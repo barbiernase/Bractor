@@ -1,0 +1,42 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+    </PropertyGroup>
+    
+    <ItemGroup>
+        <ProjectReference Include="..\Domain.SourceGeneration\Domain.SourceGeneration.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+      <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
+      <ProjectReference Include="..\Core\Core.csproj" />
+      <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
+      <ProjectReference Include="..\Domain\Domain.csproj" />
+      
+    </ItemGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Marten" Version="8.20.0" />
+        <!-- OpenCvSharp: unterschiedliche Versionen für Mac (Entwicklung) und Linux (Server) -->
+        <!-- Mac: 4.8.x (hat ARM-Support) -->
+        <PackageReference Include="OpenCvSharp4" Version="4.8.*"
+                          Condition="'$(RuntimeIdentifier)' != 'linux-x64'" />
+        <PackageReference Include="OpenCvSharp4.runtime.osx_arm64" Version="4.8.1-rc"
+                          Condition="'$(RuntimeIdentifier)' != 'linux-x64'" />
+
+        <!-- Linux: 4.6.0 (kompatibel mit Ubuntu 18.04 / GLIBC 2.27) -->
+        <PackageReference Include="OpenCvSharp4" Version="4.6.0.20220608"
+                          Condition="'$(RuntimeIdentifier)' == 'linux-x64'" />
+        <PackageReference Include="OpenCvSharp4.runtime.ubuntu.18.04-x64" Version="4.6.0.20220608"
+                          Condition="'$(RuntimeIdentifier)' == 'linux-x64'" />
+        
+        
+        <PackageReference Include="Proto.Actor" Version="1.7.0" />
+        <PackageReference Include="Proto.Cluster" Version="1.7.0" />
+        <PackageReference Include="Proto.Cluster.Consul" Version="1.7.0" />
+        <PackageReference Include="Proto.Cluster.TestProvider" Version="1.7.0" />
+        <PackageReference Include="StackExchange.Redis" Version="2.10.14" />
+    </ItemGroup>
+
+
+</Project>

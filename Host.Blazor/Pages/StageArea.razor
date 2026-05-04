@@ -1,0 +1,93 @@
+@using MudBlazor
+@* ═══════════════════════════════════════════════════════════════
+    StageArea — Zentraler Container für Stage-Module.
+    
+    Enthält:
+    1. Status-Chips (Produkt/Kamera-Label) — immer sichtbar
+    2. Tab-Leiste für aktive Stage-Module
+    3. Content-Bereich des aktiven Stage-Moduls
+    
+    Kennt keine konkreten Module — rendert sie via RenderFragment.
+═══════════════════════════════════════════════════════════════ *@
+
+<div style="flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0;">
+
+    @* ── Status-Chips: Produkt + Kamera ── *@
+    <div style="display: flex; align-items: center; gap: 8px;
+                padding: 4px 12px; background: #1e1e1e;
+                border-bottom: 1px solid #333; flex-shrink: 0;">
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                 Color="@KlassifikationColor(ProduktLabel)">
+            Produkt: @KlassifikationText(ProduktLabel)
+        </MudChip>
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                 Color="@KlassifikationColor(KameraLabel)">
+            Kamera: @KameraText(KameraLabel)
+        </MudChip>
+    </div>
+
+    @* ── Tab-Leiste + Content ── *@
+    @if (Tabs.Count == 0)
+    {
+        <div style="flex: 1; display: flex; align-items: center; justify-content: center;">
+            <span style="color: #444;">Keine Stages aktiv — Einstellungen öffnen</span>
+        </div>
+    }
+    else if (Tabs.Count == 1)
+    {
+        @* Nur ein Tab → keine Tab-Leiste nötig, direkt rendern *@
+        <div style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+            @Tabs[0].Content
+        </div>
+    }
+    else
+    {
+        @* Mehrere Tabs → MudTabs *@
+        <MudTabs @bind-ActivePanelIndex="_activeTab"
+                 Dense="true" Rounded="false" Border="false" ApplyEffectsToContainer="true"
+                 PanelClass="d-flex flex-column flex-1"
+                 Style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+            @foreach (var tab in Tabs)
+            {
+                <MudTabPanel Text="@tab.Title" Icon="@tab.Icon"
+                             Style="flex: 1; display: flex; flex-direction: column; min-height: 0;">
+                    @tab.Content
+                </MudTabPanel>
+            }
+        </MudTabs>
+    }
+</div>
+
+@code {
+    [Parameter] public Klassifikation? ProduktLabel { get; set; }
+    [Parameter] public Klassifikation? KameraLabel { get; set; }
+    [Parameter] public List<StageTab> Tabs { get; set; } = new();
+
+    private int _activeTab;
+
+    private static Color KlassifikationColor(Klassifikation? l) => l switch
+    {
+        Klassifikation.KeineAnomalie => Color.Success,
+        Klassifikation.Questionable  => Color.Warning,
+        Klassifikation.Anomalie      => Color.Error,
+        _                            => Color.Default
+    };
+
+    private static string KlassifikationText(Klassifikation? l) => l switch
+    {
+        Klassifikation.KeineAnomalie => "OK",
+        Klassifikation.Questionable  => "Fraglich",
+        Klassifikation.Anomalie      => "Anomalie",
+        _                            => "offen"
+    };
+
+    private static string KameraText(Klassifikation? l) => l switch
+    {
+        Klassifikation.KeineAnomalie => "Nicht erk.",
+        Klassifikation.Questionable  => "Fraglich",
+        Klassifikation.Anomalie      => "Erkennbar",
+        _                            => "offen"
+    };
+
+    public record StageTab(string Title, string Icon, RenderFragment Content);
+}

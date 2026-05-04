@@ -1,0 +1,123 @@
+@* ═══════════════════════════════════════════════════════════════
+    HistoriePanel — Sidebar-Modul: Timeline des ImagePair-Lebenszyklus.
+    
+    Eingeklappt: Kurzinfo (Anzahl Einträge + letzte Aktion).
+    Ausgeklappt: Vertikale Timeline mit Farbkodierung nach Kategorie.
+    
+    Farben:
+      Lifecycle  → grau   (#888)
+      Ki         → blau   (#60a5fa)
+      Mensch     → grün   (#4ade80)
+      Inspektion → gelb   (#facc15)
+═══════════════════════════════════════════════════════════════ *@
+
+@using Domain.Projections
+@using Domain.Client.ImagePair
+
+@if (IsExpanded)
+{
+    <div style="padding: 8px; font-size: 12px; color: #999; overflow-y: auto; height: 100%;">
+
+        @if (Entry == null)
+        {
+            <div style="color: #555; padding: 12px;">Kein Paar ausgewählt</div>
+        }
+        else if (Entry.Historie.Count == 0 && !Entry.HistorieGeladen)
+        {
+            <div style="padding: 12px; display: flex; align-items: center; gap: 8px;">
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
+                <span style="color: #666;">Lade Historie…</span>
+            </div>
+        }
+        else if (Entry.Historie.Count == 0)
+        {
+            <div style="color: #555; padding: 12px;">Keine Einträge</div>
+        }
+        else
+        {
+            @* ── Kompakte Überschrift ── *@
+            <div style="padding: 0 4px 8px; border-bottom: 1px solid #333; margin-bottom: 8px;">
+                <span style="color: #666; font-size: 10px; text-transform: uppercase; letter-spacing: 1px;">
+                    Historie
+                </span>
+                <span style="color: #555; font-size: 10px; margin-left: 4px;">
+                    (@Entry.Historie.Count)
+                </span>
+            </div>
+
+            @* ── Timeline ── *@
+            <div style="position: relative; padding-left: 16px;">
+
+                @* Vertikale Linie *@
+                <div style="position: absolute; left: 5px; top: 0; bottom: 0;
+                            width: 1px; background: #333;"></div>
+
+                @foreach (var eintrag in Entry.Historie)
+                {
+                    var farbe = KategorieFarbe(eintrag.Kategorie);
+
+                    <div style="position: relative; margin-bottom: 12px;">
+
+                        @* Punkt auf der Timeline *@
+                        <div style="position: absolute; left: -14px; top: 2px;
+                                    width: 8px; height: 8px; border-radius: 50%;
+                                    background: @farbe; border: 1px solid #222;"></div>
+
+                        @* Zeitstempel *@
+                        <div style="font-size: 10px; color: #555; font-family: monospace;
+                                    margin-bottom: 1px;">
+                            @eintrag.Zeitpunkt.ToLocalTime().ToString("HH:mm:ss.fff")
+                        </div>
+
+                        @* Beschreibung *@
+                        <div style="color: @farbe; font-size: 12px; font-weight: 500;">
+                            @eintrag.Beschreibung
+                        </div>
+
+                        @* Details (optional) *@
+                        @if (!string.IsNullOrEmpty(eintrag.Details))
+                        {
+                            <div style="font-size: 11px; color: #666; margin-top: 1px;">
+                                @eintrag.Details
+                            </div>
+                        }
+                    </div>
+                }
+            </div>
+        }
+    </div>
+}
+else
+{
+    @* ── Eingeklappt: Kurzinfo vertikal ── *@
+    <div style="padding: 8px 4px; display: flex; flex-direction: column; align-items: center;">
+        @if (Entry != null && Entry.HistorieGeladen)
+        {
+            <span style="font-family: monospace; font-size: 9px; color: #666;
+                         writing-mode: vertical-lr; transform: rotate(180deg);">
+                @Entry.Historie.Count Eintr.
+            </span>
+        }
+        else
+        {
+            <span style="color: #444; font-size: 10px;">—</span>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsExpanded { get; set; }
+    [Parameter] public ImagePairEntry? Entry { get; set; }
+
+    /// <summary>Wird nicht gelesen — erzwingt Re-Render wenn Store sich ändert.</summary>
+    [Parameter] public int RenderHint { get; set; }
+
+    private static string KategorieFarbe(HistorieKategorie kategorie) => kategorie switch
+    {
+        HistorieKategorie.Lifecycle  => "#888",
+        HistorieKategorie.Ki         => "#60a5fa",
+        HistorieKategorie.Mensch     => "#4ade80",
+        HistorieKategorie.Inspektion => "#facc15",
+        _                            => "#666"
+    };
+}

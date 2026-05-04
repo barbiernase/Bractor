@@ -1,0 +1,354 @@
+@* ═══════════════════════════════════════════════════════════════
+    ChartStage — Stage-Modul: Produktionsverlauf als Barcode-Strip.
+    
+    DUMME VIEW — kein eigener Daten-State.
+    Liest alles aus Store (Strip, ProduktionsTage, GewaehlterTag).
+    Reagiert auf Store.PropertyChanged, nicht auf Bus-Events.
+    User-Intents gehen über Store-Methoden.
+═══════════════════════════════════════════════════════════════ *@
+
+@using System.ComponentModel
+@using Domain.Client.ImagePair
+@using Domain.Projections
+@using Domain.ImagePair
+@inject ImagePairStore Store
+@implements IDisposable
+
+<div style="flex: 1; display: flex; min-height: 0; background: #0d0d0d;">
+
+    @* ── Tagesliste (links) ── *@
+    <div style="width: 130px; flex-shrink: 0; border-right: 1px solid #2a2a2a;
+                overflow-y: auto; background: #111;">
+
+        @if (Store.ProduktionsTage == null)
+        {
+            <div style="padding: 16px; display: flex; align-items: center; gap: 6px;">
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
+                <span style="color: #555; font-size: 11px;">Lade…</span>
+            </div>
+        }
+        else if (Store.ProduktionsTage.Tage.Count == 0)
+        {
+            <div style="padding: 16px; color: #555; font-size: 11px;">Keine Daten</div>
+        }
+        else
+        {
+            <div style="padding: 4px 0;">
+                @foreach (var tag in Store.ProduktionsTage.Tage)
+                {
+                    var istGewaehlt = Store.GewaehlterTag?.Date == tag.Datum.Date;
+                    var hatAnomalien = tag.AnzahlAnomalie > 0;
+
+                    <div @onclick="() => Store.LadeStripFuerTag(tag.Datum)"
+                         style="padding: 6px 10px; cursor: pointer; font-size: 11px;
+                                display: flex; align-items: center; gap: 6px;
+                                background: @(istGewaehlt ? "#1e1e1e" : "transparent");
+                                border-left: 3px solid @(istGewaehlt ? "#90caf9" : "transparent");">
+
+                        <div style="width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+                                    background: @(hatAnomalien ? "#f87171" : "#4ade80");" />
+
+                        <div style="flex: 1; min-width: 0;">
+                            <div style="color: @(istGewaehlt ? "#e0e0e0" : "#999"); font-weight: @(istGewaehlt ? "600" : "400");
+                                        font-family: monospace; white-space: nowrap;">
+                                @tag.Datum.ToString("dd.MM.yy")
+                            </div>
+                            <div style="color: #555; font-size: 9px; font-family: monospace;">
+                                @tag.AnzahlGesamt Teile
+                                @if (hatAnomalien)
+                                {
+                                    <span style="color: #f87171; margin-left: 2px;">@tag.AnzahlAnomalie!</span>
+                                }
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+
+    @* ── Strip-Bereich (rechts) ── *@
+    <div style="flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0; overflow: hidden;">
+
+        @* KPI-Leiste *@
+        @if (Punkte != null && Punkte.Count > 0 && Store.GewaehlterTag != null)
+        {
+            <div style="display: flex; align-items: center; gap: 8px;
+                        padding: 6px 12px; background: #1a1a1a;
+                        border-bottom: 1px solid #2a2a2a; flex-shrink: 0;">
+
+                <MudText Typo="Typo.caption" Style="color: #90caf9; font-weight: 600; font-size: 12px;">
+                    @Store.GewaehlterTag.Value.ToString("dd. MMMM yyyy")
+                </MudText>
+
+                <MudSpacer />
+
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                         Style="background: #333; color: #ccc; font-family: monospace; font-size: 11px;">
+                    @Punkte.Count Teile
+                </MudChip>
+
+                @if (AnzahlAnomalie > 0)
+                {
+                    <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                             Style="background: #f87171; color: #000; font-family: monospace; font-size: 11px;">
+                        @AnzahlAnomalie Anomalie
+                    </MudChip>
+                }
+
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                         Style="background: #555; color: #ccc; font-family: monospace; font-size: 11px;">
+                    @AnzahlUngelabelt offen
+                </MudChip>
+
+                <MudText Typo="Typo.caption" Style="color: #555; font-family: monospace; font-size: 10px;">
+                    @Punkte[0].Zeitpunkt.ToLocalTime().ToString("HH:mm:ss")
+                    – @Punkte[^1].Zeitpunkt.ToLocalTime().ToString("HH:mm:ss")
+                </MudText>
+            </div>
+        }
+
+        @* Strip-Visualisierung *@
+        <div style="flex: 1; padding: 16px 12px; overflow-y: auto;">
+            @if (Punkte != null && Punkte.Count > 0 && _zeitspanneMs > 0)
+            {
+                @* Kombinierter Strip — ein Strich pro Teil *@
+                <div style="margin-bottom: 4px;">
+                    <span style="color: #888; font-size: 10px; display: block; margin-bottom: 2px;">Produkt-Label</span>
+                    <svg width="100%" viewBox="0 0 @ViewBoxW @StripH"
+                         preserveAspectRatio="none"
+                         style="display: block; border-radius: 3px; overflow: hidden;">
+                        <rect width="@ViewBoxW" height="@StripH" fill="#1a1a1a" />
+                        @foreach (var p in Punkte)
+                        {
+                            <rect x="@XPos(p.Zeitpunkt)" y="0"
+                                  width="@StrichBreite" height="@StripH"
+                                  fill="@LabelFarbe(p.ProduktLabel)" opacity="0.85" />
+                        }
+                    </svg>
+                </div>
+
+                @* Aufgefächert nach Kategorie *@
+                <div style="margin-top: 12px;">
+                    <span style="color: #888; font-size: 10px; display: block; margin-bottom: 4px;">Nach Kategorie</span>
+
+                    @foreach (var (name, farbe, filter) in _spuren)
+                    {
+                        <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 3px;">
+                            <span style="color: @farbe; font-size: 9px; width: 55px; text-align: right;
+                                         font-family: monospace;">@name</span>
+                            <svg width="100%" viewBox="0 0 @ViewBoxW @SpurH"
+                                 preserveAspectRatio="none"
+                                 style="display: block; border-radius: 2px; flex: 1;">
+                                <rect width="@ViewBoxW" height="@SpurH" fill="#151515" />
+                                @foreach (var p in Punkte)
+                                {
+                                    if (filter(p.ProduktLabel))
+                                    {
+                                        <rect x="@XPos(p.Zeitpunkt)" y="0"
+                                              width="@StrichBreite" height="@SpurH"
+                                              fill="@farbe" opacity="0.9" />
+                                    }
+                                }
+                            </svg>
+                        </div>
+                    }
+                </div>
+
+                @* X-Achse: Zeitlabels *@
+                <div style="display: flex; justify-content: space-between; padding-top: 6px;">
+                    @foreach (var label in _zeitLabels)
+                    {
+                        <span style="color: #555; font-size: 10px; font-family: monospace;">@label</span>
+                    }
+                </div>
+
+                @* ── Tag-Labeling Button ── *@
+                <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid #2a2a2a;
+                            display: flex; align-items: center; gap: 8px;">
+
+                    @if (Store.Modus == ArbeitsModus.Tag
+                         && Store.TagLabelingDatum?.Date == Store.GewaehlterTag?.Date)
+                    {
+                        @* Bereits im Tag-Modus für diesen Tag *@
+                        <MudButton Variant="Variant.Outlined" Size="Size.Small"
+                                   Color="Color.Warning"
+                                   OnClick="Store.BeendeTagLabeling"
+                                   Style="text-transform: none; font-size: 11px;">
+                            Tag-Labeling beenden
+                        </MudButton>
+                        <MudText Typo="Typo.caption" Style="color: #facc15; font-size: 11px;">
+                            Aktiv — Paarliste zeigt nur diesen Tag
+                        </MudText>
+                    }
+                    else
+                    {
+                        <MudButton Variant="Variant.Filled" Size="Size.Small"
+                                   Color="Color.Warning"
+                                   OnClick="Store.StarteTagLabeling"
+                                   Style="text-transform: none; font-size: 11px;">
+                            Diesen Tag labeln
+                        </MudButton>
+                        <MudText Typo="Typo.caption" Style="color: #888; font-size: 11px;">
+                            Wechselt in Tag-Modus und lädt nur die Bilder dieses Tages
+                        </MudText>
+                    }
+                </div>
+            }
+            else if (Store.GewaehlterTag == null)
+            {
+                <div style="display: flex; align-items: center; justify-content: center; height: 100%;">
+                    <span style="color: #444;">Tag auswählen</span>
+                </div>
+            }
+            else if (Store.WarteAufStrip)
+            {
+                <div style="display: flex; align-items: center; justify-content: center; height: 100%; gap: 8px;">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
+                    <span style="color: #666;">Lade Verlauf…</span>
+                </div>
+            }
+            else
+            {
+                @* Auffang: Tag gewählt, nicht wartend, aber keine Punkte
+                   (z.B. nach Tab-Wechsel bevor Strip neu geladen wurde) *@
+                <div style="display: flex; align-items: center; justify-content: center; height: 100%; gap: 8px;">
+                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
+                    <span style="color: #666;">Lade Daten…</span>
+                </div>
+            }
+        </div>
+    </div>
+</div>
+
+@code {
+    // ── Abgeleitete Werte (rein für SVG-Rendering) ──
+    private long _minTicks;
+    private double _zeitspanneMs;
+    private List<string> _zeitLabels = new();
+
+    // ── Computed Properties (kein eigener State!) ──
+    private IReadOnlyList<ProduktionsStripPunkt>? Punkte => Store.Strip?.Punkte;
+    private int AnzahlAnomalie => Punkte?.Count(p => p.ProduktLabel == Klassifikation.Anomalie) ?? 0;
+    private int AnzahlUngelabelt => Punkte?.Count(p => p.ProduktLabel == null) ?? 0;
+
+    // ── SVG-Konstanten ──
+    private const int ViewBoxW = 1000;
+    private const int StripH = 32;
+    private const int SpurH = 10;
+    private const string StrichBreite = "1.5";
+
+    // ── Spuren-Definition ──
+    private static readonly List<(string Name, string Farbe, Func<Klassifikation?, bool> Filter)> _spuren = new()
+    {
+        ("Anomalie", "#f87171", label => label == Klassifikation.Anomalie),
+        ("Fraglich", "#facc15", label => label == Klassifikation.Questionable),
+        ("OK",       "#4ade80", label => label == Klassifikation.KeineAnomalie),
+        ("Offen",    "#555",    label => label == null),
+    };
+
+    // ═══════════════════════════════════════════════════════
+    // Lifecycle
+    // ═══════════════════════════════════════════════════════
+
+    protected override void OnInitialized()
+    {
+        Store.PropertyChanged += OnStoreChanged;
+
+        // Strip-Daten könnten schon geladen sein (Tab-Wechsel).
+        // SVG-Werte sofort berechnen, da PropertyChanged für Strip
+        // bei bereits geladenen Daten nicht nochmal feuert.
+        if (Store.Strip != null)
+            BerechneAbgeleiteteWerte();
+        else if (Store.GewaehlterTag != null)
+            Store.LadeStripFuerTag(Store.GewaehlterTag.Value);
+
+        // Tagesliste nur laden wenn noch nicht vorhanden
+        if (Store.ProduktionsTage == null)
+            Store.LadeProduktionsTage();
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // Store.PropertyChanged — einzige Render-Quelle
+    // ═══════════════════════════════════════════════════════
+
+    private void OnStoreChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        _ = InvokeAsync(() =>
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(ImagePairStore.ProduktionsTage):
+                    if (Store.GewaehlterTag == null && Store.ProduktionsTage?.Tage.Count > 0)
+                        Store.LadeStripFuerTag(Store.ProduktionsTage.Tage[0].Datum);
+                    break;
+
+                case nameof(ImagePairStore.Strip):
+                    BerechneAbgeleiteteWerte();
+                    break;
+            }
+
+            StateHasChanged();
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // Abgeleitete Werte (reine SVG-Koordinaten-Berechnung)
+    // ═══════════════════════════════════════════════════════
+
+    private void BerechneAbgeleiteteWerte()
+    {
+        var punkte = Store.Strip?.Punkte;
+        if (punkte == null || punkte.Count < 2)
+        {
+            _minTicks = 0;
+            _zeitspanneMs = 0;
+            _zeitLabels.Clear();
+            return;
+        }
+
+        _minTicks = punkte[0].Zeitpunkt.UtcTicks;
+        var maxTicks = punkte[^1].Zeitpunkt.UtcTicks;
+        _zeitspanneMs = (maxTicks - _minTicks) / (double)TimeSpan.TicksPerMillisecond;
+        if (_zeitspanneMs <= 0) _zeitspanneMs = 1;
+
+        _zeitLabels.Clear();
+        var anzahl = Math.Min(7, Math.Max(2, punkte.Count / 100));
+        for (var i = 0; i < anzahl; i++)
+        {
+            var anteil = (double)i / (anzahl - 1);
+            var ticks = _minTicks + (long)(anteil * _zeitspanneMs * TimeSpan.TicksPerMillisecond);
+            var zeit = new DateTimeOffset(ticks, TimeSpan.Zero);
+            _zeitLabels.Add(zeit.ToLocalTime().ToString("HH:mm"));
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // SVG-Positionierung
+    // ═══════════════════════════════════════════════════════
+
+    private string XPos(DateTimeOffset zeitpunkt)
+    {
+        var offsetMs = (zeitpunkt.UtcTicks - _minTicks) / (double)TimeSpan.TicksPerMillisecond;
+        // ViewBoxW - 2 damit der letzte Strich (Breite 1.5) nicht am rechten Rand abgeschnitten wird
+        var x = (offsetMs / _zeitspanneMs) * (ViewBoxW - 2);
+        return x.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
+    }
+
+    private static string LabelFarbe(Klassifikation? label) => label switch
+    {
+        Klassifikation.Anomalie      => "#f87171",
+        Klassifikation.Questionable  => "#facc15",
+        Klassifikation.KeineAnomalie => "#4ade80",
+        _                            => "#555"
+    };
+
+    // ═══════════════════════════════════════════════════════
+    // Dispose
+    // ═══════════════════════════════════════════════════════
+
+    public void Dispose()
+    {
+        Store.PropertyChanged -= OnStoreChanged;
+    }
+}

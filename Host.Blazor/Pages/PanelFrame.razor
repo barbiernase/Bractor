@@ -1,0 +1,71 @@
+@* ═══════════════════════════════════════════════════════════════
+    PanelFrame — Generischer Rahmen für Seitenleisten-Module.
+    
+    Kennt kein Domain-Wissen. Stellt bereit:
+    - Klickbarer vertikaler Balken (Handle) mit Titel
+    - Auf/Zu-Logik mit animierter Breite
+    - Content-Bereich für das eingebettete Modul
+═══════════════════════════════════════════════════════════════ *@
+
+<div style="display: flex; height: 100%; flex-shrink: 0;">
+
+    @if (Side == PanelSide.Right)
+    {
+        @RenderBar()
+        @RenderContent()
+    }
+    else
+    {
+        @RenderContent()
+        @RenderBar()
+    }
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public bool IsExpanded { get; set; } = true;
+    [Parameter] public EventCallback<bool> IsExpandedChanged { get; set; }
+    [Parameter] public int ExpandedWidth { get; set; } = 180;
+    [Parameter] public int CollapsedWidth { get; set; } = 40;
+    [Parameter] public PanelSide Side { get; set; } = PanelSide.Left;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private int CurrentWidth => IsExpanded ? ExpandedWidth : CollapsedWidth;
+
+    private async Task Toggle()
+    {
+        IsExpanded = !IsExpanded;
+        await IsExpandedChanged.InvokeAsync(IsExpanded);
+    }
+
+    private RenderFragment RenderBar() => __builder =>
+    {
+        <div @onclick="Toggle"
+             style="width: 24px; flex-shrink: 0; background: #1a1a1a;
+                    border-left: @(Side == PanelSide.Right ? "1px solid #333" : "none");
+                    border-right: @(Side == PanelSide.Left ? "1px solid #333" : "none");
+                    cursor: pointer; display: flex; align-items: center;
+                    justify-content: center; user-select: none;"
+             title="@Title ein/ausklappen">
+            <span style="writing-mode: vertical-lr; transform: rotate(180deg);
+                         font-size: 11px; font-weight: 600; letter-spacing: 1px;
+                         color: #666; white-space: nowrap; text-transform: uppercase;">
+                @Title
+            </span>
+        </div>
+    };
+
+    private RenderFragment RenderContent() => __builder =>
+    {
+        <div style="width: @(CurrentWidth)px; overflow: hidden; transition: width 0.15s ease;
+                    display: flex; flex-direction: column; background: #1e1e1e;
+                    border-right: @(Side == PanelSide.Left && IsExpanded ? "1px solid #2a2a2a" : "none");
+                    border-left: @(Side == PanelSide.Right && IsExpanded ? "1px solid #2a2a2a" : "none");">
+            <div style="min-width: @(CurrentWidth)px; height: 100%; display: flex; flex-direction: column;">
+                @ChildContent
+            </div>
+        </div>
+    };
+
+    public enum PanelSide { Left, Right }
+}

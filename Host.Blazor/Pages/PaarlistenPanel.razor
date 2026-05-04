@@ -1,0 +1,123 @@
+@using MudBlazor
+@* ═══════════════════════════════════════════════════════════════
+    PaarlistenPanel — Sidebar-Modul: Bildpaar-Liste mit Filter.
+    
+    Eingeklappt: Nur die Status-Punkte (●○) pro Paar.
+    Ausgeklappt: Filter, Checkbox, Punkte + Timestamps, Pagination.
+═══════════════════════════════════════════════════════════════ *@
+
+@if (IsExpanded)
+{
+    <div style="padding: 8px;">
+        <MudSelect T="string"
+                   Value="FilterWert"
+                   ValueChanged="OnFilterChanged"
+                   Dense="true"
+                   Margin="Margin.Dense"
+                   Variant="Variant.Outlined"
+                   Label="Filter">
+            <MudSelectItem Value="@("alle")">Alle</MudSelectItem>
+            <MudSelectItem Value="@("offen")">Offen</MudSelectItem>
+            <MudSelectItem Value="@("anomalie")">Anomalien</MudSelectItem>
+        </MudSelect>
+
+        <MudCheckBox T="bool"
+                     Value="NurNichtInspizierte"
+                     ValueChanged="OnNurNeueChanged"
+                     Dense="true" Size="Size.Small" Color="Color.Primary"
+                     Label="Nur neue (I)" Class="mt-1" />
+    </div>
+
+    <div style="border-top: 1px solid #333;"></div>
+
+    <div style="flex: 1 1 0; overflow-y: auto; min-height: 0;">
+        @for (var i = 0; i < Items.Count; i++)
+        {
+            var index = i;
+            var entry = Items[i];
+            var selected = i == SelectedIndex;
+            <div id="pair-@i"
+                 @onclick="() => OnSelect.InvokeAsync(index)"
+                 style="display: flex; align-items: center; gap: 5px;
+                        padding: 6px 8px; cursor: pointer;
+                        border-bottom: 1px solid #2a2a2a;
+                        border-left: @(selected ? "3px solid #5c9eff" : "3px solid transparent");
+                        background: @(selected ? "#2a3a50" : "transparent");
+                        min-height: 28px;">
+                <span style="@PunktStyle(entry.PhysischesProduktLabel); font-size: 10px;">
+                    @(entry.PhysischesProduktLabel.HasValue ? "●" : "○")
+                </span>
+                <span style="@PunktStyle(entry.MenschBildpaarLabel); font-size: 10px;">
+                    @(entry.MenschBildpaarLabel.HasValue ? "●" : "○")
+                </span>
+                <span style="font-family: monospace; font-size: 12px; color: #999;">
+                    @entry.ProduziertAm.ToString("HH:mm")
+                </span>
+                @if (!entry.IstInspiziert)
+                {
+                    <span style="font-size: 8px; color: #5c9eff;">●</span>
+                }
+            </div>
+        }
+    </div>
+
+    <div style="border-top: 1px solid #333; padding: 4px; display: flex; align-items: center; justify-content: center; gap: 4px; background: #1a1a1a;">
+        <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Small"
+                       Disabled="Seite <= 1" OnClick="OnVorige" />
+        <MudText Typo="Typo.caption" Style="color: #888;">@Seite / @Math.Max(1, GesamtSeiten)</MudText>
+        <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small"
+                       Disabled="Seite >= GesamtSeiten" OnClick="OnNaechste" />
+    </div>
+}
+else
+{
+    <div style="flex: 1 1 0; overflow-y: auto; min-height: 0;">
+        @for (var i = 0; i < Items.Count; i++)
+        {
+            var index = i;
+            var entry = Items[i];
+            var selected = i == SelectedIndex;
+            <div @onclick="() => OnSelect.InvokeAsync(index)"
+                 style="display: flex; align-items: center; justify-content: center; gap: 3px;
+                        padding: 4px 0; cursor: pointer;
+                        border-left: @(selected ? "3px solid #5c9eff" : "3px solid transparent");
+                        background: @(selected ? "#2a3a50" : "transparent");
+                        min-height: 22px;">
+                <span style="@PunktStyle(entry.PhysischesProduktLabel); font-size: 8px;">
+                    @(entry.PhysischesProduktLabel.HasValue ? "●" : "○")
+                </span>
+                <span style="@PunktStyle(entry.MenschBildpaarLabel); font-size: 8px;">
+                    @(entry.MenschBildpaarLabel.HasValue ? "●" : "○")
+                </span>
+            </div>
+        }
+    </div>
+
+    <div style="border-top: 1px solid #333; padding: 4px; text-align: center; background: #1a1a1a;">
+        <span style="color: #666; font-size: 10px;">@Seite</span>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsExpanded { get; set; }
+    [Parameter] public IReadOnlyList<ImagePairEntry> Items { get; set; } = Array.Empty<ImagePairEntry>();
+    [Parameter] public int SelectedIndex { get; set; }
+    [Parameter] public string FilterWert { get; set; } = "alle";
+    [Parameter] public bool NurNichtInspizierte { get; set; }
+    [Parameter] public int Seite { get; set; } = 1;
+    [Parameter] public int GesamtSeiten { get; set; } = 1;
+
+    [Parameter] public EventCallback<int> OnSelect { get; set; }
+    [Parameter] public EventCallback<string> OnFilterChanged { get; set; }
+    [Parameter] public EventCallback<bool> OnNurNeueChanged { get; set; }
+    [Parameter] public EventCallback OnVorige { get; set; }
+    [Parameter] public EventCallback OnNaechste { get; set; }
+
+    private static string PunktStyle(Klassifikation? l) => "color: " + l switch
+    {
+        Klassifikation.KeineAnomalie => "#4ade80;",
+        Klassifikation.Questionable  => "#f0c040;",
+        Klassifikation.Anomalie      => "#f87171;",
+        _                            => "#555;"
+    };
+}

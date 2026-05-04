@@ -1,0 +1,920 @@
+syntax = "proto3";
+
+option csharp_namespace = "ProtoRepo";
+
+package CqrsSolution;
+
+// ============================================================================
+// gRPC SERVICE
+// ============================================================================
+
+service CqrsClientService {
+    rpc Connect(stream ClientMessage) returns (stream ServerMessage);
+}
+
+// ============================================================================
+// CLIENT → SERVER (Upstream)
+// ============================================================================
+
+message ClientMessage {
+    oneof message {
+        CommandRequest command = 1;
+        SubscribeRequest subscribe = 2;
+        UnsubscribeRequest unsubscribe = 3;
+        CapabilitiesRequest capabilities = 4;
+        QueryRequest query = 5;
+    }
+}
+
+message CommandRequest {
+    CommandEnvelopeDto envelope = 1;
+}
+
+message SubscribeRequest {
+    string event_type = 1;
+    string aggregate_id = 2;
+}
+
+message UnsubscribeRequest {
+    string event_type = 1;
+    string aggregate_id = 2;
+}
+
+message CapabilitiesRequest {
+    repeated string event_types = 1;
+}
+
+message QueryRequest {
+    string correlation_id = 1;
+    QueryPayloadDto payload = 2;
+}
+
+// ============================================================================
+// SERVER → CLIENT (Downstream)
+// ============================================================================
+
+message ServerMessage {
+    oneof message {
+        EventNotification event = 1;
+        SubscriptionConfirmed subscription_confirmed = 2;
+        UnsubscriptionConfirmed unsubscription_confirmed = 3;
+        CommandAccepted command_accepted = 4;
+        ErrorResponse error = 5;
+        CapabilitiesResponse capabilities_response = 6;
+        QueryResponse query_response = 7;
+    }
+}
+
+message EventNotification {
+    EventEnvelopeDto envelope = 1;
+}
+
+message SubscriptionConfirmed {
+    string event_type = 1;
+    string aggregate_id = 2;
+}
+
+message UnsubscriptionConfirmed {
+    string event_type = 1;
+    string aggregate_id = 2;
+}
+
+message CommandAccepted {
+    string command_id = 1;
+    string correlation_id = 2;
+}
+
+message CapabilitiesResponse {
+    string session_id = 1;
+    repeated string allowed_commands = 2;
+    repeated string subscribed_events = 3;
+    repeated string supported_queries = 4;
+}
+
+message QueryResponse {
+    string correlation_id = 1;
+    QueryResponsePayloadDto payload = 2;
+    repeated AggregateMetaDto deps = 3;
+}
+
+message AggregateMetaDto {
+    string id = 1;
+    string aggregate_type = 2;
+    int32 version = 3;
+}
+
+message ErrorResponse {
+    string code = 1;
+    string message = 2;
+    string correlation_id = 3;
+}
+
+// ============================================================================
+// ENVELOPE TYPES
+// ============================================================================
+
+message CommandEnvelopeDto {
+    string command_id = 1;
+    string aggregate_id = 2;
+    string aggregate_type = 3;
+    int32 expected_version = 4;
+    int64 created_at_utc = 5;
+    string correlation_id = 6;
+    string user_id = 7;
+    string origin_session_id = 8;
+
+    oneof payload {
+        ErstelleImagePairDto erstelle_image_pair = 20;
+        KlassifiziereBildPaarDurchKiDto klassifiziere_bild_paar_durch_ki = 21;
+        KlassifiziereEinzelBildDurchKiDto klassifiziere_einzel_bild_durch_ki = 22;
+        LabelBildPaarDto label_bild_paar = 23;
+        LabelBildRegionDto label_bild_region = 24;
+        LabelEinzelBildDto label_einzel_bild = 25;
+        LabelPhysischesProduktDto label_physisches_produkt = 26;
+        MarkiereAlsInspiziertDto markiere_als_inspiziert = 27;
+        MeldeBildVerfuegbarDto melde_bild_verfuegbar = 28;
+        AendereLagerplatzDto aendere_lagerplatz = 29;
+        BucheWarenabgangDto buche_warenabgang = 30;
+        BucheWareneingangDto buche_wareneingang = 31;
+        DeaktiviereLagerartikelDto deaktiviere_lagerartikel = 32;
+        ErstelleLagerartikelDto erstelle_lagerartikel = 33;
+        OrdneLieferantZuDto ordne_lieferant_zu = 34;
+        PasseEinkaufspreisAnDto passe_einkaufspreis_an = 35;
+        ReserviereBestandDto reserviere_bestand = 36;
+        AendereProfilnamenDto aendere_profilnamen = 37;
+        ErstelleProfilDto erstelle_profil = 38;
+        AendereTitelDto aendere_titel = 39;
+        ArchiviereDto archiviere = 40;
+        EntferneTagDto entferne_tag = 41;
+        ErstelleTodoDto erstelle_todo = 42;
+        FuegeTagHinzuDto fuege_tag_hinzu = 43;
+        MarkiereAlsErledigtDto markiere_als_erledigt = 44;
+        OeffneWiederDto oeffne_wieder = 45;
+        SetzePrioritaetDto setze_prioritaet = 46;
+
+    }
+}
+
+message EventEnvelopeDto {
+    string event_id = 1;
+    string aggregate_id = 2;
+    string aggregate_type = 3;
+    int32 aggregate_version = 4;
+    int64 created_at_utc = 5;
+    string causation_id = 6;
+    string correlation_id = 7;
+    string user_id = 8;
+    string target_subscriber_id = 9;
+    
+    oneof payload {
+        ImagePairInspiziertDto image_pair_inspiziert = 20;
+        ImagePairKomplettDto image_pair_komplett = 21;
+        PaarNichtKomplettDto paar_nicht_komplett = 22;
+        LagerartikelDeaktiviertDto lagerartikel_deaktiviert = 23;
+        AlsErledigtMarkiertDto als_erledigt_markiert = 24;
+        ArchiviertDto archiviert = 25;
+        WiederGeoeffnetDto wieder_geoeffnet = 26;
+        CommandFailedDto command_failed = 27;
+        BildNichtVerfuegbarDto bild_nicht_verfuegbar = 28;
+        BildPaarDurchKiKlassifiziertDto bild_paar_durch_ki_klassifiziert = 29;
+        BildPaarGelabeltDto bild_paar_gelabelt = 30;
+        BildRegionGelabeltDto bild_region_gelabelt = 31;
+        BildVerfuegbarDto bild_verfuegbar = 32;
+        BildVersionBereitsVerfuegbarDto bild_version_bereits_verfuegbar = 33;
+        EinzelBildDurchKiKlassifiziertDto einzel_bild_durch_ki_klassifiziert = 34;
+        EinzelBildGelabeltDto einzel_bild_gelabelt = 35;
+        ImagePairEingabeUngueltigDto image_pair_eingabe_ungueltig = 36;
+        ImagePairErstelltDto image_pair_erstellt = 37;
+        ImagePairExistiertBereitsDto image_pair_existiert_bereits = 38;
+        ImagePairNichtGefundenDto image_pair_nicht_gefunden = 39;
+        PhysischesProduktGelabeltDto physisches_produkt_gelabelt = 40;
+        RegionIndexUngueltigDto region_index_ungueltig = 41;
+        RegionLabelsUngueltigDto region_labels_ungueltig = 42;
+        ArtikelExistiertBereitsDto artikel_existiert_bereits = 43;
+        ArtikelInaktivDto artikel_inaktiv = 44;
+        ArtikelNichtGefundenDto artikel_nicht_gefunden = 45;
+        BestandNichtAusreichendDto bestand_nicht_ausreichend = 46;
+        BestandReserviertDto bestand_reserviert = 47;
+        EingabeUngueltigDto eingabe_ungueltig = 48;
+        EinkaufspreisAngepasstDto einkaufspreis_angepasst = 49;
+        LagerartikelErstelltDto lagerartikel_erstellt = 50;
+        LagerplatzGeaendertDto lagerplatz_geaendert = 51;
+        LieferantZugeordnetDto lieferant_zugeordnet = 52;
+        NachbestellungAngefordertDto nachbestellung_angefordert = 53;
+        VerfuegbarerBestandNichtAusreichendDto verfuegbarer_bestand_nicht_ausreichend = 54;
+        WarenabgangGebuchtDto warenabgang_gebucht = 55;
+        WareneingangGebuchtDto wareneingang_gebucht = 56;
+        NameGeaendertDto name_geaendert = 57;
+        ProfilErstelltDto profil_erstellt = 58;
+        PrioritaetGesetztDto prioritaet_gesetzt = 59;
+        TagEntferntDto tag_entfernt = 60;
+        TagHinzugefuegtDto tag_hinzugefuegt = 61;
+        TitelGeaendertDto titel_geaendert = 62;
+        TodoBereitsArchiviertDto todo_bereits_archiviert = 63;
+        TodoBereitsErledigtDto todo_bereits_erledigt = 64;
+        TodoEingabeUngueltigDto todo_eingabe_ungueltig = 65;
+        TodoErstelltDto todo_erstellt = 66;
+        TodoExistiertBereitsDto todo_existiert_bereits = 67;
+        TodoNichtErledigtDto todo_nicht_erledigt = 68;
+        TodoNichtGefundenDto todo_nicht_gefunden = 69;
+
+    }
+}
+
+message QueryPayloadDto {
+    oneof payload {
+        GetAlleAuditEintraegeDto get_alle_audit_eintraege = 20;
+        GetAlleTodosDto get_alle_todos = 21;
+        GetAllLagerbestaendeDto get_all_lagerbestaende = 22;
+        GetImagePairStatistikDto get_image_pair_statistik = 23;
+        GetProduktionsTageDto get_produktions_tage = 24;
+        GetAuditEintraegeDto get_audit_eintraege = 25;
+        GetImagePairDto get_image_pair = 26;
+        GetImagePairHistorieDto get_image_pair_historie = 27;
+        GetLagerbestandDto get_lagerbestand = 28;
+        GetProduktionsStripDto get_produktions_strip = 29;
+        GetProduktionsVerlaufDto get_produktions_verlauf = 30;
+        GetTodoDto get_todo = 31;
+        GetUnklassifizierteImagePairsDto get_unklassifizierte_image_pairs = 32;
+        SucheImagePairsDto suche_image_pairs = 33;
+
+    }
+}
+
+message QueryResponsePayloadDto {
+    oneof payload {
+        AuditEintragAntwortDto audit_eintrag_antwort = 20;
+        ImagePairAntwortDto image_pair_antwort = 21;
+        LagerbestandAntwortDto lagerbestand_antwort = 22;
+        TodoAntwortDto todo_antwort = 23;
+        AuditEintraegeListeDto audit_eintraege_liste = 24;
+        ImagePairArbeitslisteDto image_pair_arbeitsliste = 25;
+        ImagePairHistorieAntwortDto image_pair_historie_antwort = 26;
+        ImagePairHistorieNichtGefundenDto image_pair_historie_nicht_gefunden = 27;
+        ImagePairNichtGefundenAntwortDto image_pair_nicht_gefunden_antwort = 28;
+        ImagePairStatistikAntwortDto image_pair_statistik_antwort = 29;
+        ImagePairSuchergebnisDto image_pair_suchergebnis = 30;
+        KeineAuditEintraegeGefundenDto keine_audit_eintraege_gefunden = 31;
+        LagerbestandListeDto lagerbestand_liste = 32;
+        LagerbestandNichtGefundenDto lagerbestand_nicht_gefunden = 33;
+        ProduktionsStripAntwortDto produktions_strip_antwort = 34;
+        ProduktionsTageAntwortDto produktions_tage_antwort = 35;
+        ProduktionsVerlaufAntwortDto produktions_verlauf_antwort = 36;
+        TodoListeDto todo_liste = 37;
+        TodoNichtGefundenAntwortDto todo_nicht_gefunden_antwort = 38;
+
+    }
+}
+
+// ============================================================================
+// VALUE OBJECTS
+// ============================================================================
+message RegionPositionDto {
+    double x_prozent = 1;
+    double y_prozent = 2;
+    double breite_prozent = 3;
+    double hoehe_prozent = 4;
+}
+
+message RegionBewertungDto {
+    int32 region_index = 1;
+    RegionPositionDto position = 2;
+    string ki_klassifikation = 3;
+    string mensch_label = 4;
+}
+
+message HistorieEintragDto {
+    int64 zeitpunkt = 1;
+    string ereignis_typ = 2;
+    string beschreibung = 3;
+    int32 kategorie = 4;
+    string details = 5;
+}
+
+message ProduktionsStripPunktDto {
+    int64 zeitpunkt = 1;
+    string produkt_label = 2;
+}
+
+message ProduktionsTagDto {
+    int64 datum = 1;
+    int32 anzahl_gesamt = 2;
+    int32 anzahl_anomalie = 3;
+    int32 anzahl_ungelabelt = 4;
+}
+
+message ProduktionsZeitBucketDto {
+    int64 zeitpunkt = 1;
+    int32 gesamt = 2;
+    int32 ok = 3;
+    int32 questionable = 4;
+    int32 anomalie = 5;
+    int32 ungelabelt = 6;
+    int32 nicht_inspiziert = 7;
+}
+
+message BildMetaDto {
+    string original_dateiname = 1;
+    int64 dateigroesse_bytes = 2;
+    int32 breite_pixel = 3;
+    int32 hoehe_pixel = 4;
+    int64 erstellt_am = 5;
+}
+
+message GeldbetragDto {
+    string wert = 1;
+    string waehrung = 2;
+}
+
+message LagerplatzDto {
+    string gang = 1;
+    string regal = 2;
+    int32 ebene = 3;
+}
+
+message ImagePairFilterDto {
+    int64 von = 1;
+    int64 bis = 2;
+    string ki_klassifikation = 3;
+    string mensch_label = 4;
+    string produkt_label = 5;
+    int32 nur_komplette = 6;
+    int32 hat_ki_klassifikation = 7;
+    int32 hat_mensch_label = 8;
+    int32 nur_nicht_inspizierte = 9;
+    int32 seite = 10;
+    int32 seiten_groesse = 11;
+}
+
+
+// ============================================================================
+// COMMAND PAYLOADS
+// ============================================================================
+message ErstelleImagePairDto {
+    string aggregate_id = 1;
+    string pair_key = 2;
+    int64 produziert_am = 3;
+    int64 aufgenommen_am = 4;
+    string ursprungs_pfad = 5;
+}
+
+message KlassifiziereBildPaarDurchKiDto {
+    string aggregate_id = 1;
+    int32 label = 2;
+}
+
+message KlassifiziereEinzelBildDurchKiDto {
+    string aggregate_id = 1;
+    int32 version = 2;
+    int32 bild_label = 3;
+    repeated int32 region_labels = 4;
+}
+
+message LabelBildPaarDto {
+    string aggregate_id = 1;
+    int32 label = 2;
+}
+
+message LabelBildRegionDto {
+    string aggregate_id = 1;
+    int32 version = 2;
+    int32 region_index = 3;
+    int32 label = 4;
+}
+
+message LabelEinzelBildDto {
+    string aggregate_id = 1;
+    int32 version = 2;
+    int32 label = 3;
+}
+
+message LabelPhysischesProduktDto {
+    string aggregate_id = 1;
+    int32 label = 2;
+}
+
+message MarkiereAlsInspiziertDto {
+    string aggregate_id = 1;
+}
+
+message MeldeBildVerfuegbarDto {
+    string aggregate_id = 1;
+    int32 version = 2;
+    BildMetaDto meta = 3;
+    string pfad = 4;
+}
+
+message AendereLagerplatzDto {
+    string aggregate_id = 1;
+    LagerplatzDto neuer_platz = 2;
+}
+
+message BucheWarenabgangDto {
+    string aggregate_id = 1;
+    int32 anzahl = 2;
+}
+
+message BucheWareneingangDto {
+    string aggregate_id = 1;
+    int32 anzahl = 2;
+}
+
+message DeaktiviereLagerartikelDto {
+    string aggregate_id = 1;
+}
+
+message ErstelleLagerartikelDto {
+    string aggregate_id = 1;
+    string name = 2;
+    int32 initiale_anzahl = 3;
+}
+
+message OrdneLieferantZuDto {
+    string aggregate_id = 1;
+    string lieferant_id = 2;
+}
+
+message PasseEinkaufspreisAnDto {
+    string aggregate_id = 1;
+    GeldbetragDto neuer_preis = 2;
+}
+
+message ReserviereBestandDto {
+    string aggregate_id = 1;
+    string auftrags_id = 2;
+    int32 anzahl = 3;
+}
+
+message AendereProfilnamenDto {
+    string aggregate_id = 1;
+    string neuer_name = 2;
+}
+
+message ErstelleProfilDto {
+    string aggregate_id = 1;
+    string name = 2;
+}
+
+message AendereTitelDto {
+    string aggregate_id = 1;
+    string neuer_titel = 2;
+}
+
+message ArchiviereDto {
+    string aggregate_id = 1;
+}
+
+message EntferneTagDto {
+    string aggregate_id = 1;
+    string tag = 2;
+}
+
+message ErstelleTodoDto {
+    string aggregate_id = 1;
+    string titel = 2;
+    int32 prioritaet = 3;
+    string beschreibung = 4;
+    int64 faelligkeit = 5;
+}
+
+message FuegeTagHinzuDto {
+    string aggregate_id = 1;
+    string tag = 2;
+}
+
+message MarkiereAlsErledigtDto {
+    string aggregate_id = 1;
+}
+
+message OeffneWiederDto {
+    string aggregate_id = 1;
+}
+
+message SetzePrioritaetDto {
+    string aggregate_id = 1;
+    int32 neue_prioritaet = 2;
+}
+
+
+// ============================================================================
+// EVENT PAYLOADS
+// ============================================================================
+message ImagePairInspiziertDto {
+    ImagePairInspiziertDto original = 1;
+}
+
+message ImagePairKomplettDto {
+    ImagePairKomplettDto original = 1;
+}
+
+message PaarNichtKomplettDto {
+    PaarNichtKomplettDto original = 1;
+}
+
+message LagerartikelDeaktiviertDto {
+    LagerartikelDeaktiviertDto original = 1;
+}
+
+message AlsErledigtMarkiertDto {
+    AlsErledigtMarkiertDto original = 1;
+}
+
+message ArchiviertDto {
+    ArchiviertDto original = 1;
+}
+
+message WiederGeoeffnetDto {
+    WiederGeoeffnetDto original = 1;
+}
+
+message CommandFailedDto {
+    string command_type = 1;
+    string reason = 2;
+    string aggregate_id = 3;
+}
+
+message BildNichtVerfuegbarDto {
+    int32 version = 1;
+}
+
+message BildPaarDurchKiKlassifiziertDto {
+    int32 label = 1;
+}
+
+message BildPaarGelabeltDto {
+    int32 label = 1;
+}
+
+message BildRegionGelabeltDto {
+    int32 version = 1;
+    int32 region_index = 2;
+    int32 label = 3;
+}
+
+message BildVerfuegbarDto {
+    int32 version = 1;
+    BildMetaDto meta = 2;
+    string pfad = 3;
+    repeated RegionBewertungDto regionen = 4;
+}
+
+message BildVersionBereitsVerfuegbarDto {
+    int32 version = 1;
+}
+
+message EinzelBildDurchKiKlassifiziertDto {
+    int32 version = 1;
+    int32 bild_label = 2;
+    repeated int32 region_labels = 3;
+}
+
+message EinzelBildGelabeltDto {
+    int32 version = 1;
+    int32 label = 2;
+}
+
+message ImagePairEingabeUngueltigDto {
+    string feld = 1;
+    string grund = 2;
+}
+
+message ImagePairErstelltDto {
+    string aggregate_id = 1;
+    string pair_key = 2;
+    int64 produziert_am = 3;
+    int64 aufgenommen_am = 4;
+    string ursprungs_pfad = 5;
+}
+
+message ImagePairExistiertBereitsDto {
+    string pair_id = 1;
+}
+
+message ImagePairNichtGefundenDto {
+    string pair_id = 1;
+}
+
+message PhysischesProduktGelabeltDto {
+    int32 label = 1;
+}
+
+message RegionIndexUngueltigDto {
+    int32 region_index = 1;
+}
+
+message RegionLabelsUngueltigDto {
+    int32 anzahl = 1;
+}
+
+message ArtikelExistiertBereitsDto {
+    string artikel_id = 1;
+}
+
+message ArtikelInaktivDto {
+    string artikel_id = 1;
+}
+
+message ArtikelNichtGefundenDto {
+    string artikel_id = 1;
+}
+
+message BestandNichtAusreichendDto {
+    int32 angefordert = 1;
+    int32 verfuegbar = 2;
+}
+
+message BestandReserviertDto {
+    string auftrags_id = 1;
+    int32 anzahl = 2;
+}
+
+message EingabeUngueltigDto {
+    string feld = 1;
+    string grund = 2;
+}
+
+message EinkaufspreisAngepasstDto {
+    GeldbetragDto neuer_preis = 1;
+}
+
+message LagerartikelErstelltDto {
+    string aggregate_id = 1;
+    string name = 2;
+    int32 initiale_anzahl = 3;
+}
+
+message LagerplatzGeaendertDto {
+    LagerplatzDto neuer_platz = 1;
+}
+
+message LieferantZugeordnetDto {
+    string lieferant_id = 1;
+}
+
+message NachbestellungAngefordertDto {
+    string artikel_id = 1;
+    int32 menge = 2;
+}
+
+message VerfuegbarerBestandNichtAusreichendDto {
+    int32 angefordert = 1;
+    int32 verfuegbar = 2;
+}
+
+message WarenabgangGebuchtDto {
+    int32 anzahl = 1;
+}
+
+message WareneingangGebuchtDto {
+    int32 anzahl = 1;
+}
+
+message NameGeaendertDto {
+    string neuer_name = 1;
+}
+
+message ProfilErstelltDto {
+    string aggregate_id = 1;
+    string name = 2;
+}
+
+message PrioritaetGesetztDto {
+    int32 neue_prioritaet = 1;
+}
+
+message TagEntferntDto {
+    string tag = 1;
+}
+
+message TagHinzugefuegtDto {
+    string tag = 1;
+}
+
+message TitelGeaendertDto {
+    string neuer_titel = 1;
+}
+
+message TodoBereitsArchiviertDto {
+    string todo_id = 1;
+}
+
+message TodoBereitsErledigtDto {
+    string todo_id = 1;
+}
+
+message TodoEingabeUngueltigDto {
+    string feld = 1;
+    string grund = 2;
+}
+
+message TodoErstelltDto {
+    string titel = 1;
+    string beschreibung = 2;
+    int32 prioritaet = 3;
+    int64 faelligkeit = 4;
+}
+
+message TodoExistiertBereitsDto {
+    string todo_id = 1;
+}
+
+message TodoNichtErledigtDto {
+    string todo_id = 1;
+}
+
+message TodoNichtGefundenDto {
+    string todo_id = 1;
+}
+
+
+// ============================================================================
+// QUERY PAYLOADS
+// ============================================================================
+message GetAlleAuditEintraegeDto {
+    GetAlleAuditEintraegeDto original = 1;
+}
+
+message GetAlleTodosDto {
+    GetAlleTodosDto original = 1;
+}
+
+message GetAllLagerbestaendeDto {
+    GetAllLagerbestaendeDto original = 1;
+}
+
+message GetImagePairStatistikDto {
+    GetImagePairStatistikDto original = 1;
+}
+
+message GetProduktionsTageDto {
+    GetProduktionsTageDto original = 1;
+}
+
+message GetAuditEintraegeDto {
+    string aggregate_id = 1;
+}
+
+message GetImagePairDto {
+    string pair_id = 1;
+}
+
+message GetImagePairHistorieDto {
+    string pair_id = 1;
+}
+
+message GetLagerbestandDto {
+    string artikel_id = 1;
+}
+
+message GetProduktionsStripDto {
+    int64 von = 1;
+    int64 bis = 2;
+}
+
+message GetProduktionsVerlaufDto {
+    int64 von = 1;
+    int64 bis = 2;
+    int32 bucket_minuten = 3;
+}
+
+message GetTodoDto {
+    string todo_id = 1;
+}
+
+message GetUnklassifizierteImagePairsDto {
+    int32 max_anzahl = 1;
+}
+
+message SucheImagePairsDto {
+    ImagePairFilterDto filter = 1;
+}
+
+
+// ============================================================================
+// QUERY RESPONSE PAYLOADS
+// ============================================================================
+message AuditEintragAntwortDto {
+    int64 timestamp = 1;
+    string aggregate_id = 2;
+    string aggregate_type = 3;
+    string user_id = 4;
+    string action = 5;
+    string details = 6;
+}
+
+message ImagePairAntwortDto {
+    string id = 1;
+    string pair_key = 2;
+    int64 produziert_am = 3;
+    int64 aufgenommen_am = 4;
+    bool ist_komplett = 5;
+    string ursprungs_pfad = 6;
+    string dc0_pfad = 7;
+    string dc0_ki_bild_klassifikation = 8;
+    string dc0_mensch_bild_label = 9;
+    repeated string dc0_ki_regionen = 10;
+    repeated string dc0_mensch_regionen = 11;
+    string dc2_pfad = 12;
+    string dc2_ki_bild_klassifikation = 13;
+    string dc2_mensch_bild_label = 14;
+    repeated string dc2_ki_regionen = 15;
+    repeated string dc2_mensch_regionen = 16;
+    string ki_bildpaar_klassifikation = 17;
+    string mensch_bildpaar_label = 18;
+    string physisches_produkt_label = 19;
+    bool ist_inspiziert = 20;
+}
+
+message LagerbestandAntwortDto {
+    string id = 1;
+    string name = 2;
+    int32 anzahl = 3;
+    int64 letzte_aktualisierung = 4;
+}
+
+message TodoAntwortDto {
+    string id = 1;
+    string titel = 2;
+    string beschreibung = 3;
+    int32 status = 4;
+    int32 prioritaet = 5;
+    int64 faelligkeit = 6;
+    int64 erstellt_am = 7;
+    int64 erledigt_am = 8;
+    repeated string tags = 9;
+}
+
+message AuditEintraegeListeDto {
+    repeated AuditEintragAntwortDto items = 1;
+}
+
+message ImagePairArbeitslisteDto {
+    repeated ImagePairAntwortDto items = 1;
+}
+
+message ImagePairHistorieAntwortDto {
+    string pair_id = 1;
+    repeated HistorieEintragDto eintraege = 2;
+}
+
+message ImagePairHistorieNichtGefundenDto {
+    string pair_id = 1;
+}
+
+message ImagePairNichtGefundenAntwortDto {
+    string pair_id = 1;
+}
+
+message ImagePairStatistikAntwortDto {
+    int32 gesamt = 1;
+    int32 komplett = 2;
+    int32 mit_ki_klassifikation = 3;
+    int32 mit_mensch_label = 4;
+    int32 mit_produkt_label = 5;
+    int32 ohne_klassifikation = 6;
+    int32 anzahl_anomalien_ki = 7;
+    int32 anzahl_anomalien_mensch = 8;
+}
+
+message ImagePairSuchergebnisDto {
+    repeated ImagePairAntwortDto items = 1;
+    int32 gesamt_anzahl = 2;
+    int32 seite = 3;
+    int32 seiten_groesse = 4;
+}
+
+message KeineAuditEintraegeGefundenDto {
+    string aggregate_id = 1;
+}
+
+message LagerbestandListeDto {
+    repeated LagerbestandAntwortDto items = 1;
+}
+
+message LagerbestandNichtGefundenDto {
+    string artikel_id = 1;
+}
+
+message ProduktionsStripAntwortDto {
+    repeated ProduktionsStripPunktDto punkte = 1;
+}
+
+message ProduktionsTageAntwortDto {
+    repeated ProduktionsTagDto tage = 1;
+}
+
+message ProduktionsVerlaufAntwortDto {
+    repeated ProduktionsZeitBucketDto buckets = 1;
+    int32 gesamt_im_zeitraum = 2;
+    int32 anomalien_im_zeitraum = 3;
+    int32 ungelabelt_im_zeitraum = 4;
+}
+
+message TodoListeDto {
+    repeated TodoAntwortDto items = 1;
+}
+
+message TodoNichtGefundenAntwortDto {
+    string todo_id = 1;
+}
+

@@ -1,0 +1,72 @@
+@* ═══════════════════════════════════════════════════════════════
+    DebugStage — Stage-Modul: Dummy zum Testen des Stage-Systems.
+    
+    Zeigt alle verfügbaren Daten des aktuellen ImagePairEntry
+    als übersichtliche Tabelle. Kein eigener State.
+═══════════════════════════════════════════════════════════════ *@
+
+@if (Entry == null)
+{
+<div style="flex: 1; display: flex; align-items: center; justify-content: center;">
+    <span style="color: #444;">Kein Bildpaar ausgewählt</span>
+</div>
+}
+else
+{
+<div style="flex: 1; overflow-y: auto; padding: 16px;">
+    <MudSimpleTable Dense="true" Hover="true" Style="background: transparent;">
+        <thead>
+        <tr>
+            <th style="color: #888; width: 200px;">Feld</th>
+            <th style="color: #888;">Wert</th>
+        </tr>
+        </thead>
+        <tbody>
+        <tr><td style="color: #666;">Id</td><td style="font-family: monospace; font-size: 12px;">@Entry.Id</td></tr>
+        <tr><td style="color: #666;">PairKey</td><td style="font-family: monospace;">@(Entry.PairKey ?? "—")</td></tr>
+        <tr><td style="color: #666;">ProduziertAm</td><td>@Entry.ProduziertAm.ToString("yyyy-MM-dd HH:mm:ss.fff")</td></tr>
+        <tr><td style="color: #666;">AufgenommenAm</td><td>@Entry.AufgenommenAm.ToString("yyyy-MM-dd HH:mm:ss.fff")</td></tr>
+        <tr><td style="color: #666;">IstKomplett</td><td style="color: @(Entry.IstKomplett ? "#4ade80" : "#f0c040");">@Entry.IstKomplett</td></tr>
+        <tr><td style="color: #666;">IstInspiziert</td><td style="color: @(Entry.IstInspiziert ? "#4ade80" : "#f87171");">@Entry.IstInspiziert</td></tr>
+
+        <tr><td colspan="2" style="color: #555; font-weight: 600; padding-top: 12px;">DC0</td></tr>
+        <tr><td style="color: #666;">Pfad</td><td style="font-family: monospace; font-size: 11px; word-break: break-all;">@(Entry.Dc0Pfad ?? "—")</td></tr>
+        <tr><td style="color: #666;">KI-Klassifikation</td><td style="@LabelColor(Entry.Dc0KiBildKlassifikation)">@LabelText(Entry.Dc0KiBildKlassifikation)</td></tr>
+        <tr><td style="color: #666;">Mensch-Label</td><td style="@LabelColor(Entry.Dc0MenschBildLabel)">@LabelText(Entry.Dc0MenschBildLabel)</td></tr>
+
+        <tr><td colspan="2" style="color: #555; font-weight: 600; padding-top: 12px;">DC2</td></tr>
+        <tr><td style="color: #666;">Pfad</td><td style="font-family: monospace; font-size: 11px; word-break: break-all;">@(Entry.Dc2Pfad ?? "—")</td></tr>
+        <tr><td style="color: #666;">KI-Klassifikation</td><td style="@LabelColor(Entry.Dc2KiBildKlassifikation)">@LabelText(Entry.Dc2KiBildKlassifikation)</td></tr>
+        <tr><td style="color: #666;">Mensch-Label</td><td style="@LabelColor(Entry.Dc2MenschBildLabel)">@LabelText(Entry.Dc2MenschBildLabel)</td></tr>
+
+        <tr><td colspan="2" style="color: #555; font-weight: 600; padding-top: 12px;">Paar-Ebene</td></tr>
+        <tr><td style="color: #666;">KI-Bildpaar</td><td style="@LabelColor(Entry.KiBildpaarKlassifikation)">@LabelText(Entry.KiBildpaarKlassifikation)</td></tr>
+        <tr><td style="color: #666;">Mensch-Bildpaar</td><td style="@LabelColor(Entry.MenschBildpaarLabel)">@LabelText(Entry.MenschBildpaarLabel)</td></tr>
+        <tr><td style="color: #666;">Physisches Produkt</td><td style="@LabelColor(Entry.PhysischesProduktLabel)">@LabelText(Entry.PhysischesProduktLabel)</td></tr>
+        </tbody>
+    </MudSimpleTable>
+</div>
+}
+
+@code {
+[Parameter] public ImagePairEntry? Entry { get; set; }
+
+/// <summary>Wird nicht gelesen — erzwingt Re-Render wenn Store sich ändert.</summary>
+[Parameter] public int RenderHint { get; set; }
+
+private static string LabelText(Klassifikation? l) => l switch
+{
+Klassifikation.KeineAnomalie => "OK",
+Klassifikation.Questionable  => "Fraglich",
+Klassifikation.Anomalie      => "Anomalie",
+_                            => "—"
+};
+
+private static string LabelColor(Klassifikation? l) => "color: " + l switch
+{
+Klassifikation.KeineAnomalie => "#4ade80",
+Klassifikation.Questionable  => "#f0c040",
+Klassifikation.Anomalie      => "#f87171",
+_                            => "#555"
+};
+}

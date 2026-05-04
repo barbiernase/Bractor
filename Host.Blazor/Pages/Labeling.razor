@@ -1,0 +1,305 @@
+@page "/labeling"
+@using System.ComponentModel
+@using Domain.Client.ImagePair
+@using Domain.Projections
+@inject ImagePairStore Store
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+@implements IDisposable
+
+<div tabindex="0"
+     @ref="_container"
+     @onkeydown="OnKeyDown"
+     @onkeydown:preventDefault
+     style="outline: none; height: 100vh; display: flex; flex-direction: column; background: #121212; color: #e0e0e0;">
+
+    @* ══════════════ HEADER ══════════════ *@
+    <MudAppBar Dense="true" Fixed="false" Style="background: #1e1e1e; border-bottom: 1px solid #333; flex-shrink: 0;">
+
+        @* ── Modus-Chip (drei Zustände) ── *@
+        @switch (Store.Modus)
+        {
+            case ArbeitsModus.Live:
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                         Color="Color.Error"
+                         OnClick="Store.ToggleModus">
+                    LIVE
+                </MudChip>
+                break;
+
+            case ArbeitsModus.Inspekt:
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                         Color="Color.Info"
+                         OnClick="Store.ToggleModus">
+                    INSPEKT
+                </MudChip>
+                break;
+
+            case ArbeitsModus.Tag:
+                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                         Color="Color.Warning"
+                         OnClick="Store.ToggleModus">
+                    TAG @Store.TagLabelingDatum?.ToString("dd.MM.yy") ✕
+                </MudChip>
+                break;
+        }
+
+        <MudSpacer />
+
+        @if (Store.Aktuell != null)
+        {
+            <MudText Typo="Typo.caption" Class="mr-4" Style="opacity: 0.7;">
+                @Store.Aktuell.ProduziertAm.ToString("dd.MM.yyyy HH:mm:ss")
+            </MudText>
+            <MudText Typo="Typo.caption" Style="font-family: monospace; opacity: 0.7;">
+                @((Store.Seite - 1) * Store.SeitenGroesse + Store.SelectedIndex + 1) / @Store.GesamtAnzahl
+            </MudText>
+        }
+
+        <MudIconButton Icon="@Icons.Material.Filled.Settings"
+                       Color="Color.Inherit" Size="Size.Small" Class="ml-2"
+                       OnClick="() => _settingsOffen = true" />
+    </MudAppBar>
+
+    @* ══════════════ CONTENT: Sidebars + Active Stage ══════════════ *@
+    <div style="flex: 1; display: flex; min-height: 0;">
+
+        @* Linke Sidebars *@
+        @if (_paarlisteAktiv)
+        {
+            <PanelFrame Title="Paarliste"
+                        @bind-IsExpanded="_paarlisteOffen"
+                        Side="PanelFrame.PanelSide.Left"
+                        ExpandedWidth="180" CollapsedWidth="40">
+                <PaarlistenPanel IsExpanded="_paarlisteOffen"
+                                 Items="Store.Items"
+                                 SelectedIndex="Store.SelectedIndex"
+                                 FilterWert="@Store.FilterWert"
+                                 NurNichtInspizierte="Store.NurNichtInspizierte"
+                                 Seite="Store.Seite"
+                                 GesamtSeiten="Store.GesamtSeiten"
+                                 OnSelect="i => Store.WechsleZu(i)"
+                                 OnFilterChanged="v => Store.SetFilter(v)"
+                                 OnNurNeueChanged="_ => Store.ToggleInspektionsFilter()"
+                                 OnVorige="Store.VorigeSeite"
+                                 OnNaechste="Store.NaechsteSeite" />
+            </PanelFrame>
+        }
+
+        @* Active Stage (Tab-Leiste + Content) *@
+        <div style="flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0;">
+
+            @* Stage-Tabs *@
+            <MudTabs @bind-ActivePanelIndex="_activeStageIndex"
+                     Dense="true" Rounded="false" Border="false"
+                     Style="background: #252525; border-bottom: 1px solid #333; flex-shrink: 0; min-height: 28px;"
+                     TabPanelClass="px-3 py-0"
+                     HeaderPosition="TabHeaderPosition.After">
+                @foreach (var stage in AktiveStages)
+                {
+                    <MudTabPanel Text="@stage.Title" Style="font-size: 12px; min-width: 60px; text-transform: none;" />
+                }
+            </MudTabs>
+
+            @* Stage-Content *@
+            @if (AktiveStages.Count > 0 && _activeStageIndex >= 0 && _activeStageIndex < AktiveStages.Count)
+            {
+                @AktiveStages[_activeStageIndex].Content
+            }
+            else
+            {
+                <div style="flex: 1; display: flex; align-items: center; justify-content: center;">
+                    <span style="color: #444;">Keine Stage aktiv</span>
+                </div>
+            }
+        </div>
+
+        @* Rechte Sidebars *@
+        @if (_historiePanelAktiv)
+        {
+            <PanelFrame Title="Historie"
+                        @bind-IsExpanded="_historiePanelOffen"
+                        Side="PanelFrame.PanelSide.Right"
+                        ExpandedWidth="220" CollapsedWidth="40">
+                <HistoriePanel IsExpanded="_historiePanelOffen" Entry="Store.Aktuell"
+                               RenderHint="Store.RenderGeneration" />
+            </PanelFrame>
+        }
+    </div>
+
+    @* ══════════════ FOOTER (Workflow-Shortcuts) ══════════════ *@
+    <MudToolBar Dense="true" Style="background: #1e1e1e; border-top: 1px solid #333; flex-shrink: 0;">
+        <MudText Typo="Typo.caption" Class="mr-1" Style="color: #888;">Produkt:</MudText>
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Success"
+                   OnClick="() => Store.LabelProdukt(Klassifikation.KeineAnomalie)"
+                   Class="mr-1" Style="min-width: 0; padding: 2px 8px; font-size: 11px;"><b>R</b>&nbsp;OK</MudButton>
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Warning"
+                   OnClick="() => Store.LabelProdukt(Klassifikation.Questionable)"
+                   Class="mr-1" Style="min-width: 0; padding: 2px 8px; font-size: 11px;"><b>Q</b>&nbsp;?</MudButton>
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Error"
+                   OnClick="() => Store.LabelProdukt(Klassifikation.Anomalie)"
+                   Style="min-width: 0; padding: 2px 8px; font-size: 11px;"><b>F</b>&nbsp;!</MudButton>
+
+        <MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
+
+        <MudText Typo="Typo.caption" Class="mr-1" Style="color: #888;">Kamera:</MudText>
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Error"
+                   OnClick="() => Store.LabelKamera(Klassifikation.Anomalie)"
+                   Class="mr-1" Style="min-width: 0; padding: 2px 8px; font-size: 11px;"><b>E</b>&nbsp;Erk.</MudButton>
+        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Success"
+                   OnClick="() => Store.LabelKamera(Klassifikation.KeineAnomalie)"
+                   Style="min-width: 0; padding: 2px 8px; font-size: 11px;"><b>N</b>&nbsp;Nicht</MudButton>
+
+        <MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
+
+        <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Small" OnClick="Store.NavigatePrev" />
+        <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" OnClick="Store.NavigateNext" />
+        <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Default" OnClick="Store.NavigateNextOffen"
+                   Style="min-width: 0; padding: 2px 8px; font-size: 11px; text-transform: none;"><b>Space</b>&nbsp;Nächstes</MudButton>
+    </MudToolBar>
+</div>
+
+@* ══════════════ SETTINGS ══════════════ *@
+<MudDialog @bind-Visible="_settingsOffen" Options="_dialogOptions">
+    <TitleContent><MudText Typo="Typo.h6">Einstellungen</MudText></TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: #888;">Sidebars</MudText>
+        <MudCheckBox T="bool" @bind-Value="_paarlisteAktiv" Label="Paarliste" Color="Color.Primary" Dense="true" />
+        <MudCheckBox T="bool" @bind-Value="_historiePanelAktiv" Label="Historie" Color="Color.Primary" Dense="true" />
+        <MudDivider Class="my-3" />
+        <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: #888;">Stages</MudText>
+        <MudCheckBox T="bool" @bind-Value="_bilderStageAktiv" Label="Bilder (DC0/DC2)" Color="Color.Primary" Dense="true" />
+        <MudCheckBox T="bool" @bind-Value="_debugStageAktiv" Label="Debug-Stage" Color="Color.Primary" Dense="true" />
+        <MudCheckBox T="bool" @bind-Value="_chartStageAktiv" Label="Chart (Produktionsverlauf)" Color="Color.Primary" Dense="true" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _settingsOffen = false" Color="Color.Primary">Schließen</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private ElementReference _container;
+
+    // ── Nur kosmetischer Local-State ──
+    private bool _paarlisteAktiv = true;
+    private bool _paarlisteOffen = true;
+    private bool _historiePanelAktiv = true;
+    private bool _historiePanelOffen = true;
+
+    private bool _bilderStageAktiv = true;
+    private bool _debugStageAktiv = true;
+    private bool _chartStageAktiv = true;
+    private int _activeStageIndex;
+
+    private bool _settingsOffen;
+    private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Small };
+
+    // ═══════════════════════════════════════════════════════
+    // Stage-Registry
+    // ═══════════════════════════════════════════════════════
+
+    private record StageDefinition(string Title, RenderFragment Content);
+
+    private List<StageDefinition> AktiveStages
+    {
+        get
+        {
+            var list = new List<StageDefinition>();
+            if (_bilderStageAktiv)
+                list.Add(new("Bilder",
+                    @<BilderStage Entry="Store.Aktuell" RenderHint="Store.RenderGeneration" />));
+            if (_debugStageAktiv)
+                list.Add(new("Debug",
+                    @<DebugStage Entry="Store.Aktuell" RenderHint="Store.RenderGeneration" />));
+            if (_chartStageAktiv)
+                list.Add(new("Chart",
+                    @<ChartStage />));
+            return list;
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // Lifecycle
+    // ═══════════════════════════════════════════════════════
+
+    protected override void OnInitialized()
+    {
+        Store.PropertyChanged += OnStoreChanged;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender) await _container.FocusAsync();
+    }
+
+    private void OnStoreChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        _ = InvokeAsync(() =>
+        {
+            if (e.PropertyName == nameof(ImagePairStore.LetzteAblehnung)
+                && Store.LetzteAblehnung != null)
+                Snackbar.Add($"{Store.LetzteAblehnung}", Severity.Warning);
+
+            if (e.PropertyName == nameof(ImagePairStore.SelectedIndex))
+                _ = ScrollToSelected();
+
+            // Tag-Labeling gestartet → zum Bilder-Tab springen
+            if (e.PropertyName == nameof(ImagePairStore.Modus)
+                && Store.Modus == ArbeitsModus.Tag)
+                _activeStageIndex = 0;
+
+            StateHasChanged();
+        });
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // Keyboard → Store-Methoden
+    // ═══════════════════════════════════════════════════════
+
+    private void OnKeyDown(KeyboardEventArgs e)
+    {
+        switch (e.Key)
+        {
+            case "ArrowRight": Store.NavigateNext(); break;
+            case "ArrowLeft":  Store.NavigatePrev(); break;
+            case " ":          Store.NavigateNextOffen(); break;
+
+            case "r": Store.LabelProdukt(Klassifikation.KeineAnomalie); break;
+            case "f": Store.LabelProdukt(Klassifikation.Anomalie); break;
+            case "q": Store.LabelProdukt(Klassifikation.Questionable); break;
+            case "e": Store.LabelKamera(Klassifikation.Anomalie); break;
+            case "n": Store.LabelKamera(Klassifikation.KeineAnomalie); break;
+
+            case "Tab": _paarlisteOffen = !_paarlisteOffen; break;
+            case "l":   Store.ToggleModus(); break;
+            case "i":   Store.ToggleInspektionsFilter(); break;
+            case "1":   Store.SetFilter("alle"); break;
+            case "2":   Store.SetFilter("offen"); break;
+            case "3":   Store.SetFilter("anomalie"); break;
+
+            case "Escape":
+                if (Store.Modus == ArbeitsModus.Tag)
+                    Store.BeendeTagLabeling();
+                break;
+        }
+    }
+
+    private async Task ScrollToSelected()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("eval",
+                $"document.getElementById('pair-{Store.SelectedIndex}')?.scrollIntoView({{block:'nearest'}})");
+        }
+        catch { }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // Dispose
+    // ═══════════════════════════════════════════════════════
+
+    public void Dispose()
+    {
+        Store.PropertyChanged -= OnStoreChanged;
+    }
+}

@@ -1,0 +1,103 @@
+# ═══════════════════════════════════════════════════════════════
+#  .gitignore — CqrsSolution
+# ═══════════════════════════════════════════════════════════════
+
+# ──────────────────────────────────────────────────────────────
+#  C# / .NET Standard
+# ──────────────────────────────────────────────────────────────
+
+## Build-Output
+[Bb]in/
+[Oo]bj/
+[Dd]ebug/
+[Rr]elease/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Ll]og/
+[Ll]ogs/
+
+## NuGet
+**/[Pp]ackages/*
+*.nupkg
+*.snupkg
+**/packages/
+.nuget/
+project.lock.json
+
+## Visual Studio
+.vs/
+*.suo
+*.user
+*.userosscache
+*.sln.docstates
+*.DotSettings.user
+
+## Rider / JetBrains
+.idea/
+
+## User-specific files
+*.rsuser
+*.userprefs
+
+## Build results
+[Dd]ebugPublic/
+*.VisualState.xml
+TestResult.xml
+*.Cache
+ClientBin/
+
+## MSTest
+[Tt]est[Rr]esult*/
+
+## Publish output
+*.Publish.xml
+*.azurePubxml
+*.pubxml
+*.publishproj
+publish/
+
+## Windows / macOS
+[Tt]humbs.db
+Thumbs.db:encryptable
+ehthumbs.db
+ehthumbs_vista.db
+*.stackdump
+[Dd]esktop.ini
+$RECYCLE.BIN/
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# ──────────────────────────────────────────────────────────────
+#  Projekt-spezifisch: Ordner die NICHT ins Repo sollen
+# ──────────────────────────────────────────────────────────────
+
+Client.Avalonia/
+Client.Harness/
+Client.Infrastructure.Tests/
+Client.Test/
+DebugApp/
+deploy-linux/
+deploy-windows/
+Host/
+Host.Persistence.Scenarios/
+Infrastructure.PubSub/
+Infrastructure.PubSub.Application/
+Infrastructure.PubSub.Tests/
+ReactiveState/
+ReactiveState.Application/
+ReactiveState.SourceGeneration/
+ReactiveState.Tests/
+
+# ──────────────────────────────────────────────────────────────
+#  Projekt-spezifisch: Einzeldateien die NICHT ins Repo sollen
+# ──────────────────────────────────────────────────────────────
+
+cqrs.proto
+deploy-windows.zip
+knowledge-graph.json
+LabelingTool.zip
+PROJECT_STRUCTURE.md

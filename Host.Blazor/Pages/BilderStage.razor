@@ -1,0 +1,133 @@
+@using MudBlazor
+@* ═══════════════════════════════════════════════════════════════
+    BilderStage — Stage-Modul: DC0/DC2-Bildanzeige.
+    
+    Enthält den Domain-Kontext (Produkt/Kamera-Chips) und
+    die Bild-Toggles. Kennt nur das aktuelle ImagePairEntry.
+    Die Shell weiß nichts über diese Inhalte.
+═══════════════════════════════════════════════════════════════ *@
+
+@if (Entry == null)
+{
+    <div style="flex: 1; display: flex; align-items: center; justify-content: center;">
+        <span style="color: #444;">Kein Bildpaar ausgewählt</span>
+    </div>
+}
+else
+{
+    @* ── Domain-Kontext: Produkt + Kamera Status ── *@
+    <div style="display: flex; align-items: center; gap: 8px;
+                padding: 4px 12px; background: #1a1a1a;
+                border-bottom: 1px solid #2a2a2a; flex-shrink: 0;">
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                 Color="@KlassifikationColor(Entry.PhysischesProduktLabel)">
+            Produkt: @KlassifikationText(Entry.PhysischesProduktLabel)
+        </MudChip>
+        <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                 Color="@KlassifikationColor(Entry.MenschBildpaarLabel)">
+            Kamera: @KameraText(Entry.MenschBildpaarLabel)
+        </MudChip>
+
+        <MudSpacer />
+
+        @* Bild-Toggles *@
+        <MudToggleGroup T="string"
+                        SelectionMode="SelectionMode.MultiSelection"
+                        Values="_sichtbareBilder"
+                        ValuesChanged="v => _sichtbareBilder = v"
+                        Color="Color.Primary"
+                        Size="Size.Small"
+                        CheckMark="false">
+            <MudToggleItem Value="@("DC0")" Text="DC0" />
+            <MudToggleItem Value="@("DC2")" Text="DC2" />
+        </MudToggleGroup>
+
+        <span style="font-family: monospace; font-size: 12px; color: #555; margin-left: 8px;">
+            @Entry.PairKey
+        </span>
+    </div>
+
+    @* ── Bildbereich ── *@
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 2px; padding: 2px; min-height: 0; overflow: hidden; background: #0a0a0a;">
+
+        @if (Dc0Sichtbar)
+        {
+            <div style="flex: 1; position: relative; display: flex; align-items: center; justify-content: center; min-height: 0; overflow: hidden; background: #111;">
+                <span style="position: absolute; top: 4px; left: 8px; font-size: 11px; font-weight: 600; color: #888; background: rgba(0,0,0,0.6); padding: 1px 6px; border-radius: 2px; z-index: 1;">DC0</span>
+                @if (!string.IsNullOrEmpty(Entry.Dc0BildSrc))
+                {
+                    <img src="@Entry.Dc0BildSrc" alt="DC0" style="max-width: 100%; max-height: 100%; object-fit: contain;" />
+                }
+                else if (!string.IsNullOrEmpty(Entry.Dc0Pfad))
+                {
+                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Style="width: 120px;" />
+                }
+                else
+                {
+                    <span style="color: #444;">Kein DC0-Bild</span>
+                }
+            </div>
+        }
+
+        @if (Dc2Sichtbar)
+        {
+            <div style="flex: 1; position: relative; display: flex; align-items: center; justify-content: center; min-height: 0; overflow: hidden; background: #111;">
+                <span style="position: absolute; top: 4px; left: 8px; font-size: 11px; font-weight: 600; color: #888; background: rgba(0,0,0,0.6); padding: 1px 6px; border-radius: 2px; z-index: 1;">DC2</span>
+                @if (!string.IsNullOrEmpty(Entry.Dc2BildSrc))
+                {
+                    <img src="@Entry.Dc2BildSrc" alt="DC2" style="max-width: 100%; max-height: 100%; object-fit: contain;" />
+                }
+                else if (!string.IsNullOrEmpty(Entry.Dc2Pfad))
+                {
+                    <MudProgressLinear Indeterminate="true" Color="Color.Primary" Style="width: 120px;" />
+                }
+                else
+                {
+                    <span style="color: #444;">Kein DC2-Bild</span>
+                }
+            </div>
+        }
+
+        @if (!Dc0Sichtbar && !Dc2Sichtbar)
+        {
+            <div style="flex: 1; display: flex; align-items: center; justify-content: center;">
+                <span style="color: #444;">DC0 oder DC2 aktivieren</span>
+            </div>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public ImagePairEntry? Entry { get; set; }
+
+    /// <summary>Wird nicht gelesen — erzwingt Re-Render wenn Store sich ändert.</summary>
+    [Parameter] public int RenderHint { get; set; }
+
+    private IEnumerable<string> _sichtbareBilder = new[] { "DC0", "DC2" };
+    private bool Dc0Sichtbar => _sichtbareBilder.Contains("DC0");
+    private bool Dc2Sichtbar => _sichtbareBilder.Contains("DC2");
+
+    private static Color KlassifikationColor(Klassifikation? l) => l switch
+    {
+        Klassifikation.KeineAnomalie => Color.Success,
+        Klassifikation.Questionable  => Color.Warning,
+        Klassifikation.Anomalie      => Color.Error,
+        _                            => Color.Default
+    };
+
+    private static string KlassifikationText(Klassifikation? l) => l switch
+    {
+        Klassifikation.KeineAnomalie => "OK",
+        Klassifikation.Questionable  => "Fraglich",
+        Klassifikation.Anomalie      => "Anomalie",
+        _                            => "offen"
+    };
+
+    private static string KameraText(Klassifikation? l) => l switch
+    {
+        Klassifikation.KeineAnomalie => "Nicht erk.",
+        Klassifikation.Questionable  => "Fraglich",
+        Klassifikation.Anomalie      => "Erkennbar",
+        _                            => "offen"
+    };
+}

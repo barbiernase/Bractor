@@ -1,0 +1,35 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Core.SourceGeneration\Core.SourceGeneration.csproj" />
+    <ProjectReference Include="..\Domain.Infrastructure\Domain.Infrastructure.csproj" />
+    <ProjectReference Include="..\Domain.Pipeline\Domain.Pipeline.csproj" />
+    <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
+    <ProjectReference Include="..\Infrastructure.SourceGeneration\Infrastructure.SourceGeneration.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+    <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
+    <ProjectReference Include="..\Domain\Domain.csproj" />
+    <ProjectReference Include="..\Core\Core.csproj" />
+    <ProjectReference Include="..\ProtoRepo\ProtoRepo.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="GrpcClient\Actors\" />
+    <Folder Include="GrpcClient\Messages\" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Marten" Version="8.20.0" />
+    <PackageReference Include="Proto.Actor" Version="1.7.0" />
+    <PackageReference Include="Proto.Cluster" Version="1.7.0" />
+    <PackageReference Include="Proto.Cluster.Consul" Version="1.7.0" />
+    <PackageReference Include="Proto.Cluster.TestProvider" Version="1.7.0" />
+    <PackageReference Include="StackExchange.Redis" Version="2.10.14" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
