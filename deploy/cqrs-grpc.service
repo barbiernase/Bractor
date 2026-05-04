@@ -1,0 +1,25 @@
+[Unit]
+Description=CQRS Host.Grpc (EventStore + PubSub + Pipeline)
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=exec
+User=wirksam
+Group=wirksam
+WorkingDirectory=/opt/cqrs/grpc
+ExecStart=/opt/cqrs/grpc/Host.Grpc
+EnvironmentFile=/opt/cqrs/cqrs-grpc.env
+Restart=on-failure
+RestartSec=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cqrs-grpc
+
+# Limits
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

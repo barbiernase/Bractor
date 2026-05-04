@@ -1,0 +1,21 @@
+[Unit]
+Description=CQRS Host.Blazor (UI)
+After=network.target cqrs-grpc.service
+
+[Service]
+Type=exec
+User=wirksam
+Group=wirksam
+WorkingDirectory=/opt/cqrs/blazor
+ExecStart=/opt/cqrs/blazor/Host.Blazor
+EnvironmentFile=/opt/cqrs/cqrs-blazor.env
+Restart=on-failure
+RestartSec=5
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=cqrs-blazor
+
+[Install]
+WantedBy=multi-user.target
