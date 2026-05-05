@@ -4,7 +4,6 @@ set -euo pipefail
 REPO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 GRPC_DIR="/opt/cqrs/grpc"
 BLAZOR_DIR="/opt/cqrs/blazor"
-OPENCV_SO="$HOME/.nuget/packages/opencvsharp4.runtime.ubuntu.18.04-x64/4.6.0.20220608/runtimes/ubuntu.18.04-x64/native/libOpenCvSharpExtern.so"
 
 echo "=== CQRS Deploy ==="
 
@@ -35,14 +34,6 @@ echo "Building Host.Grpc..."
 ~/.dotnet/dotnet publish "$REPO_DIR/Host.Grpc/Host.Grpc.csproj" \
     -c Release -r linux-x64 --self-contained -o "$GRPC_DIR"
 
-# OpenCvSharp native lib kopieren (.NET 9 ignoriert ubuntu.18.04-x64 RID)
-if [ -f "$OPENCV_SO" ]; then
-    cp "$OPENCV_SO" "$GRPC_DIR/"
-    echo "  libOpenCvSharpExtern.so kopiert"
-else
-    echo "  WARNUNG: libOpenCvSharpExtern.so nicht gefunden in NuGet-Cache"
-fi
-
 echo "Building Host.Blazor..."
 ~/.dotnet/dotnet publish "$REPO_DIR/Host.Blazor/Host.Blazor.csproj" \
     -c Release -r linux-x64 --self-contained -o "$BLAZOR_DIR"
@@ -55,7 +46,7 @@ ConnectionStrings__EventStore="Host=localhost;Port=5432;Database=cqrs_events;Use
 Redis__Endpoint="localhost:6379" \
 Consul__Address="localhost:8500" \
 Pipeline__WatchPath="/data/input" \
-Pipeline__PreprocessedPath="/data/preprocessed" \
+Pipeline__PreprocessedPath="/home/wirksam/cqrs-data/preprocessed" \
 DOTNET_ENVIRONMENT=Production \
 nohup ./Host.Grpc > /opt/cqrs/grpc.log 2>&1 &
 
