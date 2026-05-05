@@ -260,15 +260,15 @@
     {
         switch (e.Key)
         {
-            case "ArrowRight": Store.NavigateNext(); break;
-            case "ArrowLeft":  Store.NavigatePrev(); break;
+            case "ArrowUp": Store.NavigateNext(); break;
+            case "ArrowDown":  Store.NavigatePrev(); break;
             case " ":          Store.NavigateNextOffen(); break;
 
-            case "r": Store.LabelProdukt(Klassifikation.KeineAnomalie); break;
-            case "f": Store.LabelProdukt(Klassifikation.Anomalie); break;
+            case "Enter": Store.LabelProdukt(Klassifikation.KeineAnomalie); break;
+            case "Backspace": Store.LabelProdukt(Klassifikation.Anomalie); break;
             case "q": Store.LabelProdukt(Klassifikation.Questionable); break;
-            case "e": Store.LabelKamera(Klassifikation.Anomalie); break;
-            case "n": Store.LabelKamera(Klassifikation.KeineAnomalie); break;
+            case "ArrowLeft": Store.LabelKamera(Klassifikation.Anomalie); break;
+            case "ArrowRight": Store.LabelKamera(Klassifikation.KeineAnomalie); break;
 
             case "Tab": _paarlisteOffen = !_paarlisteOffen; break;
             case "l":   Store.ToggleModus(); break;
