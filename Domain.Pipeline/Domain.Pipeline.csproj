@@ -38,5 +38,10 @@
         <PackageReference Include="StackExchange.Redis" Version="2.10.14" />
     </ItemGroup>
 
+    <Target Name="CopyOpenCvNative" AfterTargets="Publish" Condition="'$(RuntimeIdentifier)' == 'linux-x64'">
+        <Copy SourceFiles="$(NuGetPackageRoot)opencvsharp4.runtime.ubuntu.18.04-x64/4.6.0.20220608/runtimes/ubuntu.18.04-x64/native/libOpenCvSharpExtern.so"
+              DestinationFolder="$(PublishDir)" />
+    </Target>
+
 
 </Project>
