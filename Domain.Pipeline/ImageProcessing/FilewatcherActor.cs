@@ -25,7 +25,8 @@ namespace Domain.Pipeline.ImageProcessing;
 ///   - HashSet statt Fingerprint: Dateinamen sind global eindeutig (kein Überschreiben)
 ///   - HashSet-Cap 2×Ringpuffergröße: verhindert unbegrenztes Wachstum,
 ///     behält gelöschte Einträge als Flicker-Schutz
-///   - Kein Stabilitäts-Check: Dateien kommen atomar auf dem Share an
+///   - Stabilitäts-Check: Datei muss ein Poll-Intervall lang gleiche Größe haben,
+///     damit unvollständige Transfers (SCP, rsync) nicht verarbeitet werden
 ///   - Kein lock, kein Task.Run: alles läuft sequentiell in der Actor-Mailbox
 /// </summary>
 public class FileWatcherActor : IActor
@@ -37,6 +38,7 @@ public class FileWatcherActor : IActor
     private readonly int _maxSeenEntries;
 
     private readonly HashSet<string> _seen = new();
+    private readonly Dictionary<string, long> _pending = new();
     private bool _stopped;
 
     /// <summary>Interne Tick-Message — löst einen Verzeichnis-Scan aus.</summary>
@@ -146,6 +148,24 @@ public class FileWatcherActor : IActor
                 if (_seen.Contains(name))
                     continue;
 
+                var currentSize = new FileInfo(fullPath).Length;
+
+                // Neu erkannt → Größe merken, beim nächsten Tick prüfen
+                if (!_pending.TryGetValue(name, out var lastSize))
+                {
+                    _pending[name] = currentSize;
+                    continue;
+                }
+
+                // Größe hat sich geändert → Datei wird noch geschrieben
+                if (currentSize != lastSize)
+                {
+                    _pending[name] = currentSize;
+                    continue;
+                }
+
+                // Größe stabil seit letztem Tick → Datei ist komplett
+                _pending.Remove(name);
                 _seen.Add(name);
 
                 _logger.LogInformation(
@@ -153,7 +173,7 @@ public class FileWatcherActor : IActor
 
                 var ack = await _cluster.RequestAsync<PipelineAck>(
                     identity,
-                    new DateiErkannt(fullPath, name, new FileInfo(fullPath).Length),
+                    new DateiErkannt(fullPath, name, currentSize),
                     context.CancellationToken);
 
                 if (ack?.Accepted == true)

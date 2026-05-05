@@ -41,7 +41,8 @@ public static class FileEndpointExtensions
                     basePath => normalized.StartsWith(basePath));
 
                 if (!isAllowed)
-                    return Results.Forbid();
+                    return Results.StatusCode(403);
+
 
                 if (!File.Exists(fullPath))
                     return Results.NotFound();
