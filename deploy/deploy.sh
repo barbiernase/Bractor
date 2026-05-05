@@ -47,7 +47,7 @@ Redis__Endpoint="localhost:6379" \
 Consul__Address="localhost:8500" \
 Pipeline__WatchPath="/data/input" \
 Pipeline__PreprocessedPath="/home/wirksam/cqrs-data/preprocessed" \
-DOTNET_ENVIRONMENT=Production \
+DOTNET_ENVIRONMENT=Development \
 nohup ./Host.Grpc > /opt/cqrs/grpc.log 2>&1 &
 
 echo "  Host.Grpc gestartet (PID $!), warte auf Port 5001..."
@@ -65,7 +65,7 @@ ASPNETCORE_URLS="http://0.0.0.0:5010" \
 GrpcServer__Address="http://localhost:5001" \
 Pipeline__WatchPath="/data/input" \
 Pipeline__PreprocessedPath="/data/preprocessed" \
-DOTNET_ENVIRONMENT=Production \
+DOTNET_ENVIRONMENT=Development \
 nohup ./Host.Blazor > /opt/cqrs/blazor.log 2>&1 &
 
 echo "  Host.Blazor gestartet (PID $!), warte auf Port 5010..."
