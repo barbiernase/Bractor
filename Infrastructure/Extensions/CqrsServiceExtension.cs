@@ -229,8 +229,11 @@ public static class CqrsServiceExtensions
             // die Adresse wird über den clientConfiguration-Callback gesetzt.
             var consulProvider = new ConsulProvider(
                 new ConsulProviderConfig(),
-                clientConfiguration: c => c.Address = new Uri($"http://{builder.ConsulAddress}"));
-        
+                clientConfiguration: c => c.Address = new Uri(
+                    builder.ConsulAddress.StartsWith("http") 
+                        ? builder.ConsulAddress 
+                        : $"http://{builder.ConsulAddress}"));
+            
             var clusterConfig = ClusterConfig
                 .Setup(
                     clusterName: builder.ClusterName,
