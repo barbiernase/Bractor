@@ -64,7 +64,7 @@ cd "$BLAZOR_DIR"
 ASPNETCORE_URLS="http://0.0.0.0:5010" \
 GrpcServer__Address="http://localhost:5001" \
 Pipeline__WatchPath="/data/input" \
-Pipeline__PreprocessedPath="/data/preprocessed" \
+Pipeline__PreprocessedPath="/home/wirksam/cqrs-data/preprocessed" \
 DOTNET_ENVIRONMENT=Development \
 nohup ./Host.Blazor > /opt/cqrs/blazor.log 2>&1 &
 
