@@ -45,7 +45,7 @@ Grpc__Port=5001 \
 ConnectionStrings__EventStore="Host=localhost;Port=5432;Database=cqrs_events;Username=postgres;Password=postgres" \
 Redis__Endpoint="localhost:6379" \
 Consul__Address="localhost:8500" \
-Pipeline__WatchPath="/data/input" \
+Pipeline__WatchPath="/mnt/unlabeledgewebebilder/SNP/IO" \
 Pipeline__PreprocessedPath="/home/wirksam/cqrs-data/preprocessed" \
 DOTNET_ENVIRONMENT=Development \
 nohup ./Host.Grpc > /opt/cqrs/grpc.log 2>&1 &
@@ -63,7 +63,7 @@ done
 cd "$BLAZOR_DIR"
 ASPNETCORE_URLS="http://0.0.0.0:5010" \
 GrpcServer__Address="http://localhost:5001" \
-Pipeline__WatchPath="/data/input" \
+Pipeline__WatchPath="/mnt/unlabeledgewebebilder/SNP/IO" \
 Pipeline__PreprocessedPath="/home/wirksam/cqrs-data/preprocessed" \
 DOTNET_ENVIRONMENT=Development \
 nohup ./Host.Blazor > /opt/cqrs/blazor.log 2>&1 &
