@@ -1,9 +1,8 @@
-@* ═══════════════════════════════════════════════════════════════
-    DebugStage — Stage-Modul: Dummy zum Testen des Stage-Systems.
-    
-    Zeigt alle verfügbaren Daten des aktuellen ImagePairEntry
-    als übersichtliche Tabelle. Kein eigener State.
-═══════════════════════════════════════════════════════════════ *@
+@* ── Zielverzeichnis: Host.Blazor/Shared/DebugStage.razor ── *@
+@* ── Änderung: ImagePairEntry → ImagePairRecord, RenderHint entfällt ── *@
+
+@using Domain.Client.ImagePair
+@using Domain.ImagePair
 
 @if (Entry == null)
 {
@@ -49,24 +48,21 @@ else
 }
 
 @code {
-[Parameter] public ImagePairEntry? Entry { get; set; }
+    [Parameter] public ImagePairRecord? Entry { get; set; }
 
-/// <summary>Wird nicht gelesen — erzwingt Re-Render wenn Store sich ändert.</summary>
-[Parameter] public int RenderHint { get; set; }
+    private static string LabelText(Klassifikation? l) => l switch
+    {
+        Klassifikation.KeineAnomalie => "OK",
+        Klassifikation.Questionable  => "Fraglich",
+        Klassifikation.Anomalie      => "Anomalie",
+        _                            => "—"
+    };
 
-private static string LabelText(Klassifikation? l) => l switch
-{
-Klassifikation.KeineAnomalie => "OK",
-Klassifikation.Questionable  => "Fraglich",
-Klassifikation.Anomalie      => "Anomalie",
-_                            => "—"
-};
-
-private static string LabelColor(Klassifikation? l) => "color: " + l switch
-{
-Klassifikation.KeineAnomalie => "#4ade80",
-Klassifikation.Questionable  => "#f0c040",
-Klassifikation.Anomalie      => "#f87171",
-_                            => "#555"
-};
+    private static string LabelColor(Klassifikation? l) => "color: " + l switch
+    {
+        Klassifikation.KeineAnomalie => "#4ade80",
+        Klassifikation.Questionable  => "#f0c040",
+        Klassifikation.Anomalie      => "#f87171",
+        _                            => "#555"
+    };
 }

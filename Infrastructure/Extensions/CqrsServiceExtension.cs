@@ -302,9 +302,6 @@ public static class CqrsServiceExtensions
         services.AddHostedService<Infrastructure.Pipeline.PipelineStartupService>();
         Console.WriteLine("  + PipelineStartupService");
         
-        services.AddHostedService<Infrastructure.Pipeline.TriggerStartupService>();
-        Console.WriteLine("  + TriggerStartupService");
-        
         Console.WriteLine();
         return services;
     }

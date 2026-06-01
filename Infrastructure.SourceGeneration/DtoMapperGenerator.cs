@@ -37,9 +37,15 @@ namespace Infrastructure.SourceGeneration
                 // NEU: Query-Typen separat laden
                 var queryGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IQuery");
                 var queryResponseGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IQueryResponse");
+                var triggerGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IPipelineTrigger");
+                
+                // Self-Messages explizit ausschließen — sind Pipeline-intern, kein Proto-Mapping
+                var selfMessageGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IPipelineSelfMessage");
+                var selfMessageNames = new HashSet<string>(selfMessageGraphs.Select(g => g.FullName));
+                triggerGraphs = triggerGraphs.Where(g => !selfMessageNames.Contains(g.FullName)).ToList();
                 
                 // Alle Graphen kombinieren
-                var allGraphs = graphs.Concat(queryGraphs).Concat(queryResponseGraphs).ToList();
+                var allGraphs = graphs.Concat(queryGraphs).Concat(queryResponseGraphs).Concat(triggerGraphs).ToList();
                 
                 debugInfo.Add($"Gefundene Type-Graphen: {allGraphs.Count}");
 
@@ -52,18 +58,32 @@ namespace Infrastructure.SourceGeneration
                 var eventTypes = aggregator.GetTypesSortedByDepth(DomainType.Event);
                 var queryTypes = aggregator.GetTypesSortedByDepth(DomainType.Query);
                 var queryResponseTypes = aggregator.GetTypesSortedByDepth(DomainType.QueryResponse);
+                var triggerTypes = aggregator.GetTypesSortedByDepth(DomainType.Trigger);
+
+// FIX: Trigger-Typen können vom Aggregator als Object fehlklassifiziert werden,
+// wenn sie als Abhängigkeit eines anderen Typs zuerst entdeckt wurden.
+                var triggerFullNames = new HashSet<string>(triggerGraphs.Select(g => g.FullName));
+                var misclassifiedTriggers = objectTypes
+                    .Where(t => triggerFullNames.Contains(t.Node.FullName))
+                    .ToList();
+                foreach (var item in misclassifiedTriggers)
+                {
+                    objectTypes.Remove(item);
+                    triggerTypes.Add(item);
+                }
 
                 debugInfo.Add($"Commands: {commandTypes.Count}");
                 debugInfo.Add($"Events: {eventTypes.Count}");
                 debugInfo.Add($"Queries: {queryTypes.Count}");
                 debugInfo.Add($"QueryResponses: {queryResponseTypes.Count}");
+                debugInfo.Add($"Triggers: {triggerTypes.Count}");
                 debugInfo.Add($"Value Objects: {objectTypes.Count}");
 
                 // 3. Generiere Debug Output
                 GenerateDebugOutput(context, debugInfo, objectTypes, commandTypes, eventTypes, queryTypes, queryResponseTypes);
 
                 // 4. Generiere echten Mapper Code
-                GenerateMapperCode(context, objectTypes, commandTypes, eventTypes, queryTypes, queryResponseTypes);
+                GenerateMapperCode(context, objectTypes, commandTypes, eventTypes, queryTypes, queryResponseTypes, triggerTypes);
             }
             catch (Exception ex)
             {
@@ -79,7 +99,8 @@ namespace Infrastructure.SourceGeneration
             List<TypeAggregationResult> commandTypes,
             List<TypeAggregationResult> eventTypes,
             List<TypeAggregationResult> queryTypes,
-            List<TypeAggregationResult> queryResponseTypes)
+            List<TypeAggregationResult> queryResponseTypes,
+            List<TypeAggregationResult> triggerTypes)
         {
             var sb = new StringBuilder();
             
@@ -100,7 +121,8 @@ namespace Infrastructure.SourceGeneration
                 .Concat(commandTypes)
                 .Concat(eventTypes)
                 .Concat(queryTypes ?? Enumerable.Empty<TypeAggregationResult>())
-                .Concat(queryResponseTypes ?? Enumerable.Empty<TypeAggregationResult>());
+                .Concat(queryResponseTypes ?? Enumerable.Empty<TypeAggregationResult>())
+                .Concat(triggerTypes ?? Enumerable.Empty<TypeAggregationResult>());
                 
             foreach (var type in allTypes)
             {
@@ -119,7 +141,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("{");
             
             // Build type lookup for determining helper classes
-            var typeLookup = BuildTypeLookup(objectTypes, commandTypes, eventTypes, queryTypes, queryResponseTypes);
+            var typeLookup = BuildTypeLookup(objectTypes, commandTypes, eventTypes, queryTypes, queryResponseTypes, triggerTypes);
             
             // Enum-Typnamen sammeln für Collection-Element-Erkennung
             _enumTypeNames = new HashSet<string>();
@@ -137,16 +159,15 @@ namespace Infrastructure.SourceGeneration
             GenerateCommandHelpers(sb, commandTypes, objectTypes, typeLookup);
             GenerateEventHelpers(sb, eventTypes, objectTypes, typeLookup);
             
-            // 3. Query Helpers (NEU)
-            if (queryTypes != null && queryTypes.Any())
-            {
-                GenerateQueryHelpers(sb, queryTypes, objectTypes, typeLookup);
-            }
+            // 3. Standalone-Kategorien — generisch (neue Kategorie = ein Eintrag)
+            GenerateStandaloneHelpers(sb, queryTypes ?? new List<TypeAggregationResult>(), objectTypes,
+                "Query", "IQuery", "QueryPayloadDto", "ProtoQueryMappingHelpers", typeLookup);
             
-            if (queryResponseTypes != null && queryResponseTypes.Any())
-            {
-                GenerateQueryResponseHelpers(sb, queryResponseTypes, objectTypes, typeLookup);
-            }
+            GenerateStandaloneHelpers(sb, queryResponseTypes ?? new List<TypeAggregationResult>(), objectTypes,
+                "QueryResponse", "IQueryResponse", "QueryResponsePayloadDto", "ProtoQueryResponseMappingHelpers", typeLookup);
+            
+            GenerateStandaloneHelpers(sb, triggerTypes ?? new List<TypeAggregationResult>(), objectTypes,
+                "Trigger", "IPipelineTrigger", "TriggerPayloadDto", "ProtoTriggerMappingHelpers", typeLookup);
             
             sb.AppendLine("}");
             
@@ -393,83 +414,55 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine();
         }
 
-        private void GenerateQueryHelpers(StringBuilder sb, List<TypeAggregationResult> queryTypes, List<TypeAggregationResult> objectTypes, Dictionary<string, DomainType> typeLookup)
+        /// <summary>
+        /// Generiert Mapping-Helpers für Standalone-PayloadDto-Kategorien.
+        /// Identisches Muster für Query, QueryResponse, Trigger — nur Name, Interface, DTO unterscheiden sich.
+        /// Command und Event sind Sonderfälle (Envelope-Wrapper) und nutzen eigene Methoden.
+        /// </summary>
+        private void GenerateStandaloneHelpers(
+            StringBuilder sb,
+            List<TypeAggregationResult> types,
+            List<TypeAggregationResult> objectTypes,
+            string categoryName,       // "Query", "QueryResponse", "Trigger"
+            string interfaceName,      // "IQuery", "IQueryResponse", "IPipelineTrigger"
+            string payloadDtoName,     // "QueryPayloadDto", "QueryResponsePayloadDto", "TriggerPayloadDto"
+            string helperClassName,    // "ProtoQueryMappingHelpers", etc.
+            Dictionary<string, DomainType> typeLookup)
         {
-            if (!queryTypes.Any()) return;
+            if (!types.Any()) return;
             
-            sb.AppendLine("    internal static class ProtoQueryMappingHelpers");
+            sb.AppendLine($"    internal static class {helperClassName}");
             sb.AppendLine("    {");
             
-            // Generate lookup dictionaries
-            GenerateLookupDictionaries(sb, queryTypes, "Query", "QueryPayloadDto");
+            GenerateLookupDictionaries(sb, types, categoryName, payloadDtoName);
             
             // MapToDomain
-            sb.AppendLine("        public static IQuery MapToDomain(QueryPayloadDto dto)");
+            sb.AppendLine($"        public static {interfaceName} MapToDomain({payloadDtoName} dto)");
             sb.AppendLine("        {");
-            sb.AppendLine("            if (!QueryMappers.TryGetValue(dto.PayloadCase, out var mapper))");
-            sb.AppendLine("                throw new NotSupportedException($\"Unknown query type: {dto.PayloadCase}\");");
+            sb.AppendLine($"            if (!{categoryName}Mappers.TryGetValue(dto.PayloadCase, out var mapper))");
+            sb.AppendLine($"                throw new NotSupportedException($\"Unknown {categoryName.ToLower()} type: {{dto.PayloadCase}}\");");
             sb.AppendLine();
             sb.AppendLine("            return mapper(dto);");
             sb.AppendLine("        }");
             sb.AppendLine();
             
             // MapToDto
-            sb.AppendLine("        public static QueryPayloadDto MapToDto(IQuery query)");
+            sb.AppendLine($"        public static {payloadDtoName} MapToDto({interfaceName} payload)");
             sb.AppendLine("        {");
-            sb.AppendLine("            var dto = new QueryPayloadDto();");
+            sb.AppendLine($"            var dto = new {payloadDtoName}();");
             sb.AppendLine();
-            sb.AppendLine("            if (!QueryReverseMappers.TryGetValue(query.GetType(), out var mapper))");
-            sb.AppendLine("                throw new NotSupportedException($\"Unknown query type: {query.GetType().Name}\");");
+            sb.AppendLine($"            if (!{categoryName}ReverseMappers.TryGetValue(payload.GetType(), out var mapper))");
+            sb.AppendLine($"                throw new NotSupportedException($\"Unknown {categoryName.ToLower()} type: {{payload.GetType().Name}}\");");
             sb.AppendLine();
-            sb.AppendLine("            mapper(query, dto);");
+            sb.AppendLine("            mapper(payload, dto);");
             sb.AppendLine("            return dto;");
             sb.AppendLine("        }");
             sb.AppendLine();
             
-            // Individual mappers
-            GenerateIndividualMappers(sb, queryTypes, objectTypes, "Query", typeLookup);
+            GenerateIndividualMappers(sb, types, objectTypes, categoryName, typeLookup);
             
             sb.AppendLine("    }");
             sb.AppendLine();
-        }
-
-        private void GenerateQueryResponseHelpers(StringBuilder sb, List<TypeAggregationResult> responseTypes, List<TypeAggregationResult> objectTypes, Dictionary<string, DomainType> typeLookup)
-        {
-            if (!responseTypes.Any()) return;
-            
-            sb.AppendLine("    internal static class ProtoQueryResponseMappingHelpers");
-            sb.AppendLine("    {");
-            
-            // Generate lookup dictionaries
-            GenerateLookupDictionaries(sb, responseTypes, "QueryResponse", "QueryResponsePayloadDto");
-            
-            // MapToDomain
-            sb.AppendLine("        public static IQueryResponse MapToDomain(QueryResponsePayloadDto dto)");
-            sb.AppendLine("        {");
-            sb.AppendLine("            if (!QueryResponseMappers.TryGetValue(dto.PayloadCase, out var mapper))");
-            sb.AppendLine("                throw new NotSupportedException($\"Unknown query response type: {dto.PayloadCase}\");");
-            sb.AppendLine();
-            sb.AppendLine("            return mapper(dto);");
-            sb.AppendLine("        }");
-            sb.AppendLine();
-            
-            // MapToDto
-            sb.AppendLine("        public static QueryResponsePayloadDto MapToDto(IQueryResponse response)");
-            sb.AppendLine("        {");
-            sb.AppendLine("            var dto = new QueryResponsePayloadDto();");
-            sb.AppendLine();
-            sb.AppendLine("            if (!QueryResponseReverseMappers.TryGetValue(response.GetType(), out var mapper))");
-            sb.AppendLine("                throw new NotSupportedException($\"Unknown query response type: {response.GetType().Name}\");");
-            sb.AppendLine();
-            sb.AppendLine("            mapper(response, dto);");
-            sb.AppendLine("            return dto;");
-            sb.AppendLine("        }");
-            sb.AppendLine();
-            
-            // Individual mappers
-            GenerateIndividualMappers(sb, responseTypes, objectTypes, "QueryResponse", typeLookup);
-            
-            sb.AppendLine("    }");
         }
 
         private void GenerateLookupDictionaries(StringBuilder sb, List<TypeAggregationResult> types, string typeName, string envelopeDtoName)
@@ -481,6 +474,7 @@ namespace Infrastructure.SourceGeneration
                 "Event" => "IEvent",
                 "Query" => "IQuery",
                 "QueryResponse" => "IQueryResponse",
+                "Trigger" => "IPipelineTrigger",
                 _ => $"I{typeName}"
             };
             
@@ -835,9 +829,22 @@ namespace Infrastructure.SourceGeneration
                 // null wird zu 0 (Proto default)
                 if (param.FullName == "int?" || param.FullName == "System.Int32?")
                     return $"{sourceVar}.{propName} ?? 0";
-                    
-                // Andere Skalartypen direkt verwenden
+                
+                if (param.FullName.EndsWith("?") 
+                    || param.FullName.StartsWith("System.Nullable<") 
+                    || param.FullName.StartsWith("Nullable<"))
+                    return $"{sourceVar}.{propName} ?? default";
+                
+                if (param.FullName.EndsWith("?") 
+                    || param.FullName.StartsWith("System.Nullable<") 
+                    || param.FullName.StartsWith("Nullable<"))
+                    return $"{sourceVar}.{propName} ?? default";
+
+                // Non-nullable primitive → direkt
                 return $"{sourceVar}.{propName}";
+
+
+
             }
             
             // NEU: Handle nullable Domain-Typen (z.B. Klassifikation?)
@@ -934,7 +941,8 @@ namespace Infrastructure.SourceGeneration
             List<TypeAggregationResult> commandTypes,
             List<TypeAggregationResult> eventTypes,
             List<TypeAggregationResult> queryTypes,
-            List<TypeAggregationResult> queryResponseTypes)
+            List<TypeAggregationResult> queryResponseTypes,
+            List<TypeAggregationResult> triggerTypes)
         {
             var lookup = new Dictionary<string, DomainType>();
             
@@ -954,6 +962,7 @@ namespace Infrastructure.SourceGeneration
             AddTypes(eventTypes, DomainType.Event);
             AddTypes(queryTypes, DomainType.Query);
             AddTypes(queryResponseTypes, DomainType.QueryResponse);
+            AddTypes(triggerTypes, DomainType.Trigger);
             
             return lookup;
         }
@@ -970,6 +979,7 @@ namespace Infrastructure.SourceGeneration
                 DomainType.Event => "ProtoEventMappingHelpers",
                 DomainType.Query => "ProtoQueryMappingHelpers",
                 DomainType.QueryResponse => "ProtoQueryResponseMappingHelpers",
+                DomainType.Trigger => "ProtoTriggerMappingHelpers",
                 _ => "ProtoValueObjectHelpers"
             };
         }
@@ -1005,8 +1015,12 @@ namespace Infrastructure.SourceGeneration
             {
                 "System.DateTime?",
                 "System.DateTimeOffset?",
+                "DateTime?",
+                "DateTimeOffset?",
                 "System.Nullable<System.DateTime>",
                 "System.Nullable<System.DateTimeOffset>",
+                "Nullable<DateTime>",
+                "Nullable<DateTimeOffset>",
             };
             
             return nullableDateTimeTypes.Contains(typeName);
@@ -1172,6 +1186,9 @@ namespace Infrastructure.SourceGeneration
             
             if (typeName.EndsWith("?"))
                 return typeName.TrimEnd('?');
+            
+            
+            
             
             // Nullable<T> Pattern
             if (typeName.StartsWith("System.Nullable<") || typeName.StartsWith("Nullable<"))

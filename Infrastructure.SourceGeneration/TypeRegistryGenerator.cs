@@ -11,21 +11,43 @@ namespace Infrastructure.SourceGeneration
     /// <summary>
     /// Generiert ein statisches Typ-Registry für alle Domain-Message-Typen.
     /// 
-    /// Ersetzt Runtime-Reflection in:
-    /// - MessageTypeMapping.Initialize()
-    /// - EventTypeResolver.Initialize()
-    /// - MartenEventTypeRegistration.DiscoverEventTypes()
-    /// 
+    /// Single-Pass: Ein Durchlauf über alle Typen, Kategorisierung per Interface.
+    /// Neue Kategorien = ein Eintrag in der categories-Liste, sonst nichts.
+    ///
     /// Erkennt:
     /// - IEvent (alle Events, inkl. ITransientEvent)
     /// - ICommand (alle Commands, inkl. ICreationCommand)
     /// - IQuery (alle Queries)
     /// - IQueryResponse (alle Responses)
+    /// - IPipelineTrigger (alle Trigger)
     /// - ITransientEvent (Subset von IEvent, für Marten-Ausschluss)
+    ///
+    /// Speist:
+    /// - MessageTypeMapping (einzige Runtime-Registry)
+    /// - MartenEventTypeRegistration
     /// </summary>
     [Generator]
     public class TypeRegistryGenerator : ISourceGenerator
     {
+        /// <summary>
+        /// Definition einer Nachrichtenkategorie.
+        /// </summary>
+        private class CategoryDef
+        {
+            public string InterfaceFullName { get; }
+            public string DictionaryName { get; }
+            public string Comment { get; }
+            public INamedTypeSymbol Symbol { get; set; }
+            public List<INamedTypeSymbol> Types { get; } = new List<INamedTypeSymbol>();
+
+            public CategoryDef(string interfaceFullName, string dictionaryName, string comment)
+            {
+                InterfaceFullName = interfaceFullName;
+                DictionaryName = dictionaryName;
+                Comment = comment;
+            }
+        }
+
         public void Initialize(GeneratorInitializationContext context)
         {
         }
@@ -34,60 +56,88 @@ namespace Infrastructure.SourceGeneration
         {
             var compilation = context.Compilation;
 
-            // Interface-Symbole auflösen
-            var iEvent = compilation.GetTypeByMetadataName("Abstractions.IEvent");
-            var iTransientEvent = compilation.GetTypeByMetadataName("Abstractions.ITransientEvent");
-            var iCommand = compilation.GetTypeByMetadataName("Abstractions.ICommand");
-            var iQuery = compilation.GetTypeByMetadataName("Abstractions.IQuery");
-            var iQueryResponse = compilation.GetTypeByMetadataName("Abstractions.IQueryResponse");
+            // ═══════════════════════════════════════════════════
+            // Kategorien — neue Kategorie = ein Eintrag hier
+            // ═══════════════════════════════════════════════════
 
-            if (iEvent == null || iCommand == null)
+            var categories = new[]
+            {
+                new CategoryDef("Abstractions.IEvent",           "Events",         "EVENTS (alle, inkl. ITransientEvent)"),
+                new CategoryDef("Abstractions.ICommand",         "Commands",        "COMMANDS (alle, inkl. ICreationCommand)"),
+                new CategoryDef("Abstractions.IQuery",           "Queries",         "QUERIES"),
+                new CategoryDef("Abstractions.IQueryResponse",   "QueryResponses",  "QUERY RESPONSES"),
+                new CategoryDef("Abstractions.IPipelineTrigger", "Triggers",        "TRIGGERS (Pipeline-Eingänge)"),
+            };
+
+            // TransientEvent: kein eigenes Dictionary, aber nötig für PersistableEvents
+            var transientDef = new CategoryDef("Abstractions.ITransientEvent", "_transient", "");
+
+            // Interface-Symbole auflösen
+            foreach (var cat in categories)
+            {
+                cat.Symbol = compilation.GetTypeByMetadataName(cat.InterfaceFullName);
+            }
+            transientDef.Symbol = compilation.GetTypeByMetadataName(transientDef.InterfaceFullName);
+
+            // Mindestens IEvent und ICommand müssen existieren
+            if (categories[0].Symbol == null || categories[1].Symbol == null)
                 return;
 
-            // Alle konkreten Typen sammeln
+            // ═══════════════════════════════════════════════════
+            // Single-Pass: alle Typen kategorisieren
+            // ═══════════════════════════════════════════════════
+
             var allTypes = new List<INamedTypeSymbol>();
             CollectTypes(compilation.GlobalNamespace, allTypes);
 
-            var events = new List<INamedTypeSymbol>();
-            var transientEvents = new List<INamedTypeSymbol>();
-            var commands = new List<INamedTypeSymbol>();
-            var queries = new List<INamedTypeSymbol>();
-            var queryResponses = new List<INamedTypeSymbol>();
+            // Self-Messages komplett ignorieren — sind Pipeline-intern,
+            // kein Proto-Mapping, kein TypeRegistry, kein Marten
+            var iPipelineSelf = compilation.GetTypeByMetadataName("Abstractions.IPipelineSelfMessage");
 
             foreach (var type in allTypes)
             {
-                bool isEvent = type.AllInterfaces.Contains(iEvent, SymbolEqualityComparer.Default);
-                bool isTransient = iTransientEvent != null &&
-                                   type.AllInterfaces.Contains(iTransientEvent, SymbolEqualityComparer.Default);
-                bool isCommand = type.AllInterfaces.Contains(iCommand, SymbolEqualityComparer.Default);
-                bool isQuery = iQuery != null &&
-                               type.AllInterfaces.Contains(iQuery, SymbolEqualityComparer.Default);
-                bool isQueryResponse = iQueryResponse != null &&
-                                       type.AllInterfaces.Contains(iQueryResponse, SymbolEqualityComparer.Default);
+                // Self-Messages explizit ausschließen
+                if (iPipelineSelf != null &&
+                    type.AllInterfaces.Contains(iPipelineSelf, SymbolEqualityComparer.Default))
+                    continue;
 
-                if (isEvent)
+                var interfaces = type.AllInterfaces;
+
+                foreach (var cat in categories)
                 {
-                    events.Add(type);
-                    if (isTransient)
-                        transientEvents.Add(type);
+                    if (cat.Symbol != null &&
+                        interfaces.Contains(cat.Symbol, SymbolEqualityComparer.Default))
+                    {
+                        cat.Types.Add(type);
+                    }
                 }
-                if (isCommand) commands.Add(type);
-                if (isQuery) queries.Add(type);
-                if (isQueryResponse) queryResponses.Add(type);
+
+                if (transientDef.Symbol != null &&
+                    interfaces.Contains(transientDef.Symbol, SymbolEqualityComparer.Default))
+                {
+                    transientDef.Types.Add(type);
+                }
             }
 
             // Sortieren für deterministische Ausgabe
-            events = events.OrderBy(t => t.Name).ToList();
-            transientEvents = transientEvents.OrderBy(t => t.Name).ToList();
-            commands = commands.OrderBy(t => t.Name).ToList();
-            queries = queries.OrderBy(t => t.Name).ToList();
-            queryResponses = queryResponses.OrderBy(t => t.Name).ToList();
+            foreach (var cat in categories)
+            {
+                cat.Types.Sort((a, b) => string.Compare(a.Name, b.Name));
+            }
+            transientDef.Types.Sort((a, b) => string.Compare(a.Name, b.Name));
 
-            // Persistable Events = Events OHNE TransientEvents
-            var transientSet = new HashSet<INamedTypeSymbol>(transientEvents, SymbolEqualityComparer.Default);
-            var persistableEvents = events.Where(e => !transientSet.Contains(e)).ToList();
+            // PersistableEvents = Events OHNE TransientEvents
+            var transientSet = new HashSet<INamedTypeSymbol>(
+                transientDef.Types, SymbolEqualityComparer.Default);
+            var persistableEvents = categories[0].Types
+                .Where(e => !transientSet.Contains(e))
+                .ToList();
 
-            var source = GenerateRegistry(events, persistableEvents, commands, queries, queryResponses);
+            // ═══════════════════════════════════════════════════
+            // Code generieren
+            // ═══════════════════════════════════════════════════
+
+            var source = GenerateRegistry(categories, persistableEvents);
             context.AddSource("GeneratedTypeRegistry.g.cs", source);
         }
 
@@ -99,7 +149,6 @@ namespace Infrastructure.SourceGeneration
                 {
                     results.Add(type);
                 }
-                // Records sind auch TypeKind.Class in Roslyn
             }
 
             foreach (var subNs in ns.GetNamespaceMembers())
@@ -108,27 +157,31 @@ namespace Infrastructure.SourceGeneration
             }
         }
 
+        // ═══════════════════════════════════════════════════════
+        // Code-Generierung
+        // ═══════════════════════════════════════════════════════
+
         private string GenerateRegistry(
-            List<INamedTypeSymbol> events,
-            List<INamedTypeSymbol> persistableEvents,
-            List<INamedTypeSymbol> commands,
-            List<INamedTypeSymbol> queries,
-            List<INamedTypeSymbol> queryResponses)
+            CategoryDef[] categories,
+            List<INamedTypeSymbol> persistableEvents)
         {
             var sb = new StringBuilder();
             sb.AppendLine("// <auto-generated/>");
-            sb.AppendLine("// Statisches Typ-Registry — ersetzt Runtime-Reflection");
+            sb.AppendLine("// Statisches Typ-Registry — Single-Pass-Kategorisierung");
             sb.AppendLine();
             sb.AppendLine("using System;");
             sb.AppendLine("using System.Collections.Generic;");
 
-            // Alle benötigten Namespaces sammeln
+            // Namespaces über alle Kategorien sammeln
             var namespaces = new HashSet<string>();
-            foreach (var t in events.Concat(commands).Concat(queries).Concat(queryResponses))
+            foreach (var cat in categories)
             {
-                var ns = t.ContainingNamespace?.ToDisplayString();
-                if (!string.IsNullOrEmpty(ns) && ns != "System")
-                    namespaces.Add(ns);
+                foreach (var t in cat.Types)
+                {
+                    var ns = t.ContainingNamespace?.ToDisplayString();
+                    if (!string.IsNullOrEmpty(ns) && ns != "System")
+                        namespaces.Add(ns);
+                }
             }
             foreach (var ns in namespaces.OrderBy(n => n))
             {
@@ -145,31 +198,16 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("public static class GeneratedTypeRegistry");
             sb.AppendLine("{");
 
-            // Events
-            sb.AppendLine("    // ═══════════════════════════════════════════════════════");
-            sb.AppendLine("    // EVENTS (alle, inkl. ITransientEvent)");
-            sb.AppendLine("    // ═══════════════════════════════════════════════════════");
-            GenerateDictionary(sb, "Events", events);
+            // Dictionaries — datengetrieben
+            foreach (var cat in categories)
+            {
+                sb.AppendLine($"    // ═══════════════════════════════════════════════════════");
+                sb.AppendLine($"    // {cat.Comment}");
+                sb.AppendLine($"    // ═══════════════════════════════════════════════════════");
+                GenerateDictionary(sb, cat.DictionaryName, cat.Types);
+            }
 
-            // Commands
-            sb.AppendLine("    // ═══════════════════════════════════════════════════════");
-            sb.AppendLine("    // COMMANDS (alle, inkl. ICreationCommand)");
-            sb.AppendLine("    // ═══════════════════════════════════════════════════════");
-            GenerateDictionary(sb, "Commands", commands);
-
-            // Queries
-            sb.AppendLine("    // ═══════════════════════════════════════════════════════");
-            sb.AppendLine("    // QUERIES");
-            sb.AppendLine("    // ═══════════════════════════════════════════════════════");
-            GenerateDictionary(sb, "Queries", queries);
-
-            // QueryResponses
-            sb.AppendLine("    // ═══════════════════════════════════════════════════════");
-            sb.AppendLine("    // QUERY RESPONSES");
-            sb.AppendLine("    // ═══════════════════════════════════════════════════════");
-            GenerateDictionary(sb, "QueryResponses", queryResponses);
-
-            // PersistableEvents (für Marten: IEvent ohne ITransientEvent, mit snake_case)
+            // PersistableEvents — Spezialfall für Marten
             sb.AppendLine("    // ═══════════════════════════════════════════════════════");
             sb.AppendLine("    // PERSISTABLE EVENTS (für Marten: ohne ITransientEvent)");
             sb.AppendLine("    // ═══════════════════════════════════════════════════════");
@@ -183,7 +221,6 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("    };");
             sb.AppendLine();
 
-            // PersistableEventTypes (nur Type-Liste, für einfachere Nutzung)
             sb.AppendLine("    /// <summary>");
             sb.AppendLine("    /// Nur die Type-Objekte der persistierbaren Events (Convenience).");
             sb.AppendLine("    /// </summary>");
@@ -213,8 +250,7 @@ namespace Infrastructure.SourceGeneration
         }
 
         // ═══════════════════════════════════════════════════════
-        // Snake_case Konvertierung (Duplikat aus NameSanitizer,
-        // da Source Generators keine Runtime-Referenzen nutzen können)
+        // Snake_case Konvertierung
         // ═══════════════════════════════════════════════════════
 
         private static string SanitizeName(string name)

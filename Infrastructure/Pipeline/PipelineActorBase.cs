@@ -41,6 +41,12 @@ public abstract class PipelineActorBase<THandler> : IActor
     /// </summary>
     private readonly Dictionary<Guid, int> _versionCache = new();
 
+    /// <summary>
+    /// Token → CancellationTokenSource für geplante Self-Messages.
+    /// Ermöglicht deterministisches Cancel: gleiches Token → altes Schedule verworfen.
+    /// </summary>
+    private readonly Dictionary<string, CancellationTokenSource> _scheduledTokens = new();
+
     private const int MaxRetries = 3;
 
     protected PipelineActorBase(
@@ -65,14 +71,19 @@ public abstract class PipelineActorBase<THandler> : IActor
                     await OnStartedAsync(context);
                     break;
 
-                // Kanal 1: Direkte Trigger-Messages von nativen Actors
+                // Kanal 0: Self-Messages (ScheduleSelf → eigene Mailbox)
+                case IPipelineSelfMessage selfMsg:
+                    await OnSelfMessageAsync(selfMsg, context);
+                    break;
+
+                // Kanal 1: Direkte Trigger-Messages von nativen Actors oder anderen Pipelines
                 case IPipelineTrigger trigger:
                     await OnTriggerAsync(trigger, context);
                     break;
 
                 // Kanal 2: Events via PubSub (identisch zu SubscriberActorBase)
                 case IAggregateEnvelope envelope:
-                    await OnEnvelopeAsync(envelope, context.CancellationToken);
+                    await OnEnvelopeAsync(envelope, context, context.CancellationToken);
                     break;
 
                 case Stopping:
@@ -117,7 +128,9 @@ public abstract class PipelineActorBase<THandler> : IActor
             }
         }
 
-        await _logic.OnInitializeAsync();
+        // Init-Context mit ScheduleSelf für periodische Ticks
+        var ctx = CreatePipelineContext(context);
+        await _logic.OnInitializeAsync(ctx);
         Console.WriteLine($"[Pipeline:{_logic.PipelineId}] Ready");
     }
 
@@ -142,14 +155,14 @@ public abstract class PipelineActorBase<THandler> : IActor
     {
         Console.WriteLine($"[Pipeline:{_logic.PipelineId}] Trigger: {trigger.GetType().Name}");
 
-        var ctx = new PipelineContext
-        {
-            CorrelationId = Guid.NewGuid().ToString()
-        };
+        var ctx = CreatePipelineContext(context, correlationId: Guid.NewGuid().ToString());
 
         try
         {
-            await DispatchTriggerAsync(trigger, ctx, cmd => SendCommandAsync(cmd, ctx.CorrelationId));
+            await DispatchTriggerAsync(trigger, ctx,
+                cmd => SendCommandAsync(cmd, ctx.CorrelationId),
+                trig => SendTriggerAsync(trig, ctx.CorrelationId),
+                te => BroadcastTransientAsync(te, ctx));
             context.Respond(new PipelineAck(Accepted: true));
         }
         catch (Exception ex)
@@ -165,7 +178,7 @@ public abstract class PipelineActorBase<THandler> : IActor
     // Kanal 2: Event-Verarbeitung (PubSub)
     // ═══════════════════════════════════════════════════════
 
-    private async Task OnEnvelopeAsync(IAggregateEnvelope envelope, CancellationToken ct)
+    private async Task OnEnvelopeAsync(IAggregateEnvelope envelope, IContext actorCtx, CancellationToken ct)
     {
         try
         {
@@ -177,17 +190,18 @@ public abstract class PipelineActorBase<THandler> : IActor
                 TrackVersion(eventEnvelope.AggregateId, eventEnvelope.AggregateVersion);
             }
 
-            var ctx = new PipelineContext
-            {
-                CorrelationId = envelope.CorrelationId,
-                SourceAggregateId = envelope.AggregateId,
-                SourceAggregateType = envelope.AggregateType,
-                SourceAggregateVersion = envelope is EventEnvelope ee
+            var ctx = CreatePipelineContext(actorCtx,
+                correlationId: envelope.CorrelationId,
+                sourceAggregateId: envelope.AggregateId,
+                sourceAggregateType: envelope.AggregateType,
+                sourceAggregateVersion: envelope is EventEnvelope ee
                     ? ee.AggregateVersion
-                    : null
-            };
+                    : null);
 
-            await DispatchEventAsync(envelope, ctx, cmd => SendCommandAsync(cmd, ctx.CorrelationId));
+            await DispatchEventAsync(envelope, ctx,
+                cmd => SendCommandAsync(cmd, ctx.CorrelationId),
+                trig => SendTriggerAsync(trig, ctx.CorrelationId),
+                te => BroadcastTransientAsync(te, ctx));
         }
         catch (Exception ex)
         {
@@ -294,6 +308,167 @@ public abstract class PipelineActorBase<THandler> : IActor
     }
 
     // ═══════════════════════════════════════════════════════
+    // PipelineContext mit Live-Implementierung
+    // ═══════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Konkrete PipelineContext-Implementierung mit echtem ScheduleSelf/CancelScheduled.
+    /// Nur im Actor verwendet — Pipeline-Handler sehen nur die Basis-API.
+    /// </summary>
+    private class LivePipelineContext : PipelineContext
+    {
+        private readonly PipelineActorBase<THandler> _actor;
+        private readonly IContext _actorCtx;
+
+        public LivePipelineContext(PipelineActorBase<THandler> actor, IContext actorCtx)
+        {
+            _actor = actor;
+            _actorCtx = actorCtx;
+        }
+
+        public override void ScheduleSelf<T>(T payload, TimeSpan delay, string? token = null)
+        {
+            var cts = new CancellationTokenSource();
+
+            if (token is not null)
+            {
+                if (_actor._scheduledTokens.Remove(token, out var existing))
+                    existing.Cancel();
+                _actor._scheduledTokens[token] = cts;
+            }
+
+            _actorCtx.ReenterAfter(Task.Delay(delay, cts.Token), () =>
+            {
+                if (cts.IsCancellationRequested) return;
+                _actorCtx.Send(_actorCtx.Self, payload);
+                if (token is not null) _actor._scheduledTokens.Remove(token);
+            });
+        }
+
+        public override bool CancelScheduled(string token)
+        {
+            if (!_actor._scheduledTokens.Remove(token, out var cts)) return false;
+            cts.Cancel();
+            return true;
+        }
+    }
+
+    private PipelineContext CreatePipelineContext(
+        IContext actorCtx,
+        string? correlationId = null,
+        Guid? sourceAggregateId = null,
+        string? sourceAggregateType = null,
+        int? sourceAggregateVersion = null)
+    {
+        return new LivePipelineContext(this, actorCtx)
+        {
+            CorrelationId = correlationId ?? "",
+            SourceAggregateId = sourceAggregateId,
+            SourceAggregateType = sourceAggregateType,
+            SourceAggregateVersion = sourceAggregateVersion,
+        };
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // Kanal 0: Self-Message-Verarbeitung
+    // ═══════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Verarbeitet eine Self-Message die via ScheduleSelf geplant wurde.
+    /// Context mit ScheduleSelf verdrahtet — Handler kann nächsten Tick planen.
+    /// </summary>
+    private async Task OnSelfMessageAsync(IPipelineSelfMessage selfMsg, IContext context)
+    {
+        Console.WriteLine($"[Pipeline:{_logic.PipelineId}] Self: {selfMsg.GetType().Name}");
+
+        var ctx = CreatePipelineContext(context, correlationId: Guid.NewGuid().ToString());
+
+        try
+        {
+            await DispatchSelfAsync(selfMsg, ctx,
+                cmd => SendCommandAsync(cmd, ctx.CorrelationId),
+                trig => SendTriggerAsync(trig, ctx.CorrelationId),
+                te => BroadcastTransientAsync(te, ctx));
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Pipeline:{_logic.PipelineId}] Self-message failed: {ex.Message}");
+            _logger?.LogError(ex, "[Pipeline:{PipelineId}] Self {SelfType} failed",
+                _logic.PipelineId, selfMsg.GetType().Name);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // Trigger-Sending (Pipeline → Pipeline)
+    // ═══════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Sendet einen Trigger an die Ziel-Pipeline.
+    /// Nutzt GeneratedPipelines.TriggerToPipelineId für das Routing.
+    /// </summary>
+    private async Task SendTriggerAsync(IPipelineTrigger trigger, string correlationId)
+    {
+        var triggerType = trigger.GetType();
+
+        if (!Infrastructure.Pipeline.GeneratedPipelines.TriggerToPipelineId
+                .TryGetValue(triggerType, out var targetPipelineId))
+        {
+            _logger?.LogError(
+                "[Pipeline:{PipelineId}] No TriggerToPipelineId mapping for {TriggerType}",
+                _logic.PipelineId, triggerType.Name);
+            return;
+        }
+
+        var identity = ClusterIdentity.Create(targetPipelineId, $"Pipeline-{targetPipelineId}");
+
+        var ack = await _cluster.RequestAsync<PipelineAck>(
+            identity, trigger, CancellationToken.None);
+
+        if (ack?.Accepted == true)
+        {
+            Console.WriteLine(
+                $"[Pipeline:{_logic.PipelineId}] ✔ Trigger {triggerType.Name} → {targetPipelineId}");
+        }
+        else
+        {
+            _logger?.LogWarning(
+                "[Pipeline:{PipelineId}] Trigger {TriggerType} → {Target} not accepted",
+                _logic.PipelineId, triggerType.Name, targetPipelineId);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════════
+    // TransientEvent-Broadcast (Pipeline → PubSub)
+    // ═══════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Publiziert ein ITransientEvent über den BrokerPublisher.
+    /// Kein Aggregat-Roundtrip — direkt ans PubSub.
+    /// </summary>
+    private async Task BroadcastTransientAsync(ITransientEvent evt, PipelineContext ctx)
+    {
+        if (_publisher == null)
+        {
+            _logger?.LogError(
+                "[Pipeline:{PipelineId}] BrokerPublisher not available for transient broadcast",
+                _logic.PipelineId);
+            return;
+        }
+
+        var envelope = new EventEnvelope
+        {
+            Payload = evt,
+            CorrelationId = ctx.CorrelationId,
+            AggregateId = ctx.SourceAggregateId ?? Guid.Empty,
+            AggregateType = ctx.SourceAggregateType ?? _logic.PipelineId,
+        };
+
+        await _publisher.PublishAsync(envelope);
+        Console.WriteLine(
+            $"[Pipeline:{_logic.PipelineId}] ✔ Broadcast {evt.GetType().Name}");
+    }
+
+    // ═══════════════════════════════════════════════════════
     // Abstrakte Methoden (vom Generator gefüllt)
     // ═══════════════════════════════════════════════════════
 
@@ -310,11 +485,23 @@ public abstract class PipelineActorBase<THandler> : IActor
     protected abstract Task DispatchTriggerAsync(
         IPipelineTrigger trigger,
         PipelineContext ctx,
-        Func<ICommand, Task> send);
+        Func<ICommand, Task> sendCommand,
+        Func<IPipelineTrigger, Task> sendTrigger,
+        Func<ITransientEvent, Task> broadcastTransient);
 
     /// <summary>Dispatch für Events (PubSub).</summary>
     protected abstract Task DispatchEventAsync(
         IAggregateEnvelope envelope,
         PipelineContext ctx,
-        Func<ICommand, Task> send);
+        Func<ICommand, Task> sendCommand,
+        Func<IPipelineTrigger, Task> sendTrigger,
+        Func<ITransientEvent, Task> broadcastTransient);
+
+    /// <summary>Dispatch für Self-Messages (ScheduleSelf).</summary>
+    protected abstract Task DispatchSelfAsync(
+        IPipelineSelfMessage selfMsg,
+        PipelineContext ctx,
+        Func<ICommand, Task> sendCommand,
+        Func<IPipelineTrigger, Task> sendTrigger,
+        Func<ITransientEvent, Task> broadcastTransient);
 }

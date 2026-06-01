@@ -1,15 +1,19 @@
+// ── Domain.Client/ImagePair/ClientEvents.cs ──
+
 using Client.Infrastructure.Abstractions;
 using Domain.ImagePair;
-using Domain.Projections;
 
 namespace Domain.Client.ImagePair;
 
-// ─── Client-Events (lokal, nie gRPC) ───
-
 /// <summary>
-/// Wird vom ImagePairStatistikHandler emittiert
-/// wenn sich die Zähler ändern.
+/// Drei explizite Arbeitsmodi statt kombinierter Booleans.
 /// </summary>
+public enum ArbeitsModus { Live, Inspekt, Tag }
+
+// ═══════════════════════════════════════════════════
+// STATISTIK
+// ═══════════════════════════════════════════════════
+
 public record ImagePairStatistikBerechnet(
     int AnzahlGesamt,
     int AnzahlKomplett,
@@ -18,18 +22,44 @@ public record ImagePairStatistikBerechnet(
     int AnzahlAnomalie
 ) : IClientEvent;
 
-/// <summary>
-/// Wird emittiert wenn der Nutzer den Filter ändert.
-/// Löst eine neue SucheImagePairs-Query aus.
-/// </summary>
-public record ImagePairFilterGeaendert(
-    ImagePairFilter Filter
-) : IClientEvent;
+// ═══════════════════════════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════════════════════════
+
+public record ImagePairAusgewaehlt(Guid PairId) : IClientEvent;
 
 /// <summary>
-/// Wird emittiert wenn der Nutzer ein ImagePair zur
-/// Detailansicht auswählt.
+/// Setzt _pendingIndex im NavigationStore.
+///   0 = erstes Item, -1 = letztes Item.
 /// </summary>
-public record ImagePairAusgewaehlt(
-    Guid PairId
-) : IClientEvent;
+public record NavigationZielGesetzt(int Index) : IClientEvent;
+
+/// <summary>
+/// Seitenwechsel angefordert.
+/// ListRefreshHandler baut den Filter und yieldet SucheImagePairs.
+/// </summary>
+public record SeiteAngefordert(int Seite) : IClientEvent;
+
+public record ModusGeaendert(ArbeitsModus Modus) : IClientEvent;
+
+// ═══════════════════════════════════════════════════
+// FILTER
+// ═══════════════════════════════════════════════════
+
+public record FilterWertGeaendert(string Wert) : IClientEvent;
+
+public record InspektionsfilterGetoggelt() : IClientEvent;
+
+// ═══════════════════════════════════════════════════
+// TAG-LABELING
+// ═══════════════════════════════════════════════════
+
+public record TagLabelingGestartet(DateTimeOffset Datum) : IClientEvent;
+
+public record TagLabelingBeendet() : IClientEvent;
+
+// ═══════════════════════════════════════════════════
+// CHART
+// ═══════════════════════════════════════════════════
+
+public record TagGewaehlt(DateTimeOffset? Datum) : IClientEvent;

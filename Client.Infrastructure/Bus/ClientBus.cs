@@ -3,13 +3,17 @@ using Client.Infrastructure.Abstractions;
 namespace Client.Infrastructure.Bus;
 
 /// <summary>
-/// Implementierung des hybriden Client-Bus (E2).
-/// 
+/// Implementierung des hybriden Client-Bus.
+///
 /// Kein Reflection, kein dynamic — alles über Dictionary&lt;Type, List&gt; Lookup.
 ///
 /// Generische und nicht-generische Subscriber leben im SELBEN Dictionary.
 /// Generische Subscribe&lt;T&gt; wrappen den typisierten Handler in einen object-Handler.
 /// Publish(object) und Publish&lt;T&gt; nutzen denselben Dispatch-Pfad.
+///
+/// Transaktionsmodell:
+///   IsDispatching == true  → Stores sammeln Notifications, feuern nichts
+///   DispatchCompleted      → feuert genau einmal pro Root-Publish, nach allen Stores + Handlern
 /// </summary>
 public class ClientBus : IBus
 {
@@ -24,6 +28,23 @@ public class ClientBus : IBus
     {
         _syncContext = syncContext;
     }
+
+    // ═══════════════════════════════════════════════════
+    // TRANSAKTION
+    // ═══════════════════════════════════════════════════
+
+    /// <summary>
+    /// True solange ein Publish-Zyklus läuft (inkl. reentranter Publishes).
+    /// StoreBase nutzt dieses Flag um Notifications zu unterdrücken.
+    /// </summary>
+    public bool IsDispatching => _depth > 0;
+
+    /// <summary>
+    /// Feuert genau einmal pro Root-Publish, nachdem alle sync-Subscriber
+    /// (inkl. aller reentranten Publishes) abgearbeitet sind.
+    /// StoreBase registriert sich hier und flusht dann alle gesammelten Notifications.
+    /// </summary>
+    public event Action? DispatchCompleted;
 
     // ═══════════════════════════════════════════════════
     // PUBLISH
@@ -47,6 +68,7 @@ public class ClientBus : IBus
                 $"Bus dispatch depth {_depth} exceeded maximum of {MaxDepth}. " +
                 $"Possible cycle involving {message.GetType().Name}.");
 
+        var isRoot = _depth == 0;
         var messageType = message.GetType();
 
         _depth++;
@@ -76,6 +98,11 @@ public class ClientBus : IBus
         finally
         {
             _depth--;
+
+            // DispatchCompleted nur wenn der Root-Publish abgeschlossen ist.
+            // Reentrante Publishes (isRoot == false) feuern NICHT.
+            if (isRoot)
+                DispatchCompleted?.Invoke();
         }
     }
 

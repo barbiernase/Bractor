@@ -23,6 +23,7 @@ message ClientMessage {
         UnsubscribeRequest unsubscribe = 3;
         CapabilitiesRequest capabilities = 4;
         QueryRequest query = 5;
+        TriggerRequest trigger = 6;
     }
 }
 
@@ -42,11 +43,17 @@ message UnsubscribeRequest {
 
 message CapabilitiesRequest {
     repeated string event_types = 1;
+    repeated string message_types = 2;
 }
 
 message QueryRequest {
     string correlation_id = 1;
     QueryPayloadDto payload = 2;
+}
+
+message TriggerRequest {
+    TriggerPayloadDto payload = 1;
+    string correlation_id = 2;
 }
 
 // ============================================================================
@@ -62,6 +69,7 @@ message ServerMessage {
         ErrorResponse error = 5;
         CapabilitiesResponse capabilities_response = 6;
         QueryResponse query_response = 7;
+        TriggerAck trigger_ack = 8;
     }
 }
 
@@ -89,6 +97,8 @@ message CapabilitiesResponse {
     repeated string allowed_commands = 2;
     repeated string subscribed_events = 3;
     repeated string supported_queries = 4;
+    repeated string allowed_triggers = 5;
+    repeated string unknown_types = 6;
 }
 
 message QueryResponse {
@@ -101,6 +111,12 @@ message AggregateMetaDto {
     string id = 1;
     string aggregate_type = 2;
     int32 version = 3;
+}
+
+message TriggerAck {
+    bool accepted = 1;
+    string correlation_id = 2;
+    string error_message = 3;
 }
 
 message ErrorResponse {
@@ -124,33 +140,40 @@ message CommandEnvelopeDto {
     string origin_session_id = 8;
 
     oneof payload {
-        ErstelleImagePairDto erstelle_image_pair = 20;
-        KlassifiziereBildPaarDurchKiDto klassifiziere_bild_paar_durch_ki = 21;
-        KlassifiziereEinzelBildDurchKiDto klassifiziere_einzel_bild_durch_ki = 22;
-        LabelBildPaarDto label_bild_paar = 23;
-        LabelBildRegionDto label_bild_region = 24;
-        LabelEinzelBildDto label_einzel_bild = 25;
-        LabelPhysischesProduktDto label_physisches_produkt = 26;
-        MarkiereAlsInspiziertDto markiere_als_inspiziert = 27;
-        MeldeBildVerfuegbarDto melde_bild_verfuegbar = 28;
-        AendereLagerplatzDto aendere_lagerplatz = 29;
-        BucheWarenabgangDto buche_warenabgang = 30;
-        BucheWareneingangDto buche_wareneingang = 31;
-        DeaktiviereLagerartikelDto deaktiviere_lagerartikel = 32;
-        ErstelleLagerartikelDto erstelle_lagerartikel = 33;
-        OrdneLieferantZuDto ordne_lieferant_zu = 34;
-        PasseEinkaufspreisAnDto passe_einkaufspreis_an = 35;
-        ReserviereBestandDto reserviere_bestand = 36;
-        AendereProfilnamenDto aendere_profilnamen = 37;
-        ErstelleProfilDto erstelle_profil = 38;
-        AendereTitelDto aendere_titel = 39;
-        ArchiviereDto archiviere = 40;
-        EntferneTagDto entferne_tag = 41;
-        ErstelleTodoDto erstelle_todo = 42;
-        FuegeTagHinzuDto fuege_tag_hinzu = 43;
-        MarkiereAlsErledigtDto markiere_als_erledigt = 44;
-        OeffneWiederDto oeffne_wieder = 45;
-        SetzePrioritaetDto setze_prioritaet = 46;
+        DekrementiereDto dekrementiere = 20;
+        ErstelleCounterDto erstelle_counter = 21;
+        IncrementiereDto incrementiere = 22;
+        LoescheCounterDto loesche_counter = 23;
+        ResetDto reset = 24;
+        SetzeMaxGrenzeDto setze_max_grenze = 25;
+        SetzeMinGrenzeDto setze_min_grenze = 26;
+        ErstelleImagePairDto erstelle_image_pair = 27;
+        KlassifiziereBildPaarDurchKiDto klassifiziere_bild_paar_durch_ki = 28;
+        KlassifiziereEinzelBildDurchKiDto klassifiziere_einzel_bild_durch_ki = 29;
+        LabelBildPaarDto label_bild_paar = 30;
+        LabelBildRegionDto label_bild_region = 31;
+        LabelEinzelBildDto label_einzel_bild = 32;
+        LabelPhysischesProduktDto label_physisches_produkt = 33;
+        MarkiereAlsInspiziertDto markiere_als_inspiziert = 34;
+        MeldeBildVerfuegbarDto melde_bild_verfuegbar = 35;
+        AendereLagerplatzDto aendere_lagerplatz = 36;
+        BucheWarenabgangDto buche_warenabgang = 37;
+        BucheWareneingangDto buche_wareneingang = 38;
+        DeaktiviereLagerartikelDto deaktiviere_lagerartikel = 39;
+        ErstelleLagerartikelDto erstelle_lagerartikel = 40;
+        OrdneLieferantZuDto ordne_lieferant_zu = 41;
+        PasseEinkaufspreisAnDto passe_einkaufspreis_an = 42;
+        ReserviereBestandDto reserviere_bestand = 43;
+        AendereProfilnamenDto aendere_profilnamen = 44;
+        ErstelleProfilDto erstelle_profil = 45;
+        AendereTitelDto aendere_titel = 46;
+        ArchiviereDto archiviere = 47;
+        EntferneTagDto entferne_tag = 48;
+        ErstelleTodoDto erstelle_todo = 49;
+        FuegeTagHinzuDto fuege_tag_hinzu = 50;
+        MarkiereAlsErledigtDto markiere_als_erledigt = 51;
+        OeffneWiederDto oeffne_wieder = 52;
+        SetzePrioritaetDto setze_prioritaet = 53;
 
     }
 }
@@ -167,56 +190,70 @@ message EventEnvelopeDto {
     string target_subscriber_id = 9;
     
     oneof payload {
-        ImagePairInspiziertDto image_pair_inspiziert = 20;
-        ImagePairKomplettDto image_pair_komplett = 21;
-        PaarNichtKomplettDto paar_nicht_komplett = 22;
-        LagerartikelDeaktiviertDto lagerartikel_deaktiviert = 23;
-        AlsErledigtMarkiertDto als_erledigt_markiert = 24;
-        ArchiviertDto archiviert = 25;
-        WiederGeoeffnetDto wieder_geoeffnet = 26;
-        CommandFailedDto command_failed = 27;
-        BildNichtVerfuegbarDto bild_nicht_verfuegbar = 28;
-        BildPaarDurchKiKlassifiziertDto bild_paar_durch_ki_klassifiziert = 29;
-        BildPaarGelabeltDto bild_paar_gelabelt = 30;
-        BildRegionGelabeltDto bild_region_gelabelt = 31;
-        BildVerfuegbarDto bild_verfuegbar = 32;
-        BildVersionBereitsVerfuegbarDto bild_version_bereits_verfuegbar = 33;
-        EinzelBildDurchKiKlassifiziertDto einzel_bild_durch_ki_klassifiziert = 34;
-        EinzelBildGelabeltDto einzel_bild_gelabelt = 35;
-        ImagePairEingabeUngueltigDto image_pair_eingabe_ungueltig = 36;
-        ImagePairErstelltDto image_pair_erstellt = 37;
-        ImagePairExistiertBereitsDto image_pair_existiert_bereits = 38;
-        ImagePairNichtGefundenDto image_pair_nicht_gefunden = 39;
-        PhysischesProduktGelabeltDto physisches_produkt_gelabelt = 40;
-        RegionIndexUngueltigDto region_index_ungueltig = 41;
-        RegionLabelsUngueltigDto region_labels_ungueltig = 42;
-        ArtikelExistiertBereitsDto artikel_existiert_bereits = 43;
-        ArtikelInaktivDto artikel_inaktiv = 44;
-        ArtikelNichtGefundenDto artikel_nicht_gefunden = 45;
-        BestandNichtAusreichendDto bestand_nicht_ausreichend = 46;
-        BestandReserviertDto bestand_reserviert = 47;
-        EingabeUngueltigDto eingabe_ungueltig = 48;
-        EinkaufspreisAngepasstDto einkaufspreis_angepasst = 49;
-        LagerartikelErstelltDto lagerartikel_erstellt = 50;
-        LagerplatzGeaendertDto lagerplatz_geaendert = 51;
-        LieferantZugeordnetDto lieferant_zugeordnet = 52;
-        NachbestellungAngefordertDto nachbestellung_angefordert = 53;
-        VerfuegbarerBestandNichtAusreichendDto verfuegbarer_bestand_nicht_ausreichend = 54;
-        WarenabgangGebuchtDto warenabgang_gebucht = 55;
-        WareneingangGebuchtDto wareneingang_gebucht = 56;
-        NameGeaendertDto name_geaendert = 57;
-        ProfilErstelltDto profil_erstellt = 58;
-        PrioritaetGesetztDto prioritaet_gesetzt = 59;
-        TagEntferntDto tag_entfernt = 60;
-        TagHinzugefuegtDto tag_hinzugefuegt = 61;
-        TitelGeaendertDto titel_geaendert = 62;
-        TodoBereitsArchiviertDto todo_bereits_archiviert = 63;
-        TodoBereitsErledigtDto todo_bereits_erledigt = 64;
-        TodoEingabeUngueltigDto todo_eingabe_ungueltig = 65;
-        TodoErstelltDto todo_erstellt = 66;
-        TodoExistiertBereitsDto todo_existiert_bereits = 67;
-        TodoNichtErledigtDto todo_nicht_erledigt = 68;
-        TodoNichtGefundenDto todo_nicht_gefunden = 69;
+        CounterGeloeschtDto counter_geloescht = 20;
+        ImagePairInspiziertDto image_pair_inspiziert = 21;
+        ImagePairKomplettDto image_pair_komplett = 22;
+        PaarNichtKomplettDto paar_nicht_komplett = 23;
+        LagerartikelDeaktiviertDto lagerartikel_deaktiviert = 24;
+        AlsErledigtMarkiertDto als_erledigt_markiert = 25;
+        ArchiviertDto archiviert = 26;
+        WiederGeoeffnetDto wieder_geoeffnet = 27;
+        CommandFailedDto command_failed = 28;
+        CounterBereitsGeloeschtDto counter_bereits_geloescht = 29;
+        CounterDekrementiertDto counter_dekrementiert = 30;
+        CounterEingabeUngueltigDto counter_eingabe_ungueltig = 31;
+        CounterErstelltDto counter_erstellt = 32;
+        CounterIncrementiertDto counter_incrementiert = 33;
+        CounterNichtGefundenDto counter_nicht_gefunden = 34;
+        CounterZurueckgesetztDto counter_zurueckgesetzt = 35;
+        MaxGrenzeGeaendertDto max_grenze_geaendert = 36;
+        MaximumErreichtDto maximum_erreicht = 37;
+        MinGrenzeGeaendertDto min_grenze_geaendert = 38;
+        MinimumErreichtDto minimum_erreicht = 39;
+        OberhalbMaximumDto oberhalb_maximum = 40;
+        UnterhalbMinimumDto unterhalb_minimum = 41;
+        BildNichtVerfuegbarDto bild_nicht_verfuegbar = 42;
+        BildPaarDurchKiKlassifiziertDto bild_paar_durch_ki_klassifiziert = 43;
+        BildPaarGelabeltDto bild_paar_gelabelt = 44;
+        BildRegionGelabeltDto bild_region_gelabelt = 45;
+        BildVerfuegbarDto bild_verfuegbar = 46;
+        BildVersionBereitsVerfuegbarDto bild_version_bereits_verfuegbar = 47;
+        EinzelBildDurchKiKlassifiziertDto einzel_bild_durch_ki_klassifiziert = 48;
+        EinzelBildGelabeltDto einzel_bild_gelabelt = 49;
+        ImagePairEingabeUngueltigDto image_pair_eingabe_ungueltig = 50;
+        ImagePairErstelltDto image_pair_erstellt = 51;
+        ImagePairExistiertBereitsDto image_pair_existiert_bereits = 52;
+        ImagePairNichtGefundenDto image_pair_nicht_gefunden = 53;
+        PhysischesProduktGelabeltDto physisches_produkt_gelabelt = 54;
+        RegionIndexUngueltigDto region_index_ungueltig = 55;
+        RegionLabelsUngueltigDto region_labels_ungueltig = 56;
+        ArtikelExistiertBereitsDto artikel_existiert_bereits = 57;
+        ArtikelInaktivDto artikel_inaktiv = 58;
+        ArtikelNichtGefundenDto artikel_nicht_gefunden = 59;
+        BestandNichtAusreichendDto bestand_nicht_ausreichend = 60;
+        BestandReserviertDto bestand_reserviert = 61;
+        EingabeUngueltigDto eingabe_ungueltig = 62;
+        EinkaufspreisAngepasstDto einkaufspreis_angepasst = 63;
+        LagerartikelErstelltDto lagerartikel_erstellt = 64;
+        LagerplatzGeaendertDto lagerplatz_geaendert = 65;
+        LieferantZugeordnetDto lieferant_zugeordnet = 66;
+        NachbestellungAngefordertDto nachbestellung_angefordert = 67;
+        VerfuegbarerBestandNichtAusreichendDto verfuegbarer_bestand_nicht_ausreichend = 68;
+        WarenabgangGebuchtDto warenabgang_gebucht = 69;
+        WareneingangGebuchtDto wareneingang_gebucht = 70;
+        NameGeaendertDto name_geaendert = 71;
+        ProfilErstelltDto profil_erstellt = 72;
+        PrioritaetGesetztDto prioritaet_gesetzt = 73;
+        TagEntferntDto tag_entfernt = 74;
+        TagHinzugefuegtDto tag_hinzugefuegt = 75;
+        TitelGeaendertDto titel_geaendert = 76;
+        TodoBereitsArchiviertDto todo_bereits_archiviert = 77;
+        TodoBereitsErledigtDto todo_bereits_erledigt = 78;
+        TodoEingabeUngueltigDto todo_eingabe_ungueltig = 79;
+        TodoErstelltDto todo_erstellt = 80;
+        TodoExistiertBereitsDto todo_existiert_bereits = 81;
+        TodoNichtErledigtDto todo_nicht_erledigt = 82;
+        TodoNichtGefundenDto todo_nicht_gefunden = 83;
 
     }
 }
@@ -266,6 +303,16 @@ message QueryResponsePayloadDto {
     }
 }
 
+message TriggerPayloadDto {
+    oneof payload {
+        DateiErkanntDto datei_erkannt = 20;
+
+    }
+}
+
+// ============================================================================
+// ALL PAYLOAD MESSAGES
+// ============================================================================
 // ============================================================================
 // VALUE OBJECTS
 // ============================================================================
@@ -346,10 +393,45 @@ message ImagePairFilterDto {
     int32 seiten_groesse = 11;
 }
 
-
 // ============================================================================
 // COMMAND PAYLOADS
 // ============================================================================
+message DekrementiereDto {
+    string aggregate_id = 1;
+    int64 delta = 2;
+}
+
+message ErstelleCounterDto {
+    string aggregate_id = 1;
+    string name = 2;
+    int64 max_grenze = 3;
+    int64 min_grenze = 4;
+    int64 start_wert = 5;
+}
+
+message IncrementiereDto {
+    string aggregate_id = 1;
+    int64 delta = 2;
+}
+
+message LoescheCounterDto {
+    string aggregate_id = 1;
+}
+
+message ResetDto {
+    string aggregate_id = 1;
+}
+
+message SetzeMaxGrenzeDto {
+    string aggregate_id = 1;
+    int64 max_grenze = 2;
+}
+
+message SetzeMinGrenzeDto {
+    string aggregate_id = 1;
+    int64 min_grenze = 2;
+}
+
 message ErstelleImagePairDto {
     string aggregate_id = 1;
     string pair_key = 2;
@@ -495,10 +577,13 @@ message SetzePrioritaetDto {
     int32 neue_prioritaet = 2;
 }
 
-
 // ============================================================================
 // EVENT PAYLOADS
 // ============================================================================
+message CounterGeloeschtDto {
+    CounterGeloeschtDto original = 1;
+}
+
 message ImagePairInspiziertDto {
     ImagePairInspiziertDto original = 1;
 }
@@ -531,6 +616,71 @@ message CommandFailedDto {
     string command_type = 1;
     string reason = 2;
     string aggregate_id = 3;
+}
+
+message CounterBereitsGeloeschtDto {
+    string id = 1;
+}
+
+message CounterDekrementiertDto {
+    int64 delta = 1;
+    int64 neuer_wert = 2;
+    int64 zeitpunkt = 3;
+}
+
+message CounterEingabeUngueltigDto {
+    string feld = 1;
+    string grund = 2;
+}
+
+message CounterErstelltDto {
+    string name = 1;
+    int64 max_grenze = 2;
+    int64 min_grenze = 3;
+    int64 start_wert = 4;
+    int64 erstellt_am = 5;
+}
+
+message CounterIncrementiertDto {
+    int64 delta = 1;
+    int64 neuer_wert = 2;
+    int64 zeitpunkt = 3;
+}
+
+message CounterNichtGefundenDto {
+    string id = 1;
+}
+
+message CounterZurueckgesetztDto {
+    int64 vorheriger_wert = 1;
+}
+
+message MaxGrenzeGeaendertDto {
+    int64 max_grenze = 1;
+}
+
+message MaximumErreichtDto {
+    int64 wert = 1;
+    int64 max_grenze = 2;
+}
+
+message MinGrenzeGeaendertDto {
+    int64 min_grenze = 1;
+}
+
+message MinimumErreichtDto {
+    int64 wert = 1;
+    int64 min_grenze = 2;
+}
+
+message OberhalbMaximumDto {
+    int64 versuch = 1;
+    int64 max_grenze = 2;
+}
+
+message UnterhalbMinimumDto {
+    int64 versuch = 1;
+    int64 min_grenze = 2;
 }
 
 message BildNichtVerfuegbarDto {
@@ -726,7 +876,6 @@ message TodoNichtGefundenDto {
     string todo_id = 1;
 }
 
-
 // ============================================================================
 // QUERY PAYLOADS
 // ============================================================================
@@ -788,7 +937,6 @@ message GetUnklassifizierteImagePairsDto {
 message SucheImagePairsDto {
     ImagePairFilterDto filter = 1;
 }
-
 
 // ============================================================================
 // QUERY RESPONSE PAYLOADS
@@ -916,5 +1064,14 @@ message TodoListeDto {
 
 message TodoNichtGefundenAntwortDto {
     string todo_id = 1;
+}
+
+// ============================================================================
+// TRIGGER PAYLOADS
+// ============================================================================
+message DateiErkanntDto {
+    string pfad = 1;
+    string dateiname = 2;
+    int64 dateigroesse_bytes = 3;
 }
 

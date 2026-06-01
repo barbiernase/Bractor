@@ -1,68 +1,58 @@
+// ── Zielverzeichnis: Domain.Client/ImagePair/Handlers/ImagePairStatistikHandler.cs ──
+
 using Client.Infrastructure.Abstractions;
 using Domain.ImagePair;
+using Domain.Projections;
 
 namespace Domain.Client.ImagePair;
 
 /// <summary>
-/// Berechnet Statistiken wenn sich Events ändern.
-/// IEnumerable&lt;T&gt; Handle → sync Handler im WiringGenerator.
+/// Löst bei relevanten Events eine Statistik-Query aus.
 ///
-/// Wird NACH dem Store aufgerufen (Subscription-Reihenfolge),
-/// sieht also immer den bereits aktualisierten State.
+/// Sync-Handler: IEnumerable Handle → läuft NACH allen Stores.
+///
+/// Warum Server-Query statt lokale Berechnung?
+/// ListStore hält nur die aktuelle Seite (z.B. 25 von 5000 Items).
+/// Lokale Zähler wären falsch. Der Server hat alle Daten.
+///
+/// Yieldet: GetImagePairStatistik (IQuery) → Server → ImagePairStatistikAntwort → StatistikStore
 /// </summary>
 public partial class ImagePairStatistikHandler
 {
-    private readonly ImagePairStore _store;
-
-    public ImagePairStatistikHandler(ImagePairStore store)
-    {
-        _store = store;
-    }
-
     // ── Lifecycle-Events ──
 
-    IEnumerable<ImagePairStatistikBerechnet> Handle(
-        ImagePairErstellt evt, MessageContext ctx) => Berechne();
+    IEnumerable<object> Handle(ImagePairErstellt evt, MessageContext ctx)
+        => Query();
 
-    IEnumerable<ImagePairStatistikBerechnet> Handle(
-        ImagePairKomplett evt, MessageContext ctx) => Berechne();
+    IEnumerable<object> Handle(ImagePairKomplett evt, MessageContext ctx)
+        => Query();
 
     // ── KI-Klassifikation ──
 
-    IEnumerable<ImagePairStatistikBerechnet> Handle(
-        EinzelBildDurchKiKlassifiziert evt, MessageContext ctx) => Berechne();
+    IEnumerable<object> Handle(EinzelBildDurchKiKlassifiziert evt, MessageContext ctx)
+        => Query();
 
-    IEnumerable<ImagePairStatistikBerechnet> Handle(
-        BildPaarDurchKiKlassifiziert evt, MessageContext ctx) => Berechne();
+    IEnumerable<object> Handle(BildPaarDurchKiKlassifiziert evt, MessageContext ctx)
+        => Query();
 
     // ── Mensch-Labels ──
 
-    IEnumerable<ImagePairStatistikBerechnet> Handle(
-        BildRegionGelabelt evt, MessageContext ctx) => Berechne();
+    IEnumerable<object> Handle(BildRegionGelabelt evt, MessageContext ctx)
+        => Query();
 
-    IEnumerable<ImagePairStatistikBerechnet> Handle(
-        EinzelBildGelabelt evt, MessageContext ctx) => Berechne();
+    IEnumerable<object> Handle(EinzelBildGelabelt evt, MessageContext ctx)
+        => Query();
 
-    IEnumerable<ImagePairStatistikBerechnet> Handle(
-        BildPaarGelabelt evt, MessageContext ctx) => Berechne();
+    IEnumerable<object> Handle(BildPaarGelabelt evt, MessageContext ctx)
+        => Query();
 
-    IEnumerable<ImagePairStatistikBerechnet> Handle(
-        PhysischesProduktGelabelt evt, MessageContext ctx) => Berechne();
+    IEnumerable<object> Handle(PhysischesProduktGelabelt evt, MessageContext ctx)
+        => Query();
 
-    // ── Berechnung ──
+    // ── Query ──
 
-    private IEnumerable<ImagePairStatistikBerechnet> Berechne()
+    private static IEnumerable<object> Query()
     {
-        var alle = _store.Items;
-
-        yield return new ImagePairStatistikBerechnet(
-            AnzahlGesamt: alle.Count,
-            AnzahlKomplett: alle.Count(e => e.IstKomplett),
-            AnzahlMitKiKlassifikation: alle.Count(e => e.HatKiKlassifikation),
-            AnzahlOhneKlassifikation: alle.Count(e => !e.HatKiKlassifikation),
-            AnzahlAnomalie: alle.Count(e =>
-                e.Dc0KiBildKlassifikation == Klassifikation.Anomalie ||
-                e.Dc2KiBildKlassifikation == Klassifikation.Anomalie ||
-                e.KiBildpaarKlassifikation == Klassifikation.Anomalie));
+        yield return new GetImagePairStatistik();
     }
 }

@@ -31,14 +31,9 @@ public static class GrpcSetupExtensions
         Console.WriteLine("  ✓ CqrsClientServiceImpl");
 
         // MessageTypeMapping initialisieren
-        // Ersetzt den alten EventTypeResolver und kennt zusätzlich Queries
+        // Einzige Runtime-Registry für alle Nachrichtentypen.
         services.AddSingleton<IMessageTypeInitializer, MessageTypeInitializer>();
         Console.WriteLine("  ✓ MessageTypeMapping");
-
-        // EventTypeResolver für Backwards-Kompatibilität
-        // (wird von SubscriptionTracker und PubSubStartupService genutzt)
-        services.AddSingleton<IEventTypeInitializer, EventTypeInitializer>();
-        Console.WriteLine("  ✓ EventTypeResolver");
 
         return services;
     }
@@ -77,30 +72,5 @@ public class MessageTypeInitializer : IMessageTypeInitializer
     public void Initialize()
     {
         MessageTypeMapping.Initialize();
-    }
-}
-
-/// <summary>
-/// Interface für EventTypeResolver-Initialisierung beim Startup.
-/// </summary>
-public interface IEventTypeInitializer
-{
-    void Initialize();
-}
-
-/// <summary>
-/// Initialisiert den EventTypeResolver beim ersten Aufruf.
-/// Wird von SubscriptionTracker und PubSubStartupService genutzt.
-/// </summary>
-public class EventTypeInitializer : IEventTypeInitializer
-{
-    public EventTypeInitializer()
-    {
-        Initialize();
-    }
-
-    public void Initialize()
-    {
-        EventTypeResolver.Initialize();
     }
 }

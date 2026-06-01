@@ -1,8 +1,11 @@
+@* ── Domain.Client.Ui.Blazor/ImagePair/Pages/Labeling.razor ── *@
+
 @page "/labeling"
 @using System.ComponentModel
-@using Domain.Client.ImagePair
-@using Domain.Projections
-@inject ImagePairStore Store
+@inject ImagePairWorkspace Workspace
+@inject NavigationViewModel NavVm
+@inject LabelingViewModel LabelVm
+@inject FilterViewModel FilterVm
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
 @implements IDisposable
@@ -16,43 +19,33 @@
     @* ══════════════ HEADER ══════════════ *@
     <MudAppBar Dense="true" Fixed="false" Style="background: #1e1e1e; border-bottom: 1px solid #333; flex-shrink: 0;">
 
-        @* ── Modus-Chip (drei Zustände) ── *@
-        @switch (Store.Modus)
+        @switch (Workspace.Nav.Modus)
         {
             case ArbeitsModus.Live:
                 <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
-                         Color="Color.Error"
-                         OnClick="Store.ToggleModus">
-                    LIVE
-                </MudChip>
+                         Color="Color.Error" OnClick="NavVm.ToggleModus">LIVE</MudChip>
                 break;
-
             case ArbeitsModus.Inspekt:
                 <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
-                         Color="Color.Info"
-                         OnClick="Store.ToggleModus">
-                    INSPEKT
-                </MudChip>
+                         Color="Color.Info" OnClick="NavVm.ToggleModus">INSPEKT</MudChip>
                 break;
-
             case ArbeitsModus.Tag:
                 <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
-                         Color="Color.Warning"
-                         OnClick="Store.ToggleModus">
-                    TAG @Store.TagLabelingDatum?.ToString("dd.MM.yy") ✕
+                         Color="Color.Warning" OnClick="NavVm.ToggleModus">
+                    TAG @Workspace.Nav.TagLabelingDatum?.ToString("dd.MM.yy") ✕
                 </MudChip>
                 break;
         }
 
         <MudSpacer />
 
-        @if (Store.Aktuell != null)
+        @if (AktuellerRecord != null)
         {
             <MudText Typo="Typo.caption" Class="mr-4" Style="opacity: 0.7;">
-                @Store.Aktuell.ProduziertAm.ToString("dd.MM.yyyy HH:mm:ss")
+                @AktuellerRecord.ProduziertAm.ToString("dd.MM.yyyy HH:mm:ss")
             </MudText>
             <MudText Typo="Typo.caption" Style="font-family: monospace; opacity: 0.7;">
-                @((Store.Seite - 1) * Store.SeitenGroesse + Store.SelectedIndex + 1) / @Store.GesamtAnzahl
+                @((Workspace.List.Seite - 1) * Workspace.List.SeitenGroesse + Workspace.Nav.SelectedIndex + 1) / @Workspace.List.GesamtAnzahl
             </MudText>
         }
 
@@ -61,10 +54,9 @@
                        OnClick="() => _settingsOffen = true" />
     </MudAppBar>
 
-    @* ══════════════ CONTENT: Sidebars + Active Stage ══════════════ *@
+    @* ══════════════ CONTENT ══════════════ *@
     <div style="flex: 1; display: flex; min-height: 0;">
 
-        @* Linke Sidebars *@
         @if (_paarlisteAktiv)
         {
             <PanelFrame Title="Paarliste"
@@ -72,28 +64,24 @@
                         Side="PanelFrame.PanelSide.Left"
                         ExpandedWidth="180" CollapsedWidth="40">
                 <PaarlistenPanel IsExpanded="_paarlisteOffen"
-                                 Items="Store.Items"
-                                 SelectedIndex="Store.SelectedIndex"
-                                 FilterWert="@Store.FilterWert"
-                                 NurNichtInspizierte="Store.NurNichtInspizierte"
-                                 Seite="Store.Seite"
-                                 GesamtSeiten="Store.GesamtSeiten"
-                                 OnSelect="i => Store.WechsleZu(i)"
-                                 OnFilterChanged="v => Store.SetFilter(v)"
-                                 OnNurNeueChanged="_ => Store.ToggleInspektionsFilter()"
-                                 OnVorige="Store.VorigeSeite"
-                                 OnNaechste="Store.NaechsteSeite" />
+                                 Items="Workspace.List.Values.ToList()"
+                                 SelectedIndex="Workspace.Nav.SelectedIndex"
+                                 FilterWert="@Workspace.Nav.FilterWert"
+                                 NurNichtInspizierte="Workspace.Nav.NurNichtInspizierte"
+                                 Seite="Workspace.List.Seite"
+                                 GesamtSeiten="Workspace.List.GesamtSeiten"
+                                 OnSelect="i => NavVm.WechsleZu(i)"
+                                 OnFilterChanged="v => FilterVm.SetFilter(v)"
+                                 OnNurNeueChanged="_ => FilterVm.ToggleInspektionsFilter()"
+                                 OnVorige="NavVm.VorigeSeite"
+                                 OnNaechste="NavVm.NaechsteSeite" />
             </PanelFrame>
         }
 
-        @* Active Stage (Tab-Leiste + Content) *@
         <div style="flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0;">
-
-            @* Stage-Tabs *@
             <MudTabs @bind-ActivePanelIndex="_activeStageIndex"
-                     Dense="true" Rounded="false" Border="false"
+                     Rounded="false" Border="false"
                      Style="background: #252525; border-bottom: 1px solid #333; flex-shrink: 0; min-height: 28px;"
-                     TabPanelClass="px-3 py-0"
                      HeaderPosition="TabHeaderPosition.After">
                 @foreach (var stage in AktiveStages)
                 {
@@ -101,7 +89,6 @@
                 }
             </MudTabs>
 
-            @* Stage-Content *@
             @if (AktiveStages.Count > 0 && _activeStageIndex >= 0 && _activeStageIndex < AktiveStages.Count)
             {
                 @AktiveStages[_activeStageIndex].Content
@@ -114,52 +101,52 @@
             }
         </div>
 
-        @* Rechte Sidebars *@
         @if (_historiePanelAktiv)
         {
             <PanelFrame Title="Historie"
                         @bind-IsExpanded="_historiePanelOffen"
                         Side="PanelFrame.PanelSide.Right"
                         ExpandedWidth="220" CollapsedWidth="40">
-                <HistoriePanel IsExpanded="_historiePanelOffen" Entry="Store.Aktuell"
-                               RenderHint="Store.RenderGeneration" />
+                <HistoriePanel IsExpanded="_historiePanelOffen"
+                               HatAuswahl="Workspace.Nav.AktuelleId != null"
+                               Eintraege="AktuelleHistorie"
+                               IstGeladen="AktuelleHistorieGeladen" />
             </PanelFrame>
         }
     </div>
 
-    @* ══════════════ FOOTER (Workflow-Shortcuts) ══════════════ *@
+    @* ══════════════ FOOTER ══════════════ *@
     <MudToolBar Dense="true" Style="background: #1e1e1e; border-top: 1px solid #333; flex-shrink: 0;">
         <MudText Typo="Typo.caption" Class="mr-1" Style="color: #888;">Produkt:</MudText>
         <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Success"
-                   OnClick="() => Store.LabelProdukt(Klassifikation.KeineAnomalie)"
+                   OnClick="() => LabelVm.LabelProdukt(Klassifikation.KeineAnomalie)"
                    Class="mr-1" Style="min-width: 0; padding: 2px 8px; font-size: 11px;"><b>R</b>&nbsp;OK</MudButton>
         <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Warning"
-                   OnClick="() => Store.LabelProdukt(Klassifikation.Questionable)"
+                   OnClick="() => LabelVm.LabelProdukt(Klassifikation.Questionable)"
                    Class="mr-1" Style="min-width: 0; padding: 2px 8px; font-size: 11px;"><b>Q</b>&nbsp;?</MudButton>
         <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Error"
-                   OnClick="() => Store.LabelProdukt(Klassifikation.Anomalie)"
+                   OnClick="() => LabelVm.LabelProdukt(Klassifikation.Anomalie)"
                    Style="min-width: 0; padding: 2px 8px; font-size: 11px;"><b>F</b>&nbsp;!</MudButton>
 
         <MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
 
         <MudText Typo="Typo.caption" Class="mr-1" Style="color: #888;">Kamera:</MudText>
         <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Error"
-                   OnClick="() => Store.LabelKamera(Klassifikation.Anomalie)"
+                   OnClick="() => LabelVm.LabelKamera(Klassifikation.Anomalie)"
                    Class="mr-1" Style="min-width: 0; padding: 2px 8px; font-size: 11px;"><b>E</b>&nbsp;Erk.</MudButton>
         <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Success"
-                   OnClick="() => Store.LabelKamera(Klassifikation.KeineAnomalie)"
+                   OnClick="() => LabelVm.LabelKamera(Klassifikation.KeineAnomalie)"
                    Style="min-width: 0; padding: 2px 8px; font-size: 11px;"><b>N</b>&nbsp;Nicht</MudButton>
 
         <MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
 
-        <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Small" OnClick="Store.NavigatePrev" />
-        <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" OnClick="Store.NavigateNext" />
-        <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Default" OnClick="Store.NavigateNextOffen"
+        <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Small" OnClick="NavVm.NavigatePrev" />
+        <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" OnClick="NavVm.NavigateNext" />
+        <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Default" OnClick="NavVm.NavigateNextOffen"
                    Style="min-width: 0; padding: 2px 8px; font-size: 11px; text-transform: none;"><b>Space</b>&nbsp;Nächstes</MudButton>
     </MudToolBar>
 </div>
 
-@* ══════════════ SETTINGS ══════════════ *@
 <MudDialog @bind-Visible="_settingsOffen" Options="_dialogOptions">
     <TitleContent><MudText Typo="Typo.h6">Einstellungen</MudText></TitleContent>
     <DialogContent>
@@ -180,23 +167,33 @@
 @code {
     private ElementReference _container;
 
-    // ── Nur kosmetischer Local-State ──
     private bool _paarlisteAktiv = true;
     private bool _paarlisteOffen = true;
     private bool _historiePanelAktiv = true;
     private bool _historiePanelOffen = true;
-
     private bool _bilderStageAktiv = true;
     private bool _debugStageAktiv = true;
     private bool _chartStageAktiv = true;
     private int _activeStageIndex;
-
     private bool _settingsOffen;
     private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Small };
 
-    // ═══════════════════════════════════════════════════════
-    // Stage-Registry
-    // ═══════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════
+    // Computed
+    // ═══════════════════════════════════════════════════
+
+    private ImagePairRecord? AktuellerRecord =>
+        Workspace.Nav.AktuelleId is { } id ? Workspace.List.FindById(id) : null;
+
+    private IReadOnlyList<HistorieEintrag> AktuelleHistorie =>
+        Workspace.Nav.AktuelleId is { } id ? Workspace.Historie.GetHistorie(id) : [];
+
+    private bool AktuelleHistorieGeladen =>
+        Workspace.Nav.AktuelleId is { } id && Workspace.Historie.IstGeladen(id);
+
+    // ═══════════════════════════════════════════════════
+    // Stages
+    // ═══════════════════════════════════════════════════
 
     private record StageDefinition(string Title, RenderFragment Content);
 
@@ -205,26 +202,23 @@
         get
         {
             var list = new List<StageDefinition>();
-            if (_bilderStageAktiv)
-                list.Add(new("Bilder",
-                    @<BilderStage Entry="Store.Aktuell" RenderHint="Store.RenderGeneration" />));
-            if (_debugStageAktiv)
-                list.Add(new("Debug",
-                    @<DebugStage Entry="Store.Aktuell" RenderHint="Store.RenderGeneration" />));
-            if (_chartStageAktiv)
-                list.Add(new("Chart",
-                    @<ChartStage />));
+            if (_bilderStageAktiv) list.Add(new("Bilder", @<BilderStage Entry="AktuellerRecord" />));
+            if (_debugStageAktiv)  list.Add(new("Debug",  @<DebugStage Entry="AktuellerRecord" />));
+            if (_chartStageAktiv)  list.Add(new("Chart",  @<MainStage />));
             return list;
         }
     }
 
-    // ═══════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════
     // Lifecycle
-    // ═══════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════
 
     protected override void OnInitialized()
     {
-        Store.PropertyChanged += OnStoreChanged;
+        Workspace.List.PropertyChanged += OnStoreChanged;
+        Workspace.Nav.PropertyChanged += OnStoreChanged;
+        Workspace.Feedback.PropertyChanged += OnStoreChanged;
+        Workspace.Historie.PropertyChanged += OnStoreChanged;
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -236,70 +230,72 @@
     {
         _ = InvokeAsync(() =>
         {
-            if (e.PropertyName == nameof(ImagePairStore.LetzteAblehnung)
-                && Store.LetzteAblehnung != null)
-                Snackbar.Add($"{Store.LetzteAblehnung}", Severity.Warning);
+            if (sender == Workspace.Feedback
+                && e.PropertyName == nameof(FeedbackStore.LetzteAblehnung)
+                && Workspace.Feedback.LetzteAblehnung != null)
+                Snackbar.Add($"{Workspace.Feedback.LetzteAblehnung}", Severity.Warning);
 
-            if (e.PropertyName == nameof(ImagePairStore.SelectedIndex))
+            if (sender == Workspace.Nav
+                && e.PropertyName == nameof(NavigationStore.SelectedIndex))
                 _ = ScrollToSelected();
 
-            // Tag-Labeling gestartet → zum Bilder-Tab springen
-            if (e.PropertyName == nameof(ImagePairStore.Modus)
-                && Store.Modus == ArbeitsModus.Tag)
+            if (sender == Workspace.Nav
+                && e.PropertyName == nameof(NavigationStore.Modus)
+                && Workspace.Nav.Modus == ArbeitsModus.Tag)
                 _activeStageIndex = 0;
 
             StateHasChanged();
         });
     }
 
-    // ═══════════════════════════════════════════════════════
-    // Keyboard → Store-Methoden
-    // ═══════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════
+    // Keyboard
+    // ═══════════════════════════════════════════════════
 
     private void OnKeyDown(KeyboardEventArgs e)
     {
         switch (e.Key)
         {
-            case "ArrowUp": Store.NavigateNext(); break;
-            case "ArrowDown":  Store.NavigatePrev(); break;
-            case " ":          Store.NavigateNextOffen(); break;
+            case "ArrowUp":    NavVm.NavigateNext(); break;
+            case "ArrowDown":  NavVm.NavigatePrev(); break;
+            case " ":          NavVm.NavigateNextOffen(); break;
 
-            case "Enter": Store.LabelProdukt(Klassifikation.KeineAnomalie); break;
-            case "Backspace": Store.LabelProdukt(Klassifikation.Anomalie); break;
-            case "q": Store.LabelProdukt(Klassifikation.Questionable); break;
-            case "ArrowLeft": Store.LabelKamera(Klassifikation.Anomalie); break;
-            case "ArrowRight": Store.LabelKamera(Klassifikation.KeineAnomalie); break;
+            case "Enter":     LabelVm.LabelProdukt(Klassifikation.KeineAnomalie); break;
+            case "Backspace": LabelVm.LabelProdukt(Klassifikation.Anomalie); break;
+            case "q":         LabelVm.LabelProdukt(Klassifikation.Questionable); break;
+            case "ArrowLeft": LabelVm.LabelKamera(Klassifikation.Anomalie); break;
+            case "ArrowRight":LabelVm.LabelKamera(Klassifikation.KeineAnomalie); break;
 
             case "Tab": _paarlisteOffen = !_paarlisteOffen; break;
-            case "l":   Store.ToggleModus(); break;
-            case "i":   Store.ToggleInspektionsFilter(); break;
-            case "1":   Store.SetFilter("alle"); break;
-            case "2":   Store.SetFilter("offen"); break;
-            case "3":   Store.SetFilter("anomalie"); break;
+            case "l":   NavVm.ToggleModus(); break;
+            case "i":   FilterVm.ToggleInspektionsFilter(); break;
+            case "1":   FilterVm.SetFilter("alle"); break;
+            case "2":   FilterVm.SetFilter("offen"); break;
+            case "3":   FilterVm.SetFilter("anomalie"); break;
 
             case "Escape":
-                if (Store.Modus == ArbeitsModus.Tag)
-                    Store.BeendeTagLabeling();
+                if (Workspace.Nav.Modus == ArbeitsModus.Tag)
+                    NavVm.BeendeTagLabeling();
                 break;
         }
     }
 
     private async Task ScrollToSelected()
     {
-        try
-        {
-            await JS.InvokeVoidAsync("eval",
-                $"document.getElementById('pair-{Store.SelectedIndex}')?.scrollIntoView({{block:'nearest'}})");
-        }
+        try { await JS.InvokeVoidAsync("eval",
+                $"document.getElementById('pair-{Workspace.Nav.SelectedIndex}')?.scrollIntoView({{block:'nearest'}})"); }
         catch { }
     }
 
-    // ═══════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════
     // Dispose
-    // ═══════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════
 
     public void Dispose()
     {
-        Store.PropertyChanged -= OnStoreChanged;
+        Workspace.List.PropertyChanged -= OnStoreChanged;
+        Workspace.Nav.PropertyChanged -= OnStoreChanged;
+        Workspace.Feedback.PropertyChanged -= OnStoreChanged;
+        Workspace.Historie.PropertyChanged -= OnStoreChanged;
     }
 }

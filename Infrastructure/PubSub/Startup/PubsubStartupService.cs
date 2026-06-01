@@ -1,4 +1,4 @@
-using Infrastructure.GrpcClient;
+using Infrastructure.Mapping;
 using Infrastructure.PubSub.Extensions;
 using Microsoft.Extensions.Hosting;
 using Proto;
@@ -8,8 +8,7 @@ namespace Infrastructure.PubSub.Startup;
 
 /// <summary>
 /// Aktiviert Broker für alle Event-Typen.
-/// 
-/// WICHTIG: Nutzt EventTypeResolver um ALLE Event-Typen zu finden.
+/// Nutzt MessageTypeMapping um ALLE Event-Typen zu finden.
 /// Kein Domain-Import nötig!
 /// </summary>
 public class PubSubStartupService : IHostedService
@@ -28,8 +27,7 @@ public class PubSubStartupService : IHostedService
 
         var cluster = _actorSystem.Cluster();
         
-        // Nutzt den EventTypeResolver - KEIN Domain-Import!
-        var eventTypes = EventTypeResolver.GetAllEventTypes().ToList();
+        var eventTypes = MessageTypeMapping.GetAllEventTypes().ToList();
         
         Console.WriteLine($"  Aktiviere Broker für {eventTypes.Count} Event-Typen...");
         

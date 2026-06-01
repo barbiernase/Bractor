@@ -5,7 +5,8 @@
 <MudDialogProvider />
 <MudSnackbarProvider />
 
-<Router AppAssembly="typeof(App).Assembly">
+<Router AppAssembly="typeof(App).Assembly"
+        AdditionalAssemblies="new[] { typeof(Domain.Client.Ui.Blazor.Pages.Labeling).Assembly }">
     <Found Context="r">
         <RouteView RouteData="r" />
     </Found>

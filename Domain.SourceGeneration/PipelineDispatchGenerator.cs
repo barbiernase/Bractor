@@ -65,6 +65,8 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
             .GetTypeByMetadataName("Abstractions.PipelineContext");
         var iPipelineTriggerType = context.SemanticModel.Compilation
             .GetTypeByMetadataName("Abstractions.IPipelineTrigger");
+        var iPipelineSelfType = context.SemanticModel.Compilation
+            .GetTypeByMetadataName("Abstractions.IPipelineSelfMessage");
         var iEventType = context.SemanticModel.Compilation
             .GetTypeByMetadataName("Abstractions.IEvent");
         var iCommandType = context.SemanticModel.Compilation
@@ -87,6 +89,7 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
 
         var triggerHandlers = new List<PipelineHandlerInfo>();
         var eventHandlers = new List<PipelineHandlerInfo>();
+        var selfHandlers = new List<PipelineHandlerInfo>();
         var allNamespaces = new HashSet<string>();
 
         foreach (var method in handleMethods)
@@ -101,8 +104,16 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
 
             var handlerInfo = AnalyzeReturnType(returnType, inputTypeName, allNamespaces, iCommandType);
 
-            // Kanal bestimmen: IPipelineTrigger oder IEvent?
-            if (inputType.AllInterfaces.Contains(iPipelineTriggerType, SymbolEqualityComparer.Default)
+            // Kanal bestimmen: IPipelineSelfMessage, IPipelineTrigger oder IEvent?
+            // Self-Messages zuerst prüfen (könnten theoretisch auch Trigger sein,
+            // aber Self hat Vorrang — Self-Messages sind Pipeline-intern)
+            if (iPipelineSelfType != null &&
+                (inputType.AllInterfaces.Contains(iPipelineSelfType, SymbolEqualityComparer.Default)
+                 || SymbolEqualityComparer.Default.Equals(inputType, iPipelineSelfType)))
+            {
+                selfHandlers.Add(handlerInfo);
+            }
+            else if (inputType.AllInterfaces.Contains(iPipelineTriggerType, SymbolEqualityComparer.Default)
                 || SymbolEqualityComparer.Default.Equals(inputType, iPipelineTriggerType))
             {
                 triggerHandlers.Add(handlerInfo);
@@ -114,7 +125,7 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
             }
         }
 
-        if (triggerHandlers.Count == 0 && eventHandlers.Count == 0)
+        if (triggerHandlers.Count == 0 && eventHandlers.Count == 0 && selfHandlers.Count == 0)
             return null;
 
         return new PipelineGeneratorModel(
@@ -122,12 +133,15 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
             pipelineName: classSymbol.Name,
             triggerHandlers: triggerHandlers,
             eventHandlers: eventHandlers,
+            selfHandlers: selfHandlers,
             allNamespaces: allNamespaces.ToList()
         );
     }
 
     /// <summary>
     /// Analysiert den Rückgabetyp einer Handle-Methode.
+    /// Erkennt: Task, IEnumerable&lt;ICommand&gt;, IAsyncEnumerable&lt;ICommand&gt;,
+    /// IEnumerable&lt;OneOf&lt;...&gt;&gt;, IAsyncEnumerable&lt;OneOf&lt;...&gt;&gt;.
     /// </summary>
     private static PipelineHandlerInfo AnalyzeReturnType(
         ITypeSymbol returnType, string inputTypeName,
@@ -139,12 +153,20 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
             return new PipelineHandlerInfo(inputTypeName, PipelineHandlerKind.Task, new List<string>());
         }
 
-        // IEnumerable<ICommand> → sync, yields Commands
+        // IEnumerable<T> → sync
         if (returnType is INamedTypeSymbol { IsGenericType: true } enumerable
             && enumerable.OriginalDefinition.ToDisplayString()
                 .StartsWith("System.Collections.Generic.IEnumerable"))
         {
             var elementType = enumerable.TypeArguments[0];
+
+            // OneOf<...> erkennen
+            if (IsOneOfType(elementType))
+            {
+                return new PipelineHandlerInfo(inputTypeName, PipelineHandlerKind.OneOfEnumerable, new List<string>());
+            }
+
+            // Plain ICommand
             if (elementType.AllInterfaces.Contains(iCommandType, SymbolEqualityComparer.Default)
                 || SymbolEqualityComparer.Default.Equals(elementType, iCommandType))
             {
@@ -152,12 +174,20 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
             }
         }
 
-        // IAsyncEnumerable<ICommand> → async, yields Commands
+        // IAsyncEnumerable<T> → async
         if (returnType is INamedTypeSymbol { IsGenericType: true } asyncEnum
             && asyncEnum.OriginalDefinition.ToDisplayString()
                 .StartsWith("System.Collections.Generic.IAsyncEnumerable"))
         {
             var elementType = asyncEnum.TypeArguments[0];
+
+            // OneOf<...> erkennen
+            if (IsOneOfType(elementType))
+            {
+                return new PipelineHandlerInfo(inputTypeName, PipelineHandlerKind.OneOfAsyncEnumerable, new List<string>());
+            }
+
+            // Plain ICommand
             if (elementType.AllInterfaces.Contains(iCommandType, SymbolEqualityComparer.Default)
                 || SymbolEqualityComparer.Default.Equals(elementType, iCommandType))
             {
@@ -167,6 +197,16 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
 
         // Fallback: behandle wie Task
         return new PipelineHandlerInfo(inputTypeName, PipelineHandlerKind.Task, new List<string>());
+    }
+
+    /// <summary>
+    /// Prüft ob ein Typ ein OneOf&lt;...&gt; aus dem Abstractions-Namespace ist.
+    /// </summary>
+    private static bool IsOneOfType(ITypeSymbol type)
+    {
+        return type is INamedTypeSymbol { IsGenericType: true, IsValueType: true } named
+               && named.Name == "OneOf"
+               && named.ContainingNamespace?.ToDisplayString() == "Abstractions";
     }
 
     private static void Execute(SourceProductionContext context, PipelineGeneratorModel model)
@@ -262,7 +302,9 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
         sb.AppendLine("    public async Task DispatchTriggerAsync(");
         sb.AppendLine("        IPipelineTrigger trigger,");
         sb.AppendLine("        PipelineContext ctx,");
-        sb.AppendLine("        Func<ICommand, Task> send)");
+        sb.AppendLine("        Func<ICommand, Task> sendCommand,");
+        sb.AppendLine("        Func<IPipelineTrigger, Task> sendTrigger,");
+        sb.AppendLine("        Func<ITransientEvent, Task> broadcastTransient)");
         sb.AppendLine("    {");
 
         if (model.TriggerHandlers.Count == 0)
@@ -293,7 +335,9 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
         sb.AppendLine("    public async Task DispatchEventAsync(");
         sb.AppendLine("        IAggregateEnvelope envelope,");
         sb.AppendLine("        PipelineContext ctx,");
-        sb.AppendLine("        Func<ICommand, Task> send)");
+        sb.AppendLine("        Func<ICommand, Task> sendCommand,");
+        sb.AppendLine("        Func<IPipelineTrigger, Task> sendTrigger,");
+        sb.AppendLine("        Func<ITransientEvent, Task> broadcastTransient)");
         sb.AppendLine("    {");
 
         if (model.EventHandlers.Count == 0)
@@ -315,6 +359,39 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
         }
 
         sb.AppendLine("    }");
+        sb.AppendLine();
+
+        // ── DispatchSelfAsync ──
+        sb.AppendLine("    /// <summary>");
+        sb.AppendLine("    /// Dispatch für Self-Messages (ScheduleSelf). Switch über IPipelineSelfMessage-Typen.");
+        sb.AppendLine("    /// </summary>");
+        sb.AppendLine("    public async Task DispatchSelfAsync(");
+        sb.AppendLine("        IPipelineSelfMessage selfMsg,");
+        sb.AppendLine("        PipelineContext ctx,");
+        sb.AppendLine("        Func<ICommand, Task> sendCommand,");
+        sb.AppendLine("        Func<IPipelineTrigger, Task> sendTrigger,");
+        sb.AppendLine("        Func<ITransientEvent, Task> broadcastTransient)");
+        sb.AppendLine("    {");
+
+        if (model.SelfHandlers.Count == 0)
+        {
+            sb.AppendLine("        await Task.CompletedTask;");
+        }
+        else
+        {
+            sb.AppendLine("        switch (selfMsg)");
+            sb.AppendLine("        {");
+
+            foreach (var handler in model.SelfHandlers)
+            {
+                var simpleName = GetSimpleTypeName(handler.InputTypeName);
+                EmitDispatchCase(sb, simpleName, "s", handler.Kind);
+            }
+
+            sb.AppendLine("        }");
+        }
+
+        sb.AppendLine("    }");
 
         sb.AppendLine("}");
 
@@ -329,7 +406,7 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
             case PipelineHandlerKind.Enumerable:
                 sb.AppendLine($"            case {typeName} {varName}:");
                 sb.AppendLine($"                foreach (var cmd in Handle({varName}, ctx))");
-                sb.AppendLine($"                    await send(cmd);");
+                sb.AppendLine($"                    await sendCommand(cmd);");
                 sb.AppendLine($"                break;");
                 sb.AppendLine();
                 break;
@@ -337,7 +414,7 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
             case PipelineHandlerKind.AsyncEnumerable:
                 sb.AppendLine($"            case {typeName} {varName}:");
                 sb.AppendLine($"                await foreach (var cmd in Handle({varName}, ctx))");
-                sb.AppendLine($"                    await send(cmd);");
+                sb.AppendLine($"                    await sendCommand(cmd);");
                 sb.AppendLine($"                break;");
                 sb.AppendLine();
                 break;
@@ -348,7 +425,47 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
                 sb.AppendLine($"                break;");
                 sb.AppendLine();
                 break;
+
+            case PipelineHandlerKind.OneOfEnumerable:
+                sb.AppendLine($"            case {typeName} {varName}:");
+                sb.AppendLine($"                foreach (var oneOf in Handle({varName}, ctx))");
+                sb.AppendLine($"                {{");
+                EmitOneOfSwitch(sb);
+                sb.AppendLine($"                }}");
+                sb.AppendLine($"                break;");
+                sb.AppendLine();
+                break;
+
+            case PipelineHandlerKind.OneOfAsyncEnumerable:
+                sb.AppendLine($"            case {typeName} {varName}:");
+                sb.AppendLine($"                await foreach (var oneOf in Handle({varName}, ctx))");
+                sb.AppendLine($"                {{");
+                EmitOneOfSwitch(sb);
+                sb.AppendLine($"                }}");
+                sb.AppendLine($"                break;");
+                sb.AppendLine();
+                break;
         }
+    }
+
+    /// <summary>
+    /// Generiert den inneren Switch für OneOf-Output-Routing.
+    /// Reihenfolge wichtig: ITransientEvent vor IEvent prüfen (ITransientEvent : IEvent).
+    /// </summary>
+    private static void EmitOneOfSwitch(StringBuilder sb)
+    {
+        sb.AppendLine($"                    switch (oneOf.Value)");
+        sb.AppendLine($"                    {{");
+        sb.AppendLine($"                        case ICommand cmd:");
+        sb.AppendLine($"                            await sendCommand(cmd);");
+        sb.AppendLine($"                            break;");
+        sb.AppendLine($"                        case IPipelineTrigger trig:");
+        sb.AppendLine($"                            await sendTrigger(trig);");
+        sb.AppendLine($"                            break;");
+        sb.AppendLine($"                        case ITransientEvent te:");
+        sb.AppendLine($"                            await broadcastTransient(te);");
+        sb.AppendLine($"                            break;");
+        sb.AppendLine($"                    }}");
     }
 
     private static string GetSimpleTypeName(string fullName)
@@ -372,6 +489,12 @@ internal enum PipelineHandlerKind
 
     /// <summary>Task — Fire-and-Forget, nur Seiteneffekte</summary>
     Task,
+
+    /// <summary>IEnumerable&lt;OneOf&lt;...&gt;&gt; — sync, yields gemischte Outputs</summary>
+    OneOfEnumerable,
+
+    /// <summary>IAsyncEnumerable&lt;OneOf&lt;...&gt;&gt; — async, yields gemischte Outputs</summary>
+    OneOfAsyncEnumerable,
 }
 
 internal class PipelineHandlerInfo
@@ -394,6 +517,7 @@ internal class PipelineGeneratorModel
     public string PipelineName { get; }
     public List<PipelineHandlerInfo> TriggerHandlers { get; }
     public List<PipelineHandlerInfo> EventHandlers { get; }
+    public List<PipelineHandlerInfo> SelfHandlers { get; }
     public List<string> AllNamespaces { get; }
 
     public PipelineGeneratorModel(
@@ -401,12 +525,14 @@ internal class PipelineGeneratorModel
         string pipelineName,
         List<PipelineHandlerInfo> triggerHandlers,
         List<PipelineHandlerInfo> eventHandlers,
+        List<PipelineHandlerInfo> selfHandlers,
         List<string> allNamespaces)
     {
         PipelineNamespace = pipelineNamespace;
         PipelineName = pipelineName;
         TriggerHandlers = triggerHandlers;
         EventHandlers = eventHandlers;
+        SelfHandlers = selfHandlers;
         AllNamespaces = allNamespaces;
     }
 }

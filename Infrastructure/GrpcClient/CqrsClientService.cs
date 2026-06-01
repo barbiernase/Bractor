@@ -2,6 +2,7 @@ using Abstractions;
 using Domain.Projections;
 using Grpc.Core;
 using Infrastructure.Mapping;
+using Infrastructure.Pipeline;
 using Infrastructure.Serialization;
 using Proto;
 using Proto.Cluster;
@@ -9,17 +10,17 @@ using Proto.Cluster;
 namespace Infrastructure.GrpcClient;
 
 /// <summary>
-/// gRPC Service fÃ¼r bidirektionale Client-Kommunikation.
+/// gRPC Service für bidirektionale Client-Kommunikation.
 /// 
 /// DESIGN:
 /// - Read-Loop direkt im Service (nutzt Kestrel's Thread-Pool)
-/// - Nur EIN Actor pro Verbindung: EventProxyActor (existiert nur fÃ¼r PID)
+/// - Nur EIN Actor pro Verbindung: EventProxyActor (existiert nur für PID)
 /// - SubscriptionTracker als normales Objekt (kein Actor)
 /// - Cleanup im finally-Block (deterministisch, kein Actor-Messaging)
 /// 
 /// Lifecycle einer Verbindung:
 /// 1. Client ruft Connect() auf
-/// 2. Service spawnt EventProxyActor (fÃ¼r PID)
+/// 2. Service spawnt EventProxyActor (für PID)
 /// 3. Service erstellt SubscriptionTracker
 /// 4. Read-Loop verarbeitet ClientMessages
 /// 5. finally-Block: Subscriptions beenden, Actor stoppen
@@ -62,7 +63,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
 
         try
         {
-            // 1. EventProxyActor spawnen (fÃ¼r PID)
+            // 1. EventProxyActor spawnen (für PID)
             var proxyProps = Props.FromProducer(() => 
                 new EventProxyActor(responseStream, _mapper, sessionId));
             proxyPid = _actorSystem.Root.Spawn(proxyProps);
@@ -154,6 +155,10 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                     await HandleQueryAsync(message.Query, responseStream, sessionId, ct);
                     break;
 
+                case ProtoRepo.ClientMessage.MessageOneofCase.Trigger:
+                    await HandleTriggerAsync(message.Trigger, responseStream, sessionId, ct);
+                    break;
+
                 default:
                     Console.WriteLine($"[CqrsService] {sessionId} unknown message type: {message.MessageCase}");
                     break;
@@ -171,59 +176,66 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     // =========================================================================
 
     private async Task HandleCapabilitiesAsync(
-    ProtoRepo.CapabilitiesRequest request,
-    IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
-    SubscriptionTracker subscriptionTracker,
-    string sessionId,
-    CancellationToken ct)
-{
-    Console.WriteLine($"[CqrsService] {sessionId} â† Capabilities: [{string.Join(", ", request.EventTypes)}]");
-
-    try
+        ProtoRepo.CapabilitiesRequest request,
+        IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        SubscriptionTracker subscriptionTracker,
+        string sessionId,
+        CancellationToken ct)
     {
-        // 1. Capabilities ermitteln
-        var result = _capabilitiesHandler.Handle(request, sessionId);
+        var messageSource = request.MessageTypes.Any()
+            ? $"message_types: [{string.Join(", ", request.MessageTypes)}]"
+            : $"event_types: [{string.Join(", ", request.EventTypes)}]";
+        Console.WriteLine($"[CqrsService] {sessionId} ← Capabilities: {messageSource}");
 
-        // 2. FÃ¼r jeden gÃ¼ltigen Event-Typ subscriben
-        foreach (var eventTypeName in result.SubscribedEvents)
+        try
         {
-            var subscribeSuccess = await subscriptionTracker.SubscribeAsync(eventTypeName, ct);
-            if (!subscribeSuccess)
+            // 1. Capabilities ermitteln (universell)
+            var result = _capabilitiesHandler.Handle(request, sessionId);
+
+            // 2. Für jeden gültigen Event-Typ subscriben
+            foreach (var eventTypeName in result.SubscribedEvents)
             {
-                Console.WriteLine($"[CqrsService] {sessionId} WARNING: Could not subscribe to {eventTypeName}");
+                var subscribeSuccess = await subscriptionTracker.SubscribeAsync(eventTypeName, ct);
+                if (!subscribeSuccess)
+                {
+                    Console.WriteLine($"[CqrsService] {sessionId} WARNING: Could not subscribe to {eventTypeName}");
+                }
             }
+
+            // 3. IMMER für CommandFailed subscriben (Targeted Delivery für diesen Client)
+            var commandFailedSubscribed = await subscriptionTracker.SubscribeAsync("CommandFailed", ct);
+            if (commandFailedSubscribed)
+            {
+                Console.WriteLine($"[CqrsService] {sessionId} Auto-subscribed to CommandFailed");
+            }
+
+            // 4. Unbekannte Typen loggen
+            if (result.UnknownTypes.Any())
+            {
+                Console.WriteLine($"[CqrsService] {sessionId} WARNING: Unknown types: [{string.Join(", ", result.UnknownTypes)}]");
+            }
+
+            // 5. Response senden
+            var response = _capabilitiesHandler.BuildResponse(result);
+            var serverMessage = new ProtoRepo.ServerMessage
+            {
+                CapabilitiesResponse = response
+            };
+
+            await responseStream.WriteAsync(serverMessage, ct);
+
+            Console.WriteLine($"[CqrsService] {sessionId} → CapabilitiesResponse: " +
+                $"{result.AllowedCommands.Count} commands, " +
+                $"{result.SubscribedEvents.Count} events, " +
+                $"{result.AllowedTriggers.Count} triggers, " +
+                $"{result.AllowedQueries.Count} queries");
         }
-
-        // 3. NEU: IMMER fÃ¼r CommandFailed subscriben (Targeted Delivery fÃ¼r diesen Client)
-        var commandFailedSubscribed = await subscriptionTracker.SubscribeAsync("CommandFailed", ct);
-        if (commandFailedSubscribed)
+        catch (Exception ex)
         {
-            Console.WriteLine($"[CqrsService] {sessionId} Auto-subscribed to CommandFailed");
+            Console.WriteLine($"[CqrsService] {sessionId} capabilities failed: {ex.Message}");
+            await SendErrorAsync(responseStream, "CAPABILITIES_FAILED", ex.Message, "", ct);
         }
-
-        // 4. Unbekannte Event-Typen loggen
-        if (result.UnknownEventTypes.Any())
-        {
-            Console.WriteLine($"[CqrsService] {sessionId} WARNING: Unknown event types: [{string.Join(", ", result.UnknownEventTypes)}]");
-        }
-
-        // 5. Response senden
-        var response = _capabilitiesHandler.BuildResponse(result);
-        var serverMessage = new ProtoRepo.ServerMessage
-        {
-            CapabilitiesResponse = response
-        };
-
-        await responseStream.WriteAsync(serverMessage, ct);
-
-        Console.WriteLine($"[CqrsService] {sessionId} â†’ CapabilitiesResponse: {result.AllowedCommands.Count} commands, {result.SubscribedEvents.Count} events, {result.SupportedQueries.Count} queries");
     }
-    catch (Exception ex)
-    {
-        Console.WriteLine($"[CqrsService] {sessionId} capabilities failed: {ex.Message}");
-        await SendErrorAsync(responseStream, "CAPABILITIES_FAILED", ex.Message, "", ct);
-    }
-}
 
     // =========================================================================
     // COMMAND HANDLING
@@ -235,36 +247,27 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         string sessionId,
         CancellationToken ct)
     {
-        Console.WriteLine($"[CqrsService] {sessionId} â† Command");
+        Console.WriteLine($"[CqrsService] {sessionId} ← Command");
 
         try
         {
-            // 1. DTO â†’ Domain mappen
+            // 1. DTO → Domain mappen
             var envelope = _mapper.MapToDomain(request.Envelope);
         
-            // 2. NEU: OriginSessionId fÃ¼r Targeted Delivery setzen
+            // 2. OriginSessionId für Targeted Delivery setzen
             envelope = envelope with { OriginSessionId = sessionId };
         
             Console.WriteLine($"[CqrsService] {sessionId} Command: {envelope.Payload.GetType().Name}, CorrelationId: {envelope.CorrelationId}");
 
-            // 3. Fire-and-Forget dispatch - KEIN Warten auf Result!
+            // 3. Fire-and-Forget dispatch
             _dispatcher.Dispatch(envelope);
         
             Console.WriteLine($"[CqrsService] {sessionId} Command dispatched (fire-and-forget)");
-        
-            // KEIN CommandAccepted mehr!
-            // KEIN ErrorResponse bei Command-Fehlern!
-            // Alles kommt als Event Ã¼ber PubSub:
-            // - Erfolg: Domain-Events (Broadcast)
-            // - Fehler: CommandFailed Event (Targeted an diesen Client)
         }
         catch (Exception ex)
         {
-            // Nur bei Mapping-Fehlern (Command kam gar nicht beim Actor an)
             Console.WriteLine($"[CqrsService] {sessionId} Command mapping failed: {ex.Message}");
         
-            // Bei Mapping-Fehlern kann der Actor kein CommandFailed publishen,
-            // also hier eine ErrorResponse senden
             await SendErrorAsync(
                 responseStream,
                 "COMMAND_MAPPING_FAILED",
@@ -273,6 +276,60 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 ct);
         }
     }
+
+    // =========================================================================
+    // TRIGGER HANDLING
+    // =========================================================================
+
+    private async Task HandleTriggerAsync(
+        ProtoRepo.TriggerRequest request,
+        IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        string sessionId,
+        CancellationToken ct)
+    {
+        Console.WriteLine($"[CqrsService] {sessionId} ← Trigger");
+
+        try
+        {
+            // 1. DTO → Domain mappen
+            var trigger = _mapper.MapToDomain(request.Payload);
+            
+            Console.WriteLine($"[CqrsService] {sessionId} Trigger type: {trigger.GetType().Name}");
+
+            // 2. Pipeline-Routing über generiertes Mapping
+            var triggerType = trigger.GetType();
+            if (!GeneratedPipelines.TriggerToPipelineId.TryGetValue(triggerType, out var pipelineId))
+            {
+                Console.WriteLine($"[CqrsService] {sessionId} No pipeline registered for trigger: {triggerType.Name}");
+                
+                await SendTriggerAckAsync(responseStream, false,
+                    request.CorrelationId,
+                    $"No pipeline for {triggerType.Name}", ct);
+                return;
+            }
+
+            // 3. An Pipeline senden
+            var identity = ClusterIdentity.Create(pipelineId, $"Pipeline-{pipelineId}");
+            var ack = await _actorSystem.Cluster().RequestAsync<PipelineAck>(
+                identity, trigger, ct);
+
+            // 4. Ack zurücksenden
+            await SendTriggerAckAsync(responseStream,
+                ack?.Accepted ?? false,
+                request.CorrelationId,
+                ack?.Accepted == false ? "Pipeline rejected" : null, ct);
+            
+            Console.WriteLine($"[CqrsService] {sessionId} → TriggerAck: {(ack?.Accepted ?? false ? "accepted" : "rejected")}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[CqrsService] {sessionId} trigger failed: {ex.Message}");
+            
+            await SendTriggerAckAsync(responseStream, false,
+                request.CorrelationId, ex.Message, ct);
+        }
+    }
+
     // =========================================================================
     // QUERY HANDLING
     // =========================================================================
@@ -283,19 +340,19 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         string sessionId,
         CancellationToken ct)
     {
-        Console.WriteLine($"[CqrsService] {sessionId} â† Query");
+        Console.WriteLine($"[CqrsService] {sessionId} ← Query");
 
         try
         {
-            // 1. DTO â†’ Domain mappen
+            // 1. DTO → Domain mappen
             var query = _mapper.MapToDomain(request.Payload);
             
             Console.WriteLine($"[CqrsService] {sessionId} Query type: {query.GetType().Name}");
 
-            // 2. Query ausfÃ¼hren
+            // 2. Query ausführen
             var response = await _queryService.ExecuteAsync(query);
 
-            // 3. Domain → DTO mappen (★ Phase 4: Deps werden mittransportiert)
+            // 3. Domain → DTO mappen (Deps werden mittransportiert)
             var responseDto = _mapper.ToQueryResponse(response, request.CorrelationId);
 
             // 4. Response senden
@@ -306,7 +363,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             
             await responseStream.WriteAsync(serverMessage, ct);
             
-            Console.WriteLine($"[CqrsService] {sessionId} â†’ QueryResponse: {response.Data.GetType().Name}");
+            Console.WriteLine($"[CqrsService] {sessionId} → QueryResponse: {response.Data.GetType().Name}");
         }
         catch (NotSupportedException ex)
         {
@@ -343,11 +400,10 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         string sessionId,
         CancellationToken ct)
     {
-        Console.WriteLine($"[CqrsService] {sessionId} â† Subscribe: {request.EventType}");
+        Console.WriteLine($"[CqrsService] {sessionId} ← Subscribe: {request.EventType}");
 
         try
         {
-            // 1. Subscribe via Tracker
             var success = await subscriptionTracker.SubscribeAsync(request.EventType, ct);
 
             if (!success)
@@ -361,19 +417,18 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 return;
             }
 
-            // 2. SubscriptionConfirmed senden
             var confirmed = new ProtoRepo.ServerMessage
             {
                 SubscriptionConfirmed = new ProtoRepo.SubscriptionConfirmed
                 {
                     EventType = request.EventType,
-                    AggregateId = request.AggregateId // Wird im MVP ignoriert (Client filtert)
+                    AggregateId = request.AggregateId
                 }
             };
             
             await responseStream.WriteAsync(confirmed, ct);
             
-            Console.WriteLine($"[CqrsService] {sessionId} â†’ SubscriptionConfirmed: {request.EventType}");
+            Console.WriteLine($"[CqrsService] {sessionId} → SubscriptionConfirmed: {request.EventType}");
         }
         catch (Exception ex)
         {
@@ -399,14 +454,12 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         string sessionId,
         CancellationToken ct)
     {
-        Console.WriteLine($"[CqrsService] {sessionId} â† Unsubscribe: {request.EventType}");
+        Console.WriteLine($"[CqrsService] {sessionId} ← Unsubscribe: {request.EventType}");
 
         try
         {
-            // 1. Unsubscribe via Tracker
             await subscriptionTracker.UnsubscribeAsync(request.EventType, ct);
 
-            // 2. UnsubscriptionConfirmed senden (auch wenn nicht subscribed war)
             var confirmed = new ProtoRepo.ServerMessage
             {
                 UnsubscriptionConfirmed = new ProtoRepo.UnsubscriptionConfirmed
@@ -418,7 +471,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             
             await responseStream.WriteAsync(confirmed, ct);
             
-            Console.WriteLine($"[CqrsService] {sessionId} â†’ UnsubscriptionConfirmed: {request.EventType}");
+            Console.WriteLine($"[CqrsService] {sessionId} → UnsubscriptionConfirmed: {request.EventType}");
         }
         catch (Exception ex)
         {
@@ -436,6 +489,33 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     // =========================================================================
     // HELPERS
     // =========================================================================
+
+    private static async Task SendTriggerAckAsync(
+        IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        bool accepted,
+        string correlationId,
+        string? errorMessage,
+        CancellationToken ct)
+    {
+        try
+        {
+            var ack = new ProtoRepo.ServerMessage
+            {
+                TriggerAck = new ProtoRepo.TriggerAck
+                {
+                    Accepted = accepted,
+                    CorrelationId = correlationId ?? "",
+                    ErrorMessage = errorMessage ?? ""
+                }
+            };
+            
+            await responseStream.WriteAsync(ack, ct);
+        }
+        catch
+        {
+            // Stream möglicherweise bereits geschlossen
+        }
+    }
 
     private static async Task SendErrorAsync(
         IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
@@ -460,7 +540,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         }
         catch
         {
-            // Stream mÃ¶glicherweise bereits geschlossen - ignorieren
+            // Stream möglicherweise bereits geschlossen
         }
     }
 }

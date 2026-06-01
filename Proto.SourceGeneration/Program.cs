@@ -17,7 +17,7 @@ MSBuildLocator.RegisterDefaults();
 // ============================================================================
 
 // Projekte die analysiert werden sollen (nach Name)
-var targetProjects = new[] { "Domain", "Domain.Projections" };
+var targetProjects = new[] { "Domain", "Domain.Projections", "Domain.Pipeline" };
 
 const string OutputFileName = "domain.proto";
 const string OutputProjectDir = "ProtoRepo";
@@ -96,10 +96,12 @@ var analyzer = new MultiCompilationAnalyzer(compilations);
 var messagePayloadGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IMessagePayload");
 var queryGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IQuery");
 var queryResponseGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IQueryResponse");
+var triggerGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IPipelineTrigger");
 
 var allGraphs = messagePayloadGraphs
     .Concat(queryGraphs)
     .Concat(queryResponseGraphs)
+    .Concat(triggerGraphs)
     .ToList();
 
 if (allGraphs.Count == 0)
@@ -117,6 +119,7 @@ var commandTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "Command")
 var eventTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "Event");
 var queryTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "Query");
 var queryResponseTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "QueryResponse");
+var triggerTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "Trigger");
 
 Console.WriteLine();
 Console.WriteLine("📊 Gefundene Typen:");
@@ -124,6 +127,7 @@ Console.WriteLine($"   Commands:        {commandTypes.Count}");
 Console.WriteLine($"   Events:          {eventTypes.Count}");
 Console.WriteLine($"   Queries:         {queryTypes.Count}");
 Console.WriteLine($"   QueryResponses:  {queryResponseTypes.Count}");
+Console.WriteLine($"   Triggers:        {triggerTypes.Count}");
 Console.WriteLine($"   Value Objects:   {objectTypes.Count}");
 Console.WriteLine();
 
@@ -135,7 +139,8 @@ var protoContent = generator.GenerateProtoFile(
     commandTypes, 
     eventTypes,
     queryTypes,
-    queryResponseTypes);
+    queryResponseTypes,
+    triggerTypes);
 
 // Output im ProtoRepo-Projektordner
 var solutionDir = Path.GetDirectoryName(solutionPath) ?? ".";

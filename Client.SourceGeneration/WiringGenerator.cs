@@ -1,10 +1,13 @@
+// ── Client.SourceGeneration/WiringGenerator.cs ──
+//
 // ═══════════════════════════════════════════════════════════════════
 // WiringGenerator
 //
 // Sammelt alle relevanten Typen und erzeugt EINE statische Wiring-Klasse:
 //
-//   - AddClientDomain(IServiceCollection) → DI-Registrierung
-//   - SubscribeAll(IServiceProvider, IBus) → Bus-Subscriptions
+//   - AddClientDomain(IServiceCollection) → DI-Registrierung (Scoped)
+//   - SubscribeAll(IServiceProvider, IBus) → Bus-Subscriptions + AttachToBus
+//   - UnsubscribeAll(IServiceProvider)    → DetachFromBus auf allen Stores
 //   - ServerEventTypes → IEvent (ohne IClientEvent)
 //   - CommandTypes → ICommand
 //   - CommandAggregateTypes → Command-Typ → AggregateType-Name
@@ -12,9 +15,18 @@
 //       → konkrete generische Aufrufe, KEIN Reflection
 //
 // Kritische Subscription-Reihenfolge:
-//   1. Stores (sync)       — void Handle → Mutation
-//   2. sync Handler (sync) — IEnumerable Handle → Produktion
-//   3. async Handler       — IAsyncEnumerable Handle → Background
+//   1. Store-Baum depth-first (Eltern vor Kindern, ältere Geschwister zuerst)
+//      → jeder Store: AttachToBus + Subscribe
+//   2. Standalone-Stores (nicht Teil eines Baums)
+//      → AttachToBus + Subscribe
+//   3. sync Handler  — IEnumerable Handle → Produktion
+//   4. async Handler — IAsyncEnumerable Handle → Background
+//
+// Store-Baum-Erkennung:
+//   Stores (void Handle) werden auf public Properties gescannt.
+//   Property-Typ ist ebenfalls ein Store → Eltern-Kind-Beziehung.
+//   Deklarationsreihenfolge = Subscription-Reihenfolge.
+//   Root-Stores = Stores die nicht als Kind eines anderen Stores erscheinen.
 // ═══════════════════════════════════════════════════════════════════
 
 using System.Collections.Generic;
@@ -56,7 +68,6 @@ public class WiringGenerator : IIncrementalGenerator
         var domainTypes = context.CompilationProvider
             .Select(static (compilation, _) => CollectDomainTypes(compilation));
 
-        // Alles einsammeln und kombinieren
         var combined = handleClasses.Collect()
             .Combine(viewModels.Collect())
             .Combine(domainTypes);
@@ -91,7 +102,25 @@ public class WiringGenerator : IIncrementalGenerator
                             m.Parameters[1].Type, messageContextType))
             .ToList();
 
-        if (handleMethods.Count == 0) return null;
+        // Container-Stores (z.B. ImagePairWorkspace) haben keine eigenen Handle-Methoden,
+        // erben aber von StoreBase und halten Kind-Stores als Properties.
+        // Sie müssen trotzdem in DI registriert + in den Store-Baum aufgenommen werden.
+        if (handleMethods.Count == 0)
+        {
+            var storeBaseType = context.SemanticModel.Compilation
+                .GetTypeByMetadataName("Client.Infrastructure.Abstractions.StoreBase");
+            if (storeBaseType == null) return null;
+
+            var isStoreBase = false;
+            var baseType = classSymbol.BaseType;
+            while (baseType != null)
+            {
+                if (SymbolEqualityComparer.Default.Equals(baseType, storeBaseType))
+                { isStoreBase = true; break; }
+                baseType = baseType.BaseType;
+            }
+            if (!isStoreBase) return null;
+        }
 
         var subscribedTypes = new List<string>();
         var isStore = true;
@@ -100,7 +129,8 @@ public class WiringGenerator : IIncrementalGenerator
 
         foreach (var method in handleMethods)
         {
-            var inputFqn = method.Parameters[0].Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
+            var inputFqn = method.Parameters[0].Type
+                .ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat);
             subscribedTypes.Add(inputFqn);
 
             if (method.ReturnType.SpecialType != SpecialType.System_Void)
@@ -117,6 +147,27 @@ public class WiringGenerator : IIncrementalGenerator
             }
         }
 
+        // ── NEU: Public-Properties scannen für Store-Baum-Erkennung ──
+        //
+        // Für jeden Store sammeln wir die FQNs der public, non-static Properties
+        // in Deklarationsreihenfolge. In Execute wird dann geprüft welche davon
+        // ebenfalls Stores sind → Eltern-Kind-Beziehung.
+        //
+        // Wir nutzen classSymbol.ToDisplayString() (kein global::-Prefix) weil
+        // auch WiringHandleClassInfo.Fqn ohne global:: ist — Vergleich funktioniert direkt.
+        var publicPropertyTypeFqns = new List<string>();
+        if (isStore)
+        {
+            foreach (var member in classSymbol.GetMembers().OfType<IPropertySymbol>())
+            {
+                if (member.IsStatic) continue;
+                if (member.DeclaredAccessibility != Accessibility.Public) continue;
+
+                var typeFqn = member.Type.ToDisplayString();
+                publicPropertyTypeFqns.Add(typeFqn);
+            }
+        }
+
         var fqn = classSymbol.ToDisplayString();
         var name = classSymbol.Name;
         var ns = classSymbol.ContainingNamespace.ToDisplayString();
@@ -124,7 +175,8 @@ public class WiringGenerator : IIncrementalGenerator
 
         return new WiringHandleClassInfo(
             fqn, name, ns, varName, isStore, hasSyncHandlers, hasAsyncHandlers,
-            subscribedTypes.Distinct().ToList());
+            subscribedTypes.Distinct().ToList(),
+            publicPropertyTypeFqns);
     }
 
     // ═══════════════════════════════════════════════════
@@ -152,10 +204,6 @@ public class WiringGenerator : IIncrementalGenerator
 
     // ═══════════════════════════════════════════════════
     // Analyse: Domain-Typen via Compilation (NICHT SyntaxProvider!)
-    //
-    // SyntaxProvider sieht nur Dateien im eigenen Projekt.
-    // Commands, Events, States, Queries leben im Domain-Projekt
-    // (referenzierte Assembly). CompilationProvider sieht alles.
     // ═══════════════════════════════════════════════════
 
     private static ImmutableArray<WiringDomainTypeInfo> CollectDomainTypes(Compilation compilation)
@@ -168,11 +216,9 @@ public class WiringGenerator : IIncrementalGenerator
 
         var results = ImmutableArray.CreateBuilder<WiringDomainTypeInfo>();
 
-        // Eigene Compilation durchsuchen (Client.Domain-Projekt)
         WalkNamespace(compilation.Assembly.GlobalNamespace,
             iCommand, iEvent, iClientEvent, iQuery, iState, results);
 
-        // Referenzierte Assemblies durchsuchen (Domain-Projekt!)
         foreach (var reference in compilation.References)
         {
             if (compilation.GetAssemblyOrModuleSymbol(reference) is IAssemblySymbol assembly)
@@ -185,17 +231,12 @@ public class WiringGenerator : IIncrementalGenerator
         return results.ToImmutable();
     }
 
-    /// <summary>
-    /// Rekursiv durch Namespaces laufen und Domain-Typen sammeln.
-    /// Überspringt bekannte Framework-Namespaces für Performance.
-    /// </summary>
     private static void WalkNamespace(
         INamespaceSymbol ns,
         INamedTypeSymbol? iCommand, INamedTypeSymbol? iEvent,
         INamedTypeSymbol? iClientEvent, INamedTypeSymbol? iQuery, INamedTypeSymbol? iState,
         ImmutableArray<WiringDomainTypeInfo>.Builder results)
     {
-        // Framework-Namespaces überspringen (Performance)
         var name = ns.Name;
         if (name is "System" or "Microsoft" or "Google" or "Grpc" or "Proto" or
             "ProtoRepo" or "Marten" or "Npgsql" or "StackExchange" or "Serilog" or
@@ -223,10 +264,6 @@ public class WiringGenerator : IIncrementalGenerator
         }
     }
 
-    /// <summary>
-    /// Prüft ob ein Typ ein Command, Event, Query oder State ist.
-    /// Gleiche Logik wie vorher AnalyzeDomainType, aber ohne SyntaxProvider-Abhängigkeit.
-    /// </summary>
     private static WiringDomainTypeInfo? ClassifyDomainType(
         INamedTypeSymbol symbol,
         INamedTypeSymbol? iCommand, INamedTypeSymbol? iEvent,
@@ -234,22 +271,14 @@ public class WiringGenerator : IIncrementalGenerator
     {
         var fqn = symbol.ToDisplayString();
 
-        // ICommand?
         if (iCommand != null && symbol.AllInterfaces.Any(i =>
             SymbolEqualityComparer.Default.Equals(i, iCommand)))
-        {
             return new WiringDomainTypeInfo(fqn, DomainTypeKind.Command);
-        }
 
-        // IQuery? (non-generic Abstractions.IQuery)
-        // ResponseType wird nicht gebraucht — QueryBridge nutzt IQueryResponse als Bound.
         if (iQuery != null && symbol.AllInterfaces.Any(i =>
             SymbolEqualityComparer.Default.Equals(i, iQuery)))
-        {
             return new WiringDomainTypeInfo(fqn, DomainTypeKind.Query);
-        }
 
-        // IEvent aber NICHT IClientEvent → Server-Event
         if (iEvent != null && symbol.AllInterfaces.Any(i =>
             SymbolEqualityComparer.Default.Equals(i, iEvent)))
         {
@@ -259,18 +288,15 @@ public class WiringGenerator : IIncrementalGenerator
                 return new WiringDomainTypeInfo(fqn, DomainTypeKind.ServerEvent);
         }
 
-        // IState? → für CommandAggregateTypes (Namespace-Matching)
         if (iState != null && symbol.AllInterfaces.Any(i =>
             SymbolEqualityComparer.Default.Equals(i, iState)))
-        {
             return new WiringDomainTypeInfo(fqn, DomainTypeKind.State);
-        }
 
         return null;
     }
 
     // ═══════════════════════════════════════════════════
-    // Code-Generierung
+    // Code-Generierung — Einstiegspunkt
     // ═══════════════════════════════════════════════════
 
     private static void Execute(
@@ -295,9 +321,29 @@ public class WiringGenerator : IIncrementalGenerator
         var queries = domainTypes.Where(d => d.Kind == DomainTypeKind.Query).ToList();
         var states = domainTypes.Where(d => d.Kind == DomainTypeKind.State).ToList();
 
-        // Command → AggregateType Mapping bauen
         var commandAggregateMap = BuildCommandAggregateTypeMap(commands, states);
 
+        // ── NEU: Store-Baum aufbauen ──
+        //
+        // storeFqns: schnelle Lookup-Menge aller bekannten Store-FQNs
+        // childrenOf: Store-FQN → geordnete Liste direkter Kind-Stores
+        // rootStores: Stores die nicht als Kind eines anderen Stores erscheinen
+        var storeFqns = new HashSet<string>(stores.Select(s => s.Fqn));
+        var storeByFqn = stores.ToDictionary(s => s.Fqn);
+
+        var childrenOf = stores.ToDictionary(
+            s => s.Fqn,
+            s => s.PublicPropertyTypeFqns
+                  .Where(typeFqn => storeFqns.Contains(typeFqn))
+                  .Select(typeFqn => storeByFqn[typeFqn])
+                  .ToList());
+
+        var referencedAsChild = new HashSet<string>(
+            childrenOf.Values.SelectMany(children => children.Select(c => c.Fqn)));
+
+        var rootStores = stores.Where(s => !referencedAsChild.Contains(s.Fqn)).ToList();
+
+        // Namespace für die generierte Klasse: häufigster Namespace aller Handle-Klassen
         var wiringNamespace = handleClasses.Select(h => h.Namespace)
             .Concat(viewModels.Select(v => v.Namespace))
             .GroupBy(n => n)
@@ -333,7 +379,8 @@ public class WiringGenerator : IIncrementalGenerator
         sb.AppendLine("{");
 
         GenerateAddClient(sb, stores, syncHandlers, asyncHandlers, viewModels);
-        GenerateSubscribeAll(sb, stores, syncHandlers, asyncHandlers);
+        GenerateSubscribeAll(sb, stores, syncHandlers, asyncHandlers, rootStores, childrenOf);
+        GenerateUnsubscribeAll(sb, stores, rootStores, childrenOf);
         GenerateTypeLists(sb, commands, serverEvents);
         GenerateCommandAggregateTypes(sb, commandAggregateMap);
         GenerateRegisterQueries(sb, queries);
@@ -344,23 +391,34 @@ public class WiringGenerator : IIncrementalGenerator
     }
 
     // ═══════════════════════════════════════════════════
-    // CommandAggregateType Mapping (Namespace-Convention)
+    // Store-Baum: Depth-First Traversal
     // ═══════════════════════════════════════════════════
 
     /// <summary>
-    /// Baut das Mapping Command-FQN → AggregateType-Name.
-    /// Convention: Commands im selben Namespace wie ein IState gehören zu diesem Aggregate.
-    ///
-    /// Beispiel:
-    ///   Domain.Todo.ErstelleTodo     → Namespace "Domain.Todo" → IState "TodoItem" → "TodoItem"
-    ///   Domain.Lagerartikel.BucheWareneingang → "Domain.Lagerartikel" → "Lagerartikel"
+    /// Gibt alle Stores in depth-first-Reihenfolge zurück.
+    /// Eltern vor Kindern, ältere Geschwister (früher deklariert) vor jüngeren.
+    /// visited verhindert doppelte Ausgabe bei geteilten Kind-Instanzen.
     /// </summary>
+    private static IEnumerable<WiringHandleClassInfo> DepthFirst(
+        WiringHandleClassInfo node,
+        Dictionary<string, List<WiringHandleClassInfo>> childrenOf,
+        HashSet<string> visited)
+    {
+        if (!visited.Add(node.Fqn)) yield break;
+        yield return node;
+        foreach (var child in childrenOf[node.Fqn])
+            foreach (var descendant in DepthFirst(child, childrenOf, visited))
+                yield return descendant;
+    }
+
+    // ═══════════════════════════════════════════════════
+    // CommandAggregateType Mapping
+    // ═══════════════════════════════════════════════════
+
     private static Dictionary<string, string> BuildCommandAggregateTypeMap(
         List<WiringDomainTypeInfo> commands,
         List<WiringDomainTypeInfo> states)
     {
-        // 1. State-Namespace → State-Name (einfacher Typname, nicht FQN)
-        //    "Domain.Todo.TodoItem" → Namespace="Domain.Todo", Name="TodoItem"
         var stateByNamespace = new Dictionary<string, string>();
         foreach (var state in states)
         {
@@ -371,8 +429,6 @@ public class WiringGenerator : IIncrementalGenerator
             stateByNamespace[ns] = name;
         }
 
-        // 2. Pro Command: Namespace matchen → AggregateType
-        //    "Domain.Todo.ErstelleTodo" → Namespace="Domain.Todo" → "TodoItem"
         var map = new Dictionary<string, string>();
         foreach (var cmd in commands)
         {
@@ -385,7 +441,9 @@ public class WiringGenerator : IIncrementalGenerator
         return map;
     }
 
-    // ─── AddClientDomain ───
+    // ═══════════════════════════════════════════════════
+    // AddClientDomain
+    // ═══════════════════════════════════════════════════
 
     private static void GenerateAddClient(
         StringBuilder sb,
@@ -394,16 +452,24 @@ public class WiringGenerator : IIncrementalGenerator
         List<WiringHandleClassInfo> asyncHandlers,
         List<WiringViewModelInfo> viewModels)
     {
+        sb.AppendLine("    /// <summary>");
+        sb.AppendLine("    /// Registriert alle Stores, Handler, ViewModels und ClientWiringConfig.");
+        sb.AppendLine("    /// Scoped = eine Instanz pro Circuit (Blazor Server) bzw. pro Window (MAUI).");
+        sb.AppendLine("    /// </summary>");
         sb.AppendLine("    public static IServiceCollection AddClientDomain(this IServiceCollection services)");
         sb.AppendLine("    {");
 
+        // Stores: Scoped (eine Instanz pro Circuit/Window)
         foreach (var store in stores)
-            sb.AppendLine($"        services.AddSingleton<{store.Fqn}>();");
+            sb.AppendLine($"        services.AddScoped<{store.Fqn}>();");
+
+        // Handler: Scoped (lesen Stores desselben Circuits)
         foreach (var handler in syncHandlers.Concat(asyncHandlers))
-            sb.AppendLine($"        services.AddSingleton<{handler.Fqn}>();");
+            sb.AppendLine($"        services.AddScoped<{handler.Fqn}>();");
 
         sb.AppendLine();
 
+        // ViewModels: Transient (kein State, kurzlebig)
         foreach (var vm in viewModels)
         {
             sb.AppendLine($"        services.AddTransient<{vm.Fqn}>(sp =>");
@@ -416,41 +482,97 @@ public class WiringGenerator : IIncrementalGenerator
         }
 
         sb.AppendLine();
+
+        // ── NEU: ClientWiringConfig — Delegates für CircuitHandlerBase ──
+        sb.AppendLine("        // ClientWiringConfig — Delegates für den generischen CircuitHandler");
+        sb.AppendLine("        services.AddSingleton(new ClientWiringConfig(");
+        sb.AppendLine("            SubscribeAll: GeneratedWiring.SubscribeAll,");
+        sb.AppendLine("            UnsubscribeAll: GeneratedWiring.UnsubscribeAll,");
+        sb.AppendLine("            RegisterQueries: GeneratedWiring.RegisterQueries,");
+        sb.AppendLine("            ServerEventTypes: GeneratedWiring.ServerEventTypes,");
+        sb.AppendLine("            CommandTypes: GeneratedWiring.CommandTypes,");
+        sb.AppendLine("            CommandAggregateTypes: GeneratedWiring.CommandAggregateTypes));");
+        sb.AppendLine();
+
         sb.AppendLine("        return services;");
         sb.AppendLine("    }");
         sb.AppendLine();
     }
 
-    // ─── SubscribeAll ───
+    // ═══════════════════════════════════════════════════
+    // SubscribeAll — NEU: Store-Baum depth-first + AttachToBus
+    // ═══════════════════════════════════════════════════
 
     private static void GenerateSubscribeAll(
         StringBuilder sb,
-        List<WiringHandleClassInfo> stores,
+        List<WiringHandleClassInfo> allStores,
         List<WiringHandleClassInfo> syncHandlers,
-        List<WiringHandleClassInfo> asyncHandlers)
+        List<WiringHandleClassInfo> asyncHandlers,
+        List<WiringHandleClassInfo> rootStores,
+        Dictionary<string, List<WiringHandleClassInfo>> childrenOf)
     {
+        sb.AppendLine("    /// <summary>");
+        sb.AppendLine("    /// Registriert alle Stores und Handler auf dem Bus.");
+        sb.AppendLine("    /// Store-Baum wird depth-first traversiert: Eltern vor Kindern,");
+        sb.AppendLine("    /// ältere Geschwister vor jüngeren (Deklarationsreihenfolge).");
+        sb.AppendLine("    /// Jeder Store wird via AttachToBus an DispatchCompleted registriert.");
+        sb.AppendLine("    /// </summary>");
         sb.AppendLine("    public static void SubscribeAll(IServiceProvider sp, IBus bus)");
         sb.AppendLine("    {");
+        sb.AppendLine("        // IBus → ClientBus: einmaliger expliziter Cast, kein Reflection.");
+        sb.AppendLine("        // ClientBus ist die einzige IBus-Implementierung im Client.");
+        sb.AppendLine("        var clientBus = (ClientBus)bus;");
+        sb.AppendLine();
 
-        foreach (var store in stores)
-            sb.AppendLine($"        var {store.VarName} = sp.GetRequiredService<{store.Fqn}>();");
-        foreach (var handler in syncHandlers.Concat(asyncHandlers))
-            sb.AppendLine($"        var {handler.VarName} = sp.GetRequiredService<{handler.Fqn}>();");
+        // 1. Alle Instanzen auflösen
+        if (allStores.Count > 0)
+        {
+            sb.AppendLine("        // ── Instanzen auflösen ──");
+            foreach (var store in allStores)
+                sb.AppendLine($"        var {store.VarName} = sp.GetRequiredService<{store.Fqn}>();");
+        }
+
+        if (syncHandlers.Count > 0 || asyncHandlers.Count > 0)
+        {
+            foreach (var handler in syncHandlers.Concat(asyncHandlers))
+                sb.AppendLine($"        var {handler.VarName} = sp.GetRequiredService<{handler.Fqn}>();");
+        }
 
         sb.AppendLine();
 
-        if (stores.Count > 0)
+        // 2. Store-Baum depth-first: AttachToBus + Subscribe
+        if (allStores.Count > 0)
         {
-            sb.AppendLine("        // 1. STORES — sync Subscribe, void Handle → Mutation");
-            foreach (var store in stores)
-                foreach (var eventType in store.SubscribedTypes)
-                    sb.AppendLine($"        bus.Subscribe<{eventType}>((evt, ctx) => {store.VarName}.Dispatch(evt, ctx));");
+            sb.AppendLine("        // ── Store-Baum depth-first: AttachToBus + Subscribe ──");
+            sb.AppendLine("        // Reihenfolge garantiert: Eltern handlen vor Kindern.");
+            sb.AppendLine("        // NavigationStore kann im Handle ListStore.Items lesen");
+            sb.AppendLine("        // weil ListStore vorher subscribt hat.");
             sb.AppendLine();
+
+            var visited = new HashSet<string>();
+
+            // Root-Stores zuerst (mit ihren Teilbäumen depth-first)
+            foreach (var root in rootStores)
+            {
+                foreach (var node in DepthFirst(root, childrenOf, visited))
+                    GenerateStoreBlock(sb, node);
+            }
+
+            // Standalone-Stores (nicht im Baum — zur Sicherheit, sollte leer sein)
+            var standaloneStores = allStores.Where(s => !visited.Contains(s.Fqn)).ToList();
+            if (standaloneStores.Count > 0)
+            {
+                sb.AppendLine("        // ── Standalone-Stores (kein Eltern-Store) ──");
+                foreach (var store in standaloneStores)
+                    GenerateStoreBlock(sb, store);
+            }
         }
 
+        // 3. sync Handler (nach ALLEN Stores)
         if (syncHandlers.Count > 0)
         {
-            sb.AppendLine("        // 2. HANDLER (sync) — IEnumerable Handle → Produktion");
+            sb.AppendLine("        // ── Handler (sync) — läuft nach allen Stores ──");
+            sb.AppendLine("        // Sync-Handler sehen den bereits aktualisierten Store-State.");
             foreach (var handler in syncHandlers)
                 foreach (var eventType in handler.SubscribedTypes)
                 {
@@ -460,19 +582,17 @@ public class WiringGenerator : IIncrementalGenerator
             sb.AppendLine();
         }
 
+        // 4. async Handler (fire-and-forget, nach sync)
         if (asyncHandlers.Count > 0)
         {
-            sb.AppendLine("        // 3. HANDLER (async) — IAsyncEnumerable Handle → Background");
+            sb.AppendLine("        // ── Handler (async) — fire-and-forget ──");
             foreach (var handler in asyncHandlers)
                 foreach (var eventType in handler.SubscribedTypes)
                 {
                     sb.AppendLine($"        bus.SubscribeAsync<{eventType}>(async (evt, ctx) =>");
                     sb.AppendLine($"            await {handler.VarName}.DispatchAsync(evt, ctx, async msg =>");
                     sb.AppendLine("            {");
-                    sb.AppendLine("                if (bus is ClientBus clientBus)");
-                    sb.AppendLine("                    clientBus.PostToSyncContext(() => bus.Publish(msg, MessageContext.Local()));");
-                    sb.AppendLine("                else");
-                    sb.AppendLine("                    bus.Publish(msg, MessageContext.Local());");
+                    sb.AppendLine("                clientBus.PostToSyncContext(() => bus.Publish(msg, MessageContext.Local()));");
                     sb.AppendLine("            }));");
                 }
         }
@@ -481,7 +601,65 @@ public class WiringGenerator : IIncrementalGenerator
         sb.AppendLine();
     }
 
-    // ─── ServerEventTypes + CommandTypes ───
+    /// <summary>
+    /// Erzeugt den AttachToBus-Aufruf + alle Subscribe-Aufrufe für einen einzelnen Store.
+    /// </summary>
+    private static void GenerateStoreBlock(StringBuilder sb, WiringHandleClassInfo store)
+    {
+        sb.AppendLine($"        // {store.Name}");
+        sb.AppendLine($"        {store.VarName}.AttachToBus(clientBus);");
+        foreach (var eventType in store.SubscribedTypes)
+            sb.AppendLine($"        bus.Subscribe<{eventType}>((evt, ctx) => {store.VarName}.Dispatch(evt, ctx));");
+        sb.AppendLine();
+    }
+
+    // ═══════════════════════════════════════════════════
+    // UnsubscribeAll — NEU: DetachFromBus auf allen Stores
+    // ═══════════════════════════════════════════════════
+
+    private static void GenerateUnsubscribeAll(
+        StringBuilder sb,
+        List<WiringHandleClassInfo> allStores,
+        List<WiringHandleClassInfo> rootStores,
+        Dictionary<string, List<WiringHandleClassInfo>> childrenOf)
+    {
+        sb.AppendLine("    /// <summary>");
+        sb.AppendLine("    /// Trennt alle Stores vom Bus. Kein Flush mehr nach diesem Aufruf.");
+        sb.AppendLine("    /// Wird von ClientStartupService.StopAsync aufgerufen (Circuit-Close / Window-Close).");
+        sb.AppendLine("    /// Reihenfolge: Kinder vor Eltern (umgekehrt zu SubscribeAll).");
+        sb.AppendLine("    /// </summary>");
+        sb.AppendLine("    public static void UnsubscribeAll(IServiceProvider sp)");
+        sb.AppendLine("    {");
+
+        if (allStores.Count > 0)
+        {
+            // Reihenfolge: depth-first wie SubscribeAll, aber umgekehrt
+            // Kinder DetachFromBus vor Eltern — sauberere Event-Kette
+            var visited = new HashSet<string>();
+            var orderedStores = new List<WiringHandleClassInfo>();
+
+            foreach (var root in rootStores)
+                foreach (var node in DepthFirst(root, childrenOf, visited))
+                    orderedStores.Add(node);
+
+            // Standalone-Stores (falls vorhanden)
+            foreach (var store in allStores.Where(s => !visited.Contains(s.Fqn)))
+                orderedStores.Add(store);
+
+            // Umgekehrte Reihenfolge: Kinder zuerst
+            orderedStores.Reverse();
+
+            foreach (var store in orderedStores)
+                sb.AppendLine($"        sp.GetRequiredService<{store.Fqn}>().DetachFromBus();");
+        }
+
+        sb.AppendLine("    }");
+        sb.AppendLine();
+    }
+
+    // ═══════════════════════════════════════════════════
+    // ServerEventTypes + CommandTypes
+    // ═══════════════════════════════════════════════════
 
     private static void GenerateTypeLists(
         StringBuilder sb,
@@ -519,7 +697,9 @@ public class WiringGenerator : IIncrementalGenerator
         sb.AppendLine();
     }
 
-    // ─── CommandAggregateTypes ───
+    // ═══════════════════════════════════════════════════
+    // CommandAggregateTypes
+    // ═══════════════════════════════════════════════════
 
     private static void GenerateCommandAggregateTypes(
         StringBuilder sb,
@@ -534,7 +714,9 @@ public class WiringGenerator : IIncrementalGenerator
         sb.AppendLine();
     }
 
-    // ─── RegisterQueries (kein Reflection!) ───
+    // ═══════════════════════════════════════════════════
+    // RegisterQueries (kein Reflection!)
+    // ═══════════════════════════════════════════════════
 
     private static void GenerateRegisterQueries(
         StringBuilder sb,
@@ -542,15 +724,12 @@ public class WiringGenerator : IIncrementalGenerator
     {
         sb.AppendLine("    /// <summary>");
         sb.AppendLine("    /// Registriert Query→Response-Mappings auf der QueryBridge.");
-        sb.AppendLine("    /// TResponse = IQueryResponse — der konkrete Typ wird vom ProtoMapper");
-        sb.AppendLine("    /// zur Runtime aufgelöst, nicht vom Typ-Parameter.");
+        sb.AppendLine("    /// Konkrete generische Aufrufe — kein Reflection.");
         sb.AppendLine("    /// </summary>");
         sb.AppendLine("    public static void RegisterQueries(QueryBridge queryBridge, ClientBus bus)");
         sb.AppendLine("    {");
         foreach (var query in queries.OrderBy(q => q.Fqn))
-        {
             sb.AppendLine($"        queryBridge.Register<{query.Fqn}, Abstractions.IQueryResponse>(bus);");
-        }
         sb.AppendLine("    }");
     }
 }
@@ -584,10 +763,18 @@ internal class WiringHandleClassInfo
     public bool HasAsyncHandlers { get; }
     public List<string> SubscribedTypes { get; }
 
+    /// <summary>
+    /// FQNs der public, non-static Properties in Deklarationsreihenfolge.
+    /// Wird in Execute genutzt um Kind-Stores zu erkennen (FQN in storeFqns-Set).
+    /// Nur befüllt für Stores (IsStore == true).
+    /// </summary>
+    public List<string> PublicPropertyTypeFqns { get; }
+
     public WiringHandleClassInfo(
         string fqn, string name, string ns, string varName,
         bool isStore, bool hasSyncHandlers, bool hasAsyncHandlers,
-        List<string> subscribedTypes)
+        List<string> subscribedTypes,
+        List<string> publicPropertyTypeFqns)
     {
         Fqn = fqn;
         Name = name;
@@ -597,6 +784,7 @@ internal class WiringHandleClassInfo
         HasSyncHandlers = hasSyncHandlers;
         HasAsyncHandlers = hasAsyncHandlers;
         SubscribedTypes = subscribedTypes;
+        PublicPropertyTypeFqns = publicPropertyTypeFqns;
     }
 }
 

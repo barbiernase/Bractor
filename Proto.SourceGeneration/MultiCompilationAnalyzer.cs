@@ -376,6 +376,9 @@ public class MultiCompilationAnalyzer
             interfaces.Contains("Abstractions.ICreationCommand"))
             return DomainType.Command;
 
+        if (interfaces.Contains("Abstractions.IPipelineTrigger"))
+            return DomainType.Trigger;
+
         if (interfaces.Contains("Abstractions.IQuery"))
             return DomainType.Query;
 

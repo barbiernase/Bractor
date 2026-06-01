@@ -1,22 +1,24 @@
+<!-- Host.Blazor/Host.Blazor.csproj -->
 <Project Sdk="Microsoft.NET.Sdk.Web">
-
-  <ItemGroup>
-    <ProjectReference Include="..\Client.Infrastructure\Client.Infrastructure.csproj" />
-    <ProjectReference Include="..\Domain\Domain.csproj" />
-    <ProjectReference Include="..\Domain.Client\Domain.Client.csproj" />
-    <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
-    <ProjectReference Include="..\Client.SourceGeneration\Client.SourceGeneration.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
-  </ItemGroup>
-
-  <ItemGroup>
-    <PackageReference Include="Blazor-ApexCharts" Version="6.1.0" />
-    <PackageReference Include="MudBlazor" Version="9.3.0" />
-  </ItemGroup>
 
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Infrastruktur: Bus, Startup, Connection — für DI-Setup in Program.cs -->
+    <ProjectReference Include="..\Client.Infrastructure\Client.Infrastructure.csproj" />
+
+    <!-- Views + Domain kommen transitiv über dieses Projekt -->
+    <ProjectReference Include="..\Domain.Client.Ui.Blazor\Domain.Client.Ui.Blazor.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- MudBlazor: Host braucht AddMudServices() + CSS/JS aus _Host.cshtml -->
+    <PackageReference Include="MudBlazor" Version="9.3.0" />
+    <PackageReference Include="Blazor-ApexCharts" Version="6.1.0" />
+  </ItemGroup>
 
 </Project>

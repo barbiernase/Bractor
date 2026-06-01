@@ -6,11 +6,28 @@ using Abstractions;
 namespace Infrastructure.Mapping;
 
 /// <summary>
-/// Zentrale Registry für alle Message-Typen.
+/// Kategorien für Nachrichtentypen.
+/// Bestimmt das Routing: Events werden empfangen (PubSub),
+/// alles andere wird gesendet (Aggregate, Pipeline, QueryService).
+/// </summary>
+public enum MessageCategory
+{
+    Event,
+    Command,
+    Query,
+    QueryResponse,
+    Trigger,
+    Unknown
+}
+
+/// <summary>
+/// Zentrale und einzige Runtime-Registry für alle Message-Typen.
 /// 
-/// ★ Schritt 4: Delegiert an GeneratedTypeRegistry — keine Reflection mehr!
-///   Die Dictionaries werden beim ersten Zugriff aus dem generierten Registry befüllt.
-///   API bleibt identisch — kein Umbau der Aufrufer nötig.
+/// Ersetzt den ehemaligen EventTypeResolver — eine Klasse, eine Initialisierung.
+/// Alle Aufrufer (SubscriptionTracker, CapabilitiesHandler, PubSubStartupService)
+/// nutzen ausschließlich diese Klasse.
+///
+/// Daten kommen aus GeneratedTypeRegistry — keine Reflection.
 /// </summary>
 public static class MessageTypeMapping
 {
@@ -18,6 +35,7 @@ public static class MessageTypeMapping
     private static readonly Dictionary<string, Type> _commandTypes = new();
     private static readonly Dictionary<string, Type> _queryTypes = new();
     private static readonly Dictionary<string, Type> _queryResponseTypes = new();
+    private static readonly Dictionary<string, Type> _triggerTypes = new();
     
     private static readonly Dictionary<string, HashSet<string>> _eventToCommands = new();
     
@@ -25,18 +43,15 @@ public static class MessageTypeMapping
     private static readonly object _lock = new();
 
     /// <summary>
-    /// Initialisiert die Registry.
-    /// 
-    /// ★ Schritt 4: params Assembly[] wird nur noch für API-Kompatibilität akzeptiert,
-    ///   aber ignoriert — die Typen kommen aus GeneratedTypeRegistry.
+    /// Initialisiert die Registry aus dem generierten Code.
+    /// Keine Reflection — alles kommt aus GeneratedTypeRegistry.
     /// </summary>
-    public static void Initialize(params System.Reflection.Assembly[] assemblies)
+    public static void Initialize()
     {
         lock (_lock)
         {
             if (_initialized) return;
 
-            // ★ Aus generiertem Registry befüllen — keine Reflection!
             foreach (var (name, type) in GeneratedTypeRegistry.Events)
                 _eventTypes[name] = type;
 
@@ -49,7 +64,9 @@ public static class MessageTypeMapping
             foreach (var (name, type) in GeneratedTypeRegistry.QueryResponses)
                 _queryResponseTypes[name] = type;
 
-            // ★ Event-to-Command Mapping aus GeneratedEventCommandMapping
+            foreach (var (name, type) in GeneratedTypeRegistry.Triggers)
+                _triggerTypes[name] = type;
+
             foreach (var (eventName, commandNames) in GeneratedEventCommandMapping.EventNameToCommandNames)
             {
                 _eventToCommands[eventName] = commandNames.ToHashSet();
@@ -57,11 +74,12 @@ public static class MessageTypeMapping
 
             _initialized = true;
             
-            Console.WriteLine($"[MessageTypeMapping] Initialized (from GeneratedTypeRegistry + GeneratedEventCommandMapping):");
+            Console.WriteLine($"[MessageTypeMapping] Initialized:");
             Console.WriteLine($"  Events: {_eventTypes.Count}");
             Console.WriteLine($"  Commands: {_commandTypes.Count}");
             Console.WriteLine($"  Queries: {_queryTypes.Count}");
             Console.WriteLine($"  QueryResponses: {_queryResponseTypes.Count}");
+            Console.WriteLine($"  Triggers: {_triggerTypes.Count}");
         }
     }
 
@@ -69,6 +87,48 @@ public static class MessageTypeMapping
     {
         if (!_initialized)
             Initialize();
+    }
+
+    // =========================================================================
+    // UNIVERSELLE AUFLÖSUNG
+    // =========================================================================
+
+    /// <summary>
+    /// Löst einen Typ-Namen über alle Kategorien auf.
+    /// Einziger Einstiegspunkt für SubscriptionTracker, CapabilitiesHandler, etc.
+    /// </summary>
+    public static (Type? Type, MessageCategory Category) Resolve(string typeName)
+    {
+        EnsureInitialized();
+        if (string.IsNullOrEmpty(typeName))
+            return (null, MessageCategory.Unknown);
+
+        if (_eventTypes.TryGetValue(typeName, out var e))         return (e, MessageCategory.Event);
+        if (_commandTypes.TryGetValue(typeName, out var c))       return (c, MessageCategory.Command);
+        if (_triggerTypes.TryGetValue(typeName, out var t))        return (t, MessageCategory.Trigger);
+        if (_queryTypes.TryGetValue(typeName, out var q))         return (q, MessageCategory.Query);
+        if (_queryResponseTypes.TryGetValue(typeName, out var r)) return (r, MessageCategory.QueryResponse);
+        return (null, MessageCategory.Unknown);
+    }
+
+    /// <summary>
+    /// Gibt alle registrierten Event-Type-Objekte zurück.
+    /// Ersetzt EventTypeResolver.GetAllEventTypes().
+    /// </summary>
+    public static IEnumerable<Type> GetAllEventTypes()
+    {
+        EnsureInitialized();
+        return _eventTypes.Values;
+    }
+
+    /// <summary>
+    /// Gibt alle registrierten Command-Type-Objekte zurück.
+    /// Ersetzt EventTypeResolver.GetAllCommandTypes().
+    /// </summary>
+    public static IEnumerable<Type> GetAllCommandTypes()
+    {
+        EnsureInitialized();
+        return _commandTypes.Values;
     }
 
     // =========================================================================
@@ -161,5 +221,27 @@ public static class MessageTypeMapping
     {
         EnsureInitialized();
         return _queryResponseTypes.TryGetValue(responseTypeName, out var type) ? type : null;
+    }
+
+    // =========================================================================
+    // TRIGGER METHODS
+    // =========================================================================
+
+    public static bool IsKnownTriggerType(string triggerTypeName)
+    {
+        EnsureInitialized();
+        return _triggerTypes.ContainsKey(triggerTypeName);
+    }
+
+    public static Type? GetTriggerType(string triggerTypeName)
+    {
+        EnsureInitialized();
+        return _triggerTypes.TryGetValue(triggerTypeName, out var type) ? type : null;
+    }
+
+    public static IEnumerable<string> GetAllTriggerTypeNames()
+    {
+        EnsureInitialized();
+        return _triggerTypes.Keys;
     }
 }

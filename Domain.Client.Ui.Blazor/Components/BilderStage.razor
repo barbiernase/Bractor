@@ -1,11 +1,9 @@
+@* ── Zielverzeichnis: Host.Blazor/Shared/BilderStage.razor ── *@
+@* ── Änderung: ImagePairEntry → ImagePairRecord, RenderHint entfällt ── *@
+
 @using MudBlazor
-@* ═══════════════════════════════════════════════════════════════
-    BilderStage — Stage-Modul: DC0/DC2-Bildanzeige.
-    
-    Enthält den Domain-Kontext (Produkt/Kamera-Chips) und
-    die Bild-Toggles. Kennt nur das aktuelle ImagePairEntry.
-    Die Shell weiß nichts über diese Inhalte.
-═══════════════════════════════════════════════════════════════ *@
+@using Domain.Client.ImagePair
+@using Domain.ImagePair
 
 @if (Entry == null)
 {
@@ -30,7 +28,6 @@ else
 
         <MudSpacer />
 
-        @* Bild-Toggles *@
         <MudToggleGroup T="string"
                         SelectionMode="SelectionMode.MultiSelection"
                         Values="_sichtbareBilder"
@@ -98,10 +95,7 @@ else
 }
 
 @code {
-    [Parameter] public ImagePairEntry? Entry { get; set; }
-
-    /// <summary>Wird nicht gelesen — erzwingt Re-Render wenn Store sich ändert.</summary>
-    [Parameter] public int RenderHint { get; set; }
+    [Parameter] public ImagePairRecord? Entry { get; set; }
 
     private IEnumerable<string> _sichtbareBilder = new[] { "DC0", "DC2" };
     private bool Dc0Sichtbar => _sichtbareBilder.Contains("DC0");

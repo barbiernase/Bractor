@@ -11,7 +11,17 @@ public interface IState
 
 }
 
-public interface IMessagePayload { }
+/// <summary>
+/// Super-Marker für alle Typen die als Pipeline-Output yieldbar sind.
+/// Lockert das OneOf-Constraint: OneOf&lt;T1, T2&gt; where Ti : IPipelineOutput
+/// erlaubt sowohl IMessagePayload-Subtypen (Commands, Events) als auch IPipelineTrigger.
+///
+/// Konsumenten die nur Transport-Typen erwarten (Envelopes, BrokerSubscription,
+/// BrokerIdentity) constrainen weiterhin auf IMessagePayload — nicht betroffen.
+/// </summary>
+public interface IPipelineOutput { }
+
+public interface IMessagePayload : IPipelineOutput { }
 public interface IEvent : IMessagePayload { }
 
 public interface ICommand : IMessagePayload
@@ -359,8 +369,9 @@ public interface IAggregateRepository
  
         /// <summary>
         /// Wird beim Start aufgerufen (nach Subscriptions).
+        /// Erhält einen PipelineContext mit ScheduleSelf für periodische Ticks.
         /// </summary>
-        Task OnInitializeAsync() => Task.CompletedTask;
+        Task OnInitializeAsync(PipelineContext ctx) => Task.CompletedTask;
  
         /// <summary>
         /// Wird beim Stoppen aufgerufen (vor Unsubscribe).
@@ -375,10 +386,29 @@ public interface IAggregateRepository
     ///
     /// Trigger sind KEINE Events (nicht persistiert, kein EventStore).
     /// Trigger sind KEINE Commands (nicht an Aggregate gerichtet).
-    /// Trigger kommen von nativen Proto.Actors (FileWatcher, Timer, Webhook)
-    /// und werden direkt an Pipeline-Actors gesendet.
+    /// Trigger werden zwischen Pipelines gesendet oder von nativen Actors
+    /// (FileWatcher, Timer, Webhook) direkt an Pipeline-Actors geschickt.
+    ///
+    /// Erbt von IPipelineOutput, damit Pipelines Trigger als Output yielden können
+    /// (OneOf&lt;SomeCommand, SomeTrigger&gt;). Der Generator routet Trigger-Outputs
+    /// über TriggerToPipelineId an die Ziel-Pipeline.
     ///
     /// Der PipelineDispatchGenerator unterscheidet Handle-Methoden nach
     /// Parameter[0]-Typ: IPipelineTrigger → Trigger-Kanal, IEvent → PubSub-Kanal.
     /// </summary>
-    public interface IPipelineTrigger { }
+    public interface IPipelineTrigger : IPipelineOutput { }
+
+    /// <summary>
+    /// Marker-Interface für Pipeline-interne Self-Messages.
+    ///
+    /// Self-Messages sind Implementierungsdetails einzelner Pipelines (z.B. PollTick,
+    /// TimeoutCheck). Sie werden NUR über ctx.ScheduleSelf(...) zugestellt und
+    /// durchlaufen NICHT das Framework:
+    ///   - Kein Proto-Mapping (DtoMapperGenerator ignoriert sie)
+    ///   - Keine TypeRegistry-Einträge (TypeRegistryGenerator ignoriert sie)
+    ///   - Kein TriggerToPipelineId-Lookup (PipelineActorGenerator ignoriert sie)
+    ///   - Kein OneOf-Yield (nur über ScheduleSelf zustellbar)
+    ///
+    /// Parallel zur bestehenden Hierarchie — NICHT unter IPipelineOutput.
+    /// </summary>
+    public interface IPipelineSelfMessage { }

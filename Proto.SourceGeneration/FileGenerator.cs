@@ -69,30 +69,53 @@ public class FileGenerator
     List<(string TypeName, int Depth, TypeNode Node)> commandTypes,
     List<(string TypeName, int Depth, TypeNode Node)> eventTypes,
     List<(string TypeName, int Depth, TypeNode Node)> queryTypes,
-    List<(string TypeName, int Depth, TypeNode Node)> queryResponseTypes)
+    List<(string TypeName, int Depth, TypeNode Node)> queryResponseTypes,
+    List<(string TypeName, int Depth, TypeNode Node)> triggerTypes = null)
 {
-    // FIX: Enum-Typen aus ALLEN Typ-Listen sammeln, bevor sie rausgefiltert werden.
-    // Diese werden von GetProtoTypeForName benötigt, um Collection-Elemente
-    // wie IReadOnlyList<Klassifikation> korrekt als "repeated int32" zu erkennen.
-    _enumTypeNames = CollectEnumTypeNames(objectTypes, commandTypes, eventTypes, queryTypes, queryResponseTypes);
+    // Trigger-Liste: null-safe für Abwärtskompatibilität
+    triggerTypes = triggerTypes ?? new List<(string, int, TypeNode)>();
 
-    // WICHTIG: Filtere primitive/nullable Typen aus Value Objects heraus!
-    var filteredObjectTypes = objectTypes
-        .Where(t => !IsPrimitiveOrNullableType(t.Node.FullName))
-        .ToList();
-    
-    var valueObjectMessages = GenerateMessageDefinitions(filteredObjectTypes);
-    var commandPayloadMessages = GenerateMessageDefinitions(commandTypes);
-    var eventPayloadMessages = GenerateMessageDefinitions(eventTypes);
-    var queryPayloadMessages = GenerateMessageDefinitions(queryTypes);
-    var queryResponsePayloadMessages = GenerateMessageDefinitions(queryResponseTypes);
+    // ═══════════════════════════════════════════════════
+    // Payload-Kategorien — neue Kategorie = ein Eintrag
+    // ═══════════════════════════════════════════════════
 
+    var payloadCategories = new (string Label, List<(string TypeName, int Depth, TypeNode Node)> Types)[]
+    {
+        ("VALUE OBJECTS",     objectTypes.Where(t => !IsPrimitiveOrNullableType(t.Node.FullName)).ToList()),
+        ("COMMAND PAYLOADS",  commandTypes),
+        ("EVENT PAYLOADS",    eventTypes),
+        ("QUERY PAYLOADS",    queryTypes),
+        ("QUERY RESPONSE PAYLOADS", queryResponseTypes),
+        ("TRIGGER PAYLOADS",  triggerTypes),
+    };
+
+    // Enum-Typen aus ALLEN Listen sammeln (vor dem Filtern!)
+    _enumTypeNames = CollectEnumTypeNames(objectTypes, commandTypes, eventTypes, queryTypes, queryResponseTypes, triggerTypes);
+
+    // Messages + OneOfs generieren — in einem Loop
+    var allMessages = new StringBuilder();
+    foreach (var (label, types) in payloadCategories)
+    {
+        var msgs = GenerateMessageDefinitions(types);
+        if (!string.IsNullOrEmpty(msgs))
+        {
+            allMessages.AppendLine($"// ============================================================================");
+            allMessages.AppendLine($"// {label}");
+            allMessages.AppendLine($"// ============================================================================");
+            allMessages.Append(msgs);
+        }
+    }
+
+    // OneOfs für Envelope-Messages (Command + Event sind in Envelopes eingebettet)
     var commandOneOfs = GenerateOneOfPart(commandTypes, 20);
     var eventOneOfs = GenerateOneOfPart(eventTypes, 20);
+
+    // OneOfs für Standalone-PayloadDto-Wrapper
     var queryOneOfs = GenerateOneOfPart(queryTypes, 20);
     var queryResponseOneOfs = GenerateOneOfPart(queryResponseTypes, 20);
-    
-    // Query-Teil nur generieren wenn Queries existieren
+    var triggerOneOfs = GenerateOneOfPart(triggerTypes, 20);
+
+    // Standalone-Wrapper nur generieren wenn Typen existieren
     var queryRequestMessage = queryTypes.Any() 
         ? GenerateQueryRequestMessage()
         : "// QueryRequest: Keine Query-Typen definiert";
@@ -102,12 +125,30 @@ public class FileGenerator
         : "// QueryResponse: Keine QueryResponse-Typen definiert";
         
     var queryPayloadMessage = queryTypes.Any()
-        ? GenerateQueryPayloadMessage(queryOneOfs)
+        ? GenerateStandalonePayloadDto("QueryPayloadDto", queryOneOfs)
         : "// QueryPayloadDto: Keine Query-Typen definiert";
         
     var queryResponsePayloadMessage = queryResponseTypes.Any()
-        ? GenerateQueryResponsePayloadMessage(queryResponseOneOfs)
+        ? GenerateStandalonePayloadDto("QueryResponsePayloadDto", queryResponseOneOfs)
         : "// QueryResponsePayloadDto: Keine QueryResponse-Typen definiert";
+
+    // Trigger-Protokoll-Messages IMMER generieren (auch ohne Trigger-Typen),
+    // weil ServerMessage.TriggerAck und ClientMessage.TriggerRequest immer referenziert werden.
+    // TriggerPayloadDto hat dann ein leeres oneof — das ist valides Protobuf.
+    var triggerRequestMessage = GenerateTriggerRequestMessage();
+    var triggerPayloadMessage = GenerateStandalonePayloadDto("TriggerPayloadDto", triggerOneOfs);
+
+    // ClientMessage: Trigger-Feld immer vorhanden (Protokoll-Vollständigkeit)
+    var triggerField = "        TriggerRequest trigger = 6;";
+
+    // TriggerAck immer generieren (Protokoll-Message)
+    var triggerAckMessage = """
+          message TriggerAck {
+              bool accepted = 1;
+              string correlation_id = 2;
+              string error_message = 3;
+          }
+          """;
     
     return $$"""
              syntax = "proto3";
@@ -135,6 +176,7 @@ public class FileGenerator
                      UnsubscribeRequest unsubscribe = 3;
                      CapabilitiesRequest capabilities = 4;
                      QueryRequest query = 5;
+             {{triggerField}}
                  }
              }
 
@@ -154,9 +196,12 @@ public class FileGenerator
 
              message CapabilitiesRequest {
                  repeated string event_types = 1;
+                 repeated string message_types = 2;
              }
 
              {{queryRequestMessage}}
+
+             {{triggerRequestMessage}}
 
              // ============================================================================
              // SERVER → CLIENT (Downstream)
@@ -171,6 +216,7 @@ public class FileGenerator
                      ErrorResponse error = 5;
                      CapabilitiesResponse capabilities_response = 6;
                      QueryResponse query_response = 7;
+                     TriggerAck trigger_ack = 8;
                  }
              }
 
@@ -198,9 +244,13 @@ public class FileGenerator
                  repeated string allowed_commands = 2;
                  repeated string subscribed_events = 3;
                  repeated string supported_queries = 4;
+                 repeated string allowed_triggers = 5;
+                 repeated string unknown_types = 6;
              }
 
              {{queryResponseMessage}}
+
+             {{triggerAckMessage}}
 
              message ErrorResponse {
                  string code = 1;
@@ -247,26 +297,12 @@ public class FileGenerator
 
              {{queryResponsePayloadMessage}}
 
+             {{triggerPayloadMessage}}
+
              // ============================================================================
-             // VALUE OBJECTS
+             // ALL PAYLOAD MESSAGES
              // ============================================================================
-             {{valueObjectMessages}}
-             // ============================================================================
-             // COMMAND PAYLOADS
-             // ============================================================================
-             {{commandPayloadMessages}}
-             // ============================================================================
-             // EVENT PAYLOADS
-             // ============================================================================
-             {{eventPayloadMessages}}
-             // ============================================================================
-             // QUERY PAYLOADS
-             // ============================================================================
-             {{queryPayloadMessages}}
-             // ============================================================================
-             // QUERY RESPONSE PAYLOADS
-             // ============================================================================
-             {{queryResponsePayloadMessages}}
+             {{allMessages}}
              """;
 }
 
@@ -280,9 +316,19 @@ private string GenerateQueryRequestMessage()
            """;
 }
 
+private string GenerateTriggerRequestMessage()
+{
+    return """
+           message TriggerRequest {
+               TriggerPayloadDto payload = 1;
+               string correlation_id = 2;
+           }
+           """;
+}
+
 /// <summary>
-/// QueryResponse enthält jetzt deps-Feld.
-/// AggregateMetaDto ist ein Transport-Typ (wie CommandEnvelopeDto) — hardcoded, nicht generiert.
+/// QueryResponse enthält deps-Feld.
+/// AggregateMetaDto ist ein Transport-Typ — hardcoded, nicht generiert.
 /// </summary>
 private string GenerateQueryResponseMessage()
 {
@@ -301,21 +347,14 @@ private string GenerateQueryResponseMessage()
            """;
 }
 
-private string GenerateQueryPayloadMessage(string oneOfs)
+/// <summary>
+/// Generiert einen standalone PayloadDto-Wrapper mit oneof.
+/// Ersetzt die redundanten GenerateQueryPayloadMessage/GenerateQueryResponsePayloadMessage.
+/// </summary>
+private string GenerateStandalonePayloadDto(string messageName, string oneOfs)
 {
     return $$"""
-             message QueryPayloadDto {
-                 oneof payload {
-             {{oneOfs}}
-                 }
-             }
-             """;
-}
-
-private string GenerateQueryResponsePayloadMessage(string oneOfs)
-{
-    return $$"""
-             message QueryResponsePayloadDto {
+             message {{messageName}} {
                  oneof payload {
              {{oneOfs}}
                  }

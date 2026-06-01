@@ -1,4 +1,4 @@
-using System.Collections.ObjectModel;
+/*using System.Collections.ObjectModel;
 using Client.Infrastructure.Abstractions;
 using Client.Infrastructure.Connection;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -811,4 +811,4 @@ public partial class ImagePairStore : ObservableObject
 
 public record LetzteDateiInfo(
     string FileName, string Pfad, BildVersion Version,
-    Guid PairId, long SizeBytes, DateTimeOffset EmpfangenAm);
+    Guid PairId, long SizeBytes, DateTimeOffset EmpfangenAm);*/

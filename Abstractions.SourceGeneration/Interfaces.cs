@@ -29,7 +29,8 @@ namespace Abstractions.SourceGeneration
         Command,
         Event,
         Query,
-        QueryResponse
+        QueryResponse,
+        Trigger
     }
 
     public interface IDomainAnalyzer

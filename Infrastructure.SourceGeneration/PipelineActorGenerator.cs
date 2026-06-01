@@ -42,8 +42,11 @@ namespace Infrastructure.SourceGeneration
             // Command→AggregateType-Mapping aufbauen
             var commandAggregateTypes = BuildCommandAggregateTypeMapping(context.Compilation);
 
+            // TriggerType→Pipeline-Klassenname-Mapping aufbauen
+            var triggerToClass = BuildTriggerToPipelineClassMapping(context.Compilation, sorted);
+
             string actorsSource = GeneratePipelineActorsFile(sorted);
-            string registrationSource = GeneratePipelinesRegistrationFile(sorted, commandAggregateTypes);
+            string registrationSource = GeneratePipelinesRegistrationFile(sorted, commandAggregateTypes, triggerToClass);
 
             context.AddSource("PipelineActors.g.cs", actorsSource);
             context.AddSource("GeneratedPipelines.g.cs", registrationSource);
@@ -142,6 +145,92 @@ namespace Infrastructure.SourceGeneration
             }
         }
 
+        /// <summary>
+        /// Baut ein Mapping TriggerType → PipelineId auf.
+        /// Analysiert die Handle()-Methoden jeder Pipeline:
+        /// erster Parameter implementiert IPipelineTrigger → Trigger-Typ.
+        /// PipelineId wird aus dem PipelineId-Property (string literal) extrahiert.
+        /// </summary>
+        /// <summary>
+        /// Baut ein Mapping: Trigger-Typ → Pipeline-Klassenname.
+        /// Klassenname statt PipelineId, weil PipelineId nur zur Laufzeit
+        /// aus der Handler-Instanz gelesen werden kann (Cross-Assembly).
+        /// </summary>
+        private Dictionary<INamedTypeSymbol, string> BuildTriggerToPipelineClassMapping(
+            Compilation compilation,
+            List<INamedTypeSymbol> pipelineSymbols)
+        {
+            var result = new Dictionary<INamedTypeSymbol, string>(SymbolEqualityComparer.Default);
+            
+            var iPipelineTrigger = compilation.GetTypeByMetadataName("Abstractions.IPipelineTrigger");
+            if (iPipelineTrigger == null)
+                return result;
+
+            // Self-Messages filtern — sind Pipeline-intern, kein Trigger-Routing
+            var iPipelineSelf = compilation.GetTypeByMetadataName("Abstractions.IPipelineSelfMessage");
+
+            foreach (var pipeline in pipelineSymbols)
+            {
+                var pipelineClassName = pipeline.Name;
+
+                // Handle()-Methoden finden, deren erster Parameter IPipelineTrigger implementiert
+                var handleMethods = pipeline.GetMembers()
+                    .OfType<IMethodSymbol>()
+                    .Where(m => m.Name == "Handle" && m.Parameters.Length >= 2);
+
+                foreach (var method in handleMethods)
+                {
+                    var inputType = method.Parameters[0].Type as INamedTypeSymbol;
+                    if (inputType == null) continue;
+
+                    // Self-Messages explizit ausschließen
+                    if (iPipelineSelf != null &&
+                        inputType.AllInterfaces.Contains(iPipelineSelf, SymbolEqualityComparer.Default))
+                        continue;
+
+                    if (inputType.AllInterfaces.Contains(iPipelineTrigger, SymbolEqualityComparer.Default)
+                        || SymbolEqualityComparer.Default.Equals(inputType, iPipelineTrigger))
+                    {
+                        result[inputType] = pipelineClassName;
+                    }
+                }
+            }
+
+            return result;
+        }
+
+        /// <summary>
+        /// Extrahiert den PipelineId-String aus dem Property einer Pipeline-Klasse.
+        /// Unterstützt: public string PipelineId => "xyz";
+        /// </summary>
+        private string ExtractPipelineId(INamedTypeSymbol pipelineSymbol)
+        {
+            var property = pipelineSymbol.GetMembers("PipelineId")
+                .OfType<IPropertySymbol>()
+                .FirstOrDefault();
+
+            if (property == null)
+                return null;
+
+            // Syntax-Node des Properties holen
+            var syntaxRef = property.DeclaringSyntaxReferences.FirstOrDefault();
+            if (syntaxRef == null)
+                return null;
+
+            var syntaxNode = syntaxRef.GetSyntax();
+            var text = syntaxNode.ToString();
+
+            // "image-processing" aus => "image-processing" extrahieren
+            var startQuote = text.IndexOf('"');
+            var endQuote = text.LastIndexOf('"');
+            if (startQuote >= 0 && endQuote > startQuote)
+            {
+                return text.Substring(startQuote + 1, endQuote - startQuote - 1);
+            }
+
+            return null;
+        }
+
         // ═══════════════════════════════════════════════════════
         // PipelineActors.g.cs
         // ═══════════════════════════════════════════════════════
@@ -208,15 +297,28 @@ namespace Infrastructure.SourceGeneration
                 // DispatchTriggerAsync
                 sb.AppendLine($"    protected override Task DispatchTriggerAsync(");
                 sb.AppendLine($"        IPipelineTrigger trigger, PipelineContext ctx,");
-                sb.AppendLine($"        Func<ICommand, Task> send)");
-                sb.AppendLine($"        => _logic.DispatchTriggerAsync(trigger, ctx, send);");
+                sb.AppendLine($"        Func<ICommand, Task> sendCommand,");
+                sb.AppendLine($"        Func<IPipelineTrigger, Task> sendTrigger,");
+                sb.AppendLine($"        Func<ITransientEvent, Task> broadcastTransient)");
+                sb.AppendLine($"        => _logic.DispatchTriggerAsync(trigger, ctx, sendCommand, sendTrigger, broadcastTransient);");
                 sb.AppendLine();
 
                 // DispatchEventAsync
                 sb.AppendLine($"    protected override Task DispatchEventAsync(");
                 sb.AppendLine($"        IAggregateEnvelope envelope, PipelineContext ctx,");
-                sb.AppendLine($"        Func<ICommand, Task> send)");
-                sb.AppendLine($"        => _logic.DispatchEventAsync(envelope, ctx, send);");
+                sb.AppendLine($"        Func<ICommand, Task> sendCommand,");
+                sb.AppendLine($"        Func<IPipelineTrigger, Task> sendTrigger,");
+                sb.AppendLine($"        Func<ITransientEvent, Task> broadcastTransient)");
+                sb.AppendLine($"        => _logic.DispatchEventAsync(envelope, ctx, sendCommand, sendTrigger, broadcastTransient);");
+                sb.AppendLine();
+
+                // DispatchSelfAsync
+                sb.AppendLine($"    protected override Task DispatchSelfAsync(");
+                sb.AppendLine($"        IPipelineSelfMessage selfMsg, PipelineContext ctx,");
+                sb.AppendLine($"        Func<ICommand, Task> sendCommand,");
+                sb.AppendLine($"        Func<IPipelineTrigger, Task> sendTrigger,");
+                sb.AppendLine($"        Func<ITransientEvent, Task> broadcastTransient)");
+                sb.AppendLine($"        => _logic.DispatchSelfAsync(selfMsg, ctx, sendCommand, sendTrigger, broadcastTransient);");
 
                 sb.AppendLine("}");
                 sb.AppendLine();
@@ -231,7 +333,8 @@ namespace Infrastructure.SourceGeneration
 
         private string GeneratePipelinesRegistrationFile(
             List<INamedTypeSymbol> pipelineSymbols,
-            Dictionary<INamedTypeSymbol, string> commandAggregateTypes)
+            Dictionary<INamedTypeSymbol, string> commandAggregateTypes,
+            Dictionary<INamedTypeSymbol, string> triggerToClass)
         {
             var sb = new StringBuilder();
             sb.AppendLine("// <auto-generated/>");
@@ -245,6 +348,13 @@ namespace Infrastructure.SourceGeneration
             }
             // Command-Namespaces für das Mapping
             foreach (var kvp in commandAggregateTypes)
+            {
+                var ns = kvp.Key.ContainingNamespace?.ToDisplayString();
+                if (!string.IsNullOrEmpty(ns))
+                    namespaces.Add(ns);
+            }
+            // Trigger-Namespaces für das Mapping
+            foreach (var kvp in triggerToClass)
             {
                 var ns = kvp.Key.ContainingNamespace?.ToDisplayString();
                 if (!string.IsNullOrEmpty(ns))
@@ -334,6 +444,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("        IServiceProvider provider,");
             sb.AppendLine("        ActorSystem system)");
             sb.AppendLine("    {");
+            sb.AppendLine("        InitializeTriggerMapping(provider);");
             sb.AppendLine("        var kinds = new List<ClusterKind>();");
             sb.AppendLine();
 
@@ -342,18 +453,22 @@ namespace Infrastructure.SourceGeneration
                 string name = symbol.Name;
                 string actorName = $"{name}PipelineActor";
 
-                sb.AppendLine($"        kinds.Add(new ClusterKind(");
-                sb.AppendLine($"            \"Pipeline\",");
-                sb.AppendLine($"            Props.FromProducer(() =>");
-                sb.AppendLine($"            {{");
-                sb.AppendLine($"                // Lazy: Cluster + Publisher erst bei Spawn aufloesen (Cluster ist dann konfiguriert)");
-                sb.AppendLine($"                var cluster = system.Cluster();");
-                sb.AppendLine($"                var publisher = provider.GetRequiredService<Infrastructure.PubSub.BrokerPublisher>();");
-                sb.AppendLine($"                var logic = provider.GetRequiredService<{name}>();");
-                sb.AppendLine($"                var logger = provider.GetService<ILogger<{actorName}>>();");
-                sb.AppendLine($"                return new {actorName}(logic, cluster, publisher, logger);");
-                sb.AppendLine($"            }})");
-                sb.AppendLine($"        ));");
+                // PipelineId wird zur Laufzeit aus dem Handler gelesen,
+                // weil ExtractPipelineId bei Cross-Assembly-Symbolen keine Syntax hat.
+                sb.AppendLine($"        {{");
+                sb.AppendLine($"            var handler_{name} = provider.GetRequiredService<{name}>();");
+                sb.AppendLine($"            var kindName_{name} = $\"Pipeline-{{handler_{name}.PipelineId}}\";");
+                sb.AppendLine($"            kinds.Add(new ClusterKind(");
+                sb.AppendLine($"                kindName_{name},");
+                sb.AppendLine($"                Props.FromProducer(() =>");
+                sb.AppendLine($"                {{");
+                sb.AppendLine($"                    var cluster = system.Cluster();");
+                sb.AppendLine($"                    var publisher = provider.GetRequiredService<Infrastructure.PubSub.BrokerPublisher>();");
+                sb.AppendLine($"                    var logger = provider.GetService<ILogger<{actorName}>>();");
+                sb.AppendLine($"                    return new {actorName}(handler_{name}, cluster, publisher, logger);");
+                sb.AppendLine($"                }})");
+                sb.AppendLine($"            ));");
+                sb.AppendLine($"        }}");
                 sb.AppendLine();
             }
 
@@ -378,6 +493,34 @@ namespace Infrastructure.SourceGeneration
             }
 
             sb.AppendLine("        };");
+            sb.AppendLine();
+
+            // ── TriggerToPipelineId (Laufzeit-Initialisierung) ──
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// Trigger-Typ → PipelineId.");
+            sb.AppendLine("    /// Wird vom PipelineActorBase und CqrsClientService für das Trigger-Routing verwendet.");
+            sb.AppendLine("    /// Wird zur Laufzeit initialisiert, weil PipelineId nur aus Handler-Instanzen lesbar ist.");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    private static IReadOnlyDictionary<Type, string>? _triggerToPipelineId;");
+            sb.AppendLine("    public static IReadOnlyDictionary<Type, string> TriggerToPipelineId =>");
+            sb.AppendLine("        _triggerToPipelineId ?? throw new InvalidOperationException(");
+            sb.AppendLine("            \"TriggerToPipelineId not initialized — GetPipelineKinds must be called first.\");");
+            sb.AppendLine();
+            sb.AppendLine("    private static void InitializeTriggerMapping(IServiceProvider provider)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        if (_triggerToPipelineId != null) return;");
+            sb.AppendLine("        _triggerToPipelineId = new Dictionary<Type, string>");
+            sb.AppendLine("        {");
+
+            foreach (var kvp in triggerToClass.OrderBy(k => k.Key.Name))
+            {
+                // kvp.Key = Trigger-Typ (z.B. DateiErkannt)
+                // kvp.Value = Pipeline-Klassenname (z.B. ImageProcessingPipeline)
+                sb.AppendLine($"            [typeof({kvp.Key.Name})] = provider.GetRequiredService<{kvp.Value}>().PipelineId,");
+            }
+
+            sb.AppendLine("        };");
+            sb.AppendLine("    }");
 
             sb.AppendLine("}");
 

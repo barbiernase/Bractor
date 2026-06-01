@@ -1,8 +1,6 @@
 using Domain.Pipeline.ImageProcessing;
-using Infrastructure.Pipeline;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
-using Proto;
 
 namespace Domain.Pipeline.Infrastructure;
 
@@ -11,7 +9,7 @@ namespace Domain.Pipeline.Infrastructure;
 ///
 /// Registriert:
 ///   1. Handler-Dependencies (Services die Pipeline-Handler brauchen)
-///   2. Trigger-Actor-Registrierungen (welcher Actor, welcher Pfad, welches Ziel)
+///   2. FileWatchConfig (Konfiguration für die FileWatchPipeline)
 ///
 /// NICHT registriert (kommt von anderswo):
 ///   - Pipeline-Handler selbst → GeneratedPipelines (generiert)
@@ -57,19 +55,13 @@ public static class DomainPipelineExtensions
         Console.WriteLine($"  + PreprocessingConfig → {effectivePreprocessed}");
 
         // ═══════════════════════════════════════════════════════
-        // Trigger-Actor-Registrierungen
+        // FileWatch-Konfiguration
         // ═══════════════════════════════════════════════════════
 
-        services.AddSingleton<ITriggerRegistration>(new TriggerRegistration(
-            $"FileWatcher-ImageProcessing ({effectivePath})",
-            (provider, cluster) => Props.FromProducer(() =>
-                new FileWatcherActor(
-                    watchPath: effectivePath,
-                    targetPipelineId: "image-processing",
-                    cluster: cluster,
-                    logger: provider.GetRequiredService<ILogger<FileWatcherActor>>()))
-        ));
-        Console.WriteLine($"  + FileWatcher → image-processing ({effectivePath})");
+        services.AddSingleton(new FileWatchConfig(
+            WatchPath: effectivePath,
+            PollInterval: TimeSpan.FromSeconds(1)));
+        Console.WriteLine($"  + FileWatchConfig → {effectivePath}");
 
         Console.WriteLine();
         return services;

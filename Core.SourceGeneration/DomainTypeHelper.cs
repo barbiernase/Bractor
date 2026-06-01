@@ -32,6 +32,12 @@ namespace Core.SourceGeneration
             "Abstractions.IQueryResponse",
             "IQueryResponse"
         };
+
+        private static readonly HashSet<string> TriggerInterfaces = new()
+        {
+            "Abstractions.IPipelineTrigger",
+            "IPipelineTrigger"
+        };
         
         public static Abstractions.SourceGeneration.DomainType ClassifyByInterfaces(IEnumerable<string> interfaces)
         {
@@ -43,6 +49,9 @@ namespace Core.SourceGeneration
             if (interfaceList.Any(i => CommandInterfaces.Contains(i) || CommandInterfaces.Any(ci => i.EndsWith(ci))))
                 return Abstractions.SourceGeneration.DomainType.Command;
                 
+            if (interfaceList.Any(i => TriggerInterfaces.Contains(i) || TriggerInterfaces.Any(ti => i.EndsWith(ti))))
+                return DomainType.Trigger;
+
             if (interfaceList.Any(i => QueryInterfaces.Contains(i) || QueryInterfaces.Any(qi => i.EndsWith(qi))))
                 return DomainType.Query;
 

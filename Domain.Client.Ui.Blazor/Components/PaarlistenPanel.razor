@@ -1,10 +1,9 @@
+@* ── Zielverzeichnis: Host.Blazor/Shared/PaarlistenPanel.razor ── *@
+@* ── Änderung: IReadOnlyList<ImagePairEntry> → IReadOnlyList<ImagePairRecord> ── *@
+
 @using MudBlazor
-@* ═══════════════════════════════════════════════════════════════
-    PaarlistenPanel — Sidebar-Modul: Bildpaar-Liste mit Filter.
-    
-    Eingeklappt: Nur die Status-Punkte (●○) pro Paar.
-    Ausgeklappt: Filter, Checkbox, Punkte + Timestamps, Pagination.
-═══════════════════════════════════════════════════════════════ *@
+@using Domain.Client.ImagePair
+@using Domain.ImagePair
 
 @if (IsExpanded)
 {
@@ -100,7 +99,7 @@ else
 
 @code {
     [Parameter] public bool IsExpanded { get; set; }
-    [Parameter] public IReadOnlyList<ImagePairEntry> Items { get; set; } = Array.Empty<ImagePairEntry>();
+    [Parameter] public IReadOnlyList<ImagePairRecord> Items { get; set; } = [];
     [Parameter] public int SelectedIndex { get; set; }
     [Parameter] public string FilterWert { get; set; } = "alle";
     [Parameter] public bool NurNichtInspizierte { get; set; }

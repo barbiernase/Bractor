@@ -1,3 +1,4 @@
+using Infrastructure.Mapping;
 using Infrastructure.PubSub;
 using Proto;
 using Proto.Cluster;
@@ -10,13 +11,7 @@ namespace Infrastructure.GrpcClient;
 /// KEIN ACTOR - normales Objekt!
 /// 
 /// Lebt im Scope der Connect()-Methode und wird im finally-Block aufgeräumt.
-/// Viel einfacher als Actor-basierte Subscription-Verwaltung.
-/// 
-/// Lifecycle:
-/// 1. Erstellt bei Connect()
-/// 2. SubscribeAsync() bei SubscribeRequest vom Client
-/// 3. UnsubscribeAsync() bei UnsubscribeRequest vom Client
-/// 4. UnsubscribeAllAsync() im finally-Block bei Disconnect
+/// Nutzt MessageTypeMapping.Resolve() für die Typ-Auflösung.
 /// </summary>
 public class SubscriptionTracker : IAsyncDisposable
 {
@@ -53,12 +48,13 @@ public class SubscriptionTracker : IAsyncDisposable
             return false;
         }
 
-        var eventType = EventTypeResolver.ResolveEventType(eventTypeName);
-        if (eventType == null)
+        var (resolvedType, category) = MessageTypeMapping.Resolve(eventTypeName);
+        if (resolvedType == null || category != MessageCategory.Event)
         {
-            Console.WriteLine($"[SubscriptionTracker-{_subscriberId}] Unknown event type: {eventTypeName}");
+            Console.WriteLine($"[SubscriptionTracker-{_subscriberId}] Unknown or non-event type: {eventTypeName}");
             return false;
         }
+        var eventType = resolvedType;
 
         await _lock.WaitAsync(ct);
         try
@@ -92,12 +88,13 @@ public class SubscriptionTracker : IAsyncDisposable
     /// <returns>True wenn erfolgreich unsubscribed, False wenn nicht subscribed war</returns>
     public async Task<bool> UnsubscribeAsync(string eventTypeName, CancellationToken ct = default)
     {
-        var eventType = EventTypeResolver.ResolveEventType(eventTypeName);
-        if (eventType == null)
+        var (resolvedType, _) = MessageTypeMapping.Resolve(eventTypeName);
+        if (resolvedType == null)
         {
             Console.WriteLine($"[SubscriptionTracker-{_subscriberId}] Unknown event type: {eventTypeName}");
             return false;
         }
+        var eventType = resolvedType;
 
         await _lock.WaitAsync(ct);
         try

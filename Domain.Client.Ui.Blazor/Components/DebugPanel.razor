@@ -1,9 +1,4 @@
-@* ═══════════════════════════════════════════════════════════════
-    DebugPanel — Sidebar-Modul: Dummy zum Testen des Panel-Systems.
-    
-    Eingeklappt: Kurzform der AggregateId.
-    Ausgeklappt: Volle ID + PairKey + Zeitstempel + Status.
-═══════════════════════════════════════════════════════════════ *@
+@* ── Domain.Client.Ui.Blazor/ImagePair/Components/DebugPanel.razor ── *@
 
 @if (IsExpanded)
 {
@@ -60,5 +55,5 @@ else
 
 @code {
     [Parameter] public bool IsExpanded { get; set; }
-    [Parameter] public ImagePairEntry? Entry { get; set; }
+    [Parameter] public ImagePairRecord? Entry { get; set; }
 }
