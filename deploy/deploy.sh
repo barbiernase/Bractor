@@ -61,8 +61,8 @@ done
 
 # --- Start Host.Blazor ---
 cd "$BLAZOR_DIR"
-ASPNETCORE_URLS="http://0.0.0.0:5010" \
-Blazor__Urls="http://0.0.0.0:5010" \
+ASPNETCORE_URLS="http://0.0.0.0:80" \
+Blazor__Urls="http://0.0.0.0:80" \
 GrpcServer__Address="http://localhost:5001" \
 Pipeline__WatchPath="/mnt/unlabeledgewebebilder/SNP/IO" \
 Pipeline__PreprocessedPath="/home/wirksam/cqrs-data/preprocessed" \
