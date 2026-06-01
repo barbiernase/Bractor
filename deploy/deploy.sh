@@ -38,6 +38,10 @@ echo "Building Host.Blazor..."
 ~/.dotnet/dotnet publish "$REPO_DIR/Host.Blazor/Host.Blazor.csproj" \
     -c Release -r linux-x64 --self-contained -o "$BLAZOR_DIR"
 
+# --- Port 80 ohne Root erlauben ---
+echo "Setting capabilities for port 80..."
+sudo setcap 'cap_net_bind_service=+ep' "$BLAZOR_DIR/Host.Blazor"
+
 # --- Start Host.Grpc ---
 echo "Starting..."
 cd "$GRPC_DIR"
@@ -69,9 +73,9 @@ Pipeline__PreprocessedPath="/home/wirksam/cqrs-data/preprocessed" \
 DOTNET_ENVIRONMENT=Development \
 nohup ./Host.Blazor > /opt/cqrs/blazor.log 2>&1 &
 
-echo "  Host.Blazor gestartet (PID $!), warte auf Port 5010..."
+echo "  Host.Blazor gestartet (PID $!), warte auf Port 80..."
 for i in $(seq 1 30); do
-    if ss -tlnp sport = :5010 2>/dev/null | grep -q 5010; then
+    if ss -tlnp sport = :80 2>/dev/null | grep -q 80; then
         echo "  Host.Blazor bereit"
         break
     fi
