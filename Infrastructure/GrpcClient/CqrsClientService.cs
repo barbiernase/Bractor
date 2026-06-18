@@ -1,8 +1,11 @@
+// REPO-PFAD: Infrastructure/GrpcClient/CqrsClientService.cs  (MODIFIZIERT)
+using System.Collections.Concurrent;
 using Abstractions;
 using Domain.Projections;
 using Grpc.Core;
 using Infrastructure.Mapping;
 using Infrastructure.Pipeline;
+using Infrastructure.PubSub;
 using Infrastructure.Serialization;
 using Proto;
 using Proto.Cluster;
@@ -22,8 +25,9 @@ namespace Infrastructure.GrpcClient;
 /// 1. Client ruft Connect() auf
 /// 2. Service spawnt EventProxyActor (für PID)
 /// 3. Service erstellt SubscriptionTracker
-/// 4. Read-Loop verarbeitet ClientMessages
-/// 5. finally-Block: Subscriptions beenden, Actor stoppen
+/// 4. Service registriert in TriggerHandlerRegistry / QueryHandlerRegistry  (NEU)
+/// 5. Read-Loop verarbeitet ClientMessages
+/// 6. finally-Block: Subscriptions beenden, Registrierungen entfernen, Actor stoppen
 /// </summary>
 public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServiceBase
 {
@@ -32,6 +36,33 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     private readonly IAggregateDispatcher _dispatcher;
     private readonly CapabilitiesHandler _capabilitiesHandler;
     private readonly ProjectionQueryService _queryService;
+    private readonly TriggerHandlerRegistry _triggerHandlerRegistry;
+    private readonly QueryHandlerRegistry _queryHandlerRegistry;
+    private readonly BrokerPublisher _publisher;
+
+    /// <summary>
+    /// Timeout für Query-Forwarding an Clients.
+    /// Konfigurierbar, aber mit sensiblem Default für ML-Inference.
+    /// </summary>
+    private static readonly TimeSpan QueryForwardTimeout = TimeSpan.FromSeconds(60);
+    private static readonly TimeSpan TriggerForwardTimeout = TimeSpan.FromSeconds(30);
+
+    /// <summary>
+    /// Pending Query-Forwards über alle Verbindungen hinweg.
+    /// Key: CorrelationId, Value: TaskCompletionSource für die Antwort.
+    /// 
+    /// Cross-Connection: HandleQueryAsync (Session A) registriert TCS,
+    /// HandleQueryAnswer (Session B des Handler-Clients) vervollständigt ihn.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<ProtoRepo.QueryResponseFromClient>>
+        _pendingQueryForwards = new();
+
+    /// <summary>
+    /// Pending Trigger-Forwards über alle Verbindungen hinweg.
+    /// Selbes Pattern wie Query-Forwards.
+    /// </summary>
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<ProtoRepo.TriggerResult>>
+        _pendingTriggerForwards = new();
     
     private static int _sessionCounter = 0;
 
@@ -39,12 +70,18 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         ActorSystem actorSystem,
         ProtoMessageMapper mapper,
         IAggregateDispatcher dispatcher,
-        ProjectionQueryService queryService)
+        ProjectionQueryService queryService,
+        TriggerHandlerRegistry triggerHandlerRegistry,
+        QueryHandlerRegistry queryHandlerRegistry,
+        BrokerPublisher publisher)
     {
         _actorSystem = actorSystem ?? throw new ArgumentNullException(nameof(actorSystem));
         _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
         _dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         _queryService = queryService ?? throw new ArgumentNullException(nameof(queryService));
+        _triggerHandlerRegistry = triggerHandlerRegistry ?? throw new ArgumentNullException(nameof(triggerHandlerRegistry));
+        _queryHandlerRegistry = queryHandlerRegistry ?? throw new ArgumentNullException(nameof(queryHandlerRegistry));
+        _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
         _capabilitiesHandler = new CapabilitiesHandler();
     }
 
@@ -82,7 +119,10 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             while (await requestStream.MoveNext(ct))
             {
                 var clientMessage = requestStream.Current;
-                await ProcessMessageAsync(clientMessage, responseStream, subscriptionTracker, sessionId, ct);
+                await ProcessMessageAsync(
+                    clientMessage, responseStream, subscriptionTracker,
+                    proxyPid,
+                    sessionId, ct);
             }
             
             Console.WriteLine($"[CqrsService] Client closed stream normally");
@@ -101,10 +141,15 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         }
         finally
         {
-            // 4. Cleanup: Actor stoppen
+            // 4. Cleanup: Registrierungen entfernen, pending Forwards abbrechen, Actor stoppen
             // SubscriptionTracker.DisposeAsync() wird automatisch aufgerufen (await using)
+
             if (proxyPid != null)
             {
+                // NEU: Registrierungen entfernen
+                _triggerHandlerRegistry.UnregisterAll(proxyPid);
+                _queryHandlerRegistry.UnregisterAll(proxyPid);
+
                 try
                 {
                     await _actorSystem.Root.StopAsync(proxyPid);
@@ -128,6 +173,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         ProtoRepo.ClientMessage message,
         IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
         SubscriptionTracker subscriptionTracker,
+        PID proxyPid,
         string sessionId,
         CancellationToken ct)
     {
@@ -148,15 +194,31 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                     break;
 
                 case ProtoRepo.ClientMessage.MessageOneofCase.Capabilities:
-                    await HandleCapabilitiesAsync(message.Capabilities, responseStream, subscriptionTracker, sessionId, ct);
+                    await HandleCapabilitiesAsync(message.Capabilities, responseStream, subscriptionTracker, proxyPid, sessionId, ct);
                     break;
 
                 case ProtoRepo.ClientMessage.MessageOneofCase.Query:
-                    await HandleQueryAsync(message.Query, responseStream, sessionId, ct);
+                    await HandleQueryAsync(message.Query, responseStream, proxyPid, sessionId, ct);
                     break;
 
                 case ProtoRepo.ClientMessage.MessageOneofCase.Trigger:
-                    await HandleTriggerAsync(message.Trigger, responseStream, sessionId, ct);
+                    await HandleTriggerAsync(message.Trigger, responseStream, proxyPid, sessionId, ct);
+                    break;
+
+                // ═════════════════════════════════════════
+                // NEU: First-Citizen Messages
+                // ═════════════════════════════════════════
+
+                case ProtoRepo.ClientMessage.MessageOneofCase.TransientEvent:
+                    await HandleTransientEventAsync(message.TransientEvent, responseStream, sessionId, ct);
+                    break;
+
+                case ProtoRepo.ClientMessage.MessageOneofCase.QueryAnswer:
+                    HandleQueryAnswer(message.QueryAnswer, sessionId);
+                    break;
+
+                case ProtoRepo.ClientMessage.MessageOneofCase.TriggerResult:
+                    HandleTriggerResult(message.TriggerResult, sessionId);
                     break;
 
                 default:
@@ -179,6 +241,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         ProtoRepo.CapabilitiesRequest request,
         IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
         SubscriptionTracker subscriptionTracker,
+        PID proxyPid,
         string sessionId,
         CancellationToken ct)
     {
@@ -186,6 +249,11 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             ? $"message_types: [{string.Join(", ", request.MessageTypes)}]"
             : $"event_types: [{string.Join(", ", request.EventTypes)}]";
         Console.WriteLine($"[CqrsService] {sessionId} ← Capabilities: {messageSource}");
+
+        if (request.HandleTriggers.Any())
+            Console.WriteLine($"[CqrsService] {sessionId}   handle_triggers: [{string.Join(", ", request.HandleTriggers)}]");
+        if (request.HandleQueries.Any())
+            Console.WriteLine($"[CqrsService] {sessionId}   handle_queries: [{string.Join(", ", request.HandleQueries)}]");
 
         try
         {
@@ -209,13 +277,25 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 Console.WriteLine($"[CqrsService] {sessionId} Auto-subscribed to CommandFailed");
             }
 
-            // 4. Unbekannte Typen loggen
+            // 4. NEU: Trigger-Handler registrieren
+            foreach (var triggerName in result.HandlingTriggers)
+            {
+                _triggerHandlerRegistry.Register(triggerName, proxyPid);
+            }
+
+            // 5. NEU: Query-Handler registrieren
+            foreach (var queryName in result.HandlingQueries)
+            {
+                _queryHandlerRegistry.Register(queryName, proxyPid);
+            }
+
+            // 6. Unbekannte Typen loggen
             if (result.UnknownTypes.Any())
             {
                 Console.WriteLine($"[CqrsService] {sessionId} WARNING: Unknown types: [{string.Join(", ", result.UnknownTypes)}]");
             }
 
-            // 5. Response senden
+            // 7. Response senden
             var response = _capabilitiesHandler.BuildResponse(result);
             var serverMessage = new ProtoRepo.ServerMessage
             {
@@ -228,7 +308,9 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 $"{result.AllowedCommands.Count} commands, " +
                 $"{result.SubscribedEvents.Count} events, " +
                 $"{result.AllowedTriggers.Count} triggers, " +
-                $"{result.AllowedQueries.Count} queries");
+                $"{result.AllowedQueries.Count} queries" +
+                (result.HandlingTriggers.Count > 0 ? $", handling {result.HandlingTriggers.Count} triggers" : "") +
+                (result.HandlingQueries.Count > 0 ? $", handling {result.HandlingQueries.Count} queries" : ""));
         }
         catch (Exception ex)
         {
@@ -251,15 +333,11 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
 
         try
         {
-            // 1. DTO → Domain mappen
             var envelope = _mapper.MapToDomain(request.Envelope);
-        
-            // 2. OriginSessionId für Targeted Delivery setzen
             envelope = envelope with { OriginSessionId = sessionId };
         
             Console.WriteLine($"[CqrsService] {sessionId} Command: {envelope.Payload.GetType().Name}, CorrelationId: {envelope.CorrelationId}");
 
-            // 3. Fire-and-Forget dispatch
             _dispatcher.Dispatch(envelope);
         
             Console.WriteLine($"[CqrsService] {sessionId} Command dispatched (fire-and-forget)");
@@ -278,12 +356,13 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     }
 
     // =========================================================================
-    // TRIGGER HANDLING
+    // TRIGGER HANDLING — mit Client-Handler-Registry (NEU)
     // =========================================================================
 
     private async Task HandleTriggerAsync(
         ProtoRepo.TriggerRequest request,
         IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        PID proxyPid,
         string sessionId,
         CancellationToken ct)
     {
@@ -291,29 +370,74 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
 
         try
         {
-            // 1. DTO → Domain mappen
             var trigger = _mapper.MapToDomain(request.Payload);
+            var triggerTypeName = trigger.GetType().Name;
             
-            Console.WriteLine($"[CqrsService] {sessionId} Trigger type: {trigger.GetType().Name}");
+            Console.WriteLine($"[CqrsService] {sessionId} Trigger type: {triggerTypeName}");
 
-            // 2. Pipeline-Routing über generiertes Mapping
-            var triggerType = trigger.GetType();
-            if (!GeneratedPipelines.TriggerToPipelineId.TryGetValue(triggerType, out var pipelineId))
+            // NEU: Erst TriggerHandlerRegistry prüfen (Client-Handler)
+            var handlerPid = _triggerHandlerRegistry.GetHandler(triggerTypeName);
+            if (handlerPid != null)
             {
-                Console.WriteLine($"[CqrsService] {sessionId} No pipeline registered for trigger: {triggerType.Name}");
+                Console.WriteLine($"[CqrsService] {sessionId} Forwarding trigger to client handler: {handlerPid}");
                 
-                await SendTriggerAckAsync(responseStream, false,
-                    request.CorrelationId,
-                    $"No pipeline for {triggerType.Name}", ct);
+                var correlationId = request.CorrelationId ?? Guid.NewGuid().ToString();
+                var tcs = new TaskCompletionSource<ProtoRepo.TriggerResult>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+
+                if (!_pendingTriggerForwards.TryAdd(correlationId, tcs))
+                {
+                    await SendTriggerAckAsync(responseStream, false, request.CorrelationId,
+                        "Duplicate correlation ID for trigger forward", ct);
+                    return;
+                }
+
+                try
+                {
+                    // An Client-Proxy-Actor senden
+                    _actorSystem.Root.Send(handlerPid, new TriggerForwardMsg(trigger, correlationId));
+
+                    // Auf Antwort warten (mit Timeout)
+                    using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    timeoutCts.CancelAfter(TriggerForwardTimeout);
+                    using var registration = timeoutCts.Token.Register(
+                        () => tcs.TrySetCanceled(timeoutCts.Token));
+
+                    var result = await tcs.Task;
+
+                    await SendTriggerAckAsync(responseStream,
+                        result.Accepted, request.CorrelationId,
+                        result.Accepted ? null : result.ErrorMessage, ct);
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    Console.WriteLine($"[CqrsService] {sessionId} Trigger forward timed out");
+                    await SendTriggerAckAsync(responseStream, false, request.CorrelationId,
+                        "Client handler timeout", ct);
+                }
+                finally
+                {
+                    _pendingTriggerForwards.TryRemove(correlationId, out _);
+                }
                 return;
             }
 
-            // 3. An Pipeline senden
+            // Fallback: Pipeline-Routing (bestehend)
+            var triggerType = trigger.GetType();
+            if (!GeneratedPipelines.TriggerToPipelineId.TryGetValue(triggerType, out var pipelineId))
+            {
+                Console.WriteLine($"[CqrsService] {sessionId} No handler for trigger: {triggerType.Name}");
+                
+                await SendTriggerAckAsync(responseStream, false,
+                    request.CorrelationId,
+                    $"No handler for {triggerType.Name}", ct);
+                return;
+            }
+
             var identity = ClusterIdentity.Create(pipelineId, $"Pipeline-{pipelineId}");
             var ack = await _actorSystem.Cluster().RequestAsync<PipelineAck>(
                 identity, trigger, ct);
 
-            // 4. Ack zurücksenden
             await SendTriggerAckAsync(responseStream,
                 ack?.Accepted ?? false,
                 request.CorrelationId,
@@ -331,12 +455,13 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     }
 
     // =========================================================================
-    // QUERY HANDLING
+    // QUERY HANDLING — mit Client-Handler-Registry (NEU)
     // =========================================================================
 
     private async Task HandleQueryAsync(
         ProtoRepo.QueryRequest request,
         IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        PID proxyPid,
         string sessionId,
         CancellationToken ct)
     {
@@ -344,53 +469,178 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
 
         try
         {
-            // 1. DTO → Domain mappen
             var query = _mapper.MapToDomain(request.Payload);
+            var queryTypeName = query.GetType().Name;
             
-            Console.WriteLine($"[CqrsService] {sessionId} Query type: {query.GetType().Name}");
+            Console.WriteLine($"[CqrsService] {sessionId} Query type: {queryTypeName}");
 
-            // 2. Query ausführen
-            var response = await _queryService.ExecuteAsync(query);
-
-            // 3. Domain → DTO mappen (Deps werden mittransportiert)
-            var responseDto = _mapper.ToQueryResponse(response, request.CorrelationId);
-
-            // 4. Response senden
-            var serverMessage = new ProtoRepo.ServerMessage
+            // NEU: Erst QueryHandlerRegistry prüfen (Client-Handler)
+            var handlerPid = _queryHandlerRegistry.GetHandler(queryTypeName);
+            if (handlerPid != null)
             {
-                QueryResponse = responseDto
-            };
+                Console.WriteLine($"[CqrsService] {sessionId} Forwarding query to client handler: {handlerPid}");
+
+                var correlationId = request.CorrelationId ?? Guid.NewGuid().ToString();
+                var tcs = new TaskCompletionSource<ProtoRepo.QueryResponseFromClient>(
+                    TaskCreationOptions.RunContinuationsAsynchronously);
+
+                if (!_pendingQueryForwards.TryAdd(correlationId, tcs))
+                {
+                    await SendErrorAsync(responseStream, "QUERY_DUPLICATE_CORRELATION",
+                        "Duplicate correlation ID for query forward", request.CorrelationId, ct);
+                    return;
+                }
+
+                try
+                {
+                    // An Client-Proxy-Actor senden
+                    _actorSystem.Root.Send(handlerPid, new QueryForwardMsg(query, correlationId));
+
+                    // Auf Antwort warten (mit Timeout)
+                    using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                    timeoutCts.CancelAfter(QueryForwardTimeout);
+                    using var registration = timeoutCts.Token.Register(
+                        () => tcs.TrySetCanceled(timeoutCts.Token));
+
+                    var clientResponse = await tcs.Task;
+
+                    // Fehler vom Client?
+                    if (!string.IsNullOrEmpty(clientResponse.ErrorCode))
+                    {
+                        await SendErrorAsync(responseStream,
+                            clientResponse.ErrorCode,
+                            clientResponse.ErrorMessage,
+                            request.CorrelationId, ct);
+                        return;
+                    }
+
+                    // Antwort an den anfragenden Client weiterleiten
+                    var serverMessage = new ProtoRepo.ServerMessage
+                    {
+                        QueryResponse = new ProtoRepo.QueryResponse
+                        {
+                            CorrelationId = request.CorrelationId,
+                            Payload = clientResponse.Payload
+                        }
+                    };
+                    await responseStream.WriteAsync(serverMessage, ct);
+
+                    Console.WriteLine($"[CqrsService] {sessionId} → QueryResponse (from client handler)");
+                }
+                catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+                {
+                    Console.WriteLine($"[CqrsService] {sessionId} Query forward timed out");
+                    await SendErrorAsync(responseStream, "QUERY_FORWARD_TIMEOUT",
+                        "Client handler did not respond in time", request.CorrelationId, ct);
+                }
+                finally
+                {
+                    _pendingQueryForwards.TryRemove(correlationId, out _);
+                }
+                return;
+            }
+
+            // Fallback: ProjectionQueryService (bestehend)
+            var response = await _queryService.ExecuteAsync(query);
+            var responseDto = _mapper.ToQueryResponse(response, request.CorrelationId);
+            var serverMsg = new ProtoRepo.ServerMessage { QueryResponse = responseDto };
             
-            await responseStream.WriteAsync(serverMessage, ct);
+            await responseStream.WriteAsync(serverMsg, ct);
             
             Console.WriteLine($"[CqrsService] {sessionId} → QueryResponse: {response.Data.GetType().Name}");
         }
         catch (NotSupportedException ex)
         {
             Console.WriteLine($"[CqrsService] {sessionId} query not supported: {ex.Message}");
-            
-            await SendErrorAsync(
-                responseStream,
-                "QUERY_NOT_SUPPORTED",
-                ex.Message,
-                request.CorrelationId,
-                ct);
+            await SendErrorAsync(responseStream, "QUERY_NOT_SUPPORTED", ex.Message, request.CorrelationId, ct);
         }
         catch (Exception ex)
         {
             Console.WriteLine($"[CqrsService] {sessionId} query failed: {ex.Message}");
-            
-            await SendErrorAsync(
-                responseStream,
-                "QUERY_FAILED",
-                ex.Message,
-                request.CorrelationId,
-                ct);
+            await SendErrorAsync(responseStream, "QUERY_FAILED", ex.Message, request.CorrelationId, ct);
         }
     }
 
     // =========================================================================
-    // SUBSCRIBE HANDLING
+    // TRANSIENT EVENT HANDLING (NEU)
+    // =========================================================================
+
+    private async Task HandleTransientEventAsync(
+        ProtoRepo.TransientEventRequest request,
+        IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        string sessionId,
+        CancellationToken ct)
+    {
+        Console.WriteLine($"[CqrsService] {sessionId} ← TransientEvent");
+
+        try
+        {
+            var envelope = _mapper.MapToDomain(request.Envelope);
+
+            if (envelope.Payload is not ITransientEvent)
+            {
+                Console.WriteLine($"[CqrsService] {sessionId} REJECTED: {envelope.Payload.GetType().Name} is not ITransientEvent");
+                await SendErrorAsync(responseStream, "INVALID_TRANSIENT_EVENT",
+                    $"{envelope.Payload.GetType().Name} does not implement ITransientEvent",
+                    "", ct);
+                return;
+            }
+
+            await _publisher.PublishAsync(envelope, ct);
+
+            Console.WriteLine($"[CqrsService] {sessionId} TransientEvent published: {envelope.Payload.GetType().Name}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[CqrsService] {sessionId} TransientEvent failed: {ex.Message}");
+            await SendErrorAsync(responseStream, "TRANSIENT_EVENT_FAILED", ex.Message, "", ct);
+        }
+    }
+
+    // =========================================================================
+    // QUERY ANSWER FROM CLIENT (NEU)
+    // =========================================================================
+
+    private void HandleQueryAnswer(
+        ProtoRepo.QueryResponseFromClient answer,
+        string sessionId)
+    {
+        Console.WriteLine($"[CqrsService] {sessionId} ← QueryAnswer, CorrelationId: {answer.CorrelationId}");
+
+        if (_pendingQueryForwards.TryGetValue(answer.CorrelationId, out var tcs))
+        {
+            tcs.TrySetResult(answer);
+        }
+        else
+        {
+            Console.WriteLine(
+                $"[CqrsService] {sessionId} WARNING: QueryAnswer for unknown CorrelationId: {answer.CorrelationId}");
+        }
+    }
+
+    // =========================================================================
+    // TRIGGER RESULT FROM CLIENT (NEU)
+    // =========================================================================
+
+    private void HandleTriggerResult(
+        ProtoRepo.TriggerResult result,
+        string sessionId)
+    {
+        Console.WriteLine($"[CqrsService] {sessionId} ← TriggerResult, CorrelationId: {result.CorrelationId}");
+
+        if (_pendingTriggerForwards.TryGetValue(result.CorrelationId, out var tcs))
+        {
+            tcs.TrySetResult(result);
+        }
+        else
+        {
+            Console.WriteLine(
+                $"[CqrsService] {sessionId} WARNING: TriggerResult for unknown CorrelationId: {result.CorrelationId}");
+        }
+    }
+
+    // =========================================================================
+    // SUBSCRIBE HANDLING (unverändert)
     // =========================================================================
 
     private async Task HandleSubscribeAsync(
@@ -444,7 +694,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     }
 
     // =========================================================================
-    // UNSUBSCRIBE HANDLING
+    // UNSUBSCRIBE HANDLING (unverändert)
     // =========================================================================
 
     private async Task HandleUnsubscribeAsync(
@@ -487,7 +737,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     }
 
     // =========================================================================
-    // HELPERS
+    // HELPERS (unverändert)
     // =========================================================================
 
     private static async Task SendTriggerAckAsync(

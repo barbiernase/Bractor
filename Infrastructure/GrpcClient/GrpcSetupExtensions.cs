@@ -1,3 +1,4 @@
+// REPO-PFAD: Infrastructure/GrpcClient/GrpcSetupExtensions.cs  (MODIFIZIERT)
 using Infrastructure.Mapping;
 using Infrastructure.Serialization;
 using Microsoft.AspNetCore.Builder;
@@ -22,11 +23,21 @@ public static class GrpcSetupExtensions
         services.AddSingleton<ProtoMessageMapper>();
         Console.WriteLine("  ✓ ProtoMessageMapper");
 
+        // First-Citizen Registries
+        services.AddSingleton<TriggerHandlerRegistry>();
+        Console.WriteLine("  ✓ TriggerHandlerRegistry");
+        
+        services.AddSingleton<QueryHandlerRegistry>();
+        Console.WriteLine("  ✓ QueryHandlerRegistry");
+
         // CqrsClientService - bekommt alle Dependencies via DI:
         // - ActorSystem
         // - ProtoMessageMapper
         // - IAggregateDispatcher
         // - ProjectionQueryService
+        // - TriggerHandlerRegistry    (NEU)
+        // - QueryHandlerRegistry      (NEU)
+        // - BrokerPublisher           (NEU)
         services.AddSingleton<CqrsClientServiceImpl>();
         Console.WriteLine("  ✓ CqrsClientServiceImpl");
 

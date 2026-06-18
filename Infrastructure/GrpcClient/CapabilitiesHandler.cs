@@ -1,3 +1,4 @@
+// REPO-PFAD: Infrastructure/GrpcClient/CapabilitiesHandler.cs  (MODIFIZIERT)
 using Infrastructure.Mapping;
 
 public class CapabilitiesHandler
@@ -61,6 +62,26 @@ public class CapabilitiesHandler
             result.AllowedQueries.AddRange(MessageTypeMapping.GetAllQueryTypeNames());
         }
 
+        // NEU: handle_triggers — Client deklariert dass er diese Trigger-Typen VERARBEITET
+        foreach (var triggerName in request.HandleTriggers)
+        {
+            var (type, category) = MessageTypeMapping.Resolve(triggerName);
+            if (category == MessageCategory.Trigger)
+                result.HandlingTriggers.Add(triggerName);
+            else
+                result.UnknownTypes.Add(triggerName);
+        }
+
+        // NEU: handle_queries — Client deklariert dass er diese Query-Typen BEANTWORTET
+        foreach (var queryName in request.HandleQueries)
+        {
+            var (type, category) = MessageTypeMapping.Resolve(queryName);
+            if (category == MessageCategory.Query)
+                result.HandlingQueries.Add(queryName);
+            else
+                result.UnknownTypes.Add(queryName);
+        }
+
         return result;
     }
 
@@ -79,6 +100,8 @@ public class CapabilitiesHandler
         response.SupportedQueries.AddRange(result.AllowedQueries);
         response.AllowedTriggers.AddRange(result.AllowedTriggers);
         response.UnknownTypes.AddRange(result.UnknownTypes);
+        response.HandlingTriggers.AddRange(result.HandlingTriggers);
+        response.HandlingQueries.AddRange(result.HandlingQueries);
         
         return response;
     }
@@ -95,5 +118,18 @@ public class CapabilitiesResult
     public List<string> AllowedTriggers { get; init; } = new();
     public List<string> AllowedQueries { get; init; } = new();
     public List<string> UnknownTypes { get; init; } = new();
+
+    /// <summary>
+    /// Trigger-Typen die dieser Client VERARBEITET (gegenläufig zu AllowedTriggers).
+    /// Client empfängt TriggerForward, Server routet an diesen Client.
+    /// </summary>
+    public List<string> HandlingTriggers { get; init; } = new();
+
+    /// <summary>
+    /// Query-Typen die dieser Client BEANTWORTET (gegenläufig zu AllowedQueries).
+    /// Client empfängt QueryForward, Server leitet Antwort zurück.
+    /// </summary>
+    public List<string> HandlingQueries { get; init; } = new();
+
     public string SessionId { get; init; } = string.Empty;
 }

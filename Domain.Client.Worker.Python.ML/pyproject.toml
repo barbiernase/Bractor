@@ -1,0 +1,13 @@
+# REPO-PFAD: Domain.Client.Worker.Python.ML/pyproject.toml
+[project]
+name = "cqrs-classifier"
+version = "0.1.0"
+description = "Python ML-Worker für CQRS/ES Bildinspektion"
+requires-python = ">=3.11"
+dependencies = [
+    "betterproto[compiler]>=2.0.0b6",
+    "grpclib>=0.4.7",
+    "torch>=2.0",
+    "numpy>=1.24",
+    "Pillow>=10.0",
+]

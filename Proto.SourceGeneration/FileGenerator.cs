@@ -1,3 +1,4 @@
+// REPO-PFAD: Proto.SourceGeneration/FileGenerator.cs  (MODIFIZIERT)
 using System.Text;
 using Abstractions.SourceGeneration;
 
@@ -138,14 +139,49 @@ public class FileGenerator
     var triggerRequestMessage = GenerateTriggerRequestMessage();
     var triggerPayloadMessage = GenerateStandalonePayloadDto("TriggerPayloadDto", triggerOneOfs);
 
-    // ClientMessage: Trigger-Feld immer vorhanden (Protokoll-Vollständigkeit)
-    var triggerField = "        TriggerRequest trigger = 6;";
+    // ClientMessage: Trigger-Feld + neue First-Citizen-Felder
+    var clientMessageExtensions = """
+                    TriggerRequest trigger = 6;
+                    TransientEventRequest transient_event = 7;
+                    QueryResponseFromClient query_answer = 8;
+                    TriggerResult trigger_result = 9;
+            """;
 
     // TriggerAck immer generieren (Protokoll-Message)
     var triggerAckMessage = """
           message TriggerAck {
               bool accepted = 1;
               string correlation_id = 2;
+              string error_message = 3;
+          }
+          """;
+
+    // First-Citizen-Messages: Trigger/Query-Forwarding + TransientEvents
+    var firstCitizenMessages = """
+          message TriggerForward {
+              TriggerPayloadDto payload = 1;
+              string correlation_id = 2;
+          }
+
+          message QueryForward {
+              string correlation_id = 1;
+              QueryPayloadDto payload = 2;
+          }
+
+          message TransientEventRequest {
+              EventEnvelopeDto envelope = 1;
+          }
+
+          message QueryResponseFromClient {
+              string correlation_id = 1;
+              QueryResponsePayloadDto payload = 2;
+              string error_code = 3;
+              string error_message = 4;
+          }
+
+          message TriggerResult {
+              string correlation_id = 1;
+              bool accepted = 2;
               string error_message = 3;
           }
           """;
@@ -176,7 +212,7 @@ public class FileGenerator
                      UnsubscribeRequest unsubscribe = 3;
                      CapabilitiesRequest capabilities = 4;
                      QueryRequest query = 5;
-             {{triggerField}}
+             {{clientMessageExtensions}}
                  }
              }
 
@@ -197,6 +233,8 @@ public class FileGenerator
              message CapabilitiesRequest {
                  repeated string event_types = 1;
                  repeated string message_types = 2;
+                 repeated string handle_triggers = 3;
+                 repeated string handle_queries = 4;
              }
 
              {{queryRequestMessage}}
@@ -217,6 +255,8 @@ public class FileGenerator
                      CapabilitiesResponse capabilities_response = 6;
                      QueryResponse query_response = 7;
                      TriggerAck trigger_ack = 8;
+                     TriggerForward trigger_forward = 9;
+                     QueryForward query_forward = 10;
                  }
              }
 
@@ -246,11 +286,15 @@ public class FileGenerator
                  repeated string supported_queries = 4;
                  repeated string allowed_triggers = 5;
                  repeated string unknown_types = 6;
+                 repeated string handling_triggers = 7;
+                 repeated string handling_queries = 8;
              }
 
              {{queryResponseMessage}}
 
              {{triggerAckMessage}}
+
+             {{firstCitizenMessages}}
 
              message ErrorResponse {
                  string code = 1;
