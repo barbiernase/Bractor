@@ -1,0 +1,33 @@
+@using Client.Infrastructure.Abstractions
+@using MudBlazor
+@inject IEnumerable<IUiModule> AllModules
+@inject ShellState State
+
+@foreach (var (label, items) in new[] {
+    ("Stages",   AllModules.OfType<IStageModule>().Cast<IUiModule>()),
+    ("Sidebars", AllModules.OfType<ISidebarModule>().Cast<IUiModule>()),
+    ("Header",   AllModules.OfType<IHeaderModule>().Cast<IUiModule>()),
+    ("Footer",   AllModules.OfType<IFooterModule>().Cast<IUiModule>()) })
+{
+    var list = items.OrderBy(m => m.Order).ToList();
+    @if (list.Count > 0)
+    {
+        <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: #888;">@label</MudText>
+        @foreach (var m in list)
+        {
+            <MudCheckBox T="bool" Value="State.IsVisible(m)"
+                         ValueChanged="v => OnToggle(m.Id, v)"
+                         Label="@m.Title" Color="Color.Primary" Dense="true" />
+        }
+        <MudDivider Class="my-3" />
+    }
+}
+
+@code {
+    [Parameter] public EventCallback OnVisibilityChanged { get; set; }
+    private async Task OnToggle(string id, bool v)
+    {
+        State.SetVisible(id, v);
+        await OnVisibilityChanged.InvokeAsync();
+    }
+}

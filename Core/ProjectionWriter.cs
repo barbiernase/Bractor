@@ -16,11 +16,24 @@ namespace Core;
 public class ProjectionWriter
 {
     private readonly List<WriteResult> _results = new();
+    private readonly Guid _streamId;
+    private readonly int _version;
+
+    /// <summary>
+    /// Der Adapter erzeugt den Writer mit der kausalen Position des Events; jeder
+    /// <see cref="WriteContext"/> dieses Scopes erbt sie. Der parameterlose Default
+    /// (StreamId leer, Version -1) bleibt für den Push-Pfad und Alt-Aufrufer gültig.
+    /// </summary>
+    public ProjectionWriter(Guid streamId = default, int version = -1)
+    {
+        _streamId = streamId;
+        _version = version;
+    }
 
     /// <summary>
     /// Führt einen Write-Scope aus.
-    /// 
-    /// Erstellt einen WriteContext mit der readModelId,
+    ///
+    /// Erstellt einen WriteContext mit der readModelId (und der kausalen Position),
     /// führt die Lambda aus (Entwickler macht DB-Write + ctx.Track()),
     /// und speichert das Ergebnis.
     /// </summary>
@@ -31,7 +44,7 @@ public class ProjectionWriter
         ArgumentNullException.ThrowIfNull(readModelId);
         ArgumentNullException.ThrowIfNull(write);
 
-        var ctx = new WriteContext(readModelId);
+        var ctx = new WriteContext(readModelId, _streamId, _version);
         await write(ctx);
 
         _results.Add(new WriteResult(readModelId, ctx.TrackedAggregates));

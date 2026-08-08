@@ -1,0 +1,154 @@
+@namespace Domain.Client.Modules.Blazor.Suche
+@using global::Client.Infrastructure.Abstractions
+@using Domain.Client.Modules.Suche
+@inject SuchStore BaumStore
+@inject Store Store
+@inject EffectScope Fx
+@implements IDisposable
+
+@*
+    Häkchen an JEDER Stufe (Jahr/Monat/Tag) mit Kaskade: Jahr/Monat = alle Tage
+    darunter, tri-state (voll ✓ / teilweise – / leer). Hinter jeder Stufe steht
+    die Summe aller darunter liegenden Bilder. Auswahl ist multi-select; geladen
+    wird die Bounding-Range aller gewählten Tage, damit mehrere zusammen sichtbar
+    sind. Auf-/Zuklappen (Chevron) ist von der Auswahl (Häkchen) getrennt.
+*@
+
+<div style="border-bottom:1px solid #2c2c2e">
+
+    <div style="padding:12px 14px 6px">
+        <p style="font-size:11px;letter-spacing:.4px;color:#7d7d85;margin:0;text-transform:uppercase">Produktionstage</p>
+    </div>
+
+    <div style="max-height:320px;overflow-y:auto;padding:0 6px 8px">
+        @if (Baum.Count == 0)
+        {
+            <p style="color:#6a6a72;font-size:11px;padding:6px 8px;margin:0">keine Produktionstage geladen</p>
+        }
+        @foreach (var jahr in Baum)
+        {
+            var jOffen = !_zugeklappteJahre.Contains(jahr.Jahr);
+            <div class="pt-row" style="font-weight:500;color:#dcdce2">
+                <span class="pt-chev" @onclick="() => KlappeJahr(jahr.Jahr)">@(jOffen ? "▾" : "▸")</span>
+                <span class="pt-check @CheckCls(JahrVoll(jahr), JahrTeil(jahr))" @onclick="() => WaehleJahr(jahr)">@Mark(JahrVoll(jahr), JahrTeil(jahr))</span>
+                <span style="flex:1;cursor:pointer" @onclick="() => KlappeJahr(jahr.Jahr)">@jahr.Jahr</span>
+                <span class="pt-cnt">@jahr.Anzahl</span>
+            </div>
+
+            @if (jOffen)
+            {
+                <div style="margin-left:14px">
+                    @foreach (var monat in jahr.Monate)
+                    {
+                        var mOffen = _offeneMonate.Contains(monat.Schluessel);
+                        <div class="pt-row">
+                            <span class="pt-chev" @onclick="() => KlappeMonat(monat.Schluessel)">@(mOffen ? "▾" : "▸")</span>
+                            <span class="pt-check @CheckCls(MonatVoll(monat), MonatTeil(monat))" @onclick="() => WaehleMonat(monat)">@Mark(MonatVoll(monat), MonatTeil(monat))</span>
+                            <span style="flex:1;cursor:pointer" @onclick="() => KlappeMonat(monat.Schluessel)">@MonatsName(monat.Monat)</span>
+                            <span class="pt-cnt">@monat.Anzahl</span>
+                        </div>
+
+                        @if (mOffen)
+                        {
+                            <div style="margin-left:14px">
+                                @foreach (var tag in monat.Tage)
+                                {
+                                    var gew = TagGewaehlt(tag.Datum);
+                                    <div class="pt-row">
+                                        <span class="pt-chev"></span>
+                                        <span class="pt-check @(gew ? "on" : "")" @onclick="() => WaehleTag(tag.Datum)">@(gew ? "✓" : "")</span>
+                                        <span style="flex:1">@tag.Datum.ToString("ddd dd.MM.yyyy")</span>
+                                        <span class="pt-cnt">@tag.Anzahl</span>
+                                    </div>
+                                }
+                            </div>
+                        }
+                    }
+                </div>
+            }
+        }
+    </div>
+</div>
+
+<style>
+    .pt-row{display:flex;align-items:center;gap:7px;padding:5px 8px;border-radius:6px;font-size:12px;color:#c7c7cd}
+    .pt-row:hover{background:#26262a}
+    .pt-cnt{margin-left:auto;font-size:11px;color:#7d7d85;font-variant-numeric:tabular-nums;padding-left:6px}
+    .pt-chev{color:#8a8a92;font-size:14px;width:14px;display:inline-flex;justify-content:center;cursor:pointer;flex:0 0 auto}
+    .pt-check{width:14px;height:14px;border-radius:3px;border:1px solid #4a4a4d;display:inline-flex;align-items:center;justify-content:center;font-size:10px;color:#1e1e1e;cursor:pointer;flex:0 0 auto}
+    .pt-check.on{background:#5c9eff;border-color:#5c9eff}
+    .pt-check.teil{background:#33507a;border-color:#3f6aa8;color:#cfe0ff}
+</style>
+
+@code {
+    // ── Auf-/Zuklappen: lokaler View-State, getrennt von der Auswahl ──
+    readonly HashSet<int> _zugeklappteJahre = new();          // Jahre: Default offen
+    readonly HashSet<int> _offeneMonate = new();              // Monate (Jahr*100+Monat): Default zu
+    void KlappeJahr(int j) { if (!_zugeklappteJahre.Remove(j)) _zugeklappteJahre.Add(j); }
+    void KlappeMonat(int key) { if (!_offeneMonate.Remove(key)) _offeneMonate.Add(key); }
+
+    // ── Memoisierter Baum: nur neu ableiten, wenn die Tagesliste wechselt ──
+    IReadOnlyList<ProduktionsTag>? _lastTage;
+    IReadOnlyList<JahrKnoten> _baum = Array.Empty<JahrKnoten>();
+    IReadOnlyList<JahrKnoten> Baum
+    {
+        get
+        {
+            if (!ReferenceEquals(_lastTage, BaumStore.ProduktionsTage))
+            {
+                _lastTage = BaumStore.ProduktionsTage;
+                _baum = ProduktionsBaum.Baue(BaumStore.ProduktionsTage);
+            }
+            return _baum;
+        }
+    }
+
+    protected override void OnInitialized()
+    {
+        Fx.OnChanged(BaumStore, () => InvokeAsync(StateHasChanged));   // Liste + Auswahl
+        Fx.OnChanged(Store, () => InvokeAsync(StateHasChanged));       // Filter (Sync)
+    }
+
+    // ── Auswahl-Zustand (tri-state) ──
+    IReadOnlySet<DateTimeOffset> Sel => BaumStore.SelektierteTage;
+    static DateTimeOffset Norm(DateTimeOffset d) => new(d.Date, TimeSpan.Zero);
+
+    bool TagGewaehlt(DateTimeOffset d) => Sel.Contains(Norm(d));
+    bool MonatVoll(MonatKnoten m) => m.Tage.Count > 0 && m.Tage.All(t => Sel.Contains(Norm(t.Datum)));
+    bool MonatTeil(MonatKnoten m) => !MonatVoll(m) && m.Tage.Any(t => Sel.Contains(Norm(t.Datum)));
+    bool JahrVoll(JahrKnoten j) => j.Monate.Count > 0 && j.Monate.All(MonatVoll);
+    bool JahrTeil(JahrKnoten j) => !JahrVoll(j) && j.Monate.SelectMany(m => m.Tage).Any(t => Sel.Contains(Norm(t.Datum)));
+
+    static string Mark(bool voll, bool teil) => voll ? "✓" : teil ? "–" : "";
+    static string CheckCls(bool voll, bool teil) => voll ? "on" : teil ? "teil" : "";
+
+    // ── Auswahl setzen (kaskadierend) + Bild-Pipeline über Bounding-Range ──
+    void WaehleTag(DateTimeOffset d) => Setze(neu => Toggle(neu, new[] { Norm(d) }));
+    void WaehleMonat(MonatKnoten m) => Setze(neu => Toggle(neu, m.Tage.Select(t => Norm(t.Datum))));
+    void WaehleJahr(JahrKnoten j) => Setze(neu => Toggle(neu, j.Monate.SelectMany(m => m.Tage).Select(t => Norm(t.Datum))));
+
+    static void Toggle(HashSet<DateTimeOffset> menge, IEnumerable<DateTimeOffset> tage)
+    {
+        var liste = tage.ToList();
+        var vollDrin = liste.Count > 0 && liste.All(menge.Contains);
+        foreach (var t in liste) { if (vollDrin) menge.Remove(t); else menge.Add(t); }   // an → aus, sonst alle an
+    }
+
+    void Setze(Action<HashSet<DateTimeOffset>> mutieren)
+    {
+        var neu = new HashSet<DateTimeOffset>(Sel);
+        mutieren(neu);
+
+        // EIN Event: SuchStore aktualisiert die Häkchen-Anzeige, der große Store
+        // faltet die Tage zu Bereichen und stellt den Sammel-Zähler scharf, der
+        // RefreshHandler feuert je Bereich eine Query. Kein Bounding-Range mehr.
+        Fx.Dispatch(new AuswahlGeaendert(neu));
+    }
+
+    static readonly string[] Monate =
+        { "", "Januar", "Februar", "März", "April", "Mai", "Juni",
+          "Juli", "August", "September", "Oktober", "November", "Dezember" };
+    static string MonatsName(int m) => Monate[m];
+
+    public void Dispose() => Fx.Dispose();
+}

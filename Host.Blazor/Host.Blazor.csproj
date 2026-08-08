@@ -10,6 +10,7 @@
   <ItemGroup>
     <!-- Infrastruktur: Bus, Startup, Connection — für DI-Setup in Program.cs -->
     <ProjectReference Include="..\Client.Infrastructure\Client.Infrastructure.csproj" />
+    <ProjectReference Include="..\Domain.Client.Modules.Blazor\Domain.Client.Modules.Blazor.csproj" />
 
     <!-- Views + Domain kommen transitiv über dieses Projekt -->
     <ProjectReference Include="..\Domain.Client.Ui.Blazor\Domain.Client.Ui.Blazor.csproj" />
@@ -19,6 +20,10 @@
     <!-- MudBlazor: Host braucht AddMudServices() + CSS/JS aus _Host.cshtml -->
     <PackageReference Include="MudBlazor" Version="9.3.0" />
     <PackageReference Include="Blazor-ApexCharts" Version="6.1.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Shell\" />
   </ItemGroup>
 
 </Project>

@@ -90,6 +90,7 @@ namespace Infrastructure.SourceGeneration
 
             sb.AppendLine("using Abstractions;");
             sb.AppendLine("using Infrastructure.PubSub;");
+            sb.AppendLine("using Infrastructure.Persistence;");
             sb.AppendLine("using Microsoft.Extensions.Logging;");
             foreach (var ns in namespaces.OrderBy(n => n))
             {
@@ -107,14 +108,19 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"public class {aggregateName}Actor : AggregateActorBase<{aggregateName}>");
                 sb.AppendLine("{");
                 
-                // ★ Konstruktor mit IVersionTracker? vor BrokerPublisher?
+                // ★ Konstruktor: IVersionTracker? / BrokerPublisher? / ISnapshotStore? via DI (optional).
+                //   Schema-Version (Struktur-Hash) wird als Konstante mitgegeben — invalidiert stale Snapshots.
                 sb.AppendLine($"    public {aggregateName}Actor(");
                 sb.AppendLine($"        IAggregateHandlerFactory handlerFactory,");
                 sb.AppendLine($"        IEventStoreRepository eventStore,");
                 sb.AppendLine($"        IVersionTracker? versionTracker = null,");
                 sb.AppendLine($"        BrokerPublisher? publisher = null,");
-                sb.AppendLine($"        ILogger<{aggregateName}Actor>? logger = null)");
-                sb.AppendLine($"        : base(handlerFactory, eventStore, versionTracker, publisher, logger)");
+                sb.AppendLine($"        ILogger<{aggregateName}Actor>? logger = null,");
+                sb.AppendLine($"        ISnapshotStore? snapshots = null,");
+                sb.AppendLine($"        SnapshotOptions? snapshotOptions = null,");
+                sb.AppendLine($"        IDeadLetterSink? deadLetters = null)");
+                sb.AppendLine($"        : base(handlerFactory, eventStore, versionTracker, publisher, logger,");
+                sb.AppendLine($"               snapshots, GeneratedSnapshotSchema.VersionOf<{aggregateName}>(), snapshotOptions, deadLetters)");
                 sb.AppendLine("    {");
                 sb.AppendLine("    }");
                 sb.AppendLine("}");

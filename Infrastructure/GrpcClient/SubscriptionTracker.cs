@@ -1,5 +1,7 @@
 using Infrastructure.Mapping;
 using Infrastructure.PubSub;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Proto;
 using Proto.Cluster;
 
@@ -18,20 +20,22 @@ public class SubscriptionTracker : IAsyncDisposable
     private readonly Cluster _cluster;
     private readonly PID _proxyPid;
     private readonly string _subscriberId;
-    
+    private readonly ILogger _logger;
+
     // Nur EventType als Key - kein AggregateId-Filter (MVP: Client filtert selbst)
     private readonly Dictionary<Type, BrokerSubscription> _subscriptions = new();
-    
+
     // Lock für Thread-Safety (mehrere async Operationen möglich)
     private readonly SemaphoreSlim _lock = new(1, 1);
-    
+
     private bool _disposed = false;
 
-    public SubscriptionTracker(Cluster cluster, PID proxyPid, string subscriberId)
+    public SubscriptionTracker(Cluster cluster, PID proxyPid, string subscriberId, ILogger? logger = null)
     {
         _cluster = cluster ?? throw new ArgumentNullException(nameof(cluster));
         _proxyPid = proxyPid ?? throw new ArgumentNullException(nameof(proxyPid));
         _subscriberId = subscriberId ?? throw new ArgumentNullException(nameof(subscriberId));
+        _logger = logger ?? NullLogger.Instance;
     }
 
     /// <summary>
@@ -44,14 +48,14 @@ public class SubscriptionTracker : IAsyncDisposable
         // "*" = Wildcard wird im MVP nicht unterstützt
         if (string.IsNullOrEmpty(eventTypeName) || eventTypeName == "*")
         {
-            Console.WriteLine($"[SubscriptionTracker-{_subscriberId}] Wildcard '*' not supported in MVP");
+            _logger.LogWarning("[SubscriptionTracker-{Subscriber}] Wildcard '*' not supported in MVP", _subscriberId);
             return false;
         }
 
         var (resolvedType, category) = MessageTypeMapping.Resolve(eventTypeName);
         if (resolvedType == null || category != MessageCategory.Event)
         {
-            Console.WriteLine($"[SubscriptionTracker-{_subscriberId}] Unknown or non-event type: {eventTypeName}");
+            _logger.LogWarning("[SubscriptionTracker-{Subscriber}] Unknown or non-event type: {EventType}", _subscriberId, eventTypeName);
             return false;
         }
         var eventType = resolvedType;
@@ -62,7 +66,7 @@ public class SubscriptionTracker : IAsyncDisposable
             // Bereits subscribed?
             if (_subscriptions.ContainsKey(eventType))
             {
-                Console.WriteLine($"[SubscriptionTracker-{_subscriberId}] Already subscribed to {eventTypeName}");
+                _logger.LogDebug("[SubscriptionTracker-{Subscriber}] Already subscribed to {EventType}", _subscriberId, eventTypeName);
                 return true; // Kein Fehler, nur noop
             }
 
@@ -72,7 +76,7 @@ public class SubscriptionTracker : IAsyncDisposable
             
             _subscriptions[eventType] = subscription;
             
-            Console.WriteLine($"[SubscriptionTracker-{_subscriberId}] Subscribed to {eventTypeName}");
+            _logger.LogDebug("[SubscriptionTracker-{Subscriber}] Subscribed to {EventType}", _subscriberId, eventTypeName);
             return true;
         }
         finally
@@ -91,7 +95,7 @@ public class SubscriptionTracker : IAsyncDisposable
         var (resolvedType, _) = MessageTypeMapping.Resolve(eventTypeName);
         if (resolvedType == null)
         {
-            Console.WriteLine($"[SubscriptionTracker-{_subscriberId}] Unknown event type: {eventTypeName}");
+            _logger.LogWarning("[SubscriptionTracker-{Subscriber}] Unknown event type: {EventType}", _subscriberId, eventTypeName);
             return false;
         }
         var eventType = resolvedType;
@@ -101,14 +105,14 @@ public class SubscriptionTracker : IAsyncDisposable
         {
             if (!_subscriptions.TryGetValue(eventType, out var subscription))
             {
-                Console.WriteLine($"[SubscriptionTracker-{_subscriberId}] Not subscribed to {eventTypeName}");
+                _logger.LogDebug("[SubscriptionTracker-{Subscriber}] Not subscribed to {EventType}", _subscriberId, eventTypeName);
                 return false;
             }
 
             await subscription.UnsubscribeAsync(eventType, ct);
             _subscriptions.Remove(eventType);
             
-            Console.WriteLine($"[SubscriptionTracker-{_subscriberId}] Unsubscribed from {eventTypeName}");
+            _logger.LogDebug("[SubscriptionTracker-{Subscriber}] Unsubscribed from {EventType}", _subscriberId, eventTypeName);
             return true;
         }
         finally
@@ -128,7 +132,7 @@ public class SubscriptionTracker : IAsyncDisposable
             if (_subscriptions.Count == 0)
                 return;
 
-            Console.WriteLine($"[SubscriptionTracker-{_subscriberId}] Unsubscribing from {_subscriptions.Count} types...");
+            _logger.LogDebug("[SubscriptionTracker-{Subscriber}] Unsubscribing from {Count} types", _subscriberId, _subscriptions.Count);
 
             var errors = new List<Exception>();
             
@@ -142,13 +146,13 @@ public class SubscriptionTracker : IAsyncDisposable
                 {
                     // Fehler sammeln aber weitermachen
                     errors.Add(ex);
-                    Console.WriteLine($"[SubscriptionTracker-{_subscriberId}] Error unsubscribing from {eventType.Name}: {ex.Message}");
+                    _logger.LogWarning(ex, "[SubscriptionTracker-{Subscriber}] Error unsubscribing from {EventType}", _subscriberId, eventType.Name);
                 }
             }
             
             _subscriptions.Clear();
             
-            Console.WriteLine($"[SubscriptionTracker-{_subscriberId}] All subscriptions cleared");
+            _logger.LogDebug("[SubscriptionTracker-{Subscriber}] All subscriptions cleared", _subscriberId);
 
             // Wenn Fehler aufgetreten sind, als AggregateException werfen
             if (errors.Count > 0)
@@ -217,7 +221,7 @@ public class SubscriptionTracker : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[SubscriptionTracker-{_subscriberId}] Error during dispose: {ex.Message}");
+            _logger.LogWarning(ex, "[SubscriptionTracker-{Subscriber}] Error during dispose", _subscriberId);
         }
         finally
         {

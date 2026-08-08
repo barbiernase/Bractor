@@ -7,6 +7,8 @@ using Infrastructure.Mapping;
 using Infrastructure.Pipeline;
 using Infrastructure.PubSub;
 using Infrastructure.Serialization;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Proto;
 using Proto.Cluster;
 
@@ -39,6 +41,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     private readonly TriggerHandlerRegistry _triggerHandlerRegistry;
     private readonly QueryHandlerRegistry _queryHandlerRegistry;
     private readonly BrokerPublisher _publisher;
+    private readonly ILogger _logger;
 
     /// <summary>
     /// Timeout für Query-Forwarding an Clients.
@@ -73,7 +76,8 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         ProjectionQueryService queryService,
         TriggerHandlerRegistry triggerHandlerRegistry,
         QueryHandlerRegistry queryHandlerRegistry,
-        BrokerPublisher publisher)
+        BrokerPublisher publisher,
+        ILogger<CqrsClientServiceImpl>? logger = null)
     {
         _actorSystem = actorSystem ?? throw new ArgumentNullException(nameof(actorSystem));
         _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
@@ -82,6 +86,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         _triggerHandlerRegistry = triggerHandlerRegistry ?? throw new ArgumentNullException(nameof(triggerHandlerRegistry));
         _queryHandlerRegistry = queryHandlerRegistry ?? throw new ArgumentNullException(nameof(queryHandlerRegistry));
         _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
+        _logger = logger ?? NullLogger<CqrsClientServiceImpl>.Instance;
         _capabilitiesHandler = new CapabilitiesHandler();
     }
 
@@ -93,29 +98,29 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         var sessionId = $"session-{Interlocked.Increment(ref _sessionCounter):D4}";
         var ct = context.CancellationToken;
         
-        Console.WriteLine($"[CqrsService] New connection: {sessionId}");
-        Console.WriteLine($"[CqrsService]   Peer: {context.Peer}");
+        _logger.LogInformation("New connection {Session} from {Peer}", sessionId, context.Peer);
 
         PID? proxyPid = null;
 
         try
         {
             // 1. EventProxyActor spawnen (für PID)
-            var proxyProps = Props.FromProducer(() => 
-                new EventProxyActor(responseStream, _mapper, sessionId));
+            var proxyProps = Props.FromProducer(() =>
+                new EventProxyActor(responseStream, _mapper, sessionId, _logger));
             proxyPid = _actorSystem.Root.Spawn(proxyProps);
-            
-            Console.WriteLine($"[CqrsService] EventProxy spawned: {proxyPid}");
+
+            _logger.LogDebug("{Session} EventProxy spawned: {Pid}", sessionId, proxyPid);
 
             // 2. SubscriptionTracker erstellen (await using = automatisches Cleanup)
             await using var subscriptionTracker = new SubscriptionTracker(
                 _actorSystem.Cluster(),
                 proxyPid,
-                sessionId);
+                sessionId,
+                _logger);
 
             // 3. Read-Loop
-            Console.WriteLine($"[CqrsService] Entering read loop...");
-            
+            _logger.LogDebug("{Session} entering read loop", sessionId);
+
             while (await requestStream.MoveNext(ct))
             {
                 var clientMessage = requestStream.Current;
@@ -125,19 +130,19 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                     sessionId, ct);
             }
             
-            Console.WriteLine($"[CqrsService] Client closed stream normally");
+            _logger.LogInformation("{Session} client closed stream normally", sessionId);
         }
         catch (OperationCanceledException)
         {
-            Console.WriteLine($"[CqrsService] {sessionId} cancelled");
+            _logger.LogInformation("{Session} cancelled", sessionId);
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled)
         {
-            Console.WriteLine($"[CqrsService] {sessionId} client disconnected");
+            _logger.LogInformation("{Session} client disconnected", sessionId);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CqrsService] {sessionId} error: {ex.Message}");
+            _logger.LogError(ex, "{Session} error", sessionId);
         }
         finally
         {
@@ -153,15 +158,15 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 try
                 {
                     await _actorSystem.Root.StopAsync(proxyPid);
-                    Console.WriteLine($"[CqrsService] EventProxy stopped");
+                    _logger.LogDebug("{Session} EventProxy stopped", sessionId);
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"[CqrsService] Error stopping proxy: {ex.Message}");
+                    _logger.LogWarning(ex, "{Session} error stopping proxy", sessionId);
                 }
             }
-            
-            Console.WriteLine($"[CqrsService] {sessionId} disconnected");
+
+            _logger.LogInformation("{Session} disconnected", sessionId);
         }
     }
 
@@ -222,13 +227,13 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                     break;
 
                 default:
-                    Console.WriteLine($"[CqrsService] {sessionId} unknown message type: {message.MessageCase}");
+                    _logger.LogWarning("{Session} unknown message type: {MessageCase}", sessionId, message.MessageCase);
                     break;
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CqrsService] {sessionId} error processing message: {ex.Message}");
+            _logger.LogError(ex, "{Session} error processing message", sessionId);
             await SendErrorAsync(responseStream, "PROCESSING_ERROR", ex.Message, "", ct);
         }
     }
@@ -248,12 +253,12 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         var messageSource = request.MessageTypes.Any()
             ? $"message_types: [{string.Join(", ", request.MessageTypes)}]"
             : $"event_types: [{string.Join(", ", request.EventTypes)}]";
-        Console.WriteLine($"[CqrsService] {sessionId} ← Capabilities: {messageSource}");
+        _logger.LogDebug("{Session} ← Capabilities: {Source}", sessionId, messageSource);
 
         if (request.HandleTriggers.Any())
-            Console.WriteLine($"[CqrsService] {sessionId}   handle_triggers: [{string.Join(", ", request.HandleTriggers)}]");
+            _logger.LogDebug("{Session}   handle_triggers: [{Triggers}]", sessionId, string.Join(", ", request.HandleTriggers));
         if (request.HandleQueries.Any())
-            Console.WriteLine($"[CqrsService] {sessionId}   handle_queries: [{string.Join(", ", request.HandleQueries)}]");
+            _logger.LogDebug("{Session}   handle_queries: [{Queries}]", sessionId, string.Join(", ", request.HandleQueries));
 
         try
         {
@@ -266,7 +271,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 var subscribeSuccess = await subscriptionTracker.SubscribeAsync(eventTypeName, ct);
                 if (!subscribeSuccess)
                 {
-                    Console.WriteLine($"[CqrsService] {sessionId} WARNING: Could not subscribe to {eventTypeName}");
+                    _logger.LogWarning("{Session} could not subscribe to {EventType}", sessionId, eventTypeName);
                 }
             }
 
@@ -274,7 +279,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             var commandFailedSubscribed = await subscriptionTracker.SubscribeAsync("CommandFailed", ct);
             if (commandFailedSubscribed)
             {
-                Console.WriteLine($"[CqrsService] {sessionId} Auto-subscribed to CommandFailed");
+                _logger.LogDebug("{Session} auto-subscribed to CommandFailed", sessionId);
             }
 
             // 4. NEU: Trigger-Handler registrieren
@@ -292,7 +297,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             // 6. Unbekannte Typen loggen
             if (result.UnknownTypes.Any())
             {
-                Console.WriteLine($"[CqrsService] {sessionId} WARNING: Unknown types: [{string.Join(", ", result.UnknownTypes)}]");
+                _logger.LogWarning("{Session} unknown types: [{Types}]", sessionId, string.Join(", ", result.UnknownTypes));
             }
 
             // 7. Response senden
@@ -304,17 +309,15 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
 
             await responseStream.WriteAsync(serverMessage, ct);
 
-            Console.WriteLine($"[CqrsService] {sessionId} → CapabilitiesResponse: " +
-                $"{result.AllowedCommands.Count} commands, " +
-                $"{result.SubscribedEvents.Count} events, " +
-                $"{result.AllowedTriggers.Count} triggers, " +
-                $"{result.AllowedQueries.Count} queries" +
-                (result.HandlingTriggers.Count > 0 ? $", handling {result.HandlingTriggers.Count} triggers" : "") +
-                (result.HandlingQueries.Count > 0 ? $", handling {result.HandlingQueries.Count} queries" : ""));
+            _logger.LogInformation(
+                "{Session} → CapabilitiesResponse: {Commands} commands, {Events} events, {Triggers} triggers, {Queries} queries, handling {HandlingTriggers} triggers / {HandlingQueries} queries",
+                sessionId, result.AllowedCommands.Count, result.SubscribedEvents.Count,
+                result.AllowedTriggers.Count, result.AllowedQueries.Count,
+                result.HandlingTriggers.Count, result.HandlingQueries.Count);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CqrsService] {sessionId} capabilities failed: {ex.Message}");
+            _logger.LogError(ex, "{Session} capabilities failed", sessionId);
             await SendErrorAsync(responseStream, "CAPABILITIES_FAILED", ex.Message, "", ct);
         }
     }
@@ -329,22 +332,21 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         string sessionId,
         CancellationToken ct)
     {
-        Console.WriteLine($"[CqrsService] {sessionId} ← Command");
+        _logger.LogDebug("{Session} ← Command", sessionId);
 
         try
         {
             var envelope = _mapper.MapToDomain(request.Envelope);
             envelope = envelope with { OriginSessionId = sessionId };
-        
-            Console.WriteLine($"[CqrsService] {sessionId} Command: {envelope.Payload.GetType().Name}, CorrelationId: {envelope.CorrelationId}");
+
+            _logger.LogDebug("{Session} Command {Command}, CorrelationId {CorrelationId}",
+                sessionId, envelope.Payload.GetType().Name, envelope.CorrelationId);
 
             _dispatcher.Dispatch(envelope);
-        
-            Console.WriteLine($"[CqrsService] {sessionId} Command dispatched (fire-and-forget)");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CqrsService] {sessionId} Command mapping failed: {ex.Message}");
+            _logger.LogWarning(ex, "{Session} command mapping failed", sessionId);
         
             await SendErrorAsync(
                 responseStream,
@@ -366,20 +368,20 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         string sessionId,
         CancellationToken ct)
     {
-        Console.WriteLine($"[CqrsService] {sessionId} ← Trigger");
+        _logger.LogDebug("{Session} ← Trigger", sessionId);
 
         try
         {
             var trigger = _mapper.MapToDomain(request.Payload);
             var triggerTypeName = trigger.GetType().Name;
-            
-            Console.WriteLine($"[CqrsService] {sessionId} Trigger type: {triggerTypeName}");
+
+            _logger.LogDebug("{Session} Trigger type: {Trigger}", sessionId, triggerTypeName);
 
             // NEU: Erst TriggerHandlerRegistry prüfen (Client-Handler)
             var handlerPid = _triggerHandlerRegistry.GetHandler(triggerTypeName);
             if (handlerPid != null)
             {
-                Console.WriteLine($"[CqrsService] {sessionId} Forwarding trigger to client handler: {handlerPid}");
+                _logger.LogDebug("{Session} forwarding trigger to client handler {Pid}", sessionId, handlerPid);
                 
                 var correlationId = request.CorrelationId ?? Guid.NewGuid().ToString();
                 var tcs = new TaskCompletionSource<ProtoRepo.TriggerResult>(
@@ -411,7 +413,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                 {
-                    Console.WriteLine($"[CqrsService] {sessionId} Trigger forward timed out");
+                    _logger.LogWarning("{Session} trigger forward timed out", sessionId);
                     await SendTriggerAckAsync(responseStream, false, request.CorrelationId,
                         "Client handler timeout", ct);
                 }
@@ -426,7 +428,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             var triggerType = trigger.GetType();
             if (!GeneratedPipelines.TriggerToPipelineId.TryGetValue(triggerType, out var pipelineId))
             {
-                Console.WriteLine($"[CqrsService] {sessionId} No handler for trigger: {triggerType.Name}");
+                _logger.LogWarning("{Session} no handler for trigger {Trigger}", sessionId, triggerType.Name);
                 
                 await SendTriggerAckAsync(responseStream, false,
                     request.CorrelationId,
@@ -443,11 +445,11 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 request.CorrelationId,
                 ack?.Accepted == false ? "Pipeline rejected" : null, ct);
             
-            Console.WriteLine($"[CqrsService] {sessionId} → TriggerAck: {(ack?.Accepted ?? false ? "accepted" : "rejected")}");
+            _logger.LogDebug("{Session} → TriggerAck: {Result}", sessionId, (ack?.Accepted ?? false) ? "accepted" : "rejected");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CqrsService] {sessionId} trigger failed: {ex.Message}");
+            _logger.LogWarning(ex, "{Session} trigger failed", sessionId);
             
             await SendTriggerAckAsync(responseStream, false,
                 request.CorrelationId, ex.Message, ct);
@@ -465,20 +467,20 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         string sessionId,
         CancellationToken ct)
     {
-        Console.WriteLine($"[CqrsService] {sessionId} ← Query");
+        _logger.LogDebug("{Session} ← Query", sessionId);
 
         try
         {
             var query = _mapper.MapToDomain(request.Payload);
             var queryTypeName = query.GetType().Name;
-            
-            Console.WriteLine($"[CqrsService] {sessionId} Query type: {queryTypeName}");
+
+            _logger.LogDebug("{Session} Query type: {Query}", sessionId, queryTypeName);
 
             // NEU: Erst QueryHandlerRegistry prüfen (Client-Handler)
             var handlerPid = _queryHandlerRegistry.GetHandler(queryTypeName);
             if (handlerPid != null)
             {
-                Console.WriteLine($"[CqrsService] {sessionId} Forwarding query to client handler: {handlerPid}");
+                _logger.LogDebug("{Session} forwarding query to client handler {Pid}", sessionId, handlerPid);
 
                 var correlationId = request.CorrelationId ?? Guid.NewGuid().ToString();
                 var tcs = new TaskCompletionSource<ProtoRepo.QueryResponseFromClient>(
@@ -525,11 +527,11 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                     };
                     await responseStream.WriteAsync(serverMessage, ct);
 
-                    Console.WriteLine($"[CqrsService] {sessionId} → QueryResponse (from client handler)");
+                    _logger.LogDebug("{Session} → QueryResponse (from client handler)", sessionId);
                 }
                 catch (OperationCanceledException) when (!ct.IsCancellationRequested)
                 {
-                    Console.WriteLine($"[CqrsService] {sessionId} Query forward timed out");
+                    _logger.LogWarning("{Session} query forward timed out", sessionId);
                     await SendErrorAsync(responseStream, "QUERY_FORWARD_TIMEOUT",
                         "Client handler did not respond in time", request.CorrelationId, ct);
                 }
@@ -547,16 +549,16 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             
             await responseStream.WriteAsync(serverMsg, ct);
             
-            Console.WriteLine($"[CqrsService] {sessionId} → QueryResponse: {response.Data.GetType().Name}");
+            _logger.LogDebug("{Session} → QueryResponse: {Response}", sessionId, response.Data.GetType().Name);
         }
         catch (NotSupportedException ex)
         {
-            Console.WriteLine($"[CqrsService] {sessionId} query not supported: {ex.Message}");
+            _logger.LogWarning("{Session} query not supported: {Message}", sessionId, ex.Message);
             await SendErrorAsync(responseStream, "QUERY_NOT_SUPPORTED", ex.Message, request.CorrelationId, ct);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CqrsService] {sessionId} query failed: {ex.Message}");
+            _logger.LogWarning(ex, "{Session} query failed", sessionId);
             await SendErrorAsync(responseStream, "QUERY_FAILED", ex.Message, request.CorrelationId, ct);
         }
     }
@@ -571,7 +573,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         string sessionId,
         CancellationToken ct)
     {
-        Console.WriteLine($"[CqrsService] {sessionId} ← TransientEvent");
+        _logger.LogDebug("{Session} ← TransientEvent", sessionId);
 
         try
         {
@@ -579,7 +581,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
 
             if (envelope.Payload is not ITransientEvent)
             {
-                Console.WriteLine($"[CqrsService] {sessionId} REJECTED: {envelope.Payload.GetType().Name} is not ITransientEvent");
+                _logger.LogWarning("{Session} rejected: {Payload} is not ITransientEvent", sessionId, envelope.Payload.GetType().Name);
                 await SendErrorAsync(responseStream, "INVALID_TRANSIENT_EVENT",
                     $"{envelope.Payload.GetType().Name} does not implement ITransientEvent",
                     "", ct);
@@ -588,11 +590,11 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
 
             await _publisher.PublishAsync(envelope, ct);
 
-            Console.WriteLine($"[CqrsService] {sessionId} TransientEvent published: {envelope.Payload.GetType().Name}");
+            _logger.LogDebug("{Session} TransientEvent published: {Payload}", sessionId, envelope.Payload.GetType().Name);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CqrsService] {sessionId} TransientEvent failed: {ex.Message}");
+            _logger.LogWarning(ex, "{Session} TransientEvent failed", sessionId);
             await SendErrorAsync(responseStream, "TRANSIENT_EVENT_FAILED", ex.Message, "", ct);
         }
     }
@@ -605,7 +607,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         ProtoRepo.QueryResponseFromClient answer,
         string sessionId)
     {
-        Console.WriteLine($"[CqrsService] {sessionId} ← QueryAnswer, CorrelationId: {answer.CorrelationId}");
+        _logger.LogDebug("{Session} ← QueryAnswer, CorrelationId {CorrelationId}", sessionId, answer.CorrelationId);
 
         if (_pendingQueryForwards.TryGetValue(answer.CorrelationId, out var tcs))
         {
@@ -613,8 +615,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         }
         else
         {
-            Console.WriteLine(
-                $"[CqrsService] {sessionId} WARNING: QueryAnswer for unknown CorrelationId: {answer.CorrelationId}");
+            _logger.LogWarning("{Session} QueryAnswer for unknown CorrelationId {CorrelationId}", sessionId, answer.CorrelationId);
         }
     }
 
@@ -626,7 +627,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         ProtoRepo.TriggerResult result,
         string sessionId)
     {
-        Console.WriteLine($"[CqrsService] {sessionId} ← TriggerResult, CorrelationId: {result.CorrelationId}");
+        _logger.LogDebug("{Session} ← TriggerResult, CorrelationId {CorrelationId}", sessionId, result.CorrelationId);
 
         if (_pendingTriggerForwards.TryGetValue(result.CorrelationId, out var tcs))
         {
@@ -634,8 +635,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         }
         else
         {
-            Console.WriteLine(
-                $"[CqrsService] {sessionId} WARNING: TriggerResult for unknown CorrelationId: {result.CorrelationId}");
+            _logger.LogWarning("{Session} TriggerResult for unknown CorrelationId {CorrelationId}", sessionId, result.CorrelationId);
         }
     }
 
@@ -650,7 +650,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         string sessionId,
         CancellationToken ct)
     {
-        Console.WriteLine($"[CqrsService] {sessionId} ← Subscribe: {request.EventType}");
+        _logger.LogDebug("{Session} ← Subscribe: {EventType}", sessionId, request.EventType);
 
         try
         {
@@ -678,11 +678,11 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             
             await responseStream.WriteAsync(confirmed, ct);
             
-            Console.WriteLine($"[CqrsService] {sessionId} → SubscriptionConfirmed: {request.EventType}");
+            _logger.LogDebug("{Session} → SubscriptionConfirmed: {EventType}", sessionId, request.EventType);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CqrsService] {sessionId} subscribe failed: {ex.Message}");
+            _logger.LogWarning(ex, "{Session} subscribe failed", sessionId);
             
             await SendErrorAsync(
                 responseStream,
@@ -704,7 +704,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         string sessionId,
         CancellationToken ct)
     {
-        Console.WriteLine($"[CqrsService] {sessionId} ← Unsubscribe: {request.EventType}");
+        _logger.LogDebug("{Session} ← Unsubscribe: {EventType}", sessionId, request.EventType);
 
         try
         {
@@ -721,11 +721,11 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             
             await responseStream.WriteAsync(confirmed, ct);
             
-            Console.WriteLine($"[CqrsService] {sessionId} → UnsubscriptionConfirmed: {request.EventType}");
+            _logger.LogDebug("{Session} → UnsubscriptionConfirmed: {EventType}", sessionId, request.EventType);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[CqrsService] {sessionId} unsubscribe failed: {ex.Message}");
+            _logger.LogWarning(ex, "{Session} unsubscribe failed", sessionId);
             
             await SendErrorAsync(
                 responseStream,

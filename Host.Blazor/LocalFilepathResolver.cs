@@ -17,9 +17,14 @@ public class LocalFilePathResolver : IFilePathResolver
     public Task<ResolvedFile> ResolveAsync(
         string path, CancellationToken ct = default)
     {
+        Console.WriteLine($"[Resolver] ← anfrage: '{path}'");
+
         if (!File.Exists(path))
+        {
+            Console.WriteLine($"[Resolver] ✗ File.Exists(false) für '{path}'");
             throw new FileNotFoundException(
                 $"File not found: {path}");
+        }
 
         if (!_contentTypes.TryGetContentType(
                 path, out var contentType))
@@ -32,8 +37,11 @@ public class LocalFilePathResolver : IFilePathResolver
         var escaped = string.Join("/",
             urlPath.Split('/').Select(Uri.EscapeDataString));
 
+        var url = $"/api/files/{escaped}";
+        Console.WriteLine($"[Resolver] ✔ '{path}' → '{url}' ({size} bytes, {contentType})");
+
         return Task.FromResult(new ResolvedFile(
-            $"/api/files/{escaped}",
+            url,
             contentType,
             size));
     }

@@ -24,14 +24,28 @@ public class MartenEventStore : IEventStoreRepository
     private readonly IAggregateHandlerFactory _handlerFactory;
     private readonly ILogger<MartenEventStore> _logger;
 
+    /// <summary>
+    /// Straggler-Karenz für den Poll-Scan (Befund 3): die neuesten Events werden beim Vorrücken der
+    /// High-Water-Mark eine Karenzzeit zurückgehalten. Postgres zieht die globale <c>seq_id</c> beim
+    /// INSERT innerhalb der Transaktion; zwei nebenläufige Commits können in umgekehrter Seq-Reihenfolge
+    /// sichtbar werden (höhere Seq committet zuerst). Rückte die HWM naiv auf <c>max(seq)</c> vor, würde
+    /// eine noch uncommittete niedrigere Seq übersprungen und nie wieder gescannt. Die Karenz hält die
+    /// HWM hinter Events zurück, die jünger als <see cref="_stragglerGrace"/> sind → ihre in-flight
+    /// niedriger-Seq-Geschwister haben Zeit, sichtbar zu werden. Robust gegen permanente Lücken
+    /// (rollback-verbrauchte Seqs): die Karenz ist zeitbasiert, bleibt also nie an einem Loch hängen.
+    /// </summary>
+    private readonly TimeSpan _stragglerGrace;
+
     public MartenEventStore(
         IDocumentStore store,
         IAggregateHandlerFactory handlerFactory,
-        ILogger<MartenEventStore> logger)
+        ILogger<MartenEventStore> logger,
+        TimeSpan? stragglerGrace = null)
     {
         _store = store ?? throw new ArgumentNullException(nameof(store));
         _handlerFactory = handlerFactory ?? throw new ArgumentNullException(nameof(handlerFactory));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
+        _stragglerGrace = stragglerGrace ?? TimeSpan.FromSeconds(3);
     }
 
     /// <summary>
@@ -44,7 +58,10 @@ public class MartenEventStore : IEventStoreRepository
     public async Task AppendEventsAsync(
         Guid aggregateId,
         int expectedVersion,
-        IReadOnlyList<IEvent> events)
+        IReadOnlyList<IEvent> events,
+        string? correlationId = null,
+        string? causationId = null,
+        string? aggregateType = null)
     {
         // Guard: expectedVersion muss >= 0 sein.
         // Der Actor prüft bereits gegen seinen State, aber falls
@@ -59,6 +76,13 @@ public class MartenEventStore : IEventStoreRepository
             return;
 
         await using var session = _store.LightweightSession();
+
+        // ★ Phase 1: Metadaten in DIESELBE Marten-Transaktion, damit sie nach dem
+        //   Log-Read (ReadStreamAsync) verfügbar sind. Setzt die MetadataConfig-Flags
+        //   voraus (CorrelationId/CausationId/Headers enabled — in der StoreOptions-Config).
+        if (correlationId != null) session.CorrelationId = correlationId;
+        if (causationId != null) session.CausationId = causationId;
+        if (!string.IsNullOrEmpty(aggregateType)) session.SetHeader("aggregate_type", aggregateType);
 
         if (expectedVersion == 0)
         {
@@ -141,7 +165,10 @@ public class MartenEventStore : IEventStoreRepository
             // Das .Data-Property enthält das deserialisierte Domain-Event.
             if (@event.Data is IEvent domainEvent)
             {
-                handler.ApplyEvent(domainEvent);
+                // Interne Inbox-/Prozess-Marken: in der Version mitzählen, aber nicht auf den State anwenden
+                // (der Applier kennt sie nicht) — Framework-Naht (Exactly-once-Inbox).
+                if (domainEvent is not IProzessIntern)
+                    handler.ApplyEvent(domainEvent);
                 state.Version++;
             }
             else
@@ -158,5 +185,113 @@ public class MartenEventStore : IEventStoreRepository
             aggregateId, state.Version);
 
         return state;
+    }
+
+    /// <summary>
+    /// Liest die echten Events eines Streams ab <paramref name="fromVersion"/> und
+    /// materialisiert sie als EventEnvelope (Spec 4.5 / 5.2). Das eine tragende
+    /// Leseprimitiv des Pull-Ansatzes.
+    ///
+    /// ★ Phase 1: CorrelationId/CausationId/AggregateType werden jetzt aus den
+    ///   Log-Metadaten rekonstruiert (beim Append gestempelt) — nicht mehr leer.
+    /// </summary>
+    public async Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(
+        Guid streamId, int fromVersion, CancellationToken ct)
+    {
+        await using var session = _store.LightweightSession();
+
+        var raw = await session.Events
+            .QueryAllRawEvents()
+            .Where(e => e.StreamId == streamId && e.Version >= fromVersion)
+            .OrderBy(e => e.Version)
+            .ToListAsync(ct);
+
+        var result = new List<EventEnvelope>(raw.Count);
+        foreach (var e in raw)
+        {
+            if (e.Data is not IEvent domain) continue;
+
+            var aggregateType = e.Headers != null
+                && e.Headers.TryGetValue("aggregate_type", out var at)
+                    ? at?.ToString() ?? string.Empty
+                    : string.Empty;
+
+            result.Add(new EventEnvelope
+            {
+                EventId          = e.Id,
+                AggregateId      = streamId,
+                AggregateVersion = (int)e.Version,
+                CreatedAtUtc     = e.Timestamp,
+                CorrelationId    = e.CorrelationId ?? string.Empty,
+                CausationId      = e.CausationId  ?? string.Empty,
+                AggregateType    = aggregateType,
+                Payload          = domain
+            });
+        }
+        return result;
+    }
+
+    /// <summary>
+    /// Globales Leseprimitiv für den Poll-Backstop (Spec 19.1): scannt die Events
+    /// jenseits der globalen Sequenz und liefert die betroffenen Streams + neue
+    /// High-Water-Mark. Marten führt die globale Sequenz (mt_events.seq_id) nativ.
+    ///
+    /// ★ Befund 3: Die HWM rückt NICHT naiv auf <c>max(seq)</c> vor, sondern nur bis zur höchsten
+    ///   Sequenz, deren Event bereits älter als die Straggler-Karenz (<see cref="_stragglerGrace"/>)
+    ///   ist. Zu junge Events werden zwar GEWECKT (Heilung, niedrige Latenz), schieben die HWM aber
+    ///   noch nicht vor — so bekommen in-flight, niedriger-nummerierte Nachzügler Zeit, sichtbar zu
+    ///   werden, bevor der Cursor sie überholt. Ohne Karenz (Grace = 0) ist das Verhalten identisch
+    ///   zur alten <c>max(seq)</c>-Logik.
+    /// </summary>
+    public async Task<StreamChanges> ReadChangedStreamsAsync(
+        long afterGlobalSequence, CancellationToken ct)
+    {
+        await using var session = _store.LightweightSession();
+
+        var raw = await session.Events
+            .QueryAllRawEvents()
+            .Where(e => e.Sequence > afterGlobalSequence)
+            .OrderBy(e => e.Sequence)
+            .ToListAsync(ct);
+
+        // Alle geänderten Streams wecken (Heilung) — unabhängig von der Karenz.
+        var streams = raw.Select(e => e.StreamId).Distinct().ToList();
+
+        if (raw.Count == 0)
+            return new StreamChanges(streams, afterGlobalSequence);
+
+        // Die HWM nur bis zur höchsten Sequenz vorrücken, deren Event die Karenzzeit überstanden hat.
+        // Die DB-Uhr als Referenz (die Event-Timestamps sind DB-generiert) → kein App/DB-Clock-Skew.
+        var cutoff = await DbNowAsync(session, ct) - _stragglerGrace;
+
+        long highWater = afterGlobalSequence;
+        foreach (var e in raw) // aufsteigend nach Sequenz; Timestamp läuft monoton mit
+        {
+            if (e.Timestamp <= cutoff && e.Sequence > highWater)
+                highWater = e.Sequence;
+        }
+
+        return new StreamChanges(streams, highWater);
+    }
+
+    /// <summary>Die aktuelle DB-Uhr (timestamptz) über die Session-Verbindung — als Referenz für die
+    /// Straggler-Karenz, konsistent mit den DB-generierten Event-Timestamps.</summary>
+    private static async Task<DateTimeOffset> DbNowAsync(IQuerySession session, CancellationToken ct)
+    {
+        var conn = session.Connection;
+        if (conn is null)
+            return DateTimeOffset.UtcNow; // defensiv — sollte nach dem Query offen sein
+        if (conn.State != System.Data.ConnectionState.Open)
+            await conn.OpenAsync(ct);
+
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = "select now()";
+        var value = await cmd.ExecuteScalarAsync(ct);
+        return value switch
+        {
+            DateTimeOffset dto => dto,
+            DateTime dt => new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc)),
+            _ => DateTimeOffset.UtcNow
+        };
     }
 }

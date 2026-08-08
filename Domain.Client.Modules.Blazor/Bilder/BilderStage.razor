@@ -1,0 +1,41 @@
+@inject Store Store
+@inject EffectScope Fx
+@using global::Client.Infrastructure.Abstractions
+@implements IDisposable
+
+@* Aktuelles Paar über den Cursor-Index (stabil + InsertOffset). Ist es noch ein
+   Skeleton, ist rec null → Platzhalter, bis der Chunk eintrifft (OnChanged feuert). *@
+@{ var rec = Store.Cursor.Id.HasValue
+        ? Store.VirtualImagePairs[Store.Cursor.Index + Store.VirtualImagePairs.InsertOffset]
+        : null; }
+
+@if (rec == null)
+{
+    <div style="flex:1;display:flex;align-items:center;justify-content:center">
+        <span style="color:#444">Kein Bildpaar ausgewählt</span>
+    </div>
+}
+else
+{
+    <div style="flex:1;display:flex;gap:4px;padding:4px;min-height:0">
+        <div style="flex:1;display:flex;align-items:center;justify-content:center;background:#111;border-radius:4px;overflow:hidden">
+            @if (rec.Dc0BildSrc != null)
+            { <img src="@rec.Dc0BildSrc" style="max-width:100%;max-height:100%;object-fit:contain" alt="DC0" /> }
+            else { <span style="color:#555;font-size:12px">DC0 — kein Bild</span> }
+        </div>
+        <div style="flex:1;display:flex;align-items:center;justify-content:center;background:#111;border-radius:4px;overflow:hidden">
+            @if (rec.Dc2BildSrc != null)
+            { <img src="@rec.Dc2BildSrc" style="max-width:100%;max-height:100%;object-fit:contain" alt="DC2" /> }
+            else { <span style="color:#555;font-size:12px">DC2 — kein Bild</span> }
+        </div>
+    </div>
+}
+
+@code {
+    protected override void OnInitialized()
+    {
+        Fx.OnChanged(Store, Store.Cursor,            () => InvokeAsync(StateHasChanged));
+        Fx.OnChanged(Store, Store.VirtualImagePairs, () => InvokeAsync(StateHasChanged));
+    }
+    public void Dispose() => Fx.Dispose();
+}

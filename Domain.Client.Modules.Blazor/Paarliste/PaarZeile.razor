@@ -1,0 +1,52 @@
+@namespace Domain.Client.Modules.Blazor.Paarliste
+@using Domain.Client.Modules
+@using Domain.ImagePair
+
+@*  Reine Funktion des Records: liest NUR aus Pair, hält keinen abgeleiteten
+    Zustand. Dadurch schlägt jeder Store-Patch (KI-Klassifikation, Label von einer
+    anderen Maschine, Inspektion) beim nächsten Render automatisch durch.  *@
+
+<div title="@Voll" style="display:flex;align-items:center;gap:6px;height:22px;padding:0 6px;font-family:monospace;font-size:11px;overflow:hidden">
+
+    @* neu / angeschaut *@
+    <span style="@Dot;@(Pair.IstInspiziert ? "background:#4a4a4a" : "background:#5c9eff")"></span>
+
+    @* Titel: Datum + Uhrzeit — nimmt den verfügbaren Platz; voller Text im Tooltip *@
+    <span style="flex:1;min-width:0;color:#ccc;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">
+        @Pair.ProduziertAm.ToString("dd.MM.yyyy HH:mm:ss")
+    </span>
+
+    @* rechts: Bild-Bewertung (Mensch, R/F), dann KI-Einschätzung — immer sichtbar *@
+    <span style="@Dot;@LabelStyle(Pair.PhysischesProduktLabel)"></span>
+    <span style="@Dot;@LabelStyle(Pair.KiBildpaarKlassifikation)"></span>
+</div>
+
+@code {
+    [Parameter, EditorRequired] public ImagePairRecord Pair { get; set; } = null!;
+
+    // Kompletter Text für den Tooltip (Hover) — im schmalen, fixhohen Panel ist das
+    // der virtualisierungs-verträgliche Weg, alles lesbar zu machen.
+    private string Voll =>
+        $"{Pair.ProduziertAm:yyyy-MM-dd HH:mm:ss.fff}  ·  " +
+        $"Bild: {Farbschema.Text(Pair.PhysischesProduktLabel)}  ·  " +
+        $"KI: {Farbschema.Text(Pair.KiBildpaarKlassifikation)}  ·  " +
+        (Pair.IstInspiziert ? "angeschaut" : "neu");
+
+    private const string Dot =
+        "width:9px;height:9px;border-radius:50%;flex:0 0 auto;box-sizing:border-box;display:inline-block";
+
+    // Label vorhanden → gefüllt in Klassifikationsfarbe; noch kein Label → hohler Ring.
+    private static string LabelStyle(Klassifikation? k) => k is null
+        ? "background:transparent;border:1px solid " + Farbschema.KeinLabel
+        : "background:" + Farbschema.Fuer(k);
+
+    // Nur die vom Store gepatchte Zeile bekommt eine neue Record-Referenz und rendert
+    // neu; unveränderte Zeilen (gleiche Referenz) werden übersprungen.
+    private ImagePairRecord? _last;
+    protected override bool ShouldRender()
+    {
+        if (ReferenceEquals(_last, Pair)) return false;
+        _last = Pair;
+        return true;
+    }
+}

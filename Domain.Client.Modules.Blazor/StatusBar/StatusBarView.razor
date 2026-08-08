@@ -1,0 +1,33 @@
+@inject Store Store
+@inject EffectScope Fx
+@using global::Client.Infrastructure.Abstractions
+@implements IDisposable
+
+<div style="display:flex;align-items:center;gap:12px;padding:4px 12px;background:#1a1a1a;border-bottom:1px solid #333;font-size:12px">
+    <span style="color:#888">Modus:</span>
+    <MudChip T="string" Size="Size.Small" Color="@(Store.Modus == ArbeitsModus.Live ? Color.Success : Store.Modus == ArbeitsModus.Tag ? Color.Warning : Color.Info)"
+             Style="font-size:11px" OnClick="() => Fx.Dispatch(new ModusToggleAngefordert())">
+        @Store.Modus
+    </MudChip>
+    @if (Store.Cursor.Id.HasValue)
+    {
+        <span style="color:#666">|</span>
+        <span style="color:#aaa;font-family:monospace;font-size:11px">
+            @* Absolute Position: Anzeige-Index (stabil + InsertOffset) 1-basiert. *@
+            @(Store.Cursor.Index + Store.VirtualImagePairs.InsertOffset + 1) / @Store.VirtualImagePairs.GesamtAnzahl
+        </span>
+    }
+    <div style="flex:1" />
+    <MudIconButton Icon="@Icons.Material.Filled.Settings" Size="Size.Small"
+                   OnClick="() => Fx.Dispatch(new OpenSettingsRequested())" />
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Fx.OnChanged(Store,
+            () => (Store.Cursor.Version, Store.Modus, Store.VirtualImagePairs.Version),
+            () => InvokeAsync(StateHasChanged));
+    }
+    public void Dispose() => Fx.Dispose();
+}

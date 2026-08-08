@@ -30,6 +30,7 @@ public abstract class PipelineActorBase<THandler> : IActor
     private readonly Cluster _cluster;
     private readonly Infrastructure.PubSub.BrokerPublisher? _publisher;
     private readonly ILogger? _logger;
+    private readonly IDeadLetterSink? _deadLetters;   // ★ §5: tote Commands beobachtbar machen (optional)
 
     private Infrastructure.PubSub.BrokerSubscription? _subscription;
 
@@ -53,12 +54,14 @@ public abstract class PipelineActorBase<THandler> : IActor
         THandler logic,
         Cluster cluster,
         Infrastructure.PubSub.BrokerPublisher? publisher = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        IDeadLetterSink? deadLetters = null)
     {
         _logic = logic ?? throw new ArgumentNullException(nameof(logic));
         _cluster = cluster ?? throw new ArgumentNullException(nameof(cluster));
         _publisher = publisher;
         _logger = logger;
+        _deadLetters = deadLetters;
     }
 
     public async Task ReceiveAsync(IContext context)
@@ -93,7 +96,6 @@ public abstract class PipelineActorBase<THandler> : IActor
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Pipeline:{_logic.PipelineId}] ERROR: {ex.Message}");
             _logger?.LogError(ex, "[Pipeline:{PipelineId}] Unhandled error", _logic.PipelineId);
 
             // Trigger erwartet eine Antwort — sonst Retry
@@ -110,7 +112,7 @@ public abstract class PipelineActorBase<THandler> : IActor
 
     private async Task OnStartedAsync(IContext context)
     {
-        Console.WriteLine($"[Pipeline:{_logic.PipelineId}] Starting...");
+        _logger?.LogInformation("[Pipeline:{PipelineId}] Starting", _logic.PipelineId);
 
         // PubSub-Subscriptions aufbauen (Kanal 2)
         var eventTypes = GetSubscribedEventTypes();
@@ -124,19 +126,19 @@ public abstract class PipelineActorBase<THandler> : IActor
             foreach (var type in eventTypes)
             {
                 await _subscription.SubscribeAsync(type);
-                Console.WriteLine($"[Pipeline:{_logic.PipelineId}] Subscribed to {type.Name}");
+                _logger?.LogDebug("[Pipeline:{PipelineId}] Subscribed to {EventType}", _logic.PipelineId, type.Name);
             }
         }
 
         // Init-Context mit ScheduleSelf für periodische Ticks
         var ctx = CreatePipelineContext(context);
         await _logic.OnInitializeAsync(ctx);
-        Console.WriteLine($"[Pipeline:{_logic.PipelineId}] Ready");
+        _logger?.LogInformation("[Pipeline:{PipelineId}] Ready", _logic.PipelineId);
     }
 
     private async Task OnStoppingAsync()
     {
-        Console.WriteLine($"[Pipeline:{_logic.PipelineId}] Stopping...");
+        _logger?.LogInformation("[Pipeline:{PipelineId}] Stopping", _logic.PipelineId);
         await _logic.OnShutdownAsync();
 
         if (_subscription != null)
@@ -144,7 +146,7 @@ public abstract class PipelineActorBase<THandler> : IActor
             await _subscription.UnsubscribeAllAsync();
         }
 
-        Console.WriteLine($"[Pipeline:{_logic.PipelineId}] Stopped");
+        _logger?.LogInformation("[Pipeline:{PipelineId}] Stopped", _logic.PipelineId);
     }
 
     // ═══════════════════════════════════════════════════════
@@ -153,7 +155,7 @@ public abstract class PipelineActorBase<THandler> : IActor
 
     private async Task OnTriggerAsync(IPipelineTrigger trigger, IContext context)
     {
-        Console.WriteLine($"[Pipeline:{_logic.PipelineId}] Trigger: {trigger.GetType().Name}");
+        _logger?.LogDebug("[Pipeline:{PipelineId}] Trigger: {Trigger}", _logic.PipelineId, trigger.GetType().Name);
 
         var ctx = CreatePipelineContext(context, correlationId: Guid.NewGuid().ToString());
 
@@ -167,7 +169,7 @@ public abstract class PipelineActorBase<THandler> : IActor
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Pipeline:{_logic.PipelineId}] Trigger failed: {ex.Message}");
+            _logger?.LogWarning(ex, "[Pipeline:{PipelineId}] Trigger failed", _logic.PipelineId);
             _logger?.LogError(ex, "[Pipeline:{PipelineId}] Trigger {TriggerType} failed",
                 _logic.PipelineId, trigger.GetType().Name);
             context.Respond(new PipelineAck(Accepted: false));
@@ -182,7 +184,7 @@ public abstract class PipelineActorBase<THandler> : IActor
     {
         try
         {
-            Console.WriteLine($"[Pipeline:{_logic.PipelineId}] Event: {envelope.Payload.GetType().Name}");
+            _logger?.LogDebug("[Pipeline:{PipelineId}] Event: {Event}", _logic.PipelineId, envelope.Payload.GetType().Name);
 
             // Passives Version-Tracking (Stufe 2)
             if (envelope is EventEnvelope eventEnvelope && eventEnvelope.AggregateVersion > 0)
@@ -205,7 +207,7 @@ public abstract class PipelineActorBase<THandler> : IActor
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Pipeline:{_logic.PipelineId}] Event handling failed: {ex.Message}");
+            _logger?.LogWarning(ex, "[Pipeline:{PipelineId}] Event handling failed", _logic.PipelineId);
             _logger?.LogError(ex, "[Pipeline:{PipelineId}] Event {EventType} failed",
                 _logic.PipelineId, envelope.Payload.GetType().Name);
         }
@@ -224,6 +226,7 @@ public abstract class PipelineActorBase<THandler> : IActor
         {
             _logger?.LogError("[Pipeline:{PipelineId}] No AggregateType mapping for {CommandType}",
                 _logic.PipelineId, command.GetType().Name);
+            await DeadLetterAsync(command, null, correlationId, "Kein AggregateType-Mapping (Command nicht routbar)", 0);
             return;
         }
 
@@ -258,27 +261,53 @@ public abstract class PipelineActorBase<THandler> : IActor
             {
                 // Stufe 1: Version aus CommandResult cachen
                 TrackVersion(aggregateId, result.NewVersion);
-                Console.WriteLine($"[Pipeline:{_logic.PipelineId}] ✔ {command.GetType().Name} → v{result.NewVersion}");
+                _logger?.LogDebug("[Pipeline:{PipelineId}] ✔ {Command} → v{Version}", _logic.PipelineId, command.GetType().Name, result.NewVersion);
                 return;
             }
 
             // Concurrency-Conflict: Version korrigieren und Retry
             if (result.NewVersion > 0)
             {
-                Console.WriteLine($"[Pipeline:{_logic.PipelineId}] Conflict: v{version} → v{result.NewVersion}, retrying...");
+                _logger?.LogDebug("[Pipeline:{PipelineId}] Conflict: v{Version} → v{NewVersion}, retrying", _logic.PipelineId, version, result.NewVersion);
                 TrackVersion(aggregateId, result.NewVersion);
                 version = result.NewVersion;
                 continue;
             }
 
-            // Anderer Fehler (Rejection, technisch) — kein Retry
+            // Anderer Fehler — kein Retry. Domänen-Ablehnung (RejectionEvent gesetzt) ist ein GÜLTIGES
+            // Geschäftsergebnis → nur loggen. Ein TECHNISCHER Fehler (kein RejectionEvent) ist ein echter
+            // Verlust → DLQ (§5).
             _logger?.LogWarning("[Pipeline:{PipelineId}] {CommandType} rejected: {Error}",
                 _logic.PipelineId, command.GetType().Name, result.ErrorMessage);
+            if (result.RejectionEvent is null)
+                await DeadLetterAsync(command, aggregateType, correlationId,
+                    $"Technischer Fehler: {result.ErrorMessage}", attempt + 1);
             return;
         }
 
+        // ★ §5: Retries erschöpft (Timeout/Conflict-Schleife) → beobachtbarer DLQ-Eintrag statt stillem Drop.
         _logger?.LogError("[Pipeline:{PipelineId}] {CommandType} failed after {MaxRetries} attempts",
             _logic.PipelineId, command.GetType().Name, MaxRetries);
+        await DeadLetterAsync(command, aggregateType, correlationId,
+            $"Nach {MaxRetries} Versuchen kein Erfolg (Timeout/Conflict)", MaxRetries);
+    }
+
+    /// <summary>§5: Schreibt einen toten Command in die DLQ (best-effort, no-op wenn keine Senke registriert).</summary>
+    private Task DeadLetterAsync(ICommand command, string? aggregateType, string? correlationId, string grund, int versuche)
+    {
+        if (_deadLetters is null) return Task.CompletedTask;
+        return _deadLetters.WriteAsync(new DeadLetter
+        {
+            Id = Guid.NewGuid(),
+            Quelle = _logic.PipelineId,
+            CommandType = command.GetType().Name,
+            AggregateId = command.AggregateId,
+            AggregateType = aggregateType,
+            CorrelationId = correlationId,
+            Grund = grund,
+            Versuche = versuche,
+            ErfasstUtc = DateTimeOffset.UtcNow
+        });
     }
 
     // ═══════════════════════════════════════════════════════
@@ -379,7 +408,7 @@ public abstract class PipelineActorBase<THandler> : IActor
     /// </summary>
     private async Task OnSelfMessageAsync(IPipelineSelfMessage selfMsg, IContext context)
     {
-        Console.WriteLine($"[Pipeline:{_logic.PipelineId}] Self: {selfMsg.GetType().Name}");
+        _logger?.LogDebug("[Pipeline:{PipelineId}] Self: {Message}", _logic.PipelineId, selfMsg.GetType().Name);
 
         var ctx = CreatePipelineContext(context, correlationId: Guid.NewGuid().ToString());
 
@@ -392,7 +421,7 @@ public abstract class PipelineActorBase<THandler> : IActor
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[Pipeline:{_logic.PipelineId}] Self-message failed: {ex.Message}");
+            _logger?.LogWarning(ex, "[Pipeline:{PipelineId}] Self-message failed", _logic.PipelineId);
             _logger?.LogError(ex, "[Pipeline:{PipelineId}] Self {SelfType} failed",
                 _logic.PipelineId, selfMsg.GetType().Name);
         }
@@ -426,8 +455,7 @@ public abstract class PipelineActorBase<THandler> : IActor
 
         if (ack?.Accepted == true)
         {
-            Console.WriteLine(
-                $"[Pipeline:{_logic.PipelineId}] ✔ Trigger {triggerType.Name} → {targetPipelineId}");
+            _logger?.LogDebug("[Pipeline:{PipelineId}] ✔ Trigger {TriggerType} → {Target}", _logic.PipelineId, triggerType.Name, targetPipelineId);
         }
         else
         {
@@ -464,8 +492,7 @@ public abstract class PipelineActorBase<THandler> : IActor
         };
 
         await _publisher.PublishAsync(envelope);
-        Console.WriteLine(
-            $"[Pipeline:{_logic.PipelineId}] ✔ Broadcast {evt.GetType().Name}");
+        _logger?.LogDebug("[Pipeline:{PipelineId}] ✔ Broadcast {Event}", _logic.PipelineId, evt.GetType().Name);
     }
 
     // ═══════════════════════════════════════════════════════

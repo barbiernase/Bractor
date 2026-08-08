@@ -14,6 +14,10 @@
 //   IAsyncEnumerable<T> Handle(TEvent, MessageContext)
 //     → Handler (async): DispatchAsync(object, MessageContext, Func<object, Task>)
 //       + SubscribedTypes + ProducedTypes
+//
+// WICHTIG: partial classes erzeugen mehrere ClassDeclarationSyntax-Nodes
+// für dasselbe INamedTypeSymbol. .Collect() + GroupBy dedupliziert,
+// damit AddSource nur einmal pro Klasse aufgerufen wird.
 // ═══════════════════════════════════════════════════════════════════
 
 using System.Collections.Generic;
@@ -37,8 +41,21 @@ public class HandleMethodGenerator : IIncrementalGenerator
                 transform: static (ctx, _) => AnalyzeClass(ctx))
             .Where(static m => m is not null);
 
-        context.RegisterSourceOutput(classProvider,
-            static (spc, model) => Execute(spc, model!));
+        // ★ FIX: Collect + deduplicate statt per-Node emit.
+        // partial classes (z.B. Store mit 6 Dateien) erzeugen mehrere Syntax-Nodes
+        // für dasselbe Symbol. Ohne Collect versucht Execute mehrfach
+        // "Store.Dispatch.g.cs" zu emittieren → hintName-Crash.
+        context.RegisterSourceOutput(classProvider.Collect(),
+            static (spc, models) =>
+            {
+                foreach (var model in models
+                    .Where(m => m is not null)
+                    .GroupBy(m => m!.ClassNamespace + "." + m!.ClassName)
+                    .Select(g => g.First()!))
+                {
+                    Execute(spc, model);
+                }
+            });
     }
 
     private static HandleClassModel? AnalyzeClass(GeneratorSyntaxContext context)

@@ -1,0 +1,17 @@
+@* Headless — löst Statistik-Queries bei relevanten Events aus *@
+@inject EffectScope Fx
+@implements IDisposable
+@using Domain.ImagePair
+@using Domain.Projections
+@using global::Client.Infrastructure.Abstractions
+
+@code {
+    protected override void OnInitialized()
+    {
+        Fx.On<ImagePairErstellt>(_ => Fx.Dispatch(new GetImagePairStatistik()));
+        Fx.On<PhysischesProduktGelabelt>(_ => Fx.Dispatch(new GetImagePairStatistik()));
+        Fx.On<BildPaarGelabelt>(_ => Fx.Dispatch(new GetImagePairStatistik()));
+        Fx.On<EinzelBildDurchKiKlassifiziert>(_ => Fx.Dispatch(new GetImagePairStatistik()));
+    }
+    public void Dispose() => Fx.Dispose();
+}

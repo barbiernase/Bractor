@@ -1,0 +1,21 @@
+@* Headless — Fehler-Events → Snackbar *@
+@inject EffectScope Fx
+@inject ISnackbar Snackbar
+@implements IDisposable
+@using Abstractions
+@using Domain.ImagePair
+@using global::Client.Infrastructure.Abstractions
+
+@code {
+    protected override void OnInitialized()
+    {
+        Fx.On<BildNichtVerfuegbar>(e      => Show(e.ToString()));
+        Fx.On<PaarNichtKomplett>(e         => Show(e.ToString()));
+        Fx.On<ImagePairNichtGefunden>(e    => Show(e.ToString()));
+        Fx.On<ImagePairEingabeUngueltig>(e => Show($"{e.Feld}: {e.Grund}"));
+        Fx.On<CommandFailed>(e            => ShowError(e.Reason));
+    }
+    private void Show(string text) => InvokeAsync(() => Snackbar.Add(text, Severity.Warning));
+    private void ShowError(string text) => InvokeAsync(() => Snackbar.Add(text, Severity.Error));
+    public void Dispose() => Fx.Dispose();
+}

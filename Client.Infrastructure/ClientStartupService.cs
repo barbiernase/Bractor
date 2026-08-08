@@ -2,28 +2,45 @@ using Client.Infrastructure.Abstractions;
 using Client.Infrastructure.Bus;
 using Client.Infrastructure.Connection;
 using Client.Infrastructure.Versioning;
+using Microsoft.Extensions.DependencyInjection;
 
 namespace Client.Infrastructure;
 
 /// <summary>
-/// Orchestriert den Client-Startup und -Shutdown in korrekter Reihenfolge.
+/// Bootstrap-Phasen des Clients. Die Shell gated auf Ready.
+/// </summary>
+public enum BootstrapState
+{
+    /// <summary>Verbindung wird aufgebaut.</summary>
+    Connecting,
+    /// <summary>Verbunden; wartet auf die Start-Daten der HydrationStores.</summary>
+    Hydrating,
+    /// <summary>Alle HydrationStores gefüllt — Module dürfen mounten.</summary>
+    Ready,
+    /// <summary>Verbindung oder Hydration fehlgeschlagen.</summary>
+    Failed
+}
+
+/// <summary>
+/// Orchestriert Client-Startup/-Shutdown und den Bootstrap-Lifecycle.
 ///
-/// Wird vom CircuitHandler (Blazor) oder Application-Startup (Desktop) aufgerufen.
-/// Nimmt alle Module per DI und aktiviert sie in der richtigen Reihenfolge:
+/// Der Bootstrap koppelt die Daten-Timeline an die View-Timeline: die Shell
+/// mountet die Module erst, wenn State == Ready — und Ready bedeutet, dass ALLE
+/// als IHydrationStore markierten Stores ihre Start-Daten erhalten haben. Damit
+/// ist das "leere Liste beim Start"-Rennen konstruktiv ausgeschlossen: die View
+/// startet nie, bevor die Daten da sind.
 ///
-///   StartAsync:
-///     1. SubscribeAll    — Stores und Handler auf dem Bus registrieren
-///     2. AttachAll       — Stores an Bus hängen (DispatchCompleted-Registrierung)
-///     3. RegisterQueries — Query→Response-Mappings auf der QueryBridge
-///     4. Activate        — ConnectionModule, VersioningModule, FileBridge
-///     5. ConnectAsync    — gRPC-Verbindung herstellen
+/// Ablauf StartAsync:
+///   1. SubscribeAll    — Stores/Handler auf dem Bus (AttachToBus je Store)
+///   2. RegisterQueries — Query→Response-Mappings
+///   3. Activate        — ConnectionModule, VersioningModule, FileBridge
+///   4. State=Connecting, ConnectAsync (publiziert ConnectionEstablished →
+///      RefreshHandler dispatchen die Start-Queries)
+///   5. State=Hydrating, warten bis alle HydrationStores.IsHydrated (mit Timeout)
+///   6. State=Ready
 ///
-///   StopAsync:
-///     1. UnsubscribeAll  — Stores vom Bus trennen (kein Flush-Leak)
-///     2. Disconnect      — gRPC trennen
-///
-/// Die konkreten Typen (Commands, Events, Queries, Stores) kommen als Delegates
-/// aus dem generierten GeneratedWiring — kein Domain-Import nötig.
+/// Die konkreten Typen kommen als Delegates/Listen aus dem GeneratedWiring —
+/// kein Domain-Import nötig.
 /// </summary>
 public class ClientStartupService
 {
@@ -50,63 +67,152 @@ public class ClientStartupService
         _serviceProvider = serviceProvider;
     }
 
-    /// <summary>
-    /// Startet alle Client-Module in korrekter Reihenfolge.
-    ///
-    /// subscribeAll, attachAll, unsubscribeAll und registerQueries kommen aus
-    /// GeneratedWiring — statische Methoden ohne Reflection.
-    ///
-    /// attachAll ist separat von subscribeAll damit die Subscription-Reihenfolge
-    /// (Stores vor Handlern) und die Bus-Attachment-Reihenfolge unabhängig bleiben.
-    /// In der Praxis erzeugt der Generator beides in SubscribeAll — der Parameter
-    /// wird übergeben damit ClientStartupService keine Domain-Typen kennen muss.
-    /// </summary>
+    // ═══════════════════════════════════════════════════
+    // BOOTSTRAP-STATE — von der Shell beobachtet
+    // ═══════════════════════════════════════════════════
+
+    private BootstrapState _state = BootstrapState.Connecting;
+
+    /// <summary>Aktuelle Bootstrap-Phase.</summary>
+    public BootstrapState State => _state;
+
+    /// <summary>Feuert bei jedem State-Wechsel (Shell → StateHasChanged).</summary>
+    public event Action? StateChanged;
+
+    /// <summary>Maximale Wartezeit auf Hydration, bevor trotzdem Ready gesetzt wird.</summary>
+    public TimeSpan HydrationTimeout { get; set; } = TimeSpan.FromSeconds(15);
+
+    private void SetState(BootstrapState next)
+    {
+        if (_state == next) return;
+        _state = next;
+        StateChanged?.Invoke();
+    }
+
+    // ═══════════════════════════════════════════════════
+    // START
+    // ═══════════════════════════════════════════════════
+
     public async Task StartAsync(
         Action<IServiceProvider, IBus> subscribeAll,
         Action<QueryBridge, ClientBus> registerQueries,
         IReadOnlyList<Type> serverEventTypes,
         IReadOnlyList<Type> commandTypes,
         string serverAddress,
+        IReadOnlyList<Type> hydrationStores,
         IReadOnlyDictionary<Type, string>? commandAggregateTypes = null,
         Action<IServiceProvider>? unsubscribeAll = null,
         CancellationToken ct = default)
     {
         _unsubscribeAll = unsubscribeAll;
+        _hydrationStoreTypes = hydrationStores;
 
-        // 1. Stores + Handler subscriben (Reihenfolge: Stores vor Handlern)
-        //    AttachToBus wird innerhalb von subscribeAll für jeden Store aufgerufen
+        // 1. Stores + Handler subscriben (Stores vor Handlern; AttachToBus je Store)
         subscribeAll(_serviceProvider, _bus);
 
         // 2. Query→Response-Mappings registrieren
         registerQueries(_queryBridge, _bus);
 
-        // 3. Module aktivieren (subscriben auf dem Bus)
+        // 3. Module aktivieren
         _connectionModule.Activate(_bus, commandTypes, commandAggregateTypes);
         _versioningModule.Activate(_bus, serverEventTypes);
         _fileBridge.Activate(_bus);
 
-        // 4. gRPC-Verbindung herstellen
-        var eventTypeNames = serverEventTypes
-            .Select(t => t.Name)
+        // 4. Verbinden. Bei ConnectionEstablished dispatchen die RefreshHandler
+        //    die Start-Queries (SucheImagePairs, GetProduktionsTage, …).
+        SetState(BootstrapState.Connecting);
+        var eventTypeNames = serverEventTypes.Select(t => t.Name).ToList();
+
+        try
+        {
+            await _connectionModule.ConnectAsync(serverAddress, eventTypeNames, ct);
+        }
+        catch
+        {
+            SetState(BootstrapState.Failed);
+            throw;
+        }
+
+        // 5. Auf Hydration warten: alle markierten Stores müssen ihre
+        //    Start-Daten erhalten haben (IsHydrated). Timeout-geschützt.
+        SetState(BootstrapState.Hydrating);
+        await AwaitHydrationAsync(hydrationStores, ct);
+
+        // 6. Fertig — Shell mountet jetzt die Module.
+        SetState(BootstrapState.Ready);
+    }
+
+    /// <summary>
+    /// Wartet, bis jeder HydrationStore IsHydrated meldet. Nutzt die
+    /// HydrationChanged-Events der Stores plus einen initialen Check (falls die
+    /// Daten schon vor dem Subscribe ankamen). Nach HydrationTimeout wird
+    /// trotzdem fortgesetzt, damit die App nie ewig im Ladezustand hängt.
+    /// </summary>
+    private async Task AwaitHydrationAsync(
+        IReadOnlyList<Type> hydrationStores, CancellationToken ct)
+    {
+        if (hydrationStores.Count == 0) return;
+
+        var stores = hydrationStores
+            .Select(t => _serviceProvider.GetService(t))
+            .OfType<IHydrationStore>()
             .ToList();
 
-        await _connectionModule.ConnectAsync(serverAddress, eventTypeNames, ct);
+        if (stores.Count == 0) return;
+
+        var tcs = new TaskCompletionSource<bool>(
+            TaskCreationOptions.RunContinuationsAsynchronously);
+
+        void Check()
+        {
+            if (stores.All(s => s.IsHydrated))
+                tcs.TrySetResult(true);
+        }
+
+        // Auf jede Store-Hydration hören, dann einmal initial prüfen (Daten
+        // könnten schon vor dem Subscribe eingetroffen sein).
+        foreach (var s in stores)
+            s.HydrationChanged += Check;
+
+        try
+        {
+            Check();
+
+            using var timeoutCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            timeoutCts.CancelAfter(HydrationTimeout);
+
+            using (timeoutCts.Token.Register(() => tcs.TrySetResult(false)))
+            {
+                await tcs.Task;
+            }
+        }
+        finally
+        {
+            foreach (var s in stores)
+                s.HydrationChanged -= Check;
+        }
     }
 
     // Gespeichert beim Start, genutzt beim Stop
     private Action<IServiceProvider>? _unsubscribeAll;
 
+    // ═══════════════════════════════════════════════════
+    // STOP
+    // ═══════════════════════════════════════════════════
+
     /// <summary>
-    /// Fährt alle Module herunter.
-    ///
-    /// Ruft zuerst UnsubscribeAll auf — trennt alle Stores vom Bus
-    /// damit kein Flush mehr nach dem Shutdown feuert.
-    /// Danach gRPC trennen.
-    ///
-    /// Wird vom CircuitHandler bei OnCircuitClosedAsync aufgerufen.
+    /// Fährt alle Module herunter und setzt die Hydration der Stores zurück,
+    /// damit bei einem erneuten StartAsync (Reconnect) wieder korrekt auf die
+    /// frischen Start-Daten gewartet wird statt veraltete anzuzeigen.
     /// </summary>
     public async Task StopAsync()
     {
+        // Hydration zurücksetzen, solange die Stores noch am Bus/DI hängen.
+        // (Idempotent; ResetHydration ist billig.)
+        ResetHydrationStores();
+
+        SetState(BootstrapState.Connecting);
+
         // Stores vom Bus trennen — kein Flush-Leak nach Circuit-Close
         _unsubscribeAll?.Invoke(_serviceProvider);
 
@@ -114,5 +220,15 @@ public class ClientStartupService
         await _connectionModule.DisposeAsync();
         await _fileBridge.DisposeAsync();
         _versioningModule.Deactivate();
+    }
+
+    private IReadOnlyList<Type>? _hydrationStoreTypes;
+
+    private void ResetHydrationStores()
+    {
+        if (_hydrationStoreTypes == null) return;
+        foreach (var t in _hydrationStoreTypes)
+            if (_serviceProvider.GetService(t) is IHydrationStore s)
+                s.ResetHydration();
     }
 }

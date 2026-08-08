@@ -25,48 +25,6 @@ public static class DomainServiceExtensions
         Console.WriteLine("[Domain] Registriere Projection-Services...");
 
         // ═══════════════════════════════════════════════════════
-        // Lagerbestand
-        // ═══════════════════════════════════════════════════════
-
-        services.AddSingleton<LagerbestandStoreInMemory>();
-        services.AddSingleton<ILagerbestandWriteStore>(
-            sp => sp.GetRequiredService<LagerbestandStoreInMemory>());
-        services.AddSingleton<ILagerbestandReadStore>(
-            sp => sp.GetRequiredService<LagerbestandStoreInMemory>());
-        Console.WriteLine("  + ILagerbestandWriteStore / ILagerbestandReadStore (InMemory)");
-
-        services.AddSingleton<LagerbestandReader>();
-        Console.WriteLine("  + LagerbestandReader");
-
-        // ═══════════════════════════════════════════════════════
-        // AuditLog
-        // ═══════════════════════════════════════════════════════
-
-        services.AddSingleton<InMemoryAuditLogStore>();
-        services.AddSingleton<IAuditLogWriteStore>(
-            sp => sp.GetRequiredService<InMemoryAuditLogStore>());
-        services.AddSingleton<IAuditLogReadStore>(
-            sp => sp.GetRequiredService<InMemoryAuditLogStore>());
-        Console.WriteLine("  + IAuditLogWriteStore / IAuditLogReadStore (InMemory)");
-
-        services.AddSingleton<AuditLogReader>();
-        Console.WriteLine("  + AuditLogReader");
-
-        // ═══════════════════════════════════════════════════════
-        // Todo
-        // ═══════════════════════════════════════════════════════
-
-        services.AddSingleton<TodoStoreInMemory>();
-        services.AddSingleton<ITodoWriteStore>(
-            sp => sp.GetRequiredService<TodoStoreInMemory>());
-        services.AddSingleton<ITodoReadStore>(
-            sp => sp.GetRequiredService<TodoStoreInMemory>());
-        Console.WriteLine("  + ITodoWriteStore / ITodoReadStore (InMemory)");
-
-        services.AddSingleton<TodoReader>();
-        Console.WriteLine("  + TodoReader");
-
-        // ═══════════════════════════════════════════════════════
         // ImagePair — PostgreSQL (Marten Document Store)
         //
         // Nutzt dieselbe IDocumentStore-Instanz wie der EventStore,
@@ -87,17 +45,24 @@ public static class DomainServiceExtensions
                 .UseOptimisticConcurrency(false);
         });
 
+        // Read-Seite: unverändert Singleton Postgres (eigene Query-Sessions).
         services.AddSingleton<ImagePairStorePostgres>(provider =>
         {
             var store = provider.GetRequiredService<IDocumentStore>();
             var logger = provider.GetRequiredService<ILogger<ImagePairStorePostgres>>();
             return new ImagePairStorePostgres(store, logger);
         });
-        services.AddSingleton<IImagePairWriteStore>(
-            sp => sp.GetRequiredService<ImagePairStorePostgres>());
         services.AddSingleton<IImagePairReadStore>(
             sp => sp.GetRequiredService<ImagePairStorePostgres>());
-        Console.WriteLine("  + IImagePairWriteStore / IImagePairReadStore (PostgreSQL/Marten)");
+        Console.WriteLine("  + IImagePairReadStore (PostgreSQL/Marten, Singleton)");
+
+        // Write-Seite: Pull-Pfad Co-Commit-Store, TRANSIENT (frisch pro Stream-Actor → isolierter Puffer).
+        // Zugleich IProjectionTracker (Effekt + Marke in EINEM SaveChanges → exactly-once).
+        services.AddTransient<ImagePairStore>(provider =>
+            new ImagePairStore(provider.GetRequiredService<IDocumentStore>()));
+        services.AddTransient<IImagePairWriteStore>(
+            sp => sp.GetRequiredService<ImagePairStore>());
+        Console.WriteLine("  + IImagePairWriteStore (Co-Commit, Transient)");
         Console.WriteLine("    Schema: rm");
 
         services.AddSingleton<ImagePairReader>();
@@ -110,17 +75,15 @@ public static class DomainServiceExtensions
         // pro ImagePair als append-only Liste. Selbes Schema "rm".
         // ═══════════════════════════════════════════════════════
 
-        services.AddSingleton<ImagePairHistorieStorePostgres>(provider =>
-        {
-            var store = provider.GetRequiredService<IDocumentStore>();
-            var logger = provider.GetRequiredService<ILogger<ImagePairHistorieStorePostgres>>();
-            return new ImagePairHistorieStorePostgres(store, logger);
-        });
-        services.AddSingleton<IImagePairHistorieWriteStore>(
-            sp => sp.GetRequiredService<ImagePairHistorieStorePostgres>());
-        services.AddSingleton<IImagePairHistorieReadStore>(
-            sp => sp.GetRequiredService<ImagePairHistorieStorePostgres>());
-        Console.WriteLine("  + IImagePairHistorieWriteStore / IImagePairHistorieReadStore (PostgreSQL/Marten)");
+        // Pull-Pfad: Co-Commit-Store, TRANSIENT (frisch pro Stream-Actor → isolierter Puffer).
+        // Er ist zugleich IProjectionTracker (Effekt + Marke in EINEM SaveChanges → exactly-once).
+        services.AddTransient<ImagePairHistorieStore>(provider =>
+            new ImagePairHistorieStore(provider.GetRequiredService<IDocumentStore>()));
+        services.AddTransient<IImagePairHistorieWriteStore>(
+            sp => sp.GetRequiredService<ImagePairHistorieStore>());
+        services.AddTransient<IImagePairHistorieReadStore>(
+            sp => sp.GetRequiredService<ImagePairHistorieStore>());
+        Console.WriteLine("  + IImagePairHistorieWriteStore / IImagePairHistorieReadStore (Co-Commit, Transient)");
 
         services.AddSingleton<ImagePairHistorieReader>();
         Console.WriteLine("  + ImagePairHistorieReader");
@@ -128,6 +91,12 @@ public static class DomainServiceExtensions
         // ═══════════════════════════════════════════════════════
         // ProjectionQueryService (generiert)
         // ═══════════════════════════════════════════════════════
+
+        // Projektions-Logik-Instanzen: der ProjectionQueryService braucht sie für ihre SubscriberId
+        // (Query → SubscriberId-Mapping). Früher registriert vom (mit B1 entfernten) Push-Generator;
+        // hier domänenseitig, wo auch Reader/Stores/QueryService registriert sind.
+        services.AddSingleton<ImagePairProjection>();
+        services.AddSingleton<ImagePairHistorieProjection>();
 
         services.AddSingleton<ProjectionQueryService>();
         Console.WriteLine("  + ProjectionQueryService (generiert)");

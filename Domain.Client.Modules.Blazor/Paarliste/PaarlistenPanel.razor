@@ -1,0 +1,36 @@
+@inject Store Store
+@inject EffectScope Fx
+@using Domain.Client.Modules
+@using Domain.Client.Modules.Blazor.Shared
+@using global::Client.Infrastructure.Abstractions
+@implements IDisposable
+
+@*
+    Reine Trefferliste. Die Filter-/Suchsteuerung ist ins rechte Such-Panel
+    gewandert (SucheGeaendert → eine Quelle der Wahrheit). Dieses Panel liest
+    nur noch Fenster + Cursor über die VirtualList.
+*@
+
+<div style="display:flex;flex-direction:column;height:100%;font-size:12px">
+    <div style="flex:1;min-height:0">
+        <VirtualList TItem="ImagePairRecord" TKey="Guid"
+                     Store="Store" Window="Store.VirtualImagePairs" Cursor="Store.Cursor"
+                     RowHeight="22" BufferPages="2"
+                     OnActivate="rec => Fx.Dispatch(new ImagePairAusgewaehlt(rec.Id))">
+            <Row Context="rec">
+                <PaarZeile Pair="rec" />
+            </Row>
+            <Skeleton>
+                <div style="padding:2px 6px;font-size:11px;font-family:monospace;line-height:18px;color:#333">
+                    ········
+                </div>
+            </Skeleton>
+        </VirtualList>
+    </div>
+</div>
+
+@code {
+    // Keine OnInitialized-Subscriptions: die VirtualList hängt sich selbst
+    // selektiv an Window + Cursor.
+    public void Dispose() => Fx.Dispose();
+}

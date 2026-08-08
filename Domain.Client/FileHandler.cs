@@ -33,20 +33,7 @@ public partial class FileHandler
     // ═══════════════════════════════════════════════════
 
     IEnumerable<object> Handle(ImagePairAusgewaehlt evt, MessageContext ctx)
-    {
-        // Preload: aktuelles Paar + nächste 2 Einträge (3 × 2 = bis zu 6 Bilder)
-        var startIndex = _nav.SelectedIndex;
-
-        for (var offset = 0; offset <= 2; offset++)
-        {
-            var i = startIndex + offset;
-            if (i >= _listStore.Count) break;
-
-            var entry = _listStore[i];
-            foreach (var loadFile in RequestFiles(entry))
-                yield return loadFile;
-        }
-    }
+        => PreloadAbAuswahl();
 
     // ═══════════════════════════════════════════════════
     // HANDLE — BildVerfuegbar → sofort laden wenn aktuelles Paar
@@ -63,17 +50,45 @@ public partial class FileHandler
     }
 
     // ═══════════════════════════════════════════════════
-    // HANDLE — Neue Seite → Reset
+    // HANDLE — Neue Seite / Arbeitsliste → Reset + Preload
+    //
+    // NavigationStore.SetzeAuswahl() setzt AktuelleId/SelectedIndex,
+    // published aber kein ImagePairAusgewaehlt. Da Handler NACH Stores
+    // laufen, ist die Auswahl hier bereits gesetzt — Preload direkt.
     // ═══════════════════════════════════════════════════
 
     IEnumerable<object> Handle(ImagePairSuchergebnis result, MessageContext ctx)
     {
-        // Neue Seite = neue Bilder, alte Pfade vergessen
         _requestedPaths.Clear();
+        return PreloadAbAuswahl();
+    }
 
-        // Kein yield — das Preloading kommt über ImagePairAusgewaehlt
-        // wenn NavigationStore den SelectedIndex setzt.
-        yield break;
+    IEnumerable<object> Handle(ImagePairArbeitsliste liste, MessageContext ctx)
+    {
+        _requestedPaths.Clear();
+        return PreloadAbAuswahl();
+    }
+
+    // ═══════════════════════════════════════════════════
+    // SHARED — Preload ab aktueller Auswahl + nächste 2
+    // ═══════════════════════════════════════════════════
+
+    private IEnumerable<object> PreloadAbAuswahl()
+    {
+        if (_nav.AktuelleId == null || _listStore.Count == 0)
+            yield break;
+
+        var startIndex = _nav.SelectedIndex;
+
+        for (var offset = 0; offset <= 2; offset++)
+        {
+            var i = startIndex + offset;
+            if (i >= _listStore.Count) break;
+
+            var entry = _listStore[i];
+            foreach (var loadFile in RequestFiles(entry))
+                yield return loadFile;
+        }
     }
 
     // ═══════════════════════════════════════════════════

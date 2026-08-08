@@ -1,6 +1,7 @@
-// ── Zielverzeichnis: Domain.Client/ImagePair/Workspace/ImagePairWorkspace.cs ──
+// ── Domain.Client/ImagePair/Workspace/ImagePairWorkspace.cs ──
 
 using Client.Infrastructure.Abstractions;
+using Domain.Projections;
 
 namespace Domain.Client.ImagePair;
 
@@ -11,52 +12,22 @@ namespace Domain.Client.ImagePair;
 /// Die Deklarationsreihenfolge = Subscription-Reihenfolge (depth-first).
 /// Der WiringGenerator erkennt die Baum-Struktur und generiert SubscribeAll.
 ///
-/// Subscription-Reihenfolge:
-///   1. ImagePairWorkspace selbst  (kein eigener State)
-///   2. ListStore                  (TrackedMap — alle Entity-Mutationen)
-///   3. NavigationStore            (liest ListStore für Index-Berechnung)
-///   4. ChartStore                 (Strip, Tage, Verlauf — unabhängig)
-///   5. HistorieStore              (Live-Historie — unabhängig)
-///   6. StatistikStore             (Zähler — unabhängig)
-///   7. FeedbackStore              (Ablehnungen — unabhängig)
-///
-/// Die View injiziert den Workspace und erreicht alles über Properties:
-///   Workspace.List.Count, Workspace.Nav.SelectedIndex, Workspace.Chart.Strip
+/// Shared Selectors:
+///   Abgeleitete Properties die von mehreren Sections benötigt werden.
+///   Statt Duplikation in HeaderSection + StageSection + HistorieSection
+///   liegt die Berechnung einmal hier.
 /// </summary>
 public partial class ImagePairWorkspace : StoreBase
 {
-    /// <summary>
-    /// Aktuelle Seite der ImagePair-Records.
-    /// Subscribed zuerst — alle anderen Stores können ListStore lesen.
-    /// </summary>
+    // ═══════════════════════════════════════════════════
+    // Kind-Stores (Subscription-Reihenfolge)
+    // ═══════════════════════════════════════════════════
+
     public ListStore List { get; }
-
-    /// <summary>
-    /// Navigation: SelectedIndex, Modus, Filter, _pendingIndex.
-    /// Subscribed nach ListStore — kann ListStore.FindById/Count im Handle lesen.
-    /// </summary>
     public NavigationStore Nav { get; }
-
-    /// <summary>
-    /// Chart-State: Strip, Tagesliste, Verlauf, gewählter Tag.
-    /// Unabhängig von List und Nav.
-    /// </summary>
     public ChartStore Chart { get; }
-
-    /// <summary>
-    /// Historie pro ImagePair: Server-Query + Live-Einträge.
-    /// Unabhängig — reagiert auf Server-Events mit eigenen AggregateIds.
-    /// </summary>
     public HistorieStore Historie { get; }
-
-    /// <summary>
-    /// Statistik-Zähler: Gesamt, Komplett, KI-Klassifiziert, etc.
-    /// </summary>
     public StatistikStore Statistik { get; }
-
-    /// <summary>
-    /// Transientes Feedback: Ablehnungen, letzte Datei, Fehler.
-    /// </summary>
     public FeedbackStore Feedback { get; }
 
     public ImagePairWorkspace(
@@ -74,4 +45,39 @@ public partial class ImagePairWorkspace : StoreBase
         Statistik = statistik;
         Feedback = feedback;
     }
+
+    // ═══════════════════════════════════════════════════
+    // Shared Selectors
+    // ═══════════════════════════════════════════════════
+
+    /// <summary>
+    /// Das aktuell ausgewählte ImagePair-Record.
+    /// Genutzt von: HeaderSection (Zeitstempel), StageSection (Bilder/Debug).
+    /// </summary>
+    public ImagePairRecord? AktuellerRecord =>
+        Nav.AktuelleId is { } id ? List.FindById(id) : null;
+
+    /// <summary>Ob ein Paar ausgewählt ist.</summary>
+    public bool HatAuswahl => Nav.AktuelleId != null;
+
+    /// <summary>
+    /// Globale Position des ausgewählten Paars (1-basiert).
+    /// Genutzt von: HeaderSection (Position-Anzeige).
+    /// </summary>
+    public int AktuellePosition =>
+        (List.Seite - 1) * List.SeitenGroesse + Nav.SelectedIndex + 1;
+
+    /// <summary>
+    /// Historie-Einträge für das aktuell ausgewählte Paar.
+    /// Genutzt von: HistorieSection.
+    /// </summary>
+    public IReadOnlyList<HistorieEintrag> AktuelleHistorie =>
+        Nav.AktuelleId is { } id ? Historie.GetHistorie(id) : [];
+
+    /// <summary>
+    /// Ob die Historie für das aktuelle Paar geladen ist.
+    /// Genutzt von: HistorieSection.
+    /// </summary>
+    public bool AktuelleHistorieGeladen =>
+        Nav.AktuelleId is { } id && Historie.IstGeladen(id);
 }

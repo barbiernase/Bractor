@@ -19,9 +19,24 @@ public class WriteContext
     /// </summary>
     public string ReadModelId { get; }
 
-    public WriteContext(string readModelId)
+    /// <summary>
+    /// Kausale Stream-Identität des auslösenden Events (= AggregateId).
+    /// Der Store kann sie als Schlüssel/Bedingung nutzen, ohne das Envelope zu kennen.
+    /// </summary>
+    public Guid StreamId { get; }
+
+    /// <summary>
+    /// Kausale Position im Log (= AggregateVersion des auslösenden Events).
+    /// Dieselbe Zahl, aus der die Fortschrittsmarke fällt (Spec 5.3, monoton pro Stream).
+    /// -1, wenn ohne Positions-Kontext erzeugt (Push-Pfad / Alt-Aufrufer).
+    /// </summary>
+    public int Version { get; }
+
+    public WriteContext(string readModelId, Guid streamId = default, int version = -1)
     {
         ReadModelId = readModelId ?? throw new ArgumentNullException(nameof(readModelId));
+        StreamId = streamId;
+        Version = version;
     }
 
     /// <summary>

@@ -31,6 +31,13 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
     // FIX: Dictionary statt Channel für Query-Responses
     // Ermöglicht parallele Queries mit korrektem Matching
     private readonly ConcurrentDictionary<string, TaskCompletionSource<QueryResponse>> _pendingQueries = new();
+
+    // Serialisiert Stream-Writes: gRPC erlaubt nur EINEN ausstehenden WriteAsync
+    // auf dem RequestStream. Ohne das werfen parallele Queries (Multi-Select!)
+    // überlappende Writes, landen im catch als QueryFailed statt als Response —
+    // und der Sammel-Zähler fällt nie auf null. Das Warten auf die Antwort bleibt
+    // parallel; nur das eigentliche Schreiben geht nacheinander.
+    private readonly SemaphoreSlim _writeLock = new(1, 1);
     
     // State
     private ConnectionState _currentState = ConnectionState.Disconnected;
@@ -41,6 +48,24 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
     // Channel Readers (für Consumer)
     public ChannelReader<EventEnvelope> Events => _events.Reader;
     public ChannelReader<ConnectionState> StateChanges => _stateChanges.Reader;
+
+    /// <summary>
+    /// Serialisierter Write auf den bidirektionalen RequestStream. Alle Sender
+    /// (Command, Query, Subscribe, Capabilities) laufen hierüber, damit nie zwei
+    /// Writes gleichzeitig ausstehen. Der Lock umschließt NUR den Write.
+    /// </summary>
+    private async Task SchreibeAsync(ClientMessage message, CancellationToken ct)
+    {
+        await _writeLock.WaitAsync(ct);
+        try
+        {
+            await _stream!.RequestStream.WriteAsync(message, ct);
+        }
+        finally
+        {
+            _writeLock.Release();
+        }
+    }
 
     /// <summary>
     /// Verbindet zum Server und führt Capabilities-Handshake durch.
@@ -73,7 +98,7 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
                 }
             };
             
-            await _stream.RequestStream.WriteAsync(capabilitiesRequest, ct);
+            await SchreibeAsync(capabilitiesRequest, ct);
             
             // 4. Auf Capabilities Response warten
             if (!await _stream.ResponseStream.MoveNext(ct))
@@ -118,14 +143,14 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
             Command = new CommandRequest { Envelope = dto }
         };
         
-        await _stream!.RequestStream.WriteAsync(message, ct);
+        await SchreibeAsync(message, ct);
         
         Console.WriteLine($"[GrpcProxy] Sent command: {envelope.Payload.GetType().Name}, CorrelationId: {envelope.CorrelationId}");
     }
 
     /// <summary>
     /// Sendet eine Query und wartet auf Response.
-    /// Thread-safe: Mehrere Queries können parallel laufen.
+    /// Thread-safe: Mehrere Queries können parallel laufen (Writes serialisiert).
     /// </summary>
     public async Task<QueryResponse<TResponse>> QueryAsync<TResponse>(
         IQuery query, 
@@ -155,7 +180,7 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
                 }
             };
             
-            await _stream!.RequestStream.WriteAsync(message, ct);
+            await SchreibeAsync(message, ct);
             
             Console.WriteLine($"[GrpcProxy] Sent query: {query.GetType().Name}, CorrelationId: {correlationId}");
             
@@ -184,7 +209,7 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
             Subscribe = new SubscribeRequest { EventType = eventType }
         };
         
-        await _stream!.RequestStream.WriteAsync(message, ct);
+        await SchreibeAsync(message, ct);
         
         Console.WriteLine($"[GrpcProxy] Subscribed to: {eventType}");
     }
@@ -201,7 +226,7 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
             Unsubscribe = new UnsubscribeRequest { EventType = eventType }
         };
         
-        await _stream!.RequestStream.WriteAsync(message, ct);
+        await SchreibeAsync(message, ct);
         
         Console.WriteLine($"[GrpcProxy] Unsubscribed from: {eventType}");
     }
@@ -360,6 +385,7 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
         _stateChanges.Writer.Complete();
         
         _readCts?.Dispose();
+        _writeLock.Dispose();
     }
 }
 

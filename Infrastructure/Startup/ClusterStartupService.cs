@@ -22,21 +22,20 @@ public class ClusterStartupService : IHostedService
         Console.WriteLine("=== Cluster Startup ===");
         Console.WriteLine("  → Starte Cluster-Member...");
         
-        try
-        {
-            using var timeoutCts = new CancellationTokenSource(TimeSpan.FromSeconds(30));
-            using var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(ct, timeoutCts.Token);
-            
-            await _actorSystem.Cluster().StartMemberAsync();
-            
-            var members = _actorSystem.Cluster().MemberList.GetAllMembers();
-            Console.WriteLine($"  ✓ Cluster gestartet ({members.Length} Member)");
-        }
-        catch (OperationCanceledException) when (!ct.IsCancellationRequested)
+        // ★ Der 30s-Schutz wird jetzt WIRKLICH erzwungen: früher wurde ein linkedCts gebaut, aber
+        //   StartMemberAsync() bekam das Token nie übergeben → ein hängender Join blockierte ewig.
+        //   Task.WhenAny ist API-agnostisch (unabhängig davon, ob StartMemberAsync ein Token nimmt).
+        var startTask = _actorSystem.Cluster().StartMemberAsync();
+        var completed = await Task.WhenAny(startTask, Task.Delay(TimeSpan.FromSeconds(30), ct));
+        if (completed != startTask)
         {
             Console.WriteLine("  ✗ TIMEOUT: Cluster-Start >30s");
             throw new TimeoutException("Cluster startup timed out");
         }
+        await startTask;   // Exceptions des Starts beobachten
+
+        var members = _actorSystem.Cluster().MemberList.GetAllMembers();
+        Console.WriteLine($"  ✓ Cluster gestartet ({members.Length} Member)");
         Console.WriteLine();
     }
 

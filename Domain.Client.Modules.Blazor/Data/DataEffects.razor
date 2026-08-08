@@ -1,0 +1,64 @@
+@* Headless — lädt cursor-getrieben Bilder UND Historie des aktuellen Paars. *@
+@using global::Client.Infrastructure.Abstractions
+@using Domain.Client.Modules.Historie
+@using Domain.ImagePair
+@using Domain.Projections
+@implements IDisposable
+@inject Store Store
+@inject HistorieStore Historie
+@inject EffectScope Fx
+
+@code {
+    // Zuletzt für die Historie geladener Record. Ändert er sich (anderes Paar ODER
+    // ein Patch am aktuellen Paar), wird die Historie neu beim Backend geholt.
+    private ImagePairRecord? _historieRec;
+
+    // Verhindert Doppel-Dispatch der Inspektion, bis ImagePairInspiziert
+    // IstInspiziert auf true setzt.
+    private Guid? _inspiziertAngefordert;
+
+    protected override void OnInitialized()
+    {
+        // Auf Cursor UND Fenster hören:
+        //   Cursor → anderes Paar (auch per Auto-Select nach Suche oder Sprung).
+        //   Fenster → das Ziel-Paar war Skeleton und ist gerade eingetroffen.
+        Fx.OnChanged(Store, Store.Cursor,            EnsureCurrentLoaded);
+        Fx.OnChanged(Store, Store.VirtualImagePairs, EnsureCurrentLoaded);
+    }
+
+    private void EnsureCurrentLoaded()
+    {
+        // Cursor.Index ist stabil → Anzeige = stabil + InsertOffset.
+        var idx = Store.Cursor.Index + Store.VirtualImagePairs.InsertOffset;
+        var rec = Store.VirtualImagePairs[idx];
+        if (rec is null) return;   // Cursor zeigt auf ein Skeleton → warten, bis der Chunk da ist
+
+        if (rec.Dc0Pfad is not null && rec.Dc0BildSrc is null)
+            Fx.Dispatch(new LoadFile(rec.Dc0Pfad));
+
+        if (rec.Dc2Pfad is not null && rec.Dc2BildSrc is null)
+            Fx.Dispatch(new LoadFile(rec.Dc2Pfad));
+
+        // Historie beim Backend (neu) laden, sobald sich der Record ändert: jeder
+        // Patch (KI, Bild, Label, Inspektion) heißt, der Server hat ein Event
+        // verarbeitet → Historie neu holen. So füllt sie sich auch beim frisch
+        // angelegten Paar, sobald der Server aufgeholt hat. Keine lokale Logik.
+        if (!ReferenceEquals(_historieRec, rec))
+        {
+            _historieRec = rec;
+            Fx.Dispatch(new GetImagePairHistorie(rec.Id));
+        }
+
+        // Inspiziert markieren, sobald der Cursor auf einem geladenen, noch nicht
+        // inspizierten Paar landet — egal WIE er dorthin kam (Klick, Tastatur,
+        // Laden nach oben, Live-Insert). Deshalb cursor-getrieben statt am
+        // Auswahl-Event, das beim Direkt-Setzen des Cursors gar nicht feuert.
+        if (!rec.IstInspiziert && _inspiziertAngefordert != rec.Id)
+        {
+            _inspiziertAngefordert = rec.Id;
+            Fx.Dispatch(new MarkiereAlsInspiziert(rec.Id));
+        }
+    }
+
+    public void Dispose() => Fx.Dispose();
+}

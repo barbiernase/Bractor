@@ -2,6 +2,8 @@
 using Abstractions;
 using Grpc.Core;
 using Infrastructure.Serialization;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Proto;
 
 namespace Infrastructure.GrpcClient;
@@ -48,15 +50,18 @@ public class EventProxyActor : IActor
     private readonly IServerStreamWriter<ProtoRepo.ServerMessage> _responseStream;
     private readonly ProtoMessageMapper _mapper;
     private readonly string _sessionId;
+    private readonly ILogger _logger;
 
     public EventProxyActor(
         IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
         ProtoMessageMapper mapper,
-        string sessionId)
+        string sessionId,
+        ILogger? logger = null)
     {
         _responseStream = responseStream ?? throw new ArgumentNullException(nameof(responseStream));
         _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
         _sessionId = sessionId;
+        _logger = logger ?? NullLogger.Instance;
     }
 
     public async Task ReceiveAsync(IContext context)
@@ -64,7 +69,7 @@ public class EventProxyActor : IActor
         switch (context.Message)
         {
             case Started:
-                Console.WriteLine($"[EventProxy-{_sessionId}] Started");
+                _logger.LogDebug("[EventProxy-{Session}] Started", _sessionId);
                 break;
 
             case EventEnvelope envelope:
@@ -80,11 +85,11 @@ public class EventProxyActor : IActor
                 break;
 
             case Stopping:
-                Console.WriteLine($"[EventProxy-{_sessionId}] Stopping");
+                _logger.LogDebug("[EventProxy-{Session}] Stopping", _sessionId);
                 break;
 
             case Stopped:
-                Console.WriteLine($"[EventProxy-{_sessionId}] Stopped");
+                _logger.LogDebug("[EventProxy-{Session}] Stopped", _sessionId);
                 break;
         }
     }
@@ -108,16 +113,14 @@ public class EventProxyActor : IActor
             };
             
             await _responseStream.WriteAsync(serverMessage);
-            
-            Console.WriteLine($"[EventProxy-{_sessionId}] Sent {envelope.Payload.GetType().Name}");
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled)
         {
-            Console.WriteLine($"[EventProxy-{_sessionId}] Stream cancelled (client disconnected)");
+            _logger.LogDebug("[EventProxy-{Session}] Stream cancelled (client disconnected)", _sessionId);
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"[EventProxy-{_sessionId}] Error writing to stream: {ex.Message}");
+            _logger.LogWarning(ex, "[EventProxy-{Session}] Error writing to stream", _sessionId);
         }
     }
 
@@ -142,18 +145,16 @@ public class EventProxyActor : IActor
 
             await _responseStream.WriteAsync(serverMessage);
 
-            Console.WriteLine(
-                $"[EventProxy-{_sessionId}] Forwarded trigger {msg.Trigger.GetType().Name}, " +
-                $"CorrelationId: {msg.CorrelationId}");
+            _logger.LogDebug("[EventProxy-{Session}] Forwarded trigger {Trigger}, CorrelationId {CorrelationId}",
+                _sessionId, msg.Trigger.GetType().Name, msg.CorrelationId);
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled)
         {
-            Console.WriteLine($"[EventProxy-{_sessionId}] Stream cancelled during trigger forward");
+            _logger.LogDebug("[EventProxy-{Session}] Stream cancelled during trigger forward", _sessionId);
         }
         catch (Exception ex)
         {
-            Console.WriteLine(
-                $"[EventProxy-{_sessionId}] Error forwarding trigger: {ex.Message}");
+            _logger.LogWarning(ex, "[EventProxy-{Session}] Error forwarding trigger", _sessionId);
         }
     }
 
@@ -178,18 +179,16 @@ public class EventProxyActor : IActor
 
             await _responseStream.WriteAsync(serverMessage);
 
-            Console.WriteLine(
-                $"[EventProxy-{_sessionId}] Forwarded query {msg.Query.GetType().Name}, " +
-                $"CorrelationId: {msg.CorrelationId}");
+            _logger.LogDebug("[EventProxy-{Session}] Forwarded query {Query}, CorrelationId {CorrelationId}",
+                _sessionId, msg.Query.GetType().Name, msg.CorrelationId);
         }
         catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled)
         {
-            Console.WriteLine($"[EventProxy-{_sessionId}] Stream cancelled during query forward");
+            _logger.LogDebug("[EventProxy-{Session}] Stream cancelled during query forward", _sessionId);
         }
         catch (Exception ex)
         {
-            Console.WriteLine(
-                $"[EventProxy-{_sessionId}] Error forwarding query: {ex.Message}");
+            _logger.LogWarning(ex, "[EventProxy-{Session}] Error forwarding query", _sessionId);
         }
     }
 }

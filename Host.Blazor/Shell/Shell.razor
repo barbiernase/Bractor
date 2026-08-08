@@ -1,0 +1,104 @@
+@using Client.Infrastructure
+@using Client.Infrastructure.Abstractions
+@using MudBlazor
+
+@{
+    var headers = AllModules.OfType<IHeaderModule>()
+        .Where(m => State.IsVisible(m)).OrderBy(m => m.Order);
+    var leftSidebars = AllModules.OfType<ISidebarModule>()
+        .Where(m => m.Side == SidebarSide.Left && State.IsVisible(m)).OrderBy(m => m.Order);
+    var stages = AllModules.OfType<IStageModule>()
+        .Where(m => State.IsVisible(m)).OrderBy(m => m.Order).ToList();
+    var rightSidebars = AllModules.OfType<ISidebarModule>()
+        .Where(m => m.Side == SidebarSide.Right && State.IsVisible(m)).OrderBy(m => m.Order);
+    var footers = AllModules.OfType<IFooterModule>()
+        .Where(m => State.IsVisible(m)).OrderBy(m => m.Order);
+    var headless = AllModules.OfType<IHeadlessModule>();
+}
+
+<div class="shell" tabindex="0" @ref="_container"
+     @onkeydown="OnKeyDown" @onkeydown:preventDefault
+     style="outline: none; height: 100vh; display: flex; flex-direction: column;">
+
+@if (!IsReady)
+{
+    <div style="flex: 1; display: flex; flex-direction: column; align-items: center;
+                justify-content: center; gap: 16px; color: #aaa;">
+        <MudProgressCircular Color="Color.Primary" Indeterminate="true" />
+        <MudText Typo="Typo.body2">
+            @(Startup.State == BootstrapState.Failed
+                ? "Verbindung fehlgeschlagen."
+                : Startup.State == BootstrapState.Hydrating
+                    ? "Daten werden geladen…"
+                    : "Verbinde…")
+        </MudText>
+    </div>
+}
+else
+{
+    <header style="flex-shrink: 0;">
+        @foreach (var m in headers)
+        { <DynamicComponent Type="m.ComponentType" /> }
+    </header>
+
+    <div style="flex: 1; display: flex; min-height: 0;">
+
+        @foreach (var m in leftSidebars)
+        {
+            <PanelFrame Title="@m.Title"
+                        BarTitle="@m.BarTitle"
+                        IsExpanded="State.IsExpanded(m.Id)"
+                        IsExpandedChanged="v => OnSidebarToggle(m.Id, v)"
+                        ExpandedWidth="m.ExpandedWidth" BarWidth="m.BarWidth"
+                        Side="SidebarSide.Left">
+                <DynamicComponent Type="m.ComponentType" />
+            </PanelFrame>
+        }
+
+        <div style="flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0;">
+            @if (stages.Count > 0)
+            {
+                <MudTabs ActivePanelIndex="State.ActiveStageIndex"
+                         ActivePanelIndexChanged="OnStageTabChanged"
+                         Rounded="false" Border="false">
+                    @foreach (var m in stages)
+                    {
+                        <MudTabPanel Text="@m.Title">
+                            <DynamicComponent Type="m.ComponentType" />
+                        </MudTabPanel>
+                    }
+                </MudTabs>
+            }
+        </div>
+
+        @foreach (var m in rightSidebars)
+        {
+            <PanelFrame Title="@m.Title"
+                        BarTitle="@m.BarTitle"
+                        IsExpanded="State.IsExpanded(m.Id)"
+                        IsExpandedChanged="v => OnSidebarToggle(m.Id, v)"
+                        ExpandedWidth="m.ExpandedWidth" BarWidth="m.BarWidth"
+                        Side="SidebarSide.Right">
+                <DynamicComponent Type="m.ComponentType" />
+            </PanelFrame>
+        }
+    </div>
+
+    <footer style="flex-shrink: 0; display: flex; align-items: center; padding: 4px 8px;
+                   background: #1a1a1a; border-top: 1px solid #333;">
+        @foreach (var m in footers)
+        { <DynamicComponent Type="m.ComponentType" /> }
+    </footer>
+
+    @foreach (var m in headless)
+    { <DynamicComponent Type="m.ComponentType" /> }
+}
+
+    <MudDialog @bind-Visible="_settingsOpen" Options="_dialogOptions">
+        <TitleContent><MudText Typo="Typo.h6">Einstellungen</MudText></TitleContent>
+        <DialogContent><ShellSettings OnVisibilityChanged="RebuildBindings" /></DialogContent>
+        <DialogActions>
+            <MudButton OnClick="() => _settingsOpen = false" Color="Color.Primary">Schließen</MudButton>
+        </DialogActions>
+    </MudDialog>
+</div>

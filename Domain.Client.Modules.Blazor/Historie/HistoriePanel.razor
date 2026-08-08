@@ -1,0 +1,42 @@
+@using Domain.Client.Modules.Historie
+@using global::Client.Infrastructure.Abstractions
+@inject Store Store
+@inject HistorieStore Historie
+@inject EffectScope Fx
+@implements IDisposable
+
+@{
+    var id = Store.Cursor.Id;
+    var eintraege = id.HasValue ? Historie.Get(id.Value) : [];
+    var geladen = id.HasValue && Historie.IstGeladen(id.Value);
+}
+
+<div style="padding:8px;font-size:12px;color:#999;overflow-y:auto;height:100%">
+    @if (!id.HasValue) { <div style="color:#555;padding:12px">Kein Paar ausgewählt</div> }
+    else if (eintraege.Count == 0 && !geladen)
+    {
+        <div style="padding:12px;display:flex;align-items:center;gap:8px">
+            <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
+            <span style="color:#666">Lade…</span>
+        </div>
+    }
+    else
+    {
+        @foreach (var e in eintraege)
+        {
+            <div style="margin-bottom:8px">
+                <div style="font-size:10px;color:#555;font-family:monospace">@e.Zeitpunkt.ToLocalTime().ToString("HH:mm:ss")</div>
+                <div style="font-size:12px">@e.Beschreibung</div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    protected override void OnInitialized()
+    {
+        Fx.OnChanged(Store, () => InvokeAsync(StateHasChanged));
+        Fx.OnChanged(Historie, () => InvokeAsync(StateHasChanged));
+    }
+    public void Dispose() => Fx.Dispose();
+}

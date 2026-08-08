@@ -1,12 +1,3 @@
-@* ── Domain.Client.Ui.Blazor/ImagePair/Components/MainStage.razor ── *@
-@* ── Vollständige Migration von ChartStage.razor inkl. Tag-Labeling ── *@
-
-@using System.ComponentModel
-@inject ImagePairWorkspace Workspace
-@inject ChartViewModel ChartVm
-@inject NavigationViewModel NavVm
-@implements IDisposable
-
 <div style="flex: 1; display: flex; min-height: 0; background: #0d0d0d;">
 
     @* ── Tagesliste (links) ── *@
@@ -32,7 +23,7 @@
                     var istGewaehlt = Workspace.Chart.GewaehlterTag?.Date == tag.Datum.Date;
                     var hatAnomalien = tag.AnzahlAnomalie > 0;
 
-                    <div @onclick="() => ChartVm.LadeStripFuerTag(tag.Datum)"
+                    <div @onclick="() => SelectTag(tag.Datum)"
                          style="padding: 6px 10px; cursor: pointer; font-size: 11px;
                                 display: flex; align-items: center; gap: 6px;
                                 background: @(istGewaehlt ? "#1e1e1e" : "transparent");
@@ -73,14 +64,11 @@
                 <MudText Typo="Typo.caption" Style="color: #90caf9; font-weight: 600; font-size: 12px;">
                     @Workspace.Chart.GewaehlterTag.Value.ToString("dd. MMMM yyyy")
                 </MudText>
-
                 <MudSpacer />
-
                 <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
                          Style="background: #333; color: #ccc; font-family: monospace; font-size: 11px;">
                     @Punkte.Count Teile
                 </MudChip>
-
                 @if (AnzahlAnomalie > 0)
                 {
                     <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
@@ -88,12 +76,10 @@
                         @AnzahlAnomalie Anomalie
                     </MudChip>
                 }
-
                 <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
                          Style="background: #555; color: #ccc; font-family: monospace; font-size: 11px;">
                     @AnzahlUngelabelt offen
                 </MudChip>
-
                 <MudText Typo="Typo.caption" Style="color: #555; font-family: monospace; font-size: 10px;">
                     @Punkte[0].Zeitpunkt.ToLocalTime().ToString("HH:mm:ss")
                     – @Punkte[^1].Zeitpunkt.ToLocalTime().ToString("HH:mm:ss")
@@ -103,18 +89,18 @@
 
         @* Strip-Visualisierung *@
         <div style="flex: 1; padding: 16px 12px; overflow-y: auto;">
-            @if (Punkte != null && Punkte.Count > 0 && _zeitspanneMs > 0)
+            @if (Punkte != null && Punkte.Count > 0 && ZeitspanneMs > 0)
             {
                 <div style="margin-bottom: 4px;">
                     <span style="color: #888; font-size: 10px; display: block; margin-bottom: 2px;">Produkt-Label</span>
-                    <svg width="100%" viewBox="0 0 @ViewBoxW @StripH"
+                    <svg width="100%" viewBox="0 0 1000 32"
                          preserveAspectRatio="none"
                          style="display: block; border-radius: 3px; overflow: hidden;">
-                        <rect width="@ViewBoxW" height="@StripH" fill="#1a1a1a" />
+                        <rect width="1000" height="32" fill="#1a1a1a" />
                         @foreach (var p in Punkte)
                         {
                             <rect x="@XPos(p.Zeitpunkt)" y="0"
-                                  width="@StrichBreite" height="@StripH"
+                                  width="@StrichBreite" height="32"
                                   fill="@LabelFarbe(p.ProduktLabel)" opacity="0.85" />
                         }
                     </svg>
@@ -122,21 +108,21 @@
 
                 <div style="margin-top: 12px;">
                     <span style="color: #888; font-size: 10px; display: block; margin-bottom: 4px;">Nach Kategorie</span>
-                    @foreach (var (name, farbe, filter) in _spuren)
+                    @foreach (var (name, farbe, filter) in Spuren)
                     {
                         <div style="display: flex; align-items: center; gap: 6px; margin-bottom: 3px;">
                             <span style="color: @farbe; font-size: 9px; width: 55px; text-align: right;
                                          font-family: monospace;">@name</span>
-                            <svg width="100%" viewBox="0 0 @ViewBoxW @SpurH"
+                            <svg width="100%" viewBox="0 0 1000 10"
                                  preserveAspectRatio="none"
                                  style="display: block; border-radius: 2px; flex: 1;">
-                                <rect width="@ViewBoxW" height="@SpurH" fill="#151515" />
+                                <rect width="1000" height="10" fill="#151515" />
                                 @foreach (var p in Punkte)
                                 {
                                     if (filter(p.ProduktLabel))
                                     {
                                         <rect x="@XPos(p.Zeitpunkt)" y="0"
-                                              width="@StrichBreite" height="@SpurH"
+                                              width="@StrichBreite" height="10"
                                               fill="@farbe" opacity="0.9" />
                                     }
                                 }
@@ -146,22 +132,20 @@
                 </div>
 
                 <div style="display: flex; justify-content: space-between; padding-top: 6px;">
-                    @foreach (var label in _zeitLabels)
+                    @foreach (var label in ZeitLabels)
                     {
                         <span style="color: #555; font-size: 10px; font-family: monospace;">@label</span>
                     }
                 </div>
 
-                @* ── Tag-Labeling Button ── *@
+                @* Tag-Labeling Button *@
                 <div style="margin-top: 16px; padding-top: 12px; border-top: 1px solid #2a2a2a;
                             display: flex; align-items: center; gap: 8px;">
-
                     @if (Workspace.Nav.Modus == ArbeitsModus.Tag
                          && Workspace.Nav.TagLabelingDatum?.Date == Workspace.Chart.GewaehlterTag?.Date)
                     {
                         <MudButton Variant="Variant.Outlined" Size="Size.Small"
-                                   Color="Color.Warning"
-                                   OnClick="NavVm.BeendeTagLabeling"
+                                   Color="Color.Warning" OnClick="BeendeTagLabeling"
                                    Style="text-transform: none; font-size: 11px;">
                             Tag-Labeling beenden
                         </MudButton>
@@ -172,8 +156,7 @@
                     else
                     {
                         <MudButton Variant="Variant.Filled" Size="Size.Small"
-                                   Color="Color.Warning"
-                                   OnClick="NavVm.StarteTagLabeling"
+                                   Color="Color.Warning" OnClick="StarteTagLabeling"
                                    Style="text-transform: none; font-size: 11px;">
                             Diesen Tag labeln
                         </MudButton>
@@ -189,13 +172,6 @@
                     <span style="color: #444;">Tag auswählen</span>
                 </div>
             }
-            else if (Workspace.Chart.WarteAufStrip)
-            {
-                <div style="display: flex; align-items: center; justify-content: center; height: 100%; gap: 8px;">
-                    <MudProgressCircular Size="Size.Small" Indeterminate="true" Color="Color.Primary" />
-                    <span style="color: #666;">Lade Verlauf…</span>
-                </div>
-            }
             else
             {
                 <div style="display: flex; align-items: center; justify-content: center; height: 100%; gap: 8px;">
@@ -206,115 +182,3 @@
         </div>
     </div>
 </div>
-
-@code {
-    private long _minTicks;
-    private double _zeitspanneMs;
-    private List<string> _zeitLabels = new();
-
-    private IReadOnlyList<ProduktionsStripPunkt>? Punkte => Workspace.Chart.Strip?.Punkte;
-    private int AnzahlAnomalie => Punkte?.Count(p => p.ProduktLabel == Klassifikation.Anomalie) ?? 0;
-    private int AnzahlUngelabelt => Punkte?.Count(p => p.ProduktLabel == null) ?? 0;
-
-    private const int ViewBoxW = 1000;
-    private const int StripH = 32;
-    private const int SpurH = 10;
-    private const string StrichBreite = "1.5";
-
-    private static readonly List<(string Name, string Farbe, Func<Klassifikation?, bool> Filter)> _spuren = new()
-    {
-        ("Anomalie", "#f87171", label => label == Klassifikation.Anomalie),
-        ("Fraglich", "#facc15", label => label == Klassifikation.Questionable),
-        ("OK",       "#4ade80", label => label == Klassifikation.KeineAnomalie),
-        ("Offen",    "#555",    label => label == null),
-    };
-
-    protected override void OnInitialized()
-    {
-        Workspace.Chart.PropertyChanged += OnChartChanged;
-        Workspace.Nav.PropertyChanged += OnNavChanged;
-
-        // Strip-Daten könnten schon geladen sein (Tab-Wechsel)
-        if (Workspace.Chart.Strip != null)
-            BerechneAbgeleiteteWerte();
-        else if (Workspace.Chart.GewaehlterTag != null)
-            ChartVm.LadeStripFuerTag(Workspace.Chart.GewaehlterTag.Value);
-
-        if (Workspace.Chart.ProduktionsTage == null)
-            ChartVm.LadeProduktionsTage();
-    }
-
-    private void OnChartChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        _ = InvokeAsync(() =>
-        {
-            switch (e.PropertyName)
-            {
-                case nameof(ChartStore.ProduktionsTage):
-                    if (Workspace.Chart.GewaehlterTag == null
-                        && Workspace.Chart.ProduktionsTage?.Tage.Count > 0)
-                        ChartVm.LadeStripFuerTag(Workspace.Chart.ProduktionsTage.Tage[0].Datum);
-                    break;
-                case nameof(ChartStore.Strip):
-                    BerechneAbgeleiteteWerte();
-                    break;
-            }
-            StateHasChanged();
-        });
-    }
-
-    private void OnNavChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        // Tag-Labeling Zustand ändert den Button unten im Strip
-        if (e.PropertyName is nameof(NavigationStore.Modus) or nameof(NavigationStore.TagLabelingDatum))
-            _ = InvokeAsync(StateHasChanged);
-    }
-
-    private void BerechneAbgeleiteteWerte()
-    {
-        var punkte = Workspace.Chart.Strip?.Punkte;
-        if (punkte == null || punkte.Count < 2)
-        {
-            _minTicks = 0;
-            _zeitspanneMs = 0;
-            _zeitLabels.Clear();
-            return;
-        }
-
-        _minTicks = punkte[0].Zeitpunkt.UtcTicks;
-        var maxTicks = punkte[^1].Zeitpunkt.UtcTicks;
-        _zeitspanneMs = (maxTicks - _minTicks) / (double)TimeSpan.TicksPerMillisecond;
-        if (_zeitspanneMs <= 0) _zeitspanneMs = 1;
-
-        _zeitLabels.Clear();
-        var anzahl = Math.Min(7, Math.Max(2, punkte.Count / 100));
-        for (var i = 0; i < anzahl; i++)
-        {
-            var anteil = (double)i / (anzahl - 1);
-            var ticks = _minTicks + (long)(anteil * _zeitspanneMs * TimeSpan.TicksPerMillisecond);
-            var zeit = new DateTimeOffset(ticks, TimeSpan.Zero);
-            _zeitLabels.Add(zeit.ToLocalTime().ToString("HH:mm"));
-        }
-    }
-
-    private string XPos(DateTimeOffset zeitpunkt)
-    {
-        var offsetMs = (zeitpunkt.UtcTicks - _minTicks) / (double)TimeSpan.TicksPerMillisecond;
-        var x = (offsetMs / _zeitspanneMs) * (ViewBoxW - 2);
-        return x.ToString("F1", System.Globalization.CultureInfo.InvariantCulture);
-    }
-
-    private static string LabelFarbe(Klassifikation? label) => label switch
-    {
-        Klassifikation.Anomalie      => "#f87171",
-        Klassifikation.Questionable  => "#facc15",
-        Klassifikation.KeineAnomalie => "#4ade80",
-        _                            => "#555"
-    };
-
-    public void Dispose()
-    {
-        Workspace.Chart.PropertyChanged -= OnChartChanged;
-        Workspace.Nav.PropertyChanged -= OnNavChanged;
-    }
-}

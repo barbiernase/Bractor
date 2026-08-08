@@ -1,0 +1,15 @@
+@inject EffectScope Fx
+@using global::Client.Infrastructure.Abstractions
+@implements IDisposable
+
+<MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
+<MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Small"
+               OnClick="() => Fx.Dispatch(new NavigatePrevAngefordert())" />
+<MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small"
+               OnClick="() => Fx.Dispatch(new NavigateNextAngefordert())" />
+<MudButton Variant="Variant.Text" Size="Size.Small"
+           OnClick="() => Fx.Dispatch(new NavigateNextOffenAngefordert())"
+           Style="min-width:0;padding:2px 8px;font-size:11px;text-transform:none">
+    <b>Space</b>&nbsp;Nächstes</MudButton>
+
+@code { public void Dispose() => Fx.Dispose(); }

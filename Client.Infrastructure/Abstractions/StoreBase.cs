@@ -1,3 +1,5 @@
+// ── Client.Infrastructure/Abstractions/StoreBase.cs ──
+
 using System.ComponentModel;
 using Client.Infrastructure.Bus;
 using Client.Infrastructure.Collections;
@@ -8,41 +10,79 @@ namespace Client.Infrastructure.Abstractions;
 /// <summary>
 /// Basisklasse für alle Client-Stores.
 ///
-/// Löst das Inkonsistenz-Problem bei mehreren Stores auf demselben Bus:
-/// Während eines Dispatch-Zyklus werden PropertyChanged-Notifications
-/// und Collection-Deltas gesammelt statt sofort gefeuert.
-/// Nach DispatchCompleted werden alle Notifications atomar geflusht —
-/// die View sieht ausschließlich den konsistenten Endzustand.
+/// Redux-Analogie:
+///   Store.Handle()  = Reducer (pure State-Mutation)
+///   Store.Changed   = store.subscribe() (View-Notification)
+///
+/// Notification-Modell:
+///   EIN Signal: Changed. Feuert nach jedem Dispatch-Zyklus
+///   in dem sich irgendwas geändert hat — Properties ODER Collections.
+///
+///   Kein Deltas-Event, kein granulares PropertyChanged für Views.
+///   Blazor macht ohnehin einen vollständigen Component-Diff —
+///   feingranulare Notifications sind tote Komplexität.
+///
+/// Batching:
+///   Während eines Dispatch-Zyklus (IsDispatching == true):
+///     - [ObservableProperty]-Setter → _hasChanges = true (gesammelt)
+///     - TrackedMap-Mutationen       → _hasChanges = true (gesammelt)
+///   Nach DispatchCompleted → Flush:
+///     - Changed feuert EINMAL wenn sich irgendwas geändert hat
 ///
 /// AttachToBus / DetachFromBus sind public, weil der WiringGenerator
-/// in einem anderen Assembly (Domain.Client) diese Methoden aufruft.
-/// Kein Reflection — der Generator erzeugt explizite Aufrufe.
-///
-/// Verwendung durch Store-Entwickler:
-///
-///   public partial class MyStore : StoreBase
-///   {
-///       private readonly TrackedMap&lt;Guid, MyRecord&gt; _items;
-///       [ObservableProperty] private int _count;
-///
-///       public MyStore()
-///       {
-///           _items = CreateMap&lt;Guid, MyRecord&gt;(r => r.Id);
-///       }
-///
-///       void Handle(MyEvent evt, MessageContext ctx)
-///       {
-///           _items.Put(new MyRecord(evt.Id, evt.Name));
-///           Count = _items.Count;
-///           // Kein PropertyChanged, kein Delta — alles wird nach Dispatch geflusht
-///       }
-///   }
+/// in einem anderen Assembly diese Methoden aufruft.
 /// </summary>
 public abstract class StoreBase : ObservableObject
 {
-    private readonly HashSet<string> _pendingProperties = new();
     private readonly List<ITrackedCollection> _trackedCollections = new();
     private ClientBus? _bus;
+    private bool _hasChanges;
+
+    // ═══════════════════════════════════════════════════
+    // HYDRATION — Start-Ladezustand (für IHydrationStore)
+    // ═══════════════════════════════════════════════════
+
+    private bool _isHydrated;
+
+    /// <summary>
+    /// True sobald die Start-Daten dieses Stores eingetroffen sind.
+    /// Implementiert IHydrationStore.IsHydrated für Stores die das Interface
+    /// deklarieren; für andere Stores schlicht ungenutzt.
+    /// </summary>
+    public bool IsHydrated => _isHydrated;
+
+    /// <summary>Feuert, wenn IsHydrated von false auf true wechselt.</summary>
+    public event Action? HydrationChanged;
+
+    /// <summary>
+    /// Markiert den Store als hydriert — vom Store aufgerufen, sobald die
+    /// Start-Antwort eingetroffen ist (unabhängig von der Datenmenge).
+    /// Idempotent: mehrfacher Aufruf feuert HydrationChanged nur beim Übergang.
+    /// </summary>
+    protected void MarkHydrated()
+    {
+        if (_isHydrated) return;
+        _isHydrated = true;
+        HydrationChanged?.Invoke();
+    }
+
+    /// <summary>Setzt Hydration zurück (z.B. bei Reconnect), damit erneut gewartet wird.</summary>
+    public void ResetHydration() => _isHydrated = false;
+
+    // ═══════════════════════════════════════════════════
+    // NOTIFICATION — Ein Signal für die View
+    // ═══════════════════════════════════════════════════
+
+    /// <summary>
+    /// Feuert nach jedem Dispatch-Zyklus in dem sich IRGENDWAS
+    /// geändert hat — Properties ODER Collections.
+    ///
+    /// Die View subscribed hierauf via EffectScope:
+    ///   fx.OnChanged(store, () => InvokeAsync(StateHasChanged));
+    ///
+    /// Feuert maximal einmal pro Dispatch-Zyklus (batched).
+    /// </summary>
+    public event Action? Changed;
 
     // ═══════════════════════════════════════════════════
     // BUS-ANBINDUNG
@@ -71,9 +111,6 @@ public abstract class StoreBase : ObservableObject
     ///
     /// Public aus demselben Grund wie AttachToBus — der Generator erzeugt
     /// UnsubscribeAll, das diese Methode auf allen Stores aufruft.
-    ///
-    /// Wird aufgerufen wenn der Circuit/Window schließt.
-    /// Nach diesem Aufruf feuert kein Flush mehr.
     /// </summary>
     public void DetachFromBus()
     {
@@ -83,26 +120,24 @@ public abstract class StoreBase : ObservableObject
     }
 
     // ═══════════════════════════════════════════════════
-    // PROPERTY-BATCHING
+    // PROPERTY-CHANGE INTERCEPTION
     // ═══════════════════════════════════════════════════
 
     /// <summary>
     /// Override von ObservableObject.
     ///
-    /// Während eines Dispatch: Property-Name sammeln, nicht feuern.
-    /// Außerhalb eines Dispatch (kein Bus attached, oder kein aktiver Dispatch):
-    /// sofortiges Feuern — Normalfall für direkte Zuweisungen außerhalb von Handle.
+    /// Während eines Dispatch: Change-Flag setzen, nicht feuern.
+    /// Außerhalb eines Dispatch: Changed sofort feuern.
     /// </summary>
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
     {
         if (_bus?.IsDispatching == true)
         {
-            if (e.PropertyName != null)
-                _pendingProperties.Add(e.PropertyName);
+            _hasChanges = true;
         }
         else
         {
-            base.OnPropertyChanged(e);
+            Changed?.Invoke();
         }
     }
 
@@ -115,8 +150,6 @@ public abstract class StoreBase : ObservableObject
     ///
     /// Muss im Konstruktor aufgerufen werden — nach dem Konstruktor werden
     /// keine weiteren Collections mehr registriert.
-    ///
-    /// Kein Reflection — der Store-Entwickler ruft diese Methode explizit auf.
     /// </summary>
     protected TrackedMap<TKey, TValue> CreateMap<TKey, TValue>(Func<TValue, TKey> keySelector)
         where TKey : notnull
@@ -126,49 +159,48 @@ public abstract class StoreBase : ObservableObject
         return map;
     }
 
-    // ═══════════════════════════════════════════════════
-    // DELTAS — für die View-Schicht
-    // ═══════════════════════════════════════════════════
-
     /// <summary>
-    /// Feuert nach jedem Flush mit allen Collection-Deltas dieses Stores.
+    /// Registriert eine bereits erstellte ITrackedCollection für den Flush-Zyklus
+    /// und gibt sie zurück. Für Collections die nicht über CreateMap entstehen
+    /// (z.B. PagedCollection, Cursor), typischerweise im Store-Konstruktor:
     ///
-    /// Rückgabetyp ist CollectionDelta — kein object-Boxing, kein Reflection.
-    /// Die View reagiert per Pattern-Matching auf Added, Replaced, Removed, Reset.
+    ///   public MyStore()
+    ///   {
+    ///       Items  = Track(new PagedCollection&lt;...&gt;(r => r.Id));
+    ///       Cursor = Track(new Cursor&lt;Guid&gt;());
+    ///   }
     ///
-    /// Feuert nur wenn mindestens ein Delta vorhanden ist.
+    /// Muss im Konstruktor aufgerufen werden — nach dem Konstruktor werden
+    /// keine weiteren Collections mehr registriert.
     /// </summary>
-    public event Action<IReadOnlyList<CollectionDelta>>? Deltas;
+    protected T Track<T>(T collection) where T : ITrackedCollection
+    {
+        _trackedCollections.Add(collection);
+        return collection;
+    }
 
     // ═══════════════════════════════════════════════════
     // FLUSH — privat, nur via DispatchCompleted erreichbar
     // ═══════════════════════════════════════════════════
 
     /// <summary>
-    /// Feuert alle gesammelten PropertyChanged-Events und Collection-Deltas atomar.
-    /// Registriert auf ClientBus.DispatchCompleted — wird nie direkt aufgerufen.
+    /// Prüft ob sich in diesem Dispatch-Zyklus etwas geändert hat
+    /// (Properties oder Collections) und feuert Changed genau einmal.
     /// </summary>
     private void Flush()
     {
-        // 1. Gesammelte PropertyChanged-Events feuern
-        foreach (var propertyName in _pendingProperties)
-            base.OnPropertyChanged(new PropertyChangedEventArgs(propertyName));
-        _pendingProperties.Clear();
-
-        // 2. Collection-Deltas aller registrierten Maps einsammeln
-        List<CollectionDelta>? allDeltas = null;
-
+        // Collection-Changes einsammeln
         foreach (var collection in _trackedCollections)
         {
-            var deltas = collection.FlushDeltas();
-            if (deltas.Count == 0) continue;
-
-            allDeltas ??= new List<CollectionDelta>();
-            allDeltas.AddRange(deltas);
+            if (collection.ConsumeHasChanges())
+                _hasChanges = true;
         }
 
-        // 3. Deltas als Batch feuern — nur wenn vorhanden
-        if (allDeltas != null)
-            Deltas?.Invoke(allDeltas);
+        // EIN Signal wenn sich irgendwas geändert hat
+        if (_hasChanges)
+        {
+            _hasChanges = false;
+            Changed?.Invoke();
+        }
     }
 }

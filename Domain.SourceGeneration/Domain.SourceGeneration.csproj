@@ -6,6 +6,8 @@
 
         <IncludeBuildOutput>false</IncludeBuildOutput>
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+        <!-- RS2008 (Analyzer-Release-Tracking) ist für die internen CQRS-Diagnostiken nicht nötig. -->
+        <NoWarn>$(NoWarn);RS2008</NoWarn>
     </PropertyGroup>
 
     <ItemGroup>

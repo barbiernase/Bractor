@@ -24,8 +24,17 @@ namespace Infrastructure.Projections;
 /// Graceful Degradation:
 ///   Bei Redis-Ausfall wird geloggt, der Event-Flow wird NICHT unterbrochen.
 /// </summary>
-public class ReadModelDepsWriter
+public class ReadModelDepsWriter : IReadModelDepsSink
 {
+    /// <summary>
+    /// <see cref="IReadModelDepsSink"/> — der Pull-Pfad (ProjectionAdapter) führt denselben
+    /// Deps-Versions-Index wie der Push-Pfad. Delegiert an <see cref="WriteAsync"/>.
+    /// </summary>
+    public Task PublishAsync(
+        string subscriberId, EventEnvelope envelope,
+        IReadOnlyList<WriteResult> results, CancellationToken ct = default)
+        => WriteAsync(subscriberId, envelope, results, ct);
+
     private readonly IConnectionMultiplexer _redis;
     private readonly IVersionTracker _versionTracker;
     private readonly ILogger<ReadModelDepsWriter> _logger;

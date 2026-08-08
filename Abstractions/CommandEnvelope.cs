@@ -6,9 +6,17 @@ namespace Abstractions;
 /// </summary>
 public record CommandEnvelope : IAggregateEnvelope
 {
+    /// <summary>
+    /// Sentinel für <see cref="ExpectedVersion"/>: „keine OCC-Assertion" — wende den Command an der
+    /// aktuellen Aggregat-Version an, ohne eine erwartete Version zu behaupten. Für Reaktionen/
+    /// Prozess-Commands (Spec 9.3), deren Sender die Empfänger-Version weder kennt noch kennen will:
+    /// Idempotenz sichert die deterministische <c>CommandId</c> + der (Noop-)Decider, nicht die Version.
+    /// </summary>
+    public const int AnyVersion = -1;
+
     public Guid CommandId { get; init; } = Guid.NewGuid();
     public Guid AggregateId { get; init; }
-    public int ExpectedVersion { get; init; } = -1;
+    public int ExpectedVersion { get; init; } = AnyVersion;
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
     public string CorrelationId { get; init; } = Guid.NewGuid().ToString();
     public string UserId { get; init; } = "system";
@@ -28,9 +36,11 @@ public record CommandEnvelope : IAggregateEnvelope
 
 /// <summary>
 /// Envelope für Events mit Metadaten.
-/// Implementiert IAggregateEnvelope — Events haben immer Aggregate-Kontext.
+/// Implementiert IEventEnvelope — Events haben immer Aggregate-Kontext UND eine
+/// Position im Stream (AggregateVersion). Die Property existiert bereits konkret;
+/// die zusätzliche Interface-Deklaration ist rein additiv (kein Verhaltenswechsel).
 /// </summary>
-public record EventEnvelope : IAggregateEnvelope
+public record EventEnvelope : IEventEnvelope
 {
     public Guid EventId { get; init; } = Guid.NewGuid();
     public Guid AggregateId { get; init; }

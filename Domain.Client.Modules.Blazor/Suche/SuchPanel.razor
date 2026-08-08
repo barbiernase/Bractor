@@ -1,0 +1,86 @@
+@namespace Domain.Client.Modules.Blazor.Suche
+@using global::Client.Infrastructure.Abstractions
+@inject Store Store
+@inject EffectScope Fx
+@implements IDisposable
+
+@*
+    Zustandslose Steuerfläche: liest den Filter direkt aus dem Store und dispatcht
+    bei JEDER Änderung sofort SucheGeaendert — kein Entwurf, kein Anwenden-Knopf.
+    Der Produktionstage-Baum ist als visuelles Feature eingebettet; ein Tag-Klick
+    dort setzt Von/Bis. Einen freien Zeitraum-Picker gibt es nicht mehr.
+*@
+
+<div style="display:flex;flex-direction:column;height:100%;background:#1e1e1e;color:#c7c7cd;font-size:12px;overflow-y:auto">
+
+    <div style="padding:11px 14px;border-bottom:1px solid #2c2c2e;display:flex;justify-content:space-between;align-items:center">
+        <span style="font-weight:500;color:#dcdce2">Suche</span>
+        <span style="color:#8a8a92">@Store.VirtualImagePairs.GesamtAnzahl Treffer</span>
+    </div>
+
+    @* -- Produktionstage-Baum (visuelles Navigations-Feature) -- *@
+    <ProduktionstageBaum />
+
+    @* -- Produkt-Label -- *@
+    <div style="padding:12px 14px;border-bottom:1px solid #2c2c2e">
+        <p style="font-size:11px;letter-spacing:.4px;color:#7d7d85;margin:0 0 8px;text-transform:uppercase">Produkt-Label</p>
+        <div style="display:flex;flex-wrap:wrap;gap:6px">
+            @foreach (var k in ProduktLabels)
+            {
+                <span @onclick="() => SetzeProdukt(k)" style="@ChipStyle(Store.Suche.ProduktLabel == k)">
+                    <span style="width:8px;height:8px;border-radius:50%;background:@Farbschema.Fuer(k);display:inline-block"></span>
+                    @Farbschema.Text(k)
+                </span>
+            }
+        </div>
+    </div>
+
+    @* -- Mensch-Label (tri-state) -- *@
+    <div style="padding:12px 14px;border-bottom:1px solid #2c2c2e">
+        <p style="font-size:11px;letter-spacing:.4px;color:#7d7d85;margin:0 0 8px;text-transform:uppercase">Mensch-Label</p>
+        <div style="display:flex;gap:6px">
+            <span @onclick="() => SetzeMensch(null)"  style="@ChipStyle(Store.Suche.HatMenschLabel is null)">egal</span>
+            <span @onclick="() => SetzeMensch(true)"  style="@ChipStyle(Store.Suche.HatMenschLabel == true)">gelabelt</span>
+            <span @onclick="() => SetzeMensch(false)" style="@ChipStyle(Store.Suche.HatMenschLabel == false)">offen</span>
+        </div>
+    </div>
+
+    @* -- Inspektion -- *@
+    <div style="padding:12px 14px;display:flex;justify-content:space-between;align-items:center">
+        <span>nur nicht-inspizierte</span>
+        <span @onclick="ToggleInspektion"
+              style="width:34px;height:19px;border-radius:10px;position:relative;cursor:pointer;transition:background .12s;
+                     background:@(Store.Suche.NurNichtInspizierte ? "#1f3350" : "#2a2a2d");border:1px solid @(Store.Suche.NurNichtInspizierte ? "#3f6aa8" : "#3a3a3d")">
+            <span style="position:absolute;top:1px;width:15px;height:15px;border-radius:50%;transition:.12s;
+                         left:@(Store.Suche.NurNichtInspizierte ? "16px" : "1px");background:@(Store.Suche.NurNichtInspizierte ? "#5c9eff" : "#8a8a92")"></span>
+        </span>
+    </div>
+</div>
+
+@code {
+    static readonly Klassifikation[] ProduktLabels =
+        { Klassifikation.KeineAnomalie, Klassifikation.Questionable, Klassifikation.Anomalie };
+
+    protected override void OnInitialized()
+        => Fx.OnChanged(Store, () => InvokeAsync(StateHasChanged));
+
+    // Jede Änderung dispatcht sofort — lädt direkt über das bestehende Reset-Reload.
+    void SetzeProdukt(Klassifikation k)
+    {
+        var neu = Store.Suche.ProduktLabel == k ? (Klassifikation?)null : k;   // erneut klicken = abwählen
+        Fx.Dispatch(new SucheGeaendert(Store.Suche with { ProduktLabel = neu }));
+    }
+
+    void SetzeMensch(bool? v)
+        => Fx.Dispatch(new SucheGeaendert(Store.Suche with { HatMenschLabel = v }));
+
+    void ToggleInspektion()
+        => Fx.Dispatch(new SucheGeaendert(Store.Suche with { NurNichtInspizierte = !Store.Suche.NurNichtInspizierte }));
+
+    static string ChipStyle(bool on) =>
+        "display:inline-flex;align-items:center;gap:5px;font-size:12px;border-radius:6px;padding:4px 9px;cursor:pointer;user-select:none;" +
+        (on ? "color:#cfe0ff;background:#1f3350;border:1px solid #3f6aa8"
+            : "color:#c7c7cd;background:#2a2a2d;border:1px solid #3a3a3d");
+
+    public void Dispose() => Fx.Dispose();
+}

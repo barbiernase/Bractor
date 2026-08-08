@@ -101,12 +101,46 @@ public static class CqrsServiceExtensions
         // Marten (PostgreSQL EventStore)
         services.AddMarten(options =>
         {
-            options.Connection(builder.EventStoreConnectionString);
+            // ★ Audit-Fix #2: expliziter, konfigurierbarer Command-Timeout (statt implizitem Npgsql-Default ~30s).
+            //   Store-weite, gefahrlose Grenze für einen DB-Stall im Actor-Turn (keine per-Call-Write-Abbrüche →
+            //   kein mehrdeutiger-Commit-Hazard). Aufrufer-Seite zusätzlich über #1 (Dispatcher-Dead-Letter) gedeckt.
+            //   Über den Npgsql-Connection-String gesetzt (version-unabhängig) — CommandTimeout in Sekunden.
+            var eventStoreConn = new Npgsql.NpgsqlConnectionStringBuilder(builder.EventStoreConnectionString)
+            {
+                CommandTimeout = builder.CommandTimeoutSeconds
+            };
+            options.Connection(eventStoreConn.ConnectionString);
             options.Events.DatabaseSchemaName = builder.EventStoreSchema;
             options.DatabaseSchemaName = builder.EventStoreSchema;
             options.AutoCreateSchemaObjects = AutoCreate.CreateOrUpdate;
 
             MartenEventTypeRegistration.RegisterEventTypes(options);
+
+            // ★ Phase 1: Event-Metadaten aktivieren, damit CorrelationId/CausationId/
+            //   Header (aggregate_type) beim Append persistiert und nach dem Log-Read
+            //   (ReadStreamAsync) wieder verfügbar sind.
+            options.Events.MetadataConfig.CorrelationIdEnabled = true;
+            options.Events.MetadataConfig.CausationIdEnabled = true;
+            options.Events.MetadataConfig.HeadersEnabled = true;
+
+            // Fortschrittsmarke der Projektionen (Phase 0 / Phase 2):
+            // durables Checkpoint-Dokument pro (Projektion, Stream).
+            options.Schema.For<ProjectionCheckpoint>().Identity(x => x.Id);
+
+            // Durabler Poll-Backstop-Cursor pro Pull-Pfad (Phase 4b): der Poller setzt nach
+            // einem Neustart hier wieder auf, statt beim Boot die ganze Historie zu re-scannen.
+            options.Schema.For<PollCursor>().Identity(x => x.Id);
+
+            // Durabler Offen-Index der Prozesse (§3-Backstop): eine kleine O(offen)-Menge, aus der ein
+            // periodischer Scan hängende Prozesse (verlorene terminale/kompensierende Selbst-Weckung) heilt.
+            options.Schema.For<ProzessOffen>().Identity(x => x.Id);
+
+            // Dead-Letter-Queue (§5): nicht zustellbare ausgehende Pipeline-Commands, beobachtbar + replay-bar.
+            options.Schema.For<DeadLetter>().Identity(x => x.Id).DatabaseSchemaName("dlq");
+
+            // ★ Snapshots (docs/snapshot-konzept.md): ein jsonb-Dokument je Aggregat-Typ
+            //   (Snapshot<Konto> → es.mt_doc_snapshot_konto). Registrierung generiert, reflection-frei.
+            Persistence.RegisteredSnapshotTypes.Register(options);
         });
 
         services.AddSingleton<IEventStoreRepository>(provider =>
@@ -118,6 +152,29 @@ public static class CqrsServiceExtensions
         });
         Console.WriteLine($"  + IEventStoreRepository (Marten/PostgreSQL)");
         Console.WriteLine($"    Schema: {builder.EventStoreSchema}");
+
+        // Durabler Poll-Cursor (Backstop): setzt nach Neustart bei der letzten HWM auf.
+        services.AddSingleton<IPollCursorStore>(provider =>
+            new MartenPollCursorStore(provider.GetRequiredService<IDocumentStore>()));
+
+        // Durabler Offen-Index der Prozesse (§3-Backstop): Grundlage des Scans, der hängende Prozesse heilt.
+        services.AddSingleton<IProzessOffenIndex>(provider =>
+            new MartenProzessOffenIndex(provider.GetRequiredService<IDocumentStore>()));
+
+        // Dead-Letter-Senke (§5): nicht zustellbare Pipeline-Commands beobachtbar machen statt still droppen.
+        services.AddSingleton<IDeadLetterSink>(provider =>
+            new MartenDeadLetterSink(
+                provider.GetRequiredService<IDocumentStore>(),
+                provider.GetRequiredService<ILogger<MartenDeadLetterSink>>()));
+
+        // ★ Snapshot-Store (abgeleiteter jsonb-Cache): der Aggregat-Actor seedet daraus seine Rehydration.
+        services.AddSingleton<ISnapshotStore>(provider =>
+            new MartenSnapshotStore(
+                provider.GetRequiredService<IDocumentStore>(),
+                provider.GetService<ILogger<MartenSnapshotStore>>()));
+
+        // ★ Snapshot-Schwellwert in DI → der generierte Actor injiziert ihn (Default 200, Tests klein).
+        services.AddSingleton(new SnapshotOptions(builder.SnapshotThreshold, builder.InboxCap));
         
         // Redis (VersionTracker)
         services.AddSingleton<IConnectionMultiplexer>(provider =>
@@ -152,14 +209,19 @@ public static class CqrsServiceExtensions
     }
     
     /// <summary>
-    /// Subscribers registrieren -- DELEGIERT an GeneratedSubscribers.
-    /// Projektionen (Writer) werden hier registriert.
-    /// DI loest deren WriteStore-Konstruktor automatisch auf.
+    /// Deps-Index-Naht registrieren.
+    ///
+    /// (B1) Die Push-Subscriber-Maschinerie (SubscriberActorBase-Dispatch + generierte Push-Actors +
+    /// SubscriberStartupService) wurde entfernt — alle durablen Handler laufen auf dem Pull-Pfad
+    /// (AddGeneratedPullPaths). Der Broker-Kanal bleibt (Signal-Zustellung + Re-Publish reaktiver Events).
+    /// Der Deps-Index-Writer bleibt ebenfalls: der Pull-Adapter nutzt ihn als <see cref="Core.IReadModelDepsSink"/>.
     /// </summary>
     public static IServiceCollection AddCqrsSubscribers(this IServiceCollection services)
     {
-        Console.WriteLine("[CQRS] Registriere Subscribers...");
-        GeneratedSubscribers.RegisterAllSubscribers(services);
+        Console.WriteLine("[CQRS] Registriere Deps-Index-Naht...");
+        services.AddSingleton<Infrastructure.Projections.ReadModelDepsWriter>();
+        services.AddSingleton<Core.IReadModelDepsSink>(
+            sp => sp.GetRequiredService<Infrastructure.Projections.ReadModelDepsWriter>());
         Console.WriteLine();
         return services;
     }
@@ -256,6 +318,16 @@ public static class CqrsServiceExtensions
             }
             Console.WriteLine($"  + {pipelineKinds.Length} Pipeline-Kinds registriert");
 
+            // ★ Phase 4a: per-Stream-Adapter-Kinds der auf Pull migrierten Projektionen
+            //   (VOR StartMemberAsync, sonst nicht registrierbar).
+            var kindContributors = provider
+                .GetServices<Infrastructure.Projections.IClusterKindContributor>().ToList();
+            foreach (var contributor in kindContributors)
+            {
+                clusterConfig = clusterConfig.WithClusterKind(contributor.CreateKind(system, provider));
+            }
+            Console.WriteLine($"  + {kindContributors.Count} Adapter-Kinds registriert");
+
             // FIX: BindTo("0.0.0.0") statt BindToLocalhost() — sonst ist der
             // Cluster-Node von anderen Hosts/Containern nicht erreichbar.
             // AdvertisedHost teilt anderen Nodes mit, unter welcher Adresse
@@ -275,7 +347,9 @@ public static class CqrsServiceExtensions
         services.AddSingleton<IAggregateDispatcher>(provider =>
         {
             var system = provider.GetRequiredService<ActorSystem>();
-            return new ProtoActorAggregateDispatcher(system);
+            var logger = provider.GetService<ILogger<ProtoActorAggregateDispatcher>>();
+            var deadLetters = provider.GetService<IDeadLetterSink>();   // ★ #1: nicht-zustellbare Commands durabel
+            return new ProtoActorAggregateDispatcher(system, logger, deadLetters);
         });
         Console.WriteLine("  + IAggregateDispatcher");
     
@@ -295,10 +369,10 @@ public static class CqrsServiceExtensions
         
         services.AddHostedService<PubSubStartupService>();
         Console.WriteLine("  + PubSubStartupService");
-        
-        services.AddHostedService<SubscriberStartupService>();
-        Console.WriteLine("  + SubscriberStartupService");
-        
+
+        // (B1) SubscriberStartupService entfernt — keine Push-Subscriber mehr; alle Handler laufen
+        //   über den Pull-Pfad (GenericPullStartupService via AddGeneratedPullPaths).
+
         services.AddHostedService<Infrastructure.Pipeline.PipelineStartupService>();
         Console.WriteLine("  + PipelineStartupService");
         
@@ -325,12 +399,37 @@ public class CqrsFrameworkBuilder
     
     public bool EnableGrpc { get; set; } = true;
 
-    public string EventStoreConnectionString { get; set; } = 
+    public string EventStoreConnectionString { get; set; } =
         "Host=localhost;Database=cqrs_events;Username=postgres;Password=postgres";
     public string EventStoreSchema { get; set; } = "es";
 
+    /// <summary>
+    /// ★ Audit-Fix #2: EXPLIZITER, konfigurierbarer Command-Timeout (Sekunden) für alle Marten-/Npgsql-Befehle.
+    /// Bisher galt still Npgsqls Default (~30s); ein DB-Stall blockierte den Actor-Turn unkontrolliert lange.
+    /// Jetzt app-seitig gesetzt und tunebar. BEWUSST NICHT als per-Call-CancellationToken um den Append gelöst:
+    /// ein abgebrochener SaveChanges ist mehrdeutig (committet?), auf dem OCC-Pfad ergäbe das ein falsches
+    /// CommandFailed + ein transientes Konflikt-Fenster. Ein Store-weiter Timeout ist die gefahrlose Grenze;
+    /// die Aufrufer-Seite ist zusätzlich über den Dispatcher-Dead-Letter (#1) abgedeckt.
+    /// </summary>
+    public int CommandTimeoutSeconds { get; set; } = 30;
+
     public string RedisConnectionString { get; set; } = "localhost:6379";
     public int RedisDatabase { get; set; } = 1;
+
+    /// <summary>
+    /// Snapshot-Schwellwert (docs/snapshot-konzept.md): der Aggregat-Actor schreibt best-effort nach je so
+    /// vielen Events einen Snapshot. Default 200 — hoch genug, dass kurze Aggregate nie snapshotten. Tests
+    /// setzen ihn klein, um den Snapshot-Pfad billig auszulösen. 0 schaltet das Schwellwert-Schreiben ab.
+    /// </summary>
+    public int SnapshotThreshold { get; set; } = 200;
+
+    /// <summary>
+    /// ★ Audit-Fix #4/H3: harte Obergrenze der Framework-Inbox (verarbeitete CommandIds des idempotenten
+    /// Reaktions-/Prozess-Pfads). Nur die letzten so vielen Ids bleiben in Speicher + Snapshot, statt monoton
+    /// zu wachsen. Default 10 000 — weit über dem kurzen Re-Delivery-Fenster (Poll ~30s / Prozess feuert einen
+    /// Vorgang nur bis zur ersten Marke), also praktisch dedup-sicher; höher = sicherer, größerer Snapshot.
+    /// </summary>
+    public int InboxCap { get; set; } = 10_000;
     
     public CqrsFrameworkBuilder(IServiceCollection services)
     {

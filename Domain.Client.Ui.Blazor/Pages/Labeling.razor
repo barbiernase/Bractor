@@ -1,301 +1,48 @@
-@* ── Domain.Client.Ui.Blazor/ImagePair/Pages/Labeling.razor ── *@
-
 @page "/labeling"
-@using System.ComponentModel
-@inject ImagePairWorkspace Workspace
-@inject NavigationViewModel NavVm
-@inject LabelingViewModel LabelVm
-@inject FilterViewModel FilterVm
-@inject ISnackbar Snackbar
-@inject IJSRuntime JS
-@implements IDisposable
 
 <div tabindex="0"
-     @ref="_container"
+     @ref="Container"
      @onkeydown="OnKeyDown"
      @onkeydown:preventDefault
      style="outline: none; height: 100vh; display: flex; flex-direction: column; background: #121212; color: #e0e0e0;">
 
-    @* ══════════════ HEADER ══════════════ *@
-    <MudAppBar Dense="true" Fixed="false" Style="background: #1e1e1e; border-bottom: 1px solid #333; flex-shrink: 0;">
+    <GlobalEffects />
+    <HeaderSection OnSettingsClick="OpenSettings" />
 
-        @switch (Workspace.Nav.Modus)
-        {
-            case ArbeitsModus.Live:
-                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
-                         Color="Color.Error" OnClick="NavVm.ToggleModus">LIVE</MudChip>
-                break;
-            case ArbeitsModus.Inspekt:
-                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
-                         Color="Color.Info" OnClick="NavVm.ToggleModus">INSPEKT</MudChip>
-                break;
-            case ArbeitsModus.Tag:
-                <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
-                         Color="Color.Warning" OnClick="NavVm.ToggleModus">
-                    TAG @Workspace.Nav.TagLabelingDatum?.ToString("dd.MM.yy") ✕
-                </MudChip>
-                break;
-        }
-
-        <MudSpacer />
-
-        @if (AktuellerRecord != null)
-        {
-            <MudText Typo="Typo.caption" Class="mr-4" Style="opacity: 0.7;">
-                @AktuellerRecord.ProduziertAm.ToString("dd.MM.yyyy HH:mm:ss")
-            </MudText>
-            <MudText Typo="Typo.caption" Style="font-family: monospace; opacity: 0.7;">
-                @((Workspace.List.Seite - 1) * Workspace.List.SeitenGroesse + Workspace.Nav.SelectedIndex + 1) / @Workspace.List.GesamtAnzahl
-            </MudText>
-        }
-
-        <MudIconButton Icon="@Icons.Material.Filled.Settings"
-                       Color="Color.Inherit" Size="Size.Small" Class="ml-2"
-                       OnClick="() => _settingsOffen = true" />
-    </MudAppBar>
-
-    @* ══════════════ CONTENT ══════════════ *@
     <div style="flex: 1; display: flex; min-height: 0;">
-
-        @if (_paarlisteAktiv)
+        @if (PaarlisteAktiv)
         {
-            <PanelFrame Title="Paarliste"
-                        @bind-IsExpanded="_paarlisteOffen"
-                        Side="PanelFrame.PanelSide.Left"
-                        ExpandedWidth="180" CollapsedWidth="40">
-                <PaarlistenPanel IsExpanded="_paarlisteOffen"
-                                 Items="Workspace.List.Values.ToList()"
-                                 SelectedIndex="Workspace.Nav.SelectedIndex"
-                                 FilterWert="@Workspace.Nav.FilterWert"
-                                 NurNichtInspizierte="Workspace.Nav.NurNichtInspizierte"
-                                 Seite="Workspace.List.Seite"
-                                 GesamtSeiten="Workspace.List.GesamtSeiten"
-                                 OnSelect="i => NavVm.WechsleZu(i)"
-                                 OnFilterChanged="v => FilterVm.SetFilter(v)"
-                                 OnNurNeueChanged="_ => FilterVm.ToggleInspektionsFilter()"
-                                 OnVorige="NavVm.VorigeSeite"
-                                 OnNaechste="NavVm.NaechsteSeite" />
-            </PanelFrame>
+            <PaarlisteSection IsExpanded="PaarlisteOffen"
+                              IsExpandedChanged="SetPaarlisteOffen" />
         }
 
-        <div style="flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0;">
-            <MudTabs @bind-ActivePanelIndex="_activeStageIndex"
-                     Rounded="false" Border="false"
-                     Style="background: #252525; border-bottom: 1px solid #333; flex-shrink: 0; min-height: 28px;"
-                     HeaderPosition="TabHeaderPosition.After">
-                @foreach (var stage in AktiveStages)
-                {
-                    <MudTabPanel Text="@stage.Title" Style="font-size: 12px; min-width: 60px; text-transform: none;" />
-                }
-            </MudTabs>
+        <StageSection BilderAktiv="BilderStageAktiv"
+                      DebugAktiv="DebugStageAktiv"
+                      ChartAktiv="ChartStageAktiv" />
 
-            @if (AktiveStages.Count > 0 && _activeStageIndex >= 0 && _activeStageIndex < AktiveStages.Count)
-            {
-                @AktiveStages[_activeStageIndex].Content
-            }
-            else
-            {
-                <div style="flex: 1; display: flex; align-items: center; justify-content: center;">
-                    <span style="color: #444;">Keine Stage aktiv</span>
-                </div>
-            }
-        </div>
-
-        @if (_historiePanelAktiv)
+        @if (HistoriePanelAktiv)
         {
-            <PanelFrame Title="Historie"
-                        @bind-IsExpanded="_historiePanelOffen"
-                        Side="PanelFrame.PanelSide.Right"
-                        ExpandedWidth="220" CollapsedWidth="40">
-                <HistoriePanel IsExpanded="_historiePanelOffen"
-                               HatAuswahl="Workspace.Nav.AktuelleId != null"
-                               Eintraege="AktuelleHistorie"
-                               IstGeladen="AktuelleHistorieGeladen" />
-            </PanelFrame>
+            <HistorieSection IsExpanded="HistoriePanelOffen"
+                             IsExpandedChanged="SetHistoriePanelOffen" />
         }
     </div>
 
-    @* ══════════════ FOOTER ══════════════ *@
-    <MudToolBar Dense="true" Style="background: #1e1e1e; border-top: 1px solid #333; flex-shrink: 0;">
-        <MudText Typo="Typo.caption" Class="mr-1" Style="color: #888;">Produkt:</MudText>
-        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Success"
-                   OnClick="() => LabelVm.LabelProdukt(Klassifikation.KeineAnomalie)"
-                   Class="mr-1" Style="min-width: 0; padding: 2px 8px; font-size: 11px;"><b>R</b>&nbsp;OK</MudButton>
-        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Warning"
-                   OnClick="() => LabelVm.LabelProdukt(Klassifikation.Questionable)"
-                   Class="mr-1" Style="min-width: 0; padding: 2px 8px; font-size: 11px;"><b>Q</b>&nbsp;?</MudButton>
-        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Error"
-                   OnClick="() => LabelVm.LabelProdukt(Klassifikation.Anomalie)"
-                   Style="min-width: 0; padding: 2px 8px; font-size: 11px;"><b>F</b>&nbsp;!</MudButton>
-
-        <MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
-
-        <MudText Typo="Typo.caption" Class="mr-1" Style="color: #888;">Kamera:</MudText>
-        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Error"
-                   OnClick="() => LabelVm.LabelKamera(Klassifikation.Anomalie)"
-                   Class="mr-1" Style="min-width: 0; padding: 2px 8px; font-size: 11px;"><b>E</b>&nbsp;Erk.</MudButton>
-        <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Success"
-                   OnClick="() => LabelVm.LabelKamera(Klassifikation.KeineAnomalie)"
-                   Style="min-width: 0; padding: 2px 8px; font-size: 11px;"><b>N</b>&nbsp;Nicht</MudButton>
-
-        <MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
-
-        <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Small" OnClick="NavVm.NavigatePrev" />
-        <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" OnClick="NavVm.NavigateNext" />
-        <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Default" OnClick="NavVm.NavigateNextOffen"
-                   Style="min-width: 0; padding: 2px 8px; font-size: 11px; text-transform: none;"><b>Space</b>&nbsp;Nächstes</MudButton>
-    </MudToolBar>
+    <FooterBar />
 </div>
 
-<MudDialog @bind-Visible="_settingsOffen" Options="_dialogOptions">
+<MudDialog @bind-Visible="SettingsOffen" Options="DialogOptions">
     <TitleContent><MudText Typo="Typo.h6">Einstellungen</MudText></TitleContent>
     <DialogContent>
         <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: #888;">Sidebars</MudText>
-        <MudCheckBox T="bool" @bind-Value="_paarlisteAktiv" Label="Paarliste" Color="Color.Primary" Dense="true" />
-        <MudCheckBox T="bool" @bind-Value="_historiePanelAktiv" Label="Historie" Color="Color.Primary" Dense="true" />
+        <MudCheckBox T="bool" @bind-Value="PaarlisteAktiv" Label="Paarliste" Color="Color.Primary" Dense="true" />
+        <MudCheckBox T="bool" @bind-Value="HistoriePanelAktiv" Label="Historie" Color="Color.Primary" Dense="true" />
         <MudDivider Class="my-3" />
         <MudText Typo="Typo.subtitle2" Class="mb-2" Style="color: #888;">Stages</MudText>
-        <MudCheckBox T="bool" @bind-Value="_bilderStageAktiv" Label="Bilder (DC0/DC2)" Color="Color.Primary" Dense="true" />
-        <MudCheckBox T="bool" @bind-Value="_debugStageAktiv" Label="Debug-Stage" Color="Color.Primary" Dense="true" />
-        <MudCheckBox T="bool" @bind-Value="_chartStageAktiv" Label="Chart (Produktionsverlauf)" Color="Color.Primary" Dense="true" />
+        <MudCheckBox T="bool" @bind-Value="BilderStageAktiv" Label="Bilder (DC0/DC2)" Color="Color.Primary" Dense="true" />
+        <MudCheckBox T="bool" @bind-Value="DebugStageAktiv" Label="Debug-Stage" Color="Color.Primary" Dense="true" />
+        <MudCheckBox T="bool" @bind-Value="ChartStageAktiv" Label="Chart (Produktionsverlauf)" Color="Color.Primary" Dense="true" />
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="() => _settingsOffen = false" Color="Color.Primary">Schließen</MudButton>
+        <MudButton OnClick="CloseSettings" Color="Color.Primary">Schließen</MudButton>
     </DialogActions>
 </MudDialog>
-
-@code {
-    private ElementReference _container;
-
-    private bool _paarlisteAktiv = true;
-    private bool _paarlisteOffen = true;
-    private bool _historiePanelAktiv = true;
-    private bool _historiePanelOffen = true;
-    private bool _bilderStageAktiv = true;
-    private bool _debugStageAktiv = true;
-    private bool _chartStageAktiv = true;
-    private int _activeStageIndex;
-    private bool _settingsOffen;
-    private readonly DialogOptions _dialogOptions = new() { MaxWidth = MaxWidth.Small };
-
-    // ═══════════════════════════════════════════════════
-    // Computed
-    // ═══════════════════════════════════════════════════
-
-    private ImagePairRecord? AktuellerRecord =>
-        Workspace.Nav.AktuelleId is { } id ? Workspace.List.FindById(id) : null;
-
-    private IReadOnlyList<HistorieEintrag> AktuelleHistorie =>
-        Workspace.Nav.AktuelleId is { } id ? Workspace.Historie.GetHistorie(id) : [];
-
-    private bool AktuelleHistorieGeladen =>
-        Workspace.Nav.AktuelleId is { } id && Workspace.Historie.IstGeladen(id);
-
-    // ═══════════════════════════════════════════════════
-    // Stages
-    // ═══════════════════════════════════════════════════
-
-    private record StageDefinition(string Title, RenderFragment Content);
-
-    private List<StageDefinition> AktiveStages
-    {
-        get
-        {
-            var list = new List<StageDefinition>();
-            if (_bilderStageAktiv) list.Add(new("Bilder", @<BilderStage Entry="AktuellerRecord" />));
-            if (_debugStageAktiv)  list.Add(new("Debug",  @<DebugStage Entry="AktuellerRecord" />));
-            if (_chartStageAktiv)  list.Add(new("Chart",  @<MainStage />));
-            return list;
-        }
-    }
-
-    // ═══════════════════════════════════════════════════
-    // Lifecycle
-    // ═══════════════════════════════════════════════════
-
-    protected override void OnInitialized()
-    {
-        Workspace.List.PropertyChanged += OnStoreChanged;
-        Workspace.Nav.PropertyChanged += OnStoreChanged;
-        Workspace.Feedback.PropertyChanged += OnStoreChanged;
-        Workspace.Historie.PropertyChanged += OnStoreChanged;
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender) await _container.FocusAsync();
-    }
-
-    private void OnStoreChanged(object? sender, PropertyChangedEventArgs e)
-    {
-        _ = InvokeAsync(() =>
-        {
-            if (sender == Workspace.Feedback
-                && e.PropertyName == nameof(FeedbackStore.LetzteAblehnung)
-                && Workspace.Feedback.LetzteAblehnung != null)
-                Snackbar.Add($"{Workspace.Feedback.LetzteAblehnung}", Severity.Warning);
-
-            if (sender == Workspace.Nav
-                && e.PropertyName == nameof(NavigationStore.SelectedIndex))
-                _ = ScrollToSelected();
-
-            if (sender == Workspace.Nav
-                && e.PropertyName == nameof(NavigationStore.Modus)
-                && Workspace.Nav.Modus == ArbeitsModus.Tag)
-                _activeStageIndex = 0;
-
-            StateHasChanged();
-        });
-    }
-
-    // ═══════════════════════════════════════════════════
-    // Keyboard
-    // ═══════════════════════════════════════════════════
-
-    private void OnKeyDown(KeyboardEventArgs e)
-    {
-        switch (e.Key)
-        {
-            case "ArrowUp":    NavVm.NavigateNext(); break;
-            case "ArrowDown":  NavVm.NavigatePrev(); break;
-            case " ":          NavVm.NavigateNextOffen(); break;
-
-            case "Enter":     LabelVm.LabelProdukt(Klassifikation.KeineAnomalie); break;
-            case "Backspace": LabelVm.LabelProdukt(Klassifikation.Anomalie); break;
-            case "q":         LabelVm.LabelProdukt(Klassifikation.Questionable); break;
-            case "ArrowLeft": LabelVm.LabelKamera(Klassifikation.Anomalie); break;
-            case "ArrowRight":LabelVm.LabelKamera(Klassifikation.KeineAnomalie); break;
-
-            case "Tab": _paarlisteOffen = !_paarlisteOffen; break;
-            case "l":   NavVm.ToggleModus(); break;
-            case "i":   FilterVm.ToggleInspektionsFilter(); break;
-            case "1":   FilterVm.SetFilter("alle"); break;
-            case "2":   FilterVm.SetFilter("offen"); break;
-            case "3":   FilterVm.SetFilter("anomalie"); break;
-
-            case "Escape":
-                if (Workspace.Nav.Modus == ArbeitsModus.Tag)
-                    NavVm.BeendeTagLabeling();
-                break;
-        }
-    }
-
-    private async Task ScrollToSelected()
-    {
-        try { await JS.InvokeVoidAsync("eval",
-                $"document.getElementById('pair-{Workspace.Nav.SelectedIndex}')?.scrollIntoView({{block:'nearest'}})"); }
-        catch { }
-    }
-
-    // ═══════════════════════════════════════════════════
-    // Dispose
-    // ═══════════════════════════════════════════════════
-
-    public void Dispose()
-    {
-        Workspace.List.PropertyChanged -= OnStoreChanged;
-        Workspace.Nav.PropertyChanged -= OnStoreChanged;
-        Workspace.Feedback.PropertyChanged -= OnStoreChanged;
-        Workspace.Historie.PropertyChanged -= OnStoreChanged;
-    }
-}

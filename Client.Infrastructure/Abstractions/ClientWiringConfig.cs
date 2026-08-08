@@ -20,5 +20,6 @@ public record ClientWiringConfig(
     Action<QueryBridge, ClientBus> RegisterQueries,
     IReadOnlyList<Type> ServerEventTypes,
     IReadOnlyList<Type> CommandTypes,
-    IReadOnlyDictionary<Type, string> CommandAggregateTypes
+    IReadOnlyDictionary<Type, string> CommandAggregateTypes,
+    IReadOnlyList<Type> HydrationStores
 );

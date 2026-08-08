@@ -30,6 +30,9 @@ using Domain.Pipeline.Infrastructure;
 using Infrastructure.Extensions;
 using Infrastructure.GrpcClient;
 using Infrastructure.Pipeline;
+using Infrastructure.Projections;
+using Infrastructure.Projections.Generated;
+using Infrastructure.Prozess;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -84,6 +87,15 @@ builder.Services.AddCqrsFramework(opts =>
     // gRPC Client Service
     opts.EnableGrpc = true;
 });
+
+// ─── Pull-Pfad (generiert) für alle IPullSubscriber ───
+// Signal/Poll → SignalReceiverActor → per-Stream-Adapter → Store (Effekt + Marke).
+// EIN generierter Aufruf: Kind-Contributors + Receiver/Poller + Push-Abkopplung.
+// NACH AddCqrsFramework, damit der Pull-Startup nach dem Cluster-Start läuft.
+builder.Services.AddGeneratedPullPaths();
+
+// Prozess-Schicht (Event-Regel-DAG): generisches Manager-Kind + Korrelations-Router aus GeneratedProzessRegeln.
+builder.Services.AddGeneratedProzesse();
 
 // ─── Domain Pipeline ───
 // WatchPath kommt jetzt aus der Konfiguration statt hardcoded.

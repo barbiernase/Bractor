@@ -1,0 +1,36 @@
+<MudAppBar Dense="true" Fixed="false" Style="background: #1e1e1e; border-bottom: 1px solid #333; flex-shrink: 0;">
+
+    @switch (Modus)
+    {
+        case ArbeitsModus.Live:
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                     Color="Color.Error" OnClick="ToggleModus">LIVE</MudChip>
+            break;
+        case ArbeitsModus.Inspekt:
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                     Color="Color.Info" OnClick="ToggleModus">INSPEKT</MudChip>
+            break;
+        case ArbeitsModus.Tag:
+            <MudChip T="string" Size="Size.Small" Variant="Variant.Filled"
+                     Color="Color.Warning" OnClick="ToggleModus">
+                TAG @TagDatum?.ToString("dd.MM.yy") ✕
+            </MudChip>
+            break;
+    }
+
+    <MudSpacer />
+
+    @if (Record != null)
+    {
+        <MudText Typo="Typo.caption" Class="mr-4" Style="opacity: 0.7;">
+            @Record.ProduziertAm.ToString("dd.MM.yyyy HH:mm:ss")
+        </MudText>
+        <MudText Typo="Typo.caption" Style="font-family: monospace; opacity: 0.7;">
+            @Position / @GesamtAnzahl
+        </MudText>
+    }
+
+    <MudIconButton Icon="@Icons.Material.Filled.Settings"
+                   Color="Color.Inherit" Size="Size.Small" Class="ml-2"
+                   OnClick="OnSettingsClick" />
+</MudAppBar>

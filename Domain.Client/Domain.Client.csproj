@@ -11,11 +11,7 @@
       <ProjectReference Include="..\Client.Infrastructure\Client.Infrastructure.csproj" />
     </ItemGroup>
 
-    <ItemGroup>
-        <ProjectReference Include="..\Client.SourceGeneration\Client.SourceGeneration.csproj"
-                          OutputItemType="Analyzer"
-                          ReferenceOutputAssembly="false" />
-    </ItemGroup>
+    
 
     <ItemGroup>
       <PackageReference Include="CommunityToolkit.Mvvm" Version="8.4.2" />

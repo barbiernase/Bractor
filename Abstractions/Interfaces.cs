@@ -127,10 +127,26 @@ public interface IAggregateRepository
         /// <param name="events">Die Liste der neuen Events, die gespeichert werden sollen.</param>
         /// <exception cref="ConcurrencyException">Wird ausgelöst, wenn die expectedVersion nicht mit der aktuellen Version des Streams übereinstimmt.</exception>
         /// <returns>Ein Task, der die asynchrone Schreiboperation repräsentiert.</returns>
+        /// <param name="correlationId">Optional: Korrelations-Id, wird ins Log gestempelt (Phase 1).</param>
+        /// <param name="causationId">Optional: Verursacher-Id (auslösender Command), wird ins Log gestempelt.</param>
+        /// <param name="aggregateType">Optional: Aggregat-Typname, wird als Log-Header gestempelt.</param>
         Task AppendEventsAsync(
             Guid aggregateId,
             int expectedVersion,
-            IReadOnlyList<IEvent> events);
+            IReadOnlyList<IEvent> events,
+            string? correlationId = null,
+            string? causationId = null,
+            string? aggregateType = null);
+
+        /// <summary>
+        /// Globales Leseprimitiv für den Poll-Backstop (Spec 19.1): liefert die Streams,
+        /// die seit <paramref name="afterGlobalSequence"/> neue Events bekommen haben, plus
+        /// die neue globale High-Water-Mark. Der Poller weckt daraufhin die betroffenen
+        /// Adapter — so heilt er das eine, das Coalescing NICHT auffängt: das letzte
+        /// verlorene Signal vor Stille.
+        /// </summary>
+        Task<StreamChanges> ReadChangedStreamsAsync(
+            long afterGlobalSequence, CancellationToken ct);
 
         /// <summary>
         /// Rekonstruiert den aktuellen Zustand eines Aggregats, indem alle zugehörigen
@@ -143,8 +159,25 @@ public interface IAggregateRepository
         /// oder null, wenn für diese ID keine Events gefunden wurden.
         /// </returns>
         Task<TState?> LoadStateAsync<TState>(Guid aggregateId) where TState : class, IState, new();
+
+        /// <summary>
+        /// Liest die Events eines Streams ab <paramref name="fromVersion"/>, geordnet,
+        /// jeweils mit ihrer Version im EventEnvelope.
+        ///
+        /// Das eine tragende neue Leseprimitiv des Pull-Ansatzes (Spec 5.2):
+        /// <paramref name="fromVersion"/> = angewandte Marke + 1. Genutzt von
+        /// Adaptern, (späteren) Treibern und dem Rebuilder.
+        /// </summary>
+        Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(
+            Guid streamId, int fromVersion, CancellationToken ct);
     }
 
+
+    /// <summary>
+    /// Ergebnis eines Poll-Scans: die seit der letzten High-Water-Mark geänderten Streams
+    /// und die neue High-Water-Mark (globale Event-Sequenz).
+    /// </summary>
+    public record StreamChanges(IReadOnlyList<Guid> StreamIds, long HighWaterMark);
 
     public interface IAggregateDispatcher
     {

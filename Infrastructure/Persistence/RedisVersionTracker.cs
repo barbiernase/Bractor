@@ -52,8 +52,9 @@ public class RedisVersionTracker : IVersionTracker
     /// <summary>
     /// Aktualisiert die Version eines Aggregats in Redis.
     /// 
-    /// Bei Version 1 (erste Erstellung) wird zusätzlich der sekundäre Index befüllt.
-    /// Nutzt Redis-Pipeline für atomares Schreiben (Hash + optionaler SADD).
+    /// Befüllt zusätzlich den sekundären Index „alle Aggregate vom Typ X" — bei JEDEM Track (idempotentes
+    /// SADD), damit auch Aggregate mit Erstversion ≠1 (Multi-Event/Reaktion) erfasst werden (Audit-Fix #6).
+    /// Nutzt Redis-Pipeline für atomares Schreiben (Hash + SADD).
     /// </summary>
     public async Task TrackAsync(Guid aggregateId, string aggregateType, int newVersion)
     {
@@ -73,19 +74,20 @@ public class RedisVersionTracker : IVersionTracker
                 new HashEntry(FieldTimestamp, now)
             });
 
-            // Sekundärer Index: nur bei erster Erstellung (Version 1)
-            Task? indexTask = null;
-            if (newVersion == 1)
-            {
-                var indexKey = IndexKey(aggregateType);
-                indexTask = batch.SetAddAsync(indexKey, aggregateId.ToString());
-            }
+            // Sekundärer Index „alle Aggregate vom Typ X".
+            // ★ Audit-Fix #6: bei JEDEM Track befüllen, nicht nur bei Version 1. Die alte Annahme
+            //   „erstes Event → Version 1" verfehlte Aggregate, deren erstes Command mehrere Events erzeugt
+            //   (Version ≥2) ODER die per Reaktion/Prozess erstellt werden (Domänen-Event + KommandoVerarbeitet-
+            //   Marke → Version 2) — sie tauchten NIE im Index auf (stiller Vollständigkeitsfehler).
+            //   SetAddAsync ist idempotent → ein Re-Add ist folgenlos, also schlicht immer indexen (O(1)-SADD
+            //   im selben Batch). Der Index bleibt abgeleitet/nicht-autoritativ (Wahrheit ist der Log).
+            var indexKey = IndexKey(aggregateType);
+            var indexTask = batch.SetAddAsync(indexKey, aggregateId.ToString());
 
             batch.Execute();
 
             await hashTask;
-            if (indexTask != null)
-                await indexTask;
+            await indexTask;
 
             _logger.LogDebug(
                 "Tracked {AggregateType}/{AggregateId} → Version {Version}",

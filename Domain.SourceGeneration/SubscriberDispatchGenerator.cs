@@ -241,7 +241,7 @@ public class SubscriberDispatchGenerator : IIncrementalGenerator
         sb.AppendLine("    public async Task DispatchAsync(");
         sb.AppendLine("        IAggregateEnvelope envelope,");
         sb.AppendLine("        ProjectionWriter writer,");
-        sb.AppendLine("        Func<IEvent, Task> emit)");
+        sb.AppendLine("        Func<IPipelineOutput, Task> emit)");
         sb.AppendLine("    {");
         sb.AppendLine("        switch (envelope.Payload)");
         sb.AppendLine("        {");
@@ -268,10 +268,11 @@ public class SubscriberDispatchGenerator : IIncrementalGenerator
                     break;
 
                 case HandlerKind.AsyncEnumerableOneOf:
-                    // OneOf.Value ist jetzt IMessagePayload (Phase 1), cast zu IEvent
+                    // ★ Phase 3: Output-Routing nach Typ — der Adapter/Actor entscheidet
+                    //   anhand des konkreten IMessagePayload (IEvent → publish, ICommand → Reaktion).
                     sb.AppendLine($"            case {simpleName} e:");
                     sb.AppendLine($"                await foreach (var oneOf in Handle(e, envelope, writer))");
-                    sb.AppendLine($"                    await emit((IEvent)oneOf.Value);");
+                    sb.AppendLine($"                    await emit((IPipelineOutput)oneOf.Value);");
                     sb.AppendLine($"                break;");
                     sb.AppendLine();
                     break;

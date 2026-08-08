@@ -1,0 +1,128 @@
+@*  Dev-Harness für die VirtualList — 50 000 Fake-Zeilen mit simulierter Latenz,
+    komplett ohne gRPC. Prüft visuell: flüssiges Scrollen, Skeletons, "kein
+    Daumen-Sprung", Live-Insert-Kompensation und Cursor-into-view.
+
+    WICHTIG: Diese App hat KEINEN Router (App.razor rendert direkt <Shell />, alles
+    fällt auf _Host zurück). Ein @@page-Weg funktioniert hier nicht. Zum Testen in
+    App.razor vorübergehend <Shell /> durch <VirtualListHarness /> ersetzen (dort
+    @@using Domain.Client.Modules.Blazor.Shared ergänzen).
+
+    Der Circuit-Startup (echte gRPC-Verbindung + Domain-Wiring) läuft beim Öffnen
+    trotzdem; er stört nicht, weil der Harness nur eigene Fake-Typen abonniert.  *@
+
+@namespace Domain.Client.Modules.Blazor.Shared
+@using global::Client.Infrastructure.Abstractions
+@using global::Client.Infrastructure.Bus
+@using global::Client.Infrastructure.Collections
+@implements IDisposable
+@inject IBus Bus
+
+<div style="padding:12px;color:#ddd;font-family:sans-serif;font-size:13px">
+    <div style="display:flex;gap:16px;align-items:center;margin-bottom:8px;flex-wrap:wrap">
+        <label>Latenz: @_delayMs ms
+            <input type="range" min="0" max="600" step="20" @bind="_delayMs" @bind:event="oninput" />
+        </label>
+        <label><input type="checkbox" @bind="_stickToTop" /> am Live-Rand kleben</label>
+        <button @onclick="Einfuegen">+ Live-Insert oben</button>
+        <button @onclick="() => SpringeZu(40000)">Sprung → 40 000</button>
+        <span style="color:#888">
+            Gesamt @_store.Rows.GesamtAnzahl · InsertOffset @_store.Rows.InsertOffset
+        </span>
+    </div>
+
+    <div style="height:420px;border:1px solid #444;background:#1e1e1e">
+        <VirtualList TItem="HarnessRow" TKey="int"
+                     Store="_store" Window="_store.Rows" Cursor="_store.Cursor"
+                     RowHeight="24" BufferPages="2" StickToTop="_stickToTop"
+                     OnActivate="row => Publish(new FakeCursorGesetzt(row.Nr))">
+            <Row Context="row">
+                <div style="padding:2px 8px;font-family:monospace;line-height:20px;
+                            color:@(row.IstNeu ? "#4ade80" : "#ccc")">
+                    #@row.Nr @(row.IstNeu ? "· NEU" : "")
+                </div>
+            </Row>
+            <Skeleton>
+                <div style="padding:2px 8px;line-height:20px;color:#444;font-family:monospace">░░░░░░░░</div>
+            </Skeleton>
+        </VirtualList>
+    </div>
+</div>
+
+@code {
+    private const int Gesamt = 50_000;
+
+    private readonly HarnessStore _store = new();
+    private readonly List<IDisposable> _subs = new();
+    private ClientBus _bus = null!;
+    private int _delayMs = 140;
+    private bool _stickToTop;
+    private int _insertZaehler;
+
+    protected override void OnInitialized()
+    {
+        _bus = (ClientBus)Bus;
+        _store.AttachToBus(_bus);
+
+        // Fake-"Server": auf Seitenanforderung mit Verzögerung antworten.
+        _subs.Add(_bus.SubscribeAsync<LadeFakeSeite>(async (q, _) =>
+        {
+            await Task.Delay(_delayMs);
+            var von = (q.Seite - 1) * q.Groesse;
+            var n = Math.Clamp(Gesamt - von, 0, q.Groesse);
+            var items = Enumerable.Range(von, n).Select(i => new HarnessDto(i)).ToList();
+            _bus.PostToSyncContext(() =>
+                _bus.Publish(new FakeSeiteGeladen(q.Seite, q.Groesse, Gesamt, items)));
+        }));
+
+        // Eingetroffener Chunk → in die Collection (sync, im Dispatch → Flush → Changed).
+        _subs.Add(_bus.Subscribe<FakeSeiteGeladen>((e, _) =>
+            _store.Rows.Absorb(
+                new Chunk<HarnessDto>(e.Seite, e.Groesse, e.Gesamt, e.Items),
+                d => new HarnessRow(d.Nr, IstNeu: false))));
+
+        // Live-Insert oben.
+        _subs.Add(_bus.Subscribe<FakeInsert>((e, _) =>
+            _store.Rows.FuegeVorneEin(new HarnessRow(e.Nr, IstNeu: true))));
+
+        // Cursor setzen (Klick oder Sprung).
+        _subs.Add(_bus.Subscribe<FakeCursorGesetzt>((e, _) =>
+            _store.Cursor.Select(e.Index, e.Index)));
+
+        // Initiale Ladung — im echten System stößt das der RefreshHandler auf
+        // ConnectionEstablished an (Phase 5), nicht der Treiber.
+        _bus.Publish(new LadeFakeSeite(1, 50));
+    }
+
+    private void Publish(object msg) => _bus.Publish(msg);
+    private void Einfuegen()   => Publish(new FakeInsert(--_insertZaehler));
+    private void SpringeZu(int i) => Publish(new FakeCursorGesetzt(i));
+
+    public void Dispose()
+    {
+        foreach (var s in _subs) s.Dispose();
+        _store.DetachFromBus();
+    }
+
+    // ─── Fake-Domäne (nur im Harness) ───
+    private sealed record HarnessDto(int Nr);
+    private sealed record HarnessRow(int Nr, bool IstNeu);
+
+    private sealed record LadeFakeSeite(int Seite, int Groesse);
+    private sealed record FakeSeiteGeladen(int Seite, int Groesse, int Gesamt, IReadOnlyList<HarnessDto> Items);
+    private sealed record FakeInsert(int Nr);
+    private sealed record FakeCursorGesetzt(int Index);
+
+    private sealed class HarnessStore : StoreBase
+    {
+        public VirtualCollection<HarnessRow, int> Rows { get; }
+        public Cursor<int> Cursor { get; }
+
+        public HarnessStore()
+        {
+            Rows = Track(new VirtualCollection<HarnessRow, int>(
+                keyOf: r => r.Nr,
+                baueQuery: (seite, groesse) => new LadeFakeSeite(seite, groesse)));
+            Cursor = Track(new Cursor<int>());
+        }
+    }
+}

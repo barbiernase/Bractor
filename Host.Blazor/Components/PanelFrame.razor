@@ -1,0 +1,70 @@
+@using Client.Infrastructure.Abstractions
+
+<style>
+    .panel-bar { background: #252528; transition: background 0.12s ease; }
+    .panel-bar:hover { background: #32323a; }
+    .panel-bar .pb-chevron { font-size: 13px; color: #b0b0b8; line-height: 1; }
+    .panel-bar:hover .pb-chevron { color: #ffffff; }
+    .panel-bar .pb-title {
+        writing-mode: vertical-lr; transform: rotate(180deg);
+        font-size: 11px; font-weight: 500; letter-spacing: 0.5px;
+        color: #9a9aa2; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+    .panel-bar:hover .pb-title { color: #d0d0d6; }
+</style>
+
+<div style="display: flex; height: 100%; flex-shrink: 0;
+            width: @(IsExpanded ? ExpandedWidth : BarWidth)px;
+            transition: width 0.15s ease;">
+
+    @if (Side == SidebarSide.Right) { @Bar() @Content() }
+    else { @Content() @Bar() }
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string BarTitle { get; set; } = "";
+    [Parameter] public bool IsExpanded { get; set; } = true;
+    [Parameter] public EventCallback<bool> IsExpandedChanged { get; set; }
+    [Parameter] public int ExpandedWidth { get; set; } = 180;
+    [Parameter] public int BarWidth { get; set; } = 28;
+    [Parameter] public SidebarSide Side { get; set; } = SidebarSide.Left;
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private string DisplayBarTitle => string.IsNullOrEmpty(BarTitle) ? Title : BarTitle;
+    private string Chevron => (Side, IsExpanded) switch
+    {
+        (SidebarSide.Left, true)   => "◀",
+        (SidebarSide.Left, false)  => "▶",
+        (SidebarSide.Right, true)  => "▶",
+        (SidebarSide.Right, false) => "◀",
+    };
+
+    private async Task Toggle()
+    {
+        IsExpanded = !IsExpanded;
+        await IsExpandedChanged.InvokeAsync(IsExpanded);
+    }
+
+    private RenderFragment Bar() => __builder =>
+    {
+        <div @onclick="Toggle" class="panel-bar"
+             style="width: @(BarWidth)px; flex-shrink: 0;
+                    border-left: @(Side == SidebarSide.Right ? "1px solid #3a3a3a" : "none");
+                    border-right: @(Side == SidebarSide.Left ? "1px solid #3a3a3a" : "none");
+                    cursor: pointer; display: flex; flex-direction: column;
+                    align-items: center; padding: 10px 0; user-select: none;
+                    gap: 8px;">
+            <span class="pb-chevron">@Chevron</span>
+            <span class="pb-title">@DisplayBarTitle</span>
+        </div>
+    };
+
+    private RenderFragment Content() => __builder =>
+    {
+        <div style="flex: 1; overflow: hidden; background: #1e1e1e;
+                    @(IsExpanded ? "" : "width: 0;")">
+            @if (IsExpanded) { @ChildContent }
+        </div>
+    };
+}

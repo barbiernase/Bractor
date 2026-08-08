@@ -16,7 +16,7 @@ namespace Domain.Projections;
 ///   - Kategorie für UI-Farbkodierung
 ///   - Optionale Details (Klassifikation, Version, etc.)
 /// </summary>
-public partial class ImagePairHistorieProjection : ISubscriber
+public partial class ImagePairHistorieProjection : ISubscriber, IPullSubscriber
 {
     private readonly IImagePairHistorieWriteStore _store;
 

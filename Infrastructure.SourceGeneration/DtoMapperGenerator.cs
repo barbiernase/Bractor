@@ -33,7 +33,22 @@ namespace Infrastructure.SourceGeneration
                 // 1. Nutze den existierenden DomainGraphAnalyzer aus Core.SourceGeneration
                 var analyzer = DomainGraphAnalyzer.Create(context.Compilation, useGlobalNamespace: true);
                 var graphs = analyzer.AnalyzeMessagePayloads();
-                
+
+                // Signale (StateChangeVia{Event}) ausschließen: sie laufen NUR auf der
+                // internen PubSub-Ebene (rohe CLR), nie über die externe gRPC/Proto-Grenze.
+                // Ohne Ausschluss würden sie als DomainType.Object Value-Object-Mapper auf
+                // nicht existierende StateChangeVia*Dto erzeugen → Compile-Fehler.
+                var signalGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IStateChangeSignal");
+                var signalNames = new HashSet<string>(signalGraphs.Select(g => g.FullName));
+                graphs = graphs.Where(g => !signalNames.Contains(g.FullName)).ToList();
+
+                // Prozess-Maschinerie-Typen (generierte {Prozess}_StarteProzess/Melde…/Prozess-Events,
+                // IProzessIntern) aus dem Proto-Mapping ausschließen: rein intern (single-node in-process /
+                // Event-Store-JSON), nie über Proto. Für Marten/Replay bleiben sie in der Typ-Registry.
+                var prozessGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IProzessIntern");
+                var prozessNames = new HashSet<string>(prozessGraphs.Select(g => g.FullName));
+                graphs = graphs.Where(g => !prozessNames.Contains(g.FullName)).ToList();
+
                 // NEU: Query-Typen separat laden
                 var queryGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IQuery");
                 var queryResponseGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IQueryResponse");
@@ -622,6 +637,12 @@ namespace Infrastructure.SourceGeneration
                 return $"if ({sourceVar}.{propName} != null) dto.{propName}.AddRange({sourceVar}.{propName}.Select(x => (int)x));";
             }
             
+            // Collection von Guids (z.B. IReadOnlyList<Guid>) → in Proto als repeated string.
+            if (elementType == "System.Guid")
+            {
+                return $"if ({sourceVar}.{propName} != null) dto.{propName}.AddRange({sourceVar}.{propName}.Select(x => x.ToString()));";
+            }
+
             if (TypeMappingHelper.IsProtoScalarType(elementType))
             {
                 return $"if ({sourceVar}.{propName} != null) dto.{propName}.AddRange({sourceVar}.{propName});";
@@ -629,11 +650,11 @@ namespace Infrastructure.SourceGeneration
             else
             {
                 var elementTypeName = GetSimpleTypeName(elementType);
-                
+
                 // Determine correct helper class based on element's DomainType
                 var elementDomainType = typeLookup != null ? GetDomainTypeForTypeName(elementTypeName, typeLookup) : DomainType.Object;
                 var helperClass = GetHelperClassName(elementDomainType);
-                
+
                 return $"if ({sourceVar}.{propName} != null) dto.{propName}.AddRange({sourceVar}.{propName}.Select(x => {helperClass}.MapToDto(x)));";
             }
         }
@@ -752,6 +773,12 @@ namespace Infrastructure.SourceGeneration
                     return $"{sourceVar}.{fieldName}?.Select(x => ({sanitizedEnumType})x).ToList()";
                 }
                 
+                // Collection von Guids (repeated string in Proto) → Guid.Parse je Element.
+                if (elementType == "System.Guid")
+                {
+                    return $"{sourceVar}.{fieldName}?.Select(x => Guid.Parse(x)).ToList()";
+                }
+
                 if (TypeMappingHelper.IsProtoScalarType(elementType) || IsPrimitiveOrNullableType(elementType))
                 {
                     return $"{sourceVar}.{fieldName}?.ToList()";
@@ -1128,9 +1155,6 @@ namespace Infrastructure.SourceGeneration
                 // Domain.ImagePair
                 "Klassifikation", "Domain.ImagePair.Klassifikation",
                 "BildVersion", "Domain.ImagePair.BildVersion",
-                // Domain.Todo  
-                "Prioritaet", "Domain.Todo.Prioritaet",
-                "TodoStatus", "Domain.Todo.TodoStatus",
             };
             
             string baseType = null;

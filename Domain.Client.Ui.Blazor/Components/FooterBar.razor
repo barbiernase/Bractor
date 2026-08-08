@@ -1,0 +1,29 @@
+<MudToolBar Dense="true" Style="background: #1e1e1e; border-top: 1px solid #333; flex-shrink: 0;">
+    <MudText Typo="Typo.caption" Class="mr-1" Style="color: #888;">Produkt:</MudText>
+    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Success"
+               OnClick="LabelOk"
+               Class="mr-1" Style="min-width: 0; padding: 2px 8px; font-size: 11px;"><b>R</b>&nbsp;OK</MudButton>
+    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Warning"
+               OnClick="LabelFraglich"
+               Class="mr-1" Style="min-width: 0; padding: 2px 8px; font-size: 11px;"><b>Q</b>&nbsp;?</MudButton>
+    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Error"
+               OnClick="LabelAnomalie"
+               Style="min-width: 0; padding: 2px 8px; font-size: 11px;"><b>F</b>&nbsp;!</MudButton>
+
+    <MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
+
+    <MudText Typo="Typo.caption" Class="mr-1" Style="color: #888;">Kamera:</MudText>
+    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Error"
+               OnClick="KameraErkennbar"
+               Class="mr-1" Style="min-width: 0; padding: 2px 8px; font-size: 11px;"><b>E</b>&nbsp;Erk.</MudButton>
+    <MudButton Variant="Variant.Outlined" Size="Size.Small" Color="Color.Success"
+               OnClick="KameraNicht"
+               Style="min-width: 0; padding: 2px 8px; font-size: 11px;"><b>N</b>&nbsp;Nicht</MudButton>
+
+    <MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
+
+    <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft" Size="Size.Small" OnClick="NavPrev" />
+    <MudIconButton Icon="@Icons.Material.Filled.ChevronRight" Size="Size.Small" OnClick="NavNext" />
+    <MudButton Variant="Variant.Text" Size="Size.Small" Color="Color.Default" OnClick="NavNextOffen"
+               Style="min-width: 0; padding: 2px 8px; font-size: 11px; text-transform: none;"><b>Space</b>&nbsp;Nächstes</MudButton>
+</MudToolBar>

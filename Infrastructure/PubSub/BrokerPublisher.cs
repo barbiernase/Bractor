@@ -63,8 +63,6 @@ public class BrokerPublisher
         var shard = BrokerIdentity.ShardFor(messageType, targetId);
         var message = new Publish(envelope);
 
-        Console.WriteLine($"[BrokerPublisher] Targeted publish to shard {shard.Identity} for subscriber '{targetId}'");
-
         await _cluster.RequestAsync<Ack>(shard, message, ct);
     }
 
@@ -81,9 +79,7 @@ public class BrokerPublisher
         {
             var messageType = envelope.Payload.GetType();
             var shard = BrokerIdentity.ShardFor(messageType, targeted.TargetSubscriberId);
-            
-            Console.WriteLine($"[BrokerPublisher] Targeted fire-and-forget to shard {shard.Identity}");
-            
+
             _ = _cluster.RequestAsync<Ack>(shard, new Publish(envelope), CancellationToken.None);
             return;
         }

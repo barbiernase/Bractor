@@ -39,14 +39,11 @@ namespace Infrastructure.SourceGeneration
 
             var sorted = pipelineSymbols.OrderBy(s => s.Name).ToList();
 
-            // Command→AggregateType-Mapping aufbauen
-            var commandAggregateTypes = BuildCommandAggregateTypeMapping(context.Compilation);
-
             // TriggerType→Pipeline-Klassenname-Mapping aufbauen
             var triggerToClass = BuildTriggerToPipelineClassMapping(context.Compilation, sorted);
 
             string actorsSource = GeneratePipelineActorsFile(sorted);
-            string registrationSource = GeneratePipelinesRegistrationFile(sorted, commandAggregateTypes, triggerToClass);
+            string registrationSource = GeneratePipelinesRegistrationFile(sorted, triggerToClass);
 
             context.AddSource("PipelineActors.g.cs", actorsSource);
             context.AddSource("GeneratedPipelines.g.cs", registrationSource);
@@ -84,65 +81,6 @@ namespace Infrastructure.SourceGeneration
 
             FindTypes(compilation.GlobalNamespace);
             return results;
-        }
-
-        /// <summary>
-        /// Baut ein Mapping Command-Typ → AggregateType-Name auf.
-        /// Nutzt dieselbe Namespace-Konvention wie EventCommandMappingGenerator:
-        /// IState-Implementierungen definieren Aggregate-Namespaces,
-        /// ICommand-Typen im selben Namespace gehören zu diesem Aggregate.
-        /// </summary>
-        private Dictionary<INamedTypeSymbol, string> BuildCommandAggregateTypeMapping(Compilation compilation)
-        {
-            var result = new Dictionary<INamedTypeSymbol, string>(SymbolEqualityComparer.Default);
-
-            var iState = compilation.GetTypeByMetadataName(IStateFullName);
-            var iCommand = compilation.GetTypeByMetadataName(ICommandFullName);
-
-            if (iState == null || iCommand == null)
-                return result;
-
-            var allTypes = new List<INamedTypeSymbol>();
-            CollectTypes(compilation.GlobalNamespace, allTypes);
-
-            // Aggregate finden → Namespace → Name
-            var aggregatesByNamespace = allTypes
-                .Where(t => t.AllInterfaces.Contains(iState, SymbolEqualityComparer.Default))
-                .ToDictionary(
-                    a => a.ContainingNamespace.ToDisplayString(),
-                    a => a.Name);
-
-            // Commands ihren Aggregaten zuordnen
-            var commands = allTypes
-                .Where(t => t.AllInterfaces.Contains(iCommand, SymbolEqualityComparer.Default));
-
-            foreach (var cmd in commands)
-            {
-                var ns = cmd.ContainingNamespace.ToDisplayString();
-                if (aggregatesByNamespace.TryGetValue(ns, out var aggregateName))
-                {
-                    result[cmd] = aggregateName;
-                }
-            }
-
-            return result;
-        }
-
-        private void CollectTypes(INamespaceSymbol ns, List<INamedTypeSymbol> results)
-        {
-            foreach (var type in ns.GetTypeMembers())
-            {
-                if (type.TypeKind == TypeKind.Class && !type.IsAbstract && !type.IsStatic)
-                {
-                    results.Add(type);
-                }
-                // Records sind auch TypeKind.Class in Roslyn
-            }
-
-            foreach (var subNs in ns.GetNamespaceMembers())
-            {
-                CollectTypes(subNs, results);
-            }
         }
 
         /// <summary>
@@ -275,8 +213,9 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"        {name} logic,");
                 sb.AppendLine($"        Cluster cluster,");
                 sb.AppendLine($"        Infrastructure.PubSub.BrokerPublisher? publisher = null,");
-                sb.AppendLine($"        ILogger<{actorName}>? logger = null)");
-                sb.AppendLine($"        : base(logic, cluster, publisher, logger) {{ }}");
+                sb.AppendLine($"        ILogger<{actorName}>? logger = null,");
+                sb.AppendLine($"        Abstractions.IDeadLetterSink? deadLetters = null)");
+                sb.AppendLine($"        : base(logic, cluster, publisher, logger, deadLetters) {{ }}");
                 sb.AppendLine();
 
                 // GetSubscribedEventTypes
@@ -333,7 +272,6 @@ namespace Infrastructure.SourceGeneration
 
         private string GeneratePipelinesRegistrationFile(
             List<INamedTypeSymbol> pipelineSymbols,
-            Dictionary<INamedTypeSymbol, string> commandAggregateTypes,
             Dictionary<INamedTypeSymbol, string> triggerToClass)
         {
             var sb = new StringBuilder();
@@ -345,13 +283,6 @@ namespace Infrastructure.SourceGeneration
             foreach (var symbol in pipelineSymbols)
             {
                 namespaces.Add(symbol.ContainingNamespace.ToDisplayString());
-            }
-            // Command-Namespaces für das Mapping
-            foreach (var kvp in commandAggregateTypes)
-            {
-                var ns = kvp.Key.ContainingNamespace?.ToDisplayString();
-                if (!string.IsNullOrEmpty(ns))
-                    namespaces.Add(ns);
             }
             // Trigger-Namespaces für das Mapping
             foreach (var kvp in triggerToClass)
@@ -426,7 +357,8 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"            {{");
                 sb.AppendLine($"                var logic = provider.GetRequiredService<{name}>();");
                 sb.AppendLine($"                var logger = provider.GetService<ILogger<{actorName}>>();");
-                sb.AppendLine($"                return new {actorName}(logic, cluster, publisher, logger);");
+                sb.AppendLine($"                var deadLetters = provider.GetService<Abstractions.IDeadLetterSink>();");
+                sb.AppendLine($"                return new {actorName}(logic, cluster, publisher, logger, deadLetters);");
                 sb.AppendLine($"            }})");
                 sb.AppendLine($"        );");
                 sb.AppendLine();
@@ -465,7 +397,8 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"                    var cluster = system.Cluster();");
                 sb.AppendLine($"                    var publisher = provider.GetRequiredService<Infrastructure.PubSub.BrokerPublisher>();");
                 sb.AppendLine($"                    var logger = provider.GetService<ILogger<{actorName}>>();");
-                sb.AppendLine($"                    return new {actorName}(handler_{name}, cluster, publisher, logger);");
+                sb.AppendLine($"                    var deadLetters = provider.GetService<Abstractions.IDeadLetterSink>();");
+                sb.AppendLine($"                    return new {actorName}(handler_{name}, cluster, publisher, logger, deadLetters);");
                 sb.AppendLine($"                }})");
                 sb.AppendLine($"            ));");
                 sb.AppendLine($"        }}");
@@ -476,23 +409,14 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("    }");
             sb.AppendLine();
 
-            // ── CommandAggregateTypes ──
+            // ── CommandAggregateTypes (Passthrough auf die präzise, Decider-basierte Map) ──
             sb.AppendLine("    /// <summary>");
-            sb.AppendLine("    /// Command-Typ → AggregateType-Name.");
-            sb.AppendLine("    /// Wird vom PipelineActorBase für das Routing verwendet.");
-            sb.AppendLine("    /// Leitet sich aus der Namespace-Konvention ab");
-            sb.AppendLine("    /// (gleicher Algorithmus wie EventCommandMappingGenerator).");
+            sb.AppendLine("    /// Command-Typ → AggregateType-Name (Routing). Delegiert an die PRÄZISE, aus den");
+            sb.AppendLine("    /// Decider-Signaturen abgeleitete Map (GeneratedCommandRouting) — NICHT mehr namespace-basiert.");
+            sb.AppendLine("    /// Strukturell garantiert: das Ziel ist das Aggregat, dessen Decider den Command behandelt.");
             sb.AppendLine("    /// </summary>");
-            sb.AppendLine("    public static IReadOnlyDictionary<Type, string> CommandAggregateTypes { get; } =");
-            sb.AppendLine("        new Dictionary<Type, string>");
-            sb.AppendLine("        {");
-
-            foreach (var kvp in commandAggregateTypes.OrderBy(k => k.Key.Name))
-            {
-                sb.AppendLine($"            [typeof({kvp.Key.Name})] = \"{kvp.Value}\",");
-            }
-
-            sb.AppendLine("        };");
+            sb.AppendLine("    public static IReadOnlyDictionary<Type, string> CommandAggregateTypes");
+            sb.AppendLine("        => global::Infrastructure.Mapping.GeneratedCommandRouting.CommandToAggregate;");
             sb.AppendLine();
 
             // ── TriggerToPipelineId (Laufzeit-Initialisierung) ──

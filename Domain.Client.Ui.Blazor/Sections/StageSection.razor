@@ -1,0 +1,34 @@
+<div style="flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0;">
+    @if (StageTabs.Count > 0)
+    {
+        <MudTabs @bind-ActivePanelIndex="ActiveStageIndex"
+                 Rounded="false" Border="false"
+                 Style="background: #252525; border-bottom: 1px solid #333; flex-shrink: 0; min-height: 28px;"
+                 HeaderPosition="TabHeaderPosition.After">
+            @foreach (var tab in StageTabs)
+            {
+                <MudTabPanel Text="@tab.Title"
+                             Style="font-size: 12px; min-width: 60px; text-transform: none;" />
+            }
+        </MudTabs>
+
+        @switch (ActiveKind)
+        {
+            case "bilder":
+                <BilderStage Entry="AktuellerRecord" />
+                break;
+            case "debug":
+                <DebugStage Entry="AktuellerRecord" />
+                break;
+            case "chart":
+                <MainStage />
+                break;
+        }
+    }
+    else
+    {
+        <div style="flex: 1; display: flex; align-items: center; justify-content: center;">
+            <span style="color: #444;">Keine Stage aktiv</span>
+        </div>
+    }
+</div>

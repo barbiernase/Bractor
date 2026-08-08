@@ -1,0 +1,30 @@
+@inject HeatmapStore Heatmap
+@inject EffectScope Fx
+@using Domain.Client.Modules.Heatmap
+@using global::Client.Infrastructure.Abstractions
+@implements IDisposable
+
+<div style="flex:1;padding:16px;display:flex;flex-direction:column;gap:8px">
+    <div style="font-size:12px;color:#888">Anomalie-Häufigkeit pro Region</div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:4px;max-width:400px">
+        @for (int i = 0; i < 8; i++)
+        {
+            var idx = i;
+            var count = Heatmap.RegionCounts[idx];
+            var intensity = Math.Min(count * 10, 255);
+            var selected = Heatmap.SelectedRegion == idx;
+            <div @onclick="() => Fx.Dispatch(new HeatmapRegionSelected(idx))"
+                 style="aspect-ratio:1;border-radius:4px;display:flex;align-items:center;justify-content:center;
+                        cursor:pointer;font-size:14px;font-weight:600;
+                        background:rgba(@intensity,60,60,0.6);
+                        border:2px solid @(selected ? "#fff" : "transparent")">
+                @count
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    protected override void OnInitialized() => Fx.OnChanged(Heatmap, () => InvokeAsync(StateHasChanged));
+    public void Dispose() => Fx.Dispose();
+}

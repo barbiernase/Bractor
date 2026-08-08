@@ -1,0 +1,19 @@
+@inject EffectScope Fx
+@implements IDisposable
+@using Domain.ImagePair
+@using global::Client.Infrastructure.Abstractions
+
+<MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
+<MudButton Variant="Variant.Text" Size="Size.Small" OnClick="() => Fx.Dispatch(new LabelProduktAngefordert(Klassifikation.KeineAnomalie))"
+           Style="min-width:0;padding:2px 8px;font-size:11px;text-transform:none;color:#4ade80"><b>R</b>&nbsp;OK</MudButton>
+<MudButton Variant="Variant.Text" Size="Size.Small" OnClick="() => Fx.Dispatch(new LabelProduktAngefordert(Klassifikation.Questionable))"
+           Style="min-width:0;padding:2px 8px;font-size:11px;text-transform:none;color:#f0c040"><b>Q</b>&nbsp;Fraglich</MudButton>
+<MudButton Variant="Variant.Text" Size="Size.Small" OnClick="() => Fx.Dispatch(new LabelProduktAngefordert(Klassifikation.Anomalie))"
+           Style="min-width:0;padding:2px 8px;font-size:11px;text-transform:none;color:#f87171"><b>F</b>&nbsp;Anomalie</MudButton>
+<MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
+<MudButton Variant="Variant.Text" Size="Size.Small" OnClick="() => Fx.Dispatch(new LabelKameraAngefordert(Klassifikation.Anomalie))"
+           Style="min-width:0;padding:2px 8px;font-size:11px;text-transform:none"><b>E</b>&nbsp;Erkennbar</MudButton>
+<MudButton Variant="Variant.Text" Size="Size.Small" OnClick="() => Fx.Dispatch(new LabelKameraAngefordert(Klassifikation.KeineAnomalie))"
+           Style="min-width:0;padding:2px 8px;font-size:11px;text-transform:none"><b>N</b>&nbsp;Nicht</MudButton>
+
+@code { public void Dispose() => Fx.Dispose(); }

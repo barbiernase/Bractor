@@ -1,0 +1,28 @@
+@inject ChartStore Chart
+@inject EffectScope Fx
+@using Domain.Client.Modules.Chart
+@using global::Client.Infrastructure.Abstractions
+@implements IDisposable
+
+<div style="flex:1;padding:16px;overflow-y:auto">
+    @if (Chart.ProduktionsTage == null)
+    { <MudProgressCircular Indeterminate="true" Size="Size.Small" /> }
+    else if (Chart.Strip != null)
+    {
+        <div style="font-size:12px;color:#888;margin-bottom:8px">
+            Tag: @(Chart.GewaehlterTag?.ToString("dd.MM.yyyy") ?? "—")
+            — @(Chart.Strip.Punkte?.Count ?? 0) Punkte
+        </div>
+        @* Chart-Visualisierung hier — z.B. Canvas oder SVG *@
+        <div style="height:200px;background:#1a1a1a;border-radius:4px;display:flex;align-items:center;justify-content:center">
+            <span style="color:#555">Produktionsstrip-Visualisierung</span>
+        </div>
+    }
+    else
+    { <span style="color:#555">Kein Strip geladen</span> }
+</div>
+
+@code {
+    protected override void OnInitialized() => Fx.OnChanged(Chart, () => InvokeAsync(StateHasChanged));
+    public void Dispose() => Fx.Dispose();
+}

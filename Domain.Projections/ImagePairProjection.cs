@@ -4,7 +4,7 @@ using Domain.ImagePair;
 
 namespace Domain.Projections;
 
-public partial class ImagePairProjection : ISubscriber
+public partial class ImagePairProjection : ISubscriber, IPullSubscriber
 {
     private readonly IImagePairWriteStore _store;
 

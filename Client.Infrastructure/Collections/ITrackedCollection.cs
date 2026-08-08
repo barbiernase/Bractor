@@ -1,21 +1,23 @@
+// ── Client.Infrastructure/Collections/ITrackedCollection.cs ──
+
 namespace Client.Infrastructure.Collections;
 
 /// <summary>
-/// Interface für Collections die Deltas akkumulieren.
+/// Interface für Collections die Mutations-Tracking unterstützen.
 ///
 /// StoreBase registriert alle TrackedMaps über dieses Interface
-/// und ruft FlushDeltas() im Flush-Zyklus auf.
+/// und fragt im Flush-Zyklus ab, ob Mutationen stattgefunden haben.
 ///
-/// Rückgabetyp ist IReadOnlyList&lt;CollectionDelta&gt; — kein object-Boxing,
-/// kein Reflection. Die View kann direkt per Pattern-Matching auf
-/// Added&lt;TKey&gt;, Replaced&lt;TKey&gt; etc. reagieren.
+/// Kein Delta-Tracking mehr — Blazor macht ohnehin einen
+/// vollständigen Component-Diff. Ein boolean reicht.
 /// </summary>
 public interface ITrackedCollection
 {
     /// <summary>
-    /// Gibt alle seit dem letzten Flush akkumulierten Deltas zurück
-    /// und leert die interne Delta-Liste.
-    /// Leere Liste wenn keine Mutationen stattgefunden haben.
+    /// Gibt true zurück wenn seit dem letzten Aufruf
+    /// Schreiboperationen stattfanden. Setzt das Flag zurück.
+    ///
+    /// Wird von StoreBase.Flush() nach DispatchCompleted aufgerufen.
     /// </summary>
-    IReadOnlyList<CollectionDelta> FlushDeltas();
+    bool ConsumeHasChanges();
 }
