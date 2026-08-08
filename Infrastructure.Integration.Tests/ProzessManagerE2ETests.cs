@@ -49,7 +49,7 @@ public class ProzessManagerE2ETests
     }
 
     private static CommandEnvelope Env(Guid id, string typ, ICommand payload)
-        => new() { AggregateId = id, AggregateType = typ, ExpectedVersion = 0, Payload = payload };
+        => new() { AggregateId = id, AggregateType = typ, Modus = new CommandModus.Client(0), Payload = payload };
 
     private static async Task<bool> ProzessBeendetMit(IEventStoreRepository store, Guid korr, bool erfolg)
     {

@@ -324,7 +324,8 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("                CommandId = Guid.Parse(dto.CommandId),");
             sb.AppendLine("                AggregateId = Guid.Parse(dto.AggregateId),");
             sb.AppendLine("                AggregateType = dto.AggregateType,");
-            sb.AppendLine("                ExpectedVersion = dto.ExpectedVersion,");
+            // Über gRPC reisen NUR Client-Commands (OCC) — der interne Emittiert-Pfad kreuzt nie den Draht.
+            sb.AppendLine("                Modus = new CommandModus.Client(dto.ExpectedVersion),");
             sb.AppendLine("                CreatedAtUtc = DateTimeOffset.FromUnixTimeMilliseconds(dto.CreatedAtUtc),");
             sb.AppendLine("                CorrelationId = dto.CorrelationId,");
             sb.AppendLine("                UserId = dto.UserId,");
@@ -342,7 +343,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("                CommandId = envelope.CommandId.ToString(),");
             sb.AppendLine("                AggregateId = envelope.AggregateId.ToString(),");
             sb.AppendLine("                AggregateType = envelope.AggregateType ?? string.Empty,");
-            sb.AppendLine("                ExpectedVersion = envelope.ExpectedVersion,");
+            sb.AppendLine("                ExpectedVersion = envelope.Modus is CommandModus.Client __c ? __c.ExpectedVersion : throw new global::System.NotSupportedException(\"Nur Client-Commands passieren gRPC; Emittiert ist intern.\"),");
             sb.AppendLine("                CreatedAtUtc = envelope.CreatedAtUtc.ToUnixTimeMilliseconds(),");
             sb.AppendLine("                CorrelationId = envelope.CorrelationId,");
             sb.AppendLine("                UserId = envelope.UserId,");

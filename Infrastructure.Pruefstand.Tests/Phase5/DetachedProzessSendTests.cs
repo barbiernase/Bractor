@@ -6,79 +6,68 @@ using Infrastructure.Prozess;
 namespace Infrastructure.Pruefstand.Phase5;
 
 /// <summary>
-/// Ebene 1 (reine Kontrollfluss-Logik, Fake-Send) — Befund 2 des Backend-Audits.
+/// Ebene 1 (reine Kontrollfluss-Logik, Fake-Emit) — der Treiber-Fold (EM-1).
 ///
-/// <see cref="DetachedProzessSend"/> beobachtet die Quittung eines Ziel-Sends out-of-turn und
-/// verzweigt: negativ → <c>beiFehlschlag</c> (Ablehnung durabel machen), sonst → <c>danach</c>
-/// (den Manager selbst wecken, damit er Fortschritt/Terminal prüft).
-///
-/// Der Bug: bei <c>result == null</c> (verlorene/timeout Quittung) lief WEDER Zweig → keine
-/// Selbst-Weckung. Eine terminale Join-Transition eines Diamanten (z.B. <c>Versende</c>) persistiert
-/// dann ihr Ergebnis-Event, aber der Manager erfährt es nie: das Ergebnis-Event ist Auslöser KEINER
-/// Regel → der Router abonniert sein Signal nicht → der Poll filtert es weg. Der Prozess hängt für
-/// immer ohne <c>ProzessBeendet</c>, obwohl alle Effekte da sind.
-///
-/// Der Fix weckt bei <c>null</c> ebenfalls selbst (der Effekt kann durabel sein → Fortschritt; ist er
-/// es nicht → die Transition feuert erneut). <c>null</c> ist KEINE Ablehnung.
+/// <see cref="DetachedProzessSend"/> stößt den Ziel-Emit FIRE-AND-FORGET an (das EINE Emit-Primitiv, keine
+/// Quittung mehr) und weckt DANACH — nach JEDEM Send — den Manager, damit er den durablen Ausgang faltet
+/// (Wirkung / KommandoVerarbeitet-Noop / KommandoAbgelehnt-Ablehnung). Bewiesen:
+///  • der Wrapper kehrt SOFORT zurück, auch wenn der Emit nie zurückkehrt (der (A)-Hang ist strukturell weg);
+///  • die Selbst-Weckung läuft nach einem NORMAL abgeschlossenen Emit;
+///  • die Selbst-Weckung läuft AUCH, wenn der Emit wirft (finally) — sonst hinge ein abgelehnter Schritt,
+///    dessen Ablehnungs-Marke kein Signal erzeugt, bis zum Poll-Backstop.
 /// </summary>
 public class DetachedProzessSendTests
 {
     private static ICommand EinCommand() => new ReserviereBetrag(Guid.NewGuid(), 30);
 
     [Fact]
-    public async Task Verlorene_Quittung_result_null_weckt_den_Manager_selbst()
+    public async Task Wrapper_kehrt_sofort_zurueck_auch_wenn_der_Emit_nie_zurueckkehrt()
     {
-        var danach = new TaskCompletionSource();
-        var beiFehlschlagAufgerufen = false;
+        var emitGestartet = new TaskCompletionSource();
 
         var dispatch = DetachedProzessSend.Wrap(
-            innererSend: (_, _, _) => Task.FromResult<CommandResult?>(null),   // Quittung verloren
-            beiFehlschlag: (_, _, _, _) => { beiFehlschlagAufgerufen = true; return Task.CompletedTask; },
+            emit: (_, _, _, ct) => { emitGestartet.TrySetResult(); return Task.Delay(Timeout.Infinite, ct); },
+            danach: (_, _) => Task.CompletedTask);
+
+        // Der Turn (dispatch) MUSS sofort zurückkehren, obwohl der Emit für immer hängt.
+        var turn = dispatch(Guid.NewGuid(), EinCommand(), Guid.NewGuid(), default);
+        var fertig = await Task.WhenAny(turn, Task.Delay(TimeSpan.FromSeconds(3)));
+
+        fertig.Should().BeSameAs(turn, "der Ziel-Send läuft detached — der Manager-Turn blockiert nie (A-Hang weg)");
+        await turn;
+        (await Task.WhenAny(emitGestartet.Task, Task.Delay(TimeSpan.FromSeconds(3))))
+            .Should().BeSameAs(emitGestartet.Task, "der Emit wurde dennoch angestoßen");
+    }
+
+    [Fact]
+    public async Task Selbst_Weckung_laeuft_nach_einem_erfolgreichen_Send()
+    {
+        var danach = new TaskCompletionSource();
+
+        var dispatch = DetachedProzessSend.Wrap(
+            emit: (_, _, _, _) => Task.CompletedTask,             // Emit fertig (Erfolg/Ablehnung egal — keine Quittung)
             danach: (_, _) => { danach.TrySetResult(); return Task.CompletedTask; });
 
         await dispatch(Guid.NewGuid(), EinCommand(), Guid.NewGuid(), default);
 
-        var fired = await Task.WhenAny(danach.Task, Task.Delay(TimeSpan.FromSeconds(3)));
-        fired.Should().BeSameAs(danach.Task,
-            "bei verlorener Quittung (null) MUSS der Manager selbst geweckt werden — sonst hängt eine " +
-            "terminale Join-Transition für immer ohne ProzessBeendet");
-        beiFehlschlagAufgerufen.Should().BeFalse("null ist KEINE Ablehnung, nur ein unbekannter Ausgang");
+        (await Task.WhenAny(danach.Task, Task.Delay(TimeSpan.FromSeconds(3))))
+            .Should().BeSameAs(danach.Task, "nach JEDEM Send weckt sich der Manager selbst und faltet den Ausgang");
     }
 
     [Fact]
-    public async Task Erfolgreiche_Quittung_weckt_den_Manager_selbst_nicht_als_Fehlschlag()
+    public async Task Selbst_Weckung_laeuft_AUCH_wenn_der_Emit_wirft()
     {
         var danach = new TaskCompletionSource();
-        var beiFehlschlagAufgerufen = false;
 
         var dispatch = DetachedProzessSend.Wrap(
-            innererSend: (_, _, _) => Task.FromResult<CommandResult?>(new CommandResult { Success = true }),
-            beiFehlschlag: (_, _, _, _) => { beiFehlschlagAufgerufen = true; return Task.CompletedTask; },
+            emit: (_, _, _, _) => throw new InvalidOperationException("Draht weg"),
             danach: (_, _) => { danach.TrySetResult(); return Task.CompletedTask; });
 
         await dispatch(Guid.NewGuid(), EinCommand(), Guid.NewGuid(), default);
 
-        var fired = await Task.WhenAny(danach.Task, Task.Delay(TimeSpan.FromSeconds(3)));
-        fired.Should().BeSameAs(danach.Task, "Erfolg → Manager neu wecken (Fortschritt/Terminal prüfen)");
-        beiFehlschlagAufgerufen.Should().BeFalse();
-    }
-
-    [Fact]
-    public async Task Negative_Quittung_meldet_Fehlschlag_und_weckt_nicht_selbst()
-    {
-        var fehlschlag = new TaskCompletionSource();
-        var danachAufgerufen = false;
-
-        var abgelehnt = new CommandResult { Success = false, ErrorMessage = "Deckung fehlt" };
-        var dispatch = DetachedProzessSend.Wrap(
-            innererSend: (_, _, _) => Task.FromResult<CommandResult?>(abgelehnt),
-            beiFehlschlag: (_, _, _, _) => { fehlschlag.TrySetResult(); return Task.CompletedTask; },
-            danach: (_, _) => { danachAufgerufen = true; return Task.CompletedTask; });
-
-        await dispatch(Guid.NewGuid(), EinCommand(), Guid.NewGuid(), default);
-
-        var fired = await Task.WhenAny(fehlschlag.Task, Task.Delay(TimeSpan.FromSeconds(3)));
-        fired.Should().BeSameAs(fehlschlag.Task, "eine Ablehnung wird durabel gemeldet");
-        danachAufgerufen.Should().BeFalse("eine Ablehnung ist kein Fortschritt → keine Selbst-Weckung");
+        (await Task.WhenAny(danach.Task, Task.Delay(TimeSpan.FromSeconds(3))))
+            .Should().BeSameAs(danach.Task,
+                "die Selbst-Weckung steht im finally — ein geworfener Emit darf sie nicht verschlucken " +
+                "(sonst hinge ein abgelehnter Schritt bis zum Poll-Backstop)");
     }
 }

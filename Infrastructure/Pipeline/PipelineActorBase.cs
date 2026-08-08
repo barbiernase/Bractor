@@ -28,6 +28,7 @@ public abstract class PipelineActorBase<THandler> : IActor
 {
     protected readonly THandler _logic;
     private readonly Cluster _cluster;
+    private readonly ICommandEmitter _emitter;        // ★ P3: das EINE Emit-Primitiv (EM-1) — Command→Fremd-Aggregat
     private readonly Infrastructure.PubSub.BrokerPublisher? _publisher;
     private readonly ILogger? _logger;
     private readonly IDeadLetterSink? _deadLetters;   // ★ §5: tote Commands beobachtbar machen (optional)
@@ -59,6 +60,7 @@ public abstract class PipelineActorBase<THandler> : IActor
     {
         _logic = logic ?? throw new ArgumentNullException(nameof(logic));
         _cluster = cluster ?? throw new ArgumentNullException(nameof(cluster));
+        _emitter = new Infrastructure.PubSub.CommandEmitter(cluster, logger);
         _publisher = publisher;
         _logger = logger;
         _deadLetters = deadLetters;
@@ -162,7 +164,7 @@ public abstract class PipelineActorBase<THandler> : IActor
         try
         {
             await DispatchTriggerAsync(trigger, ctx,
-                cmd => SendCommandAsync(cmd, ctx.CorrelationId),
+                cmd => SendCommandAsync(cmd, ctx, context.CancellationToken),
                 trig => SendTriggerAsync(trig, ctx.CorrelationId),
                 te => BroadcastTransientAsync(te, ctx));
             context.Respond(new PipelineAck(Accepted: true));
@@ -201,7 +203,7 @@ public abstract class PipelineActorBase<THandler> : IActor
                     : null);
 
             await DispatchEventAsync(envelope, ctx,
-                cmd => SendCommandAsync(cmd, ctx.CorrelationId),
+                cmd => SendCommandAsync(cmd, ctx, ct),
                 trig => SendTriggerAsync(trig, ctx.CorrelationId),
                 te => BroadcastTransientAsync(te, ctx));
         }
@@ -217,79 +219,17 @@ public abstract class PipelineActorBase<THandler> : IActor
     // Command-Sending mit Retry
     // ═══════════════════════════════════════════════════════
 
-    private async Task SendCommandAsync(ICommand command, string correlationId)
+    private Task SendCommandAsync(ICommand command, PipelineContext ctx, CancellationToken ct)
     {
-        var aggregateId = command.AggregateId;
-        var commandAggregateTypes = GetCommandAggregateTypes();
-
-        if (!commandAggregateTypes.TryGetValue(command.GetType(), out var aggregateType))
-        {
-            _logger?.LogError("[Pipeline:{PipelineId}] No AggregateType mapping for {CommandType}",
-                _logic.PipelineId, command.GetType().Name);
-            await DeadLetterAsync(command, null, correlationId, "Kein AggregateType-Mapping (Command nicht routbar)", 0);
-            return;
-        }
-
-        var version = ResolveVersion(command);
-
-        for (int attempt = 0; attempt < MaxRetries; attempt++)
-        {
-            var envelope = new CommandEnvelope
-            {
-                AggregateId = aggregateId,
-                Payload = command,
-                ExpectedVersion = version,
-                AggregateType = aggregateType,
-                CorrelationId = correlationId,
-                OriginSessionId = _logic.PipelineId,
-            };
-
-            var identity = ClusterIdentity.Create(
-                aggregateId.ToString(), aggregateType);
-
-            var result = await _cluster.RequestAsync<CommandResult>(
-                identity, envelope, CancellationToken.None);
-
-            if (result == null)
-            {
-                _logger?.LogWarning("[Pipeline:{PipelineId}] No response for {CommandType} (attempt {Attempt})",
-                    _logic.PipelineId, command.GetType().Name, attempt + 1);
-                continue;
-            }
-
-            if (result.Success)
-            {
-                // Stufe 1: Version aus CommandResult cachen
-                TrackVersion(aggregateId, result.NewVersion);
-                _logger?.LogDebug("[Pipeline:{PipelineId}] ✔ {Command} → v{Version}", _logic.PipelineId, command.GetType().Name, result.NewVersion);
-                return;
-            }
-
-            // Concurrency-Conflict: Version korrigieren und Retry
-            if (result.NewVersion > 0)
-            {
-                _logger?.LogDebug("[Pipeline:{PipelineId}] Conflict: v{Version} → v{NewVersion}, retrying", _logic.PipelineId, version, result.NewVersion);
-                TrackVersion(aggregateId, result.NewVersion);
-                version = result.NewVersion;
-                continue;
-            }
-
-            // Anderer Fehler — kein Retry. Domänen-Ablehnung (RejectionEvent gesetzt) ist ein GÜLTIGES
-            // Geschäftsergebnis → nur loggen. Ein TECHNISCHER Fehler (kein RejectionEvent) ist ein echter
-            // Verlust → DLQ (§5).
-            _logger?.LogWarning("[Pipeline:{PipelineId}] {CommandType} rejected: {Error}",
-                _logic.PipelineId, command.GetType().Name, result.ErrorMessage);
-            if (result.RejectionEvent is null)
-                await DeadLetterAsync(command, aggregateType, correlationId,
-                    $"Technischer Fehler: {result.ErrorMessage}", attempt + 1);
-            return;
-        }
-
-        // ★ §5: Retries erschöpft (Timeout/Conflict-Schleife) → beobachtbarer DLQ-Eintrag statt stillem Drop.
-        _logger?.LogError("[Pipeline:{PipelineId}] {CommandType} failed after {MaxRetries} attempts",
-            _logic.PipelineId, command.GetType().Name, MaxRetries);
-        await DeadLetterAsync(command, aggregateType, correlationId,
-            $"Nach {MaxRetries} Versuchen kein Erfolg (Timeout/Conflict)", MaxRetries);
+        // ★ P3: über das EINE Emit-Primitiv (EM-1) — deterministische CommandId (W1) + bounded Token (W2).
+        //   Event-Pfad: die Auslöse-Position (SourceAggregateId/-Version) reist in die Kausalität → stabile
+        //   Id über Re-Wakes, der Empfänger dedupliziert. Trigger-/Self-Pfad: kein Log-Event → best-effort
+        //   frische Id (die volle Idempotenz-Zerlegung Event→Reaktion / Trigger→Push ist P6).
+        var korrelation = Guid.TryParse(ctx.CorrelationId, out var kr) ? kr : Guid.Empty;
+        var k = ctx.SourceAggregateId is Guid src
+            ? new EmitKausalität(korrelation, src, $"{ctx.SourceAggregateVersion}:{command.GetType().Name}")
+            : new EmitKausalität(korrelation, Guid.NewGuid(), command.GetType().Name);
+        return _emitter.EmitAsync(command, k, ct);
     }
 
     /// <summary>§5: Schreibt einen toten Command in die DLQ (best-effort, no-op wenn keine Senke registriert).</summary>
@@ -415,7 +355,7 @@ public abstract class PipelineActorBase<THandler> : IActor
         try
         {
             await DispatchSelfAsync(selfMsg, ctx,
-                cmd => SendCommandAsync(cmd, ctx.CorrelationId),
+                cmd => SendCommandAsync(cmd, ctx, context.CancellationToken),
                 trig => SendTriggerAsync(trig, ctx.CorrelationId),
                 te => BroadcastTransientAsync(te, ctx));
         }

@@ -9,10 +9,3 @@ namespace Infrastructure.Prozess;
 /// gesetzt (dann kennt der Router den Prozess-Typ); bei Folge-Weckungen liest der Manager ihn aus seinem Log.
 /// </summary>
 public sealed record ProzessWake(Guid QuellStream, int QuellVersion, string? ProzessNameFürStart);
-
-/// <summary>
-/// Meldet dem Manager eine negative Ziel-Quittung (out-of-turn, aus der <see cref="DetachedProzessSend"/>-
-/// Continuation). Der Manager macht den Fehlschlag durabel (<c>SchrittGescheitert</c>) und treibt die
-/// Kompensation. Geht über die Mailbox → Single-Writer bleibt gewahrt.
-/// </summary>
-public sealed record MeldeFehlschlag(Guid Vorgang, string Grund);

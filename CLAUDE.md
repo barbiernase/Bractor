@@ -4,11 +4,66 @@ Projektgedächtnis für Claude Code. Bewusst schlank — wird bei jeder Session
 geladen. Volltexte liegen in `docs/` und werden bei Bedarf gelesen, nicht hier
 eingebettet.
 
-> **Backend-Neubau (starkes Refactoring, geplant):** Herleitung + vollständige Design-Philosophie +
+> **Backend-Neubau (starkes Refactoring, LÄUFT):** Herleitung + vollständige Design-Philosophie +
 > Entwicklungsplan in `docs/backend-neubau-einheitliche-maschine.md`; abhakbarer Fahrplan (Phasen 0–8 +
 > Feature-Strom, mit Toren) in `docs/backend-neubau-fahrplan.md`. Grundlagen dazu:
 > `docs/gedankenmodell-system-als-graph.md`, `docs/zielbild-vereinheitlichte-konsumenten-maschine.md`,
 > `docs/prozess-marking-cursor-konzept.md`, `docs/backend-audit-befunde.md`.
+>
+> **Fortschritt:** **P0 ✅** (Verträge `ICommandEmitter`/`EmitKausalität`, `IReplaybarerTracker`,
+> `IEmittentenCursor` in `Abstractions`). **P2 ✅** (grün gegen echtes Marten): der `AnyVersion=-1`-Sentinel
+> ist **gelöscht** und durch den typisierten `CommandModus { Client(int) | Emittiert }` ersetzt (ein
+> Envelope, keine Rückwärtskompat); `AggregateActorBase` hat zwei Eingänge `HandleClientCommand`/
+> `HandleEmittedCommand` (dispatch per `switch (Modus)`); Befund 5 (Live-Apply `is not IProzessIntern`)
+> und Befund 10 (Footgun-Default, jetzt `required Modus`) erledigt. Proto/gRPC unverändert (nur
+> Client-Commands kreuzen den Draht). **P3 ✅** — Emit-Primitiv `CommandEmitter` (EINE det. Id-Ableitung
+> `EmitId`, `Modus.Emittiert`, bounded Token, Send-Seam); Reaktion + Pipeline migriert, die Pipeline-
+> Retry-Schleife (zufällige CommandId + `CancellationToken.None`) gelöscht → **W1/W2 strukturell weg**
+> (`EmitPrimitivTests`). *Offen:* Pipeline-Trigger-`None` + tote OCC-Helfer → **P6**. **P5(a) ✅** —
+> präzises `CorrelationId`-Poll-Routing: der Terminal-Bug saß allein im Poll-Typ-Filter
+> (`ProzessManagerWiring.cs:154`); Fix additiv (`ProzessPollFilter.SollRouten`: teilnehmend ODER Korrelation
+> ∈ offene Prozesse) → terminale Ergebnis-Events werden event-getrieben geroutet, kein Über-Wecken.
+> Korrektheit war schon durch den `ProzessOffenIndex`-Backstop gedeckt → P5(a) macht sie präzise;
+> **beide Netze bleiben** (`WeckeSelbst` + `ProzessOffenIndex`, Auflage A2, NICHT retired). Prüfstand 47/47,
+> Prozess/Saga/Reaktion-Integration 13/13 (SnapshotLive-Cold-Boot-Flake unabhängig). **P1a ✅** (erste
+> P1-Scheibe, TG-1): die namespace-grobe `GeneratedEventCommandMapping` ist **gelöscht** (Generator + tote
+> Fassade `EventCommandMapping.cs`); der einzige lebende Konsument (Blazor-Client-Capabilities:
+> `CapabilitiesHandler` → `MessageTypeMapping.GetAllowedCommandNames`, event→Aggregat-Geschwister-Commands)
+> leitet jetzt präzise aus `GeneratedCommandRouting` (CommandToAggregate + CommandToEvents) ab. **P1b ✅** —
+> `Event→Signal` typ-getrieben: neuer Marker `IStateChangeSignal<TEvent>`, `StateChangeVia{X} :
+> IStateChangeSignal<X>`, der `SignalFactoryGenerator` paart aus dem Typ-Argument statt Namens-Präfix
+> (Präfix-/Namespace-Lookup gelöscht). **P1c ✅** (TG-3-Tor) — Attribute `[AggregatName]`/`[ProzessName]`;
+> Identitäts-Kollision bricht den Build (CQRS011/012, bewiesen); `[AggregatName]` fließt konsistent in Routing
+> UND ClusterKind (footgun-frei), `[ProzessName]` voller Resolver; Default = Typname → keine Migration.
+> Prüfstand 50/50, Integration 24-25 (nur SnapshotLive-Flake). *Rest (Follow-up):* Actor-Klassenname
+> `{TState.Name}Actor` → gleichnamige Aggregate koexistieren noch nicht (CS0101, von CQRS011 abgefangen);
+> `aggregate_type`-Header noch Typname (informativ). **P1 im Kern fertig.** **Bugfixes ✅** — Befund 9
+> (`BrokerIdentity` `& 0x7FFFFFFF` statt `Math.Abs`) + Befund 7/8 (Fan-out-Vorgang: RegelIndex + Instanz-Index
+> in `ProzessManager`). Prüfstand 51/51, Saga/Prozess 11/11 no-regression. **P5 · Treiber-Fold Scheibe A ✅** (der gekoppelte Kern,
+> `docs/handoff-treiber-fold.md` §7): durabler Marker `KommandoAbgelehnt(CommandId, Grund) : IEvent, IProzessIntern`
+> (der Actor co-committet ihn auf dem EMITTIERTEN Ablehnungs-Pfad, eine Transaktion, Client-/OCC-Pfad unberührt);
+> **Zwei-Mengen-Inbox** (`_verarbeiteteCommandIds` + `_abgelehnteCommandIds`, beide im Snapshot + `AggregateRehydrator`
+> gefaltet) → Re-Delivery eines abgelehnten Vorgangs bleibt konsistent `Success:false`, NIE `true`; neue Fold-Achse
+> `AbgelehntDa` im `ProzessManager` → `WakeAsync` stempelt daraus **vor** dem Vorwärts/Kompensations-Split ein durables
+> `SchrittGescheitert`. **Kopplung (§4):** Marker + Zwei-Mengen-Inbox + Fold-Achse ZUSAMMEN, sonst stiller Falsch-Erfolg
+> `ProzessBeendet(true)`. **Treiber sendet in A NOCH über die Quittung** (additiv/idempotent → safe). Beweis: store-freier
+> `AblehnungsMarkeTests` + volle Saga-Suite als No-Regression-Oracle. **Prüfstand 54/54, Integration 25/25** (BestellSaga-
+> Kompensation grün). **P5 · Treiber-Fold Scheibe B ✅** (der eigentliche EM-1-Abschluss): der Treiber sendet jetzt
+> **fire-and-forget über das EINE Emit-Primitiv `CommandEmitter`** — **genau ein Emit-Weg, keine Quittung mehr**. Neue
+> Überladung `EmitAsync(cmd, commandId, korrelation, ct)` (§5 Weg a: `vorgang` IST die CommandId → Fold-Match unverändert);
+> `SendeAnZiel`/`MeldeFehlschlagAnManager`/`MeldeFehlschlag`/`NotiereFehlschlagAsync` **gelöscht**; `DetachedProzessSend` auf
+> **emit + `danach`** reduziert (`WeckeSelbst` nach JEDEM Send im `finally`). Fehlschlag-Erkennung trägt allein der Fold
+> (§6 eventual; `WeckeSelbst` + `ProzessOffenIndex` bleiben). Nachzug: `NächsteKompensationAsync` wertet eine
+> `KommandoAbgelehnt`-Marke als *unvollziehbar* (KlärungNötig), nicht als „erledigt". Beweise: `DetachedProzessSendTests`
+> neu + `EmitPrimitivTests` (+Überladung) + **volle Saga-Suite grün OHNE Quittung**. **P5 · Treiber-Fold Scheibe C ✅**
+> (Analyzer A6 — EM-1 ERZWUNGEN): neuer Roslyn-`CommandEmitAnalyzer` (in `Infrastructure.SourceGeneration`, läuft auto
+> auf `Infrastructure`): **CQRS020** = Build-Fehler bei rohem `RequestAsync<CommandResult>` außerhalb der zwei legitimen
+> Sender (`CommandEmitter` + `ProtoActorAggregateDispatcher`); **CQRS021** = Build-Fehler bei `CancellationToken.None`/
+> `default` auf einer Command-Kante (W2). Präzise via `T == Abstractions.CommandResult` → Trigger-Pfad (P6) bleibt außen vor.
+> Beweise: End-to-end-Demonstration (temporäre Probe erzeugte CQRS020+021, danach gelöscht) + durabler `CommandEmitAnalyzerTests`
+> (3, eigene `CSharpCompilation`). **Prüfstand 58/58, Integration 25/25. EM-1 voll erfüllt UND erzwungen.**
+> *Offen/ehrlich:* der KlärungNötig-Pfad (Kompensation selbst abgelehnt) ist korrekt-per-Konstruktion, aber nicht integration-gedeckt.
+> **Nächste große Schritte: P4 (Konsum-Maschine), P6 (Pipeline-Zerlegung + Trigger-`None` + tote OCC-Helfer), Feature-Strom.**
 
 ## Was das Projekt ist
 

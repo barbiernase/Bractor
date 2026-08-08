@@ -129,7 +129,7 @@ async Task<int> RunAggregate()
 
     async Task<bool> Send(Guid id, ICommand payload)
     {
-        var env = new CommandEnvelope { AggregateId = id, AggregateType = "Konto", Payload = payload };
+        var env = new CommandEnvelope { AggregateId = id, AggregateType = "Konto", Modus = new CommandModus.Emittiert(), Payload = payload };
         var t = Stopwatch.StartNew();
         try
         {
@@ -187,7 +187,7 @@ async Task<bool> WaitRoutableCore()
                     ClusterIdentity.Create("benchmark", "Pipeline-benchmark"), new BenchPing(-1), cts.Token)
                 : await cluster.RequestAsync<CommandResult>(
                     ClusterIdentity.Create(probeId.ToString(), "Konto"),
-                    new CommandEnvelope { AggregateId = probeId, AggregateType = "Konto", Payload = new EroeffneKonto(probeId, 0m) },
+                    new CommandEnvelope { AggregateId = probeId, AggregateType = "Konto", Modus = new CommandModus.Emittiert(), Payload = new EroeffneKonto(probeId, 0m) },
                     cts.Token);
             if (ack != null) break;
         }

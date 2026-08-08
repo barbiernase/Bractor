@@ -78,9 +78,11 @@ namespace Domain.SourceGeneration
                 /// <summary>
                 /// Signal (Weckruf) für {{model.EventName}} — trägt nur (StreamId, Version).
                 /// Generiert vom SignalTypeGenerator (Spec 5.1). Keine Nutzlast.
+                /// ★ P1b (TG-1): implementiert IStateChangeSignal&lt;{{model.EventName}}&gt; → die Event→Signal-Kante
+                /// steckt im Typ-Argument, nicht im Namen (der SignalFactoryGenerator liest sie typ-getrieben).
                 /// </summary>
                 public sealed record StateChangeVia{{model.EventName}}(
-                    System.Guid StreamId, int Version) : IStateChangeSignal;
+                    System.Guid StreamId, int Version) : IStateChangeSignal<global::{{model.Namespace}}.{{model.EventName}}>;
                 """;
 
             context.AddSource($"StateChangeVia{model.EventName}.g.cs", source);

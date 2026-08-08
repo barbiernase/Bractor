@@ -54,7 +54,7 @@ public class ReaktionE2ETests
             {
                 AggregateId = pairId,
                 AggregateType = "ImagePair",
-                ExpectedVersion = 0,
+                Modus = new CommandModus.Client(0),
                 Payload = new ErstelleImagePair(
                     pairId, "PAIR-REAKTION", DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "/live/reaktion")
             });

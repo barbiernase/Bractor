@@ -91,7 +91,7 @@ public class SnapshotLiveE2ETests
     }
 
     private static CommandEnvelope Env(Guid id, ICommand payload)
-        => new() { AggregateId = id, AggregateType = "Konto", Payload = payload };   // ExpectedVersion = AnyVersion (Default)
+        => new() { AggregateId = id, AggregateType = "Konto", Modus = new CommandModus.Emittiert(), Payload = payload };
 
     private static async Task WaitAsync(Func<Task<bool>> condition, TimeSpan timeout, string message)
     {

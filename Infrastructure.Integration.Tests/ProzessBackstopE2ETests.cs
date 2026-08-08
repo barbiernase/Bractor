@@ -55,7 +55,7 @@ public class ProzessBackstopE2ETests
     }
 
     private static CommandEnvelope Env(Guid id, string typ, ICommand payload)
-        => new() { AggregateId = id, AggregateType = typ, ExpectedVersion = 0, Payload = payload };
+        => new() { AggregateId = id, AggregateType = typ, Modus = new CommandModus.Client(0), Payload = payload };
 
     private static async Task<int> MarkenFuer(IEventStoreRepository store, Guid stream, Guid vorgang)
     {
@@ -80,7 +80,7 @@ public class ProzessBackstopE2ETests
             dispatcher.Dispatch(new CommandEnvelope
             {
                 CommandId = vorgang1, AggregateId = empf, AggregateType = "Reaktionsempfaenger",
-                ExpectedVersion = CommandEnvelope.AnyVersion,
+                Modus = new CommandModus.Emittiert(),
                 Payload = new WirkeReaktion(empf, reaktion, "erste")
             });
             await WaitAsync(async () => (await store.ReadStreamAsync(empf, 0, default)).Any(e => e.Payload is ReaktionGewirkt),
@@ -93,7 +93,7 @@ public class ProzessBackstopE2ETests
             dispatcher.Dispatch(new CommandEnvelope
             {
                 CommandId = vorgang2, AggregateId = empf, AggregateType = "Reaktionsempfaenger",
-                ExpectedVersion = CommandEnvelope.AnyVersion,
+                Modus = new CommandModus.Emittiert(),
                 Payload = new WirkeReaktion(empf, reaktion, "zweite (Noop)")
             });
 

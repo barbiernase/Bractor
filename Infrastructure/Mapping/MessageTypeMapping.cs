@@ -67,9 +67,28 @@ public static class MessageTypeMapping
             foreach (var (name, type) in GeneratedTypeRegistry.Triggers)
                 _triggerTypes[name] = type;
 
-            foreach (var (eventName, commandNames) in GeneratedEventCommandMapping.EventNameToCommandNames)
+            // ★ P1a (TG-1): event → Commands DESSELBEN Aggregats — präzise aus den Decider-Signaturen
+            //   (GeneratedCommandRouting: CommandToAggregate + CommandToEvents), NICHT mehr aus Namespace-
+            //   Gruppierung (die gelöschte GeneratedEventCommandMapping). Ein Event gehört zum Aggregat seines
+            //   Erzeuger-Commands; die „erlaubten Commands" des Alt-Capability-Pfads (Blazor-Client) sind die
+            //   Geschwister-Commands dieses Aggregats.
+            var aggregatCommands = new Dictionary<string, HashSet<string>>();
+            foreach (var (cmd, agg) in GeneratedCommandRouting.CommandToAggregate)
             {
-                _eventToCommands[eventName] = commandNames.ToHashSet();
+                if (!aggregatCommands.TryGetValue(agg, out var set))
+                    aggregatCommands[agg] = set = new HashSet<string>();
+                set.Add(cmd.Name);
+            }
+            foreach (var (cmd, evts) in GeneratedCommandRouting.CommandToEvents)
+            {
+                if (!GeneratedCommandRouting.CommandToAggregate.TryGetValue(cmd, out var agg)) continue;
+                if (!aggregatCommands.TryGetValue(agg, out var geschwister)) continue;
+                foreach (var evt in evts)
+                {
+                    if (!_eventToCommands.TryGetValue(evt.Name, out var set))
+                        _eventToCommands[evt.Name] = set = new HashSet<string>();
+                    set.UnionWith(geschwister);
+                }
             }
 
             _initialized = true;

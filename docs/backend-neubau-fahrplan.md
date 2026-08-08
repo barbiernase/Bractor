@@ -7,6 +7,120 @@
 > Source-Generatoren, Marten/PostgreSQL, Redis, Proto.Actor, gRPC, Client-Struktur. **Ziel:** aus einer
 > Feature-Sammlung *eine* einheitliche, wartbare Maschine.
 
+## Fortschritt (umgesetzt)
+
+- **A1 entschieden:** EIN `CommandEnvelope` (keine zwei Typen, keine Rückwärtskompat). Der `-1`-Sentinel
+  wird durch einen **typisierten Summentyp** `CommandModus { Client(int ExpectedVersion) | Emittiert }`
+  ersetzt (EM-2). Vorteil: die Version lebt nur im `Client`-Fall → „interne Emitter behaupten NIE eine
+  Version" ist **strukturell**; `required Modus` killt Befund 10.
+- **P0 ✅ grün** — Verträge additiv: `ICommandEmitter`+`EmitKausalität`, `IReplaybarerTracker`,
+  `IEmittentenCursor`; `MartenProjectionTracker : IReplaybarerTracker`. Prüfstand 38/38.
+- **P2 ✅ grün (gegen echtes Marten/Consul)** — `AnyVersion` gelöscht, `CommandModus` eingeführt; Actor mit
+  zwei Eingängen `HandleClientCommand`/`HandleEmittedCommand` (dispatch per `switch (Modus)`); Befund 5
+  (Live-Apply `is not IProzessIntern`) gefixt; alle Sender + DTO-Generator + Tests migriert; Proto
+  unverändert. **Integration 25/25 (= Baseline-Oracle), Prüfstand 38/38.**
+- **P3 ✅ grün** — Emit-Primitiv `CommandEmitter` (Infrastructure.PubSub): EINE deterministische Id-Ableitung
+  `EmitId.Ableiten(EmitKausalität, ziel)` (ersetzt `ReaktionsId.For`), `Modus.Emittiert`, **bounded Token**
+  (W2), Send-Seam (Fake-Cluster-testbar). **Reaktion (`HandlerOutputRouter`) und Pipeline
+  (`PipelineActorBase.SendCommandAsync`) migriert** — die Pipeline-Retry-Schleife mit zufälliger CommandId +
+  `CancellationToken.None` ist **gelöscht** (W1/W2 strukturell weg). Beweise: `EmitPrimitivTests` (W1: Re-Emit
+  trägt dieselbe det. Id; W2: nie zurückkehrender Send bounded). **Prüfstand 43/43, Integration 25/25.**
+  - *Bewusst offen (dokumentiert):* der **Prozess-Treiber** (`ProzessManagerActor.SendeAnZiel`) sendet noch
+    eigenständig — er BRAUCHT die Quittung für `WeckeSelbst`/`MeldeFehlschlag`; Fold ins Primitiv = **P5**.
+    Der **Pipeline-Trigger**-Pfad (`SendTriggerAsync`, `CancellationToken.None`) + die toten OCC-Helfer
+    (`ResolveVersion`/`MaxRetries`/`DeadLetterAsync`) = **P6**. Analyzer (A6) folgt mit P5 (dann ist EM-1 voll).
+- **P5 · Treiber-Fold, Scheibe A ✅ grün** (der gekoppelte Kern, `docs/handoff-treiber-fold.md` §7). Die
+  Fehlschlag-Erkennung bekommt eine **fold-basierte** Quelle NEBEN der Quittung (additiv → safe & isoliert):
+  neuer durabler Marker `KommandoAbgelehnt(CommandId, Grund) : IEvent, IProzessIntern` (neben
+  `KommandoVerarbeitet`); der Actor **co-committet** ihn auf dem EMITTIERTEN Ablehnungs-Pfad
+  (`CoCommitAblehnungsMarkeAsync`, eine Transaktion, Client-/OCC-Pfad unberührt). **Zwei-Mengen-Inbox**
+  (`_verarbeiteteCommandIds` **+** `_abgelehnteCommandIds`, beide `BoundedInbox`, beide im Snapshot
+  `ProcessedCommandIds`/`RejectedCommandIds` und in `AggregateRehydrator` gefaltet): Re-Delivery eines
+  abgelehnten Vorgangs liefert **konsistent Success:false**, NIE Success:true (schließt den §4-Falsch-Erfolg).
+  Neue Fold-Achse `AbgelehntDa` im `ProzessManager.Kandidat`; `WakeAsync` stempelt daraus **vor** dem
+  Vorwärts/Kompensations-Split ein durables `SchrittGescheitert` (die Kopplung §4: Marker + Zwei-Mengen-Inbox
+  + Fold-Achse landen ZUSAMMEN, sonst läse der Vorwärtszweig den Marker als `ErgebnisDa` → `ProzessBeendet(true)`).
+  **Treiber sendet in Scheibe A NOCH über die Quittung** (idempotent gegen den Fold: `Gescheitert.ContainsKey`).
+  Beweis: store-freier Contract-Guard `AblehnungsMarkeTests` (der Marker ist `IProzessIntern` → Domänen-Fold-Skip
+  + Proto-Ausschluss + Fold-Diskriminator) + die **volle Saga-Suite als No-Regression-Oracle**. **Prüfstand
+  54/54, Integration 25/25** (BestellSaga-Kompensation grün; SnapshotLive-Flake diesen Lauf grün).
+- **P5 · Treiber-Fold, Scheibe B ✅ grün** (der eigentliche EM-1-Abschluss): der Treiber sendet jetzt
+  **fire-and-forget über das EINE Emit-Primitiv** `CommandEmitter` — **genau ein Emit-Weg**, keine Quittung mehr.
+  Neue `CommandEmitter`-Überladung `EmitAsync(cmd, commandId, korrelation, ct)` (§5 Weg a: der deterministische
+  `vorgang` IST die vorgegebene CommandId → der Fold-Match `CausationId == vorgang` bleibt unverändert).
+  `SendeAnZiel` (rohes `RequestAsync<CommandResult>`), `MeldeFehlschlagAnManager`, die `MeldeFehlschlag`-Message
+  und `ProzessManager.NotiereFehlschlagAsync` **gelöscht**; `DetachedProzessSend` auf **emit + `danach`** reduziert
+  (`WeckeSelbst` nach JEDEM Send — Erfolg, Ablehnung, Timeout — im `finally`, sonst hinge ein abgelehnter Schritt
+  bis zum Poll-Backstop, weil die Ablehnungs-Marke als `IProzessIntern` kein Signal erzeugt). Die Fehlschlag-
+  Erkennung trägt jetzt **allein der Fold** (§6: von *sofort* auf *eventual* verschoben; `WeckeSelbst` +
+  `ProzessOffenIndex` bleiben, A2). **Nachzug** umgesetzt: `NächsteKompensationAsync` wertet eine
+  `KommandoAbgelehnt`-Marke auf dem Kompensations-Ziel als *unvollziehbar* (KlärungNötig, #12), NICHT als
+  „erledigt" — da die Quittung dort ebenfalls entfällt. Beweise: `DetachedProzessSendTests` neu (Turn kehrt sofort
+  zurück bei nie-zurückkehrendem Emit; `WeckeSelbst` nach Erfolg UND wenn der Emit wirft), `EmitPrimitivTests`
+  (+Überladung stempelt `vorgang`), **volle Saga-Suite grün OHNE Quittung**. **Prüfstand 55/55, Integration 25/25**
+  (BestellSaga-Kompensation + Gesperrtes-Zielkonto + Backstop + ReiseSaga(-Parallel) + SnapshotLive grün).
+  *Ehrliche Einordnung:* der **KlärungNötig-Pfad** (Kompensation SELBST abgelehnt) ist korrekt-per-Konstruktion,
+  aber **nicht integration-gedeckt** (kein Test provoziert eine abgelehnte Kompensation). **EM-1 ist damit im
+  Kern erfüllt** (genau ein Emit-Weg).
+- **P5 · Treiber-Fold, Scheibe C ✅ grün (Analyzer A6 — EM-1 ERZWUNGEN).** Neuer Roslyn-`DiagnosticAnalyzer`
+  `CommandEmitAnalyzer` (in `Infrastructure.SourceGeneration`, läuft automatisch auf `Infrastructure` via die
+  bestehende Analyzer-Referenz — kein Extra-Wiring): **CQRS020** = Build-Fehler bei einem rohen
+  `cluster.RequestAsync<CommandResult>`-Send AUSSERHALB der zwei legitimen Sender (`CommandEmitter` = Emit-Weg,
+  `ProtoActorAggregateDispatcher` = Client-/OCC-Pfad); **CQRS021** = Build-Fehler bei `CancellationToken.None`/
+  `default` auf einer Command-Kante (unbounded, W2 — gilt auch INNERHALB der erlaubten Typen als Regressions-
+  Riegel). Präzise: syntaktischer Vorfilter (`RequestAsync<T>`) + semantische Bestätigung `T == Abstractions.
+  CommandResult` → der Pipeline-**Trigger**-Pfad (anderer Ergebnistyp, bewusst noch `None`) fällt NICHT darunter
+  (bleibt P6). Beweise: (a) End-to-end-Demonstration — eine temporäre Probe-Datei in `Infrastructure` erzeugte
+  exakt CQRS020 (roh) + CQRS021 (None) bzw. NUR CQRS020 (bounded), danach gelöscht → 0 Fehler; (b) durabler
+  Regressions-Guard `CommandEmitAnalyzerTests` (3, eigene `CSharpCompilation`): CQRS020+021 bei rohem None-Send,
+  nur CQRS020 bei bounded, sauber beim erlaubten `CommandEmitter`. **Prüfstand 58/58, Integration 25/25.**
+  **EM-1 ist damit voll erfüllt UND erzwungen.** *Offen (später):* P4 (Konsum-Maschine), P6 (Pipeline-Zerlegung +
+  Trigger-`None` + tote OCC-Helfer), Feature-Strom.
+- **P5(a) ✅ grün** — präzises `CorrelationId`-Poll-Routing. Befund: der Router (`RouteAsync`) routet ohnehin
+  jedes Event mit parsebarer Korrelation; der Terminal-Bug saß allein im Poll-**Typ**-Filter
+  (`ProzessManagerWiring.cs:154`). Fix **additiv** (`ProzessPollFilter.SollRouten`): route ein geändertes
+  Stream-Event auch, wenn seine Korrelation zu einem OFFENEN Prozess gehört → das terminale Ergebnis-Event
+  (Auslöser keiner Regel) wird jetzt **event-getrieben & präzise** geroutet, statt es dem Brute-Force-
+  Backstop zu überlassen; **kein Über-Wecken** fremder Korrelationen. Kosten: 1× `ListeOffeneAsync` je
+  Poll-Zyklus. Beweis Ebene-1 `ProzessPollFilterTests` (4). **Prüfstand 47/47; Integration: Prozess/Saga/
+  Reaktion 13/13 grün** (einziger Ausfall = der dokumentierte SnapshotLive-Cold-Boot-Flake, bimodal
+  bestätigt, prozess-unabhängig).
+  - *Ehrliche Einordnung:* die Terminal-**Korrektheit** war schon durch den `ProzessOffenIndex`-Backstop
+    (15s All-Scan) abgedeckt; P5(a) macht sie **präzise/event-getrieben** und legt die Grundlage, den
+    Brute-Force-Backstop später zu entlasten. **Beide Netze bleiben** (A2): `WeckeSelbst` (Latenz auf dem
+    Happy-Path) + `ProzessOffenIndex` (fully-stalled ohne Stream-Änderung). Bewusst NICHT retired.
+- **P1a ✅ grün** (erste Scheibe von P1, TG-1). Befund: die grobe `GeneratedEventCommandMapping` hatte nur
+  EINEN lebenden Konsumenten — den Blazor-Client-Capabilities-Pfad (`CapabilitiesHandler` →
+  `MessageTypeMapping.GetAllowedCommandNames`, Event→erlaubte Commands = Aggregat-Geschwister); die Fassade
+  `EventCommandMapping.cs` war toter Code. Umgesetzt: `MessageTypeMapping` leitet event→Geschwister-Commands
+  jetzt **präzise aus `GeneratedCommandRouting` (CommandToAggregate + CommandToEvents)** ab, nicht mehr aus
+  Namespace-Gruppierung. **Gelöscht:** `EventCommandMappingGenerator` + `GeneratedEventCommandMapping` +
+  die tote Fassade. Beweis: `EventCommandDerivationTests` (Konto-Event → Konto-Commands, keine Fremd-Commands).
+  **Prüfstand 49/49, Integration 25/25.**
+- **P1b ✅ grün** — `Event→Signal` typ-getrieben. Neuer generischer Marker `IStateChangeSignal<TEvent>`
+  (Abstractions); `SignalTypeGenerator` erzeugt `StateChangeVia{X} : IStateChangeSignal<X>`; der
+  `SignalFactoryGenerator` paart Event↔Signal jetzt aus dem **Typ-Argument** statt per Namens-Präfix
+  „StateChangeVia" + Namespace-Namenslookup (beides gelöscht). Der Signal-Name bleibt lesbar, ist aber nicht
+  mehr Ableitungsquelle. Beweis: `SignalEmitTests` (Signal implementiert `IStateChangeSignal<ImagePairInspiziert>`;
+  Factory/Registry weiter korrekt). Grep: keine Präfix-Ableitung mehr. **Prüfstand 50/50, Integration 25/25.**
+- **P1c ✅ grün (Kern) — TG-3-Tor erfüllt.** Neue optionale Attribute `[AggregatName]`/`[ProzessName]`
+  (Abstractions). **Detektion (das Tor):** zwei Aggregate/Prozesse mit gleicher aufgelöster Identität brechen
+  den **Build** (CQRS011 / CQRS012) mit klarer Meldung statt still die Laufzeit — per temporärer Kollisionsprobe
+  bewiesen (CQRS011 feuerte). **Konsistenz (footgun-frei):** `[AggregatName]` fließt in BEIDE Identitäts-Quellen
+  — Routing (`CommandAggregateMapGenerator`) **und** ClusterKind (`AggregateActorGenerator`, war `nameof`) —
+  kein Routing↔Kind-Mismatch. `[ProzessName]` ist ein **voller** Resolver (Prozess-Name ist nur ein
+  Korrelations-String). Default unverändert = einfacher Typname → **keine Migration**; No-Regression 50/50 /
+  24-25 (nur SnapshotLive-Flake).
+  - *Ehrliche Rest-Punkte (Follow-up, nicht Tor-relevant):* der Actor-**Klassenname** bleibt `{TState.Name}Actor`
+    → zwei GLEICHNAMIGE Aggregate koexistieren noch nicht (CS0101, aber sauber von CQRS011 abgefangen) — echte
+    Koexistenz braucht Klassennamen-Disambiguierung. Der `aggregate_type`-**Header** (`AggregateActorBase.cs:310`,
+    `typeof(TState).Name`) ist noch der Typname, nicht das Attribut (informativ, kein Routing). **P1d optional:**
+    `AggregateHandlerGenerator` volle OneOf-Typargumente (geringer Nutzen).
+- **P1 (Kanten-Graph) damit im Kern abgeschlossen** — jede Kante signaturgetrieben, Identitäts-Kollision =
+  Build-Fehler.
+- **Offen für später:** P5(b) Marking-Cursor; Treiber-Send ins Primitiv; P4 (Konsum-Maschine); P6 (Pipeline
+  + tote Helfer); P7/P8.
+
 ## Legende
 
 - **Tor** = messbare Abnahmebedingung; das System ist nach jeder Phase grün.
@@ -164,8 +278,8 @@ Boot bricht bei fehlendem Serializer.
 
 ## Unabhängige Bugfixes (jederzeit, entkoppelt)
 
-- [ ] `BrokerIdentity.GetShardIndex`: `(hash & 0x7FFFFFFF) % ShardCount` statt `Math.Abs(hash)` (`BrokerIdentity.cs:63`, Overflow bei `int.MinValue`).
-- [ ] Fan-out-Diskriminator: RegelIndex + Instanz-Index in die `Vorgang`-Id (latente Kollision, `ProzessId`/`ProzessManager`).
+- [x] **Befund 9 ✅** `BrokerIdentity.GetShardIndex`: `(hash & 0x7FFFFFFF) % ShardCount` statt `Math.Abs(hash)` (`BrokerIdentity.cs:63`). Guard-Test `BrokerIdentityTests`.
+- [x] **Befund 7/8 ✅** Fan-out-Diskriminator: **RegelIndex + Instanz-Index** in den `Vorgang`-Diskriminator (`ProzessManager.cs`, Vorwärts + Kompensation) — zwei Regeln gleicher Kausalität kollidieren nicht (8), Fan-out ans selbe Ziel bekommt distinkte Vorgänge (7). No-Regression: Saga/Prozess 11/11 (inkl. Fan-out + Kompensation).
 - [ ] Gemischtes Decider-Ergebnis (Effekt + Ablehnung): bereits als Fail-fast behandelt — beim Neubau als Contract festschreiben (`AggregateActorBase.cs:257`).
 
 ## Querschnitts-Regeln (während des ganzen Umbaus halten)

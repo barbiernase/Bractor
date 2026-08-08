@@ -43,7 +43,7 @@ public class BestellSagaE2ETests
     }
 
     private static CommandEnvelope Env(Guid id, string typ, ICommand payload)
-        => new() { AggregateId = id, AggregateType = typ, ExpectedVersion = 0, Payload = payload };
+        => new() { AggregateId = id, AggregateType = typ, Modus = new CommandModus.Client(0), Payload = payload };
 
     private static async Task<bool> Beendet(IEventStoreRepository store, Guid korr, bool erfolg)
         => (await store.ReadStreamAsync(korr, 0, default)).Any(e => e.Payload is ProzessBeendet b && b.Erfolg == erfolg);

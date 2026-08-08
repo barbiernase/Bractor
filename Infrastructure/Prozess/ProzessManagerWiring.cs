@@ -146,12 +146,18 @@ public sealed class ProzessManagerStartupService : IHostedService
 
             try
             {
+                // ★ P5(a): die offenen Korrelationen EINMAL je Poll-Zyklus laden (billig) → der Filter routet
+                //   zusätzlich das terminale/teilnehmende Ergebnis-Event eines OFFENEN Prozesses per
+                //   CorrelationId (event-getrieben, präzise), statt es allein dem Brute-Force-Backstop zu
+                //   überlassen. Der ProzessOffenIndex-Backstop BLEIBT (Auflage A2): er heilt den fully-stalled
+                //   Prozess OHNE Stream-Änderung, den dieses Poll-Routing strukturell nicht sieht.
+                var offene = new HashSet<Guid>(await _offenIndex.ListeOffeneAsync(ct));
                 var changes = await _store.ReadChangedStreamsAsync(hwm, ct);
                 foreach (var streamId in changes.StreamIds)
                 {
                     var events = await _store.ReadStreamAsync(streamId, 0, ct);
                     foreach (var env in events)
-                        if (relevanteTypen.Contains(env.Payload.GetType()))
+                        if (ProzessPollFilter.SollRouten(env.Payload.GetType(), env.CorrelationId, relevanteTypen, offene))
                             await router.RouteAsync(streamId, env.AggregateVersion, env.Payload, env.CorrelationId, ct);
                 }
                 hwm = changes.HighWaterMark;

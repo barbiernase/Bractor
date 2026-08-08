@@ -36,8 +36,17 @@ public sealed class Snapshot<TState> where TState : class, IState
     /// <summary>Der gefaltete Domänen-Zustand.</summary>
     public TState State { get; set; } = default!;
 
-    /// <summary>Die Framework-Inbox zum Zeitpunkt des Snapshots (idempotenter Pfad, Dedup per CommandId).</summary>
+    /// <summary>Die Framework-Inbox (verarbeitete Vorgänge) zum Zeitpunkt des Snapshots (idempotenter Pfad, Dedup per CommandId).</summary>
     public Guid[] ProcessedCommandIds { get; set; } = Array.Empty<Guid>();
+
+    /// <summary>
+    /// Die Ablehnungs-Inbox (fachlich abgelehnte Vorgänge, Treiber-Fold/EM-1) zum Zeitpunkt des Snapshots. Ohne sie
+    /// ginge die Ablehnungs-Dedup vor <see cref="Version"/> über eine Snapshot-Grenze verloren: eine Re-Delivery
+    /// eines abgelehnten Commands würde neu entschieden und könnte — bei zwischenzeitlich geändertem State —
+    /// fälschlich Erfolg liefern (der Manager kompensiert dann einen Schritt, den das Ziel gerade doch ausführte).
+    /// Analog <see cref="ProcessedCommandIds"/> gedeckelt (letzte cap, ältestes zuerst).
+    /// </summary>
+    public Guid[] RejectedCommandIds { get; set; } = Array.Empty<Guid>();
 
     /// <summary>Zeitpunkt des Snapshots (Diagnose/Betrieb).</summary>
     public DateTimeOffset UpdatedAt { get; set; }

@@ -157,7 +157,7 @@ public class ConnectionModule : IAsyncDisposable
             {
                 AggregateId = command.AggregateId,
                 Payload = command,
-                ExpectedVersion = expectedVersion,
+                Modus = new CommandModus.Client(expectedVersion),
                 CorrelationId = !string.IsNullOrEmpty(ctx.CorrelationId)
                     ? ctx.CorrelationId
                     : Guid.NewGuid().ToString(),

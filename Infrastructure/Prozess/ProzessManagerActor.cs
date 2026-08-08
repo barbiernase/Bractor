@@ -3,8 +3,8 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Abstractions;
-using Infrastructure.Pipeline;      // GeneratedPipelines.CommandAggregateTypes
 using Infrastructure.Projections;   // WakeAck
+using Infrastructure.PubSub;        // CommandEmitter
 using Proto;
 using Proto.Cluster;
 
@@ -16,12 +16,15 @@ namespace Infrastructure.Prozess;
 /// den Treiber. Er hält im Speicher NICHTS außer der Korrelation — das Marking faltet der
 /// <see cref="ProzessManager"/> bei jeder Weckung aus dem Log.
 ///
-/// Er feuert die Ziel-Commands FIRE-AND-FORGET über <see cref="DetachedProzessSend"/> (der strukturelle
-/// (A)-Hang-Fix, in-memory bewiesen): der Ziel-<c>RequestAsync</c> läuft detached, der Turn kehrt sofort
-/// zurück. Eine negative Quittung kommt out-of-turn als <see cref="MeldeFehlschlag"/> über die eigene
-/// Mailbox zurück (Single-Writer bleibt gewahrt). Die Korrelation reist als
-/// <c>CommandEnvelope.CorrelationId</c> mit → sie landet in den Ziel-Event-Metadaten, woraus der
-/// <see cref="KorrelationsRouter"/> den Manager neu weckt. Ziel-Aggregate (Konto) bleiben dadurch rein.
+/// ★ Treiber-Fold (EM-1): Er feuert die Ziel-Commands FIRE-AND-FORGET über das EINE Emit-Primitiv
+/// (<see cref="CommandEmitter"/>) — es gibt genau EINEN Emit-Weg, KEINE Quittung mehr. Der Send läuft
+/// detached (<see cref="DetachedProzessSend"/>, der strukturelle (A)-Hang-Fix, in-memory bewiesen); der Turn
+/// kehrt sofort zurück. Nach JEDEM Send weckt sich der Manager selbst (<see cref="WeckeSelbst"/>) und faltet
+/// den durablen Ausgang der Transition — eine Wirkung, die <c>KommandoVerarbeitet</c>-Noop-Marke oder die
+/// <c>KommandoAbgelehnt</c>-Ablehnungs-Marke. Der Fold (nicht mehr eine out-of-turn-Quittung) trägt die
+/// Fehlschlag-Erkennung. Die Korrelation reist als <c>CommandEnvelope.CorrelationId</c> mit → sie landet in
+/// den Ziel-Event-Metadaten, woraus der <see cref="KorrelationsRouter"/> den Manager neu weckt. Ziel-Aggregate
+/// (Konto) bleiben dadurch rein.
 ///
 /// (A)-Fix: <c>system.Cluster()</c> wird in der SPAWN-Factory aufgelöst (siehe Wiring), NICHT bei der
 /// Kind-Registrierung; der Ziel-Send ist bounded (kein <c>None</c>-Infinit-Retry).
@@ -37,6 +40,7 @@ public sealed class ProzessManagerActor : IActor
     private readonly IDeadLetterSink? _deadLetters;
     private Guid _korrelation;
     private ProzessManager? _manager;
+    private CommandEmitter? _emitter;
 
     public ProzessManagerActor(
         IEventStoreRepository eventStore,
@@ -60,7 +64,9 @@ public sealed class ProzessManagerActor : IActor
                 var identity = context.ClusterIdentity()?.Identity;
                 if (identity != null && Guid.TryParse(identity, out var korr))
                     _korrelation = korr;
-                _manager = new ProzessManager(_eventStore, _registry, ErzeugeDispatch(context), _offenIndex, _deadLetters);
+                // Das EINE Emit-Primitiv, an den Cluster gebunden (Cluster ist zur Spawn-Zeit fertig — (A)-Fix).
+                _emitter = new CommandEmitter(_cluster);
+                _manager = new ProzessManager(_eventStore, _registry, ErzeugeDispatch(), _offenIndex, _deadLetters);
                 break;
 
             case ProzessWake w:
@@ -73,23 +79,18 @@ public sealed class ProzessManagerActor : IActor
                 }
                 context.Respond(new WakeAck());
                 break;
-
-            case MeldeFehlschlag f:
-                if (_manager is not null)
-                {
-                    await _manager.NotiereFehlschlagAsync(_korrelation, f.Vorgang, f.Grund, context.CancellationToken);
-                    await _manager.WakeAsync(_korrelation, context.CancellationToken);
-                }
-                context.Respond(new WakeAck());
-                break;
         }
     }
 
-    /// <summary>Der Engine-Dispatch: detached Ziel-Send + Fehlschlag-Rückmeldung + Selbst-Weckung nach Erfolg.</summary>
-    private Func<Guid, ICommand, Guid, CancellationToken, Task> ErzeugeDispatch(IContext context)
-        => DetachedProzessSend.Wrap(SendeAnZiel, MeldeFehlschlagAnManager, WeckeSelbst);
+    /// <summary>
+    /// Der Engine-Dispatch (Treiber-Fold/EM-1): fire-and-forget Emit über das <see cref="CommandEmitter"/>-Primitiv
+    /// + Selbst-Weckung nach JEDEM Send. Keine Quittung, kein Fehlschlag-Rückkanal — der Fold liest den durablen
+    /// Ausgang (Wirkung/KommandoVerarbeitet/KommandoAbgelehnt).
+    /// </summary>
+    private Func<Guid, ICommand, Guid, CancellationToken, Task> ErzeugeDispatch()
+        => DetachedProzessSend.Wrap(EmittiereAnZiel, WeckeSelbst);
 
-    /// <summary>Nach einem erfolgreichen Send: DIESE Manager-Instanz neu wecken (Terminal/Fortschritt prüfen).</summary>
+    /// <summary>Nach JEDEM Send: DIESE Manager-Instanz neu wecken (Fortschritt/Terminal/Fehlschlag aus dem Fold).</summary>
     private async Task WeckeSelbst(Guid korrelation, CancellationToken ct)
     {
         var identity = ClusterIdentity.Create(korrelation.ToString(), KindName);
@@ -99,36 +100,11 @@ public sealed class ProzessManagerActor : IActor
         catch (OperationCanceledException) { /* Poll-Backstop heilt */ }
     }
 
-    /// <summary>Der bounded Ziel-Send; Vorgang → deterministische CommandId (Framework-Inbox), Korrelation → Metadatum.</summary>
-    private async Task<CommandResult?> SendeAnZiel(ICommand cmd, Guid vorgang, CancellationToken ct)
-    {
-        if (!GeneratedPipelines.CommandAggregateTypes.TryGetValue(cmd.GetType(), out var aggregateType))
-            return null;
-
-        var envelope = new CommandEnvelope
-        {
-            CommandId = vorgang,                            // deterministisch → Framework-Inbox dedupliziert (Exactly-once)
-            AggregateId = cmd.AggregateId,
-            AggregateType = aggregateType,
-            ExpectedVersion = CommandEnvelope.AnyVersion,   // kein OCC — Idempotenz sichert die CommandId
-            CorrelationId = _korrelation.ToString(),        // → Ziel-Event-Metadaten (Router weckt daraus)
-            Payload = cmd
-        };
-        var identity = ClusterIdentity.Create(cmd.AggregateId.ToString(), aggregateType);
-
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(5));   // bounded — kein None-Infinit-Retry (die Lektion aus (A))
-        try { return await _cluster.RequestAsync<CommandResult>(identity, envelope, cts.Token); }
-        catch (OperationCanceledException) { return null; }   // Timeout → nächste Weckung/Poll heilt
-    }
-
-    /// <summary>Rückmeldung einer negativen Quittung an DIESE Manager-Instanz (über die Mailbox → Single-Writer).</summary>
-    private async Task MeldeFehlschlagAnManager(Guid korrelation, Guid vorgang, string grund, CancellationToken ct)
-    {
-        var identity = ClusterIdentity.Create(korrelation.ToString(), KindName);
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(5));
-        try { await _cluster.RequestAsync<WakeAck>(identity, new MeldeFehlschlag(vorgang, grund), cts.Token); }
-        catch (OperationCanceledException) { /* Poll-Backstop heilt */ }
-    }
+    /// <summary>
+    /// Der Ziel-Send über das EINE Emit-Primitiv (§5 Weg a): der deterministische <c>vorgang</c> IST die
+    /// vorgegebene CommandId → der Fold matcht den durablen Ausgang über <c>CausationId == vorgang</c>, ohne
+    /// Quittung. Korrelation → Ziel-Event-Metadatum (Router weckt daraus). Bounded, at-least-once, Empfänger-Inbox.
+    /// </summary>
+    private Task EmittiereAnZiel(Guid korrelation, ICommand cmd, Guid vorgang, CancellationToken ct)
+        => _emitter!.EmitAsync(cmd, commandId: vorgang, korrelation: korrelation, ct);
 }

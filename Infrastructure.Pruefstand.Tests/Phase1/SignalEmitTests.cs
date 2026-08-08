@@ -25,6 +25,15 @@ public class SignalEmitTests
     }
 
     [Fact]
+    public void Signal_traegt_sein_Event_im_generischen_Marker_TG1()
+    {
+        // ★ P1b (TG-1): die Event→Signal-Kante steckt jetzt im TYP-Argument des Markers
+        //   IStateChangeSignal<TEvent>, nicht im Namens-Präfix. Der Factory-Generator liest sie daraus.
+        typeof(StateChangeViaImagePairInspiziert)
+            .Should().Implement<IStateChangeSignal<ImagePairInspiziert>>();
+    }
+
+    [Fact]
     public void Factory_liefert_null_fuer_transiente_Events()
     {
         // CommandFailed ist ITransientEvent → kein Signal.

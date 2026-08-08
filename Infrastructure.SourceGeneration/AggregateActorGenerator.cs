@@ -36,6 +36,20 @@ namespace Infrastructure.SourceGeneration
             context.AddSource("GeneratedAggregates.g.cs", generatedAggregatesSource);
         }
 
+        /// <summary>
+        /// ★ P1c (TG-3): die Aggregat-Identität — <c>[AggregatName("…")]</c> falls gesetzt, sonst der einfache
+        /// Typname (Default, keine Migration). MUSS identisch zum <c>CommandAggregateMapGenerator</c> sein.
+        /// </summary>
+        private static string AggregatIdentität(INamedTypeSymbol state)
+        {
+            var attr = state.GetAttributes().FirstOrDefault(a =>
+                a.AttributeClass?.ToDisplayString() == "Abstractions.AggregatNameAttribute");
+            if (attr != null && attr.ConstructorArguments.Length > 0 &&
+                attr.ConstructorArguments[0].Value is string s && !string.IsNullOrWhiteSpace(s))
+                return s;
+            return state.Name;
+        }
+
         private List<INamedTypeSymbol> FindIStateImplementations(Compilation compilation)
         {
             var results = new List<INamedTypeSymbol>();
@@ -205,8 +219,12 @@ namespace Infrastructure.SourceGeneration
                 string kindVarName = $"{char.ToLowerInvariant(aggregateName[0])}{aggregateName.Substring(1)}Kind";
                 kindVarNames.Add(kindVarName);
 
+                // ★ P1c (TG-3): der Kind-String = [AggregatName] falls gesetzt, sonst der Typname — KONSISTENT
+                //   mit dem Routing (CommandAggregateMapGenerator). Sonst entstünde ein Mismatch (Routing → "X",
+                //   Kind → Typname) → der Command fände seinen Actor nicht. Der Klassenname bleibt typname-basiert.
+                string identität = AggregatIdentität(symbol);
                 sb.AppendLine($"        var {kindVarName} = new ClusterKind(");
-                sb.AppendLine($"            nameof({aggregateName}),");
+                sb.AppendLine($"            \"{identität}\",");
                 sb.AppendLine($"            actorSystem.DI().PropsFor<{aggregateName}Actor>()");
                 sb.AppendLine("        );");
                 sb.AppendLine();

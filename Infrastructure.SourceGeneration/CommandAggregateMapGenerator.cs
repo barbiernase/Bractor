@@ -44,6 +44,19 @@ namespace Infrastructure.SourceGeneration
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
 
+        // ★ P1c (TG-3): zwei verschiedene Aggregate, die auf DIESELBE Identität auflösen (gleicher einfacher
+        //   Typname in verschiedenen Namespaces, ohne unterscheidendes [AggregatName]), würden denselben
+        //   ClusterKind/aggregate_type belegen → zur Laufzeit falsch geroutet. Fail-fast am Build statt still.
+        private static readonly DiagnosticDescriptor AggregatKollision = new DiagnosticDescriptor(
+            id: "CQRS011",
+            title: "Zwei Aggregate mit gleicher Identität",
+            messageFormat: "Die Aggregat-Identität '{0}' ist mehrdeutig — sie wird von mehreren State-Typen belegt ({1}). "
+                + "Zwei Aggregate mit gleichem Namen kollidieren im ClusterKind/aggregate_type. Gib mindestens einem ein "
+                + "explizites [AggregatName(\"...\")], um sie zu unterscheiden.",
+            category: "Cqrs",
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
         public void Initialize(GeneratorInitializationContext context) { }
 
         public void Execute(GeneratorExecutionContext context)
@@ -61,6 +74,8 @@ namespace Infrastructure.SourceGeneration
             // Command-Symbol → produzierte PERSISTIERTE Event-Typen (FQN), aus den Decide-OneOf-Rückgabetypen.
             // Grundlage des Azyklizitäts-Boot-Guards (präzise Command→Event-Kanten statt aggregat-grob).
             var events = new Dictionary<INamedTypeSymbol, SortedSet<string>>(SymbolEqualityComparer.Default);
+            // ★ P1c (TG-3): aufgelöste Aggregat-Identität → die State-Typen, die sie belegen (Kollisionserkennung).
+            var identitätZuStates = new Dictionary<string, HashSet<INamedTypeSymbol>>(System.StringComparer.Ordinal);
             var fq = SymbolDisplayFormat.FullyQualifiedFormat;
 
             var allTypes = new List<INamedTypeSymbol>();
@@ -74,7 +89,15 @@ namespace Infrastructure.SourceGeneration
                 if (deciderIface == null || deciderIface.TypeArguments.Length != 1)
                     continue;
 
-                var stateName = deciderIface.TypeArguments[0].Name;
+                // ★ P1c (TG-3): Identität aus [AggregatName] (falls vorhanden), sonst der einfache Typname
+                //   (Default → keine Migration). Kollisionen erkennen wir über die belegenden State-Typen.
+                if (deciderIface.TypeArguments[0] is not INamedTypeSymbol stateSymbol)
+                    continue;
+                var stateName = AggregatIdentität(stateSymbol);
+
+                if (!identitätZuStates.TryGetValue(stateName, out var states))
+                    identitätZuStates[stateName] = states = new HashSet<INamedTypeSymbol>(SymbolEqualityComparer.Default);
+                states.Add(stateSymbol);
 
                 // Alle Decide(TCommand)-Methoden dieses Deciders.
                 foreach (var method in type.GetMembers("Decide").OfType<IMethodSymbol>())
@@ -104,7 +127,28 @@ namespace Infrastructure.SourceGeneration
                     kv.Key.Locations.FirstOrDefault() ?? Location.None,
                     kv.Key.Name, string.Join(", ", kv.Value)));
 
+            // ★ P1c (TG-3): zwei verschiedene State-Typen mit derselben aufgelösten Identität → Build-Fehler.
+            foreach (var kv in identitätZuStates.Where(k => k.Value.Count > 1))
+                context.ReportDiagnostic(Diagnostic.Create(
+                    AggregatKollision,
+                    kv.Value.First().Locations.FirstOrDefault() ?? Location.None,
+                    kv.Key, string.Join(", ", kv.Value.Select(s => s.ToDisplayString(fq)))));
+
             context.AddSource("GeneratedCommandRouting.g.cs", Emit(map, events, fq));
+        }
+
+        /// <summary>
+        /// ★ P1c (TG-3): die Aggregat-Identität — <c>[AggregatName("…")]</c> falls gesetzt, sonst der einfache
+        /// Typname des State (Default, keine Migration).
+        /// </summary>
+        private static string AggregatIdentität(INamedTypeSymbol state)
+        {
+            var attr = state.GetAttributes().FirstOrDefault(a =>
+                a.AttributeClass?.ToDisplayString() == "Abstractions.AggregatNameAttribute");
+            if (attr != null && attr.ConstructorArguments.Length > 0 &&
+                attr.ConstructorArguments[0].Value is string s && !string.IsNullOrWhiteSpace(s))
+                return s;
+            return state.Name;
         }
 
         /// <summary>

@@ -22,7 +22,7 @@ namespace Infrastructure.Persistence;
 /// Marten-Registrierung nötig (in der StoreOptions-Konfiguration):
 ///   opts.Schema.For&lt;ProjectionCheckpoint&gt;().Identity(x =&gt; x.Id);
 /// </summary>
-public class MartenProjectionTracker : IProjectionTracker
+public class MartenProjectionTracker : IProjectionTracker, IReplaybarerTracker
 {
     private readonly IDocumentStore _store;
     private readonly ILogger<MartenProjectionTracker> _logger;

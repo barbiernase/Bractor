@@ -27,34 +27,34 @@ namespace Infrastructure.SourceGeneration
         {
             var compilation = context.Compilation;
 
-            var signalIface = compilation.GetTypeByMetadataName("Abstractions.IStateChangeSignal");
-            var eventIface = compilation.GetTypeByMetadataName("Abstractions.IEvent");
-            if (signalIface == null || eventIface == null)
+            // ★ P1b (TG-1): die Event→Signal-Kante wird TYP-getrieben aus dem generischen Marker
+            //   IStateChangeSignal<TEvent> gelesen — NICHT mehr per Namens-Präfix „StateChangeVia" +
+            //   Namespace-Namenslookup. Ein Signal deklariert sein Event im Typ-Argument.
+            var signalOpenGeneric = compilation.GetTypeByMetadataName("Abstractions.IStateChangeSignal`1");
+            if (signalOpenGeneric == null)
                 return;
 
             var allTypes = new List<INamedTypeSymbol>();
             Collect(compilation.GlobalNamespace, allTypes);
 
-            const string prefix = "StateChangeVia";
             var pairs = new List<(string EventType, string SignalType)>();
 
             foreach (var type in allTypes)
             {
-                if (!type.AllInterfaces.Contains(signalIface, SymbolEqualityComparer.Default))
-                    continue;
-                if (!type.Name.StartsWith(prefix))
-                    continue;
-
-                var eventName = type.Name.Substring(prefix.Length);
-                var ns = type.ContainingNamespace?.ToDisplayString();
-                var eventMetadataName = string.IsNullOrEmpty(ns) ? eventName : ns + "." + eventName;
-
-                var eventType = compilation.GetTypeByMetadataName(eventMetadataName);
-                if (eventType == null)
-                    continue;
-                if (!eventType.AllInterfaces.Contains(eventIface, SymbolEqualityComparer.Default))
+                INamedTypeSymbol? marker = null;
+                foreach (var i in type.AllInterfaces)
+                {
+                    if (i.IsGenericType &&
+                        SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, signalOpenGeneric))
+                    {
+                        marker = i;
+                        break;
+                    }
+                }
+                if (marker == null)
                     continue;
 
+                var eventType = marker.TypeArguments[0];
                 pairs.Add((eventType.ToDisplayString(), type.ToDisplayString()));
             }
 

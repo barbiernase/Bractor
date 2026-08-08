@@ -25,3 +25,14 @@ public interface IStateChangeSignal : IMessagePayload
     /// <summary>Die Position des auslösenden Events in seinem Stream.</summary>
     int Version { get; }
 }
+
+/// <summary>
+/// ★ P1b (TG-1): der typisierte Marker, der die Event→Signal-Kante <b>am Typ</b> trägt — nicht mehr am
+/// Namens-Präfix <c>StateChangeVia{Event}</c>. Das generierte <c>StateChangeVia{X}</c> implementiert
+/// <c>IStateChangeSignal&lt;X&gt;</c>; der <c>SignalFactoryGenerator</c> liest das Typ-Argument <c>TEvent</c>
+/// und paart Event↔Signal signaturgetrieben (kein String-Strip, kein Namespace-Namenslookup). Der Name des
+/// Signal-Typs bleibt lesbar, ist aber nicht mehr die Ableitungsquelle.
+/// </summary>
+public interface IStateChangeSignal<TEvent> : IStateChangeSignal where TEvent : IEvent
+{
+}

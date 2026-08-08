@@ -19,17 +19,17 @@ namespace Infrastructure.PubSub;
 /// </summary>
 public sealed class HandlerOutputRouter
 {
-    private readonly Cluster _cluster;
+    private readonly ICommandEmitter _emitter;
     private readonly BrokerPublisher? _publisher;
     private readonly string _subscriberId;
     private readonly ILogger _logger;
 
     public HandlerOutputRouter(Cluster cluster, BrokerPublisher? publisher, string subscriberId, ILogger? logger = null)
     {
-        _cluster = cluster;
+        _logger = logger ?? NullLogger.Instance;
+        _emitter = new CommandEmitter(cluster, _logger);   // ★ P3: das EINE Emit-Primitiv (EM-1)
         _publisher = publisher;
         _subscriberId = subscriberId;
-        _logger = logger ?? NullLogger.Instance;
     }
 
     /// <summary>Das <c>emit</c> für EIN auslösendes Event — Ausgaben erben dessen Kontext.</summary>
@@ -74,55 +74,15 @@ public sealed class HandlerOutputRouter
         _logger.LogDebug("[{Subscriber}] → reaktives Event: {Event}", _subscriberId, evt.GetType().Name);
     }
 
-    private async Task SendReaktionAsync(ICommand command, IAggregateEnvelope trigger, CancellationToken ct)
+    private Task SendReaktionAsync(ICommand command, IAggregateEnvelope trigger, CancellationToken ct)
     {
-        if (!GeneratedPipelines.CommandAggregateTypes.TryGetValue(command.GetType(), out var aggregateType))
-        {
-            _logger.LogWarning("[{Subscriber}] keine AggregateType-Zuordnung für Reaktions-Command {Command}", _subscriberId, command.GetType().Name);
-            return;
-        }
-
+        // ★ P3: über das EINE Emit-Primitiv (EM-1). Deterministische CommandId (W1-Dedup am Empfänger)
+        //   + bounded Token (W2) stecken jetzt im Primitiv — kein eigener Retry/Envelope/RequestAsync mehr.
+        //   Die Auslöse-Position (Stream + Version) reist in die Kausalität → stabile Id über Re-Wakes;
+        //   die Wirksamkeit sichert der Noop-Decider/Inbox des Empfängers (Spec 9.3).
         var triggerVersion = (trigger as IEventEnvelope)?.AggregateVersion ?? 0;
-        var commandId = ReaktionsId.For(trigger.AggregateId, triggerVersion, command.GetType().Name);
-
-        // Reaktion behauptet KEINE Empfänger-Version (Spec 9.3): der Sender kennt sie nicht und
-        //   soll sie nicht kennen. AnyVersion → der Empfänger-Actor konfligiert nie über OCC, sondern
-        //   dedupliziert am (Noop-)Decider über die deterministische CommandId. Damit entfällt der
-        //   frühere garantierte „expected 0 vs. actual N"-Konflikt (+ das nicht-publizierbare CommandFailed).
-        var envelope = new CommandEnvelope
-        {
-            CommandId = commandId,               // deterministisch (Spec 9.3)
-            AggregateId = command.AggregateId,
-            AggregateType = aggregateType,
-            ExpectedVersion = CommandEnvelope.AnyVersion,
-            CorrelationId = trigger.CorrelationId,
-            Payload = command
-        };
-        var identity = ClusterIdentity.Create(command.AggregateId.ToString(), aggregateType);
-
-        for (var attempt = 0; attempt < 3; attempt++)
-        {
-            CommandResult? result;
-            using (var cts = CancellationTokenSource.CreateLinkedTokenSource(ct))
-            {
-                cts.CancelAfter(TimeSpan.FromSeconds(3));   // begrenzt — kein Infinit-Retry (Spec: at-least-once, Re-Wake heilt)
-                try { result = await _cluster.RequestAsync<CommandResult>(identity, envelope, cts.Token); }
-                catch (OperationCanceledException)
-                {
-                    _logger.LogWarning("[{Subscriber}] Reaktion-Send Timeout (Versuch {Attempt}) an {AggregateType}/{AggregateId}", _subscriberId, attempt, aggregateType, command.AggregateId);
-                    result = null;
-                }
-            }
-
-            if (result == null) continue;                         // keine Antwort → erneut (Re-Wake heilt ebenfalls)
-
-            if (result.Success)
-            {
-                _logger.LogDebug("[{Subscriber}] → Reaktion {Command} an {AggregateType}/{AggregateId} (v{Version})", _subscriberId, command.GetType().Name, aggregateType, command.AggregateId, result.NewVersion);
-                return;
-            }
-
-            return;   // fachliche Ablehnung / technischer Fehler → kein Retry (kein OCC-Konflikt mehr möglich)
-        }
+        var korrelation = Guid.TryParse(trigger.CorrelationId, out var kr) ? kr : Guid.Empty;
+        var k = new EmitKausalität(korrelation, trigger.AggregateId, $"{triggerVersion}:{command.GetType().Name}");
+        return _emitter.EmitAsync(command, k, ct);
     }
 }

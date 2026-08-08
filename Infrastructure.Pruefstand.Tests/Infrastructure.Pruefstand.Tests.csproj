@@ -13,6 +13,8 @@
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <!-- Analyzer-Test-Harness (A6): eigene CSharpCompilation, um CQRS020/021 zu prüfen. -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
   </ItemGroup>
 
   <ItemGroup>
@@ -23,6 +25,8 @@
     <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
     <ProjectReference Include="..\Core\Core.csproj" />
     <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
+    <!-- Normaler Assembly-Ref (KEIN OutputItemType=Analyzer) → nur um CommandEmitAnalyzer zu instanziieren. -->
+    <ProjectReference Include="..\Infrastructure.SourceGeneration\Infrastructure.SourceGeneration.csproj" ReferenceOutputAssembly="true" />
     <ProjectReference Include="..\Domain\Domain.csproj" />
     <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
     <ProjectReference Include="..\Domain.Infrastructure\Domain.Infrastructure.csproj" />

@@ -60,7 +60,9 @@ public static class BrokerIdentity
             int hash = 17;
             foreach (char c in subscriberId)
                 hash = hash * 31 + c;
-            return Math.Abs(hash) % PubSubConfiguration.ShardCount;
+            // ★ Befund 9: NICHT Math.Abs — Math.Abs(int.MinValue) wirft OverflowException (auch im
+            //   unchecked-Block, weil Math.Abs selbst prüft). Das Vorzeichen-Bit maskieren ist total & billig.
+            return (hash & 0x7FFFFFFF) % PubSubConfiguration.ShardCount;
         }
     }
 

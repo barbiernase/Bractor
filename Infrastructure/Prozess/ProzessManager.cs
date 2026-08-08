@@ -15,9 +15,10 @@ namespace Infrastructure.Prozess;
 ///
 /// Eine Weckung = EIN Schritt (Spec §8, sequenziell zuerst): das Marking falten, die aktivierten,
 /// noch-nicht-erledigten Transitionen rechnen, die erste feuern (FIRE-AND-FORGET über <see cref="_dispatch"/>
-/// — kein <c>await</c> auf die Quittung im Turn, die (A)-Hang-Klasse ist strukturell weg). Die Bestätigung
-/// kommt später als korreliertes Ziel-Event, das neu weckt; eine Ablehnung kommt über
-/// <see cref="NotiereFehlschlagAsync"/> zurück (der Transport-Seam meldet die negative Quittung).
+/// — kein <c>await</c> auf eine Quittung im Turn, die (A)-Hang-Klasse ist strukturell weg). Der Ausgang
+/// kommt DURABEL vom Ziel-Stream und wird bei der nächsten Weckung gefaltet (Treiber-Fold/EM-1): eine
+/// Wirkung (Domänen-Event), eine <c>KommandoVerarbeitet</c>-Noop-Marke oder eine <c>KommandoAbgelehnt</c>-
+/// Ablehnungs-Marke (Achse <c>AbgelehntDa</c> → <c>SchrittGescheitert</c>). Keine out-of-turn-Quittung mehr.
 ///
 /// Der <see cref="_dispatch"/>-Seam IST die einzige Transport-Berührung: live ein detached, bounded
 /// Cluster-Send + Fehlschlag-Continuation, im Prüfstand ein Fake — so ist die ganze Petri-Logik in-memory
@@ -67,6 +68,31 @@ public sealed class ProzessManager
         if (!_registry.TryGetValue(mz.ProzessName, out var regeln)) return;
 
         var (_, kandidaten) = await FaltMarkingAsync(korrelation, mz, regeln, ct);
+
+        // ── Treiber-Fold (EM-1, §4/§7.3): einen im Fold gesehenen Fehlschlag DURABEL machen. Eine
+        //   KommandoAbgelehnt-Marke auf dem Ziel-Stream (AbgelehntDa) wird zu SchrittGescheitert im Manager-Log —
+        //   die Quelle der Fehlschlag-Erkennung wandert von der Ziel-Quittung in den Fold. Das MUSS vor dem
+        //   Vorwärts/Kompensations-Split passieren: sonst läse der Vorwärtszweig den Marker als „aufgelöst"
+        //   (ErgebnisDa) und schriebe fälschlich ProzessBeendet(true) (der stille Falsch-Erfolg aus §4).
+        //   Idempotent gegen die (in Scheibe A noch aktive) Quittung: nur Vorgänge, die NICHT schon in
+        //   mz.Gescheitert stehen, werden gestempelt; ein Doppel-Stempel unterbleibt.
+        var neuAbgelehnt = kandidaten
+            .Where(k => k.AbgelehntDa && !mz.Gescheitert.ContainsKey(k.Vorgang))
+            .GroupBy(k => k.Vorgang)
+            .Select(g => g.First())
+            .ToList();
+        if (neuAbgelehnt.Count > 0)
+        {
+            var v = mz.Version;
+            foreach (var k in neuAbgelehnt)
+            {
+                await AppendAsync(korrelation, v, new SchrittGescheitert(k.Vorgang, k.AbgelehntGrund), ct);
+                v++;
+            }
+            // Frisch falten: mz.Gescheitert trägt den Fehlschlag jetzt → Kompensationszweig.
+            await WakeAsync(korrelation, ct);
+            return;
+        }
 
         if (mz.Gescheitert.Count == 0)
         {
@@ -143,17 +169,6 @@ public sealed class ProzessManager
         }
     }
 
-    /// <summary>
-    /// Der Transport-Seam meldet eine negative Ziel-Quittung: der Manager macht sie DURABEL (Spec §5.2) und
-    /// treibt weiter (→ Kompensation). Idempotent — ein doppelt gemeldeter Fehlschlag verpufft.
-    /// </summary>
-    public async Task NotiereFehlschlagAsync(Guid korrelation, Guid vorgang, string grund, CancellationToken ct = default)
-    {
-        var mz = await LadeStatusAsync(korrelation, ct);
-        if (mz.Beendet || mz.Gescheitert.ContainsKey(vorgang)) return;
-        await AppendAsync(korrelation, mz.Version, new SchrittGescheitert(vorgang, grund), ct);
-    }
-
     // ── Feuern: Vorgang → deterministische CommandId (Framework-Inbox), fire-and-forget dispatchen ──
     // Der Regel-Command bleibt REIN (keine Vorgang-Injektion); die Idempotenz sichert die CommandId.
     private Task FeuereAsync(Guid korrelation, ICommand cmd, Guid vorgang, CancellationToken ct)
@@ -173,9 +188,16 @@ public sealed class ProzessManager
     ///   • <paramref name="WirkungDa"/> = „wirksam": ein DOMÄNEN-Event (kein <see cref="IProzessIntern"/>) liegt
     ///     vor. Nur eine Wirkung ist kompensierbar und aktiviert Downstream-Joins. Eine Ablehnung/ein Noop ist
     ///     aufgelöst, aber NICHT wirksam → sie wird nie kompensiert (keine Wirkung zum Zurücknehmen).
+    ///   • <paramref name="AbgelehntDa"/> = „fachlich abgelehnt": eine durable <c>KommandoAbgelehnt</c>-Marke mit
+    ///     dieser Kausalität liegt vor (Treiber-Fold/EM-1). Das ist die dritte Achse, die die frühere
+    ///     Quittungs-Fehlschlag-Erkennung ersetzt: <see cref="WakeAsync"/> stempelt daraus ein durables
+    ///     <c>SchrittGescheitert</c>. OHNE diese Achse läse der Vorwärtszweig den Marker nur als
+    ///     <paramref name="ErgebnisDa"/> und schriebe fälschlich <c>ProzessBeendet(true)</c> (§4-Kopplung).
+    ///     <paramref name="AbgelehntGrund"/> trägt den getippten Ablehnungs-Grund in den Fehlschlag.
     /// </summary>
     private sealed record Kandidat(
-        Regel Regel, int RegelIndex, IReadOnlyList<Token> Match, ICommand Cmd, Guid Vorgang, bool ErgebnisDa, bool WirkungDa);
+        Regel Regel, int RegelIndex, IReadOnlyList<Token> Match, ICommand Cmd, Guid Vorgang,
+        bool ErgebnisDa, bool WirkungDa, bool AbgelehntDa, string AbgelehntGrund);
 
     private async Task<(List<Token> Tokens, List<Kandidat> Kandidaten)> FaltMarkingAsync(
         Guid korrelation, ManagerStatus mz, ProzessRegeln regeln, CancellationToken ct)
@@ -208,11 +230,15 @@ public sealed class ProzessManager
                 foreach (var match in Belegungen(regel, schnappschuss))
                 {
                     var cmds = regel.Sende(match.Select(t => (IEvent)t.Payload).ToList());
-                    foreach (var cmd in cmds)
+                    foreach (var (cmd, ci) in cmds.Select((c, i) => (c, i)))
                     {
                         var primär = match[0];
+                        // ★ Befund 7/8: RegelIndex (ri) + Instanz-Index (ci) in den Diskriminator → zwei Regeln
+                        //   mit gleichem Auslöser/Command/Ziel kollidieren nicht (8); Fan-out an DASSELBE Ziel
+                        //   bekommt distinkte Vorgänge (7). Deterministisch (Sende ist rein, Ordnung stabil).
                         var vorgang = ProzessId.FürTransition(
-                            korrelation, primär.Stream, primär.Version, cmd.GetType().Name, cmd.AggregateId.ToString("N"));
+                            korrelation, primär.Stream, primär.Version, cmd.GetType().Name,
+                            $"{ri}:{ci}:{cmd.AggregateId:N}");
 
                         var zielEvents = await Lies(cmd.AggregateId);
                         // Ergebnis ↔ Transition per KAUSALITÄT: der Actor stempelt CausationId = CommandId = vorgang.
@@ -220,7 +246,15 @@ public sealed class ProzessManager
                         var aufgeloest = zielEvents.Any(e => e.CausationId == vorgang.ToString());
                         // „Wirkung": nur ein DOMÄNEN-Event (kein IProzessIntern) — kompensierbar + aktiviert Joins.
                         var wirkung = zielEvents.FirstOrDefault(e => e.CausationId == vorgang.ToString() && e.Payload is not IProzessIntern);
-                        kandidaten.Add(new Kandidat(regel, ri, match, cmd, vorgang, aufgeloest, wirkung is not null));
+                        // „Abgelehnt": die durable KommandoAbgelehnt-Marke mit dieser Kausalität (Treiber-Fold/EM-1).
+                        //   Eigene Achse, weil sie ErgebnisDa=true macht, aber NICHT WirkungDa — und WakeAsync sie
+                        //   zu SchrittGescheitert stempeln muss, statt sie im Vorwärtszweig als „erledigt" zu lesen.
+                        var abgelehnt = zielEvents.FirstOrDefault(
+                            e => e.CausationId == vorgang.ToString() && e.Payload is Infrastructure.Aggregate.KommandoAbgelehnt);
+                        var abgelehntGrund = (abgelehnt?.Payload as Infrastructure.Aggregate.KommandoAbgelehnt)?.Grund ?? "abgelehnt";
+                        kandidaten.Add(new Kandidat(
+                            regel, ri, match, cmd, vorgang,
+                            aufgeloest, wirkung is not null, abgelehnt is not null, abgelehntGrund));
 
                         // Nur eine WIRKUNG bringt ein neues Token in den Fold (aktiviert Downstream-Joins). Eine
                         // reine Marke (Noop/Ablehnung) ist inert — sie darf keinen Join scharf schalten.
@@ -297,20 +331,28 @@ public sealed class ProzessManager
                                     .OrderByDescending(k => k.RegelIndex))
         {
             var gegen = k.Regel.RückgängigDurch!(k.Match.Select(t => (IEvent)t.Payload).ToList());
-            foreach (var cmd in gegen)
+            foreach (var (cmd, ci) in gegen.Select((c, i) => (c, i)))
             {
                 var primär = k.Match[0];
+                // ★ Befund 7/8: RegelIndex (k.RegelIndex) + Instanz-Index (ci) — analog zur Vorwärts-Transition.
                 var vorgang = ProzessId.FürKompensation(
-                    korrelation, primär.Stream, primär.Version, cmd.GetType().Name, cmd.AggregateId.ToString("N"));
-                // Schon ausgeglichen? Der Gegenzug ist erledigt, wenn sein Ergebnis (Event mit
-                // CausationId == diesem Kompensations-Vorgang) auf dem Ziel-Stream liegt.
+                    korrelation, primär.Stream, primär.Version, cmd.GetType().Name,
+                    $"{k.RegelIndex}:{ci}:{cmd.AggregateId:N}");
+                // Schon ausgeglichen? Der Gegenzug ist erledigt, wenn sein Ergebnis auf dem Ziel-Stream liegt —
+                // ABER nur ein Ergebnis, das KEINE Ablehnung ist (eine Wirkung ODER die KommandoVerarbeitet-Noop-
+                // Marke). Eine KommandoAbgelehnt-Marke zählt NICHT als erledigt (der Gegenzug wurde abgelehnt).
                 var zielEvents = await _store.ReadStreamAsync(cmd.AggregateId, 0, ct);
-                var erledigt = zielEvents.Any(e => e.CausationId == vorgang.ToString());
+                var erledigt = zielEvents.Any(e =>
+                    e.CausationId == vorgang.ToString() && e.Payload is not Infrastructure.Aggregate.KommandoAbgelehnt);
                 if (erledigt) continue;
-                // ★ Audit-Fix #12: Der Gegenzug wurde SELBST abgelehnt (sein Vorgang steht in Gescheitert) →
-                //   NICHT neu feuern (sonst enger Kompensations-Livelock: er wird nie „erledigt", weil eine
-                //   Ablehnung weder Event noch Marke hinterlässt) — als unvollziehbar merken und weitersuchen.
-                if (gescheitert.ContainsKey(vorgang)) { unvollziehbar ??= new Kompensation(cmd, vorgang); continue; }
+                // ★ Audit-Fix #12 + Treiber-Fold: Der Gegenzug wurde SELBST abgelehnt — als durable
+                //   KommandoAbgelehnt-Marke auf dem Ziel-Stream (der Fold ersetzt die frühere Quittung; nach
+                //   Entfall des Quittungs-Pfads ist der Marker die Wahrheit). NICHT neu feuern (sonst enger
+                //   Kompensations-Livelock: „erledigt" wird er nie) — als unvollziehbar merken und weitersuchen.
+                //   (gescheitert.ContainsKey bleibt als zweite Quelle stehen: harmlos, deckt Alt-/Boot-Zustände.)
+                var abgelehnt = zielEvents.Any(e =>
+                    e.CausationId == vorgang.ToString() && e.Payload is Infrastructure.Aggregate.KommandoAbgelehnt);
+                if (abgelehnt || gescheitert.ContainsKey(vorgang)) { unvollziehbar ??= new Kompensation(cmd, vorgang); continue; }
                 return (new Kompensation(cmd, vorgang), unvollziehbar);
             }
         }

@@ -30,7 +30,7 @@ public static class AggregateDispatcherExtensions
         {
             AggregateId = command.AggregateId,
             AggregateType = ResolveAggregateType(command),
-            ExpectedVersion = expectedVersion,
+            Modus = new CommandModus.Client(expectedVersion),
             Payload = command,
         });
     }

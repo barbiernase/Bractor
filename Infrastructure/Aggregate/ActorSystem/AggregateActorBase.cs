@@ -51,11 +51,16 @@ public abstract class AggregateActorBase<TState> : IActor
     private Guid _id;
     private bool _initialized = false;
 
-    // Framework-Inbox (Exactly-once): bereits verarbeitete CommandIds des idempotenten Pfads (AnyVersion).
+    // Framework-Inbox (Exactly-once): bereits verarbeitete CommandIds des idempotenten Pfads (Emittiert).
     // Aus den co-committeten KommandoVerarbeitet-Marken des Streams gefaltet — der Fachcode kennt das nie.
     // ★ Audit-Fix #4/H3: HART gedeckelt (letzte K) statt monoton wachsend — siehe BoundedInbox.
+    // ★ Treiber-Fold (EM-1): eine ZWEITE Menge der fachlich ABGELEHNTEN Vorgänge (co-committete
+    //   KommandoAbgelehnt-Marken). Sie hält die Re-Delivery eines abgelehnten Commands konsistent auf
+    //   Ablehnung (NIE Success:true) — nötig, weil der Ablehnungs-Pfad jetzt eine durable Marke schreibt,
+    //   die der Prozess-Manager als Fehlschlag faltet (§4-Kopplung: Marke + Zwei-Mengen-Inbox + Fold-Achse).
     private readonly int _inboxCap;
     private BoundedInbox _verarbeiteteCommandIds;
+    private BoundedInbox _abgelehnteCommandIds;
 
     protected AggregateActorBase(
         IAggregateHandlerFactory handlerFactory,
@@ -78,6 +83,7 @@ public abstract class AggregateActorBase<TState> : IActor
         _snapshotThreshold = snapshotOptions?.Threshold ?? 200;
         _inboxCap = snapshotOptions?.InboxCap ?? 10_000;
         _verarbeiteteCommandIds = new BoundedInbox(_inboxCap);
+        _abgelehnteCommandIds = new BoundedInbox(_inboxCap);
         _deadLetters = deadLetters;
     }
 
@@ -154,6 +160,7 @@ public abstract class AggregateActorBase<TState> : IActor
 
         _state = rehydrated.State;
         _verarbeiteteCommandIds = rehydrated.ProcessedCommandIds;
+        _abgelehnteCommandIds = rehydrated.RejectedCommandIds;
         _lastSnapshotVersion = rehydrated.SnapshotVersion;
 
         // Handler zeigt auf denselben geseedeten State (Decider/Applier mutieren _state).
@@ -164,7 +171,34 @@ public abstract class AggregateActorBase<TState> : IActor
             _id, _state.Version, _lastSnapshotVersion);
     }
 
+    /// <summary>
+    /// ★ P2: Zwei getrennte Schreiber-Eingänge (EM-2) statt eines überladenen Sentinels. Der Actor
+    /// dispatcht exhaustiv auf den <see cref="CommandModus"/>; die Behandlung ist am Typ ablesbar,
+    /// nicht an einem magischen -1.
+    /// </summary>
     private async Task HandleCommandAsync(IContext context, CommandEnvelope cmdEnvelope)
+    {
+        switch (cmdEnvelope.Modus)
+        {
+            case CommandModus.Client c:
+                await HandleClientCommand(context, cmdEnvelope, c.ExpectedVersion);
+                break;
+            case CommandModus.Emittiert:
+                await HandleEmittedCommand(context, cmdEnvelope);
+                break;
+        }
+    }
+
+    /// <summary>Externer Client-Command: OCC gegen die behauptete Version.</summary>
+    private Task HandleClientCommand(IContext context, CommandEnvelope cmdEnvelope, int expectedVersion)
+        => HandleCommandCoreAsync(context, cmdEnvelope, istIdempotent: false, expectedVersion);
+
+    /// <summary>Interner Emitter (Reaktion/Prozess/Pipeline): KEINE Version — Idempotenz via det. CommandId + Inbox.</summary>
+    private Task HandleEmittedCommand(IContext context, CommandEnvelope cmdEnvelope)
+        => HandleCommandCoreAsync(context, cmdEnvelope, istIdempotent: true, expectedVersion: _state!.Version);
+
+    private async Task HandleCommandCoreAsync(
+        IContext context, CommandEnvelope cmdEnvelope, bool istIdempotent, int expectedVersion)
     {
         try
         {
@@ -184,17 +218,15 @@ public abstract class AggregateActorBase<TState> : IActor
                 return;
             }
 
-            // Sentinel CommandEnvelope.AnyVersion (< 0): KEINE OCC-Assertion. Der Sender (Reaktion/
-            //   Prozess, Spec 9.3) kennt die Empfänger-Version nicht — Idempotenz sichert die
-            //   deterministische CommandId + der (Noop-)Decider, nicht die Version. Der Actor
-            //   serialisiert je Aggregat ohnehin (Single-Writer) → die aktuelle Version IST die Basis.
-            //   Bestehende Commands (ExpectedVersion >= 0) sind unberührt.
-            var expectedVersion = cmdEnvelope.ExpectedVersion < 0 ? _state!.Version : cmdEnvelope.ExpectedVersion;
+            // ★ P2: expectedVersion + istIdempotent kommen jetzt vom Eingang (Client vs. Emittiert),
+            //   nicht aus einem Sentinel in der Message (EM-2). Client → behauptete Version (OCC);
+            //   Emittiert → aufgelöste aktuelle Version (Single-Writer) → nie ein OCC-Konflikt, aber
+            //   die Marten-OCC weist eine echte Doppelaktivierung weiterhin ab.
 
-            // Validierung: Concurrency Check (Actor-seitig, schnell) — nur bei echter Assertion.
+            // Validierung: Concurrency Check (Actor-seitig, schnell) — nur bei echter Assertion (Client).
             if (_state!.Version != expectedVersion)
             {
-                var errorMsg = $"Concurrency conflict: expected version {cmdEnvelope.ExpectedVersion}, actual {_state.Version}";
+                var errorMsg = $"Concurrency conflict: expected version {expectedVersion}, actual {_state.Version}";
                 _logger?.LogDebug("[Actor] {ErrorMsg}", errorMsg);
                 await TryPublishCommandFailedAsync(cmdEnvelope, errorMsg);
                 context.Respond(new CommandResult 
@@ -207,13 +239,31 @@ public abstract class AggregateActorBase<TState> : IActor
                 return;
             }
 
-            // ★ Framework-Inbox: der idempotente Pfad (AnyVersion, Reaktion/Prozess) dedupliziert nach
+            // ★ Framework-Inbox: der idempotente Pfad (Emittiert; Reaktion/Prozess) dedupliziert nach
             //   CommandId — ein wiederholt zugestellter Command (at-least-once) verpufft als Noop, OHNE dass
-            //   der Fachcode eine Dedup-Zeile trägt. Der OCC-Pfad (ExpectedVersion >= 0) ist unberührt.
-            var istIdempotent = cmdEnvelope.ExpectedVersion < 0;
+            //   der Fachcode eine Dedup-Zeile trägt. Der Client-/OCC-Pfad ist unberührt.
             if (istIdempotent && _verarbeiteteCommandIds.Contains(cmdEnvelope.CommandId))
             {
                 context.Respond(new CommandResult { Success = true, AggregateId = _id, NewVersion = _state.Version });
+                return;
+            }
+
+            // ★ Treiber-Fold (EM-1, §4-Kopplung): eine Re-Delivery eines bereits fachlich ABGELEHNTEN Vorgangs
+            //   muss KONSISTENT eine Ablehnung liefern — NIE Success:true. Sonst könnte ein zweiter Zustellversuch
+            //   (Poll/Draht-Duplikat) nach zwischenzeitlich geändertem State plötzlich erfolgreich sein und einen
+            //   Effekt erzeugen, während der Prozess-Manager den Schritt schon als gescheitert kompensiert. Der
+            //   getippte Ablehnungs-Grund ist nicht mehr rekonstruierbar (nur die CommandId reist in der Inbox) —
+            //   der Manager braucht ihn hier auch nicht: seine Fehlschlag-Wahrheit ist die durable KommandoAbgelehnt-
+            //   Marke, die er faltet. Ein generischer Ablehnungs-Ausgang genügt (Success:false).
+            if (istIdempotent && _abgelehnteCommandIds.Contains(cmdEnvelope.CommandId))
+            {
+                context.Respond(new CommandResult
+                {
+                    Success = false,
+                    AggregateId = _id,
+                    ErrorMessage = "Vorgang bereits abgelehnt (Framework-Inbox)",
+                    NewVersion = _state.Version
+                });
                 return;
             }
 
@@ -271,14 +321,16 @@ public abstract class AggregateActorBase<TState> : IActor
                 var rejection = rejections.First();
                 _logger?.LogDebug("[Actor] Rejected: {Rejection}", rejection.GetType().Name);
 
-                // ★ Audit-Fix K2 — BEWUSST KEINE Marke auf dem Ablehnungs-Pfad (nur auf dem Noop-Pfad oben):
-                //   Eine Ablehnung braucht sie nicht, um den Livelock zu vermeiden — der Prozess-Manager macht
-                //   den Fehlschlag über SchrittGescheitert durabel und feuert die Transition danach NICHT mehr
-                //   vorwärts (Kompensationszweig). Eine Marke hier wäre sogar schädlich: die ERSTE Zustellung
-                //   quittiert negativ (Success:false), eine RE-Zustellung würde per Inbox-Dedup plötzlich
-                //   Success:true liefern → der Manager verzweigt auf Success → Selbst-Weckung im Vorwärtszweig →
-                //   sieht (vor dem durablen SchrittGescheitert) alle Transitionen „aufgelöst" und schriebe
-                //   fälschlich ProzessBeendet(true). Also: Ablehnung bleibt marken-frei, Success-Signal konsistent.
+                // ★ Treiber-Fold (EM-1) — Wende der früheren K2-Entscheidung: auf dem EMITTIERTEN Pfad
+                //   (Reaktion/Prozess) wird die Ablehnung jetzt DURABEL als KommandoAbgelehnt co-committet. Der
+                //   Prozess-Manager faltet sie als eigene Achse (AbgelehntDa) zu SchrittGescheitert — er braucht
+                //   die Ziel-Quittung nicht mehr (der EINE Emit-Weg). Der frühere Falsch-Erfolg-Fallstrick (eine
+                //   RE-Zustellung liefert per Inbox-Dedup Success:true → Manager verzweigt auf Erfolg) ist durch
+                //   die ZWEITE Inbox-Menge geschlossen: ein abgelehnter Vorgang bleibt bei Re-Delivery auf
+                //   Success:false (siehe Dedup-Zweig oben). Marke + Zwei-Mengen-Inbox + Fold-Achse zusammen (§4).
+                //   Der Client-/OCC-Pfad bleibt marken-frei (Targeted Delivery, kein Prozess dahinter).
+                if (istIdempotent)
+                    await CoCommitAblehnungsMarkeAsync(cmdEnvelope, expectedVersion, rejection.GetType().Name);
 
                 // Targeted Delivery — nur an den Aufrufer
                 await TryPublishRejectionAsync(cmdEnvelope, rejection);
@@ -321,9 +373,11 @@ public abstract class AggregateActorBase<TState> : IActor
             {
                 // 6. Events applyen (Applier) — mutiert _state. Die Marke wird NICHT angewandt (der Applier
                 //    kennt sie nicht), aber in der Version mitgezählt (Stream-Position konsistent).
+                // ★ Audit-Fix #5 (Symmetrie Live == Rehydration): ein IProzessIntern-Persistent-Event wird
+                //   NICHT angewandt (nur die Version mitgezählt) — exakt wie die Rehydration (AggregateRehydrator).
                 foreach (var evt in persistentEvents)
                 {
-                    _handler.ApplyEvent(evt);
+                    if (evt is not IProzessIntern) _handler.ApplyEvent(evt);
                     _state.Version++;
                 }
                 if (istIdempotent)
@@ -419,6 +473,27 @@ public abstract class AggregateActorBase<TState> : IActor
     }
 
     /// <summary>
+    /// Co-committet AUSSCHLIESSLICH die Framework-ABLEHNUNGS-Marke (idempotenter Pfad, fachliche Ablehnung) —
+    /// ein durabler Beleg „dieser Vorgang wurde abgelehnt" MIT dem Grund, ohne Domänen-Effekt. Gleiche native
+    /// Transaktion wie ein normaler Append; die Marke ist <see cref="IProzessIntern"/> → beim Domänen-Falten
+    /// übersprungen, in der Version aber mitgezählt (Stream-Position bündig). Der Prozess-Manager faltet sie zu
+    /// <c>SchrittGescheitert</c> (Treiber-Fold/EM-1). Basis ist die aufgelöste aktuelle Version (Single-Writer).
+    /// </summary>
+    private async Task CoCommitAblehnungsMarkeAsync(CommandEnvelope cmdEnvelope, int expectedVersion, string grund)
+    {
+        await _eventStore.AppendEventsAsync(
+            _id,
+            expectedVersion,
+            new IEvent[] { new Infrastructure.Aggregate.KommandoAbgelehnt(cmdEnvelope.CommandId, grund) },
+            correlationId: cmdEnvelope.CorrelationId,
+            causationId: cmdEnvelope.CommandId.ToString(),
+            aggregateType: typeof(TState).Name);
+
+        _state!.Version++;
+        _abgelehnteCommandIds.Add(cmdEnvelope.CommandId);
+    }
+
+    /// <summary>
     /// ★ Audit-Fix #5: meldet ein „vergiftetes" Aggregat (Rehydration schlägt deterministisch fehl, i.d.R. ein
     /// werfender Applier) EINMAL je Aktivierung durabel in die DLQ — beobachtbar statt in per-Command-Spam
     /// begraben. Best-effort; wirft nie in den Aufrufer zurück (der re-wirft ohnehin den Original-Fehler).
@@ -485,6 +560,7 @@ public abstract class AggregateActorBase<TState> : IActor
             SchemaVersion = _snapshotSchemaVersion ?? "",
             State = Clone(_state),
             ProcessedCommandIds = _verarbeiteteCommandIds.ToArray(),
+            RejectedCommandIds = _abgelehnteCommandIds.ToArray(),
             UpdatedAt = DateTimeOffset.UtcNow
         };
         _lastSnapshotVersion = _state.Version;

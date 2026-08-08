@@ -67,7 +67,7 @@ public class LiveCommandE2ETests
             {
                 AggregateId = pairId,
                 AggregateType = "ImagePair",   // MUSS mit dem ClusterKind übereinstimmen
-                ExpectedVersion = 0,
+                Modus = new CommandModus.Client(0),
                 Payload = new ErstelleImagePair(
                     pairId,
                     PairKey: "PAIR-LIVE",
