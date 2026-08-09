@@ -146,6 +146,11 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("                //   ist er REPLAYBAR (Projektion). Sonst ist er EMITTIEREND (Reaktion/Pipeline-Event) und bekommt");
             sb.AppendLine("                //   den best-effort IEmittentenCursor (kein Reset) — statt bei jeder Weckung ab 0 zu re-falten.");
             sb.AppendLine("                var tracker = trackers.FirstOrDefault();");
+            sb.AppendLine();
+            sb.AppendLine("                // GA-1-Check (P4): eine append-artige Projektion OHNE Co-Commit-Tracker bricht hier");
+            sb.AppendLine("                //   (statt still at-least-once doppelte Appends zu schreiben).");
+            sb.AppendLine("                GaEinsPruefung.PrüfeCoCommit(projection, tracker, projection.SubscriberId);");
+            sb.AppendLine();
             sb.AppendLine("                IEmittentenCursor? emittentenCursor = tracker is null");
             sb.AppendLine("                    ? provider.GetService<IEmittentenCursor>()");
             sb.AppendLine("                    : null;");

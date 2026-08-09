@@ -15,8 +15,12 @@ namespace Domain.Projections;
 ///   - Menschenlesbare Beschreibung
 ///   - Kategorie für UI-Farbkodierung
 ///   - Optionale Details (Klassifikation, Version, etc.)
+///
+/// APPEND-ARTIG (<see cref="IAppendProjektion"/>): jedes Event → ein NEUER Eintrag, Doppelverarbeitung
+/// ist sichtbar/korrumpierend. Der GA-1-Check erzwingt daher den Co-Commit-Store (unten: der
+/// ImagePairHistorieStore ist zugleich IProjectionTracker → Effekt + Marke in EINER Transaktion).
 /// </summary>
-public partial class ImagePairHistorieProjection : ISubscriber, IPullSubscriber
+public partial class ImagePairHistorieProjection : ISubscriber, IPullSubscriber, IAppendProjektion
 {
     private readonly IImagePairHistorieWriteStore _store;
 
