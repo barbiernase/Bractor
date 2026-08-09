@@ -63,7 +63,19 @@ eingebettet.
 > Beweise: End-to-end-Demonstration (temporäre Probe erzeugte CQRS020+021, danach gelöscht) + durabler `CommandEmitAnalyzerTests`
 > (3, eigene `CSharpCompilation`). **Prüfstand 58/58, Integration 25/25. EM-1 voll erfüllt UND erzwungen.**
 > *Offen/ehrlich:* der KlärungNötig-Pfad (Kompensation selbst abgelehnt) ist korrekt-per-Konstruktion, aber nicht integration-gedeckt.
-> **Nächste große Schritte: P4 (Konsum-Maschine), P6 (Pipeline-Zerlegung + Trigger-`None` + tote OCC-Helfer), Feature-Strom.**
+> **P6.1 ✅** — `PipelineActorBase` entrümpelt: toter OCC-Ballast (`MaxRetries`/`ResolveVersion`/`DeadLetterAsync`/
+> write-only `_versionCache`/toter `IDeadLetterSink`-Param, Generator angepasst) raus; `SendTriggerAsync`-`None` → bounded (W2).
+> **P4 im Kern ✅** (die Konsumenten-Maschinenklasse, zwei Achsen): **P4.1** `IEmittentenCursor` real (`EmittentenCursorDoc` +
+> `MartenEmittentenCursor` best-effort/kein-Co-Commit + `InMemoryEmittentenCursor` + DI/Schema); **P4.2** die eine Maschine
+> (`ProjectionAdapter`/`SignalAdapterActor`) trägt jetzt REPLAYBAR (`IProjectionTracker`, Reset) ODER EMITTIEREND
+> (`IEmittentenCursor`, KEIN Reset) — exklusiv (Guard), der `PullPathGenerator` wählt nach Store; **Korrektheit:** der
+> detached-Emit heißt Cursor rückt nur auf dem **Signal-Pfad** vor, der **Poll heilt ab 0** (`Wake.VomPoll`) → at-least-once
+> exakt erhalten; **P4.3** GA-1-Check (Boot/DI): `IAppendProjektion`-Opt-in + `GaEinsPruefung` bricht eine append-artige
+> Projektion ohne Co-Commit-Tracker (in die Kind-Factory verdrahtet, `ImagePairHistorieProjection` markiert).
+> **Zählerstände: Prüfstand 67, Integration 25/25.** **Test-Infra dieser Session:** `scripts/dev-infra-setup.sh` (native
+> Postgres/Redis/Consul, kein Docker-Hub; .NET 10 SDK baut/läuft `net9.0` per Roll-Forward, da .NET 9 EOL).
+> **Nächster großer Schritt: P6.2** (Event-Pfad-Fold — Plan: `docs/handoff-p6.2-event-pfad-fold.md`, braucht zuerst
+> einen Pipeline-Test-Harness), dann P5(b)/Feature-Strom/P7/P8.
 
 ## Was das Projekt ist
 

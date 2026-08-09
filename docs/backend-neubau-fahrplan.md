@@ -118,8 +118,31 @@
     `AggregateHandlerGenerator` volle OneOf-Typargumente (geringer Nutzen).
 - **P1 (Kanten-Graph) damit im Kern abgeschlossen** — jede Kante signaturgetrieben, Identitäts-Kollision =
   Build-Fehler.
-- **Offen für später:** P5(b) Marking-Cursor; Treiber-Send ins Primitiv; P4 (Konsum-Maschine); P6 (Pipeline
-  + tote Helfer); P7/P8.
+- **P6.1 ✅ grün** — Pipeline-Actor entrümpelt + Trigger-Kante gebändigt. Toter OCC-Ballast aus
+  `PipelineActorBase` entfernt (mit P3/EM-1 obsolet): `MaxRetries`, `ResolveVersion`, `DeadLetterAsync`, der
+  write-only `_versionCache`+`TrackVersion`, der nie aufgerufene `IDeadLetterSink`-Ctor-Param (Generator an 3
+  Stellen entsprechend angepasst). `SendTriggerAsync` sendete mit `CancellationToken.None` (W2) → jetzt bounded
+  (5s) + `OperationCanceledException` sauber behandelt. **Prüfstand 58/58, Integration 24/25** (nur SnapshotLive-Flake).
+- **P4.1 ✅ grün** — `IEmittentenCursor` real: `EmittentenCursorDoc` (Abstractions), `MartenEmittentenCursor`
+  (best-effort, eigene Session, KEIN Co-Commit), `InMemoryEmittentenCursor` (Infrastructure.Testing), DI + Marten-
+  Schema. Rein additiv (kein Konsument). **Prüfstand 62/62 (+4), Live-Boot grün.**
+- **P4.2 ✅ grün** — die Maschine wählt die Marke nach **Achse B** (Compile-Zeit-Schnitt). `ProjectionAdapter`/
+  `SignalAdapterActor` tragen jetzt REPLAYBAR (`IProjectionTracker`, Reset) ODER EMITTIEREND (`IEmittentenCursor`,
+  KEIN Reset) — zueinander exklusiv (Konstruktions-Guard). Der `PullPathGenerator` entscheidet: Store mit
+  `IProjectionTracker` → replaybar; sonst → emittierend + Cursor aus DI. **Korrektheit:** der Reaktions-Emit ist
+  detached fire-and-forget → der Cursor rückt nur auf dem **Signal-Pfad** vor (O(Tail)); die **Poll-Weckung heilt
+  bewusst ab 0** (neues `Wake.VomPoll`) → at-least-once bleibt EXAKT erhalten (verlorener Emit re-emittiert vom
+  30s-Poll, Empfänger-Inbox 10k dedupliziert). **Prüfstand 64/64 (+2), Integration 24/25.**
+- **P4.3 ✅ grün** — GA-1-Check (Boot-/DI-Zeit): `IAppendProjektion`-Opt-in-Marker; `GaEinsPruefung.PrüfeCoCommit`
+  bricht, wenn eine append-artige Projektion keinen Co-Commit-`IProjectionTracker` mitbringt (in die generierte
+  Kind-Factory verdrahtet). `ImagePairHistorieProjection` markiert (ihr Store IST Tracker → passt). Bewusst
+  DI-Check statt Roslyn (Domain.Projections referenziert nur Domain.SourceGeneration als Analyzer). **P4 damit
+  im Kern vollständig. Prüfstand 67/67 (+3), Live-Boot grün.**
+- **Offen für später:** **P6.2** (Event-Pfad-Fold — präziser Plan: `docs/handoff-p6.2-event-pfad-fold.md`;
+  braucht zuerst einen Pipeline-Test-Harness); P5(b) Marking-Cursor; P7/P8.
+
+> **Test-Infra (diese Session eingerichtet):** `scripts/dev-infra-setup.sh` — native Postgres/Redis/Consul (kein
+> Docker-Hub-Zugang) + .NET 10 SDK (baut/läuft `net9.0` per `DOTNET_ROLL_FORWARD=LatestMajor`, da .NET 9 EOL).
 
 ## Legende
 
