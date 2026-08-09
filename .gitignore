@@ -100,4 +100,7 @@ cqrs.proto
 deploy-windows.zip
 knowledge-graph.json
 LabelingTool.zip
-PROJECT_STRUCTURE.mddump.rdb
+PROJECT_STRUCTURE.md
+
+# Redis-Dump-Artefakt aus der lokalen Test-Infra (scripts/dev-infra-setup.sh)
+dump.rdb
