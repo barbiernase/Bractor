@@ -131,6 +131,10 @@ public static class CqrsServiceExtensions
             // einem Neustart hier wieder auf, statt beim Boot die ganze Historie zu re-scannen.
             options.Schema.For<PollCursor>().Identity(x => x.Id);
 
+            // Emittenten-Cursor (P4): best-effort Fortschritt eines EMITTIERENDEN Konsumenten
+            // (Reaktion / Pipeline-Event) pro Partition — kein Co-Commit, Verlust heilt der Voll-Fold.
+            options.Schema.For<EmittentenCursorDoc>().Identity(x => x.Id);
+
             // Durabler Offen-Index der Prozesse (§3-Backstop): eine kleine O(offen)-Menge, aus der ein
             // periodischer Scan hängende Prozesse (verlorene terminale/kompensierende Selbst-Weckung) heilt.
             options.Schema.For<ProzessOffen>().Identity(x => x.Id);
@@ -156,6 +160,12 @@ public static class CqrsServiceExtensions
         // Durabler Poll-Cursor (Backstop): setzt nach Neustart bei der letzten HWM auf.
         services.AddSingleton<IPollCursorStore>(provider =>
             new MartenPollCursorStore(provider.GetRequiredService<IDocumentStore>()));
+
+        // Emittenten-Cursor (P4, Achse B = emittierend): best-effort Fortschritt für Reaktion/Pipeline-Event,
+        // damit ein emittierender Konsument nicht bei jeder Weckung ab 0 re-faltet (O(N²)→O(Tail)); die
+        // Korrektheit trägt weiter die Empfänger-Inbox, nicht dieser Cursor (kein Reset → kein blind-Replay).
+        services.AddSingleton<IEmittentenCursor>(provider =>
+            new MartenEmittentenCursor(provider.GetRequiredService<IDocumentStore>()));
 
         // Durabler Offen-Index der Prozesse (§3-Backstop): Grundlage des Scans, der hängende Prozesse heilt.
         services.AddSingleton<IProzessOffenIndex>(provider =>
