@@ -55,7 +55,7 @@ public class SignalDeliveryClusterTests : IClassFixture<PostgresFixture>
 
             var es = EventStoreMit(streamId, count: 1);
             var store = new Domain.Infrastructure.ImagePairHistorieStore(_fx.Store);
-            var adapter = new ProjectionAdapter(es, store, projId, Dispatch(store));
+            var adapter = new ProjectionAdapter(es, store, null, projId, Dispatch(store));
             var receiver = new SignalReceiver((sid, ct) => adapter.WakeAsync(sid, ct));
             var signalTypes = SignalReceiver.SignalTypesFor(new[] { typeof(ImagePairInspiziert) });
 

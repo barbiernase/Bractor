@@ -32,7 +32,7 @@ public class CoCommitPostgresTests : IClassFixture<PostgresFixture>
         var (streamId, projId) = FreshIds();
         var es = EventStoreMit(streamId, count: 1);
         var store = new Domain.Infrastructure.ImagePairHistorieStore(_fx.Store);
-        var adapter = new ProjectionAdapter(es, store, projId, Dispatch(store));
+        var adapter = new ProjectionAdapter(es, store, null, projId, Dispatch(store));
 
         await adapter.WakeAsync(streamId);
 
@@ -48,7 +48,7 @@ public class CoCommitPostgresTests : IClassFixture<PostgresFixture>
         var (streamId, projId) = FreshIds();
         var es = EventStoreMit(streamId, count: 3);
         var store = new Domain.Infrastructure.ImagePairHistorieStore(_fx.Store);
-        var adapter = new ProjectionAdapter(es, store, projId, Dispatch(store));
+        var adapter = new ProjectionAdapter(es, store, null, projId, Dispatch(store));
 
         await adapter.WakeAsync(streamId);
 
@@ -72,7 +72,7 @@ public class CoCommitPostgresTests : IClassFixture<PostgresFixture>
             throw new InvalidOperationException("Absturz zwischen Effekt und Marke");
         };
 
-        var adapter = new ProjectionAdapter(es, store, projId, Dispatch(store), crashAfterEffectBeforeMark: crash);
+        var adapter = new ProjectionAdapter(es, store, null, projId, Dispatch(store), crashAfterEffectBeforeMark: crash);
         await Assert.ThrowsAsync<InvalidOperationException>(() => adapter.WakeAsync(streamId));
 
         // Nichts wurde durabel: weder Effekt noch Marke (die ganze Session wurde verworfen).
@@ -80,7 +80,7 @@ public class CoCommitPostgresTests : IClassFixture<PostgresFixture>
         (await store.LastProcessedVersionAsync(projId, streamId, default)).Should().Be(-1);
 
         // Neustart: gleicher Store, gleiche Events → Wiederholung, dann Commit.
-        var adapter2 = new ProjectionAdapter(es, store, projId, Dispatch(store));
+        var adapter2 = new ProjectionAdapter(es, store, null, projId, Dispatch(store));
         await adapter2.WakeAsync(streamId);
 
         // exactly-once wirksam: GENAU EIN Eintrag trotz Absturz.

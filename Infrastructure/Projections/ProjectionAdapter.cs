@@ -28,32 +28,63 @@ public sealed class ProjectionAdapter
 {
     private readonly IEventStoreRepository _eventStore;
     private readonly IProjectionTracker? _tracker;
+    private readonly IEmittentenCursor? _emittentenCursor;
     private readonly string _projectionId;
     private readonly Func<EventEnvelope, ProjectionWriter, Task> _dispatch;
     private readonly IReadModelDepsSink? _depsSink;
     private readonly Func<Task>? _crashAfterEffectBeforeMark;
 
+    /// <param name="tracker">
+    /// REPLAYBARE Marke (Achse B, Projektion): co-committbar + Reset-fähig; null → tracker-los.
+    /// </param>
+    /// <param name="emittentenCursor">
+    /// EMITTENTEN-Cursor (Achse B, Reaktion/Pipeline-Event): best-effort Fortschritt OHNE Reset.
+    /// Schließt <paramref name="tracker"/> aus (ein Konsument ist replaybar ODER emittierend) —
+    /// das ist der Compile-Zeit-Schnitt: der Cursor-Typ trägt kein Reset, blindes Replayen eines
+    /// geld-bewegenden Emittenten ist damit strukturell unmöglich.
+    /// </param>
     public ProjectionAdapter(
         IEventStoreRepository eventStore,
         IProjectionTracker? tracker,
+        IEmittentenCursor? emittentenCursor,
         string projectionId,
         Func<EventEnvelope, ProjectionWriter, Task> dispatch,
         IReadModelDepsSink? depsSink = null,
         Func<Task>? crashAfterEffectBeforeMark = null)
     {
+        if (tracker is not null && emittentenCursor is not null)
+            throw new InvalidOperationException(
+                $"{projectionId}: Tracker (replaybar) UND Emittenten-Cursor (emittierend) gesetzt — " +
+                "ein Konsument ist genau eine Achsen-B-Ausprägung.");
+
         _eventStore = eventStore;
         _tracker = tracker;
+        _emittentenCursor = emittentenCursor;
         _projectionId = projectionId;
         _dispatch = dispatch;
         _depsSink = depsSink;
         _crashAfterEffectBeforeMark = crashAfterEffectBeforeMark;
     }
 
+    /// <summary>Partition des Emittenten-Cursors: pro (Konsument, Stream) — sonst kollidierten zwei
+    /// Konsumenten desselben Streams.</summary>
+    private string Partition(Guid streamId) => $"{_projectionId}:{streamId}";
+
     public async Task WakeAsync(Guid streamId, CancellationToken ct = default)
+        => await WakeAsync(streamId, vomPoll: false, ct);
+
+    public async Task WakeAsync(Guid streamId, bool vomPoll, CancellationToken ct = default)
     {
-        var applied = _tracker is null
-            ? -1
-            : await _tracker.LastProcessedVersionAsync(_projectionId, streamId, ct);
+        int applied;
+        if (_tracker is not null)
+            applied = await _tracker.LastProcessedVersionAsync(_projectionId, streamId, ct);
+        else if (_emittentenCursor is not null && !vomPoll)
+            // Signal-Pfad: ab dem best-effort Cursor (Position = last+1 → applied = Position-1;
+            // unset 0 → applied -1 → ab 0, robust gegen die Versions-Nummerierung).
+            applied = (int)(await _emittentenCursor.LadeAsync(Partition(streamId), ct)) - 1;
+        else
+            // Tracker-los ODER Poll-Heilung eines Emittenten: bewusst ab 0 (at-least-once).
+            applied = -1;
 
         var events = await _eventStore.ReadStreamAsync(streamId, applied + 1, ct);
 
@@ -82,6 +113,9 @@ public sealed class ProjectionAdapter
 
         if (_tracker is not null && last > applied)
             await _tracker.MarkProcessedAsync(_projectionId, streamId, last, ct);  // Commit-Punkt (durabel)
+        else if (_emittentenCursor is not null && last > applied)
+            // Best-effort (kein Co-Commit): Position = last+1. Verlust heilt der Voll-Fold (Poll ab 0).
+            await _emittentenCursor.SchreibeAsync(Partition(streamId), last + 1, ct);
 
         // ★ H2: Deps ERST jetzt — nach dem durablen Co-Commit — best-effort veröffentlichen. Der Index rückt
         //   damit nie über Uncommittetes vor. Ein Verlust hier ist folgenlos: der nächste Wake liefert sie neu.

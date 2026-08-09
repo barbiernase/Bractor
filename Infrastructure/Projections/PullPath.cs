@@ -72,7 +72,7 @@ public sealed class GenericPullStartupService : IHostedService
             Func<Guid, CancellationToken, Task> signalWake = (streamId, c) =>
             {
                 var identity = ClusterIdentity.Create(streamId.ToString(), kindName);
-                _ = _system.Cluster().RequestAsync<WakeAck>(identity, new Wake(), c);
+                _ = _system.Cluster().RequestAsync<WakeAck>(identity, new Wake(VomPoll: false), c);
                 return Task.CompletedTask;
             };
 
@@ -88,7 +88,7 @@ public sealed class GenericPullStartupService : IHostedService
                 cts.CancelAfter(TimeSpan.FromSeconds(10));
                 try
                 {
-                    var ack = await _system.Cluster().RequestAsync<WakeAck>(identity, new Wake(), cts.Token);
+                    var ack = await _system.Cluster().RequestAsync<WakeAck>(identity, new Wake(VomPoll: true), cts.Token);
                     return ack is not null;
                 }
                 catch { return false; }

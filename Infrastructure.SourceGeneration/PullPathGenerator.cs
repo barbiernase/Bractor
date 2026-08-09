@@ -142,6 +142,14 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("                if (trackers.Count > 1)");
             sb.AppendLine($"                    throw new InvalidOperationException(\"{p.Name}: mehrere IProjectionTracker-Stores — höchstens einer erlaubt (Spec 7.6).\");");
             sb.AppendLine();
+            sb.AppendLine("                // Achse-B-Schnitt (P4): hat der Konsument einen (co-committbaren) IProjectionTracker-Store,");
+            sb.AppendLine("                //   ist er REPLAYBAR (Projektion). Sonst ist er EMITTIEREND (Reaktion/Pipeline-Event) und bekommt");
+            sb.AppendLine("                //   den best-effort IEmittentenCursor (kein Reset) — statt bei jeder Weckung ab 0 zu re-falten.");
+            sb.AppendLine("                var tracker = trackers.FirstOrDefault();");
+            sb.AppendLine("                IEmittentenCursor? emittentenCursor = tracker is null");
+            sb.AppendLine("                    ? provider.GetService<IEmittentenCursor>()");
+            sb.AppendLine("                    : null;");
+            sb.AppendLine();
             sb.AppendLine("                // Schritt A / Spec 8: DIESELBE Ausgabe-Route wie der Push-Actor (HandlerOutputRouter):");
             sb.AppendLine("                //   IEvent → re-publish, ICommand → Reaktion. system.Cluster() hier zur SPAWN-Zeit");
             sb.AppendLine("                //   (die Factory läuft im Actor-Started, Cluster ist fertig — NICHT bei Kind-Registrierung).");
@@ -151,7 +159,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("                Func<EventEnvelope, ProjectionWriter, Task> dispatch =");
             sb.AppendLine("                    (e, writer) => projection.DispatchAsync(e, writer,");
             sb.AppendLine("                        DetachedEmit.Wrap(router.EmitFor(e, System.Threading.CancellationToken.None)));");
-            sb.AppendLine("                return (projection.SubscriberId, trackers.FirstOrDefault(), dispatch);");
+            sb.AppendLine("                return (projection.SubscriberId, tracker, emittentenCursor, dispatch);");
             sb.AppendLine("            }, depsSink)));");
             sb.AppendLine("    }");
             sb.AppendLine("}");

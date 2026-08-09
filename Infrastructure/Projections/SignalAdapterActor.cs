@@ -24,7 +24,7 @@ namespace Infrastructure.Projections;
 public sealed class SignalAdapterActor : IActor
 {
     private readonly IEventStoreRepository _eventStore;
-    private readonly Func<(string ProjectionId, IProjectionTracker? Tracker, Func<EventEnvelope, ProjectionWriter, Task> Dispatch)> _perActorFactory;
+    private readonly Func<(string ProjectionId, IProjectionTracker? Tracker, IEmittentenCursor? EmittentenCursor, Func<EventEnvelope, ProjectionWriter, Task> Dispatch)> _perActorFactory;
     private readonly IReadModelDepsSink? _depsSink;
 
     private ProjectionAdapter? _adapter;
@@ -32,12 +32,13 @@ public sealed class SignalAdapterActor : IActor
 
     /// <summary>
     /// Die Factory liefert die ProjektionsId (aus <c>ISubscriber.SubscriberId</c>, zur Laufzeit
-    /// gelesen — der Generator kann sie aus referenzierten Assemblies nicht statisch kennen),
-    /// den optionalen Tracker und den Dispatch. Frisch je Stream-Actor.
+    /// gelesen — der Generator kann sie aus referenzierten Assemblies nicht statisch kennen), die
+    /// zueinander exklusiven Achse-B-Marken (replaybarer Tracker ODER Emittenten-Cursor) und den
+    /// Dispatch. Frisch je Stream-Actor.
     /// </summary>
     public SignalAdapterActor(
         IEventStoreRepository eventStore,
-        Func<(string, IProjectionTracker?, Func<EventEnvelope, ProjectionWriter, Task>)> perActorFactory,
+        Func<(string, IProjectionTracker?, IEmittentenCursor?, Func<EventEnvelope, ProjectionWriter, Task>)> perActorFactory,
         IReadModelDepsSink? depsSink = null)
     {
         _eventStore = eventStore;
@@ -55,15 +56,15 @@ public sealed class SignalAdapterActor : IActor
                 if (identity != null && Guid.TryParse(identity, out var sid))
                 {
                     _streamId = sid;
-                    var (projectionId, tracker, dispatch) = _perActorFactory();
+                    var (projectionId, tracker, emittentenCursor, dispatch) = _perActorFactory();
                     _adapter = new ProjectionAdapter(
-                        _eventStore, tracker, projectionId, dispatch, _depsSink);
+                        _eventStore, tracker, emittentenCursor, projectionId, dispatch, _depsSink);
                 }
                 break;
 
-            case Wake:
+            case Wake wake:
                 if (_adapter != null)
-                    await _adapter.WakeAsync(_streamId, context.CancellationToken);
+                    await _adapter.WakeAsync(_streamId, wake.VomPoll, context.CancellationToken);
                 context.Respond(new WakeAck());
                 break;
         }
