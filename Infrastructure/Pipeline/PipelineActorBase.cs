@@ -8,20 +8,17 @@ namespace Infrastructure.Pipeline;
 
 /// <summary>
 /// Basis-Klasse für Pipeline-Actors.
-/// Handhabt Dual-Input (Trigger + Events), Command-Sending mit Retry,
-/// und lokales Version-Caching.
+/// Handhabt Dual-Input (Trigger + Events) und das Command-Sending über das EINE Emit-Primitiv (EM-1).
 ///
 /// Analog zu SubscriberActorBase (Events → ReadModel-Mutations)
 /// und AggregateActorBase (Commands → Events).
 ///
 /// Pipeline-Actors sind das serverseitige Gegenstück zum gRPC-Client:
-/// Beide empfangen Events und senden Commands. Der Unterschied:
-/// gRPC = Fire-and-Forget, Pipeline = Request-Response mit CommandResult.
+/// Beide empfangen Events und senden Commands.
 ///
-/// Versioning-Strategie (ohne Redis):
-///   1. CommandResult.NewVersion → Cache-Update nach jedem Command
-///   2. PubSub-Events → passives Tracking aus IAggregateEnvelope
-///   3. Kaltstart → Version 0 provoziert Conflict → Retry mit korrekter Version
+/// Kein Versionsargument und kein OCC-Retry: Commands gehen über <see cref="CommandEmitter"/> als
+/// <see cref="CommandModus.Emittiert"/> (deterministische CommandId → Empfänger-Inbox dedupliziert,
+/// bounded Token) — die alte „Version 0 → Conflict → Retry"-Strategie ist mit P3/EM-1 entfallen (W1/W2).
 /// </summary>
 public abstract class PipelineActorBase<THandler> : IActor
     where THandler : IPipelineHandler
@@ -31,17 +28,8 @@ public abstract class PipelineActorBase<THandler> : IActor
     private readonly ICommandEmitter _emitter;        // ★ P3: das EINE Emit-Primitiv (EM-1) — Command→Fremd-Aggregat
     private readonly Infrastructure.PubSub.BrokerPublisher? _publisher;
     private readonly ILogger? _logger;
-    private readonly IDeadLetterSink? _deadLetters;   // ★ §5: tote Commands beobachtbar machen (optional)
 
     private Infrastructure.PubSub.BrokerSubscription? _subscription;
-
-    /// <summary>
-    /// Lokaler Version-Cache. Wird gefüttert aus:
-    /// - CommandResult.NewVersion (nach jedem gesendeten Command)
-    /// - IAggregateEnvelope.AggregateVersion (passiv aus PubSub-Events)
-    /// Kein Redis nötig — Conflicts werden per Retry aufgelöst.
-    /// </summary>
-    private readonly Dictionary<Guid, int> _versionCache = new();
 
     /// <summary>
     /// Token → CancellationTokenSource für geplante Self-Messages.
@@ -49,21 +37,20 @@ public abstract class PipelineActorBase<THandler> : IActor
     /// </summary>
     private readonly Dictionary<string, CancellationTokenSource> _scheduledTokens = new();
 
-    private const int MaxRetries = 3;
+    /// <summary>Bounded-Frist für Pipeline→Pipeline-Trigger-Sends (W2: kein Infinit-Hang).</summary>
+    private static readonly TimeSpan TriggerFrist = TimeSpan.FromSeconds(5);
 
     protected PipelineActorBase(
         THandler logic,
         Cluster cluster,
         Infrastructure.PubSub.BrokerPublisher? publisher = null,
-        ILogger? logger = null,
-        IDeadLetterSink? deadLetters = null)
+        ILogger? logger = null)
     {
         _logic = logic ?? throw new ArgumentNullException(nameof(logic));
         _cluster = cluster ?? throw new ArgumentNullException(nameof(cluster));
         _emitter = new Infrastructure.PubSub.CommandEmitter(cluster, logger);
         _publisher = publisher;
         _logger = logger;
-        _deadLetters = deadLetters;
     }
 
     public async Task ReceiveAsync(IContext context)
@@ -188,12 +175,6 @@ public abstract class PipelineActorBase<THandler> : IActor
         {
             _logger?.LogDebug("[Pipeline:{PipelineId}] Event: {Event}", _logic.PipelineId, envelope.Payload.GetType().Name);
 
-            // Passives Version-Tracking (Stufe 2)
-            if (envelope is EventEnvelope eventEnvelope && eventEnvelope.AggregateVersion > 0)
-            {
-                TrackVersion(eventEnvelope.AggregateId, eventEnvelope.AggregateVersion);
-            }
-
             var ctx = CreatePipelineContext(actorCtx,
                 correlationId: envelope.CorrelationId,
                 sourceAggregateId: envelope.AggregateId,
@@ -230,50 +211,6 @@ public abstract class PipelineActorBase<THandler> : IActor
             ? new EmitKausalität(korrelation, src, $"{ctx.SourceAggregateVersion}:{command.GetType().Name}")
             : new EmitKausalität(korrelation, Guid.NewGuid(), command.GetType().Name);
         return _emitter.EmitAsync(command, k, ct);
-    }
-
-    /// <summary>§5: Schreibt einen toten Command in die DLQ (best-effort, no-op wenn keine Senke registriert).</summary>
-    private Task DeadLetterAsync(ICommand command, string? aggregateType, string? correlationId, string grund, int versuche)
-    {
-        if (_deadLetters is null) return Task.CompletedTask;
-        return _deadLetters.WriteAsync(new DeadLetter
-        {
-            Id = Guid.NewGuid(),
-            Quelle = _logic.PipelineId,
-            CommandType = command.GetType().Name,
-            AggregateId = command.AggregateId,
-            AggregateType = aggregateType,
-            CorrelationId = correlationId,
-            Grund = grund,
-            Versuche = versuche,
-            ErfasstUtc = DateTimeOffset.UtcNow
-        });
-    }
-
-    // ═══════════════════════════════════════════════════════
-    // Versioning (kein Redis, nur lokaler Cache)
-    // ═══════════════════════════════════════════════════════
-
-    private int ResolveVersion(ICommand command)
-    {
-        // ICreationCommand → immer 0
-        if (command is ICreationCommand)
-            return 0;
-
-        // Lokaler Cache (aus CommandResult oder PubSub-Events)
-        if (_versionCache.TryGetValue(command.AggregateId, out var cached))
-            return cached;
-
-        // Kein Cache-Hit → 0 senden, Conflict provozieren, Retry mit korrekter Version
-        return 0;
-    }
-
-    private void TrackVersion(Guid aggregateId, int version)
-    {
-        if (version > 0)
-        {
-            _versionCache[aggregateId] = version;
-        }
     }
 
     // ═══════════════════════════════════════════════════════
@@ -390,8 +327,21 @@ public abstract class PipelineActorBase<THandler> : IActor
 
         var identity = ClusterIdentity.Create(targetPipelineId, $"Pipeline-{targetPipelineId}");
 
-        var ack = await _cluster.RequestAsync<PipelineAck>(
-            identity, trigger, CancellationToken.None);
+        // W2: bounded — ein hängender Ziel-Actor darf den sendenden Turn nicht unbegrenzt blockieren.
+        // At-least-once: ein Timeout heilt der nächste Auslöser/Re-Wake (Invariante 2).
+        using var cts = new CancellationTokenSource(TriggerFrist);
+        PipelineAck? ack;
+        try
+        {
+            ack = await _cluster.RequestAsync<PipelineAck>(identity, trigger, cts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+            _logger?.LogWarning(
+                "[Pipeline:{PipelineId}] Trigger {TriggerType} → {Target} Timeout ({Frist}s) — Re-Wake heilt",
+                _logic.PipelineId, triggerType.Name, targetPipelineId, TriggerFrist.TotalSeconds);
+            return;
+        }
 
         if (ack?.Accepted == true)
         {

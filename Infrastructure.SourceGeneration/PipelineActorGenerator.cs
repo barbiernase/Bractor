@@ -213,9 +213,8 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"        {name} logic,");
                 sb.AppendLine($"        Cluster cluster,");
                 sb.AppendLine($"        Infrastructure.PubSub.BrokerPublisher? publisher = null,");
-                sb.AppendLine($"        ILogger<{actorName}>? logger = null,");
-                sb.AppendLine($"        Abstractions.IDeadLetterSink? deadLetters = null)");
-                sb.AppendLine($"        : base(logic, cluster, publisher, logger, deadLetters) {{ }}");
+                sb.AppendLine($"        ILogger<{actorName}>? logger = null)");
+                sb.AppendLine($"        : base(logic, cluster, publisher, logger) {{ }}");
                 sb.AppendLine();
 
                 // GetSubscribedEventTypes
@@ -357,8 +356,7 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"            {{");
                 sb.AppendLine($"                var logic = provider.GetRequiredService<{name}>();");
                 sb.AppendLine($"                var logger = provider.GetService<ILogger<{actorName}>>();");
-                sb.AppendLine($"                var deadLetters = provider.GetService<Abstractions.IDeadLetterSink>();");
-                sb.AppendLine($"                return new {actorName}(logic, cluster, publisher, logger, deadLetters);");
+                sb.AppendLine($"                return new {actorName}(logic, cluster, publisher, logger);");
                 sb.AppendLine($"            }})");
                 sb.AppendLine($"        );");
                 sb.AppendLine();
@@ -397,8 +395,7 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"                    var cluster = system.Cluster();");
                 sb.AppendLine($"                    var publisher = provider.GetRequiredService<Infrastructure.PubSub.BrokerPublisher>();");
                 sb.AppendLine($"                    var logger = provider.GetService<ILogger<{actorName}>>();");
-                sb.AppendLine($"                    var deadLetters = provider.GetService<Abstractions.IDeadLetterSink>();");
-                sb.AppendLine($"                    return new {actorName}(handler_{name}, cluster, publisher, logger, deadLetters);");
+                sb.AppendLine($"                    return new {actorName}(handler_{name}, cluster, publisher, logger);");
                 sb.AppendLine($"                }})");
                 sb.AppendLine($"            ));");
                 sb.AppendLine($"        }}");
