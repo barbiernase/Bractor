@@ -1,3 +1,4 @@
+using System.Linq;
 using Abstractions;
 using Infrastructure.PubSub;
 using Microsoft.Extensions.Logging;
@@ -29,16 +30,16 @@ public abstract class PipelineActorBase<THandler> : IActor
     private readonly Infrastructure.PubSub.BrokerPublisher? _publisher;
     private readonly ILogger? _logger;
 
-    private Infrastructure.PubSub.BrokerSubscription? _subscription;
-
     /// <summary>
     /// Token → CancellationTokenSource für geplante Self-Messages.
     /// Ermöglicht deterministisches Cancel: gleiches Token → altes Schedule verworfen.
     /// </summary>
     private readonly Dictionary<string, CancellationTokenSource> _scheduledTokens = new();
 
-    /// <summary>Bounded-Frist für Pipeline→Pipeline-Trigger-Sends (W2: kein Infinit-Hang).</summary>
-    private static readonly TimeSpan TriggerFrist = TimeSpan.FromSeconds(5);
+    // P6.2: NUR für TRANSIENTE Events (ITransientEvent) — die sind nicht im Log und können daher nicht
+    // auf den Pull-Pfad; sie bleiben per Invariante 6 auf dem verlierbaren Push-Broker. Persistierte
+    // Events laufen über die Pull-Maschine (generierter {Name}EventPullKind).
+    private Infrastructure.PubSub.BrokerSubscription? _subscription;
 
     protected PipelineActorBase(
         THandler logic,
@@ -73,7 +74,7 @@ public abstract class PipelineActorBase<THandler> : IActor
                     await OnTriggerAsync(trigger, context);
                     break;
 
-                // Kanal 2: Events via PubSub (identisch zu SubscriberActorBase)
+                // Kanal 2: seit P6.2 nur noch TRANSIENTE Events via Push-Broker (persistierte laufen über Pull).
                 case IAggregateEnvelope envelope:
                     await OnEnvelopeAsync(envelope, context, context.CancellationToken);
                     break;
@@ -103,19 +104,20 @@ public abstract class PipelineActorBase<THandler> : IActor
     {
         _logger?.LogInformation("[Pipeline:{PipelineId}] Starting", _logic.PipelineId);
 
-        // PubSub-Subscriptions aufbauen (Kanal 2)
-        var eventTypes = GetSubscribedEventTypes();
-        if (eventTypes.Count > 0)
+        // P6.2: PERSISTIERTE Events laufen über die geordnete Pull-/Signal-Maschine (der generierte
+        // {Name}EventPullKind weckt die PipelineEventPullBridge). Der Push-Broker trägt hier nur noch die
+        // TRANSIENTEN Events (ITransientEvent) — die sind nicht im Log und gehören per Invariante 6 auf
+        // den verlierbaren Kanal. Trigger-Ingress (Kanal 1) + Self-Messages (Kanal 0) bleiben ebenfalls hier.
+        var transienteTypen = GetSubscribedEventTypes()
+            .Where(t => typeof(ITransientEvent).IsAssignableFrom(t)).ToList();
+        if (transienteTypen.Count > 0)
         {
             _subscription = new Infrastructure.PubSub.BrokerSubscription(
-                context.System.Cluster(),
-                _logic.PipelineId,
-                context.Self);
-
-            foreach (var type in eventTypes)
+                context.System.Cluster(), _logic.PipelineId, context.Self);
+            foreach (var type in transienteTypen)
             {
                 await _subscription.SubscribeAsync(type);
-                _logger?.LogDebug("[Pipeline:{PipelineId}] Subscribed to {EventType}", _logic.PipelineId, type.Name);
+                _logger?.LogDebug("[Pipeline:{PipelineId}] (transient) subscribed {EventType}", _logic.PipelineId, type.Name);
             }
         }
 
@@ -129,12 +131,8 @@ public abstract class PipelineActorBase<THandler> : IActor
     {
         _logger?.LogInformation("[Pipeline:{PipelineId}] Stopping", _logic.PipelineId);
         await _logic.OnShutdownAsync();
-
         if (_subscription != null)
-        {
             await _subscription.UnsubscribeAllAsync();
-        }
-
         _logger?.LogInformation("[Pipeline:{PipelineId}] Stopped", _logic.PipelineId);
     }
 
@@ -166,22 +164,20 @@ public abstract class PipelineActorBase<THandler> : IActor
     }
 
     // ═══════════════════════════════════════════════════════
-    // Kanal 2: Event-Verarbeitung (PubSub)
+    // Kanal 2: TRANSIENTE Events via Push (persistierte laufen seit P6.2 über Pull)
     // ═══════════════════════════════════════════════════════
 
     private async Task OnEnvelopeAsync(IAggregateEnvelope envelope, IContext actorCtx, CancellationToken ct)
     {
         try
         {
-            _logger?.LogDebug("[Pipeline:{PipelineId}] Event: {Event}", _logic.PipelineId, envelope.Payload.GetType().Name);
+            _logger?.LogDebug("[Pipeline:{PipelineId}] (transient) Event: {Event}", _logic.PipelineId, envelope.Payload.GetType().Name);
 
             var ctx = CreatePipelineContext(actorCtx,
                 correlationId: envelope.CorrelationId,
                 sourceAggregateId: envelope.AggregateId,
                 sourceAggregateType: envelope.AggregateType,
-                sourceAggregateVersion: envelope is EventEnvelope ee
-                    ? ee.AggregateVersion
-                    : null);
+                sourceAggregateVersion: envelope is EventEnvelope ee ? ee.AggregateVersion : null);
 
             await DispatchEventAsync(envelope, ctx,
                 cmd => SendCommandAsync(cmd, ctx, ct),
@@ -190,14 +186,13 @@ public abstract class PipelineActorBase<THandler> : IActor
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "[Pipeline:{PipelineId}] Event handling failed", _logic.PipelineId);
-            _logger?.LogError(ex, "[Pipeline:{PipelineId}] Event {EventType} failed",
+            _logger?.LogError(ex, "[Pipeline:{PipelineId}] (transient) Event {EventType} failed",
                 _logic.PipelineId, envelope.Payload.GetType().Name);
         }
     }
 
     // ═══════════════════════════════════════════════════════
-    // Command-Sending mit Retry
+    // Command-Sending (Trigger-/Self-Pfad)
     // ═══════════════════════════════════════════════════════
 
     private Task SendCommandAsync(ICommand command, PipelineContext ctx, CancellationToken ct)
@@ -312,48 +307,8 @@ public abstract class PipelineActorBase<THandler> : IActor
     /// Sendet einen Trigger an die Ziel-Pipeline.
     /// Nutzt GeneratedPipelines.TriggerToPipelineId für das Routing.
     /// </summary>
-    private async Task SendTriggerAsync(IPipelineTrigger trigger, string correlationId)
-    {
-        var triggerType = trigger.GetType();
-
-        if (!Infrastructure.Pipeline.GeneratedPipelines.TriggerToPipelineId
-                .TryGetValue(triggerType, out var targetPipelineId))
-        {
-            _logger?.LogError(
-                "[Pipeline:{PipelineId}] No TriggerToPipelineId mapping for {TriggerType}",
-                _logic.PipelineId, triggerType.Name);
-            return;
-        }
-
-        var identity = ClusterIdentity.Create(targetPipelineId, $"Pipeline-{targetPipelineId}");
-
-        // W2: bounded — ein hängender Ziel-Actor darf den sendenden Turn nicht unbegrenzt blockieren.
-        // At-least-once: ein Timeout heilt der nächste Auslöser/Re-Wake (Invariante 2).
-        using var cts = new CancellationTokenSource(TriggerFrist);
-        PipelineAck? ack;
-        try
-        {
-            ack = await _cluster.RequestAsync<PipelineAck>(identity, trigger, cts.Token);
-        }
-        catch (OperationCanceledException)
-        {
-            _logger?.LogWarning(
-                "[Pipeline:{PipelineId}] Trigger {TriggerType} → {Target} Timeout ({Frist}s) — Re-Wake heilt",
-                _logic.PipelineId, triggerType.Name, targetPipelineId, TriggerFrist.TotalSeconds);
-            return;
-        }
-
-        if (ack?.Accepted == true)
-        {
-            _logger?.LogDebug("[Pipeline:{PipelineId}] ✔ Trigger {TriggerType} → {Target}", _logic.PipelineId, triggerType.Name, targetPipelineId);
-        }
-        else
-        {
-            _logger?.LogWarning(
-                "[Pipeline:{PipelineId}] Trigger {TriggerType} → {Target} not accepted",
-                _logic.PipelineId, triggerType.Name, targetPipelineId);
-        }
-    }
+    private Task SendTriggerAsync(IPipelineTrigger trigger, string correlationId)
+        => PipelineTriggerSender.SendAsync(_cluster, trigger, _logger);
 
     // ═══════════════════════════════════════════════════════
     // TransientEvent-Broadcast (Pipeline → PubSub)

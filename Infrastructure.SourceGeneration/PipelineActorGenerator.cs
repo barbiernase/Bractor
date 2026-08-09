@@ -296,7 +296,9 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"using {ns};");
             }
             sb.AppendLine("using Abstractions;");
+            sb.AppendLine("using Core;");
             sb.AppendLine("using Infrastructure.Pipeline.Actors;");
+            sb.AppendLine("using Infrastructure.Projections;");
             sb.AppendLine("using Infrastructure.PubSub;");
             sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
             sb.AppendLine("using Microsoft.Extensions.Logging;");
@@ -305,6 +307,9 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("using Proto.DependencyInjection;");
             sb.AppendLine("using System;");
             sb.AppendLine("using System.Collections.Generic;");
+            sb.AppendLine("using System.Linq;");
+            sb.AppendLine("using System.Threading;");
+            sb.AppendLine("using System.Threading.Tasks;");
             sb.AppendLine();
 
             sb.AppendLine("namespace Infrastructure.Pipeline;");
@@ -442,8 +447,72 @@ namespace Infrastructure.SourceGeneration
 
             sb.AppendLine("        };");
             sb.AppendLine("    }");
+            sb.AppendLine();
+
+            // ── AddGeneratedPipelineEventPulls (P6.2) ──
+            sb.AppendLine("    /// <summary>");
+            sb.AppendLine("    /// P6.2: verdrahtet den EVENT-Pfad (Kanal 2) jeder Pipeline mit Event-Handlern über die");
+            sb.AppendLine("    /// geordnete Pull-/Signal-Maschine (statt des verlustbehafteten Push-Brokers). Kind +");
+            sb.AppendLine("    /// PullPathRegistration je Pipeline mit nicht-leeren SubscribedEventTypes; der");
+            sb.AppendLine("    /// GenericPullStartupService (aus AddGeneratedPullPaths) weckt sie.");
+            sb.AppendLine("    /// </summary>");
+            sb.AppendLine("    public static IServiceCollection AddGeneratedPipelineEventPulls(this IServiceCollection services)");
+            sb.AppendLine("    {");
+            foreach (var symbol in pipelineSymbols)
+            {
+                var n = symbol.Name;
+                // Nur PERSISTIERTE Event-Typen wandern auf Pull. Transiente Events (ITransientEvent) sind
+                // nicht im Log → der Pull-Pfad sähe sie nie; sie bleiben per Invariante 6 auf dem Push-Kanal
+                // (das transient-gefilterte Broker-Abo im PipelineActorBase).
+                sb.AppendLine($"        var persistierte_{n} = {n}.SubscribedEventTypes");
+                sb.AppendLine("            .Where(t => !typeof(ITransientEvent).IsAssignableFrom(t)).ToList();");
+                sb.AppendLine($"        if (persistierte_{n}.Count > 0)");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            services.AddSingleton<IClusterKindContributor, {n}EventPullKind>();");
+                sb.AppendLine($"            services.AddSingleton(new PullPathRegistration(");
+                sb.AppendLine($"                {n}EventPullKind.KindName, {n}EventPullKind.KindName, persistierte_{n}));");
+                sb.AppendLine("        }");
+            }
+            sb.AppendLine("        services.AddHostedService<GenericPullStartupService>();   // idempotent (TryAddEnumerable)");
+            sb.AppendLine("        return services;");
+            sb.AppendLine("    }");
 
             sb.AppendLine("}");
+            sb.AppendLine();
+
+            // ── {Name}EventPullKind je Pipeline (P6.2) ──
+            foreach (var symbol in pipelineSymbols)
+            {
+                var n = symbol.Name;
+                sb.AppendLine($"internal sealed class {n}EventPullKind : IClusterKindContributor");
+                sb.AppendLine("{");
+                sb.AppendLine($"    public const string KindName = \"pull-pipeline-{n}\";");
+                sb.AppendLine();
+                sb.AppendLine("    public ClusterKind CreateKind(ActorSystem system, IServiceProvider provider)");
+                sb.AppendLine("    {");
+                sb.AppendLine("        var eventStore = provider.GetRequiredService<IEventStoreRepository>();");
+                sb.AppendLine("        var depsSink = provider.GetService<IReadModelDepsSink>();");
+                sb.AppendLine("        return new ClusterKind(KindName, Props.FromProducer(() =>");
+                sb.AppendLine("            new SignalAdapterActor(eventStore, () =>");
+                sb.AppendLine("            {");
+                sb.AppendLine($"                var handler = provider.GetRequiredService<{n}>();");
+                sb.AppendLine("                var cluster = system.Cluster();");
+                sb.AppendLine("                var publisher = provider.GetService<BrokerPublisher>();");
+                sb.AppendLine("                var router = new HandlerOutputRouter(cluster, publisher, handler.PipelineId);");
+                sb.AppendLine("                // Emittierend (Achse B, P4.2): best-effort IEmittentenCursor, KEIN Reset.");
+                sb.AppendLine("                var emittentenCursor = provider.GetService<IEmittentenCursor>();");
+                sb.AppendLine("                Func<EventEnvelope, Func<IPipelineOutput, Task>> emitFactory =");
+                sb.AppendLine("                    ev => DetachedEmit.Wrap(router.EmitFor(ev, CancellationToken.None));");
+                sb.AppendLine("                Func<IPipelineTrigger, string, Task> sendTrigger =");
+                sb.AppendLine("                    (trig, _) => PipelineTriggerSender.SendAsync(cluster, trig, null);");
+                sb.AppendLine("                var dispatch = PipelineEventPullBridge.Wrap(");
+                sb.AppendLine("                    handler.DispatchEventAsync, emitFactory, sendTrigger);");
+                sb.AppendLine("                return (handler.PipelineId, (IProjectionTracker?)null, emittentenCursor, dispatch);");
+                sb.AppendLine("            }, depsSink)));");
+                sb.AppendLine("    }");
+                sb.AppendLine("}");
+                sb.AppendLine();
+            }
 
             return sb.ToString();
         }

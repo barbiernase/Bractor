@@ -105,6 +105,9 @@ builder.Services.AddDomainPipelineServices(
     preprocessedPath: preprocessedPath);
 GeneratedPipelines.RegisterAllPipelines(builder.Services);
 
+// P6.2: der EVENT-Pfad der Pipelines läuft über die geordnete Pull-Maschine (nicht mehr Push-Broker).
+builder.Services.AddGeneratedPipelineEventPulls();
+
 // ─── Build + Run ───
 
 var app = builder.Build();
