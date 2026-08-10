@@ -1,8 +1,29 @@
 # Handoff — verbleibender Feature-Strom (Multi-Node bewusst außen vor)
 
 > Stand: P4 + P6 vollständig; Feature-Strom-Posten **Projektions-Rebuild-Runner** und **DLQ-Ops-/Read-Pfad**
-> geliefert (Prüfstand 79/79, Integration 25/25). Diese vier Posten bleiben — geordnet nach Aufwand/Risiko.
-> Multi-Node (P7/P8) ist explizit NICHT im aktuellen Scope.
+> geliefert. Multi-Node (P7/P8) ist explizit NICHT im aktuellen Scope.
+>
+> **✅ ABGEARBEITET (diese Session, je Scheibe beide Ebenen grün → committet/gepusht auf
+> `claude/feature-strom-backend-mpmw6p`):**
+> 1. **Timer-Trigger** — `TimerTriggerActor` + entkoppelter Kern `TimerTrigger.TickAsync` (Fabrik + Send-Seam)
+>    + `TimerTrigger.Registrierung(...)`; `TriggerStartupService` jetzt als Hosted Service verdrahtet.
+> 2. **Prozess-Verkettung** — ein Prozess-Ende startet den nächsten OHNE neue Infra (das terminale PERSISTIERTE
+>    Domänen-Event von A ist der Auslöser von B; `ProzessBeendet` taugt NICHT — `IProzessIntern`, Signal inert).
+>    Beispiel `Domain/Antrag` + `Domain/Vorgang` (GenehmigungsProzess → AktivierungsProzess).
+> 3. **Webhook-Trigger** — generische testbare `MapPipelineWebhook<TRequest>(...)` in Infrastructure; Host-Glue
+>    `POST /webhook/datei` → `DateiErkannt`.
+> 4. **Deadlines/Timeouts** — DB-Uhr-getriebenes STANDALONE-Frist-Primitiv: `IDbClock`/`MartenDbClock`
+>    (`SELECT now()`), `Frist`/`IFristplan`, `FristScheduler` (feuert fällige Fristen über das Emit-Primitiv,
+>    deterministische CommandId → Inbox-Dedup). `AddDeadlines(baueCommand)`. **Bewusst KEINE ProzessManager-/
+>    Marking-Kopplung** (die Timeout→Kompensation hängt am zurückgestellten P5(b) — dies ist ihr Unterbau).
+> 5. **Monitoring Scheibe 1** — `BackendMetrics` (offene Prozesse + DLQ-Zahl), `BackendHealthCheck`
+>    (Healthy/Degraded/Unhealthy), `GET /health` + `GET /monitoring/metrics`. **Tracing bleibt offen** (Scheibe 2).
+>
+> **Zählerstände nach dieser Session:** Prüfstand **91/91**, Integration **33/33** (SnapshotLive-Cold-Boot-Flake
+> bimodal wie dokumentiert — auf der Baseline bestätigt, NICHT von diesen Änderungen verursacht).
+>
+> **Noch offen:** Monitoring-Tracing (Emit-/Wake-Kanten); prozess-gekoppelte Deadlines (nach P5(b));
+> KlärungNötig-Integrationsdeckung. Der Rest unten ist der historische Plan (erfüllt, zur Referenz belassen).
 
 ## 1. Timer/Webhook-Trigger (klein–mittel)
 Der Registrier-Mechanismus **existiert schon** (`Infrastructure/Pipeline/TriggerStartupService.cs` iteriert
