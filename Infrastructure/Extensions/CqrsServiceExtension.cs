@@ -177,6 +177,10 @@ public static class CqrsServiceExtensions
                 provider.GetRequiredService<IDocumentStore>(),
                 provider.GetRequiredService<ILogger<MartenDeadLetterSink>>()));
 
+        // DLQ-Ops-/Read-Pfad (Feature-Strom): tote Commands auflisten/je Korrelation abfragen/auflösen.
+        services.AddSingleton<IDeadLetterReadStore>(provider =>
+            new MartenDeadLetterReadStore(provider.GetRequiredService<IDocumentStore>()));
+
         // ★ Snapshot-Store (abgeleiteter jsonb-Cache): der Aggregat-Actor seedet daraus seine Rehydration.
         services.AddSingleton<ISnapshotStore>(provider =>
             new MartenSnapshotStore(
