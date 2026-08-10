@@ -242,9 +242,19 @@ public static class CqrsServiceExtensions
             return ConnectionMultiplexer.Connect(config);
         });
 
-        services.AddSingleton<IVersionTracker, RedisVersionTracker>();
-        Console.WriteLine($"  + IVersionTracker (Redis)");
-        Console.WriteLine($"    Endpoint: {builder.RedisConnectionString}, DB: {builder.RedisDatabase}");
+        if (builder.EnableVersionTracking)
+        {
+            services.AddSingleton<IVersionTracker, RedisVersionTracker>();
+            Console.WriteLine($"  + IVersionTracker (Redis)");
+            Console.WriteLine($"    Endpoint: {builder.RedisConnectionString}, DB: {builder.RedisDatabase}");
+        }
+        else
+        {
+            // Messung/Redis-los: der Index ist aus (No-op). Der Actor-Track wird folgenlos, der eine
+            // Leser (ReadModelDepsWriter) bekommt leere Ergebnisse — beides tolerierbar (nicht-autoritativ).
+            services.AddSingleton<IVersionTracker, NullVersionTracker>();
+            Console.WriteLine($"  + IVersionTracker (No-op — Version-Index AUS)");
+        }
 
         Console.WriteLine();
         return services;
@@ -517,6 +527,13 @@ public class CqrsFrameworkBuilder
     /// Serialisierung am Append-Durchsatz hängt (Amdahl-Input für die COPY-Entscheidung). Default AUS.
     /// </summary>
     public bool UseGeneratedJsonSerializer { get; set; } = false;
+
+    /// <summary>
+    /// Redis-Version-Index (nicht-autoritative Stale-Detection/Typ-Liste). Default AN. AUS = No-op-Tracker:
+    /// isoliert für die Messung den synchronen Redis-Round-Trip aus dem Command-Turn — und erlaubt den Betrieb
+    /// ganz ohne Redis (der Index ist ohnehin nicht die Wahrheit; sein einziger Leser verträgt Leere).
+    /// </summary>
+    public bool EnableVersionTracking { get; set; } = true;
 
     public CqrsFrameworkBuilder(IServiceCollection services)
     {
