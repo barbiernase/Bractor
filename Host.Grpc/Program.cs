@@ -114,6 +114,13 @@ var app = builder.Build();
 
 app.MapCqrsGrpcService();
 
+// ─── Webhook-Trigger (Host-Glue, Trigger-Ingress bleibt Push) ───
+// POST /webhook/datei mit JSON { pfad, dateiname, dateigroesseBytes } → DateiErkannt an die Pipeline.
+// Die generische Verdrahtung liegt in Infrastructure (testbar); die Domänen-Wahl trifft der Host.
+app.MapPipelineWebhook<Domain.Pipeline.ImageProcessing.DateiErkannt>(
+    "/webhook/datei",
+    baueTrigger: r => r);   // DateiErkannt IST bereits der Trigger — Identität
+
 Console.WriteLine();
 Console.WriteLine("==========================================================");
 Console.WriteLine("  CQRS/ES Server");
