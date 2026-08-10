@@ -116,6 +116,22 @@ public static class CqrsServiceExtensions
 
             MartenEventTypeRegistration.RegisterEventTypes(options);
 
+            // ★ OPT-IN (Messung): STJ-Source-Gen-Kontext für Events in Martens Serializer einstecken.
+            //   Der Source-Gen-Resolver liefert reflection-freie JsonTypeInfo für alle persistierbaren Events;
+            //   alles andere (Dokumente: Checkpoints/Cursor/Snapshots/…) fällt auf den Reflection-Resolver
+            //   zurück (Metadata-Mode-Kontext ist chain-kompatibel). Format-neutral bei STJ-Default (Marten 8).
+            if (builder.UseGeneratedJsonSerializer)
+            {
+                // Source-Gen ZUERST (Events → reflection-freie JsonTypeInfo), danach der Reflection-Fallback
+                // für ALLES andere: Dokumente (Checkpoints/Cursor/Snapshots/…) UND Martens Event-Header
+                // (Dictionary<string,object>). Ohne den Fallback wirft jeder Append auf den Headers.
+                options.UseSystemTextJsonForSerialization(configure: o =>
+                    o.TypeInfoResolver = System.Text.Json.Serialization.Metadata.JsonTypeInfoResolver.Combine(
+                        Serialization.EventJsonSerializerContext.Default,
+                        new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver()));
+                Console.WriteLine("  + STJ Source-Gen Serializer für Events aktiv (UseGeneratedJsonSerializer)");
+            }
+
             // ★ Phase 1: Event-Metadaten aktivieren, damit CorrelationId/CausationId/
             //   Header (aggregate_type) beim Append persistiert und nach dem Log-Read
             //   (ReadStreamAsync) wieder verfügbar sind.
@@ -492,6 +508,15 @@ public class CqrsFrameworkBuilder
     /// Last coalesct die Queue von selbst, während der vorige Commit läuft.
     /// </summary>
     public int AppendBatchLingerMs { get; set; } = 0;
+
+    /// <summary>
+    /// OPT-IN (Messung): steckt den STJ-Source-Gen-Kontext (<see cref="Serialization.EventJsonSerializerContext"/>)
+    /// vorn in Martens System.Text.Json-Resolver-Chain → Events serialisieren/deserialisieren reflection-frei
+    /// (schnelle JsonTypeInfo statt Laufzeit-Reflection), Dokumente fallen unverändert auf den Reflection-Resolver
+    /// zurück. Format-neutral, solange Marten ohnehin STJ nutzt (Marten 8 Default). Zweck: messen, wie viel
+    /// Serialisierung am Append-Durchsatz hängt (Amdahl-Input für die COPY-Entscheidung). Default AUS.
+    /// </summary>
+    public bool UseGeneratedJsonSerializer { get; set; } = false;
 
     public CqrsFrameworkBuilder(IServiceCollection services)
     {

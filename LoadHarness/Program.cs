@@ -49,7 +49,11 @@ builder.Services.AddCqrsFramework(opts =>
     opts.AppendBatching = Environment.GetEnvironmentVariable("BRACTOR_BATCHING") != "0";
     if (int.TryParse(Environment.GetEnvironmentVariable("BRACTOR_BATCH_LINGER"), out var linger))
         opts.AppendBatchLingerMs = linger;
-    Console.WriteLine($"[LoadHarness] AppendBatching={opts.AppendBatching} Linger={opts.AppendBatchLingerMs}ms");
+    // A/B-Schalter für die Serializer-Messung:
+    //   BRACTOR_SOURCEGEN_JSON=1 → STJ-Source-Gen-Kontext für Events in Martens Serializer
+    opts.UseGeneratedJsonSerializer = Environment.GetEnvironmentVariable("BRACTOR_SOURCEGEN_JSON") == "1";
+    Console.WriteLine($"[LoadHarness] AppendBatching={opts.AppendBatching} Linger={opts.AppendBatchLingerMs}ms "
+        + $"SourceGenJson={opts.UseGeneratedJsonSerializer}");
 });
 builder.Services.AddDomainPipelineServices(watchPath: watchDir, preprocessedPath: null);
 GeneratedPipelines.RegisterAllPipelines(builder.Services);
