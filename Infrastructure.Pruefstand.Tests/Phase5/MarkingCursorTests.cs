@@ -200,6 +200,44 @@ public class MarkingCursorTests
         an2N.Should().BeLessThan(aus2N / 3, "bei N=80 liest der Cursor um Größenordnungen weniger");
     }
 
+    // ── M3: großer Fan-out (N=1000) — O(N) Read-Volumen statt O(N²), Ergebnis identisch zum Voll-Fold ──
+
+    [Fact]
+    public async Task M3_GrosserFanout_N1000_liest_linear_und_identisch_zum_VollFold()
+    {
+        const int n = 1000;
+        var quelle = Guid.NewGuid();
+        var ziele = Enumerable.Range(0, n).Select(_ => Guid.NewGuid()).ToArray();
+        var auftrag = Guid.NewGuid();
+        var korr = ProzessId.Für(nameof(SammelueberweisungsProzess), auftrag, 1);
+        var reg = Registry(new SammelueberweisungsProzess());
+
+        async Task<(long Events, List<(string, Guid, Guid)> Feuer, decimal Saldo)> Lauf(bool mitCursor)
+        {
+            var h = new ProzessSagaHarness(reg, mitCursor ? new InMemoryProzessMarkingStore() : null);
+            await h.EröffneKontoAsync(quelle, 10_000_000);
+            foreach (var z in ziele) await h.EröffneKontoAsync(z, 0);
+            await h.AuslöserAsync(auftrag, new SammelUeberweisungBeauftragt(quelle, ziele, 1), "Sammelueberweisungsauftrag");
+            h.Store.ResetZaehler();
+            await h.RunAsync(korr, nameof(SammelueberweisungsProzess), auftrag, 1);
+            return (h.Store.GeleseneEvents, h.Gefeuert, (await h.Store.LoadStateAsync<Konto>(quelle))!.Saldo);
+        }
+
+        var aus = await Lauf(false);
+        var an = await Lauf(true);
+
+        // Identität: gleiche Feuer-Sequenz, gleicher Saldo (der Cursor ist reiner Beschleuniger).
+        an.Feuer.Should().Equal(aus.Feuer, "der Cursor-Fold trifft dieselben Feuer-Entscheidungen wie der Voll-Fold");
+        an.Saldo.Should().Be(aus.Saldo);
+
+        // Skalierung: der Voll-Fold liest O(N²) Event-Hüllen (~jede Weckung alle Streams ab 0), der Cursor O(N).
+        // Beleg über den Read-Zähler: der Cursor liest um mehr als eine Größenordnung weniger, und sein
+        // Read-Volumen bleibt in der Größenordnung von N (jedes Ziel-Event genau einmal über den Tail).
+        an.Events.Should().BeLessThan(aus.Events / 20, "der Cursor senkt das Read-Volumen um >1 Größenordnung");
+        an.Events.Should().BeLessThan(50L * n, "das Cursor-Read-Volumen bleibt O(N)");
+        aus.Events.Should().BeGreaterThan(50L * n * n / 100, "der Voll-Fold ist erkennbar super-linear (~N²)");
+    }
+
     // ── Helfer ──
 
     private sealed record Ergebnis(
