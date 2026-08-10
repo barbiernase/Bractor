@@ -25,8 +25,9 @@ internal sealed class ProzessManagerKind : IClusterKindContributor
         var registry = provider.GetRequiredService<IReadOnlyDictionary<string, ProzessRegeln>>();
         var offenIndex = provider.GetRequiredService<IProzessOffenIndex>();
         var deadLetters = provider.GetService<IDeadLetterSink>();   // ★ #12: optional, best-effort Ops-Sicht
+        var markingStore = provider.GetService<IProzessMarkingStore>();   // ★ P5(b): optional, best-effort Cursor
         return new ClusterKind(ProzessManagerActor.KindName, Props.FromProducer(() =>
-            new ProzessManagerActor(eventStore, registry, system.Cluster(), offenIndex, deadLetters)));
+            new ProzessManagerActor(eventStore, registry, system.Cluster(), offenIndex, deadLetters, markingStore)));
     }
 }
 
