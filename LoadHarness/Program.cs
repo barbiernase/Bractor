@@ -14,6 +14,8 @@
 // ══════════════════════════════════════════════════════════════════════════════
 using System.Collections.Concurrent;
 using System.Diagnostics;
+using System.Text.Json;
+using System.Text.Json.Serialization.Metadata;
 using Abstractions;
 using Domain.Konto;
 using Domain.Pipeline.Benchmark;        // BenchPing (No-Op-Trigger)
@@ -29,6 +31,11 @@ using Proto.Cluster;
 string mode     = ArgStr("--mode", "aggregate");
 int concurrency = ArgInt("--concurrency", 64);
 LogLevel level  = ParseLevel(ArgStr("--log", "warning"));
+
+// Serializer-Mikrobench: beantwortet, ob (a) der Source-Gen-Pfad überhaupt für Events genutzt wird
+// und (b) ob er schneller ist als Reflection — und rechnet den Amdahl-Anteil an der Append-Wall-Clock aus.
+// Läuft OHNE Cluster/DB (früher Ausstieg vor dem Host-Build).
+if (mode == "serbench") { SerBench(ArgInt("--iters", 500_000)); return 0; }
 
 var watchDir = Path.Combine(Path.GetTempPath(), "loadtest-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(watchDir);
@@ -224,6 +231,81 @@ void Report(string title, long ok, long fail, Stopwatch sw, ConcurrentBag<double
     Console.WriteLine($"Wall-Clock:          {secs:0.00} s");
     Console.WriteLine($"Durchsatz:           {ok / secs:0} msg/s");
     Console.WriteLine($"Latenz p50/p95/p99:  {Pct(0.50):0.0} / {Pct(0.95):0.0} / {Pct(0.99):0.0} ms   (max {(lat.Length > 0 ? lat[^1] : 0):0.0})");
+}
+
+// ── Serializer-Mikrobench ────────────────────────────────────────────────────
+void SerBench(int iters)
+{
+    // (1) Martens tatsächlicher Default-Serializer (der Baseline-Arm des A/B).
+    try
+    {
+        using var store = Marten.DocumentStore.For(o =>
+            o.Connection("Host=localhost;Database=cqrs_events;Username=postgres;Password=postgres"));
+        Console.WriteLine($"[Marten] Default-Serializer: {store.Options.Serializer().GetType().Name}");
+    }
+    catch (Exception ex) { Console.WriteLine($"[Marten] Default-Serializer unbekannt: {ex.GetType().Name}"); }
+
+    // (2) BEWEIS, dass der Source-Gen-Resolver die Event-Typen bedient (und Nicht-Events NICHT).
+    var ctx = Infrastructure.Serialization.EventJsonSerializerContext.Default;
+    var combined = new JsonSerializerOptions
+    {
+        TypeInfoResolver = JsonTypeInfoResolver.Combine(ctx, new DefaultJsonTypeInfoResolver())
+    };
+    var tiKonto = ctx.GetTypeInfo(typeof(BetragReserviert));
+    var tiBild  = ctx.GetTypeInfo(typeof(Domain.ImagePair.BildVerfuegbar));
+    var tiDict  = ctx.GetTypeInfo(typeof(Dictionary<string, object>));
+    Console.WriteLine($"[Beweis] SourceGen-Kontext liefert TypeInfo für  BetragReserviert={tiKonto != null}  "
+        + $"BildVerfuegbar={tiBild != null}  Dictionary<string,object>={tiDict != null}");
+    Console.WriteLine($"[Beweis] → Combine gibt das erste Nicht-null zurück: Events ⇒ Source-Gen, Dictionary/Doku ⇒ Reflection.");
+
+    // (3) Rohe Serialisierungsgeschwindigkeit: Reflection vs. Source-Gen-über-Options (== Martens Weg
+    //     flag-on) vs. Source-Gen-direkt (der GeneratedEventJson-Switch). Kleines Konto-Event (das der
+    //     Aggregate-Bench real schreibt) + grosses verschachteltes Event.
+    var reflOpts = new JsonSerializerOptions { TypeInfoResolver = new DefaultJsonTypeInfoResolver() };
+
+    IEvent klein = new BetragReserviert(49.99m);
+    IEvent gross = new Domain.ImagePair.BildVerfuegbar(
+        Domain.ImagePair.BildVersion.Dc2,
+        new Domain.ImagePair.BildMeta("bild.png", 123456, 1920, 1080, DateTimeOffset.UnixEpoch),
+        "/pfad/bild.png",
+        Enumerable.Range(0, 8).Select(i => new Domain.ImagePair.RegionBewertung(
+            i, new Domain.ImagePair.RegionPosition(i * 12.5, 0, 12.5, 100),
+            Domain.ImagePair.Klassifikation.KeineAnomalie, null)).ToList<Domain.ImagePair.RegionBewertung>());
+
+    double NsPerOp(Action a)
+    {
+        for (int i = 0; i < 2000; i++) a();               // Warmup (JIT + JsonTypeInfo-Cache)
+        var sw = Stopwatch.StartNew();
+        for (int i = 0; i < iters; i++) a();
+        sw.Stop();
+        return sw.Elapsed.TotalMilliseconds * 1_000_000.0 / iters;
+    }
+
+    void Row(string label, IEvent e)
+    {
+        var r  = NsPerOp(() => JsonSerializer.Serialize(e, e.GetType(), reflOpts));
+        var so = NsPerOp(() => JsonSerializer.Serialize(e, e.GetType(), combined));
+        var sd = NsPerOp(() => Infrastructure.Serialization.GeneratedEventJson.Serialize(e));
+        Console.WriteLine($"{label,-16} reflection={r,7:0.0} ns   sourcegen(options)={so,7:0.0} ns   "
+            + $"sourcegen(switch)={sd,7:0.0} ns   speedup(switch/refl)={r / sd,4:0.00}x");
+    }
+
+    Console.WriteLine($"\n=== Roh-Serialisierung ({iters} Iterationen, ns/op) ===");
+    Row("BetragReserviert", klein);
+    Row("BildVerfuegbar", gross);
+
+    // (4) Amdahl: der Aggregate-Bench schrieb 20500 kleine Events in ~6.46 s Wall-Clock.
+    //     Wie viel davon ist Serialisierung — und was spart Source-Gen davon END-TO-END?
+    var kleinRefl = NsPerOp(() => JsonSerializer.Serialize(klein, klein.GetType(), reflOpts));
+    var kleinSg   = NsPerOp(() => Infrastructure.Serialization.GeneratedEventJson.Serialize(klein));
+    const int events = 20500; const double wallMs = 6460;
+    double serReflMs = kleinRefl * events / 1_000_000.0;
+    double serSgMs   = kleinSg   * events / 1_000_000.0;
+    Console.WriteLine($"\n=== Amdahl (20500 kleine Events, Wall {wallMs:0} ms) ===");
+    Console.WriteLine($"Serialisierung gesamt: reflection {serReflMs:0.0} ms ({serReflMs / wallMs * 100:0.00}% der Wall-Clock), "
+        + $"source-gen {serSgMs:0.0} ms ({serSgMs / wallMs * 100:0.00}%)");
+    Console.WriteLine($"Ersparnis durch Source-Gen END-TO-END: {(serReflMs - serSgMs):0.0} ms = "
+        + $"{(serReflMs - serSgMs) / wallMs * 100:0.000}% der Append-Wall-Clock.");
 }
 
 // ── Arg-Helpers ──────────────────────────────────────────────────────────────
