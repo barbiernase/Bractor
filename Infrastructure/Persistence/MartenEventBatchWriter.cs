@@ -1,9 +1,38 @@
+using System.Diagnostics;
 using Abstractions;
 using Marten;
 using Microsoft.Extensions.Logging;
 using IEvent = Abstractions.IEvent;
 
 namespace Infrastructure.Persistence;
+
+/// <summary>
+/// Prozessweite Profiling-Zähler des Group-Commit (nur Messung, vernachlässigbarer Overhead: ein
+/// Stopwatch + Interlocked pro Commit). <see cref="Snapshot"/> liefert Commits/Events/echte Commit-Zeit.
+/// </summary>
+public static class BatchWriterStats
+{
+    private static long _batches;
+    private static long _events;
+    private static long _commitMicros;
+
+    public static void Reset() { _batches = 0; _events = 0; _commitMicros = 0; }
+
+    internal static void Record(int events, double commitMs)
+    {
+        Interlocked.Increment(ref _batches);
+        Interlocked.Add(ref _events, events);
+        Interlocked.Add(ref _commitMicros, (long)(commitMs * 1000));
+    }
+
+    public static (long Batches, long Events, double TotalCommitMs, double AvgBatch, double AvgCommitMs) Snapshot()
+    {
+        var b = Interlocked.Read(ref _batches);
+        var e = Interlocked.Read(ref _events);
+        var totalMs = Interlocked.Read(ref _commitMicros) / 1000.0;
+        return (b, e, totalMs, b == 0 ? 0 : (double)e / b, b == 0 ? 0 : totalMs / b);
+    }
+}
 
 /// <summary>
 /// Bündelt N Aggregat-Appends in EINE Marten-Session → EIN <c>SaveChangesAsync</c> = eine Postgres-
@@ -35,10 +64,17 @@ public sealed class MartenEventBatchWriter : IEventBatchWriter
     {
         await using var session = _store.LightweightSession();
 
+        var eventCount = 0;
         foreach (var item in batch)
+        {
             Stage(session, item);
+            eventCount += item.Events.Count;
+        }
 
+        var sw = Stopwatch.StartNew();
         await session.SaveChangesAsync(ct);
+        sw.Stop();
+        BatchWriterStats.Record(eventCount, sw.Elapsed.TotalMilliseconds);
 
         if (_logger.IsEnabled(LogLevel.Debug))
             _logger.LogDebug("Group-Commit: {Count} Aggregat-Appends in einer Transaktion.", batch.Count);

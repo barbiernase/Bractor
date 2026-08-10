@@ -56,6 +56,8 @@ builder.Services.AddCqrsFramework(opts =>
     opts.AppendBatching = Environment.GetEnvironmentVariable("BRACTOR_BATCHING") != "0";
     if (int.TryParse(Environment.GetEnvironmentVariable("BRACTOR_BATCH_LINGER"), out var linger))
         opts.AppendBatchLingerMs = linger;
+    if (int.TryParse(Environment.GetEnvironmentVariable("BRACTOR_BATCH_MAX"), out var bmax) && bmax > 0)
+        opts.AppendBatchMaxSize = bmax;
     // A/B-Schalter für die Serializer-Messung:
     //   BRACTOR_SOURCEGEN_JSON=1 → STJ-Source-Gen-Kontext für Events in Martens Serializer
     opts.UseGeneratedJsonSerializer = Environment.GetEnvironmentVariable("BRACTOR_SOURCEGEN_JSON") == "1";
@@ -166,6 +168,7 @@ async Task<int> RunAggregate()
     }
 
     Console.WriteLine($"Aggregate-Last: {accounts} Konten × (1 + {creditsPer}) = {total} Commands, Concurrency {concurrency}");
+    Infrastructure.Persistence.BatchWriterStats.Reset();
     var sw = Stopwatch.StartNew();
     await Parallel.ForEachAsync(ids, new ParallelOptions { MaxDegreeOfParallelism = concurrency },
         async (id, _) =>
@@ -176,6 +179,18 @@ async Task<int> RunAggregate()
     sw.Stop();
 
     Report("AGGREGATE-REPORT (Command→Event, mit Persistenz)", ok, fail, sw, latencies);
+
+    // ── Group-Commit-Profil: wo geht die Zeit im DB-Schreibpfad hin? ──
+    var bs = Infrastructure.Persistence.BatchWriterStats.Snapshot();
+    if (bs.Batches > 0)
+    {
+        double wallMs = sw.Elapsed.TotalMilliseconds;
+        Console.WriteLine($"Group-Commit-Profil: {bs.Batches} Commits, {bs.Events} Events, "
+            + $"Ø Batch {bs.AvgBatch:0.0} Events/Commit, Ø Commit {bs.AvgCommitMs:0.00} ms");
+        Console.WriteLine($"  Commit-Zeit gesamt (seriell): {bs.TotalCommitMs:0} ms = {bs.TotalCommitMs / wallMs * 100:0}% der Wall-Clock "
+            + $"→ Event-Ceiling des seriellen Drains ≈ {bs.Events / (bs.TotalCommitMs / 1000.0):0} Events/s "
+            + $"(≈ {(ok + fail) / (bs.TotalCommitMs / 1000.0):0} Commands/s)");
+    }
 
     var store   = host.Services.GetRequiredService<IEventStoreRepository>();
     var factory = host.Services.GetRequiredService<IAggregateHandlerFactory>();
