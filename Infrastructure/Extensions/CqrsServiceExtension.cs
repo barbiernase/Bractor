@@ -389,7 +389,13 @@ public static class CqrsServiceExtensions
 
         services.AddHostedService<Infrastructure.Pipeline.PipelineStartupService>();
         Console.WriteLine("  + PipelineStartupService");
-        
+
+        // Trigger-Ingress (Push): spawnt alle im DI registrierten ITriggerRegistration-Instanzen
+        //   (FileWatcher, Timer, …). Nach den Pipelines, weil Trigger sofort Messages senden.
+        //   Ohne Registrierungen ein No-op — daher unbedenklich immer registriert.
+        services.AddHostedService<Infrastructure.Pipeline.TriggerStartupService>();
+        Console.WriteLine("  + TriggerStartupService");
+
         Console.WriteLine();
         return services;
     }
