@@ -43,6 +43,12 @@ public static class DomainServiceExtensions
                 .DatabaseSchemaName("rm")
                 .Identity(x => x.Id)
                 .UseOptimisticConcurrency(false);
+
+            // Spenden-Kampagne: der nicht-idempotente Summen-Topf (exactly-once-Prüfstein, Benchmark-Domäne).
+            options.Schema.For<SpendenTopfReadModel>()
+                .DatabaseSchemaName("rm")
+                .Identity(x => x.Id)
+                .UseOptimisticConcurrency(false);
         });
 
         // Read-Seite: unverändert Singleton Postgres (eigene Query-Sessions).
@@ -97,6 +103,19 @@ public static class DomainServiceExtensions
         // hier domänenseitig, wo auch Reader/Stores/QueryService registriert sind.
         services.AddSingleton<ImagePairProjection>();
         services.AddSingleton<ImagePairHistorieProjection>();
+
+        // ═══════════════════════════════════════════════════════
+        // Spenden-Kampagne — die Benchmark-Domäne (exactly-once vs. at-least-once)
+        // ═══════════════════════════════════════════════════════
+
+        // DEFAULT = exactly-once (Co-Commit-Store). Der Pull-Pfad-Generator löst ISpendenTopfWriteStore als
+        // Ctor-Arg der Projektion auf; weil er IProjectionTracker ist, gilt der Pfad als REPLAYBAR/exactly-once.
+        // Umschalten auf at-least-once: der Aufrufer registriert ISpendenTopfWriteStore NACH diesem Aufruf neu
+        // (letzte Registrierung gewinnt) — genau das macht der LoadHarness-Modus `spende --delivery at-least-once`.
+        services.AddTransient<ISpendenTopfWriteStore>(sp =>
+            new SpendenTopfCoCommitStore(sp.GetRequiredService<IDocumentStore>()));
+        services.AddSingleton<SpendenTopfProjection>();
+        Console.WriteLine("  + ISpendenTopfWriteStore (Default: Co-Commit / exactly-once, Transient)");
 
         services.AddSingleton<ProjectionQueryService>();
         Console.WriteLine("  + ProjectionQueryService (generiert)");

@@ -16,11 +16,16 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using Abstractions;
 using Domain.Konto;
+using Domain.Spende;                    // Kampagne, SpendeEin (Benchmark-Domäne)
+using Domain.Projections;               // SpendenTopfReadModel
+using Domain.Infrastructure;            // SpendenTopfAtLeastOnceStore (delivery-Override)
 using Domain.Pipeline.Benchmark;        // BenchPing (No-Op-Trigger)
 using Domain.Pipeline.Infrastructure;   // AddDomainPipelineServices
 using Infrastructure.Aggregate;         // AggregateRehydrator
 using Infrastructure.Extensions;        // AddCqrsFramework
 using Infrastructure.Pipeline;          // GeneratedPipelines
+using Infrastructure.Projections.Generated;   // AddGeneratedPullPaths
+using Marten;                           // IDocumentStore
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -47,6 +52,18 @@ builder.Services.AddCqrsFramework(opts =>
 builder.Services.AddDomainPipelineServices(watchPath: watchDir, preprocessedPath: null);
 GeneratedPipelines.RegisterAllPipelines(builder.Services);
 
+// ── Modus SPENDE: die volle E2E-Kette (Command → Event → Signal → Projektion → Read-Model) braucht die
+//    Pull-Pfade. Der --delivery-Schalter überschreibt den Write-Store der Projektion (Default = exactly-once
+//    Co-Commit aus AddDomainProjectionServices; hier optional auf at-least-once umgeregistriert — letzte gewinnt).
+string delivery = ArgStr("--delivery", "exactly-once");
+if (mode.Equals("spende", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddGeneratedPullPaths();
+    if (delivery.Equals("at-least-once", StringComparison.OrdinalIgnoreCase))
+        builder.Services.AddTransient<ISpendenTopfWriteStore>(sp =>
+            new SpendenTopfAtLeastOnceStore(sp.GetRequiredService<IDocumentStore>()));
+}
+
 using var host = builder.Build();
 Proto.Log.SetLoggerFactory(host.Services.GetRequiredService<ILoggerFactory>());
 await host.StartAsync();
@@ -60,6 +77,7 @@ try
     exit = mode.ToLowerInvariant() switch
     {
         "pipeline" => await RunPipeline(),
+        "spende"   => await RunSpende(),
         _          => await RunAggregate(),
     };
 }
@@ -169,6 +187,120 @@ async Task<int> RunAggregate()
     Console.WriteLine(wrong == 0 ? $"✓ Exactly-once hält: alle {accounts} Salden == {expected}." : $"✗ {wrong} falsch!");
     Console.WriteLine("============================================");
     return wrong == 0 && fail == 0 ? 0 : 1;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MODUS SPENDE — die volle E2E-Kette Command→Event→Signal→Projektion→Read-Model,
+//   mit umschaltbarer Zustellungs-Garantie (exactly-once Co-Commit / at-least-once getrennt).
+// ══════════════════════════════════════════════════════════════════════════════
+async Task<int> RunSpende()
+{
+    int kampagnen  = ArgInt("--kampagnen", 200);
+    int spendenJe  = ArgInt("--spenden", 20);
+    decimal betrag = ArgInt("--betrag", 10);
+    decimal erwartetGesamt = (decimal)kampagnen * spendenJe * betrag;
+    int total = kampagnen * spendenJe;
+
+    if (!await WaitRoutableSpende()) return 2;
+
+    var ids = Enumerable.Range(0, kampagnen).Select(_ => Guid.NewGuid()).ToArray();
+    var idSet = new HashSet<Guid>(ids);
+    var latencies = new ConcurrentBag<double>();
+    long ok = 0, fail = 0;
+
+    async Task<bool> Spende(Guid id)
+    {
+        var env = new CommandEnvelope
+        {
+            AggregateId = id, AggregateType = "Kampagne",
+            Modus = new CommandModus.Emittiert(), Payload = new SpendeEin(id, betrag)
+        };
+        var t = Stopwatch.StartNew();
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var r = await cluster.RequestAsync<CommandResult>(ClusterIdentity.Create(id.ToString(), "Kampagne"), env, cts.Token);
+            t.Stop();
+            if (r is null) { Interlocked.Increment(ref fail); return false; }
+            latencies.Add(t.Elapsed.TotalMilliseconds);
+            Interlocked.Increment(ref ok);
+            return true;
+        }
+        catch { Interlocked.Increment(ref fail); return false; }
+    }
+
+    Console.WriteLine($"Spende-Last [{delivery}]: {kampagnen} Kampagnen × {spendenJe} Spenden = {total} Commands, Concurrency {concurrency}");
+    var sw = Stopwatch.StartNew();
+    await Parallel.ForEachAsync(ids, new ParallelOptions { MaxDegreeOfParallelism = concurrency },
+        async (id, _) => { for (var k = 0; k < spendenJe; k++) await Spende(id); });
+    sw.Stop();
+
+    Report($"SPENDE-REPORT (Command→Event, Schreibpfad, {delivery})", ok, fail, sw, latencies);
+
+    // ── E2E: warten, bis die Projektion über den Signal-Pfad das Read-Model materialisiert hat ──
+    var docStore = host.Services.GetRequiredService<IDocumentStore>();
+    async Task<(decimal Summe, int Anzahl, int Kampagnen)> ReadModel()
+    {
+        await using var s = docStore.QuerySession();
+        var alle = await s.Query<SpendenTopfReadModel>().ToListAsync();
+        var mein = alle.Where(t => idSet.Contains(t.Id)).ToList();
+        return (mein.Sum(t => t.Summe), mein.Sum(t => t.Anzahl), mein.Count);
+    }
+
+    Console.WriteLine($"Warte auf Read-Model-Konvergenz (Signal-Pfad)… erwartet {total} Spenden / Summe {erwartetGesamt}");
+    var convSw = Stopwatch.StartNew();
+    (decimal Summe, int Anzahl, int Kampagnen) rm = default;
+    while (convSw.Elapsed < TimeSpan.FromSeconds(120))
+    {
+        rm = await ReadModel();
+        if (rm.Anzahl >= total) break;
+        await Task.Delay(200);
+    }
+    convSw.Stop();
+
+    // ── Korrektheit: die autoritative Log-Summe (OCC/Single-Writer) vs. das projizierte Read-Model ──
+    var store   = host.Services.GetRequiredService<IEventStoreRepository>();
+    var factory = host.Services.GetRequiredService<IAggregateHandlerFactory>();
+    decimal logSumme = 0;
+    foreach (var id in ids)
+        logSumme += (await AggregateRehydrator.LoadAsync<Kampagne>(id, null, store, factory, null, default)).State.Gesammelt;
+
+    Console.WriteLine();
+    Console.WriteLine("================ SPENDE-E2E-REPORT ================");
+    Console.WriteLine($"Zustellung:              {delivery}");
+    Console.WriteLine($"Read-Model-Konvergenz:   {convSw.Elapsed.TotalSeconds:0.0} s  (Kampagnen {rm.Kampagnen}/{kampagnen}, Spenden {rm.Anzahl}/{total})");
+    Console.WriteLine($"E2E-Durchsatz:           {(rm.Anzahl >= total ? total / Math.Max((sw.Elapsed + convSw.Elapsed).TotalSeconds, 1e-6) : 0):0} Spenden/s (Command→Read-Model)");
+    Console.WriteLine($"Log-Summe (autoritativ): {logSumme}   (erwartet {erwartetGesamt})");
+    Console.WriteLine($"Read-Model-Summe:        {rm.Summe}   (erwartet {erwartetGesamt})");
+    bool logOk = logSumme == erwartetGesamt;
+    bool rmOk  = rm.Anzahl == total && rm.Summe == erwartetGesamt;
+    Console.WriteLine(logOk ? "✓ Log korrekt (autoritativ, OCC/Single-Writer)." : "✗ Log falsch!");
+    Console.WriteLine(rmOk  ? $"✓ Read-Model korrekt materialisiert ({delivery})." : $"✗ Read-Model weicht ab ({delivery})!");
+    Console.WriteLine("==================================================");
+    return logOk && rmOk && fail == 0 ? 0 : 1;
+}
+
+async Task<bool> WaitRoutableSpende()
+{
+    Console.WriteLine("Warte auf Cluster-Routbarkeit (Kampagne)…");
+    var sw = Stopwatch.StartNew();
+    var probe = Guid.NewGuid();
+    while (true)
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            var ack = await cluster.RequestAsync<CommandResult>(
+                ClusterIdentity.Create(probe.ToString(), "Kampagne"),
+                new CommandEnvelope { AggregateId = probe, AggregateType = "Kampagne", Modus = new CommandModus.Emittiert(), Payload = new SpendeEin(probe, 0m) },
+                cts.Token);
+            if (ack != null) break;
+        }
+        catch (OperationCanceledException) { }
+        if (sw.Elapsed > TimeSpan.FromSeconds(60)) { Console.WriteLine("✗ Cluster nicht routbar — Abbruch."); return false; }
+    }
+    Console.WriteLine($"✓ Cluster routbar nach {sw.ElapsedMilliseconds} ms.");
+    return true;
 }
 
 // ── Readiness-Barriere: wartet bis der Ziel-Actor einen Request platzieren kann ──

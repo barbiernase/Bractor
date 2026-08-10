@@ -208,12 +208,13 @@ message CommandEnvelopeDto {
         BestaetigeReiseDto bestaetige_reise = 49;
         BucheReiseDto buche_reise = 50;
         BeauftrageSammelueberweisungDto beauftrage_sammelueberweisung = 51;
-        VersendeDto versende = 52;
-        AktiviereDto aktiviere = 53;
-        GenehmigeDto genehmige = 54;
-        BelasteKontoDto belaste_konto = 55;
-        ErstatteKontoDto erstatte_konto = 56;
-        RichteZahlungskontoEinDto richte_zahlungskonto_ein = 57;
+        SpendeEinDto spende_ein = 52;
+        VersendeDto versende = 53;
+        AktiviereDto aktiviere = 54;
+        GenehmigeDto genehmige = 55;
+        BelasteKontoDto belaste_konto = 56;
+        ErstatteKontoDto erstatte_konto = 57;
+        RichteZahlungskontoEinDto richte_zahlungskonto_ein = 58;
 
     }
 }
@@ -282,13 +283,14 @@ message EventEnvelopeDto {
         ReiseBestaetigtDto reise_bestaetigt = 69;
         ReiseGebuchtDto reise_gebucht = 70;
         SammelUeberweisungBeauftragtDto sammel_ueberweisung_beauftragt = 71;
-        VersendetDto versendet = 72;
-        VorgangAktiviertDto vorgang_aktiviert = 73;
-        VorgangGenehmigtDto vorgang_genehmigt = 74;
-        KontoBelastetDto konto_belastet = 75;
-        KontoErstattetDto konto_erstattet = 76;
-        KontoUngedecktDto konto_ungedeckt = 77;
-        ZahlungskontoEingerichtetDto zahlungskonto_eingerichtet = 78;
+        SpendeEingegangenDto spende_eingegangen = 72;
+        VersendetDto versendet = 73;
+        VorgangAktiviertDto vorgang_aktiviert = 74;
+        VorgangGenehmigtDto vorgang_genehmigt = 75;
+        KontoBelastetDto konto_belastet = 76;
+        KontoErstattetDto konto_erstattet = 77;
+        KontoUngedecktDto konto_ungedeckt = 78;
+        ZahlungskontoEingerichtetDto zahlungskonto_eingerichtet = 79;
 
     }
 }
@@ -568,6 +570,11 @@ message StateChangeViaSammelUeberweisungBeauftragtDto {
     int32 version = 2;
 }
 
+message StateChangeViaSpendeEingegangenDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
 message StateChangeViaVersendetDto {
     string stream_id = 1;
     int32 version = 2;
@@ -783,6 +790,11 @@ message BeauftrageSammelueberweisungDto {
     string quelle = 2;
     repeated string ziele = 3;
     string betrag_pro_ziel = 4;
+}
+
+message SpendeEinDto {
+    string aggregate_id = 1;
+    string betrag = 2;
 }
 
 message VersendeDto {
@@ -1063,6 +1075,10 @@ message SammelUeberweisungBeauftragtDto {
     string quelle = 1;
     repeated string ziele = 2;
     string betrag_pro_ziel = 3;
+}
+
+message SpendeEingegangenDto {
+    string betrag = 1;
 }
 
 message VersendetDto {
