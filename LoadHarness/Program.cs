@@ -43,6 +43,13 @@ builder.Services.AddCqrsFramework(opts =>
     opts.EnableGrpc = false;
     opts.ClusterName = "loadtest-" + Guid.NewGuid().ToString("N")[..8];
     opts.SnapshotThreshold = 200;
+    // A/B-Schalter für die Group-Commit-Messung (Default AN):
+    //   BRACTOR_BATCHING=0        → Batching aus (Ein-Append-pro-Command)
+    //   BRACTOR_BATCH_LINGER=<ms> → optionales Linger-Fenster
+    opts.AppendBatching = Environment.GetEnvironmentVariable("BRACTOR_BATCHING") != "0";
+    if (int.TryParse(Environment.GetEnvironmentVariable("BRACTOR_BATCH_LINGER"), out var linger))
+        opts.AppendBatchLingerMs = linger;
+    Console.WriteLine($"[LoadHarness] AppendBatching={opts.AppendBatching} Linger={opts.AppendBatchLingerMs}ms");
 });
 builder.Services.AddDomainPipelineServices(watchPath: watchDir, preprocessedPath: null);
 GeneratedPipelines.RegisterAllPipelines(builder.Services);

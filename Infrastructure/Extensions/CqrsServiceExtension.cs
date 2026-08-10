@@ -156,9 +156,22 @@ public static class CqrsServiceExtensions
             var store = provider.GetRequiredService<IDocumentStore>();
             var factory = provider.GetRequiredService<IAggregateHandlerFactory>();
             var logger = provider.GetRequiredService<ILogger<MartenEventStore>>();
-            return new MartenEventStore(store, factory, logger);
+            var marten = new MartenEventStore(store, factory, logger);
+
+            if (!builder.AppendBatching)
+                return marten;
+
+            // Node-lokaler Group-Commit vor dem Marten-Store: bündelt die Aggregat-Appends dieses Nodes
+            // in eine Transaktion. Lesezugriffe reicht der Dekorator unverändert durch; OCC/Single-Writer/
+            // exactly-once bleiben, der Isolations-Retry fällt auf den Einzel-Append (marten) zurück.
+            var writer = new MartenEventBatchWriter(
+                store, provider.GetRequiredService<ILogger<MartenEventBatchWriter>>());
+            return new BatchingEventAppender(
+                marten, writer, provider.GetRequiredService<ILogger<BatchingEventAppender>>(),
+                maxBatch: builder.AppendBatchMaxSize, lingerMs: builder.AppendBatchLingerMs);
         });
-        Console.WriteLine($"  + IEventStoreRepository (Marten/PostgreSQL)");
+        Console.WriteLine($"  + IEventStoreRepository (Marten/PostgreSQL)"
+            + (builder.AppendBatching ? $" + Group-Commit-Batching (max {builder.AppendBatchMaxSize})" : ""));
         Console.WriteLine($"    Schema: {builder.EventStoreSchema}");
 
         // Durabler Poll-Cursor (Backstop): setzt nach Neustart bei der letzten HWM auf.
@@ -461,7 +474,25 @@ public class CqrsFrameworkBuilder
     /// Vorgang nur bis zur ersten Marke), also praktisch dedup-sicher; höher = sicherer, größerer Snapshot.
     /// </summary>
     public int InboxCap { get; set; } = 10_000;
-    
+
+    /// <summary>
+    /// Node-lokaler Group-Commit für Aggregat-Appends (Batching): bündelt die Appends der auf diesem Node
+    /// ansässigen Actors in EINE Postgres-Transaktion → amortisiert die gemessen dominante Postgres-CPU pro
+    /// Command. Standardmäßig AN. OCC/Single-Writer/exactly-once bleiben unverändert (siehe
+    /// <see cref="Persistence.BatchingEventAppender"/>). Abschalten stellt den Ein-Append-pro-Command-Pfad her.
+    /// </summary>
+    public bool AppendBatching { get; set; } = true;
+
+    /// <summary>Maximale Anzahl Appends pro Group-Commit-Transaktion (Obergrenze der Batch-/Lock-Dauer).</summary>
+    public int AppendBatchMaxSize { get; set; } = 256;
+
+    /// <summary>
+    /// Optionales Linger-Fenster (ms), um unter Last größere Batches zu formen (bounded Zusatz-Latenz).
+    /// Default 0 = opportunistisch: bei leichter Last sofortiger Flush (Verhalten wie ohne Batching), unter
+    /// Last coalesct die Queue von selbst, während der vorige Commit läuft.
+    /// </summary>
+    public int AppendBatchLingerMs { get; set; } = 0;
+
     public CqrsFrameworkBuilder(IServiceCollection services)
     {
         Services = services;
