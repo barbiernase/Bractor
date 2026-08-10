@@ -29,6 +29,7 @@
 using Domain.Pipeline.Infrastructure;
 using Infrastructure.Extensions;
 using Infrastructure.GrpcClient;
+using Infrastructure.Monitoring;
 using Infrastructure.Pipeline;
 using Infrastructure.Projections;
 using Infrastructure.Projections.Generated;
@@ -108,6 +109,9 @@ GeneratedPipelines.RegisterAllPipelines(builder.Services);
 // P6.2: der EVENT-Pfad der Pipelines läuft über die geordnete Pull-Maschine (nicht mehr Push-Broker).
 builder.Services.AddGeneratedPipelineEventPulls();
 
+// Monitoring (Scheibe 1): HealthCheck + Prozess-/DLQ-Zähler (Read-Pfad auf Offen-Index + DLQ-Read-Store).
+builder.Services.AddBackendMonitoring();
+
 // ─── Build + Run ───
 
 var app = builder.Build();
@@ -120,6 +124,9 @@ app.MapCqrsGrpcService();
 app.MapPipelineWebhook<Domain.Pipeline.ImageProcessing.DateiErkannt>(
     "/webhook/datei",
     baueTrigger: r => r);   // DateiErkannt IST bereits der Trigger — Identität
+
+// ─── Monitoring-Endpoints (GET /health, GET /monitoring/metrics) ───
+app.MapBackendMonitoring();
 
 Console.WriteLine();
 Console.WriteLine("==========================================================");
