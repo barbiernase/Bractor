@@ -74,8 +74,16 @@ eingebettet.
 > Projektion ohne Co-Commit-Tracker (in die Kind-Factory verdrahtet, `ImagePairHistorieProjection` markiert).
 > **Zählerstände: Prüfstand 67, Integration 25/25.** **Test-Infra dieser Session:** `scripts/dev-infra-setup.sh` (native
 > Postgres/Redis/Consul, kein Docker-Hub; .NET 10 SDK baut/läuft `net9.0` per Roll-Forward, da .NET 9 EOL).
-> **Nächster großer Schritt: P6.2** (Event-Pfad-Fold — Plan: `docs/handoff-p6.2-event-pfad-fold.md`, braucht zuerst
-> einen Pipeline-Test-Harness), dann P5(b)/Feature-Strom/P7/P8.
+> **P6 vollständig ✅** — **P6.2** (Event-Pfad-Fold): generierter `{Name}EventPullKind` + `PipelineEventPullBridge`
+> ziehen den PERSISTIERTEN Pipeline-Event-Pfad auf die Pull-Maschine (emittierend, Achse B); **transiente Events
+> bleiben Push** (`ITransientEvent` ist nicht im Log — Invariante 6). `PipelineActorBase`-Broker-Abo nur noch
+> transient; `SendTriggerAsync`→`PipelineTriggerSender`. Live-Boot: `pull-pipeline-ImageProcessingPipeline` auf
+> 1 Signal-Typ, 0 Exceptions. **Feature-Strom angefangen:** **Rebuild-Runner** (`ProjectionRebuilder`: „Replay =
+> Adapter ab Marke -1", store-frei bewiesen) + **DLQ-Ops-Pfad** (`IDeadLetterReadStore` + Marten/InMemory:
+> listen/filtern/zählen/auflösen, kein Auto-Replay). **Zählerstände: Prüfstand 79, Integration 25/25.**
+> **Offen (Handoff `docs/handoff-feature-strom-rest.md`):** Timer/Webhook-Trigger, Prozess-Verkettung,
+> Deadlines, Monitoring. **P5(b)** bewusst zurückgestellt (Konzept §8: erst bei großem Prozess — riskanter
+> Join-Fixpunkt). Multi-Node (P7/P8) NICHT im aktuellen Scope.
 
 ## Was das Projekt ist
 

@@ -138,8 +138,27 @@
   Kind-Factory verdrahtet). `ImagePairHistorieProjection` markiert (ihr Store IST Tracker → passt). Bewusst
   DI-Check statt Roslyn (Domain.Projections referenziert nur Domain.SourceGeneration als Analyzer). **P4 damit
   im Kern vollständig. Prüfstand 67/67 (+3), Live-Boot grün.**
-- **Offen für später:** **P6.2** (Event-Pfad-Fold — präziser Plan: `docs/handoff-p6.2-event-pfad-fold.md`;
-  braucht zuerst einen Pipeline-Test-Harness); P5(b) Marking-Cursor; P7/P8.
+- **P6.2 ✅ grün** — Pipeline-Event-Pfad in die Pull-Maschine gefaltet. Generierter `{Name}EventPullKind` +
+  `PipelineEventPullBridge` hängen den PERSISTIERTEN Event-Pfad jeder Pipeline an die geordnete Pull-/Signal-
+  Maschine (emittierend, Achse B P4.2); `AddGeneratedPipelineEventPulls()` im Host. **Korrektheits-Kern:**
+  persistiert→Pull, TRANSIENT→Push (`ITransientEvent` ist nicht im Log → der Pull-Pfad sähe transiente
+  Rejections nie; sie bleiben per Invariante 6 auf dem Push-Broker). `PipelineActorBase`-Broker-Abo trägt jetzt
+  nur noch transiente Typen; `SendTriggerAsync` → `PipelineTriggerSender`. Bewiesen: Bridge-Harness + Split-Tests;
+  **live Host.Grpc-Boot: `pull-pipeline-ImageProcessingPipeline` auf 1 Signal-Typ** (nur das persistierte
+  `ImagePairKomplett`), 0 Exceptions. **P6 damit vollständig — kein gepushter persistenter Event-Konsument mehr.**
+  **Prüfstand 73/73, Integration 25/25.**
+- **Feature-Strom · Projektions-Rebuild-Runner ✅ grün** — `ProjectionRebuilder`: „Replay = Adapter ab Marke -1"
+  (leeren → ResetAll → alle Streams ab 0 re-dispatchen), den bestehenden `ProjectionAdapter` wiederverwendend.
+  Replay-Grenze strukturell durch den P4.2-Schnitt (nur replaybare Projektionen haben Reset → Emittenten
+  un-rebuildbar). Bewiesen store-frei (verdoppelt nicht, Gegenprobe, Einzel-Stream). *Offen (mechanisch):*
+  generierte DI-Auflösung projectionId→(Store,Dispatch) für eine Ein-Aufruf-Live-API.
+- **Feature-Strom · DLQ-Ops-/Read-Pfad ✅ grün** — `IDeadLetterReadStore` (+ Marten + InMemory): tote Commands
+  auflisten/je Korrelation/per Id/zählen/auflösen. Bewusst KEIN Auto-Replay (keine Payload gespeichert). DI verdrahtet.
+- **Offen für später (Multi-Node NICHT im aktuellen Scope):** restlicher Feature-Strom
+  (Timer/Webhook-Trigger, Prozess-Verkettung, Deadlines/Timeouts, Monitoring — Handoff:
+  `docs/handoff-feature-strom-rest.md`); **P5(b)** Marking-Cursor (per `docs/prozess-marking-cursor-konzept.md`
+  §8 bewusst zurückgestellt bis ein großer Prozess existiert — riskanter Join-Fixpunkt, aktuell kein Nutznießer);
+  KlärungNötig-Integrationsdeckung; P7/P8 (Multi-Node).
 
 > **Test-Infra (diese Session eingerichtet):** `scripts/dev-infra-setup.sh` — native Postgres/Redis/Consul (kein
 > Docker-Hub-Zugang) + .NET 10 SDK (baut/läuft `net9.0` per `DOTNET_ROLL_FORWARD=LatestMajor`, da .NET 9 EOL).
