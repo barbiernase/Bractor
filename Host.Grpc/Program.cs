@@ -27,6 +27,7 @@
 // ═══════════════════════════════════════════════════════════════════
 
 using Domain.Pipeline.Infrastructure;
+using Infrastructure.Deadlines;
 using Infrastructure.Extensions;
 using Infrastructure.GrpcClient;
 using Infrastructure.Monitoring;
@@ -111,6 +112,11 @@ builder.Services.AddGeneratedPipelineEventPulls();
 
 // Monitoring (Scheibe 1): HealthCheck + Prozess-/DLQ-Zähler (Read-Pfad auf Offen-Index + DLQ-Read-Store).
 builder.Services.AddBackendMonitoring();
+
+// Deadlines (Feature-Strom): DB-Uhr-getriebener Scheduler feuert fällige Fristen als FristFaellig-Command.
+// Die Domänen-Wahl (welcher Command) trifft der Host; DB-Uhr + Fristplan kommen aus dem Framework-Kern.
+builder.Services.AddDeadlines(f =>
+    new Domain.Erinnerung.FristFaellig(f.ZielAggregatId, f.Kontext));
 
 // ─── Build + Run ───
 

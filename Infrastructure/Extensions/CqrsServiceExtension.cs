@@ -142,6 +142,10 @@ public static class CqrsServiceExtensions
             // Dead-Letter-Queue (§5): nicht zustellbare ausgehende Pipeline-Commands, beobachtbar + replay-bar.
             options.Schema.For<DeadLetter>().Identity(x => x.Id).DatabaseSchemaName("dlq");
 
+            // Durabler Fristplan (Feature-Strom, Deadlines): eine Frist je offener Deadline; der
+            // DB-Uhr-getriebene Scheduler feuert die fälligen und entfernt sie danach.
+            options.Schema.For<Frist>().Identity(x => x.Id);
+
             // ★ Snapshots (docs/snapshot-konzept.md): ein jsonb-Dokument je Aggregat-Typ
             //   (Snapshot<Konto> → es.mt_doc_snapshot_konto). Registrierung generiert, reflection-frei.
             Persistence.RegisteredSnapshotTypes.Register(options);
@@ -180,6 +184,13 @@ public static class CqrsServiceExtensions
         // DLQ-Ops-/Read-Pfad (Feature-Strom): tote Commands auflisten/je Korrelation abfragen/auflösen.
         services.AddSingleton<IDeadLetterReadStore>(provider =>
             new MartenDeadLetterReadStore(provider.GetRequiredService<IDocumentStore>()));
+
+        // DB-Uhr + durabler Fristplan (Feature-Strom, Deadlines): der Unterbau des Deadline-Schedulers.
+        // Harmlos ohne Scheduler (kein aktiver Effekt) → immer registriert; der Scheduler ist opt-in (AddDeadlines).
+        services.AddSingleton<IDbClock>(provider =>
+            new MartenDbClock(provider.GetRequiredService<IDocumentStore>()));
+        services.AddSingleton<IFristplan>(provider =>
+            new MartenFristplan(provider.GetRequiredService<IDocumentStore>()));
 
         // ★ Snapshot-Store (abgeleiteter jsonb-Cache): der Aggregat-Actor seedet daraus seine Rehydration.
         services.AddSingleton<ISnapshotStore>(provider =>
