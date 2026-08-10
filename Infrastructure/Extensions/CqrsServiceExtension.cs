@@ -139,6 +139,9 @@ public static class CqrsServiceExtensions
             // periodischer Scan hängende Prozesse (verlorene terminale/kompensierende Selbst-Weckung) heilt.
             options.Schema.For<ProzessOffen>().Identity(x => x.Id);
 
+            // Prozess-Marking-Cursor (P5(b)): verdichtete Faltung je Korrelation, best-effort/nicht-autoritativ.
+            options.Schema.For<Persistence.ProzessMarkingDoc>().Identity(x => x.Id);
+
             // Dead-Letter-Queue (§5): nicht zustellbare ausgehende Pipeline-Commands, beobachtbar + replay-bar.
             options.Schema.For<DeadLetter>().Identity(x => x.Id).DatabaseSchemaName("dlq");
 
@@ -174,6 +177,14 @@ public static class CqrsServiceExtensions
         // Durabler Offen-Index der Prozesse (§3-Backstop): Grundlage des Scans, der hängende Prozesse heilt.
         services.AddSingleton<IProzessOffenIndex>(provider =>
             new MartenProzessOffenIndex(provider.GetRequiredService<IDocumentStore>()));
+
+        // Prozess-Marking-Cursor (P5(b)): nicht-autoritativer Cache des gefalteten Markings, damit der
+        // ProzessManager pro Weckung nur den Tail der Ziel-Streams nachfaltet (Reads O(N²)→O(N)). Best-effort
+        // wie der Emittenten-Cursor; Verlust/Stale heilt der Voll-Fold ab 0 (Konzept §3/§5).
+        services.AddSingleton<IProzessMarkingStore>(provider =>
+            new MartenProzessMarkingStore(
+                provider.GetRequiredService<IDocumentStore>(),
+                provider.GetService<ILogger<MartenProzessMarkingStore>>()));
 
         // Dead-Letter-Senke (§5): nicht zustellbare Pipeline-Commands beobachtbar machen statt still droppen.
         services.AddSingleton<IDeadLetterSink>(provider =>
