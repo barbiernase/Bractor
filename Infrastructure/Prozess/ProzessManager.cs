@@ -32,18 +32,31 @@ public sealed class ProzessManager
     private readonly IProzessOffenIndex? _offenIndex;
     private readonly IDeadLetterSink? _deadLetters;   // ★ #12: KlärungNötig beobachtbar machen (optional, best-effort)
 
+    // ── P5(b): der nicht-autoritative Marking-Cursor. Optional; fehlt er, faltet der Manager wie bisher
+    //   bei jeder Weckung VOLL ab 0 (der Voll-Fold ist der Fallback, Invariante 1). Ist er da, faltet der
+    //   Manager pro Weckung nur den TAIL der Ziel-Streams nach (Reads O(N²)→O(N)). Der ProzessManager ist
+    //   ein Cluster-Actor PRO Korrelation → der In-Memory-Cache lebt über Weckungen hinweg (der schnelle
+    //   Pfad); der Store trägt ihn über Passivierung/Absturz (best-effort). Sicher, weil at-least-once +
+    //   Empfänger-Dedup: ein stale Cache feuert höchstens erneut (verpufft), nie ein falscher Effekt.
+    private readonly IProzessMarkingStore? _markingStore;
+    private MarkingKompakt? _cache;                 // In-Memory-Faltung (per Korrelation)
+    private Dictionary<Guid, int>? _cacheCursor;    // je Ziel-Stream: zuletzt gefaltete Version
+    private string? _cacheRegelHash;                // Struktur-Hash der Regeln, unter dem der Cache gilt
+
     public ProzessManager(
         IEventStoreRepository store,
         IReadOnlyDictionary<string, ProzessRegeln> registry,
         Func<Guid, ICommand, Guid, CancellationToken, Task> dispatch,
         IProzessOffenIndex? offenIndex = null,
-        IDeadLetterSink? deadLetters = null)
+        IDeadLetterSink? deadLetters = null,
+        IProzessMarkingStore? markingStore = null)
     {
         _store = store;
         _registry = registry;
         _dispatch = dispatch;
         _offenIndex = offenIndex;
         _deadLetters = deadLetters;
+        _markingStore = markingStore;
     }
 
     // ── Öffentliche Eingänge (Actor/Fake rufen sie) ──
@@ -199,22 +212,38 @@ public sealed class ProzessManager
         Regel Regel, int RegelIndex, IReadOnlyList<Token> Match, ICommand Cmd, Guid Vorgang,
         bool ErgebnisDa, bool WirkungDa, bool AbgelehntDa, string AbgelehntGrund);
 
-    private async Task<(List<Token> Tokens, List<Kandidat> Kandidaten)> FaltMarkingAsync(
+    /// <summary>Die drei aus einem Ziel-Stream gelesenen Achsen eines Vorgangs (siehe <see cref="Kandidat"/>) plus die Wirkung.</summary>
+    private readonly record struct Achsen(
+        bool ErgebnisDa, bool WirkungDa, IEvent? WirkungPayload, int WirkungVersion, bool AbgelehntDa, string AbgelehntGrund);
+
+    /// <summary>
+    /// Der Eingang des Folds: mit Cursor (P5(b)) faltet der Manager nur den Tail nach, ohne ihn (kein
+    /// <see cref="_markingStore"/>) VOLL ab 0 wie bisher. BEIDE Wege durchlaufen denselben <see cref="FixpunktAsync"/>
+    /// — sie unterscheiden sich AUSSCHLIESSLICH darin, WOHER die drei Achsen eines Vorgangs kommen (Voll-Read ab 0
+    /// vs. Cache + Tail). Damit sind sie strukturell äquivalent: gleiche Tokens → gleiche Kandidaten → gleiche
+    /// Feuer-Entscheidung. Der Voll-Fold bleibt der Fallback (fehlender/stale Cache), „Marking aus dem Log"
+    /// (Invariante 1) bleibt gewahrt.
+    /// </summary>
+    private Task<(List<Token> Tokens, List<Kandidat> Kandidaten)> FaltMarkingAsync(
         Guid korrelation, ManagerStatus mz, ProzessRegeln regeln, CancellationToken ct)
     {
-        var cache = new Dictionary<Guid, IReadOnlyList<EventEnvelope>>();
-        async Task<IReadOnlyList<EventEnvelope>> Lies(Guid s)
-        {
-            if (!cache.TryGetValue(s, out var evs)) { evs = await _store.ReadStreamAsync(s, 0, ct); cache[s] = evs; }
-            return evs;
-        }
+        if (_markingStore is null)
+            return FaltMarkingVollAsync(korrelation, mz, regeln, ct);
+        return FaltMarkingInkrementellAsync(korrelation, mz, regeln, ct);
+    }
 
-        // Wurzel-Token: das Auslöse-Event (aus seinen im Log gemerkten Koordinaten).
+    /// <summary>
+    /// Der gemeinsame Fixpunkt (Petri-Netz-Sättigung): aus dem Wurzel-Token die aktivierten Transitionen rechnen,
+    /// je Transition die drei Achsen über <paramref name="loeseAuf"/> beziehen, eine WIRKUNG legt ein neues Token
+    /// nach (schaltet Downstream-Joins scharf), bis nichts mehr wächst. Die einzige externe Abhängigkeit ist
+    /// <paramref name="loeseAuf"/> — die Trennung, die Voll- und Cursor-Fold identische Kandidaten liefern lässt.
+    /// </summary>
+    private static async Task<(List<Token> Tokens, List<Kandidat> Kandidaten)> FixpunktAsync(
+        Guid korrelation, ProzessRegeln regeln, Token? auslöser,
+        Func<Guid, Guid, Task<Achsen>> loeseAuf)
+    {
         var tokens = new List<Token>();
-        var auslöserEvents = await Lies(mz.AuslöserStream);
-        var auslöser = auslöserEvents.FirstOrDefault(e => e.AggregateVersion == mz.AuslöserVersion);
-        if (auslöser is not null)
-            tokens.Add(new Token(auslöser.Payload, mz.AuslöserStream, mz.AuslöserVersion));
+        if (auslöser is not null) tokens.Add(auslöser);
 
         var kandidaten = new List<Kandidat>();
         bool geändert = true;
@@ -240,28 +269,17 @@ public sealed class ProzessManager
                             korrelation, primär.Stream, primär.Version, cmd.GetType().Name,
                             $"{ri}:{ci}:{cmd.AggregateId:N}");
 
-                        var zielEvents = await Lies(cmd.AggregateId);
-                        // Ergebnis ↔ Transition per KAUSALITÄT: der Actor stempelt CausationId = CommandId = vorgang.
-                        // „Aufgelöst": irgendein Ergebnis (auch die Inbox-Marke bei Noop/Ablehnung) → nicht neu feuern.
-                        var aufgeloest = zielEvents.Any(e => e.CausationId == vorgang.ToString());
-                        // „Wirkung": nur ein DOMÄNEN-Event (kein IProzessIntern) — kompensierbar + aktiviert Joins.
-                        var wirkung = zielEvents.FirstOrDefault(e => e.CausationId == vorgang.ToString() && e.Payload is not IProzessIntern);
-                        // „Abgelehnt": die durable KommandoAbgelehnt-Marke mit dieser Kausalität (Treiber-Fold/EM-1).
-                        //   Eigene Achse, weil sie ErgebnisDa=true macht, aber NICHT WirkungDa — und WakeAsync sie
-                        //   zu SchrittGescheitert stempeln muss, statt sie im Vorwärtszweig als „erledigt" zu lesen.
-                        var abgelehnt = zielEvents.FirstOrDefault(
-                            e => e.CausationId == vorgang.ToString() && e.Payload is Infrastructure.Aggregate.KommandoAbgelehnt);
-                        var abgelehntGrund = (abgelehnt?.Payload as Infrastructure.Aggregate.KommandoAbgelehnt)?.Grund ?? "abgelehnt";
+                        var a = await loeseAuf(vorgang, cmd.AggregateId);
                         kandidaten.Add(new Kandidat(
                             regel, ri, match, cmd, vorgang,
-                            aufgeloest, wirkung is not null, abgelehnt is not null, abgelehntGrund));
+                            a.ErgebnisDa, a.WirkungDa, a.AbgelehntDa, a.AbgelehntGrund));
 
                         // Nur eine WIRKUNG bringt ein neues Token in den Fold (aktiviert Downstream-Joins). Eine
                         // reine Marke (Noop/Ablehnung) ist inert — sie darf keinen Join scharf schalten.
-                        if (wirkung is not null &&
-                            !tokens.Any(t => t.Stream == cmd.AggregateId && t.Version == wirkung.AggregateVersion))
+                        if (a.WirkungDa && a.WirkungPayload is not null &&
+                            !tokens.Any(t => t.Stream == cmd.AggregateId && t.Version == a.WirkungVersion))
                         {
-                            tokens.Add(new Token(wirkung.Payload, cmd.AggregateId, wirkung.AggregateVersion));
+                            tokens.Add(new Token(a.WirkungPayload, cmd.AggregateId, a.WirkungVersion));
                             geändert = true;
                         }
                     }
@@ -269,6 +287,171 @@ public sealed class ProzessManager
             }
         }
         return (tokens, kandidaten);
+    }
+
+    // ── Voll-Fold: jeder Ziel-Stream ab 0 (der Fallback, O(N²) über die Weckungen) ──
+    private async Task<(List<Token> Tokens, List<Kandidat> Kandidaten)> FaltMarkingVollAsync(
+        Guid korrelation, ManagerStatus mz, ProzessRegeln regeln, CancellationToken ct)
+    {
+        var cache = new Dictionary<Guid, IReadOnlyList<EventEnvelope>>();
+        async Task<IReadOnlyList<EventEnvelope>> Lies(Guid s)
+        {
+            if (!cache.TryGetValue(s, out var evs)) { evs = await _store.ReadStreamAsync(s, 0, ct); cache[s] = evs; }
+            return evs;
+        }
+
+        // Wurzel-Token: das Auslöse-Event (aus seinen im Log gemerkten Koordinaten).
+        var auslöserEvents = await Lies(mz.AuslöserStream);
+        var au = auslöserEvents.FirstOrDefault(e => e.AggregateVersion == mz.AuslöserVersion);
+        Token? auslöser = au is null ? null : new Token(au.Payload, mz.AuslöserStream, mz.AuslöserVersion);
+
+        return await FixpunktAsync(korrelation, regeln, auslöser, async (vorgang, ziel) =>
+        {
+            var zielEvents = await Lies(ziel);
+            // Ergebnis ↔ Transition per KAUSALITÄT: der Actor stempelt CausationId = CommandId = vorgang.
+            var aufgeloest = zielEvents.Any(e => e.CausationId == vorgang.ToString());
+            var wirkung = zielEvents.FirstOrDefault(e => e.CausationId == vorgang.ToString() && e.Payload is not IProzessIntern);
+            var abgelehnt = zielEvents.FirstOrDefault(
+                e => e.CausationId == vorgang.ToString() && e.Payload is Infrastructure.Aggregate.KommandoAbgelehnt);
+            var abgelehntGrund = (abgelehnt?.Payload as Infrastructure.Aggregate.KommandoAbgelehnt)?.Grund ?? "abgelehnt";
+            return new Achsen(aufgeloest, wirkung is not null, wirkung?.Payload, wirkung?.AggregateVersion ?? 0,
+                abgelehnt is not null, abgelehntGrund);
+        });
+    }
+
+    // ── Inkrementeller Fold (P5(b)): Cache + Tail je Ziel-Stream (O(N) über die Weckungen) ──
+    //   Der Cache hält je aufgelöstem Vorgang die drei Achsen (verdichtet, Konzept §4); pro Weckung wird nur
+    //   der Tail (ab StreamCursor) nachgefaltet. Er ist strukturell äquivalent zum Voll-Fold, weil der
+    //   Ergebnis-Index nach dem Tail-Merge exakt dieselben Vorgang→Achsen liefert wie ein Read ab 0.
+    private async Task<(List<Token> Tokens, List<Kandidat> Kandidaten)> FaltMarkingInkrementellAsync(
+        Guid korrelation, ManagerStatus mz, ProzessRegeln regeln, CancellationToken ct)
+    {
+        var regelHash = ProzessRegelHash.Berechne(regeln);
+        await CacheSicherstellenAsync(korrelation, regelHash, ct);
+        var cache = _cache!;
+        var cursor = _cacheCursor!;
+
+        // Ergebnis-Index je Kausalität (Vorgang) — geseedet aus dem persistierten/gecachten Marking.
+        var index = cache.Ergebnisse.ToDictionary(v => v.Vorgang, v => Klone(v));
+        var geladen = new HashSet<Guid>();
+
+        void Merge(Guid s, IReadOnlyList<EventEnvelope> evs)
+        {
+            int max = cursor.TryGetValue(s, out var c0) ? c0 : 0;
+            foreach (var e in evs)
+            {
+                if (e.AggregateVersion > max) max = e.AggregateVersion;
+                if (!Guid.TryParse(e.CausationId, out var vorgang)) continue;
+                if (!index.TryGetValue(vorgang, out var vg)) { vg = new VorgangErgebnis { Vorgang = vorgang }; index[vorgang] = vg; }
+                vg.ErgebnisDa = true;
+                if (e.Payload is Infrastructure.Aggregate.KommandoAbgelehnt ab) { vg.AbgelehntDa = true; vg.AbgelehntGrund = ab.Grund; }
+                else if (e.Payload is not IProzessIntern && !vg.WirkungDa)
+                {
+                    vg.WirkungDa = true;
+                    vg.Wirkung = new MarkingToken { Payload = e.Payload, Stream = s, Version = e.AggregateVersion };
+                }
+            }
+            cursor[s] = max;
+        }
+
+        async Task EnsureTail(Guid s)
+        {
+            if (!geladen.Add(s)) return;   // je Weckung höchstens ein Tail-Read pro Stream
+            var from = cursor.TryGetValue(s, out var c) ? c + 1 : 0;
+            Merge(s, await _store.ReadStreamAsync(s, from, ct));
+        }
+
+        // Auslöser-Token: einmalig ab 0 lesen (neu = kurz) und im Cache halten; danach nie wieder.
+        if (cache.Auslöser is null)
+        {
+            var evs = await _store.ReadStreamAsync(mz.AuslöserStream, 0, ct);
+            geladen.Add(mz.AuslöserStream);
+            Merge(mz.AuslöserStream, evs);
+            var au = evs.FirstOrDefault(e => e.AggregateVersion == mz.AuslöserVersion);
+            if (au is not null)
+                cache.Auslöser = new MarkingToken { Payload = au.Payload, Stream = mz.AuslöserStream, Version = mz.AuslöserVersion };
+        }
+
+        Token? auslöser = cache.Auslöser is null
+            ? null
+            : new Token(cache.Auslöser.Payload, cache.Auslöser.Stream, cache.Auslöser.Version);
+
+        var (tokens, kandidaten) = await FixpunktAsync(korrelation, regeln, auslöser, async (vorgang, ziel) =>
+        {
+            await EnsureTail(ziel);   // neue Ziel-Streams tauchen mitten im Fixpunkt auf (Konzept §4, Falle 3)
+            if (index.TryGetValue(vorgang, out var vg))
+                return new Achsen(vg.ErgebnisDa, vg.WirkungDa, vg.Wirkung?.Payload, vg.Wirkung?.Version ?? 0, vg.AbgelehntDa, vg.AbgelehntGrund);
+            return new Achsen(false, false, null, 0, false, "abgelehnt");
+        });
+
+        // Cache verdichten: nur die tatsächlich gefeuerten (Kandidaten-)Vorgänge behalten, die aufgelöst sind —
+        // Client-Kausalitäten (z.B. KontoEröffnet) sind vom Cursor abgedeckt und gehören nicht ins Marking.
+        var kandVorgänge = new HashSet<Guid>(kandidaten.Select(k => k.Vorgang));
+        cache.Ergebnisse = index.Values.Where(v => v.ErgebnisDa && kandVorgänge.Contains(v.Vorgang)).ToList();
+        _cache = cache;
+        _cacheCursor = cursor;
+        _cacheRegelHash = regelHash;
+
+        await PersistiereMarkingAsync(korrelation, regelHash, mz.Version, ct);
+        return (tokens, kandidaten);
+    }
+
+    private static VorgangErgebnis Klone(VorgangErgebnis v) => new()
+    {
+        Vorgang = v.Vorgang, ErgebnisDa = v.ErgebnisDa, WirkungDa = v.WirkungDa, Wirkung = v.Wirkung,
+        AbgelehntDa = v.AbgelehntDa, AbgelehntGrund = v.AbgelehntGrund,
+    };
+
+    /// <summary>Stellt den In-Memory-Cache sicher (lebt über Weckungen); sonst aus dem Store laden + RegelHash prüfen.</summary>
+    private async Task CacheSicherstellenAsync(Guid korrelation, string regelHash, CancellationToken ct)
+    {
+        if (_cache is not null && _cacheRegelHash == regelHash) return;
+
+        if (_markingStore is not null)
+        {
+            try
+            {
+                var geladen = await _markingStore.LadeAsync(korrelation, ct);
+                if (geladen is not null && geladen.RegelHash == regelHash)
+                {
+                    _cache = geladen.Marking;
+                    _cacheCursor = geladen.StreamCursor;
+                    _cacheRegelHash = regelHash;
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"[Prozess-Marking] Laden fehlgeschlagen ({korrelation}): {ex.Message}");
+            }
+        }
+
+        // Fehlend oder RegelHash passt nicht → leer starten = sauberer Voll-Fold ab 0 (der Fallback).
+        _cache = new MarkingKompakt();
+        _cacheCursor = new Dictionary<Guid, int>();
+        _cacheRegelHash = regelHash;
+    }
+
+    /// <summary>Best-effort-Persistenz des verdichteten Markings (außerhalb der Entscheidungs-Transaktion, Konzept §5).</summary>
+    private async Task PersistiereMarkingAsync(Guid korrelation, string regelHash, int logVersion, CancellationToken ct)
+    {
+        if (_markingStore is null) return;
+        try
+        {
+            await _markingStore.SchreibeAsync(new ProzessMarking
+            {
+                Id = korrelation,
+                RegelHash = regelHash,
+                LogVersion = logVersion,
+                StreamCursor = new Dictionary<Guid, int>(_cacheCursor!),
+                Marking = _cache!,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            }, ct);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[Prozess-Marking] Schreiben fehlgeschlagen ({korrelation}): {ex.Message}");
+        }
     }
 
     /// <summary>
