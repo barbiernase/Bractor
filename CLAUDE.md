@@ -82,8 +82,25 @@ eingebettet.
 > Adapter ab Marke -1", store-frei bewiesen) + **DLQ-Ops-Pfad** (`IDeadLetterReadStore` + Marten/InMemory:
 > listen/filtern/zählen/auflösen, kein Auto-Replay). **Zählerstände: Prüfstand 79, Integration 25/25.**
 > **Offen (Handoff `docs/handoff-feature-strom-rest.md`):** Timer/Webhook-Trigger, Prozess-Verkettung,
-> Deadlines, Monitoring. **P5(b)** bewusst zurückgestellt (Konzept §8: erst bei großem Prozess — riskanter
-> Join-Fixpunkt). Multi-Node (P7/P8) NICHT im aktuellen Scope.
+> Deadlines, Monitoring.
+> **P5(b) ✅ — der Prozess-Marking-Cursor (reine Performance, `docs/prozess-marking-cursor-konzept.md` +
+> `docs/p5b-marking-cursor-handoff.md`):** `FaltMarkingAsync` teilt sich jetzt in einen GEMEINSAMEN `FixpunktAsync`
+> plus zwei Auflösungs-Wege — Voll-Fold (Read ab 0, der Fallback) und inkrementeller Fold (Cache + Tail). Beide
+> durchlaufen denselben Fixpunkt → strukturell äquivalent (gleiche Feuer-Entscheidung je Weckung), bewiesen in-memory
+> (Cursor AUS==AN für linear/Join/Kompensation/Fan-out/Count-Join). Der Cache (`ProzessMarking`/`MarkingKompakt` in
+> `Abstractions`, `IProzessMarkingStore` InMemory+Marten) hält je aufgelöstem Vorgang die DREI Achsen
+> (`ErgebnisDa`/`WirkungDa`/`AbgelehntDa`) verdichtet; das Token-Set wird aus den Wirkungen rekonstruiert; neue
+> Ziel-Streams tauchen im Fixpunkt auf (einmal ab 0). In-Memory-Cache lebt über Weckungen (per-Korrelation-Actor),
+> Marten trägt ihn über Passivierung (best-effort, KEIN Co-Commit; Payloads als getaggtes JSON, reflection-frei via
+> `GeneratedTypeRegistry`; unbekannt → null → Voll-Fold). `RegelHash` (`ProzessRegelHash`, Struktur-Hash) invalidiert
+> den Cache. **Sicher (§3):** at-least-once + Empfänger-Inbox → ein stale Cache feuert höchstens erneut (verpufft),
+> NIE ein falscher Effekt; „Marking aus dem Log" (Invariante 1) bleibt gewahrt (Voll-Fold jederzeit gültig).
+> **Nutznießer:** der breite Fan-out `SammelueberweisungsProzess` (`SendeJe` + `UndAlle<E>(n)`); Benchmark N=1000 →
+> Read-Volumen O(N) statt O(N²) (Read-Zähler), Ergebnis identisch zum Voll-Fold. Neuer in-memory Saga-Harness
+> (`ProzessSagaHarness` + `ZaehlenderEventStore`, treibt den ECHTEN Manager mit faithfuller Framework-Inbox). Live
+> verdrahtet (`ProzessManagerActor`/Kind). **Zählerstände: Prüfstand 99, Integration 32/33** (nur der bekannte,
+> bimodal flaky SnapshotLive-Cold-Boot-Test rot — snapshot-fremd; +3 Marking-Store-Postgres-Tests).
+> Multi-Node (P7/P8) NICHT im aktuellen Scope.
 
 ## Was das Projekt ist
 

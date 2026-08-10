@@ -1,5 +1,13 @@
 # P5(b) — Marking-Cursor: Handoff & Agenten-Prompt
 
+> **STATUS: ✅ UMGESETZT (M0–M3).** Der Marking-Cursor ist gebaut, live verdrahtet und bewiesen. Kern:
+> `FaltMarkingAsync` teilt sich in einen gemeinsamen `FixpunktAsync` + Voll-Fold (Fallback) + inkrementellen
+> Fold (Cache + Tail); Vertrag `ProzessMarking`/`IProzessMarkingStore` (InMemory + Marten) in `Abstractions`;
+> `RegelHash` = `ProzessRegelHash`; in-memory Saga-Harness (`ProzessSagaHarness` + `ZaehlenderEventStore`);
+> Äquivalenz Cursor AUS==AN + Benchmark N=1000 (O(N), `MarkingCursorTests`) + Marten-Live-Tor
+> (`ProzessMarkingStorePostgresTests`). Prüfstand 99, Integration 32/33 (nur der bekannte SnapshotLive-Flake).
+> Der Rest dieser Datei ist der ursprüngliche Auftrag (Kontext-Archiv).
+
 > Auftrag für einen **frischen Agenten**, P5(b) umzusetzen. Diese Datei ist der Einstieg: erst der Kontext
 > (warum, was genau, wo im Code, welche Fallen), unten der fertige **Prompt** zum Kopieren.
 >
