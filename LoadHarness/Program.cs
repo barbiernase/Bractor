@@ -58,6 +58,8 @@ builder.Services.AddCqrsFramework(opts =>
         opts.AppendBatchLingerMs = linger;
     if (int.TryParse(Environment.GetEnvironmentVariable("BRACTOR_BATCH_MAX"), out var bmax) && bmax > 0)
         opts.AppendBatchMaxSize = bmax;
+    if (int.TryParse(Environment.GetEnvironmentVariable("BRACTOR_DRAIN_PAR"), out var dpar) && dpar > 0)
+        opts.AppendDrainParallelism = dpar;
     // A/B-Schalter für die Serializer-Messung:
     //   BRACTOR_SOURCEGEN_JSON=1 → STJ-Source-Gen-Kontext für Events in Martens Serializer
     opts.UseGeneratedJsonSerializer = Environment.GetEnvironmentVariable("BRACTOR_SOURCEGEN_JSON") == "1";
@@ -65,6 +67,7 @@ builder.Services.AddCqrsFramework(opts =>
     //   BRACTOR_VERSION_TRACKING=0 → Version-Index AUS (No-op) → misst den synchronen Redis-Anteil
     opts.EnableVersionTracking = Environment.GetEnvironmentVariable("BRACTOR_VERSION_TRACKING") != "0";
     Console.WriteLine($"[LoadHarness] AppendBatching={opts.AppendBatching} Linger={opts.AppendBatchLingerMs}ms "
+        + $"DrainPar={opts.AppendDrainParallelism} "
         + $"SourceGenJson={opts.UseGeneratedJsonSerializer} VersionTracking={opts.EnableVersionTracking}");
 });
 builder.Services.AddDomainPipelineServices(watchPath: watchDir, preprocessedPath: null);

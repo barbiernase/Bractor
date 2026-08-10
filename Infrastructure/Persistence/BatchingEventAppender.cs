@@ -49,24 +49,33 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
     private readonly int _maxBatch;
     private readonly int _lingerMs;
 
+    // ★ Paralleler Commit-Drain: K unabhängige Drain-Loops teilen sich den Channel, jeder committet auf
+    //   EIGENER Marten-Session/Connection. Sicher, weil Single-Activation garantiert, dass ein Stream nie
+    //   gleichzeitig in zwei Batches liegt (der Actor awaited seine Batch-Quittung, bevor er den nächsten
+    //   Command desselben Streams verarbeitet) → zwei parallele Commits berühren NIE dieselbe (Stream,Version).
+    //   Der Flaschenhals ist commit-WAIT-gebunden bei idler CPU (Profil) → K Streams heben den Durchsatz.
     private readonly Channel<Pending> _channel =
-        Channel.CreateUnbounded<Pending>(new UnboundedChannelOptions { SingleReader = true });
+        Channel.CreateUnbounded<Pending>(new UnboundedChannelOptions { SingleReader = false });
     private readonly CancellationTokenSource _disposeCts = new();
-    private readonly Task _loop;
+    private readonly Task[] _loops;
 
     public BatchingEventAppender(
         IEventStoreRepository inner,
         IEventBatchWriter writer,
         ILogger<BatchingEventAppender> logger,
         int maxBatch = 256,
-        int lingerMs = 0)
+        int lingerMs = 0,
+        int drainParallelism = 1)
     {
         _inner = inner ?? throw new ArgumentNullException(nameof(inner));
         _writer = writer ?? throw new ArgumentNullException(nameof(writer));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _maxBatch = maxBatch > 0 ? maxBatch : 256;
         _lingerMs = lingerMs < 0 ? 0 : lingerMs;
-        _loop = Task.Run(RunAsync);
+
+        var k = drainParallelism > 0 ? drainParallelism : 1;
+        _loops = new Task[k];
+        for (var i = 0; i < k; i++) _loops[i] = Task.Run(RunAsync);
     }
 
     // ── Schreib-Hotpath: einreihen, Task = Durabilitäts-Quittung des Batches ──
@@ -188,7 +197,7 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
     {
         _channel.Writer.TryComplete();
         _disposeCts.Cancel();
-        try { await _loop.ConfigureAwait(false); }
+        try { await Task.WhenAll(_loops).ConfigureAwait(false); }
         catch { /* best effort */ }
         _disposeCts.Dispose();
     }
