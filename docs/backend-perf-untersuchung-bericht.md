@@ -95,6 +95,33 @@ Knie bei 2, Peak bei 4. **Korrektheit unter echter Parallelität in jedem Lauf v
 
 ---
 
+## Befund 4b — Nachmessung MacBook M4 Air (2026-08-11, dockerisierter Postgres)
+
+Gegenprobe auf anderer Hardware: **Apple M4, 10 Kerne, 16 GB**, Postgres/Redis/Consul in Docker
+(Docker Desktop = Linux-VM). Release-Build, `--mode aggregate`, 82.000 Commands.
+
+| Konfiguration | Durchsatz | p50 / p99 |
+|---|---|---|
+| Concurrency 128, **Drain 4 (Default)** | **~11.600 Cmd/s ≈ 23.000 Events/s** | 10 / 28 ms |
+| Concurrency 128, Drain 6 | ~11.300 Cmd/s | 10 / 29 ms |
+| Concurrency 128, Drain 8 | ~7.200 Cmd/s | 12 / 109 ms |
+| Concurrency 256, Drain 4 | ~9.000 Cmd/s | 20 / 150 ms |
+
+Bestätigt und schärft die 4-Kern-Befunde:
+- **Default Drain=4 bleibt das Optimum**, auch auf 10 Kernen. Drain 6/8 oder Concurrency 256 machen es
+  *langsamer* (kleinere/längere Commits, p99 explodiert) → der geteilte Postgres-Serialisierungspunkt ist
+  die Wand, nicht die CPU. Das offene `wait_event` (Befund 1 der Rangfolge) bleibt der nächste Schritt.
+- **Bessere Drain-Skalierung als auf der 4-Kern-Box:** hier ~3,8× über dem seriellen Baseline-Ceiling
+  (~3.000 Cmd/s) statt 1,57× — plausibel, weil die dockerisierte DB pro Commit mehr *wartet* (VM-I/O),
+  also mehr Headroom für parallele Drains bietet. Umgekehrt heißt das: **nativer/getunter Postgres würde
+  den absoluten Durchsatz heben**, aber die K>4-Contention bliebe.
+- Transport-Decke (`--mode pipeline`, No-Op, 1 Actor): **~561.000 msg/s**, p50 0,2 ms → der Actor-/
+  Framework-Transport ist weiterhin ~50× vom Schreibpfad entfernt, also nie der Flaschenhals.
+
+Alle Läufe: 0 Fehler, alle Salden korrekt (Exactly-once hält unter Last).
+
+---
+
 ## Was sich gelohnt hat
 
 | Kandidat | Gemessener Effekt | Ergebnis |

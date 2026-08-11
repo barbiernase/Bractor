@@ -52,7 +52,7 @@ Crash-Proben (definierte Absturzpunkte), Reaktionen, und die komplette Prozess-/
 dotnet test Infrastructure.Pruefstand.Tests/Infrastructure.Pruefstand.Tests.csproj
 ```
 
-**Das ist die erste Anlaufstelle.** Wer Logik ändert, muss hier grün sein (aktuell 68 Tests).
+**Das ist die erste Anlaufstelle.** Wer Logik ändert, muss hier grün sein (aktuell 99 Tests).
 Verteilte/Actor-Hangs IMMER hier (bzw. mit Fake-Cluster) diagnostizieren, nie im langsamen
 Integrationstest — siehe Fallstrick „xUnit schluckt Logs".
 
@@ -131,21 +131,36 @@ dotnet run --project LoadHarness -- --mode pipeline --messages 200000 --concurre
 | `--concurrency` | 64 | beide | gleichzeitig in-flight Requests |
 | `--log` | warning | beide | `warning` = saubere Messung; `debug` = Cluster/Consul-Logs sichtbar (Diagnose) |
 
-### Referenzwerte (lokaler Dev-Rechner, Single-Node, in-process)
-| Modus | Last | Durchsatz | p50 / p99 | Persistenz |
-|---|---|---|---|---|
-| aggregate | 4.200 Cmd | ~4.000/s | 13 / 80 ms | ja (Append je Command) |
-| aggregate | 20.500 Cmd | ~4.600/s | 26 / 51 ms | ja |
-| **pipeline** | 200.000 Trigger | **~400–500k/s** | **0,1 / 1 ms** | **nein** |
+### Referenzwerte — MacBook M4 Air, 2026-08-11 (Single-Node, in-process, Postgres/Redis/Consul in Docker)
+Apple M4, 10 Kerne, 16 GB. Release-Build. Group-Commit-Batching an (Default Drain=4). Postgres
+dockerisiert (Docker Desktop = Linux-VM → I/O-Overhead; nativer Postgres wäre schneller).
+
+| Modus | Last | Concurrency | Durchsatz | p50 / p99 | Persistenz |
+|---|---|---|---|---|---|
+| aggregate | 20.500 Cmd | 128 | ~10.200/s | 11 / 27 ms | ja |
+| **aggregate** | **82.000 Cmd** | **128** | **~11.600 Cmd/s ≈ 23.000 Events/s** | **10 / 28 ms** | **ja** |
+| aggregate | 82.000 Cmd | 256 | ~9.000/s | 20 / 150 ms | ja (übersättigt) |
+| **pipeline** | 200.000 Trigger | 128 | **~561.000/s** | **0,2 / 0,8 ms** | **nein** |
+
+Jeder aggregate-Command schreibt 2 Events (Domänen-Event + interne Marke) → „Events/s" ≈ 2× „Cmd/s".
+Alle Läufe: 0 Fehler, alle Salden korrekt (Exactly-once hält unter Last).
 
 **Einordnung:**
-- Der **aggregate**-Durchsatz ist im Wesentlichen **DB-gebunden** (ein Marten/Postgres-Append
-  pro Command, Single-Writer pro Stream).
-- Der **pipeline**-Durchsatz (~100× höher) zeigt: der **Framework-/Actor-Transport selbst ist
-  NICHT der Flaschenhals** — ohne Persistenz verarbeitet ein einzelner Actor hunderttausende
-  Nachrichten/s. Aber: **in-process** (RequestAsync ist lokal, keine Netzwerk-Serialisierung)
-  und **No-Op-Handler** (echte Handler-Arbeit senkt die Zahl). Cross-node läge deutlich tiefer.
-- Zahlen sind lokal/Single-Node — **keine Produktions-Benchmarks**, nur Größenordnungen.
+- Der **aggregate**-Durchsatz ist **DB-gebunden** (Marten/Postgres-Commit-Serialisierung, ein
+  Single-Writer pro Stream). **Mehr hilft nicht mehr:** Drain 6/8 oder Concurrency 256 senken den
+  Durchsatz (kleinere/längere Commits, p99 explodiert). **Sweet Spot: Concurrency ~128, Drain=4
+  (Default).** Der parallele Drain holt ~3,8× aus dem seriellen Baseline-Ceiling (~3.000 Cmd/s)
+  heraus — auf 4 Drains fast linear, darüber Postgres-Contention. Das ist genau das offene
+  `wait_event`-Thema (siehe `backend-perf-untersuchung-bericht.md`).
+- Der **pipeline**-Durchsatz (~50× höher) zeigt: der **Framework-/Actor-Transport selbst ist NICHT
+  der Flaschenhals** — ohne Persistenz verarbeitet ein einzelner Actor ~560k Nachrichten/s. Aber:
+  **in-process** (RequestAsync lokal, keine Netzwerk-Serialisierung) und **No-Op-Handler**. Cross-node
+  läge deutlich tiefer.
+- Zahlen sind lokal/Single-Node/dockerisierte DB — **keine Produktions-Benchmarks**, nur
+  Größenordnungen. Nativer/getunter Postgres + Cross-Node wären die Hebel für „aufwendige" Last.
+
+> **Historisch (älterer Dev-Rechner, vor dem parallelen Drain):** aggregate ~4.000–4.600/s,
+> pipeline ~400–500k/s. Der M4 + Batching + paralleler Drain liegt beim Schreibpfad ~2,5× höher.
 
 ### Warum der Harness auch die Logger-Arbeit validiert
 Bei `--log warning` ist der per-Command-Logpfad komplett still. Der gemessene Durchsatz ist
