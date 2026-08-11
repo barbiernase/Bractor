@@ -29,6 +29,8 @@ Marten/PostgreSQL + Redis. Der Einstieg hängt davon ab, was du willst.
   Monitoring, Dead-Letter.
 - [`05-generatoren-und-analyzer.md`](architektur/05-generatoren-und-analyzer.md) — alle
   Generatoren, Diagnostik-Codes CQRS001–021.
+- [`06-frontend-maschine.md`](architektur/06-frontend-maschine.md) — die Client-Seite:
+  Bus/Store/Signal, Client-Generatoren, Modul-Anatomie, Shell/Hydration, Python-Worker.
 
 ## Herleitung & Konzept (Referenz, gültig)
 

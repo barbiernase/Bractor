@@ -45,25 +45,31 @@ Prozess-Maschine (Event-Regel-DAG). **Feature-Strom geliefert:** Timer-/Webhook-
 Deadlines/Fristen (`IDbClock`), Monitoring (`/health`, `/monitoring/metrics`), Dead-Letter
 (Read+Sink), Pipeline P6.1/P6.2 zerlegt. **Schreibpfad-Perf:** Group-Commit-Batching mit
 parallelem Drain (+48 %), STJ-Serializer (opt-in), optionaler Version-Index. **Snapshots** voll
-verdrahtet.
+verdrahtet. **P5b Marking-Cursor geliefert:** der Prozess-Fold ist von O(N²) auf O(N) Stream-Reads
+(nicht-autoritativer Tail-Cursor, `IProzessMarkingStore` + Marten-`ProzessMarkingDoc`, HOT-Cache je
+Actor; Voll-Fold bleibt Fallback bei fehlendem/stale `RegelHash`). **Feuer-gerichtete Reads:** warm
+liest der Manager nur die seit dem letzten Fold befeuerten Streams nach → auch die DB-Roundtrips O(N²)→O(N)
+(gemessen echtes Postgres: bis 9× schnellere Wall-Clock bei N=60; mit Aggregat-Historie 5,5×). Kaltstart
+faltet voll (Invariante 1). Äquivalenz + Sagas grün.
 
-**Tests (echt gemessen): Prüfstand 99/99 grün (in-memory, store-frei), Integration 33/33
-(gegen echtes Marten/Consul/Redis, sequentiell).**
+**Tests (echt gemessen): Prüfstand 106/106 grün (in-memory, store-frei), Integration 33/33
+(gegen echtes Marten/Consul/Redis, sequentiell; der `SnapshotLive`-Cold-Boot-Flake ausgenommen).**
 
-1. **Cross-Node/Multi-Node** — **Iteration 1 + 2 geliefert.** Generierter, reflexionsfreier Wire-Serializer
-   (`CqrsWireSerializer` + `WireSerializerGenerator` → `GeneratedWire`/`GeneratedWirePoly` über
-   `CqrsWireJsonContext`, Marker `IWireMessage`) am `WithRemote`-Punkt, Boot-Check, Round-trip-Test.
-   Iter. 1 = Command-/Pull-Plane; Iter. 2 = PubSub-/Pipeline-/Prozess-Plane (Publish/EventEnvelope/
-   SignalEnvelope/Subscribe+PID/PipelineAck/ProzessWake/Trigger, `PID`-Converter via `PID.FromAddress`).
-   **Bewiesen:** `TwoNodeCommandDispatchTests`, `TwoNodePubSubSignalTests`, `RemotePidDeliverySmokeTests`.
-   3 stille fire-and-forget-Sends gehärtet (catch+log, kein Dead-Letter — verlierbar per Inv. 2).
-   **Weg B (gRPC-Client-Targeted) robust:** periodisches Re-Assert der Client-Subscriptions
-   (`SubscriptionTracker.ReassertAllAsync` + Loop in `CqrsClientService.Connect`) = Poll-Äquivalent;
-   kein Gateway-Kind nötig (`ClientSubscriptionReassertTests`, `docs/multi-node-weg-b-client-gateway-konzept.md`).
-   **Im ECHTEN Container-Betrieb verifiziert** (`deploy-multinode/`, `docs/multi-node-deployment.md`):
-   3 gRPC-Nodes + 1 Consul, ein LoadHarness-Node joint als 4. Member und dispatcht cross-node Commands
-   mit bewiesener Exactly-once-Semantik. Der Multi-Node-Block ist damit geschlossen.
-2. **P5b Marking-Cursor** — Prozess-Fold ist O(N²); zurückgestellte Optimierung.
+**Bewusst offen (Priorität):**
+1. **Cross-Node/Multi-Node** — **Iteration 1 + 2 geliefert; Multi-Node-Block geschlossen.** Generierter,
+   reflexionsfreier Wire-Serializer (`CqrsWireSerializer` + `WireSerializerGenerator` →
+   `GeneratedWire`/`GeneratedWirePoly` über `CqrsWireJsonContext`, Marker `IWireMessage`) am
+   `WithRemote`-Punkt, Boot-Check, Round-trip. Iter. 1 = Command-/Pull-Plane; Iter. 2 = PubSub-/
+   Pipeline-/Prozess-Plane (`PID`-Converter via `PID.FromAddress`). **Bewiesen:**
+   `TwoNodeCommandDispatchTests`, `TwoNodePubSubSignalTests`, `RemotePidDeliverySmokeTests`; cross-node
+   Saga (`LoadHarness --mode saga`) + echter 3-Node-Container-Betrieb (`deploy-multinode/`,
+   `docs/multi-node-deployment.md`). Weg B robust via Re-Assert (`ClientSubscriptionReassertTests`,
+   `docs/multi-node-weg-b-client-gateway-konzept.md`). **Offener Folge-Schritt:** Cold-Start-Schema-
+   Migrator (`docs/multi-node-schema-migrator-handoff.md`).
+2. **P5b-Restfeinschliff (klein):** die `MarkingKompakt`-Größe ist für einen extremen Fan-out noch
+   O(N) (Payloads je Vorgang); die volle Zähler+Bitset-Verdichtung (Konzept §4) bleibt optionaler
+   Feinschliff. Der O(N²)→O(N)-Read-Gewinn (das eigentliche Problem) ist voll geliefert. Die
+   Kompensations-`NächsteKompensationAsync` liest noch ab 0 (Fehlerpfad, nicht die Warm-Schleife).
 3. **Schreibpfad-Perf** — paralleler Drain skaliert sublinear (`wait_event` offen).
 4. **KlärungNötig-Pfad** korrekt-per-Konstruktion, aber ohne Testdeckung.
 

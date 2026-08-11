@@ -1,8 +1,44 @@
-# Prozess-Marking-Cursor — Konzept (Skizze)
+# Prozess-Marking-Cursor — Konzept
 
-Status: **Skizze, noch nicht umgesetzt.** Benachbarte Optimierung zu den Aggregat-Snapshots
+Status: **UMGESETZT (P5b, M0–M3).** Benachbarte Optimierung zu den Aggregat-Snapshots
 (docs/snapshot-konzept.md) — dieselbe Idee (Cursor + Tail statt Voll-Read), aber auf der
 Prozess-Schicht. Bewusst getrennt gehalten: löst ein anderes Problem als Snapshots.
+
+> **Umsetzungsstand:** Vertrag `IProzessMarkingStore` + `ProzessMarking`/`MarkingKompakt`
+> (`Abstractions/Prozess/ProzessMarking.cs`), InMemory- + Marten-Store
+> (`MartenProzessMarkingStore`, jsonb-Doc je Korrelation). Der `ProzessManager`-Fold ist zu EINEM
+> `FalteAsync` vereinheitlicht (leeres Marking = Voll-Fold ab 0; fortgeschriebenes Marking + Tail =
+> inkrementell), aktiv sobald ein Store injiziert ist; HOT-Cache je Actor + best-effort-Store,
+> Voll-Fold bleibt Fallback (`RegelHash`-Mismatch/fehlend). Beweis: in-memory Saga-Harness treibt
+> den echten Manager gegen die echten Aggregate — Cursor AUS == AN für linear/Join/Count-Join/
+> Fan-out/Kompensation; Read-Zähler zeigt O(N²)→O(N) bis N=1000
+> (`Infrastructure.Pruefstand.Tests/Phase5/ProzessMarkingCursor*`). Ebene 2 (echtes Marten): alle
+> Saga-Integrationstests grün mit aktivem Cursor. **Offener Feinschliff:** die volle Zähler+Bitset-
+> Verdichtung von `MarkingKompakt` (§4) — die aktuelle Darstellung ist je Vorgang kompakt, aber für
+> einen extremen Fan-out noch O(N) groß; der eigentliche O(N²)-Read-Schmerz ist behoben.
+>
+> **Write-Drossel (§5):** der durable Marking-Write läuft NICHT bei jeder Weckung, sondern alle K (Default 32,
+> `markingSchreibIntervall`) — sonst tauschte man O(N²) Event-Reads gegen O(N²) Marking-Writes (die §4-Falle auf
+> der Schreibseite). Der HOT-Cache trägt die Korrektheit über die Weckungen einer Aktivierung; ein Crash verliert
+> höchstens <K Weckungen Fortschritt, die der Tail-Fold folgenlos nachholt.
+>
+> **Gemessen (echtes Postgres, `ProzessMarkingCursorPerfTests`):** die gelesenen Events sinken sauber O(N²)→O(N)
+> (bei N=15–60: 7×–25×, wachsend). Ob das auf die WALL-CLOCK durchschlägt, hängt vom Read-Profil ab: bei kleinen
+> Ziel-Streams ist Postgres roundtrip-gebunden (die Zahl der `ReadStreamAsync`-Aufrufe bleibt ~gleich) → Zeit
+> ~neutral; bei Aggregaten MIT Historie (H Alt-Events je Ziel — der eigentliche Anwendungsfall, „akkumulierendes
+> Ziel"/§0) ist er datengebunden → bei N=20, H=300 misst der Benchmark **21,8× weniger Events und 3,2× schnellere
+> Wall-Clock**, mit H wachsend. Der Voll-Fold re-liest die ganze Historie jeder Weckung, der Cursor genau einmal.
+>
+> **Feuer-gerichtete Reads (umgesetzt):** auf dem WARM-Pfad (Hot-Cache dieser Aktivierung) faltet der Manager nur
+> die Streams nach, in die er seit dem letzten Fold GEFEUERT hat (`_dirty`) plus nie-gesehene neue Ziele — für
+> alle anderen trägt das gecachte Marking die Wahrheit (ihr Ergebnis kann sich nicht geändert haben; nur der
+> Manager erzeugt SEINE Vorgänge auf dem Ziel). Damit fällt auch die Zahl der `ReadStreamAsync`-AUFRUFE
+> (Roundtrips) von O(N²) auf ~O(1) pro Weckung. KALTSTART (Hot-Miss: Store-Load/frisch) faltet voll — die
+> Wahrheit rekonstruieren (Invariante 1). Bewiesen gleichwertig über die Äquivalenz-Proben (Feuer-Sequenz
+> Cursor AUS == AN) UND die Saga-Integrationstests (die real passivieren → Kaltstart-Pfad). Messung (echtes
+> Postgres): OHNE Historie bei N=60 nun **15,8× weniger Aufrufe → 9,1× schnellere Wall-Clock** (vorher ~neutral);
+> MIT Historie (N=20, H=300) **5,5× schneller**. Der Manager-Log-Read (`LadeStatusAsync`, single-writer) bleibt
+> als kleiner O(N)-Rest cachebar — offener Feinschliff.
 
 ## 0. Das Problem
 
