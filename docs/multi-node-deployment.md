@@ -69,10 +69,14 @@ docker exec cqrs-multinode-consul-1 \
 docker compose -f deploy-multinode/docker-compose.yml logs grpc2 \
   | grep -E 'Wire-Serializer id=100|Cluster gestartet'
 
-# 4. Cross-node Command-Dispatch verifizieren (LoadHarness joint als 4. Member)
-#    WICHTIG: --use-aliases, damit die grpc-Nodes den advertised Namen "loadharness" auflösen können
-#    (docker compose run vergibt sonst KEINEN Service-Alias → Gossip-Rückweg tot; s. Stolpersteine).
+# 4a. Cross-node Command-Dispatch verifizieren (LoadHarness joint als 4. Member)
+#     WICHTIG: --use-aliases, damit die grpc-Nodes den advertised Namen "loadharness" auflösen können
+#     (docker compose run vergibt sonst KEINEN Service-Alias → Gossip-Rückweg tot; s. Stolpersteine).
 docker compose -f deploy-multinode/docker-compose.yml --profile verify run --rm --use-aliases loadharness
+
+# 4b. Cross-node PROZESS/SAGA verifizieren (Überweisungs-Prozess + Gelderhaltung)
+docker compose -f deploy-multinode/docker-compose.yml --profile verify run --rm --use-aliases loadharness \
+  --mode saga --accounts 20 --transfers 40 --concurrency 16 --log warning
 
 # 5. Aufräumen (inkl. Volumes — löscht auch die Consul-Registrierungen)
 docker compose -f deploy-multinode/docker-compose.yml down -v
@@ -143,10 +147,47 @@ Exactly-once-Nachweis (0 falsch, 0 Fehler) zeigt, dass die Serialisierung in bei
 alle vier Nodes korrekt funktioniert — wäre sie kaputt, hätten die fremd platzierten Aggregate versagt und
 der Rehydrations-Check `falsch > 0` gemeldet.
 
+**Cross-node PROZESS/SAGA: ✅ bewiesen (mit einem dokumentierten Cold-Start-Vorbehalt).** Der
+`--mode saga` löst 40 Überweisungen aus (`BeauftrageUeberweisung` → `Ueberweisungsauftrag` emittiert
+das Auslöse-Event → die Prozess-Maschine auf den Server-Nodes reserviert an der Quelle, schreibt dem
+Ziel gut und bucht per Join). Das übt den **kompletten durable-Konsumenten-Plane cross-node**: Signal →
+Korrelations-Router → ProzessManager → Folge-Commands an FREMDE Aggregate — genau die
+`SignalEnvelope`/`ProzessWake`/`Publish`-Pfade, die Iteration 2 serialisierbar gemacht hat.
+
+Warmer Cluster (Snapshot-Tabellen existieren bereits):
+```
+Konten abgeschlossen:  20/20  (Saldo==erwartet ∧ Reserviert==0)
+Gelderhaltung:         Ist-Summe 20000000 == Soll-Summe 20000000
+Offene Reservierungen: 0
+✓ Alle 40 Überweisungs-Sagas cross-node abgeschlossen — exactly-once, Geld erhalten.   (nach 0.1 s)
+```
+
+**Cold-Start-Vorbehalt (aufgedeckt vom Saga-Test):** Beim ALLERERSTEN Auftreten eines bisher
+ungenutzten Aggregat-Typs (hier `Ueberweisungsauftrag`) legt Marten dessen Snapshot-Tabelle
+(`es.mt_doc_snapshot_ueberweisungsauftrag`) **lazy beim ersten Zugriff** an — ohne Advisory-Lock.
+Aktivieren mehrere Nodes den Typ gleichzeitig, rennen sie auf `CREATE TABLE` (`duplicate key pg_type`).
+Im ersten Saga-Lauf gegen einen KALTEN Cluster lief dadurch nur ein Teil im 120-s-Fenster durch
+(reproduziert: 14–16 von 20, Race-Timing-abhängig) — **aber die Gelderhaltung hielt jedes Mal exakt** (die
+nicht-gelaufenen Transfers bewegten schlicht nichts, 0 offene Reservierungen). Es ist **transient und
+selbstheilend** (Proto reaktiviert den Actor, sobald ein Node die Tabelle angelegt hat; der
+Prozess-§3-Backstop holt Hänger nach) und **kein** Serializer-/Dispatch-Fehler: der zweite Lauf gegen
+denselben (nun warmen) Cluster war jedes Mal sofort 20/20.
+
+**Sauberer Produktions-Fix (empfohlen, hier bewusst NICHT verdrahtet):** die Schema-Migration von
+GENAU EINEM Migrator ausführen (`ApplyAllDatabaseChangesOnStartup` auf einem Init-Job/Node,
+`AutoCreate.None` auf den übrigen). Achtung: `ApplyAllDatabaseChangesOnStartup` auf ALLEN Nodes
+gleichzeitig ersetzt den Lazy-Race durch **Migrations-Lock-Contention** (der Verlierer crasht mit
+„Unable to attain a global lock in time") — verifiziert und wieder zurückgenommen. Der Single-Migrator
+braucht eine per-Node-Config (Migrator-Flag) und ist ein eigener, kleiner Framework-Schritt.
+
 ## Fazit
 
 Der in Iteration 1+2 gebaute Wire-Serializer trägt im **echten verteilten Container-Betrieb**: drei
-Nodes bilden über einen Consul einen Cluster, ein vierter Node tritt bei und dispatcht cross-node
-Commands mit bewiesener Exactly-once-Semantik. Die aufgetretenen Stolpersteine waren allesamt
-**Deployment-/Netzwerk-Themen** (Schema-Migrations-Reihenfolge, Docker-Netzwerk-Aliase, Consul-Geister),
-kein einziger im Framework-Kern oder in der Serialisierung selbst.
+Nodes bilden über einen Consul einen Cluster, ein vierter tritt bei und dispatcht cross-node **Commands**
+(Iteration 1) UND fährt einen cross-node **Prozess/Saga** (Iteration 2 — Überweisungs-Petri-Netz mit
+Signal/ProzessWake/Publish über Node-Grenzen), beides mit bewiesener Exactly-once-Semantik. Alle
+aufgetretenen Stolpersteine sind **Deployment-/Betriebs-Themen** (Schema-Migrations-Reihenfolge inkl. des
+Lazy-Snapshot-Cold-Start-Race, Docker-Netzwerk-Aliase, Consul-Geister) — **kein einziger** im
+Framework-Kern oder in der Serialisierung selbst. Der Saga-Test war dabei besonders wertvoll: er hat
+sowohl die cross-node Prozess-Maschine bewiesen als auch den Cold-Start-Schema-Race sichtbar gemacht, den
+der reine Aggregat-Lauf nie berührt hätte.

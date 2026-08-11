@@ -167,6 +167,13 @@ public static class CqrsServiceExtensions
             //   (Snapshot<Konto> → es.mt_doc_snapshot_konto). Registrierung generiert, reflection-frei.
             Persistence.RegisteredSnapshotTypes.Register(options);
         });
+        // Anm. Multi-Node-Cold-Start: Marten legt die Snapshot-Tabelle eines Aggregat-Typs erst beim ERSTEN
+        //   Zugriff LAZY an (ohne Advisory-Lock). Aktivieren mehrere Nodes gleichzeitig denselben, bisher
+        //   ungenutzten Aggregat-Typ, können sie auf `CREATE TABLE mt_doc_snapshot_<typ>` rennen (transient,
+        //   selbstheilend über Proto-Reaktivierung; Geld bleibt erhalten). `ApplyAllDatabaseChangesOnStartup`
+        //   löst den Lazy-Race, führt aber Migrations-Lock-Contention beim gleichzeitigen Start EIN (Verlierer
+        //   crasht) → der saubere Fix ist ein EINZELNER Migrator-Job (AutoCreate.None auf den übrigen Nodes),
+        //   siehe docs/multi-node-deployment.md. Bewusst nicht hier verdrahtet (per-Node-Config nötig).
 
         services.AddSingleton<IEventStoreRepository>(provider =>
         {

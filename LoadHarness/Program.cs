@@ -17,6 +17,7 @@ using System.Diagnostics;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
 using Abstractions;
+using Domain.Auftrag;
 using Domain.Konto;
 using Domain.Pipeline.Benchmark;        // BenchPing (No-Op-Trigger)
 using Domain.Pipeline.Infrastructure;   // AddDomainPipelineServices
@@ -102,6 +103,7 @@ try
     exit = mode.ToLowerInvariant() switch
     {
         "pipeline" => await RunPipeline(),
+        "saga"     => await RunSaga(),
         _          => await RunAggregate(),
     };
 }
@@ -224,6 +226,108 @@ async Task<int> RunAggregate()
     Console.WriteLine(wrong == 0 ? $"✓ Exactly-once hält: alle {accounts} Salden == {expected}." : $"✗ {wrong} falsch!");
     Console.WriteLine("============================================");
     return wrong == 0 && fail == 0 ? 0 : 1;
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+// MODUS SAGA — Überweisungs-Prozess (Petri-Netz) cross-node + Gelderhaltung
+//
+// Löst BeauftrageUeberweisung aus → der Ueberweisungsauftrag emittiert das Auslöse-Event →
+// die Prozess-Maschine (auf den Server-Nodes) reserviert an der Quelle, schreibt dem Ziel gut und
+// bucht (Join). Das übt den KOMPLETTEN durable-Konsumenten-Plane cross-node: Signal → Router →
+// ProzessManager → Folge-Commands an FREMDE Aggregate. Verifikation per Rehydration:
+//   (a) Gelderhaltung — Summe aller Salden unverändert,
+//   (b) je Konto Saldo == erwartet UND Reserviert == 0 (jede Reservierung wurde gebucht = Saga fertig).
+// Ein dauerhaft verlorenes Signal/ProzessWake cross-node ließe eine Saga hängen → Reserviert>0 /
+// Salden falsch → roter Lauf.
+// ══════════════════════════════════════════════════════════════════════════════
+async Task<int> RunSaga()
+{
+    int accounts  = ArgInt("--accounts", 20);
+    int transfers = ArgInt("--transfers", 40);
+    const decimal Start = 1_000_000m, Betrag = 100m;   // grosser Startsaldo → immer solvent (kein Deckungs-Zweig)
+
+    if (!await WaitRoutableCore()) return 2;
+
+    var ids = Enumerable.Range(0, accounts).Select(_ => Guid.NewGuid()).ToArray();
+    var latencies = new ConcurrentBag<double>();
+    long ok = 0, fail = 0;
+
+    async Task<bool> Send(Guid id, string type, ICommand payload)
+    {
+        var env = new CommandEnvelope { AggregateId = id, AggregateType = type, Modus = new CommandModus.Emittiert(), Payload = payload };
+        var t = Stopwatch.StartNew();
+        try
+        {
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+            var r = await cluster.RequestAsync<CommandResult>(ClusterIdentity.Create(id.ToString(), type), env, cts.Token);
+            t.Stop();
+            if (r is null) { Interlocked.Increment(ref fail); return false; }
+            latencies.Add(t.Elapsed.TotalMilliseconds);
+            Interlocked.Increment(ref ok);
+            return true;
+        }
+        catch { Interlocked.Increment(ref fail); return false; }
+    }
+
+    // 1. Konten eröffnen.
+    Console.WriteLine($"Saga-Last: {accounts} Konten, {transfers} Überweisungen (je {Betrag}), Concurrency {concurrency}");
+    await Parallel.ForEachAsync(ids, new ParallelOptions { MaxDegreeOfParallelism = concurrency },
+        async (id, _) => await Send(id, "Konto", new EroeffneKonto(id, Start)));
+
+    // 2. Überweisungen deterministisch planen (src != dst) + erwartete Endsalden berechnen.
+    var expected = ids.ToDictionary(id => id, _ => Start);
+    var plan = new List<(Guid auftrag, Guid src, Guid dst)>();
+    for (int i = 0; i < transfers; i++)
+    {
+        var src = ids[i % accounts];
+        var dst = ids[(i * 7 + 3) % accounts];
+        if (dst == src) dst = ids[(i + 1) % accounts];
+        plan.Add((Guid.NewGuid(), src, dst));
+        expected[src] -= Betrag;
+        expected[dst] += Betrag;
+    }
+
+    // 3. Sagas auslösen: BeauftrageUeberweisung → Ueberweisungsauftrag → Prozess läuft cross-node.
+    var sw = Stopwatch.StartNew();
+    await Parallel.ForEachAsync(plan, new ParallelOptions { MaxDegreeOfParallelism = concurrency },
+        async (p, _) => await Send(p.auftrag, "Ueberweisungsauftrag", new BeauftrageUeberweisung(p.auftrag, p.src, p.dst, Betrag)));
+    sw.Stop();
+
+    Report("SAGA-REPORT (Auslöser-Commands; der Prozess läuft danach cross-node weiter)", ok, fail, sw, latencies);
+
+    // 4. Auf Saga-Abschluss warten (Rehydration): je Konto Saldo==erwartet UND Reserviert==0.
+    var store   = host.Services.GetRequiredService<IEventStoreRepository>();
+    var factory = host.Services.GetRequiredService<IAggregateHandlerFactory>();
+    Console.WriteLine("Warte auf Saga-Abschluss (Rehydration: Saldo==erwartet ∧ Reserviert==0)…");
+    var warten = Stopwatch.StartNew();
+    int matched = 0; decimal reservedOffen = 0; decimal istSumme = 0;
+    while (warten.Elapsed < TimeSpan.FromSeconds(120))
+    {
+        matched = 0; reservedOffen = 0; istSumme = 0;
+        foreach (var id in ids)
+        {
+            var st = (await AggregateRehydrator.LoadAsync<Konto>(id, null, store, factory, null, default)).State;
+            istSumme += st.Saldo;
+            reservedOffen += st.Reserviert;
+            if (st.Saldo == expected[id] && st.Reserviert == 0m) matched++;
+        }
+        if (matched == accounts) break;
+        await Task.Delay(1000);
+    }
+
+    decimal sollSumme = accounts * Start;
+    bool okAll = matched == accounts && istSumme == sollSumme && reservedOffen == 0m && fail == 0;
+
+    Console.WriteLine();
+    Console.WriteLine("================ SAGA-KORREKTHEIT (nach " + $"{warten.Elapsed.TotalSeconds:0.0}" + " s) ================");
+    Console.WriteLine($"Konten abgeschlossen:  {matched}/{accounts}  (Saldo==erwartet ∧ Reserviert==0)");
+    Console.WriteLine($"Gelderhaltung:         Ist-Summe {istSumme} {(istSumme == sollSumme ? "==" : "!=")} Soll-Summe {sollSumme}");
+    Console.WriteLine($"Offene Reservierungen: {reservedOffen}  (0 == jede Reservierung gebucht)");
+    Console.WriteLine(okAll
+        ? $"✓ Alle {transfers} Überweisungs-Sagas cross-node abgeschlossen — exactly-once, Geld erhalten."
+        : $"✗ Unvollständig (abgeschlossen {matched}/{accounts}, offen-reserviert {reservedOffen}, fail {fail}).");
+    Console.WriteLine("============================================");
+    return okAll ? 0 : 1;
 }
 
 // ── Readiness-Barriere: wartet bis der Ziel-Actor einen Request platzieren kann ──
