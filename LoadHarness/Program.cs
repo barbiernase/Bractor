@@ -23,6 +23,7 @@ using Domain.Pipeline.Infrastructure;   // AddDomainPipelineServices
 using Infrastructure.Aggregate;         // AggregateRehydrator
 using Infrastructure.Extensions;        // AddCqrsFramework
 using Infrastructure.Pipeline;          // GeneratedPipelines
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -48,7 +49,22 @@ builder.Logging.SetMinimumLevel(level);
 builder.Services.AddCqrsFramework(opts =>
 {
     opts.EnableGrpc = false;
-    opts.ClusterName = "loadtest-" + Guid.NewGuid().ToString("N")[..8];
+    // ── Cluster-Anbindung: aus Config/Env, sonst isolierter Eigen-Cluster (natives Last-Test-Verhalten) ──
+    //   Für ein echtes Multi-Node-Deployment als JOINENDER Member: Cluster__Name=cqrs-cluster +
+    //   Consul__Address + Cluster__AdvertisedHost setzen → der Harness tritt dem laufenden Cluster bei
+    //   und beweist mit seinem Exactly-once-Rehydrations-Check den cross-node Dispatch.
+    opts.ClusterName = builder.Configuration.GetValue<string>("Cluster:Name")
+        ?? ("loadtest-" + Guid.NewGuid().ToString("N")[..8]);
+    opts.ConsulAddress = builder.Configuration.GetValue<string>("Consul:Address") ?? opts.ConsulAddress;
+    opts.AdvertisedHost = builder.Configuration.GetValue<string>("Cluster:AdvertisedHost") ?? opts.AdvertisedHost;
+    if (builder.Configuration.GetConnectionString("EventStore") is { Length: > 0 } es)
+        opts.EventStoreConnectionString = es;
+    if (builder.Configuration.GetValue<string>("EventStore:Schema") is { Length: > 0 } schema)
+        opts.EventStoreSchema = schema;
+    if (builder.Configuration.GetValue<string>("Redis:Endpoint") is { Length: > 0 } redis)
+        opts.RedisConnectionString = redis;
+    if (builder.Configuration.GetValue<int?>("Redis:Database") is { } redisDb)
+        opts.RedisDatabase = redisDb;
     opts.SnapshotThreshold = 200;
     // A/B-Schalter für die Group-Commit-Messung (Default AN):
     //   BRACTOR_BATCHING=0        → Batching aus (Ein-Append-pro-Command)

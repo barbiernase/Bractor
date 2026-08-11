@@ -1,0 +1,24 @@
+# Build-Artefakte (host-lokal, falscher RID für Linux-Container) — nie in den Build-Context
+**/bin/
+**/obj/
+**/out/
+
+# Git / IDE / OS
+.git/
+.gitignore
+.vs/
+.vscode/
+.idea/
+**/.DS_Store
+
+# Deploy-Artefakte (published DLLs des nativen Deployments)
+deploy-linux/grpc/
+deploy-linux/blazor/
+deploy-windows/
+
+# Test-/Scratch
+**/TestResults/
+*.user
+
+# Node/Frontend (nicht Teil des Host.Grpc-Builds)
+**/node_modules/

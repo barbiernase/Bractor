@@ -1,0 +1,138 @@
+# ═══════════════════════════════════════════════════════════════════
+# Echtes Multi-Node-Deployment: EIN Consul + Postgres + Redis + DREI
+# gRPC-Cluster-Nodes (grpc1/2/3), plus ein LoadHarness-Node zur
+# cross-node-Verifikation (nur über das Profil "verify").
+#
+# Alle Container liegen im selben Docker-Netz → erreichen sich über die
+# Service-Namen (grpc1, consul, postgres, …). Der entscheidende Multi-Node-
+# Wert ist `Cluster__AdvertisedHost` = eigener Service-Name je Node: nur so
+# können die anderen Member diesen Node über die Leitung erreichen.
+#
+# Start:      docker compose -f deploy-multinode/docker-compose.yml up -d --build
+# Verifizieren: docker compose -f deploy-multinode/docker-compose.yml --profile verify run --rm loadharness
+# Stoppen:    docker compose -f deploy-multinode/docker-compose.yml down -v
+# ═══════════════════════════════════════════════════════════════════
+
+name: cqrs-multinode
+
+# Gemeinsame Cluster-Env aller Nodes (grpc1/2/3 + loadharness). AdvertisedHost wird je Node überschrieben.
+x-cluster-env: &cluster-env
+  Consul__Address: consul:8500
+  ConnectionStrings__EventStore: "Host=postgres;Port=5432;Database=cqrs_events;Username=postgres;Password=postgres"
+  EventStore__Schema: es
+  Redis__Endpoint: redis:6379
+  Redis__Database: "1"
+  Cluster__Name: cqrs-cluster
+  Grpc__Port: "5001"
+  Pipeline__WatchPath: /data/input
+  Pipeline__PreprocessedPath: /data/preprocessed
+
+# Gemeinsamer Build (Docker-Layer-Cache → effektiv einmal gebaut).
+x-grpc-build: &grpc-build
+  context: ..
+  dockerfile: deploy-multinode/Dockerfile
+  args:
+    PROJECT: Host.Grpc
+    ENTRY_DLL: Host.Grpc.dll
+
+x-infra-deps: &infra-deps
+  consul:
+    condition: service_healthy
+  postgres:
+    condition: service_healthy
+  redis:
+    condition: service_healthy
+
+services:
+
+  consul:
+    image: hashicorp/consul:1.19
+    command: agent -dev -client=0.0.0.0
+    healthcheck:
+      test: ["CMD", "consul", "members"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: cqrs_events
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+
+  # grpc1 fährt ZUERST hoch und migriert das Marten-Schema (es). grpc2/grpc3 warten auf seinen
+  # Healthcheck (Port 5001 offen == Schema fertig) → kein gleichzeitiges CREATE SCHEMA-Race.
+  grpc1:
+    build: *grpc-build
+    image: cqrs-host-grpc:mn
+    environment:
+      <<: *cluster-env
+      Cluster__AdvertisedHost: grpc1
+    ports:
+      - "127.0.0.1:5001:5001"   # nur grpc1 nach außen (h2c) — für optionale externe Checks
+    depends_on: *infra-deps
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z localhost 5001 || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
+
+  grpc2:
+    image: cqrs-host-grpc:mn
+    environment:
+      <<: *cluster-env
+      Cluster__AdvertisedHost: grpc2
+    depends_on:
+      <<: *infra-deps
+      grpc1:
+        condition: service_healthy
+
+  grpc3:
+    image: cqrs-host-grpc:mn
+    environment:
+      <<: *cluster-env
+      Cluster__AdvertisedHost: grpc3
+    depends_on:
+      <<: *infra-deps
+      grpc1:
+        condition: service_healthy
+
+  # Verifikations-Node: joint denselben Cluster (gleicher Cluster__Name), dispatcht Commands über die
+  # native Actor-Plane und prüft per Rehydration exactly-once. PartitionIdentityLookup platziert ~¾ der
+  # Aggregate auf grpc1/2/3 → grün beweist cross-node Wire-Serialisierung. Nur über --profile verify.
+  loadharness:
+    build:
+      context: ..
+      dockerfile: deploy-multinode/Dockerfile
+      args:
+        PROJECT: LoadHarness
+        ENTRY_DLL: LoadHarness.dll
+    image: cqrs-loadharness:mn
+    environment:
+      <<: *cluster-env
+      Cluster__AdvertisedHost: loadharness
+    command: ["--mode", "aggregate", "--accounts", "60", "--credits", "10", "--concurrency", "32", "--log", "warning"]
+    restart: "no"
+    profiles: ["verify"]
+    depends_on:
+      grpc1:
+        condition: service_started
+      grpc2:
+        condition: service_started
+      grpc3:
+        condition: service_started

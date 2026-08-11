@@ -60,7 +60,9 @@ verdrahtet.
    **Weg B (gRPC-Client-Targeted) robust:** periodisches Re-Assert der Client-Subscriptions
    (`SubscriptionTracker.ReassertAllAsync` + Loop in `CqrsClientService.Connect`) = Poll-Äquivalent;
    kein Gateway-Kind nötig (`ClientSubscriptionReassertTests`, `docs/multi-node-weg-b-client-gateway-konzept.md`).
-   Damit ist der Multi-Node-Block praktisch geschlossen (Rest: reine Betriebs-/Verifikations-Härtung).
+   **Im ECHTEN Container-Betrieb verifiziert** (`deploy-multinode/`, `docs/multi-node-deployment.md`):
+   3 gRPC-Nodes + 1 Consul, ein LoadHarness-Node joint als 4. Member und dispatcht cross-node Commands
+   mit bewiesener Exactly-once-Semantik. Der Multi-Node-Block ist damit geschlossen.
 2. **P5b Marking-Cursor** — Prozess-Fold ist O(N²); zurückgestellte Optimierung.
 3. **Schreibpfad-Perf** — paralleler Drain skaliert sublinear (`wait_event` offen).
 4. **KlärungNötig-Pfad** korrekt-per-Konstruktion, aber ohne Testdeckung.
@@ -97,4 +99,5 @@ NICHT Timeout-tunebar; xUnit schluckt App-Logs (Cluster-Diagnose → Last-Harnes
 - Integration (braucht Postgres/Consul/Redis, sequentiell): `dotnet test Infrastructure.Integration.Tests/Infrastructure.Integration.Tests.csproj`
 - Last/Durchsatz: `dotnet run --project LoadHarness -- --accounts 500 --credits 40 --concurrency 128 --log warning`
 - Infra hochfahren: `docker compose -f deploy-linux/docker-compose.infrastructure.yml up -d`
+- Multi-Node (3 Nodes + 1 Consul, echt containerisiert): `docker compose -f deploy-multinode/docker-compose.yml up -d --build` (Anleitung + Ergebnis: `docs/multi-node-deployment.md`)
 - Hosts: `Host_Blazor`, `Host_Grpc` (siehe deploy.sh).
