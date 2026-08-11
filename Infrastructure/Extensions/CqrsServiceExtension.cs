@@ -8,6 +8,7 @@ using Infrastructure.Projections;
 using Infrastructure.PubSub;
 using Infrastructure.PubSub.Extensions;
 using Infrastructure.PubSub.Startup;
+using Infrastructure.Serialization;
 using Infrastructure.Startup;
 using JasperFx;
 using Marten;
@@ -411,7 +412,20 @@ public static class CqrsServiceExtensions
             var remoteConfig = GrpcNetRemoteConfig
                 .BindTo("0.0.0.0")
                 .WithAdvertisedHost(builder.AdvertisedHost);
-        
+
+            // ★ Multi-Node: Serializer der INTERNEN Ebene registrieren. Ohne ihn hat Proto.Remote keinen
+            //   Weg, die rohen CLR-Records (Envelopes, Weckrufe, Broker-Data-Plane) über eine Node-Grenze
+            //   zu kodieren -> de-facto single-node. Disjunkt zum Protobuf-Serializer (Id 0): CanSerialize
+            //   lehnt jedes IMessage ab, sodass Protos eigene Cluster-Kontrollnachrichten dort bleiben.
+            //   Single-Node bleibt unberührt (in-process wird nie serialisiert).
+            InternalPlaneCoverage.PruefeOderWirf();   // Fail-Fast bei stiller Abdeckungslücke
+            remoteConfig.Serialization.RegisterSerializer(
+                InternalPlaneSerializer.SerializerId,
+                InternalPlaneSerializer.Priority,
+                new InternalPlaneSerializer());
+            Console.WriteLine($"  + interner Plane-Serializer registriert (Id {InternalPlaneSerializer.SerializerId}, "
+                + $"{InternalPlaneTypen.AlleTypen.Count} Typen)");
+
             system
                 .WithRemote(remoteConfig)
                 .WithCluster(clusterConfig);
