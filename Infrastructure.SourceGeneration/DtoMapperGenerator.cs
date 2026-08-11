@@ -16,16 +16,29 @@ namespace Infrastructure.SourceGeneration
         /// Wird von IsKnownEnumType() für Collection-Element-Erkennung benötigt.
         /// </summary>
         private HashSet<string> _enumTypeNames = new HashSet<string>();
-        
+
+        /// <summary>
+        /// Ein Abbruch der Mapper-Generierung wird als Compiler-Fehler gemeldet (nicht still in
+        /// die Debug-Ausgabe verschluckt). Sonst bricht der Build erst später mit verwirrenden
+        /// Folgefehlern im Infrastructure-Code, weil der generierte Mapper fehlt.
+        /// </summary>
+        private static readonly DiagnosticDescriptor GeneratorFailed = new DiagnosticDescriptor(
+            id: "CQRS030",
+            title: "DTO-Mapper-Generierung fehlgeschlagen",
+            messageFormat: "DtoMapperSourceGenerator brach ab: {0}",
+            category: "Bractor.SourceGeneration",
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
         public void Initialize(GeneratorInitializationContext context)
         {
-            // Keine Initialisierung nÃƒÆ’Ã‚Â¶tig
+            // Keine Initialisierung nötig
         }
 
         public void Execute(GeneratorExecutionContext context)
         {
             var debugInfo = new List<string>();
-            debugInfo.Add($"DtoMapperSourceGenerator lÃƒÆ’Ã‚Â¤uft in Assembly: {context.Compilation.AssemblyName}");
+            debugInfo.Add($"DtoMapperSourceGenerator läuft in Assembly: {context.Compilation.AssemblyName}");
             debugInfo.Add($"Timestamp: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
 
             try
@@ -102,6 +115,8 @@ namespace Infrastructure.SourceGeneration
             }
             catch (Exception ex)
             {
+                // LAUT melden (Compiler-Fehler), nicht still in die Debug-.g.cs verstecken.
+                context.ReportDiagnostic(Diagnostic.Create(GeneratorFailed, Location.None, ex.Message));
                 debugInfo.Add($"FEHLER: {ex.Message}");
                 debugInfo.Add($"StackTrace: {ex.StackTrace}");
                 GenerateDebugOutput(context, debugInfo, null, null, null, null, null);
@@ -858,13 +873,8 @@ namespace Infrastructure.SourceGeneration
                 if (param.FullName == "int?" || param.FullName == "System.Int32?")
                     return $"{sourceVar}.{propName} ?? 0";
                 
-                if (param.FullName.EndsWith("?") 
-                    || param.FullName.StartsWith("System.Nullable<") 
-                    || param.FullName.StartsWith("Nullable<"))
-                    return $"{sourceVar}.{propName} ?? default";
-                
-                if (param.FullName.EndsWith("?") 
-                    || param.FullName.StartsWith("System.Nullable<") 
+                if (param.FullName.EndsWith("?")
+                    || param.FullName.StartsWith("System.Nullable<")
                     || param.FullName.StartsWith("Nullable<"))
                     return $"{sourceVar}.{propName} ?? default";
 
@@ -1148,38 +1158,21 @@ namespace Infrastructure.SourceGeneration
         {
             if (string.IsNullOrEmpty(typeName))
                 return false;
-            
-            // Bekannte Enum-Typen aus dem Domain
-            // Diese Liste wird erweitert wenn neue Enums hinzukommen
-            var knownEnumTypes = new HashSet<string>
-            {
-                // Domain.ImagePair
-                "Klassifikation", "Domain.ImagePair.Klassifikation",
-                "BildVersion", "Domain.ImagePair.BildVersion",
-            };
-            
-            string baseType = null;
-            
-            // Pattern 1: Type? (z.B. "Klassifikation?")
-            if (typeName.EndsWith("?"))
-            {
-                baseType = typeName.TrimEnd('?');
-            }
-            // Pattern 2: Nullable<Type> oder System.Nullable<Type>
-            else if (typeName.StartsWith("System.Nullable<") || typeName.StartsWith("Nullable<"))
-            {
-                baseType = typeName
-                    .Replace("System.Nullable<", "")
-                    .Replace("Nullable<", "")
-                    .TrimEnd('>');
-            }
-            
-            if (baseType == null)
+
+            // Nur nullable Typen (Type? bzw. Nullable<Type>) kommen infrage.
+            bool isNullable = typeName.EndsWith("?")
+                || typeName.StartsWith("System.Nullable<")
+                || typeName.StartsWith("Nullable<");
+            if (!isNullable)
                 return false;
-            
+
+            // Base-Typ gegen die DYNAMISCH aus dem Domain-Graph gesammelten Enums prüfen
+            // (objectTypes mit IsEnum → _enumTypeNames, siehe GenerateMapperCode). KEINE
+            // Hardcoded-Liste mehr: ein neuer Enum in einer beliebigen Domäne wird automatisch
+            // erkannt statt still als Nicht-Enum fehlgemappt.
+            var baseType = GetNullableBaseType(typeName);
             var simpleBaseType = GetSimpleTypeName(baseType);
-            
-            return knownEnumTypes.Contains(baseType) || knownEnumTypes.Contains(simpleBaseType);
+            return _enumTypeNames.Contains(baseType) || _enumTypeNames.Contains(simpleBaseType);
         }
         
         /// <summary>

@@ -71,6 +71,7 @@ So wird „genau EIN Emit-Weg" zur Compile-Zeit-Invariante statt Konvention.
 | CQRS011 | `CommandAggregateMapGenerator` | Zwei Aggregate mit gleicher Identität (ClusterKind-Kollision) |
 | CQRS012 | `ProzessRegelnGenerator` | Zwei Prozesse mit gleichem aufgelöstem Namen |
 | CQRS020/021 | `CommandEmitAnalyzer` | EM-1-Erzwingung (siehe oben) |
+| CQRS030 | `DtoMapperGenerator` | DTO-Mapper-Generierung abgebrochen (Fehler wird laut gemeldet statt still verschluckt) |
 
 Zu den Attributen: `[AggregatName]` wird an ZWEI Stellen identisch gelesen —
 `CommandAggregateMapGenerator` (Routing) **und** `AggregateActorGenerator` (ClusterKind);
@@ -97,9 +98,12 @@ Default = einfacher Typname → keine Migration nötig.
 
 ## Schulden
 
-- **`DtoMapperGenerator`** (~1325 Z.) ist der fragilste Generator: hartkodierte
-  Domänen-Enums (`Klassifikation`/`BildVersion`), Encoding-Schäden in Kommentaren, tote
-  if-Zweige, `try/catch` schluckt Fehler in Debug-Output, kein Incremental.
+- **`DtoMapperGenerator`** (~1300 Z.): die Korrektheits-Risiken sind behoben (2026-08-11) —
+  Enum-Erkennung läuft jetzt dynamisch über `_enumTypeNames` (kein Hardcoding mehr, neue Enums
+  in beliebigen Domänen werden automatisch erkannt), Encoding-Schäden + toter Duplikat-Zweig
+  entfernt, ein Generierungs-Abbruch meldet jetzt **CQRS030** statt still zu verschlucken.
+  **Rest-Schuld:** immer noch groß und **nicht incremental** (`ISourceGenerator`, kein
+  `IIncrementalGenerator`).
 - `CancellationToken.None` auf den Emit-Factory-Pfaden (`PullPathGenerator`,
   `PipelineActorGenerator` `{Name}EventPullKind`) — vom CQRS021-Analyzer nicht erfasst
   (anderer Rückgabetyp), Emit selbst gebounded.
