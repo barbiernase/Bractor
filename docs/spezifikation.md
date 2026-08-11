@@ -1,5 +1,13 @@
 # Spezifikation: Signalbasierte Zustellung — Projektionen, Reaktionen und Prozesse
 
+> ## ⚠ Teilweise überholt (Stand 2026-08-11)
+> Die **Kapitel zu Naht/Signal/Reaktion/Projektion (ca. 1–9) sind weiter gültig** und
+> beschreiben die umgesetzte Maschine korrekt. Die **Prozess-Kapitel (ca. 10–15) beschreiben
+> die alte Schrittlisten-Welt** (Increments 1–5), die vom **Event-Regel-DAG (Petri-Netz)
+> gelöscht und ersetzt** wurde. Für die aktuelle Prozess-Schicht:
+> `docs/architektur/03-prozess-maschine.md` + `docs/prozess-neubau-event-regeln-dag.md`.
+> Ist-Gesamtzustand: `docs/architektur/` + `docs/backend-analyse-2026-08-11.md`.
+
 **Zweck dieses Dokuments.** Es beschreibt genau einen Weg, wie Events vom Aggregat zu
 allen gelangen, die sie kennen oder auf sie handeln müssen — geordnet, genau einmal
 wirksam, ohne Reflection und ohne das Prinzip „nur über Typen routen" zu verletzen.

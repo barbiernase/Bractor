@@ -4,9 +4,11 @@ Diese Anleitung führt eine **komplette, getestete Bestell-Saga** von der ersten
 Prozess. Jede Datei, die der Entwickler schreibt, steht hier vollständig; danach der End-to-End-Fluss vom
 einen Fach-Command bis zum Versand.
 
-Der Code liegt real im Repo und ist grün (Prüfstand + Integration):
-`Domain/Lager/`, `Domain/Zahlung/`, `Domain/Versand/`, `Domain/Bestellung/`,
-Tests `Infrastructure.Pruefstand.Tests/Phase5/BestellSagaTests.cs` + `Infrastructure.Integration.Tests/BestellSagaE2ETests.cs`.
+Der Code liegt real im Repo und ist grün: `Domain/Lager/`, `Domain/Zahlung/`, `Domain/Versand/`,
+`Domain/Bestellung/`. Der End-to-End-Beweis ist der Integrationstest
+`Infrastructure.Integration.Tests/BestellSagaE2ETests.cs` (gegen echtes Marten/Consul/Redis, inkl.
+Kompensation bei ungedecktem Konto). Die Aggregat-Logik selbst ist store-frei im Prüfstand gedeckt
+(z.B. `Infrastructure.Pruefstand.Tests/Phase5/KontoAggregatTests.cs`).
 
 ---
 
@@ -207,24 +209,29 @@ public sealed class BestellProzess : IProzessDefinition
     {
         // Zweig A — Bestand reservieren; Gegenzug gibt die Menge frei
         p.Auf<BestellungAufgegeben>()
-            .Sende(e => new ReserviereBestand(e.Artikel, e.Menge))
-            .RückgängigDurch(e => new GebeBestandFrei(e.Artikel, e.Menge));
+            .Sende<ReserviereBestand>(e => new ReserviereBestand(e.Artikel, e.Menge))
+            .RückgängigDurch<GebeBestandFrei>(e => new GebeBestandFrei(e.Artikel, e.Menge));
 
         // Zweig B — Konto belasten; Gegenzug erstattet
         p.Auf<BestellungAufgegeben>()
-            .Sende(e => new BelasteKonto(e.Kunde, e.Betrag))
-            .RückgängigDurch(e => new ErstatteKonto(e.Kunde, e.Betrag));
+            .Sende<BelasteKonto>(e => new BelasteKonto(e.Kunde, e.Betrag))
+            .RückgängigDurch<ErstatteKonto>(e => new ErstatteKonto(e.Kunde, e.Betrag));
 
         // Vereinigung (Diamant-Join) — versenden erst nach Reservieren UND Belasten
         p.Auf<BestellungAufgegeben>().Und<BestandReserviert>().Und<KontoBelastet>()
-            .Sende((e, b, k) => new Versende(e.Versand, e.Kunde));
+            .Sende<Versende>((e, b, k) => new Versende(e.Versand, e.Kunde));
     });
 }
 ```
 
 `Prozess<BestellungAufgegeben>` bindet den **Auslöser-Typ**: der Prozess startet, sobald ein
 `BestellungAufgegeben` auftaucht. `p.Auf<X>()` triggert auf Event `X`; `.Und<Y>()` ist der Join;
-`.Sende(...)` das Command; `.RückgängigDurch(...)` der Gegenzug. Mehr braucht die Orchestrierung nicht.
+`.Sende<Cmd>(...)` das Command; `.RückgängigDurch<Gegen>(...)` der Gegenzug. Mehr braucht die
+Orchestrierung nicht.
+
+> **Das Command-Typ-Argument ist Pflicht** (`.Sende<ReserviereBestand>`, nicht `.Sende(...)`). Daraus
+> leitet der Generator die Command→Event-Kante für den Azyklizitäts-Boot-Guard ab; fehlt es, bricht der
+> Build mit **CQRS003**. Ein `.Sende<TCmd>` ohne behandelnden Decider bricht mit **CQRS002**.
 
 ---
 
@@ -260,10 +267,14 @@ dispatcher.Dispatch(Env(kunde,   "Zahlungskonto",  new RichteZahlungskontoEin(ku
 dispatcher.Dispatch(Env(auftrag, "Bestellauftrag",
     new GibBestellungAuf(auftrag, versand, kunde, artikel, Menge: 3, Betrag: 50)));
 
-// Env ist nur ein kleiner Helfer:
+// Env ist nur ein kleiner Helfer (identisch zu BestellSagaE2ETests.Env):
 static CommandEnvelope Env(Guid id, string typ, ICommand payload)
-    => new() { AggregateId = id, AggregateType = typ, ExpectedVersion = 0, Payload = payload };
+    => new() { AggregateId = id, AggregateType = typ, Modus = new CommandModus.Client(0), Payload = payload };
 ```
+
+> **`Modus` ist Pflicht** (`required`). Ein Client-Command trägt `CommandModus.Client(expectedVersion)`
+> (OCC gegen die behauptete Version); interne Emitter nutzen `CommandModus.Emittiert` — das setzt aber das
+> Framework, nie der Anwender. Der alte `ExpectedVersion`/`AnyVersion=-1`-Weg existiert nicht mehr.
 
 **`AggregateType`** ist jeweils der **Klassenname des Ziel-Aggregats** (`"Lager"`, `"Zahlungskonto"`,
 `"Bestellauftrag"`). Daran routet das Framework den Command an den richtigen generierten Actor.
@@ -299,10 +310,27 @@ Beobachten (wie im Integrationstest): auf die Ziel-Zustände warten (`Lager.Best
 | `p.Auf<E>()` | Transition, die auf Event `E` triggert |
 | `.Und<E2>()` / `.Und<E3>()` | **Join**: feuert erst, wenn AUCH `E2`/`E3` da ist (Diamant) |
 | `.UndAlle<E>(t => t.Anzahl)` | **Count-Join** (dynamische Breite): feuert erst nach ALLEN N `E` |
-| `.Sende(e => new Cmd(…))` | ein Command aus dem Match |
-| `.SendeJe(e => e.Liste.Select(x => new Cmd(x)))` | **Fan-out**: N Commands aus einem Match |
-| `.RückgängigDurch(e => new Gegen(…))` | Kompensation |
+| `.Sende<Cmd>(e => new Cmd(…))` | ein Command aus dem Match (Typ-Argument Pflicht → CQRS002/003) |
+| `.SendeJe<Cmd>(e => e.Liste.Select(x => new Cmd(x)))` | **Fan-out**: N Commands aus einem Match |
+| `.RückgängigDurch<Gegen>(e => new Gegen(…))` | Kompensation |
 | zwei Regeln auf demselben Event | zwei parallele Zweige (Fan-out gratis) |
+
+---
+
+## 7.5 Weitere Muster (an echten Beispiel-Prozessen)
+
+Der Diamant oben ist nur eines von mehreren Mustern. Alle laufen auf derselben Maschine — sie
+unterscheiden sich nur in den Regeln. Die vollständigen, grünen Beispiele im Repo:
+
+| Muster | Beispiel-Prozess | Kern |
+|---|---|---|
+| **Linear + Join + Datenfluss** | `Domain/Ueberweisung/UeberweisungsProzess.cs` | Kette reservieren → gutschreiben → buchen; jeder Schritt mit `.Und<…>()`-Join auf frühere Events + `RückgängigDurch` |
+| **Fan-out / dynamische Breite** | `Domain/Sammelueberweisung/SammelueberweisungsProzess.cs` | `.SendeJe<SchreibeGut>(t => t.Ziele.Select(…))` (N Commands, je Ziel) + `.UndAlle<Gutgeschrieben>(t => t.Ziele.Count)` (Count-Join, bucht erst nach allen N). Breite steht im Auslöser, kein Zähler |
+| **Zweiter Diamant** | `Domain/Reiseauftrag/ReiseProzess.cs` | Flug ∥ Hotel → Join an der Reise — belegt, dass das Diamant-Muster wiederholbar ist |
+| **Prozess-Verkettung** | `Domain/Vorgang/GenehmigungsProzess.cs` → `AktivierungsProzess.cs` | Prozess A endet mit einem **persistierten** Domänen-Event (`VorgangGenehmigt`); Prozess B hat genau dieses Event als Auslöser → B startet „gratis" aus der Auslöser-Erkennung. **Wichtig:** ein internes `ProzessBeendet` kann NICHT verketten (sein Signal ist inert) — es braucht ein echtes Domänen-Event als Anker |
+
+Details zum Modell (Marking-Fold, Korrelation, Azyklizität, Fan-out/Count-Join):
+`docs/architektur/03-prozess-maschine.md`.
 
 ---
 

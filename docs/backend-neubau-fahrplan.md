@@ -7,6 +7,26 @@
 > Source-Generatoren, Marten/PostgreSQL, Redis, Proto.Actor, gRPC, Client-Struktur. **Ziel:** aus einer
 > Feature-Sammlung *eine* einheitliche, wartbare Maschine.
 
+---
+
+> ## ⚠ Stand 2026-08-11 — dieser Banner ist maßgeblich; die Checkboxen unten sind teils veraltet
+>
+> **Der Neubau ist im Kern abgeschlossen.** Erledigt und grün: P0–P6 (EM-1/Treiber-Fold,
+> Konsumenten-Maschine, Pipeline-Zerlegung) **plus** der gesamte Feature-Strom (Timer-/Webhook-Trigger,
+> Deadlines/Fristen, Monitoring, Dead-Letter, Projektions-Rebuild) **plus** Schreibpfad-Perf
+> (Group-Commit-Batching, +48 %). Snapshots voll verdrahtet.
+>
+> **Echte Test-Zahlen: Prüfstand 99/99, Integration 33/33.** (Die im Fließtext unten verstreuten Zahlen
+> — 38/38, 58/58, 73/73, 91/91 — sind historische Zwischenstände.)
+>
+> **Noch offen (Priorität):** (1) Cross-Node/Multi-Node — kein Serializer für den internen Plane, de facto
+> single-node; (2) **P5b Marking-Cursor** (`docs/p5b-marking-cursor-handoff.md`) — Prozess-Fold O(N²)→O(N);
+> (3) Schreibpfad-Perf `wait_event`-Auflösung (`docs/naechster-agent-prompt-schreibpfad-perf.md`);
+> (4) KlärungNötig-Pfad ohne Testdeckung; (5) Deadline↔Prozess-Integration (DSL-Verb `NachFrist`).
+>
+> **Vollständiger, code-verifizierter Ist-Zustand:** `docs/backend-analyse-2026-08-11.md` +
+> `docs/architektur/` (00–05). Der historische Teil unten bleibt als Nachverfolgung der Phasen stehen.
+
 ## Fortschritt (umgesetzt)
 
 - **A1 entschieden:** EIN `CommandEnvelope` (keine zwei Typen, keine Rückwärtskompat). Der `-1`-Sentinel
