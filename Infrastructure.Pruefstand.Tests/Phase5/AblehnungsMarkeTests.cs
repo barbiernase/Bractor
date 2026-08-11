@@ -11,7 +11,7 @@ namespace Infrastructure.Pruefstand.Phase5;
 /// der Integration bewiesen — Entscheidung „Integration + store-freie Unit-Tests"). Der Marker trägt genau
 /// die Typ-Eigenschaften, an denen die Korrektheit hängt:
 ///
-/// - <see cref="IEvent"/> + <see cref="IProzessIntern"/>: der Prozess-Manager-Fold (<c>FaltMarkingAsync</c>)
+/// - <see cref="IEvent"/> + <see cref="IProzessIntern"/>: der Prozess-Manager-Fold (<c>FalteAsync</c>)
 ///   unterscheidet „Wirkung" (ein Domänen-Event, kein <see cref="IProzessIntern"/> → kompensierbar) von der
 ///   ABLEHNUNG (ist <see cref="IProzessIntern"/> → NICHT WirkungDa, aber eigene Achse AbgelehntDa). Genau
 ///   dieser Diskriminator (<c>Payload is KommandoAbgelehnt</c> vs. <c>Payload is not IProzessIntern</c>)

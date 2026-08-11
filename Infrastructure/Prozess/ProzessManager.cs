@@ -32,18 +32,29 @@ public sealed class ProzessManager
     private readonly IProzessOffenIndex? _offenIndex;
     private readonly IDeadLetterSink? _deadLetters;   // ★ #12: KlärungNötig beobachtbar machen (optional, best-effort)
 
+    // ── P5b: der nicht-autoritative Marking-Cursor (docs/prozess-marking-cursor-konzept.md) ──
+    // Aktiv genau dann, wenn ein Store injiziert ist. Der HOT-Cache hält das gefaltete Marking über die
+    // Weckungen EINER Manager-Instanz (der Actor lebt je Korrelation) — so faltet der Warm-Pfad nur den Tail,
+    // ohne den durablen Store bei jeder Weckung zu treffen. Der Store ist die durable Kopie für den Kaltstart
+    // (Passivierung/Neustart); fehlt/stale → Voll-Fold ab 0 (Fallback). Best-effort: nie Korrektheit, nur Tempo.
+    private readonly IProzessMarkingStore? _markingStore;
+    private readonly Dictionary<Guid, (string RegelHash, MarkingKompakt Marking)> _hotMarking = new();
+    private bool CursorAktiv => _markingStore is not null;
+
     public ProzessManager(
         IEventStoreRepository store,
         IReadOnlyDictionary<string, ProzessRegeln> registry,
         Func<Guid, ICommand, Guid, CancellationToken, Task> dispatch,
         IProzessOffenIndex? offenIndex = null,
-        IDeadLetterSink? deadLetters = null)
+        IDeadLetterSink? deadLetters = null,
+        IProzessMarkingStore? markingStore = null)
     {
         _store = store;
         _registry = registry;
         _dispatch = dispatch;
         _offenIndex = offenIndex;
         _deadLetters = deadLetters;
+        _markingStore = markingStore;
     }
 
     // ── Öffentliche Eingänge (Actor/Fake rufen sie) ──
@@ -67,7 +78,7 @@ public sealed class ProzessManager
         if (!mz.Gestartet || mz.Beendet) return;
         if (!_registry.TryGetValue(mz.ProzessName, out var regeln)) return;
 
-        var (_, kandidaten) = await FaltMarkingAsync(korrelation, mz, regeln, ct);
+        var kandidaten = await FaltMarkingMitCursorAsync(korrelation, mz, regeln, ct);
 
         // ── Treiber-Fold (EM-1, §4/§7.3): einen im Fold gesehenen Fehlschlag DURABEL machen. Eine
         //   KommandoAbgelehnt-Marke auf dem Ziel-Stream (AbgelehntDa) wird zu SchrittGescheitert im Manager-Log —
@@ -199,22 +210,78 @@ public sealed class ProzessManager
         Regel Regel, int RegelIndex, IReadOnlyList<Token> Match, ICommand Cmd, Guid Vorgang,
         bool ErgebnisDa, bool WirkungDa, bool AbgelehntDa, string AbgelehntGrund);
 
-    private async Task<(List<Token> Tokens, List<Kandidat> Kandidaten)> FaltMarkingAsync(
+    /// <summary>
+    /// P5b-Einstieg: entscheidet Voll-Fold vs. inkrementellen Cursor-Fold und pflegt den Marking-Cache. Ist der
+    /// Cursor inaktiv (kein Store), ist das exakt der frühere Voll-Fold (frisches, leeres Marking je Weckung → jeder
+    /// Ziel-Stream ab 0). Ist er aktiv, faltet der Manager auf einem fortgeschriebenen Marking weiter (Tail-Read) und
+    /// schreibt es best-effort fort. Beide Wege liefern per Konstruktion DIESELBEN Kandidaten (der Fold ist
+    /// identisch; nur die Startbedingung — leeres vs. fortgeschriebenes Marking + Cursor — unterscheidet sie).
+    /// </summary>
+    private async Task<List<Kandidat>> FaltMarkingMitCursorAsync(
         Guid korrelation, ManagerStatus mz, ProzessRegeln regeln, CancellationToken ct)
     {
-        var cache = new Dictionary<Guid, IReadOnlyList<EventEnvelope>>();
-        async Task<IReadOnlyList<EventEnvelope>> Lies(Guid s)
+        if (!CursorAktiv)
         {
-            if (!cache.TryGetValue(s, out var evs)) { evs = await _store.ReadStreamAsync(s, 0, ct); cache[s] = evs; }
-            return evs;
+            // Voll-Fold: frisches, leeres Marking → jeder Ziel-Stream ab 0 (das frühere Verhalten, unverändert).
+            var (_, kandidatenVoll) = await FalteAsync(korrelation, mz, regeln, new MarkingKompakt(), ct);
+            return kandidatenVoll;
         }
 
-        // Wurzel-Token: das Auslöse-Event (aus seinen im Log gemerkten Koordinaten).
+        var regelHash = ProzessRegelHash.Berechne(regeln);
+        var marking = await HoleMarkingAsync(korrelation, regelHash, ct);
+        var (_, kandidaten) = await FalteAsync(korrelation, mz, regeln, marking, ct);
+        await SchreibeMarkingAsync(korrelation, regelHash, mz.Version, marking, ct);
+        return kandidaten;
+    }
+
+    /// <summary>
+    /// Der EINE Fold — Voll wie inkrementell. Er liest je Ziel-Stream ab <c>StreamCursor[s]+1</c> (fehlt der Cursor
+    /// → ab 0) und arbeitet die gelesenen Events in das <paramref name="marking"/> ein (mutierend): je Kausalität
+    /// (Vorgang) die drei Achsen aufgelöst/Wirkung/abgelehnt + der von einer Wirkung erzeugte Downstream-Token.
+    /// Der Fixpunkt zieht dann — rein in-memory, ohne weitere I/O — aus dem Marking die Kandidaten und die Tokens.
+    ///
+    /// Äquivalenz: Ziel-Streams sind append-only, Cursor rücken nur vor. Ein auf einem Präfix gefaltetes Marking +
+    /// der Tail darauf ergibt dieselben akkumulierten Achsen wie ein Fold aller Events ab 0 (Monotonie) → dieselben
+    /// Kandidaten, dieselbe Feuer-Entscheidung. Ein leeres <paramref name="marking"/> ist der Voll-Fold ab 0.
+    /// </summary>
+    private async Task<(List<Token> Tokens, List<Kandidat> Kandidaten)> FalteAsync(
+        Guid korrelation, ManagerStatus mz, ProzessRegeln regeln, MarkingKompakt marking, CancellationToken ct)
+    {
+        // In DIESER Weckung schon bis Head integrierte Streams (ein Read je Stream pro Weckung, wie das alte Lies).
+        var integriert = new HashSet<Guid>();
+        async Task Integriere(Guid s)
+        {
+            if (!integriert.Add(s)) return;
+            var von = marking.StreamCursor.TryGetValue(s, out var c) ? c + 1 : 0;
+            var evs = await _store.ReadStreamAsync(s, von, ct);
+            var maxV = marking.StreamCursor.TryGetValue(s, out var alt) ? alt : -1;
+            foreach (var e in evs)   // aufsteigend (Vertrag: geordnet) → „erste Wirkung" = niedrigste Version
+            {
+                if (e.AggregateVersion > maxV) maxV = e.AggregateVersion;
+                var cid = e.CausationId ?? "";
+                if (!marking.Vorgänge.TryGetValue(cid, out var vm)) { vm = new VorgangMarke(); marking.Vorgänge[cid] = vm; }
+                // „Abgelehnt": die durable KommandoAbgelehnt-Marke (Treiber-Fold/EM-1).
+                if (e.Payload is Infrastructure.Aggregate.KommandoAbgelehnt ka) { vm.Abgelehnt = true; vm.Grund = ka.Grund; }
+                // „Wirkung": ein DOMÄNEN-Event (kein IProzessIntern), NUR das erste je Vorgang (wie das alte FirstOrDefault).
+                else if (e.Payload is not IProzessIntern && !vm.Wirkung)
+                {
+                    vm.Wirkung = true; vm.TokenStream = s; vm.TokenVersion = e.AggregateVersion; vm.TokenPayload = e.Payload;
+                }
+                // sonst (KommandoVerarbeitet-Noop u. a. IProzessIntern): nur „aufgelöst" (Schlüssel-Präsenz).
+            }
+            if (maxV >= 0) marking.StreamCursor[s] = maxV;
+        }
+
+        // Wurzel-Token: das Auslöse-Event. Einmalig gelesen und im Marking zwischengehalten (unveränderlich).
+        if (marking.AuslöserPayload is null)
+        {
+            var auslöserEvents = await _store.ReadStreamAsync(mz.AuslöserStream, 0, ct);
+            marking.AuslöserPayload = auslöserEvents.FirstOrDefault(e => e.AggregateVersion == mz.AuslöserVersion)?.Payload;
+        }
+
         var tokens = new List<Token>();
-        var auslöserEvents = await Lies(mz.AuslöserStream);
-        var auslöser = auslöserEvents.FirstOrDefault(e => e.AggregateVersion == mz.AuslöserVersion);
-        if (auslöser is not null)
-            tokens.Add(new Token(auslöser.Payload, mz.AuslöserStream, mz.AuslöserVersion));
+        if (marking.AuslöserPayload is not null)
+            tokens.Add(new Token(marking.AuslöserPayload, mz.AuslöserStream, mz.AuslöserVersion));
 
         var kandidaten = new List<Kandidat>();
         bool geändert = true;
@@ -240,28 +307,24 @@ public sealed class ProzessManager
                             korrelation, primär.Stream, primär.Version, cmd.GetType().Name,
                             $"{ri}:{ci}:{cmd.AggregateId:N}");
 
-                        var zielEvents = await Lies(cmd.AggregateId);
-                        // Ergebnis ↔ Transition per KAUSALITÄT: der Actor stempelt CausationId = CommandId = vorgang.
-                        // „Aufgelöst": irgendein Ergebnis (auch die Inbox-Marke bei Noop/Ablehnung) → nicht neu feuern.
-                        var aufgeloest = zielEvents.Any(e => e.CausationId == vorgang.ToString());
-                        // „Wirkung": nur ein DOMÄNEN-Event (kein IProzessIntern) — kompensierbar + aktiviert Joins.
-                        var wirkung = zielEvents.FirstOrDefault(e => e.CausationId == vorgang.ToString() && e.Payload is not IProzessIntern);
-                        // „Abgelehnt": die durable KommandoAbgelehnt-Marke mit dieser Kausalität (Treiber-Fold/EM-1).
-                        //   Eigene Achse, weil sie ErgebnisDa=true macht, aber NICHT WirkungDa — und WakeAsync sie
-                        //   zu SchrittGescheitert stempeln muss, statt sie im Vorwärtszweig als „erledigt" zu lesen.
-                        var abgelehnt = zielEvents.FirstOrDefault(
-                            e => e.CausationId == vorgang.ToString() && e.Payload is Infrastructure.Aggregate.KommandoAbgelehnt);
-                        var abgelehntGrund = (abgelehnt?.Payload as Infrastructure.Aggregate.KommandoAbgelehnt)?.Grund ?? "abgelehnt";
+                        // Den Ziel-Stream bis Head einarbeiten (Tail-Read bei aktivem Cursor, ab 0 beim Voll-Fold),
+                        // DANN die Achsen aus dem Marking lesen — statt den Stream bei jeder Weckung neu zu scannen.
+                        await Integriere(cmd.AggregateId);
+                        var marke = marking.Vorgänge.GetValueOrDefault(vorgang.ToString());
+                        var aufgeloest = marke is not null;                 // irgendein Ziel-Event mit dieser Kausalität
+                        var wirkung = marke?.Wirkung ?? false;               // ein Domänen-Event → kompensierbar + Join
+                        var abgelehnt = marke?.Abgelehnt ?? false;           // KommandoAbgelehnt-Marke → SchrittGescheitert
+                        var abgelehntGrund = marke?.Grund ?? "abgelehnt";
                         kandidaten.Add(new Kandidat(
                             regel, ri, match, cmd, vorgang,
-                            aufgeloest, wirkung is not null, abgelehnt is not null, abgelehntGrund));
+                            aufgeloest, wirkung, abgelehnt, abgelehntGrund));
 
                         // Nur eine WIRKUNG bringt ein neues Token in den Fold (aktiviert Downstream-Joins). Eine
                         // reine Marke (Noop/Ablehnung) ist inert — sie darf keinen Join scharf schalten.
-                        if (wirkung is not null &&
-                            !tokens.Any(t => t.Stream == cmd.AggregateId && t.Version == wirkung.AggregateVersion))
+                        if (wirkung && marke!.TokenPayload is not null &&
+                            !tokens.Any(t => t.Stream == marke.TokenStream && t.Version == marke.TokenVersion))
                         {
-                            tokens.Add(new Token(wirkung.Payload, cmd.AggregateId, wirkung.AggregateVersion));
+                            tokens.Add(new Token(marke.TokenPayload, marke.TokenStream, marke.TokenVersion));
                             geändert = true;
                         }
                     }
@@ -269,6 +332,56 @@ public sealed class ProzessManager
             }
         }
         return (tokens, kandidaten);
+    }
+
+    // ── P5b: Marking-Cache laden/schreiben (best-effort; ein Fehler kostet nur Tempo, nie Korrektheit) ──
+
+    /// <summary>
+    /// Holt das gefaltete Marking für die Weckung: erst der HOT-Cache dieser Instanz (Warm-Pfad, kein I/O), sonst
+    /// der durable Store (Kaltstart). Passt der <paramref name="regelHash"/> nicht (Regeländerung) oder fehlt der
+    /// Eintrag, startet ein LEERES Marking → Voll-Fold ab 0 (Fallback, Invariante 1).
+    /// </summary>
+    private async Task<MarkingKompakt> HoleMarkingAsync(Guid korrelation, string regelHash, CancellationToken ct)
+    {
+        if (_hotMarking.TryGetValue(korrelation, out var hot) && hot.RegelHash == regelHash)
+            return hot.Marking;
+
+        try
+        {
+            var doc = await _markingStore!.LadeAsync(korrelation, ct);
+            if (doc is not null && doc.RegelHash == regelHash)
+                return doc.Marking;
+        }
+        catch (Exception ex) { Console.WriteLine($"[Prozess-Marking] Laden fehlgeschlagen ({korrelation}): {ex.Message}"); }
+
+        return new MarkingKompakt();
+    }
+
+    /// <summary>Schreibt das Marking in HOT-Cache (immer) und Store (best-effort) fort.</summary>
+    private async Task SchreibeMarkingAsync(Guid korrelation, string regelHash, int logVersion, MarkingKompakt marking, CancellationToken ct)
+    {
+        _hotMarking[korrelation] = (regelHash, marking);
+        try
+        {
+            await _markingStore!.SchreibeAsync(new ProzessMarking
+            {
+                Id = korrelation,
+                RegelHash = regelHash,
+                LogVersion = logVersion,
+                Marking = marking,
+                UpdatedAt = DateTimeOffset.UtcNow,
+            }, ct);
+        }
+        catch (Exception ex) { Console.WriteLine($"[Prozess-Marking] Schreiben fehlgeschlagen ({korrelation}): {ex.Message}"); }
+    }
+
+    /// <summary>Verwirft den Marking-Cache einer terminalen Korrelation (HOT + Store) — sie braucht ihn nie wieder.</summary>
+    private async Task VerwirfMarkingAsync(Guid korrelation, CancellationToken ct)
+    {
+        _hotMarking.Remove(korrelation);
+        if (_markingStore is null) return;
+        try { await _markingStore.LöscheAsync(korrelation, ct); }
+        catch (Exception ex) { Console.WriteLine($"[Prozess-Marking] Löschen fehlgeschlagen ({korrelation}): {ex.Message}"); }
     }
 
     /// <summary>
@@ -427,5 +540,10 @@ public sealed class ProzessManager
                 Console.WriteLine($"[Prozess-Offen-Index] Pflege fehlgeschlagen ({ereignis.GetType().Name}): {ex.Message}");
             }
         }
+
+        // ★ P5b: der Marking-Cursor wird mit dem Terminal überflüssig — der Prozess wird nie wieder geweckt
+        //   (die nächste Weckung faltet Beendet und kehrt sofort zurück). HOT + Store aufräumen (best-effort).
+        if (CursorAktiv && ereignis is ProzessBeendet)
+            await VerwirfMarkingAsync(korrelation, ct);
     }
 }
