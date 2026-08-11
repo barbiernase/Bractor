@@ -165,6 +165,10 @@ public static class CqrsServiceExtensions
             // ★ Snapshots (docs/snapshot-konzept.md): ein jsonb-Dokument je Aggregat-Typ
             //   (Snapshot<Konto> → es.mt_doc_snapshot_konto). Registrierung generiert, reflection-frei.
             Persistence.RegisteredSnapshotTypes.Register(options);
+
+            // ★ P5b: der Prozess-Marking-Cursor (docs/prozess-marking-cursor-konzept.md): ein jsonb-Dokument je
+            //   Korrelation, abgeleiteter Cache des gefalteten Markings → Tail-Fold statt Voll-Fold (O(N²)→O(N)).
+            options.Schema.For<Persistence.ProzessMarkingDoc>().Identity(x => x.Id);
         });
 
         services.AddSingleton<IEventStoreRepository>(provider =>
@@ -204,6 +208,13 @@ public static class CqrsServiceExtensions
         // Durabler Offen-Index der Prozesse (§3-Backstop): Grundlage des Scans, der hängende Prozesse heilt.
         services.AddSingleton<IProzessOffenIndex>(provider =>
             new MartenProzessOffenIndex(provider.GetRequiredService<IDocumentStore>()));
+
+        // ★ P5b: der Prozess-Marking-Cursor (best-effort): der ProzessManager faltet damit nur den Tail der
+        //   Ziel-Streams statt alles ab 0 (O(N²)→O(N)). Verlust/Stale heilt der Voll-Fold — nie Korrektheit.
+        services.AddSingleton<IProzessMarkingStore>(provider =>
+            new MartenProzessMarkingStore(
+                provider.GetRequiredService<IDocumentStore>(),
+                provider.GetService<ILogger<MartenProzessMarkingStore>>()));
 
         // Dead-Letter-Senke (§5): nicht zustellbare Pipeline-Commands beobachtbar machen statt still droppen.
         services.AddSingleton<IDeadLetterSink>(provider =>

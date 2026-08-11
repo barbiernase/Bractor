@@ -38,6 +38,7 @@ public sealed class ProzessManagerActor : IActor
     private readonly Cluster _cluster;
     private readonly IProzessOffenIndex? _offenIndex;
     private readonly IDeadLetterSink? _deadLetters;
+    private readonly IProzessMarkingStore? _markingStore;   // ★ P5b: nicht-autoritativer Marking-Cursor (optional)
     private Guid _korrelation;
     private ProzessManager? _manager;
     private CommandEmitter? _emitter;
@@ -47,13 +48,15 @@ public sealed class ProzessManagerActor : IActor
         IReadOnlyDictionary<string, ProzessRegeln> registry,
         Cluster cluster,
         IProzessOffenIndex? offenIndex = null,
-        IDeadLetterSink? deadLetters = null)
+        IDeadLetterSink? deadLetters = null,
+        IProzessMarkingStore? markingStore = null)
     {
         _eventStore = eventStore;
         _registry = registry;
         _cluster = cluster;
         _offenIndex = offenIndex;
         _deadLetters = deadLetters;
+        _markingStore = markingStore;
     }
 
     public async Task ReceiveAsync(IContext context)
@@ -66,7 +69,7 @@ public sealed class ProzessManagerActor : IActor
                     _korrelation = korr;
                 // Das EINE Emit-Primitiv, an den Cluster gebunden (Cluster ist zur Spawn-Zeit fertig — (A)-Fix).
                 _emitter = new CommandEmitter(_cluster);
-                _manager = new ProzessManager(_eventStore, _registry, ErzeugeDispatch(), _offenIndex, _deadLetters);
+                _manager = new ProzessManager(_eventStore, _registry, ErzeugeDispatch(), _offenIndex, _deadLetters, _markingStore);
                 break;
 
             case ProzessWake w:
