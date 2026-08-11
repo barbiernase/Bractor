@@ -39,13 +39,17 @@ namespace Infrastructure.SourceGeneration
             if (iWire == null || iCommand == null || iEvent == null)
                 return;
             var iSelf = compilation.GetTypeByMetadataName("Abstractions.IPipelineSelfMessage");
+            var iSignal = compilation.GetTypeByMetadataName("Abstractions.IStateChangeSignal");
 
             var all = new List<INamedTypeSymbol>();
             Collect(compilation.GlobalNamespace, all);
 
+            // Top-Level (wire): alle IWireMessage. Konkrete IPipelineTrigger sind über
+            // IPipelineTrigger : IWireMessage automatisch dabei (werden direkt als Cluster-Nachricht gesendet).
             var wire = new List<INamedTypeSymbol>();
             var commands = new List<INamedTypeSymbol>();
             var events = new List<INamedTypeSymbol>();
+            var signals = new List<INamedTypeSymbol>();
 
             foreach (var t in all)
             {
@@ -58,11 +62,14 @@ namespace Infrastructure.SourceGeneration
                     commands.Add(t);
                 if (ifaces.Contains(iEvent, SymbolEqualityComparer.Default))
                     events.Add(t);
+                if (iSignal != null && ifaces.Contains(iSignal, SymbolEqualityComparer.Default))
+                    signals.Add(t);
             }
 
             wire.Sort(ByName);
             commands.Sort(ByName);
             events.Sort(ByName);
+            signals.Sort(ByName);
 
             var full = SymbolDisplayFormat.FullyQualifiedFormat;
 
@@ -137,6 +144,8 @@ namespace Infrastructure.SourceGeneration
             EmitPoly(sb, "Event", "IEvent", events, full);
             sb.AppendLine();
             EmitPoly(sb, "Command", "ICommand", commands, full);
+            sb.AppendLine();
+            EmitPoly(sb, "Signal", "IStateChangeSignal", signals, full);
             sb.AppendLine("}");
 
             context.AddSource("GeneratedWire.g.cs", sb.ToString());

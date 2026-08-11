@@ -40,7 +40,7 @@ public record CommandEnvelope : IAggregateEnvelope, IWireMessage
 /// Position im Stream (AggregateVersion). Die Property existiert bereits konkret;
 /// die zusätzliche Interface-Deklaration ist rein additiv (kein Verhaltenswechsel).
 /// </summary>
-public record EventEnvelope : IEventEnvelope
+public record EventEnvelope : IEventEnvelope, IWireMessage
 {
     public Guid EventId { get; init; } = Guid.NewGuid();
     public Guid AggregateId { get; init; }

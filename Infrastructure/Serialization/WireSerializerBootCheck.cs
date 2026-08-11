@@ -28,8 +28,12 @@ public static class WireSerializerBootCheck
                 throw new InvalidOperationException(
                     $"[Wire] Top-Level-Nachricht {t.FullName} ist nicht serialisierbar — Wire-Serializer unvollständig.");
 
-        // (b) polymorphe Payloads im Context abgedeckt
-        foreach (var t in GeneratedTypeRegistry.Commands.Values.Concat(GeneratedTypeRegistry.Events.Values))
+        // (b) polymorphe Payloads im Context abgedeckt (Commands/Events + Iter.2: Signals/Triggers)
+        var payloads = GeneratedTypeRegistry.Commands.Values
+            .Concat(GeneratedTypeRegistry.Events.Values)
+            .Concat(GeneratedTypeRegistry.Signals.Values)
+            .Concat(GeneratedTypeRegistry.Triggers.Values);
+        foreach (var t in payloads)
             if (CqrsWireJsonContext.Default.GetTypeInfo(t) is null)
                 throw new InvalidOperationException(
                     $"[Wire] Kein Wire-JsonTypeInfo für Payload-Typ {t.FullName}. " +

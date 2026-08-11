@@ -321,7 +321,8 @@ public static class CqrsServiceExtensions
         services.AddSingleton<BrokerPublisher>(provider =>
         {
             var actorSystem = provider.GetRequiredService<ActorSystem>();
-            return new BrokerPublisher(actorSystem.Cluster());
+            return new BrokerPublisher(actorSystem.Cluster(),
+                provider.GetService<ILogger<BrokerPublisher>>());
         });
         Console.WriteLine("  + BrokerPublisher (lazy)");
         

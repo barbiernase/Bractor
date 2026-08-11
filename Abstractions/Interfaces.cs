@@ -429,7 +429,10 @@ public interface IAggregateRepository
     /// Der PipelineDispatchGenerator unterscheidet Handle-Methoden nach
     /// Parameter[0]-Typ: IPipelineTrigger → Trigger-Kanal, IEvent → PubSub-Kanal.
     /// </summary>
-    public interface IPipelineTrigger : IPipelineOutput { }
+    // : IWireMessage — ein konkreter Trigger wird direkt als Top-Level-Cluster-Nachricht gesendet
+    //   (PipelineTriggerSender: RequestAsync&lt;PipelineAck&gt;(identity, trigger)), reist also cross-node
+    //   und muss vom Wire-Serializer abgedeckt sein (Multi-Node Iter.2).
+    public interface IPipelineTrigger : IPipelineOutput, IWireMessage { }
 
     /// <summary>
     /// Marker-Interface für Pipeline-interne Self-Messages.

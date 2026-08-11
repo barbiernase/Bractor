@@ -4,4 +4,4 @@ namespace Abstractions;
 /// Bestätigung für Trigger-Sender.
 /// Proto.Actor erfordert eine Antwort auf RequestAsync — sonst Retry.
 /// </summary>
-public record PipelineAck(bool Accepted = true);
+public record PipelineAck(bool Accepted = true) : IWireMessage;

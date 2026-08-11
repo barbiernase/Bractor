@@ -50,14 +50,15 @@ verdrahtet.
 **Tests (echt gemessen): Prüfstand 99/99 grün (in-memory, store-frei), Integration 33/33
 (gegen echtes Marten/Consul/Redis, sequentiell).**
 
-**Bewusst offen (Priorität):**
-1. **Cross-Node/Multi-Node** — **Iteration 1 geliefert:** generierter, reflexionsfreier Wire-Serializer
+1. **Cross-Node/Multi-Node** — **Iteration 1 + 2 geliefert.** Generierter, reflexionsfreier Wire-Serializer
    (`CqrsWireSerializer` + `WireSerializerGenerator` → `GeneratedWire`/`GeneratedWirePoly` über
-   `CqrsWireJsonContext`, Marker `IWireMessage`) am `WithRemote`-Punkt registriert, Boot-Check
-   (`WireSerializerBootCheck`) + Round-trip-Test grün; **Zwei-Node-Command-Dispatch bewiesen**
-   (`TwoNodeCommandDispatchTests`). **Iteration 2 offen:** PubSub-Broker cross-node (blockiert an
-   `Subscribe(PID)` → `ClusterIdentity`) + `RequestAsync`-Härtung. Bis dahin ist nur der
-   Command-/Pull-Plane cross-node, PubSub bleibt single-node.
+   `CqrsWireJsonContext`, Marker `IWireMessage`) am `WithRemote`-Punkt, Boot-Check, Round-trip-Test.
+   Iter. 1 = Command-/Pull-Plane; Iter. 2 = PubSub-/Pipeline-/Prozess-Plane (Publish/EventEnvelope/
+   SignalEnvelope/Subscribe+PID/PipelineAck/ProzessWake/Trigger, `PID`-Converter via `PID.FromAddress`).
+   **Bewiesen:** `TwoNodeCommandDispatchTests`, `TwoNodePubSubSignalTests`, `RemotePidDeliverySmokeTests`.
+   3 stille fire-and-forget-Sends gehärtet (catch+log, kein Dead-Letter — verlierbar per Inv. 2).
+   **Bewusst offen (kein Blocker):** der client-gebundene gRPC-Targeted-Pfad (Weg B) cross-node ROBUST
+   machen braucht ein node-adressierendes Gateway-Kind → `docs/multi-node-weg-b-client-gateway-konzept.md`.
 2. **P5b Marking-Cursor** — Prozess-Fold ist O(N²); zurückgestellte Optimierung.
 3. **Schreibpfad-Perf** — paralleler Drain skaliert sublinear (`wait_event` offen).
 4. **KlärungNötig-Pfad** korrekt-per-Konstruktion, aber ohne Testdeckung.

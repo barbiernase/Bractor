@@ -2,11 +2,12 @@ namespace Infrastructure.PubSub;
 
 using Abstractions;
 using Infrastructure.PubSub.Messages;
+using Microsoft.Extensions.Logging;
 using Proto.Cluster;
 
 /// <summary>
 /// Publiziert IMessageEnvelope an Subscriber.
-/// 
+///
 /// Zwei Modi:
 /// - Broadcast (default): Fan-out an alle Shards
 /// - Targeted: Nur an den Shard der den Ziel-Subscriber hält
@@ -14,10 +15,15 @@ using Proto.Cluster;
 public class BrokerPublisher
 {
     private readonly Cluster _cluster;
+    private readonly ILogger? _logger;
 
-    public BrokerPublisher(Cluster cluster)
+    /// <summary>Bounded-Frist für fire-and-forget-Publishes (kein Infinit-Hang bei nicht-routbarer Topologie).</summary>
+    private static readonly TimeSpan FireForgetFrist = TimeSpan.FromSeconds(10);
+
+    public BrokerPublisher(Cluster cluster, ILogger? logger = null)
     {
         _cluster = cluster ?? throw new ArgumentNullException(nameof(cluster));
+        _logger = logger;
     }
 
     /// <summary>
@@ -67,7 +73,14 @@ public class BrokerPublisher
     }
 
     /// <summary>
-    /// Fire-and-Forget Publish (keine Garantie, wartet nicht auf Antwort)
+    /// Fire-and-Forget Publish (keine Garantie, wartet nicht auf Antwort).
+    ///
+    /// ★ Härtung (Multi-Node): der Send läuft mit BESCHRÄNKTEM Token und wird BEOBACHTBAR gemacht.
+    /// Vorher war es ein nacktes <c>_ = RequestAsync(…)</c> — eine cross-node-Ausnahme (Node weg, Timeout,
+    /// Serialisierung) landete als unbeobachtete Task-Exception, still, ohne Log. Jetzt: gefangen + geloggt.
+    /// BEWUSST KEIN Dead-Letter: ein Signal/Event-Publish ist per Design verlierbar (Invariante 2) — der
+    /// durable Konsument heilt über den Poll-Backstop; ein Dead-Letter würde fälschlich Durabilität
+    /// implizieren. Es geht hier nur um Beobachtbarkeit, nicht um Wiederzustellung.
     /// </summary>
     public void PublishFireAndForget(IMessageEnvelope envelope)
     {
@@ -79,8 +92,7 @@ public class BrokerPublisher
         {
             var messageType = envelope.Payload.GetType();
             var shard = BrokerIdentity.ShardFor(messageType, targeted.TargetSubscriberId);
-
-            _ = _cluster.RequestAsync<Ack>(shard, new Publish(envelope), CancellationToken.None);
+            SendeBeobachtet(shard, new Publish(envelope));
             return;
         }
 
@@ -91,7 +103,28 @@ public class BrokerPublisher
 
         foreach (var shard in shards)
         {
-            _ = _cluster.RequestAsync<Ack>(shard, message, CancellationToken.None);
+            SendeBeobachtet(shard, message);
+        }
+    }
+
+    /// <summary>Fire-and-forget aus Aufrufersicht, aber der Send-Fehler wird gefangen und geloggt (nicht still).</summary>
+    private void SendeBeobachtet(ClusterIdentity shard, Publish message)
+    {
+        _ = SendeBeobachtetAsync(shard, message);
+    }
+
+    private async Task SendeBeobachtetAsync(ClusterIdentity shard, Publish message)
+    {
+        try
+        {
+            using var cts = new CancellationTokenSource(FireForgetFrist);
+            await _cluster.RequestAsync<Ack>(shard, message, cts.Token);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex,
+                "[BrokerPublisher] Fire-and-forget-Publish an {Shard} fehlgeschlagen — Signal verlierbar, " +
+                "Poll-Backstop des Konsumenten heilt (Invariante 2).", shard.Identity);
         }
     }
 }

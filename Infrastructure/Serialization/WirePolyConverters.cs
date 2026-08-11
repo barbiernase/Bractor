@@ -2,6 +2,7 @@ using System;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Abstractions;
+using Proto;
 
 namespace Infrastructure.Serialization;
 
@@ -59,6 +60,104 @@ internal sealed class ICommandJsonConverter : JsonConverter<ICommand>
         var cmd = GeneratedWirePoly.ReadCommand(disc, ref reader);
         reader.Read(); // EndArray
         return cmd;
+    }
+}
+
+/// <summary>Signal-Payload einer <see cref="SignalEnvelope"/> (StateChangeVia{Event}). Iteration 2.</summary>
+internal sealed class IStateChangeSignalJsonConverter : JsonConverter<IStateChangeSignal>
+{
+    public override void Write(Utf8JsonWriter writer, IStateChangeSignal value, JsonSerializerOptions options)
+    {
+        writer.WriteStartArray();
+        writer.WriteStringValue(GeneratedWirePoly.SignalDiskriminator(value));
+        GeneratedWirePoly.WriteSignal(writer, value);
+        writer.WriteEndArray();
+    }
+
+    public override IStateChangeSignal Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) throw new JsonException("Erwartet: StartArray für IStateChangeSignal.");
+        reader.Read();
+        var disc = reader.GetString() ?? throw new JsonException("Erwartet: Signal-Diskriminator (string).");
+        reader.Read();
+        var sig = GeneratedWirePoly.ReadSignal(disc, ref reader);
+        reader.Read(); // EndArray
+        return sig;
+    }
+}
+
+/// <summary>
+/// Envelope-Payload einer <see cref="Abstractions.SignalEnvelope"/>? Nein — die HÜLLE einer
+/// <c>Publish</c>-Nachricht (<c>Publish.Envelope : IMessageEnvelope</c>). Über den PubSub reisen nur
+/// <see cref="EventEnvelope"/> (Events) und <see cref="SignalEnvelope"/> (Signale); die anderen
+/// <c>IMessageEnvelope</c>-Implementierer (<c>CommandEnvelope</c>/<c>QueryEnvelope</c>) gehen NICHT durch
+/// <c>Publish</c> und werfen hier bewusst. Hand-Converter (fixe, kleine Menge, kein Generat nötig).
+/// </summary>
+internal sealed class IMessageEnvelopeJsonConverter : JsonConverter<IMessageEnvelope>
+{
+    public override void Write(Utf8JsonWriter writer, IMessageEnvelope value, JsonSerializerOptions options)
+    {
+        writer.WriteStartArray();
+        switch (value)
+        {
+            case EventEnvelope ee:
+                writer.WriteStringValue("EventEnvelope");
+                JsonSerializer.Serialize(writer, ee, CqrsWireJsonContext.Default.EventEnvelope);
+                break;
+            case SignalEnvelope se:
+                writer.WriteStringValue("SignalEnvelope");
+                JsonSerializer.Serialize(writer, se, CqrsWireJsonContext.Default.SignalEnvelope);
+                break;
+            default:
+                throw new JsonException(
+                    $"IMessageEnvelope {value.GetType().Name} reist nicht über Publish (nur EventEnvelope/SignalEnvelope).");
+        }
+        writer.WriteEndArray();
+    }
+
+    public override IMessageEnvelope Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) throw new JsonException("Erwartet: StartArray für IMessageEnvelope.");
+        reader.Read();
+        var disc = reader.GetString();
+        reader.Read();
+        IMessageEnvelope env = disc switch
+        {
+            "EventEnvelope"  => JsonSerializer.Deserialize(ref reader, CqrsWireJsonContext.Default.EventEnvelope)!,
+            "SignalEnvelope" => JsonSerializer.Deserialize(ref reader, CqrsWireJsonContext.Default.SignalEnvelope)!,
+            _ => throw new JsonException($"Unbekannter IMessageEnvelope-Diskriminator: {disc}"),
+        };
+        reader.Read(); // EndArray
+        return env;
+    }
+}
+
+/// <summary>
+/// Proto-<see cref="PID"/> in einem CLR-Record (<c>Subscribe.Subscriber</c>). STJ kann die
+/// protobuf-generierte PID nicht direkt; wir serialisieren nur die Adressier-Bestandteile
+/// (<c>Address</c> + <c>Id</c>) und rekonstruieren via <see cref="PID.FromAddress"/>. Das reicht für
+/// <c>context.Send(pid, …)</c> — die Location-Transparency routet über die Adresse (bewiesen im
+/// RemotePidDeliverySmokeTest). RequestId u. a. sind für ein gespeichertes Subscriber-Ziel irrelevant.
+/// </summary>
+internal sealed class PidJsonConverter : JsonConverter<PID>
+{
+    public override void Write(Utf8JsonWriter writer, PID value, JsonSerializerOptions options)
+    {
+        writer.WriteStartArray();
+        writer.WriteStringValue(value.Address);
+        writer.WriteStringValue(value.Id);
+        writer.WriteEndArray();
+    }
+
+    public override PID Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) throw new JsonException("Erwartet: StartArray für PID.");
+        reader.Read();
+        var address = reader.GetString() ?? "";
+        reader.Read();
+        var id = reader.GetString() ?? "";
+        reader.Read(); // EndArray
+        return PID.FromAddress(address, id);
     }
 }
 

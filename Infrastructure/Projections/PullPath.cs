@@ -1,5 +1,6 @@
 using Abstractions;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Proto;
 using Proto.Cluster;
 
@@ -36,6 +37,7 @@ public sealed class GenericPullStartupService : IHostedService
     private readonly IEventStoreRepository _eventStore;
     private readonly IEnumerable<PullPathRegistration> _registrations;
     private readonly IPollCursorStore _pollCursors;
+    private readonly ILogger<GenericPullStartupService>? _logger;
 
     private readonly List<PID> _pids = new();
     private CancellationTokenSource? _pollCts;
@@ -45,12 +47,28 @@ public sealed class GenericPullStartupService : IHostedService
         ActorSystem system,
         IEventStoreRepository eventStore,
         IEnumerable<PullPathRegistration> registrations,
-        IPollCursorStore pollCursors)
+        IPollCursorStore pollCursors,
+        ILogger<GenericPullStartupService>? logger = null)
     {
         _system = system;
         _eventStore = eventStore;
         _registrations = registrations;
         _pollCursors = pollCursors;
+        _logger = logger;
+    }
+
+    /// <summary>Signal-Wake fire-and-forget, aber Fehler gefangen + geloggt (nicht als unbeobachtete Task-Exception).</summary>
+    private async Task SignalWakeBeobachtetAsync(ClusterIdentity identity, CancellationToken c)
+    {
+        try
+        {
+            await _system.Cluster().RequestAsync<WakeAck>(identity, new Wake(VomPoll: false), c);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug(ex,
+                "[Pull] Signal-Wake an {Identity} fehlgeschlagen — verlierbar, Poll-Backstop heilt.", identity.Identity);
+        }
     }
 
     public async Task StartAsync(CancellationToken ct)
@@ -72,7 +90,10 @@ public sealed class GenericPullStartupService : IHostedService
             Func<Guid, CancellationToken, Task> signalWake = (streamId, c) =>
             {
                 var identity = ClusterIdentity.Create(streamId.ToString(), kindName);
-                _ = _system.Cluster().RequestAsync<WakeAck>(identity, new Wake(VomPoll: false), c);
+                // ★ Härtung (Multi-Node): fire-and-forget, aber der Send-Fehler wird BEOBACHTET (nicht als
+                //   unbeobachtete Task-Exception verschluckt). Debug-Level, weil Signalverlust per Design
+                //   normal ist (Invariante 2) — der Poll-Backstop heilt.
+                _ = SignalWakeBeobachtetAsync(identity, c);
                 return Task.CompletedTask;
             };
 

@@ -318,34 +318,38 @@ Managers *auf* die P4-Maschinenklasse ist eine optionale Folge-Konsolidierung, k
 ## Phase 7 — Transport in den Graphen · TG-2 / K1 (orthogonal)
 **Zweck:** interne Nachrichten als Graph-Knoten; generierter Poly-Serializer.
 
-> **Stand:** **Iteration 1 geliefert** (Command-Dispatch- + Pull/Wake-Plane). Ein generierter,
-> reflexionsfreier JSON-Poly-Serializer (`WireSerializerGenerator` → `GeneratedWire`/`GeneratedWirePoly`
-> über den hand-gepflegten `CqrsWireJsonContext`) ist am `WithRemote`-Punkt registriert
-> (`CqrsServiceExtension.cs`, `CqrsWireSerializer` id=100/prio=-100, strikte Whitelist via `IWireMessage`).
-> Boot-Check (`WireSerializerBootCheck`) + Round-trip-Test (`WireSerializerRoundTripTests`, Prüfstand)
-> grün. **Iteration 2 offen:** PubSub-Broker cross-node (blockiert an `Subscribe(PID)` → `ClusterIdentity`)
-> und die `RequestAsync`-Härtung.
+> **Stand:** **Iteration 1 + 2 geliefert.** Ein generierter, reflexionsfreier JSON-Poly-Serializer
+> (`WireSerializerGenerator` → `GeneratedWire`/`GeneratedWirePoly` über den hand-gepflegten
+> `CqrsWireJsonContext`) ist am `WithRemote`-Punkt registriert (`CqrsServiceExtension.cs`,
+> `CqrsWireSerializer` id=100/prio=-100, strikte Whitelist via `IWireMessage`). Iter. 2 ergänzt den
+> **PubSub-/Pipeline-/Prozess-Plane** (Publish/EventEnvelope/SignalEnvelope/Subscribe+PID/Ack/Activate/
+> PipelineAck/ProzessWake + Trigger) mit `PID`-Converter (`PID.FromAddress`) und Poly-Convertern für
+> `IMessageEnvelope`/`IStateChangeSignal`. **Bewusst NICHT gemacht:** `Subscribe(PID)` → `ClusterIdentity`
+> (PID absichtlich beibehalten — der gRPC-Client-Receiver ist socket-/node-gebunden, siehe
+> `docs/multi-node-weg-b-client-gateway-konzept.md`; Location-Transparency bewiesen, Poll heilt Kanten).
 
 - [x] **Iter. 1:** Top-Level-Hüllen `CommandEnvelope`/`CommandResult`/`Wake`/`WakeAck` (Marker `IWireMessage`) + alle `ICommand`/`IEvent`-Payloads serialisierbar.
-- [ ] **Iter. 2:** restliche interne Typen (`EventEnvelope`, `SignalEnvelope`, `Publish`/`Ack`, `Subscribe`, `PipelineAck`) in den Wire-Serializer.
+- [x] **Iter. 2:** restliche interne Typen (`EventEnvelope`, `SignalEnvelope`, `Publish`/`Ack`/`Activate`, `Subscribe`+PID, `PipelineAck`, `ProzessWake`, Trigger) im Wire-Serializer.
 - [x] **Iter. 1:** Poly-Serializer generiert (reflexionsfrei, über die Registry) und am `WithRemote`-Punkt registriert.
-- [x] **Iter. 1:** Boot-Check: fehlt einem Typ die Abdeckung → Start-Abbruch (`WireSerializerBootCheck`).
-- [ ] **Iter. 2:** Laute Fehler: `_ = RequestAsync`-Stellen fangen + dead-lettern statt stillem Drop.
-- [ ] **Iter. 2:** Broker: Subscriber per `ClusterIdentity` statt lokaler PID; Abo-Entscheidung (durable vs. Poll-heilt) treffen.
+- [x] **Iter. 1+2:** Boot-Check: fehlt einem Typ die Abdeckung → Start-Abbruch (`WireSerializerBootCheck`, deckt Commands/Events/Signals/Triggers).
+- [x] **Iter. 2:** Laute Fehler: die 3 stillen `_ = RequestAsync`-Sends (`BrokerPublisher`, Pull-Wake, ProzessWake) gefangen + geloggt (BEWUSST kein Dead-Letter — verlierbar per Invariante 2, Poll heilt; Dead-Letter bleibt dem Command-Pfad vorbehalten).
+- [ ] **Später (Weg-B-Gateway):** Broker-Subscriber per `ClusterIdentity` NUR für den client-gebundenen Targeted-Pfad robust machen — eigenes Konzept, kein Blocker (`docs/multi-node-weg-b-client-gateway-konzept.md`).
 
 **Tor (Ebene 1):** Round-trip-Test über *jeden* internen Typ grün (serialisiert+deserialisiert = gleich);
-Boot bricht bei fehlendem Serializer. — **Iter. 1 erreicht** (Command-/Pull-Plane; PubSub-Typen in Iter. 2).
+Boot bricht bei fehlendem Serializer. — **Iter. 1+2 erreicht** (Command-/Pull-/PubSub-/Pipeline-/Prozess-Plane).
 
 ---
 
 ## Phase 8 — Multi-Node-Tor (Verifikation)
 **Zweck:** der eigentliche Rest-Aufwand — beweisen, nicht coden.
 
-- [x] **Zwei-Member-Test** (`TwoNodeCommandDispatchTests`, Integration): zwei ActorSystems, ein Consul-Cluster;
+- [x] **Zwei-Member-Test Command-Dispatch** (`TwoNodeCommandDispatchTests`): zwei ActorSystems, ein Consul-Cluster;
   Charge distinkter Ids von Node A per `RequestAsync<CommandResult>` → Anfrage + Antwort serialisieren cross-node. Grün.
+- [x] **Location-Transparency-Smoke** (`RemotePidDeliverySmokeTests`): `context.Send(remotePid, Wake)` von Node A zu einer Probe-PID auf Node B kommt serialisiert an (Fundament des PID-beibehalten-Ansatzes). Grün.
+- [x] **Zwei-Member-Test PubSub** (`TwoNodePubSubSignalTests`): Subscribe auf Node B, Publish auf Node A → `SignalEnvelope` reist serialisiert zum Subscriber. Grün.
 
 **Tor (Ebene 2, zwei Nodes):** ein Adapter je Stream; Ordnung erhalten; Poll heilt Totalverlust cross-node.
-— **Command-Dispatch cross-node bewiesen** (Iter. 1); der Pull-Adapter cross-node folgt mit PubSub-Iter. 2.
+— **Command-Dispatch UND PubSub-Signal cross-node bewiesen** (Iter. 1+2).
 
 ---
 

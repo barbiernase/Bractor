@@ -12,7 +12,7 @@ namespace Abstractions;
 /// Signal-Klasse — sodass nur die Receiver geweckt werden, die diesen Event-Typ
 /// behandeln (typbasiertes Routing, Invariante 3).
 /// </summary>
-public record SignalEnvelope : IMessageEnvelope
+public record SignalEnvelope : IMessageEnvelope, IWireMessage
 {
     public Guid MessageId { get; init; } = Guid.NewGuid();
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;

@@ -9,6 +9,8 @@ using Domain.Hotel;
 using Domain.ImagePair;
 using Domain.Konto;
 using Domain.Lager;
+using Domain.Pipeline.Benchmark;
+using Domain.Pipeline.ImageProcessing;
 using Domain.Projections;
 using Domain.Reaktion;
 using Domain.Reise;
@@ -20,6 +22,7 @@ using Domain.Zahlung;
 using Infrastructure.Aggregate;
 using Infrastructure.Prozess;
 using Infrastructure.Projections;
+using Infrastructure.PubSub.Messages;
 
 namespace Infrastructure.Serialization;
 
@@ -53,12 +56,27 @@ namespace Infrastructure.Serialization;
         typeof(IEventJsonConverter),
         typeof(ICommandJsonConverter),
         typeof(CommandModusJsonConverter),
+        typeof(IStateChangeSignalJsonConverter),
+        typeof(IMessageEnvelopeJsonConverter),
+        typeof(PidJsonConverter),
     })]
-// ── Top-Level Wire-Hüllen (IWireMessage) ──
+// ── Top-Level Wire-Hüllen (IWireMessage) — Iteration 1 ──
 [JsonSerializable(typeof(CommandEnvelope))]
 [JsonSerializable(typeof(CommandResult))]
 [JsonSerializable(typeof(Wake))]
 [JsonSerializable(typeof(WakeAck))]
+// ── Top-Level Wire-Hüllen (IWireMessage) — Iteration 2 (PubSub/Pipeline/Prozess) ──
+[JsonSerializable(typeof(EventEnvelope))]
+[JsonSerializable(typeof(SignalEnvelope))]
+[JsonSerializable(typeof(Publish))]
+[JsonSerializable(typeof(Subscribe))]
+[JsonSerializable(typeof(Unsubscribe))]
+[JsonSerializable(typeof(Ack))]
+[JsonSerializable(typeof(Activate))]
+[JsonSerializable(typeof(GetSubscriberCount))]
+[JsonSerializable(typeof(SubscriberCountResponse))]
+[JsonSerializable(typeof(PipelineAck))]
+[JsonSerializable(typeof(ProzessWake))]
 // ── Commands (GeneratedTypeRegistry.Commands) ──
 [JsonSerializable(typeof(Aktiviere))]
 [JsonSerializable(typeof(BeauftrageSammelueberweisung))]
@@ -163,6 +181,54 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(VorgangAktiviert))]
 [JsonSerializable(typeof(VorgangGenehmigt))]
 [JsonSerializable(typeof(ZahlungskontoEingerichtet))]
+// ── Pipeline-Trigger (GeneratedTypeRegistry.Triggers) ──
+[JsonSerializable(typeof(BenchPing))]
+[JsonSerializable(typeof(DateiErkannt))]
+// ── Signale (GeneratedTypeRegistry.Signals, StateChangeVia{Event}) ──
+[JsonSerializable(typeof(StateChangeViaAntragGestellt))]
+[JsonSerializable(typeof(StateChangeViaBestandFreigegeben))]
+[JsonSerializable(typeof(StateChangeViaBestandReserviert))]
+[JsonSerializable(typeof(StateChangeViaBestellungAufgegeben))]
+[JsonSerializable(typeof(StateChangeViaBetragReserviert))]
+[JsonSerializable(typeof(StateChangeViaBildPaarDurchKiKlassifiziert))]
+[JsonSerializable(typeof(StateChangeViaBildPaarGelabelt))]
+[JsonSerializable(typeof(StateChangeViaBildRegionGelabelt))]
+[JsonSerializable(typeof(StateChangeViaBildVerfuegbar))]
+[JsonSerializable(typeof(StateChangeViaEinzelBildDurchKiKlassifiziert))]
+[JsonSerializable(typeof(StateChangeViaEinzelBildGelabelt))]
+[JsonSerializable(typeof(StateChangeViaErinnerungAusgeloest))]
+[JsonSerializable(typeof(StateChangeViaFlugEingerichtet))]
+[JsonSerializable(typeof(StateChangeViaFlugFreigegeben))]
+[JsonSerializable(typeof(StateChangeViaFlugReserviert))]
+[JsonSerializable(typeof(StateChangeViaGutgeschrieben))]
+[JsonSerializable(typeof(StateChangeViaGutschriftStorniert))]
+[JsonSerializable(typeof(StateChangeViaHotelEingerichtet))]
+[JsonSerializable(typeof(StateChangeViaHotelFreigegeben))]
+[JsonSerializable(typeof(StateChangeViaHotelReserviert))]
+[JsonSerializable(typeof(StateChangeViaImagePairErstellt))]
+[JsonSerializable(typeof(StateChangeViaImagePairInspiziert))]
+[JsonSerializable(typeof(StateChangeViaImagePairKomplett))]
+[JsonSerializable(typeof(StateChangeViaKommandoAbgelehnt))]
+[JsonSerializable(typeof(StateChangeViaKommandoVerarbeitet))]
+[JsonSerializable(typeof(StateChangeViaKontoBelastet))]
+[JsonSerializable(typeof(StateChangeViaKontoEroeffnet))]
+[JsonSerializable(typeof(StateChangeViaKontoErstattet))]
+[JsonSerializable(typeof(StateChangeViaLagerEingerichtet))]
+[JsonSerializable(typeof(StateChangeViaPhysischesProduktGelabelt))]
+[JsonSerializable(typeof(StateChangeViaProzessBeendet))]
+[JsonSerializable(typeof(StateChangeViaProzessGestartet))]
+[JsonSerializable(typeof(StateChangeViaReaktionGewirkt))]
+[JsonSerializable(typeof(StateChangeViaReiseBestaetigt))]
+[JsonSerializable(typeof(StateChangeViaReiseGebucht))]
+[JsonSerializable(typeof(StateChangeViaReservierungFreigegeben))]
+[JsonSerializable(typeof(StateChangeViaReservierungGebucht))]
+[JsonSerializable(typeof(StateChangeViaSammelUeberweisungBeauftragt))]
+[JsonSerializable(typeof(StateChangeViaSchrittGescheitert))]
+[JsonSerializable(typeof(StateChangeViaUeberweisungBeauftragt))]
+[JsonSerializable(typeof(StateChangeViaVersendet))]
+[JsonSerializable(typeof(StateChangeViaVorgangAktiviert))]
+[JsonSerializable(typeof(StateChangeViaVorgangGenehmigt))]
+[JsonSerializable(typeof(StateChangeViaZahlungskontoEingerichtet))]
 public partial class CqrsWireJsonContext : JsonSerializerContext
 {
 }

@@ -3,11 +3,14 @@ using System.Collections.Generic;
 using System.Linq;
 using Abstractions;
 using Domain.Konto;
+using Domain.Pipeline.Benchmark;
 using Domain.Zahlung;
 using FluentAssertions;
 using Infrastructure.Mapping;
 using Infrastructure.Projections;
+using Infrastructure.PubSub.Messages;
 using Infrastructure.Serialization;
+using Proto;
 using Xunit;
 
 namespace Infrastructure.Pruefstand.Serialization;
@@ -115,15 +118,22 @@ public class WireSerializerRoundTripTests
     }
 
     [Fact]
-    public void Nur_die_vier_Top_Level_Huellen_sind_serialisierbar()
+    public void Top_Level_Whitelist_greift_die_Huellen_aber_nicht_die_Payloads()
     {
-        GeneratedWire.WireMessageTypes.Should().HaveCount(4);
+        // Iter.1-Hüllen
         GeneratedWire.CanSerialize(typeof(CommandEnvelope)).Should().BeTrue();
         GeneratedWire.CanSerialize(typeof(CommandResult)).Should().BeTrue();
         GeneratedWire.CanSerialize(typeof(Wake)).Should().BeTrue();
         GeneratedWire.CanSerialize(typeof(WakeAck)).Should().BeTrue();
-        // Ein Domänen-Payload ist KEINE Top-Level-Hülle → Default-Serializer, nicht wir.
+        // Iter.2-Hüllen
+        GeneratedWire.CanSerialize(typeof(Publish)).Should().BeTrue();
+        GeneratedWire.CanSerialize(typeof(SignalEnvelope)).Should().BeTrue();
+        GeneratedWire.CanSerialize(typeof(EventEnvelope)).Should().BeTrue();
+        GeneratedWire.CanSerialize(typeof(Subscribe)).Should().BeTrue();
+        GeneratedWire.CanSerialize(typeof(BenchPing)).Should().BeTrue();   // Trigger = Top-Level
+        // Ein geschachtelter Domänen-Payload ist KEINE Top-Level-Hülle → Default-Serializer, nicht wir.
         GeneratedWire.CanSerialize(typeof(EroeffneKonto)).Should().BeFalse();
+        GeneratedWire.CanSerialize(typeof(KontoEroeffnet)).Should().BeFalse();
     }
 
     [Fact]
@@ -133,8 +143,96 @@ public class WireSerializerRoundTripTests
         var act = () => WireSerializerBootCheck.Verify();
         act.Should().NotThrow();
 
-        // Und explizit: jeder Payload-Typ hat eine Wire-JsonTypeInfo.
-        foreach (var t in GeneratedTypeRegistry.Commands.Values.Concat(GeneratedTypeRegistry.Events.Values))
+        // Und explizit: jeder polymorphe Payload-Typ hat eine Wire-JsonTypeInfo.
+        var payloads = GeneratedTypeRegistry.Commands.Values
+            .Concat(GeneratedTypeRegistry.Events.Values)
+            .Concat(GeneratedTypeRegistry.Signals.Values)
+            .Concat(GeneratedTypeRegistry.Triggers.Values);
+        foreach (var t in payloads)
             CqrsWireJsonContext.Default.GetTypeInfo(t).Should().NotBeNull($"Wire-Context muss {t.Name} abdecken");
+    }
+
+    // ══════════════════ Iteration 2: PubSub-/Pipeline-/Prozess-Plane ══════════════════
+
+    [Fact]
+    public void SignalEnvelope_mit_polymorphem_Signal_bleibt_wertgleich()
+    {
+        var original = new SignalEnvelope
+        {
+            Signal = new Domain.Konto.StateChangeViaKontoEroeffnet(Guid.NewGuid(), 7),
+            CorrelationId = "corr-sig",
+        };
+
+        var back = RoundTrip(original);
+
+        back.Should().Be(original);
+        back.Signal.Should().BeOfType<Domain.Konto.StateChangeViaKontoEroeffnet>()
+            .Which.Version.Should().Be(7);
+    }
+
+    [Fact]
+    public void EventEnvelope_mit_polymorphem_Event_bleibt_wertgleich()
+    {
+        var original = new EventEnvelope
+        {
+            AggregateId = Guid.NewGuid(),
+            AggregateVersion = 3,
+            Payload = new KontoEroeffnet(250m, false),
+            AggregateType = "Konto",
+            TargetSubscriberId = "sess-7",
+        };
+
+        var back = RoundTrip(original);
+
+        back.Should().Be(original);
+        back.Payload.Should().BeOfType<KontoEroeffnet>();
+    }
+
+    [Fact]
+    public void Publish_traegt_EventEnvelope_und_SignalEnvelope_polymorph()
+    {
+        var mitEvent = RoundTrip(new Publish(new EventEnvelope
+        {
+            AggregateId = Guid.NewGuid(), Payload = new KontoEroeffnet(1m, false), AggregateType = "Konto",
+        }));
+        mitEvent.Envelope.Should().BeOfType<EventEnvelope>()
+            .Which.Payload.Should().BeOfType<KontoEroeffnet>();
+
+        var mitSignal = RoundTrip(new Publish(new SignalEnvelope
+        {
+            Signal = new Domain.Konto.StateChangeViaKontoEroeffnet(Guid.NewGuid(), 1),
+        }));
+        mitSignal.Envelope.Should().BeOfType<SignalEnvelope>()
+            .Which.Signal.Should().BeOfType<Domain.Konto.StateChangeViaKontoEroeffnet>();
+    }
+
+    [Fact]
+    public void Subscribe_mit_PID_erhaelt_Adresse_und_Id()
+    {
+        var original = new Subscribe("sub-42", PID.FromAddress("nodeB:5001", "$abc"));
+
+        var back = RoundTrip(original);
+
+        back.SubscriberId.Should().Be("sub-42");
+        back.Subscriber.Address.Should().Be("nodeB:5001");
+        back.Subscriber.Id.Should().Be("$abc");
+    }
+
+    [Fact]
+    public void Pipeline_Trigger_ist_ein_Top_Level_Wire_Typ()
+    {
+        GeneratedWire.CanSerialize(typeof(BenchPing)).Should().BeTrue();
+        RoundTrip(new BenchPing(99)).Should().Be(new BenchPing(99));
+    }
+
+    [Fact]
+    public void Kleine_Huellen_Ack_PipelineAck_ProzessWake_SubscriberCount()
+    {
+        RoundTrip(new Ack()).Should().Be(new Ack());
+        RoundTrip(new PipelineAck(true)).Should().Be(new PipelineAck(true));
+        RoundTrip(new SubscriberCountResponse(5)).Should().Be(new SubscriberCountResponse(5));
+
+        var wake = new Infrastructure.Prozess.ProzessWake(Guid.NewGuid(), 4, "BestellProzess");
+        RoundTrip(wake).Should().Be(wake);
     }
 }

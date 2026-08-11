@@ -7,6 +7,7 @@ using Abstractions;
 using Infrastructure.Projections;   // IClusterKindContributor, WakeAck
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
 using Proto;
 using Proto.Cluster;
 
@@ -49,6 +50,7 @@ public sealed class ProzessManagerStartupService : IHostedService
     private readonly IReadOnlyDictionary<string, ProzessRegeln> _registry;
     private readonly IPollCursorStore _pollCursors;
     private readonly IProzessOffenIndex _offenIndex;
+    private readonly ILogger<ProzessManagerStartupService>? _logger;
 
     private PID? _routerPid;
     private CancellationTokenSource? _pollCts;
@@ -60,13 +62,29 @@ public sealed class ProzessManagerStartupService : IHostedService
         IEventStoreRepository store,
         IReadOnlyDictionary<string, ProzessRegeln> registry,
         IPollCursorStore pollCursors,
-        IProzessOffenIndex offenIndex)
+        IProzessOffenIndex offenIndex,
+        ILogger<ProzessManagerStartupService>? logger = null)
     {
         _system = system;
         _store = store;
         _registry = registry;
         _pollCursors = pollCursors;
         _offenIndex = offenIndex;
+        _logger = logger;
+    }
+
+    /// <summary>Prozess-Wake fire-and-forget, aber Fehler gefangen + geloggt (nicht als unbeobachtete Task-Exception).</summary>
+    private async Task ProzessWakeBeobachtetAsync(ClusterIdentity identity, ProzessWake wake, CancellationToken c)
+    {
+        try
+        {
+            await _system.Cluster().RequestAsync<WakeAck>(identity, wake, c);
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogDebug(ex,
+                "[Prozess] Wake an {Identity} fehlgeschlagen — verlierbar, §3-Backstop heilt.", identity.Identity);
+        }
     }
 
     public async Task StartAsync(CancellationToken ct)
@@ -108,7 +126,8 @@ public sealed class ProzessManagerStartupService : IHostedService
             (korr, quellStream, quellVersion, prozessNameFürStart, c) =>
             {
                 var identity = ClusterIdentity.Create(korr.ToString(), ProzessManagerActor.KindName);
-                _ = _system.Cluster().RequestAsync<WakeAck>(
+                // ★ Härtung (Multi-Node): fire-and-forget, Send-Fehler beobachtet (nicht still verschluckt).
+                _ = ProzessWakeBeobachtetAsync(
                     identity, new ProzessWake(quellStream, quellVersion, prozessNameFürStart), c);
                 return Task.CompletedTask;
             };
