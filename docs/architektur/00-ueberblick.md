@@ -113,6 +113,8 @@ die **Framework-Inbox** am Empfänger: eine deterministische CommandId + eine co
   Monitoring, Dead-Letter.
 - [05 — Generatoren & Analyzer](05-generatoren-und-analyzer.md): alle Generatoren, die
   Diagnostik-Codes CQRS001–021, die Generator-Ketten.
+- [06 — Frontend-Maschine](06-frontend-maschine.md): die Client-Seite — Bus/Store/Signal,
+  die vier Client-Generatoren, Modul-Anatomie, Shell/Hydration, Python-Worker.
 
 ## Aktueller Scope & Grenzen
 
