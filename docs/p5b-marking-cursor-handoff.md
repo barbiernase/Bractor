@@ -1,11 +1,15 @@
 # P5(b) — Marking-Cursor: Handoff & Agenten-Prompt
 
-> Auftrag für einen **frischen Agenten**, P5(b) umzusetzen. Diese Datei ist der Einstieg: erst der Kontext
-> (warum, was genau, wo im Code, welche Fallen), unten der fertige **Prompt** zum Kopieren.
+> **✓ ERLEDIGT (M0–M3).** Umgesetzt wie unten skizziert: `IProzessMarkingStore` + `ProzessMarking`/
+> `MarkingKompakt` (Abstractions), InMemory- + `MartenProzessMarkingStore`, vereinheitlichter
+> `FalteAsync` im `ProzessManager` (Voll-Fold = leeres Marking; inkrementell = Marking + Tail),
+> Actor/DI verdrahtet, `ProzessRegelHash` für die Invalidierung. Äquivalenz- und Read-Zähler-Proben
+> (bis N=1000) in `Infrastructure.Pruefstand.Tests/Phase5/ProzessMarkingCursor*`; Saga-Integrationstests
+> grün mit aktivem Cursor. Details: `docs/prozess-marking-cursor-konzept.md` (Kopf). Der Rest dieser
+> Datei ist der historische Auftrag.
 >
 > **Governance:** P5(b) war bisher bewusst zurückgestellt (`docs/naechster-agent-prompt.md`: „NICHT anfangen").
-> **Diese Datei ist die ausdrückliche Freigabe.** Alles andere Zurückgestellte (P5(b) war das eine, Multi-Node
-> P7/P8 das andere) bleibt zurückgestellt.
+> **Diese Datei war die ausdrückliche Freigabe.** Alles andere Zurückgestellte (Multi-Node P7/P8) bleibt zurückgestellt.
 
 ## 1. Was P5(b) ist (in einem Satz)
 Ein **nicht-autoritativer Cache** des gefalteten Prozess-Markings, damit der `ProzessManager` bei jeder Weckung

@@ -45,17 +45,22 @@ Prozess-Maschine (Event-Regel-DAG). **Feature-Strom geliefert:** Timer-/Webhook-
 Deadlines/Fristen (`IDbClock`), Monitoring (`/health`, `/monitoring/metrics`), Dead-Letter
 (Read+Sink), Pipeline P6.1/P6.2 zerlegt. **Schreibpfad-Perf:** Group-Commit-Batching mit
 parallelem Drain (+48 %), STJ-Serializer (opt-in), optionaler Version-Index. **Snapshots** voll
-verdrahtet.
+verdrahtet. **P5b Marking-Cursor geliefert:** der Prozess-Fold ist von O(N²) auf O(N) Stream-Reads
+(nicht-autoritativer Tail-Cursor, `IProzessMarkingStore` + Marten-`ProzessMarkingDoc`, HOT-Cache je
+Actor; Voll-Fold bleibt Fallback bei fehlendem/stale `RegelHash`).
 
-**Tests (echt gemessen): Prüfstand 99/99 grün (in-memory, store-frei), Integration 33/33
-(gegen echtes Marten/Consul/Redis, sequentiell).**
+**Tests (echt gemessen): Prüfstand 106/106 grün (in-memory, store-frei), Integration 33/33
+(gegen echtes Marten/Consul/Redis, sequentiell; der `SnapshotLive`-Cold-Boot-Flake ausgenommen).**
 
 **Bewusst offen (Priorität):**
 1. **Cross-Node/Multi-Node** — kein Serializer für den internen Plane → de facto single-node
    (der eine große strukturelle Block).
-2. **P5b Marking-Cursor** — Prozess-Fold ist O(N²); zurückgestellte Optimierung.
-3. **Schreibpfad-Perf** — paralleler Drain skaliert sublinear (`wait_event` offen).
-4. **KlärungNötig-Pfad** korrekt-per-Konstruktion, aber ohne Testdeckung.
+2. **Schreibpfad-Perf** — paralleler Drain skaliert sublinear (`wait_event` offen).
+3. **KlärungNötig-Pfad** korrekt-per-Konstruktion, aber ohne Testdeckung.
+4. **P5b-Restfeinschliff (klein):** die `MarkingKompakt`-Größe ist für einen extremen Fan-out noch
+   O(N) (Payloads je Vorgang); die volle Zähler+Bitset-Verdichtung (Konzept §4) bleibt optionaler
+   Feinschliff. Der O(N²)→O(N)-Read-Gewinn (das eigentliche Problem) ist voll geliefert. Die
+   Kompensations-`NächsteKompensationAsync` liest noch ab 0 (Fehlerpfad, nicht die Warm-Schleife).
 
 **Kleinere Schulden:** `DtoMapperGenerator` fragil (hartkodierte Enums, Encoding-Schäden);
 `Reaktionsempfaenger`-Dedup-Menge (Domänen-Leak); Deadline-Primitiv nicht in einen Prozess

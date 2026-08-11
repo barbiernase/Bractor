@@ -258,4 +258,44 @@ public class ProzessMarkingCursorTests
         an.GeleseneEvents.Should().BeLessThan(aus.GeleseneEvents / 2,
             $"Cursor las {an.GeleseneEvents}, Voll-Fold {aus.GeleseneEvents} Events");
     }
+
+    // ───────────── §6-Probe / M3-Tor: großer Fan-out (N=1000) läuft O(N), nicht O(N²) ─────────────
+
+    [Fact]
+    public async Task Fanout_N1000_CursorAn_liest_linear_und_schlaegt_den_quadratischen_Vollfold()
+    {
+        const int N = 1000;
+        var korr = Guid.Parse("99999999-0000-0000-0000-000000000001");
+        var trigger = Guid.Parse("99999999-0000-0000-0000-000000000002");
+        var quelle = Guid.Parse("99999999-0000-0000-0000-000000000003");
+        var ziele = Enumerable.Range(0, N).Select(_ => Guid.NewGuid()).ToList();
+        var regeln = new SammelueberweisungsProzess().Regeln;
+
+        Func<KontoWelt, Task> seed = async w =>
+        {
+            await w.EröffneKontoAsync(quelle, 100_000_000);
+            foreach (var z in ziele) await w.EröffneKontoAsync(z, 0);
+        };
+        IEvent Auslöser() => new SammelUeberweisungBeauftragt(quelle, ziele, 10);
+
+        // Cursor AN: jedes Ziel-Event genau einmal gelesen → Reads wachsen LINEAR mit N.
+        var an = await TreibeAsync(korr, "SammelueberweisungsProzess", regeln, trigger, Auslöser(), seed, new InMemoryProzessMarkingStore());
+        an.Erfolg.Should().BeTrue();
+        an.Feuerungen.Count(f => f.Cmd == nameof(SchreibeGut)).Should().Be(N, "Fan-out über 1000 Ziele");
+        an.Feuerungen.Count(f => f.Cmd == nameof(BucheReservierung)).Should().Be(1, "Count-Join bucht einmal nach allen 1000");
+
+        // Ziel-Stream-Events gesamt ≈ 5 (Quelle: eröffnet + reservieren + buchen, je mit Marke) + 3·N (Ziele:
+        // eröffnet + gutschreiben + Marke). Ein linearer Fold liest jedes höchstens EINMAL; die Manager-Log-Reads
+        // (LadeStatusAsync, ~1 Eintrag) addieren O(Weckungen)=O(N). Also eine großzügige, aber LINEARE Schranke.
+        long zielEventsGesamt = 5 + 3L * N;
+        an.GeleseneEvents.Should().BeLessThan(20 * zielEventsGesamt,
+            $"Cursor-Reads {an.GeleseneEvents} müssen linear in N bleiben (Ziel-Events ~{zielEventsGesamt})");
+
+        // Voll-Fold (Cursor AUS) am selben N: re-scannt bei jeder der ~N Weckungen die wachsenden Streams → O(N²).
+        var aus = await TreibeAsync(korr, "SammelueberweisungsProzess", regeln, trigger, Auslöser(), seed, markingStore: null);
+        FeuerungenGleich(aus, an);
+        // Deutliche Trennung: der quadratische Voll-Fold liest bei N=1000 um Größenordnungen mehr.
+        (aus.GeleseneEvents > 20L * an.GeleseneEvents).Should().BeTrue(
+            $"Voll-Fold {aus.GeleseneEvents} vs Cursor {an.GeleseneEvents} — der Cursor ist um Größenordnungen sparsamer");
+    }
 }

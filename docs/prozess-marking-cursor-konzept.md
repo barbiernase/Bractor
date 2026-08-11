@@ -1,8 +1,21 @@
-# Prozess-Marking-Cursor — Konzept (Skizze)
+# Prozess-Marking-Cursor — Konzept
 
-Status: **Skizze, noch nicht umgesetzt.** Benachbarte Optimierung zu den Aggregat-Snapshots
+Status: **UMGESETZT (P5b, M0–M3).** Benachbarte Optimierung zu den Aggregat-Snapshots
 (docs/snapshot-konzept.md) — dieselbe Idee (Cursor + Tail statt Voll-Read), aber auf der
 Prozess-Schicht. Bewusst getrennt gehalten: löst ein anderes Problem als Snapshots.
+
+> **Umsetzungsstand:** Vertrag `IProzessMarkingStore` + `ProzessMarking`/`MarkingKompakt`
+> (`Abstractions/Prozess/ProzessMarking.cs`), InMemory- + Marten-Store
+> (`MartenProzessMarkingStore`, jsonb-Doc je Korrelation). Der `ProzessManager`-Fold ist zu EINEM
+> `FalteAsync` vereinheitlicht (leeres Marking = Voll-Fold ab 0; fortgeschriebenes Marking + Tail =
+> inkrementell), aktiv sobald ein Store injiziert ist; HOT-Cache je Actor + best-effort-Store,
+> Voll-Fold bleibt Fallback (`RegelHash`-Mismatch/fehlend). Beweis: in-memory Saga-Harness treibt
+> den echten Manager gegen die echten Aggregate — Cursor AUS == AN für linear/Join/Count-Join/
+> Fan-out/Kompensation; Read-Zähler zeigt O(N²)→O(N) bis N=1000
+> (`Infrastructure.Pruefstand.Tests/Phase5/ProzessMarkingCursor*`). Ebene 2 (echtes Marten): alle
+> Saga-Integrationstests grün mit aktivem Cursor. **Offener Feinschliff:** die volle Zähler+Bitset-
+> Verdichtung von `MarkingKompakt` (§4) — die aktuelle Darstellung ist je Vorgang kompakt, aber für
+> einen extremen Fan-out noch O(N) groß; der eigentliche O(N²)-Read-Schmerz ist behoben.
 
 ## 0. Das Problem
 
