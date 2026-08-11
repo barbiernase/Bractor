@@ -162,6 +162,37 @@ Alle Läufe: 0 Fehler, alle Salden korrekt (Exactly-once hält unter Last).
 > **Historisch (älterer Dev-Rechner, vor dem parallelen Drain):** aggregate ~4.000–4.600/s,
 > pipeline ~400–500k/s. Der M4 + Batching + paralleler Drain liegt beim Schreibpfad ~2,5× höher.
 
+### Referenzwerte — Multi-Node (3 Container-Nodes, cross-node), M4, 2026-08-11
+Echter 3-Node-Container-Cluster (`deploy-multinode/`: 3× Host.Grpc + 1 LoadHarness-Member an EINEM
+Consul/Postgres/Redis), **alles im selben 10-Kern-Docker-Desktop-VM**. `--mode aggregate`, 82.000
+durable Commands (2000 Konten × (1+40)), Concurrency 128. `PartitionIdentityLookup` legt ~¾ der
+Aggregate fremd → jeder dieser Commands (und sein `CommandResult`) reist SERIALISIERT über den
+Wire-Serializer (cross-node).
+
+| Postgres-Speicher | Durchsatz | p50 / p99 | Exactly-once |
+|---|---|---|---|
+| Docker-Platte (overlay, Default) | ~400 Cmd/s | 186 / 1851 ms | ✓ 2000/2000, 0 Fehler |
+| **tmpfs (RAM)** | **~5.360 Cmd/s ≈ 10.700 Events/s** | **20 / 73 ms** | **✓ 2000/2000, 0 Fehler** |
+
+**Einordnung:**
+- **Exactly-once hält cross-node lückenlos** — 2000 Salden exakt, 0 Fehler, obwohl ¾ der Commands + Results
+  über die Leitung serialisieren. Der Wire-Serializer (Iter. 1+2) trägt unter Dauerlast.
+- **Der Deckel ist Postgres-fsync, NICHT der Cluster.** overlay→tmpfs = **13×** (400→5.360/s) bei identischem
+  Code. Ein Solo-Node im selben VM (kein Join, keine Serialisierung) war mit ~354/s sogar minimal langsamer
+  als der 3-Node-Lauf → **Cross-Node kostet hier praktisch nichts**; die Append-Arbeit über mehr Nodes zu
+  verteilen gleicht den Serialisierungs-Overhead aus.
+- **Auf EINER Maschine gemessen** (10 Kerne, geteilt von 4 Nodes + Postgres + Redis + Consul; beim Lauf
+  Postgres ~510 % CPU). Der Cluster erreicht so ~46 % der nativen Single-Node-Referenz (11.600/s) — trotz
+  VM-CPU-Contention UND echter Serialisierung. Auf getrennten Maschinen mit je eigenem Postgres läge beides höher.
+- Für einen 3-Node-Cluster gegen EIN Postgres: `max_connections` hochsetzen (Default 100 → „53300 too many
+  clients" unter Last, da jeder Node eigenen Npgsql-Pool + parallelen Drain hat).
+
+**Fazit: der Multi-Node-Cluster läuft und ist performant.** Cross-node ~5.400 durable Commands/s
+(≈ 10.700 Events/s) bei exakt gehaltener Exactly-once-Semantik — auf einer einzigen Maschine, in der sich
+vier Nodes und die komplette Infrastruktur zehn Kerne teilen. Das Nadelöhr ist die Persistenz
+(Postgres-Commit), nicht der Cluster/Serializer; auf schnellem Storage + getrennten Nodes skaliert der Pfad
+weiter. (Lokal/dockerisiert → Größenordnungen, keine Produktions-Benchmarks, wie die Single-Node-Tabelle.)
+
 ### Warum der Harness auch die Logger-Arbeit validiert
 Bei `--log warning` ist der per-Command-Logpfad komplett still. Der gemessene Durchsatz ist
 nur deshalb echt, weil das synchrone `Console.WriteLine` aus dem Hot-Path entfernt und durch

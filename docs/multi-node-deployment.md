@@ -192,6 +192,24 @@ verifiziert und wieder zurückgenommen. Nur GENAU EIN Migrator vermeidet beides.
 über `Cluster__Role` (`migrator`|`member`|`standalone`); `standalone` (Default) = unverändertes
 Single-Node-Verhalten für Dev/Tests.
 
+## Durchsatz (cross-node Benchmark)
+
+Derselbe Cluster unter Dauerlast (`--mode aggregate`, 82.000 durable Commands, Concurrency 128,
+~¾ der Aggregate cross-node → serialisiert über den Wire-Serializer), gemessen auf **einer** Maschine
+(alle 4 Nodes + Infra teilen sich 10 Kerne):
+
+| Postgres-Speicher | Durchsatz | p50 / p99 | Exactly-once |
+|---|---|---|---|
+| Docker-Platte (overlay) | ~400 Cmd/s | 186 / 1851 ms | ✓ 2000/2000, 0 Fehler |
+| **tmpfs (RAM)** | **~5.360 Cmd/s ≈ 10.700 Events/s** | **20 / 73 ms** | **✓ 2000/2000, 0 Fehler** |
+
+**Der Cluster läuft und ist performant.** Exactly-once hält cross-node lückenlos; der Durchsatz-Deckel
+ist die Postgres-Commit-Latenz (overlay→tmpfs = 13× bei identischem Code), **nicht** der Cluster oder die
+Serialisierung — ein Solo-Node im selben VM war sogar minimal langsamer, Cross-Node kostet hier praktisch
+nichts. Details + Einordnung: `docs/testen-und-lasttest.md` (Abschnitt „Referenzwerte — Multi-Node").
+Hinweis fürs Deployment: bei 3 Nodes gegen EIN Postgres `max_connections` hochsetzen (Default 100 reicht
+unter Last nicht).
+
 ## Fazit
 
 Der in Iteration 1+2 gebaute Wire-Serializer trägt im **echten verteilten Container-Betrieb**: drei
