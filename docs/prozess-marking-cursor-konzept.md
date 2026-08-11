@@ -16,6 +16,21 @@ Prozess-Schicht. Bewusst getrennt gehalten: löst ein anderes Problem als Snapsh
 > Saga-Integrationstests grün mit aktivem Cursor. **Offener Feinschliff:** die volle Zähler+Bitset-
 > Verdichtung von `MarkingKompakt` (§4) — die aktuelle Darstellung ist je Vorgang kompakt, aber für
 > einen extremen Fan-out noch O(N) groß; der eigentliche O(N²)-Read-Schmerz ist behoben.
+>
+> **Write-Drossel (§5):** der durable Marking-Write läuft NICHT bei jeder Weckung, sondern alle K (Default 32,
+> `markingSchreibIntervall`) — sonst tauschte man O(N²) Event-Reads gegen O(N²) Marking-Writes (die §4-Falle auf
+> der Schreibseite). Der HOT-Cache trägt die Korrektheit über die Weckungen einer Aktivierung; ein Crash verliert
+> höchstens <K Weckungen Fortschritt, die der Tail-Fold folgenlos nachholt.
+>
+> **Gemessen (echtes Postgres, `ProzessMarkingCursorPerfTests`):** die gelesenen Events sinken sauber O(N²)→O(N)
+> (bei N=15–60: 7×–25×, wachsend). Ob das auf die WALL-CLOCK durchschlägt, hängt vom Read-Profil ab: bei kleinen
+> Ziel-Streams ist Postgres roundtrip-gebunden (die Zahl der `ReadStreamAsync`-Aufrufe bleibt ~gleich) → Zeit
+> ~neutral; bei Aggregaten MIT Historie (H Alt-Events je Ziel — der eigentliche Anwendungsfall, „akkumulierendes
+> Ziel"/§0) ist er datengebunden → bei N=20, H=300 misst der Benchmark **21,8× weniger Events und 3,2× schnellere
+> Wall-Clock**, mit H wachsend. Der Voll-Fold re-liest die ganze Historie jeder Weckung, der Cursor genau einmal.
+> **Offene Folge-Optimierung:** die Zahl der Read-AUFRUFE (Roundtrips) senkt der Cursor noch nicht — signal-/
+> feuer-gerichtete Reads (nur den gerade befeuerten Stream nachlesen) brächten auch bei kleinen Streams einen
+> Latenz-Gewinn; das ist eine eigene, korrektheits-sensible Erweiterung (Kaltstart muss voll lesen).
 
 ## 0. Das Problem
 

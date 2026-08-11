@@ -39,6 +39,15 @@ public sealed class ProzessManager
     // (Passivierung/Neustart); fehlt/stale → Voll-Fold ab 0 (Fallback). Best-effort: nie Korrektheit, nur Tempo.
     private readonly IProzessMarkingStore? _markingStore;
     private readonly Dictionary<Guid, (string RegelHash, MarkingKompakt Marking)> _hotMarking = new();
+    // Wieviele Weckungen seit dem letzten DURABLEN Marking-Write je Korrelation (Drossel, s.u.).
+    private readonly Dictionary<Guid, int> _seitSchreib = new();
+    // ★ P5b (Konzept §5, ProzessMarkingThreshold): das Marking wird NICHT bei jeder Weckung durabel geschrieben.
+    //   Der HOT-Cache trägt die Korrektheit über die Weckungen EINER Aktivierung; der durable Write ist nur der
+    //   Kaltstart-Beschleuniger (Passivierung/Crash). Jede Weckung zu schreiben tauschte O(N²) Event-Reads gegen
+    //   O(N²) Marking-Writes (die §4-Falle). Alle K Weckungen zu schreiben amortisiert das auf ~O(N²/K) — ein
+    //   Crash verliert höchstens die letzten <K Weckungen Fortschritt, die der Tail-Fold ohnehin folgenlos
+    //   nachholt (Voll-Fold-Fallback / re-fire verpufft). K=1 = jede Weckung (altes Verhalten).
+    private readonly int _markingSchreibIntervall;
     private bool CursorAktiv => _markingStore is not null;
 
     public ProzessManager(
@@ -47,7 +56,8 @@ public sealed class ProzessManager
         Func<Guid, ICommand, Guid, CancellationToken, Task> dispatch,
         IProzessOffenIndex? offenIndex = null,
         IDeadLetterSink? deadLetters = null,
-        IProzessMarkingStore? markingStore = null)
+        IProzessMarkingStore? markingStore = null,
+        int markingSchreibIntervall = 32)
     {
         _store = store;
         _registry = registry;
@@ -55,6 +65,7 @@ public sealed class ProzessManager
         _offenIndex = offenIndex;
         _deadLetters = deadLetters;
         _markingStore = markingStore;
+        _markingSchreibIntervall = Math.Max(1, markingSchreibIntervall);
     }
 
     // ── Öffentliche Eingänge (Actor/Fake rufen sie) ──
@@ -357,10 +368,19 @@ public sealed class ProzessManager
         return new MarkingKompakt();
     }
 
-    /// <summary>Schreibt das Marking in HOT-Cache (immer) und Store (best-effort) fort.</summary>
+    /// <summary>
+    /// Schreibt das Marking in den HOT-Cache (IMMER — er trägt die Korrektheit über die Weckungen) und
+    /// gedrosselt (alle <see cref="_markingSchreibIntervall"/> Weckungen) durabel in den Store (best-effort).
+    /// So bleibt der durable Write O(N²/K) statt O(N²) — ohne die Warm-Korrektheit anzutasten.
+    /// </summary>
     private async Task SchreibeMarkingAsync(Guid korrelation, string regelHash, int logVersion, MarkingKompakt marking, CancellationToken ct)
     {
         _hotMarking[korrelation] = (regelHash, marking);
+
+        var seit = _seitSchreib.GetValueOrDefault(korrelation) + 1;
+        if (seit < _markingSchreibIntervall) { _seitSchreib[korrelation] = seit; return; }
+        _seitSchreib[korrelation] = 0;
+
         try
         {
             await _markingStore!.SchreibeAsync(new ProzessMarking
@@ -379,6 +399,7 @@ public sealed class ProzessManager
     private async Task VerwirfMarkingAsync(Guid korrelation, CancellationToken ct)
     {
         _hotMarking.Remove(korrelation);
+        _seitSchreib.Remove(korrelation);
         if (_markingStore is null) return;
         try { await _markingStore.LöscheAsync(korrelation, ct); }
         catch (Exception ex) { Console.WriteLine($"[Prozess-Marking] Löschen fehlgeschlagen ({korrelation}): {ex.Message}"); }
