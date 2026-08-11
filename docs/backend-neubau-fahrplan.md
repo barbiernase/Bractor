@@ -318,23 +318,34 @@ Managers *auf* die P4-Maschinenklasse ist eine optionale Folge-Konsolidierung, k
 ## Phase 7 — Transport in den Graphen · TG-2 / K1 (orthogonal)
 **Zweck:** interne Nachrichten als Graph-Knoten; generierter Poly-Serializer.
 
-- [ ] Interne Typen (`CommandEnvelope`, `EventEnvelope`, `SignalEnvelope`, `Wake`/`WakeAck`, `Publish`/`Ack`, `Subscribe`, `ProzessWake`/`MeldeFehlschlag`) in die Typ-Registry.
-- [ ] Poly-Serializer generieren (reflexionsfrei, über die Registry) und am `WithRemote`-Punkt (`CqrsServiceExtension.cs:335-340`) registrieren.
-- [ ] Boot-Check: jeder interne Typ hat einen Serializer → sonst Start-Abbruch.
-- [ ] Laute Fehler: `_ = RequestAsync`-Stellen fangen + dead-lettern statt stillem Drop.
-- [ ] Broker: Subscriber per `ClusterIdentity` statt lokaler PID; Abo-Entscheidung (durable vs. Poll-heilt) treffen.
+> **Stand:** **Iteration 1 geliefert** (Command-Dispatch- + Pull/Wake-Plane). Ein generierter,
+> reflexionsfreier JSON-Poly-Serializer (`WireSerializerGenerator` → `GeneratedWire`/`GeneratedWirePoly`
+> über den hand-gepflegten `CqrsWireJsonContext`) ist am `WithRemote`-Punkt registriert
+> (`CqrsServiceExtension.cs`, `CqrsWireSerializer` id=100/prio=-100, strikte Whitelist via `IWireMessage`).
+> Boot-Check (`WireSerializerBootCheck`) + Round-trip-Test (`WireSerializerRoundTripTests`, Prüfstand)
+> grün. **Iteration 2 offen:** PubSub-Broker cross-node (blockiert an `Subscribe(PID)` → `ClusterIdentity`)
+> und die `RequestAsync`-Härtung.
+
+- [x] **Iter. 1:** Top-Level-Hüllen `CommandEnvelope`/`CommandResult`/`Wake`/`WakeAck` (Marker `IWireMessage`) + alle `ICommand`/`IEvent`-Payloads serialisierbar.
+- [ ] **Iter. 2:** restliche interne Typen (`EventEnvelope`, `SignalEnvelope`, `Publish`/`Ack`, `Subscribe`, `PipelineAck`) in den Wire-Serializer.
+- [x] **Iter. 1:** Poly-Serializer generiert (reflexionsfrei, über die Registry) und am `WithRemote`-Punkt registriert.
+- [x] **Iter. 1:** Boot-Check: fehlt einem Typ die Abdeckung → Start-Abbruch (`WireSerializerBootCheck`).
+- [ ] **Iter. 2:** Laute Fehler: `_ = RequestAsync`-Stellen fangen + dead-lettern statt stillem Drop.
+- [ ] **Iter. 2:** Broker: Subscriber per `ClusterIdentity` statt lokaler PID; Abo-Entscheidung (durable vs. Poll-heilt) treffen.
 
 **Tor (Ebene 1):** Round-trip-Test über *jeden* internen Typ grün (serialisiert+deserialisiert = gleich);
-Boot bricht bei fehlendem Serializer.
+Boot bricht bei fehlendem Serializer. — **Iter. 1 erreicht** (Command-/Pull-Plane; PubSub-Typen in Iter. 2).
 
 ---
 
 ## Phase 8 — Multi-Node-Tor (Verifikation)
 **Zweck:** der eigentliche Rest-Aufwand — beweisen, nicht coden.
 
-- [ ] Zwei-Member-Test: zwei ActorSystems, ein Consul-Cluster.
+- [x] **Zwei-Member-Test** (`TwoNodeCommandDispatchTests`, Integration): zwei ActorSystems, ein Consul-Cluster;
+  Charge distinkter Ids von Node A per `RequestAsync<CommandResult>` → Anfrage + Antwort serialisieren cross-node. Grün.
 
 **Tor (Ebene 2, zwei Nodes):** ein Adapter je Stream; Ordnung erhalten; Poll heilt Totalverlust cross-node.
+— **Command-Dispatch cross-node bewiesen** (Iter. 1); der Pull-Adapter cross-node folgt mit PubSub-Iter. 2.
 
 ---
 

@@ -1,6 +1,6 @@
 namespace Abstractions;
 
-public class CommandResult
+public class CommandResult : IWireMessage
 {
     public bool Success { get; set; }
     public string? ErrorMessage { get; set; }

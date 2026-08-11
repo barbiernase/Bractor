@@ -1,3 +1,5 @@
+using Abstractions;
+
 namespace Infrastructure.Projections;
 
 /// <summary>
@@ -12,10 +14,10 @@ namespace Infrastructure.Projections;
 /// detached-Emit wird spätestens vom nächsten Poll re-emittiert, Empfänger dedupliziert).
 /// Für REPLAYBARE Konsumenten (Projektion) ist der Tracker maßgeblich → das Flag ist folgenlos.
 /// </summary>
-public sealed record Wake(bool VomPoll = false);
+public sealed record Wake(bool VomPoll = false) : IWireMessage;
 
 /// <summary>Quittung auf einen Wake (der Sender feuert i. d. R. fire-and-forget).</summary>
-public sealed record WakeAck;
+public sealed record WakeAck : IWireMessage;
 
 /// <summary>
 /// Beitrag eines zusätzlichen Cluster-Kinds zur ClusterConfig (Phase 4a). Wird von

@@ -6,6 +6,7 @@ using Infrastructure.Persistence;
 using Infrastructure.Pipeline;
 using Infrastructure.Projections;
 using Infrastructure.PubSub;
+using Infrastructure.Serialization;
 using Infrastructure.PubSub.Extensions;
 using Infrastructure.PubSub.Startup;
 using Infrastructure.Startup;
@@ -397,15 +398,24 @@ public static class CqrsServiceExtensions
             // Cluster-Node von anderen Hosts/Containern nicht erreichbar.
             // AdvertisedHost teilt anderen Nodes mit, unter welcher Adresse
             // dieser Node erreichbar ist.
+            // ★ MULTI-NODE: Wire-Serializer für den internen Actor-Plane registrieren (VOR WithRemote).
+            //   Ohne diesen Serializer sind CommandEnvelope/CommandResult/Wake/… rohe CLR-Objekte
+            //   → de facto single-node. Strikte Whitelist (GeneratedWire.CanSerialize) lässt PID &
+            //   andere Protobuf-IMessage weiter beim Default-Serializer (id 0).
             var remoteConfig = GrpcNetRemoteConfig
                 .BindTo("0.0.0.0")
-                .WithAdvertisedHost(builder.AdvertisedHost);
-        
+                .WithAdvertisedHost(builder.AdvertisedHost)
+                .WithSerializer(CqrsWireSerializer.SerializerId, CqrsWireSerializer.Priority, new CqrsWireSerializer());
+
             system
                 .WithRemote(remoteConfig)
                 .WithCluster(clusterConfig);
-        
-            Console.WriteLine("  + ActorSystem erstellt");
+
+            // ★ Boot-Check (Roadmap K1): fehlt einem internen Typ die Serializer-Abdeckung → Start-Abbruch,
+            //   statt dass die Lücke erst cross-node zur Laufzeit still aufliegt.
+            WireSerializerBootCheck.Verify();
+
+            Console.WriteLine("  + ActorSystem erstellt (+ Wire-Serializer id=" + CqrsWireSerializer.SerializerId + ")");
             return system;
         });
     

@@ -51,8 +51,13 @@ verdrahtet.
 (gegen echtes Marten/Consul/Redis, sequentiell).**
 
 **Bewusst offen (Priorität):**
-1. **Cross-Node/Multi-Node** — kein Serializer für den internen Plane → de facto single-node
-   (der eine große strukturelle Block).
+1. **Cross-Node/Multi-Node** — **Iteration 1 geliefert:** generierter, reflexionsfreier Wire-Serializer
+   (`CqrsWireSerializer` + `WireSerializerGenerator` → `GeneratedWire`/`GeneratedWirePoly` über
+   `CqrsWireJsonContext`, Marker `IWireMessage`) am `WithRemote`-Punkt registriert, Boot-Check
+   (`WireSerializerBootCheck`) + Round-trip-Test grün; **Zwei-Node-Command-Dispatch bewiesen**
+   (`TwoNodeCommandDispatchTests`). **Iteration 2 offen:** PubSub-Broker cross-node (blockiert an
+   `Subscribe(PID)` → `ClusterIdentity`) + `RequestAsync`-Härtung. Bis dahin ist nur der
+   Command-/Pull-Plane cross-node, PubSub bleibt single-node.
 2. **P5b Marking-Cursor** — Prozess-Fold ist O(N²); zurückgestellte Optimierung.
 3. **Schreibpfad-Perf** — paralleler Drain skaliert sublinear (`wait_event` offen).
 4. **KlärungNötig-Pfad** korrekt-per-Konstruktion, aber ohne Testdeckung.

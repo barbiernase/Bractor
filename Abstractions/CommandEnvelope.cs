@@ -4,7 +4,7 @@ namespace Abstractions;
 /// Envelope für Commands mit Metadaten.
 /// Implementiert IAggregateEnvelope — Commands haben immer Aggregate-Kontext.
 /// </summary>
-public record CommandEnvelope : IAggregateEnvelope
+public record CommandEnvelope : IAggregateEnvelope, IWireMessage
 {
     public Guid CommandId { get; init; } = Guid.NewGuid();
     public Guid AggregateId { get; init; }
