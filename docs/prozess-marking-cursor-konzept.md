@@ -28,9 +28,17 @@ Prozess-Schicht. Bewusst getrennt gehalten: löst ein anderes Problem als Snapsh
 > ~neutral; bei Aggregaten MIT Historie (H Alt-Events je Ziel — der eigentliche Anwendungsfall, „akkumulierendes
 > Ziel"/§0) ist er datengebunden → bei N=20, H=300 misst der Benchmark **21,8× weniger Events und 3,2× schnellere
 > Wall-Clock**, mit H wachsend. Der Voll-Fold re-liest die ganze Historie jeder Weckung, der Cursor genau einmal.
-> **Offene Folge-Optimierung:** die Zahl der Read-AUFRUFE (Roundtrips) senkt der Cursor noch nicht — signal-/
-> feuer-gerichtete Reads (nur den gerade befeuerten Stream nachlesen) brächten auch bei kleinen Streams einen
-> Latenz-Gewinn; das ist eine eigene, korrektheits-sensible Erweiterung (Kaltstart muss voll lesen).
+>
+> **Feuer-gerichtete Reads (umgesetzt):** auf dem WARM-Pfad (Hot-Cache dieser Aktivierung) faltet der Manager nur
+> die Streams nach, in die er seit dem letzten Fold GEFEUERT hat (`_dirty`) plus nie-gesehene neue Ziele — für
+> alle anderen trägt das gecachte Marking die Wahrheit (ihr Ergebnis kann sich nicht geändert haben; nur der
+> Manager erzeugt SEINE Vorgänge auf dem Ziel). Damit fällt auch die Zahl der `ReadStreamAsync`-AUFRUFE
+> (Roundtrips) von O(N²) auf ~O(1) pro Weckung. KALTSTART (Hot-Miss: Store-Load/frisch) faltet voll — die
+> Wahrheit rekonstruieren (Invariante 1). Bewiesen gleichwertig über die Äquivalenz-Proben (Feuer-Sequenz
+> Cursor AUS == AN) UND die Saga-Integrationstests (die real passivieren → Kaltstart-Pfad). Messung (echtes
+> Postgres): OHNE Historie bei N=60 nun **15,8× weniger Aufrufe → 9,1× schnellere Wall-Clock** (vorher ~neutral);
+> MIT Historie (N=20, H=300) **5,5× schneller**. Der Manager-Log-Read (`LadeStatusAsync`, single-writer) bleibt
+> als kleiner O(N)-Rest cachebar — offener Feinschliff.
 
 ## 0. Das Problem
 

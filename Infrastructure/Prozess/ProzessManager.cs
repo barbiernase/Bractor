@@ -41,6 +41,12 @@ public sealed class ProzessManager
     private readonly Dictionary<Guid, (string RegelHash, MarkingKompakt Marking)> _hotMarking = new();
     // Wieviele Weckungen seit dem letzten DURABLEN Marking-Write je Korrelation (Drossel, s.u.).
     private readonly Dictionary<Guid, int> _seitSchreib = new();
+    // ★ P5b (feuer-gerichtete Reads): je Korrelation die Ziel-Streams, in die seit dem letzten Fold GEFEUERT
+    //   wurde — nur DEREN Ergebnis kann sich geändert haben (der Manager ist der einzige Erzeuger SEINER
+    //   Vorgänge auf dem Ziel). Auf dem WARM-Pfad faltet er nur diese (+ nie-gesehene neue Ziele) nach, statt
+    //   alle Kandidaten-Streams neu zu lesen → DB-Roundtrips von O(N²) auf ~O(1) pro Weckung. Kaltstart
+    //   (Hot-Miss) liest voll (die Wahrheit rekonstruieren) — Invariante 1 gewahrt.
+    private readonly Dictionary<Guid, HashSet<Guid>> _dirty = new();
     // ★ P5b (Konzept §5, ProzessMarkingThreshold): das Marking wird NICHT bei jeder Weckung durabel geschrieben.
     //   Der HOT-Cache trägt die Korrektheit über die Weckungen EINER Aktivierung; der durable Write ist nur der
     //   Kaltstart-Beschleuniger (Passivierung/Crash). Jede Weckung zu schreiben tauschte O(N²) Event-Reads gegen
@@ -194,7 +200,16 @@ public sealed class ProzessManager
     // ── Feuern: Vorgang → deterministische CommandId (Framework-Inbox), fire-and-forget dispatchen ──
     // Der Regel-Command bleibt REIN (keine Vorgang-Injektion); die Idempotenz sichert die CommandId.
     private Task FeuereAsync(Guid korrelation, ICommand cmd, Guid vorgang, CancellationToken ct)
-        => _dispatch(korrelation, cmd, vorgang, ct);
+    {
+        // ★ P5b: das befeuerte Ziel ist ab jetzt „dirty" — die nächste Weckung MUSS genau diesen Stream nachfalten
+        //   (dort erscheint das Ergebnis der Transition). Alles andere trägt der HOT-Cache.
+        if (CursorAktiv)
+        {
+            if (!_dirty.TryGetValue(korrelation, out var set)) { set = new HashSet<Guid>(); _dirty[korrelation] = set; }
+            set.Add(cmd.AggregateId);
+        }
+        return _dispatch(korrelation, cmd, vorgang, ct);
+    }
 
     // ── Marking falten (Fixpunkt über die Ziel-Streams) ──
 
@@ -234,13 +249,19 @@ public sealed class ProzessManager
         if (!CursorAktiv)
         {
             // Voll-Fold: frisches, leeres Marking → jeder Ziel-Stream ab 0 (das frühere Verhalten, unverändert).
-            var (_, kandidatenVoll) = await FalteAsync(korrelation, mz, regeln, new MarkingKompakt(), ct);
+            var (_, kandidatenVoll) = await FalteAsync(korrelation, mz, regeln, new MarkingKompakt(), nurDirty: null, ct);
             return kandidatenVoll;
         }
 
         var regelHash = ProzessRegelHash.Berechne(regeln);
-        var marking = await HoleMarkingAsync(korrelation, regelHash, ct);
-        var (_, kandidaten) = await FalteAsync(korrelation, mz, regeln, marking, ct);
+        var (marking, warm) = await HoleMarkingAsync(korrelation, regelHash, ct);
+
+        // WARM (Hot-Cache): nur die seit dem letzten Fold befeuerten Streams (+ nie-gesehene) nachfalten.
+        // KALT (Store-Load/frisch): voll lesen — die Wahrheit rekonstruieren (nurDirty = null).
+        HashSet<Guid>? nurDirty = warm ? (_dirty.TryGetValue(korrelation, out var d) ? d : new HashSet<Guid>()) : null;
+        var (_, kandidaten) = await FalteAsync(korrelation, mz, regeln, marking, nurDirty, ct);
+        _dirty[korrelation] = new HashSet<Guid>();   // gelesen — FeuereAsync füllt für die nächste Weckung neu
+
         await SchreibeMarkingAsync(korrelation, regelHash, mz.Version, marking, ct);
         return kandidaten;
     }
@@ -256,7 +277,8 @@ public sealed class ProzessManager
     /// Kandidaten, dieselbe Feuer-Entscheidung. Ein leeres <paramref name="marking"/> ist der Voll-Fold ab 0.
     /// </summary>
     private async Task<(List<Token> Tokens, List<Kandidat> Kandidaten)> FalteAsync(
-        Guid korrelation, ManagerStatus mz, ProzessRegeln regeln, MarkingKompakt marking, CancellationToken ct)
+        Guid korrelation, ManagerStatus mz, ProzessRegeln regeln, MarkingKompakt marking,
+        HashSet<Guid>? nurDirty, CancellationToken ct)
     {
         // In DIESER Weckung schon bis Head integrierte Streams (ein Read je Stream pro Weckung, wie das alte Lies).
         var integriert = new HashSet<Guid>();
@@ -320,7 +342,11 @@ public sealed class ProzessManager
 
                         // Den Ziel-Stream bis Head einarbeiten (Tail-Read bei aktivem Cursor, ab 0 beim Voll-Fold),
                         // DANN die Achsen aus dem Marking lesen — statt den Stream bei jeder Weckung neu zu scannen.
-                        await Integriere(cmd.AggregateId);
+                        // ★ Feuer-gerichtet (warm): NUR befeuerte (dirty) oder nie-gesehene Streams lesen; für alle
+                        //   anderen trägt das gecachte Marking die Wahrheit (ihr Ergebnis kann sich nicht geändert
+                        //   haben). nurDirty == null (Kaltstart/Voll-Fold) → jeden Stream lesen (Fallback).
+                        if (nurDirty is null || nurDirty.Contains(cmd.AggregateId) || !marking.StreamCursor.ContainsKey(cmd.AggregateId))
+                            await Integriere(cmd.AggregateId);
                         var marke = marking.Vorgänge.GetValueOrDefault(vorgang.ToString());
                         var aufgeloest = marke is not null;                 // irgendein Ziel-Event mit dieser Kausalität
                         var wirkung = marke?.Wirkung ?? false;               // ein Domänen-Event → kompensierbar + Join
@@ -352,20 +378,24 @@ public sealed class ProzessManager
     /// der durable Store (Kaltstart). Passt der <paramref name="regelHash"/> nicht (Regeländerung) oder fehlt der
     /// Eintrag, startet ein LEERES Marking → Voll-Fold ab 0 (Fallback, Invariante 1).
     /// </summary>
-    private async Task<MarkingKompakt> HoleMarkingAsync(Guid korrelation, string regelHash, CancellationToken ct)
+    private async Task<(MarkingKompakt Marking, bool Warm)> HoleMarkingAsync(Guid korrelation, string regelHash, CancellationToken ct)
     {
+        // WARM: der HOT-Cache dieser Instanz hat das Marking in dieser Aktivierung schon gefaltet → es ist
+        //   aktuell bis auf die seither befeuerten (dirty) Streams → feuer-gerichteter Read genügt.
         if (_hotMarking.TryGetValue(korrelation, out var hot) && hot.RegelHash == regelHash)
-            return hot.Marking;
+            return (hot.Marking, true);
 
+        // KALT: aus dem durablen Store geladen ODER frisch → könnte Tails verpasst haben (Passivierung) →
+        //   diese Weckung VOLL falten (nurDirty = null), erst danach ist es warm.
         try
         {
             var doc = await _markingStore!.LadeAsync(korrelation, ct);
             if (doc is not null && doc.RegelHash == regelHash)
-                return doc.Marking;
+                return (doc.Marking, false);
         }
         catch (Exception ex) { Console.WriteLine($"[Prozess-Marking] Laden fehlgeschlagen ({korrelation}): {ex.Message}"); }
 
-        return new MarkingKompakt();
+        return (new MarkingKompakt(), false);
     }
 
     /// <summary>
@@ -400,6 +430,7 @@ public sealed class ProzessManager
     {
         _hotMarking.Remove(korrelation);
         _seitSchreib.Remove(korrelation);
+        _dirty.Remove(korrelation);
         if (_markingStore is null) return;
         try { await _markingStore.LöscheAsync(korrelation, ct); }
         catch (Exception ex) { Console.WriteLine($"[Prozess-Marking] Löschen fehlgeschlagen ({korrelation}): {ex.Message}"); }

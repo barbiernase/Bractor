@@ -47,7 +47,10 @@ Deadlines/Fristen (`IDbClock`), Monitoring (`/health`, `/monitoring/metrics`), D
 parallelem Drain (+48 %), STJ-Serializer (opt-in), optionaler Version-Index. **Snapshots** voll
 verdrahtet. **P5b Marking-Cursor geliefert:** der Prozess-Fold ist von O(N²) auf O(N) Stream-Reads
 (nicht-autoritativer Tail-Cursor, `IProzessMarkingStore` + Marten-`ProzessMarkingDoc`, HOT-Cache je
-Actor; Voll-Fold bleibt Fallback bei fehlendem/stale `RegelHash`).
+Actor; Voll-Fold bleibt Fallback bei fehlendem/stale `RegelHash`). **Feuer-gerichtete Reads:** warm
+liest der Manager nur die seit dem letzten Fold befeuerten Streams nach → auch die DB-Roundtrips O(N²)→O(N)
+(gemessen echtes Postgres: bis 9× schnellere Wall-Clock bei N=60; mit Aggregat-Historie 5,5×). Kaltstart
+faltet voll (Invariante 1). Äquivalenz + Sagas grün.
 
 **Tests (echt gemessen): Prüfstand 106/106 grün (in-memory, store-frei), Integration 33/33
 (gegen echtes Marten/Consul/Redis, sequentiell; der `SnapshotLive`-Cold-Boot-Flake ausgenommen).**
