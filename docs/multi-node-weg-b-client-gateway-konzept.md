@@ -1,8 +1,15 @@
-# Multi-Node · Weg B: Client-Targeted-Delivery cross-node robust machen (Gateway-Kind)
+# Multi-Node · Weg B: Client-Targeted-Delivery cross-node robust machen
 
-> **Status:** Konzept / zurückgestellt. **Kein Blocker** für „PubSub-Signale reisen cross-node"
-> (Multi-Node Iteration 2). Eigene, spätere Baustelle. Erhoben aus zwei code-verifizierten
-> Subsystem-Analysen am Stand `68de45f`.
+> **Status: UMGESETZT — via Variante B (periodisches Re-Assert), nicht via Gateway-Kind.**
+> Der socket-haltende Node meldet seine Client-Subscriptions periodisch erneut an die Shards
+> (`SubscriptionTracker.ReassertAllAsync` + Re-Assert-Loop in `CqrsClientService.Connect`, Intervall 20 s) —
+> das direkte Analogon zum Projektions-Poll-Backstop. Test: `ClientSubscriptionReassertTests` (Integration).
+> Das ursprünglich skizzierte **Gateway-Kind (Variante A, unten)** wurde als überdimensioniert verworfen —
+> es löst keinen Fall, den B nicht auch löst (Begründung im Abschnitt „Zwei Wege"). Es bleibt als
+> dokumentierte schwerere Alternative erhalten, falls je eine vom Socket-Node UNABHÄNGIGE
+> Subscription-Durabilität gebraucht wird.
+>
+> Ursprünglich erhoben aus zwei code-verifizierten Subsystem-Analysen am Stand `68de45f`.
 
 ## Warum dieses Dokument
 
@@ -66,7 +73,39 @@ lässt sich also **prinzipiell nicht virtualisieren**. Ein reiner `PID→Cluster
 `Subscribe`-Record würde den gesamten gRPC-Streaming-Layer mitreißen. (Weg A ließe sich
 virtualisieren, Weg B nicht — die Asymmetrie ist der Grund, PID grundsätzlich beizubehalten.)
 
-## Das Konzept: node-adressierendes Gateway-Kind
+## ✅ Variante B (UMGESETZT): periodisches Re-Assert = das Poll-Äquivalent
+
+Die eigentliche Lücke ist „Subscription verloren, kein Selbstheilungs-Netz". Genau dafür hat Weg A
+den Poll. Also bekommt Weg B **denselben Mechanismus**: der socket-haltende Node **erneuert seine
+Subscription periodisch** (Intervall 20 s). Rebalanciert ein Shard und verliert seine In-Memory-Liste,
+füllt das nächste Re-Assert sie wieder — die Ziel-PID ist stets die aktuelle Proxy-PID.
+
+```
+Node X:  alle 20 s ──Subscribe(proxyPid) erneut──► Shard   (Poll-Äquivalent, Inv. 2/6)
+```
+
+**Kein neuer Grain, keine geteilte Karte, kein ClusterIdentity-Umbau.** Umgesetzt in:
+- `Infrastructure/GrpcClient/SubscriptionTracker.cs` → `ReassertAllAsync` (re-sendet Subscribe für alle
+  getrackten Typen; Snapshot unter Lock, Sends ohne Lock; Fehler nur geloggt).
+- `Infrastructure/GrpcClient/CqrsClientService.cs` → `SubscriptionReassertLoopAsync`, gestartet je
+  `Connect()`, an den Verbindungs-`ct` gekoppelt, gestoppt vor dem Tracker-Dispose.
+- Test: `Infrastructure.Integration.Tests/ClientSubscriptionReassertTests.cs` — simuliert Shard-Verlust
+  per direktem `Unsubscribe` am Shard und prüft, dass ein Re-Assert die Subscription wiederherstellt.
+
+**Warum B statt A:** Variante A (Gateway-Kind) würde nur gebraucht, wenn die Subscription **unabhängig
+vom Socket-Node** überleben müsste. Muss sie nicht: stirbt Node X, ist die Session sowieso tot (Socket
+weg) → der Client verbindet neu und subscribed neu. Es gibt keinen Fall, den A löst und B nicht. B ist
+das direkte Analogon zum bestehenden Poll-Backstop und passt zur Architektur (Inv. 2/6). Eine tote PID
+(Node X weg) bleibt bis zum nächsten Rebalance als harmlose Leiche im Shard (Send ins Leere → Protos
+eigenes Dead-Letter), selbst-aufräumend.
+
+Rest-Kante: bis zu einem Re-Assert-Intervall (~20 s) nach einem Rebalance können Targeted-Events
+ausfallen — exakt das Verlust-Fenster, das Weg A beim Poll auch hat. Bewusst so (verlierbarer schneller
+Kanal).
+
+---
+
+## Variante A (schwerere Alternative, NICHT gebaut): node-adressierendes Gateway-Kind
 
 Die Idee entkoppelt **zwei Dinge, die heute in einer PID verschmolzen sind**:
 1. das **stabile, cluster-adressierbare Subscription-Ziel** (überlebt Rebalance, re-resolved), und

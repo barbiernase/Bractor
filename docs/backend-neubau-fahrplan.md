@@ -333,7 +333,7 @@ Managers *auf* die P4-Maschinenklasse ist eine optionale Folge-Konsolidierung, k
 - [x] **Iter. 1:** Poly-Serializer generiert (reflexionsfrei, über die Registry) und am `WithRemote`-Punkt registriert.
 - [x] **Iter. 1+2:** Boot-Check: fehlt einem Typ die Abdeckung → Start-Abbruch (`WireSerializerBootCheck`, deckt Commands/Events/Signals/Triggers).
 - [x] **Iter. 2:** Laute Fehler: die 3 stillen `_ = RequestAsync`-Sends (`BrokerPublisher`, Pull-Wake, ProzessWake) gefangen + geloggt (BEWUSST kein Dead-Letter — verlierbar per Invariante 2, Poll heilt; Dead-Letter bleibt dem Command-Pfad vorbehalten).
-- [ ] **Später (Weg-B-Gateway):** Broker-Subscriber per `ClusterIdentity` NUR für den client-gebundenen Targeted-Pfad robust machen — eigenes Konzept, kein Blocker (`docs/multi-node-weg-b-client-gateway-konzept.md`).
+- [x] **Weg-B-Robustheit (Client-Targeted cross-node):** GELÖST via periodisches Re-Assert der Client-Subscriptions (`SubscriptionTracker.ReassertAllAsync` + Loop in `CqrsClientService.Connect`) — das Poll-Äquivalent, KEIN Gateway-Kind/ClusterIdentity-Umbau nötig (die überlegene Variante ist im Konzept-Doc begründet). Test `ClientSubscriptionReassertTests`. Details: `docs/multi-node-weg-b-client-gateway-konzept.md`.
 
 **Tor (Ebene 1):** Round-trip-Test über *jeden* internen Typ grün (serialisiert+deserialisiert = gleich);
 Boot bricht bei fehlendem Serializer. — **Iter. 1+2 erreicht** (Command-/Pull-/PubSub-/Pipeline-/Prozess-Plane).

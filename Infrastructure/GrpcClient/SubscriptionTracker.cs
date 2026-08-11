@@ -122,6 +122,50 @@ public class SubscriptionTracker : IAsyncDisposable
     }
 
     /// <summary>
+    /// Sendet die Subscription für ALLE getrackten Typen ERNEUT an die Shards — die Selbst-Heilung des
+    /// Client-Targeted-Pfads (das Poll-Äquivalent, das durable Projektionen längst haben).
+    ///
+    /// WARUM nötig (Multi-Node): die Subscriber-Liste eines Broker-Shards ist in-memory. Rebalanciert der
+    /// Shard-Actor (Node-Ausfall, Topologie-Änderung), ist sie weg — und für den Client-Targeted-Pfad gibt
+    /// es KEINEN Poll-Backstop wie bei den Projektionen. Ein periodisches Re-Assert von HIER (dem
+    /// socket-haltenden Node) stellt sie wieder her; die Ziel-PID ist stets die aktuelle Proxy-PID.
+    /// Idempotent am Shard (Dictionary-Overwrite). BEWUSST kein Dead-Letter: Targeted-Delivery ist
+    /// verlierbar (Invariante 6) — es geht nur um Selbst-Heilung, nicht um Wiederzustellung.
+    ///
+    /// Der Lock wird nur für den Snapshot gehalten, NICHT über die Netzwerk-Sends (die dürfen einen
+    /// gleichzeitigen Subscribe/Unsubscribe nicht blockieren).
+    /// </summary>
+    public async Task ReassertAllAsync(CancellationToken ct = default)
+    {
+        List<KeyValuePair<Type, BrokerSubscription>> snapshot;
+        await _lock.WaitAsync(ct);
+        try
+        {
+            if (_disposed || _subscriptions.Count == 0) return;
+            snapshot = _subscriptions.ToList();
+        }
+        finally
+        {
+            _lock.Release();
+        }
+
+        foreach (var (eventType, subscription) in snapshot)
+        {
+            try
+            {
+                await subscription.SubscribeAsync(eventType, ct);
+            }
+            catch (Exception ex)
+            {
+                // Best-effort: ein fehlgeschlagenes Re-Assert heilt der nächste Durchlauf.
+                _logger.LogDebug(ex,
+                    "[SubscriptionTracker-{Subscriber}] Re-Assert {Type} fehlgeschlagen — nächster Durchlauf heilt",
+                    _subscriberId, eventType.Name);
+            }
+        }
+    }
+
+    /// <summary>
     /// Beendet ALLE Subscriptions. Wird im finally-Block aufgerufen.
     /// </summary>
     public async Task UnsubscribeAllAsync()

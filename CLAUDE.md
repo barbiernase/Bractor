@@ -57,8 +57,10 @@ verdrahtet.
    SignalEnvelope/Subscribe+PID/PipelineAck/ProzessWake/Trigger, `PID`-Converter via `PID.FromAddress`).
    **Bewiesen:** `TwoNodeCommandDispatchTests`, `TwoNodePubSubSignalTests`, `RemotePidDeliverySmokeTests`.
    3 stille fire-and-forget-Sends gehärtet (catch+log, kein Dead-Letter — verlierbar per Inv. 2).
-   **Bewusst offen (kein Blocker):** der client-gebundene gRPC-Targeted-Pfad (Weg B) cross-node ROBUST
-   machen braucht ein node-adressierendes Gateway-Kind → `docs/multi-node-weg-b-client-gateway-konzept.md`.
+   **Weg B (gRPC-Client-Targeted) robust:** periodisches Re-Assert der Client-Subscriptions
+   (`SubscriptionTracker.ReassertAllAsync` + Loop in `CqrsClientService.Connect`) = Poll-Äquivalent;
+   kein Gateway-Kind nötig (`ClientSubscriptionReassertTests`, `docs/multi-node-weg-b-client-gateway-konzept.md`).
+   Damit ist der Multi-Node-Block praktisch geschlossen (Rest: reine Betriebs-/Verifikations-Härtung).
 2. **P5b Marking-Cursor** — Prozess-Fold ist O(N²); zurückgestellte Optimierung.
 3. **Schreibpfad-Perf** — paralleler Drain skaliert sublinear (`wait_event` offen).
 4. **KlärungNötig-Pfad** korrekt-per-Konstruktion, aber ohne Testdeckung.

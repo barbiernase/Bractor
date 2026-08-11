@@ -69,6 +69,13 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     
     private static int _sessionCounter = 0;
 
+    /// <summary>
+    /// Intervall, in dem eine offene Session ihre PubSub-Subscriptions ERNEUT an die Shards sendet
+    /// (Selbst-Heilung gegen Shard-Rebalance — das Poll-Äquivalent für den Client-Targeted-Pfad).
+    /// In Anlehnung an das Projektions-Poll-Intervall (30 s), etwas kürzer für schnellere Erholung.
+    /// </summary>
+    private static readonly TimeSpan SubscriptionReassertInterval = TimeSpan.FromSeconds(20);
+
     public CqrsClientServiceImpl(
         ActorSystem actorSystem,
         ProtoMessageMapper mapper,
@@ -118,19 +125,33 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 sessionId,
                 _logger);
 
+            // 2b. Re-Assert-Loop: hält die Subscriptions dieser Session am Leben (Selbst-Heilung gegen
+            //     Shard-Rebalance). Läuft parallel zum Read-Loop, gekoppelt an ct; wird VOR dem
+            //     Tracker-Dispose (await using) gestoppt.
+            using var reassertCts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            var reassertLoop = SubscriptionReassertLoopAsync(subscriptionTracker, sessionId, reassertCts.Token);
+
             // 3. Read-Loop
             _logger.LogDebug("{Session} entering read loop", sessionId);
 
-            while (await requestStream.MoveNext(ct))
+            try
             {
-                var clientMessage = requestStream.Current;
-                await ProcessMessageAsync(
-                    clientMessage, responseStream, subscriptionTracker,
-                    proxyPid,
-                    sessionId, ct);
+                while (await requestStream.MoveNext(ct))
+                {
+                    var clientMessage = requestStream.Current;
+                    await ProcessMessageAsync(
+                        clientMessage, responseStream, subscriptionTracker,
+                        proxyPid,
+                        sessionId, ct);
+                }
+
+                _logger.LogInformation("{Session} client closed stream normally", sessionId);
             }
-            
-            _logger.LogInformation("{Session} client closed stream normally", sessionId);
+            finally
+            {
+                reassertCts.Cancel();
+                try { await reassertLoop; } catch { /* Loop-Ende ist erwartbar */ }
+            }
         }
         catch (OperationCanceledException)
         {
@@ -167,6 +188,32 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             }
 
             _logger.LogInformation("{Session} disconnected", sessionId);
+        }
+    }
+
+    /// <summary>
+    /// Erneuert periodisch die Subscriptions der Session an den Broker-Shards, bis die Verbindung endet
+    /// (<paramref name="ct"/> gecancelt). Selbst-Heilung gegen Shard-Rebalance — das Poll-Äquivalent für
+    /// den Client-Targeted-Pfad. Fehler sind folgenlos (der nächste Durchlauf heilt).
+    /// </summary>
+    private async Task SubscriptionReassertLoopAsync(SubscriptionTracker tracker, string sessionId, CancellationToken ct)
+    {
+        try
+        {
+            while (!ct.IsCancellationRequested)
+            {
+                await Task.Delay(SubscriptionReassertInterval, ct);
+                await tracker.ReassertAllAsync(ct);
+                _logger.LogTrace("{Session} Subscriptions erneut angemeldet (Re-Assert)", sessionId);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Verbindung endet — normal.
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "{Session} Re-Assert-Loop unerwartet beendet", sessionId);
         }
     }
 
