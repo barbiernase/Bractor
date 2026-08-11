@@ -1,8 +1,18 @@
 # Handoff: Multi-Node Cold-Start — Single-Migrator für Marten-Schema
 
-> **Status:** offen / zu implementieren. Aufgedeckt vom cross-node Saga-Test
-> (`LoadHarness --mode saga`, siehe `docs/multi-node-deployment.md`). **Kein** Serializer-/
+> **Status:** ✅ ABGESCHLOSSEN (2026-08-11). Umgesetzt wie unten beschrieben (Variante a: dediziertes
+> `migrate`-Init-Service). **Akzeptanzkriterium erfüllt:** frischer Cluster (`down -v`), ERSTER Saga-Lauf
+> = **20/20** cross-node, exactly-once, Geld erhalten; keine 23505/duplicate-key in irgendeinem Member-Log.
+> Prüfstand 120/120 grün, Host.Grpc/LoadHarness bauen. Aufgedeckt vom cross-node Saga-Test
+> (`LoadHarness --mode saga`, siehe `docs/multi-node-deployment.md`). War **kein** Serializer-/
 > Dispatch-/Framework-Kern-Fehler — ein reines Schema-Migrations-Deployment-Thema.
+>
+> **Umsetzung (Kurzfassung):** `MartenSchemaRole` (Standalone|Migrator|Member) +
+> `CqrsFrameworkBuilder.SchemaRole` steuern die AutoCreate-Strategie der `AddMarten`-Kette (Member =
+> `AutoCreate.None`); `CqrsSchemaMigrator.ApplyAllAsync` (Host.Grpc, `Cluster__Role=migrator`) legt
+> alles eager an und exitet; `deploy-multinode/docker-compose.yml` bekommt ein `migrate`-Init-Service,
+> auf dessen `service_completed_successfully` grpc1/2/3 (alle `member`) warten. `RegisteredSnapshotTypes`
+> läuft auf allen Pfaden. Details in den folgenden Abschnitten (als Referenz belassen).
 
 ## Das Problem (präzise)
 

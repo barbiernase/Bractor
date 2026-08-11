@@ -58,6 +58,15 @@ builder.Services.AddCqrsFramework(opts =>
         ?? ("loadtest-" + Guid.NewGuid().ToString("N")[..8]);
     opts.ConsulAddress = builder.Configuration.GetValue<string>("Consul:Address") ?? opts.ConsulAddress;
     opts.AdvertisedHost = builder.Configuration.GetValue<string>("Cluster:AdvertisedHost") ?? opts.AdvertisedHost;
+    // Multi-Node-Cold-Start: als joinender Member läuft der Harness mit AutoCreate.None (der Migrator hat
+    //   das Schema bereits angelegt) → kein Runtime-Lazy-Create-Race. Unset/standalone = wie bisher.
+    opts.SchemaRole = (builder.Configuration.GetValue<string>("Cluster:Role") ?? "standalone")
+        .Trim().ToLowerInvariant() switch
+    {
+        "migrator" => Infrastructure.Extensions.MartenSchemaRole.Migrator,
+        "member" => Infrastructure.Extensions.MartenSchemaRole.Member,
+        _ => Infrastructure.Extensions.MartenSchemaRole.Standalone,
+    };
     if (builder.Configuration.GetConnectionString("EventStore") is { Length: > 0 } es)
         opts.EventStoreConnectionString = es;
     if (builder.Configuration.GetValue<string>("EventStore:Schema") is { Length: > 0 } schema)

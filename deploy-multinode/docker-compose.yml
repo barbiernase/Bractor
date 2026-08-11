@@ -16,6 +16,8 @@
 name: cqrs-multinode
 
 # Gemeinsame Cluster-Env aller Nodes (grpc1/2/3 + loadharness). AdvertisedHost wird je Node überschrieben.
+# Cluster__Role=member: alle laufen mit AutoCreate.None (kein Runtime-Lazy-Create) — der dedizierte
+# `migrate`-Service (Role=migrator) legt das Marten-Schema vorher eager + lock-gesichert an.
 x-cluster-env: &cluster-env
   Consul__Address: consul:8500
   ConnectionStrings__EventStore: "Host=postgres;Port=5432;Database=cqrs_events;Username=postgres;Password=postgres"
@@ -23,6 +25,7 @@ x-cluster-env: &cluster-env
   Redis__Endpoint: redis:6379
   Redis__Database: "1"
   Cluster__Name: cqrs-cluster
+  Cluster__Role: member
   Grpc__Port: "5001"
   Pipeline__WatchPath: /data/input
   Pipeline__PreprocessedPath: /data/preprocessed
@@ -74,17 +77,32 @@ services:
       timeout: 3s
       retries: 10
 
-  # grpc1 fährt ZUERST hoch und migriert das Marten-Schema (es). grpc2/grpc3 warten auf seinen
-  # Healthcheck (Port 5001 offen == Schema fertig) → kein gleichzeitiges CREATE SCHEMA-Race.
-  grpc1:
+  # ★ Dedizierter Schema-Migrator (Multi-Node-Cold-Start, docs/multi-node-deployment.md): dasselbe Image,
+  #   Cluster__Role=migrator → legt ALLE Marten-Objekte (inkl. der sonst LAZY erzeugten Snapshot-Tabellen)
+  #   eager + advisory-lock-gesichert an, dann exit 0 (kein Cluster-/Consul-Start, berührt nur Postgres).
+  #   grpc1/2/3 (alle Role=member, AutoCreate.None) warten per service_completed_successfully → kein Cold-
+  #   Start-CREATE-TABLE-Race mehr. Erster Saga-Lauf gegen frischen Cluster ist 20/20.
+  migrate:
     build: *grpc-build
+    image: cqrs-host-grpc:mn
+    environment:
+      <<: *cluster-env
+      Cluster__Role: migrator
+      Cluster__AdvertisedHost: migrate
+    restart: "no"
+    depends_on: *infra-deps
+
+  grpc1:
     image: cqrs-host-grpc:mn
     environment:
       <<: *cluster-env
       Cluster__AdvertisedHost: grpc1
     ports:
       - "127.0.0.1:5001:5001"   # nur grpc1 nach außen (h2c) — für optionale externe Checks
-    depends_on: *infra-deps
+    depends_on:
+      <<: *infra-deps
+      migrate:
+        condition: service_completed_successfully
     healthcheck:
       test: ["CMD-SHELL", "nc -z localhost 5001 || exit 1"]
       interval: 5s
@@ -99,8 +117,8 @@ services:
       Cluster__AdvertisedHost: grpc2
     depends_on:
       <<: *infra-deps
-      grpc1:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   grpc3:
     image: cqrs-host-grpc:mn
@@ -109,8 +127,8 @@ services:
       Cluster__AdvertisedHost: grpc3
     depends_on:
       <<: *infra-deps
-      grpc1:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
 
   # Verifikations-Node: joint denselben Cluster (gleicher Cluster__Name), dispatcht Commands über die
   # native Actor-Plane und prüft per Rehydration exactly-once. PartitionIdentityLookup platziert ~¾ der

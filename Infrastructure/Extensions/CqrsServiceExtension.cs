@@ -27,6 +27,39 @@ using Weasel.Core;
 namespace Infrastructure.Extensions;
 
 /// <summary>
+/// Rolle eines Nodes bezüglich der Marten-Schema-Migration (Multi-Node-Cold-Start).
+///
+/// Marten legt die Snapshot-Tabelle eines bisher ungenutzten Aggregat-Typs erst beim ERSTEN
+/// Zugriff LAZY an — ohne Advisory-Lock. Aktivieren mehrere Nodes denselben Typ gleichzeitig,
+/// rennen sie auf `CREATE TABLE mt_doc_snapshot_&lt;typ&gt;` (23505). Der saubere Fix ist
+/// „migrate once, then scale out": genau EIN <see cref="Migrator"/> legt ALLE Objekte eager +
+/// lock-gesichert an, die übrigen Nodes starten als <see cref="Member"/> (kein Runtime-Create).
+/// </summary>
+public enum MartenSchemaRole
+{
+    /// <summary>
+    /// Standardfall (Single-Node/Dev/Tests): <c>AutoCreate.CreateOrUpdate</c>, lazy Create beim
+    /// ersten Zugriff, KEIN eager Apply-on-Startup. Verhalten wie bisher — nichts ändert sich.
+    /// </summary>
+    Standalone,
+
+    /// <summary>
+    /// Dedizierter Schema-Migrator: <c>AutoCreate.CreateOrUpdate</c>; legt beim Start ALLE
+    /// konfigurierten Objekte (inkl. aller Snapshot-Tabellen) eager + advisory-lock-gesichert an.
+    /// Läuft in einem Cluster genau EINMAL, bevor die Member starten.
+    /// </summary>
+    Migrator,
+
+    /// <summary>
+    /// Cluster-Mitglied nach abgeschlossener Migration: <c>AutoCreate.None</c> — kein Runtime-
+    /// Lazy-Create mehr → kein Cold-Start-Race. Setzt voraus, dass der <see cref="Migrator"/>
+    /// vorher durch ist. Die Snapshot-/Doc-Typen sind trotzdem registriert (Member KENNEN sie,
+    /// legen sie nur nicht an).
+    /// </summary>
+    Member,
+}
+
+/// <summary>
 /// Zentrale Service-Registrierung fuer das CQRS-Framework.
 /// 
 /// WICHTIG: Diese Klasse hat KEIN Domain-Wissen!
@@ -100,6 +133,11 @@ public static class CqrsServiceExtensions
         Console.WriteLine("[CQRS] Registriere Infrastruktur...");
         
         // Marten (PostgreSQL EventStore)
+        //
+        // ★ MULTI-NODE-COLD-START (docs/multi-node-deployment.md): die AutoCreate-Strategie hängt an der
+        //   Node-Rolle (siehe MartenSchemaRole). Member laufen mit AutoCreate.None (kein Runtime-Lazy-
+        //   Create → kein CREATE-TABLE-Race), der EINE Migrator legt alles eager + advisory-lock-gesichert
+        //   an (der Host ruft dafür CqrsSchemaMigrator.ApplyAllAsync und exitet). Standalone = unverändert.
         services.AddMarten(options =>
         {
             // ★ Audit-Fix #2: expliziter, konfigurierbarer Command-Timeout (statt implizitem Npgsql-Default ~30s).
@@ -113,7 +151,11 @@ public static class CqrsServiceExtensions
             options.Connection(eventStoreConn.ConnectionString);
             options.Events.DatabaseSchemaName = builder.EventStoreSchema;
             options.DatabaseSchemaName = builder.EventStoreSchema;
-            options.AutoCreateSchemaObjects = AutoCreate.CreateOrUpdate;
+            // ★ Member (nach abgeschlossener Migration): NICHTS zur Laufzeit anlegen — der Migrator ist
+            //   durch, das Schema steht. Standalone/Migrator: wie bisher lazy/eager CreateOrUpdate.
+            options.AutoCreateSchemaObjects = builder.SchemaRole == MartenSchemaRole.Member
+                ? AutoCreate.None
+                : AutoCreate.CreateOrUpdate;
 
             MartenEventTypeRegistration.RegisterEventTypes(options);
 
@@ -171,13 +213,12 @@ public static class CqrsServiceExtensions
             //   Korrelation, abgeleiteter Cache des gefalteten Markings → Tail-Fold statt Voll-Fold (O(N²)→O(N)).
             options.Schema.For<Persistence.ProzessMarkingDoc>().Identity(x => x.Id);
         });
-        // Anm. Multi-Node-Cold-Start: Marten legt die Snapshot-Tabelle eines Aggregat-Typs erst beim ERSTEN
-        //   Zugriff LAZY an (ohne Advisory-Lock). Aktivieren mehrere Nodes gleichzeitig denselben, bisher
-        //   ungenutzten Aggregat-Typ, können sie auf `CREATE TABLE mt_doc_snapshot_<typ>` rennen (transient,
-        //   selbstheilend über Proto-Reaktivierung; Geld bleibt erhalten). `ApplyAllDatabaseChangesOnStartup`
-        //   löst den Lazy-Race, führt aber Migrations-Lock-Contention beim gleichzeitigen Start EIN (Verlierer
-        //   crasht) → der saubere Fix ist ein EINZELNER Migrator-Job (AutoCreate.None auf den übrigen Nodes),
-        //   siehe docs/multi-node-deployment.md. Bewusst nicht hier verdrahtet (per-Node-Config nötig).
+        // Anm. Multi-Node-Cold-Start (GELÖST): Marten legt die Snapshot-Tabelle eines Aggregat-Typs sonst erst
+        //   beim ERSTEN Zugriff LAZY an (ohne Advisory-Lock) → gleichzeitige Node-Aktivierung rennt auf
+        //   `CREATE TABLE mt_doc_snapshot_<typ>`. `ApplyAllDatabaseChangesOnStartup` auf ALLEN Nodes ersetzt das
+        //   nur durch Migrations-Lock-Contention (Verlierer crasht). Der saubere Fix ist jetzt verdrahtet: genau
+        //   EIN Migrator (SchemaRole.Migrator, Host ruft CqrsSchemaMigrator.ApplyAllAsync → exit 0), die übrigen
+        //   Nodes SchemaRole.Member (AutoCreate.None). Per-Node über `Cluster__Role`. Siehe docs/multi-node-deployment.md.
 
         services.AddSingleton<IEventStoreRepository>(provider =>
         {
@@ -498,6 +539,15 @@ public class CqrsFrameworkBuilder
     public string AdvertisedHost { get; set; } = "localhost";
     
     public bool EnableGrpc { get; set; } = true;
+
+    /// <summary>
+    /// Marten-Schema-Rolle dieses Nodes (Multi-Node-Cold-Start). Steuert die AutoCreate-/Apply-
+    /// Strategie der <c>AddMarten</c>-Kette — siehe <see cref="MartenSchemaRole"/>. Default
+    /// <see cref="MartenSchemaRole.Standalone"/> = unverändertes bisheriges Single-Node-Verhalten.
+    /// In einem Cluster startet genau EIN <see cref="MartenSchemaRole.Migrator"/> vor den
+    /// <see cref="MartenSchemaRole.Member"/>n (z. B. per <c>Cluster__Role=migrator|member</c>).
+    /// </summary>
+    public MartenSchemaRole SchemaRole { get; set; } = MartenSchemaRole.Standalone;
 
     public string EventStoreConnectionString { get; set; } =
         "Host=localhost;Database=cqrs_events;Username=postgres;Password=postgres";

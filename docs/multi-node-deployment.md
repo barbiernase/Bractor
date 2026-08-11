@@ -36,7 +36,8 @@
 | Datei | Rolle |
 |---|---|
 | `deploy-multinode/Dockerfile` | Multi-Stage-Image (`sdk:9.0` build → `aspnet:9.0` runtime), parametrisiert über `PROJECT`/`ENTRY_DLL` → baut sowohl Host.Grpc als auch LoadHarness. `dotnet publish <PROJECT>` zieht nur den Abhängigkeitsgraphen (Domain.Client/Blazor NICHT). netcat für den TCP-Healthcheck. |
-| `deploy-multinode/docker-compose.yml` | Consul + Postgres + Redis + grpc1/2/3 + loadharness. YAML-Anker für gemeinsame Cluster-Env; grpc2/3 warten auf grpc1s Healthcheck (Schema-Race, s. u.). |
+| `deploy-multinode/docker-compose.yml` | Consul + Postgres + Redis + **migrate** (Init-Job) + grpc1/2/3 + loadharness. YAML-Anker für gemeinsame Cluster-Env (`Cluster__Role=member`); der `migrate`-Service (`Role=migrator`) legt das Schema an und exitet, grpc1/2/3 warten per `service_completed_successfully` (Cold-Start-Fix, s. u.). |
+| `Infrastructure/Extensions/CqrsSchemaMigrator.cs` | Host-aufrufbarer Eager-Migrator (`ApplyAllAsync` → `IDocumentStore.Storage.ApplyAllConfiguredChangesToDatabaseAsync`): legt ALLE Marten-Objekte inkl. der sonst lazy erzeugten Snapshot-Tabellen an. `Host.Grpc` ruft ihn im `Cluster__Role=migrator`-Modus und exitet dann (ohne Cluster-Start). |
 | `.dockerignore` (Repo-Root) | hält host-lokale `bin/obj` (falscher RID) und `deploy-linux/`-Artefakte aus dem Build-Context. |
 | `LoadHarness/Program.cs` | minimal parametrisiert: liest `Cluster__Name`/`Consul__Address`/`Cluster__AdvertisedHost` + Connection-Strings aus der Config; ohne diese Env behält es sein natives, isoliertes Last-Test-Verhalten (Zufalls-Cluster). MIT ihnen JOINT es den laufenden `cqrs-cluster`. |
 
@@ -57,7 +58,8 @@ werden, weil Container im selben Docker-Netz sich auf allen Ports direkt erreich
 Voraussetzung: Docker + Docker Compose. Kein lokales .NET nötig (der Build läuft im SDK-Image).
 
 ```bash
-# 1. Cluster bauen + hochfahren (grpc1 migriert das Schema zuerst, dann grpc2/grpc3)
+# 1. Cluster bauen + hochfahren (der `migrate`-Init-Job legt das Schema eager + lock-gesichert an
+#    und exitet mit 0; grpc1/2/3 starten erst DANACH — service_completed_successfully)
 docker compose -f deploy-multinode/docker-compose.yml up -d --build
 
 # 2. Formation prüfen — Consul zeigt die drei Member
@@ -84,12 +86,17 @@ docker compose -f deploy-multinode/docker-compose.yml down -v
 
 ## Stolpersteine (real aufgetreten) & Lösungen
 
-1. **Marten-Schema-Race beim Cold-Start.** Fahren alle drei Nodes gleichzeitig hoch, führen sie
-   parallel `CREATE SCHEMA es` / die Marten-Migration aus → `duplicate key value violates unique
-   constraint "pg_namespace_nspname_index"`, zwei Nodes crashen. **Lösung:** `grpc1` bekommt einen
-   TCP-Healthcheck (Port 5001 offen == Schema migriert); `grpc2`/`grpc3` haben `depends_on: grpc1
-   condition: service_healthy` → sie starten erst, wenn das Schema steht, und finden alles vor (kein
-   DDL, kein Race). Standardmuster „migrate once, then scale out".
+1. **Marten-Schema-Race beim Cold-Start (GELÖST — dedizierter Migrator).** Fahren alle Nodes
+   gleichzeitig hoch, führen sie parallel die Marten-Migration aus → `duplicate key`-Races. Das gilt
+   für zweierlei DDL: (a) die Basis-Objekte (`CREATE SCHEMA es`, Event-Tabellen) und (b) — subtiler —
+   die Snapshot-Tabelle eines bisher ungenutzten Aggregat-Typs, die Marten erst **lazy zur Laufzeit**
+   beim ersten Zugriff anlegt (s. u. „Cold-Start"). Der frühere Fix (grpc1-Healthcheck-Staffelung)
+   deckte nur (a) ab, nicht das lazy (b). **Lösung jetzt:** genau EIN `migrate`-Init-Service
+   (`Cluster__Role=migrator`) legt ALLE Objekte inkl. aller Snapshot-Tabellen eager + advisory-lock-
+   gesichert an (`CqrsSchemaMigrator.ApplyAllAsync`) und exitet mit 0; grpc1/2/3 laufen als
+   `Cluster__Role=member` (`AutoCreate.None` → kein Runtime-DDL) und warten per
+   `depends_on: migrate condition: service_completed_successfully`. Standardmuster „migrate once, then
+   scale out" — sauber auf BEIDE DDL-Klassen angewandt.
 2. **HTTP-Endpoints sind h2c-only.** Kestrel im Host.Grpc lauscht nur mit `HttpProtocols.Http2` auf
    Port 5001 → `/health`, `/monitoring/metrics`, `/webhook/datei` sprechen HTTP/2 im Klartext. Ein
    gewöhnliches `curl http://…/health` scheitert; man braucht `curl --http2-prior-knowledge`. Für die
@@ -147,14 +154,15 @@ Exactly-once-Nachweis (0 falsch, 0 Fehler) zeigt, dass die Serialisierung in bei
 alle vier Nodes korrekt funktioniert — wäre sie kaputt, hätten die fremd platzierten Aggregate versagt und
 der Rehydrations-Check `falsch > 0` gemeldet.
 
-**Cross-node PROZESS/SAGA: ✅ bewiesen (mit einem dokumentierten Cold-Start-Vorbehalt).** Der
+**Cross-node PROZESS/SAGA: ✅ bewiesen (Cold-Start-Vorbehalt inzwischen behoben, s. u.).** Der
 `--mode saga` löst 40 Überweisungen aus (`BeauftrageUeberweisung` → `Ueberweisungsauftrag` emittiert
 das Auslöse-Event → die Prozess-Maschine auf den Server-Nodes reserviert an der Quelle, schreibt dem
 Ziel gut und bucht per Join). Das übt den **kompletten durable-Konsumenten-Plane cross-node**: Signal →
 Korrelations-Router → ProzessManager → Folge-Commands an FREMDE Aggregate — genau die
 `SignalEnvelope`/`ProzessWake`/`Publish`-Pfade, die Iteration 2 serialisierbar gemacht hat.
 
-Warmer Cluster (Snapshot-Tabellen existieren bereits):
+**Cold-Start (frischer Cluster, `down -v`, ERSTER Lauf) — jetzt 20/20** (mit dediziertem Migrator,
+verifiziert):
 ```
 Konten abgeschlossen:  20/20  (Saldo==erwartet ∧ Reserviert==0)
 Gelderhaltung:         Ist-Summe 20000000 == Soll-Summe 20000000
@@ -162,23 +170,27 @@ Offene Reservierungen: 0
 ✓ Alle 40 Überweisungs-Sagas cross-node abgeschlossen — exactly-once, Geld erhalten.   (nach 0.1 s)
 ```
 
-**Cold-Start-Vorbehalt (aufgedeckt vom Saga-Test):** Beim ALLERERSTEN Auftreten eines bisher
-ungenutzten Aggregat-Typs (hier `Ueberweisungsauftrag`) legt Marten dessen Snapshot-Tabelle
-(`es.mt_doc_snapshot_ueberweisungsauftrag`) **lazy beim ersten Zugriff** an — ohne Advisory-Lock.
-Aktivieren mehrere Nodes den Typ gleichzeitig, rennen sie auf `CREATE TABLE` (`duplicate key pg_type`).
-Im ersten Saga-Lauf gegen einen KALTEN Cluster lief dadurch nur ein Teil im 120-s-Fenster durch
-(reproduziert: 14–16 von 20, Race-Timing-abhängig) — **aber die Gelderhaltung hielt jedes Mal exakt** (die
-nicht-gelaufenen Transfers bewegten schlicht nichts, 0 offene Reservierungen). Es ist **transient und
-selbstheilend** (Proto reaktiviert den Actor, sobald ein Node die Tabelle angelegt hat; der
-Prozess-§3-Backstop holt Hänger nach) und **kein** Serializer-/Dispatch-Fehler: der zweite Lauf gegen
-denselben (nun warmen) Cluster war jedes Mal sofort 20/20.
+**Cold-Start-Vorbehalt (aufgedeckt vom Saga-Test) — BEHOBEN.** Ursprünglich galt: beim ALLERERSTEN
+Auftreten eines bisher ungenutzten Aggregat-Typs (hier `Ueberweisungsauftrag`) legte Marten dessen
+Snapshot-Tabelle (`es.mt_doc_snapshot_ueberweisungsauftrag`) **lazy beim ersten Zugriff** an — ohne
+Advisory-Lock. Aktivierten mehrere Nodes den Typ gleichzeitig, rannten sie auf `CREATE TABLE`
+(`duplicate key pg_type`). Im ersten Saga-Lauf gegen einen KALTEN Cluster lief dadurch nur ein Teil
+durch (reproduziert: 14–16 von 20, Race-Timing-abhängig) — die Gelderhaltung hielt zwar jedes Mal
+exakt (transient, selbstheilend), aber der erste Lauf war nicht deterministisch grün.
 
-**Sauberer Produktions-Fix (empfohlen, hier bewusst NICHT verdrahtet):** die Schema-Migration von
-GENAU EINEM Migrator ausführen (`ApplyAllDatabaseChangesOnStartup` auf einem Init-Job/Node,
-`AutoCreate.None` auf den übrigen). Achtung: `ApplyAllDatabaseChangesOnStartup` auf ALLEN Nodes
-gleichzeitig ersetzt den Lazy-Race durch **Migrations-Lock-Contention** (der Verlierer crasht mit
-„Unable to attain a global lock in time") — verifiziert und wieder zurückgenommen. Der Single-Migrator
-braucht eine per-Node-Config (Migrator-Flag) und ist ein eigener, kleiner Framework-Schritt.
+**Fix (verdrahtet und verifiziert): genau EIN Migrator.** Ein dedizierter `migrate`-Init-Service
+(`Cluster__Role=migrator`) legt beim Cluster-Start ALLE Schema-Objekte — inkl. **aller**
+Snapshot-Tabellen (alle 16 `es.mt_doc_snapshot_*`, `ueberweisungsauftrag` eingeschlossen) — eager +
+advisory-lock-gesichert an (`CqrsSchemaMigrator.ApplyAllAsync`), dann exit 0. grpc1/2/3 starten als
+`Cluster__Role=member` mit `AutoCreate.None` (kein Runtime-Lazy-Create → kein Race) und warten per
+`service_completed_successfully`. Ergebnis: der ERSTE Saga-Lauf gegen einen `down -v`-frischen Cluster
+ist **20/20**, ohne 23505/duplicate-key in irgendeinem Member-Log.
+
+Warum **nicht** `ApplyAllDatabaseChangesOnStartup` auf ALLEN Nodes: das ersetzt den Lazy-Race nur durch
+**Migrations-Lock-Contention** (der Verlierer crasht mit „Unable to attain a global lock in time") —
+verifiziert und wieder zurückgenommen. Nur GENAU EIN Migrator vermeidet beides. Per-Node gesteuert
+über `Cluster__Role` (`migrator`|`member`|`standalone`); `standalone` (Default) = unverändertes
+Single-Node-Verhalten für Dev/Tests.
 
 ## Fazit
 
@@ -190,4 +202,6 @@ aufgetretenen Stolpersteine sind **Deployment-/Betriebs-Themen** (Schema-Migrati
 Lazy-Snapshot-Cold-Start-Race, Docker-Netzwerk-Aliase, Consul-Geister) — **kein einziger** im
 Framework-Kern oder in der Serialisierung selbst. Der Saga-Test war dabei besonders wertvoll: er hat
 sowohl die cross-node Prozess-Maschine bewiesen als auch den Cold-Start-Schema-Race sichtbar gemacht, den
-der reine Aggregat-Lauf nie berührt hätte.
+der reine Aggregat-Lauf nie berührt hätte. Der letzte dieser Vorbehalte (der Lazy-Snapshot-Cold-Start-Race)
+ist inzwischen über einen dedizierten Single-Migrator geschlossen: der ERSTE Saga-Lauf gegen einen frischen
+Cluster ist deterministisch **20/20**.

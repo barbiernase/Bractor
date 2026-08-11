@@ -45,6 +45,20 @@ var watchPath = builder.Configuration.GetValue<string>("Pipeline:WatchPath")
     ?? "/data/input";
 var preprocessedPath = builder.Configuration.GetValue<string>("Pipeline:PreprocessedPath");
 
+// ─── Marten-Schema-Rolle (Multi-Node-Cold-Start, docs/multi-node-deployment.md) ───
+//   Cluster__Role = migrator | member | standalone (default).
+//   migrator: legt ALLE Schema-Objekte (inkl. lazy Snapshot-Tabellen) eager + lock-gesichert an → exit 0.
+//   member:   AutoCreate.None (kein Runtime-Lazy-Create → kein Cold-Start-Race; Migrator lief vorher).
+//   (unset):  standalone = unverändertes Single-Node-Verhalten.
+var clusterRole = (builder.Configuration.GetValue<string>("Cluster:Role") ?? "standalone")
+    .Trim().ToLowerInvariant();
+var schemaRole = clusterRole switch
+{
+    "migrator" => MartenSchemaRole.Migrator,
+    "member" => MartenSchemaRole.Member,
+    _ => MartenSchemaRole.Standalone,
+};
+
 // ─── Kestrel: HTTP/2 (gRPC braucht HTTP/2) ───
 // FIX: ListenAnyIP statt ListenLocalhost — sonst ist der Server
 // von anderen Hosts/Containern nicht erreichbar.
@@ -86,6 +100,9 @@ builder.Services.AddCqrsFramework(opts =>
     opts.AdvertisedHost =
         builder.Configuration.GetValue<string>("Cluster:AdvertisedHost") ?? "localhost";
 
+    // Schema-Rolle (Multi-Node-Cold-Start): steuert AutoCreate/Apply der Marten-Kette.
+    opts.SchemaRole = schemaRole;
+
     // gRPC Client Service
     opts.EnableGrpc = true;
 });
@@ -121,6 +138,24 @@ builder.Services.AddDeadlines(f =>
 // ─── Build + Run ───
 
 var app = builder.Build();
+
+// ─── Migrator-Modus (Multi-Node-Cold-Start): migrieren und exiten ───
+// Ein dedizierter Migrator legt ALLE Marten-Objekte (inkl. der sonst lazy erzeugten Snapshot-Tabellen)
+// eager + advisory-lock-gesichert an, dann exit 0. Bewusst OHNE app.Run(): kein Cluster-/Consul-/PubSub-
+// Start, der Migrator berührt nur Postgres. Die Member (AutoCreate.None) warten in Compose auf diesen
+// erfolgreichen Abschluss (depends_on: service_completed_successfully) und finden das Schema fertig vor.
+if (schemaRole == MartenSchemaRole.Migrator)
+{
+    Console.WriteLine();
+    Console.WriteLine("==========================================================");
+    Console.WriteLine("  CQRS/ES Schema-Migrator (Cluster__Role=migrator)");
+    Console.WriteLine("  Lege alle Marten-Objekte eager + lock-gesichert an …");
+    Console.WriteLine("==========================================================");
+    await CqrsSchemaMigrator.ApplyAllAsync(app.Services);
+    Console.WriteLine("  ✓ Marten-Schema vollständig migriert — exit 0.");
+    Console.WriteLine();
+    return;
+}
 
 app.MapCqrsGrpcService();
 
