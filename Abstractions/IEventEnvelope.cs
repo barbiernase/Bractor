@@ -31,4 +31,15 @@ public interface IEventEnvelope : IAggregateEnvelope
     /// Anker für Reihenfolge, Guard, Marke und deterministische Identitäten.
     /// </summary>
     int AggregateVersion { get; }
+
+    /// <summary>
+    /// Unter-Position innerhalb EINER gespeicherten Stream-Position (Default 0). Fast immer 0:
+    /// ein gespeichertes Event → ein materialisiertes Event. Nur bei einem Upcasting-<b>Split</b>
+    /// (eine frühere Gestalt wird beim Lesen zu mehreren Events) tragen die Geschwister dieselbe
+    /// <see cref="AggregateVersion"/>, aber aufsteigende <c>SubIndex</c> 0, 1, … — so bleibt der
+    /// Dedup-/Exactly-once-Schlüssel append-artiger Projektionen
+    /// <c>(AggregateId, AggregateVersion, SubIndex)</c> eindeutig. Die Versions-Zählung selbst bleibt
+    /// an den gespeicherten Positionen (der SubIndex zählt NICHT hoch).
+    /// </summary>
+    int SubIndex { get; }
 }

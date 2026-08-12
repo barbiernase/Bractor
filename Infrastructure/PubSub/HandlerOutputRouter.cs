@@ -81,8 +81,14 @@ public sealed class HandlerOutputRouter
         //   Die Auslöse-Position (Stream + Version) reist in die Kausalität → stabile Id über Re-Wakes;
         //   die Wirksamkeit sichert der Noop-Decider/Inbox des Empfängers (Spec 9.3).
         var triggerVersion = (trigger as IEventEnvelope)?.AggregateVersion ?? 0;
+        // ★ Upcasting-Split: bei einem Split teilen sich Geschwister dieselbe AggregateVersion; der SubIndex
+        //   disambiguiert die Auslöse-Position, damit ihre deterministischen Emit-Ids nicht kollidieren.
+        //   BACKWARD-KOMPATIBEL: SubIndex 0 (jedes heutige, nicht-gesplittete Event) lässt den Positions-String
+        //   unverändert → bytegleiche Ids wie bisher; nur >0 hängt ".{sub}" an.
+        var triggerSub = (trigger as IEventEnvelope)?.SubIndex ?? 0;
+        var pos = triggerSub == 0 ? $"{triggerVersion}" : $"{triggerVersion}.{triggerSub}";
         var korrelation = Guid.TryParse(trigger.CorrelationId, out var kr) ? kr : Guid.Empty;
-        var k = new EmitKausalität(korrelation, trigger.AggregateId, $"{triggerVersion}:{command.GetType().Name}");
+        var k = new EmitKausalität(korrelation, trigger.AggregateId, $"{pos}:{command.GetType().Name}");
         return _emitter.EmitAsync(command, k, ct);
     }
 }

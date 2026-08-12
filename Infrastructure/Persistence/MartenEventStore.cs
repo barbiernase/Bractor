@@ -1,4 +1,5 @@
 using Abstractions;
+using Infrastructure.Serialization;
 using JasperFx.Events;
 using Marten;
 using Marten.Exceptions;
@@ -161,23 +162,20 @@ public class MartenEventStore : IEventStoreRepository
 
         foreach (var @event in eventStream)
         {
-            // Marten wrappet unsere Events in seine eigene Event-Hülle.
-            // Das .Data-Property enthält das deserialisierte Domain-Event.
-            if (@event.Data is IEvent domainEvent)
+            // ★ Upcasting-Seam: Marten deserialisiert @event.Data via MapEventType getreu in den
+            //   FRÜHEREN oder AKTUELLEN Versionstyp. GeneratedEventUpcasting.Aufwerten fährt frühere
+            //   Versionen typisiert (reflection-frei) bis zur heutigen Gestalt; aktuelle Events fallen
+            //   unverändert durch. Ein unbekannter Typ WIRFT (statt still übersprungen zu werden).
+            //   Die Version zählt pro GESPEICHERTEM Event (nicht pro materialisiertem) — Split-invariant:
+            //   auch wenn ein Stored-Event später zu mehreren wird, rückt die Stream-Position um 1.
+            foreach (var domainEvent in GeneratedEventUpcasting.Aufwerten(@event.Data))
             {
                 // Interne Inbox-/Prozess-Marken: in der Version mitzählen, aber nicht auf den State anwenden
                 // (der Applier kennt sie nicht) — Framework-Naht (Exactly-once-Inbox).
                 if (domainEvent is not IProzessIntern)
                     handler.ApplyEvent(domainEvent);
-                state.Version++;
             }
-            else
-            {
-                _logger.LogWarning(
-                    "Event at version {Version} in stream {AggregateId} " +
-                    "could not be cast to IEvent. Type: {EventType}",
-                    @event.Version, aggregateId, @event.Data?.GetType().FullName ?? "null");
-            }
+            state.Version++;
         }
 
         _logger.LogDebug(
@@ -209,24 +207,32 @@ public class MartenEventStore : IEventStoreRepository
         var result = new List<EventEnvelope>(raw.Count);
         foreach (var e in raw)
         {
-            if (e.Data is not IEvent domain) continue;
-
             var aggregateType = e.Headers != null
                 && e.Headers.TryGetValue("aggregate_type", out var at)
                     ? at?.ToString() ?? string.Empty
                     : string.Empty;
 
-            result.Add(new EventEnvelope
+            // ★ Upcasting-Seam: eine Stored-Position wird zu ein (1:1) oder — bei einem künftigen
+            //   Split — mehreren materialisierten Events. Alle teilen dieselbe AggregateVersion, tragen
+            //   aber aufsteigende SubIndex 0,1,… → der Dedup-/Exactly-once-Schlüssel append-artiger
+            //   Projektionen (AggregateId, AggregateVersion, SubIndex) bleibt eindeutig. Für 1:1 ist
+            //   SubIndex immer 0 und das Verhalten identisch zu vorher.
+            var materialisiert = GeneratedEventUpcasting.Aufwerten(e.Data);
+            for (int si = 0; si < materialisiert.Count; si++)
             {
-                EventId          = e.Id,
-                AggregateId      = streamId,
-                AggregateVersion = (int)e.Version,
-                CreatedAtUtc     = e.Timestamp,
-                CorrelationId    = e.CorrelationId ?? string.Empty,
-                CausationId      = e.CausationId  ?? string.Empty,
-                AggregateType    = aggregateType,
-                Payload          = domain
-            });
+                result.Add(new EventEnvelope
+                {
+                    EventId          = e.Id,
+                    AggregateId      = streamId,
+                    AggregateVersion = (int)e.Version,
+                    SubIndex         = si,
+                    CreatedAtUtc     = e.Timestamp,
+                    CorrelationId    = e.CorrelationId ?? string.Empty,
+                    CausationId      = e.CausationId  ?? string.Empty,
+                    AggregateType    = aggregateType,
+                    Payload          = materialisiert[si]
+                });
+            }
         }
         return result;
     }

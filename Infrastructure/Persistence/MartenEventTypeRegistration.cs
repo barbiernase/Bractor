@@ -29,15 +29,21 @@ public static class MartenEventTypeRegistration
     /// </summary>
     public static void RegisterEventTypes(StoreOptions options)
     {
-        foreach (var (eventType, snakeCaseName) in GeneratedTypeRegistry.PersistableEvents)
+        // ★ Upcasting-Seam: die Registrierung kommt jetzt aus GeneratedEventUpcasting.Registrierungen —
+        //   aktuelle Events an ihrem (ggf. auf _v2/_v3 verschobenen) Diskriminator, frühere Versionen
+        //   (nur lesbar, Plain-Records) an dem Diskriminator, den ihre alten Bytes physisch tragen.
+        //   Für NICHT-evolvierte Events ist das exakt identisch zu GeneratedTypeRegistry.PersistableEvents
+        //   (Basis-snake_case). So deserialisiert Marten alte Bytes getreu in den früheren Typ; das
+        //   Aufwerten auf die aktuelle Gestalt macht danach GeneratedEventUpcasting.Aufwerten (Read-Pfad).
+        foreach (var (eventType, diskriminator) in Serialization.GeneratedEventUpcasting.Registrierungen)
         {
-            options.Events.MapEventType(eventType, snakeCaseName);
+            options.Events.MapEventType(eventType, diskriminator);
         }
 
-        Console.WriteLine($"[Marten] {GeneratedTypeRegistry.PersistableEvents.Count} Event-Typen registriert (from GeneratedTypeRegistry):");
-        foreach (var (eventType, snakeCaseName) in GeneratedTypeRegistry.PersistableEvents)
+        Console.WriteLine($"[Marten] {Serialization.GeneratedEventUpcasting.Registrierungen.Count} Event-Typen registriert (from GeneratedEventUpcasting, inkl. früherer Versionen):");
+        foreach (var (eventType, diskriminator) in Serialization.GeneratedEventUpcasting.Registrierungen)
         {
-            Console.WriteLine($"  → {eventType.Name} → {snakeCaseName}");
+            Console.WriteLine($"  → {eventType.Name} → {diskriminator}");
         }
     }
 

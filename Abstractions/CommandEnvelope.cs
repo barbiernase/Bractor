@@ -45,6 +45,8 @@ public record EventEnvelope : IEventEnvelope, IWireMessage
     public Guid EventId { get; init; } = Guid.NewGuid();
     public Guid AggregateId { get; init; }
     public int AggregateVersion { get; init; } = 0;
+    /// <summary>Unter-Position bei Upcasting-Splits; Default 0 (ein Stored-Event → ein materialisiertes Event). Siehe <see cref="IEventEnvelope.SubIndex"/>.</summary>
+    public int SubIndex { get; init; } = 0;
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;
     public string CausationId { get; init; } = Guid.NewGuid().ToString();
     public string CorrelationId { get; init; } = Guid.NewGuid().ToString();

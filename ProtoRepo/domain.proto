@@ -1032,7 +1032,7 @@ message BestandReserviertDto {
 }
 
 message LagerEingerichtetDto {
-    int32 bestand = 1;
+    int32 anfangs_bestand = 1;
 }
 
 message LagerExistiertBereitsDto {

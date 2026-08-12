@@ -20,9 +20,25 @@ public record ReserviereBestand(Guid AggregateId, int Menge) : ICommand;
 public record GebeBestandFrei(Guid AggregateId, int Menge) : ICommand;
 
 // ── Events ──
-public record LagerEingerichtet(int Bestand) : IEvent;
+// ★ SCHEMA-EVOLUTION (Beispiel, docs: Upcasting): das Feld hieß früher schlicht `Bestand`, heute
+//   `AnfangsBestand` (klarer: das Event hält den ANFANGS-Bestand bei Einrichtung). Eine Umbenennung
+//   ist der klassische STILLE Korruptionsfall — ohne Upcasting läse der Serializer das alte Feld nicht
+//   und der Bestand fiele lautlos auf 0. Die typisierte Wandlung unten (LagerEingerichtet_V1 → heute)
+//   fängt das ab; alte Bytes bleiben unverändert im Log (keine Migration), werden beim LESEN übersetzt.
+public record LagerEingerichtet(int AnfangsBestand) : IEvent;
 public record BestandReserviert(int Menge) : IEvent;
 public record BestandFreigegeben(int Menge) : IEvent;
+
+// ── Frühere Gestalt(en) + Wandlung (der Entwickler schreibt NUR das — kein String, kein JSON) ──
+/// <summary>Die erste Gestalt von <see cref="LagerEingerichtet"/> (Feld hieß <c>Bestand</c>). Schlichter
+/// Record, KEIN IEvent → nur lesbar; der Generator erkennt aus der Kante, dass dies eine frühere Version ist.</summary>
+public record LagerEingerichtet_V1(int Bestand);
+
+/// <summary>Wandelt die frühere Gestalt in die heutige: Feld <c>Bestand</c> → <c>AnfangsBestand</c>.</summary>
+public sealed class LagerEingerichtet_V1_Wandlung : IUpcast<LagerEingerichtet_V1, LagerEingerichtet>
+{
+    public LagerEingerichtet Wandle(LagerEingerichtet_V1 alt) => new(alt.Bestand);
+}
 
 // ── Ablehnungen (transient — lösen die Kompensation aus) ──
 public record BestandReichtNicht(Guid AggregateId, int Verfuegbar, int Angefordert) : ITransientEvent;
@@ -52,7 +68,7 @@ public partial class Lager
 
     public partial class Applier : IApplier<Lager>
     {
-        public void Apply(LagerEingerichtet evt) => this.State.Bestand = evt.Bestand;
+        public void Apply(LagerEingerichtet evt) => this.State.Bestand = evt.AnfangsBestand;
 
         public void Apply(BestandReserviert evt)
         {

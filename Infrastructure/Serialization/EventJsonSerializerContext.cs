@@ -64,6 +64,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(BestandReserviert))]
 [JsonSerializable(typeof(BestandFreigegeben))]
 [JsonSerializable(typeof(LagerEingerichtet))]
+[JsonSerializable(typeof(LagerEingerichtet_V1))] // frühere Gestalt (Schema-Evolution) — nur lesbar
 [JsonSerializable(typeof(Versendet))]
 [JsonSerializable(typeof(ZahlungskontoEingerichtet))]
 [JsonSerializable(typeof(BestellungAufgegeben))]
