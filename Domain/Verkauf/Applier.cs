@@ -16,7 +16,7 @@ public partial class Verkaufsauftrag
             this.State.KundeId = evt.KundeId;
             this.State.Kreditlimit = evt.Kreditlimit;
             this.State.Status = Auftragsstatus.Offen;
-            this.State.Gesamtsumme = new Geldwert(0m, evt.Kreditlimit.Waehrung);
+            this.State.Gesamtsumme = Geldwert.Null(evt.Kreditlimit.Waehrung);
         }
 
         public void Apply(VerkaufspositionHinzugefuegt evt)

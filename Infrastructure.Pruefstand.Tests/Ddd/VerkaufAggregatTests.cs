@@ -15,7 +15,7 @@ namespace Infrastructure.Pruefstand.Ddd;
 /// </summary>
 public class VerkaufAggregatTests
 {
-    private static Geldwert Eur(decimal betrag) => new Geldwert(betrag, Waehrung.EUR);
+    private static Geldwert Eur(decimal betrag) => Geldwert.Euro(betrag);
 
     private sealed class Fixture
     {
@@ -27,7 +27,7 @@ public class VerkaufAggregatTests
         {
             Auftrag = new Verkaufsauftrag();
             Handler = new AggregateHandlerFactory().CreateHandler(Auftrag);
-            Wende(new EroeffneVerkaufsauftrag(Guid.NewGuid(), Guid.NewGuid(), new Geldwert(kreditlimit, Waehrung.EUR)));
+            Wende(new EroeffneVerkaufsauftrag(Guid.NewGuid(), Guid.NewGuid(), Geldwert.Euro(kreditlimit)));
         }
 
         public IReadOnlyList<IEvent> Wende(ICommand cmd)
@@ -88,7 +88,7 @@ public class VerkaufAggregatTests
     public void Fremde_Waehrung_wird_abgelehnt()
     {
         var f = new Fixture(kreditlimit: 1000);
-        f.Wende(new FuegePositionHinzu(f.Auftrag.Id, "A-1", "Widget", 1, new Geldwert(100, Waehrung.USD)));
+        f.Wende(new FuegePositionHinzu(f.Auftrag.Id, "A-1", "Widget", 1, Geldwert.Von(100, Waehrung.USD)));
 
         f.LetzteAblehnungen.Should().ContainSingle().Which.Should().BeOfType<WaehrungPasstNicht>();
         f.Auftrag.Positionen.Should().BeEmpty();

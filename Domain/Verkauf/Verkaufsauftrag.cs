@@ -18,10 +18,10 @@ namespace Domain.Verkauf;
 public partial class Verkaufsauftrag : IState
 {
     public Guid KundeId { get; set; }
-    public Geldwert Kreditlimit { get; set; } = new(0m, Waehrung.EUR);
+    public Geldwert Kreditlimit { get; set; } = Geldwert.Null(Waehrung.EUR);
     public Auftragsstatus Status { get; set; } = Auftragsstatus.Offen;
     public List<Auftragsposition> Positionen { get; set; } = new();
-    public Geldwert Gesamtsumme { get; set; } = new(0m, Waehrung.EUR);
+    public Geldwert Gesamtsumme { get; set; } = Geldwert.Null(Waehrung.EUR);
 
     public bool IstOffen => Status == Auftragsstatus.Offen;
 

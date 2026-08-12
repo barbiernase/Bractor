@@ -20,7 +20,7 @@ neu erzeugt.
 
 | Baustein | Beleg |
 |---|---|
-| **Value Object** | `Verkauf/Wertobjekte.cs` → `Geldwert` (unveränderlich, selbstvalidierend im init-Accessor, Arithmetik mit Währungs-Guard — Verhalten IM Objekt) |
+| **Value Object** | `Verkauf/Geldwert.cs` (Daten) + `Geldwert.Verhalten.cs` (Erzeuger/Verhalten) — ein `partial record : IWertobjekt`, Verhalten auf DEMSELBEN Typ (kein separater Operationen-Typ, kein Attribut), Normalisierung total im `init`, benannte Fabriken `Euro`/`Null`/`Von` |
 | **Entity im Aggregat** | `Auftragsposition` (Identität = ArtikelNr) |
 | **Aggregate Root + Invarianten** | `Verkaufsauftrag` (Kreditlimit/Status/Währung/Mengen-Merge; `Gesamtsumme` O(1)) |
 | **Domain Event** | `Verkauf/Events.cs` (persistent + `ITransientEvent`-Ablehnungen) |
@@ -47,10 +47,19 @@ Neue Framework-Typen brauchen zudem je eine Zeile in den handgepflegten STJ-Mani
 
 `Domain/Verkauf/` weiß **nichts** über Serialisierung, Proto, Wire, DTO-Mapper, Marten oder
 Redis — die einzige Kopplung ist `using Abstractions;` (die Marker-Verträge `IState`/`IEvent`/
-`ICommand`/`IDecider`/`OneOf`). Das Value Object `Geldwert` trägt sein Verhalten als echte
-Methoden im Objekt. Als der DTO-Mapper zunächst kaputten Code erzeugte, lag die Ursache im
-Generator (`" (Ref)"`-Marker) — und **dort** wurde sie behoben. Die Domäne wurde NICHT an den
-Serializer angepasst; sie bleibt rein.
+`ICommand`/`IDecider`/`IWertobjekt`/`OneOf`). Als der DTO-Mapper zunächst kaputten Code
+erzeugte, lag die Ursache im Generator (`" (Ref)"`-Marker) — und **dort** wurde sie behoben.
+Die Domäne wurde NICHT an den Serializer angepasst.
+
+**Value-Object-Form (`partial record` + `IWertobjekt`):** Der Wert ist ein reiner Record;
+Erzeuger und Verhalten liegen als zweite `partial` auf demselben Typ — kein separater
+Operationen-Typ, kein Attribut, keine Extension-Klasse. Der Call-Site spricht Fachsprache
+(`Geldwert.Euro(1000)`, `preis.Mal(3)`, `summe.GroesserAls(limit)`). Konstruktion läuft nur
+typ-intern (Fabriken); im übrigen Fachcode steht kein `new Geldwert(...)` — die Kapsel-Grenze
+ist der Typ selbst. Der leere Marker `IWertobjekt` (analog `IState`) macht alle Wertobjekte
+compile-time auffindbar: ein späterer Analyzer kann daraus die Kapsel erzwingen
+(`new`/`with` nur im Typ) oder die Wertobjekt-Landkarte darstellen — reflexionsfrei, ohne dass
+der Fachcode etwas davon weiß.
 
 ## Pur: `Domain.DddPatterns/`
 
