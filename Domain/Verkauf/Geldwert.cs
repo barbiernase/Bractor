@@ -11,9 +11,9 @@ namespace Domain.Verkauf;
 /// </summary>
 public partial record Geldwert(decimal Betrag, Waehrung Waehrung) : IWertobjekt
 {
-    // Normalisierung (Rundung) ist total — sie kann nie scheitern und sitzt daher in der
-    // Konstruktion. So greift sie auch bei `with` und beim Rekonstruieren und hält die
-    // Wertgleichheit sauber (10,005 und 10,00 sind nicht plötzlich verschieden).
+    // Normalisierung (Rundung) ist total — sie kann nie scheitern und sitzt in der
+    // Konstruktion. So läuft jeder Erzeugungsweg (Fabriken, Deserialisieren) durch sie und
+    // hält die Wertgleichheit sauber; die Operationen (Plus/Mal) erhalten die 2 Stellen.
     public decimal Betrag { get; init; } = Runden(Betrag);
 
     private static decimal Runden(decimal betrag) => Math.Round(betrag, 2, MidpointRounding.ToEven);

@@ -1,38 +1,67 @@
 # DDD-Muster — Showcase & Referenz
 
 > Eine lauffähige, getestete Referenz der **taktischen DDD-Bausteine** im Idiom dieses
-> Frameworks — auf ZWEI Ebenen:
-> 1. **Integriert (echter Framework-Pfad):** `Domain/Verkauf/` — ein echtes Aggregat über
->    Decider/Applier, die GENERIERTE `AggregateHandlerFactory`, Proto- und Wire-Serialisierung.
-> 2. **Pur (store-frei):** `Domain.DddPatterns/` — die framework-orthogonalen Muster
->    (Specification, Domain Service, Saga, Repository) als reine Domäne.
->
+> Frameworks — **integriert und rein**, alles in `Domain/`, keine isolierte Parallelwelt.
 > Tests: `Infrastructure.Pruefstand.Tests/Ddd/` (Ebene 1, Prüfstand) — **gültig und performant** belegt.
 
-## Integriert: `Domain/Verkauf/` — durch die echte Pipeline
+## Leitlinie
 
-Das Aggregat `Verkaufsauftrag` läuft NICHT isoliert, sondern durch den vollen Framework-Pfad
-(wie Konto): `EroeffneVerkaufsauftrag`/`FuegePositionHinzu`/… → Decider (Invarianten,
-`OneOf`-Ablehnungen) → generierte `AggregateHandlerFactory` → Applier. Die Commands/Events und
-das **Value Object `Geldwert`** reisen real über den generierten DTO-/Proto-/Wire-Pfad — der
-Proto-Generator (`dotnet run --project Proto.SourceGeneration`) wurde ausgeführt und `domain.proto`
-neu erzeugt.
+Die Muster laufen durch den **echten** Framework-Pfad (Decider/Applier, generierte
+`AggregateHandlerFactory`, Proto-/Wire-Serialisierung), und die Domäne bleibt **rein**: sie
+weiß nichts über Serialisierung, Proto, Marten oder Redis. Wo das Framework einen Baustein
+bereits nativ trägt (Saga, Repository), ist das native Pendant die Referenz — kein Spielzeug
+daneben.
 
-| Baustein | Beleg |
-|---|---|
-| **Value Object** | `Verkauf/Geldwert.cs` (Daten) + `Geldwert.Verhalten.cs` (Erzeuger/Verhalten) — ein `partial record : IWertobjekt`, Verhalten auf DEMSELBEN Typ (kein separater Operationen-Typ, kein Attribut), Normalisierung total im `init`, benannte Fabriken `Euro`/`Null`/`Von` |
-| **Entity im Aggregat** | `Auftragsposition` (Identität = ArtikelNr) |
-| **Aggregate Root + Invarianten** | `Verkaufsauftrag` (Kreditlimit/Status/Währung/Mengen-Merge; `Gesamtsumme` O(1)) |
-| **Domain Event** | `Verkauf/Events.cs` (persistent + `ITransientEvent`-Ablehnungen) |
-| **Decider/Applier** | reine Entscheidung + einzige Zustandsmutation, Framework-Idiom |
+## Wo jeder Baustein lebt
 
-Test: `Ddd/VerkaufAggregatTests` (7 Tests, über die generierte Factory).
+| DDD-Baustein | Ort | Kern |
+|---|---|---|
+| **Value Object** | `Domain/Verkauf/Geldwert.cs` + `Geldwert.Verhalten.cs` | `partial record : IWertobjekt`; Verhalten auf DEMSELBEN Typ (kein Extra-Typ, kein Attribut); benannte Fabriken `Euro`/`Null`/`Von`; Normalisierung in der Konstruktion; Verhalten `Plus`/`Mal`/`GroesserAls`/`KleinerAls` mit Währungs-Guard |
+| **Entity** | `Domain/Verkauf/Wertobjekte.cs` → `Auftragsposition` | Identität = ArtikelNr; nur über die Wurzel erreichbar |
+| **Aggregate Root + Invarianten** | `Domain/Verkauf/Verkaufsauftrag.cs` | Konsistenzgrenze; Kreditlimit/Status/Währung/Mengen-Merge; `Gesamtsumme` O(1) |
+| **Domain Event** | `Domain/Verkauf/Events.cs` | persistent + `ITransientEvent`-Ablehnungen |
+| **Factory** | `Domain/Verkauf/Geldwert.Verhalten.cs` (VO-Fabriken); Erzeugung via Creation-Command | benannte, normalisierende Erzeuger |
+| **Decider / Applier** | `Domain/Verkauf/Decider.cs`, `Applier.cs` | reine Entscheidung (`OneOf`-Ablehnungen) + einzige Zustandsmutation |
+| **Specification** | `Domain/Spezifikation/Spezifikation.cs` (generisch) + `Domain/Verkauf/Kunde.cs` (Beispiel) | `Und`/`Oder`/`Nicht`-Kombinatoren; komponierte Regel = Fachsprache |
+| **Domain Service** | `Domain/Verkauf/WechselkursDienst.cs` | zustandslose Operation über `Geldwert`, keinem Aggregat zugehörig |
+| **Saga / Process Manager** | *nativ:* die Prozess-Maschine (`Domain/**/…Prozess.cs`, Event-Regel-DAG) | durable Orchestrierung + Kompensation — `docs/architektur/03-prozess-maschine.md` |
+| **Repository** | *nativ:* der Marten-Event-Store (`Infrastructure/Persistence/MartenEventStore.cs`) | Aggregat = Fold seiner Events; Laden per Replay, Speichern per Append |
+
+Test-Dateien: `Ddd/VerkaufAggregatTests` (Aggregat/Entity/VO/Events über die generierte
+Pipeline), `Ddd/GeldwertTests` (Value Object direkt), `Ddd/SpezifikationTests`,
+`Ddd/WechselkursDienstTests`.
+
+## Value-Object-Form (`partial record` + `IWertobjekt`)
+
+Der Wert ist ein reiner Record; Erzeuger und Verhalten liegen als zweite `partial` auf
+demselben Typ — **kein separater Operationen-Typ, kein Attribut, keine Extension-Klasse**. Der
+Call-Site spricht Fachsprache:
+
+```csharp
+var kreditlimit = Geldwert.Euro(1000);
+var prospektiv  = summe.Plus(preis.Mal(menge));
+if (prospektiv.GroesserAls(kreditlimit)) yield return new KreditlimitUeberschritten(prospektiv, kreditlimit);
+```
+
+Konstruktion läuft nur typ-intern (Fabriken); im übrigen Fachcode steht **kein**
+`new Geldwert(...)` — die Kapsel-Grenze ist der Typ selbst. Der leere Marker `IWertobjekt`
+(analog `IState`/`IReadModel`) macht alle Wertobjekte **compile-time auffindbar**: ein späterer
+Analyzer kann daraus die Kapsel erzwingen (`new`/`with` nur im Typ) oder die Wertobjekt-
+Landkarte darstellen — reflexionsfrei, ohne dass der Fachcode etwas davon weiß.
+
+## Reinheit der Domäne (Invariante 5)
+
+`Domain/Verkauf/` und `Domain/Spezifikation/` wissen **nichts** über Serialisierung, Proto,
+Wire, DTO-Mapper, Marten oder Redis — die einzige Kopplung ist `using Abstractions;` (die
+Marker-Verträge `IState`/`IEvent`/`ICommand`/`IDecider`/`IWertobjekt`/`OneOf`). Als der
+DTO-Mapper zunächst kaputten Code erzeugte, lag die Ursache im **Generator** — und dort wurde
+sie behoben, nicht in der Domäne.
 
 ### Dabei behobener Framework-Bug (Generator)
 
 `Geldwert` ist das erste Value Object, das von **mehreren** Messages geteilt wird. Das legte
-einen latenten Generator-Bug offen: der `DomainGraphAnalyzer` hängt an einen mehrfach
-erreichten Typ den Marker `" (Ref)"` an, und der `TypeAggregator` registrierte ihn fälschlich
+einen latenten Generator-Bug offen: der `DomainGraphAnalyzer` markiert einen mehrfach
+erreichten Typ mit dem Suffix `" (Ref)"`, und der `TypeAggregator` registrierte ihn fälschlich
 als eigenen Typ `X (Ref)` → der `DtoMapper` erzeugte kaputten Code (`Map X (Ref)…`). Behoben an
 zwei Stellen (der Marker ist ein Graph-Hinweis, kein Typname):
 - `Core.SourceGeneration/TypeAggregator.cs` — Suffix beim Typschlüssel normalisieren.
@@ -40,71 +69,17 @@ zwei Stellen (der Marker ist ein Graph-Hinweis, kein Typname):
   Ableiten des C#-Bezeichners strippen (Feld-Mapping mit zwei gleichtypigen VO-Feldern).
 
 Neue Framework-Typen brauchen zudem je eine Zeile in den handgepflegten STJ-Manifesten
-(dokumentiert): `CqrsWireJsonContext` (Commands/Events/Signale) + `EventJsonSerializerContext`
-(persistente Events).
-
-### Reinheit der Domäne (Invariante 5)
-
-`Domain/Verkauf/` weiß **nichts** über Serialisierung, Proto, Wire, DTO-Mapper, Marten oder
-Redis — die einzige Kopplung ist `using Abstractions;` (die Marker-Verträge `IState`/`IEvent`/
-`ICommand`/`IDecider`/`IWertobjekt`/`OneOf`). Als der DTO-Mapper zunächst kaputten Code
-erzeugte, lag die Ursache im Generator (`" (Ref)"`-Marker) — und **dort** wurde sie behoben.
-Die Domäne wurde NICHT an den Serializer angepasst.
-
-**Value-Object-Form (`partial record` + `IWertobjekt`):** Der Wert ist ein reiner Record;
-Erzeuger und Verhalten liegen als zweite `partial` auf demselben Typ — kein separater
-Operationen-Typ, kein Attribut, keine Extension-Klasse. Der Call-Site spricht Fachsprache
-(`Geldwert.Euro(1000)`, `preis.Mal(3)`, `summe.GroesserAls(limit)`). Konstruktion läuft nur
-typ-intern (Fabriken); im übrigen Fachcode steht kein `new Geldwert(...)` — die Kapsel-Grenze
-ist der Typ selbst. Der leere Marker `IWertobjekt` (analog `IState`) macht alle Wertobjekte
-compile-time auffindbar: ein späterer Analyzer kann daraus die Kapsel erzwingen
-(`new`/`with` nur im Typ) oder die Wertobjekt-Landkarte darstellen — reflexionsfrei, ohne dass
-der Fachcode etwas davon weiß.
-
-## Pur: `Domain.DddPatterns/`
-
-## Warum dieses Projekt existiert
-
-Der Framework-Kern demonstriert die *transportierten* Bausteine (Aggregat via generierter
-Handler-Factory, Prozess/Saga durable über den Event-Regel-DAG). Was bislang **nicht** als
-zusammenhängende Referenz existierte, sind die reinen taktischen Modellierungs-Muster —
-Value Object, Entity, Domain Service, Specification, Factory, Repository. Dieses Projekt
-schließt genau die Lücke: jedes Muster einmal sauber, mit Gültigkeits- **und**
-Performance-Test.
-
-## Bewusste Isolation (warum ein eigenes Projekt)
-
-`Domain.DddPatterns` referenziert **nur** `Abstractions` (Marker `IState`/`OneOf`) und wird
-von `Infrastructure` **nicht** referenziert. Damit sieht der `DtoMapper`/Proto-Generator
-seine Typen nie — die Muster bleiben vom fragilen Proto-Zwang entkoppelt (jedes neue
-`ICommand`/`IEvent` in `Domain/` bricht sonst den Infrastructure-Build über CQRS030). Der
-Showcase bleibt so eigenständig grün, ohne `domain.proto` anzufassen.
-
-## Die Muster — Datei → Test
-
-| DDD-Baustein | Umsetzung | Kern-Beleg |
-|---|---|---|
-| **Value Object** | `Gemeinsam/Geld.cs`, `Prozent.cs`, `Emailadresse.cs` | unveränderlich, selbstvalidierend, gleich per Wert, Verhalten im Objekt (Arithmetik mit Währungs-Guard); 1M Additionen korrekt & schnell |
-| **Entity** | `Bestellung/Bestellposition.cs` | Identität statt Wertgleichheit (ArtikelNr); nur über die Wurzel erreichbar |
-| **Aggregate Root** | `Bestellung/Bestellung.cs` | Konsistenzgrenze; Invarianten (Kreditlimit, Offen-Status, Mengen-Verschmelzung); Gesamtsumme O(1) via laufendem Saldo |
-| **Domain Event** | `Bestellung/Ereignisse.cs` | Fakten in Vergangenheitsform; einzige Zustands-Mutation läuft über sie (event-sourced) |
-| **Factory** | `Bestellung.Eroeffne` + `Bestellung.AusHistorie` | Erzeugung mit Invariante + Rekonstitution aus der Historie |
-| **Repository** | `Repository/IRepository.cs`, `EventSourcedRepository.cs` | Illusion einer Aggregat-Sammlung; Replay beim Laden, Append beim Speichern, optimistische Nebenläufigkeit |
-| **Specification** | `Spezifikation/Spezifikation.cs`, `KundenSpezifikationen.cs` | atomare Regeln + `Und`/`Oder`/`Nicht`-Kombinatoren; komponierte Regel = Fachsprache |
-| **Domain Service** | `Dienste/WechselkursDienst.cs` | zustandslose Operation, die keinem Aggregat gehört (Währungsumrechnung) |
-| **Saga / Process Manager** | `Prozess/BestellAbwicklungsSaga.cs` + `MiniAggregate.cs` | Konsistenz über zwei Aggregate mit **Kompensation** bei Fehlschlag des zweiten Schritts |
-
-Test-Dateien: `ValueObjectTests`, `SpezifikationTests`, `AggregatUndRepositoryTests`,
-`DomainServiceUndSagaTests` — **29 Tests, Teil der 155/155 des Prüfstands**.
+(dokumentierter Schritt): `CqrsWireJsonContext` (Commands/Events/Signale) +
+`EventJsonSerializerContext` (persistente Events).
 
 ## Performance-Ansatz
 
 Die Perf-Tests prüfen mit **großzügigen Wall-Clock-Budgets** (kein harter Durchsatz-Assert,
-der unter paralleler Test-Last flackert). Sie fangen katastrophale Regressionen — z. B.
-würde ein versehentliches O(N²) beim Aggregat-Aufbau (20 000² = 400 M Ops) die Budgets
-sofort sprengen; der laufende Saldo hält es O(1). Gemessen liegen alle weit unter Budget
-(1 M Value-Object-Additionen und 500 k komponierte Spezifikations-Auswertungen je deutlich
-unter einer Sekunde).
+der unter paralleler Test-Last flackert). Sie fangen katastrophale Regressionen — ein
+versehentliches O(N²) beim Aggregat-Aufbau würde die Budgets sofort sprengen; der laufende
+Saldo hält es O(1). Gemessen liegen alle weit unter Budget (1 M Value-Object-Additionen,
+500 k komponierte Spezifikations-Auswertungen, 10 k Commands durch die generierte Pipeline —
+je deutlich unter dem Budget).
 
 ## Build & Test
 
@@ -112,7 +87,6 @@ unter einer Sekunde).
 dotnet test Infrastructure.Pruefstand.Tests/Infrastructure.Pruefstand.Tests.csproj
 ```
 
-> **Umgebungs-Hinweis:** .NET 9 ist seit Mai 2026 EOL und aus den Paket-Feeds entfernt. Die
-> Muster wurden mit dem **.NET-10-SDK** gebaut und per `DOTNET_ROLL_FORWARD=LatestMajor` auf
-> der .NET-10-Runtime ausgeführt (net9.0-Targets bleiben unverändert). Ergebnis: **155/155
-> grün** (126 Bestand + 29 neu), dreimal stabil.
+> **Umgebungs-Hinweis:** .NET 9 ist seit Mai 2026 EOL und aus den Paket-Feeds entfernt. Gebaut
+> mit dem **.NET-10-SDK**, ausgeführt per `DOTNET_ROLL_FORWARD=LatestMajor` auf der .NET-10-
+> Runtime (net9.0-Targets unverändert). Ergebnis: **Prüfstand 146/146 grün**, stabil.

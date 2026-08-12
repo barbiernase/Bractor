@@ -1,9 +1,9 @@
-namespace Domain.DddPatterns.Spezifikation;
+namespace Domain.Spezifikation;
 
 /// <summary>
 /// DDD-Baustein SPECIFICATION — eine benannte, wiederverwendbare fachliche Regel als
-/// Objekt. Statt eine Bedingung als <c>if</c> im Aggregat, im Query und im UI dreimal
-/// zu duplizieren, lebt sie einmal als Spezifikation und wird komponiert.
+/// Objekt. Statt eine Bedingung mehrfach als <c>if</c> zu duplizieren, lebt sie einmal als
+/// Spezifikation und wird komponiert.
 /// </summary>
 public interface ISpezifikation<in T>
 {

@@ -28,6 +28,12 @@ public partial record Geldwert
         return Betrag > anderer.Betrag;
     }
 
+    public bool KleinerAls(Geldwert anderer)
+    {
+        MussGleicheWaehrung(anderer);
+        return Betrag < anderer.Betrag;
+    }
+
     public bool GleicheWaehrung(Geldwert anderer) => Waehrung == anderer.Waehrung;
 
     // Währungsmix ist ein Programmierfehler (der Decider prüft GleicheWaehrung vorher) →
