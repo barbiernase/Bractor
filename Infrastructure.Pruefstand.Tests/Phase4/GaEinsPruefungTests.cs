@@ -9,18 +9,30 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Phase4;
 
 /// <summary>
-/// P4.3 / GA-1 — der Boot-/DI-Check erzwingt Co-Commit für append-artige Projektionen. Bewiesen:
-///   (1) IAppendProjektion OHNE Co-Commit-Tracker → Start bricht mit klarer Meldung (der Kernfall).
-///   (2) IAppendProjektion MIT Tracker → folgenlos (der Normalfall der ImagePairHistorie).
-///   (3) NICHT markiert (z. B. eine Reaktion/emittierender Konsument) → folgenlos, auch ohne Tracker
-///       (kein Fehlalarm — Emittenten brauchen keinen Co-Commit).
+/// P4.3 / GA-1 — der Boot-/DI-Check erzwingt ECHTEN Co-Commit (ICoCommitTracker) für append-artige
+/// Projektionen. Bewiesen:
+///   (1) IAppendProjektion OHNE jeden Tracker → Start bricht mit klarer Meldung.
+///   (2) IAppendProjektion mit bloßem IProjectionTracker (NICHT co-committend) → bricht ebenfalls
+///       (der geschlossene false-green: früher grün, jetzt fail-fast).
+///   (3) IAppendProjektion mit ICoCommitTracker → folgenlos (der Normalfall der ImagePairHistorie).
+///   (4) NICHT markiert (z. B. eine Reaktion/emittierender Konsument) → folgenlos, auch ohne Tracker.
 /// </summary>
 public class GaEinsPruefungTests
 {
     private sealed class AppendProjektionOhneStore : IAppendProjektion { }
     private sealed class GewoehnlicheReaktion { }
 
-    private sealed class TrackerStub : IProjectionTracker
+    /// <summary>Trägt nur IProjectionTracker — dual-write-artig, KEINE Atomaritäts-Zusage.</summary>
+    private sealed class NurTrackerStub : IProjectionTracker
+    {
+        public Task<int> LastProcessedVersionAsync(string p, Guid s, CancellationToken ct) => Task.FromResult(-1);
+        public Task MarkProcessedAsync(string p, Guid s, int v, CancellationToken ct) => Task.CompletedTask;
+        public Task ResetAsync(string p, Guid s, CancellationToken ct) => Task.CompletedTask;
+        public Task ResetAllAsync(string p, CancellationToken ct) => Task.CompletedTask;
+    }
+
+    /// <summary>Trägt ICoCommitTracker — die Atomaritäts-Zusage (Effekt + Marke in EINER Transaktion).</summary>
+    private sealed class CoCommitTrackerStub : ICoCommitTracker
     {
         public Task<int> LastProcessedVersionAsync(string p, Guid s, CancellationToken ct) => Task.FromResult(-1);
         public Task MarkProcessedAsync(string p, Guid s, int v, CancellationToken ct) => Task.CompletedTask;
@@ -29,18 +41,28 @@ public class GaEinsPruefungTests
     }
 
     [Fact]
-    public void Append_ohne_CoCommit_Tracker_bricht()
+    public void Append_ohne_Tracker_bricht()
     {
         var akt = () => GaEinsPruefung.PrüfeCoCommit(new AppendProjektionOhneStore(), tracker: null, "append-ohne");
         akt.Should().Throw<InvalidOperationException>()
            .WithMessage("*GA-1*")
-           .WithMessage("*Co-Commit*");
+           .WithMessage("*ICoCommitTracker*");
     }
 
     [Fact]
-    public void Append_mit_Tracker_ist_folgenlos()
+    public void Append_mit_bloßem_IProjectionTracker_bricht()
     {
-        var akt = () => GaEinsPruefung.PrüfeCoCommit(new AppendProjektionOhneStore(), new TrackerStub(), "append-mit");
+        // Der geschlossene false-green: ein Tracker existiert, committet aber NICHT gemeinsam.
+        var akt = () => GaEinsPruefung.PrüfeCoCommit(new AppendProjektionOhneStore(), new NurTrackerStub(), "append-dualwrite");
+        akt.Should().Throw<InvalidOperationException>()
+           .WithMessage("*GA-1*")
+           .WithMessage("*ICoCommitTracker*");
+    }
+
+    [Fact]
+    public void Append_mit_CoCommit_Tracker_ist_folgenlos()
+    {
+        var akt = () => GaEinsPruefung.PrüfeCoCommit(new AppendProjektionOhneStore(), new CoCommitTrackerStub(), "append-cocommit");
         akt.Should().NotThrow();
     }
 

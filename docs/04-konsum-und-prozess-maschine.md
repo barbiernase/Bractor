@@ -75,17 +75,24 @@ injizierten Write-Store + `ctx.Track<T>(id)` für den Versions-Index. Der `Proje
 (`Core/ProjectionWriter.cs`) sammelt nur; der Adapter liest nach dem Marken-Commit aus und
 reicht die Ergebnisse an den `IReadModelDepsSink`.
 
-> **⚠ Kern-Befund für die Bewertung — Co-Commit ist NICHT implementiert.** Architektonisch
-> soll Effekt + `ProjectionCheckpoint` in **einer** Marten-Session committen
-> (`Abstractions/IProjectionTracker.cs`). Der reale `MartenProjectionTracker` tut das
-> **nicht**: er ist explizit als „⚠ PHASE-0-STAND — EIGENE SESSION (at-least-once)" markiert
-> (`Infrastructure/Persistence/MartenProjectionTracker.cs:11`) und öffnet in
-> `MarkProcessedAsync` eine **eigene** `LightweightSession`. Damit ist die versprochene
-> Exactly-once-Wirksamkeit für den einzigen produktiven Store **vorgesehen, aber nicht
-> eingelöst** — de facto Dual-Write/at-least-once, abgesichert nur über den Dedup-Schlüssel
-> `(AggregateId, Version)` + idempotente Upserts. Der GA-1-Check würde bei einer echten
-> `IAppendProjektion` durchgehen (der Tracker existiert ja), obwohl kein echter Co-Commit
-> stattfindet. Siehe [13](13-reifegrad-schulden-bewertung.md), Risiko #1.
+> **⚠ Kern-Befund (präzisiert 2026-08-12) — Co-Commit IST implementiert & bewiesen; der Rest ist
+> eine Typ-/Guard-Lücke, kein fehlender Mechanismus.** Die Naht ist bewusst store-agnostisch
+> (`Abstractions/IProjectionTracker.cs`: „das ist allein Sache des Stores"). Ein echter
+> Co-Commit-Store existiert und ist gegen echtes Postgres bewiesen:
+> `Domain.Infrastructure/ImagePairStore.cs` (+ `ImagePairHistorieStore`) puffert die Effekte und
+> committet sie mit dem `ProjectionCheckpoint` in **einer** `IdentitySession`, ein `SaveChanges`
+> → atomar (`CoCommitPostgresTests`: Absturz zwischen Effekt und Marke → genau ein Eintrag). Der
+> generische `MartenProjectionTracker` (eigene `LightweightSession`, „PHASE-0-STAND") ist der
+> **bewusste at-least-once-Fallback** für idempotente Upsert-Projektionen.
+>
+> Der reale Rest-Befund *war*: **Atomarität ist nicht aus den Typen überprüfbar** —
+> `IProjectionTracker` wird von *beiden* getragen (co-committend UND dual-writing), und
+> `GaEinsPruefung` prüfte nur `tracker is null` (false-green). **Geschlossen (2026-08-12):** der
+> Marker `ICoCommitTracker : IProjectionTracker` (den nur echte Co-Commit-Stores tragen) + GA-1
+> prüft jetzt `tracker is not ICoCommitTracker` → eine `IAppendProjektion` mit bloßem Tracker
+> **bricht laut am Boot**. Die vollständige Analyse (Voraussetzungen, Design-Optionen, verbleibender
+> Unit-of-Work-Hebel) steht in [konzept-exactly-once-naht.md](konzept-exactly-once-naht.md);
+> Bewertung in [13 P0-1](13-reifegrad-schulden-bewertung.md).
 
 ## 4.4 Reaktionen & das Emit-Primitiv
 

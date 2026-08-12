@@ -27,7 +27,8 @@ mit Schulden/Einschränkung · 🟠 teilweise / im Umbau · 🔴 blockiert/unfer
 | Poll-Backstop (30 s) mit `WakeAck`-Härtung | 🟢 | `Poller.cs` |
 | Zwei Achsen: replaybar (Tracker) vs. emittierend (Cursor) | 🟢 | compile-zeit-strukturell |
 | Projektionen (Read-Models) | 🟢 | `ISubscriber, IPullSubscriber` |
-| **Exactly-once-Wirksamkeit (echter Co-Commit)** | 🔴 | **NICHT implementiert** — `MartenProjectionTracker` = getrennte Session, at-least-once |
+| **Exactly-once-Wirksamkeit (echter Co-Commit)** | 🟢 | implementiert & Postgres-bewiesen (`ImagePairStore`/`Historie` + `CoCommitPostgresTests`); Guard `ICoCommitTracker` schließt den false-green (2026-08-12) |
+| Guard: Mis-Wiring strukturell unbaubar (Unit-of-Work) | 🟠 | optional, zurückgestellt (Hebel 2, s. konzept-exactly-once-naht.md) |
 | Reaktionen (Command-Emission über `CommandEmitter`) | 🟢 | ein Emit-Weg, CQRS020/021 |
 | Prozesse/Sagas als typisierte DSL (`IProzessDefinition`) | 🟢 | Diamant, Fan-out, Count-Join |
 | Kompensation / `RückgängigDurch` | 🟢 | reverse Regel-Reihenfolge |

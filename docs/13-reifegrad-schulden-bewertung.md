@@ -14,15 +14,17 @@ Test-/Perf-Kultur („nie faken, was man nicht besitzt"; Perf-Beweise gegen echt
 heben es deutlich über typische Eigenbau-Frameworks.
 
 **Der Kern (Schreibseite, Konsum-/Prozess-Maschine, Generatoren, Transport) ist solide, gemessen
-grün und produktionsnah.** Die Schwächen liegen fast durchweg **an den Rändern** und in der
-**Lücke zwischen Anspruch und Einlösung** an genau einer zentralen Stelle (Co-Commit).
+grün und produktionsnah.** Die Schwächen liegen fast durchweg **an den Rändern**. Der Co-Commit
+(exactly-once) ist — anders als in einer früheren Fassung dieses Dossiers behauptet — implementiert
+und bewiesen; die verbleibende Lücke dort ist eine **Typ-/Guard-Härtung** (die Atomarität ist nicht
+fail-fast verifiziert), kein fehlender Mechanismus (P0-1).
 
 **Reifegrad-Ampel** (Wiederholung aus dem [README](README.md)):
 
 | Subsystem | Reife |
 |---|:--:|
 | Schreibseite | 🟢 |
-| Konsum-/Prozess-Maschine | 🟢 / 🟡 (Co-Commit) |
+| Konsum-/Prozess-Maschine | 🟢 (Co-Commit guard-gehärtet 2026-08-12) |
 | Generatoren & Analyzer | 🟢 |
 | Multi-Node / Transport | 🟢 / 🟡 |
 | Graph-Extractor + SimHost | 🟡 |
@@ -53,21 +55,24 @@ Schweregrade: **P0** = blockiert / korrektheitsrelevant · **P1** = wichtig, pro
 
 ### P0 — blockierend / korrektheitsrelevant
 
-**P0-1 · Kein echter Co-Commit im Projektions-Tracker.**
-`MartenProjectionTracker` ist als „PHASE-0-STAND — EIGENE SESSION (at-least-once)" markiert und
-committet Effekt und Checkpoint in **getrennten** Sessions (`MartenProjectionTracker.cs:11`). Die
-im Framework versprochene Exactly-once-*Wirksamkeit* der Projektionen ist damit **vorgesehen,
-aber nicht eingelöst** — de facto Dual-Write, abgesichert nur über den Dedup-Schlüssel
-`(AggregateId, Version)` + idempotente Upserts.
-*Risiko:* Bei Absturz zwischen Effekt-Write und Marken-Write kann ein Effekt erneut angewandt
-werden; nur die Idempotenz der Upserts rettet die Konsistenz. Nicht-idempotente Projektions-
-Effekte wären unsicher. Der GA-1-Check gibt trotzdem grün, weil ein Tracker *existiert*.
-*Beweislage:* `CoCommitPostgresTests` beweist, dass der atomare Co-Commit *technisch geht* —
-aber der produktive Tracker nutzt ihn nicht.
-*Empfehlung:* Den `MartenProjectionTracker` auf die **eine** Session umstellen (Effekt +
-Checkpoint in derselben `SaveChangesAsync`), wie es `IProjectionTracker` verspricht und
-`CoCommitPostgresTests` demonstriert. Bis dahin: dokumentieren, dass Projektionen **idempotent**
-sein müssen, und den GA-1-Check schärfen (echten Co-Commit statt bloße Tracker-Existenz prüfen).
+**P0-1 · Co-Commit: Atomaritäts-Guard — false-green geschlossen (2026-08-12). ✅ weitgehend erledigt.**
+*(Die früheste Fassung „kein echter Co-Commit" war zu grob.)*
+Co-Commit **ist implementiert und gegen echtes Postgres bewiesen**: `Domain.Infrastructure/ImagePairStore.cs`
+(+ `ImagePairHistorieStore`) puffert Effekte und committet sie mit dem `ProjectionCheckpoint` in
+*einer* `IdentitySession` (`CoCommitPostgresTests`). Der generische `MartenProjectionTracker`
+(getrennte Session) ist der **bewusste at-least-once-Fallback** für idempotente Upserts. **Kein
+aktiver Bug** — die append-artigen Projektionen sind korrekt co-committend verdrahtet.
+*Der Rest war eine Typ-/Guard-Lücke:* `IProjectionTracker` trug keinen Atomaritäts-Beweis, und
+`GaEinsPruefung` prüfte nur `tracker is null` (false-green). **Geschlossen:** Marker
+`ICoCommitTracker : IProjectionTracker` (nur echte Co-Commit-Stores tragen ihn) + GA-1 prüft jetzt
+`tracker is not ICoCommitTracker` → eine `IAppendProjektion` mit bloßem Tracker **bricht laut am
+Boot**. Umgesetzt in `Abstractions/ICoCommitTracker.cs`, den beiden Stores, `GaEinsPruefung.cs`,
+`GaEinsPruefungTests.cs` (4 Fälle, inkl. dem geschlossenen false-green); Prüfstand grün.
+*Offen (bewusst, optional):* die framework-getriebene **Unit-of-Work** (Hebel 2), die Mis-Wiring
+*strukturell* unbaubar macht — zurückgestellt. Und die irreduzible Grenze bleibt: Atomarität ist
+Laufzeit, per Store per Crash-Test zu beweisen (existiert). Vollanalyse:
+[konzept-exactly-once-naht.md](konzept-exactly-once-naht.md). Stance: exactly-once bleibt Opt-in
+(idempotenter Upsert = Normalfall).
 
 **P0-2 · Frontend baut nicht. → ✅ BEHOBEN 2026-08-12.**
 `Host.Blazor` zog über eine stale Referenz (`Host.Blazor.csproj:16` → `Domain.Client.Ui.Blazor`
@@ -168,16 +173,19 @@ echte Credentials + TLS (deckt sich mit P1-5).
 
 ## 13.4 Korrektheits- vs. Reifegrad-Trennung
 
-Wichtig für die Bewertung: Die meisten Befunde sind **Reifegrad/Hygiene**, nicht
-**Korrektheit**. Die einzige *korrektheitsnahe* Lücke im laufenden Kern ist **P0-1 (Co-Commit)** —
-und selbst die ist durch idempotente Upserts in der Praxis abgefedert. Alle anderen P0/P1-Punkte
-sind entweder mechanisch (P0-2), betrieblich (P1-1/2), bewusst blockiert (P1-3) oder an den
-externen Rändern (P1-4/5). Der Aggregat-/Event-/Saga-Kern selbst ist konsistent und getestet.
+Wichtig für die Bewertung: **Kein Befund ist ein aktiver Korrektheits-Bug im heutigen Stand.** Die
+meisten sind **Reifegrad/Hygiene**. Die *korrektheitsnahe* Lücke ist **P0-1** — aber als **latenter
+Guard-false-green**, nicht als fehlender Mechanismus: der Co-Commit ist implementiert und bewiesen,
+die append-artigen Projektionen sind korrekt verdrahtet, und der Upsert-Normalfall ist durch
+Idempotenz ohnehin sicher. Alle anderen P0/P1-Punkte sind mechanisch (P0-2, erledigt), betrieblich
+(P1-1/2), bewusst blockiert (P1-3) oder an den externen Rändern (P1-4/5). Der Aggregat-/Event-/Saga-
+Kern selbst ist konsistent und getestet.
 
 ## 13.5 Empfohlene Reihenfolge (wenn produktiv gehärtet werden soll)
 
 1. ~~**P0-2** Frontend-Referenz entwirren~~ ✅ erledigt 2026-08-12 (Solution-Build grün).
-2. **P0-1** echten Co-Commit im Marten-Tracker (die eine substanzielle Korrektheits-Härtung).
+2. ~~**P0-1** Co-Commit-Guard härten (`ICoCommitTracker` + GA-1)~~ ✅ erledigt 2026-08-12 (Prüfstand
+   grün). Optional offen: framework-getriebene Unit-of-Work (Hebel 2). Analyse: [konzept-exactly-once-naht.md](konzept-exactly-once-naht.md).
 3. **P1-4 / P1-6** Command-Kanten wirklich bounded + Client-Ack (Zustellgarantien schließen).
 4. **P1-1 / P1-2** Multi-Node produktiv härten + Migrations-Strategie.
 5. **P1-5** Python-Sicherheit + Query-oneof (falls extern genutzt).

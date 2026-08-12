@@ -18,7 +18,7 @@ namespace Domain.Infrastructure;
 /// verworfen, damit ein abgebrochener Vorlauf nicht in den nächsten Batch leckt.
 /// </summary>
 public sealed class ImagePairHistorieStore
-    : IProjectionTracker, IImagePairHistorieWriteStore, IImagePairHistorieReadStore
+    : ICoCommitTracker, IImagePairHistorieWriteStore, IImagePairHistorieReadStore
 {
     private readonly IDocumentStore _store;
     private readonly List<(Guid PairId, HistorieEintrag Eintrag)> _pending = new();

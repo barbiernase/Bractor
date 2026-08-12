@@ -19,7 +19,7 @@ mit Live-Simulations-Runtime.
 | Subsystem | Reife | Kurzbewertung |
 |---|:---:|---|
 | Schreibseite (Command→Event→Store) | 🟢 | kohärent, gemessen grün, produktionsnah |
-| Konsum-/Prozess-Maschine | 🟢 / 🟡 | stark; **eine** Lücke: kein echter Co-Commit (s.u.) |
+| Konsum-/Prozess-Maschine | 🟢 | stark; Co-Commit implementiert & guard-gehärtet (`ICoCommitTracker`, 2026-08-12) |
 | Generatoren & Analyzer | 🟢 | 15 Build-Guards, reflexionsfrei, konsistent |
 | Multi-Node / Wire-Transport | 🟢 / 🟡 | über alle Planes verdrahtet & bewiesen; Betrieb noch container-only |
 | Graph-Extractor + SimHost | 🟡 | konzeptionell reif, aber ungetrackt & nicht in der `.sln` |
@@ -65,6 +65,10 @@ auf die jeweiligen Architektur-Kapitel.
 | 12 | [12-tests-und-vermessung.md](12-tests-und-vermessung.md) | Test-Ebenen, Zahlen, echte Messwerte, LoadHarness |
 | 13 | [13-reifegrad-schulden-bewertung.md](13-reifegrad-schulden-bewertung.md) | Bewertungs-Dossier: Stärken, Risiken, Empfehlungen |
 
+> **Konzept / Vor-Analyse:** [`konzept-exactly-once-naht.md`](konzept-exactly-once-naht.md) —
+> wie voraussetzungsreich exactly-once ist, welche Verträge ein Co-Commit-Store erfüllen muss, und
+> warum Atomarität heute nicht typ-verifiziert ist (Entscheidungsgrundlage, kein Code geändert).
+>
 > **Ergänzend:** [`ddd-muster-showcase.md`](ddd-muster-showcase.md) — lauffähige, getestete
 > Referenz der taktischen DDD-Bausteine (Value Object, Entity, Aggregate, Domain Event, Domain
 > Service, Specification, Factory, Repository, Saga; u.a. `Domain/Verkauf/`). Dieser Showcase kam

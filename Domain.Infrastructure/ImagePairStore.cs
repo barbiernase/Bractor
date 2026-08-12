@@ -22,7 +22,7 @@ namespace Domain.Infrastructure;
 /// TRANSIENT registriert (frisch pro Stream-Actor → isolierter Puffer; der Single-Writer-Actor serialisiert).
 /// </summary>
 public sealed class ImagePairStore
-    : IProjectionTracker, IImagePairWriteStore
+    : ICoCommitTracker, IImagePairWriteStore
 {
     private readonly IDocumentStore _store;
     private readonly List<Func<IDocumentSession, Task>> _pending = new();
