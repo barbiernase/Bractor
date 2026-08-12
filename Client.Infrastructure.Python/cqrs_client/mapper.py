@@ -66,6 +66,7 @@ class PayloadMapper:
         self._gen = generated_module
         self._command_field_map = self._build_type_to_field_map("CommandEnvelopeDto")
         self._event_field_map = self._build_type_to_field_map("EventEnvelopeDto")
+        self._query_response_field_map = self._build_type_to_field_map("QueryResponsePayloadDto")
 
     def _build_type_to_field_map(self, envelope_class_name: str) -> dict[type, str]:
         """
@@ -178,6 +179,28 @@ class PayloadMapper:
             setattr(envelope, field_name, event)
 
         return envelope
+
+    def wrap_query_response(self, response: betterproto.Message):
+        """
+        Verpackt eine Query-Response in einen QueryResponsePayloadDto.
+
+        Setzt das richtige oneof-Feld basierend auf dem Response-Typ — dieselbe Logik wie
+        wrap_command/wrap_transient_event (nutzt die aus QueryResponsePayloadDto abgeleitete
+        type→oneof-Feld-Map). Damit kann ein Python-Client Queries VOLLSTÄNDIG beantworten
+        (vorher: leerer Payload, oneof nie gesetzt).
+        """
+        payload_cls = getattr(self._gen, "QueryResponsePayloadDto")
+        payload = payload_cls()
+
+        field_name = self._get_oneof_field_name(response, self._query_response_field_map)
+        if not field_name:
+            raise TypeError(
+                f"Kein oneof-Feld für {type(response).__name__} "
+                f"in QueryResponsePayloadDto gefunden"
+            )
+        setattr(payload, field_name, response)
+
+        return payload
 
     def _get_oneof_field_name(
         self,

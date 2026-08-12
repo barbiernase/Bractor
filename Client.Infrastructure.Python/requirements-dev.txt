@@ -1,0 +1,12 @@
+# Dev-/Test-Abhängigkeiten für das cqrs_client-SDK.
+# Laufzeit des SDK: betterproto (v1, wie vom Generat via --python_betterproto_out genutzt) + grpclib.
+# Test: pytest (+ pytest-asyncio für die async Router-/Proxy-Pfade).
+#
+# Nutzung:
+#   python3 -m venv .venv && source .venv/bin/activate
+#   pip install -r requirements-dev.txt
+#   pytest
+betterproto>=1.2,<2
+grpclib
+pytest>=7
+pytest-asyncio>=0.21

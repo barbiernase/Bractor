@@ -17,7 +17,7 @@ mit Schulden/Einschränkung · 🟠 teilweise / im Umbau · 🔴 blockiert/unfer
 | Redis-Version-Index (abschaltbar, graceful degradation) | 🟢 | `RedisVersionTracker` / `NullVersionTracker` |
 | Signal-Mechanik `(StreamId, Version)` fire-and-forget | 🟢 | pro Event ein `StateChangeVia…` |
 | `BoundedInbox`-Dedup | 🟡 | FIFO ab `InboxCap`, nicht airtight |
-| Client-Command-Zustellgarantie | 🟡 | 3 Versuche → Dead-Letter, kein Ack-Protokoll |
+| Client-Command-Zustellgarantie | 🟢 / 🟡 | Nack-Rückkanal vollständig (`CommandSendFailed` + `CommandFailed`, T2a 2026-08-12 schließt den Dispatcher-Erschöpfungsfall); offen: idempotenter Client-Pfad für sicheren Auto-Retry (T2b) |
 
 ## 11.2 Konsum-/Prozess-Maschine
 
@@ -75,7 +75,7 @@ mit Schulden/Einschränkung · 🟠 teilweise / im Umbau · 🔴 blockiert/unfer
 | Weg-B Client-Subscription-Reassert | 🟢 | `ClientSubscriptionReassertTests` |
 | Cold-Start-Schema-Migrator (dedizierter Init-Node) | 🟢 | `deploy-multinode/` |
 | Produktiver Multi-Node-Betrieb (systemd-Cluster) | 🟠 | nur Container-Compose + Verify-Harness |
-| Rolling Schema-Migration im laufenden Cluster | 🔴 | nicht abgedeckt (Migrator ist Init-Job) |
+| Rolling Schema-Migration im laufenden Cluster | ⚪ | **bewusst weggelassen** (never-needed, Nutzer-Entscheid); Cold-Start-Migrator genügt |
 
 ## 11.6 Frontend (Blazor)
 
@@ -100,11 +100,11 @@ mit Schulden/Einschränkung · 🟠 teilweise / im Umbau · 🔴 blockiert/unfer
 | Proto-Sync (Build + Laufzeit-Hash) | 🟢 | `proto_sync.py` |
 | Reconnect + Backoff | 🟢 | `connection.py` |
 | ML-Worker (Torch-Bildklassifikation) | 🟢 | `classifier.py` |
-| Query-Beantwortung durch Python-Client | 🔴 | `# TODO`, oneof nie gesetzt |
+| Query-Beantwortung durch Python-Client | 🟢 | oneof gesetzt via `wrap_query_response` (T3 2026-08-12) |
 | Client→Client-Trigger | 🔴 | nur Warnung |
 | `generate_registry.py` (Auto-Registry) | 🔴 | Stub — schreibt nichts |
-| Python-Tests | 🔴 | keine |
-| Transport-Sicherheit (TLS/Auth) | 🔴 | keine |
+| Python-Tests | 🟡 | pytest-Grundgerüst (`requirements-dev.txt`, `pytest.ini`, `tests/`, T3 2026-08-12); Abdeckung noch dünn |
+| Transport-Sicherheit (TLS/Auth) | 🔴 | keine — **system-weit** (Server h2c-plain, Blazor `http://`, Python plain); nicht Python-lokal, s. [13 P1-2](13-reifegrad-schulden-bewertung.md) |
 
 ## 11.8 Werkzeuge & Tests
 

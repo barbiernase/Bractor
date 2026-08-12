@@ -66,8 +66,10 @@ auf die jeweiligen Architektur-Kapitel.
 | 13 | [13-reifegrad-schulden-bewertung.md](13-reifegrad-schulden-bewertung.md) | Bewertungs-Dossier: Stärken, Risiken, Empfehlungen |
 
 > **Konzept / Vor-Analyse:** [`konzept-exactly-once-naht.md`](konzept-exactly-once-naht.md) —
-> wie voraussetzungsreich exactly-once ist, welche Verträge ein Co-Commit-Store erfüllen muss, und
-> warum Atomarität heute nicht typ-verifiziert ist (Entscheidungsgrundlage, kein Code geändert).
+> wie voraussetzungsreich exactly-once ist, welche Verträge ein Co-Commit-Store erfüllen muss
+> (Hebel 1 inzwischen umgesetzt). · [`konzept-client-haertung.md`](konzept-client-haertung.md) —
+> verifizierte Analyse der Client-Oberfläche (Command-Zustellgarantie, Python-SDK, system-weite
+> Transport-Sicherheit) mit priorisiertem Plan.
 >
 > **Ergänzend:** [`ddd-muster-showcase.md`](ddd-muster-showcase.md) — lauffähige, getestete
 > Referenz der taktischen DDD-Bausteine (Value Object, Entity, Aggregate, Domain Event, Domain

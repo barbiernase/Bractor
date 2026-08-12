@@ -220,12 +220,9 @@ class MessageRouter:
                     await self._route_output(output, ctx, proxy, mapper, registry)
 
             if response is not None:
-                # Response-Payload in QueryResponsePayloadDto verpacken
-                # betterproto: setattr auf das richtige oneof-Feld
-                resp_payload_cls = getattr(mapper._gen, "QueryResponsePayloadDto")
-                resp_payload = resp_payload_cls()
-                # TODO: Set the correct oneof field based on response type
-                # This requires the same field mapping as in PayloadMapper
+                # Response-Payload in QueryResponsePayloadDto verpacken — das oneof-Feld wird über
+                # die aus QueryResponsePayloadDto abgeleitete type→Feld-Map gesetzt (wie wrap_command).
+                resp_payload = mapper.wrap_query_response(response)
                 await proxy.send_query_response(correlation_id, resp_payload)
             else:
                 await proxy.send_query_response(

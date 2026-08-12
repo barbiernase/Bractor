@@ -1,4 +1,5 @@
 using Abstractions;
+using Infrastructure.PubSub;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Proto.Cluster;
@@ -11,7 +12,9 @@ namespace Infrastructure.Aggregate.ActorSystem;
 /// FIRE-AND-FORGET aus Sicht des Aufrufers: <see cref="Dispatch"/> kehrt sofort zurück.
 /// Feedback kommt ausschließlich über Events (PubSub):
 /// - Erfolg: Domain-Events (Broadcast)
-/// - Fehler: CommandFailed Event (Targeted)
+/// - Fehler: CommandFailed Event (Targeted) — technische Actor-Fehler publiziert der Actor
+///   selbst; ERREICHT der Command nach erschöpfter Platzierung nie einen Actor, publiziert
+///   HIER der Dispatcher das CommandFailed (T2a), damit der auslösende Client nicht still hängt.
 ///
 /// ★ Härtung: der eigentliche Send läuft mit BESCHRÄNKTEM Token + bounded Retry. Ein
 /// <c>CancellationToken.None</c> ließ <c>RequestAsync</c> bei noch nicht konvergierter Cluster-
@@ -25,6 +28,7 @@ public class ProtoActorAggregateDispatcher : IAggregateDispatcher
     private readonly Proto.ActorSystem _actorSystem;
     private readonly ILogger _logger;
     private readonly IDeadLetterSink? _deadLetters;   // ★ Audit-Fix #1: nicht-zustellbaren Command durabel machen
+    private readonly BrokerPublisher? _publisher;     // ★ T2a: CommandFailed an den Client bei erschöpfter Platzierung
 
     /// <summary>Timeout pro Sende-Versuch (begrenzt die interne Placement-Retry-Schleife von Proto.Cluster).</summary>
     private static readonly TimeSpan AttemptTimeout = TimeSpan.FromSeconds(10);
@@ -35,11 +39,13 @@ public class ProtoActorAggregateDispatcher : IAggregateDispatcher
     public ProtoActorAggregateDispatcher(
         Proto.ActorSystem actorSystem,
         ILogger<ProtoActorAggregateDispatcher>? logger = null,
-        IDeadLetterSink? deadLetters = null)
+        IDeadLetterSink? deadLetters = null,
+        BrokerPublisher? publisher = null)
     {
         _actorSystem = actorSystem;
         _logger = logger ?? NullLogger<ProtoActorAggregateDispatcher>.Instance;
         _deadLetters = deadLetters;
+        _publisher = publisher;
     }
 
     /// <summary>
@@ -112,6 +118,63 @@ public class ProtoActorAggregateDispatcher : IAggregateDispatcher
         //   Client-/OCC-Pfad hat keine Idempotenz-Dedup, ein blinder Retry könnte bei verlorener Quittung
         //   doppelt wirken (§5). Best-effort; WriteAsync wirft laut Vertrag nie in den Aufrufer zurück.
         await SchreibeDeadLetterAsync(envelope, grund);
+
+        // ★ T2a: Zusätzlich den auslösenden Client benachrichtigen. Der Command hat nie einen Actor
+        //   erreicht → NIEMAND publiziert sonst ein CommandFailed (das tut normal der Actor). Ohne dies
+        //   hinge der Client still (kein Ack, kein Nack). Targeted über OriginSessionId, wie der Actor.
+        await TryPublishCommandFailedAsync(envelope, grund);
+    }
+
+    /// <summary>
+    /// Publiziert ein <see cref="CommandFailed"/> targeted an die <c>OriginSessionId</c> — spiegelt
+    /// das Actor-Muster (<c>AggregateActorBase.TryPublishCommandFailedAsync</c>), für den Fall, dass
+    /// der Command mangels routbarem Cluster nie einen Actor erreicht hat. Best-effort: ohne Publisher
+    /// oder ohne OriginSessionId folgenlos; Fehler beim Publish werden nur geloggt, nie geworfen.
+    /// </summary>
+    private async Task TryPublishCommandFailedAsync(CommandEnvelope envelope, string grund)
+    {
+        var failed = BaueCommandFailed(envelope, grund, MaxAttempts);
+        if (_publisher is null || failed is null)
+            return;
+
+        try
+        {
+            await _publisher.PublishAsync(failed);
+            _logger.LogDebug("[Dispatcher] CommandFailed an '{Session}' publiziert (nicht zugestellt).",
+                envelope.OriginSessionId);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[Dispatcher] CommandFailed-Publish fehlgeschlagen für {Type}/{Id}.",
+                envelope.AggregateType, envelope.AggregateId);
+        }
+    }
+
+    /// <summary>
+    /// Reine Konstruktion des targeted <see cref="CommandFailed"/>-EventEnvelopes für den
+    /// Nicht-zugestellt-Fall (store-/cluster-frei, Ebene-1-testbar). Gibt <c>null</c> zurück, wenn keine
+    /// <c>OriginSessionId</c> vorliegt — dann gibt es kein Ziel für die Targeted Delivery. Spiegelt
+    /// die Feldbelegung von <c>AggregateActorBase.TryPublishCommandFailedAsync</c>.
+    /// </summary>
+    public static EventEnvelope? BaueCommandFailed(CommandEnvelope envelope, string grund, int maxAttempts)
+    {
+        if (string.IsNullOrEmpty(envelope.OriginSessionId))
+            return null;
+
+        return new EventEnvelope
+        {
+            AggregateId = envelope.AggregateId,
+            AggregateVersion = 0,
+            AggregateType = envelope.AggregateType,
+            CorrelationId = envelope.CorrelationId,
+            CausationId = envelope.CommandId.ToString(),
+            UserId = envelope.UserId,
+            Payload = new CommandFailed(
+                envelope.Payload.GetType().Name,
+                $"Nicht zugestellt nach {maxAttempts} Versuchen: {grund}",
+                envelope.AggregateId.ToString()),
+            TargetSubscriberId = envelope.OriginSessionId,
+        };
     }
 
     private async Task SchreibeDeadLetterAsync(CommandEnvelope envelope, string grund)

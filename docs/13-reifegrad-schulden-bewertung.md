@@ -92,25 +92,45 @@ Consul im `-dev`-Modus (kein Quorum). *Empfehlung:* produktives Multi-Node-Setup
 mit Quorum/Persistenz, systemd-Cluster-Rezept, oder container-orchestriert), bevor Multi-Node als
 „produktionsreif" gilt.
 
-**P1-2 · Rolling Schema-Migration fehlt.**
-Der Migrator ist ein Init-Job (Cold-Start), keine laufende Migration. Schema-Evolution im
-laufenden Cluster ist nicht abgedeckt. *Empfehlung:* Migrations-Strategie für Zero-Downtime
-definieren (additive Schema-Änderungen + Migrator-Lauf vor Rollout).
+**P1-2 · Transport-Sicherheit fehlt system-weit (TLS + AuthN/AuthZ).**
+Die gesamte gRPC-Oberfläche ist unverschlüsselt und unauthentifiziert: Host.Grpc bindet h2c-plain,
+der Blazor-Client verbindet `http://`, der Python-Client `Channel(host, port)` plain. Kein Token,
+kein Tenant, `user_id` immer leer; keine Authz am `Connect`/Command/Query-Pfad. Deckt sich mit dem
+„Prod-Security"-Ziel. *Empfehlung:* TLS (h2) + Auth-Token/mTLS am Connect-Handshake, Identitäts-/
+Tenant-Propagation in die Envelope-Metadaten. Betrifft **Server + beide Clients gemeinsam** — das
+größte Client-seitige Produktionsthema.
+*(Früher hier: „Rolling Schema-Migration" — auf Nutzer-Entscheid als never-needed gestrichen.)*
 
 **P1-3 · Event-Upcasting 1:N (Split) blockiert.**
 CQRS046 bricht **jeden** realen 1:N-Upcaster bis die Consumer-Fabric steht. Generator-/leseseitig
 ist alles da. *Empfehlung:* Consumer-Fabric fertigstellen und CQRS046 lösen — sonst ist die
 Schema-Evolution auf 1:1 beschränkt.
 
-**P1-4 · Client-Command-Pfad ohne Ack-Protokoll.**
-Nach 3 Fehlversuchen Dead-Letter, kein Auto-Retry; der gRPC-Service quittiert dem externen Client
-nicht. Ein verlorener Client-Command heilt kein Poll. *Empfehlung:* sichtbares Ack/Nack an den
-Client (oder client-seitiges Retry mit deterministischer CommandId für Idempotenz).
+**P1-4 · Command-Zustellgarantie: eine stille Verlust-Lücke + nicht-idempotenter Client-Pfad.**
+*(2026-08-12 verifiziert — „quittiert dem Client nicht" war zu grob.)* Der Client WIRD quittiert:
+`CommandSendFailed` (lokal, `ConnectionModule.cs:139/172`), `COMMAND_MAPPING_FAILED` (Server-Mapping,
+`CqrsClientService.cs:398`) und `CommandFailed` (targeted an `OriginSessionId`, Client auto-subscribed
+`:326`) für Ablehnungen + technische Actor-Fehler.
+*Real verbleibend:* (a) Erschöpft der Dispatcher die Platzierung (3× → Dead-Letter, erreicht nie
+einen Actor, `AggregateDispatcher.cs:114`), gibt es **kein** `CommandFailed` → der Client hängt still
+(nur bei nicht-routbarem Cluster). (b) Der Client-Pfad ist `CommandModus.Client` (OCC, **nicht
+idempotent**) ohne deterministische CommandId → Retry nach verlorenem Ack könnte doppelt anwenden
+(daher bewusst kein Auto-Retry); zudem kein Client-Timeout/Pending-Tracking.
+*Empfehlung:* (klein) ~~Dispatcher emittiert bei Erschöpfung ein `CommandFailed`~~ ✅ **umgesetzt
+2026-08-12 (T2a):** `AggregateDispatcher` publiziert bei Erschöpfung ein targeted `CommandFailed` an
+die `OriginSessionId` → stille Lücke geschlossen (Prüfstand `DispatcherCommandFailedTests`).
+(größer, **offen/optional — T2b**) deterministische CommandId + Inbox-Dedup auf dem Client-Pfad →
+sicherer Auto-Retry + Client-Timeout. Details: [konzept-client-haertung.md](konzept-client-haertung.md).
 
-**P1-5 · Python: keine Query-Antwort, keine Sicherheit, keine Tests.**
-`router._handle_query_forward` (`# TODO`) setzt das Response-oneof nie; kein TLS/Auth; keine
-Tests. *Empfehlung:* Query-oneof schließen (falls Python-Queries gebraucht werden); TLS + Token
-für externe Clients (deckt sich mit dem „Prod-Security"-Ziel); pytest-Grundgerüst.
+**P1-5 · Python-SDK unvollständig (Query-Antwort, Client→Client-Trigger, Tests).**
+`router._handle_query_forward` (`router.py:227`) baut ein **leeres** `QueryResponsePayloadDto()` —
+das Response-oneof wird nie gesetzt (`# TODO`) → ein Python-Client kann eine Query empfangen und den
+Handler laufen lassen, aber die Antwort nicht zurückserialisieren. Client→Client-Trigger ist nicht
+implementiert (nur Warnung); keine pytest-Tests. *Empfehlung:* ~~Query-oneof schließen +
+pytest-Grundgerüst~~ ✅ **umgesetzt 2026-08-12 (T3):** `PayloadMapper.wrap_query_response` setzt das
+oneof über die vorhandene Feld-Map, `router` nutzt es (TODO weg); pytest-Grundgerüst (2 Tests, in
+venv verifiziert). **Offen:** Client→Client-Trigger (geringe Prio). Transport-Sicherheit system-weit
+→ P1-2. Details: [konzept-client-haertung.md](konzept-client-haertung.md).
 
 **P1-6 · `CancellationToken.None` im generierten Pull-Emit-Pfad.**
 `PullPathGenerator` reicht `CancellationToken.None` in `router.EmitFor(...)`; bounded nur durch
@@ -178,17 +198,19 @@ meisten sind **Reifegrad/Hygiene**. Die *korrektheitsnahe* Lücke ist **P0-1** �
 Guard-false-green**, nicht als fehlender Mechanismus: der Co-Commit ist implementiert und bewiesen,
 die append-artigen Projektionen sind korrekt verdrahtet, und der Upsert-Normalfall ist durch
 Idempotenz ohnehin sicher. Alle anderen P0/P1-Punkte sind mechanisch (P0-2, erledigt), betrieblich
-(P1-1/2), bewusst blockiert (P1-3) oder an den externen Rändern (P1-4/5). Der Aggregat-/Event-/Saga-
-Kern selbst ist konsistent und getestet.
+(P1-1), Sicherheit/Client (P1-2/4/5, aktueller Fokus — s. [konzept-client-haertung.md](konzept-client-haertung.md)),
+oder bewusst blockiert (P1-3). Der Aggregat-/Event-/Saga-Kern selbst ist konsistent und getestet.
 
 ## 13.5 Empfohlene Reihenfolge (wenn produktiv gehärtet werden soll)
 
 1. ~~**P0-2** Frontend-Referenz entwirren~~ ✅ erledigt 2026-08-12 (Solution-Build grün).
 2. ~~**P0-1** Co-Commit-Guard härten (`ICoCommitTracker` + GA-1)~~ ✅ erledigt 2026-08-12 (Prüfstand
    grün). Optional offen: framework-getriebene Unit-of-Work (Hebel 2). Analyse: [konzept-exactly-once-naht.md](konzept-exactly-once-naht.md).
-3. **P1-4 / P1-6** Command-Kanten wirklich bounded + Client-Ack (Zustellgarantien schließen).
-4. **P1-1 / P1-2** Multi-Node produktiv härten + Migrations-Strategie.
-5. **P1-5** Python-Sicherheit + Query-oneof (falls extern genutzt).
+3. **Clienten angehen** (aktueller Fokus, s. [konzept-client-haertung.md](konzept-client-haertung.md)):
+   **P1-2** Transport-Sicherheit (TLS + Auth, system-weit), **P1-4** Command-Zustellgarantie
+   (Dispatcher-CommandFailed + optional idempotenter Client-Pfad), **P1-5** Python-SDK-Vervollständigung.
+4. **P1-1** Multi-Node produktiv härten. (Rolling Schema-Migration gestrichen — never-needed.)
+5. **P1-6** Command-Kanten im generierten Pull-Emit-Pfad wirklich bounden.
 6. **P2-1 / P2-2 / P2-9** Reinheits-Leak, Proto-Map-Konsolidierung, Duplikate — Wartbarkeit.
 7. **P1-3** 1:N-Upcasting-Consumer-Fabric (wenn Split-Evolution gebraucht wird).
 8. Hygiene (P2-3 committen, P3-\* aufräumen).
