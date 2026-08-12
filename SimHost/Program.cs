@@ -24,6 +24,9 @@ app.MapPost("/api/step", (StepRequest r) =>
 // Board-Session als DSL-Regressionstest exportieren.
 app.MapPost("/api/dsl", (DslRequest r) => Results.Text(engine.Dsl(r.SessionId ?? "default"), "text/plain"));
 
+// Abdeckung: welche Entscheidungs-Zweige bislang (über alle Sessions) gefeuert wurden → Board grün/grau.
+app.MapGet("/api/coverage", () => Results.Content(engine.CoverageJson(), "application/json"));
+
 Console.WriteLine($"\n▶ SimHost läuft.  Board: http://localhost:5178/   (Board: {boardPath ?? "—"})\n");
 app.Run("http://localhost:5178");
 

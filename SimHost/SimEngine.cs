@@ -36,6 +36,11 @@ public sealed class SimEngine
     // Sitzungs-Zustand: je Session die Aggregat-States + die Saga-Markierungen.
     private readonly ConcurrentDictionary<string, Session> _sessions = new();
 
+    // Guard-Ausdrücke je "CmdName|EvtName" (aus knowledge-graph.json, offline gehoben) — das „Warum".
+    private readonly Dictionary<string, string> _guards = new(StringComparer.Ordinal);
+    // Abdeckung: berührte Graph-Ids über alle Sessions (welche Zweige je gefeuert wurden).
+    private readonly HashSet<string> _coverage = new();
+
     public SimEngine()
     {
         _iCommand = typeof(ICommand); _iEvent = typeof(IEvent); _iTransient = typeof(ITransientEvent);
@@ -55,6 +60,42 @@ public sealed class SimEngine
                         _cmdToState[m.GetParameters()[0].ParameterType] = t;
             }
         }
+
+        LadeGuards();
+    }
+
+    // Guards aus knowledge-graph.json (neben der .sln) laden — offline gehoben, hier nur gelesen.
+    private void LadeGuards()
+    {
+        var dir = Directory.GetCurrentDirectory();
+        for (var i = 0; i < 10 && dir != null; i++)
+        {
+            var p = Path.Combine(dir, "knowledge-graph.json");
+            if (File.Exists(p))
+            {
+                try
+                {
+                    using var doc = JsonDocument.Parse(File.ReadAllText(p));
+                    foreach (var node in doc.RootElement.GetProperty("nodes").EnumerateArray())
+                    {
+                        if (!node.TryGetProperty("command", out var cmd) || !node.TryGetProperty("name", out var nm)) continue;
+                        if (!cmd.TryGetProperty("produces", out var prod)) continue;
+                        foreach (var o in prod.EnumerateArray())
+                            if (o.TryGetProperty("guard", out var g) && g.ValueKind == JsonValueKind.String)
+                                _guards[nm.GetString() + "|" + o.GetProperty("event").GetString()] = g.GetString()!;
+                    }
+                }
+                catch { /* Guards sind optional — ohne sie zeigt das Board eben kein „weil …". */ }
+                return;
+            }
+            dir = Path.GetDirectoryName(dir);
+        }
+    }
+
+    public string CoverageJson()
+    {
+        lock (_coverage)
+            return "[" + string.Join(",", _coverage.OrderBy(x => x, StringComparer.Ordinal).Select(x => "\"" + x + "\"")) + "]";
     }
 
     // ── Schema für die Formulare im Board ────────────────────────────────────
@@ -120,6 +161,7 @@ public sealed class SimEngine
             var id = ReadAggregateId(c);
             var state = session.GetOrCreate(stateType, id);
             var handler = _factory.CreateHandler(state);
+            var vorher = Fields(state); // Zustand VOR dem Command → für die Guard-Bindung
 
             List<IEvent> produced;
             try { produced = handler.HandleCommand(c).ToList(); }
@@ -138,12 +180,30 @@ public sealed class SimEngine
                 session.LastAusgang = persisted.Select(e => new Ereignis(e, true))
                     .Concat(rejects.Select(e => new Ereignis(e, false))).ToList();
 
+            // Abdeckung: welche Zweige dieses Command je gefeuert hat.
+            var cmdName = c.GetType().Name;
+            lock (_coverage)
+            {
+                _coverage.Add("cmd:" + cmdName);
+                foreach (var e in persisted.Concat(rejects))
+                {
+                    _coverage.Add("evt:" + e.GetType().Name);
+                    _coverage.Add($"produces:{cmdName}->{e.GetType().Name}");
+                }
+            }
+
+            // Das „Warum": den Guard-Ausdruck des gefeuerten Zweigs mit echten Werten binden.
+            string Warum(IEvent e) =>
+                _guards.TryGetValue(cmdName + "|" + e.GetType().Name, out var g)
+                    ? $" <span style=\"opacity:.65\">[weil {System.Net.WebUtility.HtmlEncode(GuardBinder.Binde(g, vorher, c))}]</span>"
+                    : "";
+
             var items = new List<TraceItem> { new("aggregate", _stateName[stateType]) };
             persisted.ForEach(e => items.Add(new("event", e.GetType().Name)));
             rejects.ForEach(e => items.Add(new("event", e.GetType().Name)));
             var outNote = persisted.Count > 0
-                ? $"Aggregat <b>{_stateName[stateType]}</b> → " + string.Join(", ", persisted.Select(e => $"<b>{e.GetType().Name}</b> ({ValuePreview(e)})"))
-                : $"Aggregat <b>{_stateName[stateType]}</b> → ⃠ ABGELEHNT: " + string.Join(", ", rejects.Select(e => e.GetType().Name));
+                ? $"Aggregat <b>{_stateName[stateType]}</b> → " + string.Join(", ", persisted.Select(e => $"<b>{e.GetType().Name}</b> ({ValuePreview(e)}){Warum(e)}"))
+                : $"Aggregat <b>{_stateName[stateType]}</b> → ⃠ ABGELEHNT: " + string.Join(", ", rejects.Select(e => $"{e.GetType().Name}{Warum(e)}"));
             frames.Add(new TraceFrame(items, outNote));
 
             // Sagas voran treiben (nur mit persistierten Events; Ablehnungen triggern nichts).

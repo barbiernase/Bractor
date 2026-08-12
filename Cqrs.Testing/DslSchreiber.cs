@@ -24,6 +24,43 @@ public static class DslSchreiber
         return Aus(trace.AggregatTyp, trace.Gegeben, vorab, wenn.Command, wenn.Ausgang);
     }
 
+    /// <summary>
+    /// Aus einer <see cref="SagaTrace"/> das Saga-Szenario-Skelett. Die geseedeten Aggregat-Historien
+    /// stecken NICHT in der Trace (sie wurden vorher gesetzt) → sie werden als TODO markiert; die
+    /// Feuer-Reihenfolge und der Endzustand (offenes Join?) fallen aus der Trace.
+    /// </summary>
+    public static string AusSaga(SagaTrace trace)
+    {
+        var ids = new GuidNamen();
+        var body = new StringBuilder();
+
+        var proc = trace.Markierungen.FirstOrDefault()?.Prozess;
+        body.Append("SagaSzenario.Mit(new AggregateHandlerFactory()");
+        if (proc is not null) body.Append(", new ").Append(proc).Append("()");
+        body.AppendLine(")");
+        body.AppendLine("    // .Gegeben<Konto>(id, new KontoEroeffnet(…))  ← beteiligte Aggregate seeden");
+
+        if (trace.Wurzel is AuslöserWurzel aw)
+            body.Append("    .WennAusgelöst(").Append(Neu(aw.Auslöser, ids)).AppendLine(", Guid.NewGuid())");
+        else
+            body.Append("    .Wenn(").Append(Neu(trace.Wurzel, ids)).AppendLine(")");
+
+        var feuer = trace.Feuerungen.Select(c => c.GetType().Name).ToList();
+        if (feuer.Count > 0)
+            body.Append("    .FeuertInReihenfolge(").Append(string.Join(", ", feuer.Select(f => $"typeof({f})"))).AppendLine(")");
+
+        var wartet = trace.Markierungen.SelectMany(m => m.Wartend).SelectMany(w => w.Fehlt).FirstOrDefault();
+        if (wartet is not null)
+            body.Append("    .SagaWartetAuf<").Append(wartet.Split('×')[0].Trim()).AppendLine(">();");
+        else
+            body.AppendLine("    .KeineOffeneSaga();");
+
+        var kopf = new StringBuilder();
+        foreach (var name in ids.Namen)
+            kopf.Append("var ").Append(name).AppendLine(" = Guid.NewGuid();");
+        return kopf.Append(body).ToString();
+    }
+
     /// <summary>Die tragende Erzeugung aus den Rohteilen — auch direkt vom SimHost aus aufrufbar.</summary>
     public static string Aus(
         string aggregatTyp,

@@ -96,6 +96,7 @@ public static class HtmlPresenter
         <button id="play" class="primary" title="abspielen">▶</button>
         <button id="next" title="weiter">⏭</button>
         <button id="reset" title="zurücksetzen">⟲</button>
+        <button id="cov" title="Abdeckung grün/grau (welche Zweige je gefeuert)">▦</button>
       </div>
       <div class="stepinfo" id="stepinfo"><span class="n">Trigger wählen und ▶ / ⏭ drücken.</span></div>
       <div id="states"></div>
@@ -267,10 +268,13 @@ function render(){
     // Ausgänge = Events (raus), das gekapselte OneOf
     (cmd.command.produces||[]).forEach((o,k)=>{ const py=y+(SZ.HHEAD+k*SZ.ROW)*z; const evtId=nodeIdOf('event',o.event);
       const on=simActive.has(evtId); const col=o.persisted?'#3b82f6':'#6b7480';
+      const gedeckt=COV.has('produces:'+cmd.name+'->'+o.event); const a0=ctx.globalAlpha; if(covMode&&!gedeckt)ctx.globalAlpha=a0*.28;
       ctx.fillStyle=on?col:(o.persisted?'#3b82f622':'#6b748022'); ctx.strokeStyle=col; ctx.lineWidth=on?1.8:1; if(!o.persisted)ctx.setLineDash([3,2]);
       rr(x+8*z,py+2*z,(b.w-16)*z,(SZ.ROW-3)*z,5*z); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
       ctx.fillStyle=on?'#fff':(o.persisted?'#9cc2ff':'#aab3c0'); ctx.font=`${10*z}px -apple-system,sans-serif`;
-      ctx.fillText((o.persisted?'● ':'⃠ ')+o.event, x+15*z, py+SZ.ROW*z/2); });
+      ctx.fillText((o.persisted?'● ':'⃠ ')+o.event, x+15*z, py+SZ.ROW*z/2);
+      if(covMode&&gedeckt){ ctx.fillStyle='#22c55e'; ctx.beginPath(); ctx.arc(x+(b.w-14)*z,py+SZ.ROW*z/2,2.4*z,0,7); ctx.fill(); }
+      ctx.globalAlpha=a0; });
     ctx.globalAlpha=1; });
   // 5) Lanes: Sagas (oben) + Projektionen (unten)
   Object.values(board.lane).forEach(b=>{ const n=b.node; const [x,y]=S(b.x,b.y); const act=simActive.has(n.id); const col=KIND_COL[n.kind];
@@ -371,6 +375,9 @@ trigsel.innerHTML=selHtml;
 // ── LIVE-Runtime (SimHost): echte, wertabhängige Ausführung ─────────────────
 const SID='board-'+Math.floor(performance.now());
 let LIVE=false; const SCHEMA={};
+let covMode=false; const COV=new Set();
+function refreshCoverage(){ fetch('/api/coverage').then(r=>r.ok?r.json():[]).then(ids=>{ COV.clear(); (ids||[]).forEach(i=>COV.add(i)); render(); }).catch(()=>{}); }
+document.getElementById('cov').onclick=()=>{ covMode=!covMode; document.getElementById('cov').classList.toggle('primary',covMode); if(covMode)refreshCoverage(); else render(); };
 const setStep=html=>{ document.getElementById('stepinfo').innerHTML=html; };
 fetch('/api/schema').then(r=>r.ok?r.json():null).then(list=>{ if(!list)return;
   LIVE=true; list.forEach(c=>SCHEMA[c.name]=c); document.getElementById('livebadge').style.display='inline-block';
@@ -395,7 +402,7 @@ function sendCommand(node){ const c=SCHEMA[node.name]; const values={};
     values[fl.name]=fl.type==='bool'?el.checked:(['decimal','int','long'].includes(fl.type)?Number(el.value):el.value); });
   fetch('/api/step',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:SID,command:node.name,values})})
     .then(r=>r.json()).then(res=>{ if(res.error){ setStep('<span class="n" style="color:#d64545">'+res.error+'</span>'); return; }
-      simMode=true; frames=(res.frames||[]).map(fr=>({add:(fr.add||[]).map(it=>nodeIdOf(it.kind,it.name)).filter(Boolean),edges:[],note:fr.note})); showStates(res.states); gotoFrame(0); });
+      simMode=true; frames=(res.frames||[]).map(fr=>({add:(fr.add||[]).map(it=>nodeIdOf(it.kind,it.name)).filter(Boolean),edges:[],note:fr.note})); showStates(res.states); gotoFrame(0); if(covMode)refreshCoverage(); });
 }
 function showStates(states){ document.getElementById('states').innerHTML=(states||[]).map(s=>`<div class="s"><b>${s.aggregate}</b>#${s.id} ${Object.entries(s.fields).map(([k,v])=>k+'='+v).join(' · ')}</div>`).join(''); }
 function resetSession(){ fetch('/api/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:SID})}).then(()=>{ showStates([]); stopSim(); setStep('<span class="n">Session zurückgesetzt.</span>'); }); }
