@@ -382,10 +382,14 @@ function renderForm(node){ const c=SCHEMA[node.name]; const f=document.getElemen
     if(fl.type==='bool')return `<label>${fl.name}</label><input type="checkbox" id="${id}">`;
     const def=num?(/(Betrag|Saldo|Menge|Zimmer|Plaetze|Anzahl|ProZiel)/i.test(fl.name)?100:1):(fl.type==='guid'?guidFor(fl.name):'');
     return `<label>${fl.name} <span style="opacity:.55">${fl.type}</span></label><input type="${num?'number':'text'}" id="${id}" value="${def}">`; }).join('')
-    + `<button class="send" id="sendbtn">▶ ${node.name} schicken</button><button class="rst" id="rstbtn">⟲ Session zurücksetzen</button>`;
+    + `<button class="send" id="sendbtn">▶ ${node.name} schicken</button><button class="rst" id="dslbtn">🧪 Als Test</button><button class="rst" id="rstbtn">⟲ Session zurücksetzen</button>`;
   document.getElementById('sendbtn').onclick=()=>sendCommand(node);
+  document.getElementById('dslbtn').onclick=dslExport;
   document.getElementById('rstbtn').onclick=resetSession;
 }
+function dslExport(){ fetch('/api/dsl',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:SID})})
+  .then(r=>r.text()).then(code=>{ setStep('<div class="n" style="opacity:.7">Board-Session als Test (in die Zwischenablage kopiert):</div><pre style="white-space:pre-wrap;font-size:11px;line-height:1.4;color:#9fe0a0;margin:.4rem 0 0">'+code.replace(/</g,'&lt;')+'</pre>');
+    navigator.clipboard&&navigator.clipboard.writeText(code).catch(()=>{}); }); }
 function sendCommand(node){ const c=SCHEMA[node.name]; const values={};
   c.fields.forEach(fl=>{ const el=document.getElementById('f_'+fl.name); if(!el)return;
     values[fl.name]=fl.type==='bool'?el.checked:(['decimal','int','long'].includes(fl.type)?Number(el.value):el.value); });

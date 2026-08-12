@@ -21,6 +21,9 @@ app.MapPost("/api/reset", (ResetRequest r) => { engine.Reset(r.SessionId ?? "def
 app.MapPost("/api/step", (StepRequest r) =>
     Results.Json(engine.Step(r.SessionId ?? "default", r.Command, r.Values)));
 
+// Board-Session als DSL-Regressionstest exportieren.
+app.MapPost("/api/dsl", (DslRequest r) => Results.Text(engine.Dsl(r.SessionId ?? "default"), "text/plain"));
+
 Console.WriteLine($"\n▶ SimHost läuft.  Board: http://localhost:5178/   (Board: {boardPath ?? "—"})\n");
 app.Run("http://localhost:5178");
 
@@ -38,3 +41,4 @@ static string? FindBoard()
 
 record StepRequest(string? SessionId, string Command, JsonElement Values);
 record ResetRequest(string? SessionId);
+record DslRequest(string? SessionId);

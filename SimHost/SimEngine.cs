@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using System.Reflection;
 using System.Text.Json;
 using Abstractions;
+using Cqrs.Testing;              // DslSchreiber + Ereignis (Board-Session → Test-Quelltext)
 using Infrastructure;            // generierte AggregateHandlerFactory (liegt in Domain.dll, Namespace Infrastructure)
 using Domain.Prozess;            // generierte GeneratedProzessRegeln
 
@@ -68,6 +69,23 @@ public sealed class SimEngine
 
     public void Reset(string sessionId) => _sessions.TryRemove(sessionId, out _);
 
+    // ── Board-Session → DSL-Quelltext (Regressionstest exportieren) ──────────
+    public string Dsl(string sessionId)
+    {
+        if (!_sessions.TryGetValue(sessionId, out var s) || s.LastRoot is null)
+            return "// Noch kein Command geschickt — erst ein Command absenden.";
+        if (!_cmdToState.TryGetValue(s.LastRoot.GetType(), out var stateType))
+            return "// Das letzte Command wird von keinem Aggregat behandelt.";
+
+        var zielId = ReadAggregateId(s.LastRoot);
+        // Vorab = frühere Wurzel-Commands auf dasselbe Aggregat (dieselbe Id), außer dem letzten.
+        var vorab = s.Root.Take(s.Root.Count - 1)
+            .Where(c => _cmdToState.TryGetValue(c.GetType(), out var st) && st == stateType && ReadAggregateId(c) == zielId)
+            .ToList();
+
+        return DslSchreiber.Aus(_stateName[stateType], Array.Empty<IEvent>(), vorab, s.LastRoot, s.LastAusgang);
+    }
+
     // ── Ein Command mit Werten schicken → ganze wertabhängige Kaskade ────────
     public StepResult Step(string sessionId, string commandName, JsonElement values)
     {
@@ -79,6 +97,8 @@ public sealed class SimEngine
         catch (Exception ex) { return new StepResult(new(), new(), $"Werte passen nicht zu {commandName}: {ex.Message}"); }
 
         var session = _sessions.GetOrAdd(sessionId, _ => new Session());
+        session.Root.Add(cmd);
+        session.LastRoot = cmd;
         var frames = new List<TraceFrame>();
         var rootCorr = ReadAggregateId(cmd);
 
@@ -112,6 +132,11 @@ public sealed class SimEngine
                 if (_iTransient.IsAssignableFrom(e.GetType())) { rejects.Add(e); }
                 else { handler.ApplyEvent(e); BumpVersion(state); persisted.Add(e); }
             }
+
+            // Ausgang des Wurzel-Commands merken → speist die DSL-Zusicherung (Dann/DannAbgelehnt).
+            if (ReferenceEquals(c, cmd))
+                session.LastAusgang = persisted.Select(e => new Ereignis(e, true))
+                    .Concat(rejects.Select(e => new Ereignis(e, false))).ToList();
 
             var items = new List<TraceItem> { new("aggregate", _stateName[stateType]) };
             persisted.ForEach(e => items.Add(new("event", e.GetType().Name)));
@@ -225,6 +250,9 @@ public sealed class SimEngine
     {
         public readonly Dictionary<string, IState> States = new();
         public readonly ConcurrentDictionary<string, Marking> Markings = new();
+        public readonly List<ICommand> Root = new();        // Wurzel-Commands (die der Nutzer schickte)
+        public ICommand? LastRoot;                          // das zuletzt geschickte
+        public List<Ereignis> LastAusgang = new();          // dessen Ausgang (für die DSL-Zusicherung)
         public IState GetOrCreate(Type stateType, Guid id)
         {
             var key = stateType.FullName + ":" + id;

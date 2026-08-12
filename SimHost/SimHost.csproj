@@ -11,6 +11,8 @@
     <!-- NUR Domain: dort liegen (generiert) AggregateHandlerFactory + GeneratedProzessRegeln.
          Kein Marten, kein Proto.Actor, kein Infrastructure — die reine, single-threaded Ausführung. -->
     <ProjectReference Include="../Domain/Domain.csproj" />
+    <!-- Der DSL-Schreiber (nur Abstractions-Ref): Board-Session → Test-Quelltext. -->
+    <ProjectReference Include="../Cqrs.Testing/Cqrs.Testing.csproj" />
   </ItemGroup>
 
 </Project>
