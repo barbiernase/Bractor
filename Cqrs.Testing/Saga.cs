@@ -19,6 +19,7 @@ public sealed record SagaSchritt
     public required Guid AggregatId { get; init; }
     public required string AggregatTyp { get; init; }
     public required IReadOnlyList<Ereignis> Ausgang { get; init; }
+    public required IReadOnlyDictionary<string, object?> ZustandVorher { get; init; }
     public required IReadOnlyDictionary<string, object?> ZustandNachher { get; init; }
 
     /// <summary>Kein Aggregat behandelt dieses Command — im Cluster ein Runtime-Hang (Graph-Diagnose UNROUTED-SAGA-CMD).</summary>
@@ -182,10 +183,13 @@ public sealed class SagaErgebnis
 
 /// <summary>
 /// Der store-freie Saga-Motor — Command→Aggregat-Routing, gehaltene Aggregat-Zustände und die
-/// Marking-Faltung. Spiegelt <c>SimEngine.AdvanceSagas</c>/<c>TryMatch</c> (dieselbe Kaskade,
-/// nur ohne HTTP), damit Test und Board dasselbe Verhalten sehen.
+/// Marking-Faltung. DER GETEILTE KERN: sowohl die Test-DSL (<see cref="SagaSzenario"/>) als auch
+/// der SimHost/Board treiben ihre Kaskade hierüber — eine Wahrheit statt zweier Spiegel.
+/// Ein <see cref="SagaLaufwerk"/> ist zustandsbehaftet: mehrere <see cref="Fahre"/>-Aufrufe
+/// akkumulieren Aggregat-Zustände und Markings (so kann eine Board-Session Schritt für Schritt
+/// wachsen).
 /// </summary>
-internal sealed class SagaLaufwerk
+public sealed class SagaLaufwerk
 {
     private readonly IAggregateHandlerFactory _fabrik;
     private readonly IReadOnlyList<(string Name, ProzessRegeln Regeln)> _prozesse;
@@ -265,10 +269,12 @@ internal sealed class SagaLaufwerk
             {
                 Command = c, Ursprung = ursprung, SagaName = saga, Unrouted = true,
                 AggregatId = c.AggregateId, AggregatTyp = "?",
-                Ausgang = Array.Empty<Ereignis>(), ZustandNachher = new Dictionary<string, object?>(),
+                Ausgang = Array.Empty<Ereignis>(),
+                ZustandVorher = new Dictionary<string, object?>(), ZustandNachher = new Dictionary<string, object?>(),
             };
 
         var state = Hole(stateType, c.AggregateId);
+        var vorher = Zustandsspiegel.Von(state); // Zustand VOR dem Command → für die Guard-Bindung
         var handler = _fabrik.CreateHandler(state);
         var ausgang = new List<Ereignis>();
         foreach (var e in handler.HandleCommand(c).ToList())
@@ -285,9 +291,13 @@ internal sealed class SagaLaufwerk
         {
             Command = c, Ursprung = ursprung, SagaName = saga, Unrouted = false,
             AggregatId = c.AggregateId, AggregatTyp = stateType.Name,
-            Ausgang = ausgang, ZustandNachher = Zustandsspiegel.Von(state),
+            Ausgang = ausgang, ZustandVorher = vorher, ZustandNachher = Zustandsspiegel.Von(state),
         };
     }
+
+    /// <summary>Alle aktuell gehaltenen Aggregat-Zustände (für Zustands-Panels im Board o.ä.).</summary>
+    public IReadOnlyList<(string Typ, Guid Id, IReadOnlyDictionary<string, object?> Felder)> AlleZustände()
+        => _states.Select(kv => (kv.Key.Item1.Name, kv.Key.Item2, Zustandsspiegel.Von(kv.Value))).ToList();
 
     // Mirror von SimEngine.AdvanceSagas: Marking falten, aktivierte Transitionen feuern.
     private List<(ICommand Cmd, string Saga)> Advance(IEvent evt, Guid corr)
