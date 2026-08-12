@@ -2,250 +2,221 @@ using System.Text.Json.Serialization;
 
 namespace GraphExtractor;
 
-// ═══════════════════════════════════════════════════════
-// ROOT
-// ═══════════════════════════════════════════════════════
+// ════════════════════════════════════════════════════════════════════════════
+//  Der Wissensgraph als typisiertes Property-Graph-Modell.
+//
+//  Bewusst NICHT mehr isolierte Listen pro Bausteinart (so war der alte Extractor),
+//  sondern EIN gerichteter, kausaler Graph aus `Nodes` + `Edges`, plus abgeleitete
+//  `Views` (Fanout, Kausalketten, Diagnosen). Damit ist er traversierbar:
+//  „Was passiert, wenn Command X feuert?" = einem Pfad an Kanten folgen.
+//
+//  Jede Kante trägt `Provenance` — woher die Kausalität stammt. Die Kern-Kanten
+//  (command→aggregat, aggregat→event) kommen aus der AUTORITATIVEN Routing-Wahrheit
+//  `Infrastructure.Mapping.GeneratedCommandRouting`; die Saga-Kanten aus dem Prozess-DSL.
+// ════════════════════════════════════════════════════════════════════════════
 
-public class KnowledgeGraph
+public sealed class KnowledgeGraph
 {
-    public List<AggregateNode> Aggregates { get; set; } = new();
-    public List<PipelineNode> Pipelines { get; set; } = new();
-    public List<ProjectionNode> Projections { get; set; } = new();
-    public List<ReaderNode> Readers { get; set; } = new();
-    public List<QueryNode> Queries { get; set; } = new();
-    public List<ClientStoreNode> ClientStores { get; set; } = new();
-    public List<ClientHandlerNode> ClientHandlers { get; set; } = new();
-    public List<EventFanout> EventFanouts { get; set; } = new();
+    public GraphMeta Meta { get; set; } = new();
+    public List<Node> Nodes { get; set; } = new();
+    public List<Edge> Edges { get; set; } = new();
+    public GraphViews Views { get; set; } = new();
 }
 
-// ═══════════════════════════════════════════════════════
-// AGGREGATE
-// ═══════════════════════════════════════════════════════
-
-public class AggregateNode
+public sealed class GraphMeta
 {
+    public string Note { get; set; } =
+        "Wissensgraph des CQRS/ES-Frameworks. Kern-Kausalität aus GeneratedCommandRouting (autoritativ), Sagas aus dem Prozess-DSL.";
+
+    /// <summary>„GeneratedCommandRouting" (autoritativ) oder „decider-fallback".</summary>
+    public string RoutingSource { get; set; } = "unbekannt";
+
+    public Dictionary<string, int> Counts { get; set; } = new();
+
+    /// <summary>Alle Bounded Contexts (Domänen), sortiert — für Filter/Canvas-Clustering.</summary>
+    public List<string> Contexts { get; set; } = new();
+}
+
+// ── Knoten ──────────────────────────────────────────────────────────────────
+
+public enum NodeKind { aggregate, command, @event, process, projection, query, pipeline }
+
+public sealed class Node
+{
+    /// <summary>Stabile Id, präfix-getypt: z.B. <c>cmd:BelasteKonto</c>, <c>evt:KontoBelastet</c>, <c>proc:BestellProzess</c>.</summary>
+    public string Id { get; set; } = "";
+
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public NodeKind Kind { get; set; }
+
     public string Name { get; set; } = "";
-    public string Namespace { get; set; } = "";
-    public string FullName { get; set; } = "";
-    public StateNode State { get; set; } = new();
-    public List<DecideNode> Decides { get; set; } = new();
-    public List<ApplyNode> Applies { get; set; } = new();
+    public string? FullName { get; set; }
+    public string? Namespace { get; set; }
+
+    /// <summary>Bounded Context (Domäne) — für Canvas-Clustering + Filter. Bei Commands/Events das behandelnde/emittierende Aggregat.</summary>
+    public string? Context { get; set; }
+
+    // Kind-spezifische Nutzlast — nur die passende serialisiert (WhenWritingNull).
+    public AggregateInfo? Aggregate { get; set; }
+    public CommandInfo? Command { get; set; }
+    public EventInfo? Event { get; set; }
+    public ProcessInfo? Process { get; set; }
+    public ProjectionInfo? Projection { get; set; }
+    public QueryInfo? Query { get; set; }
+    public PipelineInfo? Pipeline { get; set; }
 }
 
-public class StateNode
+public sealed class AggregateInfo
 {
-    public List<FieldInfo> Fields { get; set; } = new();
-    public List<DerivedProperty> DerivedProperties { get; set; } = new();
-    public string? CodePayload { get; set; }
+    public List<FieldInfo> State { get; set; } = new();
+    public List<string> Handles { get; set; } = new();  // Command-Namen, die dieses Aggregat entscheidet
+    public List<string> Emits { get; set; } = new();     // Event-Namen, die es produziert
 }
 
-public class FieldInfo
+public sealed class CommandInfo
+{
+    public bool IsCreation { get; set; }
+    /// <summary>Aggregat, das den Command behandelt — aus GeneratedCommandRouting (autoritativ). Null ⇒ nicht geroutet.</summary>
+    public string? RoutedTo { get; set; }
+    /// <summary>Woher der Command kommt: client | process | process-compensation | pipeline | (mehrere).</summary>
+    public List<string> Origin { get; set; } = new();
+    /// <summary>
+    /// Das GEKAPSELTE Ergebnis-Universum dieses Commands aus der Decide-OneOf-Signatur (handler-sensitiv):
+    /// genau die Events, die dieser eine Handler alternativ produzieren kann — Erfolg (persistiert) ODER
+    /// Ablehnung. Das ist die präzise Relation, nicht die aggregat-grobe „emittiert irgendwann".
+    /// </summary>
+    public List<CommandOutcome> Produces { get; set; } = new();
+    public List<FieldInfo> Fields { get; set; } = new();
+}
+
+/// <summary>Ein möglicher Ausgang eines Decide-OneOf: ein Event + ob es persistiert (Erfolg) oder eine Ablehnung ist.</summary>
+public sealed class CommandOutcome
+{
+    public string Event { get; set; } = "";
+    public bool Persisted { get; set; }
+}
+
+public sealed class EventInfo
+{
+    /// <summary>true = persistiert (IEvent), false = Ablehnung (ITransientEvent, nie im Log, kann keine Regel triggern).</summary>
+    public bool Persisted { get; set; }
+    public string? EmittedBy { get; set; }   // Aggregat-Name
+}
+
+public sealed class ProcessInfo
+{
+    public string Trigger { get; set; } = "";        // Auslöser-Event (simple name)
+    /// <summary>In GeneratedProzessRegeln.Alle verdrahtet? Definiert-aber-nicht-registriert ist eine Diagnose.</summary>
+    public bool Registered { get; set; }
+    public string Pattern { get; set; } = "Linear";  // Diamant | Fan-out | Verkettung | Linear
+    public List<SagaRule> Rules { get; set; } = new();
+}
+
+/// <summary>Eine Transition (Regel) der Saga — die statisch bekannten Kanten des Petri-Netzes.</summary>
+public sealed class SagaRule
+{
+    public int Index { get; set; }
+    public List<string> When { get; set; } = new();  // Bedingungs-Event-Namen (Konjunktion)
+    public string Join { get; set; } = "single";     // single | and | count
+    public string? Sammel { get; set; }              // Count-Join-Event (bei Join=count)
+    public bool FanOut { get; set; }                 // SendeJe → N Commands aus einem Match
+    public string Sends { get; set; } = "";          // gefeuerter Command
+    public string? Compensates { get; set; }         // Gegenzug-Command (RückgängigDurch)
+}
+
+public sealed class ProjectionInfo
+{
+    public string SubscriberId { get; set; } = "";
+    public List<string> Consumes { get; set; } = new(); // Event-Namen
+}
+
+public sealed class QueryInfo
+{
+    public string? ServedByReader { get; set; }
+    public string? ReadsProjection { get; set; }
+    public List<FieldInfo> Fields { get; set; } = new();
+}
+
+public sealed class PipelineInfo
+{
+    public string PipelineId { get; set; } = "";
+    public List<PipelineHandle> Handles { get; set; } = new();
+}
+
+public sealed class PipelineHandle
+{
+    public string Input { get; set; } = "";
+    public string InputKind { get; set; } = "event"; // trigger | event
+    public List<string> Emits { get; set; } = new();  // Command-Namen
+}
+
+public sealed class FieldInfo
 {
     public string Name { get; set; } = "";
     public string Type { get; set; } = "";
-    public List<FieldInfo> Children { get; set; } = new();
 }
 
-public class DerivedProperty
+// ── Kanten ──────────────────────────────────────────────────────────────────
+
+public enum EdgeKind
 {
-    public string Name { get; set; } = "";
-    public string CodePayload { get; set; } = "";
+    routedTo,       // command  → aggregate   (GeneratedCommandRouting.CommandToAggregate, autoritativ)
+    produces,       // command  → event       (Decide-OneOf, handler-sensitiv; persistiert autoritativ aus CommandToEvents, Ablehnung aus Decider)
+    triggers,       // event    → process     (Prozess-DSL: Auslöser)
+    sends,          // process  → command     (Prozess-DSL: Sende/SendeJe) — Via = ruleIndex
+    compensates,    // process  → command     (Prozess-DSL: RückgängigDurch) — Via = ruleIndex
+    advances,       // event    → process     (Prozess-DSL: Bedingungs-Event einer Nicht-Auslöser-Regel)
+    consumedBy,     // event    → projection  (ISubscriber.Handle)
+    readsFrom,      // query    → projection  (IReader<TProjection>)
+    pipelineEmits   // pipeline → command
 }
 
-public class DecideNode
+public sealed class Edge
 {
-    /// <summary>Der Command-Typ den diese Decide-Methode verarbeitet.</summary>
-    public string CommandType { get; set; } = "";
-    
-    /// <summary>true wenn der Command ICreationCommand implementiert.</summary>
-    public bool IsCreation { get; set; }
-    
-    /// <summary>
-    /// Das geschlossene Universum der möglichen Ausgänge aus dem OneOf-Rückgabetyp.
-    /// Jeder Eintrag ist ein Event-Typ mit seiner Klassifikation (persist/reject).
-    /// </summary>
-    public List<DecideOutput> Universe { get; set; } = new();
-    
-    /// <summary>Der vollständige Methodenbody — für Bedingungen, Kombinatorik, Datenherkunft.</summary>
-    public string CodePayload { get; set; } = "";
+    public string From { get; set; } = "";
+    public string To { get; set; } = "";
+
+    [JsonConverter(typeof(JsonStringEnumConverter))]
+    public EdgeKind Kind { get; set; }
+
+    /// <summary>GeneratedCommandRouting | decider | process-dsl | subscriber | reader | pipeline.</summary>
+    public string Provenance { get; set; } = "";
+
+    /// <summary>Kontext: bei `emits` der Command; bei `sends`/`compensates`/`advances` der Regel-Index.</summary>
+    public string? Via { get; set; }
 }
 
-public class DecideOutput
+// ── Abgeleitete Sichten ──────────────────────────────────────────────────────
+
+public sealed class GraphViews
 {
-    public string EventType { get; set; } = "";
-    
-    /// <summary>"persist" (IEvent) oder "reject" (ITransientEvent)</summary>
-    public string Kind { get; set; } = "persist";
+    public List<EventFanout> EventFanout { get; set; } = new();
+    public List<CausalChain> CausalChains { get; set; } = new();
+    public List<Finding> Diagnostics { get; set; } = new();
 }
 
-public class ApplyNode
+/// <summary>Pro Event: alles, was es auslöst — der Blast-Radius eines Events.</summary>
+public sealed class EventFanout
 {
-    /// <summary>Der Event-Typ den diese Apply-Methode verarbeitet.</summary>
-    public string EventType { get; set; } = "";
-    
-    /// <summary>Der Methodenbody — welche State-Felder mutiert werden.</summary>
-    public string CodePayload { get; set; } = "";
-}
-
-// ═══════════════════════════════════════════════════════
-// PIPELINE
-// ═══════════════════════════════════════════════════════
-
-public class PipelineNode
-{
-    public string Name { get; set; } = "";
-    public string FullName { get; set; } = "";
-    public string PipelineId { get; set; } = "";
-    public List<PipelineHandleNode> Handles { get; set; } = new();
-}
-
-public class PipelineHandleNode
-{
-    /// <summary>Der Input-Typ (Trigger oder Event).</summary>
-    public string InputType { get; set; } = "";
-    
-    /// <summary>"trigger" oder "event"</summary>
-    public string InputKind { get; set; } = "";
-    
-    /// <summary>Command-Typen die diese Handle-Methode erzeugen kann.</summary>
-    public List<string> ProducedCommands { get; set; } = new();
-    
-    /// <summary>Der Methodenbody — Orchestrierungslogik.</summary>
-    public string CodePayload { get; set; } = "";
-}
-
-// ═══════════════════════════════════════════════════════
-// PROJECTION
-// ═══════════════════════════════════════════════════════
-
-public class ProjectionNode
-{
-    public string Name { get; set; } = "";
-    public string FullName { get; set; } = "";
-    public string SubscriberId { get; set; } = "";
-    public List<ProjectionHandleNode> Handles { get; set; } = new();
-}
-
-public class ProjectionHandleNode
-{
-    /// <summary>Der Event-Typ den dieser Handle verarbeitet.</summary>
-    public string EventType { get; set; } = "";
-    
-    /// <summary>Der Methodenbody — welche ReadModel-Operationen.</summary>
-    public string CodePayload { get; set; } = "";
-}
-
-// ═══════════════════════════════════════════════════════
-// READER + QUERY
-// ═══════════════════════════════════════════════════════
-
-public class ReaderNode
-{
-    public string Name { get; set; } = "";
-    public string FullName { get; set; } = "";
-    
-    /// <summary>Name der Projektion zu der dieser Reader gehört.</summary>
-    public string ProjectionName { get; set; } = "";
-    
-    public bool TrackDeps { get; set; }
-    public List<ReaderHandleNode> Handles { get; set; } = new();
-}
-
-public class ReaderHandleNode
-{
-    public string QueryType { get; set; } = "";
-    
-    /// <summary>
-    /// Mögliche Response-Typen. Bei OneOf mehrere, sonst einer.
-    /// </summary>
-    public List<string> ResponseTypes { get; set; } = new();
-    
-    public string CodePayload { get; set; } = "";
-}
-
-public class QueryNode
-{
-    public string Name { get; set; } = "";
-    public string FullName { get; set; } = "";
-    public List<FieldInfo> Fields { get; set; } = new();
-}
-
-// ═══════════════════════════════════════════════════════
-// CLIENT STORE
-// ═══════════════════════════════════════════════════════
-
-public class ClientStoreNode
-{
-    public string Name { get; set; } = "";
-    public string FullName { get; set; } = "";
-    
-    public List<StoreHandleNode> EventHandles { get; set; } = new();
-    public List<StoreHandleNode> ResponseHandles { get; set; } = new();
-    public List<StoreHandleNode> RejectionHandles { get; set; } = new();
-    public List<StoreHandleNode> InfraHandles { get; set; } = new();
-    public List<UserIntentNode> UserIntents { get; set; } = new();
-    
-    public List<FieldInfo> ObservableState { get; set; } = new();
-    public List<DerivedProperty> DerivedProperties { get; set; } = new();
-}
-
-public class StoreHandleNode
-{
-    public string InputType { get; set; } = "";
-    
-    /// <summary>"server-event", "query-response", "rejection", "client-event", "infrastructure"</summary>
-    public string InputKind { get; set; } = "";
-    
-    public string CodePayload { get; set; } = "";
-}
-
-public class UserIntentNode
-{
-    /// <summary>Der Methodenname (z.B. "WechsleZu", "LabelProdukt").</summary>
-    public string MethodName { get; set; } = "";
-    
-    /// <summary>Die Parameter-Signatur.</summary>
-    public string Signature { get; set; } = "";
-    
-    /// <summary>Command- und Query-Typen die diese Methode auf den Bus publiziert.</summary>
-    public List<string> Publishes { get; set; } = new();
-    
-    public string CodePayload { get; set; } = "";
-}
-
-/// <summary>
-/// Eigenständiger Client-Handler (wie ImagePairStatistikHandler).
-/// Konsumiert Events, emittiert ClientEvents.
-/// </summary>
-public class ClientHandlerNode
-{
-    public string Name { get; set; } = "";
-    public string FullName { get; set; } = "";
-    public List<string> HandledEvents { get; set; } = new();
-    public List<string> EmittedClientEvents { get; set; } = new();
-    public string CodePayload { get; set; } = "";
-}
-
-// ═══════════════════════════════════════════════════════
-// EVENT FANOUT (berechnet, nicht direkt extrahiert)
-// ═══════════════════════════════════════════════════════
-
-public class EventFanout
-{
-    public string EventType { get; set; } = "";
-    
-    /// <summary>"persist" oder "reject"</summary>
-    public string Kind { get; set; } = "persist";
-    
-    /// <summary>Projektionen die dieses Event konsumieren.</summary>
+    public string Event { get; set; } = "";
+    public bool Persisted { get; set; }
     public List<string> Projections { get; set; } = new();
-    
-    /// <summary>Pipelines die auf dieses Event reagieren.</summary>
+    public List<string> TriggersProcesses { get; set; } = new();  // als Auslöser
+    public List<string> AdvancesProcesses { get; set; } = new();  // als Bedingungs-Event
     public List<string> Pipelines { get; set; } = new();
-    
-    /// <summary>Client-Stores die dieses Event handlen.</summary>
-    public List<string> ClientStores { get; set; } = new();
-    
-    /// <summary>Client-Handler die dieses Event handlen.</summary>
-    public List<string> ClientHandlers { get; set; } = new();
+}
+
+/// <summary>Eine Kausalkette ab einem Start-Command: command → event → (process) → command → …</summary>
+public sealed class CausalChain
+{
+    public string Start { get; set; } = "";      // Start-Command
+    public string Process { get; set; } = "";    // beteiligter Prozess (falls einer)
+    public List<string> Steps { get; set; } = new(); // menschenlesbare Pfad-Schritte
+}
+
+public sealed class Finding
+{
+    public string Severity { get; set; } = "info"; // error | warning | info
+    public string Code { get; set; } = "";
+    public string Message { get; set; } = "";
 }

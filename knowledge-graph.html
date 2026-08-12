@@ -1,0 +1,4986 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Wissensgraph — Event-Modeling-Board</title>
+<style>
+  :root{
+    --bg:#0f1216; --panel:#161b22; --panel2:#1c222b; --ink:#e6edf3; --muted:#8b98a9; --line:#242c37;
+    --evt:#3b82f6; --rej:#6b7480; --cmd:#e0902b; --agg:#22b07d; --proc:#8b5cf6; --proj:#14b8a6; --pipe:#f97316; --accent:#8b5cf6;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%;margin:0}
+  body{display:flex;font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);overflow:hidden}
+  aside{width:300px;flex:0 0 300px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
+  .brand{padding:16px 18px;border-bottom:1px solid var(--line)}
+  .brand h1{margin:0;font-size:15px}
+  .brand small{color:var(--muted);font-size:11px}
+  .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;margin-top:8px}
+  .badge.auth{background:#0f2a20;color:var(--agg)} .badge.fallback{background:#2c1414;color:#d64545}
+  .scroll{overflow-y:auto;flex:1;padding:14px 16px}
+  .sec{margin-bottom:18px}
+  .sec h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 8px}
+  .row{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px;cursor:pointer;user-select:none}
+  .row input{accent-color:var(--accent)}
+  .sw{width:11px;height:11px;border-radius:3px;flex:0 0 11px}
+  .row .ct{margin-left:auto;color:var(--muted);font-size:11px}
+  .mini{display:flex;gap:6px;margin-bottom:10px}
+  .mini button{flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:6px;padding:5px;font-size:11px;cursor:pointer}
+  .mini button:hover{color:var(--ink)}
+  select{width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);font:inherit;margin-bottom:10px}
+  .ctrls{display:flex;gap:6px;margin-bottom:8px}
+  .ctrls button{flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:9px 0;font-size:14px;cursor:pointer}
+  .ctrls button:hover{border-color:var(--accent)}
+  .ctrls button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  .ctrls button:disabled{opacity:.35;cursor:default}
+  .stepinfo{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-size:12px;min-height:54px}
+  .stepinfo .n{color:var(--muted);font-size:11px}
+  .stepinfo b{color:var(--accent)}
+  .legend{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;color:var(--muted)}
+  .legend span{display:inline-flex;align-items:center;gap:5px}
+  .dot{width:9px;height:9px;border-radius:3px;display:inline-block}
+  main{flex:1;position:relative;overflow:hidden}
+  canvas{display:block;width:100%;height:100%;cursor:grab}
+  canvas.grabbing{cursor:grabbing}
+  #tip{position:absolute;pointer-events:none;background:#0b0e12ee;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;max-width:300px;display:none;z-index:10}
+  #tip .k{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
+  #tip .rows{color:var(--muted);font-size:11px;margin-top:4px;font-family:ui-monospace,Menlo,monospace}
+  #hud{position:absolute;left:14px;bottom:12px;font-size:11px;color:var(--muted);background:#0b0e12aa;border:1px solid var(--line);border-radius:6px;padding:4px 8px}
+  details{margin-top:6px} summary{cursor:pointer;color:var(--muted);font-size:11px}
+  code{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--evt)}
+  .livebadge{display:none;background:#0f2a20;color:var(--agg);border-radius:6px;padding:1px 7px;font-size:10px;font-weight:700;margin-left:6px}
+  #cmdform{margin:4px 0 6px}
+  #cmdform label{display:block;font-size:11px;color:var(--muted);margin:6px 0 2px}
+  #cmdform input{width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);font:inherit}
+  #cmdform input[type=checkbox]{width:auto}
+  #cmdform .send{width:100%;margin-top:10px;background:var(--accent);border:none;color:#fff;border-radius:8px;padding:9px;font-weight:600;cursor:pointer}
+  #cmdform .rst{background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;margin-top:6px;text-decoration:underline;display:block}
+  #states{margin-top:8px;font:11px ui-monospace,Menlo,monospace;color:var(--muted)}
+  #states .s{padding:3px 0;border-top:1px solid var(--line)}
+  #states b{color:var(--agg)}
+</style>
+</head>
+<body>
+<aside>
+  <div class="brand">
+    <h1>Wissensgraph</h1>
+    <small>Event-Modeling-Board · Contexts › Aggregate › Funktionen</small><br>
+    <span class="badge" id="routing"></span>
+  </div>
+  <div class="scroll">
+    <div class="sec">
+      <h2>Nachricht schicken<span class="livebadge" id="livebadge">● LIVE-Runtime</span></h2>
+      <select id="trigsel"></select>
+      <div id="cmdform"></div>
+      <div class="ctrls">
+        <button id="prev" title="zurück">⏮</button>
+        <button id="play" class="primary" title="abspielen">▶</button>
+        <button id="next" title="weiter">⏭</button>
+        <button id="reset" title="zurücksetzen">⟲</button>
+      </div>
+      <div class="stepinfo" id="stepinfo"><span class="n">Trigger wählen und ▶ / ⏭ drücken.</span></div>
+      <div id="states"></div>
+    </div>
+    <div class="sec">
+      <h2>Bounded Contexts</h2>
+      <div class="mini"><button id="ctx-all">alle</button><button id="ctx-none">keine</button><button id="ctx-saga">nur Sagas</button></div>
+      <div id="ctxlist"></div>
+    </div>
+    <div class="sec">
+      <h2>Legende</h2>
+      <div class="legend">
+        <span><i class="dot" style="background:var(--cmd)"></i>Funktion (Command rein)</span>
+        <span><i class="dot" style="background:var(--evt)"></i>Event raus</span>
+        <span><i class="dot" style="background:var(--rej)"></i>Ablehnung</span>
+        <span><i class="dot" style="background:var(--agg)"></i>Aggregat</span>
+        <span><i class="dot" style="background:var(--proc)"></i>Saga</span>
+        <span><i class="dot" style="background:var(--proj)"></i>Projektion</span>
+      </div>
+      <details>
+        <summary>JSON abfragen</summary>
+        <div style="color:var(--muted);font-size:11px;margin-top:6px">
+          <code>window.GRAPH</code> in der Konsole:<br>
+          <code>GRAPH.nodes.filter(n=>n.context==='Konto')</code><br>
+          <code>GRAPH.edges.filter(e=>e.kind==='produces')</code>
+        </div>
+      </details>
+    </div>
+  </div>
+</aside>
+<main>
+  <canvas id="cv"></canvas>
+  <div id="tip"></div>
+  <div id="hud">Scrollen = Zoom · Ziehen = Pan · Hover = Details</div>
+</main>
+
+<script>
+const GRAPH = {
+  "meta": {
+    "note": "Wissensgraph des CQRS/ES-Frameworks. Kern-Kausalität aus GeneratedCommandRouting (autoritativ), Sagas aus dem Prozess-DSL.",
+    "routingSource": "GeneratedCommandRouting",
+    "counts": {
+      "aggregate": 16,
+      "command": 38,
+      "event": 64,
+      "process": 6,
+      "projection": 3,
+      "query": 8,
+      "pipeline": 3,
+      "edges": 169
+    },
+    "contexts": [
+      "(quer)",
+      "Abstractions",
+      "Antrag",
+      "Auftrag",
+      "Bestellung",
+      "Erinnerung",
+      "Flug",
+      "Hotel",
+      "ImagePair",
+      "Infrastructure",
+      "Konto",
+      "Lager",
+      "Reaktion",
+      "Reise",
+      "Reiseauftrag",
+      "Sammelauftrag",
+      "Sammelueberweisung",
+      "Ueberweisung",
+      "Versand",
+      "Vorgang",
+      "Zahlung"
+    ]
+  },
+  "nodes": [
+    {
+      "id": "agg:Antrag",
+      "kind": "aggregate",
+      "name": "Antrag",
+      "fullName": "Domain.Antrag.Antrag",
+      "namespace": "Domain.Antrag",
+      "context": "Antrag",
+      "aggregate": {
+        "state": [
+          {
+            "name": "Gestellt",
+            "type": "bool"
+          }
+        ],
+        "handles": [
+          "StelleAntrag"
+        ],
+        "emits": [
+          "AntragGestellt"
+        ]
+      }
+    },
+    {
+      "id": "agg:Ueberweisungsauftrag",
+      "kind": "aggregate",
+      "name": "Ueberweisungsauftrag",
+      "fullName": "Domain.Auftrag.Ueberweisungsauftrag",
+      "namespace": "Domain.Auftrag",
+      "context": "Auftrag",
+      "aggregate": {
+        "state": [
+          {
+            "name": "Beauftragt",
+            "type": "bool"
+          }
+        ],
+        "handles": [
+          "BeauftrageUeberweisung"
+        ],
+        "emits": [
+          "UeberweisungBeauftragt"
+        ]
+      }
+    },
+    {
+      "id": "agg:Bestellauftrag",
+      "kind": "aggregate",
+      "name": "Bestellauftrag",
+      "fullName": "Domain.Bestellung.Bestellauftrag",
+      "namespace": "Domain.Bestellung",
+      "context": "Bestellung",
+      "aggregate": {
+        "state": [
+          {
+            "name": "Aufgegeben",
+            "type": "bool"
+          }
+        ],
+        "handles": [
+          "GibBestellungAuf"
+        ],
+        "emits": [
+          "BestellungAufgegeben"
+        ]
+      }
+    },
+    {
+      "id": "agg:Erinnerung",
+      "kind": "aggregate",
+      "name": "Erinnerung",
+      "fullName": "Domain.Erinnerung.Erinnerung",
+      "namespace": "Domain.Erinnerung",
+      "context": "Erinnerung",
+      "aggregate": {
+        "state": [
+          {
+            "name": "Erinnert",
+            "type": "bool"
+          },
+          {
+            "name": "Kontext",
+            "type": "string?"
+          }
+        ],
+        "handles": [
+          "FristFaellig"
+        ],
+        "emits": [
+          "ErinnerungAusgeloest"
+        ]
+      }
+    },
+    {
+      "id": "agg:Flugkontingent",
+      "kind": "aggregate",
+      "name": "Flugkontingent",
+      "fullName": "Domain.Flug.Flugkontingent",
+      "namespace": "Domain.Flug",
+      "context": "Flug",
+      "aggregate": {
+        "state": [
+          {
+            "name": "Plaetze",
+            "type": "int"
+          }
+        ],
+        "handles": [
+          "RichteFlugEin",
+          "ReserviereFlug",
+          "GebeFlugFrei"
+        ],
+        "emits": [
+          "FlugFreigegeben",
+          "FlugReserviert",
+          "FlugEingerichtet",
+          "FlugExistiertBereits",
+          "FlugAusgebucht"
+        ]
+      }
+    },
+    {
+      "id": "agg:Hotelkontingent",
+      "kind": "aggregate",
+      "name": "Hotelkontingent",
+      "fullName": "Domain.Hotel.Hotelkontingent",
+      "namespace": "Domain.Hotel",
+      "context": "Hotel",
+      "aggregate": {
+        "state": [
+          {
+            "name": "Zimmer",
+            "type": "int"
+          }
+        ],
+        "handles": [
+          "RichteHotelEin",
+          "ReserviereHotel",
+          "GebeHotelFrei"
+        ],
+        "emits": [
+          "HotelFreigegeben",
+          "HotelReserviert",
+          "HotelEingerichtet",
+          "HotelExistiertBereits",
+          "HotelAusgebucht"
+        ]
+      }
+    },
+    {
+      "id": "agg:ImagePair",
+      "kind": "aggregate",
+      "name": "ImagePair",
+      "fullName": "Domain.ImagePair.ImagePair",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "aggregate": {
+        "state": [
+          {
+            "name": "PairKey",
+            "type": "string?"
+          },
+          {
+            "name": "Dc0",
+            "type": "BildInfo?"
+          },
+          {
+            "name": "Dc2",
+            "type": "BildInfo?"
+          },
+          {
+            "name": "KiBildpaarKlassifikation",
+            "type": "Klassifikation?"
+          },
+          {
+            "name": "MenschBildpaarLabel",
+            "type": "Klassifikation?"
+          },
+          {
+            "name": "PhysischesProduktLabel",
+            "type": "Klassifikation?"
+          },
+          {
+            "name": "IstInspiziert",
+            "type": "bool"
+          },
+          {
+            "name": "ProduziertAm",
+            "type": "DateTimeOffset"
+          },
+          {
+            "name": "AufgenommenAm",
+            "type": "DateTimeOffset"
+          },
+          {
+            "name": "IstKomplett",
+            "type": "bool"
+          },
+          {
+            "name": "UrsprungsPfad",
+            "type": "string?"
+          }
+        ],
+        "handles": [
+          "ErstelleImagePair",
+          "MeldeBildVerfuegbar",
+          "KlassifiziereEinzelBildDurchKi",
+          "KlassifiziereBildPaarDurchKi",
+          "LabelBildRegion",
+          "LabelEinzelBild",
+          "LabelBildPaar",
+          "LabelPhysischesProdukt",
+          "MarkiereAlsInspiziert"
+        ],
+        "emits": [
+          "ImagePairErstellt",
+          "BildPaarDurchKiKlassifiziert",
+          "EinzelBildDurchKiKlassifiziert",
+          "BildPaarGelabelt",
+          "BildRegionGelabelt",
+          "EinzelBildGelabelt",
+          "PhysischesProduktGelabelt",
+          "ImagePairInspiziert",
+          "BildVerfuegbar",
+          "ImagePairKomplett",
+          "ImagePairExistiertBereits",
+          "ImagePairNichtGefunden",
+          "BildVersionBereitsVerfuegbar",
+          "BildNichtVerfuegbar",
+          "RegionLabelsUngueltig",
+          "PaarNichtKomplett",
+          "RegionIndexUngueltig"
+        ]
+      }
+    },
+    {
+      "id": "agg:Konto",
+      "kind": "aggregate",
+      "name": "Konto",
+      "fullName": "Domain.Konto.Konto",
+      "namespace": "Domain.Konto",
+      "context": "Konto",
+      "aggregate": {
+        "state": [
+          {
+            "name": "Saldo",
+            "type": "decimal"
+          },
+          {
+            "name": "Reserviert",
+            "type": "decimal"
+          },
+          {
+            "name": "Gesperrt",
+            "type": "bool"
+          },
+          {
+            "name": "Verfuegbar",
+            "type": "decimal"
+          }
+        ],
+        "handles": [
+          "EroeffneKonto",
+          "ReserviereBetrag",
+          "GebeReservierungFrei",
+          "SchreibeGut",
+          "StorniereGutschrift",
+          "BucheReservierung"
+        ],
+        "emits": [
+          "ReservierungGebucht",
+          "KontoEroeffnet",
+          "ReservierungFreigegeben",
+          "BetragReserviert",
+          "Gutgeschrieben",
+          "GutschriftStorniert",
+          "KontoExistiertBereits",
+          "KontoGesperrt",
+          "DeckungReichtNicht",
+          "KontoNichtGefunden"
+        ]
+      }
+    },
+    {
+      "id": "agg:Lager",
+      "kind": "aggregate",
+      "name": "Lager",
+      "fullName": "Domain.Lager.Lager",
+      "namespace": "Domain.Lager",
+      "context": "Lager",
+      "aggregate": {
+        "state": [
+          {
+            "name": "Bestand",
+            "type": "int"
+          },
+          {
+            "name": "Reserviert",
+            "type": "int"
+          }
+        ],
+        "handles": [
+          "RichteLagerEin",
+          "ReserviereBestand",
+          "GebeBestandFrei"
+        ],
+        "emits": [
+          "BestandFreigegeben",
+          "BestandReserviert",
+          "LagerEingerichtet",
+          "LagerExistiertBereits",
+          "BestandReichtNicht"
+        ]
+      }
+    },
+    {
+      "id": "agg:Reaktionsempfaenger",
+      "kind": "aggregate",
+      "name": "Reaktionsempfaenger",
+      "fullName": "Domain.Reaktion.Reaktionsempfaenger",
+      "namespace": "Domain.Reaktion",
+      "context": "Reaktion",
+      "aggregate": {
+        "state": [
+          {
+            "name": "Wirkungen",
+            "type": "long"
+          },
+          {
+            "name": "VerarbeiteteReaktionen",
+            "type": "HashSet<Guid>"
+          }
+        ],
+        "handles": [
+          "WirkeReaktion"
+        ],
+        "emits": [
+          "ReaktionGewirkt"
+        ]
+      }
+    },
+    {
+      "id": "agg:Reise",
+      "kind": "aggregate",
+      "name": "Reise",
+      "fullName": "Domain.Reise.Reise",
+      "namespace": "Domain.Reise",
+      "context": "Reise",
+      "aggregate": {
+        "state": [
+          {
+            "name": "Bestaetigt",
+            "type": "bool"
+          }
+        ],
+        "handles": [
+          "BestaetigeReise"
+        ],
+        "emits": [
+          "ReiseBestaetigt"
+        ]
+      }
+    },
+    {
+      "id": "agg:Reiseauftrag",
+      "kind": "aggregate",
+      "name": "Reiseauftrag",
+      "fullName": "Domain.Reiseauftrag.Reiseauftrag",
+      "namespace": "Domain.Reiseauftrag",
+      "context": "Reiseauftrag",
+      "aggregate": {
+        "state": [
+          {
+            "name": "Gebucht",
+            "type": "bool"
+          }
+        ],
+        "handles": [
+          "BucheReise"
+        ],
+        "emits": [
+          "ReiseGebucht"
+        ]
+      }
+    },
+    {
+      "id": "agg:Sammelueberweisungsauftrag",
+      "kind": "aggregate",
+      "name": "Sammelueberweisungsauftrag",
+      "fullName": "Domain.Sammelauftrag.Sammelueberweisungsauftrag",
+      "namespace": "Domain.Sammelauftrag",
+      "context": "Sammelauftrag",
+      "aggregate": {
+        "state": [
+          {
+            "name": "Beauftragt",
+            "type": "bool"
+          }
+        ],
+        "handles": [
+          "BeauftrageSammelueberweisung"
+        ],
+        "emits": [
+          "SammelUeberweisungBeauftragt"
+        ]
+      }
+    },
+    {
+      "id": "agg:Versand",
+      "kind": "aggregate",
+      "name": "Versand",
+      "fullName": "Domain.Versand.Versand",
+      "namespace": "Domain.Versand",
+      "context": "Versand",
+      "aggregate": {
+        "state": [
+          {
+            "name": "Versandt",
+            "type": "bool"
+          }
+        ],
+        "handles": [
+          "Versende"
+        ],
+        "emits": [
+          "Versendet"
+        ]
+      }
+    },
+    {
+      "id": "agg:Vorgang",
+      "kind": "aggregate",
+      "name": "Vorgang",
+      "fullName": "Domain.Vorgang.Vorgang",
+      "namespace": "Domain.Vorgang",
+      "context": "Vorgang",
+      "aggregate": {
+        "state": [
+          {
+            "name": "Genehmigt",
+            "type": "bool"
+          },
+          {
+            "name": "Aktiviert",
+            "type": "bool"
+          }
+        ],
+        "handles": [
+          "Genehmige",
+          "Aktiviere"
+        ],
+        "emits": [
+          "VorgangAktiviert",
+          "VorgangGenehmigt"
+        ]
+      }
+    },
+    {
+      "id": "agg:Zahlungskonto",
+      "kind": "aggregate",
+      "name": "Zahlungskonto",
+      "fullName": "Domain.Zahlung.Zahlungskonto",
+      "namespace": "Domain.Zahlung",
+      "context": "Zahlung",
+      "aggregate": {
+        "state": [
+          {
+            "name": "Saldo",
+            "type": "decimal"
+          }
+        ],
+        "handles": [
+          "RichteZahlungskontoEin",
+          "BelasteKonto",
+          "ErstatteKonto"
+        ],
+        "emits": [
+          "KontoBelastet",
+          "KontoErstattet",
+          "ZahlungskontoEingerichtet",
+          "KontoUngedeckt"
+        ]
+      }
+    },
+    {
+      "id": "cmd:StelleAntrag",
+      "kind": "command",
+      "name": "StelleAntrag",
+      "fullName": "Domain.Antrag.StelleAntrag",
+      "namespace": "Domain.Antrag",
+      "context": "Antrag",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Antrag",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "AntragGestellt",
+            "persisted": true
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Vorgang",
+            "type": "Guid"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:BeauftrageUeberweisung",
+      "kind": "command",
+      "name": "BeauftrageUeberweisung",
+      "fullName": "Domain.Auftrag.BeauftrageUeberweisung",
+      "namespace": "Domain.Auftrag",
+      "context": "Auftrag",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Ueberweisungsauftrag",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "UeberweisungBeauftragt",
+            "persisted": true
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Quelle",
+            "type": "Guid"
+          },
+          {
+            "name": "Ziel",
+            "type": "Guid"
+          },
+          {
+            "name": "Betrag",
+            "type": "decimal"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:GibBestellungAuf",
+      "kind": "command",
+      "name": "GibBestellungAuf",
+      "fullName": "Domain.Bestellung.GibBestellungAuf",
+      "namespace": "Domain.Bestellung",
+      "context": "Bestellung",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Bestellauftrag",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "BestellungAufgegeben",
+            "persisted": true
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Versand",
+            "type": "Guid"
+          },
+          {
+            "name": "Kunde",
+            "type": "Guid"
+          },
+          {
+            "name": "Artikel",
+            "type": "Guid"
+          },
+          {
+            "name": "Menge",
+            "type": "int"
+          },
+          {
+            "name": "Betrag",
+            "type": "decimal"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:FristFaellig",
+      "kind": "command",
+      "name": "FristFaellig",
+      "fullName": "Domain.Erinnerung.FristFaellig",
+      "namespace": "Domain.Erinnerung",
+      "context": "Erinnerung",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Erinnerung",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "ErinnerungAusgeloest",
+            "persisted": true
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Kontext",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:RichteFlugEin",
+      "kind": "command",
+      "name": "RichteFlugEin",
+      "fullName": "Domain.Flug.RichteFlugEin",
+      "namespace": "Domain.Flug",
+      "context": "Flug",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Flugkontingent",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "FlugEingerichtet",
+            "persisted": true
+          },
+          {
+            "event": "FlugExistiertBereits",
+            "persisted": false
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Plaetze",
+            "type": "int"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:ReserviereFlug",
+      "kind": "command",
+      "name": "ReserviereFlug",
+      "fullName": "Domain.Flug.ReserviereFlug",
+      "namespace": "Domain.Flug",
+      "context": "Flug",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Flugkontingent",
+        "origin": [
+          "process"
+        ],
+        "produces": [
+          {
+            "event": "FlugReserviert",
+            "persisted": true
+          },
+          {
+            "event": "FlugAusgebucht",
+            "persisted": false
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Anzahl",
+            "type": "int"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:GebeFlugFrei",
+      "kind": "command",
+      "name": "GebeFlugFrei",
+      "fullName": "Domain.Flug.GebeFlugFrei",
+      "namespace": "Domain.Flug",
+      "context": "Flug",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Flugkontingent",
+        "origin": [
+          "process-compensation"
+        ],
+        "produces": [
+          {
+            "event": "FlugFreigegeben",
+            "persisted": true
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Anzahl",
+            "type": "int"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:RichteHotelEin",
+      "kind": "command",
+      "name": "RichteHotelEin",
+      "fullName": "Domain.Hotel.RichteHotelEin",
+      "namespace": "Domain.Hotel",
+      "context": "Hotel",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Hotelkontingent",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "HotelEingerichtet",
+            "persisted": true
+          },
+          {
+            "event": "HotelExistiertBereits",
+            "persisted": false
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Zimmer",
+            "type": "int"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:ReserviereHotel",
+      "kind": "command",
+      "name": "ReserviereHotel",
+      "fullName": "Domain.Hotel.ReserviereHotel",
+      "namespace": "Domain.Hotel",
+      "context": "Hotel",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Hotelkontingent",
+        "origin": [
+          "process"
+        ],
+        "produces": [
+          {
+            "event": "HotelReserviert",
+            "persisted": true
+          },
+          {
+            "event": "HotelAusgebucht",
+            "persisted": false
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Anzahl",
+            "type": "int"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:GebeHotelFrei",
+      "kind": "command",
+      "name": "GebeHotelFrei",
+      "fullName": "Domain.Hotel.GebeHotelFrei",
+      "namespace": "Domain.Hotel",
+      "context": "Hotel",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Hotelkontingent",
+        "origin": [
+          "process-compensation"
+        ],
+        "produces": [
+          {
+            "event": "HotelFreigegeben",
+            "persisted": true
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Anzahl",
+            "type": "int"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:ErstelleImagePair",
+      "kind": "command",
+      "name": "ErstelleImagePair",
+      "fullName": "Domain.ImagePair.ErstelleImagePair",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "command": {
+        "isCreation": true,
+        "routedTo": "ImagePair",
+        "origin": [
+          "client",
+          "pipeline"
+        ],
+        "produces": [
+          {
+            "event": "ImagePairErstellt",
+            "persisted": true
+          },
+          {
+            "event": "ImagePairExistiertBereits",
+            "persisted": false
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "PairKey",
+            "type": "string"
+          },
+          {
+            "name": "ProduziertAm",
+            "type": "DateTimeOffset"
+          },
+          {
+            "name": "AufgenommenAm",
+            "type": "DateTimeOffset"
+          },
+          {
+            "name": "UrsprungsPfad",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:MeldeBildVerfuegbar",
+      "kind": "command",
+      "name": "MeldeBildVerfuegbar",
+      "fullName": "Domain.ImagePair.MeldeBildVerfuegbar",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "command": {
+        "isCreation": false,
+        "routedTo": "ImagePair",
+        "origin": [
+          "pipeline"
+        ],
+        "produces": [
+          {
+            "event": "BildVerfuegbar",
+            "persisted": true
+          },
+          {
+            "event": "ImagePairKomplett",
+            "persisted": true
+          },
+          {
+            "event": "ImagePairNichtGefunden",
+            "persisted": false
+          },
+          {
+            "event": "BildVersionBereitsVerfuegbar",
+            "persisted": false
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Version",
+            "type": "BildVersion"
+          },
+          {
+            "name": "Meta",
+            "type": "BildMeta"
+          },
+          {
+            "name": "Pfad",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:KlassifiziereEinzelBildDurchKi",
+      "kind": "command",
+      "name": "KlassifiziereEinzelBildDurchKi",
+      "fullName": "Domain.ImagePair.KlassifiziereEinzelBildDurchKi",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "command": {
+        "isCreation": false,
+        "routedTo": "ImagePair",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "EinzelBildDurchKiKlassifiziert",
+            "persisted": true
+          },
+          {
+            "event": "BildNichtVerfuegbar",
+            "persisted": false
+          },
+          {
+            "event": "RegionLabelsUngueltig",
+            "persisted": false
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Version",
+            "type": "BildVersion"
+          },
+          {
+            "name": "BildLabel",
+            "type": "Klassifikation"
+          },
+          {
+            "name": "RegionLabels",
+            "type": "IReadOnlyList<Klassifikation>"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:KlassifiziereBildPaarDurchKi",
+      "kind": "command",
+      "name": "KlassifiziereBildPaarDurchKi",
+      "fullName": "Domain.ImagePair.KlassifiziereBildPaarDurchKi",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "command": {
+        "isCreation": false,
+        "routedTo": "ImagePair",
+        "origin": [
+          "pipeline"
+        ],
+        "produces": [
+          {
+            "event": "BildPaarDurchKiKlassifiziert",
+            "persisted": true
+          },
+          {
+            "event": "PaarNichtKomplett",
+            "persisted": false
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Label",
+            "type": "Klassifikation"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:LabelBildRegion",
+      "kind": "command",
+      "name": "LabelBildRegion",
+      "fullName": "Domain.ImagePair.LabelBildRegion",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "command": {
+        "isCreation": false,
+        "routedTo": "ImagePair",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "BildRegionGelabelt",
+            "persisted": true
+          },
+          {
+            "event": "BildNichtVerfuegbar",
+            "persisted": false
+          },
+          {
+            "event": "RegionIndexUngueltig",
+            "persisted": false
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Version",
+            "type": "BildVersion"
+          },
+          {
+            "name": "RegionIndex",
+            "type": "int"
+          },
+          {
+            "name": "Label",
+            "type": "Klassifikation"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:LabelEinzelBild",
+      "kind": "command",
+      "name": "LabelEinzelBild",
+      "fullName": "Domain.ImagePair.LabelEinzelBild",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "command": {
+        "isCreation": false,
+        "routedTo": "ImagePair",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "EinzelBildGelabelt",
+            "persisted": true
+          },
+          {
+            "event": "BildNichtVerfuegbar",
+            "persisted": false
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Version",
+            "type": "BildVersion"
+          },
+          {
+            "name": "Label",
+            "type": "Klassifikation"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:LabelBildPaar",
+      "kind": "command",
+      "name": "LabelBildPaar",
+      "fullName": "Domain.ImagePair.LabelBildPaar",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "command": {
+        "isCreation": false,
+        "routedTo": "ImagePair",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "BildPaarGelabelt",
+            "persisted": true
+          },
+          {
+            "event": "PaarNichtKomplett",
+            "persisted": false
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Label",
+            "type": "Klassifikation"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:LabelPhysischesProdukt",
+      "kind": "command",
+      "name": "LabelPhysischesProdukt",
+      "fullName": "Domain.ImagePair.LabelPhysischesProdukt",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "command": {
+        "isCreation": false,
+        "routedTo": "ImagePair",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "PhysischesProduktGelabelt",
+            "persisted": true
+          },
+          {
+            "event": "ImagePairNichtGefunden",
+            "persisted": false
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Label",
+            "type": "Klassifikation"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:MarkiereAlsInspiziert",
+      "kind": "command",
+      "name": "MarkiereAlsInspiziert",
+      "fullName": "Domain.ImagePair.MarkiereAlsInspiziert",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "command": {
+        "isCreation": false,
+        "routedTo": "ImagePair",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "ImagePairInspiziert",
+            "persisted": true
+          },
+          {
+            "event": "ImagePairNichtGefunden",
+            "persisted": false
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:EroeffneKonto",
+      "kind": "command",
+      "name": "EroeffneKonto",
+      "fullName": "Domain.Konto.EroeffneKonto",
+      "namespace": "Domain.Konto",
+      "context": "Konto",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Konto",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "KontoEroeffnet",
+            "persisted": true
+          },
+          {
+            "event": "KontoExistiertBereits",
+            "persisted": false
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "StartSaldo",
+            "type": "decimal"
+          },
+          {
+            "name": "Gesperrt",
+            "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:ReserviereBetrag",
+      "kind": "command",
+      "name": "ReserviereBetrag",
+      "fullName": "Domain.Konto.ReserviereBetrag",
+      "namespace": "Domain.Konto",
+      "context": "Konto",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Konto",
+        "origin": [
+          "process"
+        ],
+        "produces": [
+          {
+            "event": "BetragReserviert",
+            "persisted": true
+          },
+          {
+            "event": "KontoGesperrt",
+            "persisted": false
+          },
+          {
+            "event": "DeckungReichtNicht",
+            "persisted": false
+          },
+          {
+            "event": "KontoNichtGefunden",
+            "persisted": false
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Betrag",
+            "type": "decimal"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:GebeReservierungFrei",
+      "kind": "command",
+      "name": "GebeReservierungFrei",
+      "fullName": "Domain.Konto.GebeReservierungFrei",
+      "namespace": "Domain.Konto",
+      "context": "Konto",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Konto",
+        "origin": [
+          "process-compensation"
+        ],
+        "produces": [
+          {
+            "event": "ReservierungFreigegeben",
+            "persisted": true
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Betrag",
+            "type": "decimal"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:SchreibeGut",
+      "kind": "command",
+      "name": "SchreibeGut",
+      "fullName": "Domain.Konto.SchreibeGut",
+      "namespace": "Domain.Konto",
+      "context": "Konto",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Konto",
+        "origin": [
+          "process"
+        ],
+        "produces": [
+          {
+            "event": "Gutgeschrieben",
+            "persisted": true
+          },
+          {
+            "event": "KontoGesperrt",
+            "persisted": false
+          },
+          {
+            "event": "KontoNichtGefunden",
+            "persisted": false
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Betrag",
+            "type": "decimal"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:StorniereGutschrift",
+      "kind": "command",
+      "name": "StorniereGutschrift",
+      "fullName": "Domain.Konto.StorniereGutschrift",
+      "namespace": "Domain.Konto",
+      "context": "Konto",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Konto",
+        "origin": [
+          "process-compensation"
+        ],
+        "produces": [
+          {
+            "event": "GutschriftStorniert",
+            "persisted": true
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Betrag",
+            "type": "decimal"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:BucheReservierung",
+      "kind": "command",
+      "name": "BucheReservierung",
+      "fullName": "Domain.Konto.BucheReservierung",
+      "namespace": "Domain.Konto",
+      "context": "Konto",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Konto",
+        "origin": [
+          "process"
+        ],
+        "produces": [
+          {
+            "event": "ReservierungGebucht",
+            "persisted": true
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Betrag",
+            "type": "decimal"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:RichteLagerEin",
+      "kind": "command",
+      "name": "RichteLagerEin",
+      "fullName": "Domain.Lager.RichteLagerEin",
+      "namespace": "Domain.Lager",
+      "context": "Lager",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Lager",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "LagerEingerichtet",
+            "persisted": true
+          },
+          {
+            "event": "LagerExistiertBereits",
+            "persisted": false
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Bestand",
+            "type": "int"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:ReserviereBestand",
+      "kind": "command",
+      "name": "ReserviereBestand",
+      "fullName": "Domain.Lager.ReserviereBestand",
+      "namespace": "Domain.Lager",
+      "context": "Lager",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Lager",
+        "origin": [
+          "process"
+        ],
+        "produces": [
+          {
+            "event": "BestandReserviert",
+            "persisted": true
+          },
+          {
+            "event": "BestandReichtNicht",
+            "persisted": false
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Menge",
+            "type": "int"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:GebeBestandFrei",
+      "kind": "command",
+      "name": "GebeBestandFrei",
+      "fullName": "Domain.Lager.GebeBestandFrei",
+      "namespace": "Domain.Lager",
+      "context": "Lager",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Lager",
+        "origin": [
+          "process-compensation"
+        ],
+        "produces": [
+          {
+            "event": "BestandFreigegeben",
+            "persisted": true
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Menge",
+            "type": "int"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:WirkeReaktion",
+      "kind": "command",
+      "name": "WirkeReaktion",
+      "fullName": "Domain.Reaktion.WirkeReaktion",
+      "namespace": "Domain.Reaktion",
+      "context": "Reaktion",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Reaktionsempfaenger",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "ReaktionGewirkt",
+            "persisted": true
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "ReaktionId",
+            "type": "Guid"
+          },
+          {
+            "name": "Notiz",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:BestaetigeReise",
+      "kind": "command",
+      "name": "BestaetigeReise",
+      "fullName": "Domain.Reise.BestaetigeReise",
+      "namespace": "Domain.Reise",
+      "context": "Reise",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Reise",
+        "origin": [
+          "process"
+        ],
+        "produces": [
+          {
+            "event": "ReiseBestaetigt",
+            "persisted": true
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Kunde",
+            "type": "Guid"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:BucheReise",
+      "kind": "command",
+      "name": "BucheReise",
+      "fullName": "Domain.Reiseauftrag.BucheReise",
+      "namespace": "Domain.Reiseauftrag",
+      "context": "Reiseauftrag",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Reiseauftrag",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "ReiseGebucht",
+            "persisted": true
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Reise",
+            "type": "Guid"
+          },
+          {
+            "name": "Flug",
+            "type": "Guid"
+          },
+          {
+            "name": "Hotel",
+            "type": "Guid"
+          },
+          {
+            "name": "Kunde",
+            "type": "Guid"
+          },
+          {
+            "name": "Plaetze",
+            "type": "int"
+          },
+          {
+            "name": "Zimmer",
+            "type": "int"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:BeauftrageSammelueberweisung",
+      "kind": "command",
+      "name": "BeauftrageSammelueberweisung",
+      "fullName": "Domain.Sammelauftrag.BeauftrageSammelueberweisung",
+      "namespace": "Domain.Sammelauftrag",
+      "context": "Sammelauftrag",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Sammelueberweisungsauftrag",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "SammelUeberweisungBeauftragt",
+            "persisted": true
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Quelle",
+            "type": "Guid"
+          },
+          {
+            "name": "Ziele",
+            "type": "IReadOnlyList<Guid>"
+          },
+          {
+            "name": "BetragProZiel",
+            "type": "decimal"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:Versende",
+      "kind": "command",
+      "name": "Versende",
+      "fullName": "Domain.Versand.Versende",
+      "namespace": "Domain.Versand",
+      "context": "Versand",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Versand",
+        "origin": [
+          "process"
+        ],
+        "produces": [
+          {
+            "event": "Versendet",
+            "persisted": true
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Kunde",
+            "type": "Guid"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:Genehmige",
+      "kind": "command",
+      "name": "Genehmige",
+      "fullName": "Domain.Vorgang.Genehmige",
+      "namespace": "Domain.Vorgang",
+      "context": "Vorgang",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Vorgang",
+        "origin": [
+          "process"
+        ],
+        "produces": [
+          {
+            "event": "VorgangGenehmigt",
+            "persisted": true
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:Aktiviere",
+      "kind": "command",
+      "name": "Aktiviere",
+      "fullName": "Domain.Vorgang.Aktiviere",
+      "namespace": "Domain.Vorgang",
+      "context": "Vorgang",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Vorgang",
+        "origin": [
+          "process"
+        ],
+        "produces": [
+          {
+            "event": "VorgangAktiviert",
+            "persisted": true
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:RichteZahlungskontoEin",
+      "kind": "command",
+      "name": "RichteZahlungskontoEin",
+      "fullName": "Domain.Zahlung.RichteZahlungskontoEin",
+      "namespace": "Domain.Zahlung",
+      "context": "Zahlung",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Zahlungskonto",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "ZahlungskontoEingerichtet",
+            "persisted": true
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Guthaben",
+            "type": "decimal"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:BelasteKonto",
+      "kind": "command",
+      "name": "BelasteKonto",
+      "fullName": "Domain.Zahlung.BelasteKonto",
+      "namespace": "Domain.Zahlung",
+      "context": "Zahlung",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Zahlungskonto",
+        "origin": [
+          "process"
+        ],
+        "produces": [
+          {
+            "event": "KontoBelastet",
+            "persisted": true
+          },
+          {
+            "event": "KontoUngedeckt",
+            "persisted": false
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Betrag",
+            "type": "decimal"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:ErstatteKonto",
+      "kind": "command",
+      "name": "ErstatteKonto",
+      "fullName": "Domain.Zahlung.ErstatteKonto",
+      "namespace": "Domain.Zahlung",
+      "context": "Zahlung",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Zahlungskonto",
+        "origin": [
+          "process-compensation"
+        ],
+        "produces": [
+          {
+            "event": "KontoErstattet",
+            "persisted": true
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Betrag",
+            "type": "decimal"
+          }
+        ]
+      }
+    },
+    {
+      "id": "evt:CommandFailed",
+      "kind": "event",
+      "name": "CommandFailed",
+      "fullName": "Abstractions.CommandFailed",
+      "namespace": "Abstractions",
+      "context": "Abstractions",
+      "event": {
+        "persisted": false
+      }
+    },
+    {
+      "id": "evt:AntragGestellt",
+      "kind": "event",
+      "name": "AntragGestellt",
+      "fullName": "Domain.Antrag.AntragGestellt",
+      "namespace": "Domain.Antrag",
+      "context": "Antrag",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Antrag"
+      }
+    },
+    {
+      "id": "evt:UeberweisungBeauftragt",
+      "kind": "event",
+      "name": "UeberweisungBeauftragt",
+      "fullName": "Domain.Auftrag.UeberweisungBeauftragt",
+      "namespace": "Domain.Auftrag",
+      "context": "Auftrag",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Ueberweisungsauftrag"
+      }
+    },
+    {
+      "id": "evt:BestellungAufgegeben",
+      "kind": "event",
+      "name": "BestellungAufgegeben",
+      "fullName": "Domain.Bestellung.BestellungAufgegeben",
+      "namespace": "Domain.Bestellung",
+      "context": "Bestellung",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Bestellauftrag"
+      }
+    },
+    {
+      "id": "evt:ErinnerungAusgeloest",
+      "kind": "event",
+      "name": "ErinnerungAusgeloest",
+      "fullName": "Domain.Erinnerung.ErinnerungAusgeloest",
+      "namespace": "Domain.Erinnerung",
+      "context": "Erinnerung",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Erinnerung"
+      }
+    },
+    {
+      "id": "evt:FlugEingerichtet",
+      "kind": "event",
+      "name": "FlugEingerichtet",
+      "fullName": "Domain.Flug.FlugEingerichtet",
+      "namespace": "Domain.Flug",
+      "context": "Flug",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Flugkontingent"
+      }
+    },
+    {
+      "id": "evt:FlugReserviert",
+      "kind": "event",
+      "name": "FlugReserviert",
+      "fullName": "Domain.Flug.FlugReserviert",
+      "namespace": "Domain.Flug",
+      "context": "Flug",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Flugkontingent"
+      }
+    },
+    {
+      "id": "evt:FlugFreigegeben",
+      "kind": "event",
+      "name": "FlugFreigegeben",
+      "fullName": "Domain.Flug.FlugFreigegeben",
+      "namespace": "Domain.Flug",
+      "context": "Flug",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Flugkontingent"
+      }
+    },
+    {
+      "id": "evt:FlugAusgebucht",
+      "kind": "event",
+      "name": "FlugAusgebucht",
+      "fullName": "Domain.Flug.FlugAusgebucht",
+      "namespace": "Domain.Flug",
+      "context": "Flug",
+      "event": {
+        "persisted": false,
+        "emittedBy": "Flugkontingent"
+      }
+    },
+    {
+      "id": "evt:FlugExistiertBereits",
+      "kind": "event",
+      "name": "FlugExistiertBereits",
+      "fullName": "Domain.Flug.FlugExistiertBereits",
+      "namespace": "Domain.Flug",
+      "context": "Flug",
+      "event": {
+        "persisted": false,
+        "emittedBy": "Flugkontingent"
+      }
+    },
+    {
+      "id": "evt:HotelEingerichtet",
+      "kind": "event",
+      "name": "HotelEingerichtet",
+      "fullName": "Domain.Hotel.HotelEingerichtet",
+      "namespace": "Domain.Hotel",
+      "context": "Hotel",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Hotelkontingent"
+      }
+    },
+    {
+      "id": "evt:HotelReserviert",
+      "kind": "event",
+      "name": "HotelReserviert",
+      "fullName": "Domain.Hotel.HotelReserviert",
+      "namespace": "Domain.Hotel",
+      "context": "Hotel",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Hotelkontingent"
+      }
+    },
+    {
+      "id": "evt:HotelFreigegeben",
+      "kind": "event",
+      "name": "HotelFreigegeben",
+      "fullName": "Domain.Hotel.HotelFreigegeben",
+      "namespace": "Domain.Hotel",
+      "context": "Hotel",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Hotelkontingent"
+      }
+    },
+    {
+      "id": "evt:HotelAusgebucht",
+      "kind": "event",
+      "name": "HotelAusgebucht",
+      "fullName": "Domain.Hotel.HotelAusgebucht",
+      "namespace": "Domain.Hotel",
+      "context": "Hotel",
+      "event": {
+        "persisted": false,
+        "emittedBy": "Hotelkontingent"
+      }
+    },
+    {
+      "id": "evt:HotelExistiertBereits",
+      "kind": "event",
+      "name": "HotelExistiertBereits",
+      "fullName": "Domain.Hotel.HotelExistiertBereits",
+      "namespace": "Domain.Hotel",
+      "context": "Hotel",
+      "event": {
+        "persisted": false,
+        "emittedBy": "Hotelkontingent"
+      }
+    },
+    {
+      "id": "evt:ImagePairErstellt",
+      "kind": "event",
+      "name": "ImagePairErstellt",
+      "fullName": "Domain.ImagePair.ImagePairErstellt",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "event": {
+        "persisted": true,
+        "emittedBy": "ImagePair"
+      }
+    },
+    {
+      "id": "evt:BildVerfuegbar",
+      "kind": "event",
+      "name": "BildVerfuegbar",
+      "fullName": "Domain.ImagePair.BildVerfuegbar",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "event": {
+        "persisted": true,
+        "emittedBy": "ImagePair"
+      }
+    },
+    {
+      "id": "evt:ImagePairKomplett",
+      "kind": "event",
+      "name": "ImagePairKomplett",
+      "fullName": "Domain.ImagePair.ImagePairKomplett",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "event": {
+        "persisted": true,
+        "emittedBy": "ImagePair"
+      }
+    },
+    {
+      "id": "evt:EinzelBildDurchKiKlassifiziert",
+      "kind": "event",
+      "name": "EinzelBildDurchKiKlassifiziert",
+      "fullName": "Domain.ImagePair.EinzelBildDurchKiKlassifiziert",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "event": {
+        "persisted": true,
+        "emittedBy": "ImagePair"
+      }
+    },
+    {
+      "id": "evt:BildPaarDurchKiKlassifiziert",
+      "kind": "event",
+      "name": "BildPaarDurchKiKlassifiziert",
+      "fullName": "Domain.ImagePair.BildPaarDurchKiKlassifiziert",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "event": {
+        "persisted": true,
+        "emittedBy": "ImagePair"
+      }
+    },
+    {
+      "id": "evt:BildRegionGelabelt",
+      "kind": "event",
+      "name": "BildRegionGelabelt",
+      "fullName": "Domain.ImagePair.BildRegionGelabelt",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "event": {
+        "persisted": true,
+        "emittedBy": "ImagePair"
+      }
+    },
+    {
+      "id": "evt:EinzelBildGelabelt",
+      "kind": "event",
+      "name": "EinzelBildGelabelt",
+      "fullName": "Domain.ImagePair.EinzelBildGelabelt",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "event": {
+        "persisted": true,
+        "emittedBy": "ImagePair"
+      }
+    },
+    {
+      "id": "evt:BildPaarGelabelt",
+      "kind": "event",
+      "name": "BildPaarGelabelt",
+      "fullName": "Domain.ImagePair.BildPaarGelabelt",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "event": {
+        "persisted": true,
+        "emittedBy": "ImagePair"
+      }
+    },
+    {
+      "id": "evt:PhysischesProduktGelabelt",
+      "kind": "event",
+      "name": "PhysischesProduktGelabelt",
+      "fullName": "Domain.ImagePair.PhysischesProduktGelabelt",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "event": {
+        "persisted": true,
+        "emittedBy": "ImagePair"
+      }
+    },
+    {
+      "id": "evt:ImagePairInspiziert",
+      "kind": "event",
+      "name": "ImagePairInspiziert",
+      "fullName": "Domain.ImagePair.ImagePairInspiziert",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "event": {
+        "persisted": true,
+        "emittedBy": "ImagePair"
+      }
+    },
+    {
+      "id": "evt:ImagePairExistiertBereits",
+      "kind": "event",
+      "name": "ImagePairExistiertBereits",
+      "fullName": "Domain.ImagePair.ImagePairExistiertBereits",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "event": {
+        "persisted": false,
+        "emittedBy": "ImagePair"
+      }
+    },
+    {
+      "id": "evt:ImagePairNichtGefunden",
+      "kind": "event",
+      "name": "ImagePairNichtGefunden",
+      "fullName": "Domain.ImagePair.ImagePairNichtGefunden",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "event": {
+        "persisted": false,
+        "emittedBy": "ImagePair"
+      }
+    },
+    {
+      "id": "evt:BildVersionBereitsVerfuegbar",
+      "kind": "event",
+      "name": "BildVersionBereitsVerfuegbar",
+      "fullName": "Domain.ImagePair.BildVersionBereitsVerfuegbar",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "event": {
+        "persisted": false,
+        "emittedBy": "ImagePair"
+      }
+    },
+    {
+      "id": "evt:BildNichtVerfuegbar",
+      "kind": "event",
+      "name": "BildNichtVerfuegbar",
+      "fullName": "Domain.ImagePair.BildNichtVerfuegbar",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "event": {
+        "persisted": false,
+        "emittedBy": "ImagePair"
+      }
+    },
+    {
+      "id": "evt:RegionIndexUngueltig",
+      "kind": "event",
+      "name": "RegionIndexUngueltig",
+      "fullName": "Domain.ImagePair.RegionIndexUngueltig",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "event": {
+        "persisted": false,
+        "emittedBy": "ImagePair"
+      }
+    },
+    {
+      "id": "evt:RegionLabelsUngueltig",
+      "kind": "event",
+      "name": "RegionLabelsUngueltig",
+      "fullName": "Domain.ImagePair.RegionLabelsUngueltig",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "event": {
+        "persisted": false,
+        "emittedBy": "ImagePair"
+      }
+    },
+    {
+      "id": "evt:PaarNichtKomplett",
+      "kind": "event",
+      "name": "PaarNichtKomplett",
+      "fullName": "Domain.ImagePair.PaarNichtKomplett",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "event": {
+        "persisted": false,
+        "emittedBy": "ImagePair"
+      }
+    },
+    {
+      "id": "evt:ImagePairEingabeUngueltig",
+      "kind": "event",
+      "name": "ImagePairEingabeUngueltig",
+      "fullName": "Domain.ImagePair.ImagePairEingabeUngueltig",
+      "namespace": "Domain.ImagePair",
+      "context": "ImagePair",
+      "event": {
+        "persisted": false
+      }
+    },
+    {
+      "id": "evt:KontoEroeffnet",
+      "kind": "event",
+      "name": "KontoEroeffnet",
+      "fullName": "Domain.Konto.KontoEroeffnet",
+      "namespace": "Domain.Konto",
+      "context": "Konto",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Konto"
+      }
+    },
+    {
+      "id": "evt:BetragReserviert",
+      "kind": "event",
+      "name": "BetragReserviert",
+      "fullName": "Domain.Konto.BetragReserviert",
+      "namespace": "Domain.Konto",
+      "context": "Konto",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Konto"
+      }
+    },
+    {
+      "id": "evt:ReservierungFreigegeben",
+      "kind": "event",
+      "name": "ReservierungFreigegeben",
+      "fullName": "Domain.Konto.ReservierungFreigegeben",
+      "namespace": "Domain.Konto",
+      "context": "Konto",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Konto"
+      }
+    },
+    {
+      "id": "evt:Gutgeschrieben",
+      "kind": "event",
+      "name": "Gutgeschrieben",
+      "fullName": "Domain.Konto.Gutgeschrieben",
+      "namespace": "Domain.Konto",
+      "context": "Konto",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Konto"
+      }
+    },
+    {
+      "id": "evt:GutschriftStorniert",
+      "kind": "event",
+      "name": "GutschriftStorniert",
+      "fullName": "Domain.Konto.GutschriftStorniert",
+      "namespace": "Domain.Konto",
+      "context": "Konto",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Konto"
+      }
+    },
+    {
+      "id": "evt:ReservierungGebucht",
+      "kind": "event",
+      "name": "ReservierungGebucht",
+      "fullName": "Domain.Konto.ReservierungGebucht",
+      "namespace": "Domain.Konto",
+      "context": "Konto",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Konto"
+      }
+    },
+    {
+      "id": "evt:KontoGesperrt",
+      "kind": "event",
+      "name": "KontoGesperrt",
+      "fullName": "Domain.Konto.KontoGesperrt",
+      "namespace": "Domain.Konto",
+      "context": "Konto",
+      "event": {
+        "persisted": false,
+        "emittedBy": "Konto"
+      }
+    },
+    {
+      "id": "evt:DeckungReichtNicht",
+      "kind": "event",
+      "name": "DeckungReichtNicht",
+      "fullName": "Domain.Konto.DeckungReichtNicht",
+      "namespace": "Domain.Konto",
+      "context": "Konto",
+      "event": {
+        "persisted": false,
+        "emittedBy": "Konto"
+      }
+    },
+    {
+      "id": "evt:KontoExistiertBereits",
+      "kind": "event",
+      "name": "KontoExistiertBereits",
+      "fullName": "Domain.Konto.KontoExistiertBereits",
+      "namespace": "Domain.Konto",
+      "context": "Konto",
+      "event": {
+        "persisted": false,
+        "emittedBy": "Konto"
+      }
+    },
+    {
+      "id": "evt:KontoNichtGefunden",
+      "kind": "event",
+      "name": "KontoNichtGefunden",
+      "fullName": "Domain.Konto.KontoNichtGefunden",
+      "namespace": "Domain.Konto",
+      "context": "Konto",
+      "event": {
+        "persisted": false,
+        "emittedBy": "Konto"
+      }
+    },
+    {
+      "id": "evt:LagerEingerichtet",
+      "kind": "event",
+      "name": "LagerEingerichtet",
+      "fullName": "Domain.Lager.LagerEingerichtet",
+      "namespace": "Domain.Lager",
+      "context": "Lager",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Lager"
+      }
+    },
+    {
+      "id": "evt:BestandReserviert",
+      "kind": "event",
+      "name": "BestandReserviert",
+      "fullName": "Domain.Lager.BestandReserviert",
+      "namespace": "Domain.Lager",
+      "context": "Lager",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Lager"
+      }
+    },
+    {
+      "id": "evt:BestandFreigegeben",
+      "kind": "event",
+      "name": "BestandFreigegeben",
+      "fullName": "Domain.Lager.BestandFreigegeben",
+      "namespace": "Domain.Lager",
+      "context": "Lager",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Lager"
+      }
+    },
+    {
+      "id": "evt:BestandReichtNicht",
+      "kind": "event",
+      "name": "BestandReichtNicht",
+      "fullName": "Domain.Lager.BestandReichtNicht",
+      "namespace": "Domain.Lager",
+      "context": "Lager",
+      "event": {
+        "persisted": false,
+        "emittedBy": "Lager"
+      }
+    },
+    {
+      "id": "evt:LagerExistiertBereits",
+      "kind": "event",
+      "name": "LagerExistiertBereits",
+      "fullName": "Domain.Lager.LagerExistiertBereits",
+      "namespace": "Domain.Lager",
+      "context": "Lager",
+      "event": {
+        "persisted": false,
+        "emittedBy": "Lager"
+      }
+    },
+    {
+      "id": "evt:ReaktionGewirkt",
+      "kind": "event",
+      "name": "ReaktionGewirkt",
+      "fullName": "Domain.Reaktion.ReaktionGewirkt",
+      "namespace": "Domain.Reaktion",
+      "context": "Reaktion",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Reaktionsempfaenger"
+      }
+    },
+    {
+      "id": "evt:ReiseBestaetigt",
+      "kind": "event",
+      "name": "ReiseBestaetigt",
+      "fullName": "Domain.Reise.ReiseBestaetigt",
+      "namespace": "Domain.Reise",
+      "context": "Reise",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Reise"
+      }
+    },
+    {
+      "id": "evt:ReiseGebucht",
+      "kind": "event",
+      "name": "ReiseGebucht",
+      "fullName": "Domain.Reiseauftrag.ReiseGebucht",
+      "namespace": "Domain.Reiseauftrag",
+      "context": "Reiseauftrag",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Reiseauftrag"
+      }
+    },
+    {
+      "id": "evt:SammelUeberweisungBeauftragt",
+      "kind": "event",
+      "name": "SammelUeberweisungBeauftragt",
+      "fullName": "Domain.Sammelauftrag.SammelUeberweisungBeauftragt",
+      "namespace": "Domain.Sammelauftrag",
+      "context": "Sammelauftrag",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Sammelueberweisungsauftrag"
+      }
+    },
+    {
+      "id": "evt:Versendet",
+      "kind": "event",
+      "name": "Versendet",
+      "fullName": "Domain.Versand.Versendet",
+      "namespace": "Domain.Versand",
+      "context": "Versand",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Versand"
+      }
+    },
+    {
+      "id": "evt:VorgangGenehmigt",
+      "kind": "event",
+      "name": "VorgangGenehmigt",
+      "fullName": "Domain.Vorgang.VorgangGenehmigt",
+      "namespace": "Domain.Vorgang",
+      "context": "Vorgang",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Vorgang"
+      }
+    },
+    {
+      "id": "evt:VorgangAktiviert",
+      "kind": "event",
+      "name": "VorgangAktiviert",
+      "fullName": "Domain.Vorgang.VorgangAktiviert",
+      "namespace": "Domain.Vorgang",
+      "context": "Vorgang",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Vorgang"
+      }
+    },
+    {
+      "id": "evt:ZahlungskontoEingerichtet",
+      "kind": "event",
+      "name": "ZahlungskontoEingerichtet",
+      "fullName": "Domain.Zahlung.ZahlungskontoEingerichtet",
+      "namespace": "Domain.Zahlung",
+      "context": "Zahlung",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Zahlungskonto"
+      }
+    },
+    {
+      "id": "evt:KontoBelastet",
+      "kind": "event",
+      "name": "KontoBelastet",
+      "fullName": "Domain.Zahlung.KontoBelastet",
+      "namespace": "Domain.Zahlung",
+      "context": "Zahlung",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Zahlungskonto"
+      }
+    },
+    {
+      "id": "evt:KontoErstattet",
+      "kind": "event",
+      "name": "KontoErstattet",
+      "fullName": "Domain.Zahlung.KontoErstattet",
+      "namespace": "Domain.Zahlung",
+      "context": "Zahlung",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Zahlungskonto"
+      }
+    },
+    {
+      "id": "evt:KontoUngedeckt",
+      "kind": "event",
+      "name": "KontoUngedeckt",
+      "fullName": "Domain.Zahlung.KontoUngedeckt",
+      "namespace": "Domain.Zahlung",
+      "context": "Zahlung",
+      "event": {
+        "persisted": false,
+        "emittedBy": "Zahlungskonto"
+      }
+    },
+    {
+      "id": "evt:KommandoVerarbeitet",
+      "kind": "event",
+      "name": "KommandoVerarbeitet",
+      "fullName": "Infrastructure.Aggregate.KommandoVerarbeitet",
+      "namespace": "Infrastructure.Aggregate",
+      "context": "Infrastructure",
+      "event": {
+        "persisted": true
+      }
+    },
+    {
+      "id": "evt:KommandoAbgelehnt",
+      "kind": "event",
+      "name": "KommandoAbgelehnt",
+      "fullName": "Infrastructure.Aggregate.KommandoAbgelehnt",
+      "namespace": "Infrastructure.Aggregate",
+      "context": "Infrastructure",
+      "event": {
+        "persisted": true
+      }
+    },
+    {
+      "id": "evt:ProzessGestartet",
+      "kind": "event",
+      "name": "ProzessGestartet",
+      "fullName": "Infrastructure.Prozess.ProzessGestartet",
+      "namespace": "Infrastructure.Prozess",
+      "context": "Infrastructure",
+      "event": {
+        "persisted": true
+      }
+    },
+    {
+      "id": "evt:SchrittGescheitert",
+      "kind": "event",
+      "name": "SchrittGescheitert",
+      "fullName": "Infrastructure.Prozess.SchrittGescheitert",
+      "namespace": "Infrastructure.Prozess",
+      "context": "Infrastructure",
+      "event": {
+        "persisted": true
+      }
+    },
+    {
+      "id": "evt:ProzessBeendet",
+      "kind": "event",
+      "name": "ProzessBeendet",
+      "fullName": "Infrastructure.Prozess.ProzessBeendet",
+      "namespace": "Infrastructure.Prozess",
+      "context": "Infrastructure",
+      "event": {
+        "persisted": true
+      }
+    },
+    {
+      "id": "proc:BestellProzess",
+      "kind": "process",
+      "name": "BestellProzess",
+      "namespace": "Domain.Bestellung",
+      "context": "Bestellung",
+      "process": {
+        "trigger": "BestellungAufgegeben",
+        "registered": true,
+        "pattern": "Diamant",
+        "rules": [
+          {
+            "index": 0,
+            "when": [
+              "BestellungAufgegeben"
+            ],
+            "join": "single",
+            "fanOut": false,
+            "sends": "ReserviereBestand",
+            "compensates": "GebeBestandFrei"
+          },
+          {
+            "index": 1,
+            "when": [
+              "BestellungAufgegeben"
+            ],
+            "join": "single",
+            "fanOut": false,
+            "sends": "BelasteKonto",
+            "compensates": "ErstatteKonto"
+          },
+          {
+            "index": 2,
+            "when": [
+              "BestellungAufgegeben",
+              "BestandReserviert",
+              "KontoBelastet"
+            ],
+            "join": "and",
+            "fanOut": false,
+            "sends": "Versende"
+          }
+        ]
+      }
+    },
+    {
+      "id": "proc:ReiseProzess",
+      "kind": "process",
+      "name": "ReiseProzess",
+      "namespace": "Domain.Reiseauftrag",
+      "context": "Reiseauftrag",
+      "process": {
+        "trigger": "ReiseGebucht",
+        "registered": true,
+        "pattern": "Diamant",
+        "rules": [
+          {
+            "index": 0,
+            "when": [
+              "ReiseGebucht"
+            ],
+            "join": "single",
+            "fanOut": false,
+            "sends": "ReserviereFlug",
+            "compensates": "GebeFlugFrei"
+          },
+          {
+            "index": 1,
+            "when": [
+              "ReiseGebucht"
+            ],
+            "join": "single",
+            "fanOut": false,
+            "sends": "ReserviereHotel",
+            "compensates": "GebeHotelFrei"
+          },
+          {
+            "index": 2,
+            "when": [
+              "ReiseGebucht",
+              "FlugReserviert",
+              "HotelReserviert"
+            ],
+            "join": "and",
+            "fanOut": false,
+            "sends": "BestaetigeReise"
+          }
+        ]
+      }
+    },
+    {
+      "id": "proc:SammelueberweisungsProzess",
+      "kind": "process",
+      "name": "SammelueberweisungsProzess",
+      "namespace": "Domain.Sammelueberweisung",
+      "context": "Sammelueberweisung",
+      "process": {
+        "trigger": "SammelUeberweisungBeauftragt",
+        "registered": true,
+        "pattern": "Fan-out",
+        "rules": [
+          {
+            "index": 0,
+            "when": [
+              "SammelUeberweisungBeauftragt"
+            ],
+            "join": "single",
+            "fanOut": false,
+            "sends": "ReserviereBetrag",
+            "compensates": "GebeReservierungFrei"
+          },
+          {
+            "index": 1,
+            "when": [
+              "SammelUeberweisungBeauftragt",
+              "BetragReserviert"
+            ],
+            "join": "and",
+            "fanOut": true,
+            "sends": "SchreibeGut"
+          },
+          {
+            "index": 2,
+            "when": [
+              "SammelUeberweisungBeauftragt",
+              "BetragReserviert"
+            ],
+            "join": "count",
+            "sammel": "Gutgeschrieben",
+            "fanOut": false,
+            "sends": "BucheReservierung"
+          }
+        ]
+      }
+    },
+    {
+      "id": "proc:UeberweisungsProzess",
+      "kind": "process",
+      "name": "UeberweisungsProzess",
+      "namespace": "Domain.Ueberweisung",
+      "context": "Ueberweisung",
+      "process": {
+        "trigger": "UeberweisungBeauftragt",
+        "registered": true,
+        "pattern": "Linear",
+        "rules": [
+          {
+            "index": 0,
+            "when": [
+              "UeberweisungBeauftragt"
+            ],
+            "join": "single",
+            "fanOut": false,
+            "sends": "ReserviereBetrag",
+            "compensates": "GebeReservierungFrei"
+          },
+          {
+            "index": 1,
+            "when": [
+              "UeberweisungBeauftragt",
+              "BetragReserviert"
+            ],
+            "join": "and",
+            "fanOut": false,
+            "sends": "SchreibeGut",
+            "compensates": "StorniereGutschrift"
+          },
+          {
+            "index": 2,
+            "when": [
+              "UeberweisungBeauftragt",
+              "BetragReserviert",
+              "Gutgeschrieben"
+            ],
+            "join": "and",
+            "fanOut": false,
+            "sends": "BucheReservierung"
+          }
+        ]
+      }
+    },
+    {
+      "id": "proc:AktivierungsProzess",
+      "kind": "process",
+      "name": "AktivierungsProzess",
+      "namespace": "Domain.Vorgang",
+      "context": "Vorgang",
+      "process": {
+        "trigger": "VorgangGenehmigt",
+        "registered": true,
+        "pattern": "Verkettung",
+        "rules": [
+          {
+            "index": 0,
+            "when": [
+              "VorgangGenehmigt"
+            ],
+            "join": "single",
+            "fanOut": false,
+            "sends": "Aktiviere"
+          }
+        ]
+      }
+    },
+    {
+      "id": "proc:GenehmigungsProzess",
+      "kind": "process",
+      "name": "GenehmigungsProzess",
+      "namespace": "Domain.Vorgang",
+      "context": "Vorgang",
+      "process": {
+        "trigger": "AntragGestellt",
+        "registered": true,
+        "pattern": "Linear",
+        "rules": [
+          {
+            "index": 0,
+            "when": [
+              "AntragGestellt"
+            ],
+            "join": "single",
+            "fanOut": false,
+            "sends": "Genehmige"
+          }
+        ]
+      }
+    },
+    {
+      "id": "proj:ImagePairHistorieProjection",
+      "kind": "projection",
+      "name": "ImagePairHistorieProjection",
+      "fullName": "Domain.Projections.ImagePairHistorieProjection",
+      "context": "ImagePair",
+      "projection": {
+        "subscriberId": "imagepair-historie",
+        "consumes": [
+          "ImagePairErstellt",
+          "BildVerfuegbar",
+          "ImagePairKomplett",
+          "EinzelBildDurchKiKlassifiziert",
+          "BildPaarDurchKiKlassifiziert",
+          "BildRegionGelabelt",
+          "EinzelBildGelabelt",
+          "BildPaarGelabelt",
+          "PhysischesProduktGelabelt",
+          "ImagePairInspiziert"
+        ]
+      }
+    },
+    {
+      "id": "proj:ImagePairProjection",
+      "kind": "projection",
+      "name": "ImagePairProjection",
+      "fullName": "Domain.Projections.ImagePairProjection",
+      "context": "ImagePair",
+      "projection": {
+        "subscriberId": "imagepair-projection",
+        "consumes": [
+          "ImagePairErstellt",
+          "BildVerfuegbar",
+          "ImagePairKomplett",
+          "EinzelBildDurchKiKlassifiziert",
+          "BildPaarDurchKiKlassifiziert",
+          "BildRegionGelabelt",
+          "EinzelBildGelabelt",
+          "BildPaarGelabelt",
+          "PhysischesProduktGelabelt",
+          "ImagePairInspiziert"
+        ]
+      }
+    },
+    {
+      "id": "proj:ImagePairReaktion",
+      "kind": "projection",
+      "name": "ImagePairReaktion",
+      "fullName": "Domain.Projections.ImagePairReaktion",
+      "context": "ImagePair",
+      "projection": {
+        "subscriberId": "imagepair-reaktion",
+        "consumes": [
+          "ImagePairErstellt"
+        ]
+      }
+    },
+    {
+      "id": "query:GetImagePairHistorie",
+      "kind": "query",
+      "name": "GetImagePairHistorie",
+      "fullName": "Domain.Projections.GetImagePairHistorie",
+      "context": "ImagePair",
+      "query": {
+        "servedByReader": "ImagePairHistorieReader",
+        "readsProjection": "ImagePairHistorieProjection",
+        "fields": [
+          {
+            "name": "PairId",
+            "type": "Guid"
+          }
+        ]
+      }
+    },
+    {
+      "id": "query:GetImagePair",
+      "kind": "query",
+      "name": "GetImagePair",
+      "fullName": "Domain.Projections.GetImagePair",
+      "context": "ImagePair",
+      "query": {
+        "servedByReader": "ImagePairReader",
+        "readsProjection": "ImagePairProjection",
+        "fields": [
+          {
+            "name": "PairId",
+            "type": "Guid"
+          }
+        ]
+      }
+    },
+    {
+      "id": "query:SucheImagePairs",
+      "kind": "query",
+      "name": "SucheImagePairs",
+      "fullName": "Domain.Projections.SucheImagePairs",
+      "context": "ImagePair",
+      "query": {
+        "servedByReader": "ImagePairReader",
+        "readsProjection": "ImagePairProjection",
+        "fields": [
+          {
+            "name": "Filter",
+            "type": "ImagePairFilter"
+          }
+        ]
+      }
+    },
+    {
+      "id": "query:GetImagePairStatistik",
+      "kind": "query",
+      "name": "GetImagePairStatistik",
+      "fullName": "Domain.Projections.GetImagePairStatistik",
+      "context": "ImagePair",
+      "query": {
+        "servedByReader": "ImagePairReader",
+        "readsProjection": "ImagePairProjection",
+        "fields": [
+          {
+            "name": "original",
+            "type": "GetImagePairStatistik"
+          }
+        ]
+      }
+    },
+    {
+      "id": "query:GetUnklassifizierteImagePairs",
+      "kind": "query",
+      "name": "GetUnklassifizierteImagePairs",
+      "fullName": "Domain.Projections.GetUnklassifizierteImagePairs",
+      "context": "ImagePair",
+      "query": {
+        "servedByReader": "ImagePairReader",
+        "readsProjection": "ImagePairProjection",
+        "fields": [
+          {
+            "name": "MaxAnzahl",
+            "type": "int"
+          }
+        ]
+      }
+    },
+    {
+      "id": "query:GetProduktionsVerlauf",
+      "kind": "query",
+      "name": "GetProduktionsVerlauf",
+      "fullName": "Domain.Projections.GetProduktionsVerlauf",
+      "context": "ImagePair",
+      "query": {
+        "servedByReader": "ImagePairReader",
+        "readsProjection": "ImagePairProjection",
+        "fields": [
+          {
+            "name": "Von",
+            "type": "DateTimeOffset"
+          },
+          {
+            "name": "Bis",
+            "type": "DateTimeOffset"
+          },
+          {
+            "name": "BucketMinuten",
+            "type": "int"
+          }
+        ]
+      }
+    },
+    {
+      "id": "query:GetProduktionsTage",
+      "kind": "query",
+      "name": "GetProduktionsTage",
+      "fullName": "Domain.Projections.GetProduktionsTage",
+      "context": "ImagePair",
+      "query": {
+        "servedByReader": "ImagePairReader",
+        "readsProjection": "ImagePairProjection",
+        "fields": [
+          {
+            "name": "original",
+            "type": "GetProduktionsTage"
+          }
+        ]
+      }
+    },
+    {
+      "id": "query:GetProduktionsStrip",
+      "kind": "query",
+      "name": "GetProduktionsStrip",
+      "fullName": "Domain.Projections.GetProduktionsStrip",
+      "context": "ImagePair",
+      "query": {
+        "servedByReader": "ImagePairReader",
+        "readsProjection": "ImagePairProjection",
+        "fields": [
+          {
+            "name": "Von",
+            "type": "DateTimeOffset"
+          },
+          {
+            "name": "Bis",
+            "type": "DateTimeOffset"
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipe:BenchmarkPipeline",
+      "kind": "pipeline",
+      "name": "BenchmarkPipeline",
+      "fullName": "Domain.Pipeline.Benchmark.BenchmarkPipeline",
+      "context": "(quer)",
+      "pipeline": {
+        "pipelineId": "benchmark",
+        "handles": [
+          {
+            "input": "BenchPing",
+            "inputKind": "trigger",
+            "emits": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipe:FileWatchPipeline",
+      "kind": "pipeline",
+      "name": "FileWatchPipeline",
+      "fullName": "Domain.Pipeline.ImageProcessing.FileWatchPipeline",
+      "context": "(quer)",
+      "pipeline": {
+        "pipelineId": "file-watch",
+        "handles": [
+          {
+            "input": "PollTick",
+            "inputKind": "event",
+            "emits": []
+          }
+        ]
+      }
+    },
+    {
+      "id": "pipe:ImageProcessingPipeline",
+      "kind": "pipeline",
+      "name": "ImageProcessingPipeline",
+      "fullName": "Domain.Pipeline.ImageProcessing.ImageProcessingPipeline",
+      "context": "ImagePair",
+      "pipeline": {
+        "pipelineId": "image-processing",
+        "handles": [
+          {
+            "input": "DateiErkannt",
+            "inputKind": "trigger",
+            "emits": [
+              "ErstelleImagePair",
+              "MeldeBildVerfuegbar"
+            ]
+          },
+          {
+            "input": "ImagePairKomplett",
+            "inputKind": "event",
+            "emits": [
+              "KlassifiziereBildPaarDurchKi"
+            ]
+          },
+          {
+            "input": "PaarNichtKomplett",
+            "inputKind": "event",
+            "emits": []
+          }
+        ]
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "cmd:Aktiviere",
+      "to": "agg:Vorgang",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:BeauftrageSammelueberweisung",
+      "to": "agg:Sammelueberweisungsauftrag",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:BeauftrageUeberweisung",
+      "to": "agg:Ueberweisungsauftrag",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:BelasteKonto",
+      "to": "agg:Zahlungskonto",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:BestaetigeReise",
+      "to": "agg:Reise",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:BucheReise",
+      "to": "agg:Reiseauftrag",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:BucheReservierung",
+      "to": "agg:Konto",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:EroeffneKonto",
+      "to": "agg:Konto",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:ErstatteKonto",
+      "to": "agg:Zahlungskonto",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:ErstelleImagePair",
+      "to": "agg:ImagePair",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:FristFaellig",
+      "to": "agg:Erinnerung",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:GebeBestandFrei",
+      "to": "agg:Lager",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:GebeFlugFrei",
+      "to": "agg:Flugkontingent",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:GebeHotelFrei",
+      "to": "agg:Hotelkontingent",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:GebeReservierungFrei",
+      "to": "agg:Konto",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:Genehmige",
+      "to": "agg:Vorgang",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:GibBestellungAuf",
+      "to": "agg:Bestellauftrag",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:KlassifiziereBildPaarDurchKi",
+      "to": "agg:ImagePair",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:KlassifiziereEinzelBildDurchKi",
+      "to": "agg:ImagePair",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:LabelBildPaar",
+      "to": "agg:ImagePair",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:LabelBildRegion",
+      "to": "agg:ImagePair",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:LabelEinzelBild",
+      "to": "agg:ImagePair",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:LabelPhysischesProdukt",
+      "to": "agg:ImagePair",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:MarkiereAlsInspiziert",
+      "to": "agg:ImagePair",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:MeldeBildVerfuegbar",
+      "to": "agg:ImagePair",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:ReserviereBestand",
+      "to": "agg:Lager",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:ReserviereBetrag",
+      "to": "agg:Konto",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:ReserviereFlug",
+      "to": "agg:Flugkontingent",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:ReserviereHotel",
+      "to": "agg:Hotelkontingent",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:RichteFlugEin",
+      "to": "agg:Flugkontingent",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:RichteHotelEin",
+      "to": "agg:Hotelkontingent",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:RichteLagerEin",
+      "to": "agg:Lager",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:RichteZahlungskontoEin",
+      "to": "agg:Zahlungskonto",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:SchreibeGut",
+      "to": "agg:Konto",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:StelleAntrag",
+      "to": "agg:Antrag",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:StorniereGutschrift",
+      "to": "agg:Konto",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:Versende",
+      "to": "agg:Versand",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:WirkeReaktion",
+      "to": "agg:Reaktionsempfaenger",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:Aktiviere",
+      "to": "evt:VorgangAktiviert",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:BeauftrageSammelueberweisung",
+      "to": "evt:SammelUeberweisungBeauftragt",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:BeauftrageUeberweisung",
+      "to": "evt:UeberweisungBeauftragt",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:BelasteKonto",
+      "to": "evt:KontoBelastet",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:BestaetigeReise",
+      "to": "evt:ReiseBestaetigt",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:BucheReise",
+      "to": "evt:ReiseGebucht",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:BucheReservierung",
+      "to": "evt:ReservierungGebucht",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:EroeffneKonto",
+      "to": "evt:KontoEroeffnet",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:ErstatteKonto",
+      "to": "evt:KontoErstattet",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:ErstelleImagePair",
+      "to": "evt:ImagePairErstellt",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:FristFaellig",
+      "to": "evt:ErinnerungAusgeloest",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:GebeBestandFrei",
+      "to": "evt:BestandFreigegeben",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:GebeFlugFrei",
+      "to": "evt:FlugFreigegeben",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:GebeHotelFrei",
+      "to": "evt:HotelFreigegeben",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:GebeReservierungFrei",
+      "to": "evt:ReservierungFreigegeben",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:Genehmige",
+      "to": "evt:VorgangGenehmigt",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:GibBestellungAuf",
+      "to": "evt:BestellungAufgegeben",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:KlassifiziereBildPaarDurchKi",
+      "to": "evt:BildPaarDurchKiKlassifiziert",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:KlassifiziereEinzelBildDurchKi",
+      "to": "evt:EinzelBildDurchKiKlassifiziert",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:LabelBildPaar",
+      "to": "evt:BildPaarGelabelt",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:LabelBildRegion",
+      "to": "evt:BildRegionGelabelt",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:LabelEinzelBild",
+      "to": "evt:EinzelBildGelabelt",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:LabelPhysischesProdukt",
+      "to": "evt:PhysischesProduktGelabelt",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:MarkiereAlsInspiziert",
+      "to": "evt:ImagePairInspiziert",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:MeldeBildVerfuegbar",
+      "to": "evt:BildVerfuegbar",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:MeldeBildVerfuegbar",
+      "to": "evt:ImagePairKomplett",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:ReserviereBestand",
+      "to": "evt:BestandReserviert",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:ReserviereBetrag",
+      "to": "evt:BetragReserviert",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:ReserviereFlug",
+      "to": "evt:FlugReserviert",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:ReserviereHotel",
+      "to": "evt:HotelReserviert",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:RichteFlugEin",
+      "to": "evt:FlugEingerichtet",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:RichteHotelEin",
+      "to": "evt:HotelEingerichtet",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:RichteLagerEin",
+      "to": "evt:LagerEingerichtet",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:RichteZahlungskontoEin",
+      "to": "evt:ZahlungskontoEingerichtet",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:SchreibeGut",
+      "to": "evt:Gutgeschrieben",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:StelleAntrag",
+      "to": "evt:AntragGestellt",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:StorniereGutschrift",
+      "to": "evt:GutschriftStorniert",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:Versende",
+      "to": "evt:Versendet",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:WirkeReaktion",
+      "to": "evt:ReaktionGewirkt",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:RichteFlugEin",
+      "to": "evt:FlugExistiertBereits",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:ReserviereFlug",
+      "to": "evt:FlugAusgebucht",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:RichteHotelEin",
+      "to": "evt:HotelExistiertBereits",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:ReserviereHotel",
+      "to": "evt:HotelAusgebucht",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:ErstelleImagePair",
+      "to": "evt:ImagePairExistiertBereits",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:MeldeBildVerfuegbar",
+      "to": "evt:ImagePairNichtGefunden",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:MeldeBildVerfuegbar",
+      "to": "evt:BildVersionBereitsVerfuegbar",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:KlassifiziereEinzelBildDurchKi",
+      "to": "evt:BildNichtVerfuegbar",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:KlassifiziereEinzelBildDurchKi",
+      "to": "evt:RegionLabelsUngueltig",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:KlassifiziereBildPaarDurchKi",
+      "to": "evt:PaarNichtKomplett",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:LabelBildRegion",
+      "to": "evt:BildNichtVerfuegbar",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:LabelBildRegion",
+      "to": "evt:RegionIndexUngueltig",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:LabelEinzelBild",
+      "to": "evt:BildNichtVerfuegbar",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:LabelBildPaar",
+      "to": "evt:PaarNichtKomplett",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:LabelPhysischesProdukt",
+      "to": "evt:ImagePairNichtGefunden",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:MarkiereAlsInspiziert",
+      "to": "evt:ImagePairNichtGefunden",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:EroeffneKonto",
+      "to": "evt:KontoExistiertBereits",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:ReserviereBetrag",
+      "to": "evt:KontoGesperrt",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:ReserviereBetrag",
+      "to": "evt:DeckungReichtNicht",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:ReserviereBetrag",
+      "to": "evt:KontoNichtGefunden",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:SchreibeGut",
+      "to": "evt:KontoGesperrt",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:SchreibeGut",
+      "to": "evt:KontoNichtGefunden",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:RichteLagerEin",
+      "to": "evt:LagerExistiertBereits",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:ReserviereBestand",
+      "to": "evt:BestandReichtNicht",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:BelasteKonto",
+      "to": "evt:KontoUngedeckt",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "evt:BestellungAufgegeben",
+      "to": "proc:BestellProzess",
+      "kind": "triggers",
+      "provenance": "process-dsl"
+    },
+    {
+      "from": "proc:BestellProzess",
+      "to": "cmd:ReserviereBestand",
+      "kind": "sends",
+      "provenance": "process-dsl",
+      "via": "0"
+    },
+    {
+      "from": "proc:BestellProzess",
+      "to": "cmd:GebeBestandFrei",
+      "kind": "compensates",
+      "provenance": "process-dsl",
+      "via": "0"
+    },
+    {
+      "from": "proc:BestellProzess",
+      "to": "cmd:BelasteKonto",
+      "kind": "sends",
+      "provenance": "process-dsl",
+      "via": "1"
+    },
+    {
+      "from": "proc:BestellProzess",
+      "to": "cmd:ErstatteKonto",
+      "kind": "compensates",
+      "provenance": "process-dsl",
+      "via": "1"
+    },
+    {
+      "from": "proc:BestellProzess",
+      "to": "cmd:Versende",
+      "kind": "sends",
+      "provenance": "process-dsl",
+      "via": "2"
+    },
+    {
+      "from": "evt:BestandReserviert",
+      "to": "proc:BestellProzess",
+      "kind": "advances",
+      "provenance": "process-dsl"
+    },
+    {
+      "from": "evt:KontoBelastet",
+      "to": "proc:BestellProzess",
+      "kind": "advances",
+      "provenance": "process-dsl"
+    },
+    {
+      "from": "evt:ReiseGebucht",
+      "to": "proc:ReiseProzess",
+      "kind": "triggers",
+      "provenance": "process-dsl"
+    },
+    {
+      "from": "proc:ReiseProzess",
+      "to": "cmd:ReserviereFlug",
+      "kind": "sends",
+      "provenance": "process-dsl",
+      "via": "0"
+    },
+    {
+      "from": "proc:ReiseProzess",
+      "to": "cmd:GebeFlugFrei",
+      "kind": "compensates",
+      "provenance": "process-dsl",
+      "via": "0"
+    },
+    {
+      "from": "proc:ReiseProzess",
+      "to": "cmd:ReserviereHotel",
+      "kind": "sends",
+      "provenance": "process-dsl",
+      "via": "1"
+    },
+    {
+      "from": "proc:ReiseProzess",
+      "to": "cmd:GebeHotelFrei",
+      "kind": "compensates",
+      "provenance": "process-dsl",
+      "via": "1"
+    },
+    {
+      "from": "proc:ReiseProzess",
+      "to": "cmd:BestaetigeReise",
+      "kind": "sends",
+      "provenance": "process-dsl",
+      "via": "2"
+    },
+    {
+      "from": "evt:FlugReserviert",
+      "to": "proc:ReiseProzess",
+      "kind": "advances",
+      "provenance": "process-dsl"
+    },
+    {
+      "from": "evt:HotelReserviert",
+      "to": "proc:ReiseProzess",
+      "kind": "advances",
+      "provenance": "process-dsl"
+    },
+    {
+      "from": "evt:SammelUeberweisungBeauftragt",
+      "to": "proc:SammelueberweisungsProzess",
+      "kind": "triggers",
+      "provenance": "process-dsl"
+    },
+    {
+      "from": "proc:SammelueberweisungsProzess",
+      "to": "cmd:ReserviereBetrag",
+      "kind": "sends",
+      "provenance": "process-dsl",
+      "via": "0"
+    },
+    {
+      "from": "proc:SammelueberweisungsProzess",
+      "to": "cmd:GebeReservierungFrei",
+      "kind": "compensates",
+      "provenance": "process-dsl",
+      "via": "0"
+    },
+    {
+      "from": "proc:SammelueberweisungsProzess",
+      "to": "cmd:SchreibeGut",
+      "kind": "sends",
+      "provenance": "process-dsl",
+      "via": "1"
+    },
+    {
+      "from": "proc:SammelueberweisungsProzess",
+      "to": "cmd:BucheReservierung",
+      "kind": "sends",
+      "provenance": "process-dsl",
+      "via": "2"
+    },
+    {
+      "from": "evt:BetragReserviert",
+      "to": "proc:SammelueberweisungsProzess",
+      "kind": "advances",
+      "provenance": "process-dsl"
+    },
+    {
+      "from": "evt:Gutgeschrieben",
+      "to": "proc:SammelueberweisungsProzess",
+      "kind": "advances",
+      "provenance": "process-dsl"
+    },
+    {
+      "from": "evt:UeberweisungBeauftragt",
+      "to": "proc:UeberweisungsProzess",
+      "kind": "triggers",
+      "provenance": "process-dsl"
+    },
+    {
+      "from": "proc:UeberweisungsProzess",
+      "to": "cmd:ReserviereBetrag",
+      "kind": "sends",
+      "provenance": "process-dsl",
+      "via": "0"
+    },
+    {
+      "from": "proc:UeberweisungsProzess",
+      "to": "cmd:GebeReservierungFrei",
+      "kind": "compensates",
+      "provenance": "process-dsl",
+      "via": "0"
+    },
+    {
+      "from": "proc:UeberweisungsProzess",
+      "to": "cmd:SchreibeGut",
+      "kind": "sends",
+      "provenance": "process-dsl",
+      "via": "1"
+    },
+    {
+      "from": "proc:UeberweisungsProzess",
+      "to": "cmd:StorniereGutschrift",
+      "kind": "compensates",
+      "provenance": "process-dsl",
+      "via": "1"
+    },
+    {
+      "from": "proc:UeberweisungsProzess",
+      "to": "cmd:BucheReservierung",
+      "kind": "sends",
+      "provenance": "process-dsl",
+      "via": "2"
+    },
+    {
+      "from": "evt:BetragReserviert",
+      "to": "proc:UeberweisungsProzess",
+      "kind": "advances",
+      "provenance": "process-dsl"
+    },
+    {
+      "from": "evt:Gutgeschrieben",
+      "to": "proc:UeberweisungsProzess",
+      "kind": "advances",
+      "provenance": "process-dsl"
+    },
+    {
+      "from": "evt:VorgangGenehmigt",
+      "to": "proc:AktivierungsProzess",
+      "kind": "triggers",
+      "provenance": "process-dsl"
+    },
+    {
+      "from": "proc:AktivierungsProzess",
+      "to": "cmd:Aktiviere",
+      "kind": "sends",
+      "provenance": "process-dsl",
+      "via": "0"
+    },
+    {
+      "from": "evt:AntragGestellt",
+      "to": "proc:GenehmigungsProzess",
+      "kind": "triggers",
+      "provenance": "process-dsl"
+    },
+    {
+      "from": "proc:GenehmigungsProzess",
+      "to": "cmd:Genehmige",
+      "kind": "sends",
+      "provenance": "process-dsl",
+      "via": "0"
+    },
+    {
+      "from": "evt:ImagePairErstellt",
+      "to": "proj:ImagePairHistorieProjection",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "evt:BildVerfuegbar",
+      "to": "proj:ImagePairHistorieProjection",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "evt:ImagePairKomplett",
+      "to": "proj:ImagePairHistorieProjection",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "evt:EinzelBildDurchKiKlassifiziert",
+      "to": "proj:ImagePairHistorieProjection",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "evt:BildPaarDurchKiKlassifiziert",
+      "to": "proj:ImagePairHistorieProjection",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "evt:BildRegionGelabelt",
+      "to": "proj:ImagePairHistorieProjection",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "evt:EinzelBildGelabelt",
+      "to": "proj:ImagePairHistorieProjection",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "evt:BildPaarGelabelt",
+      "to": "proj:ImagePairHistorieProjection",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "evt:PhysischesProduktGelabelt",
+      "to": "proj:ImagePairHistorieProjection",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "evt:ImagePairInspiziert",
+      "to": "proj:ImagePairHistorieProjection",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "evt:ImagePairErstellt",
+      "to": "proj:ImagePairProjection",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "evt:BildVerfuegbar",
+      "to": "proj:ImagePairProjection",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "evt:ImagePairKomplett",
+      "to": "proj:ImagePairProjection",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "evt:EinzelBildDurchKiKlassifiziert",
+      "to": "proj:ImagePairProjection",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "evt:BildPaarDurchKiKlassifiziert",
+      "to": "proj:ImagePairProjection",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "evt:BildRegionGelabelt",
+      "to": "proj:ImagePairProjection",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "evt:EinzelBildGelabelt",
+      "to": "proj:ImagePairProjection",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "evt:BildPaarGelabelt",
+      "to": "proj:ImagePairProjection",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "evt:PhysischesProduktGelabelt",
+      "to": "proj:ImagePairProjection",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "evt:ImagePairInspiziert",
+      "to": "proj:ImagePairProjection",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "evt:ImagePairErstellt",
+      "to": "proj:ImagePairReaktion",
+      "kind": "consumedBy",
+      "provenance": "subscriber"
+    },
+    {
+      "from": "query:GetImagePairHistorie",
+      "to": "proj:ImagePairHistorieProjection",
+      "kind": "readsFrom",
+      "provenance": "reader"
+    },
+    {
+      "from": "query:GetImagePair",
+      "to": "proj:ImagePairProjection",
+      "kind": "readsFrom",
+      "provenance": "reader"
+    },
+    {
+      "from": "query:SucheImagePairs",
+      "to": "proj:ImagePairProjection",
+      "kind": "readsFrom",
+      "provenance": "reader"
+    },
+    {
+      "from": "query:GetImagePairStatistik",
+      "to": "proj:ImagePairProjection",
+      "kind": "readsFrom",
+      "provenance": "reader"
+    },
+    {
+      "from": "query:GetUnklassifizierteImagePairs",
+      "to": "proj:ImagePairProjection",
+      "kind": "readsFrom",
+      "provenance": "reader"
+    },
+    {
+      "from": "query:GetProduktionsVerlauf",
+      "to": "proj:ImagePairProjection",
+      "kind": "readsFrom",
+      "provenance": "reader"
+    },
+    {
+      "from": "query:GetProduktionsTage",
+      "to": "proj:ImagePairProjection",
+      "kind": "readsFrom",
+      "provenance": "reader"
+    },
+    {
+      "from": "query:GetProduktionsStrip",
+      "to": "proj:ImagePairProjection",
+      "kind": "readsFrom",
+      "provenance": "reader"
+    },
+    {
+      "from": "pipe:ImageProcessingPipeline",
+      "to": "cmd:ErstelleImagePair",
+      "kind": "pipelineEmits",
+      "provenance": "pipeline"
+    },
+    {
+      "from": "pipe:ImageProcessingPipeline",
+      "to": "cmd:MeldeBildVerfuegbar",
+      "kind": "pipelineEmits",
+      "provenance": "pipeline"
+    },
+    {
+      "from": "pipe:ImageProcessingPipeline",
+      "to": "cmd:KlassifiziereBildPaarDurchKi",
+      "kind": "pipelineEmits",
+      "provenance": "pipeline"
+    }
+  ],
+  "views": {
+    "eventFanout": [
+      {
+        "event": "AntragGestellt",
+        "persisted": true,
+        "projections": [],
+        "triggersProcesses": [
+          "GenehmigungsProzess"
+        ],
+        "advancesProcesses": [],
+        "pipelines": []
+      },
+      {
+        "event": "UeberweisungBeauftragt",
+        "persisted": true,
+        "projections": [],
+        "triggersProcesses": [
+          "UeberweisungsProzess"
+        ],
+        "advancesProcesses": [],
+        "pipelines": []
+      },
+      {
+        "event": "BestellungAufgegeben",
+        "persisted": true,
+        "projections": [],
+        "triggersProcesses": [
+          "BestellProzess"
+        ],
+        "advancesProcesses": [],
+        "pipelines": []
+      },
+      {
+        "event": "FlugReserviert",
+        "persisted": true,
+        "projections": [],
+        "triggersProcesses": [],
+        "advancesProcesses": [
+          "ReiseProzess"
+        ],
+        "pipelines": []
+      },
+      {
+        "event": "HotelReserviert",
+        "persisted": true,
+        "projections": [],
+        "triggersProcesses": [],
+        "advancesProcesses": [
+          "ReiseProzess"
+        ],
+        "pipelines": []
+      },
+      {
+        "event": "ImagePairErstellt",
+        "persisted": true,
+        "projections": [
+          "ImagePairHistorieProjection",
+          "ImagePairProjection",
+          "ImagePairReaktion"
+        ],
+        "triggersProcesses": [],
+        "advancesProcesses": [],
+        "pipelines": []
+      },
+      {
+        "event": "BildVerfuegbar",
+        "persisted": true,
+        "projections": [
+          "ImagePairHistorieProjection",
+          "ImagePairProjection"
+        ],
+        "triggersProcesses": [],
+        "advancesProcesses": [],
+        "pipelines": []
+      },
+      {
+        "event": "ImagePairKomplett",
+        "persisted": true,
+        "projections": [
+          "ImagePairHistorieProjection",
+          "ImagePairProjection"
+        ],
+        "triggersProcesses": [],
+        "advancesProcesses": [],
+        "pipelines": [
+          "ImageProcessingPipeline"
+        ]
+      },
+      {
+        "event": "EinzelBildDurchKiKlassifiziert",
+        "persisted": true,
+        "projections": [
+          "ImagePairHistorieProjection",
+          "ImagePairProjection"
+        ],
+        "triggersProcesses": [],
+        "advancesProcesses": [],
+        "pipelines": []
+      },
+      {
+        "event": "BildPaarDurchKiKlassifiziert",
+        "persisted": true,
+        "projections": [
+          "ImagePairHistorieProjection",
+          "ImagePairProjection"
+        ],
+        "triggersProcesses": [],
+        "advancesProcesses": [],
+        "pipelines": []
+      },
+      {
+        "event": "BildRegionGelabelt",
+        "persisted": true,
+        "projections": [
+          "ImagePairHistorieProjection",
+          "ImagePairProjection"
+        ],
+        "triggersProcesses": [],
+        "advancesProcesses": [],
+        "pipelines": []
+      },
+      {
+        "event": "EinzelBildGelabelt",
+        "persisted": true,
+        "projections": [
+          "ImagePairHistorieProjection",
+          "ImagePairProjection"
+        ],
+        "triggersProcesses": [],
+        "advancesProcesses": [],
+        "pipelines": []
+      },
+      {
+        "event": "BildPaarGelabelt",
+        "persisted": true,
+        "projections": [
+          "ImagePairHistorieProjection",
+          "ImagePairProjection"
+        ],
+        "triggersProcesses": [],
+        "advancesProcesses": [],
+        "pipelines": []
+      },
+      {
+        "event": "PhysischesProduktGelabelt",
+        "persisted": true,
+        "projections": [
+          "ImagePairHistorieProjection",
+          "ImagePairProjection"
+        ],
+        "triggersProcesses": [],
+        "advancesProcesses": [],
+        "pipelines": []
+      },
+      {
+        "event": "ImagePairInspiziert",
+        "persisted": true,
+        "projections": [
+          "ImagePairHistorieProjection",
+          "ImagePairProjection"
+        ],
+        "triggersProcesses": [],
+        "advancesProcesses": [],
+        "pipelines": []
+      },
+      {
+        "event": "PaarNichtKomplett",
+        "persisted": false,
+        "projections": [],
+        "triggersProcesses": [],
+        "advancesProcesses": [],
+        "pipelines": [
+          "ImageProcessingPipeline"
+        ]
+      },
+      {
+        "event": "BetragReserviert",
+        "persisted": true,
+        "projections": [],
+        "triggersProcesses": [],
+        "advancesProcesses": [
+          "SammelueberweisungsProzess",
+          "UeberweisungsProzess"
+        ],
+        "pipelines": []
+      },
+      {
+        "event": "Gutgeschrieben",
+        "persisted": true,
+        "projections": [],
+        "triggersProcesses": [],
+        "advancesProcesses": [
+          "SammelueberweisungsProzess",
+          "UeberweisungsProzess"
+        ],
+        "pipelines": []
+      },
+      {
+        "event": "BestandReserviert",
+        "persisted": true,
+        "projections": [],
+        "triggersProcesses": [],
+        "advancesProcesses": [
+          "BestellProzess"
+        ],
+        "pipelines": []
+      },
+      {
+        "event": "ReiseGebucht",
+        "persisted": true,
+        "projections": [],
+        "triggersProcesses": [
+          "ReiseProzess"
+        ],
+        "advancesProcesses": [],
+        "pipelines": []
+      },
+      {
+        "event": "SammelUeberweisungBeauftragt",
+        "persisted": true,
+        "projections": [],
+        "triggersProcesses": [
+          "SammelueberweisungsProzess"
+        ],
+        "advancesProcesses": [],
+        "pipelines": []
+      },
+      {
+        "event": "VorgangGenehmigt",
+        "persisted": true,
+        "projections": [],
+        "triggersProcesses": [
+          "AktivierungsProzess"
+        ],
+        "advancesProcesses": [],
+        "pipelines": []
+      },
+      {
+        "event": "KontoBelastet",
+        "persisted": true,
+        "projections": [],
+        "triggersProcesses": [],
+        "advancesProcesses": [
+          "BestellProzess"
+        ],
+        "pipelines": []
+      }
+    ],
+    "causalChains": [
+      {
+        "start": "BestellungAufgegeben",
+        "process": "BestellProzess",
+        "steps": [
+          "[BestellungAufgegeben] → ReserviereBestand   ⟲ GebeBestandFrei",
+          "[BestellungAufgegeben] → BelasteKonto   ⟲ ErstatteKonto",
+          "[BestellungAufgegeben ∧ BestandReserviert ∧ KontoBelastet] → Versende"
+        ]
+      },
+      {
+        "start": "ReiseGebucht",
+        "process": "ReiseProzess",
+        "steps": [
+          "[ReiseGebucht] → ReserviereFlug   ⟲ GebeFlugFrei",
+          "[ReiseGebucht] → ReserviereHotel   ⟲ GebeHotelFrei",
+          "[ReiseGebucht ∧ FlugReserviert ∧ HotelReserviert] → BestaetigeReise"
+        ]
+      },
+      {
+        "start": "SammelUeberweisungBeauftragt",
+        "process": "SammelueberweisungsProzess",
+        "steps": [
+          "[SammelUeberweisungBeauftragt] → ReserviereBetrag   ⟲ GebeReservierungFrei",
+          "[SammelUeberweisungBeauftragt ∧ BetragReserviert] ⇉ SchreibeGut",
+          "[SammelUeberweisungBeauftragt ∧ BetragReserviert] ⨝(alle Gutgeschrieben) BucheReservierung"
+        ]
+      },
+      {
+        "start": "UeberweisungBeauftragt",
+        "process": "UeberweisungsProzess",
+        "steps": [
+          "[UeberweisungBeauftragt] → ReserviereBetrag   ⟲ GebeReservierungFrei",
+          "[UeberweisungBeauftragt ∧ BetragReserviert] → SchreibeGut   ⟲ StorniereGutschrift",
+          "[UeberweisungBeauftragt ∧ BetragReserviert ∧ Gutgeschrieben] → BucheReservierung"
+        ]
+      },
+      {
+        "start": "VorgangGenehmigt",
+        "process": "AktivierungsProzess",
+        "steps": [
+          "[VorgangGenehmigt] → Aktiviere"
+        ]
+      },
+      {
+        "start": "AntragGestellt",
+        "process": "GenehmigungsProzess",
+        "steps": [
+          "[AntragGestellt] → Genehmige"
+        ]
+      }
+    ],
+    "diagnostics": [
+      {
+        "severity": "info",
+        "code": "ROUTING-SOURCE",
+        "message": "Routing-Wahrheit: GeneratedCommandRouting (autoritativ, aus dem gebauten Generat)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'ErinnerungAusgeloest' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'FlugEingerichtet' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'FlugFreigegeben' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'HotelEingerichtet' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'HotelFreigegeben' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'KontoEroeffnet' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'ReservierungFreigegeben' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'GutschriftStorniert' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'ReservierungGebucht' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'LagerEingerichtet' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'BestandFreigegeben' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'ReaktionGewirkt' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'ReiseBestaetigt' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'Versendet' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'VorgangAktiviert' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'ZahlungskontoEingerichtet' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'KontoErstattet' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      }
+    ]
+  }
+};
+window.GRAPH = GRAPH;
+
+const nodes=GRAPH.nodes, edges=GRAPH.edges;
+const N=Object.fromEntries(nodes.map(n=>[n.id,n]));
+const nodeIdOf=(k,name)=>{ const n=nodes.find(n=>n.kind===k&&n.name===name); return n?n.id:null; };
+const esc=s=>(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
+const contexts=GRAPH.meta.contexts.slice();
+const ctxCount={}; nodes.forEach(n=>ctxCount[n.context]=(ctxCount[n.context]||0)+1);
+function ctxColor(c){ let h=0; for(const ch of c) h=(h*31+ch.charCodeAt(0))%360; return `hsl(${h} 55% 58%)`; }
+const sagaContexts=new Set(nodes.filter(n=>n.kind==='process').map(n=>n.context)
+  .concat(edges.filter(e=>e.kind==='sends'||e.kind==='compensates').flatMap(e=>[N[e.from].context,N[e.to].context])));
+const visibleCtx=new Set(contexts); const isVis=c=>visibleCtx.has(c);
+
+(function(){ const b=document.getElementById('routing'); const auth=GRAPH.meta.routingSource==='GeneratedCommandRouting';
+  b.className='badge '+(auth?'auth':'fallback'); b.textContent='Routing: '+GRAPH.meta.routingSource; })();
+
+// ── Kontext-Filter ────────────────────────────────────────────────────────────
+const ctxlist=document.getElementById('ctxlist');
+contexts.forEach(c=>{ const row=document.createElement('label'); row.className='row';
+  row.innerHTML=`<input type="checkbox" checked data-c="${c}"><i class="sw" style="background:${ctxColor(c)}"></i>${c}<span class="ct">${ctxCount[c]}</span>`;
+  row.querySelector('input').onchange=e=>{ e.target.checked?visibleCtx.add(c):visibleCtx.delete(c); applyFilter(); };
+  ctxlist.appendChild(row); });
+function setAllCtx(pred){ visibleCtx.clear(); ctxlist.querySelectorAll('input').forEach(i=>{ const on=pred(i.dataset.c); i.checked=on; if(on)visibleCtx.add(i.dataset.c); }); applyFilter(); }
+document.getElementById('ctx-all').onclick=()=>setAllCtx(()=>true);
+document.getElementById('ctx-none').onclick=()=>setAllCtx(()=>false);
+document.getElementById('ctx-saga').onclick=()=>setAllCtx(c=>sagaContexts.has(c));
+function applyFilter(){ computeBoard(); needFit=true; resize(); }
+
+// ── Board-Layout (deterministisch, verschachtelt) ────────────────────────────
+const SZ={HW:214,HHEAD:24,ROW:18,HPAD:8,GAPH:12,APAD:14,AHEAD:26,CPAD:18,CHEAD:32,GAPA:14,GAPC:44,LANEH:66,LANEGAP:90,LANEW:186,LANEGX:16,MAXROW:3000};
+let board={};
+
+const cmdsOfAgg=name=>nodes.filter(n=>n.kind==='command'&&n.command&&n.command.routedTo===name);
+const aggsOfCtx=c=>nodes.filter(n=>n.kind==='aggregate'&&n.context===c);
+function measureHandler(cmd){ return SZ.HHEAD + Math.max(1,(cmd.command.produces||[]).length)*SZ.ROW + SZ.HPAD; }
+function measureAgg(agg){ const cs=cmdsOfAgg(agg.name); let h=SZ.AHEAD+SZ.APAD; cs.forEach(c=>h+=measureHandler(c)+SZ.GAPH); if(cs.length)h-=SZ.GAPH; else h+=28; return {h:h+SZ.APAD, cmds:cs}; }
+function measureCtx(c){ const ags=aggsOfCtx(c); const ms=ags.map(measureAgg); let h=SZ.CHEAD+SZ.CPAD; ms.forEach(m=>h+=m.h+SZ.GAPA); if(ags.length)h-=SZ.GAPA; h+=SZ.CPAD; return {w:SZ.HW+SZ.APAD*2+SZ.CPAD*2, h, ags, ms}; }
+
+function computeBoard(){
+  board={ctx:[],agg:{},handler:{},pillsByEvt:{},lane:{},edges:[],pick:[],bounds:{minx:0,miny:0,maxx:0,maxy:0}};
+  const visCtx=contexts.filter(c=>isVis(c)&&aggsOfCtx(c).length>0);
+  const measured=visCtx.map(c=>({c,m:measureCtx(c)}));
+  const midTop=SZ.LANEH+SZ.LANEGAP;
+  let cx=0,rowY=0,rowH=0,maxRight=0;
+  measured.forEach(({c,m})=>{
+    if(cx>0 && cx+m.w>SZ.MAXROW){ cx=0; rowY+=rowH+SZ.GAPC; rowH=0; }
+    placeContext(c,m,cx,midTop+rowY);
+    cx+=m.w+SZ.GAPC; rowH=Math.max(rowH,m.h); maxRight=Math.max(maxRight,cx-SZ.GAPC);
+  });
+  const contentBottom=midTop+rowY+rowH;
+  const rightBound=Math.max(maxRight,SZ.LANEW*4);
+  placeLane([...nodes.filter(n=>n.kind==='process'&&isVis(n.context)), ...nodes.filter(n=>n.kind==='pipeline'&&isVis(n.context))], 0, rightBound);
+  placeLane(nodes.filter(n=>n.kind==='projection'&&isVis(n.context)), contentBottom+SZ.LANEGAP, rightBound);
+  buildEdges();
+  computeBounds();
+}
+function placeContext(c,m,ox,oy){
+  board.ctx.push({c,x:ox,y:oy,w:m.w,h:m.h});
+  let ay=oy+SZ.CHEAD; const ax=ox+SZ.CPAD;
+  m.ags.forEach((agg,i)=>{ const am=m.ms[i]; const aw=SZ.HW+SZ.APAD*2;
+    board.agg[agg.id]={x:ax,y:ay,w:aw,h:am.h,node:agg}; board.pick.push({x:ax,y:ay,w:aw,h:am.h,node:agg});
+    let hy=ay+SZ.AHEAD; const hx=ax+SZ.APAD;
+    am.cmds.forEach(cmd=>{ const hh=measureHandler(cmd);
+      board.handler[cmd.id]={x:hx,y:hy,w:SZ.HW,h:hh,node:cmd,portIn:{x:hx,y:hy+SZ.HHEAD/2}};
+      board.pick.unshift({x:hx,y:hy,w:SZ.HW,h:hh,node:cmd});
+      (cmd.command.produces||[]).forEach((o,k)=>{ const py=hy+SZ.HHEAD+k*SZ.ROW; const evtId=nodeIdOf('event',o.event);
+        const pill={cmdId:cmd.id,event:o.event,persisted:o.persisted,evtId,x:hx+8,y:py,w:SZ.HW-16,h:SZ.ROW,portOut:{x:hx+SZ.HW,y:py+SZ.ROW/2}};
+        if(evtId)(board.pillsByEvt[evtId] ||= []).push(pill); });
+      hy+=hh+SZ.GAPH; });
+    ay+=am.h+SZ.GAPA; });
+}
+function placeLane(items,y,rightBound){ let x=0,yy=y,rowH=SZ.LANEH;
+  items.forEach(n=>{ if(x>0&&x+SZ.LANEW>rightBound){x=0;yy+=SZ.LANEH+SZ.LANEGX;}
+    board.lane[n.id]={x,y:yy,w:SZ.LANEW,h:SZ.LANEH,node:n}; board.pick.push({x,y:yy,w:SZ.LANEW,h:SZ.LANEH,node:n}); x+=SZ.LANEW+SZ.LANEGX; }); }
+const topC=r=>({x:r.x+r.w/2,y:r.y}), botC=r=>({x:r.x+r.w/2,y:r.y+r.h});
+function buildEdges(){ const E=[];
+  edges.forEach(e=>{
+    if(e.kind==='sends'||e.kind==='compensates'||e.kind==='pipelineEmits'){ const s=board.lane[e.from],h=board.handler[e.to];
+      if(s&&h)E.push({p1:botC(s),p2:h.portIn,kind:e.kind,key:edgeKey(e)}); }
+    else if(e.kind==='triggers'||e.kind==='advances'){ const s=board.lane[e.to],pills=board.pillsByEvt[e.from]||[];
+      if(s)pills.forEach(p=>E.push({p1:p.portOut,p2:topC(s),kind:e.kind,key:edgeKey(e)})); }
+    else if(e.kind==='consumedBy'){ const pr=board.lane[e.to],pills=board.pillsByEvt[e.from]||[];
+      if(pr)pills.forEach(p=>E.push({p1:p.portOut,p2:topC(pr),kind:e.kind,key:edgeKey(e)})); }
+  }); board.edges=E; }
+function computeBounds(){ let a=1e9,b=1e9,c=-1e9,d=-1e9;
+  const acc=r=>{a=Math.min(a,r.x);b=Math.min(b,r.y);c=Math.max(c,r.x+r.w);d=Math.max(d,r.y+r.h);};
+  board.ctx.forEach(acc); Object.values(board.lane).forEach(acc);
+  if(a>c){a=b=0;c=d=100;} board.bounds={minx:a,miny:b,maxx:c,maxy:d}; }
+const edgeKey=e=>e.from+'>'+e.to+'>'+e.kind;
+
+// ── Canvas / Kamera ──────────────────────────────────────────────────────────
+let W=1000,H=700; const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
+const cam={x:0,y:0,zoom:1}; let DPR=Math.max(1,window.devicePixelRatio||1); let needFit=true;
+function resize(){ const r=cv.getBoundingClientRect(); W=r.width;H=r.height; cv.width=W*DPR;cv.height=H*DPR;
+  if(needFit&&W>0&&H>0){ fit(); needFit=false; } render(); }
+function fit(){ const b=board.bounds; if(W<=0||H<=0)return; const pad=70, gw=b.maxx-b.minx+pad*2, gh=b.maxy-b.miny+pad*2;
+  cam.zoom=Math.max(.08,Math.min(W/gw,H/gh,1.3)); cam.x=(b.minx+b.maxx)/2; cam.y=(b.miny+b.maxy)/2; }
+const S=(x,y)=>[(x-cam.x)*cam.zoom+W/2,(y-cam.y)*cam.zoom+H/2];
+const Wld=(sx,sy)=>[(sx-W/2)/cam.zoom+cam.x,(sy-H/2)/cam.zoom+cam.y];
+
+const KIND_COL={command:'#e0902b',aggregate:'#22b07d',process:'#8b5cf6',projection:'#14b8a6',pipeline:'#f97316'};
+const EDGE_COL={sends:'#e0902b',compensates:'#d64545',pipelineEmits:'#f97316',triggers:'#8b5cf6',advances:'#8b5cf6',consumedBy:'#14b8a6'};
+
+function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
+function render(){
+  ctx.setTransform(DPR,0,0,DPR,0,0); ctx.clearRect(0,0,W,H);
+  ctx.lineJoin='round'; ctx.textBaseline='middle';
+  const z=cam.zoom;
+  // 1) Kanten (hinter den Boxen)
+  drawEdges(false);
+  // 2) Kontext-Container
+  board.ctx.forEach(b=>{ const [x,y]=S(b.x,b.y);
+    ctx.fillStyle=ctxColor(b.c).replace('hsl','hsla').replace(')',' / 8%)'); ctx.strokeStyle=ctxColor(b.c).replace('hsl','hsla').replace(')',' / 40%)'); ctx.lineWidth=1.4;
+    rr(x,y,b.w*z,b.h*z,12*z); ctx.fill(); ctx.stroke();
+    ctx.fillStyle=ctxColor(b.c); ctx.font=`700 ${12*z}px -apple-system,sans-serif`; ctx.textAlign='left';
+    ctx.fillText('◆ '+b.c.toUpperCase(), x+12*z, y+16*z); });
+  // 3) Aggregate
+  Object.values(board.agg).forEach(b=>{ const [x,y]=S(b.x,b.y); const act=simActive.has(b.node.id);
+    ctx.fillStyle='#22b07d18'; ctx.strokeStyle=act?'#22b07d':'#22b07d66'; ctx.lineWidth=act?2:1.3;
+    rr(x,y,b.w*z,b.h*z,10*z); ctx.fill(); ctx.stroke();
+    ctx.fillStyle='#2fd18f'; ctx.font=`700 ${11.5*z}px -apple-system,sans-serif`; ctx.textAlign='left';
+    ctx.fillText('▣ '+b.node.name, x+10*z, y+13*z); });
+  // 4) Funktionen (Handler): Command-Kopf + OneOf-Events
+  Object.values(board.handler).forEach(b=>{ const cmd=b.node; const [x,y]=S(b.x,b.y); const act=simActive.has(cmd.id);
+    ctx.globalAlpha=simMode&&!act?.4:1;
+    // Kopf = Command (rein)
+    ctx.fillStyle=act?'#e0902b':'#e0902b22'; ctx.strokeStyle='#e0902b'; ctx.lineWidth=act?2:1.2;
+    rr(x,y,b.w*z,SZ.HHEAD*z,7*z); ctx.fill(); ctx.stroke();
+    ctx.fillStyle=act?'#1a1206':'#f0b464'; ctx.font=`700 ${11*z}px -apple-system,sans-serif`; ctx.textAlign='left';
+    ctx.fillText('▸ '+cmd.name, x+8*z, y+SZ.HHEAD*z/2);
+    // Ausgänge = Events (raus), das gekapselte OneOf
+    (cmd.command.produces||[]).forEach((o,k)=>{ const py=y+(SZ.HHEAD+k*SZ.ROW)*z; const evtId=nodeIdOf('event',o.event);
+      const on=simActive.has(evtId); const col=o.persisted?'#3b82f6':'#6b7480';
+      ctx.fillStyle=on?col:(o.persisted?'#3b82f622':'#6b748022'); ctx.strokeStyle=col; ctx.lineWidth=on?1.8:1; if(!o.persisted)ctx.setLineDash([3,2]);
+      rr(x+8*z,py+2*z,(b.w-16)*z,(SZ.ROW-3)*z,5*z); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+      ctx.fillStyle=on?'#fff':(o.persisted?'#9cc2ff':'#aab3c0'); ctx.font=`${10*z}px -apple-system,sans-serif`;
+      ctx.fillText((o.persisted?'● ':'⃠ ')+o.event, x+15*z, py+SZ.ROW*z/2); });
+    ctx.globalAlpha=1; });
+  // 5) Lanes: Sagas (oben) + Projektionen (unten)
+  Object.values(board.lane).forEach(b=>{ const n=b.node; const [x,y]=S(b.x,b.y); const act=simActive.has(n.id); const col=KIND_COL[n.kind];
+    ctx.globalAlpha=simMode&&!act?.4:1;
+    ctx.fillStyle=col+ (act?'':'22'); ctx.strokeStyle=col; ctx.lineWidth=act?2.4:1.4;
+    rr(x,y,b.w*z,b.h*z,9*z); ctx.fill(); ctx.stroke();
+    ctx.textAlign='center'; ctx.fillStyle=act?'#fff':'#e6edf3'; ctx.font=`700 ${11.5*z}px -apple-system,sans-serif`;
+    const icon=n.kind==='process'?'⬡ ':n.kind==='projection'?'▤ ':'⛁ '; ctx.fillText(icon+n.name, x+b.w*z/2, y+b.h*z/2-6*z);
+    ctx.fillStyle=col; ctx.font=`${9.5*z}px -apple-system,sans-serif`;
+    const sub=n.kind==='process'?n.process.pattern:(n.kind==='projection'?n.projection.subscriberId:'Pipeline');
+    ctx.fillText(sub, x+b.w*z/2, y+b.h*z/2+9*z); ctx.textAlign='left'; ctx.globalAlpha=1; });
+  // 6) aktive Kanten oben drauf
+  if(simMode) drawEdges(true);
+}
+function drawEdges(activeOnly){ const z=cam.zoom;
+  board.edges.forEach(e=>{ const act=simActiveEdges.has(e.key); if(activeOnly&&!act)return; if(!activeOnly&&act&&simMode)return;
+    const [x1,y1]=S(e.p1.x,e.p1.y),[x2,y2]=S(e.p2.x,e.p2.y); const my=(y1+y2)/2;
+    ctx.strokeStyle=act?EDGE_COL[e.kind]:(simMode?'#232b36':'#2c3542'); ctx.lineWidth=act?2.4:1;
+    ctx.globalAlpha=act?1:(simMode?.5:.6); if(e.kind==='compensates')ctx.setLineDash([5,3]);
+    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.bezierCurveTo(x1,my,x2,my,x2,y2); ctx.stroke(); ctx.setLineDash([]);
+    // Pfeilspitze
+    const ang=Math.atan2(y2-my,0.001); const s=5.5; ctx.fillStyle=ctx.strokeStyle;
+    ctx.beginPath(); ctx.moveTo(x2,y2); ctx.lineTo(x2-Math.cos(ang-.5)*s,y2-Math.sin(ang-.5)*s); ctx.lineTo(x2-Math.cos(ang+.5)*s,y2-Math.sin(ang+.5)*s); ctx.closePath(); ctx.fill();
+    ctx.globalAlpha=1; }); }
+
+// ── Interaktion ───────────────────────────────────────────────────────────────
+let hover=null,panning=false,last=[0,0];
+cv.addEventListener('mousedown',ev=>{ panning=true; cv.classList.add('grabbing'); last=[ev.offsetX,ev.offsetY]; });
+window.addEventListener('mousemove',ev=>{ const r=cv.getBoundingClientRect(); const ox=ev.clientX-r.left,oy=ev.clientY-r.top;
+  if(panning){ cam.x-=(ox-last[0])/cam.zoom; cam.y-=(oy-last[1])/cam.zoom; last=[ox,oy]; render(); }
+  else { const [wx,wy]=Wld(ox,oy); const n=pick(wx,wy); hover=n; showTip(n,ev.clientX,ev.clientY); } });
+window.addEventListener('mouseup',()=>{ panning=false; cv.classList.remove('grabbing'); });
+cv.addEventListener('wheel',ev=>{ ev.preventDefault(); const [wx,wy]=Wld(ev.offsetX,ev.offsetY);
+  cam.zoom*=Math.exp(-ev.deltaY*.001); cam.zoom=Math.max(.06,Math.min(4,cam.zoom));
+  const [nx,ny]=Wld(ev.offsetX,ev.offsetY); cam.x+=wx-nx; cam.y+=wy-ny; render(); },{passive:false});
+function pick(wx,wy){ for(const p of board.pick){ if(wx>=p.x&&wx<=p.x+p.w&&wy>=p.y&&wy<=p.y+p.h)return p.node; } return null; }
+const tip=document.getElementById('tip');
+function showTip(n,cx,cy){ if(!n){tip.style.display='none';return;}
+  let rows='';
+  if(n.command){ const p=n.command.produces||[]; const ok=p.filter(o=>o.persisted).map(o=>o.event), rej=p.filter(o=>!o.persisted).map(o=>o.event);
+    rows=`↳ ${n.command.routedTo||'—'} · ${(n.command.origin||[]).join(', ')}<br>OneOf&lt; ${ok.join(', ')}${rej.length?' | ⃠ '+rej.join(', '):''} &gt;`; }
+  else if(n.aggregate){ rows=`${(n.aggregate.handles||[]).length} Funktionen · ${(n.aggregate.emits||[]).length} Events`; }
+  else if(n.process){ rows=`${n.process.pattern} · Auslöser ${n.process.trigger} · ${n.process.rules.length} Regeln`; }
+  else if(n.projection){ rows=`Subscriber ${n.projection.subscriberId} · konsumiert ${(n.projection.consumes||[]).join(', ')}`; }
+  else if(n.pipeline){ rows=`${n.pipeline.handles.length} Handles`; }
+  tip.innerHTML=`<div class="k">${n.kind} · ${n.context}</div><b>${esc(n.name)}</b><div class="rows">${rows}</div>`;
+  tip.style.display='block'; tip.style.left=(cx+14)+'px'; tip.style.top=(cy+14)+'px'; }
+
+// ── Simulation ────────────────────────────────────────────────────────────────
+let frames=[],frameIdx=-1,simMode=false,playing=null;
+let simActive=new Set(),simActiveEdges=new Set();
+function out(id){ return edges.filter(e=>e.from===id); }
+function computeFrames(startId){
+  const start=N[startId]; const activated=new Set([startId]); const firedRules=new Set();
+  const note0 = start.kind==='command' ? `Command <b>${start.name}</b> geschickt → ${start.command.routedTo||'?'}` : `Trigger <b>${start.name}</b> tritt ein`;
+  const fr=[{add:[startId],edges:[],note:note0}];
+  let guard=0;
+  while(guard++<40){ const add=new Set(),used=[];
+    nodes.filter(n=>n.kind==='process'&&activated.has(n.id)).forEach(p=>{ p.process.rules.forEach((r,ri)=>{ const key=p.id+'#'+ri; if(firedRules.has(key))return;
+      const whenIds=r.when.map(w=>nodeIdOf('event',w)).filter(Boolean); const sammel=r.sammel?nodeIdOf('event',r.sammel):null;
+      if(!whenIds.every(id=>activated.has(id))||(sammel&&!activated.has(sammel)))return; firedRules.add(key);
+      const cmdId=nodeIdOf('command',r.sends); if(cmdId&&!activated.has(cmdId)){ add.add(cmdId); const se=edges.find(e=>e.kind==='sends'&&e.from===p.id&&e.to===cmdId); if(se)used.push(se); } }); });
+    fr[fr.length-1].add.forEach(id=>{ const n=N[id];
+      if(n.kind==='event'){ out(id).forEach(e=>{ if(['triggers','advances','consumedBy'].includes(e.kind)){ used.push(e); if(!activated.has(e.to))add.add(e.to); } }); }
+      else if(n.kind==='command'){ out(id).filter(e=>e.kind==='routedTo').forEach(e=>{ used.push(e); if(!activated.has(e.to))add.add(e.to); });
+        out(id).filter(e=>e.kind==='produces').forEach(e=>{ const ev=N[e.to]; if(ev.event&&!ev.event.persisted)return; used.push(e); if(!activated.has(e.to))add.add(e.to); }); } });
+    if(add.size===0&&used.length===0)break;
+    add.forEach(id=>activated.add(id)); fr.push({add:[...add],edges:used,note:noteOf([...add])}); }
+  return fr;
+}
+function noteOf(add){ const by=k=>add.map(id=>N[id]).filter(n=>n.kind===k).map(n=>n.name);
+  const p=[],c=by('command'),e=by('event'),pr=by('process'),a=by('aggregate'),pj=by('projection');
+  if(pr.length)p.push(`Saga <b>${pr.join(', ')}</b> erwacht`); if(c.length)p.push(`Funktion <b>${c.join(', ')}</b> aufgerufen`);
+  if(a.length)p.push(`Aggregat ${a.join(', ')} verarbeitet`); if(e.length)p.push(`Event <b>${e.join(', ')}</b> raus`);
+  if(pj.length)p.push(`Projektion ${pj.join(', ')} aktualisiert`); return p.join(' · ')||'—'; }
+function gotoFrame(i){ frameIdx=Math.max(0,Math.min(frames.length-1,i));
+  simActive=new Set(); simActiveEdges=new Set(); let changed=false;
+  for(let k=0;k<=frameIdx;k++){ frames[k].add.forEach(id=>simActive.add(id)); (frames[k].edges||[]).forEach(e=>simActiveEdges.add(edgeKey(e))); }
+  edges.forEach(e=>{ if(simActive.has(e.from)&&simActive.has(e.to))simActiveEdges.add(edgeKey(e)); }); // aktives Teilnetz (auch Live)
+  frames[frameIdx].add.forEach(id=>{ const c=N[id].context; if(!visibleCtx.has(c)){ visibleCtx.add(c); const inp=ctxlist.querySelector(`input[data-c="${c}"]`); if(inp)inp.checked=true; changed=true; } });
+  if(changed)computeBoard();
+  const si=document.getElementById('stepinfo'); si.innerHTML=`<span class="n">Schritt ${frameIdx} / ${frames.length-1}</span><br>${frames[frameIdx].note}`;
+  document.getElementById('prev').disabled=frameIdx<=0; document.getElementById('next').disabled=frameIdx>=frames.length-1; render(); }
+function startSim(t){ simMode=true; frames=computeFrames(t); gotoFrame(0); }
+function stopSim(){ simMode=false; simActive.clear(); simActiveEdges.clear(); playing&&clearInterval(playing); playing=null;
+  document.getElementById('play').textContent='▶'; document.getElementById('stepinfo').innerHTML='<span class="n">Trigger wählen und ▶ / ⏭ drücken.</span>'; render(); }
+const trigsel=document.getElementById('trigsel');
+const triggerEvents=[...new Set(edges.filter(e=>e.kind==='triggers').map(e=>e.from))]
+  .map(id=>({id,name:N[id].name,proc:edges.filter(e=>e.kind==='triggers'&&e.from===id).map(e=>N[e.to].name).join(', ')})).sort((a,b)=>a.name.localeCompare(b.name));
+let selHtml='<option value="">— Nachricht wählen —</option>';
+selHtml+='<optgroup label="▶ Auslöser-Events (starten eine Saga)">'
+  + triggerEvents.map(t=>`<option value="${t.id}">${t.name} → ${t.proc}</option>`).join('') + '</optgroup>';
+const cmdByAgg={}; nodes.filter(n=>n.kind==='command'&&n.command.routedTo).forEach(c=>{ (cmdByAgg[c.command.routedTo] ||= []).push(c); });
+Object.keys(cmdByAgg).sort().forEach(a=>{ selHtml+=`<optgroup label="▸ Commands → ${a}">`
+  + cmdByAgg[a].sort((x,y)=>x.name.localeCompare(y.name)).map(c=>`<option value="${c.id}">${c.name}</option>`).join('') + '</optgroup>'; });
+trigsel.innerHTML=selHtml;
+
+// ── LIVE-Runtime (SimHost): echte, wertabhängige Ausführung ─────────────────
+const SID='board-'+Math.floor(performance.now());
+let LIVE=false; const SCHEMA={};
+const setStep=html=>{ document.getElementById('stepinfo').innerHTML=html; };
+fetch('/api/schema').then(r=>r.ok?r.json():null).then(list=>{ if(!list)return;
+  LIVE=true; list.forEach(c=>SCHEMA[c.name]=c); document.getElementById('livebadge').style.display='inline-block';
+  if(trigsel.value&&N[trigsel.value]?.kind==='command')renderForm(N[trigsel.value]);
+}).catch(()=>{});
+function guidFor(name){ let h=0; for(const ch of name)h=(h*31+ch.charCodeAt(0))>>>0; return '00000000-0000-0000-0000-'+('000000000000'+h.toString(16)).slice(-12); }
+function renderForm(node){ const c=SCHEMA[node.name]; const f=document.getElementById('cmdform'); if(!c){f.innerHTML='';return;}
+  f.innerHTML=c.fields.map(fl=>{ const id='f_'+fl.name; const num=['decimal','int','long'].includes(fl.type);
+    if(fl.type==='bool')return `<label>${fl.name}</label><input type="checkbox" id="${id}">`;
+    const def=num?(/(Betrag|Saldo|Menge|Zimmer|Plaetze|Anzahl|ProZiel)/i.test(fl.name)?100:1):(fl.type==='guid'?guidFor(fl.name):'');
+    return `<label>${fl.name} <span style="opacity:.55">${fl.type}</span></label><input type="${num?'number':'text'}" id="${id}" value="${def}">`; }).join('')
+    + `<button class="send" id="sendbtn">▶ ${node.name} schicken</button><button class="rst" id="rstbtn">⟲ Session zurücksetzen</button>`;
+  document.getElementById('sendbtn').onclick=()=>sendCommand(node);
+  document.getElementById('rstbtn').onclick=resetSession;
+}
+function sendCommand(node){ const c=SCHEMA[node.name]; const values={};
+  c.fields.forEach(fl=>{ const el=document.getElementById('f_'+fl.name); if(!el)return;
+    values[fl.name]=fl.type==='bool'?el.checked:(['decimal','int','long'].includes(fl.type)?Number(el.value):el.value); });
+  fetch('/api/step',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:SID,command:node.name,values})})
+    .then(r=>r.json()).then(res=>{ if(res.error){ setStep('<span class="n" style="color:#d64545">'+res.error+'</span>'); return; }
+      simMode=true; frames=(res.frames||[]).map(fr=>({add:(fr.add||[]).map(it=>nodeIdOf(it.kind,it.name)).filter(Boolean),edges:[],note:fr.note})); showStates(res.states); gotoFrame(0); });
+}
+function showStates(states){ document.getElementById('states').innerHTML=(states||[]).map(s=>`<div class="s"><b>${s.aggregate}</b>#${s.id} ${Object.entries(s.fields).map(([k,v])=>k+'='+v).join(' · ')}</div>`).join(''); }
+function resetSession(){ fetch('/api/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:SID})}).then(()=>{ showStates([]); stopSim(); setStep('<span class="n">Session zurückgesetzt.</span>'); }); }
+
+trigsel.onchange=()=>{ const v=trigsel.value; document.getElementById('cmdform').innerHTML=''; document.getElementById('states').innerHTML='';
+  if(!v){ stopSim(); return; }
+  if(LIVE && N[v]?.kind==='command'){ renderForm(N[v]); setStep('<span class="n">Werte eingeben und ▶ schicken.</span>'); }
+  else startSim(v); };
+document.getElementById('next').onclick=()=>{ if(!simMode&&trigsel.value)startSim(trigsel.value); else gotoFrame(frameIdx+1); };
+document.getElementById('prev').onclick=()=>gotoFrame(frameIdx-1);
+document.getElementById('reset').onclick=()=>{ if(simMode)gotoFrame(0); };
+document.getElementById('play').onclick=()=>{ if(!simMode&&trigsel.value)startSim(trigsel.value);
+  if(playing){clearInterval(playing);playing=null;document.getElementById('play').textContent='▶';return;}
+  document.getElementById('play').textContent='⏸';
+  playing=setInterval(()=>{ if(frameIdx>=frames.length-1){clearInterval(playing);playing=null;document.getElementById('play').textContent='▶';return;} gotoFrame(frameIdx+1); },900); };
+
+// ── Start ─────────────────────────────────────────────────────────────────────
+window.addEventListener('resize',()=>{DPR=Math.max(1,window.devicePixelRatio||1);needFit=true;resize();});
+computeBoard(); resize();
+new ResizeObserver(()=>resize()).observe(document.querySelector('main'));
+requestAnimationFrame(resize); setTimeout(resize,80);
+
+if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufgegeben')||triggerEvents[0];
+  const f=computeFrames(t.id); console.log('SIM '+t.name+': '+f.length+' Frames'); f.forEach((fr,i)=>console.log('  ['+i+'] '+fr.note.replace(/<[^>]+>/g,''))); }
+</script>
+</body>
+</html>

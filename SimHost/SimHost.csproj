@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Der Wissensgraph liegt neben der .sln; wir lesen ihn zur Laufzeit. -->
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- NUR Domain: dort liegen (generiert) AggregateHandlerFactory + GeneratedProzessRegeln.
+         Kein Marten, kein Proto.Actor, kein Infrastructure — die reine, single-threaded Ausführung. -->
+    <ProjectReference Include="../Domain/Domain.csproj" />
+  </ItemGroup>
+
+</Project>

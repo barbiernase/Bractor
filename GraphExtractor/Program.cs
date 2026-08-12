@@ -1,59 +1,36 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using System.Text.Json.Serialization;
+using GraphExtractor;
 using Microsoft.Build.Locator;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.MSBuild;
 
+// ════════════════════════════════════════════════════════════════════════════
+//  Wissensgraph-Extractor (Neubau)
+//
+//  Baut aus der aktuellen Solution einen typisierten, kausalen Property-Graph:
+//    • Kern-Kausalität (command→aggregat→event) aus dem AUTORITATIVEN
+//      GeneratedCommandRouting (aus der gebauten Infrastructure-Compilation).
+//    • Sagas/Prozesse aus dem Prozess-DSL (Bedingung/Sende/RückgängigDurch/Fan-out).
+//    • Projektionen, Queries, Pipelines.
+//  Emittiert: knowledge-graph.json  +  knowledge-graph.html (interaktive Präsentation).
+// ════════════════════════════════════════════════════════════════════════════
 
-// ============================================================================
-// KONFIGURATION
-// ============================================================================
-
-// Projekte die analysiert werden sollen.
-// Alle Projekte in denen Domain-Code, Projektionen, Pipelines oder Client-Code liegt.
+// Infrastructure ist dabei, damit GeneratedCommandRouting (das Generat) sichtbar ist.
 var targetProjects = new[]
 {
-    "Abstractions",
-    "Core",
-    "Domain",
-    "Domain.Projections",
-    "Domain.Pipeline",
-    "Domain.Client",
-    "Client.Infrastructure",
+    "Abstractions", "Core", "Domain", "Domain.Projections", "Domain.Pipeline", "Infrastructure",
 };
-
-const string OutputFileName = "knowledge-graph.json";
-
-// ============================================================================
-// MSBuild initialisieren (muss VOR jeder Roslyn-Nutzung passieren)
-// ============================================================================
 
 MSBuildLocator.RegisterDefaults();
 
-// ============================================================================
-// HAUPTPROGRAMM
-// ============================================================================
+Console.WriteLine("\n╔══════════════════════════════════════════════╗");
+Console.WriteLine("║        Wissensgraph-Extractor (Neubau)        ║");
+Console.WriteLine("╚══════════════════════════════════════════════╝\n");
 
-Console.WriteLine();
-Console.WriteLine("╔═══════════════════════════════════════════════════════════╗");
-Console.WriteLine("║            Knowledge Graph Extractor                      ║");
-Console.WriteLine("╚═══════════════════════════════════════════════════════════╝");
-Console.WriteLine();
-
-// Solution finden
-var solutionPath = args.Length > 0 ? args[0] : FindSolutionFile();
-if (solutionPath == null)
-{
-    Console.Error.WriteLine("❌ Keine Solution gefunden!");
-    Console.Error.WriteLine("   Nutzung: dotnet run [path/to/solution.sln]");
-    return 1;
-}
-
-Console.WriteLine($"📁 Solution: {solutionPath}");
-Console.WriteLine($"📋 Ziel-Projekte: {string.Join(", ", targetProjects)}");
-Console.WriteLine();
-
-// ─── Solution laden ───
+var solutionPath = args.Length > 0 ? args[0] : FindSolution();
+if (solutionPath == null) { Console.Error.WriteLine("❌ Keine .sln gefunden."); return 1; }
+Console.WriteLine($"📁 {solutionPath}");
 
 using var workspace = MSBuildWorkspace.Create();
 workspace.WorkspaceFailed += (_, e) =>
@@ -62,107 +39,64 @@ workspace.WorkspaceFailed += (_, e) =>
         Console.WriteLine($"⚠️  {e.Diagnostic.Message}");
 };
 
-Console.WriteLine("Lade Solution...");
+Console.WriteLine("Lade Solution…");
 var solution = await workspace.OpenSolutionAsync(solutionPath);
-Console.WriteLine($"   {solution.Projects.Count()} Projekte in Solution");
-Console.WriteLine();
-
-// ─── Ziel-Projekte kompilieren ───
 
 var compilations = new List<Compilation>();
-
-Console.WriteLine("Lade Ziel-Projekte:");
-foreach (var projectName in targetProjects)
+foreach (var name in targetProjects)
 {
-    var project = solution.Projects.FirstOrDefault(p =>
-        p.Name.Equals(projectName, StringComparison.OrdinalIgnoreCase));
-
-    if (project == null)
-    {
-        Console.WriteLine($"   ⚠️  {projectName} nicht gefunden — übersprungen");
-        continue;
-    }
-
-    var compilation = await project.GetCompilationAsync();
-    if (compilation != null)
-    {
-        compilations.Add(compilation);
-        Console.WriteLine($"   ✓ {projectName}");
-    }
+    var project = solution.Projects.FirstOrDefault(p => p.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+    if (project == null) { Console.WriteLine($"   ⚠️  {name} nicht gefunden"); continue; }
+    var comp = await project.GetCompilationAsync();
+    if (comp != null) { compilations.Add(comp); Console.WriteLine($"   ✓ {name}"); }
 }
+if (compilations.Count == 0) { Console.Error.WriteLine("❌ Keine Compilations."); return 1; }
 
-if (compilations.Count == 0)
-{
-    Console.Error.WriteLine("\n❌ Keine Projekte geladen.");
-    return 1;
-}
+Console.WriteLine("\n── Routing-Wahrheit ──");
+var routing = RoutingTruth.FromCompilations(compilations);
+Console.WriteLine($"   Quelle: {routing.Source}  ({routing.CommandToAggregate.Count} Command→Aggregat, {routing.CommandToEvents.Count} Command→Events)");
 
-// ─── Graph extrahieren ───
+Console.WriteLine("\n── Domänen-Extraktion ──");
+var dom = new DomainExtractor(compilations).Extract();
+Console.WriteLine($"   {dom.Aggregates.Count} Aggregate, {dom.Processes.Count} Sagas, {dom.Projections.Count} Projektionen, {dom.Queries.Count} Queries, {dom.Pipelines.Count} Pipelines");
+Console.WriteLine($"   Prozesse registriert: {string.Join(", ", dom.RegisteredProcesses)}");
 
-Console.WriteLine("\n════════════════════════════════════════");
-Console.WriteLine("  Extrahiere Wissensgraph...");
-Console.WriteLine("════════════════════════════════════════");
+Console.WriteLine("\n── Graph aufbauen ──");
+var graph = new GraphBuilder(routing, dom).Build();
+foreach (var (k, v) in graph.Meta.Counts) Console.WriteLine($"   {k,-12}: {v}");
 
-var extractor = new GraphExtractor.GraphExtractor(compilations);
-var graph = extractor.Extract();
-
-// ─── JSON serialisieren ───
-
-var options = new JsonSerializerOptions
+var solutionDir = Path.GetDirectoryName(solutionPath) ?? ".";
+var jsonOptions = new JsonSerializerOptions
 {
     WriteIndented = true,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
     PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+    Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
 };
+var json = JsonSerializer.Serialize(graph, jsonOptions);
 
-var json = JsonSerializer.Serialize(graph, options);
+var jsonPath = Path.Combine(solutionDir, "knowledge-graph.json");
+await File.WriteAllTextAsync(jsonPath, json);
+Console.WriteLine($"\n✅ {jsonPath}");
 
-// Output neben die Solution legen
-var solutionDir = Path.GetDirectoryName(solutionPath) ?? ".";
-var outputPath = Path.Combine(solutionDir, OutputFileName);
-await File.WriteAllTextAsync(outputPath, json);
+var htmlPath = Path.Combine(solutionDir, "knowledge-graph.html");
+await File.WriteAllTextAsync(htmlPath, HtmlPresenter.Render(graph, json));
+Console.WriteLine($"✅ {htmlPath}");
 
-// ─── Zusammenfassung ───
-
-Console.WriteLine();
-Console.WriteLine("════════════════════════════════════════");
-Console.WriteLine("  Ergebnis");
-Console.WriteLine("════════════════════════════════════════");
-Console.WriteLine();
-Console.WriteLine($"   Aggregate:     {graph.Aggregates.Count}");
-Console.WriteLine($"   Decides:       {graph.Aggregates.Sum(a => a.Decides.Count)}");
-Console.WriteLine($"   Applies:       {graph.Aggregates.Sum(a => a.Applies.Count)}");
-Console.WriteLine($"   Pipelines:     {graph.Pipelines.Count} ({graph.Pipelines.Sum(p => p.Handles.Count)} Handles)");
-Console.WriteLine($"   Projektionen:  {graph.Projections.Count} ({graph.Projections.Sum(p => p.Handles.Count)} Handles)");
-Console.WriteLine($"   Reader:        {graph.Readers.Count} ({graph.Readers.Sum(r => r.Handles.Count)} Handles)");
-Console.WriteLine($"   Queries:       {graph.Queries.Count}");
-Console.WriteLine($"   Client-Stores: {graph.ClientStores.Count}");
-Console.WriteLine($"   Client-Handler:{graph.ClientHandlers.Count}");
-Console.WriteLine($"   Event-Fanouts: {graph.EventFanouts.Count}");
-Console.WriteLine();
-Console.WriteLine($"✅ {outputPath}");
-Console.WriteLine();
+Console.WriteLine($"\n   Diagnosen: {graph.Views.Diagnostics.Count}");
+foreach (var f in graph.Views.Diagnostics.Take(12))
+    Console.WriteLine($"     [{f.Severity}] {f.Message}");
 
 return 0;
 
-// ============================================================================
-// HELPER
-// ============================================================================
-
-static string? FindSolutionFile()
+static string? FindSolution()
 {
-    var searchDir = Directory.GetCurrentDirectory();
-
-    for (int i = 0; i < 10; i++)
+    var dir = Directory.GetCurrentDirectory();
+    for (var i = 0; i < 10 && dir != null; i++)
     {
-        if (searchDir == null) break;
-
-        var slnFiles = Directory.GetFiles(searchDir, "*.sln");
-        if (slnFiles.Length >= 1)
-            return slnFiles[0];
-
-        searchDir = Path.GetDirectoryName(searchDir);
+        var sln = Directory.GetFiles(dir, "*.sln");
+        if (sln.Length > 0) return sln[0];
+        dir = Path.GetDirectoryName(dir);
     }
-
     return null;
 }
