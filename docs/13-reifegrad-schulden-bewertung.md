@@ -119,8 +119,12 @@ idempotent**) ohne deterministische CommandId → Retry nach verlorenem Ack kön
 *Empfehlung:* (klein) ~~Dispatcher emittiert bei Erschöpfung ein `CommandFailed`~~ ✅ **umgesetzt
 2026-08-12 (T2a):** `AggregateDispatcher` publiziert bei Erschöpfung ein targeted `CommandFailed` an
 die `OriginSessionId` → stille Lücke geschlossen (Prüfstand `DispatcherCommandFailedTests`).
-(größer, **offen/optional — T2b**) deterministische CommandId + Inbox-Dedup auf dem Client-Pfad →
-sicherer Auto-Retry + Client-Timeout. Details: [konzept-client-haertung.md](konzept-client-haertung.md).
+(größer) ~~deterministische CommandId + Inbox-Dedup auf dem Client-Pfad~~ ✅ **umgesetzt 2026-08-12
+(T2b):** Client-Pfad `istIdempotent:true` + Inbox-Dedup VOR OCC (`CommandVorpruefung`, 5 Prüfstand-
+Tests) + Client-Retry-Loop (`PendingCommandTracker`, deterministische CommandId, 5 Client-Tests). OCC
+verhinderte Doppel-Apply ohnehin; T2b macht den Retry idempotent-sauber. Ehrliche Grenze: bei totaler
+Stille meldet der Client `CommandUnbestaetigt` (Ausgang unbekannt, sicher wiederholbar). Optionale
+Server-Ack-Verfeinerung offen. Details: [konzept-client-haertung.md](konzept-client-haertung.md).
 
 **P1-5 · Python-SDK unvollständig (Query-Antwort, Client→Client-Trigger, Tests).**
 `router._handle_query_forward` (`router.py:227`) baut ein **leeres** `QueryResponsePayloadDto()` —
@@ -129,8 +133,10 @@ Handler laufen lassen, aber die Antwort nicht zurückserialisieren. Client→Cli
 implementiert (nur Warnung); keine pytest-Tests. *Empfehlung:* ~~Query-oneof schließen +
 pytest-Grundgerüst~~ ✅ **umgesetzt 2026-08-12 (T3):** `PayloadMapper.wrap_query_response` setzt das
 oneof über die vorhandene Feld-Map, `router` nutzt es (TODO weg); pytest-Grundgerüst (2 Tests, in
-venv verifiziert). **Offen:** Client→Client-Trigger (geringe Prio). Transport-Sicherheit system-weit
-→ P1-2. Details: [konzept-client-haertung.md](konzept-client-haertung.md).
+venv verifiziert). **Client→Client-Trigger** ✅ **umgesetzt 2026-08-12:** `mapper.wrap_trigger` +
+`_route_output` sendet via `proxy.send_trigger` (Empfangs-/Registry-Infra existierte schon); Server
+forwarded an den registrierten Client-Handler (4 Python-Tests). Transport-Sicherheit system-weit → P1-2.
+Details: [konzept-client-haertung.md](konzept-client-haertung.md).
 
 **P1-6 · `CancellationToken.None` im generierten Pull-Emit-Pfad.**
 `PullPathGenerator` reicht `CancellationToken.None` in `router.EmitFor(...)`; bounded nur durch
@@ -206,9 +212,10 @@ oder bewusst blockiert (P1-3). Der Aggregat-/Event-/Saga-Kern selbst ist konsist
 1. ~~**P0-2** Frontend-Referenz entwirren~~ ✅ erledigt 2026-08-12 (Solution-Build grün).
 2. ~~**P0-1** Co-Commit-Guard härten (`ICoCommitTracker` + GA-1)~~ ✅ erledigt 2026-08-12 (Prüfstand
    grün). Optional offen: framework-getriebene Unit-of-Work (Hebel 2). Analyse: [konzept-exactly-once-naht.md](konzept-exactly-once-naht.md).
-3. **Clienten angehen** (aktueller Fokus, s. [konzept-client-haertung.md](konzept-client-haertung.md)):
-   **P1-2** Transport-Sicherheit (TLS + Auth, system-weit), **P1-4** Command-Zustellgarantie
-   (Dispatcher-CommandFailed + optional idempotenter Client-Pfad), **P1-5** Python-SDK-Vervollständigung.
+3. **Clienten angehen** (s. [konzept-client-haertung.md](konzept-client-haertung.md)): **P1-4** ✅
+   (T2a Dispatcher-CommandFailed + T2b idempotenter Client-Pfad + Retry-Loop), **P1-5** ✅ (T3
+   Query-oneof + Client→Client-Trigger + pytest). **Offen: P1-2** Transport-Sicherheit (TLS + Auth,
+   system-weit, T1) — zurückgestellt, braucht vorab ein Design-Konzept.
 4. **P1-1** Multi-Node produktiv härten. (Rolling Schema-Migration gestrichen — never-needed.)
 5. **P1-6** Command-Kanten im generierten Pull-Emit-Pfad wirklich bounden.
 6. **P2-1 / P2-2 / P2-9** Reinheits-Leak, Proto-Map-Konsolidierung, Duplikate — Wartbarkeit.

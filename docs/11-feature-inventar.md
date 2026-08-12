@@ -17,7 +17,7 @@ mit Schulden/Einschränkung · 🟠 teilweise / im Umbau · 🔴 blockiert/unfer
 | Redis-Version-Index (abschaltbar, graceful degradation) | 🟢 | `RedisVersionTracker` / `NullVersionTracker` |
 | Signal-Mechanik `(StreamId, Version)` fire-and-forget | 🟢 | pro Event ein `StateChangeVia…` |
 | `BoundedInbox`-Dedup | 🟡 | FIFO ab `InboxCap`, nicht airtight |
-| Client-Command-Zustellgarantie | 🟢 / 🟡 | Nack-Rückkanal vollständig (`CommandSendFailed` + `CommandFailed`, T2a 2026-08-12 schließt den Dispatcher-Erschöpfungsfall); offen: idempotenter Client-Pfad für sicheren Auto-Retry (T2b) |
+| Client-Command-Zustellgarantie | 🟢 | Nack-Rückkanal vollständig (`CommandSendFailed` + `CommandFailed`, T2a); idempotenter Client-Pfad (Inbox vor OCC) + Retry-Loop mit deterministischer CommandId (T2b, 2026-08-12); Stille → `CommandUnbestaetigt` |
 
 ## 11.2 Konsum-/Prozess-Maschine
 
@@ -101,7 +101,7 @@ mit Schulden/Einschränkung · 🟠 teilweise / im Umbau · 🔴 blockiert/unfer
 | Reconnect + Backoff | 🟢 | `connection.py` |
 | ML-Worker (Torch-Bildklassifikation) | 🟢 | `classifier.py` |
 | Query-Beantwortung durch Python-Client | 🟢 | oneof gesetzt via `wrap_query_response` (T3 2026-08-12) |
-| Client→Client-Trigger | 🔴 | nur Warnung |
+| Client→Client-Trigger | 🟢 | `wrap_trigger` + `_route_output`→`send_trigger` (2026-08-12); Server forwarded an registrierten Client-Handler |
 | `generate_registry.py` (Auto-Registry) | 🔴 | Stub — schreibt nichts |
 | Python-Tests | 🟡 | pytest-Grundgerüst (`requirements-dev.txt`, `pytest.ini`, `tests/`, T3 2026-08-12); Abdeckung noch dünn |
 | Transport-Sicherheit (TLS/Auth) | 🔴 | keine — **system-weit** (Server h2c-plain, Blazor `http://`, Python plain); nicht Python-lokal, s. [13 P1-2](13-reifegrad-schulden-bewertung.md) |

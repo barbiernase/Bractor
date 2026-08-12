@@ -189,9 +189,15 @@ public abstract class AggregateActorBase<TState> : IActor
         }
     }
 
-    /// <summary>Externer Client-Command: OCC gegen die behauptete Version.</summary>
+    /// <summary>
+    /// Externer Client-Command: OCC gegen die behauptete Version. ★ T2b: jetzt AUCH idempotent —
+    /// der Client darf nach verlorenem Ack denselben Command (deterministische CommandId) erneut senden;
+    /// die Framework-Inbox erkennt die Wiederholung VOR der OCC-Prüfung und liefert idempotent denselben
+    /// Ausgang (Erfolg/Ablehnung), statt eines mehrdeutigen „Concurrency conflict". Ein frischer Command
+    /// (neue CommandId) fällt weiterhin durch zur OCC-Assertion.
+    /// </summary>
     private Task HandleClientCommand(IContext context, CommandEnvelope cmdEnvelope, int expectedVersion)
-        => HandleCommandCoreAsync(context, cmdEnvelope, istIdempotent: false, expectedVersion);
+        => HandleCommandCoreAsync(context, cmdEnvelope, istIdempotent: true, expectedVersion);
 
     /// <summary>Interner Emitter (Reaktion/Prozess/Pipeline): KEINE Version — Idempotenz via det. CommandId + Inbox.</summary>
     private Task HandleEmittedCommand(IContext context, CommandEnvelope cmdEnvelope)
@@ -218,53 +224,46 @@ public abstract class AggregateActorBase<TState> : IActor
                 return;
             }
 
-            // ★ P2: expectedVersion + istIdempotent kommen jetzt vom Eingang (Client vs. Emittiert),
-            //   nicht aus einem Sentinel in der Message (EM-2). Client → behauptete Version (OCC);
-            //   Emittiert → aufgelöste aktuelle Version (Single-Writer) → nie ein OCC-Konflikt, aber
-            //   die Marten-OCC weist eine echte Doppelaktivierung weiterhin ab.
-
-            // Validierung: Concurrency Check (Actor-seitig, schnell) — nur bei echter Assertion (Client).
-            if (_state!.Version != expectedVersion)
+            // ★ T2b/EM-1: Vorab-Entscheidung — Inbox-Dedup VOR der OCC-Prüfung (Reihenfolge in der reinen,
+            //   Ebene-1-getesteten CommandVorpruefung.Prüfe gekapselt). Ein wiederholt zugestellter Command
+            //   (at-least-once — Emittiert IMMER, Client seit T2b bei Retry nach verlorenem Ack) liefert
+            //   idempotent DASSELBE Ergebnis; ein frischer Command fällt durch zur OCC-Assertion.
+            switch (CommandVorpruefung.Prüfe(
+                        istIdempotent,
+                        _verarbeiteteCommandIds.Contains(cmdEnvelope.CommandId),
+                        _abgelehnteCommandIds.Contains(cmdEnvelope.CommandId),
+                        _state!.Version,
+                        expectedVersion))
             {
-                var errorMsg = $"Concurrency conflict: expected version {expectedVersion}, actual {_state.Version}";
-                _logger?.LogDebug("[Actor] {ErrorMsg}", errorMsg);
-                await TryPublishCommandFailedAsync(cmdEnvelope, errorMsg);
-                context.Respond(new CommandResult 
-                { 
-                    Success = false, 
-                    ErrorMessage = errorMsg,
-                    AggregateId = _id,
-                    NewVersion = _state.Version  // Pipeline braucht die aktuelle Version für Retry
-                });
-                return;
-            }
+                case CommandVorpruefung.Ergebnis.IdempotenterErfolg:
+                    context.Respond(new CommandResult { Success = true, AggregateId = _id, NewVersion = _state.Version });
+                    return;
 
-            // ★ Framework-Inbox: der idempotente Pfad (Emittiert; Reaktion/Prozess) dedupliziert nach
-            //   CommandId — ein wiederholt zugestellter Command (at-least-once) verpufft als Noop, OHNE dass
-            //   der Fachcode eine Dedup-Zeile trägt. Der Client-/OCC-Pfad ist unberührt.
-            if (istIdempotent && _verarbeiteteCommandIds.Contains(cmdEnvelope.CommandId))
-            {
-                context.Respond(new CommandResult { Success = true, AggregateId = _id, NewVersion = _state.Version });
-                return;
-            }
+                case CommandVorpruefung.Ergebnis.IdempotenteAblehnung:
+                    context.Respond(new CommandResult
+                    {
+                        Success = false,
+                        AggregateId = _id,
+                        ErrorMessage = "Vorgang bereits abgelehnt (Framework-Inbox)",
+                        NewVersion = _state.Version
+                    });
+                    return;
 
-            // ★ Treiber-Fold (EM-1, §4-Kopplung): eine Re-Delivery eines bereits fachlich ABGELEHNTEN Vorgangs
-            //   muss KONSISTENT eine Ablehnung liefern — NIE Success:true. Sonst könnte ein zweiter Zustellversuch
-            //   (Poll/Draht-Duplikat) nach zwischenzeitlich geändertem State plötzlich erfolgreich sein und einen
-            //   Effekt erzeugen, während der Prozess-Manager den Schritt schon als gescheitert kompensiert. Der
-            //   getippte Ablehnungs-Grund ist nicht mehr rekonstruierbar (nur die CommandId reist in der Inbox) —
-            //   der Manager braucht ihn hier auch nicht: seine Fehlschlag-Wahrheit ist die durable KommandoAbgelehnt-
-            //   Marke, die er faltet. Ein generischer Ablehnungs-Ausgang genügt (Success:false).
-            if (istIdempotent && _abgelehnteCommandIds.Contains(cmdEnvelope.CommandId))
-            {
-                context.Respond(new CommandResult
-                {
-                    Success = false,
-                    AggregateId = _id,
-                    ErrorMessage = "Vorgang bereits abgelehnt (Framework-Inbox)",
-                    NewVersion = _state.Version
-                });
-                return;
+                case CommandVorpruefung.Ergebnis.VersionsKonflikt:
+                    var errorMsg = $"Concurrency conflict: expected version {expectedVersion}, actual {_state.Version}";
+                    _logger?.LogDebug("[Actor] {ErrorMsg}", errorMsg);
+                    await TryPublishCommandFailedAsync(cmdEnvelope, errorMsg);
+                    context.Respond(new CommandResult
+                    {
+                        Success = false,
+                        ErrorMessage = errorMsg,
+                        AggregateId = _id,
+                        NewVersion = _state.Version  // Pipeline braucht die aktuelle Version für Retry
+                    });
+                    return;
+
+                case CommandVorpruefung.Ergebnis.Fortfahren:
+                    break;
             }
 
             // 1. Events erzeugen (Decider) — wirft keine Exceptions mehr für Domänen-Ablehnungen

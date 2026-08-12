@@ -35,6 +35,12 @@ public class ConnectionModule : IAsyncDisposable
     private Task? _stateReadTask;
     private readonly List<IDisposable> _subscriptions = new();
 
+    // ★ T2b: Retry-on-Silence. Der Loop sendet mit DERSELBEN (deterministischen) CommandId erneut,
+    //   bis eine korrelierte Antwort kommt — server-seitig idempotent (Inbox vor OCC).
+    private readonly PendingCommandTracker _pending = new();
+    private static readonly TimeSpan AckTimeout = TimeSpan.FromSeconds(5);
+    private const int MaxSendAttempts = 3;
+
     public ConnectionModule(
         IGrpcProxy proxy,
         IVersioningModule versioning,
@@ -155,6 +161,9 @@ public class ConnectionModule : IAsyncDisposable
 
             var envelope = new CommandEnvelope
             {
+                // ★ T2b: deterministische CommandId — EINMAL erzeugt, über Retries wiederverwendet →
+                //   der Server dedupliziert einen Doppel-Send idempotent (Inbox vor OCC).
+                CommandId = Guid.NewGuid(),
                 AggregateId = command.AggregateId,
                 Payload = command,
                 Modus = new CommandModus.Client(expectedVersion),
@@ -165,7 +174,7 @@ public class ConnectionModule : IAsyncDisposable
                 OriginSessionId = _proxy.SessionId,
             };
 
-            await _proxy.SendCommandAsync(envelope);
+            await SendWithRetryAsync(command, envelope);
         }
         catch (Exception ex)
         {
@@ -174,6 +183,39 @@ public class ConnectionModule : IAsyncDisposable
                     command.GetType().Name,
                     command.AggregateId,
                     ex.Message)));
+        }
+    }
+
+    /// <summary>
+    /// Sendet den Command und wiederholt bei STILLE (keine korrelierte Antwort binnen <see cref="AckTimeout"/>)
+    /// mit DERSELBEN Hülle (gleiche CommandId → server-seitig idempotent, T2b). Kam eine Antwort (ein Event
+    /// ODER ein CommandFailed mit dieser CorrelationId), ist der Ausgang bekannt → fertig. Bleibt es nach allen
+    /// Versuchen still, meldet der Loop <see cref="CommandUnbestaetigt"/> (Ausgang unbekannt, sicher
+    /// wiederholbar) — NICHT „fehlgeschlagen".
+    /// </summary>
+    private async Task SendWithRetryAsync(ICommand command, CommandEnvelope envelope)
+    {
+        var ct = _cts?.Token ?? CancellationToken.None;
+        _pending.Register(envelope.CorrelationId);   // VOR dem Senden, sonst ginge ein früher Ack verloren
+        try
+        {
+            for (var attempt = 1; attempt <= MaxSendAttempts; attempt++)
+            {
+                await _proxy.SendCommandAsync(envelope);
+                if (await _pending.WaitAsync(envelope.CorrelationId, AckTimeout, ct))
+                    return;   // korrelierte Antwort (Event / CommandFailed) kam
+            }
+
+            _bus?.PostToSyncContext(() =>
+                _bus.Publish(new CommandUnbestaetigt(
+                    command.GetType().Name,
+                    command.AggregateId,
+                    MaxSendAttempts)));
+        }
+        catch (OperationCanceledException) { /* shutdown */ }
+        finally
+        {
+            _pending.Forget(envelope.CorrelationId);
         }
     }
 
@@ -200,6 +242,11 @@ public class ConnectionModule : IAsyncDisposable
         {
             await foreach (var envelope in _proxy.Events.ReadAllAsync(ct))
             {
+                // ★ T2b: eine korrelierte Antwort (Domänen-Event ODER CommandFailed) beendet den Retry-Loop
+                //   des zugehörigen Commands. CommandFailed reist als normales Event über denselben Kanal.
+                if (!string.IsNullOrEmpty(envelope.CorrelationId))
+                    _pending.Ack(envelope.CorrelationId);
+
                 var context = new MessageContext
                 {
                     AggregateId = envelope.AggregateId,

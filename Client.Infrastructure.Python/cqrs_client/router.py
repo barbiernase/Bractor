@@ -293,10 +293,11 @@ class MessageRouter:
             log.info("→ TransientEvent: %s", type(output).__name__)
 
         elif category == MessageCategory.TRIGGER:
-            log.warning(
-                "Trigger-Output %s von Handler — nicht implementiert (Client→Client)",
-                type(output).__name__
-            )
+            # Client→Client-Trigger: der Server forwarded ihn an den registrierten Client-Handler
+            # (TriggerHandlerRegistry) und quittiert per TriggerAck. Fire-and-forget aus Router-Sicht.
+            payload = mapper.wrap_trigger(output)
+            await proxy.send_trigger(payload, correlation_id=ctx.correlation_id)
+            log.info("→ Trigger: %s", type(output).__name__)
 
         elif category == MessageCategory.QUERY_RESPONSE:
             # Query-Responses werden in _handle_query_forward direkt gesendet

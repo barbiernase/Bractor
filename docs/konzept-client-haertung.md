@@ -1,10 +1,10 @@
 # Konzept — Client-Härtung (verifizierte Analyse & Plan)
 
-> **Status: Analyse + T2a & T3 umgesetzt (2026-08-12).** Fundiert am echten Code (nicht aus
-> Subagent-Berichten übernommen — zwei frühere Befunde waren zu grob und sind hier korrigiert).
-> **T2a** (Dispatcher-`CommandFailed` bei Erschöpfung) und **T3** (Python-Query-oneof + pytest-
-> Grundgerüst) sind implementiert & getestet. **T1** (Transport-Sicherheit) auf Nutzer-Entscheid
-> vorerst zurückgestellt. Verwandt: [09](09-python-sdk.md), [08](08-frontend-blazor-client.md),
+> **Status: Analyse + T2a, T2b, T3 & Client→Client-Trigger umgesetzt (2026-08-12).** Fundiert am
+> echten Code (zwei frühere Subagent-Befunde waren zu grob und sind hier korrigiert). Umgesetzt &
+> getestet: **T2a** (Dispatcher-`CommandFailed`), **T2b** (idempotenter Client-Pfad + Retry-Loop),
+> **T3** (Python-Query-oneof), **Client→Client-Trigger** (Python). **T1** (Transport-Sicherheit) auf
+> Nutzer-Entscheid zurückgestellt. Verwandt: [09](09-python-sdk.md), [08](08-frontend-blazor-client.md),
 > [13 P1-2/P1-4/P1-5](13-reifegrad-schulden-bewertung.md).
 
 ## 1. Die Client-Oberfläche heute (verifiziert)
@@ -92,11 +92,23 @@ gemeinsam** — eine isolierte Client-Änderung reicht nicht.
    setzt das oneof-Feld über die vorhandene Feld-Map; `router._handle_query_forward` nutzt es (TODO weg).
    pytest-Grundgerüst (`requirements-dev.txt`, `pytest.ini`, `tests/test_mapper_query_response.py`,
    2 Tests) — lokal in einem venv verifiziert (2 passed).
-3. **T1** (Transport-Sicherheit) — ⏸ zurückgestellt (Nutzer-Entscheid). Der große Brocken; verlangt
+3. **T2b** (idempotenter Client-Pfad + Retry-Loop) — ✅ **umgesetzt 2026-08-12.** *Kernbefund:* OCC
+   verhindert Doppel-Apply bereits; T2b macht den Retry idempotent-**sauber**. Server: Client-Pfad
+   `istIdempotent:true` + **Inbox-Dedup VOR OCC** (reine `CommandVorpruefung.Prüfe`, 5 Prüfstand-Tests).
+   Client: deterministische CommandId (über Retries wiederverwendet) + `PendingCommandTracker` +
+   Retry-on-Silence in `ConnectionModule` (5 Client-Tests). *Ehrliche Grenze:* bleibt nach allen
+   Versuchen Stille, meldet der Client `CommandUnbestaetigt` (Ausgang unbekannt, sicher wiederholbar) —
+   NICHT „fehlgeschlagen". Der Loop-Draht (Timer/Event-Ack) ist code-verifiziert, nicht integrationsgetestet.
+4. **Client→Client-Trigger** (Python) — ✅ **umgesetzt 2026-08-12.** Die Infra existierte schon
+   (Empfangen, `send_trigger`, `send_trigger_result`, Registry); es fehlte nur `_route_output`:
+   `mapper.wrap_trigger` + `proxy.send_trigger`. Der Server forwarded an den registrierten Client-Handler.
+5. **T1** (Transport-Sicherheit) — ⏸ zurückgestellt (Nutzer-Entscheid). Der große Brocken; verlangt
    vorab eine eigene Design-Entscheidung (Token-Modell/mTLS/Tenant). Danach Server + beide Clients.
-4. **T2b** (idempotenter Client-Pfad + Timeout) — offen/optional, wenn echte Auto-Retry-Garantie gewollt.
 
-> Offen aus T3: Client→Client-Trigger (`router.py:298`, nur Warnung) — separat, geringe Priorität.
+> **Optionale Verfeinerung (offen):** Für den seltenen Fall „Command angewandt, aber Event verloren"
+> gäbe der Server bei `IdempotenterErfolg` eines Client-Commands (OriginSessionId liegt vor) einen
+> targeted Ack zurück (wie T2a) → aus `CommandUnbestaetigt` würde eine echte Bestätigung. Klein, mirror
+> zu T2a; bewusst noch nicht gebaut.
 
 ## 7. Stance / Grenzen
 
@@ -107,7 +119,11 @@ gemeinsam** — eine isolierte Client-Änderung reicht nicht.
 ## 8. Entscheidungsstatus
 
 - **T2a (Command-Zustellgarantie, klein):** ✅ umgesetzt & getestet (2026-08-12).
-- **T3 (Python-SDK: Query-oneof + pytest):** ✅ umgesetzt & getestet (2026-08-12).
+- **T2b (idempotenter Client-Pfad + Retry-Loop):** ✅ umgesetzt & getestet (Server Prüfstand, Client-
+  Tracker Client-Tests; Loop-Draht code-verifiziert).
+- **T3 (Python-SDK: Query-oneof + pytest):** ✅ umgesetzt & getestet.
+- **Client→Client-Trigger (Python):** ✅ umgesetzt & getestet.
 - **T1 (Transport-Sicherheit):** ⏸ zurückgestellt (Nutzer-Entscheid) — braucht vorab ein eigenes
-  Design-Konzept (Token-Modell/mTLS/Tenant), bevor Code entsteht.
-- **T2b (idempotenter Client-Pfad + Timeout):** offen/optional.
+  Design-Konzept (Token-Modell/mTLS/Tenant).
+- **Optionale Verfeinerung** (Server targeted-Ack bei IdempotenterErfolg → `CommandUnbestaetigt` wird
+  Bestätigung): offen.

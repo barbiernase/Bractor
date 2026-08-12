@@ -67,6 +67,7 @@ class PayloadMapper:
         self._command_field_map = self._build_type_to_field_map("CommandEnvelopeDto")
         self._event_field_map = self._build_type_to_field_map("EventEnvelopeDto")
         self._query_response_field_map = self._build_type_to_field_map("QueryResponsePayloadDto")
+        self._trigger_field_map = self._build_type_to_field_map("TriggerPayloadDto")
 
     def _build_type_to_field_map(self, envelope_class_name: str) -> dict[type, str]:
         """
@@ -199,6 +200,27 @@ class PayloadMapper:
                 f"in QueryResponsePayloadDto gefunden"
             )
         setattr(payload, field_name, response)
+
+        return payload
+
+    def wrap_trigger(self, trigger: betterproto.Message):
+        """
+        Verpackt einen Trigger in einen TriggerPayloadDto (setzt das oneof-Feld).
+
+        Für Client→Client-Trigger: yieldet ein Handler einen Trigger, verpackt der Router ihn hiermit
+        und sendet ihn via GrpcProxy.send_trigger — der Server forwarded ihn an den registrierten
+        Client-Handler (TriggerHandlerRegistry). Gegenstück zu extract_trigger_payload.
+        """
+        payload_cls = getattr(self._gen, "TriggerPayloadDto")
+        payload = payload_cls()
+
+        field_name = self._get_oneof_field_name(trigger, self._trigger_field_map)
+        if not field_name:
+            raise TypeError(
+                f"Kein oneof-Feld für {type(trigger).__name__} "
+                f"in TriggerPayloadDto gefunden"
+            )
+        setattr(payload, field_name, trigger)
 
         return payload
 
