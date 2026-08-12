@@ -1,0 +1,23 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Isolierte DDD-Muster-Referenz. Zeigt die taktischen DDD-Bausteine (Value Object,
+    Entity, Aggregate Root, Domain Event, Domain Service, Specification, Factory,
+    Repository, Prozess/Saga) im Idiom des Frameworks — REINE Domäne, keine Infrastruktur.
+
+    Bewusst NUR ein Verweis auf Abstractions (Marker IState/OneOf) und KEINE Referenz
+    auf die Source-Generatoren: dieses Projekt wird von Infrastructure nicht referenziert,
+    also sieht der DtoMapper/Proto-Generator seine Typen nie — die Muster bleiben vom
+    fragilen Proto-Zwang entkoppelt und der Build bleibt grün.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -28,6 +28,7 @@
     <!-- Normaler Assembly-Ref (KEIN OutputItemType=Analyzer) → nur um CommandEmitAnalyzer zu instanziieren. -->
     <ProjectReference Include="..\Infrastructure.SourceGeneration\Infrastructure.SourceGeneration.csproj" ReferenceOutputAssembly="true" />
     <ProjectReference Include="..\Domain\Domain.csproj" />
+    <ProjectReference Include="..\Domain.DddPatterns\Domain.DddPatterns.csproj" />
     <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
     <ProjectReference Include="..\Domain.Infrastructure\Domain.Infrastructure.csproj" />
   </ItemGroup>

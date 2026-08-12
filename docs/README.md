@@ -38,6 +38,9 @@ Marten/PostgreSQL + Redis. Der Einstieg hängt davon ab, was du willst.
 - `zielbild-vereinheitlichte-konsumenten-maschine.md`, `gedankenmodell-system-als-graph.md`,
   `backend-neubau-einheitliche-maschine.md` — die vollständige, mehrstufige Herleitung.
 - `prozess-neubau-event-regeln-dag.md` — Spezifikation des aktuellen Prozessmodells.
+- [`ddd-muster-showcase.md`](ddd-muster-showcase.md) — lauffähige, getestete Referenz der
+  taktischen DDD-Bausteine (Value Object, Entity, Aggregate, Domain Event, Domain Service,
+  Specification, Factory, Repository, Saga) im Projekt `Domain.DddPatterns/`.
 - `snapshot-konzept.md` — Snapshot-Design (umgesetzt).
 - `spezifikation.md` — die Ursprungs-Spezifikation. ⚠ **Teilweise überholt:** Kap. 1–9
   (Naht/Signal/Reaktion) gültig, Kap. 10–15 (alte Prozess-Schrittlisten) durch den
