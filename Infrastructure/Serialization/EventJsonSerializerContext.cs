@@ -15,6 +15,7 @@ using Domain.Reise;
 using Domain.Reiseauftrag;
 using Domain.Sammelauftrag;
 using Domain.Versand;
+using Domain.Verkauf;
 using Domain.Vorgang;
 using Domain.Zahlung;
 using Infrastructure.Aggregate;
@@ -85,6 +86,11 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(VorgangAktiviert))]
 [JsonSerializable(typeof(VorgangGenehmigt))]
 [JsonSerializable(typeof(ErinnerungAusgeloest))]
+// ── Verkauf (DDD-Muster-Aggregat: nur PERSISTENTE Events; Value Object Geldwert reist transitiv mit) ──
+[JsonSerializable(typeof(VerkaufsauftragEroeffnet))]
+[JsonSerializable(typeof(VerkaufspositionHinzugefuegt))]
+[JsonSerializable(typeof(VerkaufsauftragAufgegeben))]
+[JsonSerializable(typeof(VerkaufsauftragStorniert))]
 // ── Reaktion ──
 [JsonSerializable(typeof(ReaktionGewirkt))]
 // ── Prozess-intern (IProzessIntern, aber IEvent → persistiert) ──

@@ -17,6 +17,7 @@ using Domain.Reise;
 using Domain.Reiseauftrag;
 using Domain.Sammelauftrag;
 using Domain.Versand;
+using Domain.Verkauf;
 using Domain.Vorgang;
 using Domain.Zahlung;
 using Infrastructure.Aggregate;
@@ -229,6 +230,24 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(StateChangeViaVorgangAktiviert))]
 [JsonSerializable(typeof(StateChangeViaVorgangGenehmigt))]
 [JsonSerializable(typeof(StateChangeViaZahlungskontoEingerichtet))]
+[JsonSerializable(typeof(StateChangeViaVerkaufsauftragEroeffnet))]
+[JsonSerializable(typeof(StateChangeViaVerkaufspositionHinzugefuegt))]
+[JsonSerializable(typeof(StateChangeViaVerkaufsauftragAufgegeben))]
+[JsonSerializable(typeof(StateChangeViaVerkaufsauftragStorniert))]
+// ── Verkauf (DDD-Muster-Aggregat: Value Object Geldwert reist transitiv mit) ──
+[JsonSerializable(typeof(EroeffneVerkaufsauftrag))]
+[JsonSerializable(typeof(FuegePositionHinzu))]
+[JsonSerializable(typeof(GibVerkaufsauftragAuf))]
+[JsonSerializable(typeof(StorniereVerkaufsauftrag))]
+[JsonSerializable(typeof(VerkaufsauftragEroeffnet))]
+[JsonSerializable(typeof(VerkaufspositionHinzugefuegt))]
+[JsonSerializable(typeof(VerkaufsauftragAufgegeben))]
+[JsonSerializable(typeof(VerkaufsauftragStorniert))]
+[JsonSerializable(typeof(VerkaufsauftragExistiertBereits))]
+[JsonSerializable(typeof(VerkaufsauftragNichtGefunden))]
+[JsonSerializable(typeof(AuftragNichtOffen))]
+[JsonSerializable(typeof(KreditlimitUeberschritten))]
+[JsonSerializable(typeof(WaehrungPasstNicht))]
 public partial class CqrsWireJsonContext : JsonSerializerContext
 {
 }

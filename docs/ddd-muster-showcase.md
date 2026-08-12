@@ -1,8 +1,49 @@
 # DDD-Muster — Showcase & Referenz
 
 > Eine lauffähige, getestete Referenz der **taktischen DDD-Bausteine** im Idiom dieses
-> Frameworks. Projekt: `Domain.DddPatterns/`. Tests: `Infrastructure.Pruefstand.Tests/Ddd/`.
-> Alles store-frei (Ebene 1, Prüfstand) — **gültig und performant** belegt.
+> Frameworks — auf ZWEI Ebenen:
+> 1. **Integriert (echter Framework-Pfad):** `Domain/Verkauf/` — ein echtes Aggregat über
+>    Decider/Applier, die GENERIERTE `AggregateHandlerFactory`, Proto- und Wire-Serialisierung.
+> 2. **Pur (store-frei):** `Domain.DddPatterns/` — die framework-orthogonalen Muster
+>    (Specification, Domain Service, Saga, Repository) als reine Domäne.
+>
+> Tests: `Infrastructure.Pruefstand.Tests/Ddd/` (Ebene 1, Prüfstand) — **gültig und performant** belegt.
+
+## Integriert: `Domain/Verkauf/` — durch die echte Pipeline
+
+Das Aggregat `Verkaufsauftrag` läuft NICHT isoliert, sondern durch den vollen Framework-Pfad
+(wie Konto): `EroeffneVerkaufsauftrag`/`FuegePositionHinzu`/… → Decider (Invarianten,
+`OneOf`-Ablehnungen) → generierte `AggregateHandlerFactory` → Applier. Die Commands/Events und
+das **Value Object `Geldwert`** reisen real über den generierten DTO-/Proto-/Wire-Pfad — der
+Proto-Generator (`dotnet run --project Proto.SourceGeneration`) wurde ausgeführt und `domain.proto`
+neu erzeugt.
+
+| Baustein | Beleg |
+|---|---|
+| **Value Object (transportiert)** | `Verkauf/Wertobjekte.cs` → `Geldwert` (reiner Daten-Record; Fabrik + Verhalten als Extension in `Geldwerte`, damit der DTO-Mapper sauber bleibt) |
+| **Entity im Aggregat** | `Auftragsposition` (Identität = ArtikelNr) |
+| **Aggregate Root + Invarianten** | `Verkaufsauftrag` (Kreditlimit/Status/Währung/Mengen-Merge; `Gesamtsumme` O(1)) |
+| **Domain Event** | `Verkauf/Events.cs` (persistent + `ITransientEvent`-Ablehnungen) |
+| **Decider/Applier** | reine Entscheidung + einzige Zustandsmutation, Framework-Idiom |
+
+Test: `Ddd/VerkaufAggregatTests` (7 Tests, über die generierte Factory).
+
+### Dabei behobener Framework-Bug (Generator)
+
+`Geldwert` ist das erste Value Object, das von **mehreren** Messages geteilt wird. Das legte
+einen latenten Generator-Bug offen: der `DomainGraphAnalyzer` hängt an einen mehrfach
+erreichten Typ den Marker `" (Ref)"` an, und der `TypeAggregator` registrierte ihn fälschlich
+als eigenen Typ `X (Ref)` → der `DtoMapper` erzeugte kaputten Code (`Map X (Ref)…`). Behoben an
+zwei Stellen (der Marker ist ein Graph-Hinweis, kein Typname):
+- `Core.SourceGeneration/TypeAggregator.cs` — Suffix beim Typschlüssel normalisieren.
+- `Infrastructure.SourceGeneration/DtoMapperGenerator.cs` (`GetSimpleTypeName`) — Suffix beim
+  Ableiten des C#-Bezeichners strippen (Feld-Mapping mit zwei gleichtypigen VO-Feldern).
+
+Neue Framework-Typen brauchen zudem je eine Zeile in den handgepflegten STJ-Manifesten
+(dokumentiert): `CqrsWireJsonContext` (Commands/Events/Signale) + `EventJsonSerializerContext`
+(persistente Events).
+
+## Pur: `Domain.DddPatterns/`
 
 ## Warum dieses Projekt existiert
 

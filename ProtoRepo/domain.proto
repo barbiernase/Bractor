@@ -208,12 +208,16 @@ message CommandEnvelopeDto {
         BestaetigeReiseDto bestaetige_reise = 49;
         BucheReiseDto buche_reise = 50;
         BeauftrageSammelueberweisungDto beauftrage_sammelueberweisung = 51;
-        VersendeDto versende = 52;
-        AktiviereDto aktiviere = 53;
-        GenehmigeDto genehmige = 54;
-        BelasteKontoDto belaste_konto = 55;
-        ErstatteKontoDto erstatte_konto = 56;
-        RichteZahlungskontoEinDto richte_zahlungskonto_ein = 57;
+        EroeffneVerkaufsauftragDto eroeffne_verkaufsauftrag = 52;
+        FuegePositionHinzuDto fuege_position_hinzu = 53;
+        GibVerkaufsauftragAufDto gib_verkaufsauftrag_auf = 54;
+        StorniereVerkaufsauftragDto storniere_verkaufsauftrag = 55;
+        VersendeDto versende = 56;
+        AktiviereDto aktiviere = 57;
+        GenehmigeDto genehmige = 58;
+        BelasteKontoDto belaste_konto = 59;
+        ErstatteKontoDto erstatte_konto = 60;
+        RichteZahlungskontoEinDto richte_zahlungskonto_ein = 61;
 
     }
 }
@@ -282,13 +286,22 @@ message EventEnvelopeDto {
         ReiseBestaetigtDto reise_bestaetigt = 69;
         ReiseGebuchtDto reise_gebucht = 70;
         SammelUeberweisungBeauftragtDto sammel_ueberweisung_beauftragt = 71;
-        VersendetDto versendet = 72;
-        VorgangAktiviertDto vorgang_aktiviert = 73;
-        VorgangGenehmigtDto vorgang_genehmigt = 74;
-        KontoBelastetDto konto_belastet = 75;
-        KontoErstattetDto konto_erstattet = 76;
-        KontoUngedecktDto konto_ungedeckt = 77;
-        ZahlungskontoEingerichtetDto zahlungskonto_eingerichtet = 78;
+        AuftragNichtOffenDto auftrag_nicht_offen = 72;
+        KreditlimitUeberschrittenDto kreditlimit_ueberschritten = 73;
+        VerkaufsauftragAufgegebenDto verkaufsauftrag_aufgegeben = 74;
+        VerkaufsauftragEroeffnetDto verkaufsauftrag_eroeffnet = 75;
+        VerkaufsauftragExistiertBereitsDto verkaufsauftrag_existiert_bereits = 76;
+        VerkaufsauftragNichtGefundenDto verkaufsauftrag_nicht_gefunden = 77;
+        VerkaufsauftragStorniertDto verkaufsauftrag_storniert = 78;
+        VerkaufspositionHinzugefuegtDto verkaufsposition_hinzugefuegt = 79;
+        WaehrungPasstNichtDto waehrung_passt_nicht = 80;
+        VersendetDto versendet = 81;
+        VorgangAktiviertDto vorgang_aktiviert = 82;
+        VorgangGenehmigtDto vorgang_genehmigt = 83;
+        KontoBelastetDto konto_belastet = 84;
+        KontoErstattetDto konto_erstattet = 85;
+        KontoUngedecktDto konto_ungedeckt = 86;
+        ZahlungskontoEingerichtetDto zahlungskonto_eingerichtet = 87;
 
     }
 }
@@ -401,6 +414,11 @@ message ImagePairFilterDto {
     int32 nur_nicht_inspizierte = 9;
     int32 seite = 10;
     int32 seiten_groesse = 11;
+}
+
+message GeldwertDto {
+    string betrag = 1;
+    int32 waehrung = 2;
 }
 
 message StateChangeViaAntragGestelltDto {
@@ -564,6 +582,26 @@ message StateChangeViaReiseGebuchtDto {
 }
 
 message StateChangeViaSammelUeberweisungBeauftragtDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaVerkaufsauftragAufgegebenDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaVerkaufsauftragEroeffnetDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaVerkaufsauftragStorniertDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaVerkaufspositionHinzugefuegtDto {
     string stream_id = 1;
     int32 version = 2;
 }
@@ -783,6 +821,29 @@ message BeauftrageSammelueberweisungDto {
     string quelle = 2;
     repeated string ziele = 3;
     string betrag_pro_ziel = 4;
+}
+
+message EroeffneVerkaufsauftragDto {
+    string aggregate_id = 1;
+    string kunde_id = 2;
+    GeldwertDto kreditlimit = 3;
+}
+
+message FuegePositionHinzuDto {
+    string aggregate_id = 1;
+    string artikel_nr = 2;
+    string bezeichnung = 3;
+    int32 menge = 4;
+    GeldwertDto einzelpreis = 5;
+}
+
+message GibVerkaufsauftragAufDto {
+    string aggregate_id = 1;
+}
+
+message StorniereVerkaufsauftragDto {
+    string aggregate_id = 1;
+    string grund = 2;
 }
 
 message VersendeDto {
@@ -1063,6 +1124,48 @@ message SammelUeberweisungBeauftragtDto {
     string quelle = 1;
     repeated string ziele = 2;
     string betrag_pro_ziel = 3;
+}
+
+message AuftragNichtOffenDto {
+    string aggregate_id = 1;
+}
+
+message KreditlimitUeberschrittenDto {
+    GeldwertDto versucht = 1;
+    GeldwertDto limit = 2;
+}
+
+message VerkaufsauftragAufgegebenDto {
+    GeldwertDto gesamtsumme = 1;
+}
+
+message VerkaufsauftragEroeffnetDto {
+    string kunde_id = 1;
+    GeldwertDto kreditlimit = 2;
+}
+
+message VerkaufsauftragExistiertBereitsDto {
+    string aggregate_id = 1;
+}
+
+message VerkaufsauftragNichtGefundenDto {
+    string aggregate_id = 1;
+}
+
+message VerkaufsauftragStorniertDto {
+    string grund = 1;
+}
+
+message VerkaufspositionHinzugefuegtDto {
+    string artikel_nr = 1;
+    string bezeichnung = 2;
+    int32 menge = 3;
+    GeldwertDto einzelpreis = 4;
+}
+
+message WaehrungPasstNichtDto {
+    int32 erwartet = 1;
+    int32 erhalten = 2;
 }
 
 message VersendetDto {

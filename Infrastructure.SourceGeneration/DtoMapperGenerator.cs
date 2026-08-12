@@ -954,7 +954,14 @@ namespace Infrastructure.SourceGeneration
         private string GetSimpleTypeName(string fullName)
         {
             if (string.IsNullOrEmpty(fullName)) return fullName;
-            
+
+            // Der DomainGraphAnalyzer hängt an einen mehrfach referenzierten Typ den Marker
+            // " (Ref)" an (z.B. ein Value Object, das in ZWEI Feldern desselben Events steht).
+            // Das ist ein Graph-Marker, kein Typname — beim Ableiten des C#-Bezeichners strippen,
+            // sonst entsteht ein kaputter Aufruf wie "MapGeldwert (Ref)(...)".
+            if (fullName.EndsWith(" (Ref)", System.StringComparison.Ordinal))
+                fullName = fullName.Substring(0, fullName.Length - " (Ref)".Length);
+
             var withoutGenerics = fullName.Split('<')[0];
             var parts = withoutGenerics.Split('.');
             return parts[parts.Length - 1];
