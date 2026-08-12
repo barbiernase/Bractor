@@ -20,7 +20,7 @@ neu erzeugt.
 
 | Baustein | Beleg |
 |---|---|
-| **Value Object (transportiert)** | `Verkauf/Wertobjekte.cs` → `Geldwert` (reiner Daten-Record; Fabrik + Verhalten als Extension in `Geldwerte`, damit der DTO-Mapper sauber bleibt) |
+| **Value Object** | `Verkauf/Wertobjekte.cs` → `Geldwert` (unveränderlich, selbstvalidierend im init-Accessor, Arithmetik mit Währungs-Guard — Verhalten IM Objekt) |
 | **Entity im Aggregat** | `Auftragsposition` (Identität = ArtikelNr) |
 | **Aggregate Root + Invarianten** | `Verkaufsauftrag` (Kreditlimit/Status/Währung/Mengen-Merge; `Gesamtsumme` O(1)) |
 | **Domain Event** | `Verkauf/Events.cs` (persistent + `ITransientEvent`-Ablehnungen) |
@@ -42,6 +42,15 @@ zwei Stellen (der Marker ist ein Graph-Hinweis, kein Typname):
 Neue Framework-Typen brauchen zudem je eine Zeile in den handgepflegten STJ-Manifesten
 (dokumentiert): `CqrsWireJsonContext` (Commands/Events/Signale) + `EventJsonSerializerContext`
 (persistente Events).
+
+### Reinheit der Domäne (Invariante 5)
+
+`Domain/Verkauf/` weiß **nichts** über Serialisierung, Proto, Wire, DTO-Mapper, Marten oder
+Redis — die einzige Kopplung ist `using Abstractions;` (die Marker-Verträge `IState`/`IEvent`/
+`ICommand`/`IDecider`/`OneOf`). Das Value Object `Geldwert` trägt sein Verhalten als echte
+Methoden im Objekt. Als der DTO-Mapper zunächst kaputten Code erzeugte, lag die Ursache im
+Generator (`" (Ref)"`-Marker) — und **dort** wurde sie behoben. Die Domäne wurde NICHT an den
+Serializer angepasst; sie bleibt rein.
 
 ## Pur: `Domain.DddPatterns/`
 

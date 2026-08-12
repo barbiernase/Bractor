@@ -1,64 +1,62 @@
 namespace Domain.Verkauf;
 
-/// <summary>Die unterstützten Währungen — Teil der Ubiquitous Language.</summary>
+/// <summary>Die unterstützten Währungen.</summary>
 public enum Waehrung { EUR, USD, CHF, GBP }
 
-/// <summary>Lebenszyklus des Verkaufsauftrags.</summary>
+/// <summary>Lebenszyklus eines Verkaufsauftrags.</summary>
 public enum Auftragsstatus { Offen, Aufgegeben, Storniert }
 
 /// <summary>
-/// VALUE OBJECT — ein Geldbetrag in genau einer Währung, als ECHTER Framework-Typ (er
-/// reist in Commands/Events über die Proto-/Wire-Grenze). Unveränderlich, gleich per Wert.
-///
-/// Bewusst ein REINER Daten-Record wie die übrigen Framework-Wertobjekte (BildMeta,
-/// RegionPosition): der generierte DTO-Mapper analysiert die Record-Member und verträgt
-/// KEINE Instanz-Methoden auf einem gemappten Wertobjekt. Fabrik und Verhalten leben daher
-/// in <see cref="Geldwerte"/> (Extension-Methoden) — für den Analyzer unsichtbar, die
-/// Aufrufsyntax (<c>preis.Mal(3)</c>) bleibt unverändert.
+/// VALUE OBJECT — ein Geldbetrag in genau einer Währung. Unveränderlich, gleich per Wert,
+/// selbstvalidierend (nie negativ, immer 2 Nachkommastellen) und mit dem Rechnen IM Objekt:
+/// Arithmetik nur innerhalb derselben Währung, das Mischen wird verweigert. Ein nackter
+/// <c>decimal</c> könnte davon nichts garantieren.
 /// </summary>
-public record Geldwert(decimal Betrag, Waehrung Waehrung);
-
-/// <summary>Fabrik + Verhalten für <see cref="Geldwert"/> (außerhalb des Records, damit der DTO-Mapper sauber bleibt).</summary>
-public static class Geldwerte
+public record Geldwert(decimal Betrag, Waehrung Waehrung)
 {
-    /// <summary>Fabrik mit Invariante: nicht negativ, auf 2 Nachkommastellen gerundet.</summary>
-    public static Geldwert Von(decimal betrag, Waehrung waehrung)
+    public decimal Betrag { get; init; } = Gerundet(Betrag);
+
+    private static decimal Gerundet(decimal betrag)
     {
         var gerundet = Math.Round(betrag, 2, MidpointRounding.ToEven);
-        if (gerundet < 0m) throw new ArgumentOutOfRangeException(nameof(betrag), $"Geldwert darf nicht negativ sein: {gerundet}");
-        return new Geldwert(gerundet, waehrung);
+        if (gerundet < 0m)
+            throw new ArgumentOutOfRangeException(nameof(betrag), $"Geldwert darf nicht negativ sein: {gerundet}");
+        return gerundet;
     }
 
-    public static bool GleicheWaehrung(this Geldwert a, Geldwert b) => a.Waehrung == b.Waehrung;
+    public bool GleicheWaehrung(Geldwert anderer) => Waehrung == anderer.Waehrung;
 
-    public static Geldwert Plus(this Geldwert a, Geldwert b)
+    public Geldwert Plus(Geldwert anderer)
     {
-        VerlangeGleicheWaehrung(a, b);
-        return a with { Betrag = a.Betrag + b.Betrag };
+        VerlangeGleicheWaehrung(anderer);
+        return this with { Betrag = Betrag + anderer.Betrag };
     }
 
-    public static Geldwert Mal(this Geldwert a, int faktor)
+    public Geldwert Mal(int faktor)
     {
-        if (faktor < 0) throw new ArgumentOutOfRangeException(nameof(faktor));
-        return a with { Betrag = a.Betrag * faktor };
+        if (faktor < 0) throw new ArgumentOutOfRangeException(nameof(faktor), "Faktor darf nicht negativ sein.");
+        return this with { Betrag = Betrag * faktor };
     }
 
-    public static bool GroesserAls(this Geldwert a, Geldwert b)
+    public bool GroesserAls(Geldwert anderer)
     {
-        VerlangeGleicheWaehrung(a, b);
-        return a.Betrag > b.Betrag;
+        VerlangeGleicheWaehrung(anderer);
+        return Betrag > anderer.Betrag;
     }
 
-    private static void VerlangeGleicheWaehrung(Geldwert a, Geldwert b)
+    private void VerlangeGleicheWaehrung(Geldwert anderer)
     {
-        if (a.Waehrung != b.Waehrung)
-            throw new InvalidOperationException($"Währungen dürfen nicht gemischt werden: {a.Waehrung} vs. {b.Waehrung}");
+        if (Waehrung != anderer.Waehrung)
+            throw new InvalidOperationException($"Währungen dürfen nicht gemischt werden: {Waehrung} vs. {anderer.Waehrung}");
     }
+
+    public override string ToString() => $"{Betrag:0.00} {Waehrung}";
 }
 
 /// <summary>
-/// ENTITY im Aggregat (im Zustand als Wert-Record gehalten): eine Auftragsposition, deren
-/// Identität die <see cref="ArtikelNr"/> ist. Nur über die Aggregatwurzel erreichbar.
+/// ENTITY im Aggregat — eine Auftragsposition, deren Identität die <see cref="ArtikelNr"/>
+/// ist (zwei Positionen mit gleicher Artikelnummer sind dieselbe). Nur über die
+/// Aggregatwurzel erreichbar und änderbar.
 /// </summary>
 public record Auftragsposition(string ArtikelNr, string Bezeichnung, int Menge, Geldwert Einzelpreis)
 {

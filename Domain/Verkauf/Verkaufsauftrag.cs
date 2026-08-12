@@ -3,17 +3,17 @@ using Abstractions;
 namespace Domain.Verkauf;
 
 /// <summary>
-/// AGGREGATE ROOT — die Konsistenzgrenze des Verkaufs. Ein ECHTES Framework-Aggregat
-/// (Decider/Applier, über die generierte Handler-Factory getrieben, Commands/Events über
-/// Proto). Es hält ENTITIES (<see cref="Auftragsposition"/>) und VALUE OBJECTS
-/// (<see cref="Geldwert"/>) und erzwingt seine Invarianten im Decider:
+/// AGGREGATE ROOT — die Konsistenzgrenze des Verkaufs. Sie hält ENTITIES
+/// (<see cref="Auftragsposition"/>) und VALUE OBJECTS (<see cref="Geldwert"/>) und erzwingt
+/// ihre Invarianten:
 ///   • Positionen nur ändern, solange offen,
 ///   • gleiche Artikelnummer verschmilzt Mengen,
 ///   • Gesamtsumme überschreitet nie das Kreditlimit,
 ///   • alle Beträge in der Auftragswährung.
 ///
-/// REINE Domäne — kein Cursor, kein Vorgang, keine Prozess-Mechanik. Id/Version werden
-/// generiert. Der laufende <see cref="Gesamtsumme"/>-Saldo hält das Kreditlimit-Prüfen O(1).
+/// REINE Domäne — kein Cursor, kein Vorgang, keine Maschinerie. Id/Version sind
+/// Framework-Pflichtfelder und werden generiert. Der laufende <see cref="Gesamtsumme"/>-Saldo
+/// hält das Kreditlimit-Prüfen O(1).
 /// </summary>
 public partial class Verkaufsauftrag : IState
 {

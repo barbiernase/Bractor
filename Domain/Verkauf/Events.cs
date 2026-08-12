@@ -2,14 +2,14 @@ using Abstractions;
 
 namespace Domain.Verkauf;
 
-// ── Persistente Domain Events (rein fachlich; das Value Object Geldwert reist mit) ──
+// ── Persistente Domain Events — fachliche Fakten in der Vergangenheitsform ──
 public record VerkaufsauftragEroeffnet(Guid KundeId, Geldwert Kreditlimit) : IEvent;
-// „Menge hinzugefügt" — bei gleicher Artikelnummer verschmilzt der Applier die Menge (kein Duplikat).
+// „Menge hinzugefügt" — bei gleicher Artikelnummer verschmilzt die Wurzel die Menge (kein Duplikat).
 public record VerkaufspositionHinzugefuegt(string ArtikelNr, string Bezeichnung, int Menge, Geldwert Einzelpreis) : IEvent;
 public record VerkaufsauftragAufgegeben(Geldwert Gesamtsumme) : IEvent;
 public record VerkaufsauftragStorniert(string Grund) : IEvent;
 
-// ── Ablehnungen (ITransientEvent — nicht im Log; kommen als CommandResult.RejectionEvent zurück) ──
+// ── Ablehnungen (ITransientEvent — gehören nicht in die Historie; fachliche Absagen) ──
 public record VerkaufsauftragExistiertBereits(Guid AggregateId) : ITransientEvent;
 public record VerkaufsauftragNichtGefunden(Guid AggregateId) : ITransientEvent;
 public record AuftragNichtOffen(Guid AggregateId) : ITransientEvent;
