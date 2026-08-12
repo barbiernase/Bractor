@@ -73,4 +73,41 @@ internal static class Berichte
     }
 
     public static string Wert(object? o) => o?.ToString() ?? "null";
+
+    public static string Schreibe(SagaTrace t)
+    {
+        var sb = new StringBuilder();
+        sb.Append("Saga-Szenario · Wurzel ").AppendLine(Wert(t.Wurzel));
+        foreach (var s in t.Schritte)
+        {
+            var kopf = s.Ursprung == Ursprung.Saga ? $"[Saga {s.SagaName}] " : "[Wurzel] ";
+            sb.Append("  ").Append(kopf).AppendLine(Wert(s.Command));
+            if (s.Unrouted)
+            {
+                sb.AppendLine("     ⚠ UNROUTED — kein Aggregat behandelt dieses Command (Runtime-Hang im Cluster!)");
+                continue;
+            }
+            foreach (var a in s.Ausgang)
+                sb.Append("     → ").Append(Wert(a.Event))
+                  .Append(a.Persistent ? "   (persistent)" : "   (ABGELEHNT)").AppendLine();
+        }
+        if (t.Markierungen.Any(m => m.Wartend.Count > 0))
+        {
+            sb.AppendLine("  Offene Sagas (halbgefülltes Join):");
+            foreach (var m in t.Markierungen.Where(m => m.Wartend.Count > 0))
+            {
+                sb.Append("    ").Append(m.Prozess).Append(" — angekommen: [").Append(string.Join(", ", m.Angekommen)).AppendLine("]");
+                foreach (var w in m.Wartend)
+                    sb.Append("       wartet auf [").Append(string.Join(", ", w.Fehlt))
+                      .Append("]  für Regel [").Append(string.Join(", ", w.Bedingung)).AppendLine("]");
+            }
+        }
+        return sb.ToString();
+    }
+}
+
+/// <summary>Kleine, tooling-lokale Reflektions-Helfer (Anzeige/Routing) — nicht im Produktionspfad.</summary>
+internal static class Reflektion
+{
+    public static IReadOnlyDictionary<string, object?> Felder(IState s) => Zustandsspiegel.Von(s);
 }
