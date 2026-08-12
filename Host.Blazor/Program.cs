@@ -3,7 +3,6 @@ using Client.Infrastructure.Abstractions;
 using Client.Infrastructure.Bus;
 using Client.Infrastructure.Connection;
 using Client.Infrastructure.Versioning;
-using Domain.Client.ImagePair;
 using Host.Blazor;
 using Host.Blazor.Shell;
 using Microsoft.AspNetCore.Components.Server.Circuits;

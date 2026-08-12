@@ -10,10 +10,9 @@
   <ItemGroup>
     <!-- Infrastruktur: Bus, Startup, Connection — für DI-Setup in Program.cs -->
     <ProjectReference Include="..\Client.Infrastructure\Client.Infrastructure.csproj" />
+    <!-- GUI-Struktur + Domain-Sicht: das modulare Frontend (löste die alten
+         Domain.Client / Domain.Client.Ui.Blazor ab, 2026-08-12). -->
     <ProjectReference Include="..\Domain.Client.Modules.Blazor\Domain.Client.Modules.Blazor.csproj" />
-
-    <!-- Views + Domain kommen transitiv über dieses Projekt -->
-    <ProjectReference Include="..\Domain.Client.Ui.Blazor\Domain.Client.Ui.Blazor.csproj" />
   </ItemGroup>
 
   <ItemGroup>

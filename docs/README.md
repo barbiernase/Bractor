@@ -1,76 +1,79 @@
-# Doku-Wegweiser
+# Dokumentation — CQRS/Event-Sourcing-Framework
 
-Diese `docs/` beschreibt ein selbstgebautes CQRS-/Event-Sourcing-Framework auf Proto.Actor +
-Marten/PostgreSQL + Redis. Der Einstieg hängt davon ab, was du willst.
+> **Stand: 2026-08-12.** Diese Doku wurde vollständig neu aus dem Code hergeleitet
+> (agentische Analyse aller Subsysteme, ohne Rückgriff auf die alte Doku). Die
+> frühere Dokumentation liegt unverändert in [`_archiv-2026-08-12/`](_archiv-2026-08-12/).
+> Diese Neufassung ist als **Bewertungsgrundlage** angelegt.
 
-## Schnell-Einstieg nach Ziel
+## Was ist das?
 
-| Ich will … | Lies |
-|---|---|
-| **verstehen, wie das Backend heute funktioniert** | [`architektur/00-ueberblick.md`](architektur/00-ueberblick.md) → dann das Subsystem |
-| **den aktuellen Stand + offene Baustellen** | [`backend-analyse-2026-08-11.md`](backend-analyse-2026-08-11.md), [`backend-neubau-fahrplan.md`](backend-neubau-fahrplan.md) |
-| **wissen, WARUM es so gebaut ist** | [`design-philosophie.md`](design-philosophie.md) |
-| **einen Prozess/eine Saga schreiben** | [`anleitung-prozess-schreiben.md`](anleitung-prozess-schreiben.md) → [`architektur/03-prozess-maschine.md`](architektur/03-prozess-maschine.md) |
-| **testen oder Last fahren** | [`testen-und-lasttest.md`](testen-und-lasttest.md), [`teststrategie-ebenen.md`](teststrategie-ebenen.md) |
+Ein selbstgebautes, signalbasiertes **CQRS-/Event-Sourcing-Framework** auf .NET 9,
+Proto.Actor (virtuelle Cluster-Actors), Marten/PostgreSQL (Event-Store = einzige Wahrheit)
+und Redis (nicht-autoritativer Versions-Index). Alles Dispatchende wird zur Compile-Zeit
+über Roslyn-Source-Generatoren erzeugt — **ohne Runtime-Reflection**. Dazu kommen ein
+generierter Blazor-Client, ein Python-SDK samt ML-Worker, sowie ein Wissensgraph-Extractor
+mit Live-Simulations-Runtime.
 
-## Die Architektur-Referenz (lebend)
+## Reifegrad auf einen Blick
 
-`architektur/` ist die maßgebliche Beschreibung des Ist-Zustands:
+| Subsystem | Reife | Kurzbewertung |
+|---|:---:|---|
+| Schreibseite (Command→Event→Store) | 🟢 | kohärent, gemessen grün, produktionsnah |
+| Konsum-/Prozess-Maschine | 🟢 / 🟡 | stark; **eine** Lücke: kein echter Co-Commit (s.u.) |
+| Generatoren & Analyzer | 🟢 | 15 Build-Guards, reflexionsfrei, konsistent |
+| Multi-Node / Wire-Transport | 🟢 / 🟡 | über alle Planes verdrahtet & bewiesen; Betrieb noch container-only |
+| Graph-Extractor + SimHost | 🟡 | konzeptionell reif, aber ungetrackt & nicht in der `.sln` |
+| Python-SDK + ML-Worker | 🟡 | Kernpfad vollständig; Query-Antwort/Registry-Gen unfertig, keine Tests |
+| Frontend (Blazor-Client) | 🟡 | **Build 2026-08-12 repariert** (stale Referenz entfernt); modulare Kette (`Domain.Client.Modules.Blazor`) baut, alte Legacy-Projekte noch auf Disk |
+| Tests & Vermessung | 🟢 | 126 Prüfstand grün, 41 Integration, ehrliche Perf-Belege |
 
-- [`00-ueberblick.md`](architektur/00-ueberblick.md) — Invarianten, „vier Konsumenten, eine
-  Maschine", Achsen, Projektlandkarte.
-- [`01-schreibseite.md`](architektur/01-schreibseite.md) — Command → Append, `CommandModus`,
-  Batching, Inbox, Snapshots, Serialisierung.
-- [`02-konsum-maschine.md`](architektur/02-konsum-maschine.md) — Pull-Adapter, Signal/Poll,
-  Co-Commit, Emittenten-Cursor, Rebuilder, GA-1.
-- [`03-prozess-maschine.md`](architektur/03-prozess-maschine.md) — Event-Regel-DAG,
-  `ProzessManager`, EM-1, Korrelation, Azyklizität, Fan-out, Verkettung.
-- [`04-feature-strom.md`](architektur/04-feature-strom.md) — Pipeline, Trigger, Deadlines,
-  Monitoring, Dead-Letter.
-- [`05-generatoren-und-analyzer.md`](architektur/05-generatoren-und-analyzer.md) — alle
-  Generatoren, Diagnostik-Codes CQRS001–021.
-- [`06-frontend-maschine.md`](architektur/06-frontend-maschine.md) — die Client-Seite:
-  Bus/Store/Signal, Client-Generatoren, Modul-Anatomie, Shell/Hydration, Python-Worker.
+🟢 solide · 🟡 mit erkannten Schulden · 🔴 aktuell blockiert. Details: [13-reifegrad-schulden-bewertung.md](13-reifegrad-schulden-bewertung.md).
 
-## Herleitung & Konzept (Referenz, gültig)
+## Lesepfade
 
-- [`design-philosophie.md`](design-philosophie.md) — konsolidierter Einstieg ins „Warum".
-- `zielbild-vereinheitlichte-konsumenten-maschine.md`, `gedankenmodell-system-als-graph.md`,
-  `backend-neubau-einheitliche-maschine.md` — die vollständige, mehrstufige Herleitung.
-- `prozess-neubau-event-regeln-dag.md` — Spezifikation des aktuellen Prozessmodells.
-- [`ddd-muster-showcase.md`](ddd-muster-showcase.md) — lauffähige, getestete Referenz der
-  taktischen DDD-Bausteine (Value Object, Entity, Aggregate, Domain Event, Domain Service,
-  Specification, Factory, Repository, Saga) im Projekt `Domain.DddPatterns/`.
-- `snapshot-konzept.md` — Snapshot-Design (umgesetzt).
-- `spezifikation.md` — die Ursprungs-Spezifikation. ⚠ **Teilweise überholt:** Kap. 1–9
-  (Naht/Signal/Reaktion) gültig, Kap. 10–15 (alte Prozess-Schrittlisten) durch den
-  Event-Regel-DAG ersetzt → siehe `architektur/03-prozess-maschine.md`.
+**Für Bewerter / Reviewer (60 Min.):**
+[01](01-ueberblick.md) → [02](02-design-prinzipien.md) → [11](11-feature-inventar.md) →
+[12](12-tests-und-vermessung.md) → [13](13-reifegrad-schulden-bewertung.md).
 
-## Offene Arbeitspakete (vorwärtsgerichtet)
+**Für Architektur-Verständnis:**
+[01](01-ueberblick.md) → [03](03-schreibseite.md) → [04](04-konsum-und-prozess-maschine.md) →
+[05](05-generatoren-analyzer-proto.md) → [06](06-transport-multinode-betrieb.md).
 
-- `naechster-agent-prompt-schreibpfad-perf.md` — Schreibpfad-Perf (`wait_event` des
-  parallelen Drains auflösen).
-- `p5b-marking-cursor-handoff.md` + `prozess-marking-cursor-konzept.md` — P5b Marking-Cursor
-  (O(N²) → O(N), bewusst zurückgestellt).
+**Für Entwickler (neuer Baustein):**
+[10-entwickler-api.md](10-entwickler-api.md) (praktisches „Wie schreibe ich X?"), rückverweisend
+auf die jeweiligen Architektur-Kapitel.
 
-## Test & Betrieb
+**Für Betrieb / Ops:**
+[06-transport-multinode-betrieb.md](06-transport-multinode-betrieb.md).
 
-- [`testen-und-lasttest.md`](testen-und-lasttest.md) — drei Test-Ebenen + reale Fallstricke.
-- [`teststrategie-ebenen.md`](teststrategie-ebenen.md) — die Ebenen-Strategie („mocke nicht,
-  was du nicht besitzt").
+## Inhalt
 
-## Archiv
+| # | Datei | Inhalt |
+|---|---|---|
+| — | [README.md](README.md) | dieser Wegweiser |
+| 01 | [01-ueberblick.md](01-ueberblick.md) | System, 27-Projekte-Landkarte, Gesamt-Datenfluss |
+| 02 | [02-design-prinzipien.md](02-design-prinzipien.md) | aus dem Code abgeleitete Prinzipien (mit Belegen) |
+| 03 | [03-schreibseite.md](03-schreibseite.md) | Command→Decider→Event→Store, Batching, Signal, Actor |
+| 04 | [04-konsum-und-prozess-maschine.md](04-konsum-und-prozess-maschine.md) | vier Konsumenten, Pull-Schleife, Saga-DSL, Marking-Cursor |
+| 05 | [05-generatoren-analyzer-proto.md](05-generatoren-analyzer-proto.md) | Generator-Tabelle, 15 CQRS-Codes, Proto-Flow |
+| 06 | [06-transport-multinode-betrieb.md](06-transport-multinode-betrieb.md) | Wire-Serializer, Cluster, Cold-Start, Deploy, Config, Monitoring |
+| 07 | [07-graph-und-simulation.md](07-graph-und-simulation.md) | GraphExtractor + SimHost + interaktives Board |
+| 08 | [08-frontend-blazor-client.md](08-frontend-blazor-client.md) | Bus/Store-Stack, Modul-System, Build-Status |
+| 09 | [09-python-sdk.md](09-python-sdk.md) | cqrs_client + ML-Worker |
+| 10 | [10-entwickler-api.md](10-entwickler-api.md) | „Wie schreibe ich X?" für alle Bausteine |
+| 11 | [11-feature-inventar.md](11-feature-inventar.md) | vollständige Feature-Aufstellung mit Status |
+| 12 | [12-tests-und-vermessung.md](12-tests-und-vermessung.md) | Test-Ebenen, Zahlen, echte Messwerte, LoadHarness |
+| 13 | [13-reifegrad-schulden-bewertung.md](13-reifegrad-schulden-bewertung.md) | Bewertungs-Dossier: Stärken, Risiken, Empfehlungen |
 
-`archiv/` enthält erledigte Handoffs, überholte Pläne und die alte Prozess-Schrittlisten-Welt
-(Increments 1–5, vom Event-Regel-DAG gelöscht). Tote Historie, nur zur Nachverfolgung.
+> **Ergänzend:** [`ddd-muster-showcase.md`](ddd-muster-showcase.md) — lauffähige, getestete
+> Referenz der taktischen DDD-Bausteine (Value Object, Entity, Aggregate, Domain Event, Domain
+> Service, Specification, Factory, Repository, Saga; u.a. `Domain/Verkauf/`). Dieser Showcase kam
+> **nach** der Voll-Analyse hinzu und ist in den Kapiteln 01–13 noch nicht eingearbeitet.
 
----
+## Konventionen dieser Doku
 
-### Konventionen
-
-- Kommentare/Domäne auf Deutsch (Bestand konsistent halten).
-- Neue Verträge → `Abstractions`; Marten/Infra → `Infrastructure`.
-- Nichts mit Runtime-Reflection (Invariante 4). Neue Dispatch-Logik = Generator erweitern.
-- Neuer Command/Event/Query/Trigger braucht einen Proto-DTO:
-  `dotnet run --project Proto.SourceGeneration` → `ProtoRepo` neu bauen → Infrastructure baut.
-  (Signale sind bewusst ausgenommen.)
+- **Sprache:** Deutsch (Projektkonvention; Domäne und Kommentare sind durchgängig deutsch).
+- **Belege:** Aussagen sind, wo möglich, mit `Datei:Zeile` unterlegt. Zeilennummern sind
+  Momentaufnahmen (Stand 2026-08-12) und können driften.
+- **Messwerte** sind als solche gekennzeichnet („gemessen 2026-08-12") und von
+  Konzept-/Anspruchs-Aussagen getrennt.
