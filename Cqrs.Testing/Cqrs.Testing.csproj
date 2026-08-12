@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Test-/Debug-DSL für die Schreibseite. Bewusst DOMÄNENAGNOSTISCH:
+    Referenz ausschließlich auf Abstractions (die Marker-Verträge + IAggregateHandlerFactory).
+    Die konkrete, generierte Fabrik wird zur Laufzeit injiziert — genau wie SimHost es tut,
+    nur ohne HTTP. So bleibt die Reinheits-Grenze (Invariante 5) auch im Werkzeug gewahrt.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
+  </ItemGroup>
+
+</Project>
