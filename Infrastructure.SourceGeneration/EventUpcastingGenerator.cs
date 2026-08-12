@@ -57,6 +57,11 @@ namespace Infrastructure.SourceGeneration
             "Das Split-Sekundärziel '{0}' ist selbst eine frühere Version (mit eigener IUpcast). In Stufe 2 müssen Sekundärziele eines Splits aktuelle Events sein; nur das ERSTE Ziel darf die Kette fortsetzen.",
             "Upcasting", DiagnosticSeverity.Error, true);
 
+        private static readonly DiagnosticDescriptor SplitNichtBereit = new DiagnosticDescriptor(
+            "CQRS046", "Split-Upcasting (1:N) noch nicht produktionsreif",
+            "Der Split-Upcaster von '{0}' ist erkannt und wird generator-/leseseitig materialisiert, aber die Consumer-Fabric (Projektions-Dedup-Schlüssel, Prozess-Korrelation, Pipeline-Emit um SubIndex) ist noch NICHT verdrahtet — ein Split würde an durablen Konsumenten (Projektion/Reaktion/Prozess) still falsch laufen. Bis die Fabric steht: nur 1:1-Upcaster (IUpcast<TAlt, TNeu>) verwenden. Ein echter Split wird zusammen mit der Fabric und einem Integrationstest geliefert.",
+            "Upcasting", DiagnosticSeverity.Error, true);
+
         public void Initialize(GeneratorInitializationContext context) { }
 
         public void Execute(GeneratorExecutionContext context)
@@ -120,6 +125,14 @@ namespace Infrastructure.SourceGeneration
 
             var priors = new HashSet<INamedTypeSymbol>(edges.Keys, cmp);
             var currentEvents = persistable.Where(e => !priors.Contains(e)).ToList();
+
+            // ── GUARD (CQRS046): Split (1:N) ist generator-/leseseitig fertig, aber die Consumer-Fabric
+            //    (Projektions-Dedup, Prozess-Korrelation, Pipeline-Emit) ist noch nicht verdrahtet. Ein
+            //    deklarierter Split bricht daher bewusst den BUILD — kein still halb-funktionierender Split.
+            //    Der Codegen unten bleibt (probe-getestet, warm für später); dieser Fehler ist das Tor. ──
+            foreach (var kv in edges)
+                if (kv.Value.targets.Count > 1)
+                    context.ReportDiagnostic(Diagnostic.Create(SplitNichtBereit, Loc(kv.Value.wandler), kv.Key.Name));
 
             // ── Validierungen: Merge, Kette-offen, Split-Sekundärziel ──
             var producedBy = new Dictionary<INamedTypeSymbol, INamedTypeSymbol>(cmp);
