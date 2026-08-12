@@ -235,7 +235,7 @@ public sealed class GraphBuilder
                 if (_evtId.TryGetValue(evtFull, out var evtNode))
                 {
                     Edge(cmdNode, evtNode, EdgeKind.produces, "GeneratedCommandRouting");
-                    cmd.Command!.Produces.Add(new CommandOutcome { Event = SimpleEvt(evtFull), Persisted = true });
+                    cmd.Command!.Produces.Add(new CommandOutcome { Event = SimpleEvt(evtFull), Persisted = true, Guard = GuardFor(cmdFull, SimpleEvt(evtFull)) });
                 }
         }
     }
@@ -248,8 +248,20 @@ public sealed class GraphBuilder
                 if (_cmdId.TryGetValue(cmdFull, out var cmdNode) && _evtId.TryGetValue(evtFull, out var evtNode))
                 {
                     Edge(cmdNode, evtNode, EdgeKind.produces, "decider");
-                    _byId[cmdNode].Command!.Produces.Add(new CommandOutcome { Event = SimpleEvt(evtFull), Persisted = false });
+                    _byId[cmdNode].Command!.Produces.Add(new CommandOutcome { Event = SimpleEvt(evtFull), Persisted = false, Guard = GuardFor(cmdFull, SimpleEvt(evtFull)) });
                 }
+    }
+
+    private Dictionary<string, string>? _guardMap;
+
+    /// <summary>Der Guard-Ausdruck dieses Zweigs (aus der Decider-Syntax) — das „Warum". Null = Sonst-Zweig.</summary>
+    private string? GuardFor(string cmdFull, string evtSimple)
+    {
+        _guardMap ??= _dom.Aggregates
+            .SelectMany(a => a.Guards)
+            .GroupBy(kv => kv.Key)
+            .ToDictionary(g => g.Key, g => g.First().Value);
+        return _guardMap.TryGetValue(cmdFull + "|" + evtSimple, out var g) ? g : null;
     }
 
     private void BuildProcessEdges()

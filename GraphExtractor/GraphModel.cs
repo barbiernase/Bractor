@@ -94,6 +94,14 @@ public sealed class CommandOutcome
 {
     public string Event { get; set; } = "";
     public bool Persisted { get; set; }
+
+    /// <summary>
+    /// Der Guard-Ausdruck aus der Decider-Syntax, der diesen Zweig wählt (z.B.
+    /// <c>State.Verfuegbar &lt; cmd.Betrag</c>) — das „Warum". Null = der ungeschützte
+    /// (Sonst-)Zweig. Statisch aus dem Syntaxbaum gehoben (parsen statt nachbauen), damit
+    /// der Debugger ihn zur Laufzeit mit echten Werten binden kann.
+    /// </summary>
+    public string? Guard { get; set; }
 }
 
 public sealed class EventInfo

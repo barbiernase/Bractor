@@ -120,14 +120,14 @@ const GRAPH = {
     "note": "Wissensgraph des CQRS/ES-Frameworks. Kern-Kausalität aus GeneratedCommandRouting (autoritativ), Sagas aus dem Prozess-DSL.",
     "routingSource": "GeneratedCommandRouting",
     "counts": {
-      "aggregate": 16,
-      "command": 38,
-      "event": 64,
+      "aggregate": 17,
+      "command": 42,
+      "event": 73,
       "process": 6,
       "projection": 3,
       "query": 8,
       "pipeline": 3,
-      "edges": 169
+      "edges": 185
     },
     "contexts": [
       "(quer)",
@@ -148,6 +148,7 @@ const GRAPH = {
       "Sammelauftrag",
       "Sammelueberweisung",
       "Ueberweisung",
+      "Verkauf",
       "Versand",
       "Vorgang",
       "Zahlung"
@@ -561,6 +562,59 @@ const GRAPH = {
       }
     },
     {
+      "id": "agg:Verkaufsauftrag",
+      "kind": "aggregate",
+      "name": "Verkaufsauftrag",
+      "fullName": "Domain.Verkauf.Verkaufsauftrag",
+      "namespace": "Domain.Verkauf",
+      "context": "Verkauf",
+      "aggregate": {
+        "state": [
+          {
+            "name": "KundeId",
+            "type": "Guid"
+          },
+          {
+            "name": "Kreditlimit",
+            "type": "Geldwert"
+          },
+          {
+            "name": "Status",
+            "type": "Auftragsstatus"
+          },
+          {
+            "name": "Positionen",
+            "type": "List<Auftragsposition>"
+          },
+          {
+            "name": "Gesamtsumme",
+            "type": "Geldwert"
+          },
+          {
+            "name": "IstOffen",
+            "type": "bool"
+          }
+        ],
+        "handles": [
+          "EroeffneVerkaufsauftrag",
+          "FuegePositionHinzu",
+          "GibVerkaufsauftragAuf",
+          "StorniereVerkaufsauftrag"
+        ],
+        "emits": [
+          "VerkaufsauftragEroeffnet",
+          "VerkaufspositionHinzugefuegt",
+          "VerkaufsauftragAufgegeben",
+          "VerkaufsauftragStorniert",
+          "VerkaufsauftragExistiertBereits",
+          "KreditlimitUeberschritten",
+          "AuftragNichtOffen",
+          "WaehrungPasstNicht",
+          "VerkaufsauftragNichtGefunden"
+        ]
+      }
+    },
+    {
       "id": "agg:Versand",
       "kind": "aggregate",
       "name": "Versand",
@@ -805,7 +859,8 @@ const GRAPH = {
           },
           {
             "event": "FlugExistiertBereits",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.Version > 0"
           }
         ],
         "fields": [
@@ -840,7 +895,8 @@ const GRAPH = {
           },
           {
             "event": "FlugAusgebucht",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.Plaetze < cmd.Anzahl"
           }
         ],
         "fields": [
@@ -906,7 +962,8 @@ const GRAPH = {
           },
           {
             "event": "HotelExistiertBereits",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.Version > 0"
           }
         ],
         "fields": [
@@ -941,7 +998,8 @@ const GRAPH = {
           },
           {
             "event": "HotelAusgebucht",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.Zimmer < cmd.Anzahl"
           }
         ],
         "fields": [
@@ -1008,7 +1066,8 @@ const GRAPH = {
           },
           {
             "event": "ImagePairExistiertBereits",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.Version > 0"
           }
         ],
         "fields": [
@@ -1055,15 +1114,18 @@ const GRAPH = {
           },
           {
             "event": "ImagePairKomplett",
-            "persisted": true
+            "persisted": true,
+            "guard": "State.GetBild(andereVersion) != null"
           },
           {
             "event": "ImagePairNichtGefunden",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.Version == 0"
           },
           {
             "event": "BildVersionBereitsVerfuegbar",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.GetBild(cmd.Version) != null"
           }
         ],
         "fields": [
@@ -1106,11 +1168,13 @@ const GRAPH = {
           },
           {
             "event": "BildNichtVerfuegbar",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.GetBild(cmd.Version) == null"
           },
           {
             "event": "RegionLabelsUngueltig",
-            "persisted": false
+            "persisted": false,
+            "guard": "cmd.RegionLabels.Count != 8"
           }
         ],
         "fields": [
@@ -1153,7 +1217,8 @@ const GRAPH = {
           },
           {
             "event": "PaarNichtKomplett",
-            "persisted": false
+            "persisted": false,
+            "guard": "!State.IstKomplett"
           }
         ],
         "fields": [
@@ -1188,11 +1253,13 @@ const GRAPH = {
           },
           {
             "event": "BildNichtVerfuegbar",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.GetBild(cmd.Version) == null"
           },
           {
             "event": "RegionIndexUngueltig",
-            "persisted": false
+            "persisted": false,
+            "guard": "cmd.RegionIndex < 0 || cmd.RegionIndex > 7"
           }
         ],
         "fields": [
@@ -1235,7 +1302,8 @@ const GRAPH = {
           },
           {
             "event": "BildNichtVerfuegbar",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.GetBild(cmd.Version) == null"
           }
         ],
         "fields": [
@@ -1274,7 +1342,8 @@ const GRAPH = {
           },
           {
             "event": "PaarNichtKomplett",
-            "persisted": false
+            "persisted": false,
+            "guard": "!State.IstKomplett"
           }
         ],
         "fields": [
@@ -1309,7 +1378,8 @@ const GRAPH = {
           },
           {
             "event": "ImagePairNichtGefunden",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.Version == 0"
           }
         ],
         "fields": [
@@ -1344,7 +1414,8 @@ const GRAPH = {
           },
           {
             "event": "ImagePairNichtGefunden",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.Version == 0"
           }
         ],
         "fields": [
@@ -1375,7 +1446,8 @@ const GRAPH = {
           },
           {
             "event": "KontoExistiertBereits",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.Version > 0"
           }
         ],
         "fields": [
@@ -1414,15 +1486,18 @@ const GRAPH = {
           },
           {
             "event": "KontoGesperrt",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.Gesperrt"
           },
           {
             "event": "DeckungReichtNicht",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.Verfuegbar < cmd.Betrag"
           },
           {
             "event": "KontoNichtGefunden",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.Version == 0"
           }
         ],
         "fields": [
@@ -1488,11 +1563,13 @@ const GRAPH = {
           },
           {
             "event": "KontoGesperrt",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.Gesperrt"
           },
           {
             "event": "KontoNichtGefunden",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.Version == 0"
           }
         ],
         "fields": [
@@ -1589,7 +1666,8 @@ const GRAPH = {
           },
           {
             "event": "LagerExistiertBereits",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.Version > 0"
           }
         ],
         "fields": [
@@ -1624,7 +1702,8 @@ const GRAPH = {
           },
           {
             "event": "BestandReichtNicht",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.Bestand < cmd.Menge"
           }
         ],
         "fields": [
@@ -1827,6 +1906,182 @@ const GRAPH = {
       }
     },
     {
+      "id": "cmd:EroeffneVerkaufsauftrag",
+      "kind": "command",
+      "name": "EroeffneVerkaufsauftrag",
+      "fullName": "Domain.Verkauf.EroeffneVerkaufsauftrag",
+      "namespace": "Domain.Verkauf",
+      "context": "Verkauf",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Verkaufsauftrag",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "VerkaufsauftragEroeffnet",
+            "persisted": true
+          },
+          {
+            "event": "VerkaufsauftragExistiertBereits",
+            "persisted": false,
+            "guard": "State.Version > 0"
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "KundeId",
+            "type": "Guid"
+          },
+          {
+            "name": "Kreditlimit",
+            "type": "Geldwert"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:FuegePositionHinzu",
+      "kind": "command",
+      "name": "FuegePositionHinzu",
+      "fullName": "Domain.Verkauf.FuegePositionHinzu",
+      "namespace": "Domain.Verkauf",
+      "context": "Verkauf",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Verkaufsauftrag",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "VerkaufspositionHinzugefuegt",
+            "persisted": true
+          },
+          {
+            "event": "KreditlimitUeberschritten",
+            "persisted": false,
+            "guard": "prospektiv.GroesserAls(State.Kreditlimit)"
+          },
+          {
+            "event": "AuftragNichtOffen",
+            "persisted": false,
+            "guard": "!State.IstOffen"
+          },
+          {
+            "event": "WaehrungPasstNicht",
+            "persisted": false,
+            "guard": "!cmd.Einzelpreis.GleicheWaehrung(State.Kreditlimit)"
+          },
+          {
+            "event": "VerkaufsauftragNichtGefunden",
+            "persisted": false,
+            "guard": "State.Version == 0"
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "ArtikelNr",
+            "type": "string"
+          },
+          {
+            "name": "Bezeichnung",
+            "type": "string"
+          },
+          {
+            "name": "Menge",
+            "type": "int"
+          },
+          {
+            "name": "Einzelpreis",
+            "type": "Geldwert"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:GibVerkaufsauftragAuf",
+      "kind": "command",
+      "name": "GibVerkaufsauftragAuf",
+      "fullName": "Domain.Verkauf.GibVerkaufsauftragAuf",
+      "namespace": "Domain.Verkauf",
+      "context": "Verkauf",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Verkaufsauftrag",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "VerkaufsauftragAufgegeben",
+            "persisted": true
+          },
+          {
+            "event": "AuftragNichtOffen",
+            "persisted": false,
+            "guard": "State.Positionen.Count == 0"
+          },
+          {
+            "event": "VerkaufsauftragNichtGefunden",
+            "persisted": false,
+            "guard": "State.Version == 0"
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:StorniereVerkaufsauftrag",
+      "kind": "command",
+      "name": "StorniereVerkaufsauftrag",
+      "fullName": "Domain.Verkauf.StorniereVerkaufsauftrag",
+      "namespace": "Domain.Verkauf",
+      "context": "Verkauf",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Verkaufsauftrag",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "VerkaufsauftragStorniert",
+            "persisted": true
+          },
+          {
+            "event": "VerkaufsauftragNichtGefunden",
+            "persisted": false,
+            "guard": "State.Version == 0"
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Grund",
+            "type": "string"
+          }
+        ]
+      }
+    },
+    {
       "id": "cmd:Versende",
       "kind": "command",
       "name": "Versende",
@@ -1962,7 +2217,8 @@ const GRAPH = {
           },
           {
             "event": "KontoUngedeckt",
-            "persisted": false
+            "persisted": false,
+            "guard": "State.Saldo < cmd.Betrag"
           }
         ],
         "fields": [
@@ -2628,6 +2884,114 @@ const GRAPH = {
       "event": {
         "persisted": true,
         "emittedBy": "Sammelueberweisungsauftrag"
+      }
+    },
+    {
+      "id": "evt:VerkaufsauftragEroeffnet",
+      "kind": "event",
+      "name": "VerkaufsauftragEroeffnet",
+      "fullName": "Domain.Verkauf.VerkaufsauftragEroeffnet",
+      "namespace": "Domain.Verkauf",
+      "context": "Verkauf",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Verkaufsauftrag"
+      }
+    },
+    {
+      "id": "evt:VerkaufspositionHinzugefuegt",
+      "kind": "event",
+      "name": "VerkaufspositionHinzugefuegt",
+      "fullName": "Domain.Verkauf.VerkaufspositionHinzugefuegt",
+      "namespace": "Domain.Verkauf",
+      "context": "Verkauf",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Verkaufsauftrag"
+      }
+    },
+    {
+      "id": "evt:VerkaufsauftragAufgegeben",
+      "kind": "event",
+      "name": "VerkaufsauftragAufgegeben",
+      "fullName": "Domain.Verkauf.VerkaufsauftragAufgegeben",
+      "namespace": "Domain.Verkauf",
+      "context": "Verkauf",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Verkaufsauftrag"
+      }
+    },
+    {
+      "id": "evt:VerkaufsauftragStorniert",
+      "kind": "event",
+      "name": "VerkaufsauftragStorniert",
+      "fullName": "Domain.Verkauf.VerkaufsauftragStorniert",
+      "namespace": "Domain.Verkauf",
+      "context": "Verkauf",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Verkaufsauftrag"
+      }
+    },
+    {
+      "id": "evt:VerkaufsauftragExistiertBereits",
+      "kind": "event",
+      "name": "VerkaufsauftragExistiertBereits",
+      "fullName": "Domain.Verkauf.VerkaufsauftragExistiertBereits",
+      "namespace": "Domain.Verkauf",
+      "context": "Verkauf",
+      "event": {
+        "persisted": false,
+        "emittedBy": "Verkaufsauftrag"
+      }
+    },
+    {
+      "id": "evt:VerkaufsauftragNichtGefunden",
+      "kind": "event",
+      "name": "VerkaufsauftragNichtGefunden",
+      "fullName": "Domain.Verkauf.VerkaufsauftragNichtGefunden",
+      "namespace": "Domain.Verkauf",
+      "context": "Verkauf",
+      "event": {
+        "persisted": false,
+        "emittedBy": "Verkaufsauftrag"
+      }
+    },
+    {
+      "id": "evt:AuftragNichtOffen",
+      "kind": "event",
+      "name": "AuftragNichtOffen",
+      "fullName": "Domain.Verkauf.AuftragNichtOffen",
+      "namespace": "Domain.Verkauf",
+      "context": "Verkauf",
+      "event": {
+        "persisted": false,
+        "emittedBy": "Verkaufsauftrag"
+      }
+    },
+    {
+      "id": "evt:KreditlimitUeberschritten",
+      "kind": "event",
+      "name": "KreditlimitUeberschritten",
+      "fullName": "Domain.Verkauf.KreditlimitUeberschritten",
+      "namespace": "Domain.Verkauf",
+      "context": "Verkauf",
+      "event": {
+        "persisted": false,
+        "emittedBy": "Verkaufsauftrag"
+      }
+    },
+    {
+      "id": "evt:WaehrungPasstNicht",
+      "kind": "event",
+      "name": "WaehrungPasstNicht",
+      "fullName": "Domain.Verkauf.WaehrungPasstNicht",
+      "namespace": "Domain.Verkauf",
+      "context": "Verkauf",
+      "event": {
+        "persisted": false,
+        "emittedBy": "Verkaufsauftrag"
       }
     },
     {
@@ -3318,6 +3682,12 @@ const GRAPH = {
       "provenance": "GeneratedCommandRouting"
     },
     {
+      "from": "cmd:EroeffneVerkaufsauftrag",
+      "to": "agg:Verkaufsauftrag",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
       "from": "cmd:ErstatteKonto",
       "to": "agg:Zahlungskonto",
       "kind": "routedTo",
@@ -3332,6 +3702,12 @@ const GRAPH = {
     {
       "from": "cmd:FristFaellig",
       "to": "agg:Erinnerung",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:FuegePositionHinzu",
+      "to": "agg:Verkaufsauftrag",
       "kind": "routedTo",
       "provenance": "GeneratedCommandRouting"
     },
@@ -3368,6 +3744,12 @@ const GRAPH = {
     {
       "from": "cmd:GibBestellungAuf",
       "to": "agg:Bestellauftrag",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:GibVerkaufsauftragAuf",
+      "to": "agg:Verkaufsauftrag",
       "kind": "routedTo",
       "provenance": "GeneratedCommandRouting"
     },
@@ -3486,6 +3868,12 @@ const GRAPH = {
       "provenance": "GeneratedCommandRouting"
     },
     {
+      "from": "cmd:StorniereVerkaufsauftrag",
+      "to": "agg:Verkaufsauftrag",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
       "from": "cmd:Versende",
       "to": "agg:Versand",
       "kind": "routedTo",
@@ -3546,6 +3934,12 @@ const GRAPH = {
       "provenance": "GeneratedCommandRouting"
     },
     {
+      "from": "cmd:EroeffneVerkaufsauftrag",
+      "to": "evt:VerkaufsauftragEroeffnet",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
       "from": "cmd:ErstatteKonto",
       "to": "evt:KontoErstattet",
       "kind": "produces",
@@ -3560,6 +3954,12 @@ const GRAPH = {
     {
       "from": "cmd:FristFaellig",
       "to": "evt:ErinnerungAusgeloest",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:FuegePositionHinzu",
+      "to": "evt:VerkaufspositionHinzugefuegt",
       "kind": "produces",
       "provenance": "GeneratedCommandRouting"
     },
@@ -3596,6 +3996,12 @@ const GRAPH = {
     {
       "from": "cmd:GibBestellungAuf",
       "to": "evt:BestellungAufgegeben",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:GibVerkaufsauftragAuf",
+      "to": "evt:VerkaufsauftragAufgegeben",
       "kind": "produces",
       "provenance": "GeneratedCommandRouting"
     },
@@ -3716,6 +4122,12 @@ const GRAPH = {
     {
       "from": "cmd:StorniereGutschrift",
       "to": "evt:GutschriftStorniert",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:StorniereVerkaufsauftrag",
+      "to": "evt:VerkaufsauftragStorniert",
       "kind": "produces",
       "provenance": "GeneratedCommandRouting"
     },
@@ -3872,6 +4284,54 @@ const GRAPH = {
     {
       "from": "cmd:ReserviereBestand",
       "to": "evt:BestandReichtNicht",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:EroeffneVerkaufsauftrag",
+      "to": "evt:VerkaufsauftragExistiertBereits",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:FuegePositionHinzu",
+      "to": "evt:KreditlimitUeberschritten",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:FuegePositionHinzu",
+      "to": "evt:AuftragNichtOffen",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:FuegePositionHinzu",
+      "to": "evt:WaehrungPasstNicht",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:FuegePositionHinzu",
+      "to": "evt:VerkaufsauftragNichtGefunden",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:GibVerkaufsauftragAuf",
+      "to": "evt:AuftragNichtOffen",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:GibVerkaufsauftragAuf",
+      "to": "evt:VerkaufsauftragNichtGefunden",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
+      "from": "cmd:StorniereVerkaufsauftrag",
+      "to": "evt:VerkaufsauftragNichtGefunden",
       "kind": "produces",
       "provenance": "decider"
     },
@@ -4675,6 +5135,26 @@ const GRAPH = {
         "severity": "info",
         "code": "DANGLING-EVENT",
         "message": "Event 'ReiseBestaetigt' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'VerkaufsauftragEroeffnet' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'VerkaufspositionHinzugefuegt' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'VerkaufsauftragAufgegeben' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
+      },
+      {
+        "severity": "info",
+        "code": "DANGLING-EVENT",
+        "message": "Event 'VerkaufsauftragStorniert' wird produziert, aber von niemandem konsumiert (keine Projektion/Saga/Pipeline)."
       },
       {
         "severity": "info",

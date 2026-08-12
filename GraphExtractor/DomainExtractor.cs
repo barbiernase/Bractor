@@ -32,6 +32,9 @@ public sealed class AggregateRaw
     public List<string> HandlesCommandsFull = new();  // FullNames der entschiedenen Commands
     /// <summary>Ablehnungen (ITransientEvent) je Command — der Sad-Path, den GeneratedCommandRouting bewusst auslässt.</summary>
     public List<(string CmdFull, string EvtFull)> Rejects = new();
+
+    /// <summary>Guard-Ausdruck je Zweig, Schlüssel <c>cmdFull|EvtSimpleName</c> — das „Warum" aus der Decider-Syntax.</summary>
+    public Dictionary<string, string> Guards = new();
 }
 
 public sealed class ProcessRaw
@@ -176,8 +179,31 @@ public sealed class DomainExtractor
             agg.HandlesCommandsFull.Add(cmd.Fq());
             foreach (var reject in UniverseEvents(method.ReturnType, onlyTransient: true))
                 agg.Rejects.Add((cmd.Fq(), reject));
+            foreach (var (evtSimple, guard) in ExtractGuards(method))
+                agg.Guards[cmd.Fq() + "|" + evtSimple] = guard;
         }
         return agg;
+    }
+
+    /// <summary>
+    /// Hebt je <c>yield return new Event(…)</c> den Ausdruck des umschließenden <c>if</c> als Guard —
+    /// das „Warum" dieses Zweigs, statisch aus der Syntax. Der ungeschützte Sonst-Zweig (Erfolg) hat keinen.
+    /// </summary>
+    private static IEnumerable<(string EvtSimple, string Guard)> ExtractGuards(IMethodSymbol method)
+    {
+        if (method.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is not MethodDeclarationSyntax syntax)
+            yield break;
+        var body = (SyntaxNode?)syntax.Body ?? syntax.ExpressionBody;
+        if (body == null) yield break;
+
+        foreach (var y in body.DescendantNodes().OfType<YieldStatementSyntax>())
+        {
+            if (y.Expression is not ObjectCreationExpressionSyntax oc) continue;
+            var ifs = y.Ancestors().OfType<IfStatementSyntax>().FirstOrDefault();
+            if (ifs == null) continue; // ungeschützter Sonst-Zweig → kein Guard
+            var evtSimple = oc.Type.ToString().Split('.').Last();
+            yield return (evtSimple, ifs.Condition.ToString().Replace("this.", ""));
+        }
     }
 
     // ── Prozesse / Sagas: der DSL-Walk ───────────────────────────────────────
