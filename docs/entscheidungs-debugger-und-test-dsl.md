@@ -110,7 +110,16 @@ dotnet run --project GraphExtractor
 dotnet run --project SimHost
 ```
 
-Öffne **http://localhost:5178/**. Ein `● LIVE`-Badge erscheint. Jetzt kannst du:
+Öffne **http://localhost:5178/**. Ein `● LIVE`-Badge erscheint, und links erscheint die
+Sektion **„Aggregate · angelegte Instanzen"**. Jetzt kannst du:
+
+0. **Ein konkretes Aggregat wählen und beobachten** — im Command-Formular ist das
+   `aggregateId`-Feld ein **Instanz-Dropdown**: „➕ neu" legt eine frische Instanz an,
+   sonst wählst du eine der schon angelegten (z.B. „Konto #1"). Die Liste zeigt jede
+   Instanz mit ihren Werten; ein Klick fokussiert sie in der **Inspektor-Karte**, die nach
+   jedem Command die geänderten Felder hervorhebt (alt durchgestrichen → neu grün) und eine
+   kleine Änderungs-Historie führt.
+
 
 1. **Ein Command mit Werten schicken** — im Selektor ein Command wählen, Werte eintragen, ▶.
    Es läuft der **echte** wertabhängige Decider; die getroffene Entscheidung leuchtet auf.
