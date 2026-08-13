@@ -6508,6 +6508,10 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .gnode.n-rejection{border-color:#7a2a3a}
 #de .gnode.n-valueobject{border-color:#2a6a5a}
 #de .gnode.n-aggregate{border-color:#7c5cff;background:#181733}
+#de .gnode.n-enum{border-color:#5a5a70;background:#17171f}
+#de .gnode.n-saga{border-color:#5a3a7a;background:#1a1526}
+#de .gnode.sel{outline:2px solid #cfe;outline-offset:1px;box-shadow:0 0 0 3px #7c5cff55,0 6px 18px #0009}
+#de .gtoolbar{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px;position:sticky;top:0;background:#0d1017;padding:4px 0;z-index:3}
 #de .gport{position:absolute;right:-8px;top:50%;transform:translateY(-50%);width:15px;height:15px;border-radius:50%;background:#7c5cff;border:2px solid #0b0e15;cursor:crosshair}
 #de .gport:hover{background:#9a80ff}
 #de .glegend{display:flex;gap:14px;margin:6px 2px 10px;font-size:11px;color:#9aa3b7;flex-wrap:wrap}
@@ -6557,7 +6561,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     <h2>Domänen-Editor</h2>
     <span id="de-badge" class="badge off">offline</span>
     <span class="sp"></span>
-    <button class="act" id="de-viewtoggle" onclick="deViewToggle()">⧉ Graph</button>
     <button class="act" onclick="deReload()">↻ Vom Graph laden</button>
     <button class="act" onclick="deValidate()">✓ Prüfen</button>
     <button class="act" onclick="deCompile()">⚙ Kompilieren</button>
@@ -6576,7 +6579,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   const SCALARS=["Guid","decimal","int","long","double","bool","string","DateTimeOffset"];
   const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"]};
   let MODEL={schemaVersion:"2",records:[],enums:[],aggregate:[],sagas:[]};
-  let VIEW="form";
   const embedded={
   "schemaVersion": "2",
   "records": [
@@ -9651,8 +9653,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     }
   ]
 };
-  window.deViewToggle=function(){VIEW=VIEW==="form"?"graph":"form";
-    const b=document.getElementById("de-viewtoggle");if(b)b.textContent=VIEW==="form"?"⧉ Graph":"▤ Formular";render();};
 
   const listeZuText=xs=>(xs||[]).join(", ");
   const textZuListe=t=>(t||"").split(",").map(s=>s.trim()).filter(Boolean);
@@ -9698,54 +9698,45 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   // ── RECORD-ZENTRISCH: ein Record-Editor für alles (Command/Event/Ablehnung/Value Object),
   //    danach KOMPOSITION zu Aggregaten (State + Decider + Applier). Feldtyp kann ein anderer
   //    Record/Enum sein → so komponieren sich Records.
-  function render(){
-    if(VIEW==="graph"){renderGraph();return;}
-    const root=document.getElementById("de-form");root.innerHTML="";
-    root.append(datalistEl());
+  // NUR der Node-Editor: links die Fläche, rechts der Inspektor des gewählten Knotens.
+  let SELECTED=null;
+  function render(){ renderGraph(); if(SELECTED&&findNode(SELECTED)?.ref) renderInspector(SELECTED); else { SELECTED=null; inspectorHint(); } }
 
-    // 1 · RECORDS — der uniforme Record-Editor.
-    const rs=h("div",{class:"sec"});
-    rs.append(h("div",{class:"sectitle"},"Records — Commands · Events · Ablehnungen · Value Objects (ein Editor)"));
-    MODEL.records.forEach((r,ri)=>rs.append(recordCard(r,ri)));
-    rs.append(h("div",{class:"addbar"},
-      h("button",{class:"add",onclick:()=>addRecord("command")},"+ Command"),
-      h("button",{class:"add",onclick:()=>addRecord("event")},"+ Event"),
-      h("button",{class:"add",onclick:()=>addRecord("rejection")},"+ Ablehnung"),
-      h("button",{class:"add",onclick:()=>addRecord("valueobject")},"+ Value Object")));
-    root.append(rs);
-
-    // 2 · ENUMS — auch Feldtypen.
-    const es=h("div",{class:"sec"});
-    es.append(h("div",{class:"sectitle"},"Enums — Typen mit festen Werten"));
-    const enTab=h("table",{});
-    MODEL.enums.forEach((e,ei)=>enTab.append(h("tr",{},
-      h("td",{},inp(e.name,v=>e.name=v,"Enum")),
-      h("td",{style:"width:150px"},inp(e.namespace,v=>e.namespace=v,"Domain.X")),
-      h("td",{},inp(listeZuText(e.werte),v=>e.werte=textZuListe(v),"Dc0, Dc2")),
-      h("td",{style:"width:26px"},h("button",{class:"rm",onclick:()=>{MODEL.enums.splice(ei,1);render();}},"✕")))));
-    es.append(enTab,h("button",{class:"add",onclick:()=>{MODEL.enums.push({name:"NeuEnum",namespace:defaultNs(),werte:["A","B"]});render();}},"+ Enum"));
-    root.append(es);
-
-    // 3 · KOMPOSITION — Aggregate verdrahten die Records.
-    const ks=h("div",{class:"sec"});
-    ks.append(h("div",{class:"sectitle"},"Komposition — Aggregate: State + Decider + Applier"));
-    MODEL.aggregate.forEach((a,ai)=>ks.append(aggCard(a,ai)));
-    ks.append(h("button",{class:"add",onclick:()=>{MODEL.aggregate.push({name:"NeuesAggregat",namespace:defaultNs(),state:[],decider:[],applier:[]});render();}},"+ Aggregat"));
-    root.append(ks);
-
-    // 4 · SAGAS.
-    const ss=h("div",{class:"sec"});
-    ss.append(h("div",{class:"sectitle"},"Sagas / Prozesse — aggregat-übergreifend, mit Kompensation"));
-    MODEL.sagas.forEach((s,si)=>ss.append(sagaCard(s,si)));
-    ss.append(h("button",{class:"add",onclick:()=>{MODEL.sagas.push({name:"NeuerProzess",namespace:defaultNs(),triggerEvent:"",schritte:[],extraUsings:[]});render();}},"+ Saga"));
-    root.append(ss);
+  function findNode(id){
+    const i=id.indexOf(":"), pfx=id.slice(0,i), name=id.slice(i+1);
+    if(pfx==="rec"){const r=MODEL.records.find(r=>r.name===name);return r?{ref:r,kind:r.kind,name}:null;}
+    if(pfx==="agg"){const a=MODEL.aggregate.find(a=>a.name===name);return a?{ref:a,kind:"aggregate",name}:null;}
+    if(pfx==="enum"){const e=MODEL.enums.find(e=>e.name===name);return e?{ref:e,kind:"enum",name}:null;}
+    if(pfx==="saga"){const s=MODEL.sagas.find(s=>s.name===name);return s?{ref:s,kind:"saga",name}:null;}
+    return null;
   }
+  function inspectorHint(){document.getElementById("de-out").innerHTML='<div class="hint">Einen Knoten anklicken, um ihn zu bearbeiten. Neue Knoten oben in der Werkzeugleiste anlegen. Vom Port ziehen = verbinden.</div>';}
+  function renderInspector(id){
+    const out=document.getElementById("de-out");out.innerHTML="";
+    const nd=findNode(id);if(!nd||!nd.ref){inspectorHint();return;}
+    out.append(h("div",{class:"sectitle"},"Inspektor · "+(nd.kind==="aggregate"?"Aggregat":nd.kind==="enum"?"Enum":nd.kind==="saga"?"Saga":kindLabel(nd.kind))));
+    if(nd.kind==="aggregate")out.append(aggCard(nd.ref,MODEL.aggregate.indexOf(nd.ref)));
+    else if(nd.kind==="enum")out.append(enumCard(nd.ref,MODEL.enums.indexOf(nd.ref)));
+    else if(nd.kind==="saga")out.append(sagaCard(nd.ref,MODEL.sagas.indexOf(nd.ref)));
+    else out.append(recordCard(nd.ref,MODEL.records.indexOf(nd.ref)));
+  }
+  function enumCard(e,ei){const c=h("div",{class:"card"});
+    c.append(h("h3",{},h("span",{class:"k vo"},"Enum"),inp(e.name,v=>e.name=v,"Enum"),
+      h("input",{value:e.namespace,oninput:ev=>e.namespace=ev.target.value,placeholder:"Domain.X",style:"width:150px"}),
+      h("button",{class:"rm",onclick:()=>{MODEL.enums.splice(ei,1);SELECTED=null;render();}},"✕")));
+    c.append(h("div",{class:"blab"},"Werte (kommagetrennt):"));
+    c.append(inp(listeZuText(e.werte),v=>e.werte=textZuListe(v),"Dc0, Dc2"));
+    return c;}
 
   function addRecord(kind){
     const felder=kind==="command"?[{name:"AggregateId",typ:"Guid"}]:[];
-    MODEL.records.push({name:"Neu"+kindLabel(kind).replace(/\s/g,""),kind,namespace:defaultNs(),felder});
-    render();
+    const name="Neu"+kindLabel(kind).replace(/\s/g,"");
+    MODEL.records.push({name,kind,namespace:defaultNs(),felder});
+    SELECTED="rec:"+name;render();
   }
+  function addAggregat(){const name="NeuesAggregat";MODEL.aggregate.push({name,namespace:defaultNs(),state:[],decider:[],applier:[]});SELECTED="agg:"+name;render();}
+  function addEnum(){const name="NeuEnum";MODEL.enums.push({name,namespace:defaultNs(),werte:["A","B"]});SELECTED="enum:"+name;render();}
+  function addSaga(){const name="NeuerProzess";MODEL.sagas.push({name,namespace:defaultNs(),triggerEvent:"",schritte:[],extraUsings:[]});SELECTED="saga:"+name;render();}
 
   function recordCard(r,ri){
     const c=h("div",{class:"card"});
@@ -9818,8 +9809,14 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   const aggByName=n=>MODEL.aggregate.find(a=>a.name===n);
   function graphNodes(){
     return [...MODEL.records.map(r=>({id:"rec:"+r.name,name:r.name,kind:r.kind,ref:r})),
-            ...MODEL.aggregate.map(a=>({id:"agg:"+a.name,name:a.name,kind:"aggregate",ref:a}))];
+            ...MODEL.aggregate.map(a=>({id:"agg:"+a.name,name:a.name,kind:"aggregate",ref:a})),
+            ...MODEL.enums.map(e=>({id:"enum:"+e.name,name:e.name,kind:"enum",ref:e})),
+            ...MODEL.sagas.map(s=>({id:"saga:"+s.name,name:s.name,kind:"saga",ref:s}))];
   }
+  function selectNode(id){SELECTED=id;
+    document.querySelectorAll("#de-form .gnode.sel").forEach(n=>n.classList.remove("sel"));
+    const el=[...document.querySelectorAll("#de-form .gnode")].find(x=>x.dataset.id===id);if(el)el.classList.add("sel");
+    renderInspector(id);}
   function graphEdges(){
     const es=[];
     MODEL.aggregate.forEach(a=>{
@@ -9832,21 +9829,30 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     return es;
   }
   function autoLayout(){
-    const spalte={command:40,aggregate:400,event:760,rejection:760,valueobject:1040};
-    const zaehl={};
-    graphNodes().forEach(n=>{const r=n.ref;
-      if(typeof r.x==="number"&&typeof r.y==="number")return;
-      const k=n.kind; zaehl[k]=(zaehl[k]||0);
-      r.x=spalte[k]!==undefined?spalte[k]:40; r.y=40+zaehl[k]*80; zaehl[k]++;});
+    // Spalten wie Event Modeling; y stapelt PRO Spalte (kein Überlappen).
+    const spalte={command:40,aggregate:400,event:760,rejection:760,valueobject:1080,enum:1080,saga:400};
+    const yByX={};
+    graphNodes().forEach(n=>{const r=n.ref;const x=spalte[n.kind]!==undefined?spalte[n.kind]:40;
+      if(typeof r.x==="number"&&typeof r.y==="number"){yByX[x]=Math.max(yByX[x]||40,r.y+80);return;}
+      const y=yByX[x]||40; r.x=x; r.y=y; yByX[x]=y+80;});
   }
   function renderGraph(){
     const root=document.getElementById("de-form");root.innerHTML="";
-    root.append(h("div",{class:"hint"},"Knoten ziehen = verschieben (rastet aufs Raster ein). Vom violetten Port ziehen und auf einen Knoten fallen lassen = verbinden."));
+    root.append(datalistEl());
+    root.append(h("div",{class:"gtoolbar"},
+      h("button",{class:"add",onclick:()=>addRecord("command")},"+ Command"),
+      h("button",{class:"add",onclick:()=>addRecord("event")},"+ Event"),
+      h("button",{class:"add",onclick:()=>addRecord("rejection")},"+ Ablehnung"),
+      h("button",{class:"add",onclick:()=>addRecord("valueobject")},"+ Value Object"),
+      h("button",{class:"add",onclick:()=>addEnum()},"+ Enum"),
+      h("button",{class:"add",onclick:()=>addAggregat()},"+ Aggregat"),
+      h("button",{class:"add",onclick:()=>addSaga()},"+ Saga")));
     root.append(h("div",{class:"glegend"},
       h("span",{},h("i",{style:"border-color:#5a7bb0"}),"Command → Aggregat (Decide)"),
       h("span",{},h("i",{style:"border-color:#b08a4a"}),"Aggregat → Event (produziert)"),
-      h("span",{},h("i",{style:"border-color:#4a9a6a;border-top-style:dashed"}),"Event → Aggregat (Apply)")));
-    if(!graphNodes().length){root.append(h("div",{class:"hint"},"Noch keine Records/Aggregate — im Formular anlegen (⧉ zurück)."));return;}
+      h("span",{},h("i",{style:"border-color:#4a9a6a;border-top-style:dashed"}),"Event → Aggregat (Apply)"),
+      h("span",{},"· Knoten ziehen rastet ein · Port ziehen = verbinden · Klick = bearbeiten")));
+    if(!graphNodes().length){root.append(h("div",{class:"hint"},"Leer — oben in der Werkzeugleiste einen Knoten anlegen."));return;}
     autoLayout();
     const canvas=h("div",{class:"gcanvas"});
     const svg=document.createElementNS(SVGNS,"svg");svg.setAttribute("class","gedges");canvas.append(svg);
@@ -9860,18 +9866,23 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     requestAnimationFrame(drawEdges);  // + nächster Frame, falls Fonts/Größen noch nachfließen
   }
   function nodeEl(n){
-    const el=h("div",{class:"gnode n-"+n.kind});
+    const el=h("div",{class:"gnode n-"+n.kind+(n.id===SELECTED?" sel":"")});
+    el.dataset.id=n.id;
     el.style.left=(n.ref.x||0)+"px";el.style.top=(n.ref.y||0)+"px";
-    el.append(h("div",{class:"gk"},n.kind==="aggregate"?"Aggregat":kindLabel(n.kind)));
+    const label=n.kind==="aggregate"?"Aggregat":n.kind==="enum"?"Enum":n.kind==="saga"?"Saga":kindLabel(n.kind);
+    el.append(h("div",{class:"gk"},label));
     el.append(h("div",{class:"gt"},n.name));
-    const port=h("div",{class:"gport",draggable:"true",title:"Ziehen zum Verbinden"});
-    port.ondragstart=e=>{e.stopPropagation();e.dataTransfer.setData("text/plain",JSON.stringify({name:n.name,kind:n.kind}));};
-    el.append(port);
+    if(n.kind==="command"||n.kind==="event"||n.kind==="rejection"){
+      const port=h("div",{class:"gport",draggable:"true",title:"Ziehen zum Verbinden"});
+      port.ondragstart=e=>{e.stopPropagation();e.dataTransfer.setData("text/plain",JSON.stringify({name:n.name,kind:n.kind}));};
+      el.append(port);
+    }
     el.ondragover=e=>{e.preventDefault();el.classList.add("droptarget");};
     el.ondragleave=()=>el.classList.remove("droptarget");
     el.ondrop=e=>{e.preventDefault();el.classList.remove("droptarget");
       let d;try{d=JSON.parse(e.dataTransfer.getData("text/plain"));}catch(_){return;}connectNodes(d,n);};
-    el.onpointerdown=e=>{if(e.target===port)return;startMove(e,el,n.ref);};
+    el.onpointerdown=e=>{if(e.target.classList.contains("gport"))return;startMove(e,el,n.ref);};
+    el.onclick=e=>{if(e.target.classList.contains("gport"))return;selectNode(n.id);};
     return el;
   }
   function startMove(e,el,ref){
