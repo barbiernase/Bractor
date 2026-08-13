@@ -6469,6 +6469,14 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de button.act:hover{background:#2c3d5c}
 #de button.act.go{background:#2e7d5b;border-color:#3fae7f}
 #de button.act.go:hover{background:#369268}
+#de button.act.run{background:#4a3a7a;border-color:#7c5cff;color:#e0d4ff}
+#de button.act.run:hover{background:#5a4892}
+#de .test .trow{display:flex;align-items:center;gap:8px;margin:3px 0}
+#de .test .trow label{min-width:180px;color:#9aa3b7;font-size:12px}
+#de .test .trow input{flex:1}
+#de .test .tframe{padding:4px 8px;border-radius:5px;background:#12261c;color:#9be3bf;margin:3px 0;font:12px ui-monospace,monospace}
+#de .test .tframe.rej{background:#3a1f28;color:#ffb3c1}
+#de .test .tstate{padding:4px 8px;border-radius:5px;background:#141926;color:#cfe;margin:3px 0;font:12px ui-monospace,monospace}
 #de .cols{flex:1;display:grid;grid-template-columns:1fr 1fr;overflow:hidden}
 #de .col{overflow:auto;padding:14px}
 #de .col.left{border-right:1px solid #232a38}
@@ -6505,6 +6513,8 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     <span class="sp"></span>
     <button class="act" onclick="deReload()">↻ Vom Graph laden</button>
     <button class="act" onclick="deValidate()">✓ Prüfen</button>
+    <button class="act" onclick="deCompile()">⚙ Kompilieren</button>
+    <button class="act run" onclick="deTest()">▶ Testen</button>
     <button class="act go" onclick="deScaffold()">&lt;/&gt; C# erzeugen</button>
     <button class="act" onclick="deDownload()">⬇ Modell</button>
     <button class="act" onclick="deClose()">✕ Schließen</button>
@@ -9071,6 +9081,53 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
       if(!fs.length){out.innerHTML='<div class="find" style="background:#1f3a2a;color:#9be3bf">✓ Keine Befunde — die Form ist stimmig.</div>';return;}
       out.innerHTML="";fs.forEach(f=>out.append(h("div",{class:"find "+f.schweregrad},"["+f.code+"] "+f.meldung)));
     }catch(e){badge(false);out.innerHTML='<div class="find error">SimHost nicht erreichbar. Starte ihn: <b>dotnet run --project SimHost</b>.</div>';}};
+
+  const unreach='<div class="find error">SimHost nicht erreichbar. Starte ihn: <b>dotnet run --project SimHost</b>.</div>';
+  async function postJson(path,obj){const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(obj)});if(!r.ok)throw new Error("HTTP "+r.status);return r;}
+  const alleCommands=()=>MODEL.aggregate.flatMap(a=>a.commands||[]);
+
+  // ⚙ Kompilieren: das Modell IN-MEMORY mit den echten Domain-Generatoren übersetzen.
+  window.deCompile=async function(){const out=document.getElementById("de-out");
+    try{const r=await post("/api/editor/compile");const res=await r.json();badge(true);out.innerHTML="";
+      if(res.ok){out.append(h("div",{class:"find",style:"background:#1f3a2a;color:#9be3bf"},"✓ Kompiliert (in-memory, echte Generatoren): "+res.aggregate+" Aggregate, "+res.sagas+" Sagas. Keine Fehler — bereit zum Testen."));}
+      else{out.append(h("div",{class:"find warning"},res.fehler.length+" Compiler-Fehler — zurück in die Körper (Self-Repair-Schleife):"));
+        res.fehler.forEach(f=>out.append(h("div",{class:"find error"},"["+f.code+"] "+(f.datei?f.datei+": ":"")+f.meldung)));}
+    }catch(e){badge(false);out.innerHTML=unreach;}};
+
+  // ▶ Testen: Command mit Werten über den store-freien Kern ausführen (Zustand baut sich auf).
+  let TESTID=null;
+  window.deTest=function(){const out=document.getElementById("de-out");out.innerHTML="";
+    const cmds=alleCommands();
+    if(!cmds.length){out.innerHTML='<div class="hint">Kein Command im Modell — erst eines anlegen.</div>';return;}
+    if(!TESTID)TESTID=(crypto.randomUUID?crypto.randomUUID():"00000000-0000-4000-8000-000000000000");
+    const wrap=h("div",{class:"test"});
+    wrap.append(h("div",{class:"sub"},"Testen — Command mit echten Werten ausführen (In-Memory-Kompilat)"));
+    const sel=h("select");cmds.forEach(c=>sel.append(h("option",{value:c.name},c.name)));
+    const fieldsBox=h("div",{class:"tfields"});
+    function renderFields(){fieldsBox.innerHTML="";const c=cmds.find(x=>x.name===sel.value)||cmds[0];
+      (c.felder||[]).forEach(f=>{const row=h("div",{class:"trow"});row.append(h("label",{},f.name+" : "+f.typ));
+        let input;if(f.typ==="bool"){input=h("input",{type:"checkbox"});}
+        else{input=h("input",{value:f.typ==="Guid"?TESTID:""});if(f.typ==="decimal"||f.typ==="int")input.type="number";}
+        input.dataset.feld=f.name;input.dataset.typ=f.typ;row.append(input);fieldsBox.append(row);});}
+    sel.onchange=renderFields;renderFields();
+    const ergebnis=h("div",{class:"tout"});
+    async function doRun(reset){const c=cmds.find(x=>x.name===sel.value);const values={};
+      fieldsBox.querySelectorAll("input").forEach(i=>{const t=i.dataset.typ;
+        values[i.dataset.feld]=t==="bool"?i.checked:(t==="decimal"||t==="int")?Number(i.value||0):i.value;});
+      try{const r=await postJson("/api/editor/run",{model:MODEL,command:c.name,values,reset});const res=await r.json();badge(true);ergebnis.innerHTML="";
+        if(!res.ok){res.fehler.forEach(f=>ergebnis.append(h("div",{class:"find error"},"["+f.code+"] "+(f.datei?f.datei+": ":"")+f.meldung)));return;}
+        ergebnis.append(h("div",{class:"sub"},"Verlauf"));
+        res.frames.forEach(fr=>ergebnis.append(h("div",{class:"tframe"+(fr.ablehnungen.length?" rej":"")},
+          fr.command+" → "+(fr.events.length?fr.events.join(", "):"—")+(fr.ablehnungen.length?"  ✗ "+fr.ablehnungen.join(", "):"")+(fr.unrouted?"  ⚠ UNROUTED":""))));
+        ergebnis.append(h("div",{class:"sub"},"Zustände"));
+        if(!res.states.length)ergebnis.append(h("div",{class:"hint"},"(kein Aggregat berührt)"));
+        res.states.forEach(s=>ergebnis.append(h("div",{class:"tstate"},s.aggregate+" "+s.id.slice(0,8)+" · "+Object.entries(s.felder).map(([k,v])=>k+"="+v).join(", "))));
+      }catch(e){badge(false);ergebnis.innerHTML=unreach;}}
+    wrap.append(sel,fieldsBox,h("div",{style:"display:flex;gap:8px;margin:8px 0"},
+      h("button",{class:"act run",onclick:()=>doRun(false)},"▶ Senden"),
+      h("button",{class:"act",onclick:()=>doRun(true)},"↺ Reset & Senden"),
+      h("button",{class:"act",onclick:()=>{TESTID=crypto.randomUUID?crypto.randomUUID():TESTID;renderFields();}},"⟳ neue Id")),ergebnis);
+    out.append(wrap);};
 })();
 </script>
 </body>

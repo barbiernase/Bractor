@@ -53,6 +53,23 @@ app.MapPost("/api/editor/validate", (JsonElement body) =>
     return Results.Json(Validator.Prüfe(modell), EditorModell.JsonOptionen);
 });
 
+// Live-Kompilat: das Modell IN-MEMORY mit den echten Domain-Generatoren übersetzen (der
+// „wird das kompiliert?"-Beweis + Self-Repair-Signal). Body = EditorModell-JSON.
+var laufzeit = new ModellRuntime();
+app.MapPost("/api/editor/compile", (JsonElement body) =>
+    Results.Json(laufzeit.Kompiliere(EditorModell.AusJson(body.GetRawText())), EditorModell.JsonOptionen));
+
+// Live-Run: übersetzen (gecacht) und einen Command mit Werten über den store-freien Kern ausführen.
+// Body = { model, command, values, reset }.
+app.MapPost("/api/editor/run", (JsonElement body) =>
+{
+    var modell = EditorModell.AusJson(body.GetProperty("model").GetRawText());
+    var command = body.GetProperty("command").GetString() ?? "";
+    var werte = body.TryGetProperty("values", out var v) ? v : default;
+    var reset = body.TryGetProperty("reset", out var r) && r.GetBoolean();
+    return Results.Json(laufzeit.Fahre(modell, command, werte, reset), EditorModell.JsonOptionen);
+});
+
 Console.WriteLine($"\n▶ SimHost läuft.  Board: http://localhost:5178/   (Board: {boardPath ?? "—"})\n");
 app.Run("http://localhost:5178");
 
