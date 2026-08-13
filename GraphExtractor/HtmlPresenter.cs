@@ -23,6 +23,33 @@ public static class HtmlPresenter
         Template.Replace("/*__GRAPH_JSON__*/", json)
                 .Replace("</body>", EditorBlock.Replace("/*__MODEL_JSON__*/", modelJson) + "\n</body>");
 
+    /// <summary>
+    /// Die EIGENSTÄNDIGE Editor-Seite (Route <c>/editor</c>): nur der Domänen-Editor, kein Board
+    /// dahinter. Startet LEER (bestehende Aggregate werden ignoriert — bewusst über „Vom Graph
+    /// laden" nachladbar). Self-contained, gleiche CSS/JS wie das Board-Overlay.
+    /// </summary>
+    public static string EditorPage() =>
+        """
+        <!doctype html>
+        <html lang="de">
+        <head>
+        <meta charset="utf-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>Domänen-Editor</title>
+        <style>html,body{margin:0;height:100%;background:#0d1017}</style>
+        </head>
+        <body>
+        __EDITOR__
+        <script>
+          // Standalone: Launch-/Schließen-Button weg, Editor sofort zeigen, LEER starten.
+          var ob=document.getElementById('de-open'); if(ob)ob.style.display='none';
+          var cb=document.getElementById('de-close'); if(cb)cb.style.display='none';
+          deShow(); deLeer(); dePing();
+        </script>
+        </body>
+        </html>
+        """.Replace("__EDITOR__", EditorBlock.Replace("/*__MODEL_JSON__*/", "null"));
+
     private const string Template = """
 <!doctype html>
 <html lang="de">
@@ -588,6 +615,11 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .arow{display:flex;gap:6px;align-items:center;margin:2px 0}
 #de .arow select{width:200px}
 #de .arow input{flex:1}
+#de .grip{cursor:grab;color:#6b7688;padding:0 6px 0 0;font-size:14px;user-select:none}
+#de .grip:active{cursor:grabbing}
+#de .dz{border:1px dashed #35507a;border-radius:6px;padding:6px 10px;margin:4px 0;color:#7f8aa0;font-size:11px;text-align:center;transition:all .12s}
+#de .dz.over{border-color:#7c5cff;border-style:solid;background:#1b2233;color:#cfe}
+#de .dz.nope{border-color:#a3435a;color:#ffb3c1}
 #de .sub{color:#8b93a7;font-size:11px;margin:8px 0 4px;text-transform:uppercase;letter-spacing:.5px}
 #de input,#de select,#de textarea{background:#0d1017;color:#dfe4ee;border:1px solid #2c3547;border-radius:5px;
   padding:4px 6px;font:12px ui-monospace,monospace;box-sizing:border-box}
@@ -633,7 +665,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     <button class="act run" onclick="deTest()">▶ Testen</button>
     <button class="act go" onclick="deScaffold()">&lt;/&gt; C# erzeugen</button>
     <button class="act" onclick="deDownload()">⬇ Modell</button>
-    <button class="act" onclick="deClose()">✕ Schließen</button>
+    <button class="act" id="de-close" onclick="deClose()">✕ Schließen</button>
   </header>
   <div class="cols">
     <div class="col left" id="de-form"></div>
@@ -668,6 +700,17 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     const opts=MODEL.records.filter(r=>kinds.includes(r.kind)).map(r=>r.name);
     if(!val||!opts.includes(val)){const o=h("option",{value:val||""},val||"— wählen —");o.selected=true;s.append(o);}
     opts.forEach(n=>{const o=h("option",{value:n},n);if(n===val)o.selected=true;s.append(o);});return s;}
+  // Drop-Zone für graphisches Komponieren: Record-Grip aus der Liste hier ablegen.
+  function dz(label,accept,onDrop){
+    const d=h("div",{class:"dz",
+      ondragover:e=>{e.preventDefault();d.classList.add("over");},
+      ondragleave:()=>d.classList.remove("over"),
+      ondrop:e=>{e.preventDefault();d.classList.remove("over");
+        let data;try{data=JSON.parse(e.dataTransfer.getData("text/plain"));}catch(_){return;}
+        if(accept.includes(data.kind))onDrop(data.name,data.kind);
+        else{d.classList.add("nope");setTimeout(()=>d.classList.remove("nope"),400);}}},label);
+    return d;
+  }
   // Feld-Tabelle: EINE uniforme Zeile Name + Typ (+ optional Ausdruck) — kein Mini-Syntax.
   function feldTabelle(felder,onDel,mitAusdruck){const t=h("table",{});
     (felder||[]).forEach((f,fi)=>{const zellen=[
@@ -732,7 +775,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     const c=h("div",{class:"card"});
     const kindSel=h("select",{class:"kindsel",onchange:e=>{r.kind=e.target.value;render();}});
     Object.keys(KINDINFO).forEach(k=>{const o=h("option",{value:k},kindLabel(k));if(r.kind===k)o.selected=true;kindSel.append(o);});
-    const kopf=[h("span",{class:"k "+kindKlasse(r.kind)},kindLabel(r.kind)),
+    const grip=h("span",{class:"grip",draggable:"true",title:"In eine Decide-/Apply-Zone ziehen",
+      ondragstart:e=>e.dataTransfer.setData("text/plain",JSON.stringify({name:r.name,kind:r.kind}))},"⠿");
+    const kopf=[grip,h("span",{class:"k "+kindKlasse(r.kind)},kindLabel(r.kind)),
       inp(r.name,v=>r.name=v,"RecordName"),
       h("input",{value:r.namespace,oninput:e=>r.namespace=e.target.value,placeholder:"Domain.X",style:"width:150px"}),
       kindSel];
@@ -766,12 +811,13 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
         recSelect(o.event,v=>{o.event=v;},["event","rejection"]),
         inp(o.guard,v=>o.guard=v||undefined,"Guard (optional)"),
         h("button",{class:"rm",onclick:()=>{d.ergibt.splice(oi,1);render();}},"✕"))));
-      box.append(h("button",{class:"add",onclick:()=>{(d.ergibt=d.ergibt||[]).push({event:""});render();}},"+ Ausgang"));
+      box.append(dz("Event/Ablehnung hierher ziehen → Ausgang",["event","rejection"],name=>{(d.ergibt=d.ergibt||[]).push({event:name});render();}));
       box.append(h("div",{class:"blab"},"Decide-Körper — Leer ⇒ throw-Platzhalter."));
       box.append(codearea(d.rumpf,v=>d.rumpf=v||undefined,"if (this.State.Verfuegbar < cmd.Betrag) { yield return new DeckungReichtNicht(this.State.Verfuegbar, cmd.Betrag); yield break; }\nyield return new BetragReserviert(cmd.Betrag);"));
       c.append(box);
     });
     c.append(h("button",{class:"add",onclick:()=>{(a.decider=a.decider||[]).push({command:"",ergibt:[]});render();}},"+ Decide-Regel"));
+    c.append(dz("Command hierher ziehen → neue Decide-Regel",["command"],name=>{(a.decider=a.decider||[]).push({command:name,ergibt:[]});render();}));
 
     // Applier — Event → State
     c.append(h("div",{class:"step"},"Applier — Apply je persistentem Event: Event ⟶ State-Faltung"));
@@ -783,6 +829,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
       c.append(box);
     });
     c.append(h("button",{class:"add",onclick:()=>{(a.applier=a.applier||[]).push({event:""});render();}},"+ Apply-Regel"));
+    c.append(dz("Event hierher ziehen → neue Apply-Regel",["event"],name=>{(a.applier=a.applier||[]).push({event:name});render();}));
 
     return c;
   }
@@ -814,6 +861,10 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   // ── Aktionen ──
   window.deOpen=function(){document.getElementById("de").classList.add("on");if(!MODEL.records.length&&!MODEL.aggregate.length)deReload();else render();};
   window.deClose=function(){document.getElementById("de").classList.remove("on");};
+  // Standalone (/editor): sofort zeigen und LEER starten (bestehende Aggregate ignorieren).
+  window.deShow=function(){document.getElementById("de").classList.add("on");};
+  window.deLeer=function(){MODEL=normalize(null);render();};
+  window.dePing=async function(){try{const r=await fetch("/api/editor/model");badge(r.ok);}catch(e){badge(false);}};
   async function loadLive(){try{const r=await fetch("/api/editor/model");if(!r.ok)throw 0;const m=await r.json();badge(true);return m;}catch(e){badge(false);return null;}}
   function badge(live){const b=document.getElementById("de-badge");b.textContent=live?"SimHost live":"offline";b.className="badge"+(live?"":" off");}
   window.deReload=async function(){const live=await loadLive();MODEL=normalize(live||(embedded&&(embedded.records||embedded.aggregate)?embedded:null));render();};

@@ -91,6 +91,11 @@ var htmlPath = Path.Combine(solutionDir, "knowledge-graph.html");
 await File.WriteAllTextAsync(htmlPath, HtmlPresenter.Render(graph, json, modellJson));
 Console.WriteLine($"✅ {htmlPath}");
 
+// Die eigenständige Editor-Seite (Route /editor): nur der Editor, leer startend.
+var editorPath = Path.Combine(solutionDir, "editor.html");
+await File.WriteAllTextAsync(editorPath, HtmlPresenter.EditorPage());
+Console.WriteLine($"✅ {editorPath}");
+
 Console.WriteLine($"\n   Diagnosen: {graph.Views.Diagnostics.Count}");
 foreach (var f in graph.Views.Diagnostics.Take(12))
     Console.WriteLine($"     [{f.Severity}] {f.Message}");

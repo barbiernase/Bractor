@@ -17,6 +17,12 @@ app.MapGet("/", () => boardPath != null && File.Exists(boardPath)
     ? Results.Content(File.ReadAllText(boardPath), "text/html")
     : Results.Content("<h1>knowledge-graph.html nicht gefunden</h1><p>Erst <code>dotnet run --project GraphExtractor</code> laufen lassen.</p>", "text/html"));
 
+// Eigene Adresse: NUR der Domänen-Editor (startet leer, ignoriert bestehende Aggregate).
+var editorPath = FindNeben("editor.html");
+app.MapGet("/editor", () => editorPath != null && File.Exists(editorPath)
+    ? Results.Content(File.ReadAllText(editorPath), "text/html")
+    : Results.Content("<h1>editor.html nicht gefunden</h1><p>Erst <code>dotnet run --project GraphExtractor</code> laufen lassen.</p>", "text/html"));
+
 app.MapGet("/api/schema", () => Results.Json(engine.Schema()));
 app.MapGet("/api/state", (string? sessionId) => Results.Json(engine.ZustandListe(sessionId ?? "default")));
 app.MapPost("/api/reset", (ResetRequest r) => { engine.Reset(r.SessionId ?? "default"); return Results.Ok(); });
