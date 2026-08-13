@@ -5354,7 +5354,7 @@ document.getElementById('ctx-saga').onclick=()=>setAllCtx(c=>sagaContexts.has(c)
 function applyFilter(){ computeBoard(); needFit=true; resize(); }
 
 // ── Board-Layout (deterministisch, verschachtelt) ────────────────────────────
-const SZ={HW:214,HHEAD:24,ROW:18,HPAD:8,GAPH:12,APAD:14,AHEAD:26,CPAD:18,CHEAD:32,GAPA:14,GAPC:44,LANEH:66,LANEGAP:90,LANEW:186,LANEGX:16,MAXROW:3000};
+const SZ={HW:214,HHEAD:24,ROW:18,HPAD:8,GAPH:12,APAD:14,AHEAD:26,CPAD:18,CHEAD:32,GAPA:14,GAPC:44,LANEH:66,LHEAD:32,LROW:30,LANEGAP:90,LANEW:186,LANEGX:16,MAXROW:3000};
 let board={};
 
 const cmdsOfAgg=name=>nodes.filter(n=>n.kind==='command'&&n.command&&n.command.routedTo===name);
@@ -5367,16 +5367,20 @@ function computeBoard(){
   board={ctx:[],agg:{},handler:{},pillsByEvt:{},lane:{},edges:[],pick:[],bounds:{minx:0,miny:0,maxx:0,maxy:0}};
   const visCtx=contexts.filter(c=>isVis(c)&&aggsOfCtx(c).length>0);
   const measured=visCtx.map(c=>({c,m:measureCtx(c)}));
-  const midTop=SZ.LANEH+SZ.LANEGAP;
-  let cx=0,rowY=0,rowH=0,maxRight=0;
+  // Umbruch-Grenze der Lane aus der geschätzten Inhaltsbreite.
+  let est=0; measured.forEach(({m})=>est+=m.w+SZ.GAPC);
+  const rightBound=Math.max(Math.min(est,SZ.MAXROW),SZ.LANEW*4);
+  // Obere Lane ZUERST (Sagas haben variable Höhe je Regelzahl) → bestimmt, wo die Contexts beginnen.
+  placeLane([...nodes.filter(n=>n.kind==='process'&&isVis(n.context)), ...nodes.filter(n=>n.kind==='pipeline'&&isVis(n.context))], 0, rightBound);
+  let topBottom=SZ.LANEH; Object.values(board.lane).forEach(b=>topBottom=Math.max(topBottom,b.y+b.h));
+  const midTop=topBottom+SZ.LANEGAP;
+  let cx=0,rowY=0,rowH=0;
   measured.forEach(({c,m})=>{
     if(cx>0 && cx+m.w>SZ.MAXROW){ cx=0; rowY+=rowH+SZ.GAPC; rowH=0; }
     placeContext(c,m,cx,midTop+rowY);
-    cx+=m.w+SZ.GAPC; rowH=Math.max(rowH,m.h); maxRight=Math.max(maxRight,cx-SZ.GAPC);
+    cx+=m.w+SZ.GAPC; rowH=Math.max(rowH,m.h);
   });
   const contentBottom=midTop+rowY+rowH;
-  const rightBound=Math.max(maxRight,SZ.LANEW*4);
-  placeLane([...nodes.filter(n=>n.kind==='process'&&isVis(n.context)), ...nodes.filter(n=>n.kind==='pipeline'&&isVis(n.context))], 0, rightBound);
   placeLane(nodes.filter(n=>n.kind==='projection'&&isVis(n.context)), contentBottom+SZ.LANEGAP, rightBound);
   buildEdges();
   computeBounds();
@@ -5396,9 +5400,13 @@ function placeContext(c,m,ox,oy){
       hy+=hh+SZ.GAPH; });
     ay+=am.h+SZ.GAPA; });
 }
-function placeLane(items,y,rightBound){ let x=0,yy=y,rowH=SZ.LANEH;
-  items.forEach(n=>{ if(x>0&&x+SZ.LANEW>rightBound){x=0;yy+=SZ.LANEH+SZ.LANEGX;}
-    board.lane[n.id]={x,y:yy,w:SZ.LANEW,h:SZ.LANEH,node:n}; board.pick.push({x,y:yy,w:SZ.LANEW,h:SZ.LANEH,node:n}); x+=SZ.LANEW+SZ.LANEGX; }); }
+function laneH(n){ return n.kind==='process' ? SZ.LHEAD + Math.max(1,(n.process.rules||[]).length)*SZ.LROW : SZ.LANEH; }
+function placeLane(items,y,rightBound){ let x=0,yy=y,rowMax=0;
+  items.forEach(n=>{ const h=laneH(n);
+    if(x>0&&x+SZ.LANEW>rightBound){x=0;yy+=rowMax+SZ.LANEGX;rowMax=0;}
+    board.lane[n.id]={x,y:yy,w:SZ.LANEW,h,node:n}; board.pick.push({x,y:yy,w:SZ.LANEW,h,node:n});
+    rowMax=Math.max(rowMax,h); x+=SZ.LANEW+SZ.LANEGX; }); }
+function clip(s,maxW){ if(ctx.measureText(s).width<=maxW)return s; let t=s; while(t.length>1&&ctx.measureText(t+'…').width>maxW)t=t.slice(0,-1); return t+'…'; }
 const topC=r=>({x:r.x+r.w/2,y:r.y}), botC=r=>({x:r.x+r.w/2,y:r.y+r.h});
 function buildEdges(){ const E=[];
   edges.forEach(e=>{
@@ -5471,11 +5479,31 @@ function render(){
     ctx.globalAlpha=simMode&&!act?.4:1;
     ctx.fillStyle=col+ (act?'':'22'); ctx.strokeStyle=col; ctx.lineWidth=act?2.4:1.4;
     rr(x,y,b.w*z,b.h*z,9*z); ctx.fill(); ctx.stroke();
-    ctx.textAlign='center'; ctx.fillStyle=act?'#fff':'#e6edf3'; ctx.font=`700 ${11.5*z}px -apple-system,sans-serif`;
-    const icon=n.kind==='process'?'⬡ ':n.kind==='projection'?'▤ ':'⛁ '; ctx.fillText(icon+n.name, x+b.w*z/2, y+b.h*z/2-6*z);
-    ctx.fillStyle=col; ctx.font=`${9.5*z}px -apple-system,sans-serif`;
-    const sub=n.kind==='process'?n.process.pattern:(n.kind==='projection'?n.projection.subscriberId:'Pipeline');
-    ctx.fillText(sub, x+b.w*z/2, y+b.h*z/2+9*z); ctx.textAlign='left'; ctx.globalAlpha=1; });
+    if(n.kind==='process'){
+      // Kopf: Name + Muster/Auslöser
+      ctx.textAlign='left'; ctx.fillStyle=act?'#fff':'#e6edf3'; ctx.font=`700 ${11*z}px -apple-system,sans-serif`;
+      ctx.fillText(clip('⬡ '+n.name,(b.w-18)*z), x+10*z, y+14*z);
+      ctx.fillStyle=col; ctx.font=`${8.4*z}px -apple-system,sans-serif`;
+      ctx.fillText(clip(n.process.pattern+' · Auslöser '+n.process.trigger,(b.w-18)*z), x+10*z, y+26*z);
+      // Transitionen: Auf <Events> → Sende <Command> (+ Join / Fan-out / Kompensation)
+      const maxW=(b.w-22)*z;
+      (n.process.rules||[]).forEach((r,i)=>{ const ry=y+(SZ.LHEAD+i*SZ.LROW)*z;
+        ctx.font=`${8.7*z}px -apple-system,sans-serif`;
+        const join=r.join==='count'?' (alle '+(r.sammel||'')+')':'';
+        ctx.fillStyle='#9cc2ff';
+        ctx.fillText(clip('Auf '+(r.when||[]).join(' + ')+join, maxW), x+12*z, ry+5*z);
+        ctx.fillStyle='#f0b464';
+        const send='→ '+(r.fanOut?'je ':'')+r.sends+(r.compensates?'   ↩ '+r.compensates:'');
+        ctx.fillText(clip(send, maxW), x+18*z, ry+18*z);
+      });
+    } else {
+      ctx.textAlign='center'; ctx.fillStyle=act?'#fff':'#e6edf3'; ctx.font=`700 ${11.5*z}px -apple-system,sans-serif`;
+      const icon=n.kind==='projection'?'▤ ':'⛁ '; ctx.fillText(icon+n.name, x+b.w*z/2, y+b.h*z/2-6*z);
+      ctx.fillStyle=col; ctx.font=`${9.5*z}px -apple-system,sans-serif`;
+      const sub=n.kind==='projection'?n.projection.subscriberId:'Pipeline';
+      ctx.fillText(sub, x+b.w*z/2, y+b.h*z/2+9*z);
+    }
+    ctx.textAlign='left'; ctx.globalAlpha=1; });
   // 6) aktive Kanten oben drauf
   if(simMode) drawEdges(true);
 }
