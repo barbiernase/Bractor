@@ -6512,6 +6512,31 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .gnode.n-saga{border-color:#5a3a7a;background:#1a1526}
 #de .gnode.sel{outline:2px solid #cfe;outline-offset:1px;box-shadow:0 0 0 3px #7c5cff55,0 6px 18px #0009}
 #de .gtoolbar{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px;position:sticky;top:0;background:#0d1017;padding:4px 0;z-index:3}
+/* Design-in-Place-Knoten */
+#de .gnode2{position:absolute;width:260px;background:#141926;border:1px solid #2c3547;border-radius:9px;box-shadow:0 3px 12px #0007}
+#de .gnode2.wide{width:420px}
+#de .gnode2.dragging{z-index:8;box-shadow:0 12px 30px #000c}
+#de .gnode2.droptarget{outline:2px solid #7c5cff;outline-offset:1px}
+#de .gnode2.n-command{border-color:#35507a}
+#de .gnode2.n-event{border-color:#7a5a2a}
+#de .gnode2.n-rejection{border-color:#7a2a3a}
+#de .gnode2.n-valueobject{border-color:#2a6a5a}
+#de .gnode2.n-enum{border-color:#5a5a70}
+#de .gnode2.n-aggregate{border-color:#7c5cff}
+#de .gnode2.n-saga{border-color:#5a3a7a}
+#de .ghead{display:flex;align-items:center;gap:6px;padding:4px 8px;background:#1b2233;border-radius:8px 8px 0 0;border-bottom:1px solid #232a38;cursor:grab;user-select:none;touch-action:none}
+#de .gnode2.dragging .ghead{cursor:grabbing}
+#de .gh-move{flex:1;color:#9aa3b7;font-size:10px;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#de .gh-port{width:14px;height:14px;border-radius:50%;background:#7c5cff;border:2px solid #0b0e15;cursor:crosshair;flex:none}
+#de .gbody{padding:6px 8px 8px}
+#de .gbody .card{background:none;border:0;box-shadow:none;padding:0;margin:0}
+#de .gbody .card h3{margin-bottom:6px}
+#de .gbody .card h3 .k{display:none}
+#de .gempty{position:absolute;left:24px;top:24px;color:#5c6577;font-size:12px}
+#de .gpick{position:absolute;z-index:20;background:#141926;border:1px solid #7c5cff;border-radius:8px;padding:6px;display:flex;flex-direction:column;gap:3px;box-shadow:0 10px 28px #000b;min-width:150px}
+#de .gpick .gpick-t{font-size:11px;color:#9aa3b7;padding:2px 6px 4px}
+#de .gpick button{background:#233047;color:#cfe;border:1px solid #35507a;border-radius:5px;padding:5px 10px;cursor:pointer;text-align:left;font:12px system-ui}
+#de .gpick button:hover{background:#2c3d5c}
 #de .gport{position:absolute;right:-8px;top:50%;transform:translateY(-50%);width:15px;height:15px;border-radius:50%;background:#7c5cff;border:2px solid #0b0e15;cursor:crosshair}
 #de .gport:hover{background:#9a80ff}
 #de .glegend{display:flex;gap:14px;margin:6px 2px 10px;font-size:11px;color:#9aa3b7;flex-wrap:wrap}
@@ -9698,45 +9723,34 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   // ── RECORD-ZENTRISCH: ein Record-Editor für alles (Command/Event/Ablehnung/Value Object),
   //    danach KOMPOSITION zu Aggregaten (State + Decider + Applier). Feldtyp kann ein anderer
   //    Record/Enum sein → so komponieren sich Records.
-  // NUR der Node-Editor: links die Fläche, rechts der Inspektor des gewählten Knotens.
-  let SELECTED=null;
-  function render(){ renderGraph(); if(SELECTED&&findNode(SELECTED)?.ref) renderInspector(SELECTED); else { SELECTED=null; inspectorHint(); } }
+  // NUR der Node-Editor, DESIGN-IN-PLACE: jeder Knoten wird direkt auf der Fläche bestückt.
+  function render(){ renderGraph(); }
 
-  function findNode(id){
-    const i=id.indexOf(":"), pfx=id.slice(0,i), name=id.slice(i+1);
-    if(pfx==="rec"){const r=MODEL.records.find(r=>r.name===name);return r?{ref:r,kind:r.kind,name}:null;}
-    if(pfx==="agg"){const a=MODEL.aggregate.find(a=>a.name===name);return a?{ref:a,kind:"aggregate",name}:null;}
-    if(pfx==="enum"){const e=MODEL.enums.find(e=>e.name===name);return e?{ref:e,kind:"enum",name}:null;}
-    if(pfx==="saga"){const s=MODEL.sagas.find(s=>s.name===name);return s?{ref:s,kind:"saga",name}:null;}
-    return null;
-  }
-  function inspectorHint(){document.getElementById("de-out").innerHTML='<div class="hint">Einen Knoten anklicken, um ihn zu bearbeiten. Neue Knoten oben in der Werkzeugleiste anlegen. Vom Port ziehen = verbinden.</div>';}
-  function renderInspector(id){
-    const out=document.getElementById("de-out");out.innerHTML="";
-    const nd=findNode(id);if(!nd||!nd.ref){inspectorHint();return;}
-    out.append(h("div",{class:"sectitle"},"Inspektor · "+(nd.kind==="aggregate"?"Aggregat":nd.kind==="enum"?"Enum":nd.kind==="saga"?"Saga":kindLabel(nd.kind))));
-    if(nd.kind==="aggregate")out.append(aggCard(nd.ref,MODEL.aggregate.indexOf(nd.ref)));
-    else if(nd.kind==="enum")out.append(enumCard(nd.ref,MODEL.enums.indexOf(nd.ref)));
-    else if(nd.kind==="saga")out.append(sagaCard(nd.ref,MODEL.sagas.indexOf(nd.ref)));
-    else out.append(recordCard(nd.ref,MODEL.records.indexOf(nd.ref)));
-  }
+  // Eindeutiger Name — Namen sind der Referenzschlüssel für Kanten/Decider/Applier.
+  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name)]);
+    if(!all.has(base))return base;let i=2;while(all.has(base+i))i++;return base+i;}
+
   function enumCard(e,ei){const c=h("div",{class:"card"});
     c.append(h("h3",{},h("span",{class:"k vo"},"Enum"),inp(e.name,v=>e.name=v,"Enum"),
       h("input",{value:e.namespace,oninput:ev=>e.namespace=ev.target.value,placeholder:"Domain.X",style:"width:150px"}),
-      h("button",{class:"rm",onclick:()=>{MODEL.enums.splice(ei,1);SELECTED=null;render();}},"✕")));
+      h("button",{class:"rm",onclick:()=>{MODEL.enums.splice(ei,1);render();}},"✕")));
     c.append(h("div",{class:"blab"},"Werte (kommagetrennt):"));
     c.append(inp(listeZuText(e.werte),v=>e.werte=textZuListe(v),"Dc0, Dc2"));
     return c;}
 
-  function addRecord(kind){
-    const felder=kind==="command"?[{name:"AggregateId",typ:"Guid"}]:[];
-    const name="Neu"+kindLabel(kind).replace(/\s/g,"");
-    MODEL.records.push({name,kind,namespace:defaultNs(),felder});
-    SELECTED="rec:"+name;render();
+  // Knoten anlegen — optional an einer Position (Rohzellen-Picker), sonst auto-layouten (Toolbar).
+  function neuerKnoten(kind,x,y){
+    const pos=(typeof x==="number")?{x:Math.round(x/GRID)*GRID,y:Math.round(y/GRID)*GRID}:{};
+    if(kind==="aggregate")MODEL.aggregate.push({name:uniq("NeuesAggregat"),namespace:defaultNs(),state:[],decider:[],applier:[],...pos});
+    else if(kind==="enum")MODEL.enums.push({name:uniq("NeuEnum"),namespace:defaultNs(),werte:["A","B"],...pos});
+    else if(kind==="saga")MODEL.sagas.push({name:uniq("NeuerProzess"),namespace:defaultNs(),triggerEvent:"",schritte:[],extraUsings:[],...pos});
+    else MODEL.records.push({name:uniq("Neu"+kindLabel(kind).replace(/\s/g,"")),kind,namespace:defaultNs(),felder:kind==="command"?[{name:"AggregateId",typ:"Guid"}]:[],...pos});
+    render();
   }
-  function addAggregat(){const name="NeuesAggregat";MODEL.aggregate.push({name,namespace:defaultNs(),state:[],decider:[],applier:[]});SELECTED="agg:"+name;render();}
-  function addEnum(){const name="NeuEnum";MODEL.enums.push({name,namespace:defaultNs(),werte:["A","B"]});SELECTED="enum:"+name;render();}
-  function addSaga(){const name="NeuerProzess";MODEL.sagas.push({name,namespace:defaultNs(),triggerEvent:"",schritte:[],extraUsings:[]});SELECTED="saga:"+name;render();}
+  const addRecord=k=>neuerKnoten(k);
+  const addAggregat=()=>neuerKnoten("aggregate");
+  const addEnum=()=>neuerKnoten("enum");
+  const addSaga=()=>neuerKnoten("saga");
 
   function recordCard(r,ri){
     const c=h("div",{class:"card"});
@@ -9813,10 +9827,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
             ...MODEL.enums.map(e=>({id:"enum:"+e.name,name:e.name,kind:"enum",ref:e})),
             ...MODEL.sagas.map(s=>({id:"saga:"+s.name,name:s.name,kind:"saga",ref:s}))];
   }
-  function selectNode(id){SELECTED=id;
-    document.querySelectorAll("#de-form .gnode.sel").forEach(n=>n.classList.remove("sel"));
-    const el=[...document.querySelectorAll("#de-form .gnode")].find(x=>x.dataset.id===id);if(el)el.classList.add("sel");
-    renderInspector(id);}
   function graphEdges(){
     const es=[];
     MODEL.aggregate.forEach(a=>{
@@ -9851,38 +9861,59 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
       h("span",{},h("i",{style:"border-color:#5a7bb0"}),"Command → Aggregat (Decide)"),
       h("span",{},h("i",{style:"border-color:#b08a4a"}),"Aggregat → Event (produziert)"),
       h("span",{},h("i",{style:"border-color:#4a9a6a;border-top-style:dashed"}),"Event → Aggregat (Apply)"),
-      h("span",{},"· Knoten ziehen rastet ein · Port ziehen = verbinden · Klick = bearbeiten")));
-    if(!graphNodes().length){root.append(h("div",{class:"hint"},"Leer — oben in der Werkzeugleiste einen Knoten anlegen."));return;}
+      h("span",{},"· Doppelklick auf die Fläche = Rohzelle · Kopf ziehen rastet ein · Port ziehen = verbinden")));
     autoLayout();
     const canvas=h("div",{class:"gcanvas"});
+    canvas.ondblclick=e=>{if(e.target!==canvas&&e.target.tagName!=="svg"&&e.target.tagName!=="path")return;
+      const rect=canvas.getBoundingClientRect();showPicker(canvas,e.clientX-rect.left,e.clientY-rect.top);};
     const svg=document.createElementNS(SVGNS,"svg");svg.setAttribute("class","gedges");canvas.append(svg);
     const els={};
-    graphNodes().forEach(n=>{const el=nodeEl(n);els[n.id]=el;canvas.append(el);});
+    graphNodes().forEach(n=>{const el=nodeEditor(n);els[n.id]=el;canvas.append(el);});
     root.append(canvas);
+    if(!graphNodes().length)canvas.append(h("div",{class:"gempty"},"Doppelklick hier, um eine Rohzelle zu setzen — oder oben in der Werkzeugleiste anlegen."));
     function drawEdges(){while(svg.firstChild)svg.removeChild(svg.firstChild);
       graphEdges().forEach(e=>{const a=els[e.from],b=els[e.to];if(!a||!b)return;svg.append(edgePath(a,b,e));});}
     window.__deDrawEdges=drawEdges;
     drawEdges();                       // synchron (liest Layout) — robust auch bei pausiertem rAF
     requestAnimationFrame(drawEdges);  // + nächster Frame, falls Fonts/Größen noch nachfließen
   }
-  function nodeEl(n){
-    const el=h("div",{class:"gnode n-"+n.kind+(n.id===SELECTED?" sel":"")});
+  // Rohzelle: Doppelklick → Picker → „was soll hier entstehen?" → Knoten an der Stelle.
+  function showPicker(canvas,x,y){
+    canvas.querySelectorAll(".gpick").forEach(p=>p.remove());
+    const pick=h("div",{class:"gpick"});pick.style.left=x+"px";pick.style.top=y+"px";
+    const opt=(kind,label)=>h("button",{onclick:()=>{pick.remove();neuerKnoten(kind,x,y);}},label);
+    pick.append(h("div",{class:"gpick-t"},"Was soll hier entstehen?"),
+      opt("command","Command"),opt("event","Event"),opt("rejection","Ablehnung"),
+      opt("valueobject","Value Object"),opt("enum","Enum"),opt("aggregate","Aggregat"),opt("saga","Saga"));
+    canvas.append(pick);
+    // Wegklicken schließt den Picker.
+    setTimeout(()=>{const off=ev=>{if(!pick.contains(ev.target)){pick.remove();document.removeEventListener("pointerdown",off);}};document.addEventListener("pointerdown",off);},0);
+  }
+
+  // Ein Knoten = Kopf (Griff + Port) + Körper (der In-Place-Editor: recordCard/aggCard/…).
+  function nodeEditor(n){
+    const el=h("div",{class:"gnode2 n-"+n.kind+(["aggregate","saga"].includes(n.kind)?" wide":"")});
     el.dataset.id=n.id;
     el.style.left=(n.ref.x||0)+"px";el.style.top=(n.ref.y||0)+"px";
     const label=n.kind==="aggregate"?"Aggregat":n.kind==="enum"?"Enum":n.kind==="saga"?"Saga":kindLabel(n.kind);
-    el.append(h("div",{class:"gk"},label));
-    el.append(h("div",{class:"gt"},n.name));
+    const head=h("div",{class:"ghead"},h("span",{class:"gh-move"},"⠿ "+label));
     if(n.kind==="command"||n.kind==="event"||n.kind==="rejection"){
-      const port=h("div",{class:"gport",draggable:"true",title:"Ziehen zum Verbinden"});
+      const port=h("div",{class:"gh-port",draggable:"true",title:"Ziehen zum Verbinden"});
       port.ondragstart=e=>{e.stopPropagation();e.dataTransfer.setData("text/plain",JSON.stringify({name:n.name,kind:n.kind}));};
-      el.append(port);
+      head.append(port);
     }
+    head.onpointerdown=e=>{if(e.target.classList.contains("gh-port"))return;startMove(e,el,n.ref);};
+    el.append(head);
+    const body=h("div",{class:"gbody"});
+    if(n.kind==="aggregate")body.append(aggCard(n.ref,MODEL.aggregate.indexOf(n.ref)));
+    else if(n.kind==="enum")body.append(enumCard(n.ref,MODEL.enums.indexOf(n.ref)));
+    else if(n.kind==="saga")body.append(sagaCard(n.ref,MODEL.sagas.indexOf(n.ref)));
+    else body.append(recordCard(n.ref,MODEL.records.indexOf(n.ref)));
+    el.append(body);
     el.ondragover=e=>{e.preventDefault();el.classList.add("droptarget");};
     el.ondragleave=()=>el.classList.remove("droptarget");
     el.ondrop=e=>{e.preventDefault();el.classList.remove("droptarget");
       let d;try{d=JSON.parse(e.dataTransfer.getData("text/plain"));}catch(_){return;}connectNodes(d,n);};
-    el.onpointerdown=e=>{if(e.target.classList.contains("gport"))return;startMove(e,el,n.ref);};
-    el.onclick=e=>{if(e.target.classList.contains("gport"))return;selectNode(n.id);};
     return el;
   }
   function startMove(e,el,ref){
