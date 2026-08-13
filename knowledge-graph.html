@@ -5439,7 +5439,7 @@ document.getElementById('ctx-saga').onclick=()=>setAllCtx(c=>sagaContexts.has(c)
 function applyFilter(){ computeBoard(); needFit=true; resize(); }
 
 // ── Board-Layout (deterministisch, verschachtelt) ────────────────────────────
-const SZ={HW:214,HHEAD:24,ROW:18,HPAD:8,GAPH:12,APAD:14,AHEAD:26,CPAD:18,CHEAD:32,GAPA:14,GAPC:44,LANEH:66,LHEAD:32,LROW:30,LANEGAP:90,LANEW:186,LANEGX:16,MAXROW:3000};
+const SZ={HW:214,HHEAD:24,ROW:18,HPAD:8,GAPH:12,APAD:14,AHEAD:26,CPAD:18,CHEAD:32,GAPA:14,GAPC:44,LANEH:66,LHEAD:32,LROW:30,LANEGAP:90,LANEW:186,PROCW:300,LANEGX:16,MAXROW:3000};
 let board={};
 
 const cmdsOfAgg=name=>nodes.filter(n=>n.kind==='command'&&n.command&&n.command.routedTo===name);
@@ -5485,12 +5485,22 @@ function placeContext(c,m,ox,oy){
       hy+=hh+SZ.GAPH; });
     ay+=am.h+SZ.GAPA; });
 }
-function laneH(n){ return n.kind==='process' ? SZ.LHEAD + Math.max(1,(n.process.rules||[]).length)*SZ.LROW : SZ.LANEH; }
+const RF=9, RLH=13; // Regel-Font + Zeilenhöhe (Weltkoordinaten)
+function laneW(n){ return n.kind==='process' ? SZ.PROCW : SZ.LANEW; }
+function wrapLines(s,maxW){ ctx.font=RF+'px -apple-system,sans-serif'; const ws=s.split(' '); const out=[]; let cur='';
+  ws.forEach(w=>{ const t=cur?cur+' '+w:w; if(!cur||ctx.measureText(t).width<=maxW)cur=t; else {out.push(cur);cur=w;} }); if(cur)out.push(cur); return out; }
+function ruleLines(r,innerW){
+  const cond='Auf '+(r.when||[]).join(' + ')+(r.join==='count'?' (alle '+(r.sammel||'')+')':'');
+  const send='→ '+(r.fanOut?'je ':'')+r.sends+(r.compensates?'  ↩ '+r.compensates:'');
+  return wrapLines(cond,innerW).map(t=>['c',t]).concat(wrapLines(send,innerW).map(t=>['s',t])); }
+function laneH(n){ if(n.kind!=='process') return SZ.LANEH;
+  const innerW=SZ.PROCW-24; let lines=0; (n.process.rules||[]).forEach(r=>lines+=ruleLines(r,innerW).length);
+  return SZ.LHEAD + Math.max(1,lines)*RLH + (n.process.rules||[]).length*4 + 6; }
 function placeLane(items,y,rightBound){ let x=0,yy=y,rowMax=0;
-  items.forEach(n=>{ const h=laneH(n);
-    if(x>0&&x+SZ.LANEW>rightBound){x=0;yy+=rowMax+SZ.LANEGX;rowMax=0;}
-    board.lane[n.id]={x,y:yy,w:SZ.LANEW,h,node:n}; board.pick.push({x,y:yy,w:SZ.LANEW,h,node:n});
-    rowMax=Math.max(rowMax,h); x+=SZ.LANEW+SZ.LANEGX; }); }
+  items.forEach(n=>{ const h=laneH(n), w=laneW(n);
+    if(x>0&&x+w>rightBound){x=0;yy+=rowMax+SZ.LANEGX;rowMax=0;}
+    board.lane[n.id]={x,y:yy,w,h,node:n}; board.pick.push({x,y:yy,w,h,node:n});
+    rowMax=Math.max(rowMax,h); x+=w+SZ.LANEGX; }); }
 function clip(s,maxW){ if(ctx.measureText(s).width<=maxW)return s; let t=s; while(t.length>1&&ctx.measureText(t+'…').width>maxW)t=t.slice(0,-1); return t+'…'; }
 const topC=r=>({x:r.x+r.w/2,y:r.y}), botC=r=>({x:r.x+r.w/2,y:r.y+r.h});
 function buildEdges(){ const E=[];
@@ -5570,16 +5580,16 @@ function render(){
       ctx.fillText(clip('⬡ '+n.name,(b.w-18)*z), x+10*z, y+14*z);
       ctx.fillStyle=col; ctx.font=`${8.4*z}px -apple-system,sans-serif`;
       ctx.fillText(clip(n.process.pattern+' · Auslöser '+n.process.trigger,(b.w-18)*z), x+10*z, y+26*z);
-      // Transitionen: Auf <Events> → Sende <Command> (+ Join / Fan-out / Kompensation)
-      const maxW=(b.w-22)*z;
-      (n.process.rules||[]).forEach((r,i)=>{ const ry=y+(SZ.LHEAD+i*SZ.LROW)*z;
-        ctx.font=`${8.7*z}px -apple-system,sans-serif`;
-        const join=r.join==='count'?' (alle '+(r.sammel||'')+')':'';
-        ctx.fillStyle='#9cc2ff';
-        ctx.fillText(clip('Auf '+(r.when||[]).join(' + ')+join, maxW), x+12*z, ry+5*z);
-        ctx.fillStyle='#f0b464';
-        const send='→ '+(r.fanOut?'je ':'')+r.sends+(r.compensates?'   ↩ '+r.compensates:'');
-        ctx.fillText(clip(send, maxW), x+18*z, ry+18*z);
+      // Transitionen: Auf <Events> → Sende <Command> — voll umgebrochen, nie abgeschnitten.
+      const innerW=b.w-24; let ly=y+SZ.LHEAD*z;
+      (n.process.rules||[]).forEach(r=>{
+        ruleLines(r,innerW).forEach(([k,t])=>{
+          ctx.font=`${RF*z}px -apple-system,sans-serif`;
+          ctx.fillStyle = k==='c' ? '#9cc2ff' : '#f0b464';
+          ctx.fillText(t, x+(k==='c'?12:18)*z, ly+RF*z);
+          ly += RLH*z;
+        });
+        ly += 4*z; // Abstand zwischen Regeln
       });
     } else {
       ctx.textAlign='center'; ctx.fillStyle=act?'#fff':'#e6edf3'; ctx.font=`700 ${11.5*z}px -apple-system,sans-serif`;
