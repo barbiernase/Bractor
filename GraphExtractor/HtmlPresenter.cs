@@ -602,10 +602,13 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .chip{display:flex;gap:4px;align-items:center;background:#141926;border:1px solid #4a3a1f;border-radius:8px;padding:4px 6px}
 #de .chip input{width:118px}
 #de .cmdbox{border-left:2px solid #35507a;padding-left:8px;margin:8px 0}
-#de .cmdhead{display:flex;gap:6px;align-items:center;margin-bottom:3px}
+#de .cmdhead{display:flex;gap:2px;align-items:center;margin-bottom:3px}
 #de .cmdhead .lbl{color:#8b93a7;font-size:11px}
 #de .cmdhead select{width:130px}
 #de table.grid td{padding:2px 3px}
+#de .step{font-size:12px;font-weight:700;color:#cfd7e6;letter-spacing:.3px;margin:14px 0 6px;padding-bottom:3px;border-bottom:1px solid #2b3446}
+#de .cmdn{color:#9be3ff;font-weight:700;font-family:ui-monospace,monospace}
+#de .applybox{border-left:2px solid #3f6a4a;padding-left:8px;margin:8px 0}
 #de .blab{color:#8b93a7;font-size:10px;margin:5px 0 2px}
 #de textarea.code{width:100%;box-sizing:border-box;font:12px/1.45 ui-monospace,monospace;background:#0a0d13;tab-size:4}
 </style>
@@ -653,106 +656,79 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   const codearea=(val,on,ph)=>{const t=h("textarea",{class:"code",oninput:e=>on(e.target.value),placeholder:ph||"",rows:Math.max(3,String(val||"").split("\n").length+1)});t.value=val??"";return t;};
   function sel(val,on){const s=h("select",{onchange:e=>on(e.target.value)});TYPEN.forEach(t=>{const o=h("option",{value:t},t);if(t===val)o.selected=true;s.append(o);});return s;}
 
-  // ── Event-first: das Modell in der Modellier-Reihenfolge zeigen ──
-  //    Events (Fakten) → Commands (Absichten, ⟶ OneOf) → State (aus Events gefaltet).
-  //    Das Aggregat ist die ZUORDNUNG/Konsistenzgrenze, nicht mehr der Container.
-  //    Gespeichert wird weiter aggregat-genestet (Scaffolder/Round-trip unverändert).
-  function ensureAgg(){ if(!MODEL.aggregate.length) MODEL.aggregate.push({name:"Konto",namespace:"Domain.Konto",felder:[],commands:[],events:[]}); return MODEL.aggregate[0]; }
-  function aggSelect(cur,on){ const s=h("select",{onchange:e=>on(e.target.value)});
-    MODEL.aggregate.forEach(a=>{const o=h("option",{value:a.name},a.name);if(a.name===cur)o.selected=true;s.append(o);}); return s; }
-  function moveItem(from,key,item,toName){ const to=MODEL.aggregate.find(a=>a.name===toName); if(!to||to===from)return;
-    const arr=from[key]; const i=arr.indexOf(item); if(i>=0)arr.splice(i,1); (to[key]=to[key]||[]).push(item); render(); }
-
+  // ── Aggregat-zuerst, in der BAU-Reihenfolge, wie man ein Aggregat von Hand schreibt:
+  //    Aggregat → 1 State → 2 Commands (Records) → 3 Events (Records) → 4 Decider → 5 Applier.
+  //    Records (Typen) sind bewusst GETRENNT von der Logik (Decider/Applier) — wie die Dateien
+  //    Commands.cs / Events.cs / Decider.cs / Applier.cs. Gespeichert wird aggregat-genestet.
   function render(){
     const root=document.getElementById("de-form");root.innerHTML="";
-    root.append(aggregatStrip());
-    root.append(eventsSektion());
-    root.append(commandsSektion());
-    root.append(stateSektion());
-    const sagaSec=h("div",{class:"sec"});
-    sagaSec.append(h("div",{class:"sectitle"},"Sagas / Prozesse — aggregat-übergreifend, mit Kompensation"));
-    MODEL.sagas.forEach((s,si)=>sagaSec.append(sagaCard(s,si)));
-    sagaSec.append(h("button",{class:"add",onclick:()=>{MODEL.sagas.push({name:"NeuerProzess",namespace:(MODEL.aggregate[0]?.namespace||"Domain.Neu"),triggerEvent:"",schritte:[],extraUsings:[]});render();}},"+ Saga"));
-    root.append(sagaSec);
+    root.append(h("div",{class:"addbar"},
+      h("button",{class:"add",onclick:()=>{MODEL.aggregate.push({name:"NeuesAggregat",namespace:"Domain.Neu",felder:[],commands:[],events:[]});render();}},"+ Aggregat"),
+      h("button",{class:"add",onclick:()=>{MODEL.sagas.push({name:"NeuerProzess",namespace:(MODEL.aggregate[0]?.namespace||"Domain.Neu"),triggerEvent:"",schritte:[],extraUsings:[]});render();}},"+ Saga")));
+    MODEL.aggregate.forEach((a,ai)=>root.append(aggCard(a,ai)));
+    MODEL.sagas.forEach((s,si)=>root.append(sagaCard(s,si)));
   }
 
-  // Aggregate = Zuordnung/Gruppierung (Konsistenzgrenzen).
-  function aggregatStrip(){
-    const sec=h("div",{class:"sec"});
-    sec.append(h("div",{class:"sectitle"},"Aggregate — Konsistenzgrenzen (Zuordnung/Gruppierung)"));
-    const chips=h("div",{class:"chips"});
-    MODEL.aggregate.forEach((a,ai)=>{
-      const chip=h("div",{class:"chip"});
-      chip.append(h("input",{value:a.name,oninput:e=>a.name=e.target.value,onchange:()=>render(),placeholder:"Name"}));
-      chip.append(h("input",{value:a.namespace,oninput:e=>a.namespace=e.target.value,placeholder:"Domain.X"}));
-      chip.append(h("button",{class:"rm",onclick:()=>{MODEL.aggregate.splice(ai,1);render();}},"✕"));
-      chips.append(chip);
-    });
-    sec.append(chips,h("button",{class:"add",onclick:()=>{MODEL.aggregate.push({name:"Neu"+(MODEL.aggregate.length+1),namespace:"Domain.Neu",felder:[],commands:[],events:[]});render();}},"+ Aggregat"));
-    return sec;
-  }
+  function aggCard(a,ai){
+    const c=h("div",{class:"card"});
+    c.append(h("h3",{},h("span",{class:"k agg"},"Aggregat"),
+      inp(a.name,v=>a.name=v),inp(a.namespace,v=>a.namespace=v),
+      h("button",{class:"rm",onclick:()=>{MODEL.aggregate.splice(ai,1);render();}},"✕")));
 
-  // 1) EVENTS — die Fakten (rein, ID-los).
-  function eventsSektion(){
-    const sec=h("div",{class:"sec"});
-    sec.append(h("div",{class:"sectitle"},"1 · Events — die Fakten (rein, ID-los · [x] = Ablehnung/transient)"));
-    const t=h("table",{class:"grid"});
-    MODEL.aggregate.forEach(a=>(a.events||[]).forEach((e,ei)=>t.append(h("tr",{},
-      h("td",{},inp(e.name,v=>e.name=v,"EventName")),
-      h("td",{style:"width:130px"},aggSelect(a.name,n=>moveItem(a,"events",e,n))),
+    // 1 · STATE — der Zustand.
+    c.append(h("div",{class:"step"},"1 · State — der Zustand (Felder; abgeleitet via Ausdruck)"));
+    const ft=h("table",{});
+    (a.felder||[]).forEach((f,fi)=>ft.append(h("tr",{},
+      h("td",{},inp(f.name,v=>f.name=v,"Feld")),
+      h("td",{},sel(f.typ,v=>f.typ=v)),
+      h("td",{},inp(f.ausdruck,v=>f.ausdruck=v||undefined,"Ausdruck (abgeleitet)")),
+      h("td",{style:"width:26px"},h("button",{class:"rm",onclick:()=>{a.felder.splice(fi,1);render();}},"✕")))));
+    c.append(ft,h("button",{class:"add",onclick:()=>{(a.felder=a.felder||[]).push({name:"feld",typ:"decimal"});render();}},"+ Feld"));
+
+    // 2 · COMMANDS — die Absichts-Records (nur Name + Felder; Logik kommt im Decider).
+    c.append(h("div",{class:"step"},"2 · Commands — die Absichts-Records (Name + Felder)"));
+    const ct=h("table",{});
+    (a.commands||[]).forEach((cm,ci)=>ct.append(h("tr",{},
+      h("td",{style:"width:190px"},inp(cm.name,v=>cm.name=v,"Command")),
+      h("td",{},inp(felderZuText(cm.felder),v=>cm.felder=textZuFelder(v),"AggregateId:Guid, Betrag:decimal")),
+      h("td",{style:"width:26px"},h("button",{class:"rm",onclick:()=>{a.commands.splice(ci,1);render();}},"✕")))));
+    c.append(ct,h("button",{class:"add",onclick:()=>{(a.commands=a.commands||[]).push({name:"MachWas",felder:[{name:"AggregateId",typ:"Guid"}],ergibt:[]});render();}},"+ Command"));
+
+    // 3 · EVENTS — die Fakten-Records (rein/ID-los; [x] = Ablehnung/transient).
+    c.append(h("div",{class:"step"},"3 · Events — die Fakten-Records (Name + Felder · [x] = Ablehnung/transient)"));
+    const et=h("table",{});
+    (a.events||[]).forEach((e,ei)=>et.append(h("tr",{},
+      h("td",{style:"width:190px"},inp(e.name,v=>e.name=v,"Event")),
       h("td",{style:"width:22px"},h("input",{type:"checkbox",onchange:ev=>{e.transient=ev.target.checked;render();},...(e.transient?{checked:"checked"}:{})})),
-      h("td",{},inp(felderZuText(e.felder),v=>e.felder=textZuFelder(v),"StartSaldo:decimal, Gesperrt:bool")),
-      h("td",{style:"width:26px"},h("button",{class:"rm",onclick:()=>{a.events.splice(ei,1);render();}},"✕"))))));
-    sec.append(t,h("button",{class:"add",onclick:()=>{const a=ensureAgg();(a.events=a.events||[]).push({name:"Ereignis",felder:[]});render();}},"+ Event"));
-    return sec;
-  }
+      h("td",{},inp(felderZuText(e.felder),v=>e.felder=textZuFelder(v),"Betrag:decimal")),
+      h("td",{style:"width:26px"},h("button",{class:"rm",onclick:()=>{a.events.splice(ei,1);render();}},"✕")))));
+    c.append(et,h("button",{class:"add",onclick:()=>{(a.events=a.events||[]).push({name:"Ereignis",felder:[]});render();}},"+ Event"));
 
-  // 2) COMMANDS — die Absichten (⟶ OneOf-Events + Decide-Körper).
-  function commandsSektion(){
-    const sec=h("div",{class:"sec"});
-    sec.append(h("div",{class:"sectitle"},"2 · Commands — die Absichten (⟶ OneOf-Events; ein Ausgang je Zeile, optional 'Event ? guard')"));
-    MODEL.aggregate.forEach(a=>(a.commands||[]).forEach((cm,ci)=>{
+    // 4 · DECIDER — Decide je Command: welche Events (OneOf) + Körper.
+    c.append(h("div",{class:"step"},"4 · Decider — Decide je Command: welche Events (OneOf) + Körper"));
+    if(!(a.commands||[]).length) c.append(h("div",{class:"hint"},"Erst Commands anlegen (Schritt 2)."));
+    (a.commands||[]).forEach(cm=>{
       const box=h("div",{class:"cmdbox"});
-      box.append(h("div",{class:"cmdhead"},
-        h("span",{class:"name"},"Decide"),inp(cm.name,v=>cm.name=v,"Command"),
-        h("span",{class:"lbl"},"in"),aggSelect(a.name,n=>moveItem(a,"commands",cm,n)),
-        h("button",{class:"rm",onclick:()=>{a.commands.splice(ci,1);render();}},"✕")));
-      box.append(h("table",{},h("tr",{},
-        h("td",{style:"width:50%"},inp(felderZuText(cm.felder),v=>cm.felder=textZuFelder(v),"AggregateId:Guid, Betrag:decimal")),
-        h("td",{},area(ergibtZuText(cm.ergibt),v=>cm.ergibt=textZuErgibt(v),"BetragReserviert\nDeckungReichtNicht ? State.Verfuegbar < cmd.Betrag")))));
+      box.append(h("div",{class:"cmdhead"},h("span",{class:"name"},"Decide("),h("span",{class:"cmdn"},cm.name||"…"),h("span",{class:"name"}," cmd)")));
+      box.append(h("div",{class:"blab"},"⟶ OneOf-Ausgänge — ein Event je Zeile, optional 'Event ? guard'"));
+      box.append(area(ergibtZuText(cm.ergibt),v=>cm.ergibt=textZuErgibt(v),"BetragReserviert\nDeckungReichtNicht ? State.Verfuegbar < cmd.Betrag"));
       box.append(h("div",{class:"blab"},"Decide-Körper — this.State lesen, cmd nutzen, Events yield return-en. Leer ⇒ throw-Platzhalter."));
       box.append(codearea(cm.rumpf,v=>cm.rumpf=v||undefined,"if (this.State.Verfuegbar < cmd.Betrag) { yield return new DeckungReichtNicht(this.State.Verfuegbar, cmd.Betrag); yield break; }\nyield return new BetragReserviert(cmd.Betrag);"));
-      sec.append(box);
-    }));
-    sec.append(h("button",{class:"add",onclick:()=>{const a=ensureAgg();(a.commands=a.commands||[]).push({name:"MachWas",felder:[{name:"AggregateId",typ:"Guid"}],ergibt:[]});render();}},"+ Command"));
-    return sec;
-  }
-
-  // 3) STATE — aus den Events gefaltet (Felder + Apply je persistentem Event).
-  function stateSektion(){
-    const sec=h("div",{class:"sec"});
-    sec.append(h("div",{class:"sectitle"},"3 · State — aus den Events gefaltet (Felder + Apply je Event)"));
-    MODEL.aggregate.forEach(a=>{
-      const card=h("div",{class:"card"});
-      card.append(h("h3",{},h("span",{class:"k agg"},a.name)));
-      const ft=h("table",{});
-      (a.felder||[]).forEach((f,fi)=>ft.append(h("tr",{},
-        h("td",{},inp(f.name,v=>f.name=v,"Feld")),
-        h("td",{},sel(f.typ,v=>f.typ=v)),
-        h("td",{},inp(f.ausdruck,v=>f.ausdruck=v||undefined,"Ausdruck (abgeleitet)")),
-        h("td",{style:"width:26px"},h("button",{class:"rm",onclick:()=>{a.felder.splice(fi,1);render();}},"✕")))));
-      card.append(ft,h("button",{class:"add",onclick:()=>{(a.felder=a.felder||[]).push({name:"feld",typ:"decimal"});render();}},"+ Feld"));
-      const persist=(a.events||[]).filter(e=>!e.transient);
-      if(persist.length){
-        card.append(h("div",{class:"sub"},"Apply — wie jedes Event den State faltet"));
-        persist.forEach(e=>{
-          card.append(h("div",{class:"name",style:"margin:6px 0 2px"},"Apply("+e.name+" evt)"));
-          card.append(codearea(e.applyRumpf,v=>e.applyRumpf=v||undefined,"this.State.Saldo += evt.Betrag;"));
-        });
-      }
-      sec.append(card);
+      c.append(box);
     });
-    return sec;
+
+    // 5 · APPLIER — Apply je persistentem Event: wie es den State faltet.
+    c.append(h("div",{class:"step"},"5 · Applier — Apply je persistentem Event: wie es den State faltet"));
+    const persist=(a.events||[]).filter(e=>!e.transient);
+    if(!persist.length) c.append(h("div",{class:"hint"},"Erst persistente Events anlegen (Schritt 3)."));
+    persist.forEach(e=>{
+      const box=h("div",{class:"applybox"});
+      box.append(h("div",{class:"cmdhead"},h("span",{class:"name"},"Apply("),h("span",{class:"cmdn"},e.name||"…"),h("span",{class:"name"}," evt)")));
+      box.append(codearea(e.applyRumpf,v=>e.applyRumpf=v||undefined,"this.State.Saldo += evt.Betrag;"));
+      c.append(box);
+    });
+
+    return c;
   }
 
   function sagaCard(s,si){
