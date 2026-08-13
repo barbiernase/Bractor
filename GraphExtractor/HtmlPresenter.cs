@@ -615,6 +615,25 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .arow{display:flex;gap:6px;align-items:center;margin:2px 0}
 #de .arow select{width:200px}
 #de .arow input{flex:1}
+/* Node-Editor */
+#de .gcanvas{position:relative;width:100%;min-width:1100px;min-height:1500px;overflow:hidden;border:1px solid #232a38;border-radius:8px;
+  background-color:#0b0e15;background-image:linear-gradient(#161d2b 1px,transparent 1px),linear-gradient(90deg,#161d2b 1px,transparent 1px);background-size:20px 20px}
+#de svg.gedges{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
+#de .gnode{position:absolute;min-width:120px;max-width:210px;background:#141926;border:1px solid #2c3547;border-radius:8px;padding:6px 9px;cursor:grab;user-select:none;box-shadow:0 2px 6px #0006;touch-action:none}
+#de .gnode.dragging{cursor:grabbing;z-index:6;box-shadow:0 8px 22px #000a}
+#de .gnode.droptarget{outline:2px solid #7c5cff;outline-offset:1px}
+#de .gnode .gk{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#8b93a7}
+#de .gnode .gt{font-weight:700;color:#eef2f8;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:ui-monospace,monospace}
+#de .gnode.n-command{border-color:#35507a}
+#de .gnode.n-event{border-color:#7a5a2a}
+#de .gnode.n-rejection{border-color:#7a2a3a}
+#de .gnode.n-valueobject{border-color:#2a6a5a}
+#de .gnode.n-aggregate{border-color:#7c5cff;background:#181733}
+#de .gport{position:absolute;right:-8px;top:50%;transform:translateY(-50%);width:15px;height:15px;border-radius:50%;background:#7c5cff;border:2px solid #0b0e15;cursor:crosshair}
+#de .gport:hover{background:#9a80ff}
+#de .glegend{display:flex;gap:14px;margin:6px 2px 10px;font-size:11px;color:#9aa3b7;flex-wrap:wrap}
+#de .glegend span{display:inline-flex;align-items:center;gap:5px}
+#de .glegend i{width:20px;height:0;border-top:2px solid;display:inline-block}
 #de .grip{cursor:grab;color:#6b7688;padding:0 6px 0 0;font-size:14px;user-select:none}
 #de .grip:active{cursor:grabbing}
 #de .dz{border:1px dashed #35507a;border-radius:6px;padding:6px 10px;margin:4px 0;color:#7f8aa0;font-size:11px;text-align:center;transition:all .12s}
@@ -659,6 +678,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     <h2>Domänen-Editor</h2>
     <span id="de-badge" class="badge off">offline</span>
     <span class="sp"></span>
+    <button class="act" id="de-viewtoggle" onclick="deViewToggle()">⧉ Graph</button>
     <button class="act" onclick="deReload()">↻ Vom Graph laden</button>
     <button class="act" onclick="deValidate()">✓ Prüfen</button>
     <button class="act" onclick="deCompile()">⚙ Kompilieren</button>
@@ -677,7 +697,10 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   const SCALARS=["Guid","decimal","int","long","double","bool","string","DateTimeOffset"];
   const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"]};
   let MODEL={schemaVersion:"2",records:[],enums:[],aggregate:[],sagas:[]};
+  let VIEW="form";
   const embedded=/*__MODEL_JSON__*/;
+  window.deViewToggle=function(){VIEW=VIEW==="form"?"graph":"form";
+    const b=document.getElementById("de-viewtoggle");if(b)b.textContent=VIEW==="form"?"⧉ Graph":"▤ Formular";render();};
 
   const listeZuText=xs=>(xs||[]).join(", ");
   const textZuListe=t=>(t||"").split(",").map(s=>s.trim()).filter(Boolean);
@@ -724,6 +747,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   //    danach KOMPOSITION zu Aggregaten (State + Decider + Applier). Feldtyp kann ein anderer
   //    Record/Enum sein → so komponieren sich Records.
   function render(){
+    if(VIEW==="graph"){renderGraph();return;}
     const root=document.getElementById("de-form");root.innerHTML="";
     root.append(datalistEl());
 
@@ -832,6 +856,102 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     c.append(dz("Event hierher ziehen → neue Apply-Regel",["event"],name=>{(a.applier=a.applier||[]).push({event:name});render();}));
 
     return c;
+  }
+
+  // ══ NODE-EDITOR: Records + Aggregate als Knoten auf einer Fläche; Verbindungen = Komposition.
+  //    Ziehen verschiebt (rastet aufs 20px-Raster ein); vom Port ziehen und auf einen Knoten
+  //    fallen lassen verbindet: Command→Aggregat (Decide), Command→Event (Ausgang), Event→Aggregat (Apply).
+  const SVGNS="http://www.w3.org/2000/svg";
+  const GRID=20;
+  const aggByName=n=>MODEL.aggregate.find(a=>a.name===n);
+  function graphNodes(){
+    return [...MODEL.records.map(r=>({id:"rec:"+r.name,name:r.name,kind:r.kind,ref:r})),
+            ...MODEL.aggregate.map(a=>({id:"agg:"+a.name,name:a.name,kind:"aggregate",ref:a}))];
+  }
+  function graphEdges(){
+    const es=[];
+    MODEL.aggregate.forEach(a=>{
+      (a.decider||[]).forEach(d=>{
+        if(d.command)es.push({from:"rec:"+d.command,to:"agg:"+a.name,kind:"decide"});
+        (d.ergibt||[]).forEach(o=>{if(o.event)es.push({from:"agg:"+a.name,to:"rec:"+o.event,kind:"produce"});});
+      });
+      (a.applier||[]).forEach(ap=>{if(ap.event)es.push({from:"rec:"+ap.event,to:"agg:"+a.name,kind:"apply"});});
+    });
+    return es;
+  }
+  function autoLayout(){
+    const spalte={command:40,aggregate:400,event:760,rejection:760,valueobject:1040};
+    const zaehl={};
+    graphNodes().forEach(n=>{const r=n.ref;
+      if(typeof r.x==="number"&&typeof r.y==="number")return;
+      const k=n.kind; zaehl[k]=(zaehl[k]||0);
+      r.x=spalte[k]!==undefined?spalte[k]:40; r.y=40+zaehl[k]*80; zaehl[k]++;});
+  }
+  function renderGraph(){
+    const root=document.getElementById("de-form");root.innerHTML="";
+    root.append(h("div",{class:"hint"},"Knoten ziehen = verschieben (rastet aufs Raster ein). Vom violetten Port ziehen und auf einen Knoten fallen lassen = verbinden."));
+    root.append(h("div",{class:"glegend"},
+      h("span",{},h("i",{style:"border-color:#5a7bb0"}),"Command → Aggregat (Decide)"),
+      h("span",{},h("i",{style:"border-color:#b08a4a"}),"Aggregat → Event (produziert)"),
+      h("span",{},h("i",{style:"border-color:#4a9a6a;border-top-style:dashed"}),"Event → Aggregat (Apply)")));
+    if(!graphNodes().length){root.append(h("div",{class:"hint"},"Noch keine Records/Aggregate — im Formular anlegen (⧉ zurück)."));return;}
+    autoLayout();
+    const canvas=h("div",{class:"gcanvas"});
+    const svg=document.createElementNS(SVGNS,"svg");svg.setAttribute("class","gedges");canvas.append(svg);
+    const els={};
+    graphNodes().forEach(n=>{const el=nodeEl(n);els[n.id]=el;canvas.append(el);});
+    root.append(canvas);
+    function drawEdges(){while(svg.firstChild)svg.removeChild(svg.firstChild);
+      graphEdges().forEach(e=>{const a=els[e.from],b=els[e.to];if(!a||!b)return;svg.append(edgePath(a,b,e));});}
+    window.__deDrawEdges=drawEdges;
+    drawEdges();                       // synchron (liest Layout) — robust auch bei pausiertem rAF
+    requestAnimationFrame(drawEdges);  // + nächster Frame, falls Fonts/Größen noch nachfließen
+  }
+  function nodeEl(n){
+    const el=h("div",{class:"gnode n-"+n.kind});
+    el.style.left=(n.ref.x||0)+"px";el.style.top=(n.ref.y||0)+"px";
+    el.append(h("div",{class:"gk"},n.kind==="aggregate"?"Aggregat":kindLabel(n.kind)));
+    el.append(h("div",{class:"gt"},n.name));
+    const port=h("div",{class:"gport",draggable:"true",title:"Ziehen zum Verbinden"});
+    port.ondragstart=e=>{e.stopPropagation();e.dataTransfer.setData("text/plain",JSON.stringify({name:n.name,kind:n.kind}));};
+    el.append(port);
+    el.ondragover=e=>{e.preventDefault();el.classList.add("droptarget");};
+    el.ondragleave=()=>el.classList.remove("droptarget");
+    el.ondrop=e=>{e.preventDefault();el.classList.remove("droptarget");
+      let d;try{d=JSON.parse(e.dataTransfer.getData("text/plain"));}catch(_){return;}connectNodes(d,n);};
+    el.onpointerdown=e=>{if(e.target===port)return;startMove(e,el,n.ref);};
+    return el;
+  }
+  function startMove(e,el,ref){
+    e.preventDefault();try{el.setPointerCapture(e.pointerId);}catch(_){}el.classList.add("dragging");
+    const sx=e.clientX,sy=e.clientY,ox=ref.x||0,oy=ref.y||0;
+    el.onpointermove=ev=>{let nx=ox+(ev.clientX-sx),ny=oy+(ev.clientY-sy);
+      nx=Math.max(0,Math.round(nx/GRID)*GRID);ny=Math.max(0,Math.round(ny/GRID)*GRID); // Einrasten aufs Raster
+      ref.x=nx;ref.y=ny;el.style.left=nx+"px";el.style.top=ny+"px";if(window.__deDrawEdges)window.__deDrawEdges();};
+    el.onpointerup=()=>{el.classList.remove("dragging");try{el.releasePointerCapture(e.pointerId);}catch(_){}el.onpointermove=null;el.onpointerup=null;};
+  }
+  function connectNodes(src,tgt){
+    if(src.kind==="command"&&tgt.kind==="aggregate"){const a=aggByName(tgt.name);
+      if(a&&!(a.decider||[]).some(d=>d.command===src.name))(a.decider=a.decider||[]).push({command:src.name,ergibt:[]});}
+    else if(src.kind==="command"&&(tgt.kind==="event"||tgt.kind==="rejection")){
+      MODEL.aggregate.forEach(a=>{const d=(a.decider||[]).find(d=>d.command===src.name);
+        if(d&&!(d.ergibt||[]).some(o=>o.event===tgt.name))(d.ergibt=d.ergibt||[]).push({event:tgt.name});});}
+    else if(src.kind==="event"&&tgt.kind==="aggregate"){const a=aggByName(tgt.name);
+      if(a&&!(a.applier||[]).some(x=>x.event===src.name))(a.applier=a.applier||[]).push({event:src.name});}
+    else return;
+    render();
+  }
+  function edgePath(a,b,e){
+    const x1=a.offsetLeft+a.offsetWidth,y1=a.offsetTop+a.offsetHeight/2;
+    const x2=b.offsetLeft,y2=b.offsetTop+b.offsetHeight/2;
+    const mx=(x1+x2)/2;
+    const p=document.createElementNS(SVGNS,"path");
+    p.setAttribute("d","M"+x1+","+y1+" C"+mx+","+y1+" "+mx+","+y2+" "+x2+","+y2);
+    p.setAttribute("fill","none");
+    p.setAttribute("stroke",e.kind==="apply"?"#4a9a6a":e.kind==="produce"?"#b08a4a":"#5a7bb0");
+    p.setAttribute("stroke-width","1.8");
+    if(e.kind==="apply")p.setAttribute("stroke-dasharray","5 4");
+    return p;
   }
 
   function sagaCard(s,si){
