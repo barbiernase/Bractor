@@ -79,8 +79,16 @@ var jsonPath = Path.Combine(solutionDir, "knowledge-graph.json");
 await File.WriteAllTextAsync(jsonPath, json);
 Console.WriteLine($"\n✅ {jsonPath}");
 
+// Round-trip: denselben Graph als editierbares Domänen-Modell zurückschreiben (Umkehrung
+// C# → Board). Der Editor lädt dieses Modell und baut Vorhandenes weiter.
+var modell = ModellMapper.ZuEditorModell(graph);
+var modellJson = modell.AlsJson();
+var modellPath = Path.Combine(solutionDir, "domain-model.json");
+await File.WriteAllTextAsync(modellPath, modellJson);
+Console.WriteLine($"✅ {modellPath}  ({modell.Aggregate.Count} Aggregate, {modell.Sagas.Count} Sagas)");
+
 var htmlPath = Path.Combine(solutionDir, "knowledge-graph.html");
-await File.WriteAllTextAsync(htmlPath, HtmlPresenter.Render(graph, json));
+await File.WriteAllTextAsync(htmlPath, HtmlPresenter.Render(graph, json, modellJson));
 Console.WriteLine($"✅ {htmlPath}");
 
 Console.WriteLine($"\n   Diagnosen: {graph.Views.Diagnostics.Count}");

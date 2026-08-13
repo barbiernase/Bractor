@@ -12,8 +12,16 @@ namespace GraphExtractor;
 /// </summary>
 public static class HtmlPresenter
 {
-    public static string Render(KnowledgeGraph graph, string json) =>
-        Template.Replace("/*__GRAPH_JSON__*/", json);
+    public static string Render(KnowledgeGraph graph, string json) => Render(graph, json, "null");
+
+    /// <summary>
+    /// Wie oben, plus das editierbare Domänen-Modell (domain-model.json) für den EDITOR-MODUS
+    /// (die Umkehrung C# → Board). Der Editor-Block ist self-contained und wird vor <c>&lt;/body&gt;</c>
+    /// eingehängt — er stört das bestehende (read-only) Board nicht.
+    /// </summary>
+    public static string Render(KnowledgeGraph graph, string json, string modelJson) =>
+        Template.Replace("/*__GRAPH_JSON__*/", json)
+                .Replace("</body>", EditorBlock.Replace("/*__MODEL_JSON__*/", modelJson) + "\n</body>");
 
     private const string Template = """
 <!doctype html>
@@ -529,5 +537,193 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 </script>
 </body>
 </html>
+""";
+
+    // ════════════════════════════════════════════════════════════════════════════════════════════
+    //  EDITOR-MODUS (Umkehrung C# → Board): das Domänen-Modell VISUELL modellieren und daraus C#
+    //  erzeugen. Self-contained (eigenes CSS-Präfix #de-, eigener Launch-Button), lädt das Modell
+    //  aus SimHost (/api/editor/model) oder aus dem eingebetteten window.__MODEL__. „C# erzeugen"
+    //  und „Prüfen" rufen den EINEN C#-Scaffolder/Validator über SimHost (eine Wahrheit, kein
+    //  JS-Nachbau). Statisch geöffnet (ohne SimHost) editiert man die FORM und lädt das Modell-JSON.
+    // ════════════════════════════════════════════════════════════════════════════════════════════
+    private const string EditorBlock = """
+<style>
+#de-open{position:fixed;top:12px;right:12px;z-index:40;background:#7c5cff;color:#fff;border:0;
+  border-radius:8px;padding:8px 14px;font:600 13px system-ui;cursor:pointer;box-shadow:0 2px 8px #0006}
+#de-open:hover{background:#8f73ff}
+#de{position:fixed;inset:0;z-index:50;background:#0d1017;color:#dfe4ee;display:none;
+  font:13px/1.5 system-ui;flex-direction:column}
+#de.on{display:flex}
+#de header{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #232a38;background:#141926}
+#de header h2{font-size:15px;margin:0;font-weight:700}
+#de header .sp{flex:1}
+#de header .badge{font-size:11px;padding:2px 8px;border-radius:10px;background:#243}
+#de header .badge.off{background:#422}
+#de button.act{background:#233047;color:#cfe;border:1px solid #35507a;border-radius:6px;padding:6px 12px;cursor:pointer;font:600 12px system-ui}
+#de button.act:hover{background:#2c3d5c}
+#de button.act.go{background:#2e7d5b;border-color:#3fae7f}
+#de button.act.go:hover{background:#369268}
+#de .cols{flex:1;display:grid;grid-template-columns:1fr 1fr;overflow:hidden}
+#de .col{overflow:auto;padding:14px}
+#de .col.left{border-right:1px solid #232a38}
+#de .card{background:#141926;border:1px solid #232a38;border-radius:8px;padding:10px 12px;margin:0 0 12px}
+#de .card h3{margin:0 0 8px;font-size:13px;display:flex;align-items:center;gap:6px}
+#de .card h3 .k{font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding:1px 6px;border-radius:8px}
+#de .k.agg{background:#4a3a1f;color:#fbd38d}
+#de .k.saga{background:#3a2a4a;color:#e0b0ff}
+#de .sub{color:#8b93a7;font-size:11px;margin:8px 0 4px;text-transform:uppercase;letter-spacing:.5px}
+#de input,#de select,#de textarea{background:#0d1017;color:#dfe4ee;border:1px solid #2c3547;border-radius:5px;
+  padding:4px 6px;font:12px ui-monospace,monospace;box-sizing:border-box}
+#de input:focus,#de select:focus,#de textarea:focus{outline:1px solid #7c5cff;border-color:#7c5cff}
+#de table{width:100%;border-collapse:collapse;margin-bottom:4px}
+#de td{padding:2px 3px;vertical-align:top}
+#de .rm{background:#3a1f28;color:#ffb3c1;border:0;border-radius:5px;cursor:pointer;padding:3px 8px;font-weight:700}
+#de .add{background:#1f2f28;color:#9be3bf;border:1px dashed #35604c;border-radius:5px;cursor:pointer;padding:3px 10px;font-size:11px}
+#de .name{font-weight:700;color:#cfe}
+#de .out{font:12px ui-monospace,monospace;background:#0a0d13;border:1px solid #232a38;border-radius:8px;padding:12px;overflow:auto}
+#de .out .f{color:#7c5cff;font-weight:700;margin:14px 0 4px;display:block}
+#de .out .body{white-space:pre;display:block;margin:0 0 6px}
+#de .find{padding:6px 10px;border-radius:6px;margin-bottom:6px;font-size:12px}
+#de .find.error{background:#3a1f28;color:#ffb3c1}
+#de .find.warning{background:#3a331f;color:#ffe1a0}
+#de .hint{color:#8b93a7;font-size:11px;margin:6px 0}
+#de .addbar{display:flex;gap:8px;margin-bottom:12px}
+</style>
+<button id="de-open" onclick="deOpen()">✎ Editor</button>
+<div id="de">
+  <header>
+    <h2>Domänen-Editor</h2>
+    <span id="de-badge" class="badge off">offline</span>
+    <span class="sp"></span>
+    <button class="act" onclick="deReload()">↻ Vom Graph laden</button>
+    <button class="act" onclick="deValidate()">✓ Prüfen</button>
+    <button class="act go" onclick="deScaffold()">&lt;/&gt; C# erzeugen</button>
+    <button class="act" onclick="deDownload()">⬇ Modell</button>
+    <button class="act" onclick="deClose()">✕ Schließen</button>
+  </header>
+  <div class="cols">
+    <div class="col left" id="de-form"></div>
+    <div class="col right out" id="de-out"><div class="hint">„C# erzeugen" rendert den echten C#-Scaffolder (über SimHost). „Prüfen" zeigt die Struktur-Diagnosen. Ohne laufenden SimHost editierst du die Form und lädst das Modell-JSON herunter.</div></div>
+  </div>
+</div>
+<script>
+(function(){
+  const TYPEN=["Guid","decimal","int","bool","string"];
+  let MODEL={schemaVersion:"1",aggregate:[],sagas:[]};
+  const embedded=/*__MODEL_JSON__*/;
+
+  // ── Mini-Formate für kompakte Feld-/Ergibt-Eingaben ──
+  const felderZuText=fs=>(fs||[]).map(f=>f.name+":"+f.typ+(f.standard?"="+f.standard:"")).join(", ");
+  function textZuFelder(t){return (t||"").split(",").map(s=>s.trim()).filter(Boolean).map(s=>{
+    const[nt,std]=s.split("="); const[n,ty]=nt.split(":").map(x=>(x||"").trim());
+    const f={name:n,typ:ty||"string"}; if(std!==undefined)f.standard=std.trim(); return f;});}
+  const ergibtZuText=es=>(es||[]).map(e=>e.event+(e.guard?" ? "+e.guard:"")).join("\n");
+  function textZuErgibt(t){return (t||"").split("\n").map(s=>s.trim()).filter(Boolean).map(s=>{
+    const i=s.indexOf(" ? "); return i<0?{event:s}:{event:s.slice(0,i).trim(),guard:s.slice(i+3).trim()};});}
+  const listeZuText=xs=>(xs||[]).join(", ");
+  const textZuListe=t=>(t||"").split(",").map(s=>s.trim()).filter(Boolean);
+
+  function h(tag,attrs,...kids){const e=document.createElement(tag);
+    for(const k in (attrs||{})){if(k==="class")e.className=attrs[k];else if(k.startsWith("on"))e[k]=attrs[k];else if(k==="value")e.value=attrs[k];else e.setAttribute(k,attrs[k]);}
+    for(const kid of kids)if(kid!=null)e.append(kid.nodeType?kid:document.createTextNode(kid));return e;}
+  const inp=(val,on,ph)=>h("input",{value:val??"",oninput:e=>on(e.target.value),placeholder:ph||""});
+  const area=(val,on,ph)=>{const t=h("textarea",{oninput:e=>on(e.target.value),placeholder:ph||"",rows:Math.max(2,String(val||"").split("\n").length)});t.value=val??"";return t;};
+  function sel(val,on){const s=h("select",{onchange:e=>on(e.target.value)});TYPEN.forEach(t=>{const o=h("option",{value:t},t);if(t===val)o.selected=true;s.append(o);});return s;}
+
+  function render(){
+    const root=document.getElementById("de-form");root.innerHTML="";
+    const bar=h("div",{class:"addbar"},
+      h("button",{class:"add",onclick:()=>{MODEL.aggregate.push({name:"NeuesAggregat",namespace:"Domain.Neu",felder:[],commands:[],events:[]});render();}},"+ Aggregat"),
+      h("button",{class:"add",onclick:()=>{MODEL.sagas.push({name:"NeuerProzess",namespace:"Domain.Neu",triggerEvent:"",schritte:[],extraUsings:[]});render();}},"+ Saga"));
+    root.append(bar);
+    MODEL.aggregate.forEach((a,ai)=>root.append(aggCard(a,ai)));
+    MODEL.sagas.forEach((s,si)=>root.append(sagaCard(s,si)));
+  }
+
+  function aggCard(a,ai){
+    const c=h("div",{class:"card"});
+    c.append(h("h3",{},h("span",{class:"k agg"},"Aggregat"),
+      inp(a.name,v=>a.name=v),inp(a.namespace,v=>a.namespace=v),
+      h("button",{class:"rm",onclick:()=>{MODEL.aggregate.splice(ai,1);render();}},"✕")));
+
+    c.append(h("div",{class:"sub"},"Felder (State)"));
+    const ft=h("table",{});
+    (a.felder||[]).forEach((f,fi)=>ft.append(h("tr",{},
+      h("td",{},inp(f.name,v=>f.name=v,"Name")),
+      h("td",{},sel(f.typ,v=>f.typ=v)),
+      h("td",{},inp(f.ausdruck,v=>f.ausdruck=v||undefined,"Ausdruck (abgeleitet)")),
+      h("td",{},h("button",{class:"rm",onclick:()=>{a.felder.splice(fi,1);render();}},"✕")))));
+    c.append(ft,h("button",{class:"add",onclick:()=>{(a.felder=a.felder||[]).push({name:"feld",typ:"decimal"});render();}},"+ Feld"));
+
+    c.append(h("div",{class:"sub"},"Events (persistent · [x] = Ablehnung/transient)"));
+    const et=h("table",{});
+    (a.events||[]).forEach((e,ei)=>et.append(h("tr",{},
+      h("td",{},inp(e.name,v=>e.name=v,"Name")),
+      h("td",{style:"width:22px"},h("input",{type:"checkbox",onchange:ev=>e.transient=ev.target.checked,...(e.transient?{checked:"checked"}:{})})),
+      h("td",{},inp(felderZuText(e.felder),v=>e.felder=textZuFelder(v),"a:decimal, b:int")),
+      h("td",{},h("button",{class:"rm",onclick:()=>{a.events.splice(ei,1);render();}},"✕")))));
+    c.append(et,h("button",{class:"add",onclick:()=>{(a.events=a.events||[]).push({name:"Ereignis",felder:[]});render();}},"+ Event"));
+
+    c.append(h("div",{class:"sub"},"Commands (Decide: ein OneOf-Ausgang je Zeile, optional 'Event ? guard')"));
+    (a.commands||[]).forEach((cm,ci)=>{
+      const box=h("div",{style:"border-left:2px solid #35507a;padding-left:8px;margin:6px 0"});
+      box.append(h("div",{style:"display:flex;gap:6px;align-items:center;margin-bottom:3px"},
+        h("span",{class:"name"},"Decide"),inp(cm.name,v=>cm.name=v,"Command"),
+        h("button",{class:"rm",onclick:()=>{a.commands.splice(ci,1);render();}},"✕")));
+      box.append(h("table",{},h("tr",{},
+        h("td",{style:"width:50%"},inp(felderZuText(cm.felder),v=>cm.felder=textZuFelder(v),"AggregateId:Guid, Betrag:decimal")),
+        h("td",{},area(ergibtZuText(cm.ergibt),v=>cm.ergibt=textZuErgibt(v),"KontoEroeffnet\nAbgelehnt ? State.Version > 0")))));
+      c.append(box);
+    });
+    c.append(h("button",{class:"add",onclick:()=>{(a.commands=a.commands||[]).push({name:"MachWas",felder:[{name:"AggregateId",typ:"Guid"}],ergibt:[]});render();}},"+ Command"));
+    return c;
+  }
+
+  function sagaCard(s,si){
+    const c=h("div",{class:"card"});
+    c.append(h("h3",{},h("span",{class:"k saga"},"Saga"),
+      inp(s.name,v=>s.name=v),inp(s.namespace,v=>s.namespace=v),
+      h("button",{class:"rm",onclick:()=>{MODEL.sagas.splice(si,1);render();}},"✕")));
+    c.append(h("table",{},
+      h("tr",{},h("td",{},"Trigger"),h("td",{},inp(s.triggerEvent,v=>s.triggerEvent=v,"AuslöserEvent"))),
+      h("tr",{},h("td",{},"Usings"),h("td",{},inp(listeZuText(s.extraUsings),v=>s.extraUsings=textZuListe(v),"Domain.Konto"))) ));
+    c.append(h("div",{class:"sub"},"Transitionen (Wenn → Sende → RückgängigDurch)"));
+    (s.schritte||[]).forEach((st,ti)=>{
+      const box=h("div",{style:"border-left:2px solid #5a3a7a;padding-left:8px;margin:6px 0"});
+      box.append(h("div",{style:"display:flex;justify-content:flex-end"},h("button",{class:"rm",onclick:()=>{s.schritte.splice(ti,1);render();}},"✕")));
+      box.append(h("table",{},
+        h("tr",{},h("td",{style:"width:70px"},"Wenn"),h("td",{},inp(listeZuText(st.wenn),v=>st.wenn=textZuListe(v),"E1, E2, E3"))),
+        h("tr",{},h("td",{},"Sende"),h("td",{},inp(st.sende,v=>st.sende=v,"Command"))),
+        h("tr",{},h("td",{},"Args"),h("td",{},inp(listeZuText(st.sendeArgumente),v=>st.sendeArgumente=textZuListe(v).length?textZuListe(v):undefined,"t.Quelle, t.Betrag"))),
+        h("tr",{},h("td",{},"Komp."),h("td",{},inp(st.kompensation,v=>st.kompensation=v||undefined,"Kompensations-Command"))),
+        h("tr",{},h("td",{},"Komp.Args"),h("td",{},inp(listeZuText(st.kompensationArgumente),v=>st.kompensationArgumente=textZuListe(v).length?textZuListe(v):undefined,"t.Quelle, t.Betrag")))));
+      c.append(box);
+    });
+    c.append(h("button",{class:"add",onclick:()=>{(s.schritte=s.schritte||[]).push({wenn:[s.triggerEvent].filter(Boolean),sende:""});render();}},"+ Transition"));
+    return c;
+  }
+
+  // ── Aktionen ──
+  window.deOpen=function(){document.getElementById("de").classList.add("on");if(!MODEL.aggregate.length&&!MODEL.sagas.length)deReload();else render();};
+  window.deClose=function(){document.getElementById("de").classList.remove("on");};
+  async function loadLive(){try{const r=await fetch("/api/editor/model");if(!r.ok)throw 0;const m=await r.json();badge(true);return m;}catch(e){badge(false);return null;}}
+  function badge(live){const b=document.getElementById("de-badge");b.textContent=live?"SimHost live":"offline";b.className="badge"+(live?"":" off");}
+  window.deReload=async function(){const live=await loadLive();MODEL=live||(embedded&&embedded.aggregate?embedded:{schemaVersion:"1",aggregate:[],sagas:[]});render();};
+  window.deDownload=function(){const blob=new Blob([JSON.stringify(MODEL,null,2)],{type:"application/json"});
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="domain-model.json";a.click();};
+  async function post(path){const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(MODEL)});
+    if(!r.ok)throw new Error("HTTP "+r.status);return r;}
+  window.deScaffold=async function(){const out=document.getElementById("de-out");
+    try{const r=await post("/api/editor/scaffold");const files=await r.json();badge(true);
+      out.innerHTML="";files.forEach(f=>{out.append(h("span",{class:"f"},"// "+f.pfad));out.append(h("div",{class:"body"},f.inhalt));});
+      if(!files.length)out.innerHTML='<div class="hint">Leeres Modell — nichts zu generieren.</div>';
+    }catch(e){badge(false);out.innerHTML='<div class="find error">SimHost nicht erreichbar. Starte ihn: <b>dotnet run --project SimHost</b>, dann erneut.</div>';}};
+  window.deValidate=async function(){const out=document.getElementById("de-out");
+    try{const r=await post("/api/editor/validate");const fs=await r.json();badge(true);
+      if(!fs.length){out.innerHTML='<div class="find" style="background:#1f3a2a;color:#9be3bf">✓ Keine Befunde — die Form ist stimmig.</div>';return;}
+      out.innerHTML="";fs.forEach(f=>out.append(h("div",{class:"find "+f.schweregrad},"["+f.code+"] "+f.meldung)));
+    }catch(e){badge(false);out.innerHTML='<div class="find error">SimHost nicht erreichbar. Starte ihn: <b>dotnet run --project SimHost</b>.</div>';}};
+})();
+</script>
 """;
 }

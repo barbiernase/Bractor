@@ -14,4 +14,10 @@
         <PackageReference Include="Microsoft.Build.Framework" Version="17.11.48" ExcludeAssets="runtime" PrivateAssets="all" />
     </ItemGroup>
 
+    <ItemGroup>
+      <!-- Das reine Editor-Modell + der Scaffolder: der Round-trip Code → Modell (hier) und
+           Modell → Code (Scaffolder) teilen sich ein Datenmodell, keine zweite Wahrheit. -->
+      <ProjectReference Include="../DomainEditor/DomainEditor.csproj" />
+    </ItemGroup>
+
 </Project>

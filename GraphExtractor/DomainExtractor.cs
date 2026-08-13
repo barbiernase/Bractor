@@ -22,7 +22,7 @@ public sealed class DomainModel
     public Dictionary<string, CommandType> Commands { get; } = new(StringComparer.Ordinal);
 }
 
-public sealed record EventType(string Simple, bool Persisted);
+public sealed record EventType(string Simple, bool Persisted, List<FieldInfo> Fields);
 public sealed record CommandType(string Simple, bool IsCreation, List<FieldInfo> Fields);
 
 public sealed class AggregateRaw
@@ -145,7 +145,7 @@ public sealed class DomainExtractor
             if (Sym.Implements(t, _iEvent))
             {
                 var persisted = !Sym.Implements(t, _iTransient);
-                m.Events[t.Fq()] = new EventType(t.Name, persisted);
+                m.Events[t.Fq()] = new EventType(t.Name, persisted, CtorFields(t));
             }
             if (Sym.Implements(t, _iCommand))
             {
@@ -168,7 +168,7 @@ public sealed class DomainExtractor
         {
             if (p.IsStatic || p.IsIndexer || p.DeclaredAccessibility != Accessibility.Public) continue;
             if (p.Name is "Id" or "Version") continue;
-            agg.State.Add(new FieldInfo { Name = p.Name, Type = ShortType(p.Type) });
+            agg.State.Add(new FieldInfo { Name = p.Name, Type = ShortType(p.Type), Expr = ComputedExpr(p) });
         }
 
         var decider = t.GetTypeMembers("Decider").First();
@@ -396,6 +396,15 @@ public sealed class DomainExtractor
 
     private static string ShortType(ITypeSymbol t) =>
         t.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat);
+
+    /// <summary>
+    /// Der Ausdruck einer ABGELEITETEN State-Property (<c>public T X => expr;</c>) aus der Syntax,
+    /// sonst null (gespeichertes Feld). Trägt den Round-trip Code → Editor-Modell → Code.
+    /// </summary>
+    private static string? ComputedExpr(IPropertySymbol p) =>
+        p.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is PropertyDeclarationSyntax { ExpressionBody: { } eb }
+            ? eb.Expression.ToString()
+            : null;
 
     /// <summary>Event-Typen aus einem Decide-Rückgabetyp <c>IEnumerable&lt;OneOf&lt;…&gt;&gt;</c> / <c>IEnumerable&lt;E&gt;</c>.</summary>
     private IEnumerable<string> UniverseEvents(ITypeSymbol returnType, bool onlyTransient)

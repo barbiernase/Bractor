@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Der Domänen-Editor: die Umkehrung des heutigen Flusses „C# → Board".
+    Ein REINES Datenmodell der Domäne (Aggregate, Felder, Commands, Events, Sagas) plus ein
+    DETERMINISTISCHER Scaffold-Generator (Modell → C#). Bewusst OHNE Roslyn, ohne Marten, ohne
+    Proto.Actor — nur System.Text.Json (in-box). So kann der Prüfstand (store-frei) die
+    Generierung dogfooden, und SimHost/GraphExtractor können ihn leichtgewichtig referenzieren.
+  -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>latest</LangVersion>
+  </PropertyGroup>
+
+</Project>

@@ -99,6 +99,7 @@ ReactiveState.Tests/
 cqrs.proto
 deploy-windows.zip
 knowledge-graph.json
+domain-model.json
 LabelingTool.zip
 PROJECT_STRUCTURE.md
 

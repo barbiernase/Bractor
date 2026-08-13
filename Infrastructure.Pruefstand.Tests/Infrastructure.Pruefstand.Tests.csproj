@@ -31,6 +31,7 @@
     <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
     <ProjectReference Include="..\Domain.Infrastructure\Domain.Infrastructure.csproj" />
     <ProjectReference Include="..\Cqrs.Testing\Cqrs.Testing.csproj" />
+    <ProjectReference Include="..\DomainEditor\DomainEditor.csproj" />
   </ItemGroup>
 
 </Project>

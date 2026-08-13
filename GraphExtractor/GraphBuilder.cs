@@ -127,7 +127,7 @@ public sealed class GraphBuilder
             Add(new Node
             {
                 Id = id, Kind = NodeKind.@event, Name = et.Simple, FullName = full, Namespace = NsOf(full),
-                Event = new EventInfo { Persisted = et.Persisted }
+                Event = new EventInfo { Persisted = et.Persisted, Fields = et.Fields }
             });
         }
     }

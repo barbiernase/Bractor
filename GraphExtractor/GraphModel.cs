@@ -109,6 +109,8 @@ public sealed class EventInfo
     /// <summary>true = persistiert (IEvent), false = Ablehnung (ITransientEvent, nie im Log, kann keine Regel triggern).</summary>
     public bool Persisted { get; set; }
     public string? EmittedBy { get; set; }   // Aggregat-Name
+    /// <summary>Die Record-Felder des Events (für den Round-trip Code → Editor-Modell → Code).</summary>
+    public List<FieldInfo> Fields { get; set; } = new();
 }
 
 public sealed class ProcessInfo
@@ -162,6 +164,12 @@ public sealed class FieldInfo
 {
     public string Name { get; set; } = "";
     public string Type { get; set; } = "";
+    /// <summary>
+    /// Nur State-Felder: gesetzt ⇒ ABGELEITETE Read-only-Property mit diesem Ausdruck
+    /// (z. B. <c>Saldo - Reserviert</c>) statt eines gespeicherten <c>{ get; set; }</c>-Felds.
+    /// Null ⇒ gespeichertes Feld. Für den Round-trip Code → Editor-Modell → Code.
+    /// </summary>
+    public string? Expr { get; set; }
 }
 
 // ── Kanten ──────────────────────────────────────────────────────────────────

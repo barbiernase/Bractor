@@ -13,6 +13,8 @@
     <ProjectReference Include="../Domain/Domain.csproj" />
     <!-- Der DSL-Schreiber (nur Abstractions-Ref): Board-Session → Test-Quelltext. -->
     <ProjectReference Include="../Cqrs.Testing/Cqrs.Testing.csproj" />
+    <!-- Der Editor-Modus: reiner Scaffolder/Validator (keine Roslyn/Infra) — Modell → C#, live. -->
+    <ProjectReference Include="../DomainEditor/DomainEditor.csproj" />
   </ItemGroup>
 
 </Project>
