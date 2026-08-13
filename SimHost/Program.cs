@@ -17,6 +17,7 @@ app.MapGet("/", () => boardPath != null && File.Exists(boardPath)
     : Results.Content("<h1>knowledge-graph.html nicht gefunden</h1><p>Erst <code>dotnet run --project GraphExtractor</code> laufen lassen.</p>", "text/html"));
 
 app.MapGet("/api/schema", () => Results.Json(engine.Schema()));
+app.MapGet("/api/state", (string? sessionId) => Results.Json(engine.ZustandListe(sessionId ?? "default")));
 app.MapPost("/api/reset", (ResetRequest r) => { engine.Reset(r.SessionId ?? "default"); return Results.Ok(); });
 app.MapPost("/api/step", (StepRequest r) =>
     Results.Json(engine.Step(r.SessionId ?? "default", r.Command, r.Values)));

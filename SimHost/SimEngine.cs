@@ -11,8 +11,10 @@ namespace SimHost;
 // ── Ausgabe-DTOs (an das Board) ──────────────────────────────────────────────
 public record TraceItem(string Kind, string Name);
 public record TraceFrame(List<TraceItem> Add, string Note);
-public record StateSnapshot(string Aggregate, string Id, Dictionary<string, object?> Fields);
-public record StepResult(List<TraceFrame> Frames, List<StateSnapshot> States, string? Error = null);
+public record StateSnapshot(string Aggregate, string Id, string Label, Dictionary<string, object?> Fields);
+public record FeldAenderung(string Feld, object? Vorher, object? Nachher);
+public record ZustandsAenderung(string Aggregate, string Id, string Label, string Command, List<FeldAenderung> Aenderungen);
+public record StepResult(List<TraceFrame> Frames, List<StateSnapshot> States, List<ZustandsAenderung> Changes, string? Error = null);
 public record CommandSchema(string Name, string Aggregate, bool Creation, List<FieldSchema> Fields);
 public record FieldSchema(string Name, string Type);
 
@@ -131,11 +133,11 @@ public sealed class SimEngine
     public StepResult Step(string sessionId, string commandName, JsonElement values)
     {
         if (!_cmdByName.TryGetValue(commandName, out var cmdType))
-            return new StepResult(new(), new(), $"Unbekannter Command: {commandName}");
+            return new StepResult(new(), new(), new(), $"Unbekannter Command: {commandName}");
 
         ICommand cmd;
         try { cmd = (ICommand)JsonSerializer.Deserialize(values.GetRawText(), cmdType, JsonOpts)!; }
-        catch (Exception ex) { return new StepResult(new(), new(), $"Werte passen nicht zu {commandName}: {ex.Message}"); }
+        catch (Exception ex) { return new StepResult(new(), new(), new(), $"Werte passen nicht zu {commandName}: {ex.Message}"); }
 
         var session = _sessions.GetOrAdd(sessionId, _ => new Session { Lauf = new SagaLaufwerk(_factory, _prozesse) });
         session.Root.Add(cmd);
@@ -155,11 +157,44 @@ public sealed class SimEngine
         // Ausgang des Wurzel-Commands → speist die DSL-Zusicherung (Dann/DannAbgelehnt).
         session.LastAusgang = trace.Schritte.FirstOrDefault(x => ReferenceEquals(x.Command, cmd))?.Ausgang.ToList() ?? new();
 
-        var states = session.Lauf.AlleZustände()
-            .Select(z => new StateSnapshot(z.Typ, z.Id.ToString()[..8], new Dictionary<string, object?>(z.Felder)))
-            .ToList();
+        // Änderungen je berührtem Aggregat (aus Zustand-vorher/nachher) → Hervorhebung + Historie im Board.
+        var changes = new List<ZustandsAenderung>();
+        foreach (var s in trace.Schritte)
+        {
+            if (s.Unrouted) continue;
+            var diffs = new List<FeldAenderung>();
+            foreach (var kv in s.ZustandNachher)
+                if (!Equals(s.ZustandVorher.GetValueOrDefault(kv.Key), kv.Value))
+                    diffs.Add(new FeldAenderung(kv.Key, s.ZustandVorher.GetValueOrDefault(kv.Key), kv.Value));
+            changes.Add(new ZustandsAenderung(s.AggregatTyp, s.AggregatId.ToString(),
+                LabelFür(session, s.AggregatTyp, s.AggregatId), s.Command.GetType().Name, diffs));
+        }
 
-        return new StepResult(frames, states);
+        return new StepResult(frames, Zustaende(session), changes);
+    }
+
+    /// <summary>Alle Aggregat-Instanzen der Session mit ihren aktuellen Werten (für die Instanzen-Liste).</summary>
+    public List<StateSnapshot> ZustandListe(string sessionId)
+        => _sessions.TryGetValue(sessionId, out var s) ? Zustaende(s) : new();
+
+    private List<StateSnapshot> Zustaende(Session s)
+    {
+        foreach (var z in s.Lauf.AlleZustände()) LabelFür(s, z.Typ, z.Id); // erst alle beschriften (stabile Nummern)
+        return s.Lauf.AlleZustände()
+            .Select(z => new StateSnapshot(z.Typ, z.Id.ToString(), LabelFür(s, z.Typ, z.Id), new Dictionary<string, object?>(z.Felder)))
+            .OrderBy(x => x.Label, StringComparer.Ordinal)
+            .ToList();
+    }
+
+    // Stabiles, lesbares Label je (Typ, Id) in Anlege-Reihenfolge: „Konto #1", „Konto #2", …
+    private static string LabelFür(Session s, string typ, Guid id)
+    {
+        if (s.Labels.TryGetValue((typ, id), out var l)) return l;
+        s.Counter.TryGetValue(typ, out var n);
+        l = $"{typ} #{n + 1}";
+        s.Counter[typ] = n + 1;
+        s.Labels[(typ, id)] = l;
+        return l;
     }
 
     private TraceFrame FrameFür(SagaSchritt s)
@@ -218,5 +253,7 @@ public sealed class SimEngine
         public readonly List<ICommand> Root = new();        // Wurzel-Commands (die der Nutzer schickte)
         public ICommand? LastRoot;                          // das zuletzt geschickte
         public List<Ereignis> LastAusgang = new();          // dessen Ausgang (für die DSL-Zusicherung)
+        public readonly Dictionary<(string, Guid), string> Labels = new(); // stabile Instanz-Labels
+        public readonly Dictionary<string, int> Counter = new();           // laufende Nummer je Typ
     }
 }
