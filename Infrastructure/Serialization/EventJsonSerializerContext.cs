@@ -61,6 +61,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(BetragReserviert))]
 [JsonSerializable(typeof(ReservierungGebucht))]
 [JsonSerializable(typeof(ReservierungFreigegeben))]
+[JsonSerializable(typeof(WillkommensbonusFaellig))]
 // ── Lager / Versand / Zahlung / Bestellung ──
 [JsonSerializable(typeof(BestandReserviert))]
 [JsonSerializable(typeof(BestandFreigegeben))]

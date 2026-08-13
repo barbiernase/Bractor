@@ -41,5 +41,11 @@ public partial class Konto
         {
             yield return new ReservierungGebucht(cmd.Betrag);
         }
+
+        public IEnumerable<OneOf<WillkommensbonusFaellig, KontoNichtGefunden>> Decide(GewaehreWillkommensbonus cmd)
+        {
+            if (this.State.Version == 0) { yield return new KontoNichtGefunden(cmd.AggregateId); yield break; }
+            yield return new WillkommensbonusFaellig(cmd.AggregateId, cmd.Betrag);
+        }
     }
 }

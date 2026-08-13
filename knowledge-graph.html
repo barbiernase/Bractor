@@ -146,13 +146,13 @@ const GRAPH = {
     "routingSource": "GeneratedCommandRouting",
     "counts": {
       "aggregate": 17,
-      "command": 42,
-      "event": 73,
-      "process": 6,
+      "command": 43,
+      "event": 74,
+      "process": 7,
       "projection": 3,
       "query": 8,
       "pipeline": 3,
-      "edges": 185
+      "edges": 190
     },
     "contexts": [
       "(quer)",
@@ -446,12 +446,14 @@ const GRAPH = {
           "GebeReservierungFrei",
           "SchreibeGut",
           "StorniereGutschrift",
-          "BucheReservierung"
+          "BucheReservierung",
+          "GewaehreWillkommensbonus"
         ],
         "emits": [
           "ReservierungGebucht",
           "KontoEroeffnet",
           "ReservierungFreigegeben",
+          "WillkommensbonusFaellig",
           "BetragReserviert",
           "Gutgeschrieben",
           "GutschriftStorniert",
@@ -1672,6 +1674,42 @@ const GRAPH = {
       }
     },
     {
+      "id": "cmd:GewaehreWillkommensbonus",
+      "kind": "command",
+      "name": "GewaehreWillkommensbonus",
+      "fullName": "Domain.Konto.GewaehreWillkommensbonus",
+      "namespace": "Domain.Konto",
+      "context": "Konto",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Konto",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "WillkommensbonusFaellig",
+            "persisted": true
+          },
+          {
+            "event": "KontoNichtGefunden",
+            "persisted": false,
+            "guard": "State.Version == 0"
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "Betrag",
+            "type": "decimal"
+          }
+        ]
+      }
+    },
+    {
       "id": "cmd:RichteLagerEin",
       "kind": "command",
       "name": "RichteLagerEin",
@@ -2756,6 +2794,18 @@ const GRAPH = {
       }
     },
     {
+      "id": "evt:WillkommensbonusFaellig",
+      "kind": "event",
+      "name": "WillkommensbonusFaellig",
+      "fullName": "Domain.Konto.WillkommensbonusFaellig",
+      "namespace": "Domain.Konto",
+      "context": "Konto",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Konto"
+      }
+    },
+    {
       "id": "evt:KontoGesperrt",
       "kind": "event",
       "name": "KontoGesperrt",
@@ -3199,6 +3249,29 @@ const GRAPH = {
             "join": "and",
             "fanOut": false,
             "sends": "Versende"
+          }
+        ]
+      }
+    },
+    {
+      "id": "proc:WillkommensbonusProzess",
+      "kind": "process",
+      "name": "WillkommensbonusProzess",
+      "namespace": "Domain.Konto",
+      "context": "Konto",
+      "process": {
+        "trigger": "WillkommensbonusFaellig",
+        "registered": true,
+        "pattern": "Linear",
+        "rules": [
+          {
+            "index": 0,
+            "when": [
+              "WillkommensbonusFaellig"
+            ],
+            "join": "single",
+            "fanOut": false,
+            "sends": "SchreibeGut"
           }
         ]
       }
@@ -3767,6 +3840,12 @@ const GRAPH = {
       "provenance": "GeneratedCommandRouting"
     },
     {
+      "from": "cmd:GewaehreWillkommensbonus",
+      "to": "agg:Konto",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
       "from": "cmd:GibBestellungAuf",
       "to": "agg:Bestellauftrag",
       "kind": "routedTo",
@@ -4015,6 +4094,12 @@ const GRAPH = {
     {
       "from": "cmd:Genehmige",
       "to": "evt:VorgangGenehmigt",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
+      "from": "cmd:GewaehreWillkommensbonus",
+      "to": "evt:WillkommensbonusFaellig",
       "kind": "produces",
       "provenance": "GeneratedCommandRouting"
     },
@@ -4301,6 +4386,12 @@ const GRAPH = {
       "provenance": "decider"
     },
     {
+      "from": "cmd:GewaehreWillkommensbonus",
+      "to": "evt:KontoNichtGefunden",
+      "kind": "produces",
+      "provenance": "decider"
+    },
+    {
       "from": "cmd:RichteLagerEin",
       "to": "evt:LagerExistiertBereits",
       "kind": "produces",
@@ -4418,6 +4509,19 @@ const GRAPH = {
       "to": "proc:BestellProzess",
       "kind": "advances",
       "provenance": "process-dsl"
+    },
+    {
+      "from": "evt:WillkommensbonusFaellig",
+      "to": "proc:WillkommensbonusProzess",
+      "kind": "triggers",
+      "provenance": "process-dsl"
+    },
+    {
+      "from": "proc:WillkommensbonusProzess",
+      "to": "cmd:SchreibeGut",
+      "kind": "sends",
+      "provenance": "process-dsl",
+      "via": "0"
     },
     {
       "from": "evt:ReiseGebucht",
@@ -4988,6 +5092,16 @@ const GRAPH = {
         "pipelines": []
       },
       {
+        "event": "WillkommensbonusFaellig",
+        "persisted": true,
+        "projections": [],
+        "triggersProcesses": [
+          "WillkommensbonusProzess"
+        ],
+        "advancesProcesses": [],
+        "pipelines": []
+      },
+      {
         "event": "BestandReserviert",
         "persisted": true,
         "projections": [],
@@ -5046,6 +5160,13 @@ const GRAPH = {
           "[BestellungAufgegeben] → ReserviereBestand   ⟲ GebeBestandFrei",
           "[BestellungAufgegeben] → BelasteKonto   ⟲ ErstatteKonto",
           "[BestellungAufgegeben ∧ BestandReserviert ∧ KontoBelastet] → Versende"
+        ]
+      },
+      {
+        "start": "WillkommensbonusFaellig",
+        "process": "WillkommensbonusProzess",
+        "steps": [
+          "[WillkommensbonusFaellig] → SchreibeGut"
         ]
       },
       {

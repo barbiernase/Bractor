@@ -198,26 +198,27 @@ message CommandEnvelopeDto {
         BucheReservierungDto buche_reservierung = 39;
         EroeffneKontoDto eroeffne_konto = 40;
         GebeReservierungFreiDto gebe_reservierung_frei = 41;
-        ReserviereBetragDto reserviere_betrag = 42;
-        SchreibeGutDto schreibe_gut = 43;
-        StorniereGutschriftDto storniere_gutschrift = 44;
-        GebeBestandFreiDto gebe_bestand_frei = 45;
-        ReserviereBestandDto reserviere_bestand = 46;
-        RichteLagerEinDto richte_lager_ein = 47;
-        WirkeReaktionDto wirke_reaktion = 48;
-        BestaetigeReiseDto bestaetige_reise = 49;
-        BucheReiseDto buche_reise = 50;
-        BeauftrageSammelueberweisungDto beauftrage_sammelueberweisung = 51;
-        EroeffneVerkaufsauftragDto eroeffne_verkaufsauftrag = 52;
-        FuegePositionHinzuDto fuege_position_hinzu = 53;
-        GibVerkaufsauftragAufDto gib_verkaufsauftrag_auf = 54;
-        StorniereVerkaufsauftragDto storniere_verkaufsauftrag = 55;
-        VersendeDto versende = 56;
-        AktiviereDto aktiviere = 57;
-        GenehmigeDto genehmige = 58;
-        BelasteKontoDto belaste_konto = 59;
-        ErstatteKontoDto erstatte_konto = 60;
-        RichteZahlungskontoEinDto richte_zahlungskonto_ein = 61;
+        GewaehreWillkommensbonusDto gewaehre_willkommensbonus = 42;
+        ReserviereBetragDto reserviere_betrag = 43;
+        SchreibeGutDto schreibe_gut = 44;
+        StorniereGutschriftDto storniere_gutschrift = 45;
+        GebeBestandFreiDto gebe_bestand_frei = 46;
+        ReserviereBestandDto reserviere_bestand = 47;
+        RichteLagerEinDto richte_lager_ein = 48;
+        WirkeReaktionDto wirke_reaktion = 49;
+        BestaetigeReiseDto bestaetige_reise = 50;
+        BucheReiseDto buche_reise = 51;
+        BeauftrageSammelueberweisungDto beauftrage_sammelueberweisung = 52;
+        EroeffneVerkaufsauftragDto eroeffne_verkaufsauftrag = 53;
+        FuegePositionHinzuDto fuege_position_hinzu = 54;
+        GibVerkaufsauftragAufDto gib_verkaufsauftrag_auf = 55;
+        StorniereVerkaufsauftragDto storniere_verkaufsauftrag = 56;
+        VersendeDto versende = 57;
+        AktiviereDto aktiviere = 58;
+        GenehmigeDto genehmige = 59;
+        BelasteKontoDto belaste_konto = 60;
+        ErstatteKontoDto erstatte_konto = 61;
+        RichteZahlungskontoEinDto richte_zahlungskonto_ein = 62;
 
     }
 }
@@ -277,31 +278,32 @@ message EventEnvelopeDto {
         KontoNichtGefundenDto konto_nicht_gefunden = 60;
         ReservierungFreigegebenDto reservierung_freigegeben = 61;
         ReservierungGebuchtDto reservierung_gebucht = 62;
-        BestandFreigegebenDto bestand_freigegeben = 63;
-        BestandReichtNichtDto bestand_reicht_nicht = 64;
-        BestandReserviertDto bestand_reserviert = 65;
-        LagerEingerichtetDto lager_eingerichtet = 66;
-        LagerExistiertBereitsDto lager_existiert_bereits = 67;
-        ReaktionGewirktDto reaktion_gewirkt = 68;
-        ReiseBestaetigtDto reise_bestaetigt = 69;
-        ReiseGebuchtDto reise_gebucht = 70;
-        SammelUeberweisungBeauftragtDto sammel_ueberweisung_beauftragt = 71;
-        AuftragNichtOffenDto auftrag_nicht_offen = 72;
-        KreditlimitUeberschrittenDto kreditlimit_ueberschritten = 73;
-        VerkaufsauftragAufgegebenDto verkaufsauftrag_aufgegeben = 74;
-        VerkaufsauftragEroeffnetDto verkaufsauftrag_eroeffnet = 75;
-        VerkaufsauftragExistiertBereitsDto verkaufsauftrag_existiert_bereits = 76;
-        VerkaufsauftragNichtGefundenDto verkaufsauftrag_nicht_gefunden = 77;
-        VerkaufsauftragStorniertDto verkaufsauftrag_storniert = 78;
-        VerkaufspositionHinzugefuegtDto verkaufsposition_hinzugefuegt = 79;
-        WaehrungPasstNichtDto waehrung_passt_nicht = 80;
-        VersendetDto versendet = 81;
-        VorgangAktiviertDto vorgang_aktiviert = 82;
-        VorgangGenehmigtDto vorgang_genehmigt = 83;
-        KontoBelastetDto konto_belastet = 84;
-        KontoErstattetDto konto_erstattet = 85;
-        KontoUngedecktDto konto_ungedeckt = 86;
-        ZahlungskontoEingerichtetDto zahlungskonto_eingerichtet = 87;
+        WillkommensbonusFaelligDto willkommensbonus_faellig = 63;
+        BestandFreigegebenDto bestand_freigegeben = 64;
+        BestandReichtNichtDto bestand_reicht_nicht = 65;
+        BestandReserviertDto bestand_reserviert = 66;
+        LagerEingerichtetDto lager_eingerichtet = 67;
+        LagerExistiertBereitsDto lager_existiert_bereits = 68;
+        ReaktionGewirktDto reaktion_gewirkt = 69;
+        ReiseBestaetigtDto reise_bestaetigt = 70;
+        ReiseGebuchtDto reise_gebucht = 71;
+        SammelUeberweisungBeauftragtDto sammel_ueberweisung_beauftragt = 72;
+        AuftragNichtOffenDto auftrag_nicht_offen = 73;
+        KreditlimitUeberschrittenDto kreditlimit_ueberschritten = 74;
+        VerkaufsauftragAufgegebenDto verkaufsauftrag_aufgegeben = 75;
+        VerkaufsauftragEroeffnetDto verkaufsauftrag_eroeffnet = 76;
+        VerkaufsauftragExistiertBereitsDto verkaufsauftrag_existiert_bereits = 77;
+        VerkaufsauftragNichtGefundenDto verkaufsauftrag_nicht_gefunden = 78;
+        VerkaufsauftragStorniertDto verkaufsauftrag_storniert = 79;
+        VerkaufspositionHinzugefuegtDto verkaufsposition_hinzugefuegt = 80;
+        WaehrungPasstNichtDto waehrung_passt_nicht = 81;
+        VersendetDto versendet = 82;
+        VorgangAktiviertDto vorgang_aktiviert = 83;
+        VorgangGenehmigtDto vorgang_genehmigt = 84;
+        KontoBelastetDto konto_belastet = 85;
+        KontoErstattetDto konto_erstattet = 86;
+        KontoUngedecktDto konto_ungedeckt = 87;
+        ZahlungskontoEingerichtetDto zahlungskonto_eingerichtet = 88;
 
     }
 }
@@ -551,6 +553,11 @@ message StateChangeViaReservierungGebuchtDto {
     int32 version = 2;
 }
 
+message StateChangeViaWillkommensbonusFaelligDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
 message StateChangeViaBestandFreigegebenDto {
     string stream_id = 1;
     int32 version = 2;
@@ -761,6 +768,11 @@ message EroeffneKontoDto {
 }
 
 message GebeReservierungFreiDto {
+    string aggregate_id = 1;
+    string betrag = 2;
+}
+
+message GewaehreWillkommensbonusDto {
     string aggregate_id = 1;
     string betrag = 2;
 }
@@ -1076,6 +1088,11 @@ message ReservierungFreigegebenDto {
 
 message ReservierungGebuchtDto {
     string betrag = 1;
+}
+
+message WillkommensbonusFaelligDto {
+    string konto = 1;
+    string betrag = 2;
 }
 
 message BestandFreigegebenDto {

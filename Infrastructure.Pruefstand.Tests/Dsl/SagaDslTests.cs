@@ -61,6 +61,19 @@ public class SagaDslTests
     }
 
     [Fact]
+    public void Willkommensbonus_Saga_schreibt_automatisch_gut()
+    {
+        var id = Guid.NewGuid();
+
+        SagaSzenario.Mit(Fabrik, new WillkommensbonusProzess())
+            .Gegeben<Konto>(id, new KontoEroeffnet(100, Gesperrt: false))
+            .Wenn(new GewaehreWillkommensbonus(id, 50))
+            .Feuert<SchreibeGut>()               // die Policy reagiert auf WillkommensbonusFaellig
+            .KeineOffeneSaga()
+            .EndzustandVon<Konto>(id, k => k.Saldo == 150, "100 + 50 Bonus, automatisch gutgeschrieben");
+    }
+
+    [Fact]
     public void Auslöser_Event_direkt_startet_dieselbe_Kaskade()
     {
         var quelle = Guid.NewGuid();
