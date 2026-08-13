@@ -172,6 +172,61 @@ public sealed class DomainEditorScaffolderTests
     }
 
     [Fact]
+    public void Vorhandener_ApplyRumpf_ersetzt_den_Platzhalter()
+    {
+        // Der Nutzer tippt den Apply-Körper selbst (kein LLM) — er landet 1:1 (auf 12 Spalten eingerückt).
+        var agg = KontoAggregat() with
+        {
+            Events =
+            [
+                new() { Name = "Gutgeschrieben", Felder = [ new() { Name = "Betrag", Typ = "decimal" } ], ApplyRumpf = "this.State.Saldo += evt.Betrag;" },
+            ],
+        };
+
+        var applier = Inhalt(Scaffolder.Generiere(new EditorModell { Aggregate = [agg] }), "Konto/Applier.cs");
+        applier.Should().Contain("        public void Apply(Gutgeschrieben evt)");
+        applier.Should().Contain("            this.State.Saldo += evt.Betrag;");
+        applier.Should().NotContain("NotImplementedException");
+    }
+
+    [Fact]
+    public void Mehrzeiliger_Rumpf_wird_je_Zeile_auf_zwoelf_Spalten_eingerueckt()
+    {
+        var agg = KontoAggregat() with
+        {
+            Commands =
+            [
+                new()
+                {
+                    Name = "ReserviereBetrag",
+                    Felder = [ new() { Name = "AggregateId", Typ = "Guid" }, new() { Name = "Betrag", Typ = "decimal" } ],
+                    Ergibt = [ new() { Event = "BetragReserviert" }, new() { Event = "DeckungReichtNicht" } ],
+                    Rumpf = "if (this.State.Verfuegbar < cmd.Betrag) { yield return new DeckungReichtNicht(this.State.Verfuegbar, cmd.Betrag); yield break; }\nyield return new BetragReserviert(cmd.Betrag);",
+                },
+            ],
+        };
+
+        Inhalt(Scaffolder.Generiere(new EditorModell { Aggregate = [agg] }), "Konto/Decider.cs").Should().Be(
+            """
+            using Abstractions;
+
+            namespace Domain.Konto;
+
+            public partial class Konto
+            {
+                public partial class Decider : IDecider<Konto>
+                {
+                    public IEnumerable<OneOf<BetragReserviert, DeckungReichtNicht>> Decide(ReserviereBetrag cmd)
+                    {
+                        if (this.State.Verfuegbar < cmd.Betrag) { yield return new DeckungReichtNicht(this.State.Verfuegbar, cmd.Betrag); yield break; }
+                        yield return new BetragReserviert(cmd.Betrag);
+                    }
+                }
+            }
+            """);
+    }
+
+    [Fact]
     public void Ist_deterministisch()
     {
         var modell = new EditorModell { Aggregate = [KontoAggregat()] };

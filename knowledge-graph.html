@@ -6494,6 +6494,8 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .find.warning{background:#3a331f;color:#ffe1a0}
 #de .hint{color:#8b93a7;font-size:11px;margin:6px 0}
 #de .addbar{display:flex;gap:8px;margin-bottom:12px}
+#de .blab{color:#8b93a7;font-size:10px;margin:5px 0 2px}
+#de textarea.code{width:100%;box-sizing:border-box;font:12px/1.45 ui-monospace,monospace;background:#0a0d13;tab-size:4}
 </style>
 <button id="de-open" onclick="deOpen()">✎ Editor</button>
 <div id="de">
@@ -8960,6 +8962,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     for(const kid of kids)if(kid!=null)e.append(kid.nodeType?kid:document.createTextNode(kid));return e;}
   const inp=(val,on,ph)=>h("input",{value:val??"",oninput:e=>on(e.target.value),placeholder:ph||""});
   const area=(val,on,ph)=>{const t=h("textarea",{oninput:e=>on(e.target.value),placeholder:ph||"",rows:Math.max(2,String(val||"").split("\n").length)});t.value=val??"";return t;};
+  const codearea=(val,on,ph)=>{const t=h("textarea",{class:"code",oninput:e=>on(e.target.value),placeholder:ph||"",rows:Math.max(3,String(val||"").split("\n").length+1)});t.value=val??"";return t;};
   function sel(val,on){const s=h("select",{onchange:e=>on(e.target.value)});TYPEN.forEach(t=>{const o=h("option",{value:t},t);if(t===val)o.selected=true;s.append(o);});return s;}
 
   function render(){
@@ -8991,7 +8994,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     const et=h("table",{});
     (a.events||[]).forEach((e,ei)=>et.append(h("tr",{},
       h("td",{},inp(e.name,v=>e.name=v,"Name")),
-      h("td",{style:"width:22px"},h("input",{type:"checkbox",onchange:ev=>e.transient=ev.target.checked,...(e.transient?{checked:"checked"}:{})})),
+      h("td",{style:"width:22px"},h("input",{type:"checkbox",onchange:ev=>{e.transient=ev.target.checked;render();},...(e.transient?{checked:"checked"}:{})})),
       h("td",{},inp(felderZuText(e.felder),v=>e.felder=textZuFelder(v),"a:decimal, b:int")),
       h("td",{},h("button",{class:"rm",onclick:()=>{a.events.splice(ei,1);render();}},"✕")))));
     c.append(et,h("button",{class:"add",onclick:()=>{(a.events=a.events||[]).push({name:"Ereignis",felder:[]});render();}},"+ Event"));
@@ -9005,9 +9008,22 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
       box.append(h("table",{},h("tr",{},
         h("td",{style:"width:50%"},inp(felderZuText(cm.felder),v=>cm.felder=textZuFelder(v),"AggregateId:Guid, Betrag:decimal")),
         h("td",{},area(ergibtZuText(cm.ergibt),v=>cm.ergibt=textZuErgibt(v),"KontoEroeffnet\nAbgelehnt ? State.Version > 0")))));
+      box.append(h("div",{class:"blab"},"Decide-Körper — this.State lesen, cmd nutzen, Events yield return-en. Leer ⇒ throw-Platzhalter."));
+      box.append(codearea(cm.rumpf,v=>cm.rumpf=v||undefined,"if (this.State.Version > 0) { yield return new KontoExistiertBereits(cmd.AggregateId); yield break; }\nyield return new KontoEroeffnet(cmd.StartSaldo, cmd.Gesperrt);"));
       c.append(box);
     });
     c.append(h("button",{class:"add",onclick:()=>{(a.commands=a.commands||[]).push({name:"MachWas",felder:[{name:"AggregateId",typ:"Guid"}],ergibt:[]});render();}},"+ Command"));
+
+    const persist=(a.events||[]).filter(e=>!e.transient);
+    if(persist.length){
+      c.append(h("div",{class:"sub"},"Applier — void Apply je persistentem Event (this.State mutieren)"));
+      persist.forEach(e=>{
+        const box=h("div",{style:"border-left:2px solid #3f6a4a;padding-left:8px;margin:6px 0"});
+        box.append(h("div",{class:"name",style:"margin-bottom:3px"},"Apply("+e.name+" evt)"));
+        box.append(codearea(e.applyRumpf,v=>e.applyRumpf=v||undefined,"this.State.Saldo += evt.Betrag;"));
+        c.append(box);
+      });
+    }
     return c;
   }
 
