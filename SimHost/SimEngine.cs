@@ -106,9 +106,16 @@ public sealed class SimEngine
         {
             _cmdToState.TryGetValue(c, out var st);
             var ctor = c.GetConstructors().OrderByDescending(x => x.GetParameters().Length).First();
-            return new CommandSchema(c.Name, st != null ? _stateName[st] : "?", _iCreation.IsAssignableFrom(c),
+            return new CommandSchema(c.Name, st != null ? _stateName[st] : "?", IstErzeugung(c),
                 ctor.GetParameters().Select(p => new FieldSchema(p.Name!, Pretty(p.ParameterType))).ToList());
         }).OrderBy(c => c.Aggregate).ThenBy(c => c.Name).ToList();
+
+    // Erzeugend = trägt den Marker ODER prüft im Guard „Version > 0" (das „…ExistiertBereits"),
+    // d.h. das Command legt eine neue Instanz an. Durchgängige Domänen-Konvention → robust ohne Marker.
+    private bool IstErzeugung(Type c)
+        => _iCreation.IsAssignableFrom(c)
+           || _guards.Where(kv => kv.Key.StartsWith(c.Name + "|", StringComparison.Ordinal))
+                     .Any(kv => kv.Value.Replace(" ", "").Contains("Version>0"));
 
     public void Reset(string sessionId) => _sessions.TryRemove(sessionId, out _);
 
