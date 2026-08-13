@@ -3,6 +3,7 @@ using Cqrs.Testing;
 using Domain.Auftrag;
 using Domain.Konto;
 using Domain.Ueberweisung;
+using Domain.Willkommensbonus;
 using FluentAssertions;
 using Infrastructure; // generierte AggregateHandlerFactory
 
@@ -61,16 +62,20 @@ public class SagaDslTests
     }
 
     [Fact]
-    public void Willkommensbonus_Saga_schreibt_automatisch_gut()
+    public void Willkommensbonus_wird_vom_Promo_Konto_ueberwiesen()
     {
-        var id = Guid.NewGuid();
+        var neu = Guid.NewGuid();
+        var promo = Guid.NewGuid();
+        var auftrag = Guid.NewGuid();
 
         SagaSzenario.Mit(Fabrik, new WillkommensbonusProzess())
-            .Gegeben<Konto>(id, new KontoEroeffnet(100, Gesperrt: false))
-            .Wenn(new GewaehreWillkommensbonus(id, 50))
-            .Feuert<SchreibeGut>()               // die Policy reagiert auf WillkommensbonusFaellig
+            .Gegeben<Konto>(promo, new KontoEroeffnet(1000, Gesperrt: false)) // die Bank-Kasse
+            .Gegeben<Konto>(neu, new KontoEroeffnet(0, Gesperrt: false))
+            .Wenn(new BeauftrageWillkommensbonus(auftrag, neu, promo, 50))
+            .FeuertInReihenfolge<ReserviereBetrag, SchreibeGut, BucheReservierung>()
             .KeineOffeneSaga()
-            .EndzustandVon<Konto>(id, k => k.Saldo == 150, "100 + 50 Bonus, automatisch gutgeschrieben");
+            .EndzustandVon<Konto>(promo, k => k.Saldo == 950, "Promo-Konto zahlt den Bonus")
+            .EndzustandVon<Konto>(neu, k => k.Saldo == 50, "neues Konto bekommt den Bonus");
     }
 
     [Fact]

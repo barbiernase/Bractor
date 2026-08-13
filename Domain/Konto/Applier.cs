@@ -22,8 +22,5 @@ public partial class Konto
             this.State.Reserviert -= evt.Betrag;
             this.State.Saldo -= evt.Betrag;
         }
-
-        // Reine Auslöse-Marke — kein Zustandswechsel; die Gutschrift macht die Saga über SchreibeGut.
-        public void Apply(WillkommensbonusFaellig evt) { }
     }
 }

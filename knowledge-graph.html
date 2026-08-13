@@ -145,14 +145,14 @@ const GRAPH = {
     "note": "Wissensgraph des CQRS/ES-Frameworks. Kern-Kausalität aus GeneratedCommandRouting (autoritativ), Sagas aus dem Prozess-DSL.",
     "routingSource": "GeneratedCommandRouting",
     "counts": {
-      "aggregate": 17,
+      "aggregate": 18,
       "command": 43,
       "event": 74,
       "process": 7,
       "projection": 3,
       "query": 8,
       "pipeline": 3,
-      "edges": 190
+      "edges": 195
     },
     "contexts": [
       "(quer)",
@@ -176,6 +176,7 @@ const GRAPH = {
       "Verkauf",
       "Versand",
       "Vorgang",
+      "Willkommensbonus",
       "Zahlung"
     ]
   },
@@ -446,14 +447,12 @@ const GRAPH = {
           "GebeReservierungFrei",
           "SchreibeGut",
           "StorniereGutschrift",
-          "BucheReservierung",
-          "GewaehreWillkommensbonus"
+          "BucheReservierung"
         ],
         "emits": [
           "ReservierungGebucht",
           "KontoEroeffnet",
           "ReservierungFreigegeben",
-          "WillkommensbonusFaellig",
           "BetragReserviert",
           "Gutgeschrieben",
           "GutschriftStorniert",
@@ -688,6 +687,28 @@ const GRAPH = {
         "emits": [
           "VorgangAktiviert",
           "VorgangGenehmigt"
+        ]
+      }
+    },
+    {
+      "id": "agg:Willkommensbonusauftrag",
+      "kind": "aggregate",
+      "name": "Willkommensbonusauftrag",
+      "fullName": "Domain.Willkommensbonus.Willkommensbonusauftrag",
+      "namespace": "Domain.Willkommensbonus",
+      "context": "Willkommensbonus",
+      "aggregate": {
+        "state": [
+          {
+            "name": "Beauftragt",
+            "type": "bool"
+          }
+        ],
+        "handles": [
+          "BeauftrageWillkommensbonus"
+        ],
+        "emits": [
+          "WillkommensbonusBeauftragt"
         ]
       }
     },
@@ -1674,42 +1695,6 @@ const GRAPH = {
       }
     },
     {
-      "id": "cmd:GewaehreWillkommensbonus",
-      "kind": "command",
-      "name": "GewaehreWillkommensbonus",
-      "fullName": "Domain.Konto.GewaehreWillkommensbonus",
-      "namespace": "Domain.Konto",
-      "context": "Konto",
-      "command": {
-        "isCreation": false,
-        "routedTo": "Konto",
-        "origin": [
-          "client"
-        ],
-        "produces": [
-          {
-            "event": "WillkommensbonusFaellig",
-            "persisted": true
-          },
-          {
-            "event": "KontoNichtGefunden",
-            "persisted": false,
-            "guard": "State.Version == 0"
-          }
-        ],
-        "fields": [
-          {
-            "name": "AggregateId",
-            "type": "Guid"
-          },
-          {
-            "name": "Betrag",
-            "type": "decimal"
-          }
-        ]
-      }
-    },
-    {
       "id": "cmd:RichteLagerEin",
       "kind": "command",
       "name": "RichteLagerEin",
@@ -2225,6 +2210,45 @@ const GRAPH = {
           {
             "name": "AggregateId",
             "type": "Guid"
+          }
+        ]
+      }
+    },
+    {
+      "id": "cmd:BeauftrageWillkommensbonus",
+      "kind": "command",
+      "name": "BeauftrageWillkommensbonus",
+      "fullName": "Domain.Willkommensbonus.BeauftrageWillkommensbonus",
+      "namespace": "Domain.Willkommensbonus",
+      "context": "Willkommensbonus",
+      "command": {
+        "isCreation": false,
+        "routedTo": "Willkommensbonusauftrag",
+        "origin": [
+          "client"
+        ],
+        "produces": [
+          {
+            "event": "WillkommensbonusBeauftragt",
+            "persisted": true
+          }
+        ],
+        "fields": [
+          {
+            "name": "AggregateId",
+            "type": "Guid"
+          },
+          {
+            "name": "NeuesKonto",
+            "type": "Guid"
+          },
+          {
+            "name": "PromoKonto",
+            "type": "Guid"
+          },
+          {
+            "name": "Betrag",
+            "type": "decimal"
           }
         ]
       }
@@ -2794,18 +2818,6 @@ const GRAPH = {
       }
     },
     {
-      "id": "evt:WillkommensbonusFaellig",
-      "kind": "event",
-      "name": "WillkommensbonusFaellig",
-      "fullName": "Domain.Konto.WillkommensbonusFaellig",
-      "namespace": "Domain.Konto",
-      "context": "Konto",
-      "event": {
-        "persisted": true,
-        "emittedBy": "Konto"
-      }
-    },
-    {
       "id": "evt:KontoGesperrt",
       "kind": "event",
       "name": "KontoGesperrt",
@@ -3106,6 +3118,18 @@ const GRAPH = {
       }
     },
     {
+      "id": "evt:WillkommensbonusBeauftragt",
+      "kind": "event",
+      "name": "WillkommensbonusBeauftragt",
+      "fullName": "Domain.Willkommensbonus.WillkommensbonusBeauftragt",
+      "namespace": "Domain.Willkommensbonus",
+      "context": "Willkommensbonus",
+      "event": {
+        "persisted": true,
+        "emittedBy": "Willkommensbonusauftrag"
+      }
+    },
+    {
       "id": "evt:ZahlungskontoEingerichtet",
       "kind": "event",
       "name": "ZahlungskontoEingerichtet",
@@ -3249,29 +3273,6 @@ const GRAPH = {
             "join": "and",
             "fanOut": false,
             "sends": "Versende"
-          }
-        ]
-      }
-    },
-    {
-      "id": "proc:WillkommensbonusProzess",
-      "kind": "process",
-      "name": "WillkommensbonusProzess",
-      "namespace": "Domain.Konto",
-      "context": "Konto",
-      "process": {
-        "trigger": "WillkommensbonusFaellig",
-        "registered": true,
-        "pattern": "Linear",
-        "rules": [
-          {
-            "index": 0,
-            "when": [
-              "WillkommensbonusFaellig"
-            ],
-            "join": "single",
-            "fanOut": false,
-            "sends": "SchreibeGut"
           }
         ]
       }
@@ -3454,6 +3455,52 @@ const GRAPH = {
             "join": "single",
             "fanOut": false,
             "sends": "Genehmige"
+          }
+        ]
+      }
+    },
+    {
+      "id": "proc:WillkommensbonusProzess",
+      "kind": "process",
+      "name": "WillkommensbonusProzess",
+      "namespace": "Domain.Willkommensbonus",
+      "context": "Willkommensbonus",
+      "process": {
+        "trigger": "WillkommensbonusBeauftragt",
+        "registered": true,
+        "pattern": "Linear",
+        "rules": [
+          {
+            "index": 0,
+            "when": [
+              "WillkommensbonusBeauftragt"
+            ],
+            "join": "single",
+            "fanOut": false,
+            "sends": "ReserviereBetrag",
+            "compensates": "GebeReservierungFrei"
+          },
+          {
+            "index": 1,
+            "when": [
+              "WillkommensbonusBeauftragt",
+              "BetragReserviert"
+            ],
+            "join": "and",
+            "fanOut": false,
+            "sends": "SchreibeGut",
+            "compensates": "StorniereGutschrift"
+          },
+          {
+            "index": 2,
+            "when": [
+              "WillkommensbonusBeauftragt",
+              "BetragReserviert",
+              "Gutgeschrieben"
+            ],
+            "join": "and",
+            "fanOut": false,
+            "sends": "BucheReservierung"
           }
         ]
       }
@@ -3750,6 +3797,12 @@ const GRAPH = {
       "provenance": "GeneratedCommandRouting"
     },
     {
+      "from": "cmd:BeauftrageWillkommensbonus",
+      "to": "agg:Willkommensbonusauftrag",
+      "kind": "routedTo",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
       "from": "cmd:BelasteKonto",
       "to": "agg:Zahlungskonto",
       "kind": "routedTo",
@@ -3836,12 +3889,6 @@ const GRAPH = {
     {
       "from": "cmd:Genehmige",
       "to": "agg:Vorgang",
-      "kind": "routedTo",
-      "provenance": "GeneratedCommandRouting"
-    },
-    {
-      "from": "cmd:GewaehreWillkommensbonus",
-      "to": "agg:Konto",
       "kind": "routedTo",
       "provenance": "GeneratedCommandRouting"
     },
@@ -4008,6 +4055,12 @@ const GRAPH = {
       "provenance": "GeneratedCommandRouting"
     },
     {
+      "from": "cmd:BeauftrageWillkommensbonus",
+      "to": "evt:WillkommensbonusBeauftragt",
+      "kind": "produces",
+      "provenance": "GeneratedCommandRouting"
+    },
+    {
       "from": "cmd:BelasteKonto",
       "to": "evt:KontoBelastet",
       "kind": "produces",
@@ -4094,12 +4147,6 @@ const GRAPH = {
     {
       "from": "cmd:Genehmige",
       "to": "evt:VorgangGenehmigt",
-      "kind": "produces",
-      "provenance": "GeneratedCommandRouting"
-    },
-    {
-      "from": "cmd:GewaehreWillkommensbonus",
-      "to": "evt:WillkommensbonusFaellig",
       "kind": "produces",
       "provenance": "GeneratedCommandRouting"
     },
@@ -4386,12 +4433,6 @@ const GRAPH = {
       "provenance": "decider"
     },
     {
-      "from": "cmd:GewaehreWillkommensbonus",
-      "to": "evt:KontoNichtGefunden",
-      "kind": "produces",
-      "provenance": "decider"
-    },
-    {
       "from": "cmd:RichteLagerEin",
       "to": "evt:LagerExistiertBereits",
       "kind": "produces",
@@ -4509,19 +4550,6 @@ const GRAPH = {
       "to": "proc:BestellProzess",
       "kind": "advances",
       "provenance": "process-dsl"
-    },
-    {
-      "from": "evt:WillkommensbonusFaellig",
-      "to": "proc:WillkommensbonusProzess",
-      "kind": "triggers",
-      "provenance": "process-dsl"
-    },
-    {
-      "from": "proc:WillkommensbonusProzess",
-      "to": "cmd:SchreibeGut",
-      "kind": "sends",
-      "provenance": "process-dsl",
-      "via": "0"
     },
     {
       "from": "evt:ReiseGebucht",
@@ -4700,6 +4728,59 @@ const GRAPH = {
       "kind": "sends",
       "provenance": "process-dsl",
       "via": "0"
+    },
+    {
+      "from": "evt:WillkommensbonusBeauftragt",
+      "to": "proc:WillkommensbonusProzess",
+      "kind": "triggers",
+      "provenance": "process-dsl"
+    },
+    {
+      "from": "proc:WillkommensbonusProzess",
+      "to": "cmd:ReserviereBetrag",
+      "kind": "sends",
+      "provenance": "process-dsl",
+      "via": "0"
+    },
+    {
+      "from": "proc:WillkommensbonusProzess",
+      "to": "cmd:GebeReservierungFrei",
+      "kind": "compensates",
+      "provenance": "process-dsl",
+      "via": "0"
+    },
+    {
+      "from": "proc:WillkommensbonusProzess",
+      "to": "cmd:SchreibeGut",
+      "kind": "sends",
+      "provenance": "process-dsl",
+      "via": "1"
+    },
+    {
+      "from": "proc:WillkommensbonusProzess",
+      "to": "cmd:StorniereGutschrift",
+      "kind": "compensates",
+      "provenance": "process-dsl",
+      "via": "1"
+    },
+    {
+      "from": "proc:WillkommensbonusProzess",
+      "to": "cmd:BucheReservierung",
+      "kind": "sends",
+      "provenance": "process-dsl",
+      "via": "2"
+    },
+    {
+      "from": "evt:BetragReserviert",
+      "to": "proc:WillkommensbonusProzess",
+      "kind": "advances",
+      "provenance": "process-dsl"
+    },
+    {
+      "from": "evt:Gutgeschrieben",
+      "to": "proc:WillkommensbonusProzess",
+      "kind": "advances",
+      "provenance": "process-dsl"
     },
     {
       "from": "evt:ImagePairErstellt",
@@ -5076,7 +5157,8 @@ const GRAPH = {
         "triggersProcesses": [],
         "advancesProcesses": [
           "SammelueberweisungsProzess",
-          "UeberweisungsProzess"
+          "UeberweisungsProzess",
+          "WillkommensbonusProzess"
         ],
         "pipelines": []
       },
@@ -5087,18 +5169,9 @@ const GRAPH = {
         "triggersProcesses": [],
         "advancesProcesses": [
           "SammelueberweisungsProzess",
-          "UeberweisungsProzess"
-        ],
-        "pipelines": []
-      },
-      {
-        "event": "WillkommensbonusFaellig",
-        "persisted": true,
-        "projections": [],
-        "triggersProcesses": [
+          "UeberweisungsProzess",
           "WillkommensbonusProzess"
         ],
-        "advancesProcesses": [],
         "pipelines": []
       },
       {
@@ -5142,6 +5215,16 @@ const GRAPH = {
         "pipelines": []
       },
       {
+        "event": "WillkommensbonusBeauftragt",
+        "persisted": true,
+        "projections": [],
+        "triggersProcesses": [
+          "WillkommensbonusProzess"
+        ],
+        "advancesProcesses": [],
+        "pipelines": []
+      },
+      {
         "event": "KontoBelastet",
         "persisted": true,
         "projections": [],
@@ -5160,13 +5243,6 @@ const GRAPH = {
           "[BestellungAufgegeben] → ReserviereBestand   ⟲ GebeBestandFrei",
           "[BestellungAufgegeben] → BelasteKonto   ⟲ ErstatteKonto",
           "[BestellungAufgegeben ∧ BestandReserviert ∧ KontoBelastet] → Versende"
-        ]
-      },
-      {
-        "start": "WillkommensbonusFaellig",
-        "process": "WillkommensbonusProzess",
-        "steps": [
-          "[WillkommensbonusFaellig] → SchreibeGut"
         ]
       },
       {
@@ -5208,6 +5284,15 @@ const GRAPH = {
         "process": "GenehmigungsProzess",
         "steps": [
           "[AntragGestellt] → Genehmige"
+        ]
+      },
+      {
+        "start": "WillkommensbonusBeauftragt",
+        "process": "WillkommensbonusProzess",
+        "steps": [
+          "[WillkommensbonusBeauftragt] → ReserviereBetrag   ⟲ GebeReservierungFrei",
+          "[WillkommensbonusBeauftragt ∧ BetragReserviert] → SchreibeGut   ⟲ StorniereGutschrift",
+          "[WillkommensbonusBeauftragt ∧ BetragReserviert ∧ Gutgeschrieben] → BucheReservierung"
         ]
       }
     ],
@@ -5626,11 +5711,12 @@ function renderInspector(){ const el=document.getElementById('inspector'); if(!e
   const hist=(HIST[selId]||[]).slice(-6).reverse().map(e=>'<div class="hrow"><b>'+e.command+'</b> '+((e.changes&&e.changes.length)?e.changes.map(c=>c.feld+' '+fmt(c.vorher)+'→'+fmt(c.nachher)).join(', '):'(keine Änderung)')+'</div>').join('');
   el.innerHTML='<div class="card"><div class="chead">'+x.label+' <span class="iid" style="font-weight:400">'+x.id.slice(0,8)+'</span></div>'+rows+'</div>'+(hist?'<div class="hist"><div class="hh">Änderungen</div>'+hist+'</div>':''); }
 function guidFeld(fl,id,c){ const isAgg=fl.name.toLowerCase()==='aggregateid';
-  const opts=Object.values(INST).filter(x=>!isAgg||x.typ===c.aggregate); const creation=c.creation&&isAgg;
-  const def=creation?'__neu__':((opts.find(x=>x.id===selId)?selId:(opts[0]?opts[0].id:'__neu__')));
+  // aggregateId → Instanzen des Ziel-Aggregats; Referenz-Felder (z.B. NeuesKonto) → Instanzen ANDERER Aggregate.
+  const opts=Object.values(INST).filter(x=>isAgg?x.typ===c.aggregate:x.typ!==c.aggregate); const creation=c.creation&&isAgg;
+  const def=creation?'__neu__':(isAgg?(opts.find(x=>x.id===selId)?selId:(opts[0]?opts[0].id:'__neu__')):(opts[0]?opts[0].id:'__neu__'));
   const o=opts.map(x=>'<option value="'+x.id+'"'+(x.id===def?' selected':'')+'>'+x.label+' · '+x.id.slice(0,8)+'</option>').join('')
     +'<option value="__neu__"'+(def==='__neu__'?' selected':'')+'>➕ neu (frische Id)</option>';
-  return '<label>'+fl.name+' <span style="opacity:.55">'+(isAgg?'Aggregat':'Instanz')+'</span></label><select id="'+id+'">'+o+'</select>'; }
+  return '<label>'+fl.name+' <span style="opacity:.55">'+(isAgg?'Aggregat':'Referenz')+'</span></label><select id="'+id+'">'+o+'</select>'; }
 function guidFor(name){ let h=0; for(const ch of name)h=(h*31+ch.charCodeAt(0))>>>0; return '00000000-0000-0000-0000-'+('000000000000'+h.toString(16)).slice(-12); }
 function renderForm(node){ const c=SCHEMA[node.name]; const f=document.getElementById('cmdform'); if(!c){f.innerHTML='';return;}
   f.innerHTML=c.fields.map(fl=>{ const id='f_'+fl.name; const num=['decimal','int','long'].includes(fl.type);

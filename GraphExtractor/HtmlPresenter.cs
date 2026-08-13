@@ -460,11 +460,12 @@ function renderInspector(){ const el=document.getElementById('inspector'); if(!e
   const hist=(HIST[selId]||[]).slice(-6).reverse().map(e=>'<div class="hrow"><b>'+e.command+'</b> '+((e.changes&&e.changes.length)?e.changes.map(c=>c.feld+' '+fmt(c.vorher)+'→'+fmt(c.nachher)).join(', '):'(keine Änderung)')+'</div>').join('');
   el.innerHTML='<div class="card"><div class="chead">'+x.label+' <span class="iid" style="font-weight:400">'+x.id.slice(0,8)+'</span></div>'+rows+'</div>'+(hist?'<div class="hist"><div class="hh">Änderungen</div>'+hist+'</div>':''); }
 function guidFeld(fl,id,c){ const isAgg=fl.name.toLowerCase()==='aggregateid';
-  const opts=Object.values(INST).filter(x=>!isAgg||x.typ===c.aggregate); const creation=c.creation&&isAgg;
-  const def=creation?'__neu__':((opts.find(x=>x.id===selId)?selId:(opts[0]?opts[0].id:'__neu__')));
+  // aggregateId → Instanzen des Ziel-Aggregats; Referenz-Felder (z.B. NeuesKonto) → Instanzen ANDERER Aggregate.
+  const opts=Object.values(INST).filter(x=>isAgg?x.typ===c.aggregate:x.typ!==c.aggregate); const creation=c.creation&&isAgg;
+  const def=creation?'__neu__':(isAgg?(opts.find(x=>x.id===selId)?selId:(opts[0]?opts[0].id:'__neu__')):(opts[0]?opts[0].id:'__neu__'));
   const o=opts.map(x=>'<option value="'+x.id+'"'+(x.id===def?' selected':'')+'>'+x.label+' · '+x.id.slice(0,8)+'</option>').join('')
     +'<option value="__neu__"'+(def==='__neu__'?' selected':'')+'>➕ neu (frische Id)</option>';
-  return '<label>'+fl.name+' <span style="opacity:.55">'+(isAgg?'Aggregat':'Instanz')+'</span></label><select id="'+id+'">'+o+'</select>'; }
+  return '<label>'+fl.name+' <span style="opacity:.55">'+(isAgg?'Aggregat':'Referenz')+'</span></label><select id="'+id+'">'+o+'</select>'; }
 function guidFor(name){ let h=0; for(const ch of name)h=(h*31+ch.charCodeAt(0))>>>0; return '00000000-0000-0000-0000-'+('000000000000'+h.toString(16)).slice(-12); }
 function renderForm(node){ const c=SCHEMA[node.name]; const f=document.getElementById('cmdform'); if(!c){f.innerHTML='';return;}
   f.innerHTML=c.fields.map(fl=>{ const id='f_'+fl.name; const num=['decimal','int','long'].includes(fl.type);

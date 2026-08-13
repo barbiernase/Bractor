@@ -8,6 +8,7 @@ using Domain.Flug;
 using Domain.Hotel;
 using Domain.ImagePair;
 using Domain.Konto;
+using Domain.Willkommensbonus;
 using Domain.Lager;
 using Domain.Pipeline.Benchmark;
 using Domain.Pipeline.ImageProcessing;
@@ -112,7 +113,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(RichteHotelEin))]
 [JsonSerializable(typeof(RichteLagerEin))]
 [JsonSerializable(typeof(RichteZahlungskontoEin))]
-[JsonSerializable(typeof(GewaehreWillkommensbonus))]
+[JsonSerializable(typeof(BeauftrageWillkommensbonus))]
 [JsonSerializable(typeof(SchreibeGut))]
 [JsonSerializable(typeof(StelleAntrag))]
 [JsonSerializable(typeof(StorniereGutschrift))]
@@ -176,7 +177,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(ReiseGebucht))]
 [JsonSerializable(typeof(ReservierungFreigegeben))]
 [JsonSerializable(typeof(ReservierungGebucht))]
-[JsonSerializable(typeof(WillkommensbonusFaellig))]
+[JsonSerializable(typeof(WillkommensbonusBeauftragt))]
 [JsonSerializable(typeof(SammelUeberweisungBeauftragt))]
 [JsonSerializable(typeof(SchrittGescheitert))]
 [JsonSerializable(typeof(UeberweisungBeauftragt))]
@@ -204,7 +205,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(StateChangeViaFlugFreigegeben))]
 [JsonSerializable(typeof(StateChangeViaFlugReserviert))]
 [JsonSerializable(typeof(StateChangeViaGutgeschrieben))]
-[JsonSerializable(typeof(StateChangeViaWillkommensbonusFaellig))]
+[JsonSerializable(typeof(StateChangeViaWillkommensbonusBeauftragt))]
 [JsonSerializable(typeof(StateChangeViaGutschriftStorniert))]
 [JsonSerializable(typeof(StateChangeViaHotelEingerichtet))]
 [JsonSerializable(typeof(StateChangeViaHotelFreigegeben))]

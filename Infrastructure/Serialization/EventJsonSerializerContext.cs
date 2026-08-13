@@ -8,6 +8,7 @@ using Domain.Flug;
 using Domain.Hotel;
 using Domain.ImagePair;
 using Domain.Konto;
+using Domain.Willkommensbonus;
 using Domain.Lager;
 using Domain.Projections;
 using Domain.Reaktion;
@@ -61,7 +62,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(BetragReserviert))]
 [JsonSerializable(typeof(ReservierungGebucht))]
 [JsonSerializable(typeof(ReservierungFreigegeben))]
-[JsonSerializable(typeof(WillkommensbonusFaellig))]
+[JsonSerializable(typeof(WillkommensbonusBeauftragt))]
 // ── Lager / Versand / Zahlung / Bestellung ──
 [JsonSerializable(typeof(BestandReserviert))]
 [JsonSerializable(typeof(BestandFreigegeben))]
