@@ -6485,6 +6485,15 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .card h3 .k{font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding:1px 6px;border-radius:8px}
 #de .k.agg{background:#4a3a1f;color:#fbd38d}
 #de .k.saga{background:#3a2a4a;color:#e0b0ff}
+#de .k.cmd{background:#20344f;color:#9cc9ff}
+#de .k.evt{background:#4a3a1f;color:#fbd38d}
+#de .k.rej{background:#3a1f28;color:#ffb3c1}
+#de .k.vo{background:#26343a;color:#a0e0d0}
+#de .kindsel{width:118px}
+#de .cbx{font-size:11px;color:#9aa3b7;display:flex;align-items:center;gap:3px}
+#de .arow{display:flex;gap:6px;align-items:center;margin:2px 0}
+#de .arow select{width:200px}
+#de .arow input{flex:1}
 #de .sub{color:#8b93a7;font-size:11px;margin:8px 0 4px;text-transform:uppercase;letter-spacing:.5px}
 #de input,#de select,#de textarea{background:#0d1017;color:#dfe4ee;border:1px solid #2c3547;border-radius:5px;
   padding:4px 6px;font:12px ui-monospace,monospace;box-sizing:border-box}
@@ -6539,33 +6548,1939 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 </div>
 <script>
 (function(){
-  const TYPEN=["Guid","decimal","int","bool","string"];
-  let MODEL={schemaVersion:"1",aggregate:[],sagas:[]};
+  const SCALARS=["Guid","decimal","int","long","double","bool","string","DateTimeOffset"];
+  const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"]};
+  let MODEL={schemaVersion:"2",records:[],enums:[],aggregate:[],sagas:[]};
   const embedded={
-  "schemaVersion": "1",
+  "schemaVersion": "2",
+  "records": [
+    {
+      "name": "Aktiviere",
+      "kind": "command",
+      "namespace": "Domain.Vorgang",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "BeauftrageSammelueberweisung",
+      "kind": "command",
+      "namespace": "Domain.Sammelauftrag",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Quelle",
+          "typ": "Guid"
+        },
+        {
+          "name": "Ziele",
+          "typ": "IReadOnlyList<Guid>"
+        },
+        {
+          "name": "BetragProZiel",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "BeauftrageUeberweisung",
+      "kind": "command",
+      "namespace": "Domain.Auftrag",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Quelle",
+          "typ": "Guid"
+        },
+        {
+          "name": "Ziel",
+          "typ": "Guid"
+        },
+        {
+          "name": "Betrag",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "BeauftrageWillkommensbonus",
+      "kind": "command",
+      "namespace": "Domain.Willkommensbonus",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "NeuesKonto",
+          "typ": "Guid"
+        },
+        {
+          "name": "PromoKonto",
+          "typ": "Guid"
+        },
+        {
+          "name": "Betrag",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "BelasteKonto",
+      "kind": "command",
+      "namespace": "Domain.Zahlung",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Betrag",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "BestaetigeReise",
+      "kind": "command",
+      "namespace": "Domain.Reise",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Kunde",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "BucheReise",
+      "kind": "command",
+      "namespace": "Domain.Reiseauftrag",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Reise",
+          "typ": "Guid"
+        },
+        {
+          "name": "Flug",
+          "typ": "Guid"
+        },
+        {
+          "name": "Hotel",
+          "typ": "Guid"
+        },
+        {
+          "name": "Kunde",
+          "typ": "Guid"
+        },
+        {
+          "name": "Plaetze",
+          "typ": "int"
+        },
+        {
+          "name": "Zimmer",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "BucheReservierung",
+      "kind": "command",
+      "namespace": "Domain.Konto",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Betrag",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "EroeffneKonto",
+      "kind": "command",
+      "namespace": "Domain.Konto",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "StartSaldo",
+          "typ": "decimal"
+        },
+        {
+          "name": "Gesperrt",
+          "typ": "bool"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "EroeffneVerkaufsauftrag",
+      "kind": "command",
+      "namespace": "Domain.Verkauf",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "KundeId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Kreditlimit",
+          "typ": "Geldwert"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ErstatteKonto",
+      "kind": "command",
+      "namespace": "Domain.Zahlung",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Betrag",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ErstelleImagePair",
+      "kind": "command",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "PairKey",
+          "typ": "string"
+        },
+        {
+          "name": "ProduziertAm",
+          "typ": "DateTimeOffset"
+        },
+        {
+          "name": "AufgenommenAm",
+          "typ": "DateTimeOffset"
+        },
+        {
+          "name": "UrsprungsPfad",
+          "typ": "string"
+        }
+      ],
+      "istErzeugung": true
+    },
+    {
+      "name": "FristFaellig",
+      "kind": "command",
+      "namespace": "Domain.Erinnerung",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Kontext",
+          "typ": "string"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "FuegePositionHinzu",
+      "kind": "command",
+      "namespace": "Domain.Verkauf",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "ArtikelNr",
+          "typ": "string"
+        },
+        {
+          "name": "Bezeichnung",
+          "typ": "string"
+        },
+        {
+          "name": "Menge",
+          "typ": "int"
+        },
+        {
+          "name": "Einzelpreis",
+          "typ": "Geldwert"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "GebeBestandFrei",
+      "kind": "command",
+      "namespace": "Domain.Lager",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Menge",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "GebeFlugFrei",
+      "kind": "command",
+      "namespace": "Domain.Flug",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Anzahl",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "GebeHotelFrei",
+      "kind": "command",
+      "namespace": "Domain.Hotel",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Anzahl",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "GebeReservierungFrei",
+      "kind": "command",
+      "namespace": "Domain.Konto",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Betrag",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "Genehmige",
+      "kind": "command",
+      "namespace": "Domain.Vorgang",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "GibBestellungAuf",
+      "kind": "command",
+      "namespace": "Domain.Bestellung",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Versand",
+          "typ": "Guid"
+        },
+        {
+          "name": "Kunde",
+          "typ": "Guid"
+        },
+        {
+          "name": "Artikel",
+          "typ": "Guid"
+        },
+        {
+          "name": "Menge",
+          "typ": "int"
+        },
+        {
+          "name": "Betrag",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "GibVerkaufsauftragAuf",
+      "kind": "command",
+      "namespace": "Domain.Verkauf",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "KlassifiziereBildPaarDurchKi",
+      "kind": "command",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Label",
+          "typ": "Klassifikation"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "KlassifiziereEinzelBildDurchKi",
+      "kind": "command",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Version",
+          "typ": "BildVersion"
+        },
+        {
+          "name": "BildLabel",
+          "typ": "Klassifikation"
+        },
+        {
+          "name": "RegionLabels",
+          "typ": "IReadOnlyList<Klassifikation>"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "LabelBildPaar",
+      "kind": "command",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Label",
+          "typ": "Klassifikation"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "LabelBildRegion",
+      "kind": "command",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Version",
+          "typ": "BildVersion"
+        },
+        {
+          "name": "RegionIndex",
+          "typ": "int"
+        },
+        {
+          "name": "Label",
+          "typ": "Klassifikation"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "LabelEinzelBild",
+      "kind": "command",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Version",
+          "typ": "BildVersion"
+        },
+        {
+          "name": "Label",
+          "typ": "Klassifikation"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "LabelPhysischesProdukt",
+      "kind": "command",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Label",
+          "typ": "Klassifikation"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "MarkiereAlsInspiziert",
+      "kind": "command",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "MeldeBildVerfuegbar",
+      "kind": "command",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Version",
+          "typ": "BildVersion"
+        },
+        {
+          "name": "Meta",
+          "typ": "BildMeta"
+        },
+        {
+          "name": "Pfad",
+          "typ": "string"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ReserviereBestand",
+      "kind": "command",
+      "namespace": "Domain.Lager",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Menge",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ReserviereBetrag",
+      "kind": "command",
+      "namespace": "Domain.Konto",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Betrag",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ReserviereFlug",
+      "kind": "command",
+      "namespace": "Domain.Flug",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Anzahl",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ReserviereHotel",
+      "kind": "command",
+      "namespace": "Domain.Hotel",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Anzahl",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "RichteFlugEin",
+      "kind": "command",
+      "namespace": "Domain.Flug",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Plaetze",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "RichteHotelEin",
+      "kind": "command",
+      "namespace": "Domain.Hotel",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Zimmer",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "RichteLagerEin",
+      "kind": "command",
+      "namespace": "Domain.Lager",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Bestand",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "RichteZahlungskontoEin",
+      "kind": "command",
+      "namespace": "Domain.Zahlung",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Guthaben",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "SchreibeGut",
+      "kind": "command",
+      "namespace": "Domain.Konto",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Betrag",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "StelleAntrag",
+      "kind": "command",
+      "namespace": "Domain.Antrag",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Vorgang",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "StorniereGutschrift",
+      "kind": "command",
+      "namespace": "Domain.Konto",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Betrag",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "StorniereVerkaufsauftrag",
+      "kind": "command",
+      "namespace": "Domain.Verkauf",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Grund",
+          "typ": "string"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "Versende",
+      "kind": "command",
+      "namespace": "Domain.Versand",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Kunde",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "WirkeReaktion",
+      "kind": "command",
+      "namespace": "Domain.Reaktion",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "ReaktionId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Notiz",
+          "typ": "string"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "AntragGestellt",
+      "kind": "event",
+      "namespace": "Domain.Antrag",
+      "felder": [
+        {
+          "name": "AntragId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Vorgang",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "AuftragNichtOffen",
+      "kind": "rejection",
+      "namespace": "Domain.Verkauf",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "BestandFreigegeben",
+      "kind": "event",
+      "namespace": "Domain.Lager",
+      "felder": [
+        {
+          "name": "Menge",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "BestandReichtNicht",
+      "kind": "rejection",
+      "namespace": "Domain.Lager",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Verfuegbar",
+          "typ": "int"
+        },
+        {
+          "name": "Angefordert",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "BestandReserviert",
+      "kind": "event",
+      "namespace": "Domain.Lager",
+      "felder": [
+        {
+          "name": "Menge",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "BestellungAufgegeben",
+      "kind": "event",
+      "namespace": "Domain.Bestellung",
+      "felder": [
+        {
+          "name": "Bestellung",
+          "typ": "Guid"
+        },
+        {
+          "name": "Versand",
+          "typ": "Guid"
+        },
+        {
+          "name": "Kunde",
+          "typ": "Guid"
+        },
+        {
+          "name": "Artikel",
+          "typ": "Guid"
+        },
+        {
+          "name": "Menge",
+          "typ": "int"
+        },
+        {
+          "name": "Betrag",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "BetragReserviert",
+      "kind": "event",
+      "namespace": "Domain.Konto",
+      "felder": [
+        {
+          "name": "Betrag",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "BildNichtVerfuegbar",
+      "kind": "rejection",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "Version",
+          "typ": "BildVersion"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "BildPaarDurchKiKlassifiziert",
+      "kind": "event",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "Label",
+          "typ": "Klassifikation"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "BildPaarGelabelt",
+      "kind": "event",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "Label",
+          "typ": "Klassifikation"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "BildRegionGelabelt",
+      "kind": "event",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "Version",
+          "typ": "BildVersion"
+        },
+        {
+          "name": "RegionIndex",
+          "typ": "int"
+        },
+        {
+          "name": "Label",
+          "typ": "Klassifikation"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "BildVerfuegbar",
+      "kind": "event",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "Version",
+          "typ": "BildVersion"
+        },
+        {
+          "name": "Meta",
+          "typ": "BildMeta"
+        },
+        {
+          "name": "Pfad",
+          "typ": "string"
+        },
+        {
+          "name": "Regionen",
+          "typ": "IReadOnlyList<RegionBewertung>"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "BildVersionBereitsVerfuegbar",
+      "kind": "rejection",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "Version",
+          "typ": "BildVersion"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "CommandFailed",
+      "kind": "rejection",
+      "namespace": "Abstractions",
+      "felder": [
+        {
+          "name": "CommandType",
+          "typ": "string"
+        },
+        {
+          "name": "Reason",
+          "typ": "string"
+        },
+        {
+          "name": "AggregateId",
+          "typ": "string?"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "DeckungReichtNicht",
+      "kind": "rejection",
+      "namespace": "Domain.Konto",
+      "felder": [
+        {
+          "name": "Verfuegbar",
+          "typ": "decimal"
+        },
+        {
+          "name": "Angefordert",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "EinzelBildDurchKiKlassifiziert",
+      "kind": "event",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "Version",
+          "typ": "BildVersion"
+        },
+        {
+          "name": "BildLabel",
+          "typ": "Klassifikation"
+        },
+        {
+          "name": "RegionLabels",
+          "typ": "IReadOnlyList<Klassifikation>"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "EinzelBildGelabelt",
+      "kind": "event",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "Version",
+          "typ": "BildVersion"
+        },
+        {
+          "name": "Label",
+          "typ": "Klassifikation"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ErinnerungAusgeloest",
+      "kind": "event",
+      "namespace": "Domain.Erinnerung",
+      "felder": [
+        {
+          "name": "Kontext",
+          "typ": "string"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "FlugAusgebucht",
+      "kind": "rejection",
+      "namespace": "Domain.Flug",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Frei",
+          "typ": "int"
+        },
+        {
+          "name": "Angefordert",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "FlugEingerichtet",
+      "kind": "event",
+      "namespace": "Domain.Flug",
+      "felder": [
+        {
+          "name": "Plaetze",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "FlugExistiertBereits",
+      "kind": "rejection",
+      "namespace": "Domain.Flug",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "FlugFreigegeben",
+      "kind": "event",
+      "namespace": "Domain.Flug",
+      "felder": [
+        {
+          "name": "Anzahl",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "FlugReserviert",
+      "kind": "event",
+      "namespace": "Domain.Flug",
+      "felder": [
+        {
+          "name": "Anzahl",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "Gutgeschrieben",
+      "kind": "event",
+      "namespace": "Domain.Konto",
+      "felder": [
+        {
+          "name": "Betrag",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "GutschriftStorniert",
+      "kind": "event",
+      "namespace": "Domain.Konto",
+      "felder": [
+        {
+          "name": "Betrag",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "HotelAusgebucht",
+      "kind": "rejection",
+      "namespace": "Domain.Hotel",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Frei",
+          "typ": "int"
+        },
+        {
+          "name": "Angefordert",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "HotelEingerichtet",
+      "kind": "event",
+      "namespace": "Domain.Hotel",
+      "felder": [
+        {
+          "name": "Zimmer",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "HotelExistiertBereits",
+      "kind": "rejection",
+      "namespace": "Domain.Hotel",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "HotelFreigegeben",
+      "kind": "event",
+      "namespace": "Domain.Hotel",
+      "felder": [
+        {
+          "name": "Anzahl",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "HotelReserviert",
+      "kind": "event",
+      "namespace": "Domain.Hotel",
+      "felder": [
+        {
+          "name": "Anzahl",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ImagePairEingabeUngueltig",
+      "kind": "rejection",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "Feld",
+          "typ": "string"
+        },
+        {
+          "name": "Grund",
+          "typ": "string"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ImagePairErstellt",
+      "kind": "event",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "PairKey",
+          "typ": "string"
+        },
+        {
+          "name": "ProduziertAm",
+          "typ": "DateTimeOffset"
+        },
+        {
+          "name": "AufgenommenAm",
+          "typ": "DateTimeOffset"
+        },
+        {
+          "name": "UrsprungsPfad",
+          "typ": "string"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ImagePairExistiertBereits",
+      "kind": "rejection",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "PairId",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ImagePairInspiziert",
+      "kind": "event",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "original",
+          "typ": "ImagePairInspiziert"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ImagePairKomplett",
+      "kind": "event",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "original",
+          "typ": "ImagePairKomplett"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ImagePairNichtGefunden",
+      "kind": "rejection",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "PairId",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "KommandoAbgelehnt",
+      "kind": "event",
+      "namespace": "Infrastructure.Aggregate",
+      "felder": [
+        {
+          "name": "CommandId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Grund",
+          "typ": "string"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "KommandoVerarbeitet",
+      "kind": "event",
+      "namespace": "Infrastructure.Aggregate",
+      "felder": [
+        {
+          "name": "CommandId",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "KontoBelastet",
+      "kind": "event",
+      "namespace": "Domain.Zahlung",
+      "felder": [
+        {
+          "name": "Betrag",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "KontoEroeffnet",
+      "kind": "event",
+      "namespace": "Domain.Konto",
+      "felder": [
+        {
+          "name": "StartSaldo",
+          "typ": "decimal"
+        },
+        {
+          "name": "Gesperrt",
+          "typ": "bool"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "KontoErstattet",
+      "kind": "event",
+      "namespace": "Domain.Zahlung",
+      "felder": [
+        {
+          "name": "Betrag",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "KontoExistiertBereits",
+      "kind": "rejection",
+      "namespace": "Domain.Konto",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "KontoGesperrt",
+      "kind": "rejection",
+      "namespace": "Domain.Konto",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "KontoNichtGefunden",
+      "kind": "rejection",
+      "namespace": "Domain.Konto",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "KontoUngedeckt",
+      "kind": "rejection",
+      "namespace": "Domain.Zahlung",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Verfuegbar",
+          "typ": "decimal"
+        },
+        {
+          "name": "Angefordert",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "KreditlimitUeberschritten",
+      "kind": "rejection",
+      "namespace": "Domain.Verkauf",
+      "felder": [
+        {
+          "name": "Versucht",
+          "typ": "Geldwert"
+        },
+        {
+          "name": "Limit",
+          "typ": "Geldwert"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "LagerEingerichtet",
+      "kind": "event",
+      "namespace": "Domain.Lager",
+      "felder": [
+        {
+          "name": "AnfangsBestand",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "LagerExistiertBereits",
+      "kind": "rejection",
+      "namespace": "Domain.Lager",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "PaarNichtKomplett",
+      "kind": "rejection",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "original",
+          "typ": "PaarNichtKomplett"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "PhysischesProduktGelabelt",
+      "kind": "event",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "Label",
+          "typ": "Klassifikation"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ProzessBeendet",
+      "kind": "event",
+      "namespace": "Infrastructure.Prozess",
+      "felder": [
+        {
+          "name": "Erfolg",
+          "typ": "bool"
+        },
+        {
+          "name": "Grund",
+          "typ": "string"
+        },
+        {
+          "name": "KlärungNötig",
+          "typ": "bool"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ProzessGestartet",
+      "kind": "event",
+      "namespace": "Infrastructure.Prozess",
+      "felder": [
+        {
+          "name": "ProzessName",
+          "typ": "string"
+        },
+        {
+          "name": "AuslöserStream",
+          "typ": "Guid"
+        },
+        {
+          "name": "AuslöserVersion",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ReaktionGewirkt",
+      "kind": "event",
+      "namespace": "Domain.Reaktion",
+      "felder": [
+        {
+          "name": "ReaktionId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Notiz",
+          "typ": "string"
+        },
+        {
+          "name": "Zeitpunkt",
+          "typ": "DateTimeOffset"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "RegionIndexUngueltig",
+      "kind": "rejection",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "RegionIndex",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "RegionLabelsUngueltig",
+      "kind": "rejection",
+      "namespace": "Domain.ImagePair",
+      "felder": [
+        {
+          "name": "Anzahl",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ReiseBestaetigt",
+      "kind": "event",
+      "namespace": "Domain.Reise",
+      "felder": [
+        {
+          "name": "Kunde",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ReiseGebucht",
+      "kind": "event",
+      "namespace": "Domain.Reiseauftrag",
+      "felder": [
+        {
+          "name": "ReiseId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Reise",
+          "typ": "Guid"
+        },
+        {
+          "name": "Flug",
+          "typ": "Guid"
+        },
+        {
+          "name": "Hotel",
+          "typ": "Guid"
+        },
+        {
+          "name": "Kunde",
+          "typ": "Guid"
+        },
+        {
+          "name": "Plaetze",
+          "typ": "int"
+        },
+        {
+          "name": "Zimmer",
+          "typ": "int"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ReservierungFreigegeben",
+      "kind": "event",
+      "namespace": "Domain.Konto",
+      "felder": [
+        {
+          "name": "Betrag",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ReservierungGebucht",
+      "kind": "event",
+      "namespace": "Domain.Konto",
+      "felder": [
+        {
+          "name": "Betrag",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "SammelUeberweisungBeauftragt",
+      "kind": "event",
+      "namespace": "Domain.Sammelauftrag",
+      "felder": [
+        {
+          "name": "Quelle",
+          "typ": "Guid"
+        },
+        {
+          "name": "Ziele",
+          "typ": "IReadOnlyList<Guid>"
+        },
+        {
+          "name": "BetragProZiel",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "SchrittGescheitert",
+      "kind": "event",
+      "namespace": "Infrastructure.Prozess",
+      "felder": [
+        {
+          "name": "Vorgang",
+          "typ": "Guid"
+        },
+        {
+          "name": "Grund",
+          "typ": "string"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "UeberweisungBeauftragt",
+      "kind": "event",
+      "namespace": "Domain.Auftrag",
+      "felder": [
+        {
+          "name": "Quelle",
+          "typ": "Guid"
+        },
+        {
+          "name": "Ziel",
+          "typ": "Guid"
+        },
+        {
+          "name": "Betrag",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "VerkaufsauftragAufgegeben",
+      "kind": "event",
+      "namespace": "Domain.Verkauf",
+      "felder": [
+        {
+          "name": "Gesamtsumme",
+          "typ": "Geldwert"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "VerkaufsauftragEroeffnet",
+      "kind": "event",
+      "namespace": "Domain.Verkauf",
+      "felder": [
+        {
+          "name": "KundeId",
+          "typ": "Guid"
+        },
+        {
+          "name": "Kreditlimit",
+          "typ": "Geldwert"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "VerkaufsauftragExistiertBereits",
+      "kind": "rejection",
+      "namespace": "Domain.Verkauf",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "VerkaufsauftragNichtGefunden",
+      "kind": "rejection",
+      "namespace": "Domain.Verkauf",
+      "felder": [
+        {
+          "name": "AggregateId",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "VerkaufsauftragStorniert",
+      "kind": "event",
+      "namespace": "Domain.Verkauf",
+      "felder": [
+        {
+          "name": "Grund",
+          "typ": "string"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "VerkaufspositionHinzugefuegt",
+      "kind": "event",
+      "namespace": "Domain.Verkauf",
+      "felder": [
+        {
+          "name": "ArtikelNr",
+          "typ": "string"
+        },
+        {
+          "name": "Bezeichnung",
+          "typ": "string"
+        },
+        {
+          "name": "Menge",
+          "typ": "int"
+        },
+        {
+          "name": "Einzelpreis",
+          "typ": "Geldwert"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "Versendet",
+      "kind": "event",
+      "namespace": "Domain.Versand",
+      "felder": [
+        {
+          "name": "Kunde",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "VorgangAktiviert",
+      "kind": "event",
+      "namespace": "Domain.Vorgang",
+      "felder": [
+        {
+          "name": "VorgangId",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "VorgangGenehmigt",
+      "kind": "event",
+      "namespace": "Domain.Vorgang",
+      "felder": [
+        {
+          "name": "VorgangId",
+          "typ": "Guid"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "WaehrungPasstNicht",
+      "kind": "rejection",
+      "namespace": "Domain.Verkauf",
+      "felder": [
+        {
+          "name": "Erwartet",
+          "typ": "Waehrung"
+        },
+        {
+          "name": "Erhalten",
+          "typ": "Waehrung"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "WillkommensbonusBeauftragt",
+      "kind": "event",
+      "namespace": "Domain.Willkommensbonus",
+      "felder": [
+        {
+          "name": "NeuesKonto",
+          "typ": "Guid"
+        },
+        {
+          "name": "PromoKonto",
+          "typ": "Guid"
+        },
+        {
+          "name": "Betrag",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    },
+    {
+      "name": "ZahlungskontoEingerichtet",
+      "kind": "event",
+      "namespace": "Domain.Zahlung",
+      "felder": [
+        {
+          "name": "Guthaben",
+          "typ": "decimal"
+        }
+      ],
+      "istErzeugung": false
+    }
+  ],
+  "enums": [],
   "aggregate": [
     {
       "name": "Antrag",
       "namespace": "Domain.Antrag",
-      "felder": [
+      "state": [
         {
           "name": "Gestellt",
           "typ": "bool"
         }
       ],
-      "commands": [
+      "decider": [
         {
-          "name": "StelleAntrag",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Vorgang",
-              "typ": "Guid"
-            }
-          ],
+          "command": "StelleAntrag",
           "ergibt": [
             {
               "event": "AntragGestellt"
@@ -6573,61 +8488,24 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         }
       ],
-      "events": [
+      "applier": [
         {
-          "name": "AntragGestellt",
-          "felder": [
-            {
-              "name": "AntragId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Vorgang",
-              "typ": "Guid"
-            }
-          ],
-          "transient": false
+          "event": "AntragGestellt"
         }
       ]
     },
     {
       "name": "Bestellauftrag",
       "namespace": "Domain.Bestellung",
-      "felder": [
+      "state": [
         {
           "name": "Aufgegeben",
           "typ": "bool"
         }
       ],
-      "commands": [
+      "decider": [
         {
-          "name": "GibBestellungAuf",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Versand",
-              "typ": "Guid"
-            },
-            {
-              "name": "Kunde",
-              "typ": "Guid"
-            },
-            {
-              "name": "Artikel",
-              "typ": "Guid"
-            },
-            {
-              "name": "Menge",
-              "typ": "int"
-            },
-            {
-              "name": "Betrag",
-              "typ": "decimal"
-            }
-          ],
+          "command": "GibBestellungAuf",
           "ergibt": [
             {
               "event": "BestellungAufgegeben"
@@ -6635,43 +8513,16 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         }
       ],
-      "events": [
+      "applier": [
         {
-          "name": "BestellungAufgegeben",
-          "felder": [
-            {
-              "name": "Bestellung",
-              "typ": "Guid"
-            },
-            {
-              "name": "Versand",
-              "typ": "Guid"
-            },
-            {
-              "name": "Kunde",
-              "typ": "Guid"
-            },
-            {
-              "name": "Artikel",
-              "typ": "Guid"
-            },
-            {
-              "name": "Menge",
-              "typ": "int"
-            },
-            {
-              "name": "Betrag",
-              "typ": "decimal"
-            }
-          ],
-          "transient": false
+          "event": "BestellungAufgegeben"
         }
       ]
     },
     {
       "name": "Erinnerung",
       "namespace": "Domain.Erinnerung",
-      "felder": [
+      "state": [
         {
           "name": "Erinnert",
           "typ": "bool"
@@ -6681,19 +8532,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           "typ": "string?"
         }
       ],
-      "commands": [
+      "decider": [
         {
-          "name": "FristFaellig",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Kontext",
-              "typ": "string"
-            }
-          ],
+          "command": "FristFaellig",
           "ergibt": [
             {
               "event": "ErinnerungAusgeloest"
@@ -6701,41 +8542,24 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         }
       ],
-      "events": [
+      "applier": [
         {
-          "name": "ErinnerungAusgeloest",
-          "felder": [
-            {
-              "name": "Kontext",
-              "typ": "string"
-            }
-          ],
-          "transient": false
+          "event": "ErinnerungAusgeloest"
         }
       ]
     },
     {
       "name": "Flugkontingent",
       "namespace": "Domain.Flug",
-      "felder": [
+      "state": [
         {
           "name": "Plaetze",
           "typ": "int"
         }
       ],
-      "commands": [
+      "decider": [
         {
-          "name": "RichteFlugEin",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Plaetze",
-              "typ": "int"
-            }
-          ],
+          "command": "RichteFlugEin",
           "ergibt": [
             {
               "event": "FlugEingerichtet"
@@ -6747,17 +8571,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "ReserviereFlug",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Anzahl",
-              "typ": "int"
-            }
-          ],
+          "command": "ReserviereFlug",
           "ergibt": [
             {
               "event": "FlugReserviert"
@@ -6769,17 +8583,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "GebeFlugFrei",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Anzahl",
-              "typ": "int"
-            }
-          ],
+          "command": "GebeFlugFrei",
           "ergibt": [
             {
               "event": "FlugFreigegeben"
@@ -6787,89 +8591,30 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         }
       ],
-      "events": [
+      "applier": [
         {
-          "name": "FlugEingerichtet",
-          "felder": [
-            {
-              "name": "Plaetze",
-              "typ": "int"
-            }
-          ],
-          "transient": false
+          "event": "FlugEingerichtet"
         },
         {
-          "name": "FlugExistiertBereits",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            }
-          ],
-          "transient": true
+          "event": "FlugReserviert"
         },
         {
-          "name": "FlugReserviert",
-          "felder": [
-            {
-              "name": "Anzahl",
-              "typ": "int"
-            }
-          ],
-          "transient": false
-        },
-        {
-          "name": "FlugAusgebucht",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Frei",
-              "typ": "int"
-            },
-            {
-              "name": "Angefordert",
-              "typ": "int"
-            }
-          ],
-          "transient": true
-        },
-        {
-          "name": "FlugFreigegeben",
-          "felder": [
-            {
-              "name": "Anzahl",
-              "typ": "int"
-            }
-          ],
-          "transient": false
+          "event": "FlugFreigegeben"
         }
       ]
     },
     {
       "name": "Hotelkontingent",
       "namespace": "Domain.Hotel",
-      "felder": [
+      "state": [
         {
           "name": "Zimmer",
           "typ": "int"
         }
       ],
-      "commands": [
+      "decider": [
         {
-          "name": "RichteHotelEin",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Zimmer",
-              "typ": "int"
-            }
-          ],
+          "command": "RichteHotelEin",
           "ergibt": [
             {
               "event": "HotelEingerichtet"
@@ -6881,17 +8626,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "ReserviereHotel",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Anzahl",
-              "typ": "int"
-            }
-          ],
+          "command": "ReserviereHotel",
           "ergibt": [
             {
               "event": "HotelReserviert"
@@ -6903,17 +8638,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "GebeHotelFrei",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Anzahl",
-              "typ": "int"
-            }
-          ],
+          "command": "GebeHotelFrei",
           "ergibt": [
             {
               "event": "HotelFreigegeben"
@@ -6921,71 +8646,22 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         }
       ],
-      "events": [
+      "applier": [
         {
-          "name": "HotelEingerichtet",
-          "felder": [
-            {
-              "name": "Zimmer",
-              "typ": "int"
-            }
-          ],
-          "transient": false
+          "event": "HotelEingerichtet"
         },
         {
-          "name": "HotelExistiertBereits",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            }
-          ],
-          "transient": true
+          "event": "HotelReserviert"
         },
         {
-          "name": "HotelReserviert",
-          "felder": [
-            {
-              "name": "Anzahl",
-              "typ": "int"
-            }
-          ],
-          "transient": false
-        },
-        {
-          "name": "HotelAusgebucht",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Frei",
-              "typ": "int"
-            },
-            {
-              "name": "Angefordert",
-              "typ": "int"
-            }
-          ],
-          "transient": true
-        },
-        {
-          "name": "HotelFreigegeben",
-          "felder": [
-            {
-              "name": "Anzahl",
-              "typ": "int"
-            }
-          ],
-          "transient": false
+          "event": "HotelFreigegeben"
         }
       ]
     },
     {
       "name": "ImagePair",
       "namespace": "Domain.ImagePair",
-      "felder": [
+      "state": [
         {
           "name": "PairKey",
           "typ": "string?"
@@ -7032,31 +8708,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           "typ": "string?"
         }
       ],
-      "commands": [
+      "decider": [
         {
-          "name": "ErstelleImagePair",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "PairKey",
-              "typ": "string"
-            },
-            {
-              "name": "ProduziertAm",
-              "typ": "DateTimeOffset"
-            },
-            {
-              "name": "AufgenommenAm",
-              "typ": "DateTimeOffset"
-            },
-            {
-              "name": "UrsprungsPfad",
-              "typ": "string"
-            }
-          ],
+          "command": "ErstelleImagePair",
           "ergibt": [
             {
               "event": "ImagePairErstellt"
@@ -7068,25 +8722,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "MeldeBildVerfuegbar",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Version",
-              "typ": "BildVersion"
-            },
-            {
-              "name": "Meta",
-              "typ": "BildMeta"
-            },
-            {
-              "name": "Pfad",
-              "typ": "string"
-            }
-          ],
+          "command": "MeldeBildVerfuegbar",
           "ergibt": [
             {
               "event": "BildVerfuegbar"
@@ -7106,25 +8742,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "KlassifiziereEinzelBildDurchKi",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Version",
-              "typ": "BildVersion"
-            },
-            {
-              "name": "BildLabel",
-              "typ": "Klassifikation"
-            },
-            {
-              "name": "RegionLabels",
-              "typ": "IReadOnlyList<Klassifikation>"
-            }
-          ],
+          "command": "KlassifiziereEinzelBildDurchKi",
           "ergibt": [
             {
               "event": "EinzelBildDurchKiKlassifiziert"
@@ -7140,17 +8758,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "KlassifiziereBildPaarDurchKi",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Label",
-              "typ": "Klassifikation"
-            }
-          ],
+          "command": "KlassifiziereBildPaarDurchKi",
           "ergibt": [
             {
               "event": "BildPaarDurchKiKlassifiziert"
@@ -7162,25 +8770,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "LabelBildRegion",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Version",
-              "typ": "BildVersion"
-            },
-            {
-              "name": "RegionIndex",
-              "typ": "int"
-            },
-            {
-              "name": "Label",
-              "typ": "Klassifikation"
-            }
-          ],
+          "command": "LabelBildRegion",
           "ergibt": [
             {
               "event": "BildRegionGelabelt"
@@ -7196,21 +8786,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "LabelEinzelBild",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Version",
-              "typ": "BildVersion"
-            },
-            {
-              "name": "Label",
-              "typ": "Klassifikation"
-            }
-          ],
+          "command": "LabelEinzelBild",
           "ergibt": [
             {
               "event": "EinzelBildGelabelt"
@@ -7222,17 +8798,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "LabelBildPaar",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Label",
-              "typ": "Klassifikation"
-            }
-          ],
+          "command": "LabelBildPaar",
           "ergibt": [
             {
               "event": "BildPaarGelabelt"
@@ -7244,17 +8810,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "LabelPhysischesProdukt",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Label",
-              "typ": "Klassifikation"
-            }
-          ],
+          "command": "LabelPhysischesProdukt",
           "ergibt": [
             {
               "event": "PhysischesProduktGelabelt"
@@ -7266,13 +8822,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "MarkiereAlsInspiziert",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            }
-          ],
+          "command": "MarkiereAlsInspiziert",
           "ergibt": [
             {
               "event": "ImagePairInspiziert"
@@ -7284,231 +8834,43 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         }
       ],
-      "events": [
+      "applier": [
         {
-          "name": "ImagePairErstellt",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "PairKey",
-              "typ": "string"
-            },
-            {
-              "name": "ProduziertAm",
-              "typ": "DateTimeOffset"
-            },
-            {
-              "name": "AufgenommenAm",
-              "typ": "DateTimeOffset"
-            },
-            {
-              "name": "UrsprungsPfad",
-              "typ": "string"
-            }
-          ],
-          "transient": false
+          "event": "ImagePairErstellt"
         },
         {
-          "name": "ImagePairExistiertBereits",
-          "felder": [
-            {
-              "name": "PairId",
-              "typ": "Guid"
-            }
-          ],
-          "transient": true
+          "event": "BildVerfuegbar"
         },
         {
-          "name": "BildVerfuegbar",
-          "felder": [
-            {
-              "name": "Version",
-              "typ": "BildVersion"
-            },
-            {
-              "name": "Meta",
-              "typ": "BildMeta"
-            },
-            {
-              "name": "Pfad",
-              "typ": "string"
-            },
-            {
-              "name": "Regionen",
-              "typ": "IReadOnlyList<RegionBewertung>"
-            }
-          ],
-          "transient": false
+          "event": "ImagePairKomplett"
         },
         {
-          "name": "ImagePairKomplett",
-          "felder": [
-            {
-              "name": "original",
-              "typ": "ImagePairKomplett"
-            }
-          ],
-          "transient": false
+          "event": "EinzelBildDurchKiKlassifiziert"
         },
         {
-          "name": "ImagePairNichtGefunden",
-          "felder": [
-            {
-              "name": "PairId",
-              "typ": "Guid"
-            }
-          ],
-          "transient": true
+          "event": "BildPaarDurchKiKlassifiziert"
         },
         {
-          "name": "BildVersionBereitsVerfuegbar",
-          "felder": [
-            {
-              "name": "Version",
-              "typ": "BildVersion"
-            }
-          ],
-          "transient": true
+          "event": "BildRegionGelabelt"
         },
         {
-          "name": "EinzelBildDurchKiKlassifiziert",
-          "felder": [
-            {
-              "name": "Version",
-              "typ": "BildVersion"
-            },
-            {
-              "name": "BildLabel",
-              "typ": "Klassifikation"
-            },
-            {
-              "name": "RegionLabels",
-              "typ": "IReadOnlyList<Klassifikation>"
-            }
-          ],
-          "transient": false
+          "event": "EinzelBildGelabelt"
         },
         {
-          "name": "BildNichtVerfuegbar",
-          "felder": [
-            {
-              "name": "Version",
-              "typ": "BildVersion"
-            }
-          ],
-          "transient": true
+          "event": "BildPaarGelabelt"
         },
         {
-          "name": "RegionLabelsUngueltig",
-          "felder": [
-            {
-              "name": "Anzahl",
-              "typ": "int"
-            }
-          ],
-          "transient": true
+          "event": "PhysischesProduktGelabelt"
         },
         {
-          "name": "BildPaarDurchKiKlassifiziert",
-          "felder": [
-            {
-              "name": "Label",
-              "typ": "Klassifikation"
-            }
-          ],
-          "transient": false
-        },
-        {
-          "name": "PaarNichtKomplett",
-          "felder": [
-            {
-              "name": "original",
-              "typ": "PaarNichtKomplett"
-            }
-          ],
-          "transient": true
-        },
-        {
-          "name": "BildRegionGelabelt",
-          "felder": [
-            {
-              "name": "Version",
-              "typ": "BildVersion"
-            },
-            {
-              "name": "RegionIndex",
-              "typ": "int"
-            },
-            {
-              "name": "Label",
-              "typ": "Klassifikation"
-            }
-          ],
-          "transient": false
-        },
-        {
-          "name": "RegionIndexUngueltig",
-          "felder": [
-            {
-              "name": "RegionIndex",
-              "typ": "int"
-            }
-          ],
-          "transient": true
-        },
-        {
-          "name": "EinzelBildGelabelt",
-          "felder": [
-            {
-              "name": "Version",
-              "typ": "BildVersion"
-            },
-            {
-              "name": "Label",
-              "typ": "Klassifikation"
-            }
-          ],
-          "transient": false
-        },
-        {
-          "name": "BildPaarGelabelt",
-          "felder": [
-            {
-              "name": "Label",
-              "typ": "Klassifikation"
-            }
-          ],
-          "transient": false
-        },
-        {
-          "name": "PhysischesProduktGelabelt",
-          "felder": [
-            {
-              "name": "Label",
-              "typ": "Klassifikation"
-            }
-          ],
-          "transient": false
-        },
-        {
-          "name": "ImagePairInspiziert",
-          "felder": [
-            {
-              "name": "original",
-              "typ": "ImagePairInspiziert"
-            }
-          ],
-          "transient": false
+          "event": "ImagePairInspiziert"
         }
       ]
     },
     {
       "name": "Konto",
       "namespace": "Domain.Konto",
-      "felder": [
+      "state": [
         {
           "name": "Saldo",
           "typ": "decimal"
@@ -7527,23 +8889,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           "ausdruck": "Saldo - Reserviert"
         }
       ],
-      "commands": [
+      "decider": [
         {
-          "name": "EroeffneKonto",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "StartSaldo",
-              "typ": "decimal"
-            },
-            {
-              "name": "Gesperrt",
-              "typ": "bool"
-            }
-          ],
+          "command": "EroeffneKonto",
           "ergibt": [
             {
               "event": "KontoEroeffnet"
@@ -7555,17 +8903,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "ReserviereBetrag",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Betrag",
-              "typ": "decimal"
-            }
-          ],
+          "command": "ReserviereBetrag",
           "ergibt": [
             {
               "event": "BetragReserviert"
@@ -7585,17 +8923,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "GebeReservierungFrei",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Betrag",
-              "typ": "decimal"
-            }
-          ],
+          "command": "GebeReservierungFrei",
           "ergibt": [
             {
               "event": "ReservierungFreigegeben"
@@ -7603,17 +8931,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "SchreibeGut",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Betrag",
-              "typ": "decimal"
-            }
-          ],
+          "command": "SchreibeGut",
           "ergibt": [
             {
               "event": "Gutgeschrieben"
@@ -7629,17 +8947,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "StorniereGutschrift",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Betrag",
-              "typ": "decimal"
-            }
-          ],
+          "command": "StorniereGutschrift",
           "ergibt": [
             {
               "event": "GutschriftStorniert"
@@ -7647,17 +8955,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "BucheReservierung",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Betrag",
-              "typ": "decimal"
-            }
-          ],
+          "command": "BucheReservierung",
           "ergibt": [
             {
               "event": "ReservierungGebucht"
@@ -7665,121 +8963,31 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         }
       ],
-      "events": [
+      "applier": [
         {
-          "name": "KontoEroeffnet",
-          "felder": [
-            {
-              "name": "StartSaldo",
-              "typ": "decimal"
-            },
-            {
-              "name": "Gesperrt",
-              "typ": "bool"
-            }
-          ],
-          "transient": false
+          "event": "KontoEroeffnet"
         },
         {
-          "name": "KontoExistiertBereits",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            }
-          ],
-          "transient": true
+          "event": "BetragReserviert"
         },
         {
-          "name": "BetragReserviert",
-          "felder": [
-            {
-              "name": "Betrag",
-              "typ": "decimal"
-            }
-          ],
-          "transient": false
+          "event": "ReservierungFreigegeben"
         },
         {
-          "name": "KontoGesperrt",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            }
-          ],
-          "transient": true
+          "event": "Gutgeschrieben"
         },
         {
-          "name": "DeckungReichtNicht",
-          "felder": [
-            {
-              "name": "Verfuegbar",
-              "typ": "decimal"
-            },
-            {
-              "name": "Angefordert",
-              "typ": "decimal"
-            }
-          ],
-          "transient": true
+          "event": "GutschriftStorniert"
         },
         {
-          "name": "KontoNichtGefunden",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            }
-          ],
-          "transient": true
-        },
-        {
-          "name": "ReservierungFreigegeben",
-          "felder": [
-            {
-              "name": "Betrag",
-              "typ": "decimal"
-            }
-          ],
-          "transient": false
-        },
-        {
-          "name": "Gutgeschrieben",
-          "felder": [
-            {
-              "name": "Betrag",
-              "typ": "decimal"
-            }
-          ],
-          "transient": false
-        },
-        {
-          "name": "GutschriftStorniert",
-          "felder": [
-            {
-              "name": "Betrag",
-              "typ": "decimal"
-            }
-          ],
-          "transient": false
-        },
-        {
-          "name": "ReservierungGebucht",
-          "felder": [
-            {
-              "name": "Betrag",
-              "typ": "decimal"
-            }
-          ],
-          "transient": false
+          "event": "ReservierungGebucht"
         }
       ]
     },
     {
       "name": "Lager",
       "namespace": "Domain.Lager",
-      "felder": [
+      "state": [
         {
           "name": "Bestand",
           "typ": "int"
@@ -7789,19 +8997,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           "typ": "int"
         }
       ],
-      "commands": [
+      "decider": [
         {
-          "name": "RichteLagerEin",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Bestand",
-              "typ": "int"
-            }
-          ],
+          "command": "RichteLagerEin",
           "ergibt": [
             {
               "event": "LagerEingerichtet"
@@ -7813,17 +9011,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "ReserviereBestand",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Menge",
-              "typ": "int"
-            }
-          ],
+          "command": "ReserviereBestand",
           "ergibt": [
             {
               "event": "BestandReserviert"
@@ -7835,17 +9023,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "GebeBestandFrei",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Menge",
-              "typ": "int"
-            }
-          ],
+          "command": "GebeBestandFrei",
           "ergibt": [
             {
               "event": "BestandFreigegeben"
@@ -7853,71 +9031,22 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         }
       ],
-      "events": [
+      "applier": [
         {
-          "name": "LagerEingerichtet",
-          "felder": [
-            {
-              "name": "AnfangsBestand",
-              "typ": "int"
-            }
-          ],
-          "transient": false
+          "event": "LagerEingerichtet"
         },
         {
-          "name": "LagerExistiertBereits",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            }
-          ],
-          "transient": true
+          "event": "BestandReserviert"
         },
         {
-          "name": "BestandReserviert",
-          "felder": [
-            {
-              "name": "Menge",
-              "typ": "int"
-            }
-          ],
-          "transient": false
-        },
-        {
-          "name": "BestandReichtNicht",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Verfuegbar",
-              "typ": "int"
-            },
-            {
-              "name": "Angefordert",
-              "typ": "int"
-            }
-          ],
-          "transient": true
-        },
-        {
-          "name": "BestandFreigegeben",
-          "felder": [
-            {
-              "name": "Menge",
-              "typ": "int"
-            }
-          ],
-          "transient": false
+          "event": "BestandFreigegeben"
         }
       ]
     },
     {
       "name": "Reaktionsempfaenger",
       "namespace": "Domain.Reaktion",
-      "felder": [
+      "state": [
         {
           "name": "Wirkungen",
           "typ": "long"
@@ -7927,23 +9056,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           "typ": "HashSet<Guid>"
         }
       ],
-      "commands": [
+      "decider": [
         {
-          "name": "WirkeReaktion",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "ReaktionId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Notiz",
-              "typ": "string"
-            }
-          ],
+          "command": "WirkeReaktion",
           "ergibt": [
             {
               "event": "ReaktionGewirkt"
@@ -7951,49 +9066,24 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         }
       ],
-      "events": [
+      "applier": [
         {
-          "name": "ReaktionGewirkt",
-          "felder": [
-            {
-              "name": "ReaktionId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Notiz",
-              "typ": "string"
-            },
-            {
-              "name": "Zeitpunkt",
-              "typ": "DateTimeOffset"
-            }
-          ],
-          "transient": false
+          "event": "ReaktionGewirkt"
         }
       ]
     },
     {
       "name": "Reise",
       "namespace": "Domain.Reise",
-      "felder": [
+      "state": [
         {
           "name": "Bestaetigt",
           "typ": "bool"
         }
       ],
-      "commands": [
+      "decider": [
         {
-          "name": "BestaetigeReise",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Kunde",
-              "typ": "Guid"
-            }
-          ],
+          "command": "BestaetigeReise",
           "ergibt": [
             {
               "event": "ReiseBestaetigt"
@@ -8001,61 +9091,24 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         }
       ],
-      "events": [
+      "applier": [
         {
-          "name": "ReiseBestaetigt",
-          "felder": [
-            {
-              "name": "Kunde",
-              "typ": "Guid"
-            }
-          ],
-          "transient": false
+          "event": "ReiseBestaetigt"
         }
       ]
     },
     {
       "name": "Reiseauftrag",
       "namespace": "Domain.Reiseauftrag",
-      "felder": [
+      "state": [
         {
           "name": "Gebucht",
           "typ": "bool"
         }
       ],
-      "commands": [
+      "decider": [
         {
-          "name": "BucheReise",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Reise",
-              "typ": "Guid"
-            },
-            {
-              "name": "Flug",
-              "typ": "Guid"
-            },
-            {
-              "name": "Hotel",
-              "typ": "Guid"
-            },
-            {
-              "name": "Kunde",
-              "typ": "Guid"
-            },
-            {
-              "name": "Plaetze",
-              "typ": "int"
-            },
-            {
-              "name": "Zimmer",
-              "typ": "int"
-            }
-          ],
+          "command": "BucheReise",
           "ergibt": [
             {
               "event": "ReiseGebucht"
@@ -8063,73 +9116,24 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         }
       ],
-      "events": [
+      "applier": [
         {
-          "name": "ReiseGebucht",
-          "felder": [
-            {
-              "name": "ReiseId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Reise",
-              "typ": "Guid"
-            },
-            {
-              "name": "Flug",
-              "typ": "Guid"
-            },
-            {
-              "name": "Hotel",
-              "typ": "Guid"
-            },
-            {
-              "name": "Kunde",
-              "typ": "Guid"
-            },
-            {
-              "name": "Plaetze",
-              "typ": "int"
-            },
-            {
-              "name": "Zimmer",
-              "typ": "int"
-            }
-          ],
-          "transient": false
+          "event": "ReiseGebucht"
         }
       ]
     },
     {
       "name": "Sammelueberweisungsauftrag",
       "namespace": "Domain.Sammelauftrag",
-      "felder": [
+      "state": [
         {
           "name": "Beauftragt",
           "typ": "bool"
         }
       ],
-      "commands": [
+      "decider": [
         {
-          "name": "BeauftrageSammelueberweisung",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Quelle",
-              "typ": "Guid"
-            },
-            {
-              "name": "Ziele",
-              "typ": "IReadOnlyList<Guid>"
-            },
-            {
-              "name": "BetragProZiel",
-              "typ": "decimal"
-            }
-          ],
+          "command": "BeauftrageSammelueberweisung",
           "ergibt": [
             {
               "event": "SammelUeberweisungBeauftragt"
@@ -8137,57 +9141,24 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         }
       ],
-      "events": [
+      "applier": [
         {
-          "name": "SammelUeberweisungBeauftragt",
-          "felder": [
-            {
-              "name": "Quelle",
-              "typ": "Guid"
-            },
-            {
-              "name": "Ziele",
-              "typ": "IReadOnlyList<Guid>"
-            },
-            {
-              "name": "BetragProZiel",
-              "typ": "decimal"
-            }
-          ],
-          "transient": false
+          "event": "SammelUeberweisungBeauftragt"
         }
       ]
     },
     {
       "name": "Ueberweisungsauftrag",
       "namespace": "Domain.Auftrag",
-      "felder": [
+      "state": [
         {
           "name": "Beauftragt",
           "typ": "bool"
         }
       ],
-      "commands": [
+      "decider": [
         {
-          "name": "BeauftrageUeberweisung",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Quelle",
-              "typ": "Guid"
-            },
-            {
-              "name": "Ziel",
-              "typ": "Guid"
-            },
-            {
-              "name": "Betrag",
-              "typ": "decimal"
-            }
-          ],
+          "command": "BeauftrageUeberweisung",
           "ergibt": [
             {
               "event": "UeberweisungBeauftragt"
@@ -8195,31 +9166,16 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         }
       ],
-      "events": [
+      "applier": [
         {
-          "name": "UeberweisungBeauftragt",
-          "felder": [
-            {
-              "name": "Quelle",
-              "typ": "Guid"
-            },
-            {
-              "name": "Ziel",
-              "typ": "Guid"
-            },
-            {
-              "name": "Betrag",
-              "typ": "decimal"
-            }
-          ],
-          "transient": false
+          "event": "UeberweisungBeauftragt"
         }
       ]
     },
     {
       "name": "Verkaufsauftrag",
       "namespace": "Domain.Verkauf",
-      "felder": [
+      "state": [
         {
           "name": "KundeId",
           "typ": "Guid"
@@ -8246,23 +9202,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           "ausdruck": "Status == Auftragsstatus.Offen"
         }
       ],
-      "commands": [
+      "decider": [
         {
-          "name": "EroeffneVerkaufsauftrag",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "KundeId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Kreditlimit",
-              "typ": "Geldwert"
-            }
-          ],
+          "command": "EroeffneVerkaufsauftrag",
           "ergibt": [
             {
               "event": "VerkaufsauftragEroeffnet"
@@ -8274,29 +9216,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "FuegePositionHinzu",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "ArtikelNr",
-              "typ": "string"
-            },
-            {
-              "name": "Bezeichnung",
-              "typ": "string"
-            },
-            {
-              "name": "Menge",
-              "typ": "int"
-            },
-            {
-              "name": "Einzelpreis",
-              "typ": "Geldwert"
-            }
-          ],
+          "command": "FuegePositionHinzu",
           "ergibt": [
             {
               "event": "VerkaufspositionHinzugefuegt"
@@ -8320,13 +9240,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "GibVerkaufsauftragAuf",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            }
-          ],
+          "command": "GibVerkaufsauftragAuf",
           "ergibt": [
             {
               "event": "VerkaufsauftragAufgegeben"
@@ -8342,17 +9256,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "StorniereVerkaufsauftrag",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Grund",
-              "typ": "string"
-            }
-          ],
+          "command": "StorniereVerkaufsauftrag",
           "ergibt": [
             {
               "event": "VerkaufsauftragStorniert"
@@ -8364,145 +9268,33 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         }
       ],
-      "events": [
+      "applier": [
         {
-          "name": "VerkaufsauftragEroeffnet",
-          "felder": [
-            {
-              "name": "KundeId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Kreditlimit",
-              "typ": "Geldwert"
-            }
-          ],
-          "transient": false
+          "event": "VerkaufsauftragEroeffnet"
         },
         {
-          "name": "VerkaufsauftragExistiertBereits",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            }
-          ],
-          "transient": true
+          "event": "VerkaufspositionHinzugefuegt"
         },
         {
-          "name": "VerkaufspositionHinzugefuegt",
-          "felder": [
-            {
-              "name": "ArtikelNr",
-              "typ": "string"
-            },
-            {
-              "name": "Bezeichnung",
-              "typ": "string"
-            },
-            {
-              "name": "Menge",
-              "typ": "int"
-            },
-            {
-              "name": "Einzelpreis",
-              "typ": "Geldwert"
-            }
-          ],
-          "transient": false
+          "event": "VerkaufsauftragAufgegeben"
         },
         {
-          "name": "KreditlimitUeberschritten",
-          "felder": [
-            {
-              "name": "Versucht",
-              "typ": "Geldwert"
-            },
-            {
-              "name": "Limit",
-              "typ": "Geldwert"
-            }
-          ],
-          "transient": true
-        },
-        {
-          "name": "AuftragNichtOffen",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            }
-          ],
-          "transient": true
-        },
-        {
-          "name": "WaehrungPasstNicht",
-          "felder": [
-            {
-              "name": "Erwartet",
-              "typ": "Waehrung"
-            },
-            {
-              "name": "Erhalten",
-              "typ": "Waehrung"
-            }
-          ],
-          "transient": true
-        },
-        {
-          "name": "VerkaufsauftragNichtGefunden",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            }
-          ],
-          "transient": true
-        },
-        {
-          "name": "VerkaufsauftragAufgegeben",
-          "felder": [
-            {
-              "name": "Gesamtsumme",
-              "typ": "Geldwert"
-            }
-          ],
-          "transient": false
-        },
-        {
-          "name": "VerkaufsauftragStorniert",
-          "felder": [
-            {
-              "name": "Grund",
-              "typ": "string"
-            }
-          ],
-          "transient": false
+          "event": "VerkaufsauftragStorniert"
         }
       ]
     },
     {
       "name": "Versand",
       "namespace": "Domain.Versand",
-      "felder": [
+      "state": [
         {
           "name": "Versandt",
           "typ": "bool"
         }
       ],
-      "commands": [
+      "decider": [
         {
-          "name": "Versende",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Kunde",
-              "typ": "Guid"
-            }
-          ],
+          "command": "Versende",
           "ergibt": [
             {
               "event": "Versendet"
@@ -8510,23 +9302,16 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         }
       ],
-      "events": [
+      "applier": [
         {
-          "name": "Versendet",
-          "felder": [
-            {
-              "name": "Kunde",
-              "typ": "Guid"
-            }
-          ],
-          "transient": false
+          "event": "Versendet"
         }
       ]
     },
     {
       "name": "Vorgang",
       "namespace": "Domain.Vorgang",
-      "felder": [
+      "state": [
         {
           "name": "Genehmigt",
           "typ": "bool"
@@ -8536,15 +9321,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           "typ": "bool"
         }
       ],
-      "commands": [
+      "decider": [
         {
-          "name": "Genehmige",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            }
-          ],
+          "command": "Genehmige",
           "ergibt": [
             {
               "event": "VorgangGenehmigt"
@@ -8552,13 +9331,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "Aktiviere",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            }
-          ],
+          "command": "Aktiviere",
           "ergibt": [
             {
               "event": "VorgangAktiviert"
@@ -8566,59 +9339,27 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         }
       ],
-      "events": [
+      "applier": [
         {
-          "name": "VorgangGenehmigt",
-          "felder": [
-            {
-              "name": "VorgangId",
-              "typ": "Guid"
-            }
-          ],
-          "transient": false
+          "event": "VorgangGenehmigt"
         },
         {
-          "name": "VorgangAktiviert",
-          "felder": [
-            {
-              "name": "VorgangId",
-              "typ": "Guid"
-            }
-          ],
-          "transient": false
+          "event": "VorgangAktiviert"
         }
       ]
     },
     {
       "name": "Willkommensbonusauftrag",
       "namespace": "Domain.Willkommensbonus",
-      "felder": [
+      "state": [
         {
           "name": "Beauftragt",
           "typ": "bool"
         }
       ],
-      "commands": [
+      "decider": [
         {
-          "name": "BeauftrageWillkommensbonus",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "NeuesKonto",
-              "typ": "Guid"
-            },
-            {
-              "name": "PromoKonto",
-              "typ": "Guid"
-            },
-            {
-              "name": "Betrag",
-              "typ": "decimal"
-            }
-          ],
+          "command": "BeauftrageWillkommensbonus",
           "ergibt": [
             {
               "event": "WillkommensbonusBeauftragt"
@@ -8626,49 +9367,24 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         }
       ],
-      "events": [
+      "applier": [
         {
-          "name": "WillkommensbonusBeauftragt",
-          "felder": [
-            {
-              "name": "NeuesKonto",
-              "typ": "Guid"
-            },
-            {
-              "name": "PromoKonto",
-              "typ": "Guid"
-            },
-            {
-              "name": "Betrag",
-              "typ": "decimal"
-            }
-          ],
-          "transient": false
+          "event": "WillkommensbonusBeauftragt"
         }
       ]
     },
     {
       "name": "Zahlungskonto",
       "namespace": "Domain.Zahlung",
-      "felder": [
+      "state": [
         {
           "name": "Saldo",
           "typ": "decimal"
         }
       ],
-      "commands": [
+      "decider": [
         {
-          "name": "RichteZahlungskontoEin",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Guthaben",
-              "typ": "decimal"
-            }
-          ],
+          "command": "RichteZahlungskontoEin",
           "ergibt": [
             {
               "event": "ZahlungskontoEingerichtet"
@@ -8676,17 +9392,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "BelasteKonto",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Betrag",
-              "typ": "decimal"
-            }
-          ],
+          "command": "BelasteKonto",
           "ergibt": [
             {
               "event": "KontoBelastet"
@@ -8698,17 +9404,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         },
         {
-          "name": "ErstatteKonto",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Betrag",
-              "typ": "decimal"
-            }
-          ],
+          "command": "ErstatteKonto",
           "ergibt": [
             {
               "event": "KontoErstattet"
@@ -8716,54 +9412,15 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           ]
         }
       ],
-      "events": [
+      "applier": [
         {
-          "name": "ZahlungskontoEingerichtet",
-          "felder": [
-            {
-              "name": "Guthaben",
-              "typ": "decimal"
-            }
-          ],
-          "transient": false
+          "event": "ZahlungskontoEingerichtet"
         },
         {
-          "name": "KontoBelastet",
-          "felder": [
-            {
-              "name": "Betrag",
-              "typ": "decimal"
-            }
-          ],
-          "transient": false
+          "event": "KontoBelastet"
         },
         {
-          "name": "KontoUngedeckt",
-          "felder": [
-            {
-              "name": "AggregateId",
-              "typ": "Guid"
-            },
-            {
-              "name": "Verfuegbar",
-              "typ": "decimal"
-            },
-            {
-              "name": "Angefordert",
-              "typ": "decimal"
-            }
-          ],
-          "transient": true
-        },
-        {
-          "name": "KontoErstattet",
-          "felder": [
-            {
-              "name": "Betrag",
-              "typ": "decimal"
-            }
-          ],
-          "transient": false
+          "event": "KontoErstattet"
         }
       ]
     }
@@ -8969,36 +9626,101 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   ]
 };
 
-  // ── Mini-Formate für kompakte Feld-/Ergibt-Eingaben ──
-  const felderZuText=fs=>(fs||[]).map(f=>f.name+":"+f.typ+(f.standard?"="+f.standard:"")).join(", ");
-  function textZuFelder(t){return (t||"").split(",").map(s=>s.trim()).filter(Boolean).map(s=>{
-    const[nt,std]=s.split("="); const[n,ty]=nt.split(":").map(x=>(x||"").trim());
-    const f={name:n,typ:ty||"string"}; if(std!==undefined)f.standard=std.trim(); return f;});}
-  const ergibtZuText=es=>(es||[]).map(e=>e.event+(e.guard?" ? "+e.guard:"")).join("\n");
-  function textZuErgibt(t){return (t||"").split("\n").map(s=>s.trim()).filter(Boolean).map(s=>{
-    const i=s.indexOf(" ? "); return i<0?{event:s}:{event:s.slice(0,i).trim(),guard:s.slice(i+3).trim()};});}
   const listeZuText=xs=>(xs||[]).join(", ");
   const textZuListe=t=>(t||"").split(",").map(s=>s.trim()).filter(Boolean);
+  const kindLabel=k=>(KINDINFO[k]||["?","vo"])[0];
+  const kindKlasse=k=>(KINDINFO[k]||["?","vo"])[1];
+  function normalize(m){m=m||{};m.records=m.records||[];m.enums=m.enums||[];m.aggregate=m.aggregate||[];m.sagas=m.sagas||[];return m;}
+  function defaultNs(){return MODEL.records[0]?.namespace||MODEL.aggregate[0]?.namespace||"Domain.Neu";}
 
   function h(tag,attrs,...kids){const e=document.createElement(tag);
     for(const k in (attrs||{})){if(k==="class")e.className=attrs[k];else if(k.startsWith("on"))e[k]=attrs[k];else if(k==="value")e.value=attrs[k];else e.setAttribute(k,attrs[k]);}
     for(const kid of kids)if(kid!=null)e.append(kid.nodeType?kid:document.createTextNode(kid));return e;}
   const inp=(val,on,ph)=>h("input",{value:val??"",oninput:e=>on(e.target.value),placeholder:ph||""});
-  const area=(val,on,ph)=>{const t=h("textarea",{oninput:e=>on(e.target.value),placeholder:ph||"",rows:Math.max(2,String(val||"").split("\n").length)});t.value=val??"";return t;};
   const codearea=(val,on,ph)=>{const t=h("textarea",{class:"code",oninput:e=>on(e.target.value),placeholder:ph||"",rows:Math.max(3,String(val||"").split("\n").length+1)});t.value=val??"";return t;};
-  function sel(val,on){const s=h("select",{onchange:e=>on(e.target.value)});TYPEN.forEach(t=>{const o=h("option",{value:t},t);if(t===val)o.selected=true;s.append(o);});return s;}
+  // Typ-Eingabe mit Autovervollständigung (Skalare + Records + Enums = Komposition).
+  const tinp=(val,on)=>h("input",{value:val??"",list:"de-typen",oninput:e=>on(e.target.value),placeholder:"Typ"});
+  function datalistEl(){const dl=h("datalist",{id:"de-typen"});
+    [...SCALARS,...MODEL.records.map(r=>r.name),...MODEL.enums.map(e=>e.name)].forEach(t=>dl.append(h("option",{value:t})));return dl;}
+  // Record-Auswahl gefiltert nach Kind (für Decide/Apply/Saga-Verdrahtung).
+  function recSelect(val,on,kinds){const s=h("select",{onchange:e=>on(e.target.value)});
+    const opts=MODEL.records.filter(r=>kinds.includes(r.kind)).map(r=>r.name);
+    if(!val||!opts.includes(val)){const o=h("option",{value:val||""},val||"— wählen —");o.selected=true;s.append(o);}
+    opts.forEach(n=>{const o=h("option",{value:n},n);if(n===val)o.selected=true;s.append(o);});return s;}
+  // Feld-Tabelle: EINE uniforme Zeile Name + Typ (+ optional Ausdruck) — kein Mini-Syntax.
+  function feldTabelle(felder,onDel,mitAusdruck){const t=h("table",{});
+    (felder||[]).forEach((f,fi)=>{const zellen=[
+      h("td",{},inp(f.name,v=>f.name=v,"Feld")),
+      h("td",{style:"width:160px"},tinp(f.typ,v=>f.typ=v))];
+      if(mitAusdruck)zellen.push(h("td",{},inp(f.ausdruck,v=>f.ausdruck=v||undefined,"Ausdruck (abgeleitet)")));
+      zellen.push(h("td",{style:"width:26px"},h("button",{class:"rm",onclick:()=>onDel(fi)},"✕")));
+      t.append(h("tr",{},...zellen));});return t;}
 
-  // ── Aggregat-zuerst, in der BAU-Reihenfolge, wie man ein Aggregat von Hand schreibt:
-  //    Aggregat → 1 State → 2 Commands (Records) → 3 Events (Records) → 4 Decider → 5 Applier.
-  //    Records (Typen) sind bewusst GETRENNT von der Logik (Decider/Applier) — wie die Dateien
-  //    Commands.cs / Events.cs / Decider.cs / Applier.cs. Gespeichert wird aggregat-genestet.
+  // ── RECORD-ZENTRISCH: ein Record-Editor für alles (Command/Event/Ablehnung/Value Object),
+  //    danach KOMPOSITION zu Aggregaten (State + Decider + Applier). Feldtyp kann ein anderer
+  //    Record/Enum sein → so komponieren sich Records.
   function render(){
     const root=document.getElementById("de-form");root.innerHTML="";
-    root.append(h("div",{class:"addbar"},
-      h("button",{class:"add",onclick:()=>{MODEL.aggregate.push({name:"NeuesAggregat",namespace:"Domain.Neu",felder:[],commands:[],events:[]});render();}},"+ Aggregat"),
-      h("button",{class:"add",onclick:()=>{MODEL.sagas.push({name:"NeuerProzess",namespace:(MODEL.aggregate[0]?.namespace||"Domain.Neu"),triggerEvent:"",schritte:[],extraUsings:[]});render();}},"+ Saga")));
-    MODEL.aggregate.forEach((a,ai)=>root.append(aggCard(a,ai)));
-    MODEL.sagas.forEach((s,si)=>root.append(sagaCard(s,si)));
+    root.append(datalistEl());
+
+    // 1 · RECORDS — der uniforme Record-Editor.
+    const rs=h("div",{class:"sec"});
+    rs.append(h("div",{class:"sectitle"},"Records — Commands · Events · Ablehnungen · Value Objects (ein Editor)"));
+    MODEL.records.forEach((r,ri)=>rs.append(recordCard(r,ri)));
+    rs.append(h("div",{class:"addbar"},
+      h("button",{class:"add",onclick:()=>addRecord("command")},"+ Command"),
+      h("button",{class:"add",onclick:()=>addRecord("event")},"+ Event"),
+      h("button",{class:"add",onclick:()=>addRecord("rejection")},"+ Ablehnung"),
+      h("button",{class:"add",onclick:()=>addRecord("valueobject")},"+ Value Object")));
+    root.append(rs);
+
+    // 2 · ENUMS — auch Feldtypen.
+    const es=h("div",{class:"sec"});
+    es.append(h("div",{class:"sectitle"},"Enums — Typen mit festen Werten"));
+    const enTab=h("table",{});
+    MODEL.enums.forEach((e,ei)=>enTab.append(h("tr",{},
+      h("td",{},inp(e.name,v=>e.name=v,"Enum")),
+      h("td",{style:"width:150px"},inp(e.namespace,v=>e.namespace=v,"Domain.X")),
+      h("td",{},inp(listeZuText(e.werte),v=>e.werte=textZuListe(v),"Dc0, Dc2")),
+      h("td",{style:"width:26px"},h("button",{class:"rm",onclick:()=>{MODEL.enums.splice(ei,1);render();}},"✕")))));
+    es.append(enTab,h("button",{class:"add",onclick:()=>{MODEL.enums.push({name:"NeuEnum",namespace:defaultNs(),werte:["A","B"]});render();}},"+ Enum"));
+    root.append(es);
+
+    // 3 · KOMPOSITION — Aggregate verdrahten die Records.
+    const ks=h("div",{class:"sec"});
+    ks.append(h("div",{class:"sectitle"},"Komposition — Aggregate: State + Decider + Applier"));
+    MODEL.aggregate.forEach((a,ai)=>ks.append(aggCard(a,ai)));
+    ks.append(h("button",{class:"add",onclick:()=>{MODEL.aggregate.push({name:"NeuesAggregat",namespace:defaultNs(),state:[],decider:[],applier:[]});render();}},"+ Aggregat"));
+    root.append(ks);
+
+    // 4 · SAGAS.
+    const ss=h("div",{class:"sec"});
+    ss.append(h("div",{class:"sectitle"},"Sagas / Prozesse — aggregat-übergreifend, mit Kompensation"));
+    MODEL.sagas.forEach((s,si)=>ss.append(sagaCard(s,si)));
+    ss.append(h("button",{class:"add",onclick:()=>{MODEL.sagas.push({name:"NeuerProzess",namespace:defaultNs(),triggerEvent:"",schritte:[],extraUsings:[]});render();}},"+ Saga"));
+    root.append(ss);
+  }
+
+  function addRecord(kind){
+    const felder=kind==="command"?[{name:"AggregateId",typ:"Guid"}]:[];
+    MODEL.records.push({name:"Neu"+kindLabel(kind).replace(/\s/g,""),kind,namespace:defaultNs(),felder});
+    render();
+  }
+
+  function recordCard(r,ri){
+    const c=h("div",{class:"card"});
+    const kindSel=h("select",{class:"kindsel",onchange:e=>{r.kind=e.target.value;render();}});
+    Object.keys(KINDINFO).forEach(k=>{const o=h("option",{value:k},kindLabel(k));if(r.kind===k)o.selected=true;kindSel.append(o);});
+    const kopf=[h("span",{class:"k "+kindKlasse(r.kind)},kindLabel(r.kind)),
+      inp(r.name,v=>r.name=v,"RecordName"),
+      h("input",{value:r.namespace,oninput:e=>r.namespace=e.target.value,placeholder:"Domain.X",style:"width:150px"}),
+      kindSel];
+    if(r.kind==="command")kopf.push(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>r.istErzeugung=e.target.checked||undefined,...(r.istErzeugung?{checked:"checked"}:{})}),"Erzeugung"));
+    kopf.push(h("button",{class:"rm",onclick:()=>{MODEL.records.splice(ri,1);render();}},"✕"));
+    c.append(h("h3",{},...kopf));
+    c.append(feldTabelle(r.felder,fi=>{r.felder.splice(fi,1);render();},false));
+    c.append(h("button",{class:"add",onclick:()=>{(r.felder=r.felder||[]).push({name:"feld",typ:"string"});render();}},"+ Feld"));
+    return c;
   }
 
   function aggCard(a,ai){
@@ -9007,58 +9729,39 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
       inp(a.name,v=>a.name=v),inp(a.namespace,v=>a.namespace=v),
       h("button",{class:"rm",onclick:()=>{MODEL.aggregate.splice(ai,1);render();}},"✕")));
 
-    // 1 · STATE — der Zustand.
-    c.append(h("div",{class:"step"},"1 · State — der Zustand (Felder; abgeleitet via Ausdruck)"));
-    const ft=h("table",{});
-    (a.felder||[]).forEach((f,fi)=>ft.append(h("tr",{},
-      h("td",{},inp(f.name,v=>f.name=v,"Feld")),
-      h("td",{},sel(f.typ,v=>f.typ=v)),
-      h("td",{},inp(f.ausdruck,v=>f.ausdruck=v||undefined,"Ausdruck (abgeleitet)")),
-      h("td",{style:"width:26px"},h("button",{class:"rm",onclick:()=>{a.felder.splice(fi,1);render();}},"✕")))));
-    c.append(ft,h("button",{class:"add",onclick:()=>{(a.felder=a.felder||[]).push({name:"feld",typ:"decimal"});render();}},"+ Feld"));
+    // State
+    c.append(h("div",{class:"step"},"State — der Zustand (Felder; abgeleitet via Ausdruck)"));
+    c.append(feldTabelle(a.state,fi=>{a.state.splice(fi,1);render();},true));
+    c.append(h("button",{class:"add",onclick:()=>{(a.state=a.state||[]).push({name:"feld",typ:"decimal"});render();}},"+ Feld"));
 
-    // 2 · COMMANDS — die Absichts-Records (nur Name + Felder; Logik kommt im Decider).
-    c.append(h("div",{class:"step"},"2 · Commands — die Absichts-Records (Name + Felder)"));
-    const ct=h("table",{});
-    (a.commands||[]).forEach((cm,ci)=>ct.append(h("tr",{},
-      h("td",{style:"width:190px"},inp(cm.name,v=>cm.name=v,"Command")),
-      h("td",{},inp(felderZuText(cm.felder),v=>cm.felder=textZuFelder(v),"AggregateId:Guid, Betrag:decimal")),
-      h("td",{style:"width:26px"},h("button",{class:"rm",onclick:()=>{a.commands.splice(ci,1);render();}},"✕")))));
-    c.append(ct,h("button",{class:"add",onclick:()=>{(a.commands=a.commands||[]).push({name:"MachWas",felder:[{name:"AggregateId",typ:"Guid"}],ergibt:[]});render();}},"+ Command"));
-
-    // 3 · EVENTS — die Fakten-Records (rein/ID-los; [x] = Ablehnung/transient).
-    c.append(h("div",{class:"step"},"3 · Events — die Fakten-Records (Name + Felder · [x] = Ablehnung/transient)"));
-    const et=h("table",{});
-    (a.events||[]).forEach((e,ei)=>et.append(h("tr",{},
-      h("td",{style:"width:190px"},inp(e.name,v=>e.name=v,"Event")),
-      h("td",{style:"width:22px"},h("input",{type:"checkbox",onchange:ev=>{e.transient=ev.target.checked;render();},...(e.transient?{checked:"checked"}:{})})),
-      h("td",{},inp(felderZuText(e.felder),v=>e.felder=textZuFelder(v),"Betrag:decimal")),
-      h("td",{style:"width:26px"},h("button",{class:"rm",onclick:()=>{a.events.splice(ei,1);render();}},"✕")))));
-    c.append(et,h("button",{class:"add",onclick:()=>{(a.events=a.events||[]).push({name:"Ereignis",felder:[]});render();}},"+ Event"));
-
-    // 4 · DECIDER — Decide je Command: welche Events (OneOf) + Körper.
-    c.append(h("div",{class:"step"},"4 · Decider — Decide je Command: welche Events (OneOf) + Körper"));
-    if(!(a.commands||[]).length) c.append(h("div",{class:"hint"},"Erst Commands anlegen (Schritt 2)."));
-    (a.commands||[]).forEach(cm=>{
+    // Decider — Command → OneOf-Events
+    c.append(h("div",{class:"step"},"Decider — Decide je Command: Command ⟶ OneOf-Events + Körper"));
+    (a.decider||[]).forEach((d,di)=>{
       const box=h("div",{class:"cmdbox"});
-      box.append(h("div",{class:"cmdhead"},h("span",{class:"name"},"Decide("),h("span",{class:"cmdn"},cm.name||"…"),h("span",{class:"name"}," cmd)")));
-      box.append(h("div",{class:"blab"},"⟶ OneOf-Ausgänge — ein Event je Zeile, optional 'Event ? guard'"));
-      box.append(area(ergibtZuText(cm.ergibt),v=>cm.ergibt=textZuErgibt(v),"BetragReserviert\nDeckungReichtNicht ? State.Verfuegbar < cmd.Betrag"));
-      box.append(h("div",{class:"blab"},"Decide-Körper — this.State lesen, cmd nutzen, Events yield return-en. Leer ⇒ throw-Platzhalter."));
-      box.append(codearea(cm.rumpf,v=>cm.rumpf=v||undefined,"if (this.State.Verfuegbar < cmd.Betrag) { yield return new DeckungReichtNicht(this.State.Verfuegbar, cmd.Betrag); yield break; }\nyield return new BetragReserviert(cmd.Betrag);"));
+      box.append(h("div",{class:"cmdhead"},h("span",{class:"name"},"Decide("),recSelect(d.command,v=>{d.command=v;},["command"]),h("span",{class:"name"}," cmd)"),
+        h("button",{class:"rm",onclick:()=>{a.decider.splice(di,1);render();}},"✕")));
+      box.append(h("div",{class:"blab"},"⟶ OneOf-Ausgänge (Event/Ablehnung + optional Guard):"));
+      (d.ergibt||[]).forEach((o,oi)=>box.append(h("div",{class:"arow"},
+        recSelect(o.event,v=>{o.event=v;},["event","rejection"]),
+        inp(o.guard,v=>o.guard=v||undefined,"Guard (optional)"),
+        h("button",{class:"rm",onclick:()=>{d.ergibt.splice(oi,1);render();}},"✕"))));
+      box.append(h("button",{class:"add",onclick:()=>{(d.ergibt=d.ergibt||[]).push({event:""});render();}},"+ Ausgang"));
+      box.append(h("div",{class:"blab"},"Decide-Körper — Leer ⇒ throw-Platzhalter."));
+      box.append(codearea(d.rumpf,v=>d.rumpf=v||undefined,"if (this.State.Verfuegbar < cmd.Betrag) { yield return new DeckungReichtNicht(this.State.Verfuegbar, cmd.Betrag); yield break; }\nyield return new BetragReserviert(cmd.Betrag);"));
       c.append(box);
     });
+    c.append(h("button",{class:"add",onclick:()=>{(a.decider=a.decider||[]).push({command:"",ergibt:[]});render();}},"+ Decide-Regel"));
 
-    // 5 · APPLIER — Apply je persistentem Event: wie es den State faltet.
-    c.append(h("div",{class:"step"},"5 · Applier — Apply je persistentem Event: wie es den State faltet"));
-    const persist=(a.events||[]).filter(e=>!e.transient);
-    if(!persist.length) c.append(h("div",{class:"hint"},"Erst persistente Events anlegen (Schritt 3)."));
-    persist.forEach(e=>{
+    // Applier — Event → State
+    c.append(h("div",{class:"step"},"Applier — Apply je persistentem Event: Event ⟶ State-Faltung"));
+    (a.applier||[]).forEach((ap,pi)=>{
       const box=h("div",{class:"applybox"});
-      box.append(h("div",{class:"cmdhead"},h("span",{class:"name"},"Apply("),h("span",{class:"cmdn"},e.name||"…"),h("span",{class:"name"}," evt)")));
-      box.append(codearea(e.applyRumpf,v=>e.applyRumpf=v||undefined,"this.State.Saldo += evt.Betrag;"));
+      box.append(h("div",{class:"cmdhead"},h("span",{class:"name"},"Apply("),recSelect(ap.event,v=>{ap.event=v;},["event"]),h("span",{class:"name"}," evt)"),
+        h("button",{class:"rm",onclick:()=>{a.applier.splice(pi,1);render();}},"✕")));
+      box.append(codearea(ap.rumpf,v=>ap.rumpf=v||undefined,"this.State.Saldo += evt.Betrag;"));
       c.append(box);
     });
+    c.append(h("button",{class:"add",onclick:()=>{(a.applier=a.applier||[]).push({event:""});render();}},"+ Apply-Regel"));
 
     return c;
   }
@@ -9088,11 +9791,11 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   }
 
   // ── Aktionen ──
-  window.deOpen=function(){document.getElementById("de").classList.add("on");if(!MODEL.aggregate.length&&!MODEL.sagas.length)deReload();else render();};
+  window.deOpen=function(){document.getElementById("de").classList.add("on");if(!MODEL.records.length&&!MODEL.aggregate.length)deReload();else render();};
   window.deClose=function(){document.getElementById("de").classList.remove("on");};
   async function loadLive(){try{const r=await fetch("/api/editor/model");if(!r.ok)throw 0;const m=await r.json();badge(true);return m;}catch(e){badge(false);return null;}}
   function badge(live){const b=document.getElementById("de-badge");b.textContent=live?"SimHost live":"offline";b.className="badge"+(live?"":" off");}
-  window.deReload=async function(){const live=await loadLive();MODEL=live||(embedded&&embedded.aggregate?embedded:{schemaVersion:"1",aggregate:[],sagas:[]});render();};
+  window.deReload=async function(){const live=await loadLive();MODEL=normalize(live||(embedded&&(embedded.records||embedded.aggregate)?embedded:null));render();};
   window.deDownload=function(){const blob=new Blob([JSON.stringify(MODEL,null,2)],{type:"application/json"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="domain-model.json";a.click();};
   async function post(path){const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(MODEL)});
@@ -9110,7 +9813,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 
   const unreach='<div class="find error">SimHost nicht erreichbar. Starte ihn: <b>dotnet run --project SimHost</b>.</div>';
   async function postJson(path,obj){const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(obj)});if(!r.ok)throw new Error("HTTP "+r.status);return r;}
-  const alleCommands=()=>MODEL.aggregate.flatMap(a=>a.commands||[]);
+  const alleCommands=()=>MODEL.records.filter(r=>r.kind==="command");
 
   // ⚙ Kompilieren: das Modell IN-MEMORY mit den echten Domain-Generatoren übersetzen.
   window.deCompile=async function(){const out=document.getElementById("de-out");

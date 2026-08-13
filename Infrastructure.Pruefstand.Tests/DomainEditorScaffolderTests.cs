@@ -4,49 +4,55 @@ using FluentAssertions;
 namespace Infrastructure.Pruefstand.Tests;
 
 /// <summary>
-/// Dogfood für den Domänen-Editor (Stufe 1): das Modell → C# in der kanonischen Gestalt. Store-frei,
-/// rein textuell — genau das, was der Prüfstand testen darf. Beweist die FORM (Records, partial-
-/// Klassen, OneOf-Signaturen, Saga-DSL), nicht die Logik (die ist Stufe 3). Determinismus ist Teil
-/// des Vertrags: gleiches Modell → byte-gleicher Output.
+/// Dogfood für den record-zentrischen Domänen-Editor: Records (Command/Event/Ablehnung/Value Object)
+/// + Aggregat-Komposition (State/Decider/Applier) → C# in kanonischer Gestalt. Store-frei, rein
+/// textuell. Beweist die FORM + Komposition (Feldtyp = anderer Record/Enum), nicht die Logik.
 /// </summary>
 public sealed class DomainEditorScaffolderTests
 {
-    // ── Das Konto-Modell (kanonisch), als Fixture ──────────────────────────────────────────────
-    private static Aggregat KontoAggregat() => new()
+    // ── Konto als record-zentrisches Modell ────────────────────────────────────────────────────
+    private static EditorModell KontoModell() => new()
     {
-        Name = "Konto",
-        Namespace = "Domain.Konto",
-        Doku = "Ziel-Aggregat: Saldo, reservierter Teilbetrag, Gesperrt-Schalter.",
-        Felder =
+        Records =
         [
-            new() { Name = "Saldo", Typ = "decimal" },
-            new() { Name = "Reserviert", Typ = "decimal" },
-            new() { Name = "Gesperrt", Typ = "bool" },
-            new() { Name = "Verfuegbar", Typ = "decimal", Ausdruck = "Saldo - Reserviert" },
+            new() { Name = "EroeffneKonto", Kind = RecordArt.Command, Namespace = "Domain.Konto",
+                Felder = [ new() { Name = "AggregateId", Typ = "Guid" }, new() { Name = "StartSaldo", Typ = "decimal" }, new() { Name = "Gesperrt", Typ = "bool", Standard = "false" } ] },
+            new() { Name = "ReserviereBetrag", Kind = RecordArt.Command, Namespace = "Domain.Konto",
+                Felder = [ new() { Name = "AggregateId", Typ = "Guid" }, new() { Name = "Betrag", Typ = "decimal" } ] },
+
+            new() { Name = "KontoEroeffnet", Kind = RecordArt.Event, Namespace = "Domain.Konto",
+                Felder = [ new() { Name = "StartSaldo", Typ = "decimal" }, new() { Name = "Gesperrt", Typ = "bool" } ] },
+            new() { Name = "BetragReserviert", Kind = RecordArt.Event, Namespace = "Domain.Konto",
+                Felder = [ new() { Name = "Betrag", Typ = "decimal" } ] },
+
+            new() { Name = "KontoExistiertBereits", Kind = RecordArt.Rejection, Namespace = "Domain.Konto", Felder = [ new() { Name = "AggregateId", Typ = "Guid" } ] },
+            new() { Name = "KontoGesperrt", Kind = RecordArt.Rejection, Namespace = "Domain.Konto", Felder = [ new() { Name = "AggregateId", Typ = "Guid" } ] },
+            new() { Name = "DeckungReichtNicht", Kind = RecordArt.Rejection, Namespace = "Domain.Konto", Felder = [ new() { Name = "Verfuegbar", Typ = "decimal" }, new() { Name = "Angefordert", Typ = "decimal" } ] },
+            new() { Name = "KontoNichtGefunden", Kind = RecordArt.Rejection, Namespace = "Domain.Konto", Felder = [ new() { Name = "AggregateId", Typ = "Guid" } ] },
         ],
-        Commands =
+        Aggregate =
         [
             new()
             {
-                Name = "EroeffneKonto",
-                Felder = [ new() { Name = "AggregateId", Typ = "Guid" }, new() { Name = "StartSaldo", Typ = "decimal" }, new() { Name = "Gesperrt", Typ = "bool", Standard = "false" } ],
-                Ergibt = [ new() { Event = "KontoEroeffnet" }, new() { Event = "KontoExistiertBereits", Guard = "State.Version > 0" } ],
+                Name = "Konto", Namespace = "Domain.Konto",
+                State =
+                [
+                    new() { Name = "Saldo", Typ = "decimal" },
+                    new() { Name = "Reserviert", Typ = "decimal" },
+                    new() { Name = "Gesperrt", Typ = "bool" },
+                    new() { Name = "Verfuegbar", Typ = "decimal", Ausdruck = "Saldo - Reserviert" },
+                ],
+                Decider =
+                [
+                    new() { Command = "EroeffneKonto", Ergibt = [ new() { Event = "KontoEroeffnet" }, new() { Event = "KontoExistiertBereits", Guard = "State.Version > 0" } ] },
+                    new() { Command = "ReserviereBetrag", Ergibt = [ new() { Event = "BetragReserviert" }, new() { Event = "KontoGesperrt" }, new() { Event = "DeckungReichtNicht", Guard = "State.Verfuegbar < cmd.Betrag" }, new() { Event = "KontoNichtGefunden" } ] },
+                ],
+                Applier =
+                [
+                    new() { Event = "KontoEroeffnet" },
+                    new() { Event = "BetragReserviert" },
+                ],
             },
-            new()
-            {
-                Name = "ReserviereBetrag",
-                Felder = [ new() { Name = "AggregateId", Typ = "Guid" }, new() { Name = "Betrag", Typ = "decimal" } ],
-                Ergibt = [ new() { Event = "BetragReserviert" }, new() { Event = "KontoGesperrt" }, new() { Event = "DeckungReichtNicht", Guard = "State.Verfuegbar < cmd.Betrag" }, new() { Event = "KontoNichtGefunden" } ],
-            },
-        ],
-        Events =
-        [
-            new() { Name = "KontoEroeffnet", Felder = [ new() { Name = "StartSaldo", Typ = "decimal" }, new() { Name = "Gesperrt", Typ = "bool" } ] },
-            new() { Name = "BetragReserviert", Felder = [ new() { Name = "Betrag", Typ = "decimal" } ] },
-            new() { Name = "KontoGesperrt", Felder = [ new() { Name = "AggregateId", Typ = "Guid" } ], Transient = true },
-            new() { Name = "DeckungReichtNicht", Felder = [ new() { Name = "Verfuegbar", Typ = "decimal" }, new() { Name = "Angefordert", Typ = "decimal" } ], Transient = true },
-            new() { Name = "KontoNichtGefunden", Felder = [ new() { Name = "AggregateId", Typ = "Guid" } ], Transient = true },
-            new() { Name = "KontoExistiertBereits", Felder = [ new() { Name = "AggregateId", Typ = "Guid" } ], Transient = true },
         ],
     };
 
@@ -54,28 +60,55 @@ public sealed class DomainEditorScaffolderTests
         dateien.Single(d => d.Pfad == pfad).Inhalt.Replace("\r\n", "\n").TrimEnd('\n');
 
     [Fact]
-    public void Erzeugt_die_fuenf_kanonischen_Aggregat_Dateien()
+    public void Erzeugt_die_kanonischen_Aggregat_Dateien()
     {
-        var dateien = Scaffolder.Generiere(new EditorModell { Aggregate = [KontoAggregat()] });
-
+        var dateien = Scaffolder.Generiere(KontoModell());
         dateien.Select(d => d.Pfad).Should().BeEquivalentTo(
             "Konto/Konto.cs", "Konto/Commands.cs", "Konto/Events.cs", "Konto/Decider.cs", "Konto/Applier.cs");
     }
 
     [Fact]
-    public void State_Datei_matcht_die_kanonische_Form()
+    public void Commands_Datei_matcht_die_kanonische_Form()
     {
-        var dateien = Scaffolder.Generiere(new EditorModell { Aggregate = [KontoAggregat()] });
-
-        Inhalt(dateien, "Konto/Konto.cs").Should().Be(
+        Inhalt(Scaffolder.Generiere(KontoModell()), "Konto/Commands.cs").Should().Be(
             """
             using Abstractions;
 
             namespace Domain.Konto;
 
-            /// <summary>
-            /// Ziel-Aggregat: Saldo, reservierter Teilbetrag, Gesperrt-Schalter.
-            /// </summary>
+            public record EroeffneKonto(Guid AggregateId, decimal StartSaldo, bool Gesperrt = false) : ICommand;
+            public record ReserviereBetrag(Guid AggregateId, decimal Betrag) : ICommand;
+            """);
+    }
+
+    [Fact]
+    public void Events_Datei_trennt_persistent_und_Ablehnung()
+    {
+        Inhalt(Scaffolder.Generiere(KontoModell()), "Konto/Events.cs").Should().Be(
+            """
+            using Abstractions;
+
+            namespace Domain.Konto;
+
+            public record KontoEroeffnet(decimal StartSaldo, bool Gesperrt) : IEvent;
+            public record BetragReserviert(decimal Betrag) : IEvent;
+
+            public record KontoExistiertBereits(Guid AggregateId) : ITransientEvent;
+            public record KontoGesperrt(Guid AggregateId) : ITransientEvent;
+            public record DeckungReichtNicht(decimal Verfuegbar, decimal Angefordert) : ITransientEvent;
+            public record KontoNichtGefunden(Guid AggregateId) : ITransientEvent;
+            """);
+    }
+
+    [Fact]
+    public void State_matcht_die_kanonische_Form()
+    {
+        Inhalt(Scaffolder.Generiere(KontoModell()), "Konto/Konto.cs").Should().Be(
+            """
+            using Abstractions;
+
+            namespace Domain.Konto;
+
             public partial class Konto : IState
             {
                 public decimal Saldo { get; set; }
@@ -88,266 +121,113 @@ public sealed class DomainEditorScaffolderTests
     }
 
     [Fact]
-    public void Commands_Datei_matcht_die_kanonische_Form()
+    public void Decider_traegt_die_OneOf_Signaturen()
     {
-        var dateien = Scaffolder.Generiere(new EditorModell { Aggregate = [KontoAggregat()] });
-
-        Inhalt(dateien, "Konto/Commands.cs").Should().Be(
-            """
-            using Abstractions;
-
-            namespace Domain.Konto;
-
-            public record EroeffneKonto(Guid AggregateId, decimal StartSaldo, bool Gesperrt = false) : ICommand;
-            public record ReserviereBetrag(Guid AggregateId, decimal Betrag) : ICommand;
-            """);
-    }
-
-    [Fact]
-    public void Events_Datei_trennt_persistent_und_transient()
-    {
-        var dateien = Scaffolder.Generiere(new EditorModell { Aggregate = [KontoAggregat()] });
-
-        Inhalt(dateien, "Konto/Events.cs").Should().Be(
-            """
-            using Abstractions;
-
-            namespace Domain.Konto;
-
-            public record KontoEroeffnet(decimal StartSaldo, bool Gesperrt) : IEvent;
-            public record BetragReserviert(decimal Betrag) : IEvent;
-
-            public record KontoGesperrt(Guid AggregateId) : ITransientEvent;
-            public record DeckungReichtNicht(decimal Verfuegbar, decimal Angefordert) : ITransientEvent;
-            public record KontoNichtGefunden(Guid AggregateId) : ITransientEvent;
-            public record KontoExistiertBereits(Guid AggregateId) : ITransientEvent;
-            """);
-    }
-
-    [Fact]
-    public void Decider_traegt_die_OneOf_Signaturen_und_Platzhalter()
-    {
-        var dateien = Scaffolder.Generiere(new EditorModell { Aggregate = [KontoAggregat()] });
-        var decider = Inhalt(dateien, "Konto/Decider.cs");
-
+        var decider = Inhalt(Scaffolder.Generiere(KontoModell()), "Konto/Decider.cs");
         decider.Should().Contain("public partial class Decider : IDecider<Konto>");
         decider.Should().Contain("public IEnumerable<OneOf<KontoEroeffnet, KontoExistiertBereits>> Decide(EroeffneKonto cmd)");
         decider.Should().Contain("public IEnumerable<OneOf<BetragReserviert, KontoGesperrt, DeckungReichtNicht, KontoNichtGefunden>> Decide(ReserviereBetrag cmd)");
-        decider.Should().Contain("throw new NotImplementedException(\"TODO: Entscheidungslogik (Stufe 3).\");");
+        decider.Should().Contain("throw new NotImplementedException(\"TODO: Entscheidungslogik.\");");
     }
 
     [Fact]
-    public void Applier_hat_ein_Apply_je_persistentem_Event_und_keins_fuer_Ablehnungen()
+    public void Applier_hat_ein_Apply_je_persistentem_Event()
     {
-        var dateien = Scaffolder.Generiere(new EditorModell { Aggregate = [KontoAggregat()] });
-        var applier = Inhalt(dateien, "Konto/Applier.cs");
-
+        var applier = Inhalt(Scaffolder.Generiere(KontoModell()), "Konto/Applier.cs");
         applier.Should().Contain("public void Apply(KontoEroeffnet evt)");
         applier.Should().Contain("public void Apply(BetragReserviert evt)");
-        // Ablehnungen (ITransientEvent) haben KEIN Apply.
-        applier.Should().NotContain("Apply(KontoGesperrt");
-        applier.Should().NotContain("Apply(DeckungReichtNicht");
     }
 
     [Fact]
     public void Vorhandener_Rumpf_ersetzt_den_Platzhalter()
     {
-        var agg = KontoAggregat() with
+        var m = KontoModell();
+        var agg = m.Aggregate[0] with
         {
-            Commands =
-            [
-                new()
-                {
-                    Name = "GebeReservierungFrei",
-                    Felder = [ new() { Name = "AggregateId", Typ = "Guid" }, new() { Name = "Betrag", Typ = "decimal" } ],
-                    Ergibt = [ new() { Event = "ReservierungFreigegeben" } ],
-                    Rumpf = "yield return new ReservierungFreigegeben(cmd.Betrag);",
-                },
-            ],
+            Decider = [ m.Aggregate[0].Decider[0] with { Rumpf = "yield return new KontoEroeffnet(cmd.StartSaldo, cmd.Gesperrt);" }, m.Aggregate[0].Decider[1] ],
+            Applier = [ m.Aggregate[0].Applier[0] with { Rumpf = "this.State.Saldo = evt.StartSaldo;" }, m.Aggregate[0].Applier[1] ],
         };
-
-        var decider = Inhalt(Scaffolder.Generiere(new EditorModell { Aggregate = [agg] }), "Konto/Decider.cs");
-        decider.Should().Contain("            yield return new ReservierungFreigegeben(cmd.Betrag);");
-        decider.Should().NotContain("NotImplementedException");
+        var dateien = Scaffolder.Generiere(m with { Aggregate = [agg] });
+        Inhalt(dateien, "Konto/Decider.cs").Should().Contain("            yield return new KontoEroeffnet(cmd.StartSaldo, cmd.Gesperrt);");
+        Inhalt(dateien, "Konto/Applier.cs").Should().Contain("            this.State.Saldo = evt.StartSaldo;");
     }
 
+    // ── Komposition: Records referenzieren andere Records/Enums als Feldtyp (ImagePair-Art) ──
     [Fact]
-    public void Vorhandener_ApplyRumpf_ersetzt_den_Platzhalter()
+    public void Records_komponieren_ueber_Enums_und_Value_Objects()
     {
-        // Der Nutzer tippt den Apply-Körper selbst (kein LLM) — er landet 1:1 (auf 12 Spalten eingerückt).
-        var agg = KontoAggregat() with
+        var m = new EditorModell
         {
-            Events =
+            Enums = [ new() { Name = "BildVersion", Namespace = "Domain.ImagePair", Werte = ["Dc0", "Dc2"] } ],
+            Records =
             [
-                new() { Name = "Gutgeschrieben", Felder = [ new() { Name = "Betrag", Typ = "decimal" } ], ApplyRumpf = "this.State.Saldo += evt.Betrag;" },
+                new() { Name = "BildMeta", Kind = RecordArt.ValueObject, Namespace = "Domain.ImagePair",
+                    Felder = [ new() { Name = "OriginalDateiname", Typ = "string" }, new() { Name = "ErstelltAm", Typ = "DateTimeOffset" } ] },
+                new() { Name = "MeldeBildVerfuegbar", Kind = RecordArt.Command, Namespace = "Domain.ImagePair",
+                    Felder = [ new() { Name = "AggregateId", Typ = "Guid" }, new() { Name = "Version", Typ = "BildVersion" }, new() { Name = "Meta", Typ = "BildMeta" } ] },
+                new() { Name = "BildVerfuegbar", Kind = RecordArt.Event, Namespace = "Domain.ImagePair",
+                    Felder = [ new() { Name = "Version", Typ = "BildVersion" }, new() { Name = "Regionen", Typ = "IReadOnlyList<BildMeta>" } ] },
             ],
         };
+        var dateien = Scaffolder.Generiere(m);
 
-        var applier = Inhalt(Scaffolder.Generiere(new EditorModell { Aggregate = [agg] }), "Konto/Applier.cs");
-        applier.Should().Contain("        public void Apply(Gutgeschrieben evt)");
-        applier.Should().Contain("            this.State.Saldo += evt.Betrag;");
-        applier.Should().NotContain("NotImplementedException");
-    }
-
-    [Fact]
-    public void Mehrzeiliger_Rumpf_wird_je_Zeile_auf_zwoelf_Spalten_eingerueckt()
-    {
-        var agg = KontoAggregat() with
-        {
-            Commands =
-            [
-                new()
-                {
-                    Name = "ReserviereBetrag",
-                    Felder = [ new() { Name = "AggregateId", Typ = "Guid" }, new() { Name = "Betrag", Typ = "decimal" } ],
-                    Ergibt = [ new() { Event = "BetragReserviert" }, new() { Event = "DeckungReichtNicht" } ],
-                    Rumpf = "if (this.State.Verfuegbar < cmd.Betrag) { yield return new DeckungReichtNicht(this.State.Verfuegbar, cmd.Betrag); yield break; }\nyield return new BetragReserviert(cmd.Betrag);",
-                },
-            ],
-        };
-
-        Inhalt(Scaffolder.Generiere(new EditorModell { Aggregate = [agg] }), "Konto/Decider.cs").Should().Be(
+        Inhalt(dateien, "ImagePair/Enums.cs").Should().Be(
             """
-            using Abstractions;
+            namespace Domain.ImagePair;
 
-            namespace Domain.Konto;
-
-            public partial class Konto
-            {
-                public partial class Decider : IDecider<Konto>
-                {
-                    public IEnumerable<OneOf<BetragReserviert, DeckungReichtNicht>> Decide(ReserviereBetrag cmd)
-                    {
-                        if (this.State.Verfuegbar < cmd.Betrag) { yield return new DeckungReichtNicht(this.State.Verfuegbar, cmd.Betrag); yield break; }
-                        yield return new BetragReserviert(cmd.Betrag);
-                    }
-                }
-            }
+            public enum BildVersion { Dc0, Dc2 }
             """);
-    }
-
-    [Fact]
-    public void Ist_deterministisch()
-    {
-        var modell = new EditorModell { Aggregate = [KontoAggregat()] };
-        var a = Scaffolder.Generiere(modell);
-        var b = Scaffolder.Generiere(modell);
-
-        a.Should().BeEquivalentTo(b, o => o.WithStrictOrdering());
-    }
-
-    [Fact]
-    public void JSON_Roundtrip_erhaelt_das_Modell()
-    {
-        var modell = new EditorModell { Aggregate = [KontoAggregat()] };
-        var wieder = EditorModell.AusJson(modell.AlsJson());
-
-        Scaffolder.Generiere(wieder).Should().BeEquivalentTo(Scaffolder.Generiere(modell), o => o.WithStrictOrdering());
-    }
-
-    // ── Saga / Prozess (Willkommensbonus-Form: Join + Kompensation, aggregat-fremde Commands) ──
-    [Fact]
-    public void Saga_erzeugt_die_Prozess_DSL_mit_Join_und_Kompensation()
-    {
-        var saga = new Saga
-        {
-            Name = "WillkommensbonusProzess",
-            Namespace = "Domain.Willkommensbonus",
-            TriggerEvent = "WillkommensbonusBeauftragt",
-            ExtraUsings = ["Domain.Konto"],
-            Schritte =
-            [
-                new()
-                {
-                    Wenn = ["WillkommensbonusBeauftragt"],
-                    Sende = "ReserviereBetrag", SendeArgumente = ["t.PromoKonto", "t.Betrag"],
-                    Kompensation = "GebeReservierungFrei", KompensationArgumente = ["t.PromoKonto", "t.Betrag"],
-                },
-                new()
-                {
-                    Wenn = ["WillkommensbonusBeauftragt", "BetragReserviert"],
-                    Sende = "SchreibeGut", SendeArgumente = ["t.NeuesKonto", "t.Betrag"],
-                    Kompensation = "StorniereGutschrift", KompensationArgumente = ["t.NeuesKonto", "t.Betrag"],
-                },
-                new()
-                {
-                    Wenn = ["WillkommensbonusBeauftragt", "BetragReserviert", "Gutgeschrieben"],
-                    Sende = "BucheReservierung", SendeArgumente = ["t.PromoKonto", "t.Betrag"],
-                },
-            ],
-        };
-
-        var datei = Inhalt(Scaffolder.Generiere(new EditorModell { Sagas = [saga] }), "Willkommensbonus/WillkommensbonusProzess.cs");
-
-        datei.Should().Be(
+        Inhalt(dateien, "ImagePair/ValueObjects.cs").Should().Be(
             """
-            using Abstractions;
-            using Domain.Konto;
+            namespace Domain.ImagePair;
 
-            namespace Domain.Willkommensbonus;
-
-            public sealed class WillkommensbonusProzess : IProzessDefinition
-            {
-                public ProzessRegeln Regeln => Prozess<WillkommensbonusBeauftragt>.Definiere(p =>
-                {
-                    p.Auf<WillkommensbonusBeauftragt>()
-                        .Sende<ReserviereBetrag>(t => new ReserviereBetrag(t.PromoKonto, t.Betrag))
-                        .RückgängigDurch<GebeReservierungFrei>(t => new GebeReservierungFrei(t.PromoKonto, t.Betrag));
-
-                    p.Auf<WillkommensbonusBeauftragt>().Und<BetragReserviert>()
-                        .Sende<SchreibeGut>((t, r) => new SchreibeGut(t.NeuesKonto, t.Betrag))
-                        .RückgängigDurch<StorniereGutschrift>((t, r) => new StorniereGutschrift(t.NeuesKonto, t.Betrag));
-
-                    p.Auf<WillkommensbonusBeauftragt>().Und<BetragReserviert>().Und<Gutgeschrieben>()
-                        .Sende<BucheReservierung>((t, r, g) => new BucheReservierung(t.PromoKonto, t.Betrag));
-                });
-            }
+            public record BildMeta(string OriginalDateiname, DateTimeOffset ErstelltAm);
             """);
+        // Composition: das Command-Feld hat den Typ eines anderen Records/Enums.
+        Inhalt(dateien, "ImagePair/Commands.cs").Should().Contain("public record MeldeBildVerfuegbar(Guid AggregateId, BildVersion Version, BildMeta Meta) : ICommand;");
+        Inhalt(dateien, "ImagePair/Events.cs").Should().Contain("public record BildVerfuegbar(BildVersion Version, IReadOnlyList<BildMeta> Regionen) : IEvent;");
     }
 
-    // ── Validator (Guardrails auf der FORM) ──────────────────────────────────────────────────────
+    [Fact]
+    public void Erzeugungs_Command_bekommt_ICreationCommand()
+    {
+        var m = new EditorModell
+        {
+            Records = [ new() { Name = "ErstelleX", Kind = RecordArt.Command, Namespace = "Domain.X", IstErzeugung = true, Felder = [ new() { Name = "AggregateId", Typ = "Guid" } ] } ],
+        };
+        Inhalt(Scaffolder.Generiere(m), "X/Commands.cs").Should().Contain("public record ErstelleX(Guid AggregateId) : ICommand, ICreationCommand;");
+    }
+
+    [Fact]
+    public void Ist_deterministisch_und_JSON_roundtrip_stabil()
+    {
+        var m = KontoModell();
+        Scaffolder.Generiere(m).Should().BeEquivalentTo(Scaffolder.Generiere(m), o => o.WithStrictOrdering());
+        Scaffolder.Generiere(EditorModell.AusJson(m.AlsJson())).Should().BeEquivalentTo(Scaffolder.Generiere(m), o => o.WithStrictOrdering());
+    }
+
+    // ── Validator ──────────────────────────────────────────────────────────────────────────────
     [Fact]
     public void Validator_ist_still_bei_gesundem_Modell()
     {
-        Validator.Prüfe(new EditorModell { Aggregate = [KontoAggregat()] })
-            .Where(b => b.IstFehler).Should().BeEmpty();
+        Validator.Prüfe(KontoModell()).Where(b => b.IstFehler).Should().BeEmpty();
     }
 
     [Fact]
     public void Validator_meldet_unrouted_Saga_Command()
     {
-        var saga = new Saga
+        var m = new EditorModell
         {
-            Name = "KaputterProzess",
-            Namespace = "Domain.Kaputt",
-            TriggerEvent = "Losgetreten",
-            Schritte = [ new() { Wenn = ["Losgetreten"], Sende = "NiemandEntscheidetDas" } ],
+            Sagas = [ new() { Name = "Kaputt", Namespace = "Domain.Kaputt", TriggerEvent = "Los", Schritte = [ new() { Wenn = ["Los"], Sende = "NiemandDecided" } ] } ],
         };
-
-        Validator.Prüfe(new EditorModell { Sagas = [saga] })
-            .Should().Contain(b => b.Code == "EDIT-UNROUTED-SAGA-CMD" && b.IstFehler);
+        Validator.Prüfe(m).Should().Contain(b => b.Code == "EDIT-UNROUTED-SAGA-CMD" && b.IstFehler);
     }
 
     [Fact]
-    public void Validator_meldet_zu_viele_OneOf_Ausgaenge()
+    public void Validator_meldet_Decide_auf_unbekanntes_Event()
     {
-        var agg = new Aggregat
-        {
-            Name = "Zuviel",
-            Namespace = "Domain.Zuviel",
-            Events = [ new() { Name = "E1" }, new() { Name = "E2" }, new() { Name = "E3" }, new() { Name = "E4" }, new() { Name = "E5" }, new() { Name = "E6" } ],
-            Commands =
-            [
-                new()
-                {
-                    Name = "MachWas",
-                    Felder = [ new() { Name = "AggregateId", Typ = "Guid" } ],
-                    Ergibt = [ new() { Event = "E1" }, new() { Event = "E2" }, new() { Event = "E3" }, new() { Event = "E4" }, new() { Event = "E5" }, new() { Event = "E6" } ],
-                },
-            ],
-        };
-
-        Validator.Prüfe(new EditorModell { Aggregate = [agg] })
-            .Should().Contain(b => b.Code == "EDIT-ONEOF-5" && b.IstFehler);
+        var m = KontoModell();
+        var agg = m.Aggregate[0] with { Decider = [ m.Aggregate[0].Decider[0] with { Ergibt = [ new() { Event = "GibtsNicht" } ] }, m.Aggregate[0].Decider[1] ] };
+        Validator.Prüfe(m with { Aggregate = [agg] }).Should().Contain(b => b.Code == "EDIT-EVENT-FEHLT" && b.IstFehler);
     }
 }

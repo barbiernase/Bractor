@@ -579,6 +579,15 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .card h3 .k{font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding:1px 6px;border-radius:8px}
 #de .k.agg{background:#4a3a1f;color:#fbd38d}
 #de .k.saga{background:#3a2a4a;color:#e0b0ff}
+#de .k.cmd{background:#20344f;color:#9cc9ff}
+#de .k.evt{background:#4a3a1f;color:#fbd38d}
+#de .k.rej{background:#3a1f28;color:#ffb3c1}
+#de .k.vo{background:#26343a;color:#a0e0d0}
+#de .kindsel{width:118px}
+#de .cbx{font-size:11px;color:#9aa3b7;display:flex;align-items:center;gap:3px}
+#de .arow{display:flex;gap:6px;align-items:center;margin:2px 0}
+#de .arow select{width:200px}
+#de .arow input{flex:1}
 #de .sub{color:#8b93a7;font-size:11px;margin:8px 0 4px;text-transform:uppercase;letter-spacing:.5px}
 #de input,#de select,#de textarea{background:#0d1017;color:#dfe4ee;border:1px solid #2c3547;border-radius:5px;
   padding:4px 6px;font:12px ui-monospace,monospace;box-sizing:border-box}
@@ -633,40 +642,106 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 </div>
 <script>
 (function(){
-  const TYPEN=["Guid","decimal","int","bool","string"];
-  let MODEL={schemaVersion:"1",aggregate:[],sagas:[]};
+  const SCALARS=["Guid","decimal","int","long","double","bool","string","DateTimeOffset"];
+  const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"]};
+  let MODEL={schemaVersion:"2",records:[],enums:[],aggregate:[],sagas:[]};
   const embedded=/*__MODEL_JSON__*/;
 
-  // ── Mini-Formate für kompakte Feld-/Ergibt-Eingaben ──
-  const felderZuText=fs=>(fs||[]).map(f=>f.name+":"+f.typ+(f.standard?"="+f.standard:"")).join(", ");
-  function textZuFelder(t){return (t||"").split(",").map(s=>s.trim()).filter(Boolean).map(s=>{
-    const[nt,std]=s.split("="); const[n,ty]=nt.split(":").map(x=>(x||"").trim());
-    const f={name:n,typ:ty||"string"}; if(std!==undefined)f.standard=std.trim(); return f;});}
-  const ergibtZuText=es=>(es||[]).map(e=>e.event+(e.guard?" ? "+e.guard:"")).join("\n");
-  function textZuErgibt(t){return (t||"").split("\n").map(s=>s.trim()).filter(Boolean).map(s=>{
-    const i=s.indexOf(" ? "); return i<0?{event:s}:{event:s.slice(0,i).trim(),guard:s.slice(i+3).trim()};});}
   const listeZuText=xs=>(xs||[]).join(", ");
   const textZuListe=t=>(t||"").split(",").map(s=>s.trim()).filter(Boolean);
+  const kindLabel=k=>(KINDINFO[k]||["?","vo"])[0];
+  const kindKlasse=k=>(KINDINFO[k]||["?","vo"])[1];
+  function normalize(m){m=m||{};m.records=m.records||[];m.enums=m.enums||[];m.aggregate=m.aggregate||[];m.sagas=m.sagas||[];return m;}
+  function defaultNs(){return MODEL.records[0]?.namespace||MODEL.aggregate[0]?.namespace||"Domain.Neu";}
 
   function h(tag,attrs,...kids){const e=document.createElement(tag);
     for(const k in (attrs||{})){if(k==="class")e.className=attrs[k];else if(k.startsWith("on"))e[k]=attrs[k];else if(k==="value")e.value=attrs[k];else e.setAttribute(k,attrs[k]);}
     for(const kid of kids)if(kid!=null)e.append(kid.nodeType?kid:document.createTextNode(kid));return e;}
   const inp=(val,on,ph)=>h("input",{value:val??"",oninput:e=>on(e.target.value),placeholder:ph||""});
-  const area=(val,on,ph)=>{const t=h("textarea",{oninput:e=>on(e.target.value),placeholder:ph||"",rows:Math.max(2,String(val||"").split("\n").length)});t.value=val??"";return t;};
   const codearea=(val,on,ph)=>{const t=h("textarea",{class:"code",oninput:e=>on(e.target.value),placeholder:ph||"",rows:Math.max(3,String(val||"").split("\n").length+1)});t.value=val??"";return t;};
-  function sel(val,on){const s=h("select",{onchange:e=>on(e.target.value)});TYPEN.forEach(t=>{const o=h("option",{value:t},t);if(t===val)o.selected=true;s.append(o);});return s;}
+  // Typ-Eingabe mit Autovervollständigung (Skalare + Records + Enums = Komposition).
+  const tinp=(val,on)=>h("input",{value:val??"",list:"de-typen",oninput:e=>on(e.target.value),placeholder:"Typ"});
+  function datalistEl(){const dl=h("datalist",{id:"de-typen"});
+    [...SCALARS,...MODEL.records.map(r=>r.name),...MODEL.enums.map(e=>e.name)].forEach(t=>dl.append(h("option",{value:t})));return dl;}
+  // Record-Auswahl gefiltert nach Kind (für Decide/Apply/Saga-Verdrahtung).
+  function recSelect(val,on,kinds){const s=h("select",{onchange:e=>on(e.target.value)});
+    const opts=MODEL.records.filter(r=>kinds.includes(r.kind)).map(r=>r.name);
+    if(!val||!opts.includes(val)){const o=h("option",{value:val||""},val||"— wählen —");o.selected=true;s.append(o);}
+    opts.forEach(n=>{const o=h("option",{value:n},n);if(n===val)o.selected=true;s.append(o);});return s;}
+  // Feld-Tabelle: EINE uniforme Zeile Name + Typ (+ optional Ausdruck) — kein Mini-Syntax.
+  function feldTabelle(felder,onDel,mitAusdruck){const t=h("table",{});
+    (felder||[]).forEach((f,fi)=>{const zellen=[
+      h("td",{},inp(f.name,v=>f.name=v,"Feld")),
+      h("td",{style:"width:160px"},tinp(f.typ,v=>f.typ=v))];
+      if(mitAusdruck)zellen.push(h("td",{},inp(f.ausdruck,v=>f.ausdruck=v||undefined,"Ausdruck (abgeleitet)")));
+      zellen.push(h("td",{style:"width:26px"},h("button",{class:"rm",onclick:()=>onDel(fi)},"✕")));
+      t.append(h("tr",{},...zellen));});return t;}
 
-  // ── Aggregat-zuerst, in der BAU-Reihenfolge, wie man ein Aggregat von Hand schreibt:
-  //    Aggregat → 1 State → 2 Commands (Records) → 3 Events (Records) → 4 Decider → 5 Applier.
-  //    Records (Typen) sind bewusst GETRENNT von der Logik (Decider/Applier) — wie die Dateien
-  //    Commands.cs / Events.cs / Decider.cs / Applier.cs. Gespeichert wird aggregat-genestet.
+  // ── RECORD-ZENTRISCH: ein Record-Editor für alles (Command/Event/Ablehnung/Value Object),
+  //    danach KOMPOSITION zu Aggregaten (State + Decider + Applier). Feldtyp kann ein anderer
+  //    Record/Enum sein → so komponieren sich Records.
   function render(){
     const root=document.getElementById("de-form");root.innerHTML="";
-    root.append(h("div",{class:"addbar"},
-      h("button",{class:"add",onclick:()=>{MODEL.aggregate.push({name:"NeuesAggregat",namespace:"Domain.Neu",felder:[],commands:[],events:[]});render();}},"+ Aggregat"),
-      h("button",{class:"add",onclick:()=>{MODEL.sagas.push({name:"NeuerProzess",namespace:(MODEL.aggregate[0]?.namespace||"Domain.Neu"),triggerEvent:"",schritte:[],extraUsings:[]});render();}},"+ Saga")));
-    MODEL.aggregate.forEach((a,ai)=>root.append(aggCard(a,ai)));
-    MODEL.sagas.forEach((s,si)=>root.append(sagaCard(s,si)));
+    root.append(datalistEl());
+
+    // 1 · RECORDS — der uniforme Record-Editor.
+    const rs=h("div",{class:"sec"});
+    rs.append(h("div",{class:"sectitle"},"Records — Commands · Events · Ablehnungen · Value Objects (ein Editor)"));
+    MODEL.records.forEach((r,ri)=>rs.append(recordCard(r,ri)));
+    rs.append(h("div",{class:"addbar"},
+      h("button",{class:"add",onclick:()=>addRecord("command")},"+ Command"),
+      h("button",{class:"add",onclick:()=>addRecord("event")},"+ Event"),
+      h("button",{class:"add",onclick:()=>addRecord("rejection")},"+ Ablehnung"),
+      h("button",{class:"add",onclick:()=>addRecord("valueobject")},"+ Value Object")));
+    root.append(rs);
+
+    // 2 · ENUMS — auch Feldtypen.
+    const es=h("div",{class:"sec"});
+    es.append(h("div",{class:"sectitle"},"Enums — Typen mit festen Werten"));
+    const enTab=h("table",{});
+    MODEL.enums.forEach((e,ei)=>enTab.append(h("tr",{},
+      h("td",{},inp(e.name,v=>e.name=v,"Enum")),
+      h("td",{style:"width:150px"},inp(e.namespace,v=>e.namespace=v,"Domain.X")),
+      h("td",{},inp(listeZuText(e.werte),v=>e.werte=textZuListe(v),"Dc0, Dc2")),
+      h("td",{style:"width:26px"},h("button",{class:"rm",onclick:()=>{MODEL.enums.splice(ei,1);render();}},"✕")))));
+    es.append(enTab,h("button",{class:"add",onclick:()=>{MODEL.enums.push({name:"NeuEnum",namespace:defaultNs(),werte:["A","B"]});render();}},"+ Enum"));
+    root.append(es);
+
+    // 3 · KOMPOSITION — Aggregate verdrahten die Records.
+    const ks=h("div",{class:"sec"});
+    ks.append(h("div",{class:"sectitle"},"Komposition — Aggregate: State + Decider + Applier"));
+    MODEL.aggregate.forEach((a,ai)=>ks.append(aggCard(a,ai)));
+    ks.append(h("button",{class:"add",onclick:()=>{MODEL.aggregate.push({name:"NeuesAggregat",namespace:defaultNs(),state:[],decider:[],applier:[]});render();}},"+ Aggregat"));
+    root.append(ks);
+
+    // 4 · SAGAS.
+    const ss=h("div",{class:"sec"});
+    ss.append(h("div",{class:"sectitle"},"Sagas / Prozesse — aggregat-übergreifend, mit Kompensation"));
+    MODEL.sagas.forEach((s,si)=>ss.append(sagaCard(s,si)));
+    ss.append(h("button",{class:"add",onclick:()=>{MODEL.sagas.push({name:"NeuerProzess",namespace:defaultNs(),triggerEvent:"",schritte:[],extraUsings:[]});render();}},"+ Saga"));
+    root.append(ss);
+  }
+
+  function addRecord(kind){
+    const felder=kind==="command"?[{name:"AggregateId",typ:"Guid"}]:[];
+    MODEL.records.push({name:"Neu"+kindLabel(kind).replace(/\s/g,""),kind,namespace:defaultNs(),felder});
+    render();
+  }
+
+  function recordCard(r,ri){
+    const c=h("div",{class:"card"});
+    const kindSel=h("select",{class:"kindsel",onchange:e=>{r.kind=e.target.value;render();}});
+    Object.keys(KINDINFO).forEach(k=>{const o=h("option",{value:k},kindLabel(k));if(r.kind===k)o.selected=true;kindSel.append(o);});
+    const kopf=[h("span",{class:"k "+kindKlasse(r.kind)},kindLabel(r.kind)),
+      inp(r.name,v=>r.name=v,"RecordName"),
+      h("input",{value:r.namespace,oninput:e=>r.namespace=e.target.value,placeholder:"Domain.X",style:"width:150px"}),
+      kindSel];
+    if(r.kind==="command")kopf.push(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>r.istErzeugung=e.target.checked||undefined,...(r.istErzeugung?{checked:"checked"}:{})}),"Erzeugung"));
+    kopf.push(h("button",{class:"rm",onclick:()=>{MODEL.records.splice(ri,1);render();}},"✕"));
+    c.append(h("h3",{},...kopf));
+    c.append(feldTabelle(r.felder,fi=>{r.felder.splice(fi,1);render();},false));
+    c.append(h("button",{class:"add",onclick:()=>{(r.felder=r.felder||[]).push({name:"feld",typ:"string"});render();}},"+ Feld"));
+    return c;
   }
 
   function aggCard(a,ai){
@@ -675,58 +750,39 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
       inp(a.name,v=>a.name=v),inp(a.namespace,v=>a.namespace=v),
       h("button",{class:"rm",onclick:()=>{MODEL.aggregate.splice(ai,1);render();}},"✕")));
 
-    // 1 · STATE — der Zustand.
-    c.append(h("div",{class:"step"},"1 · State — der Zustand (Felder; abgeleitet via Ausdruck)"));
-    const ft=h("table",{});
-    (a.felder||[]).forEach((f,fi)=>ft.append(h("tr",{},
-      h("td",{},inp(f.name,v=>f.name=v,"Feld")),
-      h("td",{},sel(f.typ,v=>f.typ=v)),
-      h("td",{},inp(f.ausdruck,v=>f.ausdruck=v||undefined,"Ausdruck (abgeleitet)")),
-      h("td",{style:"width:26px"},h("button",{class:"rm",onclick:()=>{a.felder.splice(fi,1);render();}},"✕")))));
-    c.append(ft,h("button",{class:"add",onclick:()=>{(a.felder=a.felder||[]).push({name:"feld",typ:"decimal"});render();}},"+ Feld"));
+    // State
+    c.append(h("div",{class:"step"},"State — der Zustand (Felder; abgeleitet via Ausdruck)"));
+    c.append(feldTabelle(a.state,fi=>{a.state.splice(fi,1);render();},true));
+    c.append(h("button",{class:"add",onclick:()=>{(a.state=a.state||[]).push({name:"feld",typ:"decimal"});render();}},"+ Feld"));
 
-    // 2 · COMMANDS — die Absichts-Records (nur Name + Felder; Logik kommt im Decider).
-    c.append(h("div",{class:"step"},"2 · Commands — die Absichts-Records (Name + Felder)"));
-    const ct=h("table",{});
-    (a.commands||[]).forEach((cm,ci)=>ct.append(h("tr",{},
-      h("td",{style:"width:190px"},inp(cm.name,v=>cm.name=v,"Command")),
-      h("td",{},inp(felderZuText(cm.felder),v=>cm.felder=textZuFelder(v),"AggregateId:Guid, Betrag:decimal")),
-      h("td",{style:"width:26px"},h("button",{class:"rm",onclick:()=>{a.commands.splice(ci,1);render();}},"✕")))));
-    c.append(ct,h("button",{class:"add",onclick:()=>{(a.commands=a.commands||[]).push({name:"MachWas",felder:[{name:"AggregateId",typ:"Guid"}],ergibt:[]});render();}},"+ Command"));
-
-    // 3 · EVENTS — die Fakten-Records (rein/ID-los; [x] = Ablehnung/transient).
-    c.append(h("div",{class:"step"},"3 · Events — die Fakten-Records (Name + Felder · [x] = Ablehnung/transient)"));
-    const et=h("table",{});
-    (a.events||[]).forEach((e,ei)=>et.append(h("tr",{},
-      h("td",{style:"width:190px"},inp(e.name,v=>e.name=v,"Event")),
-      h("td",{style:"width:22px"},h("input",{type:"checkbox",onchange:ev=>{e.transient=ev.target.checked;render();},...(e.transient?{checked:"checked"}:{})})),
-      h("td",{},inp(felderZuText(e.felder),v=>e.felder=textZuFelder(v),"Betrag:decimal")),
-      h("td",{style:"width:26px"},h("button",{class:"rm",onclick:()=>{a.events.splice(ei,1);render();}},"✕")))));
-    c.append(et,h("button",{class:"add",onclick:()=>{(a.events=a.events||[]).push({name:"Ereignis",felder:[]});render();}},"+ Event"));
-
-    // 4 · DECIDER — Decide je Command: welche Events (OneOf) + Körper.
-    c.append(h("div",{class:"step"},"4 · Decider — Decide je Command: welche Events (OneOf) + Körper"));
-    if(!(a.commands||[]).length) c.append(h("div",{class:"hint"},"Erst Commands anlegen (Schritt 2)."));
-    (a.commands||[]).forEach(cm=>{
+    // Decider — Command → OneOf-Events
+    c.append(h("div",{class:"step"},"Decider — Decide je Command: Command ⟶ OneOf-Events + Körper"));
+    (a.decider||[]).forEach((d,di)=>{
       const box=h("div",{class:"cmdbox"});
-      box.append(h("div",{class:"cmdhead"},h("span",{class:"name"},"Decide("),h("span",{class:"cmdn"},cm.name||"…"),h("span",{class:"name"}," cmd)")));
-      box.append(h("div",{class:"blab"},"⟶ OneOf-Ausgänge — ein Event je Zeile, optional 'Event ? guard'"));
-      box.append(area(ergibtZuText(cm.ergibt),v=>cm.ergibt=textZuErgibt(v),"BetragReserviert\nDeckungReichtNicht ? State.Verfuegbar < cmd.Betrag"));
-      box.append(h("div",{class:"blab"},"Decide-Körper — this.State lesen, cmd nutzen, Events yield return-en. Leer ⇒ throw-Platzhalter."));
-      box.append(codearea(cm.rumpf,v=>cm.rumpf=v||undefined,"if (this.State.Verfuegbar < cmd.Betrag) { yield return new DeckungReichtNicht(this.State.Verfuegbar, cmd.Betrag); yield break; }\nyield return new BetragReserviert(cmd.Betrag);"));
+      box.append(h("div",{class:"cmdhead"},h("span",{class:"name"},"Decide("),recSelect(d.command,v=>{d.command=v;},["command"]),h("span",{class:"name"}," cmd)"),
+        h("button",{class:"rm",onclick:()=>{a.decider.splice(di,1);render();}},"✕")));
+      box.append(h("div",{class:"blab"},"⟶ OneOf-Ausgänge (Event/Ablehnung + optional Guard):"));
+      (d.ergibt||[]).forEach((o,oi)=>box.append(h("div",{class:"arow"},
+        recSelect(o.event,v=>{o.event=v;},["event","rejection"]),
+        inp(o.guard,v=>o.guard=v||undefined,"Guard (optional)"),
+        h("button",{class:"rm",onclick:()=>{d.ergibt.splice(oi,1);render();}},"✕"))));
+      box.append(h("button",{class:"add",onclick:()=>{(d.ergibt=d.ergibt||[]).push({event:""});render();}},"+ Ausgang"));
+      box.append(h("div",{class:"blab"},"Decide-Körper — Leer ⇒ throw-Platzhalter."));
+      box.append(codearea(d.rumpf,v=>d.rumpf=v||undefined,"if (this.State.Verfuegbar < cmd.Betrag) { yield return new DeckungReichtNicht(this.State.Verfuegbar, cmd.Betrag); yield break; }\nyield return new BetragReserviert(cmd.Betrag);"));
       c.append(box);
     });
+    c.append(h("button",{class:"add",onclick:()=>{(a.decider=a.decider||[]).push({command:"",ergibt:[]});render();}},"+ Decide-Regel"));
 
-    // 5 · APPLIER — Apply je persistentem Event: wie es den State faltet.
-    c.append(h("div",{class:"step"},"5 · Applier — Apply je persistentem Event: wie es den State faltet"));
-    const persist=(a.events||[]).filter(e=>!e.transient);
-    if(!persist.length) c.append(h("div",{class:"hint"},"Erst persistente Events anlegen (Schritt 3)."));
-    persist.forEach(e=>{
+    // Applier — Event → State
+    c.append(h("div",{class:"step"},"Applier — Apply je persistentem Event: Event ⟶ State-Faltung"));
+    (a.applier||[]).forEach((ap,pi)=>{
       const box=h("div",{class:"applybox"});
-      box.append(h("div",{class:"cmdhead"},h("span",{class:"name"},"Apply("),h("span",{class:"cmdn"},e.name||"…"),h("span",{class:"name"}," evt)")));
-      box.append(codearea(e.applyRumpf,v=>e.applyRumpf=v||undefined,"this.State.Saldo += evt.Betrag;"));
+      box.append(h("div",{class:"cmdhead"},h("span",{class:"name"},"Apply("),recSelect(ap.event,v=>{ap.event=v;},["event"]),h("span",{class:"name"}," evt)"),
+        h("button",{class:"rm",onclick:()=>{a.applier.splice(pi,1);render();}},"✕")));
+      box.append(codearea(ap.rumpf,v=>ap.rumpf=v||undefined,"this.State.Saldo += evt.Betrag;"));
       c.append(box);
     });
+    c.append(h("button",{class:"add",onclick:()=>{(a.applier=a.applier||[]).push({event:""});render();}},"+ Apply-Regel"));
 
     return c;
   }
@@ -756,11 +812,11 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   }
 
   // ── Aktionen ──
-  window.deOpen=function(){document.getElementById("de").classList.add("on");if(!MODEL.aggregate.length&&!MODEL.sagas.length)deReload();else render();};
+  window.deOpen=function(){document.getElementById("de").classList.add("on");if(!MODEL.records.length&&!MODEL.aggregate.length)deReload();else render();};
   window.deClose=function(){document.getElementById("de").classList.remove("on");};
   async function loadLive(){try{const r=await fetch("/api/editor/model");if(!r.ok)throw 0;const m=await r.json();badge(true);return m;}catch(e){badge(false);return null;}}
   function badge(live){const b=document.getElementById("de-badge");b.textContent=live?"SimHost live":"offline";b.className="badge"+(live?"":" off");}
-  window.deReload=async function(){const live=await loadLive();MODEL=live||(embedded&&embedded.aggregate?embedded:{schemaVersion:"1",aggregate:[],sagas:[]});render();};
+  window.deReload=async function(){const live=await loadLive();MODEL=normalize(live||(embedded&&(embedded.records||embedded.aggregate)?embedded:null));render();};
   window.deDownload=function(){const blob=new Blob([JSON.stringify(MODEL,null,2)],{type:"application/json"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="domain-model.json";a.click();};
   async function post(path){const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(MODEL)});
@@ -778,7 +834,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 
   const unreach='<div class="find error">SimHost nicht erreichbar. Starte ihn: <b>dotnet run --project SimHost</b>.</div>';
   async function postJson(path,obj){const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(obj)});if(!r.ok)throw new Error("HTTP "+r.status);return r;}
-  const alleCommands=()=>MODEL.aggregate.flatMap(a=>a.commands||[]);
+  const alleCommands=()=>MODEL.records.filter(r=>r.kind==="command");
 
   // ⚙ Kompilieren: das Modell IN-MEMORY mit den echten Domain-Generatoren übersetzen.
   window.deCompile=async function(){const out=document.getElementById("de-out");

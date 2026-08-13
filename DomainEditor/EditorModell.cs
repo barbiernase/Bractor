@@ -4,24 +4,31 @@ using System.Text.Json.Serialization;
 namespace DomainEditor;
 
 /// <summary>
-/// Das Domänen-Modell als AUSFÜHRBARE DATEN (Kern-Idee 5): eine Wahrheit, zwei Backends.
-/// Aus diesem Modell erzeugt der <see cref="Scaffolder"/> deterministisch C# (der echte,
-/// commitbare Artefakt); dasselbe Modell kann live über den SagaLaufwerk-Interpreter laufen
-/// (Stufe 2). Bewusst nur die FORM — Aggregate, Felder, Commands, Events, Sagas. Die winzigen
-/// reinen Decide/Apply-Körper füllt in Stufe 3 ein kleines lokales LLM; hier stehen sie als
-/// optionaler Freitext (<see cref="Befehl.Rumpf"/> / <see cref="Ereignis"/>-Applier), sonst
-/// generiert der Scaffolder einen kompilierbaren <c>throw</c>-Platzhalter.
+/// Das Domänen-Modell als AUSFÜHRBARE DATEN — RECORD-ZENTRISCH (v2).
+///
+/// Die Kern-Einsicht: Commands, Events, Ablehnungen und Value Objects sind ALLE Records
+/// (Name + typisierte Felder). Deshalb gibt es EINEN uniformen Record-Editor statt bespoke
+/// Formulare je Bausteinart. Ein Feldtyp darf ein anderer Record/Enum sein — so KOMPONIEREN
+/// sich Records (z. B. <c>BildInfo</c> enthält <c>BildMeta</c> und <c>List&lt;RegionBewertung&gt;</c>).
+///
+/// Aus den getaggten Records KOMPONIERT man dann die Aggregate: State (Felder) + Decider
+/// (Command → OneOf-Events) + Applier (Event → State). Der <see cref="Scaffolder"/> erzeugt daraus
+/// deterministisch C# in kanonischer Gestalt (Commands.cs / Events.cs / ValueObjects.cs / Enums.cs
+/// / {Aggregat}.cs / Decider.cs / Applier.cs).
 /// </summary>
 public sealed record EditorModell
 {
-    /// <summary>Schema-Version des Modell-JSON (nicht der Domäne). Erlaubt spätere Migration.</summary>
-    public string SchemaVersion { get; init; } = "1";
+    public string SchemaVersion { get; init; } = "2";
 
+    /// <summary>Alle Records der Domäne — Commands, Events, Ablehnungen, Value Objects (kind-getaggt).</summary>
+    public IReadOnlyList<Record> Records { get; init; } = [];
+    /// <summary>Enums der Domäne (auch Feldtypen), z. B. <c>BildVersion { Dc0, Dc2 }</c>.</summary>
+    public IReadOnlyList<Enumeration> Enums { get; init; } = [];
+    /// <summary>Die Komposition: Aggregate (State + Decider + Applier), die die Records verdrahten.</summary>
     public IReadOnlyList<Aggregat> Aggregate { get; init; } = [];
     public IReadOnlyList<Saga> Sagas { get; init; } = [];
 
-    // ── Serialisierung: camelCase, Enums als String, Nulls weglassen — deckungsgleich mit dem
-    //    knowledge-graph.json-Stil, damit das Board beide ohne Sonderfall liest. ──
+    // Serialisierung: camelCase, Enums als String, Nulls weglassen — wie knowledge-graph.json.
     public static readonly JsonSerializerOptions JsonOptionen = new()
     {
         WriteIndented = true,
@@ -38,84 +45,104 @@ public sealed record EditorModell
         ?? throw new FormatException("Konnte EditorModell nicht aus JSON lesen (null).");
 }
 
-/// <summary>
-/// Ein Aggregat = eine Konsistenzgrenze. Trägt seine reinen Zustands-Felder, die Commands, die es
-/// entscheidet, und die Events, die es produziert (persistent) bzw. als Ablehnung zurückgibt
-/// (transient). Id/Version werden generiert und tauchen hier NICHT auf (Invariante 5).
-/// </summary>
-public sealed record Aggregat
+/// <summary>Die Rolle eines Records — bestimmt Interface und Zieldatei.</summary>
+public static class RecordArt
 {
-    public required string Name { get; init; }
-    /// <summary>Voller Namespace, z. B. <c>Domain.Konto</c>.</summary>
-    public required string Namespace { get; init; }
-    /// <summary>Optionaler XML-Doc-Text (eine Zeile oder mehrzeilig) über der State-Klasse.</summary>
-    public string? Doku { get; init; }
+    public const string Command = "command";        // : ICommand → Commands.cs
+    public const string Event = "event";            // : IEvent → Events.cs (persistent)
+    public const string Rejection = "rejection";    // : ITransientEvent → Events.cs (Ablehnung)
+    public const string ValueObject = "valueobject";// reiner Record → ValueObjects.cs
 
-    public IReadOnlyList<Feld> Felder { get; init; } = [];
-    public IReadOnlyList<Befehl> Commands { get; init; } = [];
-    public IReadOnlyList<Ereignis> Events { get; init; } = [];
+    public static readonly IReadOnlyList<string> Alle = [Command, Event, Rejection, ValueObject];
 }
 
 /// <summary>
-/// Ein Feld — als Record-Parameter (Command/Event) oder als State-Property (Aggregat). Ist
-/// <see cref="Ausdruck"/> gesetzt, ist es eine ABGELEITETE Read-only-Property
-/// (<c>public T Name => Ausdruck;</c>) statt eines gespeicherten <c>{ get; set; }</c>-Felds.
+/// Ein Record: Name + Kind (<see cref="RecordArt"/>) + typisierte Felder. Der uniforme Baustein für
+/// Commands, Events, Ablehnungen und Value Objects. Felder dürfen andere Records/Enums referenzieren.
+/// </summary>
+public sealed record Record
+{
+    public required string Name { get; init; }
+    /// <summary>Siehe <see cref="RecordArt"/>: command | event | rejection | valueobject.</summary>
+    public required string Kind { get; init; }
+    /// <summary>Voller Namespace, z. B. <c>Domain.ImagePair</c> — bestimmt die Zieldatei-Gruppierung.</summary>
+    public required string Namespace { get; init; }
+    public IReadOnlyList<Feld> Felder { get; init; } = [];
+    public string? Doku { get; init; }
+    /// <summary>Nur command: erzeugt das Aggregat (<c>ICreationCommand</c> statt nur <c>ICommand</c>).</summary>
+    public bool IstErzeugung { get; init; }
+}
+
+/// <summary>
+/// Ein Feld = Name + Typ. Der Typ ist C#-Text: ein Skalar (<see cref="Skalar"/>), ein anderer
+/// Record/Enum der Domäne (Komposition), ein Framework-Typ (<c>DateTimeOffset</c> …), nullable
+/// (<c>Klassifikation?</c>) oder eine Collection (<c>List&lt;RegionBewertung&gt;</c>). Verbatim übernommen.
 /// </summary>
 public sealed record Feld
 {
     public required string Name { get; init; }
-    /// <summary>Skalarer Typ; siehe <see cref="Skalar"/>. Erlaubt: Guid, decimal, int, bool, string.</summary>
     public required string Typ { get; init; }
-    /// <summary>Optionaler Default (nur Command-/Ctor-Parameter), z. B. <c>false</c> — roher C#-Literal.</summary>
+    /// <summary>Optionaler Default (nur Command-Felder), z. B. <c>false</c> — roher C#-Literal.</summary>
     public string? Standard { get; init; }
-    /// <summary>Gesetzt ⇒ abgeleitete State-Property mit diesem Ausdruck (kein gespeichertes Feld).</summary>
+    /// <summary>Nur State-Felder: gesetzt ⇒ abgeleitete Read-only-Property (<c>=> Ausdruck</c>), kein gespeichertes Feld.</summary>
     public string? Ausdruck { get; init; }
 }
 
-/// <summary>
-/// Ein Command. Erstes Feld ist per Konvention <c>Guid AggregateId</c> (explizit im Modell). Die
-/// <see cref="Ergibt"/>-Liste ist die OneOf-Ausgangsmenge des zugehörigen <c>Decide</c> — der
-/// Erfolgs-Event zuerst, dann die Ablehnungen (transient). Das ist die Routing-FORM.
-/// </summary>
-public sealed record Befehl
+/// <summary>Ein Enum-Typ der Domäne (→ <c>Enums.cs</c>).</summary>
+public sealed record Enumeration
 {
     public required string Name { get; init; }
-    public IReadOnlyList<Feld> Felder { get; init; } = [];
-    /// <summary>Die OneOf-Ausgänge (Event-Namen + optionaler Guard) in Reihenfolge.</summary>
-    public IReadOnlyList<Ausgang> Ergibt { get; init; } = [];
+    public required string Namespace { get; init; }
+    public IReadOnlyList<string> Werte { get; init; } = [];
     public string? Doku { get; init; }
-    /// <summary>
-    /// Optionaler, von Hand/LLM gefüllter Decide-Körper (Stufe 3). Null ⇒ kompilierbarer
-    /// <c>throw new NotImplementedException(...)</c>-Platzhalter.
-    /// </summary>
+}
+
+/// <summary>
+/// Die KOMPOSITION: ein Aggregat verdrahtet die Records. Es hält den State (Felder) und die
+/// Regeln — Decider (Command → OneOf-Events) und Applier (Event → State-Faltung).
+/// </summary>
+public sealed record Aggregat
+{
+    public required string Name { get; init; }
+    public required string Namespace { get; init; }
+    public string? Doku { get; init; }
+    /// <summary>State-Felder (mit optionalem <see cref="Feld.Ausdruck"/> für abgeleitete Props).</summary>
+    public IReadOnlyList<Feld> State { get; init; } = [];
+    /// <summary>Zusätzliche State-Member als roher C#-Text (Hilfsmethoden), in die Klasse eingehängt.</summary>
+    public string? StateZusatz { get; init; }
+    public IReadOnlyList<DecideRegel> Decider { get; init; } = [];
+    public IReadOnlyList<ApplyRegel> Applier { get; init; } = [];
+}
+
+/// <summary>Eine Decide-Regel: welcher Command → welche OneOf-Events (+ optionaler Körper).</summary>
+public sealed record DecideRegel
+{
+    /// <summary>Name des Command-Records.</summary>
+    public required string Command { get; init; }
+    /// <summary>Die OneOf-Ausgänge (Event-/Ablehnungs-Record-Namen + optionaler Guard) in Reihenfolge.</summary>
+    public IReadOnlyList<Ausgang> Ergibt { get; init; } = [];
+    /// <summary>Optionaler Decide-Körper; null ⇒ kompilierbarer <c>throw</c>-Platzhalter.</summary>
     public string? Rumpf { get; init; }
 }
 
-/// <summary>Ein OneOf-Ausgang eines Decide: der Event-Name plus optional der Guard (das „Warum").</summary>
+/// <summary>Ein OneOf-Ausgang: der Event-Record-Name plus optional der Guard (das „Warum").</summary>
 public sealed record Ausgang
 {
     public required string Event { get; init; }
-    /// <summary>Roher Bedingungs-Ausdruck (z. B. <c>State.Verfuegbar &lt; cmd.Betrag</c>), rein informativ.</summary>
     public string? Guard { get; init; }
 }
 
-/// <summary>
-/// Ein Event — rein/ID-los. <see cref="Transient"/> ⇒ Ablehnung (<c>ITransientEvent</c>, nicht im
-/// Log, kein Signal, kein Applier); sonst persistent (<c>IEvent</c>, bekommt ein Apply).
-/// </summary>
-public sealed record Ereignis
+/// <summary>Eine Apply-Regel: welcher (persistente) Event faltet den State wie (+ optionaler Körper).</summary>
+public sealed record ApplyRegel
 {
-    public required string Name { get; init; }
-    public IReadOnlyList<Feld> Felder { get; init; } = [];
-    public bool Transient { get; init; }
-    /// <summary>Optionaler, von Hand/LLM gefüllter Apply-Körper (Stufe 3). Nur für persistente Events.</summary>
-    public string? ApplyRumpf { get; init; }
+    /// <summary>Name des Event-Records.</summary>
+    public required string Event { get; init; }
+    public string? Rumpf { get; init; }
 }
 
 /// <summary>
-/// Eine Saga/ein Prozess: mehrere Aggregate / asynchron / mit Kompensation (Kern-Idee 7). Der
-/// <see cref="TriggerEvent"/> ist das <c>Prozess&lt;T&gt;</c>-Argument. Jeder <see cref="Schritt"/>
-/// ist eine Transition (Auf/Und → Sende → RückgängigDurch).
+/// Eine Saga/ein Prozess: mehrere Aggregate / asynchron / mit Kompensation. Der
+/// <see cref="TriggerEvent"/> ist das <c>Prozess&lt;T&gt;</c>-Argument.
 /// </summary>
 public sealed record Saga
 {
@@ -124,31 +151,22 @@ public sealed record Saga
     public required string TriggerEvent { get; init; }
     public IReadOnlyList<SagaSchritt> Schritte { get; init; } = [];
     public string? Doku { get; init; }
-    /// <summary>Zusätzliche <c>using</c>-Direktiven für aggregat-fremde Commands/Events (z. B. <c>Domain.Konto</c>).</summary>
     public IReadOnlyList<string> ExtraUsings { get; init; } = [];
 }
 
-/// <summary>
-/// Eine Saga-Transition: <c>p.Auf&lt;Wenn[0]&gt;().Und&lt;Wenn[1]&gt;()… .Sende&lt;Sende&gt;(…)
-/// .RückgängigDurch&lt;Kompensation&gt;(…)</c>. Die Lambda-Argumente (<c>t.Quelle</c> …) sind Fachlogik
-/// und werden — wo bekannt — als roher Ausdruck mitgeführt; sonst generiert der Scaffolder
-/// kompilierbare <c>default</c>-Platzhalter je Command-Feld.
-/// </summary>
+/// <summary>Eine Saga-Transition: <c>Auf/Und → Sende → RückgängigDurch</c>.</summary>
 public sealed record SagaSchritt
 {
-    /// <summary>Bedingungs-Events in Reihenfolge; das erste ist der Trigger.</summary>
     public IReadOnlyList<string> Wenn { get; init; } = [];
     public required string Sende { get; init; }
-    /// <summary>Argument-Ausdrücke für den Sende-Command-Ctor; null ⇒ <c>default</c>-Platzhalter.</summary>
     public IReadOnlyList<string>? SendeArgumente { get; init; }
     public string? Kompensation { get; init; }
     public IReadOnlyList<string>? KompensationArgumente { get; init; }
 }
 
-/// <summary>Die erlaubten skalaren Feldtypen (bewusst eng — Kern-Idee/EHRLICHE GRENZEN).</summary>
+/// <summary>Vorgeschlagene skalare Feldtypen (nur Vorschläge fürs Dropdown; der Typ ist frei).</summary>
 public static class Skalar
 {
-    public static readonly IReadOnlyList<string> Erlaubt = ["Guid", "decimal", "int", "bool", "string"];
-
-    public static bool IstErlaubt(string typ) => Erlaubt.Contains(typ);
+    public static readonly IReadOnlyList<string> Vorschlaege =
+        ["Guid", "decimal", "int", "long", "double", "bool", "string", "DateTimeOffset"];
 }
