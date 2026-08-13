@@ -6522,8 +6522,11 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .gnode2.n-rejection{border-color:#7a2a3a}
 #de .gnode2.n-valueobject{border-color:#2a6a5a}
 #de .gnode2.n-enum{border-color:#5a5a70}
-#de .gnode2.n-aggregate{border-color:#7c5cff}
+#de .gnode2.n-aggregate{border-color:#7c5cff;background:#181733}
+#de .gnode2.n-decider{border-color:#5a7bb0}
+#de .gnode2.n-applier{border-color:#4a9a6a}
 #de .gnode2.n-saga{border-color:#5a3a7a}
+#de .gbody .arow .lbl{color:#8b93a7;font-size:11px;min-width:70px}
 #de .ghead{display:flex;align-items:center;gap:6px;padding:4px 8px;background:#1b2233;border-radius:8px 8px 0 0;border-bottom:1px solid #232a38;cursor:grab;user-select:none;touch-action:none}
 #de .gnode2.dragging .ghead{cursor:grabbing}
 #de .gh-move{flex:1;color:#9aa3b7;font-size:10px;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -6603,7 +6606,8 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 (function(){
   const SCALARS=["Guid","decimal","int","long","double","bool","string","DateTimeOffset"];
   const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"]};
-  let MODEL={schemaVersion:"2",records:[],enums:[],aggregate:[],sagas:[]};
+  let MODEL={schemaVersion:"2",records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[]};
+  let NID=1;
   const embedded={
   "schemaVersion": "2",
   "records": [
@@ -8530,21 +8534,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           "name": "Gestellt",
           "typ": "bool"
         }
-      ],
-      "decider": [
-        {
-          "command": "StelleAntrag",
-          "ergibt": [
-            {
-              "event": "AntragGestellt"
-            }
-          ]
-        }
-      ],
-      "applier": [
-        {
-          "event": "AntragGestellt"
-        }
       ]
     },
     {
@@ -8554,21 +8543,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
         {
           "name": "Aufgegeben",
           "typ": "bool"
-        }
-      ],
-      "decider": [
-        {
-          "command": "GibBestellungAuf",
-          "ergibt": [
-            {
-              "event": "BestellungAufgegeben"
-            }
-          ]
-        }
-      ],
-      "applier": [
-        {
-          "event": "BestellungAufgegeben"
         }
       ]
     },
@@ -8584,21 +8558,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           "name": "Kontext",
           "typ": "string?"
         }
-      ],
-      "decider": [
-        {
-          "command": "FristFaellig",
-          "ergibt": [
-            {
-              "event": "ErinnerungAusgeloest"
-            }
-          ]
-        }
-      ],
-      "applier": [
-        {
-          "event": "ErinnerungAusgeloest"
-        }
       ]
     },
     {
@@ -8609,51 +8568,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           "name": "Plaetze",
           "typ": "int"
         }
-      ],
-      "decider": [
-        {
-          "command": "RichteFlugEin",
-          "ergibt": [
-            {
-              "event": "FlugEingerichtet"
-            },
-            {
-              "event": "FlugExistiertBereits",
-              "guard": "State.Version > 0"
-            }
-          ]
-        },
-        {
-          "command": "ReserviereFlug",
-          "ergibt": [
-            {
-              "event": "FlugReserviert"
-            },
-            {
-              "event": "FlugAusgebucht",
-              "guard": "State.Plaetze < cmd.Anzahl"
-            }
-          ]
-        },
-        {
-          "command": "GebeFlugFrei",
-          "ergibt": [
-            {
-              "event": "FlugFreigegeben"
-            }
-          ]
-        }
-      ],
-      "applier": [
-        {
-          "event": "FlugEingerichtet"
-        },
-        {
-          "event": "FlugReserviert"
-        },
-        {
-          "event": "FlugFreigegeben"
-        }
       ]
     },
     {
@@ -8663,51 +8577,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
         {
           "name": "Zimmer",
           "typ": "int"
-        }
-      ],
-      "decider": [
-        {
-          "command": "RichteHotelEin",
-          "ergibt": [
-            {
-              "event": "HotelEingerichtet"
-            },
-            {
-              "event": "HotelExistiertBereits",
-              "guard": "State.Version > 0"
-            }
-          ]
-        },
-        {
-          "command": "ReserviereHotel",
-          "ergibt": [
-            {
-              "event": "HotelReserviert"
-            },
-            {
-              "event": "HotelAusgebucht",
-              "guard": "State.Zimmer < cmd.Anzahl"
-            }
-          ]
-        },
-        {
-          "command": "GebeHotelFrei",
-          "ergibt": [
-            {
-              "event": "HotelFreigegeben"
-            }
-          ]
-        }
-      ],
-      "applier": [
-        {
-          "event": "HotelEingerichtet"
-        },
-        {
-          "event": "HotelReserviert"
-        },
-        {
-          "event": "HotelFreigegeben"
         }
       ]
     },
@@ -8760,164 +8629,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           "name": "UrsprungsPfad",
           "typ": "string?"
         }
-      ],
-      "decider": [
-        {
-          "command": "ErstelleImagePair",
-          "ergibt": [
-            {
-              "event": "ImagePairErstellt"
-            },
-            {
-              "event": "ImagePairExistiertBereits",
-              "guard": "State.Version > 0"
-            }
-          ]
-        },
-        {
-          "command": "MeldeBildVerfuegbar",
-          "ergibt": [
-            {
-              "event": "BildVerfuegbar"
-            },
-            {
-              "event": "ImagePairKomplett",
-              "guard": "State.GetBild(andereVersion) != null"
-            },
-            {
-              "event": "ImagePairNichtGefunden",
-              "guard": "State.Version == 0"
-            },
-            {
-              "event": "BildVersionBereitsVerfuegbar",
-              "guard": "State.GetBild(cmd.Version) != null"
-            }
-          ]
-        },
-        {
-          "command": "KlassifiziereEinzelBildDurchKi",
-          "ergibt": [
-            {
-              "event": "EinzelBildDurchKiKlassifiziert"
-            },
-            {
-              "event": "BildNichtVerfuegbar",
-              "guard": "State.GetBild(cmd.Version) == null"
-            },
-            {
-              "event": "RegionLabelsUngueltig",
-              "guard": "cmd.RegionLabels.Count != 8"
-            }
-          ]
-        },
-        {
-          "command": "KlassifiziereBildPaarDurchKi",
-          "ergibt": [
-            {
-              "event": "BildPaarDurchKiKlassifiziert"
-            },
-            {
-              "event": "PaarNichtKomplett",
-              "guard": "!State.IstKomplett"
-            }
-          ]
-        },
-        {
-          "command": "LabelBildRegion",
-          "ergibt": [
-            {
-              "event": "BildRegionGelabelt"
-            },
-            {
-              "event": "BildNichtVerfuegbar",
-              "guard": "State.GetBild(cmd.Version) == null"
-            },
-            {
-              "event": "RegionIndexUngueltig",
-              "guard": "cmd.RegionIndex < 0 || cmd.RegionIndex > 7"
-            }
-          ]
-        },
-        {
-          "command": "LabelEinzelBild",
-          "ergibt": [
-            {
-              "event": "EinzelBildGelabelt"
-            },
-            {
-              "event": "BildNichtVerfuegbar",
-              "guard": "State.GetBild(cmd.Version) == null"
-            }
-          ]
-        },
-        {
-          "command": "LabelBildPaar",
-          "ergibt": [
-            {
-              "event": "BildPaarGelabelt"
-            },
-            {
-              "event": "PaarNichtKomplett",
-              "guard": "!State.IstKomplett"
-            }
-          ]
-        },
-        {
-          "command": "LabelPhysischesProdukt",
-          "ergibt": [
-            {
-              "event": "PhysischesProduktGelabelt"
-            },
-            {
-              "event": "ImagePairNichtGefunden",
-              "guard": "State.Version == 0"
-            }
-          ]
-        },
-        {
-          "command": "MarkiereAlsInspiziert",
-          "ergibt": [
-            {
-              "event": "ImagePairInspiziert"
-            },
-            {
-              "event": "ImagePairNichtGefunden",
-              "guard": "State.Version == 0"
-            }
-          ]
-        }
-      ],
-      "applier": [
-        {
-          "event": "ImagePairErstellt"
-        },
-        {
-          "event": "BildVerfuegbar"
-        },
-        {
-          "event": "ImagePairKomplett"
-        },
-        {
-          "event": "EinzelBildDurchKiKlassifiziert"
-        },
-        {
-          "event": "BildPaarDurchKiKlassifiziert"
-        },
-        {
-          "event": "BildRegionGelabelt"
-        },
-        {
-          "event": "EinzelBildGelabelt"
-        },
-        {
-          "event": "BildPaarGelabelt"
-        },
-        {
-          "event": "PhysischesProduktGelabelt"
-        },
-        {
-          "event": "ImagePairInspiziert"
-        }
       ]
     },
     {
@@ -8941,100 +8652,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           "typ": "decimal",
           "ausdruck": "Saldo - Reserviert"
         }
-      ],
-      "decider": [
-        {
-          "command": "EroeffneKonto",
-          "ergibt": [
-            {
-              "event": "KontoEroeffnet"
-            },
-            {
-              "event": "KontoExistiertBereits",
-              "guard": "State.Version > 0"
-            }
-          ]
-        },
-        {
-          "command": "ReserviereBetrag",
-          "ergibt": [
-            {
-              "event": "BetragReserviert"
-            },
-            {
-              "event": "KontoGesperrt",
-              "guard": "State.Gesperrt"
-            },
-            {
-              "event": "DeckungReichtNicht",
-              "guard": "State.Verfuegbar < cmd.Betrag"
-            },
-            {
-              "event": "KontoNichtGefunden",
-              "guard": "State.Version == 0"
-            }
-          ]
-        },
-        {
-          "command": "GebeReservierungFrei",
-          "ergibt": [
-            {
-              "event": "ReservierungFreigegeben"
-            }
-          ]
-        },
-        {
-          "command": "SchreibeGut",
-          "ergibt": [
-            {
-              "event": "Gutgeschrieben"
-            },
-            {
-              "event": "KontoGesperrt",
-              "guard": "State.Gesperrt"
-            },
-            {
-              "event": "KontoNichtGefunden",
-              "guard": "State.Version == 0"
-            }
-          ]
-        },
-        {
-          "command": "StorniereGutschrift",
-          "ergibt": [
-            {
-              "event": "GutschriftStorniert"
-            }
-          ]
-        },
-        {
-          "command": "BucheReservierung",
-          "ergibt": [
-            {
-              "event": "ReservierungGebucht"
-            }
-          ]
-        }
-      ],
-      "applier": [
-        {
-          "event": "KontoEroeffnet"
-        },
-        {
-          "event": "BetragReserviert"
-        },
-        {
-          "event": "ReservierungFreigegeben"
-        },
-        {
-          "event": "Gutgeschrieben"
-        },
-        {
-          "event": "GutschriftStorniert"
-        },
-        {
-          "event": "ReservierungGebucht"
-        }
       ]
     },
     {
@@ -9048,51 +8665,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
         {
           "name": "Reserviert",
           "typ": "int"
-        }
-      ],
-      "decider": [
-        {
-          "command": "RichteLagerEin",
-          "ergibt": [
-            {
-              "event": "LagerEingerichtet"
-            },
-            {
-              "event": "LagerExistiertBereits",
-              "guard": "State.Version > 0"
-            }
-          ]
-        },
-        {
-          "command": "ReserviereBestand",
-          "ergibt": [
-            {
-              "event": "BestandReserviert"
-            },
-            {
-              "event": "BestandReichtNicht",
-              "guard": "State.Bestand < cmd.Menge"
-            }
-          ]
-        },
-        {
-          "command": "GebeBestandFrei",
-          "ergibt": [
-            {
-              "event": "BestandFreigegeben"
-            }
-          ]
-        }
-      ],
-      "applier": [
-        {
-          "event": "LagerEingerichtet"
-        },
-        {
-          "event": "BestandReserviert"
-        },
-        {
-          "event": "BestandFreigegeben"
         }
       ]
     },
@@ -9108,21 +8680,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           "name": "VerarbeiteteReaktionen",
           "typ": "HashSet<Guid>"
         }
-      ],
-      "decider": [
-        {
-          "command": "WirkeReaktion",
-          "ergibt": [
-            {
-              "event": "ReaktionGewirkt"
-            }
-          ]
-        }
-      ],
-      "applier": [
-        {
-          "event": "ReaktionGewirkt"
-        }
       ]
     },
     {
@@ -9132,21 +8689,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
         {
           "name": "Bestaetigt",
           "typ": "bool"
-        }
-      ],
-      "decider": [
-        {
-          "command": "BestaetigeReise",
-          "ergibt": [
-            {
-              "event": "ReiseBestaetigt"
-            }
-          ]
-        }
-      ],
-      "applier": [
-        {
-          "event": "ReiseBestaetigt"
         }
       ]
     },
@@ -9158,21 +8700,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           "name": "Gebucht",
           "typ": "bool"
         }
-      ],
-      "decider": [
-        {
-          "command": "BucheReise",
-          "ergibt": [
-            {
-              "event": "ReiseGebucht"
-            }
-          ]
-        }
-      ],
-      "applier": [
-        {
-          "event": "ReiseGebucht"
-        }
       ]
     },
     {
@@ -9183,21 +8710,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           "name": "Beauftragt",
           "typ": "bool"
         }
-      ],
-      "decider": [
-        {
-          "command": "BeauftrageSammelueberweisung",
-          "ergibt": [
-            {
-              "event": "SammelUeberweisungBeauftragt"
-            }
-          ]
-        }
-      ],
-      "applier": [
-        {
-          "event": "SammelUeberweisungBeauftragt"
-        }
       ]
     },
     {
@@ -9207,21 +8719,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
         {
           "name": "Beauftragt",
           "typ": "bool"
-        }
-      ],
-      "decider": [
-        {
-          "command": "BeauftrageUeberweisung",
-          "ergibt": [
-            {
-              "event": "UeberweisungBeauftragt"
-            }
-          ]
-        }
-      ],
-      "applier": [
-        {
-          "event": "UeberweisungBeauftragt"
         }
       ]
     },
@@ -9254,86 +8751,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           "typ": "bool",
           "ausdruck": "Status == Auftragsstatus.Offen"
         }
-      ],
-      "decider": [
-        {
-          "command": "EroeffneVerkaufsauftrag",
-          "ergibt": [
-            {
-              "event": "VerkaufsauftragEroeffnet"
-            },
-            {
-              "event": "VerkaufsauftragExistiertBereits",
-              "guard": "State.Version > 0"
-            }
-          ]
-        },
-        {
-          "command": "FuegePositionHinzu",
-          "ergibt": [
-            {
-              "event": "VerkaufspositionHinzugefuegt"
-            },
-            {
-              "event": "KreditlimitUeberschritten",
-              "guard": "prospektiv.GroesserAls(State.Kreditlimit)"
-            },
-            {
-              "event": "AuftragNichtOffen",
-              "guard": "!State.IstOffen"
-            },
-            {
-              "event": "WaehrungPasstNicht",
-              "guard": "!cmd.Einzelpreis.GleicheWaehrung(State.Kreditlimit)"
-            },
-            {
-              "event": "VerkaufsauftragNichtGefunden",
-              "guard": "State.Version == 0"
-            }
-          ]
-        },
-        {
-          "command": "GibVerkaufsauftragAuf",
-          "ergibt": [
-            {
-              "event": "VerkaufsauftragAufgegeben"
-            },
-            {
-              "event": "AuftragNichtOffen",
-              "guard": "State.Positionen.Count == 0"
-            },
-            {
-              "event": "VerkaufsauftragNichtGefunden",
-              "guard": "State.Version == 0"
-            }
-          ]
-        },
-        {
-          "command": "StorniereVerkaufsauftrag",
-          "ergibt": [
-            {
-              "event": "VerkaufsauftragStorniert"
-            },
-            {
-              "event": "VerkaufsauftragNichtGefunden",
-              "guard": "State.Version == 0"
-            }
-          ]
-        }
-      ],
-      "applier": [
-        {
-          "event": "VerkaufsauftragEroeffnet"
-        },
-        {
-          "event": "VerkaufspositionHinzugefuegt"
-        },
-        {
-          "event": "VerkaufsauftragAufgegeben"
-        },
-        {
-          "event": "VerkaufsauftragStorniert"
-        }
       ]
     },
     {
@@ -9343,21 +8760,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
         {
           "name": "Versandt",
           "typ": "bool"
-        }
-      ],
-      "decider": [
-        {
-          "command": "Versende",
-          "ergibt": [
-            {
-              "event": "Versendet"
-            }
-          ]
-        }
-      ],
-      "applier": [
-        {
-          "event": "Versendet"
         }
       ]
     },
@@ -9373,32 +8775,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           "name": "Aktiviert",
           "typ": "bool"
         }
-      ],
-      "decider": [
-        {
-          "command": "Genehmige",
-          "ergibt": [
-            {
-              "event": "VorgangGenehmigt"
-            }
-          ]
-        },
-        {
-          "command": "Aktiviere",
-          "ergibt": [
-            {
-              "event": "VorgangAktiviert"
-            }
-          ]
-        }
-      ],
-      "applier": [
-        {
-          "event": "VorgangGenehmigt"
-        },
-        {
-          "event": "VorgangAktiviert"
-        }
       ]
     },
     {
@@ -9408,21 +8784,6 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
         {
           "name": "Beauftragt",
           "typ": "bool"
-        }
-      ],
-      "decider": [
-        {
-          "command": "BeauftrageWillkommensbonus",
-          "ergibt": [
-            {
-              "event": "WillkommensbonusBeauftragt"
-            }
-          ]
-        }
-      ],
-      "applier": [
-        {
-          "event": "WillkommensbonusBeauftragt"
         }
       ]
     },
@@ -9434,48 +8795,710 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
           "name": "Saldo",
           "typ": "decimal"
         }
-      ],
-      "decider": [
+      ]
+    }
+  ],
+  "decider": [
+    {
+      "aggregat": "Antrag",
+      "command": "StelleAntrag",
+      "ergibt": [
         {
-          "command": "RichteZahlungskontoEin",
-          "ergibt": [
-            {
-              "event": "ZahlungskontoEingerichtet"
-            }
-          ]
-        },
-        {
-          "command": "BelasteKonto",
-          "ergibt": [
-            {
-              "event": "KontoBelastet"
-            },
-            {
-              "event": "KontoUngedeckt",
-              "guard": "State.Saldo < cmd.Betrag"
-            }
-          ]
-        },
-        {
-          "command": "ErstatteKonto",
-          "ergibt": [
-            {
-              "event": "KontoErstattet"
-            }
-          ]
+          "event": "AntragGestellt"
         }
-      ],
-      "applier": [
+      ]
+    },
+    {
+      "aggregat": "Bestellauftrag",
+      "command": "GibBestellungAuf",
+      "ergibt": [
+        {
+          "event": "BestellungAufgegeben"
+        }
+      ]
+    },
+    {
+      "aggregat": "Erinnerung",
+      "command": "FristFaellig",
+      "ergibt": [
+        {
+          "event": "ErinnerungAusgeloest"
+        }
+      ]
+    },
+    {
+      "aggregat": "Flugkontingent",
+      "command": "RichteFlugEin",
+      "ergibt": [
+        {
+          "event": "FlugEingerichtet"
+        },
+        {
+          "event": "FlugExistiertBereits",
+          "guard": "State.Version > 0"
+        }
+      ]
+    },
+    {
+      "aggregat": "Flugkontingent",
+      "command": "ReserviereFlug",
+      "ergibt": [
+        {
+          "event": "FlugReserviert"
+        },
+        {
+          "event": "FlugAusgebucht",
+          "guard": "State.Plaetze < cmd.Anzahl"
+        }
+      ]
+    },
+    {
+      "aggregat": "Flugkontingent",
+      "command": "GebeFlugFrei",
+      "ergibt": [
+        {
+          "event": "FlugFreigegeben"
+        }
+      ]
+    },
+    {
+      "aggregat": "Hotelkontingent",
+      "command": "RichteHotelEin",
+      "ergibt": [
+        {
+          "event": "HotelEingerichtet"
+        },
+        {
+          "event": "HotelExistiertBereits",
+          "guard": "State.Version > 0"
+        }
+      ]
+    },
+    {
+      "aggregat": "Hotelkontingent",
+      "command": "ReserviereHotel",
+      "ergibt": [
+        {
+          "event": "HotelReserviert"
+        },
+        {
+          "event": "HotelAusgebucht",
+          "guard": "State.Zimmer < cmd.Anzahl"
+        }
+      ]
+    },
+    {
+      "aggregat": "Hotelkontingent",
+      "command": "GebeHotelFrei",
+      "ergibt": [
+        {
+          "event": "HotelFreigegeben"
+        }
+      ]
+    },
+    {
+      "aggregat": "ImagePair",
+      "command": "ErstelleImagePair",
+      "ergibt": [
+        {
+          "event": "ImagePairErstellt"
+        },
+        {
+          "event": "ImagePairExistiertBereits",
+          "guard": "State.Version > 0"
+        }
+      ]
+    },
+    {
+      "aggregat": "ImagePair",
+      "command": "MeldeBildVerfuegbar",
+      "ergibt": [
+        {
+          "event": "BildVerfuegbar"
+        },
+        {
+          "event": "ImagePairKomplett",
+          "guard": "State.GetBild(andereVersion) != null"
+        },
+        {
+          "event": "ImagePairNichtGefunden",
+          "guard": "State.Version == 0"
+        },
+        {
+          "event": "BildVersionBereitsVerfuegbar",
+          "guard": "State.GetBild(cmd.Version) != null"
+        }
+      ]
+    },
+    {
+      "aggregat": "ImagePair",
+      "command": "KlassifiziereEinzelBildDurchKi",
+      "ergibt": [
+        {
+          "event": "EinzelBildDurchKiKlassifiziert"
+        },
+        {
+          "event": "BildNichtVerfuegbar",
+          "guard": "State.GetBild(cmd.Version) == null"
+        },
+        {
+          "event": "RegionLabelsUngueltig",
+          "guard": "cmd.RegionLabels.Count != 8"
+        }
+      ]
+    },
+    {
+      "aggregat": "ImagePair",
+      "command": "KlassifiziereBildPaarDurchKi",
+      "ergibt": [
+        {
+          "event": "BildPaarDurchKiKlassifiziert"
+        },
+        {
+          "event": "PaarNichtKomplett",
+          "guard": "!State.IstKomplett"
+        }
+      ]
+    },
+    {
+      "aggregat": "ImagePair",
+      "command": "LabelBildRegion",
+      "ergibt": [
+        {
+          "event": "BildRegionGelabelt"
+        },
+        {
+          "event": "BildNichtVerfuegbar",
+          "guard": "State.GetBild(cmd.Version) == null"
+        },
+        {
+          "event": "RegionIndexUngueltig",
+          "guard": "cmd.RegionIndex < 0 || cmd.RegionIndex > 7"
+        }
+      ]
+    },
+    {
+      "aggregat": "ImagePair",
+      "command": "LabelEinzelBild",
+      "ergibt": [
+        {
+          "event": "EinzelBildGelabelt"
+        },
+        {
+          "event": "BildNichtVerfuegbar",
+          "guard": "State.GetBild(cmd.Version) == null"
+        }
+      ]
+    },
+    {
+      "aggregat": "ImagePair",
+      "command": "LabelBildPaar",
+      "ergibt": [
+        {
+          "event": "BildPaarGelabelt"
+        },
+        {
+          "event": "PaarNichtKomplett",
+          "guard": "!State.IstKomplett"
+        }
+      ]
+    },
+    {
+      "aggregat": "ImagePair",
+      "command": "LabelPhysischesProdukt",
+      "ergibt": [
+        {
+          "event": "PhysischesProduktGelabelt"
+        },
+        {
+          "event": "ImagePairNichtGefunden",
+          "guard": "State.Version == 0"
+        }
+      ]
+    },
+    {
+      "aggregat": "ImagePair",
+      "command": "MarkiereAlsInspiziert",
+      "ergibt": [
+        {
+          "event": "ImagePairInspiziert"
+        },
+        {
+          "event": "ImagePairNichtGefunden",
+          "guard": "State.Version == 0"
+        }
+      ]
+    },
+    {
+      "aggregat": "Konto",
+      "command": "EroeffneKonto",
+      "ergibt": [
+        {
+          "event": "KontoEroeffnet"
+        },
+        {
+          "event": "KontoExistiertBereits",
+          "guard": "State.Version > 0"
+        }
+      ]
+    },
+    {
+      "aggregat": "Konto",
+      "command": "ReserviereBetrag",
+      "ergibt": [
+        {
+          "event": "BetragReserviert"
+        },
+        {
+          "event": "KontoGesperrt",
+          "guard": "State.Gesperrt"
+        },
+        {
+          "event": "DeckungReichtNicht",
+          "guard": "State.Verfuegbar < cmd.Betrag"
+        },
+        {
+          "event": "KontoNichtGefunden",
+          "guard": "State.Version == 0"
+        }
+      ]
+    },
+    {
+      "aggregat": "Konto",
+      "command": "GebeReservierungFrei",
+      "ergibt": [
+        {
+          "event": "ReservierungFreigegeben"
+        }
+      ]
+    },
+    {
+      "aggregat": "Konto",
+      "command": "SchreibeGut",
+      "ergibt": [
+        {
+          "event": "Gutgeschrieben"
+        },
+        {
+          "event": "KontoGesperrt",
+          "guard": "State.Gesperrt"
+        },
+        {
+          "event": "KontoNichtGefunden",
+          "guard": "State.Version == 0"
+        }
+      ]
+    },
+    {
+      "aggregat": "Konto",
+      "command": "StorniereGutschrift",
+      "ergibt": [
+        {
+          "event": "GutschriftStorniert"
+        }
+      ]
+    },
+    {
+      "aggregat": "Konto",
+      "command": "BucheReservierung",
+      "ergibt": [
+        {
+          "event": "ReservierungGebucht"
+        }
+      ]
+    },
+    {
+      "aggregat": "Lager",
+      "command": "RichteLagerEin",
+      "ergibt": [
+        {
+          "event": "LagerEingerichtet"
+        },
+        {
+          "event": "LagerExistiertBereits",
+          "guard": "State.Version > 0"
+        }
+      ]
+    },
+    {
+      "aggregat": "Lager",
+      "command": "ReserviereBestand",
+      "ergibt": [
+        {
+          "event": "BestandReserviert"
+        },
+        {
+          "event": "BestandReichtNicht",
+          "guard": "State.Bestand < cmd.Menge"
+        }
+      ]
+    },
+    {
+      "aggregat": "Lager",
+      "command": "GebeBestandFrei",
+      "ergibt": [
+        {
+          "event": "BestandFreigegeben"
+        }
+      ]
+    },
+    {
+      "aggregat": "Reaktionsempfaenger",
+      "command": "WirkeReaktion",
+      "ergibt": [
+        {
+          "event": "ReaktionGewirkt"
+        }
+      ]
+    },
+    {
+      "aggregat": "Reise",
+      "command": "BestaetigeReise",
+      "ergibt": [
+        {
+          "event": "ReiseBestaetigt"
+        }
+      ]
+    },
+    {
+      "aggregat": "Reiseauftrag",
+      "command": "BucheReise",
+      "ergibt": [
+        {
+          "event": "ReiseGebucht"
+        }
+      ]
+    },
+    {
+      "aggregat": "Sammelueberweisungsauftrag",
+      "command": "BeauftrageSammelueberweisung",
+      "ergibt": [
+        {
+          "event": "SammelUeberweisungBeauftragt"
+        }
+      ]
+    },
+    {
+      "aggregat": "Ueberweisungsauftrag",
+      "command": "BeauftrageUeberweisung",
+      "ergibt": [
+        {
+          "event": "UeberweisungBeauftragt"
+        }
+      ]
+    },
+    {
+      "aggregat": "Verkaufsauftrag",
+      "command": "EroeffneVerkaufsauftrag",
+      "ergibt": [
+        {
+          "event": "VerkaufsauftragEroeffnet"
+        },
+        {
+          "event": "VerkaufsauftragExistiertBereits",
+          "guard": "State.Version > 0"
+        }
+      ]
+    },
+    {
+      "aggregat": "Verkaufsauftrag",
+      "command": "FuegePositionHinzu",
+      "ergibt": [
+        {
+          "event": "VerkaufspositionHinzugefuegt"
+        },
+        {
+          "event": "KreditlimitUeberschritten",
+          "guard": "prospektiv.GroesserAls(State.Kreditlimit)"
+        },
+        {
+          "event": "AuftragNichtOffen",
+          "guard": "!State.IstOffen"
+        },
+        {
+          "event": "WaehrungPasstNicht",
+          "guard": "!cmd.Einzelpreis.GleicheWaehrung(State.Kreditlimit)"
+        },
+        {
+          "event": "VerkaufsauftragNichtGefunden",
+          "guard": "State.Version == 0"
+        }
+      ]
+    },
+    {
+      "aggregat": "Verkaufsauftrag",
+      "command": "GibVerkaufsauftragAuf",
+      "ergibt": [
+        {
+          "event": "VerkaufsauftragAufgegeben"
+        },
+        {
+          "event": "AuftragNichtOffen",
+          "guard": "State.Positionen.Count == 0"
+        },
+        {
+          "event": "VerkaufsauftragNichtGefunden",
+          "guard": "State.Version == 0"
+        }
+      ]
+    },
+    {
+      "aggregat": "Verkaufsauftrag",
+      "command": "StorniereVerkaufsauftrag",
+      "ergibt": [
+        {
+          "event": "VerkaufsauftragStorniert"
+        },
+        {
+          "event": "VerkaufsauftragNichtGefunden",
+          "guard": "State.Version == 0"
+        }
+      ]
+    },
+    {
+      "aggregat": "Versand",
+      "command": "Versende",
+      "ergibt": [
+        {
+          "event": "Versendet"
+        }
+      ]
+    },
+    {
+      "aggregat": "Vorgang",
+      "command": "Genehmige",
+      "ergibt": [
+        {
+          "event": "VorgangGenehmigt"
+        }
+      ]
+    },
+    {
+      "aggregat": "Vorgang",
+      "command": "Aktiviere",
+      "ergibt": [
+        {
+          "event": "VorgangAktiviert"
+        }
+      ]
+    },
+    {
+      "aggregat": "Willkommensbonusauftrag",
+      "command": "BeauftrageWillkommensbonus",
+      "ergibt": [
+        {
+          "event": "WillkommensbonusBeauftragt"
+        }
+      ]
+    },
+    {
+      "aggregat": "Zahlungskonto",
+      "command": "RichteZahlungskontoEin",
+      "ergibt": [
         {
           "event": "ZahlungskontoEingerichtet"
-        },
+        }
+      ]
+    },
+    {
+      "aggregat": "Zahlungskonto",
+      "command": "BelasteKonto",
+      "ergibt": [
         {
           "event": "KontoBelastet"
         },
         {
+          "event": "KontoUngedeckt",
+          "guard": "State.Saldo < cmd.Betrag"
+        }
+      ]
+    },
+    {
+      "aggregat": "Zahlungskonto",
+      "command": "ErstatteKonto",
+      "ergibt": [
+        {
           "event": "KontoErstattet"
         }
       ]
+    }
+  ],
+  "applier": [
+    {
+      "aggregat": "Antrag",
+      "event": "AntragGestellt"
+    },
+    {
+      "aggregat": "Bestellauftrag",
+      "event": "BestellungAufgegeben"
+    },
+    {
+      "aggregat": "Erinnerung",
+      "event": "ErinnerungAusgeloest"
+    },
+    {
+      "aggregat": "Flugkontingent",
+      "event": "FlugEingerichtet"
+    },
+    {
+      "aggregat": "Flugkontingent",
+      "event": "FlugReserviert"
+    },
+    {
+      "aggregat": "Flugkontingent",
+      "event": "FlugFreigegeben"
+    },
+    {
+      "aggregat": "Hotelkontingent",
+      "event": "HotelEingerichtet"
+    },
+    {
+      "aggregat": "Hotelkontingent",
+      "event": "HotelReserviert"
+    },
+    {
+      "aggregat": "Hotelkontingent",
+      "event": "HotelFreigegeben"
+    },
+    {
+      "aggregat": "ImagePair",
+      "event": "ImagePairErstellt"
+    },
+    {
+      "aggregat": "ImagePair",
+      "event": "BildVerfuegbar"
+    },
+    {
+      "aggregat": "ImagePair",
+      "event": "ImagePairKomplett"
+    },
+    {
+      "aggregat": "ImagePair",
+      "event": "EinzelBildDurchKiKlassifiziert"
+    },
+    {
+      "aggregat": "ImagePair",
+      "event": "BildPaarDurchKiKlassifiziert"
+    },
+    {
+      "aggregat": "ImagePair",
+      "event": "BildRegionGelabelt"
+    },
+    {
+      "aggregat": "ImagePair",
+      "event": "EinzelBildGelabelt"
+    },
+    {
+      "aggregat": "ImagePair",
+      "event": "BildPaarGelabelt"
+    },
+    {
+      "aggregat": "ImagePair",
+      "event": "PhysischesProduktGelabelt"
+    },
+    {
+      "aggregat": "ImagePair",
+      "event": "ImagePairInspiziert"
+    },
+    {
+      "aggregat": "Konto",
+      "event": "KontoEroeffnet"
+    },
+    {
+      "aggregat": "Konto",
+      "event": "BetragReserviert"
+    },
+    {
+      "aggregat": "Konto",
+      "event": "ReservierungFreigegeben"
+    },
+    {
+      "aggregat": "Konto",
+      "event": "Gutgeschrieben"
+    },
+    {
+      "aggregat": "Konto",
+      "event": "GutschriftStorniert"
+    },
+    {
+      "aggregat": "Konto",
+      "event": "ReservierungGebucht"
+    },
+    {
+      "aggregat": "Lager",
+      "event": "LagerEingerichtet"
+    },
+    {
+      "aggregat": "Lager",
+      "event": "BestandReserviert"
+    },
+    {
+      "aggregat": "Lager",
+      "event": "BestandFreigegeben"
+    },
+    {
+      "aggregat": "Reaktionsempfaenger",
+      "event": "ReaktionGewirkt"
+    },
+    {
+      "aggregat": "Reise",
+      "event": "ReiseBestaetigt"
+    },
+    {
+      "aggregat": "Reiseauftrag",
+      "event": "ReiseGebucht"
+    },
+    {
+      "aggregat": "Sammelueberweisungsauftrag",
+      "event": "SammelUeberweisungBeauftragt"
+    },
+    {
+      "aggregat": "Ueberweisungsauftrag",
+      "event": "UeberweisungBeauftragt"
+    },
+    {
+      "aggregat": "Verkaufsauftrag",
+      "event": "VerkaufsauftragEroeffnet"
+    },
+    {
+      "aggregat": "Verkaufsauftrag",
+      "event": "VerkaufspositionHinzugefuegt"
+    },
+    {
+      "aggregat": "Verkaufsauftrag",
+      "event": "VerkaufsauftragAufgegeben"
+    },
+    {
+      "aggregat": "Verkaufsauftrag",
+      "event": "VerkaufsauftragStorniert"
+    },
+    {
+      "aggregat": "Versand",
+      "event": "Versendet"
+    },
+    {
+      "aggregat": "Vorgang",
+      "event": "VorgangGenehmigt"
+    },
+    {
+      "aggregat": "Vorgang",
+      "event": "VorgangAktiviert"
+    },
+    {
+      "aggregat": "Willkommensbonusauftrag",
+      "event": "WillkommensbonusBeauftragt"
+    },
+    {
+      "aggregat": "Zahlungskonto",
+      "event": "ZahlungskontoEingerichtet"
+    },
+    {
+      "aggregat": "Zahlungskonto",
+      "event": "KontoBelastet"
+    },
+    {
+      "aggregat": "Zahlungskonto",
+      "event": "KontoErstattet"
     }
   ],
   "sagas": [
@@ -9683,7 +9706,11 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   const textZuListe=t=>(t||"").split(",").map(s=>s.trim()).filter(Boolean);
   const kindLabel=k=>(KINDINFO[k]||["?","vo"])[0];
   const kindKlasse=k=>(KINDINFO[k]||["?","vo"])[1];
-  function normalize(m){m=m||{};m.records=m.records||[];m.enums=m.enums||[];m.aggregate=m.aggregate||[];m.sagas=m.sagas||[];return m;}
+  function normalize(m){m=m||{};m.records=m.records||[];m.enums=m.enums||[];m.aggregate=m.aggregate||[];m.decider=m.decider||[];m.applier=m.applier||[];m.sagas=m.sagas||[];
+    m.decider.forEach(d=>{if(!d._id)d._id="d"+(NID++);});m.applier.forEach(a=>{if(!a._id)a._id="a"+(NID++);});return m;}
+  const aggSelect=(val,on)=>{const s=h("select",{onchange:e=>on(e.target.value)});
+    if(!val||!MODEL.aggregate.some(a=>a.name===val)){const o=h("option",{value:val||""},val||"— Aggregat —");o.selected=true;s.append(o);}
+    MODEL.aggregate.forEach(a=>{const o=h("option",{value:a.name},a.name);if(a.name===val)o.selected=true;s.append(o);});return s;};
   function defaultNs(){return MODEL.records[0]?.namespace||MODEL.aggregate[0]?.namespace||"Domain.Neu";}
 
   function h(tag,attrs,...kids){const e=document.createElement(tag);
@@ -9741,7 +9768,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   // Knoten anlegen — optional an einer Position (Rohzellen-Picker), sonst auto-layouten (Toolbar).
   function neuerKnoten(kind,x,y){
     const pos=(typeof x==="number")?{x:Math.round(x/GRID)*GRID,y:Math.round(y/GRID)*GRID}:{};
-    if(kind==="aggregate")MODEL.aggregate.push({name:uniq("NeuesAggregat"),namespace:defaultNs(),state:[],decider:[],applier:[],...pos});
+    if(kind==="aggregate")MODEL.aggregate.push({name:uniq("NeuesAggregat"),namespace:defaultNs(),state:[],...pos});
+    else if(kind==="decider")MODEL.decider.push({_id:"d"+(NID++),aggregat:"",command:"",ergibt:[],...pos});
+    else if(kind==="applier")MODEL.applier.push({_id:"a"+(NID++),aggregat:"",event:"",...pos});
     else if(kind==="enum")MODEL.enums.push({name:uniq("NeuEnum"),namespace:defaultNs(),werte:["A","B"],...pos});
     else if(kind==="saga")MODEL.sagas.push({name:uniq("NeuerProzess"),namespace:defaultNs(),triggerEvent:"",schritte:[],extraUsings:[],...pos});
     else MODEL.records.push({name:uniq("Neu"+kindLabel(kind).replace(/\s/g,"")),kind,namespace:defaultNs(),felder:kind==="command"?[{name:"AggregateId",typ:"Guid"}]:[],...pos});
@@ -9770,48 +9799,39 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     return c;
   }
 
-  function aggCard(a,ai){
+  // Aggregat-Knoten: NUR State. Nimmt Decider/Applier per Verbindung entgegen.
+  function aggStateCard(a){
     const c=h("div",{class:"card"});
-    c.append(h("h3",{},h("span",{class:"k agg"},"Aggregat"),
-      inp(a.name,v=>a.name=v),inp(a.namespace,v=>a.namespace=v),
-      h("button",{class:"rm",onclick:()=>{MODEL.aggregate.splice(ai,1);render();}},"✕")));
-
-    // State
-    c.append(h("div",{class:"step"},"State — der Zustand (Felder; abgeleitet via Ausdruck)"));
+    c.append(h("h3",{},inp(a.name,v=>a.name=v,"Aggregat"),inp(a.namespace,v=>a.namespace=v,"Domain.X"),
+      h("button",{class:"rm",onclick:()=>{MODEL.aggregate.splice(MODEL.aggregate.indexOf(a),1);render();}},"✕")));
+    c.append(h("div",{class:"blab"},"State — Felder (nimmt Decider/Applier per Verbindung entgegen):"));
     c.append(feldTabelle(a.state,fi=>{a.state.splice(fi,1);render();},true));
     c.append(h("button",{class:"add",onclick:()=>{(a.state=a.state||[]).push({name:"feld",typ:"decimal"});render();}},"+ Feld"));
-
-    // Decider — Command → OneOf-Events
-    c.append(h("div",{class:"step"},"Decider — Decide je Command: Command ⟶ OneOf-Events + Körper"));
-    (a.decider||[]).forEach((d,di)=>{
-      const box=h("div",{class:"cmdbox"});
-      box.append(h("div",{class:"cmdhead"},h("span",{class:"name"},"Decide("),recSelect(d.command,v=>{d.command=v;},["command"]),h("span",{class:"name"}," cmd)"),
-        h("button",{class:"rm",onclick:()=>{a.decider.splice(di,1);render();}},"✕")));
-      box.append(h("div",{class:"blab"},"⟶ OneOf-Ausgänge (Event/Ablehnung + optional Guard):"));
-      (d.ergibt||[]).forEach((o,oi)=>box.append(h("div",{class:"arow"},
-        recSelect(o.event,v=>{o.event=v;},["event","rejection"]),
-        inp(o.guard,v=>o.guard=v||undefined,"Guard (optional)"),
-        h("button",{class:"rm",onclick:()=>{d.ergibt.splice(oi,1);render();}},"✕"))));
-      box.append(dz("Event/Ablehnung hierher ziehen → Ausgang",["event","rejection"],name=>{(d.ergibt=d.ergibt||[]).push({event:name});render();}));
-      box.append(h("div",{class:"blab"},"Decide-Körper — Leer ⇒ throw-Platzhalter."));
-      box.append(codearea(d.rumpf,v=>d.rumpf=v||undefined,"if (this.State.Verfuegbar < cmd.Betrag) { yield return new DeckungReichtNicht(this.State.Verfuegbar, cmd.Betrag); yield break; }\nyield return new BetragReserviert(cmd.Betrag);"));
-      c.append(box);
-    });
-    c.append(h("button",{class:"add",onclick:()=>{(a.decider=a.decider||[]).push({command:"",ergibt:[]});render();}},"+ Decide-Regel"));
-    c.append(dz("Command hierher ziehen → neue Decide-Regel",["command"],name=>{(a.decider=a.decider||[]).push({command:name,ergibt:[]});render();}));
-
-    // Applier — Event → State
-    c.append(h("div",{class:"step"},"Applier — Apply je persistentem Event: Event ⟶ State-Faltung"));
-    (a.applier||[]).forEach((ap,pi)=>{
-      const box=h("div",{class:"applybox"});
-      box.append(h("div",{class:"cmdhead"},h("span",{class:"name"},"Apply("),recSelect(ap.event,v=>{ap.event=v;},["event"]),h("span",{class:"name"}," evt)"),
-        h("button",{class:"rm",onclick:()=>{a.applier.splice(pi,1);render();}},"✕")));
-      box.append(codearea(ap.rumpf,v=>ap.rumpf=v||undefined,"this.State.Saldo += evt.Betrag;"));
-      c.append(box);
-    });
-    c.append(h("button",{class:"add",onclick:()=>{(a.applier=a.applier||[]).push({event:""});render();}},"+ Apply-Regel"));
-    c.append(dz("Event hierher ziehen → neue Apply-Regel",["event"],name=>{(a.applier=a.applier||[]).push({event:name});render();}));
-
+    return c;
+  }
+  // Decider-Knoten: Command (rein) ⟶ OneOf-Events (raus) + Körper; gehört zu einem Aggregat.
+  function deciderCard(d){
+    const c=h("div",{class:"card"});
+    c.append(h("h3",{},h("span",{class:"name"},"Decide("),recSelect(d.command,v=>{d.command=v;render();},["command"]),h("span",{class:"name"}," cmd)"),
+      h("button",{class:"rm",onclick:()=>{MODEL.decider.splice(MODEL.decider.indexOf(d),1);render();}},"✕")));
+    c.append(h("div",{class:"arow"},h("span",{class:"lbl"},"im Aggregat"),aggSelect(d.aggregat,v=>{d.aggregat=v;render();})));
+    c.append(h("div",{class:"blab"},"⟶ OneOf-Ausgänge (Event/Ablehnung + optional Guard) — oder Event-Knoten hierher ziehen:"));
+    (d.ergibt||[]).forEach((o,oi)=>c.append(h("div",{class:"arow"},
+      recSelect(o.event,v=>{o.event=v;},["event","rejection"]),
+      inp(o.guard,v=>o.guard=v||undefined,"Guard (optional)"),
+      h("button",{class:"rm",onclick:()=>{d.ergibt.splice(oi,1);render();}},"✕"))));
+    c.append(h("button",{class:"add",onclick:()=>{(d.ergibt=d.ergibt||[]).push({event:""});render();}},"+ Ausgang"));
+    c.append(h("div",{class:"blab"},"Decide-Körper — Leer ⇒ throw-Platzhalter."));
+    c.append(codearea(d.rumpf,v=>d.rumpf=v||undefined,"if (this.State.Verfuegbar < cmd.Betrag) { yield return new DeckungReichtNicht(this.State.Verfuegbar, cmd.Betrag); yield break; }\nyield return new BetragReserviert(cmd.Betrag);"));
+    return c;
+  }
+  // Applier-Knoten: Event (rein) faltet den State; gehört zu einem Aggregat.
+  function applierCard(a){
+    const c=h("div",{class:"card"});
+    c.append(h("h3",{},h("span",{class:"name"},"Apply("),recSelect(a.event,v=>{a.event=v;render();},["event"]),h("span",{class:"name"}," evt)"),
+      h("button",{class:"rm",onclick:()=>{MODEL.applier.splice(MODEL.applier.indexOf(a),1);render();}},"✕")));
+    c.append(h("div",{class:"arow"},h("span",{class:"lbl"},"im Aggregat"),aggSelect(a.aggregat,v=>{a.aggregat=v;render();})));
+    c.append(codearea(a.rumpf,v=>a.rumpf=v||undefined,"this.State.Saldo += evt.Betrag;"));
     return c;
   }
 
@@ -9824,27 +9844,32 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   function graphNodes(){
     return [...MODEL.records.map(r=>({id:"rec:"+r.name,name:r.name,kind:r.kind,ref:r})),
             ...MODEL.aggregate.map(a=>({id:"agg:"+a.name,name:a.name,kind:"aggregate",ref:a})),
+            ...MODEL.decider.map(d=>({id:"dec:"+d._id,name:d.command||"Decide",kind:"decider",ref:d})),
+            ...MODEL.applier.map(a=>({id:"app:"+a._id,name:a.event||"Apply",kind:"applier",ref:a})),
             ...MODEL.enums.map(e=>({id:"enum:"+e.name,name:e.name,kind:"enum",ref:e})),
             ...MODEL.sagas.map(s=>({id:"saga:"+s.name,name:s.name,kind:"saga",ref:s}))];
   }
   function graphEdges(){
     const es=[];
-    MODEL.aggregate.forEach(a=>{
-      (a.decider||[]).forEach(d=>{
-        if(d.command)es.push({from:"rec:"+d.command,to:"agg:"+a.name,kind:"decide"});
-        (d.ergibt||[]).forEach(o=>{if(o.event)es.push({from:"agg:"+a.name,to:"rec:"+o.event,kind:"produce"});});
-      });
-      (a.applier||[]).forEach(ap=>{if(ap.event)es.push({from:"rec:"+ap.event,to:"agg:"+a.name,kind:"apply"});});
+    MODEL.decider.forEach(d=>{
+      if(d.command)es.push({from:"rec:"+d.command,to:"dec:"+d._id,kind:"decide"});      // Command → Decider
+      (d.ergibt||[]).forEach(o=>{if(o.event)es.push({from:"dec:"+d._id,to:"rec:"+o.event,kind:"produce"});}); // Decider → Event
+      if(d.aggregat)es.push({from:"dec:"+d._id,to:"agg:"+d.aggregat,kind:"decagg"});     // Decider → Aggregat
+    });
+    MODEL.applier.forEach(a=>{
+      if(a.event)es.push({from:"rec:"+a.event,to:"app:"+a._id,kind:"applyin"});          // Event → Applier
+      if(a.aggregat)es.push({from:"app:"+a._id,to:"agg:"+a.aggregat,kind:"apply"});       // Applier → Aggregat
     });
     return es;
   }
   function autoLayout(){
-    // Spalten wie Event Modeling; y stapelt PRO Spalte (kein Überlappen).
-    const spalte={command:40,aggregate:400,event:760,rejection:760,valueobject:1080,enum:1080,saga:400};
+    // Spalten wie Event Modeling; y stapelt PRO Spalte mit höhen-bewusstem Abstand (kein Überlappen).
+    const spalte={command:40,decider:320,aggregate:660,applier:320,event:980,rejection:980,valueobject:1280,enum:1280,saga:660};
+    const step={command:120,event:120,rejection:120,valueobject:140,enum:120,aggregate:220,decider:300,applier:200,saga:220};
     const yByX={};
-    graphNodes().forEach(n=>{const r=n.ref;const x=spalte[n.kind]!==undefined?spalte[n.kind]:40;
-      if(typeof r.x==="number"&&typeof r.y==="number"){yByX[x]=Math.max(yByX[x]||40,r.y+80);return;}
-      const y=yByX[x]||40; r.x=x; r.y=y; yByX[x]=y+80;});
+    graphNodes().forEach(n=>{const r=n.ref;const x=spalte[n.kind]!==undefined?spalte[n.kind]:40;const s=step[n.kind]||120;
+      if(typeof r.x==="number"&&typeof r.y==="number"){yByX[x]=Math.max(yByX[x]||40,r.y+s);return;}
+      const y=yByX[x]||40; r.x=x; r.y=y; yByX[x]=y+s;});
   }
   function renderGraph(){
     const root=document.getElementById("de-form");root.innerHTML="";
@@ -9856,12 +9881,16 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
       h("button",{class:"add",onclick:()=>addRecord("valueobject")},"+ Value Object"),
       h("button",{class:"add",onclick:()=>addEnum()},"+ Enum"),
       h("button",{class:"add",onclick:()=>addAggregat()},"+ Aggregat"),
+      h("button",{class:"add",onclick:()=>neuerKnoten("decider")},"+ Decider"),
+      h("button",{class:"add",onclick:()=>neuerKnoten("applier")},"+ Applier"),
       h("button",{class:"add",onclick:()=>addSaga()},"+ Saga")));
     root.append(h("div",{class:"glegend"},
-      h("span",{},h("i",{style:"border-color:#5a7bb0"}),"Command → Aggregat (Decide)"),
-      h("span",{},h("i",{style:"border-color:#b08a4a"}),"Aggregat → Event (produziert)"),
-      h("span",{},h("i",{style:"border-color:#4a9a6a;border-top-style:dashed"}),"Event → Aggregat (Apply)"),
-      h("span",{},"· Doppelklick auf die Fläche = Rohzelle · Kopf ziehen rastet ein · Port ziehen = verbinden")));
+      h("span",{},h("i",{style:"border-color:#5a7bb0"}),"Command → Decider"),
+      h("span",{},h("i",{style:"border-color:#b08a4a"}),"Decider → Event"),
+      h("span",{},h("i",{style:"border-color:#7c5cff"}),"Decider → Aggregat"),
+      h("span",{},h("i",{style:"border-color:#4aa0a0"}),"Event → Applier"),
+      h("span",{},h("i",{style:"border-color:#4a9a6a;border-top-style:dashed"}),"Applier → Aggregat"),
+      h("span",{},"· Doppelklick = Rohzelle · Kopf ziehen rastet ein · Port ziehen = verbinden")));
     autoLayout();
     const canvas=h("div",{class:"gcanvas"});
     canvas.ondblclick=e=>{if(e.target!==canvas&&e.target.tagName!=="svg"&&e.target.tagName!=="path")return;
@@ -9884,28 +9913,34 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     const opt=(kind,label)=>h("button",{onclick:()=>{pick.remove();neuerKnoten(kind,x,y);}},label);
     pick.append(h("div",{class:"gpick-t"},"Was soll hier entstehen?"),
       opt("command","Command"),opt("event","Event"),opt("rejection","Ablehnung"),
-      opt("valueobject","Value Object"),opt("enum","Enum"),opt("aggregate","Aggregat"),opt("saga","Saga"));
+      opt("valueobject","Value Object"),opt("enum","Enum"),opt("aggregate","Aggregat"),
+      opt("decider","Decider"),opt("applier","Applier"),opt("saga","Saga"));
     canvas.append(pick);
     // Wegklicken schließt den Picker.
     setTimeout(()=>{const off=ev=>{if(!pick.contains(ev.target)){pick.remove();document.removeEventListener("pointerdown",off);}};document.addEventListener("pointerdown",off);},0);
   }
 
   // Ein Knoten = Kopf (Griff + Port) + Körper (der In-Place-Editor: recordCard/aggCard/…).
+  const NODELABEL={aggregate:"Aggregat",enum:"Enum",saga:"Saga",decider:"Decider",applier:"Applier"};
   function nodeEditor(n){
-    const el=h("div",{class:"gnode2 n-"+n.kind+(["aggregate","saga"].includes(n.kind)?" wide":"")});
+    const el=h("div",{class:"gnode2 n-"+n.kind+(["aggregate","saga","decider"].includes(n.kind)?" wide":"")});
     el.dataset.id=n.id;
     el.style.left=(n.ref.x||0)+"px";el.style.top=(n.ref.y||0)+"px";
-    const label=n.kind==="aggregate"?"Aggregat":n.kind==="enum"?"Enum":n.kind==="saga"?"Saga":kindLabel(n.kind);
+    const label=NODELABEL[n.kind]||kindLabel(n.kind);
     const head=h("div",{class:"ghead"},h("span",{class:"gh-move"},"⠿ "+label));
-    if(n.kind==="command"||n.kind==="event"||n.kind==="rejection"){
+    if(["command","event","rejection","decider","applier"].includes(n.kind)){
       const port=h("div",{class:"gh-port",draggable:"true",title:"Ziehen zum Verbinden"});
-      port.ondragstart=e=>{e.stopPropagation();e.dataTransfer.setData("text/plain",JSON.stringify({name:n.name,kind:n.kind}));};
+      port.ondragstart=e=>{e.stopPropagation();
+        const payload=(n.kind==="decider"||n.kind==="applier")?{kind:n.kind,id:n.ref._id}:{name:n.name,kind:n.kind};
+        e.dataTransfer.setData("text/plain",JSON.stringify(payload));};
       head.append(port);
     }
     head.onpointerdown=e=>{if(e.target.classList.contains("gh-port"))return;startMove(e,el,n.ref);};
     el.append(head);
     const body=h("div",{class:"gbody"});
-    if(n.kind==="aggregate")body.append(aggCard(n.ref,MODEL.aggregate.indexOf(n.ref)));
+    if(n.kind==="aggregate")body.append(aggStateCard(n.ref));
+    else if(n.kind==="decider")body.append(deciderCard(n.ref));
+    else if(n.kind==="applier")body.append(applierCard(n.ref));
     else if(n.kind==="enum")body.append(enumCard(n.ref,MODEL.enums.indexOf(n.ref)));
     else if(n.kind==="saga")body.append(sagaCard(n.ref,MODEL.sagas.indexOf(n.ref)));
     else body.append(recordCard(n.ref,MODEL.records.indexOf(n.ref)));
@@ -9924,14 +9959,15 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
       ref.x=nx;ref.y=ny;el.style.left=nx+"px";el.style.top=ny+"px";if(window.__deDrawEdges)window.__deDrawEdges();};
     el.onpointerup=()=>{el.classList.remove("dragging");try{el.releasePointerCapture(e.pointerId);}catch(_){}el.onpointermove=null;el.onpointerup=null;};
   }
-  function connectNodes(src,tgt){
-    if(src.kind==="command"&&tgt.kind==="aggregate"){const a=aggByName(tgt.name);
-      if(a&&!(a.decider||[]).some(d=>d.command===src.name))(a.decider=a.decider||[]).push({command:src.name,ergibt:[]});}
-    else if(src.kind==="command"&&(tgt.kind==="event"||tgt.kind==="rejection")){
-      MODEL.aggregate.forEach(a=>{const d=(a.decider||[]).find(d=>d.command===src.name);
-        if(d&&!(d.ergibt||[]).some(o=>o.event===tgt.name))(d.ergibt=d.ergibt||[]).push({event:tgt.name});});}
-    else if(src.kind==="event"&&tgt.kind==="aggregate"){const a=aggByName(tgt.name);
-      if(a&&!(a.applier||[]).some(x=>x.event===src.name))(a.applier=a.applier||[]).push({event:src.name});}
+  // Verbinden: Command→Decider, Event→Decider (Ausgang), Decider→Aggregat, Event→Applier, Applier→Aggregat.
+  function connectNodes(src,n){
+    const T=n.kind, tref=n.ref;
+    if(src.kind==="command"&&T==="decider"){tref.command=src.name;}
+    else if((src.kind==="event"||src.kind==="rejection")&&T==="decider"){
+      if(!(tref.ergibt||[]).some(o=>o.event===src.name))(tref.ergibt=tref.ergibt||[]).push({event:src.name});}
+    else if(src.kind==="decider"&&T==="aggregate"){const d=MODEL.decider.find(d=>d._id===src.id);if(d)d.aggregat=n.name;}
+    else if(src.kind==="event"&&T==="applier"){tref.event=src.name;}
+    else if(src.kind==="applier"&&T==="aggregate"){const a=MODEL.applier.find(a=>a._id===src.id);if(a)a.aggregat=n.name;}
     else return;
     render();
   }
@@ -9942,7 +9978,8 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     const p=document.createElementNS(SVGNS,"path");
     p.setAttribute("d","M"+x1+","+y1+" C"+mx+","+y1+" "+mx+","+y2+" "+x2+","+y2);
     p.setAttribute("fill","none");
-    p.setAttribute("stroke",e.kind==="apply"?"#4a9a6a":e.kind==="produce"?"#b08a4a":"#5a7bb0");
+    const farbe={decide:"#5a7bb0",produce:"#b08a4a",decagg:"#7c5cff",applyin:"#4aa0a0",apply:"#4a9a6a"};
+    p.setAttribute("stroke",farbe[e.kind]||"#5a7bb0");
     p.setAttribute("stroke-width","1.8");
     if(e.kind==="apply")p.setAttribute("stroke-dasharray","5 4");
     return p;

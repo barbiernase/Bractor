@@ -42,17 +42,17 @@ public sealed class DomainEditorScaffolderTests
                     new() { Name = "Gesperrt", Typ = "bool" },
                     new() { Name = "Verfuegbar", Typ = "decimal", Ausdruck = "Saldo - Reserviert" },
                 ],
-                Decider =
-                [
-                    new() { Command = "EroeffneKonto", Ergibt = [ new() { Event = "KontoEroeffnet" }, new() { Event = "KontoExistiertBereits", Guard = "State.Version > 0" } ] },
-                    new() { Command = "ReserviereBetrag", Ergibt = [ new() { Event = "BetragReserviert" }, new() { Event = "KontoGesperrt" }, new() { Event = "DeckungReichtNicht", Guard = "State.Verfuegbar < cmd.Betrag" }, new() { Event = "KontoNichtGefunden" } ] },
-                ],
-                Applier =
-                [
-                    new() { Event = "KontoEroeffnet" },
-                    new() { Event = "BetragReserviert" },
-                ],
             },
+        ],
+        Decider =
+        [
+            new() { Aggregat = "Konto", Command = "EroeffneKonto", Ergibt = [ new() { Event = "KontoEroeffnet" }, new() { Event = "KontoExistiertBereits", Guard = "State.Version > 0" } ] },
+            new() { Aggregat = "Konto", Command = "ReserviereBetrag", Ergibt = [ new() { Event = "BetragReserviert" }, new() { Event = "KontoGesperrt" }, new() { Event = "DeckungReichtNicht", Guard = "State.Verfuegbar < cmd.Betrag" }, new() { Event = "KontoNichtGefunden" } ] },
+        ],
+        Applier =
+        [
+            new() { Aggregat = "Konto", Event = "KontoEroeffnet" },
+            new() { Aggregat = "Konto", Event = "BetragReserviert" },
         ],
     };
 
@@ -142,12 +142,12 @@ public sealed class DomainEditorScaffolderTests
     public void Vorhandener_Rumpf_ersetzt_den_Platzhalter()
     {
         var m = KontoModell();
-        var agg = m.Aggregate[0] with
+        var m2 = m with
         {
-            Decider = [ m.Aggregate[0].Decider[0] with { Rumpf = "yield return new KontoEroeffnet(cmd.StartSaldo, cmd.Gesperrt);" }, m.Aggregate[0].Decider[1] ],
-            Applier = [ m.Aggregate[0].Applier[0] with { Rumpf = "this.State.Saldo = evt.StartSaldo;" }, m.Aggregate[0].Applier[1] ],
+            Decider = [ m.Decider[0] with { Rumpf = "yield return new KontoEroeffnet(cmd.StartSaldo, cmd.Gesperrt);" }, m.Decider[1] ],
+            Applier = [ m.Applier[0] with { Rumpf = "this.State.Saldo = evt.StartSaldo;" }, m.Applier[1] ],
         };
-        var dateien = Scaffolder.Generiere(m with { Aggregate = [agg] });
+        var dateien = Scaffolder.Generiere(m2);
         Inhalt(dateien, "Konto/Decider.cs").Should().Contain("            yield return new KontoEroeffnet(cmd.StartSaldo, cmd.Gesperrt);");
         Inhalt(dateien, "Konto/Applier.cs").Should().Contain("            this.State.Saldo = evt.StartSaldo;");
     }
@@ -227,7 +227,7 @@ public sealed class DomainEditorScaffolderTests
     public void Validator_meldet_Decide_auf_unbekanntes_Event()
     {
         var m = KontoModell();
-        var agg = m.Aggregate[0] with { Decider = [ m.Aggregate[0].Decider[0] with { Ergibt = [ new() { Event = "GibtsNicht" } ] }, m.Aggregate[0].Decider[1] ] };
-        Validator.Prüfe(m with { Aggregate = [agg] }).Should().Contain(b => b.Code == "EDIT-EVENT-FEHLT" && b.IstFehler);
+        var m2 = m with { Decider = [ m.Decider[0] with { Ergibt = [ new() { Event = "GibtsNicht" } ] }, m.Decider[1] ] };
+        Validator.Prüfe(m2).Should().Contain(b => b.Code == "EDIT-EVENT-FEHLT" && b.IstFehler);
     }
 }

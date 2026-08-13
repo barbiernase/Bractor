@@ -48,13 +48,15 @@ public static class Scaffolder
                 dateien.Add(new($"{ordner}/ValueObjects.cs", ValueObjectDatei(ns, vos)));
         }
 
-        // ── Aggregate (Komposition) → State + Decider + Applier ──
+        // ── Aggregate → State; Decider/Applier je Aggregat aus den eigenständigen Regeln ──
         foreach (var agg in modell.Aggregate)
         {
             var ordner = OrdnerVon(agg.Namespace);
+            var decider = modell.Decider.Where(d => d.Aggregat == agg.Name).ToList();
+            var applier = modell.Applier.Where(a => a.Aggregat == agg.Name).ToList();
             dateien.Add(new($"{ordner}/{agg.Name}.cs", StateDatei(agg)));
-            dateien.Add(new($"{ordner}/Decider.cs", DeciderDatei(agg)));
-            dateien.Add(new($"{ordner}/Applier.cs", ApplierDatei(agg)));
+            dateien.Add(new($"{ordner}/Decider.cs", DeciderDatei(agg, decider)));
+            dateien.Add(new($"{ordner}/Applier.cs", ApplierDatei(agg, applier)));
         }
 
         foreach (var saga in modell.Sagas)
@@ -160,7 +162,7 @@ public static class Scaffolder
         return b.ToString();
     }
 
-    private static string DeciderDatei(Aggregat agg)
+    private static string DeciderDatei(Aggregat agg, IReadOnlyList<DecideRegel> decider)
     {
         var b = Kopf(agg.Namespace, "using Abstractions;");
         b.AppendLine($"public partial class {agg.Name}");
@@ -168,15 +170,15 @@ public static class Scaffolder
         b.AppendLine($"    public partial class Decider : IDecider<{agg.Name}>");
         b.AppendLine("    {");
 
-        for (var i = 0; i < agg.Decider.Count; i++)
+        for (var i = 0; i < decider.Count; i++)
         {
-            var d = agg.Decider[i];
+            var d = decider[i];
             var oneOf = string.Join(", ", d.Ergibt.Select(a => a.Event));
             b.AppendLine($"        public IEnumerable<OneOf<{oneOf}>> Decide({d.Command} cmd)");
             b.AppendLine("        {");
             Rumpf(b, d.Rumpf, "TODO: Entscheidungslogik.");
             b.AppendLine("        }");
-            if (i < agg.Decider.Count - 1) b.AppendLine();
+            if (i < decider.Count - 1) b.AppendLine();
         }
 
         b.AppendLine("    }");
@@ -184,7 +186,7 @@ public static class Scaffolder
         return b.ToString();
     }
 
-    private static string ApplierDatei(Aggregat agg)
+    private static string ApplierDatei(Aggregat agg, IReadOnlyList<ApplyRegel> applier)
     {
         var b = Kopf(agg.Namespace, "using Abstractions;");
         b.AppendLine($"public partial class {agg.Name}");
@@ -192,14 +194,14 @@ public static class Scaffolder
         b.AppendLine($"    public partial class Applier : IApplier<{agg.Name}>");
         b.AppendLine("    {");
 
-        for (var i = 0; i < agg.Applier.Count; i++)
+        for (var i = 0; i < applier.Count; i++)
         {
-            var a = agg.Applier[i];
+            var a = applier[i];
             b.AppendLine($"        public void Apply({a.Event} evt)");
             b.AppendLine("        {");
             Rumpf(b, a.Rumpf, "TODO: Apply-Logik.");
             b.AppendLine("        }");
-            if (i < agg.Applier.Count - 1) b.AppendLine();
+            if (i < applier.Count - 1) b.AppendLine();
         }
 
         b.AppendLine("    }");

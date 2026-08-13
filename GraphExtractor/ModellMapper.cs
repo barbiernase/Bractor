@@ -38,12 +38,38 @@ public static class ModellMapper
                 Felder = n.Event!.Fields.Select(MappeFeld).ToList(),
             });
 
-        // Aggregate: Komposition aus State + Decider + Applier.
-        var aggregate = graph.Nodes
+        // Aggregate: nur State. Decider/Applier sind eigenständig und verweisen aufs Aggregat.
+        var aggNodes = graph.Nodes
             .Where(n => n.Kind == NodeKind.aggregate && n.Aggregate is not null && n.FullName is not null)
             .OrderBy(n => n.Name, StringComparer.Ordinal)
-            .Select(n => MappeAggregat(n, commandByName))
             .ToList();
+
+        var aggregate = aggNodes.Select(n => new Aggregat
+        {
+            Name = n.Name,
+            Namespace = n.Namespace ?? $"Domain.{n.Name}",
+            State = n.Aggregate!.State.Select(MappeFeld).ToList(),
+        }).ToList();
+
+        var decider = new List<DecideRegel>();
+        var applier = new List<ApplyRegel>();
+        foreach (var n in aggNodes)
+        {
+            foreach (var cn in n.Aggregate!.Handles.Where(commandByName.ContainsKey).Select(name => commandByName[name]))
+                decider.Add(new DecideRegel
+                {
+                    Aggregat = n.Name,
+                    Command = cn.Name,
+                    Ergibt = cn.Command!.Produces.Select(o => new Ausgang { Event = o.Event, Guard = o.Guard }).ToList(),
+                });
+
+            var persistente = n.Aggregate!.Handles
+                .Where(commandByName.ContainsKey).Select(name => commandByName[name])
+                .SelectMany(cn => cn.Command!.Produces).Where(o => o.Persisted).Select(o => o.Event)
+                .Distinct(StringComparer.Ordinal);
+            foreach (var ev in persistente)
+                applier.Add(new ApplyRegel { Aggregat = n.Name, Event = ev });
+        }
 
         var sagas = graph.Nodes
             .Where(n => n.Kind == NodeKind.process && n.Process is not null)
@@ -51,40 +77,7 @@ public static class ModellMapper
             .Select(n => MappeSaga(n, commandByName, eventByName))
             .ToList();
 
-        return new EditorModell { Records = records, Aggregate = aggregate, Sagas = sagas };
-    }
-
-    private static Aggregat MappeAggregat(Node node, IReadOnlyDictionary<string, Node> commandByName)
-    {
-        var info = node.Aggregate!;
-
-        var decider = info.Handles
-            .Where(commandByName.ContainsKey)
-            .Select(name => commandByName[name])
-            .Select(cn => new DecideRegel
-            {
-                Command = cn.Name,
-                Ergibt = cn.Command!.Produces.Select(o => new Ausgang { Event = o.Event, Guard = o.Guard }).ToList(),
-            })
-            .ToList();
-
-        // Applier: je persistentem Event, das die Commands des Aggregats produzieren (dedupliziert).
-        var applier = decider
-            .SelectMany(d => commandByName.TryGetValue(d.Command, out var cn) ? cn.Command!.Produces : [])
-            .Where(o => o.Persisted)
-            .Select(o => o.Event)
-            .Distinct(StringComparer.Ordinal)
-            .Select(name => new ApplyRegel { Event = name })
-            .ToList();
-
-        return new Aggregat
-        {
-            Name = node.Name,
-            Namespace = node.Namespace ?? $"Domain.{node.Name}",
-            State = info.State.Select(MappeFeld).ToList(),
-            Decider = decider,
-            Applier = applier,
-        };
+        return new EditorModell { Records = records, Aggregate = aggregate, Decider = decider, Applier = applier, Sagas = sagas };
     }
 
     private static Saga MappeSaga(Node node, IReadOnlyDictionary<string, Node> commandByName, IReadOnlyDictionary<string, Node> eventByName)

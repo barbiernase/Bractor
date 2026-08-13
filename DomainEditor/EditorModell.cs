@@ -24,8 +24,12 @@ public sealed record EditorModell
     public IReadOnlyList<Record> Records { get; init; } = [];
     /// <summary>Enums der Domäne (auch Feldtypen), z. B. <c>BildVersion { Dc0, Dc2 }</c>.</summary>
     public IReadOnlyList<Enumeration> Enums { get; init; } = [];
-    /// <summary>Die Komposition: Aggregate (State + Decider + Applier), die die Records verdrahten.</summary>
+    /// <summary>Aggregate = Konsistenzgrenzen; halten den State und nehmen Decider/Applier entgegen.</summary>
     public IReadOnlyList<Aggregat> Aggregate { get; init; } = [];
+    /// <summary>Decider (Command → OneOf-Events) — je Regel EIGENSTÄNDIG, referenziert sein Aggregat.</summary>
+    public IReadOnlyList<DecideRegel> Decider { get; init; } = [];
+    /// <summary>Applier (Event → State-Faltung) — je Regel EIGENSTÄNDIG, referenziert sein Aggregat.</summary>
+    public IReadOnlyList<ApplyRegel> Applier { get; init; } = [];
     public IReadOnlyList<Saga> Sagas { get; init; } = [];
 
     // Serialisierung: camelCase, Enums als String, Nulls weglassen — wie knowledge-graph.json.
@@ -98,8 +102,9 @@ public sealed record Enumeration
 }
 
 /// <summary>
-/// Die KOMPOSITION: ein Aggregat verdrahtet die Records. Es hält den State (Felder) und die
-/// Regeln — Decider (Command → OneOf-Events) und Applier (Event → State-Faltung).
+/// Ein Aggregat = eine Konsistenzgrenze. Hält NUR den State (Felder). Decider und Applier sind
+/// eigenständige Bausteine (<see cref="DecideRegel"/>/<see cref="ApplyRegel"/>), die IHR Aggregat per
+/// Namen referenzieren — das Aggregat „nimmt sie entgegen".
 /// </summary>
 public sealed record Aggregat
 {
@@ -110,15 +115,18 @@ public sealed record Aggregat
     public IReadOnlyList<Feld> State { get; init; } = [];
     /// <summary>Zusätzliche State-Member als roher C#-Text (Hilfsmethoden), in die Klasse eingehängt.</summary>
     public string? StateZusatz { get; init; }
-    public IReadOnlyList<DecideRegel> Decider { get; init; } = [];
-    public IReadOnlyList<ApplyRegel> Applier { get; init; } = [];
 }
 
-/// <summary>Eine Decide-Regel: welcher Command → welche OneOf-Events (+ optionaler Körper).</summary>
+/// <summary>
+/// Ein Decider (eigenständig): entscheidet für sein <see cref="Aggregat"/> einen Command zu OneOf-
+/// Events. Command → Decider → Events, und Decider → Aggregat.
+/// </summary>
 public sealed record DecideRegel
 {
+    /// <summary>Name des Aggregats, zu dem dieser Decider gehört.</summary>
+    public required string Aggregat { get; init; }
     /// <summary>Name des Command-Records.</summary>
-    public required string Command { get; init; }
+    public string Command { get; init; } = "";
     /// <summary>Die OneOf-Ausgänge (Event-/Ablehnungs-Record-Namen + optionaler Guard) in Reihenfolge.</summary>
     public IReadOnlyList<Ausgang> Ergibt { get; init; } = [];
     /// <summary>Optionaler Decide-Körper; null ⇒ kompilierbarer <c>throw</c>-Platzhalter.</summary>
@@ -132,11 +140,16 @@ public sealed record Ausgang
     public string? Guard { get; init; }
 }
 
-/// <summary>Eine Apply-Regel: welcher (persistente) Event faltet den State wie (+ optionaler Körper).</summary>
+/// <summary>
+/// Ein Applier (eigenständig): faltet für sein <see cref="Aggregat"/> einen (persistenten) Event in
+/// den State. Event → Applier → Aggregat.
+/// </summary>
 public sealed record ApplyRegel
 {
+    /// <summary>Name des Aggregats, zu dem dieser Applier gehört.</summary>
+    public required string Aggregat { get; init; }
     /// <summary>Name des Event-Records.</summary>
-    public required string Event { get; init; }
+    public string Event { get; init; } = "";
     public string? Rumpf { get; init; }
 }
 

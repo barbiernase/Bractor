@@ -49,24 +49,28 @@ public static class Validator
                     befunde.Add(new("info", "EDIT-TYP-UNBEKANNT", $"{r.Name}.{f.Name}: Typ '{f.Typ}' ist kein Skalar/Record/Enum der Domäne — kompiliert nur, wenn der Typ existiert."));
         }
 
-        // Aggregat-Komposition.
-        foreach (var agg in modell.Aggregate)
+        // Eigenständige Decider/Applier (verweisen auf ihr Aggregat).
+        var aggNamen = new HashSet<string>(modell.Aggregate.Select(a => a.Name), StringComparer.Ordinal);
+        foreach (var d in modell.Decider)
         {
-            foreach (var d in agg.Decider)
-            {
-                if (!commandNamen.Contains(d.Command))
-                    befunde.Add(new("error", "EDIT-DECIDE-CMD", $"{agg.Name}.Decide: '{d.Command}' ist kein Command-Record."));
-                if (d.Ergibt.Count is 0)
-                    befunde.Add(new("error", "EDIT-ONEOF-LEER", $"{agg.Name}.Decide({d.Command}) hat keinen Ausgang — mindestens ein Event nötig."));
-                else if (d.Ergibt.Count > 5)
-                    befunde.Add(new("error", "EDIT-ONEOF-5", $"{agg.Name}.Decide({d.Command}) hat {d.Ergibt.Count} Ausgänge — OneOf erlaubt höchstens 5."));
-                foreach (var a in d.Ergibt)
-                    if (!eventNamen.Contains(a.Event))
-                        befunde.Add(new("error", "EDIT-EVENT-FEHLT", $"{agg.Name}.Decide({d.Command}) → '{a.Event}' ist kein Event/Ablehnungs-Record."));
-            }
-            foreach (var a in agg.Applier)
-                if (!persistentEvents.Contains(a.Event))
-                    befunde.Add(new("error", "EDIT-APPLY-EVENT", $"{agg.Name}.Apply: '{a.Event}' ist kein persistenter Event-Record."));
+            if (!aggNamen.Contains(d.Aggregat))
+                befunde.Add(new("error", "EDIT-DECIDE-AGG", $"Decider({d.Command}): '{d.Aggregat}' ist kein Aggregat."));
+            if (!commandNamen.Contains(d.Command))
+                befunde.Add(new("error", "EDIT-DECIDE-CMD", $"Decider: '{d.Command}' ist kein Command-Record."));
+            if (d.Ergibt.Count is 0)
+                befunde.Add(new("error", "EDIT-ONEOF-LEER", $"Decider({d.Command}) hat keinen Ausgang — mindestens ein Event nötig."));
+            else if (d.Ergibt.Count > 5)
+                befunde.Add(new("error", "EDIT-ONEOF-5", $"Decider({d.Command}) hat {d.Ergibt.Count} Ausgänge — OneOf erlaubt höchstens 5."));
+            foreach (var a in d.Ergibt)
+                if (!eventNamen.Contains(a.Event))
+                    befunde.Add(new("error", "EDIT-EVENT-FEHLT", $"Decider({d.Command}) → '{a.Event}' ist kein Event/Ablehnungs-Record."));
+        }
+        foreach (var a in modell.Applier)
+        {
+            if (!aggNamen.Contains(a.Aggregat))
+                befunde.Add(new("error", "EDIT-APPLY-AGG", $"Applier({a.Event}): '{a.Aggregat}' ist kein Aggregat."));
+            if (!persistentEvents.Contains(a.Event))
+                befunde.Add(new("error", "EDIT-APPLY-EVENT", $"Applier: '{a.Event}' ist kein persistenter Event-Record."));
         }
 
         // Sagas.
