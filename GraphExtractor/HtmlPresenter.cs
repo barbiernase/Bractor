@@ -615,54 +615,93 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .arow{display:flex;gap:6px;align-items:center;margin:2px 0}
 #de .arow select{width:200px}
 #de .arow input{flex:1}
-/* Node-Editor */
-#de .gcanvas{position:relative;width:100%;min-width:1100px;min-height:1500px;overflow:hidden;border:1px solid #232a38;border-radius:8px;
-  background-color:#0b0e15;background-image:linear-gradient(#161d2b 1px,transparent 1px),linear-gradient(90deg,#161d2b 1px,transparent 1px);background-size:20px 20px}
-#de svg.gedges{position:absolute;inset:0;width:100%;height:100%;pointer-events:none}
-#de .gnode{position:absolute;min-width:120px;max-width:210px;background:#141926;border:1px solid #2c3547;border-radius:8px;padding:6px 9px;cursor:grab;user-select:none;box-shadow:0 2px 6px #0006;touch-action:none}
-#de .gnode.dragging{cursor:grabbing;z-index:6;box-shadow:0 8px 22px #000a}
-#de .gnode.droptarget{outline:2px solid #7c5cff;outline-offset:1px}
-#de .gnode .gk{font-size:9px;text-transform:uppercase;letter-spacing:.5px;color:#8b93a7}
-#de .gnode .gt{font-weight:700;color:#eef2f8;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:ui-monospace,monospace}
-#de .gnode.n-command{border-color:#35507a}
-#de .gnode.n-event{border-color:#7a5a2a}
-#de .gnode.n-rejection{border-color:#7a2a3a}
-#de .gnode.n-valueobject{border-color:#2a6a5a}
-#de .gnode.n-aggregate{border-color:#7c5cff;background:#181733}
-#de .gnode.n-enum{border-color:#5a5a70;background:#17171f}
-#de .gnode.n-saga{border-color:#5a3a7a;background:#1a1526}
-#de .gnode.sel{outline:2px solid #cfe;outline-offset:1px;box-shadow:0 0 0 3px #7c5cff55,0 6px 18px #0009}
-#de .gtoolbar{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px;position:sticky;top:0;background:#0d1017;padding:4px 0;z-index:3}
-/* Design-in-Place-Knoten */
-#de .gnode2{position:absolute;width:260px;background:#141926;border:1px solid #2c3547;border-radius:9px;box-shadow:0 3px 12px #0007}
-#de .gnode2.wide{width:420px}
-#de .gnode2.dragging{z-index:8;box-shadow:0 12px 30px #000c}
-#de .gnode2.droptarget{outline:2px solid #7c5cff;outline-offset:1px}
-#de .gnode2.n-command{border-color:#35507a}
-#de .gnode2.n-event{border-color:#7a5a2a}
-#de .gnode2.n-rejection{border-color:#7a2a3a}
-#de .gnode2.n-valueobject{border-color:#2a6a5a}
-#de .gnode2.n-enum{border-color:#5a5a70}
-#de .gnode2.n-aggregate{border-color:#7c5cff;background:#181733}
-#de .gnode2.n-decider{border-color:#5a7bb0}
-#de .gnode2.n-applier{border-color:#4a9a6a}
-#de .gnode2.n-saga{border-color:#5a3a7a}
-#de .gbody .arow .lbl{color:#8b93a7;font-size:11px;min-width:70px}
-#de .ghead{display:flex;align-items:center;gap:6px;padding:4px 8px;background:#1b2233;border-radius:8px 8px 0 0;border-bottom:1px solid #232a38;cursor:grab;user-select:none;touch-action:none}
-#de .gnode2.dragging .ghead{cursor:grabbing}
-#de .gh-move{flex:1;color:#9aa3b7;font-size:10px;text-transform:uppercase;letter-spacing:.6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#de .gh-port{width:14px;height:14px;border-radius:50%;background:#7c5cff;border:2px solid #0b0e15;cursor:crosshair;flex:none}
-#de .gbody{padding:6px 8px 8px}
+/* ── ComfyUI-Node-Editor (getippte Slots + Bézier-Kanten statt Dropdowns) ── */
+#de .col.left{overflow:hidden;display:flex;flex-direction:column}
+#de .gtoolbar{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px}
+#de .glegend2{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:#9aa3b7;margin:0 2px 8px;align-items:center}
+#de .glegend2 span{display:inline-flex;align-items:center;gap:5px}
+#de .glegend2 i{width:11px;height:11px;border-radius:50%;display:inline-block}
+#de .gcanvas{position:relative;flex:1;min-height:0;overflow:hidden;border:1px solid #232a38;border-radius:8px;
+  background-color:#0b0e15;background-image:radial-gradient(#1a2436 1.1px,transparent 1.1px);background-size:22px 22px;cursor:grab;touch-action:none}
+#de .gcanvas.panning{cursor:grabbing}
+#de .gworld{position:absolute;left:0;top:0;width:6000px;height:4000px;transform-origin:0 0;will-change:transform}
+#de svg.gedges{position:absolute;left:0;top:0;width:6000px;height:4000px;pointer-events:none;overflow:visible}
+#de .glink{pointer-events:none}
+#de .glink.internal{stroke:#7f8aa0;stroke-width:1.5;opacity:.4;pointer-events:stroke;transition:opacity .1s,stroke-width .1s}
+#de .glink.internal:hover,#de .glink.internal.hot{stroke:#cbb8ff;stroke-width:3;opacity:1}
+#de .gnode2{position:absolute;width:250px;background:#161b27;border:1px solid #2c3547;border-radius:9px;box-shadow:0 4px 14px #0008}
+#de .gnode2.dragging{box-shadow:0 14px 34px #000c;z-index:9}
+#de .gnode2.n-command{border-color:#3b6fb0}
+#de .gnode2.n-event{border-color:#3f9d5a}
+#de .gnode2.n-rejection{border-color:#b5504a}
+#de .gnode2.n-valueobject{border-color:#2f8f7d}
+#de .gnode2.n-enum{border-color:#6a6a86}
+#de .gnode2.n-aggregate{border-color:#2f9d95;width:274px}
+#de .gnode2.n-decider{border-color:#7a5cc0;width:258px}
+#de .gnode2.n-applier{border-color:#c08a3e;width:258px}
+#de .gnode2.n-saga{border-color:#8a5cc0;width:300px}
+#de .gnode2.n-transition{border-color:#8a6fc8;width:276px}
+#de .gnode2.n-state{border-color:#c9a24b;width:250px}
+#de .gnode2.collapsed .gbody{display:none}
+#de .ghead{display:flex;align-items:center;gap:6px;padding:5px 9px;border-radius:8px 8px 0 0;cursor:grab;color:#0d0f14;font-weight:700;font-size:12px;user-select:none;touch-action:none}
+#de .gnode2.n-command .ghead{background:#5b8fd0}
+#de .gnode2.n-event .ghead{background:#57b673}
+#de .gnode2.n-rejection .ghead{background:#cf6f68}
+#de .gnode2.n-valueobject .ghead{background:#49a996}
+#de .gnode2.n-enum .ghead{background:#8a8aa0}
+#de .gnode2.n-aggregate .ghead{background:#3fb0a6}
+#de .gnode2.n-decider .ghead{background:#9678d6}
+#de .gnode2.n-applier .ghead{background:#d0a35a}
+#de .gnode2.n-saga .ghead{background:#9d78d6}
+#de .gnode2.n-transition .ghead{background:#a48fd6}
+#de .gnode2.n-state .ghead{background:#d4b45f}
+#de .ghead .gtitle{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:ui-monospace,monospace}
+#de .ghead .gcol{cursor:pointer;opacity:.8;padding:0 2px;font-size:11px}
+#de .ghead .gcol:hover{opacity:1}
+#de .ghead .gx{cursor:pointer;opacity:.7;padding:0 2px}
+#de .ghead .gx:hover{opacity:1}
+#de .gbody{padding:8px 10px 10px}
 #de .gbody .card{background:none;border:0;box-shadow:none;padding:0;margin:0}
 #de .gbody .card h3{margin-bottom:6px}
 #de .gbody .card h3 .k{display:none}
-#de .gempty{position:absolute;left:24px;top:24px;color:#5c6577;font-size:12px}
+#de .gbody input,#de .gbody textarea,#de .gbody select{width:100%;box-sizing:border-box}
+#de .gbody .frow{display:flex;gap:4px;margin:2px 0;align-items:center}
+#de .gbody .frow input:first-child{flex:1;width:auto}
+#de .gbody .frow input:nth-child(2){width:92px;flex:none}
+#de .slotrow{display:flex;align-items:center;gap:6px;margin:4px 0;min-height:15px}
+#de .slotrow.o{justify-content:flex-end;text-align:right}
+#de .slotlbl{font-size:10.5px;color:#b3bbcb;font-family:ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#de .slot{width:13px;height:13px;border-radius:50%;border:2px solid #0b0e15;cursor:crosshair;flex:none;box-shadow:0 0 0 1px #000a;touch-action:none}
+#de .slot.i{margin-left:-17px}
+#de .slot.o{margin-right:-17px}
+#de .slot.t{margin-top:-16px}
+#de .slot.ro{cursor:default;opacity:.9}
+#de .slot:hover{filter:brightness(1.4)}
+#de .slot.hot{box-shadow:0 0 0 3px #fff,0 0 0 6px #7c5cff}
+#de .slot.s-command{background:#4a86d6}
+#de .slot.s-event{background:#4fb06a}
+#de .slot.s-rejection{background:#c25b52}
+#de .slot.s-decagg{background:#33b1a6}
+#de .slot.s-appagg{background:#d1953f}
+#de .slot.s-field{background:#e0b64d}
+#de .slot.s-open{background:#20293a;border-color:#46557a}
+#de .slot.s-saga{background:#9d78d6}
+#de .slot.s-sagacmd{background:#9d78d6}
+#de .slot.s-arg{background:#e0c46a}
+#de .slot.s-prozess{background:#9d78d6}
+#de .slot.sm{width:10px;height:10px;box-shadow:0 0 0 1px #000a}
+#de .slot.s-state{background:#e0b64d}
+#de .gtoprow{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:5px}
+#de .gtopfield{display:flex;flex-direction:column;align-items:center;gap:1px}
+#de .aggwrap{display:flex;justify-content:space-between;gap:8px;margin:2px 0}
+#de .aggwrap .col2{display:flex;flex-direction:column;gap:2px;min-width:92px}
+#de .gsec{font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;color:#7f8aa0;margin:6px 0 2px}
+#de .gsep{margin:9px 0 3px;padding-top:7px;border-top:1px solid #3a3350;font-size:10px;color:#c9b6ee;text-transform:uppercase;letter-spacing:.5px;font-weight:700}
+#de .gempty{position:absolute;left:60px;top:80px;color:#5c6577;font-size:12px;pointer-events:none}
 #de .gpick{position:absolute;z-index:20;background:#141926;border:1px solid #7c5cff;border-radius:8px;padding:6px;display:flex;flex-direction:column;gap:3px;box-shadow:0 10px 28px #000b;min-width:150px}
 #de .gpick .gpick-t{font-size:11px;color:#9aa3b7;padding:2px 6px 4px}
 #de .gpick button{background:#233047;color:#cfe;border:1px solid #35507a;border-radius:5px;padding:5px 10px;cursor:pointer;text-align:left;font:12px system-ui}
 #de .gpick button:hover{background:#2c3d5c}
-#de .gport{position:absolute;right:-8px;top:50%;transform:translateY(-50%);width:15px;height:15px;border-radius:50%;background:#7c5cff;border:2px solid #0b0e15;cursor:crosshair}
-#de .gport:hover{background:#9a80ff}
 #de .glegend{display:flex;gap:14px;margin:6px 2px 10px;font-size:11px;color:#9aa3b7;flex-wrap:wrap}
 #de .glegend span{display:inline-flex;align-items:center;gap:5px}
 #de .glegend i{width:20px;height:0;border-top:2px solid;display:inline-block}
@@ -727,7 +766,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 (function(){
   const SCALARS=["Guid","decimal","int","long","double","bool","string","DateTimeOffset"];
   const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"]};
-  let MODEL={schemaVersion:"2",records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[]};
+  let MODEL={schemaVersion:"2",records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[]};
   let NID=1;
   const embedded=/*__MODEL_JSON__*/;
 
@@ -735,8 +774,14 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   const textZuListe=t=>(t||"").split(",").map(s=>s.trim()).filter(Boolean);
   const kindLabel=k=>(KINDINFO[k]||["?","vo"])[0];
   const kindKlasse=k=>(KINDINFO[k]||["?","vo"])[1];
-  function normalize(m){m=m||{};m.records=m.records||[];m.enums=m.enums||[];m.aggregate=m.aggregate||[];m.decider=m.decider||[];m.applier=m.applier||[];m.sagas=m.sagas||[];
-    m.decider.forEach(d=>{if(!d._id)d._id="d"+(NID++);});m.applier.forEach(a=>{if(!a._id)a._id="a"+(NID++);});return m;}
+  function normalize(m){m=m||{};m.records=m.records||[];m.enums=m.enums||[];m.aggregate=m.aggregate||[];m.decider=m.decider||[];m.applier=m.applier||[];m.sagas=m.sagas||[];m.states=m.states||[];m.transitions=m.transitions||[];
+    m.decider.forEach(d=>{if(!d._id)d._id="d"+(NID++);});m.applier.forEach(a=>{if(!a._id)a._id="a"+(NID++);});m.states.forEach(s=>{if(!s._id)s._id="s"+(NID++);});m.transitions.forEach(t=>{if(!t._id)t._id="t"+(NID++);});
+    m.aggregate.forEach(a=>{if((a.state||[]).length&&!m.states.some(s=>s.aggregat===a.name))m.states.push({_id:"s"+(NID++),aggregat:a.name});});
+    // Round-trip: geladene Saga.Schritte → Transition-Knoten (prozess = Saga-Name), Schritte werden vor Serveraufruf neu erzeugt.
+    m.sagas.forEach(s=>{(s.schritte||[]).forEach(st=>m.transitions.push({_id:"t"+(NID++),prozess:s.name,wenn:(st.wenn||[]).slice(),
+        sammelEvent:st.sammelEvent||"",sammelAnzahl:st.sammelAnzahl||"",sende:st.sende||"",sendeJe:!!st.sendeJe,sendeJeCollection:st.sendeJeCollection||"",
+        sendeArgs:(st.sendeArgumente||[]).slice(),kompensation:st.kompensation||"",kompArgs:(st.kompensationArgumente||[]).slice()}));s.schritte=[];});
+    return m;}
   const aggSelect=(val,on)=>{const s=h("select",{onchange:e=>on(e.target.value)});
     if(!val||!MODEL.aggregate.some(a=>a.name===val)){const o=h("option",{value:val||""},val||"— Aggregat —");o.selected=true;s.append(o);}
     MODEL.aggregate.forEach(a=>{const o=h("option",{value:a.name},a.name);if(a.name===val)o.selected=true;s.append(o);});return s;};
@@ -780,7 +825,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   //    danach KOMPOSITION zu Aggregaten (State + Decider + Applier). Feldtyp kann ein anderer
   //    Record/Enum sein → so komponieren sich Records.
   // NUR der Node-Editor, DESIGN-IN-PLACE: jeder Knoten wird direkt auf der Fläche bestückt.
-  function render(){ renderGraph(); }
+  function render(){ deriveMembership(); renderGraph(); }
 
   // Eindeutiger Name — Namen sind der Referenzschlüssel für Kanten/Decider/Applier.
   function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name)]);
@@ -794,14 +839,20 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     c.append(inp(listeZuText(e.werte),v=>e.werte=textZuListe(v),"Dc0, Dc2"));
     return c;}
 
-  // Knoten anlegen — optional an einer Position (Rohzellen-Picker), sonst auto-layouten (Toolbar).
+  // Knoten anlegen — an einer Position (Picker) ODER sichtbar im aktuellen Ausschnitt (Toolbar).
+  let SPAWN=0;
+  function spawnPos(){if(!canvas)return {};const r=canvas.getBoundingClientRect();
+    const c=toWorld(r.left+60,r.top+70);SPAWN++;
+    return {x:Math.round((c.x+(SPAWN%8)*28)/GRID)*GRID,y:Math.round((c.y+(SPAWN%8)*28)/GRID)*GRID};}
   function neuerKnoten(kind,x,y){
-    const pos=(typeof x==="number")?{x:Math.round(x/GRID)*GRID,y:Math.round(y/GRID)*GRID}:{};
+    const pos=(typeof x==="number")?{x:Math.round(x/GRID)*GRID,y:Math.round(y/GRID)*GRID}:spawnPos();
     if(kind==="aggregate")MODEL.aggregate.push({name:uniq("NeuesAggregat"),namespace:defaultNs(),state:[],...pos});
     else if(kind==="decider")MODEL.decider.push({_id:"d"+(NID++),aggregat:"",command:"",ergibt:[],...pos});
     else if(kind==="applier")MODEL.applier.push({_id:"a"+(NID++),aggregat:"",event:"",...pos});
+    else if(kind==="state")MODEL.states.push({_id:"s"+(NID++),aggregat:"",felder:[],...pos});
     else if(kind==="enum")MODEL.enums.push({name:uniq("NeuEnum"),namespace:defaultNs(),werte:["A","B"],...pos});
     else if(kind==="saga")MODEL.sagas.push({name:uniq("NeuerProzess"),namespace:defaultNs(),triggerEvent:"",schritte:[],extraUsings:[],...pos});
+    else if(kind==="transition")MODEL.transitions.push({_id:"t"+(NID++),prozess:"",wenn:[],sende:"",sendeArgs:[],...pos});
     else MODEL.records.push({name:uniq("Neu"+kindLabel(kind).replace(/\s/g,"")),kind,namespace:defaultNs(),felder:kind==="command"?[{name:"AggregateId",typ:"Guid"}]:[],...pos});
     render();
   }
@@ -810,233 +861,445 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   const addEnum=()=>neuerKnoten("enum");
   const addSaga=()=>neuerKnoten("saga");
 
-  function recordCard(r,ri){
-    const c=h("div",{class:"card"});
-    const kindSel=h("select",{class:"kindsel",onchange:e=>{r.kind=e.target.value;render();}});
+  function recordCard(body,r){
+    body.append(h("div",{class:"gsec"},"Name · Art"));
+    body.append(nameInp(r,"name","RecordName","record"));
+    const kindSel=h("select",{onchange:e=>{r.kind=e.target.value;if(r.kind==="command"&&!(r.felder||[]).some(f=>f.name==="AggregateId"))(r.felder=r.felder||[]).unshift({name:"AggregateId",typ:"Guid"});render();}});
     Object.keys(KINDINFO).forEach(k=>{const o=h("option",{value:k},kindLabel(k));if(r.kind===k)o.selected=true;kindSel.append(o);});
-    const grip=h("span",{class:"grip",draggable:"true",title:"In eine Decide-/Apply-Zone ziehen",
-      ondragstart:e=>e.dataTransfer.setData("text/plain",JSON.stringify({name:r.name,kind:r.kind}))},"⠿");
-    const kopf=[grip,h("span",{class:"k "+kindKlasse(r.kind)},kindLabel(r.kind)),
-      inp(r.name,v=>r.name=v,"RecordName"),
-      h("input",{value:r.namespace,oninput:e=>r.namespace=e.target.value,placeholder:"Domain.X",style:"width:150px"}),
-      kindSel];
-    if(r.kind==="command")kopf.push(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>r.istErzeugung=e.target.checked||undefined,...(r.istErzeugung?{checked:"checked"}:{})}),"Erzeugung"));
-    kopf.push(h("button",{class:"rm",onclick:()=>{MODEL.records.splice(ri,1);render();}},"✕"));
-    c.append(h("h3",{},...kopf));
-    c.append(feldTabelle(r.felder,fi=>{r.felder.splice(fi,1);render();},false));
-    c.append(h("button",{class:"add",onclick:()=>{(r.felder=r.felder||[]).push({name:"feld",typ:"string"});render();}},"+ Feld"));
-    return c;
+    body.append(kindSel);
+    if(r.kind==="valueobject"){
+      body.append(h("div",{class:"gsec"},"Namespace"));
+      body.append(h("input",{value:r.namespace??"",oninput:e=>r.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.X"}));
+    }else{
+      body.append(h("div",{class:"gsec"},"Aggregat (= Namespace → Zugehörigkeit)"));
+      const aggSel=h("select",{onchange:e=>{const a=MODEL.aggregate.find(x=>x.name===e.target.value);if(a)r.namespace=a.namespace;render();}});
+      aggSel.append(h("option",{value:""},MODEL.aggregate.length?"— Aggregat wählen —":"— erst ein Aggregat anlegen —"));
+      MODEL.aggregate.forEach(a=>{const o=h("option",{value:a.name},a.name+"  ("+a.namespace+")");if(a.namespace===r.namespace)o.selected=true;aggSel.append(o);});
+      body.append(aggSel);
+    }
+    if(r.kind==="command")body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>r.istErzeugung=e.target.checked||undefined,...(r.istErzeugung?{checked:"checked"}:{})}),"Erzeugung (ICreationCommand)"));
+    if(r.kind==="command"){body.append(slotRow("sagacmd","◀ ausgelöst von (Saga/Reaktion)","l",{type:"sagaCmd",dir:"in",rec:r.name},"cmd:in:"+r.name));
+      body.append(slotRow("command","cmd ▶","r",{type:"cmd",dir:"out",rec:r.name},"cmd:out:"+r.name));}
+    else if(r.kind==="event"){body.append(slotRow("event","◀ von Decider","l",{type:"evtOut",dir:"in",rec:r.name},"evt:in:"+r.name));
+      body.append(slotRow("event","evt ▶","r",{type:"evtUse",dir:"out",rec:r.name},"evt:out:"+r.name));}
+    else if(r.kind==="rejection")body.append(slotRow("rejection","◀ von Decider","l",{type:"evtOut",dir:"in",rec:r.name},"evt:in:"+r.name));
+    body.append(h("div",{class:"gsec"},"Felder"));
+    (r.felder||[]).forEach((f,fi)=>body.append(feldRow(f,()=>{r.felder.splice(fi,1);render();})));
+    body.append(h("button",{class:"add",onclick:()=>{(r.felder=r.felder||[]).push({name:"feld",typ:"string"});render();}},"+ Feld"));
   }
 
-  // Aggregat-Knoten: NUR State. Nimmt Decider/Applier per Verbindung entgegen.
-  function aggStateCard(a){
-    const c=h("div",{class:"card"});
-    c.append(h("h3",{},inp(a.name,v=>a.name=v,"Aggregat"),inp(a.namespace,v=>a.namespace=v,"Domain.X"),
-      h("button",{class:"rm",onclick:()=>{MODEL.aggregate.splice(MODEL.aggregate.indexOf(a),1);render();}},"✕")));
-    c.append(h("div",{class:"blab"},"State — Felder (nimmt Decider/Applier per Verbindung entgegen):"));
-    c.append(feldTabelle(a.state,fi=>{a.state.splice(fi,1);render();},true));
-    c.append(h("button",{class:"add",onclick:()=>{(a.state=a.state||[]).push({name:"feld",typ:"decimal"});render();}},"+ Feld"));
-    return c;
+  // Aggregat = HUB: State-Knoten oben zuweisen, Decider links, Applier rechts. Keine Feld-Slots.
+  function aggStateCard(body,a){
+    body.append(topSlot("state","State",{type:"state",dir:"in",agg:a.name},"agg:state:"+a.name));
+    body.append(nameInp(a,"name","Aggregat","aggregate"));
+    body.append(h("input",{value:a.namespace??"",oninput:e=>a.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.X"}));
+    const deciders=MODEL.decider.filter(d=>d.aggregat===a.name), appliers=MODEL.applier.filter(p=>p.aggregat===a.name);
+    const L=h("div",{class:"col2"});L.append(h("div",{class:"gsec"},"Decider ◀ (autom.)"));
+    deciders.forEach(d=>{const s=anchorDot("decagg");s.classList.add("i");reg("agg:left:"+a.name+":"+d._id,s,null);
+      L.append(h("div",{class:"slotrow",onmouseenter:()=>hilite(d._id,null,true),onmouseleave:()=>hilite(d._id,null,false)},s,h("span",{class:"slotlbl"},d.command||"Decider")));});
+    if(!deciders.length)L.append(h("div",{class:"slotlbl",style:"opacity:.5"},"—"));
+    const R=h("div",{class:"col2",style:"text-align:right"});R.append(h("div",{class:"gsec"},"(autom.) ▶ Applier"));
+    appliers.forEach(p=>{const s=anchorDot("appagg");s.classList.add("o");reg("agg:right:"+a.name+":"+p._id,s,null);
+      R.append(h("div",{class:"slotrow o",onmouseenter:()=>hilite(null,p._id,true),onmouseleave:()=>hilite(null,p._id,false)},h("span",{class:"slotlbl"},p.event||"Applier"),s));});
+    if(!appliers.length)R.append(h("div",{class:"slotlbl",style:"opacity:.5"},"—"));
+    body.append(h("div",{class:"aggwrap"},L,R));
+    const st=MODEL.states.find(s=>s.aggregat===a.name);
+    body.append(h("div",{class:"gsec"},st?("State zugewiesen · "+((a.state||[]).length)+" Feld(er)"):"State-Knoten oben anschließen"));
   }
-  // Decider-Knoten: Command (rein) ⟶ OneOf-Events (raus) + Körper; gehört zu einem Aggregat.
-  function deciderCard(d){
-    const c=h("div",{class:"card"});
-    c.append(h("h3",{},h("span",{class:"name"},"Decide("),recSelect(d.command,v=>{d.command=v;render();},["command"]),h("span",{class:"name"}," cmd)"),
-      h("button",{class:"rm",onclick:()=>{MODEL.decider.splice(MODEL.decider.indexOf(d),1);render();}},"✕")));
-    c.append(h("div",{class:"arow"},h("span",{class:"lbl"},"im Aggregat"),aggSelect(d.aggregat,v=>{d.aggregat=v;render();})));
-    c.append(h("div",{class:"blab"},"⟶ OneOf-Ausgänge (Event/Ablehnung + optional Guard) — oder Event-Knoten hierher ziehen:"));
-    (d.ergibt||[]).forEach((o,oi)=>c.append(h("div",{class:"arow"},
-      recSelect(o.event,v=>{o.event=v;},["event","rejection"]),
-      inp(o.guard,v=>o.guard=v||undefined,"Guard (optional)"),
-      h("button",{class:"rm",onclick:()=>{d.ergibt.splice(oi,1);render();}},"✕"))));
-    c.append(h("button",{class:"add",onclick:()=>{(d.ergibt=d.ergibt||[]).push({event:""});render();}},"+ Ausgang"));
-    c.append(h("div",{class:"blab"},"Decide-Körper — Leer ⇒ throw-Platzhalter."));
-    c.append(codearea(d.rumpf,v=>d.rumpf=v||undefined,"if (this.State.Verfuegbar < cmd.Betrag) { yield return new DeckungReichtNicht(this.State.Verfuegbar, cmd.Betrag); yield break; }\nyield return new BetragReserviert(cmd.Betrag);"));
-    return c;
+  // Decider: Command rein (links), Aggregat OBEN, OneOf-Events als MEHRERE Ausgänge (rechts, je Outcome ein Punkt).
+  function deciderCard(body,d){
+    body.append(topAnchor("decagg","▲ Aggregat: "+(d.aggregat||"— (am Command setzen)"),"dec:aggout:"+d._id));
+    body.append(slotRow("command","◀ Command: "+(d.command||"—"),"l",{type:"cmd",dir:"in",dec:d._id},"dec:cmdin:"+d._id));
+    body.append(h("div",{class:"gsec"},"OneOf-Ausgänge — je Outcome ein Punkt (Punkt → Event ziehen)"));
+    (d.ergibt||[]).forEach((o,oi)=>{
+      const s=port("event");s.classList.add("o");reg("dec:evtout:"+d._id+":"+o.event,s,{type:"evtOut",dir:"out",dec:d._id});
+      body.append(h("div",{class:"slotrow o"},
+        h("button",{class:"rm",onclick:()=>{d.ergibt.splice(oi,1);render();}},"✕"),
+        h("input",{value:o.guard??"",oninput:e=>o.guard=e.target.value||undefined,placeholder:"Guard",style:"flex:1;width:auto"}),
+        h("span",{class:"slotlbl"},(o.event||"?")+" ▶"),s));
+    });
+    const os=port("open");os.classList.add("o");reg("dec:evtout:"+d._id+":open",os,{type:"evtOut",dir:"out",dec:d._id});
+    body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Ausgang ▶"),os));
+    body.append(h("div",{class:"gsec"},"Decide-Körper (leer ⇒ throw-Platzhalter)"));
+    body.append(codearea(d.rumpf,v=>d.rumpf=v||undefined,"if (this.State.Verfuegbar < cmd.Betrag) { yield return new DeckungReichtNicht(this.State.Verfuegbar, cmd.Betrag); yield break; }\nyield return new BetragReserviert(cmd.Betrag);"));
   }
-  // Applier-Knoten: Event (rein) faltet den State; gehört zu einem Aggregat.
-  function applierCard(a){
-    const c=h("div",{class:"card"});
-    c.append(h("h3",{},h("span",{class:"name"},"Apply("),recSelect(a.event,v=>{a.event=v;render();},["event"]),h("span",{class:"name"}," evt)"),
-      h("button",{class:"rm",onclick:()=>{MODEL.applier.splice(MODEL.applier.indexOf(a),1);render();}},"✕")));
-    c.append(h("div",{class:"arow"},h("span",{class:"lbl"},"im Aggregat"),aggSelect(a.aggregat,v=>{a.aggregat=v;render();})));
-    c.append(codearea(a.rumpf,v=>a.rumpf=v||undefined,"this.State.Saldo += evt.Betrag;"));
-    return c;
+  // Applier: gespiegelt zum Decider — Event rein (rechts), Aggregat OBEN. Körper = Code.
+  function applierCard(body,a){
+    body.append(topAnchor("appagg","▲ Aggregat: "+(a.aggregat||"— (am Event setzen)"),"app:aggout:"+a._id));
+    body.append(slotRow("event","Event: "+(a.event||"—")+" ◀","r",{type:"evtUse",dir:"in",app:a._id},"app:evtin:"+a._id));
+    body.append(h("div",{class:"gsec"},"Apply-Körper (leer ⇒ throw-Platzhalter)"));
+    body.append(codearea(a.rumpf,v=>a.rumpf=v||undefined,"this.State.Saldo += evt.Betrag;"));
+  }
+  // State-Knoten: eigene State-Felder (Typ per Dropdown); per Kante rechts einem Aggregat zuweisen.
+  function stateCard(body,s){
+    const agg=s.aggregat?MODEL.aggregate.find(a=>a.name===s.aggregat):null;
+    const felder=agg?(agg.state=agg.state||[]):(s.felder=s.felder||[]);
+    body.append(slotRow("state","Aggregat ▶"+(s.aggregat?" ("+s.aggregat+")":" — frei"),"r",{type:"state",dir:"out",state:s._id},"state:out:"+s._id));
+    body.append(h("div",{class:"gsec"},"State-Felder (Typ per Dropdown)"));
+    felder.forEach((f,fi)=>body.append(stateFeldRow(f,()=>{felder.splice(fi,1);render();})));
+    body.append(h("button",{class:"add",onclick:()=>{felder.push({name:"feld",typ:"decimal"});render();}},"+ Feld"));
+    if(!agg)body.append(h("div",{class:"gsec",style:"color:#8b93a7"},"nicht zugewiesen — Punkt rechts auf ein Aggregat ziehen"));
   }
 
-  // ══ NODE-EDITOR: Records + Aggregate als Knoten auf einer Fläche; Verbindungen = Komposition.
-  //    Ziehen verschiebt (rastet aufs 20px-Raster ein); vom Port ziehen und auf einen Knoten
-  //    fallen lassen verbindet: Command→Aggregat (Decide), Command→Event (Ausgang), Event→Aggregat (Apply).
+  // ══ COMFYUI-NODE-EDITOR: getippte Slots (Punkte) + Bézier-Kanten statt Dropdowns.
+  //    Kopf ziehen = verschieben (rastet 20px); von einem Slot-Punkt ziehen = verbinden;
+  //    Fläche ziehen = pannen; Mausrad = zoomen. Verbindungen (out→in, typgleich):
+  //    Command→Decider · Decider→Event(Ergibt) · Decider→Aggregat(links) · Event→Applier ·
+  //    Applier→Aggregat(rechts) · Applier→State-Feld(oben, optionale Zuweisungs-Markierung).
   const SVGNS="http://www.w3.org/2000/svg";
   const GRID=20;
-  const aggByName=n=>MODEL.aggregate.find(a=>a.name===n);
+  const NODELABEL={command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Transition"};
+  let PAN={x:40,y:30,s:1}, canvas=null, world=null, svg=null, svgTop=null, SLOTS={};
+
+  const dec=id=>MODEL.decider.find(d=>d._id===id);
+  const app=id=>MODEL.applier.find(a=>a._id===id);
+  // Namespace = Aggregat: Decider/Applier-Zugehörigkeit wird ABGELEITET (keine manuelle Kante mehr).
+  const recByName=n=>MODEL.records.find(r=>r.name===n);
+  function aggForNs(ns){if(!ns)return "";const m=MODEL.aggregate.filter(a=>a.namespace===ns);return m.length?m[0].name:"";}
+  const deciderAgg=d=>{const c=d.command&&recByName(d.command);return c?aggForNs(c.namespace):"";};
+  const applierAgg=a=>{const e=a.event&&recByName(a.event);return e?aggForNs(e.namespace):"";};
+  function deriveMembership(){MODEL.decider.forEach(d=>d.aggregat=deciderAgg(d));MODEL.applier.forEach(a=>a.aggregat=applierAgg(a));}
+  const baseTyp=x=>(x||"").replace(/\s/g,"").replace(/\?$/,"");
+  // Positionsweise vollständige Argumentliste (fehlende Parameter → "default", damit es kompiliert).
+  function argListe(cmdName,args){const cmd=recByName(cmdName);
+    if(!cmd)return (args||[]).filter(Boolean);
+    return (cmd.felder||[]).map((_,i)=>((args||[])[i])||"default");}
+  // Transitionen eines Prozesses (explizit angesteckt via t.prozess).
+  const transOf=s=>MODEL.transitions.filter(t=>t.prozess===s.name);
+  // Collection-Felder der Join-Events (für UndAlle-Anzahl / SendeJe-Collection), als "role.field".
+  function collFelder(t){const out=[];(t.wenn||[]).forEach((e,i)=>{const r=recByName(e);if(!r)return;const role=["t","r","g"][i]||("e"+(i+1));
+    (r.felder||[]).forEach(f=>{if(/List<|IReadOnlyList<|IEnumerable<|\[\]/.test(f.typ||""))out.push(role+"."+f.name);});});return out;}
+  // Berührte Aggregate (abgeleitet aus den Namespaces der referenzierten Events/Commands der Transitionen).
+  function sagaAggs(s){const ns=new Set();transOf(s).forEach(t=>{[...(t.wenn||[]),t.sammelEvent].forEach(e=>{const r=e&&recByName(e);if(r)ns.add(r.namespace);});
+    [t.sende,t.kompensation].forEach(c=>{const r=c&&recByName(c);if(r)ns.add(r.namespace);});});
+    return [...new Set([...ns].map(n=>aggForNs(n)).filter(Boolean))];}
+  // Vor Serveraufruf: Transitionen → Saga.Schritte (inkl. UndAlle/SendeJe) + ExtraUsings; Argumente positionsvoll.
+  function prepareSaga(){MODEL.sagas.forEach(s=>{const ts=transOf(s);
+    s.schritte=ts.filter(t=>(t.wenn||[]).length).map(t=>{const st={wenn:(t.wenn||[]).slice(),sende:t.sende||""};
+      if(t.sammelEvent){st.sammelEvent=t.sammelEvent;if(t.sammelAnzahl)st.sammelAnzahl=t.sammelAnzahl;}
+      if(t.sendeJe){st.sendeJe=true;if(t.sendeJeCollection)st.sendeJeCollection=t.sendeJeCollection;}
+      const sa=argListe(t.sende,t.sendeArgs);if(sa.length)st.sendeArgumente=sa;
+      if(t.kompensation){st.kompensation=t.kompensation;const ka=argListe(t.kompensation,t.kompArgs);if(ka.length)st.kompensationArgumente=ka;}
+      return st;});
+    const ns=new Set();ts.forEach(t=>{[...(t.wenn||[]),t.sammelEvent].forEach(e=>{const r=e&&recByName(e);if(r&&r.namespace)ns.add(r.namespace);});
+      [t.sende,t.kompensation].forEach(c=>{const r=c&&recByName(c);if(r&&r.namespace)ns.add(r.namespace);});});
+    ns.delete(s.namespace);s.extraUsings=[...ns];});}
+  // Read-only-Anker (nicht ziehbar) — nur Ankerpunkt für abgeleitete Kanten.
+  function anchorDot(color){return h("div",{class:"slot s-"+color+" ro"});}
+  function topAnchor(color,label,key){const s=anchorDot(color);s.classList.add("t");reg(key,s,null);return h("div",{class:"gtopfield"},s,h("span",{class:"slotlbl"},label));}
+  // Namens-Eingabe: benennt um UND zieht alle Verbindungen mit (Namen sind der Referenzschlüssel).
+  function renameRefs(kind,obj,old,nv){
+    if(kind==="aggregate"){
+      MODEL.decider.forEach(d=>{if(d.aggregat===old)d.aggregat=nv;});
+      MODEL.applier.forEach(a=>{if(a.aggregat===old)a.aggregat=nv;});
+      MODEL.states.forEach(s=>{if(s.aggregat===old)s.aggregat=nv;});
+    }else if(kind==="record"){
+      if(obj.kind==="command"){
+        MODEL.decider.forEach(d=>{if(d.command===old)d.command=nv;});
+        MODEL.sagas.forEach(s=>(s.schritte||[]).forEach(st=>{if(st.sende===old)st.sende=nv;if(st.kompensation===old)st.kompensation=nv;}));
+      }else{
+        MODEL.decider.forEach(d=>(d.ergibt||[]).forEach(o=>{if(o.event===old)o.event=nv;}));
+        MODEL.applier.forEach(a=>{if(a.event===old)a.event=nv;});
+        MODEL.sagas.forEach(s=>{if(s.triggerEvent===old)s.triggerEvent=nv;(s.schritte||[]).forEach(st=>{st.wenn=(st.wenn||[]).map(w=>w===old?nv:w);});});
+      }
+    }
+  }
+  function nameInp(o,p,ph,kind){const old=o[p];
+    return h("input",{value:old??"",placeholder:ph||"Name",
+      onchange:e=>{const nv=e.target.value;if(!nv){e.target.value=old??"";return;}
+        if(nv!==old&&kind)renameRefs(kind,o,old,nv);o[p]=nv;render();}});}
+  function feldRow(f,onDel,mitAusdruck){const row=h("div",{class:"frow"},
+      h("input",{value:f.name??"",oninput:e=>f.name=e.target.value,onchange:()=>render(),placeholder:"Feld"}),
+      tinp(f.typ,v=>f.typ=v));
+    if(mitAusdruck)row.append(h("input",{value:f.ausdruck??"",oninput:e=>f.ausdruck=e.target.value||undefined,placeholder:"=Ausdruck",style:"flex:1;width:auto"}));
+    row.append(h("button",{class:"rm",onclick:onDel},"✕"));return row;}
+  // Typ-Auswahl per Dropdown (Skalare + Value Objects + Enums) — im State-Knoten.
+  function typSelect(val,on){const s=h("select",{style:"flex:1;width:auto",onchange:e=>on(e.target.value)});
+    const opts=[...SCALARS,...MODEL.records.filter(r=>r.kind==="valueobject").map(r=>r.name),...MODEL.enums.map(e=>e.name)];
+    if(val&&!opts.includes(val))opts.unshift(val);
+    opts.forEach(t=>{const o=h("option",{value:t},t);if(t===val)o.selected=true;s.append(o);});return s;}
+  function stateFeldRow(f,onDel){return h("div",{class:"frow"},
+    h("input",{value:f.name??"",oninput:e=>f.name=e.target.value,placeholder:"Feld"}),
+    typSelect(f.typ,v=>f.typ=v),
+    h("button",{class:"rm",onclick:onDel},"✕"));}
+
+  function port(color){const s=h("div",{class:"slot s-"+color});s.onpointerdown=e=>{e.stopPropagation();e.preventDefault();startLink(e,s);};return s;}
+  function reg(key,el,info){el.__slot=info;SLOTS[key]=el;return el;}
+  function slotRow(color,label,side,info,key){const s=port(color);s.classList.add(side==="l"?"i":"o");reg(key,s,info);
+    return side==="l"?h("div",{class:"slotrow"},s,h("span",{class:"slotlbl"},label))
+                     :h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},label),s);}
+  function topSlot(color,label,info,key){const s=port(color);s.classList.add("t");reg(key,s,info);
+    return h("div",{class:"gtopfield"},s,h("span",{class:"slotlbl"},label));}
+
   function graphNodes(){
     return [...MODEL.records.map(r=>({id:"rec:"+r.name,name:r.name,kind:r.kind,ref:r})),
             ...MODEL.aggregate.map(a=>({id:"agg:"+a.name,name:a.name,kind:"aggregate",ref:a})),
-            ...MODEL.decider.map(d=>({id:"dec:"+d._id,name:d.command||"Decide",kind:"decider",ref:d})),
-            ...MODEL.applier.map(a=>({id:"app:"+a._id,name:a.event||"Apply",kind:"applier",ref:a})),
+            ...MODEL.states.map(s=>({id:"st:"+s._id,name:s.aggregat||"frei",kind:"state",ref:s})),
+            ...MODEL.decider.map(d=>({id:"dec:"+d._id,name:d.command||"",kind:"decider",ref:d})),
+            ...MODEL.applier.map(a=>({id:"app:"+a._id,name:a.event||"",kind:"applier",ref:a})),
             ...MODEL.enums.map(e=>({id:"enum:"+e.name,name:e.name,kind:"enum",ref:e})),
-            ...MODEL.sagas.map(s=>({id:"saga:"+s.name,name:s.name,kind:"saga",ref:s}))];
-  }
-  function graphEdges(){
-    const es=[];
-    MODEL.decider.forEach(d=>{
-      if(d.command)es.push({from:"rec:"+d.command,to:"dec:"+d._id,kind:"decide"});      // Command → Decider
-      (d.ergibt||[]).forEach(o=>{if(o.event)es.push({from:"dec:"+d._id,to:"rec:"+o.event,kind:"produce"});}); // Decider → Event
-      if(d.aggregat)es.push({from:"dec:"+d._id,to:"agg:"+d.aggregat,kind:"decagg"});     // Decider → Aggregat
-    });
-    MODEL.applier.forEach(a=>{
-      if(a.event)es.push({from:"rec:"+a.event,to:"app:"+a._id,kind:"applyin"});          // Event → Applier
-      if(a.aggregat)es.push({from:"app:"+a._id,to:"agg:"+a.aggregat,kind:"apply"});       // Applier → Aggregat
-    });
-    return es;
+            ...MODEL.sagas.map(s=>({id:"saga:"+s.name,name:s.name,kind:"saga",ref:s})),
+            ...MODEL.transitions.map(t=>({id:"tr:"+t._id,name:(t.sende||"Transition"),kind:"transition",ref:t}))];
   }
   function autoLayout(){
-    // Spalten wie Event Modeling; y stapelt PRO Spalte mit höhen-bewusstem Abstand (kein Überlappen).
-    const spalte={command:40,decider:320,aggregate:660,applier:320,event:980,rejection:980,valueobject:1280,enum:1280,saga:660};
-    const step={command:120,event:120,rejection:120,valueobject:140,enum:120,aggregate:220,decider:300,applier:200,saga:220};
+    const spalte={command:40,decider:360,aggregate:720,state:720,event:1080,rejection:1080,applier:1400,valueobject:1720,enum:1720,saga:1760,transition:2120};
+    const step={command:150,event:150,rejection:150,valueobject:160,enum:150,aggregate:320,state:220,decider:330,applier:280,saga:240,transition:360};
     const yByX={};
-    graphNodes().forEach(n=>{const r=n.ref;const x=spalte[n.kind]!==undefined?spalte[n.kind]:40;const s=step[n.kind]||120;
-      if(typeof r.x==="number"&&typeof r.y==="number"){yByX[x]=Math.max(yByX[x]||40,r.y+s);return;}
-      const y=yByX[x]||40; r.x=x; r.y=y; yByX[x]=y+s;});
+    graphNodes().forEach(n=>{const r=n.ref;const x=spalte[n.kind]!==undefined?spalte[n.kind]:40;const s=step[n.kind]||150;
+      if(typeof r.x==="number"&&typeof r.y==="number"){yByX[x]=Math.max(yByX[x]||30,r.y+s);return;}
+      const y=yByX[x]||30;r.x=x;r.y=y;yByX[x]=y+s;});
   }
+  function nodeEditor(n){
+    const el=h("div",{class:"gnode2 n-"+n.kind+(n.ref._collapsed?" collapsed":"")});el.dataset.id=n.id;
+    el.style.left=(n.ref.x||0)+"px";el.style.top=(n.ref.y||0)+"px";
+    const title=NODELABEL[n.kind]||n.kind;
+    const head=h("div",{class:"ghead"},
+      h("span",{class:"gcol",title:"Ein-/Ausklappen",onclick:()=>{n.ref._collapsed=!n.ref._collapsed;render();}},n.ref._collapsed?"▸":"▾"),
+      h("span",{class:"gtitle"},title+(n.name?" · "+n.name:"")),
+      h("span",{class:"gx",title:"Löschen",onclick:()=>delNode(n)},"✕"));
+    head.onpointerdown=e=>{if(e.target.classList.contains("gx")||e.target.classList.contains("gcol"))return;startMove(e,el,n.ref);};
+    el.append(head);
+    const body=h("div",{class:"gbody"});
+    if(n.kind==="aggregate")aggStateCard(body,n.ref);
+    else if(n.kind==="state")stateCard(body,n.ref);
+    else if(n.kind==="decider")deciderCard(body,n.ref);
+    else if(n.kind==="applier")applierCard(body,n.ref);
+    else if(n.kind==="enum")body.append(enumCard(n.ref,MODEL.enums.indexOf(n.ref)));
+    else if(n.kind==="saga")prozessHubCard(body,n.ref);
+    else if(n.kind==="transition")transitionCard(body,n.ref);
+    else recordCard(body,n.ref);
+    el.append(body);return el;
+  }
+  function delNode(n){const k=n.kind,ref=n.ref;
+    if(k==="aggregate")MODEL.aggregate.splice(MODEL.aggregate.indexOf(ref),1);
+    else if(k==="state")MODEL.states.splice(MODEL.states.indexOf(ref),1);
+    else if(k==="decider")MODEL.decider.splice(MODEL.decider.indexOf(ref),1);
+    else if(k==="applier")MODEL.applier.splice(MODEL.applier.indexOf(ref),1);
+    else if(k==="enum")MODEL.enums.splice(MODEL.enums.indexOf(ref),1);
+    else if(k==="saga")MODEL.sagas.splice(MODEL.sagas.indexOf(ref),1);
+    else if(k==="transition")MODEL.transitions.splice(MODEL.transitions.indexOf(ref),1);
+    else MODEL.records.splice(MODEL.records.indexOf(ref),1);
+    render();}
+
+  // Koordinaten: Welt = unskaliert; canvas = Bildschirm.
+  function applyPan(){if(world)world.style.transform="translate("+PAN.x+"px,"+PAN.y+"px) scale("+PAN.s+")";}
+  function toWorld(cx,cy){const r=canvas.getBoundingClientRect();return {x:(cx-r.left-PAN.x)/PAN.s,y:(cy-r.top-PAN.y)/PAN.s};}
+  function slotCenter(el){const wr=world.getBoundingClientRect(),r=el.getBoundingClientRect();
+    return {x:(r.left+r.width/2-wr.left)/PAN.s,y:(r.top+r.height/2-wr.top)/PAN.s};}
+  const bez=(x1,y1,x2,y2)=>{const dx=Math.max(46,Math.abs(x2-x1)*0.5);return "M"+x1+","+y1+" C"+(x1+dx)+","+y1+" "+(x2-dx)+","+y2+" "+x2+","+y2;};
+
+  // Verbinden per Slot-Drag (Gummiband + Typprüfung, dann MODEL mutieren).
+  function startLink(e,from){
+    const path=document.createElementNS(SVGNS,"path");path.setAttribute("class","glink tmp");
+    path.setAttribute("fill","none");path.setAttribute("stroke","#cbb8ff");path.setAttribute("stroke-width","2.4");path.setAttribute("stroke-dasharray","5 4");
+    svg.append(path);const a=slotCenter(from);
+    const mv=ev=>{const b=toWorld(ev.clientX,ev.clientY);path.setAttribute("d",bez(a.x,a.y,b.x,b.y));
+      document.querySelectorAll("#de .slot.hot").forEach(x=>x.classList.remove("hot"));
+      const t=hitSlot(ev.clientX,ev.clientY);if(t&&compatible(from,t))t.classList.add("hot");};
+    const up=ev=>{window.removeEventListener("pointermove",mv);window.removeEventListener("pointerup",up);
+      path.remove();document.querySelectorAll("#de .slot.hot").forEach(x=>x.classList.remove("hot"));
+      const t=hitSlot(ev.clientX,ev.clientY);if(t&&compatible(from,t))applyLink(from,t);};
+    window.addEventListener("pointermove",mv);window.addEventListener("pointerup",up);
+  }
+  function hitSlot(cx,cy){let el=document.elementFromPoint(cx,cy);while(el&&!el.__slot)el=el.parentElement;return el&&el.__slot?el:null;}
+  function compatible(a,b){const A=a.__slot,B=b.__slot;if(!A||!B)return false;if(A.dir===B.dir)return false;if(A.type!==B.type)return false;
+    if((A.kind==="arg")!==(B.kind==="arg"))return false;              // Argument-Pin nur an Argument-Pin
+    if(A.kind==="arg"&&A.trans!==B.trans)return false;                 // und nur innerhalb derselben Transition
+    return true;}
+  function applyLink(a,b){
+    const O=a.__slot.dir==="out"?a.__slot:b.__slot, I=a.__slot.dir==="out"?b.__slot:a.__slot;
+    if(O.type==="cmd"){const d=dec(I.dec);if(d)d.command=O.rec;}
+    else if(O.type==="evtOut"){const d=dec(O.dec);if(d&&!(d.ergibt||[]).some(x=>x.event===I.rec))(d.ergibt=d.ergibt||[]).push({event:I.rec});}
+    else if(O.type==="prozess"){const t=MODEL.transitions.find(x=>x._id===O.trans);if(t)t.prozess=I.saga;}
+    else if(O.type==="evtUse"){
+      if(I.app){const p=app(I.app);if(p)p.event=O.rec;}
+      else if(I.trigger){const sg=MODEL.sagas.find(x=>x.name===I.saga);if(sg)sg.triggerEvent=O.rec;}
+      else if(I.trans){const t=MODEL.transitions.find(x=>x._id===I.trans);if(t){
+        if(I.sammel){t.sammelEvent=O.rec;}
+        else{t.wenn=t.wenn||[];if(I.wennIdx==="open"){if(!t.wenn.includes(O.rec))t.wenn.push(O.rec);}else t.wenn[I.wennIdx]=O.rec;}}}}
+    else if(O.type==="sagaCmd"){const t=MODEL.transitions.find(x=>x._id===O.trans);if(t){if(O.role==="komp")t.kompensation=I.rec;else t.sende=I.rec;}}
+    else if(O.kind==="arg"&&I.kind==="arg"&&O.trans===I.trans){const t=MODEL.transitions.find(x=>x._id===O.trans);
+      if(t){const arr=I.target==="komp"?(t.kompArgs=t.kompArgs||[]):(t.sendeArgs=t.sendeArgs||[]);arr[I.paramIndex]=O.field?O.role+"."+O.field:O.role;}}
+    else if(O.type==="decAgg"){const d=dec(O.dec);if(d)d.aggregat=I.agg;}
+    else if(O.type==="appAgg"){const p=app(O.app);if(p)p.aggregat=I.agg;}
+    else if(O.type==="state"){const s=MODEL.states.find(x=>x._id===O.state);const A=I.agg;
+      if(s){s.aggregat=A;const agg=MODEL.aggregate.find(a=>a.name===A);
+        if(agg){if((!agg.state||!agg.state.length)&&s.felder&&s.felder.length)agg.state=s.felder;s.felder=undefined;
+          MODEL.states=MODEL.states.filter(x=>x===s||x.aggregat!==A);}}}
+    render();
+  }
+
+  // Kanten aus dem MODEL zeichnen (Slot-Mitte → Slot-Mitte; eingeklappt → an den Kopf).
+  function anchor(el){if(el.offsetParent!==null)return slotCenter(el);const nd=el.closest(".gnode2");const hd=nd&&nd.querySelector(".ghead");return hd?slotCenter(hd):slotCenter(el);}
+  // Anschlussseite eines Slots: rechts (.o)=+1, links (.i)=-1, oben/sonst=0.
+  const sdir=el=>el&&el.classList.contains("o")?1:(el&&el.classList.contains("i")?-1:0);
+  function drawEdges(){
+    if(!svg)return;[...svg.querySelectorAll(".glink:not(.tmp)")].forEach(p=>p.remove());
+    if(svgTop)[...svgTop.querySelectorAll(".glink")].forEach(p=>p.remove());
+    // Kurve mit Anschlussrichtung je Ende (da/db: +1 tritt nach rechts aus, -1 nach links).
+    const mk=(A,B,da,db,color,dash,cls,ds,tgt)=>{const dx=Math.max(46,Math.abs(B.x-A.x)*0.5);
+      const p=document.createElementNS(SVGNS,"path");p.setAttribute("class","glink"+(cls?" "+cls:""));p.setAttribute("fill","none");
+      p.setAttribute("stroke",color);p.setAttribute("stroke-width","2.2");if(dash)p.setAttribute("stroke-dasharray","5 4");
+      if(ds){p.dataset.dec=ds[0];p.dataset.app=ds[1];}
+      p.setAttribute("d","M"+A.x+","+A.y+" C"+(A.x+da*dx)+","+A.y+" "+(B.x+db*dx)+","+B.y+" "+B.x+","+B.y);(tgt||svg).append(p);};
+    const add=(k1,k2,color,dash)=>{const a=SLOTS[k1],b=SLOTS[k2];if(!a||!b)return;const A=anchor(a),B=anchor(b);
+      let da=sdir(a),db=sdir(b);if(!da)da=B.x>=A.x?1:-1;if(!db)db=A.x>=B.x?1:-1;mk(A,B,da,db,color,dash);};
+    MODEL.decider.forEach(d=>{
+      if(d.command)add("cmd:out:"+d.command,"dec:cmdin:"+d._id,"#4a86d6");
+      if(d.aggregat)add("dec:aggout:"+d._id,"agg:left:"+d.aggregat+":"+d._id,"#33b1a6",true);
+      (d.ergibt||[]).forEach(o=>{if(o.event)add("dec:evtout:"+d._id+":"+o.event,"evt:in:"+o.event,"#4fb06a");});
+    });
+    MODEL.applier.forEach(p=>{
+      if(p.event)add("evt:out:"+p.event,"app:evtin:"+p._id,"#4fb06a");
+      if(p.aggregat)add("app:aggout:"+p._id,"agg:right:"+p.aggregat+":"+p._id,"#d1953f",true);
+    });
+    MODEL.states.forEach(s=>{if(s.aggregat)add("state:out:"+s._id,"agg:state:"+s.aggregat,"#e0b64d");});
+    // Interne Aggregat-Kanten: welcher Decider (links) erzeugt das Event welches Appliers (rechts) — Linie IM Aggregat.
+    MODEL.aggregate.forEach(a=>{
+      const dl=MODEL.decider.filter(d=>d.aggregat===a.name), al=MODEL.applier.filter(p=>p.aggregat===a.name);
+      dl.forEach(d=>(d.ergibt||[]).forEach(o=>al.filter(p=>p.event===o.event).forEach(p=>{
+        const x=SLOTS["agg:left:"+a.name+":"+d._id], y=SLOTS["agg:right:"+a.name+":"+p._id];if(!x||!y)return;
+        mk(anchor(x),anchor(y),1,-1,"#7f8aa0",false,"internal",[d._id,p._id],svgTop);})));
+    });
+    // Prozess-Hub: Auslöser-Event → Prozess.
+    MODEL.sagas.forEach(s=>{if(s.triggerEvent)add("evt:out:"+s.triggerEvent,"saga:trigger:"+s.name,"#9d78d6");});
+    // Transitionen: an Hub angesteckt (gestrichelt), Join/UndAlle rein, Sende/Kompensation raus, Konstruktor-Args intern.
+    MODEL.transitions.forEach(t=>{
+      if(t.prozess)add("tr:prozess:"+t._id,"hub:in:"+t.prozess+":"+t._id,"#9d78d6",true);
+      (t.wenn||[]).forEach((e,j)=>{if(e)add("evt:out:"+e,"tr:in:"+t._id+":"+j,"#4fb06a");});
+      if(t.sammelEvent)add("evt:out:"+t.sammelEvent,"tr:sammel:"+t._id,"#4fb06a");
+      if(t.sende)add("tr:sende:"+t._id,"cmd:in:"+t.sende,"#4a86d6");
+      if(t.kompensation)add("tr:komp:"+t._id,"cmd:in:"+t.kompensation,"#cf6f68",true);
+      const argE=(arr,target)=>{(arr||[]).forEach((expr,pi)=>{if(!expr||expr==="default")return;
+        const x=SLOTS["tr:field:"+t._id+":"+expr],y=SLOTS["tr:param:"+t._id+":"+target+":"+pi];
+        if(x&&y)mk(anchor(x),anchor(y),-1,1,"#e0c46a",false,"internal",null,svgTop);});};
+      argE(t.sendeArgs,"sende");argE(t.kompArgs,"komp");
+    });
+  }
+  // Interne Linien hervorheben, wenn man über die zugehörige Decider-/Applier-Zeile fährt.
+  function hilite(decId,appId,on){document.querySelectorAll("#de .glink.internal").forEach(p=>{
+    if((decId&&p.dataset.dec===decId)||(appId&&p.dataset.app===appId))p.classList.toggle("hot",on);});}
+
+  // Verschieben (Knoten) / Pannen (Fläche).
+  function startMove(e,el,ref){e.preventDefault();el.classList.add("dragging");
+    const sx=e.clientX,sy=e.clientY,ox=ref.x||0,oy=ref.y||0;
+    const mv=ev=>{ref.x=Math.round((ox+(ev.clientX-sx)/PAN.s)/GRID)*GRID;
+      ref.y=Math.round((oy+(ev.clientY-sy)/PAN.s)/GRID)*GRID;
+      el.style.left=ref.x+"px";el.style.top=ref.y+"px";drawEdges();};
+    const up=()=>{el.classList.remove("dragging");window.removeEventListener("pointermove",mv);window.removeEventListener("pointerup",up);};
+    window.addEventListener("pointermove",mv);window.addEventListener("pointerup",up);}
+  function startPan(e){e.preventDefault();canvas.classList.add("panning");const sx=e.clientX,sy=e.clientY,ox=PAN.x,oy=PAN.y;
+    const mv=ev=>{PAN.x=ox+(ev.clientX-sx);PAN.y=oy+(ev.clientY-sy);applyPan();};
+    const up=()=>{canvas.classList.remove("panning");window.removeEventListener("pointermove",mv);window.removeEventListener("pointerup",up);};
+    window.addEventListener("pointermove",mv);window.addEventListener("pointerup",up);}
+
   function renderGraph(){
     const root=document.getElementById("de-form");root.innerHTML="";
     root.append(datalistEl());
+    const tb=(kind,label)=>h("button",{class:"add",onclick:()=>neuerKnoten(kind)},label);
     root.append(h("div",{class:"gtoolbar"},
-      h("button",{class:"add",onclick:()=>addRecord("command")},"+ Command"),
-      h("button",{class:"add",onclick:()=>addRecord("event")},"+ Event"),
-      h("button",{class:"add",onclick:()=>addRecord("rejection")},"+ Ablehnung"),
-      h("button",{class:"add",onclick:()=>addRecord("valueobject")},"+ Value Object"),
-      h("button",{class:"add",onclick:()=>addEnum()},"+ Enum"),
-      h("button",{class:"add",onclick:()=>addAggregat()},"+ Aggregat"),
-      h("button",{class:"add",onclick:()=>neuerKnoten("decider")},"+ Decider"),
-      h("button",{class:"add",onclick:()=>neuerKnoten("applier")},"+ Applier"),
-      h("button",{class:"add",onclick:()=>addSaga()},"+ Saga")));
-    root.append(h("div",{class:"glegend"},
-      h("span",{},h("i",{style:"border-color:#5a7bb0"}),"Command → Decider"),
-      h("span",{},h("i",{style:"border-color:#b08a4a"}),"Decider → Event"),
-      h("span",{},h("i",{style:"border-color:#7c5cff"}),"Decider → Aggregat"),
-      h("span",{},h("i",{style:"border-color:#4aa0a0"}),"Event → Applier"),
-      h("span",{},h("i",{style:"border-color:#4a9a6a;border-top-style:dashed"}),"Applier → Aggregat"),
-      h("span",{},"· Doppelklick = Rohzelle · Kopf ziehen rastet ein · Port ziehen = verbinden")));
+      tb("command","+ Command"),tb("event","+ Event"),tb("rejection","+ Ablehnung"),
+      tb("valueobject","+ Value Object"),tb("enum","+ Enum"),tb("aggregate","+ Aggregat"),
+      tb("state","+ State"),tb("decider","+ Decider"),tb("applier","+ Applier"),tb("saga","+ Prozess"),tb("transition","+ Transition")));
+    const leg=(c,t)=>h("span",{},h("i",{style:"background:"+c}),t);
+    root.append(h("div",{class:"glegend2"},
+      leg("#4a86d6","Command→Decider"),leg("#33b1a6","Decider→Aggregat"),leg("#4fb06a","Event"),
+      leg("#d1953f","Applier→Aggregat"),leg("#e0b64d","State→Aggregat"),
+      h("span",{},"· Doppelklick = Knoten · Kopf ziehen = verschieben · Titel ⯆ = einklappen · Punkt ziehen = verbinden · Rad = Zoom · Fläche ziehen = Pan")));
     autoLayout();
-    const canvas=h("div",{class:"gcanvas"});
-    canvas.ondblclick=e=>{if(e.target!==canvas&&e.target.tagName!=="svg"&&e.target.tagName!=="path")return;
-      const rect=canvas.getBoundingClientRect();showPicker(canvas,e.clientX-rect.left,e.clientY-rect.top);};
-    const svg=document.createElementNS(SVGNS,"svg");svg.setAttribute("class","gedges");canvas.append(svg);
-    const els={};
-    graphNodes().forEach(n=>{const el=nodeEditor(n);els[n.id]=el;canvas.append(el);});
-    root.append(canvas);
-    if(!graphNodes().length)canvas.append(h("div",{class:"gempty"},"Doppelklick hier, um eine Rohzelle zu setzen — oder oben in der Werkzeugleiste anlegen."));
-    function drawEdges(){while(svg.firstChild)svg.removeChild(svg.firstChild);
-      graphEdges().forEach(e=>{const a=els[e.from],b=els[e.to];if(!a||!b)return;svg.append(edgePath(a,b,e));});}
-    window.__deDrawEdges=drawEdges;
-    drawEdges();                       // synchron (liest Layout) — robust auch bei pausiertem rAF
-    requestAnimationFrame(drawEdges);  // + nächster Frame, falls Fonts/Größen noch nachfließen
+    SLOTS={};
+    canvas=h("div",{class:"gcanvas"});
+    world=h("div",{class:"gworld"});
+    svg=document.createElementNS(SVGNS,"svg");svg.setAttribute("class","gedges");world.append(svg);
+    const nodes=graphNodes();
+    nodes.forEach(n=>world.append(nodeEditor(n)));
+    svgTop=document.createElementNS(SVGNS,"svg");svgTop.setAttribute("class","gedges top");world.append(svgTop);
+    if(!nodes.length)world.append(h("div",{class:"gempty"},"Doppelklick auf die Fläche, um einen Knoten zu setzen — oder oben in der Leiste."));
+    canvas.append(world);root.append(canvas);
+    applyPan();
+    canvas.onpointerdown=e=>{const t=e.target;
+      if(t.closest&&(t.closest(".ghead")||t.closest("input,textarea,select,button,.slot")))return;
+      startPan(e);};
+    canvas.ondblclick=e=>{if(e.target.closest&&e.target.closest(".gnode2"))return;
+      const w=toWorld(e.clientX,e.clientY),r=canvas.getBoundingClientRect();
+      showPicker(canvas,e.clientX-r.left,e.clientY-r.top,w.x,w.y);};
+    canvas.onwheel=e=>{e.preventDefault();const r=canvas.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
+      const ns=Math.min(2,Math.max(0.35,PAN.s*(e.deltaY<0?1.1:0.9))),wx=(mx-PAN.x)/PAN.s,wy=(my-PAN.y)/PAN.s;
+      PAN.s=ns;PAN.x=mx-wx*ns;PAN.y=my-wy*ns;applyPan();};
+    drawEdges();requestAnimationFrame(drawEdges);
   }
-  // Rohzelle: Doppelklick → Picker → „was soll hier entstehen?" → Knoten an der Stelle.
-  function showPicker(canvas,x,y){
+  function showPicker(canvas,sx,sy,wx,wy){
     canvas.querySelectorAll(".gpick").forEach(p=>p.remove());
-    const pick=h("div",{class:"gpick"});pick.style.left=x+"px";pick.style.top=y+"px";
-    const opt=(kind,label)=>h("button",{onclick:()=>{pick.remove();neuerKnoten(kind,x,y);}},label);
+    const pick=h("div",{class:"gpick"});pick.style.left=sx+"px";pick.style.top=sy+"px";
+    const opt=(kind,label)=>h("button",{onclick:()=>{pick.remove();neuerKnoten(kind,wx,wy);}},label);
     pick.append(h("div",{class:"gpick-t"},"Was soll hier entstehen?"),
       opt("command","Command"),opt("event","Event"),opt("rejection","Ablehnung"),
       opt("valueobject","Value Object"),opt("enum","Enum"),opt("aggregate","Aggregat"),
-      opt("decider","Decider"),opt("applier","Applier"),opt("saga","Saga"));
+      opt("state","State"),opt("decider","Decider"),opt("applier","Applier"),opt("saga","Prozess"),opt("transition","Transition"));
     canvas.append(pick);
-    // Wegklicken schließt den Picker.
     setTimeout(()=>{const off=ev=>{if(!pick.contains(ev.target)){pick.remove();document.removeEventListener("pointerdown",off);}};document.addEventListener("pointerdown",off);},0);
   }
 
-  // Ein Knoten = Kopf (Griff + Port) + Körper (der In-Place-Editor: recordCard/aggCard/…).
-  const NODELABEL={aggregate:"Aggregat",enum:"Enum",saga:"Saga",decider:"Decider",applier:"Applier"};
-  function nodeEditor(n){
-    const el=h("div",{class:"gnode2 n-"+n.kind+(["aggregate","saga","decider"].includes(n.kind)?" wide":"")});
-    el.dataset.id=n.id;
-    el.style.left=(n.ref.x||0)+"px";el.style.top=(n.ref.y||0)+"px";
-    const label=NODELABEL[n.kind]||kindLabel(n.kind);
-    const head=h("div",{class:"ghead"},h("span",{class:"gh-move"},"⠿ "+label));
-    if(["command","event","rejection","decider","applier"].includes(n.kind)){
-      const port=h("div",{class:"gh-port",draggable:"true",title:"Ziehen zum Verbinden"});
-      port.ondragstart=e=>{e.stopPropagation();
-        const payload=(n.kind==="decider"||n.kind==="applier")?{kind:n.kind,id:n.ref._id}:{name:n.name,kind:n.kind};
-        e.dataTransfer.setData("text/plain",JSON.stringify(payload));};
-      head.append(port);
-    }
-    head.onpointerdown=e=>{if(e.target.classList.contains("gh-port"))return;startMove(e,el,n.ref);};
-    el.append(head);
-    const body=h("div",{class:"gbody"});
-    if(n.kind==="aggregate")body.append(aggStateCard(n.ref));
-    else if(n.kind==="decider")body.append(deciderCard(n.ref));
-    else if(n.kind==="applier")body.append(applierCard(n.ref));
-    else if(n.kind==="enum")body.append(enumCard(n.ref,MODEL.enums.indexOf(n.ref)));
-    else if(n.kind==="saga")body.append(sagaCard(n.ref,MODEL.sagas.indexOf(n.ref)));
-    else body.append(recordCard(n.ref,MODEL.records.indexOf(n.ref)));
-    el.append(body);
-    el.ondragover=e=>{e.preventDefault();el.classList.add("droptarget");};
-    el.ondragleave=()=>el.classList.remove("droptarget");
-    el.ondrop=e=>{e.preventDefault();el.classList.remove("droptarget");
-      let d;try{d=JSON.parse(e.dataTransfer.getData("text/plain"));}catch(_){return;}connectNodes(d,n);};
-    return el;
+  // Prozess-HUB: Prozess<Auslöser>. Transitionen stecken sich HIER an (sichtbare Kante, keine Ableitung).
+  function prozessHubCard(body,s){
+    body.append(topSlot("event","Auslöser: "+(s.triggerEvent||"— (Event hineinziehen)"),{type:"evtUse",dir:"in",saga:s.name,trigger:true},"saga:trigger:"+s.name));
+    body.append(nameInp(s,"name","Prozess","saga"));
+    body.append(h("input",{value:s.namespace??"",oninput:e=>s.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.X"}));
+    const aggs=sagaAggs(s);
+    body.append(h("div",{class:"gsec"},"berührt (abgeleitet): "+(aggs.length?aggs.join(" · "):"—")));
+    body.append(h("div",{class:"gsec"},"Transitionen ◀ (anstecken)"));
+    transOf(s).forEach(t=>{const p=anchorDot("prozess");p.classList.add("i");reg("hub:in:"+s.name+":"+t._id,p,null);
+      body.append(h("div",{class:"slotrow"},p,h("span",{class:"slotlbl"},(t.sende||"Transition")+((t.wenn||[]).length>1?" (Join "+t.wenn.length+")":"")+(t.sammelEvent?" +alle":"")+(t.sendeJe?" ×N":""))));});
+    const oi=port("prozess");oi.classList.add("i");reg("hub:in:"+s.name+":open",oi,{type:"prozess",dir:"in",saga:s.name});
+    body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Transition anstecken")));
   }
-  function startMove(e,el,ref){
-    e.preventDefault();try{el.setPointerCapture(e.pointerId);}catch(_){}el.classList.add("dragging");
-    const sx=e.clientX,sy=e.clientY,ox=ref.x||0,oy=ref.y||0;
-    el.onpointermove=ev=>{let nx=ox+(ev.clientX-sx),ny=oy+(ev.clientY-sy);
-      nx=Math.max(0,Math.round(nx/GRID)*GRID);ny=Math.max(0,Math.round(ny/GRID)*GRID); // Einrasten aufs Raster
-      ref.x=nx;ref.y=ny;el.style.left=nx+"px";el.style.top=ny+"px";if(window.__deDrawEdges)window.__deDrawEdges();};
-    el.onpointerup=()=>{el.classList.remove("dragging");try{el.releasePointerCapture(e.pointerId);}catch(_){}el.onpointermove=null;el.onpointerup=null;};
+  // Elementtyp der SendeJe-Collection (z. B. List<Guid> → Guid) — für den Typ des z-Pins.
+  function collElemTyp(t){if(!t.sendeJeCollection)return "";const dot=t.sendeJeCollection.indexOf(".");if(dot<0)return "";
+    const role=t.sendeJeCollection.slice(0,dot),field=t.sendeJeCollection.slice(dot+1);const j=["t","r","g"].indexOf(role);
+    const r=recByName((t.wenn||[])[j]);const f=r&&(r.felder||[]).find(x=>x.name===field);const m=f&&/<(.+)>/.exec(f.typ||"");return m?baseTyp(m[1]):"";}
+  // Transition-KNOTEN: oben → Prozess (angesteckt); links Join (Auf/Und, UndAlle); rechts Sende/Kompensation (fest);
+  //   darunter Konstruktor: Command-Parameter (Ziel-Pins) ← Event-Felder / z (Quell-Pins), typgeprüft.
+  function transitionCard(body,t){
+    body.append(topSlot("prozess","→ Prozess: "+(t.prozess||"— (an Hub ziehen)"),{type:"prozess",dir:"out",trans:t._id},"tr:prozess:"+t._id));
+    const L=h("div",{class:"col2"});L.append(h("div",{class:"gsec"},"Auf / Und (Join)"));
+    (t.wenn||[]).forEach((e,j)=>{const p=port("event");p.classList.add("i");reg("tr:in:"+t._id+":"+j,p,{type:"evtUse",dir:"in",trans:t._id,wennIdx:j});
+      const role=["t","r","g"][j]||("e"+(j+1));
+      L.append(h("div",{class:"slotrow"},p,h("span",{class:"slotlbl"},"◀ "+role+" · "+(e||"?")),h("button",{class:"rm",onclick:()=>{t.wenn.splice(j,1);render();}},"✕")));});
+    const oi=port("open");oi.classList.add("i");reg("tr:in:"+t._id+":open",oi,{type:"evtUse",dir:"in",trans:t._id,wennIdx:"open"});
+    L.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Und (Event)")));
+    if(t.sammelEvent){const sp=port("event");sp.classList.add("i");reg("tr:sammel:"+t._id,sp,{type:"evtUse",dir:"in",trans:t._id,sammel:true});
+      L.append(h("div",{class:"slotrow"},sp,h("span",{class:"slotlbl"},"◀ alle · "+t.sammelEvent),h("button",{class:"rm",onclick:()=>{t.sammelEvent="";t.sammelAnzahl="";render();}},"✕")));
+      const coll=collFelder(t);const sel=h("select",{onchange:e=>{t.sammelAnzahl=e.target.value?e.target.value+".Count":"";render();}});
+      sel.append(h("option",{value:""},"— N = Collection.Count —"));coll.forEach(c=>{const o=h("option",{value:c},c+".Count");if(t.sammelAnzahl===c+".Count")o.selected=true;sel.append(o);});
+      L.append(sel);
+    }else{const sp=port("open");sp.classList.add("i");reg("tr:sammel:"+t._id,sp,{type:"evtUse",dir:"in",trans:t._id,sammel:true});
+      L.append(h("div",{class:"slotrow"},sp,h("span",{class:"slotlbl"},"+ UndAlle (Count-Join)")));}
+    const R=h("div",{class:"col2",style:"text-align:right"});R.append(h("div",{class:"gsec"},"Sende ▶"));
+    const so=port("command");so.classList.add("o");reg("tr:sende:"+t._id,so,{type:"sagaCmd",dir:"out",trans:t._id,role:"sende"});
+    R.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},t.sende||"— (Command)"),so));
+    R.append(h("label",{class:"cbx",style:"justify-content:flex-end"},h("input",{type:"checkbox",onchange:e=>{t.sendeJe=e.target.checked||undefined;render();},...(t.sendeJe?{checked:"checked"}:{})}),"je (Fan-out)"));
+    if(t.sendeJe){const coll=collFelder(t);const sel=h("select",{onchange:e=>{t.sendeJeCollection=e.target.value;render();}});
+      sel.append(h("option",{value:""},"— je Collection —"));coll.forEach(c=>{const o=h("option",{value:c},c);if(t.sendeJeCollection===c)o.selected=true;sel.append(o);});R.append(sel);}
+    const ko=port("rejection");ko.classList.add("o");reg("tr:komp:"+t._id,ko,{type:"sagaCmd",dir:"out",trans:t._id,role:"komp"});
+    R.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"↩ "+(t.kompensation||"—")),ko));
+    body.append(h("div",{class:"aggwrap"},L,R));
+    schrittArgs(body,t,"sende",t.sende);
+    if(t.kompensation)schrittArgs(body,t,"komp",t.kompensation);
+    const quellen=(t.wenn||[]).map((e,j)=>({r:recByName(e),role:["t","r","g"][j]||("e"+(j+1))})).filter(x=>x.r);
+    if(quellen.length||t.sendeJe){body.append(h("div",{class:"gsec"},"Felder → Parameter ziehen"));
+      quellen.forEach(({r,role})=>(r.felder||[]).forEach(f=>{const pin=port("arg");pin.classList.add("o","sm");
+        reg("tr:field:"+t._id+":"+role+"."+f.name,pin,{type:baseTyp(f.typ),dir:"out",trans:t._id,role,field:f.name,kind:"arg"});
+        body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},role+"."+f.name+" : "+f.typ),pin));}));
+      if(t.sendeJe){const pin=port("arg");pin.classList.add("o","sm");
+        reg("tr:field:"+t._id+":z",pin,{type:collElemTyp(t),dir:"out",trans:t._id,role:"z",field:"",kind:"arg"});
+        body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"z (Element : "+(collElemTyp(t)||"?")+")"),pin));}}
   }
-  // Verbinden: Command→Decider, Event→Decider (Ausgang), Decider→Aggregat, Event→Applier, Applier→Aggregat.
-  function connectNodes(src,n){
-    const T=n.kind, tref=n.ref;
-    if(src.kind==="command"&&T==="decider"){tref.command=src.name;}
-    else if((src.kind==="event"||src.kind==="rejection")&&T==="decider"){
-      if(!(tref.ergibt||[]).some(o=>o.event===src.name))(tref.ergibt=tref.ergibt||[]).push({event:src.name});}
-    else if(src.kind==="decider"&&T==="aggregate"){const d=MODEL.decider.find(d=>d._id===src.id);if(d)d.aggregat=n.name;}
-    else if(src.kind==="event"&&T==="applier"){tref.event=src.name;}
-    else if(src.kind==="applier"&&T==="aggregate"){const a=MODEL.applier.find(a=>a._id===src.id);if(a)a.aggregat=n.name;}
-    else return;
-    render();
-  }
-  function edgePath(a,b,e){
-    const x1=a.offsetLeft+a.offsetWidth,y1=a.offsetTop+a.offsetHeight/2;
-    const x2=b.offsetLeft,y2=b.offsetTop+b.offsetHeight/2;
-    const mx=(x1+x2)/2;
-    const p=document.createElementNS(SVGNS,"path");
-    p.setAttribute("d","M"+x1+","+y1+" C"+mx+","+y1+" "+mx+","+y2+" "+x2+","+y2);
-    p.setAttribute("fill","none");
-    const farbe={decide:"#5a7bb0",produce:"#b08a4a",decagg:"#7c5cff",applyin:"#4aa0a0",apply:"#4a9a6a"};
-    p.setAttribute("stroke",farbe[e.kind]||"#5a7bb0");
-    p.setAttribute("stroke-width","1.8");
-    if(e.kind==="apply")p.setAttribute("stroke-dasharray","5 4");
-    return p;
-  }
-
-  function sagaCard(s,si){
-    const c=h("div",{class:"card"});
-    c.append(h("h3",{},h("span",{class:"k saga"},"Saga"),
-      inp(s.name,v=>s.name=v),inp(s.namespace,v=>s.namespace=v),
-      h("button",{class:"rm",onclick:()=>{MODEL.sagas.splice(si,1);render();}},"✕")));
-    c.append(h("table",{},
-      h("tr",{},h("td",{},"Trigger"),h("td",{},inp(s.triggerEvent,v=>s.triggerEvent=v,"AuslöserEvent"))),
-      h("tr",{},h("td",{},"Usings"),h("td",{},inp(listeZuText(s.extraUsings),v=>s.extraUsings=textZuListe(v),"Domain.Konto"))) ));
-    c.append(h("div",{class:"sub"},"Transitionen (Wenn → Sende → RückgängigDurch)"));
-    (s.schritte||[]).forEach((st,ti)=>{
-      const box=h("div",{style:"border-left:2px solid #5a3a7a;padding-left:8px;margin:6px 0"});
-      box.append(h("div",{style:"display:flex;justify-content:flex-end"},h("button",{class:"rm",onclick:()=>{s.schritte.splice(ti,1);render();}},"✕")));
-      box.append(h("table",{},
-        h("tr",{},h("td",{style:"width:70px"},"Wenn"),h("td",{},inp(listeZuText(st.wenn),v=>st.wenn=textZuListe(v),"E1, E2, E3"))),
-        h("tr",{},h("td",{},"Sende"),h("td",{},inp(st.sende,v=>st.sende=v,"Command"))),
-        h("tr",{},h("td",{},"Args"),h("td",{},inp(listeZuText(st.sendeArgumente),v=>st.sendeArgumente=textZuListe(v).length?textZuListe(v):undefined,"t.Quelle, t.Betrag"))),
-        h("tr",{},h("td",{},"Komp."),h("td",{},inp(st.kompensation,v=>st.kompensation=v||undefined,"Kompensations-Command"))),
-        h("tr",{},h("td",{},"Komp.Args"),h("td",{},inp(listeZuText(st.kompensationArgumente),v=>st.kompensationArgumente=textZuListe(v).length?textZuListe(v):undefined,"t.Quelle, t.Betrag")))));
-      c.append(box);
-    });
-    c.append(h("button",{class:"add",onclick:()=>{(s.schritte=s.schritte||[]).push({wenn:[s.triggerEvent].filter(Boolean),sende:""});render();}},"+ Transition"));
-    return c;
-  }
+  function schrittArgs(body,t,target,cmdName){const cmd=recByName(cmdName);if(!cmd)return;
+    const args=target==="komp"?(t.kompArgs||[]):(t.sendeArgs||[]);
+    body.append(h("div",{class:"gsec"},(target==="komp"?"↩ ":"")+cmdName+"( … ) — Parameter"));
+    (cmd.felder||[]).forEach((p,pi)=>{const pin=port("arg");pin.classList.add("i","sm");
+      reg("tr:param:"+t._id+":"+target+":"+pi,pin,{type:baseTyp(p.typ),dir:"in",trans:t._id,paramIndex:pi,target,kind:"arg"});
+      body.append(h("div",{class:"slotrow"},pin,h("span",{class:"slotlbl"},p.name+" : "+p.typ+(args[pi]?"  ← "+args[pi]:""))));});}
 
   // ── Aktionen ──
   window.deOpen=function(){document.getElementById("de").classList.add("on");if(!MODEL.records.length&&!MODEL.aggregate.length)deReload();else render();};
@@ -1048,9 +1311,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   async function loadLive(){try{const r=await fetch("/api/editor/model");if(!r.ok)throw 0;const m=await r.json();badge(true);return m;}catch(e){badge(false);return null;}}
   function badge(live){const b=document.getElementById("de-badge");b.textContent=live?"SimHost live":"offline";b.className="badge"+(live?"":" off");}
   window.deReload=async function(){const live=await loadLive();MODEL=normalize(live||(embedded&&(embedded.records||embedded.aggregate)?embedded:null));render();};
-  window.deDownload=function(){const blob=new Blob([JSON.stringify(MODEL,null,2)],{type:"application/json"});
+  window.deDownload=function(){deriveMembership();prepareSaga();const blob=new Blob([JSON.stringify(MODEL,null,2)],{type:"application/json"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="domain-model.json";a.click();};
-  async function post(path){const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(MODEL)});
+  async function post(path){deriveMembership();prepareSaga();const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(MODEL)});
     if(!r.ok)throw new Error("HTTP "+r.status);return r;}
   window.deScaffold=async function(){const out=document.getElementById("de-out");
     try{const r=await post("/api/editor/scaffold");const files=await r.json();badge(true);
@@ -1064,7 +1327,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     }catch(e){badge(false);out.innerHTML='<div class="find error">SimHost nicht erreichbar. Starte ihn: <b>dotnet run --project SimHost</b>.</div>';}};
 
   const unreach='<div class="find error">SimHost nicht erreichbar. Starte ihn: <b>dotnet run --project SimHost</b>.</div>';
-  async function postJson(path,obj){const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(obj)});if(!r.ok)throw new Error("HTTP "+r.status);return r;}
+  async function postJson(path,obj){deriveMembership();prepareSaga();const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(obj)});if(!r.ok)throw new Error("HTTP "+r.status);return r;}
   const alleCommands=()=>MODEL.records.filter(r=>r.kind==="command");
 
   // ⚙ Kompilieren: das Modell IN-MEMORY mit den echten Domain-Generatoren übersetzen.

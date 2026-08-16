@@ -236,12 +236,25 @@ public static class Scaffolder
     {
         var auf = new StringBuilder($"        p.Auf<{s.Wenn[0]}>()");
         for (var i = 1; i < s.Wenn.Count; i++) auf.Append($".Und<{s.Wenn[i]}>()");
+        var hatSammel = !string.IsNullOrWhiteSpace(s.SammelEvent);
+        if (hatSammel)
+            auf.Append($".UndAlle<{s.SammelEvent}>(t => {(string.IsNullOrWhiteSpace(s.SammelAnzahl) ? "0" : s.SammelAnzahl)})");
         b.AppendLine(auf.ToString());
 
-        var lambda = LambdaKopf(s.Wenn.Count);
+        var lambda = LambdaKopf(s.Wenn.Count + (hatSammel ? 1 : 0));
         var sendeArgs = ArgListe(s.SendeArgumente, s.Sende, modell);
         var hatKomp = s.Kompensation is not null;
-        var sende = $"            .Sende<{s.Sende}>({lambda} => new {s.Sende}({sendeArgs}))";
+        string sende;
+        if (s.SendeJe)
+        {
+            var el = string.IsNullOrWhiteSpace(s.SendeJeElement) ? "z" : s.SendeJeElement;
+            var coll = string.IsNullOrWhiteSpace(s.SendeJeCollection) ? "/* Collection */" : s.SendeJeCollection;
+            sende = $"            .SendeJe<{s.Sende}>({lambda} => {coll}.Select({el} => new {s.Sende}({sendeArgs})))";
+        }
+        else
+        {
+            sende = $"            .Sende<{s.Sende}>({lambda} => new {s.Sende}({sendeArgs}))";
+        }
         b.AppendLine(hatKomp ? sende : sende + ";");
 
         if (hatKomp)

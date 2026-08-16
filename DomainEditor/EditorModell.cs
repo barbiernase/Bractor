@@ -167,11 +167,20 @@ public sealed record Saga
     public IReadOnlyList<string> ExtraUsings { get; init; } = [];
 }
 
-/// <summary>Eine Saga-Transition: <c>Auf/Und → Sende → RückgängigDurch</c>.</summary>
+/// <summary>Eine Saga-Transition: <c>Auf/Und (→ UndAlle) → Sende/SendeJe → RückgängigDurch</c>.</summary>
 public sealed record SagaSchritt
 {
+    /// <summary>Der Join (Konjunktion): <c>Auf&lt;Wenn[0]&gt;().Und&lt;Wenn[1]&gt;()…</c>.</summary>
     public IReadOnlyList<string> Wenn { get; init; } = [];
+    /// <summary>Optional Count-Join: <c>.UndAlle&lt;SammelEvent&gt;(t => SammelAnzahl)</c> — feuert erst nach ALLEN N.</summary>
+    public string? SammelEvent { get; init; }
+    /// <summary>Der Anzahl-Ausdruck des Count-Joins, z. B. <c>t.Ziele.Count</c>.</summary>
+    public string? SammelAnzahl { get; init; }
     public required string Sende { get; init; }
+    /// <summary>Fan-out: <c>SendeJe</c> statt <c>Sende</c> — iteriert <see cref="SendeJeCollection"/> mit <see cref="SendeJeElement"/>.</summary>
+    public bool SendeJe { get; init; }
+    public string? SendeJeCollection { get; init; }
+    public string? SendeJeElement { get; init; }
     public IReadOnlyList<string>? SendeArgumente { get; init; }
     public string? Kompensation { get; init; }
     public IReadOnlyList<string>? KompensationArgumente { get; init; }
