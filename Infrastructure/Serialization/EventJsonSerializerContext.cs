@@ -3,6 +3,7 @@ using Abstractions;
 using Domain.Antrag;
 using Domain.Auftrag;
 using Domain.Bestellung;
+using Domain.Datensatz;
 using Domain.Erinnerung;
 using Domain.Flug;
 using Domain.Hotel;
@@ -93,6 +94,15 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(VerkaufspositionHinzugefuegt))]
 [JsonSerializable(typeof(VerkaufsauftragAufgegeben))]
 [JsonSerializable(typeof(VerkaufsauftragStorniert))]
+// ── Datensatz (nur PERSISTENTE Events; Value Objects reisen transitiv mit) ──
+[JsonSerializable(typeof(DatensatzErstellt))]
+[JsonSerializable(typeof(RangeAngefordert))]
+[JsonSerializable(typeof(PaareAufgenommen))]
+[JsonSerializable(typeof(PaarAufgenommen))]
+[JsonSerializable(typeof(PaarEntfernt))]
+[JsonSerializable(typeof(SplitGesetzt))]
+[JsonSerializable(typeof(EinfrierenAngefordert))]
+[JsonSerializable(typeof(DatensatzEingefroren))]
 // ── Reaktion ──
 [JsonSerializable(typeof(ReaktionGewirkt))]
 // ── Prozess-intern (IProzessIntern, aber IEvent → persistiert) ──

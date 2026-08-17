@@ -179,46 +179,54 @@ message CommandEnvelopeDto {
         StelleAntragDto stelle_antrag = 20;
         BeauftrageUeberweisungDto beauftrage_ueberweisung = 21;
         GibBestellungAufDto gib_bestellung_auf = 22;
-        FristFaelligDto frist_faellig = 23;
-        GebeFlugFreiDto gebe_flug_frei = 24;
-        ReserviereFlugDto reserviere_flug = 25;
-        RichteFlugEinDto richte_flug_ein = 26;
-        GebeHotelFreiDto gebe_hotel_frei = 27;
-        ReserviereHotelDto reserviere_hotel = 28;
-        RichteHotelEinDto richte_hotel_ein = 29;
-        ErstelleImagePairDto erstelle_image_pair = 30;
-        KlassifiziereBildPaarDurchKiDto klassifiziere_bild_paar_durch_ki = 31;
-        KlassifiziereEinzelBildDurchKiDto klassifiziere_einzel_bild_durch_ki = 32;
-        LabelBildPaarDto label_bild_paar = 33;
-        LabelBildRegionDto label_bild_region = 34;
-        LabelEinzelBildDto label_einzel_bild = 35;
-        LabelPhysischesProduktDto label_physisches_produkt = 36;
-        MarkiereAlsInspiziertDto markiere_als_inspiziert = 37;
-        MeldeBildVerfuegbarDto melde_bild_verfuegbar = 38;
-        BucheReservierungDto buche_reservierung = 39;
-        EroeffneKontoDto eroeffne_konto = 40;
-        GebeReservierungFreiDto gebe_reservierung_frei = 41;
-        ReserviereBetragDto reserviere_betrag = 42;
-        SchreibeGutDto schreibe_gut = 43;
-        StorniereGutschriftDto storniere_gutschrift = 44;
-        GebeBestandFreiDto gebe_bestand_frei = 45;
-        ReserviereBestandDto reserviere_bestand = 46;
-        RichteLagerEinDto richte_lager_ein = 47;
-        WirkeReaktionDto wirke_reaktion = 48;
-        BestaetigeReiseDto bestaetige_reise = 49;
-        BucheReiseDto buche_reise = 50;
-        BeauftrageSammelueberweisungDto beauftrage_sammelueberweisung = 51;
-        EroeffneVerkaufsauftragDto eroeffne_verkaufsauftrag = 52;
-        FuegePositionHinzuDto fuege_position_hinzu = 53;
-        GibVerkaufsauftragAufDto gib_verkaufsauftrag_auf = 54;
-        StorniereVerkaufsauftragDto storniere_verkaufsauftrag = 55;
-        VersendeDto versende = 56;
-        AktiviereDto aktiviere = 57;
-        GenehmigeDto genehmige = 58;
-        BeauftrageWillkommensbonusDto beauftrage_willkommensbonus = 59;
-        BelasteKontoDto belaste_konto = 60;
-        ErstatteKontoDto erstatte_konto = 61;
-        RichteZahlungskontoEinDto richte_zahlungskonto_ein = 62;
+        EntfernePaarDto entferne_paar = 23;
+        ErstelleDatensatzDto erstelle_datensatz = 24;
+        FriereEinDto friere_ein = 25;
+        FuegeRangeHinzuDto fuege_range_hinzu = 26;
+        NimmPaarAufDto nimm_paar_auf = 27;
+        NimmRangeAufDto nimm_range_auf = 28;
+        SchliesseEinfrierenAbDto schliesse_einfrieren_ab = 29;
+        SetzeSplitDto setze_split = 30;
+        FristFaelligDto frist_faellig = 31;
+        GebeFlugFreiDto gebe_flug_frei = 32;
+        ReserviereFlugDto reserviere_flug = 33;
+        RichteFlugEinDto richte_flug_ein = 34;
+        GebeHotelFreiDto gebe_hotel_frei = 35;
+        ReserviereHotelDto reserviere_hotel = 36;
+        RichteHotelEinDto richte_hotel_ein = 37;
+        ErstelleImagePairDto erstelle_image_pair = 38;
+        KlassifiziereBildPaarDurchKiDto klassifiziere_bild_paar_durch_ki = 39;
+        KlassifiziereEinzelBildDurchKiDto klassifiziere_einzel_bild_durch_ki = 40;
+        LabelBildPaarDto label_bild_paar = 41;
+        LabelBildRegionDto label_bild_region = 42;
+        LabelEinzelBildDto label_einzel_bild = 43;
+        LabelPhysischesProduktDto label_physisches_produkt = 44;
+        MarkiereAlsInspiziertDto markiere_als_inspiziert = 45;
+        MeldeBildVerfuegbarDto melde_bild_verfuegbar = 46;
+        BucheReservierungDto buche_reservierung = 47;
+        EroeffneKontoDto eroeffne_konto = 48;
+        GebeReservierungFreiDto gebe_reservierung_frei = 49;
+        ReserviereBetragDto reserviere_betrag = 50;
+        SchreibeGutDto schreibe_gut = 51;
+        StorniereGutschriftDto storniere_gutschrift = 52;
+        GebeBestandFreiDto gebe_bestand_frei = 53;
+        ReserviereBestandDto reserviere_bestand = 54;
+        RichteLagerEinDto richte_lager_ein = 55;
+        WirkeReaktionDto wirke_reaktion = 56;
+        BestaetigeReiseDto bestaetige_reise = 57;
+        BucheReiseDto buche_reise = 58;
+        BeauftrageSammelueberweisungDto beauftrage_sammelueberweisung = 59;
+        EroeffneVerkaufsauftragDto eroeffne_verkaufsauftrag = 60;
+        FuegePositionHinzuDto fuege_position_hinzu = 61;
+        GibVerkaufsauftragAufDto gib_verkaufsauftrag_auf = 62;
+        StorniereVerkaufsauftragDto storniere_verkaufsauftrag = 63;
+        VersendeDto versende = 64;
+        AktiviereDto aktiviere = 65;
+        GenehmigeDto genehmige = 66;
+        BeauftrageWillkommensbonusDto beauftrage_willkommensbonus = 67;
+        BelasteKontoDto belaste_konto = 68;
+        ErstatteKontoDto erstatte_konto = 69;
+        RichteZahlungskontoEinDto richte_zahlungskonto_ein = 70;
 
     }
 }
@@ -235,75 +243,88 @@ message EventEnvelopeDto {
     string target_subscriber_id = 9;
     
     oneof payload {
-        ImagePairInspiziertDto image_pair_inspiziert = 20;
-        ImagePairKomplettDto image_pair_komplett = 21;
-        PaarNichtKomplettDto paar_nicht_komplett = 22;
-        CommandFailedDto command_failed = 23;
-        AntragGestelltDto antrag_gestellt = 24;
-        UeberweisungBeauftragtDto ueberweisung_beauftragt = 25;
-        BestellungAufgegebenDto bestellung_aufgegeben = 26;
-        ErinnerungAusgeloestDto erinnerung_ausgeloest = 27;
-        FlugAusgebuchtDto flug_ausgebucht = 28;
-        FlugEingerichtetDto flug_eingerichtet = 29;
-        FlugExistiertBereitsDto flug_existiert_bereits = 30;
-        FlugFreigegebenDto flug_freigegeben = 31;
-        FlugReserviertDto flug_reserviert = 32;
-        HotelAusgebuchtDto hotel_ausgebucht = 33;
-        HotelEingerichtetDto hotel_eingerichtet = 34;
-        HotelExistiertBereitsDto hotel_existiert_bereits = 35;
-        HotelFreigegebenDto hotel_freigegeben = 36;
-        HotelReserviertDto hotel_reserviert = 37;
-        BildNichtVerfuegbarDto bild_nicht_verfuegbar = 38;
-        BildPaarDurchKiKlassifiziertDto bild_paar_durch_ki_klassifiziert = 39;
-        BildPaarGelabeltDto bild_paar_gelabelt = 40;
-        BildRegionGelabeltDto bild_region_gelabelt = 41;
-        BildVerfuegbarDto bild_verfuegbar = 42;
-        BildVersionBereitsVerfuegbarDto bild_version_bereits_verfuegbar = 43;
-        EinzelBildDurchKiKlassifiziertDto einzel_bild_durch_ki_klassifiziert = 44;
-        EinzelBildGelabeltDto einzel_bild_gelabelt = 45;
-        ImagePairEingabeUngueltigDto image_pair_eingabe_ungueltig = 46;
-        ImagePairErstelltDto image_pair_erstellt = 47;
-        ImagePairExistiertBereitsDto image_pair_existiert_bereits = 48;
-        ImagePairNichtGefundenDto image_pair_nicht_gefunden = 49;
-        PhysischesProduktGelabeltDto physisches_produkt_gelabelt = 50;
-        RegionIndexUngueltigDto region_index_ungueltig = 51;
-        RegionLabelsUngueltigDto region_labels_ungueltig = 52;
-        BetragReserviertDto betrag_reserviert = 53;
-        DeckungReichtNichtDto deckung_reicht_nicht = 54;
-        GutgeschriebenDto gutgeschrieben = 55;
-        GutschriftStorniertDto gutschrift_storniert = 56;
-        KontoEroeffnetDto konto_eroeffnet = 57;
-        KontoExistiertBereitsDto konto_existiert_bereits = 58;
-        KontoGesperrtDto konto_gesperrt = 59;
-        KontoNichtGefundenDto konto_nicht_gefunden = 60;
-        ReservierungFreigegebenDto reservierung_freigegeben = 61;
-        ReservierungGebuchtDto reservierung_gebucht = 62;
-        BestandFreigegebenDto bestand_freigegeben = 63;
-        BestandReichtNichtDto bestand_reicht_nicht = 64;
-        BestandReserviertDto bestand_reserviert = 65;
-        LagerEingerichtetDto lager_eingerichtet = 66;
-        LagerExistiertBereitsDto lager_existiert_bereits = 67;
-        ReaktionGewirktDto reaktion_gewirkt = 68;
-        ReiseBestaetigtDto reise_bestaetigt = 69;
-        ReiseGebuchtDto reise_gebucht = 70;
-        SammelUeberweisungBeauftragtDto sammel_ueberweisung_beauftragt = 71;
-        AuftragNichtOffenDto auftrag_nicht_offen = 72;
-        KreditlimitUeberschrittenDto kreditlimit_ueberschritten = 73;
-        VerkaufsauftragAufgegebenDto verkaufsauftrag_aufgegeben = 74;
-        VerkaufsauftragEroeffnetDto verkaufsauftrag_eroeffnet = 75;
-        VerkaufsauftragExistiertBereitsDto verkaufsauftrag_existiert_bereits = 76;
-        VerkaufsauftragNichtGefundenDto verkaufsauftrag_nicht_gefunden = 77;
-        VerkaufsauftragStorniertDto verkaufsauftrag_storniert = 78;
-        VerkaufspositionHinzugefuegtDto verkaufsposition_hinzugefuegt = 79;
-        WaehrungPasstNichtDto waehrung_passt_nicht = 80;
-        VersendetDto versendet = 81;
-        VorgangAktiviertDto vorgang_aktiviert = 82;
-        VorgangGenehmigtDto vorgang_genehmigt = 83;
-        WillkommensbonusBeauftragtDto willkommensbonus_beauftragt = 84;
-        KontoBelastetDto konto_belastet = 85;
-        KontoErstattetDto konto_erstattet = 86;
-        KontoUngedecktDto konto_ungedeckt = 87;
-        ZahlungskontoEingerichtetDto zahlungskonto_eingerichtet = 88;
+        EinfrierenAngefordertDto einfrieren_angefordert = 20;
+        ImagePairInspiziertDto image_pair_inspiziert = 21;
+        ImagePairKomplettDto image_pair_komplett = 22;
+        PaarNichtKomplettDto paar_nicht_komplett = 23;
+        CommandFailedDto command_failed = 24;
+        AntragGestelltDto antrag_gestellt = 25;
+        UeberweisungBeauftragtDto ueberweisung_beauftragt = 26;
+        BestellungAufgegebenDto bestellung_aufgegeben = 27;
+        DatensatzBereitsEingefrorenDto datensatz_bereits_eingefroren = 28;
+        DatensatzEingefrorenDto datensatz_eingefroren = 29;
+        DatensatzErstelltDto datensatz_erstellt = 30;
+        DatensatzExistiertBereitsDto datensatz_existiert_bereits = 31;
+        DatensatzLeerDto datensatz_leer = 32;
+        PaarAufgenommenDto paar_aufgenommen = 33;
+        PaareAufgenommenDto paare_aufgenommen = 34;
+        PaarEntferntDto paar_entfernt = 35;
+        RangeAngefordertDto range_angefordert = 36;
+        RangeLeerDto range_leer = 37;
+        SplitGesetztDto split_gesetzt = 38;
+        SplitUngueltigDto split_ungueltig = 39;
+        ErinnerungAusgeloestDto erinnerung_ausgeloest = 40;
+        FlugAusgebuchtDto flug_ausgebucht = 41;
+        FlugEingerichtetDto flug_eingerichtet = 42;
+        FlugExistiertBereitsDto flug_existiert_bereits = 43;
+        FlugFreigegebenDto flug_freigegeben = 44;
+        FlugReserviertDto flug_reserviert = 45;
+        HotelAusgebuchtDto hotel_ausgebucht = 46;
+        HotelEingerichtetDto hotel_eingerichtet = 47;
+        HotelExistiertBereitsDto hotel_existiert_bereits = 48;
+        HotelFreigegebenDto hotel_freigegeben = 49;
+        HotelReserviertDto hotel_reserviert = 50;
+        BildNichtVerfuegbarDto bild_nicht_verfuegbar = 51;
+        BildPaarDurchKiKlassifiziertDto bild_paar_durch_ki_klassifiziert = 52;
+        BildPaarGelabeltDto bild_paar_gelabelt = 53;
+        BildRegionGelabeltDto bild_region_gelabelt = 54;
+        BildVerfuegbarDto bild_verfuegbar = 55;
+        BildVersionBereitsVerfuegbarDto bild_version_bereits_verfuegbar = 56;
+        EinzelBildDurchKiKlassifiziertDto einzel_bild_durch_ki_klassifiziert = 57;
+        EinzelBildGelabeltDto einzel_bild_gelabelt = 58;
+        ImagePairEingabeUngueltigDto image_pair_eingabe_ungueltig = 59;
+        ImagePairErstelltDto image_pair_erstellt = 60;
+        ImagePairExistiertBereitsDto image_pair_existiert_bereits = 61;
+        ImagePairNichtGefundenDto image_pair_nicht_gefunden = 62;
+        PhysischesProduktGelabeltDto physisches_produkt_gelabelt = 63;
+        RegionIndexUngueltigDto region_index_ungueltig = 64;
+        RegionLabelsUngueltigDto region_labels_ungueltig = 65;
+        BetragReserviertDto betrag_reserviert = 66;
+        DeckungReichtNichtDto deckung_reicht_nicht = 67;
+        GutgeschriebenDto gutgeschrieben = 68;
+        GutschriftStorniertDto gutschrift_storniert = 69;
+        KontoEroeffnetDto konto_eroeffnet = 70;
+        KontoExistiertBereitsDto konto_existiert_bereits = 71;
+        KontoGesperrtDto konto_gesperrt = 72;
+        KontoNichtGefundenDto konto_nicht_gefunden = 73;
+        ReservierungFreigegebenDto reservierung_freigegeben = 74;
+        ReservierungGebuchtDto reservierung_gebucht = 75;
+        BestandFreigegebenDto bestand_freigegeben = 76;
+        BestandReichtNichtDto bestand_reicht_nicht = 77;
+        BestandReserviertDto bestand_reserviert = 78;
+        LagerEingerichtetDto lager_eingerichtet = 79;
+        LagerExistiertBereitsDto lager_existiert_bereits = 80;
+        ReaktionGewirktDto reaktion_gewirkt = 81;
+        ReiseBestaetigtDto reise_bestaetigt = 82;
+        ReiseGebuchtDto reise_gebucht = 83;
+        SammelUeberweisungBeauftragtDto sammel_ueberweisung_beauftragt = 84;
+        AuftragNichtOffenDto auftrag_nicht_offen = 85;
+        KreditlimitUeberschrittenDto kreditlimit_ueberschritten = 86;
+        VerkaufsauftragAufgegebenDto verkaufsauftrag_aufgegeben = 87;
+        VerkaufsauftragEroeffnetDto verkaufsauftrag_eroeffnet = 88;
+        VerkaufsauftragExistiertBereitsDto verkaufsauftrag_existiert_bereits = 89;
+        VerkaufsauftragNichtGefundenDto verkaufsauftrag_nicht_gefunden = 90;
+        VerkaufsauftragStorniertDto verkaufsauftrag_storniert = 91;
+        VerkaufspositionHinzugefuegtDto verkaufsposition_hinzugefuegt = 92;
+        WaehrungPasstNichtDto waehrung_passt_nicht = 93;
+        VersendetDto versendet = 94;
+        VorgangAktiviertDto vorgang_aktiviert = 95;
+        VorgangGenehmigtDto vorgang_genehmigt = 96;
+        WillkommensbonusBeauftragtDto willkommensbonus_beauftragt = 97;
+        KontoBelastetDto konto_belastet = 98;
+        KontoErstattetDto konto_erstattet = 99;
+        KontoUngedecktDto konto_ungedeckt = 100;
+        ZahlungskontoEingerichtetDto zahlungskonto_eingerichtet = 101;
 
     }
 }
@@ -359,6 +380,26 @@ message RegionPositionDto {
     double hoehe_prozent = 4;
 }
 
+message DatensatzMitgliedDto {
+    string image_pair_id = 1;
+    int32 label = 2;
+    int32 split = 3;
+    string dc0_pfad = 4;
+    string dc2_pfad = 5;
+}
+
+message RangeKriterienDto {
+    int64 von = 1;
+    int64 bis = 2;
+    string ki_klassifikation = 3;
+    string mensch_label = 4;
+    string produkt_label = 5;
+    int32 nur_komplette = 6;
+    int32 hat_ki_klassifikation = 7;
+    int32 hat_mensch_label = 8;
+    int32 nur_nicht_inspizierte = 9;
+}
+
 message RegionBewertungDto {
     int32 region_index = 1;
     RegionPositionDto position = 2;
@@ -394,6 +435,11 @@ message ProduktionsZeitBucketDto {
     int32 anomalie = 5;
     int32 ungelabelt = 6;
     int32 nicht_inspiziert = 7;
+}
+
+message RangeHerkunftDto {
+    RangeKriterienDto kriterien = 1;
+    int32 anzahl_paare = 2;
 }
 
 message BildMetaDto {
@@ -434,6 +480,46 @@ message StateChangeViaUeberweisungBeauftragtDto {
 }
 
 message StateChangeViaBestellungAufgegebenDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaDatensatzEingefrorenDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaDatensatzErstelltDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaEinfrierenAngefordertDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaPaarAufgenommenDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaPaareAufgenommenDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaPaarEntferntDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaRangeAngefordertDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaSplitGesetztDto {
     string stream_id = 1;
     int32 version = 2;
 }
@@ -667,6 +753,49 @@ message GibBestellungAufDto {
     string betrag = 6;
 }
 
+message EntfernePaarDto {
+    string aggregate_id = 1;
+    string image_pair_id = 2;
+}
+
+message ErstelleDatensatzDto {
+    string aggregate_id = 1;
+    string name = 2;
+}
+
+message FriereEinDto {
+    string aggregate_id = 1;
+}
+
+message FuegeRangeHinzuDto {
+    string aggregate_id = 1;
+    RangeKriterienDto kriterien = 2;
+}
+
+message NimmPaarAufDto {
+    string aggregate_id = 1;
+    string image_pair_id = 2;
+}
+
+message NimmRangeAufDto {
+    string aggregate_id = 1;
+    repeated string image_pair_ids = 2;
+    RangeHerkunftDto herkunft = 3;
+}
+
+message SchliesseEinfrierenAbDto {
+    string aggregate_id = 1;
+    repeated DatensatzMitgliedDto mitglieder = 2;
+}
+
+message SetzeSplitDto {
+    string aggregate_id = 1;
+    int32 train_prozent = 2;
+    int32 val_prozent = 3;
+    int32 test_prozent = 4;
+    int32 seed = 5;
+}
+
 message FristFaelligDto {
     string aggregate_id = 1;
     string kontext = 2;
@@ -891,6 +1020,10 @@ message RichteZahlungskontoEinDto {
 // ============================================================================
 // EVENT PAYLOADS
 // ============================================================================
+message EinfrierenAngefordertDto {
+    EinfrierenAngefordertDto original = 1;
+}
+
 message ImagePairInspiziertDto {
     ImagePairInspiziertDto original = 1;
 }
@@ -927,6 +1060,61 @@ message BestellungAufgegebenDto {
     string artikel = 4;
     int32 menge = 5;
     string betrag = 6;
+}
+
+message DatensatzBereitsEingefrorenDto {
+    string datensatz_id = 1;
+}
+
+message DatensatzEingefrorenDto {
+    int32 version = 1;
+    repeated DatensatzMitgliedDto mitglieder = 2;
+}
+
+message DatensatzErstelltDto {
+    string name = 1;
+}
+
+message DatensatzExistiertBereitsDto {
+    string datensatz_id = 1;
+}
+
+message DatensatzLeerDto {
+    string datensatz_id = 1;
+}
+
+message PaarAufgenommenDto {
+    string image_pair_id = 1;
+}
+
+message PaareAufgenommenDto {
+    repeated string image_pair_ids = 1;
+    RangeHerkunftDto herkunft = 2;
+}
+
+message PaarEntferntDto {
+    string image_pair_id = 1;
+}
+
+message RangeAngefordertDto {
+    RangeKriterienDto kriterien = 1;
+}
+
+message RangeLeerDto {
+    string datensatz_id = 1;
+}
+
+message SplitGesetztDto {
+    int32 train_prozent = 1;
+    int32 val_prozent = 2;
+    int32 test_prozent = 3;
+    int32 seed = 4;
+}
+
+message SplitUngueltigDto {
+    int32 train_prozent = 1;
+    int32 val_prozent = 2;
+    int32 test_prozent = 3;
 }
 
 message ErinnerungAusgeloestDto {

@@ -3,6 +3,7 @@ using Abstractions;
 using Domain.Antrag;
 using Domain.Auftrag;
 using Domain.Bestellung;
+using Domain.Datensatz;
 using Domain.Erinnerung;
 using Domain.Flug;
 using Domain.Hotel;
@@ -81,6 +82,15 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(ProzessWake))]
 // ── Commands (GeneratedTypeRegistry.Commands) ──
 [JsonSerializable(typeof(Aktiviere))]
+// ── Datensatz-Commands ──
+[JsonSerializable(typeof(ErstelleDatensatz))]
+[JsonSerializable(typeof(FuegeRangeHinzu))]
+[JsonSerializable(typeof(NimmRangeAuf))]
+[JsonSerializable(typeof(NimmPaarAuf))]
+[JsonSerializable(typeof(EntfernePaar))]
+[JsonSerializable(typeof(SetzeSplit))]
+[JsonSerializable(typeof(FriereEin))]
+[JsonSerializable(typeof(SchliesseEinfrierenAb))]
 [JsonSerializable(typeof(BeauftrageSammelueberweisung))]
 [JsonSerializable(typeof(BeauftrageUeberweisung))]
 [JsonSerializable(typeof(BelasteKonto))]
@@ -121,6 +131,20 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(WirkeReaktion))]
 // ── Events (GeneratedTypeRegistry.Events, inkl. ITransientEvent + Prozess-intern) ──
 [JsonSerializable(typeof(AntragGestellt))]
+// ── Datensatz-Events (inkl. Ablehnungen als ITransientEvent) ──
+[JsonSerializable(typeof(DatensatzErstellt))]
+[JsonSerializable(typeof(RangeAngefordert))]
+[JsonSerializable(typeof(PaareAufgenommen))]
+[JsonSerializable(typeof(PaarAufgenommen))]
+[JsonSerializable(typeof(PaarEntfernt))]
+[JsonSerializable(typeof(SplitGesetzt))]
+[JsonSerializable(typeof(EinfrierenAngefordert))]
+[JsonSerializable(typeof(DatensatzEingefroren))]
+[JsonSerializable(typeof(DatensatzExistiertBereits))]
+[JsonSerializable(typeof(DatensatzBereitsEingefroren))]
+[JsonSerializable(typeof(DatensatzLeer))]
+[JsonSerializable(typeof(RangeLeer))]
+[JsonSerializable(typeof(SplitUngueltig))]
 [JsonSerializable(typeof(BestandFreigegeben))]
 [JsonSerializable(typeof(BestandReichtNicht))]
 [JsonSerializable(typeof(BestandReserviert))]
@@ -190,6 +214,15 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(DateiErkannt))]
 // ── Signale (GeneratedTypeRegistry.Signals, StateChangeVia{Event}) ──
 [JsonSerializable(typeof(StateChangeViaAntragGestellt))]
+// ── Datensatz-Signale (nur persistierbare Events) ──
+[JsonSerializable(typeof(StateChangeViaDatensatzErstellt))]
+[JsonSerializable(typeof(StateChangeViaRangeAngefordert))]
+[JsonSerializable(typeof(StateChangeViaPaareAufgenommen))]
+[JsonSerializable(typeof(StateChangeViaPaarAufgenommen))]
+[JsonSerializable(typeof(StateChangeViaPaarEntfernt))]
+[JsonSerializable(typeof(StateChangeViaSplitGesetzt))]
+[JsonSerializable(typeof(StateChangeViaEinfrierenAngefordert))]
+[JsonSerializable(typeof(StateChangeViaDatensatzEingefroren))]
 [JsonSerializable(typeof(StateChangeViaBestandFreigegeben))]
 [JsonSerializable(typeof(StateChangeViaBestandReserviert))]
 [JsonSerializable(typeof(StateChangeViaBestellungAufgegeben))]
