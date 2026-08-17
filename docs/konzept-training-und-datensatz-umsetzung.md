@@ -51,10 +51,15 @@ Jeder Meilenstein ist für sich baubar + testbar. **Nach jedem Schritt: `dotnet 
 | **6** | **`Domain/Trainingslauf`** + Proto + Read-Seite | Trainings-Lebenszyklus event-sourced |
 | **7** | **Python: `query()` + `extract_query_response`** (`cqrs_client`) | Query-Parität hergestellt (Konzept §7) |
 | **8** | **Python `TrainingWorker`** | Event→Fortschritts-Commands, Samples per `query()` |
-| **9** | **Blazor-Module** (Komposition-Stage, Dashboard, Sidebars, Headless) | GUI über generierte Verdrahtung |
+| **9** | **Blazor-Module** (Komposition-Stage, Dashboard, Sidebars, Headless) | GUI über generierte Verdrahtung — **eigener Handoff: [`konzept-training-und-datensatz-m9-blazor-handoff.md`](konzept-training-und-datensatz-m9-blazor-handoff.md)** |
 | **10** | **`Domain/Modell`** + Inferenz-Kopplung (Phase 2) | Kreis geschlossen |
 
 **Empfohlener erster Agenten-Lauf: Meilenstein 1** (sauber abgegrenzt, rein, schnell grün).
+
+> **Stand:** M1–M8 sind auf Branch `claude/imageoair-frontend-setup-0g0s4b` gebaut & grün
+> (Prüfstand 219/219, Python-Suites grün). **M9 als Nächstes** — der Blazor-Handoff oben hebt einen
+> frischen Agenten auf den vollen Wissensstand (Architektur, Server-Contract, Datei-Checklisten,
+> Fallstricke, die eine nötige Backend-Ergänzung `HoleDatensaetze()`).
 
 ---
 
