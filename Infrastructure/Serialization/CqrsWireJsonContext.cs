@@ -18,6 +18,7 @@ using Domain.Reaktion;
 using Domain.Reise;
 using Domain.Reiseauftrag;
 using Domain.Sammelauftrag;
+using Domain.Trainingslauf;
 using Domain.Versand;
 using Domain.Verkauf;
 using Domain.Vorgang;
@@ -92,6 +93,14 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(FriereEin))]
 [JsonSerializable(typeof(SchliesseEinfrierenAb))]
 [JsonSerializable(typeof(BeauftrageSammelueberweisung))]
+// ── Trainingslauf-Commands ──
+[JsonSerializable(typeof(StarteTraining))]
+[JsonSerializable(typeof(BricheTrainingAb))]
+[JsonSerializable(typeof(MeldeTrainingBegonnen))]
+[JsonSerializable(typeof(MeldeFortschritt))]
+[JsonSerializable(typeof(MeldeTrainingAbgeschlossen))]
+[JsonSerializable(typeof(MeldeTrainingGescheitert))]
+[JsonSerializable(typeof(MarkiereAlsHaengengeblieben))]
 [JsonSerializable(typeof(BeauftrageUeberweisung))]
 [JsonSerializable(typeof(BelasteKonto))]
 [JsonSerializable(typeof(BestaetigeReise))]
@@ -145,6 +154,18 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(DatensatzLeer))]
 [JsonSerializable(typeof(RangeLeer))]
 [JsonSerializable(typeof(SplitUngueltig))]
+// ── Trainingslauf-Events (inkl. Ablehnungen als ITransientEvent) ──
+[JsonSerializable(typeof(TrainingAngefordert))]
+[JsonSerializable(typeof(TrainingBegonnen))]
+[JsonSerializable(typeof(TrainingFortschritt))]
+[JsonSerializable(typeof(TrainingAbgeschlossen))]
+[JsonSerializable(typeof(TrainingGescheitert))]
+[JsonSerializable(typeof(TrainingAbgebrochen))]
+[JsonSerializable(typeof(TrainingHaengengeblieben))]
+[JsonSerializable(typeof(TrainingslaufExistiertBereits))]
+[JsonSerializable(typeof(TrainingslaufNichtGefunden))]
+[JsonSerializable(typeof(TrainingNichtAktiv))]
+[JsonSerializable(typeof(TrainingBereitsBeendet))]
 [JsonSerializable(typeof(BestandFreigegeben))]
 [JsonSerializable(typeof(BestandReichtNicht))]
 [JsonSerializable(typeof(BestandReserviert))]
@@ -223,6 +244,14 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(StateChangeViaSplitGesetzt))]
 [JsonSerializable(typeof(StateChangeViaEinfrierenAngefordert))]
 [JsonSerializable(typeof(StateChangeViaDatensatzEingefroren))]
+// ── Trainingslauf-Signale (nur persistierbare Events) ──
+[JsonSerializable(typeof(StateChangeViaTrainingAngefordert))]
+[JsonSerializable(typeof(StateChangeViaTrainingBegonnen))]
+[JsonSerializable(typeof(StateChangeViaTrainingFortschritt))]
+[JsonSerializable(typeof(StateChangeViaTrainingAbgeschlossen))]
+[JsonSerializable(typeof(StateChangeViaTrainingGescheitert))]
+[JsonSerializable(typeof(StateChangeViaTrainingAbgebrochen))]
+[JsonSerializable(typeof(StateChangeViaTrainingHaengengeblieben))]
 [JsonSerializable(typeof(StateChangeViaBestandFreigegeben))]
 [JsonSerializable(typeof(StateChangeViaBestandReserviert))]
 [JsonSerializable(typeof(StateChangeViaBestellungAufgegeben))]

@@ -16,6 +16,7 @@ using Domain.Reaktion;
 using Domain.Reise;
 using Domain.Reiseauftrag;
 using Domain.Sammelauftrag;
+using Domain.Trainingslauf;
 using Domain.Versand;
 using Domain.Verkauf;
 using Domain.Vorgang;
@@ -103,6 +104,14 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(SplitGesetzt))]
 [JsonSerializable(typeof(EinfrierenAngefordert))]
 [JsonSerializable(typeof(DatensatzEingefroren))]
+// ── Trainingslauf (nur PERSISTENTE Events) ──
+[JsonSerializable(typeof(TrainingAngefordert))]
+[JsonSerializable(typeof(TrainingBegonnen))]
+[JsonSerializable(typeof(TrainingFortschritt))]
+[JsonSerializable(typeof(TrainingAbgeschlossen))]
+[JsonSerializable(typeof(TrainingGescheitert))]
+[JsonSerializable(typeof(TrainingAbgebrochen))]
+[JsonSerializable(typeof(TrainingHaengengeblieben))]
 // ── Reaktion ──
 [JsonSerializable(typeof(ReaktionGewirkt))]
 // ── Prozess-intern (IProzessIntern, aber IEvent → persistiert) ──
