@@ -43,6 +43,17 @@ public static class DomainServiceExtensions
                 .DatabaseSchemaName("rm")
                 .Identity(x => x.Id)
                 .UseOptimisticConcurrency(false);
+
+            // ── Datensatz (Trainings-/Datensatz-Kontext) ──
+            options.Schema.For<DatensatzReadModel>()
+                .DatabaseSchemaName("rm")
+                .Identity(x => x.Id)
+                .UseOptimisticConcurrency(false);
+
+            options.Schema.For<DatensatzSampleReadModel>()
+                .DatabaseSchemaName("rm")
+                .Identity(x => x.Id)
+                .UseOptimisticConcurrency(false);
         });
 
         // Read-Seite: unverändert Singleton Postgres (eigene Query-Sessions).
@@ -89,6 +100,31 @@ public static class DomainServiceExtensions
         Console.WriteLine("  + ImagePairHistorieReader");
 
         // ═══════════════════════════════════════════════════════
+        // Datensatz — PostgreSQL (Marten Document Store, Schema "rm")
+        //
+        // Read-Seite: Singleton Postgres (eigene Query-Sessions).
+        // Write-Seite: Co-Commit-Store, TRANSIENT (frisch pro Stream-Actor → isolierter
+        // Puffer). Zugleich IProjectionTracker/ICoCommitTracker (Effekt + Marke in EINEM
+        // SaveChanges → exactly-once; nötig für die IAppendProjektion beim Einfrieren).
+        // ═══════════════════════════════════════════════════════
+
+        services.AddSingleton<DatensatzStorePostgres>(provider =>
+        {
+            var store = provider.GetRequiredService<IDocumentStore>();
+            var logger = provider.GetRequiredService<ILogger<DatensatzStorePostgres>>();
+            return new DatensatzStorePostgres(store, logger);
+        });
+        services.AddSingleton<IDatensatzReadStore>(
+            sp => sp.GetRequiredService<DatensatzStorePostgres>());
+        Console.WriteLine("  + IDatensatzReadStore (PostgreSQL/Marten, Singleton)");
+
+        services.AddTransient<DatensatzStore>(provider =>
+            new DatensatzStore(provider.GetRequiredService<IDocumentStore>()));
+        services.AddTransient<IDatensatzWriteStore>(
+            sp => sp.GetRequiredService<DatensatzStore>());
+        Console.WriteLine("  + IDatensatzWriteStore (Co-Commit, Transient)");
+
+        // ═══════════════════════════════════════════════════════
         // ProjectionQueryService (generiert)
         // ═══════════════════════════════════════════════════════
 
@@ -97,6 +133,7 @@ public static class DomainServiceExtensions
         // hier domänenseitig, wo auch Reader/Stores/QueryService registriert sind.
         services.AddSingleton<ImagePairProjection>();
         services.AddSingleton<ImagePairHistorieProjection>();
+        services.AddSingleton<DatensatzProjektion>();
 
         services.AddSingleton<ProjectionQueryService>();
         Console.WriteLine("  + ProjectionQueryService (generiert)");
