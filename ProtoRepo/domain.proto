@@ -351,14 +351,16 @@ message QueryPayloadDto {
     oneof payload {
         GetImagePairStatistikDto get_image_pair_statistik = 20;
         GetProduktionsTageDto get_produktions_tage = 21;
-        GetImagePairDto get_image_pair = 22;
-        GetImagePairHistorieDto get_image_pair_historie = 23;
-        GetProduktionsStripDto get_produktions_strip = 24;
-        GetProduktionsVerlaufDto get_produktions_verlauf = 25;
-        GetUnklassifizierteImagePairsDto get_unklassifizierte_image_pairs = 26;
-        HoleDatensatzDto hole_datensatz = 27;
-        HoleDatensatzSamplesDto hole_datensatz_samples = 28;
-        SucheImagePairsDto suche_image_pairs = 29;
+        HoleTrainingslaeufeDto hole_trainingslaeufe = 22;
+        GetImagePairDto get_image_pair = 23;
+        GetImagePairHistorieDto get_image_pair_historie = 24;
+        GetProduktionsStripDto get_produktions_strip = 25;
+        GetProduktionsVerlaufDto get_produktions_verlauf = 26;
+        GetUnklassifizierteImagePairsDto get_unklassifizierte_image_pairs = 27;
+        HoleDatensatzDto hole_datensatz = 28;
+        HoleDatensatzSamplesDto hole_datensatz_samples = 29;
+        HoleTrainingslaufDto hole_trainingslauf = 30;
+        SucheImagePairsDto suche_image_pairs = 31;
 
     }
 }
@@ -366,18 +368,21 @@ message QueryPayloadDto {
 message QueryResponsePayloadDto {
     oneof payload {
         ImagePairAntwortDto image_pair_antwort = 20;
-        DatensatzAntwortDto datensatz_antwort = 21;
-        DatensatzNichtGefundenDto datensatz_nicht_gefunden = 22;
-        DatensatzSamplesDto datensatz_samples = 23;
-        ImagePairArbeitslisteDto image_pair_arbeitsliste = 24;
-        ImagePairHistorieAntwortDto image_pair_historie_antwort = 25;
-        ImagePairHistorieNichtGefundenDto image_pair_historie_nicht_gefunden = 26;
-        ImagePairNichtGefundenAntwortDto image_pair_nicht_gefunden_antwort = 27;
-        ImagePairStatistikAntwortDto image_pair_statistik_antwort = 28;
-        ImagePairSuchergebnisDto image_pair_suchergebnis = 29;
-        ProduktionsStripAntwortDto produktions_strip_antwort = 30;
-        ProduktionsTageAntwortDto produktions_tage_antwort = 31;
-        ProduktionsVerlaufAntwortDto produktions_verlauf_antwort = 32;
+        TrainingslaufAntwortDto trainingslauf_antwort = 21;
+        DatensatzAntwortDto datensatz_antwort = 22;
+        DatensatzNichtGefundenDto datensatz_nicht_gefunden = 23;
+        DatensatzSamplesDto datensatz_samples = 24;
+        ImagePairArbeitslisteDto image_pair_arbeitsliste = 25;
+        ImagePairHistorieAntwortDto image_pair_historie_antwort = 26;
+        ImagePairHistorieNichtGefundenDto image_pair_historie_nicht_gefunden = 27;
+        ImagePairNichtGefundenAntwortDto image_pair_nicht_gefunden_antwort = 28;
+        ImagePairStatistikAntwortDto image_pair_statistik_antwort = 29;
+        ImagePairSuchergebnisDto image_pair_suchergebnis = 30;
+        ProduktionsStripAntwortDto produktions_strip_antwort = 31;
+        ProduktionsTageAntwortDto produktions_tage_antwort = 32;
+        ProduktionsVerlaufAntwortDto produktions_verlauf_antwort = 33;
+        TrainingslaufListeDto trainingslauf_liste = 34;
+        TrainingslaufNichtGefundenAntwortDto trainingslauf_nicht_gefunden_antwort = 35;
 
     }
 }
@@ -396,6 +401,12 @@ message TriggerPayloadDto {
 // ============================================================================
 // VALUE OBJECTS
 // ============================================================================
+message EpochenMetrikDto {
+    int32 epoche = 1;
+    double loss = 2;
+    double genauigkeit = 3;
+}
+
 message RangeKriterienDto {
     int64 von = 1;
     int64 bis = 2;
@@ -413,6 +424,19 @@ message RegionPositionDto {
     double y_prozent = 2;
     double breite_prozent = 3;
     double hoehe_prozent = 4;
+}
+
+message EndmetrikenDto {
+    double loss = 1;
+    double genauigkeit = 2;
+}
+
+message HyperparameterDto {
+    int32 epochen = 1;
+    double lern_rate = 2;
+    int32 batch_groesse = 3;
+    string architektur = 4;
+    int32 seed = 5;
 }
 
 message DatensatzMitgliedDto {
@@ -500,25 +524,6 @@ message ImagePairFilterDto {
     int32 nur_nicht_inspizierte = 9;
     int32 seite = 10;
     int32 seiten_groesse = 11;
-}
-
-message EndmetrikenDto {
-    double loss = 1;
-    double genauigkeit = 2;
-}
-
-message EpochenMetrikDto {
-    int32 epoche = 1;
-    double loss = 2;
-    double genauigkeit = 3;
-}
-
-message HyperparameterDto {
-    int32 epochen = 1;
-    double lern_rate = 2;
-    int32 batch_groesse = 3;
-    string architektur = 4;
-    int32 seed = 5;
 }
 
 message GeldwertDto {
@@ -1592,6 +1597,10 @@ message GetProduktionsTageDto {
     GetProduktionsTageDto original = 1;
 }
 
+message HoleTrainingslaeufeDto {
+    HoleTrainingslaeufeDto original = 1;
+}
+
 message GetImagePairDto {
     string pair_id = 1;
 }
@@ -1626,6 +1635,10 @@ message HoleDatensatzSamplesDto {
     int32 seiten_groesse = 4;
 }
 
+message HoleTrainingslaufDto {
+    string trainingslauf_id = 1;
+}
+
 message SucheImagePairsDto {
     ImagePairFilterDto filter = 1;
 }
@@ -1654,6 +1667,21 @@ message ImagePairAntwortDto {
     string mensch_bildpaar_label = 18;
     string physisches_produkt_label = 19;
     bool ist_inspiziert = 20;
+}
+
+message TrainingslaufAntwortDto {
+    string id = 1;
+    string datensatz_id = 2;
+    int32 datensatz_version = 3;
+    int32 status = 4;
+    int32 aktuelle_epoche = 5;
+    int32 gesamt_epochen = 6;
+    HyperparameterDto hyperparameter = 7;
+    repeated EpochenMetrikDto metrik_historie = 8;
+    string modell_pfad = 9;
+    EndmetrikenDto endmetriken = 10;
+    string fehlergrund = 11;
+    int64 startzeit = 12;
 }
 
 message DatensatzAntwortDto {
@@ -1725,6 +1753,14 @@ message ProduktionsVerlaufAntwortDto {
     int32 gesamt_im_zeitraum = 2;
     int32 anomalien_im_zeitraum = 3;
     int32 ungelabelt_im_zeitraum = 4;
+}
+
+message TrainingslaufListeDto {
+    repeated TrainingslaufAntwortDto items = 1;
+}
+
+message TrainingslaufNichtGefundenAntwortDto {
+    string trainingslauf_id = 1;
 }
 
 // ============================================================================

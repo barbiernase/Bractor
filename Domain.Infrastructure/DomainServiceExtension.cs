@@ -54,6 +54,12 @@ public static class DomainServiceExtensions
                 .DatabaseSchemaName("rm")
                 .Identity(x => x.Id)
                 .UseOptimisticConcurrency(false);
+
+            // ── Trainingslauf ──
+            options.Schema.For<TrainingslaufReadModel>()
+                .DatabaseSchemaName("rm")
+                .Identity(x => x.Id)
+                .UseOptimisticConcurrency(false);
         });
 
         // Read-Seite: unverändert Singleton Postgres (eigene Query-Sessions).
@@ -128,6 +134,30 @@ public static class DomainServiceExtensions
         Console.WriteLine("  + DatensatzReader");
 
         // ═══════════════════════════════════════════════════════
+        // Trainingslauf — PostgreSQL (Marten, Schema "rm")
+        // Read-Singleton + Co-Commit-Write-Transient (IAppendProjektion: MetrikHistorie wächst).
+        // ═══════════════════════════════════════════════════════
+
+        services.AddSingleton<TrainingslaufStorePostgres>(provider =>
+        {
+            var store = provider.GetRequiredService<IDocumentStore>();
+            var logger = provider.GetRequiredService<ILogger<TrainingslaufStorePostgres>>();
+            return new TrainingslaufStorePostgres(store, logger);
+        });
+        services.AddSingleton<ITrainingslaufReadStore>(
+            sp => sp.GetRequiredService<TrainingslaufStorePostgres>());
+        Console.WriteLine("  + ITrainingslaufReadStore (PostgreSQL/Marten, Singleton)");
+
+        services.AddTransient<TrainingslaufStore>(provider =>
+            new TrainingslaufStore(provider.GetRequiredService<IDocumentStore>()));
+        services.AddTransient<ITrainingslaufWriteStore>(
+            sp => sp.GetRequiredService<TrainingslaufStore>());
+        Console.WriteLine("  + ITrainingslaufWriteStore (Co-Commit, Transient)");
+
+        services.AddSingleton<TrainingslaufReader>();
+        Console.WriteLine("  + TrainingslaufReader");
+
+        // ═══════════════════════════════════════════════════════
         // ProjectionQueryService (generiert)
         // ═══════════════════════════════════════════════════════
 
@@ -137,6 +167,7 @@ public static class DomainServiceExtensions
         services.AddSingleton<ImagePairProjection>();
         services.AddSingleton<ImagePairHistorieProjection>();
         services.AddSingleton<DatensatzProjektion>();
+        services.AddSingleton<TrainingslaufProjektion>();
 
         services.AddSingleton<ProjectionQueryService>();
         Console.WriteLine("  + ProjectionQueryService (generiert)");
