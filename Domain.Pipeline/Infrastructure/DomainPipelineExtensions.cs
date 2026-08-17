@@ -63,6 +63,13 @@ public static class DomainPipelineExtensions
             PollInterval: TimeSpan.FromSeconds(1)));
         Console.WriteLine($"  + FileWatchConfig → {effectivePath}");
 
+        // ═══════════════════════════════════════════════════════
+        // Trainingslauf-Timeout (Frist-Wächter)
+        // ═══════════════════════════════════════════════════════
+
+        services.AddSingleton(new Trainingslauf.TrainingFristConfig(TimeSpan.FromHours(6)));
+        Console.WriteLine("  + TrainingFristConfig → 6h");
+
         Console.WriteLine();
         return services;
     }

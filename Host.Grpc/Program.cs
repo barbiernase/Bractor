@@ -130,10 +130,13 @@ builder.Services.AddGeneratedPipelineEventPulls();
 // Monitoring (Scheibe 1): HealthCheck + Prozess-/DLQ-Zähler (Read-Pfad auf Offen-Index + DLQ-Read-Store).
 builder.Services.AddBackendMonitoring();
 
-// Deadlines (Feature-Strom): DB-Uhr-getriebener Scheduler feuert fällige Fristen als FristFaellig-Command.
+// Deadlines (Feature-Strom): DB-Uhr-getriebener Scheduler feuert fällige Fristen als Command.
 // Die Domänen-Wahl (welcher Command) trifft der Host; DB-Uhr + Fristplan kommen aus dem Framework-Kern.
+// Routing über den Frist-Kontext: Trainings-Timeout → MarkiereAlsHaengengeblieben, sonst Erinnerung.
 builder.Services.AddDeadlines(f =>
-    new Domain.Erinnerung.FristFaellig(f.ZielAggregatId, f.Kontext));
+    f.Kontext == Domain.Pipeline.Trainingslauf.TrainingFristPipeline.Kontext
+        ? new Domain.Trainingslauf.MarkiereAlsHaengengeblieben(f.ZielAggregatId)
+        : new Domain.Erinnerung.FristFaellig(f.ZielAggregatId, f.Kontext));
 
 // ─── Build + Run ───
 
