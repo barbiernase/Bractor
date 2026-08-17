@@ -66,6 +66,7 @@ class PayloadMapper:
         self._gen = generated_module
         self._command_field_map = self._build_type_to_field_map("CommandEnvelopeDto")
         self._event_field_map = self._build_type_to_field_map("EventEnvelopeDto")
+        self._query_field_map = self._build_type_to_field_map("QueryPayloadDto")
         self._query_response_field_map = self._build_type_to_field_map("QueryResponsePayloadDto")
         self._trigger_field_map = self._build_type_to_field_map("TriggerPayloadDto")
 
@@ -112,6 +113,18 @@ class PayloadMapper:
     def extract_query_payload(self, wrapper) -> betterproto.Message:
         """Extrahiert den konkreten Query-Typ aus QueryPayloadDto."""
         _, payload = extract_oneof_payload(wrapper, "payload")
+        return payload
+
+    def extract_query_response(self, query_response) -> betterproto.Message:
+        """
+        Entpackt die TYPISIERTE Antwort aus einem QueryResponse (Server → Client) — die Ask-Seite
+        (Konzept §7.2). QueryResponse.payload ist ein QueryResponsePayloadDto-oneof; das ist das
+        fehlende Gegenstück zu wrap_query_response. Nutzt den generischen extract_oneof_payload.
+
+        Beispiel: QueryResponse(payload=QueryResponsePayloadDto(datensatz_samples=...))
+                  → DatensatzSamplesDto(...)
+        """
+        _, payload = extract_oneof_payload(query_response.payload, "payload")
         return payload
 
     # ═══════════════════════════════════════════════════
@@ -180,6 +193,25 @@ class PayloadMapper:
             setattr(envelope, field_name, event)
 
         return envelope
+
+    def wrap_query(self, query: betterproto.Message):
+        """
+        Verpackt eine Query in einen QueryPayloadDto (setzt das oneof-Feld) — die Ask-Seite
+        (Konzept §7). Spiegelbild zu wrap_command; dieselbe type→oneof-Feld-Logik, abgeleitet
+        aus QueryPayloadDto. Der Proxy hängt Korrelation + 30s-Timeout drum.
+        """
+        payload_cls = getattr(self._gen, "QueryPayloadDto")
+        payload = payload_cls()
+
+        field_name = self._get_oneof_field_name(query, self._query_field_map)
+        if not field_name:
+            raise TypeError(
+                f"Kein oneof-Feld für {type(query).__name__} "
+                f"in QueryPayloadDto gefunden"
+            )
+        setattr(payload, field_name, query)
+
+        return payload
 
     def wrap_query_response(self, response: betterproto.Message):
         """

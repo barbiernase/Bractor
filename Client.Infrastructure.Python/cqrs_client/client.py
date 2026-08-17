@@ -107,6 +107,31 @@ class CqrsClient(HandlerBase, Generic[S]):
         return self._proxy.is_connected
 
     # ═══════════════════════════════════════════════════
+    # ASK-SEITE — Queries stellen (Konzept §7)
+    # ═══════════════════════════════════════════════════
+
+    async def query(self, query_dto):
+        """
+        Stellt eine Query und liefert die TYPISIERTE Antwort — die öffentliche Ask-API, die
+        bisher fehlte (Konzept §7.2/§7.3). Spiegelbild zum send_command-Pfad:
+
+          1. wrap_query      → QueryPayloadDto (oneof-Feld nach Typ)
+          2. proxy.send_query → Korrelation via Future, 30s Timeout
+          3. extract_query_response → konkrete Antwort aus dem Response-oneof
+
+        Fehler vom Server (QueryFailed) kommen als proxy.ServerError-Exception (Korrelation im
+        Read-Loop). Für read-only Datensatz-/Trainings-Queries ist KEIN Deps/Versions-Tracking
+        nötig (§7.2, Punkt 4) — Python schreibt nichts versionsabhängig.
+
+        Beispiel (im TrainingWorker):
+            antwort = await self.query(
+                HoleDatensatzSamplesDto(datensatz_id=str(ds_id), version=1, seite=1))
+        """
+        payload = self._mapper.wrap_query(query_dto)
+        raw = await self._proxy.send_query(payload)
+        return self._mapper.extract_query_response(raw)
+
+    # ═══════════════════════════════════════════════════
     # LIFECYCLE
     # ═══════════════════════════════════════════════════
 
