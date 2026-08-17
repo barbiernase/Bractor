@@ -1,0 +1,488 @@
+<title>Datensätze &amp; Training</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@600;700;800&family=IBM+Plex+Sans:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap">
+<style>
+  :root{
+    --bg:#F4F6F8; --panel:#FFFFFF; --panel-2:#EDF1F5; --line:#D8DEE6;
+    --ink:#111721; --ink-soft:#46505E; --ink-faint:#78828F;
+    --accent:#0E8FA8;
+    --gui:#6D4FD0; --gui-bg:#efeafc;
+    --domain:#1877B8; --domain-bg:#e4f1fb;
+    --python:#A9741E; --python-bg:#f8efdd;
+    --ok:#2E9E57; --warn:#C1880F; --crit:#CF4A45;
+    --shadow:0 1px 2px rgba(16,22,34,.06),0 8px 24px rgba(16,22,34,.06);
+  }
+  @media (prefers-color-scheme:dark){
+    :root:not([data-theme="light"]){
+      --bg:#0D1015; --panel:#161B23; --panel-2:#1C232D; --line:#2A323F;
+      --ink:#E7EBF1; --ink-soft:#A7B1BF; --ink-faint:#6B7686;
+      --accent:#3FCDDE;
+      --gui:#A78BFA; --gui-bg:#221d38;
+      --domain:#4FB2EE; --domain-bg:#152634;
+      --python:#E0AB44; --python-bg:#2c2410;
+      --ok:#4ADE80; --warn:#FBBF24; --crit:#F87171;
+      --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0D1015; --panel:#161B23; --panel-2:#1C232D; --line:#2A323F;
+    --ink:#E7EBF1; --ink-soft:#A7B1BF; --ink-faint:#6B7686;
+    --accent:#3FCDDE;
+    --gui:#A78BFA; --gui-bg:#221d38;
+    --domain:#4FB2EE; --domain-bg:#152634;
+    --python:#E0AB44; --python-bg:#2c2410;
+    --ok:#4ADE80; --warn:#FBBF24; --crit:#F87171;
+    --shadow:0 1px 2px rgba(0,0,0,.3),0 10px 30px rgba(0,0,0,.35);
+  }
+  *{box-sizing:border-box}
+  html{-webkit-text-size-adjust:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--ink);
+    font-family:"IBM Plex Sans",system-ui,sans-serif;
+    font-size:16px;line-height:1.6;
+    -webkit-font-smoothing:antialiased;
+  }
+  .wrap{max-width:1080px;margin:0 auto;padding:0 24px}
+  code,.mono{font-family:"IBM Plex Mono",ui-monospace,monospace}
+  h1,h2,h3{font-family:"Archivo",system-ui,sans-serif;margin:0;text-wrap:balance;letter-spacing:-.01em}
+  a{color:var(--accent)}
+
+  /* ---- header ---- */
+  header{padding:72px 0 40px;border-bottom:1px solid var(--line)}
+  .eyebrow{
+    font-family:"IBM Plex Mono",monospace;font-size:12.5px;font-weight:500;
+    letter-spacing:.16em;text-transform:uppercase;color:var(--accent);
+    display:flex;align-items:center;gap:10px;flex-wrap:wrap;
+  }
+  .eyebrow .dot{width:7px;height:7px;border-radius:50%;background:var(--accent)}
+  .eyebrow .status{
+    color:var(--ink-faint);border:1px solid var(--line);border-radius:999px;
+    padding:2px 9px;letter-spacing:.08em;
+  }
+  h1{font-size:clamp(34px,6vw,58px);font-weight:800;line-height:1.02;margin:20px 0 0}
+  .lede{font-size:clamp(17px,2.4vw,21px);color:var(--ink-soft);max-width:60ch;margin:22px 0 0}
+  .lede b{color:var(--ink);font-weight:600}
+  .tiers{display:flex;gap:8px;flex-wrap:wrap;margin-top:26px}
+  .tier{
+    font-family:"IBM Plex Mono",monospace;font-size:12.5px;font-weight:500;
+    padding:6px 12px;border-radius:8px;border:1px solid var(--line);
+    display:inline-flex;align-items:center;gap:8px;background:var(--panel);
+  }
+  .tier .sw{width:9px;height:9px;border-radius:2px}
+
+  section{padding:56px 0;border-bottom:1px solid var(--line)}
+  .sec-eyebrow{
+    font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:600;
+    letter-spacing:.14em;text-transform:uppercase;color:var(--ink-faint);
+  }
+  h2{font-size:clamp(24px,3.6vw,34px);font-weight:700;margin:10px 0 0}
+  .sec-sub{color:var(--ink-soft);max-width:64ch;margin:14px 0 0}
+
+  figure{margin:34px 0 0}
+  .board{
+    background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    padding:22px;box-shadow:var(--shadow);overflow-x:auto;
+  }
+  svg{display:block;max-width:100%;height:auto;margin:0 auto}
+  figcaption{color:var(--ink-faint);font-size:13.5px;margin-top:14px;text-align:center;max-width:70ch;margin-inline:auto}
+
+  /* ---- domain cards ---- */
+  .cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px;margin-top:34px}
+  .card{
+    background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    padding:22px 22px 20px;box-shadow:var(--shadow);position:relative;overflow:hidden;
+  }
+  .card::before{content:"";position:absolute;inset:0 auto 0 0;width:4px;background:var(--c)}
+  .card .kicker{display:flex;align-items:center;justify-content:space-between;gap:10px}
+  .card h3{font-size:20px;font-weight:700}
+  .phase{
+    font-family:"IBM Plex Mono",monospace;font-size:11px;font-weight:600;letter-spacing:.06em;
+    padding:3px 8px;border-radius:999px;background:var(--c-bg);color:var(--c);white-space:nowrap;
+  }
+  .card p{color:var(--ink-soft);font-size:14.5px;margin:10px 0 16px}
+  .rowlabel{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);margin:0 0 7px}
+  .chips{display:flex;flex-wrap:wrap;gap:6px;margin:0 0 14px}
+  .chip{
+    font-family:"IBM Plex Mono",monospace;font-size:12px;font-weight:500;
+    padding:4px 9px;border-radius:7px;border:1px solid var(--line);
+    background:var(--panel-2);color:var(--ink);white-space:nowrap;
+  }
+  .chip.evt{border-style:dashed;color:var(--ink-soft)}
+
+  /* ---- manifest boundary ---- */
+  .split{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:34px}
+  @media (max-width:720px){.split{grid-template-columns:1fr}}
+  .filecard{background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:var(--shadow);overflow:hidden}
+  .filehead{
+    display:flex;align-items:center;gap:9px;padding:12px 16px;border-bottom:1px solid var(--line);
+    font-family:"IBM Plex Mono",monospace;font-size:13px;font-weight:600;
+  }
+  .filehead .tag{margin-left:auto;font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--own);font-weight:600}
+  pre{margin:0;padding:16px;overflow-x:auto;font-family:"IBM Plex Mono",monospace;font-size:12.5px;line-height:1.65;color:var(--ink-soft)}
+  pre .k{color:var(--domain)} pre .s{color:var(--ok)} pre .n{color:var(--python)} pre .c{color:var(--ink-faint)}
+
+  /* ---- user flow stepper ---- */
+  .flow{display:grid;grid-template-columns:repeat(6,1fr);gap:0;margin-top:34px;counter-reset:s}
+  @media (max-width:860px){.flow{grid-template-columns:repeat(2,1fr);gap:14px}}
+  @media (max-width:460px){.flow{grid-template-columns:1fr}}
+  .step{position:relative;padding:0 16px}
+  .step:not(:last-child)::after{
+    content:"";position:absolute;top:17px;right:-2px;width:calc(100% - 34px);height:2px;
+    background:linear-gradient(90deg,var(--accent),var(--line));left:50px;
+  }
+  @media (max-width:860px){.step::after{display:none}}
+  .num{
+    width:36px;height:36px;border-radius:10px;background:var(--accent);color:#fff;
+    font-family:"Archivo",sans-serif;font-weight:800;font-size:16px;
+    display:flex;align-items:center;justify-content:center;position:relative;z-index:1;
+  }
+  .step h4{font-family:"IBM Plex Sans",sans-serif;font-size:15px;font-weight:600;margin:13px 0 5px}
+  .step p{font-size:13px;color:var(--ink-soft);margin:0}
+  .step .auto{display:inline-block;margin-top:7px;font-family:"IBM Plex Mono",monospace;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--accent);border:1px solid var(--line);border-radius:6px;padding:2px 7px}
+
+  /* ---- GUI mockup ---- */
+  .mock{
+    background:var(--panel);border:1px solid var(--line);border-radius:16px;
+    box-shadow:var(--shadow);overflow:hidden;margin-top:34px;
+  }
+  .mock-bar{display:flex;align-items:center;gap:8px;padding:11px 16px;border-bottom:1px solid var(--line);background:var(--panel-2)}
+  .mock-bar .tt{width:11px;height:11px;border-radius:50%;background:var(--line)}
+  .mock-bar .title{margin-left:8px;font-family:"IBM Plex Mono",monospace;font-size:12.5px;color:var(--ink-soft)}
+  .mock-bar .live{margin-left:auto;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ok);display:flex;align-items:center;gap:6px}
+  .mock-bar .live::before{content:"";width:7px;height:7px;border-radius:50%;background:var(--ok)}
+  .transfer{display:grid;grid-template-columns:1fr 44px 1fr;gap:0}
+  @media (max-width:720px){.transfer{grid-template-columns:1fr}}
+  .pane{padding:16px}
+  .pane.left{border-right:1px solid var(--line)}
+  @media (max-width:720px){.pane.left{border-right:0;border-bottom:1px solid var(--line)}}
+  .pane .ph{font-family:"IBM Plex Mono",monospace;font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--ink-faint);display:flex;justify-content:space-between}
+  .filterline{font-size:12.5px;color:var(--ink-soft);margin:9px 0 12px;font-family:"IBM Plex Mono",monospace}
+  .filterline b{color:var(--domain);font-weight:600}
+  .rows{display:flex;flex-direction:column;gap:6px}
+  .rrow{display:flex;align-items:center;gap:10px;font-family:"IBM Plex Mono",monospace;font-size:12.5px;padding:7px 10px;border:1px solid var(--line);border-radius:8px;background:var(--panel-2)}
+  .rrow .cb{width:13px;height:13px;border-radius:3px;border:1.5px solid var(--accent);flex:none}
+  .rrow .cb.on{background:var(--accent)}
+  .rrow .dt{color:var(--ink)}
+  .rrow .lbl{margin-left:auto;display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--ink-soft)}
+  .rrow .lbl::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--m)}
+  .midcol{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:12px;color:var(--ink-faint)}
+  @media (max-width:720px){.midcol{flex-direction:row;padding:10px 0;border-bottom:1px solid var(--line)}}
+  .arrowbtn{width:34px;height:34px;border-radius:9px;border:1px solid var(--line);background:var(--panel);display:flex;align-items:center;justify-content:center;color:var(--accent);font-size:16px}
+  .addall{
+    margin-top:14px;width:100%;padding:9px;border-radius:9px;border:1px dashed var(--accent);
+    background:transparent;color:var(--accent);font-family:"IBM Plex Sans",sans-serif;font-size:13px;font-weight:600;cursor:default;
+  }
+  .basket .meta{font-size:12.5px;color:var(--ink-soft);margin:9px 0 12px}
+  .basket .meta b{color:var(--ink);font-weight:600}
+  .balance{display:flex;height:12px;border-radius:6px;overflow:hidden;margin:0 0 6px;border:1px solid var(--line)}
+  .balance i{display:block}
+  .baltags{display:flex;gap:14px;font-family:"IBM Plex Mono",monospace;font-size:11px;color:var(--ink-soft);margin-bottom:14px}
+  .baltags span{display:inline-flex;align-items:center;gap:5px}
+  .baltags .d{width:8px;height:8px;border-radius:2px}
+  .splitrow{font-family:"IBM Plex Mono",monospace;font-size:12px;color:var(--ink-soft);margin-bottom:14px}
+  .splitrow b{color:var(--domain)}
+  .prov{border-top:1px solid var(--line);padding-top:12px}
+  .prov .ph{margin-bottom:9px}
+  .pv{display:flex;justify-content:space-between;align-items:center;font-family:"IBM Plex Mono",monospace;font-size:12px;padding:6px 0;color:var(--ink-soft)}
+  .pv b{color:var(--ink);font-weight:500}
+  .pv .rm{color:var(--ink-faint);font-size:11px}
+  .actions{display:flex;gap:9px;margin-top:16px}
+  .btn{flex:1;padding:9px;border-radius:9px;font-family:"IBM Plex Sans",sans-serif;font-size:13px;font-weight:600;text-align:center;border:1px solid var(--line);background:var(--panel-2);color:var(--ink)}
+  .btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+
+  /* ---- repro callout ---- */
+  .callout{
+    margin-top:34px;background:var(--panel);border:1px solid var(--line);border-left:4px solid var(--accent);
+    border-radius:12px;padding:22px 24px;box-shadow:var(--shadow);
+  }
+  .callout h3{font-size:18px;font-weight:700;margin-bottom:12px}
+  .repro{display:flex;flex-wrap:wrap;gap:10px 8px;align-items:center;font-family:"IBM Plex Mono",monospace;font-size:13px}
+  .repro .n{padding:6px 11px;border-radius:8px;background:var(--panel-2);border:1px solid var(--line);color:var(--ink)}
+  .repro .ar{color:var(--accent);font-weight:600}
+
+  footer{padding:40px 0 64px;color:var(--ink-faint);font-size:13px}
+  footer .mono{color:var(--ink-soft)}
+  @media (prefers-reduced-motion:no-preference){a{transition:color .15s}}
+</style>
+
+<header>
+  <div class="wrap">
+    <div class="eyebrow"><span class="dot"></span> Konzept · KI-Modell-Lebenszyklus <span class="status">nicht implementiert</span></div>
+    <h1>Datensätze &amp; Training</h1>
+    <p class="lede">Aus kontinuierlich gesammelten, gelabelten Bildpaaren <b>Datensätze zusammenführen</b> und daraus <b>Modelle trainieren</b> — reproduzierbar, event-sourced, im Stil des bestehenden Frameworks. Datensatz-Erzeugung in <b>C#</b>, Training in <b>Python</b>, Steuerung in <b>Blazor</b>.</p>
+    <div class="tiers">
+      <span class="tier"><span class="sw" style="background:var(--gui)"></span> Blazor · Steuerung &amp; Ansicht</span>
+      <span class="tier"><span class="sw" style="background:var(--domain)"></span> C# · Domäne &amp; Datensatz</span>
+      <span class="tier"><span class="sw" style="background:var(--python)"></span> Python · Training auf GPU</span>
+    </div>
+  </div>
+</header>
+
+<!-- ============ THE LOOP ============ -->
+<section>
+  <div class="wrap">
+    <div class="sec-eyebrow">Der Kreislauf</div>
+    <h2>Ein Klick stößt an — der Fortschritt streamt zurück</h2>
+    <p class="sec-sub">Training ist dasselbe Muster wie die bestehende Inferenz: ein out-of-process Python-Worker abonniert ein Event, reagiert, emittiert Commands. Nichts Neues am Transport — nur langlaufend, mit Fortschritt.</p>
+
+    <figure>
+      <div class="board">
+        <svg viewBox="0 0 980 430" role="img" aria-label="Kreislauf: Blazor sendet StarteTraining an das Trainingslauf-Aggregat in C#, das ein TrainingAngefordert-Event veröffentlicht. Der Python-Worker liest das Manifest des eingefrorenen Datensatzes, trainiert und emittiert Fortschritts-Commands zurück, die als Events per Push die Live-Kurve im Blazor-Dashboard speisen.">
+          <defs>
+            <marker id="ah" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="var(--accent)"/></marker>
+            <marker id="ah-d" markerWidth="9" markerHeight="9" refX="7" refY="4.5" orient="auto"><path d="M0,0 L9,4.5 L0,9 Z" fill="var(--python)"/></marker>
+          </defs>
+
+          <!-- lane labels -->
+          <text x="16" y="70" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--gui)" font-weight="600" transform="rotate(-90 16 70)" text-anchor="middle">BLAZOR</text>
+          <text x="16" y="215" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--domain)" font-weight="600" transform="rotate(-90 16 215)" text-anchor="middle">C# DOMÄNE</text>
+          <text x="16" y="365" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--python)" font-weight="600" transform="rotate(-90 16 365)" text-anchor="middle">PYTHON</text>
+          <line x1="34" y1="20" x2="34" y2="410" stroke="var(--line)" stroke-width="1"/>
+
+          <!-- Blazor node -->
+          <rect x="70" y="34" width="200" height="72" rx="11" fill="var(--gui-bg)" stroke="var(--gui)" stroke-width="1.5"/>
+          <text x="170" y="62" text-anchor="middle" font-family="Archivo, sans-serif" font-size="14" font-weight="700" fill="var(--ink)">Training-Dashboard</text>
+          <text x="170" y="84" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--ink-soft)">Live-Kurve · Formular</text>
+
+          <!-- Trainingslauf node -->
+          <rect x="390" y="170" width="200" height="80" rx="11" fill="var(--domain-bg)" stroke="var(--domain)" stroke-width="1.5"/>
+          <text x="490" y="200" text-anchor="middle" font-family="Archivo, sans-serif" font-size="14" font-weight="700" fill="var(--ink)">Trainingslauf</text>
+          <text x="490" y="221" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-soft)">Aggregat · Event-Store</text>
+          <text x="490" y="238" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="10.5" fill="var(--ink-faint)">foldet Fortschritt</text>
+
+          <!-- Datensatz node (input) -->
+          <rect x="70" y="320" width="200" height="72" rx="11" fill="var(--domain-bg)" stroke="var(--domain)" stroke-width="1.5" stroke-dasharray="0"/>
+          <text x="170" y="348" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13.5" font-weight="700" fill="var(--ink)">Datensatz (v1)</text>
+          <text x="170" y="370" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-soft)">manifest.json</text>
+
+          <!-- Python node -->
+          <rect x="710" y="320" width="210" height="72" rx="11" fill="var(--python-bg)" stroke="var(--python)" stroke-width="1.5"/>
+          <text x="815" y="348" text-anchor="middle" font-family="Archivo, sans-serif" font-size="14" font-weight="700" fill="var(--ink)">TrainingWorker</text>
+          <text x="815" y="370" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-soft)">GPU · to_thread</text>
+
+          <!-- forward: Blazor -> Trainingslauf -->
+          <path d="M240,106 C320,140 330,150 400,180" fill="none" stroke="var(--accent)" stroke-width="1.8" marker-end="url(#ah)"/>
+          <text x="248" y="150" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--ink)">StarteTraining</text>
+          <text x="248" y="165" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-faint)">Command</text>
+
+          <!-- return: Python -> Trainingslauf  (gold, oben) -->
+          <path d="M745,326 C660,285 640,255 588,232" fill="none" stroke="var(--python)" stroke-width="1.8" marker-end="url(#ah-d)"/>
+          <text x="628" y="243" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--ink)">MeldeFortschritt ×N</text>
+          <text x="628" y="258" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--python)">· Abgeschlossen — Commands</text>
+
+          <!-- forward: Trainingslauf -> Python  (cyan, unten) -->
+          <path d="M594,246 C660,278 690,296 748,320" fill="none" stroke="var(--accent)" stroke-width="1.8" marker-end="url(#ah)"/>
+          <text x="600" y="294" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--ink)">TrainingAngefordert</text>
+          <text x="600" y="309" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-faint)">Event · Push</text>
+
+          <!-- manifest: Datensatz -> Python -->
+          <path d="M270,357 L700,357" fill="none" stroke="var(--python)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#ah-d)"/>
+          <text x="360" y="349" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-soft)">liest Manifest (Pfad im Event)</text>
+
+          <!-- return: Trainingslauf -> Blazor -->
+          <path d="M400,196 C300,150 300,140 240,96" fill="none" stroke="var(--accent)" stroke-width="1.8" marker-end="url(#ah)"/>
+          <text x="250" y="196" font-family="IBM Plex Mono, monospace" font-size="11.5" fill="var(--ink)">TrainingFortschritt</text>
+          <text x="250" y="211" font-family="IBM Plex Mono, monospace" font-size="10" fill="var(--ink-faint)">Event-Push → Kurve</text>
+        </svg>
+      </div>
+      <figcaption>Der Fortschritt fließt <b>event-sourced</b> zurück: jede gemeldete Epoche wird ein Event, das per gRPC-Push von selbst die Live-Kurve im Dashboard speist. Ein Timeout wird über das vorhandene <span class="mono">Frist</span>-Primitiv abgesichert; doppelte Zustellung startet dank Empfänger-Dedup <b>kein</b> zweites Training.</figcaption>
+    </figure>
+  </div>
+</section>
+
+<!-- ============ DOMAINS ============ -->
+<section>
+  <div class="wrap">
+    <div class="sec-eyebrow">Der Zuschnitt</div>
+    <h2>Drei fokussierte Aggregate</h2>
+    <p class="sec-sub"><span class="mono">ImagePair</span> und die Suche bleiben unverändert. Es kommen kleine, event-sourcete Aggregate dazu — je ein Ordner unter <span class="mono">Domain/</span>, wie <span class="mono">ImagePair</span> selbst.</p>
+
+    <div class="cards">
+      <div class="card" style="--c:var(--domain);--c-bg:var(--domain-bg)">
+        <div class="kicker"><h3>Datensatz</h3><span class="phase">Phase 1</span></div>
+        <p>Kuratierte, <b>eingefrorene, versionierte</b> Menge gelabelter Bildpaare — die Vereinigung mehrerer Such-Ranges.</p>
+        <div class="rowlabel">Commands</div>
+        <div class="chips">
+          <span class="chip">ErstelleDatensatz</span><span class="chip">FügeRangeHinzu</span><span class="chip">EntfernePaar</span><span class="chip">FriereEin</span>
+        </div>
+        <div class="rowlabel">Events</div>
+        <div class="chips">
+          <span class="chip evt">RangeAngefordert</span><span class="chip evt">PaareAufgenommen</span><span class="chip evt">DatensatzEingefroren</span><span class="chip evt">DatensatzMaterialisiert</span>
+        </div>
+      </div>
+
+      <div class="card" style="--c:var(--python);--c-bg:var(--python-bg)">
+        <div class="kicker"><h3>Trainingslauf</h3><span class="phase">Phase 1</span></div>
+        <p>Ein Trainings-Job mit Lebenszyklus: <b>angefordert → läuft → Fortschritt → fertig</b>. Referenziert Datensatz&nbsp;+&nbsp;Version immutabel.</p>
+        <div class="rowlabel">Commands</div>
+        <div class="chips">
+          <span class="chip">StarteTraining</span><span class="chip">MeldeFortschritt</span><span class="chip">MeldeAbgeschlossen</span><span class="chip">BricheAb</span>
+        </div>
+        <div class="rowlabel">Events</div>
+        <div class="chips">
+          <span class="chip evt">TrainingAngefordert</span><span class="chip evt">TrainingFortschritt</span><span class="chip evt">TrainingAbgeschlossen</span><span class="chip evt">TrainingGescheitert</span>
+        </div>
+      </div>
+
+      <div class="card" style="--c:var(--accent);--c-bg:var(--panel-2)">
+        <div class="kicker"><h3>Modell</h3><span class="phase">Phase 2</span></div>
+        <p>Das trainierte Artefakt: registriert, mit Metriken, <b>„aktiv setzen"</b> → der Inferenz-Worker lädt es. Schließt den Kreis.</p>
+        <div class="rowlabel">Commands</div>
+        <div class="chips">
+          <span class="chip">RegistriereModell</span><span class="chip">SetzeAktiv</span><span class="chip">Archiviere</span>
+        </div>
+        <div class="rowlabel">Events</div>
+        <div class="chips">
+          <span class="chip evt">ModellRegistriert</span><span class="chip evt">ModellAktiviert</span>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ C#/PYTHON BOUNDARY ============ -->
+<section>
+  <div class="wrap">
+    <div class="sec-eyebrow">Der Schnitt</div>
+    <h2>C# erzeugt, Python nutzt — über ein Manifest</h2>
+    <p class="sec-sub">Genau die Aufteilung „Erzeugung in C#, Training in Python". Events tragen <b>Pfade, keine Blobs</b> — wie die Bildpfade heute. Der Datensatz ist im Log reproduzierbar; das Manifest ist nur eine Datei-Projektion davon.</p>
+
+    <div class="split">
+      <div class="filecard" style="--own:var(--domain)">
+        <div class="filehead"><span style="color:var(--domain)">▸</span> datasets/&#123;id&#125;/v1/manifest.json <span class="tag">C# schreibt</span></div>
+<pre><span class="c">// eingefroren, immutable — die Trainings-Wahrheit</span>
+&#123;
+  <span class="k">"datensatzId"</span>: <span class="s">"a3f…"</span>, <span class="k">"version"</span>: <span class="n">1</span>,
+  <span class="k">"klassen"</span>: [<span class="s">"KeineAnomalie"</span>,<span class="s">"Questionable"</span>,<span class="s">"Anomalie"</span>],
+  <span class="k">"samples"</span>: [
+    &#123; <span class="k">"imagePairId"</span>:<span class="s">"…"</span>,
+      <span class="k">"dc0Pfad"</span>:<span class="s">"…_DC0.png"</span>,
+      <span class="k">"dc2Pfad"</span>:<span class="s">"…_DC2.png"</span>,
+      <span class="k">"label"</span>:<span class="n">2</span>, <span class="k">"split"</span>:<span class="s">"train"</span> &#125;,
+    <span class="c">…</span>
+  ]
+&#125;</pre>
+      </div>
+      <div class="filecard" style="--own:var(--python)">
+        <div class="filehead"><span style="color:var(--python)">▸</span> models/&#123;laufId&#125;/ <span class="tag">Python schreibt</span></div>
+<pre><span class="c"># der Worker liest das Manifest, trainiert,</span>
+<span class="c"># schreibt Artefakt + Metriken zurück</span>
+
+model.pt        <span class="c"># TorchScript — vom Inferenz-</span>
+                <span class="c"># Worker ladbar (Phase 2)</span>
+
+metrics.json    <span class="c"># Endmetriken je Split</span>
+&#123;
+  <span class="k">"accuracy"</span>: <span class="n">0.94</span>, <span class="k">"f1"</span>: <span class="n">0.91</span>,
+  <span class="k">"loss"</span>: <span class="n">0.18</span>, <span class="k">"epochen"</span>: <span class="n">40</span>
+&#125;</pre>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ USER FLOW ============ -->
+<section>
+  <div class="wrap">
+    <div class="sec-eyebrow">Nutzer-Flow</div>
+    <h2>Drei Klicks bis zum trainierbaren Datensatz</h2>
+    <p class="sec-sub">Alles Technische — Auflösen, Split, Manifest, Reproduzierbarkeit — bleibt unsichtbar. Invariante 5: der Nutzer bleibt rein.</p>
+
+    <div class="flow">
+      <div class="step"><div class="num">1</div><h4>Suchen</h4><p>Zeit-Range im Produktionstage-Baum + Klassen-Filter.</p></div>
+      <div class="step"><div class="num">2</div><h4>Range → Datensatz</h4><p>Ganzes Suchergebnis hinzufügen — beliebig oft, Union.</p></div>
+      <div class="step"><div class="num">3</div><h4>Prüfen</h4><p>Größe, Klassenbalance, Provenienz auf einen Blick.</p></div>
+      <div class="step"><div class="num">4</div><h4>Einfrieren</h4><p>Version festgeschrieben. <span class="auto">Split + Manifest automatisch</span></p></div>
+      <div class="step"><div class="num">5</div><h4>Training starten</h4><p>Datensatz wählen, Hyperparameter, los.</p></div>
+      <div class="step"><div class="num">6</div><h4>Zusehen</h4><p>Live-Kurve streamt event-sourced. <span class="auto">→ fertiges Modell</span></p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ GUI MOCKUP ============ -->
+<section>
+  <div class="wrap">
+    <div class="sec-eyebrow">Die neue Main-View</div>
+    <h2>Datensatz-Komposition</h2>
+    <p class="sec-sub">Transfer-Layout im vorhandenen Slot-System: Suchergebnis links, Datensatz-Korb rechts. Der Filter links ist der bestehende <span class="mono">SuchKriterien</span>-Baustein — nichts Neues für „Bilder finden".</p>
+
+    <div class="mock">
+      <div class="mock-bar">
+        <span class="tt"></span><span class="tt"></span><span class="tt"></span>
+        <span class="title">Stage · Datensatz-Komposition</span>
+        <span class="live">Live</span>
+      </div>
+      <div class="transfer">
+        <!-- left: search results -->
+        <div class="pane left">
+          <div class="ph"><span>Suchergebnis</span><span>1 240 Treffer</span></div>
+          <div class="filterline">Filter: <b>Juni 2025</b> · Produktlabel=<b>Anomalie</b></div>
+          <div class="rows">
+            <div class="rrow"><span class="cb on"></span><span class="dt">12.06 09:11</span><span class="lbl" style="--m:var(--crit)">Anomalie</span></div>
+            <div class="rrow"><span class="cb on"></span><span class="dt">11.06 08:10</span><span class="lbl" style="--m:var(--crit)">Anomalie</span></div>
+            <div class="rrow"><span class="cb on"></span><span class="dt">10.06 17:09</span><span class="lbl" style="--m:var(--warn)">Questionable</span></div>
+            <div class="rrow"><span class="cb"></span><span class="dt">09.06 16:08</span><span class="lbl" style="--m:var(--crit)">Anomalie</span></div>
+          </div>
+          <button class="addall">ganze Range → Datensatz</button>
+        </div>
+        <!-- middle -->
+        <div class="midcol">
+          <div class="arrowbtn">→</div>
+          <div class="arrowbtn" style="color:var(--ink-faint)">←</div>
+        </div>
+        <!-- right: basket -->
+        <div class="pane basket">
+          <div class="ph"><span>Datensatz „Charge-Juni"</span><span style="color:var(--warn)">Entwurf</span></div>
+          <div class="meta"><b>4 812</b> Paare · <b>3</b> Ranges · 4 200 mit Mensch-Label</div>
+          <div class="balance">
+            <i style="background:var(--ok);width:60%"></i><i style="background:var(--warn);width:25%"></i><i style="background:var(--crit);width:15%"></i>
+          </div>
+          <div class="baltags">
+            <span><span class="d" style="background:var(--ok)"></span>OK 60%</span>
+            <span><span class="d" style="background:var(--warn)"></span>Frag. 25%</span>
+            <span><span class="d" style="background:var(--crit)"></span>Anom. 15%</span>
+          </div>
+          <div class="splitrow">Split&nbsp; <b>train 70</b> / val 15 / test 15 &nbsp;<span style="color:var(--ink-faint)">(auto)</span></div>
+          <div class="prov">
+            <div class="ph">Provenienz</div>
+            <div class="pv"><span>Juni · Anomalie</span><b>1 240</b></div>
+            <div class="pv"><span>Juli · OK</span><span><b>3 100</b> &nbsp;<span class="rm">entfernen</span></span></div>
+            <div class="pv"><span>manuell</span><b>472</b></div>
+          </div>
+          <div class="actions">
+            <span class="btn primary">Einfrieren</span>
+            <span class="btn">Materialisieren</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ REPRO ============ -->
+<section style="border-bottom:0">
+  <div class="wrap">
+    <div class="sec-eyebrow">Warum event-sourced</div>
+    <h2>Reproduzierbarkeit ist geschenkt</h2>
+    <p class="sec-sub">Der eingefrorene Datensatz ist ein unveränderlicher Input; der Trainingslauf hält Datensatz-Version, Hyperparameter und Seed fest. Woraus ein Modell gelernt hat, steht lückenlos im Log.</p>
+    <div class="callout">
+      <h3>Der Audit-Pfad — eine Kette im Event-Store</h3>
+      <div class="repro">
+        <span class="n">Suche-Ranges</span><span class="ar">→</span>
+        <span class="n">Datensatz v1 (eingefroren)</span><span class="ar">→</span>
+        <span class="n">Trainingslauf (+ Seed, Hyperparameter)</span><span class="ar">→</span>
+        <span class="n">Modell + Metriken</span><span class="ar">→</span>
+        <span class="n">aktive Inferenz</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<footer>
+  <div class="wrap">
+    Konzept-Board zur Erweiterung des <span class="mono">ImagePair</span>-Systems um Datensatz-Verwaltung und KI-Training.
+    Volltext: <span class="mono">docs/konzept-training-und-datensatz.md</span>. &nbsp;Status: Entwurf — noch nicht implementiert.
+  </div>
+</footer>
