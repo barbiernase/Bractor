@@ -136,7 +136,9 @@ public partial class Datensatz
                 yield break;
             }
 
-            yield return new EinfrierenAngefordert();
+            // Autoritative Mitgliedschaft + Split aus dem State mitgeben (Invariante 1).
+            yield return new EinfrierenAngefordert(
+                this.State.DraftMitglieder.ToList(), this.State.Split);
         }
 
         public IEnumerable<OneOf<DatensatzEingefroren, DatensatzBereitsEingefroren, DatensatzLeer>> Decide(

@@ -42,10 +42,15 @@ public record SplitGesetzt(
 ) : IEvent;
 
 /// <summary>
-/// Marker: das Einfrieren wurde angefordert. Der Resolver snapshottet daraufhin
-/// den Label-Stand + Split und schließt mit SchliesseEinfrierenAb ab.
+/// Das Einfrieren wurde angefordert. Trägt die <em>autoritative</em> Mitgliedschaft +
+/// Split-Konfig aus dem Aggregat-State (Invariante 1: nicht aus dem abgeleiteten Read-Model
+/// lesen). Der Resolver liest daraufhin nur noch den Label-Stand + Pfade je Mitglied aus
+/// dem ImagePair-Read-Store, teilt den Split zu und schließt mit SchliesseEinfrierenAb ab.
 /// </summary>
-public record EinfrierenAngefordert() : IEvent;
+public record EinfrierenAngefordert(
+    IReadOnlyList<Guid> Mitglieder,
+    SplitKonfig Split
+) : IEvent;
 
 /// <summary>
 /// Der Datensatz ist eingefroren: Mitgliedschaft + Label-Stand + Split festgeschrieben,

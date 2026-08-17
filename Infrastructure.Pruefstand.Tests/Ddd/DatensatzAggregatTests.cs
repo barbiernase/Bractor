@@ -159,11 +159,19 @@ public class DatensatzAggregatTests
     [Fact]
     public void Einfrieren_mit_Mitgliedern_fordert_das_Einfrieren_an()
     {
+        var p1 = Guid.NewGuid();
+        var p2 = Guid.NewGuid();
         var f = new Fixture();
-        f.NimmRange(Guid.NewGuid(), Guid.NewGuid());
+        f.NimmRange(p1, p2);
+        f.Wende(new SetzeSplit(f.Id, 80, 10, 10, 7));
         var events = f.Wende(new FriereEin(f.Id));
 
-        events.Should().ContainSingle().Which.Should().BeOfType<EinfrierenAngefordert>();
+        var angefordert = events.Should().ContainSingle()
+            .Which.Should().BeOfType<EinfrierenAngefordert>().Subject;
+        angefordert.Mitglieder.Should().BeEquivalentTo(new[] { p1, p2 },
+            "die autoritative Mitgliedschaft reist mit (Invariante 1)");
+        angefordert.Split.Should().Be(new SplitKonfig(80, 10, 10, 7),
+            "die Split-Konfig reist mit");
         f.Datensatz.IstEingefroren.Should().BeFalse("erst SchliesseEinfrierenAb friert wirklich ein");
     }
 

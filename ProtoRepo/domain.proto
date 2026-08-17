@@ -243,19 +243,19 @@ message EventEnvelopeDto {
     string target_subscriber_id = 9;
     
     oneof payload {
-        EinfrierenAngefordertDto einfrieren_angefordert = 20;
-        ImagePairInspiziertDto image_pair_inspiziert = 21;
-        ImagePairKomplettDto image_pair_komplett = 22;
-        PaarNichtKomplettDto paar_nicht_komplett = 23;
-        CommandFailedDto command_failed = 24;
-        AntragGestelltDto antrag_gestellt = 25;
-        UeberweisungBeauftragtDto ueberweisung_beauftragt = 26;
-        BestellungAufgegebenDto bestellung_aufgegeben = 27;
-        DatensatzBereitsEingefrorenDto datensatz_bereits_eingefroren = 28;
-        DatensatzEingefrorenDto datensatz_eingefroren = 29;
-        DatensatzErstelltDto datensatz_erstellt = 30;
-        DatensatzExistiertBereitsDto datensatz_existiert_bereits = 31;
-        DatensatzLeerDto datensatz_leer = 32;
+        ImagePairInspiziertDto image_pair_inspiziert = 20;
+        ImagePairKomplettDto image_pair_komplett = 21;
+        PaarNichtKomplettDto paar_nicht_komplett = 22;
+        CommandFailedDto command_failed = 23;
+        AntragGestelltDto antrag_gestellt = 24;
+        UeberweisungBeauftragtDto ueberweisung_beauftragt = 25;
+        BestellungAufgegebenDto bestellung_aufgegeben = 26;
+        DatensatzBereitsEingefrorenDto datensatz_bereits_eingefroren = 27;
+        DatensatzEingefrorenDto datensatz_eingefroren = 28;
+        DatensatzErstelltDto datensatz_erstellt = 29;
+        DatensatzExistiertBereitsDto datensatz_existiert_bereits = 30;
+        DatensatzLeerDto datensatz_leer = 31;
+        EinfrierenAngefordertDto einfrieren_angefordert = 32;
         PaarAufgenommenDto paar_aufgenommen = 33;
         PaareAufgenommenDto paare_aufgenommen = 34;
         PaarEntferntDto paar_entfernt = 35;
@@ -1040,10 +1040,6 @@ message RichteZahlungskontoEinDto {
 // ============================================================================
 // EVENT PAYLOADS
 // ============================================================================
-message EinfrierenAngefordertDto {
-    EinfrierenAngefordertDto original = 1;
-}
-
 message ImagePairInspiziertDto {
     ImagePairInspiziertDto original = 1;
 }
@@ -1101,6 +1097,11 @@ message DatensatzExistiertBereitsDto {
 
 message DatensatzLeerDto {
     string datensatz_id = 1;
+}
+
+message EinfrierenAngefordertDto {
+    repeated string mitglieder = 1;
+    SplitKonfigDto split = 2;
 }
 
 message PaarAufgenommenDto {
