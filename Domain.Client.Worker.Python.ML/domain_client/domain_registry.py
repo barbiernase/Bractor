@@ -13,6 +13,13 @@ from domain_client.generated import (
     BildPaarDurchKiKlassifiziertDto,
     PaarNichtKomplettDto,
     KlassifiziereBildPaarDurchKiDto,
+    # ── Trainingslauf (Konzept §4) ──
+    TrainingAngefordertDto,
+    TrainingAbgebrochenDto,
+    MeldeTrainingBegonnenDto,
+    MeldeFortschrittDto,
+    MeldeTrainingAbgeschlossenDto,
+    MeldeTrainingGescheitertDto,
 )
 
 EVENT_TYPES: frozenset[type] = frozenset({
@@ -21,10 +28,18 @@ EVENT_TYPES: frozenset[type] = frozenset({
     ImagePairErstelltDto,
     BildPaarDurchKiKlassifiziertDto,
     PaarNichtKomplettDto,
+    # Der TrainingWorker abonniert diese:
+    TrainingAngefordertDto,
+    TrainingAbgebrochenDto,
 })
 
 COMMAND_TYPES: frozenset[type] = frozenset({
     KlassifiziereBildPaarDurchKiDto,
+    # Der TrainingWorker meldet Fortschritt über diese:
+    MeldeTrainingBegonnenDto,
+    MeldeFortschrittDto,
+    MeldeTrainingAbgeschlossenDto,
+    MeldeTrainingGescheitertDto,
 })
 
 TRIGGER_TYPES: frozenset[type] = frozenset()

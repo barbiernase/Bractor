@@ -204,87 +204,139 @@ class CommandEnvelopeDto(betterproto.Message):
     correlation_id: str = betterproto.string_field(6)
     user_id: str = betterproto.string_field(7)
     origin_session_id: str = betterproto.string_field(8)
-    dekrementiere: "DekrementiereDto" = betterproto.message_field(20, group="payload")
-    erstelle_counter: "ErstelleCounterDto" = betterproto.message_field(
+    stelle_antrag: "StelleAntragDto" = betterproto.message_field(20, group="payload")
+    beauftrage_ueberweisung: "BeauftrageUeberweisungDto" = betterproto.message_field(
         21, group="payload"
     )
-    incrementiere: "IncrementiereDto" = betterproto.message_field(22, group="payload")
-    loesche_counter: "LoescheCounterDto" = betterproto.message_field(
-        23, group="payload"
+    gib_bestellung_auf: "GibBestellungAufDto" = betterproto.message_field(
+        22, group="payload"
     )
-    reset: "ResetDto" = betterproto.message_field(24, group="payload")
-    setze_max_grenze: "SetzeMaxGrenzeDto" = betterproto.message_field(
-        25, group="payload"
+    entferne_paar: "EntfernePaarDto" = betterproto.message_field(23, group="payload")
+    erstelle_datensatz: "ErstelleDatensatzDto" = betterproto.message_field(
+        24, group="payload"
     )
-    setze_min_grenze: "SetzeMinGrenzeDto" = betterproto.message_field(
+    friere_ein: "FriereEinDto" = betterproto.message_field(25, group="payload")
+    fuege_range_hinzu: "FuegeRangeHinzuDto" = betterproto.message_field(
         26, group="payload"
     )
-    erstelle_image_pair: "ErstelleImagePairDto" = betterproto.message_field(
-        27, group="payload"
+    nimm_paar_auf: "NimmPaarAufDto" = betterproto.message_field(27, group="payload")
+    nimm_range_auf: "NimmRangeAufDto" = betterproto.message_field(28, group="payload")
+    schliesse_einfrieren_ab: "SchliesseEinfrierenAbDto" = betterproto.message_field(
+        29, group="payload"
     )
-    klassifiziere_bild_paar_durch_ki: "KlassifiziereBildPaarDurchKiDto" = (
-        betterproto.message_field(28, group="payload")
-    )
-    klassifiziere_einzel_bild_durch_ki: "KlassifiziereEinzelBildDurchKiDto" = (
-        betterproto.message_field(29, group="payload")
-    )
-    label_bild_paar: "LabelBildPaarDto" = betterproto.message_field(30, group="payload")
-    label_bild_region: "LabelBildRegionDto" = betterproto.message_field(
-        31, group="payload"
-    )
-    label_einzel_bild: "LabelEinzelBildDto" = betterproto.message_field(
-        32, group="payload"
-    )
-    label_physisches_produkt: "LabelPhysischesProduktDto" = betterproto.message_field(
+    setze_split: "SetzeSplitDto" = betterproto.message_field(30, group="payload")
+    frist_faellig: "FristFaelligDto" = betterproto.message_field(31, group="payload")
+    gebe_flug_frei: "GebeFlugFreiDto" = betterproto.message_field(32, group="payload")
+    reserviere_flug: "ReserviereFlugDto" = betterproto.message_field(
         33, group="payload"
     )
-    markiere_als_inspiziert: "MarkiereAlsInspiziertDto" = betterproto.message_field(
-        34, group="payload"
-    )
-    melde_bild_verfuegbar: "MeldeBildVerfuegbarDto" = betterproto.message_field(
-        35, group="payload"
-    )
-    aendere_lagerplatz: "AendereLagerplatzDto" = betterproto.message_field(
+    richte_flug_ein: "RichteFlugEinDto" = betterproto.message_field(34, group="payload")
+    gebe_hotel_frei: "GebeHotelFreiDto" = betterproto.message_field(35, group="payload")
+    reserviere_hotel: "ReserviereHotelDto" = betterproto.message_field(
         36, group="payload"
     )
-    buche_warenabgang: "BucheWarenabgangDto" = betterproto.message_field(
+    richte_hotel_ein: "RichteHotelEinDto" = betterproto.message_field(
         37, group="payload"
     )
-    buche_wareneingang: "BucheWareneingangDto" = betterproto.message_field(
+    erstelle_image_pair: "ErstelleImagePairDto" = betterproto.message_field(
         38, group="payload"
     )
-    deaktiviere_lagerartikel: "DeaktiviereLagerartikelDto" = betterproto.message_field(
-        39, group="payload"
+    klassifiziere_bild_paar_durch_ki: "KlassifiziereBildPaarDurchKiDto" = (
+        betterproto.message_field(39, group="payload")
     )
-    erstelle_lagerartikel: "ErstelleLagerartikelDto" = betterproto.message_field(
-        40, group="payload"
+    klassifiziere_einzel_bild_durch_ki: "KlassifiziereEinzelBildDurchKiDto" = (
+        betterproto.message_field(40, group="payload")
     )
-    ordne_lieferant_zu: "OrdneLieferantZuDto" = betterproto.message_field(
-        41, group="payload"
-    )
-    passe_einkaufspreis_an: "PasseEinkaufspreisAnDto" = betterproto.message_field(
+    label_bild_paar: "LabelBildPaarDto" = betterproto.message_field(41, group="payload")
+    label_bild_region: "LabelBildRegionDto" = betterproto.message_field(
         42, group="payload"
     )
-    reserviere_bestand: "ReserviereBestandDto" = betterproto.message_field(
+    label_einzel_bild: "LabelEinzelBildDto" = betterproto.message_field(
         43, group="payload"
     )
-    aendere_profilnamen: "AendereProfilnamenDto" = betterproto.message_field(
+    label_physisches_produkt: "LabelPhysischesProduktDto" = betterproto.message_field(
         44, group="payload"
     )
-    erstelle_profil: "ErstelleProfilDto" = betterproto.message_field(
+    markiere_als_inspiziert: "MarkiereAlsInspiziertDto" = betterproto.message_field(
         45, group="payload"
     )
-    aendere_titel: "AendereTitelDto" = betterproto.message_field(46, group="payload")
-    archiviere: "ArchiviereDto" = betterproto.message_field(47, group="payload")
-    entferne_tag: "EntferneTagDto" = betterproto.message_field(48, group="payload")
-    erstelle_todo: "ErstelleTodoDto" = betterproto.message_field(49, group="payload")
-    fuege_tag_hinzu: "FuegeTagHinzuDto" = betterproto.message_field(50, group="payload")
-    markiere_als_erledigt: "MarkiereAlsErledigtDto" = betterproto.message_field(
-        51, group="payload"
+    melde_bild_verfuegbar: "MeldeBildVerfuegbarDto" = betterproto.message_field(
+        46, group="payload"
     )
-    oeffne_wieder: "OeffneWiederDto" = betterproto.message_field(52, group="payload")
-    setze_prioritaet: "SetzePrioritaetDto" = betterproto.message_field(
+    buche_reservierung: "BucheReservierungDto" = betterproto.message_field(
+        47, group="payload"
+    )
+    eroeffne_konto: "EroeffneKontoDto" = betterproto.message_field(48, group="payload")
+    gebe_reservierung_frei: "GebeReservierungFreiDto" = betterproto.message_field(
+        49, group="payload"
+    )
+    reserviere_betrag: "ReserviereBetragDto" = betterproto.message_field(
+        50, group="payload"
+    )
+    schreibe_gut: "SchreibeGutDto" = betterproto.message_field(51, group="payload")
+    storniere_gutschrift: "StorniereGutschriftDto" = betterproto.message_field(
+        52, group="payload"
+    )
+    gebe_bestand_frei: "GebeBestandFreiDto" = betterproto.message_field(
         53, group="payload"
+    )
+    reserviere_bestand: "ReserviereBestandDto" = betterproto.message_field(
+        54, group="payload"
+    )
+    richte_lager_ein: "RichteLagerEinDto" = betterproto.message_field(
+        55, group="payload"
+    )
+    wirke_reaktion: "WirkeReaktionDto" = betterproto.message_field(56, group="payload")
+    bestaetige_reise: "BestaetigeReiseDto" = betterproto.message_field(
+        57, group="payload"
+    )
+    buche_reise: "BucheReiseDto" = betterproto.message_field(58, group="payload")
+    beauftrage_sammelueberweisung: "BeauftrageSammelueberweisungDto" = (
+        betterproto.message_field(59, group="payload")
+    )
+    briche_training_ab: "BricheTrainingAbDto" = betterproto.message_field(
+        60, group="payload"
+    )
+    markiere_als_haengengeblieben: "MarkiereAlsHaengengebliebenDto" = (
+        betterproto.message_field(61, group="payload")
+    )
+    melde_fortschritt: "MeldeFortschrittDto" = betterproto.message_field(
+        62, group="payload"
+    )
+    melde_training_abgeschlossen: "MeldeTrainingAbgeschlossenDto" = (
+        betterproto.message_field(63, group="payload")
+    )
+    melde_training_begonnen: "MeldeTrainingBegonnenDto" = betterproto.message_field(
+        64, group="payload"
+    )
+    melde_training_gescheitert: "MeldeTrainingGescheitertDto" = (
+        betterproto.message_field(65, group="payload")
+    )
+    starte_training: "StarteTrainingDto" = betterproto.message_field(
+        66, group="payload"
+    )
+    eroeffne_verkaufsauftrag: "EroeffneVerkaufsauftragDto" = betterproto.message_field(
+        67, group="payload"
+    )
+    fuege_position_hinzu: "FuegePositionHinzuDto" = betterproto.message_field(
+        68, group="payload"
+    )
+    gib_verkaufsauftrag_auf: "GibVerkaufsauftragAufDto" = betterproto.message_field(
+        69, group="payload"
+    )
+    storniere_verkaufsauftrag: "StorniereVerkaufsauftragDto" = (
+        betterproto.message_field(70, group="payload")
+    )
+    versende: "VersendeDto" = betterproto.message_field(71, group="payload")
+    aktiviere: "AktiviereDto" = betterproto.message_field(72, group="payload")
+    genehmige: "GenehmigeDto" = betterproto.message_field(73, group="payload")
+    beauftrage_willkommensbonus: "BeauftrageWillkommensbonusDto" = (
+        betterproto.message_field(74, group="payload")
+    )
+    belaste_konto: "BelasteKontoDto" = betterproto.message_field(75, group="payload")
+    erstatte_konto: "ErstatteKontoDto" = betterproto.message_field(76, group="payload")
+    richte_zahlungskonto_ein: "RichteZahlungskontoEinDto" = betterproto.message_field(
+        77, group="payload"
     )
 
 
@@ -299,243 +351,318 @@ class EventEnvelopeDto(betterproto.Message):
     correlation_id: str = betterproto.string_field(7)
     user_id: str = betterproto.string_field(8)
     target_subscriber_id: str = betterproto.string_field(9)
-    counter_geloescht: "CounterGeloeschtDto" = betterproto.message_field(
+    image_pair_inspiziert: "ImagePairInspiziertDto" = betterproto.message_field(
         20, group="payload"
     )
-    image_pair_inspiziert: "ImagePairInspiziertDto" = betterproto.message_field(
+    image_pair_komplett: "ImagePairKomplettDto" = betterproto.message_field(
         21, group="payload"
     )
-    image_pair_komplett: "ImagePairKomplettDto" = betterproto.message_field(
+    paar_nicht_komplett: "PaarNichtKomplettDto" = betterproto.message_field(
         22, group="payload"
     )
-    paar_nicht_komplett: "PaarNichtKomplettDto" = betterproto.message_field(
+    training_abgebrochen: "TrainingAbgebrochenDto" = betterproto.message_field(
         23, group="payload"
     )
-    lagerartikel_deaktiviert: "LagerartikelDeaktiviertDto" = betterproto.message_field(
+    training_begonnen: "TrainingBegonnenDto" = betterproto.message_field(
         24, group="payload"
     )
-    als_erledigt_markiert: "AlsErledigtMarkiertDto" = betterproto.message_field(
-        25, group="payload"
+    training_haengengeblieben: "TrainingHaengengebliebenDto" = (
+        betterproto.message_field(25, group="payload")
     )
-    archiviert: "ArchiviertDto" = betterproto.message_field(26, group="payload")
-    wieder_geoeffnet: "WiederGeoeffnetDto" = betterproto.message_field(
+    command_failed: "CommandFailedDto" = betterproto.message_field(26, group="payload")
+    antrag_gestellt: "AntragGestelltDto" = betterproto.message_field(
         27, group="payload"
     )
-    command_failed: "CommandFailedDto" = betterproto.message_field(28, group="payload")
-    counter_bereits_geloescht: "CounterBereitsGeloeschtDto" = betterproto.message_field(
+    ueberweisung_beauftragt: "UeberweisungBeauftragtDto" = betterproto.message_field(
+        28, group="payload"
+    )
+    bestellung_aufgegeben: "BestellungAufgegebenDto" = betterproto.message_field(
         29, group="payload"
     )
-    counter_dekrementiert: "CounterDekrementiertDto" = betterproto.message_field(
-        30, group="payload"
+    datensatz_bereits_eingefroren: "DatensatzBereitsEingefrorenDto" = (
+        betterproto.message_field(30, group="payload")
     )
-    counter_eingabe_ungueltig: "CounterEingabeUngueltigDto" = betterproto.message_field(
+    datensatz_eingefroren: "DatensatzEingefrorenDto" = betterproto.message_field(
         31, group="payload"
     )
-    counter_erstellt: "CounterErstelltDto" = betterproto.message_field(
+    datensatz_erstellt: "DatensatzErstelltDto" = betterproto.message_field(
         32, group="payload"
     )
-    counter_incrementiert: "CounterIncrementiertDto" = betterproto.message_field(
-        33, group="payload"
+    datensatz_existiert_bereits: "DatensatzExistiertBereitsDto" = (
+        betterproto.message_field(33, group="payload")
     )
-    counter_nicht_gefunden: "CounterNichtGefundenDto" = betterproto.message_field(
-        34, group="payload"
-    )
-    counter_zurueckgesetzt: "CounterZurueckgesetztDto" = betterproto.message_field(
+    datensatz_leer: "DatensatzLeerDto" = betterproto.message_field(34, group="payload")
+    einfrieren_angefordert: "EinfrierenAngefordertDto" = betterproto.message_field(
         35, group="payload"
     )
-    max_grenze_geaendert: "MaxGrenzeGeaendertDto" = betterproto.message_field(
+    paar_aufgenommen: "PaarAufgenommenDto" = betterproto.message_field(
         36, group="payload"
     )
-    maximum_erreicht: "MaximumErreichtDto" = betterproto.message_field(
+    paare_aufgenommen: "PaareAufgenommenDto" = betterproto.message_field(
         37, group="payload"
     )
-    min_grenze_geaendert: "MinGrenzeGeaendertDto" = betterproto.message_field(
-        38, group="payload"
-    )
-    minimum_erreicht: "MinimumErreichtDto" = betterproto.message_field(
+    paar_entfernt: "PaarEntferntDto" = betterproto.message_field(38, group="payload")
+    range_angefordert: "RangeAngefordertDto" = betterproto.message_field(
         39, group="payload"
     )
-    oberhalb_maximum: "OberhalbMaximumDto" = betterproto.message_field(
-        40, group="payload"
-    )
-    unterhalb_minimum: "UnterhalbMinimumDto" = betterproto.message_field(
-        41, group="payload"
-    )
-    bild_nicht_verfuegbar: "BildNichtVerfuegbarDto" = betterproto.message_field(
+    range_leer: "RangeLeerDto" = betterproto.message_field(40, group="payload")
+    split_gesetzt: "SplitGesetztDto" = betterproto.message_field(41, group="payload")
+    split_ungueltig: "SplitUngueltigDto" = betterproto.message_field(
         42, group="payload"
     )
-    bild_paar_durch_ki_klassifiziert: "BildPaarDurchKiKlassifiziertDto" = (
-        betterproto.message_field(43, group="payload")
+    erinnerung_ausgeloest: "ErinnerungAusgeloestDto" = betterproto.message_field(
+        43, group="payload"
     )
-    bild_paar_gelabelt: "BildPaarGelabeltDto" = betterproto.message_field(
+    flug_ausgebucht: "FlugAusgebuchtDto" = betterproto.message_field(
         44, group="payload"
     )
-    bild_region_gelabelt: "BildRegionGelabeltDto" = betterproto.message_field(
+    flug_eingerichtet: "FlugEingerichtetDto" = betterproto.message_field(
         45, group="payload"
     )
-    bild_verfuegbar: "BildVerfuegbarDto" = betterproto.message_field(
+    flug_existiert_bereits: "FlugExistiertBereitsDto" = betterproto.message_field(
         46, group="payload"
     )
-    bild_version_bereits_verfuegbar: "BildVersionBereitsVerfuegbarDto" = (
-        betterproto.message_field(47, group="payload")
+    flug_freigegeben: "FlugFreigegebenDto" = betterproto.message_field(
+        47, group="payload"
     )
-    einzel_bild_durch_ki_klassifiziert: "EinzelBildDurchKiKlassifiziertDto" = (
-        betterproto.message_field(48, group="payload")
+    flug_reserviert: "FlugReserviertDto" = betterproto.message_field(
+        48, group="payload"
     )
-    einzel_bild_gelabelt: "EinzelBildGelabeltDto" = betterproto.message_field(
+    hotel_ausgebucht: "HotelAusgebuchtDto" = betterproto.message_field(
         49, group="payload"
     )
-    image_pair_eingabe_ungueltig: "ImagePairEingabeUngueltigDto" = (
-        betterproto.message_field(50, group="payload")
+    hotel_eingerichtet: "HotelEingerichtetDto" = betterproto.message_field(
+        50, group="payload"
     )
-    image_pair_erstellt: "ImagePairErstelltDto" = betterproto.message_field(
+    hotel_existiert_bereits: "HotelExistiertBereitsDto" = betterproto.message_field(
         51, group="payload"
     )
-    image_pair_existiert_bereits: "ImagePairExistiertBereitsDto" = (
-        betterproto.message_field(52, group="payload")
+    hotel_freigegeben: "HotelFreigegebenDto" = betterproto.message_field(
+        52, group="payload"
     )
-    image_pair_nicht_gefunden: "ImagePairNichtGefundenDto" = betterproto.message_field(
+    hotel_reserviert: "HotelReserviertDto" = betterproto.message_field(
         53, group="payload"
     )
-    physisches_produkt_gelabelt: "PhysischesProduktGelabeltDto" = (
-        betterproto.message_field(54, group="payload")
+    bild_nicht_verfuegbar: "BildNichtVerfuegbarDto" = betterproto.message_field(
+        54, group="payload"
     )
-    region_index_ungueltig: "RegionIndexUngueltigDto" = betterproto.message_field(
-        55, group="payload"
+    bild_paar_durch_ki_klassifiziert: "BildPaarDurchKiKlassifiziertDto" = (
+        betterproto.message_field(55, group="payload")
     )
-    region_labels_ungueltig: "RegionLabelsUngueltigDto" = betterproto.message_field(
+    bild_paar_gelabelt: "BildPaarGelabeltDto" = betterproto.message_field(
         56, group="payload"
     )
-    artikel_existiert_bereits: "ArtikelExistiertBereitsDto" = betterproto.message_field(
+    bild_region_gelabelt: "BildRegionGelabeltDto" = betterproto.message_field(
         57, group="payload"
     )
-    artikel_inaktiv: "ArtikelInaktivDto" = betterproto.message_field(
+    bild_verfuegbar: "BildVerfuegbarDto" = betterproto.message_field(
         58, group="payload"
     )
-    artikel_nicht_gefunden: "ArtikelNichtGefundenDto" = betterproto.message_field(
-        59, group="payload"
+    bild_version_bereits_verfuegbar: "BildVersionBereitsVerfuegbarDto" = (
+        betterproto.message_field(59, group="payload")
     )
-    bestand_nicht_ausreichend: "BestandNichtAusreichendDto" = betterproto.message_field(
-        60, group="payload"
+    einzel_bild_durch_ki_klassifiziert: "EinzelBildDurchKiKlassifiziertDto" = (
+        betterproto.message_field(60, group="payload")
     )
-    bestand_reserviert: "BestandReserviertDto" = betterproto.message_field(
+    einzel_bild_gelabelt: "EinzelBildGelabeltDto" = betterproto.message_field(
         61, group="payload"
     )
-    eingabe_ungueltig: "EingabeUngueltigDto" = betterproto.message_field(
-        62, group="payload"
+    image_pair_eingabe_ungueltig: "ImagePairEingabeUngueltigDto" = (
+        betterproto.message_field(62, group="payload")
     )
-    einkaufspreis_angepasst: "EinkaufspreisAngepasstDto" = betterproto.message_field(
+    image_pair_erstellt: "ImagePairErstelltDto" = betterproto.message_field(
         63, group="payload"
     )
-    lagerartikel_erstellt: "LagerartikelErstelltDto" = betterproto.message_field(
-        64, group="payload"
+    image_pair_existiert_bereits: "ImagePairExistiertBereitsDto" = (
+        betterproto.message_field(64, group="payload")
     )
-    lagerplatz_geaendert: "LagerplatzGeaendertDto" = betterproto.message_field(
+    image_pair_nicht_gefunden: "ImagePairNichtGefundenDto" = betterproto.message_field(
         65, group="payload"
     )
-    lieferant_zugeordnet: "LieferantZugeordnetDto" = betterproto.message_field(
-        66, group="payload"
+    physisches_produkt_gelabelt: "PhysischesProduktGelabeltDto" = (
+        betterproto.message_field(66, group="payload")
     )
-    nachbestellung_angefordert: "NachbestellungAngefordertDto" = (
-        betterproto.message_field(67, group="payload")
+    region_index_ungueltig: "RegionIndexUngueltigDto" = betterproto.message_field(
+        67, group="payload"
     )
-    verfuegbarer_bestand_nicht_ausreichend: "VerfuegbarerBestandNichtAusreichendDto" = (
-        betterproto.message_field(68, group="payload")
+    region_labels_ungueltig: "RegionLabelsUngueltigDto" = betterproto.message_field(
+        68, group="payload"
     )
-    warenabgang_gebucht: "WarenabgangGebuchtDto" = betterproto.message_field(
+    betrag_reserviert: "BetragReserviertDto" = betterproto.message_field(
         69, group="payload"
     )
-    wareneingang_gebucht: "WareneingangGebuchtDto" = betterproto.message_field(
+    deckung_reicht_nicht: "DeckungReichtNichtDto" = betterproto.message_field(
         70, group="payload"
     )
-    name_geaendert: "NameGeaendertDto" = betterproto.message_field(71, group="payload")
-    profil_erstellt: "ProfilErstelltDto" = betterproto.message_field(
+    gutgeschrieben: "GutgeschriebenDto" = betterproto.message_field(71, group="payload")
+    gutschrift_storniert: "GutschriftStorniertDto" = betterproto.message_field(
         72, group="payload"
     )
-    prioritaet_gesetzt: "PrioritaetGesetztDto" = betterproto.message_field(
+    konto_eroeffnet: "KontoEroeffnetDto" = betterproto.message_field(
         73, group="payload"
     )
-    tag_entfernt: "TagEntferntDto" = betterproto.message_field(74, group="payload")
-    tag_hinzugefuegt: "TagHinzugefuegtDto" = betterproto.message_field(
-        75, group="payload"
+    konto_existiert_bereits: "KontoExistiertBereitsDto" = betterproto.message_field(
+        74, group="payload"
     )
-    titel_geaendert: "TitelGeaendertDto" = betterproto.message_field(
+    konto_gesperrt: "KontoGesperrtDto" = betterproto.message_field(75, group="payload")
+    konto_nicht_gefunden: "KontoNichtGefundenDto" = betterproto.message_field(
         76, group="payload"
     )
-    todo_bereits_archiviert: "TodoBereitsArchiviertDto" = betterproto.message_field(
+    reservierung_freigegeben: "ReservierungFreigegebenDto" = betterproto.message_field(
         77, group="payload"
     )
-    todo_bereits_erledigt: "TodoBereitsErledigtDto" = betterproto.message_field(
+    reservierung_gebucht: "ReservierungGebuchtDto" = betterproto.message_field(
         78, group="payload"
     )
-    todo_eingabe_ungueltig: "TodoEingabeUngueltigDto" = betterproto.message_field(
+    bestand_freigegeben: "BestandFreigegebenDto" = betterproto.message_field(
         79, group="payload"
     )
-    todo_erstellt: "TodoErstelltDto" = betterproto.message_field(80, group="payload")
-    todo_existiert_bereits: "TodoExistiertBereitsDto" = betterproto.message_field(
+    bestand_reicht_nicht: "BestandReichtNichtDto" = betterproto.message_field(
+        80, group="payload"
+    )
+    bestand_reserviert: "BestandReserviertDto" = betterproto.message_field(
         81, group="payload"
     )
-    todo_nicht_erledigt: "TodoNichtErledigtDto" = betterproto.message_field(
+    lager_eingerichtet: "LagerEingerichtetDto" = betterproto.message_field(
         82, group="payload"
     )
-    todo_nicht_gefunden: "TodoNichtGefundenDto" = betterproto.message_field(
+    lager_existiert_bereits: "LagerExistiertBereitsDto" = betterproto.message_field(
         83, group="payload"
+    )
+    reaktion_gewirkt: "ReaktionGewirktDto" = betterproto.message_field(
+        84, group="payload"
+    )
+    reise_bestaetigt: "ReiseBestaetigtDto" = betterproto.message_field(
+        85, group="payload"
+    )
+    reise_gebucht: "ReiseGebuchtDto" = betterproto.message_field(86, group="payload")
+    sammel_ueberweisung_beauftragt: "SammelUeberweisungBeauftragtDto" = (
+        betterproto.message_field(87, group="payload")
+    )
+    training_abgeschlossen: "TrainingAbgeschlossenDto" = betterproto.message_field(
+        88, group="payload"
+    )
+    training_angefordert: "TrainingAngefordertDto" = betterproto.message_field(
+        89, group="payload"
+    )
+    training_bereits_beendet: "TrainingBereitsBeendetDto" = betterproto.message_field(
+        90, group="payload"
+    )
+    training_fortschritt: "TrainingFortschrittDto" = betterproto.message_field(
+        91, group="payload"
+    )
+    training_gescheitert: "TrainingGescheitertDto" = betterproto.message_field(
+        92, group="payload"
+    )
+    training_nicht_aktiv: "TrainingNichtAktivDto" = betterproto.message_field(
+        93, group="payload"
+    )
+    trainingslauf_existiert_bereits: "TrainingslaufExistiertBereitsDto" = (
+        betterproto.message_field(94, group="payload")
+    )
+    trainingslauf_nicht_gefunden: "TrainingslaufNichtGefundenDto" = (
+        betterproto.message_field(95, group="payload")
+    )
+    auftrag_nicht_offen: "AuftragNichtOffenDto" = betterproto.message_field(
+        96, group="payload"
+    )
+    kreditlimit_ueberschritten: "KreditlimitUeberschrittenDto" = (
+        betterproto.message_field(97, group="payload")
+    )
+    verkaufsauftrag_aufgegeben: "VerkaufsauftragAufgegebenDto" = (
+        betterproto.message_field(98, group="payload")
+    )
+    verkaufsauftrag_eroeffnet: "VerkaufsauftragEroeffnetDto" = (
+        betterproto.message_field(99, group="payload")
+    )
+    verkaufsauftrag_existiert_bereits: "VerkaufsauftragExistiertBereitsDto" = (
+        betterproto.message_field(100, group="payload")
+    )
+    verkaufsauftrag_nicht_gefunden: "VerkaufsauftragNichtGefundenDto" = (
+        betterproto.message_field(101, group="payload")
+    )
+    verkaufsauftrag_storniert: "VerkaufsauftragStorniertDto" = (
+        betterproto.message_field(102, group="payload")
+    )
+    verkaufsposition_hinzugefuegt: "VerkaufspositionHinzugefuegtDto" = (
+        betterproto.message_field(103, group="payload")
+    )
+    waehrung_passt_nicht: "WaehrungPasstNichtDto" = betterproto.message_field(
+        104, group="payload"
+    )
+    versendet: "VersendetDto" = betterproto.message_field(105, group="payload")
+    vorgang_aktiviert: "VorgangAktiviertDto" = betterproto.message_field(
+        106, group="payload"
+    )
+    vorgang_genehmigt: "VorgangGenehmigtDto" = betterproto.message_field(
+        107, group="payload"
+    )
+    willkommensbonus_beauftragt: "WillkommensbonusBeauftragtDto" = (
+        betterproto.message_field(108, group="payload")
+    )
+    konto_belastet: "KontoBelastetDto" = betterproto.message_field(109, group="payload")
+    konto_erstattet: "KontoErstattetDto" = betterproto.message_field(
+        110, group="payload"
+    )
+    konto_ungedeckt: "KontoUngedecktDto" = betterproto.message_field(
+        111, group="payload"
+    )
+    zahlungskonto_eingerichtet: "ZahlungskontoEingerichtetDto" = (
+        betterproto.message_field(112, group="payload")
     )
 
 
 @dataclass(eq=False, repr=False)
 class QueryPayloadDto(betterproto.Message):
-    get_alle_audit_eintraege: "GetAlleAuditEintraegeDto" = betterproto.message_field(
+    get_image_pair_statistik: "GetImagePairStatistikDto" = betterproto.message_field(
         20, group="payload"
     )
-    get_alle_todos: "GetAlleTodosDto" = betterproto.message_field(21, group="payload")
-    get_all_lagerbestaende: "GetAllLagerbestaendeDto" = betterproto.message_field(
+    get_produktions_tage: "GetProduktionsTageDto" = betterproto.message_field(
+        21, group="payload"
+    )
+    hole_trainingslaeufe: "HoleTrainingslaeufeDto" = betterproto.message_field(
         22, group="payload"
     )
-    get_image_pair_statistik: "GetImagePairStatistikDto" = betterproto.message_field(
-        23, group="payload"
-    )
-    get_produktions_tage: "GetProduktionsTageDto" = betterproto.message_field(
+    get_image_pair: "GetImagePairDto" = betterproto.message_field(23, group="payload")
+    get_image_pair_historie: "GetImagePairHistorieDto" = betterproto.message_field(
         24, group="payload"
     )
-    get_audit_eintraege: "GetAuditEintraegeDto" = betterproto.message_field(
+    get_produktions_strip: "GetProduktionsStripDto" = betterproto.message_field(
         25, group="payload"
     )
-    get_image_pair: "GetImagePairDto" = betterproto.message_field(26, group="payload")
-    get_image_pair_historie: "GetImagePairHistorieDto" = betterproto.message_field(
-        27, group="payload"
+    get_produktions_verlauf: "GetProduktionsVerlaufDto" = betterproto.message_field(
+        26, group="payload"
     )
-    get_lagerbestand: "GetLagerbestandDto" = betterproto.message_field(
-        28, group="payload"
+    get_unklassifizierte_image_pairs: "GetUnklassifizierteImagePairsDto" = (
+        betterproto.message_field(27, group="payload")
     )
-    get_produktions_strip: "GetProduktionsStripDto" = betterproto.message_field(
+    hole_datensatz: "HoleDatensatzDto" = betterproto.message_field(28, group="payload")
+    hole_datensatz_samples: "HoleDatensatzSamplesDto" = betterproto.message_field(
         29, group="payload"
     )
-    get_produktions_verlauf: "GetProduktionsVerlaufDto" = betterproto.message_field(
+    hole_trainingslauf: "HoleTrainingslaufDto" = betterproto.message_field(
         30, group="payload"
     )
-    get_todo: "GetTodoDto" = betterproto.message_field(31, group="payload")
-    get_unklassifizierte_image_pairs: "GetUnklassifizierteImagePairsDto" = (
-        betterproto.message_field(32, group="payload")
-    )
     suche_image_pairs: "SucheImagePairsDto" = betterproto.message_field(
-        33, group="payload"
+        31, group="payload"
     )
 
 
 @dataclass(eq=False, repr=False)
 class QueryResponsePayloadDto(betterproto.Message):
-    audit_eintrag_antwort: "AuditEintragAntwortDto" = betterproto.message_field(
+    image_pair_antwort: "ImagePairAntwortDto" = betterproto.message_field(
         20, group="payload"
     )
-    image_pair_antwort: "ImagePairAntwortDto" = betterproto.message_field(
+    trainingslauf_antwort: "TrainingslaufAntwortDto" = betterproto.message_field(
         21, group="payload"
     )
-    lagerbestand_antwort: "LagerbestandAntwortDto" = betterproto.message_field(
+    datensatz_antwort: "DatensatzAntwortDto" = betterproto.message_field(
         22, group="payload"
     )
-    todo_antwort: "TodoAntwortDto" = betterproto.message_field(23, group="payload")
-    audit_eintraege_liste: "AuditEintraegeListeDto" = betterproto.message_field(
+    datensatz_nicht_gefunden: "DatensatzNichtGefundenDto" = betterproto.message_field(
+        23, group="payload"
+    )
+    datensatz_samples: "DatensatzSamplesDto" = betterproto.message_field(
         24, group="payload"
     )
     image_pair_arbeitsliste: "ImagePairArbeitslisteDto" = betterproto.message_field(
@@ -556,37 +683,31 @@ class QueryResponsePayloadDto(betterproto.Message):
     image_pair_suchergebnis: "ImagePairSuchergebnisDto" = betterproto.message_field(
         30, group="payload"
     )
-    keine_audit_eintraege_gefunden: "KeineAuditEintraegeGefundenDto" = (
-        betterproto.message_field(31, group="payload")
-    )
-    lagerbestand_liste: "LagerbestandListeDto" = betterproto.message_field(
-        32, group="payload"
-    )
-    lagerbestand_nicht_gefunden: "LagerbestandNichtGefundenDto" = (
-        betterproto.message_field(33, group="payload")
-    )
     produktions_strip_antwort: "ProduktionsStripAntwortDto" = betterproto.message_field(
-        34, group="payload"
+        31, group="payload"
     )
     produktions_tage_antwort: "ProduktionsTageAntwortDto" = betterproto.message_field(
-        35, group="payload"
+        32, group="payload"
     )
     produktions_verlauf_antwort: "ProduktionsVerlaufAntwortDto" = (
-        betterproto.message_field(36, group="payload")
+        betterproto.message_field(33, group="payload")
     )
-    todo_liste: "TodoListeDto" = betterproto.message_field(37, group="payload")
-    todo_nicht_gefunden_antwort: "TodoNichtGefundenAntwortDto" = (
-        betterproto.message_field(38, group="payload")
+    trainingslauf_liste: "TrainingslaufListeDto" = betterproto.message_field(
+        34, group="payload"
+    )
+    trainingslauf_nicht_gefunden_antwort: "TrainingslaufNichtGefundenAntwortDto" = (
+        betterproto.message_field(35, group="payload")
     )
 
 
 @dataclass(eq=False, repr=False)
 class TriggerPayloadDto(betterproto.Message):
-    datei_erkannt: "DateiErkanntDto" = betterproto.message_field(20, group="payload")
+    bench_ping: "BenchPingDto" = betterproto.message_field(20, group="payload")
+    datei_erkannt: "DateiErkanntDto" = betterproto.message_field(21, group="payload")
 
 
 @dataclass(eq=False, repr=False)
-class RegionPositionDto(betterproto.Message):
+class EpochenMetrikDto(betterproto.Message):
     """
     ============================================================================
      ALL PAYLOAD MESSAGES
@@ -596,10 +717,60 @@ class RegionPositionDto(betterproto.Message):
      ============================================================================
     """
 
+    epoche: int = betterproto.int32_field(1)
+    loss: float = betterproto.double_field(2)
+    genauigkeit: float = betterproto.double_field(3)
+
+
+@dataclass(eq=False, repr=False)
+class RangeKriterienDto(betterproto.Message):
+    von: int = betterproto.int64_field(1)
+    bis: int = betterproto.int64_field(2)
+    ki_klassifikation: str = betterproto.string_field(3)
+    mensch_label: str = betterproto.string_field(4)
+    produkt_label: str = betterproto.string_field(5)
+    nur_komplette: int = betterproto.int32_field(6)
+    hat_ki_klassifikation: int = betterproto.int32_field(7)
+    hat_mensch_label: int = betterproto.int32_field(8)
+    nur_nicht_inspizierte: int = betterproto.int32_field(9)
+
+
+@dataclass(eq=False, repr=False)
+class RegionPositionDto(betterproto.Message):
     x_prozent: float = betterproto.double_field(1)
     y_prozent: float = betterproto.double_field(2)
     breite_prozent: float = betterproto.double_field(3)
     hoehe_prozent: float = betterproto.double_field(4)
+
+
+@dataclass(eq=False, repr=False)
+class EndmetrikenDto(betterproto.Message):
+    loss: float = betterproto.double_field(1)
+    genauigkeit: float = betterproto.double_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class HyperparameterDto(betterproto.Message):
+    epochen: int = betterproto.int32_field(1)
+    lern_rate: float = betterproto.double_field(2)
+    batch_groesse: int = betterproto.int32_field(3)
+    architektur: str = betterproto.string_field(4)
+    seed: int = betterproto.int32_field(5)
+
+
+@dataclass(eq=False, repr=False)
+class DatensatzMitgliedDto(betterproto.Message):
+    image_pair_id: str = betterproto.string_field(1)
+    label: int = betterproto.int32_field(2)
+    split: int = betterproto.int32_field(3)
+    dc0_pfad: str = betterproto.string_field(4)
+    dc2_pfad: str = betterproto.string_field(5)
+
+
+@dataclass(eq=False, repr=False)
+class RangeHerkunftDto(betterproto.Message):
+    kriterien: "RangeKriterienDto" = betterproto.message_field(1)
+    anzahl_paare: int = betterproto.int32_field(2)
 
 
 @dataclass(eq=False, repr=False)
@@ -608,6 +779,15 @@ class RegionBewertungDto(betterproto.Message):
     position: "RegionPositionDto" = betterproto.message_field(2)
     ki_klassifikation: str = betterproto.string_field(3)
     mensch_label: str = betterproto.string_field(4)
+
+
+@dataclass(eq=False, repr=False)
+class DatensatzSampleDto(betterproto.Message):
+    image_pair_id: str = betterproto.string_field(1)
+    dc0_pfad: str = betterproto.string_field(2)
+    dc2_pfad: str = betterproto.string_field(3)
+    label: int = betterproto.int32_field(4)
+    split: int = betterproto.int32_field(5)
 
 
 @dataclass(eq=False, repr=False)
@@ -645,25 +825,20 @@ class ProduktionsZeitBucketDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
+class SplitKonfigDto(betterproto.Message):
+    train_prozent: int = betterproto.int32_field(1)
+    val_prozent: int = betterproto.int32_field(2)
+    test_prozent: int = betterproto.int32_field(3)
+    seed: int = betterproto.int32_field(4)
+
+
+@dataclass(eq=False, repr=False)
 class BildMetaDto(betterproto.Message):
     original_dateiname: str = betterproto.string_field(1)
     dateigroesse_bytes: int = betterproto.int64_field(2)
     breite_pixel: int = betterproto.int32_field(3)
     hoehe_pixel: int = betterproto.int32_field(4)
     erstellt_am: int = betterproto.int64_field(5)
-
-
-@dataclass(eq=False, repr=False)
-class GeldbetragDto(betterproto.Message):
-    wert: str = betterproto.string_field(1)
-    waehrung: str = betterproto.string_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class LagerplatzDto(betterproto.Message):
-    gang: str = betterproto.string_field(1)
-    regal: str = betterproto.string_field(2)
-    ebene: int = betterproto.int32_field(3)
 
 
 @dataclass(eq=False, repr=False)
@@ -682,7 +857,367 @@ class ImagePairFilterDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class DekrementiereDto(betterproto.Message):
+class GeldwertDto(betterproto.Message):
+    betrag: str = betterproto.string_field(1)
+    waehrung: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaAntragGestelltDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaUeberweisungBeauftragtDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaBestellungAufgegebenDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaDatensatzEingefrorenDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaDatensatzErstelltDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaEinfrierenAngefordertDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaPaarAufgenommenDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaPaareAufgenommenDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaPaarEntferntDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaRangeAngefordertDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaSplitGesetztDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaErinnerungAusgeloestDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaFlugEingerichtetDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaFlugFreigegebenDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaFlugReserviertDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaHotelEingerichtetDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaHotelFreigegebenDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaHotelReserviertDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaBildPaarDurchKiKlassifiziertDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaBildPaarGelabeltDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaBildRegionGelabeltDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaBildVerfuegbarDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaEinzelBildDurchKiKlassifiziertDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaEinzelBildGelabeltDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaImagePairErstelltDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaImagePairInspiziertDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaImagePairKomplettDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaPhysischesProduktGelabeltDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaBetragReserviertDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaGutgeschriebenDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaGutschriftStorniertDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaKontoEroeffnetDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaReservierungFreigegebenDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaReservierungGebuchtDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaBestandFreigegebenDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaBestandReserviertDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaLagerEingerichtetDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaReaktionGewirktDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaReiseBestaetigtDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaReiseGebuchtDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaSammelUeberweisungBeauftragtDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaTrainingAbgebrochenDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaTrainingAbgeschlossenDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaTrainingAngefordertDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaTrainingBegonnenDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaTrainingFortschrittDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaTrainingGescheitertDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaTrainingHaengengebliebenDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaVerkaufsauftragAufgegebenDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaVerkaufsauftragEroeffnetDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaVerkaufsauftragStorniertDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaVerkaufspositionHinzugefuegtDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaVersendetDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaVorgangAktiviertDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaVorgangGenehmigtDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaWillkommensbonusBeauftragtDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaKontoBelastetDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaKontoErstattetDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaZahlungskontoEingerichtetDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StelleAntragDto(betterproto.Message):
     """
     ============================================================================
      COMMAND PAYLOADS
@@ -690,44 +1225,118 @@ class DekrementiereDto(betterproto.Message):
     """
 
     aggregate_id: str = betterproto.string_field(1)
-    delta: int = betterproto.int64_field(2)
+    vorgang: str = betterproto.string_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class ErstelleCounterDto(betterproto.Message):
+class BeauftrageUeberweisungDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    quelle: str = betterproto.string_field(2)
+    ziel: str = betterproto.string_field(3)
+    betrag: str = betterproto.string_field(4)
+
+
+@dataclass(eq=False, repr=False)
+class GibBestellungAufDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    versand: str = betterproto.string_field(2)
+    kunde: str = betterproto.string_field(3)
+    artikel: str = betterproto.string_field(4)
+    menge: int = betterproto.int32_field(5)
+    betrag: str = betterproto.string_field(6)
+
+
+@dataclass(eq=False, repr=False)
+class EntfernePaarDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    image_pair_id: str = betterproto.string_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class ErstelleDatensatzDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
     name: str = betterproto.string_field(2)
-    max_grenze: int = betterproto.int64_field(3)
-    min_grenze: int = betterproto.int64_field(4)
-    start_wert: int = betterproto.int64_field(5)
 
 
 @dataclass(eq=False, repr=False)
-class IncrementiereDto(betterproto.Message):
-    aggregate_id: str = betterproto.string_field(1)
-    delta: int = betterproto.int64_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class LoescheCounterDto(betterproto.Message):
+class FriereEinDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class ResetDto(betterproto.Message):
+class FuegeRangeHinzuDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
+    kriterien: "RangeKriterienDto" = betterproto.message_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class SetzeMaxGrenzeDto(betterproto.Message):
+class NimmPaarAufDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
-    max_grenze: int = betterproto.int64_field(2)
+    image_pair_id: str = betterproto.string_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class SetzeMinGrenzeDto(betterproto.Message):
+class NimmRangeAufDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
-    min_grenze: int = betterproto.int64_field(2)
+    image_pair_ids: List[str] = betterproto.string_field(2)
+    herkunft: "RangeHerkunftDto" = betterproto.message_field(3)
+
+
+@dataclass(eq=False, repr=False)
+class SchliesseEinfrierenAbDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    mitglieder: List["DatensatzMitgliedDto"] = betterproto.message_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class SetzeSplitDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    train_prozent: int = betterproto.int32_field(2)
+    val_prozent: int = betterproto.int32_field(3)
+    test_prozent: int = betterproto.int32_field(4)
+    seed: int = betterproto.int32_field(5)
+
+
+@dataclass(eq=False, repr=False)
+class FristFaelligDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    kontext: str = betterproto.string_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class GebeFlugFreiDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    anzahl: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class ReserviereFlugDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    anzahl: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class RichteFlugEinDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    plaetze: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class GebeHotelFreiDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    anzahl: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class ReserviereHotelDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    anzahl: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class RichteHotelEinDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    zimmer: int = betterproto.int32_field(2)
 
 
 @dataclass(eq=False, repr=False)
@@ -794,127 +1403,211 @@ class MeldeBildVerfuegbarDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class AendereLagerplatzDto(betterproto.Message):
+class BucheReservierungDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
-    neuer_platz: "LagerplatzDto" = betterproto.message_field(2)
+    betrag: str = betterproto.string_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class BucheWarenabgangDto(betterproto.Message):
+class EroeffneKontoDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
-    anzahl: int = betterproto.int32_field(2)
+    start_saldo: str = betterproto.string_field(2)
+    gesperrt: bool = betterproto.bool_field(3)
 
 
 @dataclass(eq=False, repr=False)
-class BucheWareneingangDto(betterproto.Message):
+class GebeReservierungFreiDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
-    anzahl: int = betterproto.int32_field(2)
+    betrag: str = betterproto.string_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class DeaktiviereLagerartikelDto(betterproto.Message):
+class ReserviereBetragDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
+    betrag: str = betterproto.string_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class ErstelleLagerartikelDto(betterproto.Message):
+class SchreibeGutDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
-    name: str = betterproto.string_field(2)
-    initiale_anzahl: int = betterproto.int32_field(3)
+    betrag: str = betterproto.string_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class OrdneLieferantZuDto(betterproto.Message):
+class StorniereGutschriftDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
-    lieferant_id: str = betterproto.string_field(2)
+    betrag: str = betterproto.string_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class PasseEinkaufspreisAnDto(betterproto.Message):
+class GebeBestandFreiDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
-    neuer_preis: "GeldbetragDto" = betterproto.message_field(2)
+    menge: int = betterproto.int32_field(2)
 
 
 @dataclass(eq=False, repr=False)
 class ReserviereBestandDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
-    auftrags_id: str = betterproto.string_field(2)
-    anzahl: int = betterproto.int32_field(3)
+    menge: int = betterproto.int32_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class AendereProfilnamenDto(betterproto.Message):
+class RichteLagerEinDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
-    neuer_name: str = betterproto.string_field(2)
+    bestand: int = betterproto.int32_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class ErstelleProfilDto(betterproto.Message):
+class WirkeReaktionDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
-    name: str = betterproto.string_field(2)
+    reaktion_id: str = betterproto.string_field(2)
+    notiz: str = betterproto.string_field(3)
 
 
 @dataclass(eq=False, repr=False)
-class AendereTitelDto(betterproto.Message):
+class BestaetigeReiseDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
-    neuer_titel: str = betterproto.string_field(2)
+    kunde: str = betterproto.string_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class ArchiviereDto(betterproto.Message):
+class BucheReiseDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
+    reise: str = betterproto.string_field(2)
+    flug: str = betterproto.string_field(3)
+    hotel: str = betterproto.string_field(4)
+    kunde: str = betterproto.string_field(5)
+    plaetze: int = betterproto.int32_field(6)
+    zimmer: int = betterproto.int32_field(7)
 
 
 @dataclass(eq=False, repr=False)
-class EntferneTagDto(betterproto.Message):
+class BeauftrageSammelueberweisungDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
-    tag: str = betterproto.string_field(2)
+    quelle: str = betterproto.string_field(2)
+    ziele: List[str] = betterproto.string_field(3)
+    betrag_pro_ziel: str = betterproto.string_field(4)
 
 
 @dataclass(eq=False, repr=False)
-class ErstelleTodoDto(betterproto.Message):
-    aggregate_id: str = betterproto.string_field(1)
-    titel: str = betterproto.string_field(2)
-    prioritaet: int = betterproto.int32_field(3)
-    beschreibung: str = betterproto.string_field(4)
-    faelligkeit: int = betterproto.int64_field(5)
-
-
-@dataclass(eq=False, repr=False)
-class FuegeTagHinzuDto(betterproto.Message):
-    aggregate_id: str = betterproto.string_field(1)
-    tag: str = betterproto.string_field(2)
-
-
-@dataclass(eq=False, repr=False)
-class MarkiereAlsErledigtDto(betterproto.Message):
+class BricheTrainingAbDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class OeffneWiederDto(betterproto.Message):
+class MarkiereAlsHaengengebliebenDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class SetzePrioritaetDto(betterproto.Message):
+class MeldeFortschrittDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
-    neue_prioritaet: int = betterproto.int32_field(2)
+    metrik: "EpochenMetrikDto" = betterproto.message_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class CounterGeloeschtDto(betterproto.Message):
+class MeldeTrainingAbgeschlossenDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    modell_pfad: str = betterproto.string_field(2)
+    endmetriken: "EndmetrikenDto" = betterproto.message_field(3)
+
+
+@dataclass(eq=False, repr=False)
+class MeldeTrainingBegonnenDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class MeldeTrainingGescheitertDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    grund: str = betterproto.string_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StarteTrainingDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    datensatz_id: str = betterproto.string_field(2)
+    datensatz_version: int = betterproto.int32_field(3)
+    hyperparameter: "HyperparameterDto" = betterproto.message_field(4)
+
+
+@dataclass(eq=False, repr=False)
+class EroeffneVerkaufsauftragDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    kunde_id: str = betterproto.string_field(2)
+    kreditlimit: "GeldwertDto" = betterproto.message_field(3)
+
+
+@dataclass(eq=False, repr=False)
+class FuegePositionHinzuDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    artikel_nr: str = betterproto.string_field(2)
+    bezeichnung: str = betterproto.string_field(3)
+    menge: int = betterproto.int32_field(4)
+    einzelpreis: "GeldwertDto" = betterproto.message_field(5)
+
+
+@dataclass(eq=False, repr=False)
+class GibVerkaufsauftragAufDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class StorniereVerkaufsauftragDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    grund: str = betterproto.string_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class VersendeDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    kunde: str = betterproto.string_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class AktiviereDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class GenehmigeDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class BeauftrageWillkommensbonusDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    neues_konto: str = betterproto.string_field(2)
+    promo_konto: str = betterproto.string_field(3)
+    betrag: str = betterproto.string_field(4)
+
+
+@dataclass(eq=False, repr=False)
+class BelasteKontoDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    betrag: str = betterproto.string_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class ErstatteKontoDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    betrag: str = betterproto.string_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class RichteZahlungskontoEinDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    guthaben: str = betterproto.string_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class ImagePairInspiziertDto(betterproto.Message):
     """
     ============================================================================
      EVENT PAYLOADS
      ============================================================================
     """
 
-    original: "CounterGeloeschtDto" = betterproto.message_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class ImagePairInspiziertDto(betterproto.Message):
     original: "ImagePairInspiziertDto" = betterproto.message_field(1)
 
 
@@ -929,23 +1622,18 @@ class PaarNichtKomplettDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class LagerartikelDeaktiviertDto(betterproto.Message):
-    original: "LagerartikelDeaktiviertDto" = betterproto.message_field(1)
+class TrainingAbgebrochenDto(betterproto.Message):
+    original: "TrainingAbgebrochenDto" = betterproto.message_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class AlsErledigtMarkiertDto(betterproto.Message):
-    original: "AlsErledigtMarkiertDto" = betterproto.message_field(1)
+class TrainingBegonnenDto(betterproto.Message):
+    original: "TrainingBegonnenDto" = betterproto.message_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class ArchiviertDto(betterproto.Message):
-    original: "ArchiviertDto" = betterproto.message_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class WiederGeoeffnetDto(betterproto.Message):
-    original: "WiederGeoeffnetDto" = betterproto.message_field(1)
+class TrainingHaengengebliebenDto(betterproto.Message):
+    original: "TrainingHaengengebliebenDto" = betterproto.message_field(1)
 
 
 @dataclass(eq=False, repr=False)
@@ -956,81 +1644,158 @@ class CommandFailedDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class CounterBereitsGeloeschtDto(betterproto.Message):
-    id: str = betterproto.string_field(1)
+class AntragGestelltDto(betterproto.Message):
+    antrag_id: str = betterproto.string_field(1)
+    vorgang: str = betterproto.string_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class CounterDekrementiertDto(betterproto.Message):
-    delta: int = betterproto.int64_field(1)
-    neuer_wert: int = betterproto.int64_field(2)
-    zeitpunkt: int = betterproto.int64_field(3)
+class UeberweisungBeauftragtDto(betterproto.Message):
+    quelle: str = betterproto.string_field(1)
+    ziel: str = betterproto.string_field(2)
+    betrag: str = betterproto.string_field(3)
 
 
 @dataclass(eq=False, repr=False)
-class CounterEingabeUngueltigDto(betterproto.Message):
-    feld: str = betterproto.string_field(1)
-    grund: str = betterproto.string_field(2)
+class BestellungAufgegebenDto(betterproto.Message):
+    bestellung: str = betterproto.string_field(1)
+    versand: str = betterproto.string_field(2)
+    kunde: str = betterproto.string_field(3)
+    artikel: str = betterproto.string_field(4)
+    menge: int = betterproto.int32_field(5)
+    betrag: str = betterproto.string_field(6)
 
 
 @dataclass(eq=False, repr=False)
-class CounterErstelltDto(betterproto.Message):
+class DatensatzBereitsEingefrorenDto(betterproto.Message):
+    datensatz_id: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class DatensatzEingefrorenDto(betterproto.Message):
+    version: int = betterproto.int32_field(1)
+    mitglieder: List["DatensatzMitgliedDto"] = betterproto.message_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class DatensatzErstelltDto(betterproto.Message):
     name: str = betterproto.string_field(1)
-    max_grenze: int = betterproto.int64_field(2)
-    min_grenze: int = betterproto.int64_field(3)
-    start_wert: int = betterproto.int64_field(4)
-    erstellt_am: int = betterproto.int64_field(5)
 
 
 @dataclass(eq=False, repr=False)
-class CounterIncrementiertDto(betterproto.Message):
-    delta: int = betterproto.int64_field(1)
-    neuer_wert: int = betterproto.int64_field(2)
-    zeitpunkt: int = betterproto.int64_field(3)
+class DatensatzExistiertBereitsDto(betterproto.Message):
+    datensatz_id: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class CounterNichtGefundenDto(betterproto.Message):
-    id: str = betterproto.string_field(1)
+class DatensatzLeerDto(betterproto.Message):
+    datensatz_id: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class CounterZurueckgesetztDto(betterproto.Message):
-    vorheriger_wert: int = betterproto.int64_field(1)
+class EinfrierenAngefordertDto(betterproto.Message):
+    mitglieder: List[str] = betterproto.string_field(1)
+    split: "SplitKonfigDto" = betterproto.message_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class MaxGrenzeGeaendertDto(betterproto.Message):
-    max_grenze: int = betterproto.int64_field(1)
+class PaarAufgenommenDto(betterproto.Message):
+    image_pair_id: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class MaximumErreichtDto(betterproto.Message):
-    wert: int = betterproto.int64_field(1)
-    max_grenze: int = betterproto.int64_field(2)
+class PaareAufgenommenDto(betterproto.Message):
+    image_pair_ids: List[str] = betterproto.string_field(1)
+    herkunft: "RangeHerkunftDto" = betterproto.message_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class MinGrenzeGeaendertDto(betterproto.Message):
-    min_grenze: int = betterproto.int64_field(1)
+class PaarEntferntDto(betterproto.Message):
+    image_pair_id: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class MinimumErreichtDto(betterproto.Message):
-    wert: int = betterproto.int64_field(1)
-    min_grenze: int = betterproto.int64_field(2)
+class RangeAngefordertDto(betterproto.Message):
+    kriterien: "RangeKriterienDto" = betterproto.message_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class OberhalbMaximumDto(betterproto.Message):
-    versuch: int = betterproto.int64_field(1)
-    max_grenze: int = betterproto.int64_field(2)
+class RangeLeerDto(betterproto.Message):
+    datensatz_id: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class UnterhalbMinimumDto(betterproto.Message):
-    versuch: int = betterproto.int64_field(1)
-    min_grenze: int = betterproto.int64_field(2)
+class SplitGesetztDto(betterproto.Message):
+    train_prozent: int = betterproto.int32_field(1)
+    val_prozent: int = betterproto.int32_field(2)
+    test_prozent: int = betterproto.int32_field(3)
+    seed: int = betterproto.int32_field(4)
+
+
+@dataclass(eq=False, repr=False)
+class SplitUngueltigDto(betterproto.Message):
+    train_prozent: int = betterproto.int32_field(1)
+    val_prozent: int = betterproto.int32_field(2)
+    test_prozent: int = betterproto.int32_field(3)
+
+
+@dataclass(eq=False, repr=False)
+class ErinnerungAusgeloestDto(betterproto.Message):
+    kontext: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class FlugAusgebuchtDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    frei: int = betterproto.int32_field(2)
+    angefordert: int = betterproto.int32_field(3)
+
+
+@dataclass(eq=False, repr=False)
+class FlugEingerichtetDto(betterproto.Message):
+    plaetze: int = betterproto.int32_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class FlugExistiertBereitsDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class FlugFreigegebenDto(betterproto.Message):
+    anzahl: int = betterproto.int32_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class FlugReserviertDto(betterproto.Message):
+    anzahl: int = betterproto.int32_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class HotelAusgebuchtDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    frei: int = betterproto.int32_field(2)
+    angefordert: int = betterproto.int32_field(3)
+
+
+@dataclass(eq=False, repr=False)
+class HotelEingerichtetDto(betterproto.Message):
+    zimmer: int = betterproto.int32_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class HotelExistiertBereitsDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class HotelFreigegebenDto(betterproto.Message):
+    anzahl: int = betterproto.int32_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class HotelReserviertDto(betterproto.Message):
+    anzahl: int = betterproto.int32_field(1)
 
 
 @dataclass(eq=False, repr=False)
@@ -1122,175 +1887,260 @@ class RegionLabelsUngueltigDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class ArtikelExistiertBereitsDto(betterproto.Message):
-    artikel_id: str = betterproto.string_field(1)
+class BetragReserviertDto(betterproto.Message):
+    betrag: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class ArtikelInaktivDto(betterproto.Message):
-    artikel_id: str = betterproto.string_field(1)
+class DeckungReichtNichtDto(betterproto.Message):
+    verfuegbar: str = betterproto.string_field(1)
+    angefordert: str = betterproto.string_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class ArtikelNichtGefundenDto(betterproto.Message):
-    artikel_id: str = betterproto.string_field(1)
+class GutgeschriebenDto(betterproto.Message):
+    betrag: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class BestandNichtAusreichendDto(betterproto.Message):
-    angefordert: int = betterproto.int32_field(1)
+class GutschriftStorniertDto(betterproto.Message):
+    betrag: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class KontoEroeffnetDto(betterproto.Message):
+    start_saldo: str = betterproto.string_field(1)
+    gesperrt: bool = betterproto.bool_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class KontoExistiertBereitsDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class KontoGesperrtDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class KontoNichtGefundenDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class ReservierungFreigegebenDto(betterproto.Message):
+    betrag: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class ReservierungGebuchtDto(betterproto.Message):
+    betrag: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class BestandFreigegebenDto(betterproto.Message):
+    menge: int = betterproto.int32_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class BestandReichtNichtDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
     verfuegbar: int = betterproto.int32_field(2)
+    angefordert: int = betterproto.int32_field(3)
 
 
 @dataclass(eq=False, repr=False)
 class BestandReserviertDto(betterproto.Message):
-    auftrags_id: str = betterproto.string_field(1)
-    anzahl: int = betterproto.int32_field(2)
+    menge: int = betterproto.int32_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class EingabeUngueltigDto(betterproto.Message):
-    feld: str = betterproto.string_field(1)
-    grund: str = betterproto.string_field(2)
+class LagerEingerichtetDto(betterproto.Message):
+    anfangs_bestand: int = betterproto.int32_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class EinkaufspreisAngepasstDto(betterproto.Message):
-    neuer_preis: "GeldbetragDto" = betterproto.message_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class LagerartikelErstelltDto(betterproto.Message):
+class LagerExistiertBereitsDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
-    name: str = betterproto.string_field(2)
-    initiale_anzahl: int = betterproto.int32_field(3)
 
 
 @dataclass(eq=False, repr=False)
-class LagerplatzGeaendertDto(betterproto.Message):
-    neuer_platz: "LagerplatzDto" = betterproto.message_field(1)
+class ReaktionGewirktDto(betterproto.Message):
+    reaktion_id: str = betterproto.string_field(1)
+    notiz: str = betterproto.string_field(2)
+    zeitpunkt: int = betterproto.int64_field(3)
 
 
 @dataclass(eq=False, repr=False)
-class LieferantZugeordnetDto(betterproto.Message):
-    lieferant_id: str = betterproto.string_field(1)
+class ReiseBestaetigtDto(betterproto.Message):
+    kunde: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class NachbestellungAngefordertDto(betterproto.Message):
-    artikel_id: str = betterproto.string_field(1)
-    menge: int = betterproto.int32_field(2)
+class ReiseGebuchtDto(betterproto.Message):
+    reise_id: str = betterproto.string_field(1)
+    reise: str = betterproto.string_field(2)
+    flug: str = betterproto.string_field(3)
+    hotel: str = betterproto.string_field(4)
+    kunde: str = betterproto.string_field(5)
+    plaetze: int = betterproto.int32_field(6)
+    zimmer: int = betterproto.int32_field(7)
 
 
 @dataclass(eq=False, repr=False)
-class VerfuegbarerBestandNichtAusreichendDto(betterproto.Message):
-    angefordert: int = betterproto.int32_field(1)
-    verfuegbar: int = betterproto.int32_field(2)
+class SammelUeberweisungBeauftragtDto(betterproto.Message):
+    quelle: str = betterproto.string_field(1)
+    ziele: List[str] = betterproto.string_field(2)
+    betrag_pro_ziel: str = betterproto.string_field(3)
 
 
 @dataclass(eq=False, repr=False)
-class WarenabgangGebuchtDto(betterproto.Message):
-    anzahl: int = betterproto.int32_field(1)
+class TrainingAbgeschlossenDto(betterproto.Message):
+    modell_pfad: str = betterproto.string_field(1)
+    endmetriken: "EndmetrikenDto" = betterproto.message_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class WareneingangGebuchtDto(betterproto.Message):
-    anzahl: int = betterproto.int32_field(1)
+class TrainingAngefordertDto(betterproto.Message):
+    datensatz_id: str = betterproto.string_field(1)
+    datensatz_version: int = betterproto.int32_field(2)
+    hyperparameter: "HyperparameterDto" = betterproto.message_field(3)
 
 
 @dataclass(eq=False, repr=False)
-class NameGeaendertDto(betterproto.Message):
-    neuer_name: str = betterproto.string_field(1)
+class TrainingBereitsBeendetDto(betterproto.Message):
+    trainingslauf_id: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class ProfilErstelltDto(betterproto.Message):
+class TrainingFortschrittDto(betterproto.Message):
+    metrik: "EpochenMetrikDto" = betterproto.message_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class TrainingGescheitertDto(betterproto.Message):
+    grund: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class TrainingNichtAktivDto(betterproto.Message):
+    trainingslauf_id: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class TrainingslaufExistiertBereitsDto(betterproto.Message):
+    trainingslauf_id: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class TrainingslaufNichtGefundenDto(betterproto.Message):
+    trainingslauf_id: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class AuftragNichtOffenDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
-    name: str = betterproto.string_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class PrioritaetGesetztDto(betterproto.Message):
-    neue_prioritaet: int = betterproto.int32_field(1)
+class KreditlimitUeberschrittenDto(betterproto.Message):
+    versucht: "GeldwertDto" = betterproto.message_field(1)
+    limit: "GeldwertDto" = betterproto.message_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class TagEntferntDto(betterproto.Message):
-    tag: str = betterproto.string_field(1)
+class VerkaufsauftragAufgegebenDto(betterproto.Message):
+    gesamtsumme: "GeldwertDto" = betterproto.message_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class TagHinzugefuegtDto(betterproto.Message):
-    tag: str = betterproto.string_field(1)
+class VerkaufsauftragEroeffnetDto(betterproto.Message):
+    kunde_id: str = betterproto.string_field(1)
+    kreditlimit: "GeldwertDto" = betterproto.message_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class TitelGeaendertDto(betterproto.Message):
-    neuer_titel: str = betterproto.string_field(1)
+class VerkaufsauftragExistiertBereitsDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class TodoBereitsArchiviertDto(betterproto.Message):
-    todo_id: str = betterproto.string_field(1)
+class VerkaufsauftragNichtGefundenDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class TodoBereitsErledigtDto(betterproto.Message):
-    todo_id: str = betterproto.string_field(1)
+class VerkaufsauftragStorniertDto(betterproto.Message):
+    grund: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class TodoEingabeUngueltigDto(betterproto.Message):
-    feld: str = betterproto.string_field(1)
-    grund: str = betterproto.string_field(2)
+class VerkaufspositionHinzugefuegtDto(betterproto.Message):
+    artikel_nr: str = betterproto.string_field(1)
+    bezeichnung: str = betterproto.string_field(2)
+    menge: int = betterproto.int32_field(3)
+    einzelpreis: "GeldwertDto" = betterproto.message_field(4)
 
 
 @dataclass(eq=False, repr=False)
-class TodoErstelltDto(betterproto.Message):
-    titel: str = betterproto.string_field(1)
-    beschreibung: str = betterproto.string_field(2)
-    prioritaet: int = betterproto.int32_field(3)
-    faelligkeit: int = betterproto.int64_field(4)
+class WaehrungPasstNichtDto(betterproto.Message):
+    erwartet: int = betterproto.int32_field(1)
+    erhalten: int = betterproto.int32_field(2)
 
 
 @dataclass(eq=False, repr=False)
-class TodoExistiertBereitsDto(betterproto.Message):
-    todo_id: str = betterproto.string_field(1)
+class VersendetDto(betterproto.Message):
+    kunde: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class TodoNichtErledigtDto(betterproto.Message):
-    todo_id: str = betterproto.string_field(1)
+class VorgangAktiviertDto(betterproto.Message):
+    vorgang_id: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class TodoNichtGefundenDto(betterproto.Message):
-    todo_id: str = betterproto.string_field(1)
+class VorgangGenehmigtDto(betterproto.Message):
+    vorgang_id: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class GetAlleAuditEintraegeDto(betterproto.Message):
+class WillkommensbonusBeauftragtDto(betterproto.Message):
+    neues_konto: str = betterproto.string_field(1)
+    promo_konto: str = betterproto.string_field(2)
+    betrag: str = betterproto.string_field(3)
+
+
+@dataclass(eq=False, repr=False)
+class KontoBelastetDto(betterproto.Message):
+    betrag: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class KontoErstattetDto(betterproto.Message):
+    betrag: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class KontoUngedecktDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    verfuegbar: str = betterproto.string_field(2)
+    angefordert: str = betterproto.string_field(3)
+
+
+@dataclass(eq=False, repr=False)
+class ZahlungskontoEingerichtetDto(betterproto.Message):
+    guthaben: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class GetImagePairStatistikDto(betterproto.Message):
     """
     ============================================================================
      QUERY PAYLOADS
      ============================================================================
     """
 
-    original: "GetAlleAuditEintraegeDto" = betterproto.message_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class GetAlleTodosDto(betterproto.Message):
-    original: "GetAlleTodosDto" = betterproto.message_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class GetAllLagerbestaendeDto(betterproto.Message):
-    original: "GetAllLagerbestaendeDto" = betterproto.message_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class GetImagePairStatistikDto(betterproto.Message):
     original: "GetImagePairStatistikDto" = betterproto.message_field(1)
 
 
@@ -1300,8 +2150,8 @@ class GetProduktionsTageDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class GetAuditEintraegeDto(betterproto.Message):
-    aggregate_id: str = betterproto.string_field(1)
+class HoleTrainingslaeufeDto(betterproto.Message):
+    original: "HoleTrainingslaeufeDto" = betterproto.message_field(1)
 
 
 @dataclass(eq=False, repr=False)
@@ -1312,11 +2162,6 @@ class GetImagePairDto(betterproto.Message):
 @dataclass(eq=False, repr=False)
 class GetImagePairHistorieDto(betterproto.Message):
     pair_id: str = betterproto.string_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class GetLagerbestandDto(betterproto.Message):
-    artikel_id: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
@@ -1333,13 +2178,26 @@ class GetProduktionsVerlaufDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class GetTodoDto(betterproto.Message):
-    todo_id: str = betterproto.string_field(1)
+class GetUnklassifizierteImagePairsDto(betterproto.Message):
+    max_anzahl: int = betterproto.int32_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class GetUnklassifizierteImagePairsDto(betterproto.Message):
-    max_anzahl: int = betterproto.int32_field(1)
+class HoleDatensatzDto(betterproto.Message):
+    datensatz_id: str = betterproto.string_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class HoleDatensatzSamplesDto(betterproto.Message):
+    datensatz_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+    seite: int = betterproto.int32_field(3)
+    seiten_groesse: int = betterproto.int32_field(4)
+
+
+@dataclass(eq=False, repr=False)
+class HoleTrainingslaufDto(betterproto.Message):
+    trainingslauf_id: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
@@ -1348,23 +2206,13 @@ class SucheImagePairsDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class AuditEintragAntwortDto(betterproto.Message):
+class ImagePairAntwortDto(betterproto.Message):
     """
     ============================================================================
      QUERY RESPONSE PAYLOADS
      ============================================================================
     """
 
-    timestamp: int = betterproto.int64_field(1)
-    aggregate_id: str = betterproto.string_field(2)
-    aggregate_type: str = betterproto.string_field(3)
-    user_id: str = betterproto.string_field(4)
-    action: str = betterproto.string_field(5)
-    details: str = betterproto.string_field(6)
-
-
-@dataclass(eq=False, repr=False)
-class ImagePairAntwortDto(betterproto.Message):
     id: str = betterproto.string_field(1)
     pair_key: str = betterproto.string_field(2)
     produziert_am: int = betterproto.int64_field(3)
@@ -1388,29 +2236,43 @@ class ImagePairAntwortDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class LagerbestandAntwortDto(betterproto.Message):
+class TrainingslaufAntwortDto(betterproto.Message):
+    id: str = betterproto.string_field(1)
+    datensatz_id: str = betterproto.string_field(2)
+    datensatz_version: int = betterproto.int32_field(3)
+    status: int = betterproto.int32_field(4)
+    aktuelle_epoche: int = betterproto.int32_field(5)
+    gesamt_epochen: int = betterproto.int32_field(6)
+    hyperparameter: "HyperparameterDto" = betterproto.message_field(7)
+    metrik_historie: List["EpochenMetrikDto"] = betterproto.message_field(8)
+    modell_pfad: str = betterproto.string_field(9)
+    endmetriken: "EndmetrikenDto" = betterproto.message_field(10)
+    fehlergrund: str = betterproto.string_field(11)
+    startzeit: int = betterproto.int64_field(12)
+
+
+@dataclass(eq=False, repr=False)
+class DatensatzAntwortDto(betterproto.Message):
     id: str = betterproto.string_field(1)
     name: str = betterproto.string_field(2)
-    anzahl: int = betterproto.int32_field(3)
-    letzte_aktualisierung: int = betterproto.int64_field(4)
+    status: int = betterproto.int32_field(3)
+    anzahl_mitglieder: int = betterproto.int32_field(4)
+    eingefrorene_version: int = betterproto.int32_field(5)
+    split: "SplitKonfigDto" = betterproto.message_field(6)
+    ranges: List["RangeHerkunftDto"] = betterproto.message_field(7)
 
 
 @dataclass(eq=False, repr=False)
-class TodoAntwortDto(betterproto.Message):
-    id: str = betterproto.string_field(1)
-    titel: str = betterproto.string_field(2)
-    beschreibung: str = betterproto.string_field(3)
-    status: int = betterproto.int32_field(4)
-    prioritaet: int = betterproto.int32_field(5)
-    faelligkeit: int = betterproto.int64_field(6)
-    erstellt_am: int = betterproto.int64_field(7)
-    erledigt_am: int = betterproto.int64_field(8)
-    tags: List[str] = betterproto.string_field(9)
+class DatensatzNichtGefundenDto(betterproto.Message):
+    datensatz_id: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class AuditEintraegeListeDto(betterproto.Message):
-    items: List["AuditEintragAntwortDto"] = betterproto.message_field(1)
+class DatensatzSamplesDto(betterproto.Message):
+    samples: List["DatensatzSampleDto"] = betterproto.message_field(1)
+    gesamt_anzahl: int = betterproto.int32_field(2)
+    seite: int = betterproto.int32_field(3)
+    seiten_groesse: int = betterproto.int32_field(4)
 
 
 @dataclass(eq=False, repr=False)
@@ -1455,21 +2317,6 @@ class ImagePairSuchergebnisDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class KeineAuditEintraegeGefundenDto(betterproto.Message):
-    aggregate_id: str = betterproto.string_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class LagerbestandListeDto(betterproto.Message):
-    items: List["LagerbestandAntwortDto"] = betterproto.message_field(1)
-
-
-@dataclass(eq=False, repr=False)
-class LagerbestandNichtGefundenDto(betterproto.Message):
-    artikel_id: str = betterproto.string_field(1)
-
-
-@dataclass(eq=False, repr=False)
 class ProduktionsStripAntwortDto(betterproto.Message):
     punkte: List["ProduktionsStripPunktDto"] = betterproto.message_field(1)
 
@@ -1488,23 +2335,28 @@ class ProduktionsVerlaufAntwortDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class TodoListeDto(betterproto.Message):
-    items: List["TodoAntwortDto"] = betterproto.message_field(1)
+class TrainingslaufListeDto(betterproto.Message):
+    items: List["TrainingslaufAntwortDto"] = betterproto.message_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class TodoNichtGefundenAntwortDto(betterproto.Message):
-    todo_id: str = betterproto.string_field(1)
+class TrainingslaufNichtGefundenAntwortDto(betterproto.Message):
+    trainingslauf_id: str = betterproto.string_field(1)
 
 
 @dataclass(eq=False, repr=False)
-class DateiErkanntDto(betterproto.Message):
+class BenchPingDto(betterproto.Message):
     """
     ============================================================================
      TRIGGER PAYLOADS
      ============================================================================
     """
 
+    seq: int = betterproto.int32_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class DateiErkanntDto(betterproto.Message):
     pfad: str = betterproto.string_field(1)
     dateiname: str = betterproto.string_field(2)
     dateigroesse_bytes: int = betterproto.int64_field(3)

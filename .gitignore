@@ -106,3 +106,9 @@ PROJECT_STRUCTURE.md
 
 # Redis-Dump-Artefakt aus der lokalen Test-Infra (scripts/dev-infra-setup.sh)
 dump.rdb
+
+# Python (SDK + ML-Worker)
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
