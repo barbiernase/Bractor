@@ -202,6 +202,24 @@
   .repro .n{padding:6px 11px;border-radius:8px;background:var(--panel-2);border:1px solid var(--line);color:var(--ink)}
   .repro .ar{color:var(--accent);font-weight:600}
 
+  code{font-family:"IBM Plex Mono",monospace;font-size:.88em;background:var(--panel-2);padding:1px 5px;border-radius:5px;color:var(--ink)}
+  .optrow{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}
+  .opt{font-family:"IBM Plex Mono",monospace;font-size:12.5px;padding:7px 13px;border-radius:9px;border:1px solid var(--line);display:inline-flex;align-items:center;gap:8px;background:var(--panel)}
+  .opt .x{font-weight:700}
+  .opt.bad{color:var(--ink-faint)} .opt.bad .x{color:var(--crit)}
+  .opt.good{color:var(--ink);border-color:var(--accent)} .opt.good .x{color:var(--ok)}
+  .parity{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-top:34px}
+  @media (max-width:720px){.parity{grid-template-columns:1fr}}
+  .pcard{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px 22px;box-shadow:var(--shadow)}
+  .pcard.gap{border-left:4px solid var(--warn)}
+  .pcard.same{border-left:4px solid var(--ok)}
+  .pcard h3{font-size:16px;font-weight:700;margin-bottom:6px}
+  .pcard .lead{font-size:13px;color:var(--ink-soft);margin:0 0 14px}
+  .plist{display:flex;flex-direction:column;gap:9px}
+  .pli{display:flex;gap:10px;font-size:13.5px;color:var(--ink)}
+  .pli .m{flex:none;font-weight:700;font-family:"IBM Plex Mono",monospace}
+  .pli.ok .m{color:var(--ok)} .pli.no .m{color:var(--warn)}
+  .pli span b{font-family:"IBM Plex Mono",monospace;font-weight:500;font-size:12.5px;background:var(--panel-2);padding:1px 5px;border-radius:5px}
   footer{padding:40px 0 64px;color:var(--ink-faint);font-size:13px}
   footer .mono{color:var(--ink-soft)}
   @media (prefers-reduced-motion:no-preference){a{transition:color .15s}}
@@ -255,7 +273,7 @@
           <!-- Datensatz node (input) -->
           <rect x="70" y="320" width="200" height="72" rx="11" fill="var(--domain-bg)" stroke="var(--domain)" stroke-width="1.5" stroke-dasharray="0"/>
           <text x="170" y="348" text-anchor="middle" font-family="Archivo, sans-serif" font-size="13.5" font-weight="700" fill="var(--ink)">Datensatz (v1)</text>
-          <text x="170" y="370" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-soft)">manifest.json</text>
+          <text x="170" y="370" text-anchor="middle" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-soft)">eingefroren · rm</text>
 
           <!-- Python node -->
           <rect x="710" y="320" width="210" height="72" rx="11" fill="var(--python-bg)" stroke="var(--python)" stroke-width="1.5"/>
@@ -279,7 +297,7 @@
 
           <!-- manifest: Datensatz -> Python -->
           <path d="M270,357 L700,357" fill="none" stroke="var(--python)" stroke-width="1.6" stroke-dasharray="5 4" marker-end="url(#ah-d)"/>
-          <text x="360" y="349" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-soft)">liest Manifest (Pfad im Event)</text>
+          <text x="352" y="349" font-family="IBM Plex Mono, monospace" font-size="11" fill="var(--ink-soft)">HoleDatensatzSamples · Query (paged)</text>
 
           <!-- return: Trainingslauf -> Blazor -->
           <path d="M400,196 C300,150 300,140 240,96" fill="none" stroke="var(--accent)" stroke-width="1.8" marker-end="url(#ah)"/>
@@ -309,7 +327,7 @@
         </div>
         <div class="rowlabel">Events</div>
         <div class="chips">
-          <span class="chip evt">RangeAngefordert</span><span class="chip evt">PaareAufgenommen</span><span class="chip evt">DatensatzEingefroren</span><span class="chip evt">DatensatzMaterialisiert</span>
+          <span class="chip evt">RangeAngefordert</span><span class="chip evt">PaareAufgenommen</span><span class="chip evt">PaarEntfernt</span><span class="chip evt">DatensatzEingefroren</span>
         </div>
       </div>
 
@@ -346,24 +364,29 @@
 <section>
   <div class="wrap">
     <div class="sec-eyebrow">Der Schnitt</div>
-    <h2>C# erzeugt, Python nutzt — über ein Manifest</h2>
-    <p class="sec-sub">Genau die Aufteilung „Erzeugung in C#, Training in Python". Events tragen <b>Pfade, keine Blobs</b> — wie die Bildpfade heute. Der Datensatz ist im Log reproduzierbar; das Manifest ist nur eine Datei-Projektion davon.</p>
+    <h2>C# erzeugt, Python nutzt — über einen Query-Kanal</h2>
+    <p class="sec-sub"><b>Kein <code>manifest.json</code></b> (statische Datei für dynamische Daten) und <b>kein direkter Postgres-Zugriff</b> aus Python (Schema-Kopplung, keine Portabilität). Stattdessen: C# liefert die Samples <b>dynamisch über denselben typisierten Query-Kanal wie das Blazor-Frontend</b> — ein Postgres-Call, in einen <code>IQuery</code> gewickelt.</p>
+
+    <div class="optrow">
+      <span class="opt bad"><span class="x">✗</span> manifest.json — Datei</span>
+      <span class="opt bad"><span class="x">✗</span> Python → Postgres direkt</span>
+      <span class="opt good"><span class="x">✓</span> served Query (C# löst auf)</span>
+    </div>
 
     <div class="split">
       <div class="filecard" style="--own:var(--domain)">
-        <div class="filehead"><span style="color:var(--domain)">▸</span> datasets/&#123;id&#125;/v1/manifest.json <span class="tag">C# schreibt</span></div>
-<pre><span class="c">// eingefroren, immutable — die Trainings-Wahrheit</span>
-&#123;
-  <span class="k">"datensatzId"</span>: <span class="s">"a3f…"</span>, <span class="k">"version"</span>: <span class="n">1</span>,
-  <span class="k">"klassen"</span>: [<span class="s">"KeineAnomalie"</span>,<span class="s">"Questionable"</span>,<span class="s">"Anomalie"</span>],
-  <span class="k">"samples"</span>: [
-    &#123; <span class="k">"imagePairId"</span>:<span class="s">"…"</span>,
-      <span class="k">"dc0Pfad"</span>:<span class="s">"…_DC0.png"</span>,
-      <span class="k">"dc2Pfad"</span>:<span class="s">"…_DC2.png"</span>,
-      <span class="k">"label"</span>:<span class="n">2</span>, <span class="k">"split"</span>:<span class="s">"train"</span> &#125;,
-    <span class="c">…</span>
-  ]
-&#125;</pre>
+        <div class="filehead"><span style="color:var(--domain)">▸</span> HoleDatensatzSamples <span class="tag">C# beantwortet</span></div>
+<pre><span class="c"># derselbe gRPC-Query-Kanal wie im Blazor-Client</span>
+<span class="c"># liest den EINGEFRORENEN Snapshot (rm), paginiert</span>
+
+<span class="k">await</span> self.query(
+  HoleDatensatzSamplesDto(
+    datensatz_id=<span class="s">"a3f…"</span>, version=<span class="n">1</span>, seite=<span class="n">1</span>))
+
+<span class="c"># → DatensatzSamples</span>
+samples: [ &#123; imagePairId, dc0Pfad, dc2Pfad,
+             label:<span class="n">2</span>, split:<span class="s">"train"</span> &#125;, <span class="c">…</span> ]
+<span class="c"># Pixel je Bild: GET /api/files/… (HTTP, wie heute)</span></pre>
       </div>
       <div class="filecard" style="--own:var(--python)">
         <div class="filehead"><span style="color:var(--python)">▸</span> models/&#123;laufId&#125;/ <span class="tag">Python schreibt</span></div>
@@ -383,6 +406,40 @@ metrics.json    <span class="c"># Endmetriken je Split</span>
   </div>
 </section>
 
+<!-- ============ QUERY PARITY ============ -->
+<section>
+  <div class="wrap">
+    <div class="sec-eyebrow">Voraussetzung</div>
+    <h2>Query-Parität: Python fragt wie Blazor</h2>
+    <p class="sec-sub">Damit derselbe Query-Kanal funktioniert, muss der Python-Client Queries <b>stellen</b> können. Analyse: die Möglichkeiten sind im Prinzip identisch — nur die Ask-Seite ist ergonomisch noch nicht ausgebaut. Keine Server-, Proto- oder Capabilities-Änderung.</p>
+
+    <div class="parity">
+      <div class="pcard same">
+        <h3>Schon gleich — eine Quelle, beide Clients</h3>
+        <p class="lead">Aus <code>domain.proto</code> abgeleitet, kein Client-Sonderweg.</p>
+        <div class="plist">
+          <div class="pli ok"><span class="m">✓</span><span><b>Query-Menge</b> — <code>: IQuery</code> in Domain.Projections → beide Clients (SucheImagePairs, GetStatistik, GetProduktionsTage …)</span></div>
+          <div class="pli ok"><span class="m">✓</span><span><b>Filtertyp</b> — <code>ImagePairFilter</code> ist shared DTO → identische Filter</span></div>
+          <div class="pli ok"><span class="m">✓</span><span><b>Server</b> — antwortet client-agnostisch, gleiche Envelope</span></div>
+          <div class="pli ok"><span class="m">✓</span><span><b>Transport</b> — <code>proxy.send_query</code> (Future + 30 s) = Spiegel von <code>QueryAsync</code></span></div>
+          <div class="pli ok"><span class="m">✓</span><span><b>Fragen</b> braucht keine Capability-Deklaration</span></div>
+        </div>
+      </div>
+      <div class="pcard gap">
+        <h3>Die Lücke — Python-only, ~1 kleines Modul</h3>
+        <p class="lead">Spiegelbildlich zum vorhandenen <code>send_command</code>-Pfad.</p>
+        <div class="plist">
+          <div class="pli no"><span class="m">+</span><span>öffentliche <code>query()</code> auf <code>CqrsClient</code> (heute nur am privaten <code>_proxy</code>)</span></div>
+          <div class="pli no"><span class="m">+</span><span>typisiertes Response-Unpacking (<code>extract_query_response</code> — generisches Primitiv existiert)</span></div>
+          <div class="pli no"><span class="m">+</span><span>Fehler-Mapping (Server-<code>error</code> → Exception)</span></div>
+          <div class="pli ok"><span class="m">·</span><span>Deps/Versions-Tracking (OCC) — für read-only <b>irrelevant</b></span></div>
+        </div>
+        <p class="lead" style="margin:14px 0 0">⚠️ Nicht die Schuld aus §9.7 („Python kann Queries nicht <i>beantworten</i>") — das ist die andere Richtung.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ============ USER FLOW ============ -->
 <section>
   <div class="wrap">
@@ -394,7 +451,7 @@ metrics.json    <span class="c"># Endmetriken je Split</span>
       <div class="step"><div class="num">1</div><h4>Suchen</h4><p>Zeit-Range im Produktionstage-Baum + Klassen-Filter.</p></div>
       <div class="step"><div class="num">2</div><h4>Range → Datensatz</h4><p>Ganzes Suchergebnis hinzufügen — beliebig oft, Union.</p></div>
       <div class="step"><div class="num">3</div><h4>Prüfen</h4><p>Größe, Klassenbalance, Provenienz auf einen Blick.</p></div>
-      <div class="step"><div class="num">4</div><h4>Einfrieren</h4><p>Version festgeschrieben. <span class="auto">Split + Manifest automatisch</span></p></div>
+      <div class="step"><div class="num">4</div><h4>Einfrieren</h4><p>Version festgeschrieben. <span class="auto">Split auto · queryierbar</span></p></div>
       <div class="step"><div class="num">5</div><h4>Training starten</h4><p>Datensatz wählen, Hyperparameter, los.</p></div>
       <div class="step"><div class="num">6</div><h4>Zusehen</h4><p>Live-Kurve streamt event-sourced. <span class="auto">→ fertiges Modell</span></p></div>
     </div>
@@ -453,7 +510,7 @@ metrics.json    <span class="c"># Endmetriken je Split</span>
           </div>
           <div class="actions">
             <span class="btn primary">Einfrieren</span>
-            <span class="btn">Materialisieren</span>
+            <span class="btn">Vorschau (Query)</span>
           </div>
         </div>
       </div>

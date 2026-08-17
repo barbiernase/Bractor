@@ -1,14 +1,32 @@
 # Konzept — Datensätze & Training (KI-Modell-Lebenszyklus)
 
-> **Stand: 2026-08-17. Status: KONZEPT — nicht implementiert.** Dieses Dokument entwirft die
+> **Stand: 2026-08-17. Status: KONZEPT — nicht implementiert.** Vollständiger Entwurf der
 > Erweiterung, mit der aus kontinuierlich gesammelten, gelabelten Bildpaaren **Datensätze**
-> zusammengeführt und daraus **KI-Modelle trainiert** werden — reproduzierbar, event-sourced und
-> im Stil des bestehenden Frameworks (sechs Invarianten, vier Konsumenten, generiert,
-> typgetrieben). Training läuft in **Python**, Datensatz-Erzeugung/-Verwaltung in **C#**, die GUI
-> in **Blazor** (Slot-Module: Sidebar / Main-View).
+> dynamisch zusammengeführt und daraus **KI-Modelle trainiert** werden — reproduzierbar,
+> event-sourced, im Stil des bestehenden Frameworks (sechs Invarianten, vier Konsumenten,
+> generiert, typgetrieben). **Training in Python**, **Datensatz-Erzeugung/-Verwaltung in C#**,
+> **Steuerung in Blazor** (Slot-Module: Sidebar / Main-View).
+>
+> Visuelles Board: `docs/konzept-training-und-datensatz.board.html`.
+> Verwandt: [08-frontend-blazor-client.md](08-frontend-blazor-client.md),
+> [09-python-sdk.md](09-python-sdk.md), [04-konsum-und-prozess-maschine.md](04-konsum-und-prozess-maschine.md).
 
-Verwandte Doku: [08-frontend-blazor-client.md](08-frontend-blazor-client.md),
-[09-python-sdk.md](09-python-sdk.md), [04-konsum-und-prozess-maschine.md](04-konsum-und-prozess-maschine.md).
+---
+
+## Inhalt
+
+1. Ziel & Leitidee
+2. Der Zuschnitt — drei Aggregate
+3. Aggregat `Datensatz`
+4. Aggregat `Trainingslauf`
+5. Aggregat `Modell` (Phase 2)
+6. Der C#↔Python-Schnitt — **ein Query-Kanal, kein File**
+7. **Query-Parität Python ↔ Blazor** (Analyse + Lücke)
+8. GUI (Blazor-Module)
+9. Nutzer-Flow
+10. Reproduzierbarkeit & Provenienz
+11. Was zu bauen wäre
+12. Offene Punkte
 
 ---
 
@@ -16,40 +34,55 @@ Verwandte Doku: [08-frontend-blazor-client.md](08-frontend-blazor-client.md),
 
 Wir sammeln kontinuierlich Bildpaare (`ImagePair`) und labeln sie (KI + Mensch). Über die
 **bestehende Suche** (`ImagePairFilter` → `SearchAsync`) bekommen wir jederzeit eine **Range**
-passender Bilder. Diese Ranges wollen wir zu **Datensätzen** zusammenführen, einfrieren und daraus
-**Modelle trainieren**.
+passender Bilder. Diese Ranges führen wir zu **Datensätzen** zusammen, frieren sie ein und
+trainieren daraus **Modelle**.
 
 **Leitidee in einem Satz:** *Du suchst, du schiebst die Treffer in einen Datensatz, du frierst ein
-— den Rest (Auflösen, Split, Manifest, Reproduzierbarkeit) macht das System unsichtbar.*
+— den Rest (Auflösen, Split, Reproduzierbarkeit, Zustellung an Python) macht das System
+unsichtbar.*
 
-`ImagePair` und die Suche bleiben **unverändert**. Es kommen drei fokussierte Aggregate dazu:
-
-| Aggregat | Verantwortung | Phase |
-|---|---|:---:|
-| **`Datensatz`** | kuratierte, **eingefrorene, versionierte** Menge gelabelter Bildpaare | 1 |
-| **`Trainingslauf`** | ein Trainings-Job: angefordert → läuft → Fortschritt → fertig/gescheitert | 1 |
-| **`Modell`** | trainiertes Artefakt: registriert, mit Metriken, „aktiv setzen" → schließt den Kreis zur Inferenz | 2 |
+`ImagePair` und die Suche bleiben **unverändert**.
 
 ---
 
-## 2. Aggregat `Datensatz`
+## 2. Der Zuschnitt — drei Aggregate
 
-### 2.1 Lebenszyklus
+| Aggregat | Verantwortung | Phase |
+|---|---|:---:|
+| **`Datensatz`** | kuratierte, **eingefrorene, versionierte** Menge gelabelter Bildpaare — Vereinigung mehrerer Such-Ranges | 1 |
+| **`Trainingslauf`** | ein Trainings-Job: angefordert → läuft → Fortschritt → fertig/gescheitert | 1 |
+| **`Modell`** | trainiertes Artefakt: registriert, mit Metriken, „aktiv setzen" → schließt den Kreis zur Inferenz | 2 |
+
+Kleine, fokussierte Aggregate — je ein Ordner unter `Domain/`, wie `Domain/ImagePair`.
+
+---
+
+## 3. Aggregat `Datensatz`
+
+### 3.1 Lebenszyklus
 
 ```
-Entwurf  ──(Ranges hinzufügen, manuell +/-)──►  Entwurf  ──FriereEin──►  Eingefroren (v1, immutable)
-                                                                              └─► Manifest materialisiert
+Entwurf  ──(Ranges +/-, manuell +/-)──►  Entwurf  ──FriereEin──►  Eingefroren (v1, immutable)
+    │ dynamisch, Live-Label-Status                                     └─► Projektion macht Samples
+    │                                                                       queryierbar (Schema rm)
 ```
 
-- **Entwurf**: ein **wachsender Korb konkreter Bildpaar-Referenzen**, gefüllt aus **mehreren**
-  Such-Ranges (Union, dedupliziert) + manuellen Deltas. Solange Entwurf → zeigt der Korb den
-  **aktuellen** Label-/Vollständigkeitsstand aus dem Read-Model (live).
-- **Eingefroren**: `FriereEin` friert für **jedes Mitglied den Label-Stand *zum Zeitpunkt des
+- **Entwurf** = ein **wachsender Korb konkreter Bildpaar-Referenzen**, gefüllt aus **mehreren**
+  Such-Ranges (Union, dedupliziert) + manuellen Deltas. **Dynamisch**: solange Entwurf, zeigt der
+  Korb den **aktuellen** Label-/Vollständigkeitsstand aus dem Read-Model (live).
+- **Eingefroren** = `FriereEin` friert für **jedes Mitglied den Label-Stand *zum Zeitpunkt des
   Einfrierens*** fest, berechnet den **Split** und vergibt eine `DatensatzVersion`. Danach
-  **immutable** → reproduzierbar. Ein späteres Neu-Labeln eines Bildpaars ändert den
-  eingefrorenen Datensatz **nicht**.
+  **immutable**. Ein späteres Neu-Labeln eines Bildpaars ändert den eingefrorenen Datensatz
+  **nicht** → reproduzierbar.
 
-### 2.2 Range hinzufügen — Variante A (Client sucht, Server löst auf)
+> **Warum überhaupt einfrieren, wenn der Datensatz dynamisch ist?** Weil *Komposition* und
+> *Training* zwei Dinge sind: Die **Komposition ist dynamisch** (Draft), aber **Training läuft
+> gegen eine eingefrorene Version** — sonst ist ein Lauf nicht reproduzierbar (Bilder werden
+> kontinuierlich weiter gelabelt). Einfrieren ist **kein File-Dump**, sondern ein **Event**:
+> `DatensatzEingefroren` trägt die konkrete Mitgliedschaft `{ImagePairId, Label, Split}` — der
+> Snapshot liegt **im Postgres-Event-Store**, immutabel, quasi gratis.
+
+### 3.2 Range hinzufügen — der Server löst auf (Variante A)
 
 Der Decider ist rein (kein I/O) — die Suche darf nicht *im* Decider laufen. Deshalb:
 
@@ -61,23 +94,19 @@ GUI  ──FügeRangeHinzu(datensatzId, kriterien)──►  Datensatz
    SearchAsync(filter) → PaareAufgenommen(imagePairIds[], herkunft)  ──►  Datensatz (Union, dedup)
 ```
 
-**Vorteile:** Der Nutzer fasst **nie IDs** an (er denkt in *Suchen*), es skaliert auf große
-Ranges, und die **Kriterien landen als Provenienz** im Log („diese Range kam aus *dieser*
-Suche"). Genau deshalb kann ein Datensatz **mehrere** Ranges elegant vereinen:
+**Der Nutzer fasst nie IDs an** — er denkt in *Suchen*. Die **Kriterien landen als Provenienz** im
+Log („diese Range kam aus *dieser* Suche"). Genau deshalb kann ein Datensatz **mehrere** Ranges
+elegant vereinen: „Mein Datensatz = *Juni-Anomalien* + *Juli-OK* + ein paar manuelle."
 
-> „Mein Datensatz = *Juni-Anomalien* + *Juli-OK* + ein paar manuelle."
-
-### 2.3 Split & Klassenbalance
+### 3.3 Split & Klassenbalance
 
 - **Split (train/val/test) beim Einfrieren automatisch & deterministisch**: stratifiziert nach
   Klasse, Default **70/15/15**, fester Seed. Im Normalfall **null Knöpfe** — optional
-  überschreibbar (`SetzeSplit`). So ist der Datensatz „fertig" und **vergleichbar** (zwei
-  Trainings auf *v1* sind es wirklich).
-- **Klassenbalance = nur angezeigte Kennzahl**, **kein Rebalancing**. Wir werfen keine Daten weg,
-  um zu balancieren — Ungleichgewicht behandelt später das **Training** über Klassengewichte. Das
-  hält den Datensatz ehrlich und die UI verständlich.
+  überschreibbar (`SetzeSplit`). So sind zwei Trainings auf *v1* wirklich vergleichbar.
+- **Klassenbalance = nur angezeigte Kennzahl**, **kein Rebalancing**. Wir werfen keine Daten weg —
+  Ungleichgewicht behandelt später das **Training** über Klassengewichte.
 
-### 2.4 Commands / Events
+### 3.4 Commands / Events
 
 | Command | Event(s) | Bemerkung |
 |---|---|---|
@@ -86,39 +115,37 @@ Suche"). Genau deshalb kann ein Datensatz **mehrere** Ranges elegant vereinen:
 | `NimmPaarAuf(id, imagePairId)` / `EntfernePaar(id, imagePairId)` | `PaarAufgenommen` / `PaarEntfernt` | manuelles Delta |
 | `SetzeSplit(id, train, val, test, seed)` | `SplitGesetzt` | optionaler Override |
 | `FriereEin(id)` | `EinfrierenAngefordert` → *(Resolver)* → `DatensatzEingefroren(version, mitglieder[])` | Snapshot Label+Split |
-| *(automatisch)* | `DatensatzMaterialisiert(manifestPfad, anzahl)` | Manifest auf Platte |
 
 **Ablehnungs-Events** (`ITransientEvent`): `DatensatzExistiertBereits`,
-`DatensatzBereitsEingefroren` (jede Änderung nach dem Einfrieren), `DatensatzLeer` (Einfrieren
-ohne Mitglieder), `RangeLeer`.
+`DatensatzBereitsEingefroren` (jede Änderung nach dem Einfrieren), `DatensatzLeer`, `RangeLeer`.
 
-**Wichtig — Wahrheit liegt im Log:** `DatensatzEingefroren` trägt die **vollständige** eingefrorene
-Mitgliedschaft `{ImagePairId, Label, Split}` im Event. Damit ist der Datensatz aus dem Log
-reproduzierbar; das `manifest.json` (§4) ist nur eine **Datei-Projektion** davon (wie die
-vorverarbeiteten Bilder — abgeleitet, nicht autoritativ).
+> **Kein `MaterialisiereDatensatz` / kein `manifest.json` mehr** (Änderung ggü. erstem Entwurf).
+> Das Einfrieren macht die Samples direkt **queryierbar** (§6) — es braucht keine Datei auf Platte.
 
-### 2.5 Read-Model (`DatensatzReadModel`, Schema `rm`)
+### 3.5 Read-Models (Schema `rm`, Co-Commit-Projektion wie `ImagePairProjection`)
 
-`Name`, `Status`, `AnzahlMitglieder`, `Klassenbalance`, `AnteilMitMenschLabel`, `Version`,
-`Ranges[]` (Herkunft), `ManifestPfad`. Bespielt von `DatensatzProjektion` (Pull-Subscriber,
-Co-Commit) — exakt wie `ImagePairProjection`.
+- `DatensatzReadModel`: `Name`, `Status`, `AnzahlMitglieder`, `Klassenbalance`,
+  `AnteilMitMenschLabel`, `Version`, `Ranges[]` (Herkunft).
+- `DatensatzSampleReadModel`: je eingefrorenem Mitglied eine Zeile `{DatensatzId, Version,
+  ImagePairId, Dc0Pfad, Dc2Pfad, Label, Split}` — die **queryierbare** Trainings-Wahrheit
+  (bespielt aus `DatensatzEingefroren`). Grundlage von `HoleDatensatzSamples` (§6).
 
 ---
 
-## 3. Aggregat `Trainingslauf`
+## 4. Aggregat `Trainingslauf`
 
-### 3.1 Lebenszyklus
+### 4.1 Lebenszyklus
 
 ```
 Angefordert ──►  Läuft ──(Fortschritt je Epoche)──►  Abgeschlossen
-     │                                                     ▲
+     │                                                     
      └────────►  Gescheitert / Abgebrochen / Hängengeblieben
 ```
 
-Ein `Trainingslauf` referenziert **`DatensatzId` + `DatensatzVersion`** (immutabler Input →
-reproduzierbar) sowie die **Hyperparameter** (Epochen, LR, Batch, Architektur, Seed).
+Referenziert **`DatensatzId` + `DatensatzVersion`** (immutabler Input → reproduzierbar) sowie die
+**Hyperparameter** (Epochen, LR, Batch, Architektur, Seed).
 
-### 3.2 Der Trigger-Flow: derselbe Python-Client-Weg wie die Inferenz
+### 4.2 Der Trigger-Flow — derselbe Python-Client-Weg wie die Inferenz
 
 Der bestehende ML-Worker ist ein out-of-process **Event→Command-Reaktor** (`CqrsClient[State]`,
 `@handle.register`, `yield` von Commands, §09). **Training ist dasselbe Muster, nur langlaufend
@@ -126,11 +153,12 @@ mit Fortschritt:**
 
 ```
 GUI ──StarteTraining(datensatzId, version, hyperparameter)──►  Trainingslauf-Aggregat
-                                                                 │ TrainingAngefordert(manifestPfad, hyperparameter)
+                                                                 │ TrainingAngefordert(datensatzId, version, hyperparameter)
         ┌─────────────────────────────────────────────────────────┘   (Event, per Capabilities abonniert)
         ▼  gRPC Event-Push
   Python TrainingWorker (CqrsClient, eigener Prozess, GPU)
-     • liest manifest.json  (Pfad im Event, bzw. HTTP wie der Classifier heute Bilder holt)
+     • holt die Sample-Liste per Query (§6):  await self.query(HoleDatensatzSamples(id, version, seite))
+     • holt Pixel je Bild über /api/files/…   (HTTP, wie die Inferenz heute)
      • Training läuft in  asyncio.to_thread   → Event-Loop bleibt frei
      • Trainingsthread → asyncio.Queue → Handler yieldet mehrfach über die Zeit:
           MeldeTrainingBegonnen                         ──► TrainingBegonnen
@@ -140,31 +168,28 @@ GUI ──StarteTraining(datensatzId, version, hyperparameter)──►  Trainin
 ```
 
 Maximal architekturtreu: **kein neuer Transport, kein neuer Konsumenten-Typ.** Der Python-Handler
-ist ein Async-Generator, der über Minuten/Stunden **mehrfach yieldet** (Fortschritt) — der Router
-verpackt jeden Yield als Command zurück. Der `Trainingslauf`-Decider foldet die Fortschritts-Events
-in seinen State (`AktuelleEpoche`, `MetrikHistorie`, …).
+ist ein Async-Generator, der über Minuten/Stunden **mehrfach yieldet**; der Router verpackt jeden
+Yield als Command zurück. Der `Trainingslauf`-Decider foldet die Fortschritts-Events in seinen
+State.
 
 **Schön dabei:** Weil Fortschritt event-sourced zurückfließt, **streamt die Live-Trainingskurve
-von selbst** über den bestehenden gRPC-Event-Push in die Blazor-Training-Stage — genau der
-Chart/ApexCharts-Weg, den es schon gibt.
+von selbst** über den gRPC-Event-Push in die Blazor-Training-Stage — genau der Chart/ApexCharts-Weg.
 
-### 3.3 Robustheit — vorhandene Mechanismen
+### 4.3 Robustheit — vorhandene Mechanismen
 
 - **Timeout**: bei `TrainingBegonnen` eine **`Frist`** planen (`IDbClock` / `FristScheduler`, in
-  `Host.Grpc` bereits über `AddDeadlines` verdrahtet). `FristFaellig` vor Abschluss →
-  `MarkiereAlsHängengeblieben`. Kein Polling von Hand. *(Verdrahtungs-Detail: die Frist muss den
-  `Trainingslauf` als Ziel adressieren — heute mappt `AddDeadlines` auf
-  `Domain.Erinnerung.FristFaellig`; hier analog auf ein Trainings-Ziel-Command.)*
-- **Exactly-once / Idempotenz**: greift automatisch (Empfänger-Dedup über `ReaktionId`/
-  `CausationId`) — ein doppelt zugestelltes `TrainingAngefordert` startet **kein** zweites Training.
+  `Host.Grpc` über `AddDeadlines` verdrahtet). `FristFaellig` vor Abschluss →
+  `MarkiereAlsHängengeblieben`. Kein Polling von Hand.
+- **Exactly-once / Idempotenz**: Empfänger-Dedup über `ReaktionId`/`CausationId` → ein doppelt
+  zugestelltes `TrainingAngefordert` startet **kein** zweites Training.
 - **Abbruch**: `BricheTrainingAb` (GUI) → `TrainingAbgebrochen`; der Worker prüft ein Abbruch-Flag
   zwischen Epochen (kooperativer Abbruch).
 
-### 3.3 Commands / Events
+### 4.4 Commands / Events
 
 | Command | Quelle | Event |
 |---|---|---|
-| `StarteTraining(id, datensatzId, version, hyperparameter)` `: ICreationCommand` | GUI | `TrainingAngefordert(manifestPfad, hyperparameter)` |
+| `StarteTraining(id, datensatzId, version, hyperparameter)` `: ICreationCommand` | GUI | `TrainingAngefordert(datensatzId, version, hyperparameter)` |
 | `MeldeTrainingBegonnen(id)` | Python | `TrainingBegonnen` |
 | `MeldeFortschritt(id, epoche, metriken)` | Python (×N) | `TrainingFortschritt` |
 | `MeldeTrainingAbgeschlossen(id, modellPfad, endmetriken)` | Python | `TrainingAbgeschlossen` |
@@ -172,42 +197,14 @@ Chart/ApexCharts-Weg, den es schon gibt.
 | `BricheTrainingAb(id)` | GUI | `TrainingAbgebrochen` |
 | `MarkiereAlsHängengeblieben(id)` | Frist | `TrainingHängengeblieben` |
 
-### 3.4 Read-Model (`TrainingslaufReadModel`, Schema `rm`)
+### 4.5 Read-Model (`TrainingslaufReadModel`, Schema `rm`)
 
-`DatensatzId`+`Version`, `Status`, `AktuelleEpoche`/`GesamtEpochen`, `MetrikHistorie[]` (für die
-Live-Kurve), `Hyperparameter`, `ModellPfad`, `Endmetriken`, `Startzeit`/`Dauer`.
-
----
-
-## 4. Der C#↔Python-Schnitt: ein Manifest
-
-Genau die Aufteilung „Erzeugung in C#, Training in Python, nur nutzen":
-
-- **C# materialisiert** beim Einfrieren ein **`manifest.json`** — eine reine Liste. C# ist
-  alleiniger **Eigentümer der Datensatz-Erzeugung**.
-- **Python liest nur** das Manifest, trainiert, **schreibt ein Modell**.
-- **Events tragen Pfade, keine Blobs** — Invariante „Signal ist nur ein Weckruf, schwere Daten
-  liegen daneben" (wie die Bildpfade heute).
-
-```
-datasets/{datensatzId}/{version}/manifest.json
-├─ datensatzId, version, erstelltAm
-├─ klassen: ["KeineAnomalie","Questionable","Anomalie"]
-└─ samples: [
-     { imagePairId, dc0Pfad, dc2Pfad, label, split }   // split ∈ {train,val,test}
-   ]
-
-models/{trainingslaufId}/model.pt      ← Python-Output
-models/{trainingslaufId}/metrics.json  ← Python-Output
-```
-
-Auslieferung wie heute per Datei-Endpunkt (`/api/files/…`, `LocalFilePathResolver`) oder
-gemeinsames Volume. Der Python-`TrainingWorker` lädt das Manifest über den Pfad im
-`TrainingAngefordert`-Event.
+`DatensatzId`+`Version`, `Status`, `AktuelleEpoche`/`GesamtEpochen`, `MetrikHistorie[]` (Live-Kurve),
+`Hyperparameter`, `ModellPfad`, `Endmetriken`, `Startzeit`/`Dauer`.
 
 ---
 
-## 5. `Modell` — der Kreis zur Inferenz *(Phase 2)*
+## 5. Aggregat `Modell` (Phase 2)
 
 | Command | Event | Wirkung |
 |---|---|---|
@@ -217,11 +214,9 @@ gemeinsames Volume. Der Python-`TrainingWorker` lädt das Manifest über den Pfa
 
 **Kreis geschlossen:** der bestehende **Inferenz-Worker** (`classifier.py`) subscribed
 `ModellAktiviert`, lädt das neue Modell (TorchScript, wie heute) und klassifiziert damit weiter.
-So entsteht die Kette **Datensatz → Training → Modell → Inferenz** — vollständig event-sourced und
-auditierbar.
+Kette **Datensatz → Training → Modell → Inferenz** — vollständig event-sourced und auditierbar.
 
-**Optionale Saga (Prozess-Maschine, §04):** die Training→Modell-Kante deklarativ verbinden, statt
-sie zu Fuß zu verdrahten:
+**Optionale Saga (Prozess-Maschine, §04):** die Training→Modell-Kante deklarativ verbinden:
 
 ```csharp
 Prozess<TrainingAbgeschlossen>.Definiere(p =>
@@ -229,11 +224,121 @@ Prozess<TrainingAbgeschlossen>.Definiere(p =>
         new RegistriereModell(NeueId(), e.TrainingslaufId, e.ModellPfad, e.Endmetriken)));
 ```
 
+Das **Modell-Artefakt selbst** (`model.pt`, `metrics.json`) ist eine **Datei** — Python schreibt
+sie, das Event trägt nur den **Pfad**. (Ein Modell *ist* eine Binärdatei; hier ist eine Datei
+richtig — anders als beim Datensatz, siehe §6.)
+
 ---
 
-## 6. GUI (Blazor — nur neue Slot-Module, kein neuer Unterbau)
+## 6. Der C#↔Python-Schnitt — **ein Query-Kanal, kein File**
 
-### 6.1 Neue Main-View: „Datensatz-Komposition" (`IStageModule`)
+> **Kernentscheidung (überarbeitet).** Der Datensatz wird **nicht** als `manifest.json` auf Platte
+> materialisiert und Python liest **nicht** direkt Postgres. Stattdessen liefert C# die Samples
+> **dynamisch über denselben typisierten Query-Kanal, den auch das Blazor-Frontend nutzt.**
+
+### 6.1 Warum nicht Datei, warum nicht Python→Postgres
+
+| Ansatz | Problem |
+|---|---|
+| **`manifest.json` (Datei)** | statische Datei für dynamische Daten; ein Artefakt mehr zu verwalten; kann veralten. |
+| **Python → Postgres direkt** | koppelt Python an die **physische Marten-Form** (`rm.mt_doc_…`, JSONB) → Schema-Änderung bricht Python **still**; braucht DB-Credentials/-Netz auf der GPU-Box; hebelt „C# besitzt den Store, Python ist Client" aus (dieselbe Linie, aus der `InMemoryEventStore` verboten ist). |
+| **✅ served Query (C# löst auf)** | dein „Postgres-Call" — nur in einen **typisierten Query** gewickelt. Keine Datei, immer aktuell, Python bleibt reiner Client, C# behält Schema-Hoheit, reproduzierbar (liest den **eingefrorenen** Snapshot). |
+
+### 6.2 Der Fluss
+
+```
+Python  ──await self.query(HoleDatensatzSamples(id, version, seite))──►  Host (gRPC Query-Kanal)
+                                                                          │ liest rm.DatensatzSampleReadModel
+Python  ◄──DatensatzSamples(samples[], seiteInfo)──────────────────────────┘   (eingefrorener Snapshot)
+Python  ──GET /api/files/…──►  Host        (Pixel je Bild, HTTP — wie die Inferenz heute)
+```
+
+- **Sample-Liste**: neue `HoleDatensatzSamples(datensatzId, version, seite) : IQuery` → Antwort
+  `DatensatzSamples`. **Paginiert** (wie `SucheImagePairs` mit `Seite`/`SeitenGroesse`) — Python
+  blättert bei großen Mengen durch. Denselben Kanal nutzt die GUI (z. B. Vorschau).
+- **Pixel**: unverändert über den bestehenden Datei-Endpunkt `/api/files/…`
+  (`LocalFilePathResolver`) — Events/Queries tragen **Pfade, keine Blobs**.
+- **Reproduzierbarkeit**: die Query liest die **eingefrorene** `DatensatzSampleReadModel` (aus
+  `DatensatzEingefroren`) — also den immutablen Snapshot, nicht die Live-Daten.
+
+**Ein Mechanismus für beide Clients.** Kein bespoke REST-Endpunkt, keine zweite Datenzugriffsform.
+Eine neue Datensatz-Query wird einmal in C# als `IQuery` deklariert, per Proto-Regen sehen sie
+**beide** Clients (§7).
+
+> **Voraussetzung** dafür: der Python-Client muss Queries **stellen** können — Analyse in §7.
+
+---
+
+## 7. Query-Parität Python ↔ Blazor (Analyse)
+
+**Frage:** Hat der Python-Client dieselben Query-Möglichkeiten wie das Blazor-Frontend?
+**Kurzantwort:** im Prinzip ja (gleiche Query-Menge, gleicher Server, Transport vorhanden) — aber
+die **Ask-Seite ist ergonomisch nicht ausgebaut**. Es fehlt eine öffentliche `query()`-Methode +
+typisiertes Response-Unpacking. Kleine, gekapselte Lücke — **keine** Server-, Proto- oder
+Capabilities-Änderung.
+
+### 7.1 Was schon gleich ist
+
+| Baustein | Zustand | Beleg |
+|---|---|---|
+| **Query-Menge** | *eine* Quelle → beide Clients | `: IQuery` in `Domain.Projections` → `domain.proto`. `SucheImagePairs(ImagePairFilter)`, `GetImagePair`, `GetImagePairStatistik`, `GetProduktionsTage`, `GetVerlauf`, `GetImagePairHistorie`, … Neue Query + Proto-Regen → Python sieht die DTOs automatisch. |
+| **Filtertyp** | identisch | `ImagePairFilter` ist shared DTO → Python baut exakt dieselben Filter. |
+| **Server** | client-agnostisch | gleiche `QueryRequest`/`QueryResponse`-Envelope über denselben bidi-Stream — keine Server-Änderung, damit Python fragen darf. |
+| **Transport** | vorhanden | `proxy.send_query` (`Client.Infrastructure.Python/cqrs_client/proxy.py:232`) = Spiegel von C# `GrpcProxy.QueryAsync`; Korrelation via `Future`, 30 s Timeout. |
+| **Registry** | vorhanden | klassifiziert `QUERY` / `QUERY_RESPONSE` (`registry.py`). |
+| **Capabilities** | frei | *Fragen* braucht **keine** Deklaration (nur *Beantworten* würde) — `_build_capabilities_request` deklariert nur Events/Commands/handle-Queries. |
+
+### 7.2 Die Lücke (Python-only, Ergonomie)
+
+1. **Keine öffentliche `query()`** auf `CqrsClient` — `send_query` liegt am privaten `_proxy`;
+   `client.py` bietet nur `state`/`session_id`/`is_connected`/`run`.
+2. **Kein typisiertes Response-Unpacking** auf der Ask-Seite: `send_query` liefert die **rohe**
+   `QueryResponse`. Der Mapper hat `wrap_query_response` (Antworten) und `extract_query_payload`
+   (Query beim Antworten), aber **kein** `extract_query_response`. Der generische
+   `extract_oneof_payload` existiert bereits — muss nur verdrahtet werden.
+3. **Kein Fehler-Mapping**: C# `QueryBridge` emittiert `QueryFailed`; Python müsste ein
+   Server-`error` auf einer Query-Korrelation in eine Exception übersetzen.
+4. **Kein Deps/Versions-Tracking** aus Responses (C# `QueryBridge.TrackFromDeps` → OCC). Für
+   **read-only** Datensatz-/Trainings-Queries **irrelevant** — Python schreibt nichts
+   versionsabhängig.
+
+### 7.3 Die Ergänzung (Skizze, nicht implementiert)
+
+Spiegelbildlich zum vorhandenen `send_command`-Pfad — ~1 kleines Modul:
+
+```python
+# cqrs_client/client.py — fehlende öffentliche API
+async def query(self, query_dto) -> betterproto.Message:
+    raw = await self._proxy.send_query(query_dto)          # existiert
+    return self._mapper.extract_query_response(raw)        # neu: oneof → typisierte Antwort
+
+# Nutzung im TrainingWorker:
+#   samples = await self.query(HoleDatensatzSamplesDto(datensatz_id=…, version=1, seite=1))
+```
+
+### 7.4 Struktureller Unterschied — Absicht, kein Defekt
+
+- **Blazor** ist reaktiv/bus-integriert: `bus.Publish(query)` → Antwort als Bus-Event →
+  `Store.Handle` → Hydration.
+- **Python** wäre imperativ/awaitable: `treffer = await self.query(...)`. Für einen Worker die
+  **bessere** Form (linearer Code). → *Fähigkeits*-Parität ja, *Stil* bewusst anders.
+
+> ⚠️ **Nicht verwechseln** mit der bekannten Schuld (Doku §9.7): „Python kann Queries nicht
+> *beantworten*" (`router._handle_query_forward` TODO) — das ist die **andere** Richtung (Python
+> als Responder). Wir brauchen Python als **Frager**; das ist die kleinere, hier beschriebene
+> Lücke, unabhängig davon.
+
+### 7.5 Caveat — große Mengen
+
+Query→Response ist **eine** Antwort. Große Datensätze → **paginieren** (`Seite`/`SeitenGroesse`,
+wie `SucheImagePairs`). Für sehr große Datensätze wäre echtes **Server-Streaming** eine Option —
+das liegt außerhalb des aktuellen Query-Vertrags und wäre eine separate Entscheidung.
+
+---
+
+## 8. GUI (Blazor — nur neue Slot-Module, kein neuer Unterbau)
+
+### 8.1 Neue Main-View: „Datensatz-Komposition" (`IStageModule`)
 
 Transfer-/Korb-Layout — Suchergebnis links, Datensatz-Korb rechts:
 
@@ -245,17 +350,16 @@ Transfer-/Korb-Layout — Suchergebnis links, Datensatz-Korb rechts:
 │                     gesamt 1 240 Tr.   │   │  Provenienz:                          │
 │  [ganze Range → Datensatz]             │   │   • Juni·Anomalie 1 240               │
 │                                        │   │   • Juli·OK       3 100  [entfernen]  │
-│                                        │   │  [Einfrieren]  [Materialisieren]      │
+│                                        │   │  [Einfrieren]                         │
 └────────────────────────────────────────┘   └────────────────────────────────────────┘
 ```
 
 - Der **Filter links** ist der vorhandene `SuchKriterien`-Baustein inkl. **Produktionstage-Baum**
   (die natürliche Zeit-Range bei kontinuierlicher Sammlung).
-- „**ganze Range → Datensatz**" fügt das *komplette* Suchergebnis hinzu (nicht nur die sichtbare
-  Seite) — Union, Duplikate verpuffen.
+- „**ganze Range → Datensatz**" fügt das *komplette* Suchergebnis hinzu (Union, Dedup).
 - Rechts live: **Größe, Klassenbalance, Split, Provenienz**.
 
-### 6.2 Weitere Module
+### 8.2 Weitere Module
 
 | Slot | Modul | Inhalt |
 |---|---|---|
@@ -266,58 +370,62 @@ Transfer-/Korb-Layout — Suchergebnis links, Datensatz-Korb rechts:
 | `IHeadlessModule` | **Data/Refresh/Intent** | Stores + RefreshHandler für die neuen Read-Models, IntentHandler für „Starte Training"/„Friere ein" |
 
 Alles über die **generierte Verdrahtung** (`AddClientDomain_…` / `AddModules_…`) — keine
-Handverdrahtung, keine `IViewModel`-Klassen (neues Modell: RefreshHandler + IntentHandler +
-Client-Events).
+Handverdrahtung.
 
 ---
 
-## 7. Nutzer-Flow (so einfach wie möglich)
+## 9. Nutzer-Flow (so einfach wie möglich)
 
 ```
 1. Suchen        (Zeit-Range im Produktionstage-Baum + Filter)
 2. „ganze Range → Datensatz"      ← beliebig oft, verschiedene Suchen
 3. Balance/Größe anschauen
-4. „Einfrieren"                    ← Split + Manifest macht das System automatisch
+4. „Einfrieren"                    ← Split automatisch, Samples werden queryierbar
 5. „Training starten"  (Datensatz wählen, Hyperparameter)
 6. Live-Kurve zusehen  ← Fortschritt streamt event-sourced ins Dashboard
         └─► fertiges Modell (Phase 2: „aktiv setzen" → Inferenz nutzt es)
 ```
 
-Drei Klicks bis zum trainierbaren Datensatz; alles Technische (Auflösen, Split, Manifest,
-Reproduzierbarkeit) bleibt unsichtbar — Invariante 5 („der Fachcode/Nutzer bleibt rein").
+Drei Klicks bis zum trainierbaren Datensatz; alles Technische bleibt unsichtbar — Invariante 5.
 
 ---
 
-## 8. Reproduzierbarkeit & Provenienz (die ES-Stärke)
+## 10. Reproduzierbarkeit & Provenienz (die ES-Stärke)
 
 - **Eingefrorener Datensatz** = unveränderlicher Input → zwei Trainings sind vergleichbar.
 - **`TrainingAngefordert`** hält `DatensatzId`+`Version`, Hyperparameter, Seed fest.
 - **Provenienz je Range** (welcher Filter, wann, wie viele) → nachvollziehbar, *woraus* ein Modell
-  gelernt hat.
-- Alles im Log → voller Audit-Trail „Datensatz → Training → Modell → Inferenz".
+  gelernt hat. Provenienz lebt im **Log** (queryable), nicht in einer Datei neben dem Modell.
+- Voller Audit-Trail: **Suche-Ranges → Datensatz v1 → Trainingslauf (+ Seed) → Modell + Metriken →
+  aktive Inferenz.**
 
 ---
 
-## 9. Was zu bauen wäre (Aufwandsskizze — bewusst noch nicht implementiert)
+## 11. Was zu bauen wäre (Aufwandsskizze — bewusst noch nicht implementiert)
 
 | Baustein | Ort | Anmerkung |
 |---|---|---|
 | Aggregate `Datensatz`, `Trainingslauf` (+ `Modell` Ph.2) | `Domain/Datensatz/`, `Domain/Trainingslauf/` | Commands/Events/Decider/Applier/State — wie `Domain/ImagePair` |
-| **Proto-DTOs** je neuem Command/Event | `Proto.SourceGeneration` → `ProtoRepo` | Pflicht, sonst bricht `DtoMapperGenerator` (CLAUDE.md) |
-| Projektionen + Co-Commit-Stores | `Domain.Projections`, `Domain.Infrastructure` (Schema `rm`) | wie `ImagePairProjection`/`ImagePairStore` |
-| **Server-Resolver** (Range-Auflösung, Freeze-Snapshot, Manifest) | `Domain.Pipeline`/`Infrastructure` | injizierter `IImagePairReadStore`, yieldet Commands/schreibt Datei |
-| **Python `TrainingWorker`** | neben `Domain.Client.Worker.Python.ML` | `CqrsClient`, Event→Fortschritts-Commands, `to_thread` + Queue |
+| **Proto-DTOs** je neuem Command/Event/**Query** | `Proto.SourceGeneration` → `ProtoRepo` | Pflicht, sonst bricht `DtoMapperGenerator` (CLAUDE.md) |
+| Projektionen + Co-Commit-Stores (`DatensatzReadModel`, **`DatensatzSampleReadModel`**, `TrainingslaufReadModel`) | `Domain.Projections`, `Domain.Infrastructure` (Schema `rm`) | wie `ImagePairProjection`/`ImagePairStore` |
+| Query `HoleDatensatzSamples` + Reader | `Domain.Projections` | paginiert; liest den eingefrorenen Snapshot |
+| **Server-Resolver** (Range-Auflösung, Freeze-Snapshot) | `Domain.Pipeline`/`Infrastructure` | injizierter `IImagePairReadStore`, yieldet Commands |
+| **Python: öffentliche `query()` + `extract_query_response`** | `Client.Infrastructure.Python/cqrs_client` | §7 — klein, spiegelt `send_command` |
+| **Python `TrainingWorker`** | neben `Domain.Client.Worker.Python.ML` | `CqrsClient`, Event→Fortschritts-Commands, `to_thread` + Queue, Samples per `query()` |
 | Blazor-Module (Komposition-Stage, Dashboard, Sidebars, Headless) | `Domain.Client.Modules.Blazor` | generierte Verdrahtung |
 | Frist-Verdrahtung (Timeout) | `Host.Grpc` | analog zum bestehenden `AddDeadlines` |
 
+**Kein** `manifest.json`-Materializer, **kein** REST-Endpunkt, **kein** direkter DB-Zugriff aus
+Python (siehe §6).
+
 ---
 
-## 10. Offene Punkte / spätere Ausbaustufen
+## 12. Offene Punkte / spätere Ausbaustufen
 
-- **Hyperparameter-Sweeps**: mehrere `Trainingslauf` unter einer Klammer (Phase 3). Der Zuschnitt
-  (Trainingslauf referenziert Datensatz+Hyperparameter) trägt das bereits — eine „Sweep"-Klammer
-  wäre nur eine dünne Fan-out-Saga (`SendeJe`, §04).
-- **Datensatz-Diff/Vererbung**: „v2 = v1 + Range X" (Delta-Datensätze) — optional, das
-  Range-Union-Modell macht es natürlich.
-- **Drift-getriggertes Retraining**: automatisch neuen Datensatz-Zeitschnitt + Training anstoßen,
-  wenn genug neue gelabelte Bilder da sind (Timer-Trigger, §04) — bewusst Phase ≥ 2.
+- **Hyperparameter-Sweeps**: mehrere `Trainingslauf` unter einer Klammer (Phase 3) — eine dünne
+  Fan-out-Saga (`SendeJe`, §04).
+- **Datensatz-Diff/Vererbung**: „v2 = v1 + Range X" (Delta-Datensätze) — das Range-Union-Modell
+  macht es natürlich.
+- **Drift-getriggertes Retraining**: automatisch neuen Zeitschnitt + Training anstoßen, wenn genug
+  neue gelabelte Bilder da sind (Timer-Trigger, §04) — Phase ≥ 2.
+- **Server-Streaming** für sehr große Datensätze statt Paginierung (§7.5) — bei Bedarf.
