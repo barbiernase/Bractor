@@ -42,13 +42,29 @@ public partial class DatensatzReader : IReader<DatensatzProjektion>
             return new DatensatzNichtGefunden(query.DatensatzId);
 
         ctx.Track(query.DatensatzId.ToString());
-        return new DatensatzAntwort(
-            Id: model.Id,
-            Name: model.Name,
-            Status: model.Status,
-            AnzahlMitglieder: model.AnzahlMitglieder,
-            EingefroreneVersion: model.EingefroreneVersion,
-            Split: model.Split,
-            Ranges: model.Ranges);
+        return ToAntwort(model);
     }
+
+    public async Task<DatensatzListe> Handle(
+        HoleDatensaetze query, IMessageEnvelope envelope, ReadContext ctx)
+    {
+        var modelle = await _store.GetAlleAsync();
+
+        var items = modelle.Select(m =>
+        {
+            ctx.Track(m.Id.ToString());
+            return ToAntwort(m);
+        }).ToList();
+
+        return new DatensatzListe(items);
+    }
+
+    private static DatensatzAntwort ToAntwort(DatensatzReadModel model) => new(
+        Id: model.Id,
+        Name: model.Name,
+        Status: model.Status,
+        AnzahlMitglieder: model.AnzahlMitglieder,
+        EingefroreneVersion: model.EingefroreneVersion,
+        Split: model.Split,
+        Ranges: model.Ranges);
 }

@@ -351,38 +351,40 @@ message QueryPayloadDto {
     oneof payload {
         GetImagePairStatistikDto get_image_pair_statistik = 20;
         GetProduktionsTageDto get_produktions_tage = 21;
-        HoleTrainingslaeufeDto hole_trainingslaeufe = 22;
-        GetImagePairDto get_image_pair = 23;
-        GetImagePairHistorieDto get_image_pair_historie = 24;
-        GetProduktionsStripDto get_produktions_strip = 25;
-        GetProduktionsVerlaufDto get_produktions_verlauf = 26;
-        GetUnklassifizierteImagePairsDto get_unklassifizierte_image_pairs = 27;
-        HoleDatensatzDto hole_datensatz = 28;
-        HoleDatensatzSamplesDto hole_datensatz_samples = 29;
-        HoleTrainingslaufDto hole_trainingslauf = 30;
-        SucheImagePairsDto suche_image_pairs = 31;
+        HoleDatensaetzeDto hole_datensaetze = 22;
+        HoleTrainingslaeufeDto hole_trainingslaeufe = 23;
+        GetImagePairDto get_image_pair = 24;
+        GetImagePairHistorieDto get_image_pair_historie = 25;
+        GetProduktionsStripDto get_produktions_strip = 26;
+        GetProduktionsVerlaufDto get_produktions_verlauf = 27;
+        GetUnklassifizierteImagePairsDto get_unklassifizierte_image_pairs = 28;
+        HoleDatensatzDto hole_datensatz = 29;
+        HoleDatensatzSamplesDto hole_datensatz_samples = 30;
+        HoleTrainingslaufDto hole_trainingslauf = 31;
+        SucheImagePairsDto suche_image_pairs = 32;
 
     }
 }
 
 message QueryResponsePayloadDto {
     oneof payload {
-        ImagePairAntwortDto image_pair_antwort = 20;
-        TrainingslaufAntwortDto trainingslauf_antwort = 21;
-        DatensatzAntwortDto datensatz_antwort = 22;
-        DatensatzNichtGefundenDto datensatz_nicht_gefunden = 23;
-        DatensatzSamplesDto datensatz_samples = 24;
-        ImagePairArbeitslisteDto image_pair_arbeitsliste = 25;
-        ImagePairHistorieAntwortDto image_pair_historie_antwort = 26;
-        ImagePairHistorieNichtGefundenDto image_pair_historie_nicht_gefunden = 27;
-        ImagePairNichtGefundenAntwortDto image_pair_nicht_gefunden_antwort = 28;
-        ImagePairStatistikAntwortDto image_pair_statistik_antwort = 29;
-        ImagePairSuchergebnisDto image_pair_suchergebnis = 30;
-        ProduktionsStripAntwortDto produktions_strip_antwort = 31;
-        ProduktionsTageAntwortDto produktions_tage_antwort = 32;
-        ProduktionsVerlaufAntwortDto produktions_verlauf_antwort = 33;
-        TrainingslaufListeDto trainingslauf_liste = 34;
-        TrainingslaufNichtGefundenAntwortDto trainingslauf_nicht_gefunden_antwort = 35;
+        DatensatzAntwortDto datensatz_antwort = 20;
+        ImagePairAntwortDto image_pair_antwort = 21;
+        TrainingslaufAntwortDto trainingslauf_antwort = 22;
+        DatensatzListeDto datensatz_liste = 23;
+        DatensatzNichtGefundenDto datensatz_nicht_gefunden = 24;
+        DatensatzSamplesDto datensatz_samples = 25;
+        ImagePairArbeitslisteDto image_pair_arbeitsliste = 26;
+        ImagePairHistorieAntwortDto image_pair_historie_antwort = 27;
+        ImagePairHistorieNichtGefundenDto image_pair_historie_nicht_gefunden = 28;
+        ImagePairNichtGefundenAntwortDto image_pair_nicht_gefunden_antwort = 29;
+        ImagePairStatistikAntwortDto image_pair_statistik_antwort = 30;
+        ImagePairSuchergebnisDto image_pair_suchergebnis = 31;
+        ProduktionsStripAntwortDto produktions_strip_antwort = 32;
+        ProduktionsTageAntwortDto produktions_tage_antwort = 33;
+        ProduktionsVerlaufAntwortDto produktions_verlauf_antwort = 34;
+        TrainingslaufListeDto trainingslauf_liste = 35;
+        TrainingslaufNichtGefundenAntwortDto trainingslauf_nicht_gefunden_antwort = 36;
 
     }
 }
@@ -401,12 +403,6 @@ message TriggerPayloadDto {
 // ============================================================================
 // VALUE OBJECTS
 // ============================================================================
-message EpochenMetrikDto {
-    int32 epoche = 1;
-    double loss = 2;
-    double genauigkeit = 3;
-}
-
 message RangeKriterienDto {
     int64 von = 1;
     int64 bis = 2;
@@ -417,6 +413,24 @@ message RangeKriterienDto {
     int32 hat_ki_klassifikation = 7;
     int32 hat_mensch_label = 8;
     int32 nur_nicht_inspizierte = 9;
+}
+
+message RangeHerkunftDto {
+    RangeKriterienDto kriterien = 1;
+    int32 anzahl_paare = 2;
+}
+
+message EpochenMetrikDto {
+    int32 epoche = 1;
+    double loss = 2;
+    double genauigkeit = 3;
+}
+
+message SplitKonfigDto {
+    int32 train_prozent = 1;
+    int32 val_prozent = 2;
+    int32 test_prozent = 3;
+    int32 seed = 4;
 }
 
 message RegionPositionDto {
@@ -445,11 +459,6 @@ message DatensatzMitgliedDto {
     int32 split = 3;
     string dc0_pfad = 4;
     string dc2_pfad = 5;
-}
-
-message RangeHerkunftDto {
-    RangeKriterienDto kriterien = 1;
-    int32 anzahl_paare = 2;
 }
 
 message RegionBewertungDto {
@@ -495,13 +504,6 @@ message ProduktionsZeitBucketDto {
     int32 anomalie = 5;
     int32 ungelabelt = 6;
     int32 nicht_inspiziert = 7;
-}
-
-message SplitKonfigDto {
-    int32 train_prozent = 1;
-    int32 val_prozent = 2;
-    int32 test_prozent = 3;
-    int32 seed = 4;
 }
 
 message BildMetaDto {
@@ -1597,6 +1599,10 @@ message GetProduktionsTageDto {
     GetProduktionsTageDto original = 1;
 }
 
+message HoleDatensaetzeDto {
+    HoleDatensaetzeDto original = 1;
+}
+
 message HoleTrainingslaeufeDto {
     HoleTrainingslaeufeDto original = 1;
 }
@@ -1646,6 +1652,16 @@ message SucheImagePairsDto {
 // ============================================================================
 // QUERY RESPONSE PAYLOADS
 // ============================================================================
+message DatensatzAntwortDto {
+    string id = 1;
+    string name = 2;
+    int32 status = 3;
+    int32 anzahl_mitglieder = 4;
+    int32 eingefrorene_version = 5;
+    SplitKonfigDto split = 6;
+    repeated RangeHerkunftDto ranges = 7;
+}
+
 message ImagePairAntwortDto {
     string id = 1;
     string pair_key = 2;
@@ -1684,14 +1700,8 @@ message TrainingslaufAntwortDto {
     int64 startzeit = 12;
 }
 
-message DatensatzAntwortDto {
-    string id = 1;
-    string name = 2;
-    int32 status = 3;
-    int32 anzahl_mitglieder = 4;
-    int32 eingefrorene_version = 5;
-    SplitKonfigDto split = 6;
-    repeated RangeHerkunftDto ranges = 7;
+message DatensatzListeDto {
+    repeated DatensatzAntwortDto items = 1;
 }
 
 message DatensatzNichtGefundenDto {

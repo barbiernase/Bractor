@@ -17,3 +17,6 @@ public record HoleDatensatzSamples(
 
 /// <summary>Ein einzelner Datensatz (Kopf-Daten) — für GUI-Detail und Integrations-Prüfung.</summary>
 public record HoleDatensatz(Guid DatensatzId) : IQuery;
+
+/// <summary>Alle Datensätze (Sidebar-Liste mit Entwurf/Eingefroren-Badge, Größe, Version).</summary>
+public record HoleDatensaetze() : IQuery;

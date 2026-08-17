@@ -43,3 +43,8 @@ public record DatensatzAntwort(
 ) : IQueryResponse;
 
 public record DatensatzNichtGefunden(Guid DatensatzId) : IQueryResponse;
+
+/// <summary>Antwort auf <see cref="HoleDatensaetze"/> — alle Datensätze (Sidebar-Liste).</summary>
+public record DatensatzListe(
+    IReadOnlyList<DatensatzAntwort> Items
+) : IQueryResponse;
