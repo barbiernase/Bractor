@@ -1,0 +1,54 @@
+using Abstractions;
+
+namespace Domain.Projections;
+
+/// <summary>
+/// Reader der Datensatz-Projektion (analog <see cref="ImagePairReader"/>). Beantwortet die
+/// Datensatz-Queries über den <see cref="IDatensatzReadStore"/> — derselbe Kanal für Blazor
+/// und Python (Konzept §6/§7).
+///
+/// Die Samples sind ein <em>immutabler</em> Snapshot → kein Deps-Tracking nötig (read-only,
+/// Konzept §7.2). Beim Kopf-Read wird die Datensatz-Id getrackt (Stale-Detection wie ImagePair).
+/// </summary>
+[ProjectionReader(TrackDeps = true)]
+public partial class DatensatzReader : IReader<DatensatzProjektion>
+{
+    private readonly IDatensatzReadStore _store;
+
+    public DatensatzReader(IDatensatzReadStore store)
+    {
+        _store = store;
+    }
+
+    public async Task<DatensatzSamples> Handle(
+        HoleDatensatzSamples query, IMessageEnvelope envelope, ReadContext ctx)
+    {
+        var (items, gesamtAnzahl) = await _store.HoleSamplesAsync(
+            query.DatensatzId, query.Version, query.Seite, query.SeitenGroesse);
+
+        var samples = items
+            .Select(s => new DatensatzSample(s.ImagePairId, s.Dc0Pfad, s.Dc2Pfad, s.Label, s.Split))
+            .ToList();
+
+        return new DatensatzSamples(samples, gesamtAnzahl, query.Seite, query.SeitenGroesse);
+    }
+
+    public async Task<OneOf<DatensatzAntwort, DatensatzNichtGefunden>> Handle(
+        HoleDatensatz query, IMessageEnvelope envelope, ReadContext ctx)
+    {
+        var model = await _store.FindByIdAsync(query.DatensatzId);
+
+        if (model is null)
+            return new DatensatzNichtGefunden(query.DatensatzId);
+
+        ctx.Track(query.DatensatzId.ToString());
+        return new DatensatzAntwort(
+            Id: model.Id,
+            Name: model.Name,
+            Status: model.Status,
+            AnzahlMitglieder: model.AnzahlMitglieder,
+            EingefroreneVersion: model.EingefroreneVersion,
+            Split: model.Split,
+            Ranges: model.Ranges);
+    }
+}

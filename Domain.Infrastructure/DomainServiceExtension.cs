@@ -124,6 +124,9 @@ public static class DomainServiceExtensions
             sp => sp.GetRequiredService<DatensatzStore>());
         Console.WriteLine("  + IDatensatzWriteStore (Co-Commit, Transient)");
 
+        services.AddSingleton<DatensatzReader>();
+        Console.WriteLine("  + DatensatzReader");
+
         // ═══════════════════════════════════════════════════════
         // ProjectionQueryService (generiert)
         // ═══════════════════════════════════════════════════════

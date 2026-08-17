@@ -338,7 +338,9 @@ message QueryPayloadDto {
         GetProduktionsStripDto get_produktions_strip = 24;
         GetProduktionsVerlaufDto get_produktions_verlauf = 25;
         GetUnklassifizierteImagePairsDto get_unklassifizierte_image_pairs = 26;
-        SucheImagePairsDto suche_image_pairs = 27;
+        HoleDatensatzDto hole_datensatz = 27;
+        HoleDatensatzSamplesDto hole_datensatz_samples = 28;
+        SucheImagePairsDto suche_image_pairs = 29;
 
     }
 }
@@ -346,15 +348,18 @@ message QueryPayloadDto {
 message QueryResponsePayloadDto {
     oneof payload {
         ImagePairAntwortDto image_pair_antwort = 20;
-        ImagePairArbeitslisteDto image_pair_arbeitsliste = 21;
-        ImagePairHistorieAntwortDto image_pair_historie_antwort = 22;
-        ImagePairHistorieNichtGefundenDto image_pair_historie_nicht_gefunden = 23;
-        ImagePairNichtGefundenAntwortDto image_pair_nicht_gefunden_antwort = 24;
-        ImagePairStatistikAntwortDto image_pair_statistik_antwort = 25;
-        ImagePairSuchergebnisDto image_pair_suchergebnis = 26;
-        ProduktionsStripAntwortDto produktions_strip_antwort = 27;
-        ProduktionsTageAntwortDto produktions_tage_antwort = 28;
-        ProduktionsVerlaufAntwortDto produktions_verlauf_antwort = 29;
+        DatensatzAntwortDto datensatz_antwort = 21;
+        DatensatzNichtGefundenDto datensatz_nicht_gefunden = 22;
+        DatensatzSamplesDto datensatz_samples = 23;
+        ImagePairArbeitslisteDto image_pair_arbeitsliste = 24;
+        ImagePairHistorieAntwortDto image_pair_historie_antwort = 25;
+        ImagePairHistorieNichtGefundenDto image_pair_historie_nicht_gefunden = 26;
+        ImagePairNichtGefundenAntwortDto image_pair_nicht_gefunden_antwort = 27;
+        ImagePairStatistikAntwortDto image_pair_statistik_antwort = 28;
+        ImagePairSuchergebnisDto image_pair_suchergebnis = 29;
+        ProduktionsStripAntwortDto produktions_strip_antwort = 30;
+        ProduktionsTageAntwortDto produktions_tage_antwort = 31;
+        ProduktionsVerlaufAntwortDto produktions_verlauf_antwort = 32;
 
     }
 }
@@ -373,6 +378,18 @@ message TriggerPayloadDto {
 // ============================================================================
 // VALUE OBJECTS
 // ============================================================================
+message RangeKriterienDto {
+    int64 von = 1;
+    int64 bis = 2;
+    string ki_klassifikation = 3;
+    string mensch_label = 4;
+    string produkt_label = 5;
+    int32 nur_komplette = 6;
+    int32 hat_ki_klassifikation = 7;
+    int32 hat_mensch_label = 8;
+    int32 nur_nicht_inspizierte = 9;
+}
+
 message RegionPositionDto {
     double x_prozent = 1;
     double y_prozent = 2;
@@ -388,16 +405,9 @@ message DatensatzMitgliedDto {
     string dc2_pfad = 5;
 }
 
-message RangeKriterienDto {
-    int64 von = 1;
-    int64 bis = 2;
-    string ki_klassifikation = 3;
-    string mensch_label = 4;
-    string produkt_label = 5;
-    int32 nur_komplette = 6;
-    int32 hat_ki_klassifikation = 7;
-    int32 hat_mensch_label = 8;
-    int32 nur_nicht_inspizierte = 9;
+message RangeHerkunftDto {
+    RangeKriterienDto kriterien = 1;
+    int32 anzahl_paare = 2;
 }
 
 message RegionBewertungDto {
@@ -405,6 +415,14 @@ message RegionBewertungDto {
     RegionPositionDto position = 2;
     string ki_klassifikation = 3;
     string mensch_label = 4;
+}
+
+message DatensatzSampleDto {
+    string image_pair_id = 1;
+    string dc0_pfad = 2;
+    string dc2_pfad = 3;
+    int32 label = 4;
+    int32 split = 5;
 }
 
 message HistorieEintragDto {
@@ -437,9 +455,11 @@ message ProduktionsZeitBucketDto {
     int32 nicht_inspiziert = 7;
 }
 
-message RangeHerkunftDto {
-    RangeKriterienDto kriterien = 1;
-    int32 anzahl_paare = 2;
+message SplitKonfigDto {
+    int32 train_prozent = 1;
+    int32 val_prozent = 2;
+    int32 test_prozent = 3;
+    int32 seed = 4;
 }
 
 message BildMetaDto {
@@ -1440,6 +1460,17 @@ message GetUnklassifizierteImagePairsDto {
     int32 max_anzahl = 1;
 }
 
+message HoleDatensatzDto {
+    string datensatz_id = 1;
+}
+
+message HoleDatensatzSamplesDto {
+    string datensatz_id = 1;
+    int32 version = 2;
+    int32 seite = 3;
+    int32 seiten_groesse = 4;
+}
+
 message SucheImagePairsDto {
     ImagePairFilterDto filter = 1;
 }
@@ -1468,6 +1499,27 @@ message ImagePairAntwortDto {
     string mensch_bildpaar_label = 18;
     string physisches_produkt_label = 19;
     bool ist_inspiziert = 20;
+}
+
+message DatensatzAntwortDto {
+    string id = 1;
+    string name = 2;
+    int32 status = 3;
+    int32 anzahl_mitglieder = 4;
+    int32 eingefrorene_version = 5;
+    SplitKonfigDto split = 6;
+    repeated RangeHerkunftDto ranges = 7;
+}
+
+message DatensatzNichtGefundenDto {
+    string datensatz_id = 1;
+}
+
+message DatensatzSamplesDto {
+    repeated DatensatzSampleDto samples = 1;
+    int32 gesamt_anzahl = 2;
+    int32 seite = 3;
+    int32 seiten_groesse = 4;
 }
 
 message ImagePairArbeitslisteDto {
