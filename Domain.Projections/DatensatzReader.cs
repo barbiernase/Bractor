@@ -14,10 +14,12 @@ namespace Domain.Projections;
 public partial class DatensatzReader : IReader<DatensatzProjektion>
 {
     private readonly IDatensatzReadStore _store;
+    private readonly IImagePairReadStore _imagePairs;
 
-    public DatensatzReader(IDatensatzReadStore store)
+    public DatensatzReader(IDatensatzReadStore store, IImagePairReadStore imagePairs)
     {
         _store = store;
+        _imagePairs = imagePairs;
     }
 
     public async Task<DatensatzSamples> Handle(
@@ -49,6 +51,35 @@ public partial class DatensatzReader : IReader<DatensatzProjektion>
 
         ctx.Track(query.DatensatzId.ToString());
         return ToAntwort(model);
+    }
+
+    public async Task<ImagePairSuchergebnis> Handle(
+        HoleDatensatzPaare query, IMessageEnvelope envelope, ReadContext ctx)
+    {
+        var model = await _store.FindByIdAsync(query.DatensatzId);
+        var alle = model is null
+            ? new List<Guid>()
+            : (query.Modus == DatensatzPaarModus.Ausgeschlossen ? model.Ausgeschlossen : model.Mitglieder);
+
+        var gesamt = alle.Count;
+        var seitenIds = alle
+            .Skip((query.Seite - 1) * query.SeitenGroesse)
+            .Take(query.SeitenGroesse)
+            .ToList();
+
+        var records = await _imagePairs.LadeVieleAsync(seitenIds);
+        var nachId = records.ToDictionary(r => r.Id);
+
+        var items = new List<ImagePairAntwort>();
+        foreach (var id in seitenIds)                         // Reihenfolge der Id-Liste bewahren
+            if (nachId.TryGetValue(id, out var m))
+            {
+                ctx.Track(id.ToString());
+                items.Add(ImagePairReader.ToAntwort(m));
+            }
+
+        ctx.Track(query.DatensatzId.ToString());              // RYW: Sicht folgt dem Delta
+        return new ImagePairSuchergebnis(items, gesamt, query.Seite, query.SeitenGroesse);
     }
 
     public async Task<DatensaetzeFuerPaar> Handle(
@@ -89,5 +120,6 @@ public partial class DatensatzReader : IReader<DatensatzProjektion>
         EingefroreneVersion: model.EingefroreneVersion,
         Split: model.Split,
         Ranges: model.Ranges,
-        Mitglieder: model.Mitglieder);
+        Mitglieder: model.Mitglieder,
+        Ausgeschlossen: model.Ausgeschlossen);
 }

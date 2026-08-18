@@ -27,6 +27,13 @@ public record DatensatzReadModel : IReadModel
     /// <summary>Der Entwurfs-Korb: konkrete Bildpaar-Referenzen, dedupliziert.</summary>
     public List<Guid> Mitglieder { get; init; } = new();
 
+    /// <summary>
+    /// Beim Kuratieren aussortierte Bildpaare (aus einer Range/dem Korb entfernt) — die
+    /// „Ausgeschlossen"-Sicht (Konzept datensatz-kuratierung: eigene Galerie der rausgeworfenen
+    /// Bilder, in der Galerie ansehbar/wieder-aufnehmbar). Read-Model-Sicht, kein Domänenzustand.
+    /// </summary>
+    public List<Guid> Ausgeschlossen { get; init; } = new();
+
     /// <summary>Materialisierte Größe (== <see cref="Mitglieder"/>.Count) — für die Sidebar.</summary>
     public int AnzahlMitglieder { get; init; }
 

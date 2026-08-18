@@ -282,9 +282,10 @@ message QueryPayloadDto {
         GetUnklassifizierteImagePairsDto get_unklassifizierte_image_pairs = 28;
         HoleDatensaetzeFuerPaarDto hole_datensaetze_fuer_paar = 29;
         HoleDatensatzDto hole_datensatz = 30;
-        HoleDatensatzSamplesDto hole_datensatz_samples = 31;
-        HoleTrainingslaufDto hole_trainingslauf = 32;
-        SucheImagePairsDto suche_image_pairs = 33;
+        HoleDatensatzPaareDto hole_datensatz_paare = 31;
+        HoleDatensatzSamplesDto hole_datensatz_samples = 32;
+        HoleTrainingslaufDto hole_trainingslauf = 33;
+        SucheImagePairsDto suche_image_pairs = 34;
 
     }
 }
@@ -970,6 +971,13 @@ message HoleDatensatzDto {
     string datensatz_id = 1;
 }
 
+message HoleDatensatzPaareDto {
+    string datensatz_id = 1;
+    int32 modus = 2;
+    int32 seite = 3;
+    int32 seiten_groesse = 4;
+}
+
 message HoleDatensatzSamplesDto {
     string datensatz_id = 1;
     int32 version = 2;
@@ -997,6 +1005,7 @@ message DatensatzAntwortDto {
     SplitKonfigDto split = 6;
     repeated RangeHerkunftDto ranges = 7;
     repeated string mitglieder = 8;
+    repeated string ausgeschlossen = 9;
 }
 
 message ImagePairAntwortDto {

@@ -48,6 +48,10 @@ public interface IImagePairWriteStore
 public interface IImagePairReadStore
 {
     Task<ImagePairReadModel?> FindByIdAsync(Guid id);
+
+    /// <summary>Mehrere Read-Models per Id laden (Batch, für die Datensatz-gescopte Galerie).</summary>
+    Task<IReadOnlyList<ImagePairReadModel>> LadeVieleAsync(IReadOnlyList<Guid> ids);
+
     Task<(IReadOnlyList<ImagePairReadModel> Items, int GesamtAnzahl)> SearchAsync(ImagePairFilter filter);
     Task<ImagePairStatistik> GetStatistikAsync();
     Task<IReadOnlyList<ImagePairReadModel>> GetUnklassifizierteAsync(int maxAnzahl = 20);

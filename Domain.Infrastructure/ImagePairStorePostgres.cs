@@ -184,6 +184,14 @@ public class ImagePairStorePostgres : IImagePairWriteStore, IImagePairReadStore
         return await session.LoadAsync<ImagePairReadModel>(id);
     }
 
+    public async Task<IReadOnlyList<ImagePairReadModel>> LadeVieleAsync(IReadOnlyList<Guid> ids)
+    {
+        if (ids.Count == 0) return System.Array.Empty<ImagePairReadModel>();
+        await using var session = _store.QuerySession();
+        var geladen = await session.LoadManyAsync<ImagePairReadModel>(ids.ToArray());
+        return geladen.ToList();
+    }
+
     public async Task<(IReadOnlyList<ImagePairReadModel> Items, int GesamtAnzahl)> SearchAsync(
         ImagePairFilter filter)
     {

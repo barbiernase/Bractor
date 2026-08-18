@@ -1,3 +1,4 @@
+using System.Linq;
 using Abstractions;
 using Domain.Datensatz;
 using Domain.Projections;
@@ -45,10 +46,12 @@ public sealed class DatensatzStore
             var mitglieder = new List<Guid>(existing.Mitglieder);
             foreach (var pid in imagePairIds)
                 if (!mitglieder.Contains(pid)) mitglieder.Add(pid);   // Union, dedup, Reihenfolge stabil
+            var ausgeschlossen = existing.Ausgeschlossen.Where(x => !imagePairIds.Contains(x)).ToList();
             var ranges = new List<RangeHerkunft>(existing.Ranges) { herkunft };
             return existing with
             {
                 Mitglieder = mitglieder,
+                Ausgeschlossen = ausgeschlossen,
                 AnzahlMitglieder = mitglieder.Count,
                 Ranges = ranges,
                 LetzteAktualisierung = aktualisierung
@@ -62,11 +65,16 @@ public sealed class DatensatzStore
     {
         Buffer(id, existing =>
         {
-            if (existing.Mitglieder.Contains(imagePairId)) return existing;
+            var ausgeschlossen = existing.Ausgeschlossen.Where(x => x != imagePairId).ToList();
+            if (existing.Mitglieder.Contains(imagePairId))
+                return ausgeschlossen.Count == existing.Ausgeschlossen.Count
+                    ? existing
+                    : existing with { Ausgeschlossen = ausgeschlossen, LetzteAktualisierung = aktualisierung };
             var mitglieder = new List<Guid>(existing.Mitglieder) { imagePairId };
             return existing with
             {
                 Mitglieder = mitglieder,
+                Ausgeschlossen = ausgeschlossen,
                 AnzahlMitglieder = mitglieder.Count,
                 LetzteAktualisierung = aktualisierung
             };
@@ -82,9 +90,13 @@ public sealed class DatensatzStore
             if (!existing.Mitglieder.Contains(imagePairId)) return existing;
             var mitglieder = new List<Guid>(existing.Mitglieder);
             mitglieder.Remove(imagePairId);
+            // Aussortiert → in die Ausgeschlossen-Sicht (dedup).
+            var ausgeschlossen = new List<Guid>(existing.Ausgeschlossen);
+            if (!ausgeschlossen.Contains(imagePairId)) ausgeschlossen.Add(imagePairId);
             return existing with
             {
                 Mitglieder = mitglieder,
+                Ausgeschlossen = ausgeschlossen,
                 AnzahlMitglieder = mitglieder.Count,
                 LetzteAktualisierung = aktualisierung
             };

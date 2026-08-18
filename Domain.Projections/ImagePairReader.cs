@@ -88,7 +88,8 @@ public partial class ImagePairReader : IReader<ImagePairProjection>
         return await _store.GetProduktionsStripAsync(query.Von, query.Bis);
     }
 
-    private static ImagePairAntwort ToAntwort(ImagePairReadModel m) => new(
+    /// <summary>Read-Model → DTO. Internal, damit der DatensatzReader (Galerie-Join) es wiederverwendet.</summary>
+    internal static ImagePairAntwort ToAntwort(ImagePairReadModel m) => new(
         Id: m.Id,
         PairKey: m.PairKey,
         ProduziertAm: m.ProduziertAm,
