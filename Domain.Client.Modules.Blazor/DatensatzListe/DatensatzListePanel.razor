@@ -1,0 +1,63 @@
+@namespace Domain.Client.Modules.Blazor.DatensatzListe
+@using Domain.Client.Modules.Datensaetze
+@using Domain.Datensatz
+@using global::Client.Infrastructure.Abstractions
+@inject DatensatzListeStore Store
+@inject EffectScope Fx
+@implements IDisposable
+
+@*
+    Datensatz-Liste (linke Sidebar). Zeigt je Datensatz Name, Status-Badge, Größe
+    und — wenn eingefroren — die Version. Klick markiert den Datensatz aktiv und
+    dispatcht DatensatzAusgewaehlt, das die Komposition-Stage übernimmt.
+*@
+
+<div style="display:flex;flex-direction:column;height:100%;font-size:12px">
+    @if (Store.Datensaetze.Count == 0)
+    {
+        <div style="padding:8px;color:#888">Noch keine Datensätze.</div>
+    }
+    else
+    {
+        <div style="flex:1;min-height:0;overflow-y:auto">
+            @foreach (var d in Store.Datensaetze)
+            {
+                var aktiv = Store.AktiveId == d.Id;
+                <div @key="d.Id" @onclick="() => Waehle(d.Id)"
+                     style="@ZeilenStil(aktiv)">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+                        <span style="font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">
+                            @(string.IsNullOrWhiteSpace(d.Name) ? "(ohne Name)" : d.Name)
+                        </span>
+                        <span style="@BadgeStil(d.Status)">@StatusText(d.Status)</span>
+                    </div>
+                    <div style="color:#777;font-size:11px;margin-top:2px">
+                        @d.AnzahlMitglieder Paare@(d.Status == DatensatzStatus.Eingefroren ? $" · v{d.EingefroreneVersion}" : "")
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    protected override void OnInitialized()
+        => Fx.OnChanged(Store, () => InvokeAsync(StateHasChanged));
+
+    void Waehle(Guid id) => Fx.Dispatch(new DatensatzAusgewaehlt(id));
+
+    public void Dispose() => Fx.Dispose();
+
+    private static string ZeilenStil(bool aktiv) =>
+        $"padding:6px 8px;cursor:pointer;border-left:3px solid {(aktiv ? "#1976d2" : "transparent")};" +
+        $"background:{(aktiv ? "#e3f2fd" : "transparent")}";
+
+    private static string StatusText(DatensatzStatus s) =>
+        s == DatensatzStatus.Eingefroren ? "eingefroren" : "Entwurf";
+
+    private static string BadgeStil(DatensatzStatus s)
+    {
+        var (bg, fg) = s == DatensatzStatus.Eingefroren ? ("#2e7d32", "#fff") : ("#ececec", "#555");
+        return $"background:{bg};color:{fg};border-radius:8px;padding:1px 8px;font-size:10px;white-space:nowrap";
+    }
+}
