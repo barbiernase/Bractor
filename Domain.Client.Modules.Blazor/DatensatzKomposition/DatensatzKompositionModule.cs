@@ -4,14 +4,17 @@ using Domain.Client.Modules.Blazor.DatensatzKomposition;
 namespace Domain.Client.Modules.DatensatzKomposition;
 
 /// <summary>
-/// Zentrale Bühne „Datensatz-Komposition" (Transfer-/Korb-Layout, Konzept §8.1).
-/// Als IStageModule automatisch ein Tab in der Shell. Links die Kandidaten aus dem
-/// vorhandenen Such-Filter, rechts der Datensatz-Korb mit Größe/Split/Provenienz/Einfrieren.
+/// Bühne „Verwalten" (Konzept datensatz-kuratierung §9): die frühere Korb-/Kompositions-Bühne,
+/// auf eine <em>Verwalten</em>-Sicht zurückgestuft — Mitglieder sehen + einzeln aussortieren,
+/// Provenienz/Ranges, Split, Klassenbalance, Einfrieren. Kuratiert (getaggt) wird jetzt in
+/// Galerie/Einbild (Sammel-Ziel + Taste A / Badge-Klick); der filter-getriebene
+/// „ganze Range → Datensatz"-Weg bleibt als optionaler Bulk-Saat erhalten.
+/// Als IStageModule automatisch ein Tab in der Shell.
 /// </summary>
 public class DatensatzKompositionModule : IStageModule
 {
     public string Id    => "datensatz-komposition";
-    public string Title => "Datensatz";
+    public string Title => "Verwalten";
     public Type   ComponentType => typeof(DatensatzKompositionPanel);
     public int    Order => 10;
 }

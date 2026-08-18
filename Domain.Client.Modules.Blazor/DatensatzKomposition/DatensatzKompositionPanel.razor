@@ -10,10 +10,11 @@
 @implements IDisposable
 
 @*
-    Master-Detail in der Bühne (Layout-Konzept „Bühne statt Panels", Stufe 1):
-    GANZ LINKS die Datensatz-Liste (Master) — früher eine globale Sidebar, jetzt Teil der Bühne.
-    MITTE die Kandidaten aus dem vorhandenen Such-Filter, RECHTS der Datensatz-Korb
-    (Größe/Split/Provenienz/Balance/Einfrieren).
+    „Verwalten"-Sicht (Konzept datensatz-kuratierung §9). Master-Detail in der Bühne:
+    GANZ LINKS die Datensatz-Liste (Master). MITTE die Mitglieder-Verwaltung des aktiven
+    Datensatzes (sehen + einzeln aussortieren; optionaler Bulk-Saat aus dem Filter). RECHTS
+    der Datensatz-Kopf (Größe/Split/Provenienz/Balance/Einfrieren). Kuratiert wird in
+    Galerie/Einbild — hier wird verwaltet und eingefroren.
 *@
 
 <div style="display:flex;height:100%;box-sizing:border-box;font-size:13px;overflow:hidden">
@@ -27,38 +28,78 @@
     @* ══════════ DETAIL: Kandidaten + Korb ══════════ *@
     <div style="flex:1;min-width:0;display:flex;gap:16px;padding:16px;box-sizing:border-box;overflow:hidden">
 
-    @* ── Kandidaten ── *@
-    <div style="flex:1;min-width:0;display:flex;flex-direction:column;border:1px solid #e0e0e0;border-radius:8px;padding:14px;overflow-y:auto">
-        <div style="font-weight:600;font-size:14px;margin-bottom:10px">Suchergebnis (Kandidaten)</div>
-
-        <div style="color:#555;margin-bottom:6px">Aktiver Filter:</div>
-        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
-            @foreach (var chip in FilterChips())
-            {
-                <span style="background:#eef2f7;border:1px solid #d5dde6;border-radius:6px;padding:2px 9px;font-size:12px">@chip</span>
-            }
+    @* ── Mitglieder verwalten (Konzept datensatz-kuratierung §9: Verwalten-Sicht) ── *@
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;border:1px solid #e0e0e0;border-radius:8px;padding:14px;overflow:hidden">
+        <div style="font-weight:600;font-size:14px;margin-bottom:2px">Mitglieder verwalten</div>
+        <div style="color:#999;font-size:11px;margin-bottom:10px">
+            Kuratiert wird in <b>Galerie</b>/<b>Einbild</b> (Taste <b>A</b> / Klick auf das Badge).
+            Hier siehst du die Sammlung, sortierst einzeln aus und frierst ein.
         </div>
 
-        <div style="font-size:26px;font-weight:700;line-height:1">@Suche.VirtualImagePairs.GesamtAnzahl</div>
-        <div style="color:#777;margin-bottom:14px">Treffer im aktuellen Filter</div>
-
-        <button @onclick="RangeHinzufuegen" disabled="@(!KannRangeHinzufuegen)" style="@PrimBtn(KannRangeHinzufuegen)">
-            ganze Range → Datensatz
-        </button>
-        <div style="color:#999;font-size:11px;margin-top:8px">
-            Filter im <b>Suche</b>-Panel (rechts) setzen. Der Server löst die Range auf und nimmt
-            die Paare dedupliziert auf.
-        </div>
-
-        <div style="margin-top:auto;padding-top:14px;border-top:1px solid #eee">
-            <div style="color:#555;margin-bottom:6px">Neuen Datensatz anlegen:</div>
-            <div style="display:flex;gap:6px">
-                <input @bind="_neuerName" @bind:event="oninput" placeholder="Name, z. B. Charge-Juni"
-                       style="flex:1;padding:6px 8px;border:1px solid #ccc;border-radius:6px;font-size:13px" />
-                <button @onclick="Erstelle" disabled="@string.IsNullOrWhiteSpace(_neuerName)"
-                        style="@PrimBtn(!string.IsNullOrWhiteSpace(_neuerName))">anlegen</button>
+        @if (Suche.SammelZiel is not { } ziel)
+        {
+            <div style="margin:auto;color:#888;text-align:center">
+                Wähle links in der Datensatz-Liste einen Datensatz<br/>oder oben in der Sammel-Leiste.
             </div>
-        </div>
+        }
+        else
+        {
+            <div style="color:#555;margin-bottom:8px">
+                @ziel.AnzahlMitglieder Paare@(ziel.IstEingefroren ? " · eingefroren (read-only)" : "")
+            </div>
+
+            <div style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:3px">
+                @if (ziel.AnzahlMitglieder == 0)
+                {
+                    <div style="color:#999;font-size:12px">Noch leer — tagge Bilder in Galerie/Einbild (Taste A / Klick).</div>
+                }
+                @foreach (var id in ziel.MitgliederIds.Take(MaxAnzeige))
+                {
+                    var rec = Suche.VirtualImagePairs.Get(id);
+                    <div style="display:flex;align-items:center;gap:8px;background:#f7f7f7;border-radius:6px;padding:4px 8px">
+                        <div style="width:42px;height:22px;background:#111;border-radius:3px;overflow:hidden;flex:0 0 auto;display:flex;align-items:center;justify-content:center">
+                            @if (rec?.Dc0BildSrc is { } src)
+                            { <img src="@src" style="width:100%;height:100%;object-fit:cover" alt="" /> }
+                        </div>
+                        @if (rec is not null && LabelVon(rec) is { } lbl)
+                        {
+                            <span title="@lbl" style="width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:@Farbschema.Fuer(lbl)"></span>
+                        }
+                        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#444;font-size:12px">
+                            @(rec?.PairKey ?? id.ToString()[..8])
+                        </span>
+                        @if (!ziel.IstEingefroren)
+                        {
+                            <button @onclick="() => Entferne(id)" title="aus dem Datensatz entfernen"
+                                    style="border:1px solid #e0a0a0;background:#fff;color:#c62828;border-radius:5px;padding:2px 8px;font-size:11px;cursor:pointer">entfernen</button>
+                        }
+                    </div>
+                }
+                @if (ziel.AnzahlMitglieder > MaxAnzeige)
+                {
+                    <div style="color:#999;font-size:11px;padding:4px 0">… und @(ziel.AnzahlMitglieder - MaxAnzeige) weitere (in der Galerie sichtbar/kuratierbar).</div>
+                }
+            </div>
+
+            @* ── Bulk-Saat (optional): der frühere Hauptweg, jetzt Startpunkt ── *@
+            @if (!ziel.IstEingefroren)
+            {
+                <div style="margin-top:12px;padding-top:10px;border-top:1px solid #eee">
+                    <div style="color:#555;font-size:12px;margin-bottom:4px">
+                        Bulk-Saat (optional): ganze Filter-Range als Startmenge aufnehmen
+                    </div>
+                    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
+                        @foreach (var chip in FilterChips())
+                        {
+                            <span style="background:#eef2f7;border:1px solid #d5dde6;border-radius:6px;padding:2px 9px;font-size:11px">@chip</span>
+                        }
+                    </div>
+                    <button @onclick="RangeHinzufuegen" disabled="@(!KannRangeHinzufuegen)" style="@SekBtn(KannRangeHinzufuegen)">
+                        Filter-Range aufnehmen (@Suche.VirtualImagePairs.GesamtAnzahl Treffer)
+                    </button>
+                </div>
+            }
+        }
     </div>
 
     @* ══════════ RECHTS: Datensatz-Korb ══════════ *@
@@ -158,7 +199,7 @@
 </div>
 
 @code {
-    private string _neuerName = "";
+    private const int MaxAnzeige = 300;   // Verwalten-Liste kappen (große Sets kuratiert man in der Galerie)
     private int _train = 70, _val = 15, _test = 15, _seed = 42;
 
     protected override void OnInitialized()
@@ -169,15 +210,13 @@
 
     private bool KannRangeHinzufuegen => Korb.AktuelleDatensatzId is not null && !Korb.IstEingefroren;
 
-    void Erstelle()
-    {
-        Fx.Dispatch(new ErstelleDatensatzIntent(_neuerName));
-        _neuerName = "";
-    }
-
     void RangeHinzufuegen() => Fx.Dispatch(new RangeHinzufuegenIntent());
     void SplitSetzen()      => Fx.Dispatch(new SplitSetzenIntent(_train, _val, _test, _seed));
     void FriereEin()        => Fx.Dispatch(new FriereEinIntent());
+    void Entferne(Guid id)  => Fx.Dispatch(new PaarEntfernenIntent(id));
+
+    private static Klassifikation? LabelVon(ImagePairRecord r)
+        => r.PhysischesProduktLabel ?? r.MenschBildpaarLabel;
 
     public void Dispose() => Fx.Dispose();
 
