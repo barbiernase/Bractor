@@ -1,0 +1,230 @@
+@namespace Domain.Client.Modules.Blazor.DatensatzKomposition
+@using Domain.Client.Modules.DatensatzKomposition
+@using Domain.Datensatz
+@using Domain.ImagePair
+@using global::Client.Infrastructure.Abstractions
+@inject DatensatzKompositionStore Korb
+@inject Store Suche
+@inject EffectScope Fx
+@implements IDisposable
+
+@*
+    Transfer-/Korb-Layout (Konzept §8.1): LINKS die Kandidaten aus dem vorhandenen
+    Such-Filter (der im rechten Suche-Panel gesteuert wird — eine Quelle der Wahrheit),
+    RECHTS der Datensatz-Korb mit Größe/Split/Provenienz/Balance/Einfrieren.
+*@
+
+<div style="display:flex;gap:16px;height:100%;padding:16px;box-sizing:border-box;font-size:13px;overflow:hidden">
+
+    @* ══════════ LINKS: Kandidaten ══════════ *@
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;border:1px solid #e0e0e0;border-radius:8px;padding:14px;overflow-y:auto">
+        <div style="font-weight:600;font-size:14px;margin-bottom:10px">Suchergebnis (Kandidaten)</div>
+
+        <div style="color:#555;margin-bottom:6px">Aktiver Filter:</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:12px">
+            @foreach (var chip in FilterChips())
+            {
+                <span style="background:#eef2f7;border:1px solid #d5dde6;border-radius:6px;padding:2px 9px;font-size:12px">@chip</span>
+            }
+        </div>
+
+        <div style="font-size:26px;font-weight:700;line-height:1">@Suche.VirtualImagePairs.GesamtAnzahl</div>
+        <div style="color:#777;margin-bottom:14px">Treffer im aktuellen Filter</div>
+
+        <button @onclick="RangeHinzufuegen" disabled="@(!KannRangeHinzufuegen)" style="@PrimBtn(KannRangeHinzufuegen)">
+            ganze Range → Datensatz
+        </button>
+        <div style="color:#999;font-size:11px;margin-top:8px">
+            Filter im <b>Suche</b>-Panel (rechts) setzen. Der Server löst die Range auf und nimmt
+            die Paare dedupliziert auf.
+        </div>
+
+        <div style="margin-top:auto;padding-top:14px;border-top:1px solid #eee">
+            <div style="color:#555;margin-bottom:6px">Neuen Datensatz anlegen:</div>
+            <div style="display:flex;gap:6px">
+                <input @bind="_neuerName" @bind:event="oninput" placeholder="Name, z. B. Charge-Juni"
+                       style="flex:1;padding:6px 8px;border:1px solid #ccc;border-radius:6px;font-size:13px" />
+                <button @onclick="Erstelle" disabled="@string.IsNullOrWhiteSpace(_neuerName)"
+                        style="@PrimBtn(!string.IsNullOrWhiteSpace(_neuerName))">anlegen</button>
+            </div>
+        </div>
+    </div>
+
+    @* ══════════ RECHTS: Datensatz-Korb ══════════ *@
+    <div style="flex:1;min-width:0;display:flex;flex-direction:column;border:1px solid #e0e0e0;border-radius:8px;padding:14px;overflow-y:auto">
+        @if (Korb.AktuelleDatensatzId is null)
+        {
+            <div style="margin:auto;color:#888;text-align:center">
+                Wähle links in der Datensatz-Liste einen Datensatz<br/>oder lege einen neuen an.
+            </div>
+        }
+        else
+        {
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">
+                <span style="font-weight:600;font-size:14px">@(string.IsNullOrWhiteSpace(Korb.Name) ? "(ohne Name)" : Korb.Name)</span>
+                <span style="@BadgeStil(Korb.Status)">@StatusText(Korb.Status)</span>
+            </div>
+            <div style="color:#777;margin-bottom:14px">
+                @Korb.AnzahlMitglieder Paare · @Korb.Ranges.Count Ranges
+                @(Korb.IstEingefroren ? $" · v{Korb.EingefroreneVersion}" : "")
+            </div>
+
+            @* ── Split ── *@
+            <div style="font-weight:600;margin-bottom:6px">Split</div>
+            @if (Korb.IstEingefroren)
+            {
+                <div style="color:#555;margin-bottom:14px">
+                    train @Korb.AktuellerSplit.TrainProzent / val @Korb.AktuellerSplit.ValProzent
+                    / test @Korb.AktuellerSplit.TestProzent · Seed @Korb.AktuellerSplit.Seed
+                </div>
+            }
+            else
+            {
+                <div style="display:flex;gap:6px;align-items:center;margin-bottom:6px;flex-wrap:wrap">
+                    <label style="font-size:12px;color:#555">train<input type="number" @bind="_train" style="@NumInput" /></label>
+                    <label style="font-size:12px;color:#555">val<input type="number" @bind="_val" style="@NumInput" /></label>
+                    <label style="font-size:12px;color:#555">test<input type="number" @bind="_test" style="@NumInput" /></label>
+                    <label style="font-size:12px;color:#555">seed<input type="number" @bind="_seed" style="@NumInput" /></label>
+                    <button @onclick="SplitSetzen" disabled="@(_train + _val + _test != 100)" style="@SekBtn(_train + _val + _test == 100)">setzen</button>
+                </div>
+                @if (_train + _val + _test != 100)
+                {
+                    <div style="color:#c62828;font-size:11px;margin-bottom:10px">Summe muss 100 sein (aktuell @(_train + _val + _test)).</div>
+                }
+            }
+
+            @* ── Klassenbalance (nach Freeze) ── *@
+            @if (Korb.BalanceGeladen)
+            {
+                <div style="font-weight:600;margin:10px 0 6px">Klassenbalance <span style="color:#999;font-weight:400;font-size:11px">(Stichprobe bis 500)</span></div>
+                @Balken("OK", Korb.BalOk, Farbschema.Fuer(Klassifikation.KeineAnomalie))
+                @Balken("Fraglich", Korb.BalFraglich, Farbschema.Fuer(Klassifikation.Questionable))
+                @Balken("Anomalie", Korb.BalAnomalie, Farbschema.Fuer(Klassifikation.Anomalie))
+                <div style="color:#777;font-size:12px;margin-top:6px">
+                    Split-Verteilung: train @Korb.SplTrain · val @Korb.SplVal · test @Korb.SplTest
+                </div>
+            }
+
+            @* ── Provenienz ── *@
+            <div style="font-weight:600;margin:14px 0 6px">Provenienz</div>
+            @if (Korb.Ranges.Count == 0)
+            {
+                <div style="color:#999;font-size:12px">Noch keine Range aufgenommen.</div>
+            }
+            else
+            {
+                <div style="display:flex;flex-direction:column;gap:4px">
+                    @foreach (var r in Korb.Ranges)
+                    {
+                        <div style="display:flex;justify-content:space-between;gap:8px;background:#f7f7f7;border-radius:6px;padding:5px 9px">
+                            <span style="color:#444;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">@RangeText(r.Kriterien)</span>
+                            <span style="color:#777;white-space:nowrap">@r.AnzahlPaare</span>
+                        </div>
+                    }
+                </div>
+            }
+
+            @* ── Einfrieren ── *@
+            <div style="margin-top:16px">
+                @if (Korb.IstEingefroren)
+                {
+                    <div style="color:#2e7d32;font-weight:600">✓ eingefroren (v@Korb.EingefroreneVersion) — Samples queryierbar, Training möglich.</div>
+                }
+                else
+                {
+                    <button @onclick="FriereEin" disabled="@(Korb.AnzahlMitglieder == 0)" style="@PrimBtn(Korb.AnzahlMitglieder > 0)">
+                        Einfrieren
+                    </button>
+                    @if (Korb.AnzahlMitglieder == 0)
+                    {
+                        <div style="color:#999;font-size:11px;margin-top:6px">Erst mindestens eine Range aufnehmen.</div>
+                    }
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private string _neuerName = "";
+    private int _train = 70, _val = 15, _test = 15, _seed = 42;
+
+    protected override void OnInitialized()
+    {
+        Fx.OnChanged(Korb, () => InvokeAsync(StateHasChanged));
+        Fx.OnChanged(Suche, () => InvokeAsync(StateHasChanged));
+    }
+
+    private bool KannRangeHinzufuegen => Korb.AktuelleDatensatzId is not null && !Korb.IstEingefroren;
+
+    void Erstelle()
+    {
+        Fx.Dispatch(new ErstelleDatensatzIntent(_neuerName));
+        _neuerName = "";
+    }
+
+    void RangeHinzufuegen() => Fx.Dispatch(new RangeHinzufuegenIntent());
+    void SplitSetzen()      => Fx.Dispatch(new SplitSetzenIntent(_train, _val, _test, _seed));
+    void FriereEin()        => Fx.Dispatch(new FriereEinIntent());
+
+    public void Dispose() => Fx.Dispose();
+
+    // ── Anzeige-Helfer ──
+    private IEnumerable<string> FilterChips()
+    {
+        var s = Suche.Suche;
+        var chips = new List<string>();
+        if (s.Von is { } von) chips.Add($"ab {von:dd.MM.yyyy}");
+        if (s.Bis is { } bis) chips.Add($"bis {bis:dd.MM.yyyy}");
+        if (s.ProduktLabel is { } p) chips.Add($"Produkt={Farbschema.Text(p)}");
+        if (s.HatMenschLabel == true) chips.Add("gelabelt");
+        if (s.HatMenschLabel == false) chips.Add("offen");
+        if (s.NurNichtInspizierte) chips.Add("nur nicht-inspizierte");
+        if (chips.Count == 0) chips.Add("alle (keine Einschränkung)");
+        return chips;
+    }
+
+    private static string RangeText(RangeKriterien k)
+    {
+        var teile = new List<string>();
+        if (k.Von is { } von) teile.Add($"ab {von:dd.MM.}");
+        if (k.Bis is { } bis) teile.Add($"bis {bis:dd.MM.}");
+        if (k.ProduktLabel is { } p) teile.Add($"Produkt={Farbschema.Text(p)}");
+        if (k.HatMenschLabel == true) teile.Add("gelabelt");
+        if (k.HatMenschLabel == false) teile.Add("offen");
+        if (k.NurNichtInspizierte == true) teile.Add("nicht-inspiziert");
+        return teile.Count == 0 ? "alle" : string.Join(" · ", teile);
+    }
+
+    private RenderFragment Balken(string label, int wert, string farbe)
+    {
+        var gesamt = Math.Max(1, Korb.BalOk + Korb.BalFraglich + Korb.BalAnomalie);
+        var prozent = (int)Math.Round(100.0 * wert / gesamt);
+        return @<div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+            <span style="width:64px;font-size:12px;color:#555">@label</span>
+            <div style="flex:1;height:12px;background:#eee;border-radius:6px;overflow:hidden">
+                <div style="width:@(prozent)%;height:100%;background:@farbe"></div>
+            </div>
+            <span style="width:64px;text-align:right;font-size:12px;color:#555">@wert (@prozent%)</span>
+        </div>;
+    }
+
+    private static string StatusText(DatensatzStatus s) =>
+        s == DatensatzStatus.Eingefroren ? "eingefroren" : "Entwurf";
+
+    private static string BadgeStil(DatensatzStatus s)
+    {
+        var (bg, fg) = s == DatensatzStatus.Eingefroren ? ("#2e7d32", "#fff") : ("#ececec", "#555");
+        return $"background:{bg};color:{fg};border-radius:8px;padding:1px 10px;font-size:11px;white-space:nowrap";
+    }
+
+    private const string NumInput = "width:52px;margin-left:4px;padding:3px 4px;border:1px solid #ccc;border-radius:4px;font-size:12px";
+
+    private static string PrimBtn(bool on) =>
+        "padding:8px 14px;border:none;border-radius:6px;font-size:13px;font-weight:600;color:#fff;" +
+        (on ? "background:#1976d2;cursor:pointer" : "background:#b0bec5;cursor:not-allowed");
+
+    private static string SekBtn(bool on) =>
+        "padding:5px 12px;border:1px solid #1976d2;border-radius:6px;font-size:12px;color:#1976d2;background:#fff;" +
+        (on ? "cursor:pointer" : "opacity:.5;cursor:not-allowed");
+}
