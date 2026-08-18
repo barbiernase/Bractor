@@ -52,3 +52,25 @@ public record DatensatzNichtGefunden(Guid DatensatzId) : IQueryResponse;
 public record DatensatzListe(
     IReadOnlyList<DatensatzAntwort> Items
 ) : IQueryResponse;
+
+// ═══════════════════════════════════════════════════════
+// RÜCKWÄRTS-TAGS (Datensatz-Zugehörigkeit eines Bildes)
+// ═══════════════════════════════════════════════════════
+
+/// <summary>Ein Datensatz-Tag eines Bildes: Kopf-Daten für den Chip im Einbild.</summary>
+public record DatensatzTag(
+    Guid Id,
+    string? Name,
+    DatensatzStatus Status,
+    int EingefroreneVersion
+);
+
+/// <summary>
+/// Antwort auf <see cref="HoleDatensaetzeFuerPaar"/> — alle Datensätze, in denen das Bildpaar
+/// liegt. <see cref="ImagePairId"/> trägt die Frage zurück, damit der Client eine späte Antwort
+/// gegen den aktuellen Cursor prüfen und verwerfen kann.
+/// </summary>
+public record DatensaetzeFuerPaar(
+    Guid ImagePairId,
+    IReadOnlyList<DatensatzTag> Tags
+) : IQueryResponse;

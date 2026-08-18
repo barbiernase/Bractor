@@ -39,7 +39,8 @@ public sealed class DatensatzStore
 
     public Task NimmRangeAufAsync(
         Guid id, IReadOnlyList<Guid> imagePairIds, RangeHerkunft herkunft, DateTimeOffset aktualisierung)
-        => Buffer(id, existing =>
+    {
+        Buffer(id, existing =>
         {
             var mitglieder = new List<Guid>(existing.Mitglieder);
             foreach (var pid in imagePairIds)
@@ -53,9 +54,13 @@ public sealed class DatensatzStore
                 LetzteAktualisierung = aktualisierung
             };
         });
+        foreach (var pid in imagePairIds) BufferRueckwaerts(pid, id, drin: true);
+        return Task.CompletedTask;
+    }
 
     public Task NimmPaarAufAsync(Guid id, Guid imagePairId, DateTimeOffset aktualisierung)
-        => Buffer(id, existing =>
+    {
+        Buffer(id, existing =>
         {
             if (existing.Mitglieder.Contains(imagePairId)) return existing;
             var mitglieder = new List<Guid>(existing.Mitglieder) { imagePairId };
@@ -66,9 +71,13 @@ public sealed class DatensatzStore
                 LetzteAktualisierung = aktualisierung
             };
         });
+        BufferRueckwaerts(imagePairId, id, drin: true);
+        return Task.CompletedTask;
+    }
 
     public Task EntfernePaarAsync(Guid id, Guid imagePairId, DateTimeOffset aktualisierung)
-        => Buffer(id, existing =>
+    {
+        Buffer(id, existing =>
         {
             if (!existing.Mitglieder.Contains(imagePairId)) return existing;
             var mitglieder = new List<Guid>(existing.Mitglieder);
@@ -80,6 +89,9 @@ public sealed class DatensatzStore
                 LetzteAktualisierung = aktualisierung
             };
         });
+        BufferRueckwaerts(imagePairId, id, drin: false);
+        return Task.CompletedTask;
+    }
 
     public Task SetzeSplitAsync(Guid id, SplitKonfig split, DateTimeOffset aktualisierung)
         => Buffer(id, existing => existing with { Split = split, LetzteAktualisierung = aktualisierung });
@@ -133,6 +145,32 @@ public sealed class DatensatzStore
             s.Store(transform(existing));
         });
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Puffert die Rückwärts-Index-Pflege: <c>imagePairId → +/− datensatzId</c>. Idempotent
+    /// (Union bzw. Remove), co-committet im selben Batch wie das Vorwärts-Delta.
+    /// </summary>
+    private void BufferRueckwaerts(Guid imagePairId, Guid datensatzId, bool drin)
+    {
+        _pending.Add(async s =>
+        {
+            var doc = await s.LoadAsync<DatensatzMitgliedschaftReadModel>(imagePairId)
+                      ?? new DatensatzMitgliedschaftReadModel { Id = imagePairId };
+
+            if (drin)
+            {
+                if (doc.DatensatzIds.Contains(datensatzId)) return;   // schon drin → idempotent
+                s.Store(doc with { DatensatzIds = new List<Guid>(doc.DatensatzIds) { datensatzId } });
+            }
+            else
+            {
+                if (!doc.DatensatzIds.Contains(datensatzId)) return;
+                var ids = new List<Guid>(doc.DatensatzIds);
+                ids.Remove(datensatzId);
+                s.Store(doc with { DatensatzIds = ids });
+            }
+        });
     }
 
     // ═══════════════════════════════════════════════════════════

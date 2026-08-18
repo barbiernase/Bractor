@@ -20,3 +20,9 @@ public record HoleDatensatz(Guid DatensatzId) : IQuery;
 
 /// <summary>Alle Datensätze (Sidebar-Liste mit Entwurf/Eingefroren-Badge, Größe, Version).</summary>
 public record HoleDatensaetze() : IQuery;
+
+/// <summary>
+/// Rückwärts-Frage (Konzept datensatz-kuratierung §4.3): in welchen Datensätzen liegt dieses
+/// Bildpaar? Speist die „in Datensätzen: …"-Chips im Einbild. Liest den Rückwärts-Index.
+/// </summary>
+public record HoleDatensaetzeFuerPaar(Guid ImagePairId) : IQuery;

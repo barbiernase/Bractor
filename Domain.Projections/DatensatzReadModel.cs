@@ -71,3 +71,27 @@ public record DatensatzSampleReadModel : IReadModel
     public static string MakeId(Guid datensatzId, int version, Guid imagePairId) =>
         $"{datensatzId:N}:{version}:{imagePairId:N}";
 }
+
+// ═══════════════════════════════════════════════════════════════
+// RÜCKWÄRTS-INDEX — je Bildpaar die Datensätze, in denen es liegt
+// ═══════════════════════════════════════════════════════════════
+
+/// <summary>
+/// Der serverseitige Rückwärts-Index (Konzept datensatz-kuratierung §4.3): je
+/// ImagePairId die Menge der Datensätze, in denen das Paar (als Entwurfs-Mitglied) liegt.
+/// Grundlage der „in Datensätzen: …"-Chips im Einbild — O(1)-Rückwärts-Lookup statt
+/// Voll-Scan aller Datensätze.
+///
+/// Bewusst schlank: nur die Datensatz-<em>Ids</em>. Name/Status/Version zieht der Reader
+/// per Join aus dem <see cref="DatensatzReadModel"/> — so bleibt der Index frei von
+/// Duplikaten und ist beim Einfrieren (Status/Version-Wechsel) ohne eigenen Handler frisch.
+/// Co-committet mit dem Vorwärts-Delta (dieselbe Transaktion) → exactly-once.
+/// </summary>
+public record DatensatzMitgliedschaftReadModel : IReadModel
+{
+    /// <summary>== ImagePairId (Marten-Dokument-Id).</summary>
+    public Guid Id { get; init; }
+
+    /// <summary>Die Datensätze, in denen dieses Bildpaar liegt (dedupliziert).</summary>
+    public List<Guid> DatensatzIds { get; init; } = new();
+}

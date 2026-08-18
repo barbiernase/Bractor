@@ -53,4 +53,17 @@ public class DatensatzStorePostgres : IDatensatzReadStore
 
         return (page, gesamtAnzahl);
     }
+
+    public async Task<IReadOnlyList<DatensatzReadModel>> HoleDatensaetzeFuerPaarAsync(Guid imagePairId)
+    {
+        await using var session = _store.QuerySession();
+
+        var doc = await session.LoadAsync<DatensatzMitgliedschaftReadModel>(imagePairId);
+        if (doc is null || doc.DatensatzIds.Count == 0)
+            return Array.Empty<DatensatzReadModel>();
+
+        // Join: Kopf-Daten (Name/Status/Version) frisch aus den Datensatz-Read-Models.
+        var modelle = await session.LoadManyAsync<DatensatzReadModel>(doc.DatensatzIds.ToArray());
+        return modelle.ToList();
+    }
 }

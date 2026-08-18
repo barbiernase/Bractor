@@ -51,6 +51,22 @@ public partial class DatensatzReader : IReader<DatensatzProjektion>
         return ToAntwort(model);
     }
 
+    public async Task<DatensaetzeFuerPaar> Handle(
+        HoleDatensaetzeFuerPaar query, IMessageEnvelope envelope, ReadContext ctx)
+    {
+        var modelle = await _store.HoleDatensaetzeFuerPaarAsync(query.ImagePairId);
+
+        var tags = modelle
+            .Select(m => new DatensatzTag(m.Id, m.Name, m.Status, m.EingefroreneVersion))
+            .ToList();
+
+        // Rückwärts-Index gegen die betroffenen Aggregate tracken (Read-Your-Writes nach dem Taggen).
+        ctx.Track(query.ImagePairId.ToString());
+        foreach (var m in modelle) ctx.Track(m.Id.ToString());
+
+        return new DatensaetzeFuerPaar(query.ImagePairId, tags);
+    }
+
     public async Task<DatensatzListe> Handle(
         HoleDatensaetze query, IMessageEnvelope envelope, ReadContext ctx)
     {

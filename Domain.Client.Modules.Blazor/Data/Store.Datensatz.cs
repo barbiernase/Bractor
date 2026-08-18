@@ -41,6 +41,9 @@ public partial class Store
     /// <summary>Dedizierte Mehrfach-Auswahl in der Galerie (Kachel-Häkchen) — Konzept §5.</summary>
     [ObservableProperty] private IReadOnlySet<Guid> _markierung = new HashSet<Guid>();
 
+    /// <summary>Rückwärts-Tags des betrachteten Paars: „in Datensätzen: …" (Konzept §4.3).</summary>
+    [ObservableProperty] private IReadOnlyList<DatensatzTag> _paarTags = System.Array.Empty<DatensatzTag>();
+
     /// <summary>O(1): liegt dieses Bildpaar im aktiven Sammel-Ziel?</summary>
     public bool IstMitglied(Guid pairId) => SammelZiel?.MitgliederIds.Contains(pairId) ?? false;
 
@@ -67,6 +70,14 @@ public partial class Store
     {
         if (Markierung.Count == 0) return;
         Markierung = new HashSet<Guid>();
+    }
+
+    // ── Rückwärts-Tags des Cursor-Paars ──
+    void Handle(DatensaetzeFuerPaar a, MessageContext ctx)
+    {
+        // Späte Antwort verwerfen, wenn der Cursor inzwischen weitergezogen ist.
+        if (Cursor.Id is { } cur && a.ImagePairId != cur) return;
+        PaarTags = a.Tags;
     }
 
     // ── Auswahl = Sammel-Ziel aktivieren ──

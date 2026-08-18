@@ -280,10 +280,11 @@ message QueryPayloadDto {
         GetProduktionsStripDto get_produktions_strip = 26;
         GetProduktionsVerlaufDto get_produktions_verlauf = 27;
         GetUnklassifizierteImagePairsDto get_unklassifizierte_image_pairs = 28;
-        HoleDatensatzDto hole_datensatz = 29;
-        HoleDatensatzSamplesDto hole_datensatz_samples = 30;
-        HoleTrainingslaufDto hole_trainingslauf = 31;
-        SucheImagePairsDto suche_image_pairs = 32;
+        HoleDatensaetzeFuerPaarDto hole_datensaetze_fuer_paar = 29;
+        HoleDatensatzDto hole_datensatz = 30;
+        HoleDatensatzSamplesDto hole_datensatz_samples = 31;
+        HoleTrainingslaufDto hole_trainingslauf = 32;
+        SucheImagePairsDto suche_image_pairs = 33;
 
     }
 }
@@ -293,20 +294,21 @@ message QueryResponsePayloadDto {
         DatensatzAntwortDto datensatz_antwort = 20;
         ImagePairAntwortDto image_pair_antwort = 21;
         TrainingslaufAntwortDto trainingslauf_antwort = 22;
-        DatensatzListeDto datensatz_liste = 23;
-        DatensatzNichtGefundenDto datensatz_nicht_gefunden = 24;
-        DatensatzSamplesDto datensatz_samples = 25;
-        ImagePairArbeitslisteDto image_pair_arbeitsliste = 26;
-        ImagePairHistorieAntwortDto image_pair_historie_antwort = 27;
-        ImagePairHistorieNichtGefundenDto image_pair_historie_nicht_gefunden = 28;
-        ImagePairNichtGefundenAntwortDto image_pair_nicht_gefunden_antwort = 29;
-        ImagePairStatistikAntwortDto image_pair_statistik_antwort = 30;
-        ImagePairSuchergebnisDto image_pair_suchergebnis = 31;
-        ProduktionsStripAntwortDto produktions_strip_antwort = 32;
-        ProduktionsTageAntwortDto produktions_tage_antwort = 33;
-        ProduktionsVerlaufAntwortDto produktions_verlauf_antwort = 34;
-        TrainingslaufListeDto trainingslauf_liste = 35;
-        TrainingslaufNichtGefundenAntwortDto trainingslauf_nicht_gefunden_antwort = 36;
+        DatensaetzeFuerPaarDto datensaetze_fuer_paar = 23;
+        DatensatzListeDto datensatz_liste = 24;
+        DatensatzNichtGefundenDto datensatz_nicht_gefunden = 25;
+        DatensatzSamplesDto datensatz_samples = 26;
+        ImagePairArbeitslisteDto image_pair_arbeitsliste = 27;
+        ImagePairHistorieAntwortDto image_pair_historie_antwort = 28;
+        ImagePairHistorieNichtGefundenDto image_pair_historie_nicht_gefunden = 29;
+        ImagePairNichtGefundenAntwortDto image_pair_nicht_gefunden_antwort = 30;
+        ImagePairStatistikAntwortDto image_pair_statistik_antwort = 31;
+        ImagePairSuchergebnisDto image_pair_suchergebnis = 32;
+        ProduktionsStripAntwortDto produktions_strip_antwort = 33;
+        ProduktionsTageAntwortDto produktions_tage_antwort = 34;
+        ProduktionsVerlaufAntwortDto produktions_verlauf_antwort = 35;
+        TrainingslaufListeDto trainingslauf_liste = 36;
+        TrainingslaufNichtGefundenAntwortDto trainingslauf_nicht_gefunden_antwort = 37;
 
     }
 }
@@ -396,6 +398,13 @@ message DatensatzSampleDto {
     string dc2_pfad = 3;
     int32 label = 4;
     int32 split = 5;
+}
+
+message DatensatzTagDto {
+    string id = 1;
+    string name = 2;
+    int32 status = 3;
+    int32 eingefrorene_version = 4;
 }
 
 message HistorieEintragDto {
@@ -953,6 +962,10 @@ message GetUnklassifizierteImagePairsDto {
     int32 max_anzahl = 1;
 }
 
+message HoleDatensaetzeFuerPaarDto {
+    string image_pair_id = 1;
+}
+
 message HoleDatensatzDto {
     string datensatz_id = 1;
 }
@@ -1022,6 +1035,11 @@ message TrainingslaufAntwortDto {
     EndmetrikenDto endmetriken = 10;
     string fehlergrund = 11;
     int64 startzeit = 12;
+}
+
+message DatensaetzeFuerPaarDto {
+    string image_pair_id = 1;
+    repeated DatensatzTagDto tags = 2;
 }
 
 message DatensatzListeDto {

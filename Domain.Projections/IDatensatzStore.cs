@@ -49,4 +49,10 @@ public interface IDatensatzReadStore
     /// </summary>
     Task<(IReadOnlyList<DatensatzSampleReadModel> Items, int GesamtAnzahl)> HoleSamplesAsync(
         Guid datensatzId, int version, int seite, int seitenGroesse);
+
+    /// <summary>
+    /// Rückwärts-Index: alle Datensätze, in denen das Bildpaar (als Entwurfs-Mitglied) liegt.
+    /// Liest die <see cref="DatensatzMitgliedschaftReadModel"/>-Zeile und joint die Kopf-Daten.
+    /// </summary>
+    Task<IReadOnlyList<DatensatzReadModel>> HoleDatensaetzeFuerPaarAsync(Guid imagePairId);
 }

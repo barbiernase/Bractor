@@ -55,6 +55,12 @@ public static class DomainServiceExtensions
                 .Identity(x => x.Id)
                 .UseOptimisticConcurrency(false);
 
+            // Rückwärts-Index (Datensatz-als-Tag §4.3): je ImagePairId die Datensätze.
+            options.Schema.For<DatensatzMitgliedschaftReadModel>()
+                .DatabaseSchemaName("rm")
+                .Identity(x => x.Id)
+                .UseOptimisticConcurrency(false);
+
             // ── Trainingslauf ──
             options.Schema.For<TrainingslaufReadModel>()
                 .DatabaseSchemaName("rm")
