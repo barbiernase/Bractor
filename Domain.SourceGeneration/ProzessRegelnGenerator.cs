@@ -46,9 +46,11 @@ namespace Domain.SourceGeneration
                 .OrderBy(t => t.Name)
                 .ToList();
 
-            // Nur die Assembly emittiert die Registry, die auch Definitionen deklariert (Domain). Sonst
-            // entstünden in Domain.Pipeline/Domain.Projections leere Doppel-Klassen → CS0433-Kollision.
-            if (defs.Count == 0) return;
+            // Die Registry gehört in die Domain-Assembly (dort werden Prozesse deklariert und von dort
+            // referenziert Infrastructure sie). Andere Assemblies (Domain.Pipeline/Domain.Projections)
+            // dürfen sie NICHT emittieren, sonst CS0433-Doppel-Klasse. Domain emittiert immer — auch leer,
+            // wenn es (wie hier nach der Domänen-Bereinigung) gar keine Prozesse gibt.
+            if (defs.Count == 0 && context.Compilation.AssemblyName != "Domain") return;
 
             // ★ P1c (TG-3): Name aus [ProzessName] (falls gesetzt), sonst Klassenname. Kollisionen → Build-Fehler.
             var benannt = defs.Select(d => (Name: ProzessIdentität(d), Def: d)).ToList();

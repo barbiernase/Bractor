@@ -1,26 +1,9 @@
 using System.Text.Json.Serialization;
 using Abstractions;
-using Domain.Antrag;
-using Domain.Auftrag;
-using Domain.Bestellung;
 using Domain.Datensatz;
-using Domain.Erinnerung;
-using Domain.Flug;
-using Domain.Hotel;
 using Domain.ImagePair;
-using Domain.Konto;
-using Domain.Willkommensbonus;
-using Domain.Lager;
 using Domain.Projections;
-using Domain.Reaktion;
-using Domain.Reise;
-using Domain.Reiseauftrag;
-using Domain.Sammelauftrag;
 using Domain.Trainingslauf;
-using Domain.Versand;
-using Domain.Verkauf;
-using Domain.Vorgang;
-using Domain.Zahlung;
 using Infrastructure.Aggregate;
 using Infrastructure.Prozess;
 
@@ -56,45 +39,11 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(PhysischesProduktGelabelt))]
 [JsonSerializable(typeof(ImagePairInspiziert))]
 // ── Konto ──
-[JsonSerializable(typeof(KontoEroeffnet))]
-[JsonSerializable(typeof(KontoBelastet))]
-[JsonSerializable(typeof(KontoErstattet))]
-[JsonSerializable(typeof(Gutgeschrieben))]
-[JsonSerializable(typeof(GutschriftStorniert))]
-[JsonSerializable(typeof(BetragReserviert))]
-[JsonSerializable(typeof(ReservierungGebucht))]
-[JsonSerializable(typeof(ReservierungFreigegeben))]
-[JsonSerializable(typeof(WillkommensbonusBeauftragt))]
 // ── Lager / Versand / Zahlung / Bestellung ──
-[JsonSerializable(typeof(BestandReserviert))]
-[JsonSerializable(typeof(BestandFreigegeben))]
-[JsonSerializable(typeof(LagerEingerichtet))]
-[JsonSerializable(typeof(LagerEingerichtet_V1))] // frühere Gestalt (Schema-Evolution) — nur lesbar
-[JsonSerializable(typeof(Versendet))]
-[JsonSerializable(typeof(ZahlungskontoEingerichtet))]
-[JsonSerializable(typeof(BestellungAufgegeben))]
 // ── Auftrag / Sammelauftrag ──
-[JsonSerializable(typeof(UeberweisungBeauftragt))]
-[JsonSerializable(typeof(SammelUeberweisungBeauftragt))]
 // ── Reise / Reiseauftrag / Flug / Hotel ──
-[JsonSerializable(typeof(FlugEingerichtet))]
-[JsonSerializable(typeof(FlugReserviert))]
-[JsonSerializable(typeof(FlugFreigegeben))]
-[JsonSerializable(typeof(HotelEingerichtet))]
-[JsonSerializable(typeof(HotelReserviert))]
-[JsonSerializable(typeof(HotelFreigegeben))]
-[JsonSerializable(typeof(ReiseGebucht))]
-[JsonSerializable(typeof(ReiseBestaetigt))]
 // ── Antrag / Vorgang / Erinnerung ──
-[JsonSerializable(typeof(AntragGestellt))]
-[JsonSerializable(typeof(VorgangAktiviert))]
-[JsonSerializable(typeof(VorgangGenehmigt))]
-[JsonSerializable(typeof(ErinnerungAusgeloest))]
 // ── Verkauf (DDD-Muster-Aggregat: nur PERSISTENTE Events; Value Object Geldwert reist transitiv mit) ──
-[JsonSerializable(typeof(VerkaufsauftragEroeffnet))]
-[JsonSerializable(typeof(VerkaufspositionHinzugefuegt))]
-[JsonSerializable(typeof(VerkaufsauftragAufgegeben))]
-[JsonSerializable(typeof(VerkaufsauftragStorniert))]
 // ── Datensatz (nur PERSISTENTE Events; Value Objects reisen transitiv mit) ──
 [JsonSerializable(typeof(DatensatzErstellt))]
 [JsonSerializable(typeof(RangeAngefordert))]
@@ -113,7 +62,6 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(TrainingAbgebrochen))]
 [JsonSerializable(typeof(TrainingHaengengeblieben))]
 // ── Reaktion ──
-[JsonSerializable(typeof(ReaktionGewirkt))]
 // ── Prozess-intern (IProzessIntern, aber IEvent → persistiert) ──
 [JsonSerializable(typeof(ProzessGestartet))]
 [JsonSerializable(typeof(ProzessBeendet))]

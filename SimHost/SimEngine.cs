@@ -45,7 +45,7 @@ public sealed class SimEngine
     public SimEngine()
     {
         _iCommand = typeof(ICommand); _iState = typeof(IState); _iCreation = typeof(ICreationCommand);
-        var domain = typeof(Domain.Konto.Konto).Assembly;
+        var domain = typeof(Domain.Datensatz.ErstelleDatensatz).Assembly;
 
         // Nur Anzeige-Metadaten fürs Board-Formular — die Ausführung routet der Kern selbst.
         foreach (var t in domain.GetTypes())

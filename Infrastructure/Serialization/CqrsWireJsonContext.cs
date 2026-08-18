@@ -1,28 +1,11 @@
 using System.Text.Json.Serialization;
 using Abstractions;
-using Domain.Antrag;
-using Domain.Auftrag;
-using Domain.Bestellung;
 using Domain.Datensatz;
-using Domain.Erinnerung;
-using Domain.Flug;
-using Domain.Hotel;
 using Domain.ImagePair;
-using Domain.Konto;
-using Domain.Willkommensbonus;
-using Domain.Lager;
 using Domain.Pipeline.Benchmark;
 using Domain.Pipeline.ImageProcessing;
 using Domain.Projections;
-using Domain.Reaktion;
-using Domain.Reise;
-using Domain.Reiseauftrag;
-using Domain.Sammelauftrag;
 using Domain.Trainingslauf;
-using Domain.Versand;
-using Domain.Verkauf;
-using Domain.Vorgang;
-using Domain.Zahlung;
 using Infrastructure.Aggregate;
 using Infrastructure.Prozess;
 using Infrastructure.Projections;
@@ -82,7 +65,6 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(PipelineAck))]
 [JsonSerializable(typeof(ProzessWake))]
 // ── Commands (GeneratedTypeRegistry.Commands) ──
-[JsonSerializable(typeof(Aktiviere))]
 // ── Datensatz-Commands ──
 [JsonSerializable(typeof(ErstelleDatensatz))]
 [JsonSerializable(typeof(FuegeRangeHinzu))]
@@ -92,7 +74,6 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(SetzeSplit))]
 [JsonSerializable(typeof(FriereEin))]
 [JsonSerializable(typeof(SchliesseEinfrierenAb))]
-[JsonSerializable(typeof(BeauftrageSammelueberweisung))]
 // ── Trainingslauf-Commands ──
 [JsonSerializable(typeof(StarteTraining))]
 [JsonSerializable(typeof(BricheTrainingAb))]
@@ -101,21 +82,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(MeldeTrainingAbgeschlossen))]
 [JsonSerializable(typeof(MeldeTrainingGescheitert))]
 [JsonSerializable(typeof(MarkiereAlsHaengengeblieben))]
-[JsonSerializable(typeof(BeauftrageUeberweisung))]
-[JsonSerializable(typeof(BelasteKonto))]
-[JsonSerializable(typeof(BestaetigeReise))]
-[JsonSerializable(typeof(BucheReise))]
-[JsonSerializable(typeof(BucheReservierung))]
-[JsonSerializable(typeof(EroeffneKonto))]
-[JsonSerializable(typeof(ErstatteKonto))]
 [JsonSerializable(typeof(ErstelleImagePair))]
-[JsonSerializable(typeof(FristFaellig))]
-[JsonSerializable(typeof(GebeBestandFrei))]
-[JsonSerializable(typeof(GebeFlugFrei))]
-[JsonSerializable(typeof(GebeHotelFrei))]
-[JsonSerializable(typeof(GebeReservierungFrei))]
-[JsonSerializable(typeof(Genehmige))]
-[JsonSerializable(typeof(GibBestellungAuf))]
 [JsonSerializable(typeof(KlassifiziereBildPaarDurchKi))]
 [JsonSerializable(typeof(KlassifiziereEinzelBildDurchKi))]
 [JsonSerializable(typeof(LabelBildPaar))]
@@ -124,22 +91,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(LabelPhysischesProdukt))]
 [JsonSerializable(typeof(MarkiereAlsInspiziert))]
 [JsonSerializable(typeof(MeldeBildVerfuegbar))]
-[JsonSerializable(typeof(ReserviereBestand))]
-[JsonSerializable(typeof(ReserviereBetrag))]
-[JsonSerializable(typeof(ReserviereFlug))]
-[JsonSerializable(typeof(ReserviereHotel))]
-[JsonSerializable(typeof(RichteFlugEin))]
-[JsonSerializable(typeof(RichteHotelEin))]
-[JsonSerializable(typeof(RichteLagerEin))]
-[JsonSerializable(typeof(RichteZahlungskontoEin))]
-[JsonSerializable(typeof(BeauftrageWillkommensbonus))]
-[JsonSerializable(typeof(SchreibeGut))]
-[JsonSerializable(typeof(StelleAntrag))]
-[JsonSerializable(typeof(StorniereGutschrift))]
-[JsonSerializable(typeof(Versende))]
-[JsonSerializable(typeof(WirkeReaktion))]
 // ── Events (GeneratedTypeRegistry.Events, inkl. ITransientEvent + Prozess-intern) ──
-[JsonSerializable(typeof(AntragGestellt))]
 // ── Datensatz-Events (inkl. Ablehnungen als ITransientEvent) ──
 [JsonSerializable(typeof(DatensatzErstellt))]
 [JsonSerializable(typeof(RangeAngefordert))]
@@ -166,11 +118,6 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(TrainingslaufNichtGefunden))]
 [JsonSerializable(typeof(TrainingNichtAktiv))]
 [JsonSerializable(typeof(TrainingBereitsBeendet))]
-[JsonSerializable(typeof(BestandFreigegeben))]
-[JsonSerializable(typeof(BestandReichtNicht))]
-[JsonSerializable(typeof(BestandReserviert))]
-[JsonSerializable(typeof(BestellungAufgegeben))]
-[JsonSerializable(typeof(BetragReserviert))]
 [JsonSerializable(typeof(BildNichtVerfuegbar))]
 [JsonSerializable(typeof(BildPaarDurchKiKlassifiziert))]
 [JsonSerializable(typeof(BildPaarGelabelt))]
@@ -178,22 +125,8 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(BildVerfuegbar))]
 [JsonSerializable(typeof(BildVersionBereitsVerfuegbar))]
 [JsonSerializable(typeof(CommandFailed))]
-[JsonSerializable(typeof(DeckungReichtNicht))]
 [JsonSerializable(typeof(EinzelBildDurchKiKlassifiziert))]
 [JsonSerializable(typeof(EinzelBildGelabelt))]
-[JsonSerializable(typeof(ErinnerungAusgeloest))]
-[JsonSerializable(typeof(FlugAusgebucht))]
-[JsonSerializable(typeof(FlugEingerichtet))]
-[JsonSerializable(typeof(FlugExistiertBereits))]
-[JsonSerializable(typeof(FlugFreigegeben))]
-[JsonSerializable(typeof(FlugReserviert))]
-[JsonSerializable(typeof(Gutgeschrieben))]
-[JsonSerializable(typeof(GutschriftStorniert))]
-[JsonSerializable(typeof(HotelAusgebucht))]
-[JsonSerializable(typeof(HotelEingerichtet))]
-[JsonSerializable(typeof(HotelExistiertBereits))]
-[JsonSerializable(typeof(HotelFreigegeben))]
-[JsonSerializable(typeof(HotelReserviert))]
 [JsonSerializable(typeof(ImagePairEingabeUngueltig))]
 [JsonSerializable(typeof(ImagePairErstellt))]
 [JsonSerializable(typeof(ImagePairExistiertBereits))]
@@ -202,39 +135,17 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(ImagePairNichtGefunden))]
 [JsonSerializable(typeof(KommandoAbgelehnt))]
 [JsonSerializable(typeof(KommandoVerarbeitet))]
-[JsonSerializable(typeof(KontoBelastet))]
-[JsonSerializable(typeof(KontoEroeffnet))]
-[JsonSerializable(typeof(KontoErstattet))]
-[JsonSerializable(typeof(KontoExistiertBereits))]
-[JsonSerializable(typeof(KontoGesperrt))]
-[JsonSerializable(typeof(KontoNichtGefunden))]
-[JsonSerializable(typeof(KontoUngedeckt))]
-[JsonSerializable(typeof(LagerEingerichtet))]
-[JsonSerializable(typeof(LagerExistiertBereits))]
 [JsonSerializable(typeof(PaarNichtKomplett))]
 [JsonSerializable(typeof(PhysischesProduktGelabelt))]
 [JsonSerializable(typeof(ProzessBeendet))]
 [JsonSerializable(typeof(ProzessGestartet))]
-[JsonSerializable(typeof(ReaktionGewirkt))]
 [JsonSerializable(typeof(RegionIndexUngueltig))]
 [JsonSerializable(typeof(RegionLabelsUngueltig))]
-[JsonSerializable(typeof(ReiseBestaetigt))]
-[JsonSerializable(typeof(ReiseGebucht))]
-[JsonSerializable(typeof(ReservierungFreigegeben))]
-[JsonSerializable(typeof(ReservierungGebucht))]
-[JsonSerializable(typeof(WillkommensbonusBeauftragt))]
-[JsonSerializable(typeof(SammelUeberweisungBeauftragt))]
 [JsonSerializable(typeof(SchrittGescheitert))]
-[JsonSerializable(typeof(UeberweisungBeauftragt))]
-[JsonSerializable(typeof(Versendet))]
-[JsonSerializable(typeof(VorgangAktiviert))]
-[JsonSerializable(typeof(VorgangGenehmigt))]
-[JsonSerializable(typeof(ZahlungskontoEingerichtet))]
 // ── Pipeline-Trigger (GeneratedTypeRegistry.Triggers) ──
 [JsonSerializable(typeof(BenchPing))]
 [JsonSerializable(typeof(DateiErkannt))]
 // ── Signale (GeneratedTypeRegistry.Signals, StateChangeVia{Event}) ──
-[JsonSerializable(typeof(StateChangeViaAntragGestellt))]
 // ── Datensatz-Signale (nur persistierbare Events) ──
 [JsonSerializable(typeof(StateChangeViaDatensatzErstellt))]
 [JsonSerializable(typeof(StateChangeViaRangeAngefordert))]
@@ -252,68 +163,22 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(StateChangeViaTrainingGescheitert))]
 [JsonSerializable(typeof(StateChangeViaTrainingAbgebrochen))]
 [JsonSerializable(typeof(StateChangeViaTrainingHaengengeblieben))]
-[JsonSerializable(typeof(StateChangeViaBestandFreigegeben))]
-[JsonSerializable(typeof(StateChangeViaBestandReserviert))]
-[JsonSerializable(typeof(StateChangeViaBestellungAufgegeben))]
-[JsonSerializable(typeof(StateChangeViaBetragReserviert))]
 [JsonSerializable(typeof(StateChangeViaBildPaarDurchKiKlassifiziert))]
 [JsonSerializable(typeof(StateChangeViaBildPaarGelabelt))]
 [JsonSerializable(typeof(StateChangeViaBildRegionGelabelt))]
 [JsonSerializable(typeof(StateChangeViaBildVerfuegbar))]
 [JsonSerializable(typeof(StateChangeViaEinzelBildDurchKiKlassifiziert))]
 [JsonSerializable(typeof(StateChangeViaEinzelBildGelabelt))]
-[JsonSerializable(typeof(StateChangeViaErinnerungAusgeloest))]
-[JsonSerializable(typeof(StateChangeViaFlugEingerichtet))]
-[JsonSerializable(typeof(StateChangeViaFlugFreigegeben))]
-[JsonSerializable(typeof(StateChangeViaFlugReserviert))]
-[JsonSerializable(typeof(StateChangeViaGutgeschrieben))]
-[JsonSerializable(typeof(StateChangeViaWillkommensbonusBeauftragt))]
-[JsonSerializable(typeof(StateChangeViaGutschriftStorniert))]
-[JsonSerializable(typeof(StateChangeViaHotelEingerichtet))]
-[JsonSerializable(typeof(StateChangeViaHotelFreigegeben))]
-[JsonSerializable(typeof(StateChangeViaHotelReserviert))]
 [JsonSerializable(typeof(StateChangeViaImagePairErstellt))]
 [JsonSerializable(typeof(StateChangeViaImagePairInspiziert))]
 [JsonSerializable(typeof(StateChangeViaImagePairKomplett))]
 [JsonSerializable(typeof(StateChangeViaKommandoAbgelehnt))]
 [JsonSerializable(typeof(StateChangeViaKommandoVerarbeitet))]
-[JsonSerializable(typeof(StateChangeViaKontoBelastet))]
-[JsonSerializable(typeof(StateChangeViaKontoEroeffnet))]
-[JsonSerializable(typeof(StateChangeViaKontoErstattet))]
-[JsonSerializable(typeof(StateChangeViaLagerEingerichtet))]
 [JsonSerializable(typeof(StateChangeViaPhysischesProduktGelabelt))]
 [JsonSerializable(typeof(StateChangeViaProzessBeendet))]
 [JsonSerializable(typeof(StateChangeViaProzessGestartet))]
-[JsonSerializable(typeof(StateChangeViaReaktionGewirkt))]
-[JsonSerializable(typeof(StateChangeViaReiseBestaetigt))]
-[JsonSerializable(typeof(StateChangeViaReiseGebucht))]
-[JsonSerializable(typeof(StateChangeViaReservierungFreigegeben))]
-[JsonSerializable(typeof(StateChangeViaReservierungGebucht))]
-[JsonSerializable(typeof(StateChangeViaSammelUeberweisungBeauftragt))]
 [JsonSerializable(typeof(StateChangeViaSchrittGescheitert))]
-[JsonSerializable(typeof(StateChangeViaUeberweisungBeauftragt))]
-[JsonSerializable(typeof(StateChangeViaVersendet))]
-[JsonSerializable(typeof(StateChangeViaVorgangAktiviert))]
-[JsonSerializable(typeof(StateChangeViaVorgangGenehmigt))]
-[JsonSerializable(typeof(StateChangeViaZahlungskontoEingerichtet))]
-[JsonSerializable(typeof(StateChangeViaVerkaufsauftragEroeffnet))]
-[JsonSerializable(typeof(StateChangeViaVerkaufspositionHinzugefuegt))]
-[JsonSerializable(typeof(StateChangeViaVerkaufsauftragAufgegeben))]
-[JsonSerializable(typeof(StateChangeViaVerkaufsauftragStorniert))]
 // ── Verkauf (DDD-Muster-Aggregat: Value Object Geldwert reist transitiv mit) ──
-[JsonSerializable(typeof(EroeffneVerkaufsauftrag))]
-[JsonSerializable(typeof(FuegePositionHinzu))]
-[JsonSerializable(typeof(GibVerkaufsauftragAuf))]
-[JsonSerializable(typeof(StorniereVerkaufsauftrag))]
-[JsonSerializable(typeof(VerkaufsauftragEroeffnet))]
-[JsonSerializable(typeof(VerkaufspositionHinzugefuegt))]
-[JsonSerializable(typeof(VerkaufsauftragAufgegeben))]
-[JsonSerializable(typeof(VerkaufsauftragStorniert))]
-[JsonSerializable(typeof(VerkaufsauftragExistiertBereits))]
-[JsonSerializable(typeof(VerkaufsauftragNichtGefunden))]
-[JsonSerializable(typeof(AuftragNichtOffen))]
-[JsonSerializable(typeof(KreditlimitUeberschritten))]
-[JsonSerializable(typeof(WaehrungPasstNicht))]
 public partial class CqrsWireJsonContext : JsonSerializerContext
 {
 }
