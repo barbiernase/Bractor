@@ -1,0 +1,77 @@
+@namespace Domain.Client.Modules.Blazor.TrainingslaufListe
+@using Domain.Client.Modules.Trainingslaeufe
+@using Domain.Trainingslauf
+@using global::Client.Infrastructure.Abstractions
+@inject TrainingslaufListeStore Store
+@inject EffectScope Fx
+@implements IDisposable
+
+@*
+    Trainingslauf-Liste (linke Sidebar). Zeigt je Lauf einen Status-Badge (live), die
+    Epoche (i/n) und die kurze Datensatz-Referenz. Klick fokussiert den Lauf im Dashboard.
+*@
+
+<div style="display:flex;flex-direction:column;height:100%;font-size:12px">
+    @if (Store.Laeufe.Count == 0)
+    {
+        <div style="padding:8px;color:#888">Noch keine Trainingsläufe.</div>
+    }
+    else
+    {
+        <div style="flex:1;min-height:0;overflow-y:auto">
+            @foreach (var l in Store.Laeufe)
+            {
+                var aktiv = Store.AktiveId == l.Id;
+                <div @key="l.Id" @onclick="() => Waehle(l.Id)" style="@ZeilenStil(aktiv)">
+                    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px">
+                        <span style="font-family:monospace">@Kurz(l.Id)</span>
+                        <span style="@BadgeStil(l.Status)">@StatusText(l.Status)</span>
+                    </div>
+                    <div style="color:#777;font-size:11px;margin-top:2px">
+                        Epoche @l.AktuelleEpoche/@l.GesamtEpochen · DS @Kurz(l.DatensatzId) v@l.DatensatzVersion
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    protected override void OnInitialized()
+        => Fx.OnChanged(Store, () => InvokeAsync(StateHasChanged));
+
+    void Waehle(Guid id) => Fx.Dispatch(new TrainingslaufAusgewaehlt(id));
+
+    public void Dispose() => Fx.Dispose();
+
+    private static string Kurz(Guid id) => id.ToString("N")[..8];
+
+    private static string ZeilenStil(bool aktiv) =>
+        $"padding:6px 8px;cursor:pointer;border-left:3px solid {(aktiv ? "#1976d2" : "transparent")};" +
+        $"background:{(aktiv ? "#e3f2fd" : "transparent")}";
+
+    private static string StatusText(TrainingsStatus s) => s switch
+    {
+        TrainingsStatus.Angefordert      => "angefordert",
+        TrainingsStatus.Laeuft           => "läuft",
+        TrainingsStatus.Abgeschlossen    => "abgeschlossen",
+        TrainingsStatus.Gescheitert      => "gescheitert",
+        TrainingsStatus.Abgebrochen      => "abgebrochen",
+        TrainingsStatus.Haengengeblieben => "hängengeblieben",
+        _                                => s.ToString()
+    };
+
+    private static string BadgeStil(TrainingsStatus s)
+    {
+        var (bg, fg) = s switch
+        {
+            TrainingsStatus.Laeuft           => ("#1565c0", "#fff"),
+            TrainingsStatus.Abgeschlossen    => ("#2e7d32", "#fff"),
+            TrainingsStatus.Gescheitert      => ("#c62828", "#fff"),
+            TrainingsStatus.Abgebrochen      => ("#757575", "#fff"),
+            TrainingsStatus.Haengengeblieben => ("#ef6c00", "#fff"),
+            _                                => ("#ececec", "#555") // Angefordert
+        };
+        return $"background:{bg};color:{fg};border-radius:8px;padding:1px 8px;font-size:10px;white-space:nowrap";
+    }
+}
