@@ -21,9 +21,12 @@ namespace Client.Infrastructure.Versioning;
 /// </summary>
 public class VersioningModule : IVersioningModule
 {
+    private const int RecentWritesCap = 64;   // genug für eine Label-/Edit-Sitzung, hält das Set klein
+
     private readonly object _gate = new();
     private readonly Dictionary<Guid, int> _occVersions = new();   // Stream-Head (inkl. Marke) → ExpectedVersion
     private readonly Dictionary<Guid, int> _readTargets = new();   // Domain-Event-Version → Read-Your-Writes-Ziel
+    private readonly LinkedList<Guid> _recentWrites = new();       // MRU-Ordnung: neueste hinten, Cap RecentWritesCap
     private readonly List<IDisposable> _subscriptions = new();
 
     /// <summary>
@@ -73,9 +76,37 @@ public class VersioningModule : IVersioningModule
 
     public void TrackFromDeps(IEnumerable<AggregateDep> deps)
     {
+        // BEWUSST KEIN OCC-Tracking aus Query-Deps: die Deps tragen die DOMAIN-Event-Version des
+        // Read-Models, NICHT die marker-inklusive Stream-Head-Version. Als OCC-ExpectedVersion wäre
+        // sie zu niedrig (es fehlen die co-committeten KommandoVerarbeitet-Marken) → der erste
+        // Command auf einem nur per Query geladenen Aggregat schlüge an der OCC fehl ("erster Klick
+        // verpufft"). Die OCC-Version kommt AUSSCHLIESSLICH aus Event-Pushes (StreamHeadVersion,
+        // siehe TrackFromContext). Kennt der Client noch keine Head-Version, sendet ConnectionModule
+        // den Command mit Sentinel -1 → der Server fährt Emittiert (kein OCC, Inbox-Dedup).
+        // Die Deps werden weiterhin für die Read-Your-Writes-Prüfung der QueryBridge gebraucht
+        // (dep.Version vs. GetReadTarget) — dafür ist hier aber nichts zu speichern.
+        _ = deps;
+    }
+
+    public void MarkWritten(Guid aggregateId)
+    {
+        if (aggregateId == Guid.Empty) return;
         lock (_gate)
-            foreach (var dep in deps)
-                Bump(_occVersions, dep.Id, dep.Version);
+        {
+            _recentWrites.Remove(aggregateId);      // Dedup: falls schon vorhanden, ans Ende (MRU)
+            _recentWrites.AddLast(aggregateId);
+            while (_recentWrites.Count > RecentWritesCap)
+                _recentWrites.RemoveFirst();        // ältestes fällt heraus
+        }
+    }
+
+    public IReadOnlyList<string> RecentWrites
+    {
+        get
+        {
+            lock (_gate)
+                return _recentWrites.Select(id => id.ToString()).ToList();
+        }
     }
 
     /// <summary>Entfernt alle gecachten Versionen. Nützlich bei Reconnect.</summary>
@@ -85,6 +116,7 @@ public class VersioningModule : IVersioningModule
         {
             _occVersions.Clear();
             _readTargets.Clear();
+            _recentWrites.Clear();
         }
     }
 

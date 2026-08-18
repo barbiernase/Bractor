@@ -233,7 +233,7 @@ public class ProjectionQueryServiceGenerator : IIncrementalGenerator
         sb.AppendLine("    /// Führt eine Query aus. Erstellt QueryEnvelope für Transport-Metadaten.");
         sb.AppendLine("    /// Deps sind null wenn TrackDeps=false oder kein ctx.Track() aufgerufen wurde.");
         sb.AppendLine("    /// </summary>");
-        sb.AppendLine("    public async Task<QueryResponse<IQueryResponse>> ExecuteAsync(IQuery query)");
+        sb.AppendLine("    public async Task<QueryResponse<IQueryResponse>> ExecuteAsync(IQuery query, IReadOnlyList<string>? expectedFreshIds = null)");
         sb.AppendLine("    {");
         sb.AppendLine("        ArgumentNullException.ThrowIfNull(query);");
         sb.AppendLine();
@@ -243,6 +243,14 @@ public class ProjectionQueryServiceGenerator : IIncrementalGenerator
         sb.AppendLine("        var ctx = new ReadContext();");
         sb.AppendLine("        var envelope = new QueryEnvelope();");
         sb.AppendLine("        var data = await entry.Handler(query, envelope, ctx);");
+        sb.AppendLine();
+        sb.AppendLine("        // Read-Your-Writes: die vom Client mitgeschickten \"zuletzt geschrieben\"-IDs zusätzlich als");
+        sb.AppendLine("        // Deps tracken. So liefert der Deps-Read auch deren (evtl. noch stale) Read-Model-Version →");
+        sb.AppendLine("        // der Client fasst bounded nach, bis die Projektion die eigenen Writes eingeholt hat — auch");
+        sb.AppendLine("        // wenn ein frisch geschriebenes Objekt (noch) nicht ins gefilterte Ergebnis fällt.");
+        sb.AppendLine("        if (expectedFreshIds != null)");
+        sb.AppendLine("            foreach (var __freshId in expectedFreshIds)");
+        sb.AppendLine("                ctx.Track(__freshId);");
         sb.AppendLine();
         sb.AppendLine("        IReadOnlyList<AggregateMeta>? deps = null;");
         sb.AppendLine("        if (entry.TrackDeps && ctx.HasTrackedIds && _depsReader != null)");

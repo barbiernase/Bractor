@@ -609,8 +609,9 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 return;
             }
 
-            // Fallback: ProjectionQueryService (bestehend)
-            var response = await _queryService.ExecuteAsync(query);
+            // Fallback: ProjectionQueryService (bestehend). Die vom Client mitgeschickten
+            // "zuletzt geschrieben"-IDs werden als zusätzliche Deps getrackt (Read-Your-Writes).
+            var response = await _queryService.ExecuteAsync(query, request.ExpectedFreshIds);
             var responseDto = _mapper.ToQueryResponse(response, request.CorrelationId);
             var serverMsg = new ProtoRepo.ServerMessage { QueryResponse = responseDto };
             

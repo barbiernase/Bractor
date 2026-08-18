@@ -150,14 +150,24 @@ public class ConnectionModule : IAsyncDisposable
             return;
         }
 
+        // Read-Your-Writes: dieses Aggregat als "gerade geschrieben" merken → geht als
+        // expected_fresh_ids mit künftigen Queries mit, bis die Projektion es eingeholt hat.
+        _versioning.MarkWritten(command.AggregateId);
+
         try
         {
             // ExpectedVersion-Logik:
-            //   ICreationCommand → immer 0 (Aggregat darf noch nicht existieren)
-            //   Alle anderen     → aus VersioningModule (Client kennt Version aus Events/Deps)
+            //   ICreationCommand → immer 0 (Aggregat darf noch nicht existieren).
+            //   Sonst, wenn der Client die (marker-inklusive) Stream-Head-Version aus einem
+            //     Event-Push kennt → diese als OCC-ExpectedVersion (CommandModus.Client).
+            //   Sonst (Aggregat nur per Query geladen, noch KEIN Event-Push in dieser Sitzung)
+            //     → Sentinel -1: der Server mappt negativ auf CommandModus.Emittiert (kein OCC,
+            //     Inbox-Dedup). Sonst schlüge der erste Command fehl, weil die einzige dem Client
+            //     bekannte Version die Domain-Version (aus Query-Deps) ohne die co-committeten
+            //     KommandoVerarbeitet-Marken wäre — also zu niedrig für die OCC gegen den Head.
             var expectedVersion = command is ICreationCommand
                 ? 0
-                : _versioning.GetVersion(command.AggregateId) ?? 0;
+                : _versioning.GetVersion(command.AggregateId) ?? -1;
 
             var envelope = new CommandEnvelope
             {

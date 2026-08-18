@@ -153,32 +153,34 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
     /// Thread-safe: Mehrere Queries können parallel laufen (Writes serialisiert).
     /// </summary>
     public async Task<QueryResponse<TResponse>> QueryAsync<TResponse>(
-        IQuery query, 
+        IQuery query,
         string correlationId,
+        IReadOnlyList<string>? expectedFreshIds = null,
         CancellationToken ct = default) where TResponse : IQueryResponse
     {
         EnsureConnected();
-        
+
         // TaskCompletionSource VOR dem Senden registrieren
         var tcs = new TaskCompletionSource<QueryResponse>(TaskCreationOptions.RunContinuationsAsynchronously);
-        
+
         if (!_pendingQueries.TryAdd(correlationId, tcs))
         {
             throw new InvalidOperationException($"Query with CorrelationId '{correlationId}' already pending");
         }
-        
+
         try
         {
             // Query senden
             var queryDto = _mapper.MapToDto(query);
-            var message = new ClientMessage
+            var queryRequest = new QueryRequest
             {
-                Query = new QueryRequest
-                {
-                    CorrelationId = correlationId,
-                    Payload = queryDto
-                }
+                CorrelationId = correlationId,
+                Payload = queryDto
             };
+            // Read-Your-Writes: die zuletzt beschriebenen Aggregate mitschicken (Deps-Tracking).
+            if (expectedFreshIds is { Count: > 0 })
+                queryRequest.ExpectedFreshIds.AddRange(expectedFreshIds);
+            var message = new ClientMessage { Query = queryRequest };
             
             await SchreibeAsync(message, ct);
             

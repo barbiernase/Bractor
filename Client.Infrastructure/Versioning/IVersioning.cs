@@ -28,6 +28,17 @@ public interface IVersioningModule
     /// Wird von der QueryBridge aufgerufen.
     /// </summary>
     void TrackFromDeps(IEnumerable<AggregateDep> deps);
+
+    /// <summary>
+    /// Merkt sich ein Aggregat, das der Client GERADE beschrieben hat (beim Command-Senden aufgerufen).
+    /// Read-Your-Writes: diese IDs gehen als <c>expected_fresh_ids</c> mit jeder Query mit, damit die
+    /// Leseseite sie als Deps trackt und der Client nachfasst, bis die Projektion sie eingeholt hat.
+    /// Recency-begrenzt (die ältesten fallen heraus) — hält das Set klein.
+    /// </summary>
+    void MarkWritten(Guid aggregateId);
+
+    /// <summary>Die zuletzt beschriebenen Aggregat-IDs (readModel-ID-Format) für die RYW-Deps.</summary>
+    IReadOnlyList<string> RecentWrites { get; }
 }
 
 /// <summary>

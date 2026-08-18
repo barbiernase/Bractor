@@ -37,10 +37,15 @@ public interface IGrpcProxy
     /// <summary>Sendet einen Command (Fire-and-Forget).</summary>
     Task SendCommandAsync(CommandEnvelope envelope, CancellationToken ct = default);
 
-    /// <summary>Sendet eine Query und wartet auf Response.</summary>
+    /// <summary>
+    /// Sendet eine Query und wartet auf Response. <paramref name="expectedFreshIds"/> sind
+    /// Aggregat-IDs, die der Client zuletzt beschrieben hat — die Leseseite trackt sie als Deps,
+    /// damit das bounded Read-Your-Writes nachfasst, bis die Projektion die Writes eingeholt hat.
+    /// </summary>
     Task<QueryResponse<TResponse>> QueryAsync<TResponse>(
         IQuery query,
         string correlationId,
+        IReadOnlyList<string>? expectedFreshIds = null,
         CancellationToken ct = default) where TResponse : IQueryResponse;
 
     /// <summary>Subscribes für einen Event-Typ.</summary>

@@ -357,6 +357,11 @@ private string GenerateQueryRequestMessage()
            message QueryRequest {
                string correlation_id = 1;
                QueryPayloadDto payload = 2;
+               // Read-Your-Writes: Aggregat-IDs, die der Client zuletzt beschrieben hat. Die
+               // Leseseite trackt sie als Deps, damit das bounded RYW so lange nachfasst, bis die
+               // (asynchrone) Projektion die eigenen Writes eingeholt hat — auch wenn ein frisch
+               // geschriebenes Objekt (noch) nicht ins gefilterte Ergebnis fällt.
+               repeated string expected_fresh_ids = 3;
            }
            """;
 }

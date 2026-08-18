@@ -88,9 +88,14 @@ public class QueryBridge : IAsyncDisposable
             List<AggregateDep>? deps = null;
             object? data = null;
 
+            // Read-Your-Writes: die zuletzt vom Client beschriebenen Aggregate mitschicken. Die
+            // Leseseite trackt sie als Deps → IstReadModelZurueck erkennt auch ein frisch
+            // geschriebenes Objekt, das (noch) nicht ins gefilterte Ergebnis fällt, und fasst nach.
+            var frischeIds = _versioning.RecentWrites;
+
             for (var attempt = 1; attempt <= MaxReadAttempts; attempt++)
             {
-                var response = await _proxy.QueryAsync<TResponse>(query, correlationId);
+                var response = await _proxy.QueryAsync<TResponse>(query, correlationId, frischeIds);
                 deps = response.Deps?.Select(d =>
                     new AggregateDep(d.Id, d.AggregateType, d.Version)).ToList();
                 data = response.Data!;
