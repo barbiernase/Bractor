@@ -1,3 +1,4 @@
+using System.Linq;
 using Client.Infrastructure.Abstractions;
 using Domain.Datensatz;
 
@@ -29,5 +30,21 @@ public partial class KuratierenIntentHandler
             yield return new EntfernePaar(ziel.Id, id);
         else
             yield return new NimmPaarAuf(ziel.Id, id);
+    }
+
+    // Dedizierte Mehrfach-Auswahl → EIN NimmRangeAuf (Herkunft „manuelle Auswahl"),
+    // danach Markierung leeren. Wiederverwendung des Range-Aufnahme-Wegs (Handoff §4.1 /
+    // Konzept §7): keine neuen Commands. Nur Nicht-Mitglieder aufnehmen (idempotent, aber
+    // hält die Provenienz-Zahl ehrlich).
+    IEnumerable<object> Handle(AuswahlAufgenommenAngefordert evt, MessageContext ctx)
+    {
+        if (_store.SammelZiel is not { } ziel) yield break;
+        if (ziel.IstEingefroren) yield break;
+
+        var neue = _store.Markierung.Where(id => !ziel.MitgliederIds.Contains(id)).ToList();
+        if (neue.Count > 0)
+            yield return new NimmRangeAuf(ziel.Id, neue, new RangeHerkunft(new RangeKriterien(), neue.Count));
+
+        yield return new MarkierungGeleert();
     }
 }

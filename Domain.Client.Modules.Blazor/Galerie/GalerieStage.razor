@@ -24,6 +24,21 @@
         <button style="@BtnStyle" @onclick="Weniger" disabled="@(_columns <= MinCols)">−</button>
         <span style="min-width:20px;text-align:center;color:#eee">@_columns</span>
         <button style="@BtnStyle" @onclick="Mehr" disabled="@(_columns >= MaxCols)">+</button>
+
+        <span style="width:10px"></span>
+        <button style="@AuswahlBtnStyle" @onclick="ToggleAuswahl"
+                title="Rubber-Band: Rechteck über die Kacheln ziehen; Klick togglet eine Kachel">
+            @(_auswahlModus ? "✓ Auswahl-Modus" : "Mehrfach-Auswahl")
+        </button>
+        @if (_auswahlModus)
+        {
+            <span style="color:#8ab4f8">@Store.Markierung.Count markiert</span>
+            <button style="@PrimaryBtnStyle" @onclick="AuswahlAufnehmen" disabled="@(!KannAufnehmen)">
+                ＋ ins Sammel-Ziel
+            </button>
+            <button style="@BtnStyle" @onclick="AuswahlLeeren" disabled="@(Store.Markierung.Count == 0)">leeren</button>
+        }
+
         <span style="margin-left:auto;color:#666">@Store.VirtualImagePairs.GesamtAnzahl Paare · Enter/Doppelklick → Bild</span>
     </div>
 
@@ -32,7 +47,8 @@
         <VirtualGrid TItem="ImagePairRecord" TKey="Guid"
                      Store="Store" Window="Store.VirtualImagePairs" Cursor="Store.Cursor"
                      Columns="_columns" AspectRatio="7.46"
-                     OnActivate="Auswaehlen" OnOpen="Oeffnen">
+                     OnActivate="Auswaehlen" OnOpen="Oeffnen"
+                     SelectionMode="_auswahlModus" OnBandSelect="BandSelected">
             <Cell Context="rec">
                 <div style="height:100%;padding:2px;box-sizing:border-box">
                     <div style="height:100%;background:#111;border-radius:3px;overflow:hidden;
@@ -76,6 +92,15 @@
                                          background:#7e57c2;color:#fff;text-align:center;line-height:13px;font-size:10px;border:1px solid #0006">✓</span>
                         }
 
+                        @* Dedizierte Markierung (Rubber-Band-Auswahl) — unabhängig von der Mitgliedschaft. *@
+                        @if (Store.IstMarkiert(rec.Id))
+                        {
+                            <span title="markiert"
+                                  style="position:absolute;bottom:3px;right:3px;width:15px;height:15px;border-radius:3px;
+                                         background:#0009;border:1px solid #5c9eff;color:#8ab4f8;font-size:10px;
+                                         line-height:13px;text-align:center">✓</span>
+                        }
+
                         @if (!rec.IstKomplett)
                         {
                             <span style="position:absolute;bottom:2px;left:4px;font-size:9px;color:#c9a227">unvollständig</span>
@@ -97,9 +122,18 @@
     private const int MinCols = 1;
     private const int MaxCols = 12;
     private int _columns = 3;
+    private bool _auswahlModus;
+
+    private bool KannAufnehmen => Store.SammelZiel is { IstEingefroren: false } && Store.Markierung.Count > 0;
 
     private const string BtnStyle =
-        "width:22px;height:22px;border:1px solid #444;background:#222;color:#ddd;border-radius:3px;cursor:pointer;line-height:1";
+        "height:22px;padding:0 6px;min-width:22px;border:1px solid #444;background:#222;color:#ddd;border-radius:3px;cursor:pointer;line-height:1";
+    private string AuswahlBtnStyle =>
+        "height:22px;padding:0 10px;border-radius:3px;cursor:pointer;line-height:1;font-size:12px;" +
+        (_auswahlModus ? "border:1px solid #5c9eff;background:#12233a;color:#bcd8ff"
+                       : "border:1px solid #444;background:#222;color:#ddd");
+    private const string PrimaryBtnStyle =
+        "height:22px;padding:0 10px;border:1px solid #7e57c2;background:#2a2140;color:#cbb8f0;border-radius:3px;cursor:pointer;line-height:1;font-size:12px";
 
     protected override void OnInitialized()
     {
@@ -124,6 +158,21 @@
 
     // Klick auf das Tag-Badge: Mitgliedschaft im aktiven Sammel-Ziel umschalten (ohne Cursor-Wechsel).
     private void Toggle(ImagePairRecord rec) => Fx.Dispatch(new DatensatzTagGetoggelt(rec.Id));
+
+    // ── Dedizierte Mehrfach-Auswahl ──
+    private void ToggleAuswahl() => _auswahlModus = !_auswahlModus;
+
+    // Rubber-Band abgeschlossen: 1 Item = Klick → togglen; mehrere = Bereich zur Markierung.
+    private void BandSelected(IReadOnlyList<ImagePairRecord> items)
+    {
+        if (items.Count == 1)
+            Fx.Dispatch(new MarkierungGetoggelt(items[0].Id));
+        else if (items.Count > 1)
+            Fx.Dispatch(new MarkierungBereichHinzugefuegt(items.Select(r => r.Id).ToList()));
+    }
+
+    private void AuswahlAufnehmen() => Fx.Dispatch(new AuswahlAufgenommenAngefordert());
+    private void AuswahlLeeren()    => Fx.Dispatch(new MarkierungGeleert());
 
     // Doppelklick: auswählen UND ins Bild wechseln (wie Enter).
     private void Oeffnen(ImagePairRecord rec)

@@ -1,6 +1,7 @@
 using Client.Infrastructure.Abstractions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Domain.Client.Modules.Datensaetze;   // DatensatzAusgewaehlt
+using Domain.Client.Modules.Kuratieren;    // Markierungs-Intents
 using Domain.Datensatz;                     // DatensatzStatus, Paar-Events
 using Domain.Projections;                   // DatensatzAntwort
 
@@ -37,8 +38,36 @@ public partial class Store
 {
     [ObservableProperty] private SammelZielKontext? _sammelZiel;
 
+    /// <summary>Dedizierte Mehrfach-Auswahl in der Galerie (Kachel-Häkchen) — Konzept §5.</summary>
+    [ObservableProperty] private IReadOnlySet<Guid> _markierung = new HashSet<Guid>();
+
     /// <summary>O(1): liegt dieses Bildpaar im aktiven Sammel-Ziel?</summary>
     public bool IstMitglied(Guid pairId) => SammelZiel?.MitgliederIds.Contains(pairId) ?? false;
+
+    /// <summary>O(1): ist dieses Bildpaar dediziert markiert?</summary>
+    public bool IstMarkiert(Guid pairId) => Markierung.Contains(pairId);
+
+    // ── Markierungs-Reducer (reine Client-Sicht) ──
+    void Handle(MarkierungGetoggelt evt, MessageContext ctx)
+    {
+        var set = new HashSet<Guid>(Markierung);
+        if (!set.Add(evt.PairId)) set.Remove(evt.PairId);
+        Markierung = set;
+    }
+
+    void Handle(MarkierungBereichHinzugefuegt evt, MessageContext ctx)
+    {
+        if (evt.PairIds.Count == 0) return;
+        var set = new HashSet<Guid>(Markierung);
+        foreach (var id in evt.PairIds) set.Add(id);
+        Markierung = set;
+    }
+
+    void Handle(MarkierungGeleert evt, MessageContext ctx)
+    {
+        if (Markierung.Count == 0) return;
+        Markierung = new HashSet<Guid>();
+    }
 
     // ── Auswahl = Sammel-Ziel aktivieren ──
     void Handle(DatensatzAusgewaehlt evt, MessageContext ctx)

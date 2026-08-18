@@ -46,6 +46,27 @@
     </div>
 
     <div style="height:@(BottomSpacerPx)px"></div>
+
+    @* Auswahl-Overlay (Rubber-Band). Deckt die volle virtuelle Höhe ab und liegt am
+       Content-Ursprung → OffsetX/OffsetY sind absolute Content-Koordinaten (scroll-korrekt),
+       unabhängig vom Ereignis-Ziel. Nur aktiv im Auswahl-Modus. *@
+    @if (SelectionMode && _cellH > 0 && Window.GesamtAnzahl > 0)
+    {
+        <div style="position:absolute;top:0;left:0;width:100%;height:@(GesamtRows * _cellH)px;
+                    cursor:crosshair;z-index:5;user-select:none"
+             @onmousedown="BandDown" @onmousedown:preventDefault
+             @onmousemove="BandMove"
+             @onmouseup="BandUp"
+             @onmouseleave="BandUp">
+            @if (_dragging)
+            {
+                <div style="position:absolute;pointer-events:none;border:1.5px dashed #5c9eff;
+                            background:rgba(92,158,255,.14);border-radius:3px;
+                            left:@(BandX0.ToString(Ic))px;top:@(BandY0.ToString(Ic))px;
+                            width:@(BandW.ToString(Ic))px;height:@(BandH.ToString(Ic))px"></div>
+            }
+        </div>
+    }
 </div>
 
 @code {
@@ -70,6 +91,14 @@
     /// <summary>Doppelklick — „öffnen" (z. B. ins Detail wechseln).</summary>
     [Parameter] public EventCallback<TItem> OnOpen { get; set; }
 
+    /// <summary>Auswahl-Modus: statt Cursor zieht die Maus ein Rubber-Band über die Kacheln.</summary>
+    [Parameter] public bool SelectionMode { get; set; }
+    /// <summary>
+    /// Rubber-Band abgeschlossen: die abgedeckten (geladenen) Items. Ein 1-Item-Band ist ein
+    /// Klick — der Aufrufer entscheidet dann (togglen); mehrere Items = aufgezogener Bereich.
+    /// </summary>
+    [Parameter] public EventCallback<IReadOnlyList<TItem>> OnBandSelect { get; set; }
+
     // ─── Interner Zustand ───
     private ElementReference _viewport;
     private IJSObjectReference? _module;
@@ -84,6 +113,15 @@
     private int _lastIndex = -1;    // letzter sichtbarer Item-Index (Zeilenende)
 
     private static readonly RenderFragment _leer = _ => { };
+
+    // ─── Rubber-Band-Zustand (Content-Koordinaten via Overlay-OffsetX/Y) ───
+    private static readonly System.Globalization.CultureInfo Ic = System.Globalization.CultureInfo.InvariantCulture;
+    private bool _dragging;
+    private double _sx, _sy, _cx, _cy;
+    private double BandX0 => Math.Min(_sx, _cx);
+    private double BandY0 => Math.Min(_sy, _cy);
+    private double BandW  => Math.Abs(_cx - _sx);
+    private double BandH  => Math.Abs(_cy - _sy);
 
     private int Cols => Math.Max(1, Columns);
     private int GesamtRows => (Window.GesamtAnzahl + Cols - 1) / Cols;
@@ -200,6 +238,56 @@
 
     private Task Oeffne(TItem? item)
         => item is null ? Task.CompletedTask : OnOpen.InvokeAsync(item);
+
+    // ─── Rubber-Band ───
+    private void BandDown(MouseEventArgs e)
+    {
+        _dragging = true;
+        _sx = _cx = e.OffsetX;
+        _sy = _cy = e.OffsetY;
+    }
+
+    private void BandMove(MouseEventArgs e)
+    {
+        if (!_dragging) return;
+        _cx = e.OffsetX; _cy = e.OffsetY;
+        StateHasChanged();
+    }
+
+    private async Task BandUp(MouseEventArgs e)
+    {
+        if (!_dragging) return;
+        _dragging = false;
+        _cx = e.OffsetX; _cy = e.OffsetY;
+        var items = ItemsInBand();
+        StateHasChanged();
+        if (items.Count > 0) await OnBandSelect.InvokeAsync(items);
+    }
+
+    /// <summary>Alle geladenen Items unter dem aufgezogenen Rechteck (Content-Koordinaten → Zellindex).</summary>
+    private IReadOnlyList<TItem> ItemsInBand()
+    {
+        var result = new List<TItem>();
+        if (_cellH <= 0 || _width <= 0) return result;
+
+        var cellW = _width / Cols;
+        var x0 = Math.Min(_sx, _cx); var x1 = Math.Max(_sx, _cx);
+        var y0 = Math.Min(_sy, _cy); var y1 = Math.Max(_sy, _cy);
+
+        var colFrom = Math.Max(0, (int)(x0 / cellW));
+        var colTo   = Math.Min(Cols - 1, (int)(x1 / cellW));
+        var rowFrom = Math.Max(0, (int)(y0 / _cellH));
+        var rowTo   = Math.Min(GesamtRows - 1, (int)(y1 / _cellH));
+
+        for (var row = rowFrom; row <= rowTo; row++)
+            for (var col = colFrom; col <= colTo; col++)
+            {
+                var idx = row * Cols + col;
+                if (idx >= Window.GesamtAnzahl) continue;
+                if (Window[idx] is { } item) result.Add(item);
+            }
+        return result;
+    }
 
     public async ValueTask DisposeAsync()
     {
