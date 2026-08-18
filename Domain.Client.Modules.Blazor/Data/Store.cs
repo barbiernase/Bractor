@@ -34,9 +34,25 @@ public partial class Store : StoreBase, IHydrationStore
     {
         VirtualImagePairs = Track(new VirtualCollection<ImagePairRecord, Guid>(
             keyOf:     r => r.Id,
-            baueQuery: (seite, groesse) => new SucheImagePairs(BaueFilter(seite, groesse))));
+            baueQuery: BaueFensterQuery));
         Cursor = Track(new Cursor<Guid>());
     }
+
+    /// <summary>
+    /// Query, die das geteilte Fenster für eine Seite anfordert: im Datensatz-Fokus die
+    /// gescopte <see cref="HoleDatensatzPaare"/> (Mitglieder/Ausgeschlossen des Sammel-Ziels),
+    /// sonst die normale <see cref="SucheImagePairs"/>. Beide antworten mit
+    /// <c>ImagePairSuchergebnis</c> → derselbe Absorb-Pfad, Cursor/Einbild bleiben gekoppelt.
+    /// </summary>
+    private object BaueFensterQuery(int seite, int groesse)
+        => DatensatzGalerieModus != DatensatzGalerieModus.Aus && SammelZiel is { } z
+            ? new HoleDatensatzPaare(
+                z.Id,
+                DatensatzGalerieModus == DatensatzGalerieModus.Ausgeschlossen
+                    ? DatensatzPaarModus.Ausgeschlossen
+                    : DatensatzPaarModus.Mitglieder,
+                seite, groesse)
+            : new SucheImagePairs(BaueFilter(seite, groesse));
 
     /// <summary>
     /// Unbegrenzter/lazy Filter (nur wenn KEINE Bereiche aktiv sind). Von/Bis aus
@@ -73,6 +89,15 @@ public partial class Store : StoreBase, IHydrationStore
     {
         VirtualImagePairs.Reset();
         _puffer.Clear();
+
+        // Datensatz-Fokus → EINE paginierte HoleDatensatzPaare-Query (kein Bereichs-Merge).
+        if (DatensatzGalerieModus != DatensatzGalerieModus.Aus)
+        {
+            _offeneAntworten = 0;
+            _sammelModus = false;
+            return;
+        }
+
         _offeneAntworten = AktiveBereiche.Count;
         _sammelModus = AktiveBereiche.Count > 0;   // 0 Bereiche → Normalpfad (unbegrenzt/lazy)
     }

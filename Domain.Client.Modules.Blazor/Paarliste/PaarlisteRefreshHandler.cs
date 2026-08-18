@@ -27,10 +27,18 @@ public partial class PaarlisteRefreshHandler
     IEnumerable<object> Handle(ModusGeaendert evt, MessageContext ctx)            => LadeAktuelle();
     IEnumerable<object> Handle(TagLabelingGestartet evt, MessageContext ctx)      => LadeAktuelle();
     IEnumerable<object> Handle(TagLabelingBeendet evt, MessageContext ctx)        => LadeAktuelle();
+    IEnumerable<object> Handle(DatensatzGalerieModusGesetzt evt, MessageContext ctx) => LadeAktuelle();
 
     private IEnumerable<object> LadeAktuelle()
     {
         yield return new NavigationZielGesetzt(0);   // Cursor nach dem Laden oben
+
+        // Datensatz-Fokus → EINE paginierte HoleDatensatzPaare-Query (baut das Fenster selbst).
+        if (_store.DatensatzGalerieModus != DatensatzGalerieModus.Aus)
+        {
+            yield return _store.VirtualImagePairs.BaueQuery(1);
+            yield break;
+        }
 
         if (_store.AktiveBereiche.Count == 0)
         {

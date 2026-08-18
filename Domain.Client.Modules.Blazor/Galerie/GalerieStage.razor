@@ -42,6 +42,23 @@
         <span style="margin-left:auto;color:#666">@Store.VirtualImagePairs.GesamtAnzahl Paare · Enter/Doppelklick → Bild</span>
     </div>
 
+    @* ── Datensatz-Fokus: Alle · Nur dieser Datensatz · Ausgeschlossene ── *@
+    @if (Store.SammelZiel is { } ziel)
+    {
+        <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:6px 10px;
+                    background:#181422;border-bottom:1px solid #333;font-size:12px;color:#bbb">
+            <span style="color:#cbb8f0;font-weight:600">@Kurz(ziel.Name)</span>
+            <span style="color:#666">Zeige:</span>
+            <button style="@ModusStil(DatensatzGalerieModus.Aus)"          @onclick="() => SetzeModus(DatensatzGalerieModus.Aus)">Alle</button>
+            <button style="@ModusStil(DatensatzGalerieModus.Mitglieder)"   @onclick="() => SetzeModus(DatensatzGalerieModus.Mitglieder)">Nur dieser Datensatz (@ziel.AnzahlMitglieder)</button>
+            <button style="@ModusStil(DatensatzGalerieModus.Ausgeschlossen)" @onclick="() => SetzeModus(DatensatzGalerieModus.Ausgeschlossen)">Ausgeschlossene (@ziel.AnzahlAusgeschlossen)</button>
+            @if (Store.DatensatzGalerieModus != DatensatzGalerieModus.Aus)
+            {
+                <button style="@BtnStyle" @onclick="ZurVerwaltung" title="zurück zur Datensatz-Verwaltung">→ Verwalten</button>
+            }
+        </div>
+    }
+
     @* ── Grid ── *@
     <div style="flex:1;min-height:0;overflow:hidden">
         <VirtualGrid TItem="ImagePairRecord" TKey="Guid"
@@ -173,6 +190,24 @@
 
     private void AuswahlAufnehmen() => Fx.Dispatch(new AuswahlAufgenommenAngefordert());
     private void AuswahlLeeren()    => Fx.Dispatch(new MarkierungGeleert());
+
+    // ── Datensatz-Fokus (Galerie zeigt Alle / Mitglieder / Ausgeschlossene) ──
+    private void SetzeModus(DatensatzGalerieModus m) => Fx.Dispatch(new DatensatzGalerieModusGesetzt(m));
+    private void ZurVerwaltung() => Fx.Dispatch(new StageWechselAngefordert("datensatz-komposition"));
+
+    private string ModusStil(DatensatzGalerieModus m)
+    {
+        var aktiv = Store.DatensatzGalerieModus == m;
+        return "height:22px;padding:0 10px;border-radius:11px;cursor:pointer;line-height:1;font-size:12px;" +
+               (aktiv ? "border:1px solid #7e57c2;background:#2a2140;color:#cbb8f0"
+                      : "border:1px solid #444;background:#222;color:#ccc");
+    }
+
+    private static string Kurz(string? name)
+    {
+        var n = string.IsNullOrWhiteSpace(name) ? "Sammel-Ziel" : name!.Trim();
+        return n.Length > 24 ? n[..23] + "…" : n;
+    }
 
     // Doppelklick: auswählen UND ins Bild wechseln (wie Enter).
     private void Oeffnen(ImagePairRecord rec)

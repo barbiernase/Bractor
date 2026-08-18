@@ -28,12 +28,12 @@
     @* ══════════ DETAIL: Kandidaten + Korb ══════════ *@
     <div style="flex:1;min-width:0;display:flex;gap:16px;padding:16px;box-sizing:border-box;overflow:hidden">
 
-    @* ── Mitglieder verwalten (Konzept datensatz-kuratierung §9: Verwalten-Sicht) ── *@
+    @* ── Datensatz-Inhalt: Ranges + Sprung in die Galerie (Konzept: Bilder in der Galerie ansehen) ── *@
     <div style="flex:1;min-width:0;display:flex;flex-direction:column;border:1px solid #e0e0e0;border-radius:8px;padding:14px;overflow:hidden">
-        <div style="font-weight:600;font-size:14px;margin-bottom:2px">Mitglieder verwalten</div>
-        <div style="color:#999;font-size:11px;margin-bottom:10px">
-            Kuratiert wird in <b>Galerie</b>/<b>Einbild</b> (Taste <b>A</b> / Klick auf das Badge).
-            Hier siehst du die Sammlung, sortierst einzeln aus und frierst ein.
+        <div style="font-weight:600;font-size:14px;margin-bottom:2px">Datensatz-Inhalt</div>
+        <div style="color:#999;font-size:11px;margin-bottom:12px">
+            Angesehen und einzeln aussortiert wird in der <b>Galerie</b> (Taste <b>A</b> / Klick auf das Badge).
+            Hier verwaltest du die <b>Ranges</b> und springst zum Kuratieren in die Galerie.
         </div>
 
         @if (Suche.SammelZiel is not { } ziel)
@@ -44,50 +44,51 @@
         }
         else
         {
-            <div style="color:#555;margin-bottom:8px">
-                @ziel.AnzahlMitglieder Paare@(ziel.IstEingefroren ? " · eingefroren (read-only)" : "")
+            @* Größen + Sprung in die Galerie *@
+            <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+                <span style="font-size:20px;font-weight:700;line-height:1">@ziel.AnzahlMitglieder</span>
+                <span style="color:#777">Paare</span>
+                @if (ziel.AnzahlAusgeschlossen > 0)
+                {
+                    <span style="color:#c0392b;font-size:12px">· @ziel.AnzahlAusgeschlossen ausgeschlossen</span>
+                }
+                @if (ziel.IstEingefroren)
+                {
+                    <span style="color:#2e7d32;font-size:12px">· eingefroren</span>
+                }
             </div>
 
-            <div style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:3px">
-                @if (ziel.AnzahlMitglieder == 0)
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px">
+                <button @onclick="() => InGalerie(DatensatzGalerieModus.Mitglieder)" style="@PrimBtn(true)">
+                    In Galerie ansehen →
+                </button>
+                <button @onclick="() => InGalerie(DatensatzGalerieModus.Ausgeschlossen)"
+                        disabled="@(ziel.AnzahlAusgeschlossen == 0)" style="@SekBtn(ziel.AnzahlAusgeschlossen > 0)">
+                    Ausgeschlossene ansehen (@ziel.AnzahlAusgeschlossen)
+                </button>
+            </div>
+
+            @* Ranges (Provenienz) — welche Suchen sind eingeflossen *@
+            <div style="font-weight:600;margin-bottom:6px">Ranges</div>
+            <div style="flex:1;min-height:0;overflow-y:auto;display:flex;flex-direction:column;gap:4px">
+                @if (Korb.Ranges.Count == 0)
                 {
-                    <div style="color:#999;font-size:12px">Noch leer — tagge Bilder in Galerie/Einbild (Taste A / Klick).</div>
+                    <div style="color:#999;font-size:12px">Noch keine Range aufgenommen — unten eine Filter-Range hinzufügen oder in der Galerie taggen.</div>
                 }
-                @foreach (var id in ziel.MitgliederIds.Take(MaxAnzeige))
+                @foreach (var r in Korb.Ranges)
                 {
-                    var rec = Suche.VirtualImagePairs.Get(id);
-                    <div style="display:flex;align-items:center;gap:8px;background:#f7f7f7;border-radius:6px;padding:4px 8px">
-                        <div style="width:42px;height:22px;background:#111;border-radius:3px;overflow:hidden;flex:0 0 auto;display:flex;align-items:center;justify-content:center">
-                            @if (rec?.Dc0BildSrc is { } src)
-                            { <img src="@src" style="width:100%;height:100%;object-fit:cover" alt="" /> }
-                        </div>
-                        @if (rec is not null && LabelVon(rec) is { } lbl)
-                        {
-                            <span title="@lbl" style="width:8px;height:8px;border-radius:50%;flex:0 0 auto;background:@Farbschema.Fuer(lbl)"></span>
-                        }
-                        <span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#444;font-size:12px">
-                            @(rec?.PairKey ?? id.ToString()[..8])
-                        </span>
-                        @if (!ziel.IstEingefroren)
-                        {
-                            <button @onclick="() => Entferne(id)" title="aus dem Datensatz entfernen"
-                                    style="border:1px solid #e0a0a0;background:#fff;color:#c62828;border-radius:5px;padding:2px 8px;font-size:11px;cursor:pointer">entfernen</button>
-                        }
+                    <div style="display:flex;justify-content:space-between;gap:8px;background:#f7f7f7;border-radius:6px;padding:6px 10px">
+                        <span style="color:#444;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">@RangeText(r.Kriterien)</span>
+                        <span style="color:#777;white-space:nowrap">@r.AnzahlPaare</span>
                     </div>
                 }
-                @if (ziel.AnzahlMitglieder > MaxAnzeige)
-                {
-                    <div style="color:#999;font-size:11px;padding:4px 0">… und @(ziel.AnzahlMitglieder - MaxAnzeige) weitere (in der Galerie sichtbar/kuratierbar).</div>
-                }
             </div>
 
-            @* ── Bulk-Saat (optional): der frühere Hauptweg, jetzt Startpunkt ── *@
+            @* Bulk-Saat: Range hinzufügen (aus dem Suchfilter) *@
             @if (!ziel.IstEingefroren)
             {
                 <div style="margin-top:12px;padding-top:10px;border-top:1px solid #eee">
-                    <div style="color:#555;font-size:12px;margin-bottom:4px">
-                        Bulk-Saat (optional): ganze Filter-Range als Startmenge aufnehmen
-                    </div>
+                    <div style="color:#555;font-size:12px;margin-bottom:4px">Range hinzufügen (aus dem Suchfilter rechts):</div>
                     <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px">
                         @foreach (var chip in FilterChips())
                         {
@@ -157,25 +158,6 @@
                 </div>
             }
 
-            @* ── Provenienz ── *@
-            <div style="font-weight:600;margin:14px 0 6px">Provenienz</div>
-            @if (Korb.Ranges.Count == 0)
-            {
-                <div style="color:#999;font-size:12px">Noch keine Range aufgenommen.</div>
-            }
-            else
-            {
-                <div style="display:flex;flex-direction:column;gap:4px">
-                    @foreach (var r in Korb.Ranges)
-                    {
-                        <div style="display:flex;justify-content:space-between;gap:8px;background:#f7f7f7;border-radius:6px;padding:5px 9px">
-                            <span style="color:#444;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">@RangeText(r.Kriterien)</span>
-                            <span style="color:#777;white-space:nowrap">@r.AnzahlPaare</span>
-                        </div>
-                    }
-                </div>
-            }
-
             @* ── Einfrieren ── *@
             <div style="margin-top:16px">
                 @if (Korb.IstEingefroren)
@@ -199,7 +181,6 @@
 </div>
 
 @code {
-    private const int MaxAnzeige = 300;   // Verwalten-Liste kappen (große Sets kuratiert man in der Galerie)
     private int _train = 70, _val = 15, _test = 15, _seed = 42;
 
     protected override void OnInitialized()
@@ -213,10 +194,13 @@
     void RangeHinzufuegen() => Fx.Dispatch(new RangeHinzufuegenIntent());
     void SplitSetzen()      => Fx.Dispatch(new SplitSetzenIntent(_train, _val, _test, _seed));
     void FriereEin()        => Fx.Dispatch(new FriereEinIntent());
-    void Entferne(Guid id)  => Fx.Dispatch(new PaarEntfernenIntent(id));
 
-    private static Klassifikation? LabelVon(ImagePairRecord r)
-        => r.PhysischesProduktLabel ?? r.MenschBildpaarLabel;
+    // Galerie auf diesen Datensatz scopen und dorthin wechseln (Mitglieder oder Ausgeschlossene).
+    void InGalerie(DatensatzGalerieModus modus)
+    {
+        Fx.Dispatch(new DatensatzGalerieModusGesetzt(modus));
+        Fx.Dispatch(new StageWechselAngefordert("galerie"));
+    }
 
     public void Dispose() => Fx.Dispose();
 

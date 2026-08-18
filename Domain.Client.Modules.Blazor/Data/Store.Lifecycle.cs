@@ -14,6 +14,7 @@ public partial class Store
     {
         // In einer fixen Bereichs-Ansicht wandern keine "Jetzt"-Neuzugänge rein.
         if (AktiveBereiche.Count > 0) return;
+        if (DatensatzGalerieModus != DatensatzGalerieModus.Aus) return;   // Datensatz-Fokus: nur die gescopte Menge
         if (!IstLive) return;
         if (Suche.Bis is not null) return;
         if (Suche.ProduktLabel is not null || Suche.HatMenschLabel == true) return;
