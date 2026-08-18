@@ -34,7 +34,7 @@
                         <option value="">— wählen —</option>
                         @foreach (var d in Store.EingefroreneDatensaetze)
                         {
-                            <option value="@d.Id">@(string.IsNullOrWhiteSpace(d.Name) ? "(ohne Name)" : d.Name) · v@d.EingefroreneVersion</option>
+                            <option value="@d.Id">@(string.IsNullOrWhiteSpace(d.Name) ? "(ohne Name)" : d.Name) · v@(d.EingefroreneVersion)</option>
                         }
                     </select>
                 </label>
@@ -61,7 +61,7 @@
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                     <div>
                         <span style="font-family:monospace;font-weight:600">@Kurz(lauf.Id)</span>
-                        <span style="color:#777;margin-left:8px">DS @Kurz(lauf.DatensatzId) v@lauf.DatensatzVersion · @lauf.Hyperparameter.Architektur</span>
+                        <span style="color:#777;margin-left:8px">DS @Kurz(lauf.DatensatzId) v@(lauf.DatensatzVersion) · @lauf.Hyperparameter.Architektur</span>
                     </div>
                     <div style="display:flex;align-items:center;gap:10px">
                         <span style="@BadgeStil(lauf.Status)">@StatusText(lauf.Status)</span>
