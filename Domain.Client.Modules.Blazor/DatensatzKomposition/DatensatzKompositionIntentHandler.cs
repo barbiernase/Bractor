@@ -36,7 +36,25 @@ public partial class DatensatzKompositionIntentHandler
     IEnumerable<object> Handle(RangeHinzufuegenIntent evt, MessageContext ctx)
     {
         if (_korb.AktuelleDatensatzId is not { } id) yield break;
-        yield return new FuegeRangeHinzu(id, MapKriterien(_suche.Suche));
+
+        var basis = MapKriterien(_suche.Suche);
+        var bereiche = _suche.AktiveBereiche;
+
+        // Keine Baum-Auswahl → EINE Range wie bisher (Von/Bis aus Suche: bei Tag-Labeling gesetzt,
+        // sonst offen = die unbegrenzte, lazy-paginierte Kandidatenmenge).
+        if (bereiche.Count == 0)
+        {
+            yield return new FuegeRangeHinzu(id, basis);
+            yield break;
+        }
+
+        // Baum-Auswahl aktiv → EXAKT die gewählten Bereiche aufnehmen: je Bereich eine Range,
+        // deckungsgleich mit der Kandidaten-Anzeige (die je Bereich eine Query fährt und merged).
+        // Das Aggregat vereinigt + dedupliziert die IDs; die Provenienz hält jeden Zeitschnitt
+        // einzeln fest. Die feingranularen Label-/Inspektionsfilter kommen aus `basis`, nur die
+        // Datumsgrenzen werden je Bereich überschrieben.
+        foreach (var b in bereiche)
+            yield return new FuegeRangeHinzu(id, basis with { Von = b.Von, Bis = b.Bis });
     }
 
     IEnumerable<object> Handle(PaarEntfernenIntent evt, MessageContext ctx)
