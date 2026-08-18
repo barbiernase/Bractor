@@ -1,0 +1,128 @@
+@namespace Domain.Client.Modules.Blazor.Galerie
+@inject Store Store
+@inject EffectScope Fx
+@using global::Client.Infrastructure.Abstractions
+@using Domain.Client.Modules
+@using Domain.Client.Modules.Blazor.Shared
+@using Domain.ImagePair
+@implements IDisposable
+
+@*
+    Bühne „Galerie" — reine Galerie-Ansicht (keine Detail-Vorschau). Thumbnail-Grid über
+    demselben VirtualImagePairs-Fenster wie die Paarliste. Die Zellen orientieren sich an den
+    Bildern (Seitenverhältnis), die Spaltenzahl ist steuerbar. Auswahl teilt sich den Cursor mit
+    Paarliste + Bild-Bühne. „Enter" (Modul-Keybinding) oder Doppelklick wechselt ins Bild.
+*@
+
+<div style="display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden">
+
+    @* ── Werkzeugleiste: Bilder pro Reihe ── *@
+    <div style="flex:0 0 auto;display:flex;align-items:center;gap:8px;padding:6px 10px;
+                border-bottom:1px solid #333;font-size:12px;color:#bbb">
+        <span>Bilder pro Reihe:</span>
+        <button style="@BtnStyle" @onclick="Weniger" disabled="@(_columns <= MinCols)">−</button>
+        <span style="min-width:20px;text-align:center;color:#eee">@_columns</span>
+        <button style="@BtnStyle" @onclick="Mehr" disabled="@(_columns >= MaxCols)">+</button>
+        <span style="margin-left:auto;color:#666">@Store.VirtualImagePairs.GesamtAnzahl Paare · Enter/Doppelklick → Bild</span>
+    </div>
+
+    @* ── Grid ── *@
+    <div style="flex:1;min-height:0;overflow:hidden">
+        <VirtualGrid TItem="ImagePairRecord" TKey="Guid"
+                     Store="Store" Window="Store.VirtualImagePairs" Cursor="Store.Cursor"
+                     Columns="_columns" AspectRatio="7.46"
+                     OnActivate="Auswaehlen" OnOpen="Oeffnen">
+            <Cell Context="rec">
+                <div style="height:100%;padding:2px;box-sizing:border-box">
+                    <div style="height:100%;background:#111;border-radius:3px;overflow:hidden;
+                                position:relative;display:flex;align-items:center;justify-content:center">
+                        @if (rec.Dc0BildSrc != null)
+                        {
+                            <img src="@rec.Dc0BildSrc" loading="lazy" alt="@rec.PairKey"
+                                 style="width:100%;height:100%;object-fit:contain" />
+                        }
+                        else
+                        {
+                            <span style="color:#444;font-size:10px">
+                                @(rec.Dc0Pfad != null ? "…" : "kein Bild")
+                            </span>
+                        }
+
+                        @if (LabelVon(rec) is { } label)
+                        {
+                            <span title="@label"
+                                  style="position:absolute;top:3px;right:3px;width:9px;height:9px;
+                                         border-radius:50%;border:1px solid #000;background:@Farbe(label)"></span>
+                        }
+                        @if (!rec.IstKomplett)
+                        {
+                            <span style="position:absolute;bottom:2px;left:4px;font-size:9px;color:#c9a227">unvollständig</span>
+                        }
+                    </div>
+                </div>
+            </Cell>
+            <Skeleton>
+                <div style="height:100%;padding:2px;box-sizing:border-box">
+                    <div style="height:100%;background:#161616;border-radius:3px"></div>
+                </div>
+            </Skeleton>
+        </VirtualGrid>
+    </div>
+
+</div>
+
+@code {
+    private const int MinCols = 1;
+    private const int MaxCols = 12;
+    private int _columns = 3;
+
+    private const string BtnStyle =
+        "width:22px;height:22px;border:1px solid #444;background:#222;color:#ddd;border-radius:3px;cursor:pointer;line-height:1";
+
+    protected override void OnInitialized()
+    {
+        Fx.OnChanged(Store, Store.VirtualImagePairs, LadeThumbnails);
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        // Erststoß: beim Tab-Wechsel ist das Fenster i.d.R. schon von der Paarliste geladen und
+        // versioniert nicht mehr → der OnChanged-Effekt allein würde nie feuern.
+        if (firstRender) LadeThumbnails();
+    }
+
+    private void Mehr()    { if (_columns < MaxCols) _columns++; }
+    private void Weniger() { if (_columns > MinCols) _columns--; }
+
+    // Einfacher Klick: Auswahl (Cursor) — Paarliste + (spätere) Bild-Bühne folgen.
+    private void Auswaehlen(ImagePairRecord rec) => Fx.Dispatch(new ImagePairAusgewaehlt(rec.Id));
+
+    // Doppelklick: auswählen UND ins Bild wechseln (wie Enter).
+    private void Oeffnen(ImagePairRecord rec)
+    {
+        Fx.Dispatch(new ImagePairAusgewaehlt(rec.Id));
+        Fx.Dispatch(new StageWechselAngefordert("bilder"));
+    }
+
+    // Thumbnails nur für die GELADENEN Records laden (Virtualisierung begrenzt die Menge).
+    // FileBridge dedupt inflight; nach FileLoaded patcht der Store BildSrc → Fenster versioniert
+    // → dieser Effekt feuert erneut und überspringt die schon geladenen.
+    private void LadeThumbnails()
+    {
+        foreach (var rec in Store.VirtualImagePairs.AlleGeladenen())
+            if (rec.Dc0Pfad is not null && rec.Dc0BildSrc is null)
+                Fx.Dispatch(new LoadFile(rec.Dc0Pfad));
+    }
+
+    private static Klassifikation? LabelVon(ImagePairRecord r)
+        => r.PhysischesProduktLabel ?? r.MenschBildpaarLabel;
+
+    private static string Farbe(Klassifikation label) => label switch
+    {
+        Klassifikation.Anomalie      => "#e05252",
+        Klassifikation.KeineAnomalie => "#4caf50",
+        _                            => "#c9a227"
+    };
+
+    public void Dispose() => Fx.Dispose();
+}

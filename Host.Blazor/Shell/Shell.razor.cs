@@ -27,6 +27,7 @@ public partial class Shell : ComponentBase, IDisposable
     {
         _bindingBuilder.AddShellKey("Tab", "Sidebar toggle", () => new ShellSidebarToggle());
         Fx.On<OpenSettingsRequested>(_ => { _settingsOpen = true; InvokeAsync(StateHasChanged); });
+        Fx.On<StageWechselAngefordert>(msg => GeheZuStage(msg.StageId));
         RebuildBindings();
 
         // Auf Bootstrap-Fortschritt reagieren: bei Ready (bzw. jedem Wechsel)
@@ -63,6 +64,19 @@ public partial class Shell : ComponentBase, IDisposable
     }
 
     private void OnStageTabChanged(int i) { State.ActiveStageIndex = i; RebuildBindings(); }
+
+    /// <summary>Aktive Bühne per Id wechseln (z. B. Galerie → „bilder" bei Enter). Unbekannt = folgenlos.</summary>
+    private void GeheZuStage(string stageId)
+    {
+        var stages = AllModules.OfType<IStageModule>()
+            .Where(m => State.IsVisible(m)).OrderBy(m => m.Order).ToList();
+        var index = stages.FindIndex(m => m.Id == stageId);
+        if (index < 0 || index == State.ActiveStageIndex) return;
+
+        State.ActiveStageIndex = index;
+        RebuildBindings();
+        InvokeAsync(StateHasChanged);
+    }
     private void OnSidebarToggle(string id, bool v) { State.SetExpanded(id, v); RebuildBindings(); }
 
     private void ToggleFirstLeftSidebar()

@@ -1,0 +1,218 @@
+@*  Generisches virtualisiertes GRID. Der Nutzer gibt die SPALTENZAHL (Columns) vor; die
+    Zellbreite ergibt sich aus Viewport-Breite / Spalten, die Zellhöhe aus Zellbreite /
+    Seitenverhältnis (AspectRatio) — die Zellen orientieren sich also an den Bildern. Dieselbe
+    schlanke JS-Mechanik wie die VirtualList, nur meldet VirtualGrid.razor.js zusätzlich die Breite.  *@
+
+@namespace Domain.Client.Modules.Blazor.Shared
+@typeparam TItem where TItem : class
+@typeparam TKey where TKey : struct
+@using global::Client.Infrastructure.Abstractions
+@using global::Client.Infrastructure.Collections
+@using Microsoft.JSInterop
+@implements IAsyncDisposable
+@inject IJSRuntime JS
+@inject EffectScope Fx
+
+<style>
+    .vg-viewport { height: 100%; overflow-y: auto; position: relative; outline: none; }
+    .vg-grid { display: grid; }
+    .vg-cell { overflow: hidden; box-sizing: border-box; cursor: pointer; }
+    .vg-cell.vg-selected { outline: 2px solid #5c9eff; outline-offset: -2px; border-radius: 4px; }
+</style>
+
+@* tabindex + eigenes keydown: Enter „öffnet" das Cursor-Item, unabhängig vom Shell-Fokus
+   (ein Klick auf eine nicht fokussierbare Zelle würde sonst den Fokus über den Shell-Container
+   hinaus verlieren). Andere Tasten (Pfeile) bubblen weiter zu den Shell-Bindings. *@
+<div @ref="_viewport" class="vg-viewport" tabindex="0" @onkeydown="OnKey">
+    <div style="height:@(TopSpacerPx)px"></div>
+
+    <div class="vg-grid"
+         style="grid-template-columns:repeat(@Cols,1fr);grid-auto-rows:@(_cellH)px">
+        @if (_cellH > 0)
+        {
+            for (var i = _firstIndex; i <= _lastIndex; i++)
+            {
+                var index = i;
+                var item = Window[index];
+                var selektiert = index == CursorAnzeigeIndex;
+                <div @key="index" class="vg-cell @(selektiert ? "vg-selected" : null)"
+                     @onclick="() => Aktiviere(item)"
+                     @ondblclick="() => Oeffne(item)">
+                    @if (item is not null) { @Cell(item) }
+                    else { @(Skeleton ?? _leer) }
+                </div>
+            }
+        }
+    </div>
+
+    <div style="height:@(BottomSpacerPx)px"></div>
+</div>
+
+@code {
+    // ─── Vertrag (deklarativ vom Domänen-View gesetzt) ───
+    [Parameter, EditorRequired] public StoreBase Store { get; set; } = null!;
+    [Parameter, EditorRequired] public IVirtualWindow<TItem> Window { get; set; } = null!;
+    [Parameter] public Cursor<TKey>? Cursor { get; set; }
+
+    /// <summary>Spalten (Bilder pro Reihe) — vom Nutzer steuerbar.</summary>
+    [Parameter] public int Columns { get; set; } = 3;
+
+    /// <summary>Seitenverhältnis einer Zelle (Breite/Höhe). Default ~7.46 = die Gewebe-Streifenbilder.</summary>
+    [Parameter] public double AspectRatio { get; set; } = 7.46;
+
+    [Parameter] public int BufferRows { get; set; } = 2;
+
+    [Parameter, EditorRequired] public RenderFragment<TItem> Cell { get; set; } = null!;
+    [Parameter] public RenderFragment? Skeleton { get; set; }
+
+    /// <summary>Einfacher Klick — Auswahl (Cursor setzen).</summary>
+    [Parameter] public EventCallback<TItem> OnActivate { get; set; }
+    /// <summary>Doppelklick — „öffnen" (z. B. ins Detail wechseln).</summary>
+    [Parameter] public EventCallback<TItem> OnOpen { get; set; }
+
+    // ─── Interner Zustand ───
+    private ElementReference _viewport;
+    private IJSObjectReference? _module;
+    private IJSObjectReference? _handle;
+
+    private double _width;          // zuletzt gemeldete Viewport-Breite
+    private double _lastScrollTop;
+    private double _lastHeight;
+    private int _cellH;             // abgeleitete Zellhöhe (px)
+
+    private int _firstIndex;        // erster sichtbarer Item-Index (Zeilenanfang)
+    private int _lastIndex = -1;    // letzter sichtbarer Item-Index (Zeilenende)
+
+    private static readonly RenderFragment _leer = _ => { };
+
+    private int Cols => Math.Max(1, Columns);
+    private int GesamtRows => (Window.GesamtAnzahl + Cols - 1) / Cols;
+    private int FirstRow => _cellH > 0 ? _firstIndex / Cols : 0;
+    private int LastRow => _cellH > 0 ? _lastIndex / Cols : -1;
+    private int TopSpacerPx => FirstRow * _cellH;
+    private int BottomSpacerPx => Math.Max(0, (GesamtRows - (LastRow + 1)) * _cellH);
+
+    // Cursor.Index ist STABIL → Anzeige = stabil + InsertOffset.
+    private int CursorAnzeigeIndex => Cursor is null ? -1 : Cursor.Index + Window.InsertOffset;
+
+    protected override void OnInitialized()
+    {
+        Fx.OnChanged(Store, Window, OnWindowChanged);
+        if (Cursor is not null)
+            Fx.OnChanged(Store, Cursor, OnCursorChanged);
+    }
+
+    protected override void OnParametersSet()
+    {
+        // Spalten (oder Seitenverhältnis) geändert → mit der zuletzt bekannten Geometrie neu rechnen.
+        if (_width > 0) Recompute(_lastScrollTop, _lastHeight);
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!firstRender) return;
+
+        _module = await JS.InvokeAsync<IJSObjectReference>(
+            "import", "./_content/Domain.Client.Modules.Blazor/Shared/VirtualGrid.razor.js");
+        _handle = await _module.InvokeAsync<IJSObjectReference>(
+            "init", DotNetObjectReference.Create(this), _viewport);
+
+        // Beim Mounten Tastatur-Fokus holen, damit Enter/Pfeile sofort wirken.
+        await _viewport.FocusAsync();
+    }
+
+    /// <summary>Enter „öffnet" das aktuell gewählte (Cursor-)Item. Rest bubbelt zu den Shell-Bindings.</summary>
+    private Task OnKey(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or "NumpadEnter")
+        {
+            var item = CursorAnzeigeIndex >= 0 ? Window[CursorAnzeigeIndex] : null;
+            if (item is not null) return OnOpen.InvokeAsync(item);
+        }
+        return Task.CompletedTask;
+    }
+
+    /// <summary>Rückkanal aus JS: sichtbarer Bereich UND Breite → Geometrie + fehlende Seiten.</summary>
+    [JSInvokable]
+    public void OnViewport(double scrollTop, double height, double width)
+    {
+        _width = width;
+        Recompute(scrollTop, height);
+    }
+
+    private void Recompute(double scrollTop, double height)
+    {
+        if (Window.GesamtAnzahl == 0 || _width <= 0) return;
+
+        var cellW = _width / Cols;
+        _cellH = Math.Max(1, (int)Math.Round(cellW / Math.Max(0.1, AspectRatio)));
+
+        var firstRow = (int)(scrollTop / _cellH);
+        var lastRow  = (int)Math.Ceiling((scrollTop + height) / _cellH) - 1;
+
+        firstRow = Math.Max(0, firstRow - BufferRows);
+        lastRow  = Math.Min(GesamtRows - 1, lastRow + BufferRows);
+        if (lastRow < firstRow) lastRow = firstRow;
+
+        var first = firstRow * Cols;
+        var last  = Math.Min(Window.GesamtAnzahl - 1, (lastRow + 1) * Cols - 1);
+
+        foreach (var seite in Window.FehlendeSeiten(first, last))
+        {
+            Fx.Dispatch(Window.BaueQuery(seite));
+            Window.MarkiereAngefordert(seite);
+        }
+
+        _lastScrollTop = scrollTop;
+        _lastHeight = height;
+        (_firstIndex, _lastIndex) = (first, last);
+        StateHasChanged();
+    }
+
+    private void OnWindowChanged()
+    {
+        // Erst-Population: sobald GesamtAnzahl bekannt ist, einen frischen Report anstoßen.
+        if (_lastIndex < 0 && Window.GesamtAnzahl > 0 && _handle is not null)
+            _ = _handle.InvokeVoidAsync("report");
+
+        StateHasChanged();
+    }
+
+    private void OnCursorChanged()
+    {
+        var idx = CursorAnzeigeIndex;
+        if (_cellH > 0 && idx >= 0 && (idx < _firstIndex || idx > _lastIndex))
+        {
+            var row = idx / Cols;
+            _ = _handle?.InvokeVoidAsync("scrollToPx", row * _cellH);
+        }
+        StateHasChanged();
+    }
+
+    private async Task Aktiviere(TItem? item)
+    {
+        if (item is null) return;
+        await OnActivate.InvokeAsync(item);
+        // Fokus zurück ins Grid holen (Klick auf die nicht fokussierbare Zelle verliert ihn sonst)
+        // → Enter/Pfeile wirken direkt nach dem Anklicken.
+        await _viewport.FocusAsync();
+    }
+
+    private Task Oeffne(TItem? item)
+        => item is null ? Task.CompletedTask : OnOpen.InvokeAsync(item);
+
+    public async ValueTask DisposeAsync()
+    {
+        Fx.Dispose();
+        try
+        {
+            if (_handle is not null)
+            {
+                await _handle.InvokeVoidAsync("dispose");
+                await _handle.DisposeAsync();
+            }
+            if (_module is not null) await _module.DisposeAsync();
+        }
+        catch (JSDisconnectedException) { /* Circuit bereits geschlossen */ }
+    }
+}
