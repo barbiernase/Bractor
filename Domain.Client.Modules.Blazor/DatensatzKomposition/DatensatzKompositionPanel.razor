@@ -1,5 +1,6 @@
 @namespace Domain.Client.Modules.Blazor.DatensatzKomposition
 @using Domain.Client.Modules.DatensatzKomposition
+@using Domain.Client.Modules.Blazor.DatensatzListe
 @using Domain.Datensatz
 @using Domain.ImagePair
 @using global::Client.Infrastructure.Abstractions
@@ -9,14 +10,24 @@
 @implements IDisposable
 
 @*
-    Transfer-/Korb-Layout (Konzept §8.1): LINKS die Kandidaten aus dem vorhandenen
-    Such-Filter (der im rechten Suche-Panel gesteuert wird — eine Quelle der Wahrheit),
-    RECHTS der Datensatz-Korb mit Größe/Split/Provenienz/Balance/Einfrieren.
+    Master-Detail in der Bühne (Layout-Konzept „Bühne statt Panels", Stufe 1):
+    GANZ LINKS die Datensatz-Liste (Master) — früher eine globale Sidebar, jetzt Teil der Bühne.
+    MITTE die Kandidaten aus dem vorhandenen Such-Filter, RECHTS der Datensatz-Korb
+    (Größe/Split/Provenienz/Balance/Einfrieren).
 *@
 
-<div style="display:flex;gap:16px;height:100%;padding:16px;box-sizing:border-box;font-size:13px;overflow:hidden">
+<div style="display:flex;height:100%;box-sizing:border-box;font-size:13px;overflow:hidden">
 
-    @* ══════════ LINKS: Kandidaten ══════════ *@
+    @* ══════════ MASTER: Datensatz-Liste ══════════ *@
+    <div style="flex:0 0 240px;min-width:0;display:flex;flex-direction:column;border-right:1px solid #e0e0e0">
+        <div style="padding:10px 12px;font-weight:600;border-bottom:1px solid #eee">Datensätze</div>
+        <div style="flex:1;min-height:0;overflow:hidden"><DatensatzListePanel /></div>
+    </div>
+
+    @* ══════════ DETAIL: Kandidaten + Korb ══════════ *@
+    <div style="flex:1;min-width:0;display:flex;gap:16px;padding:16px;box-sizing:border-box;overflow:hidden">
+
+    @* ── Kandidaten ── *@
     <div style="flex:1;min-width:0;display:flex;flex-direction:column;border:1px solid #e0e0e0;border-radius:8px;padding:14px;overflow-y:auto">
         <div style="font-weight:600;font-size:14px;margin-bottom:10px">Suchergebnis (Kandidaten)</div>
 
@@ -142,6 +153,7 @@
                 }
             </div>
         }
+    </div>
     </div>
 </div>
 

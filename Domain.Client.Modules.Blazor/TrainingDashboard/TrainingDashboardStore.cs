@@ -1,5 +1,6 @@
 using Client.Infrastructure.Abstractions;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Domain.Client.Modules.Trainingslaeufe;
 using Domain.Datensatz;
 using Domain.Projections;
 
@@ -21,6 +22,22 @@ public partial class TrainingDashboardStore : StoreBase
 
     [ObservableProperty] private IReadOnlyList<TrainingslaufAntwort> _laeufe = [];
     [ObservableProperty] private IReadOnlyList<DatensatzAntwort> _eingefroreneDatensaetze = [];
+
+    /// <summary>Der in der Master-Liste gewählte Lauf; null = kein expliziter Fokus.</summary>
+    [ObservableProperty] private Guid? _aktiveId;
+
+    /// <summary>
+    /// Der im Detail gezeigte Lauf: der explizit gewählte, sonst der neueste. So zeigt das
+    /// Dashboard sofort etwas Sinnvolles, auch bevor der Nutzer klickt.
+    /// </summary>
+    public TrainingslaufAntwort? AktuellerLauf =>
+        (AktiveId is { } id ? Laeufe.FirstOrDefault(l => l.Id == id) : null)
+        ?? Laeufe.FirstOrDefault();
+
+    void Handle(TrainingslaufAusgewaehlt evt, MessageContext ctx)
+    {
+        AktiveId = evt.TrainingslaufId;
+    }
 
     void Handle(TrainingslaufListe antwort, MessageContext ctx)
     {

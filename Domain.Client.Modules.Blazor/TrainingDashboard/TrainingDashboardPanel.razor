@@ -1,6 +1,7 @@
 @namespace Domain.Client.Modules.Blazor.TrainingDashboard
 @using Domain.Client.Modules.TrainingDashboard
 @using Domain.Client.Modules.Trainingslaeufe
+@using Domain.Client.Modules.Blazor.TrainingslaufListe
 @using Domain.Datensatz
 @using Domain.Trainingslauf
 @using Domain.Projections
@@ -11,14 +12,24 @@
 @implements IDisposable
 
 @*
-    Training-Dashboard (Konzept §8.2): oben „Neues Training" (eingefrorener Datensatz +
-    Hyperparameter), darunter je Lauf eine Live-Kurve (loss/accuracy). Jeder
-    TrainingFortschritt-Event triggert einen Re-Query → MetrikHistorie wächst → Kurve streamt.
+    Master-Detail in der Bühne (Layout-Konzept „Bühne statt Panels", Stufe 1):
+    LINKS die Trainingslauf-Liste (Master) — früher eine globale Sidebar, jetzt Teil der Bühne.
+    RECHTS das Detail: oben „Neues Training", darunter die Live-Kurve (loss/accuracy) des
+    gewählten Laufs. Jeder TrainingFortschritt-Event → Re-Query → MetrikHistorie wächst → Kurve streamt.
 *@
 
-<div style="height:100%;overflow-y:auto;padding:16px;box-sizing:border-box;font-size:13px">
+<div style="display:flex;height:100%;box-sizing:border-box;font-size:13px;overflow:hidden">
 
-    @* ══════════ Neues Training ══════════ *@
+    @* ══════════ MASTER: Trainingslauf-Liste ══════════ *@
+    <div style="flex:0 0 240px;min-width:0;display:flex;flex-direction:column;border-right:1px solid #e0e0e0">
+        <div style="padding:10px 12px;font-weight:600;border-bottom:1px solid #eee">Trainingsläufe</div>
+        <div style="flex:1;min-height:0;overflow:hidden"><TrainingslaufListePanel /></div>
+    </div>
+
+    @* ══════════ DETAIL: Formular + gewählter Lauf ══════════ *@
+    <div style="flex:1;min-width:0;overflow-y:auto;padding:16px;box-sizing:border-box">
+
+    @* ── Neues Training ── *@
     <div style="border:1px solid #e0e0e0;border-radius:8px;padding:14px;margin-bottom:18px">
         <div style="font-weight:600;font-size:14px;margin-bottom:10px">Neues Training</div>
 
@@ -48,15 +59,14 @@
         }
     </div>
 
-    @* ══════════ Live-Kurven je Lauf ══════════ *@
-    @if (Store.Laeufe.Count == 0)
+    @* ── Detail: der gewählte (oder neueste) Lauf mit Live-Kurve ── *@
+    @{ var lauf = Store.AktuellerLauf; }
+    @if (lauf is null)
     {
-        <div style="color:#888;padding:8px">Noch keine Trainingsläufe.</div>
+        <div style="color:#888;padding:8px">Noch keine Trainingsläufe. Wähle links einen Lauf oder starte oben ein neues Training.</div>
     }
     else
     {
-        foreach (var lauf in Store.Laeufe)
-        {
             <div @key="lauf.Id" style="border:1px solid #e0e0e0;border-radius:8px;padding:14px;margin-bottom:14px">
                 <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
                     <div>
@@ -112,8 +122,8 @@
                     </div>
                 }
             </div>
-        }
     }
+    </div>
 </div>
 
 @code {
