@@ -30,6 +30,12 @@ public partial class DatensatzReader : IReader<DatensatzProjektion>
             .Select(s => new DatensatzSample(s.ImagePairId, s.Dc0Pfad, s.Dc2Pfad, s.Label, s.Split))
             .ToList();
 
+        // Das Datensatz-Aggregat als Dep tracken: die Samples sind zwar ein immutabler Snapshot, aber
+        // DIREKT nach dem Einfrieren kann die (asynchrone) Projektion die Sample-Zeilen noch nicht
+        // geschrieben haben. Der Dep (auf die DatensatzEingefroren-Version) lässt den Client per
+        // Read-Your-Writes nachfassen, bis die Balance-Grundlage wirklich da ist.
+        ctx.Track(query.DatensatzId.ToString());
+
         return new DatensatzSamples(samples, gesamtAnzahl, query.Seite, query.SeitenGroesse);
     }
 

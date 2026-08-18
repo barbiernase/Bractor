@@ -15,6 +15,15 @@ public interface IVersioningModule
     int? GetVersion(Guid aggregateId);
 
     /// <summary>
+    /// Das Read-Your-Writes-Ziel: die höchste DOMAIN-Event-Version, die der Client für dieses
+    /// Aggregat aus dem Event-Push gesehen hat. Anders als <see cref="GetVersion"/> (Stream-Head
+    /// inkl. Marke, für OCC) zählt hier NUR die materialisierbare Domain-Version — denn genau bis
+    /// dorthin muss die (asynchrone Pull-)Projektion aufgeschlossen haben, damit ein Read frisch ist.
+    /// null, wenn der Client kein Event für das Aggregat gesehen hat (nichts zu erwarten).
+    /// </summary>
+    int? GetReadTarget(Guid aggregateId);
+
+    /// <summary>
     /// Trackt Aggregate-Versionen aus Query-Response-Dependencies.
     /// Wird von der QueryBridge aufgerufen.
     /// </summary>

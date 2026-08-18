@@ -3,18 +3,27 @@ using Client.Infrastructure.Abstractions;
 namespace Client.Infrastructure.Versioning;
 
 /// <summary>
-/// Tracked Aggregate-Versionen für Optimistic Concurrency.
+/// Tracked Aggregate-Versionen — zwei Notionen, weil OCC und Read-Your-Writes verschiedene
+/// Versionen brauchen:
 ///
-/// Zwei Quellen:
-///   1. Server-Events: MessageContext.AggregateVersion → höchste Version pro AggregateId
-///   2. Query-Deps: QueryBridge ruft TrackFromDeps() mit den Deps aus der Response
+///   • <b>OCC-Version</b> (<see cref="GetVersion"/>): der Stream-Head NACH dem Commit, inklusive
+///     der co-committeten <c>KommandoVerarbeitet</c>-Marke (aus <see cref="MessageContext.StreamHeadVersion"/>).
+///     Das ist die <c>ExpectedVersion</c>, die der nächste Command tragen muss.
 ///
-/// Kein Reflection — subscribt via bus.Subscribe(Type, handler).
-/// Thread-Safety: Nicht nötig — wird nur vom UI-Thread aufgerufen.
+///   • <b>Read-Ziel</b> (<see cref="GetReadTarget"/>): die höchste DOMAIN-Event-Version
+///     (<see cref="MessageContext.AggregateVersion"/>). Die Marke materialisiert nichts, also
+///     erreicht die Projektion (asynchroner Pull-Consumer) genau die Domain-Version — bis dorthin
+///     muss ein Read aufgeschlossen haben, um „read your writes" zu erfüllen.
+///
+/// Quellen: Server-Events (MessageContext) und Query-Deps (nur OCC). Kein Reflection.
+/// Thread-Safety: Writes kommen vom UI-Thread (Bus-Dispatch), Reads teils vom Query-Task
+/// (QueryBridge prüft die Deps gegen das Read-Ziel) — daher ein Lock um beide Maps.
 /// </summary>
 public class VersioningModule : IVersioningModule
 {
-    private readonly Dictionary<Guid, int> _versions = new();
+    private readonly object _gate = new();
+    private readonly Dictionary<Guid, int> _occVersions = new();   // Stream-Head (inkl. Marke) → ExpectedVersion
+    private readonly Dictionary<Guid, int> _readTargets = new();   // Domain-Event-Version → Read-Your-Writes-Ziel
     private readonly List<IDisposable> _subscriptions = new();
 
     /// <summary>
@@ -33,19 +42,16 @@ public class VersioningModule : IVersioningModule
 
     private void TrackFromContext(MessageContext ctx)
     {
-        // Für die OCC-ExpectedVersion zählt der Stream-Head NACH dem Commit (inkl. der
-        // co-committeten KommandoVerarbeitet-Marke), nicht die Position des Domain-Events.
-        // StreamHeadVersion trägt genau das; nur wenn sie ungesetzt ist (0, z. B. ältere Events
-        // oder lokale Nachrichten) fällt es auf die Event-Version zurück.
-        var version = ctx.StreamHeadVersion > 0 ? ctx.StreamHeadVersion : ctx.AggregateVersion;
+        if (ctx.AggregateId == Guid.Empty) return;
 
-        if (ctx.AggregateId != Guid.Empty && version > 0)
+        // OCC: Stream-Head bevorzugen (zählt die Marke mit), sonst Event-Version.
+        var occ = ctx.StreamHeadVersion > 0 ? ctx.StreamHeadVersion : ctx.AggregateVersion;
+
+        lock (_gate)
         {
-            if (!_versions.TryGetValue(ctx.AggregateId, out var existing) ||
-                version > existing)
-            {
-                _versions[ctx.AggregateId] = version;
-            }
+            if (occ > 0) Bump(_occVersions, ctx.AggregateId, occ);
+            // Read-Ziel: IMMER die reine Domain-Event-Version (nie den Marker-Head).
+            if (ctx.AggregateVersion > 0) Bump(_readTargets, ctx.AggregateId, ctx.AggregateVersion);
         }
     }
 
@@ -54,27 +60,45 @@ public class VersioningModule : IVersioningModule
     // ═══════════════════════════════════════════════════
 
     public int? GetVersion(Guid aggregateId)
-        => _versions.TryGetValue(aggregateId, out var v) ? v : null;
+    {
+        lock (_gate)
+            return _occVersions.TryGetValue(aggregateId, out var v) ? v : null;
+    }
+
+    public int? GetReadTarget(Guid aggregateId)
+    {
+        lock (_gate)
+            return _readTargets.TryGetValue(aggregateId, out var v) ? v : null;
+    }
 
     public void TrackFromDeps(IEnumerable<AggregateDep> deps)
     {
-        foreach (var dep in deps)
-        {
-            if (!_versions.TryGetValue(dep.Id, out var existing) ||
-                dep.Version > existing)
-            {
-                _versions[dep.Id] = dep.Version;
-            }
-        }
+        lock (_gate)
+            foreach (var dep in deps)
+                Bump(_occVersions, dep.Id, dep.Version);
     }
 
     /// <summary>Entfernt alle gecachten Versionen. Nützlich bei Reconnect.</summary>
-    public void Reset() => _versions.Clear();
+    public void Reset()
+    {
+        lock (_gate)
+        {
+            _occVersions.Clear();
+            _readTargets.Clear();
+        }
+    }
 
     public void Deactivate()
     {
         foreach (var sub in _subscriptions)
             sub.Dispose();
         _subscriptions.Clear();
+    }
+
+    // Monoton erhöhen (nie senken) — der Aufrufer hält das Lock.
+    private static void Bump(Dictionary<Guid, int> map, Guid id, int version)
+    {
+        if (!map.TryGetValue(id, out var existing) || version > existing)
+            map[id] = version;
     }
 }
