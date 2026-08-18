@@ -620,83 +620,89 @@ class QueryPayloadDto(betterproto.Message):
     get_produktions_tage: "GetProduktionsTageDto" = betterproto.message_field(
         21, group="payload"
     )
-    hole_trainingslaeufe: "HoleTrainingslaeufeDto" = betterproto.message_field(
+    hole_datensaetze: "HoleDatensaetzeDto" = betterproto.message_field(
         22, group="payload"
     )
-    get_image_pair: "GetImagePairDto" = betterproto.message_field(23, group="payload")
-    get_image_pair_historie: "GetImagePairHistorieDto" = betterproto.message_field(
-        24, group="payload"
+    hole_trainingslaeufe: "HoleTrainingslaeufeDto" = betterproto.message_field(
+        23, group="payload"
     )
-    get_produktions_strip: "GetProduktionsStripDto" = betterproto.message_field(
+    get_image_pair: "GetImagePairDto" = betterproto.message_field(24, group="payload")
+    get_image_pair_historie: "GetImagePairHistorieDto" = betterproto.message_field(
         25, group="payload"
     )
-    get_produktions_verlauf: "GetProduktionsVerlaufDto" = betterproto.message_field(
+    get_produktions_strip: "GetProduktionsStripDto" = betterproto.message_field(
         26, group="payload"
     )
+    get_produktions_verlauf: "GetProduktionsVerlaufDto" = betterproto.message_field(
+        27, group="payload"
+    )
     get_unklassifizierte_image_pairs: "GetUnklassifizierteImagePairsDto" = (
-        betterproto.message_field(27, group="payload")
+        betterproto.message_field(28, group="payload")
     )
-    hole_datensatz: "HoleDatensatzDto" = betterproto.message_field(28, group="payload")
+    hole_datensatz: "HoleDatensatzDto" = betterproto.message_field(29, group="payload")
     hole_datensatz_samples: "HoleDatensatzSamplesDto" = betterproto.message_field(
-        29, group="payload"
-    )
-    hole_trainingslauf: "HoleTrainingslaufDto" = betterproto.message_field(
         30, group="payload"
     )
-    suche_image_pairs: "SucheImagePairsDto" = betterproto.message_field(
+    hole_trainingslauf: "HoleTrainingslaufDto" = betterproto.message_field(
         31, group="payload"
+    )
+    suche_image_pairs: "SucheImagePairsDto" = betterproto.message_field(
+        32, group="payload"
     )
 
 
 @dataclass(eq=False, repr=False)
 class QueryResponsePayloadDto(betterproto.Message):
-    image_pair_antwort: "ImagePairAntwortDto" = betterproto.message_field(
+    datensatz_antwort: "DatensatzAntwortDto" = betterproto.message_field(
         20, group="payload"
     )
-    trainingslauf_antwort: "TrainingslaufAntwortDto" = betterproto.message_field(
+    image_pair_antwort: "ImagePairAntwortDto" = betterproto.message_field(
         21, group="payload"
     )
-    datensatz_antwort: "DatensatzAntwortDto" = betterproto.message_field(
+    trainingslauf_antwort: "TrainingslaufAntwortDto" = betterproto.message_field(
         22, group="payload"
     )
-    datensatz_nicht_gefunden: "DatensatzNichtGefundenDto" = betterproto.message_field(
+    datensatz_liste: "DatensatzListeDto" = betterproto.message_field(
         23, group="payload"
     )
-    datensatz_samples: "DatensatzSamplesDto" = betterproto.message_field(
+    datensatz_nicht_gefunden: "DatensatzNichtGefundenDto" = betterproto.message_field(
         24, group="payload"
     )
-    image_pair_arbeitsliste: "ImagePairArbeitslisteDto" = betterproto.message_field(
+    datensatz_samples: "DatensatzSamplesDto" = betterproto.message_field(
         25, group="payload"
     )
-    image_pair_historie_antwort: "ImagePairHistorieAntwortDto" = (
-        betterproto.message_field(26, group="payload")
+    image_pair_arbeitsliste: "ImagePairArbeitslisteDto" = betterproto.message_field(
+        26, group="payload"
     )
-    image_pair_historie_nicht_gefunden: "ImagePairHistorieNichtGefundenDto" = (
+    image_pair_historie_antwort: "ImagePairHistorieAntwortDto" = (
         betterproto.message_field(27, group="payload")
     )
-    image_pair_nicht_gefunden_antwort: "ImagePairNichtGefundenAntwortDto" = (
+    image_pair_historie_nicht_gefunden: "ImagePairHistorieNichtGefundenDto" = (
         betterproto.message_field(28, group="payload")
     )
-    image_pair_statistik_antwort: "ImagePairStatistikAntwortDto" = (
+    image_pair_nicht_gefunden_antwort: "ImagePairNichtGefundenAntwortDto" = (
         betterproto.message_field(29, group="payload")
     )
-    image_pair_suchergebnis: "ImagePairSuchergebnisDto" = betterproto.message_field(
-        30, group="payload"
+    image_pair_statistik_antwort: "ImagePairStatistikAntwortDto" = (
+        betterproto.message_field(30, group="payload")
     )
-    produktions_strip_antwort: "ProduktionsStripAntwortDto" = betterproto.message_field(
+    image_pair_suchergebnis: "ImagePairSuchergebnisDto" = betterproto.message_field(
         31, group="payload"
     )
-    produktions_tage_antwort: "ProduktionsTageAntwortDto" = betterproto.message_field(
+    produktions_strip_antwort: "ProduktionsStripAntwortDto" = betterproto.message_field(
         32, group="payload"
     )
+    produktions_tage_antwort: "ProduktionsTageAntwortDto" = betterproto.message_field(
+        33, group="payload"
+    )
     produktions_verlauf_antwort: "ProduktionsVerlaufAntwortDto" = (
-        betterproto.message_field(33, group="payload")
+        betterproto.message_field(34, group="payload")
     )
     trainingslauf_liste: "TrainingslaufListeDto" = betterproto.message_field(
-        34, group="payload"
+        35, group="payload"
     )
     trainingslauf_nicht_gefunden_antwort: "TrainingslaufNichtGefundenAntwortDto" = (
-        betterproto.message_field(35, group="payload")
+        betterproto.message_field(36, group="payload")
     )
 
 
@@ -707,7 +713,7 @@ class TriggerPayloadDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class EpochenMetrikDto(betterproto.Message):
+class RangeKriterienDto(betterproto.Message):
     """
     ============================================================================
      ALL PAYLOAD MESSAGES
@@ -717,13 +723,6 @@ class EpochenMetrikDto(betterproto.Message):
      ============================================================================
     """
 
-    epoche: int = betterproto.int32_field(1)
-    loss: float = betterproto.double_field(2)
-    genauigkeit: float = betterproto.double_field(3)
-
-
-@dataclass(eq=False, repr=False)
-class RangeKriterienDto(betterproto.Message):
     von: int = betterproto.int64_field(1)
     bis: int = betterproto.int64_field(2)
     ki_klassifikation: str = betterproto.string_field(3)
@@ -733,6 +732,27 @@ class RangeKriterienDto(betterproto.Message):
     hat_ki_klassifikation: int = betterproto.int32_field(7)
     hat_mensch_label: int = betterproto.int32_field(8)
     nur_nicht_inspizierte: int = betterproto.int32_field(9)
+
+
+@dataclass(eq=False, repr=False)
+class RangeHerkunftDto(betterproto.Message):
+    kriterien: "RangeKriterienDto" = betterproto.message_field(1)
+    anzahl_paare: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class EpochenMetrikDto(betterproto.Message):
+    epoche: int = betterproto.int32_field(1)
+    loss: float = betterproto.double_field(2)
+    genauigkeit: float = betterproto.double_field(3)
+
+
+@dataclass(eq=False, repr=False)
+class SplitKonfigDto(betterproto.Message):
+    train_prozent: int = betterproto.int32_field(1)
+    val_prozent: int = betterproto.int32_field(2)
+    test_prozent: int = betterproto.int32_field(3)
+    seed: int = betterproto.int32_field(4)
 
 
 @dataclass(eq=False, repr=False)
@@ -765,12 +785,6 @@ class DatensatzMitgliedDto(betterproto.Message):
     split: int = betterproto.int32_field(3)
     dc0_pfad: str = betterproto.string_field(4)
     dc2_pfad: str = betterproto.string_field(5)
-
-
-@dataclass(eq=False, repr=False)
-class RangeHerkunftDto(betterproto.Message):
-    kriterien: "RangeKriterienDto" = betterproto.message_field(1)
-    anzahl_paare: int = betterproto.int32_field(2)
 
 
 @dataclass(eq=False, repr=False)
@@ -822,14 +836,6 @@ class ProduktionsZeitBucketDto(betterproto.Message):
     anomalie: int = betterproto.int32_field(5)
     ungelabelt: int = betterproto.int32_field(6)
     nicht_inspiziert: int = betterproto.int32_field(7)
-
-
-@dataclass(eq=False, repr=False)
-class SplitKonfigDto(betterproto.Message):
-    train_prozent: int = betterproto.int32_field(1)
-    val_prozent: int = betterproto.int32_field(2)
-    test_prozent: int = betterproto.int32_field(3)
-    seed: int = betterproto.int32_field(4)
 
 
 @dataclass(eq=False, repr=False)
@@ -2150,6 +2156,11 @@ class GetProduktionsTageDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
+class HoleDatensaetzeDto(betterproto.Message):
+    original: "HoleDatensaetzeDto" = betterproto.message_field(1)
+
+
+@dataclass(eq=False, repr=False)
 class HoleTrainingslaeufeDto(betterproto.Message):
     original: "HoleTrainingslaeufeDto" = betterproto.message_field(1)
 
@@ -2206,13 +2217,24 @@ class SucheImagePairsDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class ImagePairAntwortDto(betterproto.Message):
+class DatensatzAntwortDto(betterproto.Message):
     """
     ============================================================================
      QUERY RESPONSE PAYLOADS
      ============================================================================
     """
 
+    id: str = betterproto.string_field(1)
+    name: str = betterproto.string_field(2)
+    status: int = betterproto.int32_field(3)
+    anzahl_mitglieder: int = betterproto.int32_field(4)
+    eingefrorene_version: int = betterproto.int32_field(5)
+    split: "SplitKonfigDto" = betterproto.message_field(6)
+    ranges: List["RangeHerkunftDto"] = betterproto.message_field(7)
+
+
+@dataclass(eq=False, repr=False)
+class ImagePairAntwortDto(betterproto.Message):
     id: str = betterproto.string_field(1)
     pair_key: str = betterproto.string_field(2)
     produziert_am: int = betterproto.int64_field(3)
@@ -2252,14 +2274,8 @@ class TrainingslaufAntwortDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
-class DatensatzAntwortDto(betterproto.Message):
-    id: str = betterproto.string_field(1)
-    name: str = betterproto.string_field(2)
-    status: int = betterproto.int32_field(3)
-    anzahl_mitglieder: int = betterproto.int32_field(4)
-    eingefrorene_version: int = betterproto.int32_field(5)
-    split: "SplitKonfigDto" = betterproto.message_field(6)
-    ranges: List["RangeHerkunftDto"] = betterproto.message_field(7)
+class DatensatzListeDto(betterproto.Message):
+    items: List["DatensatzAntwortDto"] = betterproto.message_field(1)
 
 
 @dataclass(eq=False, repr=False)
