@@ -39,7 +39,11 @@ public record DatensatzAntwort(
     int AnzahlMitglieder,
     int EingefroreneVersion,
     SplitKonfig Split,
-    IReadOnlyList<RangeHerkunft> Ranges
+    IReadOnlyList<RangeHerkunft> Ranges,
+    // Die konkreten Entwurfs-Mitglieder (Bildpaar-Ids). Grundlage für die
+    // „Datensatz-als-Tag"-Sicht (Konzept datensatz-kuratierung §4.3, §6): der Client
+    // baut daraus O(1)-Mitgliedschaft (Badges in Galerie/Einbild) für das Sammel-Ziel.
+    IReadOnlyList<Guid> Mitglieder
 ) : IQueryResponse;
 
 public record DatensatzNichtGefunden(Guid DatensatzId) : IQueryResponse;

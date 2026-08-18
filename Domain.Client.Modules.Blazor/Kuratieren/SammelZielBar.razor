@@ -1,0 +1,134 @@
+@namespace Domain.Client.Modules.Blazor.Kuratieren
+@inject Store Store
+@inject DatensatzListeStore Liste
+@inject EffectScope Fx
+@using global::Client.Infrastructure.Abstractions
+@using Domain.Client.Modules
+@using Domain.Client.Modules.Datensaetze
+@using Domain.Client.Modules.DatensatzKomposition
+@using Domain.Datensatz
+@using Domain.ImagePair
+@implements IDisposable
+
+@*
+    Sammel-Ziel-Leiste. Links der Aufnahme-Zustand (roter Punkt + „Sammle in: <Name>"),
+    Größe + Live-Balance (aus den geladenen Mitgliedern gerechnet), rechts Wechsel-Dropdown,
+    Neuanlage und Einfrieren. Kuratiert wird in Galerie/Einbild — hier ist nur der Modus sichtbar.
+*@
+
+<div style="display:flex;align-items:center;gap:12px;padding:7px 12px;
+            background:linear-gradient(90deg,#2a2140,#1a1a1a);border-bottom:1px solid #7e57c2;font-size:12px">
+
+    @if (Store.SammelZiel is { } ziel)
+    {
+        <span title="Sammel-Ziel aktiv"
+              style="width:10px;height:10px;border-radius:50%;flex:0 0 auto;
+                     background:@(ziel.IstEingefroren ? "#5c9eff" : "#e05252");
+                     box-shadow:0 0 0 4px @(ziel.IstEingefroren ? "rgba(92,158,255,.18)" : "rgba(224,82,82,.18)")"></span>
+
+        <span style="color:#ccc">Sammle in:</span>
+        <span style="font-weight:600;color:#d7c6f7">@Name(ziel)</span>
+        <span style="color:#888">@StatusText(ziel.Status)@(ziel.IstEingefroren ? $" · v{ziel.EingefroreneVersion}" : "") · @ziel.AnzahlMitglieder Paare</span>
+
+        @if (Balance(ziel) is var b && b.ges > 0)
+        {
+            <div title="Klassenbalance (geladene Mitglieder)"
+                 style="display:flex;height:12px;width:180px;border-radius:3px;overflow:hidden;border:1px solid #333">
+                <i style="display:block;height:100%;background:#4caf50;width:@(Pct(b.ok, b.ges))%"></i>
+                <i style="display:block;height:100%;background:#c9a227;width:@(Pct(b.frag, b.ges))%"></i>
+                <i style="display:block;height:100%;background:#e05252;width:@(Pct(b.anom, b.ges))%"></i>
+            </div>
+            <span style="color:#888">OK @b.ok · Frag @b.frag · Anom @b.anom</span>
+        }
+    }
+    else
+    {
+        <span style="width:10px;height:10px;border-radius:50%;flex:0 0 auto;background:#444"></span>
+        <span style="color:#999">Kein Sammel-Ziel — wähle einen Datensatz oder lege einen neuen an.</span>
+    }
+
+    <div style="flex:1"></div>
+
+    @* Wechsel-Dropdown *@
+    @if (Liste.Datensaetze.Count > 0)
+    {
+        <select value="@(Store.SammelZiel?.Id.ToString() ?? "")" @onchange="Wechsle"
+                style="background:#222;color:#ddd;border:1px solid #444;border-radius:5px;padding:4px 8px;font-size:12px">
+            <option value="" disabled>Sammel-Ziel wählen…</option>
+            @foreach (var d in Liste.Datensaetze)
+            {
+                <option value="@d.Id">@(string.IsNullOrWhiteSpace(d.Name) ? "(ohne Name)" : d.Name) (@d.AnzahlMitglieder)</option>
+            }
+        </select>
+    }
+
+    @* Neuanlage *@
+    <input @bind="_neuName" @bind:event="oninput" @onkeydown="NeuKey" placeholder="Neuer Datensatz…"
+           style="background:#222;color:#ddd;border:1px solid #444;border-radius:5px;padding:4px 8px;font-size:12px;width:150px" />
+    <button @onclick="Neu"
+            style="background:#2a2140;color:#cbb8f0;border:1px solid #7e57c2;border-radius:5px;padding:4px 10px;font-size:12px;cursor:pointer">＋ Anlegen</button>
+
+    @* Einfrieren *@
+    @if (Store.SammelZiel is { IstEingefroren: false } && Store.SammelZiel.AnzahlMitglieder > 0)
+    {
+        <button @onclick="Einfrieren"
+                style="background:#12233a;color:#bcd8ff;border:1px solid #5c9eff;border-radius:5px;padding:4px 10px;font-size:12px;cursor:pointer">Einfrieren →</button>
+    }
+</div>
+
+@code {
+    private string _neuName = "";
+
+    protected override void OnInitialized()
+    {
+        Fx.OnChanged(Store, () => InvokeAsync(StateHasChanged));
+        Fx.OnChanged(Liste, () => InvokeAsync(StateHasChanged));
+    }
+
+    private void Wechsle(ChangeEventArgs e)
+    {
+        if (Guid.TryParse(e.Value?.ToString(), out var id))
+            Fx.Dispatch(new DatensatzAusgewaehlt(id));
+    }
+
+    private void Neu()
+    {
+        Fx.Dispatch(new ErstelleDatensatzIntent(_neuName));
+        _neuName = "";
+    }
+
+    private void NeuKey(KeyboardEventArgs e)
+    {
+        if (e.Key is "Enter" or "NumpadEnter") Neu();
+    }
+
+    private void Einfrieren() => Fx.Dispatch(new FriereEinIntent());
+
+    private static string Name(SammelZielKontext z)
+        => string.IsNullOrWhiteSpace(z.Name) ? "(lädt…)" : z.Name!;
+
+    private static string StatusText(DatensatzStatus s)
+        => s == DatensatzStatus.Eingefroren ? "Eingefroren" : "Entwurf";
+
+    // Balance aus den aktuell GELADENEN Mitgliedern (das Kuratier-Fenster): du siehst die
+    // Bilder ja gerade, also sind sie i.d.R. geladen. Nicht geladene Mitglieder zählen nicht mit.
+    private (int ok, int frag, int anom, int ges) Balance(SammelZielKontext z)
+    {
+        int ok = 0, frag = 0, anom = 0;
+        foreach (var rec in Store.VirtualImagePairs.AlleGeladenen())
+        {
+            if (!z.MitgliederIds.Contains(rec.Id)) continue;
+            switch (rec.PhysischesProduktLabel ?? rec.MenschBildpaarLabel)
+            {
+                case Klassifikation.KeineAnomalie: ok++;   break;
+                case Klassifikation.Questionable:  frag++; break;
+                case Klassifikation.Anomalie:      anom++; break;
+            }
+        }
+        return (ok, frag, anom, ok + frag + anom);
+    }
+
+    private static int Pct(int part, int total) => total <= 0 ? 0 : (int)Math.Round(100.0 * part / total);
+
+    public void Dispose() { Fx.Dispose(); }
+}

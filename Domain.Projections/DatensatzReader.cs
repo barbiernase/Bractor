@@ -72,5 +72,6 @@ public partial class DatensatzReader : IReader<DatensatzProjektion>
         AnzahlMitglieder: model.AnzahlMitglieder,
         EingefroreneVersion: model.EingefroreneVersion,
         Split: model.Split,
-        Ranges: model.Ranges);
+        Ranges: model.Ranges,
+        Mitglieder: model.Mitglieder);
 }

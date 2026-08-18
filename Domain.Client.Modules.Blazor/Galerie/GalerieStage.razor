@@ -4,6 +4,7 @@
 @using global::Client.Infrastructure.Abstractions
 @using Domain.Client.Modules
 @using Domain.Client.Modules.Blazor.Shared
+@using Domain.Client.Modules.Kuratieren
 @using Domain.ImagePair
 @implements IDisposable
 
@@ -54,6 +55,27 @@
                                   style="position:absolute;top:3px;right:3px;width:9px;height:9px;
                                          border-radius:50%;border:1px solid #000;background:@Farbe(label)"></span>
                         }
+
+                        @* Datensatz-Tag: Mitgliedschafts-Badge + Klick-Toggle (Konzept §4.2). *@
+                        @if (Store.SammelZiel is { IstEingefroren: false })
+                        {
+                            var drin = Store.IstMitglied(rec.Id);
+                            <span @onclick="() => Toggle(rec)" @onclick:stopPropagation="true"
+                                  title="@(drin ? "Aus Sammel-Ziel entfernen" : "Ins Sammel-Ziel aufnehmen")"
+                                  style="position:absolute;top:3px;left:4px;width:16px;height:16px;border-radius:50%;
+                                         cursor:pointer;text-align:center;line-height:15px;font-size:11px;
+                                         @(drin ? "background:#7e57c2;color:#fff;border:1px solid #0006"
+                                                : "background:#0007;color:#b39ddb;border:1px dashed #7e57c2")">
+                                @(drin ? "✓" : "+")
+                            </span>
+                        }
+                        else if (Store.IstMitglied(rec.Id))
+                        {
+                            <span title="im Sammel-Ziel"
+                                  style="position:absolute;top:3px;left:4px;width:14px;height:14px;border-radius:50%;
+                                         background:#7e57c2;color:#fff;text-align:center;line-height:13px;font-size:10px;border:1px solid #0006">✓</span>
+                        }
+
                         @if (!rec.IstKomplett)
                         {
                             <span style="position:absolute;bottom:2px;left:4px;font-size:9px;color:#c9a227">unvollständig</span>
@@ -82,6 +104,9 @@
     protected override void OnInitialized()
     {
         Fx.OnChanged(Store, Store.VirtualImagePairs, LadeThumbnails);
+        // Mitgliedschafts-Badges folgen dem Sammel-Ziel: bei jeder Store-Änderung neu rendern
+        // (SammelZiel-Wechsel, Tag-Toggle). Re-Render fließt in die VirtualGrid-Cells durch.
+        Fx.OnChanged(Store, () => InvokeAsync(StateHasChanged));
     }
 
     protected override void OnAfterRender(bool firstRender)
@@ -96,6 +121,9 @@
 
     // Einfacher Klick: Auswahl (Cursor) — Paarliste + (spätere) Bild-Bühne folgen.
     private void Auswaehlen(ImagePairRecord rec) => Fx.Dispatch(new ImagePairAusgewaehlt(rec.Id));
+
+    // Klick auf das Tag-Badge: Mitgliedschaft im aktiven Sammel-Ziel umschalten (ohne Cursor-Wechsel).
+    private void Toggle(ImagePairRecord rec) => Fx.Dispatch(new DatensatzTagGetoggelt(rec.Id));
 
     // Doppelklick: auswählen UND ins Bild wechseln (wie Enter).
     private void Oeffnen(ImagePairRecord rec)

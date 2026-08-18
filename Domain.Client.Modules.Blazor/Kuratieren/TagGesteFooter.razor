@@ -1,0 +1,42 @@
+@namespace Domain.Client.Modules.Blazor.Kuratieren
+@inject Store Store
+@inject EffectScope Fx
+@using global::Client.Infrastructure.Abstractions
+@using Domain.Client.Modules
+@using Domain.Client.Modules.Kuratieren
+@implements IDisposable
+
+@*
+    Tag-Toggle des betrachteten (Cursor-)Paars im aktiven Sammel-Ziel. Zeigt „✓ in <Name>"
+    wenn drin, sonst „+ <Name>". Klick = Taste A. Ohne Sammel-Ziel bleibt der Footer leer.
+*@
+
+@if (Store.SammelZiel is { } ziel && !ziel.IstEingefroren && Store.Cursor.Id is { } id)
+{
+    var drin = Store.IstMitglied(id);
+    <MudDivider Vertical="true" FlexItem="true" Class="mx-2" />
+    <MudButton Variant="Variant.Text" Size="Size.Small"
+               OnClick="() => Fx.Dispatch(new DatensatzTagGetoggelt())"
+               Style="@ButtonStyle(drin)">
+        <b>A</b>&nbsp;@(drin ? "✓ in " : "+ ")@Kurz(ziel.Name)
+    </MudButton>
+}
+
+@code {
+    protected override void OnInitialized()
+        => Fx.OnChanged(Store,
+            () => (Store.SammelZiel, Store.Cursor.Version),
+            () => InvokeAsync(StateHasChanged));
+
+    private static string ButtonStyle(bool drin)
+        => "min-width:0;padding:2px 10px;font-size:11px;text-transform:none;" +
+           (drin ? "color:#cbb8f0" : "color:#9a86c8");
+
+    private static string Kurz(string? name)
+    {
+        var n = string.IsNullOrWhiteSpace(name) ? "Sammel-Ziel" : name!.Trim();
+        return n.Length > 22 ? n[..21] + "…" : n;
+    }
+
+    public void Dispose() => Fx.Dispose();
+}

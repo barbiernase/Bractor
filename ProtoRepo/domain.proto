@@ -983,6 +983,7 @@ message DatensatzAntwortDto {
     int32 eingefrorene_version = 5;
     SplitKonfigDto split = 6;
     repeated RangeHerkunftDto ranges = 7;
+    repeated string mitglieder = 8;
 }
 
 message ImagePairAntwortDto {
