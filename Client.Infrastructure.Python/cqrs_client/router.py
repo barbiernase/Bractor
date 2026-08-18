@@ -272,11 +272,15 @@ class MessageRouter:
                 log.error("Command %s has no aggregate_id", type(output).__name__)
                 return
 
-            expected_version = ctx.get_expected_version(agg_id)
+            # Aus einem Event-Handler gelieferte Commands sind REAKTIONEN, keine Client-Commands
+            # mit behaupteter Version: sie werden im Emittiert-Modus (§4.2) gesendet — keine OCC,
+            # die Empfaenger-Inbox dedupliziert. Sonst scheitern sie am co-committeten
+            # KommandoVerarbeitet-Marker (der Stream steht eine Version hoeher als das Event, auf
+            # das reagiert wurde). Sentinel: expected_version < 0 -> der Server mappt auf Emittiert.
             envelope = mapper.wrap_command(
                 output,
                 aggregate_id=agg_id,
-                expected_version=expected_version,
+                expected_version=-1,
                 session_id=proxy.session_id,
             )
             await proxy.send_command(envelope)

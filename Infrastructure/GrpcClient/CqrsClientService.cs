@@ -3,6 +3,7 @@ using System.Collections.Concurrent;
 using Abstractions;
 using Domain.Projections;
 using Grpc.Core;
+using Infrastructure.Extensions;
 using Infrastructure.Mapping;
 using Infrastructure.Pipeline;
 using Infrastructure.PubSub;
@@ -386,8 +387,27 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             var envelope = _mapper.MapToDomain(request.Envelope);
             envelope = envelope with { OriginSessionId = sessionId };
 
-            _logger.LogDebug("{Session} Command {Command}, CorrelationId {CorrelationId}",
-                sessionId, envelope.Payload.GetType().Name, envelope.CorrelationId);
+            // Routing über Typen (Invariante 3): der AggregateType ist serverseitig autoritativ aus
+            // dem Command-Typ ableitbar (generierte CommandToAggregate-Map). Clients, die ihn nicht
+            // setzen — z. B. der Python-Worker, der reaktive Melde*-Commands emittiert — würden sonst
+            // eine ClusterIdentity mit leerem Kind erzeugen; die ist nicht routbar → Dispatch läuft in
+            // den Timeout (DLQ), das Command wirkt nie. Fehlt der Type, hier deterministisch auflösen.
+            if (string.IsNullOrWhiteSpace(envelope.AggregateType))
+                envelope = envelope with { AggregateType = AggregateDispatcherExtensions.ResolveAggregateType(envelope.Payload) };
+
+            // Emittiert-Modus über die gRPC-Grenze (§4.2): ein externer Reaktions-Treiber — der
+            // Python-Worker reagiert auf TrainingAngefordert und emittiert Melde*-Commands — ist
+            // semantisch eine Reaktion, kein Client mit behaupteter Version. OCC würde ihn am
+            // co-committeten KommandoVerarbeitet-Marker scheitern lassen (Stream steht auf v2, das
+            // Event war v1). Der Wire kennt nur expected_version; negativ = Sentinel für Emittiert
+            // (keine Version, Empfänger-Inbox dedupliziert) — dieselbe Semantik wie der interne
+            // CommandEmitter. Positive Versionen bleiben strikt Client (OCC), z. B. die Blazor-GUI.
+            if (request.Envelope.ExpectedVersion < 0)
+                envelope = envelope with { Modus = new CommandModus.Emittiert() };
+
+            _logger.LogDebug("{Session} Command {Command} → {AggregateType} ({Modus}), CorrelationId {CorrelationId}",
+                sessionId, envelope.Payload.GetType().Name, envelope.AggregateType,
+                envelope.Modus.GetType().Name, envelope.CorrelationId);
 
             _dispatcher.Dispatch(envelope);
         }
