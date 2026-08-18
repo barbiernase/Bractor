@@ -252,6 +252,7 @@ public class ConnectionModule : IAsyncDisposable
                     AggregateId = envelope.AggregateId,
                     AggregateType = envelope.AggregateType,
                     AggregateVersion = envelope.AggregateVersion,
+                    StreamHeadVersion = envelope.StreamHeadVersion,
                     CorrelationId = envelope.CorrelationId,
                     CreatedAtUtc = envelope.CreatedAtUtc,
                 };

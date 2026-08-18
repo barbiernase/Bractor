@@ -351,6 +351,7 @@ class EventEnvelopeDto(betterproto.Message):
     correlation_id: str = betterproto.string_field(7)
     user_id: str = betterproto.string_field(8)
     target_subscriber_id: str = betterproto.string_field(9)
+    stream_head_version: int = betterproto.int32_field(10)
     image_pair_inspiziert: "ImagePairInspiziertDto" = betterproto.message_field(
         20, group="payload"
     )

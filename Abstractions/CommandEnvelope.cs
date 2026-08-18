@@ -45,6 +45,16 @@ public record EventEnvelope : IEventEnvelope, IWireMessage
     public Guid EventId { get; init; } = Guid.NewGuid();
     public Guid AggregateId { get; init; }
     public int AggregateVersion { get; init; } = 0;
+
+    /// <summary>
+    /// Der Stream-Head NACH dem Commit dieses Batches — inklusive der co-committeten
+    /// <c>KommandoVerarbeitet</c>-Inbox-Marke. Anders als <see cref="AggregateVersion"/> (die
+    /// unveränderliche Position dieses Events, Spec 4.2) sagt dies dem Client, welche
+    /// <c>ExpectedVersion</c> sein nächster Command tragen muss — sonst scheitert er am Marker
+    /// (Head = Event-Version + 1). 0 = nicht gesetzt → Client fällt auf AggregateVersion zurück.
+    /// </summary>
+    public int StreamHeadVersion { get; init; } = 0;
+
     /// <summary>Unter-Position bei Upcasting-Splits; Default 0 (ein Stored-Event → ein materialisiertes Event). Siehe <see cref="IEventEnvelope.SubIndex"/>.</summary>
     public int SubIndex { get; init; } = 0;
     public DateTimeOffset CreatedAtUtc { get; init; } = DateTimeOffset.UtcNow;

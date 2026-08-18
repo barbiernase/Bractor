@@ -331,7 +331,8 @@ public class FileGenerator
                  string correlation_id = 7;
                  string user_id = 8;
                  string target_subscriber_id = 9;
-                 
+                 int32 stream_head_version = 10;
+
                  oneof payload {
              {{eventOneOfs}}
                  }

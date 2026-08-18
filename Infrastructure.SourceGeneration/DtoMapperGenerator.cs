@@ -404,6 +404,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("                AggregateId = Guid.Parse(dto.AggregateId),");
             sb.AppendLine("                AggregateType = dto.AggregateType,");
             sb.AppendLine("                AggregateVersion = dto.AggregateVersion,");
+            sb.AppendLine("                StreamHeadVersion = dto.StreamHeadVersion,");
             sb.AppendLine("                CreatedAtUtc = DateTimeOffset.FromUnixTimeMilliseconds(dto.CreatedAtUtc),");
             sb.AppendLine("                CausationId = dto.CausationId,");
             sb.AppendLine("                CorrelationId = dto.CorrelationId,");
@@ -423,6 +424,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("                AggregateId = envelope.AggregateId.ToString(),");
             sb.AppendLine("                AggregateType = envelope.AggregateType ?? string.Empty,");
             sb.AppendLine("                AggregateVersion = envelope.AggregateVersion,");
+            sb.AppendLine("                StreamHeadVersion = envelope.StreamHeadVersion,");
             sb.AppendLine("                CreatedAtUtc = envelope.CreatedAtUtc.ToUnixTimeMilliseconds(),");
             sb.AppendLine("                CausationId = envelope.CausationId,");
             sb.AppendLine("                CorrelationId = envelope.CorrelationId,");

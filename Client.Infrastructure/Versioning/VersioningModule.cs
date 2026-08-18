@@ -33,12 +33,18 @@ public class VersioningModule : IVersioningModule
 
     private void TrackFromContext(MessageContext ctx)
     {
-        if (ctx.AggregateId != Guid.Empty && ctx.AggregateVersion > 0)
+        // Für die OCC-ExpectedVersion zählt der Stream-Head NACH dem Commit (inkl. der
+        // co-committeten KommandoVerarbeitet-Marke), nicht die Position des Domain-Events.
+        // StreamHeadVersion trägt genau das; nur wenn sie ungesetzt ist (0, z. B. ältere Events
+        // oder lokale Nachrichten) fällt es auf die Event-Version zurück.
+        var version = ctx.StreamHeadVersion > 0 ? ctx.StreamHeadVersion : ctx.AggregateVersion;
+
+        if (ctx.AggregateId != Guid.Empty && version > 0)
         {
             if (!_versions.TryGetValue(ctx.AggregateId, out var existing) ||
-                ctx.AggregateVersion > existing)
+                version > existing)
             {
-                _versions[ctx.AggregateId] = ctx.AggregateVersion;
+                _versions[ctx.AggregateId] = version;
             }
         }
     }

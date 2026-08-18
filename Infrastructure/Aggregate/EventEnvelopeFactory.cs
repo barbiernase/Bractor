@@ -23,7 +23,8 @@ public static class EventEnvelopeFactory
         int baseVersion,
         string correlationId,
         string causationId,
-        string userId)
+        string userId,
+        int streamHeadVersion = 0)
     {
         var result = new List<EventEnvelope>(events.Count);
         for (int i = 0; i < events.Count; i++)
@@ -31,7 +32,10 @@ public static class EventEnvelopeFactory
             result.Add(new EventEnvelope
             {
                 AggregateId      = aggregateId,
-                AggregateVersion = baseVersion + i + 1,   // Version PRO Event
+                AggregateVersion = baseVersion + i + 1,   // Version PRO Event (Spec 4.2)
+                // Stream-Head nach dem ganzen Batch (inkl. Marke) — für die Client-OCC. Jedes Event
+                // des Batches trägt denselben Head; 0 (ungesetzt) → Client nutzt AggregateVersion.
+                StreamHeadVersion = streamHeadVersion,
                 AggregateType    = aggregateType,
                 CorrelationId    = correlationId,
                 CausationId      = causationId,

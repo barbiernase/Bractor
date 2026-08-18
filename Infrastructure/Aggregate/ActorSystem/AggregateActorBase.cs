@@ -623,7 +623,10 @@ public abstract class AggregateActorBase<TState> : IActor
             baseVersion: baseVersion,
             correlationId: cmdEnvelope.CorrelationId,
             causationId: cmdEnvelope.CommandId.ToString(),
-            userId: cmdEnvelope.UserId);
+            userId: cmdEnvelope.UserId,
+            // Der Actor-State steht hier bereits auf dem Head NACH Domain-Events + co-committer
+            // Marke — genau die ExpectedVersion, die der nächste Client-Command tragen muss.
+            streamHeadVersion: _state.Version);
 
         // ★ Perf: Publish ist reine Benachrichtigung — der Command ist bereits im Log committet
         //   (Schritt 5). Zustellung ist best-effort (Invariante 2); die durablen Konsumenten
