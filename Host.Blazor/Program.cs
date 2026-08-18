@@ -5,6 +5,7 @@ using Client.Infrastructure.Connection;
 using Client.Infrastructure.Versioning;
 using Host.Blazor;
 using Host.Blazor.Shell;
+using ApexCharts;
 using Microsoft.AspNetCore.Components.Server.Circuits;
 using MudBlazor.Services;
 
@@ -23,6 +24,7 @@ builder.WebHost.UseUrls(blazorUrls);
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 builder.Services.AddMudServices();
+builder.Services.AddApexCharts();   // Live-Trainingskurven im Training-Dashboard (M9)
 
 // ── Infrastruktur ──
 builder.Services.AddSingleton(new GrpcServerConfig(grpcAddress));

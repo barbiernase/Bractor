@@ -1,0 +1,187 @@
+@namespace Domain.Client.Modules.Blazor.TrainingDashboard
+@using Domain.Client.Modules.TrainingDashboard
+@using Domain.Client.Modules.Trainingslaeufe
+@using Domain.Datensatz
+@using Domain.Trainingslauf
+@using Domain.Projections
+@using ApexCharts
+@using global::Client.Infrastructure.Abstractions
+@inject TrainingDashboardStore Store
+@inject EffectScope Fx
+@implements IDisposable
+
+@*
+    Training-Dashboard (Konzept §8.2): oben „Neues Training" (eingefrorener Datensatz +
+    Hyperparameter), darunter je Lauf eine Live-Kurve (loss/accuracy). Jeder
+    TrainingFortschritt-Event triggert einen Re-Query → MetrikHistorie wächst → Kurve streamt.
+*@
+
+<div style="height:100%;overflow-y:auto;padding:16px;box-sizing:border-box;font-size:13px">
+
+    @* ══════════ Neues Training ══════════ *@
+    <div style="border:1px solid #e0e0e0;border-radius:8px;padding:14px;margin-bottom:18px">
+        <div style="font-weight:600;font-size:14px;margin-bottom:10px">Neues Training</div>
+
+        @if (Store.EingefroreneDatensaetze.Count == 0)
+        {
+            <div style="color:#999">Noch kein eingefrorener Datensatz. Erst in „Datensatz" komponieren und einfrieren.</div>
+        }
+        else
+        {
+            <div style="display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end">
+                <label style="font-size:12px;color:#555">Datensatz<br/>
+                    <select @bind="_selDsId" style="@Sel">
+                        <option value="">— wählen —</option>
+                        @foreach (var d in Store.EingefroreneDatensaetze)
+                        {
+                            <option value="@d.Id">@(string.IsNullOrWhiteSpace(d.Name) ? "(ohne Name)" : d.Name) · v@d.EingefroreneVersion</option>
+                        }
+                    </select>
+                </label>
+                <label style="font-size:12px;color:#555">Epochen<br/><input type="number" @bind="_epochen" style="@Num" /></label>
+                <label style="font-size:12px;color:#555">LernRate<br/><input type="number" step="0.0001" @bind="_lernRate" style="@Num" /></label>
+                <label style="font-size:12px;color:#555">Batch<br/><input type="number" @bind="_batch" style="@Num" /></label>
+                <label style="font-size:12px;color:#555">Architektur<br/><input @bind="_arch" style="@("width:90px;" + Num)" /></label>
+                <label style="font-size:12px;color:#555">Seed<br/><input type="number" @bind="_seed" style="@Num" /></label>
+                <button @onclick="Starte" disabled="@(!KannStarten)" style="@PrimBtn(KannStarten)">Training starten</button>
+            </div>
+        }
+    </div>
+
+    @* ══════════ Live-Kurven je Lauf ══════════ *@
+    @if (Store.Laeufe.Count == 0)
+    {
+        <div style="color:#888;padding:8px">Noch keine Trainingsläufe.</div>
+    }
+    else
+    {
+        foreach (var lauf in Store.Laeufe)
+        {
+            <div @key="lauf.Id" style="border:1px solid #e0e0e0;border-radius:8px;padding:14px;margin-bottom:14px">
+                <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+                    <div>
+                        <span style="font-family:monospace;font-weight:600">@Kurz(lauf.Id)</span>
+                        <span style="color:#777;margin-left:8px">DS @Kurz(lauf.DatensatzId) v@lauf.DatensatzVersion · @lauf.Hyperparameter.Architektur</span>
+                    </div>
+                    <div style="display:flex;align-items:center;gap:10px">
+                        <span style="@BadgeStil(lauf.Status)">@StatusText(lauf.Status)</span>
+                        @if (lauf.Status is TrainingsStatus.Angefordert or TrainingsStatus.Laeuft)
+                        {
+                            <button @onclick="() => BrichAb(lauf.Id)" style="@SekBtn">abbrechen</button>
+                        }
+                    </div>
+                </div>
+
+                <div style="color:#777;font-size:12px;margin-bottom:8px">
+                    Epoche @lauf.AktuelleEpoche/@lauf.GesamtEpochen
+                    @if (lauf.Status == TrainingsStatus.Abgeschlossen)
+                    {
+                        <span> · Endloss @lauf.Endmetriken.Loss.ToString("0.0000") · Genauigkeit @lauf.Endmetriken.Genauigkeit.ToString("0.0000")</span>
+                    }
+                    @if (lauf.Status == TrainingsStatus.Gescheitert && !string.IsNullOrEmpty(lauf.Fehlergrund))
+                    {
+                        <span style="color:#c62828"> · @lauf.Fehlergrund</span>
+                    }
+                </div>
+
+                @if (lauf.MetrikHistorie.Count == 0)
+                {
+                    <div style="height:120px;display:flex;align-items:center;justify-content:center;color:#aaa;background:#fafafa;border-radius:6px">
+                        noch keine Metriken
+                    </div>
+                }
+                else
+                {
+                    @* @key auf die Metrik-Anzahl: bei jedem neuen Epochen-Punkt wird die Kurve frisch
+                       gerendert → der Live-Zuwachs erscheint zuverlässig, ohne JS-Interop-Update. *@
+                    <div @key="Kurvenschluessel(lauf)">
+                        <ApexChart TItem="EpochenMetrik" Height="220">
+                            <ApexPointSeries TItem="EpochenMetrik"
+                                             Items="lauf.MetrikHistorie"
+                                             Name="Loss"
+                                             SeriesType="SeriesType.Line"
+                                             XValue="e => e.Epoche"
+                                             YValue="e => (decimal)e.Loss" />
+                            <ApexPointSeries TItem="EpochenMetrik"
+                                             Items="lauf.MetrikHistorie"
+                                             Name="Genauigkeit"
+                                             SeriesType="SeriesType.Line"
+                                             XValue="e => e.Epoche"
+                                             YValue="e => (decimal)e.Genauigkeit" />
+                        </ApexChart>
+                    </div>
+                }
+            </div>
+        }
+    }
+</div>
+
+@code {
+    private string _selDsId = "";
+    private int _epochen = 10;
+    private double _lernRate = 0.001;
+    private int _batch = 32;
+    private string _arch = "cnn";
+    private int _seed = 42;
+
+    protected override void OnInitialized()
+        => Fx.OnChanged(Store, () => InvokeAsync(StateHasChanged));
+
+    private bool KannStarten =>
+        Guid.TryParse(_selDsId, out _) && _epochen > 0 && _batch > 0;
+
+    void Starte()
+    {
+        if (!Guid.TryParse(_selDsId, out var dsId)) return;
+        var ds = Store.EingefroreneDatensaetze.FirstOrDefault(d => d.Id == dsId);
+        if (ds is null) return;
+        Fx.Dispatch(new StarteTrainingIntent(
+            DatensatzId: dsId,
+            DatensatzVersion: ds.EingefroreneVersion,
+            Epochen: _epochen,
+            LernRate: _lernRate,
+            BatchGroesse: _batch,
+            Architektur: _arch,
+            Seed: _seed));
+    }
+
+    void BrichAb(Guid id) => Fx.Dispatch(new BrichTrainingAbIntent(id));
+
+    public void Dispose() => Fx.Dispose();
+
+    private static string Kurz(Guid id) => id.ToString("N")[..8];
+    private static string Kurvenschluessel(TrainingslaufAntwort l) => $"{l.Id:N}:{l.MetrikHistorie.Count}:{(int)l.Status}";
+
+    private static string StatusText(TrainingsStatus s) => s switch
+    {
+        TrainingsStatus.Angefordert      => "angefordert",
+        TrainingsStatus.Laeuft           => "läuft",
+        TrainingsStatus.Abgeschlossen    => "abgeschlossen",
+        TrainingsStatus.Gescheitert      => "gescheitert",
+        TrainingsStatus.Abgebrochen      => "abgebrochen",
+        TrainingsStatus.Haengengeblieben => "hängengeblieben",
+        _                                => s.ToString()
+    };
+
+    private static string BadgeStil(TrainingsStatus s)
+    {
+        var (bg, fg) = s switch
+        {
+            TrainingsStatus.Laeuft           => ("#1565c0", "#fff"),
+            TrainingsStatus.Abgeschlossen    => ("#2e7d32", "#fff"),
+            TrainingsStatus.Gescheitert      => ("#c62828", "#fff"),
+            TrainingsStatus.Abgebrochen      => ("#757575", "#fff"),
+            TrainingsStatus.Haengengeblieben => ("#ef6c00", "#fff"),
+            _                                => ("#ececec", "#555")
+        };
+        return $"background:{bg};color:{fg};border-radius:8px;padding:1px 10px;font-size:11px;white-space:nowrap";
+    }
+
+    private const string Num = "width:70px;padding:5px 6px;border:1px solid #ccc;border-radius:5px;font-size:13px";
+    private const string Sel = "min-width:200px;padding:5px 6px;border:1px solid #ccc;border-radius:5px;font-size:13px";
+    private const string SekBtn = "padding:4px 10px;border:1px solid #c62828;border-radius:6px;font-size:12px;color:#c62828;background:#fff;cursor:pointer";
+
+    private static string PrimBtn(bool on) =>
+        "padding:8px 14px;border:none;border-radius:6px;font-size:13px;font-weight:600;color:#fff;" +
+        (on ? "background:#1976d2;cursor:pointer" : "background:#b0bec5;cursor:not-allowed");
+}
