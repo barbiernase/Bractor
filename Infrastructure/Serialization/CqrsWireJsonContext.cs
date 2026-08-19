@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Abstractions;
 using Domain.Datensatz;
 using Domain.ImagePair;
+using Domain.Modell;
 using Domain.Pipeline.Benchmark;
 using Domain.Pipeline.ImageProcessing;
 using Domain.Projections;
@@ -91,6 +92,10 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(LabelPhysischesProdukt))]
 [JsonSerializable(typeof(MarkiereAlsInspiziert))]
 [JsonSerializable(typeof(MeldeBildVerfuegbar))]
+// ── Modell-Commands ──
+[JsonSerializable(typeof(RegistriereModell))]
+[JsonSerializable(typeof(SetzeModellAktiv))]
+[JsonSerializable(typeof(ArchiviereModell))]
 // ── Events (GeneratedTypeRegistry.Events, inkl. ITransientEvent + Prozess-intern) ──
 // ── Datensatz-Events (inkl. Ablehnungen als ITransientEvent) ──
 [JsonSerializable(typeof(DatensatzErstellt))]
@@ -118,6 +123,13 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(TrainingslaufNichtGefunden))]
 [JsonSerializable(typeof(TrainingNichtAktiv))]
 [JsonSerializable(typeof(TrainingBereitsBeendet))]
+// ── Modell-Events (inkl. Ablehnungen als ITransientEvent) ──
+[JsonSerializable(typeof(ModellRegistriert))]
+[JsonSerializable(typeof(ModellAktiviert))]
+[JsonSerializable(typeof(ModellArchiviert))]
+[JsonSerializable(typeof(ModellExistiertBereits))]
+[JsonSerializable(typeof(ModellNichtGefunden))]
+[JsonSerializable(typeof(ModellBereitsArchiviert))]
 [JsonSerializable(typeof(BildNichtVerfuegbar))]
 [JsonSerializable(typeof(BildPaarDurchKiKlassifiziert))]
 [JsonSerializable(typeof(BildPaarGelabelt))]
@@ -163,6 +175,10 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(StateChangeViaTrainingGescheitert))]
 [JsonSerializable(typeof(StateChangeViaTrainingAbgebrochen))]
 [JsonSerializable(typeof(StateChangeViaTrainingHaengengeblieben))]
+// ── Modell-Signale (nur persistierbare Events) ──
+[JsonSerializable(typeof(StateChangeViaModellRegistriert))]
+[JsonSerializable(typeof(StateChangeViaModellAktiviert))]
+[JsonSerializable(typeof(StateChangeViaModellArchiviert))]
 [JsonSerializable(typeof(StateChangeViaBildPaarDurchKiKlassifiziert))]
 [JsonSerializable(typeof(StateChangeViaBildPaarGelabelt))]
 [JsonSerializable(typeof(StateChangeViaBildRegionGelabelt))]

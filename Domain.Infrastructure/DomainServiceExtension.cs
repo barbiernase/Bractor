@@ -66,6 +66,17 @@ public static class DomainServiceExtensions
                 .DatabaseSchemaName("rm")
                 .Identity(x => x.Id)
                 .UseOptimisticConcurrency(false);
+
+            // ── Modell (registrierte Artefakte + aktiver-Modell-Singleton) ──
+            options.Schema.For<ModellReadModel>()
+                .DatabaseSchemaName("rm")
+                .Identity(x => x.Id)
+                .UseOptimisticConcurrency(false);
+
+            options.Schema.For<AktivesModellReadModel>()
+                .DatabaseSchemaName("rm")
+                .Identity(x => x.Id)
+                .UseOptimisticConcurrency(false);
         });
 
         // Read-Seite: unverändert Singleton Postgres (eigene Query-Sessions).
@@ -164,6 +175,30 @@ public static class DomainServiceExtensions
         Console.WriteLine("  + TrainingslaufReader");
 
         // ═══════════════════════════════════════════════════════
+        // Modell — PostgreSQL (Marten, Schema "rm")
+        // Read-Singleton + Co-Commit-Write-Transient (Upsert-Projektion + Aktiv-Singleton).
+        // ═══════════════════════════════════════════════════════
+
+        services.AddSingleton<ModellStorePostgres>(provider =>
+        {
+            var store = provider.GetRequiredService<IDocumentStore>();
+            var logger = provider.GetRequiredService<ILogger<ModellStorePostgres>>();
+            return new ModellStorePostgres(store, logger);
+        });
+        services.AddSingleton<IModellReadStore>(
+            sp => sp.GetRequiredService<ModellStorePostgres>());
+        Console.WriteLine("  + IModellReadStore (PostgreSQL/Marten, Singleton)");
+
+        services.AddTransient<ModellStore>(provider =>
+            new ModellStore(provider.GetRequiredService<IDocumentStore>()));
+        services.AddTransient<IModellWriteStore>(
+            sp => sp.GetRequiredService<ModellStore>());
+        Console.WriteLine("  + IModellWriteStore (Co-Commit, Transient)");
+
+        services.AddSingleton<ModellReader>();
+        Console.WriteLine("  + ModellReader");
+
+        // ═══════════════════════════════════════════════════════
         // ProjectionQueryService (generiert)
         // ═══════════════════════════════════════════════════════
 
@@ -174,6 +209,7 @@ public static class DomainServiceExtensions
         services.AddSingleton<ImagePairHistorieProjection>();
         services.AddSingleton<DatensatzProjektion>();
         services.AddSingleton<TrainingslaufProjektion>();
+        services.AddSingleton<ModellProjektion>();
 
         services.AddSingleton<ProjectionQueryService>();
         Console.WriteLine("  + ProjectionQueryService (generiert)");

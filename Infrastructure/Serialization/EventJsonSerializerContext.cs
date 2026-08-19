@@ -2,6 +2,7 @@ using System.Text.Json.Serialization;
 using Abstractions;
 using Domain.Datensatz;
 using Domain.ImagePair;
+using Domain.Modell;
 using Domain.Projections;
 using Domain.Trainingslauf;
 using Infrastructure.Aggregate;
@@ -61,6 +62,10 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(TrainingGescheitert))]
 [JsonSerializable(typeof(TrainingAbgebrochen))]
 [JsonSerializable(typeof(TrainingHaengengeblieben))]
+// ── Modell (nur PERSISTENTE Events; Value Object ModellMetriken reist transitiv mit) ──
+[JsonSerializable(typeof(ModellRegistriert))]
+[JsonSerializable(typeof(ModellAktiviert))]
+[JsonSerializable(typeof(ModellArchiviert))]
 // ── Reaktion ──
 // ── Prozess-intern (IProzessIntern, aber IEvent → persistiert) ──
 [JsonSerializable(typeof(ProzessGestartet))]

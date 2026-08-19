@@ -1,0 +1,109 @@
+@namespace Domain.Client.Modules.Blazor.Modelle
+@using global::Client.Infrastructure.Abstractions
+@using Domain.Client.Modules.Modelle
+@using Domain.Modell
+@using Domain.Projections
+@inject ModellListeStore Store
+@inject EffectScope Fx
+@implements IDisposable
+
+@*
+    Modelle-Bühne: registrierte Modell-Artefakte (Metriken, Provenienz) + „aktiv setzen".
+    Das aktive Modell nutzt die Live-Inferenz. Registrierung normalerweise automatisch per
+    Saga (TrainingAbgeschlossen → RegistriereModell); hier zusätzlich ein manueller Weg.
+*@
+
+<div style="display:flex;flex-direction:column;height:100%;min-height:0;overflow:hidden;color:#ddd;font-size:13px">
+
+    @* ── Kopf + manuelle Registrierung ── *@
+    <div style="flex:0 0 auto;display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #333">
+        <span style="font-weight:600;font-size:15px">Modelle</span>
+        <span style="color:#777">@Store.Modelle.Count registriert</span>
+        <div style="flex:1"></div>
+        <input @bind="_name" @bind:event="oninput" @onkeydown="RegKey" placeholder="Modell-Name…"
+               style="background:#222;color:#ddd;border:1px solid #444;border-radius:5px;padding:5px 9px;font-size:12px;width:170px" />
+        <button @onclick="Registriere"
+                style="background:#12233a;color:#bcd8ff;border:1px solid #5c9eff;border-radius:5px;padding:5px 11px;font-size:12px;cursor:pointer">
+            ＋ Modell registrieren
+        </button>
+    </div>
+
+    @* ── Liste ── *@
+    <div style="flex:1;min-height:0;overflow-y:auto;padding:12px 14px">
+        @if (Store.Modelle.Count == 0)
+        {
+            <div style="color:#888;padding:20px;text-align:center">
+                Noch keine Modelle registriert.<br/>
+                <span style="font-size:12px">Entstehen aus abgeschlossenen Trainingsläufen (oder manuell oben).</span>
+            </div>
+        }
+        else
+        {
+            <div style="display:flex;flex-direction:column;gap:8px">
+                @foreach (var m in Store.Modelle)
+                {
+                    <div style="@RowStyle(m)">
+                        <div style="display:flex;align-items:center;gap:10px">
+                            @if (m.IstAktiv)
+                            {
+                                <span title="aktives Modell (Live-Inferenz)"
+                                      style="background:#1f6f3a;color:#c6f6d5;border-radius:10px;padding:2px 10px;font-size:11px;font-weight:600">★ aktiv</span>
+                            }
+                            <span style="font-weight:600;font-size:14px">@(string.IsNullOrWhiteSpace(m.Name) ? "(ohne Name)" : m.Name)</span>
+                            @if (m.Status == ModellStatus.Archiviert)
+                            {
+                                <span style="background:#3a3a3a;color:#aaa;border-radius:10px;padding:2px 9px;font-size:11px">archiviert</span>
+                            }
+                            <div style="flex:1"></div>
+                            @if (!m.IstAktiv && m.Status != ModellStatus.Archiviert)
+                            {
+                                <button @onclick="() => AktivSetzen(m.Id)"
+                                        style="background:#12233a;color:#bcd8ff;border:1px solid #5c9eff;border-radius:5px;padding:4px 11px;font-size:12px;cursor:pointer">aktiv setzen</button>
+                            }
+                            @if (m.Status != ModellStatus.Archiviert)
+                            {
+                                <button @onclick="() => Archivieren(m.Id)"
+                                        style="background:#222;color:#999;border:1px solid #444;border-radius:5px;padding:4px 9px;font-size:12px;cursor:pointer">archivieren</button>
+                            }
+                        </div>
+                        <div style="display:flex;gap:16px;margin-top:6px;color:#999;font-size:12px">
+                            <span>Genauigkeit <b style="color:#4caf50">@Prozent(m.Genauigkeit)</b></span>
+                            <span>Loss <b style="color:#ddd">@m.Loss.ToString("0.000", Ic)</b></span>
+                            <span>Datensatz @Kurz(m.DatensatzId)@(m.DatensatzVersion > 0 ? $" · v{m.DatensatzVersion}" : "")</span>
+                            <span style="color:#666">Pfad @m.Pfad</span>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private static readonly System.Globalization.CultureInfo Ic = System.Globalization.CultureInfo.InvariantCulture;
+    private string _name = "";
+
+    protected override void OnInitialized()
+        => Fx.OnChanged(Store, () => InvokeAsync(StateHasChanged));
+
+    private void Registriere()
+    {
+        // Manueller Weg (Platzhalter-Provenienz/-Metriken) — die Saga liefert später echte Werte.
+        Fx.Dispatch(new ModellRegistrierenIntent(_name, Guid.Empty, Guid.Empty, 0, "", 0, 0));
+        _name = "";
+    }
+
+    private void RegKey(KeyboardEventArgs e) { if (e.Key is "Enter" or "NumpadEnter") Registriere(); }
+
+    private void AktivSetzen(Guid id) => Fx.Dispatch(new ModellAktivSetzenIntent(id));
+    private void Archivieren(Guid id)  => Fx.Dispatch(new ModellArchivierenIntent(id));
+
+    private static string RowStyle(ModellAntwort m)
+        => "border-radius:8px;padding:10px 12px;border:1px solid " +
+           (m.IstAktiv ? "#2e7d32;background:#132218" : "#333;background:#1a1a1a");
+
+    private static string Prozent(double anteil) => (anteil * 100).ToString("0.0", Ic) + " %";
+    private static string Kurz(Guid id) => id == Guid.Empty ? "—" : id.ToString("N")[..8];
+
+    public void Dispose() => Fx.Dispose();
+}
