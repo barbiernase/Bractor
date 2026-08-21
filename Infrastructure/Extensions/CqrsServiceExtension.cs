@@ -1,5 +1,6 @@
 using Abstractions;
 using Domain.Infrastructure;
+using Domain.Infrastructure.Generated;
 using Infrastructure.Aggregate.ActorSystem;
 using Infrastructure.GrpcClient;
 using Infrastructure.Persistence;
@@ -64,7 +65,7 @@ public enum MartenSchemaRole
 /// 
 /// WICHTIG: Diese Klasse hat KEIN Domain-Wissen!
 /// Domain-Komponenten werden ueber Domain.Infrastructure registriert:
-///   services.AddDomainProjectionServices()  -- Stores + Reader
+///   services.AddGeneratedProjectionServices()  -- Stores + Reader
 ///
 /// Generierte Registrierungen:
 ///   GeneratedAggregates   -- Aggregate-Actors + Factory
@@ -91,9 +92,9 @@ public static class CqrsServiceExtensions
         // 1. Infrastruktur (Marten + Redis)
         services.AddCqrsInfrastructure(builder);
         
-        // 2. Domain-Stores + Reader (aus Domain.Infrastructure)
+        // 2. Domain-Stores + Reader (generiert vom ProjectionServicesGenerator in Domain.Infrastructure)
         //    MUSS VOR Subscribers -- Projektionen brauchen WriteStores!
-        services.AddDomainProjectionServices();
+        services.AddGeneratedProjectionServices();
         
         // 3. Aggregate-Components -- GENERIERT
         services.AddCqrsAggregates();
@@ -355,7 +356,7 @@ public static class CqrsServiceExtensions
     /// Query Infrastructure: ReadModelDepsReader (Redis).
     /// 
     /// Reader + ProjectionQueryService sind bereits ueber
-    /// AddDomainProjectionServices() registriert (Domain.Infrastructure).
+    /// AddGeneratedProjectionServices() registriert (Domain.Infrastructure).
     /// Hier kommt nur das Infrastructure-Zeug (Redis DepsReader).
     /// </summary>
     public static IServiceCollection AddCqrsQueryService(this IServiceCollection services)

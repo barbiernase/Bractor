@@ -9,6 +9,7 @@
     <ItemGroup>
       <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
       <ProjectReference Include="..\Domain\Domain.csproj" />
+      <ProjectReference Include="..\Projections.SourceGeneration\Projections.SourceGeneration.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     </ItemGroup>
 
     <ItemGroup>

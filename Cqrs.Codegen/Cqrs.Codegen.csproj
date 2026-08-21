@@ -1,0 +1,37 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Cqrs.Codegen</RootNamespace>
+    <!-- Reines Build-Zeit-Werkzeug (Prepass). Nie zur Laufzeit referenziert. -->
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Wiederverwendung: Proto-Emitter (FileGenerator) + TypeAggregator + TypeNode -->
+    <ProjectReference Include="..\Proto.SourceGeneration\Proto.SourceGeneration.csproj" />
+    <ProjectReference Include="..\Core.SourceGeneration\Core.SourceGeneration.csproj" />
+    <ProjectReference Include="..\Abstractions.SourceGeneration\Abstractions.SourceGeneration.csproj" />
+    <ProjectReference Include="..\Domain\Domain.csproj" />
+    <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
+
+    <!-- Volle Referenzen auf die beiden übrigen Domain-Assemblies. Grund: Domain.* sind
+         Libraries — NuGet-Abhängigkeiten (Proto.Actor, Marten, OpenCvSharp, …) landen NICHT in
+         ihren eigenen bin-Ordnern, sondern werden erst beim App-Consumer kopiert. Als Exe zieht
+         Cqrs.Codegen daher die VOLLSTÄNDIGE Abhängigkeits-Closure in seinen eigenen Ausgabeordner.
+         Der Prepass lädt die drei DLLs samt Closure per MetadataLoadContext genau aus diesem
+         Ordner (AppContext.BaseDirectory). Zugleich erzwingen die Referenzen die Build-Reihenfolge
+         (Domain-Projekte VOR dem Prepass). -->
+    <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
+    <ProjectReference Include="..\Domain.Pipeline\Domain.Pipeline.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Reflexion über gebaute DLLs statt Roslyn/MSBuildWorkspace. -->
+    <PackageReference Include="System.Reflection.MetadataLoadContext" Version="9.0.0" />
+  </ItemGroup>
+
+</Project>

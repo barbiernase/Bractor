@@ -145,7 +145,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine();
             EmitPoly(sb, "Command", "ICommand", commands, full);
             sb.AppendLine();
-            EmitPoly(sb, "Signal", "IStateChangeSignal", signals, full);
+            EmitSignalPoly(sb, signals, full);
             sb.AppendLine("}");
 
             context.AddSource("GeneratedWire.g.cs", sb.ToString());
@@ -181,6 +181,58 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"        \"{t.Name}\" => JsonSerializer.Deserialize(ref reader, Ctx.Default.{t.Name})!,");
             sb.AppendLine($"        _ => throw new NotSupportedException($\"Unbekannter Wire-{kind}-Diskriminator: {{diskriminator}}\")");
             sb.AppendLine("    };");
+        }
+
+        /// <summary>
+        /// Signal-Dispatch OHNE STJ: Ein <c>StateChangeVia{Event}</c> trägt IMMER nur
+        /// <c>(Guid StreamId, int Version)</c> — das Typ-Argument ist reiner Routing-Tag und
+        /// steuert NICHTS zur Nutzlast bei. Deshalb ist kein per-Typ-<c>JsonTypeInfo</c> nötig:
+        /// ein uniformer Writer schreibt die zwei Felder, der Reader konstruiert den konkreten
+        /// Typ per Diskriminator. Folge: die ~40 <c>[JsonSerializable(typeof(StateChangeVia…))]</c>
+        /// entfallen komplett (weder Hand noch Prepass). Der Reader lässt den Reader — wie die
+        /// STJ-Pfade — auf dem LETZTEN Token des Werts (EndObject) stehen.
+        /// </summary>
+        private static void EmitSignalPoly(StringBuilder sb, List<INamedTypeSymbol> signals, SymbolDisplayFormat full)
+        {
+            // Diskriminator
+            sb.AppendLine("    public static string SignalDiskriminator(IStateChangeSignal value) => value switch");
+            sb.AppendLine("    {");
+            foreach (var t in signals)
+                sb.AppendLine($"        {t.ToDisplayString(full)} => \"{t.Name}\",");
+            sb.AppendLine("        _ => throw new NotSupportedException($\"Kein Wire-Diskriminator für {value.GetType().FullName}\")");
+            sb.AppendLine("    };");
+            sb.AppendLine();
+
+            // Write: uniform (StreamId, Version) — kein STJ, kein [JsonSerializable] nötig.
+            sb.AppendLine("    public static void WriteSignal(Utf8JsonWriter writer, IStateChangeSignal value)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        writer.WriteStartObject();");
+            sb.AppendLine("        writer.WriteString(\"StreamId\", value.StreamId);");
+            sb.AppendLine("        writer.WriteNumber(\"Version\", value.Version);");
+            sb.AppendLine("        writer.WriteEndObject();");
+            sb.AppendLine("    }");
+            sb.AppendLine();
+
+            // Read: zwei Felder lesen (reihenfolge-unabhängig), konkreten Typ per Diskriminator konstruieren.
+            sb.AppendLine("    public static IStateChangeSignal ReadSignal(string diskriminator, ref Utf8JsonReader reader)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        if (reader.TokenType != JsonTokenType.StartObject) throw new JsonException(\"Erwartet: StartObject für Signal-Payload.\");");
+            sb.AppendLine("        System.Guid streamId = default; int version = default;");
+            sb.AppendLine("        while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            var prop = reader.GetString(); reader.Read();");
+            sb.AppendLine("            if (prop == \"StreamId\") streamId = reader.GetGuid();");
+            sb.AppendLine("            else if (prop == \"Version\") version = reader.GetInt32();");
+            sb.AppendLine("            else reader.Skip();");
+            sb.AppendLine("        }");
+            sb.AppendLine("        // reader steht jetzt auf EndObject (letztes Token des Werts) — analog zu den STJ-Pfaden.");
+            sb.AppendLine("        return diskriminator switch");
+            sb.AppendLine("        {");
+            foreach (var t in signals)
+                sb.AppendLine($"            \"{t.Name}\" => new {t.ToDisplayString(full)}(streamId, version),");
+            sb.AppendLine("            _ => throw new NotSupportedException($\"Unbekannter Wire-Signal-Diskriminator: {diskriminator}\")");
+            sb.AppendLine("        };");
+            sb.AppendLine("    }");
         }
 
         private static int ByName(INamedTypeSymbol a, INamedTypeSymbol b)
