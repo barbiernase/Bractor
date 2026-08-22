@@ -233,6 +233,16 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("            _ => throw new NotSupportedException($\"Unbekannter Wire-Signal-Diskriminator: {diskriminator}\")");
             sb.AppendLine("        };");
             sb.AppendLine("    }");
+            sb.AppendLine();
+
+            // Abgedeckte Signal-Typen — Backstop für den WireSerializerBootCheck. Signale haben KEIN
+            // STJ-JsonTypeInfo (self-serialized), deshalb prüft der Boot-Check gegen diese Liste statt
+            // gegen CqrsWireJsonContext.Default.GetTypeInfo.
+            sb.AppendLine("    public static readonly System.Collections.Generic.IReadOnlyList<System.Type> SignalTypes = new System.Type[]");
+            sb.AppendLine("    {");
+            foreach (var t in signals)
+                sb.AppendLine($"        typeof({t.ToDisplayString(full)}),");
+            sb.AppendLine("    };");
         }
 
         private static int ByName(INamedTypeSymbol a, INamedTypeSymbol b)
