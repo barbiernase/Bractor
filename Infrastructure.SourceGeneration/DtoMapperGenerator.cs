@@ -257,61 +257,15 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine("        }");
                 sb.AppendLine();
                 
-                // MapToDto method - handle collections (RepeatedField in Protobuf)
-                var collectionParams = parameters.Where(p => p.IsCollection).ToList();
-                var nonCollectionParams = parameters.Where(p => !p.IsCollection).ToList();
-                
+                // MapToDto: Initializer + AddRange + optionale Post-Zuweisungen (siehe EmitMapToDtoBody).
                 sb.AppendLine($"        public static {dtoName} MapToDto({typeName} obj)");
                 sb.AppendLine("        {");
                 sb.AppendLine("            if (obj == null) return null;");
-                
-                if (collectionParams.Any())
-                {
-                    // Has collections - need to use AddRange() for RepeatedField
-                    sb.AppendLine($"            var dto = new {dtoName}");
-                    sb.AppendLine("            {");
-                    
-                    foreach (var param in nonCollectionParams)
-                    {
-                        var propName = ToPascalCase(param.Name);
-                        var mapping = GeneratePropertyMapping(param, "obj", propName, typeLookup);
-                        sb.AppendLine($"                {propName} = {mapping},");
-                    }
-                    
-                    sb.AppendLine("            };");
-                    sb.AppendLine();
-                    
-                    // Add collections using AddRange
-                    foreach (var param in collectionParams)
-                    {
-                        var propName = ToPascalCase(param.Name);
-                        var addRangeMapping = GenerateCollectionAddRangeMapping(param, "obj", propName, typeLookup);
-                        sb.AppendLine($"            {addRangeMapping}");
-                    }
-                    
-                    sb.AppendLine();
-                    sb.AppendLine("            return dto;");
-                }
-                else
-                {
-                    // No collections - simple object initializer
-                    sb.AppendLine($"            return new {dtoName}");
-                    sb.AppendLine("            {");
-                    
-                    foreach (var param in parameters)
-                    {
-                        var propName = ToPascalCase(param.Name);
-                        var mapping = GeneratePropertyMapping(param, "obj", propName, typeLookup);
-                        sb.AppendLine($"                {propName} = {mapping},");
-                    }
-                    
-                    sb.AppendLine("            };");
-                }
-                
+                EmitMapToDtoBody(sb, parameters, dtoName, "obj", typeLookup);
                 sb.AppendLine("        }");
                 sb.AppendLine();
             }
-            
+
             sb.AppendLine("    }");
             sb.AppendLine();
         }
@@ -579,61 +533,73 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine("        }");
                 sb.AppendLine();
                 
-                // MapToDto - separate handling for collections (RepeatedField in Protobuf)
-                var collectionParams = parameters.Where(p => p.IsCollection).ToList();
-                var nonCollectionParams = parameters.Where(p => !p.IsCollection).ToList();
-                
+                // MapToDto: Initializer + AddRange + optionale Post-Zuweisungen (siehe EmitMapToDtoBody).
                 sb.AppendLine($"        private static {dtoName} MapToDto({simpleName} obj)");
                 sb.AppendLine("        {");
-                
-                if (collectionParams.Any())
-                {
-                    // Has collections - need to use AddRange() for RepeatedField
-                    sb.AppendLine($"            var dto = new {dtoName}");
-                    sb.AppendLine("            {");
-                    
-                    foreach (var param in nonCollectionParams)
-                    {
-                        var propName = ToPascalCase(param.Name);
-                        var mapping = GeneratePropertyMapping(param, "obj", propName, typeLookup);
-                        sb.AppendLine($"                {propName} = {mapping},");
-                    }
-                    
-                    sb.AppendLine("            };");
-                    sb.AppendLine();
-                    
-                    // Add collections using AddRange
-                    foreach (var param in collectionParams)
-                    {
-                        var propName = ToPascalCase(param.Name);
-                        var addRangeMapping = GenerateCollectionAddRangeMapping(param, "obj", propName, typeLookup);
-                        sb.AppendLine($"            {addRangeMapping}");
-                    }
-                    
-                    sb.AppendLine();
-                    sb.AppendLine("            return dto;");
-                }
-                else
-                {
-                    // No collections - simple object initializer
-                    sb.AppendLine($"            return new {dtoName}");
-                    sb.AppendLine("            {");
-                    
-                    foreach (var param in parameters)
-                    {
-                        var propName = ToPascalCase(param.Name);
-                        var mapping = GeneratePropertyMapping(param, "obj", propName, typeLookup);
-                        sb.AppendLine($"                {propName} = {mapping},");
-                    }
-                    
-                    sb.AppendLine("            };");
-                }
-                
+                EmitMapToDtoBody(sb, parameters, dtoName, "obj", typeLookup);
                 sb.AppendLine("        }");
                 sb.AppendLine();
             }
         }
         
+        /// <summary>
+        /// Baut den MapToDto-Rumpf (Domain → DTO), gemeinsam für Value Objects und die Einzel-Mapper:
+        /// nicht-nullable Skalare/komplexe Felder im Objekt-Initializer; Collections via AddRange;
+        /// nullable Skalare als bedingte Post-Zuweisung (proto3 optional setzt bei JEDER Zuweisung
+        /// Presence — null muss das Feld also auslassen, nicht im Initializer setzen).
+        /// </summary>
+        private void EmitMapToDtoBody(StringBuilder sb, List<TypeNode> parameters, string dtoName, string sourceVar, Dictionary<string, DomainType> typeLookup)
+        {
+            var collectionParams  = parameters.Where(p => p.IsCollection).ToList();
+            var optionalScalars   = parameters.Where(IsOptionalScalar).ToList();
+            var initializerParams = parameters.Where(p => !p.IsCollection && !IsOptionalScalar(p)).ToList();
+            var needsVar = collectionParams.Any() || optionalScalars.Any();
+
+            sb.AppendLine($"            {(needsVar ? "var dto = " : "return ")}new {dtoName}");
+            sb.AppendLine("            {");
+            foreach (var param in initializerParams)
+            {
+                var propName = ToPascalCase(param.Name);
+                var mapping = GeneratePropertyMapping(param, sourceVar, propName, typeLookup);
+                sb.AppendLine($"                {propName} = {mapping},");
+            }
+            sb.AppendLine("            };");
+
+            if (needsVar)
+            {
+                sb.AppendLine();
+                foreach (var param in collectionParams)
+                {
+                    var propName = ToPascalCase(param.Name);
+                    sb.AppendLine($"            {GenerateCollectionAddRangeMapping(param, sourceVar, propName, typeLookup)}");
+                }
+                foreach (var param in optionalScalars)
+                {
+                    var propName = ToPascalCase(param.Name);
+                    sb.AppendLine($"            {GenerateOptionalScalarAssignment(param, sourceVar, propName)}");
+                }
+                sb.AppendLine();
+                sb.AppendLine("            return dto;");
+            }
+        }
+
+        /// <summary>
+        /// Ein Value-Type-Nullable-Proto-Skalar (proto3 optional) — reist als bedingte Post-Zuweisung,
+        /// nicht im Initializer. string? (IsRefType) NICHT: das bleibt Sentinel im Initializer.
+        /// </summary>
+        private static bool IsOptionalScalar(TypeNode p) =>
+            !p.IsEnum && !p.IsCollection && ProtoScalarSpecs.TryGet(p.FullName, out var s) && s.IsNullable && !s.IsRefType;
+
+        /// <summary>Bedingte Zuweisung eines nullable Proto-Skalars: nur bei Presence, sonst Feld ungesetzt (= null).</summary>
+        private string GenerateOptionalScalarAssignment(TypeNode param, string sourceVar, string propName)
+        {
+            ProtoScalarSpecs.TryGet(param.FullName, out var s);
+            var access = $"{sourceVar}.{propName}";
+            return s.IsRefType
+                ? $"if ({access} != null) dto.{propName} = {s.Encode(access)};"
+                : $"if ({access}.HasValue) dto.{propName} = {s.Encode(access + ".Value")};";
+        }
+
         /// <summary>
         /// Generates AddRange call for collection properties (Protobuf RepeatedField).
         /// </summary>
@@ -703,41 +669,21 @@ namespace Infrastructure.SourceGeneration
                 }
             }
             
-            // Handle Guid specially
-            if (param.FullName == "System.Guid")
-                return $"Guid.Parse({sourceVar}.{fieldName})";
-            
-            // Handle decimal (von string zu decimal)
-            if (param.FullName == "decimal" || param.FullName == "System.Decimal")
-                return $"decimal.Parse({sourceVar}.{fieldName}, CultureInfo.InvariantCulture)";
-            
-            // Handle DateTime (von int64 zu DateTimeOffset) — non-nullable
-            if (param.FullName == "System.DateTime" || param.FullName == "System.DateTimeOffset")
-                return $"DateTimeOffset.FromUnixTimeMilliseconds({sourceVar}.{fieldName})";
-            
-            // NEU: Handle nullable DateTime/DateTimeOffset (int64 → DateTimeOffset?, 0 = null)
-            if (IsNullableDateTimeType(param.FullName))
-                return $"{sourceVar}.{fieldName} == 0 ? (DateTimeOffset?)null : DateTimeOffset.FromUnixTimeMilliseconds({sourceVar}.{fieldName})";
-            
-            // WICHTIG: Prüfe zuerst auf primitive/nullable Typen BEVOR complex type check
-            if (IsPrimitiveOrNullableType(param.FullName))
+            // ── Skalare aus der EINEN Quelle. Nullable = proto3 optional → über Has…-Presence
+            //    dekodieren (kein Sentinel mehr: null und Grenzwert wie 0/Epoche sind unterscheidbar). ──
+            if (ProtoScalarSpecs.TryGet(param.FullName, out var scalar))
             {
-                // Nullable string? -> direkt verwenden, aber leere Strings zu null konvertieren
-                if (param.FullName == "string?" || param.FullName == "System.String?")
-                    return $"string.IsNullOrEmpty({sourceVar}.{fieldName}) ? null : {sourceVar}.{fieldName}";
-                
-                // ★ FIX: int32 → Nullable bool? (0=null, 1=true, 2=false)
-                // Gegenstück zur Kodierung in GeneratePropertyMapping.
-                if (param.FullName == "bool?" || param.FullName == "System.Boolean?")
-                    return $"{sourceVar}.{fieldName} switch {{ 1 => (bool?)true, 2 => (bool?)false, _ => null }}";
-                
-                // Nullable int? -> Proto int32 hat keinen null-Zustand, 0 = null
-                if (param.FullName == "int?" || param.FullName == "System.Int32?")
-                    return $"{sourceVar}.{fieldName} == 0 ? (int?)null : {sourceVar}.{fieldName}";
-                    
-                // Andere Skalartypen direkt verwenden
-                return $"{sourceVar}.{fieldName}";
+                // Value-Type-Nullables reisen als proto3 optional → über Has…-Presence dekodieren.
+                // string? (IsRefType) behält die Sentinel-Kodierung (leer=null) via scalar.Decode.
+                if (scalar.IsNullable && !scalar.IsRefType)
+                    return $"{sourceVar}.Has{fieldName} ? {scalar.Decode($"{sourceVar}.{fieldName}")} : ({scalar.NullableCSharp})null";
+                return scalar.Decode($"{sourceVar}.{fieldName}");
             }
+
+            // Superset-Primitive (short/byte/char/object/TimeSpan) + Nicht-Spec-Nullables:
+            // Bestandsverhalten — direkt übernehmen.
+            if (IsPrimitiveOrNullableType(param.FullName))
+                return $"{sourceVar}.{fieldName}";
             
             // NEU: Handle nullable Domain-Typen (z.B. Klassifikation?)
             // Diese nutzen den Mapper des Base-Typs
@@ -841,40 +787,13 @@ namespace Infrastructure.SourceGeneration
                 }
             }
             
-            // Handle Guid specially
-            if (param.FullName == "System.Guid")
-                return $"{sourceVar}.{propName}.ToString()";
-            
-            // Handle decimal (von decimal zu string)
-            if (param.FullName == "decimal" || param.FullName == "System.Decimal")
-                return $"{sourceVar}.{propName}.ToString(CultureInfo.InvariantCulture)";
-            
-            // Handle DateTime (von DateTimeOffset zu int64) — non-nullable
-            if (param.FullName == "System.DateTime" || param.FullName == "System.DateTimeOffset")
-                return $"{sourceVar}.{propName}.ToUnixTimeMilliseconds()";
-            
-            // NEU: Handle nullable DateTime/DateTimeOffset (DateTimeOffset? → int64, null = 0)
-            if (IsNullableDateTimeType(param.FullName))
-                return $"{sourceVar}.{propName}?.ToUnixTimeMilliseconds() ?? 0";
-            
-            // WICHTIG: Prüfe zuerst auf primitive/nullable Typen BEVOR complex type check
+            // ── Skalare aus der EINEN Quelle: genau eine Encode-Regel je Typ (ProtoScalarSpec). ──
+            if (ProtoScalarSpecs.TryGet(param.FullName, out var scalar))
+                return scalar.Encode($"{sourceVar}.{propName}");
+
+            // Superset-Primitive + Nicht-Spec-Nullables: Bestandsverhalten.
             if (IsPrimitiveOrNullableType(param.FullName))
             {
-                // Nullable string? -> direkt verwenden, null zu leerem String für Proto
-                if (param.FullName == "string?" || param.FullName == "System.String?")
-                    return $"{sourceVar}.{propName} ?? string.Empty";
-                
-                // ★ FIX: Nullable bool? → int32 (0=null, 1=true, 2=false)
-                // Proto3 hat keinen null-Zustand für bool. Daher kodieren wir
-                // bool? als int32: 0 = nicht gesetzt, 1 = true, 2 = false.
-                if (param.FullName == "bool?" || param.FullName == "System.Boolean?")
-                    return $"{sourceVar}.{propName} switch {{ null => 0, true => 1, false => 2 }}";
-                
-                // Nullable int? -> Proto int32 hat keinen null-Zustand
-                // null wird zu 0 (Proto default)
-                if (param.FullName == "int?" || param.FullName == "System.Int32?")
-                    return $"{sourceVar}.{propName} ?? 0";
-                
                 if (param.FullName.EndsWith("?")
                     || param.FullName.StartsWith("System.Nullable<")
                     || param.FullName.StartsWith("Nullable<"))
@@ -882,9 +801,6 @@ namespace Infrastructure.SourceGeneration
 
                 // Non-nullable primitive → direkt
                 return $"{sourceVar}.{propName}";
-
-
-
             }
             
             // NEU: Handle nullable Domain-Typen (z.B. Klassifikation?)
@@ -956,13 +872,6 @@ namespace Infrastructure.SourceGeneration
         private string GetSimpleTypeName(string fullName)
         {
             if (string.IsNullOrEmpty(fullName)) return fullName;
-
-            // Der DomainGraphAnalyzer hängt an einen mehrfach referenzierten Typ den Marker
-            // " (Ref)" an (z.B. ein Value Object, das in ZWEI Feldern desselben Events steht).
-            // Das ist ein Graph-Marker, kein Typname — beim Ableiten des C#-Bezeichners strippen,
-            // sonst entsteht ein kaputter Aufruf wie "MapGeldwert (Ref)(...)".
-            if (fullName.EndsWith(" (Ref)", System.StringComparison.Ordinal))
-                fullName = fullName.Substring(0, fullName.Length - " (Ref)".Length);
 
             var withoutGenerics = fullName.Split('<')[0];
             var parts = withoutGenerics.Split('.');

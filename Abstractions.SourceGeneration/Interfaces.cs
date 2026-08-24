@@ -12,6 +12,9 @@ namespace Abstractions.SourceGeneration
         public bool IsCollection { get; set; }
         public bool IsDictionary { get; set; }
         public bool IsEnum { get; set; }  // <-- NEU: Markiert C#-Enums
+        // Mehrfach im Graph erreichter Typ (Rückverweis): NICHT erneut als eigener Typ
+        // emittieren. Ersetzt den früheren " (Ref)"-Suffix-Hack im FullName — FullName bleibt rein.
+        public bool IsBackReference { get; set; }
         public string CollectionElementType { get; set; }
         public string DictionaryKeyType { get; set; }
         public string DictionaryValueType { get; set; }

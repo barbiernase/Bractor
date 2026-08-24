@@ -20,16 +20,9 @@ namespace Core.SourceGeneration
 
         private void TraverseNode(TypeNode node, int currentDepth)
         {
+            // FullName ist jetzt IMMER rein (der frühere " (Ref)"-Suffix-Hack ist entfernt; ein
+            // Rückverweis wird über TypeNode.IsBackReference markiert, nicht über den Namen).
             var typeKey = node.FullName ?? node.Name;
-
-            // Ein mehrfach im Graph erreichter Typ bekommt vom DomainGraphAnalyzer den Suffix
-            // " (Ref)" (reiner Referenz-Marker, KEIN eigener Typ). Ohne Normalisierung würde er
-            // als separater Typ "X (Ref)" registriert, und der DtoMapper generierte dafür kaputten
-            // Code (Map "X (Ref)"..., "X (Ref)Dto"). Auf den echten Typschlüssel zurückführen — die
-            // eigentliche Definition ist bereits über die erste (Nicht-Ref-)Begegnung registriert.
-            // Latenter Bug, den erst ein von MEHREREN Messages geteiltes Value Object auslöst.
-            if (typeKey != null && typeKey.EndsWith(" (Ref)", StringComparison.Ordinal))
-                typeKey = typeKey.Substring(0, typeKey.Length - " (Ref)".Length);
 
             if (BaseTypes.IsBaseType(typeKey))
             {

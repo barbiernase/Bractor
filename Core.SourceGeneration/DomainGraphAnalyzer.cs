@@ -75,8 +75,12 @@ namespace Core.SourceGeneration
                 
                 if (processedTypes.ContainsKey(typeKey))
                 {
+                    // Rückverweis auf einen bereits registrierten Typ: FullName bleibt REIN
+                    // (kein " (Ref)"-Suffix mehr), stattdessen ein echtes Flag. Der Rekursions-
+                    // stopp entsteht durchs Leeren der ConstructorParameters, nicht durch den Namen.
                     var existingNode = processedTypes[typeKey];
-                    currentNode.FullName = existingNode.FullName + " (Ref)";
+                    currentNode.FullName = existingNode.FullName;
+                    currentNode.IsBackReference = true;
                     currentNode.ConstructorParameters = new List<TypeNode>();
                     continue;
                 }

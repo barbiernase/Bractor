@@ -1,6 +1,7 @@
 // REPO-PFAD: Proto.SourceGeneration/FileGenerator.cs  (MODIFIZIERT)
 using System.Text;
 using Abstractions.SourceGeneration;
+using Core.SourceGeneration;
 
 namespace Proto.SourceGeneration;
 
@@ -14,48 +15,8 @@ namespace Proto.SourceGeneration;
 /// </summary>
 public class FileGenerator
 {
-    private readonly Dictionary<string, string> _typeMapping = new()
-    {
-        // Non-nullable types
-        { "System.String", "string" }, { "string", "string" },
-        { "System.Int32", "int32" },   { "int", "int32" },
-        { "System.Int64", "int64" },   { "long", "int64" },
-        { "System.Boolean", "bool" },  { "bool", "bool" },
-        { "System.Double", "double" }, { "double", "double" },
-        { "System.Single", "float" },  { "float", "float" },
-        { "System.Guid", "string" },
-        { "System.Decimal", "string" }, { "decimal", "string" },
-        { "System.DateTime", "int64" },
-        { "System.DateTimeOffset", "int64" },
-        
-        // Nullable types - WICHTIG: Diese müssen auch gemappt werden!
-        { "string?", "string" },
-        { "System.String?", "string" },
-        { "int?", "int32" },
-        { "System.Int32?", "int32" },
-        { "System.Nullable<System.Int32>", "int32" },
-        { "long?", "int64" },
-        { "System.Int64?", "int64" },
-        { "System.Nullable<System.Int64>", "int64" },
-        { "bool?", "int32" },           // ★ FIX: int32 statt bool — 0=null, 1=true, 2=false
-        { "System.Boolean?", "int32" },
-        { "System.Nullable<System.Boolean>", "int32" },
-        { "double?", "double" },
-        { "System.Double?", "double" },
-        { "System.Nullable<System.Double>", "double" },
-        { "float?", "float" },
-        { "System.Single?", "float" },
-        { "System.Nullable<System.Single>", "float" },
-        { "decimal?", "string" },
-        { "System.Decimal?", "string" },
-        { "System.Nullable<System.Decimal>", "string" },
-        { "System.Guid?", "string" },
-        { "System.Nullable<System.Guid>", "string" },
-        { "System.DateTime?", "int64" },
-        { "System.Nullable<System.DateTime>", "int64" },
-        { "System.DateTimeOffset?", "int64" },
-        { "System.Nullable<System.DateTimeOffset>", "int64" },
-    };
+    // Die Skalar-Regeln (Proto-Feldtyp je C#-Typ) leben in Core.SourceGeneration.ProtoScalarSpecs
+    // (die EINE Quelle). Kein lokales _typeMapping mehr — siehe GetProtoType/GetProtoTypeForName.
 
     /// <summary>
     /// FIX: Bekannte Enum-Typnamen — werden in GenerateProtoFile aus den objectTypes
@@ -486,27 +447,29 @@ private string GenerateStandalonePayloadDto(string messageName, string oneOfs)
             return "int32";
         }
         
-        // Zuerst im Mapping nachschauen (inkl. nullable Typen)
-        if (_typeMapping.TryGetValue(paramNode.FullName, out var mappedType))
+        // Zuerst in der EINEN Quelle nachschauen (inkl. nullable Typen). Value-Type-Nullables
+        // reisen als proto3 `optional` (native Presence). string? bleibt `string` mit Sentinel
+        // (leer=null), weil Reference-Nullability zur Reflection-Zeit unsichtbar ist (IsRefType).
+        if (ProtoScalarSpecs.TryGet(paramNode.FullName, out var scalar))
         {
-            return mappedType;
+            return scalar.IsNullable && !scalar.IsRefType ? "optional " + scalar.ProtoType : scalar.ProtoType;
         }
-        
+
         // Collection handling
         if (paramNode.IsCollection)
         {
             var elementType = GetProtoTypeForName(paramNode.CollectionElementType);
             return $"repeated {elementType}";
         }
-        
-        // Prüfe ob es ein primitiver/nullable Typ ist, der nicht im Mapping war
+
+        // Prüfe ob es ein primitiver/nullable Typ ist, der nicht in der Spec-Tabelle war
         if (IsPrimitiveOrNullableType(paramNode.FullName))
         {
             // Für unbekannte nullable Typen: Basis-Typ extrahieren und mappen
             var baseType = GetBaseType(paramNode.FullName);
-            if (_typeMapping.TryGetValue(baseType, out var baseMappedType))
+            if (ProtoScalarSpecs.TryGet(baseType, out var baseScalar))
             {
-                return baseMappedType;
+                return baseScalar.ProtoType;
             }
             // Fallback für unbekannte primitive Typen
             return "string";
@@ -520,15 +483,15 @@ private string GenerateStandalonePayloadDto(string messageName, string oneOfs)
 
     private string GetProtoTypeForName(string typeName)
     {
-        if (_typeMapping.TryGetValue(typeName, out var mappedType))
-            return mappedType;
-        
+        if (ProtoScalarSpecs.TryGet(typeName, out var scalar))
+            return scalar.ProtoType;
+
         // Prüfe ob primitiv/nullable
         if (IsPrimitiveOrNullableType(typeName))
         {
             var baseType = GetBaseType(typeName);
-            if (_typeMapping.TryGetValue(baseType, out var baseMappedType))
-                return baseMappedType;
+            if (ProtoScalarSpecs.TryGet(baseType, out var baseScalar))
+                return baseScalar.ProtoType;
             return "string";
         }
         
@@ -614,8 +577,8 @@ private string GenerateStandalonePayloadDto(string messageName, string oneOfs)
         if (string.IsNullOrEmpty(typeName))
             return false;
         
-        // Direkt im Mapping?
-        if (_typeMapping.ContainsKey(typeName))
+        // Direkt in der EINEN Quelle?
+        if (ProtoScalarSpecs.ByCSharpType.ContainsKey(typeName))
             return true;
         
         // Nullable<T> Pattern

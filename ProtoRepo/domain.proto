@@ -343,15 +343,15 @@ message TriggerPayloadDto {
 // VALUE OBJECTS
 // ============================================================================
 message RangeKriterienDto {
-    int64 von = 1;
-    int64 bis = 2;
+    optional int64 von = 1;
+    optional int64 bis = 2;
     string ki_klassifikation = 3;
     string mensch_label = 4;
     string produkt_label = 5;
-    int32 nur_komplette = 6;
-    int32 hat_ki_klassifikation = 7;
-    int32 hat_mensch_label = 8;
-    int32 nur_nicht_inspizierte = 9;
+    optional bool nur_komplette = 6;
+    optional bool hat_ki_klassifikation = 7;
+    optional bool hat_mensch_label = 8;
+    optional bool nur_nicht_inspizierte = 9;
 }
 
 message RangeHerkunftDto {
@@ -466,15 +466,15 @@ message ModellMetrikenDto {
 }
 
 message ImagePairFilterDto {
-    int64 von = 1;
-    int64 bis = 2;
+    optional int64 von = 1;
+    optional int64 bis = 2;
     string ki_klassifikation = 3;
     string mensch_label = 4;
     string produkt_label = 5;
-    int32 nur_komplette = 6;
-    int32 hat_ki_klassifikation = 7;
-    int32 hat_mensch_label = 8;
-    int32 nur_nicht_inspizierte = 9;
+    optional bool nur_komplette = 6;
+    optional bool hat_ki_klassifikation = 7;
+    optional bool hat_mensch_label = 8;
+    optional bool nur_nicht_inspizierte = 9;
     int32 seite = 10;
     int32 seiten_groesse = 11;
 }
