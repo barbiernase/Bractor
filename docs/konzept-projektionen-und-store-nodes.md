@@ -1,5 +1,31 @@
 # Konzept — Projektionen & Store-Nodes im Domänen-Editor
 
+> **VERFEINERUNG (2026-09-09, im Editor GEBAUT — Verdrahtung, ohne Fill/Sim):** Der ursprüngliche
+> „Effekt-Vokabular"-Ansatz (§5) ist überholt. Das tragende Modell ist jetzt **zwei Code-Schichten,
+> beide gegen verdrahtete Verträge**, plus **Code als verdrahteter Wert**:
+>
+> - **Handle = Controller** (dispatcht an Stores): der Editor verdrahtet nur **Trigger-Events** +
+>   **Store-Scope** (mehrere Stores möglich). *Welche* Store-Funktionen in *welcher* Reihenfolge unter
+>   *welcher* Bedingung mit *welchen* Argumenten aufgerufen werden = **C#-Code** (mehrere Aufrufe
+>   hintereinander). Kein Join („Auf/Und" gibt es nur bei der Saga), keine Arg-Pins, kein `primitiv`.
+> - **Store = Interface + Impl:** der Editor ist ein **Interface-Editor** — Write-/Read-Funktionen mit
+>   **Signatur** (Name + Parameter-Zeilen [+ Rückgabetyp]). Die **Impl-Rümpfe** = C#-Code.
+> - **Code als Wert:** ein füllbarer Rumpf ist **kein Textfeld im Knoten**, sondern ein **Code-Eingang
+>   (Port)**. Code fließt von einem **📝 Code-Knoten** (manuell getippt) oder **🤖 LLM-Knoten**
+>   (generiert), beide mit `code ▶`-Ausgang → beliebig austauschbar. Der **Vertrag fließt rückwärts**:
+>   der LLM-Knoten leitet Signatur/Event/Store-Interfaces aus dem Ziel-Slot ab (nicht getippt).
+> - **Zwei Fill-Stellen** (später, LLM/Hand, sim-verifiziert): der **Controller-Rumpf** (je Handle) und
+>   die **Store-Impl** (je Funktion). Der eigentliche LLM-Aufruf + Sim = spätere Phase; jetzt nur die
+>   Verdrahtung (Store→Interface, Projektion→Trigger+Scope, 📝/🤖-Knoten + `code`-Ports).
+>
+> - **Einheitlich ÜBERALL:** jede Code-Stelle ist ein Code-Port — auch die **Decide-** und
+>   **Apply-Rümpfe** der Schreibseite (die früheren eingebetteten Textareas sind ersetzt). Domänen-
+>   Knoten enthalten KEINE Code-Textfelder mehr; der einzige Tipp-Ort ist der 📝 Code-Knoten (bzw. das
+>   🤖-Intent-Feld). Round-getrippte Decide/Apply-Rümpfe werden beim Laden automatisch in einen
+>   📝 Code-Knoten migriert und verdrahtet.
+>
+> Gebaut & live verifiziert in `GraphExtractor/HtmlPresenter.cs` (nur der `EditorBlock`).
+
 > **Stand: 2026-08-24. Status: KONZEPT — nicht implementiert.** Erweiterung des visuellen
 > Domänen-Editors (ComfyUI-Node-Modell, `GraphExtractor/HtmlPresenter.cs`, SimHost `/editor`) um
 > die **Leseseite**: Read Models, Projektionen, Stores, Queries, Reader. Leitprinzip:

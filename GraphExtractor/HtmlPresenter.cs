@@ -598,9 +598,10 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .test .tframe{padding:4px 8px;border-radius:5px;background:#12261c;color:#9be3bf;margin:3px 0;font:12px ui-monospace,monospace}
 #de .test .tframe.rej{background:#3a1f28;color:#ffb3c1}
 #de .test .tstate{padding:4px 8px;border-radius:5px;background:#141926;color:#cfe;margin:3px 0;font:12px ui-monospace,monospace}
-#de .cols{flex:1;display:grid;grid-template-columns:1fr 1fr;overflow:hidden}
+#de .cols{flex:1;display:grid;grid-template-columns:1fr;overflow:hidden}
 #de .col{overflow:auto;padding:14px}
 #de .col.left{border-right:1px solid #232a38}
+#de .col.right{display:none}  /* Ausgabe-Bereich vorerst ausgeblendet — Editor auf voller Breite */
 #de .card{background:#141926;border:1px solid #232a38;border-radius:8px;padding:10px 12px;margin:0 0 12px}
 #de .card h3{margin:0 0 8px;font-size:13px;display:flex;align-items:center;gap:6px}
 #de .card h3 .k{font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding:1px 6px;border-radius:8px}
@@ -642,6 +643,14 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .gnode2.n-saga{border-color:#8a5cc0;width:300px}
 #de .gnode2.n-transition{border-color:#8a6fc8;width:276px}
 #de .gnode2.n-state{border-color:#c9a24b;width:250px}
+#de .gnode2.n-readmodel{border-color:#b98a3c;width:250px}
+#de .gnode2.n-store{border-color:#2f9d95;width:290px}
+#de .gnode2.n-projektion{border-color:#3f9d5a;width:274px}
+#de .gnode2.n-reader{border-color:#7a5cc0;width:274px}
+#de .gnode2.n-query{border-color:#3b6fb0}
+#de .gnode2.n-queryresponse{border-color:#2f8f7d}
+#de .gnode2.n-codenode{border-color:#6b7280;width:300px}
+#de .gnode2.n-llmnode{border-color:#8a6fc8;width:280px}
 #de .gnode2.collapsed .gbody{display:none}
 #de .ghead{display:flex;align-items:center;gap:6px;padding:5px 9px;border-radius:8px 8px 0 0;cursor:grab;color:#0d0f14;font-weight:700;font-size:12px;user-select:none;touch-action:none}
 #de .gnode2.n-command .ghead{background:#5b8fd0}
@@ -655,6 +664,14 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .gnode2.n-saga .ghead{background:#9d78d6}
 #de .gnode2.n-transition .ghead{background:#a48fd6}
 #de .gnode2.n-state .ghead{background:#d4b45f}
+#de .gnode2.n-readmodel .ghead{background:#d0a45a}
+#de .gnode2.n-store .ghead{background:#3fb0a6}
+#de .gnode2.n-projektion .ghead{background:#57b673}
+#de .gnode2.n-reader .ghead{background:#9678d6}
+#de .gnode2.n-query .ghead{background:#5b8fd0}
+#de .gnode2.n-queryresponse .ghead{background:#49a996}
+#de .gnode2.n-codenode .ghead{background:#9aa0aa}
+#de .gnode2.n-llmnode .ghead{background:#a48fd6}
 #de .ghead .gtitle{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:ui-monospace,monospace}
 #de .ghead .gcol{cursor:pointer;opacity:.8;padding:0 2px;font-size:11px}
 #de .ghead .gcol:hover{opacity:1}
@@ -691,6 +708,11 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .slot.s-prozess{background:#9d78d6}
 #de .slot.sm{width:10px;height:10px;box-shadow:0 0 0 1px #000a}
 #de .slot.s-state{background:#e0b64d}
+#de .slot.s-readmodel{background:#d0a45a}
+#de .slot.s-store{background:#3fb0a6}
+#de .slot.s-query{background:#5b8fd0}
+#de .slot.s-qrsp{background:#49a996}
+#de .slot.s-code{background:#9aa0aa}
 #de .gtoprow{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:5px}
 #de .gtopfield{display:flex;flex-direction:column;align-items:center;gap:1px}
 #de .aggwrap{display:flex;justify-content:space-between;gap:8px;margin:2px 0}
@@ -765,8 +787,8 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 <script>
 (function(){
   const SCALARS=["Guid","decimal","int","long","double","bool","string","DateTimeOffset"];
-  const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"]};
-  let MODEL={schemaVersion:"2",records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[]};
+  const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"],query:["Query","qry"],queryresponse:["Response","qrsp"]};
+  let MODEL={schemaVersion:"2",records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],codeNodes:[],llmNodes:[]};
   let NID=1;
   const embedded=/*__MODEL_JSON__*/;
 
@@ -775,7 +797,16 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   const kindLabel=k=>(KINDINFO[k]||["?","vo"])[0];
   const kindKlasse=k=>(KINDINFO[k]||["?","vo"])[1];
   function normalize(m){m=m||{};m.records=m.records||[];m.enums=m.enums||[];m.aggregate=m.aggregate||[];m.decider=m.decider||[];m.applier=m.applier||[];m.sagas=m.sagas||[];m.states=m.states||[];m.transitions=m.transitions||[];
+    m.readModels=m.readModels||[];m.stores=m.stores||[];m.projektionen=m.projektionen||[];m.reader=m.reader||[];m.codeNodes=m.codeNodes||[];m.llmNodes=m.llmNodes||[];
     m.decider.forEach(d=>{if(!d._id)d._id="d"+(NID++);});m.applier.forEach(a=>{if(!a._id)a._id="a"+(NID++);});m.states.forEach(s=>{if(!s._id)s._id="s"+(NID++);});m.transitions.forEach(t=>{if(!t._id)t._id="t"+(NID++);});
+    m.readModels.forEach(rm=>{if(!rm._id)rm._id="rm"+(NID++);});
+    m.stores.forEach(st=>{if(!st._id)st._id="st"+(NID++);st.writeFns=st.writeFns||[];st.readFns=st.readFns||[];st.writeFns.forEach(f=>{if(!f._id)f._id="wf"+(NID++);f.params=f.params||[];});st.readFns.forEach(f=>{if(!f._id)f._id="rf"+(NID++);f.params=f.params||[];});});
+    m.projektionen.forEach(p=>{if(!p._id)p._id="pj"+(NID++);p.stores=p.stores||[];p.handles=p.handles||[];});
+    m.reader.forEach(r=>{if(!r._id)r._id="rd"+(NID++);r.stores=r.stores||[];r.handles=r.handles||[];});
+    m.codeNodes.forEach(c=>{if(!c._id)c._id="cn"+(NID++);});m.llmNodes.forEach(l=>{if(!l._id)l._id="ln"+(NID++);});
+    // Migration: eingebettete Decide/Apply-Rümpfe → 📝 Code-Knoten (Konsistenz: jede Code-Stelle = Port + Quelle).
+    const mig=node=>{if(node.rumpf&&!node.codeSrc){const cn={_id:"cn"+(NID++),name:"Code",text:node.rumpf,x:(node.x||0)+320,y:node.y||0};m.codeNodes.push(cn);node.codeSrc=cn._id;delete node.rumpf;}};
+    m.decider.forEach(mig);m.applier.forEach(mig);
     m.aggregate.forEach(a=>{if((a.state||[]).length&&!m.states.some(s=>s.aggregat===a.name))m.states.push({_id:"s"+(NID++),aggregat:a.name});});
     // Round-trip: geladene Saga.Schritte → Transition-Knoten (prozess = Saga-Name), Schritte werden vor Serveraufruf neu erzeugt.
     m.sagas.forEach(s=>{(s.schritte||[]).forEach(st=>m.transitions.push({_id:"t"+(NID++),prozess:s.name,wenn:(st.wenn||[]).slice(),
@@ -828,7 +859,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   function render(){ deriveMembership(); renderGraph(); }
 
   // Eindeutiger Name — Namen sind der Referenzschlüssel für Kanten/Decider/Applier.
-  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name)]);
+  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.codeNodes.map(x=>x.name),...MODEL.llmNodes.map(x=>x.name)]);
     if(!all.has(base))return base;let i=2;while(all.has(base+i))i++;return base+i;}
 
   function enumCard(e,ei){const c=h("div",{class:"card"});
@@ -853,6 +884,12 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     else if(kind==="enum")MODEL.enums.push({name:uniq("NeuEnum"),namespace:defaultNs(),werte:["A","B"],...pos});
     else if(kind==="saga")MODEL.sagas.push({name:uniq("NeuerProzess"),namespace:defaultNs(),triggerEvent:"",schritte:[],extraUsings:[],...pos});
     else if(kind==="transition")MODEL.transitions.push({_id:"t"+(NID++),prozess:"",wenn:[],sende:"",sendeArgs:[],...pos});
+    else if(kind==="readmodel")MODEL.readModels.push({_id:"rm"+(NID++),name:uniq("NeuReadModel"),namespace:defaultNs(),felder:[{name:"Id",typ:"Guid"}],store:"",...pos});
+    else if(kind==="store")MODEL.stores.push({_id:"st"+(NID++),name:uniq("NeuStore"),namespace:defaultNs(),writeFns:[],readFns:[],...pos});
+    else if(kind==="projektion")MODEL.projektionen.push({_id:"pj"+(NID++),name:uniq("NeueProjektion"),namespace:defaultNs(),stores:[],append:false,handles:[],...pos});
+    else if(kind==="reader")MODEL.reader.push({_id:"rd"+(NID++),name:uniq("NeuReader"),namespace:defaultNs(),stores:[],trackDeps:true,handles:[],...pos});
+    else if(kind==="codenode")MODEL.codeNodes.push({_id:"cn"+(NID++),name:uniq("Code"),text:"",...pos});
+    else if(kind==="llmnode")MODEL.llmNodes.push({_id:"ln"+(NID++),name:uniq("LLM"),intent:"",...pos});
     else MODEL.records.push({name:uniq("Neu"+kindLabel(kind).replace(/\s/g,"")),kind,namespace:defaultNs(),felder:kind==="command"?[{name:"AggregateId",typ:"Guid"}]:[],...pos});
     render();
   }
@@ -867,9 +904,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     const kindSel=h("select",{onchange:e=>{r.kind=e.target.value;if(r.kind==="command"&&!(r.felder||[]).some(f=>f.name==="AggregateId"))(r.felder=r.felder||[]).unshift({name:"AggregateId",typ:"Guid"});render();}});
     Object.keys(KINDINFO).forEach(k=>{const o=h("option",{value:k},kindLabel(k));if(r.kind===k)o.selected=true;kindSel.append(o);});
     body.append(kindSel);
-    if(r.kind==="valueobject"){
+    if(r.kind==="valueobject"||r.kind==="query"||r.kind==="queryresponse"){
       body.append(h("div",{class:"gsec"},"Namespace"));
-      body.append(h("input",{value:r.namespace??"",oninput:e=>r.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.X"}));
+      body.append(h("input",{value:r.namespace??"",oninput:e=>r.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.Projections"}));
     }else{
       body.append(h("div",{class:"gsec"},"Aggregat (= Namespace → Zugehörigkeit)"));
       const aggSel=h("select",{onchange:e=>{const a=MODEL.aggregate.find(x=>x.name===e.target.value);if(a)r.namespace=a.namespace;render();}});
@@ -883,6 +920,8 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     else if(r.kind==="event"){body.append(slotRow("event","◀ von Decider","l",{type:"evtOut",dir:"in",rec:r.name},"evt:in:"+r.name));
       body.append(slotRow("event","evt ▶","r",{type:"evtUse",dir:"out",rec:r.name},"evt:out:"+r.name));}
     else if(r.kind==="rejection")body.append(slotRow("rejection","◀ von Decider","l",{type:"evtOut",dir:"in",rec:r.name},"evt:in:"+r.name));
+    else if(r.kind==="query")body.append(slotRow("query","query ▶","r",{type:"query",dir:"out",rec:r.name},"qry:out:"+r.name));
+    else if(r.kind==="queryresponse")body.append(slotRow("qrsp","◀ von Reader","l",{type:"qrsp",dir:"in",rec:r.name},"qrsp:in:"+r.name));
     body.append(h("div",{class:"gsec"},"Felder"));
     (r.felder||[]).forEach((f,fi)=>body.append(feldRow(f,()=>{r.felder.splice(fi,1);render();})));
     body.append(h("button",{class:"add",onclick:()=>{(r.felder=r.felder||[]).push({name:"feld",typ:"string"});render();}},"+ Feld"));
@@ -910,25 +949,24 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   function deciderCard(body,d){
     body.append(topAnchor("decagg","▲ Aggregat: "+(d.aggregat||"— (am Command setzen)"),"dec:aggout:"+d._id));
     body.append(slotRow("command","◀ Command: "+(d.command||"—"),"l",{type:"cmd",dir:"in",dec:d._id},"dec:cmdin:"+d._id));
-    body.append(h("div",{class:"gsec"},"OneOf-Ausgänge — je Outcome ein Punkt (Punkt → Event ziehen)"));
+    body.append(h("div",{class:"gsec"},"OneOf-Ausgänge — je mögliches Event ein Punkt (Punkt → Event ziehen). Das WANN macht der Decide-Rumpf."));
     (d.ergibt||[]).forEach((o,oi)=>{
       const s=port("event");s.classList.add("o");reg("dec:evtout:"+d._id+":"+o.event,s,{type:"evtOut",dir:"out",dec:d._id});
       body.append(h("div",{class:"slotrow o"},
         h("button",{class:"rm",onclick:()=>{d.ergibt.splice(oi,1);render();}},"✕"),
-        h("input",{value:o.guard??"",oninput:e=>o.guard=e.target.value||undefined,placeholder:"Guard",style:"flex:1;width:auto"}),
-        h("span",{class:"slotlbl"},(o.event||"?")+" ▶"),s));
+        h("span",{class:"slotlbl",style:"flex:1;text-align:right"},(o.event||"?")+" ▶"),s));
     });
     const os=port("open");os.classList.add("o");reg("dec:evtout:"+d._id+":open",os,{type:"evtOut",dir:"out",dec:d._id});
     body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Ausgang ▶"),os));
-    body.append(h("div",{class:"gsec"},"Decide-Körper (leer ⇒ throw-Platzhalter)"));
-    body.append(codearea(d.rumpf,v=>d.rumpf=v||undefined,"if (this.State.Verfuegbar < cmd.Betrag) { yield return new DeckungReichtNicht(this.State.Verfuegbar, cmd.Betrag); yield break; }\nyield return new BetragReserviert(cmd.Betrag);"));
+    body.append(h("div",{class:"gsec"},"Decide-Rumpf"));
+    body.append(codePort("dec:rumpf:"+d._id,{k:"decider",dec:d._id},d.codeSrc));
   }
   // Applier: gespiegelt zum Decider — Event rein (rechts), Aggregat OBEN. Körper = Code.
   function applierCard(body,a){
     body.append(topAnchor("appagg","▲ Aggregat: "+(a.aggregat||"— (am Event setzen)"),"app:aggout:"+a._id));
     body.append(slotRow("event","Event: "+(a.event||"—")+" ◀","r",{type:"evtUse",dir:"in",app:a._id},"app:evtin:"+a._id));
-    body.append(h("div",{class:"gsec"},"Apply-Körper (leer ⇒ throw-Platzhalter)"));
-    body.append(codearea(a.rumpf,v=>a.rumpf=v||undefined,"this.State.Saldo += evt.Betrag;"));
+    body.append(h("div",{class:"gsec"},"Apply-Rumpf"));
+    body.append(codePort("app:rumpf:"+a._id,{k:"applier",app:a._id},a.codeSrc));
   }
   // State-Knoten: eigene State-Felder (Typ per Dropdown); per Kante rechts einem Aggregat zuweisen.
   function stateCard(body,s){
@@ -941,6 +979,105 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     if(!agg)body.append(h("div",{class:"gsec",style:"color:#8b93a7"},"nicht zugewiesen — Punkt rechts auf ein Aggregat ziehen"));
   }
 
+  // ══ LESESEITE: Read Model / Store (Interface = Querschnitt der Verdrahtung) / Projektion / Reader.
+  //    ReadModel→Store · Projektion→Store · Event→Projektion(Handle) · Reader→Store · Query→Reader · Reader→Response.
+  //    Effekt-/Query-Ops = STRUKTURIERTES Vokabular (Dropdown), kein Freicode — LLM nur an echten Logik-Stellen.
+  function readModelCard(body,rm){
+    body.append(slotRow("readmodel","Store ▶"+(rm.store?" ("+rm.store+")":" — frei"),"r",{type:"readmodel",dir:"out",rm:rm._id},"rm:out:"+rm._id));
+    body.append(nameInp(rm,"name","ReadModel"));
+    body.append(h("input",{value:rm.namespace??"",oninput:e=>rm.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.X"}));
+    body.append(h("div",{class:"gsec"},"Dokument-Felder (Typ per Dropdown)"));
+    (rm.felder||[]).forEach((f,fi)=>body.append(stateFeldRow(f,()=>{rm.felder.splice(fi,1);render();})));
+    body.append(h("button",{class:"add",onclick:()=>{(rm.felder=rm.felder||[]).push({name:"feld",typ:"string"});render();}},"+ Feld"));
+  }
+
+  // Verträge werden verdrahtet; CODE fließt als Wert von 📝 Code- / 🤖 LLM-Knoten in die Rumpf-Ports.
+  const nodeName=id=>{const c=MODEL.codeNodes.find(x=>x._id===id);if(c)return "📝 "+(c.name||"Code");const l=MODEL.llmNodes.find(x=>x._id===id);if(l)return "🤖 "+(l.name||"LLM");return null;};
+  // Ein Code-Eingang (Rumpf): getippter Slot `code`; zeigt die verdrahtete Quelle (📝/🤖) oder „— leer".
+  function codePort(key,target,codeSrc){const s=port("code");s.classList.add("i");reg(key,s,{type:"code",dir:"in",target});
+    const src=codeSrc?nodeName(codeSrc):null;
+    return h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:src?"color:#9be3bf":"opacity:.5"},src?("◀ Rumpf: "+src):"◀ Rumpf — leer (📝/🤖 andocken)"));}
+  // Parameter-Zeilen einer Store-Funktion (Name : Typ) — die API-Signatur.
+  function paramRows(fn){const box=h("div",{});
+    (fn.params||[]).forEach((pr,pi)=>box.append(h("div",{class:"frow"},
+      inp(pr.name,v=>pr.name=v,"param"),tinp(pr.typ,v=>pr.typ=v),
+      h("button",{class:"rm",onclick:()=>{fn.params.splice(pi,1);render();}},"✕"))));
+    box.append(h("button",{class:"add",onclick:()=>{(fn.params=fn.params||[]).push({name:"arg",typ:"Guid"});render();}},"+ Param"));
+    return box;}
+
+  // Store-Knoten = INTERFACE-EDITOR: Write-/Read-Funktionen (Signatur = Name + Parameter [+ Rückgabe]),
+  //   je Funktion ein Impl-Code-Port (der Rumpf kommt von 📝/🤖). Read Models docken oben an.
+  function storeCard(body,st){
+    body.append(topSlot("readmodel","Read Models ▲",{type:"readmodel",dir:"in",store:st.name},"sto:rm:"+st.name));
+    body.append(nameInp(st,"name","Store"));
+    body.append(h("input",{value:st.namespace??"",oninput:e=>st.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.Projections"}));
+    const rms=MODEL.readModels.filter(x=>x.store===st.name);
+    body.append(h("div",{class:"gsec"},"Dokumente: "+(rms.length?rms.map(x=>x.name).join(" · "):"— (ReadModel oben anschließen)")));
+    const cin=port("store");cin.classList.add("i");reg("sto:in:"+st.name,cin,{type:"store",dir:"in",store:st.name});
+    body.append(h("div",{class:"slotrow"},cin,h("span",{class:"slotlbl"},"◀ Projektion / Reader (Scope)")));
+    body.append(h("div",{class:"gsep"},"Write-API"));
+    (st.writeFns||[]).forEach(fn=>body.append(fnBlock(st,fn,false)));
+    body.append(h("button",{class:"add",onclick:()=>{st.writeFns.push({_id:"wf"+(NID++),name:"NeuFunktion",params:[]});render();}},"+ Write-Funktion"));
+    body.append(h("div",{class:"gsep"},"Read-API"));
+    (st.readFns||[]).forEach(fn=>body.append(fnBlock(st,fn,true)));
+    body.append(h("button",{class:"add",onclick:()=>{st.readFns.push({_id:"rf"+(NID++),name:"HoleX",params:[],rueckgabe:""});render();}},"+ Read-Funktion"));
+  }
+  function fnBlock(st,fn,isRead){const arr=isRead?st.readFns:st.writeFns;
+    const box=h("div",{style:"border-left:2px solid #2c3547;padding-left:7px;margin:6px 0"});
+    box.append(h("div",{class:"slotrow"},inp(fn.name,v=>fn.name=v,"funktionsName"),
+      h("button",{class:"rm",onclick:()=>{arr.splice(arr.indexOf(fn),1);render();}},"✕")));
+    box.append(paramRows(fn));
+    if(isRead)box.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"→ Rückgabe"),tinp(fn.rueckgabe,v=>fn.rueckgabe=v)));
+    box.append(codePort("impl:in:"+st._id+":"+fn._id,{k:isRead?"readFn":"writeFn",store:st._id,fn:fn._id},fn.codeSrc));
+    return box;}
+
+  // Projektion = Controller: Trigger-Events (je Handle) + Store-SCOPE (mehrere möglich). Der Handle-Rumpf
+  //   (welche Store-Funktionen, Reihenfolge, Bedingung, Args) kommt als CODE über den Controller-Port.
+  function projektionCard(body,p){
+    body.append(nameInp(p,"name","Projektion"));
+    body.append(h("input",{value:p.namespace??"",oninput:e=>p.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.Projections"}));
+    body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>p.append=e.target.checked||undefined,...(p.append?{checked:"checked"}:{})}),"Append (IAppendProjektion)"));
+    body.append(slotRow("store","Stores ▶ Scope"+((p.stores||[]).length?": "+p.stores.join(", "):" — andocken"),"r",{type:"store",dir:"out",proj:p._id},"prj:store:"+p._id));
+    body.append(h("div",{class:"gsec"},"Trigger-Events → Handle (Controller)"));
+    (p.handles||[]).forEach((hd,hi)=>{const sl=port("event");sl.classList.add("i");reg("prj:in:"+p._id+":"+hi,sl,{type:"evtUse",dir:"in",proj:p._id,handleIdx:hi});
+      body.append(h("div",{class:"slotrow"},sl,h("span",{class:"slotlbl"},"◀ Auf "+(hd.event||"?")),h("button",{class:"rm",onclick:()=>{p.handles.splice(hi,1);render();}},"✕")));
+      body.append(codePort("ctrl:in:"+p._id+":"+hi,{k:"pjHandle",proj:p._id,hi:hi},hd.codeSrc));});
+    const oi=port("open");oi.classList.add("i");reg("prj:in:"+p._id+":open",oi,{type:"evtUse",dir:"in",proj:p._id,handleIdx:"open"});
+    body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Event andocken")));
+  }
+
+  // Reader = Controller: Queries (je Handle) + Store-SCOPE + Response; Handle-Rumpf kommt als Code.
+  function readerCard(body,r){
+    body.append(nameInp(r,"name","Reader"));
+    body.append(h("input",{value:r.namespace??"",oninput:e=>r.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.Projections"}));
+    body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>r.trackDeps=e.target.checked,...((r.trackDeps!==false)?{checked:"checked"}:{})}),"TrackDeps (Redis-Deps)"));
+    body.append(slotRow("store","Stores ▶ Scope"+((r.stores||[]).length?": "+r.stores.join(", "):" — andocken"),"r",{type:"store",dir:"out",reader:r._id},"rdr:store:"+r._id));
+    body.append(h("div",{class:"gsec"},"Query → Handle (Controller) → Response"));
+    (r.handles||[]).forEach((hd,hi)=>{
+      const qin=port("query");qin.classList.add("i");reg("rdr:qin:"+r._id+":"+hi,qin,{type:"query",dir:"in",reader:r._id,handleIdx:hi});
+      const rout=port("qrsp");rout.classList.add("o");reg("rdr:rout:"+r._id+":"+hi,rout,{type:"qrsp",dir:"out",reader:r._id,handleIdx:hi});
+      body.append(h("div",{class:"slotrow"},qin,h("span",{class:"slotlbl",style:"flex:1"},"◀ "+(hd.query||"?")),h("span",{class:"slotlbl"},(hd.response||"— Response")+" ▶"),rout,h("button",{class:"rm",onclick:()=>{r.handles.splice(hi,1);render();}},"✕")));
+      body.append(codePort("ctrl:in:"+r._id+":"+hi,{k:"rdHandle",reader:r._id,hi:hi},hd.codeSrc));
+    });
+    const oi=port("open");oi.classList.add("i");reg("rdr:qin:"+r._id+":open",oi,{type:"query",dir:"in",reader:r._id,handleIdx:"open"});
+    body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Query andocken")));
+  }
+
+  // 📝 Code-Knoten (manuell): der EINZIGE Ort für getippten C#-Rumpf. Ausgang code ▶ → an einen Rumpf-Port.
+  function codeNodeCard(body,c){
+    body.append(nameInp(c,"name","Code"));
+    body.append(codearea(c.text,v=>c.text=v,"// C#-Rumpf hier tippen"));
+    body.append(slotRow("code","code ▶","r",{type:"code",dir:"out",codeNode:c._id},"code:out:"+c._id));
+  }
+  // 🤖 LLM-Knoten: Intent-Text; Vertrag wird aus dem verdrahteten Ziel abgeleitet; Ausgang code ▶.
+  function llmNodeCard(body,l){
+    body.append(nameInp(l,"name","LLM"));
+    body.append(h("div",{class:"gsec"},"Intent — was soll der Rumpf tun?"));
+    body.append(codearea(l.intent,v=>l.intent=v,"z. B. Modell upserten; Aktiv-Zeiger setzen"));
+    body.append(h("div",{class:"gsec",style:"opacity:.6"},"Vertrag aus dem Ziel abgeleitet · Generieren + Sim: spätere Phase"));
+    body.append(slotRow("code","code ▶","r",{type:"code",dir:"out",codeNode:l._id},"code:out:"+l._id));
+  }
+
   // ══ COMFYUI-NODE-EDITOR: getippte Slots (Punkte) + Bézier-Kanten statt Dropdowns.
   //    Kopf ziehen = verschieben (rastet 20px); von einem Slot-Punkt ziehen = verbinden;
   //    Fläche ziehen = pannen; Mausrad = zoomen. Verbindungen (out→in, typgleich):
@@ -948,7 +1085,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   //    Applier→Aggregat(rechts) · Applier→State-Feld(oben, optionale Zuweisungs-Markierung).
   const SVGNS="http://www.w3.org/2000/svg";
   const GRID=20;
-  const NODELABEL={command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Transition"};
+  const NODELABEL={command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Transition",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",codenode:"Code",llmnode:"LLM"};
   let PAN={x:40,y:30,s:1}, canvas=null, world=null, svg=null, svgTop=null, SLOTS={};
 
   const dec=id=>MODEL.decider.find(d=>d._id===id);
@@ -1039,11 +1176,17 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
             ...MODEL.applier.map(a=>({id:"app:"+a._id,name:a.event||"",kind:"applier",ref:a})),
             ...MODEL.enums.map(e=>({id:"enum:"+e.name,name:e.name,kind:"enum",ref:e})),
             ...MODEL.sagas.map(s=>({id:"saga:"+s.name,name:s.name,kind:"saga",ref:s})),
-            ...MODEL.transitions.map(t=>({id:"tr:"+t._id,name:(t.sende||"Transition"),kind:"transition",ref:t}))];
+            ...MODEL.transitions.map(t=>({id:"tr:"+t._id,name:(t.sende||"Transition"),kind:"transition",ref:t})),
+            ...MODEL.readModels.map(rm=>({id:"rm:"+rm._id,name:rm.name,kind:"readmodel",ref:rm})),
+            ...MODEL.stores.map(s=>({id:"sto:"+s._id,name:s.name,kind:"store",ref:s})),
+            ...MODEL.projektionen.map(p=>({id:"prj:"+p._id,name:p.name,kind:"projektion",ref:p})),
+            ...MODEL.reader.map(r=>({id:"rdr:"+r._id,name:r.name,kind:"reader",ref:r})),
+            ...MODEL.codeNodes.map(c=>({id:"cn:"+c._id,name:c.name,kind:"codenode",ref:c})),
+            ...MODEL.llmNodes.map(l=>({id:"ln:"+l._id,name:l.name,kind:"llmnode",ref:l}))];
   }
   function autoLayout(){
-    const spalte={command:40,decider:360,aggregate:720,state:720,event:1080,rejection:1080,applier:1400,valueobject:1720,enum:1720,saga:1760,transition:2120};
-    const step={command:150,event:150,rejection:150,valueobject:160,enum:150,aggregate:320,state:220,decider:330,applier:280,saga:240,transition:360};
+    const spalte={command:40,decider:360,aggregate:720,state:720,event:1080,rejection:1080,applier:1400,valueobject:1720,enum:1720,saga:1760,transition:2120,projektion:2200,store:2560,readmodel:2900,query:3250,reader:3600,queryresponse:3950,codenode:4300,llmnode:4650};
+    const step={command:150,event:150,rejection:150,valueobject:160,enum:150,aggregate:320,state:220,decider:330,applier:280,saga:240,transition:360,projektion:300,store:360,readmodel:220,query:150,reader:320,queryresponse:150,codenode:220,llmnode:220};
     const yByX={};
     graphNodes().forEach(n=>{const r=n.ref;const x=spalte[n.kind]!==undefined?spalte[n.kind]:40;const s=step[n.kind]||150;
       if(typeof r.x==="number"&&typeof r.y==="number"){yByX[x]=Math.max(yByX[x]||30,r.y+s);return;}
@@ -1067,6 +1210,12 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     else if(n.kind==="enum")body.append(enumCard(n.ref,MODEL.enums.indexOf(n.ref)));
     else if(n.kind==="saga")prozessHubCard(body,n.ref);
     else if(n.kind==="transition")transitionCard(body,n.ref);
+    else if(n.kind==="readmodel")readModelCard(body,n.ref);
+    else if(n.kind==="store")storeCard(body,n.ref);
+    else if(n.kind==="projektion")projektionCard(body,n.ref);
+    else if(n.kind==="reader")readerCard(body,n.ref);
+    else if(n.kind==="codenode")codeNodeCard(body,n.ref);
+    else if(n.kind==="llmnode")llmNodeCard(body,n.ref);
     else recordCard(body,n.ref);
     el.append(body);return el;
   }
@@ -1078,6 +1227,12 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     else if(k==="enum")MODEL.enums.splice(MODEL.enums.indexOf(ref),1);
     else if(k==="saga")MODEL.sagas.splice(MODEL.sagas.indexOf(ref),1);
     else if(k==="transition")MODEL.transitions.splice(MODEL.transitions.indexOf(ref),1);
+    else if(k==="readmodel")MODEL.readModels.splice(MODEL.readModels.indexOf(ref),1);
+    else if(k==="store")MODEL.stores.splice(MODEL.stores.indexOf(ref),1);
+    else if(k==="projektion")MODEL.projektionen.splice(MODEL.projektionen.indexOf(ref),1);
+    else if(k==="reader")MODEL.reader.splice(MODEL.reader.indexOf(ref),1);
+    else if(k==="codenode")MODEL.codeNodes.splice(MODEL.codeNodes.indexOf(ref),1);
+    else if(k==="llmnode")MODEL.llmNodes.splice(MODEL.llmNodes.indexOf(ref),1);
     else MODEL.records.splice(MODEL.records.indexOf(ref),1);
     render();}
 
@@ -1113,6 +1268,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     else if(O.type==="prozess"){const t=MODEL.transitions.find(x=>x._id===O.trans);if(t)t.prozess=I.saga;}
     else if(O.type==="evtUse"){
       if(I.app){const p=app(I.app);if(p)p.event=O.rec;}
+      else if(I.proj){const p=MODEL.projektionen.find(x=>x._id===I.proj);if(p){p.handles=p.handles||[];
+        if(I.handleIdx==="open"){if(!p.handles.some(x=>x.event===O.rec))p.handles.push({event:O.rec,effekt:""});}
+        else p.handles[I.handleIdx].event=O.rec;}}
       else if(I.trigger){const sg=MODEL.sagas.find(x=>x.name===I.saga);if(sg)sg.triggerEvent=O.rec;}
       else if(I.trans){const t=MODEL.transitions.find(x=>x._id===I.trans);if(t){
         if(I.sammel){t.sammelEvent=O.rec;}
@@ -1122,6 +1280,22 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
       if(t){const arr=I.target==="komp"?(t.kompArgs=t.kompArgs||[]):(t.sendeArgs=t.sendeArgs||[]);arr[I.paramIndex]=O.field?O.role+"."+O.field:O.role;}}
     else if(O.type==="decAgg"){const d=dec(O.dec);if(d)d.aggregat=I.agg;}
     else if(O.type==="appAgg"){const p=app(O.app);if(p)p.aggregat=I.agg;}
+    // ── Leseseite: ReadModel→Store, Projektion/Reader→Store-Scope, Event→Projektion, Query→Reader,
+    //    Reader→Response, und CODE (📝/🤖) → Rumpf-Port (Controller / Impl). ──
+    else if(O.type==="readmodel"){const rm=MODEL.readModels.find(x=>x._id===O.rm);if(rm)rm.store=I.store;}
+    else if(O.type==="store"){if(O.proj){const p=MODEL.projektionen.find(x=>x._id===O.proj);if(p){p.stores=p.stores||[];if(!p.stores.includes(I.store))p.stores.push(I.store);}}
+      else if(O.reader){const r=MODEL.reader.find(x=>x._id===O.reader);if(r){r.stores=r.stores||[];if(!r.stores.includes(I.store))r.stores.push(I.store);}}}
+    else if(O.type==="query"){const r=MODEL.reader.find(x=>x._id===I.reader);if(r){r.handles=r.handles||[];
+      if(I.handleIdx==="open"){if(!r.handles.some(x=>x.query===O.rec))r.handles.push({query:O.rec,response:""});}
+      else r.handles[I.handleIdx].query=O.rec;}}
+    else if(O.type==="qrsp"){const r=MODEL.reader.find(x=>x._id===O.reader);if(r&&r.handles[O.handleIdx])r.handles[O.handleIdx].response=I.rec;}
+    else if(O.type==="code"){const t=I.target;const src=O.codeNode;if(t){
+      if(t.k==="pjHandle"){const p=MODEL.projektionen.find(x=>x._id===t.proj);if(p&&p.handles[t.hi])p.handles[t.hi].codeSrc=src;}
+      else if(t.k==="rdHandle"){const r=MODEL.reader.find(x=>x._id===t.reader);if(r&&r.handles[t.hi])r.handles[t.hi].codeSrc=src;}
+      else if(t.k==="writeFn"){const st=MODEL.stores.find(x=>x._id===t.store);const fn=st&&(st.writeFns||[]).find(f=>f._id===t.fn);if(fn)fn.codeSrc=src;}
+      else if(t.k==="readFn"){const st=MODEL.stores.find(x=>x._id===t.store);const fn=st&&(st.readFns||[]).find(f=>f._id===t.fn);if(fn)fn.codeSrc=src;}
+      else if(t.k==="decider"){const d=dec(t.dec);if(d)d.codeSrc=src;}
+      else if(t.k==="applier"){const a=app(t.app);if(a)a.codeSrc=src;}}}
     else if(O.type==="state"){const s=MODEL.states.find(x=>x._id===O.state);const A=I.agg;
       if(s){s.aggregat=A;const agg=MODEL.aggregate.find(a=>a.name===A);
         if(agg){if((!agg.state||!agg.state.length)&&s.felder&&s.felder.length)agg.state=s.felder;s.felder=undefined;
@@ -1148,10 +1322,12 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
       if(d.command)add("cmd:out:"+d.command,"dec:cmdin:"+d._id,"#4a86d6");
       if(d.aggregat)add("dec:aggout:"+d._id,"agg:left:"+d.aggregat+":"+d._id,"#33b1a6",true);
       (d.ergibt||[]).forEach(o=>{if(o.event)add("dec:evtout:"+d._id+":"+o.event,"evt:in:"+o.event,"#4fb06a");});
+      if(d.codeSrc)add("code:out:"+d.codeSrc,"dec:rumpf:"+d._id,"#8a8f9c",true);
     });
     MODEL.applier.forEach(p=>{
       if(p.event)add("evt:out:"+p.event,"app:evtin:"+p._id,"#4fb06a");
       if(p.aggregat)add("app:aggout:"+p._id,"agg:right:"+p.aggregat+":"+p._id,"#d1953f",true);
+      if(p.codeSrc)add("code:out:"+p.codeSrc,"app:rumpf:"+p._id,"#8a8f9c",true);
     });
     MODEL.states.forEach(s=>{if(s.aggregat)add("state:out:"+s._id,"agg:state:"+s.aggregat,"#e0b64d");});
     // Interne Aggregat-Kanten: welcher Decider (links) erzeugt das Event welches Appliers (rechts) — Linie IM Aggregat.
@@ -1174,6 +1350,25 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
         const x=SLOTS["tr:field:"+t._id+":"+expr],y=SLOTS["tr:param:"+t._id+":"+target+":"+pi];
         if(x&&y)mk(anchor(x),anchor(y),-1,1,"#e0c46a",false,"internal",null,svgTop);});};
       argE(t.sendeArgs,"sende");argE(t.kompArgs,"komp");
+    });
+    // ── Leseseite: ReadModel→Store, Projektion/Reader→Store-Scope, Event→Projektion, Query→Reader,
+    //    Reader→Response, und CODE (📝/🤖) → Rumpf-Ports (gestrichelt). ──
+    const CODE="#8a8f9c";
+    MODEL.readModels.forEach(rm=>{if(rm.store)add("rm:out:"+rm._id,"sto:rm:"+rm.store,"#c9a24b");});
+    MODEL.stores.forEach(st=>{
+      (st.writeFns||[]).forEach(fn=>{if(fn.codeSrc)add("code:out:"+fn.codeSrc,"impl:in:"+st._id+":"+fn._id,CODE,true);});
+      (st.readFns||[]).forEach(fn=>{if(fn.codeSrc)add("code:out:"+fn.codeSrc,"impl:in:"+st._id+":"+fn._id,CODE,true);});
+    });
+    MODEL.projektionen.forEach(p=>{
+      (p.stores||[]).forEach(sn=>add("prj:store:"+p._id,"sto:in:"+sn,"#2f9d95"));
+      (p.handles||[]).forEach((hd,hi)=>{if(hd.event)add("evt:out:"+hd.event,"prj:in:"+p._id+":"+hi,"#4fb06a");
+        if(hd.codeSrc)add("code:out:"+hd.codeSrc,"ctrl:in:"+p._id+":"+hi,CODE,true);});
+    });
+    MODEL.reader.forEach(r=>{
+      (r.stores||[]).forEach(sn=>add("rdr:store:"+r._id,"sto:in:"+sn,"#c08a3e"));
+      (r.handles||[]).forEach((hd,hi)=>{if(hd.query)add("qry:out:"+hd.query,"rdr:qin:"+r._id+":"+hi,"#9678d6");
+        if(hd.response)add("rdr:rout:"+r._id+":"+hi,"qrsp:in:"+hd.response,"#9d78d6");
+        if(hd.codeSrc)add("code:out:"+hd.codeSrc,"ctrl:in:"+r._id+":"+hi,CODE,true);});
     });
   }
   // Interne Linien hervorheben, wenn man über die zugehörige Decider-/Applier-Zeile fährt.
@@ -1200,7 +1395,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     root.append(h("div",{class:"gtoolbar"},
       tb("command","+ Command"),tb("event","+ Event"),tb("rejection","+ Ablehnung"),
       tb("valueobject","+ Value Object"),tb("enum","+ Enum"),tb("aggregate","+ Aggregat"),
-      tb("state","+ State"),tb("decider","+ Decider"),tb("applier","+ Applier"),tb("saga","+ Prozess"),tb("transition","+ Transition")));
+      tb("state","+ State"),tb("decider","+ Decider"),tb("applier","+ Applier"),tb("saga","+ Prozess"),tb("transition","+ Transition"),
+      tb("readmodel","+ Read Model"),tb("store","+ Store"),tb("projektion","+ Projektion"),tb("query","+ Query"),tb("queryresponse","+ Response"),tb("reader","+ Reader"),
+      tb("codenode","+ 📝 Code"),tb("llmnode","+ 🤖 LLM")));
     const leg=(c,t)=>h("span",{},h("i",{style:"background:"+c}),t);
     root.append(h("div",{class:"glegend2"},
       leg("#4a86d6","Command→Decider"),leg("#33b1a6","Decider→Aggregat"),leg("#4fb06a","Event"),
@@ -1235,7 +1432,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     pick.append(h("div",{class:"gpick-t"},"Was soll hier entstehen?"),
       opt("command","Command"),opt("event","Event"),opt("rejection","Ablehnung"),
       opt("valueobject","Value Object"),opt("enum","Enum"),opt("aggregate","Aggregat"),
-      opt("state","State"),opt("decider","Decider"),opt("applier","Applier"),opt("saga","Prozess"),opt("transition","Transition"));
+      opt("state","State"),opt("decider","Decider"),opt("applier","Applier"),opt("saga","Prozess"),opt("transition","Transition"),
+      opt("readmodel","Read Model"),opt("store","Store"),opt("projektion","Projektion"),opt("query","Query"),opt("queryresponse","Response"),opt("reader","Reader"),
+      opt("codenode","📝 Code"),opt("llmnode","🤖 LLM"));
     canvas.append(pick);
     setTimeout(()=>{const off=ev=>{if(!pick.contains(ev.target)){pick.remove();document.removeEventListener("pointerdown",off);}};document.addEventListener("pointerdown",off);},0);
   }
