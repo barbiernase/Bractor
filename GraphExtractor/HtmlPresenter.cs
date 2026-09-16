@@ -646,6 +646,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .gnode2.n-readmodel{border-color:#b98a3c;width:250px}
 #de .gnode2.n-store{border-color:#2f9d95;width:290px}
 #de .gnode2.n-projektion{border-color:#3f9d5a;width:274px}
+#de .gnode2.n-reaktion{border-color:#c8703a;width:274px}
+#de .gnode2.n-pipeline{border-color:#d97b34;width:274px}
+#de .gnode2.n-trigger{border-color:#c98a3a;width:262px}
 #de .gnode2.n-reader{border-color:#7a5cc0;width:274px}
 #de .gnode2.n-query{border-color:#3b6fb0}
 #de .gnode2.n-queryresponse{border-color:#2f8f7d}
@@ -667,6 +670,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .gnode2.n-readmodel .ghead{background:#d0a45a}
 #de .gnode2.n-store .ghead{background:#3fb0a6}
 #de .gnode2.n-projektion .ghead{background:#57b673}
+#de .gnode2.n-reaktion .ghead{background:#d0885a}
+#de .gnode2.n-pipeline .ghead{background:#e08a44}
+#de .gnode2.n-trigger .ghead{background:#d29a4a}
 #de .gnode2.n-reader .ghead{background:#9678d6}
 #de .gnode2.n-query .ghead{background:#5b8fd0}
 #de .gnode2.n-queryresponse .ghead{background:#49a996}
@@ -695,6 +701,11 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .slot.ro{cursor:default;opacity:.9}
 #de .slot:hover{filter:brightness(1.4)}
 #de .slot.hot{box-shadow:0 0 0 3px #fff,0 0 0 6px #7c5cff}
+#de .slot.cand{box-shadow:0 0 0 2px #0b0e15,0 0 0 5px #3fae7f}
+#de .codeadd{background:#233047;color:#cfe;border:1px solid #35507a;border-radius:5px;cursor:pointer;font:600 11px system-ui;padding:1px 6px;margin-left:4px}
+#de .codeadd:hover{background:#2c3d5c}
+#de .slotrow.codeempty .codemiss{color:#e0b46a;font-weight:600}
+#de .slotrow.codeempty .slot.s-code{box-shadow:0 0 0 2px #0b0e15,0 0 0 4px #e0b46a66}
 #de .slot.s-command{background:#4a86d6}
 #de .slot.s-event{background:#4fb06a}
 #de .slot.s-rejection{background:#c25b52}
@@ -713,6 +724,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .slot.s-query{background:#5b8fd0}
 #de .slot.s-qrsp{background:#49a996}
 #de .slot.s-code{background:#9aa0aa}
+#de .slot.s-ftype{background:#c58fd6}
+#de .slot.s-trigmsg{background:#f0883e}
+#de .slot.s-self{background:#c98a3a}
 #de .gtoprow{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:5px}
 #de .gtopfield{display:flex;flex-direction:column;align-items:center;gap:1px}
 #de .aggwrap{display:flex;justify-content:space-between;gap:8px;margin:2px 0}
@@ -788,7 +802,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 (function(){
   const SCALARS=["Guid","decimal","int","long","double","bool","string","DateTimeOffset"];
   const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"],query:["Query","qry"],queryresponse:["Response","qrsp"]};
-  let MODEL={schemaVersion:"2",records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],codeNodes:[],llmNodes:[]};
+  let MODEL={schemaVersion:"2",records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],reaktionen:[],pipelines:[],triggers:[],codeNodes:[],llmNodes:[]};
   let NID=1;
   const embedded=/*__MODEL_JSON__*/;
 
@@ -797,12 +811,36 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   const kindLabel=k=>(KINDINFO[k]||["?","vo"])[0];
   const kindKlasse=k=>(KINDINFO[k]||["?","vo"])[1];
   function normalize(m){m=m||{};m.records=m.records||[];m.enums=m.enums||[];m.aggregate=m.aggregate||[];m.decider=m.decider||[];m.applier=m.applier||[];m.sagas=m.sagas||[];m.states=m.states||[];m.transitions=m.transitions||[];
-    m.readModels=m.readModels||[];m.stores=m.stores||[];m.projektionen=m.projektionen||[];m.reader=m.reader||[];m.codeNodes=m.codeNodes||[];m.llmNodes=m.llmNodes||[];
-    m.decider.forEach(d=>{if(!d._id)d._id="d"+(NID++);});m.applier.forEach(a=>{if(!a._id)a._id="a"+(NID++);});m.states.forEach(s=>{if(!s._id)s._id="s"+(NID++);});m.transitions.forEach(t=>{if(!t._id)t._id="t"+(NID++);});
+    m.readModels=m.readModels||[];m.stores=m.stores||[];m.projektionen=m.projektionen||[];m.reader=m.reader||[];m.reaktionen=m.reaktionen||[];m.pipelines=m.pipelines||[];m.triggers=m.triggers||[];m.codeNodes=m.codeNodes||[];m.llmNodes=m.llmNodes||[];
+    // Reaktion = emittierender Konsument (ISubscriber → IAsyncEnumerable<OneOf<Cmd>>): Trigger-Event → Handle → OneOf-Commands.
+    m.reaktionen.forEach(r=>{if(!r._id)r._id="rk"+(NID++);r.handles=r.handles||[];r.handles.forEach(hd=>{hd.sends=hd.sends||[];hd.publishes=hd.publishes||[];});});
+    // Pipeline = 4. durabler Konsument (IPipelineHandler): Trigger-Msg ODER Event → Handle → OneOf-Command(s).
+    m.pipelines.forEach(p=>{if(!p._id)p._id="pl"+(NID++);p.handles=p.handles||[];p.handles.forEach(hd=>{hd.sends=hd.sends||[];hd.emits=hd.emits||[];hd.schedules=hd.schedules||[];
+      hd.inputKind=hd.inputKind||(hd.trigId?"trigger":"event");
+      if(hd.trigId&&!hd.prod){hd.prod={k:"tg",id:hd.trigId};hd.input=hd.input||"";}});});
+    // Trigger = Ingress-Wecker (Timer/Webhook/FileWatch/Frist), erzeugt eine IPipelineTrigger-Nachricht.
+    m.triggers.forEach(t=>{if(!t._id)t._id="tg"+(NID++);t.modus=t.modus||"timer";t.felder=t.felder||[];t.felder.forEach(f=>{if(f&&!f._id)f._id="f"+(NID++);});});
+    // Jedes Objekt-Feld bekommt eine stabile _id → Feld-Ports eindeutig (auch bei gleichnamigen Feldern) und rename-fest.
+    const stampFelder=arr=>(arr||[]).forEach(f=>{if(f&&!f._id)f._id="f"+(NID++);});
+    m.records.forEach(r=>stampFelder(r.felder));m.aggregate.forEach(a=>stampFelder(a.state));m.states.forEach(s=>stampFelder(s.felder));m.readModels.forEach(rm=>stampFelder(rm.felder));
+    m.decider.forEach(d=>{if(!d._id)d._id="d"+(NID++);});m.applier.forEach(a=>{if(!a._id)a._id="a"+(NID++);});m.states.forEach(s=>{if(!s._id)s._id="s"+(NID++);});m.transitions.forEach(t=>{if(!t._id)t._id="t"+(NID++);
+      // Migration „ein Join, mehrere Dann": flaches sende/kompensation → dann[]. Jeder Dann = ein Command (+ eigene Kompensation).
+      if(!t.dann)t.dann=t.sende?[{sende:t.sende,sendeJe:t.sendeJe,sendeJeCollection:t.sendeJeCollection,kompensation:t.kompensation}]:[{}];
+      delete t.sende;delete t.sendeJe;delete t.sendeJeCollection;delete t.kompensation;delete t.sendeArgs;delete t.kompArgs;
+      });
     m.readModels.forEach(rm=>{if(!rm._id)rm._id="rm"+(NID++);});
     m.stores.forEach(st=>{if(!st._id)st._id="st"+(NID++);st.writeFns=st.writeFns||[];st.readFns=st.readFns||[];st.writeFns.forEach(f=>{if(!f._id)f._id="wf"+(NID++);f.params=f.params||[];});st.readFns.forEach(f=>{if(!f._id)f._id="rf"+(NID++);f.params=f.params||[];});});
-    m.projektionen.forEach(p=>{if(!p._id)p._id="pj"+(NID++);p.stores=p.stores||[];p.handles=p.handles||[];});
-    m.reader.forEach(r=>{if(!r._id)r._id="rd"+(NID++);r.stores=r.stores||[];r.handles=r.handles||[];});
+    // Projektion-Handle ruft je Event eine (oder mehrere) Write-Fn des Stores → fns[]. Der Store-Scope
+    // wird daraus ABGELEITET (= die injizierten Stores), nicht mehr von Hand deklariert.
+    m.projektionen.forEach(p=>{if(!p._id)p._id="pj"+(NID++);p.handles=p.handles||[];p.handles.forEach(hd=>{hd.fns=hd.fns||[];hd.publishes=hd.publishes||[];});delete p.stores;});
+    m.reader.forEach(r=>{if(!r._id)r._id="rd"+(NID++);r.handles=r.handles||[];delete r.stores;
+      // Reader liest genau eine Projektion (IReader<TProjection>) — expliziter Bindungs-Port.
+      r.projektion=r.projektion||"";
+      r.handles.forEach(hd=>{
+        // Query-Handle ruft je Query eine/mehrere Read-Fn (auch über mehrere Stores) → fns[].
+        hd.fns=hd.fns||[];
+        // Symmetrie zur Schreibseite (decider.ergibt[]): je Query mehrere Responses als OneOf → responses[].
+        hd.responses=hd.responses||(hd.response?[hd.response]:[]);delete hd.response;});});
     m.codeNodes.forEach(c=>{if(!c._id)c._id="cn"+(NID++);});m.llmNodes.forEach(l=>{if(!l._id)l._id="ln"+(NID++);});
     // Migration: eingebettete Decide/Apply-Rümpfe → 📝 Code-Knoten (Konsistenz: jede Code-Stelle = Port + Quelle).
     const mig=node=>{if(node.rumpf&&!node.codeSrc){const cn={_id:"cn"+(NID++),name:"Code",text:node.rumpf,x:(node.x||0)+320,y:node.y||0};m.codeNodes.push(cn);node.codeSrc=cn._id;delete node.rumpf;}};
@@ -810,8 +848,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     m.aggregate.forEach(a=>{if((a.state||[]).length&&!m.states.some(s=>s.aggregat===a.name))m.states.push({_id:"s"+(NID++),aggregat:a.name});});
     // Round-trip: geladene Saga.Schritte → Transition-Knoten (prozess = Saga-Name), Schritte werden vor Serveraufruf neu erzeugt.
     m.sagas.forEach(s=>{(s.schritte||[]).forEach(st=>m.transitions.push({_id:"t"+(NID++),prozess:s.name,wenn:(st.wenn||[]).slice(),
-        sammelEvent:st.sammelEvent||"",sammelAnzahl:st.sammelAnzahl||"",sende:st.sende||"",sendeJe:!!st.sendeJe,sendeJeCollection:st.sendeJeCollection||"",
-        sendeArgs:(st.sendeArgumente||[]).slice(),kompensation:st.kompensation||"",kompArgs:(st.kompensationArgumente||[]).slice()}));s.schritte=[];});
+        dann:[{sende:st.sende||"",sendeJe:!!st.sendeJe,sendeJeCollection:st.sendeJeCollection||"",kompensation:st.kompensation||""}]}));s.schritte=[];});
     return m;}
   const aggSelect=(val,on)=>{const s=h("select",{onchange:e=>on(e.target.value)});
     if(!val||!MODEL.aggregate.some(a=>a.name===val)){const o=h("option",{value:val||""},val||"— Aggregat —");o.selected=true;s.append(o);}
@@ -859,15 +896,16 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   function render(){ deriveMembership(); renderGraph(); }
 
   // Eindeutiger Name — Namen sind der Referenzschlüssel für Kanten/Decider/Applier.
-  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.codeNodes.map(x=>x.name),...MODEL.llmNodes.map(x=>x.name)]);
+  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.reaktionen.map(x=>x.name),...MODEL.pipelines.map(x=>x.name),...MODEL.triggers.map(x=>x.name),...MODEL.codeNodes.map(x=>x.name),...MODEL.llmNodes.map(x=>x.name)]);
     if(!all.has(base))return base;let i=2;while(all.has(base+i))i++;return base+i;}
 
   function enumCard(e,ei){const c=h("div",{class:"card"});
-    c.append(h("h3",{},h("span",{class:"k vo"},"Enum"),inp(e.name,v=>e.name=v,"Enum"),
+    c.append(h("h3",{},h("span",{class:"k vo"},"Enum"),nameInp(e,"name","Enum","enum"),
       h("input",{value:e.namespace,oninput:ev=>e.namespace=ev.target.value,placeholder:"Domain.X",style:"width:150px"}),
       h("button",{class:"rm",onclick:()=>{MODEL.enums.splice(ei,1);render();}},"✕")));
     c.append(h("div",{class:"blab"},"Werte (kommagetrennt):"));
     c.append(inp(listeZuText(e.werte),v=>e.werte=textZuListe(v),"Dc0, Dc2"));
+    c.append(slotRow("ftype","als Feldtyp ▶","r",{type:"ftype",dir:"out",typeName:e.name},"ftype:out:enum:"+e.name));
     return c;}
 
   // Knoten anlegen — an einer Position (Picker) ODER sichtbar im aktuellen Ausschnitt (Toolbar).
@@ -883,14 +921,17 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     else if(kind==="state")MODEL.states.push({_id:"s"+(NID++),aggregat:"",felder:[],...pos});
     else if(kind==="enum")MODEL.enums.push({name:uniq("NeuEnum"),namespace:defaultNs(),werte:["A","B"],...pos});
     else if(kind==="saga")MODEL.sagas.push({name:uniq("NeuerProzess"),namespace:defaultNs(),triggerEvent:"",schritte:[],extraUsings:[],...pos});
-    else if(kind==="transition")MODEL.transitions.push({_id:"t"+(NID++),prozess:"",wenn:[],sende:"",sendeArgs:[],...pos});
-    else if(kind==="readmodel")MODEL.readModels.push({_id:"rm"+(NID++),name:uniq("NeuReadModel"),namespace:defaultNs(),felder:[{name:"Id",typ:"Guid"}],store:"",...pos});
+    else if(kind==="transition")MODEL.transitions.push({_id:"t"+(NID++),prozess:"",wenn:[],dann:[{}],...pos});
+    else if(kind==="readmodel")MODEL.readModels.push({_id:"rm"+(NID++),name:uniq("NeuReadModel"),namespace:defaultNs(),felder:[{_id:"f"+(NID++),name:"Id",typ:"Guid"}],store:"",...pos});
     else if(kind==="store")MODEL.stores.push({_id:"st"+(NID++),name:uniq("NeuStore"),namespace:defaultNs(),writeFns:[],readFns:[],...pos});
-    else if(kind==="projektion")MODEL.projektionen.push({_id:"pj"+(NID++),name:uniq("NeueProjektion"),namespace:defaultNs(),stores:[],append:false,handles:[],...pos});
+    else if(kind==="projektion")MODEL.projektionen.push({_id:"pj"+(NID++),name:uniq("NeueProjektion"),namespace:defaultNs(),stores:[],append:false,pull:true,handles:[],...pos});
     else if(kind==="reader")MODEL.reader.push({_id:"rd"+(NID++),name:uniq("NeuReader"),namespace:defaultNs(),stores:[],trackDeps:true,handles:[],...pos});
+    else if(kind==="reaktion")MODEL.reaktionen.push({_id:"rk"+(NID++),name:uniq("NeueReaktion"),namespace:defaultNs(),pull:true,handles:[],...pos});
+    else if(kind==="pipeline")MODEL.pipelines.push({_id:"pl"+(NID++),name:uniq("NeuePipeline"),namespace:defaultNs(),pipelineId:"",handles:[],...pos});
+    else if(kind==="trigger")MODEL.triggers.push({_id:"tg"+(NID++),name:uniq("NeuTrigger"),namespace:defaultNs(),modus:"timer",intervall:"30s",msgName:uniq("NeuTriggerMsg"),felder:[{_id:"f"+(NID++),name:"AggregateId",typ:"Guid"}],...pos});
     else if(kind==="codenode")MODEL.codeNodes.push({_id:"cn"+(NID++),name:uniq("Code"),text:"",...pos});
     else if(kind==="llmnode")MODEL.llmNodes.push({_id:"ln"+(NID++),name:uniq("LLM"),intent:"",...pos});
-    else MODEL.records.push({name:uniq("Neu"+kindLabel(kind).replace(/\s/g,"")),kind,namespace:defaultNs(),felder:kind==="command"?[{name:"AggregateId",typ:"Guid"}]:[],...pos});
+    else MODEL.records.push({name:uniq("Neu"+kindLabel(kind).replace(/\s/g,"")),kind,namespace:defaultNs(),felder:kind==="command"?[{_id:"f"+(NID++),name:"AggregateId",typ:"Guid"}]:[],...pos});
     render();
   }
   const addRecord=k=>neuerKnoten(k);
@@ -917,14 +958,15 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     if(r.kind==="command")body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>r.istErzeugung=e.target.checked||undefined,...(r.istErzeugung?{checked:"checked"}:{})}),"Erzeugung (ICreationCommand)"));
     if(r.kind==="command"){body.append(slotRow("sagacmd","◀ ausgelöst von (Saga/Reaktion)","l",{type:"sagaCmd",dir:"in",rec:r.name},"cmd:in:"+r.name));
       body.append(slotRow("command","cmd ▶","r",{type:"cmd",dir:"out",rec:r.name},"cmd:out:"+r.name));}
-    else if(r.kind==="event"){body.append(slotRow("event","◀ von Decider","l",{type:"evtOut",dir:"in",rec:r.name},"evt:in:"+r.name));
+    else if(r.kind==="event"){body.append(slotRow("event","◀ erzeugt von (Decider / reaktiv veröffentlicht)","l",{type:"evtOut",dir:"in",rec:r.name},"evt:in:"+r.name));
       body.append(slotRow("event","evt ▶","r",{type:"evtUse",dir:"out",rec:r.name},"evt:out:"+r.name));}
     else if(r.kind==="rejection")body.append(slotRow("rejection","◀ von Decider","l",{type:"evtOut",dir:"in",rec:r.name},"evt:in:"+r.name));
     else if(r.kind==="query")body.append(slotRow("query","query ▶","r",{type:"query",dir:"out",rec:r.name},"qry:out:"+r.name));
     else if(r.kind==="queryresponse")body.append(slotRow("qrsp","◀ von Reader","l",{type:"qrsp",dir:"in",rec:r.name},"qrsp:in:"+r.name));
+    if(r.kind==="valueobject")body.append(slotRow("ftype","als Feldtyp ▶","r",{type:"ftype",dir:"out",typeName:r.name},"ftype:out:rec:"+r.name));
     body.append(h("div",{class:"gsec"},"Felder"));
-    (r.felder||[]).forEach((f,fi)=>body.append(feldRow(f,()=>{r.felder.splice(fi,1);render();})));
-    body.append(h("button",{class:"add",onclick:()=>{(r.felder=r.felder||[]).push({name:"feld",typ:"string"});render();}},"+ Feld"));
+    (r.felder||[]).forEach((f,fi)=>body.append(feldRow(f,()=>{r.felder.splice(fi,1);render();},undefined,r.name)));
+    body.append(h("button",{class:"add",onclick:()=>{(r.felder=r.felder||[]).push({_id:"f"+(NID++),name:uniqFeldName(r.felder,"feld"),typ:"string"});render();}},"+ Feld"));
   }
 
   // Aggregat = HUB: State-Knoten oben zuweisen, Decider links, Applier rechts. Keine Feld-Slots.
@@ -959,14 +1001,14 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     const os=port("open");os.classList.add("o");reg("dec:evtout:"+d._id+":open",os,{type:"evtOut",dir:"out",dec:d._id});
     body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Ausgang ▶"),os));
     body.append(h("div",{class:"gsec"},"Decide-Rumpf"));
-    body.append(codePort("dec:rumpf:"+d._id,{k:"decider",dec:d._id},d.codeSrc));
+    body.append(codePort("dec:rumpf:"+d._id,{k:"decider",dec:d._id},d.codeSrc,"Decide-Logik"));
   }
   // Applier: gespiegelt zum Decider — Event rein (rechts), Aggregat OBEN. Körper = Code.
   function applierCard(body,a){
     body.append(topAnchor("appagg","▲ Aggregat: "+(a.aggregat||"— (am Event setzen)"),"app:aggout:"+a._id));
     body.append(slotRow("event","Event: "+(a.event||"—")+" ◀","r",{type:"evtUse",dir:"in",app:a._id},"app:evtin:"+a._id));
     body.append(h("div",{class:"gsec"},"Apply-Rumpf"));
-    body.append(codePort("app:rumpf:"+a._id,{k:"applier",app:a._id},a.codeSrc));
+    body.append(codePort("app:rumpf:"+a._id,{k:"applier",app:a._id},a.codeSrc,"Apply-Logik"));
   }
   // State-Knoten: eigene State-Felder (Typ per Dropdown); per Kante rechts einem Aggregat zuweisen.
   function stateCard(body,s){
@@ -974,8 +1016,8 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     const felder=agg?(agg.state=agg.state||[]):(s.felder=s.felder||[]);
     body.append(slotRow("state","Aggregat ▶"+(s.aggregat?" ("+s.aggregat+")":" — frei"),"r",{type:"state",dir:"out",state:s._id},"state:out:"+s._id));
     body.append(h("div",{class:"gsec"},"State-Felder (Typ per Dropdown)"));
-    felder.forEach((f,fi)=>body.append(stateFeldRow(f,()=>{felder.splice(fi,1);render();})));
-    body.append(h("button",{class:"add",onclick:()=>{felder.push({name:"feld",typ:"decimal"});render();}},"+ Feld"));
+    felder.forEach((f,fi)=>body.append(stateFeldRow(f,()=>{felder.splice(fi,1);render();},agg?agg.name:s._id)));
+    body.append(h("button",{class:"add",onclick:()=>{felder.push({_id:"f"+(NID++),name:uniqFeldName(felder,"feld"),typ:"decimal"});render();}},"+ Feld"));
     if(!agg)body.append(h("div",{class:"gsec",style:"color:#8b93a7"},"nicht zugewiesen — Punkt rechts auf ein Aggregat ziehen"));
   }
 
@@ -987,16 +1029,39 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     body.append(nameInp(rm,"name","ReadModel"));
     body.append(h("input",{value:rm.namespace??"",oninput:e=>rm.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.X"}));
     body.append(h("div",{class:"gsec"},"Dokument-Felder (Typ per Dropdown)"));
-    (rm.felder||[]).forEach((f,fi)=>body.append(stateFeldRow(f,()=>{rm.felder.splice(fi,1);render();})));
-    body.append(h("button",{class:"add",onclick:()=>{(rm.felder=rm.felder||[]).push({name:"feld",typ:"string"});render();}},"+ Feld"));
+    (rm.felder||[]).forEach((f,fi)=>body.append(stateFeldRow(f,()=>{rm.felder.splice(fi,1);render();},rm.name)));
+    body.append(h("button",{class:"add",onclick:()=>{(rm.felder=rm.felder||[]).push({_id:"f"+(NID++),name:uniqFeldName(rm.felder,"feld"),typ:"string"});render();}},"+ Feld"));
   }
 
   // Verträge werden verdrahtet; CODE fließt als Wert von 📝 Code- / 🤖 LLM-Knoten in die Rumpf-Ports.
   const nodeName=id=>{const c=MODEL.codeNodes.find(x=>x._id===id);if(c)return "📝 "+(c.name||"Code");const l=MODEL.llmNodes.find(x=>x._id===id);if(l)return "🤖 "+(l.name||"LLM");return null;};
+  // Getippter 📝-Text eines Code-Knotens (für kurze Ausdrücke wie den Count-Ausdruck; 🤖 = später generiert → leer).
+  const codeText=id=>{const c=MODEL.codeNodes.find(x=>x._id===id);return c?(c.text||""):"";};
   // Ein Code-Eingang (Rumpf): getippter Slot `code`; zeigt die verdrahtete Quelle (📝/🤖) oder „— leer".
-  function codePort(key,target,codeSrc){const s=port("code");s.classList.add("i");reg(key,s,{type:"code",dir:"in",target});
-    const src=codeSrc?nodeName(codeSrc):null;
-    return h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:src?"color:#9be3bf":"opacity:.5"},src?("◀ Rumpf: "+src):"◀ Rumpf — leer (📝/🤖 andocken)"));}
+  // Setzt die Code-Quelle eines Rumpf-Ports (dieselbe Ziel-Logik wie beim Verdrahten einer code-Kante).
+  function setCodeSrc(t,src){if(!t)return;
+    if(t.k==="pjHandle"){const p=MODEL.projektionen.find(x=>x._id===t.proj);if(p&&p.handles[t.hi])p.handles[t.hi].codeSrc=src;}
+    else if(t.k==="rdHandle"){const r=MODEL.reader.find(x=>x._id===t.reader);if(r&&r.handles[t.hi])r.handles[t.hi].codeSrc=src;}
+    else if(t.k==="reakHandle"){const r=MODEL.reaktionen.find(x=>x._id===t.reaktion);if(r&&r.handles[t.hi])r.handles[t.hi].codeSrc=src;}
+    else if(t.k==="plHandle"){const p=MODEL.pipelines.find(x=>x._id===t.pipeline);if(p&&p.handles[t.hi])p.handles[t.hi].codeSrc=src;}
+    else if(t.k==="writeFn"){const st=MODEL.stores.find(x=>x._id===t.store);const fn=st&&(st.writeFns||[]).find(f=>f._id===t.fn);if(fn)fn.codeSrc=src;}
+    else if(t.k==="readFn"){const st=MODEL.stores.find(x=>x._id===t.store);const fn=st&&(st.readFns||[]).find(f=>f._id===t.fn);if(fn)fn.codeSrc=src;}
+    else if(t.k==="decider"){const d=dec(t.dec);if(d)d.codeSrc=src;}
+    else if(t.k==="applier"){const a=app(t.app);if(a)a.codeSrc=src;}
+    else if(t.k==="sagaCount"){const x=MODEL.transitions.find(z=>z._id===t.trans);if(x)x.sammelCodeSrc=src;}}
+  // Ein-Klick: Code-/LLM-Knoten erzeugen UND sofort an diesen Rumpf-Port andocken (macht die „Code-Inseln" auffindbar).
+  function addCode(target,kind){const pos=spawnPos();let id;
+    if(kind==="llm"){id="ln"+(NID++);MODEL.llmNodes.push({_id:id,name:uniq("LLM"),intent:"",...pos});}
+    else{id="cn"+(NID++);MODEL.codeNodes.push({_id:id,name:uniq("Code"),text:"",...pos});}
+    setCodeSrc(target,id);render();}
+  // Code-Eingang (Rumpf): getippter Slot `code`. Leer → deutlicher „⚙ …fehlt"-Marker + Ein-Klick-Knöpfe.
+  function codePort(key,target,codeSrc,label){const s=port("code");s.classList.add("i");reg(key,s,{type:"code",dir:"in",target});
+    const src=codeSrc?nodeName(codeSrc):null;const lbl=label||"Logik";
+    if(src)return h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"color:#9be3bf"},"◀ "+lbl+": "+src));
+    return h("div",{class:"slotrow codeempty"},s,
+      h("span",{class:"slotlbl codemiss",style:"flex:1"},"⚙ "+lbl+" fehlt"),
+      h("button",{class:"codeadd",title:"Code-Knoten erzeugen und hier andocken",onclick:()=>addCode(target,"code")},"＋📝"),
+      h("button",{class:"codeadd",title:"LLM-Knoten erzeugen und hier andocken",onclick:()=>addCode(target,"llm")},"＋🤖"));}
   // Parameter-Zeilen einer Store-Funktion (Name : Typ) — die API-Signatur.
   function paramRows(fn){const box=h("div",{});
     (fn.params||[]).forEach((pr,pi)=>box.append(h("div",{class:"frow"},
@@ -1004,6 +1069,13 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
       h("button",{class:"rm",onclick:()=>{fn.params.splice(pi,1);render();}},"✕"))));
     box.append(h("button",{class:"add",onclick:()=>{(fn.params=fn.params||[]).push({name:"arg",typ:"Guid"});render();}},"+ Param"));
     return box;}
+
+  // Store-Funktion per _id auflösen → {store, fn, isRead}. Basis für abgeleiteten Scope + Aufruf-Kanten.
+  function fnById(id){for(const st of MODEL.stores){
+    const w=(st.writeFns||[]).find(f=>f._id===id);if(w)return{store:st,fn:w,isRead:false};
+    const r=(st.readFns||[]).find(f=>f._id===id);if(r)return{store:st,fn:r,isRead:true};}return null;}
+  // Abgeleiteter Store-Scope eines Konsumenten = die Stores, deren Funktionen seine Handles aufrufen.
+  function derivedStores(node){const s=new Set();(node.handles||[]).forEach(hd=>(hd.fns||[]).forEach(id=>{const r=fnById(id);if(r)s.add(r.store.name);}));return[...s];}
 
   // Store-Knoten = INTERFACE-EDITOR: Write-/Read-Funktionen (Signatur = Name + Parameter [+ Rückgabe]),
   //   je Funktion ein Impl-Code-Port (der Rumpf kommt von 📝/🤖). Read Models docken oben an.
@@ -1013,37 +1085,153 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     body.append(h("input",{value:st.namespace??"",oninput:e=>st.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.Projections"}));
     const rms=MODEL.readModels.filter(x=>x.store===st.name);
     body.append(h("div",{class:"gsec"},"Dokumente: "+(rms.length?rms.map(x=>x.name).join(" · "):"— (ReadModel oben anschließen)")));
-    const cin=port("store");cin.classList.add("i");reg("sto:in:"+st.name,cin,{type:"store",dir:"in",store:st.name});
-    body.append(h("div",{class:"slotrow"},cin,h("span",{class:"slotlbl"},"◀ Projektion / Reader (Scope)")));
-    body.append(h("div",{class:"gsep"},"Write-API"));
+    body.append(h("div",{class:"gsep"},"Write-API — je Fn ◀ von Projektion-Handle aufgerufen"));
     (st.writeFns||[]).forEach(fn=>body.append(fnBlock(st,fn,false)));
     body.append(h("button",{class:"add",onclick:()=>{st.writeFns.push({_id:"wf"+(NID++),name:"NeuFunktion",params:[]});render();}},"+ Write-Funktion"));
-    body.append(h("div",{class:"gsep"},"Read-API"));
+    body.append(h("div",{class:"gsep"},"Read-API — je Fn ◀ von Reader-Handle aufgerufen"));
     (st.readFns||[]).forEach(fn=>body.append(fnBlock(st,fn,true)));
     body.append(h("button",{class:"add",onclick:()=>{st.readFns.push({_id:"rf"+(NID++),name:"HoleX",params:[],rueckgabe:""});render();}},"+ Read-Funktion"));
   }
   function fnBlock(st,fn,isRead){const arr=isRead?st.readFns:st.writeFns;
     const box=h("div",{style:"border-left:2px solid #2c3547;padding-left:7px;margin:6px 0"});
-    box.append(h("div",{class:"slotrow"},inp(fn.name,v=>fn.name=v,"funktionsName"),
+    // Aufruf-Ziel-Port: ein Projektion- (write) bzw. Reader-Handle (read) dockt hier an → er ruft diese Fn.
+    const ct=isRead?"rcall":"wcall";const cp=port("store");cp.classList.add("i");
+    reg(ct+":in:"+st._id+":"+fn._id,cp,{type:ct,dir:"in",store:st._id,fn:fn._id});
+    box.append(h("div",{class:"slotrow"},cp,inp(fn.name,v=>fn.name=v,"funktionsName"),
       h("button",{class:"rm",onclick:()=>{arr.splice(arr.indexOf(fn),1);render();}},"✕")));
     box.append(paramRows(fn));
     if(isRead)box.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"→ Rückgabe"),tinp(fn.rueckgabe,v=>fn.rueckgabe=v)));
-    box.append(codePort("impl:in:"+st._id+":"+fn._id,{k:isRead?"readFn":"writeFn",store:st._id,fn:fn._id},fn.codeSrc));
+    box.append(codePort("impl:in:"+st._id+":"+fn._id,{k:isRead?"readFn":"writeFn",store:st._id,fn:fn._id},fn.codeSrc,"Impl-Logik"));
     return box;}
 
   // Projektion = Controller: Trigger-Events (je Handle) + Store-SCOPE (mehrere möglich). Der Handle-Rumpf
   //   (welche Store-Funktionen, Reihenfolge, Bedingung, Args) kommt als CODE über den Controller-Port.
   function projektionCard(body,p){
-    body.append(nameInp(p,"name","Projektion"));
+    body.append(nameInp(p,"name","Projektion","projektion"));
     body.append(h("input",{value:p.namespace??"",oninput:e=>p.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.Projections"}));
-    body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>p.append=e.target.checked||undefined,...(p.append?{checked:"checked"}:{})}),"Append (IAppendProjektion)"));
-    body.append(slotRow("store","Stores ▶ Scope"+((p.stores||[]).length?": "+p.stores.join(", "):" — andocken"),"r",{type:"store",dir:"out",proj:p._id},"prj:store:"+p._id));
-    body.append(h("div",{class:"gsec"},"Trigger-Events → Handle (Controller)"));
+    // Transport-Achse: geordneter Pull (IPullSubscriber) vs. Signal (ISubscriber, best-effort). Default = Pull.
+    body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>{p.pull=e.target.checked;render();},...((p.pull!==false)?{checked:"checked"}:{})}),"Geordneter Pull (IPullSubscriber)"));
+    // Garantie-Achse: append-artig ⇒ Co-Commit-Store ⇒ exactly-once (GA-1); sonst idempotenter Upsert ⇒ at-least-once genügt.
+    body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>{p.append=e.target.checked||undefined;render();},...(p.append?{checked:"checked"}:{})}),"Append-artig ⇒ Exactly-once (IAppendProjektion)"));
+    body.append(h("div",{class:"gsec",style:"opacity:.6"},p.append?"Append ⇒ verlangt Co-Commit-Store (GA-1): Effekt + Marke in EINER Transaktion.":(p.pull!==false?"Idempotenter Upsert · geordneter Pull.":"Idempotenter Upsert · Signal (best-effort, verlierbar).")));
+    // Als Projektion-Ziel (IReader<TProjection>) andockbar + abgeleiteter Store-Scope (aus den Handle-Aufrufen).
+    const asp=port("query");asp.classList.add("i");reg("prj:asproj:"+p._id,asp,{type:"projref",dir:"in",proj:p._id});
+    body.append(h("div",{class:"slotrow"},asp,h("span",{class:"slotlbl"},"◀ Reader bindet hier an")));
+    const ds=derivedStores(p);
+    body.append(h("div",{class:"gsec"},"Stores (abgeleitet): "+(ds.length?ds.join(" · "):"— (Handle → Write-Fn verdrahten)")));
+    body.append(h("div",{class:"gsec"},"Trigger-Event → Handle (Controller) → Write-Fn(s)"));
     (p.handles||[]).forEach((hd,hi)=>{const sl=port("event");sl.classList.add("i");reg("prj:in:"+p._id+":"+hi,sl,{type:"evtUse",dir:"in",proj:p._id,handleIdx:hi});
-      body.append(h("div",{class:"slotrow"},sl,h("span",{class:"slotlbl"},"◀ Auf "+(hd.event||"?")),h("button",{class:"rm",onclick:()=>{p.handles.splice(hi,1);render();}},"✕")));
-      body.append(codePort("ctrl:in:"+p._id+":"+hi,{k:"pjHandle",proj:p._id,hi:hi},hd.codeSrc));});
+      body.append(h("div",{class:"slotrow"},sl,h("span",{class:"slotlbl",style:"flex:1"},"◀ Auf "+(hd.event||"?")),h("button",{class:"rm",onclick:()=>{p.handles.splice(hi,1);render();}},"✕")));
+      // Aufgerufene Write-Funktionen (je Aufruf ein Punkt → Store-Fn ziehen); Norm = genau eine.
+      (hd.fns||[]).forEach((fid,fj)=>{const r=fnById(fid);const s=port("store");s.classList.add("o");reg("wcall:out:"+p._id+":"+hi+":"+fid,s,{type:"wcall",dir:"out",proj:p._id,handleIdx:hi});
+        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.fns.splice(fj,1);render();}},"✕"),
+          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"ruft "+(r?r.store.name+"."+r.fn.name:"?")+" ▶"),s));});
+      const wo=port("store");wo.classList.add("o");reg("wcall:out:"+p._id+":"+hi+":open",wo,{type:"wcall",dir:"out",proj:p._id,handleIdx:hi});
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Write-Fn ▶"),wo));
+      // Reaktives Event veröffentlichen (nach dem Schreiben): yield IEvent → Broker-Re-Publish (verlierbar, kein Log).
+      (hd.publishes||[]).forEach((ev,ei)=>{const s=port("event");s.classList.add("o");reg("prj:pub:"+p._id+":"+hi+":"+ev,s,{type:"evtOut",dir:"out",proj:p._id,handleIdx:hi});
+        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.publishes.splice(ei,1);render();}},"✕"),
+          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"veröffentlicht "+(ev||"?")+" ▶"),s));});
+      const po=port("event");po.classList.add("o");reg("prj:pub:"+p._id+":"+hi+":open",po,{type:"evtOut",dir:"out",proj:p._id,handleIdx:hi});
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"opacity:.7"},"+ veröffentlicht Event ▶ (reaktiv)"),po));
+      body.append(codePort("ctrl:in:"+p._id+":"+hi,{k:"pjHandle",proj:p._id,hi:hi},hd.codeSrc,"Controller-Logik"));});
     const oi=port("open");oi.classList.add("i");reg("prj:in:"+p._id+":open",oi,{type:"evtUse",dir:"in",proj:p._id,handleIdx:"open"});
     body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Event andocken")));
+  }
+
+  // Reaktion = EMITTIERENDER Konsument (ISubscriber → IAsyncEnumerable<OneOf<Cmd>>): kein Store, keine
+  //   Reset — Trigger-Event(s) ◀ → Handle → OneOf-Command-Ausgänge ▶ (das WAS ausgelöst wird ist verdrahtet,
+  //   das WIE/mit-welchen-Werten macht die 📝 Controller-Logik). Der idiomatische Fan-in-Baustein.
+  function reaktionCard(body,r){
+    body.append(nameInp(r,"name","Reaktion","reaktion"));
+    body.append(h("input",{value:r.namespace??"",oninput:e=>r.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.Projections"}));
+    body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>r.pull=e.target.checked,...((r.pull!==false)?{checked:"checked"}:{})}),"Geordneter Pull (IPullSubscriber)"));
+    body.append(h("div",{class:"gsec"},"Trigger-Event → Handle → OneOf-Command(s) (emittiert). Das WANN/mit-WELCHEN-Werten macht der Rumpf."));
+    (r.handles||[]).forEach((hd,hi)=>{
+      const sl=port("event");sl.classList.add("i");reg("rk:in:"+r._id+":"+hi,sl,{type:"evtUse",dir:"in",reaktion:r._id,handleIdx:hi});
+      body.append(h("div",{class:"slotrow"},sl,h("span",{class:"slotlbl",style:"flex:1"},"◀ Auf "+(hd.event||"?")),h("button",{class:"rm",onclick:()=>{r.handles.splice(hi,1);render();}},"✕")));
+      // Ausgelöste Commands (je Command ein Punkt → an „◀ ausgelöst von" eines Command-Knotens ziehen).
+      (hd.sends||[]).forEach((c,ci)=>{const so=port("command");so.classList.add("o");reg("rk:send:"+r._id+":"+hi+":"+c,so,{type:"sagaCmd",dir:"out",reaktion:r._id,handleIdx:hi});
+        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.sends.splice(ci,1);render();}},"✕"),
+          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"sendet "+(c||"?")+" ▶"),so));});
+      const so=port("command");so.classList.add("o");reg("rk:send:"+r._id+":"+hi+":open",so,{type:"sagaCmd",dir:"out",reaktion:r._id,handleIdx:hi});
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Command ▶"),so));
+      // Reaktives Event veröffentlichen: yield IEvent → Broker-Re-Publish (verlierbar, kein Log).
+      (hd.publishes||[]).forEach((ev,ei)=>{const s=port("event");s.classList.add("o");reg("rk:pub:"+r._id+":"+hi+":"+ev,s,{type:"evtOut",dir:"out",reaktion:r._id,handleIdx:hi});
+        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.publishes.splice(ei,1);render();}},"✕"),
+          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"veröffentlicht "+(ev||"?")+" ▶"),s));});
+      const po=port("event");po.classList.add("o");reg("rk:pub:"+r._id+":"+hi+":open",po,{type:"evtOut",dir:"out",reaktion:r._id,handleIdx:hi});
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"opacity:.7"},"+ veröffentlicht Event ▶ (reaktiv)"),po));
+      body.append(codePort("ctrl:in:"+r._id+":"+hi,{k:"reakHandle",reaktion:r._id,hi:hi},hd.codeSrc,"Controller-Logik"));});
+    const oi=port("open");oi.classList.add("i");reg("rk:in:"+r._id+":open",oi,{type:"evtUse",dir:"in",reaktion:r._id,handleIdx:"open"});
+    body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Event andocken")));
+  }
+
+  // Trigger-Msg eines Handles anzeigen (aktueller msgName des verdrahteten Triggers, rename-fest über trigId).
+  const trigMsgLabel=id=>{const t=MODEL.triggers.find(x=>x._id===id);return t?(t.msgName||t.name||"Trigger"):null;};
+  // ══ INGRESS/PIPELINE: Trigger (Timer/Webhook/FileWatch/Frist) → Trigger-Msg → Pipeline → OneOf-Command(s).
+  // Trigger = Ingress-WECKER. Modus + Config; erzeugt EINE IPipelineTrigger-Nachricht (Name + Felder) → Pipeline.
+  function triggerCard(body,t){
+    body.append(nameInp(t,"name","Trigger","trigger"));
+    const modi=[["timer","⏱ Timer (Intervall)"],["webhook","🔗 Webhook (HTTP)"],["filewatch","📁 FileWatch (Datei)"],["frist","⏳ Frist (Deadline)"]];
+    const sel=h("select",{onchange:e=>{t.modus=e.target.value;render();}});
+    modi.forEach(([v,l])=>{const o=h("option",{value:v},l);if((t.modus||"timer")===v)o.selected=true;sel.append(o);});
+    body.append(sel);
+    if(t.modus==="webhook"){body.append(h("div",{class:"gsec"},"Route · Request-Typ"));
+      body.append(inp(t.route,v=>t.route=v,"/webhooks/x"));body.append(tinp(t.reqTyp,v=>t.reqTyp=v));}
+    else if(t.modus==="filewatch"){body.append(h("div",{class:"gsec"},"Pfad · Muster"));
+      body.append(inp(t.pfad,v=>t.pfad=v,"/data/incoming"));body.append(inp(t.muster,v=>t.muster=v,"*.png"));}
+    else if(t.modus==="frist"){body.append(h("div",{class:"gsec"},"Dauer / Fälligkeit (IDbClock)"));
+      body.append(inp(t.dauer,v=>t.dauer=v,"z. B. 24:00:00 oder aus Feld"));}
+    else {body.append(h("div",{class:"gsec"},"Intervall"));body.append(inp(t.intervall,v=>t.intervall=v,"30s"));}
+    body.append(h("div",{class:"gsec"},"Trigger-Nachricht (IPipelineTrigger)"));
+    body.append(inp(t.msgName,v=>{t.msgName=v;},"z. B. DateiErkannt"));
+    (t.felder||[]).forEach((f,fi)=>body.append(feldRow(f,()=>{t.felder.splice(fi,1);render();})));
+    body.append(h("button",{class:"add",onclick:()=>{(t.felder=t.felder||[]).push({_id:"f"+(NID++),name:uniqFeldName(t.felder,"feld"),typ:"Guid"});render();}},"+ Feld"));
+    body.append(slotRow("trigmsg","erzeugt "+(t.msgName||"Trigger-Msg")+" ▶","r",{type:"trigmsg",dir:"out",trigId:t._id,msgName:t.msgName},"trg:msg:"+t._id));
+  }
+  // Pipeline = 4. durabler Konsument (IPipelineHandler): je Handle EIN Eingang (Trigger/Event/Self) →
+  //   yield ICommand UND/ODER yield IPipelineTrigger (→ andere Pipeline) UND/ODER ScheduleSelf (Tick/Timeout).
+  //   Ein Handle kann auch reiner Seiteneffekt sein (kein yield). Das WIE macht der 📝 Rumpf.
+  function pipelineCard(body,p){
+    body.append(nameInp(p,"name","Pipeline","pipeline"));
+    body.append(h("input",{value:p.namespace??"",oninput:e=>p.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.Pipeline"}));
+    body.append(h("div",{class:"gsec"},"PipelineId"));
+    body.append(inp(p.pipelineId,v=>p.pipelineId=v,"z. B. bildverarbeitung"));
+    body.append(h("div",{class:"gsec"},"Handle: Trigger/Event/Self ◀ → yield Command · yield Trigger · ScheduleSelf. Das WIE macht der Rumpf."));
+    (p.handles||[]).forEach((hd,hi)=>{
+      const kind=hd.inputKind||"event", isTrig=kind==="trigger", isSelf=kind==="self";
+      const sl=port(isTrig?"trigmsg":(isSelf?"self":"event"));sl.classList.add("i");
+      reg("pl:in:"+p._id+":"+hi,sl,{type:isTrig?"trigmsg":(isSelf?"self":"evtUse"),dir:"in",pipeline:p._id,handleIdx:hi});
+      const tlabel=(hd.prod&&hd.prod.k==="tg")?(trigMsgLabel(hd.prod.id)||hd.input):hd.input;
+      const lbl=isTrig?("◀ Trigger "+(tlabel||"?")):(isSelf?("◀ Self "+(hd.selfName||"?")):("◀ Auf "+(hd.event||"?")));
+      body.append(h("div",{class:"slotrow"},sl,h("span",{class:"slotlbl",style:"flex:1"},lbl),h("button",{class:"rm",onclick:()=>{p.handles.splice(hi,1);render();}},"✕")));
+      // yield ICommand → Aggregat
+      (hd.sends||[]).forEach((c,ci)=>{const so=port("command");so.classList.add("o");reg("pl:send:"+p._id+":"+hi+":"+c,so,{type:"sagaCmd",dir:"out",pipeline:p._id,handleIdx:hi});
+        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.sends.splice(ci,1);render();}},"✕"),
+          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"sendet "+(c||"?")+" ▶"),so));});
+      const so=port("command");so.classList.add("o");reg("pl:send:"+p._id+":"+hi+":open",so,{type:"sagaCmd",dir:"out",pipeline:p._id,handleIdx:hi});
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Command ▶"),so));
+      // yield IPipelineTrigger → an eine andere Pipeline (Verkettung, z. B. FileWatch → ImageProcessing)
+      (hd.emits||[]).forEach((nm,ei)=>{const eo=port("trigmsg");eo.classList.add("o");reg("pl:emit:"+p._id+":"+hi+":"+nm,eo,{type:"trigmsg",dir:"out",pipeline:p._id,handleIdx:hi,msgName:nm});
+        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.emits.splice(ei,1);render();}},"✕"),
+          h("input",{value:nm,oninput:e=>hd.emits[ei]=e.target.value,onchange:()=>render(),placeholder:"TriggerMsg",style:"flex:1"}),h("span",{class:"slotlbl"},"▶"),eo));});
+      // Persistenter, gleichwertiger Ausgangs-Port: eine Handle yieldet Command ODER Trigger (OneOf<…>).
+      const eopen=port("trigmsg");eopen.classList.add("o");reg("pl:emit:"+p._id+":"+hi+":open",eopen,{type:"trigmsg",dir:"out",pipeline:p._id,handleIdx:hi,msgName:""});
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ erzeugt Trigger ▶"),eopen));
+      // ScheduleSelf → interner Tick/Timeout (Self-Message kommt als eigener ◀ Self-Handle zurück)
+      (hd.schedules||[]).forEach((sc,si)=>{const ss=port("self");ss.classList.add("o");reg("pl:sched:"+p._id+":"+hi+":"+sc.name,ss,{type:"self",dir:"out",pipeline:p._id,handleIdx:hi,name:sc.name});
+        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.schedules.splice(si,1);render();}},"✕"),
+          h("input",{value:sc.name,oninput:e=>sc.name=e.target.value,onchange:()=>render(),placeholder:"SelfMsg",style:"flex:1"}),
+          h("input",{value:sc.delay??"",oninput:e=>sc.delay=e.target.value,placeholder:"delay",style:"width:52px"}),h("span",{class:"slotlbl"},"↺"),ss));});
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"opacity:.8"},"+ plant Self-Tick ↺"),
+        h("button",{class:"codeadd",title:"ScheduleSelf + Self-Handle anlegen",onclick:()=>{const nm=uniq("Tick");(hd.schedules=hd.schedules||[]).push({name:nm,delay:"30s"});if(!p.handles.some(x=>x.inputKind==="self"&&x.selfName===nm))p.handles.push({inputKind:"self",selfName:nm,sends:[],emits:[],schedules:[]});render();}},"＋")));
+      body.append(codePort("plctrl:in:"+p._id+":"+hi,{k:"plHandle",pipeline:p._id,hi:hi},hd.codeSrc,"Pipeline-Logik"));
+    });
+    const ot=port("trigmsg");ot.classList.add("i");reg("pl:in:"+p._id+":opentrg",ot,{type:"trigmsg",dir:"in",pipeline:p._id,handleIdx:"opentrg"});
+    body.append(h("div",{class:"slotrow"},ot,h("span",{class:"slotlbl"},"+ Trigger andocken")));
+    const oe=port("event");oe.classList.add("i");reg("pl:in:"+p._id+":openevt",oe,{type:"evtUse",dir:"in",pipeline:p._id,handleIdx:"openevt"});
+    body.append(h("div",{class:"slotrow"},oe,h("span",{class:"slotlbl"},"+ Event andocken")));
   }
 
   // Reader = Controller: Queries (je Handle) + Store-SCOPE + Response; Handle-Rumpf kommt als Code.
@@ -1051,13 +1239,31 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     body.append(nameInp(r,"name","Reader"));
     body.append(h("input",{value:r.namespace??"",oninput:e=>r.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.Projections"}));
     body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>r.trackDeps=e.target.checked,...((r.trackDeps!==false)?{checked:"checked"}:{})}),"TrackDeps (Redis-Deps)"));
-    body.append(slotRow("store","Stores ▶ Scope"+((r.stores||[]).length?": "+r.stores.join(", "):" — andocken"),"r",{type:"store",dir:"out",reader:r._id},"rdr:store:"+r._id));
-    body.append(h("div",{class:"gsec"},"Query → Handle (Controller) → Response"));
+    // IReader<TProjection>: der Reader liest GENAU EINE Projektion — expliziter Bindungs-Port.
+    const pb=port("query");pb.classList.add("o");reg("rdr:proj:"+r._id,pb,{type:"projref",dir:"out",reader:r._id});
+    body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"liest Projektion: "+(r.projektion||"— andocken")+" ▶"),pb));
+    const ds=derivedStores(r);
+    body.append(h("div",{class:"gsec"},"Stores (abgeleitet): "+(ds.length?ds.join(" · "):"— (Handle → Read-Fn verdrahten)")));
+    body.append(h("div",{class:"gsec"},"Query → Handle → Read-Fn(s) (auch mehrere Stores) → OneOf-Responses. Das WANN macht der Rumpf."));
     (r.handles||[]).forEach((hd,hi)=>{
       const qin=port("query");qin.classList.add("i");reg("rdr:qin:"+r._id+":"+hi,qin,{type:"query",dir:"in",reader:r._id,handleIdx:hi});
-      const rout=port("qrsp");rout.classList.add("o");reg("rdr:rout:"+r._id+":"+hi,rout,{type:"qrsp",dir:"out",reader:r._id,handleIdx:hi});
-      body.append(h("div",{class:"slotrow"},qin,h("span",{class:"slotlbl",style:"flex:1"},"◀ "+(hd.query||"?")),h("span",{class:"slotlbl"},(hd.response||"— Response")+" ▶"),rout,h("button",{class:"rm",onclick:()=>{r.handles.splice(hi,1);render();}},"✕")));
-      body.append(codePort("ctrl:in:"+r._id+":"+hi,{k:"rdHandle",reader:r._id,hi:hi},hd.codeSrc));
+      body.append(h("div",{class:"slotrow"},qin,h("span",{class:"slotlbl",style:"flex:1"},"◀ Query: "+(hd.query||"?")),h("button",{class:"rm",onclick:()=>{r.handles.splice(hi,1);render();}},"✕")));
+      // Aufgerufene Read-Funktionen (je Aufruf ein Punkt → Store-Read-Fn ziehen; mehrere Stores erlaubt).
+      (hd.fns||[]).forEach((fid,fj)=>{const rr=fnById(fid);const s=port("store");s.classList.add("o");reg("rcall:out:"+r._id+":"+hi+":"+fid,s,{type:"rcall",dir:"out",reader:r._id,handleIdx:hi});
+        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.fns.splice(fj,1);render();}},"✕"),
+          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"ruft "+(rr?rr.store.name+"."+rr.fn.name:"?")+" ▶"),s));});
+      const ro=port("store");ro.classList.add("o");reg("rcall:out:"+r._id+":"+hi+":open",ro,{type:"rcall",dir:"out",reader:r._id,handleIdx:hi});
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Read-Fn ▶"),ro));
+      // OneOf-Responses (je mögliche Antwort ein Punkt).
+      (hd.responses||[]).forEach((resp,ri)=>{
+        const rout=port("qrsp");rout.classList.add("o");reg("rdr:rout:"+r._id+":"+hi+":"+resp,rout,{type:"qrsp",dir:"out",reader:r._id,handleIdx:hi});
+        body.append(h("div",{class:"slotrow o"},
+          h("button",{class:"rm",onclick:()=>{hd.responses.splice(ri,1);render();}},"✕"),
+          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},(resp||"?")+" ▶"),rout));
+      });
+      const rop=port("qrsp");rop.classList.add("o");reg("rdr:rout:"+r._id+":"+hi+":open",rop,{type:"qrsp",dir:"out",reader:r._id,handleIdx:hi});
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Response ▶"),rop));
+      body.append(codePort("ctrl:in:"+r._id+":"+hi,{k:"rdHandle",reader:r._id,hi:hi},hd.codeSrc,"Controller-Logik"));
     });
     const oi=port("open");oi.classList.add("i");reg("rdr:qin:"+r._id+":open",oi,{type:"query",dir:"in",reader:r._id,handleIdx:"open"});
     body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Query andocken")));
@@ -1085,7 +1291,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   //    Applier→Aggregat(rechts) · Applier→State-Feld(oben, optionale Zuweisungs-Markierung).
   const SVGNS="http://www.w3.org/2000/svg";
   const GRID=20;
-  const NODELABEL={command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Transition",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",codenode:"Code",llmnode:"LLM"};
+  const NODELABEL={command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",pipeline:"Pipeline",trigger:"Trigger",codenode:"Code",llmnode:"LLM"};
   let PAN={x:40,y:30,s:1}, canvas=null, world=null, svg=null, svgTop=null, SLOTS={};
 
   const dec=id=>MODEL.decider.find(d=>d._id===id);
@@ -1106,20 +1312,43 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   // Collection-Felder der Join-Events (für UndAlle-Anzahl / SendeJe-Collection), als "role.field".
   function collFelder(t){const out=[];(t.wenn||[]).forEach((e,i)=>{const r=recByName(e);if(!r)return;const role=["t","r","g"][i]||("e"+(i+1));
     (r.felder||[]).forEach(f=>{if(/List<|IReadOnlyList<|IEnumerable<|\[\]/.test(f.typ||""))out.push(role+"."+f.name);});});return out;}
+  // Feldtyp-Klassifikation für Feld-Ports (verdrahtbare Objekt-Felder).
+  const istColl=ty=>/List<|IReadOnlyList<|IEnumerable<|\[\]/.test(ty||"");
+  const istGanzzahl=ty=>/^(int|long)\??$/.test((ty||"").trim());
+  // ── Typ-Komposition: den INNEREN Typ eines Feldes (List<X>/X[]/X? → X) für die VO/Enum→Feld-Verdrahtung. ──
+  const innerTyp=ty=>{let t=(ty||"").trim().replace(/\?$/,"");const m=/^(?:List|IReadOnlyList|IEnumerable)<(.+)>$/.exec(t);if(m)t=m[1].trim();return t.replace(/\[\]$/,"").replace(/\?$/,"").trim();};
+  // Alle verdrahtbaren Felder samt Owner-Schlüssel (identisch zum feldPort-Owner: Record/Aggregat-/ReadModel-Name bzw. State-_id).
+  function alleFelder(){const out=[];
+    MODEL.records.forEach(r=>(r.felder||[]).forEach(f=>out.push({owner:r.name,f})));
+    MODEL.aggregate.forEach(a=>(a.state||[]).forEach(f=>out.push({owner:a.name,f})));
+    MODEL.states.forEach(s=>{if(!s.aggregat)(s.felder||[]).forEach(f=>out.push({owner:s._id,f}));});
+    MODEL.readModels.forEach(rm=>(rm.felder||[]).forEach(f=>out.push({owner:rm.name,f})));
+    return out;}
+  // Feldtyp per Verdrahtung setzen — vorhandenen Collection-/Array-/Nullable-Wrapper bewahren.
+  function setFeldTyp(f,name){const cur=(f.typ||"").trim();const m=/^(List|IReadOnlyList|IEnumerable)<.*?>(\??)$/.exec(cur);
+    if(m){f.typ=m[1]+"<"+name+">"+m[2];return;}if(/\[\]\??$/.test(cur)){f.typ=name+"[]"+(cur.endsWith("?")?"?":"");return;}
+    f.typ=name+(cur.endsWith("?")?"?":"");}
+  // VO/Enum umbenannt → in allen Feldtypen nachziehen (Wort-Grenze, Wrapper bleibt).
+  function retypeFelder(old,nv){alleFelder().forEach(({f})=>{if(innerTyp(f.typ)===old)f.typ=(f.typ||"").replace(new RegExp("\\b"+old+"\\b"),nv);});}
+  // Ein Feld-Typ-Eingang (◀): eine VO/Enum-Quelle andocken → setzt den Feldtyp. Klein, links.
+  function typeInPort(owner,f){if(!f._id)f._id="f"+(NID++);const s=port("ftype");s.classList.add("i","sm");s.title="Typ verdrahten (VO/Enum an dieses Feld)";
+    reg("ftype:in:"+owner+":"+f._id,s,{type:"ftype",dir:"in",fobj:f});return s;}
   // Berührte Aggregate (abgeleitet aus den Namespaces der referenzierten Events/Commands der Transitionen).
   function sagaAggs(s){const ns=new Set();transOf(s).forEach(t=>{[...(t.wenn||[]),t.sammelEvent].forEach(e=>{const r=e&&recByName(e);if(r)ns.add(r.namespace);});
-    [t.sende,t.kompensation].forEach(c=>{const r=c&&recByName(c);if(r)ns.add(r.namespace);});});
+    (t.dann||[]).forEach(d=>[d.sende,d.kompensation].forEach(c=>{const r=c&&recByName(c);if(r)ns.add(r.namespace);}));});
     return [...new Set([...ns].map(n=>aggForNs(n)).filter(Boolean))];}
   // Vor Serveraufruf: Transitionen → Saga.Schritte (inkl. UndAlle/SendeJe) + ExtraUsings; Argumente positionsvoll.
   function prepareSaga(){MODEL.sagas.forEach(s=>{const ts=transOf(s);
-    s.schritte=ts.filter(t=>(t.wenn||[]).length).map(t=>{const st={wenn:(t.wenn||[]).slice(),sende:t.sende||""};
-      if(t.sammelEvent){st.sammelEvent=t.sammelEvent;if(t.sammelAnzahl)st.sammelAnzahl=t.sammelAnzahl;}
-      if(t.sendeJe){st.sendeJe=true;if(t.sendeJeCollection)st.sendeJeCollection=t.sendeJeCollection;}
-      const sa=argListe(t.sende,t.sendeArgs);if(sa.length)st.sendeArgumente=sa;
-      if(t.kompensation){st.kompensation=t.kompensation;const ka=argListe(t.kompensation,t.kompArgs);if(ka.length)st.kompensationArgumente=ka;}
-      return st;});
+    // Ein Join, mehrere Dann → je Dann EINE Regel (gleiche Bedingung). flatMap fächert die Dann auf.
+    s.schritte=ts.filter(t=>(t.wenn||[]).length).flatMap(t=>(t.dann||[]).filter(d=>d.sende).map(d=>{
+      const st={wenn:(t.wenn||[]).slice(),sende:d.sende};
+      // Count-Anzahl: Feld-Auswahl (D/S); ein 📝-Ausdruck (H-Fallback) hat Vorrang.
+      if(d.sendeJe){st.sendeJe=true;if(d.sendeJeCollection)st.sendeJeCollection=d.sendeJeCollection;}
+      const sa=argListe(d.sende,d.sendeArgs);if(sa.length)st.sendeArgumente=sa;
+      if(d.kompensation){st.kompensation=d.kompensation;const ka=argListe(d.kompensation,d.kompArgs);if(ka.length)st.kompensationArgumente=ka;}
+      return st;}));
     const ns=new Set();ts.forEach(t=>{[...(t.wenn||[]),t.sammelEvent].forEach(e=>{const r=e&&recByName(e);if(r&&r.namespace)ns.add(r.namespace);});
-      [t.sende,t.kompensation].forEach(c=>{const r=c&&recByName(c);if(r&&r.namespace)ns.add(r.namespace);});});
+      (t.dann||[]).forEach(d=>[d.sende,d.kompensation].forEach(c=>{const r=c&&recByName(c);if(r&&r.namespace)ns.add(r.namespace);}));});
     ns.delete(s.namespace);s.extraUsings=[...ns];});}
   // Read-only-Anker (nicht ziehbar) — nur Ankerpunkt für abgeleitete Kanten.
   function anchorDot(color){return h("div",{class:"slot s-"+color+" ro"});}
@@ -1131,34 +1360,62 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
       MODEL.applier.forEach(a=>{if(a.aggregat===old)a.aggregat=nv;});
       MODEL.states.forEach(s=>{if(s.aggregat===old)s.aggregat=nv;});
     }else if(kind==="record"){
+      if(obj.kind==="valueobject")retypeFelder(old,nv);   // Typ-Komposition: Feldtypen mitziehen
       if(obj.kind==="command"){
         MODEL.decider.forEach(d=>{if(d.command===old)d.command=nv;});
-        MODEL.sagas.forEach(s=>(s.schritte||[]).forEach(st=>{if(st.sende===old)st.sende=nv;if(st.kompensation===old)st.kompensation=nv;}));
+        MODEL.transitions.forEach(t=>(t.dann||[]).forEach(d=>{if(d.sende===old)d.sende=nv;if(d.kompensation===old)d.kompensation=nv;}));
+        // Reaktion-Handles: ausgelöste Commands mitziehen.
+        MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>{hd.sends=(hd.sends||[]).map(x=>x===old?nv:x);}));
+        MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{hd.sends=(hd.sends||[]).map(x=>x===old?nv:x);}));
       }else{
         MODEL.decider.forEach(d=>(d.ergibt||[]).forEach(o=>{if(o.event===old)o.event=nv;}));
         MODEL.applier.forEach(a=>{if(a.event===old)a.event=nv;});
-        MODEL.sagas.forEach(s=>{if(s.triggerEvent===old)s.triggerEvent=nv;(s.schritte||[]).forEach(st=>{st.wenn=(st.wenn||[]).map(w=>w===old?nv:w);});});
+        MODEL.sagas.forEach(s=>{if(s.triggerEvent===old)s.triggerEvent=nv;});
+        MODEL.transitions.forEach(t=>{t.wenn=(t.wenn||[]).map(w=>w===old?nv:w);if(t.sammelEvent===old)t.sammelEvent=nv;if(t.sammelAnzahlFeld&&t.sammelAnzahlFeld.rec===old)t.sammelAnzahlFeld.rec=nv;});
+        // Reader-Handles: Query (Eingang) und OneOf-Responses (Ausgänge) mitziehen.
+        MODEL.reader.forEach(r=>(r.handles||[]).forEach(hd=>{if(hd.query===old)hd.query=nv;hd.responses=(hd.responses||[]).map(x=>x===old?nv:x);}));
+        // Reaktion-Handles: Trigger-Event mitziehen.
+        MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>{if(hd.event===old)hd.event=nv;}));
+        MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.event===old)hd.event=nv;}));
+        // Veröffentlichte reaktive Events (Projektion + Reaktion) mitziehen.
+        MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>{hd.publishes=(hd.publishes||[]).map(x=>x===old?nv:x);}));
+        MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>{hd.publishes=(hd.publishes||[]).map(x=>x===old?nv:x);}));
       }
-    }
+    }else if(kind==="projektion"){
+      // IReader<TProjection>-Bindung (per Name) mitziehen.
+      MODEL.reader.forEach(r=>{if(r.projektion===old)r.projektion=nv;});
+    }else if(kind==="enum"){retypeFelder(old,nv);}   // Typ-Komposition: Feldtypen mitziehen
   }
   function nameInp(o,p,ph,kind){const old=o[p];
     return h("input",{value:old??"",placeholder:ph||"Name",
       onchange:e=>{const nv=e.target.value;if(!nv){e.target.value=old??"";return;}
         if(nv!==old&&kind)renameRefs(kind,o,old,nv);o[p]=nv;render();}});}
-  function feldRow(f,onDel,mitAusdruck){const row=h("div",{class:"frow"},
+  // Feld-Ausgang: jedes Objekt-Feld ist eine verdrahtbare Wert-Quelle (field ▶). Typ-Check am Eingang.
+  // Eindeutiger Default-Feldname innerhalb eines Objekts (keine gleichnamigen Felder → keine doppelten „feld").
+  function uniqFeldName(arr,base){const set=new Set((arr||[]).map(f=>f.name));if(!set.has(base))return base;let i=2;while(set.has(base+i))i++;return base+i;}
+  // Feld nach stabiler _id auflösen (rename-fest); Basis für Kante/Label/Codegen der Feld-Verdrahtung.
+  function feldRef(rec,fid){const r=recByName(rec);return r&&(r.felder||[]).find(x=>x._id===fid);}
+  // Feld-Ausgang: KEY per stabiler _id (nicht Name!) → gleichnamige Felder kollidieren nicht mehr.
+  function feldPort(owner,field,ftyp,fid){const s=port("field");s.classList.add("o","sm");s.title=(field||"?")+" : "+(ftyp||"?")+" — als Wert verdrahten";
+    reg("field:out:"+owner+":"+(fid||field),s,{type:"field",dir:"out",rec:owner,field:field,fid:fid,ftyp:ftyp});return s;}
+  function feldRow(f,onDel,mitAusdruck,owner){const row=h("div",{class:"frow"},
       h("input",{value:f.name??"",oninput:e=>f.name=e.target.value,onchange:()=>render(),placeholder:"Feld"}),
       tinp(f.typ,v=>f.typ=v));
     if(mitAusdruck)row.append(h("input",{value:f.ausdruck??"",oninput:e=>f.ausdruck=e.target.value||undefined,placeholder:"=Ausdruck",style:"flex:1;width:auto"}));
-    row.append(h("button",{class:"rm",onclick:onDel},"✕"));return row;}
+    row.append(h("button",{class:"rm",onclick:onDel},"✕"));
+    if(owner&&f.name)row.append(feldPort(owner,f.name,f.typ,f._id));
+    if(owner)row.prepend(typeInPort(owner,f));return row;}
   // Typ-Auswahl per Dropdown (Skalare + Value Objects + Enums) — im State-Knoten.
   function typSelect(val,on){const s=h("select",{style:"flex:1;width:auto",onchange:e=>on(e.target.value)});
     const opts=[...SCALARS,...MODEL.records.filter(r=>r.kind==="valueobject").map(r=>r.name),...MODEL.enums.map(e=>e.name)];
     if(val&&!opts.includes(val))opts.unshift(val);
     opts.forEach(t=>{const o=h("option",{value:t},t);if(t===val)o.selected=true;s.append(o);});return s;}
-  function stateFeldRow(f,onDel){return h("div",{class:"frow"},
+  function stateFeldRow(f,onDel,owner){const row=h("div",{class:"frow"},
     h("input",{value:f.name??"",oninput:e=>f.name=e.target.value,placeholder:"Feld"}),
     typSelect(f.typ,v=>f.typ=v),
-    h("button",{class:"rm",onclick:onDel},"✕"));}
+    h("button",{class:"rm",onclick:onDel},"✕"));
+    if(owner&&f.name)row.append(feldPort(owner,f.name,f.typ,f._id));
+    if(owner)row.prepend(typeInPort(owner,f));return row;}
 
   function port(color){const s=h("div",{class:"slot s-"+color});s.onpointerdown=e=>{e.stopPropagation();e.preventDefault();startLink(e,s);};return s;}
   function reg(key,el,info){el.__slot=info;SLOTS[key]=el;return el;}
@@ -1176,17 +1433,20 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
             ...MODEL.applier.map(a=>({id:"app:"+a._id,name:a.event||"",kind:"applier",ref:a})),
             ...MODEL.enums.map(e=>({id:"enum:"+e.name,name:e.name,kind:"enum",ref:e})),
             ...MODEL.sagas.map(s=>({id:"saga:"+s.name,name:s.name,kind:"saga",ref:s})),
-            ...MODEL.transitions.map(t=>({id:"tr:"+t._id,name:(t.sende||"Transition"),kind:"transition",ref:t})),
+            ...MODEL.transitions.map(t=>({id:"tr:"+t._id,name:((t.dann||[]).map(d=>d.sende).filter(Boolean).join(", ")),kind:"transition",ref:t})),
             ...MODEL.readModels.map(rm=>({id:"rm:"+rm._id,name:rm.name,kind:"readmodel",ref:rm})),
             ...MODEL.stores.map(s=>({id:"sto:"+s._id,name:s.name,kind:"store",ref:s})),
             ...MODEL.projektionen.map(p=>({id:"prj:"+p._id,name:p.name,kind:"projektion",ref:p})),
             ...MODEL.reader.map(r=>({id:"rdr:"+r._id,name:r.name,kind:"reader",ref:r})),
+            ...MODEL.reaktionen.map(r=>({id:"rk:"+r._id,name:r.name,kind:"reaktion",ref:r})),
+            ...MODEL.pipelines.map(p=>({id:"pl:"+p._id,name:p.name,kind:"pipeline",ref:p})),
+            ...MODEL.triggers.map(t=>({id:"tg:"+t._id,name:t.name,kind:"trigger",ref:t})),
             ...MODEL.codeNodes.map(c=>({id:"cn:"+c._id,name:c.name,kind:"codenode",ref:c})),
             ...MODEL.llmNodes.map(l=>({id:"ln:"+l._id,name:l.name,kind:"llmnode",ref:l}))];
   }
   function autoLayout(){
-    const spalte={command:40,decider:360,aggregate:720,state:720,event:1080,rejection:1080,applier:1400,valueobject:1720,enum:1720,saga:1760,transition:2120,projektion:2200,store:2560,readmodel:2900,query:3250,reader:3600,queryresponse:3950,codenode:4300,llmnode:4650};
-    const step={command:150,event:150,rejection:150,valueobject:160,enum:150,aggregate:320,state:220,decider:330,applier:280,saga:240,transition:360,projektion:300,store:360,readmodel:220,query:150,reader:320,queryresponse:150,codenode:220,llmnode:220};
+    const spalte={command:40,decider:360,aggregate:720,state:720,event:1080,rejection:1080,applier:1400,valueobject:1720,enum:1720,saga:1760,transition:2120,projektion:2200,store:2560,readmodel:2900,query:3250,reader:3600,queryresponse:3950,reaktion:2200,trigger:5000,pipeline:5340,codenode:4300,llmnode:4650};
+    const step={command:150,event:150,rejection:150,valueobject:160,enum:150,aggregate:320,state:220,decider:330,applier:280,saga:240,transition:360,projektion:300,store:360,readmodel:220,query:150,reader:320,queryresponse:150,reaktion:300,trigger:300,pipeline:320,codenode:220,llmnode:220};
     const yByX={};
     graphNodes().forEach(n=>{const r=n.ref;const x=spalte[n.kind]!==undefined?spalte[n.kind]:40;const s=step[n.kind]||150;
       if(typeof r.x==="number"&&typeof r.y==="number"){yByX[x]=Math.max(yByX[x]||30,r.y+s);return;}
@@ -1214,6 +1474,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     else if(n.kind==="store")storeCard(body,n.ref);
     else if(n.kind==="projektion")projektionCard(body,n.ref);
     else if(n.kind==="reader")readerCard(body,n.ref);
+    else if(n.kind==="reaktion")reaktionCard(body,n.ref);
+    else if(n.kind==="pipeline")pipelineCard(body,n.ref);
+    else if(n.kind==="trigger")triggerCard(body,n.ref);
     else if(n.kind==="codenode")codeNodeCard(body,n.ref);
     else if(n.kind==="llmnode")llmNodeCard(body,n.ref);
     else recordCard(body,n.ref);
@@ -1231,6 +1494,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     else if(k==="store")MODEL.stores.splice(MODEL.stores.indexOf(ref),1);
     else if(k==="projektion")MODEL.projektionen.splice(MODEL.projektionen.indexOf(ref),1);
     else if(k==="reader")MODEL.reader.splice(MODEL.reader.indexOf(ref),1);
+    else if(k==="reaktion")MODEL.reaktionen.splice(MODEL.reaktionen.indexOf(ref),1);
+    else if(k==="pipeline")MODEL.pipelines.splice(MODEL.pipelines.indexOf(ref),1);
+    else if(k==="trigger")MODEL.triggers.splice(MODEL.triggers.indexOf(ref),1);
     else if(k==="codenode")MODEL.codeNodes.splice(MODEL.codeNodes.indexOf(ref),1);
     else if(k==="llmnode")MODEL.llmNodes.splice(MODEL.llmNodes.indexOf(ref),1);
     else MODEL.records.splice(MODEL.records.indexOf(ref),1);
@@ -1248,11 +1514,14 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     const path=document.createElementNS(SVGNS,"path");path.setAttribute("class","glink tmp");
     path.setAttribute("fill","none");path.setAttribute("stroke","#cbb8ff");path.setAttribute("stroke-width","2.4");path.setAttribute("stroke-dasharray","5 4");
     svg.append(path);const a=slotCenter(from);
+    // Gültige Ziele sofort sichtbar: ALLE kompatiblen Slots grün ringeln (so sieht man, wohin ein Feld darf — und wohin nicht).
+    const cands=Object.values(SLOTS).filter(s=>s&&s!==from&&compatible(from,s));cands.forEach(s=>s.classList.add("cand"));
+    const clear=()=>{cands.forEach(s=>s.classList.remove("cand"));document.querySelectorAll("#de .slot.hot").forEach(x=>x.classList.remove("hot"));};
     const mv=ev=>{const b=toWorld(ev.clientX,ev.clientY);path.setAttribute("d",bez(a.x,a.y,b.x,b.y));
       document.querySelectorAll("#de .slot.hot").forEach(x=>x.classList.remove("hot"));
       const t=hitSlot(ev.clientX,ev.clientY);if(t&&compatible(from,t))t.classList.add("hot");};
     const up=ev=>{window.removeEventListener("pointermove",mv);window.removeEventListener("pointerup",up);
-      path.remove();document.querySelectorAll("#de .slot.hot").forEach(x=>x.classList.remove("hot"));
+      path.remove();clear();
       const t=hitSlot(ev.clientX,ev.clientY);if(t&&compatible(from,t))applyLink(from,t);};
     window.addEventListener("pointermove",mv);window.addEventListener("pointerup",up);
   }
@@ -1260,11 +1529,19 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   function compatible(a,b){const A=a.__slot,B=b.__slot;if(!A||!B)return false;if(A.dir===B.dir)return false;if(A.type!==B.type)return false;
     if((A.kind==="arg")!==(B.kind==="arg"))return false;              // Argument-Pin nur an Argument-Pin
     if(A.kind==="arg"&&A.trans!==B.trans)return false;                 // und nur innerhalb derselben Transition
+    if(A.type==="field"){const src=A.dir==="out"?A:B,snk=A.dir==="out"?B:A;   // Feld-Quelle muss den Wunsch des Eingangs erfüllen
+      if(snk.want==="count")return istColl(src.ftyp)||istGanzzahl(src.ftyp);
+      if(snk.want==="collection")return istColl(src.ftyp);
+      return true;}
     return true;}
   function applyLink(a,b){
     const O=a.__slot.dir==="out"?a.__slot:b.__slot, I=a.__slot.dir==="out"?b.__slot:a.__slot;
     if(O.type==="cmd"){const d=dec(I.dec);if(d)d.command=O.rec;}
-    else if(O.type==="evtOut"){const d=dec(O.dec);if(d&&!(d.ergibt||[]).some(x=>x.event===I.rec))(d.ergibt=d.ergibt||[]).push({event:I.rec});}
+    else if(O.type==="evtOut"){
+      if(O.dec){const d=dec(O.dec);if(d&&!(d.ergibt||[]).some(x=>x.event===I.rec))(d.ergibt=d.ergibt||[]).push({event:I.rec});}
+      // Konsument veröffentlicht ein reaktives Event (HandlerOutputRouter: yield IEvent → Broker-Re-Publish).
+      else if(O.proj){const p=MODEL.projektionen.find(x=>x._id===O.proj);const hd=p&&p.handles[O.handleIdx];if(hd){hd.publishes=hd.publishes||[];if(!hd.publishes.includes(I.rec))hd.publishes.push(I.rec);}}
+      else if(O.reaktion){const r=MODEL.reaktionen.find(x=>x._id===O.reaktion);const hd=r&&r.handles[O.handleIdx];if(hd){hd.publishes=hd.publishes||[];if(!hd.publishes.includes(I.rec))hd.publishes.push(I.rec);}}}
     else if(O.type==="prozess"){const t=MODEL.transitions.find(x=>x._id===O.trans);if(t)t.prozess=I.saga;}
     else if(O.type==="evtUse"){
       if(I.app){const p=app(I.app);if(p)p.event=O.rec;}
@@ -1273,29 +1550,52 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
         else p.handles[I.handleIdx].event=O.rec;}}
       else if(I.trigger){const sg=MODEL.sagas.find(x=>x.name===I.saga);if(sg)sg.triggerEvent=O.rec;}
       else if(I.trans){const t=MODEL.transitions.find(x=>x._id===I.trans);if(t){
-        if(I.sammel){t.sammelEvent=O.rec;}
-        else{t.wenn=t.wenn||[];if(I.wennIdx==="open"){if(!t.wenn.includes(O.rec))t.wenn.push(O.rec);}else t.wenn[I.wennIdx]=O.rec;}}}}
-    else if(O.type==="sagaCmd"){const t=MODEL.transitions.find(x=>x._id===O.trans);if(t){if(O.role==="komp")t.kompensation=I.rec;else t.sende=I.rec;}}
-    else if(O.kind==="arg"&&I.kind==="arg"&&O.trans===I.trans){const t=MODEL.transitions.find(x=>x._id===O.trans);
-      if(t){const arr=I.target==="komp"?(t.kompArgs=t.kompArgs||[]):(t.sendeArgs=t.sendeArgs||[]);arr[I.paramIndex]=O.field?O.role+"."+O.field:O.role;}}
+        t.wenn=t.wenn||[];if(I.wennIdx==="open"){if(!t.wenn.includes(O.rec))t.wenn.push(O.rec);}else t.wenn[I.wennIdx]=O.rec;}}
+      else if(I.reaktion){const r=MODEL.reaktionen.find(x=>x._id===I.reaktion);if(r){r.handles=r.handles||[];
+        if(I.handleIdx==="open"){if(!r.handles.some(x=>x.event===O.rec))r.handles.push({event:O.rec,sends:[]});}
+        else r.handles[I.handleIdx].event=O.rec;}}
+      // Event → Pipeline-Handle (die „Reaktion IST eine Pipeline"-Naht).
+      else if(I.pipeline){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p){p.handles=p.handles||[];
+        if(I.handleIdx==="openevt"||I.handleIdx==="open"){if(!p.handles.some(x=>x.event===O.rec&&x.inputKind==="event"))p.handles.push({inputKind:"event",event:O.rec,sends:[]});}
+        else{p.handles[I.handleIdx].event=O.rec;p.handles[I.handleIdx].inputKind="event";delete p.handles[I.handleIdx].trigId;}}}}
+    else if(O.type==="sagaCmd"){
+      if(O.reaktion){const r=MODEL.reaktionen.find(x=>x._id===O.reaktion);const hd=r&&r.handles[O.handleIdx];if(hd){hd.sends=hd.sends||[];if(!hd.sends.includes(I.rec))hd.sends.push(I.rec);}}
+      else if(O.pipeline){const p=MODEL.pipelines.find(x=>x._id===O.pipeline);const hd=p&&p.handles[O.handleIdx];if(hd){hd.sends=hd.sends||[];if(!hd.sends.includes(I.rec))hd.sends.push(I.rec);}}
+      else{const t=MODEL.transitions.find(x=>x._id===O.trans);const d=t&&(t.dann||[])[O.dannIdx];if(d){if(O.role==="komp")d.kompensation=I.rec;else d.sende=I.rec;}}}
+    // Trigger-Msg → Pipeline-Handle: Quelle = Trigger-Ingress-Node (O.trigId) ODER eine andere Pipeline, die
+    //   den Trigger yieldet (O.pipeline). Producer-Ref bleibt rename-fest.
+    else if(O.type==="trigmsg"){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p){p.handles=p.handles||[];
+      let msgName=O.msgName;
+      // Quelle = offener Pipeline-Emit-Port (noch unbenannt) → Trigger-Ausgang am Quell-Handle materialisieren.
+      if(O.pipeline&&!msgName){const sp=MODEL.pipelines.find(x=>x._id===O.pipeline);const shd=sp&&sp.handles[O.handleIdx];if(shd){msgName=uniq("NeuTriggerMsg");(shd.emits=shd.emits||[]).push(msgName);}}
+      const prod=O.trigId?{k:"tg",id:O.trigId}:(O.pipeline?{k:"pl",plId:O.pipeline,hi:O.handleIdx,name:msgName}:null);
+      const nm=msgName||(prod&&prod.k==="tg"?trigMsgLabel(prod.id):"")||"Trigger";
+      if(I.handleIdx==="opentrg"||I.handleIdx==="open"){if(!p.handles.some(x=>x.inputKind==="trigger"&&x.input===nm))p.handles.push({inputKind:"trigger",input:nm,prod,sends:[],emits:[],schedules:[]});}
+      else{const hd=p.handles[I.handleIdx];hd.inputKind="trigger";hd.input=nm;hd.prod=prod;delete hd.event;delete hd.selfName;delete hd.trigId;}}}
+    // ScheduleSelf-Ausgang → Self-Handle derselben Pipeline (interner Tick/Timeout-Loop).
+    else if(O.type==="self"){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);const hd=p&&p.handles[I.handleIdx];if(hd&&hd.inputKind==="self")hd.selfName=O.name;}
     else if(O.type==="decAgg"){const d=dec(O.dec);if(d)d.aggregat=I.agg;}
     else if(O.type==="appAgg"){const p=app(O.app);if(p)p.aggregat=I.agg;}
-    // ── Leseseite: ReadModel→Store, Projektion/Reader→Store-Scope, Event→Projektion, Query→Reader,
-    //    Reader→Response, und CODE (📝/🤖) → Rumpf-Port (Controller / Impl). ──
+    // ── Leseseite: ReadModel→Store, Projektion-Handle→Write-Fn, Reader-Handle→Read-Fn, Reader→Projektion,
+    //    Event→Projektion, Query→Reader, Reader→Response, CODE (📝/🤖) → Rumpf-Port (Controller / Impl). ──
     else if(O.type==="readmodel"){const rm=MODEL.readModels.find(x=>x._id===O.rm);if(rm)rm.store=I.store;}
-    else if(O.type==="store"){if(O.proj){const p=MODEL.projektionen.find(x=>x._id===O.proj);if(p){p.stores=p.stores||[];if(!p.stores.includes(I.store))p.stores.push(I.store);}}
-      else if(O.reader){const r=MODEL.reader.find(x=>x._id===O.reader);if(r){r.stores=r.stores||[];if(!r.stores.includes(I.store))r.stores.push(I.store);}}}
+    // Projektion-Handle ruft eine Write-Fn (Store-Scope fällt daraus ab) — anhängen, dedup.
+    else if(O.type==="wcall"){const p=MODEL.projektionen.find(x=>x._id===O.proj);const hd=p&&p.handles[O.handleIdx];if(hd){hd.fns=hd.fns||[];if(!hd.fns.includes(I.fn))hd.fns.push(I.fn);}}
+    // Reader-Handle ruft eine Read-Fn (auch über mehrere Stores) — anhängen, dedup.
+    else if(O.type==="rcall"){const r=MODEL.reader.find(x=>x._id===O.reader);const hd=r&&r.handles[O.handleIdx];if(hd){hd.fns=hd.fns||[];if(!hd.fns.includes(I.fn))hd.fns.push(I.fn);}}
+    // IReader<TProjection>: Reader → genau eine Projektion binden.
+    else if(O.type==="projref"){const r=MODEL.reader.find(x=>x._id===O.reader);const p=MODEL.projektionen.find(x=>x._id===I.proj);if(r&&p)r.projektion=p.name;}
     else if(O.type==="query"){const r=MODEL.reader.find(x=>x._id===I.reader);if(r){r.handles=r.handles||[];
-      if(I.handleIdx==="open"){if(!r.handles.some(x=>x.query===O.rec))r.handles.push({query:O.rec,response:""});}
+      if(I.handleIdx==="open"){if(!r.handles.some(x=>x.query===O.rec))r.handles.push({query:O.rec,responses:[]});}
       else r.handles[I.handleIdx].query=O.rec;}}
-    else if(O.type==="qrsp"){const r=MODEL.reader.find(x=>x._id===O.reader);if(r&&r.handles[O.handleIdx])r.handles[O.handleIdx].response=I.rec;}
-    else if(O.type==="code"){const t=I.target;const src=O.codeNode;if(t){
-      if(t.k==="pjHandle"){const p=MODEL.projektionen.find(x=>x._id===t.proj);if(p&&p.handles[t.hi])p.handles[t.hi].codeSrc=src;}
-      else if(t.k==="rdHandle"){const r=MODEL.reader.find(x=>x._id===t.reader);if(r&&r.handles[t.hi])r.handles[t.hi].codeSrc=src;}
-      else if(t.k==="writeFn"){const st=MODEL.stores.find(x=>x._id===t.store);const fn=st&&(st.writeFns||[]).find(f=>f._id===t.fn);if(fn)fn.codeSrc=src;}
-      else if(t.k==="readFn"){const st=MODEL.stores.find(x=>x._id===t.store);const fn=st&&(st.readFns||[]).find(f=>f._id===t.fn);if(fn)fn.codeSrc=src;}
-      else if(t.k==="decider"){const d=dec(t.dec);if(d)d.codeSrc=src;}
-      else if(t.k==="applier"){const a=app(t.app);if(a)a.codeSrc=src;}}}
+    // OneOf-Response: mehrere Antworten je Query → anhängen (dedup), gespiegelt zu decider.ergibt.
+    else if(O.type==="qrsp"){const r=MODEL.reader.find(x=>x._id===O.reader);const hd=r&&r.handles[O.handleIdx];if(hd){hd.responses=hd.responses||[];if(!hd.responses.includes(I.rec))hd.responses.push(I.rec);}}
+    else if(O.type==="code"){setCodeSrc(I.target,O.codeNode);}
+    // Typ-Komposition: VO/Enum-Quelle → Feld-Typ-Eingang → setzt den Feldtyp (Wrapper bleibt erhalten).
+    else if(O.type==="ftype"){if(I.fobj)setFeldTyp(I.fobj,O.typeName);}
+    // Feld-Port → Konsument (verdrahtet statt Dropdown): Fan-out-Collection (want=collection). (Σ/Count-Join entfernt.)
+    else if(O.type==="field"){if(I.trans){const t=MODEL.transitions.find(x=>x._id===I.trans);if(t){
+      if(I.want==="collection"){const d=(t.dann||[])[I.dannIdx];if(d)d.sendeJeCollectionFeld={rec:O.rec,field:O.field,fid:O.fid};}}}}
     else if(O.type==="state"){const s=MODEL.states.find(x=>x._id===O.state);const A=I.agg;
       if(s){s.aggregat=A;const agg=MODEL.aggregate.find(a=>a.name===A);
         if(agg){if((!agg.state||!agg.state.length)&&s.felder&&s.felder.length)agg.state=s.felder;s.felder=undefined;
@@ -1343,13 +1643,10 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     MODEL.transitions.forEach(t=>{
       if(t.prozess)add("tr:prozess:"+t._id,"hub:in:"+t.prozess+":"+t._id,"#9d78d6",true);
       (t.wenn||[]).forEach((e,j)=>{if(e)add("evt:out:"+e,"tr:in:"+t._id+":"+j,"#4fb06a");});
-      if(t.sammelEvent)add("evt:out:"+t.sammelEvent,"tr:sammel:"+t._id,"#4fb06a");
-      if(t.sende)add("tr:sende:"+t._id,"cmd:in:"+t.sende,"#4a86d6");
-      if(t.kompensation)add("tr:komp:"+t._id,"cmd:in:"+t.kompensation,"#cf6f68",true);
-      const argE=(arr,target)=>{(arr||[]).forEach((expr,pi)=>{if(!expr||expr==="default")return;
-        const x=SLOTS["tr:field:"+t._id+":"+expr],y=SLOTS["tr:param:"+t._id+":"+target+":"+pi];
-        if(x&&y)mk(anchor(x),anchor(y),-1,1,"#e0c46a",false,"internal",null,svgTop);});};
-      argE(t.sendeArgs,"sende");argE(t.kompArgs,"komp");
+      (t.dann||[]).forEach((d,di)=>{
+        if(d.sende)add("tr:sende:"+t._id+":"+di,"cmd:in:"+d.sende,"#4a86d6");
+        if(d.kompensation)add("tr:komp:"+t._id+":"+di,"cmd:in:"+d.kompensation,"#cf6f68",true);
+      });
     });
     // ── Leseseite: ReadModel→Store, Projektion/Reader→Store-Scope, Event→Projektion, Query→Reader,
     //    Reader→Response, und CODE (📝/🤖) → Rumpf-Ports (gestrichelt). ──
@@ -1360,16 +1657,49 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
       (st.readFns||[]).forEach(fn=>{if(fn.codeSrc)add("code:out:"+fn.codeSrc,"impl:in:"+st._id+":"+fn._id,CODE,true);});
     });
     MODEL.projektionen.forEach(p=>{
-      (p.stores||[]).forEach(sn=>add("prj:store:"+p._id,"sto:in:"+sn,"#2f9d95"));
       (p.handles||[]).forEach((hd,hi)=>{if(hd.event)add("evt:out:"+hd.event,"prj:in:"+p._id+":"+hi,"#4fb06a");
+        // Handle → aufgerufene Write-Fn (Store-Scope ist damit sichtbar-abgeleitet).
+        (hd.fns||[]).forEach(fid=>{const f=fnById(fid);if(f)add("wcall:out:"+p._id+":"+hi+":"+fid,"wcall:in:"+f.store._id+":"+fid,"#2f9d95");});
+        // veröffentlichtes reaktives Event (gestrichelt/teal = Broker, verlierbar).
+        (hd.publishes||[]).forEach(ev=>{if(ev)add("prj:pub:"+p._id+":"+hi+":"+ev,"evt:in:"+ev,"#2fd6b0",true);});
         if(hd.codeSrc)add("code:out:"+hd.codeSrc,"ctrl:in:"+p._id+":"+hi,CODE,true);});
     });
     MODEL.reader.forEach(r=>{
-      (r.stores||[]).forEach(sn=>add("rdr:store:"+r._id,"sto:in:"+sn,"#c08a3e"));
+      // IReader<TProjection>: Reader → Projektion (der gemeinsame Store ist der Treffpunkt).
+      if(r.projektion){const p=MODEL.projektionen.find(x=>x.name===r.projektion);if(p)add("rdr:proj:"+r._id,"prj:asproj:"+p._id,"#c08a3e",true);}
       (r.handles||[]).forEach((hd,hi)=>{if(hd.query)add("qry:out:"+hd.query,"rdr:qin:"+r._id+":"+hi,"#9678d6");
-        if(hd.response)add("rdr:rout:"+r._id+":"+hi,"qrsp:in:"+hd.response,"#9d78d6");
+        // Handle → aufgerufene Read-Fn(s), auch über mehrere Stores.
+        (hd.fns||[]).forEach(fid=>{const f=fnById(fid);if(f)add("rcall:out:"+r._id+":"+hi+":"+fid,"rcall:in:"+f.store._id+":"+fid,"#c08a3e");});
+        (hd.responses||[]).forEach(resp=>{if(resp)add("rdr:rout:"+r._id+":"+hi+":"+resp,"qrsp:in:"+resp,"#9d78d6");});
         if(hd.codeSrc)add("code:out:"+hd.codeSrc,"ctrl:in:"+r._id+":"+hi,CODE,true);});
     });
+    // Reaktion (emittierend): Trigger-Event → Handle, Handle → OneOf-Command(s), 📝 → Controller-Rumpf.
+    MODEL.reaktionen.forEach(r=>{
+      (r.handles||[]).forEach((hd,hi)=>{
+        if(hd.event)add("evt:out:"+hd.event,"rk:in:"+r._id+":"+hi,"#4fb06a");
+        (hd.sends||[]).forEach(c=>{if(c)add("rk:send:"+r._id+":"+hi+":"+c,"cmd:in:"+c,"#4a86d6");});
+        (hd.publishes||[]).forEach(ev=>{if(ev)add("rk:pub:"+r._id+":"+hi+":"+ev,"evt:in:"+ev,"#2fd6b0",true);});
+        if(hd.codeSrc)add("code:out:"+hd.codeSrc,"ctrl:in:"+r._id+":"+hi,CODE,true);});
+    });
+    // ── Ingress/Pipeline: Eingang (Trigger-Node|Pipeline-yield|Event) → Handle; Ausgänge Command/Trigger/Self; 📝 → Rumpf. ──
+    MODEL.pipelines.forEach(p=>{(p.handles||[]).forEach((hd,hi)=>{
+      // Eingangs-Kante je nach Quelle.
+      if(hd.inputKind==="trigger"){const pr=hd.prod||(hd.trigId?{k:"tg",id:hd.trigId}:null);
+        if(pr&&pr.k==="pl")add("pl:emit:"+pr.plId+":"+pr.hi+":"+pr.name,"pl:in:"+p._id+":"+hi,"#f0883e");
+        else if(pr)add("trg:msg:"+pr.id,"pl:in:"+p._id+":"+hi,"#f0883e");}
+      else if(hd.inputKind==="event"&&hd.event)add("evt:out:"+hd.event,"pl:in:"+p._id+":"+hi,"#4fb06a");
+      // yield ICommand.
+      (hd.sends||[]).forEach(c=>{if(c)add("pl:send:"+p._id+":"+hi+":"+c,"cmd:in:"+c,"#4a86d6");});
+      // ScheduleSelf → passender Self-Handle (Name-Match), gestrichelter Loop.
+      (hd.schedules||[]).forEach(sc=>{const ti=(p.handles||[]).findIndex(x=>x.inputKind==="self"&&x.selfName===sc.name);
+        if(ti>=0)add("pl:sched:"+p._id+":"+hi+":"+sc.name,"pl:in:"+p._id+":"+ti,"#c98a3a",true);});
+      if(hd.codeSrc)add("code:out:"+hd.codeSrc,"plctrl:in:"+p._id+":"+hi,CODE,true);});});
+    // ── Typ-Komposition: VO/Enum → Feld (welches Feld benutzt diesen Typ), gestrichelt. ──
+    const voNamen=new Set(MODEL.records.filter(r=>r.kind==="valueobject").map(r=>r.name));
+    const enNamen=new Set(MODEL.enums.map(e=>e.name));
+    alleFelder().forEach(({owner,f})=>{const bt=innerTyp(f.typ);
+      if(voNamen.has(bt))add("ftype:out:rec:"+bt,"ftype:in:"+owner+":"+f._id,"#49a996",true);
+      else if(enNamen.has(bt))add("ftype:out:enum:"+bt,"ftype:in:"+owner+":"+f._id,"#8a8aa0",true);});
   }
   // Interne Linien hervorheben, wenn man über die zugehörige Decider-/Applier-Zeile fährt.
   function hilite(decId,appId,on){document.querySelectorAll("#de .glink.internal").forEach(p=>{
@@ -1395,8 +1725,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     root.append(h("div",{class:"gtoolbar"},
       tb("command","+ Command"),tb("event","+ Event"),tb("rejection","+ Ablehnung"),
       tb("valueobject","+ Value Object"),tb("enum","+ Enum"),tb("aggregate","+ Aggregat"),
-      tb("state","+ State"),tb("decider","+ Decider"),tb("applier","+ Applier"),tb("saga","+ Prozess"),tb("transition","+ Transition"),
-      tb("readmodel","+ Read Model"),tb("store","+ Store"),tb("projektion","+ Projektion"),tb("query","+ Query"),tb("queryresponse","+ Response"),tb("reader","+ Reader"),
+      tb("state","+ State"),tb("decider","+ Decider"),tb("applier","+ Applier"),tb("saga","+ Prozess"),tb("transition","+ Regel"),
+      tb("readmodel","+ Read Model"),tb("store","+ Store"),tb("projektion","+ Projektion"),tb("query","+ Query"),tb("queryresponse","+ Response"),tb("reader","+ Reader"),tb("reaktion","+ Reaktion"),
+      tb("trigger","+ Trigger"),tb("pipeline","+ Pipeline"),
       tb("codenode","+ 📝 Code"),tb("llmnode","+ 🤖 LLM")));
     const leg=(c,t)=>h("span",{},h("i",{style:"background:"+c}),t);
     root.append(h("div",{class:"glegend2"},
@@ -1432,8 +1763,9 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     pick.append(h("div",{class:"gpick-t"},"Was soll hier entstehen?"),
       opt("command","Command"),opt("event","Event"),opt("rejection","Ablehnung"),
       opt("valueobject","Value Object"),opt("enum","Enum"),opt("aggregate","Aggregat"),
-      opt("state","State"),opt("decider","Decider"),opt("applier","Applier"),opt("saga","Prozess"),opt("transition","Transition"),
-      opt("readmodel","Read Model"),opt("store","Store"),opt("projektion","Projektion"),opt("query","Query"),opt("queryresponse","Response"),opt("reader","Reader"),
+      opt("state","State"),opt("decider","Decider"),opt("applier","Applier"),opt("saga","Prozess"),opt("transition","Regel"),
+      opt("readmodel","Read Model"),opt("store","Store"),opt("projektion","Projektion"),opt("query","Query"),opt("queryresponse","Response"),opt("reader","Reader"),opt("reaktion","Reaktion"),
+      opt("trigger","Trigger"),opt("pipeline","Pipeline"),
       opt("codenode","📝 Code"),opt("llmnode","🤖 LLM"));
     canvas.append(pick);
     setTimeout(()=>{const off=ev=>{if(!pick.contains(ev.target)){pick.remove();document.removeEventListener("pointerdown",off);}};document.addEventListener("pointerdown",off);},0);
@@ -1441,64 +1773,51 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 
   // Prozess-HUB: Prozess<Auslöser>. Transitionen stecken sich HIER an (sichtbare Kante, keine Ableitung).
   function prozessHubCard(body,s){
-    body.append(topSlot("event","Auslöser: "+(s.triggerEvent||"— (Event hineinziehen)"),{type:"evtUse",dir:"in",saga:s.name,trigger:true},"saga:trigger:"+s.name));
+    body.append(topSlot("event","Auslöser (startet): "+(s.triggerEvent||"— (Event hineinziehen)"),{type:"evtUse",dir:"in",saga:s.name,trigger:true},"saga:trigger:"+s.name));
     body.append(nameInp(s,"name","Prozess","saga"));
     body.append(h("input",{value:s.namespace??"",oninput:e=>s.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.X"}));
     const aggs=sagaAggs(s);
     body.append(h("div",{class:"gsec"},"berührt (abgeleitet): "+(aggs.length?aggs.join(" · "):"—")));
-    body.append(h("div",{class:"gsec"},"Transitionen ◀ (anstecken)"));
+    body.append(h("div",{class:"gsec"},"Regeln ◀ (anstecken)"));
     transOf(s).forEach(t=>{const p=anchorDot("prozess");p.classList.add("i");reg("hub:in:"+s.name+":"+t._id,p,null);
-      body.append(h("div",{class:"slotrow"},p,h("span",{class:"slotlbl"},(t.sende||"Transition")+((t.wenn||[]).length>1?" (Join "+t.wenn.length+")":"")+(t.sammelEvent?" +alle":"")+(t.sendeJe?" ×N":""))));});
+      body.append(h("div",{class:"slotrow"},p,h("span",{class:"slotlbl"},"WENN "+((t.wenn||[])[0]||"?")+((t.wenn||[]).length>1?" +"+((t.wenn.length-1)+(t.sammelEvent?1:0))+"":(t.sammelEvent?" +alle":""))+" → "+((t.dann||[]).map(d=>d.sende||"?").join(", ")||"?"))));});
     const oi=port("prozess");oi.classList.add("i");reg("hub:in:"+s.name+":open",oi,{type:"prozess",dir:"in",saga:s.name});
-    body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Transition anstecken")));
+    body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Regel anstecken")));
   }
   // Elementtyp der SendeJe-Collection (z. B. List<Guid> → Guid) — für den Typ des z-Pins.
   function collElemTyp(t){if(!t.sendeJeCollection)return "";const dot=t.sendeJeCollection.indexOf(".");if(dot<0)return "";
     const role=t.sendeJeCollection.slice(0,dot),field=t.sendeJeCollection.slice(dot+1);const j=["t","r","g"].indexOf(role);
     const r=recByName((t.wenn||[])[j]);const f=r&&(r.felder||[]).find(x=>x.name===field);const m=f&&/<(.+)>/.exec(f.typ||"");return m?baseTyp(m[1]):"";}
-  // Transition-KNOTEN: oben → Prozess (angesteckt); links Join (Auf/Und, UndAlle); rechts Sende/Kompensation (fest);
-  //   darunter Konstruktor: Command-Parameter (Ziel-Pins) ← Event-Felder / z (Quell-Pins), typgeprüft.
+  // REGEL-KNOTEN: liest sich als Satz WENN … DANN SENDE … SONST ↩ … (eine DSL-Regel = ein SagaSchritt).
+  //   Logik (Argument-Bau, Count-Ausdruck) ist Fülle-Zeit → Stub, KEINE Argument-Pins mehr.
+  // REGEL = kleine KREUZUNG im Event/Command-Fluss (Petri-Transition): Event-Eingänge (Join) → Command-Ausgang.
+  //   KEINE wiederholten Namen, KEINE Sektionen — der Inhalt lebt in den verdrahteten Event/Command-Nodes
+  //   (Name nur als Hover-Titel + über die Kante sichtbar). Der Join = mehrere zusammenlaufende Kanten.
   function transitionCard(body,t){
-    body.append(topSlot("prozess","→ Prozess: "+(t.prozess||"— (an Hub ziehen)"),{type:"prozess",dir:"out",trans:t._id},"tr:prozess:"+t._id));
-    const L=h("div",{class:"col2"});L.append(h("div",{class:"gsec"},"Auf / Und (Join)"));
-    (t.wenn||[]).forEach((e,j)=>{const p=port("event");p.classList.add("i");reg("tr:in:"+t._id+":"+j,p,{type:"evtUse",dir:"in",trans:t._id,wennIdx:j});
-      const role=["t","r","g"][j]||("e"+(j+1));
-      L.append(h("div",{class:"slotrow"},p,h("span",{class:"slotlbl"},"◀ "+role+" · "+(e||"?")),h("button",{class:"rm",onclick:()=>{t.wenn.splice(j,1);render();}},"✕")));});
-    const oi=port("open");oi.classList.add("i");reg("tr:in:"+t._id+":open",oi,{type:"evtUse",dir:"in",trans:t._id,wennIdx:"open"});
-    L.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Und (Event)")));
-    if(t.sammelEvent){const sp=port("event");sp.classList.add("i");reg("tr:sammel:"+t._id,sp,{type:"evtUse",dir:"in",trans:t._id,sammel:true});
-      L.append(h("div",{class:"slotrow"},sp,h("span",{class:"slotlbl"},"◀ alle · "+t.sammelEvent),h("button",{class:"rm",onclick:()=>{t.sammelEvent="";t.sammelAnzahl="";render();}},"✕")));
-      const coll=collFelder(t);const sel=h("select",{onchange:e=>{t.sammelAnzahl=e.target.value?e.target.value+".Count":"";render();}});
-      sel.append(h("option",{value:""},"— N = Collection.Count —"));coll.forEach(c=>{const o=h("option",{value:c},c+".Count");if(t.sammelAnzahl===c+".Count")o.selected=true;sel.append(o);});
-      L.append(sel);
-    }else{const sp=port("open");sp.classList.add("i");reg("tr:sammel:"+t._id,sp,{type:"evtUse",dir:"in",trans:t._id,sammel:true});
-      L.append(h("div",{class:"slotrow"},sp,h("span",{class:"slotlbl"},"+ UndAlle (Count-Join)")));}
-    const R=h("div",{class:"col2",style:"text-align:right"});R.append(h("div",{class:"gsec"},"Sende ▶"));
-    const so=port("command");so.classList.add("o");reg("tr:sende:"+t._id,so,{type:"sagaCmd",dir:"out",trans:t._id,role:"sende"});
-    R.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},t.sende||"— (Command)"),so));
-    R.append(h("label",{class:"cbx",style:"justify-content:flex-end"},h("input",{type:"checkbox",onchange:e=>{t.sendeJe=e.target.checked||undefined;render();},...(t.sendeJe?{checked:"checked"}:{})}),"je (Fan-out)"));
-    if(t.sendeJe){const coll=collFelder(t);const sel=h("select",{onchange:e=>{t.sendeJeCollection=e.target.value;render();}});
-      sel.append(h("option",{value:""},"— je Collection —"));coll.forEach(c=>{const o=h("option",{value:c},c);if(t.sendeJeCollection===c)o.selected=true;sel.append(o);});R.append(sel);}
-    const ko=port("rejection");ko.classList.add("o");reg("tr:komp:"+t._id,ko,{type:"sagaCmd",dir:"out",trans:t._id,role:"komp"});
-    R.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"↩ "+(t.kompensation||"—")),ko));
-    body.append(h("div",{class:"aggwrap"},L,R));
-    schrittArgs(body,t,"sende",t.sende);
-    if(t.kompensation)schrittArgs(body,t,"komp",t.kompensation);
-    const quellen=(t.wenn||[]).map((e,j)=>({r:recByName(e),role:["t","r","g"][j]||("e"+(j+1))})).filter(x=>x.r);
-    if(quellen.length||t.sendeJe){body.append(h("div",{class:"gsec"},"Felder → Parameter ziehen"));
-      quellen.forEach(({r,role})=>(r.felder||[]).forEach(f=>{const pin=port("arg");pin.classList.add("o","sm");
-        reg("tr:field:"+t._id+":"+role+"."+f.name,pin,{type:baseTyp(f.typ),dir:"out",trans:t._id,role,field:f.name,kind:"arg"});
-        body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},role+"."+f.name+" : "+f.typ),pin));}));
-      if(t.sendeJe){const pin=port("arg");pin.classList.add("o","sm");
-        reg("tr:field:"+t._id+":z",pin,{type:collElemTyp(t),dir:"out",trans:t._id,role:"z",field:"",kind:"arg"});
-        body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"z (Element : "+(collElemTyp(t)||"?")+")"),pin));}}
+    const mk=(txt,title,on,onclick)=>h("span",{title:title||"",...(onclick?{onclick}:{}),
+      style:"font-size:9px;padding:0 3px;border-radius:3px;border:1px solid #3a4453;opacity:"+(on?"1":".55")+";"+(onclick?"cursor:pointer;":"")+(on?"background:#2f5d46;color:#c8f0d8;border-color:#2f5d46":"")},txt);
+    body.append(topSlot("prozess","→ Prozess"+(t.prozess?": "+t.prozess:" (andocken)"),{type:"prozess",dir:"out",trans:t._id},"tr:prozess:"+t._id));
+    // ── WENN (Join): Event-Eingänge UNTEREINANDER, beliebig viele (keine 3er-Grenze) ──
+    body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl",style:"opacity:.55"},"Wenn ◀ (Join)")));
+    (t.wenn||[]).forEach((e,j)=>{const p=port("event");p.classList.add("i");p.title=e||"(Event)";reg("tr:in:"+t._id+":"+j,p,{type:"evtUse",dir:"in",trans:t._id,wennIdx:j});
+      body.append(h("div",{class:"slotrow"},p,h("span",{class:"slotlbl",style:"flex:1;opacity:.75"},e||"(Event)"),h("button",{class:"rm",onclick:()=>{t.wenn.splice(j,1);render();}},"✕")));});
+    // Offener „+ und"-Eingang (unbegrenzt).
+    const oi=port("open");oi.classList.add("i");oi.title="+ und (Event)";reg("tr:in:"+t._id+":open",oi,{type:"evtUse",dir:"in",trans:t._id,wennIdx:"open"});
+    body.append(h("div",{class:"slotrow"},oi,mk("+ und","weiteres Bedingungs-Event")));
+    // ── DANN (mehrere): ein Join, N Commands — je Dann ein Command-Ausgang + eigene Kompensation ──
+    (t.dann||[]).forEach((d,di)=>{
+      const so=port("command");so.classList.add("o");so.title=d.sende||"(Command)";reg("tr:sende:"+t._id+":"+di,so,{type:"sagaCmd",dir:"out",trans:t._id,dannIdx:di,role:"sende"});
+      body.append(h("div",{class:"slotrow o"},
+        h("button",{class:"rm",onclick:()=>{t.dann.splice(di,1);if(!t.dann.length)t.dann.push({});render();}},"✕"),
+        h("span",{class:"slotlbl",style:"flex:1;text-align:right;opacity:.75"},"Dann "+(d.sende||"")),
+        mk("×N","Fan-out (SendeJe) — N Commands je Element",!!d.sendeJe,()=>{d.sendeJe=d.sendeJe?undefined:true;render();}),so));
+      const ko=port("rejection");ko.classList.add("o");ko.title=d.kompensation||"(Kompensation)";reg("tr:komp:"+t._id+":"+di,ko,{type:"sagaCmd",dir:"out",trans:t._id,dannIdx:di,role:"komp"});
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right;opacity:.55"},"↩ "+(d.kompensation||"")),ko));
+    });
+    body.append(h("button",{class:"add",onclick:()=>{(t.dann=t.dann||[]).push({});render();}},"+ Dann (weiterer Command am selben Join)"));
+    // Je Dann → eine Regel (gleiche Bedingung). Argument-Bau = mechanisches Feld-Mapping (D/S) → default-Stub.
+    // KEIN Code/LLM-Port: eine Regel trägt keine freie Logik, nur die Verdrahtung Events→Command.
   }
-  function schrittArgs(body,t,target,cmdName){const cmd=recByName(cmdName);if(!cmd)return;
-    const args=target==="komp"?(t.kompArgs||[]):(t.sendeArgs||[]);
-    body.append(h("div",{class:"gsec"},(target==="komp"?"↩ ":"")+cmdName+"( … ) — Parameter"));
-    (cmd.felder||[]).forEach((p,pi)=>{const pin=port("arg");pin.classList.add("i","sm");
-      reg("tr:param:"+t._id+":"+target+":"+pi,pin,{type:baseTyp(p.typ),dir:"in",trans:t._id,paramIndex:pi,target,kind:"arg"});
-      body.append(h("div",{class:"slotrow"},pin,h("span",{class:"slotlbl"},p.name+" : "+p.typ+(args[pi]?"  ← "+args[pi]:""))));});}
 
   // ── Aktionen ──
   window.deOpen=function(){document.getElementById("de").classList.add("on");if(!MODEL.records.length&&!MODEL.aggregate.length)deReload();else render();};
