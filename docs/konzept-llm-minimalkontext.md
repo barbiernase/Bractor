@@ -1,6 +1,6 @@
 # Konzept — Minimalkontext für ein (lokales) LLM: die Arbeitskarte
 
-> **Stand:** 2026-09-24 · **Status:** KONZEPT (nichts implementiert).
+> **Stand:** 2026-09-24 · **Status:** K1 GEBAUT (Arbeitskarte für Decide/Apply als CLI, §12); K2–K6 Konzept.
 > **Frage:** Wie bauen wir ein System, das einem LLM — Zielgröße: ein **lokales ~27B-Modell** — nur
 > den minimalen Kontext gibt, damit es *wirklich nur die Funktion* schreibt? Und: können wir präzise
 > benennen und im Editor zeigen, **was** das Modell dafür wissen muss?
@@ -287,3 +287,53 @@ erst mit Phase 3 der Editor-Roadmap (Leseseite schreibbar).
 3. **Sprache der Karte:** Deutsch (konsistent mit Domäne) — Regelblock ggf. zusätzlich englisch testen,
    falls das lokale Modell auf englische Instruktionen messbar besser reagiert (Benchmark K3 entscheidet).
 4. **Grammatik-gezwungene Ausgabe** (W0) nur für lokale Server oder generell über JSON-Schema?
+
+---
+
+## 12 · K1 geliefert — die Arbeitskarte als CLI (2026-09-24)
+
+**Bau:** `GraphExtractor/Arbeitskarte.cs` (`Arbeitskarte`, `KartenBauer`, `KartenCli`) + Regelblöcke
+`GraphExtractor/Karten/{decide,apply}.txt` (EmbeddedResource). Kein Eingriff in Extractor-Pfad, Scaffolder oder Editor;
+`--check` bleibt grün.
+
+```bash
+dotnet run --project GraphExtractor -- --karte                      # Übersicht aller 64 Slots + Größenvergleich + Gegenprobe
+dotnet run --project GraphExtractor -- --karte SetzeSplit           # eine Karte (Disc oder Aggregat.Disc)
+dotnet run --project GraphExtractor -- --karten <verz>              # alle Karten als .txt + übersicht.md + karten.json
+```
+
+**Was die Karte aus Code-Fakten zieht:**
+
+| Abschnitt | Quelle |
+|---|---|
+| Slots | Typen mit `IDecider<T>`/`IApplier<T>`; Methoden, deren 1. Parameter `ICommand`/`IEvent` ist (handgeschrieben) |
+| Rumpf-Status | `geschrieben` · `leer` (bewusster Marker) · `fehlt` (= `throw new NotImplementedException`, per Symbol) |
+| Signatur/Ausgänge | Methoden-Symbol; `OneOf`-Typargumente; Ablehnung = `ITransientEvent` |
+| Absicht | `// 🤖 Prompt:` im Rumpf, `<summary>` der Methode, Banner-Kommentare vor Methode und Eingangstyp |
+| Zustand | öffentliche State-Member; ≤ 8 handgeschriebene → alle, sonst Relevanz-Schnitt (von Nachbar-Rümpfen benutzt ∪ bool-Helfer bei Decide ∪ Wortgleichheit) — Rest als „weitere: Name:Typ“ |
+| Helfer | vorhandene Nicht-Slot-Methoden der Decider-/Applier-Klasse (nur Signatur) — **nachgerüstet, weil die Gegenprobe sie vermisste** |
+| Typen | transitiv (Tiefe 2) aus Eingang, Ausgängen, relevantem Zustand, Helfer-Parametern — nur Domänen-Quelltypen; Records mit Primär-Ctor + öffentlicher Zusatz-Oberfläche, Enums mit Werten |
+| Beispiel | Nachbar-Rumpf derselben Art: meiste geteilte Ausgänge, dann kürzester |
+| Szenarien | aus Test-Projekten über die **Form** der Test-DSL (generischer Typ über einen `IState`, Methode mit genau einem `ICommand`) — Decide: `Wenn(Cmd)`, Apply: Kette erwähnt das Event und prüft den Zustand (Lambda) |
+
+**Messung (Bestand, 64 Slots = 31 Decide + 33 Apply):**
+
+| | Median | Max |
+|---|---:|---:|
+| Arbeitskarte (echter Qwen-BPE) | **975** | 1 391 |
+| Aggregat-Ordner (was man sonst mitgäbe) | ≈ 6 300 | — |
+| Domänen-Projekte gesamt | ≈ 69 000 | — |
+
+- **Gegenprobe (Vorstufe W2):** alle 60 geschriebenen Rümpfe benutzen **nur** Domänen-Symbole, die auf ihrer Karte
+  stehen (Namensebene). Der erste Lauf fand 4 Lücken (`Applier.SetBild`) → Abschnitt „Helfer“ ergänzt → 60/60.
+- **Token-Schätzung** (Zeichen/3,3) gegen den Qwen-BPE kalibriert: Verhältnis echt/Schätzung 0,99 über alle Karten.
+- **Befund Absicht:** kein Rumpf im Bestand trägt eine `// 🤖 Prompt:`-Zeile; die Absicht kommt heute aus Doku/Bannern
+  und ist oft dünn (z. B. `SetzeSplit`: nur „SPLIT — optionaler Override (Default 70/15/15)“). Das Wissen steckt dann
+  in Typ-Doku (`SplitKonfig.IstGueltig`) — die Karte bringt es mit.
+- **Befund Szenarien:** nur `Sammelvorgang` hat Szenario-Tests (5 Karten mit Szenarien). Für die übrigen 59 Slots
+  ist das die größte Lücke der Spezifikation → stützt Entscheidung 1 (§11: Szenario-Pflicht für Decide).
+- **Fixkosten:** Aufgabe + Regeln ≈ 350 Token je Karte. Bei winzigen Aggregaten ist die Karte daher größer als die
+  Decider-Datei allein — die Datei allein reicht aber nicht (ihr fehlen State, Events, VOs).
+
+**Nächster Schritt:** K2 (Kartenwand als echte Prüfung auf dem Semantic Model eines LLM-Rumpfs, statt Namensebene) und
+K3 (Benchmark gegen ein lokales Modell über einen OpenAI-kompatiblen Endpunkt).
