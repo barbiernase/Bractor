@@ -1,3 +1,4 @@
+using Abstractions;
 using Domain.Trainingslauf;
 
 namespace Domain.Projections;
@@ -6,7 +7,7 @@ namespace Domain.Projections;
 /// Write-Zugriffsmuster der Trainingslauf-Projektion — je Event ein atomarer Effekt.
 /// Wird von <c>TrainingslaufProjektion</c> verwendet.
 /// </summary>
-public interface ITrainingslaufWriteStore
+public interface ITrainingslaufWriteStore : IWriteStore
 {
     Task UpsertAsync(TrainingslaufReadModel model);
 
@@ -28,7 +29,7 @@ public interface ITrainingslaufWriteStore
 /// Read-Zugriffsmuster der Trainingslauf-Projektion. Wird vom <c>TrainingslaufReader</c>
 /// und vom Dashboard verwendet (Live-Kurve).
 /// </summary>
-public interface ITrainingslaufReadStore
+public interface ITrainingslaufReadStore : IReadStore<ITrainingslaufWriteStore>
 {
     Task<TrainingslaufReadModel?> FindByIdAsync(Guid id);
 

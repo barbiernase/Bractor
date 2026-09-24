@@ -1,0 +1,22 @@
+using Abstractions;
+
+// SONDE — Decider/Applier eines Aggregats in einer EIGENEN Datei (partial).
+
+namespace Leihwesen.Gebuehren;
+
+public partial class Mahnvorgang
+{
+    public partial class Decider : IDecider<Mahnvorgang>
+    {
+        public IEnumerable<OneOf<MahnungEroeffnet, MahnungExistiert>> Decide(EroeffneMahnung m)
+        {
+            if (this.State.Version > 0) { yield return new MahnungExistiert(m.AggregateId); yield break; }
+            yield return new MahnungEroeffnet(m.Betrag);
+        }
+    }
+
+    public partial class Applier : IApplier<Mahnvorgang>
+    {
+        public void Apply(MahnungEroeffnet e) { this.State.Betrag = e.Betrag; }
+    }
+}

@@ -1,7 +1,8 @@
+using Abstractions;
 namespace Domain.Projections;
 
 /// <summary>Write-Zugriffsmuster der Modell-Projektion — je Event ein atomarer Effekt.</summary>
-public interface IModellWriteStore
+public interface IModellWriteStore : IWriteStore
 {
     /// <summary>Registriert/aktualisiert ein Modell-Dokument.</summary>
     Task UpsertAsync(ModellReadModel model);
@@ -14,7 +15,7 @@ public interface IModellWriteStore
 }
 
 /// <summary>Read-Zugriffsmuster der Modell-Projektion — Listen + aktiver Zeiger.</summary>
-public interface IModellReadStore
+public interface IModellReadStore : IReadStore<IModellWriteStore>
 {
     Task<ModellReadModel?> FindByIdAsync(Guid id);
 

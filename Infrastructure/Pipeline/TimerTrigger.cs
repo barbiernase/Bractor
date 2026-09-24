@@ -35,6 +35,7 @@ public static class TimerTrigger
     /// live <see cref="PipelineTriggerSender.SendAsync"/> (bounded/W2). <paramref name="erzeugeTrigger"/>
     /// bleibt reine Fabrik (keine Proto-/Cluster-Abhängigkeit) → deterministisch testbar.
     /// </summary>
+    [Ingress(IngressArt.Timer, Ort = nameof(intervall))]
     public static ITriggerRegistration Registrierung(
         string name,
         TimeSpan intervall,

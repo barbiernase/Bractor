@@ -1,18 +1,14 @@
 using Microsoft.CodeAnalysis;
-using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace GraphExtractor;
 
 /// <summary>
-/// Liest die AUTORITATIVE Routing-Wahrheit aus dem generierten
-/// <c>Infrastructure.Mapping.GeneratedCommandRouting</c> (aus der gebauten Infrastructure-Compilation,
-/// die den Roslyn-Generator bereits ausgeführt hat).
-///
-/// Wir parsen bewusst das GENERAT, nicht die Decider erneut: der Sinn ist die Kopplung an genau die
-/// Abbildung, die zur Laufzeit routet (<c>HandlerOutputRouter</c>/<c>ProzessManagerActor</c>). Fällt das
-/// Generat aus (nicht gebaut), fällt <see cref="TryFromCompilations"/> auf die Decider-Ableitung zurück und
-/// meldet das über <see cref="Source"/>.
+/// Liest die AUTORITATIVE Routing-Wahrheit aus dem GENERAT des Framework-Generators — dieselbe Abbildung, die zur
+/// Laufzeit routet. Das Generat wird über den Vertrags-Anker <c>[RoutingTabelle(Art)]</c> an seinen Properties erkannt
+/// (weder Klassen-/Property-Namen noch eine Syntaxform werden vorausgesetzt); die Einträge <c>[typeof(Command)] = …</c>
+/// werden per Symbol gelesen. Fehlt es (nicht gebaut), fällt <see cref="FromCompilations"/> auf die Decider-Ableitung
+/// zurück und meldet das über <see cref="Source"/>.
 /// </summary>
 public sealed class RoutingTruth
 {
@@ -27,93 +23,73 @@ public sealed class RoutingTruth
 
     public string Source { get; private set; } = "unbekannt";
 
+    /// <summary>Enthält die Compilation eine generierte Command→Aggregat-Tabelle?</summary>
+    public static bool HatRouting(Compilation comp) => RoutingProperties(comp).Any(x => x.Art == Art.Aggregat);
+
     public static RoutingTruth FromCompilations(IReadOnlyList<Compilation> compilations)
     {
         var truth = new RoutingTruth();
-
-        // GeneratedCommandRouting liegt in der Infrastructure-Compilation als generierter Syntaxbaum.
         foreach (var comp in compilations)
         {
-            var symbol = comp.GetTypeByMetadataName("Infrastructure.Mapping.GeneratedCommandRouting");
-            if (symbol == null) continue;
-
-            var syntaxRef = symbol.DeclaringSyntaxReferences.FirstOrDefault();
-            if (syntaxRef == null) continue;
-
-            var classNode = syntaxRef.GetSyntax();
-            var tree = classNode.SyntaxTree;
-            var model = comp.GetSemanticModel(tree);
-
-            if (TryParse(classNode, model, truth))
-            {
-                truth.Source = "GeneratedCommandRouting";
-                return truth;
-            }
+            var props = RoutingProperties(comp).ToList();
+            if (!props.Any(x => x.Art == Art.Aggregat)) continue;
+            foreach (var (prop, model, art) in props)
+                foreach (var (cmd, rhs) in Entries(prop, model))
+                {
+                    truth.CommandSimpleName.TryAdd(cmd.Full, cmd.Simple);
+                    if (art == Art.Aggregat && model.GetConstantValue(rhs) is { HasValue: true, Value: string agg })
+                        truth.CommandToAggregate[cmd.Full] = agg;
+                    else if (art == Art.Events)
+                    {
+                        var events = rhs.DescendantNodesAndSelf().OfType<TypeOfExpressionSyntax>()
+                            .Select(t => model.GetTypeInfo(t.Type).Type).OfType<INamedTypeSymbol>()
+                            .Select(Fq).Where(x => x.Length > 0).ToList();
+                        if (events.Count > 0) truth.CommandToEvents[cmd.Full] = events;
+                    }
+                }
+            truth.Source = "GeneratedCommandRouting";
+            return truth;
         }
 
-        // Fallback: aus den Decider-Signaturen ableiten (gleiche Regel wie der Generator).
         DeciderFallback.Fill(compilations, truth);
         truth.Source = "decider-fallback";
         return truth;
     }
 
-    /// <summary>
-    /// Parst die beiden Dictionary-Initializer. Robust: wir suchen JEDE Zuweisung <c>[typeof(X)] = …</c>
-    /// innerhalb der jeweiligen Property und lesen X über das Semantik-Modell (voll aufgelöst).
-    /// </summary>
-    private static bool TryParse(SyntaxNode classNode, SemanticModel model, RoutingTruth truth)
+    private enum Art { Aggregat, Events }
+
+    private static IEnumerable<(PropertyDeclarationSyntax Prop, SemanticModel Model, Art Art)> RoutingProperties(Compilation comp)
     {
-        var props = classNode.DescendantNodes().OfType<PropertyDeclarationSyntax>().ToList();
-        var aggProp = props.FirstOrDefault(p => p.Identifier.Text == "CommandToAggregate");
-        var evtProp = props.FirstOrDefault(p => p.Identifier.Text == "CommandToEvents");
-        if (aggProp == null && evtProp == null) return false;
-
-        if (aggProp != null)
+        var anker = comp.GetTypeByMetadataName(Vertrag.RoutingTabelleAttribute);
+        if (anker == null) yield break;
+        foreach (var tree in comp.SyntaxTrees.Where(Projektlage.IstGeneriert))
         {
-            foreach (var (cmd, rhs) in Entries(aggProp, model))
+            var model = comp.GetSemanticModel(tree);
+            foreach (var prop in tree.GetRoot().DescendantNodes().OfType<PropertyDeclarationSyntax>().Where(p => p.AttributeLists.Count > 0))
             {
-                if (rhs is LiteralExpressionSyntax lit && lit.Token.Value is string agg)
-                {
-                    truth.CommandToAggregate[cmd.Full] = agg;
-                    truth.CommandSimpleName[cmd.Full] = cmd.Simple;
-                }
+                if (model.GetDeclaredSymbol(prop) is not IPropertySymbol ps) continue;
+                var attr = ps.GetAttributes().FirstOrDefault(a => a.AttributeClass?.ToDisplayString() == Vertrag.RoutingTabelleAttribute);
+                if (attr?.ConstructorArguments.FirstOrDefault().Value is not int art) continue;
+                if (art == (int)Abstractions.RoutingArt.CommandZuAggregat) yield return (prop, model, Art.Aggregat);
+                else if (art == (int)Abstractions.RoutingArt.CommandZuEvents) yield return (prop, model, Art.Events);
             }
         }
-
-        if (evtProp != null)
-        {
-            foreach (var (cmd, rhs) in Entries(evtProp, model))
-            {
-                var events = rhs.DescendantNodesAndSelf()
-                    .OfType<TypeOfExpressionSyntax>()
-                    .Select(t => model.GetTypeInfo(t.Type).Type)
-                    .OfType<INamedTypeSymbol>()
-                    .Select(Fq)
-                    .Where(s => s.Length > 0)
-                    .ToList();
-
-                if (events.Count > 0)
-                {
-                    truth.CommandToEvents[cmd.Full] = events;
-                    truth.CommandSimpleName.TryAdd(cmd.Full, cmd.Simple);
-                }
-            }
-        }
-
-        return truth.CommandToAggregate.Count > 0 || truth.CommandToEvents.Count > 0;
     }
 
-    /// <summary>Alle <c>[typeof(Cmd)] = rhs</c>-Zuweisungen einer Property: liefert (Cmd-Typ, rhs-Ausdruck).</summary>
-    private static IEnumerable<(TypeName Cmd, ExpressionSyntax Rhs)> Entries(PropertyDeclarationSyntax prop, SemanticModel model)
+    private readonly record struct Eintrag(TypeName Cmd, ExpressionSyntax Rhs, INamedTypeSymbol Symbol)
+    {
+        public void Deconstruct(out TypeName cmd, out ExpressionSyntax rhs) { cmd = Cmd; rhs = Rhs; }
+    }
+
+    /// <summary>Alle <c>[typeof(X)] = rhs</c>-Zuweisungen einer Property: liefert (X, rhs-Ausdruck).</summary>
+    private static IEnumerable<Eintrag> Entries(PropertyDeclarationSyntax prop, SemanticModel model)
     {
         foreach (var asg in prop.DescendantNodes().OfType<AssignmentExpressionSyntax>())
         {
             if (asg.Left is not ImplicitElementAccessSyntax access) continue;
-            var arg = access.ArgumentList.Arguments.FirstOrDefault()?.Expression;
-            if (arg is not TypeOfExpressionSyntax tof) continue;
-            if (model.GetTypeInfo(tof.Type).Type is not INamedTypeSymbol cmdSym) continue;
-
-            yield return (new TypeName(Fq(cmdSym), cmdSym.Name), asg.Right);
+            if (access.ArgumentList.Arguments.FirstOrDefault()?.Expression is not TypeOfExpressionSyntax tof) continue;
+            if (model.GetTypeInfo(tof.Type).Type is not INamedTypeSymbol sym) continue;
+            yield return new Eintrag(new TypeName(Fq(sym), sym.Name), asg.Right, sym);
         }
     }
 

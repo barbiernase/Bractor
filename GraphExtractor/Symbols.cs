@@ -21,6 +21,25 @@ public static class Sym
         return named.AllInterfaces.Any(i => i.Fq() == target || i.OriginalDefinition.Fq() == target);
     }
 
+    /// <summary>
+    /// Die Implementierung eines Interface-Members am Typ <paramref name="t"/> — auch wenn <paramref name="ifaceMember"/>
+    /// aus einer ANDEREN Compilation stammt (dann ist <c>FindImplementationForInterfaceMember</c> direkt immer null):
+    /// das Interface wird in der Sicht von <paramref name="t"/> aufgelöst (gleicher FullName), dort der Member mit
+    /// gleichem Namen und gleicher Signatur, und DESSEN Implementierung geliefert. Auch explizite Implementierungen.
+    /// </summary>
+    public static ISymbol? Implementierung(INamedTypeSymbol t, ISymbol ifaceMember)
+    {
+        var ifaceFq = ifaceMember.ContainingType.OriginalDefinition.Fq();
+        foreach (var i in t.AllInterfaces.Where(i => i.OriginalDefinition.Fq() == ifaceFq))
+            foreach (var m in i.GetMembers(ifaceMember.Name))
+                if (m.Kind == ifaceMember.Kind && Signatur(m) == Signatur(ifaceMember))
+                    return t.FindImplementationForInterfaceMember(m);
+        return null;
+    }
+
+    private static string Signatur(ISymbol s) =>
+        s is IMethodSymbol ms ? string.Join(",", ms.OriginalDefinition.Parameters.Select(p => p.Type.Fq())) : "";
+
     /// <summary>Alle konkreten (nicht-abstrakten, nicht-Interface) benannten Typen über alle Compilations.</summary>
     public static List<INamedTypeSymbol> AllConcreteTypes(IEnumerable<Compilation> comps)
     {
@@ -40,7 +59,8 @@ public static class Sym
 
     private static void CollectNested(INamedTypeSymbol t, Dictionary<string, INamedTypeSymbol> acc)
     {
-        if (t.TypeKind == TypeKind.Class && !t.IsAbstract)
+        // Klassen UND Structs (auch record struct) — die Rolle entscheiden die Marker, nicht die Typform.
+        if (t.TypeKind is TypeKind.Class or TypeKind.Struct && !t.IsAbstract && !t.IsStatic)
             acc.TryAdd(t.Fq(), t);
         foreach (var nested in t.GetTypeMembers())
             CollectNested(nested, acc);

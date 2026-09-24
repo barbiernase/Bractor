@@ -201,13 +201,17 @@ message CommandEnvelopeDto {
         ArchiviereModellDto archiviere_modell = 37;
         RegistriereModellDto registriere_modell = 38;
         SetzeModellAktivDto setze_modell_aktiv = 39;
-        BricheTrainingAbDto briche_training_ab = 40;
-        MarkiereAlsHaengengebliebenDto markiere_als_haengengeblieben = 41;
-        MeldeFortschrittDto melde_fortschritt = 42;
-        MeldeTrainingAbgeschlossenDto melde_training_abgeschlossen = 43;
-        MeldeTrainingBegonnenDto melde_training_begonnen = 44;
-        MeldeTrainingGescheitertDto melde_training_gescheitert = 45;
-        StarteTrainingDto starte_training = 46;
+        MeldeTeilFertigDto melde_teil_fertig = 40;
+        StarteSammelvorgangDto starte_sammelvorgang = 41;
+        SchliesseTeilauftragAbDto schliesse_teilauftrag_ab = 42;
+        StarteTeilauftragDto starte_teilauftrag = 43;
+        BricheTrainingAbDto briche_training_ab = 44;
+        MarkiereAlsHaengengebliebenDto markiere_als_haengengeblieben = 45;
+        MeldeFortschrittDto melde_fortschritt = 46;
+        MeldeTrainingAbgeschlossenDto melde_training_abgeschlossen = 47;
+        MeldeTrainingBegonnenDto melde_training_begonnen = 48;
+        MeldeTrainingGescheitertDto melde_training_gescheitert = 49;
+        StarteTrainingDto starte_training = 50;
 
     }
 }
@@ -229,51 +233,62 @@ message EventEnvelopeDto {
         ImagePairKomplettDto image_pair_komplett = 21;
         PaarNichtKomplettDto paar_nicht_komplett = 22;
         ModellArchiviertDto modell_archiviert = 23;
-        TrainingAbgebrochenDto training_abgebrochen = 24;
-        TrainingBegonnenDto training_begonnen = 25;
-        TrainingHaengengebliebenDto training_haengengeblieben = 26;
-        CommandFailedDto command_failed = 27;
-        DatensatzBereitsEingefrorenDto datensatz_bereits_eingefroren = 28;
-        DatensatzEingefrorenDto datensatz_eingefroren = 29;
-        DatensatzErstelltDto datensatz_erstellt = 30;
-        DatensatzExistiertBereitsDto datensatz_existiert_bereits = 31;
-        DatensatzLeerDto datensatz_leer = 32;
-        EinfrierenAngefordertDto einfrieren_angefordert = 33;
-        PaarAufgenommenDto paar_aufgenommen = 34;
-        PaareAufgenommenDto paare_aufgenommen = 35;
-        PaarEntferntDto paar_entfernt = 36;
-        RangeAngefordertDto range_angefordert = 37;
-        RangeLeerDto range_leer = 38;
-        SplitGesetztDto split_gesetzt = 39;
-        SplitUngueltigDto split_ungueltig = 40;
-        BildNichtVerfuegbarDto bild_nicht_verfuegbar = 41;
-        BildPaarDurchKiKlassifiziertDto bild_paar_durch_ki_klassifiziert = 42;
-        BildPaarGelabeltDto bild_paar_gelabelt = 43;
-        BildRegionGelabeltDto bild_region_gelabelt = 44;
-        BildVerfuegbarDto bild_verfuegbar = 45;
-        BildVersionBereitsVerfuegbarDto bild_version_bereits_verfuegbar = 46;
-        EinzelBildDurchKiKlassifiziertDto einzel_bild_durch_ki_klassifiziert = 47;
-        EinzelBildGelabeltDto einzel_bild_gelabelt = 48;
-        ImagePairEingabeUngueltigDto image_pair_eingabe_ungueltig = 49;
-        ImagePairErstelltDto image_pair_erstellt = 50;
-        ImagePairExistiertBereitsDto image_pair_existiert_bereits = 51;
-        ImagePairNichtGefundenDto image_pair_nicht_gefunden = 52;
-        PhysischesProduktGelabeltDto physisches_produkt_gelabelt = 53;
-        RegionIndexUngueltigDto region_index_ungueltig = 54;
-        RegionLabelsUngueltigDto region_labels_ungueltig = 55;
-        ModellAktiviertDto modell_aktiviert = 56;
-        ModellBereitsArchiviertDto modell_bereits_archiviert = 57;
-        ModellExistiertBereitsDto modell_existiert_bereits = 58;
-        ModellNichtGefundenDto modell_nicht_gefunden = 59;
-        ModellRegistriertDto modell_registriert = 60;
-        TrainingAbgeschlossenDto training_abgeschlossen = 61;
-        TrainingAngefordertDto training_angefordert = 62;
-        TrainingBereitsBeendetDto training_bereits_beendet = 63;
-        TrainingFortschrittDto training_fortschritt = 64;
-        TrainingGescheitertDto training_gescheitert = 65;
-        TrainingNichtAktivDto training_nicht_aktiv = 66;
-        TrainingslaufExistiertBereitsDto trainingslauf_existiert_bereits = 67;
-        TrainingslaufNichtGefundenDto trainingslauf_nicht_gefunden = 68;
+        SammelvorgangAbgeschlossenDto sammelvorgang_abgeschlossen = 24;
+        TrainingAbgebrochenDto training_abgebrochen = 25;
+        TrainingBegonnenDto training_begonnen = 26;
+        TrainingHaengengebliebenDto training_haengengeblieben = 27;
+        CommandFailedDto command_failed = 28;
+        DatensatzBereitsEingefrorenDto datensatz_bereits_eingefroren = 29;
+        DatensatzEingefrorenDto datensatz_eingefroren = 30;
+        DatensatzErstelltDto datensatz_erstellt = 31;
+        DatensatzExistiertBereitsDto datensatz_existiert_bereits = 32;
+        DatensatzLeerDto datensatz_leer = 33;
+        EinfrierenAngefordertDto einfrieren_angefordert = 34;
+        PaarAufgenommenDto paar_aufgenommen = 35;
+        PaareAufgenommenDto paare_aufgenommen = 36;
+        PaarEntferntDto paar_entfernt = 37;
+        RangeAngefordertDto range_angefordert = 38;
+        RangeLeerDto range_leer = 39;
+        SplitGesetztDto split_gesetzt = 40;
+        SplitUngueltigDto split_ungueltig = 41;
+        BildNichtVerfuegbarDto bild_nicht_verfuegbar = 42;
+        BildPaarDurchKiKlassifiziertDto bild_paar_durch_ki_klassifiziert = 43;
+        BildPaarGelabeltDto bild_paar_gelabelt = 44;
+        BildRegionGelabeltDto bild_region_gelabelt = 45;
+        BildVerfuegbarDto bild_verfuegbar = 46;
+        BildVersionBereitsVerfuegbarDto bild_version_bereits_verfuegbar = 47;
+        EinzelBildDurchKiKlassifiziertDto einzel_bild_durch_ki_klassifiziert = 48;
+        EinzelBildGelabeltDto einzel_bild_gelabelt = 49;
+        ImagePairEingabeUngueltigDto image_pair_eingabe_ungueltig = 50;
+        ImagePairErstelltDto image_pair_erstellt = 51;
+        ImagePairExistiertBereitsDto image_pair_existiert_bereits = 52;
+        ImagePairNichtGefundenDto image_pair_nicht_gefunden = 53;
+        PhysischesProduktGelabeltDto physisches_produkt_gelabelt = 54;
+        RegionIndexUngueltigDto region_index_ungueltig = 55;
+        RegionLabelsUngueltigDto region_labels_ungueltig = 56;
+        ModellAktiviertDto modell_aktiviert = 57;
+        ModellBereitsArchiviertDto modell_bereits_archiviert = 58;
+        ModellExistiertBereitsDto modell_existiert_bereits = 59;
+        ModellNichtGefundenDto modell_nicht_gefunden = 60;
+        ModellRegistriertDto modell_registriert = 61;
+        SammelvorgangBereitsAbgeschlossenDto sammelvorgang_bereits_abgeschlossen = 62;
+        SammelvorgangExistiertBereitsDto sammelvorgang_existiert_bereits = 63;
+        SammelvorgangGestartetDto sammelvorgang_gestartet = 64;
+        SammelvorgangNichtGefundenDto sammelvorgang_nicht_gefunden = 65;
+        TeilVerbuchtDto teil_verbucht = 66;
+        TeilauftragAbgeschlossenDto teilauftrag_abgeschlossen = 67;
+        TeilauftragBereitsFertigDto teilauftrag_bereits_fertig = 68;
+        TeilauftragExistiertBereitsDto teilauftrag_existiert_bereits = 69;
+        TeilauftragGestartetDto teilauftrag_gestartet = 70;
+        TeilauftragNichtGefundenDto teilauftrag_nicht_gefunden = 71;
+        TrainingAbgeschlossenDto training_abgeschlossen = 72;
+        TrainingAngefordertDto training_angefordert = 73;
+        TrainingBereitsBeendetDto training_bereits_beendet = 74;
+        TrainingFortschrittDto training_fortschritt = 75;
+        TrainingGescheitertDto training_gescheitert = 76;
+        TrainingNichtAktivDto training_nicht_aktiv = 77;
+        TrainingslaufExistiertBereitsDto trainingslauf_existiert_bereits = 78;
+        TrainingslaufNichtGefundenDto trainingslauf_nicht_gefunden = 79;
 
     }
 }
@@ -584,6 +599,31 @@ message StateChangeViaModellRegistriertDto {
     int32 version = 2;
 }
 
+message StateChangeViaSammelvorgangAbgeschlossenDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaSammelvorgangGestartetDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaTeilVerbuchtDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaTeilauftragAbgeschlossenDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaTeilauftragGestartetDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
 message StateChangeViaTrainingAbgebrochenDto {
     string stream_id = 1;
     int32 version = 2;
@@ -737,6 +777,24 @@ message SetzeModellAktivDto {
     string aggregate_id = 1;
 }
 
+message MeldeTeilFertigDto {
+    string aggregate_id = 1;
+}
+
+message StarteSammelvorgangDto {
+    string aggregate_id = 1;
+    int32 anzahl = 2;
+}
+
+message SchliesseTeilauftragAbDto {
+    string aggregate_id = 1;
+}
+
+message StarteTeilauftragDto {
+    string aggregate_id = 1;
+    string sammelvorgang_id = 2;
+}
+
 message BricheTrainingAbDto {
     string aggregate_id = 1;
 }
@@ -789,6 +847,10 @@ message PaarNichtKomplettDto {
 
 message ModellArchiviertDto {
     ModellArchiviertDto original = 1;
+}
+
+message SammelvorgangAbgeschlossenDto {
+    SammelvorgangAbgeschlossenDto original = 1;
 }
 
 message TrainingAbgebrochenDto {
@@ -966,6 +1028,47 @@ message ModellRegistriertDto {
     string name = 4;
     string pfad = 5;
     ModellMetrikenDto metriken = 6;
+}
+
+message SammelvorgangBereitsAbgeschlossenDto {
+    string sammelvorgang_id = 1;
+}
+
+message SammelvorgangExistiertBereitsDto {
+    string sammelvorgang_id = 1;
+}
+
+message SammelvorgangGestartetDto {
+    int32 anzahl = 1;
+}
+
+message SammelvorgangNichtGefundenDto {
+    string sammelvorgang_id = 1;
+}
+
+message TeilVerbuchtDto {
+    int32 fertig = 1;
+    int32 erwartet = 2;
+}
+
+message TeilauftragAbgeschlossenDto {
+    string sammelvorgang_id = 1;
+}
+
+message TeilauftragBereitsFertigDto {
+    string teilauftrag_id = 1;
+}
+
+message TeilauftragExistiertBereitsDto {
+    string teilauftrag_id = 1;
+}
+
+message TeilauftragGestartetDto {
+    string sammelvorgang_id = 1;
+}
+
+message TeilauftragNichtGefundenDto {
+    string teilauftrag_id = 1;
 }
 
 message TrainingAbgeschlossenDto {

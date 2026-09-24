@@ -1,5 +1,9 @@
 # 07 — Wissensgraph-Extractor & Live-Simulation
 
+> **Stand 2026-09-24:** Board (`knowledge-graph.html`) und `SimEngine` sind abgelöst — die einzige Oberfläche
+> ist `http://localhost:5178/editor` (Editor + Simulation, `SimHost/ModellSimulation.cs`). Siehe
+> [konzept-domaenen-editor.md](konzept-domaenen-editor.md) §10. Der Rest dieses Dokuments beschreibt den alten Stand.
+
 Ein dreigliedriges Werkzeug macht das System als traversierbaren Graph sichtbar und kann es
 über eine Mini-Runtime **echt** simulieren. Reine Analyse-/Read-Werkzeuge, kein Teil des
 Produktionspfads.

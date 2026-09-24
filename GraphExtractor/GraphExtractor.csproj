@@ -11,13 +11,27 @@
       <PackageReference Include="Microsoft.Build.Locator" Version="1.11.2" />
       <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.3.0" />
       <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.MSBuild" Version="5.3.0" />
+        <!-- Nur als typeof-Anker für die DI-/Konfigurations-APIs (AddSingleton, GetValue), keine Laufzeitnutzung. -->
+        <PackageReference Include="Microsoft.Extensions.DependencyInjection.Abstractions" Version="10.0.3" />
+        <PackageReference Include="Microsoft.Extensions.Configuration.Binder" Version="10.0.3" />
         <PackageReference Include="Microsoft.Build.Framework" Version="17.11.48" ExcludeAssets="runtime" PrivateAssets="all" />
+    </ItemGroup>
+
+    <ItemGroup>
+      <!-- Die Agnostik-Sonde: Quelltext einer unbekannten Domäne + handgeschriebenes Soll (nicht mitkompiliert). -->
+      <EmbeddedResource Include="Sonde/*.cs.txt" WithCulture="false" />
+      <EmbeddedResource Include="Sonde/soll.txt" />
+      <!-- Die Skalar-Wahrheit des Wires (eine Quelle mit Proto-Prepass und DtoMapper). -->
+      <Compile Include="../Core.SourceGeneration/ProtoScalarSpec.cs" Link="Vertrag/ProtoScalarSpec.cs" />
     </ItemGroup>
 
     <ItemGroup>
       <!-- Das reine Editor-Modell + der Scaffolder: der Round-trip Code → Modell (hier) und
            Modell → Code (Scaffolder) teilen sich ein Datenmodell, keine zweite Wahrheit. -->
       <ProjectReference Include="../DomainEditor/DomainEditor.csproj" />
+      <!-- Der Framework-VERTRAG (Marker-Interfaces, Prozess-DSL, Frist) — nur für typeof/nameof-Anker, damit der
+           Extractor KEINEN Framework-Namen als String kennt (Umbenennung = Compile-Fehler statt stiller Drift). -->
+      <ProjectReference Include="../Abstractions/Abstractions.csproj" />
     </ItemGroup>
 
 </Project>

@@ -1,0 +1,12 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "SimHost",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "SimHost/SimHost.csproj", "-c", "Debug"],
+      "port": 5178,
+      "autoPort": true
+    }
+  ]
+}

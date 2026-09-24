@@ -82,7 +82,7 @@ namespace Domain.SourceGeneration
                     SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iDecider));
                 if (deciderIface == null)
                     continue;
-                foreach (var m in t.GetMembers("Decide").OfType<IMethodSymbol>())
+                foreach (var m in t.GetMembers(Abstractions.Aggregatvertrag.Decide).OfType<IMethodSymbol>())
                     if (m.Parameters.Length >= 1 &&
                         m.Parameters[0].Type is INamedTypeSymbol cmd &&
                         cmd.AllInterfaces.Contains(iCommand, SymbolEqualityComparer.Default))

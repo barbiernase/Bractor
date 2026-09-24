@@ -16,6 +16,8 @@ public sealed record SagaSchritt
     public required ICommand Command { get; init; }
     public required Ursprung Ursprung { get; init; }
     public string? SagaName { get; init; }
+    /// <summary>Index der gefeuerten Regel im Prozess (Reihenfolge der <c>Definiere</c>-Regeln); null bei Wurzel-Commands.</summary>
+    public int? RegelIndex { get; init; }
     public required Guid AggregatId { get; init; }
     public required string AggregatTyp { get; init; }
     public required IReadOnlyList<Ereignis> Ausgang { get; init; }
@@ -56,9 +58,9 @@ public sealed record SagaTrace
 /// Erwarte (Feuerungen/Endzustände/offene Joins)</c>.
 ///
 /// Treibt die ECHTEN Prozess-Regeln (<see cref="ProzessRegeln"/>) über denselben store-freien Kern
-/// wie die Aggregat-DSL — eine headless Variante der SimEngine-Kaskade, nur mit Assertions statt
+/// wie die Aggregat-DSL — eine headless Variante der Editor-Simulations-Kaskade, nur mit Assertions statt
 /// HTTP-Frames. Command→Aggregat-Routing wird aus den Decider-Signaturen der Fabrik-Assembly
-/// gelesen (Tooling-Reflection, wie SimEngine).
+/// gelesen (Tooling-Reflection, wie die Editor-Simulation).
 /// </summary>
 public static class SagaSzenario
 {
@@ -201,7 +203,7 @@ public sealed class SagaLaufwerk
     {
         _fabrik = fabrik;
         _prozesse = prozesse;
-        // Command→State aus den Decider-Signaturen der Fabrik-Assembly (Domain.dll), wie SimEngine.
+        // Command→State aus den Decider-Signaturen der Fabrik-Assembly (Domain.dll bzw. Editor-Kompilat).
         foreach (var t in fabrik.GetType().Assembly.GetTypes())
         {
             if (!t.IsClass || t.IsAbstract || !typeof(IState).IsAssignableFrom(t)) continue;
@@ -229,8 +231,8 @@ public sealed class SagaLaufwerk
     public SagaTrace Fahre(ICommand wurzel)
     {
         var schritte = new List<SagaSchritt>();
-        var queue = new Queue<(ICommand Cmd, Guid Corr, string? Saga)>();
-        queue.Enqueue((wurzel, wurzel.AggregateId, null));
+        var queue = new Queue<(ICommand Cmd, Guid Corr, string? Saga, int? Regel)>();
+        queue.Enqueue((wurzel, wurzel.AggregateId, null, null));
         Kaskade(queue, schritte);
         return Bau(wurzel, schritte);
     }
@@ -238,26 +240,26 @@ public sealed class SagaLaufwerk
     public SagaTrace FahreAbEvent(IEvent auslöser, Guid korrelation)
     {
         var schritte = new List<SagaSchritt>();
-        var queue = new Queue<(ICommand, Guid, string?)>();
-        foreach (var (cmd, proc) in Advance(auslöser, korrelation))
-            queue.Enqueue((cmd, korrelation, proc));
+        var queue = new Queue<(ICommand, Guid, string?, int?)>();
+        foreach (var (cmd, proc, ri) in Advance(auslöser, korrelation))
+            queue.Enqueue((cmd, korrelation, proc, ri));
         Kaskade(queue, schritte);
         // Als Wurzel dient hier synthetisch der Auslöser (nur für den Bericht).
         return Bau(new AuslöserWurzel(auslöser), schritte);
     }
 
-    private void Kaskade(Queue<(ICommand Cmd, Guid Corr, string? Saga)> queue, List<SagaSchritt> schritte)
+    private void Kaskade(Queue<(ICommand Cmd, Guid Corr, string? Saga, int? Regel)> queue, List<SagaSchritt> schritte)
     {
         var guard = 0;
         while (queue.Count > 0 && guard++ < 400)
         {
-            var (c, corr, saga) = queue.Dequeue();
-            var schritt = Ausführe(c, saga);
+            var (c, corr, saga, regel) = queue.Dequeue();
+            var schritt = Ausführe(c, saga) with { RegelIndex = regel };
             schritte.Add(schritt);
             if (schritt.Unrouted) continue;
             foreach (var e in schritt.Ausgang.Where(a => a.Persistent).Select(a => a.Event))
-                foreach (var (next, proc) in Advance(e, corr))
-                    queue.Enqueue((next, corr, proc));
+                foreach (var (next, proc, ri) in Advance(e, corr))
+                    queue.Enqueue((next, corr, proc, ri));
         }
     }
 
@@ -299,10 +301,10 @@ public sealed class SagaLaufwerk
     public IReadOnlyList<(string Typ, Guid Id, IReadOnlyDictionary<string, object?> Felder)> AlleZustände()
         => _states.Select(kv => (kv.Key.Item1.Name, kv.Key.Item2, Zustandsspiegel.Von(kv.Value))).ToList();
 
-    // Mirror von SimEngine.AdvanceSagas: Marking falten, aktivierte Transitionen feuern.
-    private List<(ICommand Cmd, string Saga)> Advance(IEvent evt, Guid corr)
+    // Marking falten, aktivierte Transitionen feuern.
+    private List<(ICommand Cmd, string Saga, int Regel)> Advance(IEvent evt, Guid corr)
     {
-        var next = new List<(ICommand, string)>();
+        var next = new List<(ICommand, string, int)>();
         foreach (var (name, regeln) in _prozesse)
         {
             var isAuslöser = regeln.AuslöserTyp == evt.GetType();
@@ -325,7 +327,7 @@ public sealed class SagaLaufwerk
                 if (matched is null) continue;
                 inst.Fired.Add(ri);
                 foreach (var cmd in regeln.Regeln[ri].Sende(matched))
-                    next.Add((cmd, name));
+                    next.Add((cmd, name, ri));
             }
         }
         return next;

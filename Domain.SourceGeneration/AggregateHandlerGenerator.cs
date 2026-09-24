@@ -131,8 +131,8 @@ namespace Domain.SourceGeneration
             if (iStateSymbol is null) return null;
             
             bool isStateAggregateRoot = classSymbol.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i, iStateSymbol)) &&
-                                        classSymbol.GetTypeMembers("Decider").Any() &&
-                                        classSymbol.GetTypeMembers("Applier").Any();
+                                        classSymbol.GetTypeMembers(Abstractions.Aggregatvertrag.Decider).Any() &&
+                                        classSymbol.GetTypeMembers(Abstractions.Aggregatvertrag.Applier).Any();
             
             return isStateAggregateRoot ? classSymbol : null;
         }
@@ -142,14 +142,14 @@ namespace Domain.SourceGeneration
             var stateTypeName = classSymbol.Name;
             var namespaceName = classSymbol.ContainingNamespace.ToDisplayString();
 
-            var deciderSymbol = classSymbol.GetTypeMembers("Decider").FirstOrDefault();
-            var applierSymbol = classSymbol.GetTypeMembers("Applier").FirstOrDefault();
+            var deciderSymbol = classSymbol.GetTypeMembers(Abstractions.Aggregatvertrag.Decider).FirstOrDefault();
+            var applierSymbol = classSymbol.GetTypeMembers(Abstractions.Aggregatvertrag.Applier).FirstOrDefault();
 
             if (deciderSymbol is null || applierSymbol is null) return;
             
             // â˜… OneOf-Migration: Pro Decide-Methode analysieren ob OneOf im RÃ¼ckgabetyp steckt
             var decideMethods = GetDecideMethodInfos(deciderSymbol);
-            var eventTypes = GetMethodParameterTypes(applierSymbol, "Apply");
+            var eventTypes = GetMethodParameterTypes(applierSymbol, Abstractions.Aggregatvertrag.Apply);
 
             var model = new HandlerGeneratorModel(
                 ns: namespaceName,
@@ -172,7 +172,7 @@ namespace Domain.SourceGeneration
         /// </summary>
         private static List<DecideMethodInfo> GetDecideMethodInfos(INamedTypeSymbol deciderSymbol)
         {
-            return deciderSymbol.GetMembers("Decide")
+            return deciderSymbol.GetMembers(Abstractions.Aggregatvertrag.Decide)
                 .OfType<IMethodSymbol>()
                 .Where(m => m.Parameters.Length == 1)
                 .Select(m =>

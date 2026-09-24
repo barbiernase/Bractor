@@ -16,6 +16,11 @@
     </ItemGroup>
 
     <ItemGroup>
+        <!-- Die Aggregat-Namensregel aus dem Vertrag (eine Quelle mit dem Domänen-Extractor). -->
+        <Compile Include="..\Abstractions\Aggregatvertrag.cs" Link="Vertrag\Aggregatvertrag.cs" />
+    </ItemGroup>
+
+    <ItemGroup>
         <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" />
     </ItemGroup>
 

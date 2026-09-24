@@ -14,12 +14,6 @@ public sealed record Befund(string Schweregrad, string Code, string Meldung)
 /// </summary>
 public static class Validator
 {
-    private static readonly HashSet<string> Framework = new(StringComparer.Ordinal)
-    {
-        "Guid", "decimal", "int", "long", "double", "float", "bool", "string",
-        "DateTime", "DateTimeOffset", "TimeSpan", "byte", "short", "object",
-    };
-
     public static IReadOnlyList<Befund> Prüfe(EditorModell modell)
     {
         var befunde = new List<Befund>();
@@ -28,8 +22,8 @@ public static class Validator
         var eventNamen = new HashSet<string>(modell.Records.Where(r => r.Kind is RecordArt.Event or RecordArt.Rejection).Select(r => r.Name), StringComparer.Ordinal);
         var persistentEvents = new HashSet<string>(modell.Records.Where(r => r.Kind == RecordArt.Event).Select(r => r.Name), StringComparer.Ordinal);
 
-        // Bekannte Typen: Framework + alle Records + alle Enums.
-        var bekannt = new HashSet<string>(Framework, StringComparer.Ordinal);
+        // Bekannte Typen: die Wire-Skalare (aus dem Codegen, via Rahmen) + alle Records + alle Enums.
+        var bekannt = new HashSet<string>(modell.Rahmen.Skalare, StringComparer.Ordinal);
         foreach (var r in modell.Records) bekannt.Add(r.Name);
         foreach (var e in modell.Enums) bekannt.Add(e.Name);
 
@@ -40,9 +34,10 @@ public static class Validator
         // Feldtypen prüfen (nur Hinweis bei unbekannt — reiche Typen sind erlaubt).
         foreach (var r in modell.Records)
         {
-            var erstes = r.Felder.FirstOrDefault();
-            if (r.Kind == RecordArt.Command && (erstes is null || erstes.Name != "AggregateId" || erstes.Typ != "Guid"))
-                befunde.Add(new("warning", "EDIT-CMD-ID", $"Command '{r.Name}': erstes Feld sollte 'Guid AggregateId' sein (ICommand-Konvention)."));
+            // ICommand verlangt die Property (Position egal — Positions-Parameter ODER Property-Feld).
+            var id = modell.Rahmen.AggregatIdFeld;
+            if (r.Kind == RecordArt.Command && !r.Felder.Any(f => f.Name == id && f.Typ == "Guid"))
+                befunde.Add(new("error", "EDIT-CMD-ID", $"Command '{r.Name}': Feld 'Guid {id}' fehlt (ICommand verlangt es)."));
 
             foreach (var f in r.Felder)
                 if (!TypBekannt(f.Typ, bekannt))
@@ -59,8 +54,8 @@ public static class Validator
                 befunde.Add(new("error", "EDIT-DECIDE-CMD", $"Decider: '{d.Command}' ist kein Command-Record."));
             if (d.Ergibt.Count is 0)
                 befunde.Add(new("error", "EDIT-ONEOF-LEER", $"Decider({d.Command}) hat keinen Ausgang — mindestens ein Event nötig."));
-            else if (d.Ergibt.Count > 5)
-                befunde.Add(new("error", "EDIT-ONEOF-5", $"Decider({d.Command}) hat {d.Ergibt.Count} Ausgänge — OneOf erlaubt höchstens 5."));
+            else if (modell.Rahmen.OneOfMax > 0 && d.Ergibt.Count > modell.Rahmen.OneOfMax)
+                befunde.Add(new("error", "EDIT-ONEOF-MAX", $"Decider({d.Command}) hat {d.Ergibt.Count} Ausgänge — OneOf gibt es im Vertrag nur bis {modell.Rahmen.OneOfMax}."));
             foreach (var a in d.Ergibt)
                 if (!eventNamen.Contains(a.Event))
                     befunde.Add(new("error", "EDIT-EVENT-FEHLT", $"Decider({d.Command}) → '{a.Event}' ist kein Event/Ablehnungs-Record."));
@@ -82,8 +77,8 @@ public static class Validator
             {
                 if (s.Wenn.Count is 0)
                     befunde.Add(new("error", "EDIT-SAGA-WENN", $"Saga {saga.Name}: eine Transition ohne Auf/Wenn-Event."));
-                else if (s.Wenn.Count > 3)
-                    befunde.Add(new("error", "EDIT-SAGA-JOIN3", $"Saga {saga.Name}: Join über {s.Wenn.Count} Events — Und erlaubt höchstens 3."));
+                else if (modell.Rahmen.UndMax > 0 && s.Wenn.Count > modell.Rahmen.UndMax)
+                    befunde.Add(new("error", "EDIT-SAGA-JOIN-MAX", $"Saga {saga.Name}: Join über {s.Wenn.Count} Events — die DSL trägt höchstens {modell.Rahmen.UndMax}."));
                 if (!commandNamen.Contains(s.Sende))
                     befunde.Add(new("error", "EDIT-UNROUTED-SAGA-CMD", $"Saga {saga.Name} sendet '{s.Sende}', der kein Command-Record ist (Runtime-Hang)."));
                 if (s.Kompensation is not null && !commandNamen.Contains(s.Kompensation))

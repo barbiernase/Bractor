@@ -14,4 +14,10 @@
     <LangVersion>latest</LangVersion>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Der Framework-Vertrag (keine Paket-Abhängigkeiten): der Scaffolder nennt Marker/DSL über nameof/typeof,
+         nie als String — eine Umbenennung im Framework ist hier ein Compile-Fehler. -->
+    <ProjectReference Include="../Abstractions/Abstractions.csproj" />
+  </ItemGroup>
+
 </Project>

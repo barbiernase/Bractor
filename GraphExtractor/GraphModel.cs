@@ -71,6 +71,10 @@ public sealed class AggregateInfo
     public List<FieldInfo> State { get; set; } = new();
     public List<string> Handles { get; set; } = new();  // Command-Namen, die dieses Aggregat entscheidet
     public List<string> Emits { get; set; } = new();     // Event-Namen, die es produziert
+    /// <summary>Echter Decide-Rumpf je Command-Simple-Name — für den Code-Round-trip (Code-Knoten im Editor).</summary>
+    public Dictionary<string, string> DecideBodies { get; set; } = new();
+    /// <summary>Echter Apply-Rumpf je Event-Simple-Name.</summary>
+    public Dictionary<string, string> ApplyBodies { get; set; } = new();
 }
 
 public sealed class CommandInfo
@@ -170,6 +174,19 @@ public sealed class FieldInfo
     /// Null ⇒ gespeichertes Feld. Für den Round-trip Code → Editor-Modell → Code.
     /// </summary>
     public string? Expr { get; set; }
+    /// <summary>Default-/Initialwert verbatim (Record-Parameter <c>= null</c>, State-Initializer <c>= new()</c>).</summary>
+    public string? Default { get; set; }
+    /// <summary>Nur State-Felder: <c>{ get; }</c> statt <c>{ get; set; }</c>.</summary>
+    public bool NurGet { get; set; }
+    /// <summary>
+    /// Nur Record-/Klassen-Felder: als Property deklariert (nicht als Positions-Parameter) — der Accessor-Satz
+    /// verbatim normalisiert, z. B. <c>{ get; init; }</c>. Null ⇒ Positions-Parameter des Records.
+    /// </summary>
+    public string? Zugriff { get; set; }
+    /// <summary>Property mit <c>required</c>.</summary>
+    public bool Pflicht { get; set; }
+    /// <summary>Sammlung: der Element-Typ, wenn der Feldtyp <c>IEnumerable&lt;T&gt;</c> ist (per Symbol, nicht per Name; <c>string</c> nicht).</summary>
+    public string? ElementTyp { get; set; }
 }
 
 // ── Kanten ──────────────────────────────────────────────────────────────────

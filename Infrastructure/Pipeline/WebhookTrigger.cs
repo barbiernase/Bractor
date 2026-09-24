@@ -39,6 +39,7 @@ public static class WebhookTrigger
     /// <paramref name="sendeFactory"/>. Antwortet <c>202 Accepted</c> (at-least-once: der Empfang ist quittiert,
     /// die Wirkung heilt der Re-Trigger).
     /// </summary>
+    [Ingress(IngressArt.Webhook, Ort = nameof(route))]
     public static IEndpointRouteBuilder MapPipelineWebhook<TRequest>(
         this IEndpointRouteBuilder endpoints,
         string route,

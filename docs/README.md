@@ -65,6 +65,13 @@ auf die jeweiligen Architektur-Kapitel.
 | 12 | [12-tests-und-vermessung.md](12-tests-und-vermessung.md) | Test-Ebenen, Zahlen, echte Messwerte, LoadHarness |
 | 13 | [13-reifegrad-schulden-bewertung.md](13-reifegrad-schulden-bewertung.md) | Bewertungs-Dossier: Stärken, Risiken, Empfehlungen |
 
+> **Domänen-Editor:** [`konzept-domaenen-editor.md`](konzept-domaenen-editor.md) — die eine
+> kanonische Referenz zum ComfyUI-Node-Editor (Leitprinzipien, Node-Palette, Schreib-/Leseseite,
+> Prozess-/Regel-Knoten, Composition Root, Feld-Ports, Bedienung, SimHost-Naht). Führt fünf frühere
+> Einzel-Konzepte zusammen (Composition-Root, Projektionen/Store-Nodes, Saga-Nodes, Feld-Ports,
+> Frist/Leseachsen-Anleitung). Ist-Abgleich Backend↔Editor (Abdeckung, Sync-Lücken, LLM-Füllung,
+> Roadmap): [`analyse-editor-backend-abdeckung-2026-09-24.md`](analyse-editor-backend-abdeckung-2026-09-24.md).
+>
 > **Konzept / Vor-Analyse:** [`konzept-exactly-once-naht.md`](konzept-exactly-once-naht.md) —
 > wie voraussetzungsreich exactly-once ist, welche Verträge ein Co-Commit-Store erfüllen muss
 > (Hebel 1 inzwischen umgesetzt). · [`konzept-client-haertung.md`](konzept-client-haertung.md) —

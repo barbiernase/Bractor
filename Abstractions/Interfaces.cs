@@ -271,6 +271,25 @@ public interface IAggregateRepository
     /// Keine Felder, keine Pflicht-Properties. ReadModels bleiben reine Domain-Records.
     /// </summary>
     public interface IReadModel { }
+
+    /// <summary>
+    /// Marker: dieses Interface ist die SCHREIB-Seite eines Projektions-Stores (Co-Commit, von einer Projektion
+    /// injiziert). Der Vertrag, über den Framework-Generator (DI-Registrierung) und Domänen-Extractor Stores
+    /// erkennen — typisiert statt über eine Namenskonvention. Der Name des Interfaces ist frei.
+    /// </summary>
+    public interface IWriteStore { }
+
+    /// <summary>
+    /// Marker: dieses Interface ist eine LESE-Seite eines Projektions-Stores (von einem Reader injiziert).
+    /// Ohne Schreib-Partner (reine Lese-Sicht) direkt, sonst über <see cref="IReadStore{TWriteStore}"/>.
+    /// </summary>
+    public interface IReadStore { }
+
+    /// <summary>
+    /// Die Lese-Seite des Stores, dessen Schreib-Seite <typeparamref name="TWriteStore"/> ist — die Paarung
+    /// steht als Typ im Code, nicht in übereinstimmenden Namen.
+    /// </summary>
+    public interface IReadStore<TWriteStore> : IReadStore where TWriteStore : IWriteStore { }
     
     public record AggregateMeta(Guid Id, string AggregateType, int Version);
 

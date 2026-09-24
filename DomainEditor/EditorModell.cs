@@ -31,6 +31,8 @@ public sealed record EditorModell
     /// <summary>Applier (Event → State-Faltung) — je Regel EIGENSTÄNDIG, referenziert sein Aggregat.</summary>
     public IReadOnlyList<ApplyRegel> Applier { get; init; } = [];
     public IReadOnlyList<Saga> Sagas { get; init; } = [];
+    /// <summary>Der aus dem Code abgeleitete Rahmen (Vertrags-Namespace, globale usings, Namenskonvention, Verzeichnisse).</summary>
+    public Rahmen Rahmen { get; init; } = new();
 
     // Serialisierung: camelCase, Enums als String, Nulls weglassen — wie knowledge-graph.json.
     public static readonly JsonSerializerOptions JsonOptionen = new()
@@ -75,6 +77,29 @@ public sealed record Record
     public string? Doku { get; init; }
     /// <summary>Nur command: erzeugt das Aggregat (<c>ICreationCommand</c> statt nur <c>ICommand</c>).</summary>
     public bool IstErzeugung { get; init; }
+    /// <summary>
+    /// Zusätzliche Member im Record-Rumpf als roher C#-Text (z. B. <c>static Default</c>, abgeleitete
+    /// Props) — Handcode, den der Scaffolder verbatim in <c>{ … }</c> einhängt. Null ⇒ <c>record X(…);</c>.
+    /// </summary>
+    public string? Zusatz { get; init; }
+    /// <summary>Zusätzliche <c>using</c>-Namespaces, die der Handcode (Zusatz) braucht (ohne <c>using</c>/<c>;</c>).</summary>
+    public IReadOnlyList<string> Usings { get; init; } = [];
+    /// <summary>Die Quelldatei (relativ zur Solution), in der der Record steht — null = noch nicht geschrieben.</summary>
+    public string? Datei { get; init; }
+    /// <summary>
+    /// Das Aggregat, zu dem der Record GEHÖRT — aus dem Code: der Command, den genau ein Decider entscheidet; das Event,
+    /// das genau ein Aggregat erzeugt/faltet. Null = keinem (Value Object, geteilt, oder im Editor noch nicht verdrahtet).
+    /// </summary>
+    public string? Aggregat { get; init; }
+    /// <summary>Die Deklarationsform verbatim ohne Namen, z. B. <c>public sealed record</c>, <c>public record struct</c>. Null = <c>public record</c>.</summary>
+    public string? Typart { get; init; }
+    /// <summary>Record ohne Parameterliste (<c>record X : I { … }</c> statt <c>record X(…) : I</c>).</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool OhneParameterliste { get; init; }
+    /// <summary>Basistypen AUSSER dem Rollen-Marker, verbatim (z. B. weitere Interfaces).</summary>
+    public IReadOnlyList<string>? Basen { get; init; }
+    /// <summary>Attribut-Listen des Typs verbatim (mehrere zeilengetrennt).</summary>
+    public string? Attribute { get; init; }
 }
 
 /// <summary>
@@ -90,6 +115,15 @@ public sealed record Feld
     public string? Standard { get; init; }
     /// <summary>Nur State-Felder: gesetzt ⇒ abgeleitete Read-only-Property (<c>=> Ausdruck</c>), kein gespeichertes Feld.</summary>
     public string? Ausdruck { get; init; }
+    /// <summary>Nur State-Felder: <c>{ get; }</c> statt <c>{ get; set; }</c> (z. B. mit <see cref="Standard"/> <c>new()</c>).</summary>
+    public bool NurGet { get; init; }
+    /// <summary>Nur Record-Felder: als Property deklariert, Accessor-Satz z. B. <c>{ get; init; }</c>. Null = Positions-Parameter.</summary>
+    public string? Zugriff { get; init; }
+    /// <summary>Property mit <c>required</c>.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Pflicht { get; init; }
+    /// <summary>Sammlungs-Feld: der Element-Typ (vom Extractor per Symbol bestimmt). Null = keine Sammlung bzw. noch nicht übersetzt.</summary>
+    public string? ElementTyp { get; init; }
 }
 
 /// <summary>Ein Enum-Typ der Domäne (→ <c>Enums.cs</c>).</summary>
@@ -99,6 +133,7 @@ public sealed record Enumeration
     public required string Namespace { get; init; }
     public IReadOnlyList<string> Werte { get; init; } = [];
     public string? Doku { get; init; }
+    public string? Datei { get; init; }
 }
 
 /// <summary>
@@ -115,6 +150,16 @@ public sealed record Aggregat
     public IReadOnlyList<Feld> State { get; init; } = [];
     /// <summary>Zusätzliche State-Member als roher C#-Text (Hilfsmethoden), in die Klasse eingehängt.</summary>
     public string? StateZusatz { get; init; }
+    /// <summary>Private Hilfs-Member der Decider-Klasse (roher C#-Text), hinter den Decide-Methoden eingehängt.</summary>
+    public string? DeciderZusatz { get; init; }
+    /// <summary>Private Hilfs-Member der Applier-Klasse (roher C#-Text), hinter den Apply-Methoden eingehängt.</summary>
+    public string? ApplierZusatz { get; init; }
+    /// <summary>Zusätzliche <c>using</c>-Namespaces der Aggregat-Dateien (State/Decider/Applier), z. B. für Hilfstypen in Rümpfen.</summary>
+    public IReadOnlyList<string> Usings { get; init; } = [];
+    /// <summary>Quelldateien (relativ zur Solution): State, Decider, Applier — null = noch nicht geschrieben.</summary>
+    public string? Datei { get; init; }
+    public string? DeciderDatei { get; init; }
+    public string? ApplierDatei { get; init; }
 }
 
 /// <summary>
@@ -129,8 +174,12 @@ public sealed record DecideRegel
     public string Command { get; init; } = "";
     /// <summary>Die OneOf-Ausgänge (Event-/Ablehnungs-Record-Namen + optionaler Guard) in Reihenfolge.</summary>
     public IReadOnlyList<Ausgang> Ergibt { get; init; } = [];
-    /// <summary>Optionaler Decide-Körper; null ⇒ kompilierbarer <c>throw</c>-Platzhalter.</summary>
+    /// <summary>Optionaler Decide-Körper; null ⇒ kompilierbarer <c>throw</c>-Platzhalter, <c>""</c> ⇒ bewusst leer.</summary>
     public string? Rumpf { get; init; }
+    /// <summary>Parametername des Commands in der Signatur (der Rumpf bezieht sich darauf).</summary>
+    public string Parameter { get; init; } = "cmd";
+    /// <summary>Die Quelldatei der Methode (relativ zur Solution) — Anker für Code-Sync/IDE; null = noch nicht geschrieben.</summary>
+    public string? Datei { get; init; }
 }
 
 /// <summary>Ein OneOf-Ausgang: der Event-Record-Name plus optional der Guard (das „Warum").</summary>
@@ -150,7 +199,11 @@ public sealed record ApplyRegel
     public required string Aggregat { get; init; }
     /// <summary>Name des Event-Records.</summary>
     public string Event { get; init; } = "";
+    /// <summary>Optionaler Apply-Körper; null ⇒ <c>throw</c>-Platzhalter, <c>""</c> ⇒ bewusst leerer No-op.</summary>
     public string? Rumpf { get; init; }
+    /// <summary>Parametername des Events in der Signatur (der Rumpf bezieht sich darauf).</summary>
+    public string Parameter { get; init; } = "evt";
+    public string? Datei { get; init; }
 }
 
 /// <summary>
@@ -165,6 +218,7 @@ public sealed record Saga
     public IReadOnlyList<SagaSchritt> Schritte { get; init; } = [];
     public string? Doku { get; init; }
     public IReadOnlyList<string> ExtraUsings { get; init; } = [];
+    public string? Datei { get; init; }
 }
 
 /// <summary>Eine Saga-Transition: <c>Auf/Und (→ UndAlle) → Sende/SendeJe → RückgängigDurch</c>.</summary>
@@ -176,19 +230,55 @@ public sealed record SagaSchritt
     public string? SammelEvent { get; init; }
     /// <summary>Der Anzahl-Ausdruck des Count-Joins, z. B. <c>t.Ziele.Count</c>.</summary>
     public string? SammelAnzahl { get; init; }
+    /// <summary>Der echte Count-Join-Lambda-Ausdruck verbatim (z. B. <c>t => t.Anzahl</c>); Vorrang vor <see cref="SammelAnzahl"/>.</summary>
+    public string? SammelAusdruck { get; init; }
     public required string Sende { get; init; }
     /// <summary>Fan-out: <c>SendeJe</c> statt <c>Sende</c> — iteriert <see cref="SendeJeCollection"/> mit <see cref="SendeJeElement"/>.</summary>
     public bool SendeJe { get; init; }
     public string? SendeJeCollection { get; init; }
     public string? SendeJeElement { get; init; }
     public IReadOnlyList<string>? SendeArgumente { get; init; }
+    /// <summary>
+    /// Der ECHTE Sende-Lambda-Ausdruck verbatim (z. B. <c>e => new X(e.Id)</c>) — aus dem Code gelesen.
+    /// Gesetzt ⇒ hat Vorrang vor <see cref="SendeArgumente"/>/<see cref="SendeJeCollection"/> (verlustfreier Round-trip).
+    /// </summary>
+    public string? SendeAusdruck { get; init; }
     public string? Kompensation { get; init; }
     public IReadOnlyList<string>? KompensationArgumente { get; init; }
+    /// <summary>Der echte Kompensations-Lambda-Ausdruck verbatim; Vorrang vor <see cref="KompensationArgumente"/>.</summary>
+    public string? KompensationAusdruck { get; init; }
+    /// <summary>Kompensation als Fan-out (<c>RückgängigDurchJe</c>).</summary>
+    public bool KompensationJe { get; init; }
 }
 
-/// <summary>Vorgeschlagene skalare Feldtypen (nur Vorschläge fürs Dropdown; der Typ ist frei).</summary>
-public static class Skalar
+/// <summary>
+/// Der Rahmen, in den geschrieben wird — vom Extractor AUS DEM CODE abgeleitet, nicht im Scaffolder festgelegt:
+/// Vertrags-Namespace, globale usings der Domänen-Projekte, die Namen der inneren Decider/Applier-Klassen und ihrer
+/// Methoden (wie der Code sie benennt) und die Verzeichnisse je Namespace (wo die Typen tatsächlich liegen).
+/// Die Klassen-/Methodennamen sind der Vertrag des Framework-Generators (<c>Abstractions.Aggregatvertrag</c>); die
+/// Verzeichnisse stehen nur für Namespaces, deren Typen in genau EINEM Verzeichnis liegen.
+/// </summary>
+public sealed record Rahmen
 {
-    public static readonly IReadOnlyList<string> Vorschlaege =
-        ["Guid", "decimal", "int", "long", "double", "bool", "string", "DateTimeOffset"];
+    public string VertragsNamespace { get; init; } = typeof(Abstractions.IState).Namespace!;
+    /// <summary>global usings der Domänen-Compilations (ImplicitUsings) — für In-Memory-Übersetzungen.</summary>
+    public IReadOnlyList<string> GlobaleUsings { get; init; } = [];
+    // Die Aggregat-Namensregel des Framework-Generators — Vertrag (Abstractions.Aggregatvertrag), nicht geschätzt.
+    public string DeciderKlasse { get; init; } = Abstractions.Aggregatvertrag.Decider;
+    public string ApplierKlasse { get; init; } = Abstractions.Aggregatvertrag.Applier;
+    public string DecideMethode { get; init; } = Abstractions.Aggregatvertrag.Decide;
+    public string ApplyMethode { get; init; } = Abstractions.Aggregatvertrag.Apply;
+    /// <summary>Namespace → Verzeichnis (relativ zur Solution, „/"-getrennt). Enthält auch die Wurzel-Namespaces der Projekte.</summary>
+    public IReadOnlyDictionary<string, string> Verzeichnisse { get; init; } = new Dictionary<string, string>();
+
+    /// <summary>Kennung der Solution, aus der das Modell stammt — trennt Browser-Zwischenstände verschiedener Repos.</summary>
+    public string? Kennung { get; init; }
+    /// <summary>Die Skalar-Typen, die der Wire (Proto-Codegen, <c>ProtoScalarSpecs</c>) trägt — Vorschläge + Validierung.</summary>
+    public IReadOnlyList<string> Skalare { get; init; } = [];
+    /// <summary>Das Identitäts-Feld, das <c>ICommand</c> verlangt (<c>nameof(ICommand.AggregateId)</c>).</summary>
+    public string AggregatIdFeld { get; init; } = nameof(Abstractions.ICommand.AggregateId);
+    /// <summary>Größte Stelligkeit von <c>OneOf&lt;…&gt;</c> im Vertrag (aus der Compilation gezählt; 0 = unbekannt).</summary>
+    public int OneOfMax { get; init; }
+    /// <summary>Größte Join-Stelligkeit der Prozess-DSL (<c>RegelBauer&lt;…&gt;</c>, aus der Compilation gezählt; 0 = unbekannt).</summary>
+    public int UndMax { get; init; }
 }

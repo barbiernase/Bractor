@@ -1,0 +1,45 @@
+# SOLL der Agnostik-Sonde — VON HAND aus dem Sonden-Quelltext abgeleitet, NICHT aus einer Extractor-Ausgabe.
+# Ein Fakt je Zeile. Was der Editor über die unbekannte Domäne wissen MUSS (Reihenfolge egal).
+
+# ── Ausleihe: Commands im Sub-Namespace, Property-Records, if/else ──
+record Leihwesen.Ausleihe.Befehle.LeiheAus command erzeugung aggregat=Leihvorgang | AggregateId:Guid, Medium:Signatur, LeserId:Guid, Tage:int=14
+record Leihwesen.Ausleihe.Befehle.GibZurueck command aggregat=Leihvorgang | AggregateId:Guid { get; init; }, Zustand:Zustand { get; init; }
+record Leihwesen.Ausleihe.Signatur valueobject | Regal:string, Nummer:int
+record Leihwesen.Ausleihe.Ausgeliehen event aggregat=Leihvorgang | Medium:Signatur, LeserId:Guid, Tage:int
+record Leihwesen.Ausleihe.Zurueckgegeben event aggregat=Leihvorgang | LeserId:Guid { get; init; }, Zustand:Zustand { get; init; }
+record Leihwesen.Ausleihe.BereitsAusgeliehen rejection aggregat=Leihvorgang | AusleiheId:Guid
+record Leihwesen.Ausleihe.NichtAusgeliehen rejection aggregat=Leihvorgang | AusleiheId:Guid
+enum Leihwesen.Ausleihe.Zustand | Neu = 1, Gebraucht = 2, Beschaedigt = 3
+aggregat Leihwesen.Ausleihe.Leihvorgang | LeserId:Guid, Offen:bool
+decide Leihvorgang.LeiheAus -> Ausgeliehen wenn !(State.Offen); BereitsAusgeliehen wenn State.Offen
+decide Leihvorgang.GibZurueck -> Zurueckgegeben; NichtAusgeliehen wenn !State.Offen
+apply Leihvorgang.Ausgeliehen
+apply Leihvorgang.Zurueckgegeben
+
+# ── Gebuehren: ZWEI Aggregate in einem Namespace, Decider in eigener Datei, Saga explizit implementiert ──
+record Leihwesen.Gebuehren.MeldeSchaden command erzeugung aggregat=Schadensfall | AggregateId:Guid, LeserId:Guid
+record Leihwesen.Gebuehren.SchadenGemeldet event aggregat=Schadensfall | LeserId:Guid
+record Leihwesen.Gebuehren.SchadenExistiert rejection aggregat=Schadensfall | Id:Guid
+record Leihwesen.Gebuehren.EroeffneMahnung command erzeugung aggregat=Mahnvorgang | AggregateId:Guid, Betrag:decimal
+record Leihwesen.Gebuehren.MahnungEroeffnet event aggregat=Mahnvorgang | Betrag:decimal
+record Leihwesen.Gebuehren.MahnungExistiert rejection aggregat=Mahnvorgang | Id:Guid
+aggregat Leihwesen.Gebuehren.Schadensfall | Gemeldet:bool
+aggregat Leihwesen.Gebuehren.Mahnvorgang | Betrag:decimal
+decide Schadensfall.MeldeSchaden -> SchadenGemeldet; SchadenExistiert wenn State.Gemeldet
+decide Mahnvorgang.EroeffneMahnung -> MahnungEroeffnet; MahnungExistiert wenn State.Version > 0
+apply Schadensfall.SchadenGemeldet
+apply Mahnvorgang.MahnungEroeffnet
+saga Leihwesen.Gebuehren.SchadenBeiRueckgabe auslöser=Zurueckgegeben | wenn Zurueckgegeben -> sende MeldeSchaden
+
+# ── Lesen: frei benannte Stores (Marker statt Namensregel), class-ReadModel, OneOf, Konstanten-Ids ──
+record Leihwesen.Lesen.OffeneAusleihen query | LeserId:Guid { get; init; }
+record Leihwesen.Lesen.OffeneAusleihenAntwort queryresponse | Anzahl:int
+record Leihwesen.Lesen.KeineAusleihen queryresponse |
+record Leihwesen.Lesen.MahnlaufKonfig konfig | Mindestbetrag:decimal
+readmodel Leihwesen.Lesen.LeihEintrag store=ILeihBuch | Id:Guid { get; set; }, LeserId:Guid { get; set; }, Offen:bool { get; set; }
+store Leihwesen.Lesen.ILeihBuch | schreibt SchreibeAsync(eintrag:LeihEintrag), SchliesseAsync(id:Guid) | liest OffeneAsync(leserId:Guid):IReadOnlyList<LeihEintrag>
+projektion Leihwesen.Lesen.Leihliste id=leihliste pull | Ausgeliehen -> ILeihBuch.SchreibeAsync; Zurueckgegeben -> ILeihBuch.SchliesseAsync
+reaktion Leihwesen.Lesen.MahnungBeiSchaden id=mahnung-bei-schaden | SchadenGemeldet -> sendet EroeffneMahnung
+reader Leihwesen.Lesen.LeihAuskunftLeser projektion=Leihliste trackDeps=false | OffeneAusleihen -> ILeihBuch.OffeneAsync => OffeneAusleihenAntwort|KeineAusleihen
+pipeline Leihwesen.Lesen.MahnlaufPipeline id=mahnlauf konfigs=MahnlaufKonfig | MahnlaufAngestossen(trigger) -> sendet EroeffneMahnung
+trigger MahnlaufAngestossen | Ziel:Guid, Betrag:decimal

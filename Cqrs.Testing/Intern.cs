@@ -10,7 +10,7 @@ namespace Cqrs.Testing;
 ///
 /// Nutzt Reflection: das ist bewusst NUR im Werkzeug erlaubt (Anzeige/Inspektion, kein
 /// Dispatch, nicht im Produktionspfad, nicht in der Domäne) — dieselbe pragmatische Linie
-/// wie SimEngine. Invariante 4 (keine Runtime-Reflection) gilt der DISPATCH-Logik, nicht
+/// wie die Editor-Simulation (SimHost/ModellSimulation). Invariante 4 (keine Runtime-Reflection) gilt der DISPATCH-Logik, nicht
 /// einem Zustands-Spiegel für die Ausgabe.
 /// </summary>
 internal static class Zustandsspiegel

@@ -1,0 +1,79 @@
+using Abstractions;
+using Leihwesen.Ausleihe.Befehle;
+
+// SONDE — Aggregat mit Commands in eigenem Sub-Namespace, Property-Records, if/else-Guards, alles in EINER Datei.
+
+namespace Leihwesen.Ausleihe.Befehle
+{
+    /// <summary>Leiht ein Medium aus.</summary>
+    public record LeiheAus(Guid AggregateId, Signatur Medium, Guid LeserId, int Tage = 14) : ICreationCommand;
+
+    public record GibZurueck : ICommand
+    {
+        public Guid AggregateId { get; init; }
+        public Zustand Zustand { get; init; }
+    }
+}
+
+namespace Leihwesen.Ausleihe
+{
+    public enum Zustand { Neu = 1, Gebraucht = 2, Beschaedigt = 3 }
+
+    public record Signatur(string Regal, int Nummer);
+
+    public record Ausgeliehen(Signatur Medium, Guid LeserId, int Tage) : IEvent;
+
+    public record Zurueckgegeben : IEvent
+    {
+        public Guid LeserId { get; init; }
+        public Zustand Zustand { get; init; }
+    }
+
+    public record BereitsAusgeliehen(Guid AusleiheId) : ITransientEvent;
+    public record NichtAusgeliehen(Guid AusleiheId) : ITransientEvent;
+
+    public partial class Leihvorgang : IState
+    {
+        public Guid LeserId { get; set; }
+        public bool Offen { get; set; }
+
+        public partial class Decider : IDecider<Leihvorgang>
+        {
+            public IEnumerable<OneOf<Ausgeliehen, BereitsAusgeliehen>> Decide(LeiheAus befehl)
+            {
+                if (this.State.Offen)
+                {
+                    yield return new BereitsAusgeliehen(befehl.AggregateId);
+                }
+                else
+                {
+                    yield return new Ausgeliehen(befehl.Medium, befehl.LeserId, befehl.Tage);
+                }
+            }
+
+            public IEnumerable<OneOf<Zurueckgegeben, NichtAusgeliehen>> Decide(GibZurueck befehl)
+            {
+                if (!this.State.Offen)
+                {
+                    yield return new NichtAusgeliehen(befehl.AggregateId);
+                    yield break;
+                }
+                yield return new Zurueckgegeben { LeserId = this.State.LeserId, Zustand = befehl.Zustand };
+            }
+        }
+
+        public partial class Applier : IApplier<Leihvorgang>
+        {
+            public void Apply(Ausgeliehen e)
+            {
+                this.State.LeserId = e.LeserId;
+                this.State.Offen = true;
+            }
+
+            public void Apply(Zurueckgegeben e)
+            {
+                this.State.Offen = false;
+            }
+        }
+    }
+}

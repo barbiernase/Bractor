@@ -1,3 +1,4 @@
+using Abstractions;
 namespace Domain.Projections;
 
 /// <summary>
@@ -6,7 +7,7 @@ namespace Domain.Projections;
 /// Append-only: Einträge werden nur hinzugefügt, nie geändert oder gelöscht.
 /// Wird von ImagePairHistorieProjection (ISubscriber) verwendet.
 /// </summary>
-public interface IImagePairHistorieWriteStore
+public interface IImagePairHistorieWriteStore : IWriteStore
 {
     /// <summary>
     /// Fügt einen einzelnen HistorieEintrag an die Timeline eines ImagePairs an.
@@ -20,7 +21,7 @@ public interface IImagePairHistorieWriteStore
 ///
 /// Wird vom ImagePairHistorieReader verwendet.
 /// </summary>
-public interface IImagePairHistorieReadStore
+public interface IImagePairHistorieReadStore : IReadStore<IImagePairHistorieWriteStore>
 {
     /// <summary>
     /// Lädt die komplette Historie eines ImagePairs.

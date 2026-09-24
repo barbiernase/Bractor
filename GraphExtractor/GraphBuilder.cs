@@ -88,7 +88,13 @@ public sealed class GraphBuilder
             Add(new Node
             {
                 Id = id, Kind = NodeKind.aggregate, Name = a.Name, FullName = a.Full, Namespace = a.Namespace,
-                Aggregate = new AggregateInfo { State = a.State, Handles = a.HandlesCommandsFull.Select(SimpleCmd).ToList() }
+                Aggregate = new AggregateInfo
+                {
+                    State = a.State,
+                    Handles = a.HandlesCommandsFull.Select(SimpleCmd).ToList(),
+                    DecideBodies = a.DecideBodies.GroupBy(kv => SimpleCmd(kv.Key)).ToDictionary(g => g.Key, g => g.First().Value),
+                    ApplyBodies = a.ApplyBodies,
+                }
             });
         }
     }
@@ -169,7 +175,7 @@ public sealed class GraphBuilder
         foreach (var pr in _dom.Projections)
             Add(new Node
             {
-                Id = $"proj:{pr.Name}", Kind = NodeKind.projection, Name = pr.Name, FullName = pr.Full,
+                Id = $"proj:{pr.Name}", Kind = NodeKind.projection, Name = pr.Name, FullName = pr.Full, Namespace = pr.Namespace,
                 Projection = new ProjectionInfo { SubscriberId = pr.SubscriberId, Consumes = pr.ConsumesFull.Select(SimpleEvt).ToList() }
             });
     }
@@ -186,7 +192,7 @@ public sealed class GraphBuilder
             readerByQuery.TryGetValue(q.Name, out var reader);
             Add(new Node
             {
-                Id = $"query:{q.Name}", Kind = NodeKind.query, Name = q.Name, FullName = q.Full,
+                Id = $"query:{q.Name}", Kind = NodeKind.query, Name = q.Name, FullName = q.Full, Namespace = q.Meta.Namespace,
                 Query = new QueryInfo { Fields = q.Fields, ServedByReader = reader?.Name, ReadsProjection = reader?.ProjectionName }
             });
         }
@@ -199,12 +205,12 @@ public sealed class GraphBuilder
             var handles = p.Handles.Select(h => new PipelineHandle
             {
                 Input = _dom.Events.TryGetValue(h.InputFull, out var et) ? et.Simple : Short(h.InputFull),
-                InputKind = h.IsTrigger ? "trigger" : "event",
+                InputKind = h.InputKind,
                 Emits = h.EmitsFull.Select(SimpleCmd).ToList()
             }).ToList();
             Add(new Node
             {
-                Id = $"pipe:{p.Name}", Kind = NodeKind.pipeline, Name = p.Name, FullName = p.Full,
+                Id = $"pipe:{p.Name}", Kind = NodeKind.pipeline, Name = p.Name, FullName = p.Full, Namespace = p.Namespace,
                 Pipeline = new PipelineInfo { PipelineId = p.PipelineId, Handles = handles }
             });
         }
@@ -432,12 +438,11 @@ public sealed class GraphBuilder
             .Distinct().OrderBy(c => c, StringComparer.Ordinal).Cast<string>().ToList();
     }
 
-    private static string Ctx(string? ns)
-    {
-        if (string.IsNullOrEmpty(ns)) return "(unbekannt)";
-        var parts = ns.Split('.');
-        return parts.Length >= 2 && parts[0] == "Domain" ? parts[1] : parts[0];
-    }
+    /// <summary>
+    /// Kontext eines Knotens = sein voller Namespace, so wie der Code ihn deklariert — kein Segment-Raten über einen
+    /// gemeinsamen Präfix. (Zugehörigkeit zu einem Aggregat ergibt sich aus den Kanten, nicht aus dem Namespace.)
+    /// </summary>
+    private static string Ctx(string? ns) => string.IsNullOrEmpty(ns) ? "(unbekannt)" : ns;
 
     private static string NsOf(string full)
     {
@@ -514,6 +519,34 @@ public sealed class GraphBuilder
         foreach (var proc in _g.Nodes.Where(n => n.Kind == NodeKind.process && !n.Process!.Registered))
             d.Add(new Finding { Severity = "warning", Code = "PROCESS-NOT-REGISTERED",
                 Message = $"Prozess '{proc.Name}' ist definiert, aber NICHT in GeneratedProzessRegeln.Alle registriert (läuft nicht)." });
+
+        // Persistiertes Event, das ein Aggregat produziert, aber sein Applier nicht faltet → der generierte
+        // ApplyEvent-Switch wirft zur Laufzeit NotSupportedException (kein Compile-Check im Framework).
+        foreach (var a in _dom.Aggregates)
+        {
+            var gefaltet = a.ApplyEventsFull.ToHashSet(StringComparer.Ordinal);
+            foreach (var evt in a.DecideOutcomes.Values.SelectMany(x => x).Distinct(StringComparer.Ordinal))
+                if (_dom.Events.TryGetValue(evt, out var et) && et.Persisted && !gefaltet.Contains(evt))
+                    d.Add(new Finding { Severity = "error", Code = "MISSING-APPLY",
+                        Message = $"Aggregat '{a.Name}' produziert '{et.Simple}', hat aber kein Apply({et.Simple}) → NotSupportedException beim Falten." });
+        }
+
+        // Domänen-Event/Ablehnung, das KEIN Decider erzeugt (kein OneOf-Ausgang) → toter Typ (eine echte Insel).
+        var erzeugt = _dom.Aggregates.SelectMany(a => a.DecideOutcomes.Values.SelectMany(x => x)).ToHashSet(StringComparer.Ordinal);
+        foreach (var (full, et) in _dom.Events.Where(kv => kv.Value.Meta.IstDomäne && !erzeugt.Contains(kv.Key)))
+            d.Add(new Finding { Severity = "warning", Code = "UNUSED-EVENT",
+                Message = $"{(et.Persisted ? "Event" : "Ablehnung")} '{et.Simple}' wird von keinem Decider erzeugt (in keiner Decide-OneOf-Signatur) — toter Typ." });
+
+        // Enum mit Wert 0: der Proto-Wire (proto3) lässt den Default weg → 0 ist auf dem Draht nicht von „nicht gesetzt" unterscheidbar.
+        foreach (var e in _dom.Enums.Where(e => e.HatNull))
+            d.Add(new Finding { Severity = "warning", Code = "ENUM-ZERO",
+                Message = $"Enum '{e.Name}' hat einen Wert 0 — geht auf dem Proto-Wire als Default verloren (1-basiert empfohlen)." });
+
+        // Mehrere Impls desselben Store-Interfaces → ProjectionServicesGenerator nimmt FirstOrDefault (reihenfolgeabhängig).
+        foreach (var s in _dom.Stores)
+            foreach (var m in s.MehrdeutigeImpls)
+                d.Add(new Finding { Severity = "warning", Code = "STORE-AMBIGUOUS",
+                    Message = $"Store-Interface mit mehreren Implementierungen ({m}) — DI-Auflösung reihenfolgeabhängig." });
 
         // Persistiertes Event ohne jeden Konsumenten (kein Konsument, kein Prozess, keine Pipeline).
         foreach (var evt in _g.Nodes.Where(n => n.Kind == NodeKind.@event && n.Event!.Persisted))

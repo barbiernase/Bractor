@@ -100,7 +100,7 @@ namespace Infrastructure.SourceGeneration
                 states.Add(stateSymbol);
 
                 // Alle Decide(TCommand)-Methoden dieses Deciders.
-                foreach (var method in type.GetMembers("Decide").OfType<IMethodSymbol>())
+                foreach (var method in type.GetMembers(Abstractions.Aggregatvertrag.Decide).OfType<IMethodSymbol>())
                 {
                     if (method.Parameters.Length < 1)
                         continue;
@@ -220,6 +220,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("public static class GeneratedCommandRouting");
             sb.AppendLine("{");
             sb.AppendLine("    /// <summary>Command-Typ → Aggregat-Name, strukturell aus den Decidern abgeleitet.</summary>");
+            sb.AppendLine("    [global::Abstractions.RoutingTabelle(global::Abstractions.RoutingArt.CommandZuAggregat)]");
             sb.AppendLine("    public static IReadOnlyDictionary<Type, string> CommandToAggregate { get; } =");
             sb.AppendLine("        new Dictionary<Type, string>");
             sb.AppendLine("        {");
@@ -232,6 +233,7 @@ namespace Infrastructure.SourceGeneration
 
             // ★ Azyklizität-Grundlage: Command → produzierte (persistierte) Event-Typen, präzise aus den Decidern.
             sb.AppendLine("    /// <summary>Command-Typ → produzierte persistierte Event-Typen (aus den Decide-OneOf-Rückgaben).</summary>");
+            sb.AppendLine("    [global::Abstractions.RoutingTabelle(global::Abstractions.RoutingArt.CommandZuEvents)]");
             sb.AppendLine("    public static IReadOnlyDictionary<Type, IReadOnlyList<Type>> CommandToEvents { get; } =");
             sb.AppendLine("        new Dictionary<Type, IReadOnlyList<Type>>");
             sb.AppendLine("        {");

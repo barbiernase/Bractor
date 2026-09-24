@@ -1,0 +1,47 @@
+using Abstractions;
+using Leihwesen.Ausleihe;
+
+// SONDE — ZWEI Aggregate im SELBEN Namespace + Saga mit expliziter Interface-Implementierung und Block-Lambda.
+
+namespace Leihwesen.Gebuehren;
+
+public record MeldeSchaden(Guid AggregateId, Guid LeserId) : ICreationCommand;
+public record SchadenGemeldet(Guid LeserId) : IEvent;
+public record SchadenExistiert(Guid Id) : ITransientEvent;
+
+public record EroeffneMahnung(Guid AggregateId, decimal Betrag) : ICreationCommand;
+public record MahnungEroeffnet(decimal Betrag) : IEvent;
+public record MahnungExistiert(Guid Id) : ITransientEvent;
+
+public partial class Schadensfall : IState
+{
+    public bool Gemeldet { get; set; }
+
+    public partial class Decider : IDecider<Schadensfall>
+    {
+        public IEnumerable<OneOf<SchadenGemeldet, SchadenExistiert>> Decide(MeldeSchaden c)
+        {
+            if (this.State.Gemeldet) { yield return new SchadenExistiert(c.AggregateId); yield break; }
+            yield return new SchadenGemeldet(c.LeserId);
+        }
+    }
+
+    public partial class Applier : IApplier<Schadensfall>
+    {
+        public void Apply(SchadenGemeldet e) { this.State.Gemeldet = true; }
+    }
+}
+
+public partial class Mahnvorgang : IState
+{
+    public decimal Betrag { get; set; }
+}
+
+public sealed class SchadenBeiRueckgabe : IProzessDefinition
+{
+    ProzessRegeln IProzessDefinition.Regeln => Prozess<Zurueckgegeben>.Definiere(p =>
+    {
+        p.Auf<Zurueckgegeben>()
+         .Sende<MeldeSchaden>(e => new MeldeSchaden(Guid.NewGuid(), e.LeserId));
+    });
+}

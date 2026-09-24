@@ -8,9 +8,10 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- NUR Domain: dort liegen (generiert) AggregateHandlerFactory + GeneratedProzessRegeln.
-         Kein Marten, kein Proto.Actor, kein Infrastructure — die reine, single-threaded Ausführung. -->
-    <ProjectReference Include="../Domain/Domain.csproj" />
+    <!-- KEINE Domain-Referenz: simuliert wird ausschließlich das Editor-Modell (In-Memory-Kompilat mit den
+         echten Domain-Generatoren) — sonst gäbe es zwei Wahrheiten (verlinkte Domain.dll vs. Modell). -->
+    <!-- Core: Framework-Basis der generierten Handler (AggregateHandlerBase) — Laufzeit-Referenz des Kompilats. -->
+    <ProjectReference Include="../Core/Core.csproj" />
     <!-- Der DSL-Schreiber (nur Abstractions-Ref): Board-Session → Test-Quelltext. -->
     <ProjectReference Include="../Cqrs.Testing/Cqrs.Testing.csproj" />
     <!-- Der Editor-Modus: reiner Scaffolder/Validator (keine Roslyn/Infra) — Modell → C#, live. -->

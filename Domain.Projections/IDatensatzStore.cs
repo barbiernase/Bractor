@@ -1,3 +1,4 @@
+using Abstractions;
 using Domain.Datensatz;
 
 namespace Domain.Projections;
@@ -6,7 +7,7 @@ namespace Domain.Projections;
 /// Write-Zugriffsmuster der Datensatz-Projektion — je Event ein atomarer Effekt.
 /// Wird von <c>DatensatzProjektion</c> verwendet.
 /// </summary>
-public interface IDatensatzWriteStore
+public interface IDatensatzWriteStore : IWriteStore
 {
     /// <summary>Legt den Datensatz an (Entwurf, leerer Korb).</summary>
     Task UpsertAsync(DatensatzReadModel model);
@@ -36,7 +37,7 @@ public interface IDatensatzWriteStore
 /// Read-Zugriffsmuster der Datensatz-Projektion — Queries mit Paginierung.
 /// Wird vom <c>DatensatzReader</c> (M4) und von der GUI verwendet.
 /// </summary>
-public interface IDatensatzReadStore
+public interface IDatensatzReadStore : IReadStore<IDatensatzWriteStore>
 {
     Task<DatensatzReadModel?> FindByIdAsync(Guid id);
 

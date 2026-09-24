@@ -108,8 +108,8 @@ namespace Domain.SourceGeneration
             if (iStateSymbol is null) return null;
 
             bool isStateAggregateRoot = classSymbol.AllInterfaces.Any(i => SymbolEqualityComparer.Default.Equals(i, iStateSymbol)) &&
-                                        classSymbol.GetTypeMembers("Decider").Any() &&
-                                        classSymbol.GetTypeMembers("Applier").Any();
+                                        classSymbol.GetTypeMembers(Abstractions.Aggregatvertrag.Decider).Any() &&
+                                        classSymbol.GetTypeMembers(Abstractions.Aggregatvertrag.Applier).Any();
 
             return isStateAggregateRoot ? classSymbol : null;
         }

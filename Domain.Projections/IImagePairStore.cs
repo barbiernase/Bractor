@@ -1,3 +1,4 @@
+using Abstractions;
 using Domain.ImagePair;
 
 namespace Domain.Projections;
@@ -6,7 +7,7 @@ namespace Domain.Projections;
 /// Write-Zugriffsmuster — optimiert für atomare Updates pro Event.
 /// Wird von der ImagePairProjection verwendet.
 /// </summary>
-public interface IImagePairWriteStore
+public interface IImagePairWriteStore : IWriteStore
 {
     Task UpsertAsync(ImagePairReadModel model);
 
@@ -45,7 +46,7 @@ public interface IImagePairWriteStore
 /// Read-Zugriffsmuster — optimiert für Queries mit Filterung.
 /// Wird vom ImagePairReader verwendet.
 /// </summary>
-public interface IImagePairReadStore
+public interface IImagePairReadStore : IReadStore<IImagePairWriteStore>
 {
     Task<ImagePairReadModel?> FindByIdAsync(Guid id);
 

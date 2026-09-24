@@ -13,8 +13,8 @@ namespace Projections.SourceGeneration
     ///
     /// Alles typ-/interface-getrieben entdeckt (Namen sind unzuverlässig: „Projection" vs „Projektion"):
     ///   - Marten-Schema: je <c>IReadModel</c> ein uniformer <c>Schema.For&lt;T&gt;()</c>-Block.
-    ///   - Stores: je Interface-Paar <c>I{Base}ReadStore</c>/<c>I{Base}WriteStore</c> die konkrete Klasse
-    ///     (Symbol-Query, nicht Name). Ctor-Argumente per Parameter-Inspektion (robust gegen (IDocumentStore)
+    ///   - Stores: je <c>IReadStore&lt;TWrite&gt;</c>-Interface das Paar (TWrite, Read) — die Paarung steht als Typ im
+    ///     Code (Marker aus Abstractions), die Namen sind frei; je Seite die konkrete Klasse (Symbol-Query). Ctor-Argumente per Parameter-Inspektion (robust gegen (IDocumentStore)
     ///     vs (IDocumentStore, ILogger&lt;T&gt;)). Lifetime: Write = Co-Commit/Transient; separater Read-Store
     ///     (Postgres) = Singleton; ist Read == Write (eine Klasse) → beide Transient.
     ///   - Reader: je <c>IReader&lt;T&gt;</c>-Implementierer ein <c>AddSingleton</c>.
@@ -26,8 +26,6 @@ namespace Projections.SourceGeneration
     [Generator]
     public class ProjectionServicesGenerator : ISourceGenerator
     {
-        private static readonly Regex StoreIfaceRx = new Regex("^I(.+)(Read|Write)Store$", RegexOptions.Compiled);
-
         public void Initialize(GeneratorInitializationContext context) { }
 
         public void Execute(GeneratorExecutionContext context)
@@ -37,13 +35,22 @@ namespace Projections.SourceGeneration
             var iSubscriber = comp.GetTypeByMetadataName("Abstractions.ISubscriber");
             var iPull = comp.GetTypeByMetadataName("Abstractions.IPullSubscriber");
             var iReader = comp.GetTypeByMetadataName("Abstractions.IReader`1");
-            if (iReadModel == null || iSubscriber == null || iPull == null || iReader == null)
+            var iReadStoreT = comp.GetTypeByMetadataName("Abstractions.IReadStore`1");
+            if (iReadModel == null || iSubscriber == null || iPull == null || iReader == null || iReadStoreT == null)
                 return;
 
-            // Nur domain-residente Typen (Domain.Projections / Domain.Infrastructure …).
+            // Nur Typen aus Assemblies, die den Vertrag (Abstractions) referenzieren — der Vertrag selbst und
+            // fremde Bibliotheken fallen heraus. Die Rolle entscheiden danach allein die Marker.
+            var vertrag = iReadModel.ContainingAssembly;
             var classes = new List<INamedTypeSymbol>();
             var ifaces = new List<INamedTypeSymbol>();
-            Collect(comp.GlobalNamespace, classes, ifaces);
+            var assemblies = new List<IAssemblySymbol> { comp.Assembly };
+            assemblies.AddRange(comp.SourceModule.ReferencedAssemblySymbols);
+            foreach (var asm in assemblies)
+                if (!SymbolEqualityComparer.Default.Equals(asm, vertrag)
+                    && (SymbolEqualityComparer.Default.Equals(asm, comp.Assembly)
+                        || asm.Modules.Any(m => m.ReferencedAssemblySymbols.Any(r => SymbolEqualityComparer.Default.Equals(r, vertrag)))))
+                    Collect(asm.GlobalNamespace, classes, ifaces);
 
             var full = SymbolDisplayFormat.FullyQualifiedFormat;
             bool Impl(INamedTypeSymbol t, INamedTypeSymbol i) => t.AllInterfaces.Contains(i, SymbolEqualityComparer.Default);
@@ -54,18 +61,15 @@ namespace Projections.SourceGeneration
                 .OrderBy(c => c.Name, System.StringComparer.Ordinal)
                 .ToList();
 
-            // ── Store-Interface-Paare I{Base}Read/WriteStore ──
-            var readIf = new Dictionary<string, INamedTypeSymbol>();
-            var writeIf = new Dictionary<string, INamedTypeSymbol>();
+            // ── Store-Paare: IReadStore<TWrite> nennt seinen Schreib-Partner als Typ ──
+            var paare = new List<(INamedTypeSymbol Write, INamedTypeSymbol Read)>();
             foreach (var i in ifaces)
             {
-                var m = StoreIfaceRx.Match(i.Name);
-                if (!m.Success) continue;
-                var baseName = m.Groups[1].Value;
-                if (m.Groups[2].Value == "Read") readIf[baseName] = i;
-                else writeIf[baseName] = i;
+                var r = i.Interfaces.FirstOrDefault(x => x.IsGenericType
+                    && SymbolEqualityComparer.Default.Equals(x.OriginalDefinition, iReadStoreT));
+                if (r?.TypeArguments[0] is INamedTypeSymbol w) paare.Add((w, i));
             }
-            var bases = readIf.Keys.Intersect(writeIf.Keys).OrderBy(b => b, System.StringComparer.Ordinal).ToList();
+            paare = paare.OrderBy(p => p.Write.ToDisplayString(full), System.StringComparer.Ordinal).ToList();
 
             INamedTypeSymbol? ConcreteImpl(INamedTypeSymbol i) =>
                 classes.FirstOrDefault(c => Impl(c, i));
@@ -112,10 +116,9 @@ namespace Projections.SourceGeneration
             sb.AppendLine();
 
             // Stores je Basis
-            foreach (var b in bases)
+            foreach (var (writeIface, readIface) in paare)
             {
-                var writeIface = writeIf[b];
-                var readIface = readIf[b];
+                var b = writeIface.Name;
                 var writeClass = ConcreteImpl(writeIface);
                 var readClass = ConcreteImpl(readIface);
                 if (writeClass == null || readClass == null) continue;
@@ -180,8 +183,6 @@ namespace Projections.SourceGeneration
         {
             foreach (var t in ns.GetTypeMembers())
             {
-                var asm = t.ContainingAssembly?.Name;
-                if (asm == null || !asm.StartsWith("Domain")) continue;
                 if (t.TypeKind == TypeKind.Class && !t.IsAbstract && !t.IsStatic) classes.Add(t);
                 else if (t.TypeKind == TypeKind.Interface) ifaces.Add(t);
             }

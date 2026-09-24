@@ -86,6 +86,9 @@ integriert; `CqrsFrameworkOptions` toter `[Obsolete]`-Typ.
 - Neue Verträge → `Abstractions`; Marten/Infra → `Infrastructure`.
 - Nichts mit Runtime-Reflection (Inv. 4). Neue Dispatch-Logik = Generator erweitern, nicht
   Handschalter.
+- **Extractor/Editor erkennen nur Code-Fakten** (Marker, Attribute, Symbole) — nie Namenskonventionen oder
+  Namespace-Raten. Stores: Schreib-Interface `: IWriteStore`, Lese-Interface `: IReadStore<ISchreibInterface>` (Namen
+  frei). Ingress-Methoden tragen `[Ingress(...)]`. Neues Konstrukt ⇒ Sonde (`GraphExtractor/Sonde/`) + `soll.txt` erweitern.
 - **Kein `InMemoryEventStore`:** Store-Semantik nur gegen echtes Marten (Integration). Der
   Prüfstand testet nur store-freie Logik. Nie faken, was man nicht besitzt.
 - **Proto-Regenerierung bei neuen Domain-Typen:** jeder neue Command/Event/Query/Trigger
@@ -103,6 +106,9 @@ NICHT Timeout-tunebar; xUnit schluckt App-Logs (Cluster-Diagnose → Last-Harnes
 - Build: `dotnet build`
 - Test (Logik, immer grün): `dotnet test Infrastructure.Pruefstand.Tests/Infrastructure.Pruefstand.Tests.csproj`
 - Integration (braucht Postgres/Consul/Redis, sequentiell): `dotnet test Infrastructure.Integration.Tests/Infrastructure.Integration.Tests.csproj`
+- Domänen-Editor + Simulation (einzige Oberfläche): `dotnet run --project GraphExtractor` (erzeugt editor.html + domain-model.json), dann `dotnet run --project SimHost` → http://localhost:5178/editor
+- Editor-Parität (Code ⇄ Extraktion ⇄ Editor, schreibt nichts): `dotnet run --project GraphExtractor -- --check`
+- Agnostik-Sonde (unbekannte Domäne im Speicher gegen handgeschriebenes Soll + Fixpunkt): `dotnet run --project GraphExtractor -- --sonde`
 - Last/Durchsatz: `dotnet run --project LoadHarness -- --accounts 500 --credits 40 --concurrency 128 --log warning`
 - Infra hochfahren: `docker compose -f deploy-linux/docker-compose.infrastructure.yml up -d`
 - Multi-Node (3 Nodes + 1 Consul, echt containerisiert): `docker compose -f deploy-multinode/docker-compose.yml up -d --build` (Anleitung + Ergebnis: `docs/multi-node-deployment.md`)

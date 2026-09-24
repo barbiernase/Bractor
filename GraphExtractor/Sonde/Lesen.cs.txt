@@ -1,0 +1,123 @@
+using Abstractions;
+using Core;
+using Leihwesen.Ausleihe;
+using Leihwesen.Gebuehren;
+
+// SONDE — Leseseite mit FREIEN Namen (keine Namenskonvention), class-ReadModel, OneOf-Antwort,
+// Konstanten-Id, Reaktion, Pipeline mit Konfig-Record.
+
+namespace Leihwesen.Lesen;
+
+public class LeihEintrag : IReadModel
+{
+    public Guid Id { get; set; }
+    public Guid LeserId { get; set; }
+    public bool Offen { get; set; }
+}
+
+public interface ILeihBuch : IWriteStore
+{
+    Task SchreibeAsync(LeihEintrag eintrag);
+    Task SchliesseAsync(Guid id);
+}
+
+public interface ILeihAuskunft : IReadStore<ILeihBuch>
+{
+    Task<IReadOnlyList<LeihEintrag>> OffeneAsync(Guid leserId);
+}
+
+public sealed class LeihBuchSpeicher : ILeihBuch, ILeihAuskunft
+{
+    private readonly Dictionary<Guid, LeihEintrag> _daten = new();
+
+    public Task SchreibeAsync(LeihEintrag eintrag) { _daten[eintrag.Id] = eintrag; return Task.CompletedTask; }
+
+    public Task SchliesseAsync(Guid id) { if (_daten.TryGetValue(id, out var e)) e.Offen = false; return Task.CompletedTask; }
+
+    public Task<IReadOnlyList<LeihEintrag>> OffeneAsync(Guid leserId) =>
+        Task.FromResult<IReadOnlyList<LeihEintrag>>(_daten.Values.Where(e => e.Offen && e.LeserId == leserId).ToList());
+}
+
+public record OffeneAusleihen : IQuery
+{
+    public Guid LeserId { get; init; }
+}
+
+public record OffeneAusleihenAntwort(int Anzahl) : IQueryResponse;
+public record KeineAusleihen() : IQueryResponse;
+
+public partial class Leihliste : ISubscriber, IPullSubscriber
+{
+    private const string Kennung = "leihliste";
+    private readonly ILeihBuch _buch;
+
+    public Leihliste(ILeihBuch buch) { _buch = buch; }
+
+    public string SubscriberId => Kennung;
+
+    public async Task Handle(Ausgeliehen evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+    {
+        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
+        {
+            ctx.Track<Leihvorgang>(envelope.AggregateId);
+            await _buch.SchreibeAsync(new LeihEintrag { Id = envelope.AggregateId, LeserId = evt.LeserId, Offen = true });
+        });
+    }
+
+    public async Task Handle(Zurueckgegeben evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+    {
+        await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
+        {
+            ctx.Track<Leihvorgang>(envelope.AggregateId);
+            await _buch.SchliesseAsync(envelope.AggregateId);
+        });
+    }
+}
+
+[ProjectionReader(TrackDeps = false)]
+public partial class LeihAuskunftLeser : IReader<Leihliste>
+{
+    private readonly ILeihAuskunft _auskunft;
+
+    public LeihAuskunftLeser(ILeihAuskunft auskunft) { _auskunft = auskunft; }
+
+    public async Task<OneOf<OffeneAusleihenAntwort, KeineAusleihen>> Handle(OffeneAusleihen query, IMessageEnvelope envelope, ReadContext ctx)
+    {
+        var offen = await _auskunft.OffeneAsync(query.LeserId);
+        if (offen.Count == 0) return new KeineAusleihen();
+        return new OffeneAusleihenAntwort(offen.Count);
+    }
+}
+
+public partial class MahnungBeiSchaden : ISubscriber, IPullSubscriber
+{
+    public string SubscriberId => "mahnung-bei-schaden";
+
+    public async IAsyncEnumerable<EroeffneMahnung> Handle(SchadenGemeldet evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+    {
+        await Task.CompletedTask;
+        yield return new EroeffneMahnung(Guid.NewGuid(), 5m);
+    }
+}
+
+public record MahnlaufAngestossen(Guid Ziel, decimal Betrag) : IPipelineTrigger;
+
+public record MahnlaufKonfig(decimal Mindestbetrag);
+
+public partial class MahnlaufPipeline : IPipelineHandler
+{
+    public const string Kennung = "mahnlauf";
+    private readonly MahnlaufKonfig _konfig;
+
+    public MahnlaufPipeline(MahnlaufKonfig konfig) { _konfig = konfig; }
+
+    public string PipelineId => Kennung;
+
+    public async IAsyncEnumerable<EroeffneMahnung> Handle(MahnlaufAngestossen trigger, PipelineContext ctx)
+    {
+        await Task.CompletedTask;
+        var betrag = Math.Max(trigger.Betrag, _konfig.Mindestbetrag);
+        var verworfen = new EroeffneMahnung(Guid.Empty, 0m);
+        yield return new EroeffneMahnung(trigger.Ziel, betrag);
+    }
+}

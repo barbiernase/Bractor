@@ -15,10 +15,10 @@ public static class DeciderFallback
         INamedTypeSymbol? iDecider = null, iCommand = null, iEvent = null, iTransient = null;
         foreach (var c in comps)
         {
-            iDecider ??= c.GetTypeByMetadataName("Abstractions.IDecider`1");
-            iCommand ??= c.GetTypeByMetadataName("Abstractions.ICommand");
-            iEvent ??= c.GetTypeByMetadataName("Abstractions.IEvent");
-            iTransient ??= c.GetTypeByMetadataName("Abstractions.ITransientEvent");
+            iDecider ??= c.GetTypeByMetadataName(Vertrag.IDecider);
+            iCommand ??= c.GetTypeByMetadataName(Vertrag.ICommand);
+            iEvent ??= c.GetTypeByMetadataName(Vertrag.IEvent);
+            iTransient ??= c.GetTypeByMetadataName(Vertrag.ITransientEvent);
         }
         if (iDecider == null || iCommand == null || iEvent == null) return;
 
@@ -30,7 +30,8 @@ public static class DeciderFallback
             if (deciderIface.TypeArguments[0] is not INamedTypeSymbol state) continue;
             var aggName = AggregatName(state);
 
-            foreach (var method in type.GetMembers("Decide").OfType<IMethodSymbol>())
+            // Entscheidungs-Methoden = öffentliche Methoden mit Command als erstem Parameter (kein Methodenname nötig).
+            foreach (var method in type.GetMembers().OfType<IMethodSymbol>().Where(m => m.DeclaredAccessibility == Accessibility.Public && m.MethodKind == MethodKind.Ordinary))
             {
                 if (method.Parameters.Length < 1) continue;
                 if (method.Parameters[0].Type is not INamedTypeSymbol cmd) continue;
@@ -49,7 +50,7 @@ public static class DeciderFallback
     private static string AggregatName(INamedTypeSymbol state)
     {
         var attr = state.GetAttributes().FirstOrDefault(a =>
-            a.AttributeClass?.Fq() == "Abstractions.AggregatNameAttribute");
+            a.AttributeClass?.Fq() == Vertrag.AggregatNameAttribute);
         if (attr is { ConstructorArguments.Length: > 0 } && attr.ConstructorArguments[0].Value is string s && !string.IsNullOrWhiteSpace(s))
             return s;
         return state.Name;
