@@ -1,7 +1,0 @@
-BCL: Zuweisungen, Sammlungs-Methoden (Add/Remove/Clear …), System.Linq, string, Math, Konstruktoren der TYPEN
-R1 Nur den Zustand fortschreiben: this.State.<Member> setzen bzw. Sammlungen ändern — aus den Feldern des Events.
-R2 Keine Entscheidungen über Gültigkeit (die hat Decide getroffen) — das Event ist ein Faktum und wird immer angewandt.
-R3 Kein I/O, kein await, keine Uhrzeit/Zufall, keine Events erzeugen, kein return-Wert.
-R4 Ein bewusst leerer Rumpf ist erlaubt (Marker-Event ohne Zustandsänderung) — dann einen Kommentar mit dem Grund.
-R5 Deterministisch: dasselbe Event auf denselben Zustand ergibt immer denselben Zustand (Replay!).
-R6 Keine neuen Typen, keine Hilfsmethoden, keine using-Direktiven — nur der Rumpf.

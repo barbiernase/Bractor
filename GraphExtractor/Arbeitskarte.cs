@@ -1,4 +1,3 @@
-using System.Reflection;
 using System.Text;
 using System.Text.RegularExpressions;
 using System.Xml.Linq;
@@ -9,19 +8,28 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace GraphExtractor;
 
 // ════════════════════════════════════════════════════════════════════════════
-//  Arbeitskarte (Konzept: docs/konzept-llm-minimalkontext.md, Phase K1)
+//  Arbeitskarte (docs/konzept-llm-minimalkontext.md)
 //
-//  Je H-Slot (heute: Decide-/Apply-Rumpf) eine GESCHLOSSENE WELT für ein LLM: fixe Signatur, abschließendes
-//  Vokabular, Regeln der Slot-Art, Absicht, ein Nachbar-Beispiel, Szenarien aus dem Bestand. Alles aus Code-Fakten
-//  (Symbole, Marker, Signaturen, Aufrufe) — keine Namenskonvention. Der EIGENE Rumpf fließt nie in die Karte ein
-//  (er ist die Antwort); einzige Ausnahme ist die „// 🤖 Prompt:“-Zeile (die Absicht).
+//  Je H-Slot (heute: Decide-/Apply-Rumpf) eine Projektion des GRAPHEN: was der Rumpf-Schreiber wissen muss, wird aus
+//  Knoten/Kanten des Wissensgraphen (Routing, OneOf-Ausgänge, Guards, Saga-/Pipeline-/Projektions-Kanten) und aus
+//  Roslyn-Symbolen abgeleitet — nach festen, nummerierten Regeln. Kein LLM, keine Heuristik, keine Namens-Ähnlichkeit,
+//  keine erfundene Prosa: Beschreibungen erscheinen NUR, wenn der Code einen Kommentar dazu trägt.
+//  Der EIGENE Rumpf fließt nie ein (er ist die Antwort) — ausgenommen seine „// 🤖 Prompt:“-Zeile.
+//
+//  Die Regeln (Abschnitt BEZÜGE):
+//    B1  Guard-Wiederverwendung: derselbe Ausgangstyp wird in anderen Slots desselben Aggregats unter Bedingung G erzeugt.
+//    B2  Typgleiche Quellen: je Parameter eines Ausgangs (Decide) bzw. je Event-Feld (Apply) die erreichbaren Werte
+//        exakt gleichen Typs (cmd.*, this.State.*), bei Apply die setzbaren Ziele gleichen Typs bzw. Sammlungen dieses Typs.
+//    B3  Konstruktor-Treffer: ein Zustands-Typ, dessen Konstruktor exakt die Typfolge der Event-Felder nimmt.
+//    B4  Zustands-Nutzung: welche Nachbar-Slots welches State-Member lesen / schreiben / aufrufen (Datenfluss).
+//    B5  Beispiel: Nachbar derselben Art mit den meisten gemeinsamen Ausgängen, dann der kürzeste.
 // ════════════════════════════════════════════════════════════════════════════
 
-/// <summary>Ein Vokabular-Eintrag: eine Deklaration (so, wie das LLM sie benutzen darf) + Kurz-Doku + Member.</summary>
+/// <summary>Ein Vokabular-Eintrag: eine Deklaration, ihr Doku-Kommentar (verbatim, falls vorhanden) und ihre Member.</summary>
 public sealed record KartenEintrag(string Rolle, string Deklaration, string? Doku, List<string> Member);
 
 /// <summary>Ein Szenario aus einem bestehenden Test (Gegeben/Wenn/Dann-Kette der Test-DSL).</summary>
-public sealed record KartenSzenario(string Name, List<string> Schritte);
+public sealed record KartenSzenario(string Name, string Quelle, List<string> Schritte);
 
 public sealed class Arbeitskarte
 {
@@ -32,82 +40,80 @@ public sealed class Arbeitskarte
     public required int Zeile { get; init; }
     public required string Rumpf { get; init; }            // "geschrieben" | "leer" (bewusst, Marker) | "fehlt" (throw-Stub)
     public required string Signatur { get; init; }
-    public List<string> Verfuegbar { get; } = new();
-    public List<string> Absicht { get; } = new();
-    public string? Prompt { get; set; }
+    public required string Erreichbar { get; init; }
+    public List<string> Vertrag { get; } = new();
+    public List<string> Kommentare { get; } = new();
     public KartenEintrag? Eingang { get; set; }
     public List<KartenEintrag> Ausgaenge { get; } = new();
     public KartenEintrag? Zustand { get; set; }
-    public List<string> ZustandWeitere { get; } = new();
-    /// <summary>Vorhandene Hilfsmethoden der Decider-/Applier-Klasse (dürfen benutzt, nicht neu geschrieben werden).</summary>
     public List<string> Helfer { get; } = new();
     public List<KartenEintrag> Typen { get; } = new();
-    public string Bcl { get; set; } = "";
-    public List<string> Regeln { get; } = new();
+    public List<string> Umfeld { get; } = new();
+    public List<string> Bezuege { get; } = new();
     public (string Disc, string Rumpf)? Beispiel { get; set; }
     public List<KartenSzenario> Szenarien { get; } = new();
-    /// <summary>
-    /// Gegenprobe gegen den ECHTEN Rumpf (nicht Teil der Karte): Domänen-Symbole, die der handgeschriebene Rumpf benutzt,
-    /// die aber nicht im Vokabular der Karte stehen. Leer = die Karte reicht für den Bestand. null = kein Rumpf zum Prüfen.
-    /// </summary>
+
+    /// <summary>Symbol-Ids (Fq) aller Typen und Member, die die Karte deklariert — die Grundlage der Gegenprobe.</summary>
+    public HashSet<string> Symbole { get; } = new(StringComparer.Ordinal);
+    /// <summary>Gegenprobe (nicht Teil der Karte): Domänen-Symbole des ECHTEN Rumpfs, die die Karte nicht deklariert. null = kein Rumpf.</summary>
     public List<string>? NichtAufKarte { get; set; }
 
     public string Id => $"{Aggregat}.{Disc}";
 
-    /// <summary>Token-Schätzung ohne Tokenizer: Zeichen / 3,3 (gegen den Qwen-BPE auf den 64 Bestands-Karten kalibriert, ±10 %).</summary>
+    /// <summary>Token-Schätzung ohne Tokenizer: Zeichen / 3,3 (gegen den Qwen-BPE auf den Bestands-Karten kalibriert).</summary>
     public static int Token(string text) => (int)Math.Ceiling(text.Length / 3.3);
 
     public string AlsText()
     {
         var b = new StringBuilder();
         void Kopf(string t) { if (b.Length > 0) b.AppendLine(); b.AppendLine("## " + t); }
-        static string Doku(string? d) => d == null ? "" : "   // " + d;
-
-        Kopf("AUFGABE");
-        b.AppendLine("Schreibe NUR den Methodenrumpf — ohne Signatur, ohne die äußeren geschweiften Klammern, ohne using.");
-
-        Kopf("SIGNATUR (fix)");
-        b.AppendLine(Signatur);
-        foreach (var v in Verfuegbar) b.AppendLine("Verfügbar: " + v);
-
-        Kopf("ABSICHT");
-        if (Prompt != null) b.AppendLine("🤖 " + Prompt);
-        foreach (var a in Absicht) b.AppendLine(a);
-        if (Prompt == null && Absicht.Count == 0) b.AppendLine("(keine hinterlegt — `// 🤖 Prompt:` im Rumpf ergänzen)");
-
-        Kopf("VOKABULAR (abschließend — nichts anderes existiert)");
+        static string Doku(string? d) => d == null ? "" : "   /// " + d;
         void Eintrag(string label, KartenEintrag e)
         {
             b.AppendLine($"{label,-10}{e.Deklaration}{(e.Rolle.Length > 0 ? "   [" + e.Rolle + "]" : "")}{Doku(e.Doku)}");
             foreach (var m in e.Member) b.AppendLine($"{"",-12}{m}");
         }
-        if (Eingang != null) Eintrag("Eingang", Eingang);
-        if (Zustand != null)
-        {
-            Eintrag("Zustand", Zustand);
-            if (ZustandWeitere.Count > 0) b.AppendLine($"{"",-12}weitere: {string.Join(", ", ZustandWeitere)}");
-        }
-        for (var i = 0; i < Helfer.Count; i++) b.AppendLine($"{(i == 0 ? "Helfer" : ""),-10}{Helfer[i]}");
-        for (var i = 0; i < Ausgaenge.Count; i++) Eintrag(i == 0 ? "Ausgänge" : "", Ausgaenge[i]);
-        for (var i = 0; i < Typen.Count; i++) Eintrag(i == 0 ? "Typen" : "", Typen[i]);
-        b.AppendLine(Bcl);
 
-        Kopf($"REGELN (Slot-Art: {Art})");
-        foreach (var r in Regeln) b.AppendLine(r);
+        Kopf("AUFGABE");
+        b.AppendLine("Rumpf von: " + Signatur);
+        b.AppendLine("Erreichbar: " + Erreichbar);
+
+        if (Vertrag.Count > 0)
+        {
+            Kopf("VERTRAG");
+            foreach (var v in Vertrag) b.AppendLine(v);
+        }
+
+        Kopf("KOMMENTARE (verbatim aus dem Code)");
+        if (Kommentare.Count == 0) b.AppendLine("keine");
+        foreach (var k in Kommentare) b.AppendLine(k);
+
+        Kopf("TYPEN (abschließend; /// = Doku-Kommentar aus dem Code)");
+        if (Eingang != null) Eintrag("Eingang", Eingang);
+        for (var i = 0; i < Ausgaenge.Count; i++) Eintrag(i == 0 ? "Ausgang" : "", Ausgaenge[i]);
+        if (Zustand != null) Eintrag("Zustand", Zustand);
+        for (var i = 0; i < Helfer.Count; i++) b.AppendLine($"{(i == 0 ? "Helfer" : ""),-10}{Helfer[i]}");
+        for (var i = 0; i < Typen.Count; i++) Eintrag(i == 0 ? "Typen" : "", Typen[i]);
+
+        Kopf("GRAPH-UMFELD");
+        foreach (var u in Umfeld) b.AppendLine(u);
+
+        Kopf("BEZÜGE (regelbasiert abgeleitet)");
+        if (Bezuege.Count == 0) b.AppendLine("keine");
+        foreach (var x in Bezuege) b.AppendLine(x);
 
         if (Beispiel is { } bsp)
         {
-            Kopf("BEISPIEL (Nachbar-Rumpf derselben Art, echter Code)");
+            Kopf("BEISPIEL (B5)");
             b.AppendLine($"// {(Art == "decide" ? "Decide" : "Apply")}({bsp.Disc})");
             b.AppendLine(bsp.Rumpf);
         }
 
-        Kopf("MUSS BESTEHEN (Szenarien)");
-        if (Szenarien.Count == 0)
-            b.AppendLine("(keine im Bestand — in der Simulation erzeugen „📋 Als Test“ oder vorschlagen lassen und bestätigen)");
+        Kopf("SPEZIFIKATION (Szenarien aus Tests)");
+        if (Szenarien.Count == 0) b.AppendLine("keine — für diesen Slot liegt keine Spezifikation als Code vor");
         for (var i = 0; i < Szenarien.Count; i++)
         {
-            b.AppendLine($"S{i + 1} {Szenarien[i].Name}");
+            b.AppendLine($"S{i + 1} {Szenarien[i].Name}   ({Szenarien[i].Quelle})");
             foreach (var s in Szenarien[i].Schritte) b.AppendLine("   " + s);
         }
         return b.ToString();
@@ -115,17 +121,14 @@ public sealed class Arbeitskarte
 }
 
 /// <summary>
-/// Baut Arbeitskarten aus der Solution. Findet die Slots über den Vertrag (<c>IDecider&lt;T&gt;</c>/<c>IApplier&lt;T&gt;</c>,
-/// erster Parameter <c>ICommand</c>/<c>IEvent</c>) und die Szenarien über die Test-DSL-FORM (generischer Typ über einen
-/// State mit einer Methode, die genau ein <c>ICommand</c> nimmt) — nicht über ihren Namen.
+/// Baut Arbeitskarten aus Wissensgraph + Domänenmodell (Extractor-Ergebnis) und Roslyn-Symbolen. Slots über den Vertrag
+/// (<c>IDecider&lt;T&gt;</c>/<c>IApplier&lt;T&gt;</c>, 1. Parameter <c>ICommand</c>/<c>IEvent</c>), Szenarien über die FORM der Test-DSL
+/// (generischer Typ über einen State mit einer Methode, die genau ein <c>ICommand</c> nimmt) — nie über Namen.
 /// </summary>
 public sealed class KartenBauer
 {
     /// <summary>Spiegel von <c>SimHost.CodeSync.PromptMarke</c> (SimHost referenziert den Extractor nicht).</summary>
     public const string PromptMarke = "// 🤖 Prompt:";
-
-    /// <summary>Bis zu dieser Größe wird der ganze Zustand gezeigt; darüber greift der Relevanz-Schnitt.</summary>
-    private const int ZustandVoll = 8;
 
     private static readonly SymbolDisplayFormat Kurz = new(
         globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Omitted,
@@ -135,19 +138,26 @@ public sealed class KartenBauer
                               | SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
     private sealed record Slot(string Art, INamedTypeSymbol State, INamedTypeSymbol Klasse, IMethodSymbol Methode,
-        INamedTypeSymbol Disc, MethodDeclarationSyntax Syntax);
+        INamedTypeSymbol Disc, MethodDeclarationSyntax Syntax)
+    {
+        public string Titel => $"{(Art == "decide" ? "Decide" : "Apply")}({Disc.Name})";
+    }
+
+    /// <summary>Ein Zugriff eines Slot-Rumpfs auf ein State-Member: liest | schreibt | ruft .Methode.</summary>
+    private sealed record Zugriff(string Member, string Art);
 
     private readonly List<Compilation> _comps;
     private readonly HashSet<string> _domänen;
     private readonly List<Compilation> _tests;
+    private readonly DomainModel _dom;
+    private readonly KnowledgeGraph _graph;
     private readonly INamedTypeSymbol? _iCommand, _iEvent, _iTransient, _iState, _iDecider, _iApplier;
     private readonly List<Slot> _slots = new();
+    private readonly Dictionary<Slot, List<Zugriff>> _zugriffe = new();
 
-    private KartenBauer(List<Compilation> comps, HashSet<string> domänen, List<Compilation> tests)
+    private KartenBauer(List<Compilation> comps, HashSet<string> domänen, List<Compilation> tests, DomainModel dom, KnowledgeGraph graph)
     {
-        _comps = comps;
-        _domänen = domänen;
-        _tests = tests;
+        _comps = comps; _domänen = domänen; _tests = tests; _dom = dom; _graph = graph;
         INamedTypeSymbol? Get(string n) => _comps.Select(c => c.GetTypeByMetadataName(n)).FirstOrDefault(x => x != null);
         _iCommand = Get(Vertrag.ICommand);
         _iEvent = Get(Vertrag.IEvent);
@@ -156,21 +166,22 @@ public sealed class KartenBauer
         _iDecider = Get(Vertrag.IDecider);
         _iApplier = Get(Vertrag.IApplier);
         SammleSlots();
+        foreach (var s in _slots) _zugriffe[s] = Zugriffe(s).ToList();
     }
 
-    public static async Task<KartenBauer> ErstelleAsync(Solution solution, Projektlage lage)
+    public static async Task<KartenBauer> ErstelleAsync(Solution solution, Projektlage lage, DomainModel dom, KnowledgeGraph graph)
     {
         // Test-Projekte = Nicht-Analyse-Projekte, die eine Domänen-Assembly referenzieren (dort liegen die Szenarien).
         var analyse = lage.Analyse.Select(a => a.Projekt.Id).ToHashSet();
         var domänenIds = lage.Analyse.Where(a => lage.DomänenAssemblies.Contains(a.Compilation.AssemblyName ?? ""))
             .Select(a => a.Projekt.Id).ToHashSet();
-        var graph = solution.GetProjectDependencyGraph();
+        var abh = solution.GetProjectDependencyGraph();
         var tests = new List<Compilation>();
         foreach (var p in solution.Projects.Where(p => !analyse.Contains(p.Id)))
-            if (graph.GetProjectsThatThisProjectTransitivelyDependsOn(p.Id).Any(domänenIds.Contains)
+            if (abh.GetProjectsThatThisProjectTransitivelyDependsOn(p.Id).Any(domänenIds.Contains)
                 && await p.GetCompilationAsync() is { } c)
                 tests.Add(c);
-        return new KartenBauer(lage.Compilations, lage.DomänenAssemblies, tests);
+        return new KartenBauer(lage.Compilations, lage.DomänenAssemblies, tests, dom, graph);
     }
 
     /// <summary>Alle Karten, deren Disc (oder Aggregat.Disc) passt; ohne Filter alle.</summary>
@@ -202,12 +213,16 @@ public sealed class KartenBauer
         _slots.Sort((a, b) => string.CompareOrdinal($"{a.State.Name}|{a.Art}|{a.Disc.Name}", $"{b.State.Name}|{b.Art}|{b.Disc.Name}"));
     }
 
+    private IEnumerable<Slot> Nachbarn(Slot s, string? art = null) =>
+        _slots.Where(x => x != s && x.State.Fq() == s.State.Fq() && (art == null || x.Art == art));
+
     // ── Karte ──
 
     private Arbeitskarte Baue(Slot s)
     {
         var decide = s.Art == "decide";
         var pos = s.Syntax.GetLocation().GetLineSpan();
+        var p0 = s.Methode.Parameters[0].Name;
         var k = new Arbeitskarte
         {
             Art = s.Art, Aggregat = s.State.Name, Disc = s.Disc.Name,
@@ -215,68 +230,256 @@ public sealed class KartenBauer
             Rumpf = RumpfStatus(s),
             Signatur = $"{s.Methode.ReturnType.ToDisplayString(Kurz)} {s.Methode.Name}("
                        + string.Join(", ", s.Methode.Parameters.Select(p => $"{p.Type.ToDisplayString(Kurz)} {p.Name}")) + ")",
+            Erreichbar = $"{p0} ({s.Disc.Name}), this.State ({s.State.Name})",
         };
-        k.Verfuegbar.Add($"this.State (Typ {s.State.Name}, {(decide ? "nur lesen" : "schreibbar")}), {s.Methode.Parameters[0].Name}");
-
-        // Absicht: Prompt-Zeile im eigenen Rumpf + Doku/Banner-Kommentare an Methode und Eingangstyp.
-        k.Prompt = PromptAus(s.Syntax);
-        // (Die Doku des Eingangstyps steht beim Eingang im Vokabular — hier nicht doppelt.)
-        var absicht = new[] { DokuVon(s.Methode) }.Concat(Banner(s.Syntax)).Concat(TypBanner(s.Disc))
-            .Where(a => !string.IsNullOrWhiteSpace(a)).Select(a => a!).Distinct().ToList();
-        k.Absicht.AddRange(absicht.Where(a => !absicht.Any(x => x != a && x.StartsWith(a, StringComparison.Ordinal))));
-
-        k.Eingang = Eintrag(s.Disc, decide ? "Command" : "Event");
 
         var ausgänge = decide ? Ausgänge(s.Methode) : new List<INamedTypeSymbol>();
-        foreach (var o in ausgänge) k.Ausgaenge.Add(Eintrag(o, Sym.Implements(o, _iTransient) ? "Ablehnung" : "Event"));
+        var ablehnungen = ausgänge.Where(o => Sym.Implements(o, _iTransient)).ToList();
 
-        // Zustand mit Relevanz-Schnitt (Darstellung, keine Erkenntnis: gezeigt wird alles, nur unterschiedlich ausführlich).
-        var geschwister = _slots.Where(x => x.Art == s.Art && x.State.Fq() == s.State.Fq() && x.Disc.Fq() != s.Disc.Fq()).ToList();
+        // VERTRAG — nur, was Compiler bzw. Framework-Laufzeit tatsächlich erzwingen.
+        if (decide)
+        {
+            k.Vertrag.Add($"V1 Ausgaben ⊆ {{{string.Join(", ", ausgänge.Select(a => a.Name))}}}   — erzwungen: Compiler (OneOf-Signatur)");
+            if (ablehnungen.Count > 0)
+                k.Vertrag.Add($"V2 Ablehnung ({string.Join(", ", ablehnungen.Select(a => a.Name))}) nur als einzige Ausgabe   — erzwungen: Laufzeit (Aggregat-Actor wirft bei gemischtem Ergebnis)");
+        }
+
+        // KOMMENTARE — verbatim, mit Herkunft.
+        if (PromptAus(s.Syntax) is { } prompt) k.Kommentare.Add($"[Prompt im Rumpf] {prompt}");
+        if (DokuVon(s.Methode) is { } md) k.Kommentare.Add($"[/// an {s.Titel}] {md}");
+        foreach (var c in Kommentare(s.Syntax)) k.Kommentare.Add($"[// vor {s.Titel}] {c}");
+        foreach (var c in s.Disc.DeclaringSyntaxReferences.Where(r => !Projektlage.IstGeneriert(r.SyntaxTree)).Take(1).SelectMany(r => Kommentare(r.GetSyntax())))
+            k.Kommentare.Add($"[// vor {s.Disc.Name}] {c}");
+
+        // TYPEN
+        k.Eingang = Eintrag(s.Disc, decide ? "Command" : "Event", k);
+        foreach (var o in ausgänge) k.Ausgaenge.Add(Eintrag(o, Sym.Implements(o, _iTransient) ? "Ablehnung" : "Event", k));
         var member = ZustandsMember(s.State);
-        var relevant = RelevanteMember(s, member, ausgänge, geschwister);
-        k.Zustand = new KartenEintrag("", $"{s.State.Name}{(decide ? "  (nur lesen)" : "  (schreibbar über this.State)")}", null,
-            member.Where(m => relevant.Contains(m.Name)).Select(m => MemberZeile(m, decide)).ToList());
-        k.ZustandWeitere.AddRange(member.Where(m => !relevant.Contains(m.Name)).Select(m => $"{m.Name}:{MemberTyp(m)}"));
-
-        // Vorhandene Helfer der eigenen Klasse (alle partiellen Teile): Nicht-Slot-Methoden, handgeschrieben — nur Signatur.
-        var slotMethoden = _slots.Where(x => x.Klasse.Fq() == s.Klasse.Fq()).Select(x => x.Methode).ToList();
-        var helfer = s.Klasse.GetMembers().OfType<IMethodSymbol>()
-            .Where(m => m.MethodKind == MethodKind.Ordinary && !m.IsImplicitlyDeclared
-                        && !slotMethoden.Any(x => SymbolEqualityComparer.Default.Equals(x, m))
-                        && m.DeclaringSyntaxReferences.Any(r => !Projektlage.IstGeneriert(r.SyntaxTree)))
-            .ToList();
-        k.Helfer.AddRange(helfer.Select(m => MemberZeile(m, decide)));
-
-        // Transitive Domänen-Typen (VOs, Enums, …) aus Eingang, Ausgängen und relevantem Zustand — Tiefe 2.
+        k.Zustand = new KartenEintrag("", s.State.Name, DokuVon(s.State), member.Select(m => MemberZeile(m)).ToList());
+        foreach (var m in member) k.Symbole.Add(m.OriginalDefinition.ToDisplayString());
+        var helfer = Helfer(s);
+        foreach (var h in helfer) { k.Helfer.Add(MemberZeile(h)); k.Symbole.Add(h.OriginalDefinition.ToDisplayString()); }
         var schon = new HashSet<string>(StringComparer.Ordinal) { s.Disc.Fq(), s.State.Fq() };
         foreach (var o in ausgänge) schon.Add(o.Fq());
         var saat = Feldtypen(s.Disc).Concat(ausgänge.SelectMany(Feldtypen))
-            .Concat(member.Where(m => relevant.Contains(m.Name)).SelectMany(m => Entpacke(MemberTypSymbol(m))))
+            .Concat(member.SelectMany(m => Entpacke(MemberTypSymbol(m))))
             .Concat(helfer.SelectMany(m => m.Parameters.SelectMany(p => Entpacke(p.Type))));
-        foreach (var t in Transitiv(saat, schon, 2)) k.Typen.Add(Eintrag(t, t.TypeKind == TypeKind.Enum ? "Enum" : "Typ"));
+        foreach (var t in Transitiv(saat, schon)) k.Typen.Add(Eintrag(t, t.TypeKind == TypeKind.Enum ? "Enum" : "Typ", k));
 
-        var regeln = Regeln(s.Art);
-        k.Bcl = regeln.FirstOrDefault(r => r.StartsWith("BCL:")) ?? "";
-        k.Regeln.AddRange(regeln.Where(r => !r.StartsWith("BCL:")));
+        // GRAPH-UMFELD
+        if (decide) UmfeldDecide(s, ausgänge, k); else UmfeldApply(s, k);
 
-        k.Beispiel = Beispiel(s, ausgänge, geschwister);
+        // BEZÜGE
+        if (decide)
+        {
+            B1(s, ausgänge, k);
+            B2Decide(s, ausgänge, member, k);
+        }
+        else
+        {
+            B2Apply(s, member, k);
+            B3(s, member, k);
+        }
+        B4(s, member, k);
+
+        k.Beispiel = Beispiel(s, ausgänge);
         k.Szenarien.AddRange(Szenarien(s));
         if (k.Rumpf == "geschrieben") k.NichtAufKarte = Gegenprobe(s, k);
         return k;
     }
 
-    // ── Gegenprobe (Vorstufe der Kartenwand W2) ──
+    // ── Graph-Umfeld ──
+
+    private Node? Knoten(NodeKind kind, INamedTypeSymbol t) =>
+        _graph.Nodes.FirstOrDefault(n => n.Kind == kind && n.FullName == t.Fq())
+        ?? _graph.Nodes.FirstOrDefault(n => n.Kind == kind && n.Name == t.Name);
+
+    private void UmfeldDecide(Slot s, List<INamedTypeSymbol> ausgänge, Arbeitskarte k)
+    {
+        var cmd = Knoten(NodeKind.command, s.Disc);
+        var quellen = new List<string>();
+        if (cmd != null)
+        {
+            foreach (var e in _graph.Edges.Where(e => e.To == cmd.Id))
+            {
+                var von = _graph.Nodes.FirstOrDefault(n => n.Id == e.From);
+                if (e.Kind is EdgeKind.sends or EdgeKind.compensates && von?.Process is { } pi && int.TryParse(e.Via, out var ri) && ri < pi.Rules.Count)
+                    quellen.Add($"Prozess {von.Name} Regel {ri} ({(e.Kind == EdgeKind.compensates ? "Kompensation" : "wenn " + string.Join(" + ", pi.Rules[ri].When))}{(pi.Rules[ri].FanOut ? ", je Element" : "")})");
+                else if (e.Kind == EdgeKind.pipelineEmits && von != null)
+                    quellen.Add($"Pipeline {von.Name}");
+            }
+            if (cmd.Command!.Origin.Contains("client")) quellen.Insert(0, "Client");
+        }
+        k.Umfeld.Add($"{s.Disc.Name} kommt von: {(quellen.Count == 0 ? "— (nicht im Graphen)" : string.Join(" · ", quellen.Distinct()))}");
+        foreach (var o in ausgänge) k.Umfeld.Add($"{o.Name} geht an: {Abnehmer(o, s.State)}");
+    }
+
+    private void UmfeldApply(Slot s, Arbeitskarte k)
+    {
+        var evt = Knoten(NodeKind.@event, s.Disc);
+        var erzeuger = new List<string>();
+        if (evt != null)
+            foreach (var cmd in _graph.Nodes.Where(n => n.Kind == NodeKind.command && n.Command!.Produces.Any(p => p.Event == evt.Name)))
+            {
+                var guard = cmd.Command!.Produces.First(p => p.Event == evt.Name).Guard;
+                erzeuger.Add($"Decide({cmd.Name}){(guard != null ? $" wenn `{guard}`" : " ohne umschließende Bedingung")}");
+            }
+        k.Umfeld.Add($"{s.Disc.Name} erzeugt von: {(erzeuger.Count == 0 ? "— (kein Decide im Graphen)" : string.Join(" · ", erzeuger))}");
+        k.Umfeld.Add($"{s.Disc.Name} geht außerdem an: {Abnehmer(s.Disc, s.State, ohneApply: true)}");
+    }
+
+    /// <summary>Wer ein Event konsumiert — aus dem Graphen (Apply, Projektionen, Prozesse, Pipelines).</summary>
+    private string Abnehmer(INamedTypeSymbol evt, INamedTypeSymbol state, bool ohneApply = false)
+    {
+        if (Sym.Implements(evt, _iTransient)) return "Aufrufer (Ablehnung, nicht im Log)";
+        var ziele = new List<string>();
+        if (!ohneApply)
+        {
+            var apply = _slots.FirstOrDefault(x => x.Art == "apply" && x.State.Fq() == state.Fq() && x.Disc.Fq() == evt.Fq());
+            ziele.Add(apply == null ? $"Apply({evt.Name}) FEHLT" : $"Apply({evt.Name}) [{RumpfStatus(apply)}]");
+        }
+        var fo = _graph.Views.EventFanout.FirstOrDefault(f => f.Event == evt.Name);
+        if (fo != null)
+        {
+            ziele.AddRange(fo.Projections.Select(p => $"Projektion {p}"));
+            ziele.AddRange(fo.TriggersProcesses.Select(p => $"Prozess {p} (Auslöser)"));
+            ziele.AddRange(fo.AdvancesProcesses.Select(p => $"Prozess {p} (Bedingung)"));
+            ziele.AddRange(fo.Pipelines.Select(p => $"Pipeline {p}"));
+        }
+        return ziele.Count == 0 ? "—" : string.Join(" · ", ziele);
+    }
+
+    // ── Bezüge (Regeln) ──
+
+    /// <summary>B1: unter welchen Guards erzeugen ANDERE Decide-Slots desselben Aggregats denselben Ausgangstyp? (Guards aus dem Graphen.)</summary>
+    private void B1(Slot s, List<INamedTypeSymbol> ausgänge, Arbeitskarte k)
+    {
+        var agg = _dom.Aggregates.FirstOrDefault(a => a.Full == s.State.Fq());
+        if (agg == null) return;
+        foreach (var o in ausgänge)
+        {
+            var andere = agg.DecideOutcomes.Where(kv => kv.Key != s.Disc.Fq() && kv.Value.Contains(o.Fq()))
+                .Select(kv => (Cmd: kv.Key.Split('.').Last(), Guard: agg.Guards.TryGetValue(kv.Key + "|" + o.Name, out var g) ? g : null))
+                .ToList();
+            if (andere.Count == 0) continue;
+            var teile = andere.GroupBy(a => a.Guard ?? "")
+                .OrderByDescending(g => g.Count()).ThenBy(g => g.Key, StringComparer.Ordinal)
+                .Select(g => $"{(g.Key.Length == 0 ? "ohne umschließende Bedingung" : $"`{g.Key}`")} in {g.Count()} ({string.Join(", ", g.Select(a => a.Cmd))})");
+            k.Bezuege.Add($"B1 {o.Name} — in {andere.Count} anderen Decide: {string.Join("; ", teile)}");
+        }
+    }
+
+    /// <summary>B2 (Decide): je Konstruktor-Parameter eines Ausgangs die erreichbaren Werte exakt gleichen Typs.</summary>
+    private void B2Decide(Slot s, List<INamedTypeSymbol> ausgänge, List<ISymbol> member, Arbeitskarte k)
+    {
+        var p0 = s.Methode.Parameters[0].Name;
+        var quellen = Felder(s.Disc).Select(f => (Ausdruck: $"{p0}.{f.Name}", Typ: FeldTyp(f)))
+            .Concat(member.OfType<IPropertySymbol>().Select(p => (Ausdruck: $"State.{p.Name}", Typ: (ITypeSymbol?)p.Type)))
+            .ToList();
+        // Je Typ EINE Zeile: alle Ausgangs-Parameter dieses Typs ← alle erreichbaren Werte dieses Typs.
+        var parameter = ausgänge.SelectMany(o => (PrimärKonstruktor(o)?.Parameters ?? ImmutableEmpty).Select(p => (Ziel: $"{o.Name}.{p.Name}", p.Type)));
+        foreach (var g in NachTyp(parameter.Select(x => (x.Ziel, x.Type))))
+        {
+            var treffer = quellen.Where(q => q.Typ != null && Gleich(q.Typ, g.Typ)).Select(q => q.Ausdruck).ToList();
+            k.Bezuege.Add($"B2 {g.Typ.ToDisplayString(Kurz)}: {string.Join(", ", g.Namen)} ← {(treffer.Count == 0 ? "kein Wert dieses Typs erreichbar" : string.Join(", ", treffer))}");
+        }
+    }
+
+    /// <summary>Gruppiert (Name, Typ)-Paare nach exakter Typgleichheit, in Auftretens-Reihenfolge.</summary>
+    private static List<(ITypeSymbol Typ, List<string> Namen)> NachTyp(IEnumerable<(string Name, ITypeSymbol Typ)> paare)
+    {
+        var gruppen = new List<(ITypeSymbol Typ, List<string> Namen)>();
+        foreach (var (name, typ) in paare)
+        {
+            var g = gruppen.FirstOrDefault(x => Gleich(x.Typ, typ));
+            if (g.Typ == null) gruppen.Add((typ, new List<string> { name })); else g.Namen.Add(name);
+        }
+        return gruppen;
+    }
+
+    /// <summary>B2 (Apply): je Event-Feld die setzbaren State-Member gleichen Typs bzw. die Sammlungen mit diesem Elementtyp.</summary>
+    private void B2Apply(Slot s, List<ISymbol> member, Arbeitskarte k)
+    {
+        var felder = Felder(s.Disc).Where(f => FeldTyp(f) != null).Select(f => ($"{s.Disc.Name}.{f.Name}", FeldTyp(f)!));
+        foreach (var g in NachTyp(felder))
+        {
+            var ft = g.Typ;
+            var fe = ElementTyp(ft);
+            var ziele = new List<string>();
+            // Generierte Member (Id/Version) gehören dem Framework — kein Schreibziel für Apply.
+            foreach (var p in member.OfType<IPropertySymbol>().Where(IstHandgeschrieben))
+            {
+                if (p.SetMethod != null && Gleich(p.Type, ft)) ziele.Add($"State.{p.Name} (setzbar)");
+                var pe = ElementTyp(p.Type);
+                if (pe != null && (Gleich(pe, ft) || fe != null && Gleich(pe, fe)))
+                    ziele.Add($"State.{p.Name} (Sammlung von {pe.ToDisplayString(Kurz)})");
+            }
+            k.Bezuege.Add($"B2 {ft.ToDisplayString(Kurz)}: {string.Join(", ", g.Namen)} → {(ziele.Count == 0 ? "kein Ziel gleichen Typs" : string.Join(", ", ziele))}");
+        }
+    }
+
+    /// <summary>B3 (Apply): ein Zustands-Typ, dessen Konstruktor exakt die Typfolge der Event-Felder nimmt.</summary>
+    private void B3(Slot s, List<ISymbol> member, Arbeitskarte k)
+    {
+        var folge = Felder(s.Disc).Select(FeldTyp).ToList();
+        if (folge.Count == 0 || folge.Any(t => t == null)) return;
+        foreach (var p in member.OfType<IPropertySymbol>().Where(p => p.SetMethod != null && IstHandgeschrieben(p)))
+            if (p.Type is INamedTypeSymbol pt && PrimärKonstruktor(pt) is { } ctor && ctor.Parameters.Length == folge.Count
+                && ctor.Parameters.Select((x, i) => Gleich(x.Type, folge[i]!)).All(x => x))
+                k.Bezuege.Add($"B3 State.{p.Name} : {pt.Name} — Konstruktor {pt.Name}({string.Join(", ", ctor.Parameters.Select(x => x.Type.ToDisplayString(Kurz)))}) = Feldfolge von {s.Disc.Name}");
+    }
+
+    /// <summary>B4: Datenfluss der Nachbar-Slots auf den Zustand (liest / schreibt / ruft .Methode).</summary>
+    private void B4(Slot s, List<ISymbol> member, Arbeitskarte k)
+    {
+        foreach (var m in member)
+        {
+            var teile = new List<string>();
+            foreach (var art in new[] { "liest", "schreibt" })
+            {
+                var wer = Nachbarn(s).Where(n => _zugriffe[n].Any(z => z.Member == m.Name && z.Art == art)).Select(n => n.Titel).ToList();
+                if (wer.Count > 0) teile.Add($"{(art == "liest" ? "gelesen" : "geschrieben")} von {string.Join(", ", wer)}");
+            }
+            foreach (var g in Nachbarn(s).SelectMany(n => _zugriffe[n].Where(z => z.Member == m.Name && z.Art.StartsWith('.')).Select(z => (z.Art, n.Titel)))
+                         .GroupBy(x => x.Art))
+                teile.Add($"{g.Key}() von {string.Join(", ", g.Select(x => x.Titel).Distinct())}");
+            // Apply: ein handgeschriebenes, veränderbares Member, das KEIN anderer Apply-Slot schreibt oder verändert.
+            if (s.Art == "apply" && IstHandgeschrieben(m) && m is IPropertySymbol { } pm && (pm.SetMethod != null || ElementTyp(pm.Type) != null)
+                && !Nachbarn(s, "apply").Any(n => _zugriffe[n].Any(z => z.Member == m.Name && z.Art != "liest")))
+                teile.Add("von keinem anderen Apply geschrieben oder verändert");
+            if (teile.Count > 0) k.Bezuege.Add($"B4 State.{m.Name}: {string.Join("; ", teile)}");
+        }
+    }
+
+    private static bool IstHandgeschrieben(ISymbol m) => m.DeclaringSyntaxReferences.Any(r => !Projektlage.IstGeneriert(r.SyntaxTree));
+
+    private IEnumerable<Zugriff> Zugriffe(Slot s)
+    {
+        if (s.Syntax.Body is null && s.Syntax.ExpressionBody is null) yield break;
+        var model = Model(s.Syntax.SyntaxTree);
+        foreach (var id in s.Syntax.DescendantNodes().OfType<SimpleNameSyntax>())
+        {
+            if (model.GetSymbolInfo(id).Symbol is not { } sym || sym.ContainingType?.Fq() != s.State.Fq()) continue;
+            if (sym is not (IPropertySymbol or IMethodSymbol or IFieldSymbol)) continue;
+            var e = id.Parent is MemberAccessExpressionSyntax ma && ma.Name == id ? (ExpressionSyntax)ma : id;
+            if (e.Parent is AssignmentExpressionSyntax a && a.Left == e
+                || e.Parent is PostfixUnaryExpressionSyntax or PrefixUnaryExpressionSyntax { RawKind: (int)SyntaxKind.PreIncrementExpression or (int)SyntaxKind.PreDecrementExpression })
+                yield return new Zugriff(sym.Name, "schreibt");
+            else if (e.Parent is MemberAccessExpressionSyntax aufruf && aufruf.Expression == e && aufruf.Parent is InvocationExpressionSyntax)
+                yield return new Zugriff(sym.Name, "." + aufruf.Name.Identifier.Text);
+            else
+                yield return new Zugriff(sym.Name, "liest");
+        }
+    }
+
+    // ── Gegenprobe ──
 
     /// <summary>
-    /// Alle im eigenen Rumpf gebundenen Symbole aus Domänen-Assemblies (Typen, Member, Konstruktoren) — steht ihr Name
-    /// im VOKABULAR-Abschnitt der Karte? Parameter/Lokale/BCL zählen nicht (die sind Signatur bzw. BCL-Zeile).
+    /// Alle im eigenen Rumpf gebundenen Symbole aus Domänen-Assemblies (Typen, Member, Konstruktoren) — deklariert die Karte
+    /// sie (Symbol-Identität, nicht Name)? Parameter/Lokale/BCL zählen nicht; <c>this.State</c> ist generierter Rahmen.
     /// </summary>
     private List<string> Gegenprobe(Slot s, Arbeitskarte k)
     {
-        var text = k.AlsText();
-        var a = text.IndexOf("## VOKABULAR", StringComparison.Ordinal);
-        var e = text.IndexOf("## REGELN", StringComparison.Ordinal);
-        var vokabular = a >= 0 && e > a ? text[a..e] : text;
         var model = Model(s.Syntax.SyntaxTree);
         var fehlt = new SortedSet<string>(StringComparer.Ordinal);
         foreach (var n in s.Syntax.Body?.DescendantNodes().OfType<SimpleNameSyntax>() ?? Enumerable.Empty<SimpleNameSyntax>())
@@ -286,15 +489,17 @@ public sealed class KartenBauer
             if (sym is null or IParameterSymbol or ILocalSymbol or IRangeVariableSymbol or INamespaceSymbol) continue;
             var asm = (sym as ITypeSymbol ?? sym.ContainingType)?.ContainingAssembly?.Name;
             if (!_domänen.Contains(asm ?? "")) continue;
-            // this.State selbst ist generierter Rahmen (steht als „Verfügbar“ in der Signatur-Sektion).
-            if (sym is IPropertySymbol { Name: "State" } p && p.ContainingType.Fq() == s.Klasse.Fq()) continue;
-            if (!Regex.IsMatch(vokabular, $@"(?<![\wÄÖÜäöüß]){Regex.Escape(sym.Name)}(?![\wÄÖÜäöüß])"))
-                fehlt.Add(sym is ITypeSymbol ? sym.Name : $"{sym.ContainingType?.Name}.{sym.Name}");
+            if (sym is IPropertySymbol p && p.ContainingType.Fq() == s.Klasse.Fq() && SymbolEqualityComparer.Default.Equals(p.Type, s.State)) continue;
+            var id = sym is ITypeSymbol ts ? ts.OriginalDefinition.Fq() : sym.OriginalDefinition.ToDisplayString();
+            if (!k.Symbole.Contains(id)) fehlt.Add(sym is ITypeSymbol ? sym.Name : $"{sym.ContainingType?.Name}.{sym.Name}");
         }
         return fehlt.ToList();
     }
 
-    // ── Ausgänge / Zustand ──
+    // ── Typen / Member ──
+
+    private static readonly System.Collections.Immutable.ImmutableArray<IParameterSymbol> ImmutableEmpty =
+        System.Collections.Immutable.ImmutableArray<IParameterSymbol>.Empty;
 
     private List<INamedTypeSymbol> Ausgänge(IMethodSymbol m)
     {
@@ -304,71 +509,49 @@ public sealed class KartenBauer
         return Vertrag.IstOneOf(oneOf) ? oneOf!.TypeArguments.OfType<INamedTypeSymbol>().ToList() : new();
     }
 
-    private List<ISymbol> ZustandsMember(INamedTypeSymbol state) => state.GetMembers()
+    private static List<ISymbol> ZustandsMember(INamedTypeSymbol state) => state.GetMembers()
         .Where(m => m.DeclaredAccessibility == Accessibility.Public && !m.IsImplicitlyDeclared && !m.IsStatic)
         .Where(m => m is IPropertySymbol || m is IMethodSymbol { MethodKind: MethodKind.Ordinary })
         .Where(m => m.DeclaringSyntaxReferences.Length > 0)
-        .OrderBy(m => m.DeclaringSyntaxReferences[0].SyntaxTree.FilePath, StringComparer.Ordinal)
+        .OrderBy(m => Projektlage.IstGeneriert(m.DeclaringSyntaxReferences[0].SyntaxTree))   // handgeschrieben zuerst
+        .ThenBy(m => m.DeclaringSyntaxReferences[0].SyntaxTree.FilePath, StringComparer.Ordinal)
         .ThenBy(m => m.DeclaringSyntaxReferences[0].Span.Start)
         .ToList();
 
-    private HashSet<string> RelevanteMember(Slot s, List<ISymbol> member, List<INamedTypeSymbol> ausgänge, List<Slot> geschwister)
+    /// <summary>Handgeschriebene Nicht-Slot-Methoden der eigenen Decider-/Applier-Klasse (alle partiellen Teile).</summary>
+    private List<IMethodSymbol> Helfer(Slot s)
     {
-        var namen = member.Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
-        // Generierte Framework-Member (Id/Version) nur, wenn ein Nachbar sie benutzt.
-        var hand = member.Where(m => m.DeclaringSyntaxReferences.Any(r => !Projektlage.IstGeneriert(r.SyntaxTree))).ToList();
-        if (hand.Count <= ZustandVoll) return hand.Select(m => m.Name).ToHashSet(StringComparer.Ordinal);
-
-        var rel = new HashSet<string>(StringComparer.Ordinal);
-        // (1) von Nachbar-Rümpfen derselben Art gelesen/geschrieben (Datenfluss über das Semantic Model)
-        foreach (var g in geschwister)
-            foreach (var n in StateZugriffe(g)) if (namen.Contains(n)) rel.Add(n);
-        // (2) Decide: berechnete bool-Helfer (billig, hoher Nutzen)
-        if (s.Art == "decide")
-            foreach (var p in hand.OfType<IPropertySymbol>().Where(p => p.SetMethod == null && p.Type.SpecialType == SpecialType.System_Boolean))
-                rel.Add(p.Name);
-        // (3) Wortgleichheit mit Eingang/Ausgängen/Feldern (nur Ranking — gezeigt wird ohnehin alles)
-        var wörter = Wörter(s.Disc.Name).Concat(ausgänge.SelectMany(a => Wörter(a.Name)))
-            .Concat(Felder(s.Disc).SelectMany(f => Wörter(f.Name))).ToHashSet(StringComparer.OrdinalIgnoreCase);
-        foreach (var m in hand) if (Wörter(m.Name).Any(wörter.Contains)) rel.Add(m.Name);
-        return rel;
+        var slotMethoden = _slots.Where(x => x.Klasse.Fq() == s.Klasse.Fq()).Select(x => x.Methode).ToList();
+        return s.Klasse.GetMembers().OfType<IMethodSymbol>()
+            .Where(m => m.MethodKind == MethodKind.Ordinary && !m.IsImplicitlyDeclared
+                        && !slotMethoden.Any(x => SymbolEqualityComparer.Default.Equals(x, m))
+                        && m.DeclaringSyntaxReferences.Any(r => !Projektlage.IstGeneriert(r.SyntaxTree)))
+            .ToList();
     }
 
-    private IEnumerable<string> StateZugriffe(Slot s)
-    {
-        if (s.Syntax.Body is null && s.Syntax.ExpressionBody is null) yield break;
-        var model = Model(s.Syntax.SyntaxTree);
-        foreach (var id in s.Syntax.DescendantNodes().OfType<SimpleNameSyntax>())
-            if (model.GetSymbolInfo(id).Symbol is { } sym && sym.ContainingType?.Fq() == s.State.Fq()
-                && sym is IPropertySymbol or IMethodSymbol)
-                yield return sym.Name;
-    }
-
-    private static IEnumerable<string> Wörter(string name) =>
-        Regex.Matches(name, "[A-ZÄÖÜ][a-zäöüß]+|[a-zäöüß]+").Select(m => m.Value).Where(w => w.Length >= 4);
-
-    private string MemberZeile(ISymbol m, bool decide)
+    /// <summary>Eine Member-Zeile: Signatur, bei Expression-Bodies der Ausdruck als Code, dahinter der Doku-Kommentar (falls vorhanden).</summary>
+    private static string MemberZeile(ISymbol m)
     {
         var sig = (m.IsStatic ? "static " : "") + m switch
         {
-            IPropertySymbol p => $"{p.Type.ToDisplayString(Kurz)} {p.Name}{(!decide && p.SetMethod == null && !IstSammlung(p.Type) ? "   (berechnet)" : "")}",
+            IPropertySymbol p => $"{p.Type.ToDisplayString(Kurz)} {p.Name}{Accessor(p)}",
             IMethodSymbol ms => $"{ms.ReturnType.ToDisplayString(Kurz)} {ms.Name}({string.Join(", ", ms.Parameters.Select(x => $"{x.Type.ToDisplayString(Kurz)} {x.Name}"))})",
             _ => m.Name,
         };
-        var info = DokuVon(m) ?? KurzAusdruck(m);
-        return info == null ? sig : $"{sig,-40} // {info}";
+        if (Ausdruck(m) is { } expr) sig += " => " + expr;
+        var doku = DokuVon(m);
+        return doku == null ? sig : $"{sig}   /// {doku}";
     }
 
-    private static string MemberTyp(ISymbol m) => MemberTypSymbol(m)?.ToDisplayString(Kurz) ?? "?";
-    private static ITypeSymbol? MemberTypSymbol(ISymbol m) => m switch
+    /// <summary>Accessor-Satz einer Property als Code-Fakt (nur bei nicht-berechneten Properties).</summary>
+    private static string Accessor(IPropertySymbol p)
     {
-        IPropertySymbol p => p.Type, IMethodSymbol ms => ms.ReturnType, IFieldSymbol f => f.Type, _ => null,
-    };
+        if (Ausdruck(p) != null) return "";
+        if (p.SetMethod == null) return " { get; }";
+        return p.SetMethod.IsInitOnly ? " { get; init; }" : " { get; set; }";
+    }
 
-    private static bool IstSammlung(ITypeSymbol t) => t is INamedTypeSymbol n && n.TypeArguments.Length > 0 || t is IArrayTypeSymbol;
-
-    /// <summary>Expression-bodied Helfer als Kurzform (<c>=&gt; Status == …</c>), wenn kurz — sonst null.</summary>
-    private static string? KurzAusdruck(ISymbol m)
+    private static string? Ausdruck(ISymbol m)
     {
         var syn = m.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax();
         var expr = syn switch
@@ -377,34 +560,42 @@ public sealed class KartenBauer
             MethodDeclarationSyntax md => md.ExpressionBody?.Expression,
             _ => null,
         };
-        var text = expr == null ? null : Regex.Replace(expr.ToString(), @"\s+", " ");
-        return text is { Length: <= 70 } ? "=> " + text : null;
+        return expr == null ? null : Regex.Replace(expr.ToString(), @"\s+", " ");
     }
 
-    // ── Typen ──
-
-    private KartenEintrag Eintrag(INamedTypeSymbol t, string rolle)
+    private static ITypeSymbol? MemberTypSymbol(ISymbol m) => m switch
     {
+        IPropertySymbol p => p.Type, IMethodSymbol ms => ms.ReturnType, IFieldSymbol f => f.Type, _ => null,
+    };
+
+    private KartenEintrag Eintrag(INamedTypeSymbol t, string rolle, Arbeitskarte k)
+    {
+        k.Symbole.Add(t.OriginalDefinition.Fq());
         if (t.TypeKind == TypeKind.Enum)
-            return new KartenEintrag(rolle, $"enum {t.Name} {{ {string.Join(", ", t.GetMembers().OfType<IFieldSymbol>().Where(f => f.HasConstantValue).Select(f => f.Name))} }}",
-                DokuVon(t), new());
+        {
+            var werte = t.GetMembers().OfType<IFieldSymbol>().Where(f => f.HasConstantValue).ToList();
+            foreach (var w in werte) k.Symbole.Add(w.OriginalDefinition.ToDisplayString());
+            return new KartenEintrag(rolle, $"enum {t.Name} {{ {string.Join(", ", werte.Select(f => f.Name))} }}", DokuVon(t), new());
+        }
 
-        var felder = Felder(t);
         var ctor = PrimärKonstruktor(t);
-        string dekl;
-        if (ctor != null)
-            dekl = $"{t.Name}({string.Join(", ", ctor.Parameters.Select(p => $"{p.Type.ToDisplayString(Kurz)} {p.Name}"))})";
-        else
-            dekl = felder.Count == 0 ? $"{t.Name}()" : $"{t.Name} {{ {string.Join("; ", felder.Select(f => $"{MemberTyp(f)} {f.Name}"))} }}";
+        var felder = Felder(t);
+        var dekl = ctor != null
+            ? $"{t.Name}({string.Join(", ", ctor.Parameters.Select(p => $"{p.Type.ToDisplayString(Kurz)} {p.Name}"))})"
+            : felder.Count == 0 ? $"{t.Name}()" : $"{t.Name} {{ {string.Join("; ", felder.Select(f => $"{FeldTyp(f)?.ToDisplayString(Kurz)} {f.Name}"))} }}";
 
-        // Zusätzliche öffentliche Oberfläche (berechnete Properties, statische Werte, Methoden) — ohne Rümpfe.
+        // Alle öffentlichen Member (auch die Record-Properties) sind Teil des Vokabulars.
+        foreach (var m in t.GetMembers().Where(m => m.DeclaredAccessibility == Accessibility.Public))
+            k.Symbole.Add(m.OriginalDefinition.ToDisplayString());
+
+        // Zusätzliche öffentliche Oberfläche (berechnete/statische Properties, Methoden) — mit Ausdruck, ohne Block-Rümpfe.
         var ctorNamen = ctor?.Parameters.Select(p => p.Name).ToHashSet(StringComparer.Ordinal) ?? new();
         var extra = t.GetMembers()
             .Where(m => m.DeclaredAccessibility == Accessibility.Public && !m.IsImplicitlyDeclared
                         && m.DeclaringSyntaxReferences.Any(r => !Projektlage.IstGeneriert(r.SyntaxTree)))
             .Where(m => m is IPropertySymbol p && !ctorNamen.Contains(p.Name) && (ctor != null || p.SetMethod == null)
                         || m is IMethodSymbol { MethodKind: MethodKind.Ordinary })
-            .Select(m => MemberZeile(m, true))
+            .Select(MemberZeile)
             .ToList();
         return new KartenEintrag(rolle, dekl, DokuVon(t), extra);
     }
@@ -422,8 +613,22 @@ public sealed class KartenBauer
             .Where(p => p.DeclaredAccessibility == Accessibility.Public && !p.IsStatic && p.SetMethod != null).Cast<ISymbol>().ToList();
     }
 
-    private static IEnumerable<ITypeSymbol> Feldtypen(INamedTypeSymbol t) =>
-        Felder(t).SelectMany(f => Entpacke(f switch { IParameterSymbol p => p.Type, _ => MemberTypSymbol(f) }));
+    private static ITypeSymbol? FeldTyp(ISymbol f) => f switch { IParameterSymbol p => p.Type, _ => MemberTypSymbol(f) };
+
+    private static IEnumerable<ITypeSymbol> Feldtypen(INamedTypeSymbol t) => Felder(t).SelectMany(f => Entpacke(FeldTyp(f)));
+
+    /// <summary>Typgleichheit inkl. Nullbarkeit (int ≠ int?, string ≠ string?).</summary>
+    private static bool Gleich(ITypeSymbol a, ITypeSymbol b) => SymbolEqualityComparer.IncludeNullability.Equals(a, b);
+
+    /// <summary>Elementtyp einer Sammlung (per Symbol: das <c>IEnumerable&lt;T&gt;</c>-Interface; <c>string</c> nicht).</summary>
+    private static ITypeSymbol? ElementTyp(ITypeSymbol t)
+    {
+        if (t.SpecialType == SpecialType.System_String) return null;
+        if (t is IArrayTypeSymbol a) return a.ElementType;
+        var ie = (t as INamedTypeSymbol)?.AllInterfaces.Concat(t is INamedTypeSymbol n ? new[] { n } : Array.Empty<INamedTypeSymbol>())
+            .FirstOrDefault(i => i.OriginalDefinition.SpecialType == SpecialType.System_Collections_Generic_IEnumerable_T);
+        return ie?.TypeArguments[0];
+    }
 
     private static IEnumerable<ITypeSymbol> Entpacke(ITypeSymbol? t)
     {
@@ -435,35 +640,31 @@ public sealed class KartenBauer
                 foreach (var x in Entpacke(arg)) yield return x;
     }
 
-    private IEnumerable<INamedTypeSymbol> Transitiv(IEnumerable<ITypeSymbol> saat, HashSet<string> schon, int tiefe)
+    /// <summary>Transitive Hülle der Domänen-Quelltypen (VOs, Enums, …) — vollständig, ohne Tiefengrenze.</summary>
+    private IEnumerable<INamedTypeSymbol> Transitiv(IEnumerable<ITypeSymbol> saat, HashSet<string> schon)
     {
-        var ebene = saat.ToList();
-        for (var d = 0; d < tiefe && ebene.Count > 0; d++)
+        var offen = new Queue<ITypeSymbol>(saat);
+        while (offen.Count > 0)
         {
-            var nächste = new List<ITypeSymbol>();
-            foreach (var t in ebene.OfType<INamedTypeSymbol>())
-            {
-                if (!_domänen.Contains(t.ContainingAssembly?.Name ?? "")) continue;
-                if (!t.DeclaringSyntaxReferences.Any(r => !Projektlage.IstGeneriert(r.SyntaxTree))) continue;
-                if (!schon.Add(t.OriginalDefinition.Fq())) continue;
-                yield return t;
-                if (t.TypeKind != TypeKind.Enum) nächste.AddRange(Feldtypen(t));
-            }
-            ebene = nächste;
+            if (offen.Dequeue() is not INamedTypeSymbol t) continue;
+            if (!_domänen.Contains(t.ContainingAssembly?.Name ?? "")) continue;
+            if (!t.DeclaringSyntaxReferences.Any(r => !Projektlage.IstGeneriert(r.SyntaxTree))) continue;
+            if (!schon.Add(t.OriginalDefinition.Fq())) continue;
+            yield return t;
+            if (t.TypeKind != TypeKind.Enum) foreach (var x in Feldtypen(t)) offen.Enqueue(x);
         }
     }
 
-    // ── Beispiel ──
+    // ── Beispiel (B5) ──
 
-    private (string, string)? Beispiel(Slot s, List<INamedTypeSymbol> ausgänge, List<Slot> geschwister)
+    private (string, string)? Beispiel(Slot s, List<INamedTypeSymbol> ausgänge)
     {
         var eigene = ausgänge.Select(a => a.Fq()).ToHashSet(StringComparer.Ordinal);
-        var kandidaten = geschwister.Where(g => RumpfStatus(g) == "geschrieben")
+        var kandidat = Nachbarn(s, s.Art).Where(g => RumpfStatus(g) == "geschrieben")
             .Select(g => (g, Rumpf: Rumpf(g.Syntax), Geteilt: Ausgänge(g.Methode).Count(a => eigene.Contains(a.Fq()))))
-            .Where(x => Regex.IsMatch(x.Rumpf, @"[;}]"))   // mindestens eine Anweisung (kein bloßer Kommentar)
             .OrderByDescending(x => x.Geteilt).ThenBy(x => x.Rumpf.Length).ThenBy(x => x.g.Disc.Name, StringComparer.Ordinal)
-            .ToList();
-        return kandidaten.Count == 0 ? null : (kandidaten[0].g.Disc.Name, kandidaten[0].Rumpf);
+            .FirstOrDefault();
+        return kandidat.g == null ? null : (kandidat.g.Disc.Name, kandidat.Rumpf);
     }
 
     /// <summary>„fehlt“ = der Scaffolder-Platzhalter (<c>throw new NotImplementedException</c>, per Symbol); ein leerer Rumpf ist bewusst.</summary>
@@ -478,10 +679,6 @@ public sealed class KartenBauer
         return b.Statements.Count > 0 ? "geschrieben" : "leer";
     }
 
-    /// <summary>Ist <paramref name="t"/> der Marker selbst oder implementiert ihn?</summary>
-    private static bool IstOderImplementiert(ITypeSymbol t, INamedTypeSymbol? marker) =>
-        marker != null && (t.Fq() == marker.Fq() || Sym.Implements(t, marker));
-
     private static string Rumpf(MethodDeclarationSyntax m)
     {
         if (m.ExpressionBody is { } e) return e.Expression + ";";
@@ -493,21 +690,19 @@ public sealed class KartenBauer
         return string.Join("\n", zeilen.Select(l => (l.Length >= min ? l[min..] : l.TrimStart()).TrimEnd())).Trim('\n');
     }
 
-    // ── Absicht ──
+    // ── Kommentare ──
 
     private static string? PromptAus(MethodDeclarationSyntax m) =>
         m.Body?.DescendantTrivia().Select(t => t.ToString().Trim())
             .FirstOrDefault(t => t.StartsWith(PromptMarke))?[PromptMarke.Length..].Trim();
 
-    /// <summary>Banner-/Zeilenkommentare direkt vor der Methode (ohne reine Trennlinien) — handgeschriebene Absicht.</summary>
-    private static IEnumerable<string> Banner(SyntaxNode n) => n.GetLeadingTrivia()
+    /// <summary>Zeilenkommentare vor einer Deklaration, verbatim (reine Trennlinien ohne Buchstaben ausgenommen).</summary>
+    private static IEnumerable<string> Kommentare(SyntaxNode n) => n.GetLeadingTrivia()
         .Where(t => t.IsKind(SyntaxKind.SingleLineCommentTrivia))
         .Select(t => t.ToString().TrimStart('/').Trim())
-        .Where(t => t.Length > 0 && t.Any(char.IsLetter));
+        .Where(t => t.Any(char.IsLetter));
 
-    private static IEnumerable<string> TypBanner(INamedTypeSymbol t) =>
-        t.DeclaringSyntaxReferences.Where(r => !Projektlage.IstGeneriert(r.SyntaxTree)).Take(1).SelectMany(r => Banner(r.GetSyntax()));
-
+    /// <summary>Der <c>&lt;summary&gt;</c>-Doku-Kommentar verbatim (Whitespace normalisiert, Verweise als Name) — oder null.</summary>
     private static string? DokuVon(ISymbol s)
     {
         var xml = s.GetDocumentationCommentXml();
@@ -519,7 +714,7 @@ public sealed class KartenBauer
             foreach (var r in summary.Descendants().Where(e => e.Name == "see" || e.Name == "paramref" || e.Name == "c").ToList())
                 r.ReplaceWith(r.Attribute("cref")?.Value.Split('.').Last().Split(':').Last() ?? r.Attribute("name")?.Value ?? r.Value);
             var text = Regex.Replace(summary.Value, @"\s+", " ").Trim();
-            return text.Length <= 220 ? text : text[..217].TrimEnd() + "…";
+            return text.Length == 0 ? null : text;
         }
         catch { return null; }
     }
@@ -541,8 +736,9 @@ public sealed class KartenBauer
                         ? kette.WennTyp?.Fq() == s.Disc.Fq()
                         : kette.HatZustandsPrüfung && kette.Erwähnt.Contains(s.Disc.Fq());
                     if (!passt) continue;
-                    var name = st.FirstAncestorOrSelf<MethodDeclarationSyntax>()?.Identifier.Text.Replace('_', ' ') ?? "";
-                    yield return new KartenSzenario(name, kette.Schritte);
+                    var name = st.FirstAncestorOrSelf<MethodDeclarationSyntax>()?.Identifier.Text ?? "";
+                    var zeile = st.GetLocation().GetLineSpan();
+                    yield return new KartenSzenario(name, $"{Path.GetFileName(zeile.Path)}:{zeile.StartLinePosition.Line + 1}", kette.Schritte);
                 }
             }
     }
@@ -571,8 +767,7 @@ public sealed class KartenBauer
         foreach (var g in glieder)
         {
             if (model.GetSymbolInfo(g).Symbol is not IMethodSymbol m) return null;
-            var besitzer = m.ContainingType;
-            var arg0 = besitzer?.TypeArguments.FirstOrDefault() as INamedTypeSymbol;
+            var arg0 = m.ContainingType?.TypeArguments.FirstOrDefault() as INamedTypeSymbol;
             if (arg0 != null && Sym.Implements(arg0, _iState)) state ??= arg0;
             if (m.Parameters.Length == 1 && IstOderImplementiert(m.Parameters[0].Type, _iCommand) && !m.Parameters[0].IsParams
                 && g.ArgumentList.Arguments.Count == 1)
@@ -590,16 +785,10 @@ public sealed class KartenBauer
 
     // ── Hilfen ──
 
-    private SemanticModel Model(SyntaxTree tree) => _comps.First(c => c.ContainsSyntaxTree(tree)).GetSemanticModel(tree);
+    private static bool IstOderImplementiert(ITypeSymbol t, INamedTypeSymbol? marker) =>
+        marker != null && (t.Fq() == marker.Fq() || Sym.Implements(t, marker));
 
-    private static List<string> Regeln(string art)
-    {
-        var name = $"GraphExtractor.Karten.{art}.txt";
-        using var s = Assembly.GetExecutingAssembly().GetManifestResourceStream(name)
-            ?? throw new InvalidOperationException($"Regelblock '{name}' fehlt (EmbeddedResource).");
-        using var r = new StreamReader(s);
-        return r.ReadToEnd().Replace("\r\n", "\n").Split('\n').Where(l => l.Trim().Length > 0).ToList();
-    }
+    private SemanticModel Model(SyntaxTree tree) => _comps.First(c => c.ContainsSyntaxTree(tree)).GetSemanticModel(tree);
 
     private static IEnumerable<INamedTypeSymbol> AlleTypen(INamespaceSymbol ns)
     {
@@ -623,9 +812,9 @@ public sealed class KartenBauer
 /// </summary>
 public static class KartenCli
 {
-    public static async Task<int> LaufAsync(string[] args, Solution solution, Projektlage lage)
+    public static async Task<int> LaufAsync(string[] args, Solution solution, Projektlage lage, DomainModel dom, KnowledgeGraph graph)
     {
-        var bauer = await KartenBauer.ErstelleAsync(solution, lage);
+        var bauer = await KartenBauer.ErstelleAsync(solution, lage, dom, graph);
         string? Wert(string flag) { var i = Array.IndexOf(args, flag); return i >= 0 && i + 1 < args.Length && !args[i + 1].StartsWith("--") ? args[i + 1] : null; }
 
         var ziel = Wert("--karte");
@@ -651,11 +840,11 @@ public static class KartenCli
         {
             Directory.CreateDirectory(verz);
             foreach (var k in alle) await File.WriteAllTextAsync(Path.Combine(verz, $"{k.Art}-{k.Id}.txt"), k.AlsText());
-            var md = new System.Text.StringBuilder();
-            md.AppendLine("| Art | Slot | Rumpf | Karte ≈Tok | Datei ≈Tok | Ordner ≈Tok | Szenarien | Beispiel | Gegenprobe |");
-            md.AppendLine("|---|---|---|---:|---:|---:|---:|---|---|");
+            var md = new StringBuilder();
+            md.AppendLine("| Art | Slot | Rumpf | Karte ≈Tok | Datei ≈Tok | Ordner ≈Tok | Szenarien | Kommentare | Beispiel | Gegenprobe |");
+            md.AppendLine("|---|---|---|---:|---:|---:|---:|---:|---|---|");
             foreach (var z in zeilen)
-                md.AppendLine($"| {z.k.Art} | {z.k.Id} | {Symbol(z.k.Rumpf)} | {z.Karte} | {z.Datei} | {z.Ordner} | {z.k.Szenarien.Count} | {z.k.Beispiel?.Disc ?? "—"} | {Probe(z.k)} |");
+                md.AppendLine($"| {z.k.Art} | {z.k.Id} | {Symbol(z.k.Rumpf)} | {z.Karte} | {z.Datei} | {z.Ordner} | {z.k.Szenarien.Count} | {z.k.Kommentare.Count} | {z.k.Beispiel?.Disc ?? "—"} | {Probe(z.k)} |");
             md.AppendLine($"\nDomäne gesamt ≈ {mass.Domäne} Token (handgeschriebene Quelltexte der Domänen-Projekte).");
             await File.WriteAllTextAsync(Path.Combine(verz, "übersicht.md"), md.ToString());
             var json = System.Text.Json.JsonSerializer.Serialize(new
@@ -665,7 +854,8 @@ public static class KartenCli
                 {
                     art = z.k.Art, id = z.k.Id, datei = Rel(z.k.Datei, solution), zeile = z.k.Zeile, rumpf = z.k.Rumpf,
                     token = new { karte = z.Karte, datei = z.Datei, ordner = z.Ordner },
-                    szenarien = z.k.Szenarien.Count, beispiel = z.k.Beispiel?.Disc, nichtAufKarte = z.k.NichtAufKarte, text = z.k.AlsText(),
+                    szenarien = z.k.Szenarien.Count, kommentare = z.k.Kommentare.Count, beispiel = z.k.Beispiel?.Disc,
+                    nichtAufKarte = z.k.NichtAufKarte, text = z.k.AlsText(),
                 }),
             }, new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping });
             await File.WriteAllTextAsync(Path.Combine(verz, "karten.json"), json);
@@ -673,15 +863,15 @@ public static class KartenCli
         }
 
         Console.WriteLine($"\n── Arbeitskarten: {alle.Count} Slots (Decide/Apply) ──");
-        Console.WriteLine($"   {"Art",-7}{"Slot",-44}{"Rumpf",-9}{"Karte",7}{"Datei",8}{"Ordner",8}{"Szen.",7}  Gegenprobe");
+        Console.WriteLine($"   {"Art",-7}{"Slot",-44}{"Rumpf",-9}{"Karte",7}{"Datei",8}{"Ordner",8}{"Szen.",7}{"Komm.",7}  Gegenprobe");
         foreach (var z in zeilen)
-            Console.WriteLine($"   {z.k.Art,-7}{z.k.Id,-44}{Symbol(z.k.Rumpf),-9}{z.Karte,7}{z.Datei,8}{z.Ordner,8}{z.k.Szenarien.Count,7}  {Probe(z.k)}");
+            Console.WriteLine($"   {z.k.Art,-7}{z.k.Id,-44}{Symbol(z.k.Rumpf),-9}{z.Karte,7}{z.Datei,8}{z.Ordner,8}{z.k.Szenarien.Count,7}{z.k.Kommentare.Count,7}  {Probe(z.k)}");
         var geprüft = alle.Where(k => k.NichtAufKarte != null).ToList();
-        Console.WriteLine($"\n   Gegenprobe: {geprüft.Count(k => k.NichtAufKarte!.Count == 0)}/{geprüft.Count} geschriebene Rümpfe benutzen nur Symbole ihrer Karte.");
+        Console.WriteLine($"\n   Gegenprobe: {geprüft.Count(k => k.NichtAufKarte!.Count == 0)}/{geprüft.Count} geschriebene Rümpfe benutzen nur Symbole, die ihre Karte deklariert.");
         if (zeilen.Count > 0)
         {
             var med = zeilen.Select(z => z.Karte).OrderBy(x => x).ElementAt(zeilen.Count / 2);
-            Console.WriteLine($"\n   Karte: Median ≈ {med}, Max ≈ {zeilen.Max(z => z.Karte)} Token · Ordner Median ≈ "
+            Console.WriteLine($"   Karte: Median ≈ {med}, Max ≈ {zeilen.Max(z => z.Karte)} Token · Ordner Median ≈ "
                 + $"{zeilen.Select(z => z.Ordner).OrderBy(x => x).ElementAt(zeilen.Count / 2)} · Domäne ≈ {mass.Domäne} Token (Schätzung Zeichen/3,3)");
         }
         return 0;

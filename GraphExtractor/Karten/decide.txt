@@ -1,8 +1,0 @@
-BCL: Vergleiche, Arithmetik, Bool-Logik, string, Guid (nur vorhandene Werte), Math, System.Linq auf Sammlungen, lokale Variablen
-R1 Rein: kein I/O, kein await, kein DateTime.Now/UtcNow, kein Guid.NewGuid, kein Random, keine statischen Zustände.
-R2 Ausgabe nur per `yield return new <Ausgang>(...)` — ausschließlich Typen aus AUSGÄNGE.
-R3 Eine Ablehnung steht ALLEIN: `yield return new <Ablehnung>(...); yield break;` — nie zusammen mit einem Event.
-R4 Nichts zu tun (idempotent) → `yield break;` ohne Ausgabe.
-R5 Den Zustand nie verändern (das tut ausschließlich Apply) — this.State nur lesen.
-R6 Mehrere Events hintereinander sind erlaubt, wenn die Absicht es verlangt (Reihenfolge = Reihenfolge im Log).
-R7 Keine neuen Typen, keine Hilfsmethoden, keine using-Direktiven — nur der Rumpf.

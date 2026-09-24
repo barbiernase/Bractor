@@ -55,10 +55,6 @@ if (sonde)
         bi >= 0 && bi + 1 < args.Length ? args[bi + 1] : null);
 }
 
-// --karte [<Disc|Aggregat.Disc>] / --karten <verz>: Arbeitskarten (Minimalkontext je Decide-/Apply-Rumpf für ein LLM).
-if (args.Contains("--karte") || args.Contains("--karten"))
-    return await KartenCli.LaufAsync(args, solution, lage);
-
 Console.WriteLine("\n── Routing-Wahrheit ──");
 var routing = RoutingTruth.FromCompilations(compilations);
 Console.WriteLine($"   Quelle: {routing.Source}  ({routing.CommandToAggregate.Count} Command→Aggregat, {routing.CommandToEvents.Count} Command→Events)");
@@ -75,6 +71,10 @@ var graph = new GraphBuilder(routing, dom).Build();
 foreach (var (k, v) in graph.Meta.Counts) Console.WriteLine($"   {k,-12}: {v}");
 
 var solutionDir = Path.GetDirectoryName(solutionPath) ?? ".";
+
+// --karte [<Disc|Aggregat.Disc>] / --karten <verz>: Arbeitskarten — Projektion des Graphen je Decide-/Apply-Rumpf.
+if (args.Contains("--karte") || args.Contains("--karten"))
+    return await KartenCli.LaufAsync(args, solution, lage, dom, graph);
 
 Console.WriteLine("\n── Composition-Root (Betrieb/Host) ──");
 var compositionRoot = await new CompositionRootExtractor(solution, lage, routing, dom).ExtractAsync();

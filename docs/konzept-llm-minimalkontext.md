@@ -1,6 +1,6 @@
 # Konzept — Minimalkontext für ein (lokales) LLM: die Arbeitskarte
 
-> **Stand:** 2026-09-24 · **Status:** K1 GEBAUT (Arbeitskarte für Decide/Apply als CLI, §12); K2–K6 Konzept.
+> **Stand:** 2026-09-24 · **Status:** K1 GEBAUT — Arbeitskarte als reine Graph-Projektion für Decide/Apply (§2–§4, §12); K2–K6 Konzept.
 > **Frage:** Wie bauen wir ein System, das einem LLM — Zielgröße: ein **lokales ~27B-Modell** — nur
 > den minimalen Kontext gibt, damit es *wirklich nur die Funktion* schreibt? Und: können wir präzise
 > benennen und im Editor zeigen, **was** das Modell dafür wissen muss?
@@ -38,115 +38,115 @@ aber spürbar mit der Menge irrelevanten Materials).
 
 ---
 
-## 2 · Das Prinzip: geschlossene Welt je Slot
+## 2 · Das Prinzip: die Karte ist eine Projektion des Graphen
 
-> **Das LLM bekommt keine Dateien. Es bekommt eine Karte.**
-> Eine Karte beschreibt eine **geschlossene Welt**: eine fixe Signatur, ein endliches Vokabular
-> (genau die Symbole, die es benutzen darf), ein paar Regeln der Slot-Art, die Absicht und die
-> Beispiele, die bestehen müssen. Was nicht auf der Karte steht, existiert für das LLM nicht — und
-> darf im Ergebnis auch nicht vorkommen (die Kartenwand prüft das, §5).
+> **Die Karte wird vollständig aus dem Code erzeugt — ohne LLM, ohne Heuristik, ohne erfundene Prosa.**
+> Quelle ist ausschließlich der Wissensgraph des Extractors (Routing, OneOf-Ausgänge, Guards, Saga-/Pipeline-/
+> Projektions-Kanten) und Roslyn (Symbole, Signaturen, Datenfluss, Tests). Jede Zeile der Karte gehört zu genau
+> einer der drei Klassen:
+>
+> | Klasse | Was | Beispiel |
+> |---|---|---|
+> | **Fakt** | direkt ein Symbol/eine Kante | Signatur, Ausgänge, Felder, State-Member, „kommt von Client" |
+> | **Regel** (B1–B5) | feste, nummerierte Ableitung über Fakten — Typgleichheit, Kanten, Datenfluss; **nie** Namensähnlichkeit | „`DatensatzBereitsEingefroren` wird in 6 anderen Decide unter `State.IstEingefroren` erzeugt" |
+> | **Kommentar** | verbatim aus dem Code (`///`, `//`, `// 🤖 Prompt:`), mit Herkunft | „/// Gültig, wenn die Anteile nicht-negativ sind …" |
+>
+> **Beschreibungen gibt es nur, wo der Code einen Kommentar trägt.** Ein Feld ohne Kommentar erscheint als
+> `Typ Name { get; set; }` — sonst nichts. Was nicht ableitbar ist, steht als Lücke auf der Karte („keine").
 
-Drei Sätze tragen das Konzept:
+Drei Sätze tragen das:
 
-1. **Karte = Ableitung, nie Handarbeit.** Sie wird zu 100 % aus dem Extractor-Modell + Roslyn-Symbolen
-   erzeugt (Klasse D). Keine Namenskonvention, kein Raten — dieselbe Regel wie §10.5.
-2. **Das LLM schreibt nur den Rumpf zwischen `{` und `}`.** Signatur, `using`s, Klasse, Datei, Platzierung
-   bestimmt die Maschine. Das LLM kann sie nicht einmal ausdrücken.
-3. **Vokabular der Karte = Allowlist der Prüfung.** Was auf der Karte steht, ist exakt das, was die
-   Kartenwand zulässt. Präsentation und Guardrail sind *dasselbe Objekt*.
+1. **Vom Graphen her denken.** Die Frage ist nicht „was steht in der Datei?", sondern „welche Knoten und Kanten
+   berührt dieser Slot?" — Eingang (Command-/Event-Knoten), Ausgänge (`produces`-Kanten), Zustand (State-Knoten),
+   Herkunft (`sends`/`pipelineEmits`-Kanten auf den Command), Abnehmer (`consumedBy`/`triggers`/`advances`,
+   Apply-Slots) und die Nachbar-Slots desselben Aggregats (Guards, Datenfluss).
+2. **Das LLM schreibt nur den Rumpf zwischen `{` und `}`.** Signatur, `using`s, Klasse, Datei bestimmt die Maschine.
+3. **Was die Karte deklariert, ist die Allowlist der Prüfung** (Gegenprobe heute auf Symbol-Identität, Kartenwand K2).
+
+**Was NICHT ableitbar ist — und deshalb vom Menschen als Code kommen muss:**
+- die **Absicht** eines neuen Rumpfs → als Kommentar (`// 🤖 Prompt:` im Rumpf, `///` am Command),
+- die **Bedingungen neuer Logik** → nur indirekt über B1 (wie Nachbarn denselben Ausgang schützen),
+- die **Spezifikation** → als Szenario-Test (`Szenario.Für…Gegeben…Wenn…Dann`). Die Simulation („📋 Als Test")
+  zeichnet nur das *Ist*-Verhalten auf und kann für einen fehlenden Rumpf nichts liefern.
+- **Verhaltensregeln** wie „Decide ist rein" → stehen nur dann auf der Karte, wenn Compiler oder Framework sie
+  erzwingen (Abschnitt VERTRAG); sonst wären sie Prosa. Reinheit bräuchte dafür erst einen Analyzer (K2).
 
 ---
 
-## 3 · Die Arbeitskarte — Aufbau am echten Beispiel
+## 3 · Die Arbeitskarte — echte Ausgabe
 
-Slot: `Datensatz.Decider.Decide(SetzeSplit)` (H, Schreibseite). So sähe die Karte aus, die das LLM
-**vollständig** bekommt (≈ 700 Token):
+`dotnet run --project GraphExtractor -- --karte SetzeSplit` (gekürzt: Typen-Doku und B4-Zeilen):
 
 ```text
 ## AUFGABE
-Schreibe NUR den Methodenrumpf (ohne Signatur, ohne geschweifte Klammern des Rumpfs, ohne using).
+Rumpf von: IEnumerable<OneOf<SplitGesetzt, DatensatzBereitsEingefroren, SplitUngueltig>> Decide(SetzeSplit cmd)
+Erreichbar: cmd (SetzeSplit), this.State (Datensatz)
 
-## SIGNATUR (fix)
-IEnumerable<OneOf<SplitGesetzt, DatensatzBereitsEingefroren, SplitUngueltig>> Decide(SetzeSplit cmd)
-Verfügbar: this.State (Typ Datensatz, nur lesen), cmd.
+## VERTRAG
+V1 Ausgaben ⊆ {SplitGesetzt, DatensatzBereitsEingefroren, SplitUngueltig}   — erzwungen: Compiler (OneOf-Signatur)
+V2 Ablehnung (DatensatzBereitsEingefroren, SplitUngueltig) nur als einzige Ausgabe   — erzwungen: Laufzeit (Aggregat-Actor wirft bei gemischtem Ergebnis)
 
-## ABSICHT   (aus // 🤖 Prompt: + <summary>)
-Split-Override setzen. Eingefroren → ablehnen. Anteile müssen gültig sein (SplitKonfig.IstGueltig).
+## KOMMENTARE (verbatim aus dem Code)
+[// vor Decide(SetzeSplit)] SPLIT — optionaler Override
+[// vor SetzeSplit] SPLIT — optionaler Override (Default 70/15/15)
 
-## VOKABULAR (abschließend)
-Eingang   SetzeSplit(Guid AggregateId, int TrainProzent, int ValProzent, int TestProzent, int Seed)
-Zustand   Datensatz  (nur lesen)
-            bool IstEingefroren          // Status == Eingefroren
-            bool Existiert               // Stream hat ≥ 1 Event
-            SplitKonfig Split
-Ausgänge  SplitGesetzt(int TrainProzent, int ValProzent, int TestProzent, int Seed)   [Event]
-          DatensatzBereitsEingefroren(Guid DatensatzId)                             [Ablehnung]
-          SplitUngueltig(int TrainProzent, int ValProzent, int TestProzent)          [Ablehnung]
-Typen     record SplitKonfig(int TrainProzent, int ValProzent, int TestProzent, int Seed)
-            bool IstGueltig             // alle ≥ 0 und Summe == 100
-            static SplitKonfig Default
-BCL       Vergleiche, Arithmetik, System.Linq auf Sammlungen, string, Guid, Math
+## TYPEN (abschließend; /// = Doku-Kommentar aus dem Code)
+Eingang   SetzeSplit(Guid AggregateId, int TrainProzent, int ValProzent, int TestProzent, int Seed)   [Command]
+Ausgang   SplitGesetzt(int TrainProzent, int ValProzent, int TestProzent, int Seed)   [Event]
+          DatensatzBereitsEingefroren(Guid DatensatzId)   [Ablehnung]
+          SplitUngueltig(int TrainProzent, int ValProzent, int TestProzent)   [Ablehnung]
+Zustand   Datensatz   /// …
+            string? Name { get; set; }
+            DatensatzStatus Status { get; set; }
+            SplitKonfig Split { get; set; }   /// Split-Konfiguration (Default 70/15/15, optional überschrieben).
+            bool IstEingefroren => Status == DatensatzStatus.Eingefroren
+            …
+Typen     SplitKonfig(int TrainProzent, int ValProzent, int TestProzent, int Seed)   [Typ]   /// …
+            bool IstGueltig => TrainProzent >= 0 && … == 100   /// Gültig, wenn die Anteile nicht-negativ sind und sich zu 100 summieren.
+          enum DatensatzStatus { Entwurf, Eingefroren }   [Enum]
+          …
 
-## REGELN (Slot-Art: Decide)
-R1 Rein: kein I/O, kein await, kein DateTime.Now/UtcNow, kein Guid.NewGuid, kein Random.
-R2 Nur `yield return new <Ausgang>(...)` mit Typen aus AUSGÄNGE.
-R3 Eine Ablehnung steht ALLEIN: `yield return new <Ablehnung>(...); yield break;`
-R4 Idempotent ohne Wirkung → `yield break;` ohne Event.
-R5 Zustand nie verändern (das tut Apply).
+## GRAPH-UMFELD
+SetzeSplit kommt von: Client
+SplitGesetzt geht an: Apply(SplitGesetzt) [geschrieben] · Projektion DatensatzProjektion
+DatensatzBereitsEingefroren geht an: Aufrufer (Ablehnung, nicht im Log)
 
-## BEISPIEL (Nachbar-Rumpf derselben Art, aus dem echten Code)
-// Decide(EntfernePaar)
-if (this.State.IstEingefroren) { yield return new DatensatzBereitsEingefroren(cmd.AggregateId); yield break; }
-if (!this.State.IstDraftMitglied(cmd.ImagePairId)) yield break;
-yield return new PaarEntfernt(cmd.ImagePairId);
-
-## MUSS BESTEHEN (Szenarien)
-S1 Gegeben: DatensatzEingefroren(...)           Wenn: SetzeSplit(_,70,15,15,1) Dann: DatensatzBereitsEingefroren
-S2 Gegeben: DatensatzErstellt("x")              Wenn: SetzeSplit(_,50,50,10,1) Dann: SplitUngueltig(50,50,10)
-S3 Gegeben: DatensatzErstellt("x")              Wenn: SetzeSplit(_,80,10,10,7) Dann: SplitGesetzt(80,10,10,7)
+## BEZÜGE (regelbasiert abgeleitet)
+B1 DatensatzBereitsEingefroren — in 6 anderen Decide: `State.IstEingefroren` in 6 (FuegeRangeHinzu, NimmRangeAuf, …)
+B2 int: SplitGesetzt.TrainProzent, …, SplitUngueltig.TestProzent ← cmd.TrainProzent, cmd.ValProzent, cmd.TestProzent, cmd.Seed, State.EingefroreneVersion, …
+B2 Guid: DatensatzBereitsEingefroren.DatensatzId ← cmd.AggregateId, State.Id
+B4 State.IstEingefroren: gelesen von Decide(EntfernePaar), Decide(FriereEin), …
+…
+## BEISPIEL (B5)          // Decide(EntfernePaar) — echter Nachbar-Rumpf
+## SPEZIFIKATION          keine — für diesen Slot liegt keine Spezifikation als Code vor
 ```
 
-**Was bewusst NICHT auf der Karte steht:** die Datei, andere Decide-Methoden, der Applier, andere
-Aggregate, Projektionen, Proto/Marten/Actors, `IDecider`, `OneOf`-Implementierung, Generatoren,
-Namespaces, `using`s, Framework-Doku, CLAUDE.md. Auch nicht: State-Member, die mit dem Slot nichts zu
-tun haben (s. §4 Relevanz-Schnitt) — die Karte zeigt `IstEingefroren`, nicht `DraftMitglieder`.
-
-### 3.1 Karten-Abschnitte (allgemein)
-
-| Abschnitt | Quelle (Code-Fakt) | Klasse |
-|---|---|---|
-| Signatur | Methoden-Symbol am Anker (`CodeAnker`: Kind + Disc) | D |
-| Absicht | `// 🤖 Prompt:` im Rumpf, `<summary>` von Methode/Command/Event | Mensch |
-| Vokabular | Parametertypen, OneOf-Argumente, deren Ctor-Parameter; State-Member; transitiv referenzierte VOs/Enums (Tiefe 1–2); **nur öffentliche Oberfläche**, Rümpfe nur bei *Expression-bodied Helfern* als Kommentar-Kurzform | D |
-| Regeln | fester Regelblock je **Slot-Art** (§4), versioniert im Repo | D (statisch) |
-| Beispiel | 1 Nachbar-Rumpf **gleicher Slot-Art im selben Aggregat/Konsumenten**, deterministisch gewählt (kürzester mit Ablehnungs-Muster; sonst keiner) | D |
-| Szenarien | Editor-Sim-Session („📋 Als Test"), vorhandene `Szenario`-Tests, oder vom Menschen bestätigte, vom LLM *vorgeschlagene* Szenarien (§6 Schritt 0) | Mensch/D |
+(Die frühere Fassung dieses Abschnitts zeigte eine **erfundene** Karte mit ausgedachten Szenarien und einem
+handgeschriebenen Regelblock. Beides ist ersetzt.)
 
 ---
 
-## 4 · Slot-Arten: was je Art auf die Karte muss
+## 4 · Die Ableitungsregeln
 
-Die Karte ist je Slot-Art verschieden — aber immer klein, weil die Art das Vokabular hart begrenzt.
+| Regel | Frage des Rumpf-Schreibers | Ableitung (nur Fakten) | Quelle |
+|---|---|---|---|
+| **V1** | Was darf ich ausgeben? | OneOf-Typargumente der Signatur | Symbol; erzwungen vom Compiler |
+| **V2** | Darf eine Ablehnung mit Events kombiniert werden? | Ausgänge mit Marker `ITransientEvent` | Marker; erzwungen zur Laufzeit im Aggregat-Actor |
+| **Umfeld** | Wer schickt das? Wer hört zu? | `sends`/`compensates`/`pipelineEmits`-Kanten auf den Command, `Origin`; Apply-Slot + `EventFanout` je Ausgang; bei Apply: `produces`-Kanten auf das Event inkl. Guard | Wissensgraph |
+| **B1** | Unter welcher Bedingung wird dieser Ausgang üblicherweise erzeugt? | derselbe Ausgangs-**Typ** in anderen Decide desselben Aggregats → deren Guard (umschließende `if`, aus dem Syntaxbaum) | Graph (`CommandOutcome.Guard`) |
+| **B2** | Woher kommen die Werte? | je Parameter-/Feld-**Typ**: alle erreichbaren Werte bzw. setzbaren Ziele **exakt gleichen Typs** (inkl. Nullbarkeit); Sammlungen über ihren Elementtyp; generierte Member (Id/Version) sind kein Apply-Ziel | Symbole |
+| **B3** | Muss ich einen Wert zusammenbauen? | ein setzbares State-Member, dessen Typ-Konstruktor **exakt die Typfolge** der Event-Felder nimmt | Symbole |
+| **B4** | Welche Zustands-Member sind im Spiel? | Datenfluss der Nachbar-Slots: liest / schreibt / ruft `.Methode()`; bei Apply zusätzlich „von keinem anderen Apply geschrieben" | Roslyn Semantic Model |
+| **B5** | Wie sieht so ein Rumpf hier aus? | Nachbar derselben Art mit den meisten gemeinsamen Ausgängen, dann der kürzeste | Graph + Syntax |
+| **Szenarien** | Was muss gelten? | Test-DSL-Ketten (über ihre **Form**: generischer Typ über `IState`, Methode mit genau einem `ICommand`) — Decide: `Wenn(Cmd)`; Apply: Kette erwähnt das Event und prüft den Zustand | Test-Projekte |
+| **Typen** | Welche Typen gibt es? | Eingang, Ausgänge, Zustand, Helfer + **vollständige** transitive Hülle der Domänen-Quelltypen | Symbole |
 
-| Slot-Art | Signatur-Form | Vokabular (nur das!) | Regeln (Kern) | Verifikation |
-|---|---|---|---|---|
-| **Decide** | `IEnumerable<OneOf<…>> Decide(Cmd)` | Cmd-Felder, **relevante** State-Member, OneOf-Ausgänge + Ctors, VOs/Enums | R1–R5 (s. §3) | Compile + Szenarien (store-frei) |
-| **Apply** | `void Apply(Evt)` | Evt-Felder, **schreibbare** State-Member, VOs/Enums | nur Zustand setzen; keine Entscheidungen; keine Events; bewusst leerer Rumpf erlaubt | Compile + Fold-Szenario (Gegeben → Zustand) |
-| **Projektion-Handle** | `Task Handle(Evt, IAggregateEnvelope, ProjectionWriter)` | Evt-Felder, `envelope.AggregateId/CreatedAtUtc`, **nur die verdrahteten** Store-Fns (aus den Handle→Fn-Kanten, nicht das ganze Interface), ReadModel-Felder | Muster `writer.Execute(key, async ctx => { ctx.Track<Agg>(id); await _store.X(...); })` als **Gerüst D**, LLM füllt nur den inneren Block | Compile; (später Leseseiten-Sim) |
-| **Reader-Handle** | `Task<OneOf<R…>> Handle(Q, env, ReadContext)` | Query-Felder, verdrahtete Read-Fns, Response-Ctors | nur lesen; `ctx.Track` Gerüst D | Compile; (später Sim) |
-| **Reaktion** | `IAsyncEnumerable<OneOf<Cmd…/E…>> Handle(Evt, …)` | Evt-Felder, erlaubte Commands/Events + Ctors | nur `yield`; Emit ausschließlich per `yield` (CQRS020/021 prüft ohnehin) | Compile + CQRS020/021 |
-| **Pipeline-Handle** | `IAsyncEnumerable<ICommand> Handle(T, PipelineContext)` | T-Felder, **verdrahtete** Dienst-Verträge (nur Signaturen), `ctx.SourceAggregateId`, `ctx.ScheduleSelf`, erlaubte Commands | I/O nur über verdrahtete Dienste; kein Store-Schreiben | Compile (+ Dienst-Fakes aus Vertrag, später) |
-| **Store-Impl** | Fn des `I…WriteStore` | ReadModel, 3 Co-Commit-Primitive | eher **S** als H (kleines Vokabular) → erst deterministisch versuchen | Integration (echtes Marten) |
-| **Saga-Argumente** | `e => new Cmd(…)` | Auslöser-Event-Felder, Ziel-Command-Ctor | **zuerst D** (Feld-Mapping über Name+Typ); LLM nur bei Mehrdeutigkeit, dann als *Auswahl*, nicht Freitext | Compile + Saga-Sim |
+**Bewusst NICHT verwendet:** Namensähnlichkeit (auch nicht `cmd.Seed` ↔ `SplitGesetzt.Seed`), Relevanz-Ranking,
+Zusammenfassungen, Default-Texte, Kürzungen von Code. Deshalb ist B2 bei häufigen Typen (`int`) breit — das ist
+der ehrliche Preis dafür, nichts zu raten.
 
-**Relevanz-Schnitt (wichtig für kleine Modelle):** Die Karte zeigt nicht *alle* State-Member, sondern
-
-1. die, die im Absichtstext/Szenarien namentlich vorkommen,
-2. die, die **Nachbar-Rümpfe derselben Art** lesen (Datenfluss aus dem Semantic Model),
-3. berechnete Helfer (`bool Ist…`) grundsätzlich (billig, hoher Nutzen),
-4. Rest als **eine Zeile „weitere: Name:Typ, …"** — sichtbar, aber ohne Doku.
-
-So bleibt die Welt vollständig (nichts Nötiges fehlt), aber die Aufmerksamkeit liegt auf dem Relevanten.
+Heute gebaut für Decide und Apply. Für Projektion/Reader/Reaktion/Pipeline gilt dasselbe Schema; die Graph-Kanten
+(`consumedBy`, `readsFrom`, Store-Aufrufe, `pipelineEmits`) existieren bereits — nur die Karten-Projektion fehlt (K6).
 
 ---
 
@@ -166,9 +166,9 @@ Reparaturschleife (§6).
 
 **W2 ist das eigentliche neue Guardrail.** Sie macht aus „bitte nur die Funktion schreiben" eine
 *prüfbare* Aussage: das LLM kann nicht unbemerkt in Framework, Nachbar-Aggregate oder I/O greifen.
-Nebeneffekt: die Decide-Reinheitsregeln (R1, R5) sind auch für **Menschen** wertvoll → als echter
+Nebeneffekt: Reinheitsregeln für Decide (kein I/O, keine Uhr, State nur lesen) wären auch für **Menschen** wertvoll → als echter
 Analyzer (`CQRS04x`, Decider-Reinheit) auch außerhalb des LLM-Pfads einsetzbar — konsistent mit
-Invariante 5 und der Art, wie CQRS020/021 heute schon Emit erzwingen.
+Invariante 5 und der Art, wie CQRS020/021 heute schon Emit erzwingen. Erst als Analyzer dürfen sie in den VERTRAG der Karte.
 
 ---
 
@@ -187,7 +187,7 @@ Invariante 5 und der Art, wie CQRS020/021 heute schon Emit erzwingen.
    um *Szenarien* (nicht Code) auf Basis derselben Karte. Der Mensch hakt sie ab. Spezifikation =
    Beispiele, nicht Prosa — und der Mensch prüft Beispiele viel schneller als Code.
 1. **Karte bauen** (deterministisch, aus Modell + Symbolen).
-2. **Generieren**: System-Prompt = fester Kurztext + Regelblock der Art; User = Karte. Kein Chat-Verlauf.
+2. **Generieren**: System-Prompt = fester Kurztext (Ausgabeformat: nur der Rumpf); User = Karte. Kein Chat-Verlauf.
 3. **Prüfen** W0–W4 in dieser Reihenfolge; die erste rote Wand bricht ab.
 4. **Reparieren**: *neue* Anfrage = Karte + letzter Rumpf + **nur** die Befunde (Zeile, Code, Meldung,
    bei W4 zusätzlich Soll/Ist der Szenario-Ausgabe aus `SzenarioTrace`). Kein wachsender Verlauf —
@@ -226,8 +226,7 @@ Die Frage des Nutzers ist wörtlich darstellbar, weil Karte und Guardrail dassel
 
 | Baustein | Ort | Begründung |
 |---|---|---|
-| `Arbeitskarte` (Modell: Signatur, Vokabular-Einträge mit Symbol-ID, Regeln, Beispiel, Szenarien) + `KartenBauer` | `GraphExtractor` (neben `DomainExtractor`) | braucht Roslyn-Symbole + Extractor-Modell; gleiche Code-Fakt-Regel (§10.5) |
-| Regelblöcke je Slot-Art | `GraphExtractor/Karten/*.txt` (versioniert) | statisch, reviewbar; Framework-Namen über `Vertrag.cs` (`nameof`) eingesetzt |
+| `Arbeitskarte` + `KartenBauer` (Projektion von Wissensgraph + Domänenmodell + Roslyn, Regeln B1–B5) | `GraphExtractor/Arbeitskarte.cs` | braucht Graph + Symbole; gleiche Code-Fakt-Regel (§10.5) |
 | `Kartenwand` (W2) | Analyzer-Klasse, im In-Memory-Compile von `ModellSimulation` eingehängt | kein neuer Build-Pfad; Befunde = normale Diagnosen |
 | Decider-Reinheit als Produkt-Analyzer | `Domain.SourceGeneration` (neben CQRS0xx) | nützt auch ohne LLM |
 | LLM-Client | `SimHost` (ein Endpunkt `POST /api/editor/fill`), **OpenAI-kompatible** Schnittstelle, Basis-URL konfigurierbar | deckt Ollama / llama.cpp-Server / vLLM / LM Studio lokal und Cloud-Anbieter gleichermaßen ab; keine Modell-Bindung im Code |
@@ -284,56 +283,42 @@ erst mit Phase 3 der Editor-Roadmap (Leseseite schreibbar).
    reicht für den Anfang (schneller)? Empfehlung: Pflicht für Decide, optional für Apply.
 2. **Beispiel-Rumpf aus dem Bestand** in die Karte (hilft kleinen Modellen deutlich, kostet ~100 Token,
    kann aber Stil-Fehler kopieren)? Empfehlung: ja, genau einer, deterministisch gewählt.
-3. **Sprache der Karte:** Deutsch (konsistent mit Domäne) — Regelblock ggf. zusätzlich englisch testen,
-   falls das lokale Modell auf englische Instruktionen messbar besser reagiert (Benchmark K3 entscheidet).
+3. **Verhaltensregeln (Reinheit von Decide, Determinismus von Apply)** als echte Analyzer bauen? Erst dann dürfen
+   sie auf die Karte (VERTRAG nennt nur Erzwungenes).
 4. **Grammatik-gezwungene Ausgabe** (W0) nur für lokale Server oder generell über JSON-Schema?
 
 ---
 
-## 12 · K1 geliefert — die Arbeitskarte als CLI (2026-09-24)
+## 12 · K1 geliefert — die Arbeitskarte als Graph-Projektion (2026-09-24)
 
-**Bau:** `GraphExtractor/Arbeitskarte.cs` (`Arbeitskarte`, `KartenBauer`, `KartenCli`) + Regelblöcke
-`GraphExtractor/Karten/{decide,apply}.txt` (EmbeddedResource). Kein Eingriff in Extractor-Pfad, Scaffolder oder Editor;
-`--check` bleibt grün.
+**Bau:** `GraphExtractor/Arbeitskarte.cs` (`Arbeitskarte`, `KartenBauer`, `KartenCli`). Läuft nach dem Graph-Aufbau des
+Extractors und liest Wissensgraph + Domänenmodell; kein Eingriff in Extractor-Pfad, Scaffolder oder Editor, `--check` grün.
 
 ```bash
-dotnet run --project GraphExtractor -- --karte                      # Übersicht aller 64 Slots + Größenvergleich + Gegenprobe
+dotnet run --project GraphExtractor -- --karte                      # Übersicht aller 64 Slots + Größen + Gegenprobe
 dotnet run --project GraphExtractor -- --karte SetzeSplit           # eine Karte (Disc oder Aggregat.Disc)
 dotnet run --project GraphExtractor -- --karten <verz>              # alle Karten als .txt + übersicht.md + karten.json
 ```
 
-**Was die Karte aus Code-Fakten zieht:**
-
-| Abschnitt | Quelle |
-|---|---|
-| Slots | Typen mit `IDecider<T>`/`IApplier<T>`; Methoden, deren 1. Parameter `ICommand`/`IEvent` ist (handgeschrieben) |
-| Rumpf-Status | `geschrieben` · `leer` (bewusster Marker) · `fehlt` (= `throw new NotImplementedException`, per Symbol) |
-| Signatur/Ausgänge | Methoden-Symbol; `OneOf`-Typargumente; Ablehnung = `ITransientEvent` |
-| Absicht | `// 🤖 Prompt:` im Rumpf, `<summary>` der Methode, Banner-Kommentare vor Methode und Eingangstyp |
-| Zustand | öffentliche State-Member; ≤ 8 handgeschriebene → alle, sonst Relevanz-Schnitt (von Nachbar-Rümpfen benutzt ∪ bool-Helfer bei Decide ∪ Wortgleichheit) — Rest als „weitere: Name:Typ“ |
-| Helfer | vorhandene Nicht-Slot-Methoden der Decider-/Applier-Klasse (nur Signatur) — **nachgerüstet, weil die Gegenprobe sie vermisste** |
-| Typen | transitiv (Tiefe 2) aus Eingang, Ausgängen, relevantem Zustand, Helfer-Parametern — nur Domänen-Quelltypen; Records mit Primär-Ctor + öffentlicher Zusatz-Oberfläche, Enums mit Werten |
-| Beispiel | Nachbar-Rumpf derselben Art: meiste geteilte Ausgänge, dann kürzester |
-| Szenarien | aus Test-Projekten über die **Form** der Test-DSL (generischer Typ über einen `IState`, Methode mit genau einem `ICommand`) — Decide: `Wenn(Cmd)`, Apply: Kette erwähnt das Event und prüft den Zustand (Lambda) |
+**Revision (gleicher Tag):** Die erste Fassung enthielt einen handgeschriebenen Regelblock (R1–R7), eine BCL-Zeile,
+einen Relevanz-Schnitt mit Wortgleichheit und eine Gegenprobe auf Namensebene. Alles entfernt bzw. ersetzt:
+Regelblock → VERTRAG (nur Erzwungenes); Relevanz-Schnitt → voller Zustand + B4 (Datenfluss); Gegenprobe → Symbol-Identität.
 
 **Messung (Bestand, 64 Slots = 31 Decide + 33 Apply):**
 
 | | Median | Max |
 |---|---:|---:|
-| Arbeitskarte (echter Qwen-BPE) | **975** | 1 391 |
-| Aggregat-Ordner (was man sonst mitgäbe) | ≈ 6 300 | — |
+| Arbeitskarte (echter Qwen-BPE) | **1 563** | 2 377 |
+| Aggregat-Ordner | ≈ 6 300 | — |
 | Domänen-Projekte gesamt | ≈ 69 000 | — |
 
-- **Gegenprobe (Vorstufe W2):** alle 60 geschriebenen Rümpfe benutzen **nur** Domänen-Symbole, die auf ihrer Karte
-  stehen (Namensebene). Der erste Lauf fand 4 Lücken (`Applier.SetBild`) → Abschnitt „Helfer“ ergänzt → 60/60.
-- **Token-Schätzung** (Zeichen/3,3) gegen den Qwen-BPE kalibriert: Verhältnis echt/Schätzung 0,99 über alle Karten.
-- **Befund Absicht:** kein Rumpf im Bestand trägt eine `// 🤖 Prompt:`-Zeile; die Absicht kommt heute aus Doku/Bannern
-  und ist oft dünn (z. B. `SetzeSplit`: nur „SPLIT — optionaler Override (Default 70/15/15)“). Das Wissen steckt dann
-  in Typ-Doku (`SplitKonfig.IstGueltig`) — die Karte bringt es mit.
-- **Befund Szenarien:** nur `Sammelvorgang` hat Szenario-Tests (5 Karten mit Szenarien). Für die übrigen 59 Slots
-  ist das die größte Lücke der Spezifikation → stützt Entscheidung 1 (§11: Szenario-Pflicht für Decide).
-- **Fixkosten:** Aufgabe + Regeln ≈ 350 Token je Karte. Bei winzigen Aggregaten ist die Karte daher größer als die
-  Decider-Datei allein — die Datei allein reicht aber nicht (ihr fehlen State, Events, VOs).
+- Die Karte ist gegenüber der ersten Fassung (Median 975) größer: voller Zustand, vollständige Typ-Hülle, Graph-Umfeld
+  und B1–B4 statt eines gekürzten Ausschnitts. Immer noch ~¼ des Ordners — und ohne ausgelassene Symbole.
+- **Gegenprobe (Symbol-Identität):** alle 60 geschriebenen Rümpfe benutzen nur Domänen-Symbole, die ihre Karte deklariert.
+- **Kommentare:** kein Rumpf trägt eine `// 🤖 Prompt:`-Zeile; 33 der 64 Karten haben gar keinen Kommentar zum Slot.
+- **Szenarien:** nur `Sammelvorgang` hat Szenario-Tests (5 Karten). Für 59 Slots liegt keine Spezifikation als Code vor.
+- **B2 ist breit** bei häufigen Typen (`int`: 7 Ziele × 7 Quellen bei `SetzeSplit`) — Folge des Verzichts auf Namen.
+  Engere Zuordnung ginge nur über zusätzliche Code-Fakten (z. B. typisierte Wertobjekte statt `int`).
 
-**Nächster Schritt:** K2 (Kartenwand als echte Prüfung auf dem Semantic Model eines LLM-Rumpfs, statt Namensebene) und
+**Nächster Schritt:** K2 (Kartenwand: LLM-Rumpf gegen die deklarierten Symbole auf dem Semantic Model prüfen) und
 K3 (Benchmark gegen ein lokales Modell über einen OpenAI-kompatiblen Endpunkt).

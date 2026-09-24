@@ -21,8 +21,6 @@
       <!-- Die Agnostik-Sonde: Quelltext einer unbekannten Domäne + handgeschriebenes Soll (nicht mitkompiliert). -->
       <EmbeddedResource Include="Sonde/*.cs.txt" WithCulture="false" />
       <EmbeddedResource Include="Sonde/soll.txt" />
-      <!-- Regelblöcke der Arbeitskarten je Slot-Art (docs/konzept-llm-minimalkontext.md). -->
-      <EmbeddedResource Include="Karten/*.txt" WithCulture="false" />
       <!-- Die Skalar-Wahrheit des Wires (eine Quelle mit Proto-Prepass und DtoMapper). -->
       <Compile Include="../Core.SourceGeneration/ProtoScalarSpec.cs" Link="Vertrag/ProtoScalarSpec.cs" />
     </ItemGroup>
