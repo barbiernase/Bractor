@@ -322,3 +322,93 @@ Regelblock → VERTRAG (nur Erzwungenes); Relevanz-Schnitt → voller Zustand + 
 
 **Nächster Schritt:** K2 (Kartenwand: LLM-Rumpf gegen die deklarierten Symbole auf dem Semantic Model prüfen) und
 K3 (Benchmark gegen ein lokales Modell über einen OpenAI-kompatiblen Endpunkt).
+
+---
+
+## 13 · Wie isoliert sind die Code-Block-Stellen? Brauchen wir die Nachbarn? (2026-09-24)
+
+**Werkzeug:** `dotnet run --project GraphExtractor -- --slots` (`GraphExtractor/SlotInventar.cs`). Findet ALLE Stellen, an denen ein
+Code-Block hängt, über Marker und Signatur (Decide, Apply, Projektion, Reaktion, Reader, Pipeline, Store-Implementierung,
+Saga-Lambda) und klassifiziert jedes gebundene Symbol jedes Rumpfs: **P** Parameter · **S** State · **F** injiziertes Feld ·
+**H** Helfer der Klasse · **X** anderer Slot · **D** Domäne · **R** Framework · **B** BCL/NuGet. Für D/R wird geprüft, woher das
+Wissen kommen kann: aus dem **Spielraum** (transitive Hülle der Typen aus Signatur, State, Feldern, Helfern und geerbten
+Membern), zusätzlich über eine **Graph-Kante** (Pipeline → gesendete Commands, Store → seine ReadModels, Projektion → Aggregat
+des Events), nur über **Nachbarn** (andere Slots derselben Klasse) bzw. **Artgenossen** (Slots derselben Art), oder **von außen**.
+
+### 13.1 Messung (Bestand)
+
+| Art | Slots | D/R-Symbole je Rumpf | Spielraum | +Graph | +Nachbar | von außen | injizierte Felder | geteilte Helfer |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|
+| Decide | 31 | 5,3 | 100 % | 0 % | 0 % | 0 % | 0/31 | 0/31 |
+| Apply | 33 | 2,5 | 100 % | 0 % | 0 % | 0 % | 0/33 | 4/33 (`SetBild`) |
+| Projektion | 36 | 10,1 | 90 % | 10 % | 0 % | 0 % | 36/36 (1 Store) | 0/36 |
+| Reader | 17 | 7,5 | 98 % | 0 % | 0 % | 2 % | 17/17 | 0/17 |
+| Pipeline | 11 | 4,4 | 65 % | 17 % | 0 % | 19 % | 7/11 | 3/11 |
+| Store-Impl | 56 | 5,8 | 63 % | 37 % | 0 % | 0 % | 29/56 (Marten) | 3/56 |
+| Saga-Lambda | 1 | 2,0 | 100 % | 0 % | 0 % | 0 % | — | — |
+
+**Lesart:**
+- **Das „Was“ (welche Symbole) liefern Signatur + Graph fast vollständig.** Nachbarn tragen zum Wortschatz nach der
+  Korrektur 0 % bei. Der Graph ist dabei nicht optional: ohne die Kanten fehlen bei Projektionen das Aggregat für
+  `Track<Agg>` (10 %), bei Pipelines die gesendeten Commands (17 %), bei Stores die ReadModels (37 %).
+- **Das „Wie“ liefern die Nachbarn.** Alle 36 Projektions-Rümpfe folgen demselben Protokoll
+  (`writer.Execute(key, async ctx => { ctx.Track<Agg>(envelope.AggregateId); await _store.X(…, envelope.CreatedAtUtc); })`),
+  13/17 Reader rufen `ctx.Track`, die Stores benutzen eine kleine Teilmenge der Marten-API (`QuerySession`, `LoadAsync`,
+  `Store`, `LightweightSession`) bzw. die Basis-Primitive `EnqueueTransform/EnqueueStore/Enqueue`. Die Typen *erlauben* das,
+  aber nur die Nachbarn *zeigen*, wie es hier gemacht wird.
+- **Von außen** kommt Wissen nur an zwei Stellen: Pipelines benutzen Domänen-Helfer ohne Kante (`SplitZuteiler`,
+  `ImagePairFileName`), ein Reader benutzt den statischen Helfer eines anderen Readers (`ImagePairReader.ToAntwort`).
+- **Isolation:** Decide/Apply sind vollständig isoliert (Generator: `new X.Decider(state)` — nichts anderes erreichbar).
+  Projektion/Reader hängen an genau einem Store. **Pipelines sind die am wenigsten isolierte Stelle:** Dienste, Logger,
+  Konfigurationen und **geteilter veränderlicher Klassenzustand** (`FileWatchPipeline._seen/_pending`, von mehreren
+  Methoden benutzt) — ein Handle ist dort nicht allein verstehbar.
+
+### 13.2 Randfälle von Aufträgen (LLM-Queries) an einem Code-Block
+
+Ein Auftrag im Editor kann (a) im Spielraum lösbar sein, (b) eine **Strukturänderung** brauchen (Graph/Editor, D/S — nicht
+Aufgabe des LLM), (c) **mehrere Slots gekoppelt** betreffen oder (d) am **falschen Konsumenten** hängen.
+
+| # | Stelle | Auftrag (Beispiel) | Klasse | Was der Kontext zeigen muss / was stattdessen passiert | Beleg im Bestand |
+|---|---|---|---|---|---|
+| 1 | Decide | braucht Read-Model-Daten („nur Paare aus Suche X") | b | nicht erreichbar → Zwei-Phasen-Muster: Event → Pipeline liest Store → Command mit Daten | `FuegeRangeHinzu` → `RangeAngefordert` → `DatensatzResolverPipeline` → `NimmRangeAuf` |
+| 2 | Decide | braucht die Uhrzeit („älter als 2 h") | b | keine Uhr im Decider → Zeit als Command-Feld oder Frist (`IFristplan` in Pipeline, fällig → Command) | `TrainingFristPipeline` (`IDbClock`, `IFristplan`) → `MarkiereAlsHaengengeblieben` |
+| 3 | Decide | neuer Ablehnungsgrund | b | OneOf-Ausgang fehlt → erst im Editor verdrahten, dann neue Karte | — |
+| 4 | Decide | Regel über Zustand, den es noch nicht gibt („max. 3 Ranges") | b + c | State-Feld (D) **und** die Apply-Slots, die es schreiben müssen → Kopplungs-Kontext aus B4 | — |
+| 5 | Decide | Idempotenz („zweimal = nichts tun") | a / c | im Spielraum, wenn der State es trägt (`IstDraftMitglied`); sonst wie 4 | `NimmPaarAuf`, `EntfernePaar` |
+| 6 | Apply | „ungültige Werte ignorieren" | d | Apply entscheidet nicht (void, Replay) → gehört in Decide | — |
+| 7 | Apply | braucht Wert, den das Event nicht trägt | b + c | Event-Feld (D) **und** alle erzeugenden Decide-Slots (Graph: `produces`-Kanten auf das Event) | — |
+| 8 | Projektion | „danach Command X senden" | d | Projektion emittiert nicht (CQRS020/021) → Reaktion | — |
+| 9 | Projektion | braucht Daten eines anderen Aggregats (Join) | b + c | nur der eigene Store ist injiziert → Store-Fn mit Join (**zweiter Slot**: Store-Impl) oder Event trägt die Daten | `DatensatzStore` |
+| 10 | Projektion | neue Store-Funktion nötig | b + c | Interface-Fn (D, Kante Handle→Fn) **plus** Store-Impl-Slot | — |
+| 11 | Reader | Daten aus zwei Stores | b | zweiter Store als Kante (Ctor) | `DatensatzReader` (`_store` + `_imagePairs`) |
+| 12 | Reader | „wie in Reader Y formatieren" | c | Wiederverwendung über Klassengrenzen — heute Wissen von außen | `ImagePairReader.ToAntwort` |
+| 13 | Pipeline | externer Dienst (Klassifizierer, Bildbearbeitung) | b | Dienst-Knoten (Vertrag → Impl); nur der Vertrag ist Spielraum | `ImageProcessingPipeline` |
+| 14 | Pipeline | Zustand zwischen Aufrufen merken | c | geteilter Klassenzustand → alle Methoden, die ihn benutzen, gehören in den Kontext; verlierbar (Inv. 6) | `FileWatchPipeline._seen/_pending` |
+| 15 | Pipeline | Domänen-Berechnung (Split zuteilen) | b | Domänen-Helfer ohne Kante → als Dienst/Kante verdrahten, sonst von außen | `SplitZuteiler` |
+| 16 | Store-Impl | Abfrage mit Filter/Paging | a | Spielraum = Basis-Primitive + ReadModel; Marten-API nur über Nachbarn (Präzedenz) | `ImagePairStorePostgres.SearchAsync` |
+| 17 | Saga | Ziel-Command braucht Feld, das kein Bedingungs-Event trägt | b | Event-Feld (D) oder Pipeline statt Saga | — |
+| 18 | alle | Auftrag widerspricht einem Szenario | — | W4 fängt es; Szenario gewinnt | — |
+| 19 | alle | Umbenennen/Signatur ändern | b | kein H-Auftrag — Editor-Struktur | — |
+| 20 | alle | „wie bei Slot Y" | c | expliziter Verweis → Y als Präzedenz in den Kontext (als Editor-Kante „Vorlage ◀", nicht per Textsuche) | — |
+
+**Erkennung ohne Semantik:** Die Maschine kann den Auftragstext nicht verstehen. Sie kann aber (1) den Spielraum vollständig
+angeben, (2) strukturelle Signale aus dem Editor lesen (Query an einen Decider gehängt, Command-Ausgang an einer Projektion)
+und (3) dem LLM einen **Antwortkanal** geben: statt eines Rumpfs darf es strukturiert antworten
+`AUSSERHALB: braucht <Art> <Name>` (z. B. „OneOf-Ausgang `RangeZuGross`", „State-Feld `AnzahlRanges : int`"). Die Kartenwand
+(K2) prüft umgekehrt, dass ein gelieferter Rumpf den Spielraum nicht verlässt.
+
+### 13.3 Folgerung: Kontext in drei Schichten — ja, mit Nachbarn
+
+| Schicht | Frage | Quelle | fehlt, wenn … |
+|---|---|---|---|
+| **Spielraum** | Was steht zur Verfügung? | Signatur + State + Felder + geerbte Member + **Graph-Kanten** | nie (aus Generator/Graph ableitbar, auch für leere Slots und Entwürfe) |
+| **Präzedenz** | Wie wird es hier benutzt? | Nachbarn (gleiche Klasse), sonst **Artgenossen** (gleiche Art, andere Klasse), sonst ein Referenz-Slot der Art | erster Slot seiner Art im ganzen System — dann Referenz-Slot (z. B. aus der Sonde) |
+| **Kopplung** | Was muss mit geändert/gelesen werden? | B4 (State-Datenfluss), `produces`-Kanten, geteilte Helfer/Felder | nur bei gekoppelten Aufträgen (Fälle 4, 7, 9, 10, 14) |
+
+Dazu immer **Auftrag** (Editor/Kommentar) und **Spezifikation** (Szenarien), und der Antwortkanal `AUSSERHALB`.
+
+**Zwei konkrete Konsequenzen:**
+1. **Wo die Präzedenz ein festes Protokoll ist, wird sie D statt H.** Projektions-Handles folgen zu 36/36 demselben
+   Gerüst → der Scaffolder erzeugt `writer.Execute(…, async ctx => { ctx.Track<Agg>(…); /* H */ })` deterministisch (das
+   Aggregat liefert der Graph), und der H-Slot schrumpft auf den inneren Block. Analog `ctx.Track` im Reader.
+2. **Pipelines brauchen die Klasse, nicht die Methode, als Kontext-Einheit**, sobald Felder geteilt veränderlich sind.

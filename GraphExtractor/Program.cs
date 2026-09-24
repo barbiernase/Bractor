@@ -75,6 +75,13 @@ var solutionDir = Path.GetDirectoryName(solutionPath) ?? ".";
 // --karte [<Disc|Aggregat.Disc>] / --karten <verz>: Arbeitskarten — Projektion des Graphen je Decide-/Apply-Rumpf.
 if (args.Contains("--karte") || args.Contains("--karten"))
     return await KartenCli.LaufAsync(args, solution, lage, dom, graph);
+// --slots: Isolation aller Code-Block-Stellen (Spielraum vs. Nachbarn vs. Wissen von außen).
+if (args.Contains("--slots"))
+{
+    Console.WriteLine();
+    Console.WriteLine(new SlotInventar(lage, dom).Bericht());
+    return 0;
+}
 
 Console.WriteLine("\n── Composition-Root (Betrieb/Host) ──");
 var compositionRoot = await new CompositionRootExtractor(solution, lage, routing, dom).ExtractAsync();
