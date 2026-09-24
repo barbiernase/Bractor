@@ -71,6 +71,8 @@ auf die jeweiligen Architektur-Kapitel.
 > Einzel-Konzepte zusammen (Composition-Root, Projektionen/Store-Nodes, Saga-Nodes, Feld-Ports,
 > Frist/Leseachsen-Anleitung). Ist-Abgleich Backend↔Editor (Abdeckung, Sync-Lücken, LLM-Füllung,
 > Roadmap): [`analyse-editor-backend-abdeckung-2026-09-24.md`](analyse-editor-backend-abdeckung-2026-09-24.md).
+> LLM-Füllung mit Minimalkontext (Arbeitskarte je H-Slot, Kartenwand, Benchmark; Konzept, nicht
+> gebaut): [`konzept-llm-minimalkontext.md`](konzept-llm-minimalkontext.md).
 >
 > **Konzept / Vor-Analyse:** [`konzept-exactly-once-naht.md`](konzept-exactly-once-naht.md) —
 > wie voraussetzungsreich exactly-once ist, welche Verträge ein Co-Commit-Store erfüllen muss
