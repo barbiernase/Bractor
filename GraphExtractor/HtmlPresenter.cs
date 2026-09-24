@@ -1,32 +1,15 @@
 namespace GraphExtractor;
 
 /// <summary>
-/// Rendert den Wissensgraphen als self-contained, interaktives Event-Modeling-Board (Canvas):
-///   • Bounded Contexts als Container; darin die Aggregate; um jedes Aggregat seine einzelnen Funktionen
-///     (Decide-Handler) visuell isoliert — Command REIN, Events (das OneOf) RAUS.
-///   • Die emittierten Events fließen sichtbar in Projektionen (unten) und Sagas (oben).
-///   • Domänen-Filter (Kontexte ein/ausblenden), Pan/Zoom.
-///   • Trigger-Simulator: eine Auslöser-Nachricht schicken und die Token wellenweise durchs Board laufen
-///     sehen — steuerbar über Prev / Next / Play / Reset.
-/// Die gesamte Graph-Struktur ist als JSON eingebettet (window.GRAPH) und bleibt abfragbar.
+/// Rendert die EINE Oberfläche: den Domänen-Editor (Route <c>SimHost /editor</c>) — Node-Editor, Code-Sync,
+/// Prüfen/Kompilieren und die Simulation (Command → Decider → Events → Applier → Saga, animiert auf den Knoten).
+/// Das frühere read-only Event-Modeling-Board ist darin aufgegangen.
 /// </summary>
 public static class HtmlPresenter
 {
-    public static string Render(KnowledgeGraph graph, string json) => Render(graph, json, "null");
-
     /// <summary>
-    /// Wie oben, plus das editierbare Domänen-Modell (domain-model.json) für den EDITOR-MODUS
-    /// (die Umkehrung C# → Board). Der Editor-Block ist self-contained und wird vor <c>&lt;/body&gt;</c>
-    /// eingehängt — er stört das bestehende (read-only) Board nicht.
-    /// </summary>
-    public static string Render(KnowledgeGraph graph, string json, string modelJson) =>
-        Template.Replace("/*__GRAPH_JSON__*/", json)
-                .Replace("</body>", EditorBlock.Replace("/*__MODEL_JSON__*/", modelJson) + "\n</body>");
-
-    /// <summary>
-    /// Die EIGENSTÄNDIGE Editor-Seite (Route <c>/editor</c>): nur der Domänen-Editor, kein Board
-    /// dahinter. Startet LEER (bestehende Aggregate werden ignoriert — bewusst über „Vom Graph
-    /// laden" nachladbar). Self-contained, gleiche CSS/JS wie das Board-Overlay.
+    /// Die Editor-Seite (Route <c>/editor</c>): self-contained HTML/CSS/JS. Bootet aus dem Code
+    /// (<c>/api/editor/model</c>) und merged das gespeicherte Board (Layout, Entwürfe) darüber.
     /// </summary>
     public static string EditorPage() =>
         """
@@ -41,538 +24,15 @@ public static class HtmlPresenter
         <body>
         __EDITOR__
         <script>
-          // Standalone: Launch-/Schließen-Button weg, Editor sofort zeigen, LEER starten.
+          // Standalone: Launch-/Schließen-Button weg, Editor sofort zeigen, aus dem Code booten.
           var ob=document.getElementById('de-open'); if(ob)ob.style.display='none';
           var cb=document.getElementById('de-close'); if(cb)cb.style.display='none';
-          deShow(); deLeer(); dePing();
+          deShow(); deBoot();
         </script>
         </body>
         </html>
         """.Replace("__EDITOR__", EditorBlock.Replace("/*__MODEL_JSON__*/", "null"));
 
-    private const string Template = """
-<!doctype html>
-<html lang="de">
-<head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Wissensgraph — Event-Modeling-Board</title>
-<style>
-  :root{
-    --bg:#0f1216; --panel:#161b22; --panel2:#1c222b; --ink:#e6edf3; --muted:#8b98a9; --line:#242c37;
-    --evt:#3b82f6; --rej:#6b7480; --cmd:#e0902b; --agg:#22b07d; --proc:#8b5cf6; --proj:#14b8a6; --pipe:#f97316; --accent:#8b5cf6;
-  }
-  *{box-sizing:border-box}
-  html,body{height:100%;margin:0}
-  body{display:flex;font:13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg);color:var(--ink);overflow:hidden}
-  aside{width:300px;flex:0 0 300px;background:var(--panel);border-right:1px solid var(--line);display:flex;flex-direction:column;overflow:hidden}
-  .brand{padding:16px 18px;border-bottom:1px solid var(--line)}
-  .brand h1{margin:0;font-size:15px}
-  .brand small{color:var(--muted);font-size:11px}
-  .badge{display:inline-block;padding:2px 8px;border-radius:6px;font-size:10px;font-weight:700;margin-top:8px}
-  .badge.auth{background:#0f2a20;color:var(--agg)} .badge.fallback{background:#2c1414;color:#d64545}
-  .scroll{overflow-y:auto;flex:1;padding:14px 16px}
-  .sec{margin-bottom:18px}
-  .sec h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 8px}
-  .row{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px;cursor:pointer;user-select:none}
-  .row input{accent-color:var(--accent)}
-  .sw{width:11px;height:11px;border-radius:3px;flex:0 0 11px}
-  .row .ct{margin-left:auto;color:var(--muted);font-size:11px}
-  .mini{display:flex;gap:6px;margin-bottom:10px}
-  .mini button{flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--muted);border-radius:6px;padding:5px;font-size:11px;cursor:pointer}
-  .mini button:hover{color:var(--ink)}
-  select{width:100%;padding:8px;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);font:inherit;margin-bottom:10px}
-  .ctrls{display:flex;gap:6px;margin-bottom:8px}
-  .ctrls button{flex:1;background:var(--panel2);border:1px solid var(--line);color:var(--ink);border-radius:8px;padding:9px 0;font-size:14px;cursor:pointer}
-  .ctrls button:hover{border-color:var(--accent)}
-  .ctrls button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
-  .ctrls button:disabled{opacity:.35;cursor:default}
-  .stepinfo{background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:9px 11px;font-size:12px;min-height:54px}
-  .stepinfo .n{color:var(--muted);font-size:11px}
-  .stepinfo b{color:var(--accent)}
-  .legend{display:flex;flex-wrap:wrap;gap:6px 12px;font-size:11px;color:var(--muted)}
-  .legend span{display:inline-flex;align-items:center;gap:5px}
-  .dot{width:9px;height:9px;border-radius:3px;display:inline-block}
-  main{flex:1;position:relative;overflow:hidden}
-  canvas{display:block;width:100%;height:100%;cursor:grab}
-  canvas.grabbing{cursor:grabbing}
-  #tip{position:absolute;pointer-events:none;background:#0b0e12ee;border:1px solid var(--line);border-radius:8px;padding:8px 10px;font-size:12px;max-width:300px;display:none;z-index:10}
-  #tip .k{color:var(--muted);font-size:10px;text-transform:uppercase;letter-spacing:.05em}
-  #tip .rows{color:var(--muted);font-size:11px;margin-top:4px;font-family:ui-monospace,Menlo,monospace}
-  #hud{position:absolute;left:14px;bottom:12px;font-size:11px;color:var(--muted);background:#0b0e12aa;border:1px solid var(--line);border-radius:6px;padding:4px 8px}
-  details{margin-top:6px} summary{cursor:pointer;color:var(--muted);font-size:11px}
-  code{font-family:ui-monospace,Menlo,monospace;font-size:11px;color:var(--evt)}
-  .livebadge{display:none;background:#0f2a20;color:var(--agg);border-radius:6px;padding:1px 7px;font-size:10px;font-weight:700;margin-left:6px}
-  #cmdform{margin:4px 0 6px}
-  #cmdform label{display:block;font-size:11px;color:var(--muted);margin:6px 0 2px}
-  #cmdform input{width:100%;padding:6px 8px;border-radius:6px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);font:inherit}
-  #cmdform input[type=checkbox]{width:auto}
-  #cmdform .send{width:100%;margin-top:10px;background:var(--accent);border:none;color:#fff;border-radius:8px;padding:9px;font-weight:600;cursor:pointer}
-  #cmdform .rst{background:none;border:none;color:var(--muted);font-size:11px;cursor:pointer;margin-top:6px;text-decoration:underline;display:block}
-  #states{margin-top:8px;font:11px ui-monospace,Menlo,monospace;color:var(--muted)}
-  #states .s{padding:3px 0;border-top:1px solid var(--line)}
-  #states b{color:var(--agg)}
-  #instlist .itype{font-size:10px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin:8px 0 3px}
-  #instlist .inst{padding:5px 7px;border:1px solid var(--line);border-radius:7px;margin-bottom:4px;cursor:pointer;font-size:12px}
-  #instlist .inst:hover{border-color:var(--accent)}
-  #instlist .inst.sel{border-color:var(--agg);background:#22b07d14}
-  #instlist .inst b{color:var(--agg)}
-  #instlist .iid{color:var(--muted);font-size:10px;font-family:ui-monospace,Menlo,monospace;margin-left:6px}
-  #instlist .ivals{color:var(--muted);font-size:11px;font-family:ui-monospace,Menlo,monospace;margin-top:2px}
-  #instlist .ihint{color:var(--muted);font-size:11px}
-  #inspector{margin-top:8px}
-  #inspector .card{border:1px solid var(--agg);border-radius:8px;padding:8px 10px;background:#22b07d0d}
-  #inspector .chead{font-size:12px;font-weight:600;color:var(--agg);margin-bottom:5px}
-  #inspector .frow{display:flex;justify-content:space-between;font-size:12px;font-family:ui-monospace,Menlo,monospace;padding:1px 0}
-  #inspector .fk{color:var(--muted)}
-  #inspector .old{color:var(--muted);text-decoration:line-through;opacity:.55}
-  #inspector .new{color:var(--agg)}
-  #inspector .hist{margin-top:6px;font-size:11px;color:var(--muted)}
-  #inspector .hh{text-transform:uppercase;letter-spacing:.05em;font-size:10px;margin-bottom:2px}
-  #inspector .hrow{font-family:ui-monospace,Menlo,monospace;padding:1px 0;border-top:1px solid var(--line)}
-  #inspector .hrow b{color:var(--cmd)}
-</style>
-</head>
-<body>
-<aside>
-  <div class="brand">
-    <h1>Wissensgraph</h1>
-    <small>Event-Modeling-Board · Contexts › Aggregate › Funktionen</small><br>
-    <span class="badge" id="routing"></span>
-  </div>
-  <div class="scroll">
-    <div class="sec">
-      <h2>Nachricht schicken<span class="livebadge" id="livebadge">● LIVE-Runtime</span></h2>
-      <select id="trigsel"></select>
-      <div id="cmdform"></div>
-      <div class="ctrls">
-        <button id="prev" title="zurück">⏮</button>
-        <button id="play" class="primary" title="abspielen">▶</button>
-        <button id="next" title="weiter">⏭</button>
-        <button id="reset" title="zurücksetzen">⟲</button>
-        <button id="cov" title="Abdeckung grün/grau (welche Zweige je gefeuert)">▦</button>
-      </div>
-      <div class="stepinfo" id="stepinfo"><span class="n">Trigger wählen und ▶ / ⏭ drücken.</span></div>
-      <div id="states"></div>
-    </div>
-    <div class="sec" id="aggsec" style="display:none">
-      <h2>Aggregate <span style="opacity:.5;font-weight:400;text-transform:none;letter-spacing:0">· angelegte Instanzen</span></h2>
-      <div id="instlist"></div>
-      <div id="inspector"></div>
-    </div>
-    <div class="sec">
-      <h2>Bounded Contexts</h2>
-      <div class="mini"><button id="ctx-all">alle</button><button id="ctx-none">keine</button><button id="ctx-saga">nur Sagas</button></div>
-      <div id="ctxlist"></div>
-    </div>
-    <div class="sec">
-      <h2>Legende</h2>
-      <div class="legend">
-        <span><i class="dot" style="background:var(--cmd)"></i>Funktion (Command rein)</span>
-        <span><i class="dot" style="background:var(--evt)"></i>Event raus</span>
-        <span><i class="dot" style="background:var(--rej)"></i>Ablehnung</span>
-        <span><i class="dot" style="background:var(--agg)"></i>Aggregat</span>
-        <span><i class="dot" style="background:var(--proc)"></i>Saga</span>
-        <span><i class="dot" style="background:var(--proj)"></i>Projektion</span>
-      </div>
-      <details>
-        <summary>JSON abfragen</summary>
-        <div style="color:var(--muted);font-size:11px;margin-top:6px">
-          <code>window.GRAPH</code> in der Konsole:<br>
-          <code>GRAPH.nodes.filter(n=>n.context==='Konto')</code><br>
-          <code>GRAPH.edges.filter(e=>e.kind==='produces')</code>
-        </div>
-      </details>
-    </div>
-  </div>
-</aside>
-<main>
-  <canvas id="cv"></canvas>
-  <div id="tip"></div>
-  <div id="hud">Scrollen = Zoom · Ziehen = Pan · Hover = Details</div>
-</main>
-
-<script>
-const GRAPH = /*__GRAPH_JSON__*/;
-window.GRAPH = GRAPH;
-
-const nodes=GRAPH.nodes, edges=GRAPH.edges;
-const N=Object.fromEntries(nodes.map(n=>[n.id,n]));
-const nodeIdOf=(k,name)=>{ const n=nodes.find(n=>n.kind===k&&n.name===name); return n?n.id:null; };
-const esc=s=>(s??'').replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));
-const contexts=GRAPH.meta.contexts.slice();
-const ctxCount={}; nodes.forEach(n=>ctxCount[n.context]=(ctxCount[n.context]||0)+1);
-function ctxColor(c){ let h=0; for(const ch of c) h=(h*31+ch.charCodeAt(0))%360; return `hsl(${h} 55% 58%)`; }
-const sagaContexts=new Set(nodes.filter(n=>n.kind==='process').map(n=>n.context)
-  .concat(edges.filter(e=>e.kind==='sends'||e.kind==='compensates').flatMap(e=>[N[e.from].context,N[e.to].context])));
-const visibleCtx=new Set(contexts); const isVis=c=>visibleCtx.has(c);
-
-(function(){ const b=document.getElementById('routing'); const auth=GRAPH.meta.routingSource==='GeneratedCommandRouting';
-  b.className='badge '+(auth?'auth':'fallback'); b.textContent='Routing: '+GRAPH.meta.routingSource; })();
-
-// ── Kontext-Filter ────────────────────────────────────────────────────────────
-const ctxlist=document.getElementById('ctxlist');
-contexts.forEach(c=>{ const row=document.createElement('label'); row.className='row';
-  row.innerHTML=`<input type="checkbox" checked data-c="${c}"><i class="sw" style="background:${ctxColor(c)}"></i>${c}<span class="ct">${ctxCount[c]}</span>`;
-  row.querySelector('input').onchange=e=>{ e.target.checked?visibleCtx.add(c):visibleCtx.delete(c); applyFilter(); };
-  ctxlist.appendChild(row); });
-function setAllCtx(pred){ visibleCtx.clear(); ctxlist.querySelectorAll('input').forEach(i=>{ const on=pred(i.dataset.c); i.checked=on; if(on)visibleCtx.add(i.dataset.c); }); applyFilter(); }
-document.getElementById('ctx-all').onclick=()=>setAllCtx(()=>true);
-document.getElementById('ctx-none').onclick=()=>setAllCtx(()=>false);
-document.getElementById('ctx-saga').onclick=()=>setAllCtx(c=>sagaContexts.has(c));
-function applyFilter(){ computeBoard(); needFit=true; resize(); }
-
-// ── Board-Layout (deterministisch, verschachtelt) ────────────────────────────
-const SZ={HW:214,HHEAD:24,ROW:18,HPAD:8,GAPH:12,APAD:14,AHEAD:26,CPAD:18,CHEAD:32,GAPA:14,GAPC:44,LANEH:66,LHEAD:32,LROW:30,LANEGAP:90,LANEW:186,PROCW:300,LANEGX:16,MAXROW:3000};
-let board={};
-
-const cmdsOfAgg=name=>nodes.filter(n=>n.kind==='command'&&n.command&&n.command.routedTo===name);
-const aggsOfCtx=c=>nodes.filter(n=>n.kind==='aggregate'&&n.context===c);
-function measureHandler(cmd){ return SZ.HHEAD + Math.max(1,(cmd.command.produces||[]).length)*SZ.ROW + SZ.HPAD; }
-function measureAgg(agg){ const cs=cmdsOfAgg(agg.name); let h=SZ.AHEAD+SZ.APAD; cs.forEach(c=>h+=measureHandler(c)+SZ.GAPH); if(cs.length)h-=SZ.GAPH; else h+=28; return {h:h+SZ.APAD, cmds:cs}; }
-function measureCtx(c){ const ags=aggsOfCtx(c); const ms=ags.map(measureAgg); let h=SZ.CHEAD+SZ.CPAD; ms.forEach(m=>h+=m.h+SZ.GAPA); if(ags.length)h-=SZ.GAPA; h+=SZ.CPAD; return {w:SZ.HW+SZ.APAD*2+SZ.CPAD*2, h, ags, ms}; }
-
-function computeBoard(){
-  board={ctx:[],agg:{},handler:{},pillsByEvt:{},lane:{},edges:[],pick:[],bounds:{minx:0,miny:0,maxx:0,maxy:0}};
-  const visCtx=contexts.filter(c=>isVis(c)&&aggsOfCtx(c).length>0);
-  const measured=visCtx.map(c=>({c,m:measureCtx(c)}));
-  // Umbruch-Grenze der Lane aus der geschätzten Inhaltsbreite.
-  let est=0; measured.forEach(({m})=>est+=m.w+SZ.GAPC);
-  const rightBound=Math.max(Math.min(est,SZ.MAXROW),SZ.LANEW*4);
-  // Obere Lane ZUERST (Sagas haben variable Höhe je Regelzahl) → bestimmt, wo die Contexts beginnen.
-  placeLane([...nodes.filter(n=>n.kind==='process'&&isVis(n.context)), ...nodes.filter(n=>n.kind==='pipeline'&&isVis(n.context))], 0, rightBound);
-  let topBottom=SZ.LANEH; Object.values(board.lane).forEach(b=>topBottom=Math.max(topBottom,b.y+b.h));
-  const midTop=topBottom+SZ.LANEGAP;
-  let cx=0,rowY=0,rowH=0;
-  measured.forEach(({c,m})=>{
-    if(cx>0 && cx+m.w>SZ.MAXROW){ cx=0; rowY+=rowH+SZ.GAPC; rowH=0; }
-    placeContext(c,m,cx,midTop+rowY);
-    cx+=m.w+SZ.GAPC; rowH=Math.max(rowH,m.h);
-  });
-  const contentBottom=midTop+rowY+rowH;
-  placeLane(nodes.filter(n=>n.kind==='projection'&&isVis(n.context)), contentBottom+SZ.LANEGAP, rightBound);
-  buildEdges();
-  computeBounds();
-}
-function placeContext(c,m,ox,oy){
-  board.ctx.push({c,x:ox,y:oy,w:m.w,h:m.h});
-  let ay=oy+SZ.CHEAD; const ax=ox+SZ.CPAD;
-  m.ags.forEach((agg,i)=>{ const am=m.ms[i]; const aw=SZ.HW+SZ.APAD*2;
-    board.agg[agg.id]={x:ax,y:ay,w:aw,h:am.h,node:agg}; board.pick.push({x:ax,y:ay,w:aw,h:am.h,node:agg});
-    let hy=ay+SZ.AHEAD; const hx=ax+SZ.APAD;
-    am.cmds.forEach(cmd=>{ const hh=measureHandler(cmd);
-      board.handler[cmd.id]={x:hx,y:hy,w:SZ.HW,h:hh,node:cmd,portIn:{x:hx,y:hy+SZ.HHEAD/2}};
-      board.pick.unshift({x:hx,y:hy,w:SZ.HW,h:hh,node:cmd});
-      (cmd.command.produces||[]).forEach((o,k)=>{ const py=hy+SZ.HHEAD+k*SZ.ROW; const evtId=nodeIdOf('event',o.event);
-        const pill={cmdId:cmd.id,event:o.event,persisted:o.persisted,evtId,x:hx+8,y:py,w:SZ.HW-16,h:SZ.ROW,portOut:{x:hx+SZ.HW,y:py+SZ.ROW/2}};
-        if(evtId)(board.pillsByEvt[evtId] ||= []).push(pill); });
-      hy+=hh+SZ.GAPH; });
-    ay+=am.h+SZ.GAPA; });
-}
-const RF=9, RLH=13; // Regel-Font + Zeilenhöhe (Weltkoordinaten)
-function laneW(n){ return n.kind==='process' ? SZ.PROCW : SZ.LANEW; }
-function wrapLines(s,maxW){ ctx.font=RF+'px -apple-system,sans-serif'; const ws=s.split(' '); const out=[]; let cur='';
-  ws.forEach(w=>{ const t=cur?cur+' '+w:w; if(!cur||ctx.measureText(t).width<=maxW)cur=t; else {out.push(cur);cur=w;} }); if(cur)out.push(cur); return out; }
-function ruleLines(r,innerW){
-  const cond='Auf '+(r.when||[]).join(' + ')+(r.join==='count'?' (alle '+(r.sammel||'')+')':'');
-  const send='→ '+(r.fanOut?'je ':'')+r.sends+(r.compensates?'  ↩ '+r.compensates:'');
-  return wrapLines(cond,innerW).map(t=>['c',t]).concat(wrapLines(send,innerW).map(t=>['s',t])); }
-function laneH(n){ if(n.kind!=='process') return SZ.LANEH;
-  const innerW=SZ.PROCW-24; let lines=0; (n.process.rules||[]).forEach(r=>lines+=ruleLines(r,innerW).length);
-  return SZ.LHEAD + Math.max(1,lines)*RLH + (n.process.rules||[]).length*4 + 6; }
-function placeLane(items,y,rightBound){ let x=0,yy=y,rowMax=0;
-  items.forEach(n=>{ const h=laneH(n), w=laneW(n);
-    if(x>0&&x+w>rightBound){x=0;yy+=rowMax+SZ.LANEGX;rowMax=0;}
-    board.lane[n.id]={x,y:yy,w,h,node:n}; board.pick.push({x,y:yy,w,h,node:n});
-    rowMax=Math.max(rowMax,h); x+=w+SZ.LANEGX; }); }
-function clip(s,maxW){ if(ctx.measureText(s).width<=maxW)return s; let t=s; while(t.length>1&&ctx.measureText(t+'…').width>maxW)t=t.slice(0,-1); return t+'…'; }
-const topC=r=>({x:r.x+r.w/2,y:r.y}), botC=r=>({x:r.x+r.w/2,y:r.y+r.h});
-function buildEdges(){ const E=[];
-  edges.forEach(e=>{
-    if(e.kind==='sends'||e.kind==='compensates'||e.kind==='pipelineEmits'){ const s=board.lane[e.from],h=board.handler[e.to];
-      if(s&&h)E.push({p1:botC(s),p2:h.portIn,kind:e.kind,key:edgeKey(e)}); }
-    else if(e.kind==='triggers'||e.kind==='advances'){ const s=board.lane[e.to],pills=board.pillsByEvt[e.from]||[];
-      if(s)pills.forEach(p=>E.push({p1:p.portOut,p2:topC(s),kind:e.kind,key:edgeKey(e)})); }
-    else if(e.kind==='consumedBy'){ const pr=board.lane[e.to],pills=board.pillsByEvt[e.from]||[];
-      if(pr)pills.forEach(p=>E.push({p1:p.portOut,p2:topC(pr),kind:e.kind,key:edgeKey(e)})); }
-  }); board.edges=E; }
-function computeBounds(){ let a=1e9,b=1e9,c=-1e9,d=-1e9;
-  const acc=r=>{a=Math.min(a,r.x);b=Math.min(b,r.y);c=Math.max(c,r.x+r.w);d=Math.max(d,r.y+r.h);};
-  board.ctx.forEach(acc); Object.values(board.lane).forEach(acc);
-  if(a>c){a=b=0;c=d=100;} board.bounds={minx:a,miny:b,maxx:c,maxy:d}; }
-const edgeKey=e=>e.from+'>'+e.to+'>'+e.kind;
-
-// ── Canvas / Kamera ──────────────────────────────────────────────────────────
-let W=1000,H=700; const cv=document.getElementById('cv'), ctx=cv.getContext('2d');
-const cam={x:0,y:0,zoom:1}; let DPR=Math.max(1,window.devicePixelRatio||1); let needFit=true;
-function resize(){ const r=cv.getBoundingClientRect(); W=r.width;H=r.height; cv.width=W*DPR;cv.height=H*DPR;
-  if(needFit&&W>0&&H>0){ fit(); needFit=false; } render(); }
-function fit(){ const b=board.bounds; if(W<=0||H<=0)return; const pad=70, gw=b.maxx-b.minx+pad*2, gh=b.maxy-b.miny+pad*2;
-  cam.zoom=Math.max(.08,Math.min(W/gw,H/gh,1.3)); cam.x=(b.minx+b.maxx)/2; cam.y=(b.miny+b.maxy)/2; }
-const S=(x,y)=>[(x-cam.x)*cam.zoom+W/2,(y-cam.y)*cam.zoom+H/2];
-const Wld=(sx,sy)=>[(sx-W/2)/cam.zoom+cam.x,(sy-H/2)/cam.zoom+cam.y];
-
-const KIND_COL={command:'#e0902b',aggregate:'#22b07d',process:'#8b5cf6',projection:'#14b8a6',pipeline:'#f97316'};
-const EDGE_COL={sends:'#e0902b',compensates:'#d64545',pipelineEmits:'#f97316',triggers:'#8b5cf6',advances:'#8b5cf6',consumedBy:'#14b8a6'};
-
-function rr(x,y,w,h,r){ ctx.beginPath(); ctx.moveTo(x+r,y); ctx.arcTo(x+w,y,x+w,y+h,r); ctx.arcTo(x+w,y+h,x,y+h,r); ctx.arcTo(x,y+h,x,y,r); ctx.arcTo(x,y,x+w,y,r); ctx.closePath(); }
-function render(){
-  ctx.setTransform(DPR,0,0,DPR,0,0); ctx.clearRect(0,0,W,H);
-  ctx.lineJoin='round'; ctx.textBaseline='middle';
-  const z=cam.zoom;
-  // 1) Kanten (hinter den Boxen)
-  drawEdges(false);
-  // 2) Kontext-Container
-  board.ctx.forEach(b=>{ const [x,y]=S(b.x,b.y);
-    ctx.fillStyle=ctxColor(b.c).replace('hsl','hsla').replace(')',' / 8%)'); ctx.strokeStyle=ctxColor(b.c).replace('hsl','hsla').replace(')',' / 40%)'); ctx.lineWidth=1.4;
-    rr(x,y,b.w*z,b.h*z,12*z); ctx.fill(); ctx.stroke();
-    ctx.fillStyle=ctxColor(b.c); ctx.font=`700 ${12*z}px -apple-system,sans-serif`; ctx.textAlign='left';
-    ctx.fillText('◆ '+b.c.toUpperCase(), x+12*z, y+16*z); });
-  // 3) Aggregate
-  Object.values(board.agg).forEach(b=>{ const [x,y]=S(b.x,b.y); const act=simActive.has(b.node.id);
-    ctx.fillStyle='#22b07d18'; ctx.strokeStyle=act?'#22b07d':'#22b07d66'; ctx.lineWidth=act?2:1.3;
-    rr(x,y,b.w*z,b.h*z,10*z); ctx.fill(); ctx.stroke();
-    ctx.fillStyle='#2fd18f'; ctx.font=`700 ${11.5*z}px -apple-system,sans-serif`; ctx.textAlign='left';
-    ctx.fillText('▣ '+b.node.name, x+10*z, y+13*z); });
-  // 4) Funktionen (Handler): Command-Kopf + OneOf-Events
-  Object.values(board.handler).forEach(b=>{ const cmd=b.node; const [x,y]=S(b.x,b.y); const act=simActive.has(cmd.id);
-    ctx.globalAlpha=simMode&&!act?.4:1;
-    // Kopf = Command (rein)
-    ctx.fillStyle=act?'#e0902b':'#e0902b22'; ctx.strokeStyle='#e0902b'; ctx.lineWidth=act?2:1.2;
-    rr(x,y,b.w*z,SZ.HHEAD*z,7*z); ctx.fill(); ctx.stroke();
-    ctx.fillStyle=act?'#1a1206':'#f0b464'; ctx.font=`700 ${11*z}px -apple-system,sans-serif`; ctx.textAlign='left';
-    ctx.fillText('▸ '+cmd.name, x+8*z, y+SZ.HHEAD*z/2);
-    // Ausgänge = Events (raus), das gekapselte OneOf
-    (cmd.command.produces||[]).forEach((o,k)=>{ const py=y+(SZ.HHEAD+k*SZ.ROW)*z; const evtId=nodeIdOf('event',o.event);
-      const on=simActive.has(evtId); const col=o.persisted?'#3b82f6':'#6b7480';
-      const gedeckt=COV.has('produces:'+cmd.name+'->'+o.event); const a0=ctx.globalAlpha; if(covMode&&!gedeckt)ctx.globalAlpha=a0*.28;
-      ctx.fillStyle=on?col:(o.persisted?'#3b82f622':'#6b748022'); ctx.strokeStyle=col; ctx.lineWidth=on?1.8:1; if(!o.persisted)ctx.setLineDash([3,2]);
-      rr(x+8*z,py+2*z,(b.w-16)*z,(SZ.ROW-3)*z,5*z); ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
-      ctx.fillStyle=on?'#fff':(o.persisted?'#9cc2ff':'#aab3c0'); ctx.font=`${10*z}px -apple-system,sans-serif`;
-      ctx.fillText((o.persisted?'● ':'⃠ ')+o.event, x+15*z, py+SZ.ROW*z/2);
-      if(covMode&&gedeckt){ ctx.fillStyle='#22c55e'; ctx.beginPath(); ctx.arc(x+(b.w-14)*z,py+SZ.ROW*z/2,2.4*z,0,7); ctx.fill(); }
-      ctx.globalAlpha=a0; });
-    ctx.globalAlpha=1; });
-  // 5) Lanes: Sagas (oben) + Projektionen (unten)
-  Object.values(board.lane).forEach(b=>{ const n=b.node; const [x,y]=S(b.x,b.y); const act=simActive.has(n.id); const col=KIND_COL[n.kind];
-    ctx.globalAlpha=simMode&&!act?.4:1;
-    ctx.fillStyle=col+ (act?'':'22'); ctx.strokeStyle=col; ctx.lineWidth=act?2.4:1.4;
-    rr(x,y,b.w*z,b.h*z,9*z); ctx.fill(); ctx.stroke();
-    if(n.kind==='process'){
-      // Kopf: Name + Muster/Auslöser
-      ctx.textAlign='left'; ctx.fillStyle=act?'#fff':'#e6edf3'; ctx.font=`700 ${11*z}px -apple-system,sans-serif`;
-      ctx.fillText(clip('⬡ '+n.name,(b.w-18)*z), x+10*z, y+14*z);
-      ctx.fillStyle=col; ctx.font=`${8.4*z}px -apple-system,sans-serif`;
-      ctx.fillText(clip(n.process.pattern+' · Auslöser '+n.process.trigger,(b.w-18)*z), x+10*z, y+26*z);
-      // Transitionen: Auf <Events> → Sende <Command> — voll umgebrochen, nie abgeschnitten.
-      const innerW=b.w-24; let ly=y+SZ.LHEAD*z;
-      (n.process.rules||[]).forEach(r=>{
-        ruleLines(r,innerW).forEach(([k,t])=>{
-          ctx.font=`${RF*z}px -apple-system,sans-serif`;
-          ctx.fillStyle = k==='c' ? '#9cc2ff' : '#f0b464';
-          ctx.fillText(t, x+(k==='c'?12:18)*z, ly+RF*z);
-          ly += RLH*z;
-        });
-        ly += 4*z; // Abstand zwischen Regeln
-      });
-    } else {
-      ctx.textAlign='center'; ctx.fillStyle=act?'#fff':'#e6edf3'; ctx.font=`700 ${11.5*z}px -apple-system,sans-serif`;
-      const icon=n.kind==='projection'?'▤ ':'⛁ '; ctx.fillText(icon+n.name, x+b.w*z/2, y+b.h*z/2-6*z);
-      ctx.fillStyle=col; ctx.font=`${9.5*z}px -apple-system,sans-serif`;
-      const sub=n.kind==='projection'?n.projection.subscriberId:'Pipeline';
-      ctx.fillText(sub, x+b.w*z/2, y+b.h*z/2+9*z);
-    }
-    ctx.textAlign='left'; ctx.globalAlpha=1; });
-  // 6) aktive Kanten oben drauf
-  if(simMode) drawEdges(true);
-}
-function drawEdges(activeOnly){ const z=cam.zoom;
-  board.edges.forEach(e=>{ const act=simActiveEdges.has(e.key); if(activeOnly&&!act)return; if(!activeOnly&&act&&simMode)return;
-    const [x1,y1]=S(e.p1.x,e.p1.y),[x2,y2]=S(e.p2.x,e.p2.y); const my=(y1+y2)/2;
-    ctx.strokeStyle=act?EDGE_COL[e.kind]:(simMode?'#232b36':'#2c3542'); ctx.lineWidth=act?2.4:1;
-    ctx.globalAlpha=act?1:(simMode?.5:.6); if(e.kind==='compensates')ctx.setLineDash([5,3]);
-    ctx.beginPath(); ctx.moveTo(x1,y1); ctx.bezierCurveTo(x1,my,x2,my,x2,y2); ctx.stroke(); ctx.setLineDash([]);
-    // Pfeilspitze
-    const ang=Math.atan2(y2-my,0.001); const s=5.5; ctx.fillStyle=ctx.strokeStyle;
-    ctx.beginPath(); ctx.moveTo(x2,y2); ctx.lineTo(x2-Math.cos(ang-.5)*s,y2-Math.sin(ang-.5)*s); ctx.lineTo(x2-Math.cos(ang+.5)*s,y2-Math.sin(ang+.5)*s); ctx.closePath(); ctx.fill();
-    ctx.globalAlpha=1; }); }
-
-// ── Interaktion ───────────────────────────────────────────────────────────────
-let hover=null,panning=false,last=[0,0];
-cv.addEventListener('mousedown',ev=>{ panning=true; cv.classList.add('grabbing'); last=[ev.offsetX,ev.offsetY]; });
-window.addEventListener('mousemove',ev=>{ const r=cv.getBoundingClientRect(); const ox=ev.clientX-r.left,oy=ev.clientY-r.top;
-  if(panning){ cam.x-=(ox-last[0])/cam.zoom; cam.y-=(oy-last[1])/cam.zoom; last=[ox,oy]; render(); }
-  else { const [wx,wy]=Wld(ox,oy); const n=pick(wx,wy); hover=n; showTip(n,ev.clientX,ev.clientY); } });
-window.addEventListener('mouseup',()=>{ panning=false; cv.classList.remove('grabbing'); });
-cv.addEventListener('wheel',ev=>{ ev.preventDefault(); const [wx,wy]=Wld(ev.offsetX,ev.offsetY);
-  cam.zoom*=Math.exp(-ev.deltaY*.001); cam.zoom=Math.max(.06,Math.min(4,cam.zoom));
-  const [nx,ny]=Wld(ev.offsetX,ev.offsetY); cam.x+=wx-nx; cam.y+=wy-ny; render(); },{passive:false});
-function pick(wx,wy){ for(const p of board.pick){ if(wx>=p.x&&wx<=p.x+p.w&&wy>=p.y&&wy<=p.y+p.h)return p.node; } return null; }
-const tip=document.getElementById('tip');
-function showTip(n,cx,cy){ if(!n){tip.style.display='none';return;}
-  let rows='';
-  if(n.command){ const p=n.command.produces||[]; const ok=p.filter(o=>o.persisted).map(o=>o.event), rej=p.filter(o=>!o.persisted).map(o=>o.event);
-    rows=`↳ ${n.command.routedTo||'—'} · ${(n.command.origin||[]).join(', ')}<br>OneOf&lt; ${ok.join(', ')}${rej.length?' | ⃠ '+rej.join(', '):''} &gt;`; }
-  else if(n.aggregate){ rows=`${(n.aggregate.handles||[]).length} Funktionen · ${(n.aggregate.emits||[]).length} Events`; }
-  else if(n.process){ rows=`${n.process.pattern} · Auslöser ${n.process.trigger} · ${n.process.rules.length} Regeln`; }
-  else if(n.projection){ rows=`Subscriber ${n.projection.subscriberId} · konsumiert ${(n.projection.consumes||[]).join(', ')}`; }
-  else if(n.pipeline){ rows=`${n.pipeline.handles.length} Handles`; }
-  tip.innerHTML=`<div class="k">${n.kind} · ${n.context}</div><b>${esc(n.name)}</b><div class="rows">${rows}</div>`;
-  tip.style.display='block'; tip.style.left=(cx+14)+'px'; tip.style.top=(cy+14)+'px'; }
-
-// ── Simulation ────────────────────────────────────────────────────────────────
-let frames=[],frameIdx=-1,simMode=false,playing=null;
-let simActive=new Set(),simActiveEdges=new Set();
-function out(id){ return edges.filter(e=>e.from===id); }
-function computeFrames(startId){
-  const start=N[startId]; const activated=new Set([startId]); const firedRules=new Set();
-  const note0 = start.kind==='command' ? `Command <b>${start.name}</b> geschickt → ${start.command.routedTo||'?'}` : `Trigger <b>${start.name}</b> tritt ein`;
-  const fr=[{add:[startId],edges:[],note:note0}];
-  let guard=0;
-  while(guard++<40){ const add=new Set(),used=[];
-    nodes.filter(n=>n.kind==='process'&&activated.has(n.id)).forEach(p=>{ p.process.rules.forEach((r,ri)=>{ const key=p.id+'#'+ri; if(firedRules.has(key))return;
-      const whenIds=r.when.map(w=>nodeIdOf('event',w)).filter(Boolean); const sammel=r.sammel?nodeIdOf('event',r.sammel):null;
-      if(!whenIds.every(id=>activated.has(id))||(sammel&&!activated.has(sammel)))return; firedRules.add(key);
-      const cmdId=nodeIdOf('command',r.sends); if(cmdId&&!activated.has(cmdId)){ add.add(cmdId); const se=edges.find(e=>e.kind==='sends'&&e.from===p.id&&e.to===cmdId); if(se)used.push(se); } }); });
-    fr[fr.length-1].add.forEach(id=>{ const n=N[id];
-      if(n.kind==='event'){ out(id).forEach(e=>{ if(['triggers','advances','consumedBy'].includes(e.kind)){ used.push(e); if(!activated.has(e.to))add.add(e.to); } }); }
-      else if(n.kind==='command'){ out(id).filter(e=>e.kind==='routedTo').forEach(e=>{ used.push(e); if(!activated.has(e.to))add.add(e.to); });
-        out(id).filter(e=>e.kind==='produces').forEach(e=>{ const ev=N[e.to]; if(ev.event&&!ev.event.persisted)return; used.push(e); if(!activated.has(e.to))add.add(e.to); }); } });
-    if(add.size===0&&used.length===0)break;
-    add.forEach(id=>activated.add(id)); fr.push({add:[...add],edges:used,note:noteOf([...add])}); }
-  return fr;
-}
-function noteOf(add){ const by=k=>add.map(id=>N[id]).filter(n=>n.kind===k).map(n=>n.name);
-  const p=[],c=by('command'),e=by('event'),pr=by('process'),a=by('aggregate'),pj=by('projection');
-  if(pr.length)p.push(`Saga <b>${pr.join(', ')}</b> erwacht`); if(c.length)p.push(`Funktion <b>${c.join(', ')}</b> aufgerufen`);
-  if(a.length)p.push(`Aggregat ${a.join(', ')} verarbeitet`); if(e.length)p.push(`Event <b>${e.join(', ')}</b> raus`);
-  if(pj.length)p.push(`Projektion ${pj.join(', ')} aktualisiert`); return p.join(' · ')||'—'; }
-function gotoFrame(i){ frameIdx=Math.max(0,Math.min(frames.length-1,i));
-  simActive=new Set(); simActiveEdges=new Set(); let changed=false;
-  for(let k=0;k<=frameIdx;k++){ frames[k].add.forEach(id=>simActive.add(id)); (frames[k].edges||[]).forEach(e=>simActiveEdges.add(edgeKey(e))); }
-  edges.forEach(e=>{ if(simActive.has(e.from)&&simActive.has(e.to))simActiveEdges.add(edgeKey(e)); }); // aktives Teilnetz (auch Live)
-  frames[frameIdx].add.forEach(id=>{ const c=N[id].context; if(!visibleCtx.has(c)){ visibleCtx.add(c); const inp=ctxlist.querySelector(`input[data-c="${c}"]`); if(inp)inp.checked=true; changed=true; } });
-  if(changed)computeBoard();
-  const si=document.getElementById('stepinfo'); si.innerHTML=`<span class="n">Schritt ${frameIdx} / ${frames.length-1}</span><br>${frames[frameIdx].note}`;
-  document.getElementById('prev').disabled=frameIdx<=0; document.getElementById('next').disabled=frameIdx>=frames.length-1; render(); }
-function startSim(t){ simMode=true; frames=computeFrames(t); gotoFrame(0); }
-function stopSim(){ simMode=false; simActive.clear(); simActiveEdges.clear(); playing&&clearInterval(playing); playing=null;
-  document.getElementById('play').textContent='▶'; document.getElementById('stepinfo').innerHTML='<span class="n">Trigger wählen und ▶ / ⏭ drücken.</span>'; render(); }
-const trigsel=document.getElementById('trigsel');
-const triggerEvents=[...new Set(edges.filter(e=>e.kind==='triggers').map(e=>e.from))]
-  .map(id=>({id,name:N[id].name,proc:edges.filter(e=>e.kind==='triggers'&&e.from===id).map(e=>N[e.to].name).join(', ')})).sort((a,b)=>a.name.localeCompare(b.name));
-let selHtml='<option value="">— Nachricht wählen —</option>';
-selHtml+='<optgroup label="▶ Auslöser-Events (starten eine Saga)">'
-  + triggerEvents.map(t=>`<option value="${t.id}">${t.name} → ${t.proc}</option>`).join('') + '</optgroup>';
-const cmdByAgg={}; nodes.filter(n=>n.kind==='command'&&n.command.routedTo).forEach(c=>{ (cmdByAgg[c.command.routedTo] ||= []).push(c); });
-Object.keys(cmdByAgg).sort().forEach(a=>{ selHtml+=`<optgroup label="▸ Commands → ${a}">`
-  + cmdByAgg[a].sort((x,y)=>x.name.localeCompare(y.name)).map(c=>`<option value="${c.id}">${c.name}</option>`).join('') + '</optgroup>'; });
-trigsel.innerHTML=selHtml;
-
-// ── LIVE-Runtime (SimHost): echte, wertabhängige Ausführung ─────────────────
-const SID='board-'+Math.floor(performance.now());
-let LIVE=false; const SCHEMA={};
-let covMode=false; const COV=new Set();
-function refreshCoverage(){ fetch('/api/coverage').then(r=>r.ok?r.json():[]).then(ids=>{ COV.clear(); (ids||[]).forEach(i=>COV.add(i)); render(); }).catch(()=>{}); }
-document.getElementById('cov').onclick=()=>{ covMode=!covMode; document.getElementById('cov').classList.toggle('primary',covMode); if(covMode)refreshCoverage(); else render(); };
-const setStep=html=>{ document.getElementById('stepinfo').innerHTML=html; };
-fetch('/api/schema').then(r=>r.ok?r.json():null).then(list=>{ if(!list)return;
-  LIVE=true; list.forEach(c=>SCHEMA[c.name]=c); document.getElementById('livebadge').style.display='inline-block';
-  document.getElementById('aggsec').style.display='block';
-  if(trigsel.value&&N[trigsel.value]?.kind==='command')renderForm(N[trigsel.value]);
-  refreshState();
-}).catch(()=>{});
-
-// ── Instanz-Inspektor: konkrete Aggregate, ihre Werte, ihre Änderungen ──────
-const INST={}; const HIST={}; let selId=null;
-const fmt=v=>v===true?'true':v===false?'false':(v==null?'—':v);
-function newGuid(){ return (self.crypto&&crypto.randomUUID)?crypto.randomUUID():'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,c=>{const r=Math.random()*16|0;return (c==='x'?r:(r&3|8)).toString(16);}); }
-function mergeStates(list){ (list||[]).forEach(s=>{ INST[s.id]={id:s.id,typ:s.aggregate,label:s.label,fields:s.fields}; }); if(!selId&&list&&list.length)selId=list[0].id; }
-function refreshState(){ fetch('/api/state?sessionId='+encodeURIComponent(SID)).then(r=>r.ok?r.json():[]).then(list=>{ mergeStates(list); renderInstances(); renderInspector(); }).catch(()=>{}); }
-function keyFields(f){ return Object.entries(f).map(([k,v])=>k+' '+fmt(v)).join(' · '); }
-function renderInstances(){ const el=document.getElementById('instlist'); if(!el)return;
-  const arr=Object.values(INST); if(!arr.length){ el.innerHTML='<div class="ihint">Noch keine — schick ein Erzeugungs-Command (z.B. EroeffneKonto).</div>'; return; }
-  const byTyp={}; arr.forEach(x=>{(byTyp[x.typ]=byTyp[x.typ]||[]).push(x);});
-  let h=''; Object.keys(byTyp).sort().forEach(t=>{ h+='<div class="itype">▣ '+t+'</div>';
-    byTyp[t].sort((a,b)=>a.label.localeCompare(b.label,undefined,{numeric:true})).forEach(x=>{
-      h+='<div class="inst'+(x.id===selId?' sel':'')+'" data-id="'+x.id+'"><b>'+x.label+'</b><span class="iid">'+x.id.slice(0,8)+'</span><div class="ivals">'+keyFields(x.fields)+'</div></div>'; }); });
-  el.innerHTML=h; el.querySelectorAll('.inst').forEach(d=>d.onclick=()=>{ selId=d.dataset.id; renderInstances(); renderInspector(); }); }
-function renderInspector(){ const el=document.getElementById('inspector'); if(!el)return;
-  const x=INST[selId]; if(!x){ el.innerHTML=''; return; }
-  const last=(HIST[selId]||[]).slice(-1)[0]; const chg={}; if(last)(last.changes||[]).forEach(c=>chg[c.feld]=c);
-  const rows=Object.entries(x.fields).map(([k,v])=>{ const c=chg[k];
-    return '<div class="frow"><span class="fk">'+k+'</span>'+(c?'<span><span class="old">'+fmt(c.vorher)+'</span> → <b class="new">'+fmt(c.nachher)+'</b></span>':'<span>'+fmt(v)+'</span>')+'</div>'; }).join('');
-  const hist=(HIST[selId]||[]).slice(-6).reverse().map(e=>'<div class="hrow"><b>'+e.command+'</b> '+((e.changes&&e.changes.length)?e.changes.map(c=>c.feld+' '+fmt(c.vorher)+'→'+fmt(c.nachher)).join(', '):'(keine Änderung)')+'</div>').join('');
-  el.innerHTML='<div class="card"><div class="chead">'+x.label+' <span class="iid" style="font-weight:400">'+x.id.slice(0,8)+'</span></div>'+rows+'</div>'+(hist?'<div class="hist"><div class="hh">Änderungen</div>'+hist+'</div>':''); }
-function guidFeld(fl,id,c){ const isAgg=fl.name.toLowerCase()==='aggregateid';
-  // aggregateId → Instanzen des Ziel-Aggregats; Referenz-Felder (z.B. NeuesKonto) → Instanzen ANDERER Aggregate.
-  const opts=Object.values(INST).filter(x=>isAgg?x.typ===c.aggregate:x.typ!==c.aggregate); const creation=c.creation&&isAgg;
-  const def=creation?'__neu__':(isAgg?(opts.find(x=>x.id===selId)?selId:(opts[0]?opts[0].id:'__neu__')):(opts[0]?opts[0].id:'__neu__'));
-  const o=opts.map(x=>'<option value="'+x.id+'"'+(x.id===def?' selected':'')+'>'+x.label+' · '+x.id.slice(0,8)+'</option>').join('')
-    +'<option value="__neu__"'+(def==='__neu__'?' selected':'')+'>➕ neu (frische Id)</option>';
-  return '<label>'+fl.name+' <span style="opacity:.55">'+(isAgg?'Aggregat':'Referenz')+'</span></label><select id="'+id+'">'+o+'</select>'; }
-function guidFor(name){ let h=0; for(const ch of name)h=(h*31+ch.charCodeAt(0))>>>0; return '00000000-0000-0000-0000-'+('000000000000'+h.toString(16)).slice(-12); }
-function renderForm(node){ const c=SCHEMA[node.name]; const f=document.getElementById('cmdform'); if(!c){f.innerHTML='';return;}
-  f.innerHTML=c.fields.map(fl=>{ const id='f_'+fl.name; const num=['decimal','int','long'].includes(fl.type);
-    if(fl.type==='bool')return `<label>${fl.name}</label><input type="checkbox" id="${id}">`;
-    if(fl.type==='guid')return guidFeld(fl,id,c);
-    const def=num?(/(Betrag|Saldo|Menge|Zimmer|Plaetze|Anzahl|ProZiel)/i.test(fl.name)?100:1):'';
-    return `<label>${fl.name} <span style="opacity:.55">${fl.type}</span></label><input type="${num?'number':'text'}" id="${id}" value="${def}">`; }).join('')
-    + `<button class="send" id="sendbtn">▶ ${node.name} schicken</button><button class="rst" id="dslbtn">🧪 Als Test</button><button class="rst" id="rstbtn">⟲ Session zurücksetzen</button>`;
-  document.getElementById('sendbtn').onclick=()=>sendCommand(node);
-  document.getElementById('dslbtn').onclick=dslExport;
-  document.getElementById('rstbtn').onclick=resetSession;
-}
-function dslExport(){ fetch('/api/dsl',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:SID})})
-  .then(r=>r.text()).then(code=>{ setStep('<div class="n" style="opacity:.7">Board-Session als Test (in die Zwischenablage kopiert):</div><pre style="white-space:pre-wrap;font-size:11px;line-height:1.4;color:#9fe0a0;margin:.4rem 0 0">'+code.replace(/</g,'&lt;')+'</pre>');
-    navigator.clipboard&&navigator.clipboard.writeText(code).catch(()=>{}); }); }
-function sendCommand(node){ const c=SCHEMA[node.name]; const values={}; let ziel=null;
-  c.fields.forEach(fl=>{ const el=document.getElementById('f_'+fl.name); if(!el)return;
-    let v; if(fl.type==='bool')v=el.checked;
-    else if(['decimal','int','long'].includes(fl.type))v=Number(el.value);
-    else if(fl.type==='guid'){ v=el.value==='__neu__'?newGuid():el.value; if(fl.name.toLowerCase()==='aggregateid')ziel=v; }
-    else v=el.value;
-    values[fl.name]=v; });
-  fetch('/api/step',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:SID,command:node.name,values})})
-    .then(r=>r.json()).then(res=>{ if(res.error){ setStep('<span class="n" style="color:#d64545">'+res.error+'</span>'); return; }
-      simMode=true; frames=(res.frames||[]).map(fr=>({add:(fr.add||[]).map(it=>nodeIdOf(it.kind,it.name)).filter(Boolean),edges:[],note:fr.note})); gotoFrame(0);
-      mergeStates(res.states); (res.changes||[]).forEach(ch=>{ (HIST[ch.id]=HIST[ch.id]||[]).push({command:ch.command,changes:ch.aenderungen}); });
-      if(ziel&&INST[ziel])selId=ziel; renderInstances(); renderInspector(); renderForm(node); if(covMode)refreshCoverage(); });
-}
-function resetSession(){ fetch('/api/reset',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({sessionId:SID})}).then(()=>{ Object.keys(INST).forEach(k=>delete INST[k]); Object.keys(HIST).forEach(k=>delete HIST[k]); selId=null; renderInstances(); renderInspector(); stopSim(); setStep('<span class="n">Session zurückgesetzt.</span>'); }); }
-
-trigsel.onchange=()=>{ const v=trigsel.value; document.getElementById('cmdform').innerHTML=''; document.getElementById('states').innerHTML='';
-  if(!v){ stopSim(); return; }
-  if(LIVE && N[v]?.kind==='command'){ renderForm(N[v]); setStep('<span class="n">Werte eingeben und ▶ schicken.</span>'); }
-  else startSim(v); };
-document.getElementById('next').onclick=()=>{ if(!simMode&&trigsel.value)startSim(trigsel.value); else gotoFrame(frameIdx+1); };
-document.getElementById('prev').onclick=()=>gotoFrame(frameIdx-1);
-document.getElementById('reset').onclick=()=>{ if(simMode)gotoFrame(0); };
-document.getElementById('play').onclick=()=>{ if(!simMode&&trigsel.value)startSim(trigsel.value);
-  if(playing){clearInterval(playing);playing=null;document.getElementById('play').textContent='▶';return;}
-  document.getElementById('play').textContent='⏸';
-  playing=setInterval(()=>{ if(frameIdx>=frames.length-1){clearInterval(playing);playing=null;document.getElementById('play').textContent='▶';return;} gotoFrame(frameIdx+1); },900); };
-
-// ── Start ─────────────────────────────────────────────────────────────────────
-window.addEventListener('resize',()=>{DPR=Math.max(1,window.devicePixelRatio||1);needFit=true;resize();});
-computeBoard(); resize();
-new ResizeObserver(()=>resize()).observe(document.querySelector('main'));
-requestAnimationFrame(resize); setTimeout(resize,80);
-
-if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufgegeben')||triggerEvents[0];
-  const f=computeFrames(t.id); console.log('SIM '+t.name+': '+f.length+' Frames'); f.forEach((fr,i)=>console.log('  ['+i+'] '+fr.note.replace(/<[^>]+>/g,''))); }
-</script>
-</body>
-</html>
-""";
-
-    // ════════════════════════════════════════════════════════════════════════════════════════════
-    //  EDITOR-MODUS (Umkehrung C# → Board): das Domänen-Modell VISUELL modellieren und daraus C#
-    //  erzeugen. Self-contained (eigenes CSS-Präfix #de-, eigener Launch-Button), lädt das Modell
-    //  aus SimHost (/api/editor/model) oder aus dem eingebetteten window.__MODEL__. „C# erzeugen"
-    //  und „Prüfen" rufen den EINEN C#-Scaffolder/Validator über SimHost (eine Wahrheit, kein
-    //  JS-Nachbau). Statisch geöffnet (ohne SimHost) editiert man die FORM und lädt das Modell-JSON.
-    // ════════════════════════════════════════════════════════════════════════════════════════════
     private const string EditorBlock = """
 <style>
 #de-open{position:fixed;top:12px;right:12px;z-index:40;background:#7c5cff;color:#fff;border:0;
@@ -599,9 +59,41 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .test .tframe.rej{background:#3a1f28;color:#ffb3c1}
 #de .test .tstate{padding:4px 8px;border-radius:5px;background:#141926;color:#cfe;margin:3px 0;font:12px ui-monospace,monospace}
 #de .cols{flex:1;display:grid;grid-template-columns:1fr;overflow:hidden}
+#de.simon .cols{grid-template-columns:1fr minmax(320px,400px)}
+#de .sim{display:none}
+@media (max-width:1100px){#de .cols{position:relative}#de.simon .cols{grid-template-columns:1fr}
+  #de.simon .sim{position:absolute;top:0;right:0;bottom:0;width:min(360px,88vw);z-index:40;box-shadow:-8px 0 24px rgba(0,0,0,.5)}}
+#de.simon .sim{display:flex;flex-direction:column;gap:10px;overflow:auto;border-left:1px solid #232a38;background:#10141d;padding:12px;font-size:12px}
+#de .sim h4{margin:6px 0 2px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
+#de .sim .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+#de .sim select,#de .sim input,#de .sim textarea{background:#0a0d13;color:#dfe4ee;border:1px solid #2a3344;border-radius:5px;padding:4px 6px;font:12px ui-monospace,monospace;min-width:0}
+#de .sim .fld{display:grid;grid-template-columns:120px 1fr;gap:6px;align-items:center;margin:3px 0}
+#de .sim .fld label{opacity:.8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#de .sim .fld select,#de .sim .fld input,#de .sim .fld textarea{width:100%;box-sizing:border-box}
+#de .sim .frame{border-left:3px solid #ffb86b;background:#151b27;border-radius:4px;padding:5px 8px;margin:4px 0;cursor:pointer}
+#de .sim .frame.saga{border-left-color:#b48cff}
+#de .sim .frame.rej{border-left-color:#ff6b81}
+#de .sim .frame .ev{display:block;margin-left:10px;opacity:.9}
+#de .sim .frame .ev.rej{color:#ff9aa9}
+#de .sim .frame .warum{opacity:.6}
+#de .sim .inst{background:#151b27;border-radius:4px;padding:5px 8px;margin:4px 0;cursor:pointer}
+#de .sim .inst .f{display:block;margin-left:8px;opacity:.85}
+#de .sim .inst .f.neu{color:#ffd76a;opacity:1}
+#de .sim .hinweis{background:#2a2410;color:#ffd76a;border-radius:4px;padding:4px 8px}
+#de .sim .fehler{background:#3a1a20;color:#ffb3c1;border-radius:4px;padding:4px 8px;margin:2px 0}
+#de .gnode2.simhot{outline:3px solid #ffb86b;outline-offset:2px;box-shadow:0 0 28px #ffb86bcc;z-index:9}
+#de .gnode2.simhot.simrej{outline-color:#ff6b81;box-shadow:0 0 28px #ff6b81cc}
+#de .gnode2.simspur{outline:2px solid #ffb86b88;outline-offset:2px}
+#de .gnode2.simspur.simrej{outline-color:#ff6b8188}
+#de .gnode2.abd-voll{box-shadow:0 0 0 3px #3fb950}
+#de .gnode2.abd-teil{box-shadow:0 0 0 3px #d29922}
+#de .gnode2.abd-kalt{opacity:.4}
+#de .ghead .simabd{font-size:9px;background:#0d1017;color:#dfe4ee;border-radius:3px;padding:0 4px;margin-left:auto}
 #de .col{overflow:auto;padding:14px}
 #de .col.left{border-right:1px solid #232a38}
-#de .col.right{display:none}  /* Ausgabe-Bereich vorerst ausgeblendet — Editor auf voller Breite */
+#de .col.right{display:none}  /* Ausgabe als schwebendes Panel — erscheint, sobald Prüfen/Kompilieren/Testen etwas melden */
+#de .col.right.zeigen{display:block;position:fixed;right:16px;bottom:16px;width:min(560px,calc(100vw - 32px));max-height:55vh;z-index:60;box-shadow:0 8px 32px rgba(0,0,0,.55)}
+#de .col.right .outzu{position:sticky;top:0;float:right;background:#232a38;color:#cfd6e4;border:0;border-radius:4px;cursor:pointer;padding:2px 8px}
 #de .card{background:#141926;border:1px solid #232a38;border-radius:8px;padding:10px 12px;margin:0 0 12px}
 #de .card h3{margin:0 0 8px;font-size:13px;display:flex;align-items:center;gap:6px}
 #de .card h3 .k{font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding:1px 6px;border-radius:8px}
@@ -630,8 +122,32 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .glink{pointer-events:none}
 #de .glink.internal{stroke:#7f8aa0;stroke-width:1.5;opacity:.4;pointer-events:stroke;transition:opacity .1s,stroke-width .1s}
 #de .glink.internal:hover,#de .glink.internal.hot{stroke:#cbb8ff;stroke-width:3;opacity:1}
+/* Minimap (klickbar, zeigt Viewport) + Domänen-Filter */
+#de .gminimap{position:absolute;right:10px;bottom:10px;width:212px;height:150px;background:#0b0e15cc;border:1px solid #2c3547;border-radius:8px;overflow:hidden;z-index:20;cursor:pointer;box-shadow:0 6px 20px #0009}
+#de .gminimap svg{display:block;width:100%;height:100%}
+#de .gminimap .mmvp{fill:#7fb0e61f;stroke:#8fc0ff;stroke-width:1.5}
+#de .gfilter{position:absolute;left:10px;top:10px;width:216px;max-height:calc(100% - 20px);overflow:auto;background:#0d1119f2;border:1px solid #2c3547;border-radius:8px;z-index:22;padding:9px;font-size:12px;box-shadow:0 10px 28px #000b}
+#de .gfilter h4{margin:0 0 8px;font-size:12px;color:#cbd3e1;display:flex;justify-content:space-between;align-items:center}
+#de .gfilter label{display:flex;align-items:center;gap:6px;padding:3px 3px;color:#aab3c5;cursor:pointer;border-radius:4px}
+#de .gfilter label:hover{background:#1a2130}
+#de .gfilter .mm-q{display:flex;gap:6px;margin-bottom:7px}
+#de .gfilter .mm-q button{flex:1;font-size:11px;padding:4px;background:#1a2130;color:#cbd3e1;border:1px solid #2c3547;border-radius:5px;cursor:pointer}
+#de .gfilter .mm-q button:hover{background:#222c3d}
+/* Code-Knoten: Vorschau im Knoten + anklickbares Modal mit vollem Code */
+#de .gcodeprev{margin:4px 0;padding:7px 9px;background:#0d1119;border:1px solid #263041;border-radius:6px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;line-height:1.45;color:#c7d0df;white-space:pre;overflow:hidden;max-height:130px;cursor:default}
 #de .gnode2{position:absolute;width:250px;background:#161b27;border:1px solid #2c3547;border-radius:9px;box-shadow:0 4px 14px #0008}
 #de .gnode2.dragging{box-shadow:0 14px 34px #000c;z-index:9}
+#de .gnode2.typehi{outline:2px solid #ffd76a;box-shadow:0 0 0 2px #ffd76a55,0 0 20px #ffd76a66;z-index:7}
+#de .gnode2.island{outline:1px dashed #e0844d;box-shadow:0 0 0 1px #e0844d44}
+#de .gnode2.ungeschrieben{outline:2px dashed #e0b46a;outline-offset:2px}
+#de .gnode2.ungeschrieben .ghead::before{content:"✎ ungeschrieben";font-size:9px;color:#3a2a00;background:#e0b46a;border-radius:3px;padding:0 4px;margin-right:4px}
+#de .gnode2.entwurf{outline:2px dashed #6aa0e0;outline-offset:2px}
+#de .gnode2.entwurf .ghead::before{content:"Entwurf";font-size:9px;color:#06203a;background:#6aa0e0;border-radius:3px;padding:0 4px;margin-right:4px}
+#de .gnode2.island .ghead::after{content:"⚠ Insel";font-size:9px;color:#e0a06d;margin-left:6px;opacity:.85}
+#de .gtoolbar button.island-btn{border-color:#7a4a2a;color:#e0a06d}
+#de .gnode2.pulse{outline:3px solid #7dd3fc;box-shadow:0 0 26px #7dd3fccc;z-index:8;transition:box-shadow .15s}
+#de .gtoolbar button.add.jumpable{cursor:pointer}
+#de .gminimap svg rect.mmhi{fill:#ffd76a !important;opacity:1 !important;stroke:#fff3c9;stroke-width:.6}
 #de .gnode2.n-command{border-color:#3b6fb0}
 #de .gnode2.n-event{border-color:#3f9d5a}
 #de .gnode2.n-rejection{border-color:#b5504a}
@@ -660,6 +176,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .gnode2.n-event .ghead{background:#57b673}
 #de .gnode2.n-rejection .ghead{background:#cf6f68}
 #de .gnode2.n-valueobject .ghead{background:#49a996}
+#de .gnode2.n-konfig .ghead{background:#8fa3b8}
 #de .gnode2.n-enum .ghead{background:#8a8aa0}
 #de .gnode2.n-aggregate .ghead{background:#3fb0a6}
 #de .gnode2.n-decider .ghead{background:#9678d6}
@@ -727,6 +244,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .slot.s-ftype{background:#c58fd6}
 #de .slot.s-trigmsg{background:#f0883e}
 #de .slot.s-self{background:#c98a3a}
+#de .slot.s-prompt{background:#a48fd6}
 #de .gtoprow{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:5px}
 #de .gtopfield{display:flex;flex-direction:column;align-items:center;gap:1px}
 #de .aggwrap{display:flex;justify-content:space-between;gap:8px;margin:2px 0}
@@ -778,6 +296,73 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
 #de .applybox{border-left:2px solid #3f6a4a;padding-left:8px;margin:8px 0}
 #de .blab{color:#8b93a7;font-size:10px;margin:5px 0 2px}
 #de textarea.code{width:100%;box-sizing:border-box;font:12px/1.45 ui-monospace,monospace;background:#0a0d13;tab-size:4}
+/* ══ ANSICHT: Kompakt-Karten · Inspector · semantischer Zoom · Slice-Fokus (reine Darstellung) ══ */
+#de .gview{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 8px;font-size:11px;color:#9aa3b7}
+#de .gview button{background:#1a2130;color:#cbd3e1;border:1px solid #2c3547;border-radius:6px;padding:4px 10px;cursor:pointer;font:600 11px system-ui}
+#de .gview button:hover{background:#222c3d}
+#de .gview button.on{background:#2b3a5c;border-color:#5b8fd0;color:#e6efff}
+#de .gview .lod{display:inline-flex;border:1px solid #2c3547;border-radius:6px;overflow:hidden;margin-left:6px}
+#de .gview .lod span{padding:4px 9px;cursor:pointer;color:#8b93a7}
+#de .gview .lod span.on{background:#2b3a5c;color:#e6efff}
+#de .gview .sep{width:1px;height:18px;background:#2c3547;margin:0 4px}
+#de .gworld{--inv:1}
+#de .gworld.kompakt .gnode2.collapsed{width:230px}
+#de .gworld.kompakt .gnode2:not(.collapsed){z-index:4}
+#de .gsum{display:none;padding:4px 9px 7px;font-size:11px;color:#aab3c5;cursor:pointer}
+#de .gnode2.collapsed .gsum{display:block}
+#de .gsum .gs-t{font-family:ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#de .gsum .gchips{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
+#de .gsum .gchip{font-size:9.5px;padding:0 5px;border-radius:7px;background:#232b3b;color:#b9c2d6;border:1px solid #313b50}
+#de .gsum .gchip.warn{background:#3a2e14;color:#e0b46a;border-color:#6b5222}
+#de .ghead .gtitle .gk{opacity:.75}
+#de .gnode2.sel{outline:2px solid #f5f7ff;outline-offset:3px;z-index:6}
+#de .gworld.fokus .gnode2:not(.inslice){opacity:.13}
+#de .gworld.fokus .glink:not(.inslice){opacity:.04}
+#de .gworld.fokus .glink.inslice{opacity:1;stroke-width:3}
+#de .glink.kontrakt{opacity:.75}
+/* Inspector: Bearbeiten rechts statt Formular im Knoten */
+#de .ginsp{position:absolute;right:10px;top:10px;bottom:170px;width:min(380px,calc(100% - 40px));overflow:auto;background:#10141df7;border:1px solid #2c3547;border-radius:10px;z-index:25;box-shadow:0 10px 30px #000c;font-size:12px}
+#de .ginsp .gi-h{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:6px;padding:8px 10px;background:#161c2a;border-bottom:1px solid #2c3547}
+#de .ginsp .gi-h .gi-k{font-size:10px;padding:1px 7px;border-radius:8px;color:#0d0f14;font-weight:700}
+#de .ginsp .gi-h .gi-n{flex:1;font:700 13px ui-monospace,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#de .ginsp .gi-h button{background:#1a2130;color:#cbd3e1;border:1px solid #2c3547;border-radius:5px;cursor:pointer;padding:2px 7px;font-size:11px}
+#de .ginsp .gi-sec{margin:10px 10px 0;border:1px solid #262f40;border-radius:8px;overflow:hidden}
+#de .ginsp .gi-st{padding:4px 9px;font-size:10.5px;font-weight:700;color:#0d0f14;cursor:pointer}
+#de .ginsp .gbody{padding:8px 10px 10px}
+#de .ginsp .slot{display:none}
+#de .ginsp .gcodeprev{max-height:none}
+#de .ginsp .gi-rel{margin:10px;font-size:11px}
+#de .ginsp .gi-rel h5{margin:8px 0 4px;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#7f8aa0}
+#de .ginsp .gi-rel a{display:inline-block;margin:0 4px 4px 0;padding:1px 7px;border-radius:7px;background:#1a2130;border:1px solid #2c3547;color:#cbd3e1;cursor:pointer;font-family:ui-monospace,monospace}
+#de .ginsp .gi-rel a:hover{border-color:#7c5cff}
+/* Kind-Farben (Kopf) für Inspector-Chips */
+#de .kc-command{background:#5b8fd0}#de .kc-event{background:#57b673}#de .kc-rejection{background:#cf6f68}#de .kc-valueobject{background:#49a996}
+#de .kc-konfig{background:#8fa3b8}#de .kc-enum{background:#8a8aa0}#de .kc-aggregate{background:#3fb0a6}#de .kc-decider{background:#9678d6}
+#de .kc-applier{background:#d0a35a}#de .kc-saga{background:#9d78d6}#de .kc-transition{background:#a48fd6}#de .kc-state{background:#d4b45f}
+#de .kc-readmodel{background:#d0a45a}#de .kc-store{background:#3fb0a6}#de .kc-projektion{background:#57b673}#de .kc-reaktion{background:#d0885a}
+#de .kc-pipeline{background:#e08a44}#de .kc-trigger{background:#d29a4a}#de .kc-reader{background:#9678d6}#de .kc-query{background:#5b8fd0}
+#de .kc-queryresponse{background:#49a996}#de .kc-codenode{background:#9aa0aa}#de .kc-llmnode{background:#a48fd6}
+#de .kc-frist,#de .kc-dienst,#de .kc-hostsetting{background:#c9a24b}
+/* Semantischer Zoom: Landkarte (<0.4) · Ablauf (<0.75) · Detail */
+#de .gcanvas.lod-ablauf .gnode2 .gbody,#de .gcanvas.lod-ablauf .gnode2 .gsum{display:none}
+#de .gcanvas.lod-ablauf .gnode2{width:230px}
+#de .gcanvas.lod-ablauf .ghead{padding:6px 10px;border-radius:8px}
+#de .gcanvas.lod-ablauf .ghead .gtitle{font-size:calc(10px*var(--inv));white-space:normal;overflow-wrap:anywhere;line-height:1.15}
+#de .gcanvas.lod-ablauf .ghead .gtitle.hatname .gk{display:none}
+#de .gcanvas.lod-ablauf .ghead .gcol,#de .gcanvas.lod-ablauf .ghead .gx{display:none}
+#de .gcanvas.lod-ablauf .gnode2.ungeschrieben .ghead::before,#de .gcanvas.lod-ablauf .gnode2.entwurf .ghead::before,#de .gcanvas.lod-ablauf .gnode2.island .ghead::after{display:none}
+#de .gcanvas.lod-karte .gnode2{visibility:hidden}
+#de .gcanvas.lod-karte svg.gedges{display:none}
+#de .gtile,#de svg.gtilesvg{display:none}
+#de .gcanvas.lod-karte .gtile,#de .gcanvas.lod-karte svg.gtilesvg{display:block}
+#de .gtile{position:absolute;box-sizing:border-box;border:calc(2px*var(--inv)) solid;border-radius:calc(12px*var(--inv));background:#141a28d9;cursor:zoom-in;padding:calc(10px*var(--inv)) calc(12px*var(--inv));overflow:hidden}
+#de .gtile:hover{background:#1b2336f0}
+#de .gtile .gtl-t{font:700 calc(17px*var(--inv))/1.15 ui-monospace,monospace;color:#e6ebf5;overflow-wrap:anywhere}
+#de .gtile .gtl-c{font-size:calc(11.5px*var(--inv));line-height:1.35;color:#9aa3b7;margin-top:calc(5px*var(--inv))}
+#de .gworld.fokus .gtile:not(.inslice){opacity:.25}
+#de svg.gtilesvg{position:absolute;left:0;top:0;width:10px;height:10px;overflow:visible;pointer-events:none}
+#de svg.gtilesvg path{fill:none;stroke:#6b7a96;opacity:.7}
+#de svg.gtilesvg text{fill:#cbd3e1;font-family:system-ui;font-weight:700;paint-order:stroke;stroke:#0b0e15}
 </style>
 <button id="de-open" onclick="deOpen()">✎ Editor</button>
 <div id="de">
@@ -786,32 +371,50 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     <span id="de-badge" class="badge off">offline</span>
     <span class="sp"></span>
     <button class="act" onclick="deReload()">↻ Vom Graph laden</button>
+    <button class="act" onclick="deReflow()">▦ Neu anordnen</button>
+    <button class="act" onclick="deFilter()">🗂 Domänen</button>
     <button class="act" onclick="deValidate()">✓ Prüfen</button>
     <button class="act" onclick="deCompile()">⚙ Kompilieren</button>
-    <button class="act run" onclick="deTest()">▶ Testen</button>
-    <button class="act go" onclick="deScaffold()">&lt;/&gt; C# erzeugen</button>
+    <button class="act run" id="de-simbtn" onclick="deSim()">▶ Simulation</button>
+    <button class="act go" onclick="deWrite()">&lt;/&gt; C# schreiben</button>
+    <button class="act" onclick="deSave()">💾 Speichern</button>
     <button class="act" onclick="deDownload()">⬇ Modell</button>
     <button class="act" id="de-close" onclick="deClose()">✕ Schließen</button>
   </header>
   <div class="cols">
     <div class="col left" id="de-form"></div>
+    <aside class="sim" id="de-sim"></aside>
     <div class="col right out" id="de-out"><div class="hint">„C# erzeugen" rendert den echten C#-Scaffolder (über SimHost). „Prüfen" zeigt die Struktur-Diagnosen. Ohne laufenden SimHost editierst du die Form und lädst das Modell-JSON herunter.</div></div>
   </div>
 </div>
 <script>
 (function(){
-  const SCALARS=["Guid","decimal","int","long","double","bool","string","DateTimeOffset"];
-  const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"],query:["Query","qry"],queryresponse:["Response","qrsp"]};
-  let MODEL={schemaVersion:"2",records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],reaktionen:[],pipelines:[],triggers:[],codeNodes:[],llmNodes:[]};
+  // Skalare = was der Wire trägt (aus dem Codegen, via rahmen.skalare) — keine eigene Liste im Editor.
+  const SCALARS=()=>((MODEL.rahmen&&MODEL.rahmen.skalare)||[]);
+  // Vertrags-Fakten aus dem Rahmen (vom Extractor aus dem Code gelesen).
+  const ID_FELD=()=>((MODEL.rahmen&&MODEL.rahmen.aggregatIdFeld)||"");
+  const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"],konfig:["Konfiguration","vo"],query:["Query","qry"],queryresponse:["Response","qrsp"]};
+  let MODEL={schemaVersion:"2",records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],reaktionen:[],pipelines:[],triggers:[],frists:[],dienste:[],hostSettings:[],codeNodes:[],llmNodes:[]};
   let NID=1;
   const embedded=/*__MODEL_JSON__*/;
+  // Domänen-Filter (welche Domänen ausgeblendet sind) — pro Browser UND pro Solution persistiert (rahmen.kennung),
+  //   damit Zwischenstände verschiedener Repos sich nie vermischen.
+  let HKEY="cqrs-hidden-domains", LSKEY="cqrs-board-model";
+  let HIDDEN=new Set();
+  function schluesselFuer(m){const k=(m&&m.rahmen&&m.rahmen.kennung)||"";
+    HKEY="cqrs-hidden-domains"+(k?":"+k:"");LSKEY="cqrs-board-model"+(k?":"+k:"");
+    HIDDEN=new Set();try{const s=localStorage.getItem(HKEY);if(s)HIDDEN=new Set(JSON.parse(s));}catch(e){}
+    ladeAnsicht(k);}
+  function saveHidden(){try{localStorage.setItem(HKEY,JSON.stringify([...HIDDEN]));}catch(e){}}
+  let FILTER_OPEN=false, MM=null;
+  function domHue(k){let h=0;for(let i=0;i<(k||"").length;i++)h=(h*31+k.charCodeAt(i))>>>0;return h%360;}
 
   const listeZuText=xs=>(xs||[]).join(", ");
   const textZuListe=t=>(t||"").split(",").map(s=>s.trim()).filter(Boolean);
   const kindLabel=k=>(KINDINFO[k]||["?","vo"])[0];
   const kindKlasse=k=>(KINDINFO[k]||["?","vo"])[1];
   function normalize(m){m=m||{};m.records=m.records||[];m.enums=m.enums||[];m.aggregate=m.aggregate||[];m.decider=m.decider||[];m.applier=m.applier||[];m.sagas=m.sagas||[];m.states=m.states||[];m.transitions=m.transitions||[];
-    m.readModels=m.readModels||[];m.stores=m.stores||[];m.projektionen=m.projektionen||[];m.reader=m.reader||[];m.reaktionen=m.reaktionen||[];m.pipelines=m.pipelines||[];m.triggers=m.triggers||[];m.codeNodes=m.codeNodes||[];m.llmNodes=m.llmNodes||[];
+    m.readModels=m.readModels||[];m.stores=m.stores||[];m.projektionen=m.projektionen||[];m.reader=m.reader||[];m.reaktionen=m.reaktionen||[];m.pipelines=m.pipelines||[];m.triggers=m.triggers||[];m.frists=m.frists||[];m.dienste=m.dienste||[];m.hostSettings=m.hostSettings||[];m.codeNodes=m.codeNodes||[];m.llmNodes=m.llmNodes||[];
     // Reaktion = emittierender Konsument (ISubscriber → IAsyncEnumerable<OneOf<Cmd>>): Trigger-Event → Handle → OneOf-Commands.
     m.reaktionen.forEach(r=>{if(!r._id)r._id="rk"+(NID++);r.handles=r.handles||[];r.handles.forEach(hd=>{hd.sends=hd.sends||[];hd.publishes=hd.publishes||[];});});
     // Pipeline = 4. durabler Konsument (IPipelineHandler): Trigger-Msg ODER Event → Handle → OneOf-Command(s).
@@ -819,7 +422,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
       hd.inputKind=hd.inputKind||(hd.trigId?"trigger":"event");
       if(hd.trigId&&!hd.prod){hd.prod={k:"tg",id:hd.trigId};hd.input=hd.input||"";}});});
     // Trigger = Ingress-Wecker (Timer/Webhook/FileWatch/Frist), erzeugt eine IPipelineTrigger-Nachricht.
-    m.triggers.forEach(t=>{if(!t._id)t._id="tg"+(NID++);t.modus=t.modus||"timer";t.felder=t.felder||[];t.felder.forEach(f=>{if(f&&!f._id)f._id="f"+(NID++);});});
+    m.triggers.forEach(t=>{if(!t._id)t._id="tg"+(NID++);t.felder=t.felder||[];t.felder.forEach(f=>{if(f&&!f._id)f._id="f"+(NID++);});});
     // Jedes Objekt-Feld bekommt eine stabile _id → Feld-Ports eindeutig (auch bei gleichnamigen Feldern) und rename-fest.
     const stampFelder=arr=>(arr||[]).forEach(f=>{if(f&&!f._id)f._id="f"+(NID++);});
     m.records.forEach(r=>stampFelder(r.felder));m.aggregate.forEach(a=>stampFelder(a.state));m.states.forEach(s=>stampFelder(s.felder));m.readModels.forEach(rm=>stampFelder(rm.felder));
@@ -843,17 +446,27 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
         hd.responses=hd.responses||(hd.response?[hd.response]:[]);delete hd.response;});});
     m.codeNodes.forEach(c=>{if(!c._id)c._id="cn"+(NID++);});m.llmNodes.forEach(l=>{if(!l._id)l._id="ln"+(NID++);});
     // Migration: eingebettete Decide/Apply-Rümpfe → 📝 Code-Knoten (Konsistenz: jede Code-Stelle = Port + Quelle).
-    const mig=node=>{if(node.rumpf&&!node.codeSrc){const cn={_id:"cn"+(NID++),name:"Code",text:node.rumpf,x:(node.x||0)+320,y:node.y||0};m.codeNodes.push(cn);node.codeSrc=cn._id;delete node.rumpf;}};
-    m.decider.forEach(mig);m.applier.forEach(mig);
+    const mig=(node,nm)=>{if(node.rumpf===""&&!node.codeSrc){node.leer=true;delete node.rumpf;return;}
+      if(node.rumpf&&!node.codeSrc){const cn={_id:"cn"+(NID++),name:nm||"Code",text:node.rumpf,x:(node.x||0)+320,y:node.y||0};m.codeNodes.push(cn);node.codeSrc=cn._id;delete node.rumpf;}};
+    m.decider.forEach(d=>mig(d));m.applier.forEach(a=>mig(a));
+    // Leseseiten-Rümpfe: Projektion-/Reader-/Pipeline-Handler + Store-Fn-Impls → eigene Code-Knoten.
+    m.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>mig(hd,"Handle "+(hd.event||""))));
+    m.reader.forEach(r=>(r.handles||[]).forEach(hd=>mig(hd,"Handle "+(hd.query||""))));
+    m.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>mig(hd,"Handle "+(hd.input||hd.event||""))));
+    m.stores.forEach(s=>{(s.writeFns||[]).forEach(f=>mig(f,f.name||"Store-Fn"));(s.readFns||[]).forEach(f=>mig(f,f.name||"Store-Fn"));});
     m.aggregate.forEach(a=>{if((a.state||[]).length&&!m.states.some(s=>s.aggregat===a.name))m.states.push({_id:"s"+(NID++),aggregat:a.name});});
     // Round-trip: geladene Saga.Schritte → Transition-Knoten (prozess = Saga-Name), Schritte werden vor Serveraufruf neu erzeugt.
     m.sagas.forEach(s=>{(s.schritte||[]).forEach(st=>m.transitions.push({_id:"t"+(NID++),prozess:s.name,wenn:(st.wenn||[]).slice(),
-        dann:[{sende:st.sende||"",sendeJe:!!st.sendeJe,sendeJeCollection:st.sendeJeCollection||"",kompensation:st.kompensation||""}]}));s.schritte=[];});
+        ...(st.sammelEvent?{sammelEvent:st.sammelEvent,sammelAusdruck:st.sammelAusdruck,sammelAnzahl:st.sammelAnzahl}:{}),
+        dann:[{sende:st.sende||"",sendeJe:!!st.sendeJe,sendeJeCollection:st.sendeJeCollection||"",kompensation:st.kompensation||"",
+          sendeAusdruck:st.sendeAusdruck,kompensationAusdruck:st.kompensationAusdruck,kompensationJe:!!st.kompensationJe}]}));s.schritte=[];});
     return m;}
   const aggSelect=(val,on)=>{const s=h("select",{onchange:e=>on(e.target.value)});
     if(!val||!MODEL.aggregate.some(a=>a.name===val)){const o=h("option",{value:val||""},val||"— Aggregat —");o.selected=true;s.append(o);}
     MODEL.aggregate.forEach(a=>{const o=h("option",{value:a.name},a.name);if(a.name===val)o.selected=true;s.append(o);});return s;};
-  function defaultNs(){return MODEL.records[0]?.namespace||MODEL.aggregate[0]?.namespace||"Domain.Neu";}
+  // Standard-Namespace für neue Knoten: der eines vorhandenen Aggregats/Records; sonst eine Projekt-Wurzel aus dem Code (Rahmen).
+  function defaultNs(){const w=Object.keys((MODEL.rahmen||{}).verzeichnisse||{}).sort((a,b)=>a.length-b.length)[0];
+    return MODEL.aggregate[0]?.namespace||MODEL.records[0]?.namespace||(w?w+".Neu":"Neu");}
 
   function h(tag,attrs,...kids){const e=document.createElement(tag);
     for(const k in (attrs||{})){if(k==="class")e.className=attrs[k];else if(k.startsWith("on"))e[k]=attrs[k];else if(k==="value")e.value=attrs[k];else e.setAttribute(k,attrs[k]);}
@@ -863,7 +476,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   // Typ-Eingabe mit Autovervollständigung (Skalare + Records + Enums = Komposition).
   const tinp=(val,on)=>h("input",{value:val??"",list:"de-typen",oninput:e=>on(e.target.value),placeholder:"Typ"});
   function datalistEl(){const dl=h("datalist",{id:"de-typen"});
-    [...SCALARS,...MODEL.records.map(r=>r.name),...MODEL.enums.map(e=>e.name)].forEach(t=>dl.append(h("option",{value:t})));return dl;}
+    [...SCALARS(),...MODEL.records.map(r=>r.name),...MODEL.enums.map(e=>e.name)].forEach(t=>dl.append(h("option",{value:t})));return dl;}
   // Record-Auswahl gefiltert nach Kind (für Decide/Apply/Saga-Verdrahtung).
   function recSelect(val,on,kinds){const s=h("select",{onchange:e=>on(e.target.value)});
     const opts=MODEL.records.filter(r=>kinds.includes(r.kind)).map(r=>r.name);
@@ -893,15 +506,15 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   //    danach KOMPOSITION zu Aggregaten (State + Decider + Applier). Feldtyp kann ein anderer
   //    Record/Enum sein → so komponieren sich Records.
   // NUR der Node-Editor, DESIGN-IN-PLACE: jeder Knoten wird direkt auf der Fläche bestückt.
-  function render(){ deriveMembership(); renderGraph(); }
+  function render(){ ELEM=null; deriveMembership(); renderGraph(); autosave(); if(window.simNachRender)simNachRender(); }
 
   // Eindeutiger Name — Namen sind der Referenzschlüssel für Kanten/Decider/Applier.
-  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.reaktionen.map(x=>x.name),...MODEL.pipelines.map(x=>x.name),...MODEL.triggers.map(x=>x.name),...MODEL.codeNodes.map(x=>x.name),...MODEL.llmNodes.map(x=>x.name)]);
+  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.reaktionen.map(x=>x.name),...MODEL.pipelines.map(x=>x.name),...MODEL.triggers.map(x=>x.name),...MODEL.frists.map(x=>x.name),...MODEL.dienste.map(x=>x.name),...MODEL.hostSettings.map(x=>x.name),...MODEL.codeNodes.map(x=>x.name),...MODEL.llmNodes.map(x=>x.name)]);
     if(!all.has(base))return base;let i=2;while(all.has(base+i))i++;return base+i;}
 
   function enumCard(e,ei){const c=h("div",{class:"card"});
     c.append(h("h3",{},h("span",{class:"k vo"},"Enum"),nameInp(e,"name","Enum","enum"),
-      h("input",{value:e.namespace,oninput:ev=>e.namespace=ev.target.value,placeholder:"Domain.X",style:"width:150px"}),
+      h("input",{value:e.namespace,oninput:ev=>e.namespace=ev.target.value,placeholder:"Namespace",style:"width:150px"}),
       h("button",{class:"rm",onclick:()=>{MODEL.enums.splice(ei,1);render();}},"✕")));
     c.append(h("div",{class:"blab"},"Werte (kommagetrennt):"));
     c.append(inp(listeZuText(e.werte),v=>e.werte=textZuListe(v),"Dc0, Dc2"));
@@ -911,10 +524,21 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   // Knoten anlegen — an einer Position (Picker) ODER sichtbar im aktuellen Ausschnitt (Toolbar).
   let SPAWN=0;
   function spawnPos(){if(!canvas)return {};const r=canvas.getBoundingClientRect();
-    const c=toWorld(r.left+60,r.top+70);SPAWN++;
-    return {x:Math.round((c.x+(SPAWN%8)*28)/GRID)*GRID,y:Math.round((c.y+(SPAWN%8)*28)/GRID)*GRID};}
+    const c=toWorld(r.left+r.width*0.5,r.top+r.height*0.42);SPAWN++;   // Sichtmitte statt Ecke → landet im Blick
+    const x=Math.round((c.x+(SPAWN%8)*28)/GRID)*GRID,y=Math.round((c.y+(SPAWN%8)*28)/GRID)*GRID;
+    return VIEW.kompakt?{x,y,_kpos:{x,y}}:{x,y};}   // Kompakt-Ansicht: Position gilt für deren eigenes Layout
+  // Nach dem Anlegen den neuen Knoten finden, ggf. seine (ausgeblendete) Domäne einblenden, dorthin
+  //   zentrieren + pulsen — sonst geht er in hunderten Knoten unter.
+  function fokussiereNeu(vorher){requestAnimationFrame(()=>{
+    const neu=graphNodes().find(n=>!vorher.has(n.id));if(!neu)return;
+    if(HIDDEN.has(groupKeyOf(neu))){HIDDEN.delete(groupKeyOf(neu));saveHidden();render();
+      requestAnimationFrame(()=>{centerOn(neu);pulseNode(neu);});}
+    else{centerOn(neu);pulseNode(neu);}
+    deFlash("+ "+(NODELABEL[neu.kind]||neu.kind)+(neu.name?" · "+neu.name:"")+" — hinzugefügt",true);});}
   function neuerKnoten(kind,x,y){
-    const pos=(typeof x==="number")?{x:Math.round(x/GRID)*GRID,y:Math.round(y/GRID)*GRID}:spawnPos();
+    const vorher=new Set(graphNodes().map(n=>n.id));
+    let pos=(typeof x==="number")?{x:Math.round(x/GRID)*GRID,y:Math.round(y/GRID)*GRID}:spawnPos();
+    if(VIEW.kompakt&&!pos._kpos)pos={...pos,_kpos:{x:pos.x,y:pos.y}};
     if(kind==="aggregate")MODEL.aggregate.push({name:uniq("NeuesAggregat"),namespace:defaultNs(),state:[],...pos});
     else if(kind==="decider")MODEL.decider.push({_id:"d"+(NID++),aggregat:"",command:"",ergibt:[],...pos});
     else if(kind==="applier")MODEL.applier.push({_id:"a"+(NID++),aggregat:"",event:"",...pos});
@@ -928,11 +552,15 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     else if(kind==="reader")MODEL.reader.push({_id:"rd"+(NID++),name:uniq("NeuReader"),namespace:defaultNs(),stores:[],trackDeps:true,handles:[],...pos});
     else if(kind==="reaktion")MODEL.reaktionen.push({_id:"rk"+(NID++),name:uniq("NeueReaktion"),namespace:defaultNs(),pull:true,handles:[],...pos});
     else if(kind==="pipeline")MODEL.pipelines.push({_id:"pl"+(NID++),name:uniq("NeuePipeline"),namespace:defaultNs(),pipelineId:"",handles:[],...pos});
-    else if(kind==="trigger")MODEL.triggers.push({_id:"tg"+(NID++),name:uniq("NeuTrigger"),namespace:defaultNs(),modus:"timer",intervall:"30s",msgName:uniq("NeuTriggerMsg"),felder:[{_id:"f"+(NID++),name:"AggregateId",typ:"Guid"}],...pos});
+    else if(kind==="trigger")MODEL.triggers.push({_id:"tg"+(NID++),name:uniq("NeuTrigger"),namespace:defaultNs(),msgName:uniq("NeuTriggerMsg"),felder:[],...pos});
+    else if(kind==="frist")MODEL.frists.push({_id:"fr"+(NID++),name:uniq("NeueFrist"),kontext:"",dauerSetting:"",plant:[],storniert:[],sendet:"",aggregat:"",...pos});
+    else if(kind==="dienst")MODEL.dienste.push({_id:"di"+(NID++),name:uniq("NeuerDienst"),vertrag:"IDienst",extern:false,codeSrc:null,...pos});
+    else if(kind==="hostsetting")MODEL.hostSettings.push({_id:"hs"+(NID++),name:uniq("NeuSetting"),typ:"string",default:"",envKey:"",...pos});
     else if(kind==="codenode")MODEL.codeNodes.push({_id:"cn"+(NID++),name:uniq("Code"),text:"",...pos});
     else if(kind==="llmnode")MODEL.llmNodes.push({_id:"ln"+(NID++),name:uniq("LLM"),intent:"",...pos});
-    else MODEL.records.push({name:uniq("Neu"+kindLabel(kind).replace(/\s/g,"")),kind,namespace:defaultNs(),felder:kind==="command"?[{_id:"f"+(NID++),name:"AggregateId",typ:"Guid"}]:[],...pos});
+    else MODEL.records.push({name:uniq("Neu"+kindLabel(kind).replace(/\s/g,"")),kind,namespace:defaultNs(),felder:kind==="command"&&ID_FELD()?[{_id:"f"+(NID++),name:ID_FELD(),typ:"Guid"}]:[],...pos});
     render();
+    fokussiereNeu(vorher);
   }
   const addRecord=k=>neuerKnoten(k);
   const addAggregat=()=>neuerKnoten("aggregate");
@@ -942,19 +570,15 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   function recordCard(body,r){
     body.append(h("div",{class:"gsec"},"Name · Art"));
     body.append(nameInp(r,"name","RecordName","record"));
-    const kindSel=h("select",{onchange:e=>{r.kind=e.target.value;if(r.kind==="command"&&!(r.felder||[]).some(f=>f.name==="AggregateId"))(r.felder=r.felder||[]).unshift({name:"AggregateId",typ:"Guid"});render();}});
+    const kindSel=h("select",{onchange:e=>{r.kind=e.target.value;if(r.kind==="command"&&ID_FELD()&&!(r.felder||[]).some(f=>f.name===ID_FELD()))(r.felder=r.felder||[]).unshift({name:ID_FELD(),typ:"Guid"});render();}});
     Object.keys(KINDINFO).forEach(k=>{const o=h("option",{value:k},kindLabel(k));if(r.kind===k)o.selected=true;kindSel.append(o);});
     body.append(kindSel);
-    if(r.kind==="valueobject"||r.kind==="query"||r.kind==="queryresponse"){
-      body.append(h("div",{class:"gsec"},"Namespace"));
-      body.append(h("input",{value:r.namespace??"",oninput:e=>r.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.Projections"}));
-    }else{
-      body.append(h("div",{class:"gsec"},"Aggregat (= Namespace → Zugehörigkeit)"));
-      const aggSel=h("select",{onchange:e=>{const a=MODEL.aggregate.find(x=>x.name===e.target.value);if(a)r.namespace=a.namespace;render();}});
-      aggSel.append(h("option",{value:""},MODEL.aggregate.length?"— Aggregat wählen —":"— erst ein Aggregat anlegen —"));
-      MODEL.aggregate.forEach(a=>{const o=h("option",{value:a.name},a.name+"  ("+a.namespace+")");if(a.namespace===r.namespace)o.selected=true;aggSel.append(o);});
-      body.append(aggSel);
-    }
+    // Namespace = eigener Code-Fakt (frei). Die Aggregat-Zugehörigkeit ist KEINE Eingabe: sie folgt aus der Verdrahtung
+    //   (Command → Decider, Event ← Decider-Ausgang / → Applier), und der Decider/Applier hängt per ▲ an seinem Aggregat.
+    body.append(h("div",{class:"gsec"},"Namespace"));
+    body.append(h("input",{value:r.namespace??"",oninput:e=>r.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
+    if(r.kind==="command"||r.kind==="event"||r.kind==="rejection"){const ag=recordAgg(r.name);
+      body.append(h("div",{class:"gsec",title:"abgeleitet aus Decider/Applier"},"Aggregat: "+(ag||"— keinem (Decider/Applier verdrahten)")));}
     if(r.kind==="command")body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>r.istErzeugung=e.target.checked||undefined,...(r.istErzeugung?{checked:"checked"}:{})}),"Erzeugung (ICreationCommand)"));
     if(r.kind==="command"){body.append(slotRow("sagacmd","◀ ausgelöst von (Saga/Reaktion)","l",{type:"sagaCmd",dir:"in",rec:r.name},"cmd:in:"+r.name));
       body.append(slotRow("command","cmd ▶","r",{type:"cmd",dir:"out",rec:r.name},"cmd:out:"+r.name));}
@@ -973,23 +597,25 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   function aggStateCard(body,a){
     body.append(topSlot("state","State",{type:"state",dir:"in",agg:a.name},"agg:state:"+a.name));
     body.append(nameInp(a,"name","Aggregat","aggregate"));
-    body.append(h("input",{value:a.namespace??"",oninput:e=>a.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.X"}));
+    body.append(h("input",{value:a.namespace??"",oninput:e=>a.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
     const deciders=MODEL.decider.filter(d=>d.aggregat===a.name), appliers=MODEL.applier.filter(p=>p.aggregat===a.name);
-    const L=h("div",{class:"col2"});L.append(h("div",{class:"gsec"},"Decider ◀ (autom.)"));
+    const L=h("div",{class:"col2"});L.append(h("div",{class:"gsec"},"Decider ◀"));
     deciders.forEach(d=>{const s=anchorDot("decagg");s.classList.add("i");reg("agg:left:"+a.name+":"+d._id,s,null);
       L.append(h("div",{class:"slotrow",onmouseenter:()=>hilite(d._id,null,true),onmouseleave:()=>hilite(d._id,null,false)},s,h("span",{class:"slotlbl"},d.command||"Decider")));});
-    if(!deciders.length)L.append(h("div",{class:"slotlbl",style:"opacity:.5"},"—"));
-    const R=h("div",{class:"col2",style:"text-align:right"});R.append(h("div",{class:"gsec"},"(autom.) ▶ Applier"));
+    const dOpen=port("decagg");dOpen.classList.add("i");reg("agg:left:"+a.name+":open",dOpen,{type:"decAgg",dir:"in",agg:a.name});
+    L.append(h("div",{class:"slotrow"},dOpen,h("span",{class:"slotlbl",style:"opacity:.7"},"+ Decider")));
+    const R=h("div",{class:"col2",style:"text-align:right"});R.append(h("div",{class:"gsec"},"▶ Applier"));
     appliers.forEach(p=>{const s=anchorDot("appagg");s.classList.add("o");reg("agg:right:"+a.name+":"+p._id,s,null);
       R.append(h("div",{class:"slotrow o",onmouseenter:()=>hilite(null,p._id,true),onmouseleave:()=>hilite(null,p._id,false)},h("span",{class:"slotlbl"},p.event||"Applier"),s));});
-    if(!appliers.length)R.append(h("div",{class:"slotlbl",style:"opacity:.5"},"—"));
+    const aOpen=port("appagg");aOpen.classList.add("o");reg("agg:right:"+a.name+":open",aOpen,{type:"appAgg",dir:"in",agg:a.name});
+    R.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"opacity:.7"},"+ Applier"),aOpen));
     body.append(h("div",{class:"aggwrap"},L,R));
     const st=MODEL.states.find(s=>s.aggregat===a.name);
     body.append(h("div",{class:"gsec"},st?("State zugewiesen · "+((a.state||[]).length)+" Feld(er)"):"State-Knoten oben anschließen"));
   }
   // Decider: Command rein (links), Aggregat OBEN, OneOf-Events als MEHRERE Ausgänge (rechts, je Outcome ein Punkt).
   function deciderCard(body,d){
-    body.append(topAnchor("decagg","▲ Aggregat: "+(d.aggregat||"— (am Command setzen)"),"dec:aggout:"+d._id));
+    body.append(topSlot("decagg","▲ Aggregat: "+(d.aggregat||"— (ans Aggregat ziehen)"),{type:"decAgg",dir:"out",dec:d._id},"dec:aggout:"+d._id));
     body.append(slotRow("command","◀ Command: "+(d.command||"—"),"l",{type:"cmd",dir:"in",dec:d._id},"dec:cmdin:"+d._id));
     body.append(h("div",{class:"gsec"},"OneOf-Ausgänge — je mögliches Event ein Punkt (Punkt → Event ziehen). Das WANN macht der Decide-Rumpf."));
     (d.ergibt||[]).forEach((o,oi)=>{
@@ -1005,7 +631,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   }
   // Applier: gespiegelt zum Decider — Event rein (rechts), Aggregat OBEN. Körper = Code.
   function applierCard(body,a){
-    body.append(topAnchor("appagg","▲ Aggregat: "+(a.aggregat||"— (am Event setzen)"),"app:aggout:"+a._id));
+    body.append(topSlot("appagg","▲ Aggregat: "+(a.aggregat||"— (ans Aggregat ziehen)"),{type:"appAgg",dir:"out",app:a._id},"app:aggout:"+a._id));
     body.append(slotRow("event","Event: "+(a.event||"—")+" ◀","r",{type:"evtUse",dir:"in",app:a._id},"app:evtin:"+a._id));
     body.append(h("div",{class:"gsec"},"Apply-Rumpf"));
     body.append(codePort("app:rumpf:"+a._id,{k:"applier",app:a._id},a.codeSrc,"Apply-Logik"));
@@ -1027,7 +653,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   function readModelCard(body,rm){
     body.append(slotRow("readmodel","Store ▶"+(rm.store?" ("+rm.store+")":" — frei"),"r",{type:"readmodel",dir:"out",rm:rm._id},"rm:out:"+rm._id));
     body.append(nameInp(rm,"name","ReadModel"));
-    body.append(h("input",{value:rm.namespace??"",oninput:e=>rm.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.X"}));
+    body.append(h("input",{value:rm.namespace??"",oninput:e=>rm.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
     body.append(h("div",{class:"gsec"},"Dokument-Felder (Typ per Dropdown)"));
     (rm.felder||[]).forEach((f,fi)=>body.append(stateFeldRow(f,()=>{rm.felder.splice(fi,1);render();},rm.name)));
     body.append(h("button",{class:"add",onclick:()=>{(rm.felder=rm.felder||[]).push({_id:"f"+(NID++),name:uniqFeldName(rm.felder,"feld"),typ:"string"});render();}},"+ Feld"));
@@ -1046,9 +672,13 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     else if(t.k==="plHandle"){const p=MODEL.pipelines.find(x=>x._id===t.pipeline);if(p&&p.handles[t.hi])p.handles[t.hi].codeSrc=src;}
     else if(t.k==="writeFn"){const st=MODEL.stores.find(x=>x._id===t.store);const fn=st&&(st.writeFns||[]).find(f=>f._id===t.fn);if(fn)fn.codeSrc=src;}
     else if(t.k==="readFn"){const st=MODEL.stores.find(x=>x._id===t.store);const fn=st&&(st.readFns||[]).find(f=>f._id===t.fn);if(fn)fn.codeSrc=src;}
-    else if(t.k==="decider"){const d=dec(t.dec);if(d)d.codeSrc=src;}
-    else if(t.k==="applier"){const a=app(t.app);if(a)a.codeSrc=src;}
-    else if(t.k==="sagaCount"){const x=MODEL.transitions.find(z=>z._id===t.trans);if(x)x.sammelCodeSrc=src;}}
+    else if(t.k==="decider"){const d=dec(t.dec);if(d){d.codeSrc=src;if(src)delete d.leer;}}
+    else if(t.k==="applier"){const a=app(t.app);if(a){a.codeSrc=src;if(src)delete a.leer;}}
+    else if(t.k==="sagaCount"){const x=MODEL.transitions.find(z=>z._id===t.trans);if(x)x.sammelCodeSrc=src;}
+    else if(t.k==="dienst"){const d=MODEL.dienste.find(x=>x._id===t.dienst);if(d)d.codeSrc=src;}}
+  // Rumpf-Port eines Deciders/Appliers, dessen Methode im Code bewusst LEER ist (No-op, kein Platzhalter)?
+  function codeOwnerLeer(t){if(t.k==="decider"){const d=dec(t.dec);return !!(d&&d.leer);}
+    if(t.k==="applier"){const a=app(t.app);return !!(a&&a.leer);}return false;}
   // Ein-Klick: Code-/LLM-Knoten erzeugen UND sofort an diesen Rumpf-Port andocken (macht die „Code-Inseln" auffindbar).
   function addCode(target,kind){const pos=spawnPos();let id;
     if(kind==="llm"){id="ln"+(NID++);MODEL.llmNodes.push({_id:id,name:uniq("LLM"),intent:"",...pos});}
@@ -1057,11 +687,12 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   // Code-Eingang (Rumpf): getippter Slot `code`. Leer → deutlicher „⚙ …fehlt"-Marker + Ein-Klick-Knöpfe.
   function codePort(key,target,codeSrc,label){const s=port("code");s.classList.add("i");reg(key,s,{type:"code",dir:"in",target});
     const src=codeSrc?nodeName(codeSrc):null;const lbl=label||"Logik";
+    // Passiv: der gefüllte Rumpf zeigt nur, welcher Code-Block hängt (kein Editier-Modal am Konsumenten).
     if(src)return h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"color:#9be3bf"},"◀ "+lbl+": "+src));
+    if(target&&codeOwnerLeer(target))return h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"opacity:.6",title:"Im Code bewusst leer (No-op) — kein Platzhalter"},"∅ "+lbl+": bewusst leer"));
     return h("div",{class:"slotrow codeempty"},s,
       h("span",{class:"slotlbl codemiss",style:"flex:1"},"⚙ "+lbl+" fehlt"),
-      h("button",{class:"codeadd",title:"Code-Knoten erzeugen und hier andocken",onclick:()=>addCode(target,"code")},"＋📝"),
-      h("button",{class:"codeadd",title:"LLM-Knoten erzeugen und hier andocken",onclick:()=>addCode(target,"llm")},"＋🤖"));}
+      h("button",{class:"codeadd",title:"Code-Block erzeugen und hier andocken",onclick:()=>addCode(target,"code")},"＋📝"));}
   // Parameter-Zeilen einer Store-Funktion (Name : Typ) — die API-Signatur.
   function paramRows(fn){const box=h("div",{});
     (fn.params||[]).forEach((pr,pi)=>box.append(h("div",{class:"frow"},
@@ -1082,7 +713,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   function storeCard(body,st){
     body.append(topSlot("readmodel","Read Models ▲",{type:"readmodel",dir:"in",store:st.name},"sto:rm:"+st.name));
     body.append(nameInp(st,"name","Store"));
-    body.append(h("input",{value:st.namespace??"",oninput:e=>st.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.Projections"}));
+    body.append(h("input",{value:st.namespace??"",oninput:e=>st.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
     const rms=MODEL.readModels.filter(x=>x.store===st.name);
     body.append(h("div",{class:"gsec"},"Dokumente: "+(rms.length?rms.map(x=>x.name).join(" · "):"— (ReadModel oben anschließen)")));
     body.append(h("div",{class:"gsep"},"Write-API — je Fn ◀ von Projektion-Handle aufgerufen"));
@@ -1108,7 +739,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   //   (welche Store-Funktionen, Reihenfolge, Bedingung, Args) kommt als CODE über den Controller-Port.
   function projektionCard(body,p){
     body.append(nameInp(p,"name","Projektion","projektion"));
-    body.append(h("input",{value:p.namespace??"",oninput:e=>p.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.Projections"}));
+    body.append(h("input",{value:p.namespace??"",oninput:e=>p.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
     // Transport-Achse: geordneter Pull (IPullSubscriber) vs. Signal (ISubscriber, best-effort). Default = Pull.
     body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>{p.pull=e.target.checked;render();},...((p.pull!==false)?{checked:"checked"}:{})}),"Geordneter Pull (IPullSubscriber)"));
     // Garantie-Achse: append-artig ⇒ Co-Commit-Store ⇒ exactly-once (GA-1); sonst idempotenter Upsert ⇒ at-least-once genügt.
@@ -1144,7 +775,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   //   das WIE/mit-welchen-Werten macht die 📝 Controller-Logik). Der idiomatische Fan-in-Baustein.
   function reaktionCard(body,r){
     body.append(nameInp(r,"name","Reaktion","reaktion"));
-    body.append(h("input",{value:r.namespace??"",oninput:e=>r.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.Projections"}));
+    body.append(h("input",{value:r.namespace??"",oninput:e=>r.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
     body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>r.pull=e.target.checked,...((r.pull!==false)?{checked:"checked"}:{})}),"Geordneter Pull (IPullSubscriber)"));
     body.append(h("div",{class:"gsec"},"Trigger-Event → Handle → OneOf-Command(s) (emittiert). Das WANN/mit-WELCHEN-Werten macht der Rumpf."));
     (r.handles||[]).forEach((hd,hi)=>{
@@ -1174,8 +805,10 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   function triggerCard(body,t){
     body.append(nameInp(t,"name","Trigger","trigger"));
     const modi=[["timer","⏱ Timer (Intervall)"],["webhook","🔗 Webhook (HTTP)"],["filewatch","📁 FileWatch (Datei)"],["frist","⏳ Frist (Deadline)"]];
-    const sel=h("select",{onchange:e=>{t.modus=e.target.value;render();}});
-    modi.forEach(([v,l])=>{const o=h("option",{value:v},l);if((t.modus||"timer")===v)o.selected=true;sel.append(o);});
+    const sel=h("select",{onchange:e=>{t.modus=e.target.value||undefined;render();}});
+    // Ohne Bindung im Code (Composition Root) ist der Modus UNBESTIMMT — nicht geraten.
+    const leer=h("option",{value:""},"— Modus (im Code nicht gebunden)");if(!t.modus)leer.selected=true;sel.append(leer);
+    modi.forEach(([v,l])=>{const o=h("option",{value:v},l);if(t.modus===v)o.selected=true;sel.append(o);});
     body.append(sel);
     if(t.modus==="webhook"){body.append(h("div",{class:"gsec"},"Route · Request-Typ"));
       body.append(inp(t.route,v=>t.route=v,"/webhooks/x"));body.append(tinp(t.reqTyp,v=>t.reqTyp=v));}
@@ -1195,7 +828,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   //   Ein Handle kann auch reiner Seiteneffekt sein (kein yield). Das WIE macht der 📝 Rumpf.
   function pipelineCard(body,p){
     body.append(nameInp(p,"name","Pipeline","pipeline"));
-    body.append(h("input",{value:p.namespace??"",oninput:e=>p.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.Pipeline"}));
+    body.append(h("input",{value:p.namespace??"",oninput:e=>p.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
     body.append(h("div",{class:"gsec"},"PipelineId"));
     body.append(inp(p.pipelineId,v=>p.pipelineId=v,"z. B. bildverarbeitung"));
     body.append(h("div",{class:"gsec"},"Handle: Trigger/Event/Self ◀ → yield Command · yield Trigger · ScheduleSelf. Das WIE macht der Rumpf."));
@@ -1228,6 +861,11 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
         h("button",{class:"codeadd",title:"ScheduleSelf + Self-Handle anlegen",onclick:()=>{const nm=uniq("Tick");(hd.schedules=hd.schedules||[]).push({name:nm,delay:"30s"});if(!p.handles.some(x=>x.inputKind==="self"&&x.selfName===nm))p.handles.push({inputKind:"self",selfName:nm,sends:[],emits:[],schedules:[]});render();}},"＋")));
       body.append(codePort("plctrl:in:"+p._id+":"+hi,{k:"plHandle",pipeline:p._id,hi:hi},hd.codeSrc,"Pipeline-Logik"));
     });
+    // Genutzte Dienste (Konstruktor-Injektion) — an „Vertrag ▶" eines Dienst-Knotens andocken.
+    (p.dienste||[]).forEach((dn,i)=>{const s=port("store");s.classList.add("i");reg("pl:dienst:"+p._id+":"+dn,s,{type:"dienst",dir:"in",pipeline:p._id});
+      body.append(h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"flex:1"},"◀ nutzt "+(dn||"?")),h("button",{class:"rm",onclick:()=>{p.dienste.splice(i,1);render();}},"✕")));});
+    const dio=port("store");dio.classList.add("i");reg("pl:dienst:"+p._id+":open",dio,{type:"dienst",dir:"in",pipeline:p._id});
+    body.append(h("div",{class:"slotrow"},dio,h("span",{class:"slotlbl"},"+ nutzt Dienst ◀")));
     const ot=port("trigmsg");ot.classList.add("i");reg("pl:in:"+p._id+":opentrg",ot,{type:"trigmsg",dir:"in",pipeline:p._id,handleIdx:"opentrg"});
     body.append(h("div",{class:"slotrow"},ot,h("span",{class:"slotlbl"},"+ Trigger andocken")));
     const oe=port("event");oe.classList.add("i");reg("pl:in:"+p._id+":openevt",oe,{type:"evtUse",dir:"in",pipeline:p._id,handleIdx:"openevt"});
@@ -1237,7 +875,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   // Reader = Controller: Queries (je Handle) + Store-SCOPE + Response; Handle-Rumpf kommt als Code.
   function readerCard(body,r){
     body.append(nameInp(r,"name","Reader"));
-    body.append(h("input",{value:r.namespace??"",oninput:e=>r.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.Projections"}));
+    body.append(h("input",{value:r.namespace??"",oninput:e=>r.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
     body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>r.trackDeps=e.target.checked,...((r.trackDeps!==false)?{checked:"checked"}:{})}),"TrackDeps (Redis-Deps)"));
     // IReader<TProjection>: der Reader liest GENAU EINE Projektion — expliziter Bindungs-Port.
     const pb=port("query");pb.classList.add("o");reg("rdr:proj:"+r._id,pb,{type:"projref",dir:"out",reader:r._id});
@@ -1269,20 +907,142 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Query andocken")));
   }
 
-  // 📝 Code-Knoten (manuell): der EINZIGE Ort für getippten C#-Rumpf. Ausgang code ▶ → an einen Rumpf-Port.
+  // ══ BETRIEB / HOST-BAND: die (bewusst unreine) Composition-Root-Naht — Frist, Dienst-Bindung, HostSetting.
+  //    Sie leben real in Program.cs/DI. Der Editor macht die Naht sichtbar statt sie zu verstecken.
+
+  // Frist = Drei-End-Relation (statt Ingress-Attrappe): plant ◀ Event · storniert ◀ Event ·
+  //   Dauer ◀ HostSetting · fällig → Command @ Aggregat. Kontext = stabile Identität (AddDeadlines-Router).
+  function fristCard(body,f){
+    body.append(nameInp(f,"name","Frist","frist"));
+    body.append(h("div",{class:"gsec"},"Kontext (stabile Identität)"));
+    body.append(inp(f.kontext,v=>f.kontext=v,"z. B. training-timeout"));
+    body.append(h("div",{class:"gsec"},"plant auf Event(s) · storniert auf Event(s) · Dauer aus HostSetting"));
+    (f.plant||[]).forEach((ev,i)=>{const s=port("event");s.classList.add("i");reg("fr:plant:"+f._id+":"+ev,s,{type:"evtUse",dir:"in",frist:f._id,role:"plant"});
+      body.append(h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"flex:1"},"◀ plant auf "+(ev||"?")),h("button",{class:"rm",onclick:()=>{f.plant.splice(i,1);render();}},"✕")));});
+    const po=port("event");po.classList.add("i");reg("fr:plant:"+f._id+":open",po,{type:"evtUse",dir:"in",frist:f._id,role:"plant"});
+    body.append(h("div",{class:"slotrow"},po,h("span",{class:"slotlbl"},"+ plant auf Event ◀")));
+    (f.storniert||[]).forEach((ev,i)=>{const s=port("event");s.classList.add("i");reg("fr:cancel:"+f._id+":"+ev,s,{type:"evtUse",dir:"in",frist:f._id,role:"storniert"});
+      body.append(h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"flex:1"},"◀ storniert auf "+(ev||"?")),h("button",{class:"rm",onclick:()=>{f.storniert.splice(i,1);render();}},"✕")));});
+    const co=port("event");co.classList.add("i");reg("fr:cancel:"+f._id+":open",co,{type:"evtUse",dir:"in",frist:f._id,role:"storniert"});
+    body.append(h("div",{class:"slotrow"},co,h("span",{class:"slotlbl"},"+ storniert auf Event ◀")));
+    const ds=port("trigmsg");ds.classList.add("i");reg("fr:dauer:"+f._id,ds,{type:"setting",dir:"in",frist:f._id});
+    body.append(h("div",{class:"slotrow"},ds,h("span",{class:"slotlbl"},"◀ Dauer: "+(f.dauerSetting||"— HostSetting andocken"))));
+    const so=port("command");so.classList.add("o");reg("fr:send:"+f._id,so,{type:"sagaCmd",dir:"out",frist:f._id});
+    body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"fällig → "+(f.sendet||"Command")+(f.aggregat?" @ "+f.aggregat:"")+" ▶"),so));
+  }
+
+  // Dienst-Bindung = Vertrag (Interface) → Impl (📝-Insel ODER externer Adapter). Gibt dem freistehenden
+  //   Domain-Service (SplitZuteiler, ImagePairName) UND den Handler-Dependencies (IClassifierService) ein Zuhause.
+  function dienstCard(body,d){
+    body.append(nameInp(d,"name","Dienst","dienst"));
+    body.append(h("div",{class:"gsec"},"Vertrag (Interface)"));
+    body.append(inp(d.vertrag,v=>d.vertrag=v,"z. B. IClassifierService"));
+    const vo=port("store");vo.classList.add("o");reg("di:vertrag:"+d._id,vo,{type:"dienst",dir:"out",dienst:d._id});
+    body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"Vertrag "+(d.vertrag||"?")+" ▶"),vo));
+    body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>{d.extern=e.target.checked||undefined;render();},...(d.extern?{checked:"checked"}:{})}),"Externer Dienst (HTTP/ML) — Impl außerhalb"));
+    if(!d.extern){body.append(h("div",{class:"gsec"},"Impl-Logik"));
+      body.append(codePort("di:impl:"+d._id,{k:"dienst",dienst:d._id},d.codeSrc,"Impl-Logik"));}
+    else body.append(h("div",{class:"gsec",style:"opacity:.6"},"Impl = externer Adapter (nicht im Editor)"));
+  }
+
+  // HostSetting = operativer Config-Wert (Name/Typ/Default/EnvKey) — die Editor-Repräsentation von
+  //   appsettings/env für DOMÄNEN-relevante Werte (Pfad/Intervall/Timeout). Speist Trigger/Frist.
+  function hostSettingCard(body,s){
+    body.append(nameInp(s,"name","HostSetting","hostsetting"));
+    body.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"Typ"),tinp(s.typ,v=>s.typ=v)));
+    body.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"Default"),inp(s.default,v=>s.default=v,"z. B. 6h · /data/input")));
+    body.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"EnvKey"),inp(s.envKey,v=>s.envKey=v,"Abschnitt:Schlüssel")));
+    body.append(h("div",{class:"gsec",title:"aus dem Code verfolgt: GetValue → DI-Extension → Konfig-Feld"},
+      s.konfig?"fließt in "+s.konfig+"."+(s.feld||"?")+" ▶":"— in keiner Konfiguration verwendet"));
+    const wo=port("trigmsg");wo.classList.add("o");reg("hs:wert:"+s._id,wo,{type:"setting",dir:"out",hostSetting:s._id});
+    body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"Wert ▶"),wo));
+  }
+
+  // 📝 Code-Knoten: der C#-Rumpf. Vorschau im Knoten, KLICK → Modal mit vollem, editierbarem Code.
+  // ── CODE-SYNC: Board ⇄ echte .cs-Datei (SimHost). Anker aus dem GRAPHEN abgeleitet: welcher
+  //    Decider/Applier besitzt diesen 📝/🤖-Knoten → Namespace + Command/Event. Heute nur die
+  //    Schreibseite (vom Scaffolder als Datei gedeckt); Leseseite-Rümpfe folgen.
+  function codeAnker(nodeId){const o=findCodeOwner(nodeId);if(!o)return null;
+    if(o.kind==="decider"){const d=o.ref,agg=MODEL.aggregate.find(a=>a.name===d.aggregat);
+      return (agg&&d.command)?{kind:"decider",namespace:agg.namespace,disc:d.command,datei:d.datei||""}:null;}
+    if(o.kind==="applier"){const a=o.ref,agg=MODEL.aggregate.find(x=>x.name===a.aggregat);
+      return (agg&&a.event)?{kind:"applier",namespace:agg.namespace,disc:a.event,datei:a.datei||""}:null;}
+    return null;}
+  async function codeGet(a){const q=new URLSearchParams({kind:a.kind,namespace:a.namespace,disc:a.disc,datei:a.datei||""});
+    return fetch("/api/editor/code?"+q).then(r=>r.json());}
+  async function codeSetPrompt(a,prompt,baseHash){return fetch("/api/editor/code",{method:"POST",
+    headers:{"content-type":"application/json"},body:JSON.stringify({...a,prompt,baseHash})}).then(r=>r.json());}
+  async function codeOpen(a){return fetch("/api/editor/open",{method:"POST",
+    headers:{"content-type":"application/json"},body:JSON.stringify(a)}).then(r=>r.json());}
+  // Poll-Registry (Datei→Browser, das Double-Binding): je sichtbarem Knoten ein Updater; bei Hash-Wechsel anwenden.
+  let SYNC={}, WATCH=new Set();
+  const ankerKey=a=>a?a.kind+":"+a.namespace+":"+a.disc:"";
+  function syncReg(id,anker,apply,gid){if(INSP&&SYNC[id])return;SYNC[id]={anker,apply,hash:null,gid};}
+  function imBlick(gid){if(!canvas||!world||!gid)return true;const el=world.querySelector('[data-id="'+gid+'"]');
+    if(!el)return true;const cr=canvas.getBoundingClientRect(),r=el.getBoundingClientRect();
+    return !(r.right<cr.left||r.left>cr.right||r.bottom<cr.top||r.top>cr.bottom);}
+  // Kontinuierlich gepollt wird NUR, was via ✎ geöffnet wurde (WATCH). Sichtbare Blöcke werden EINMAL
+  //   gespiegelt (Vorschau füllen), dann Ruhe → im Leerlauf keine Requests, kein Terminal-Flut.
+  async function syncTick(){const de=document.getElementById("de");if(!de||!de.classList.contains("on"))return;
+    for(const id in SYNC){const s=SYNC[id];const beobachtet=WATCH.has(ankerKey(s.anker));
+      if(!beobachtet){if(s.hash!==null)continue;if(!imBlick(s.gid))continue;}
+      try{const d=await codeGet(s.anker);if(d&&d.ok&&d.hash!==s.hash){s.hash=d.hash;s.apply(d);}}catch(e){}}}
+  setInterval(syncTick,2000);
+
+  // 📝 Code-Block: PASSIV (Spiegel der echten Datei). ALLGEMEINES PATTERN — jeder Block hat:
+  //   • Eingang „◀ 🤖 Prompt": bei Bedarf eine LLM-Node andocken (dort schreibst du den Prompt).
+  //   • Ausgang „code ▶": in den Rumpf-Port des Konsumenten (Decider/Applier/Store-Fn/Handler …).
+  //   • „✎ Im Editor öffnen" + Datei-Spiegel — nur, wo eine echte .cs existiert (heute Schreibseite).
+  //   KEIN In-Browser-Editieren, KEIN Klick auf den Block.
   function codeNodeCard(body,c){
     body.append(nameInp(c,"name","Code"));
-    body.append(codearea(c.text,v=>c.text=v,"// C#-Rumpf hier tippen"));
+    const anker=codeAnker(c._id);
+    const voll=INSP;   // im Inspector: der ganze Rumpf statt der Kurzvorschau
+    const prev=h("pre",{class:"gcodeprev",style:"cursor:default",title:anker?"Spiegel der echten .cs (passiv)":"passiv"},codePreview(c.text,undefined,voll));
+    body.append(prev);
+    // Eingang: 🤖 LLM-Prompt-Node andocken (an JEDEM Code-Block, unabhängig vom Konsumenten-Typ).
+    const pin=port("prompt");pin.classList.add("i");reg("code:prin:"+c._id,pin,{type:"prompt",dir:"in",codeBlock:c._id});
+    const llm=MODEL.llmNodes.find(x=>x.promptZiel===c._id);
+    const prow=h("div",{class:"slotrow"},pin,h("span",{class:"slotlbl",style:"flex:1"},llm?("◀ 🤖 "+(llm.name||"LLM")):"◀ 🤖 Prompt (bei Bedarf)"));
+    if(!llm)prow.append(h("button",{class:"codeadd",title:"LLM-Prompt-Node erzeugen und andocken",
+      onclick:()=>{const vorher=new Set(graphNodes().map(n=>n.id));
+        MODEL.llmNodes.push({_id:"ln"+(NID++),name:uniq("LLM"),intent:"",promptZiel:c._id,...spawnPos()});render();fokussiereNeu(vorher);}},"＋🤖"));
+    body.append(prow);
+    // ✎ IMMER (allgemeines Pattern) — ohne echte Datei: klare Meldung statt fehlendem Knopf.
+    body.append(h("div",{class:"frow"},h("button",{class:"codeadd",
+      title:anker?"Echte .cs im Editor öffnen":"Datei folgt — Scaffolder deckt diesen Rumpf noch nicht",
+      onclick:async()=>{if(!anker){deFlash("◦ Datei folgt — Scaffolder deckt diesen Rumpf noch nicht",false);return;}
+        WATCH.add(ankerKey(anker));   // ab jetzt diese eine Datei kontinuierlich spiegeln (Datei→Browser)
+        const r=await codeOpen(anker).catch(()=>null);
+        deFlash(r&&r.ok?"✎ geöffnet: "+r.pfad:"⚠ "+((r&&r.grund)||"SimHost offline"),!!(r&&r.ok));}},"✎ Im Editor öffnen")));
+    if(anker)syncReg(c._id,anker,d=>{c.text=d.body;prev.textContent=codePreview(d.body,undefined,voll);},"cn:"+c._id);   // Datei→Browser: Vorschau spiegelt den echten Rumpf
     body.append(slotRow("code","code ▶","r",{type:"code",dir:"out",codeNode:c._id},"code:out:"+c._id));
   }
   // 🤖 LLM-Knoten: Intent-Text; Vertrag wird aus dem verdrahteten Ziel abgeleitet; Ausgang code ▶.
+  // 🤖 LLM-Node = PROMPT-QUELLE. `Prompt ▶` an den Eingang eines Code-Blocks; hier tippst du den Prompt.
+  //   Wo der Block eine echte Datei hat, wird der Prompt als `// 🤖 Prompt:`-Kommentar in den Rumpf geschrieben
+  //   (die einzige Code-Mutation, bei Bedarf). Double-Binding: extern geänderter Prompt spiegelt zurück.
   function llmNodeCard(body,l){
     body.append(nameInp(l,"name","LLM"));
-    body.append(h("div",{class:"gsec"},"Intent — was soll der Rumpf tun?"));
-    body.append(codearea(l.intent,v=>l.intent=v,"z. B. Modell upserten; Aktiv-Zeiger setzen"));
-    body.append(h("div",{class:"gsec",style:"opacity:.6"},"Vertrag aus dem Ziel abgeleitet · Generieren + Sim: spätere Phase"));
-    body.append(slotRow("code","code ▶","r",{type:"code",dir:"out",codeNode:l._id},"code:out:"+l._id));
+    const block=l.promptZiel?MODEL.codeNodes.find(c=>c._id===l.promptZiel):null;
+    const anker=block?codeAnker(block._id):null;
+    body.append(h("div",{class:"gsec"},"Prompt"+(block?" → 📝 "+(block.name||"Code"):" (an einen Code-Block andocken)")));
+    const ta=h("textarea",{class:"code",rows:3,placeholder:"z. B. Bestätige nur, wenn Betrag > 0."});
+    ta.value=l.intent||"";body.append(ta);
+    const status=h("div",{class:"gsec",style:"opacity:.6"},anker?"↔ echte Datei":(block?"angedockt · Datei folgt (Schreibseite)":"nicht angedockt"));
+    body.append(status);
+    let baseHash=null;
+    ta.onchange=async()=>{l.intent=ta.value;if(!anker)return;
+      const r=await codeSetPrompt(anker,ta.value,baseHash).catch(()=>null);
+      if(r&&r.ok){baseHash=r.hash;status.textContent="✓ in Datei geschrieben";status.style.color="#9be3bf";}
+      else if(r&&r.grund==="stale"){baseHash=r.hash;ta.value=r.prompt||"";l.intent=ta.value;status.textContent="↩ extern geändert — neu geladen";status.style.color="#e0b46a";}
+      else{status.textContent="⚠ "+((r&&r.grund)||"SimHost offline");status.style.color="#ffb3c1";}};
+    if(anker)syncReg(l._id,anker,d=>{baseHash=d.hash;if(document.activeElement!==ta){ta.value=d.prompt||"";l.intent=ta.value;}},"ln:"+l._id);
+    body.append(slotRow("prompt","Prompt ▶","r",{type:"prompt",dir:"out",llm:l._id},"llm:prout:"+l._id));
   }
+  // Kurzvorschau eines Code-/Intent-Textes (erste Zeilen) für den Knoten.
+  function codePreview(t,leer,voll){const s=(t||"").replace(/\t/g,"    ").split("\n");const max=voll?1e9:7;
+    const head=s.slice(0,max).join("\n");return (t&&t.trim())?(head+(s.length>max?"\n…":"")):(leer||"// leer");}
 
   // ══ COMFYUI-NODE-EDITOR: getippte Slots (Punkte) + Bézier-Kanten statt Dropdowns.
   //    Kopf ziehen = verschieben (rastet 20px); von einem Slot-Punkt ziehen = verbinden;
@@ -1291,17 +1051,54 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   //    Applier→Aggregat(rechts) · Applier→State-Feld(oben, optionale Zuweisungs-Markierung).
   const SVGNS="http://www.w3.org/2000/svg";
   const GRID=20;
-  const NODELABEL={command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",pipeline:"Pipeline",trigger:"Trigger",codenode:"Code",llmnode:"LLM"};
+  const NODELABEL={command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",pipeline:"Pipeline",trigger:"Trigger",frist:"Frist",dienst:"Dienst",hostsetting:"HostSetting",codenode:"Code",llmnode:"LLM"};
   let PAN={x:40,y:30,s:1}, canvas=null, world=null, svg=null, svgTop=null, SLOTS={};
+  // Typ-Navigation: HLKIND = aktuell hervorgehobener Node-Typ (Board+Minimap); JUMPIX = Sprung-Cursor je Typ.
+  let HLKIND=null; const JUMPIX={};
+  // Alle Knoten eines Typs im Board + Minimap hervorheben (Hover über den Palette-Button).
+  function highlightKind(kind,on){
+    HLKIND=on?kind:null;
+    if(world){const ids=new Set(graphNodes().filter(n=>n.kind===kind).flatMap(n=>VERTRETER.get(n.id)||[n.id]));
+      world.querySelectorAll(".gnode2").forEach(el=>el.classList.toggle("typehi",on&&ids.has(el.dataset.id)));}
+    if(MM&&MM.svg)MM.svg.querySelectorAll("rect[data-kind]").forEach(r=>r.classList.toggle("mmhi",on&&r.dataset.kind===kind));
+  }
+  // Viewport auf einen Knoten zentrieren.
+  //   Eingeklappte Details (Decider/Code/…) → auf ihren sichtbaren Besitzer.
+  function centerOn(n){if(!canvas)return;n=NODEBY.get(vertreterId(n.id))||n;const el=world.querySelector('[data-id="'+n.id+'"]');
+    const w=el?el.offsetWidth:250,h=el?el.offsetHeight:120,cr=canvas.getBoundingClientRect(),p=P(n);
+    PAN.x=cr.width/2-((p.x||0)+w/2)*PAN.s;PAN.y=cr.height/2-((p.y||0)+h/2)*PAN.s;applyPan();}
+  // Kurzer Puls-Ring auf einem Knoten (nach dem Sprung).
+  function pulseNode(n){const el=world&&world.querySelector('[data-id="'+vertreterId(n.id)+'"]');if(!el)return;
+    el.classList.add("pulse");setTimeout(()=>el.classList.remove("pulse"),900);}
+  // Ctrl/Cmd+Klick auf den Palette-Button: der Reihe nach zum nächsten Knoten dieses Typs springen.
+  function jumpNextOfKind(kind){const list=graphNodes().filter(n=>n.kind===kind);if(!list.length)return;
+    const i=(((JUMPIX[kind]??-1)+1))%list.length;JUMPIX[kind]=i;const n=list[i];
+    centerOn(n);pulseNode(n);highlightKind(kind,true);
+    deFlash("↪ "+(NODELABEL[kind]||kind)+" "+(i+1)+"/"+list.length+(n.name?" · "+n.name:""),true);}
+  // Einsame Inseln (unverbundene Knoten aus der Graph-Analyse) — hervorheben + der Reihe nach anspringen.
+  let ISLE=new Set();
+  function highlightIslands(on){if(world)world.querySelectorAll(".gnode2").forEach(el=>el.classList.toggle("typehi",on&&ISLE.has(el.dataset.id)));}
+  function jumpIslands(){const list=graphNodes().filter(n=>ISLE.has(n.id));if(!list.length){deFlash("✓ keine einsamen Inseln",true);return;}
+    const k="§insel";const i=(((JUMPIX[k]??-1)+1))%list.length;JUMPIX[k]=i;const n=list[i];
+    centerOn(n);pulseNode(n);deFlash("⚠ Insel "+(i+1)+"/"+list.length+" · "+(NODELABEL[n.kind]||n.kind)+(n.name?" "+n.name:""),true);}
 
   const dec=id=>MODEL.decider.find(d=>d._id===id);
   const app=id=>MODEL.applier.find(a=>a._id===id);
-  // Namespace = Aggregat: Decider/Applier-Zugehörigkeit wird ABGELEITET (keine manuelle Kante mehr).
+  // ZUGEHÖRIGKEIT = BEZIEHUNG, nie Namespace oder Name: Decider/Applier tragen ihr Aggregat (aus dem Code bzw. per
+  //   ▲-Verdrahtung ans Aggregat). Ein Record gehört dem Aggregat, dessen Decider/Applier ihn entscheidet/erzeugt/faltet;
+  //   ein Wert-Typ (VO/Enum) dem Aggregat, dessen Records/State ihn referenzieren — jeweils EINDEUTIG oder keinem.
   const recByName=n=>MODEL.records.find(r=>r.name===n);
-  function aggForNs(ns){if(!ns)return "";const m=MODEL.aggregate.filter(a=>a.namespace===ns);return m.length?m[0].name:"";}
-  const deciderAgg=d=>{const c=d.command&&recByName(d.command);return c?aggForNs(c.namespace):"";};
-  const applierAgg=a=>{const e=a.event&&recByName(a.event);return e?aggForNs(e.namespace):"";};
-  function deriveMembership(){MODEL.decider.forEach(d=>d.aggregat=deciderAgg(d));MODEL.applier.forEach(a=>a.aggregat=applierAgg(a));}
+  const eindeutig=xs=>{const s=[...new Set(xs)];return s.length===1&&s[0]?s[0]:"";};
+  function recordAgg(n){if(!n)return "";
+    const a=MODEL.decider.filter(d=>d.command===n||(d.ergibt||[]).some(o=>o.event===n)).map(d=>d.aggregat)
+      .concat(MODEL.applier.filter(x=>x.event===n).map(x=>x.aggregat));
+    return a.length?eindeutig(a):"";}
+  function typAgg(t){if(!t)return "";const a=[];
+    MODEL.records.forEach(r=>{if((r.felder||[]).some(f=>innerTyp(f.typ)===t))a.push(recordAgg(r.name));});
+    MODEL.aggregate.forEach(g=>{if((g.state||[]).some(f=>innerTyp(f.typ)===t))a.push(g.name);});
+    return a.length?eindeutig(a):"";}
+  // Records spiegeln ihre (abgeleitete) Zugehörigkeit — Decider/Applier werden NICHT überschrieben.
+  function deriveMembership(){MODEL.records.forEach(r=>{const a=recordAgg(r.name);if(a)r.aggregat=a;else delete r.aggregat;});}
   const baseTyp=x=>(x||"").replace(/\s/g,"").replace(/\?$/,"");
   // Positionsweise vollständige Argumentliste (fehlende Parameter → "default", damit es kompiliert).
   function argListe(cmdName,args){const cmd=recByName(cmdName);
@@ -1311,12 +1108,20 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   const transOf=s=>MODEL.transitions.filter(t=>t.prozess===s.name);
   // Collection-Felder der Join-Events (für UndAlle-Anzahl / SendeJe-Collection), als "role.field".
   function collFelder(t){const out=[];(t.wenn||[]).forEach((e,i)=>{const r=recByName(e);if(!r)return;const role=["t","r","g"][i]||("e"+(i+1));
-    (r.felder||[]).forEach(f=>{if(/List<|IReadOnlyList<|IEnumerable<|\[\]/.test(f.typ||""))out.push(role+"."+f.name);});});return out;}
+    (r.felder||[]).forEach(f=>{if(elementVon(f))out.push(role+"."+f.name);});});return out;}
+  // Sammlung? — der Element-Typ kommt vom Extractor (Symbol: IEnumerable<T>). Nur für NIE übersetzte Entwürfe liest der
+  //   Editor den eingetippten Typ-Text (List<X>/IReadOnlyList<X>/IEnumerable<X>/X[]) — dort gibt es noch keinen Code.
+  const ENTWURF_SAMMLUNG=/^(?:List|IReadOnlyList|IEnumerable)<(.+)>\??$|^(.+)\[\]\??$/;
+  function elementVon(f){if(!f)return "";if(f.elementTyp)return f.elementTyp;const m=ENTWURF_SAMMLUNG.exec((f.typ||"").trim());return m?(m[1]||m[2]).trim():"";}
+  // Typ-Text → Element-Typ (aus den extrahierten Feldern), je Render einmal aufgebaut.
+  let ELEM=null;
+  function elementVonTyp(ty){if(!ELEM){ELEM=new Map();alleFelder().forEach(({f})=>{if(f&&f.elementTyp&&!ELEM.has(f.typ))ELEM.set(f.typ,f.elementTyp);});}
+    return ELEM.get(ty)||elementVon({typ:ty});}
   // Feldtyp-Klassifikation für Feld-Ports (verdrahtbare Objekt-Felder).
-  const istColl=ty=>/List<|IReadOnlyList<|IEnumerable<|\[\]/.test(ty||"");
+  const istColl=ty=>!!elementVonTyp(ty);
   const istGanzzahl=ty=>/^(int|long)\??$/.test((ty||"").trim());
   // ── Typ-Komposition: den INNEREN Typ eines Feldes (List<X>/X[]/X? → X) für die VO/Enum→Feld-Verdrahtung. ──
-  const innerTyp=ty=>{let t=(ty||"").trim().replace(/\?$/,"");const m=/^(?:List|IReadOnlyList|IEnumerable)<(.+)>$/.exec(t);if(m)t=m[1].trim();return t.replace(/\[\]$/,"").replace(/\?$/,"").trim();};
+  const innerTyp=ty=>{const e=elementVonTyp(ty);return (e||(ty||"")).trim().replace(/\?$/,"").trim();};
   // Alle verdrahtbaren Felder samt Owner-Schlüssel (identisch zum feldPort-Owner: Record/Aggregat-/ReadModel-Name bzw. State-_id).
   function alleFelder(){const out=[];
     MODEL.records.forEach(r=>(r.felder||[]).forEach(f=>out.push({owner:r.name,f})));
@@ -1334,22 +1139,27 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   function typeInPort(owner,f){if(!f._id)f._id="f"+(NID++);const s=port("ftype");s.classList.add("i","sm");s.title="Typ verdrahten (VO/Enum an dieses Feld)";
     reg("ftype:in:"+owner+":"+f._id,s,{type:"ftype",dir:"in",fobj:f});return s;}
   // Berührte Aggregate (abgeleitet aus den Namespaces der referenzierten Events/Commands der Transitionen).
-  function sagaAggs(s){const ns=new Set();transOf(s).forEach(t=>{[...(t.wenn||[]),t.sammelEvent].forEach(e=>{const r=e&&recByName(e);if(r)ns.add(r.namespace);});
-    (t.dann||[]).forEach(d=>[d.sende,d.kompensation].forEach(c=>{const r=c&&recByName(c);if(r)ns.add(r.namespace);}));});
-    return [...new Set([...ns].map(n=>aggForNs(n)).filter(Boolean))];}
+  function sagaAggs(s){const ns=new Set();transOf(s).forEach(t=>{[...(t.wenn||[]),t.sammelEvent].forEach(e=>ns.add(recordAgg(e)));
+    (t.dann||[]).forEach(d=>[d.sende,d.kompensation].forEach(c=>ns.add(recordAgg(c))));});
+    return [...new Set([...ns].filter(Boolean))];}
   // Vor Serveraufruf: Transitionen → Saga.Schritte (inkl. UndAlle/SendeJe) + ExtraUsings; Argumente positionsvoll.
   function prepareSaga(){MODEL.sagas.forEach(s=>{const ts=transOf(s);
     // Ein Join, mehrere Dann → je Dann EINE Regel (gleiche Bedingung). flatMap fächert die Dann auf.
     s.schritte=ts.filter(t=>(t.wenn||[]).length).flatMap(t=>(t.dann||[]).filter(d=>d.sende).map(d=>{
       const st={wenn:(t.wenn||[]).slice(),sende:d.sende};
+      // Aus dem Code gelesene Ausdrücke (verbatim) reisen unverändert zurück — Vorrang vor Stub-Argumenten.
+      if(t.sammelEvent){st.sammelEvent=t.sammelEvent;if(t.sammelAusdruck)st.sammelAusdruck=t.sammelAusdruck;if(t.sammelAnzahl)st.sammelAnzahl=t.sammelAnzahl;}
+      if(d.sendeAusdruck)st.sendeAusdruck=d.sendeAusdruck;
+      if(d.kompensationAusdruck)st.kompensationAusdruck=d.kompensationAusdruck;
+      if(d.kompensationJe)st.kompensationJe=true;
       // Count-Anzahl: Feld-Auswahl (D/S); ein 📝-Ausdruck (H-Fallback) hat Vorrang.
       if(d.sendeJe){st.sendeJe=true;if(d.sendeJeCollection)st.sendeJeCollection=d.sendeJeCollection;}
       const sa=argListe(d.sende,d.sendeArgs);if(sa.length)st.sendeArgumente=sa;
       if(d.kompensation){st.kompensation=d.kompensation;const ka=argListe(d.kompensation,d.kompArgs);if(ka.length)st.kompensationArgumente=ka;}
       return st;}));
-    const ns=new Set();ts.forEach(t=>{[...(t.wenn||[]),t.sammelEvent].forEach(e=>{const r=e&&recByName(e);if(r&&r.namespace)ns.add(r.namespace);});
-      (t.dann||[]).forEach(d=>[d.sende,d.kompensation].forEach(c=>{const r=c&&recByName(c);if(r&&r.namespace)ns.add(r.namespace);}));});
-    ns.delete(s.namespace);s.extraUsings=[...ns];});}
+    // usings: der Scaffolder leitet sie aus den referenzierten Records ab (inkl. Auslöser-Namespace);
+    // s.extraUsings hält nur die aus dem Code gelesenen expliziten — hier NICHT überschreiben.
+    s.extraUsings=s.extraUsings||[];});}
   // Read-only-Anker (nicht ziehbar) — nur Ankerpunkt für abgeleitete Kanten.
   function anchorDot(color){return h("div",{class:"slot s-"+color+" ro"});}
   function topAnchor(color,label,key){const s=anchorDot(color);s.classList.add("t");reg(key,s,null);return h("div",{class:"gtopfield"},s,h("span",{class:"slotlbl"},label));}
@@ -1363,10 +1173,15 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
       if(obj.kind==="valueobject")retypeFelder(old,nv);   // Typ-Komposition: Feldtypen mitziehen
       if(obj.kind==="command"){
         MODEL.decider.forEach(d=>{if(d.command===old)d.command=nv;});
-        MODEL.transitions.forEach(t=>(t.dann||[]).forEach(d=>{if(d.sende===old)d.sende=nv;if(d.kompensation===old)d.kompensation=nv;}));
+        const rx=new RegExp("\\b"+old.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"\\b","g");
+        MODEL.hostSettings.forEach(hs=>{if(hs.konfig===old)hs.konfig=nv;});
+        MODEL.pipelines.forEach(p=>{p.konfigs=(p.konfigs||[]).map(k=>k===old?nv:k);});
+        MODEL.transitions.forEach(t=>(t.dann||[]).forEach(d=>{if(d.sende===old)d.sende=nv;if(d.kompensation===old)d.kompensation=nv;
+          if(d.sendeAusdruck)d.sendeAusdruck=d.sendeAusdruck.replace(rx,nv);if(d.kompensationAusdruck)d.kompensationAusdruck=d.kompensationAusdruck.replace(rx,nv);}));
         // Reaktion-Handles: ausgelöste Commands mitziehen.
         MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>{hd.sends=(hd.sends||[]).map(x=>x===old?nv:x);}));
         MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{hd.sends=(hd.sends||[]).map(x=>x===old?nv:x);}));
+        MODEL.frists.forEach(f=>{if(f.sendet===old)f.sendet=nv;});
       }else{
         MODEL.decider.forEach(d=>(d.ergibt||[]).forEach(o=>{if(o.event===old)o.event=nv;}));
         MODEL.applier.forEach(a=>{if(a.event===old)a.event=nv;});
@@ -1377,10 +1192,12 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
         // Reaktion-Handles: Trigger-Event mitziehen.
         MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>{if(hd.event===old)hd.event=nv;}));
         MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.event===old)hd.event=nv;}));
-        // Veröffentlichte reaktive Events (Projektion + Reaktion) mitziehen.
-        MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>{hd.publishes=(hd.publishes||[]).map(x=>x===old?nv:x);}));
+        // Projektion-Handles: Trigger-Event (Abo) UND veröffentlichte reaktive Events mitziehen.
+        MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.event===old)hd.event=nv;hd.publishes=(hd.publishes||[]).map(x=>x===old?nv:x);}));
         MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>{hd.publishes=(hd.publishes||[]).map(x=>x===old?nv:x);}));
+        MODEL.frists.forEach(f=>{f.plant=(f.plant||[]).map(x=>x===old?nv:x);f.storniert=(f.storniert||[]).map(x=>x===old?nv:x);});
       }
+    }else if(kind==="hostsetting"){MODEL.frists.forEach(f=>{if(f.dauerSetting===old)f.dauerSetting=nv;});
     }else if(kind==="projektion"){
       // IReader<TProjection>-Bindung (per Name) mitziehen.
       MODEL.reader.forEach(r=>{if(r.projektion===old)r.projektion=nv;});
@@ -1407,7 +1224,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     if(owner)row.prepend(typeInPort(owner,f));return row;}
   // Typ-Auswahl per Dropdown (Skalare + Value Objects + Enums) — im State-Knoten.
   function typSelect(val,on){const s=h("select",{style:"flex:1;width:auto",onchange:e=>on(e.target.value)});
-    const opts=[...SCALARS,...MODEL.records.filter(r=>r.kind==="valueobject").map(r=>r.name),...MODEL.enums.map(e=>e.name)];
+    const opts=[...SCALARS(),...MODEL.records.filter(r=>r.kind==="valueobject").map(r=>r.name),...MODEL.enums.map(e=>e.name)];
     if(val&&!opts.includes(val))opts.unshift(val);
     opts.forEach(t=>{const o=h("option",{value:t},t);if(t===val)o.selected=true;s.append(o);});return s;}
   function stateFeldRow(f,onDel,owner){const row=h("div",{class:"frow"},
@@ -1418,7 +1235,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     if(owner)row.prepend(typeInPort(owner,f));return row;}
 
   function port(color){const s=h("div",{class:"slot s-"+color});s.onpointerdown=e=>{e.stopPropagation();e.preventDefault();startLink(e,s);};return s;}
-  function reg(key,el,info){el.__slot=info;SLOTS[key]=el;return el;}
+  function reg(key,el,info){el.__slot=info;if(!INSP)SLOTS[key]=el;return el;}   // Inspector-Kopien verdrahten nicht
   function slotRow(color,label,side,info,key){const s=port(color);s.classList.add(side==="l"?"i":"o");reg(key,s,info);
     return side==="l"?h("div",{class:"slotrow"},s,h("span",{class:"slotlbl"},label))
                      :h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},label),s);}
@@ -1441,28 +1258,242 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
             ...MODEL.reaktionen.map(r=>({id:"rk:"+r._id,name:r.name,kind:"reaktion",ref:r})),
             ...MODEL.pipelines.map(p=>({id:"pl:"+p._id,name:p.name,kind:"pipeline",ref:p})),
             ...MODEL.triggers.map(t=>({id:"tg:"+t._id,name:t.name,kind:"trigger",ref:t})),
+            ...MODEL.frists.map(f=>({id:"fr:"+f._id,name:f.name,kind:"frist",ref:f})),
+            ...MODEL.dienste.map(d=>({id:"di:"+d._id,name:d.name,kind:"dienst",ref:d})),
+            ...MODEL.hostSettings.map(s=>({id:"hs:"+s._id,name:s.name,kind:"hostsetting",ref:s})),
             ...MODEL.codeNodes.map(c=>({id:"cn:"+c._id,name:c.name,kind:"codenode",ref:c})),
             ...MODEL.llmNodes.map(l=>({id:"ln:"+l._id,name:l.name,kind:"llmnode",ref:l}))];
   }
-  function autoLayout(){
-    const spalte={command:40,decider:360,aggregate:720,state:720,event:1080,rejection:1080,applier:1400,valueobject:1720,enum:1720,saga:1760,transition:2120,projektion:2200,store:2560,readmodel:2900,query:3250,reader:3600,queryresponse:3950,reaktion:2200,trigger:5000,pipeline:5340,codenode:4300,llmnode:4650};
-    const step={command:150,event:150,rejection:150,valueobject:160,enum:150,aggregate:320,state:220,decider:330,applier:280,saga:240,transition:360,projektion:300,store:360,readmodel:220,query:150,reader:320,queryresponse:150,reaktion:300,trigger:300,pipeline:320,codenode:220,llmnode:220};
-    const yByX={};
-    graphNodes().forEach(n=>{const r=n.ref;const x=spalte[n.kind]!==undefined?spalte[n.kind]:40;const s=step[n.kind]||150;
-      if(typeof r.x==="number"&&typeof r.y==="number"){yByX[x]=Math.max(yByX[x]||30,r.y+s);return;}
-      const y=yByX[x]||30;r.x=x;r.y=y;yByX[x]=y+s;});
+  // ── AGGREGATSWEISE ANORDNUNG: jedes Aggregat ein gekachelter Block (eigenes Rollen-Mini-Layout),
+  //    aggregat-übergreifende Knoten (Sagas/Pipelines/Trigger/Reaktionen/geteilte Typen) im „Geteilt"-Band.
+  const SHARED_KEY="§geteilt";
+  // Rollen-Spalten innerhalb eines Aggregat-Blocks (links→rechts = Schreibfluss, dann Leseseite).
+  const ROLE_AGG={command:0,decider:1,aggregate:2,state:2,event:3,rejection:3,applier:4,valueobject:5,enum:5,projektion:6,query:7,reader:8,queryresponse:9,store:10,readmodel:10};
+  // Rollen-Spalten im Geteilt-Band.
+  const ROLE_SHARED={saga:0,transition:1,reaktion:2,pipeline:3,trigger:4,frist:4,dienst:5,hostsetting:5,valueobject:6,enum:6,command:7,event:7,rejection:7,codenode:8,llmnode:8};
+
+  // Wer besitzt diesen 📝/🤖-Knoten? (Rumpf-Ziel) — für die Gruppen-Zuordnung.
+  function findCodeOwner(id){
+    for(const d of MODEL.decider) if(d.codeSrc===id) return {kind:"decider",ref:d};
+    for(const a of MODEL.applier) if(a.codeSrc===id) return {kind:"applier",ref:a};
+    for(const p of MODEL.projektionen) if((p.handles||[]).some(h=>h.codeSrc===id)) return {kind:"projektion",ref:p};
+    for(const r of MODEL.reader) if((r.handles||[]).some(h=>h.codeSrc===id)) return {kind:"reader",ref:r};
+    for(const p of MODEL.pipelines) if((p.handles||[]).some(h=>h.codeSrc===id)) return {kind:"pipeline",ref:p};
+    for(const s of MODEL.stores){if(((s.writeFns||[]).concat(s.readFns||[])).some(f=>f.codeSrc===id))return {kind:"store",ref:s};}
+    for(const d of MODEL.dienste) if(d.codeSrc===id) return {kind:"dienst",ref:d};
+    return null;
   }
+  // Aggregat-Zugehörigkeit eines Knotens (oder SHARED_KEY). Ableitung über Namespace + Verdrahtung.
+  // ══ GRAPH-BASIS: alles liegt als Graph vor — Partition nach ECHTER Verbundenheit, nicht nach Namespace. ══
+  // Eine einzige Kanten-Quelle auf KNOTEN-Ebene (Node-Id → Node-Id), gespiegelt zu drawEdges' Beziehungen.
+  function boardEdges(){
+    const E=[]; const rec=n=>"rec:"+n;
+    const codeId=id=>MODEL.codeNodes.some(c=>c._id===id)?"cn:"+id:(MODEL.llmNodes.some(l=>l._id===id)?"ln:"+id:null);
+    const push=(a,b)=>{if(a&&b)E.push([a,b]);};
+    MODEL.decider.forEach(d=>{if(recByName(d.command))push(rec(d.command),"dec:"+d._id);
+      if(d.aggregat)push("dec:"+d._id,"agg:"+d.aggregat);
+      (d.ergibt||[]).forEach(o=>{if(recByName(o.event))push("dec:"+d._id,rec(o.event));});
+      if(d.codeSrc)push(codeId(d.codeSrc),"dec:"+d._id);});
+    MODEL.applier.forEach(a=>{if(recByName(a.event))push(rec(a.event),"app:"+a._id);
+      if(a.aggregat)push("app:"+a._id,"agg:"+a.aggregat); if(a.codeSrc)push(codeId(a.codeSrc),"app:"+a._id);});
+    MODEL.states.forEach(s=>{if(s.aggregat)push("st:"+s._id,"agg:"+s.aggregat);});
+    MODEL.sagas.forEach(s=>{if(recByName(s.triggerEvent))push(rec(s.triggerEvent),"saga:"+s.name);});
+    MODEL.transitions.forEach(t=>{if(t.prozess)push("tr:"+t._id,"saga:"+t.prozess);
+      (t.wenn||[]).forEach(e=>{if(recByName(e))push(rec(e),"tr:"+t._id);});
+      (t.dann||[]).forEach(d=>{if(recByName(d.sende))push("tr:"+t._id,rec(d.sende));if(recByName(d.kompensation))push("tr:"+t._id,rec(d.kompensation));});});
+    MODEL.readModels.forEach(rm=>{const st=MODEL.stores.find(s=>s.name===rm.store);if(st)push("rm:"+rm._id,"sto:"+st._id);});
+    MODEL.stores.forEach(st=>(st.writeFns||[]).concat(st.readFns||[]).forEach(fn=>{if(fn.codeSrc)push(codeId(fn.codeSrc),"sto:"+st._id);}));
+    MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>{if(recByName(hd.event))push(rec(hd.event),"prj:"+p._id);
+      (hd.fns||[]).forEach(fid=>{const f=fnById(fid);if(f)push("prj:"+p._id,"sto:"+f.store._id);});
+      (hd.publishes||[]).forEach(ev=>{if(recByName(ev))push("prj:"+p._id,rec(ev));});
+      if(hd.codeSrc)push(codeId(hd.codeSrc),"prj:"+p._id);}));
+    MODEL.reader.forEach(r=>{const p=r.projektion&&MODEL.projektionen.find(x=>x.name===r.projektion);if(p)push("rdr:"+r._id,"prj:"+p._id);
+      (r.handles||[]).forEach(hd=>{if(recByName(hd.query))push(rec(hd.query),"rdr:"+r._id);
+        (hd.fns||[]).forEach(fid=>{const f=fnById(fid);if(f)push("rdr:"+r._id,"sto:"+f.store._id);});
+        (hd.responses||[]).forEach(resp=>{if(recByName(resp))push("rdr:"+r._id,rec(resp));});
+        if(hd.codeSrc)push(codeId(hd.codeSrc),"rdr:"+r._id);});});
+    MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>{if(recByName(hd.event))push(rec(hd.event),"rk:"+r._id);
+      (hd.sends||[]).forEach(c=>{if(recByName(c))push("rk:"+r._id,rec(c));});
+      (hd.publishes||[]).forEach(ev=>{if(recByName(ev))push("rk:"+r._id,rec(ev));});
+      if(hd.codeSrc)push(codeId(hd.codeSrc),"rk:"+r._id);}));
+    MODEL.pipelines.forEach(p=>{(p.handles||[]).forEach(hd=>{
+        if(hd.inputKind==="event"&&recByName(hd.event))push(rec(hd.event),"pl:"+p._id);
+        if(hd.inputKind==="trigger"){const pr=hd.prod||(hd.trigId?{k:"tg",id:hd.trigId}:null);
+          if(pr&&pr.k==="tg")push("tg:"+pr.id,"pl:"+p._id); else if(pr&&pr.k==="pl")push("pl:"+pr.plId,"pl:"+p._id);}
+        (hd.sends||[]).forEach(c=>{if(recByName(c))push("pl:"+p._id,rec(c));});
+        // ge-yieldeter Trigger → jede Pipeline, die diese Trigger-Nachricht als Eingang hat (die Kette).
+        (hd.emits||[]).forEach(tn=>MODEL.pipelines.forEach(q=>{if(q._id!==p._id)(q.handles||[]).forEach(qh=>{if(qh.inputKind==="trigger"&&qh.input===tn)push("pl:"+p._id,"pl:"+q._id);});}));
+        if(hd.codeSrc)push(codeId(hd.codeSrc),"pl:"+p._id);});
+      (p.dienste||[]).forEach(dn=>{const d=MODEL.dienste.find(x=>(x.vertrag||x.name)===dn);if(d)push("di:"+d._id,"pl:"+p._id);});});
+    MODEL.frists.forEach(f=>{(f.plant||[]).forEach(ev=>{if(recByName(ev))push(rec(ev),"fr:"+f._id);});
+      (f.storniert||[]).forEach(ev=>{if(recByName(ev))push(rec(ev),"fr:"+f._id);});
+      if(recByName(f.sendet))push("fr:"+f._id,rec(f.sendet));
+      if(f.dauerSetting){const hs=MODEL.hostSettings.find(x=>x.name===f.dauerSetting);if(hs)push("hs:"+hs._id,"fr:"+f._id);}});
+    MODEL.dienste.forEach(d=>{if(d.codeSrc)push(codeId(d.codeSrc),"di:"+d._id);});
+    // Betrieb: HostSetting → Konfigurations-Record (Feld) → Pipeline, die ihn per Konstruktor injiziert.
+    MODEL.hostSettings.forEach(hs=>{if(hs.konfig&&recByName(hs.konfig))push("hs:"+hs._id,rec(hs.konfig));});
+    MODEL.pipelines.forEach(p=>(p.konfigs||[]).forEach(k=>{if(recByName(k))push(rec(k),"pl:"+p._id);}));
+    // Store-API: Records in Fn-Parametern/-Rückgaben (Transfer-Typen wie ImagePairStatistik) gehören an ihren Store.
+    MODEL.stores.forEach(st=>(st.writeFns||[]).concat(st.readFns||[]).forEach(fn=>{
+      [fn.rueckgabe,...(fn.params||[]).map(x=>x.typ)].forEach(t=>((t||"").match(/[A-Za-z_]\w*/g)||[]).forEach(n=>{
+        const r=recByName(n);if(r&&r.kind!=="command")push(rec(n),"sto:"+st._id);}));}));
+    // Typ-Komposition: VO/Enum → Feld-Owner (Record/Aggregat/ReadModel/State).
+    const voN=new Set(MODEL.records.filter(r=>r.kind==="valueobject").map(r=>r.name)), enN=new Set(MODEL.enums.map(e=>e.name));
+    const ownerId=o=>MODEL.records.some(r=>r.name===o)?"rec:"+o:MODEL.aggregate.some(a=>a.name===o)?"agg:"+o
+      :(MODEL.readModels.find(rm=>rm.name===o)?"rm:"+MODEL.readModels.find(rm=>rm.name===o)._id
+      :(MODEL.states.some(s=>s._id===o)?"st:"+o:null));
+    alleFelder().forEach(({owner,f})=>{const bt=innerTyp(f.typ),oid=ownerId(owner);if(!oid)return;
+      if(voN.has(bt))push("rec:"+bt,oid); else if(enN.has(bt))push("enum:"+bt,oid);});
+    return E;
+  }
+  // Diagnose/Prüf-Skripte: Knoten + Kanten des Boards (dieselbe Wahrheit wie Layout und Insel-Erkennung).
+  window.deGraph=()=>({knoten:graphNodes().map(n=>({id:n.id,kind:n.kind,name:n.name})),kanten:boardEdges()});
+  // Zusammenhangskomponenten (Union-Find) über graphNodes + boardEdges → Map(nodeId → Wurzel-Id).
+  function components(){
+    const p={}, find=x=>{while(p[x]!==x){p[x]=p[p[x]];x=p[x];}return x;};
+    graphNodes().forEach(n=>p[n.id]=n.id);
+    boardEdges().forEach(([a,b])=>{if(p[a]!==undefined&&p[b]!==undefined){const ra=find(a),rb=find(b);if(ra!==rb)p[ra]=rb;}});
+    const m=new Map();graphNodes().forEach(n=>m.set(n.id,find(n.id)));return m;
+  }
+  // Inseln = Knoten in winzigen Komponenten (≤2) OHNE Aggregat — die „einsamen" / unverdrahteten.
+  const ISLE_MAX=2;
+  function islandInfo(){
+    const comp=components(), all=graphNodes(), byC=new Map();
+    all.forEach(n=>{const c=comp.get(n.id);if(!byC.has(c))byC.set(c,[]);byC.get(c).push(n);});
+    const ids=new Set();
+    byC.forEach(nodes=>{const fach=nodes.filter(n=>n.kind!=="codenode"&&n.kind!=="llmnode");
+      if(fach.length<=ISLE_MAX && !fach.some(n=>n.kind==="aggregate"))fach.forEach(n=>ids.add(n.id));});
+    return {comp,byC,ids};
+  }
+  // Aggregat-Untergruppe (oder null = Brücke: cross-cutting, gehört keinem Aggregat).
+  function subGroupOf(n){const g=groupKeyOf(n);return g===SHARED_KEY?null:g;}
+
+  function groupKeyOf(n){
+    const k=n.kind, r=n.ref;
+    if(k==="aggregate") return r.name;
+    if(k==="state") return r.aggregat||SHARED_KEY;
+    if(k==="decider"||k==="applier") return r.aggregat||SHARED_KEY;
+    if(k==="command"||k==="event"||k==="rejection") return recordAgg(r.name)||SHARED_KEY;
+    if(k==="valueobject"||k==="enum") return typAgg(r.name)||SHARED_KEY;
+    if(k==="projektion"){const a=(r.handles||[]).map(h=>recordAgg(h.event));return (a.length&&eindeutig(a))||SHARED_KEY;}
+    if(k==="reader"){const p=r.projektion&&MODEL.projektionen.find(x=>x.name===r.projektion);return (p&&groupKeyOf({kind:"projektion",ref:p}))||SHARED_KEY;}
+    if(k==="query"){const rd=MODEL.reader.find(x=>(x.handles||[]).some(h=>h.query===r.name));return (rd&&groupKeyOf({kind:"reader",ref:rd}))||SHARED_KEY;}
+    if(k==="queryresponse"){const rd=MODEL.reader.find(x=>(x.handles||[]).some(h=>(h.responses||[]).includes(r.name)));return (rd&&groupKeyOf({kind:"reader",ref:rd}))||SHARED_KEY;}
+    if(k==="store"){const u=MODEL.projektionen.find(p=>derivedStores(p).includes(r.name))||MODEL.reader.find(rd=>derivedStores(rd).includes(r.name));
+      if(u)return groupKeyOf({kind:MODEL.projektionen.includes(u)?"projektion":"reader",ref:u});
+      return SHARED_KEY;} // kein Handle→Fn verdrahtet: gehört (noch) keinem Aggregat
+    if(k==="readmodel"){const st=MODEL.stores.find(s=>s.name===r.store);return st?groupKeyOf({kind:"store",ref:st}):SHARED_KEY;}
+    if(k==="codenode"||k==="llmnode"){const o=findCodeOwner(r._id);return o?groupKeyOf(o):SHARED_KEY;}
+    return SHARED_KEY; // saga, transition, pipeline, trigger, reaktion
+  }
+  // ── MESS-BASIERTES PACKING: nach dem Rendern die ECHTEN Knotengrößen messen und die Aggregat-
+  //    Blöcke ÜBERLAPPUNGSFREI per Shelf-Packing setzen. Nur frische/Seed-Boards (alle x/y leer);
+  //    vollständig arrangierte Boards (Handanordnung) bleiben unberührt. Zwei Ebenen:
+  //    (1) im Block: Rollen→Spalten, Spaltenbreite = max. gemessene Knotenbreite, Stapeln nach echter Höhe.
+  //    (2) Blöcke: Shelf-Packing mit echten Block-Maßen → keine Domäne überlappt eine andere.
+  function packLayout(force){
+    if(!world)return;
+    const all=graphNodes().filter(n=>VIS.has(n.id));   // nur was gezeichnet wird (eingeklappte Details liegen im Besitzer)
+    if(!all.length)return;
+    const setze=(n,x,y)=>{const p=P(n);p.x=Math.round(x);p.y=Math.round(y);
+      const el=world.querySelector('[data-id="'+n.id+'"]');if(el){el.style.left=p.x+"px";el.style.top=p.y+"px";}};
+    // Echte Knotengrößen EINMAL aus dem DOM messen (Position-unabhängig) → Karte id→{w,h}.
+    const dim=new Map();
+    world.querySelectorAll(".gnode2").forEach(el=>{dim.set(el.dataset.id,{w:el.offsetWidth||280,h:el.offsetHeight||120});});
+    const sz=n=>dim.get(n.id)||{w:280,h:120};
+    const positioned=n=>{const p=P(n);return typeof p.x==="number"&&typeof p.y==="number";};
+    // Wenige Knoten ohne Position (neu sichtbar, z. B. Details eingeblendet): neben einen platzierten Nachbarn legen
+    //   statt das ganze Board neu zu würfeln. Viele ohne Position → unten komplett neu packen.
+    const ohne=all.filter(n=>!positioned(n));
+    if(!force&&ohne.length&&ohne.length<all.length*0.3){let off=0;
+      ohne.forEach(n=>{const nb=[...(ADJ.out.get(n.id)||[]),...(ADJ.inn.get(n.id)||[])].map(id=>NODEBY.get(vertreterId(id))).find(m=>m&&m!==n&&VIS.has(m.id)&&positioned(m));
+        if(nb){const p=P(nb),s=sz(nb);setze(n,p.x+s.w+60,p.y+(off%4)*40);}else{const s=spawnPos();setze(n,s.x,s.y);}off++;});}
+    // Wie viele Knotenpaare überlappen aktuell deutlich? (früher Abbruch, sobald „viele").
+    const overlaps=()=>{const b=all.map(n=>{const s=sz(n),p=P(n);return {x:p.x||0,y:p.y||0,w:s.w,h:s.h};});let c=0;
+      for(let i=0;i<b.length;i++)for(let j=i+1;j<b.length;j++){const A=b[i],B=b[j];
+        if(Math.min(A.x+A.w,B.x+B.w)-Math.max(A.x,B.x)>16 && Math.min(A.y+A.h,B.y+B.h)-Math.max(A.y,B.y)>16){if(++c>all.length)return c;}}
+      return c;};
+    // Ein arrangiertes Board (Handanordnung) NICHT neu würfeln — AUSSER es überlappt grob (alter/kaputter
+    // Stand aus localStorage/board-model.json → heilen). „▦ Neu anordnen" ruft mit force=true.
+    if(!force && all.some(positioned) && overlaps() < Math.max(3, Math.floor(all.length*0.12))) return;
+
+    const COLGAP=48,ROWGAP=26,SHELFGAP=150,COMPGAP=240;
+    const isCode=n=>n.kind==="codenode"||n.kind==="llmnode";
+    // Ein Aggregat-/Brücken-BLOCK: Rollen→Spalten (+ Code-Bänder rechts) → relative Positionen + Box.
+    const layoutBlock=(nodes,roleMap)=>{
+      const rest=nodes.filter(n=>!isCode(n)), codes=nodes.filter(isCode);
+      const codeByOwner=new Map(); const orphan=[];
+      codes.forEach(cn=>{const o=findCodeOwner(cn.ref._id);
+        if(o){if(!codeByOwner.has(o.ref))codeByOwner.set(o.ref,[]);codeByOwner.get(o.ref).push(cn);}else orphan.push(cn);});
+      const rawOf=n=>roleMap[n.kind]!==undefined?roleMap[n.kind]:99;
+      const colRoles=[...new Set(rest.map(rawOf))].sort((a,b)=>a-b);
+      const byRole=new Map(colRoles.map(r=>[r,[]]));
+      rest.forEach(n=>{const s=sz(n);byRole.get(rawOf(n)).push({n,w:s.w,h:s.h});});
+      let cx=0,hh=0;const placed=[];
+      colRoles.forEach(role=>{const list=byRole.get(role);const w=Math.max(120,...list.map(e=>e.w));
+        let y=0;const owners=[];
+        list.forEach(e=>{placed.push({n:e.n,rx:cx,ry:y});owners.push({ref:e.n.ref,ry:y});y+=e.h+ROWGAP;});
+        hh=Math.max(hh,y-ROWGAP);cx+=w+COLGAP;
+        const sub=[];owners.forEach(o=>{const cs=codeByOwner.get(o.ref);if(cs)cs.forEach(cn=>sub.push({cn,wantY:o.ry,ch:sz(cn).h}));});
+        if(sub.length){sub.sort((a,b)=>a.wantY-b.wantY);let cw=120,cursor=0;
+          sub.forEach(it=>{cw=Math.max(cw,sz(it.cn).w);const yy=Math.max(it.wantY,cursor);
+            placed.push({n:it.cn,rx:cx,ry:yy});cursor=yy+it.ch+ROWGAP;hh=Math.max(hh,yy+it.ch);});cx+=cw+COLGAP;}});
+      if(orphan.length){let cw=120,y=0;orphan.forEach(cn=>{const s=sz(cn);cw=Math.max(cw,s.w);
+        placed.push({n:cn,rx:cx,ry:y});y+=s.h+ROWGAP;hh=Math.max(hh,y-ROWGAP);});cx+=cw+COLGAP;}
+      return {placed,w:Math.max(0,cx-COLGAP),h:Math.max(0,hh)};
+    };
+    // Shelf-Packing über {w,h,…}-Boxen; setzt rx/ry; liefert Gesamtmaße.
+    const shelf=(boxes,gap,factor)=>{const area=boxes.reduce((s,b)=>s+b.w*b.h,0),maxW=Math.max(1,...boxes.map(b=>b.w));
+      const ROWW=Math.max(maxW,Math.sqrt(area)*(factor||1.2));let cx=0,ry=0,rh=0,tw=0;
+      boxes.forEach(b=>{if(cx>0&&cx+b.w>ROWW){ry+=rh+gap;cx=0;rh=0;}b.rx=cx;b.ry=ry;cx+=b.w+gap;rh=Math.max(rh,b.h);tw=Math.max(tw,cx-gap);});
+      return {w:tw,h:ry+rh};};
+    // Eine KOMPONENTE: Aggregat-Blöcke (ROLE_AGG) + EIN Brücken-Block (ROLE_SHARED, cross-cutting), intern gepackt.
+    const layoutComp=(nodes)=>{
+      const subs=new Map();nodes.forEach(n=>{const s=subGroupOf(n)||SHARED_KEY;if(!subs.has(s))subs.set(s,[]);subs.get(s).push(n);});
+      const aggKeys=[...subs.keys()].filter(k=>k!==SHARED_KEY).sort();
+      const blocks=aggKeys.map(k=>layoutBlock(subs.get(k),ROLE_AGG));
+      if(subs.has(SHARED_KEY))blocks.push(layoutBlock(subs.get(SHARED_KEY),ROLE_SHARED));
+      const d=shelf(blocks,SHELFGAP,1.35);
+      const placed=[];blocks.forEach(b=>b.placed.forEach(p=>placed.push({n:p.n,rx:b.rx+p.rx,ry:b.ry+p.ry})));
+      return {placed,w:d.w,h:d.h};
+    };
+    // Komponenten bilden; Inseln (winzige Komponenten ohne Aggregat) aussortieren.
+    const {byC}=islandInfo();
+    const islandNodes=[],mainComps=[];
+    byC.forEach(alle=>{const nodes=alle.filter(n=>VIS.has(n.id));if(!nodes.length)return;
+      if(alle.length<=ISLE_MAX && !alle.some(n=>n.kind==="aggregate")) islandNodes.push(...nodes); else mainComps.push(nodes); });
+    // Jede Haupt-Komponente → Region-Box, nach Fläche absteigend (größtes Subsystem zuerst), dann shelf-gepackt.
+    const regions=mainComps.map(nodes=>layoutComp(nodes)).sort((a,b)=>b.w*b.h-a.w*a.h);
+    const total=shelf(regions,COMPGAP,1.05);
+    // Region-Knoten platzieren (absolut = Region-Ursprung + Block-Offset + relative Position).
+    regions.forEach(d=>d.placed.forEach(p=>setze(p.n,d.rx+p.rx,d.ry+p.ry)));
+    // Inseln: kompakte Gitter-Zeile ganz unten (die „einsamen"/unverdrahteten Knoten).
+    if(islandNodes.length){const IW=Math.max(700,total.w);let ix=0,iy=total.h+COMPGAP,rh=0;
+      islandNodes.forEach(n=>{const s=sz(n);if(ix>0&&ix+s.w>IW){iy+=rh+ROWGAP;ix=0;rh=0;}
+        setze(n,ix,iy);ix+=s.w+COLGAP;rh=Math.max(rh,s.h);});}
+    if(VIEW.kompakt)speichereKpos();
+  }
+  // Eingeklappt? Kompakt-Ansicht: standardmäßig zu (nur `_offen` klappt auf); Voll-Ansicht: nur `_collapsed` klappt zu.
+  const istZu=n=>VIEW.kompakt?!n.ref._offen:!!n.ref._collapsed;
   function nodeEditor(n){
-    const el=h("div",{class:"gnode2 n-"+n.kind+(n.ref._collapsed?" collapsed":"")});el.dataset.id=n.id;
-    el.style.left=(n.ref.x||0)+"px";el.style.top=(n.ref.y||0)+"px";
+    const zu=istZu(n);
+    const el=h("div",{class:"gnode2 n-"+n.kind+(zu?" collapsed":"")+(ISLE.has(n.id)?" island":"")
+      +(n.ref.ungeschrieben?" ungeschrieben":(n.ref.ausCode===false||(n.ref.ausCode===undefined&&MERGE_KEYS[kollektionVon(n.kind)])?" entwurf":""))});el.dataset.id=n.id;
+    const pos=P(n);el.style.left=(pos.x||0)+"px";el.style.top=(pos.y||0)+"px";
     const title=NODELABEL[n.kind]||n.kind;
     const head=h("div",{class:"ghead"},
-      h("span",{class:"gcol",title:"Ein-/Ausklappen",onclick:()=>{n.ref._collapsed=!n.ref._collapsed;render();}},n.ref._collapsed?"▸":"▾"),
-      h("span",{class:"gtitle"},title+(n.name?" · "+n.name:"")),
+      h("span",{class:"gcol",title:"Ein-/Ausklappen",onclick:()=>{if(VIEW.kompakt)n.ref._offen=!n.ref._offen;else n.ref._collapsed=!n.ref._collapsed;render();}},zu?"▸":"▾"),
+      h("span",{class:"gtitle"+(n.name?" hatname":""),title:title+(n.name?" · "+n.name:"")},h("span",{class:"gk"},title+(n.name?" · ":"")),h("span",{class:"gn"},n.name||"")),
       h("span",{class:"gx",title:"Löschen",onclick:()=>delNode(n)},"✕"));
-    head.onpointerdown=e=>{if(e.target.classList.contains("gx")||e.target.classList.contains("gcol"))return;startMove(e,el,n.ref);};
+    head.onpointerdown=e=>{if(e.target.classList.contains("gx")||e.target.classList.contains("gcol"))return;startMove(e,el,P(n),()=>waehle(n.id));};
     el.append(head);
+    el.append(kurzfassung(n));
     const body=h("div",{class:"gbody"});
+    fuelleKoerper(body,n);
+    el.append(body);return el;
+  }
+  // Der Formular-Körper eines Knotens — auf der Fläche (aufgeklappt) UND im Inspector derselbe.
+  function fuelleKoerper(body,n){
     if(n.kind==="aggregate")aggStateCard(body,n.ref);
     else if(n.kind==="state")stateCard(body,n.ref);
     else if(n.kind==="decider")deciderCard(body,n.ref);
@@ -1477,10 +1508,12 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     else if(n.kind==="reaktion")reaktionCard(body,n.ref);
     else if(n.kind==="pipeline")pipelineCard(body,n.ref);
     else if(n.kind==="trigger")triggerCard(body,n.ref);
+    else if(n.kind==="frist")fristCard(body,n.ref);
+    else if(n.kind==="dienst")dienstCard(body,n.ref);
+    else if(n.kind==="hostsetting")hostSettingCard(body,n.ref);
     else if(n.kind==="codenode")codeNodeCard(body,n.ref);
     else if(n.kind==="llmnode")llmNodeCard(body,n.ref);
     else recordCard(body,n.ref);
-    el.append(body);return el;
   }
   function delNode(n){const k=n.kind,ref=n.ref;
     if(k==="aggregate")MODEL.aggregate.splice(MODEL.aggregate.indexOf(ref),1);
@@ -1497,13 +1530,95 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     else if(k==="reaktion")MODEL.reaktionen.splice(MODEL.reaktionen.indexOf(ref),1);
     else if(k==="pipeline")MODEL.pipelines.splice(MODEL.pipelines.indexOf(ref),1);
     else if(k==="trigger")MODEL.triggers.splice(MODEL.triggers.indexOf(ref),1);
+    else if(k==="frist")MODEL.frists.splice(MODEL.frists.indexOf(ref),1);
+    else if(k==="dienst")MODEL.dienste.splice(MODEL.dienste.indexOf(ref),1);
+    else if(k==="hostsetting")MODEL.hostSettings.splice(MODEL.hostSettings.indexOf(ref),1);
     else if(k==="codenode")MODEL.codeNodes.splice(MODEL.codeNodes.indexOf(ref),1);
     else if(k==="llmnode")MODEL.llmNodes.splice(MODEL.llmNodes.indexOf(ref),1);
     else MODEL.records.splice(MODEL.records.indexOf(ref),1);
     render();}
 
   // Koordinaten: Welt = unskaliert; canvas = Bildschirm.
-  function applyPan(){if(world)world.style.transform="translate("+PAN.x+"px,"+PAN.y+"px) scale("+PAN.s+")";}
+  function applyPan(){if(world)world.style.transform="translate("+PAN.x+"px,"+PAN.y+"px) scale("+PAN.s+")";updateMinimapViewport();pruefeLod();}
+
+  // ── DOMÄNEN-FILTER ────────────────────────────────────────────────────────────────────────
+  function allDomains(){
+    const counts=new Map();
+    graphNodes().forEach(n=>{const g=groupKeyOf(n);counts.set(g,(counts.get(g)||0)+1);});
+    const order=MODEL.aggregate.map(a=>a.name).filter(k=>counts.has(k));
+    [...counts.keys()].filter(k=>k!==SHARED_KEY&&!order.includes(k)).sort().forEach(k=>order.push(k));
+    if(counts.has(SHARED_KEY))order.push(SHARED_KEY);
+    return order.map(k=>({key:k,label:k===SHARED_KEY?"⋯ Geteilt":k,count:counts.get(k)}));
+  }
+  window.deFilter=function(){FILTER_OPEN=!FILTER_OPEN;renderFilterPanel();};
+  function renderFilterPanel(){
+    if(!canvas)return;
+    const old=canvas.querySelector(".gfilter");if(old)old.remove();
+    if(!FILTER_OPEN)return;
+    const p=h("div",{class:"gfilter"});
+    p.append(h("h4",{},h("span",{},"Domänen anzeigen"),
+      h("span",{style:"cursor:pointer;color:#8a93a7",title:"Schließen",onclick:()=>{FILTER_OPEN=false;renderFilterPanel();}},"✕")));
+    p.append(h("div",{class:"mm-q"},
+      h("button",{onclick:()=>{HIDDEN.clear();saveHidden();render();}},"Alle"),
+      h("button",{onclick:()=>{allDomains().forEach(d=>HIDDEN.add(d.key));saveHidden();render();}},"Keine")));
+    allDomains().forEach(d=>{
+      const cb=h("input",{type:"checkbox"});cb.checked=!HIDDEN.has(d.key);
+      cb.onchange=()=>{if(cb.checked)HIDDEN.delete(d.key);else HIDDEN.add(d.key);saveHidden();render();};
+      const sw=h("i",{style:"width:9px;height:9px;border-radius:2px;flex:none;background:hsl("+domHue(d.key)+" 45% 55%)"});
+      p.append(h("label",{},cb,sw,h("span",{style:"flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"},d.label),
+        h("span",{style:"color:#6b7488"},String(d.count))));
+    });
+    p.onpointerdown=e=>e.stopPropagation();
+    p.ondblclick=e=>e.stopPropagation();
+    canvas.append(p);
+  }
+
+  // ── MINIMAP (klickbar, zeigt den aktuellen Viewport) ──────────────────────────────────────
+  function buildMinimap(cv){
+    const box=h("div",{class:"gminimap",title:"Minimap — klicken/ziehen zum Springen"});
+    const s=document.createElementNS(SVGNS,"svg");box.append(s);
+    cv.append(box);
+    MM={box:box,svg:s,vp:null,scale:1,minx:0,miny:0};
+    const jump=ev=>{const r=box.getBoundingClientRect();
+      const wx=MM.minx+(ev.clientX-r.left)/MM.scale, wy=MM.miny+(ev.clientY-r.top)/MM.scale;
+      const cr=canvas.getBoundingClientRect();PAN.x=cr.width/2-wx*PAN.s;PAN.y=cr.height/2-wy*PAN.s;applyPan();};
+    let drag=false;
+    box.addEventListener("pointerdown",e=>{e.stopPropagation();e.preventDefault();drag=true;try{box.setPointerCapture(e.pointerId);}catch(x){}jump(e);});
+    box.addEventListener("pointermove",e=>{if(drag)jump(e);});
+    box.addEventListener("pointerup",()=>{drag=false;});
+    box.addEventListener("dblclick",e=>e.stopPropagation());
+  }
+  function drawMinimap(){
+    if(!MM||!MM.svg||!world)return;
+    while(MM.svg.firstChild)MM.svg.removeChild(MM.svg.firstChild);
+    const vis=graphNodes().filter(n=>VIS.has(n.id));
+    const boxes=vis.map(n=>{const el=world.querySelector('[data-id="'+n.id+'"]'),p=P(n);
+      return {x:p.x||0,y:p.y||0,w:(el&&el.offsetWidth)||250,h:(el&&el.offsetHeight)||120,key:groupKeyOf(n),kind:n.kind};});
+    if(!boxes.length){MM.vp=null;return;}
+    let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
+    boxes.forEach(b=>{minx=Math.min(minx,b.x);miny=Math.min(miny,b.y);maxx=Math.max(maxx,b.x+b.w);maxy=Math.max(maxy,b.y+b.h);});
+    const pad=100;minx-=pad;miny-=pad;maxx+=pad;maxy+=pad;
+    const r=MM.box.getBoundingClientRect();const mmW=r.width||212, mmH=r.height||150;
+    const scale=Math.min(mmW/(maxx-minx), mmH/(maxy-miny));
+    MM.scale=scale;MM.minx=minx;MM.miny=miny;
+    MM.svg.setAttribute("viewBox","0 0 "+mmW+" "+mmH);
+    const frag=document.createDocumentFragment();
+    boxes.forEach(b=>{const el=document.createElementNS(SVGNS,"rect");
+      el.setAttribute("x",((b.x-minx)*scale).toFixed(1));el.setAttribute("y",((b.y-miny)*scale).toFixed(1));
+      el.setAttribute("width",Math.max(1,b.w*scale).toFixed(1));el.setAttribute("height",Math.max(1,b.h*scale).toFixed(1));
+      el.setAttribute("rx","1");el.setAttribute("fill","hsl("+domHue(b.key)+" 45% 56%)");el.setAttribute("opacity",".85");
+      el.setAttribute("data-kind",b.kind);if(HLKIND&&b.kind===HLKIND)el.classList.add("mmhi");frag.append(el);});
+    const vp=document.createElementNS(SVGNS,"rect");vp.setAttribute("class","mmvp");frag.append(vp);
+    MM.svg.append(frag);MM.vp=vp;updateMinimapViewport();
+  }
+  function updateMinimapViewport(){
+    if(!MM||!MM.vp||!canvas)return;
+    const cr=canvas.getBoundingClientRect();if(!cr.width)return;
+    MM.vp.setAttribute("x",((-PAN.x/PAN.s-MM.minx)*MM.scale).toFixed(1));
+    MM.vp.setAttribute("y",((-PAN.y/PAN.s-MM.miny)*MM.scale).toFixed(1));
+    MM.vp.setAttribute("width",Math.max(3,(cr.width/PAN.s)*MM.scale).toFixed(1));
+    MM.vp.setAttribute("height",Math.max(3,(cr.height/PAN.s)*MM.scale).toFixed(1));
+  }
   function toWorld(cx,cy){const r=canvas.getBoundingClientRect();return {x:(cx-r.left-PAN.x)/PAN.s,y:(cy-r.top-PAN.y)/PAN.s};}
   function slotCenter(el){const wr=world.getBoundingClientRect(),r=el.getBoundingClientRect();
     return {x:(r.left+r.width/2-wr.left)/PAN.s,y:(r.top+r.height/2-wr.top)/PAN.s};}
@@ -1545,6 +1660,8 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     else if(O.type==="prozess"){const t=MODEL.transitions.find(x=>x._id===O.trans);if(t)t.prozess=I.saga;}
     else if(O.type==="evtUse"){
       if(I.app){const p=app(I.app);if(p)p.event=O.rec;}
+      // Event → Frist: plant / storniert (die Drei-End-Relation der Composition-Root-Frist).
+      else if(I.frist){const f=MODEL.frists.find(x=>x._id===I.frist);if(f){const arr=I.role==="storniert"?(f.storniert=f.storniert||[]):(f.plant=f.plant||[]);if(!arr.includes(O.rec))arr.push(O.rec);}}
       else if(I.proj){const p=MODEL.projektionen.find(x=>x._id===I.proj);if(p){p.handles=p.handles||[];
         if(I.handleIdx==="open"){if(!p.handles.some(x=>x.event===O.rec))p.handles.push({event:O.rec,effekt:""});}
         else p.handles[I.handleIdx].event=O.rec;}}
@@ -1561,7 +1678,11 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     else if(O.type==="sagaCmd"){
       if(O.reaktion){const r=MODEL.reaktionen.find(x=>x._id===O.reaktion);const hd=r&&r.handles[O.handleIdx];if(hd){hd.sends=hd.sends||[];if(!hd.sends.includes(I.rec))hd.sends.push(I.rec);}}
       else if(O.pipeline){const p=MODEL.pipelines.find(x=>x._id===O.pipeline);const hd=p&&p.handles[O.handleIdx];if(hd){hd.sends=hd.sends||[];if(!hd.sends.includes(I.rec))hd.sends.push(I.rec);}}
-      else{const t=MODEL.transitions.find(x=>x._id===O.trans);const d=t&&(t.dann||[])[O.dannIdx];if(d){if(O.role==="komp")d.kompensation=I.rec;else d.sende=I.rec;}}}
+      // Frist fällig → genau ein Command @ Aggregat (der AddDeadlines-Router: Kontext → Command).
+      else if(O.frist){const f=MODEL.frists.find(x=>x._id===O.frist);if(f){f.sendet=I.rec;f.aggregat=recordAgg(I.rec)||f.aggregat;}}
+      else{const t=MODEL.transitions.find(x=>x._id===O.trans);const d=t&&(t.dann||[])[O.dannIdx];if(d){
+        if(O.role==="komp"){if(d.kompensation!==I.rec)delete d.kompensationAusdruck;d.kompensation=I.rec;}
+        else{if(d.sende!==I.rec)delete d.sendeAusdruck;d.sende=I.rec;}}}}
     // Trigger-Msg → Pipeline-Handle: Quelle = Trigger-Ingress-Node (O.trigId) ODER eine andere Pipeline, die
     //   den Trigger yieldet (O.pipeline). Producer-Ref bleibt rename-fest.
     else if(O.type==="trigmsg"){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p){p.handles=p.handles||[];
@@ -1591,6 +1712,12 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
     // OneOf-Response: mehrere Antworten je Query → anhängen (dedup), gespiegelt zu decider.ergibt.
     else if(O.type==="qrsp"){const r=MODEL.reader.find(x=>x._id===O.reader);const hd=r&&r.handles[O.handleIdx];if(hd){hd.responses=hd.responses||[];if(!hd.responses.includes(I.rec))hd.responses.push(I.rec);}}
     else if(O.type==="code"){setCodeSrc(I.target,O.codeNode);}
+    // 🤖 LLM-Prompt-Node → Code-Block-Eingang: die LLM-Node wird zur Prompt-Quelle dieses Blocks.
+    else if(O.type==="prompt"){const l=MODEL.llmNodes.find(x=>x._id===O.llm);if(l&&I.codeBlock)l.promptZiel=I.codeBlock;}
+    // HostSetting → Frist-Dauer (später auch Trigger-Config): der Wert speist die Fälligkeit.
+    else if(O.type==="setting"){const nm=(MODEL.hostSettings.find(x=>x._id===O.hostSetting)||{}).name;if(I.frist){const f=MODEL.frists.find(x=>x._id===I.frist);if(f)f.dauerSetting=nm;}}
+    // Dienst-Vertrag → Konsument (Konstruktor-Injektion): den Vertrag der Dienst-Liste hinzufügen.
+    else if(O.type==="dienst"){const dn=MODEL.dienste.find(x=>x._id===O.dienst)||{};const nm=dn.vertrag||dn.name;if(I.pipeline){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p){p.dienste=p.dienste||[];if(!p.dienste.includes(nm))p.dienste.push(nm);}}}
     // Typ-Komposition: VO/Enum-Quelle → Feld-Typ-Eingang → setzt den Feldtyp (Wrapper bleibt erhalten).
     else if(O.type==="ftype"){if(I.fobj)setFeldTyp(I.fobj,O.typeName);}
     // Feld-Port → Konsument (verdrahtet statt Dropdown): Fan-out-Collection (want=collection). (Σ/Count-Join entfernt.)
@@ -1604,9 +1731,13 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   }
 
   // Kanten aus dem MODEL zeichnen (Slot-Mitte → Slot-Mitte; eingeklappt → an den Kopf).
-  function anchor(el){if(el.offsetParent!==null)return slotCenter(el);const nd=el.closest(".gnode2");const hd=nd&&nd.querySelector(".ghead");return hd?slotCenter(hd):slotCenter(el);}
+  //   Eingeklappt: an die passende KOPF-SEITE (Ausgang rechts, Eingang links, oben mittig) statt in die Kopfmitte.
+  function anchor(el){if(el.offsetParent!==null)return slotCenter(el);const nd=el.closest(".gnode2");const hd=nd&&nd.querySelector(".ghead");
+    if(!hd)return slotCenter(el);const d=sdir(el),y=nd.offsetTop+hd.offsetHeight/2;
+    if(d>0)return {x:nd.offsetLeft+nd.offsetWidth,y};if(d<0)return {x:nd.offsetLeft,y};return {x:nd.offsetLeft+nd.offsetWidth/2,y:nd.offsetTop};}
   // Anschlussseite eines Slots: rechts (.o)=+1, links (.i)=-1, oben/sonst=0.
   const sdir=el=>el&&el.classList.contains("o")?1:(el&&el.classList.contains("i")?-1:0);
+  const knotenIdVon=el=>{const g=el&&el.closest(".gnode2");return g?g.dataset.id:"";};
   function drawEdges(){
     if(!svg)return;[...svg.querySelectorAll(".glink:not(.tmp)")].forEach(p=>p.remove());
     if(svgTop)[...svgTop.querySelectorAll(".glink")].forEach(p=>p.remove());
@@ -1615,9 +1746,10 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
       const p=document.createElementNS(SVGNS,"path");p.setAttribute("class","glink"+(cls?" "+cls:""));p.setAttribute("fill","none");
       p.setAttribute("stroke",color);p.setAttribute("stroke-width","2.2");if(dash)p.setAttribute("stroke-dasharray","5 4");
       if(ds){p.dataset.dec=ds[0];p.dataset.app=ds[1];}
-      p.setAttribute("d","M"+A.x+","+A.y+" C"+(A.x+da*dx)+","+A.y+" "+(B.x+db*dx)+","+B.y+" "+B.x+","+B.y);(tgt||svg).append(p);};
+      p.setAttribute("d","M"+A.x+","+A.y+" C"+(A.x+da*dx)+","+A.y+" "+(B.x+db*dx)+","+B.y+" "+B.x+","+B.y);(tgt||svg).append(p);return p;};
     const add=(k1,k2,color,dash)=>{const a=SLOTS[k1],b=SLOTS[k2];if(!a||!b)return;const A=anchor(a),B=anchor(b);
-      let da=sdir(a),db=sdir(b);if(!da)da=B.x>=A.x?1:-1;if(!db)db=A.x>=B.x?1:-1;mk(A,B,da,db,color,dash);};
+      let da=sdir(a),db=sdir(b);if(!da)da=B.x>=A.x?1:-1;if(!db)db=A.x>=B.x?1:-1;
+      const p=mk(A,B,da,db,color,dash);p.dataset.a=knotenIdVon(a);p.dataset.b=knotenIdVon(b);};
     MODEL.decider.forEach(d=>{
       if(d.command)add("cmd:out:"+d.command,"dec:cmdin:"+d._id,"#4a86d6");
       if(d.aggregat)add("dec:aggout:"+d._id,"agg:left:"+d.aggregat+":"+d._id,"#33b1a6",true);
@@ -1635,7 +1767,8 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
       const dl=MODEL.decider.filter(d=>d.aggregat===a.name), al=MODEL.applier.filter(p=>p.aggregat===a.name);
       dl.forEach(d=>(d.ergibt||[]).forEach(o=>al.filter(p=>p.event===o.event).forEach(p=>{
         const x=SLOTS["agg:left:"+a.name+":"+d._id], y=SLOTS["agg:right:"+a.name+":"+p._id];if(!x||!y)return;
-        mk(anchor(x),anchor(y),1,-1,"#7f8aa0",false,"internal",[d._id,p._id],svgTop);})));
+        if(x.offsetParent===null||y.offsetParent===null)return;   // Aggregat eingeklappt: keine Linie im Kopf
+        const l=mk(anchor(x),anchor(y),1,-1,"#7f8aa0",false,"internal",[d._id,p._id],svgTop);l.dataset.a="dec:"+d._id;l.dataset.b="app:"+p._id;})));
     });
     // Prozess-Hub: Auslöser-Event → Prozess.
     MODEL.sagas.forEach(s=>{if(s.triggerEvent)add("evt:out:"+s.triggerEvent,"saga:trigger:"+s.name,"#9d78d6");});
@@ -1690,61 +1823,319 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
       else if(hd.inputKind==="event"&&hd.event)add("evt:out:"+hd.event,"pl:in:"+p._id+":"+hi,"#4fb06a");
       // yield ICommand.
       (hd.sends||[]).forEach(c=>{if(c)add("pl:send:"+p._id+":"+hi+":"+c,"cmd:in:"+c,"#4a86d6");});
+      // yield IPipelineTrigger → verbrauchende Pipeline (die Kette, z. B. FileWatch → ImageProcessing).
+      (hd.emits||[]).forEach(tn=>MODEL.pipelines.forEach(q=>{if(q._id!==p._id)(q.handles||[]).forEach((qh,qi)=>{if(qh.inputKind==="trigger"&&qh.input===tn)add("pl:emit:"+p._id+":"+hi+":"+tn,"pl:in:"+q._id+":"+qi,"#f0883e");});}));
       // ScheduleSelf → passender Self-Handle (Name-Match), gestrichelter Loop.
       (hd.schedules||[]).forEach(sc=>{const ti=(p.handles||[]).findIndex(x=>x.inputKind==="self"&&x.selfName===sc.name);
         if(ti>=0)add("pl:sched:"+p._id+":"+hi+":"+sc.name,"pl:in:"+p._id+":"+ti,"#c98a3a",true);});
       if(hd.codeSrc)add("code:out:"+hd.codeSrc,"plctrl:in:"+p._id+":"+hi,CODE,true);});});
+    // ── Betrieb/Host (Composition Root): Frist-Drei-End-Relation + Dienst-Bindung. ──
+    MODEL.frists.forEach(f=>{
+      (f.plant||[]).forEach(ev=>{if(ev)add("evt:out:"+ev,"fr:plant:"+f._id+":"+ev,"#4fb06a");});
+      (f.storniert||[]).forEach(ev=>{if(ev)add("evt:out:"+ev,"fr:cancel:"+f._id+":"+ev,"#cf6f68",true);});
+      if(f.sendet)add("fr:send:"+f._id,"cmd:in:"+f.sendet,"#4a86d6");
+      if(f.dauerSetting){const hs=MODEL.hostSettings.find(x=>x.name===f.dauerSetting);if(hs)add("hs:wert:"+hs._id,"fr:dauer:"+f._id,"#c98a3a",true);}
+    });
+    MODEL.pipelines.forEach(p=>(p.dienste||[]).forEach(dn=>{const d=MODEL.dienste.find(x=>(x.vertrag||x.name)===dn);if(d)add("di:vertrag:"+d._id,"pl:dienst:"+p._id+":"+dn,"#c9a24b");}));
+    MODEL.dienste.forEach(d=>{if(d.codeSrc)add("code:out:"+d.codeSrc,"di:impl:"+d._id,CODE,true);});
+    // 🤖 LLM-Prompt-Node → Code-Block (Eingang): der Prompt speist den Rumpf-Kommentar.
+    MODEL.llmNodes.forEach(l=>{if(l.promptZiel)add("llm:prout:"+l._id,"code:prin:"+l.promptZiel,"#a48fd6",true);});
     // ── Typ-Komposition: VO/Enum → Feld (welches Feld benutzt diesen Typ), gestrichelt. ──
     const voNamen=new Set(MODEL.records.filter(r=>r.kind==="valueobject").map(r=>r.name));
     const enNamen=new Set(MODEL.enums.map(e=>e.name));
     alleFelder().forEach(({owner,f})=>{const bt=innerTyp(f.typ);
       if(voNamen.has(bt))add("ftype:out:rec:"+bt,"ftype:in:"+owner+":"+f._id,"#49a996",true);
       else if(enNamen.has(bt))add("ftype:out:enum:"+bt,"ftype:in:"+owner+":"+f._id,"#8a8aa0",true);});
+    // ── Zusammengezogene Kanten: Pfade DURCH eingeklappte Details (Command →[Decider]→ Event …) Kopf an Kopf. ──
+    const ELS=new Map([...world.querySelectorAll(".gnode2")].map(e=>[e.dataset.id,e]));
+    const kopf=(e,seite)=>{const hd=e.querySelector(".ghead");return {x:e.offsetLeft+(seite>0?e.offsetWidth:0),y:e.offsetTop+(hd?hd.offsetHeight/2:12)};};
+    KONTRAKT.forEach(([u,v])=>{const eu=ELS.get(u),ev=ELS.get(v);if(!eu||!ev)return;
+      const kv=(NODEBY.get(v)||{}).kind,col=kv==="event"?"#4fb06a":(kv==="command"?"#4a86d6":"#8a8f9c");
+      const p=mk(kopf(eu,1),kopf(ev,-1),1,-1,col,false,"kontrakt");p.dataset.a=u;p.dataset.b=v;});
+    wendeFokusAn();
   }
   // Interne Linien hervorheben, wenn man über die zugehörige Decider-/Applier-Zeile fährt.
   function hilite(decId,appId,on){document.querySelectorAll("#de .glink.internal").forEach(p=>{
     if((decId&&p.dataset.dec===decId)||(appId&&p.dataset.app===appId))p.classList.toggle("hot",on);});}
 
   // Verschieben (Knoten) / Pannen (Fläche).
-  function startMove(e,el,ref){e.preventDefault();el.classList.add("dragging");
-    const sx=e.clientX,sy=e.clientY,ox=ref.x||0,oy=ref.y||0;
-    const mv=ev=>{ref.x=Math.round((ox+(ev.clientX-sx)/PAN.s)/GRID)*GRID;
+  //   Kopf nur antippen (ohne Ziehen) = auswählen (onClick) → Inspector + Slice-Fokus.
+  function startMove(e,el,ref,onClick){e.preventDefault();el.classList.add("dragging");
+    const sx=e.clientX,sy=e.clientY,ox=ref.x||0,oy=ref.y||0;let moved=false;
+    const mv=ev=>{if(!moved&&Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)<4)return;moved=true;
+      ref.x=Math.round((ox+(ev.clientX-sx)/PAN.s)/GRID)*GRID;
       ref.y=Math.round((oy+(ev.clientY-sy)/PAN.s)/GRID)*GRID;
       el.style.left=ref.x+"px";el.style.top=ref.y+"px";drawEdges();};
-    const up=()=>{el.classList.remove("dragging");window.removeEventListener("pointermove",mv);window.removeEventListener("pointerup",up);};
+    const up=()=>{el.classList.remove("dragging");window.removeEventListener("pointermove",mv);window.removeEventListener("pointerup",up);
+      if(!moved){if(onClick)onClick();}else{if(VIEW.kompakt)speichereKpos();autosave();drawMinimap();}};
     window.addEventListener("pointermove",mv);window.addEventListener("pointerup",up);}
-  function startPan(e){e.preventDefault();canvas.classList.add("panning");const sx=e.clientX,sy=e.clientY,ox=PAN.x,oy=PAN.y;
-    const mv=ev=>{PAN.x=ox+(ev.clientX-sx);PAN.y=oy+(ev.clientY-sy);applyPan();};
+  let PANNED=false;
+  function startPan(e){e.preventDefault();canvas.classList.add("panning");const sx=e.clientX,sy=e.clientY,ox=PAN.x,oy=PAN.y;PANNED=false;
+    const mv=ev=>{if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)>3)PANNED=true;PAN.x=ox+(ev.clientX-sx);PAN.y=oy+(ev.clientY-sy);applyPan();};
     const up=()=>{canvas.classList.remove("panning");window.removeEventListener("pointermove",mv);window.removeEventListener("pointerup",up);};
     window.addEventListener("pointermove",mv);window.addEventListener("pointerup",up);}
 
+  // ══ ANSICHT (reine Darstellung — Modell, Scaffolder und Round-trip bleiben unberührt) ══════════════════════
+  //   (1) Kompakt-Karten: Knoten standardmäßig eingeklappt (Kopf + Kurzfassung), bearbeitet wird im INSPECTOR.
+  //   (2) Details eingeklappt: Decider/Applier/State/Code/LLM/Ablehnung/VO/Enum/Response liegen IN ihrem
+  //       sichtbaren Besitzer (Chips + Inspector-Sektionen); Pfade durch sie werden als Kopf-Kanten zusammengezogen.
+  //   (4) Semantischer Zoom: Landkarte (<0.4, Aggregat-Kacheln + gebündelte Kanten) · Ablauf (<0.75, nur Titel) · Detail.
+  //   (5) Slice-Fokus: Klick auf einen Knoten → sein vertikaler Schnitt bleibt hell, der Rest tritt zurück.
+  let VIEW={kompakt:true,details:false}, VKEY="cqrs-ansicht", KPKEY="cqrs-kpos", KPOS={k:{},d:{}};
+  function ladeAnsicht(k){VKEY="cqrs-ansicht"+(k?":"+k:"");KPKEY="cqrs-kpos"+(k?":"+k:"");
+    try{const v=JSON.parse(localStorage.getItem(VKEY)||"null");if(v)VIEW={...VIEW,...v};}catch(e){}
+    try{KPOS=JSON.parse(localStorage.getItem(KPKEY)||"{}")||{};}catch(e){KPOS={};}
+    if(!KPOS.k||!KPOS.d)KPOS={k:{},d:{}};}
+  function speichereAnsicht(){try{localStorage.setItem(VKEY,JSON.stringify(VIEW));}catch(e){}}
+  function speichereKpos(){try{localStorage.setItem(KPKEY,JSON.stringify(KPOS));}catch(e){}}
+  // Position eines Knotens in der AKTUELLEN Ansicht. Voll = x/y im Modell (wandert ins Board); Kompakt = eigenes,
+  //   nur browser-lokales Layout (KPOS) — die kleineren Karten brauchen eine dichtere Anordnung.
+  //   Je Detail-Stufe ein eigenes Layout (k = Details eingeklappt, d = Details als Knoten) — Umschalten verliert nichts.
+  function P(n){if(!VIEW.kompakt)return n.ref;
+    const L=KPOS[VIEW.details?"d":"k"]||(KPOS[VIEW.details?"d":"k"]={});
+    let p=L[n.id];if(!p){p=L[n.id]={};if(n.ref._kpos){p.x=n.ref._kpos.x;p.y=n.ref._kpos.y;}}
+    if(n.ref._kpos)delete n.ref._kpos;return p;}
+  let INSP=false, INSP_SCROLL=null;   // INSP: gerade wird eine Inspector-Kopie gebaut (keine Slot-Registrierung)
+
+  const DETAIL_KINDS=new Set(["decider","applier","state","codenode","llmnode","rejection","valueobject","enum","queryresponse"]);
+  let VIS=new Set(), VERTRETER=new Map(), DETAILS=new Map(), EINGEKLAPPT=new Set(), NODEBY=new Map(), KONTRAKT=[];
+  let ADJ={out:new Map(),inn:new Map()};
+  const vertreterId=id=>(VERTRETER.get(id)||[id])[0];
+  // Direkte Besitzer eines Detail-Knotens (Knoten-Ids) — aus der Verdrahtung, nie aus Namen.
+  function direkteBesitzer(n){const r=n.ref,rec=x=>x&&recByName(x)?"rec:"+x:null,agg=x=>x&&MODEL.aggregate.some(a=>a.name===x)?"agg:"+x:null;
+    switch(n.kind){
+      case "decider":return [rec(r.command)||agg(r.aggregat)];
+      case "applier":return [rec(r.event)||agg(r.aggregat)];
+      case "llmnode":return r.promptZiel?["cn:"+r.promptZiel]:(ADJ.out.get(n.id)||[]);
+      case "codenode":case "state":case "valueobject":case "enum":return ADJ.out.get(n.id)||[];
+      // Nur die erzeugende Seite besitzt: Ablehnung ← Decider, Response ← Reader (nicht VO-Feldtyp-Kanten).
+      case "rejection":return (ADJ.inn.get(n.id)||[]).filter(x=>x.startsWith("dec:"));
+      case "queryresponse":return (ADJ.inn.get(n.id)||[]).filter(x=>x.startsWith("rdr:"));}
+    return [];}
+  function berechneSicht(){
+    const alle=graphNodes();NODEBY=new Map(alle.map(n=>[n.id,n]));
+    const push=(m,k,v)=>{let a=m.get(k);if(!a)m.set(k,a=[]);if(!a.includes(v))a.push(v);};
+    ADJ={out:new Map(),inn:new Map()};
+    boardEdges().forEach(([a,b])=>{if(a===b||!NODEBY.has(a)||!NODEBY.has(b))return;push(ADJ.out,a,b);push(ADJ.inn,b,a);});
+    const einklappbar=n=>!VIEW.details&&DETAIL_KINDS.has(n.kind);
+    // Vertreter = sichtbarer Besitzer, transitiv durch eingeklappte Besitzer (Code → Decider → Command).
+    //   Ohne Besitzer bleibt ein Detail selbst sichtbar (neu angelegt / unverdrahtet → nichts verschwindet).
+    const memo=new Map();
+    const vert=(id,pfad)=>{if(memo.has(id))return memo.get(id);const n=NODEBY.get(id);if(!n)return [];
+      if(!einklappbar(n)){memo.set(id,[id]);return [id];}
+      if(pfad.has(id))return [];pfad.add(id);
+      const res=[...new Set(direkteBesitzer(n).filter(Boolean).flatMap(o=>vert(o,pfad)))];pfad.delete(id);
+      const out=res.length?res:[id];memo.set(id,out);return out;};
+    VIS=new Set();VERTRETER=new Map();DETAILS=new Map();EINGEKLAPPT=new Set();
+    alle.forEach(n=>{const v=vert(n.id,new Set());VERTRETER.set(n.id,v);
+      if(v.length===1&&v[0]===n.id){if(!HIDDEN.has(groupKeyOf(n)))VIS.add(n.id);}
+      else{EINGEKLAPPT.add(n.id);v.forEach(o=>push(DETAILS,o,n.id));}});
+    // Zusammengezogene Kanten: sichtbar →(eingeklappt)*→ sichtbar. Ins Aggregat nicht (das zeigt der Block).
+    KONTRAKT=[];if(VIEW.details)return;
+    const direkt=new Set();ADJ.out.forEach((bs,a)=>bs.forEach(b=>{direkt.add(a+"\u0000"+b);direkt.add(b+"\u0000"+a);}));
+    VIS.forEach(u=>{const ziele=new Set(),seen=new Set(),stack=(ADJ.out.get(u)||[]).filter(x=>EINGEKLAPPT.has(x));
+      while(stack.length){const x=stack.pop();if(seen.has(x))continue;seen.add(x);
+        (ADJ.out.get(x)||[]).forEach(y=>{if(VIS.has(y)){if(y!==u)ziele.add(y);}else if(EINGEKLAPPT.has(y))stack.push(y);});}
+      ziele.forEach(v=>{if(NODEBY.get(v).kind==="aggregate"||direkt.has(u+"\u0000"+v))return;KONTRAKT.push([u,v]);});});
+  }
+
+  // ── (5) SLICE: der vertikale Schnitt durch einen Knoten — GERICHTET über die Board-Kanten:
+  //    • vorwärts im Fluss (Command → [Decider] → Events → [Applier] / Projektion → Store …), an Knotenpunkten
+  //      (Aggregat, fremde Commands, Prozess/Regel, Reaktion, Pipeline, Frist, Typen, Betrieb) wird angehalten;
+  //    • Leseseite nachziehen: an Projektion/Store die Reader + Read Models, am Reader seine Queries;
+  //    • rückwärts nur der Auslöser (durch eingeklappte Details bis zum ersten sichtbaren Knoten).
+  //    Aggregat/Prozess als Start: ihre angesteckten Decider/Applier/State bzw. Regeln sind Mit-Startpunkte.
+  const STOP=new Set(["aggregate","command","saga","transition","reaktion","pipeline","frist","valueobject","enum","dienst","hostsetting","trigger","konfig"]);
+  const LESE_START=new Set(["projektion","reader","query","store","readmodel","queryresponse"]);
+  function sliceVon(start){const res=new Set([start]),N=id=>NODEBY.get(id)||{};
+    const inn=id=>ADJ.inn.get(id)||[],out=id=>ADJ.out.get(id)||[];
+    const k0=N(start).kind,seeds=[start];
+    if(k0==="aggregate"||k0==="saga")inn(start).forEach(x=>{res.add(x);seeds.push(x);});
+    const zurueck=(id,seen)=>inn(id).forEach(x=>{if(seen.has(x))return;seen.add(x);res.add(x);if(EINGEKLAPPT.has(x))zurueck(x,seen);});
+    seeds.forEach(s=>zurueck(s,new Set()));
+    const q=[...seeds],fertig=new Set();
+    const add=(x,weiter)=>{res.add(x);if(weiter&&!fertig.has(x))q.push(x);};
+    while(q.length){const id=q.shift();if(fertig.has(id))continue;fertig.add(id);const k=N(id).kind;
+      if(!seeds.includes(id)&&STOP.has(k))continue;
+      out(id).forEach(y=>add(y,true));
+      if(k==="projektion"||k==="store")inn(id).forEach(y=>{const ky=N(y).kind;
+        if(ky==="reader"||ky==="readmodel")add(y,true);else if(k==="projektion"&&ky==="event"&&LESE_START.has(k0))add(y,false);});
+      if(k==="reader")inn(id).forEach(y=>{if(N(y).kind==="query")add(y,false);});}
+    return res;}
+  let SEL=null, FOCUS=null;
+  function waehle(id){SEL=id||null;FOCUS=SEL?sliceVon(SEL):null;wendeFokusAn();zeigeInspector();}
+  function wendeFokusAn(){if(!world)return;const an=!!FOCUS;world.classList.toggle("fokus",an);
+    const selV=SEL?(VERTRETER.get(SEL)||[SEL]):[];
+    world.querySelectorAll(".gnode2").forEach(el=>{const id=el.dataset.id;el.classList.toggle("inslice",an&&FOCUS.has(id));el.classList.toggle("sel",selV.includes(id));});
+    if(!an)return;
+    world.querySelectorAll(".glink").forEach(p=>p.classList.toggle("inslice",FOCUS.has(p.dataset.a)&&FOCUS.has(p.dataset.b)));
+    world.querySelectorAll(".gtile").forEach(t=>t.classList.toggle("inslice",(t.dataset.ids||"").split("|").some(i=>FOCUS.has(i))));}
+  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&SEL)waehle(null);});
+
+  // ── (1) INSPECTOR: das Formular des gewählten Knotens + seiner eingeklappten Details + Nachbarn zum Springen.
+  function zeigeInspector(){if(!canvas)return;const alt=canvas.querySelector(".ginsp");if(alt)alt.remove();if(!SEL)return;
+    const n=NODEBY.get(SEL);if(!n){SEL=null;return;}
+    const p=h("div",{class:"ginsp"});p.dataset.sel=SEL;
+    ["pointerdown","dblclick","wheel","click"].forEach(ev=>p.addEventListener(ev,e=>e.stopPropagation()));
+    const nm=n.name||NODELABEL[n.kind]||n.kind;
+    p.append(h("div",{class:"gi-h"},h("span",{class:"gi-k kc-"+n.kind},NODELABEL[n.kind]||n.kind),h("span",{class:"gi-n",title:nm},nm),
+      h("button",{title:"Slice einpassen",onclick:()=>passeEin([...(FOCUS||[])].map(vertreterId).filter(i=>VIS.has(i)),1)},"⤢"),
+      h("button",{title:"Auf der Fläche zeigen",onclick:()=>{centerOn(n);pulseNode(n);}},"◎"),
+      h("button",{title:"Schließen (Esc)",onclick:()=>waehle(null)},"✕")));
+    const sektion=(m,titel)=>{const sec=h("div",{class:"gi-sec"});
+      if(titel)sec.append(h("div",{class:"gi-st kc-"+m.kind},titel));
+      const b=h("div",{class:"gbody"});INSP=true;try{fuelleKoerper(b,m);}finally{INSP=false;}sec.append(b);return sec;};
+    p.append(sektion(n,null));
+    const ORD=["decider","rejection","applier","state","codenode","llmnode","valueobject","enum","queryresponse"];
+    const det=(DETAILS.get(n.id)||[]).map(id=>NODEBY.get(id)).filter(Boolean).sort((a,b)=>ORD.indexOf(a.kind)-ORD.indexOf(b.kind));
+    const titelVon=m=>m.kind==="codenode"?"{ } Rumpf"+(m.name&&m.name!=="Code"?" · "+m.name:""):(NODELABEL[m.kind]||m.kind)+(m.name?" · "+m.name:"");
+    det.forEach(m=>p.append(sektion(m,titelVon(m))));
+    // Nachbarn (über eingeklappte Details hinweg, auf ihre sichtbaren Vertreter abgebildet).
+    const eigen=new Set([n.id,...det.map(m=>m.id)]),rein=new Set(),raus=new Set();
+    const sammle=(ids,ziel)=>(ids||[]).forEach(y=>(VERTRETER.get(y)||[y]).forEach(v=>{if(!eigen.has(v))ziel.add(v);}));
+    eigen.forEach(x=>{sammle(ADJ.inn.get(x),rein);sammle(ADJ.out.get(x),raus);});
+    const rel=h("div",{class:"gi-rel"});
+    const liste=(titel,set)=>{if(!set.size)return;rel.append(h("h5",{},titel));
+      [...set].map(id=>NODEBY.get(id)).filter(Boolean).forEach(m=>rel.append(h("a",{title:NODELABEL[m.kind]||m.kind,onclick:()=>{waehle(m.id);centerOn(m);pulseNode(m);}},
+        h("i",{class:"kc-"+m.kind,style:"display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px"}),m.name||NODELABEL[m.kind])));};
+    liste("◀ Eingang",rein);liste("Ausgang ▶",raus);if(rel.childNodes.length)p.append(rel);
+    canvas.append(p);
+    if(INSP_SCROLL&&INSP_SCROLL.id===SEL)p.scrollTop=INSP_SCROLL.top;INSP_SCROLL=null;}
+
+  // Kurzfassung auf der eingeklappten Karte: das Wesentliche in einer Zeile + Chips der eingeklappten Details.
+  const kurz=xs=>{xs=[...new Set((xs||[]).filter(Boolean))];return xs.slice(0,2).join(", ")+(xs.length>2?" +"+(xs.length-2):"");};
+  function kurzfassung(n){const r=n.ref,k=n.kind;let t="";
+    if(k==="command"){const ev=MODEL.decider.filter(d=>d.command===r.name).flatMap(d=>(d.ergibt||[]).map(o=>o.event)).filter(e=>(recByName(e)||{}).kind!=="rejection");
+      t=ev.length?"→ "+kurz(ev):"→ (kein Decider)";}
+    else if(k==="event"){const c=MODEL.decider.filter(d=>(d.ergibt||[]).some(o=>o.event===r.name)).map(d=>d.command);t=c.length?"← "+kurz(c):"";}
+    else if(k==="aggregate")t=MODEL.decider.filter(d=>d.aggregat===r.name).length+" Commands · "+MODEL.applier.filter(a=>a.aggregat===r.name).length+" Events · "+(r.state||[]).length+" State-Felder";
+    else if(k==="projektion"||k==="reaktion")t="← "+kurz((r.handles||[]).map(x=>x.event));
+    else if(k==="reader")t="? "+kurz((r.handles||[]).map(x=>x.query));
+    else if(k==="pipeline")t=(r.handles||[]).length+" Handle · → "+kurz((r.handles||[]).flatMap(x=>x.sends||[]));
+    else if(k==="saga")t="Auslöser: "+(r.triggerEvent||"—")+" · "+transOf(r).length+" Regeln";
+    else if(k==="transition")t="WENN "+kurz(r.wenn)+" → "+kurz((r.dann||[]).map(d=>d.sende));
+    else if(k==="store")t=(r.writeFns||[]).length+" schreibend · "+(r.readFns||[]).length+" lesend";
+    else if(k==="codenode")t=((r.text||"").trim().split("\n")[0]||"// leer");
+    if(Array.isArray(r.felder)&&k!=="aggregate")t+=(t?" · ":"")+r.felder.length+" Felder";
+    const box=h("div",{class:"gsum",title:"Klick: im Inspector bearbeiten",onclick:()=>waehle(n.id)});
+    if(t)box.append(h("div",{class:"gs-t",title:t},t));
+    const det=(DETAILS.get(n.id)||[]).map(id=>NODEBY.get(id)).filter(Boolean);
+    if(det.length){const chips=h("div",{class:"gchips"}),zahl={};det.forEach(m=>zahl[m.kind]=(zahl[m.kind]||0)+1);
+      const LBL={decider:"⚖ Decider",applier:"↻ Applier",state:"▤ State",llmnode:"🤖 LLM",rejection:"✕ Ablehnung",valueobject:"◇ VO",enum:"◇ Enum",queryresponse:"↩ Response"};
+      Object.keys(zahl).forEach(kk=>{let lbl=(LBL[kk]||kk)+(zahl[kk]>1?" ×"+zahl[kk]:"");
+        if(kk==="codenode")lbl="{ } "+det.filter(m=>m.kind==="codenode").reduce((s,m)=>s+((m.ref.text||"").split("\n").length),0)+" Zeilen";
+        chips.append(h("span",{class:"gchip"},lbl));});
+      if(det.some(m=>(m.kind==="decider"||m.kind==="applier")&&!m.ref.codeSrc&&!m.ref.leer))
+        chips.append(h("span",{class:"gchip warn",title:"Decide-/Apply-Rumpf fehlt"},"⚙ Logik fehlt"));
+      box.append(chips);}
+    return box;}
+
+  // ── (4) SEMANTISCHER ZOOM ──
+  let LOD=null;
+  const lodVon=s=>s<0.4?"karte":(s<0.75?"ablauf":"detail");
+  function pruefeLod(){if(!canvas||!world)return;world.style.setProperty("--inv",(1/PAN.s).toFixed(3));
+    const l=lodVon(PAN.s);if(l===LOD)return;const vorher=LOD;LOD=l;
+    canvas.classList.toggle("lod-karte",l==="karte");canvas.classList.toggle("lod-ablauf",l==="ablauf");
+    if(l==="karte")baueKarte();else if(vorher!==null)drawEdges();   // Anker wandern (Körper ein/aus) → neu zeichnen
+    document.querySelectorAll("#de .gview .lod span").forEach(s=>s.classList.toggle("on",s.dataset.l===l));}
+  function zoomAuf(s){if(!canvas)return;const cr=canvas.getBoundingClientRect(),wx=(cr.width/2-PAN.x)/PAN.s,wy=(cr.height/2-PAN.y)/PAN.s;
+    PAN.s=s;PAN.x=cr.width/2-wx*s;PAN.y=cr.height/2-wy*s;applyPan();}
+  // Knoten-Menge einpassen (minS: mindestens diese Zoomstufe, z. B. Ablauf nach Klick auf eine Kachel).
+  function passeEin(ids,maxS,minS){if(!canvas||!world||!ids||!ids.length)return;let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;
+    ids.forEach(id=>{const n=NODEBY.get(id),el=world.querySelector('[data-id="'+id+'"]');if(!n||!el)return;const p=P(n);
+      x1=Math.min(x1,p.x||0);y1=Math.min(y1,p.y||0);x2=Math.max(x2,(p.x||0)+el.offsetWidth);y2=Math.max(y2,(p.y||0)+el.offsetHeight);});
+    if(x1>x2)return;const cr=canvas.getBoundingClientRect(),pad=60;
+    const s=Math.max(minS||0.08,Math.min(maxS||1,(cr.width-2*pad)/Math.max(1,x2-x1),(cr.height-2*pad)/Math.max(1,y2-y1)));
+    PAN.s=s;PAN.x=cr.width/2-(x1+x2)/2*s;PAN.y=cr.height/2-(y1+y2)/2*s;applyPan();}
+  // Landkarte: je Aggregat (bzw. geteiltem Block / Inseln) eine Kachel mit Zählern; Kanten zwischen Kacheln gebündelt.
+  function baueKarte(){if(!world)return;world.querySelectorAll(".gtile,svg.gtilesvg").forEach(x=>x.remove());
+    const comp=components(),T=new Map();
+    const schl=n=>{const g=subGroupOf(n);if(g)return g;if(ISLE.has(n.id))return "§inseln";return SHARED_KEY+"|"+comp.get(n.id);};
+    VIS.forEach(id=>{const n=NODEBY.get(id),el=world.querySelector('[data-id="'+id+'"]');if(!n||!el)return;const p=P(n),x=p.x||0,y=p.y||0,k=schl(n);
+      let t=T.get(k);if(!t)T.set(k,t={k,x1:1e9,y1:1e9,x2:-1e9,y2:-1e9,kinds:{},ids:[],namen:[]});
+      t.x1=Math.min(t.x1,x);t.y1=Math.min(t.y1,y);t.x2=Math.max(t.x2,x+el.offsetWidth);t.y2=Math.max(t.y2,y+el.offsetHeight);
+      t.kinds[n.kind]=(t.kinds[n.kind]||0)+1;t.ids.push(id);if(["saga","pipeline","reaktion","trigger"].includes(n.kind))t.namen.push(n.name);});
+    const PAD=40,kOf=new Map();T.forEach(t=>t.ids.forEach(id=>kOf.set(id,t.k)));
+    T.forEach(t=>{const geteilt=t.k.startsWith(SHARED_KEY),hue=domHue(geteilt?SHARED_KEY:t.k);
+      const titel=t.k==="§inseln"?"⚠ Inseln":(geteilt?"⋯ "+(t.namen.length?kurz(t.namen):"Geteilt"):t.k);
+      const zahlen=Object.keys(t.kinds).sort((a,b)=>t.kinds[b]-t.kinds[a]).map(k=>t.kinds[k]+" "+(NODELABEL[k]||k)).join(" · ");
+      const div=h("div",{class:"gtile",title:"Klick: hineinzoomen"},h("div",{class:"gtl-t"},titel),h("div",{class:"gtl-c"},zahlen));
+      div.style.left=(t.x1-PAD)+"px";div.style.top=(t.y1-PAD)+"px";div.style.width=(t.x2-t.x1+2*PAD)+"px";div.style.height=(t.y2-t.y1+2*PAD)+"px";
+      div.style.borderColor="hsl("+hue+" 45% 55%)";div.dataset.ids=t.ids.join("|");
+      div.onclick=()=>{if(!PANNED)passeEin(t.ids,1,0.45);};
+      world.append(div);});
+    const cnt=new Map();ADJ.out.forEach((bs,a)=>bs.forEach(b=>{const ka=kOf.get(vertreterId(a)),kb=kOf.get(vertreterId(b));if(!ka||!kb||ka===kb)return;
+      const key=ka<kb?ka+"\u0000"+kb:kb+"\u0000"+ka;cnt.set(key,(cnt.get(key)||0)+1);}));
+    const s=document.createElementNS(SVGNS,"svg");s.setAttribute("class","gtilesvg");
+    cnt.forEach((c,key)=>{const [a,b]=key.split("\u0000"),A=T.get(a),B=T.get(b);
+      const ax=(A.x1+A.x2)/2,ay=(A.y1+A.y2)/2,bx=(B.x1+B.x2)/2,by=(B.y1+B.y2)/2;
+      const p=document.createElementNS(SVGNS,"path");p.setAttribute("d","M"+ax+","+ay+" L"+bx+","+by);
+      p.style.strokeWidth="calc("+(1.5+Math.log2(c+1)*1.5).toFixed(1)+"px * var(--inv))";s.append(p);
+      const tx=document.createElementNS(SVGNS,"text");tx.setAttribute("x",(ax+bx)/2);tx.setAttribute("y",(ay+by)/2);tx.setAttribute("text-anchor","middle");
+      tx.style.fontSize="calc(12px * var(--inv))";tx.style.strokeWidth="calc(3px * var(--inv))";tx.textContent=String(c);s.append(tx);});
+    world.insertBefore(s,world.firstChild);
+    wendeFokusAn();}
+
+  // Ansichts-Leiste über der Fläche.
+  function ansichtLeiste(){
+    const btn=(lbl,on,title,fn)=>h("button",{class:on?"on":"",title,onclick:fn},lbl);
+    const alle=auf=>{graphNodes().forEach(n=>{if(!VIS.has(n.id))return;
+      if(VIEW.kompakt){if(auf)n.ref._offen=true;else delete n.ref._offen;}else{if(auf)delete n.ref._collapsed;else n.ref._collapsed=true;}});render();};
+    const lod=h("span",{class:"lod",title:"Semantischer Zoom — Mausrad oder hier klicken"},
+      ...[["karte","Landkarte",0.25],["ablauf","Ablauf",0.55],["detail","Detail",1]].map(([l,t,s])=>{const sp=h("span",{onclick:()=>zoomAuf(s)},t);sp.dataset.l=l;if(LOD===l)sp.classList.add("on");return sp;}));
+    const nDet=graphNodes().filter(n=>DETAIL_KINDS.has(n.kind)).length;
+    return h("div",{class:"gview"},
+      h("b",{style:"color:#cbd3e1"},"Ansicht"),
+      btn("▣ Kompakt",VIEW.kompakt,"Karten eingeklappt, Bearbeiten im Inspector rechts (eigenes Layout)",()=>{VIEW.kompakt=!VIEW.kompakt;speichereAnsicht();render();}),
+      btn("⚙ Details ("+nDet+")",VIEW.details,"Decider/Applier/State/Code/Typen/Ablehnungen als eigene Knoten zeigen — sonst eingeklappt in ihren Besitzer",()=>{VIEW.details=!VIEW.details;speichereAnsicht();render();}),
+      h("span",{class:"sep"}),
+      btn("⊟ Alle zu",false,"Alle Karten einklappen",()=>alle(false)),
+      btn("⊞ Alle auf",false,"Alle Karten aufklappen",()=>alle(true)),
+      btn("⤢ Alles zeigen",false,"Ganzes Board einpassen",()=>passeEin([...VIS],1)),
+      lod,
+      h("span",{style:"margin-left:8px"},"Kopf antippen = auswählen + Slice · Esc = Fokus aus · ▸ = auf-/zuklappen · Kopf ziehen = verschieben · Punkt ziehen = verbinden"));}
+
   function renderGraph(){
-    const root=document.getElementById("de-form");root.innerHTML="";
+    const root=document.getElementById("de-form");
+    const altI=root.querySelector(".ginsp");INSP_SCROLL=altI?{id:altI.dataset.sel,top:altI.scrollTop}:null;
+    root.innerHTML="";
     root.append(datalistEl());
-    const tb=(kind,label)=>h("button",{class:"add",onclick:()=>neuerKnoten(kind)},label);
+    ISLE=islandInfo().ids;   // einsame Inseln (unverbundene Knoten) aus der Graph-Analyse
+    berechneSicht();         // sichtbar / eingeklappte Details / zusammengezogene Kanten
+    if(SEL&&!NODEBY.has(SEL))SEL=null;FOCUS=SEL?sliceVon(SEL):null;LOD=null;
+    const tb=(kind,label)=>h("button",{class:"add jumpable",
+      title:label.replace(/^\+\s*/,"")+" — Hover: alle hervorheben · Ctrl/Cmd+Klick: zum nächsten springen · Klick: neu",
+      onmouseenter:()=>highlightKind(kind,true),onmouseleave:()=>highlightKind(kind,false),
+      onclick:e=>{if(e.ctrlKey||e.metaKey){e.preventDefault();jumpNextOfKind(kind);}else neuerKnoten(kind);}},label);
     root.append(h("div",{class:"gtoolbar"},
       tb("command","+ Command"),tb("event","+ Event"),tb("rejection","+ Ablehnung"),
       tb("valueobject","+ Value Object"),tb("enum","+ Enum"),tb("aggregate","+ Aggregat"),
       tb("state","+ State"),tb("decider","+ Decider"),tb("applier","+ Applier"),tb("saga","+ Prozess"),tb("transition","+ Regel"),
       tb("readmodel","+ Read Model"),tb("store","+ Store"),tb("projektion","+ Projektion"),tb("query","+ Query"),tb("queryresponse","+ Response"),tb("reader","+ Reader"),tb("reaktion","+ Reaktion"),
       tb("trigger","+ Trigger"),tb("pipeline","+ Pipeline"),
-      tb("codenode","+ 📝 Code"),tb("llmnode","+ 🤖 LLM")));
-    const leg=(c,t)=>h("span",{},h("i",{style:"background:"+c}),t);
-    root.append(h("div",{class:"glegend2"},
-      leg("#4a86d6","Command→Decider"),leg("#33b1a6","Decider→Aggregat"),leg("#4fb06a","Event"),
-      leg("#d1953f","Applier→Aggregat"),leg("#e0b64d","State→Aggregat"),
-      h("span",{},"· Doppelklick = Knoten · Kopf ziehen = verschieben · Titel ⯆ = einklappen · Punkt ziehen = verbinden · Rad = Zoom · Fläche ziehen = Pan")));
-    autoLayout();
-    SLOTS={};
+      tb("frist","+ ⏳ Frist"),tb("dienst","+ Dienst"),tb("hostsetting","+ HostSetting"),
+      tb("codenode","+ 📝 Code"),tb("llmnode","+ 🤖 LLM"),
+      h("button",{class:"add island-btn",style:"margin-left:auto",
+        title:"Einsame Inseln (unverbundene Knoten) — Hover: markieren · Klick: der Reihe nach anspringen",
+        onmouseenter:()=>highlightIslands(true),onmouseleave:()=>highlightIslands(false),onclick:()=>jumpIslands()},
+        (ISLE.size?"⚠ ":"✓ ")+ISLE.size+" Inseln")));
+    root.append(ansichtLeiste());
+    SLOTS={};SYNC={};   // Code-Sync-Registry je Render neu aufbauen (nur sichtbare Knoten pollen)
     canvas=h("div",{class:"gcanvas"});
-    world=h("div",{class:"gworld"});
+    world=h("div",{class:"gworld"+(VIEW.kompakt?" kompakt":"")});
     svg=document.createElementNS(SVGNS,"svg");svg.setAttribute("class","gedges");world.append(svg);
     const nodes=graphNodes();
-    nodes.forEach(n=>world.append(nodeEditor(n)));
+    // Domänen-Filter + eingeklappte Details: nicht rendern (Kanten zu ihnen entfallen bzw. werden zusammengezogen).
+    const vis=nodes.filter(n=>VIS.has(n.id));
+    vis.forEach(n=>world.append(nodeEditor(n)));
     svgTop=document.createElementNS(SVGNS,"svg");svgTop.setAttribute("class","gedges top");world.append(svgTop);
-    if(!nodes.length)world.append(h("div",{class:"gempty"},"Doppelklick auf die Fläche, um einen Knoten zu setzen — oder oben in der Leiste."));
+    if(!vis.length)world.append(h("div",{class:"gempty"},"Nichts sichtbar — alle Domänen ausgeblendet (🗂) oder leeres Modell."));
     canvas.append(world);root.append(canvas);
+    buildMinimap(canvas);
+    renderFilterPanel();
+    packLayout();  // jetzt ist world im Dokument → echte Knotengrößen messbar → überlappungsfreies Packing
     applyPan();
+    drawMinimap();
     canvas.onpointerdown=e=>{const t=e.target;
       if(t.closest&&(t.closest(".ghead")||t.closest("input,textarea,select,button,.slot")))return;
       startPan(e);};
@@ -1752,9 +2143,13 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
       const w=toWorld(e.clientX,e.clientY),r=canvas.getBoundingClientRect();
       showPicker(canvas,e.clientX-r.left,e.clientY-r.top,w.x,w.y);};
     canvas.onwheel=e=>{e.preventDefault();const r=canvas.getBoundingClientRect(),mx=e.clientX-r.left,my=e.clientY-r.top;
-      const ns=Math.min(2,Math.max(0.35,PAN.s*(e.deltaY<0?1.1:0.9))),wx=(mx-PAN.x)/PAN.s,wy=(my-PAN.y)/PAN.s;
+      const ns=Math.min(2,Math.max(0.08,PAN.s*(e.deltaY<0?1.1:0.9))),wx=(mx-PAN.x)/PAN.s,wy=(my-PAN.y)/PAN.s;
       PAN.s=ns;PAN.x=mx-wx*ns;PAN.y=my-wy*ns;applyPan();};
+    // Klick ins Leere (ohne Pannen) = Auswahl/Fokus aufheben.
+    canvas.onclick=e=>{if(PANNED)return;const t=e.target;
+      if(t.closest&&t.closest(".gnode2,.ginsp,.gfilter,.gminimap,.gtile,.gpick"))return;if(SEL)waehle(null);};
     drawEdges();requestAnimationFrame(drawEdges);
+    zeigeInspector();
   }
   function showPicker(canvas,sx,sy,wx,wy){
     canvas.querySelectorAll(".gpick").forEach(p=>p.remove());
@@ -1766,6 +2161,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
       opt("state","State"),opt("decider","Decider"),opt("applier","Applier"),opt("saga","Prozess"),opt("transition","Regel"),
       opt("readmodel","Read Model"),opt("store","Store"),opt("projektion","Projektion"),opt("query","Query"),opt("queryresponse","Response"),opt("reader","Reader"),opt("reaktion","Reaktion"),
       opt("trigger","Trigger"),opt("pipeline","Pipeline"),
+      opt("frist","⏳ Frist"),opt("dienst","Dienst"),opt("hostsetting","HostSetting"),
       opt("codenode","📝 Code"),opt("llmnode","🤖 LLM"));
     canvas.append(pick);
     setTimeout(()=>{const off=ev=>{if(!pick.contains(ev.target)){pick.remove();document.removeEventListener("pointerdown",off);}};document.addEventListener("pointerdown",off);},0);
@@ -1775,7 +2171,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   function prozessHubCard(body,s){
     body.append(topSlot("event","Auslöser (startet): "+(s.triggerEvent||"— (Event hineinziehen)"),{type:"evtUse",dir:"in",saga:s.name,trigger:true},"saga:trigger:"+s.name));
     body.append(nameInp(s,"name","Prozess","saga"));
-    body.append(h("input",{value:s.namespace??"",oninput:e=>s.namespace=e.target.value,onchange:()=>render(),placeholder:"Domain.X"}));
+    body.append(h("input",{value:s.namespace??"",oninput:e=>s.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
     const aggs=sagaAggs(s);
     body.append(h("div",{class:"gsec"},"berührt (abgeleitet): "+(aggs.length?aggs.join(" · "):"—")));
     body.append(h("div",{class:"gsec"},"Regeln ◀ (anstecken)"));
@@ -1787,7 +2183,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   // Elementtyp der SendeJe-Collection (z. B. List<Guid> → Guid) — für den Typ des z-Pins.
   function collElemTyp(t){if(!t.sendeJeCollection)return "";const dot=t.sendeJeCollection.indexOf(".");if(dot<0)return "";
     const role=t.sendeJeCollection.slice(0,dot),field=t.sendeJeCollection.slice(dot+1);const j=["t","r","g"].indexOf(role);
-    const r=recByName((t.wenn||[])[j]);const f=r&&(r.felder||[]).find(x=>x.name===field);const m=f&&/<(.+)>/.exec(f.typ||"");return m?baseTyp(m[1]):"";}
+    const r=recByName((t.wenn||[])[j]);const f=r&&(r.felder||[]).find(x=>x.name===field);const e=elementVon(f);return e?baseTyp(e):"";}
   // REGEL-KNOTEN: liest sich als Satz WENN … DANN SENDE … SONST ↩ … (eine DSL-Regel = ein SagaSchritt).
   //   Logik (Argument-Bau, Count-Ausdruck) ist Fülle-Zeit → Stub, KEINE Argument-Pins mehr.
   // REGEL = kleine KREUZUNG im Event/Command-Fluss (Petri-Transition): Event-Eingänge (Join) → Command-Ausgang.
@@ -1811,6 +2207,7 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
         h("button",{class:"rm",onclick:()=>{t.dann.splice(di,1);if(!t.dann.length)t.dann.push({});render();}},"✕"),
         h("span",{class:"slotlbl",style:"flex:1;text-align:right;opacity:.75"},"Dann "+(d.sende||"")),
         mk("×N","Fan-out (SendeJe) — N Commands je Element",!!d.sendeJe,()=>{d.sendeJe=d.sendeJe?undefined:true;render();}),so));
+      if(d.sendeAusdruck)body.append(h("div",{class:"gsec",title:"aus dem Code gelesen — wird verbatim zurückgeschrieben",style:"font-family:monospace;opacity:.7;white-space:pre-wrap"},"λ "+d.sendeAusdruck));
       const ko=port("rejection");ko.classList.add("o");ko.title=d.kompensation||"(Kompensation)";reg("tr:komp:"+t._id+":"+di,ko,{type:"sagaCmd",dir:"out",trans:t._id,dannIdx:di,role:"komp"});
       body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right;opacity:.55"},"↩ "+(d.kompensation||"")),ko));
     });
@@ -1820,30 +2217,169 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
   }
 
   // ── Aktionen ──
-  window.deOpen=function(){document.getElementById("de").classList.add("on");if(!MODEL.records.length&&!MODEL.aggregate.length)deReload();else render();};
+  window.deOpen=function(){document.getElementById("de").classList.add("on");if(!MODEL.records.length&&!MODEL.aggregate.length)deBoot();else render();};
   window.deClose=function(){document.getElementById("de").classList.remove("on");};
-  // Standalone (/editor): sofort zeigen und LEER starten (bestehende Aggregate ignorieren).
+  // Standalone (/editor): sofort zeigen; Boot lädt das gespeicherte Board (nicht mehr leer).
   window.deShow=function(){document.getElementById("de").classList.add("on");};
   window.deLeer=function(){MODEL=normalize(null);render();};
   window.dePing=async function(){try{const r=await fetch("/api/editor/model");badge(r.ok);}catch(e){badge(false);}};
   async function loadLive(){try{const r=await fetch("/api/editor/model");if(!r.ok)throw 0;const m=await r.json();badge(true);return m;}catch(e){badge(false);return null;}}
   function badge(live){const b=document.getElementById("de-badge");b.textContent=live?"SimHost live":"offline";b.className="badge"+(live?"":" off");}
-  window.deReload=async function(){const live=await loadLive();MODEL=normalize(live||(embedded&&(embedded.records||embedded.aggregate)?embedded:null));render();};
+  // ↻ Vom Graph laden: den Code NEU einlesen (GraphExtractor im SimHost) und mit dem Board MERGEN — der Code ist
+  //   die Wahrheit; Layout, Entwürfe und ungeschriebene Änderungen bleiben (kein Ersetzen mehr).
+  window.deReload=async function(opt){opt=opt||{};
+    if(!opt.ohneExtract){deFlash("↻ lese Code neu ein …",true);
+      try{const r=await fetch("/api/editor/extract",{method:"POST"});const x=await r.json();if(!x.ok)deFlash("⚠ Einlesen fehlgeschlagen: "+(x.grund||""),false);}
+      catch(e){badge(false);}}
+    const live=await loadLive();
+    const code=live||(embedded&&(embedded.records||embedded.aggregate)?embedded:null);
+    const vorher=MODEL&&(MODEL.records.length||MODEL.aggregate.length)?JSON.parse(JSON.stringify(MODEL)):null;
+    MODEL=mergeBoard(code,vorher);render();meldeMerge();};
+  // ▦ Neu anordnen: alle Positionen verwerfen → aggregatsweises Kachel-Layout neu rechnen.
+  window.deReflow=function(){if(VIEW.kompakt){KPOS[VIEW.details?"d":"k"]={};speichereKpos();}else graphNodes().forEach(n=>{delete n.ref.x;delete n.ref.y;});render();};
+
+  // ── DURABLE BOARD-PERSISTENZ: das VOLLE MODEL (alle Sammlungen + Layout) ist die Quelle. ──
+  // Server (board-model.json via SimHost) = geteilte Wahrheit; localStorage = Browser-Sicherheitsnetz
+  //   (schützt ungespeicherte Änderungen, auch offline). Boot-Reihenfolge: Server → localStorage → C#.
+  let _asT=null;
+  // Autosave (debounced) nach jeder Änderung — verliert nichts zwischen zwei „💾 Speichern".
+  function autosave(){if(_asT)clearTimeout(_asT);_asT=setTimeout(saveLocal,600);}
+  function saveLocal(){try{localStorage.setItem(LSKEY,JSON.stringify(MODEL));}catch(e){}}
+  function loadLocal(){try{const s=localStorage.getItem(LSKEY);return s?JSON.parse(s):null;}catch(e){return null;}}
+  async function loadBoard(){try{const r=await fetch("/api/editor/board");if(!r.ok)return null;badge(true);return await r.json();}catch(e){return null;}}
+  function deFlash(txt,ok){const b=document.getElementById("de-badge");if(!b)return;const alt=b.textContent,ac=b.className;
+    b.textContent=txt;b.className="badge"+(ok?"":" off");setTimeout(()=>{b.textContent=alt;b.className=ac;},1600);}
+  // 💾 Speichern: das komplette MODEL roh auf den Server (board-model.json) + lokal sichern.
+  window.deSave=async function(){deriveMembership();saveLocal();
+    try{const r=await fetch("/api/editor/board",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(MODEL)});
+      if(!r.ok)throw 0;deFlash("💾 Board gespeichert",true);}
+    catch(e){badge(false);deFlash("⚠ Nur lokal gesichert (SimHost offline)",false);}};
+  // Boot: der aus C# gelesene Stand ist die WAHRHEIT; das gespeicherte Board (Server, sonst localStorage)
+  //   liefert nur Layout, Entwürfe und im Editor geänderte, noch nicht geschriebene Elemente (mergeBoard).
+  window.deBoot=async function(){
+    const live=await loadLive();
+    const code=live||(embedded&&(embedded.records||embedded.aggregate)?embedded:null);
+    schluesselFuer(code);
+    const gespeichert=(await loadBoard())||loadLocal();
+    MODEL=mergeBoard(code,gespeichert);render();meldeMerge();
+  };
+
+  // ── MERGE Code ⇄ Board ──────────────────────────────────────────────────────────────────────
+  // Jedes aus dem Code stammende Element trägt ausCode + _codeKey (Identität im Code) + _herkunft (Hash des
+  //   Inhalts beim Einlesen). Beim nächsten Laden gilt je Element:
+  //     • im Code, im Board unverändert (Hash = _herkunft)      → Code-Stand gewinnt, Layout (x/y) bleibt
+  //     • im Code, im Board geändert (Hash ≠ _herkunft)          → Board-Stand bleibt, markiert „ungeschrieben"
+  //     • im Board als Entwurf (ohne ausCode), nicht im Code     → bleibt (Entwurf)
+  //     • im Board ausCode, aber nicht mehr im Code               → entfällt (im Code gelöscht)
+  const MERGE_KEYS={records:r=>r.kind+"|"+r.namespace+"|"+r.name,enums:e=>e.namespace+"|"+e.name,aggregate:a=>a.namespace+"|"+a.name,
+    decider:d=>d.aggregat+"|"+d.command,applier:a=>a.aggregat+"|"+a.event,sagas:x=>x.namespace+"|"+x.name,
+    readModels:x=>x.name,stores:x=>x.name,projektionen:x=>x.name,reaktionen:x=>x.name,reader:x=>x.name,pipelines:x=>x.name,
+    triggers:x=>x.msgName||x.name,frists:x=>x.name,dienste:x=>x.name,hostSettings:x=>x.name};
+  const LAYOUT=new Set(["x","y","ausCode","ungeschrieben","codeSrc","leer","rumpf","schritte"]);
+  function inhalt(o){return JSON.stringify(o,(k,v)=>(k.startsWith("_")||LAYOUT.has(k))?undefined:v);}
+  function hash(t){let h=5381;for(let i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))>>>0;return h.toString(36);}
+  function maxId(m){let mx=0;JSON.stringify(m||{}).replace(/"_id":"[a-z_]*?(\d+)"/g,(_,n)=>{mx=Math.max(mx,+n);return _;});return mx;}
+  let MERGE_INFO={ungeschrieben:0,entwuerfe:0};
+  function mergeBoard(code,saved){
+    // Gespeichertes zuerst normalisieren, dann Id-Zähler HINTER alle vergebenen Ids setzen → keine Kollisionen.
+    const alt=saved?normalize(saved):null;
+    NID=Math.max(NID,maxId(alt)+1);
+    const neu=normalize(code?JSON.parse(JSON.stringify(code)):null);
+    MERGE_INFO={ungeschrieben:0,entwuerfe:0};
+    for(const col in MERGE_KEYS){const key=MERGE_KEYS[col];
+      (neu[col]||[]).forEach(x=>{x.ausCode=true;x._codeKey=key(x);x._herkunft=hash(inhalt(x));});}
+    neu.transitions.forEach(t=>{t.ausCode=true;t._herkunft=hash(inhalt(t));});
+    if(!alt)return neu;
+    // Alt-Board (vor der Herkunfts-Marke): Elemente in Namespaces, die der CODE nicht kennt (z. B. früher mitgezogene
+    //   Framework-Records), entfallen ohne Code-Pendant; Entwürfe in den Namespaces der Domäne bleiben.
+    const altFormat=!JSON.stringify(alt).includes('"ausCode":true');
+    const codeNs=new Set();for(const col in MERGE_KEYS)(neu[col]||[]).forEach(x=>{if(x.namespace)codeNs.add(x.namespace);});
+    const codeNodesNeu=new Map(neu.codeNodes.map(c=>[c._id,c]));
+    for(const col in MERGE_KEYS){const key=MERGE_KEYS[col];
+      const liveByKey=new Map((neu[col]||[]).map(x=>[x._codeKey,x]));
+      const erg=[];const benutzt=new Set();
+      (alt[col]||[]).forEach(s=>{
+        const k=s.ausCode?s._codeKey:key(s);const l=liveByKey.get(k);
+        if(l){benutzt.add(k);
+          const geaendert=s.ausCode&&s._herkunft&&hash(inhalt(s))!==s._herkunft&&inhalt(s)!==inhalt(l);
+          if(geaendert){s.ungeschrieben=true;s._codeKey=l._codeKey;
+            // Rumpf-Quelle bleibt die echte Datei (der Code-Knoten des Code-Stands).
+            if(l.codeSrc)s.codeSrc=l.codeSrc;else delete s.codeSrc;if(l.leer)s.leer=true;else delete s.leer;
+            erg.push(s);MERGE_INFO.ungeschrieben++;}
+          else{if(s.x!=null){l.x=s.x;l.y=s.y;}erg.push(l);}}
+        else if(!s.ausCode&&!(altFormat&&s.namespace&&!codeNs.has(s.namespace))){erg.push(s);MERGE_INFO.entwuerfe++;}      // Entwurf: bleibt
+        // else: ausCode, aber im Code verschwunden → entfällt
+      });
+      (neu[col]||[]).forEach(l=>{if(!benutzt.has(l._codeKey))erg.push(l);});
+      neu[col]=erg;}
+    // Abgeleitete Knoten: State-Knoten + Code-Knoten (Layout je Besitzer), Prompt-Knoten (Ziel umhängen).
+    const altStates=new Map((alt.states||[]).map(x=>[x.aggregat,x]));
+    neu.states.forEach(x=>{const a=altStates.get(x.aggregat);if(a&&a.x!=null){x.x=a.x;x.y=a.y;}});
+    const altCode=new Map((alt.codeNodes||[]).map(c=>[c._id,c]));
+    const ownerKey=(n,col)=>col+"|"+MERGE_KEYS[col](n);
+    const codeUmzug=new Map();   // alte Code-Knoten-Id → neue (über den Besitzer)
+    ["decider","applier"].forEach(col=>{const altBy=new Map((alt[col]||[]).map(n=>[ownerKey(n,col),n]));
+      neu[col].forEach(n=>{const a=altBy.get(ownerKey(n,col));if(!a||!a.codeSrc||!n.codeSrc)return;
+        const ac=altCode.get(a.codeSrc),nc=codeNodesNeu.get(n.codeSrc);if(ac&&nc){if(ac.x!=null){nc.x=ac.x;nc.y=ac.y;}codeUmzug.set(ac._id,nc._id);}});});
+    // Übrige Code-Knoten (Leseseite, Store-Fns, Pipelines): Layout über (Name, Rumpf-Text) — sonst lägen sie alle auf
+    //   der Normalize-Startposition, das Board überlappte grob und packLayout würfelte die Handanordnung neu.
+    const altPos=new Map();(alt.codeNodes||[]).forEach(c=>{if(c.x!=null)altPos.set((c.name||"")+"\u0000"+(c.text||""),c);});
+    neu.codeNodes.forEach(c=>{if([...codeUmzug.values()].includes(c._id))return;const a=altPos.get((c.name||"")+"\u0000"+(c.text||""));
+      if(a){c.x=a.x;c.y=a.y;}});
+    // Code-Knoten der Entwürfe/ungeschriebenen Leseseite mitnehmen (sonst hingen deren codeSrc ins Leere).
+    const referenziert=new Set();JSON.stringify(neu,(k,v)=>{if(k==="codeSrc"&&v)referenziert.add(v);return v;});
+    (alt.codeNodes||[]).forEach(c=>{if(referenziert.has(c._id)&&!codeNodesNeu.has(c._id))neu.codeNodes.push(c);});
+    neu.llmNodes=(alt.llmNodes||[]).map(l=>({...l,promptZiel:codeUmzug.get(l.promptZiel)||l.promptZiel}));
+    // Transitionen (Saga-Regeln): unverändert → Code-Stand; im Board geändert/ergänzt → Board-Stand je Prozess.
+    const altTr=(alt.transitions||[]);
+    const proProzess=p=>altTr.filter(t=>t.prozess===p);
+    neu.sagas.forEach(sg=>{const at=proProzess(sg.name);if(!at.length)return;
+      const lt=neu.transitions.filter(t=>t.prozess===sg.name);
+      const edit=at.some(t=>(!t.ausCode&&!altFormat)||(t._herkunft&&hash(inhalt(t))!==t._herkunft));
+      if(edit){neu.transitions=neu.transitions.filter(t=>t.prozess!==sg.name).concat(at.map(t=>({...t,ungeschrieben:true})));MERGE_INFO.ungeschrieben++;}
+      else{const sig=t=>JSON.stringify([t.wenn||[],t.sammelEvent||"",(t.dann||[]).map(d=>[d.sende||"",d.kompensation||""])]);
+        const altBySig=new Map(at.map(t=>[sig(t),t]));
+        lt.forEach(t=>{const a=altBySig.get(sig(t));if(a&&a.x!=null){t.x=a.x;t.y=a.y;}});}});
+    // Entwurfs-Transitionen neuer (Entwurfs-)Prozesse behalten.
+    altTr.filter(t=>!neu.sagas.some(sg=>sg.name===t.prozess)&&neu.transitions.indexOf(t)<0).forEach(t=>neu.transitions.push(t));
+    return neu;}
+  // Node-Art (graphNodes().kind) → Modell-Sammlung (für die Entwurf-Markierung: nur Sammlungen, die aus dem Code kommen).
+  function kollektionVon(kind){return {command:"records",event:"records",rejection:"records",valueobject:"records",konfig:"records",query:"records",queryresponse:"records",
+    enum:"enums",aggregate:"aggregate",decider:"decider",applier:"applier",saga:"sagas",readmodel:"readModels",store:"stores",
+    projektion:"projektionen",reaktion:"reaktionen",reader:"reader",pipeline:"pipelines",trigger:"triggers",frist:"frists",dienst:"dienste",hostsetting:"hostSettings"}[kind]||null;}
+  function meldeMerge(){const u=MERGE_INFO.ungeschrieben,e=MERGE_INFO.entwuerfe;
+    if(u||e)deFlash("↔ Code geladen · "+u+" ungeschrieben · "+e+" Entwurf/Entwürfe",true);}
   window.deDownload=function(){deriveMembership();prepareSaga();const blob=new Blob([JSON.stringify(MODEL,null,2)],{type:"application/json"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="domain-model.json";a.click();};
-  async function post(path){deriveMembership();prepareSaga();const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(MODEL)});
+  // Server-Payload: das MODEL + die Rümpfe (Code-Knoten-Text bzw. "" für bewusst leer) zurück an Decider/Applier.
+  function payload(){deriveMembership();prepareSaga();const m=JSON.parse(JSON.stringify(MODEL));
+    const txt=id=>{const c=m.codeNodes.find(x=>x._id===id);return c?c.text:null;};
+    [...m.decider,...m.applier].forEach(n=>{if(n.leer)n.rumpf="";else if(n.codeSrc){const t=txt(n.codeSrc);if(t!=null)n.rumpf=t;}});
+    return m;}
+  async function post(path){const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload())});
     if(!r.ok)throw new Error("HTTP "+r.status);return r;}
-  window.deScaffold=async function(){const out=document.getElementById("de-out");
-    try{const r=await post("/api/editor/scaffold");const files=await r.json();badge(true);
-      out.innerHTML="";files.forEach(f=>{out.append(h("span",{class:"f"},"// "+f.pfad));out.append(h("div",{class:"body"},f.inhalt));});
-      if(!files.length)out.innerHTML='<div class="hint">Leeres Modell — nichts zu generieren.</div>';
-    }catch(e){badge(false);out.innerHTML='<div class="find error">SimHost nicht erreichbar. Starte ihn: <b>dotnet run --project SimHost</b>, dann erneut.</div>';}};
+  // &lt;/&gt; C# schreiben: das Modell in die ECHTEN .cs-Dateien schreiben (chirurgisch/additiv über
+  //   /api/editor/write). Neue Records/Methoden werden angehängt, Handcode nie überschrieben.
+  //   Danach spiegelt der Code-Sync die Datei-Rümpfe zurück ins Board.
+  window.deWrite=async function(){
+    try{const r=await post("/api/editor/write");const b=await r.json();badge(true);
+      const neu=(b.geschrieben||[]).length, erg=(b.ergaenzt||[]).length, ueb=(b.uebersprungen||[]).length;
+      if(!neu&&!erg){deFlash("✓ Dateien aktuell — nichts zu schreiben ("+ueb+" unverändert)",true);}
+      else{deFlash("✅ geschrieben: "+neu+" neu · "+erg+" ergänzt · "+ueb+" unverändert",true);}
+      console.log("C# schreiben:",b);
+      if(neu||erg)await deReload();   // Code → Board: Geschriebenes wird Code-Stand (nicht mehr „ungeschrieben")
+    }catch(e){badge(false);deFlash("⚠ SimHost offline — nicht geschrieben (dotnet run --project SimHost)",false);}};
   window.deValidate=async function(){const out=document.getElementById("de-out");
-    try{const r=await post("/api/editor/validate");const fs=await r.json();badge(true);
+    try{const r=await post("/api/editor/validate");const fs=(await r.json()).concat(MODEL.diagnosen||[]);badge(true);
       if(!fs.length){out.innerHTML='<div class="find" style="background:#1f3a2a;color:#9be3bf">✓ Keine Befunde — die Form ist stimmig.</div>';return;}
       out.innerHTML="";fs.forEach(f=>out.append(h("div",{class:"find "+f.schweregrad},"["+f.code+"] "+f.meldung)));
     }catch(e){badge(false);out.innerHTML='<div class="find error">SimHost nicht erreichbar. Starte ihn: <b>dotnet run --project SimHost</b>.</div>';}};
 
+  // Ausgabe-Panel: sobald Prüfen/Kompilieren/Testen hineinschreiben, einblenden (mit ✕ zum Schließen).
+  (function(){const out=document.getElementById("de-out");if(!out||!window.MutationObserver)return;
+    new MutationObserver(()=>{if(out.querySelector(".outzu"))return;out.classList.add("zeigen");
+      const zu=h("button",{class:"outzu",title:"Ausgabe schließen",onclick:()=>out.classList.remove("zeigen")},"✕");out.prepend(zu);})
+      .observe(out,{childList:true});})();
   const unreach='<div class="find error">SimHost nicht erreichbar. Starte ihn: <b>dotnet run --project SimHost</b>.</div>';
   async function postJson(path,obj){deriveMembership();prepareSaga();const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(obj)});if(!r.ok)throw new Error("HTTP "+r.status);return r;}
   const alleCommands=()=>MODEL.records.filter(r=>r.kind==="command");
@@ -1856,40 +2392,169 @@ if(triggerEvents.length){ const t=triggerEvents.find(t=>t.name==='BestellungAufg
         res.fehler.forEach(f=>out.append(h("div",{class:"find error"},"["+f.code+"] "+(f.datei?f.datei+": ":"")+f.meldung)));}
     }catch(e){badge(false);out.innerHTML=unreach;}};
 
-  // ▶ Testen: Command mit Werten über den store-freien Kern ausführen (Zustand baut sich auf).
-  let TESTID=null;
-  window.deTest=function(){const out=document.getElementById("de-out");out.innerHTML="";
-    const cmds=alleCommands();
-    if(!cmds.length){out.innerHTML='<div class="hint">Kein Command im Modell — erst eines anlegen.</div>';return;}
-    if(!TESTID)TESTID=(crypto.randomUUID?crypto.randomUUID():"00000000-0000-4000-8000-000000000000");
-    const wrap=h("div",{class:"test"});
-    wrap.append(h("div",{class:"sub"},"Testen — Command mit echten Werten ausführen (In-Memory-Kompilat)"));
-    const sel=h("select");cmds.forEach(c=>sel.append(h("option",{value:c.name},c.name)));
-    const fieldsBox=h("div",{class:"tfields"});
-    function renderFields(){fieldsBox.innerHTML="";const c=cmds.find(x=>x.name===sel.value)||cmds[0];
-      (c.felder||[]).forEach(f=>{const row=h("div",{class:"trow"});row.append(h("label",{},f.name+" : "+f.typ));
-        let input;if(f.typ==="bool"){input=h("input",{type:"checkbox"});}
-        else{input=h("input",{value:f.typ==="Guid"?TESTID:""});if(f.typ==="decimal"||f.typ==="int")input.type="number";}
-        input.dataset.feld=f.name;input.dataset.typ=f.typ;row.append(input);fieldsBox.append(row);});}
-    sel.onchange=renderFields;renderFields();
-    const ergebnis=h("div",{class:"tout"});
-    async function doRun(reset){const c=cmds.find(x=>x.name===sel.value);const values={};
-      fieldsBox.querySelectorAll("input").forEach(i=>{const t=i.dataset.typ;
-        values[i.dataset.feld]=t==="bool"?i.checked:(t==="decimal"||t==="int")?Number(i.value||0):i.value;});
-      try{const r=await postJson("/api/editor/run",{model:MODEL,command:c.name,values,reset});const res=await r.json();badge(true);ergebnis.innerHTML="";
-        if(!res.ok){res.fehler.forEach(f=>ergebnis.append(h("div",{class:"find error"},"["+f.code+"] "+(f.datei?f.datei+": ":"")+f.meldung)));return;}
-        ergebnis.append(h("div",{class:"sub"},"Verlauf"));
-        res.frames.forEach(fr=>ergebnis.append(h("div",{class:"tframe"+(fr.ablehnungen.length?" rej":"")},
-          fr.command+" → "+(fr.events.length?fr.events.join(", "):"—")+(fr.ablehnungen.length?"  ✗ "+fr.ablehnungen.join(", "):"")+(fr.unrouted?"  ⚠ UNROUTED":""))));
-        ergebnis.append(h("div",{class:"sub"},"Zustände"));
-        if(!res.states.length)ergebnis.append(h("div",{class:"hint"},"(kein Aggregat berührt)"));
-        res.states.forEach(s=>ergebnis.append(h("div",{class:"tstate"},s.aggregate+" "+s.id.slice(0,8)+" · "+Object.entries(s.felder).map(([k,v])=>k+"="+v).join(", "))));
-      }catch(e){badge(false);ergebnis.innerHTML=unreach;}}
-    wrap.append(sel,fieldsBox,h("div",{style:"display:flex;gap:8px;margin:8px 0"},
-      h("button",{class:"act run",onclick:()=>doRun(false)},"▶ Senden"),
-      h("button",{class:"act",onclick:()=>doRun(true)},"↺ Reset & Senden"),
-      h("button",{class:"act",onclick:()=>{TESTID=crypto.randomUUID?crypto.randomUUID():TESTID;renderFields();}},"⟳ neue Id")),ergebnis);
-    out.append(wrap);};
+  // ══ SIMULATION (die EINE Laufzeit): Command mit Werten → Kaskade über das In-Memory-Kompilat des MODELLS ══
+  //   (echte Generatoren + SagaLaufwerk). Die Kaskade läuft Knoten für Knoten über das Board:
+  //   (Saga-Regel →) Command → Decider/Aggregat → Events/Ablehnungen → Applier/State. Ändert man das Modell,
+  //   spielt der Server die bisherige Geschichte gegen die neue Logik nach (Hot-Reload).
+  const SIM={an:false,sid:"editor-"+Math.random().toString(36).slice(2,10),frames:[],instanzen:[],sagas:[],abd:new Set(),
+    abdAn:false,folgen:true,tempo:420,laeuft:false,cmd:null,werte:{},hinweis:null,fehler:[],cmdSig:""};
+  const uuid=()=>crypto.randomUUID?crypto.randomUUID():"xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx".replace(/x/g,()=>(Math.random()*16|0).toString(16));
+  const simCommands=()=>MODEL.records.filter(r=>r.kind==="command");
+  const simZiel=c=>{const d=MODEL.decider.find(x=>x.command===c);return d?d.aggregat:null;};
+  window.deSimSession=()=>SIM.sid;
+  window.deSim=function(){SIM.an=!SIM.an;document.getElementById("de").classList.toggle("simon",SIM.an);
+    document.getElementById("de-simbtn").textContent=SIM.an?"■ Simulation":"▶ Simulation";
+    if(SIM.an){simPanel();simStand();}else simLeeren(true);render();};
+
+  function simPanel(){const box=document.getElementById("de-sim");if(!box)return;box.innerHTML="";
+    const kopf=h("div",{class:"row"},
+      h("button",{class:"act",title:"Session verwerfen (alle Instanzen/Sagas)",onclick:simReset},"↺ Reset"),
+      h("button",{class:"act",title:"Letztes Command als Regressionstest (Test-DSL)",onclick:simDsl},"📋 Als Test"),
+      h("label",{class:"cbx",title:"Welche Zweige wurden in dieser Session gefahren?"},h("input",{type:"checkbox",...(SIM.abdAn?{checked:"checked"}:{}),onchange:e=>{SIM.abdAn=e.target.checked;simOverlay();}})," Abdeckung"),
+      h("label",{class:"cbx",title:"Kamera folgt der Animation"},h("input",{type:"checkbox",...(SIM.folgen?{checked:"checked"}:{}),onchange:e=>SIM.folgen=e.target.checked})," Folgen"));
+    const tempo=h("select",{title:"Animations-Tempo",onchange:e=>SIM.tempo=+e.target.value});
+    [["700","langsam"],["420","normal"],["150","schnell"],["0","sofort"]].forEach(([v,l])=>{const o=h("option",{value:v},l);if(+v===SIM.tempo)o.selected=true;tempo.append(o);});
+    kopf.append(tempo);
+    box.append(kopf,h("h4",{},"Command senden"),h("div",{id:"sim-form"}),h("div",{id:"sim-meld"}),
+      h("h4",{},"Verlauf"),h("div",{id:"sim-verlauf"}),h("h4",{},"Instanzen"),h("div",{id:"sim-inst"}),
+      h("h4",{},"Laufende Sagas"),h("div",{id:"sim-sagas"}));
+    simForm();simListen();}
+
+  // ── Formular: Command wählen (nach Ziel-Aggregat gruppiert) + Felder typgerecht ──
+  function simForm(){const box=document.getElementById("sim-form");if(!box)return;box.innerHTML="";
+    const cmds=simCommands();SIM.cmdSig=cmds.map(c=>c.name+":"+(c.felder||[]).map(f=>f.name+"/"+f.typ).join(",")).join("|");
+    if(!cmds.length){box.append(h("div",{class:"hint"},"Kein Command im Modell."));return;}
+    if(!SIM.cmd||!cmds.some(c=>c.name===SIM.cmd))SIM.cmd=cmds[0].name;
+    const sel=h("select",{style:"width:100%",onchange:e=>{SIM.cmd=e.target.value;simForm();}});
+    const gruppen={};cmds.forEach(c=>{const g=simZiel(c.name)||"(kein Decider)";(gruppen[g]=gruppen[g]||[]).push(c);});
+    Object.keys(gruppen).sort().forEach(g=>{const og=h("optgroup",{label:g});
+      gruppen[g].sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>{const o=h("option",{value:c.name},c.name+(c.istErzeugung?" ✚":""));if(c.name===SIM.cmd)o.selected=true;og.append(o);});sel.append(og);});
+    box.append(sel);
+    const c=cmds.find(x=>x.name===SIM.cmd);const w=SIM.werte[c.name]=SIM.werte[c.name]||{};const ziel=simZiel(c.name);
+    (c.felder||[]).forEach(f=>box.append(h("div",{class:"fld"},h("label",{title:f.typ},f.name+" : "+f.typ),simInput(f,w,ziel))));
+    box.append(h("div",{class:"row",style:"margin-top:6px"},
+      h("button",{class:"act run",onclick:simSenden},"▶ Senden"),
+      ziel?null:h("span",{class:"hint"},"⚠ kein Aggregat entscheidet dieses Command")));}
+
+  const enumWerte=t=>{const e=MODEL.enums.find(x=>x.name===t);return e?(e.werte||[]).map((v,i)=>{const m=/^(\w+)\s*=\s*(-?\d+)/.exec(v);return m?{n:m[1],v:+m[2]}:{n:v.trim(),v:i};}):null;};
+  function simInput(f,w,ziel){const typ=(f.typ||"").trim(),basis=typ.replace(/\?$/,""),nullbar=typ.endsWith("?");
+    const set=v=>{w[f.name]=v;};
+    if(basis==="Guid"){ // Instanz wählen (Ziel-Aggregat zuerst) oder neue Id
+      const s=h("select",{onchange:e=>set(e.target.value==="__neu"?uuid():e.target.value)});
+      const eigene=SIM.instanzen.filter(i=>f.name===ID_FELD()?i.aggregat===ziel:true);
+      if(w[f.name]===undefined)w[f.name]=(f.name===ID_FELD()&&eigene.length&&!(simCommands().find(c=>c.name===SIM.cmd)||{}).istErzeugung)?eigene[eigene.length-1].id:uuid();
+      const bekannt=eigene.some(i=>i.id===w[f.name]);
+      s.append(h("option",{value:w[f.name]},bekannt?"":"neu · "+String(w[f.name]).slice(0,8)));
+      eigene.forEach(i=>{const o=h("option",{value:i.id},i.label+" · "+i.id.slice(0,8));if(i.id===w[f.name])o.selected=true;s.append(o);});
+      s.append(h("option",{value:"__neu"},"＋ neue Id"));if(bekannt)s.firstChild.remove();return s;}
+    if(basis==="bool"){const i=h("input",{type:"checkbox",onchange:e=>set(e.target.checked)});if(w[f.name])i.checked=true;if(w[f.name]===undefined)set(false);return i;}
+    if(/^(int|long|decimal|double|float|short)$/.test(basis)){if(w[f.name]===undefined)set(nullbar?null:0);
+      return h("input",{type:"number",value:w[f.name]??"",oninput:e=>set(e.target.value===""?(nullbar?null:0):Number(e.target.value))});}
+    const ew=enumWerte(basis);
+    if(ew){const s=h("select",{onchange:e=>set(e.target.value===""?null:+e.target.value)});
+      if(nullbar)s.append(h("option",{value:""},"null"));
+      ew.forEach(x=>{const o=h("option",{value:x.v},x.n);if(w[f.name]===x.v)o.selected=true;s.append(o);});
+      if(w[f.name]===undefined)set(nullbar?null:(ew[0]||{}).v);return s;}
+    if(basis==="DateTimeOffset"||basis==="DateTime"){if(w[f.name]===undefined)set(nullbar?null:new Date().toISOString());
+      return h("input",{value:w[f.name]??"",placeholder:"ISO-Zeit",oninput:e=>set(e.target.value===""&&nullbar?null:e.target.value)});}
+    if(basis==="string"){if(w[f.name]===undefined)set(nullbar?null:"");
+      return h("input",{value:w[f.name]??"",placeholder:nullbar?"null":"",oninput:e=>set(e.target.value===""&&nullbar?null:e.target.value)});}
+    // Komplex (Value Object, Collection): JSON.
+    if(w[f.name]===undefined)set(/^(List|IReadOnlyList|IEnumerable|HashSet|.*\[\])/.test(basis)?[]:null);
+    const t=h("textarea",{rows:2,placeholder:"JSON",oninput:e=>{try{set(e.target.value.trim()===""?null:JSON.parse(e.target.value));t.style.borderColor="";}catch(_){t.style.borderColor="#ff6b81";}}});
+    t.value=JSON.stringify(w[f.name]);return t;}
+
+  // ── Senden → Server-Kaskade → Animation ──
+  async function simSenden(){if(SIM.laeuft)return;const c=SIM.cmd;const werte=SIM.werte[c]||{};SIM.laeuft=true;
+    try{const r=await postJson("/api/editor/sim/step",{model:payload(),sessionId:SIM.sid,command:c,values:werte});const res=await r.json();badge(true);
+      SIM.fehler=res.ok?[]:(res.fehler||[]);SIM.hinweis=res.hinweis||null;
+      // Bei Übersetzungs-/Wertefehlern bleibt der letzte gute Stand (Instanzen, Abdeckung) stehen.
+      if(res.ok){SIM.instanzen=res.instanzen||[];SIM.abd=new Set(res.abdeckung||[]);SIM.sagas=res.sagas||[];const start=SIM.frames.length;res.frames.forEach(f=>SIM.frames.push(f));
+        // Nach dem Anlegen: dieselbe Instanz für Folge-Commands vorwählen.
+        simListen();simOverlay();await simAnimiere(res.frames);simForm();}
+      else{simListen();simOverlay();}}
+    catch(e){badge(false);SIM.fehler=[{code:"OFFLINE",meldung:"SimHost nicht erreichbar (dotnet run --project SimHost)."}];simListen();}
+    finally{SIM.laeuft=false;}}
+  async function simReset(){try{await postJson("/api/editor/sim/reset",{sessionId:SIM.sid});}catch(e){}
+    SIM.frames=[];SIM.instanzen=[];SIM.sagas=[];SIM.abd=new Set();SIM.werte={};SIM.hinweis=null;SIM.fehler=[];simLeeren(true);simForm();simListen();simOverlay();}
+  async function simStand(){try{const r=await fetch("/api/editor/sim/state?sessionId="+SIM.sid);const res=await r.json();
+    SIM.instanzen=res.instanzen||[];SIM.abd=new Set(res.abdeckung||[]);simListen();simOverlay();}catch(e){}}
+  async function simDsl(){const out=document.getElementById("de-out");
+    try{const t=await (await fetch("/api/editor/sim/dsl?sessionId="+SIM.sid)).text();out.innerHTML="";
+      out.append(h("div",{class:"sub"},"Regressionstest (Test-DSL) — in Infrastructure.Pruefstand.Tests einfügen"),h("pre",{style:"white-space:pre-wrap"},t));
+      try{await navigator.clipboard.writeText(t);deFlash("📋 Test in die Zwischenablage kopiert",true);}catch(_){}}
+    catch(e){out.innerHTML=unreach;}}
+
+  // ── Listen: Meldungen, Verlauf (klickbar = erneut abspielen), Instanzen, Sagas ──
+  function simListen(){
+    const meld=document.getElementById("sim-meld");if(meld){meld.innerHTML="";
+      if(SIM.hinweis)meld.append(h("div",{class:"hinweis"},"↻ "+SIM.hinweis));
+      SIM.fehler.forEach(f=>meld.append(h("div",{class:"fehler"},"["+f.code+"] "+(f.datei?f.datei+": ":"")+f.meldung)));}
+    const v=document.getElementById("sim-verlauf");if(v){v.innerHTML="";
+      if(!SIM.frames.length)v.append(h("div",{class:"hint"},"Noch nichts gesendet."));
+      SIM.frames.slice().reverse().forEach(f=>{const rej=f.events.length&&f.events.every(e=>!e.persistent);
+        const el=h("div",{class:"frame"+(f.herkunft==="saga"?" saga":"")+(rej||f.unrouted?" rej":""),title:"erneut abspielen",onclick:()=>simAnimiere([f])},
+          h("b",{},(f.herkunft==="saga"?"⤷ "+f.saga+": ":"")+f.command),h("span",{style:"opacity:.6"}," → "+f.label+(f.werte?" ("+f.werte+")":"")));
+        if(f.unrouted)el.append(h("span",{class:"ev rej"},"⚠ von keinem Aggregat behandelt (im Cluster ein Hang)"));
+        f.events.forEach(e=>el.append(h("span",{class:"ev"+(e.persistent?"":" rej")},(e.persistent?"● ":"✗ ")+e.typ+(e.werte?" ("+e.werte+")":""),
+          e.warum?h("span",{class:"warum"}," weil "+e.warum):null)));
+        v.append(el);});}
+    const ib=document.getElementById("sim-inst");if(ib){ib.innerHTML="";
+      if(!SIM.instanzen.length)ib.append(h("div",{class:"hint"},"Keine Instanz angelegt."));
+      SIM.instanzen.forEach(i=>{const el=h("div",{class:"inst",title:"als Ziel wählen",onclick:()=>{const c=simCommands().find(x=>x.name===SIM.cmd);
+          if(c&&simZiel(c.name)===i.aggregat){(SIM.werte[c.name]=SIM.werte[c.name]||{})[ID_FELD()]=i.id;simForm();}
+          const n=graphNodes().find(x=>x.id==="agg:"+i.aggregat);if(n){centerOn(n);pulseNode(n);}}},h("b",{},i.label),h("span",{style:"opacity:.5"}," "+i.id.slice(0,8)));
+        i.felder.forEach(f=>el.append(h("span",{class:"f"+(f.geaendert?" neu":"")},f.name+" = "+f.wert)));ib.append(el);});}
+    const sb=document.getElementById("sim-sagas");if(sb){sb.innerHTML="";
+      const offen=SIM.sagas.filter(x=>x.wartend.length);
+      if(!offen.length)sb.append(h("div",{class:"hint"},SIM.sagas.length?"Alle Saga-Instanzen abgeschlossen.":"Keine Saga gestartet."));
+      offen.forEach(x=>{const el=h("div",{class:"inst"},h("b",{},x.prozess),h("span",{style:"opacity:.5"}," "+x.korrelation.slice(0,8)));
+        el.append(h("span",{class:"f"},"angekommen: "+(x.angekommen.join(", ")||"—")));
+        x.wartend.forEach(w=>el.append(h("span",{class:"f neu"},"wartet: "+w.bedingung.join(" ∧ ")+(w.fehlt.length?" — fehlt "+w.fehlt.join(", "):""))));sb.append(el);});}}
+
+  // ── Animation: Frame → Stufen von Knoten-Ids ──
+  const knotenId={
+    rec:n=>MODEL.records.some(r=>r.name===n)?"rec:"+n:null,
+    dec:(agg,cmd)=>{const d=MODEL.decider.find(x=>x.aggregat===agg&&x.command===cmd)||MODEL.decider.find(x=>x.command===cmd);return d?"dec:"+d._id:null;},
+    app:(agg,evt)=>{const a=MODEL.applier.find(x=>x.aggregat===agg&&x.event===evt);return a?"app:"+a._id:null;},
+    state:agg=>{const s=MODEL.states.find(x=>x.aggregat===agg);return s?"st:"+s._id:null;},
+    regel:(saga,ri)=>{const sg=MODEL.sagas.find(x=>x.name===saga);if(!sg||ri==null)return null;
+      const liste=transOf(sg).filter(t=>(t.wenn||[]).length).flatMap(t=>(t.dann||[]).filter(d=>d.sende).map(()=>t));const t=liste[ri];return t?"tr:"+t._id:null;}};
+  function simStufen(f){const st=[];const rej=new Set();
+    if(f.herkunft==="saga")st.push(["saga:"+f.saga,knotenId.regel(f.saga,f.regel)]);
+    st.push([knotenId.rec(f.command)]);if(f.unrouted){rej.add(knotenId.rec(f.command));return {st,rej};}
+    st.push([knotenId.dec(f.aggregat,f.command),"agg:"+f.aggregat]);
+    st.push(f.events.map(e=>{const id=knotenId.rec(e.typ);if(!e.persistent&&id)rej.add(id);return id;}));
+    const pers=f.events.filter(e=>e.persistent);
+    if(pers.length)st.push([...pers.map(e=>knotenId.app(f.aggregat,e.typ)),knotenId.state(f.aggregat)]);
+    return {st:st.map(x=>x.filter(Boolean)).filter(x=>x.length),rej};}
+  const simEl=id=>world&&world.querySelector('[data-id="'+vertreterId(id)+'"]');   // eingeklappte Details → Besitzer
+  function simLeeren(ganz){if(!world)return;world.querySelectorAll(".gnode2.simhot").forEach(e=>e.classList.remove("simhot"));
+    if(ganz)world.querySelectorAll(".gnode2.simspur,.gnode2.simrej").forEach(e=>e.classList.remove("simspur","simrej"));}
+  const warte=ms=>new Promise(r=>setTimeout(r,ms));
+  async function simAnimiere(frames){simLeeren(true);
+    for(const f of frames){const {st,rej}=simStufen(f);
+      for(const ids of st){simLeeren(false);
+        ids.forEach(id=>{const el=simEl(id);if(!el)return;el.classList.add("simhot","simspur");if(rej.has(id))el.classList.add("simrej");});
+        if(SIM.folgen&&SIM.tempo>0){const n=graphNodes().find(x=>x.id===ids[0]);if(n)centerOn(n);}
+        if(SIM.tempo>0)await warte(SIM.tempo);}}
+    simLeeren(false);}
+
+  // ── Abdeckung: welche Zweige diese Session gefahren hat (Decider: Ausgänge x/y, Applier, Regeln) ──
+  function simOverlay(){if(!world)return;
+    world.querySelectorAll(".gnode2").forEach(el=>{el.classList.remove("abd-voll","abd-teil","abd-kalt");const b=el.querySelector(".simabd");if(b)b.remove();});
+    if(!SIM.an||!SIM.abdAn)return;
+    const mark=(id,klasse,text)=>{const el=simEl(id);if(!el)return;el.classList.add(klasse);
+      if(text){const hd=el.querySelector(".ghead");if(hd)hd.append(h("span",{class:"simabd"},text));}};
+    MODEL.decider.forEach(d=>{const aus=d.ergibt||[];const n=aus.filter(o=>SIM.abd.has("out:"+d.command+">"+o.event)).length;
+      mark("dec:"+d._id,n===0?"abd-kalt":(n===aus.length?"abd-voll":"abd-teil"),n+"/"+aus.length+" Zweige");});
+    MODEL.applier.forEach(a=>mark("app:"+a._id,SIM.abd.has("app:"+a.aggregat+"|"+a.event)?"abd-voll":"abd-kalt"));
+    MODEL.sagas.forEach(sg=>{const liste=transOf(sg).filter(t=>(t.wenn||[]).length).flatMap(t=>(t.dann||[]).filter(d=>d.sende).map(()=>t));
+      liste.forEach((t,ri)=>mark("tr:"+t._id,SIM.abd.has("regel:"+sg.name+"#"+ri)?"abd-voll":"abd-kalt"));});}
+
+  // Nach jedem Board-Render: Overlay neu anbringen; Formular nur neu bauen, wenn sich die Commands geändert haben.
+  window.simNachRender=function(){if(!SIM.an)return;simOverlay();
+    const sig=simCommands().map(c=>c.name+":"+(c.felder||[]).map(f=>f.name+"/"+f.typ).join(",")).join("|");if(sig!==SIM.cmdSig)simForm();};
 })();
 </script>
 """;
