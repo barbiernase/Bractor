@@ -1,6 +1,6 @@
 # Konzept — LLM-Füllung von Code-Blöcken: Kontext nur aus dem Code
 
-> **Stand:** 2026-09-25 · **Status:** Architektur = KONZEPT (nicht gebaut). Mess-Werkzeuge gebaut: `--karte`, `--slots` (§9).
+> **Stand:** 2026-09-25 · **Status:** Kontext-Erzeugung GEBAUT für alle Slot-Arten (`--kontext`, `--kontexte`, §9); LLM-Aufruf, Prüfung und Schreiben (§2 Schritte 3–5) noch nicht.
 > **Ziel:** Ein lokales LLM (Zielhardware: RTX 4080 Super, 16 GB; Modell: Qwen3.8-27B) schreibt **nur den Rumpf** eines
 > Code-Blocks. Alles, was es dafür wissen muss, wird **regelbasiert aus dem Domänen-Code und dem Graphen** abgeleitet —
 > nichts ist ausgedacht, nichts semantisch geraten. Die **einzige** menschliche Eingabe ist der Auftrag am LLM-Knoten.
@@ -116,7 +116,8 @@ bei leerem Rumpf kommt sie aus dem Editor, nicht aus dem Code) · **[N]** Nachba
 3. Gesendete Commands, erzeugte Trigger, geplante Self-Ticks [K]
 4. Dienst-Verträge (Signaturen), Konfig-Records mit HostSettings, Trigger-Quelle bzw. Frist [K]
 5. Klassenfelder, die mehrere Handles benutzen (geteilter, verlierbarer Zustand — Inv. 6) [S/N]
-6. ❌ Lesezugriff auf einen Read-Store: nur als Konstruktor-Feld sichtbar, keine Kante (`DatensatzResolverPipeline`)
+6. Injizierte Felder mit Kategorie über Marker (Store / Konfig / Domänen-Dienst / Framework / Bibliothek) — damit ist auch
+   der Read-Store-Zugriff sichtbar (`DatensatzResolverPipeline._imagePairStore [Store]`) [S]. ❌ Im Graphen/Editor fehlt diese Kante weiterhin.
 7. ❌ Domänen-Helfer (`SplitZuteiler`, `ImagePairFileName`) sind nicht als Dienst verdrahtet
 
 ### Store-Impl (je Write-/Read-Funktion) — Methode, die eine Funktion eines `IWriteStore`/`IReadStore`-Interfaces implementiert
@@ -235,13 +236,30 @@ dem Editor (z. B. Query an einem Decider) und gibt dem LLM den Antwortkanal `AUS
 
 ## 9 · Ist-Stand der Werkzeuge (gebaut)
 
-| Werkzeug | Was es tut | Abweichung vom Konzept |
-|---|---|---|
-| `--karte [<Disc>]`, `--karten <verz>` (`GraphExtractor/Arbeitskarte.cs`) | Kontext für Decide/Apply aus Graph + Roslyn; Gegenprobe: alle 60 geschriebenen Rümpfe benutzen nur deklarierte Symbole | nur Decide/Apply; ohne Graph-Skelett und ohne intent; Nachbar nur **einer** (B5) statt alle; enthält noch einen Abschnitt „Spezifikation" (verworfen, §10); V2 und „sonst nichts erreichbar" sind fester Text, nicht aus dem Code gelesen |
-| `--slots` (`GraphExtractor/SlotInventar.cs`) | Isolations-Messung aller Code-Block-Stellen (§7) | — |
+```bash
+dotnet run --project GraphExtractor -- --kontexte <verz>                       # 00-graph-skelett.txt + je Code-Block ein Slot-Teil + übersicht.md
+dotnet run --project GraphExtractor -- --kontext SetzeSplit [--auftrag "…"]     # ein Slot-Teil auf die Konsole
+dotnet run --project GraphExtractor -- --slots                                 # Isolations-Messung (§7)
+```
 
-Offen im Bestand, unabhängig vom LLM: `CodeSync` löst nur Decide/Apply-Anker auf (Leseseiten-Code-Blöcke gibt es im
-Editor bereits); Kanten Pipeline → Read-Store und Pipeline → Domänen-Helfer fehlen im Graphen.
+`GraphExtractor/LlmKontext.cs` (`KontextBauer`, `KontextCli`), Slot-Erkennung aus `GraphExtractor/SlotInventar.cs`.
+
+| Teil | Umsetzung |
+|---|---|
+| Graph-Skelett | aus dem Editor-Modell (`ModellMapper.ZuBoardJson`); beim eigenen Decide werden die Guards entfernt |
+| Auftrag | 1. LLM-Knoten in `board-model.json` (`intent` → `promptZiel` → Code-Knoten → `codeSrc` des Slots), 2. `// 🤖 Prompt:` im Rumpf, 3. `--auftrag` (nur Einzel-Slot). Ohne Auftrag: Hinweis „kein LLM-Knoten" |
+| Slot-Arten | Decide, Apply, Projektion, Reaktion, Reader, Pipeline, Store-Impl (184 Code-Blöcke im Bestand) |
+| Abschnitte | AUFTRAG · ANKER · SIGNATUR · VERTRAG · ERREICHBAR · KOMMENTARE · TYPEN · GRAPH-UMFELD · NACHBAR-CODE-BLÖCKE (alle der Klasse, inkl. Helfer) · KOPPLUNG |
+| Kopplung | Decide → Apply der persistenten Ausgänge · Apply → erzeugende Decide · Projektion/Reader → Store-Impl der aufgerufenen Funktionen · Store-Impl → aufrufende Handles |
+
+**Gemessen (Qwen-BPE):** Skelett 8.879 Token. Slot-Teil Median/Max: Decide 2.285/2.873 · Apply 1.702/2.000 ·
+Projektion 2.613/2.949 · Reader 2.939/4.715 · Pipeline 1.860/3.983 · Store-Impl 2.650/5.679. Größter Aufruf inkl. 1.000
+Token Antwort: 15.558 — innerhalb des Budgets (§6).
+
+**Bekannte Abweichungen:** Der Vertragssatz „Ablehnung nur allein" ist fester Text je Marker (die Prüfung steht in
+`AggregateActorBase.cs:306`, wird aber nicht ausgelesen). Bei geschriebenen Slots stammen „Store-Aufrufe (verdrahtet)" aus
+dem eigenen Rumpf, weil es noch kein Board gibt; bei leeren Slots kommen sie aus der Editor-Verdrahtung. Domänen-Helfer ohne
+Kante (`SplitZuteiler`) erscheinen nicht. `CodeSync` löst weiterhin nur Decide/Apply-Anker auf.
 
 ---
 
@@ -256,9 +274,8 @@ Editor bereits); Kanten Pipeline → Read-Store und Pipeline → Domänen-Helfer
 
 ## 11 · Nächste Schritte
 
-1. `--karte` auf das Konzept umstellen: Graph-Skelett als fester Teil, intent aus dem LLM-Knoten, alle Nachbar-Blöcke,
-   Spezifikations-Abschnitt entfernen, V2/„sonst nichts erreichbar" aus dem Code belegen.
-2. Slot-Arten Projektion, Reader, Pipeline, Store-Impl ergänzen (§4).
-3. Graph-Kanten Pipeline → Read-Store und Pipeline → Domänen-Helfer (Code-Fakt: Konstruktor-Parameter).
-4. Kartenwand (Prüfung auf dem Semantic Model) und `AUSSERHALB`-Antwortkanal.
+1. LLM-Aufruf (OpenAI-kompatibler Endpunkt, lokaler Server) mit Präfix = Graph-Skelett, danach Slot-Teil.
+2. Prüfung: In-Memory-Compile + Kartenwand; `AUSSERHALB`-Antwortkanal auswerten.
+3. `CodeSync` für alle Slot-Arten (Rumpf schreiben + `// 🤖 Prompt:`).
+4. Graph-Kanten Pipeline → Read-Store und Pipeline → Domänen-Helfer (Code-Fakt: Konstruktor-Parameter).
 5. Vergleichstest auf der Zielhardware: Slot-Teil allein vs. mit Graph-Skelett.

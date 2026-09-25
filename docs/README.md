@@ -72,7 +72,7 @@ auf die jeweiligen Architektur-Kapitel.
 > Frist/Leseachsen-Anleitung). Ist-Abgleich Backend↔Editor (Abdeckung, Sync-Lücken, LLM-Füllung,
 > Roadmap): [`analyse-editor-backend-abdeckung-2026-09-24.md`](analyse-editor-backend-abdeckung-2026-09-24.md).
 > LLM-Füllung von Code-Blöcken (Kontext nur aus Code + Graph, ausgelöst durch einen LLM-Knoten; Informationen je
-> Slot-Art, Budget für lokales Modell; Architektur = Konzept, Mess-Werkzeuge `--karte`/`--slots` gebaut):
+> Slot-Art, Budget für lokales Modell; Kontext-Erzeugung `--kontexte` gebaut, LLM-Aufruf noch nicht):
 > [`konzept-llm-minimalkontext.md`](konzept-llm-minimalkontext.md).
 >
 > **Konzept / Vor-Analyse:** [`konzept-exactly-once-naht.md`](konzept-exactly-once-naht.md) —

@@ -72,9 +72,6 @@ foreach (var (k, v) in graph.Meta.Counts) Console.WriteLine($"   {k,-12}: {v}");
 
 var solutionDir = Path.GetDirectoryName(solutionPath) ?? ".";
 
-// --karte [<Disc|Aggregat.Disc>] / --karten <verz>: Arbeitskarten — Projektion des Graphen je Decide-/Apply-Rumpf.
-if (args.Contains("--karte") || args.Contains("--karten"))
-    return await KartenCli.LaufAsync(args, solution, lage, dom, graph);
 // --slots: Isolation aller Code-Block-Stellen (Spielraum vs. Nachbarn vs. Wissen von außen).
 if (args.Contains("--slots"))
 {
@@ -86,6 +83,10 @@ if (args.Contains("--slots"))
 Console.WriteLine("\n── Composition-Root (Betrieb/Host) ──");
 var compositionRoot = await new CompositionRootExtractor(solution, lage, routing, dom).ExtractAsync();
 Console.WriteLine($"   {compositionRoot.Frists.Count} Frist(en), {compositionRoot.Triggers.Count} Trigger, {compositionRoot.Dienste.Count} Dienst-Bindung(en), {compositionRoot.HostSettings.Count} HostSetting(s)");
+
+// --kontext <Disc|Besitzer.Disc> [--auftrag "…"] / --kontexte <verz>: LLM-Kontext je Code-Block (Graph-Skelett + Slot-Teil).
+if (args.Contains("--kontext") || args.Contains("--kontexte"))
+    return KontextCli.Lauf(args, lage, dom, graph, compositionRoot, solutionDir);
 var jsonOptions = new JsonSerializerOptions
 {
     WriteIndented = true,
