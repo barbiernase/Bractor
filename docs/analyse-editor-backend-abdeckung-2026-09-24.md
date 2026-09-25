@@ -181,6 +181,9 @@ Damit ist „Code und Editor synchron" nicht mehr Disziplin, sondern CI-Gate —
 
 ## 5 · LLM-Füllung — wie es hier sauber passt
 
+> **Überholt (2026-09-25)** durch [konzept-llm-minimalkontext.md](konzept-llm-minimalkontext.md): Kontext nur aus Code +
+> Graph, keine Szenarien als Spezifikation, Auslöser ist der LLM-Knoten am Code-Block.
+
 D/S/H steht schon im Konzept; es fehlt die Maschine. Vorschlag:
 
 1. **Vertrag automatisch aus dem Slot** (existiert als Idee): Signatur, State-Typ, erlaubte Outcome-

@@ -109,7 +109,7 @@ NICHT Timeout-tunebar; xUnit schluckt App-Logs (Cluster-Diagnose → Last-Harnes
 - Domänen-Editor + Simulation (einzige Oberfläche): `dotnet run --project GraphExtractor` (erzeugt editor.html + domain-model.json), dann `dotnet run --project SimHost` → http://localhost:5178/editor
 - Editor-Parität (Code ⇄ Extraktion ⇄ Editor, schreibt nichts): `dotnet run --project GraphExtractor -- --check`
 - Agnostik-Sonde (unbekannte Domäne im Speicher gegen handgeschriebenes Soll + Fixpunkt): `dotnet run --project GraphExtractor -- --sonde`
-- LLM-Arbeitskarten (Minimalkontext je Decide-/Apply-Rumpf, `docs/konzept-llm-minimalkontext.md`): `dotnet run --project GraphExtractor -- --karte [<Command|Event>]` bzw. `--karten <verz>`; Isolation aller Code-Block-Stellen: `--slots`
+- LLM-Kontext je Code-Block (Konzept `docs/konzept-llm-minimalkontext.md`; Werkzeug heute nur Decide/Apply): `dotnet run --project GraphExtractor -- --karte [<Command|Event>]` bzw. `--karten <verz>`; Isolation aller Code-Block-Stellen: `--slots`
 - Last/Durchsatz: `dotnet run --project LoadHarness -- --accounts 500 --credits 40 --concurrency 128 --log warning`
 - Infra hochfahren: `docker compose -f deploy-linux/docker-compose.infrastructure.yml up -d`
 - Multi-Node (3 Nodes + 1 Consul, echt containerisiert): `docker compose -f deploy-multinode/docker-compose.yml up -d --build` (Anleitung + Ergebnis: `docs/multi-node-deployment.md`)
