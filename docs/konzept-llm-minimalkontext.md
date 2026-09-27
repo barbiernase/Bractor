@@ -281,11 +281,49 @@ Kante (`SplitZuteiler`) erscheinen nicht. Schreiben für alle Slot-Arten: `CodeS
 
 ---
 
-## 12 · Die LLM-Konsole (SimHost, `/konsole`)
+## 12 · LLM-Code-Blöcke: im Editor ausführen, testen, übernehmen (SimHost)
+
+### 12.1 · Im Editor: der ganze Weg am 🤖-Knoten (Hauptweg)
+
+```
+🤖 Auftrag ─▶ [▶ LLM ausführen] ─▶ Vorschlag im 📝 Code-Block ─▶ ⚙ In-Memory-Kompilat (echte Generatoren)
+                                        │                         └▶ ▶ Simulation testet den Vorschlag (Hot-Reload)
+                                        ├─ ↻ Anpassen (Wunsch → neue Runde mit dem Vorschlag)
+                                        ├─ ✗ Verwerfen (Datei-Rumpf gilt wieder)
+                                        └─ ✓ Übernehmen ─▶ .cs schreiben (+ „// 🤖 Prompt:“) ─▶ dotnet build (Generatoren)
+                                                          ─▶ Code + Kontexte neu einlesen ─▶ ↶ Rückgängig am Block
+```
+
+- **▶ LLM ausführen** am 🤖-Knoten (bzw. **🤖 Alle ausführen** in der Werkzeugleiste: alle Knoten mit Auftrag nacheinander,
+  nichts wird geschrieben). Es laufen dieselben zustandslosen Runden wie unten (Prüfung + automatische Reparatur, max. 3).
+- **Der Vorschlag steht im Code-Block** (grüner Rahmen, auch eingeklappt sichtbar: „🤖 Vorschlag wartet“). Für
+  Decide/Apply ersetzt er beim **Kompilieren** und in der **Simulation** den Datei-Rumpf — `payload(mitVorschlag)`; die
+  Simulation spielt die Session gegen die neue Logik nach. **„C# schreiben“ nimmt nie einen Vorschlag mit.**
+- **✓ Übernehmen**: `POST /api/llm/uebernehmen {bauen:true}` schreibt den Rumpf (Hash-Sperre), baut das Projekt (die echten
+  Generatoren laufen im Build), danach **ein** GraphExtractor-Lauf (`/api/editor/extract` = `--kontexte`): Modell +
+  Kontexte stehen auf dem neuen Code. Solange sind ▶/✓ gesperrt („Code + Kontexte werden neu eingelesen“) — der nächste
+  Block sieht so nie veraltete Nachbarn.
+
+**Synchron halten — die Datei ist die einzige Wahrheit:**
+
+| Was | Quelle | Mechanik |
+|---|---|---|
+| Rumpf im 📝-Block | `.cs` | Spiegel für **jede** Slot-Art: Decide/Apply über den Code-Anker, alle übrigen über `GET /api/llm/rumpf?id=` (Slot-Schlüssel → Datei · Klasse · Methode). Ein Hash-Wechsel (auch aus VS Code) aktualisiert die Vorschau. |
+| Auftrag | `// 🤖 Prompt:` in der Datei | Decide/Apply sofort beim Tippen, alle Arten beim Übernehmen. |
+| Vorschlag | Browser (`localStorage`, Schlüssel = Slot) | übersteht Neu-Einlesen und Neuladen; in die Datei nur über ✓. Beim Übernehmen muss der Datei-Hash dem Stand beim Ausführen entsprechen, sonst „neu ausführen“. |
+| Kontexte + `domain-model.json` | Code | ein gemeinsamer Lauf nach jedem Schreiben; fehlen sie beim Start, erzeugt SimHost sie selbst im Hintergrund. |
+
+**Geprüft (Fake-Anbieter, ohne API-Kosten, im echten Editor per Playwright):** ▶ → Runde 1 scheitert am In-Memory-Kompilat
+(`CS1061`), Runde 2 grün → Vorschlag im Block, „✓ Kompiliert (echte Generatoren)“. Simulation `SetzeSplit 70/20/10`:
+mit Vorschlag `SplitGesetzt`; nach „Anpassen: lehne immer ab“ `SplitUngueltig`; nach Verwerfen wieder `SplitGesetzt`
+(Datei-Rumpf). Übernehmen: geschrieben + Build grün (13 s), Neu-Einlesen ≈ 1 min; Rückgängig stellt die Datei wörtlich her.
+
+### 12.2 · Die Konsole (`/konsole`) — Details, Prompt, Verlauf, Protokoll
+
 
 ```bash
-dotnet run --project GraphExtractor -- --kontexte .llm-kontext   # Modell-Dateien + Kontexte + index.json (≈ 1 min)
-dotnet run --project SimHost                                     # → http://localhost:5178/konsole
+dotnet run --project GraphExtractor   # editor.html + domain-model.json (die Kontexte erzeugt SimHost bei Bedarf selbst)
+dotnet run --project SimHost          # → http://localhost:5178/editor  (Details: /konsole, am 🤖-Knoten „Details ↗“)
 ```
 
 **Anbieter** (Umgebungsvariablen des SimHost):

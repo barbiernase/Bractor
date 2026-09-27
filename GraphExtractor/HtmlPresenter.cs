@@ -331,6 +331,15 @@ public static class HtmlPresenter
 #de .ginsp .gbody{padding:8px 10px 10px}
 #de .ginsp .slot{display:none}
 #de .ginsp .gcodeprev{max-height:none}
+#de .gnode2.llmvor{box-shadow:0 0 0 2px #3f9a64,0 0 14px rgba(63,154,100,.35)}
+#de .gcodeprev.vorschlag{border-color:#3f9a64;background:#0e1d15;color:#c9f2d9}
+#de .llmrun{background:#2f6fd0;color:#fff;border:0;border-radius:5px;cursor:pointer;font:600 11px system-ui;padding:3px 9px}
+#de .llmrun:disabled{opacity:.45;cursor:default}
+#de .llmok{background:#2e8a57;color:#fff;border:0;border-radius:5px;cursor:pointer;font:600 11px system-ui;padding:3px 9px}
+#de .llmmeld{font:11px/1.4 system-ui;margin:4px 0;white-space:normal;color:#aab4c4}
+#de .llmmeld.ok{color:#9be3bf}#de .llmmeld.warn{color:#e0b46a}#de .llmmeld.err{color:#ffb3c1}
+#de .llmrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0}
+#de .llmrow input{flex:1;min-width:120px}
 #de .ginsp .gi-rel{margin:10px;font-size:11px}
 #de .ginsp .gi-rel h5{margin:8px 0 4px;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#7f8aa0}
 #de .ginsp .gi-rel a{display:inline-block;margin:0 4px 4px 0;padding:1px 7px;border-radius:7px;background:#1a2130;border:1px solid #2c3547;color:#cbd3e1;cursor:pointer;font-family:ui-monospace,monospace}
@@ -375,6 +384,7 @@ public static class HtmlPresenter
     <button class="act" onclick="deFilter()">🗂 Domänen</button>
     <button class="act" onclick="deValidate()">✓ Prüfen</button>
     <button class="act" onclick="deCompile()">⚙ Kompilieren</button>
+    <button class="act" id="de-llmalle" onclick="deLlmAlle()" title="Alle 🤖-Knoten mit Auftrag nacheinander ausführen — jeder Vorschlag wartet auf ✓ Übernehmen">🤖 Alle ausführen</button>
     <button class="act run" id="de-simbtn" onclick="deSim()">▶ Simulation</button>
     <button class="act go" onclick="deWrite()">&lt;/&gt; C# schreiben</button>
     <button class="act" onclick="deSave()">💾 Speichern</button>
@@ -968,7 +978,8 @@ public static class HtmlPresenter
     if(o.kind==="applier"){const a=o.ref,agg=MODEL.aggregate.find(x=>x.name===a.aggregat);
       return (agg&&a.event)?{kind:"applier",namespace:agg.namespace,disc:a.event,datei:a.datei||""}:null;}
     return null;}
-  async function codeGet(a){const q=new URLSearchParams({kind:a.kind,namespace:a.namespace,disc:a.disc,datei:a.datei||""});
+  async function codeGet(a){if(a.kind==="slot")return fetch("/api/llm/rumpf?id="+encodeURIComponent(a.disc)).then(r=>r.json());
+    const q=new URLSearchParams({kind:a.kind,namespace:a.namespace,disc:a.disc,datei:a.datei||""});
     return fetch("/api/editor/code?"+q).then(r=>r.json());}
   async function codeSetPrompt(a,prompt,baseHash){return fetch("/api/editor/code",{method:"POST",
     headers:{"content-type":"application/json"},body:JSON.stringify({...a,prompt,baseHash})}).then(r=>r.json());}
@@ -997,9 +1008,22 @@ public static class HtmlPresenter
   function codeNodeCard(body,c){
     body.append(nameInp(c,"name","Code"));
     const anker=codeAnker(c._id);
+    const kid=konsolenId(c._id), v=kid?VOR[kid]:null;
     const voll=INSP;   // im Inspector: der ganze Rumpf statt der Kurzvorschau
-    const prev=h("pre",{class:"gcodeprev",style:"cursor:default",title:anker?"Spiegel der echten .cs (passiv)":"passiv"},codePreview(c.text,undefined,voll));
+    const prev=h("pre",{class:"gcodeprev"+(v?" vorschlag":""),style:"cursor:default",
+      title:v?"🤖 Vorschlag — noch NICHT in der Datei; Kompilieren + Simulation nutzen ihn schon":(anker||kid)?"Spiegel der echten .cs (passiv)":"passiv"},
+      codePreview(v?v.rumpf:c.text,undefined,voll));
     body.append(prev);
+    if(v){   // 🤖 Vorschlag: sichtbar im Block, testbar in der Simulation, in die Datei erst mit ✓ Übernehmen
+      const gut=v.ok&&!(v.befunde||[]).length;
+      body.append(h("div",{class:"llmmeld "+(gut?"ok":"warn")},gut?"🤖 Vorschlag · ✓ geprüft · noch nicht in der Datei":"🤖 Vorschlag · "+(v.befunde||[]).length+" Befund(e) · noch nicht in der Datei"));
+      const lauf=LAUF[kid];
+      const ok=h("button",{class:"llmok",title:"In die echte .cs schreiben (mit „// 🤖 Prompt:“), Projekt bauen (Generatoren), Code + Kontexte neu einlesen",onclick:()=>llmUebernehmen(kid)},"✓ Übernehmen");
+      const weg=h("button",{class:"codeadd",title:"Vorschlag verwerfen — der Datei-Rumpf gilt wieder",onclick:()=>llmVerwerfen(kid)},"✗ Verwerfen");
+      if(lauf||EINLESEN){ok.disabled=true;weg.disabled=true;}
+      body.append(h("div",{class:"llmrow"},ok,weg));}
+    else if(kid&&ZULETZT[kid])body.append(h("div",{class:"llmrow"},h("span",{class:"llmmeld ok",style:"flex:1"},"🤖 übernommen"),
+      h("button",{class:"codeadd",title:"Den alten Rumpf wörtlich wiederherstellen (nur solange die Datei seitdem unverändert ist)",onclick:()=>llmRueckgaengig(kid)},"↶ Rückgängig")));
     // Eingang: 🤖 LLM-Prompt-Node andocken (an JEDEM Code-Block, unabhängig vom Konsumenten-Typ).
     const pin=port("prompt");pin.classList.add("i");reg("code:prin:"+c._id,pin,{type:"prompt",dir:"in",codeBlock:c._id});
     const llm=MODEL.llmNodes.find(x=>x.promptZiel===c._id);
@@ -1015,7 +1039,10 @@ public static class HtmlPresenter
         WATCH.add(ankerKey(anker));   // ab jetzt diese eine Datei kontinuierlich spiegeln (Datei→Browser)
         const r=await codeOpen(anker).catch(()=>null);
         deFlash(r&&r.ok?"✎ geöffnet: "+r.pfad:"⚠ "+((r&&r.grund)||"SimHost offline"),!!(r&&r.ok));}},"✎ Im Editor öffnen")));
-    if(anker)syncReg(c._id,anker,d=>{c.text=d.body;prev.textContent=codePreview(d.body,undefined,voll);},"cn:"+c._id);   // Datei→Browser: Vorschau spiegelt den echten Rumpf
+    // Datei→Browser: die Vorschau spiegelt den echten Rumpf — für JEDE Slot-Art (Decide/Apply über den Code-Anker,
+    //   alle übrigen über den Slot-Schlüssel der Kontexte). Ein offener Vorschlag bleibt sichtbar, bis er entschieden ist.
+    const spiegel=anker||(kid?{kind:"slot",namespace:"",disc:kid}:null);
+    if(spiegel)syncReg(c._id,spiegel,d=>{c.text=d.body;if(!VOR[kid])prev.textContent=codePreview(d.body,undefined,voll);},"cn:"+c._id);
     body.append(slotRow("code","code ▶","r",{type:"code",dir:"out",codeNode:c._id},"code:out:"+c._id));
   }
   // 🤖 LLM-Knoten: Intent-Text; Vertrag wird aus dem verdrahteten Ziel abgeleitet; Ausgang code ▶.
@@ -1038,12 +1065,106 @@ public static class HtmlPresenter
       else if(r&&r.grund==="stale"){baseHash=r.hash;ta.value=r.prompt||"";l.intent=ta.value;status.textContent="↩ extern geändert — neu geladen";status.style.color="#e0b46a";}
       else{status.textContent="⚠ "+((r&&r.grund)||"SimHost offline");status.style.color="#ffb3c1";}};
     if(anker)syncReg(l._id,anker,d=>{baseHash=d.hash;if(document.activeElement!==ta){ta.value=d.prompt||"";l.intent=ta.value;}},"ln:"+l._id);
-    // ▶ LLM-Konsole: denselben Code-Block dort füllen → prüfen → anpassen → übernehmen (Kontext aus Code + Graph).
+    // ▶ LLM ausführen: Kontext (aus Code + Graph) + Auftrag → Rumpf, geprüft mit den echten Generatoren; der Vorschlag
+    //   erscheint im Code-Block und ist sofort in der Simulation testbar. In die Datei erst mit ✓ Übernehmen (am Block).
     const kid=block?konsolenId(block._id):null;
-    if(kid)body.append(h("div",{class:"frow"},h("button",{class:"codeadd",title:"In der LLM-Konsole füllen (neuer Tab)",
-      onclick:()=>window.open("/konsole#id="+encodeURIComponent(kid)+"&auftrag="+encodeURIComponent(ta.value||""),"_blank")},"▶ In der LLM-Konsole füllen")));
+    if(kid){
+      const lauf=LAUF[kid], v=VOR[kid], m=MELD[kid];
+      const ohneKontext=!LLM_STATUS||!LLM_STATUS.index;
+      const knopf=h("button",{class:"llmrun",title:"Das LLM schreibt den Rumpf dieses Code-Blocks (bis zu 3 Runden mit automatischer Reparatur)",
+        onclick:async()=>{l.intent=ta.value;await llmAusfuehren(kid,ta.value,null);}},v?"▶ Neu ausführen":"▶ LLM ausführen");
+      if(lauf||EINLESEN||ohneKontext)knopf.disabled=true;
+      body.append(h("div",{class:"llmrow"},knopf,h("a",{class:"codeadd",href:"/konsole#id="+encodeURIComponent(kid),target:"_blank",
+        title:"Runden, Prompt, Verlauf und Token dieses Blocks",style:"text-decoration:none"},"Details ↗")));
+      const zeile=lauf?{k:"",t:"● "+lauf.was+" …",lauf:lauf.seit}
+        :EINLESEN?{k:"",t:"↻ Code + Kontexte werden neu eingelesen …"}
+        :ohneKontext?{k:"warn",t:LLM_STATUS&&LLM_STATUS.aktualisierungLaeuft?"↻ Kontexte werden erzeugt (≈ 1 min) …":LLM_STATUS?"Keine Kontexte — „↻ Vom Graph laden“":"SimHost offline"}
+        :m?m:null;
+      if(zeile){const el=h("div",{class:"llmmeld "+(zeile.k||"")},zeile.t);if(zeile.lauf)el.dataset.lauf=zeile.lauf;body.append(el);}
+      if(v&&!lauf){   // Anpassen: neue Runde mit aktuellem Vorschlag + Wunsch
+        const wunsch=h("input",{placeholder:"Anpassen, z. B. „nutze Guard statt if“"});
+        const los=()=>{if(wunsch.value.trim())llmAusfuehren(kid,ta.value,wunsch.value.trim());};
+        wunsch.onkeydown=e=>{if(e.key==="Enter")los();};
+        const ak=h("button",{class:"codeadd",onclick:los},"↻ Anpassen");if(EINLESEN)ak.disabled=true;
+        body.append(h("div",{class:"llmrow"},wunsch,ak));}}
     body.append(slotRow("prompt","Prompt ▶","r",{type:"prompt",dir:"out",llm:l._id},"llm:prout:"+l._id));
   }
+  // ══ 🤖 LLM-CODE-BLÖCKE — der ganze Weg im Editor:
+  //   ▶ (LLM-Knoten) → Vorschlag im Code-Block → ⚙ In-Memory-Kompilat mit den echten Generatoren → ▶ Simulation testet ihn
+  //   → ✓ Übernehmen: echte .cs + dotnet build (Generatoren) → Code + Kontexte neu eingelesen (ein GraphExtractor-Lauf).
+  //   Wahrheit ist die Datei; ein Vorschlag hängt am SLOT-Schlüssel (stabil über Neu-Einlesen) und ist lokal gesichert.
+  const LLM_VKEY="bractor-llm-vorschlaege";
+  let VOR={};try{VOR=JSON.parse(localStorage.getItem(LLM_VKEY)||"{}")||{};}catch(e){}
+  const saveVor=()=>{try{localStorage.setItem(LLM_VKEY,JSON.stringify(VOR));}catch(e){}};
+  const LAUF={}, MELD={}, ZULETZT={};   // Slot → läuft seit / letzte Meldung / gerade übernommen (Rückgängig anbieten)
+  let EINLESEN=false, LLM_STATUS=null;
+  function vorschlagFuer(codeId){const k=konsolenId(codeId);return k?VOR[k]:null;}
+  const istSimulierbar=kid=>/^(decide|apply)\|/.test(kid);
+  const neuZeichnen=()=>{try{render();}catch(e){}};
+  async function llmStatus(){try{LLM_STATUS=await fetch("/api/llm/status").then(r=>r.json());}catch(e){LLM_STATUS=null;}return LLM_STATUS;}
+  // Kontexte fehlen / werden erzeugt → nachfragen, bis sie da sind (danach Ruhe).
+  setInterval(async()=>{if(LLM_STATUS&&LLM_STATUS.index&&!LLM_STATUS.aktualisierungLaeuft)return;
+    const vor=JSON.stringify(LLM_STATUS);await llmStatus();if(JSON.stringify(LLM_STATUS)!==vor)neuZeichnen();},4000);
+  llmStatus().then(neuZeichnen);
+  setInterval(()=>document.querySelectorAll("#de [data-lauf]").forEach(el=>{const t=Math.round((Date.now()-(+el.dataset.lauf))/1000);
+    el.textContent=el.textContent.replace(/ \(\d+ s\)$/,"")+" ("+t+" s)";}),1000);
+  const postLlm=(pfad,obj)=>fetch(pfad,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(obj)}).then(r=>r.json());
+
+  async function llmAusfuehren(kid,auftrag,anpassung){
+    auftrag=(auftrag||"").trim();
+    if(!auftrag){MELD[kid]={k:"warn",t:"Erst den Auftrag schreiben — ohne Auftrag kein Aufruf."};neuZeichnen();return;}
+    if(LAUF[kid])return;
+    const v=VOR[kid];
+    LAUF[kid]={seit:Date.now(),was:anpassung?"passt an":"LLM schreibt"};delete MELD[kid];neuZeichnen();
+    let r;try{r=await postLlm("/api/llm/fuellen",{id:kid,auftrag,rumpf:anpassung&&v?v.rumpf:null,anpassung:anpassung||null,autoReparatur:true,maxRunden:3});}
+    catch(e){r={ok:false,grund:"SimHost offline"};}
+    delete LAUF[kid];
+    if(!r.ok){MELD[kid]={k:"err",t:"⚠ "+(r.grund||"Fehler")};neuZeichnen();return;}
+    const runden=r.runden||[], ende=runden[runden.length-1]||{};
+    const dauer=runden.reduce((a,x)=>a+(x.dauerMs||0),0), info=runden.length+" Runde(n) · "+(dauer/1000).toFixed(1)+" s";
+    if(ende.fehler)MELD[kid]={k:"err",t:"⚠ "+ende.fehler};
+    else if(ende.ergebnis==="ausserhalb")MELD[kid]={k:"warn",t:"⛔ Nicht in diesem Block lösbar: "+ende.ausserhalb+" — erst die Struktur im Editor ergänzen."};
+    else if(!ende.rumpf)MELD[kid]={k:"err",t:"⚠ Antwort ohne Code ("+info+") — Details ↗"};
+    else{
+      VOR[kid]={rumpf:ende.rumpf,basisHash:r.basisHash,ok:!!ende.ok,befunde:ende.befunde||[],auftrag,zeit:new Date().toISOString()};saveVor();
+      MELD[kid]=ende.ok
+        ?{k:"ok",t:"✓ Vorschlag im Code-Block ("+info+")"+(istSimulierbar(kid)?" · mit den Generatoren kompiliert → in der ▶ Simulation testbar":" · Syntax geprüft")}
+        :{k:"warn",t:"Vorschlag mit "+(ende.befunde||[]).length+" Befund(en) nach "+info+": "+(ende.befunde||[])[0]};
+      if(istSimulierbar(kid))deCompile();}
+    neuZeichnen();}
+
+  async function llmUebernehmen(kid){const v=VOR[kid];if(!v||LAUF[kid])return;
+    LAUF[kid]={seit:Date.now(),was:"schreibt + baut"};neuZeichnen();
+    let r;try{r=await postLlm("/api/llm/uebernehmen",{id:kid,rumpf:v.rumpf,auftrag:v.auftrag,basisHash:v.basisHash,bauen:true});}
+    catch(e){r={ok:false,grund:"SimHost offline"};}
+    delete LAUF[kid];
+    if(!r.ok){MELD[kid]={k:"err",t:"⚠ "+r.grund+(/Hash/.test(r.grund||"")?" → ▶ Neu ausführen":"")};neuZeichnen();return;}
+    delete VOR[kid];saveVor();ZULETZT[kid]=true;
+    MELD[kid]=r.bau&&r.bau.ok?{k:"ok",t:"✓ geschrieben: "+r.datei+":"+r.zeile+" · Build grün (Generatoren gelaufen)"}
+      :{k:"err",t:"⚠ geschrieben, aber Build rot: "+(((r.bau&&r.bau.fehler)||[])[0]||"")+" — ↶ Rückgängig am Block"};
+    await neuEinlesen();}
+
+  async function llmRueckgaengig(kid){if(LAUF[kid])return;LAUF[kid]={seit:Date.now(),was:"stellt wieder her + baut"};neuZeichnen();
+    let r;try{r=await postLlm("/api/llm/rueckgaengig",{id:kid,bauen:true});}catch(e){r={ok:false,grund:"SimHost offline"};}
+    delete LAUF[kid];
+    if(!r.ok){MELD[kid]={k:"err",t:"⚠ "+r.grund};neuZeichnen();return;}
+    delete ZULETZT[kid];MELD[kid]={k:"",t:"↶ alter Rumpf wiederhergestellt"+(r.bau&&!r.bau.ok?" · Build rot":"")};await neuEinlesen();}
+
+  function llmVerwerfen(kid){delete VOR[kid];saveVor();MELD[kid]={k:"",t:"Vorschlag verworfen — der Datei-Rumpf gilt."};neuZeichnen();if(istSimulierbar(kid))deCompile();}
+
+  // Nach jedem Schreiben: EIN GraphExtractor-Lauf liest Modell + Kontexte neu → Spiegel, Nachbar-Kontexte und Simulation
+  //   stehen auf dem neuen Code; solange sind ▶/✓ gesperrt (sonst sähe der nächste Block veraltete Nachbarn).
+  async function neuEinlesen(){EINLESEN=true;neuZeichnen();try{await deReload();}finally{EINLESEN=false;await llmStatus();neuZeichnen();}}
+
+  // 🤖 Alle ausführen: jeden 🤖-Knoten mit Auftrag nacheinander — nichts wird geschrieben, jeder Vorschlag wartet auf ✓.
+  window.deLlmAlle=async function(){const btn=document.getElementById("de-llmalle");
+    const liste=MODEL.llmNodes.map(l=>({l,kid:l.promptZiel?konsolenId(l.promptZiel):null})).filter(x=>x.kid&&(x.l.intent||"").trim());
+    if(!liste.length){deFlash("Kein 🤖-Knoten mit Auftrag",false);return;}
+    btn.disabled=true;
+    for(let i=0;i<liste.length;i++){btn.textContent="🤖 "+(i+1)+"/"+liste.length+" …";await llmAusfuehren(liste[i].kid,liste[i].l.intent,null);}
+    btn.disabled=false;btn.textContent="🤖 Alle ausführen";
+    const offen=Object.keys(VOR).length;deFlash("🤖 fertig · "+offen+" Vorschlag/Vorschläge warten auf ✓ Übernehmen",true);};
+
   // Slot-Schlüssel der LLM-Konsole (wie GraphExtractor --kontexte ihn vergibt): Art|Besitzer|Disc.
   function konsolenId(codeId){const o=findCodeOwner(codeId);if(!o)return null;const r=o.ref;
     if(o.kind==="decider")return "decide|"+r.aggregat+"|"+r.command;
@@ -1491,7 +1612,7 @@ public static class HtmlPresenter
   function nodeEditor(n){
     const zu=istZu(n);
     const el=h("div",{class:"gnode2 n-"+n.kind+(zu?" collapsed":"")+(ISLE.has(n.id)?" island":"")
-      +(n.ref.ungeschrieben?" ungeschrieben":(n.ref.ausCode===false||(n.ref.ausCode===undefined&&MERGE_KEYS[kollektionVon(n.kind)])?" entwurf":""))});el.dataset.id=n.id;
+      +(n.kind==="codenode"&&vorschlagFuer(n.ref._id)?" llmvor":"")+(n.ref.ungeschrieben?" ungeschrieben":(n.ref.ausCode===false||(n.ref.ausCode===undefined&&MERGE_KEYS[kollektionVon(n.kind)])?" entwurf":""))});el.dataset.id=n.id;
     const pos=P(n);el.style.left=(pos.x||0)+"px";el.style.top=(pos.y||0)+"px";
     const title=NODELABEL[n.kind]||n.kind;
     const head=h("div",{class:"ghead"},
@@ -2028,7 +2149,9 @@ public static class HtmlPresenter
     else if(k==="saga")t="Auslöser: "+(r.triggerEvent||"—")+" · "+transOf(r).length+" Regeln";
     else if(k==="transition")t="WENN "+kurz(r.wenn)+" → "+kurz((r.dann||[]).map(d=>d.sende));
     else if(k==="store")t=(r.writeFns||[]).length+" schreibend · "+(r.readFns||[]).length+" lesend";
-    else if(k==="codenode")t=((r.text||"").trim().split("\n")[0]||"// leer");
+    else if(k==="codenode"){const v=vorschlagFuer(r._id);t=v?"🤖 Vorschlag wartet auf ✓ Übernehmen":((r.text||"").trim().split("\n")[0]||"// leer");}
+    else if(k==="llmnode"){const kid=r.promptZiel?konsolenId(r.promptZiel):null,m=kid&&MELD[kid];
+      t=(kid&&LAUF[kid]?"● "+LAUF[kid].was+" … · ":kid&&VOR[kid]?"🤖 Vorschlag im Block · ":m?m.t.slice(0,40)+" · ":"")+((r.intent||"").trim().split("\n")[0]||"(Auftrag fehlt)");}
     if(Array.isArray(r.felder)&&k!=="aggregate")t+=(t?" · ":"")+r.felder.length+" Felder";
     const box=h("div",{class:"gsum",title:"Klick: im Inspector bearbeiten",onclick:()=>waehle(n.id)});
     if(t)box.append(h("div",{class:"gs-t",title:t},t));
@@ -2365,11 +2488,13 @@ public static class HtmlPresenter
   window.deDownload=function(){deriveMembership();prepareSaga();const blob=new Blob([JSON.stringify(MODEL,null,2)],{type:"application/json"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="domain-model.json";a.click();};
   // Server-Payload: das MODEL + die Rümpfe (Code-Knoten-Text bzw. "" für bewusst leer) zurück an Decider/Applier.
-  function payload(){deriveMembership();prepareSaga();const m=JSON.parse(JSON.stringify(MODEL));
-    const txt=id=>{const c=m.codeNodes.find(x=>x._id===id);return c?c.text:null;};
+  // mitVorschlag: offene 🤖-Vorschläge ersetzen den Datei-Rumpf — für Kompilieren + Simulation (echte Generatoren,
+  //   in-memory), NIE für „C# schreiben“ (in die Datei kommt ein Vorschlag nur über ✓ Übernehmen).
+  function payload(mitVorschlag){deriveMembership();prepareSaga();const m=JSON.parse(JSON.stringify(MODEL));
+    const txt=id=>{const v=mitVorschlag?vorschlagFuer(id):null;if(v)return v.rumpf;const c=m.codeNodes.find(x=>x._id===id);return c?c.text:null;};
     [...m.decider,...m.applier].forEach(n=>{if(n.leer)n.rumpf="";else if(n.codeSrc){const t=txt(n.codeSrc);if(t!=null)n.rumpf=t;}});
     return m;}
-  async function post(path){const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload())});
+  async function post(path){const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload(path!=="/api/editor/write"))});
     if(!r.ok)throw new Error("HTTP "+r.status);return r;}
   // &lt;/&gt; C# schreiben: das Modell in die ECHTEN .cs-Dateien schreiben (chirurgisch/additiv über
   //   /api/editor/write). Neue Records/Methoden werden angehängt, Handcode nie überschrieben.
@@ -2479,7 +2604,7 @@ public static class HtmlPresenter
 
   // ── Senden → Server-Kaskade → Animation ──
   async function simSenden(){if(SIM.laeuft)return;const c=SIM.cmd;const werte=SIM.werte[c]||{};SIM.laeuft=true;
-    try{const r=await postJson("/api/editor/sim/step",{model:payload(),sessionId:SIM.sid,command:c,values:werte});const res=await r.json();badge(true);
+    try{const r=await postJson("/api/editor/sim/step",{model:payload(true),sessionId:SIM.sid,command:c,values:werte});const res=await r.json();badge(true);
       SIM.fehler=res.ok?[]:(res.fehler||[]);SIM.hinweis=res.hinweis||null;
       // Bei Übersetzungs-/Wertefehlern bleibt der letzte gute Stand (Instanzen, Abdeckung) stehen.
       if(res.ok){SIM.instanzen=res.instanzen||[];SIM.abd=new Set(res.abdeckung||[]);SIM.sagas=res.sagas||[];const start=SIM.frames.length;res.frames.forEach(f=>SIM.frames.push(f));

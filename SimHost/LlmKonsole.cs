@@ -170,7 +170,16 @@ public sealed class LlmKonsole
     private JsonObject? Index() => File.Exists(Path.Combine(_verz, "index.json"))
         ? JsonNode.Parse(File.ReadAllText(Path.Combine(_verz, "index.json")))!.AsObject() : null;
 
-    private JsonObject? Slot(string id) => Index()?["slots"]?.AsArray().OfType<JsonObject>().FirstOrDefault(s => s["id"]?.GetValue<string>() == id);
+    // Der Editor kennt je Store-Funktion nur „store|Interface|Methode“; mehrere Implementierungen tragen „@Klasse“ → die erste.
+    private JsonObject? Slot(string id)
+    {
+        var slots = Index()?["slots"]?.AsArray().OfType<JsonObject>().ToList();
+        return slots?.FirstOrDefault(s => s["id"]?.GetValue<string>() == id)
+            ?? slots?.FirstOrDefault(s => s["id"]?.GetValue<string>().StartsWith(id + "@", StringComparison.Ordinal) == true);
+    }
+
+    /// <summary>Datei-Spiegel eines Slots (jede Art): aktueller Rumpf, Prompt, Hash.</summary>
+    public object Rumpf(string id) => Slot(id) is { } slot ? CodeSync.LeseRumpf(Anker(slot), _sln) : new { ok = false, grund = "Unbekannter Slot." };
 
     private static string S(JsonNode? n, string p) => n?[p]?.GetValue<string>() ?? "";
     private static string? SN(JsonNode? n, string p) => n?[p] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
@@ -184,6 +193,7 @@ public sealed class LlmKonsole
         return new
         {
             anbieter = a.Beschreibung, warnung = a.Warnung,
+            aktualisierungLaeuft = AktualisierungLaeuft,
             index = File.Exists(idx) ? new { stand = File.GetLastWriteTime(idx).ToString("yyyy-MM-dd HH:mm:ss"), slots = Index()!["slots"]!.AsArray().Count,
                 tokenSkelett = Index()!["tokenSkelett"]?.GetValue<int>() } : null,
         };
@@ -346,7 +356,8 @@ public sealed class LlmKonsole
 
     // ── Übernehmen / Rückgängig / Bauen ──
 
-    public object Uebernehmen(string id, string rumpf, string? auftrag, string? basisHash)
+    /// <param name="bauen">danach das Projekt bauen — der echte Build, die Code-Generatoren laufen mit.</param>
+    public object Uebernehmen(string id, string rumpf, string? auftrag, string? basisHash, bool bauen = false)
     {
         var slot = Slot(id);
         if (slot == null) return new { ok = false, grund = "Unbekannter Slot." };
@@ -358,10 +369,11 @@ public sealed class LlmKonsole
         var datei = Path.Combine(sicherung, $"{DateTime.Now:yyyyMMdd-HHmmss}-{Regex.Replace(id, @"[^\w.@-]", "_")}.json");
         File.WriteAllText(datei, JsonSerializer.Serialize(new { id, anker, alterInhalt = alt, neuerHash = neuHash }));
         Protokolliere(id, new { aktion = "uebernommen", datei = anker.Datei, zeile });
-        return new { ok = true, datei = anker.Datei, zeile, sicherung = Path.GetFileName(datei), hinweis = "Kontexte sind jetzt veraltet — neu erzeugen, bevor der nächste Slot gefüllt wird." };
+        return new { ok = true, datei = anker.Datei, zeile, sicherung = Path.GetFileName(datei), bau = bauen ? Bauen(id) : null,
+            hinweis = "Kontexte sind jetzt veraltet — neu erzeugen, bevor der nächste Slot gefüllt wird." };
     }
 
-    public object Rueckgaengig(string id)
+    public object Rueckgaengig(string id, bool bauen = false)
     {
         var sicherung = Path.Combine(_verz, "sicherung");
         var muster = Regex.Replace(id, @"[^\w.@-]", "_");
@@ -372,13 +384,29 @@ public sealed class LlmKonsole
         var anker = o["anker"].Deserialize<MethodenAnker>()!;
         var (ok, grund) = CodeSync.SetzeInhaltZurueck(anker, S(o, "alterInhalt"), S(o, "neuerHash"), _sln);
         if (ok) { File.Move(letzte, letzte + ".zurueckgenommen"); Protokolliere(id, new { aktion = "rueckgaengig" }); }
-        return new { ok, grund };
+        return new { ok, grund, bau = ok && bauen ? Bauen(id) : null };
     }
 
     public object Bauen(string id) => Slot(id) is { } slot ? CodeSync.BaueProjektVon(S(slot, "datei"), _sln) : new { ok = false, grund = "Unbekannter Slot." };
 
     /// <summary>GraphExtractor über den aktuellen Code: domain-model.json + alle Kontexte + index.json neu.</summary>
+    private readonly SemaphoreSlim _aktualisierung = new(1, 1);
+    public bool AktualisierungLaeuft => _aktualisierung.CurrentCount == 0;
+
+    /// <summary>Beim Start: fehlen die Kontexte, erzeugt SimHost sie im Hintergrund (die GUI zeigt „wird erzeugt“).</summary>
+    public void ErzeugeKontexteFallsFehlend()
+    {
+        if (!File.Exists(Path.Combine(_verz, "index.json"))) _ = Task.Run(Aktualisieren);
+    }
+
     public object Aktualisieren()
+    {
+        _aktualisierung.Wait();   // nie zwei GraphExtractor-Läufe gleichzeitig (beide schreiben dieselben Dateien)
+        try { return AktualisierenIntern(); }
+        finally { _aktualisierung.Release(); }
+    }
+
+    private object AktualisierenIntern()
     {
         var psi = new ProcessStartInfo("dotnet", "run --project GraphExtractor -- --kontexte .llm-kontext")
         { WorkingDirectory = _sln, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
@@ -387,7 +415,8 @@ public sealed class LlmKonsole
         if (!p.WaitForExit(TimeSpan.FromMinutes(5))) { try { p.Kill(true); } catch { } return new { ok = false, grund = "Zeitüberschreitung (5 min)." }; }
         var zeilen = (o.Result + "\n" + e.Result).Split('\n');
         lock (_sperre) _basisFehler.Clear();
-        return new { ok = p.ExitCode == 0, meldung = zeilen.Where(l => l.Contains('✅') || l.Contains('❌') || l.Contains("error")).Select(l => l.Trim()).Take(10).ToList() };
+        var meldung = zeilen.Where(l => l.Contains('✅') || l.Contains('❌') || l.Contains("error")).Select(l => l.Trim()).Take(10).ToList();
+        return new { ok = p.ExitCode == 0, meldung, grund = p.ExitCode == 0 ? null : string.Join(" · ", meldung.Take(3)) };
     }
 
     private void Protokolliere(string id, object eintrag, string? auftrag = null)

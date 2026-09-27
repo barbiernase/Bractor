@@ -97,6 +97,10 @@ app.MapGet("/api/editor/sim/dsl", (string? sessionId) => Results.Text(simulation
 
 // ── CODE-SYNC: Board ⇄ echte .cs-Datei (Decider/Applier-Rümpfe). Anker = aus dem Graphen abgeleitet. ──
 var slnRoot = SlnRoot();
+// LLM-Code-Blöcke (docs/konzept-llm-minimalkontext.md): Kontexte + Füllen + Übernehmen. Fehlen die Kontexte, erzeugt
+// SimHost sie beim Start im Hintergrund selbst (kein CLI-Schritt nötig).
+var konsole = new LlmKonsole(slnRoot, simulation);
+konsole.ErzeugeKontexteFallsFehlend();
 static CodeAnker Anker(JsonElement b) => new(
     b.GetProperty("kind").GetString() ?? "decider",
     b.GetProperty("namespace").GetString() ?? "",
@@ -119,7 +123,8 @@ app.MapPost("/api/editor/code", (JsonElement b) =>
 });
 
 // Neu einlesen: GraphExtractor über den aktuellen Code → domain-model.json (Code = Wahrheit; der Browser merged).
-app.MapPost("/api/editor/extract", () => Results.Json(CodeSync.Extrahiere(slnRoot)));
+// Ein Lauf schreibt domain-model.json UND die LLM-Kontexte — Modell und Kontexte bleiben so immer auf demselben Code-Stand.
+app.MapPost("/api/editor/extract", () => Results.Json(konsole.Aktualisieren()));
 
 // Bauen (entprellt vom Browser aufgerufen): Generatoren + Proto-Prepass laufen bei dotnet build mit.
 app.MapPost("/api/editor/build", () => Results.Json(CodeSync.Baue(slnRoot)));
@@ -127,7 +132,6 @@ app.MapPost("/api/editor/build", () => Results.Json(CodeSync.Baue(slnRoot)));
 // ── LLM-KONSOLE: einen Code-Block füllen → prüfen → anpassen → übernehmen (docs/konzept-llm-minimalkontext.md). ──
 // Anbieter über die Umgebung: BRACTOR_LLM = claude (Standard, `claude -p` mit der Anmeldung dieses Rechners)
 // | openai (BRACTOR_LLM_URL, BRACTOR_LLM_MODELL — z. B. llama.cpp/vLLM) | befehl (BRACTOR_LLM_BEFEHL, stdin → stdout).
-var konsole = new LlmKonsole(slnRoot, simulation);
 app.MapGet("/konsole", () => Results.Content(KonsoleSeite.Html, "text/html"));
 app.MapGet("/api/llm/status", () => Results.Json(konsole.Status()));
 app.MapGet("/api/llm/slots", () => Results.Json(konsole.Slots()));
@@ -145,10 +149,14 @@ app.MapPost("/api/llm/simulieren", (JsonElement b) => Results.Json(konsole.Simul
 app.MapPost("/api/llm/uebernehmen", (JsonElement b) => Results.Json(konsole.Uebernehmen(
     b.GetProperty("id").GetString()!, b.GetProperty("rumpf").GetString()!,
     b.TryGetProperty("auftrag", out var a) ? a.GetString() : null,
-    b.TryGetProperty("basisHash", out var h) && h.ValueKind == JsonValueKind.String ? h.GetString() : null)));
-app.MapPost("/api/llm/rueckgaengig", (JsonElement b) => Results.Json(konsole.Rueckgaengig(b.GetProperty("id").GetString()!)));
+    b.TryGetProperty("basisHash", out var h) && h.ValueKind == JsonValueKind.String ? h.GetString() : null,
+    b.TryGetProperty("bauen", out var bau) && bau.ValueKind == JsonValueKind.True)));
+app.MapPost("/api/llm/rueckgaengig", (JsonElement b) => Results.Json(konsole.Rueckgaengig(b.GetProperty("id").GetString()!,
+    b.TryGetProperty("bauen", out var bau) && bau.ValueKind == JsonValueKind.True)));
 app.MapPost("/api/llm/bauen", (JsonElement b) => Results.Json(konsole.Bauen(b.GetProperty("id").GetString()!)));
 app.MapPost("/api/llm/aktualisieren", () => Results.Json(konsole.Aktualisieren()));
+// Datei-Spiegel für JEDE Slot-Art (Projektion, Reader, Pipeline, Store …): aktueller Rumpf + Prompt + Hash.
+app.MapGet("/api/llm/rumpf", (string id) => Results.Json(konsole.Rumpf(id)));
 app.MapGet("/api/llm/protokoll", (string? id, int? max) => Results.Json(konsole.Protokoll(string.IsNullOrEmpty(id) ? null : id, max ?? 300)));
 
 // Port: 5178, außer die Umgebung weist einen zu (PORT) — z. B. wenn mehrere Editor-Instanzen parallel laufen.
