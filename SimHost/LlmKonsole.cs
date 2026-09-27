@@ -103,8 +103,10 @@ public sealed class OpenAiAnbieter(string url, string modell) : ILlmAnbieter
         var o = JsonNode.Parse(roh)!;
         var u = o["usage"];
         int? I(JsonNode? n) => n is JsonValue v && v.TryGetValue<int>(out var i) ? i : null;
+        // prompt_tokens zählt die gecachten mit — auf „nicht gecacht" umrechnen, damit Eingabe/aus Cache wie bei Claude gemeint sind.
+        var gesamt = I(u?["prompt_tokens"]); var cache = I(u?["prompt_tokens_details"]?["cached_tokens"]);
         return new LlmAntwort(o["choices"]?[0]?["message"]?["content"]?.GetValue<string>() ?? "",
-            I(u?["prompt_tokens"]), I(u?["prompt_tokens_details"]?["cached_tokens"]), null, I(u?["completion_tokens"]), null, roh);
+            gesamt is { } g && cache is { } c ? g - c : gesamt, cache, null, I(u?["completion_tokens"]), null, roh);
     }
 }
 
@@ -263,7 +265,7 @@ public sealed class LlmKonsole
                 antwortRoh = kandidat == null && ausserhalb == null ? antwort.Text : null,
             };
             runden.Add(runde);
-            Protokolliere(a.Id, runde);
+            Protokolliere(a.Id, runde, a.Auftrag);
             if (ergebnis != "rumpf" || befunde.Count == 0 || !a.AutoReparatur) break;
             rumpf = kandidat; befund = string.Join("\n", befunde); anpassung = null;   // nächste Runde: nur letzter Rumpf + Befund
         }
@@ -388,11 +390,43 @@ public sealed class LlmKonsole
         return new { ok = p.ExitCode == 0, meldung = zeilen.Where(l => l.Contains('✅') || l.Contains('❌') || l.Contains("error")).Select(l => l.Trim()).Take(10).ToList() };
     }
 
-    private void Protokolliere(string id, object eintrag)
+    private void Protokolliere(string id, object eintrag, string? auftrag = null)
     {
         Directory.CreateDirectory(_verz);
         File.AppendAllText(Path.Combine(_verz, "protokoll.jsonl"),
-            JsonSerializer.Serialize(new { zeit = DateTime.Now.ToString("s"), id, eintrag }) + "\n");
+            JsonSerializer.Serialize(new { zeit = DateTime.Now.ToString("s"), id, auftrag, eintrag }) + "\n");
+    }
+
+    /// <summary>
+    /// Das Protokoll für den Browser: neueste zuerst (höchstens <paramref name="max"/>), optional nur ein Slot, plus Summen
+    /// über alle Runden (Aufrufe, Token gesamt/aus Cache/Ausgabe, Dauer). Kaputte Zeilen werden übersprungen.
+    /// </summary>
+    public object Protokoll(string? id, int max = 300)
+    {
+        var datei = Path.Combine(_verz, "protokoll.jsonl");
+        var einträge = new List<JsonNode>();
+        if (File.Exists(datei))
+            foreach (var zeile in File.ReadLines(datei))
+            {
+                if (string.IsNullOrWhiteSpace(zeile)) continue;
+                try { if (JsonNode.Parse(zeile) is { } n && (id == null || S(n, "id") == id)) einträge.Add(n); } catch { /* Zeile überspringen */ }
+            }
+        long L(JsonNode? n) => n is JsonValue v && v.TryGetValue<long>(out var x) ? x : 0;
+        var runden = einträge.Where(e => e["eintrag"]?["nr"] != null).ToList();
+        var summe = new
+        {
+            aufrufe = runden.Count,
+            ok = runden.Count(e => e["eintrag"]?["ok"] is JsonValue v && v.TryGetValue<bool>(out var b) && b),
+            eingabe = runden.Sum(e => L(e["eintrag"]?["token"]?["eingabe"])),
+            ausCache = runden.Sum(e => L(e["eintrag"]?["token"]?["ausCache"])),
+            cacheGeschrieben = runden.Sum(e => L(e["eintrag"]?["token"]?["cacheGeschrieben"])),
+            ausgabe = runden.Sum(e => L(e["eintrag"]?["token"]?["ausgabe"])),
+            promptSchaetzung = runden.Sum(e => L(e["eintrag"]?["promptTokenSchaetzung"])),
+            dauerMs = runden.Sum(e => L(e["eintrag"]?["dauerMs"])),
+            uebernommen = einträge.Count(e => S(e["eintrag"], "aktion") == "uebernommen"),
+        };
+        einträge.Reverse();
+        return new { summe, eintraege = einträge.Take(max).ToList() };
     }
 
     private static string Dedent(string s)

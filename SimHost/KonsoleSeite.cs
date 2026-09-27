@@ -53,6 +53,16 @@ button:focus-visible,input:focus-visible,textarea:focus-visible,select:focus-vis
 .leer{color:var(--mu)}
 select,input.w{padding:5px 7px;border:1px solid var(--li);border-radius:5px;background:var(--bg);color:var(--tx);font:13px var(--mono)}
 .hinweis{font-size:12.5px;color:var(--mu)}
+.tab{overflow-x:auto}
+table{border-collapse:collapse;width:100%;font-size:12.5px}
+th,td{text-align:left;padding:5px 8px;border-bottom:1px solid var(--so);vertical-align:top;white-space:nowrap}
+th{font:600 11px var(--mono);letter-spacing:.05em;text-transform:uppercase;color:var(--mu)}
+td.n,th.n{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums}
+td.slot{white-space:normal;min-width:140px;word-break:break-word}
+td.erg{white-space:normal;min-width:200px;max-width:380px}
+td .klein{display:block;font-size:11px;color:var(--mu)}
+td details pre{max-height:260px;white-space:pre;margin-top:6px}
+a.sl{color:var(--ak);cursor:pointer;text-decoration:none}a.sl:hover{text-decoration:underline}
 @media (max-width:800px){main{grid-template-columns:1fr}aside{max-height:35vh}}
 </style>
 </head>
@@ -60,6 +70,7 @@ select,input.w{padding:5px 7px;border:1px solid var(--li);border-radius:5px;back
 <header>
   <h1>LLM-Konsole</h1>
   <span class="st" id="status">lädt…</span>
+  <button class="b" id="protokollKnopf" type="button" title="Alle Aufrufe mit Token, Dauer und Ergebnis">Protokoll</button>
   <button class="b" id="aktualisieren" type="button" title="GraphExtractor über den aktuellen Code laufen lassen (≈ 1 min)">Kontexte neu erzeugen</button>
   <a href="/editor" class="hinweis">zum Editor</a>
 </header>
@@ -120,8 +131,62 @@ async function waehle(id, auftrag){
       <span class="hinweis">Jede Runde ist ein neuer Aufruf: Kontext + Auftrag + nur der letzte Rumpf.</span>
     </div>
   </div>
-  <div id="ergebnis"></div>`;
+  <div id="ergebnis"></div>
+  <div class="kasten"><h2>Verlauf dieses Slots</h2><div id="verlauf" class="leer">lädt …</div></div>`;
   $('#fuellen').onclick = () => fuellen(null);
+  verlauf();
+}
+// ── Protokoll (alle Slots bzw. ein Slot) ──
+const zahl = n => (n ?? 0).toLocaleString('de-DE');
+function ergebnisText(e){ const x = e.eintrag || {};
+  if (x.aktion === 'uebernommen') return `<span class="pill ok">übernommen → ${esc(x.datei)}:${x.zeile}</span>`;
+  if (x.aktion === 'rueckgaengig') return '<span class="pill wa">rückgängig</span>';
+  if (x.fehler) return `<span class="pill fe">Aufruf-Fehler</span>`;
+  if (x.ok) return '<span class="pill ok">✓ geprüft</span>';
+  if (x.ergebnis === 'ausserhalb') return '<span class="pill wa">AUSSERHALB</span>';
+  if (x.ergebnis === 'unlesbar') return '<span class="pill fe">unlesbar</span>';
+  return `<span class="pill fe">${(x.befunde||[]).length} Befund(e)</span>`; }
+function zeitKurz(z){ const [d, u] = (z||'').split('T'); return `${esc((u||'').slice(0,8))}<span class="klein">${esc(d||'')}</span>`; }
+function slotKurz(id){ const [art, besitzer, rest] = (id||'').split('|'); const [disc, klasse] = (rest||'').split('@');
+  return `${esc(besitzer||'')}.${esc(disc||'')}<span class="klein">${esc(art||'')}${klasse?' · '+esc(klasse):''}</span>`; }
+function zeilen(liste, mitSlot){
+  return liste.map((e, i) => { const x = e.eintrag || {}, t = x.token || {};
+    const was = x.nr ? `Runde ${x.nr} · ${esc(x.art)}` : esc(x.aktion || '');
+    const inhalt = [x.fehler, x.ausserhalb, x.rumpf, (x.befunde||[]).join('\n'), x.antwortRoh].filter(Boolean).join('\n\n');
+    const laden = !mitSlot && x.rumpf ? `<button class="b" type="button" data-laden="${i}">als Kandidat laden</button>` : '';
+    return `<tr><td title="${esc(e.zeit||'')}">${zeitKurz(e.zeit)}</td>${mitSlot?`<td class="slot" title="${esc(e.id)}"><a class="sl" data-id="${esc(e.id)}">${slotKurz(e.id)}</a></td>`:''}
+      <td>${was}</td><td class="erg">${ergebnisText(e)}${e.auftrag?`<br><span class="hinweis">${esc(e.auftrag)}</span>`:''}
+      ${inhalt?`<details><summary>Inhalt</summary><pre>${esc(inhalt)}</pre></details>`:''}${laden}</td>
+      <td class="n">${t.eingabe!=null?zahl(t.eingabe):(x.promptTokenSchaetzung?'≈'+zahl(x.promptTokenSchaetzung):'')}</td>
+      <td class="n">${t.ausCache!=null?zahl(t.ausCache):''}</td><td class="n">${t.ausgabe!=null?zahl(t.ausgabe):''}</td>
+      <td class="n">${x.dauerMs!=null?(x.dauerMs/1000).toFixed(1)+' s':''}</td></tr>`; }).join('');
+}
+function tabelle(liste, mitSlot){
+  return `<div class="tab"><table><thead><tr><th>Zeit</th>${mitSlot?'<th>Slot</th>':''}<th>Aktion</th><th>Ergebnis</th>
+    <th class="n">Eingabe</th><th class="n">aus Cache</th><th class="n">Ausgabe</th><th class="n">Dauer</th></tr></thead><tbody>${zeilen(liste, mitSlot)}</tbody></table></div>`;
+}
+function summenZeile(s){
+  const cache = s.eingabe > 0 ? Math.round(100 * s.ausCache / (s.eingabe + s.ausCache)) : null;
+  return `<div class="meta"><span class="pill">${s.aufrufe} Aufrufe</span><span class="pill ok">${s.ok} geprüft ✓</span><span class="pill">${s.uebernommen} übernommen</span>
+    <span class="pill">Eingabe ${zahl(s.eingabe)}${s.eingabe===0&&s.promptSchaetzung?' (geschätzt ≈ '+zahl(s.promptSchaetzung)+')':''}</span>
+    <span class="pill">aus Cache ${zahl(s.ausCache)}${cache!=null?' ('+cache+' %)':''}</span><span class="pill">Ausgabe ${zahl(s.ausgabe)}</span>
+    <span class="pill">Dauer ${(s.dauerMs/1000).toFixed(1)} s</span></div>`;
+}
+async function verlauf(){
+  if (!AKT || !$('#verlauf')) return;
+  const p = await api('/api/llm/protokoll?id=' + encodeURIComponent(AKT));
+  const el = $('#verlauf'); if (!el) return;
+  if (!p.eintraege.length) { el.innerHTML = '<span class="leer">noch keine Aufrufe für diesen Slot</span>'; return; }
+  el.classList.remove('leer'); el.innerHTML = summenZeile(p.summe) + tabelle(p.eintraege, false);
+  el.querySelectorAll('[data-laden]').forEach(b => b.onclick = () => { KANDIDAT = p.eintraege[+b.dataset.laden].eintrag.rumpf; zeichneErgebnis(); $('#ergebnis').scrollIntoView({behavior:'smooth'}); });
+}
+async function zeigeProtokoll(){
+  AKT = null; zeichneListe();
+  const p = await api('/api/llm/protokoll');
+  $('#haupt').innerHTML = `<div class="kasten"><h2>Protokoll aller Aufrufe</h2>${summenZeile(p.summe)}
+    <p class="hinweis">Eingabe = nicht gecachte Eingabe-Token, „aus Cache“ = aus dem Präfix-Cache gelesen (sofern der Anbieter das meldet); ≈ = Schätzung, wenn der Anbieter keine Token meldet. Die Datei liegt in .llm-kontext/protokoll.jsonl.</p>
+    ${p.eintraege.length ? tabelle(p.eintraege, true) : '<p class="leer">noch keine Aufrufe</p>'}</div>`;
+  $('#haupt').querySelectorAll('a.sl').forEach(a => a.onclick = () => waehle(a.dataset.id));
 }
 async function fuellen(anpassung){
   const auftrag = $('#auftrag').value.trim();
@@ -135,7 +200,7 @@ async function fuellen(anpassung){
   RUNDEN = RUNDEN.concat(r.runden);
   const letzte = r.runden[r.runden.length - 1];
   KANDIDAT = letzte && letzte.rumpf ? letzte.rumpf : KANDIDAT;
-  zeichneErgebnis();
+  zeichneErgebnis(); verlauf();
 }
 function alertBox(t){ $('#ergebnis').insertAdjacentHTML('afterbegin', `<div class="kasten"><p class="bef">${esc(t)}</p></div>`); }
 function tok(t){ if(!t) return ''; const p=[]; if(t.eingabe!=null)p.push(`Eingabe ${t.eingabe}`); if(t.ausCache!=null)p.push(`aus Cache ${t.ausCache}`); if(t.cacheGeschrieben!=null)p.push(`Cache geschrieben ${t.cacheGeschrieben}`); if(t.ausgabe!=null)p.push(`Ausgabe ${t.ausgabe}`); return p.join(' · '); }
@@ -201,14 +266,16 @@ async function uebernehmen(){
     <div class="zeile"><button class="b" id="bauen" type="button">Projekt bauen</button><button class="b" id="zurueck" type="button">Rückgängig</button></div><pre id="bauaus" class="leer">—</pre>`;
   $('#bauen').onclick = async () => { $('#bauaus').textContent = 'baut …'; const b = await api('/api/llm/bauen', { id: AKT });
     $('#bauaus').textContent = b.ok ? `✓ ${b.projekt} baut` : `✗ ${b.projekt ?? ''}\n` + (b.fehler||[]).join('\n'); };
-  $('#zurueck').onclick = async () => { const z = await api('/api/llm/rueckgaengig', { id: AKT }); $('#bauaus').textContent = z.ok ? '↶ alter Rumpf wiederhergestellt' : z.grund; };
+  $('#zurueck').onclick = async () => { const z = await api('/api/llm/rueckgaengig', { id: AKT }); $('#bauaus').textContent = z.ok ? '↶ alter Rumpf wiederhergestellt' : z.grund; verlauf(); };
+  verlauf();
 }
 $('#suche').oninput = zeichneListe;
+$('#protokollKnopf').onclick = zeigeProtokoll;
 $('#aktualisieren').onclick = async () => { const b = $('#aktualisieren'); b.disabled = true; b.textContent = 'erzeugt … (≈ 1 min)';
   const r = await api('/api/llm/aktualisieren', {}); b.disabled = false; b.textContent = 'Kontexte neu erzeugen';
   await status(); await liste(); if (AKT) waehle(AKT); if (!r.ok) alertBox((r.meldung||[]).join('\n') || r.grund); };
 (async () => { await status(); await liste();
-  const h = new URLSearchParams(location.hash.slice(1)); if (h.get('id')) waehle(h.get('id'), h.get('auftrag')); })();
+  const h = new URLSearchParams(location.hash.slice(1)); if (h.get('id')) waehle(h.get('id'), h.get('auftrag')); else if (h.has('protokoll')) zeigeProtokoll(); })();
 </script>
 </body>
 </html>

@@ -310,6 +310,11 @@ dotnet run --project SimHost                                     # → http://lo
    Hash-Sperre gegen Zwischenänderungen, Sicherung in `.llm-kontext/sicherung/`. Danach **Projekt bauen**
    (`dotnet build` des betroffenen `.csproj`) und **Rückgängig** (stellt den alten Rumpf wörtlich wieder her).
 7. **Protokoll** — jede Runde mit Token (Eingabe, aus Cache, Ausgabe) in `.llm-kontext/protokoll.jsonl`.
+   Im Browser: Knopf **Protokoll** (bzw. `/konsole#protokoll`) zeigt alle Aufrufe, neueste zuerst, mit Summen
+   (Aufrufe, geprüft, übernommen, Eingabe-/Cache-/Ausgabe-Token, Dauer), Auftrag, Befunden und aufklappbarem Inhalt; ein
+   Klick auf den Slot öffnet ihn. Je Slot zeigt der Kasten „Verlauf dieses Slots" dieselben Zeilen, jeder frühere Rumpf ist
+   „als Kandidat laden" zurückholbar. Daten: `GET /api/llm/protokoll?id=&max=` (Token normalisiert: Eingabe = nicht
+   gecacht, bei OpenAI `prompt_tokens − cached_tokens`; ohne Anbieter-Zahlen Schätzung ≈ Zeichen/3,3).
 
 Aus dem Editor: am 🤖 LLM-Knoten „▶ In der LLM-Konsole füllen" (öffnet `/konsole#id=…&auftrag=…`); alle 172 Code-Blöcke
 des Editor-Modells finden ihren Slot (Store-Slots mit mehreren Implementierungen: die erste, wählbar in der Liste).

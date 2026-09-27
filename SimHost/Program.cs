@@ -149,6 +149,7 @@ app.MapPost("/api/llm/uebernehmen", (JsonElement b) => Results.Json(konsole.Uebe
 app.MapPost("/api/llm/rueckgaengig", (JsonElement b) => Results.Json(konsole.Rueckgaengig(b.GetProperty("id").GetString()!)));
 app.MapPost("/api/llm/bauen", (JsonElement b) => Results.Json(konsole.Bauen(b.GetProperty("id").GetString()!)));
 app.MapPost("/api/llm/aktualisieren", () => Results.Json(konsole.Aktualisieren()));
+app.MapGet("/api/llm/protokoll", (string? id, int? max) => Results.Json(konsole.Protokoll(string.IsNullOrEmpty(id) ? null : id, max ?? 300)));
 
 // Port: 5178, außer die Umgebung weist einen zu (PORT) — z. B. wenn mehrere Editor-Instanzen parallel laufen.
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5178";
