@@ -1,6 +1,6 @@
 # Konzept — LLM-Füllung von Code-Blöcken: Kontext nur aus dem Code
 
-> **Stand:** 2026-09-25 · **Status:** Kontext-Erzeugung GEBAUT für alle Slot-Arten (`--kontext`, `--kontexte`, §9); LLM-Aufruf, Prüfung und Schreiben (§2 Schritte 3–5) noch nicht.
+> **Stand:** 2026-09-27 · **Status:** GEBAUT — Kontext-Erzeugung für alle Slot-Arten (§9) und die LLM-Konsole im SimHost: Füllen → Prüfen → Anpassen → Übernehmen (§12). Offen: Kartenwand, Vergleichstest auf der Zielhardware.
 > **Ziel:** Ein lokales LLM (Zielhardware: RTX 4080 Super, 16 GB; Modell: Qwen3.8-27B) schreibt **nur den Rumpf** eines
 > Code-Blocks. Alles, was es dafür wissen muss, wird **regelbasiert aus dem Domänen-Code und dem Graphen** abgeleitet —
 > nichts ist ausgedacht, nichts semantisch geraten. Die **einzige** menschliche Eingabe ist der Auftrag am LLM-Knoten.
@@ -259,7 +259,7 @@ Token Antwort: 15.558 — innerhalb des Budgets (§6).
 **Bekannte Abweichungen:** Der Vertragssatz „Ablehnung nur allein" ist fester Text je Marker (die Prüfung steht in
 `AggregateActorBase.cs:306`, wird aber nicht ausgelesen). Bei geschriebenen Slots stammen „Store-Aufrufe (verdrahtet)" aus
 dem eigenen Rumpf, weil es noch kein Board gibt; bei leeren Slots kommen sie aus der Editor-Verdrahtung. Domänen-Helfer ohne
-Kante (`SplitZuteiler`) erscheinen nicht. `CodeSync` löst weiterhin nur Decide/Apply-Anker auf.
+Kante (`SplitZuteiler`) erscheinen nicht. Schreiben für alle Slot-Arten: `CodeSync.SetzeRumpf` (§12).
 
 ---
 
@@ -274,8 +274,50 @@ Kante (`SplitZuteiler`) erscheinen nicht. `CodeSync` löst weiterhin nur Decide/
 
 ## 11 · Nächste Schritte
 
-1. LLM-Aufruf (OpenAI-kompatibler Endpunkt, lokaler Server) mit Präfix = Graph-Skelett, danach Slot-Teil.
-2. Prüfung: In-Memory-Compile + Kartenwand; `AUSSERHALB`-Antwortkanal auswerten.
-3. `CodeSync` für alle Slot-Arten (Rumpf schreiben + `// 🤖 Prompt:`).
-4. Graph-Kanten Pipeline → Read-Store und Pipeline → Domänen-Helfer (Code-Fakt: Konstruktor-Parameter).
-5. Vergleichstest auf der Zielhardware: Slot-Teil allein vs. mit Graph-Skelett.
+1. Echter Lauf mit `claude -p` (Abo) bzw. dem lokalen Qwen-Server; Token-Protokoll auswerten (greift der Präfix-Cache?).
+2. Kartenwand: der Rumpf darf nur Symbole benutzen, die der Kontext deklariert (Semantic Model).
+3. Kompilieren vor dem Übernehmen auch für Leseseite/Pipeline/Store (In-Memory über die Domain-Compilation).
+4. Graph-Kanten Pipeline → Read-Store und Pipeline → Domänen-Helfer.
+
+---
+
+## 12 · Die LLM-Konsole (SimHost, `/konsole`)
+
+```bash
+dotnet run --project GraphExtractor -- --kontexte .llm-kontext   # Modell-Dateien + Kontexte + index.json (≈ 1 min)
+dotnet run --project SimHost                                     # → http://localhost:5178/konsole
+```
+
+**Anbieter** (Umgebungsvariablen des SimHost):
+
+| `BRACTOR_LLM` | Aufruf | Abrechnung |
+|---|---|---|
+| `claude` (Standard) | `claude -p … --output-format json --permission-mode dontAsk` im leeren Temp-Verzeichnis, Kontext über stdin; optional `BRACTOR_LLM_MODELL` | Anmeldung dieses Rechners (Abo). Ist `ANTHROPIC_API_KEY` gesetzt, verweigert die Konsole den Aufruf, außer `BRACTOR_LLM_API_ERLAUBT=1` |
+| `openai` | `POST {BRACTOR_LLM_URL}/v1/chat/completions`, Modell `BRACTOR_LLM_MODELL`, `cache_prompt: true` | lokal (llama.cpp, vLLM, LM Studio, Ollama) |
+| `befehl` | `BRACTOR_LLM_BEFEHL`: Anweisung + Prompt auf stdin, Antwort auf stdout | zum Testen der Kette |
+
+**Ablauf je Code-Block** (`SimHost/LlmKonsole.cs`, Seite `SimHost/KonsoleSeite.cs`):
+
+1. **Füllen** — jede Runde ein neuer, zustandsloser Aufruf. Prompt stabil → veränderlich: feste Anweisung · Graph-Skelett
+   (eigene Guards entfernt) · Slot-Teil (ohne Auftrags-Abschnitt) · Auftrag · [aktueller Rumpf · Befund bzw. Anpassung].
+   Nie ein Verlauf; nur der letzte Rumpf reist mit.
+2. **Antwort** — ein ```csharp-Block (Rumpf ohne äußere Klammern) oder `AUSSERHALB: braucht …` (→ Editor-Struktur).
+3. **Prüfen** — Syntax für alle Slot-Arten; Decide/Apply zusätzlich In-Memory-Compile mit den echten Generatoren
+   (`domain-model.json` mit ersetztem Rumpf, nur neue Fehler zählen). Bei Befund automatisch nächste Runde (max. 3).
+4. **Simulieren** (Decide/Apply) — der Kandidat ersetzt nur in der Simulation den Rumpf; Command mit Werten schicken.
+5. **Anpassen** — Wunschtext → neue Runde mit Kontext + Auftrag + aktuellem Rumpf + Anpassung.
+6. **Übernehmen** — erst auf Klick: `CodeSync.SetzeRumpf` schreibt Rumpf + `// 🤖 Prompt: <Auftrag>` (Ausdrucks-Rumpf → Block),
+   Hash-Sperre gegen Zwischenänderungen, Sicherung in `.llm-kontext/sicherung/`. Danach **Projekt bauen**
+   (`dotnet build` des betroffenen `.csproj`) und **Rückgängig** (stellt den alten Rumpf wörtlich wieder her).
+7. **Protokoll** — jede Runde mit Token (Eingabe, aus Cache, Ausgabe) in `.llm-kontext/protokoll.jsonl`.
+
+Aus dem Editor: am 🤖 LLM-Knoten „▶ In der LLM-Konsole füllen" (öffnet `/konsole#id=…&auftrag=…`); alle 172 Code-Blöcke
+des Editor-Modells finden ihren Slot (Store-Slots mit mehreren Implementierungen: die erste, wählbar in der Liste).
+
+**Getestet (ohne echtes Modell):** Fake-Befehl liefert in Runde 1 einen Rumpf mit unbekanntem Member → der In-Memory-Compile
+meldet `CS1061`, Runde 2 (Befund) kompiliert; Simulation trifft Event, Ablehnung und Guard; Übernehmen schreibt korrekt
+eingerückt; Projekt baut; zweites Übernehmen mit altem Hash wird abgelehnt; Rückgängig stellt Datei wörtlich her (auch
+Ausdrucks-Rumpf `=> …` ↔ Block). OpenAI-Weg gegen einen Fake-Server: `AUSSERHALB` erkannt, Token inkl. Cache gelesen.
+
+**Grenzen:** Kompilieren vor dem Übernehmen nur für Decide/Apply (sonst Syntax + Bauen danach). Nach dem Übernehmen sind die
+Kontexte veraltet („Kontexte neu erzeugen", ≈ 1 min). Kartenwand (Symbol-Allowlist) noch nicht.

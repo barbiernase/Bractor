@@ -1038,8 +1038,21 @@ public static class HtmlPresenter
       else if(r&&r.grund==="stale"){baseHash=r.hash;ta.value=r.prompt||"";l.intent=ta.value;status.textContent="↩ extern geändert — neu geladen";status.style.color="#e0b46a";}
       else{status.textContent="⚠ "+((r&&r.grund)||"SimHost offline");status.style.color="#ffb3c1";}};
     if(anker)syncReg(l._id,anker,d=>{baseHash=d.hash;if(document.activeElement!==ta){ta.value=d.prompt||"";l.intent=ta.value;}},"ln:"+l._id);
+    // ▶ LLM-Konsole: denselben Code-Block dort füllen → prüfen → anpassen → übernehmen (Kontext aus Code + Graph).
+    const kid=block?konsolenId(block._id):null;
+    if(kid)body.append(h("div",{class:"frow"},h("button",{class:"codeadd",title:"In der LLM-Konsole füllen (neuer Tab)",
+      onclick:()=>window.open("/konsole#id="+encodeURIComponent(kid)+"&auftrag="+encodeURIComponent(ta.value||""),"_blank")},"▶ In der LLM-Konsole füllen")));
     body.append(slotRow("prompt","Prompt ▶","r",{type:"prompt",dir:"out",llm:l._id},"llm:prout:"+l._id));
   }
+  // Slot-Schlüssel der LLM-Konsole (wie GraphExtractor --kontexte ihn vergibt): Art|Besitzer|Disc.
+  function konsolenId(codeId){const o=findCodeOwner(codeId);if(!o)return null;const r=o.ref;
+    if(o.kind==="decider")return "decide|"+r.aggregat+"|"+r.command;
+    if(o.kind==="applier")return "apply|"+r.aggregat+"|"+r.event;
+    if(o.kind==="projektion"){const hd=(r.handles||[]).find(x=>x.codeSrc===codeId);return hd?"projektion|"+r.name+"|"+hd.event:null;}
+    if(o.kind==="reader"){const hd=(r.handles||[]).find(x=>x.codeSrc===codeId);return hd?"reader|"+r.name+"|"+hd.query:null;}
+    if(o.kind==="pipeline"){const hd=(r.handles||[]).find(x=>x.codeSrc===codeId);return hd?"pipeline|"+r.name+"|"+(hd.input||hd.event):null;}
+    if(o.kind==="store"){const f=(r.writeFns||[]).concat(r.readFns||[]).find(x=>x.codeSrc===codeId);return f?"store|"+r.name+"|"+f.name:null;}
+    return null;}
   // Kurzvorschau eines Code-/Intent-Textes (erste Zeilen) für den Knoten.
   function codePreview(t,leer,voll){const s=(t||"").replace(/\t/g,"    ").split("\n");const max=voll?1e9:7;
     const head=s.slice(0,max).join("\n");return (t&&t.trim())?(head+(s.length>max?"\n…":"")):(leer||"// leer");}

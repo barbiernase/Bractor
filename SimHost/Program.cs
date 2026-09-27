@@ -124,9 +124,35 @@ app.MapPost("/api/editor/extract", () => Results.Json(CodeSync.Extrahiere(slnRoo
 // Bauen (entprellt vom Browser aufgerufen): Generatoren + Proto-Prepass laufen bei dotnet build mit.
 app.MapPost("/api/editor/build", () => Results.Json(CodeSync.Baue(slnRoot)));
 
+// ── LLM-KONSOLE: einen Code-Block füllen → prüfen → anpassen → übernehmen (docs/konzept-llm-minimalkontext.md). ──
+// Anbieter über die Umgebung: BRACTOR_LLM = claude (Standard, `claude -p` mit der Anmeldung dieses Rechners)
+// | openai (BRACTOR_LLM_URL, BRACTOR_LLM_MODELL — z. B. llama.cpp/vLLM) | befehl (BRACTOR_LLM_BEFEHL, stdin → stdout).
+var konsole = new LlmKonsole(slnRoot, simulation);
+app.MapGet("/konsole", () => Results.Content(KonsoleSeite.Html, "text/html"));
+app.MapGet("/api/llm/status", () => Results.Json(konsole.Status()));
+app.MapGet("/api/llm/slots", () => Results.Json(konsole.Slots()));
+app.MapGet("/api/llm/slot", (string id) => Results.Json(konsole.SlotDetail(id), EditorModell.JsonOptionen));
+app.MapPost("/api/llm/fuellen", async (JsonElement b, CancellationToken ct) => Results.Json(await konsole.FuellenAsync(new LlmKonsole.FuellAnfrage(
+    b.GetProperty("id").GetString()!,
+    b.TryGetProperty("auftrag", out var au) ? au.GetString() ?? "" : "",
+    b.TryGetProperty("rumpf", out var r) && r.ValueKind == JsonValueKind.String ? r.GetString() : null,
+    b.TryGetProperty("anpassung", out var an) && an.ValueKind == JsonValueKind.String ? an.GetString() : null,
+    !b.TryGetProperty("autoReparatur", out var ar) || ar.ValueKind != JsonValueKind.False,
+    b.TryGetProperty("maxRunden", out var mr) && mr.TryGetInt32(out var m) ? m : 3), ct)));
+app.MapPost("/api/llm/simulieren", (JsonElement b) => Results.Json(konsole.Simuliere(
+    b.GetProperty("id").GetString()!, b.GetProperty("rumpf").GetString()!, b.GetProperty("command").GetString()!,
+    b.TryGetProperty("werte", out var w) ? w : default, b.TryGetProperty("neu", out var n) && n.ValueKind == JsonValueKind.True), EditorModell.JsonOptionen));
+app.MapPost("/api/llm/uebernehmen", (JsonElement b) => Results.Json(konsole.Uebernehmen(
+    b.GetProperty("id").GetString()!, b.GetProperty("rumpf").GetString()!,
+    b.TryGetProperty("auftrag", out var a) ? a.GetString() : null,
+    b.TryGetProperty("basisHash", out var h) && h.ValueKind == JsonValueKind.String ? h.GetString() : null)));
+app.MapPost("/api/llm/rueckgaengig", (JsonElement b) => Results.Json(konsole.Rueckgaengig(b.GetProperty("id").GetString()!)));
+app.MapPost("/api/llm/bauen", (JsonElement b) => Results.Json(konsole.Bauen(b.GetProperty("id").GetString()!)));
+app.MapPost("/api/llm/aktualisieren", () => Results.Json(konsole.Aktualisieren()));
+
 // Port: 5178, außer die Umgebung weist einen zu (PORT) — z. B. wenn mehrere Editor-Instanzen parallel laufen.
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5178";
-Console.WriteLine($"\n▶ SimHost läuft.  Editor: http://localhost:{port}/editor   ({editorPath ?? "editor.html fehlt"})\n");
+Console.WriteLine($"\n▶ SimHost läuft.  Editor: http://localhost:{port}/editor   ({editorPath ?? "editor.html fehlt"})   LLM-Konsole: http://localhost:{port}/konsole\n");
 app.Run($"http://localhost:{port}");
 
 // Wurzelverzeichnis der .sln (für die Code-Sync-Dateipfade).

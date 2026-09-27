@@ -106,7 +106,7 @@ NICHT Timeout-tunebar; xUnit schluckt App-Logs (Cluster-Diagnose → Last-Harnes
 - Build: `dotnet build`
 - Test (Logik, immer grün): `dotnet test Infrastructure.Pruefstand.Tests/Infrastructure.Pruefstand.Tests.csproj`
 - Integration (braucht Postgres/Consul/Redis, sequentiell): `dotnet test Infrastructure.Integration.Tests/Infrastructure.Integration.Tests.csproj`
-- Domänen-Editor + Simulation (einzige Oberfläche): `dotnet run --project GraphExtractor` (erzeugt editor.html + domain-model.json), dann `dotnet run --project SimHost` → http://localhost:5178/editor
+- Domänen-Editor + Simulation (einzige Oberfläche): `dotnet run --project GraphExtractor` (erzeugt editor.html + domain-model.json), dann `dotnet run --project SimHost` → http://localhost:5178/editor; LLM-Konsole → http://localhost:5178/konsole (vorher `-- --kontexte .llm-kontext`; Anbieter über `BRACTOR_LLM`, siehe Konzept §12)
 - Editor-Parität (Code ⇄ Extraktion ⇄ Editor, schreibt nichts): `dotnet run --project GraphExtractor -- --check`
 - Agnostik-Sonde (unbekannte Domäne im Speicher gegen handgeschriebenes Soll + Fixpunkt): `dotnet run --project GraphExtractor -- --sonde`
 - LLM-Kontext je Code-Block (`docs/konzept-llm-minimalkontext.md`): `dotnet run --project GraphExtractor -- --kontexte <verz>` (Graph-Skelett + Slot-Teile) bzw. `--kontext <Disc> [--auftrag "…"]`; Isolation aller Code-Block-Stellen: `--slots`

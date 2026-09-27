@@ -778,11 +778,37 @@ public static class KontextCli
         var skelTok = Token(skelett);
         foreach (var k in alle)
         {
-            var impl = k.Slot.Art == "store" ? "@" + k.Slot.Klasse.Name : "";   // ein Store-Interface kann mehrere Implementierungen haben
-            File.WriteAllText(Path.Combine(verz, $"{k.Slot.Art}-{k.Schlüssel.Split('|')[1]}.{k.Slot.Disc}{impl}.txt"), k.Text);
+            File.WriteAllText(Path.Combine(verz, DateiName(k)), k.Text);
             md.AppendLine($"| {k.Titel} | {k.RumpfStatus} | {(k.Auftrag == null ? "—" : "✓")} | {Token(k.Text)} | {k.NachbarBlöcke} | {k.KopplungBlöcke} | {skelTok + Token(k.Text)} |");
         }
         File.WriteAllText(Path.Combine(verz, "übersicht.md"), md.ToString());
+
+        // index.json — was die LLM-Konsole (SimHost) je Slot braucht: Anker zum Schreiben, Slot-Teil-Datei,
+        // die Skelett-Zeile ohne eigene Guards (Ersatz) und den Auftrag, falls einer im Code/Board steht.
+        var skelettZeilen = skelett.Split('\n');
+        var index = alle.Select(k =>
+        {
+            var eigen = bauer.Skelett(k.Schlüssel).Split('\n');
+            var ersatz = skelettZeilen.Zip(eigen).Where(z => z.First != z.Second).Select(z => new { alt = z.First, neu = z.Second }).FirstOrDefault();
+            var m = k.Slot.Methode!;
+            var decl = m.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).First(n => !Projektlage.IstGeneriert(n.SyntaxTree));
+            var pos = decl.GetLocation().GetLineSpan();
+            // Parametertyp so, wie er im Quelltext steht (Basisname) — der Anker, mit dem CodeSync die Methode wiederfindet.
+            var pTyp = (decl as Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax)?.ParameterList.Parameters.FirstOrDefault()?.Type?.ToString();
+            return new
+            {
+                id = k.Schlüssel + (k.Slot.Art == "store" ? "@" + k.Slot.Klasse.Name : ""),   // eindeutig (Store: mehrere Impls je Interface)
+                schluessel = k.Schlüssel, titel = k.Titel, art = k.Slot.Art, besitzer = k.Schlüssel.Split('|')[1], disc = k.Slot.Disc,
+                aggregat = k.Slot.State?.Name,
+                klasse = k.Slot.Klasse.Name, methode = m.Name,
+                parameterTyp = pTyp == null ? null : pTyp.Split('<')[0].Split('.').Last().TrimEnd('?').Trim(),
+                datei = Path.GetRelativePath(solutionDir, pos.Path).Replace('\\', '/'), zeile = pos.StartLinePosition.Line + 1,
+                rumpf = k.RumpfStatus, auftrag = k.Auftrag,
+                slotDatei = DateiName(k), tokenSlot = Token(k.Text), skelettErsatz = ersatz,
+            };
+        }).ToList();
+        File.WriteAllText(Path.Combine(verz, "index.json"), System.Text.Json.JsonSerializer.Serialize(new { skelettDatei = "00-graph-skelett.txt", tokenSkelett = Token(skelett), slots = index },
+            new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
         Console.WriteLine($"✅ {alle.Count} Slot-Teile + Graph-Skelett (≈ {skelTok} Token) → {verz}");
         foreach (var g in alle.GroupBy(k => k.Slot.Art))
         {
@@ -791,6 +817,10 @@ public static class KontextCli
         }
         return 0;
     }
+
+    /// <summary>Dateiname des Slot-Teils; ein Store-Interface kann mehrere Implementierungen haben (→ Klasse im Namen).</summary>
+    private static string DateiName(SlotKontext k) =>
+        $"{k.Slot.Art}-{k.Schlüssel.Split('|')[1]}.{k.Slot.Disc}{(k.Slot.Art == "store" ? "@" + k.Slot.Klasse.Name : "")}.txt";
 
     /// <summary>Zeichen / 3,3 — gegen den Qwen-BPE kalibriert (siehe Konzept).</summary>
     public static int Token(string text) => (int)Math.Ceiling(text.Length / 3.3);

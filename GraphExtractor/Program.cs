@@ -84,8 +84,8 @@ Console.WriteLine("\n── Composition-Root (Betrieb/Host) ──");
 var compositionRoot = await new CompositionRootExtractor(solution, lage, routing, dom).ExtractAsync();
 Console.WriteLine($"   {compositionRoot.Frists.Count} Frist(en), {compositionRoot.Triggers.Count} Trigger, {compositionRoot.Dienste.Count} Dienst-Bindung(en), {compositionRoot.HostSettings.Count} HostSetting(s)");
 
-// --kontext <Disc|Besitzer.Disc> [--auftrag "…"] / --kontexte <verz>: LLM-Kontext je Code-Block (Graph-Skelett + Slot-Teil).
-if (args.Contains("--kontext") || args.Contains("--kontexte"))
+// --kontext <Disc|Besitzer.Disc> [--auftrag "…"]: ein LLM-Kontext auf die Konsole (schreibt sonst nichts).
+if (args.Contains("--kontext"))
     return KontextCli.Lauf(args, lage, dom, graph, compositionRoot, solutionDir);
 var jsonOptions = new JsonSerializerOptions
 {
@@ -133,6 +133,10 @@ Console.WriteLine($"✅ {modellPath}  ({modell.Aggregate.Count} Aggregate, {mode
 // Die EINE Oberfläche (Route /editor): Editor + Simulation. Das Modell lädt sie live vom SimHost.
 var editorPath = Path.Combine(solutionDir, "editor.html");
 await File.WriteAllTextAsync(editorPath, HtmlPresenter.EditorPage());
+
+// --kontexte <verz>: zusätzlich zu den Modell-Dateien alle LLM-Kontexte + index.json (Quelle der LLM-Konsole im SimHost).
+if (args.Contains("--kontexte"))
+    return KontextCli.Lauf(args, lage, dom, graph, compositionRoot, solutionDir);
 Console.WriteLine($"✅ {editorPath}");
 
 Console.WriteLine($"\n   Diagnosen: {graph.Views.Diagnostics.Count}");

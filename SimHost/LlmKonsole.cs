@@ -1,0 +1,404 @@
+using System.Diagnostics;
+using System.Text;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using System.Text.RegularExpressions;
+using DomainEditor;
+using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
+
+namespace SimHost;
+
+// ════════════════════════════════════════════════════════════════════════════
+//  LLM-Konsole (docs/konzept-llm-minimalkontext.md): einen Code-Block füllen, prüfen, anpassen, übernehmen.
+//
+//  • Kontext = die Dateien aus `GraphExtractor --kontexte .llm-kontext` (Graph-Skelett + Slot-Teil je Code-Block).
+//  • Jede Runde ist ein NEUER, zustandsloser Aufruf. Reihenfolge stabil → veränderlich:
+//      Anweisung · Graph-Skelett · Slot-Teil · Auftrag · [aktueller Rumpf · Befund/Anpassung]
+//    Nie ein Gesprächsverlauf — nur der letzte Rumpf reist mit.
+//  • Prüfen: Syntax (alle Slot-Arten); Decide/Apply zusätzlich In-Memory-Compile mit den echten Generatoren
+//    (dasselbe Kompilat wie /api/editor/compile). Nur NEUE Fehler gegenüber dem unveränderten Modell zählen.
+//  • Übernehmen schreibt den Rumpf erst auf ausdrücklichen Klick in die echte Datei (Hash-Sperre, Sicherung, Rückgängig).
+// ════════════════════════════════════════════════════════════════════════════
+
+/// <summary>Ein LLM-Aufruf: Anweisung (System) + Prompt. Liefert Text und – falls gemeldet – Token-Zahlen.</summary>
+public interface ILlmAnbieter
+{
+    string Beschreibung { get; }
+    string? Warnung { get; }
+    Task<LlmAntwort> FrageAsync(string anweisung, string prompt, CancellationToken ct);
+}
+
+public sealed record LlmAntwort(string Text, int? Eingabe, int? AusCache, int? CacheGeschrieben, int? Ausgabe, double? KostenSchaetzungUsd, string? Roh);
+
+/// <summary>Claude Code im Print-Modus (<c>claude -p</c>) — läuft über die Anmeldung des Nutzers (Abo), nicht über einen API-Key.</summary>
+public sealed class ClaudeCliAnbieter(string? modell) : ILlmAnbieter
+{
+    public string Beschreibung => $"claude -p (Claude Code, Anmeldung dieses Rechners){(modell != null ? ", Modell " + modell : "")}";
+    public string? Warnung => Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") is { Length: > 0 }
+        ? "ANTHROPIC_API_KEY ist gesetzt — claude -p würde über die API abrechnen. Variable entfernen oder BRACTOR_LLM_API_ERLAUBT=1 setzen."
+        : null;
+
+    public async Task<LlmAntwort> FrageAsync(string anweisung, string prompt, CancellationToken ct)
+    {
+        if (Warnung != null && Environment.GetEnvironmentVariable("BRACTOR_LLM_API_ERLAUBT") != "1")
+            throw new InvalidOperationException(Warnung);
+        // Leeres Arbeitsverzeichnis: kein Projekt-CLAUDE.md, keine Repo-Dateien — nur der gelieferte Kontext.
+        var leer = Directory.CreateTempSubdirectory("bractor-llm-");
+        try
+        {
+            var psi = new ProcessStartInfo("claude")
+            {
+                WorkingDirectory = leer.FullName, UseShellExecute = false,
+                RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true,
+                StandardInputEncoding = new UTF8Encoding(false), StandardOutputEncoding = Encoding.UTF8,
+            };
+            foreach (var a in new[] { "-p", "Bearbeite die Aufgabe aus der Eingabe genau nach der Anweisung.",
+                         "--output-format", "json", "--permission-mode", "dontAsk", "--append-system-prompt", anweisung })
+                psi.ArgumentList.Add(a);
+            if (modell != null) { psi.ArgumentList.Add("--model"); psi.ArgumentList.Add(modell); }
+            using var p = Process.Start(psi) ?? throw new InvalidOperationException("claude konnte nicht gestartet werden (im PATH?).");
+            await p.StandardInput.WriteAsync(prompt);
+            p.StandardInput.Close();
+            var aus = p.StandardOutput.ReadToEndAsync(ct);
+            var err = p.StandardError.ReadToEndAsync(ct);
+            await p.WaitForExitAsync(ct);
+            var json = await aus;
+            if (p.ExitCode != 0 && string.IsNullOrWhiteSpace(json))
+                throw new InvalidOperationException($"claude -p beendet mit {p.ExitCode}: {(await err).Trim()}");
+            var o = JsonNode.Parse(json)!;
+            var u = o["usage"];
+            return new LlmAntwort(o["result"]?.GetValue<string>() ?? "", Int(u?["input_tokens"]), Int(u?["cache_read_input_tokens"]),
+                Int(u?["cache_creation_input_tokens"]), Int(u?["output_tokens"]), o["total_cost_usd"]?.GetValue<double>(), json);
+        }
+        finally { try { leer.Delete(true); } catch { /* egal */ } }
+    }
+
+    private static int? Int(JsonNode? n) => n is JsonValue v && v.TryGetValue<int>(out var i) ? i : null;
+}
+
+/// <summary>OpenAI-kompatibler Chat-Endpunkt (llama.cpp-Server, vLLM, LM Studio, Ollama …) — für das lokale Modell.</summary>
+public sealed class OpenAiAnbieter(string url, string modell) : ILlmAnbieter
+{
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromMinutes(10) };
+    public string Beschreibung => $"OpenAI-kompatibel: {url} · Modell {modell}";
+    public string? Warnung => null;
+
+    public async Task<LlmAntwort> FrageAsync(string anweisung, string prompt, CancellationToken ct)
+    {
+        var ziel = url.TrimEnd('/').EndsWith("/chat/completions") ? url : url.TrimEnd('/') + "/v1/chat/completions";
+        var anfrage = new JsonObject
+        {
+            ["model"] = modell, ["temperature"] = 0.2, ["cache_prompt"] = true,   // cache_prompt: llama.cpp-Präfix-Cache
+            ["messages"] = new JsonArray(
+                new JsonObject { ["role"] = "system", ["content"] = anweisung },
+                new JsonObject { ["role"] = "user", ["content"] = prompt }),
+        };
+        // Fester Content-Length statt Chunked — auch einfache Server (und Proxies) nehmen das an.
+        using var inhalt = new StringContent(anfrage.ToJsonString(), Encoding.UTF8, "application/json");
+        using var antwort = await Http.PostAsync(ziel, inhalt, ct);
+        var roh = await antwort.Content.ReadAsStringAsync(ct);
+        if (!antwort.IsSuccessStatusCode) throw new InvalidOperationException($"{(int)antwort.StatusCode}: {roh[..Math.Min(400, roh.Length)]}");
+        var o = JsonNode.Parse(roh)!;
+        var u = o["usage"];
+        int? I(JsonNode? n) => n is JsonValue v && v.TryGetValue<int>(out var i) ? i : null;
+        return new LlmAntwort(o["choices"]?[0]?["message"]?["content"]?.GetValue<string>() ?? "",
+            I(u?["prompt_tokens"]), I(u?["prompt_tokens_details"]?["cached_tokens"]), null, I(u?["completion_tokens"]), null, roh);
+    }
+}
+
+/// <summary>Beliebiger Befehl: Anweisung + Prompt auf stdin, Antwort auf stdout (zum Testen der Kette ohne Modell).</summary>
+public sealed class BefehlAnbieter(string befehl) : ILlmAnbieter
+{
+    public string Beschreibung => $"Befehl: {befehl}";
+    public string? Warnung => null;
+
+    public async Task<LlmAntwort> FrageAsync(string anweisung, string prompt, CancellationToken ct)
+    {
+        var psi = new ProcessStartInfo("/bin/sh") { UseShellExecute = false, RedirectStandardInput = true, RedirectStandardOutput = true, RedirectStandardError = true };
+        psi.ArgumentList.Add("-c"); psi.ArgumentList.Add(befehl);
+        using var p = Process.Start(psi)!;
+        await p.StandardInput.WriteAsync(anweisung + "\n\n" + prompt);
+        p.StandardInput.Close();
+        var aus = await p.StandardOutput.ReadToEndAsync(ct);
+        await p.WaitForExitAsync(ct);
+        if (p.ExitCode != 0) throw new InvalidOperationException($"Befehl beendet mit {p.ExitCode}: {await p.StandardError.ReadToEndAsync(ct)}");
+        return new LlmAntwort(aus, null, null, null, null, null, null);
+    }
+}
+
+public sealed class LlmKonsole
+{
+    /// <summary>Die feste Anweisung — für alle Aufrufe gleich (Teil des cachebaren Präfixes).</summary>
+    public const string Anweisung = """
+        Du schreibst den Rumpf genau EINER C#-Methode in einem bestehenden Projekt. Der Kontext besteht aus dem
+        Graph-Skelett der Domäne und dem Slot-Teil dieses Code-Blocks; am Ende stehen Auftrag und ggf. der aktuelle Rumpf
+        mit Befund oder Anpassung.
+        Antworte in GENAU einer von zwei Formen, ohne weiteren Text:
+        1) Ein einziger ```csharp-Block mit den Anweisungen des Methodenrumpfs — ohne Signatur, ohne die äußeren
+           geschweiften Klammern der Methode, ohne using-Direktiven.
+        2) Eine Zeile: AUSSERHALB: braucht <Art> <Name> — <Grund>
+           wenn der Auftrag mit dem, was im Rumpf erreichbar ist, nicht lösbar ist (z. B. neuer Ausgang, neues Feld,
+           neue Verdrahtung).
+        Benutze nur Typen und Member, die im Kontext stehen.
+        """;
+
+    private readonly string _sln, _verz;
+    private readonly ModellSimulation _sim;
+    private readonly Func<ILlmAnbieter> _anbieter;
+    private readonly object _sperre = new();
+    private readonly Dictionary<string, CompileErgebnis> _basisFehler = new();
+
+    public LlmKonsole(string slnRoot, ModellSimulation sim)
+    {
+        _sln = slnRoot; _sim = sim;
+        _verz = Path.Combine(slnRoot, ".llm-kontext");
+        _anbieter = () => (Environment.GetEnvironmentVariable("BRACTOR_LLM") ?? "claude") switch
+        {
+            "openai" => new OpenAiAnbieter(Environment.GetEnvironmentVariable("BRACTOR_LLM_URL") ?? "http://localhost:8080",
+                Environment.GetEnvironmentVariable("BRACTOR_LLM_MODELL") ?? "qwen"),
+            "befehl" => new BefehlAnbieter(Environment.GetEnvironmentVariable("BRACTOR_LLM_BEFEHL") ?? "cat >/dev/null; echo 'AUSSERHALB: kein Befehl konfiguriert'"),
+            _ => new ClaudeCliAnbieter(Environment.GetEnvironmentVariable("BRACTOR_LLM_MODELL")),
+        };
+    }
+
+    // ── Index + Dateien aus GraphExtractor --kontexte ──
+
+    private JsonObject? Index() => File.Exists(Path.Combine(_verz, "index.json"))
+        ? JsonNode.Parse(File.ReadAllText(Path.Combine(_verz, "index.json")))!.AsObject() : null;
+
+    private JsonObject? Slot(string id) => Index()?["slots"]?.AsArray().OfType<JsonObject>().FirstOrDefault(s => s["id"]?.GetValue<string>() == id);
+
+    private static string S(JsonNode? n, string p) => n?[p]?.GetValue<string>() ?? "";
+    private static string? SN(JsonNode? n, string p) => n?[p] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
+
+    private MethodenAnker Anker(JsonObject slot) => new(S(slot, "datei"), S(slot, "klasse"), S(slot, "methode"), SN(slot, "parameterTyp"));
+
+    public object Status()
+    {
+        var a = _anbieter();
+        var idx = Path.Combine(_verz, "index.json");
+        return new
+        {
+            anbieter = a.Beschreibung, warnung = a.Warnung,
+            index = File.Exists(idx) ? new { stand = File.GetLastWriteTime(idx).ToString("yyyy-MM-dd HH:mm:ss"), slots = Index()!["slots"]!.AsArray().Count,
+                tokenSkelett = Index()!["tokenSkelett"]?.GetValue<int>() } : null,
+        };
+    }
+
+    public object Slots() => Index()?["slots"]?.AsArray().OfType<JsonObject>().Select(s => new
+    {
+        id = S(s, "id"), titel = S(s, "titel"), art = S(s, "art"), rumpf = S(s, "rumpf"), tokenSlot = s["tokenSlot"]?.GetValue<int>(),
+        datei = S(s, "datei"), zeile = s["zeile"]?.GetValue<int>(), auftrag = SN(s, "auftrag"),
+    }).ToList() ?? (object)new List<object>();
+
+    public object SlotDetail(string id)
+    {
+        var slot = Slot(id);
+        if (slot == null) return new { ok = false, grund = "Unbekannter Slot — Kontexte neu erzeugen?" };
+        var teil = File.ReadAllText(Path.Combine(_verz, S(slot, "slotDatei")));
+        var modell = SimModell();
+        var commands = S(slot, "art") is "decide" or "apply" && modell != null
+            ? modell.Decider.Where(d => d.Aggregat == S(slot, "aggregat")).Select(d => new
+            {
+                name = d.Command,
+                felder = modell.Records.FirstOrDefault(r => r.Name == d.Command)?.Felder.Select(f => new { name = f.Name, typ = f.Typ }).ToList(),
+            }).ToList()
+            : null;
+        return new
+        {
+            ok = true, slot, slotTeil = teil, aktuell = CodeSync.LeseRumpf(Anker(slot), _sln),
+            tokenGesamt = (Index()!["tokenSkelett"]?.GetValue<int>() ?? 0) + (slot["tokenSlot"]?.GetValue<int>() ?? 0),
+            simulierbar = commands != null, commands,
+        };
+    }
+
+    // ── Prompt: stabil → veränderlich ──
+
+    private string Prompt(JsonObject slot, string auftrag, string? rumpf, string? befund, string? anpassung)
+    {
+        var skelett = File.ReadAllText(Path.Combine(_verz, S(slot, "skelettDatei").Length > 0 ? S(slot, "skelettDatei") : "00-graph-skelett.txt"));
+        if (slot["skelettErsatz"] is JsonObject e) skelett = skelett.Replace(S(e, "alt"), S(e, "neu"));
+        // Der Auftrags-Abschnitt aus der Datei fliegt raus: der Auftrag steht bewusst am ENDE (veränderlicher Teil).
+        var teil = Regex.Replace(File.ReadAllText(Path.Combine(_verz, S(slot, "slotDatei"))), @"## AUFTRAG \[L\]\n.*?\n(?=\n## )", "", RegexOptions.Singleline);
+        var b = new StringBuilder();
+        b.AppendLine(skelett).AppendLine().AppendLine(teil.Trim()).AppendLine();
+        b.AppendLine("## AUFTRAG").AppendLine(auftrag.Trim());
+        if (rumpf != null) b.AppendLine().AppendLine("## AKTUELLER RUMPF").AppendLine("```csharp").AppendLine(rumpf.Trim()).AppendLine("```");
+        if (befund != null) b.AppendLine().AppendLine("## BEFUND (Prüfung des aktuellen Rumpfs) — korrigiere den Rumpf").AppendLine(befund.Trim());
+        if (anpassung != null) b.AppendLine().AppendLine("## ANPASSUNG (Wunsch des Entwicklers) — ändere den aktuellen Rumpf").AppendLine(anpassung.Trim());
+        return b.ToString();
+    }
+
+    // ── Füllen: bis zu N zustandslose Runden, jede geprüft ──
+
+    public sealed record FuellAnfrage(string Id, string Auftrag, string? Rumpf, string? Anpassung, bool AutoReparatur = true, int MaxRunden = 3);
+
+    public async Task<object> FuellenAsync(FuellAnfrage a, CancellationToken ct)
+    {
+        var slot = Slot(a.Id);
+        if (slot == null) return new { ok = false, grund = "Unbekannter Slot — Kontexte neu erzeugen?" };
+        if (string.IsNullOrWhiteSpace(a.Auftrag)) return new { ok = false, grund = "Kein Auftrag — ohne Auftrag wird kein Aufruf ausgelöst." };
+        var anbieter = _anbieter();
+        var basisHash = CodeSync.RumpfHash(Anker(slot), _sln);
+        var runden = new List<object>();
+        string? rumpf = a.Rumpf, befund = null, anpassung = a.Anpassung;
+        for (var nr = 1; nr <= Math.Max(1, a.MaxRunden); nr++)
+        {
+            var prompt = Prompt(slot, a.Auftrag, rumpf, befund, anpassung);
+            var art = anpassung != null ? "anpassung" : befund != null ? "reparatur" : "erzeugen";
+            var uhr = Stopwatch.StartNew();
+            LlmAntwort antwort;
+            try { antwort = await anbieter.FrageAsync(Anweisung, prompt, ct); }
+            catch (Exception ex) { runden.Add(new { nr, art, fehler = ex.Message + (ex.InnerException != null ? " — " + ex.InnerException.Message : "") }); break; }
+            uhr.Stop();
+            var (ergebnis, kandidat, ausserhalb) = Zerlege(antwort.Text);
+            var befunde = kandidat != null ? Pruefe(slot, kandidat) : new List<string>();
+            var runde = new
+            {
+                nr, art, dauerMs = uhr.ElapsedMilliseconds, promptZeichen = prompt.Length, promptTokenSchaetzung = (int)Math.Ceiling(prompt.Length / 3.3),
+                token = new { eingabe = antwort.Eingabe, ausCache = antwort.AusCache, cacheGeschrieben = antwort.CacheGeschrieben, ausgabe = antwort.Ausgabe, kostenSchaetzungUsd = antwort.KostenSchaetzungUsd },
+                ergebnis, rumpf = kandidat, ausserhalb, befunde, ok = ergebnis == "rumpf" && befunde.Count == 0,
+                antwortRoh = kandidat == null && ausserhalb == null ? antwort.Text : null,
+            };
+            runden.Add(runde);
+            Protokolliere(a.Id, runde);
+            if (ergebnis != "rumpf" || befunde.Count == 0 || !a.AutoReparatur) break;
+            rumpf = kandidat; befund = string.Join("\n", befunde); anpassung = null;   // nächste Runde: nur letzter Rumpf + Befund
+        }
+        return new { ok = true, anbieter = anbieter.Beschreibung, basisHash, runden };
+    }
+
+    /// <summary>Antwort → Rumpf | AUSSERHALB | unlesbar. Ein Codeblock wird herausgelöst; äußere Methodenklammern entfernt.</summary>
+    private static (string Ergebnis, string? Rumpf, string? Ausserhalb) Zerlege(string text)
+    {
+        var t = text.Trim();
+        var aus = Regex.Match(t, @"^AUSSERHALB:.*$", RegexOptions.Multiline);
+        var block = Regex.Match(t, @"```(?:csharp|cs|c#)?\s*\n(.*?)```", RegexOptions.Singleline);
+        if (!block.Success && aus.Success) return ("ausserhalb", null, aus.Value.Trim());
+        var code = block.Success ? block.Groups[1].Value : t;
+        code = code.Replace("\r\n", "\n").Trim('\n');
+        if (code.TrimStart().StartsWith('{') && code.TrimEnd().EndsWith('}')
+            && SyntaxFactory.ParseStatement(code.Trim()) is BlockSyntax bs && bs.Span.Length == code.Trim().Length && !bs.GetDiagnostics().Any())
+            code = string.Join("\n", bs.Statements.Select(x => x.ToFullString())).Trim('\n');
+        if (code.Trim().Length == 0) return ("unlesbar", null, null);
+        return ("rumpf", Dedent(code), null);
+    }
+
+    // ── Prüfen: Syntax für alle; Decide/Apply zusätzlich In-Memory-Compile mit den echten Generatoren ──
+
+    public List<string> Pruefe(JsonObject slot, string rumpf)
+    {
+        var befunde = SyntaxFactory.ParseStatement("{\n" + rumpf + "\n}").GetDiagnostics()
+            .Where(d => d.Severity == DiagnosticSeverity.Error)
+            .Select(d => $"Syntax {d.Id} Zeile {d.Location.GetLineSpan().StartLinePosition.Line}: {d.GetMessage()}").ToList();
+        if (befunde.Count > 0) return befunde;
+        var art = S(slot, "art");
+        if (art is not ("decide" or "apply")) return befunde;   // Leseseite/Pipeline/Store: Compile erst beim Bauen nach dem Übernehmen
+        var modell = SimModell();
+        if (modell == null) return new List<string> { "domain-model.json fehlt — Kontexte neu erzeugen." };
+        var basis = BasisKompilat(modell);
+        var neu = _sim.Kompiliere(MitRumpf(modell, slot, rumpf));
+        var bekannt = basis.Fehler.Select(f => f.Code + "|" + f.Meldung).ToHashSet();
+        return neu.Fehler.Where(f => f.Schweregrad == "error" && !bekannt.Contains(f.Code + "|" + f.Meldung))
+            .Select(f => $"{f.Code}: {f.Meldung}").Distinct().Take(20).ToList();
+    }
+
+    private CompileErgebnis BasisKompilat(EditorModell modell)
+    {
+        var schluessel = modell.AlsJson().GetHashCode().ToString();
+        lock (_sperre)
+            if (_basisFehler.TryGetValue(schluessel, out var e)) return e;
+        var erg = _sim.Kompiliere(modell);
+        lock (_sperre) _basisFehler[schluessel] = erg;
+        return erg;
+    }
+
+    private EditorModell? SimModell()
+    {
+        var p = Path.Combine(_sln, "domain-model.json");
+        return File.Exists(p) ? EditorModell.AusJson(File.ReadAllText(p)) : null;
+    }
+
+    private static EditorModell MitRumpf(EditorModell m, JsonObject slot, string rumpf)
+    {
+        var agg = S(slot, "aggregat"); var disc = S(slot, "disc");
+        return S(slot, "art") == "decide"
+            ? m with { Decider = m.Decider.Select(d => d.Aggregat == agg && d.Command == disc ? d with { Rumpf = rumpf } : d).ToList() }
+            : m with { Applier = m.Applier.Select(x => x.Aggregat == agg && x.Event == disc ? x with { Rumpf = rumpf } : x).ToList() };
+    }
+
+    // ── Simulation mit dem Kandidaten (Decide/Apply): dieselbe Laufzeit wie im Editor ──
+
+    public object Simuliere(string id, string rumpf, string command, JsonElement werte, bool neu)
+    {
+        var slot = Slot(id);
+        if (slot == null || S(slot, "art") is not ("decide" or "apply")) return new { ok = false, grund = "Simulation nur für Decide/Apply." };
+        var modell = SimModell();
+        if (modell == null) return new { ok = false, grund = "domain-model.json fehlt." };
+        var session = "konsole:" + id;
+        if (neu) _sim.Reset(session);
+        return _sim.Schritt(MitRumpf(modell, slot, rumpf), session, command, werte);
+    }
+
+    // ── Übernehmen / Rückgängig / Bauen ──
+
+    public object Uebernehmen(string id, string rumpf, string? auftrag, string? basisHash)
+    {
+        var slot = Slot(id);
+        if (slot == null) return new { ok = false, grund = "Unbekannter Slot." };
+        var anker = Anker(slot);
+        var (ok, grund, alt, neuHash, zeile) = CodeSync.SetzeRumpf(anker, rumpf, auftrag, basisHash, _sln);
+        if (!ok) return new { ok, grund };
+        var sicherung = Path.Combine(_verz, "sicherung");
+        Directory.CreateDirectory(sicherung);
+        var datei = Path.Combine(sicherung, $"{DateTime.Now:yyyyMMdd-HHmmss}-{Regex.Replace(id, @"[^\w.@-]", "_")}.json");
+        File.WriteAllText(datei, JsonSerializer.Serialize(new { id, anker, alterInhalt = alt, neuerHash = neuHash }));
+        Protokolliere(id, new { aktion = "uebernommen", datei = anker.Datei, zeile });
+        return new { ok = true, datei = anker.Datei, zeile, sicherung = Path.GetFileName(datei), hinweis = "Kontexte sind jetzt veraltet — neu erzeugen, bevor der nächste Slot gefüllt wird." };
+    }
+
+    public object Rueckgaengig(string id)
+    {
+        var sicherung = Path.Combine(_verz, "sicherung");
+        var muster = Regex.Replace(id, @"[^\w.@-]", "_");
+        var letzte = Directory.Exists(sicherung)
+            ? Directory.GetFiles(sicherung, $"*-{muster}.json").OrderByDescending(f => f).FirstOrDefault() : null;
+        if (letzte == null) return new { ok = false, grund = "Keine Sicherung für diesen Slot." };
+        var o = JsonNode.Parse(File.ReadAllText(letzte))!;
+        var anker = o["anker"].Deserialize<MethodenAnker>()!;
+        var (ok, grund) = CodeSync.SetzeInhaltZurueck(anker, S(o, "alterInhalt"), S(o, "neuerHash"), _sln);
+        if (ok) { File.Move(letzte, letzte + ".zurueckgenommen"); Protokolliere(id, new { aktion = "rueckgaengig" }); }
+        return new { ok, grund };
+    }
+
+    public object Bauen(string id) => Slot(id) is { } slot ? CodeSync.BaueProjektVon(S(slot, "datei"), _sln) : new { ok = false, grund = "Unbekannter Slot." };
+
+    /// <summary>GraphExtractor über den aktuellen Code: domain-model.json + alle Kontexte + index.json neu.</summary>
+    public object Aktualisieren()
+    {
+        var psi = new ProcessStartInfo("dotnet", "run --project GraphExtractor -- --kontexte .llm-kontext")
+        { WorkingDirectory = _sln, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        using var p = Process.Start(psi)!;
+        var o = p.StandardOutput.ReadToEndAsync(); var e = p.StandardError.ReadToEndAsync();
+        if (!p.WaitForExit(TimeSpan.FromMinutes(5))) { try { p.Kill(true); } catch { } return new { ok = false, grund = "Zeitüberschreitung (5 min)." }; }
+        var zeilen = (o.Result + "\n" + e.Result).Split('\n');
+        lock (_sperre) _basisFehler.Clear();
+        return new { ok = p.ExitCode == 0, meldung = zeilen.Where(l => l.Contains('✅') || l.Contains('❌') || l.Contains("error")).Select(l => l.Trim()).Take(10).ToList() };
+    }
+
+    private void Protokolliere(string id, object eintrag)
+    {
+        Directory.CreateDirectory(_verz);
+        File.AppendAllText(Path.Combine(_verz, "protokoll.jsonl"),
+            JsonSerializer.Serialize(new { zeit = DateTime.Now.ToString("s"), id, eintrag }) + "\n");
+    }
+
+    private static string Dedent(string s)
+    {
+        var zeilen = s.Replace("\r\n", "\n").Split('\n');
+        var min = zeilen.Where(z => z.Trim().Length > 0).Select(z => z.Length - z.TrimStart().Length).DefaultIfEmpty(0).Min();
+        return string.Join("\n", zeilen.Select(z => (z.Length >= min ? z[min..] : z.TrimStart()).TrimEnd())).Trim('\n');
+    }
+}
