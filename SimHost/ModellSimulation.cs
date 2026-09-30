@@ -282,6 +282,7 @@ public sealed class ModellSimulation
         }
         return modell with
         {
+            Lesen = null,   // Leseseite läuft nicht in der Simulation (eigene Assemblies, Stores)
             Records = modell.Records.Where(r => ns.Contains(r.Namespace)).ToList(),
             Enums = modell.Enums.Where(e => ns.Contains(e.Namespace)).ToList(),
         };

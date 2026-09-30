@@ -1,6 +1,9 @@
 using System.Reflection;
 using System.Text.Json.Nodes;
+using DomainEditor;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace GraphExtractor;
 
@@ -13,6 +16,11 @@ namespace GraphExtractor;
 /// Property-Records, zwei Aggregate in einem Namespace, Decider in eigener Datei, Saga mit expliziter
 /// Interface-Implementierung, frei benannte Stores, class-ReadModel, OneOf-Antwort, Konstanten-Ids, Reaktion, Pipeline
 /// mit Konfig und einem nie ausgegebenen Objekt.
+///
+/// Dazu eine im Editor GEZEICHNETE Leseseite (<c>Sonde/Gezeichnet.board.json</c>: neuer Store mit einer im Panel benannten
+/// und einer abgeleiteten Fähigkeit, Projektion, Reaktion, Reader, Query/Response/ReadModel): sie wird an das Board der Sonde
+/// gehängt, über <see cref="BoardLeseseite"/> ins Modell gelesen, vom <see cref="Scaffolder"/> geschrieben und liegt dann als
+/// Code im Fork — das Soll beschreibt, was der Extractor daraus wieder lesen MUSS.
 ///
 /// Ablauf: Sonde im SPEICHER in ein Aggregat-Projekt der Solution legen (Fork, nichts auf Platte), die ECHTE Pipeline
 /// fahren (Projektlage → Extraktion → Board-Modell), das Inventar der Sonde mit dem VON HAND geschriebenen Soll
@@ -34,6 +42,36 @@ public static class Sonde
             fork = fork.AddDocument(DocumentId.CreateNewId(ziel.Id), name, text, folders: new[] { "__sonde" },
                 filePath: Path.Combine(Path.GetDirectoryName(ziel.FilePath)!, "__sonde", name));
         Console.WriteLine($"   Sonde „{Wurzel}\" ({Quellen().Count()} Dateien) im Speicher in {ziel.Name} gelegt.");
+
+        // ── Die gezeichnete Leseseite: Board der Sonde + Zeichnung → Modell → Scaffolder → in den Fork ──
+        var lage1 = await Projektlage.ErmittleAsync(fork, _ => { });
+        var analyse1 = ParitaetsPruefung.Analysiere(lage1.Compilations, lage1.DomänenAssemblies);
+        analyse1.Dom.Wurzel = solutionDir;
+        foreach (var (ns, dir) in lage1.ProjektWurzeln()) analyse1.Dom.ProjektWurzeln[ns] = dir;
+        var cr1 = await new CompositionRootExtractor(fork, lage1, analyse1.Routing, analyse1.Dom).ExtractAsync();
+        var gezeichnet = Zeichne(ModellMapper.ZuBoardJson(analyse1.Graph, analyse1.Dom, cr1), Ressource("Gezeichnet.board.json"), out var namen);
+        var modell = BoardLeseseite.AusBoard(gezeichnet);
+        // Neue Selbst-Nachrichten legt das Modell selbst an (Self-Tick ohne Record) — sie gehören zur Zeichnung.
+        namen.UnionWith(modell.Records.Where(r => r.Kind == RecordArt.Selbst && r.Datei == null).Select(r => r.Name));
+        foreach (var st in (modell.Lesen?.Stores ?? []).Where(s => namen.Contains(s.Name)))
+        {
+            namen.UnionWith(st.Fns.Select(f => f.Name));
+            if (st.Impl != null) namen.Add(st.Impl.Name);
+        }
+        var neu = Scaffolder.Generiere(modell).Where(d =>
+        {
+            var typen = CSharpSyntaxTree.ParseText(d.Inhalt).GetRoot().DescendantNodes().OfType<BaseTypeDeclarationSyntax>()
+                .Where(t => t.Parent is BaseNamespaceDeclarationSyntax or CompilationUnitSyntax).Select(t => t.Identifier.Text).ToList();
+            return typen.Count > 0 && typen.All(namen.Contains);
+        }).ToList();
+        foreach (var (d, i) in neu.Select((d, i) => (d, i)))
+        {
+            var name = $"Gezeichnet.{i}.{Path.GetFileName(d.Pfad)}";   // eindeutig: zwei Namespaces können dieselbe Zieldatei haben
+            fork = fork.AddDocument(DocumentId.CreateNewId(ziel.Id), name, d.Inhalt, folders: new[] { "__sonde" },
+                filePath: Path.Combine(Path.GetDirectoryName(ziel.FilePath)!, "__sonde", name));
+        }
+        Console.WriteLine($"   Gezeichnet: {namen.Count} Typen über Board → Modell → Scaffolder in {neu.Count} Datei(en) geschrieben.");
+        if (zeigeIst) foreach (var d in neu) Console.WriteLine($"\n── {d.Pfad} ({d.Art}) ──\n{d.Inhalt}");
 
         var lage2 = await Projektlage.ErmittleAsync(fork, Console.WriteLine);
         var fehler = 0;
@@ -84,6 +122,28 @@ public static class Sonde
     private static string Kurz(string full) => full[(full.LastIndexOf('.') + 1)..];
 
     /// <summary>
+    /// Die Zeichnung an das Board hängen (Sammlungen anfügen — so, wie der Browser neue Karten anlegt). <paramref name="namen"/>
+    /// = die gezeichneten Typnamen (Records, ReadModels, Stores, Projektionen/Reaktionen, Reader).
+    /// </summary>
+    private static string Zeichne(string board, string zeichnung, out HashSet<string> namen)
+    {
+        var b = JsonNode.Parse(board)!.AsObject();
+        var z = JsonNode.Parse(zeichnung)!.AsObject();
+        namen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (k, v) in z)
+        {
+            if (v is not JsonArray neu) continue;
+            if (b[k] is not JsonArray liste) b[k] = liste = new JsonArray();
+            foreach (var x in neu.ToList())
+            {
+                if ((string?)x?["name"] is { } n) namen.Add(n);
+                liste.Add(x!.DeepClone());
+            }
+        }
+        return b.ToJsonString();
+    }
+
+    /// <summary>
     /// Das Inventar der Sonde als kanonische Zeilen — aus dem BOARD-Modell (dem, was der Editor sieht), gefiltert auf
     /// den Sonden-Namespace. Ein Fakt je Zeile, deterministisch sortiert.
     /// </summary>
@@ -130,6 +190,9 @@ public static class Sonde
         foreach (var st in A(b, "stores").Where(Sonde))
             z.Add($"store {S(st, "namespace")}.{S(st, "name")} | schreibt {string.Join(", ", A(st, "writeFns").Select(f => $"{S(f, "name")}({string.Join(", ", A(f, "params").Select(p => $"{S(p, "name")}:{S(p, "typ")}"))})"))}"
                   + $" | liest {string.Join(", ", A(st, "readFns").Select(f => $"{S(f, "name")}({string.Join(", ", A(f, "params").Select(p => $"{S(p, "name")}:{S(p, "typ")}"))}):{S(f, "rueckgabe")}"))}");
+        foreach (var st in A(b, "stores").Where(Sonde))
+            foreach (var (f, art) in A(st, "writeFns").Select(f => (f, "schreibt")).Concat(A(st, "readFns").Select(f => (f, "liest"))))
+                z.Add($"faehigkeit {(string?)f["sig"]?["namespace"] ?? S(st, "namespace")}.{S(f, "faehigkeit")} {art} {S(st, "name")}.{S(f, "name")}");
         foreach (var p in A(b, "projektionen").Where(Sonde))
             z.Add($"projektion {S(p, "namespace")}.{S(p, "name")} id={S(p, "subscriberId")}{(p["pull"]?.GetValue<bool>() == true ? " pull" : "")} | "
                   + string.Join("; ", A(p, "handles").Select(h => $"{S(h, "event")} -> {Fns(h)}")));

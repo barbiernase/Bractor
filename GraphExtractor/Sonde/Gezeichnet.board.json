@@ -1,0 +1,198 @@
+{
+  "_zweck": "Eine im Editor GEZEICHNETE Leseseite (so, wie der Browser sie ins Board legt: neue Karten ohne Datei/Signatur). Die Sonde hängt sie an das Board der Sonden-Domäne, liest sie über BoardLeseseite ins Modell, lässt den Scaffolder schreiben und liest den Fork neu ein. Fähigkeit von MerkeVorAsync im Panel benannt, die von ZaehleAsync abgeleitet. Dazu Betrieb: neue Pipeline mit Konfig-Record, neuem Trigger, Self-Tick (neue Selbst-Nachricht) und Lese-Fähigkeit als Parameter.",
+  "records": [
+    {
+      "name": "Vormerkungen",
+      "kind": "query",
+      "namespace": "Leihwesen.Lesen",
+      "datei": "__gezeichnet/Typen.cs",
+      "felder": [
+        {
+          "name": "LeserId",
+          "typ": "Guid"
+        }
+      ]
+    },
+    {
+      "name": "VormerkungenAntwort",
+      "kind": "queryresponse",
+      "namespace": "Leihwesen.Lesen",
+      "datei": "__gezeichnet/Typen.cs",
+      "felder": [
+        {
+          "name": "Anzahl",
+          "typ": "int"
+        }
+      ]
+    },
+    {
+      "name": "VormerkKonfig",
+      "kind": "konfig",
+      "namespace": "Leihwesen.Vormerkung",
+      "datei": "__gezeichnet/Typen.cs",
+      "felder": [
+        {
+          "name": "Tage",
+          "typ": "int"
+        }
+      ]
+    }
+  ],
+  "readModels": [
+    {
+      "_id": "grm1",
+      "name": "Vormerkung",
+      "namespace": "Leihwesen.Lesen",
+      "datei": "__gezeichnet/Typen.cs",
+      "felder": [
+        {
+          "name": "Id",
+          "typ": "Guid"
+        },
+        {
+          "name": "LeserId",
+          "typ": "Guid"
+        }
+      ]
+    }
+  ],
+  "stores": [
+    {
+      "_id": "gst1",
+      "name": "IVormerkbuch",
+      "namespace": "Leihwesen.Lesen",
+      "writeFns": [
+        {
+          "_id": "gwf1",
+          "name": "MerkeVorAsync",
+          "faehigkeit": "INotiereVormerkung",
+          "params": [
+            {
+              "name": "v",
+              "typ": "Vormerkung"
+            }
+          ]
+        }
+      ],
+      "readFns": [
+        {
+          "_id": "grf1",
+          "name": "ZaehleAsync",
+          "params": [
+            {
+              "name": "leserId",
+              "typ": "Guid"
+            }
+          ],
+          "rueckgabe": "int"
+        }
+      ]
+    }
+  ],
+  "projektionen": [
+    {
+      "_id": "gpj1",
+      "name": "Vormerkliste",
+      "namespace": "Leihwesen.Lesen",
+      "subscriberId": "vormerkliste",
+      "pull": true,
+      "handles": [
+        {
+          "event": "Ausgeliehen",
+          "fns": [
+            "gwf1"
+          ]
+        }
+      ]
+    }
+  ],
+  "reaktionen": [
+    {
+      "_id": "grk1",
+      "name": "Schadenpruefung",
+      "namespace": "Leihwesen.Lesen",
+      "subscriberId": "schadenpruefung",
+      "pull": true,
+      "handles": [
+        {
+          "event": "Zurueckgegeben",
+          "sends": [
+            "MeldeSchaden"
+          ]
+        }
+      ]
+    }
+  ],
+  "reader": [
+    {
+      "_id": "grd1",
+      "name": "VormerkAuskunft",
+      "namespace": "Leihwesen.Lesen",
+      "projektion": "Vormerkliste",
+      "trackDeps": true,
+      "handles": [
+        {
+          "query": "Vormerkungen",
+          "fns": [
+            "grf1"
+          ],
+          "responses": [
+            "VormerkungenAntwort"
+          ]
+        }
+      ]
+    }
+  ],
+  "triggers": [
+    {
+      "_id": "gtg1",
+      "name": "PruefeVormerkungen",
+      "msgName": "PruefeVormerkungen",
+      "namespace": "Leihwesen.Vormerkung",
+      "felder": [
+        {
+          "name": "LeserId",
+          "typ": "Guid"
+        }
+      ]
+    }
+  ],
+  "pipelines": [
+    {
+      "_id": "gpl1",
+      "name": "Vormerkpruefung",
+      "namespace": "Leihwesen.Vormerkung",
+      "pipelineId": "vormerkpruefung",
+      "konfigs": [
+        "VormerkKonfig"
+      ],
+      "handles": [
+        {
+          "inputKind": "trigger",
+          "trigId": "gtg1",
+          "sends": [
+            "EroeffneMahnung"
+          ],
+          "emits": [],
+          "schedules": [
+            {
+              "name": "VormerkTick"
+            }
+          ],
+          "fns": [
+            "grf1"
+          ]
+        },
+        {
+          "inputKind": "self",
+          "selfName": "VormerkTick",
+          "sends": [
+            "MeldeSchaden"
+          ],
+          "emits": [],
+          "schedules": []
+        }
+      ]
+    }
+  ]
+}

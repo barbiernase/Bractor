@@ -32,7 +32,14 @@ public sealed class CompositionRoot
 }
 
 public sealed record TriggerBinding(string Name, string Modus, string? Route, string? Interval,
-    string? Path, string MsgName, string? TargetPipelineId);
+    string? Path, string MsgName, string? TargetPipelineId)
+{
+    /// <summary>Die Anweisung verbatim + ihre Datei und die Texte von Typ-Argument und Ort-Argument darin (Vorlage für neue Bindungen).</summary>
+    public string? Datei { get; init; }
+    public string? Anweisung { get; init; }
+    public string? TypArgument { get; init; }
+    public string? OrtArgument { get; init; }
+}
 public sealed record FristBinding(string Name, string Kontext, string Sendet, string? Aggregat,
     List<string> Plant, List<string> Storniert, string? DauerSetting);
 public sealed record DienstBinding(string Name, string Vertrag, string? Impl, bool Extern);
@@ -116,11 +123,20 @@ public sealed class CompositionRootExtractor
                         : l.Body.DescendantNodes().OfType<ReturnStatementSyntax>().Select(r => r.Expression).OfType<ExpressionSyntax>())
                     .Select(e => model.GetTypeInfo(e).Type).OfType<INamedTypeSymbol>().FirstOrDefault(t => Sym.Implements(t, _iTrigger));
                 if (msg == null || cr.Triggers.Any(x => x.MsgName == msg.Name && x.Modus == modus && x.Route == ort)) continue;
+                // Die Vorlage: die ganze Anweisung (nur eine Ausdrucks-Anweisung), das Typ-Argument, das auf den Trigger zeigt,
+                //   und das Ort-Argument — beides als Text, damit eine neue Bindung dieselbe Form bekommt.
+                var anweisung = inv.FirstAncestorOrSelf<ExpressionStatementSyntax>();
+                var typArg = (inv.Expression switch { MemberAccessExpressionSyntax { Name: GenericNameSyntax g } => g, GenericNameSyntax g => g, _ => null })
+                    ?.TypeArgumentList.Arguments.FirstOrDefault(a => model.GetTypeInfo(a).Type is INamedTypeSymbol at && at.Fq() == msg.Fq());
+                var ortArg = ortParam == null ? null : Argument(inv, m, ortParam);
                 cr.Triggers.Add(new TriggerBinding(Name: msg.Name, Modus: modus,
                     Route: modus == Vertrag.IngressModus[(int)Abstractions.IngressArt.Webhook] ? ort : null,
                     Interval: modus == Vertrag.IngressModus[(int)Abstractions.IngressArt.Timer] ? ort : null,
                     Path: modus == Vertrag.IngressModus[(int)Abstractions.IngressArt.Datei] ? ort : null,
-                    MsgName: msg.Name, TargetPipelineId: PipelineHandling(msg.Fq())));
+                    MsgName: msg.Name, TargetPipelineId: PipelineHandling(msg.Fq()))
+                {
+                    Datei = tree.FilePath, Anweisung = anweisung?.ToString(), TypArgument = typArg?.ToString(), OrtArgument = ortArg?.ToString(),
+                });
             }
         }
     }

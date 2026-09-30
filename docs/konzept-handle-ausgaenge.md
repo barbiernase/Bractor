@@ -242,7 +242,7 @@ liefern exakt die Signatur-Kanten); Editor live: 44 Fn-Karten mit Fähigkeit, 57
 keine „wenn …“-Zeile. **Nicht gemessen:** Integration (Docker lief nicht) — die Store-Lifetime (Scoped statt Transient/Singleton)
 und der Fristen-Pfad sind dort noch zu bestätigen.
 
-**Offen:** Scaffolder schreibt die Leseseite (Fähigkeit + Bündel + Parameter) noch nicht; Reaktionen/Pipelines in den
+**Offen:** ~~Scaffolder schreibt die Leseseite (Fähigkeit + Bündel + Parameter) noch nicht~~ → geliefert, siehe §12; Reaktionen/Pipelines in den
 Azyklizitäts-Guard aufnehmen (die Ausgänge sind typisiert); Editor-Band für HostSettings ist nur noch Entwurf (kein Code-Träger).
 
 **Nachprüfung „alles aus dem Code abgeleitet?“ (2026-09-30):** Extractor/Editor/SimHost enthalten keine Domänen-Namen und keine
@@ -256,4 +256,95 @@ mit variabler Stelligkeit). **Offen (älter):** die generierten Artefakte liegen
 (`Domain.Projections.ProjectionQueryService`, `Domain.Prozess.GeneratedProzessRegeln`, `Domain.Infrastructure.Generated`) und
 werden von Infrastructure/ProjectionServicesGenerator unter diesem Namen gesucht — funktioniert, bindet das Framework aber an die
 Projektnamen dieser Solution.
+
+## 12 · Editor → Code für die Leseseite (2026-09-30)
+
+**Frage:** Der Editor LIEST die Leseseite vollständig aus Signaturen (Store-Karten, Fn-Karten je Fähigkeit, „darf Store.Fn ▶“-Ports),
+SCHREIBEN konnte er sie nicht: `EditorModell` hatte keine Leseseite, der Scaffolder kannte nur Records/Aggregate/Sagas, und
+Editor-Änderungen (Fn anlegen, Handle ↔ Fn verbinden/lösen, Query andocken, neuer Store/Projektion/Reader) landeten nirgends.
+
+**Entscheidungen** (je die Empfehlung, Annahmen benannt):
+
+| Frage | Entscheidung |
+|---|---|
+| Wo lebt die Leseseite? | **Eigene Records in `EditorModell.Lesen`** (`Store`/`Faehigkeit`/`StoreImpl`, `Konsument` = Projektion+Reaktion, `Leser`, `PipelineKarte`, gemeinsamer `Handle`). Query/Response/ReadModel sind **Record-Arten** (`query`/`queryresponse`/`readmodel`). Das Board behält seine Anzeige-Sammlungen; die Code-Fakten reisen darin mit (`sig` je Fn/Handle, `code` je Klasse, `impl`/`datei` je Store). `DomainEditor.BoardLeseseite.AusBoard` liest daraus das typisierte Modell. |
+| Fähigkeits-Name neuer Fn | **Abgeleitet + im Panel editierbar**: `I` + Methode ohne `Async`, vergeben ⇒ + Store-Name ohne `I`. Danach Code-Fakt (fest im Panel, der Extractor rät nie). |
+| Rümpfe | **Kein Rumpf-Code außer Platzhalter** (`throw new NotImplementedException("TODO: …")`) — für Handles und Store-Methoden. Kein Marten-Wissen im Scaffolder. |
+| Dateiorte | **Aus dem Code**: Fähigkeit → Datei des Bündels; Handle → Datei der Klasse; Store-Methode → Datei, in der die Schreib- bzw. Lese-Methoden der Impl liegen (nur wenn eindeutig, sonst die Deklaration). Neu ⇒ Verzeichnis des Namespace (Rahmen); unbekannt ⇒ nicht platzierbar. |
+| Store-Impl | **Nur bei genau einer Impl-Klasse** je Bündel ergänzt (sonst Panel-Hinweis, nichts geraten). Neuer Store ⇒ neue Klasse; ihre Basis/Ctor nur, wenn ALLE Impls im Code eine gemeinsame Basis haben (`Rahmen.StoreBasis`, hier `MartenCoCommitStoreBase(IDocumentStore)`), ihr Namespace nur, wenn alle Impls in einem liegen (`Rahmen.StoreImplNamespace`). |
+| Schreiber-Typ | `ProjectionWriter` liegt in Core (DomainEditor referenziert nur Abstractions): **aus den Projektions-Handles im Code gelesen** (3. Parameter, CQRS057), nur wenn eindeutig. Kein Handle im Code ⇒ keine neue Projektion (Validator meldet es). |
+
+**Umgesetzt:**
+
+| Was | Wie |
+|---|---|
+| Modell | `EditorModell.Lesen` (s. o.), `RecordArt.Query/Antwort/ReadModel`, `Rahmen.ProjektionsSchreiber[Namespace]`/`StoreBasis`/`StoreImplNamespace`. |
+| Extractor | verbatim je Handle: Parametername, Kontext-Namen, Fähigkeits-Parameter, Rückgabe, Modifizierer, Rumpf/Ausdruck, Datei (`HandleSigRaw`); je Klasse: Datei, Doku, Form, Basisliste, Attribute (ohne `[ProjectionReader]`), übrige Member als Zusatz, using-Direktiven inkl. Aliase (`KlassenQuelle`); je Fähigkeit Rückgabe/Parameter verbatim, Namespace, Datei, Doku; je Store Bündel-Datei/Doku und die einzige Impl (Deklaration, Schreib-/Lese-Datei). |
+| Mapper | `ModellMapper.ZuEditorModell` füllt `Lesen` + die Leseseiten-Records; `ZuBoardJson` legt sie in die Board-Sammlungen (`sig`/`code`/`impl`), keine doppelten Query/Response-Records mehr, ReadModels nur in `readModels`. |
+| Scaffolder | neue `DateiArt`s: `Schnittstellen` (Fähigkeit je Fn einzeilig + Bündel `: IStore, …`), `StoreImpl` (neue Klasse voll bzw. nur Methoden NEUER Fähigkeiten), `Konsument` (`partial class … : ISubscriber, IPullSubscriber[, IAppendProjektion]`, `SubscriberId`, `Handle(TEvent, IAggregateEnvelope, ProjectionWriter, Fähigkeit…)` → `Task` bzw. `IAsyncEnumerable<OneOf<…>>`), `Leser` (`[ProjectionReader(TrackDeps = …)]`, `IReader<P>`, `Handle(TQuery, IMessageEnvelope, ReadContext, Fähigkeit…)` → `Task<R>`/`Task<OneOf<…>>`). Bestehende Klassen: usings verbatim, abgeleitete nur für neue Handles (keine neuen Mehrdeutigkeiten). |
+| DateiSchreiber | additiv: fehlende Fähigkeits-Interfaces + fehlende Basen im Bündel; fehlende Impl-Methoden (Schlüssel Name + Parametertypen); fehlende Handles (nur die im Modell neuen). **Parameter-Abgleich**: je bestehendem Handle werden die Parameter hinter dem Kontext (CQRS057: 2 bzw. 1 bei Pipelines) auf das Modell gebracht — hinzu/weg, vorhandene wörtlich, fehlende usings ergänzt, **nur die Parameterliste**. |
+| SimHost | `/api/editor/write` und `/validate` lesen das Board über `BoardLeseseite`; nach dem Schreiben werden die betroffenen Projekte gebaut, Fehler kommen im Bericht zurück (Editor zeigt sie im Ausgabe-Panel). Simulation ohne Leseseite (`Lesen = null`). |
+| Editor | Fn-Karte: Fähigkeit aus dem Code fest, neu = Feld mit Vorschlag; Store-Karte: Impl (Code) bzw. benennbar (neu). `mergeBoard` vergleicht die Leseseite über „Store.Fn“ statt Fn-Ids und ohne Code-Fakten — Geschriebenes wird nach dem Neu-Einlesen Code-Stand statt „ungeschrieben“. |
+| Validator | `EDIT-FAEHIGKEIT-DUP` (zwei Fns, eine Fähigkeit), `EDIT-READER-OHNE-ANTWORT` (ohne Ausgabe-Vertrag nicht geschrieben), `EDIT-KONSUMENT-SCHREIBER`. |
+| Parität | `--check`: neu **Board ⇄ Modell** (die aus dem Board gelesene Leseseite = die aus dem Code) und der **Fixpunkt über die Leseseite**: in allen Domänen-Projekten werden Fähigkeiten, Bündel, Projektionen/Reaktionen, Reader, Queries, Responses, ReadModels durch Scaffolder-Dateien ersetzt, die Store-Impls bleiben stehen (sie müssen gegen die geschriebenen Fähigkeiten kompilieren). Gegenprobe: Scaffolder ohne Fähigkeits-Parameter ⇒ 10 Fixpunkt-Abweichungen + 25 Compile-Fehler. |
+| Sonde | `Sonde/Gezeichnet.board.json`: eine im Editor gezeichnete Leseseite (neuer Store mit einer im Panel benannten und einer abgeleiteten Fähigkeit, Projektion, Reaktion, Reader, Query/Response/ReadModel) wird an das Board der Sonde gehängt → `BoardLeseseite` → Scaffolder → Fork → neu eingelesen; `soll.txt` von Hand um 15 Fakten erweitert (u. a. `faehigkeit …`-Zeilen). |
+
+**Gemessen:** Solution-Build 0 Fehler; Prüfstand **166/166** (neu: 11 `DomainEditorLeseseiteTests`, darunter Scaffolder-Ausgabe
+kompiliert + besteht **alle** Analyzer aus `Domain.SourceGeneration` — CQRS050/051/054/055/057); `--check` grün (232 Typen in 4
+Domänen-Projekten durch 71 Scaffolder-Dateien ersetzt, davon 44 Fähigkeiten, 5 Bündel, 5 Projektionen/Reaktionen, 5 Reader);
+`--sonde` grün (**61** Soll-Fakten). **Live im Browser** (SimHost): an `IModellStore` Fn `MarkiereGeprueftAsync(Guid modellId)` mit
+Fähigkeit `IMarkiereModellGeprueft` angelegt, Handle `ModellProjektion.Handle(ModellAktiviert)` verbunden, „C# schreiben“ →
+`IModellStore.cs` (+Interface, +Basis), `ModellStore.cs` (+Platzhalter-Methode), `ModellProjektion.cs` (nur Parameterliste) →
+betroffene Projekte gebaut, 0 Fehler → neu eingelesen: Kante + Fähigkeit aus dem Code. Lösen von `ISetzeModellAktiv` (Rumpf nutzt
+sie) ⇒ Parameter weg, Rumpf unverändert, **CS0103 im Editor gemeldet**. Die Demo-Änderungen an der Domäne wurden zurückgesetzt.
+
+**Grenzen (bewusst):** additiv — eine im Editor entfernte Fn/Fähigkeit bleibt im Bündel und in der Impl stehen; Rückgabetyp und
+Parameter einer BESTEHENDEN Fn bzw. die Response-Liste eines bestehenden Reader-Handles ändert „C# schreiben“ nicht (nur die
+Fähigkeits-Parameter der Handles); neue Pipelines/Pipeline-Handles werden nicht gescaffoldet (nur Fähigkeits-Parameter bestehender).
+Eine neue Store-Impl ohne gemeinsame Basis ist kein Co-Commit-Tracker — die Basis wählt dann der Mensch.
+
+## 13 · Bestehendes ändern + Betrieb schreiben (2026-09-30)
+
+**Frage:** Nach §12 schrieb „C# schreiben“ nur NEUES; Änderungen an Bestehendem (Feld, Enum-Wert, State-Feld, OneOf, Prozess-Regel,
+Handle-Ausgänge, Store-Fn-Signatur, Flags) wurden still verworfen („nichts zu schreiben“), Pipelines/Trigger/Konfig gar nicht.
+
+**Kernentscheidung: Herkunfts-Stempel.** Beim Einlesen bekommt jedes änderbare Element einen Hash seines Modell-Inhalts
+(`DomainEditor.Herkunft`). „C# schreiben“ gleicht ein bestehendes Element NUR ab, wenn sein Inhalt vom Stempel abweicht (= im Editor
+geändert). Damit schreibt ein unverändertes Board garantiert nichts — auch wo die Textform des Codes von der Scaffolder-Form abweicht.
+Gehasht wird, was der Scaffolder wirklich schreibt (Prozess: ein verbatim gelesenes Lambda hat Vorrang vor Stub-Argumenten des
+Browsers). **Regel des Abgleichs:** das Modell besitzt Signatur/Deklaration, der Code Rümpfe und Handcode; Unverändertes bleibt Wort
+für Wort (auch Formatierung: mehrzeilige Parameterlisten, unveränderte Prozess-Regeln samt Kommentaren); bricht dadurch ein Rumpf,
+meldet es der Bau.
+
+| Editor-Aktion | Was geschrieben wird |
+|---|---|
+| Feld an bestehendem Record hinzu/weg/Typ | Positions-Parameter bzw. Property-Felder (Feldregeln = `Codeformen.Feldregeln`, EINE Quelle für Extractor und Schreiber) |
+| Enum-Wert | Member-Liste (vorhandene Member wörtlich) |
+| State-Feld | Property einfügen/ersetzen/entfernen (Zusatz und `Id`/`Version` bleiben) |
+| OneOf eines Deciders | nur das Typ-Argument der Rückgabe |
+| Regel eines Prozesses | Anweisungen im `Definiere`-Lambda; unveränderte Regeln wörtlich; Ausdrucks-Lambda → Block bei zweiter Regel |
+| Ausgänge eines Handles (Responses, sendet, veröffentlicht, erzeugt Trigger, plant Selbst) | nur das Typ-Argument der Rückgabe; Wrapper bleibt (`Task`/`IAsyncEnumerable`/`IEnumerable`); Fristen unverändert |
+| Parameter/Rückgabe einer Store-Fn | Fähigkeits-Interface + Impl-Methode (Parameter wörtlich, wo unverändert) |
+| Pull/Append, TrackDeps, SubscriberId/PipelineId, Reader → Projektion | Basisliste (Marker, `IReader<P>`), `[ProjectionReader(TrackDeps = …)]`, Literal (auch über `const` derselben Klasse) |
+| Neue Pipeline / neuer Handle | `partial class : IPipelineHandler`, `PipelineId`, Konfig-Konstruktor, `Handle(TEingang, PipelineContext, Fähigkeit…)` → **immer** `IAsyncEnumerable<OneOf<…>>` (der Dispatch-Generator erkennt nur OneOf — auch bei einem Ausgang) |
+| Neuer Trigger, Self-Tick, Konfig | Records `: IPipelineTrigger` / `: IPipelineSelfMessage` / ohne Marker (neue Record-Arten `trigger`/`selbst`/`konfig`) |
+| Trigger mit Modus + Ort | neue Ingress-Bindung nach dem Vorbild einer bestehenden desselben Modus (Anweisung kopiert, Typ- und Ort-Argument ersetzt). Kein Vorbild (z. B. Timer) ⇒ Meldung „von Hand anlegen“ |
+| Code-/LLM-Entwurf an neuem Handle / neuer Store-Fn | wird ihr Rumpf (`async`, wenn nötig) |
+
+**Nicht still:** geänderte Elemente ohne Schreib-Regel (z. B. nur Doku, Konstruktor einer bestehenden Pipeline) meldet der Bericht als
+„nicht geschrieben“. **👁 Vorschau** im Editor = Trockenlauf (`/api/editor/write?trocken=true`); Kommandozeile:
+`dotnet run --project SimHost -- --trocken|--schreiben <board.json>`.
+
+**Gemessen:** Build 0 Fehler; Prüfstand **170/170**; `--check` grün inkl. **Stempel-Idempotenz** (unverändertes Board = 0 geänderte
+Elemente) und Fixpunkt über **242** Typen (jetzt mit Pipelines, Konfig/Trigger/Selbst); `--sonde` **66** Soll-Fakten (gezeichnete
+Pipeline mit Konfig, Trigger, Self-Tick). **Szenario** (alle 12 Aktionen auf einmal gegen die echte Domäne, per CLI): geschrieben →
+Solution baut mit 0 Fehlern → neu eingelesen → Trockenlauf leer → `--check` grün → zurückgesetzt. **Browser:** Vorschau auf dem
+unveränderten Board „nichts zu schreiben“ (fand vorher den Stub-Argument-Fall im Prozess); TrackDeps umgeschaltet ⇒ genau eine Änderung.
+
+**Entscheidung Pipeline-Form:** zwei Formen, nach der Ausgabemenge — **keine** Ausgabe ⇒ `Task` (die geschlossene leere Menge, nur
+Effekte; genutzt von `BenchmarkPipeline` und `ImageProcessingPipeline.Handle(PaarNichtKomplett)`; ein Verbot erzwänge einen nie
+ausgegebenen Scheintyp im OneOf); **eine oder mehrere** ⇒ `IAsyncEnumerable<OneOf<…>>`/`IEnumerable<OneOf<…>>`, auch bei einem Ausgang.
+`IAsyncEnumerable<X>` ohne OneOf ist keine gebrauchte Form, sondern ein Vertragsloch: CQRS050 lässt sie zu, der `PipelineDispatchGenerator`
+behandelt sie still als `Task` (Fehler erst im Generat) ⇒ wird ein Build-Fehler (offene Aufgabe), KEINE zweite Form im Generator. Der
+Scaffolder hält die Regel ein (neuer Handle ohne Ausgang ⇒ `Task`; `Task` + Ausgang ⇒ Strom; alle Ausgänge gelöst ⇒ `Task`).
 

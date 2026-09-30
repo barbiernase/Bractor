@@ -31,6 +31,14 @@ public sealed record EditorModell
     /// <summary>Applier (Event → State-Faltung) — je Regel EIGENSTÄNDIG, referenziert sein Aggregat.</summary>
     public IReadOnlyList<ApplyRegel> Applier { get; init; } = [];
     public IReadOnlyList<Saga> Sagas { get; init; } = [];
+    /// <summary>
+    /// Die LESESEITE als Signatur-Fakten: Stores (Fähigkeiten + Bündel + Impl-Klasse), Projektionen/Reaktionen, Reader und
+    /// die Fähigkeits-Parameter der Pipeline-Handles. ReadModels/Queries/Responses sind <see cref="Record"/>s (eigene Arten).
+    /// Null = das Modell trägt keine Leseseite (z. B. Simulation) — der Scaffolder erzeugt dann keine Leseseiten-Dateien.
+    /// </summary>
+    public Leseseite? Lesen { get; init; }
+    /// <summary>Ingress-Bindungen der Composition Root (Trigger → Webhook/Timer/Datei). Null = nicht Teil des Modells.</summary>
+    public IReadOnlyList<IngressBindung>? Ingress { get; init; }
     /// <summary>Der aus dem Code abgeleitete Rahmen (Vertrags-Namespace, globale usings, Namenskonvention, Verzeichnisse).</summary>
     public Rahmen Rahmen { get; init; } = new();
 
@@ -46,6 +54,10 @@ public sealed record EditorModell
 
     public string AlsJson() => JsonSerializer.Serialize(this, JsonOptionen);
 
+    /// <summary>Ein einzelner Record aus JSON (Board-Sammlungen, die Records tragen: triggers[].code, selbstNachrichten).</summary>
+    public static Record AusJsonRecord(string json) =>
+        JsonSerializer.Deserialize<Record>(json, JsonOptionen) ?? throw new FormatException("Konnte Record nicht aus JSON lesen (null).");
+
     public static EditorModell AusJson(string json) =>
         JsonSerializer.Deserialize<EditorModell>(json, JsonOptionen)
         ?? throw new FormatException("Konnte EditorModell nicht aus JSON lesen (null).");
@@ -58,8 +70,14 @@ public static class RecordArt
     public const string Event = "event";            // : IEvent → Events.cs (persistent)
     public const string Rejection = "rejection";    // : ITransientEvent → Events.cs (Ablehnung)
     public const string ValueObject = "valueobject";// reiner Record → ValueObjects.cs
+    public const string Query = "query";            // : IQuery → Queries.cs
+    public const string Antwort = "queryresponse";  // : IQueryResponse → Responses.cs
+    public const string ReadModel = "readmodel";    // : IReadModel → ReadModels.cs
+    public const string Konfig = "konfig";          // reiner Record, per Ctor in einen Konsumenten injiziert → Konfigs.cs
+    public const string Trigger = "trigger";        // : IPipelineTrigger → Triggers.cs
+    public const string Selbst = "selbst";          // : IPipelineSelfMessage (Selbst<T>-Nachricht einer Pipeline) → SelbstNachrichten.cs
 
-    public static readonly IReadOnlyList<string> Alle = [Command, Event, Rejection, ValueObject];
+    public static readonly IReadOnlyList<string> Alle = [Command, Event, Rejection, ValueObject, Query, Antwort, ReadModel, Konfig, Trigger, Selbst];
 }
 
 /// <summary>
@@ -100,6 +118,8 @@ public sealed record Record
     public IReadOnlyList<string>? Basen { get; init; }
     /// <summary>Attribut-Listen des Typs verbatim (mehrere zeilengetrennt).</summary>
     public string? Attribute { get; init; }
+    /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
+    public string? Herkunft { get; init; }
 }
 
 /// <summary>
@@ -134,6 +154,8 @@ public sealed record Enumeration
     public IReadOnlyList<string> Werte { get; init; } = [];
     public string? Doku { get; init; }
     public string? Datei { get; init; }
+    /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
+    public string? Herkunft { get; init; }
 }
 
 /// <summary>
@@ -160,6 +182,8 @@ public sealed record Aggregat
     public string? Datei { get; init; }
     public string? DeciderDatei { get; init; }
     public string? ApplierDatei { get; init; }
+    /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
+    public string? Herkunft { get; init; }
 }
 
 /// <summary>
@@ -180,6 +204,8 @@ public sealed record DecideRegel
     public string Parameter { get; init; } = "cmd";
     /// <summary>Die Quelldatei der Methode (relativ zur Solution) — Anker für Code-Sync/IDE; null = noch nicht geschrieben.</summary>
     public string? Datei { get; init; }
+    /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
+    public string? Herkunft { get; init; }
 }
 
 /// <summary>Ein OneOf-Ausgang: der Event-Record-Name (Signatur-Fakt; das „Wann" bleibt freier Rumpf-Code).</summary>
@@ -218,6 +244,8 @@ public sealed record Saga
     public string? Doku { get; init; }
     public IReadOnlyList<string> ExtraUsings { get; init; } = [];
     public string? Datei { get; init; }
+    /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
+    public string? Herkunft { get; init; }
 }
 
 /// <summary>Eine Saga-Transition: <c>Auf/Und (→ UndAlle) → Sende/SendeJe → RückgängigDurch</c>.</summary>
@@ -280,4 +308,213 @@ public sealed record Rahmen
     public int OneOfMax { get; init; }
     /// <summary>Größte Join-Stelligkeit der Prozess-DSL (<c>RegelBauer&lt;…&gt;</c>, aus der Compilation gezählt; 0 = unbekannt).</summary>
     public int UndMax { get; init; }
+
+    // ── Leseseite (CQRS057: Handle(TEvent, IAggregateEnvelope, ProjectionWriter, Fähigkeit…) / Handle(TQuery, IMessageEnvelope, ReadContext, Fähigkeit…)) ──
+    /// <summary>
+    /// Der Schreiber-Typ der Projektions-Handles (3. Parameter) + sein Namespace — aus den Handles im Code gelesen (er liegt
+    /// außerhalb des Vertrags). Null = kein Handle im Code: dann kann der Scaffolder keine NEUE Projektion schreiben.
+    /// </summary>
+    public string? ProjektionsSchreiber { get; init; }
+    public string? ProjektionsSchreiberNamespace { get; init; }
+    /// <summary>Gemeinsame Basisklasse ALLER Store-Implementierungen im Code (nur wenn eindeutig) — Basis einer NEUEN Impl-Klasse.</summary>
+    public StoreBasis? StoreBasis { get; init; }
+    /// <summary>Namespace, in dem ALLE Store-Implementierungen liegen (nur wenn eindeutig) — Ort einer NEUEN Impl-Klasse.</summary>
+    public string? StoreImplNamespace { get; init; }
+}
+
+/// <summary>Basisklasse für neue Store-Implementierungen: Name, Namespace und die Parameter ihres (einzigen) Konstruktors.</summary>
+public sealed record StoreBasis
+{
+    public required string Name { get; init; }
+    public required string Namespace { get; init; }
+    public IReadOnlyList<Parameter> KtorParameter { get; init; } = [];
+    /// <summary>Namespaces der Konstruktor-Parametertypen (für die usings der neuen Datei).</summary>
+    public IReadOnlyList<string> Usings { get; init; } = [];
+}
+
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+//  LESESEITE — nur SIGNATUR-Fakten (Fähigkeit, Bündel, Handle-Parameter, Rückgabe-Vertrag). Rümpfe/Handcode reisen
+//  verbatim mit (Rumpf/Zusatz), damit der Round-trip ein Fixpunkt ist; geschrieben wird additiv (DateiSchreiber).
+// ═══════════════════════════════════════════════════════════════════════════════════════════════
+
+/// <summary>Die Leseseite des Modells.</summary>
+public sealed record Leseseite
+{
+    public IReadOnlyList<Store> Stores { get; init; } = [];
+    /// <summary>Projektionen UND Reaktionen (dieselbe Form; Reaktion = ein Handle gibt Commands aus).</summary>
+    public IReadOnlyList<Konsument> Konsumenten { get; init; } = [];
+    public IReadOnlyList<Leser> Reader { get; init; } = [];
+    /// <summary>Pipelines — hier NUR ihre Handles mit Fähigkeits-Parametern (verbinden/lösen); keine Pipeline-Scaffoldung.</summary>
+    public IReadOnlyList<PipelineKarte> Pipelines { get; init; } = [];
+}
+
+/// <summary>Ein Methoden-/Konstruktor-Parameter verbatim: Typ, Name, optionaler Default.</summary>
+public sealed record Parameter
+{
+    public required string Typ { get; init; }
+    public required string Name { get; init; }
+    public string? Standard { get; init; }
+}
+
+/// <summary>
+/// Ein Store = ein Bündel-Interface (<c>: IStore, IFähigkeitA, …</c>) mit seinen Fähigkeiten. <see cref="IstBuendel"/> = false:
+/// eine einzelne Fähigkeit ohne Bündel (dann ist sie ihr eigener Store, <see cref="Name"/> = Fähigkeit).
+/// </summary>
+public sealed record Store
+{
+    public required string Name { get; init; }
+    public required string Namespace { get; init; }
+    public string? Doku { get; init; }
+    public bool IstBuendel { get; init; } = true;
+    /// <summary>Die Fähigkeiten in Deklarations-Reihenfolge der Basisliste.</summary>
+    public IReadOnlyList<Faehigkeit> Fns { get; init; } = [];
+    /// <summary>Die (einzige) Implementierungs-Klasse; null = keine bzw. mehrdeutig (dann wird dort nichts ergänzt).</summary>
+    public StoreImpl? Impl { get; init; }
+    /// <summary>Datei des Bündel-Interfaces (relativ zur Solution) — null = noch nicht geschrieben.</summary>
+    public string? Datei { get; init; }
+}
+
+/// <summary>Eine Fähigkeit = Interface mit GENAU EINER Funktion (CQRS051), <c>: IWriteStore</c> bzw. <c>: IReadStore</c>.</summary>
+public sealed record Faehigkeit
+{
+    /// <summary>Name des Fähigkeits-Interfaces (z. B. <c>IUpsertModell</c>) — Code-Fakt, im Editor editierbar.</summary>
+    public required string Name { get; init; }
+    /// <summary>Namespace der Fähigkeit; null = der des Stores.</summary>
+    public string? Namespace { get; init; }
+    public required string Methode { get; init; }
+    public bool Lesen { get; init; }
+    /// <summary>Rückgabetyp verbatim, z. B. <c>Task</c> oder <c>Task&lt;ModellReadModel?&gt;</c>.</summary>
+    public string Rueckgabe { get; init; } = "Task";
+    public IReadOnlyList<Parameter> Parameter { get; init; } = [];
+    public string? Doku { get; init; }
+    public string? Datei { get; init; }
+    /// <summary>Rumpf-Entwurf der Impl-Methode (Code-/LLM-Knoten im Editor) — nur für eine NEUE Fähigkeit; null ⇒ throw-Platzhalter.</summary>
+    public string? ImplRumpf { get; init; }
+    /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
+    public string? Herkunft { get; init; }
+}
+
+/// <summary>Die Implementierungs-Klasse eines Stores: Name, Namespace und wo ihre Teile liegen (partial über Dateien).</summary>
+public sealed record StoreImpl
+{
+    public required string Name { get; init; }
+    public required string Namespace { get; init; }
+    /// <summary>Datei der Deklaration mit Basisliste; null = neue Klasse (wird voll geschrieben).</summary>
+    public string? Datei { get; init; }
+    /// <summary>Datei, in der die Schreib- bzw. Lese-Methoden der Klasse liegen (nur wenn eindeutig; sonst <see cref="Datei"/>).</summary>
+    public string? SchreibDatei { get; init; }
+    public string? LeseDatei { get; init; }
+}
+
+/// <summary>Ein Handle einer Projektion/Reaktion, eines Readers oder einer Pipeline: Eingang, Kontext, Fähigkeiten, Rückgabe.</summary>
+public sealed record Handle
+{
+    /// <summary>Einfacher Typname des Eingangs (Event / Query / Trigger / Selbst-Nachricht) — identifiziert den Handle.</summary>
+    public required string Eingang { get; init; }
+    /// <summary>Parametername des Eingangs.</summary>
+    public string Parameter { get; init; } = "evt";
+    /// <summary>Namen der Kontext-Parameter (Umschlag, Schreiber/Lese-Kontext) verbatim; null = Standardnamen.</summary>
+    public IReadOnlyList<string>? Kontext { get; init; }
+    /// <summary>Die Fähigkeits-Parameter (Typ = Fähigkeits-Interface): die Obergrenze dessen, was der Rumpf am Store darf.</summary>
+    public IReadOnlyList<Parameter> Faehigkeiten { get; init; } = [];
+    /// <summary>Was der Handle erzeugen KANN (OneOf-Varianten): Commands/Events (Konsument), Responses (Reader).</summary>
+    public IReadOnlyList<string> Ausgaenge { get; init; } = [];
+    /// <summary>Rückgabetyp verbatim; null = aus <see cref="Ausgaenge"/> abgeleitet.</summary>
+    public string? Rueckgabe { get; init; }
+    /// <summary>Modifizierer verbatim (z. B. <c>public async</c>); null = <c>public</c>.</summary>
+    public string? Modifikatoren { get; init; }
+    /// <summary>Block-Rumpf (ohne Klammern); null ⇒ <c>throw</c>-Platzhalter.</summary>
+    public string? Rumpf { get; init; }
+    /// <summary>Ausdrucks-Rumpf (<c>=&gt; …;</c> ohne Pfeil/Semikolon); hat Vorrang vor <see cref="Rumpf"/>.</summary>
+    public string? Ausdruck { get; init; }
+    public string? Datei { get; init; }
+    /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
+    public string? Herkunft { get; init; }
+}
+
+/// <summary>Eine Projektion oder Reaktion (<c>ISubscriber</c>), Handles <c>Handle(TEvent, IAggregateEnvelope, ProjectionWriter, Fähigkeit…)</c>.</summary>
+public sealed record Konsument
+{
+    public required string Name { get; init; }
+    public required string Namespace { get; init; }
+    public string? SubscriberId { get; init; }
+    public bool Pull { get; init; } = true;
+    public bool Append { get; init; }
+    public IReadOnlyList<Handle> Handles { get; init; } = [];
+    public string? Doku { get; init; }
+    /// <summary>Deklarationsform verbatim ohne <c>partial</c> (z. B. <c>public</c>); null = <c>public</c>.</summary>
+    public string? Typart { get; init; }
+    /// <summary>Basisliste verbatim; null = aus den Markern (<c>ISubscriber, IPullSubscriber[, IAppendProjektion]</c>).</summary>
+    public IReadOnlyList<string>? Basen { get; init; }
+    public string? Attribute { get; init; }
+    /// <summary>Alle übrigen Member (SubscriberId, Konstanten, Ctor, Helfer) verbatim. Null ⇒ nur <c>SubscriberId</c> wird erzeugt.</summary>
+    public string? Zusatz { get; init; }
+    /// <summary>using-Direktiven der Datei verbatim (ohne <c>using</c>/<c>;</c>, auch Aliase).</summary>
+    public IReadOnlyList<string> Usings { get; init; } = [];
+    public string? Datei { get; init; }
+    /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
+    public string? Herkunft { get; init; }
+}
+
+/// <summary>Ein Reader (<c>IReader&lt;TProjektion&gt;</c>), Handles <c>Handle(TQuery, IMessageEnvelope, ReadContext, Fähigkeit…)</c>.</summary>
+public sealed record Leser
+{
+    public required string Name { get; init; }
+    public required string Namespace { get; init; }
+    /// <summary>Name der Projektion (<c>IReader&lt;T&gt;</c>).</summary>
+    public required string Projektion { get; init; }
+    public bool TrackDeps { get; init; } = true;
+    public IReadOnlyList<Handle> Handles { get; init; } = [];
+    public string? Doku { get; init; }
+    public string? Typart { get; init; }
+    public IReadOnlyList<string>? Basen { get; init; }
+    /// <summary>Weitere Attribute AUSSER <c>[ProjectionReader]</c> (das kommt aus <see cref="TrackDeps"/>).</summary>
+    public string? Attribute { get; init; }
+    public string? Zusatz { get; init; }
+    public IReadOnlyList<string> Usings { get; init; } = [];
+    public string? Datei { get; init; }
+    /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
+    public string? Herkunft { get; init; }
+}
+
+/// <summary>
+/// Eine Pipeline (<c>IPipelineHandler</c>), Handles <c>Handle(TEingang, PipelineContext, Fähigkeit…)</c> → <c>IAsyncEnumerable&lt;OneOf&lt;…&gt;&gt;</c>
+/// (Commands, Trigger, <c>Selbst&lt;T&gt;</c>, <c>Frist&lt;TCmd&gt;</c>). Konfigs = per Konstruktor injizierte Konfigurations-Records.
+/// </summary>
+public sealed record PipelineKarte
+{
+    public required string Name { get; init; }
+    public required string Namespace { get; init; }
+    public string? PipelineId { get; init; }
+    public IReadOnlyList<string> Konfigs { get; init; } = [];
+    public IReadOnlyList<Handle> Handles { get; init; } = [];
+    public string? Doku { get; init; }
+    public string? Typart { get; init; }
+    public IReadOnlyList<string>? Basen { get; init; }
+    public string? Attribute { get; init; }
+    /// <summary>Übrige Member verbatim (PipelineId, Ctor, Felder, Helfer). Null ⇒ PipelineId + Konfig-Ctor werden erzeugt.</summary>
+    public string? Zusatz { get; init; }
+    public IReadOnlyList<string> Usings { get; init; } = [];
+    public string? Datei { get; init; }
+    /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
+    public string? Herkunft { get; init; }
+}
+
+/// <summary>
+/// Eine Ingress-Bindung der Composition Root: welcher Trigger über welchen Ingress (Webhook/Timer/Datei) an welchem Ort
+/// ankommt. Aus dem Code: der Aufruf einer <c>[Ingress]</c>-Methode (Datei + Anweisung verbatim). Eine NEUE Bindung wird nach
+/// dem Vorbild einer bestehenden Bindung desselben Modus geschrieben (Anweisung kopiert, Trigger-Typ und Ort ersetzt).
+/// </summary>
+public sealed record IngressBindung
+{
+    public required string Trigger { get; init; }
+    /// <summary>webhook | timer | filewatch.</summary>
+    public required string Modus { get; init; }
+    /// <summary>Der Ort (Route/Intervall/Pfad) als Wert.</summary>
+    public string? Ort { get; init; }
+    /// <summary>Nur aus dem Code: Datei, die Anweisung verbatim, der Typ-Argument-Text und der Ort-Argument-Text darin.</summary>
+    public string? Datei { get; init; }
+    public string? Anweisung { get; init; }
+    public string? TypArgument { get; init; }
+    public string? OrtArgument { get; init; }
 }

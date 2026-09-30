@@ -44,6 +44,19 @@ public static class Validator
                     befunde.Add(new("info", "EDIT-TYP-UNBEKANNT", $"{r.Name}.{f.Name}: Typ '{f.Typ}' ist kein Skalar/Record/Enum der Domäne — kompiliert nur, wenn der Typ existiert."));
         }
 
+        // Leseseite (nur wenn das Modell sie trägt): was der Scaffolder nicht schreiben kann, sagen — nicht still übergehen.
+        if (modell.Lesen is { } lesen)
+        {
+            foreach (var g in lesen.Stores.SelectMany(s => s.Fns.Select(f => (f.Name, Store: s.Name))).GroupBy(x => x.Name).Where(g => g.Count() > 1))
+                befunde.Add(new("error", "EDIT-FAEHIGKEIT-DUP", $"Fähigkeit '{g.Key}' trägt {g.Count()} Funktionen ({string.Join(", ", g.Select(x => x.Store))}) — eine Fn je Fähigkeit (CQRS051)."));
+            foreach (var r in lesen.Reader)
+                foreach (var h in r.Handles.Where(h => h.Rueckgabe == null && h.Ausgaenge.Count == 0))
+                    befunde.Add(new("warning", "EDIT-READER-OHNE-ANTWORT", $"{r.Name}.Handle({h.Eingang}) hat keine Response — ohne Ausgabe-Vertrag (CQRS050) wird er nicht geschrieben."));
+            if (modell.Rahmen.ProjektionsSchreiber is null)
+                foreach (var k in lesen.Konsumenten.Where(k => k.Datei == null))
+                    befunde.Add(new("warning", "EDIT-KONSUMENT-SCHREIBER", $"{k.Name}: der Schreiber-Typ der Projektions-Handles ist aus dem Code nicht bekannt (keine Projektion im Code) — nicht geschrieben."));
+        }
+
         // Eigenständige Decider/Applier (verweisen auf ihr Aggregat).
         var aggNamen = new HashSet<string>(modell.Aggregate.Select(a => a.Name), StringComparer.Ordinal);
         foreach (var d in modell.Decider)

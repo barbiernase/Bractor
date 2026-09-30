@@ -32,6 +32,7 @@ public static class ParitaetsPruefung
     {
         var befunde = new List<ParitaetsBefund>();
         Inventar(ist, lage, boardJson, befunde);
+        BoardModell(ist, boardJson, befunde);
         await Fixpunkt(solution, lage, ist, befunde);
         return befunde;
     }
@@ -233,28 +234,71 @@ public static class ParitaetsPruefung
 
     // ══ B · Fixpunkt ═══════════════════════════════════════════════════════════════════════════
 
+    // ══ Board ⇄ Modell ════════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Das Board zeigt die Leseseite in eigenen Sammlungen; <see cref="BoardLeseseite.AusBoard"/> liest sie zurück. Beides muss
+    /// dasselbe Modell ergeben wie die Extraktion — sonst schriebe „C# schreiben" etwas anderes, als der Code sagt.
+    /// </summary>
+    private static void BoardModell(Analyse ist, string boardJson, List<ParitaetsBefund> befunde)
+    {
+        var ausCode = ModellMapper.ZuEditorModell(ist.Graph, ist.Dom);
+        var ausBoard = BoardLeseseite.AusBoard(boardJson);
+        var vorher = befunde.Count;
+        VergleicheLeseseite("Board ⇄ Modell", ausCode, ausBoard, befunde, mitDateien: true);
+        // Alle Records (auch ReadModel/Trigger/Selbst/Konfig, die das Board in eigenen Sammlungen zeigt).
+        Liste("Board ⇄ Modell", "Record", ausCode.Records, ausBoard.Records, r => $"{r.Kind}|{r.Namespace}.{r.Name}", r => r, befunde);
+        // Idempotenz: ein unverändertes Board meldet KEIN Element als „im Editor geändert“ — sonst fasste „C# schreiben“ Code an.
+        foreach (var g in Herkunft.Geaenderte(ausBoard))
+            befunde.Add(new("Board ⇄ Modell", "error", $"Stempel: '{g}' gilt ohne Änderung als geändert — „C# schreiben“ würde es anfassen."));
+        befunde.Add(new("Board ⇄ Modell", "info", befunde.Count == vorher
+            ? $"Leseseite aus dem Board = Leseseite aus dem Code ({ausCode.Lesen?.Stores.Count} Stores, {ausCode.Lesen?.Konsumenten.Count} Projektionen/Reaktionen, {ausCode.Lesen?.Reader.Count} Reader, {ausCode.Lesen?.Pipelines.Count} Pipelines)."
+            : "Leseseite aus dem Board weicht vom Code ab."));
+    }
+
     private static async Task Fixpunkt(Solution solution, Projektlage lage, Analyse ist, List<ParitaetsBefund> befunde)
     {
         var m1 = ModellMapper.ZuEditorModell(ist.Graph, ist.Dom);
-        // Ersetzt wird, was in den AGGREGAT-Projekten deklariert ist (dort schreibt der Scaffolder hin).
-        var ziele = lage.Analyse.Where(a => lage.AggregatAssemblies.Contains(a.Compilation.AssemblyName ?? "")).ToList();
-        var nsProjekt = new Dictionary<string, (Project Projekt, Compilation Comp)>(StringComparer.Ordinal);
-        foreach (var (p, c) in ziele)
-            foreach (var ns in c.SyntaxTrees.Where(t => !Projektlage.IstGeneriert(t))
-                         .SelectMany(t => t.GetRoot().DescendantNodes().OfType<BaseNamespaceDeclarationSyntax>()).Select(n => n.Name.ToString()))
-                nsProjekt.TryAdd(ns, (p, c));
-
+        // Ersetzt wird, was in den DOMÄNEN-Projekten deklariert ist (Schreibseite in den Aggregat-Projekten, Leseseite dort,
+        //   wo sie liegt). Store-IMPLEMENTIERUNGEN bleiben stehen: sie müssen gegen die geschriebenen Fähigkeiten kompilieren.
+        var ziele = lage.Analyse.Where(a => lage.DomänenAssemblies.Contains(a.Compilation.AssemblyName ?? "")).ToList();
+        var lesen = m1.Lesen ?? new Leseseite();
         var teil = new EditorModell
         {
-            Records = m1.Records.Where(r => nsProjekt.ContainsKey(r.Namespace)).ToList(),
-            Enums = m1.Enums.Where(e => nsProjekt.ContainsKey(e.Namespace)).ToList(),
+            Records = m1.Records, Enums = m1.Enums,
             Aggregate = m1.Aggregate, Decider = m1.Decider, Applier = m1.Applier, Sagas = m1.Sagas, Rahmen = m1.Rahmen,
+            Lesen = lesen with { Stores = lesen.Stores.Select(s => s with { Impl = null }).ToList() },
         };
         var abgedeckt = teil.Records.Select(r => $"{r.Namespace}.{r.Name}")
             .Concat(teil.Enums.Select(e => $"{e.Namespace}.{e.Name}"))
             .Concat(teil.Aggregate.Select(a => $"{a.Namespace}.{a.Name}"))
             .Concat(teil.Sagas.Select(s => $"{s.Namespace}.{s.Name}"))
+            .Concat(lesen.Stores.SelectMany(s => s.Fns.Select(f => $"{f.Namespace ?? s.Namespace}.{f.Name}")
+                .Concat(s.IstBuendel ? [$"{s.Namespace}.{s.Name}"] : [])))
+            .Concat(lesen.Konsumenten.Select(k => $"{k.Namespace}.{k.Name}"))
+            .Concat(lesen.Reader.Select(r => $"{r.Namespace}.{r.Name}"))
+            .Concat(lesen.Pipelines.Select(p => $"{p.Namespace}.{p.Name}"))
             .ToHashSet(StringComparer.Ordinal);
+
+        // Namespace → Projekt: das Projekt, in dem die ersetzten Typen dieses Namespace deklariert sind (sonst das erste mit dem Namespace).
+        var nsProjekt = new Dictionary<string, (Project Projekt, Compilation Comp)>(StringComparer.Ordinal);
+        foreach (var (p, c) in ziele)
+            foreach (var tree in c.SyntaxTrees.Where(t => !Projektlage.IstGeneriert(t)))
+            {
+                var model = c.GetSemanticModel(tree);
+                foreach (var d in tree.GetRoot().DescendantNodes().OfType<BaseTypeDeclarationSyntax>())
+                    if (model.GetDeclaredSymbol(d) is INamedTypeSymbol sym && abgedeckt.Contains(sym.Fq()))
+                        nsProjekt.TryAdd(sym.ContainingNamespace.Fq(), (p, c));
+            }
+        foreach (var (p, c) in ziele)
+            foreach (var ns in c.SyntaxTrees.Where(t => !Projektlage.IstGeneriert(t))
+                         .SelectMany(t => t.GetRoot().DescendantNodes().OfType<BaseNamespaceDeclarationSyntax>()).Select(n => n.Name.ToString()))
+                nsProjekt.TryAdd(ns, (p, c));
+        teil = teil with
+        {
+            Records = teil.Records.Where(r => nsProjekt.ContainsKey(r.Namespace)).ToList(),
+            Enums = teil.Enums.Where(e => nsProjekt.ContainsKey(e.Namespace)).ToList(),
+        };
 
         // Fork: abgedeckte Typ-Deklarationen aus den Aggregat-Projekten entfernen …
         var fork = solution;
@@ -280,8 +324,12 @@ public static class ParitaetsPruefung
         // … und durch den Scaffolder ersetzen (jede Datei in das Projekt ihres Namespace).
         var dateien = Scaffolder.Generiere(teil);
         befunde.Add(new("Fixpunkt", "info",
-            $"{abgedeckt.Count} Typen in {ziele.Count} Aggregat-Projekt(en) durch {dateien.Count} Scaffolder-Dateien ersetzt, neu kompiliert, neu extrahiert."));
-        foreach (var datei in dateien)
+            $"{abgedeckt.Count} Typen in {ziele.Count} Domänen-Projekt(en) durch {dateien.Count} Scaffolder-Dateien ersetzt " +
+            $"(davon Leseseite: {lesen.Stores.Sum(s => s.Fns.Count)} Fähigkeiten, {lesen.Stores.Count(s => s.IstBuendel)} Bündel, " +
+            $"{lesen.Konsumenten.Count} Projektionen/Reaktionen, {lesen.Reader.Count} Reader, {lesen.Pipelines.Count} Pipelines), neu kompiliert, neu extrahiert."));
+        foreach (var d in dateien.Where(d => !d.Platzierbar))
+            befunde.Add(new("Fixpunkt", "error", $"{d.Art} {d.Pfad}: nicht platzierbar (Verzeichnis bzw. Schreiber-Typ aus dem Code unbekannt)."));
+        foreach (var datei in dateien.Where(d => d.Platzierbar))
         {
             var ns = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(datei.Inhalt).GetRoot()
                 .DescendantNodes().OfType<BaseNamespaceDeclarationSyntax>().FirstOrDefault()?.Name.ToString() ?? "";
@@ -313,24 +361,42 @@ public static class ParitaetsPruefung
     /// <summary>Element-weiser Vergleich M₁ vs. M₂ (usings bewusst ausgenommen — die prüft das Kompilat).</summary>
     private static void VergleicheModelle(EditorModell m1, EditorModell m2, List<ParitaetsBefund> befunde)
     {
-        void Liste<T>(string art, IEnumerable<T> a, IEnumerable<T> b, Func<T, string> key, Func<T, T> ohneUsings)
-        {
-            var da = a.GroupBy(key).ToDictionary(g => g.Key, g => Json(ohneUsings(g.First())), StringComparer.Ordinal);
-            var db = b.GroupBy(key).ToDictionary(g => g.Key, g => Json(ohneUsings(g.First())), StringComparer.Ordinal);
-            foreach (var k in da.Keys.Union(db.Keys).OrderBy(x => x, StringComparer.Ordinal))
-            {
-                if (!db.ContainsKey(k)) befunde.Add(new("Fixpunkt", "error", $"{art} '{k}': nach Rückschreiben verschwunden."));
-                else if (!da.ContainsKey(k)) befunde.Add(new("Fixpunkt", "error", $"{art} '{k}': nach Rückschreiben neu aufgetaucht."));
-                else if (da[k] != db[k]) befunde.Add(new("Fixpunkt", "error", $"{art} '{k}' weicht ab:\n{Diff(da[k], db[k])}"));
-            }
-        }
         // Dateipfade und usings bewusst ausgenommen (der Fork legt neue Dateien an; usings prüft das Kompilat).
-        Liste("Record", m1.Records, m2.Records, r => $"{r.Namespace}.{r.Name}", r => r with { Usings = [], Datei = null });
-        Liste("Enum", m1.Enums, m2.Enums, e => $"{e.Namespace}.{e.Name}", e => e with { Datei = null });
-        Liste("Aggregat", m1.Aggregate, m2.Aggregate, a => $"{a.Namespace}.{a.Name}", a => a with { Usings = [], Datei = null, DeciderDatei = null, ApplierDatei = null });
-        Liste("Decider", m1.Decider, m2.Decider, d => $"{d.Aggregat}|{d.Command}", d => d with { Datei = null });
-        Liste("Applier", m1.Applier, m2.Applier, a => $"{a.Aggregat}|{a.Event}", a => a with { Datei = null });
-        Liste("Saga", m1.Sagas, m2.Sagas, s => $"{s.Namespace}.{s.Name}", s => s with { ExtraUsings = [], Datei = null });
+        Liste("Fixpunkt", "Record", m1.Records, m2.Records, r => $"{r.Namespace}.{r.Name}", r => r with { Usings = [], Datei = null }, befunde);
+        Liste("Fixpunkt", "Enum", m1.Enums, m2.Enums, e => $"{e.Namespace}.{e.Name}", e => e with { Datei = null }, befunde);
+        Liste("Fixpunkt", "Aggregat", m1.Aggregate, m2.Aggregate, a => $"{a.Namespace}.{a.Name}", a => a with { Usings = [], Datei = null, DeciderDatei = null, ApplierDatei = null }, befunde);
+        Liste("Fixpunkt", "Decider", m1.Decider, m2.Decider, d => $"{d.Aggregat}|{d.Command}", d => d with { Datei = null }, befunde);
+        Liste("Fixpunkt", "Applier", m1.Applier, m2.Applier, a => $"{a.Aggregat}|{a.Event}", a => a with { Datei = null }, befunde);
+        Liste("Fixpunkt", "Saga", m1.Sagas, m2.Sagas, s => $"{s.Namespace}.{s.Name}", s => s with { ExtraUsings = [], Datei = null }, befunde);
+        VergleicheLeseseite("Fixpunkt", m1, m2, befunde, mitDateien: false);
+    }
+
+    /// <summary>Die Leseseite zweier Modelle element-weise (Stores/Fähigkeiten, Projektionen/Reaktionen, Reader, Pipeline-Fähigkeiten).</summary>
+    private static void VergleicheLeseseite(string bereich, EditorModell m1, EditorModell m2, List<ParitaetsBefund> befunde, bool mitDateien)
+    {
+        var a = m1.Lesen ?? new Leseseite();
+        var b = m2.Lesen ?? new Leseseite();
+        Handle H(Handle h) => mitDateien ? h : h with { Datei = null };
+        Liste(bereich, "Store", a.Stores, b.Stores, s => $"{s.Namespace}.{s.Name}",
+            s => mitDateien ? s : s with { Datei = null, Fns = s.Fns.Select(f => f with { Datei = null }).ToList() }, befunde);
+        Liste(bereich, "Projektion/Reaktion", a.Konsumenten, b.Konsumenten, k => $"{k.Namespace}.{k.Name}",
+            k => (mitDateien ? k : k with { Datei = null, Usings = [] }) with { Handles = k.Handles.Select(H).ToList() }, befunde);
+        Liste(bereich, "Reader", a.Reader, b.Reader, r => $"{r.Namespace}.{r.Name}",
+            r => (mitDateien ? r : r with { Datei = null, Usings = [] }) with { Handles = r.Handles.Select(H).ToList() }, befunde);
+        Liste(bereich, "Pipeline", a.Pipelines, b.Pipelines, p => $"{p.Namespace}.{p.Name}",
+            p => (mitDateien ? p : p with { Datei = null, Usings = [] }) with { Handles = p.Handles.Select(H).ToList() }, befunde);
+    }
+
+    private static void Liste<T>(string bereich, string art, IEnumerable<T> a, IEnumerable<T> b, Func<T, string> key, Func<T, T> normal, List<ParitaetsBefund> befunde)
+    {
+        var da = a.GroupBy(key).ToDictionary(g => g.Key, g => Json(normal(g.First())), StringComparer.Ordinal);
+        var db = b.GroupBy(key).ToDictionary(g => g.Key, g => Json(normal(g.First())), StringComparer.Ordinal);
+        foreach (var k in da.Keys.Union(db.Keys).OrderBy(x => x, StringComparer.Ordinal))
+        {
+            if (!db.ContainsKey(k)) befunde.Add(new(bereich, "error", $"{art} '{k}': auf der zweiten Seite verschwunden."));
+            else if (!da.ContainsKey(k)) befunde.Add(new(bereich, "error", $"{art} '{k}': auf der zweiten Seite neu aufgetaucht."));
+            else if (da[k] != db[k]) befunde.Add(new(bereich, "error", $"{art} '{k}' weicht ab:\n{Diff(da[k], db[k])}"));
+        }
     }
 
     private static string Json<T>(T x) => JsonSerializer.Serialize(x, EditorModell.JsonOptionen);

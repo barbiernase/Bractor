@@ -4,7 +4,18 @@ using Abstractions;
 namespace DomainEditor;
 
 /// <summary>Welche Rolle eine generierte Datei hat — bestimmt, wie sie in eine bestehende Datei gemischt wird.</summary>
-public enum DateiArt { Typen, State, Decider, Applier, Saga }
+public enum DateiArt
+{
+    Typen, State, Decider, Applier, Saga,
+    /// <summary>Fähigkeits- und Bündel-Interfaces eines Stores (Mischen: fehlende Interfaces + fehlende Basen im Bündel).</summary>
+    Schnittstellen,
+    /// <summary>Methoden einer Store-Implementierung (Mischen: fehlende Methoden nach Name + Parametertypen).</summary>
+    StoreImpl,
+    /// <summary>Projektion/Reaktion bzw. Reader (Mischen: fehlende Handles nach Eingangstyp; Parameter-Abgleich gesondert).</summary>
+    Konsument, Leser,
+    /// <summary>Pipeline (Mischen: fehlende Handles nach Eingangstyp; Parameter/Rückgabe-Abgleich gesondert).</summary>
+    Pipeline,
+}
 
 /// <summary>
 /// Eine generierte Quelldatei: Pfad (relativ zur Solution bzw. zum Zielordner) + Inhalt + Rolle. <paramref name="Platzierbar"/>
@@ -45,6 +56,33 @@ public static class Scaffolder
     private static readonly string RückgängigDurch = nameof(RegelAbschluss<IEvent>.RückgängigDurch);
     private static readonly string RückgängigDurchJe = nameof(RegelAbschluss<IEvent>.RückgängigDurchJe);
     private static readonly string OneOf = typeof(OneOf<>).Name.Split('`')[0];
+    // ── Leseseite ──
+    private static readonly string IQuery = nameof(Abstractions.IQuery);
+    private static readonly string IQueryResponse = nameof(Abstractions.IQueryResponse);
+    private static readonly string IReadModel = nameof(Abstractions.IReadModel);
+    private static readonly string IWriteStore = nameof(Abstractions.IWriteStore);
+    private static readonly string IReadStore = nameof(Abstractions.IReadStore);
+    private static readonly string IStore = nameof(Abstractions.IStore);
+    private static readonly string ISubscriber = nameof(Abstractions.ISubscriber);
+    private static readonly string IPullSubscriber = nameof(Abstractions.IPullSubscriber);
+    private static readonly string IAppendProjektion = nameof(Abstractions.IAppendProjektion);
+    private static readonly string SubscriberId = nameof(Abstractions.ISubscriber.SubscriberId);
+    private static readonly string IReader = typeof(IReader<>).Name.Split('`')[0];
+    private static readonly string IAggregateEnvelope = nameof(Abstractions.IAggregateEnvelope);
+    private static readonly string IMessageEnvelope = nameof(Abstractions.IMessageEnvelope);
+    private static readonly string ReadContext = nameof(Abstractions.ReadContext);
+    private static readonly string ProjectionReader = nameof(ProjectionReaderAttribute)[..^"Attribute".Length];
+    private static readonly string TrackDeps = nameof(ProjectionReaderAttribute.TrackDeps);
+    private static readonly string IPipelineHandler = nameof(Abstractions.IPipelineHandler);
+    private static readonly string IPipelineTrigger = nameof(Abstractions.IPipelineTrigger);
+    private static readonly string IPipelineSelfMessage = nameof(Abstractions.IPipelineSelfMessage);
+    private static readonly string PipelineContext = nameof(Abstractions.PipelineContext);
+    private static readonly string PipelineId = nameof(Abstractions.IPipelineHandler.PipelineId);
+    /// <summary>
+    /// Der Methodenname, den die Dispatch-Generatoren rufen — Framework-Vertrag, erzwungen durch CQRS057
+    /// (HandlerFormAnalyzer): ein anders benannter Handler ist ein Build-Fehler, kein stilles Auseinanderlaufen.
+    /// </summary>
+    private const string HandleMethode = "Handle";
 
     public static IReadOnlyList<GenerierteDatei> Generiere(EditorModell modell)
     {
@@ -81,6 +119,8 @@ public static class Scaffolder
         foreach (var saga in modell.Sagas)
             dateien.Add(Platziert(saga.Datei, Verzeichnis(modell, saga.Namespace), $"{saga.Name}.cs", SagaDatei(saga, modell), DateiArt.Saga));
 
+        if (modell.Lesen is { } lesen) dateien.AddRange(LeseseitenDateien(modell, lesen));
+
         return dateien.OrderBy(d => d.Pfad, StringComparer.Ordinal).ToList();
     }
 
@@ -114,6 +154,12 @@ public static class Scaffolder
             RecordArt.Command => "Commands.cs",
             RecordArt.Event => "Events.cs",
             RecordArt.ValueObject => "ValueObjects.cs",
+            RecordArt.Query => "Queries.cs",
+            RecordArt.Antwort => "Responses.cs",
+            RecordArt.ReadModel => "ReadModels.cs",
+            RecordArt.Konfig => "Konfigs.cs",
+            RecordArt.Trigger => "Triggers.cs",
+            RecordArt.Selbst => "SelbstNachrichten.cs",
             _ => "Enums.cs",
         };
         var v = Verzeichnis(m, ns);
@@ -180,6 +226,17 @@ public static class Scaffolder
             for (var i = 0; i < vos.Count; i++)
                 RecordZeilen(b, vos[i], null, i < vos.Count - 1);
         });
+        // Leseseite: Queries, Responses, ReadModels — je Art ein Abschnitt mit ihrem Marker.
+        foreach (var (art, marker) in new (string, string?)[] { (RecordArt.Query, IQuery), (RecordArt.Antwort, IQueryResponse), (RecordArt.ReadModel, IReadModel),
+                     (RecordArt.Konfig, null), (RecordArt.Trigger, IPipelineTrigger), (RecordArt.Selbst, IPipelineSelfMessage) })
+        {
+            var liste = records.Where(r => r.Kind == art).ToList();
+            if (liste.Count > 0) abschnitte.Add(() =>
+            {
+                for (var i = 0; i < liste.Count; i++)
+                    RecordZeilen(b, liste[i], marker, i < liste.Count - 1);
+            });
+        }
 
         for (var i = 0; i < abschnitte.Count; i++)
         {
@@ -378,6 +435,255 @@ public static class Scaffolder
         }
     }
 
+    // ── Leseseite: Fähigkeiten + Bündel, Store-Impl, Projektion/Reaktion, Reader ──────────────────────
+    //    Nur SIGNATUREN aus dem Modell; Rümpfe/Handcode verbatim, neue Rümpfe = throw-Platzhalter. Kein Store im Ctor
+    //    (CQRS054), kein new Store (CQRS055), eine Fn je Fähigkeit (CQRS051), OneOf/konkret (CQRS050), Handle-Form (CQRS057).
+
+    private static IEnumerable<GenerierteDatei> LeseseitenDateien(EditorModell m, Leseseite lesen)
+    {
+        // ── Fähigkeiten + Bündel: je (Datei, Namespace) eine Schnittstellen-Datei ──
+        var gruppen = new Dictionary<(string Pfad, string Ns), List<(string? Doku, string Zeile, IEnumerable<string> Typen)>>();
+        void Nimm(string pfad, string ns, string? doku, string zeile, IEnumerable<string> typen)
+        {
+            if (!gruppen.TryGetValue((pfad, ns), out var l)) gruppen[(pfad, ns)] = l = new();
+            l.Add((doku, zeile, typen));
+        }
+        foreach (var st in lesen.Stores)
+        {
+            var storeDatei = st.Datei ?? Ziel(m, st.Namespace, $"{st.Name}.cs");
+            foreach (var f in st.Fns)
+            {
+                var fns = f.Namespace ?? st.Namespace;
+                var pfad = f.Datei ?? (fns == st.Namespace ? storeDatei : Ziel(m, fns, $"{f.Name}.cs"));
+                Nimm(pfad, fns, f.Doku,
+                    $"public interface {f.Name} : {(f.Lesen ? IReadStore : IWriteStore)} {{ {f.Rueckgabe} {f.Methode}({ParameterListe(f.Parameter)}); }}",
+                    f.Parameter.Select(p => p.Typ).Append(f.Rueckgabe));
+            }
+            if (st.IstBuendel)
+                Nimm(storeDatei, st.Namespace, st.Doku,
+                    $"public interface {st.Name} : {string.Join(", ", st.Fns.Select(f => f.Name).Prepend(IStore))} {{ }}",
+                    st.Fns.Select(f => f.Name));
+        }
+        foreach (var ((pfad, ns), zeilen) in gruppen)
+        {
+            var b = Kopf(ns, Usings(ns, m, [m.Rahmen.VertragsNamespace], zeilen.SelectMany(z => z.Typen), []));
+            for (var i = 0; i < zeilen.Count; i++)
+            {
+                if (i > 0) b.AppendLine();
+                Doku(b, zeilen[i].Doku, "");
+                b.AppendLine(zeilen[i].Zeile);
+            }
+            yield return Datei(pfad, b.ToString(), DateiArt.Schnittstellen);
+        }
+
+        // ── Store-Implementierungen: neue Klasse voll; bestehende → Schreib-/Lese-Teil (nur die Methoden zählen) ──
+        foreach (var st in lesen.Stores.Where(s => s.Impl != null))
+        {
+            var impl = st.Impl!;
+            if (impl.Datei == null)
+            {
+                yield return Datei(Ziel(m, impl.Namespace, $"{impl.Name}.cs"), StoreImplDatei(m, st, impl, st.Fns, neu: true), DateiArt.StoreImpl);
+                continue;
+            }
+            // Bestehende Klasse: nur die NEUEN Fähigkeiten (ohne Datei) — die übrigen implementiert sie schon (sonst kompilierte sie nicht).
+            foreach (var teil in st.Fns.Where(f => f.Datei == null).GroupBy(f => (f.Lesen ? impl.LeseDatei : impl.SchreibDatei) ?? impl.Datei))
+                yield return Datei(teil.Key, StoreImplDatei(m, st, impl, teil.ToList(), neu: false), DateiArt.StoreImpl);
+        }
+
+        foreach (var k in lesen.Konsumenten)
+        {
+            var d = KonsumentDatei(m, k);
+            yield return d == null
+                ? new GenerierteDatei($"{Unplatziert}{k.Name}.cs", "", DateiArt.Konsument, Platzierbar: false)
+                : Datei(k.Datei ?? Ziel(m, k.Namespace, $"{k.Name}.cs"), d, DateiArt.Konsument);
+        }
+        foreach (var r in lesen.Reader)
+            yield return Datei(r.Datei ?? Ziel(m, r.Namespace, $"{r.Name}.cs"), LeserDatei(m, r), DateiArt.Leser);
+        foreach (var p in lesen.Pipelines)
+            yield return Datei(p.Datei ?? Ziel(m, p.Namespace, $"{p.Name}.cs"), PipelineDatei(m, p), DateiArt.Pipeline);
+    }
+
+    /// <summary>
+    /// Pipeline: <c>partial class P : IPipelineHandler</c>, <c>PipelineId</c>, Konfig-Records per Konstruktor, je Handle
+    /// <c>Handle(TEingang, PipelineContext, Fähigkeit…)</c> → <c>IAsyncEnumerable&lt;OneOf&lt;…&gt;&gt;</c> (Commands, Trigger, Selbst, Frist);
+    /// ohne Ausgang <c>Task</c> (die geschlossene leere Menge — nur Effekte, wie bei Projektionen).
+    /// </summary>
+    private static string PipelineDatei(EditorModell m, PipelineKarte p)
+    {
+        var b = Kopf(p.Namespace, Usings(p.Namespace, m, [m.Rahmen.VertragsNamespace],
+            KlassenTypen(p.Datei, p.Handles).Concat(p.Datei == null ? p.Konfigs : []), p.Usings));
+        Doku(b, p.Doku, "");
+        Attribute(b, p.Attribute);
+        b.AppendLine($"{MitPartial(p.Typart)} {p.Name} : {string.Join(", ", p.Basen ?? [IPipelineHandler])}");
+        b.AppendLine("{");
+        var teile = new List<Action>();
+        teile.Add(() =>
+        {
+            if (p.Zusatz is not null) { Eingerückt(b, p.Zusatz, "    "); return; }
+            b.AppendLine($"    public string {PipelineId} => \"{p.PipelineId ?? p.Name}\";");
+            if (p.Konfigs.Count == 0) return;
+            b.AppendLine();
+            foreach (var k in p.Konfigs) b.AppendLine($"    private readonly {k} _{BoardLeseseite.ParameterName(k)};");
+            b.AppendLine();
+            b.AppendLine($"    public {p.Name}({string.Join(", ", p.Konfigs.Select(k => $"{k} {BoardLeseseite.ParameterName(k)}"))})");
+            b.AppendLine("    {");
+            foreach (var k in p.Konfigs) b.AppendLine($"        _{BoardLeseseite.ParameterName(k)} = {BoardLeseseite.ParameterName(k)};");
+            b.AppendLine("    }");
+        });
+        // Zwei Formen, nach der Ausgabemenge: keine ⇒ Task (geschlossen leer, nur Effekte); sonst IAsyncEnumerable<OneOf<…>> —
+        //   der Pipeline-Dispatch erkennt nur OneOf, auch ein einzelner Ausgang steht darin.
+        foreach (var h in p.Handles)
+            teile.Add(() => HandleZeilen(b, h, [PipelineContext], ["ctx"],
+                h.Rueckgabe ?? (h.Ausgaenge.Count == 0 ? "Task" : $"IAsyncEnumerable<{OneOf}<{string.Join(", ", h.Ausgaenge)}>>")));
+        Teile(b, teile);
+        b.AppendLine("}");
+        return b.ToString();
+    }
+
+    private static string Ziel(EditorModell m, string ns, string name) =>
+        Verzeichnis(m, ns) is { } v ? $"{v}/{name}" : $"{Unplatziert}{name}";
+
+    private static GenerierteDatei Datei(string pfad, string inhalt, DateiArt art) =>
+        new(pfad, inhalt, art, !pfad.StartsWith(Unplatziert, StringComparison.Ordinal));
+
+    private static string StoreImplDatei(EditorModell m, Store st, StoreImpl impl, IReadOnlyList<Faehigkeit> fns, bool neu)
+    {
+        var basis = neu ? m.Rahmen.StoreBasis : null;
+        var usings = new List<string>();
+        if (basis != null) usings.Add(basis.Namespace);
+        var b = Kopf(impl.Namespace, Usings(impl.Namespace, m, usings.Concat(basis?.Usings ?? []),
+            fns.SelectMany(f => f.Parameter.Select(p => p.Typ).Append(f.Rueckgabe)).Append(st.Name), []));
+        var basen = basis == null ? st.Name : $"{basis.Name}, {st.Name}";
+        b.AppendLine($"public sealed partial class {impl.Name}" + (neu ? $" : {basen}" : ""));
+        b.AppendLine("{");
+        var zeilen = new List<string>();
+        if (basis != null)
+            zeilen.Add($"    public {impl.Name}({ParameterListe(basis.KtorParameter)}) : base({string.Join(", ", basis.KtorParameter.Select(p => p.Name))}) {{ }}");
+        foreach (var f in fns)
+        {
+            var kopf = $"    public {f.Rueckgabe} {f.Methode}({ParameterListe(f.Parameter)})";
+            if (string.IsNullOrWhiteSpace(f.ImplRumpf))
+                zeilen.Add($"{kopf}\n        => throw new NotImplementedException(\"TODO: {f.Name}.{f.Methode}\");");
+            else
+            {
+                // Rumpf-Entwurf aus dem Editor (Code-/LLM-Knoten); async, wenn er await benutzt.
+                var asy = f.ImplRumpf.Contains("await ") && !kopf.Contains(" async ") ? kopf.Replace("    public ", "    public async ") : kopf;
+                var rb = new StringBuilder();
+                Eingerückt(rb, f.ImplRumpf, "        ");
+                zeilen.Add($"{asy}\n    {{\n{rb.ToString().TrimEnd('\n')}\n    }}");
+            }
+        }
+        b.AppendLine(string.Join("\n\n", zeilen));
+        b.AppendLine("}");
+        return b.ToString();
+    }
+
+    /// <summary>
+    /// Projektion/Reaktion. Null = der Schreiber-Typ der Handles ist aus dem Code nicht bekannt (keine Projektion im Code) —
+    /// dann wird nicht geraten, sondern nicht geschrieben.
+    /// </summary>
+    private static string? KonsumentDatei(EditorModell m, Konsument k)
+    {
+        var r = m.Rahmen;
+        if (r.ProjektionsSchreiber is null) return null;
+        var basis = new List<string> { r.VertragsNamespace };
+        if (r.ProjektionsSchreiberNamespace is { } sns) basis.Add(sns);
+        var b = Kopf(k.Namespace, Usings(k.Namespace, m, basis, KlassenTypen(k.Datei, k.Handles), k.Usings));
+        Doku(b, k.Doku, "");
+        Attribute(b, k.Attribute);
+        var basen = k.Basen ?? new[] { ISubscriber }.Concat(k.Pull ? [IPullSubscriber] : []).Concat(k.Append ? [IAppendProjektion] : []).ToList();
+        b.AppendLine($"{MitPartial(k.Typart)} {k.Name} : {string.Join(", ", basen)}");
+        b.AppendLine("{");
+        var teile = new List<Action>();
+        teile.Add(() => { if (k.Zusatz is null) b.AppendLine($"    public string {SubscriberId} => \"{k.SubscriberId ?? k.Name}\";"); else Eingerückt(b, k.Zusatz, "    "); });
+        foreach (var h in k.Handles)
+            teile.Add(() => HandleZeilen(b, h, [IAggregateEnvelope, r.ProjektionsSchreiber], ["envelope", "writer"],
+                h.Rueckgabe ?? (h.Ausgaenge.Count == 0 ? "Task" : $"IAsyncEnumerable<{OneOfVon(h.Ausgaenge)}>")));
+        Teile(b, teile);
+        b.AppendLine("}");
+        return b.ToString();
+    }
+
+    private static string LeserDatei(EditorModell m, Leser r)
+    {
+        var b = Kopf(r.Namespace, Usings(r.Namespace, m, [m.Rahmen.VertragsNamespace],
+            KlassenTypen(r.Datei, r.Handles).Append(r.Projektion), r.Usings));
+        Doku(b, r.Doku, "");
+        b.AppendLine($"[{ProjectionReader}({TrackDeps} = {(r.TrackDeps ? "true" : "false")})]");
+        Attribute(b, r.Attribute);
+        b.AppendLine($"{MitPartial(r.Typart)} {r.Name} : {string.Join(", ", r.Basen ?? [$"{IReader}<{r.Projektion}>"])}");
+        b.AppendLine("{");
+        var teile = new List<Action>();
+        if (r.Zusatz is not null) teile.Add(() => Eingerückt(b, r.Zusatz, "    "));
+        // Ein Reader-Handle ohne Response hat keinen Vertrag (CQRS050) — nicht geschrieben (Validator meldet es).
+        foreach (var h in r.Handles.Where(h => h.Rueckgabe != null || h.Ausgaenge.Count > 0))
+            teile.Add(() => HandleZeilen(b, h, [IMessageEnvelope, ReadContext], ["envelope", "ctx"],
+                h.Rueckgabe ?? $"Task<{OneOfVon(h.Ausgaenge)}>"));
+        Teile(b, teile);
+        b.AppendLine("}");
+        return b.ToString();
+    }
+
+    /// <summary>
+    /// Typen, aus denen die usings einer Konsumenten-/Reader-Datei ABGELEITET werden: bei einer NEUEN Klasse alle, bei einer
+    /// bestehenden nur die der neuen Handles (die bestehenden usings stehen verbatim im Modell — keine neuen Mehrdeutigkeiten).
+    /// </summary>
+    private static IEnumerable<string> KlassenTypen(string? datei, IReadOnlyList<Handle> handles) =>
+        handles.Where(h => datei == null || h.Datei == null)
+            .SelectMany(h => h.Faehigkeiten.Select(f => f.Typ).Concat(h.Ausgaenge).Append(h.Eingang));
+
+    private static void HandleZeilen(StringBuilder b, Handle h, string[] kontextTypen, string[] kontextNamen, string rueckgabe)
+    {
+        var ps = new List<string> { $"{h.Eingang} {h.Parameter}" };
+        for (var i = 0; i < kontextTypen.Length; i++)
+            ps.Add($"{kontextTypen[i]} {(h.Kontext is { } k && i < k.Count ? k[i] : kontextNamen[i])}");
+        ps.AddRange(h.Faehigkeiten.Select(f => $"{f.Typ} {f.Name}"));
+        // Neuer Handle mit Entwurf, der await benutzt ⇒ async (bestehende Modifizierer bleiben wörtlich).
+        var asy = h.Rumpf is { } r && (r.Contains("await ") || rueckgabe.StartsWith("IAsyncEnumerable<", StringComparison.Ordinal) && r.Contains("yield "));
+        var mods = h.Modifikatoren ?? (asy ? "public async" : "public");
+        var kopf = $"    {mods} {rueckgabe} {HandleMethode}({string.Join(", ", ps)})";
+        if (h.Ausdruck is not null)
+        {
+            b.AppendLine(kopf + " =>");
+            b.AppendLine("        " + h.Ausdruck + ";");
+            return;
+        }
+        b.AppendLine(kopf);
+        b.AppendLine("    {");
+        if (h.Rumpf is null) b.AppendLine($"        throw new NotImplementedException(\"TODO: {HandleMethode}({h.Eingang})\");");
+        else if (h.Rumpf.Trim().Length > 0) Eingerückt(b, h.Rumpf, "        ");
+        b.AppendLine("    }");
+    }
+
+    private static void Teile(StringBuilder b, List<Action> teile)
+    {
+        for (var i = 0; i < teile.Count; i++)
+        {
+            if (i > 0) b.AppendLine();
+            teile[i]();
+        }
+    }
+
+    private static void Attribute(StringBuilder b, string? attribute)
+    {
+        if (string.IsNullOrWhiteSpace(attribute)) return;
+        foreach (var zeile in attribute.Replace("\r\n", "\n").Split('\n')) b.AppendLine(zeile);
+    }
+
+    /// <summary>Die Deklarationsform mit <c>partial</c> vor dem Schlüsselwort (die Dispatch-Generatoren ergänzen die Klasse).</summary>
+    private static string MitPartial(string? typart)
+    {
+        var teile = (typart ?? "public class").Split(' ', StringSplitOptions.RemoveEmptyEntries).ToList();
+        teile.Insert(teile.Count - 1, "partial");
+        return string.Join(" ", teile);
+    }
+
+    private static string OneOfVon(IReadOnlyList<string> typen) =>
+        typen.Count == 1 ? typen[0] : $"{OneOf}<{string.Join(", ", typen)}>";
+
+    private static string ParameterListe(IReadOnlyList<Parameter> ps) =>
+        string.Join(", ", ps.Select(p => $"{p.Typ} {p.Name}" + (p.Standard is null ? "" : $" = {p.Standard}")));
+
     // ── Bausteine ─────────────────────────────────────────────────────────────────────────────
     private static StringBuilder Kopf(string ns, IReadOnlyList<string> usings)
     {
@@ -435,6 +741,12 @@ public static class Scaffolder
         var nsVon = new Dictionary<string, string>(StringComparer.Ordinal);
         foreach (var r in modell.Records) nsVon.TryAdd(r.Name, r.Namespace);
         foreach (var e in modell.Enums) nsVon.TryAdd(e.Name, e.Namespace);
+        foreach (var st in modell.Lesen?.Stores ?? [])
+        {
+            nsVon.TryAdd(st.Name, st.Namespace);
+            foreach (var f in st.Fns) nsVon.TryAdd(f.Name, f.Namespace ?? st.Namespace);
+        }
+        foreach (var k in modell.Lesen?.Konsumenten ?? []) nsVon.TryAdd(k.Name, k.Namespace);
 
         var menge = new SortedSet<string>(basis.Concat(explizit), StringComparer.Ordinal);
         foreach (var typ in typen)

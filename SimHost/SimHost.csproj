@@ -26,4 +26,8 @@
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Dieselben Feld-Regeln wie der Extractor (Code → Modell) für den Abgleich bestehender Deklarationen (Modell → Code). -->
+    <Compile Include="../GraphExtractor/Codeformen.cs" Link="Codeformen.cs" />
+  </ItemGroup>
 </Project>

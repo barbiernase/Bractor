@@ -217,3 +217,27 @@ Ausgeblendete Arten reservieren im Raster nichts (ohne Code rücken die Decider 
 
 **Nicht umgesetzt (bewusst, nicht nötig):** Port-Katalog (§6 Schritt 1), denn die Karten registrieren ihre Ports weiter
 unsichtbar. `drawEdges` bleibt (ankert an den Kopf-Seiten der kompakten Karten).
+
+## 9 · Leseseite schreibt in den Code (2026-09-30)
+
+Die Verbinden/Lösen-Aktionen der Leseseite haben jetzt einen typisierten Träger im Code (Volltext:
+`docs/konzept-handle-ausgaenge.md` §12):
+
+- **„+ Write-Funktion“/„+ Read-Funktion“** an der Store-Karte → neue Fn; im Fn-Panel **„Fähigkeit“** (leer = Vorschlag
+  `I` + Methode ohne `Async`). „C# schreiben“ legt das Fähigkeits-Interface an, hängt es an die Basisliste des Bündels und ergänzt
+  in der (einzigen) Impl-Klasse eine Platzhalter-Methode. Aus dem Code gelesene Fähigkeiten sind fest.
+- **Handle „+ Write-Fn ▶“/„+ Read-Fn ▶“ → Fn anklicken** (verbinden) bzw. **✕** (lösen) = Fähigkeits-Parameter hinzu/weg — nur die
+  Parameterliste; benutzt der Rumpf einen gelösten Parameter noch, meldet der Bau nach dem Schreiben den Compiler-Fehler im
+  Ausgabe-Panel.
+- **Neuer Store/Projektion/Reaktion/Reader, „+ Query andocken“** → neue Dateien (Platzhalter-Rümpfe) bzw. neue Handles in der
+  bestehenden Klasse. Neuer Store: Impl-Klasse im Panel benennbar (leer = Name ohne `I`).
+- Nach dem Schreiben liest der Editor den Code neu ein; die Leseseite wird dabei über „Store.Fn“ verglichen, Geschriebenes ist
+  danach Code-Stand (nicht „ungeschrieben“).
+
+## 10 · Bestehendes ändern, Betrieb, Vorschau (2026-09-30)
+
+Auch Änderungen an Bestehendem gehen jetzt in den Code (Volltext `docs/konzept-handle-ausgaenge.md` §13): Felder, Enum-Werte,
+State-Felder, OneOf, Prozess-Regeln, Handle-Ausgänge, Store-Fn-Signatur, Flags (Pull/Append/TrackDeps/SubscriberId/Projektion).
+Neu im Panel: **SubscriberId** an Projektion/Reaktion, **Konfigs** an der Pipeline (Konstruktor nur bei neuer Pipeline), Palette
+**„+ Konfig“**. **👁 Vorschau** zeigt vor dem Schreiben, was angelegt/geändert würde und was NICHT (mit Grund).
+

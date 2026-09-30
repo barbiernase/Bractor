@@ -27,6 +27,8 @@ public sealed class DomainModel
     public List<RecordRaw> ReadModels { get; } = new();
     /// <summary><c>IPipelineTrigger</c>-Records (Ingress-Nachrichten).</summary>
     public List<RecordRaw> Triggers { get; } = new();
+    /// <summary>Selbst-Nachrichten der Pipelines (<c>IPipelineSelfMessage</c>, Domäne).</summary>
+    public List<RecordRaw> SelbstNachrichten { get; } = new();
     /// <summary>Enums in Domain-Assemblies.</summary>
     public List<EnumRaw> Enums { get; } = new();
     /// <summary>
@@ -55,6 +57,12 @@ public sealed class DomainModel
 
     /// <summary>Event-FullName → (Simple, Persisted, Felder, Meta).</summary>
     public Dictionary<string, EventType> Events { get; } = new(StringComparer.Ordinal);
+    /// <summary>Der Schreiber-Typ (3. Parameter) der Projektions-Handles im Code — nur wenn eindeutig.</summary>
+    public string? ProjektionsSchreiber, ProjektionsSchreiberNamespace;
+    /// <summary>Gemeinsame Basisklasse aller Store-Impls (nur eindeutig): Name, Namespace, Ctor-Parameter, usings.</summary>
+    public (string Name, string Ns, List<(string Typ, string Name)> Ktor, List<string> Usings)? StoreBasis;
+    /// <summary>Namespace aller Store-Impls (nur eindeutig).</summary>
+    public string? StoreImplNamespace;
     /// <summary>Command-FullName → (Simple, IsCreation, Felder, Meta).</summary>
     public Dictionary<string, CommandType> Commands { get; } = new(StringComparer.Ordinal);
 }
@@ -148,8 +156,31 @@ public sealed class RuleRaw
     public string? CompLambda;
 }
 
+/// <summary>
+/// Quelltext einer Konsumenten-/Reader-Klasse verbatim (für den verlustfreien Round-trip): Datei, Doku, Form, Basisliste,
+/// Attribute, die übrigen Member (Zusatz) und die using-Direktiven der Datei (auch Aliase).
+/// </summary>
+public sealed class KlassenQuelle
+{
+    public string? Datei, Doku, Typart, Attribute, Zusatz;
+    public List<string> Basen = new(), Usings = new();
+}
+
+/// <summary>Die Signatur eines Handles verbatim: Parameternamen, Fähigkeits-Parameter, Rückgabe, Modifizierer, Rumpf.</summary>
+public sealed class HandleSigRaw
+{
+    public string Parameter = "";
+    public List<string> Kontext = new();
+    public List<(string Typ, string Name)> Faehigkeiten = new();
+    public string Rueckgabe = "", Modifikatoren = "";
+    public string? Rumpf, Ausdruck, Datei;
+}
+
 public sealed class ProjectionRaw
 {
+    /// <summary>Die Klasse verbatim (Round-trip) und je Handle (Event-Simple-Name) die Signatur verbatim.</summary>
+    public KlassenQuelle Quelle = new();
+    public Dictionary<string, HandleSigRaw> HandleSigs = new();
     public string Name = "", Full = "", Namespace = "";
     /// <summary>Der Wert der SubscriberId, wenn er zur Compile-Zeit konstant ist; sonst null (nicht geraten).</summary>
     public string? SubscriberId;
@@ -181,6 +212,9 @@ public sealed class QueryRaw
 
 public sealed class ReaderRaw
 {
+    public KlassenQuelle Quelle = new();
+    /// <summary>Signatur verbatim je Query (Simple-Name).</summary>
+    public Dictionary<string, HandleSigRaw> HandleSigs = new();
     public string Name = "", Full = "", Namespace = "", ProjectionName = "";
     public bool TrackDeps = true;
     public List<string> QueryNames = new();
@@ -223,6 +257,10 @@ public sealed class HandleVertragRaw
 
 public sealed class PipelineRaw
 {
+    public string? Datei;
+    public KlassenQuelle Quelle = new();
+    /// <summary>Signatur verbatim je Eingang (FullName).</summary>
+    public Dictionary<string, HandleSigRaw> HandleSigs = new();
     public string Name = "", Full = "", Namespace = "";
     /// <summary>Der Wert der PipelineId, wenn er zur Compile-Zeit konstant ist; sonst null (nicht geraten).</summary>
     public string? PipelineId;
@@ -252,6 +290,10 @@ public sealed class StoreFnRaw
     public string Faehigkeit = "", FaehigkeitFull = "";
     /// <summary>Alle Typen (FullNames), die die Signatur nennt — auch in Typ-Argumenten (für ReadModel → Store).</summary>
     public HashSet<string> TypRefs = new(StringComparer.Ordinal);
+    /// <summary>Die Signatur verbatim (Rückgabe, Parameter mit Default) + Ort/Doku der Fähigkeit — für den Round-trip.</summary>
+    public string RueckgabeVoll = "Task";
+    public List<(string Typ, string Name, string? Standard)> ParamsVoll = new();
+    public string? FaehigkeitNamespace, FaehigkeitDatei, FaehigkeitDoku;
 }
 
 /// <summary>
@@ -269,6 +311,11 @@ public sealed class StoreRaw
     public List<string> ImplsFull = new();
     /// <summary>Mehr als eine konkrete Klasse implementiert dasselbe Interface → DI-Auflösung mehrdeutig.</summary>
     public List<string> MehrdeutigeImpls = new();
+    /// <summary>Datei + Doku des Bündels; false = Fähigkeit ohne Bündel (eigener Store).</summary>
+    public string? Datei, Doku;
+    public bool IstBuendel = true;
+    /// <summary>Die EINZIGE Impl-Klasse (sonst null): Name, Namespace, Datei der Deklaration, Datei der Schreib-/Lese-Methoden.</summary>
+    public (string Name, string Ns, string? Datei, string? SchreibDatei, string? LeseDatei)? Impl;
 }
 
 /// <summary>
@@ -376,6 +423,13 @@ public sealed class DomainExtractor
             if (reader != null) m.Readers.Add(reader);
         }
 
+        // Der Schreiber-Typ der Projektions-Handles (CQRS057: 3. Parameter) — aus dem Code, nur wenn eindeutig.
+        var schreiber = _types.Where(t => Sym.Implements(t, _iSubscriber)).SelectMany(OeffentlicheMethoden)
+            .Where(mm => mm.Parameters.Length >= 3 && Sym.Implements(mm.Parameters[0].Type, _iEvent)
+                         && mm.Parameters[1].Type.ToDisplayString() == _iAggEnvelope?.ToDisplayString())
+            .Select(mm => mm.Parameters[2].Type).GroupBy(x => x.Fq()).Select(g => g.First()).ToList();
+        if (schreiber.Count == 1) { m.ProjektionsSchreiber = schreiber[0].Name; m.ProjektionsSchreiberNamespace = schreiber[0].ContainingNamespace.Fq(); }
+
         CatalogDomainTypes(m);
         SeparateKonfigs(m);
         LinkReadModelStores(m);
@@ -465,6 +519,7 @@ public sealed class DomainExtractor
             if (Sym.Implements(t, _iQueryResponse)) m.Responses.Add(raw);
             else if (Sym.Implements(t, _iReadModel)) m.ReadModels.Add(raw);
             else if (Sym.Implements(t, _iPipelineTrigger)) m.Triggers.Add(raw);
+            else if (_iSelfMessage != null && Sym.Implements(t, _iSelfMessage)) m.SelbstNachrichten.Add(raw);
             // Value Object = als Wertobjekt markiert ODER ein Record (Datenträger per Sprachkonstrukt) ohne jede Rolle.
             // Klassen ohne Marker sind Dienste/Helfer (z. B. Store-Implementierungen), keine Werte.
             else if ((Sym.Implements(t, _iWertobjekt) || t.IsRecord)
@@ -478,6 +533,8 @@ public sealed class DomainExtractor
         m.Responses.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.ReadModels.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Triggers.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
+        m.SelbstNachrichten.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
+        m.Triggers.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
     }
 
     private EnumRaw ReadEnum(INamedTypeSymbol t)
@@ -487,7 +544,7 @@ public sealed class DomainExtractor
         foreach (var f in t.GetMembers().OfType<IFieldSymbol>().Where(f => f.HasConstantValue))
         {
             var syn = decl?.Members.FirstOrDefault(x => x.Identifier.Text == f.Name);
-            e.Werte.Add(syn?.EqualsValue is { } ev ? $"{f.Name} = {ev.Value}" : f.Name);
+            e.Werte.Add(syn != null ? Codeformen.Feldregeln.EnumWert(syn) : f.Name);
             if (Convert.ToInt64(f.ConstantValue) == 0) e.HatNull = true;
         }
         return e;
@@ -575,6 +632,16 @@ public sealed class DomainExtractor
                     Return = isRead ? UnwrapTask(im.ReturnType) : null,
                 };
                 foreach (var tr in im.Parameters.Select(p => p.Type).Append(im.ReturnType).SelectMany(TypUndArgumente)) fn.TypRefs.Add(tr);
+                // Verbatim aus der Deklaration (Rückgabe/Parameter wie geschrieben) — der Scaffolder schreibt sie genau so zurück.
+                if (im.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is MethodDeclarationSyntax ms)
+                {
+                    fn.RueckgabeVoll = ms.ReturnType.ToString();
+                    fn.ParamsVoll = ms.ParameterList.Parameters.Select(p => (p.Type?.ToString() ?? "", p.Identifier.Text, p.Default?.Value.ToString())).ToList();
+                }
+                var fDecl = QuellDeklarationen(f).FirstOrDefault();
+                fn.FaehigkeitNamespace = f.ContainingNamespace.Fq();
+                fn.FaehigkeitDatei = fDecl?.SyntaxTree.FilePath;
+                fn.FaehigkeitDoku = fDecl == null ? null : Summary(fDecl);
                 foreach (var impl in impls)
                     if ((fn.Body == null || RegistrierteImpls().Contains(impl.Fq()))
                         && Sym.Implementierung(impl, im) is IMethodSymbol implM && MethodBody(implM) is { } body)
@@ -586,7 +653,9 @@ public sealed class DomainExtractor
 
         foreach (var b in buendel.OrderBy(x => x.Fq(), StringComparer.Ordinal))
         {
-            var store = new StoreRaw { Name = b.Name, Namespace = b.ContainingNamespace.Fq(), BuendelFull = b.Fq() };
+            var bDecl = QuellDeklarationen(b).FirstOrDefault();
+            var store = new StoreRaw { Name = b.Name, Namespace = b.ContainingNamespace.Fq(), BuendelFull = b.Fq(),
+                Datei = bDecl?.SyntaxTree.FilePath, Doku = bDecl == null ? null : Summary(bDecl) };
             // Reihenfolge = Deklarations-Reihenfolge der Basisliste (Code-Fakt), nicht alphabetisch.
             foreach (var f in b.Interfaces.Where(IstFaehigkeit).Concat(b.AllInterfaces.Where(IstFaehigkeit)))
                 Nimm(store, f);
@@ -594,7 +663,9 @@ public sealed class DomainExtractor
         }
         foreach (var f in faehigkeiten.Where(f => !_faehigkeiten.ContainsKey(f.Fq())))
         {
-            var store = new StoreRaw { Name = f.Name, Namespace = f.ContainingNamespace.Fq(), BuendelFull = f.Fq() };
+            var fDecl = QuellDeklarationen(f).FirstOrDefault();
+            var store = new StoreRaw { Name = f.Name, Namespace = f.ContainingNamespace.Fq(), BuendelFull = f.Fq(), IstBuendel = false,
+                Datei = fDecl?.SyntaxTree.FilePath };
             Nimm(store, f);
             stores.Add(store);
         }
@@ -602,6 +673,47 @@ public sealed class DomainExtractor
             if (impls.Count > 1 && _faehigkeiten.TryGetValue(f, out var z))
                 stores.First(s => s.Name == z.Store).MehrdeutigeImpls.Add($"{f[(f.LastIndexOf('.') + 1)..]}: {string.Join(", ", impls)}");
         m.Stores.AddRange(stores.OrderBy(s => s.Name, StringComparer.Ordinal));
+        LeseStoreImpls(m);
+    }
+
+    /// <summary>
+    /// Je Store die EINZIGE Impl-Klasse (mehrere/keine ⇒ null, nichts geraten) und wo ihre Teile liegen: Deklaration mit
+    /// Basisliste, Datei der Schreib- bzw. Lese-Methoden (nur wenn eindeutig). Dazu die Rahmen-Fakten für NEUE Impls:
+    /// gemeinsame Basisklasse und gemeinsamer Namespace aller Impls — nur wenn eindeutig.
+    /// </summary>
+    private void LeseStoreImpls(DomainModel m)
+    {
+        var impls = new List<INamedTypeSymbol>();
+        foreach (var s in m.Stores)
+        {
+            if (s.ImplsFull.Count != 1) continue;
+            var impl = _types.FirstOrDefault(t => t.Fq() == s.ImplsFull[0]);
+            if (impl == null || !IstDomänenAssembly(impl.ContainingAssembly)) continue;
+            impls.Add(impl);
+            var decls = QuellDeklarationen(impl).OfType<TypeDeclarationSyntax>().ToList();
+            string? Datei(bool lesen)
+            {
+                var dateien = s.Fns.Where(f => f.IsRead == lesen)
+                    .Select(f => _comps.Select(c => c.GetTypeByMetadataName(f.FaehigkeitFull)).FirstOrDefault(x => x != null)?.GetMembers(f.Name).OfType<IMethodSymbol>().FirstOrDefault())
+                    .Where(x => x != null).Select(x => Sym.Implementierung(impl, x!)?.DeclaringSyntaxReferences.FirstOrDefault()?.SyntaxTree.FilePath)
+                    .Where(x => x != null).Distinct(StringComparer.Ordinal).ToList();
+                return dateien.Count == 1 ? dateien[0] : null;
+            }
+            s.Impl = (impl.Name, impl.ContainingNamespace.Fq(), (decls.FirstOrDefault(d => d.BaseList != null) ?? decls.FirstOrDefault())?.SyntaxTree.FilePath,
+                Datei(false), Datei(true));
+        }
+        var nss = impls.Select(i => i.ContainingNamespace.Fq()).Distinct(StringComparer.Ordinal).ToList();
+        if (nss.Count == 1) m.StoreImplNamespace = nss[0];
+        var basen = impls.Select(i => i.BaseType).Where(b => b != null && b.SpecialType != SpecialType.System_Object).Select(b => b!.Fq()).Distinct(StringComparer.Ordinal).ToList();
+        if (impls.Count > 0 && basen.Count == 1 && impls.All(i => i.BaseType?.Fq() == basen[0]))
+        {
+            var b = impls[0].BaseType!;
+            var ktors = b.InstanceConstructors.Where(c => c.DeclaredAccessibility is Accessibility.Protected or Accessibility.Public).ToList();
+            if (ktors.Count == 1)
+                m.StoreBasis = (b.Name, b.ContainingNamespace.Fq(),
+                    ktors[0].Parameters.Select(p => (ShortType(p.Type), p.Name)).ToList(),
+                    ktors[0].Parameters.Select(p => p.Type.ContainingNamespace?.Fq()).Where(x => !string.IsNullOrEmpty(x)).Select(x => x!).Distinct(StringComparer.Ordinal).ToList());
+        }
     }
 
     /// <summary>Die Fähigkeits-Parameter einer Handle-Methode → (Store, Funktion, Lesen?) — reine Signatur.</summary>
@@ -763,25 +875,10 @@ public sealed class DomainExtractor
     /// <c>public T X { get; set; } [= init;]</c>, <c>public T X { get; } [= init;]</c> oder <c>public T X => expr;</c>.
     /// Alles andere (Rumpf-Accessoren, <c>private set</c>, <c>init</c>, static, Attribute) bleibt Handcode.
     /// </summary>
-    private static FieldInfo? TryStateFeld(PropertyDeclarationSyntax p)
-    {
-        if (!p.Modifiers.Any(SyntaxKind.PublicKeyword) || p.Modifiers.Any(SyntaxKind.StaticKeyword)
-            || p.Modifiers.Count != 1 || p.AttributeLists.Count > 0 || p.ExplicitInterfaceSpecifier != null)
-            return null;
-        if (p.ExpressionBody is { } eb)
-            return new FieldInfo { Name = p.Identifier.Text, Type = p.Type.ToString(), Expr = eb.Expression.ToString() };
-        if (p.AccessorList is not { } al || al.Accessors.Any(a => a.Body != null || a.ExpressionBody != null || a.Modifiers.Count > 0))
-            return null;
-        var kinds = al.Accessors.Select(a => a.Kind()).ToList();
-        var nurGet = kinds.SequenceEqual(new[] { SyntaxKind.GetAccessorDeclaration });
-        var getSet = kinds.SequenceEqual(new[] { SyntaxKind.GetAccessorDeclaration, SyntaxKind.SetAccessorDeclaration });
-        if (!nurGet && !getSet) return null;
-        return new FieldInfo
-        {
-            Name = p.Identifier.Text, Type = p.Type.ToString(),
-            Default = p.Initializer?.Value.ToString(), NurGet = nurGet,
-        };
-    }
+    private static FieldInfo? TryStateFeld(PropertyDeclarationSyntax p) =>
+        Codeformen.Feldregeln.State(p) is { } f
+            ? new FieldInfo { Name = f.Name, Type = f.Typ, Default = f.Standard, Expr = f.Ausdruck, NurGet = f.NurGet }
+            : null;
 
     // ── Quelltext-Helfer ─────────────────────────────────────────────────────
 
@@ -816,7 +913,7 @@ public sealed class DomainExtractor
         {
             var model = Model(decl.SyntaxTree);
             // Die Rollen-Marker (sie bestimmen die Art und werden aus ihr geschrieben) — alle übrigen Basen sind Code-Fakt.
-            var rollen = new[] { _iCommand, _iCreation, _iEvent, _iTransient, _iQuery, _iQueryResponse, _iReadModel, _iPipelineTrigger }
+            var rollen = new[] { _iCommand, _iCreation, _iEvent, _iTransient, _iQuery, _iQueryResponse, _iReadModel, _iPipelineTrigger, _iSelfMessage }
                 .Where(x => x != null).Select(x => x!.Fq()).ToHashSet(StringComparer.Ordinal);
             basen = bl.Types.Where(b => model.GetTypeInfo(b.Type).Type is not INamedTypeSymbol bt || !rollen.Contains(bt.Fq()))
                 .Select(b => b.ToString()).ToList();
@@ -1017,6 +1114,49 @@ public sealed class DomainExtractor
 
     // ── Projektionen / Reaktionen / Queries / Reader / Pipelines ─────────────
 
+    /// <summary>
+    /// Die Klasse verbatim: Datei/Form/Basisliste aus der Deklaration mit Basisliste, Attribute (ohne die ausgenommenen),
+    /// Doku, die übrigen Member aller handgeschriebenen Teile (ohne die Handles) und die using-Direktiven (auch Aliase).
+    /// </summary>
+    private KlassenQuelle LiesKlasse(INamedTypeSymbol t, IEnumerable<IMethodSymbol> handles, string? ohneAttribut = null)
+    {
+        var decls = QuellDeklarationen(t).OfType<TypeDeclarationSyntax>().ToList();
+        var haupt = decls.FirstOrDefault(d => d.BaseList != null) ?? decls.FirstOrDefault();
+        var q = new KlassenQuelle();
+        if (haupt == null) return q;
+        q.Datei = haupt.SyntaxTree.FilePath;
+        q.Doku = decls.Select(Summary).FirstOrDefault(d => d != null);
+        q.Typart = string.Join(" ", haupt.Modifiers.Where(x => !x.IsKind(SyntaxKind.PartialKeyword)).Select(x => x.Text).Append(haupt.Keyword.Text));
+        q.Basen = decls.Where(d => d.BaseList != null).SelectMany(d => d.BaseList!.Types.Select(b => b.ToString())).Distinct(StringComparer.Ordinal).ToList();
+        var attrs = decls.SelectMany(d => d.AttributeLists)
+            .Where(al => ohneAttribut == null || !al.Attributes.Any(a => Model(a.SyntaxTree).GetTypeInfo(a).Type?.ToDisplayString() == ohneAttribut))
+            .Select(al => al.ToString()).ToList();
+        q.Attribute = attrs.Count == 0 ? null : string.Join("\n", attrs);
+        var handleSyntax = handles.SelectMany(h => h.DeclaringSyntaxReferences).Select(r => r.GetSyntax()).ToHashSet();
+        q.Zusatz = MemberText(decls.SelectMany(d => d.Members).Where(mm => !handleSyntax.Contains(mm)));
+        q.Usings = decls.SelectMany(d => d.SyntaxTree.GetRoot().DescendantNodes(n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax)
+                .OfType<UsingDirectiveSyntax>().Where(u => u.GlobalKeyword.IsKind(SyntaxKind.None)))
+            .Select(u => u.ToString().Trim()[("using ".Length)..].TrimEnd(';').Trim())
+            .Where(u => !_impliziteUsings.Contains(u)).Distinct(StringComparer.Ordinal).OrderBy(u => u, StringComparer.Ordinal).ToList();
+        return q;
+    }
+
+    /// <summary>Die Signatur eines Handles verbatim; <paramref name="kontext"/> = Anzahl Kontext-Parameter nach dem Eingang (CQRS057).</summary>
+    private static HandleSigRaw LiesHandleSig(IMethodSymbol mm, int kontext)
+    {
+        var sig = new HandleSigRaw { Parameter = mm.Parameters[0].Name };
+        if (mm.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is not MethodDeclarationSyntax s) return sig;
+        var ps = s.ParameterList.Parameters;
+        sig.Kontext = ps.Skip(1).Take(kontext).Select(p => p.Identifier.Text).ToList();
+        sig.Faehigkeiten = ps.Skip(1 + kontext).Select(p => (p.Type?.ToString() ?? "", p.Identifier.Text)).ToList();
+        sig.Rueckgabe = s.ReturnType.ToString();
+        sig.Modifikatoren = string.Join(" ", s.Modifiers.Select(x => x.Text));
+        sig.Datei = s.SyntaxTree.FilePath;
+        if (s.ExpressionBody is { } e) sig.Ausdruck = Dedent(e.Expression.ToString().Replace("\r\n", "\n")).Trim();
+        else sig.Rumpf = MethodBody(mm);
+        return sig;
+    }
+
     private ProjectionRaw? TryReadProjection(INamedTypeSymbol t)
     {
         // Handler = öffentliche Methode: Event als erster Parameter + Aggregat-Umschlag (Name egal, die Typen tragen die Rolle).
@@ -1048,7 +1188,9 @@ public sealed class DomainExtractor
             if (sends.Count > 0) { raw.HandleSends[evt] = sends; raw.IstReaktion = true; }
             if (pubs.Count > 0) raw.HandlePublishes[evt] = pubs;
             raw.HandleVertraege[evt] = LiesHandleVertrag(mm);
+            raw.HandleSigs[evt] = LiesHandleSig(mm, 2);
         }
+        raw.Quelle = LiesKlasse(t, methods);
         return raw;
     }
 
@@ -1098,7 +1240,9 @@ public sealed class DomainExtractor
                 raw.HandleResponses[q] = (Vertrag.IstOneOf(inner) ? inner.TypeArguments.OfType<INamedTypeSymbol>() : new[] { inner })
                     .Select(x => x.Name).ToList();
             raw.HandleVertraege[q] = LiesHandleVertrag(mm);
+            raw.HandleSigs[q] = LiesHandleSig(mm, 2);
         }
+        raw.Quelle = LiesKlasse(t, methods, Vertrag.ProjectionReaderAttribute);
         return raw;
     }
 
@@ -1108,7 +1252,8 @@ public sealed class DomainExtractor
         pipe.PipelineId = KonstanterWert(t, _iPipelineHandler, Vertrag.PipelineId);
 
         // Handler = öffentliche Methode mit PipelineContext-Parameter (Eingang = erster Parameter).
-        foreach (var method in OeffentlicheMethoden(t).Where(mm => mm.Parameters.Skip(1).Any(p => p.Type.ToDisplayString() == _pipelineContext?.ToDisplayString())))
+        var handles = OeffentlicheMethoden(t).Where(mm => mm.Parameters.Skip(1).Any(p => p.Type.ToDisplayString() == _pipelineContext?.ToDisplayString())).ToList();
+        foreach (var method in handles)
         {
             if (method.Parameters.Length < 1 || method.Parameters[0].Type is not INamedTypeSymbol input) continue;
             var kind = Sym.Implements(input, _iPipelineTrigger) ? "trigger"
@@ -1124,7 +1269,10 @@ public sealed class DomainExtractor
             if (trigs.Count > 0) pipe.HandleEmitsTriggers[input.Fq()] = trigs;
             var fs = FaehigkeitenVon(method);
             if (fs.Count > 0) pipe.HandleFaehigkeiten[input.Fq()] = fs;
+            pipe.HandleSigs[input.Fq()] = LiesHandleSig(method, 1);
         }
+        pipe.Quelle = LiesKlasse(t, handles.Where(h => h.Parameters.Length >= 1 && h.Parameters[0].Type is INamedTypeSymbol));
+        pipe.Datei = pipe.Quelle.Datei;
         return pipe;
     }
 
@@ -1258,28 +1406,10 @@ public sealed class DomainExtractor
     /// <c>required</c>), ohne Attribute, Auto-Accessoren <c>get;</c> / <c>get; set;</c> / <c>get; init;</c>, optional mit
     /// Initialisierer. Alles andere (berechnet, Rümpfe, Attribute) bleibt Handcode.
     /// </summary>
-    private static FieldInfo? EigenschaftsFeld(PropertyDeclarationSyntax p)
-    {
-        var mods = p.Modifiers.Select(x => x.Kind()).ToList();
-        if (!mods.Contains(SyntaxKind.PublicKeyword) || mods.Any(k => k is not (SyntaxKind.PublicKeyword or SyntaxKind.RequiredKeyword))) return null;
-        if (p.AttributeLists.Count > 0 || p.ExplicitInterfaceSpecifier != null || p.ExpressionBody != null) return null;
-        if (p.AccessorList is not { } al || al.Accessors.Any(a => a.Body != null || a.ExpressionBody != null || a.Modifiers.Count > 0 || a.AttributeLists.Count > 0))
-            return null;
-        var kinds = al.Accessors.Select(a => a.Kind()).ToList();
-        string? zugriff = kinds switch
-        {
-            [SyntaxKind.GetAccessorDeclaration] => "{ get; }",
-            [SyntaxKind.GetAccessorDeclaration, SyntaxKind.SetAccessorDeclaration] => "{ get; set; }",
-            [SyntaxKind.GetAccessorDeclaration, SyntaxKind.InitAccessorDeclaration] => "{ get; init; }",
-            _ => null,
-        };
-        if (zugriff == null) return null;
-        return new FieldInfo
-        {
-            Name = p.Identifier.Text, Type = p.Type.ToString(), Default = p.Initializer?.Value.ToString(),
-            Zugriff = zugriff, Pflicht = mods.Contains(SyntaxKind.RequiredKeyword),
-        };
-    }
+    private static FieldInfo? EigenschaftsFeld(PropertyDeclarationSyntax p) =>
+        Codeformen.Feldregeln.Eigenschaft(p) is { } f
+            ? new FieldInfo { Name = f.Name, Type = f.Typ, Default = f.Standard, Zugriff = f.Zugriff, Pflicht = f.Pflicht }
+            : null;
 
     private static string ShortType(ITypeSymbol t) =>
         t.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat

@@ -54,3 +54,32 @@ ausgang MahnlaufPipeline.MahnlaufAngestossen strom | command:EroeffneMahnung; co
 ausgang MahnlaufPipeline.MahnlaufGeprueft strom | command:EroeffneMahnung; command:MeldeSchaden; storefn:ILeihBuch.OffeneAsync
 ausgang MahnlaufPipeline.PipelineGestartet strom | self:Mahnrunde
 ausgang MahnlaufPipeline.Mahnrunde strom | command:EroeffneMahnung; self:Mahnrunde; frist:MeldeSchaden
+
+# ── Fähigkeits-Namen sind Code-Fakt (Interface je Funktion), nicht aus dem Fn-Namen geraten ──
+faehigkeit Leihwesen.Lesen.INotiereAusleihe schreibt ILeihBuch.SchreibeAsync
+faehigkeit Leihwesen.Lesen.ISchliesseAusleihe schreibt ILeihBuch.SchliesseAsync
+faehigkeit Leihwesen.Lesen.IZaehleOffene liest ILeihBuch.OffeneAsync
+
+# ── Im Editor GEZEICHNET (Sonde/Gezeichnet.board.json → BoardLeseseite → Scaffolder → Fork → neu eingelesen) ──
+#    Store neu (Impl-Klasse ohne Basis, weil die Impls im Code keine gemeinsame haben), Fähigkeit von MerkeVorAsync im Panel
+#    benannt, die von ZaehleAsync abgeleitet (I + Methode ohne Async). Kanten = Fähigkeits-Parameter, Ausgänge = Signatur.
+record Leihwesen.Lesen.Vormerkungen query | LeserId:Guid
+record Leihwesen.Lesen.VormerkungenAntwort queryresponse | Anzahl:int
+readmodel Leihwesen.Lesen.Vormerkung store=IVormerkbuch | Id:Guid, LeserId:Guid
+store Leihwesen.Lesen.IVormerkbuch | schreibt MerkeVorAsync(v:Vormerkung) | liest ZaehleAsync(leserId:Guid):int
+faehigkeit Leihwesen.Lesen.INotiereVormerkung schreibt IVormerkbuch.MerkeVorAsync
+faehigkeit Leihwesen.Lesen.IZaehle liest IVormerkbuch.ZaehleAsync
+projektion Leihwesen.Lesen.Vormerkliste id=vormerkliste pull | Ausgeliehen -> IVormerkbuch.MerkeVorAsync
+reaktion Leihwesen.Lesen.Schadenpruefung id=schadenpruefung | Zurueckgegeben -> sendet MeldeSchaden
+reader Leihwesen.Lesen.VormerkAuskunft projektion=Vormerkliste trackDeps=true | Vormerkungen -> IVormerkbuch.ZaehleAsync => VormerkungenAntwort
+ausgang Vormerkliste.Ausgeliehen nichts | storefn:IVormerkbuch.MerkeVorAsync
+ausgang Schadenpruefung.Zurueckgegeben strom | command:MeldeSchaden
+ausgang VormerkAuskunft.Vormerkungen einzeln | response:VormerkungenAntwort; storefn:IVormerkbuch.ZaehleAsync
+
+# ── Gezeichneter BETRIEB: Pipeline mit Konfig (Konstruktor), neuem Trigger, Self-Tick (neue Selbst-Nachricht), Lese-Fähigkeit ──
+#    Konfig = Record im Pipeline-Konstruktor (Code-Fakt), Ausgänge im OneOf (auch der einzelne), Self-Handle als eigener Eingang.
+record Leihwesen.Vormerkung.VormerkKonfig konfig | Tage:int
+trigger PruefeVormerkungen | LeserId:Guid
+pipeline Leihwesen.Vormerkung.Vormerkpruefung id=vormerkpruefung konfigs=VormerkKonfig | PruefeVormerkungen(trigger) -> sendet EroeffneMahnung -> IVormerkbuch.ZaehleAsync; VormerkTick(self) -> sendet MeldeSchaden
+ausgang Vormerkpruefung.PruefeVormerkungen strom | command:EroeffneMahnung; self:VormerkTick; storefn:IVormerkbuch.ZaehleAsync
+ausgang Vormerkpruefung.VormerkTick strom | command:MeldeSchaden

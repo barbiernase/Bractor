@@ -39,6 +39,20 @@ public static class ModellMapper
             records.Add(AlsRecord(e.Simple, e.Persisted ? RecordArt.Event : RecordArt.Rejection, e.Fields, e.Meta, dom.Wurzel) with { Aggregat = AggVonEvt(full) });
         foreach (var vo in dom.ValueObjects)
             records.Add(AlsRecord(vo.Name, RecordArt.ValueObject, vo.Fields, vo.Meta, dom.Wurzel));
+        // Leseseiten-Records: Queries, Responses, ReadModels (Marker IQuery/IQueryResponse/IReadModel).
+        foreach (var q in dom.Queries.Where(q => q.Meta.IstDomäne).OrderBy(q => q.Full, StringComparer.Ordinal))
+            records.Add(AlsRecord(q.Name, RecordArt.Query, q.Fields, q.Meta, dom.Wurzel));
+        foreach (var r in dom.Responses.OrderBy(r => r.Full, StringComparer.Ordinal))
+            records.Add(AlsRecord(r.Name, RecordArt.Antwort, r.Fields, r.Meta, dom.Wurzel));
+        foreach (var r in dom.ReadModels.OrderBy(r => r.Full, StringComparer.Ordinal))
+            records.Add(AlsRecord(r.Name, RecordArt.ReadModel, r.Fields, r.Meta, dom.Wurzel));
+        // Betrieb: Konfigurations-Records (Ctor-Injektion), Trigger-Nachrichten, Selbst-Nachrichten der Pipelines.
+        foreach (var r in dom.Konfigs)
+            records.Add(AlsRecord(r.Name, RecordArt.Konfig, r.Fields, r.Meta, dom.Wurzel));
+        foreach (var r in dom.Triggers)
+            records.Add(AlsRecord(r.Name, RecordArt.Trigger, r.Fields, r.Meta, dom.Wurzel));
+        foreach (var r in dom.SelbstNachrichten)
+            records.Add(AlsRecord(r.Name, RecordArt.Selbst, r.Fields, r.Meta, dom.Wurzel));
 
         var enums = dom.Enums.Select(e => new Enumeration
         {
@@ -118,13 +132,97 @@ public static class ModellMapper
             Kennung = Kennung(dom.Wurzel),
             Skalare = WireSkalare(),
             OneOfMax = dom.OneOfMax, UndMax = dom.UndMax,
+            ProjektionsSchreiber = dom.ProjektionsSchreiber, ProjektionsSchreiberNamespace = dom.ProjektionsSchreiberNamespace,
+            StoreBasis = dom.StoreBasis is { } sb ? new StoreBasis
+            {
+                Name = sb.Name, Namespace = sb.Ns, Usings = sb.Usings,
+                KtorParameter = sb.Ktor.Select(k => new Parameter { Typ = k.Typ, Name = k.Name }).ToList(),
+            } : null,
+            StoreImplNamespace = dom.StoreImplNamespace,
         };
 
-        return new EditorModell
+        return Herkunft.Stempeln(new EditorModell
         {
             Records = records, Enums = enums, Aggregate = aggregate, Decider = decider, Applier = applier, Sagas = sagas, Rahmen = rahmen,
-        };
+            Lesen = Leseseite(dom),
+        });
     }
+
+    // ── Leseseite: Stores (Fähigkeit + Bündel + Impl), Projektionen/Reaktionen, Reader, Pipeline-Fähigkeiten ──────────
+    private static Leseseite Leseseite(DomainModel dom)
+    {
+        string? Rel(string? abs) => Relativ(dom.Wurzel, abs);
+        var stores = dom.Stores.Select(s => new Store
+        {
+            Name = s.Name, Namespace = s.Namespace, Doku = s.Doku, IstBuendel = s.IstBuendel, Datei = Rel(s.Datei),
+            // Kanonische Reihenfolge wie die Store-Karte: Schreib-Fns, dann Lese-Fns (je in Code-Reihenfolge).
+            Fns = s.Fns.Where(f => !f.IsRead).Concat(s.Fns.Where(f => f.IsRead)).Select(f => new Faehigkeit
+            {
+                Name = f.Faehigkeit, Namespace = f.FaehigkeitNamespace == s.Namespace ? null : f.FaehigkeitNamespace,
+                Methode = f.Name, Lesen = f.IsRead, Rueckgabe = f.RueckgabeVoll, Doku = f.FaehigkeitDoku, Datei = Rel(f.FaehigkeitDatei),
+                Parameter = f.ParamsVoll.Select(p => new Parameter { Typ = p.Typ, Name = p.Name, Standard = p.Standard }).ToList(),
+            }).ToList(),
+            Impl = s.Impl is { } i ? new StoreImpl
+            {
+                Name = i.Name, Namespace = i.Ns, Datei = Rel(i.Datei), SchreibDatei = Rel(i.SchreibDatei), LeseDatei = Rel(i.LeseDatei),
+            } : null,
+        }).ToList();
+
+        Handle AlsHandle(string eingang, HandleSigRaw? sig, HandleVertragRaw? v, bool mitRumpf = true) => new()
+        {
+            Eingang = eingang,
+            Parameter = sig?.Parameter ?? "evt",
+            Kontext = sig?.Kontext,
+            Faehigkeiten = sig?.Faehigkeiten.Select(f => new Parameter { Typ = f.Typ, Name = f.Name }).ToList() ?? [],
+            Ausgaenge = AusgangsTypen(v),
+            Rueckgabe = sig?.Rueckgabe, Modifikatoren = sig?.Modifikatoren,
+            Rumpf = mitRumpf ? sig?.Rumpf : null, Ausdruck = mitRumpf ? sig?.Ausdruck : null,
+            Datei = Rel(sig?.Datei),
+        };
+
+        var konsumenten = dom.Projections.OrderBy(p => p.Name, StringComparer.Ordinal).Select(p => new Konsument
+        {
+            Name = p.Name, Namespace = p.Namespace, SubscriberId = p.SubscriberId, Pull = p.Pull, Append = p.Append,
+            Handles = p.ConsumesFull.Select(full => Kurz(full))
+                .Select(ev => AlsHandle(ev, p.HandleSigs.GetValueOrDefault(ev), p.HandleVertraege.GetValueOrDefault(ev))).ToList(),
+            Doku = p.Quelle.Doku, Typart = p.Quelle.Typart, Basen = p.Quelle.Basen, Attribute = p.Quelle.Attribute,
+            Zusatz = p.Quelle.Zusatz, Usings = p.Quelle.Usings, Datei = Rel(p.Quelle.Datei),
+        }).ToList();
+
+        var reader = dom.Readers.OrderBy(r => r.Name, StringComparer.Ordinal).Select(r => new Leser
+        {
+            Name = r.Name, Namespace = r.Namespace, Projektion = r.ProjectionName, TrackDeps = r.TrackDeps,
+            Handles = r.QueryNames.Select(q => AlsHandle(q, r.HandleSigs.GetValueOrDefault(q), r.HandleVertraege.GetValueOrDefault(q))).ToList(),
+            Doku = r.Quelle.Doku, Typart = r.Quelle.Typart, Basen = r.Quelle.Basen, Attribute = r.Quelle.Attribute,
+            Zusatz = r.Quelle.Zusatz, Usings = r.Quelle.Usings, Datei = Rel(r.Quelle.Datei),
+        }).ToList();
+
+        var pipelines = dom.Pipelines.OrderBy(p => p.Name, StringComparer.Ordinal).Select(p => new PipelineKarte
+        {
+            Name = p.Name, Namespace = p.Namespace, Datei = Rel(p.Datei), PipelineId = p.PipelineId, Konfigs = p.Konfigs,
+            Handles = p.Handles.Select(h => AlsHandle(Kurz(h.InputFull), p.HandleSigs.GetValueOrDefault(h.InputFull),
+                p.HandleVertraege.GetValueOrDefault(h.InputFull))).ToList(),
+            Doku = p.Quelle.Doku, Typart = p.Quelle.Typart, Basen = p.Quelle.Basen, Attribute = p.Quelle.Attribute,
+            Zusatz = p.Quelle.Zusatz, Usings = p.Quelle.Usings,
+        }).ToList();
+
+        return new Leseseite { Stores = stores, Konsumenten = konsumenten, Reader = reader, Pipelines = pipelines };
+    }
+
+    /// <summary>
+    /// Die Ausgänge eines Handles als Typ-Texte, wie sie in der OneOf-Signatur stehen — Planung als <c>Selbst&lt;T&gt;</c>/
+    /// <c>Frist&lt;T&gt;</c>/<c>FristStorno&lt;T&gt;</c> (die Planungs-Typnamen aus dem Vertrag); Fähigkeiten sind Parameter, keine Ausgänge.
+    /// </summary>
+    internal static List<string> AusgangsTypen(HandleVertragRaw? v) => v == null ? [] : v.Ausgaenge.Where(a => a.Art != "storefn")
+        .Select(a => a.Art switch
+        {
+            "self" => $"{Generisch(Vertrag.SelbstTyp)}<{a.Typ}>",
+            "frist" => $"{Generisch(Vertrag.FristTyp)}<{a.Typ}>",
+            "fristStorno" => $"{Generisch(Vertrag.FristStornoTyp)}<{a.Typ}>",
+            _ => a.Typ,
+        }).ToList();
+
+    private static string Generisch(string metadatenName) => metadatenName.Split('`')[0];
 
     /// <summary>Stabile Kennung der Solution (FNV-1a über den Wurzelpfad) — kein Inhalt, nur Unterscheidung.</summary>
     private static string Kennung(string wurzel)
@@ -177,7 +275,11 @@ public static class ModellMapper
     /// </summary>
     public static string ZuBoardJson(KnowledgeGraph graph, DomainModel dom, CompositionRoot cr)
     {
-        var root = JsonNode.Parse(ZuEditorModell(graph, dom).AlsJson())!.AsObject();
+        var modell = ZuEditorModell(graph, dom);
+        var root = JsonNode.Parse(modell.AlsJson())!.AsObject();
+        // Die Leseseite zeigt das Board in seinen eigenen Sammlungen (stores/projektionen/reader/…) — mit den Code-Fakten
+        //   darin (Datei, Zusatz, Signatur verbatim); Board → Modell (DomainEditor.BoardLeseseite) liest sie zurück.
+        root.Remove("lesen");
         var records = root["records"]!.AsArray();
 
         // (Store, Methode, isRead) → Board-Fn-Id — damit Projektion/Reader-Handles die aufgerufene Store-Fn
@@ -209,14 +311,27 @@ public static class ModellMapper
             store = a.Store,
         }).ToArray();
 
-        // Query- und Response-Records — als Board-Records, damit Reader daran andocken.
-        foreach (var q in dom.Queries.Where(q => q.Meta.IstDomäne).OrderBy(q => q.Full, StringComparer.Ordinal))
-            records.Add(Knoten(RecordJson(q.Name, "query", q.Fields, q.Meta, dom.Wurzel)));
-        foreach (var r in dom.Responses)
-            records.Add(Knoten(RecordJson(r.Name, "queryresponse", r.Fields, r.Meta, dom.Wurzel)));
-        // Konfigurations-Records (per DI in Konsumenten injiziert) — eigene Art, KEIN Value Object.
-        foreach (var k in dom.Konfigs)
-            records.Add(Knoten(RecordJson(k.Name, "konfig", k.Fields, k.Meta, dom.Wurzel)));
+        // Query- und Response-Records stehen schon als Records im Modell (Reader docken daran an). ReadModels zeigt das Board
+        //   als eigene Sammlung (readModels) — die Record-Form reist dort mit (Zusatz/Basen/…), Board → Modell baut sie zurück.
+        // Trigger- und Selbst-Nachrichten zeigt das Board ebenfalls in eigenen Sammlungen (triggers / selbstNachrichten).
+        var recordJson = records.Where(r => r != null).ToDictionary(r => $"{r!["kind"]}|{r["name"]}", r => r!, StringComparer.Ordinal);
+        foreach (var rm in records.Where(r => (string?)r?["kind"] is RecordArt.ReadModel or RecordArt.Trigger or RecordArt.Selbst).ToList()) records.Remove(rm);
+        root["selbstNachrichten"] = new JsonArray(recordJson.Where(kv => kv.Key.StartsWith(RecordArt.Selbst + "|", StringComparison.Ordinal))
+            .Select(kv => kv.Value.DeepClone()).ToArray());
+        JsonNode? TriggerCode(string name) => recordJson.GetValueOrDefault(RecordArt.Trigger + "|" + name)?.DeepClone();
+        var lesen = modell.Lesen ?? new Leseseite();
+        var storeVon = lesen.Stores.ToDictionary(s => s.Name, StringComparer.Ordinal);
+        var konsumentVon = lesen.Konsumenten.ToDictionary(k => k.Name, StringComparer.Ordinal);
+        var leserVon = lesen.Reader.ToDictionary(r => r.Name, StringComparer.Ordinal);
+        var pipelineVon = lesen.Pipelines.ToDictionary(p => p.Name, StringComparer.Ordinal);
+        // Die Signatur verbatim eines Handles (für Board → Modell: verbinden/lösen ändert nur die Fähigkeits-Parameter).
+        static object? Sig(Handle? h) => h == null ? null : new
+        {
+            parameter = h.Parameter, kontext = h.Kontext, rueckgabe = h.Rueckgabe, modifikatoren = h.Modifikatoren,
+            faehigkeitParameter = h.Faehigkeiten.Select(f => new { typ = f.Typ, name = f.Name }).ToArray(),
+            ausgangsTypen = h.Ausgaenge, ausdruck = h.Ausdruck, rumpfCode = h.Rumpf, datei = h.Datei, herkunft = h.Herkunft,
+        };
+        // Konfigurations-Records stehen als Records der Art „konfig" schon im Modell.
 
         // ReadModels — Dokument-Felder + der Store, der sie liest/schreibt.
         var readModels = dom.ReadModels.Select((rm, i) => new
@@ -224,6 +339,9 @@ public static class ModellMapper
             _id = "rm" + (i + 1), name = rm.Name, @namespace = rm.Meta.Namespace, store = rm.Store, storeKandidaten = rm.StoreKandidaten,
             felder = rm.Fields.Select(FeldJson).ToArray(),
             typart = rm.Meta.Typart, doku = rm.Meta.Doku, datei = Relativ(dom.Wurzel, rm.Meta.Datei),
+            zusatz = rm.Meta.Zusatz, usings = rm.Meta.Usings.Count > 0 ? rm.Meta.Usings : null, basen = rm.Meta.Basen, attribute = rm.Meta.Attribute,
+            ohneParameterliste = rm.Meta.OhneParameterliste ? true : (bool?)null,
+            herkunft = modell.Records.FirstOrDefault(r => r.Kind == RecordArt.ReadModel && r.Name == rm.Name && r.Namespace == rm.Meta.Namespace)?.Herkunft,
         }).ToList();
 
         // Projektionen (replaybar/idempotent) und Reaktionen (emittierend: yield Command) getrennt.
@@ -231,9 +349,11 @@ public static class ModellMapper
             .Select((p, i) => new
             {
                 _id = "pj" + (i + 1), name = p.Name, @namespace = p.Namespace, subscriberId = p.SubscriberId, pull = p.Pull, append = p.Append ? true : (bool?)null,
+                code = KlassenCode(konsumentVon.GetValueOrDefault(p.Name)),
                 handles = p.ConsumesFull.Select(full => KurzEvt(dom, full)).Select(ev => new
                 {
                     @event = ev,
+                    sig = Sig(konsumentVon.GetValueOrDefault(p.Name)?.Handles.FirstOrDefault(h => h.Eingang == Kurz(ev))),
                     fns = StoreFns(p.HandleFaehigkeiten, ev),
                     publishes = Liste(p.HandlePublishes, ev),
                     rumpf = Rumpf(p.HandleBodies, ev),
@@ -247,9 +367,12 @@ public static class ModellMapper
             .Select((p, i) => new
             {
                 _id = "rk" + (i + 1), name = p.Name, @namespace = p.Namespace, subscriberId = p.SubscriberId, pull = p.Pull,
+                append = p.Append ? true : (bool?)null,
+                code = KlassenCode(konsumentVon.GetValueOrDefault(p.Name)),
                 handles = p.ConsumesFull.Select(full => KurzEvt(dom, full)).Select(ev => new
                 {
                     @event = ev,
+                    sig = Sig(konsumentVon.GetValueOrDefault(p.Name)?.Handles.FirstOrDefault(h => h.Eingang == Kurz(ev))),
                     sends = Liste(p.HandleSends, ev),
                     publishes = Liste(p.HandlePublishes, ev),
                     rumpf = Rumpf(p.HandleBodies, ev),
@@ -265,9 +388,11 @@ public static class ModellMapper
             {
                 _id = "rd" + (i + 1), name = r.Name, @namespace = r.Namespace, trackDeps = r.TrackDeps,
                 projektion = r.ProjectionName,
+                code = KlassenCode(leserVon.GetValueOrDefault(r.Name)),
                 handles = r.QueryNames.Select(q => new
                 {
                     query = q,
+                    sig = Sig(leserVon.GetValueOrDefault(r.Name)?.Handles.FirstOrDefault(h => h.Eingang == q)),
                     fns = StoreFns(r.HandleFaehigkeiten, q),
                     responses = Liste(r.HandleResponses, q),
                     rumpf = Rumpf(r.HandleBodies, q),
@@ -284,6 +409,8 @@ public static class ModellMapper
             .Select((p, pi) => new
             {
                 _id = "pl" + (pi + 1), name = p.Name, @namespace = p.Namespace, pipelineId = p.PipelineId,
+                datei = pipelineVon.GetValueOrDefault(p.Name)?.Datei,
+                code = KlassenCode(pipelineVon.GetValueOrDefault(p.Name)), herkunft = pipelineVon.GetValueOrDefault(p.Name)?.Herkunft,
                 konfigs = p.Konfigs.ToArray(),
                 dienste = cr.PipelineDienste.TryGetValue(p.Name, out var ds) ? ds.ToArray() : Array.Empty<string>(),
                 handles = p.Handles.Select(hd =>
@@ -295,6 +422,7 @@ public static class ModellMapper
                     return new
                     {
                         inputKind = hd.InputKind,
+                        sig = Sig(pipelineVon.GetValueOrDefault(p.Name)?.Handles.FirstOrDefault(h => h.Eingang == Kurz(hd.InputFull))),
                         @event = hd.InputKind == "event" ? input : null,
                         selfName = hd.InputKind == "self" ? input : null,
                         input,
@@ -317,25 +445,39 @@ public static class ModellMapper
             .Select(kv => new
             {
                 _id = kv.Value, name = kv.Key, msgName = kv.Key,
+                @namespace = dom.Triggers.FirstOrDefault(t => t.Name == kv.Key)?.Meta.Namespace,
                 felder = triggerFelder.TryGetValue(kv.Key, out var tf) ? tf.Select(FeldJson).ToArray() : Array.Empty<object>(),
+                code = TriggerCode(kv.Key),
             }).ToList();
 
         // Stores — aus dem Roh-Domänenmodell (Bündel IStore + je Fn ihre Fähigkeit + Impl-Rümpfe).
+        // Je Fn ihre Fähigkeit verbatim (Rückgabe/Parameter/Ort) — die Store-Karte bleibt die Anzeige, „sig" der Code-Fakt.
+        object? FnSig(string store, string methode)
+        {
+            var f = storeVon.GetValueOrDefault(store)?.Fns.FirstOrDefault(x => x.Methode == methode);
+            return f == null ? null : new
+            {
+                rueckgabe = f.Rueckgabe, @namespace = f.Namespace, doku = f.Doku, datei = f.Datei, herkunft = f.Herkunft,
+                parameter = f.Parameter.Select(p => new { typ = p.Typ, name = p.Name, standard = p.Standard }).ToArray(),
+            };
+        }
         var stores = dom.Stores.Select((s, i) => new
         {
             _id = "st" + (i + 1), name = s.Name, @namespace = s.Namespace,
+            datei = storeVon.GetValueOrDefault(s.Name)?.Datei, doku = s.Doku, istBuendel = s.IstBuendel ? (bool?)null : false,
+            impl = storeVon.GetValueOrDefault(s.Name)?.Impl,
             writeFns = s.Fns.Where(f => !f.IsRead).Select((f, fi) => new
             {
                 _id = "wf_" + i + "_" + fi, name = f.Name, faehigkeit = f.Faehigkeit,
                 @params = f.Params.Select(p => new { name = p.Name, typ = p.Type }).ToArray(),
-                rumpf = f.Body,
+                rumpf = f.Body, sig = FnSig(s.Name, f.Name),
             }).ToArray(),
             readFns = s.Fns.Where(f => f.IsRead).Select((f, fi) => new
             {
                 _id = "rf_" + i + "_" + fi, name = f.Name, faehigkeit = f.Faehigkeit,
                 @params = f.Params.Select(p => new { name = p.Name, typ = p.Type }).ToArray(),
                 rueckgabe = f.Return,
-                rumpf = f.Body,
+                rumpf = f.Body, sig = FnSig(s.Name, f.Name),
             }).ToArray(),
         }).ToList();
 
@@ -345,8 +487,11 @@ public static class ModellMapper
         foreach (var tb in cr.Triggers)
         {
             var match = triggersNode.FirstOrDefault(n => (string?)n?["msgName"] == tb.MsgName)?.AsObject();
+            // Die Bindung aus dem Code (Vorlage für neue Bindungen desselben Modus).
+            var bindung = Knoten(new { datei = Relativ(dom.Wurzel, tb.Datei), anweisung = tb.Anweisung, typArgument = tb.TypArgument, ortArgument = tb.OrtArgument, modus = tb.Modus, ort = tb.Route ?? tb.Interval ?? tb.Path });
             if (match != null)
             {
+                match["bindung"] = bindung;
                 match["modus"] = tb.Modus;
                 if (tb.Route != null) match["route"] = tb.Route;
                 if (tb.Interval != null) match["intervall"] = tb.Interval;
@@ -354,13 +499,25 @@ public static class ModellMapper
             }
             else
             {
-                triggersNode.Add(Knoten(new
+                var neu = Knoten(new
                 {
                     _id = "tgw" + (triggersNode.Count + 1), name = tb.Name, msgName = tb.MsgName,
+                    @namespace = dom.Triggers.FirstOrDefault(t => t.Name == tb.MsgName)?.Meta.Namespace,
                     modus = tb.Modus, route = tb.Route, intervall = tb.Interval, pfad = tb.Path,
                     felder = triggerFelder.TryGetValue(tb.MsgName, out var tf) ? tf.Select(FeldJson).ToArray() : Array.Empty<object>(),
-                }));
+                }).AsObject();
+                neu["code"] = TriggerCode(tb.MsgName);
+                neu["bindung"] = bindung;
+                triggersNode.Add(neu);
             }
+        }
+        // Auch Trigger-Nachrichten ohne Pipeline/Bindung sind Code — eigene Karte.
+        foreach (var t in dom.Triggers.Where(t => !triggersNode.Any(n => (string?)n?["msgName"] == t.Name)))
+        {
+            var neu = Knoten(new { _id = "tgc" + (triggersNode.Count + 1), name = t.Name, msgName = t.Name, @namespace = t.Meta.Namespace,
+                felder = t.Fields.Select(FeldJson).ToArray() }).AsObject();
+            neu["code"] = TriggerCode(t.Name);
+            triggersNode.Add(neu);
         }
 
         // Graph-Diagnosen (MISSING-APPLY, ENUM-ZERO, UNROUTED-SAGA-CMD …) — der Editor zeigt sie bei „✓ Prüfen".
@@ -392,6 +549,15 @@ public static class ModellMapper
             WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
         });
     }
+
+    /// <summary>Die Klasse eines Konsumenten/Readers verbatim (Datei, Form, Basen, Attribute, Zusatz, usings, Doku) — Board-Feld „code".</summary>
+    private static object? KlassenCode(object? k) => k switch
+    {
+        Konsument x => new { datei = x.Datei, doku = x.Doku, typart = x.Typart, basen = x.Basen, attribute = x.Attribute, zusatz = x.Zusatz, usings = x.Usings, herkunft = x.Herkunft },
+        Leser x => new { datei = x.Datei, doku = x.Doku, typart = x.Typart, basen = x.Basen, attribute = x.Attribute, zusatz = x.Zusatz, usings = x.Usings, herkunft = x.Herkunft },
+        PipelineKarte x => new { datei = x.Datei, doku = x.Doku, typart = x.Typart, basen = x.Basen, attribute = x.Attribute, zusatz = x.Zusatz, usings = x.Usings, herkunft = x.Herkunft },
+        _ => null,
+    };
 
     private static object RecordJson(string name, string kind, List<FieldInfo> felder, TypMeta meta, string wurzel) => new
     {

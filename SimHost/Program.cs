@@ -2,6 +2,18 @@ using System.Text.Json;
 using DomainEditor;
 using SimHost;
 
+// Kommandozeile (ohne Web): „C# schreiben“ für ein Board-JSON — --trocken zeigt nur, was geschähe; --schreiben schreibt.
+if (args.Length >= 2 && args[0] is "--trocken" or "--schreiben")
+{
+    var cliModell = BoardLeseseite.AusBoard(File.ReadAllText(args[1]));
+    var cliBericht = DateiSchreiber.Schreibe(cliModell, SlnRoot(), trocken: args[0] == "--trocken");
+    Console.WriteLine(JsonSerializer.Serialize(cliBericht, new JsonSerializerOptions
+    {
+        WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    }));
+    return;
+}
+
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 var app = builder.Build();
@@ -56,16 +68,41 @@ app.MapPost("/api/editor/scaffold", (JsonElement body) =>
 
 // Modell → ECHTE .cs-Dateien schreiben (chirurgisch/additiv: neue Records/Methoden anhängen,
 // Handcode nie überschreiben). Body = EditorModell-JSON. So erscheint z. B. ein neues Event in Events.cs.
-app.MapPost("/api/editor/write", (JsonElement body) =>
+// Der Body ist das volle Board-MODEL: die Leseseite (Stores/Fähigkeiten, Projektionen, Reader, Pipeline-Fähigkeiten,
+// ReadModels) liest BoardLeseseite aus den Board-Sammlungen. Danach werden die betroffenen Projekte gebaut — ein gelöster
+// Fähigkeits-Parameter, den der Rumpf noch benutzt, kommt so als Compiler-Fehler zurück (nicht still).
+app.MapPost("/api/editor/write", (JsonElement body, bool? trocken) =>
 {
-    var modell = EditorModell.AusJson(body.GetRawText());
-    return Results.Json(DateiSchreiber.Schreibe(modell, SlnRoot()), EditorModell.JsonOptionen);
+    var modell = BoardLeseseite.AusBoard(body.GetRawText());
+    var root = SlnRoot();
+    var bericht = DateiSchreiber.Schreibe(modell, root, trocken == true);
+    if (trocken == true) return Results.Json(bericht, EditorModell.JsonOptionen);
+    var fehler = new List<string>();
+    foreach (var projekt in bericht.Dateien.Select(d => ProjektVon(d, root)).Where(p => p != null).Distinct())
+    {
+        var b = System.Text.Json.JsonSerializer.SerializeToElement(CodeSync.BaueProjekt(projekt!, root));
+        if (b.TryGetProperty("fehler", out var fs)) fehler.AddRange(fs.EnumerateArray().Select(f => f.GetString() ?? "").Where(f => f.Length > 0));
+    }
+    return Results.Json(bericht with { Fehler = fehler.Distinct().ToList() }, EditorModell.JsonOptionen);
 });
+
+// Das Projekt (relativ, nächste .csproj aufwärts) einer geschriebenen Datei.
+static string? ProjektVon(string relDatei, string root)
+{
+    var dir = Path.GetDirectoryName(Path.GetFullPath(Path.Combine(root, relDatei)));
+    while (dir != null && dir.StartsWith(root, StringComparison.Ordinal))
+    {
+        var p = Directory.GetFiles(dir, "*.csproj").FirstOrDefault();
+        if (p != null) return Path.GetRelativePath(root, p).Replace('\\', '/');
+        dir = Path.GetDirectoryName(dir);
+    }
+    return null;
+}
 
 // Struktur-Guardrails auf dem Modell (spiegeln Compiler/Analyzer). Body = EditorModell-JSON.
 app.MapPost("/api/editor/validate", (JsonElement body) =>
 {
-    var modell = EditorModell.AusJson(body.GetRawText());
+    var modell = BoardLeseseite.AusBoard(body.GetRawText());   // inkl. Leseseite (dieselbe Sicht wie „C# schreiben")
     return Results.Json(Validator.Prüfe(modell), EditorModell.JsonOptionen);
 });
 

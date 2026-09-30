@@ -416,6 +416,7 @@ public static class HtmlPresenter
     <button class="act" onclick="deCompile()">⚙ Kompilieren</button>
     <button class="act" id="de-llmalle" onclick="deLlmAlle()" title="Alle 🤖-Knoten mit Auftrag nacheinander ausführen — jeder Vorschlag wartet auf ✓ Übernehmen">🤖 Alle ausführen</button>
     <button class="act run" id="de-simbtn" onclick="deSim()">▶ Simulation</button>
+    <button class="act" onclick="deVorschau()" title="Trockenlauf: was „C# schreiben“ anlegen/ändern würde — nichts wird geschrieben">👁 Vorschau</button>
     <button class="act go" onclick="deWrite()">&lt;/&gt; C# schreiben</button>
     <button class="act" onclick="deSave()">💾 Speichern</button>
     <button class="act" onclick="deDownload()">⬇ Modell</button>
@@ -780,6 +781,12 @@ public static class HtmlPresenter
     body.append(topSlot("readmodel","Read Models ▲",{type:"readmodel",dir:"in",store:st.name},"sto:rm:"+st.name));
     body.append(nameInp(st,"name","Store"));
     body.append(h("input",{value:st.namespace??"",oninput:e=>st.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
+    // Impl-Klasse: aus dem Code (fest) oder — bei einem neuen Store — benennbar (leer = Vorschlag: Name ohne I-Präfix).
+    if(st.impl&&st.impl.datei)body.append(h("div",{class:"gsig",title:"Die Implementierungs-Klasse aus dem Code — neue Fns bekommen dort einen Platzhalter"},"Impl: "+st.impl.name));
+    else if(st.datei)body.append(h("div",{class:"gsec",style:"opacity:.7"},"Impl: keine eindeutige Klasse im Code — Methoden werden nicht ergänzt"));
+    else body.append(h("div",{class:"frow",title:"Implementierungs-Klasse, die „C# schreiben“ anlegt"},h("span",{class:"slotlbl"},"Impl"),
+      inp(st.impl&&st.impl.name,v=>{v=v.trim();if(v)st.impl={name:v,namespace:(MODEL.rahmen&&MODEL.rahmen.storeImplNamespace)||st.namespace};else delete st.impl;},
+        /^I[A-Z]/.test(st.name||"")?st.name.slice(1):(st.name||"")+"Impl")));
     const rms=MODEL.readModels.filter(x=>x.store===st.name);
     body.append(h("div",{class:"gsec"},"Dokumente: "+(rms.length?rms.map(x=>x.name).join(" · "):"— (ReadModel oben anschließen)")));
     body.append(h("div",{class:"gsep"},"Schreib-Fähigkeiten — je Fn ein Interface, ◀ Parameter eines Projektion-Handles"));
@@ -789,6 +796,12 @@ public static class HtmlPresenter
     body.append(fnListe(st,st.readFns||[]));
     body.append(h("button",{class:"add",onclick:()=>{st.readFns.push({_id:"rf"+(NID++),name:"HoleX",params:[],rueckgabe:""});render();}},"+ Read-Funktion"));
   }
+  // Vorschlag für den Fähigkeits-Namen einer NEUEN Fn — dieselbe Regel wie der Server (DomainEditor.BoardLeseseite):
+  //   I + Methode ohne „Async“; schon vergeben ⇒ + Store-Name ohne I-Präfix. Danach ist der Name Code-Fakt.
+  function faehigkeitVorschlag(st,fn){const belegt=new Set();
+    MODEL.stores.forEach(s=>(s.writeFns||[]).concat(s.readFns||[]).forEach(f=>{if(f!==fn&&f.faehigkeit)belegt.add(f.faehigkeit);}));
+    const n=fn.name||"";const kern=n.length>5&&n.endsWith("Async")?n.slice(0,-5):n;const ohneI=x=>/^I[A-Z]/.test(x||"")?x.slice(1):(x||"");
+    let v="I"+kern;if(belegt.has(v))v="I"+kern+ohneI(st.name);return v;}
   function fnBlock(st,fn,isRead){const arr=isRead?st.readFns:st.writeFns;
     const box=h("div",{style:"border-left:2px solid #2c3547;padding-left:7px;margin:6px 0"});
     // Fähigkeits-Port: ein Projektion- (write) bzw. Reader-/Pipeline-Handle (read) dockt hier an → die Fn wird sein Parameter.
@@ -798,6 +811,10 @@ public static class HtmlPresenter
       h("button",{class:"rm",onclick:()=>{arr.splice(arr.indexOf(fn),1);render();}},"✕")));
     box.append(paramRows(fn));
     if(isRead)box.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"→ Rückgabe"),tinp(fn.rueckgabe,v=>fn.rueckgabe=v)));
+    // Fähigkeit = das Interface GENAU dieser Fn (CQRS051). Aus dem Code: fest (Code-Fakt). Neu: Name im Panel, leer = Vorschlag.
+    if(fn.sig)box.append(h("div",{class:"gsig",title:"Das Fähigkeits-Interface aus dem Code — der Typ, den ein Handle als Parameter nimmt"},"Fähigkeit: "+(fn.faehigkeit||"?")));
+    else box.append(h("div",{class:"frow",title:"Name des Fähigkeits-Interfaces, das „C# schreiben“ anlegt (leer = Vorschlag)"},h("span",{class:"slotlbl"},"Fähigkeit"),
+      inp(fn.faehigkeit,v=>{fn.faehigkeit=v.trim()||undefined;},faehigkeitVorschlag(st,fn))));
     box.append(codePort("impl:in:"+st._id+":"+fn._id,{k:isRead?"readFn":"writeFn",store:st._id,fn:fn._id},fn.codeSrc,"Impl-Logik"));
     return box;}
 
@@ -806,6 +823,7 @@ public static class HtmlPresenter
   function projektionCard(body,p){
     body.append(nameInp(p,"name","Projektion","projektion"));
     body.append(h("input",{value:p.namespace??"",oninput:e=>p.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
+    body.append(h("div",{class:"frow",title:"ISubscriber.SubscriberId — Kennung des Cursors (Umbenennen = neuer Cursor!)"},h("span",{class:"slotlbl"},"SubscriberId"),inp(p.subscriberId,v=>p.subscriberId=v||undefined,p.name||"")));
     // Transport-Achse: geordneter Pull (IPullSubscriber) vs. Signal (ISubscriber, best-effort). Default = Pull.
     body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>{p.pull=e.target.checked;render();},...((p.pull!==false)?{checked:"checked"}:{})}),"Geordneter Pull (IPullSubscriber)"));
     // Garantie-Achse: append-artig ⇒ Co-Commit-Store ⇒ exactly-once (GA-1); sonst idempotenter Upsert ⇒ at-least-once genügt.
@@ -827,6 +845,7 @@ public static class HtmlPresenter
   function reaktionCard(body,r){
     body.append(nameInp(r,"name","Reaktion","reaktion"));
     body.append(h("input",{value:r.namespace??"",oninput:e=>r.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
+    body.append(h("div",{class:"frow",title:"ISubscriber.SubscriberId — Kennung des Cursors (Umbenennen = neuer Cursor!)"},h("span",{class:"slotlbl"},"SubscriberId"),inp(r.subscriberId,v=>r.subscriberId=v||undefined,r.name||"")));
     body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>r.pull=e.target.checked,...((r.pull!==false)?{checked:"checked"}:{})}),"Geordneter Pull (IPullSubscriber)"));
     body.append(h("div",{class:"gsec"},"Trigger-Event → Handle → OneOf-Command(s) (emittiert). Das WANN/mit-WELCHEN-Werten macht der Rumpf."));
     body.append(handleListe(r,"rk:"+r._id,"je Handle eine eigene Karte"));
@@ -966,7 +985,6 @@ public static class HtmlPresenter
   function fnCard(body,n){const st=n.own.ref;
     body.append(h("a",{class:"ghl",onclick:()=>{const m=NODEBY.get(n.own.id);if(m){waehle(m.id);centerOn(m);}}},"▲ Store: "+(st.name||"?")));
     body.append(h("div",{class:"gsec"},n.lesen?"Lese-Fähigkeit — ◀ Parameter von Reader-/Pipeline-Handles":"Schreib-Fähigkeit — ◀ Parameter von Projektions-Handles"));
-    if(n.ref.faehigkeit)body.append(h("div",{class:"gsig",title:"Das Fähigkeits-Interface (genau diese eine Funktion) — der Typ, den ein Handle als Parameter nimmt"},"Fähigkeit: "+n.ref.faehigkeit));
     body.append(fnBlock(st,n.ref,n.lesen));
     // Wer diese Fähigkeit als Parameter verlangt (Signatur-Fakt: darf rufen — nicht „ruft wann").
     const rufer=[];MODEL.projektionen.concat(MODEL.reader,MODEL.pipelines||[]).forEach(o=>(o.handles||[]).forEach(hd=>{if((hd.fns||[]).includes(n.ref._id))rufer.push({o,hd});}));
@@ -1005,6 +1023,14 @@ public static class HtmlPresenter
     body.append(h("input",{value:p.namespace??"",oninput:e=>p.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
     body.append(h("div",{class:"gsec"},"PipelineId"));
     body.append(inp(p.pipelineId,v=>p.pipelineId=v,"z. B. bildverarbeitung"));
+    // Konfigurations-Records (Konstruktor-Injektion). Geschrieben wird der Konstruktor nur bei einer NEUEN Pipeline.
+    body.append(h("div",{class:"gsec"},"Konfigs (Konstruktor)"+(p.code?" — bestehend: Konstruktor ist Handcode":"")));
+    (p.konfigs=p.konfigs||[]).forEach((k,i)=>body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl",style:"flex:1"},"◀ "+k),
+      h("button",{class:"rm",onclick:()=>{p.konfigs.splice(i,1);render();}},"✕"))));
+    {const sel=h("select",{onchange:e=>{if(e.target.value&&!p.konfigs.includes(e.target.value))p.konfigs.push(e.target.value);render();}});
+     sel.append(h("option",{value:""},"+ Konfig-Record …"));
+     MODEL.records.filter(r=>r.kind==="konfig"&&!p.konfigs.includes(r.name)).forEach(r=>sel.append(h("option",{value:r.name},r.name)));
+     body.append(sel);}
     body.append(h("div",{class:"gsec"},"Handle: Trigger/Event/Self ◀ → yield Command · yield Trigger · ScheduleSelf. Das WIE macht der Rumpf."));
     body.append(handleListe(p,"pl:"+p._id,"je Handle eine eigene Karte"));
     // Genutzte Dienste (Konstruktor-Injektion) — an „Vertrag ▶" eines Dienst-Knotens andocken.
@@ -2608,7 +2634,7 @@ public static class HtmlPresenter
       onclick:e=>{if(e.ctrlKey||e.metaKey){e.preventDefault();jumpNextOfKind(kind);}else neuerKnoten(kind);}},label);
     root.append(h("div",{class:"gtoolbar"},
       tb("command","+ Command"),tb("event","+ Event"),tb("rejection","+ Ablehnung"),
-      tb("valueobject","+ Value Object"),tb("enum","+ Enum"),tb("aggregate","+ Aggregat"),
+      tb("valueobject","+ Value Object"),tb("konfig","+ Konfig"),tb("enum","+ Enum"),tb("aggregate","+ Aggregat"),
       tb("state","+ State"),tb("decider","+ Decider"),tb("applier","+ Applier"),tb("saga","+ Prozess"),tb("transition","+ Regel"),
       tb("readmodel","+ Read Model"),tb("store","+ Store"),tb("projektion","+ Projektion"),tb("query","+ Query"),tb("queryresponse","+ Response"),tb("reader","+ Reader"),tb("reaktion","+ Reaktion"),
       tb("trigger","+ Trigger"),tb("pipeline","+ Pipeline"),
@@ -2657,7 +2683,7 @@ public static class HtmlPresenter
     const opt=(kind,label)=>h("button",{onclick:()=>{pick.remove();neuerKnoten(kind,wx,wy);}},label);
     pick.append(h("div",{class:"gpick-t"},"Was soll hier entstehen?"),
       opt("command","Command"),opt("event","Event"),opt("rejection","Ablehnung"),
-      opt("valueobject","Value Object"),opt("enum","Enum"),opt("aggregate","Aggregat"),
+      opt("valueobject","Value Object"),opt("konfig","Konfiguration"),opt("enum","Enum"),opt("aggregate","Aggregat"),
       opt("state","State"),opt("decider","Decider"),opt("applier","Applier"),opt("saga","Prozess"),opt("transition","Regel"),
       opt("readmodel","Read Model"),opt("store","Store"),opt("projektion","Projektion"),opt("query","Query"),opt("queryresponse","Response"),opt("reader","Reader"),opt("reaktion","Reaktion"),
       opt("trigger","Trigger"),opt("pipeline","Pipeline"),
@@ -2775,8 +2801,15 @@ public static class HtmlPresenter
     decider:d=>d.aggregat+"|"+d.command,applier:a=>a.aggregat+"|"+a.event,sagas:x=>x.namespace+"|"+x.name,
     readModels:x=>x.name,stores:x=>x.name,projektionen:x=>x.name,reaktionen:x=>x.name,reader:x=>x.name,pipelines:x=>x.name,
     triggers:x=>x.msgName||x.name,frists:x=>x.name,dienste:x=>x.name,hostSettings:x=>x.name};
-  const LAYOUT=new Set(["x","y","ausCode","ungeschrieben","codeSrc","leer","rumpf","schritte"]);
+  const LAYOUT=new Set(["x","y","ausCode","ungeschrieben","codeSrc","leer","rumpf","schritte","herkunft"]);
   function inhalt(o){return JSON.stringify(o,(k,v)=>(k.startsWith("_")||LAYOUT.has(k))?undefined:v);}
+  // Leseseite: „steht die Änderung schon im Code?“ — Fn-Ids (je Einlesen neu nummeriert) über „Store.Fn“ vergleichen und die
+  //   Code-Fakten, die erst der Code liefert (Signatur verbatim, Datei, Fähigkeits-Name, Vertrag), nicht mitzählen.
+  const LESE_KOLL=new Set(["stores","projektionen","reaktionen","reader","pipelines","readModels","triggers"]);
+  const CODEFAKT=new Set(["sig","code","impl","datei","doku","faehigkeit","form","signatur","signaturOffen","ausgaenge","istBuendel","bindung","input","delay","entwurf"]);
+  function fnNamen(m){const x=new Map();(m&&m.stores||[]).forEach(st=>(st.writeFns||[]).concat(st.readFns||[]).forEach(f=>x.set(f._id,st.name+"."+f.name)));return x;}
+  function leseInhalt(o,fnName){return JSON.stringify(o,(k,v)=>{if(k.startsWith("_")||LAYOUT.has(k)||CODEFAKT.has(k)||v===null)return undefined;
+    if(k==="fns"&&Array.isArray(v))return v.map(id=>fnName.get(id)||id);return v;});}
   function hash(t){let h=5381;for(let i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))>>>0;return h.toString(36);}
   function maxId(m){let mx=0;JSON.stringify(m||{}).replace(/"_id":"[a-z_]*?(\d+)"/g,(_,n)=>{mx=Math.max(mx,+n);return _;});return mx;}
   let MERGE_INFO={ungeschrieben:0,entwuerfe:0};
@@ -2795,13 +2828,15 @@ public static class HtmlPresenter
     const altFormat=!JSON.stringify(alt).includes('"ausCode":true');
     const codeNs=new Set();for(const col in MERGE_KEYS)(neu[col]||[]).forEach(x=>{if(x.namespace)codeNs.add(x.namespace);});
     const codeNodesNeu=new Map(neu.codeNodes.map(c=>[c._id,c]));
+    const fnAlt=fnNamen(alt),fnNeu=fnNamen(neu);
+    const imCode=(col,s,l)=>LESE_KOLL.has(col)?leseInhalt(s,fnAlt)===leseInhalt(l,fnNeu):inhalt(s)===inhalt(l);
     for(const col in MERGE_KEYS){const key=MERGE_KEYS[col];
       const liveByKey=new Map((neu[col]||[]).map(x=>[x._codeKey,x]));
       const erg=[];const benutzt=new Set();
       (alt[col]||[]).forEach(s=>{
         const k=s.ausCode?s._codeKey:key(s);const l=liveByKey.get(k);
         if(l){benutzt.add(k);
-          const geaendert=s.ausCode&&s._herkunft&&hash(inhalt(s))!==s._herkunft&&inhalt(s)!==inhalt(l);
+          const geaendert=s.ausCode&&s._herkunft&&hash(inhalt(s))!==s._herkunft&&!imCode(col,s,l);
           if(geaendert){s.ungeschrieben=true;s._codeKey=l._codeKey;
             // Rumpf-Quelle bleibt die echte Datei (der Code-Knoten des Code-Stands).
             if(l.codeSrc)s.codeSrc=l.codeSrc;else delete s.codeSrc;if(l.leer)s.leer=true;else delete s.leer;
@@ -2862,18 +2897,41 @@ public static class HtmlPresenter
   function payload(mitVorschlag){deriveMembership();prepareSaga();const m=JSON.parse(JSON.stringify(MODEL));
     const txt=id=>{const v=mitVorschlag?vorschlagFuer(id):null;if(v)return v.rumpf;const c=m.codeNodes.find(x=>x._id===id);return c?c.text:null;};
     [...m.decider,...m.applier].forEach(n=>{if(n.leer)n.rumpf="";else if(n.codeSrc){const t=txt(n.codeSrc);if(t!=null&&t.trim())n.rumpf=t;}});
+    // Leseseite/Pipelines: der Code-/LLM-Entwurf einer NEUEN Methode (ohne Code-Signatur) wird ihr Rumpf („entwurf“);
+    //   bestehende Rümpfe ändert „C# schreiben“ nicht (dafür: ✓ Übernehmen im LLM-Knoten).
+    const entwurf=o=>{if(!o.sig&&o.codeSrc){const t=txt(o.codeSrc);if(t!=null&&t.trim())o.entwurf=t;}};
+    [...(m.projektionen||[]),...(m.reaktionen||[]),...(m.reader||[]),...(m.pipelines||[])].forEach(o=>(o.handles||[]).forEach(entwurf));
+    (m.stores||[]).forEach(st=>[...(st.writeFns||[]),...(st.readFns||[])].forEach(entwurf));
     return m;}
   async function post(path){const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload(path!=="/api/editor/write"))});
     if(!r.ok)throw new Error("HTTP "+r.status);return r;}
   // &lt;/&gt; C# schreiben: das Modell in die ECHTEN .cs-Dateien schreiben (chirurgisch/additiv über
   //   /api/editor/write). Neue Records/Methoden werden angehängt, Handcode nie überschrieben.
   //   Danach spiegelt der Code-Sync die Datei-Rümpfe zurück ins Board.
+  // Bericht eines Schreib-/Vorschau-Laufs ins Ausgabe-Panel: neu, geändert, NICHT geschrieben (mit Grund), Build-Fehler.
+  function schreibBericht(b,vorschau){const out=document.getElementById("de-out");if(!out)return;out.innerHTML="";
+    const gut=(t)=>out.append(h("div",{class:"find",style:"background:#1f3a2a;color:#9be3bf"},t));
+    const nicht=(b.uebersprungen||[]).filter(x=>!/unangetastet/.test(x));
+    if(vorschau)out.append(h("div",{class:"find"},"👁 Vorschau — nichts geschrieben:"));
+    (b.geschrieben||[]).forEach(x=>gut((vorschau?"würde anlegen: ":"＋ ")+x));
+    (b.ergaenzt||[]).forEach(x=>gut((vorschau?"würde ändern: ":"✎ ")+x));
+    nicht.forEach(x=>out.append(h("div",{class:"find warning"},"⚠ nicht geschrieben: "+x)));
+    if((b.fehler||[]).length){out.append(h("div",{class:"find warning"},b.fehler.length+" Compiler-Fehler nach dem Schreiben — der Rumpf passt nicht mehr zur Signatur:"));
+      b.fehler.forEach(f=>out.append(h("div",{class:"find error"},f)));}
+    else if(!vorschau&&((b.geschrieben||[]).length||(b.ergaenzt||[]).length))gut("✓ Betroffene Projekte gebaut — 0 Fehler.");
+    if(!(b.geschrieben||[]).length&&!(b.ergaenzt||[]).length&&!nicht.length)gut("✓ Code und Board stimmen überein — nichts zu schreiben.");}
+  window.deVorschau=async function(){
+    try{const r=await fetch("/api/editor/write?trocken=true",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload(false))});
+      if(!r.ok)throw 0;badge(true);schreibBericht(await r.json(),true);}
+    catch(e){badge(false);deFlash("⚠ SimHost offline",false);}};
   window.deWrite=async function(){
     try{const r=await post("/api/editor/write");const b=await r.json();badge(true);
       const neu=(b.geschrieben||[]).length, erg=(b.ergaenzt||[]).length, ueb=(b.uebersprungen||[]).length;
       if(!neu&&!erg){deFlash("✓ Dateien aktuell — nichts zu schreiben ("+ueb+" unverändert)",true);}
       else{deFlash("✅ geschrieben: "+neu+" neu · "+erg+" ergänzt · "+ueb+" unverändert",true);}
       console.log("C# schreiben:",b);
+      // Was geschrieben wurde, was NICHT (mit Grund) + der Bau der betroffenen Projekte.
+      schreibBericht(b,false);
       if(neu||erg)await deReload();   // Code → Board: Geschriebenes wird Code-Stand (nicht mehr „ungeschrieben")
     }catch(e){badge(false);deFlash("⚠ SimHost offline — nicht geschrieben (dotnet run --project SimHost)",false);}};
   window.deValidate=async function(){const out=document.getElementById("de-out");
