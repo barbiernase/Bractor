@@ -1,7 +1,7 @@
 using Abstractions;
 using Domain.Datensatz;
 using Domain.ImagePair;      // Klassifikation
-using Domain.Projections;    // IImagePairReadStore, ImagePairFilter, ImagePairReadModel
+using Domain.Projections;    // ISearchImagePairs/IFindImagePair, ImagePairFilter, ImagePairReadModel
 using Microsoft.Extensions.Logging;
 
 namespace Domain.Pipeline.Datensatz;
@@ -10,7 +10,7 @@ namespace Domain.Pipeline.Datensatz;
 /// Server-seitiger Resolver des Datensatz-Kontexts (Konzept §3.2/§11, Variante A). Er löst die
 /// zwei I/O-behafteten Halbschritte auf, die der reine Decider bewusst nicht selbst tut:
 ///
-///   1. <c>RangeAngefordert</c> → <see cref="IImagePairReadStore.SearchAsync"/> über den 1:1 aus
+///   1. <c>RangeAngefordert</c> → <see cref="ISearchImagePairs.SearchAsync"/> über den 1:1 aus
 ///      <see cref="RangeKriterien"/> gebauten <see cref="ImagePairFilter"/> (durchpaginiert) →
 ///      <c>NimmRangeAuf(ids, herkunft)</c>.
 ///   2. <c>EinfrierenAngefordert</c> → je (autoritativem) Mitglied den Label-Stand + die Bildpfade
@@ -24,16 +24,12 @@ namespace Domain.Pipeline.Datensatz;
 /// </summary>
 public partial class DatensatzResolverPipeline : IPipelineHandler
 {
-    private readonly IImagePairReadStore _imagePairStore;
     private readonly ILogger<DatensatzResolverPipeline> _logger;
 
     private const int SeitenGroesse = 500;
 
-    public DatensatzResolverPipeline(
-        IImagePairReadStore imagePairStore,
-        ILogger<DatensatzResolverPipeline> logger)
+    public DatensatzResolverPipeline(ILogger<DatensatzResolverPipeline> logger)
     {
-        _imagePairStore = imagePairStore;
         _logger = logger;
     }
 
@@ -43,7 +39,7 @@ public partial class DatensatzResolverPipeline : IPipelineHandler
     // RANGE AUFLÖSEN — Suche → konkrete IDs
     // ═══════════════════════════════════════════════════════════
 
-    public async IAsyncEnumerable<ICommand> Handle(RangeAngefordert evt, PipelineContext ctx)
+    public async IAsyncEnumerable<OneOf<NimmRangeAuf>> Handle(RangeAngefordert evt, PipelineContext ctx, ISearchImagePairs searchImagePairs)
     {
         var datensatzId = ctx.SourceAggregateId!.Value;
 
@@ -52,7 +48,7 @@ public partial class DatensatzResolverPipeline : IPipelineHandler
         while (true)
         {
             var filter = ToFilter(evt.Kriterien, seite, SeitenGroesse);
-            var (items, gesamt) = await _imagePairStore.SearchAsync(filter);
+            var (items, gesamt) = await searchImagePairs.SearchAsync(filter);
             ids.AddRange(items.Select(m => m.Id));
             if (items.Count == 0 || ids.Count >= gesamt) break;
             seite++;
@@ -75,7 +71,7 @@ public partial class DatensatzResolverPipeline : IPipelineHandler
     // EINFRIEREN — Label-Stand + Pfade snapshotten, Split zuteilen
     // ═══════════════════════════════════════════════════════════
 
-    public async IAsyncEnumerable<ICommand> Handle(EinfrierenAngefordert evt, PipelineContext ctx)
+    public async IAsyncEnumerable<OneOf<SchliesseEinfrierenAb>> Handle(EinfrierenAngefordert evt, PipelineContext ctx, IFindImagePair findImagePair)
     {
         var datensatzId = ctx.SourceAggregateId!.Value;
 
@@ -83,7 +79,7 @@ public partial class DatensatzResolverPipeline : IPipelineHandler
         var modelle = new Dictionary<Guid, ImagePairReadModel>();
         foreach (var pid in evt.Mitglieder)
         {
-            var ip = await _imagePairStore.FindByIdAsync(pid);
+            var ip = await findImagePair.FindByIdAsync(pid);
             if (ip is not null) modelle[pid] = ip;
             else _logger.LogWarning(
                 "Datensatz-Resolver: ImagePair {Pid} fehlt im Read-Model — beim Einfrieren übersprungen", pid);

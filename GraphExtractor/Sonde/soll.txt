@@ -11,8 +11,8 @@ record Leihwesen.Ausleihe.BereitsAusgeliehen rejection aggregat=Leihvorgang | Au
 record Leihwesen.Ausleihe.NichtAusgeliehen rejection aggregat=Leihvorgang | AusleiheId:Guid
 enum Leihwesen.Ausleihe.Zustand | Neu = 1, Gebraucht = 2, Beschaedigt = 3
 aggregat Leihwesen.Ausleihe.Leihvorgang | LeserId:Guid, Offen:bool
-decide Leihvorgang.LeiheAus -> Ausgeliehen wenn !(State.Offen); BereitsAusgeliehen wenn State.Offen
-decide Leihvorgang.GibZurueck -> Zurueckgegeben; NichtAusgeliehen wenn !State.Offen
+decide Leihvorgang.LeiheAus -> Ausgeliehen; BereitsAusgeliehen
+decide Leihvorgang.GibZurueck -> Zurueckgegeben; NichtAusgeliehen
 apply Leihvorgang.Ausgeliehen
 apply Leihvorgang.Zurueckgegeben
 
@@ -25,13 +25,13 @@ record Leihwesen.Gebuehren.MahnungEroeffnet event aggregat=Mahnvorgang | Betrag:
 record Leihwesen.Gebuehren.MahnungExistiert rejection aggregat=Mahnvorgang | Id:Guid
 aggregat Leihwesen.Gebuehren.Schadensfall | Gemeldet:bool
 aggregat Leihwesen.Gebuehren.Mahnvorgang | Betrag:decimal
-decide Schadensfall.MeldeSchaden -> SchadenGemeldet; SchadenExistiert wenn State.Gemeldet
-decide Mahnvorgang.EroeffneMahnung -> MahnungEroeffnet; MahnungExistiert wenn State.Version > 0
+decide Schadensfall.MeldeSchaden -> SchadenGemeldet; SchadenExistiert
+decide Mahnvorgang.EroeffneMahnung -> MahnungEroeffnet; MahnungExistiert
 apply Schadensfall.SchadenGemeldet
 apply Mahnvorgang.MahnungEroeffnet
 saga Leihwesen.Gebuehren.SchadenBeiRueckgabe auslöser=Zurueckgegeben | wenn Zurueckgegeben -> sende MeldeSchaden
 
-# ── Lesen: frei benannte Stores (Marker statt Namensregel), class-ReadModel, OneOf, Konstanten-Ids ──
+# ── Lesen: frei benannte Fähigkeiten + Bündel (Marker statt Namensregel), class-ReadModel, OneOf, Konstanten-Ids ──
 record Leihwesen.Lesen.OffeneAusleihen query | LeserId:Guid { get; init; }
 record Leihwesen.Lesen.OffeneAusleihenAntwort queryresponse | Anzahl:int
 record Leihwesen.Lesen.KeineAusleihen queryresponse |
@@ -41,5 +41,16 @@ store Leihwesen.Lesen.ILeihBuch | schreibt SchreibeAsync(eintrag:LeihEintrag), S
 projektion Leihwesen.Lesen.Leihliste id=leihliste pull | Ausgeliehen -> ILeihBuch.SchreibeAsync; Zurueckgegeben -> ILeihBuch.SchliesseAsync
 reaktion Leihwesen.Lesen.MahnungBeiSchaden id=mahnung-bei-schaden | SchadenGemeldet -> sendet EroeffneMahnung
 reader Leihwesen.Lesen.LeihAuskunftLeser projektion=Leihliste trackDeps=false | OffeneAusleihen -> ILeihBuch.OffeneAsync => OffeneAusleihenAntwort|KeineAusleihen
-pipeline Leihwesen.Lesen.MahnlaufPipeline id=mahnlauf konfigs=MahnlaufKonfig | MahnlaufAngestossen(trigger) -> sendet EroeffneMahnung
+pipeline Leihwesen.Lesen.MahnlaufPipeline id=mahnlauf konfigs=MahnlaufKonfig | MahnlaufAngestossen(trigger) -> sendet EroeffneMahnung, MeldeSchaden; MahnlaufGeprueft(trigger) -> sendet EroeffneMahnung, MeldeSchaden -> ILeihBuch.OffeneAsync; PipelineGestartet(self) -> sendet ; Mahnrunde(self) -> sendet EroeffneMahnung
 trigger MahnlaufAngestossen | Ziel:Guid, Betrag:decimal
+trigger MahnlaufGeprueft | Ziel:Guid, Betrag:decimal
+
+# ── Handle-Verträge: WAS aus der Signatur (Form · Art:Typ), WELCHE Store-Fns aus den Fähigkeits-Parametern — kein Rumpf-Fakt ──
+ausgang Leihliste.Ausgeliehen nichts | storefn:ILeihBuch.SchreibeAsync
+ausgang Leihliste.Zurueckgegeben nichts | storefn:ILeihBuch.SchliesseAsync
+ausgang MahnungBeiSchaden.SchadenGemeldet strom | command:EroeffneMahnung
+ausgang LeihAuskunftLeser.OffeneAusleihen einzeln | response:OffeneAusleihenAntwort; response:KeineAusleihen; storefn:ILeihBuch.OffeneAsync
+ausgang MahnlaufPipeline.MahnlaufAngestossen strom | command:EroeffneMahnung; command:MeldeSchaden
+ausgang MahnlaufPipeline.MahnlaufGeprueft strom | command:EroeffneMahnung; command:MeldeSchaden; storefn:ILeihBuch.OffeneAsync
+ausgang MahnlaufPipeline.PipelineGestartet strom | self:Mahnrunde
+ausgang MahnlaufPipeline.Mahnrunde strom | command:EroeffneMahnung; self:Mahnrunde; frist:MeldeSchaden

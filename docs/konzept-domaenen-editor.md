@@ -20,6 +20,11 @@
 
 ## 1 · Was der Editor ist
 
+> **Seit 2026-09-29 (Hybrid):** Die Fläche ist Landkarte (Karten immer kompakt, keine Ports, kein Freihand-Ziehen);
+> bearbeitet und verbunden wird im Panel über den Verbinden-Modus — siehe
+> [konzept-editor-panel-bearbeitung.md](konzept-editor-panel-bearbeitung.md). Die Bedienhinweise unten zu „Slot ziehen“
+> und Aufklappen sind damit überholt; Port-Typen, Kanten und Modell gelten unverändert.
+
 Ein vollständiger **ComfyUI-Node-Editor**: getippte Slots (farbige Punkte) + Bézier-Kanten statt
 Dropdowns. Ein einziges `MODEL`-Objekt (`schemaVersion:"2"`, ~26 Sammlungen) ist die Wahrheit;
 **alles andere ist Ableitung** — Aggregat-Zugehörigkeit, Store-Scope, Graph-Komponenten, Layout.

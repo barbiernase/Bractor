@@ -39,6 +39,14 @@ public interface IFristplan
 /// <summary>Deterministische Ableitungen rund um Fristen (analog <see cref="ProzessId"/>).</summary>
 public static class FristId
 {
+    /// <summary>Die Frist-Id einer typisierten Planung (<see cref="Frist{TCmd}"/>): aus Kontext (Command-Typ) + Ziel.</summary>
+    public static Guid Für(string kontext, Guid zielAggregatId)
+    {
+        Span<byte> hash = stackalloc byte[16];
+        MD5.HashData(Encoding.UTF8.GetBytes($"frist:{kontext}:{zielAggregatId:N}"), hash);
+        return new Guid(hash);
+    }
+
     /// <summary>
     /// Die CommandId der <c>FristFällig</c>-Zustellung — deterministisch aus der Frist-Id, damit ein
     /// Re-Feuern (Crash zwischen Emit und Entfernen, Doppel-Tick) am Empfänger als Duplikat verpufft.

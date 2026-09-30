@@ -14,7 +14,7 @@ namespace GraphExtractor;
 //  Ein Aufruf = FESTER TEIL (Graph-Skelett, für alle Slots gleich) + SLOT-TEIL (je Code-Block). Alles aus Code-Fakten:
 //  Roslyn-Symbole [S], Graph-/Editor-Kanten [K], Nachbar-Rümpfe [N]. Einzige menschliche Eingabe ist der Auftrag [L] —
 //  aus dem LLM-Knoten im Board (intent → promptZiel → Code-Block), aus der „// 🤖 Prompt:“-Zeile im Rumpf oder per CLI.
-//  Der EIGENE Rumpf fließt nie ein; im Skelett werden die Guards des eigenen Decide entfernt.
+//  Der EIGENE Rumpf fließt nie ein. Das Skelett trägt nur Signatur-Fakten (keine Rumpf-Guards).
 // ════════════════════════════════════════════════════════════════════════════
 
 public sealed class SlotKontext
@@ -117,10 +117,10 @@ public sealed class KontextBauer
     }
 
     // ════════════════════════════════════════════════════════════════════════
-    //  FESTER TEIL: das Graph-Skelett (aus dem Editor-Modell — Signaturen + Kanten + Guards, keine Rümpfe)
+    //  FESTER TEIL: das Graph-Skelett (aus dem Editor-Modell — Signaturen + Kanten, keine Rümpfe)
     // ════════════════════════════════════════════════════════════════════════
 
-    public string Skelett(string? ohneGuardsVon = null)
+    public string Skelett()
     {
         var b = new StringBuilder();
         string? S(JsonElement e, string p) => e.TryGetProperty(p, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
@@ -130,7 +130,7 @@ public sealed class KontextBauer
         string F(JsonElement e, string p = "felder") => string.Join(", ", A(e, p).Select(f => $"{S(f, "name")}:{S(f, "typ")}"));
 
         var rec = A(_board, "records").ToDictionary(r => S(r, "name")!, r => r, StringComparer.Ordinal);
-        b.AppendLine("# GRAPH-SKELETT der Domäne (Signaturen, Kanten, Guards — ohne Rümpfe)");
+        b.AppendLine("# GRAPH-SKELETT der Domäne (Signaturen und Kanten — ohne Rümpfe)");
         foreach (var e in A(_board, "enums")) b.AppendLine($"enum {S(e, "name")} {{{string.Join(", ", Str(e, "werte"))}}}");
         foreach (var r in A(_board, "records"))
             if (S(r, "kind") is "valueobject" or "konfig" or "query" or "queryresponse")
@@ -141,8 +141,7 @@ public sealed class KontextBauer
             b.AppendLine($"AGGREGAT {an}  state: {F(a, "state")}");
             foreach (var d in A(_board, "decider").Where(d => S(d, "aggregat") == an))
             {
-                var eigen = ohneGuardsVon == $"decide|{an}|{S(d, "command")}";
-                var outs = string.Join(" | ", A(d, "ergibt").Select(o => S(o, "event") + (!eigen && S(o, "guard") is { } g ? $" wenn {g}" : "")));
+                var outs = string.Join(" | ", A(d, "ergibt").Select(o => S(o, "event")));
                 var c = rec.GetValueOrDefault(S(d, "command") ?? "");
                 b.AppendLine($"  decide {S(d, "command")}({(c.ValueKind == JsonValueKind.Object ? F(c) : "")}) -> {outs}");
             }
@@ -512,7 +511,7 @@ public sealed class KontextBauer
             {
                 var evt = Knoten(NodeKind.@event, disc);
                 var erzeuger = evt == null ? new List<string>() : _graph.Nodes.Where(n => n.Kind == NodeKind.command && n.Command!.Produces.Any(p => p.Event == evt.Name))
-                    .Select(n => { var g = n.Command!.Produces.First(p => p.Event == evt.Name).Guard; return $"Decide({n.Name}){(g != null ? $" wenn `{g}`" : " ohne umschließende Bedingung")}"; }).ToList();
+                    .Select(n => $"Decide({n.Name})").ToList();
                 yield return $"{disc.Name} erzeugt von: {(erzeuger.Count == 0 ? "—" : string.Join(" · ", erzeuger))}";
                 yield return $"{disc.Name} geht außerdem an: {Abnehmer(disc as INamedTypeSymbol, s.State, ohneApply: true)}";
                 break;
@@ -521,9 +520,9 @@ public sealed class KontextBauer
             case "reaktion":
             {
                 var pr = _dom.Projections.FirstOrDefault(p => p.Full == s.Klasse.Fq());
-                var calls = pr?.HandleStoreCalls.GetValueOrDefault(disc.Name) ?? new();
+                var calls = pr?.HandleFaehigkeiten.GetValueOrDefault(disc.Name) ?? new();
                 yield return $"Trigger-Event: {disc.Name} (erzeugt von Aggregat {string.Join(", ", ErzeugerAggregate(disc))})";
-                yield return $"Store-Aufrufe (verdrahtet): {(calls.Count == 0 ? "—" : string.Join(", ", calls.Select(c => $"{c.Store}.{c.Method}")))}";
+                yield return $"Fähigkeiten (Signatur): {(calls.Count == 0 ? "—" : string.Join(", ", calls.Select(c => $"{c.Store}.{c.Method}")))}";
                 foreach (var c in calls) if (FnSig(c.Store, c.Method) is { } sig) yield return $"    {sig}";
                 foreach (var st in calls.Select(c => c.Store).Distinct())
                     yield return $"ReadModels von {st}: {string.Join(", ", ReadModelsVon(st))}";
@@ -534,9 +533,9 @@ public sealed class KontextBauer
             case "reader":
             {
                 var rd = _dom.Readers.FirstOrDefault(r => r.Full == s.Klasse.Fq());
-                var calls = rd?.HandleStoreCalls.GetValueOrDefault(disc.Name) ?? new();
+                var calls = rd?.HandleFaehigkeiten.GetValueOrDefault(disc.Name) ?? new();
                 yield return $"liest Projektion: {rd?.ProjectionName ?? "—"}";
-                yield return $"Store-Aufrufe (verdrahtet): {(calls.Count == 0 ? "—" : string.Join(", ", calls.Select(c => $"{c.Store}.{c.Method}")))}";
+                yield return $"Fähigkeiten (Signatur): {(calls.Count == 0 ? "—" : string.Join(", ", calls.Select(c => $"{c.Store}.{c.Method}")))}";
                 foreach (var c in calls) if (FnSig(c.Store, c.Method) is { } sig) yield return $"    {sig}";
                 foreach (var st in calls.Select(c => c.Store).Distinct())
                     yield return $"ReadModels von {st}: {string.Join(", ", ReadModelsVon(st))}";
@@ -550,7 +549,11 @@ public sealed class KontextBauer
                 yield return $"Eingang {disc.Name} kommt von: {(quelle.Count == 0 ? "Trigger/Self (siehe Skelett)" : string.Join(", ", quelle))}";
                 yield return $"sendet: {(h?.EmitsFull.Count > 0 ? string.Join(", ", h.Value.EmitsFull.Select(e => e.Split('.').Last())) : "—")}";
                 if (pl?.HandleEmitsTriggers.GetValueOrDefault(disc.Fq()) is { Count: > 0 } tr) yield return $"erzeugt Trigger: {string.Join(", ", tr)}";
-                if (pl?.HandleSchedules.GetValueOrDefault(disc.Fq()) is { Count: > 0 } sc) yield return $"plant Self-Tick: {string.Join(", ", sc.Select(x => $"{x.Name} nach {x.Delay}"))}";
+                var vt = pl?.HandleVertraege.GetValueOrDefault(disc.Fq());
+                if (vt?.Ausgaenge.Where(a => a.Art == "self").Select(a => a.Typ).ToList() is { Count: > 0 } sc) yield return $"plant Selbst-Nachricht: {string.Join(", ", sc)}";
+                if (vt?.Ausgaenge.Where(a => a.Art == "frist").Select(a => a.Typ).ToList() is { Count: > 0 } fr) yield return $"plant Frist: {string.Join(", ", fr)}";
+                var pfs = pl?.HandleFaehigkeiten.GetValueOrDefault(disc.Fq()) ?? new();
+                if (pfs.Count > 0) yield return $"Fähigkeiten (Signatur): {string.Join(", ", pfs.Select(c => $"{c.Store}.{c.Method}"))}";
                 foreach (var ziel in h?.EmitsFull ?? new())
                     if (_dom.Aggregates.FirstOrDefault(a => a.HandlesCommandsFull.Contains(ziel)) is { } agg)
                         yield return $"{ziel.Split('.').Last()} geht an: Aggregat {agg.Name}";
@@ -565,7 +568,7 @@ public sealed class KontextBauer
                 yield return $"ReadModels: {string.Join(", ", ReadModelsVon(st.Name))}";
                 var aufrufer = Aufrufer(st.Name, s.Disc).Select(x => x.Titel).ToList();
                 yield return $"aufgerufen von: {(aufrufer.Count == 0 ? "—" : string.Join(", ", aufrufer))}";
-                foreach (var p in _dom.Projections.Where(p => p.HandleStoreCalls.Values.Any(cs => cs.Any(c => c.Store == st.Name && c.Method == s.Disc))))
+                foreach (var p in _dom.Projections.Where(p => p.HandleFaehigkeiten.Values.Any(cs => cs.Any(c => c.Store == st.Name && c.Method == s.Disc))))
                     yield return $"    {p.Name}: {(p.Append ? "append-artig (exactly-once)" : "Upsert (at-least-once)")}";
                 if (st.MehrdeutigeImpls.Count > 0) yield return $"mehrere Implementierungen: {string.Join(", ", st.MehrdeutigeImpls.Select(x => x.Split('.').Last()))}";
                 break;
@@ -650,8 +653,8 @@ public sealed class KontextBauer
             case "reader":
             {
                 var calls = s.Art == "reader"
-                    ? _dom.Readers.FirstOrDefault(r => r.Full == s.Klasse.Fq())?.HandleStoreCalls.GetValueOrDefault(disc.Name)
-                    : _dom.Projections.FirstOrDefault(p => p.Full == s.Klasse.Fq())?.HandleStoreCalls.GetValueOrDefault(disc.Name);
+                    ? _dom.Readers.FirstOrDefault(r => r.Full == s.Klasse.Fq())?.HandleFaehigkeiten.GetValueOrDefault(disc.Name)
+                    : _dom.Projections.FirstOrDefault(p => p.Full == s.Klasse.Fq())?.HandleFaehigkeiten.GetValueOrDefault(disc.Name);
                 foreach (var c in calls ?? new())
                     foreach (var impl in _inv.Slots.Where(x => x.Art == "store" && x.Disc == c.Method && StoreVon(x)?.Name == c.Store))
                         yield return ($"Store-Impl {impl.Klasse.Name}.{c.Method}", RumpfText(impl.Rumpf));
@@ -668,12 +671,12 @@ public sealed class KontextBauer
     private IEnumerable<(string Titel, SyntaxNode Rumpf)> Aufrufer(string store, string method)
     {
         foreach (var p in _dom.Projections)
-            foreach (var (evt, calls) in p.HandleStoreCalls)
+            foreach (var (evt, calls) in p.HandleFaehigkeiten)
                 if (calls.Any(c => c.Store == store && c.Method == method)
                     && _inv.Slots.FirstOrDefault(x => x.Klasse.Fq() == p.Full && x.Disc == evt) is { } sl)
                     yield return ($"{p.Name}.Handle({evt})", sl.Rumpf);
         foreach (var r in _dom.Readers)
-            foreach (var (q, calls) in r.HandleStoreCalls)
+            foreach (var (q, calls) in r.HandleFaehigkeiten)
                 if (calls.Any(c => c.Store == store && c.Method == method)
                     && _inv.Slots.FirstOrDefault(x => x.Klasse.Fq() == r.Full && x.Disc == q) is { } sl)
                     yield return ($"{r.Name}.Handle({q})", sl.Rumpf);
@@ -760,7 +763,7 @@ public static class KontextCli
             if (ks.Count == 0) { Console.Error.WriteLine($"❌ Kein Code-Block für '{ziel}'."); return 1; }
             foreach (var k in ks)
             {
-                var skel = bauer.Skelett(k.Schlüssel);
+                var skel = bauer.Skelett();
                 Console.WriteLine($"\n════ {k.Titel} — fester Teil ≈ {Token(skel)} Token (Graph-Skelett, siehe --kontexte), Slot-Teil ≈ {Token(k.Text)} Token ════\n");
                 Console.WriteLine(k.Text);
             }
@@ -784,12 +787,9 @@ public static class KontextCli
         File.WriteAllText(Path.Combine(verz, "übersicht.md"), md.ToString());
 
         // index.json — was die LLM-Konsole (SimHost) je Slot braucht: Anker zum Schreiben, Slot-Teil-Datei,
-        // die Skelett-Zeile ohne eigene Guards (Ersatz) und den Auftrag, falls einer im Code/Board steht.
-        var skelettZeilen = skelett.Split('\n');
+        // und den Auftrag, falls einer im Code/Board steht.
         var index = alle.Select(k =>
         {
-            var eigen = bauer.Skelett(k.Schlüssel).Split('\n');
-            var ersatz = skelettZeilen.Zip(eigen).Where(z => z.First != z.Second).Select(z => new { alt = z.First, neu = z.Second }).FirstOrDefault();
             var m = k.Slot.Methode!;
             var decl = m.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).First(n => !Projektlage.IstGeneriert(n.SyntaxTree));
             var pos = decl.GetLocation().GetLineSpan();
@@ -804,10 +804,16 @@ public static class KontextCli
                 parameterTyp = pTyp == null ? null : pTyp.Split('<')[0].Split('.').Last().TrimEnd('?').Trim(),
                 datei = Path.GetRelativePath(solutionDir, pos.Path).Replace('\\', '/'), zeile = pos.StartLinePosition.Line + 1,
                 rumpf = k.RumpfStatus, auftrag = k.Auftrag,
-                slotDatei = DateiName(k), tokenSlot = Token(k.Text), skelettErsatz = ersatz,
+                slotDatei = DateiName(k), tokenSlot = Token(k.Text),
             };
         }).ToList();
-        File.WriteAllText(Path.Combine(verz, "index.json"), System.Text.Json.JsonSerializer.Serialize(new { skelettDatei = "00-graph-skelett.txt", tokenSkelett = Token(skelett), slots = index },
+        File.WriteAllText(Path.Combine(verz, "index.json"), System.Text.Json.JsonSerializer.Serialize(new
+        {
+            skelettDatei = "00-graph-skelett.txt", tokenSkelett = Token(skelett),
+            // Das Laufzeit-Projekt (generierte Routing-Tabelle): sein Build fährt ALLE Code-Generatoren — die Konsole baut es nach dem Schreiben.
+            laufzeitProjekt = lage.Laufzeit.FilePath is { } lp ? Path.GetRelativePath(solutionDir, lp).Replace('\\', '/') : null,
+            slots = index,
+        },
             new System.Text.Json.JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
         Console.WriteLine($"✅ {alle.Count} Slot-Teile + Graph-Skelett (≈ {skelTok} Token) → {verz}");
         foreach (var g in alle.GroupBy(k => k.Slot.Art))

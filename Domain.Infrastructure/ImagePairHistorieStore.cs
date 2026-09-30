@@ -6,10 +6,10 @@ namespace Domain.Infrastructure;
 /// <summary>
 /// Co-Commit-Store der ImagePairHistorie (Append-Projektion, Muster B: Read + Write auf derselben
 /// Klasse). Exactly-once-Naht in <see cref="MartenCoCommitStoreBase"/>; <see cref="AppendEintragAsync"/>
-/// puffert einen load-or-create-append als Effekt. TRANSIENT registriert.
+/// puffert einen load-or-create-append als Effekt. SCOPED registriert (eine Instanz je Fähigkeits-Bereich, unter jeder Fähigkeit).
 /// </summary>
 public sealed class ImagePairHistorieStore
-    : MartenCoCommitStoreBase, IImagePairHistorieWriteStore, IImagePairHistorieReadStore
+    : MartenCoCommitStoreBase, IImagePairHistorieStore
 {
     public ImagePairHistorieStore(IDocumentStore store) : base(store) { }
 

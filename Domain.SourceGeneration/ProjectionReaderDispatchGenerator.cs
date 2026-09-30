@@ -12,7 +12,7 @@ namespace Domain.SourceGeneration;
 /// - DispatchAsync (Query-Routing mit Envelope + ReadContext)
 ///
 /// Erkennung: Top-Level-Klassen die IReader&lt;T&gt; implementieren.
-/// Handle-Signatur: (TQuery, IMessageEnvelope, ReadContext)
+/// Handle-Signatur: (TQuery, IMessageEnvelope, ReadContext, Fähigkeit…) — Fähigkeiten löst der Dispatch auf.
 /// Return-Typ-Analyse: Task&lt;OneOf&lt;...&gt;&gt; → unwrap .Value, Task&lt;T&gt; → direkt
 /// </summary>
 [Generator]
@@ -62,10 +62,11 @@ public class ProjectionReaderDispatchGenerator : IIncrementalGenerator
         if (messageEnvelopeType == null || readContextType == null)
             return null;
 
-        // Handle-Methoden: (TQuery, IMessageEnvelope, ReadContext)
+        // Handle-Methoden: (TQuery, IMessageEnvelope, ReadContext, Fähigkeit…)
         var handleMethods = classSymbol.GetMembers("Handle")
             .OfType<IMethodSymbol>()
-            .Where(m => m.Parameters.Length == 3 &&
+            .Where(m => m.Parameters.Length >= 3 &&
+                        m.Parameters.Skip(3).All(p => FaehigkeitsTypen.IstFaehigkeit(p.Type, context.SemanticModel.Compilation)) &&
                         SymbolEqualityComparer.Default.Equals(
                             m.Parameters[1].Type, messageEnvelopeType) &&
                         SymbolEqualityComparer.Default.Equals(
@@ -80,7 +81,8 @@ public class ProjectionReaderDispatchGenerator : IIncrementalGenerator
         {
             var queryTypeName = method.Parameters[0].Type.ToDisplayString();
             var kind = AnalyzeReturnType(method.ReturnType);
-            handlers.Add(new ReaderHandlerInfo(queryTypeName, kind));
+            handlers.Add(new ReaderHandlerInfo(queryTypeName, kind,
+                FaehigkeitsTypen.ArgumentListe(FaehigkeitsTypen.Argumente(method, 3))));
         }
 
         return new ReaderGeneratorModel(
@@ -144,7 +146,7 @@ public class ProjectionReaderDispatchGenerator : IIncrementalGenerator
         sb.AppendLine("    /// Routet eine Query an die passende Handle-Methode.");
         sb.AppendLine("    /// OneOf-Returns werden zu IQueryResponse unwrappt.");
         sb.AppendLine("    /// </summary>");
-        sb.AppendLine("    public async Task<IQueryResponse> DispatchAsync(IQuery query, IMessageEnvelope envelope, ReadContext ctx)");
+        sb.AppendLine("    public async Task<IQueryResponse> DispatchAsync(IQuery query, IMessageEnvelope envelope, ReadContext ctx, IFaehigkeiten faehigkeiten)");
         sb.AppendLine("    {");
         sb.AppendLine("        switch (query)");
         sb.AppendLine("        {");
@@ -157,13 +159,13 @@ public class ProjectionReaderDispatchGenerator : IIncrementalGenerator
             {
                 case ReaderHandlerKind.TaskOneOf:
                     sb.AppendLine($"            case {simpleType} q:");
-                    sb.AppendLine($"                var r_{simpleType} = await Handle(q, envelope, ctx);");
+                    sb.AppendLine($"                var r_{simpleType} = await Handle(q, envelope, ctx{handler.FaehigkeitsArgumente});");
                     sb.AppendLine($"                return (IQueryResponse)r_{simpleType}.Value;");
                     break;
 
                 case ReaderHandlerKind.TaskDirect:
                     sb.AppendLine($"            case {simpleType} q:");
-                    sb.AppendLine($"                return await Handle(q, envelope, ctx);");
+                    sb.AppendLine($"                return await Handle(q, envelope, ctx{handler.FaehigkeitsArgumente});");
                     break;
             }
         }
@@ -199,9 +201,12 @@ internal class ReaderHandlerInfo
 {
     public string QueryTypeName { get; }
     public ReaderHandlerKind Kind { get; }
+    /// <summary>„, faehigkeiten.Hole&lt;…&gt;()" je Fähigkeits-Parameter.</summary>
+    public string FaehigkeitsArgumente { get; }
 
-    public ReaderHandlerInfo(string queryTypeName, ReaderHandlerKind kind)
+    public ReaderHandlerInfo(string queryTypeName, ReaderHandlerKind kind, string faehigkeitsArgumente)
     {
+        FaehigkeitsArgumente = faehigkeitsArgumente;
         QueryTypeName = queryTypeName;
         Kind = kind;
     }

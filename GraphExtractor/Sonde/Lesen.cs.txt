@@ -4,7 +4,10 @@ using Leihwesen.Ausleihe;
 using Leihwesen.Gebuehren;
 
 // SONDE — Leseseite mit FREIEN Namen (keine Namenskonvention), class-ReadModel, OneOf-Antwort,
-// Konstanten-Id, Reaktion, Pipeline mit Konfig-Record.
+// Konstanten-Id, Reaktion, Pipeline mit Konfig-Record. Handle-Verträge: WAS aus der Signatur (auch eine deklarierte,
+// nie ausgegebene Variante), WELCHE Store-Fns aus den Fähigkeits-Parametern. Verschleierung: Fähigkeit über eine
+// Hilfsmethode, über einen Delegate, über ein fremdes Objekt, in einem nie ausgeführten Lambda — die Kanten bleiben exakt,
+// weil sie nur aus der Signatur kommen. Kein Rumpf-Fakt (kein Guard).
 
 namespace Leihwesen.Lesen;
 
@@ -15,18 +18,14 @@ public class LeihEintrag : IReadModel
     public bool Offen { get; set; }
 }
 
-public interface ILeihBuch : IWriteStore
-{
-    Task SchreibeAsync(LeihEintrag eintrag);
-    Task SchliesseAsync(Guid id);
-}
+// Fähigkeiten: frei benannt, je genau EINE Funktion; das Bündel (IStore) ist der Store.
+public interface INotiereAusleihe : IWriteStore { Task SchreibeAsync(LeihEintrag eintrag); }
+public interface ISchliesseAusleihe : IWriteStore { Task SchliesseAsync(Guid id); }
+public interface IZaehleOffene : IReadStore { Task<IReadOnlyList<LeihEintrag>> OffeneAsync(Guid leserId); }
 
-public interface ILeihAuskunft : IReadStore<ILeihBuch>
-{
-    Task<IReadOnlyList<LeihEintrag>> OffeneAsync(Guid leserId);
-}
+public interface ILeihBuch : IStore, INotiereAusleihe, ISchliesseAusleihe, IZaehleOffene { }
 
-public sealed class LeihBuchSpeicher : ILeihBuch, ILeihAuskunft
+public sealed class LeihBuchSpeicher : ILeihBuch
 {
     private readonly Dictionary<Guid, LeihEintrag> _daten = new();
 
@@ -49,41 +48,43 @@ public record KeineAusleihen() : IQueryResponse;
 public partial class Leihliste : ISubscriber, IPullSubscriber
 {
     private const string Kennung = "leihliste";
-    private readonly ILeihBuch _buch;
-
-    public Leihliste(ILeihBuch buch) { _buch = buch; }
 
     public string SubscriberId => Kennung;
 
-    public async Task Handle(Ausgeliehen evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+    // Verschleierung 1: die Fähigkeit geht durch eine Hilfsmethode.
+    public async Task Handle(Ausgeliehen evt, IAggregateEnvelope envelope, ProjectionWriter writer, INotiereAusleihe notiere)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<Leihvorgang>(envelope.AggregateId);
-            await _buch.SchreibeAsync(new LeihEintrag { Id = envelope.AggregateId, LeserId = evt.LeserId, Offen = true });
+            await Notiere(notiere, envelope.AggregateId, evt.LeserId);
         });
     }
 
-    public async Task Handle(Zurueckgegeben evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+    private static Task Notiere(INotiereAusleihe f, Guid id, Guid leser) =>
+        f.SchreibeAsync(new LeihEintrag { Id = id, LeserId = leser, Offen = true });
+
+    // Verschleierung 2+3: über einen Delegate und über ein fremdes Objekt; dazu ein nie ausgeführtes Lambda.
+    public async Task Handle(Zurueckgegeben evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISchliesseAusleihe schliesse)
     {
+        Func<Guid, Task> tu = schliesse.SchliesseAsync;
+        Func<Task> nie = () => new Schliesser(schliesse).Los(Guid.Empty);
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<Leihvorgang>(envelope.AggregateId);
-            await _buch.SchliesseAsync(envelope.AggregateId);
+            await tu(envelope.AggregateId);
         });
     }
+
+    private sealed class Schliesser(ISchliesseAusleihe f) { public Task Los(Guid id) => f.SchliesseAsync(id); }
 }
 
 [ProjectionReader(TrackDeps = false)]
 public partial class LeihAuskunftLeser : IReader<Leihliste>
 {
-    private readonly ILeihAuskunft _auskunft;
-
-    public LeihAuskunftLeser(ILeihAuskunft auskunft) { _auskunft = auskunft; }
-
-    public async Task<OneOf<OffeneAusleihenAntwort, KeineAusleihen>> Handle(OffeneAusleihen query, IMessageEnvelope envelope, ReadContext ctx)
+    public async Task<OneOf<OffeneAusleihenAntwort, KeineAusleihen>> Handle(OffeneAusleihen query, IMessageEnvelope envelope, ReadContext ctx, IZaehleOffene zaehle)
     {
-        var offen = await _auskunft.OffeneAsync(query.LeserId);
+        var offen = await zaehle.OffeneAsync(query.LeserId);
         if (offen.Count == 0) return new KeineAusleihen();
         return new OffeneAusleihenAntwort(offen.Count);
     }
@@ -102,7 +103,11 @@ public partial class MahnungBeiSchaden : ISubscriber, IPullSubscriber
 
 public record MahnlaufAngestossen(Guid Ziel, decimal Betrag) : IPipelineTrigger;
 
+public record MahnlaufGeprueft(Guid Ziel, decimal Betrag) : IPipelineTrigger;
+
 public record MahnlaufKonfig(decimal Mindestbetrag);
+
+public record Mahnrunde : IPipelineSelfMessage;
 
 public partial class MahnlaufPipeline : IPipelineHandler
 {
@@ -113,11 +118,31 @@ public partial class MahnlaufPipeline : IPipelineHandler
 
     public string PipelineId => Kennung;
 
-    public async IAsyncEnumerable<EroeffneMahnung> Handle(MahnlaufAngestossen trigger, PipelineContext ctx)
+    public async IAsyncEnumerable<OneOf<EroeffneMahnung, MeldeSchaden>> Handle(MahnlaufAngestossen trigger, PipelineContext ctx)
     {
         await Task.CompletedTask;
         var betrag = Math.Max(trigger.Betrag, _konfig.Mindestbetrag);
         var verworfen = new EroeffneMahnung(Guid.Empty, 0m);
         yield return new EroeffneMahnung(trigger.Ziel, betrag);
+    }
+
+    public async IAsyncEnumerable<OneOf<EroeffneMahnung, MeldeSchaden>> Handle(MahnlaufGeprueft trigger, PipelineContext ctx, IZaehleOffene zaehle)
+    {
+        if ((await zaehle.OffeneAsync(trigger.Ziel)).Count == 0) yield break;
+        if (trigger.Betrag <= 0) yield break;
+        yield return trigger.Betrag > 100m
+            ? new EroeffneMahnung(trigger.Ziel, trigger.Betrag)
+            : new MeldeSchaden(trigger.Ziel, trigger.Ziel);
+    }
+
+    // Planung als typisierter Ausgang: Selbst-Nachricht (erste beim Start) + Frist — kein ScheduleSelf/IFristplan im Rumpf.
+    public IEnumerable<OneOf<Selbst<Mahnrunde>>> Handle(PipelineGestartet start, PipelineContext ctx)
+    {
+        yield return Selbst.In(new Mahnrunde(), TimeSpan.FromHours(1));
+    }
+
+    public IEnumerable<OneOf<EroeffneMahnung, Selbst<Mahnrunde>, Frist<MeldeSchaden>>> Handle(Mahnrunde runde, PipelineContext ctx)
+    {
+        yield return Selbst.In(new Mahnrunde(), TimeSpan.FromHours(1));
     }
 }

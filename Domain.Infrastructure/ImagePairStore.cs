@@ -5,11 +5,11 @@ using Marten;
 namespace Domain.Infrastructure;
 
 /// <summary>
-/// Co-Commit-Store der ImagePair-Projektion (Pull-Variante der Write-Seite; die Read-Seite bleibt das
-/// Singleton <see cref="ImagePairStorePostgres"/>). Exactly-once-Naht in
-/// <see cref="MartenCoCommitStoreBase"/>; hier nur die fachlichen Write-Effekte. TRANSIENT registriert.
+/// Co-Commit-Store der ImagePair-Projektion — implementiert das Bündel <see cref="IImagePairStore"/> (Schreiben hier,
+/// Lesen im Teil <c>ImagePairStore.Lesen.cs</c>). Exactly-once-Naht in <see cref="MartenCoCommitStoreBase"/>; hier nur
+/// die fachlichen Write-Effekte. SCOPED registriert (eine Instanz je Fähigkeits-Bereich, unter jeder Fähigkeit).
 /// </summary>
-public sealed class ImagePairStore : MartenCoCommitStoreBase, IImagePairWriteStore
+public sealed partial class ImagePairStore : MartenCoCommitStoreBase, IImagePairStore
 {
     public ImagePairStore(IDocumentStore store) : base(store) { }
 

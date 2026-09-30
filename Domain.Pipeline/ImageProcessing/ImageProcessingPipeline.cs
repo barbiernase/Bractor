@@ -44,7 +44,7 @@ public partial class ImageProcessingPipeline : IPipelineHandler
     // TRIGGER-HANDLER
     // ═══════════════════════════════════════════════════
 
-    public async IAsyncEnumerable<ICommand> Handle(
+    public async IAsyncEnumerable<OneOf<ErstelleImagePair, MeldeBildVerfuegbar>> Handle(
         DateiErkannt trigger, PipelineContext ctx)
     {
         // ── 1. Dateinamen parsen ──
@@ -121,7 +121,7 @@ public partial class ImageProcessingPipeline : IPipelineHandler
     // EVENT-HANDLER (PubSub)
     // ═══════════════════════════════════════════════════
 
-    public async IAsyncEnumerable<ICommand> Handle(
+    public async IAsyncEnumerable<OneOf<KlassifiziereBildPaarDurchKi>> Handle(
         ImagePairKomplett evt, PipelineContext ctx)
     {
         var aggregateId = ctx.SourceAggregateId!.Value;

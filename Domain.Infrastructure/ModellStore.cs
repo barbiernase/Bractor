@@ -7,9 +7,9 @@ namespace Domain.Infrastructure;
 /// <summary>
 /// Co-Commit-Store der Modell-Projektion. Die Exactly-once-Naht (Puffern → ein SaveChanges +
 /// ProjectionCheckpoint) liegt in <see cref="MartenCoCommitStoreBase"/>; hier nur die fachlichen
-/// Write-Effekte. TRANSIENT registriert.
+/// Write-Effekte. SCOPED registriert (eine Instanz je Fähigkeits-Bereich, unter jeder Fähigkeit).
 /// </summary>
-public sealed class ModellStore : MartenCoCommitStoreBase, IModellWriteStore
+public sealed partial class ModellStore : MartenCoCommitStoreBase, IModellStore
 {
     public ModellStore(IDocumentStore store) : base(store) { }
 

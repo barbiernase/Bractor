@@ -1,31 +1,20 @@
 using Abstractions;
 namespace Domain.Projections;
 
-/// <summary>
-/// Write-Zugriffsmuster für die Historie-Projektion.
-///
-/// Append-only: Einträge werden nur hinzugefügt, nie geändert oder gelöscht.
-/// Wird von ImagePairHistorieProjection (ISubscriber) verwendet.
-/// </summary>
-public interface IImagePairHistorieWriteStore : IWriteStore
-{
-    /// <summary>
-    /// Fügt einen einzelnen HistorieEintrag an die Timeline eines ImagePairs an.
-    /// Erstellt das Dokument falls es noch nicht existiert.
-    /// </summary>
-    Task AppendEintragAsync(Guid pairId, HistorieEintrag eintrag);
-}
+// FÄHIGKEITEN des Historie-Stores — je Funktion ein Interface (CQRS051).
+// Append-only: Einträge werden nur hinzugefügt, nie geändert oder gelöscht.
 
 /// <summary>
-/// Read-Zugriffsmuster für die Historie-Projektion.
-///
-/// Wird vom ImagePairHistorieReader verwendet.
+/// Fügt einen einzelnen HistorieEintrag an die Timeline eines ImagePairs an.
+/// Erstellt das Dokument falls es noch nicht existiert.
 /// </summary>
-public interface IImagePairHistorieReadStore : IReadStore<IImagePairHistorieWriteStore>
-{
-    /// <summary>
-    /// Lädt die komplette Historie eines ImagePairs.
-    /// Gibt null zurück wenn das Paar nicht existiert.
-    /// </summary>
-    Task<ImagePairHistorieReadModel?> GetByPairIdAsync(Guid pairId);
-}
+public interface IAppendHistorieEintrag : IWriteStore { Task AppendEintragAsync(Guid pairId, HistorieEintrag eintrag); }
+
+/// <summary>
+/// Lädt die komplette Historie eines ImagePairs.
+/// Gibt null zurück wenn das Paar nicht existiert.
+/// </summary>
+public interface IGetHistorie : IReadStore { Task<ImagePairHistorieReadModel?> GetByPairIdAsync(Guid pairId); }
+
+/// <summary>Der Historie-Store — Bündel seiner Fähigkeiten, Transaktionsgrenze.</summary>
+public interface IImagePairHistorieStore : IStore, IAppendHistorieEintrag, IGetHistorie { }

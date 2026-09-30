@@ -28,7 +28,8 @@ public static class PipelineEventPullBridge
         PipelineContext ctx,
         Func<ICommand, Task> sendCommand,
         Func<IPipelineTrigger, Task> sendTrigger,
-        Func<ITransientEvent, Task> broadcastTransient);
+        Func<ITransientEvent, Task> broadcastTransient,
+        Func<IPlanung, Task> plane);
 
     /// <summary>
     /// Adaptiert <paramref name="dispatchEvent"/> auf den Pull-Maschinen-Dispatch. Baut je Event den
@@ -39,7 +40,8 @@ public static class PipelineEventPullBridge
     public static Func<EventEnvelope, ProjectionWriter, Task> Wrap(
         EventDispatch dispatchEvent,
         Func<EventEnvelope, Func<IPipelineOutput, Task>> emitFactory,
-        Func<IPipelineTrigger, string, Task> sendTrigger)
+        Func<IPipelineTrigger, string, Task> sendTrigger,
+        Func<FristAuftrag, Task>? planeFrist = null)
     {
         if (dispatchEvent is null) throw new ArgumentNullException(nameof(dispatchEvent));
         if (emitFactory is null) throw new ArgumentNullException(nameof(emitFactory));
@@ -61,7 +63,14 @@ public static class PipelineEventPullBridge
                 e, ctx,
                 cmd => emit(cmd),                              // ICommand : IPipelineOutput
                 trig => sendTrigger(trig, ctx.CorrelationId),  // pipeline→pipeline
-                te => emit(te));                               // ITransientEvent : IEvent : IPipelineOutput
+                te => emit(te),                                // ITransientEvent : IEvent : IPipelineOutput
+                p => p switch                                  // Planung: Frist → Fristplan; Selbst hat hier keine Mailbox
+                {
+                    FristAuftrag f when planeFrist != null => planeFrist(f),
+                    FristAuftrag f => throw new InvalidOperationException($"Frist '{f.Kontext}' geplant, aber kein FristPlaner verdrahtet."),
+                    _ => throw new NotSupportedException(
+                        "Selbst<T> aus einem Event-Handle: der Pull-Pfad hat keine Actor-Mailbox — Selbst-Nachrichten nur aus Trigger-/Selbst-Handles."),
+                });
         };
     }
 }

@@ -8,9 +8,9 @@ namespace Domain.Infrastructure;
 /// Co-Commit-Store der Datensatz-Projektion. Exactly-once-Naht in <see cref="MartenCoCommitStoreBase"/>;
 /// hier nur die fachlichen Write-Effekte (inkl. Rückwärts-Index-Pflege + Einfrieren-Snapshot). Die
 /// Projektion ist <see cref="Abstractions.IAppendProjektion"/> (Einfrieren schreibt neue Sample-Zeilen).
-/// TRANSIENT registriert.
+/// SCOPED registriert (eine Instanz je Fähigkeits-Bereich, unter jeder Fähigkeit).
 /// </summary>
-public sealed class DatensatzStore : MartenCoCommitStoreBase, IDatensatzWriteStore
+public sealed partial class DatensatzStore : MartenCoCommitStoreBase, IDatensatzStore
 {
     public DatensatzStore(IDocumentStore store) : base(store) { }
 

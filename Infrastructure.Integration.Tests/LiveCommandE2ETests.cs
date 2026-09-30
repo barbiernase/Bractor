@@ -59,8 +59,10 @@ public class LiveCommandE2ETests
                 .Should().NotBeNull("IReadModelDepsSink muss für den Pull-Deps-Index registriert sein");
 
             var dispatcher = host.Services.GetRequiredService<IAggregateDispatcher>();
-            var historieRead = host.Services.GetRequiredService<IImagePairHistorieReadStore>();
-            var imagePairRead = host.Services.GetRequiredService<IImagePairReadStore>();
+            // Stores sind SCOPED (eine Instanz je Fähigkeits-Bereich) → aus einem eigenen Bereich lesen.
+            using var bereich = host.Services.CreateScope();
+            var historieRead = bereich.ServiceProvider.GetRequiredService<IGetHistorie>();
+            var imagePairRead = bereich.ServiceProvider.GetRequiredService<IFindImagePair>();
 
             var pairId = Guid.NewGuid();
             dispatcher.Dispatch(new CommandEnvelope

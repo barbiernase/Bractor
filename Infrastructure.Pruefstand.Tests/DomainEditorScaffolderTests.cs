@@ -50,8 +50,8 @@ public sealed class DomainEditorScaffolderTests
         ],
         Decider =
         [
-            new() { Aggregat = "Konto", Command = "EroeffneKonto", Ergibt = [ new() { Event = "KontoEroeffnet" }, new() { Event = "KontoExistiertBereits", Guard = "State.Version > 0" } ] },
-            new() { Aggregat = "Konto", Command = "ReserviereBetrag", Ergibt = [ new() { Event = "BetragReserviert" }, new() { Event = "KontoGesperrt" }, new() { Event = "DeckungReichtNicht", Guard = "State.Verfuegbar < cmd.Betrag" }, new() { Event = "KontoNichtGefunden" } ] },
+            new() { Aggregat = "Konto", Command = "EroeffneKonto", Ergibt = [ new() { Event = "KontoEroeffnet" }, new() { Event = "KontoExistiertBereits" } ] },
+            new() { Aggregat = "Konto", Command = "ReserviereBetrag", Ergibt = [ new() { Event = "BetragReserviert" }, new() { Event = "KontoGesperrt" }, new() { Event = "DeckungReichtNicht" }, new() { Event = "KontoNichtGefunden" } ] },
         ],
         Applier =
         [

@@ -17,8 +17,8 @@ namespace SimHost;
 public record CompileFehler(string Schweregrad, string Code, string Meldung, string? Datei);
 public record CompileErgebnis(bool Ok, List<CompileFehler> Fehler, int Aggregate, int Sagas);
 
-/// <summary>Ein Event im Simulations-Frame: Typ, persistent/Ablehnung, gebundener Guard („weil …"), Werte.</summary>
-public record SimEvent(string Typ, bool Persistent, string? Warum, string Werte);
+/// <summary>Ein Event im Simulations-Frame: Typ, persistent/Ablehnung, Werte.</summary>
+public record SimEvent(string Typ, bool Persistent, string Werte);
 /// <summary>Ein Command-Schritt der Kaskade — genau das, was der Editor Knoten für Knoten animiert.</summary>
 public record SimFrame(string Command, string Werte, string Herkunft, string? Saga, int? Regel,
     string Aggregat, string AggregatId, string Label, List<SimEvent> Events, bool Unrouted);
@@ -182,10 +182,6 @@ public sealed class ModellSimulation
         s.LetzteWurzel = wurzel;
         s.LetzterAusgang = trace.Schritte.FirstOrDefault(x => ReferenceEquals(x.Command, wurzel))?.Ausgang.ToList() ?? new();
 
-        var guards = modell.Decider
-            .SelectMany(d => d.Ergibt.Where(a => a.Guard is not null).Select(a => (Key: d.Command + "|" + a.Event, a.Guard!)))
-            .GroupBy(x => x.Key).ToDictionary(g => g.Key, g => g.First().Item2, StringComparer.Ordinal);
-
         var frames = new List<SimFrame>();
         foreach (var st in trace.Schritte)
         {
@@ -201,10 +197,7 @@ public sealed class ModellSimulation
             }
             if (st.SagaName is not null && st.RegelIndex is int ri) s.Abdeckung.Add($"regel:{st.SagaName}#{ri}");
 
-            var events = st.Ausgang.Select(e => new SimEvent(
-                e.Typ, e.Persistent,
-                guards.TryGetValue(cmdName + "|" + e.Typ, out var g) ? GuardBinder.Binde(g, st.ZustandVorher, st.Command) : null,
-                Werte(e.Event))).ToList();
+            var events = st.Ausgang.Select(e => new SimEvent(e.Typ, e.Persistent, Werte(e.Event))).ToList();
             frames.Add(new SimFrame(cmdName, Werte(st.Command), st.Ursprung == Ursprung.Saga ? "saga" : "wurzel",
                 st.SagaName, st.RegelIndex, st.AggregatTyp, st.AggregatId.ToString(),
                 st.Unrouted ? "—" : Label(s, st.AggregatTyp, st.AggregatId), events, st.Unrouted));

@@ -6,13 +6,6 @@ namespace Domain.Projections;
 
 public partial class ImagePairProjection : ISubscriber, IPullSubscriber
 {
-    private readonly IImagePairWriteStore _store;
-
-    public ImagePairProjection(IImagePairWriteStore store)
-    {
-        _store = store;
-    }
-
     public string SubscriberId => "imagepair-projection";
 
     // =========================================================================
@@ -20,12 +13,12 @@ public partial class ImagePairProjection : ISubscriber, IPullSubscriber
     // =========================================================================
 
     public async Task Handle(
-        ImagePairErstellt evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        ImagePairErstellt evt, IAggregateEnvelope envelope, ProjectionWriter writer, IUpsertImagePair upsertImagePair)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ImagePair.ImagePair>(envelope.AggregateId);
-            await _store.UpsertAsync(new ImagePairReadModel
+            await upsertImagePair.UpsertAsync(new ImagePairReadModel
             {
                 Id = envelope.AggregateId,
                 PairKey = evt.PairKey,
@@ -38,24 +31,24 @@ public partial class ImagePairProjection : ISubscriber, IPullSubscriber
     }
 
     public async Task Handle(
-        BildVerfuegbar evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        BildVerfuegbar evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetBildVerfuegbar setBildVerfuegbar)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ImagePair.ImagePair>(envelope.AggregateId);
-            await _store.SetBildVerfuegbarAsync(
+            await setBildVerfuegbar.SetBildVerfuegbarAsync(
                 envelope.AggregateId, evt.Version, evt.Meta, evt.Pfad,
                 envelope.CreatedAtUtc);
         });
     }
 
     public async Task Handle(
-        ImagePairKomplett evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        ImagePairKomplett evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetKomplett setKomplett)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ImagePair.ImagePair>(envelope.AggregateId);
-            await _store.SetKomplettAsync(envelope.AggregateId, envelope.CreatedAtUtc);
+            await setKomplett.SetKomplettAsync(envelope.AggregateId, envelope.CreatedAtUtc);
         });
     }
 
@@ -64,24 +57,24 @@ public partial class ImagePairProjection : ISubscriber, IPullSubscriber
     // =========================================================================
 
     public async Task Handle(
-        EinzelBildDurchKiKlassifiziert evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        EinzelBildDurchKiKlassifiziert evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetKiEinzelbildKlassifikation setKiEinzelbildKlassifikation)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ImagePair.ImagePair>(envelope.AggregateId);
-            await _store.SetKiEinzelbildKlassifikationAsync(
+            await setKiEinzelbildKlassifikation.SetKiEinzelbildKlassifikationAsync(
                 envelope.AggregateId, evt.Version, evt.BildLabel, evt.RegionLabels,
                 envelope.CreatedAtUtc);
         });
     }
 
     public async Task Handle(
-        BildPaarDurchKiKlassifiziert evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        BildPaarDurchKiKlassifiziert evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetKiBildpaarKlassifikation setKiBildpaarKlassifikation)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ImagePair.ImagePair>(envelope.AggregateId);
-            await _store.SetKiBildpaarKlassifikationAsync(
+            await setKiBildpaarKlassifikation.SetKiBildpaarKlassifikationAsync(
                 envelope.AggregateId, evt.Label, envelope.CreatedAtUtc);
         });
     }
@@ -91,35 +84,35 @@ public partial class ImagePairProjection : ISubscriber, IPullSubscriber
     // =========================================================================
 
     public async Task Handle(
-        BildRegionGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        BildRegionGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetMenschRegionLabel setMenschRegionLabel)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ImagePair.ImagePair>(envelope.AggregateId);
-            await _store.SetMenschRegionLabelAsync(
+            await setMenschRegionLabel.SetMenschRegionLabelAsync(
                 envelope.AggregateId, evt.Version, evt.RegionIndex, evt.Label,
                 envelope.CreatedAtUtc);
         });
     }
 
     public async Task Handle(
-        EinzelBildGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        EinzelBildGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetMenschEinzelbildLabel setMenschEinzelbildLabel)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ImagePair.ImagePair>(envelope.AggregateId);
-            await _store.SetMenschEinzelbildLabelAsync(
+            await setMenschEinzelbildLabel.SetMenschEinzelbildLabelAsync(
                 envelope.AggregateId, evt.Version, evt.Label, envelope.CreatedAtUtc);
         });
     }
 
     public async Task Handle(
-        BildPaarGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        BildPaarGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetMenschBildpaarLabel setMenschBildpaarLabel)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ImagePair.ImagePair>(envelope.AggregateId);
-            await _store.SetMenschBildpaarLabelAsync(
+            await setMenschBildpaarLabel.SetMenschBildpaarLabelAsync(
                 envelope.AggregateId, evt.Label, envelope.CreatedAtUtc);
         });
     }
@@ -129,12 +122,12 @@ public partial class ImagePairProjection : ISubscriber, IPullSubscriber
     // =========================================================================
 
     public async Task Handle(
-        PhysischesProduktGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        PhysischesProduktGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetPhysischesProduktLabel setPhysischesProduktLabel)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ImagePair.ImagePair>(envelope.AggregateId);
-            await _store.SetPhysischesProduktLabelAsync(
+            await setPhysischesProduktLabel.SetPhysischesProduktLabelAsync(
                 envelope.AggregateId, evt.Label, envelope.CreatedAtUtc);
         });
     }
@@ -144,12 +137,12 @@ public partial class ImagePairProjection : ISubscriber, IPullSubscriber
     // =========================================================================
 
     public async Task Handle(
-        ImagePairInspiziert evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        ImagePairInspiziert evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetInspiziert setInspiziert)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ImagePair.ImagePair>(envelope.AggregateId);
-            await _store.SetInspiziertAsync(
+            await setInspiziert.SetInspiziertAsync(
                 envelope.AggregateId, envelope.CreatedAtUtc);
         });
     }

@@ -92,15 +92,15 @@ public static class CqrsServiceExtensions
         // 1. Infrastruktur (Marten + Redis)
         services.AddCqrsInfrastructure(builder);
         
-        // 2. Domain-Stores + Reader (generiert vom ProjectionServicesGenerator in Domain.Infrastructure)
-        //    MUSS VOR Subscribers -- Projektionen brauchen WriteStores!
+        // 2. Domain-Stores + Reader (generiert vom ProjectionServicesGenerator in Domain.Infrastructure).
+        //    Stores sind SCOPED; Handles bekommen ihre Fähigkeiten über einen Bereich der Fabrik.
         services.AddGeneratedProjectionServices();
+        services.AddSingleton<Abstractions.IFaehigkeitsFabrik, Infrastructure.Projections.DiFaehigkeitsFabrik>();
         
         // 3. Aggregate-Components -- GENERIERT
         services.AddCqrsAggregates();
         
         // 4. Subscribers (Projektionen/Writer) -- GENERIERT
-        //    DI loest WriteStore-Konstruktor automatisch auf (Stores sind registriert)
         services.AddCqrsSubscribers();
         
         // 5. PubSub
@@ -282,6 +282,9 @@ public static class CqrsServiceExtensions
             new MartenDbClock(provider.GetRequiredService<IDocumentStore>()));
         services.AddSingleton<IFristplan>(provider =>
             new MartenFristplan(provider.GetRequiredService<IDocumentStore>()));
+        // Senke der typisierten Frist-Ausgänge (Frist<TCmd>/FristStorno<TCmd>) aus Pipelines.
+        services.AddSingleton(provider => new Infrastructure.Deadlines.FristPlaner(
+            provider.GetRequiredService<IFristplan>(), provider.GetRequiredService<IDbClock>()));
 
         // ★ Snapshot-Store (abgeleiteter jsonb-Cache): der Aggregat-Actor seedet daraus seine Rehydration.
         services.AddSingleton<ISnapshotStore>(provider =>

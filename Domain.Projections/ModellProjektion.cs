@@ -16,22 +16,15 @@ namespace Domain.Projections;
 /// </summary>
 public partial class ModellProjektion : ISubscriber, IPullSubscriber
 {
-    private readonly IModellWriteStore _store;
-
-    public ModellProjektion(IModellWriteStore store)
-    {
-        _store = store;
-    }
-
     public string SubscriberId => "modell-projection";
 
     public async Task Handle(
-        ModellRegistriert evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        ModellRegistriert evt, IAggregateEnvelope envelope, ProjectionWriter writer, IUpsertModell upsertModell)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ModellAgg>(envelope.AggregateId);
-            await _store.UpsertAsync(new ModellReadModel
+            await upsertModell.UpsertAsync(new ModellReadModel
             {
                 Id = envelope.AggregateId,
                 Name = evt.Name,
@@ -48,22 +41,22 @@ public partial class ModellProjektion : ISubscriber, IPullSubscriber
     }
 
     public async Task Handle(
-        ModellAktiviert evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        ModellAktiviert evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetzeModellAktiv setzeModellAktiv)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ModellAgg>(envelope.AggregateId);
-            await _store.SetzeAktivAsync(envelope.AggregateId, evt.Name, evt.Pfad, envelope.CreatedAtUtc);
+            await setzeModellAktiv.SetzeAktivAsync(envelope.AggregateId, evt.Name, evt.Pfad, envelope.CreatedAtUtc);
         });
     }
 
     public async Task Handle(
-        ModellArchiviert evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        ModellArchiviert evt, IAggregateEnvelope envelope, ProjectionWriter writer, IArchiviereModell archiviereModell)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ModellAgg>(envelope.AggregateId);
-            await _store.ArchiviereAsync(envelope.AggregateId, envelope.CreatedAtUtc);
+            await archiviereModell.ArchiviereAsync(envelope.AggregateId, envelope.CreatedAtUtc);
         });
     }
 }

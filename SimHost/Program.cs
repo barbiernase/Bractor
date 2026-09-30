@@ -10,9 +10,10 @@ app.UseCors();
 // ── EINE Oberfläche: der Domänen-Editor unter /editor (inkl. Simulation). Das alte Board ist abgelöst. ──
 app.MapGet("/", () => Results.Redirect("/editor"));
 var editorPath = FindNeben("editor.html");
-app.MapGet("/editor", () => editorPath != null && File.Exists(editorPath)
+// no-store: der Browser holt die Oberfläche immer frisch (sonst sieht man nach einem Editor-Update die alte Seite).
+app.MapGet("/editor", (HttpContext ctx) => { ctx.Response.Headers.CacheControl = "no-store"; return editorPath != null && File.Exists(editorPath)
     ? Results.Content(File.ReadAllText(editorPath), "text/html")
-    : Results.Content("<h1>editor.html nicht gefunden</h1><p>Erst <code>dotnet run --project GraphExtractor</code> laufen lassen.</p>", "text/html"));
+    : Results.Content("<h1>editor.html nicht gefunden</h1><p>Erst <code>dotnet run --project GraphExtractor</code> laufen lassen.</p>", "text/html"); });
 
 // ── EDITOR-MODUS: Modell → C# (der EINE Scaffolder) + Struktur-Prüfung. Umkehrung C# → Board. ──
 // Das aktuelle Domänen-Modell (aus dem Round-trip, neben der .sln) — Startpunkt zum Weiterbauen.
@@ -130,8 +131,8 @@ app.MapPost("/api/editor/extract", () => Results.Json(konsole.Aktualisieren()));
 app.MapPost("/api/editor/build", () => Results.Json(CodeSync.Baue(slnRoot)));
 
 // ── LLM-KONSOLE: einen Code-Block füllen → prüfen → anpassen → übernehmen (docs/konzept-llm-minimalkontext.md). ──
-// Anbieter über die Umgebung: BRACTOR_LLM = claude (Standard, `claude -p` mit der Anmeldung dieses Rechners)
-// | openai (BRACTOR_LLM_URL, BRACTOR_LLM_MODELL — z. B. llama.cpp/vLLM) | befehl (BRACTOR_LLM_BEFEHL, stdin → stdout).
+// Anbieter: ausschließlich Claude Code (`claude -p`) mit der Anmeldung dieses Rechners — Abo, keine API-Kosten
+// (ein gesetzter ANTHROPIC_API_KEY blockiert den Aufruf). BRACTOR_LLM_MODELL wählt optional das Modell.
 app.MapGet("/konsole", () => Results.Content(KonsoleSeite.Html, "text/html"));
 app.MapGet("/api/llm/status", () => Results.Json(konsole.Status()));
 app.MapGet("/api/llm/slots", () => Results.Json(konsole.Slots()));
@@ -143,6 +144,13 @@ app.MapPost("/api/llm/fuellen", async (JsonElement b, CancellationToken ct) => R
     b.TryGetProperty("anpassung", out var an) && an.ValueKind == JsonValueKind.String ? an.GetString() : null,
     !b.TryGetProperty("autoReparatur", out var ar) || ar.ValueKind != JsonValueKind.False,
     b.TryGetProperty("maxRunden", out var mr) && mr.TryGetInt32(out var m) ? m : 3), ct)));
+// Der EINE Durchlauf am 🤖-Knoten: füllen → prüfen → geprüften Rumpf in die Datei → Generatoren (Laufzeit-Build).
+app.MapPost("/api/llm/ausfuehren", async (JsonElement b, CancellationToken ct) => Results.Json(await konsole.AusfuehrenAsync(new LlmKonsole.FuellAnfrage(
+    b.GetProperty("id").GetString()!,
+    b.TryGetProperty("auftrag", out var au) ? au.GetString() ?? "" : "",
+    b.TryGetProperty("rumpf", out var r) && r.ValueKind == JsonValueKind.String ? r.GetString() : null,
+    b.TryGetProperty("anpassung", out var an) && an.ValueKind == JsonValueKind.String ? an.GetString() : null,
+    true, b.TryGetProperty("maxRunden", out var mr) && mr.TryGetInt32(out var m) ? m : 3), ct)));
 app.MapPost("/api/llm/simulieren", (JsonElement b) => Results.Json(konsole.Simuliere(
     b.GetProperty("id").GetString()!, b.GetProperty("rumpf").GetString()!, b.GetProperty("command").GetString()!,
     b.TryGetProperty("werte", out var w) ? w : default, b.TryGetProperty("neu", out var n) && n.ValueKind == JsonValueKind.True), EditorModell.JsonOptionen));

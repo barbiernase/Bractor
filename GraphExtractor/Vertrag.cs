@@ -28,7 +28,7 @@ public static class Vertrag
     public static readonly string IReadModel = typeof(IReadModel).FullName!;
     public static readonly string IWriteStore = typeof(IWriteStore).FullName!;
     public static readonly string IReadStore = typeof(IReadStore).FullName!;
-    public static readonly string IReadStoreT = typeof(IReadStore<>).FullName!;
+    public static readonly string IStore = typeof(IStore).FullName!;
     public static readonly string IWertobjekt = typeof(IWertobjekt).FullName!;
     public static readonly string IPipelineHandler = typeof(IPipelineHandler).FullName!;
     public static readonly string IPipelineTrigger = typeof(IPipelineTrigger).FullName!;
@@ -40,8 +40,6 @@ public static class Vertrag
     public static readonly string IApplier = typeof(IApplier<>).FullName!;
     public static readonly string IAggregateEnvelope = typeof(IAggregateEnvelope).FullName!;
     public static readonly string PipelineContext = typeof(PipelineContext).FullName!;
-    public static readonly string IFristplan = typeof(IFristplan).FullName!;
-    public static readonly string Frist = typeof(Frist).FullName!;
     public static readonly string ProjectionReaderAttribute = typeof(ProjectionReaderAttribute).FullName!;
     public static readonly string AggregatNameAttribute = typeof(AggregatNameAttribute).FullName!;
     public static readonly string IngressAttribute = typeof(IngressAttribute).FullName!;
@@ -64,11 +62,10 @@ public static class Vertrag
     public static readonly string PipelineId = nameof(Abstractions.IPipelineHandler.PipelineId);
     public static readonly string Regeln = nameof(Abstractions.IProzessDefinition.Regeln);
     public static readonly string TrackDeps = nameof(Abstractions.ProjectionReaderAttribute.TrackDeps);
-    public static readonly string FristPlane = nameof(Abstractions.IFristplan.PlaneAsync);
-    public static readonly string FristEntferne = nameof(Abstractions.IFristplan.EntferneAsync);
-    public static readonly string FristKontext = nameof(Abstractions.Frist.Kontext);
-    public static readonly string FristFällig = nameof(Abstractions.Frist.Fällig);
-    public static readonly string ScheduleSelf = nameof(Abstractions.PipelineContext.ScheduleSelf);
+    // ── Planungs-Ausgänge (generische Vertrags-Typen, Metadatenname mit Stelligkeit) ──
+    public static readonly string SelbstTyp = typeof(Selbst<>).Name;
+    public static readonly string FristTyp = typeof(Frist<>).Name;
+    public static readonly string FristStornoTyp = typeof(FristStorno<>).Name;
 
     // ── Aggregat-Namensregel des Framework-Generators (EINE Quelle: Abstractions.Aggregatvertrag) ──
     public const string DeciderKlasse = Aggregatvertrag.Decider;

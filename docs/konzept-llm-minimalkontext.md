@@ -47,7 +47,7 @@
 ┌─ FESTER TEIL — für alle Slots gleich, einmal pro Sitzung verarbeitet (KV-Prefix-Cache) ───── ~9.000 Token
 │  Anweisung (Ausgabeformat: nur Rumpf oder AUSSERHALB)
 │  Graph-Skelett: alle Aggregate/Commands/Events/Prozesse/Stores/Projektionen/Reader/Pipelines,
-│                 als Signaturen + Kanten + Guards; die Guards des EIGENEN Slots werden entfernt
+│                 als Signaturen + Kanten (seit 2026-09-30 ohne Guards — Rumpf-Fakten fließen nicht mehr ein)
 ├─ SLOT-TEIL — je Slot ──────────────────────────────────────────────────────────── ~1.500–5.000 Token
 │  Auftrag (intent) · Anker · Vertrag · Spielraum · Graph-Umfeld · Nachbar-Code-Blöcke · Kopplung
 └─ Antwort ──────────────────────────────────────────────────────────────────────── ~1.000 Token
@@ -76,14 +76,14 @@ bei leerem Rumpf kommt sie aus dem Editor, nicht aus dem Code) · **[N]** Nachba
 4. Erreichbar ist sonst nichts: der Generator erzeugt `new X.Decider(state)` (`FactoryGenerator.cs:51`) [S]
 5. Herkunft des Commands: Client · Prozess X Regel i (Wenn-Events) · Pipeline Y [K]
 6. Abnehmer je Ausgang: Apply-Slot (Status) · Projektionen · Prozesse (Auslöser/Bedingung) · Pipelines [K]
-7. Guards anderer Decide desselben Aggregats für denselben Ausgangstyp [N]
+7. ~~Guards anderer Decide~~ (entfernt 2026-09-30: kein Rumpf-Fakt im Kontext)
 8. Datenfluss: welche Decide welches State-Member lesen, welche Apply es schreiben [N]
 9. Vertrag: Ausgänge ⊆ OneOf (Compiler); eine Ablehnung steht allein (Laufzeit, `AggregateActorBase.cs:306`) [S]
 
 ### Apply(Event) — `IApplier<T>`, 1. Parameter `IEvent`
 1. Signatur + Event-Felder [S]
 2. State: alle Member, schreibbar/berechnet; Helfer-Methoden des Appliers [S]
-3. Erzeugende Decide samt Guard [K]
+3. Erzeugende Decide [K]
 4. Weitere Abnehmer des Events: Projektionen, Prozesse, Pipelines [K]
 5. Datenfluss: welche Member andere Apply schreiben, welche Decide sie lesen, welche kein anderer Apply schreibt [N]
 6. Ziele gleichen Typs je Event-Feld; Konstruktor, der exakt die Typfolge der Event-Felder nimmt [S]
@@ -112,7 +112,7 @@ bei leerem Rumpf kommt sie aus dem Editor, nicht aus dem Code) · **[N]** Nachba
 
 ### Pipeline.Handle(Eingang, PipelineContext) — `IPipelineHandler`, Parameter `PipelineContext`
 1. Signatur, Eingangsfelder, Kanal (Trigger / Event / Ablehnung / Self) [S]
-2. `ctx.SourceAggregateId`, `ctx.ScheduleSelf` [S]
+2. `ctx.SourceAggregateId`; Planen über `Selbst<T>`/`Frist<TCmd>` im OneOf [S]
 3. Gesendete Commands, erzeugte Trigger, geplante Self-Ticks [K]
 4. Dienst-Verträge (Signaturen), Konfig-Records mit HostSettings, Trigger-Quelle bzw. Frist [K]
 5. Klassenfelder, die mehrere Handles benutzen (geteilter, verlierbarer Zustand — Inv. 6) [S/N]
@@ -120,7 +120,7 @@ bei leerem Rumpf kommt sie aus dem Editor, nicht aus dem Code) · **[N]** Nachba
    der Read-Store-Zugriff sichtbar (`DatensatzResolverPipeline._imagePairStore [Store]`) [S]. ❌ Im Graphen/Editor fehlt diese Kante weiterhin.
 7. ❌ Domänen-Helfer (`SplitZuteiler`, `ImagePairFileName`) sind nicht als Dienst verdrahtet
 
-### Store-Impl (je Write-/Read-Funktion) — Methode, die eine Funktion eines `IWriteStore`/`IReadStore`-Interfaces implementiert
+### Store-Impl (je Fähigkeit) — Methode, die die eine Funktion einer `IWriteStore`/`IReadStore`-Fähigkeit implementiert
 1. Signatur (Parameter, Rückgabe, Write/Read) [S]
 2. ReadModels des Stores [K]
 3. Basis-Primitive (`Enqueue`, `EnqueueStore`, `EnqueueTransform`) bzw. injizierter Dokument-Store [S]
@@ -246,7 +246,7 @@ dotnet run --project GraphExtractor -- --slots                                 #
 
 | Teil | Umsetzung |
 |---|---|
-| Graph-Skelett | aus dem Editor-Modell (`ModellMapper.ZuBoardJson`); beim eigenen Decide werden die Guards entfernt |
+| Graph-Skelett | aus dem Editor-Modell (`ModellMapper.ZuBoardJson`); nur Signatur-Fakten, keine Guards |
 | Auftrag | 1. LLM-Knoten in `board-model.json` (`intent` → `promptZiel` → Code-Knoten → `codeSrc` des Slots), 2. `// 🤖 Prompt:` im Rumpf, 3. `--auftrag` (nur Einzel-Slot). Ohne Auftrag: Hinweis „kein LLM-Knoten" |
 | Slot-Arten | Decide, Apply, Projektion, Reaktion, Reader, Pipeline, Store-Impl (184 Code-Blöcke im Bestand) |
 | Abschnitte | AUFTRAG · ANKER · SIGNATUR · VERTRAG · ERREICHBAR · KOMMENTARE · TYPEN · GRAPH-UMFELD · NACHBAR-CODE-BLÖCKE (alle der Klasse, inkl. Helfer) · KOPPLUNG |
@@ -283,26 +283,39 @@ Kante (`SplitZuteiler`) erscheinen nicht. Schreiben für alle Slot-Arten: `CodeS
 
 ## 12 · LLM-Code-Blöcke: im Editor ausführen, testen, übernehmen (SimHost)
 
-### 12.1 · Im Editor: der ganze Weg am 🤖-Knoten (Hauptweg)
+### 12.1 · Im Editor: der ganze Weg am 🤖-Knoten (Hauptweg, EIN Klick)
 
 ```
-🤖 Auftrag ─▶ [▶ LLM ausführen] ─▶ Vorschlag im 📝 Code-Block ─▶ ⚙ In-Memory-Kompilat (echte Generatoren)
-                                        │                         └▶ ▶ Simulation testet den Vorschlag (Hot-Reload)
-                                        ├─ ↻ Anpassen (Wunsch → neue Runde mit dem Vorschlag)
-                                        ├─ ✗ Verwerfen (Datei-Rumpf gilt wieder)
-                                        └─ ✓ Übernehmen ─▶ .cs schreiben (+ „// 🤖 Prompt:“) ─▶ dotnet build (Generatoren)
-                                                          ─▶ Code + Kontexte neu einlesen ─▶ ↶ Rückgängig am Block
+🤖 Chat-Prompt ─▶ [▶ Senden] ─▶ claude -p (Abo) ─▶ Prüfung (Syntax; Decide/Apply: In-Memory-Kompilat, ≤ 3 Reparaturrunden)
+   │                                   ├─ geprüft ─▶ .cs schreiben (+ „// 🤖 Prompt:“) ─▶ Build des Laufzeit-Projekts
+   │                                   │             (ALLE Code-Generatoren inkl. Proto/STJ-Prepass) ─▶ Code + Kontexte neu
+   │                                   │             einlesen ─▶ ↶ Rückgängig am Block
+   │                                   └─ nicht geprüft ─▶ Vorschlag im 📝-Block (↻ Anpassen · ✓ trotzdem übernehmen · ✗ Verwerfen)
+   └─ Block ohne Methode (neu gezeichneter Decider/Applier) ─▶ vorher automatisch „C# schreiben“ (Platzhalter) + Einlesen
 ```
 
-- **▶ LLM ausführen** am 🤖-Knoten (bzw. **🤖 Alle ausführen** in der Werkzeugleiste: alle Knoten mit Auftrag nacheinander,
-  nichts wird geschrieben). Es laufen dieselben zustandslosen Runden wie unten (Prüfung + automatische Reparatur, max. 3).
-- **Der Vorschlag steht im Code-Block** (grüner Rahmen, auch eingeklappt sichtbar: „🤖 Vorschlag wartet“). Für
-  Decide/Apply ersetzt er beim **Kompilieren** und in der **Simulation** den Datei-Rumpf — `payload(mitVorschlag)`; die
-  Simulation spielt die Session gegen die neue Logik nach. **„C# schreiben“ nimmt nie einen Vorschlag mit.**
-- **✓ Übernehmen**: `POST /api/llm/uebernehmen {bauen:true}` schreibt den Rumpf (Hash-Sperre), baut das Projekt (die echten
-  Generatoren laufen im Build), danach **ein** GraphExtractor-Lauf (`/api/editor/extract` = `--kontexte`): Modell +
-  Kontexte stehen auf dem neuen Code. Solange sind ▶/✓ gesperrt („Code + Kontexte werden neu eingelesen“) — der nächste
-  Block sieht so nie veraltete Nachbarn.
+- **Andocken mit einem Klick:** in der Detail-Sicht (Inspector) bzw. am 📝-Block „🤖 LLM-Knoten hinzufügen“; am leeren
+  Rumpf-Port erzeugt „＋🤖“ Code-Block + LLM-Knoten zusammen. Das Prompt-Feld hat danach sofort den Fokus. Der Knoten
+  merkt sich seinen **Slot** (`promptSlot` = Art|Besitzer|Disc) und hängt nach jedem Neu-Einlesen wieder am selben
+  Code-Block — für jede Slot-Art (Code-Block-Ids werden beim Einlesen neu vergeben).
+- **Der 🤖-Knoten ist ein Chat:** der Verlauf zeigt die gesendeten Prompts (sonst nichts), darunter Eingabe + **▶ Senden**
+  (Cmd/Ctrl+Enter). Die 1. Nachricht ist der Auftrag, jede weitere passt den aktuellen Rumpf an (Anpassung). Jede Nachricht
+  ist ein vollständiger Durchlauf. Der Verlauf lebt im Knoten (`llmNodes[].verlauf`, Board/Browser); steht im Code schon
+  ein `// 🤖 Prompt:`, wird er bei leerem Verlauf dessen erster Eintrag. In der Datei steht immer genau EINE Prompt-Zeile.
+- **Senden** am 🤖-Knoten = `POST /api/llm/ausfuehren` (bzw. **🤖 Alle ausführen**: alle Knoten mit Auftrag
+  nacheinander). Ein geprüfter Rumpf landet **sofort** in der Datei; danach baut der SimHost das **Laufzeit-Projekt**
+  (`index.json` → `laufzeitProjekt`, vom Extractor abgeleitet: das Projekt mit der generierten Routing-Tabelle). Sein Build
+  zieht die ganze Kette: Domain-Generatoren, Codegen-Prepass (ProtoRepo), Projektions-DI, Infrastructure-Generatoren.
+- **Neuer Block:** kennt der Index den Slot nicht (noch keine Methode), schreibt der Editor bei Decide/Apply erst die
+  Struktur (`/api/editor/write`, `throw`-Platzhalter), liest ein und startet denselben Durchlauf. Leseseiten-Blöcke
+  brauchen weiterhin eine bestehende Methode (der Scaffolder schreibt die Leseseite nicht).
+- **Nur ein ungeprüfter Kandidat bleibt Vorschlag** im Code-Block: er ersetzt beim Kompilieren und in der Simulation den
+  Datei-Rumpf (`payload(mitVorschlag)`); ✓ am Block schreibt ihn trotzdem (`/api/llm/uebernehmen {bauen:true}`).
+- Nach dem Schreiben **ein** GraphExtractor-Lauf (`/api/editor/extract` = `--kontexte`); solange sind ▶/✓ gesperrt.
+
+**Live geprüft (2026-09-29, Stellvertreter-CLI über `BRACTOR_CLAUDE`):** ▶ am 🤖-Knoten von `Decide(StarteSammelvorgang)`
+→ 1 Runde geprüft → `Domain/Sammelvorgang/Decider.cs:13` geschrieben → `Infrastructure.csproj` grün (≈ 50 s) → eingelesen
+(≈ 60 s) → Meldung „✓ geschrieben … · Generatoren grün“.
 
 **Synchron halten — die Datei ist die einzige Wahrheit:**
 
@@ -326,13 +339,12 @@ dotnet run --project GraphExtractor   # editor.html + domain-model.json (die Kon
 dotnet run --project SimHost          # → http://localhost:5178/editor  (Details: /konsole, am 🤖-Knoten „Details ↗“)
 ```
 
-**Anbieter** (Umgebungsvariablen des SimHost):
-
-| `BRACTOR_LLM` | Aufruf | Abrechnung |
-|---|---|---|
-| `claude` (Standard) | `claude -p … --output-format json --permission-mode dontAsk` im leeren Temp-Verzeichnis, Kontext über stdin; optional `BRACTOR_LLM_MODELL` | Anmeldung dieses Rechners (Abo). Ist `ANTHROPIC_API_KEY` gesetzt, verweigert die Konsole den Aufruf, außer `BRACTOR_LLM_API_ERLAUBT=1` |
-| `openai` | `POST {BRACTOR_LLM_URL}/v1/chat/completions`, Modell `BRACTOR_LLM_MODELL`, `cache_prompt: true` | lokal (llama.cpp, vLLM, LM Studio, Ollama) |
-| `befehl` | `BRACTOR_LLM_BEFEHL`: Anweisung + Prompt auf stdin, Antwort auf stdout | zum Testen der Kette |
+**Anbieter: ausschließlich Claude Code** (`SimHost/LlmKonsole.cs`, `ClaudeCliAnbieter`) — `claude -p --output-format json`
+im leeren Temp-Verzeichnis, feste Anweisung + Kontext über stdin (nur Schalter, die jede CLI-Version kennt). Abgerechnet wird
+über die **Anmeldung dieses Rechners (Abo), nie über die API**: `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` werden dem
+Kindprozess entzogen, ein gesetzter `ANTHROPIC_API_KEY` blockiert den Aufruf. Umgebung: `BRACTOR_CLAUDE` = Pfad der CLI
+(Standard `claude` aus dem PATH), `BRACTOR_LLM_MODELL` = optional das Modell. Einmalig nötig: die CLI im Terminal starten
+und `/login` (Abo) ausführen — sonst meldet der Knoten „Not logged in“.
 
 **Ablauf je Code-Block** (`SimHost/LlmKonsole.cs`, Seite `SimHost/KonsoleSeite.cs`):
 
@@ -344,9 +356,9 @@ dotnet run --project SimHost          # → http://localhost:5178/editor  (Detai
    (`domain-model.json` mit ersetztem Rumpf, nur neue Fehler zählen). Bei Befund automatisch nächste Runde (max. 3).
 4. **Simulieren** (Decide/Apply) — der Kandidat ersetzt nur in der Simulation den Rumpf; Command mit Werten schicken.
 5. **Anpassen** — Wunschtext → neue Runde mit Kontext + Auftrag + aktuellem Rumpf + Anpassung.
-6. **Übernehmen** — erst auf Klick: `CodeSync.SetzeRumpf` schreibt Rumpf + `// 🤖 Prompt: <Auftrag>` (Ausdrucks-Rumpf → Block),
-   Hash-Sperre gegen Zwischenänderungen, Sicherung in `.llm-kontext/sicherung/`. Danach **Projekt bauen**
-   (`dotnet build` des betroffenen `.csproj`) und **Rückgängig** (stellt den alten Rumpf wörtlich wieder her).
+6. **Übernehmen** — in der Konsole auf Klick (im Editor automatisch nach bestandener Prüfung): `CodeSync.SetzeRumpf` schreibt Rumpf + `// 🤖 Prompt: <Auftrag>` (Ausdrucks-Rumpf → Block),
+   Hash-Sperre gegen Zwischenänderungen, Sicherung in `.llm-kontext/sicherung/`. Danach **Generatoren bauen**
+   (`dotnet build` des Laufzeit-Projekts; ohne diese Angabe das `.csproj` der Datei) und **Rückgängig** (stellt den alten Rumpf wörtlich wieder her).
 7. **Protokoll** — jede Runde mit Token (Eingabe, aus Cache, Ausgabe) in `.llm-kontext/protokoll.jsonl`.
    Im Browser: Knopf **Protokoll** (bzw. `/konsole#protokoll`) zeigt alle Aufrufe, neueste zuerst, mit Summen
    (Aufrufe, geprüft, übernommen, Eingabe-/Cache-/Ausgabe-Token, Dauer), Auftrag, Befunden und aufklappbarem Inhalt; ein

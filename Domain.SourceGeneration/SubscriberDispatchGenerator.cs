@@ -17,7 +17,7 @@ namespace Domain.SourceGeneration;
 ///   Reader-Handler (IMessageEnvelope) werden vom ProjectionReaderDispatchGenerator behandelt.
 ///
 /// Erkennung: Handle-Methoden mit Signatur:
-///   (TEvent, IAggregateEnvelope, ProjectionWriter) → Task | IAsyncEnumerable&lt;T&gt; | IAsyncEnumerable&lt;OneOf&lt;...&gt;&gt;
+///   (TEvent, IAggregateEnvelope, ProjectionWriter, Fähigkeit…) → Task | IAsyncEnumerable&lt;T&gt; | IAsyncEnumerable&lt;OneOf&lt;...&gt;&gt;
 /// </summary>
 [Generator]
 public class SubscriberDispatchGenerator : IIncrementalGenerator
@@ -66,14 +66,16 @@ public class SubscriberDispatchGenerator : IIncrementalGenerator
             return null;
 
         // Handle-Methoden finden:
-        //   (TEvent, IAggregateEnvelope, ProjectionWriter) → Task | IAsyncEnumerable<T> | IAsyncEnumerable<OneOf<...>>
+        //   (TEvent, IAggregateEnvelope, ProjectionWriter, Fähigkeit…) → Task | IAsyncEnumerable<T> | IAsyncEnumerable<OneOf<...>>
+        //   Fähigkeit = Interface mit Marker IWriteStore/IReadStore (0…n) — der Dispatch löst sie auf.
         var handleMethods = classSymbol.GetMembers("Handle")
             .OfType<IMethodSymbol>()
-            .Where(m => m.Parameters.Length == 3 &&
+            .Where(m => m.Parameters.Length >= 3 &&
                         SymbolEqualityComparer.Default.Equals(
                             m.Parameters[1].Type, aggregateEnvelopeType) &&
                         SymbolEqualityComparer.Default.Equals(
-                            m.Parameters[2].Type, projectionWriterType))
+                            m.Parameters[2].Type, projectionWriterType) &&
+                        m.Parameters.Skip(3).All(p => FaehigkeitsTypen.IstFaehigkeit(p.Type, context.SemanticModel.Compilation)))
             .ToList();
 
         if (handleMethods.Count == 0)
@@ -94,6 +96,7 @@ public class SubscriberDispatchGenerator : IIncrementalGenerator
                 allEventNamespaces.Add(inputNamespace);
 
             var handlerInfo = AnalyzeReturnType(returnType, inputTypeName, allEventNamespaces);
+            handlerInfo.Faehigkeiten.AddRange(FaehigkeitsTypen.Argumente(method, 3));
             handlers.Add(handlerInfo);
         }
 
@@ -241,7 +244,8 @@ public class SubscriberDispatchGenerator : IIncrementalGenerator
         sb.AppendLine("    public async Task DispatchAsync(");
         sb.AppendLine("        IAggregateEnvelope envelope,");
         sb.AppendLine("        ProjectionWriter writer,");
-        sb.AppendLine("        Func<IPipelineOutput, Task> emit)");
+        sb.AppendLine("        Func<IPipelineOutput, Task> emit,");
+        sb.AppendLine("        IFaehigkeiten faehigkeiten)");
         sb.AppendLine("    {");
         sb.AppendLine("        switch (envelope.Payload)");
         sb.AppendLine("        {");
@@ -254,14 +258,14 @@ public class SubscriberDispatchGenerator : IIncrementalGenerator
             {
                 case HandlerKind.Task:
                     sb.AppendLine($"            case {simpleName} e:");
-                    sb.AppendLine($"                await Handle(e, envelope, writer);");
+                    sb.AppendLine($"                await Handle(e, envelope, writer{handler.FaehigkeitsArgumente});");
                     sb.AppendLine($"                break;");
                     sb.AppendLine();
                     break;
 
                 case HandlerKind.AsyncEnumerable:
                     sb.AppendLine($"            case {simpleName} e:");
-                    sb.AppendLine($"                await foreach (var result in Handle(e, envelope, writer))");
+                    sb.AppendLine($"                await foreach (var result in Handle(e, envelope, writer{handler.FaehigkeitsArgumente}))");
                     sb.AppendLine($"                    await emit(result);");
                     sb.AppendLine($"                break;");
                     sb.AppendLine();
@@ -271,7 +275,7 @@ public class SubscriberDispatchGenerator : IIncrementalGenerator
                     // ★ Phase 3: Output-Routing nach Typ — der Adapter/Actor entscheidet
                     //   anhand des konkreten IMessagePayload (IEvent → publish, ICommand → Reaktion).
                     sb.AppendLine($"            case {simpleName} e:");
-                    sb.AppendLine($"                await foreach (var oneOf in Handle(e, envelope, writer))");
+                    sb.AppendLine($"                await foreach (var oneOf in Handle(e, envelope, writer{handler.FaehigkeitsArgumente}))");
                     sb.AppendLine($"                    await emit((IPipelineOutput)oneOf.Value);");
                     sb.AppendLine($"                break;");
                     sb.AppendLine();
@@ -315,6 +319,9 @@ internal class HandlerInfo
     public string InputTypeName { get; }
     public HandlerKind Kind { get; }
     public List<string> ProducedTypes { get; }
+    /// <summary>Fähigkeits-Parameter (voll qualifiziert) in Signatur-Reihenfolge.</summary>
+    public List<string> Faehigkeiten { get; } = new();
+    public string FaehigkeitsArgumente => FaehigkeitsTypen.ArgumentListe(Faehigkeiten);
 
     public HandlerInfo(string inputTypeName, HandlerKind kind, List<string> producedTypes)
     {

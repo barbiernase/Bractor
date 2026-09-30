@@ -4,7 +4,7 @@ namespace Domain.Projections;
 
 /// <summary>
 /// Reader der Datensatz-Projektion (analog <see cref="ImagePairReader"/>). Beantwortet die
-/// Datensatz-Queries über den <see cref="IDatensatzReadStore"/> — derselbe Kanal für Blazor
+/// Datensatz-Queries über Lese-Fähigkeiten des <see cref="IDatensatzStore"/> — derselbe Kanal für Blazor
 /// und Python (Konzept §6/§7).
 ///
 /// Die Samples sind ein <em>immutabler</em> Snapshot → kein Deps-Tracking nötig (read-only,
@@ -13,19 +13,10 @@ namespace Domain.Projections;
 [ProjectionReader(TrackDeps = true)]
 public partial class DatensatzReader : IReader<DatensatzProjektion>
 {
-    private readonly IDatensatzReadStore _store;
-    private readonly IImagePairReadStore _imagePairs;
-
-    public DatensatzReader(IDatensatzReadStore store, IImagePairReadStore imagePairs)
-    {
-        _store = store;
-        _imagePairs = imagePairs;
-    }
-
     public async Task<DatensatzSamples> Handle(
-        HoleDatensatzSamples query, IMessageEnvelope envelope, ReadContext ctx)
+        HoleDatensatzSamples query, IMessageEnvelope envelope, ReadContext ctx, IHoleSamples holeSamples)
     {
-        var (items, gesamtAnzahl) = await _store.HoleSamplesAsync(
+        var (items, gesamtAnzahl) = await holeSamples.HoleSamplesAsync(
             query.DatensatzId, query.Version, query.Seite, query.SeitenGroesse);
 
         var samples = items
@@ -42,9 +33,9 @@ public partial class DatensatzReader : IReader<DatensatzProjektion>
     }
 
     public async Task<OneOf<DatensatzAntwort, DatensatzNichtGefunden>> Handle(
-        HoleDatensatz query, IMessageEnvelope envelope, ReadContext ctx)
+        HoleDatensatz query, IMessageEnvelope envelope, ReadContext ctx, IFindDatensatz findDatensatz)
     {
-        var model = await _store.FindByIdAsync(query.DatensatzId);
+        var model = await findDatensatz.FindByIdAsync(query.DatensatzId);
 
         if (model is null)
             return new DatensatzNichtGefunden(query.DatensatzId);
@@ -54,9 +45,9 @@ public partial class DatensatzReader : IReader<DatensatzProjektion>
     }
 
     public async Task<ImagePairSuchergebnis> Handle(
-        HoleDatensatzPaare query, IMessageEnvelope envelope, ReadContext ctx)
+        HoleDatensatzPaare query, IMessageEnvelope envelope, ReadContext ctx, IFindDatensatz findDatensatz, ILadeVieleImagePairs ladeVieleImagePairs)
     {
-        var model = await _store.FindByIdAsync(query.DatensatzId);
+        var model = await findDatensatz.FindByIdAsync(query.DatensatzId);
         var alle = model is null
             ? new List<Guid>()
             : (query.Modus == DatensatzPaarModus.Ausgeschlossen ? model.Ausgeschlossen : model.Mitglieder);
@@ -67,7 +58,7 @@ public partial class DatensatzReader : IReader<DatensatzProjektion>
             .Take(query.SeitenGroesse)
             .ToList();
 
-        var records = await _imagePairs.LadeVieleAsync(seitenIds);
+        var records = await ladeVieleImagePairs.LadeVieleAsync(seitenIds);
         var nachId = records.ToDictionary(r => r.Id);
 
         var items = new List<ImagePairAntwort>();
@@ -83,9 +74,9 @@ public partial class DatensatzReader : IReader<DatensatzProjektion>
     }
 
     public async Task<DatensaetzeFuerPaar> Handle(
-        HoleDatensaetzeFuerPaar query, IMessageEnvelope envelope, ReadContext ctx)
+        HoleDatensaetzeFuerPaar query, IMessageEnvelope envelope, ReadContext ctx, IHoleDatensaetzeFuerPaar holeDatensaetzeFuerPaar)
     {
-        var modelle = await _store.HoleDatensaetzeFuerPaarAsync(query.ImagePairId);
+        var modelle = await holeDatensaetzeFuerPaar.HoleDatensaetzeFuerPaarAsync(query.ImagePairId);
 
         var tags = modelle
             .Select(m => new DatensatzTag(m.Id, m.Name, m.Status, m.EingefroreneVersion))
@@ -99,9 +90,9 @@ public partial class DatensatzReader : IReader<DatensatzProjektion>
     }
 
     public async Task<DatensatzListe> Handle(
-        HoleDatensaetze query, IMessageEnvelope envelope, ReadContext ctx)
+        HoleDatensaetze query, IMessageEnvelope envelope, ReadContext ctx, IGetAlleDatensaetze getAlleDatensaetze)
     {
-        var modelle = await _store.GetAlleAsync();
+        var modelle = await getAlleDatensaetze.GetAlleAsync();
 
         var items = modelle.Select(m =>
         {

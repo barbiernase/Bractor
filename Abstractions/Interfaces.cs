@@ -273,24 +273,27 @@ public interface IAggregateRepository
     public interface IReadModel { }
 
     /// <summary>
-    /// Marker: dieses Interface ist die SCHREIB-Seite eines Projektions-Stores (Co-Commit, von einer Projektion
-    /// injiziert). Der Vertrag, über den Framework-Generator (DI-Registrierung) und Domänen-Extractor Stores
-    /// erkennen — typisiert statt über eine Namenskonvention. Der Name des Interfaces ist frei.
+    /// Marker: dieses Interface ist eine SCHREIB-FÄHIGKEIT eines Projektions-Stores — genau EINE Funktion
+    /// (CQRS051). Ein Handle bekommt die Fähigkeiten, die er benutzen darf, als Parameter; der generierte
+    /// Dispatch löst sie aus dem DI-Bereich auf (eine Store-Instanz je Bereich → Co-Commit bleibt). So steht die
+    /// Obergrenze „welche Store-Funktionen darf dieser Handle rufen" in der Signatur, vom Compiler erzwungen.
+    /// Der Name des Interfaces ist frei.
     /// </summary>
     public interface IWriteStore { }
 
     /// <summary>
-    /// Marker: dieses Interface ist eine LESE-Seite eines Projektions-Stores (von einem Reader injiziert).
-    /// Ohne Schreib-Partner (reine Lese-Sicht) direkt, sonst über <see cref="IReadStore{TWriteStore}"/>.
+    /// Marker: dieses Interface ist eine LESE-FÄHIGKEIT eines Projektions-Stores — genau EINE Funktion
+    /// (CQRS051). Von Reader- oder Pipeline-Handles als Parameter angefordert.
     /// </summary>
     public interface IReadStore { }
 
     /// <summary>
-    /// Die Lese-Seite des Stores, dessen Schreib-Seite <typeparamref name="TWriteStore"/> ist — die Paarung
-    /// steht als Typ im Code, nicht in übereinstimmenden Namen.
+    /// Marker: dieses Interface ist ein STORE — das Bündel seiner Fähigkeiten (erbt die <see cref="IWriteStore"/>-
+    /// und <see cref="IReadStore"/>-Interfaces) und damit die Transaktionsgrenze. Genau eine Klasse implementiert
+    /// es; die DI registriert diese eine Instanz je Bereich unter jeder Fähigkeit (generiert).
     /// </summary>
-    public interface IReadStore<TWriteStore> : IReadStore where TWriteStore : IWriteStore { }
-    
+    public interface IStore { }
+
     public record AggregateMeta(Guid Id, string AggregateType, int Version);
 
 
@@ -420,8 +423,8 @@ public interface IAggregateRepository
         string PipelineId { get; }
  
         /// <summary>
-        /// Wird beim Start aufgerufen (nach Subscriptions).
-        /// Erhält einen PipelineContext mit ScheduleSelf für periodische Ticks.
+        /// Wird beim Start aufgerufen (nach Subscriptions). Planen geht hier NICHT — die erste Selbst-Nachricht
+        /// plant ein <c>Handle(PipelineGestartet, ctx)</c> mit <c>Selbst&lt;T&gt;</c> im OneOf.
         /// </summary>
         Task OnInitializeAsync(PipelineContext ctx) => Task.CompletedTask;
  
@@ -457,12 +460,12 @@ public interface IAggregateRepository
     /// Marker-Interface für Pipeline-interne Self-Messages.
     ///
     /// Self-Messages sind Implementierungsdetails einzelner Pipelines (z.B. PollTick,
-    /// TimeoutCheck). Sie werden NUR über ctx.ScheduleSelf(...) zugestellt und
+    /// TimeoutCheck). Sie werden NUR über einen <c>Selbst&lt;T&gt;</c>-Ausgang geplant und
     /// durchlaufen NICHT das Framework:
     ///   - Kein Proto-Mapping (DtoMapperGenerator ignoriert sie)
     ///   - Keine TypeRegistry-Einträge (TypeRegistryGenerator ignoriert sie)
     ///   - Kein TriggerToPipelineId-Lookup (PipelineActorGenerator ignoriert sie)
-    ///   - Kein OneOf-Yield (nur über ScheduleSelf zustellbar)
+    ///   - Nicht direkt im OneOf, sondern verpackt: <c>OneOf&lt;…, Selbst&lt;T&gt;&gt;</c>
     ///
     /// Parallel zur bestehenden Hierarchie — NICHT unter IPipelineOutput.
     /// </summary>

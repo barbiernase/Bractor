@@ -172,7 +172,7 @@ public sealed record DecideRegel
     public required string Aggregat { get; init; }
     /// <summary>Name des Command-Records.</summary>
     public string Command { get; init; } = "";
-    /// <summary>Die OneOf-Ausgänge (Event-/Ablehnungs-Record-Namen + optionaler Guard) in Reihenfolge.</summary>
+    /// <summary>Die OneOf-Ausgänge (Event-/Ablehnungs-Record-Namen) in Reihenfolge.</summary>
     public IReadOnlyList<Ausgang> Ergibt { get; init; } = [];
     /// <summary>Optionaler Decide-Körper; null ⇒ kompilierbarer <c>throw</c>-Platzhalter, <c>""</c> ⇒ bewusst leer.</summary>
     public string? Rumpf { get; init; }
@@ -182,11 +182,10 @@ public sealed record DecideRegel
     public string? Datei { get; init; }
 }
 
-/// <summary>Ein OneOf-Ausgang: der Event-Record-Name plus optional der Guard (das „Warum").</summary>
+/// <summary>Ein OneOf-Ausgang: der Event-Record-Name (Signatur-Fakt; das „Wann" bleibt freier Rumpf-Code).</summary>
 public sealed record Ausgang
 {
     public required string Event { get; init; }
-    public string? Guard { get; init; }
 }
 
 /// <summary>

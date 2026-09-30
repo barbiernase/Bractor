@@ -18,13 +18,6 @@ namespace Domain.Projections;
 /// </summary>
 public partial class DatensatzProjektion : ISubscriber, IPullSubscriber, IAppendProjektion
 {
-    private readonly IDatensatzWriteStore _store;
-
-    public DatensatzProjektion(IDatensatzWriteStore store)
-    {
-        _store = store;
-    }
-
     public string SubscriberId => "datensatz-projection";
 
     // ═══════════════════════════════════════════════════════════
@@ -32,12 +25,12 @@ public partial class DatensatzProjektion : ISubscriber, IPullSubscriber, IAppend
     // ═══════════════════════════════════════════════════════════
 
     public async Task Handle(
-        DatensatzErstellt evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        DatensatzErstellt evt, IAggregateEnvelope envelope, ProjectionWriter writer, IUpsertDatensatz upsertDatensatz)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<DatensatzAgg>(envelope.AggregateId);
-            await _store.UpsertAsync(new DatensatzReadModel
+            await upsertDatensatz.UpsertAsync(new DatensatzReadModel
             {
                 Id = envelope.AggregateId,
                 Name = evt.Name,
@@ -53,43 +46,43 @@ public partial class DatensatzProjektion : ISubscriber, IPullSubscriber, IAppend
     // ═══════════════════════════════════════════════════════════
 
     public async Task Handle(
-        PaareAufgenommen evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        PaareAufgenommen evt, IAggregateEnvelope envelope, ProjectionWriter writer, INimmRangeAuf nimmRangeAuf)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<DatensatzAgg>(envelope.AggregateId);
-            await _store.NimmRangeAufAsync(
+            await nimmRangeAuf.NimmRangeAufAsync(
                 envelope.AggregateId, evt.ImagePairIds, evt.Herkunft, envelope.CreatedAtUtc);
         });
     }
 
     public async Task Handle(
-        PaarAufgenommen evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        PaarAufgenommen evt, IAggregateEnvelope envelope, ProjectionWriter writer, INimmPaarAuf nimmPaarAuf)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<DatensatzAgg>(envelope.AggregateId);
-            await _store.NimmPaarAufAsync(envelope.AggregateId, evt.ImagePairId, envelope.CreatedAtUtc);
+            await nimmPaarAuf.NimmPaarAufAsync(envelope.AggregateId, evt.ImagePairId, envelope.CreatedAtUtc);
         });
     }
 
     public async Task Handle(
-        PaarEntfernt evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        PaarEntfernt evt, IAggregateEnvelope envelope, ProjectionWriter writer, IEntfernePaar entfernePaar)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<DatensatzAgg>(envelope.AggregateId);
-            await _store.EntfernePaarAsync(envelope.AggregateId, evt.ImagePairId, envelope.CreatedAtUtc);
+            await entfernePaar.EntfernePaarAsync(envelope.AggregateId, evt.ImagePairId, envelope.CreatedAtUtc);
         });
     }
 
     public async Task Handle(
-        SplitGesetzt evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        SplitGesetzt evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetzeSplit setzeSplit)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<DatensatzAgg>(envelope.AggregateId);
-            await _store.SetzeSplitAsync(
+            await setzeSplit.SetzeSplitAsync(
                 envelope.AggregateId,
                 new SplitKonfig(evt.TrainProzent, evt.ValProzent, evt.TestProzent, evt.Seed),
                 envelope.CreatedAtUtc);
@@ -101,12 +94,12 @@ public partial class DatensatzProjektion : ISubscriber, IPullSubscriber, IAppend
     // ═══════════════════════════════════════════════════════════
 
     public async Task Handle(
-        DatensatzEingefroren evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        DatensatzEingefroren evt, IAggregateEnvelope envelope, ProjectionWriter writer, IFriereEin friereEin)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<DatensatzAgg>(envelope.AggregateId);
-            await _store.FriereEinAsync(
+            await friereEin.FriereEinAsync(
                 envelope.AggregateId, evt.Version, evt.Mitglieder, envelope.CreatedAtUtc);
         });
     }

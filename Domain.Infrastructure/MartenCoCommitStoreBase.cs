@@ -13,7 +13,7 @@ namespace Domain.Infrastructure;
 ///
 /// Konkrete Stores erben und schreiben nur noch ihre FACHLICHEN Write-Methoden; sie puffern über
 /// <see cref="Enqueue"/> / <see cref="EnqueueStore{T}"/>. Kein Domänenwissen hier, kein Generat —
-/// reiner Marten-Adapter. TRANSIENT registrieren (frisch pro Stream-Actor → isolierter Puffer).
+/// reiner Marten-Adapter. SCOPED registriert: eine Instanz je Fähigkeits-Bereich (je Stream-Actor → isolierter Puffer).
 /// </summary>
 public abstract class MartenCoCommitStoreBase : ICoCommitTracker
 {

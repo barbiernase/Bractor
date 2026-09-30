@@ -10,7 +10,7 @@ namespace GraphExtractor;
 ///
 /// Die Sonden-Domäne „Leihwesen" (eingebettete Ressourcen <c>Sonde/*.cs.txt</c>) nutzt absichtlich jede gültige
 /// Schreibweise, die eine Konvention brechen würde: fremder Wurzel-Namespace, Commands in eigenem Sub-Namespace,
-/// Property-Records, zwei Aggregate in einem Namespace, Decider in eigener Datei, if/else-Guards, Saga mit expliziter
+/// Property-Records, zwei Aggregate in einem Namespace, Decider in eigener Datei, Saga mit expliziter
 /// Interface-Implementierung, frei benannte Stores, class-ReadModel, OneOf-Antwort, Konstanten-Ids, Reaktion, Pipeline
 /// mit Konfig und einem nie ausgegebenen Objekt.
 ///
@@ -111,7 +111,7 @@ public static class Sonde
             z.Add($"aggregat {S(a, "namespace")}.{S(a, "name")} | {Felder(a, "state")}");
         foreach (var d in A(b, "decider").Where(d => sondenAggregate.Contains(S(d, "aggregat"))))
             z.Add($"decide {S(d, "aggregat")}.{S(d, "command")} -> " + string.Join("; ", A(d, "ergibt").Select(o =>
-                S(o, "event") + (o["guard"] is { } g ? $" wenn {g}" : ""))));
+                S(o, "event"))));
         foreach (var a in A(b, "applier").Where(a => sondenAggregate.Contains(S(a, "aggregat"))))
             z.Add($"apply {S(a, "aggregat")}.{S(a, "event")}");
         foreach (var s in A(b, "sagas").Where(Sonde))
@@ -143,9 +143,17 @@ public static class Sonde
         foreach (var p in A(b, "pipelines").Where(Sonde))
         {
             z.Add($"pipeline {S(p, "namespace")}.{S(p, "name")} id={S(p, "pipelineId")} konfigs={string.Join(",", A(p, "konfigs").Select(x => (string?)x))} | "
-                  + string.Join("; ", A(p, "handles").Select(h => $"{S(h, "input")}({S(h, "inputKind")}) -> sendet {string.Join(", ", A(h, "sends").Select(x => (string?)x))}")));
+                  + string.Join("; ", A(p, "handles").Select(h => $"{S(h, "input")}({S(h, "inputKind")}) -> sendet {string.Join(", ", A(h, "sends").Select(x => (string?)x))}"
+                                                                 + (A(h, "fns").Any() ? $" -> {Fns(h)}" : ""))));
             foreach (var h in A(p, "handles").Where(h => S(h, "inputKind") == "trigger")) sondenTrigger.Add(S(h, "input"));
         }
+        // Handle-Verträge: was jeder Handler erzeugen KANN und welche Store-Fns er rufen DARF — nur aus der Signatur.
+        string Ausgaenge(JsonNode h) => string.Join("; ", A(h, "ausgaenge").Select(a =>
+            $"{S(a, "art")}:{(S(a, "art") == "storefn" ? S(a, "store") + "." : "")}{S(a, "typ")}"));
+        foreach (var (liste, disc) in new[] { ("projektionen", "event"), ("reaktionen", "event"), ("reader", "query"), ("pipelines", "input") })
+            foreach (var o in A(b, liste).Where(Sonde))
+                foreach (var h in A(o, "handles"))
+                    z.Add($"ausgang {S(o, "name")}.{S(h, disc)} {S(h, "form")}{(h["signaturOffen"]?.GetValue<bool>() == true ? " offen" : "")} | {Ausgaenge(h)}");
         foreach (var t in A(b, "triggers").Where(t => sondenTrigger.Contains(S(t, "msgName"))))
             z.Add($"trigger {S(t, "msgName")} | {Felder(t)}");
 

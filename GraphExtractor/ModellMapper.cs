@@ -64,11 +64,7 @@ public static class ModellMapper
                 {
                     Aggregat = a.Name,
                     Command = Cmd(cmdFull),
-                    Ergibt = a.DecideOutcomes[cmdFull].Select(e => new Ausgang
-                    {
-                        Event = Evt(e),
-                        Guard = a.Guards.TryGetValue(cmdFull + "|" + Evt(e), out var g) ? g : null,
-                    }).ToList(),
+                    Ergibt = a.DecideOutcomes[cmdFull].Select(e => new Ausgang { Event = Evt(e) }).ToList(),
                     Rumpf = a.DecideBodies.TryGetValue(cmdFull, out var db) ? db : null,
                     Parameter = a.DecideParams.TryGetValue(cmdFull, out var dp) ? dp : "cmd",
                     Datei = Rel(a.DecideDateien.GetValueOrDefault(cmdFull)),
@@ -195,7 +191,7 @@ public static class ModellMapper
             var rf = s.Fns.Where(f => f.IsRead).ToList();
             for (var fi = 0; fi < rf.Count; fi++) fnId[(s.Name, rf[fi].Name, true)] = "rf_" + i + "_" + fi;
         }
-        // Die Seite (Lesen/Schreiben) kommt aus dem aufgerufenen Interface, nicht aus der Rolle des Aufrufers.
+        // Handle → Fn = die Fähigkeits-Parameter der Signatur (die Seite kommt aus dem Marker der Fähigkeit).
         string[] StoreFns(Dictionary<string, List<(string Store, string Method, bool IsRead)>> calls, string key) =>
             calls.TryGetValue(key, out var cs)
                 ? cs.Select(c => fnId.TryGetValue((c.Store, c.Method, c.IsRead), out var id) ? id : null)
@@ -204,6 +200,14 @@ public static class ModellMapper
         string[] Liste(Dictionary<string, List<string>> d, string key) =>
             d.TryGetValue(key, out var xs) ? xs.ToArray() : System.Array.Empty<string>();
         string? Rumpf(Dictionary<string, string> d, string key) => d.TryGetValue(key, out var b) ? b : null;
+        // Handle-Vertrag (was der Handler erzeugen KANN + welche Fns er rufen DARF) — nur Signatur; Fähigkeiten auf die Board-Fn-Id abgebildet.
+        HandleVertragRaw? Vertrag(Dictionary<string, HandleVertragRaw> d, string key) => d.TryGetValue(key, out var v) ? v : null;
+        object[] Ausgaenge(HandleVertragRaw? v) => v == null ? System.Array.Empty<object>() : v.Ausgaenge.Select(a => (object)new
+        {
+            typ = a.Typ, art = a.Art,
+            fn = a.Art == "storefn" && a.Store != null && fnId.TryGetValue((a.Store, a.Typ, a.IstLesen), out var id) ? id : null,
+            store = a.Store,
+        }).ToArray();
 
         // Query- und Response-Records — als Board-Records, damit Reader daran andocken.
         foreach (var q in dom.Queries.Where(q => q.Meta.IstDomäne).OrderBy(q => q.Full, StringComparer.Ordinal))
@@ -230,9 +234,12 @@ public static class ModellMapper
                 handles = p.ConsumesFull.Select(full => KurzEvt(dom, full)).Select(ev => new
                 {
                     @event = ev,
-                    fns = StoreFns(p.HandleStoreCalls, ev),
+                    fns = StoreFns(p.HandleFaehigkeiten, ev),
                     publishes = Liste(p.HandlePublishes, ev),
                     rumpf = Rumpf(p.HandleBodies, ev),
+                    form = Vertrag(p.HandleVertraege, ev)?.Form, signatur = Vertrag(p.HandleVertraege, ev)?.Signatur,
+                    signaturOffen = Vertrag(p.HandleVertraege, ev)?.SignaturOffen == true ? true : (bool?)null,
+                    ausgaenge = Ausgaenge(Vertrag(p.HandleVertraege, ev)),
                 }).ToArray(),
             }).ToList();
 
@@ -246,6 +253,9 @@ public static class ModellMapper
                     sends = Liste(p.HandleSends, ev),
                     publishes = Liste(p.HandlePublishes, ev),
                     rumpf = Rumpf(p.HandleBodies, ev),
+                    form = Vertrag(p.HandleVertraege, ev)?.Form, signatur = Vertrag(p.HandleVertraege, ev)?.Signatur,
+                    signaturOffen = Vertrag(p.HandleVertraege, ev)?.SignaturOffen == true ? true : (bool?)null,
+                    ausgaenge = Ausgaenge(Vertrag(p.HandleVertraege, ev)),
                 }).ToArray(),
             }).ToList();
 
@@ -258,13 +268,16 @@ public static class ModellMapper
                 handles = r.QueryNames.Select(q => new
                 {
                     query = q,
-                    fns = StoreFns(r.HandleStoreCalls, q),
+                    fns = StoreFns(r.HandleFaehigkeiten, q),
                     responses = Liste(r.HandleResponses, q),
                     rumpf = Rumpf(r.HandleBodies, q),
+                    form = Vertrag(r.HandleVertraege, q)?.Form, signatur = Vertrag(r.HandleVertraege, q)?.Signatur,
+                    signaturOffen = Vertrag(r.HandleVertraege, q)?.SignaturOffen == true ? true : (bool?)null,
+                    ausgaenge = Ausgaenge(Vertrag(r.HandleVertraege, q)),
                 }).ToArray(),
             }).ToList();
 
-        // Pipelines + Trigger — je Handle Ingress (Trigger/Event/Self) → Command/Trigger/ScheduleSelf.
+        // Pipelines + Trigger — je Handle Ingress (Trigger/Event/Self) → Command/Trigger/Selbst/Frist + Fähigkeiten.
         var triggerFelder = dom.Triggers.ToDictionary(t => t.Name, t => t.Fields, StringComparer.Ordinal);
         var triggerIds = new Dictionary<string, string>(StringComparer.Ordinal); // Trigger-Msg → _id
         var pipelines = dom.Pipelines.OrderBy(p => p.Name, StringComparer.Ordinal)
@@ -288,10 +301,14 @@ public static class ModellMapper
                         trigId,
                         sends = hd.EmitsFull.Select(c => dom.Commands.TryGetValue(c, out var ct) ? ct.Simple : Kurz(c)).ToArray(),
                         emits = Liste(p.HandleEmitsTriggers, hd.InputFull),
-                        schedules = p.HandleSchedules.TryGetValue(hd.InputFull, out var sc)
-                            ? sc.Select(x => new { name = x.Name, delay = x.Delay }).ToArray()
-                            : Array.Empty<object>(),
+                        // Selbst-Nachrichten = die Selbst<T>-Varianten der Signatur (Verzögerung ist Rumpf → nicht gezeigt).
+                        schedules = (Vertrag(p.HandleVertraege, hd.InputFull)?.Ausgaenge ?? new()).Where(a => a.Art == "self")
+                            .Select(a => (object)new { name = a.Typ, delay = "" }).ToArray(),
+                        fns = StoreFns(p.HandleFaehigkeiten, hd.InputFull),
                         rumpf = Rumpf(p.HandleBodies, hd.InputFull),
+                        form = Vertrag(p.HandleVertraege, hd.InputFull)?.Form, signatur = Vertrag(p.HandleVertraege, hd.InputFull)?.Signatur,
+                        signaturOffen = Vertrag(p.HandleVertraege, hd.InputFull)?.SignaturOffen == true ? true : (bool?)null,
+                        ausgaenge = Ausgaenge(Vertrag(p.HandleVertraege, hd.InputFull)),
                     };
                 }).ToArray(),
             }).ToList();
@@ -303,19 +320,19 @@ public static class ModellMapper
                 felder = triggerFelder.TryGetValue(kv.Key, out var tf) ? tf.Select(FeldJson).ToArray() : Array.Empty<object>(),
             }).ToList();
 
-        // Stores — aus dem Roh-Domänenmodell (I{X}Write/ReadStore + Impl-Rümpfe).
+        // Stores — aus dem Roh-Domänenmodell (Bündel IStore + je Fn ihre Fähigkeit + Impl-Rümpfe).
         var stores = dom.Stores.Select((s, i) => new
         {
             _id = "st" + (i + 1), name = s.Name, @namespace = s.Namespace,
             writeFns = s.Fns.Where(f => !f.IsRead).Select((f, fi) => new
             {
-                _id = "wf_" + i + "_" + fi, name = f.Name,
+                _id = "wf_" + i + "_" + fi, name = f.Name, faehigkeit = f.Faehigkeit,
                 @params = f.Params.Select(p => new { name = p.Name, typ = p.Type }).ToArray(),
                 rumpf = f.Body,
             }).ToArray(),
             readFns = s.Fns.Where(f => f.IsRead).Select((f, fi) => new
             {
-                _id = "rf_" + i + "_" + fi, name = f.Name,
+                _id = "rf_" + i + "_" + fi, name = f.Name, faehigkeit = f.Faehigkeit,
                 @params = f.Params.Select(p => new { name = p.Name, typ = p.Type }).ToArray(),
                 rueckgabe = f.Return,
                 rumpf = f.Body,

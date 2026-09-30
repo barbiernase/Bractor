@@ -15,21 +15,14 @@ namespace Domain.Projections;
 /// </summary>
 public partial class TrainingslaufProjektion : ISubscriber, IPullSubscriber, IAppendProjektion
 {
-    private readonly ITrainingslaufWriteStore _store;
-
-    public TrainingslaufProjektion(ITrainingslaufWriteStore store)
-    {
-        _store = store;
-    }
-
     public string SubscriberId => "trainingslauf-projection";
 
-    public async Task Handle(TrainingAngefordert evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+    public async Task Handle(TrainingAngefordert evt, IAggregateEnvelope envelope, ProjectionWriter writer, IUpsertTrainingslauf upsertTrainingslauf)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<TrainingslaufAgg>(envelope.AggregateId);
-            await _store.UpsertAsync(new TrainingslaufReadModel
+            await upsertTrainingslauf.UpsertAsync(new TrainingslaufReadModel
             {
                 Id = envelope.AggregateId,
                 DatensatzId = evt.DatensatzId,
@@ -42,58 +35,58 @@ public partial class TrainingslaufProjektion : ISubscriber, IPullSubscriber, IAp
         });
     }
 
-    public async Task Handle(TrainingBegonnen evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+    public async Task Handle(TrainingBegonnen evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetTrainingslaufBegonnen setTrainingslaufBegonnen)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<TrainingslaufAgg>(envelope.AggregateId);
-            await _store.SetBegonnenAsync(envelope.AggregateId, envelope.CreatedAtUtc);
+            await setTrainingslaufBegonnen.SetBegonnenAsync(envelope.AggregateId, envelope.CreatedAtUtc);
         });
     }
 
-    public async Task Handle(TrainingFortschritt evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+    public async Task Handle(TrainingFortschritt evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendMetrik appendMetrik)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<TrainingslaufAgg>(envelope.AggregateId);
-            await _store.AppendMetrikAsync(envelope.AggregateId, evt.Metrik, envelope.CreatedAtUtc);
+            await appendMetrik.AppendMetrikAsync(envelope.AggregateId, evt.Metrik, envelope.CreatedAtUtc);
         });
     }
 
-    public async Task Handle(TrainingAbgeschlossen evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+    public async Task Handle(TrainingAbgeschlossen evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetTrainingslaufAbgeschlossen setTrainingslaufAbgeschlossen)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<TrainingslaufAgg>(envelope.AggregateId);
-            await _store.SetAbgeschlossenAsync(
+            await setTrainingslaufAbgeschlossen.SetAbgeschlossenAsync(
                 envelope.AggregateId, evt.ModellPfad, evt.Endmetriken, envelope.CreatedAtUtc);
         });
     }
 
-    public async Task Handle(TrainingGescheitert evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+    public async Task Handle(TrainingGescheitert evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetTrainingslaufGescheitert setTrainingslaufGescheitert)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<TrainingslaufAgg>(envelope.AggregateId);
-            await _store.SetGescheitertAsync(envelope.AggregateId, evt.Grund, envelope.CreatedAtUtc);
+            await setTrainingslaufGescheitert.SetGescheitertAsync(envelope.AggregateId, evt.Grund, envelope.CreatedAtUtc);
         });
     }
 
-    public async Task Handle(TrainingAbgebrochen evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+    public async Task Handle(TrainingAbgebrochen evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetTrainingslaufStatus setTrainingslaufStatus)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<TrainingslaufAgg>(envelope.AggregateId);
-            await _store.SetStatusAsync(envelope.AggregateId, TrainingsStatus.Abgebrochen, envelope.CreatedAtUtc);
+            await setTrainingslaufStatus.SetStatusAsync(envelope.AggregateId, TrainingsStatus.Abgebrochen, envelope.CreatedAtUtc);
         });
     }
 
-    public async Task Handle(TrainingHaengengeblieben evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+    public async Task Handle(TrainingHaengengeblieben evt, IAggregateEnvelope envelope, ProjectionWriter writer, ISetTrainingslaufStatus setTrainingslaufStatus)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<TrainingslaufAgg>(envelope.AggregateId);
-            await _store.SetStatusAsync(envelope.AggregateId, TrainingsStatus.Haengengeblieben, envelope.CreatedAtUtc);
+            await setTrainingslaufStatus.SetStatusAsync(envelope.AggregateId, TrainingsStatus.Haengengeblieben, envelope.CreatedAtUtc);
         });
     }
 }

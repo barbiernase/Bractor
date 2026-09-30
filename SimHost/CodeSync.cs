@@ -150,7 +150,8 @@ public static class CodeSync
         var m = t.M!;
         var methodenSpalte = m.GetLocation().GetLineSpan().StartLinePosition.Character;
         var einzug = new string(' ', methodenSpalte + 4);
-        var zeilen = Dedent(rumpf.Replace("\r\n", "\n")).Split('\n').ToList();
+        // Eine mitgelieferte „// 🤖 Prompt:“-Zeile (z. B. aus dem aktuellen Rumpf einer Anpassung) fliegt raus — es gibt genau EINE.
+        var zeilen = Dedent(rumpf.Replace("\r\n", "\n")).Split('\n').Where(z => !z.TrimStart().StartsWith(PromptMarke, StringComparison.Ordinal)).ToList();
         if (!string.IsNullOrWhiteSpace(prompt)) zeilen.Insert(0, PromptMarke + " " + EinZeile(prompt!));
         var inhalt = nl + string.Join(nl, zeilen.Select(z => z.Trim().Length == 0 ? "" : einzug + z)) + nl + new string(' ', methodenSpalte);
 
@@ -202,6 +203,14 @@ public static class CodeSync
             dir = Path.GetDirectoryName(dir);
         }
         if (proj == null) return new { ok = false, projekt = (string?)null, fehler = new List<string> { "Kein .csproj über der Datei gefunden." } };
+        return BaueProjekt(Rel(proj, slnRoot), slnRoot);
+    }
+
+    /// <summary>Ein Projekt (relativ zur Solution) bauen — die Roslyn-Generatoren und MSBuild-Prepasses laufen mit.</summary>
+    public static object BaueProjekt(string relProjekt, string slnRoot)
+    {
+        var proj = Path.GetFullPath(Path.Combine(slnRoot, relProjekt));
+        if (!File.Exists(proj)) return new { ok = false, projekt = (string?)relProjekt, fehler = new List<string> { $"Projekt fehlt: {relProjekt}" } };
         var psi = new ProcessStartInfo("dotnet", $"build \"{proj}\" -v q --nologo")
         {
             WorkingDirectory = slnRoot, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false,

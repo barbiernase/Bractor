@@ -113,9 +113,6 @@ public sealed class AggregateRaw
     /// <summary>Parametername je Command-FullName (der Rumpf referenziert ihn).</summary>
     public Dictionary<string, string> DecideParams = new();
 
-    /// <summary>Guard-Ausdruck je Zweig, Schlüssel <c>cmdFull|EvtSimpleName</c> — das „Warum" aus der Decider-Syntax.</summary>
-    public Dictionary<string, string> Guards = new();
-
     /// <summary>Der ECHTE Decide-Rumpf je Command (FullName → dedenteter Body-Text; "" = leer).</summary>
     public Dictionary<string, string> DecideBodies = new();
     /// <summary>Die ECHTEN Apply-Methoden in Quelltext-Reihenfolge (Event-FullName).</summary>
@@ -165,12 +162,14 @@ public sealed class ProjectionRaw
     public List<string> ConsumesFull = new();
     /// <summary>Handle-Rumpf je konsumiertem Event (Simple-Name → Body-Text).</summary>
     public Dictionary<string, string> HandleBodies = new();
-    /// <summary>Aufgerufene Store-Funktionen je Event (Simple-Name → [(Store, Methode)]) — für die Projektion→Store-Kante.</summary>
-    public Dictionary<string, List<(string Store, string Method, bool IsRead)>> HandleStoreCalls = new();
+    /// <summary>Fähigkeits-Parameter je Event (Simple-Name → [(Store, Funktion, Lesen?)]) — aus der SIGNATUR des Handles.</summary>
+    public Dictionary<string, List<(string Store, string Method, bool IsRead)>> HandleFaehigkeiten = new();
     /// <summary>Ge-yieldete Commands je Event (Simple-Name → Command-Simple-Namen) — Reaktion.</summary>
     public Dictionary<string, List<string>> HandleSends = new();
     /// <summary>Ge-yieldete (reaktiv veröffentlichte) Events je Event (Simple-Name → Event-Simple-Namen).</summary>
     public Dictionary<string, List<string>> HandlePublishes = new();
+    /// <summary>Rückgabe-Vertrag + Ausgänge (mit Guard) je Event (Simple-Name).</summary>
+    public Dictionary<string, HandleVertragRaw> HandleVertraege = new();
 }
 
 public sealed class QueryRaw
@@ -187,10 +186,39 @@ public sealed class ReaderRaw
     public List<string> QueryNames = new();
     /// <summary>Handle-Rumpf je Query (Query-Simple-Name → Body-Text).</summary>
     public Dictionary<string, string> HandleBodies = new();
-    /// <summary>Aufgerufene Store-Read-Funktionen je Query (Query-Simple-Name → [(Store, Methode)]).</summary>
-    public Dictionary<string, List<(string Store, string Method, bool IsRead)>> HandleStoreCalls = new();
+    /// <summary>Fähigkeits-Parameter je Query (Query-Simple-Name → [(Store, Funktion, Lesen?)]) — aus der SIGNATUR.</summary>
+    public Dictionary<string, List<(string Store, string Method, bool IsRead)>> HandleFaehigkeiten = new();
     /// <summary>Die (OneOf-)Responses je Query (Query-Simple-Name → Response-Simple-Namen) aus der Rückgabe-Signatur.</summary>
     public Dictionary<string, List<string>> HandleResponses = new();
+    /// <summary>Rückgabe-Vertrag + Ausgänge (mit Guard) je Query (Simple-Name).</summary>
+    public Dictionary<string, HandleVertragRaw> HandleVertraege = new();
+}
+
+/// <summary>
+/// Ein möglicher AUSGANG eines Handlers (Projektion/Reader/Reaktion/Pipeline) — das Gegenstück zum OneOf-Ausgang eines
+/// Deciders. <see cref="Art"/> aus dem Marker des Typs (response | command | trigger | event | typ) — immer aus der
+/// SIGNATUR —, bzw. <c>storefn</c> je Fähigkeits-Parameter (ebenfalls Signatur). Der Rumpf liefert nichts.
+/// </summary>
+public sealed class AusgangRaw
+{
+    public string Typ = "", Art = "";
+    /// <summary>Voller Typname (Signatur-Ausgänge und Fähigkeiten).</summary>
+    public string Full = "";
+    /// <summary>Nur bei <c>storefn</c>: der Store (Bündel) der Fähigkeit und ob Lese-Fähigkeit.</summary>
+    public string? Store;
+    public bool IstLesen;
+}
+
+/// <summary>Der Rückgabe-Vertrag eines Handlers: Form, ob die Signatur offen ist (Marker statt konkreter Typen), die Ausgänge.</summary>
+public sealed class HandleVertragRaw
+{
+    /// <summary>nichts (<c>Task</c>/<c>void</c>) · einzeln (<c>Task&lt;T&gt;</c>) · strom (<c>IAsyncEnumerable&lt;T&gt;</c>/<c>IEnumerable&lt;T&gt;</c>).</summary>
+    public string Form = "nichts";
+    /// <summary>Das Element-Typargument ist ein Interface (z. B. <c>ICommand</c>) — der Vertrag steht nur im Rumpf.</summary>
+    public bool SignaturOffen;
+    /// <summary>Die Rückgabe-Signatur verbatim (z. B. <c>Task&lt;OneOf&lt;A, B&gt;&gt;</c>).</summary>
+    public string Signatur = "";
+    public List<AusgangRaw> Ausgaenge = new();
 }
 
 public sealed class PipelineRaw
@@ -206,8 +234,10 @@ public sealed class PipelineRaw
     public Dictionary<string, string> HandleBodies = new();
     /// <summary>Ge-yieldete Trigger-Nachrichten je Handle (Input-FullName → [Trigger-Simple-Name]) — für die Pipeline→Pipeline-Kette.</summary>
     public Dictionary<string, List<string>> HandleEmitsTriggers = new();
-    /// <summary><c>ctx.ScheduleSelf(new X(), delay)</c> je Handle (Input-FullName → [(Self-Simple-Name, Delay-Ausdruck)]).</summary>
-    public Dictionary<string, List<(string Name, string Delay)>> HandleSchedules = new();
+    /// <summary>Fähigkeits-Parameter je Eingang (Input-FullName → [(Store, Funktion, Lesen?)]) — aus der SIGNATUR.</summary>
+    public Dictionary<string, List<(string Store, string Method, bool IsRead)>> HandleFaehigkeiten = new();
+    /// <summary>Rückgabe-Vertrag + Ausgänge (mit Guard) je Eingang (Input-FullName).</summary>
+    public Dictionary<string, HandleVertragRaw> HandleVertraege = new();
 }
 
 /// <summary>Eine Store-Funktion (aus dem Store-Interface + Impl-Rumpf).</summary>
@@ -218,22 +248,24 @@ public sealed class StoreFnRaw
     public List<(string Name, string Type)> Params = new();
     public string? Return;
     public string? Body;
+    /// <summary>Das Fähigkeits-Interface (Simple-Name / FullName), das genau diese Funktion trägt.</summary>
+    public string Faehigkeit = "", FaehigkeitFull = "";
     /// <summary>Alle Typen (FullNames), die die Signatur nennt — auch in Typ-Argumenten (für ReadModel → Store).</summary>
     public HashSet<string> TypRefs = new(StringComparer.Ordinal);
 }
 
 /// <summary>
-/// Ein Store = ein <c>IWriteStore</c>-Interface + die <c>IReadStore&lt;TWrite&gt;</c>-Interfaces, die es als Partner
-/// nennen (bzw. ein alleinstehendes <c>IReadStore</c>). Name = das Interface, das ihn verankert (frei benannt).
+/// Ein Store = ein Bündel-Interface mit Marker <c>IStore</c>; seine Funktionen = die Fähigkeits-Interfaces
+/// (<c>IWriteStore</c>/<c>IReadStore</c>, je genau eine Funktion), die es erbt. Eine Fähigkeit ohne Bündel ist ihr
+/// eigener Store. Name = das Bündel-Interface (frei benannt).
 /// </summary>
 public sealed class StoreRaw
 {
     public string Name = "", Namespace = "";
-    /// <summary>FullNames der Schreib-/Lese-Interfaces dieses Stores.</summary>
-    public string? WriteIface;
-    public List<string> ReadIfaces = new();
+    /// <summary>FullName des Bündel-Interfaces.</summary>
+    public string? BuendelFull;
     public List<StoreFnRaw> Fns = new();
-    /// <summary>Die konkreten Implementierungen (FullNames) — für die ReadModel-Zuordnung über den Impl-Rumpf.</summary>
+    /// <summary>Die konkreten Implementierungen (FullNames) — Quelle der Fn-Rümpfe (📝-Slots).</summary>
     public List<string> ImplsFull = new();
     /// <summary>Mehr als eine konkrete Klasse implementiert dasselbe Interface → DI-Auflösung mehrdeutig.</summary>
     public List<string> MehrdeutigeImpls = new();
@@ -258,7 +290,7 @@ public sealed class DomainExtractor
     /// <summary>Die globalen usings der Domänen-Compilations (ImplicitUsings + global using) + der Vertrags-Namespace — nie „explizit".</summary>
     private readonly HashSet<string> _impliziteUsings;
     private readonly INamedTypeSymbol? _iDecider, _iApplier, _iAggEnvelope, _pipelineContext,
-        _iWriteStore, _iReadStore, _iReadStoreT, _iWertobjekt, _prozessTyp;
+        _iWriteStore, _iReadStore, _iStore, _iWertobjekt, _prozessTyp;
     /// <summary>State-FullName → die Typen, die <c>IDecider&lt;State&gt;</c> bzw. <c>IApplier&lt;State&gt;</c> implementieren (egal wo deklariert).</summary>
     private readonly Dictionary<string, List<INamedTypeSymbol>> _deciderJeState = new(StringComparer.Ordinal), _applierJeState = new(StringComparer.Ordinal);
 
@@ -293,7 +325,7 @@ public sealed class DomainExtractor
         _pipelineContext = Get(Vertrag.PipelineContext);
         _iWriteStore = Get(Vertrag.IWriteStore);
         _iReadStore = Get(Vertrag.IReadStore);
-        _iReadStoreT = Get(Vertrag.IReadStoreT);
+        _iStore = Get(Vertrag.IStore);
         _iWertobjekt = Get(Vertrag.IWertobjekt);
         _prozessTyp = Get(Vertrag.ProzessMetadatenName);
 
@@ -330,7 +362,7 @@ public sealed class DomainExtractor
 
         CatalogEventsAndCommands(m);
         ExtractRegisteredProcesses(m);
-        // Stores ZUERST: die Konsumenten-Handler lösen ihre Store-Aufrufe gegen die erkannten Store-Interfaces auf.
+        // Stores ZUERST: die Konsumenten-Handler lösen ihre Fähigkeits-Parameter gegen die erkannten Fähigkeiten auf.
         ExtractStores(m);
 
         foreach (var t in _types)
@@ -462,34 +494,17 @@ public sealed class DomainExtractor
     }
 
     /// <summary>
-    /// ReadModel → Store: bevorzugt der Store, dessen Fn-Signaturen den Typ nennen; sonst der Store, dessen
-    /// IMPLEMENTIERUNG ihn benutzt (<c>LoadAsync&lt;T&gt;</c>, <c>EnqueueStore(new T …)</c>) — typisiert über Symbole.
+    /// ReadModel → Store: der Store, dessen Fähigkeits-Signaturen den Typ nennen — nur Signatur, nie die Implementierung.
     /// </summary>
     private void LinkReadModelStores(DomainModel m)
     {
         foreach (var rm in m.ReadModels)
         {
             // Eindeutig oder gar nicht: nennen mehrere Stores den Typ, wird NICHT geraten (→ Diagnose im Graph).
-            var perSignatur = m.Stores.Where(s => s.Fns.Any(f => f.TypRefs.Contains(rm.Full))).ToList();
-            var kandidaten = perSignatur.Count > 0 ? perSignatur
-                : m.Stores.Where(s => s.ImplsFull.Any(impl => ImplReferenziert(impl, rm.Full))).ToList();
+            var kandidaten = m.Stores.Where(s => s.Fns.Any(f => f.TypRefs.Contains(rm.Full))).ToList();
             if (kandidaten.Count == 1) rm.Store = kandidaten[0].Name;
             else if (kandidaten.Count > 1) rm.StoreKandidaten = kandidaten.Select(s => s.Name).ToList();
         }
-    }
-
-    private bool ImplReferenziert(string implFull, string typFull)
-    {
-        var t = _types.FirstOrDefault(x => x.Fq() == implFull);
-        if (t == null) return false;
-        var simple = typFull[(typFull.LastIndexOf('.') + 1)..];
-        foreach (var decl in QuellDeklarationen(t))
-        {
-            var model = Model(decl.SyntaxTree);
-            foreach (var id in decl.DescendantNodes().OfType<SimpleNameSyntax>().Where(n => n.Identifier.Text == simple))
-                if (model.GetSymbolInfo(id).Symbol is INamedTypeSymbol sym && sym.Fq() == typFull) return true;
-        }
-        return false;
     }
 
     /// <summary>
@@ -527,79 +542,72 @@ public sealed class DomainExtractor
         m.Konfigs.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
     }
 
-    // ── Stores: über die Vertrags-Marker IWriteStore / IReadStore<TWrite> (Namen frei) ──────────────
+    // ── Stores: Fähigkeiten (IWriteStore/IReadStore, je EINE Funktion) + Bündel (IStore) — Namen frei ──────────────
 
-    /// <summary>Store-Interface (FullName) → (Store-Name, ist Lese-Seite).</summary>
-    private readonly Dictionary<string, (string Store, bool IsRead)> _storeIfaces = new(StringComparer.Ordinal);
+    /// <summary>Fähigkeits-Interface (FullName) → (Store, Funktion, Lesen?).</summary>
+    private readonly Dictionary<string, (string Store, string Method, bool IsRead)> _faehigkeiten = new(StringComparer.Ordinal);
+
+    private bool IstFaehigkeit(ITypeSymbol t) => t is INamedTypeSymbol { TypeKind: TypeKind.Interface } i
+        && (Sym.Implements(i, _iWriteStore) || Sym.Implements(i, _iReadStore)) && !Sym.Implements(i, _iStore);
 
     private void ExtractStores(DomainModel m)
     {
-        // 1) Die Store-Interfaces der Domäne: direkt markiert (IWriteStore / IReadStore / IReadStore<T>).
-        var ifaces = DomainQuellTypen().Where(t => t.TypeKind == TypeKind.Interface
-            && (Sym.Implements(t, _iWriteStore) || Sym.Implements(t, _iReadStore))).ToList();
-        var stores = new Dictionary<string, StoreRaw>(StringComparer.Ordinal);      // Anker-Interface → Store
-        var storeJeIface = new Dictionary<string, StoreRaw>(StringComparer.Ordinal); // jedes Store-Interface → Store
-        StoreRaw Store(INamedTypeSymbol anker)
-        {
-            if (!stores.TryGetValue(anker.Fq(), out var st))
-                stores[anker.Fq()] = st = new StoreRaw { Name = anker.Name, Namespace = anker.ContainingNamespace.Fq() };
-            return st;
-        }
-        foreach (var w in ifaces.Where(i => Sym.Implements(i, _iWriteStore)))
-        {
-            var st = Store(w);
-            st.WriteIface = w.Fq();
-            storeJeIface[w.Fq()] = st;
-            _storeIfaces[w.Fq()] = (st.Name, false);
-        }
-        foreach (var r in ifaces.Where(i => Sym.Implements(i, _iReadStore)))
-        {
-            // Partner als TYP: IReadStore<TWrite>; ohne Partner ist die Lese-Sicht ihr eigener Store.
-            var partner = r.AllInterfaces.FirstOrDefault(x => x.OriginalDefinition.Fq() == _iReadStoreT?.Fq())?.TypeArguments[0] as INamedTypeSymbol;
-            var st = partner != null && stores.ContainsKey(partner.Fq()) ? stores[partner.Fq()] : Store(r);
-            st.ReadIfaces.Add(r.Fq());
-            storeJeIface[r.Fq()] = st;
-            _storeIfaces[r.Fq()] = (st.Name, true);
-        }
+        var faehigkeiten = DomainQuellTypen().Where(IstFaehigkeit).ToList();
+        var buendel = DomainQuellTypen().Where(t => t.TypeKind == TypeKind.Interface && Sym.Implements(t, _iStore)).ToList();
+        var stores = new List<StoreRaw>();
+        var implsJeFaehigkeit = new Dictionary<string, List<string>>(StringComparer.Ordinal);
 
-        // 2) Funktionen je Seite aus den Interface-Membern, Rümpfe aus der Implementierung, die die Laufzeit registriert.
-        var implsJeIface = new Dictionary<string, List<string>>(StringComparer.Ordinal);
-        foreach (var iface in ifaces)
+        void Nimm(StoreRaw store, INamedTypeSymbol f)
         {
-            var isRead = _storeIfaces[iface.Fq()].IsRead;
-            var store = storeJeIface[iface.Fq()];
+            if (_faehigkeiten.ContainsKey(f.Fq())) return;   // schon in einem (anderen) Bündel
+            var isRead = Sym.Implements(f, _iReadStore);
             var impls = _types.Where(t => t.TypeKind is TypeKind.Class or TypeKind.Struct && !t.IsAbstract
-                                          && t.AllInterfaces.Any(x => x.Fq() == iface.Fq())).ToList();
-            implsJeIface[iface.Fq()] = impls.Select(x => x.Name).Distinct().OrderBy(x => x, StringComparer.Ordinal).ToList();
+                                          && t.AllInterfaces.Any(x => x.Fq() == f.Fq())).ToList();
+            implsJeFaehigkeit[f.Fq()] = impls.Select(x => x.Name).Distinct().OrderBy(x => x, StringComparer.Ordinal).ToList();
             foreach (var impl in impls) if (!store.ImplsFull.Contains(impl.Fq())) store.ImplsFull.Add(impl.Fq());
-
-            foreach (var im in new[] { iface }.Concat(iface.AllInterfaces).Where(x => x.Fq() != _iWriteStore?.Fq() && x.Fq() != _iReadStore?.Fq()
-                                                                                      && x.OriginalDefinition.Fq() != _iReadStoreT?.Fq())
-                         .SelectMany(x => x.GetMembers().OfType<IMethodSymbol>()))
+            // Genau EINE Funktion je Fähigkeit (CQRS051); mehrere wären ein Analyzer-Fehler — hier: jede wird eine Fn.
+            foreach (var im in f.GetMembers().OfType<IMethodSymbol>().Where(x => x.MethodKind == MethodKind.Ordinary))
             {
-                var fn = store.Fns.FirstOrDefault(f => f.Name == im.Name && f.IsRead == isRead);
-                if (fn == null)
+                var fn = new StoreFnRaw
                 {
-                    fn = new StoreFnRaw
-                    {
-                        Name = im.Name, IsRead = isRead,
-                        Params = im.Parameters.Select(p => (p.Name, ShortType(p.Type))).ToList(),
-                        Return = isRead ? UnwrapTask(im.ReturnType) : null,
-                    };
-                    foreach (var tr in im.Parameters.Select(p => p.Type).Append(im.ReturnType).SelectMany(TypUndArgumente)) fn.TypRefs.Add(tr);
-                    store.Fns.Add(fn);
-                }
+                    Name = im.Name, IsRead = isRead, Faehigkeit = f.Name, FaehigkeitFull = f.Fq(),
+                    Params = im.Parameters.Select(p => (p.Name, ShortType(p.Type))).ToList(),
+                    Return = isRead ? UnwrapTask(im.ReturnType) : null,
+                };
+                foreach (var tr in im.Parameters.Select(p => p.Type).Append(im.ReturnType).SelectMany(TypUndArgumente)) fn.TypRefs.Add(tr);
                 foreach (var impl in impls)
                     if ((fn.Body == null || RegistrierteImpls().Contains(impl.Fq()))
                         && Sym.Implementierung(impl, im) is IMethodSymbol implM && MethodBody(implM) is { } body)
                         fn.Body = body;
+                store.Fns.Add(fn);
+                _faehigkeiten[f.Fq()] = (store.Name, im.Name, isRead);
             }
         }
-        foreach (var (iface, impls) in implsJeIface)
-            if (impls.Count > 1)
-                storeJeIface[iface].MehrdeutigeImpls.Add($"{iface[(iface.LastIndexOf('.') + 1)..]}: {string.Join(", ", impls)}");
-        m.Stores.AddRange(stores.Values.OrderBy(s => s.Name, StringComparer.Ordinal));
+
+        foreach (var b in buendel.OrderBy(x => x.Fq(), StringComparer.Ordinal))
+        {
+            var store = new StoreRaw { Name = b.Name, Namespace = b.ContainingNamespace.Fq(), BuendelFull = b.Fq() };
+            // Reihenfolge = Deklarations-Reihenfolge der Basisliste (Code-Fakt), nicht alphabetisch.
+            foreach (var f in b.Interfaces.Where(IstFaehigkeit).Concat(b.AllInterfaces.Where(IstFaehigkeit)))
+                Nimm(store, f);
+            stores.Add(store);
+        }
+        foreach (var f in faehigkeiten.Where(f => !_faehigkeiten.ContainsKey(f.Fq())))
+        {
+            var store = new StoreRaw { Name = f.Name, Namespace = f.ContainingNamespace.Fq(), BuendelFull = f.Fq() };
+            Nimm(store, f);
+            stores.Add(store);
+        }
+        foreach (var (f, impls) in implsJeFaehigkeit)
+            if (impls.Count > 1 && _faehigkeiten.TryGetValue(f, out var z))
+                stores.First(s => s.Name == z.Store).MehrdeutigeImpls.Add($"{f[(f.LastIndexOf('.') + 1)..]}: {string.Join(", ", impls)}");
+        m.Stores.AddRange(stores.OrderBy(s => s.Name, StringComparer.Ordinal));
     }
+
+    /// <summary>Die Fähigkeits-Parameter einer Handle-Methode → (Store, Funktion, Lesen?) — reine Signatur.</summary>
+    private List<(string Store, string Method, bool IsRead)> FaehigkeitenVon(IMethodSymbol mm) =>
+        mm.Parameters.Select(p => _faehigkeiten.TryGetValue(p.Type.OriginalDefinition.Fq(), out var f) ? f : default)
+            .Where(f => f.Store != null).Distinct().ToList();
 
     /// <summary>Ein Typ und alle Typ-Argumente darin, rekursiv (FullNames der Original-Definitionen und Argumente).</summary>
     private static IEnumerable<string> TypUndArgumente(ITypeSymbol t)
@@ -713,8 +721,6 @@ public sealed class DomainExtractor
                     agg.DecideOutcomes[cmdFull] = ausgaenge.Select(e => e.Fq()).ToList();
                     foreach (var reject in ausgaenge.Where(e => Sym.Implements(e, _iTransient)))
                         agg.Rejects.Add((cmdFull, reject.Fq()));
-                    foreach (var (evtSimple, guard) in ExtractGuards(method))
-                        agg.Guards.TryAdd(cmdFull + "|" + evtSimple, guard);
                     var db = MethodBody(method);
                     if (db != null) agg.DecideBodies[cmdFull] = db;
                     continue;
@@ -894,36 +900,6 @@ public sealed class DomainExtractor
         return string.Join("\n", lines.Select(l => (l.Length >= min ? l[min..] : l.TrimStart()).TrimEnd()));
     }
 
-    /// <summary>
-    /// Das „Warum" je ge-yieldetem Event: die Bedingungen ALLER umschließenden <c>if</c> bis zum Methodenrumpf, je nach
-    /// Zweig — im <c>then</c>-Zweig die Bedingung, im <c>else</c>-Zweig ihre Negation <c>!(…)</c>, äußerste zuerst,
-    /// mit <c>&amp;&amp;</c> verbunden. Der Event-Typ kommt aus dem Symbol des ge-yieldeten Ausdrucks (nicht aus dem Text).
-    /// Ein Yield ohne umschließendes <c>if</c> hat keinen Guard.
-    /// </summary>
-    private IEnumerable<(string EvtSimple, string Guard)> ExtractGuards(IMethodSymbol method)
-    {
-        if (method.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is not MethodDeclarationSyntax syntax)
-            yield break;
-        var body = (SyntaxNode?)syntax.Body ?? syntax.ExpressionBody;
-        if (body == null) yield break;
-        var model = Model(syntax.SyntaxTree);
-
-        foreach (var y in body.DescendantNodes().OfType<YieldStatementSyntax>())
-        {
-            if (y.Expression == null || model.GetTypeInfo(y.Expression).Type is not INamedTypeSymbol et) continue;
-            var bedingungen = new List<string>();
-            foreach (var ifs in y.Ancestors().TakeWhile(a => a != body).OfType<IfStatementSyntax>())
-            {
-                var c = ifs.Condition.ToString().Replace("this.", "");
-                if (ifs.Statement.Span.Contains(y.Span)) bedingungen.Add(c);
-                else if (ifs.Else != null && ifs.Else.Span.Contains(y.Span)) bedingungen.Add($"!({c})");
-            }
-            if (bedingungen.Count == 0) continue; // ungeschützter Zweig → kein Guard
-            bedingungen.Reverse();
-            yield return (et.Name, string.Join(" && ", bedingungen));
-        }
-    }
-
     // ── Prozesse / Sagas: der DSL-Walk ───────────────────────────────────────
 
     private ProcessRaw ReadProcess(INamedTypeSymbol t)
@@ -1062,8 +1038,8 @@ public sealed class DomainExtractor
             var evt = mm.Parameters[0].Type.Name;
             var body = MethodBody(mm);
             if (body != null) raw.HandleBodies[evt] = body;
-            var calls = ExtractStoreCalls(mm).Distinct().ToList();
-            if (calls.Count > 0) raw.HandleStoreCalls[evt] = calls;
+            var fs = FaehigkeitenVon(mm);
+            if (fs.Count > 0) raw.HandleFaehigkeiten[evt] = fs;
 
             // Rückgabe IAsyncEnumerable<T | OneOf<…>>: ge-yieldete Commands (→ Reaktion) bzw. Events (reaktiv).
             var ausgaben = YieldTypen(mm.ReturnType).ToList();
@@ -1071,6 +1047,7 @@ public sealed class DomainExtractor
             var pubs = ausgaben.Where(x => Sym.Implements(x, _iEvent)).Select(x => x.Name).ToList();
             if (sends.Count > 0) { raw.HandleSends[evt] = sends; raw.IstReaktion = true; }
             if (pubs.Count > 0) raw.HandlePublishes[evt] = pubs;
+            raw.HandleVertraege[evt] = LiesHandleVertrag(mm);
         }
         return raw;
     }
@@ -1113,13 +1090,14 @@ public sealed class DomainExtractor
             var q = mm.Parameters[0].Type.Name;
             var body = MethodBody(mm);
             if (body != null) raw.HandleBodies[q] = body;
-            var calls = ExtractStoreCalls(mm).Distinct().ToList();
-            if (calls.Count > 0) raw.HandleStoreCalls[q] = calls;
+            var fs = FaehigkeitenVon(mm);
+            if (fs.Count > 0) raw.HandleFaehigkeiten[q] = fs;
             // Task<R> / Task<OneOf<R1,R2>> → Responses.
             var inner = IstTask(mm.ReturnType) ? ((INamedTypeSymbol)mm.ReturnType).TypeArguments[0] as INamedTypeSymbol : null;
             if (inner != null)
                 raw.HandleResponses[q] = (Vertrag.IstOneOf(inner) ? inner.TypeArguments.OfType<INamedTypeSymbol>() : new[] { inner })
                     .Select(x => x.Name).ToList();
+            raw.HandleVertraege[q] = LiesHandleVertrag(mm);
         }
         return raw;
     }
@@ -1136,67 +1114,70 @@ public sealed class DomainExtractor
             var kind = Sym.Implements(input, _iPipelineTrigger) ? "trigger"
                 : _iSelfMessage != null && Sym.Implements(input, _iSelfMessage) ? "self"
                 : "event";
-            var emits = EmittedCommands(method).ToList();
-            pipe.Handles.Add((input.Fq(), kind, emits));
+            // Was die Pipeline ausgibt, steht in der Signatur (CQRS050) — nicht aus den yields geraten.
+            var vertrag = LiesHandleVertrag(method);
+            pipe.HandleVertraege[input.Fq()] = vertrag;
+            pipe.Handles.Add((input.Fq(), kind, vertrag.Ausgaenge.Where(a => a.Art == "command").Select(a => a.Full).ToList()));
             var body = MethodBody(method);
             if (body != null) pipe.HandleBodies[input.Fq()] = body;
-            var trigs = EmittedTriggers(method).ToList();
+            var trigs = vertrag.Ausgaenge.Where(a => a.Art == "trigger").Select(a => a.Typ).ToList();
             if (trigs.Count > 0) pipe.HandleEmitsTriggers[input.Fq()] = trigs;
-            var scheds = ScheduleSelfAufrufe(method).ToList();
-            if (scheds.Count > 0) pipe.HandleSchedules[input.Fq()] = scheds;
+            var fs = FaehigkeitenVon(method);
+            if (fs.Count > 0) pipe.HandleFaehigkeiten[input.Fq()] = fs;
         }
         return pipe;
     }
 
-    /// <summary><c>ctx.ScheduleSelf(new X(…), delay)</c> im Methodenrumpf → (X, delay-Ausdruck).</summary>
-    private IEnumerable<(string Name, string Delay)> ScheduleSelfAufrufe(IMethodSymbol method)
+    // ── Handle-Vertrag: WAS ein Handler erzeugen kann und WELCHE Store-Funktionen er benutzen darf, steht in der SIGNATUR
+    //    (Typ-Fakten, vom Compiler erzwungen: CQRS050 für die Rückgabe, Fähigkeits-Parameter für die Store-Funktionen).
+    //    Der RUMPF liefert nichts — er übersteht Hilfsmethoden, Delegates und fremde Objekte nicht verlässlich. ──
+
+    /// <summary>
+    /// Der Vertrag eines Handlers — das Gegenstück zum OneOf eines Deciders, für Projektion/Reader/Reaktion/Pipeline.
+    /// Ausgänge: Form (nichts/einzeln/strom) + Typargumente (OneOf aufgefächert); eine offene Signatur (Interface,
+    /// Typ-Parameter, object, abstrakte Klasse) liefert KEINE Ausgänge (nicht geraten; CQRS050). Dazu je
+    /// Fähigkeits-Parameter ein <c>storefn</c>-Ausgang: die Obergrenze dessen, was der Handle am Store rufen darf.
+    /// </summary>
+    private HandleVertragRaw LiesHandleVertrag(IMethodSymbol mm)
     {
-        var node = method.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax();
-        if (node == null) yield break;
-        var model = Model(node.SyntaxTree);
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var inv in node.DescendantNodes().OfType<InvocationExpressionSyntax>())
-        {
-            if (inv.Expression is not MemberAccessExpressionSyntax sma || sma.Name.Identifier.Text != Vertrag.ScheduleSelf
-                || model.GetSymbolInfo(inv).Symbol?.ContainingType?.ToDisplayString() != _pipelineContext?.ToDisplayString()) continue;
-            var args = inv.ArgumentList.Arguments;
-            if (args.Count == 0) continue;
-            var typ = model.GetTypeInfo(args[0].Expression).Type;
-            var name = typ?.Name ?? args[0].Expression.ToString();
-            var delay = args.Count > 1 ? args[1].Expression.ToString() : "";
-            if (seen.Add(name)) yield return (name, delay);
-        }
+        var v = new HandleVertragRaw { Signatur = mm.ReturnType.ToDisplayString(SymbolDisplayFormat.MinimallyQualifiedFormat) };
+        var rt = mm.ReturnType;
+        ITypeSymbol? el = null;
+        if (IstTask(rt)) { v.Form = "einzeln"; el = ((INamedTypeSymbol)rt).TypeArguments[0]; }
+        else if (Vertrag.Ist(rt, typeof(IAsyncEnumerable<>)) || Vertrag.Ist(rt, typeof(IEnumerable<>))) { v.Form = "strom"; el = ((INamedTypeSymbol)rt).TypeArguments[0]; }
+        var sigTypen = el == null ? new List<ITypeSymbol>() : Vertrag.IstOneOf(el) ? ((INamedTypeSymbol)el).TypeArguments.ToList() : new List<ITypeSymbol> { el };
+        static bool Offen(ITypeSymbol t) => t.TypeKind is TypeKind.Interface or TypeKind.TypeParameter
+                                            || t.SpecialType == SpecialType.System_Object || (t.TypeKind == TypeKind.Class && t.IsAbstract);
+        v.SignaturOffen = sigTypen.Any(Offen);
+        var sig = v.SignaturOffen ? new List<INamedTypeSymbol>() : sigTypen.OfType<INamedTypeSymbol>().ToList();
+        v.Ausgaenge = sig.Select(t => Planung(t) is { } pl
+            ? new AusgangRaw { Typ = pl.Ziel.Name, Full = pl.Ziel.Fq(), Art = pl.Art }
+            : new AusgangRaw { Typ = t.Name, Full = t.Fq(), Art = ArtVon(t) }).ToList();
+        foreach (var p in mm.Parameters)
+            if (_faehigkeiten.TryGetValue(p.Type.OriginalDefinition.Fq(), out var f))
+                v.Ausgaenge.Add(new AusgangRaw { Typ = f.Method, Full = p.Type.Fq(), Art = "storefn", Store = f.Store, IstLesen = f.IsRead });
+        return v;
     }
 
     /// <summary>
-    /// Die Typen der TATSÄCHLICH ausgegebenen Werte eines Handlers: <c>yield return x</c> (bzw. <c>return x</c> in
-    /// Task-Handlern) — über den Typ des Ausdrucks, OneOf aufgefächert. Ein nur konstruiertes, nie ausgegebenes Objekt zählt nicht.
+    /// Planungs-Ausgänge des Vertrags (Abstractions): <c>Selbst&lt;T&gt;</c> → self (T = Selbst-Nachricht),
+    /// <c>Frist&lt;TCmd&gt;</c> → frist, <c>FristStorno&lt;TCmd&gt;</c> → fristStorno (TCmd = der fällige Command). Über das Symbol.
     /// </summary>
-    private IEnumerable<INamedTypeSymbol> AusgegebeneTypen(IMethodSymbol method)
+    private static (string Art, INamedTypeSymbol Ziel)? Planung(INamedTypeSymbol t)
     {
-        var node = method.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax();
-        if (node == null) yield break;
-        var model = Model(node.SyntaxTree);
-        foreach (var n in node.DescendantNodes(x => x is not (LambdaExpressionSyntax or LocalFunctionStatementSyntax)))
-        {
-            var expr = n switch
-            {
-                YieldStatementSyntax { Expression: { } y } => y,
-                ReturnStatementSyntax { Expression: { } r } => r,
-                _ => null,
-            };
-            if (expr == null || model.GetTypeInfo(expr).Type is not INamedTypeSymbol typ) continue;
-            if (Vertrag.IstOneOf(typ)) { foreach (var a in typ.TypeArguments.OfType<INamedTypeSymbol>()) yield return a; }
-            else yield return typ;
-        }
+        if (!t.IsGenericType || t.TypeArguments.Length != 1 || t.TypeArguments[0] is not INamedTypeSymbol ziel
+            || t.ContainingAssembly?.Name != Vertrag.VertragsAssembly) return null;
+        var def = t.OriginalDefinition.MetadataName;
+        return def == Vertrag.SelbstTyp ? ("self", ziel) : def == Vertrag.FristTyp ? ("frist", ziel) : def == Vertrag.FristStornoTyp ? ("fristStorno", ziel) : null;
     }
 
-    private IEnumerable<string> EmittedCommands(IMethodSymbol method) =>
-        AusgegebeneTypen(method).Where(t => Sym.Implements(t, _iCommand)).Select(t => t.Fq()).Distinct(StringComparer.Ordinal);
-
-    /// <summary>Ausgegebene <c>IPipelineTrigger</c>-Nachrichten (Simple-Namen) — die Pipeline→Pipeline-Kette.</summary>
-    private IEnumerable<string> EmittedTriggers(IMethodSymbol method) =>
-        AusgegebeneTypen(method).Where(t => Sym.Implements(t, _iPipelineTrigger)).Select(t => t.Name).Distinct(StringComparer.Ordinal);
+    /// <summary>Die Art eines Ausgabe-Typs aus seinem Marker (nie aus dem Namen).</summary>
+    private string ArtVon(INamedTypeSymbol t) =>
+        Sym.Implements(t, _iQueryResponse) ? "response"
+        : Sym.Implements(t, _iCommand) ? "command"
+        : Sym.Implements(t, _iPipelineTrigger) ? "trigger"
+        : Sym.Implements(t, _iEvent) ? "event"
+        : "typ";
 
     /// <summary>
     /// Der Compile-Zeit-Wert eines Vertrags-Members (z. B. <c>SubscriberId</c>) am Typ: über die Interface-Implementierung
@@ -1218,37 +1199,6 @@ public sealed class DomainExtractor
             if (expr != null && Model(syn.SyntaxTree).GetConstantValue(expr) is { HasValue: true, Value: string wert }) return wert;
         }
         return null;
-    }
-
-    /// <summary>
-    /// Aufgerufene Store-Funktionen im Handle-Rumpf → (Store, Methode, Lese-Seite?). Über das AUFGELÖSTE Methoden-Symbol:
-    /// entweder eine Methode eines Store-Interfaces selbst, oder (Aufruf über die konkrete Klasse) die Implementierung
-    /// eines Store-Interface-Members. Hebt die Topologie-Kante Projektion/Reader → Store.
-    /// </summary>
-    private IEnumerable<(string Store, string Method, bool IsRead)> ExtractStoreCalls(IMethodSymbol method)
-    {
-        var syntaxRef = method.DeclaringSyntaxReferences.FirstOrDefault();
-        if (syntaxRef == null) yield break;
-        var node = syntaxRef.GetSyntax();
-        var model = Model(node.SyntaxTree);
-        foreach (var inv in node.DescendantNodes().OfType<InvocationExpressionSyntax>())
-        {
-            if (model.GetSymbolInfo(inv).Symbol is not IMethodSymbol ziel) continue;
-            ziel = ziel.ReducedFrom ?? ziel;
-            var ct = ziel.ContainingType;
-            if (ct == null) continue;
-            if (_storeIfaces.TryGetValue(ct.OriginalDefinition.Fq(), out var direkt))
-            {
-                yield return (direkt.Store, ziel.Name, direkt.IsRead);
-                continue;
-            }
-            foreach (var i in ct.AllInterfaces)
-            {
-                if (!_storeIfaces.TryGetValue(i.OriginalDefinition.Fq(), out var ueber)) continue;
-                if (i.GetMembers().OfType<IMethodSymbol>().Any(im => SymbolEqualityComparer.Default.Equals(ct.FindImplementationForInterfaceMember(im), ziel)))
-                    yield return (ueber.Store, ziel.Name, ueber.IsRead);
-            }
-        }
     }
 
     // ── Helfer ───────────────────────────────────────────────────────────────

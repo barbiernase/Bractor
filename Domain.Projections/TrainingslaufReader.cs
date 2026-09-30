@@ -5,23 +5,16 @@ namespace Domain.Projections;
 
 /// <summary>
 /// Reader der Trainingslauf-Projektion (analog <see cref="ImagePairReader"/>). Beantwortet die
-/// Trainings-Queries über den <see cref="ITrainingslaufReadStore"/> — derselbe Kanal für Blazor
+/// Trainings-Queries über Lese-Fähigkeiten des <see cref="ITrainingslaufStore"/> — derselbe Kanal für Blazor
 /// (Live-Dashboard) und Python.
 /// </summary>
 [ProjectionReader(TrackDeps = true)]
 public partial class TrainingslaufReader : IReader<TrainingslaufProjektion>
 {
-    private readonly ITrainingslaufReadStore _store;
-
-    public TrainingslaufReader(ITrainingslaufReadStore store)
-    {
-        _store = store;
-    }
-
     public async Task<OneOf<TrainingslaufAntwort, TrainingslaufNichtGefundenAntwort>> Handle(
-        HoleTrainingslauf query, IMessageEnvelope envelope, ReadContext ctx)
+        HoleTrainingslauf query, IMessageEnvelope envelope, ReadContext ctx, IFindTrainingslauf findTrainingslauf)
     {
-        var model = await _store.FindByIdAsync(query.TrainingslaufId);
+        var model = await findTrainingslauf.FindByIdAsync(query.TrainingslaufId);
 
         if (model is null)
             return new TrainingslaufNichtGefundenAntwort(query.TrainingslaufId);
@@ -31,9 +24,9 @@ public partial class TrainingslaufReader : IReader<TrainingslaufProjektion>
     }
 
     public async Task<TrainingslaufListe> Handle(
-        HoleTrainingslaeufe query, IMessageEnvelope envelope, ReadContext ctx)
+        HoleTrainingslaeufe query, IMessageEnvelope envelope, ReadContext ctx, IGetAlleTrainingslaeufe getAlleTrainingslaeufe)
     {
-        var modelle = await _store.GetAlleAsync();
+        var modelle = await getAlleTrainingslaeufe.GetAlleAsync();
 
         var items = modelle.Select(m =>
         {

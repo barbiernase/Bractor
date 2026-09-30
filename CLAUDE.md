@@ -87,8 +87,17 @@ integriert; `CqrsFrameworkOptions` toter `[Obsolete]`-Typ.
 - Nichts mit Runtime-Reflection (Inv. 4). Neue Dispatch-Logik = Generator erweitern, nicht
   Handschalter.
 - **Extractor/Editor erkennen nur Code-Fakten** (Marker, Attribute, Symbole) — nie Namenskonventionen oder
-  Namespace-Raten. Stores: Schreib-Interface `: IWriteStore`, Lese-Interface `: IReadStore<ISchreibInterface>` (Namen
-  frei). Ingress-Methoden tragen `[Ingress(...)]`. Neues Konstrukt ⇒ Sonde (`GraphExtractor/Sonde/`) + `soll.txt` erweitern.
+  Namespace-Raten. Stores: Fähigkeit = Interface `: IWriteStore`/`: IReadStore` mit GENAU EINER Funktion (CQRS051),
+  Store = Bündel `: IStore, IFähigkeitA, …` (eine Klasse, Namen frei). Ingress-Methoden tragen `[Ingress(...)]`.
+  Neues Konstrukt ⇒ Sonde (`GraphExtractor/Sonde/`) + `soll.txt` erweitern.
+- **Fähigkeiten statt Rumpf-Analyse:** ein Handle (Projektion/Reader/Pipeline) bekommt die Store-Funktionen, die er
+  benutzen darf, als Parameter (`Handle(evt, env, writer, IUpsertX store)`); der generierte Dispatch löst sie aus einem
+  DI-Bereich auf. Kein Store/`IFristplan` in Ctor/Feld eines Konsumenten (CQRS054), kein `new …Store()` (CQRS055).
+  Planen ist ein Ausgang: `Selbst<T>`, `Frist<TCmd>`, `FristStorno<TCmd>` im OneOf. Der Rumpf liefert dem
+  Extractor NICHTS (keine Guards, keine Store-Aufrufe) — nur die Signatur zählt.
+- **Ausgabe-Vertrag in der Signatur (CQRS050):** Decide und jedes Handle geben einen konkreten Typ oder `OneOf<…>`
+  konkreter Typen zurück (nie `ICommand`/`IEvent` …). WAS entstehen kann, lesen Generatoren/Extractor/Editor NUR aus der
+  Signatur.
 - **Kein `InMemoryEventStore`:** Store-Semantik nur gegen echtes Marten (Integration). Der
   Prüfstand testet nur store-freie Logik. Nie faken, was man nicht besitzt.
 - **Proto-Regenerierung bei neuen Domain-Typen:** jeder neue Command/Event/Query/Trigger
@@ -106,7 +115,7 @@ NICHT Timeout-tunebar; xUnit schluckt App-Logs (Cluster-Diagnose → Last-Harnes
 - Build: `dotnet build`
 - Test (Logik, immer grün): `dotnet test Infrastructure.Pruefstand.Tests/Infrastructure.Pruefstand.Tests.csproj`
 - Integration (braucht Postgres/Consul/Redis, sequentiell): `dotnet test Infrastructure.Integration.Tests/Infrastructure.Integration.Tests.csproj`
-- Domänen-Editor + Simulation (einzige Oberfläche): `dotnet run --project GraphExtractor` (erzeugt editor.html + domain-model.json), dann `dotnet run --project SimHost` → http://localhost:5178/editor; 🤖-LLM-Knoten am Code-Block: „▶ LLM ausführen“ → Vorschlag im Block → Kompilieren/Simulation → „✓ Übernehmen“ (schreibt .cs + baut); Kontexte erzeugt SimHost selbst, Anbieter über `BRACTOR_LLM` (Konzept §12)
+- Domänen-Editor + Simulation (einzige Oberfläche): `dotnet run --project GraphExtractor` (erzeugt editor.html + domain-model.json), dann `dotnet run --project SimHost` → http://localhost:5178/editor; Bearbeiten nur im Panel: Karte anklicken, ⊕-Punkt im Panel → passende Knoten leuchten → anklicken = verbinden/lösen (`docs/konzept-editor-panel-bearbeitung.md`); 🤖-LLM-Knoten am Code-Block = Chat: Prompt senden → `claude -p` (Abo, nie API) → geprüft → .cs geschrieben → Laufzeit-Projekt gebaut (alle Generatoren) → neu eingelesen (Konzept §12); Kontexte erzeugt SimHost selbst
 - Editor-Parität (Code ⇄ Extraktion ⇄ Editor, schreibt nichts): `dotnet run --project GraphExtractor -- --check`
 - Agnostik-Sonde (unbekannte Domäne im Speicher gegen handgeschriebenes Soll + Fixpunkt): `dotnet run --project GraphExtractor -- --sonde`
 - LLM-Kontext je Code-Block (`docs/konzept-llm-minimalkontext.md`): `dotnet run --project GraphExtractor -- --kontexte <verz>` (Graph-Skelett + Slot-Teile) bzw. `--kontext <Disc> [--auftrag "…"]`; Isolation aller Code-Block-Stellen: `--slots`

@@ -9,18 +9,11 @@ namespace Domain.Projections;
 [ProjectionReader(TrackDeps = true)]
 public partial class ModellReader : IReader<ModellProjektion>
 {
-    private readonly IModellReadStore _store;
-
-    public ModellReader(IModellReadStore store)
-    {
-        _store = store;
-    }
-
     public async Task<ModellListe> Handle(
-        HoleModelle query, IMessageEnvelope envelope, ReadContext ctx)
+        HoleModelle query, IMessageEnvelope envelope, ReadContext ctx, IGetAlleModelle getAlleModelle, IGetAktivesModell getAktivesModell)
     {
-        var modelle = await _store.GetAlleAsync();
-        var aktiv = await _store.GetAktivesAsync();
+        var modelle = await getAlleModelle.GetAlleAsync();
+        var aktiv = await getAktivesModell.GetAktivesAsync();
         var aktivId = aktiv?.ModellId ?? Guid.Empty;
 
         var items = modelle.Select(m =>
@@ -35,9 +28,9 @@ public partial class ModellReader : IReader<ModellProjektion>
     }
 
     public async Task<AktivesModellAntwort> Handle(
-        HoleAktivesModell query, IMessageEnvelope envelope, ReadContext ctx)
+        HoleAktivesModell query, IMessageEnvelope envelope, ReadContext ctx, IGetAktivesModell getAktivesModell)
     {
-        var aktiv = await _store.GetAktivesAsync();
+        var aktiv = await getAktivesModell.GetAktivesAsync();
         if (aktiv is null)
             return new AktivesModellAntwort(Guid.Empty, null, null);
 

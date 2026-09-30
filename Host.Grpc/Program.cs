@@ -131,15 +131,8 @@ builder.Services.AddGeneratedPipelineEventPulls();
 builder.Services.AddBackendMonitoring();
 
 // Deadlines (Feature-Strom): DB-Uhr-getriebener Scheduler feuert fällige Fristen als Command.
-// Die Domänen-Wahl (welcher Command) trifft der Host; DB-Uhr + Fristplan kommen aus dem Framework-Kern.
-// Routing über den Frist-Kontext: nach der Domänen-Bereinigung plant NUR die Trainings-Pipeline
-// Fristen (Timeout → MarkiereAlsHaengengeblieben). Ein anderer Kontext ist unerreichbar → Fail-fast.
-builder.Services.AddDeadlines(f =>
-    f.Kontext == Domain.Pipeline.Trainingslauf.TrainingFristPipeline.Kontext
-        ? new Domain.Trainingslauf.MarkiereAlsHaengengeblieben(f.ZielAggregatId)
-        : throw new InvalidOperationException(
-            $"Unbekannter Frist-Kontext '{f.Kontext}'. Nach der Domänen-Bereinigung plant nur die "
-            + "Trainings-Pipeline Fristen; ein weiterer Kontext deutet auf einen Konfigurationsfehler."));
+// Welcher Command, steht im Typ der Planung (Frist<TCmd> im OneOf einer Pipeline) — der Router ist generiert.
+builder.Services.AddDeadlines(Infrastructure.Pipeline.Generated.GeneratedFristen.Baue);
 
 // ─── Build + Run ───
 

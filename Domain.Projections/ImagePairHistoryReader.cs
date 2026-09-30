@@ -12,17 +12,10 @@ namespace Domain.Projections;
 [ProjectionReader(TrackDeps = true)]
 public partial class ImagePairHistorieReader : IReader<ImagePairHistorieProjection>
 {
-    private readonly IImagePairHistorieReadStore _store;
-
-    public ImagePairHistorieReader(IImagePairHistorieReadStore store)
-    {
-        _store = store;
-    }
-
     public async Task<OneOf<ImagePairHistorieAntwort, ImagePairHistorieNichtGefunden>>
-        Handle(GetImagePairHistorie query, IMessageEnvelope envelope, ReadContext ctx)
+        Handle(GetImagePairHistorie query, IMessageEnvelope envelope, ReadContext ctx, IGetHistorie getHistorie)
     {
-        var model = await _store.GetByPairIdAsync(query.PairId);
+        var model = await getHistorie.GetByPairIdAsync(query.PairId);
 
         if (model != null)
         {

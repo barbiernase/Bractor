@@ -1,27 +1,30 @@
 using Abstractions;
+
 namespace Domain.Projections;
 
-/// <summary>Write-Zugriffsmuster der Modell-Projektion — je Event ein atomarer Effekt.</summary>
-public interface IModellWriteStore : IWriteStore
-{
-    /// <summary>Registriert/aktualisiert ein Modell-Dokument.</summary>
-    Task UpsertAsync(ModellReadModel model);
+// FÄHIGKEITEN des Modell-Stores — je Funktion ein Interface (CQRS051).
 
-    /// <summary>Setzt den Singleton-Zeiger auf das aktive Modell (last-writer-wins).</summary>
-    Task SetzeAktivAsync(Guid modellId, string? name, string? pfad, DateTimeOffset aktiviertAm);
+// ── Schreiben (ModellProjektion) ──
+/// <summary>Registriert/aktualisiert ein Modell-Dokument.</summary>
+public interface IUpsertModell : IWriteStore { Task UpsertAsync(ModellReadModel model); }
 
-    /// <summary>Markiert ein Modell als archiviert.</summary>
-    Task ArchiviereAsync(Guid modellId, DateTimeOffset aktualisierung);
-}
+/// <summary>Setzt den Singleton-Zeiger auf das aktive Modell (last-writer-wins).</summary>
+public interface ISetzeModellAktiv : IWriteStore { Task SetzeAktivAsync(Guid modellId, string? name, string? pfad, DateTimeOffset aktiviertAm); }
 
-/// <summary>Read-Zugriffsmuster der Modell-Projektion — Listen + aktiver Zeiger.</summary>
-public interface IModellReadStore : IReadStore<IModellWriteStore>
-{
-    Task<ModellReadModel?> FindByIdAsync(Guid id);
+/// <summary>Markiert ein Modell als archiviert.</summary>
+public interface IArchiviereModell : IWriteStore { Task ArchiviereAsync(Guid modellId, DateTimeOffset aktualisierung); }
 
-    /// <summary>Alle Modelle, neueste zuerst.</summary>
-    Task<IReadOnlyList<ModellReadModel>> GetAlleAsync();
+// ── Lesen (ModellReader) ──
+public interface IFindModell : IReadStore { Task<ModellReadModel?> FindByIdAsync(Guid id); }
 
-    /// <summary>Der aktive-Modell-Singleton (oder null, wenn noch keiner gesetzt).</summary>
-    Task<AktivesModellReadModel?> GetAktivesAsync();
-}
+/// <summary>Alle Modelle, neueste zuerst.</summary>
+public interface IGetAlleModelle : IReadStore { Task<IReadOnlyList<ModellReadModel>> GetAlleAsync(); }
+
+/// <summary>Der aktive-Modell-Singleton (oder null, wenn noch keiner gesetzt).</summary>
+public interface IGetAktivesModell : IReadStore { Task<AktivesModellReadModel?> GetAktivesAsync(); }
+
+/// <summary>Der Modell-Store — Bündel seiner Fähigkeiten, Transaktionsgrenze.</summary>
+public interface IModellStore : IStore,
+    IUpsertModell, ISetzeModellAktiv, IArchiviereModell,
+    IFindModell, IGetAlleModelle, IGetAktivesModell
+{ }

@@ -3,57 +3,64 @@ using Domain.Datensatz;
 
 namespace Domain.Projections;
 
-/// <summary>
-/// Write-Zugriffsmuster der Datensatz-Projektion — je Event ein atomarer Effekt.
-/// Wird von <c>DatensatzProjektion</c> verwendet.
-/// </summary>
-public interface IDatensatzWriteStore : IWriteStore
-{
-    /// <summary>Legt den Datensatz an (Entwurf, leerer Korb).</summary>
-    Task UpsertAsync(DatensatzReadModel model);
+// FÄHIGKEITEN des Datensatz-Stores — je Funktion ein Interface (CQRS051).
 
-    /// <summary>Nimmt eine aufgelöste Range auf (Union, dedupliziert) + Provenienz.</summary>
+// ── Schreiben (DatensatzProjektion) — je Event ein atomarer Effekt ──
+
+/// <summary>Legt den Datensatz an (Entwurf, leerer Korb).</summary>
+public interface IUpsertDatensatz : IWriteStore { Task UpsertAsync(DatensatzReadModel model); }
+
+/// <summary>Nimmt eine aufgelöste Range auf (Union, dedupliziert) + Provenienz.</summary>
+public interface INimmRangeAuf : IWriteStore
+{
     Task NimmRangeAufAsync(
         Guid id, IReadOnlyList<Guid> imagePairIds, RangeHerkunft herkunft, DateTimeOffset aktualisierung);
+}
 
-    /// <summary>Manuelles Delta: ein Paar aufnehmen.</summary>
-    Task NimmPaarAufAsync(Guid id, Guid imagePairId, DateTimeOffset aktualisierung);
+/// <summary>Manuelles Delta: ein Paar aufnehmen.</summary>
+public interface INimmPaarAuf : IWriteStore { Task NimmPaarAufAsync(Guid id, Guid imagePairId, DateTimeOffset aktualisierung); }
 
-    /// <summary>Manuelles Delta: ein Paar entfernen.</summary>
-    Task EntfernePaarAsync(Guid id, Guid imagePairId, DateTimeOffset aktualisierung);
+/// <summary>Manuelles Delta: ein Paar entfernen.</summary>
+public interface IEntfernePaar : IWriteStore { Task EntfernePaarAsync(Guid id, Guid imagePairId, DateTimeOffset aktualisierung); }
 
-    /// <summary>Split-Override setzen.</summary>
-    Task SetzeSplitAsync(Guid id, SplitKonfig split, DateTimeOffset aktualisierung);
+/// <summary>Split-Override setzen.</summary>
+public interface ISetzeSplit : IWriteStore { Task SetzeSplitAsync(Guid id, SplitKonfig split, DateTimeOffset aktualisierung); }
 
-    /// <summary>
-    /// Einfrieren festschreiben: Status/Version am Datensatz setzen UND je Mitglied
-    /// eine <see cref="DatensatzSampleReadModel"/>-Zeile schreiben (der immutable Snapshot).
-    /// </summary>
+/// <summary>
+/// Einfrieren festschreiben: Status/Version am Datensatz setzen UND je Mitglied
+/// eine <see cref="DatensatzSampleReadModel"/>-Zeile schreiben (der immutable Snapshot).
+/// </summary>
+public interface IFriereEin : IWriteStore
+{
     Task FriereEinAsync(
         Guid id, int version, IReadOnlyList<DatensatzMitglied> mitglieder, DateTimeOffset aktualisierung);
 }
 
+// ── Lesen (DatensatzReader, GUI) — Queries mit Paginierung ──
+
+public interface IFindDatensatz : IReadStore { Task<DatensatzReadModel?> FindByIdAsync(Guid id); }
+
+/// <summary>Alle Datensätze (Sidebar-Liste), neueste zuerst.</summary>
+public interface IGetAlleDatensaetze : IReadStore { Task<IReadOnlyList<DatensatzReadModel>> GetAlleAsync(); }
+
 /// <summary>
-/// Read-Zugriffsmuster der Datensatz-Projektion — Queries mit Paginierung.
-/// Wird vom <c>DatensatzReader</c> (M4) und von der GUI verwendet.
+/// Die eingefrorenen Samples einer bestimmten Datensatz-Version, paginiert.
+/// Liest den immutablen Snapshot (Reproduzierbarkeit) — stabil sortiert nach ImagePairId.
 /// </summary>
-public interface IDatensatzReadStore : IReadStore<IDatensatzWriteStore>
+public interface IHoleSamples : IReadStore
 {
-    Task<DatensatzReadModel?> FindByIdAsync(Guid id);
-
-    /// <summary>Alle Datensätze (Sidebar-Liste), neueste zuerst.</summary>
-    Task<IReadOnlyList<DatensatzReadModel>> GetAlleAsync();
-
-    /// <summary>
-    /// Die eingefrorenen Samples einer bestimmten Datensatz-Version, paginiert.
-    /// Liest den immutablen Snapshot (Reproduzierbarkeit) — stabil sortiert nach ImagePairId.
-    /// </summary>
     Task<(IReadOnlyList<DatensatzSampleReadModel> Items, int GesamtAnzahl)> HoleSamplesAsync(
         Guid datensatzId, int version, int seite, int seitenGroesse);
-
-    /// <summary>
-    /// Rückwärts-Index: alle Datensätze, in denen das Bildpaar (als Entwurfs-Mitglied) liegt.
-    /// Liest die <see cref="DatensatzMitgliedschaftReadModel"/>-Zeile und joint die Kopf-Daten.
-    /// </summary>
-    Task<IReadOnlyList<DatensatzReadModel>> HoleDatensaetzeFuerPaarAsync(Guid imagePairId);
 }
+
+/// <summary>
+/// Rückwärts-Index: alle Datensätze, in denen das Bildpaar (als Entwurfs-Mitglied) liegt.
+/// Liest die <see cref="DatensatzMitgliedschaftReadModel"/>-Zeile und joint die Kopf-Daten.
+/// </summary>
+public interface IHoleDatensaetzeFuerPaar : IReadStore { Task<IReadOnlyList<DatensatzReadModel>> HoleDatensaetzeFuerPaarAsync(Guid imagePairId); }
+
+/// <summary>Der Datensatz-Store — Bündel seiner Fähigkeiten, Transaktionsgrenze.</summary>
+public interface IDatensatzStore : IStore,
+    IUpsertDatensatz, INimmRangeAuf, INimmPaarAuf, IEntfernePaar, ISetzeSplit, IFriereEin,
+    IFindDatensatz, IGetAlleDatensaetze, IHoleSamples, IHoleDatensaetzeFuerPaar
+{ }

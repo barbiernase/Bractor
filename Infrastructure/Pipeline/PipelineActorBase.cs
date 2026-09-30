@@ -29,6 +29,7 @@ public abstract class PipelineActorBase<THandler> : IActor
     private readonly ICommandEmitter _emitter;        // ★ P3: das EINE Emit-Primitiv (EM-1) — Command→Fremd-Aggregat
     private readonly Infrastructure.PubSub.BrokerPublisher? _publisher;
     private readonly ILogger? _logger;
+    private readonly Infrastructure.Deadlines.FristPlaner? _fristPlaner;
 
     /// <summary>
     /// Token → CancellationTokenSource für geplante Self-Messages.
@@ -45,8 +46,10 @@ public abstract class PipelineActorBase<THandler> : IActor
         THandler logic,
         Cluster cluster,
         Infrastructure.PubSub.BrokerPublisher? publisher = null,
-        ILogger? logger = null)
+        ILogger? logger = null,
+        Infrastructure.Deadlines.FristPlaner? fristPlaner = null)
     {
+        _fristPlaner = fristPlaner;
         _logic = logic ?? throw new ArgumentNullException(nameof(logic));
         _cluster = cluster ?? throw new ArgumentNullException(nameof(cluster));
         _emitter = new Infrastructure.PubSub.CommandEmitter(cluster, logger);
@@ -64,7 +67,7 @@ public abstract class PipelineActorBase<THandler> : IActor
                     await OnStartedAsync(context);
                     break;
 
-                // Kanal 0: Self-Messages (ScheduleSelf → eigene Mailbox)
+                // Kanal 0: Self-Messages (Selbst<T>-Ausgang → eigene Mailbox)
                 case IPipelineSelfMessage selfMsg:
                     await OnSelfMessageAsync(selfMsg, context);
                     break;
@@ -121,9 +124,10 @@ public abstract class PipelineActorBase<THandler> : IActor
             }
         }
 
-        // Init-Context mit ScheduleSelf für periodische Ticks
         var ctx = CreatePipelineContext(context);
         await _logic.OnInitializeAsync(ctx);
+        // Der typisierte Ort für die erste Planung: Handle(PipelineGestartet, ctx) → OneOf<…, Selbst<T>>.
+        await OnSelfMessageAsync(new PipelineGestartet(), context);
         _logger?.LogInformation("[Pipeline:{PipelineId}] Ready", _logic.PipelineId);
     }
 
@@ -151,7 +155,8 @@ public abstract class PipelineActorBase<THandler> : IActor
             await DispatchTriggerAsync(trigger, ctx,
                 cmd => SendCommandAsync(cmd, ctx, context.CancellationToken),
                 trig => SendTriggerAsync(trig, ctx.CorrelationId),
-                te => BroadcastTransientAsync(te, ctx));
+                te => BroadcastTransientAsync(te, ctx),
+                p => PlaneAsync(p, context));
             context.Respond(new PipelineAck(Accepted: true));
         }
         catch (Exception ex)
@@ -182,7 +187,8 @@ public abstract class PipelineActorBase<THandler> : IActor
             await DispatchEventAsync(envelope, ctx,
                 cmd => SendCommandAsync(cmd, ctx, ct),
                 trig => SendTriggerAsync(trig, ctx.CorrelationId),
-                te => BroadcastTransientAsync(te, ctx));
+                te => BroadcastTransientAsync(te, ctx),
+                p => PlaneAsync(p, actorCtx));
         }
         catch (Exception ex)
         {
@@ -209,48 +215,38 @@ public abstract class PipelineActorBase<THandler> : IActor
     }
 
     // ═══════════════════════════════════════════════════════
-    // PipelineContext mit Live-Implementierung
+    // Planung (typisierte Ausgänge Selbst<T> / Frist<TCmd>)
     // ═══════════════════════════════════════════════════════
 
     /// <summary>
-    /// Konkrete PipelineContext-Implementierung mit echtem ScheduleSelf/CancelScheduled.
-    /// Nur im Actor verwendet — Pipeline-Handler sehen nur die Basis-API.
+    /// Die Senke der Planungs-Ausgänge: <see cref="ISelbstPlanung"/> → eigene Mailbox nach der Verzögerung
+    /// (ReenterAfter, mailbox-sicher; gleiches Token ersetzt), <see cref="FristAuftrag"/> → durabler Fristplan.
     /// </summary>
-    private class LivePipelineContext : PipelineContext
+    private Task PlaneAsync(IPlanung planung, IContext actorCtx)
     {
-        private readonly PipelineActorBase<THandler> _actor;
-        private readonly IContext _actorCtx;
-
-        public LivePipelineContext(PipelineActorBase<THandler> actor, IContext actorCtx)
+        switch (planung)
         {
-            _actor = actor;
-            _actorCtx = actorCtx;
-        }
-
-        public override void ScheduleSelf<T>(T payload, TimeSpan delay, string? token = null)
-        {
-            var cts = new CancellationTokenSource();
-
-            if (token is not null)
-            {
-                if (_actor._scheduledTokens.Remove(token, out var existing))
-                    existing.Cancel();
-                _actor._scheduledTokens[token] = cts;
-            }
-
-            _actorCtx.ReenterAfter(Task.Delay(delay, cts.Token), () =>
-            {
-                if (cts.IsCancellationRequested) return;
-                _actorCtx.Send(_actorCtx.Self, payload);
-                if (token is not null) _actor._scheduledTokens.Remove(token);
-            });
-        }
-
-        public override bool CancelScheduled(string token)
-        {
-            if (!_actor._scheduledTokens.Remove(token, out var cts)) return false;
-            cts.Cancel();
-            return true;
+            case ISelbstPlanung s:
+                var cts = new CancellationTokenSource();
+                if (s.Token is { } token)
+                {
+                    if (_scheduledTokens.Remove(token, out var existing)) existing.Cancel();
+                    _scheduledTokens[token] = cts;
+                }
+                var nachricht = s.Nachricht;
+                actorCtx.ReenterAfter(Task.Delay(s.Verzoegerung, cts.Token), () =>
+                {
+                    if (cts.IsCancellationRequested) return;
+                    actorCtx.Send(actorCtx.Self, nachricht);
+                    if (s.Token is { } t) _scheduledTokens.Remove(t);
+                });
+                return Task.CompletedTask;
+            case FristAuftrag f when _fristPlaner != null:
+                return _fristPlaner.PlaneAsync(f, actorCtx.CancellationToken);
+            case FristAuftrag f:
+                throw new InvalidOperationException($"[Pipeline:{_logic.PipelineId}] Frist '{f.Kontext}' geplant, aber kein FristPlaner registriert.");
+            default:
+                throw new NotSupportedException($"Unbekannte Planung {planung.GetType().Name}.");
         }
     }
 
@@ -261,7 +257,7 @@ public abstract class PipelineActorBase<THandler> : IActor
         string? sourceAggregateType = null,
         int? sourceAggregateVersion = null)
     {
-        return new LivePipelineContext(this, actorCtx)
+        return new PipelineContext
         {
             CorrelationId = correlationId ?? "",
             SourceAggregateId = sourceAggregateId,
@@ -275,8 +271,7 @@ public abstract class PipelineActorBase<THandler> : IActor
     // ═══════════════════════════════════════════════════════
 
     /// <summary>
-    /// Verarbeitet eine Self-Message die via ScheduleSelf geplant wurde.
-    /// Context mit ScheduleSelf verdrahtet — Handler kann nächsten Tick planen.
+    /// Verarbeitet eine Self-Message (geplant über einen Selbst&lt;T&gt;-Ausgang, oder <see cref="PipelineGestartet"/>).
     /// </summary>
     private async Task OnSelfMessageAsync(IPipelineSelfMessage selfMsg, IContext context)
     {
@@ -289,7 +284,8 @@ public abstract class PipelineActorBase<THandler> : IActor
             await DispatchSelfAsync(selfMsg, ctx,
                 cmd => SendCommandAsync(cmd, ctx, context.CancellationToken),
                 trig => SendTriggerAsync(trig, ctx.CorrelationId),
-                te => BroadcastTransientAsync(te, ctx));
+                te => BroadcastTransientAsync(te, ctx),
+                p => PlaneAsync(p, context));
         }
         catch (Exception ex)
         {
@@ -359,7 +355,8 @@ public abstract class PipelineActorBase<THandler> : IActor
         PipelineContext ctx,
         Func<ICommand, Task> sendCommand,
         Func<IPipelineTrigger, Task> sendTrigger,
-        Func<ITransientEvent, Task> broadcastTransient);
+        Func<ITransientEvent, Task> broadcastTransient,
+        Func<IPlanung, Task> plane);
 
     /// <summary>Dispatch für Events (PubSub).</summary>
     protected abstract Task DispatchEventAsync(
@@ -367,13 +364,15 @@ public abstract class PipelineActorBase<THandler> : IActor
         PipelineContext ctx,
         Func<ICommand, Task> sendCommand,
         Func<IPipelineTrigger, Task> sendTrigger,
-        Func<ITransientEvent, Task> broadcastTransient);
+        Func<ITransientEvent, Task> broadcastTransient,
+        Func<IPlanung, Task> plane);
 
-    /// <summary>Dispatch für Self-Messages (ScheduleSelf).</summary>
+    /// <summary>Dispatch für Self-Messages (Selbst&lt;T&gt;, PipelineGestartet).</summary>
     protected abstract Task DispatchSelfAsync(
         IPipelineSelfMessage selfMsg,
         PipelineContext ctx,
         Func<ICommand, Task> sendCommand,
         Func<IPipelineTrigger, Task> sendTrigger,
-        Func<ITransientEvent, Task> broadcastTransient);
+        Func<ITransientEvent, Task> broadcastTransient,
+        Func<IPlanung, Task> plane);
 }

@@ -13,10 +13,9 @@ namespace Projections.SourceGeneration
     ///
     /// Alles typ-/interface-getrieben entdeckt (Namen sind unzuverlässig: „Projection" vs „Projektion"):
     ///   - Marten-Schema: je <c>IReadModel</c> ein uniformer <c>Schema.For&lt;T&gt;()</c>-Block.
-    ///   - Stores: je <c>IReadStore&lt;TWrite&gt;</c>-Interface das Paar (TWrite, Read) — die Paarung steht als Typ im
-    ///     Code (Marker aus Abstractions), die Namen sind frei; je Seite die konkrete Klasse (Symbol-Query). Ctor-Argumente per Parameter-Inspektion (robust gegen (IDocumentStore)
-    ///     vs (IDocumentStore, ILogger&lt;T&gt;)). Lifetime: Write = Co-Commit/Transient; separater Read-Store
-    ///     (Postgres) = Singleton; ist Read == Write (eine Klasse) → beide Transient.
+    ///   - Stores: jede Klasse mit Fähigkeiten (Marker <c>IWriteStore</c>/<c>IReadStore</c>) SCOPED — eine Instanz je
+    ///     Fähigkeits-Bereich —, umgeleitet unter jeder Fähigkeit und dem Bündel (<c>IStore</c>). Ctor-Argumente per
+    ///     Parameter-Inspektion. Eine Fähigkeit mit zwei Klassen ist CQRS053.
     ///   - Reader: je <c>IReader&lt;T&gt;</c>-Implementierer ein <c>AddSingleton</c>.
     ///   - Projektionen: je <c>ISubscriber</c>+<c>IPullSubscriber</c> ein <c>AddSingleton</c>.
     ///   - <c>ProjectionQueryService</c> (nur hier registriert).
@@ -26,6 +25,15 @@ namespace Projections.SourceGeneration
     [Generator]
     public class ProjectionServicesGenerator : ISourceGenerator
     {
+        /// <summary>CQRS053: eine Fähigkeit wird von mehreren Store-Klassen implementiert — die DI wüsste nicht, welche.</summary>
+        private static readonly DiagnosticDescriptor MehrdeutigeFaehigkeit = new(
+            "CQRS053",
+            "Fähigkeit mehrdeutig",
+            "Die Fähigkeit {0} wird von mehreren Store-Klassen implementiert ({1}) — genau eine Klasse je Fähigkeit",
+            "Cqrs.Faehigkeiten",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
         public void Initialize(GeneratorInitializationContext context) { }
 
         public void Execute(GeneratorExecutionContext context)
@@ -35,8 +43,11 @@ namespace Projections.SourceGeneration
             var iSubscriber = comp.GetTypeByMetadataName("Abstractions.ISubscriber");
             var iPull = comp.GetTypeByMetadataName("Abstractions.IPullSubscriber");
             var iReader = comp.GetTypeByMetadataName("Abstractions.IReader`1");
-            var iReadStoreT = comp.GetTypeByMetadataName("Abstractions.IReadStore`1");
-            if (iReadModel == null || iSubscriber == null || iPull == null || iReader == null || iReadStoreT == null)
+            var iWrite = comp.GetTypeByMetadataName("Abstractions.IWriteStore");
+            var iRead = comp.GetTypeByMetadataName("Abstractions.IReadStore");
+            var iStore = comp.GetTypeByMetadataName("Abstractions.IStore");
+            if (iReadModel == null || iSubscriber == null || iPull == null || iReader == null
+                || iWrite == null || iRead == null || iStore == null)
                 return;
 
             // Nur Typen aus Assemblies, die den Vertrag (Abstractions) referenzieren — der Vertrag selbst und
@@ -61,18 +72,21 @@ namespace Projections.SourceGeneration
                 .OrderBy(c => c.Name, System.StringComparer.Ordinal)
                 .ToList();
 
-            // ── Store-Paare: IReadStore<TWrite> nennt seinen Schreib-Partner als Typ ──
-            var paare = new List<(INamedTypeSymbol Write, INamedTypeSymbol Read)>();
-            foreach (var i in ifaces)
+            // ── Stores: jede Klasse, die Fähigkeiten (IWriteStore/IReadStore) implementiert. Registriert wird sie
+            //    SCOPED — eine Instanz je Fähigkeits-Bereich (Pull-Actor / Pipeline-Actor / Query) — und unter JEDER
+            //    ihrer Fähigkeiten plus dem Bündel (IStore) auf dieselbe Instanz umgeleitet → Co-Commit bleibt. ──
+            bool IstFaehigkeit(INamedTypeSymbol i) => Impl(i, iWrite) || Impl(i, iRead);
+            var stores = classes
+                .Where(c => c.AllInterfaces.Any(IstFaehigkeit))
+                .OrderBy(c => c.ToDisplayString(full), System.StringComparer.Ordinal)
+                .ToList();
+            foreach (var f in stores.SelectMany(c => c.AllInterfaces.Where(IstFaehigkeit)).Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default))
             {
-                var r = i.Interfaces.FirstOrDefault(x => x.IsGenericType
-                    && SymbolEqualityComparer.Default.Equals(x.OriginalDefinition, iReadStoreT));
-                if (r?.TypeArguments[0] is INamedTypeSymbol w) paare.Add((w, i));
+                var impls = stores.Where(c => Impl(c, f)).ToList();
+                if (impls.Count > 1)
+                    context.ReportDiagnostic(Diagnostic.Create(MehrdeutigeFaehigkeit, impls[0].Locations.FirstOrDefault(),
+                        f.Name, string.Join(", ", impls.Select(c => c.Name))));
             }
-            paare = paare.OrderBy(p => p.Write.ToDisplayString(full), System.StringComparer.Ordinal).ToList();
-
-            INamedTypeSymbol? ConcreteImpl(INamedTypeSymbol i) =>
-                classes.FirstOrDefault(c => Impl(c, i));
 
             // ── Reader + Projektionen ──
             var readers = classes
@@ -115,30 +129,16 @@ namespace Projections.SourceGeneration
             sb.AppendLine("        });");
             sb.AppendLine();
 
-            // Stores je Basis
-            foreach (var (writeIface, readIface) in paare)
+            // Stores: eine Instanz je Bereich, unter jeder Fähigkeit + dem Bündel
+            foreach (var store in stores)
             {
-                var b = writeIface.Name;
-                var writeClass = ConcreteImpl(writeIface);
-                var readClass = ConcreteImpl(readIface);
-                if (writeClass == null || readClass == null) continue;
-
-                sb.AppendLine($"        // ── {b} ──");
-                // Write-Store: Co-Commit, Transient
-                sb.AppendLine($"        services.AddTransient<{writeClass.ToDisplayString(full)}>(sp => {NewExpr(writeClass, full)});");
-                sb.AppendLine($"        services.AddTransient<{writeIface.ToDisplayString(full)}>(sp => sp.GetRequiredService<{writeClass.ToDisplayString(full)}>());");
-
-                if (SymbolEqualityComparer.Default.Equals(readClass, writeClass))
-                {
-                    // Muster B: eine Klasse bedient read + write (beide Transient)
-                    sb.AppendLine($"        services.AddTransient<{readIface.ToDisplayString(full)}>(sp => sp.GetRequiredService<{writeClass.ToDisplayString(full)}>());");
-                }
-                else
-                {
-                    // Muster A: separater Postgres-Read-Store, Singleton
-                    sb.AppendLine($"        services.AddSingleton<{readClass.ToDisplayString(full)}>(sp => {NewExpr(readClass, full)});");
-                    sb.AppendLine($"        services.AddSingleton<{readIface.ToDisplayString(full)}>(sp => sp.GetRequiredService<{readClass.ToDisplayString(full)}>());");
-                }
+                var fq = store.ToDisplayString(full);
+                sb.AppendLine($"        // ── {store.Name} ──");
+                sb.AppendLine($"        services.AddScoped<{fq}>(sp => {NewExpr(store, full)});");
+                foreach (var i in store.AllInterfaces
+                             .Where(i => IstFaehigkeit(i) || Impl(i, iStore))
+                             .OrderBy(i => i.ToDisplayString(full), System.StringComparer.Ordinal))
+                    sb.AppendLine($"        services.AddScoped<{i.ToDisplayString(full)}>(sp => sp.GetRequiredService<{fq}>());");
                 sb.AppendLine();
             }
 

@@ -180,6 +180,12 @@ public static class HtmlPresenter
 #de .gnode2.n-enum .ghead{background:#8a8aa0}
 #de .gnode2.n-aggregate .ghead{background:#3fb0a6}
 #de .gnode2.n-decider .ghead{background:#9678d6}
+#de .gnode2.n-handle{border-color:#4f7fa8}#de .gnode2.n-handle .ghead{background:#5d8fbf}
+#de .gnode2.n-fn{border-color:#2f8f88}#de .gnode2.n-fn .ghead{background:#2f9d95}
+#de .ghl{display:block;cursor:pointer;color:#9fb6d6;font-size:11.5px;padding:1px 0;text-decoration:none}#de .ghl:hover{color:#dbe6f5;text-decoration:underline}
+#de .gaus{font-size:10.5px;color:#8f9bb0;margin:-2px 0 4px 18px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#de .gaus.tot{color:#d08a6a}#de .gaus.offen{color:#d0b35a}
+#de .gsig{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:#b9c4d8;margin:2px 0 6px;word-break:break-all}
 #de .gnode2.n-applier .ghead{background:#d0a35a}
 #de .gnode2.n-saga .ghead{background:#9d78d6}
 #de .gnode2.n-transition .ghead{background:#a48fd6}
@@ -319,6 +325,27 @@ public static class HtmlPresenter
 #de .gworld.fokus .gnode2:not(.inslice){opacity:.13}
 #de .gworld.fokus .glink:not(.inslice){opacity:.04}
 #de .gworld.fokus .glink.inslice{opacity:1;stroke-width:3}
+/* Verbinden-Modus (Hybrid): passende Knoten leuchten, Rest abgeblendet; ✓ = schon verbunden */
+#de .gworld.vbmodus .gnode2{opacity:.14!important}
+#de .gworld.vbmodus .glink{opacity:.05!important}
+#de .gworld.vbmodus .gnode2.vb-kand,#de .gworld.vbmodus .gnode2.vb-quelle{opacity:1!important}
+#de .gworld.vbmodus .gnode2.vb-kand{box-shadow:0 0 0 3px #3fae7f,0 0 18px #3fae7faa;cursor:pointer}
+#de .gworld.vbmodus .gnode2.vb-kand:hover{box-shadow:0 0 0 4px #7ee0b0,0 0 24px #3fae7f}
+#de .gworld.vbmodus .gnode2.vb-verb{box-shadow:0 0 0 3px #7c5cff,0 0 18px #7c5cffaa}
+#de .gworld.vbmodus .gnode2.vb-verb .ghead::after{content:"✓ verbunden";margin-left:auto;font:600 10px system-ui;color:#d9ccff;padding-left:6px}
+#de .gworld.vbmodus .gnode2.vb-quelle{box-shadow:0 0 0 3px #fff}
+#de .gcanvas.vbaktiv .gminimap{display:none}
+#de .ginsp .gi-hint{margin:6px 10px 0;padding:5px 8px;border-radius:6px;background:#16261e;border:1px solid #2f6b50;color:#9fe0bf;font:11px/1.35 system-ui}
+#de .gvbwahl{position:absolute;z-index:31;display:flex;flex-direction:column;gap:3px;background:#15202c;border:1px solid #3fae7f;border-radius:8px;padding:6px;min-width:180px;box-shadow:0 6px 24px #000a}
+#de .gvbwahl button{text-align:left}
+/* Ports im Panel = ⊕-Knöpfe (auf der Fläche gibt es keine Ports mehr) */
+#de .ginsp .slot{margin:0 8px 0 0!important;width:22px!important;height:22px!important;cursor:pointer;position:relative;flex:none;
+  border:2px solid #3fae7f!important;background:#16261e!important;box-shadow:0 0 8px #3fae7f66}
+#de .ginsp .slot::after{content:"⊕";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:700 15px/1 system-ui;color:#7ee0b0}
+#de .ginsp .slot:hover{background:#3fae7f!important}#de .ginsp .slot:hover::after{color:#0b0e15}
+#de .ginsp .slotrow.o{justify-content:flex-end}
+#de .ginsp .slot.o{order:-1;margin:0 8px 0 0!important}
+#de .ginsp .slot.vb-aktiv{box-shadow:0 0 0 3px #fff,0 0 0 6px #3fae7f}
 #de .glink.kontrakt{opacity:.75}
 /* Inspector: Bearbeiten rechts statt Formular im Knoten */
 #de .ginsp{position:absolute;right:10px;top:10px;bottom:170px;width:min(380px,calc(100% - 40px));overflow:auto;background:#10141df7;border:1px solid #2c3547;border-radius:10px;z-index:25;box-shadow:0 10px 30px #000c;font-size:12px}
@@ -329,7 +356,7 @@ public static class HtmlPresenter
 #de .ginsp .gi-sec{margin:10px 10px 0;border:1px solid #262f40;border-radius:8px;overflow:hidden}
 #de .ginsp .gi-st{padding:4px 9px;font-size:10.5px;font-weight:700;color:#0d0f14;cursor:pointer}
 #de .ginsp .gbody{padding:8px 10px 10px}
-#de .ginsp .slot{display:none}
+/* Ports im Panel sind die ⊕-Knöpfe des Verbinden-Modus (siehe oben) — nicht mehr ausgeblendet */
 #de .ginsp .gcodeprev{max-height:none}
 #de .gnode2.llmvor{box-shadow:0 0 0 2px #3f9a64,0 0 14px rgba(63,154,100,.35)}
 #de .gcodeprev.vorschlag{border-color:#3f9a64;background:#0e1d15;color:#c9f2d9}
@@ -340,6 +367,9 @@ public static class HtmlPresenter
 #de .llmmeld.ok{color:#9be3bf}#de .llmmeld.warn{color:#e0b46a}#de .llmmeld.err{color:#ffb3c1}
 #de .llmrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0}
 #de .llmrow input{flex:1;min-width:120px}
+#de .llmchat{display:flex;flex-direction:column;gap:5px;margin:4px 0 6px;max-height:220px;overflow:auto}
+#de .llmmsg{align-self:flex-end;max-width:92%;background:#2a2f45;border:1px solid #5b4f8a;color:#e3ddf7;border-radius:9px 9px 2px 9px;padding:5px 8px;font:12px/1.4 system-ui;white-space:pre-wrap;word-break:break-word}
+#de .llmleer{font:11px system-ui;color:#8a93a6;font-style:italic}
 #de .ginsp .gi-rel{margin:10px;font-size:11px}
 #de .ginsp .gi-rel h5{margin:8px 0 4px;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#7f8aa0}
 #de .ginsp .gi-rel a{display:inline-block;margin:0 4px 4px 0;padding:1px 7px;border-radius:7px;background:#1a2130;border:1px solid #2c3547;color:#cbd3e1;cursor:pointer;font-family:ui-monospace,monospace}
@@ -347,7 +377,7 @@ public static class HtmlPresenter
 /* Kind-Farben (Kopf) für Inspector-Chips */
 #de .kc-command{background:#5b8fd0}#de .kc-event{background:#57b673}#de .kc-rejection{background:#cf6f68}#de .kc-valueobject{background:#49a996}
 #de .kc-konfig{background:#8fa3b8}#de .kc-enum{background:#8a8aa0}#de .kc-aggregate{background:#3fb0a6}#de .kc-decider{background:#9678d6}
-#de .kc-applier{background:#d0a35a}#de .kc-saga{background:#9d78d6}#de .kc-transition{background:#a48fd6}#de .kc-state{background:#d4b45f}
+#de .kc-applier{background:#d0a35a}#de .kc-handle{background:#5d8fbf}#de .kc-fn{background:#2f9d95}#de .kc-saga{background:#9d78d6}#de .kc-transition{background:#a48fd6}#de .kc-state{background:#d4b45f}
 #de .kc-readmodel{background:#d0a45a}#de .kc-store{background:#3fb0a6}#de .kc-projektion{background:#57b673}#de .kc-reaktion{background:#d0885a}
 #de .kc-pipeline{background:#e08a44}#de .kc-trigger{background:#d29a4a}#de .kc-reader{background:#9678d6}#de .kc-query{background:#5b8fd0}
 #de .kc-queryresponse{background:#49a996}#de .kc-codenode{background:#9aa0aa}#de .kc-llmnode{background:#a48fd6}
@@ -356,7 +386,7 @@ public static class HtmlPresenter
 #de .gcanvas.lod-ablauf .gnode2 .gbody,#de .gcanvas.lod-ablauf .gnode2 .gsum{display:none}
 #de .gcanvas.lod-ablauf .gnode2{width:230px}
 #de .gcanvas.lod-ablauf .ghead{padding:6px 10px;border-radius:8px}
-#de .gcanvas.lod-ablauf .ghead .gtitle{font-size:calc(10px*var(--inv));white-space:normal;overflow-wrap:anywhere;line-height:1.15}
+#de .gcanvas.lod-ablauf .ghead .gtitle{font-size:12px;white-space:normal;overflow-wrap:anywhere;line-height:1.15}
 #de .gcanvas.lod-ablauf .ghead .gtitle.hatname .gk{display:none}
 #de .gcanvas.lod-ablauf .ghead .gcol,#de .gcanvas.lod-ablauf .ghead .gx{display:none}
 #de .gcanvas.lod-ablauf .gnode2.ungeschrieben .ghead::before,#de .gcanvas.lod-ablauf .gnode2.entwurf .ghead::before,#de .gcanvas.lod-ablauf .gnode2.island .ghead::after{display:none}
@@ -443,14 +473,14 @@ public static class HtmlPresenter
       });
     m.readModels.forEach(rm=>{if(!rm._id)rm._id="rm"+(NID++);});
     m.stores.forEach(st=>{if(!st._id)st._id="st"+(NID++);st.writeFns=st.writeFns||[];st.readFns=st.readFns||[];st.writeFns.forEach(f=>{if(!f._id)f._id="wf"+(NID++);f.params=f.params||[];});st.readFns.forEach(f=>{if(!f._id)f._id="rf"+(NID++);f.params=f.params||[];});});
-    // Projektion-Handle ruft je Event eine (oder mehrere) Write-Fn des Stores → fns[]. Der Store-Scope
+    // Projektion-Handle nimmt je Event eine (oder mehrere) Schreib-FÄHIGKEIT als Parameter → fns[]. Der Store-Scope
     // wird daraus ABGELEITET (= die injizierten Stores), nicht mehr von Hand deklariert.
     m.projektionen.forEach(p=>{if(!p._id)p._id="pj"+(NID++);p.handles=p.handles||[];p.handles.forEach(hd=>{hd.fns=hd.fns||[];hd.publishes=hd.publishes||[];});delete p.stores;});
     m.reader.forEach(r=>{if(!r._id)r._id="rd"+(NID++);r.handles=r.handles||[];delete r.stores;
       // Reader liest genau eine Projektion (IReader<TProjection>) — expliziter Bindungs-Port.
       r.projektion=r.projektion||"";
       r.handles.forEach(hd=>{
-        // Query-Handle ruft je Query eine/mehrere Read-Fn (auch über mehrere Stores) → fns[].
+        // Query-Handle nimmt je Query eine/mehrere Lese-Fähigkeiten als Parameter (auch über mehrere Stores) → fns[].
         hd.fns=hd.fns||[];
         // Symmetrie zur Schreibseite (decider.ergibt[]): je Query mehrere Responses als OneOf → responses[].
         hd.responses=hd.responses||(hd.response?[hd.response]:[]);delete hd.response;});});
@@ -516,7 +546,23 @@ public static class HtmlPresenter
   //    danach KOMPOSITION zu Aggregaten (State + Decider + Applier). Feldtyp kann ein anderer
   //    Record/Enum sein → so komponieren sich Records.
   // NUR der Node-Editor, DESIGN-IN-PLACE: jeder Knoten wird direkt auf der Fläche bestückt.
-  function render(){ ELEM=null; deriveMembership(); renderGraph(); autosave(); if(window.simNachRender)simNachRender(); }
+  let TEIL=null;   // Verbinden-Modus: statt Voll-Render nur die betroffenen Karten neu (Set der Knoten-Ids)
+  function render(){ if(TEIL){TEIL.gerufen=true;return;} ELEM=null; deriveMembership(); renderGraph(); autosave(); if(window.simNachRender)simNachRender(); }
+  // Teil-Neuaufbau: betroffene Karten ersetzen, Kurzfassungen/Kanten/Panel auffrischen — Fläche, Zoom und Layout bleiben stehen.
+  function teilNeu(ids){if(!world||!canvas){render();return;}
+    ELEM=null;deriveMembership();ISLE=islandInfo().ids;berechneSicht();
+    // Knoten entstanden/entfallen (z. B. ein neuer Handle durch „+ Query andocken"): dann voll neu zeichnen (Raster packt neu).
+    const gezeichnet=new Set([...world.querySelectorAll(".gnode2")].map(e=>e.dataset.id));
+    if(gezeichnet.size!==VIS.size||[...VIS].some(id=>!gezeichnet.has(id))){render();return;}
+    ids.forEach(id=>{const alt=world.querySelector('[data-id="'+id+'"]'),n=NODEBY.get(id);if(!alt||!n)return;
+      for(const k in SLOTS)if(SLOTS[k]&&alt.contains(SLOTS[k]))delete SLOTS[k];
+      alt.replaceWith(nodeEditor(n));});
+    world.querySelectorAll(".gnode2").forEach(el=>{const n=NODEBY.get(el.dataset.id),alt=el.querySelector(".gsum");if(!n||!alt)return;
+      const neu=kurzfassung(n);if(neu.innerHTML!==alt.innerHTML)alt.replaceWith(neu);});   // nur wo sich wirklich etwas ändert
+    const altI=canvas.querySelector(".ginsp");INSP_SCROLL=altI?{id:altI.dataset.sel,top:altI.scrollTop}:null;
+    drawEdges();FOCUS=SEL?sliceVon(SEL):null;wendeFokusAn();zeigeInspector();autosave();if(window.simNachRender)simNachRender();}
+  // Eine Modell-Änderung aus dem Verbinden-Modus ausführen: ohne Voll-Render, danach nur die betroffenen Karten.
+  function imModus(ids,aendern){TEIL={gerufen:false};try{aendern();}finally{const g=TEIL.gerufen;TEIL=null;if(g)teilNeu(ids.filter(Boolean));}}
 
   // Eindeutiger Name — Namen sind der Referenzschlüssel für Kanten/Decider/Applier.
   function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.reaktionen.map(x=>x.name),...MODEL.pipelines.map(x=>x.name),...MODEL.triggers.map(x=>x.name),...MODEL.frists.map(x=>x.name),...MODEL.dienste.map(x=>x.name),...MODEL.hostSettings.map(x=>x.name),...MODEL.codeNodes.map(x=>x.name),...MODEL.llmNodes.map(x=>x.name)]);
@@ -539,16 +585,21 @@ public static class HtmlPresenter
     return VIEW.kompakt?{x,y,_kpos:{x,y}}:{x,y};}   // Kompakt-Ansicht: Position gilt für deren eigenes Layout
   // Nach dem Anlegen den neuen Knoten finden, ggf. seine (ausgeblendete) Domäne einblenden, dorthin
   //   zentrieren + pulsen — sonst geht er in hunderten Knoten unter.
-  function fokussiereNeu(vorher){requestAnimationFrame(()=>{
+  function fokussiereNeu(vorher,auswaehlen){
+    // Panel des neuen Knotens sofort öffnen — dort wird er benannt und verbunden.
+    if(auswaehlen){const neu=graphNodes().find(n=>!vorher.has(n.id));if(neu)waehle(neu.id);}
+    requestAnimationFrame(()=>{
     const neu=graphNodes().find(n=>!vorher.has(n.id));if(!neu)return;
     if(HIDDEN.has(groupKeyOf(neu))){HIDDEN.delete(groupKeyOf(neu));saveHidden();render();
       requestAnimationFrame(()=>{centerOn(neu);pulseNode(neu);});}
     else{centerOn(neu);pulseNode(neu);}
     deFlash("+ "+(NODELABEL[neu.kind]||neu.kind)+(neu.name?" · "+neu.name:"")+" — hinzugefügt",true);});}
-  function neuerKnoten(kind,x,y){
+  // opt.still: nicht auswählen/anspringen (Verbinden-Modus legt an und verbindet selbst).
+  function neuerKnoten(kind,x,y,opt){
     const vorher=new Set(graphNodes().map(n=>n.id));
-    let pos=(typeof x==="number")?{x:Math.round(x/GRID)*GRID,y:Math.round(y/GRID)*GRID}:spawnPos();
-    if(VIEW.kompakt&&!pos._kpos)pos={...pos,_kpos:{x:pos.x,y:pos.y}};
+    // Ohne Klickposition keine Position: packLayout setzt den Knoten in die Spalte seiner Art (typreine Spalten).
+    let pos=(typeof x==="number")?{x:Math.round(x/GRID)*GRID,y:Math.round(y/GRID)*GRID}:{};
+    if(VIEW.kompakt&&pos.x!=null&&!pos._kpos)pos={...pos,_kpos:{x:pos.x,y:pos.y}};
     if(kind==="aggregate")MODEL.aggregate.push({name:uniq("NeuesAggregat"),namespace:defaultNs(),state:[],...pos});
     else if(kind==="decider")MODEL.decider.push({_id:"d"+(NID++),aggregat:"",command:"",ergibt:[],...pos});
     else if(kind==="applier")MODEL.applier.push({_id:"a"+(NID++),aggregat:"",event:"",...pos});
@@ -570,7 +621,7 @@ public static class HtmlPresenter
     else if(kind==="llmnode")MODEL.llmNodes.push({_id:"ln"+(NID++),name:uniq("LLM"),intent:"",...pos});
     else MODEL.records.push({name:uniq("Neu"+kindLabel(kind).replace(/\s/g,"")),kind,namespace:defaultNs(),felder:kind==="command"&&ID_FELD()?[{_id:"f"+(NID++),name:ID_FELD(),typ:"Guid"}]:[],...pos});
     render();
-    fokussiereNeu(vorher);
+    if(!(opt&&opt.still))fokussiereNeu(vorher,true);
   }
   const addRecord=k=>neuerKnoten(k);
   const addAggregat=()=>neuerKnoten("aggregate");
@@ -625,9 +676,9 @@ public static class HtmlPresenter
   }
   // Decider: Command rein (links), Aggregat OBEN, OneOf-Events als MEHRERE Ausgänge (rechts, je Outcome ein Punkt).
   function deciderCard(body,d){
-    body.append(topSlot("decagg","▲ Aggregat: "+(d.aggregat||"— (ans Aggregat ziehen)"),{type:"decAgg",dir:"out",dec:d._id},"dec:aggout:"+d._id));
+    body.append(topSlot("decagg","▲ Aggregat: "+(d.aggregat||"— ⊕ Aggregat wählen"),{type:"decAgg",dir:"out",dec:d._id},"dec:aggout:"+d._id));
     body.append(slotRow("command","◀ Command: "+(d.command||"—"),"l",{type:"cmd",dir:"in",dec:d._id},"dec:cmdin:"+d._id));
-    body.append(h("div",{class:"gsec"},"OneOf-Ausgänge — je mögliches Event ein Punkt (Punkt → Event ziehen). Das WANN macht der Decide-Rumpf."));
+    body.append(h("div",{class:"gsec"},"OneOf-Ausgänge — je mögliches Event eine Zeile (⊕ bei „+ Ausgang“ → Event auf dem Graphen wählen). Das WANN macht der Decide-Rumpf."));
     (d.ergibt||[]).forEach((o,oi)=>{
       const s=port("event");s.classList.add("o");reg("dec:evtout:"+d._id+":"+o.event,s,{type:"evtOut",dir:"out",dec:d._id});
       body.append(h("div",{class:"slotrow o"},
@@ -641,7 +692,7 @@ public static class HtmlPresenter
   }
   // Applier: gespiegelt zum Decider — Event rein (rechts), Aggregat OBEN. Körper = Code.
   function applierCard(body,a){
-    body.append(topSlot("appagg","▲ Aggregat: "+(a.aggregat||"— (ans Aggregat ziehen)"),{type:"appAgg",dir:"out",app:a._id},"app:aggout:"+a._id));
+    body.append(topSlot("appagg","▲ Aggregat: "+(a.aggregat||"— ⊕ Aggregat wählen"),{type:"appAgg",dir:"out",app:a._id},"app:aggout:"+a._id));
     body.append(slotRow("event","Event: "+(a.event||"—")+" ◀","r",{type:"evtUse",dir:"in",app:a._id},"app:evtin:"+a._id));
     body.append(h("div",{class:"gsec"},"Apply-Rumpf"));
     body.append(codePort("app:rumpf:"+a._id,{k:"applier",app:a._id},a.codeSrc,"Apply-Logik"));
@@ -654,7 +705,7 @@ public static class HtmlPresenter
     body.append(h("div",{class:"gsec"},"State-Felder (Typ per Dropdown)"));
     felder.forEach((f,fi)=>body.append(stateFeldRow(f,()=>{felder.splice(fi,1);render();},agg?agg.name:s._id)));
     body.append(h("button",{class:"add",onclick:()=>{felder.push({_id:"f"+(NID++),name:uniqFeldName(felder,"feld"),typ:"decimal"});render();}},"+ Feld"));
-    if(!agg)body.append(h("div",{class:"gsec",style:"color:#8b93a7"},"nicht zugewiesen — Punkt rechts auf ein Aggregat ziehen"));
+    if(!agg)body.append(h("div",{class:"gsec",style:"color:#8b93a7"},"nicht zugewiesen — ⊕ anklicken und ein Aggregat wählen"));
   }
 
   // ══ LESESEITE: Read Model / Store (Interface = Querschnitt der Verdrahtung) / Projektion / Reader.
@@ -689,11 +740,15 @@ public static class HtmlPresenter
   // Rumpf-Port eines Deciders/Appliers, dessen Methode im Code bewusst LEER ist (No-op, kein Platzhalter)?
   function codeOwnerLeer(t){if(t.k==="decider"){const d=dec(t.dec);return !!(d&&d.leer);}
     if(t.k==="applier"){const a=app(t.app);return !!(a&&a.leer);}return false;}
-  // Ein-Klick: Code-/LLM-Knoten erzeugen UND sofort an diesen Rumpf-Port andocken (macht die „Code-Inseln" auffindbar).
-  function addCode(target,kind){const pos=spawnPos();let id;
-    if(kind==="llm"){id="ln"+(NID++);MODEL.llmNodes.push({_id:id,name:uniq("LLM"),intent:"",...pos});}
-    else{id="cn"+(NID++);MODEL.codeNodes.push({_id:id,name:uniq("Code"),text:"",...pos});}
-    setCodeSrc(target,id);render();}
+  // 🤖 LLM-Knoten an einen Code-Block andocken — EIN Klick (auch in der Detail-Sicht/im Inspector). Hängt schon einer
+  //   dran, wird nur dessen Prompt-Feld fokussiert. Der Slot-Schlüssel wird mitgemerkt (stabil über Neu-Einlesen).
+  let LLM_FOKUS=null;
+  function llmAndocken(codeId){let l=MODEL.llmNodes.find(x=>x.promptZiel===codeId);
+    if(!l){l={_id:"ln"+(NID++),name:uniq("LLM"),intent:"",promptZiel:codeId};const k=konsolenId(codeId);if(k)l.promptSlot=k;MODEL.llmNodes.push(l);}
+    LLM_FOKUS=l._id;render();}
+  // Ein-Klick am leeren Rumpf-Port: 📝 Code-Block erzeugen und andocken; bei 🤖 zusätzlich den LLM-Knoten an den Block.
+  function addCode(target,kind){const id="cn"+(NID++);MODEL.codeNodes.push({_id:id,name:uniq("Code"),text:""});
+    setCodeSrc(target,id);if(kind==="llm")llmAndocken(id);else render();}
   // Code-Eingang (Rumpf): getippter Slot `code`. Leer → deutlicher „⚙ …fehlt"-Marker + Ein-Klick-Knöpfe.
   function codePort(key,target,codeSrc,label){const s=port("code");s.classList.add("i");reg(key,s,{type:"code",dir:"in",target});
     const src=codeSrc?nodeName(codeSrc):null;const lbl=label||"Logik";
@@ -702,7 +757,8 @@ public static class HtmlPresenter
     if(target&&codeOwnerLeer(target))return h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"opacity:.6",title:"Im Code bewusst leer (No-op) — kein Platzhalter"},"∅ "+lbl+": bewusst leer"));
     return h("div",{class:"slotrow codeempty"},s,
       h("span",{class:"slotlbl codemiss",style:"flex:1"},"⚙ "+lbl+" fehlt"),
-      h("button",{class:"codeadd",title:"Code-Block erzeugen und hier andocken",onclick:()=>addCode(target,"code")},"＋📝"));}
+      h("button",{class:"codeadd",title:"Code-Block erzeugen und hier andocken",onclick:()=>addCode(target,"code")},"＋📝"),
+      h("button",{class:"codeadd",title:"Code-Block + 🤖 LLM-Knoten in einem Klick erzeugen und andocken — dann Prompt schreiben und ▶",onclick:()=>addCode(target,"llm")},"＋🤖"));}
   // Parameter-Zeilen einer Store-Funktion (Name : Typ) — die API-Signatur.
   function paramRows(fn){const box=h("div",{});
     (fn.params||[]).forEach((pr,pi)=>box.append(h("div",{class:"frow"},
@@ -726,16 +782,16 @@ public static class HtmlPresenter
     body.append(h("input",{value:st.namespace??"",oninput:e=>st.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
     const rms=MODEL.readModels.filter(x=>x.store===st.name);
     body.append(h("div",{class:"gsec"},"Dokumente: "+(rms.length?rms.map(x=>x.name).join(" · "):"— (ReadModel oben anschließen)")));
-    body.append(h("div",{class:"gsep"},"Write-API — je Fn ◀ von Projektion-Handle aufgerufen"));
-    (st.writeFns||[]).forEach(fn=>body.append(fnBlock(st,fn,false)));
+    body.append(h("div",{class:"gsep"},"Schreib-Fähigkeiten — je Fn ein Interface, ◀ Parameter eines Projektion-Handles"));
+    body.append(fnListe(st,st.writeFns||[]));
     body.append(h("button",{class:"add",onclick:()=>{st.writeFns.push({_id:"wf"+(NID++),name:"NeuFunktion",params:[]});render();}},"+ Write-Funktion"));
-    body.append(h("div",{class:"gsep"},"Read-API — je Fn ◀ von Reader-Handle aufgerufen"));
-    (st.readFns||[]).forEach(fn=>body.append(fnBlock(st,fn,true)));
+    body.append(h("div",{class:"gsep"},"Lese-Fähigkeiten — je Fn ein Interface, ◀ Parameter eines Reader-/Pipeline-Handles"));
+    body.append(fnListe(st,st.readFns||[]));
     body.append(h("button",{class:"add",onclick:()=>{st.readFns.push({_id:"rf"+(NID++),name:"HoleX",params:[],rueckgabe:""});render();}},"+ Read-Funktion"));
   }
   function fnBlock(st,fn,isRead){const arr=isRead?st.readFns:st.writeFns;
     const box=h("div",{style:"border-left:2px solid #2c3547;padding-left:7px;margin:6px 0"});
-    // Aufruf-Ziel-Port: ein Projektion- (write) bzw. Reader-Handle (read) dockt hier an → er ruft diese Fn.
+    // Fähigkeits-Port: ein Projektion- (write) bzw. Reader-/Pipeline-Handle (read) dockt hier an → die Fn wird sein Parameter.
     const ct=isRead?"rcall":"wcall";const cp=port("store");cp.classList.add("i");
     reg(ct+":in:"+st._id+":"+fn._id,cp,{type:ct,dir:"in",store:st._id,fn:fn._id});
     box.append(h("div",{class:"slotrow"},cp,inp(fn.name,v=>fn.name=v,"funktionsName"),
@@ -760,22 +816,7 @@ public static class HtmlPresenter
     body.append(h("div",{class:"slotrow"},asp,h("span",{class:"slotlbl"},"◀ Reader bindet hier an")));
     const ds=derivedStores(p);
     body.append(h("div",{class:"gsec"},"Stores (abgeleitet): "+(ds.length?ds.join(" · "):"— (Handle → Write-Fn verdrahten)")));
-    body.append(h("div",{class:"gsec"},"Trigger-Event → Handle (Controller) → Write-Fn(s)"));
-    (p.handles||[]).forEach((hd,hi)=>{const sl=port("event");sl.classList.add("i");reg("prj:in:"+p._id+":"+hi,sl,{type:"evtUse",dir:"in",proj:p._id,handleIdx:hi});
-      body.append(h("div",{class:"slotrow"},sl,h("span",{class:"slotlbl",style:"flex:1"},"◀ Auf "+(hd.event||"?")),h("button",{class:"rm",onclick:()=>{p.handles.splice(hi,1);render();}},"✕")));
-      // Aufgerufene Write-Funktionen (je Aufruf ein Punkt → Store-Fn ziehen); Norm = genau eine.
-      (hd.fns||[]).forEach((fid,fj)=>{const r=fnById(fid);const s=port("store");s.classList.add("o");reg("wcall:out:"+p._id+":"+hi+":"+fid,s,{type:"wcall",dir:"out",proj:p._id,handleIdx:hi});
-        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.fns.splice(fj,1);render();}},"✕"),
-          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"ruft "+(r?r.store.name+"."+r.fn.name:"?")+" ▶"),s));});
-      const wo=port("store");wo.classList.add("o");reg("wcall:out:"+p._id+":"+hi+":open",wo,{type:"wcall",dir:"out",proj:p._id,handleIdx:hi});
-      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Write-Fn ▶"),wo));
-      // Reaktives Event veröffentlichen (nach dem Schreiben): yield IEvent → Broker-Re-Publish (verlierbar, kein Log).
-      (hd.publishes||[]).forEach((ev,ei)=>{const s=port("event");s.classList.add("o");reg("prj:pub:"+p._id+":"+hi+":"+ev,s,{type:"evtOut",dir:"out",proj:p._id,handleIdx:hi});
-        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.publishes.splice(ei,1);render();}},"✕"),
-          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"veröffentlicht "+(ev||"?")+" ▶"),s));});
-      const po=port("event");po.classList.add("o");reg("prj:pub:"+p._id+":"+hi+":open",po,{type:"evtOut",dir:"out",proj:p._id,handleIdx:hi});
-      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"opacity:.7"},"+ veröffentlicht Event ▶ (reaktiv)"),po));
-      body.append(codePort("ctrl:in:"+p._id+":"+hi,{k:"pjHandle",proj:p._id,hi:hi},hd.codeSrc,"Controller-Logik"));});
+    body.append(handleListe(p,"prj:"+p._id,"Trigger-Event → Handle → Write-Fn(s) · je Handle eine eigene Karte"));
     const oi=port("open");oi.classList.add("i");reg("prj:in:"+p._id+":open",oi,{type:"evtUse",dir:"in",proj:p._id,handleIdx:"open"});
     body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Event andocken")));
   }
@@ -788,7 +829,31 @@ public static class HtmlPresenter
     body.append(h("input",{value:r.namespace??"",oninput:e=>r.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
     body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>r.pull=e.target.checked,...((r.pull!==false)?{checked:"checked"}:{})}),"Geordneter Pull (IPullSubscriber)"));
     body.append(h("div",{class:"gsec"},"Trigger-Event → Handle → OneOf-Command(s) (emittiert). Das WANN/mit-WELCHEN-Werten macht der Rumpf."));
-    (r.handles||[]).forEach((hd,hi)=>{
+    body.append(handleListe(r,"rk:"+r._id,"je Handle eine eigene Karte"));
+    const oi=port("open");oi.classList.add("i");reg("rk:in:"+r._id+":open",oi,{type:"evtUse",dir:"in",reaktion:r._id,handleIdx:"open"});
+    body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Event andocken")));
+  }
+
+  // Ein Projektions-HANDLE (eigene Karte): Eingang-Event, Schreib-Fähigkeiten (Parameter), veröffentlichte Events, Controller-Rumpf.
+  function prjHandleBody(body,p,hd,hi){
+      const sl=port("event");sl.classList.add("i");reg("prj:in:"+p._id+":"+hi,sl,{type:"evtUse",dir:"in",proj:p._id,handleIdx:hi});
+      body.append(h("div",{class:"slotrow"},sl,h("span",{class:"slotlbl",style:"flex:1"},"◀ Auf "+(hd.event||"?")),h("button",{class:"rm",onclick:()=>{p.handles.splice(hi,1);render();}},"✕")));
+      // Schreib-Fähigkeiten (je Parameter ein Punkt → Store-Fn ziehen); Norm = genau eine.
+      (hd.fns||[]).forEach((fid,fj)=>{const r=fnById(fid);const s=port("store");s.classList.add("o");reg("wcall:out:"+p._id+":"+hi+":"+fid,s,{type:"wcall",dir:"out",proj:p._id,handleIdx:hi});
+        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.fns.splice(fj,1);render();}},"✕"),
+          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"darf "+(r?r.store.name+"."+r.fn.name:"?")+" ▶"),s));});
+      const wo=port("store");wo.classList.add("o");reg("wcall:out:"+p._id+":"+hi+":open",wo,{type:"wcall",dir:"out",proj:p._id,handleIdx:hi});
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Write-Fn ▶"),wo));
+      // Reaktives Event veröffentlichen (nach dem Schreiben): yield IEvent → Broker-Re-Publish (verlierbar, kein Log).
+      (hd.publishes||[]).forEach((ev,ei)=>{const s=port("event");s.classList.add("o");reg("prj:pub:"+p._id+":"+hi+":"+ev,s,{type:"evtOut",dir:"out",proj:p._id,handleIdx:hi});
+        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.publishes.splice(ei,1);render();}},"✕"),
+          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"veröffentlicht "+(ev||"?")+" ▶"),s));});
+      const po=port("event");po.classList.add("o");reg("prj:pub:"+p._id+":"+hi+":open",po,{type:"evtOut",dir:"out",proj:p._id,handleIdx:hi});
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"opacity:.7"},"+ veröffentlicht Event ▶ (reaktiv)"),po));
+      body.append(codePort("ctrl:in:"+p._id+":"+hi,{k:"pjHandle",proj:p._id,hi:hi},hd.codeSrc,"Controller-Logik"));
+  }
+  function rkHandleBody(body,r,hd,hi){
+
       const sl=port("event");sl.classList.add("i");reg("rk:in:"+r._id+":"+hi,sl,{type:"evtUse",dir:"in",reaktion:r._id,handleIdx:hi});
       body.append(h("div",{class:"slotrow"},sl,h("span",{class:"slotlbl",style:"flex:1"},"◀ Auf "+(hd.event||"?")),h("button",{class:"rm",onclick:()=>{r.handles.splice(hi,1);render();}},"✕")));
       // Ausgelöste Commands (je Command ein Punkt → an „◀ ausgelöst von" eines Command-Knotens ziehen).
@@ -803,11 +868,110 @@ public static class HtmlPresenter
           h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"veröffentlicht "+(ev||"?")+" ▶"),s));});
       const po=port("event");po.classList.add("o");reg("rk:pub:"+r._id+":"+hi+":open",po,{type:"evtOut",dir:"out",reaktion:r._id,handleIdx:hi});
       body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"opacity:.7"},"+ veröffentlicht Event ▶ (reaktiv)"),po));
-      body.append(codePort("ctrl:in:"+r._id+":"+hi,{k:"reakHandle",reaktion:r._id,hi:hi},hd.codeSrc,"Controller-Logik"));});
-    const oi=port("open");oi.classList.add("i");reg("rk:in:"+r._id+":open",oi,{type:"evtUse",dir:"in",reaktion:r._id,handleIdx:"open"});
-    body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Event andocken")));
+      body.append(codePort("ctrl:in:"+r._id+":"+hi,{k:"reakHandle",reaktion:r._id,hi:hi},hd.codeSrc,"Controller-Logik"));
+  }
+  function plHandleBody(body,p,hd,hi){
+
+      const kind=hd.inputKind||"event", isTrig=kind==="trigger", isSelf=kind==="self";
+      const sl=port(isTrig?"trigmsg":(isSelf?"self":"event"));sl.classList.add("i");
+      reg("pl:in:"+p._id+":"+hi,sl,{type:isTrig?"trigmsg":(isSelf?"self":"evtUse"),dir:"in",pipeline:p._id,handleIdx:hi});
+      const tlabel=(hd.prod&&hd.prod.k==="tg")?(trigMsgLabel(hd.prod.id)||hd.input):hd.input;
+      const lbl=isTrig?("◀ Trigger "+(tlabel||"?")):(isSelf?("◀ Self "+(hd.selfName||"?")):("◀ Auf "+(hd.event||"?")));
+      body.append(h("div",{class:"slotrow"},sl,h("span",{class:"slotlbl",style:"flex:1"},lbl),h("button",{class:"rm",onclick:()=>{p.handles.splice(hi,1);render();}},"✕")));
+      // yield ICommand → Aggregat
+      (hd.sends||[]).forEach((c,ci)=>{const so=port("command");so.classList.add("o");reg("pl:send:"+p._id+":"+hi+":"+c,so,{type:"sagaCmd",dir:"out",pipeline:p._id,handleIdx:hi});
+        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.sends.splice(ci,1);render();}},"✕"),
+          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"sendet "+(c||"?")+" ▶"),so));});
+      const so=port("command");so.classList.add("o");reg("pl:send:"+p._id+":"+hi+":open",so,{type:"sagaCmd",dir:"out",pipeline:p._id,handleIdx:hi});
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Command ▶"),so));
+      // yield IPipelineTrigger → an eine andere Pipeline (Verkettung, z. B. FileWatch → ImageProcessing)
+      (hd.emits||[]).forEach((nm,ei)=>{const eo=port("trigmsg");eo.classList.add("o");reg("pl:emit:"+p._id+":"+hi+":"+nm,eo,{type:"trigmsg",dir:"out",pipeline:p._id,handleIdx:hi,msgName:nm});
+        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.emits.splice(ei,1);render();}},"✕"),
+          h("input",{value:nm,oninput:e=>hd.emits[ei]=e.target.value,onchange:()=>render(),placeholder:"TriggerMsg",style:"flex:1"}),h("span",{class:"slotlbl"},"▶"),eo));});
+      // Persistenter, gleichwertiger Ausgangs-Port: eine Handle yieldet Command ODER Trigger (OneOf<…>).
+      const eopen=port("trigmsg");eopen.classList.add("o");reg("pl:emit:"+p._id+":"+hi+":open",eopen,{type:"trigmsg",dir:"out",pipeline:p._id,handleIdx:hi,msgName:""});
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ erzeugt Trigger ▶"),eopen));
+      // Fähigkeiten (Read-Fns als Handle-Parameter) — wie am Reader-Handle.
+      (hd.fns||[]).forEach((fid,fj)=>{const rr=fnById(fid);const s=port("store");s.classList.add("o");reg("rcall:out:pl:"+p._id+":"+hi+":"+fid,s,{type:"rcall",dir:"out",pipeline:p._id,handleIdx:hi});
+        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.fns.splice(fj,1);render();}},"✕"),
+          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"darf "+(rr?rr.store.name+"."+rr.fn.name:"?")+" ▶"),s));});
+      {const ro=port("store");ro.classList.add("o");reg("rcall:out:pl:"+p._id+":"+hi+":open",ro,{type:"rcall",dir:"out",pipeline:p._id,handleIdx:hi});
+       body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Read-Fn ▶"),ro));}
+      // Selbst<T> → interner Tick/Timeout (Self-Message kommt als eigener ◀ Self-Handle zurück). Die Verzögerung ist Rumpf.
+      (hd.schedules||[]).forEach((sc,si)=>{const ss=port("self");ss.classList.add("o");reg("pl:sched:"+p._id+":"+hi+":"+sc.name,ss,{type:"self",dir:"out",pipeline:p._id,handleIdx:hi,name:sc.name});
+        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.schedules.splice(si,1);render();}},"✕"),
+          h("input",{value:sc.name,oninput:e=>sc.name=e.target.value,onchange:()=>render(),placeholder:"SelfMsg",style:"flex:1"}),h("span",{class:"slotlbl"},"↺"),ss));});
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"opacity:.8"},"+ plant Self-Tick ↺"),
+        h("button",{class:"codeadd",title:"Selbst<T>-Ausgang + Self-Handle anlegen",onclick:()=>{const nm=uniq("Tick");(hd.schedules=hd.schedules||[]).push({name:nm});if(!p.handles.some(x=>x.inputKind==="self"&&x.selfName===nm))p.handles.push({inputKind:"self",selfName:nm,sends:[],emits:[],schedules:[]});render();}},"＋")));
+      body.append(codePort("plctrl:in:"+p._id+":"+hi,{k:"plHandle",pipeline:p._id,hi:hi},hd.codeSrc,"Pipeline-Logik"));
+  }
+  function rdHandleBody(body,r,hd,hi){
+
+      const qin=port("query");qin.classList.add("i");reg("rdr:qin:"+r._id+":"+hi,qin,{type:"query",dir:"in",reader:r._id,handleIdx:hi});
+      body.append(h("div",{class:"slotrow"},qin,h("span",{class:"slotlbl",style:"flex:1"},"◀ Query: "+(hd.query||"?")),h("button",{class:"rm",onclick:()=>{r.handles.splice(hi,1);render();}},"✕")));
+      // Lese-Fähigkeiten (je Parameter ein Punkt → Store-Read-Fn ziehen; mehrere Stores erlaubt).
+      (hd.fns||[]).forEach((fid,fj)=>{const rr=fnById(fid);const s=port("store");s.classList.add("o");reg("rcall:out:"+r._id+":"+hi+":"+fid,s,{type:"rcall",dir:"out",reader:r._id,handleIdx:hi});
+        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.fns.splice(fj,1);render();}},"✕"),
+          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"darf "+(rr?rr.store.name+"."+rr.fn.name:"?")+" ▶"),s));});
+      const ro=port("store");ro.classList.add("o");reg("rcall:out:"+r._id+":"+hi+":open",ro,{type:"rcall",dir:"out",reader:r._id,handleIdx:hi});
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Read-Fn ▶"),ro));
+      // OneOf-Responses (je mögliche Antwort ein Punkt).
+      (hd.responses||[]).forEach((resp,ri)=>{
+        const rout=port("qrsp");rout.classList.add("o");reg("rdr:rout:"+r._id+":"+hi+":"+resp,rout,{type:"qrsp",dir:"out",reader:r._id,handleIdx:hi});
+        body.append(h("div",{class:"slotrow o"},
+          h("button",{class:"rm",onclick:()=>{hd.responses.splice(ri,1);render();}},"✕"),
+          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},(resp||"?")+" ▶"),rout));
+        
+      });
+      const rop=port("qrsp");rop.classList.add("o");reg("rdr:rout:"+r._id+":"+hi+":open",rop,{type:"qrsp",dir:"out",reader:r._id,handleIdx:hi});
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Response ▶"),rop));
+      body.append(codePort("ctrl:in:"+r._id+":"+hi,{k:"rdHandle",reader:r._id,hi:hi},hd.codeSrc,"Controller-Logik"));
   }
 
+  // ══ HANDLE- und FN-KNOTEN: jeder Handle einer Projektion/Reader/Reaktion/Pipeline und jede Store-Funktion ist eine
+  //   EIGENE Karte (wie der Decider je Command) — mit ihren Ports, ihrem Rumpf und dem Vertrag aus dem Code (was sie
+  //   erzeugen KANN und welche Store-Fns sie rufen DARF — nur Signatur). Kein neues Modell-Objekt: die Karte zeigt owner.handles[i] bzw. die Fn.
+  const HANDLE_ART={projektion:["projektionen","prj"],reader:["reader","rdr"],reaktion:["reaktionen","rk"],pipeline:["pipelines","pl"]};
+  const handleDisc=hd=>hd.query||hd.event||hd.selfName||hd.input||"";
+  // Knoten-Ids der Handles eines Besitzers — über den Eingangstyp (rename-fest je Eingang), Index nur bei Kollision/leer.
+  function handleIds(o,oid){const seen=new Set();return (o.handles||[]).map((hd,hi)=>{let id="hd:"+oid+":"+(handleDisc(hd)||"#"+hi);
+    if(seen.has(id))id+="#"+hi;seen.add(id);return id;});}
+  function handleKnoten(){const out=[];Object.entries(HANDLE_ART).forEach(([k,[coll,pre]])=>(MODEL[coll]||[]).forEach(o=>{const oid=pre+":"+o._id,ids=handleIds(o,oid);
+    (o.handles||[]).forEach((hd,hi)=>out.push({id:ids[hi],name:handleDisc(hd)||"(neu)",kind:"handle",ref:hd,own:{kind:k,ref:o,id:oid},hi}));}));return out;}
+  function fnKnoten(){const out=[];MODEL.stores.forEach(st=>["writeFns","readFns"].forEach(a=>(st[a]||[]).forEach(f=>
+    out.push({id:"fn:"+f._id,name:f.name||"?",kind:"fn",ref:f,own:{kind:"store",ref:st,id:"sto:"+st._id},lesen:a==="readFns"}))));return out;}
+  // Liste der Handles auf der Besitzer-Karte (zum Springen).
+  function handleListe(o,oid,titel){const box=h("div",{});box.append(h("div",{class:"gsec"},titel));
+    const ids=handleIds(o,oid);
+    (o.handles||[]).forEach((hd,hi)=>box.append(h("a",{class:"ghl",title:"Handle-Karte zeigen",onclick:()=>{const n=NODEBY.get(ids[hi]);if(n){waehle(n.id);centerOn(n);pulseNode(n);}}},
+      "▸ Handle("+(handleDisc(hd)||"?")+")"+(hd.signaturOffen?" ⚠":""))));
+    return box;}
+  function fnListe(st,arr){const box=h("div",{});
+    arr.forEach(f=>box.append(h("a",{class:"ghl",title:"Fn-Karte zeigen",onclick:()=>{const n=NODEBY.get("fn:"+f._id);if(n){waehle(n.id);centerOn(n);pulseNode(n);}}},
+      "▸ "+(f.name||"?")+"("+(f.params||[]).map(x=>x.typ).join(", ")+")"+(f.rueckgabe?" → "+f.rueckgabe:""))));
+    return box;}
+  // Kopf des Handles: Signatur + Form, offene Signatur als Warnung.
+  function vertragKopf(hd){const box=h("div",{});
+    if(hd.signatur)box.append(h("div",{class:"gsig",title:"Rückgabe-Signatur aus dem Code"},"⟶ "+hd.signatur));
+    if(hd.signaturOffen)box.append(h("div",{class:"llmmeld err"},"⚠ offene Signatur — mögliche Ausgaben unbekannt (CQRS050: OneOf<…> konkreter Typen)"));
+    if(hd.form==="nichts")box.append(h("div",{class:"gsec",style:"opacity:.65"},"gibt nichts zurück (Task) — nur Effekte"));
+    return box;}
+  function handleCard(body,n){const o=n.own.ref,hd=n.ref,hi=n.hi;
+    body.append(h("a",{class:"ghl",onclick:()=>{const m=NODEBY.get(n.own.id);if(m){waehle(m.id);centerOn(m);}}},"▲ "+(NODELABEL[n.own.kind]||n.own.kind)+": "+(o.name||"?")));
+    body.append(vertragKopf(hd));
+    if(n.own.kind==="projektion")prjHandleBody(body,o,hd,hi);
+    else if(n.own.kind==="reader")rdHandleBody(body,o,hd,hi);
+    else if(n.own.kind==="reaktion")rkHandleBody(body,o,hd,hi);
+    else if(n.own.kind==="pipeline")plHandleBody(body,o,hd,hi);}
+  function fnCard(body,n){const st=n.own.ref;
+    body.append(h("a",{class:"ghl",onclick:()=>{const m=NODEBY.get(n.own.id);if(m){waehle(m.id);centerOn(m);}}},"▲ Store: "+(st.name||"?")));
+    body.append(h("div",{class:"gsec"},n.lesen?"Lese-Fähigkeit — ◀ Parameter von Reader-/Pipeline-Handles":"Schreib-Fähigkeit — ◀ Parameter von Projektions-Handles"));
+    if(n.ref.faehigkeit)body.append(h("div",{class:"gsig",title:"Das Fähigkeits-Interface (genau diese eine Funktion) — der Typ, den ein Handle als Parameter nimmt"},"Fähigkeit: "+n.ref.faehigkeit));
+    body.append(fnBlock(st,n.ref,n.lesen));
+    // Wer diese Fähigkeit als Parameter verlangt (Signatur-Fakt: darf rufen — nicht „ruft wann").
+    const rufer=[];MODEL.projektionen.concat(MODEL.reader,MODEL.pipelines||[]).forEach(o=>(o.handles||[]).forEach(hd=>{if((hd.fns||[]).includes(n.ref._id))rufer.push({o,hd});}));
+    if(rufer.length){body.append(h("div",{class:"gsec"},"Fähigkeit von"));
+      rufer.forEach(({o,hd})=>body.append(h("div",{class:"gaus"},o.name+".Handle("+handleDisc(hd)+")")));}}
   // Trigger-Msg eines Handles anzeigen (aktueller msgName des verdrahteten Triggers, rename-fest über trigId).
   const trigMsgLabel=id=>{const t=MODEL.triggers.find(x=>x._id===id);return t?(t.msgName||t.name||"Trigger"):null;};
   // ══ INGRESS/PIPELINE: Trigger (Timer/Webhook/FileWatch/Frist) → Trigger-Msg → Pipeline → OneOf-Command(s).
@@ -842,35 +1006,7 @@ public static class HtmlPresenter
     body.append(h("div",{class:"gsec"},"PipelineId"));
     body.append(inp(p.pipelineId,v=>p.pipelineId=v,"z. B. bildverarbeitung"));
     body.append(h("div",{class:"gsec"},"Handle: Trigger/Event/Self ◀ → yield Command · yield Trigger · ScheduleSelf. Das WIE macht der Rumpf."));
-    (p.handles||[]).forEach((hd,hi)=>{
-      const kind=hd.inputKind||"event", isTrig=kind==="trigger", isSelf=kind==="self";
-      const sl=port(isTrig?"trigmsg":(isSelf?"self":"event"));sl.classList.add("i");
-      reg("pl:in:"+p._id+":"+hi,sl,{type:isTrig?"trigmsg":(isSelf?"self":"evtUse"),dir:"in",pipeline:p._id,handleIdx:hi});
-      const tlabel=(hd.prod&&hd.prod.k==="tg")?(trigMsgLabel(hd.prod.id)||hd.input):hd.input;
-      const lbl=isTrig?("◀ Trigger "+(tlabel||"?")):(isSelf?("◀ Self "+(hd.selfName||"?")):("◀ Auf "+(hd.event||"?")));
-      body.append(h("div",{class:"slotrow"},sl,h("span",{class:"slotlbl",style:"flex:1"},lbl),h("button",{class:"rm",onclick:()=>{p.handles.splice(hi,1);render();}},"✕")));
-      // yield ICommand → Aggregat
-      (hd.sends||[]).forEach((c,ci)=>{const so=port("command");so.classList.add("o");reg("pl:send:"+p._id+":"+hi+":"+c,so,{type:"sagaCmd",dir:"out",pipeline:p._id,handleIdx:hi});
-        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.sends.splice(ci,1);render();}},"✕"),
-          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"sendet "+(c||"?")+" ▶"),so));});
-      const so=port("command");so.classList.add("o");reg("pl:send:"+p._id+":"+hi+":open",so,{type:"sagaCmd",dir:"out",pipeline:p._id,handleIdx:hi});
-      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Command ▶"),so));
-      // yield IPipelineTrigger → an eine andere Pipeline (Verkettung, z. B. FileWatch → ImageProcessing)
-      (hd.emits||[]).forEach((nm,ei)=>{const eo=port("trigmsg");eo.classList.add("o");reg("pl:emit:"+p._id+":"+hi+":"+nm,eo,{type:"trigmsg",dir:"out",pipeline:p._id,handleIdx:hi,msgName:nm});
-        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.emits.splice(ei,1);render();}},"✕"),
-          h("input",{value:nm,oninput:e=>hd.emits[ei]=e.target.value,onchange:()=>render(),placeholder:"TriggerMsg",style:"flex:1"}),h("span",{class:"slotlbl"},"▶"),eo));});
-      // Persistenter, gleichwertiger Ausgangs-Port: eine Handle yieldet Command ODER Trigger (OneOf<…>).
-      const eopen=port("trigmsg");eopen.classList.add("o");reg("pl:emit:"+p._id+":"+hi+":open",eopen,{type:"trigmsg",dir:"out",pipeline:p._id,handleIdx:hi,msgName:""});
-      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ erzeugt Trigger ▶"),eopen));
-      // ScheduleSelf → interner Tick/Timeout (Self-Message kommt als eigener ◀ Self-Handle zurück)
-      (hd.schedules||[]).forEach((sc,si)=>{const ss=port("self");ss.classList.add("o");reg("pl:sched:"+p._id+":"+hi+":"+sc.name,ss,{type:"self",dir:"out",pipeline:p._id,handleIdx:hi,name:sc.name});
-        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.schedules.splice(si,1);render();}},"✕"),
-          h("input",{value:sc.name,oninput:e=>sc.name=e.target.value,onchange:()=>render(),placeholder:"SelfMsg",style:"flex:1"}),
-          h("input",{value:sc.delay??"",oninput:e=>sc.delay=e.target.value,placeholder:"delay",style:"width:52px"}),h("span",{class:"slotlbl"},"↺"),ss));});
-      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"opacity:.8"},"+ plant Self-Tick ↺"),
-        h("button",{class:"codeadd",title:"ScheduleSelf + Self-Handle anlegen",onclick:()=>{const nm=uniq("Tick");(hd.schedules=hd.schedules||[]).push({name:nm,delay:"30s"});if(!p.handles.some(x=>x.inputKind==="self"&&x.selfName===nm))p.handles.push({inputKind:"self",selfName:nm,sends:[],emits:[],schedules:[]});render();}},"＋")));
-      body.append(codePort("plctrl:in:"+p._id+":"+hi,{k:"plHandle",pipeline:p._id,hi:hi},hd.codeSrc,"Pipeline-Logik"));
-    });
+    body.append(handleListe(p,"pl:"+p._id,"je Handle eine eigene Karte"));
     // Genutzte Dienste (Konstruktor-Injektion) — an „Vertrag ▶" eines Dienst-Knotens andocken.
     (p.dienste||[]).forEach((dn,i)=>{const s=port("store");s.classList.add("i");reg("pl:dienst:"+p._id+":"+dn,s,{type:"dienst",dir:"in",pipeline:p._id});
       body.append(h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"flex:1"},"◀ nutzt "+(dn||"?")),h("button",{class:"rm",onclick:()=>{p.dienste.splice(i,1);render();}},"✕")));});
@@ -893,26 +1029,7 @@ public static class HtmlPresenter
     const ds=derivedStores(r);
     body.append(h("div",{class:"gsec"},"Stores (abgeleitet): "+(ds.length?ds.join(" · "):"— (Handle → Read-Fn verdrahten)")));
     body.append(h("div",{class:"gsec"},"Query → Handle → Read-Fn(s) (auch mehrere Stores) → OneOf-Responses. Das WANN macht der Rumpf."));
-    (r.handles||[]).forEach((hd,hi)=>{
-      const qin=port("query");qin.classList.add("i");reg("rdr:qin:"+r._id+":"+hi,qin,{type:"query",dir:"in",reader:r._id,handleIdx:hi});
-      body.append(h("div",{class:"slotrow"},qin,h("span",{class:"slotlbl",style:"flex:1"},"◀ Query: "+(hd.query||"?")),h("button",{class:"rm",onclick:()=>{r.handles.splice(hi,1);render();}},"✕")));
-      // Aufgerufene Read-Funktionen (je Aufruf ein Punkt → Store-Read-Fn ziehen; mehrere Stores erlaubt).
-      (hd.fns||[]).forEach((fid,fj)=>{const rr=fnById(fid);const s=port("store");s.classList.add("o");reg("rcall:out:"+r._id+":"+hi+":"+fid,s,{type:"rcall",dir:"out",reader:r._id,handleIdx:hi});
-        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.fns.splice(fj,1);render();}},"✕"),
-          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"ruft "+(rr?rr.store.name+"."+rr.fn.name:"?")+" ▶"),s));});
-      const ro=port("store");ro.classList.add("o");reg("rcall:out:"+r._id+":"+hi+":open",ro,{type:"rcall",dir:"out",reader:r._id,handleIdx:hi});
-      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Read-Fn ▶"),ro));
-      // OneOf-Responses (je mögliche Antwort ein Punkt).
-      (hd.responses||[]).forEach((resp,ri)=>{
-        const rout=port("qrsp");rout.classList.add("o");reg("rdr:rout:"+r._id+":"+hi+":"+resp,rout,{type:"qrsp",dir:"out",reader:r._id,handleIdx:hi});
-        body.append(h("div",{class:"slotrow o"},
-          h("button",{class:"rm",onclick:()=>{hd.responses.splice(ri,1);render();}},"✕"),
-          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},(resp||"?")+" ▶"),rout));
-      });
-      const rop=port("qrsp");rop.classList.add("o");reg("rdr:rout:"+r._id+":"+hi+":open",rop,{type:"qrsp",dir:"out",reader:r._id,handleIdx:hi});
-      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Response ▶"),rop));
-      body.append(codePort("ctrl:in:"+r._id+":"+hi,{k:"rdHandle",reader:r._id,hi:hi},hd.codeSrc,"Controller-Logik"));
-    });
+    body.append(handleListe(r,"rdr:"+r._id,"Query → Handle → Read-Fn(s) → OneOf-Responses · je Handle eine eigene Karte"));
     const oi=port("open");oi.classList.add("i");reg("rdr:qin:"+r._id+":open",oi,{type:"query",dir:"in",reader:r._id,handleIdx:"open"});
     body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Query andocken")));
   }
@@ -981,8 +1098,6 @@ public static class HtmlPresenter
   async function codeGet(a){if(a.kind==="slot")return fetch("/api/llm/rumpf?id="+encodeURIComponent(a.disc)).then(r=>r.json());
     const q=new URLSearchParams({kind:a.kind,namespace:a.namespace,disc:a.disc,datei:a.datei||""});
     return fetch("/api/editor/code?"+q).then(r=>r.json());}
-  async function codeSetPrompt(a,prompt,baseHash){return fetch("/api/editor/code",{method:"POST",
-    headers:{"content-type":"application/json"},body:JSON.stringify({...a,prompt,baseHash})}).then(r=>r.json());}
   async function codeOpen(a){return fetch("/api/editor/open",{method:"POST",
     headers:{"content-type":"application/json"},body:JSON.stringify(a)}).then(r=>r.json());}
   // Poll-Registry (Datei→Browser, das Double-Binding): je sichtbarem Knoten ein Updater; bei Hash-Wechsel anwenden.
@@ -1028,10 +1143,9 @@ public static class HtmlPresenter
     const pin=port("prompt");pin.classList.add("i");reg("code:prin:"+c._id,pin,{type:"prompt",dir:"in",codeBlock:c._id});
     const llm=MODEL.llmNodes.find(x=>x.promptZiel===c._id);
     const prow=h("div",{class:"slotrow"},pin,h("span",{class:"slotlbl",style:"flex:1"},llm?("◀ 🤖 "+(llm.name||"LLM")):"◀ 🤖 Prompt (bei Bedarf)"));
-    if(!llm)prow.append(h("button",{class:"codeadd",title:"LLM-Prompt-Node erzeugen und andocken",
-      onclick:()=>{const vorher=new Set(graphNodes().map(n=>n.id));
-        MODEL.llmNodes.push({_id:"ln"+(NID++),name:uniq("LLM"),intent:"",promptZiel:c._id,...spawnPos()});render();fokussiereNeu(vorher);}},"＋🤖"));
     body.append(prow);
+    if(!llm)body.append(h("div",{class:"llmrow"},h("button",{class:"llmrun",style:"flex:1",title:"🤖 LLM-Knoten erzeugen und an diesen Code-Block andocken — dann Prompt schreiben und ▶",
+      onclick:()=>llmAndocken(c._id)},"🤖 LLM-Knoten hinzufügen")));
     // ✎ IMMER (allgemeines Pattern) — ohne echte Datei: klare Meldung statt fehlendem Knopf.
     body.append(h("div",{class:"frow"},h("button",{class:"codeadd",
       title:anker?"Echte .cs im Editor öffnen":"Datei folgt — Scaffolder deckt diesen Rumpf noch nicht",
@@ -1049,49 +1163,53 @@ public static class HtmlPresenter
   // 🤖 LLM-Node = PROMPT-QUELLE. `Prompt ▶` an den Eingang eines Code-Blocks; hier tippst du den Prompt.
   //   Wo der Block eine echte Datei hat, wird der Prompt als `// 🤖 Prompt:`-Kommentar in den Rumpf geschrieben
   //   (die einzige Code-Mutation, bei Bedarf). Double-Binding: extern geänderter Prompt spiegelt zurück.
+  // 🤖 LLM-Knoten = CHAT an seinen Code-Block: der Verlauf zeigt die gesendeten Prompts (sonst nichts), darunter die Eingabe.
+  //   Die 1. Nachricht ist der Auftrag, jede weitere passt den aktuellen Rumpf an. Jede Nachricht = ein Durchlauf
+  //   (claude -p → Prüfung → .cs → Generatoren → neu einlesen). Der Verlauf lebt im Knoten (Board/Browser).
+  function llmVerlauf(l){if(!Array.isArray(l.verlauf))l.verlauf=(l.intent||"").trim()?[{text:l.intent.trim()}]:[];return l.verlauf;}
   function llmNodeCard(body,l){
     body.append(nameInp(l,"name","LLM"));
     const block=l.promptZiel?MODEL.codeNodes.find(c=>c._id===l.promptZiel):null;
     const anker=block?codeAnker(block._id):null;
-    body.append(h("div",{class:"gsec"},"Prompt"+(block?" → 📝 "+(block.name||"Code"):" (an einen Code-Block andocken)")));
-    const ta=h("textarea",{class:"code",rows:3,placeholder:"z. B. Bestätige nur, wenn Betrag > 0."});
-    ta.value=l.intent||"";body.append(ta);
-    const status=h("div",{class:"gsec",style:"opacity:.6"},anker?"↔ echte Datei":(block?"angedockt · Datei folgt (Schreibseite)":"nicht angedockt"));
-    body.append(status);
-    let baseHash=null;
-    ta.onchange=async()=>{l.intent=ta.value;if(!anker)return;
-      const r=await codeSetPrompt(anker,ta.value,baseHash).catch(()=>null);
-      if(r&&r.ok){baseHash=r.hash;status.textContent="✓ in Datei geschrieben";status.style.color="#9be3bf";}
-      else if(r&&r.grund==="stale"){baseHash=r.hash;ta.value=r.prompt||"";l.intent=ta.value;status.textContent="↩ extern geändert — neu geladen";status.style.color="#e0b46a";}
-      else{status.textContent="⚠ "+((r&&r.grund)||"SimHost offline");status.style.color="#ffb3c1";}};
-    if(anker)syncReg(l._id,anker,d=>{baseHash=d.hash;if(document.activeElement!==ta){ta.value=d.prompt||"";l.intent=ta.value;}},"ln:"+l._id);
-    // ▶ LLM ausführen: Kontext (aus Code + Graph) + Auftrag → Rumpf, geprüft mit den echten Generatoren; der Vorschlag
-    //   erscheint im Code-Block und ist sofort in der Simulation testbar. In die Datei erst mit ✓ Übernehmen (am Block).
+    const verlauf=llmVerlauf(l);
+    body.append(h("div",{class:"gsec"},"Chat"+(block?" → 📝 "+(block.name||"Code"):" (an einen Code-Block andocken)")));
+    const liste=h("div",{class:"llmchat"});
+    if(!verlauf.length)liste.append(h("div",{class:"llmleer"},"Noch keine Prompts."));
+    verlauf.forEach(e=>liste.append(h("div",{class:"llmmsg"},e.text)));
+    body.append(liste);
+    // Steht im Code schon ein „// 🤖 Prompt:“ und der Verlauf ist leer, ist das der erste (frühere) Prompt.
+    if(anker)syncReg(l._id,anker,d=>{if(!l.verlauf.length&&(d.prompt||"").trim()){l.verlauf.push({text:d.prompt.trim()});l.intent=d.prompt.trim();neuZeichnen();}},"ln:"+l._id);
     const kid=block?konsolenId(block._id):null;
-    if(kid){
-      const lauf=LAUF[kid], v=VOR[kid], m=MELD[kid];
+    const ta=h("textarea",{class:"code",rows:2,placeholder:verlauf.length?"Nächster Prompt, z. B. „lehne auch ab, wenn Betrag > 1000“":"Prompt, z. B. „Bestätige nur, wenn Betrag > 0.“"});
+    body.append(ta);
+    if(LLM_FOKUS===l._id)setTimeout(()=>{if(!ta.isConnected)return;LLM_FOKUS=null;ta.focus({preventScroll:true});
+      const insp=ta.closest(".ginsp");if(insp){const d=ta.getBoundingClientRect().top-insp.getBoundingClientRect().top;insp.scrollTop+=d-insp.clientHeight/3;}
+      else{const n=NODEBY.get("ln:"+l._id);if(n){centerOn(n);pulseNode(n);}}},60);
+    if(!kid){body.append(h("div",{class:"llmmeld warn"},block?"Dieser Code-Block hat (noch) keinen Slot im Code.":"Erst an einen Code-Block andocken."));}
+    else{
+      const lauf=LAUF[kid], m=MELD[kid];
       const ohneKontext=!LLM_STATUS||!LLM_STATUS.index;
-      const knopf=h("button",{class:"llmrun",title:"Das LLM schreibt den Rumpf dieses Code-Blocks (bis zu 3 Runden mit automatischer Reparatur)",
-        onclick:async()=>{l.intent=ta.value;await llmAusfuehren(kid,ta.value,null);}},v?"▶ Neu ausführen":"▶ LLM ausführen");
+      // Senden: Prompt in den Verlauf, dann derselbe Durchlauf — 1. Prompt = Auftrag, jeder weitere = Anpassung des Rumpfs.
+      const senden=async()=>{const text=ta.value.trim();if(!text||LAUF[kid]||EINLESEN)return;
+        const erster=!verlauf.length;verlauf.push({text,zeit:new Date().toISOString()});if(erster)l.intent=text;ta.value="";neuZeichnen();
+        await llmAusfuehren(kid,l.intent||text,erster?null:text,block.text);};
+      ta.onkeydown=e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)){e.preventDefault();senden();}};
+      const knopf=h("button",{class:"llmrun",title:"Senden (Cmd/Ctrl+Enter): claude -p schreibt den Rumpf → Prüfung → .cs → Generatoren → neu einlesen",onclick:senden},"▶ Senden");
       if(lauf||EINLESEN||ohneKontext)knopf.disabled=true;
       body.append(h("div",{class:"llmrow"},knopf,h("a",{class:"codeadd",href:"/konsole#id="+encodeURIComponent(kid),target:"_blank",
-        title:"Runden, Prompt, Verlauf und Token dieses Blocks",style:"text-decoration:none"},"Details ↗")));
+        title:"Runden, Prompt und Token dieses Blocks",style:"text-decoration:none"},"Details ↗")));
       const zeile=lauf?{k:"",t:"● "+lauf.was+" …",lauf:lauf.seit}
         :EINLESEN?{k:"",t:"↻ Code + Kontexte werden neu eingelesen …"}
         :ohneKontext?{k:"warn",t:LLM_STATUS&&LLM_STATUS.aktualisierungLaeuft?"↻ Kontexte werden erzeugt (≈ 1 min) …":LLM_STATUS?"Keine Kontexte — „↻ Vom Graph laden“":"SimHost offline"}
         :m?m:null;
-      if(zeile){const el=h("div",{class:"llmmeld "+(zeile.k||"")},zeile.t);if(zeile.lauf)el.dataset.lauf=zeile.lauf;body.append(el);}
-      if(v&&!lauf){   // Anpassen: neue Runde mit aktuellem Vorschlag + Wunsch
-        const wunsch=h("input",{placeholder:"Anpassen, z. B. „nutze Guard statt if“"});
-        const los=()=>{if(wunsch.value.trim())llmAusfuehren(kid,ta.value,wunsch.value.trim());};
-        wunsch.onkeydown=e=>{if(e.key==="Enter")los();};
-        const ak=h("button",{class:"codeadd",onclick:los},"↻ Anpassen");if(EINLESEN)ak.disabled=true;
-        body.append(h("div",{class:"llmrow"},wunsch,ak));}}
+      if(zeile){const el=h("div",{class:"llmmeld "+(zeile.k||"")},zeile.t);if(zeile.lauf)el.dataset.lauf=zeile.lauf;body.append(el);}}
     body.append(slotRow("prompt","Prompt ▶","r",{type:"prompt",dir:"out",llm:l._id},"llm:prout:"+l._id));
   }
-  // ══ 🤖 LLM-CODE-BLÖCKE — der ganze Weg im Editor:
-  //   ▶ (LLM-Knoten) → Vorschlag im Code-Block → ⚙ In-Memory-Kompilat mit den echten Generatoren → ▶ Simulation testet ihn
-  //   → ✓ Übernehmen: echte .cs + dotnet build (Generatoren) → Code + Kontexte neu eingelesen (ein GraphExtractor-Lauf).
+  // ══ 🤖 LLM-CODE-BLÖCKE — der ganze Weg am 🤖-Knoten, EIN Klick (▶):
+  //   claude -p (Abo, keine API) füllt den Rumpf → Prüfung (Syntax; Decide/Apply: In-Memory-Kompilat mit den echten
+  //   Generatoren, bis zu 3 Reparaturrunden) → GEPRÜFT: sofort in die echte .cs → Build des Laufzeit-Projekts (alle Code-
+  //   Generatoren inkl. Proto-Prepass) → Code + Kontexte neu eingelesen. Hat der Block noch keine Methode (Decide/Apply),
+  //   wird sie vorher als Platzhalter geschrieben („C# schreiben“). Nur ein UNGEPRÜFTER Kandidat bleibt Vorschlag (✓ am Block).
   //   Wahrheit ist die Datei; ein Vorschlag hängt am SLOT-Schlüssel (stabil über Neu-Einlesen) und ist lokal gesichert.
   const LLM_VKEY="bractor-llm-vorschlaege";
   let VOR={};try{VOR=JSON.parse(localStorage.getItem(LLM_VKEY)||"{}")||{};}catch(e){}
@@ -1110,26 +1228,39 @@ public static class HtmlPresenter
     el.textContent=el.textContent.replace(/ \(\d+ s\)$/,"")+" ("+t+" s)";}),1000);
   const postLlm=(pfad,obj)=>fetch(pfad,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(obj)}).then(r=>r.json());
 
-  async function llmAusfuehren(kid,auftrag,anpassung){
+  // anpassung: Wunsch zum bestehenden Rumpf; basisRumpf = der aktuelle Rumpf (offener Vorschlag, sonst der Datei-Spiegel).
+  async function llmAusfuehren(kid,auftrag,anpassung,basisRumpf){
     auftrag=(auftrag||"").trim();
     if(!auftrag){MELD[kid]={k:"warn",t:"Erst den Auftrag schreiben — ohne Auftrag kein Aufruf."};neuZeichnen();return;}
     if(LAUF[kid])return;
     const v=VOR[kid];
-    LAUF[kid]={seit:Date.now(),was:anpassung?"passt an":"LLM schreibt"};delete MELD[kid];neuZeichnen();
-    let r;try{r=await postLlm("/api/llm/fuellen",{id:kid,auftrag,rumpf:anpassung&&v?v.rumpf:null,anpassung:anpassung||null,autoReparatur:true,maxRunden:3});}
+    const anfrage={id:kid,auftrag,rumpf:anpassung?(v?v.rumpf:(basisRumpf||null)):null,anpassung:anpassung||null,maxRunden:3};
+    LAUF[kid]={seit:Date.now(),was:anpassung?"passt an · schreibt · baut":"LLM schreibt · prüft · baut"};delete MELD[kid];neuZeichnen();
+    let r;try{r=await postLlm("/api/llm/ausfuehren",anfrage);}
     catch(e){r={ok:false,grund:"SimHost offline"};}
+    // Noch keine Methode im Code (neu gezeichneter Decider/Applier): erst die Struktur schreiben (Platzhalter) + einlesen,
+    //   dann derselbe Durchlauf. Leseseiten-Blöcke deckt der Scaffolder (noch) nicht — dort bleibt die Meldung.
+    if(r&&!r.ok&&r.unbekannt&&istSimulierbar(kid)){
+      LAUF[kid].was="legt die Methode an (C# schreiben) · liest ein";neuZeichnen();
+      await deWrite();
+      LAUF[kid].was="LLM schreibt · prüft · baut";neuZeichnen();
+      try{r=await postLlm("/api/llm/ausfuehren",anfrage);}catch(e){r={ok:false,grund:"SimHost offline"};}
+      if(r&&!r.ok&&r.unbekannt)r.grund="Methode konnte nicht angelegt werden — Decider/Applier vollständig verdrahtet (Command/Event, Aggregat, Ausgänge)?";}
     delete LAUF[kid];
     if(!r.ok){MELD[kid]={k:"err",t:"⚠ "+(r.grund||"Fehler")};neuZeichnen();return;}
     const runden=r.runden||[], ende=runden[runden.length-1]||{};
     const dauer=runden.reduce((a,x)=>a+(x.dauerMs||0),0), info=runden.length+" Runde(n) · "+(dauer/1000).toFixed(1)+" s";
+    if(r.geschrieben){   // geprüft → in der Datei → Generatoren gelaufen
+      delete VOR[kid];saveVor();ZULETZT[kid]=true;
+      MELD[kid]=r.bau&&r.bau.ok?{k:"ok",t:"✓ geschrieben: "+r.datei+":"+r.zeile+" · Generatoren grün ("+info+")"}
+        :{k:"err",t:"⚠ geschrieben, aber Build rot: "+(((r.bau&&r.bau.fehler)||[])[0]||"")+" — ↶ Rückgängig am Block"};
+      await neuEinlesen();return;}
     if(ende.fehler)MELD[kid]={k:"err",t:"⚠ "+ende.fehler};
     else if(ende.ergebnis==="ausserhalb")MELD[kid]={k:"warn",t:"⛔ Nicht in diesem Block lösbar: "+ende.ausserhalb+" — erst die Struktur im Editor ergänzen."};
     else if(!ende.rumpf)MELD[kid]={k:"err",t:"⚠ Antwort ohne Code ("+info+") — Details ↗"};
     else{
       VOR[kid]={rumpf:ende.rumpf,basisHash:r.basisHash,ok:!!ende.ok,befunde:ende.befunde||[],auftrag,zeit:new Date().toISOString()};saveVor();
-      MELD[kid]=ende.ok
-        ?{k:"ok",t:"✓ Vorschlag im Code-Block ("+info+")"+(istSimulierbar(kid)?" · mit den Generatoren kompiliert → in der ▶ Simulation testbar":" · Syntax geprüft")}
-        :{k:"warn",t:"Vorschlag mit "+(ende.befunde||[]).length+" Befund(en) nach "+info+": "+(ende.befunde||[])[0]};
+      MELD[kid]={k:"warn",t:"Nicht geschrieben — Vorschlag mit "+(ende.befunde||[]).length+" Befund(en) nach "+info+": "+(ende.befunde||[])[0]+" · ↻ Anpassen oder ✓ trotzdem übernehmen"};
       if(istSimulierbar(kid))deCompile();}
     neuZeichnen();}
 
@@ -1156,22 +1287,23 @@ public static class HtmlPresenter
   //   stehen auf dem neuen Code; solange sind ▶/✓ gesperrt (sonst sähe der nächste Block veraltete Nachbarn).
   async function neuEinlesen(){EINLESEN=true;neuZeichnen();try{await deReload();}finally{EINLESEN=false;await llmStatus();neuZeichnen();}}
 
-  // 🤖 Alle ausführen: jeden 🤖-Knoten mit Auftrag nacheinander — nichts wird geschrieben, jeder Vorschlag wartet auf ✓.
+  // 🤖 Alle ausführen: jeden 🤖-Knoten mit Auftrag nacheinander — jeder geprüfte Rumpf wird geschrieben + gebaut + eingelesen.
   window.deLlmAlle=async function(){const btn=document.getElementById("de-llmalle");
-    const liste=MODEL.llmNodes.map(l=>({l,kid:l.promptZiel?konsolenId(l.promptZiel):null})).filter(x=>x.kid&&(x.l.intent||"").trim());
+    const liste=MODEL.llmNodes.map(l=>({l,kid:l.promptZiel?konsolenId(l.promptZiel):null})).filter(x=>x.kid&&((llmVerlauf(x.l)[0]||{}).text||"").trim());
     if(!liste.length){deFlash("Kein 🤖-Knoten mit Auftrag",false);return;}
     btn.disabled=true;
-    for(let i=0;i<liste.length;i++){btn.textContent="🤖 "+(i+1)+"/"+liste.length+" …";await llmAusfuehren(liste[i].kid,liste[i].l.intent,null);}
+    for(let i=0;i<liste.length;i++){btn.textContent="🤖 "+(i+1)+"/"+liste.length+" …";await llmAusfuehren(liste[i].kid,llmVerlauf(liste[i].l)[0].text,null);}
     btn.disabled=false;btn.textContent="🤖 Alle ausführen";
-    const offen=Object.keys(VOR).length;deFlash("🤖 fertig · "+offen+" Vorschlag/Vorschläge warten auf ✓ Übernehmen",true);};
+    const offen=Object.keys(VOR).length;deFlash("🤖 fertig"+(offen?" · "+offen+" ungeprüfte(r) Vorschlag/Vorschläge warten auf ✓":" · alles geschrieben"),!offen);};
 
   // Slot-Schlüssel der LLM-Konsole (wie GraphExtractor --kontexte ihn vergibt): Art|Besitzer|Disc.
-  function konsolenId(codeId){const o=findCodeOwner(codeId);if(!o)return null;const r=o.ref;
+  function konsolenId(codeId,m){const o=findCodeOwner(codeId,m);if(!o)return null;const r=o.ref;
     if(o.kind==="decider")return "decide|"+r.aggregat+"|"+r.command;
     if(o.kind==="applier")return "apply|"+r.aggregat+"|"+r.event;
     if(o.kind==="projektion"){const hd=(r.handles||[]).find(x=>x.codeSrc===codeId);return hd?"projektion|"+r.name+"|"+hd.event:null;}
     if(o.kind==="reader"){const hd=(r.handles||[]).find(x=>x.codeSrc===codeId);return hd?"reader|"+r.name+"|"+hd.query:null;}
     if(o.kind==="pipeline"){const hd=(r.handles||[]).find(x=>x.codeSrc===codeId);return hd?"pipeline|"+r.name+"|"+(hd.input||hd.event):null;}
+    if(o.kind==="reaktion"){const hd=(r.handles||[]).find(x=>x.codeSrc===codeId);return hd?"reaktion|"+r.name+"|"+hd.event:null;}
     if(o.kind==="store"){const f=(r.writeFns||[]).concat(r.readFns||[]).find(x=>x.codeSrc===codeId);return f?"store|"+r.name+"|"+f.name:null;}
     return null;}
   // Kurzvorschau eines Code-/Intent-Textes (erste Zeilen) für den Knoten.
@@ -1185,7 +1317,7 @@ public static class HtmlPresenter
   //    Applier→Aggregat(rechts) · Applier→State-Feld(oben, optionale Zuweisungs-Markierung).
   const SVGNS="http://www.w3.org/2000/svg";
   const GRID=20;
-  const NODELABEL={command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",pipeline:"Pipeline",trigger:"Trigger",frist:"Frist",dienst:"Dienst",hostsetting:"HostSetting",codenode:"Code",llmnode:"LLM"};
+  const NODELABEL={command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",pipeline:"Pipeline",trigger:"Trigger",frist:"Frist",dienst:"Dienst",hostsetting:"HostSetting",codenode:"Code",llmnode:"LLM",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn"};
   let PAN={x:40,y:30,s:1}, canvas=null, world=null, svg=null, svgTop=null, SLOTS={};
   // Typ-Navigation: HLKIND = aktuell hervorgehobener Node-Typ (Board+Minimap); JUMPIX = Sprung-Cursor je Typ.
   let HLKIND=null; const JUMPIX={};
@@ -1368,8 +1500,11 @@ public static class HtmlPresenter
     if(owner&&f.name)row.append(feldPort(owner,f.name,f.typ,f._id));
     if(owner)row.prepend(typeInPort(owner,f));return row;}
 
-  function port(color){const s=h("div",{class:"slot s-"+color});s.onpointerdown=e=>{e.stopPropagation();e.preventDefault();startLink(e,s);};return s;}
-  function reg(key,el,info){el.__slot=info;if(!INSP)SLOTS[key]=el;return el;}   // Inspector-Kopien verdrahten nicht
+  // Port: auf der Fläche unsichtbar (Karten sind immer kompakt) — im Panel startet ein Klick den Verbinden-Modus.
+  function port(color){const s=h("div",{class:"slot s-"+color,title:"Klick: passende Knoten leuchten auf dem Graphen — dort anklicken = verbinden / lösen"});
+    s.onpointerdown=e=>{e.stopPropagation();e.preventDefault();if(s.closest(".ginsp"))vbStart(s);};return s;}
+  // __key: derselbe Schlüssel wie der Port der Karte auf der Fläche (so findet der Verbinden-Modus Kanten + Quelle wieder).
+  function reg(key,el,info){el.__slot=info;el.__key=key;if(!INSP)SLOTS[key]=el;return el;}   // Inspector-Kopien verdrahten nicht
   function slotRow(color,label,side,info,key){const s=port(color);s.classList.add(side==="l"?"i":"o");reg(key,s,info);
     return side==="l"?h("div",{class:"slotrow"},s,h("span",{class:"slotlbl"},label))
                      :h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},label),s);}
@@ -1396,27 +1531,42 @@ public static class HtmlPresenter
             ...MODEL.dienste.map(d=>({id:"di:"+d._id,name:d.name,kind:"dienst",ref:d})),
             ...MODEL.hostSettings.map(s=>({id:"hs:"+s._id,name:s.name,kind:"hostsetting",ref:s})),
             ...MODEL.codeNodes.map(c=>({id:"cn:"+c._id,name:c.name,kind:"codenode",ref:c})),
-            ...MODEL.llmNodes.map(l=>({id:"ln:"+l._id,name:l.name,kind:"llmnode",ref:l}))];
+            ...MODEL.llmNodes.map(l=>({id:"ln:"+l._id,name:l.name,kind:"llmnode",ref:l})),
+            ...handleKnoten(),...fnKnoten()];
   }
   // ── AGGREGATSWEISE ANORDNUNG: jedes Aggregat ein gekachelter Block (eigenes Rollen-Mini-Layout),
   //    aggregat-übergreifende Knoten (Sagas/Pipelines/Trigger/Reaktionen/geteilte Typen) im „Geteilt"-Band.
   const SHARED_KEY="§geteilt";
   // Rollen-Spalten innerhalb eines Aggregat-Blocks (links→rechts = Schreibfluss, dann Leseseite).
-  const ROLE_AGG={command:0,decider:1,aggregate:2,state:2,event:3,rejection:3,applier:4,valueobject:5,enum:5,projektion:6,query:7,reader:8,queryresponse:9,store:10,readmodel:10};
+  //   Leseseite: Projektion (Hub) → ihre Handles → Store-Fns → Store/ReadModel; Query → Reader-Handle → Response, Reader (Hub).
+  const ROLE_AGG={command:0,decider:1,aggregate:2,state:2,event:3,rejection:3,applier:4,valueobject:5,enum:5,projektion:6,"handle:projektion":7,"handle:reaktion":7,
+    fn:8,store:9,readmodel:9,query:10,"handle:reader":11,queryresponse:12,reader:13};
   // Rollen-Spalten im Geteilt-Band.
-  const ROLE_SHARED={saga:0,transition:1,reaktion:2,pipeline:3,trigger:4,frist:4,dienst:5,hostsetting:5,valueobject:6,enum:6,command:7,event:7,rejection:7,codenode:8,llmnode:8};
+  const ROLE_SHARED={saga:0,transition:1,reaktion:2,"handle:reaktion":3,pipeline:4,"handle:pipeline":5,trigger:6,frist:6,dienst:7,hostsetting:7,konfig:7,valueobject:8,enum:8,command:9,event:9,rejection:9,
+    fn:10,store:11,readmodel:11,"handle:projektion":12,projektion:13,"handle:reader":14,reader:15,query:14,queryresponse:16,codenode:17,llmnode:17};
+  // Rolle eines Knotens: Handles je Besitzer-Art (Projektions- vs. Reader-Handle liegen in verschiedenen Spalten).
+  const rolle=(n,map)=>{const k=n.kind==="handle"?"handle:"+n.own.kind:n.kind;return map[k]!==undefined?map[k]:99;};
 
   // Wer besitzt diesen 📝/🤖-Knoten? (Rumpf-Ziel) — für die Gruppen-Zuordnung.
-  function findCodeOwner(id){
-    for(const d of MODEL.decider) if(d.codeSrc===id) return {kind:"decider",ref:d};
-    for(const a of MODEL.applier) if(a.codeSrc===id) return {kind:"applier",ref:a};
-    for(const p of MODEL.projektionen) if((p.handles||[]).some(h=>h.codeSrc===id)) return {kind:"projektion",ref:p};
-    for(const r of MODEL.reader) if((r.handles||[]).some(h=>h.codeSrc===id)) return {kind:"reader",ref:r};
-    for(const p of MODEL.pipelines) if((p.handles||[]).some(h=>h.codeSrc===id)) return {kind:"pipeline",ref:p};
-    for(const s of MODEL.stores){if(((s.writeFns||[]).concat(s.readFns||[])).some(f=>f.codeSrc===id))return {kind:"store",ref:s};}
-    for(const d of MODEL.dienste) if(d.codeSrc===id) return {kind:"dienst",ref:d};
+  function findCodeOwner(id,m){m=m||MODEL;
+    for(const d of m.decider||[]) if(d.codeSrc===id) return {kind:"decider",ref:d};
+    for(const a of m.applier||[]) if(a.codeSrc===id) return {kind:"applier",ref:a};
+    for(const p of m.projektionen||[]) if((p.handles||[]).some(h=>h.codeSrc===id)) return {kind:"projektion",ref:p};
+    for(const r of m.reader||[]) if((r.handles||[]).some(h=>h.codeSrc===id)) return {kind:"reader",ref:r};
+    for(const p of m.pipelines||[]) if((p.handles||[]).some(h=>h.codeSrc===id)) return {kind:"pipeline",ref:p};
+    for(const s of m.stores||[]){if(((s.writeFns||[]).concat(s.readFns||[])).some(f=>f.codeSrc===id))return {kind:"store",ref:s};}
+    for(const r of m.reaktionen||[]) if((r.handles||[]).some(h=>h.codeSrc===id)) return {kind:"reaktion",ref:r};
+    for(const d of m.dienste||[]) if(d.codeSrc===id) return {kind:"dienst",ref:d};
     return null;
   }
+  // Die Code-EINGÄNGE eines Knotens (je Eingang die codeSrc oder leer) — was der Knoten an Rumpf-Ports hat, auch unbelegt.
+  //   null = der Knoten hat keinen Code-Eingang.
+  function codeEingaenge(n){const r=n.ref;
+    switch(n.kind){
+      case "decider":case "applier":return [r.codeSrc||null];
+      case "dienst":return r.extern?(r.codeSrc?[r.codeSrc]:null):[r.codeSrc||null];
+      case "handle":case "fn":return [r.codeSrc||null];}   // Projektion/Reader/Reaktion/Pipeline/Store: der Code hängt an Handle/Fn
+    return null;}
   // Aggregat-Zugehörigkeit eines Knotens (oder SHARED_KEY). Ableitung über Namespace + Verdrahtung.
   // ══ GRAPH-BASIS: alles liegt als Graph vor — Partition nach ECHTER Verbundenheit, nicht nach Namespace. ══
   // Eine einzige Kanten-Quelle auf KNOTEN-Ebene (Node-Id → Node-Id), gespiegelt zu drawEdges' Beziehungen.
@@ -1436,41 +1586,54 @@ public static class HtmlPresenter
       (t.wenn||[]).forEach(e=>{if(recByName(e))push(rec(e),"tr:"+t._id);});
       (t.dann||[]).forEach(d=>{if(recByName(d.sende))push("tr:"+t._id,rec(d.sende));if(recByName(d.kompensation))push("tr:"+t._id,rec(d.kompensation));});});
     MODEL.readModels.forEach(rm=>{const st=MODEL.stores.find(s=>s.name===rm.store);if(st)push("rm:"+rm._id,"sto:"+st._id);});
-    MODEL.stores.forEach(st=>(st.writeFns||[]).concat(st.readFns||[]).forEach(fn=>{if(fn.codeSrc)push(codeId(fn.codeSrc),"sto:"+st._id);}));
-    MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>{if(recByName(hd.event))push(rec(hd.event),"prj:"+p._id);
-      (hd.fns||[]).forEach(fid=>{const f=fnById(fid);if(f)push("prj:"+p._id,"sto:"+f.store._id);});
-      (hd.publishes||[]).forEach(ev=>{if(recByName(ev))push("prj:"+p._id,rec(ev));});
-      if(hd.codeSrc)push(codeId(hd.codeSrc),"prj:"+p._id);}));
+    // Store-Fns: eigene Knoten am Store (Hub-Kante Fn → Store), ihr Impl-Rumpf hängt an der Fn.
+    MODEL.stores.forEach(st=>(st.writeFns||[]).concat(st.readFns||[]).forEach(fn=>{push("fn:"+fn._id,"sto:"+st._id);if(fn.codeSrc)push(codeId(fn.codeSrc),"fn:"+fn._id);}));
+    // Handles: eigene Knoten am Besitzer (Hub-Kante Handle → Besitzer); Eingang → Handle → Ausgänge; Rumpf → Handle.
+    const HID=new Map();Object.entries(HANDLE_ART).forEach(([k,[coll,pre]])=>(MODEL[coll]||[]).forEach(o=>{const ids=handleIds(o,pre+":"+o._id);(o.handles||[]).forEach((hd,hi)=>HID.set(hd,ids[hi]));}));
+    const H=hd=>HID.get(hd);
+    MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>{push(H(hd),"prj:"+p._id);
+      if(recByName(hd.event))push(rec(hd.event),H(hd));
+      (hd.fns||[]).forEach(fid=>{if(fnById(fid))push(H(hd),"fn:"+fid);});
+      (hd.publishes||[]).forEach(ev=>{if(recByName(ev))push(H(hd),rec(ev));});
+      if(hd.codeSrc)push(codeId(hd.codeSrc),H(hd));}));
     MODEL.reader.forEach(r=>{const p=r.projektion&&MODEL.projektionen.find(x=>x.name===r.projektion);if(p)push("rdr:"+r._id,"prj:"+p._id);
-      (r.handles||[]).forEach(hd=>{if(recByName(hd.query))push(rec(hd.query),"rdr:"+r._id);
-        (hd.fns||[]).forEach(fid=>{const f=fnById(fid);if(f)push("rdr:"+r._id,"sto:"+f.store._id);});
-        (hd.responses||[]).forEach(resp=>{if(recByName(resp))push("rdr:"+r._id,rec(resp));});
-        if(hd.codeSrc)push(codeId(hd.codeSrc),"rdr:"+r._id);});});
-    MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>{if(recByName(hd.event))push(rec(hd.event),"rk:"+r._id);
-      (hd.sends||[]).forEach(c=>{if(recByName(c))push("rk:"+r._id,rec(c));});
-      (hd.publishes||[]).forEach(ev=>{if(recByName(ev))push("rk:"+r._id,rec(ev));});
-      if(hd.codeSrc)push(codeId(hd.codeSrc),"rk:"+r._id);}));
-    MODEL.pipelines.forEach(p=>{(p.handles||[]).forEach(hd=>{
-        if(hd.inputKind==="event"&&recByName(hd.event))push(rec(hd.event),"pl:"+p._id);
+      (r.handles||[]).forEach(hd=>{push(H(hd),"rdr:"+r._id);
+        if(recByName(hd.query))push(rec(hd.query),H(hd));
+        (hd.fns||[]).forEach(fid=>{if(fnById(fid))push(H(hd),"fn:"+fid);});
+        (hd.responses||[]).forEach(resp=>{if(recByName(resp))push(H(hd),rec(resp));});
+        if(hd.codeSrc)push(codeId(hd.codeSrc),H(hd));});});
+    MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>{push(H(hd),"rk:"+r._id);
+      if(recByName(hd.event))push(rec(hd.event),H(hd));
+      (hd.sends||[]).forEach(c=>{if(recByName(c))push(H(hd),rec(c));});
+      (hd.publishes||[]).forEach(ev=>{if(recByName(ev))push(H(hd),rec(ev));});
+      if(hd.codeSrc)push(codeId(hd.codeSrc),H(hd));}));
+    MODEL.pipelines.forEach(p=>{(p.handles||[]).forEach(hd=>{push(H(hd),"pl:"+p._id);
+        if(hd.inputKind==="event"&&recByName(hd.event))push(rec(hd.event),H(hd));
         if(hd.inputKind==="trigger"){const pr=hd.prod||(hd.trigId?{k:"tg",id:hd.trigId}:null);
-          if(pr&&pr.k==="tg")push("tg:"+pr.id,"pl:"+p._id); else if(pr&&pr.k==="pl")push("pl:"+pr.plId,"pl:"+p._id);}
-        (hd.sends||[]).forEach(c=>{if(recByName(c))push("pl:"+p._id,rec(c));});
-        // ge-yieldeter Trigger → jede Pipeline, die diese Trigger-Nachricht als Eingang hat (die Kette).
-        (hd.emits||[]).forEach(tn=>MODEL.pipelines.forEach(q=>{if(q._id!==p._id)(q.handles||[]).forEach(qh=>{if(qh.inputKind==="trigger"&&qh.input===tn)push("pl:"+p._id,"pl:"+q._id);});}));
-        if(hd.codeSrc)push(codeId(hd.codeSrc),"pl:"+p._id);});
+          if(pr&&pr.k==="tg")push("tg:"+pr.id,H(hd));
+          else if(pr&&pr.k==="pl"){const q=MODEL.pipelines.find(x=>x._id===pr.plId),qh=q&&(q.handles||[])[pr.hi];if(qh)push(H(qh),H(hd));}}
+        (hd.sends||[]).forEach(c=>{if(recByName(c))push(H(hd),rec(c));});
+        (hd.fns||[]).forEach(fid=>{if(fnById(fid))push(H(hd),"fn:"+fid);});
+        // ge-yieldeter Trigger → jeder Handle einer anderen Pipeline mit dieser Trigger-Nachricht als Eingang (die Kette).
+        (hd.emits||[]).forEach(tn=>MODEL.pipelines.forEach(q=>{if(q._id!==p._id)(q.handles||[]).forEach(qh=>{if(qh.inputKind==="trigger"&&qh.input===tn)push(H(hd),H(qh));});}));
+        // Selbst<T> → der Self-Handle derselben Pipeline (Tick/Timeout-Schleife).
+        (hd.schedules||[]).forEach(sc=>(p.handles||[]).forEach(qh=>{if(qh.inputKind==="self"&&qh.selfName===sc.name&&qh!==hd)push(H(hd),H(qh));}));
+        if(hd.codeSrc)push(codeId(hd.codeSrc),H(hd));});
       (p.dienste||[]).forEach(dn=>{const d=MODEL.dienste.find(x=>(x.vertrag||x.name)===dn);if(d)push("di:"+d._id,"pl:"+p._id);});});
     MODEL.frists.forEach(f=>{(f.plant||[]).forEach(ev=>{if(recByName(ev))push(rec(ev),"fr:"+f._id);});
       (f.storniert||[]).forEach(ev=>{if(recByName(ev))push(rec(ev),"fr:"+f._id);});
       if(recByName(f.sendet))push("fr:"+f._id,rec(f.sendet));
       if(f.dauerSetting){const hs=MODEL.hostSettings.find(x=>x.name===f.dauerSetting);if(hs)push("hs:"+hs._id,"fr:"+f._id);}});
     MODEL.dienste.forEach(d=>{if(d.codeSrc)push(codeId(d.codeSrc),"di:"+d._id);});
+    // 🤖 → 📝: der LLM-Knoten hängt an seinem Code-Block (Prompt-Kante, wie drawEdges sie zeichnet).
+    MODEL.llmNodes.forEach(l=>{if(l.promptZiel&&MODEL.codeNodes.some(c=>c._id===l.promptZiel))push("ln:"+l._id,"cn:"+l.promptZiel);});
     // Betrieb: HostSetting → Konfigurations-Record (Feld) → Pipeline, die ihn per Konstruktor injiziert.
     MODEL.hostSettings.forEach(hs=>{if(hs.konfig&&recByName(hs.konfig))push("hs:"+hs._id,rec(hs.konfig));});
     MODEL.pipelines.forEach(p=>(p.konfigs||[]).forEach(k=>{if(recByName(k))push(rec(k),"pl:"+p._id);}));
-    // Store-API: Records in Fn-Parametern/-Rückgaben (Transfer-Typen wie ImagePairStatistik) gehören an ihren Store.
+    // Store-API: Records in Fn-Parametern/-Rückgaben (Transfer-Typen wie ImagePairStatistik) gehören an ihre Fn.
     MODEL.stores.forEach(st=>(st.writeFns||[]).concat(st.readFns||[]).forEach(fn=>{
       [fn.rueckgabe,...(fn.params||[]).map(x=>x.typ)].forEach(t=>((t||"").match(/[A-Za-z_]\w*/g)||[]).forEach(n=>{
-        const r=recByName(n);if(r&&r.kind!=="command")push(rec(n),"sto:"+st._id);}));}));
+        const r=recByName(n);if(r&&r.kind!=="command")push(rec(n),"fn:"+fn._id);}));}));
     // Typ-Komposition: VO/Enum → Feld-Owner (Record/Aggregat/ReadModel/State).
     const voN=new Set(MODEL.records.filter(r=>r.kind==="valueobject").map(r=>r.name)), enN=new Set(MODEL.enums.map(e=>e.name));
     const ownerId=o=>MODEL.records.some(r=>r.name===o)?"rec:"+o:MODEL.aggregate.some(a=>a.name===o)?"agg:"+o
@@ -1505,6 +1668,7 @@ public static class HtmlPresenter
   function groupKeyOf(n){
     const k=n.kind, r=n.ref;
     if(k==="aggregate") return r.name;
+    if(k==="handle"||k==="fn") return groupKeyOf(n.own);   // Handle/Fn gehören zu ihrem Besitzer
     if(k==="state") return r.aggregat||SHARED_KEY;
     if(k==="decider"||k==="applier") return r.aggregat||SHARED_KEY;
     if(k==="command"||k==="event"||k==="rejection") return recordAgg(r.name)||SHARED_KEY;
@@ -1517,7 +1681,8 @@ public static class HtmlPresenter
       if(u)return groupKeyOf({kind:MODEL.projektionen.includes(u)?"projektion":"reader",ref:u});
       return SHARED_KEY;} // kein Handle→Fn verdrahtet: gehört (noch) keinem Aggregat
     if(k==="readmodel"){const st=MODEL.stores.find(s=>s.name===r.store);return st?groupKeyOf({kind:"store",ref:st}):SHARED_KEY;}
-    if(k==="codenode"||k==="llmnode"){const o=findCodeOwner(r._id);return o?groupKeyOf(o):SHARED_KEY;}
+    if(k==="codenode"){const o=findCodeOwner(r._id);return o?groupKeyOf(o):SHARED_KEY;}
+    if(k==="llmnode"){const o=r.promptZiel&&findCodeOwner(r.promptZiel);return o?groupKeyOf(o):SHARED_KEY;}
     return SHARED_KEY; // saga, transition, pipeline, trigger, reaktion
   }
   // ── MESS-BASIERTES PACKING: nach dem Rendern die ECHTEN Knotengrößen messen und die Aggregat-
@@ -1536,12 +1701,13 @@ public static class HtmlPresenter
     world.querySelectorAll(".gnode2").forEach(el=>{dim.set(el.dataset.id,{w:el.offsetWidth||280,h:el.offsetHeight||120});});
     const sz=n=>dim.get(n.id)||{w:280,h:120};
     const positioned=n=>{const p=P(n);return typeof p.x==="number"&&typeof p.y==="number";};
-    // Wenige Knoten ohne Position (neu sichtbar, z. B. Details eingeblendet): neben einen platzierten Nachbarn legen
-    //   statt das ganze Board neu zu würfeln. Viele ohne Position → unten komplett neu packen.
-    const ohne=all.filter(n=>!positioned(n));
-    if(!force&&ohne.length&&ohne.length<all.length*0.3){let off=0;
-      ohne.forEach(n=>{const nb=[...(ADJ.out.get(n.id)||[]),...(ADJ.inn.get(n.id)||[])].map(id=>NODEBY.get(vertreterId(id))).find(m=>m&&m!==n&&VIS.has(m.id)&&positioned(m));
-        if(nb){const p=P(nb),s=sz(nb);setze(n,p.x+s.w+60,p.y+(off%4)*40);}else{const s=spawnPos();setze(n,s.x,s.y);}off++;});}
+    // Knoten ohne Position (neu angelegt / neu sichtbar): im Raster hat jeder Knoten seine feste Zeile → neu packen.
+    if(all.some(n=>!positioned(n)))force=true;
+    // Raster-Signatur (sichtbare Knoten + Zahl ihrer Code-Eingänge): ändert sie sich (Handle/Fn dazu, Art aus-/eingeblendet),
+    //   stimmen die reservierten Zeilen nicht mehr → neu packen. Gleiche Signatur = Handanordnung bleibt.
+    const LAY=KPOS[VIEW.details?"d":"k"]||(KPOS[VIEW.details?"d":"k"]={});
+    const sig=hash(all.map(n=>n.id+":"+((codeEingaenge(n)||[]).length)).join("|")+"#"+(VIEW.aus||[]).join(","));
+    if(LAY.__sig!==sig)force=true;
     // Wie viele Knotenpaare überlappen aktuell deutlich? (früher Abbruch, sobald „viele").
     const overlaps=()=>{const b=all.map(n=>{const s=sz(n),p=P(n);return {x:p.x||0,y:p.y||0,w:s.w,h:s.h};});let c=0;
       for(let i=0;i<b.length;i++)for(let j=i+1;j<b.length;j++){const A=b[i],B=b[j];
@@ -1553,28 +1719,80 @@ public static class HtmlPresenter
 
     const COLGAP=48,ROWGAP=26,SHELFGAP=150,COMPGAP=240;
     const isCode=n=>n.kind==="codenode"||n.kind==="llmnode";
-    // Ein Aggregat-/Brücken-BLOCK: Rollen→Spalten (+ Code-Bänder rechts) → relative Positionen + Box.
+    // ── ZEILENRASTER: jede Karte belegt genau eine Rasterzeile (Höhe = höchste sichtbare Karte + Abstand), alles fluchtet.
+    //   Ein Knoten mit Code-Eingängen (Decider, Applier, Projektion, Reader, Reaktion, Pipeline, Store, Dienst) belegt
+    //   1 + je Eingang GENAU 2 Zeilen: 📝 Code-Block und 🤖 LLM-Platz — der LLM-Platz ist immer reserviert (auch ohne
+    //   LLM-Knoten), ein leerer Code-Eingang ebenso. Dadurch sind alle Besitzer gleich getaktet; Command/Event/Ablehnung/
+    //   Query … stehen in der Zeile ihres Partners (Decider, Applier, Reader …). Ausgeblendete Arten reservieren nichts.
+    const EINZUG=16, ZGAP=12;
+    const codeAn=!istAus("codenode"), llmAn=codeAn&&!istAus("llmnode");
+    const ZEILE=Math.max(28,...all.map(n=>sz(n).h))+ZGAP;
     const layoutBlock=(nodes,roleMap)=>{
-      const rest=nodes.filter(n=>!isCode(n)), codes=nodes.filter(isCode);
-      const codeByOwner=new Map(); const orphan=[];
-      codes.forEach(cn=>{const o=findCodeOwner(cn.ref._id);
-        if(o){if(!codeByOwner.has(o.ref))codeByOwner.set(o.ref,[]);codeByOwner.get(o.ref).push(cn);}else orphan.push(cn);});
-      const rawOf=n=>roleMap[n.kind]!==undefined?roleMap[n.kind]:99;
+      const rest=nodes.filter(n=>!isCode(n)), codes=nodes.filter(n=>n.kind==="codenode"), llms=nodes.filter(n=>n.kind==="llmnode");
+      const codeById=new Map(codes.map(c=>[c.ref._id,c]));
+      const llmByCode=new Map(), orphanLlm=[];
+      llms.forEach(l=>{const z=l.ref.promptZiel;if(z&&codeById.has(z)){if(!llmByCode.has(z))llmByCode.set(z,[]);llmByCode.get(z).push(l);}else orphanLlm.push(l);});
+      // Code-Plätze je Besitzer in Eingangs-Reihenfolge (Handle/Fn); null = leerer Eingang (Platz bleibt reserviert).
+      const genutzt=new Set();
+      const plaetze=n=>{if(!codeAn)return [];
+        const src=codeEingaenge(n);if(!src)return [];
+        const ps=src.map(id=>{const c=id&&codeById.get(id);if(c)genutzt.add(c.ref._id);return c||null;});
+        codes.forEach(c=>{if(genutzt.has(c.ref._id))return;const o=findCodeOwner(c.ref._id);if(o&&o.ref===n.ref){genutzt.add(c.ref._id);ps.push(c);}});
+        return ps;};
+      const PL=new Map();rest.forEach(n=>{const p=plaetze(n);if(p.length)PL.set(n.id,p);});
+      const hoehe=n=>1+(PL.get(n.id)||[]).reduce((s,c)=>s+(llmAn?1+Math.max(1,c?(llmByCode.get(c.ref._id)||[]).length:1):1),0);
+      const rawOf=n=>rolle(n,roleMap);
       const colRoles=[...new Set(rest.map(rawOf))].sort((a,b)=>a-b);
-      const byRole=new Map(colRoles.map(r=>[r,[]]));
-      rest.forEach(n=>{const s=sz(n);byRole.get(rawOf(n)).push({n,w:s.w,h:s.h});});
-      let cx=0,hh=0;const placed=[];
-      colRoles.forEach(role=>{const list=byRole.get(role);const w=Math.max(120,...list.map(e=>e.w));
-        let y=0;const owners=[];
-        list.forEach(e=>{placed.push({n:e.n,rx:cx,ry:y});owners.push({ref:e.n.ref,ry:y});y+=e.h+ROWGAP;});
-        hh=Math.max(hh,y-ROWGAP);cx+=w+COLGAP;
-        const sub=[];owners.forEach(o=>{const cs=codeByOwner.get(o.ref);if(cs)cs.forEach(cn=>sub.push({cn,wantY:o.ry,ch:sz(cn).h}));});
-        if(sub.length){sub.sort((a,b)=>a.wantY-b.wantY);let cw=120,cursor=0;
-          sub.forEach(it=>{cw=Math.max(cw,sz(it.cn).w);const yy=Math.max(it.wantY,cursor);
-            placed.push({n:it.cn,rx:cx,ry:yy});cursor=yy+it.ch+ROWGAP;hh=Math.max(hh,yy+it.ch);});cx+=cw+COLGAP;}});
-      if(orphan.length){let cw=120,y=0;orphan.forEach(cn=>{const s=sz(cn);cw=Math.max(cw,s.w);
-        placed.push({n:cn,rx:cx,ry:y});y+=s.h+ROWGAP;hh=Math.max(hh,y-ROWGAP);});cx+=cw+COLGAP;}
-      return {placed,w:Math.max(0,cx-COLGAP),h:Math.max(0,hh)};
+      const byRole=new Map(colRoles.map(r=>[r,[]]));rest.forEach(n=>byRole.get(rawOf(n)).push(n));
+      // Belegung je Spalte (Zeilen-Set) + Zeile je Knoten.
+      const belegt=new Map(colRoles.map(r=>[r,new Set()])), zeile=new Map();
+      const frei=(role,z,len)=>{const b=belegt.get(role);for(let i=0;i<len;i++)if(b.has(z+i))return false;return true;};
+      const setzeZ=(role,n,z,len)=>{const b=belegt.get(role);for(let i=0;i<len;i++)b.add(z+i);zeile.set(n.id,z);};
+      const ab=(role,z,len)=>{while(!frei(role,z,len))z++;return z;};
+      const imBlock=new Set(rest.map(n=>n.id));
+      const nachbarZ=id=>[...(ADJ.inn.get(id)||[]),...(ADJ.out.get(id)||[])].filter(x=>imBlock.has(x)&&zeile.has(x)).map(x=>zeile.get(x));
+      // Wunschzeile: Event → sein Applier (sonst der erzeugende Decider); sonst die oberste Zeile eines platzierten Nachbarn.
+      const wunsch=n=>{if(n.kind==="event"){const ap=(ADJ.out.get(n.id)||[]).filter(x=>x.startsWith("app:")&&zeile.has(x)).map(x=>zeile.get(x));if(ap.length)return Math.min(...ap);}
+        const z=nachbarZ(n.id);return z.length?Math.min(...z):null;};
+      const zweiHop=n=>{let best=null;[n.id,...(ADJ.inn.get(n.id)||[]),...(ADJ.out.get(n.id)||[])].forEach(x=>nachbarZ(x).forEach(z=>{if(best===null||z<best)best=z;}));return best;};
+      // (1) Besitzer-Spalten zuerst, lückenlos gestapelt (Reihenfolge: nahe an bereits platzierten Nachbarn, sonst Modell-Reihenfolge).
+      //   Die Store-Fn-Spalte zuletzt: sie richtet sich an ihren Aufrufern aus (Projektions- UND Reader-Handles).
+      const fnRolle=roleMap.fn;
+      [...colRoles.filter(r=>r!==fnRolle),...colRoles.filter(r=>r===fnRolle)].forEach(role=>{const own=byRole.get(role).filter(n=>PL.has(n.id));if(!own.length)return;
+        const key=new Map(own.map((n,i)=>[n.id,[zweiHop(n)??1e9,i]]));
+        own.sort((a,b)=>{const A=key.get(a.id),B=key.get(b.id);return A[0]-B[0]||A[1]-B[1];});
+        // Store-Fns stehen auf der Höhe ihres ersten Aufrufers (freie Zeile ab dort); alle anderen Besitzer lückenlos.
+        let z=0;own.forEach(n=>{const len=hoehe(n),k=key.get(n.id)[0];
+          if(role===fnRolle&&k<1e9){setzeZ(role,n,ab(role,k,len),len);return;}
+          z=ab(role,z,len);setzeZ(role,n,z,len);z+=len;});});
+      // (2) übrige Knoten je Spalte in Rollen-Reihenfolge: in ihre Wunschzeile (erste freie ab dort), sonst ans Ende.
+      colRoles.forEach(role=>{const rest2=byRole.get(role).filter(n=>!zeile.has(n.id));
+        const w=new Map(rest2.map(n=>[n.id,wunsch(n)]));
+        const mit=rest2.filter(n=>w.get(n.id)!==null).sort((a,b)=>w.get(a.id)-w.get(b.id)), ohneW=rest2.filter(n=>w.get(n.id)===null);
+        mit.forEach(n=>setzeZ(role,n,ab(role,w.get(n.id),1),1));
+        let z=0;ohneW.forEach(n=>{z=ab(role,z,1);setzeZ(role,n,z,1);z++;});});
+      // Spalten → x; Code/LLM eingerückt unter dem Besitzer.
+      let cx=0,maxZ=0;const placed=[];
+      colRoles.forEach(role=>{let w=120;
+        byRole.get(role).forEach(n=>{const z=zeile.get(n.id),s=sz(n);placed.push({n,rx:cx,ry:z*ZEILE});
+          // Besitzer: Breite für die Einrückung von Code UND LLM immer reservieren — ein neuer 🤖 verschiebt keine Spalte.
+          w=Math.max(w,s.w+(PL.has(n.id)?(llmAn?2:1)*EINZUG:0));
+          let zz=z+1;(PL.get(n.id)||[]).forEach(c=>{
+            if(c){placed.push({n:c,rx:cx+EINZUG,ry:zz*ZEILE});w=Math.max(w,sz(c).w+EINZUG);}
+            zz++;if(!llmAn)return;
+            const ls=c?(llmByCode.get(c.ref._id)||[]):[];
+            ls.forEach((l,i)=>{placed.push({n:l,rx:cx+2*EINZUG,ry:(zz+i)*ZEILE});w=Math.max(w,sz(l).w+2*EINZUG);});
+            zz+=Math.max(1,ls.length);});
+          maxZ=Math.max(maxZ,zz);});
+        cx+=w+COLGAP;});
+      // Code-Blöcke ohne Besitzer (frei angelegt) + LLM-Knoten ohne Block: eigene Spalte, ebenfalls im Raster.
+      const orphan=codes.filter(c=>!genutzt.has(c.ref._id));
+      if(orphan.length||orphanLlm.length){let w=120,z=0;
+        orphan.forEach(c=>{placed.push({n:c,rx:cx,ry:z*ZEILE});w=Math.max(w,sz(c).w);z++;
+          (llmByCode.get(c.ref._id)||[]).forEach(l=>{placed.push({n:l,rx:cx+EINZUG,ry:z*ZEILE});w=Math.max(w,sz(l).w+EINZUG);z++;});});
+        orphanLlm.forEach(l=>{placed.push({n:l,rx:cx,ry:z*ZEILE});w=Math.max(w,sz(l).w);z++;});
+        maxZ=Math.max(maxZ,z);cx+=w+COLGAP;}
+      return {placed,w:Math.max(0,cx-COLGAP),h:Math.max(0,maxZ*ZEILE-ZGAP)};
     };
     // Shelf-Packing über {w,h,…}-Boxen; setzt rx/ry; liefert Gesamtmaße.
     const shelf=(boxes,gap,factor)=>{const area=boxes.reduce((s,b)=>s+b.w*b.h,0),maxW=Math.max(1,...boxes.map(b=>b.w));
@@ -1605,18 +1823,17 @@ public static class HtmlPresenter
     if(islandNodes.length){const IW=Math.max(700,total.w);let ix=0,iy=total.h+COMPGAP,rh=0;
       islandNodes.forEach(n=>{const s=sz(n);if(ix>0&&ix+s.w>IW){iy+=rh+ROWGAP;ix=0;rh=0;}
         setze(n,ix,iy);ix+=s.w+COLGAP;rh=Math.max(rh,s.h);});}
-    if(VIEW.kompakt)speichereKpos();
+    LAY.__sig=sig;if(VIEW.kompakt)speichereKpos();
   }
-  // Eingeklappt? Kompakt-Ansicht: standardmäßig zu (nur `_offen` klappt auf); Voll-Ansicht: nur `_collapsed` klappt zu.
-  const istZu=n=>VIEW.kompakt?!n.ref._offen:!!n.ref._collapsed;
+  // Karten auf der Fläche sind immer kompakt (Kopf + Kurzfassung); das Formular lebt im Panel.
+  const istZu=()=>true;   // Karten sind immer kompakt — bearbeitet wird im Panel
   function nodeEditor(n){
     const zu=istZu(n);
     const el=h("div",{class:"gnode2 n-"+n.kind+(zu?" collapsed":"")+(ISLE.has(n.id)?" island":"")
-      +(n.kind==="codenode"&&vorschlagFuer(n.ref._id)?" llmvor":"")+(n.ref.ungeschrieben?" ungeschrieben":(n.ref.ausCode===false||(n.ref.ausCode===undefined&&MERGE_KEYS[kollektionVon(n.kind)])?" entwurf":""))});el.dataset.id=n.id;
+      +(n.kind==="codenode"&&vorschlagFuer(n.ref._id)?" llmvor":"")+((n.own?n.own.ref:n.ref).ungeschrieben?" ungeschrieben":((m=>m.ausCode===false||(m.ausCode===undefined&&MERGE_KEYS[kollektionVon(n.own?n.own.kind:n.kind)]))(n.own?n.own.ref:n.ref)?" entwurf":""))});el.dataset.id=n.id;
     const pos=P(n);el.style.left=(pos.x||0)+"px";el.style.top=(pos.y||0)+"px";
     const title=NODELABEL[n.kind]||n.kind;
     const head=h("div",{class:"ghead"},
-      h("span",{class:"gcol",title:"Ein-/Ausklappen",onclick:()=>{if(VIEW.kompakt)n.ref._offen=!n.ref._offen;else n.ref._collapsed=!n.ref._collapsed;render();}},zu?"▸":"▾"),
       h("span",{class:"gtitle"+(n.name?" hatname":""),title:title+(n.name?" · "+n.name:"")},h("span",{class:"gk"},title+(n.name?" · ":"")),h("span",{class:"gn"},n.name||"")),
       h("span",{class:"gx",title:"Löschen",onclick:()=>delNode(n)},"✕"));
     head.onpointerdown=e=>{if(e.target.classList.contains("gx")||e.target.classList.contains("gcol"))return;startMove(e,el,P(n),()=>waehle(n.id));};
@@ -1647,6 +1864,8 @@ public static class HtmlPresenter
     else if(n.kind==="hostsetting")hostSettingCard(body,n.ref);
     else if(n.kind==="codenode")codeNodeCard(body,n.ref);
     else if(n.kind==="llmnode")llmNodeCard(body,n.ref);
+    else if(n.kind==="handle")handleCard(body,n);
+    else if(n.kind==="fn")fnCard(body,n);
     else recordCard(body,n.ref);
   }
   function delNode(n){const k=n.kind,ref=n.ref;
@@ -1669,6 +1888,9 @@ public static class HtmlPresenter
     else if(k==="hostsetting")MODEL.hostSettings.splice(MODEL.hostSettings.indexOf(ref),1);
     else if(k==="codenode")MODEL.codeNodes.splice(MODEL.codeNodes.indexOf(ref),1);
     else if(k==="llmnode")MODEL.llmNodes.splice(MODEL.llmNodes.indexOf(ref),1);
+    else if(k==="handle"){const hs=n.own.ref.handles||[];hs.splice(hs.indexOf(ref),1);}
+    else if(k==="fn"){const st=n.own.ref;["writeFns","readFns"].forEach(a=>{const i=(st[a]||[]).indexOf(ref);if(i>=0)st[a].splice(i,1);});
+      MODEL.projektionen.concat(MODEL.reader,MODEL.pipelines).forEach(o=>(o.handles||[]).forEach(hd=>{hd.fns=(hd.fns||[]).filter(x=>x!==ref._id);}));}
     else MODEL.records.splice(MODEL.records.indexOf(ref),1);
     render();}
 
@@ -1690,8 +1912,23 @@ public static class HtmlPresenter
     const old=canvas.querySelector(".gfilter");if(old)old.remove();
     if(!FILTER_OPEN)return;
     const p=h("div",{class:"gfilter"});
-    p.append(h("h4",{},h("span",{},"Domänen anzeigen"),
+    // (1) Knotenarten ausblenden — z. B. 🤖 LLM, 📝 Code, Ablehnungen, Value Objects. Ausgeblendete Arten reservieren im Raster nichts.
+    const zahl=new Map();graphNodes().forEach(n=>zahl.set(n.kind,(zahl.get(n.kind)||0)+1));
+    // 📝 Code und 🤖 LLM immer anbieten (auch bevor es einen 🤖-Knoten gibt) — sonst nur Arten, die im Modell vorkommen.
+    const arten=Object.keys(NODELABEL).filter(k=>zahl.has(k)||k==="codenode"||k==="llmnode").concat([...zahl.keys()].filter(k=>!NODELABEL[k]));
+    const MENU={codenode:"📝 Code",llmnode:"🤖 LLM"};
+    p.append(h("h4",{},h("span",{},"👁 Knotenarten"),
       h("span",{style:"cursor:pointer;color:#8a93a7",title:"Schließen",onclick:()=>{FILTER_OPEN=false;renderFilterPanel();}},"✕")));
+    p.append(h("div",{class:"mm-q"},
+      h("button",{onclick:()=>{VIEW.aus=[];speichereAnsicht();render();}},"Alle"),
+      h("button",{title:"Nur die Fachknoten — 📝 Code und 🤖 LLM ausblenden",onclick:()=>{VIEW.aus=["codenode","llmnode"];speichereAnsicht();render();}},"Ohne Code")));
+    arten.forEach(k=>{const cb=h("input",{type:"checkbox"});cb.checked=!istAus(k);
+      cb.onchange=()=>setzeAus(k,!cb.checked);
+      p.append(h("label",{},cb,h("i",{class:"kc-"+k,style:"width:9px;height:9px;border-radius:50%;flex:none;display:inline-block"}),
+        h("span",{style:"flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap"},MENU[k]||NODELABEL[k]||k),
+        h("span",{style:"color:#6b7488"},String(zahl.get(k)||0))));});
+    // (2) Domänen.
+    p.append(h("h4",{style:"margin-top:10px"},h("span",{},"🗂 Domänen")));
     p.append(h("div",{class:"mm-q"},
       h("button",{onclick:()=>{HIDDEN.clear();saveHidden();render();}},"Alle"),
       h("button",{onclick:()=>{allDomains().forEach(d=>HIDDEN.add(d.key));saveHidden();render();}},"Keine")));
@@ -1758,23 +1995,6 @@ public static class HtmlPresenter
     return {x:(r.left+r.width/2-wr.left)/PAN.s,y:(r.top+r.height/2-wr.top)/PAN.s};}
   const bez=(x1,y1,x2,y2)=>{const dx=Math.max(46,Math.abs(x2-x1)*0.5);return "M"+x1+","+y1+" C"+(x1+dx)+","+y1+" "+(x2-dx)+","+y2+" "+x2+","+y2;};
 
-  // Verbinden per Slot-Drag (Gummiband + Typprüfung, dann MODEL mutieren).
-  function startLink(e,from){
-    const path=document.createElementNS(SVGNS,"path");path.setAttribute("class","glink tmp");
-    path.setAttribute("fill","none");path.setAttribute("stroke","#cbb8ff");path.setAttribute("stroke-width","2.4");path.setAttribute("stroke-dasharray","5 4");
-    svg.append(path);const a=slotCenter(from);
-    // Gültige Ziele sofort sichtbar: ALLE kompatiblen Slots grün ringeln (so sieht man, wohin ein Feld darf — und wohin nicht).
-    const cands=Object.values(SLOTS).filter(s=>s&&s!==from&&compatible(from,s));cands.forEach(s=>s.classList.add("cand"));
-    const clear=()=>{cands.forEach(s=>s.classList.remove("cand"));document.querySelectorAll("#de .slot.hot").forEach(x=>x.classList.remove("hot"));};
-    const mv=ev=>{const b=toWorld(ev.clientX,ev.clientY);path.setAttribute("d",bez(a.x,a.y,b.x,b.y));
-      document.querySelectorAll("#de .slot.hot").forEach(x=>x.classList.remove("hot"));
-      const t=hitSlot(ev.clientX,ev.clientY);if(t&&compatible(from,t))t.classList.add("hot");};
-    const up=ev=>{window.removeEventListener("pointermove",mv);window.removeEventListener("pointerup",up);
-      path.remove();clear();
-      const t=hitSlot(ev.clientX,ev.clientY);if(t&&compatible(from,t))applyLink(from,t);};
-    window.addEventListener("pointermove",mv);window.addEventListener("pointerup",up);
-  }
-  function hitSlot(cx,cy){let el=document.elementFromPoint(cx,cy);while(el&&!el.__slot)el=el.parentElement;return el&&el.__slot?el:null;}
   function compatible(a,b){const A=a.__slot,B=b.__slot;if(!A||!B)return false;if(A.dir===B.dir)return false;if(A.type!==B.type)return false;
     if((A.kind==="arg")!==(B.kind==="arg"))return false;              // Argument-Pin nur an Argument-Pin
     if(A.kind==="arg"&&A.trans!==B.trans)return false;                 // und nur innerhalb derselben Transition
@@ -1837,7 +2057,7 @@ public static class HtmlPresenter
     // Projektion-Handle ruft eine Write-Fn (Store-Scope fällt daraus ab) — anhängen, dedup.
     else if(O.type==="wcall"){const p=MODEL.projektionen.find(x=>x._id===O.proj);const hd=p&&p.handles[O.handleIdx];if(hd){hd.fns=hd.fns||[];if(!hd.fns.includes(I.fn))hd.fns.push(I.fn);}}
     // Reader-Handle ruft eine Read-Fn (auch über mehrere Stores) — anhängen, dedup.
-    else if(O.type==="rcall"){const r=MODEL.reader.find(x=>x._id===O.reader);const hd=r&&r.handles[O.handleIdx];if(hd){hd.fns=hd.fns||[];if(!hd.fns.includes(I.fn))hd.fns.push(I.fn);}}
+    else if(O.type==="rcall"){const r=O.pipeline?MODEL.pipelines.find(x=>x._id===O.pipeline):MODEL.reader.find(x=>x._id===O.reader);const hd=r&&r.handles[O.handleIdx];if(hd){hd.fns=hd.fns||[];if(!hd.fns.includes(I.fn))hd.fns.push(I.fn);}}
     // IReader<TProjection>: Reader → genau eine Projektion binden.
     else if(O.type==="projref"){const r=MODEL.reader.find(x=>x._id===O.reader);const p=MODEL.projektionen.find(x=>x._id===I.proj);if(r&&p)r.projektion=p.name;}
     else if(O.type==="query"){const r=MODEL.reader.find(x=>x._id===I.reader);if(r){r.handles=r.handles||[];
@@ -1864,6 +2084,129 @@ public static class HtmlPresenter
     render();
   }
 
+  // Verbindung LÖSEN — das Gegenstück zu applyLink (gleiche Port-Typen, gleiche Modell-Felder, nur rückwärts).
+  function loeseLink(a,b){
+    const O=a.__slot.dir==="out"?a.__slot:b.__slot, I=a.__slot.dir==="out"?b.__slot:a.__slot;
+    const ohne=(arr,x)=>(arr||[]).filter(v=>v!==x);
+    const handle=(liste,id,idx)=>{const o=liste.find(x=>x._id===id);return o&&typeof idx==="number"?(o.handles||[])[idx]:null;};
+    if(O.type==="cmd"){const d=dec(I.dec);if(d&&d.command===O.rec)d.command="";}
+    else if(O.type==="evtOut"){
+      if(O.dec){const d=dec(O.dec);if(d)d.ergibt=(d.ergibt||[]).filter(x=>x.event!==I.rec);}
+      else{const hd=handle(O.proj?MODEL.projektionen:MODEL.reaktionen,O.proj||O.reaktion,O.handleIdx);if(hd)hd.publishes=ohne(hd.publishes,I.rec);}}
+    else if(O.type==="prozess"){const t=MODEL.transitions.find(x=>x._id===O.trans);if(t)t.prozess="";}
+    else if(O.type==="evtUse"){
+      if(I.app){const p=app(I.app);if(p)p.event="";}
+      else if(I.frist){const f=MODEL.frists.find(x=>x._id===I.frist);if(f){if(I.role==="storniert")f.storniert=ohne(f.storniert,O.rec);else f.plant=ohne(f.plant,O.rec);}}
+      else if(I.trigger){const sg=MODEL.sagas.find(x=>x.name===I.saga);if(sg)sg.triggerEvent="";}
+      else if(I.trans){const t=MODEL.transitions.find(x=>x._id===I.trans);if(t)t.wenn=ohne(t.wenn,O.rec);}
+      else if(I.proj){const p=MODEL.projektionen.find(x=>x._id===I.proj);if(p)p.handles=(p.handles||[]).filter(h=>h.event!==O.rec);}
+      else if(I.reaktion){const r=MODEL.reaktionen.find(x=>x._id===I.reaktion);if(r)r.handles=(r.handles||[]).filter(h=>h.event!==O.rec);}
+      else if(I.pipeline){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p)p.handles=(p.handles||[]).filter(h=>!(h.inputKind==="event"&&h.event===O.rec));}}
+    else if(O.type==="sagaCmd"){
+      if(O.reaktion||O.pipeline){const hd=handle(O.reaktion?MODEL.reaktionen:MODEL.pipelines,O.reaktion||O.pipeline,O.handleIdx);if(hd)hd.sends=ohne(hd.sends,I.rec);}
+      else if(O.frist){const f=MODEL.frists.find(x=>x._id===O.frist);if(f)f.sendet="";}
+      else{const t=MODEL.transitions.find(x=>x._id===O.trans);const d=t&&(t.dann||[])[O.dannIdx];
+        if(d){if(O.role==="komp"){delete d.kompensation;delete d.kompensationAusdruck;}else{d.sende="";delete d.sendeAusdruck;}}}}
+    else if(O.type==="trigmsg"){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p&&typeof I.handleIdx==="number")p.handles.splice(I.handleIdx,1);}
+    else if(O.type==="self"){const hd=handle(MODEL.pipelines,I.pipeline,I.handleIdx);if(hd)hd.selfName="";}
+    else if(O.type==="decAgg"){const d=dec(O.dec);if(d)d.aggregat="";}
+    else if(O.type==="appAgg"){const p=app(O.app);if(p)p.aggregat="";}
+    else if(O.type==="readmodel"){const rm=MODEL.readModels.find(x=>x._id===O.rm);if(rm)rm.store="";}
+    else if(O.type==="wcall"){const hd=handle(MODEL.projektionen,O.proj,O.handleIdx);if(hd)hd.fns=ohne(hd.fns,I.fn);}
+    else if(O.type==="rcall"){const hd=O.pipeline?handle(MODEL.pipelines,O.pipeline,O.handleIdx):handle(MODEL.reader,O.reader,O.handleIdx);if(hd)hd.fns=ohne(hd.fns,I.fn);}
+    else if(O.type==="projref"){const r=MODEL.reader.find(x=>x._id===O.reader);if(r)r.projektion="";}
+    else if(O.type==="query"){const r=MODEL.reader.find(x=>x._id===I.reader);if(r)r.handles=(r.handles||[]).filter(h=>h.query!==O.rec);}
+    else if(O.type==="qrsp"){const hd=handle(MODEL.reader,O.reader,O.handleIdx);if(hd)hd.responses=ohne(hd.responses,I.rec);}
+    else if(O.type==="code"){setCodeSrc(I.target,null);}
+    else if(O.type==="prompt"){const l=MODEL.llmNodes.find(x=>x._id===O.llm);if(l){l.promptZiel=null;delete l.promptSlot;}}
+    else if(O.type==="setting"){if(I.frist){const f=MODEL.frists.find(x=>x._id===I.frist);if(f)f.dauerSetting="";}}
+    else if(O.type==="dienst"){const dn=MODEL.dienste.find(x=>x._id===O.dienst)||{};const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p)p.dienste=ohne(p.dienste,dn.vertrag||dn.name);}
+    else if(O.type==="state"){const st=MODEL.states.find(x=>x._id===O.state);if(st)st.aggregat="";}
+    else{deFlash("Diese Verbindung lässt sich hier nicht lösen — im Formular ändern.",false);return;}
+    render();
+  }
+
+  // ══ VERBINDEN-MODUS (Hybrid, docs/konzept-editor-panel-bearbeitung.md §3.3): Port im Panel anklicken → alle PASSENDEN
+  //   Knoten leuchten auf dem Graphen (Ablauf-Ansicht, Rest abgeblendet) → Karte anklicken = verbinden, ✓-Karte = lösen.
+  //   Einfache Ports enden nach einem Klick, Listen-Ports bleiben offen bis Esc/Fertig. Typregel: compatible().
+  let VB=null;   // {key, label, einzel, filter}
+  function vbQuelle(){const i=canvas&&canvas.querySelector(".ginsp");return VB&&i?[...i.querySelectorAll(".slot")].find(x=>x.__key===VB.key)||null:null;}
+  function vbKandidaten(q){const m=new Map();Object.values(SLOTS).forEach(x=>{if(!x||!compatible(q,x))return;const id=knotenIdVon(x);if(!id)return;
+    if(!m.has(id))m.set(id,[]);m.get(id).push(x);});return m;}
+  // Verbunden? Eine gezeichnete Kante zwischen dem Kandidaten-Port und einem Port DIESES Knotens mit demselben Typ.
+  //   Genau dieser Port (gleicher Schlüssel) — nur „offene" Sammel-Ports (…:open, z. B. „+ Ausgang") zählen knotenweit.
+  function vbPartner(q,x){const offen=/:open\b|open(evt|trg)?$/.test(q.__key);
+    for(const [k1,k2] of KANTEN){const o=k1===x.__key?k2:(k2===x.__key?k1:null);if(!o)continue;
+      if(o===q.__key)return SLOTS[o]||q;
+      const e=SLOTS[o];if(offen&&e&&knotenIdVon(e)===SEL&&e.__slot.type===q.__slot.type&&e.__slot.dir===q.__slot.dir&&e.__slot.handleIdx===q.__slot.handleIdx)return e;}
+    return null;}
+  // Lesbarer Name eines Ports: Beschriftung + Werte der Eingabefelder seiner Zeile (z. B. der Name einer Store-Funktion).
+  const slotLabel=x=>{const r=x.closest(".slotrow,.gtopfield,.frow");if(!r)return x.__slot.type;
+    const werte=[...r.querySelectorAll("input,select")].map(i=>i.value).filter(Boolean);
+    const text=(r.textContent||"").replace(/[✕▶◀▲]/g," ");
+    return (werte.join(" ")+" "+text).replace(/\s+/g," ").trim().slice(0,60)||x.__slot.type;};
+  // Hält der Port EINEN Wert (Decider→Command, Applier→Event …)? Dann endet der Modus nach einem Klick.
+  function istEinzel(I){const t=I.type,d=I.dir;
+    if(t==="cmd")return d==="in";
+    if(t==="prozess"||t==="decAgg"||t==="appAgg"||t==="projref"||t==="readmodel"||t==="state"||t==="prompt")return d==="out";
+    if(t==="code"||t==="setting"||t==="ftype"||t==="self")return d==="in";
+    if(t==="evtUse")return d==="in"&&(!!I.app||!!I.trigger||typeof I.handleIdx==="number"||typeof I.wennIdx==="number");
+    if(t==="sagaCmd")return d==="out"&&(!!I.frist||!!I.trans);
+    if(t==="trigmsg")return d==="in"&&typeof I.handleIdx==="number";
+    return false;}
+  // ⊕ anklicken = Modus an (derselbe ⊕ nochmal = aus). Beenden auch mit Esc oder Klick ins Leere.
+  function vbStart(x){if(!x.__key)return;if(VB&&VB.key===x.__key){vbEnde();return;}
+    if(VIEW.lod==="karte")setzeLod("ablauf");VB={key:x.__key,label:slotLabel(x),einzel:istEinzel(x.__slot)};vbZeige(true);}
+  function vbEnde(){VB=null;if(!world)return;world.classList.remove("vbmodus");if(canvas)canvas.classList.remove("vbaktiv");
+    world.querySelectorAll(".vb-kand,.vb-verb,.vb-quelle").forEach(e=>e.classList.remove("vb-kand","vb-verb","vb-quelle"));
+    canvas.querySelectorAll(".gvbwahl").forEach(e=>e.remove());canvas.querySelectorAll(".ginsp .slot.vb-aktiv").forEach(e=>e.classList.remove("vb-aktiv"));}
+  function vbZeige(einpassen){if(!VB||!world||!canvas)return;const q=vbQuelle();if(!q){vbEnde();return;}
+    const K=vbKandidaten(q);VB.K=K;
+    world.classList.add("vbmodus");canvas.classList.add("vbaktiv");q.classList.add("vb-aktiv");
+    // Aktiven Port im (verkleinerten) Panel sichtbar halten.
+    const insp=q.closest(".ginsp");if(insp){const d=q.getBoundingClientRect().top-insp.getBoundingClientRect().top;if(d<0||d>insp.clientHeight-30)insp.scrollTop+=d-40;}
+    world.querySelectorAll(".gnode2").forEach(el=>{const id=el.dataset.id,xs=K.get(id);
+      const passt=!!xs;
+      el.classList.toggle("vb-kand",passt);el.classList.toggle("vb-verb",passt&&xs.some(x=>vbPartner(q,x)));el.classList.toggle("vb-quelle",id===SEL);});
+    if(!K.size)deFlash("Keine passenden Knoten für diesen Anschluss.",false);
+    if(einpassen){const cr=canvas.getBoundingClientRect(),imBild=[...K.keys()].some(id=>{const el=world.querySelector('[data-id="'+id+'"]');if(!el)return false;
+      const r=el.getBoundingClientRect();return r.right>cr.left&&r.left<cr.right&&r.bottom>cr.top&&r.top<cr.bottom;});
+      if(!imBild)vbEinpassen([...K.keys()].filter(id=>VIS.has(id)));}}
+  // Einpassen: die dem gewählten Knoten NÄCHSTEN Kandidaten — so viele, wie in die Ablauf-Ansicht (Zoom ≥ 0,4) passen.
+  function vbEinpassen(ids){if(!ids.length||!canvas||!world)return;
+    const box=id=>{const n=NODEBY.get(id),el=world.querySelector('[data-id="'+id+'"]');if(!n||!el)return null;const p=P(n);
+      return {x:p.x||0,y:p.y||0,w:el.offsetWidth,h:el.offsetHeight};};
+    const q=SEL&&box(SEL),cr=canvas.getBoundingClientRect(),pad=60,MIN=0.4;
+    const mitte=b=>({x:b.x+b.w/2,y:b.y+b.h/2}),mq=q?mitte(q):null;
+    const liste=ids.map(id=>({id,b:box(id)})).filter(e=>e.b)
+      .sort((a,b)=>{if(!mq)return 0;const A=mitte(a.b),B=mitte(b.b);return Math.hypot(A.x-mq.x,A.y-mq.y)-Math.hypot(B.x-mq.x,B.y-mq.y);});
+    let x1=q?q.x:1e9,y1=q?q.y:1e9,x2=q?q.x+q.w:-1e9,y2=q?q.y+q.h:-1e9;const wahl=q?[SEL]:[];
+    for(const e of liste){const nx1=Math.min(x1,e.b.x),ny1=Math.min(y1,e.b.y),nx2=Math.max(x2,e.b.x+e.b.w),ny2=Math.max(y2,e.b.y+e.b.h);
+      const sk=Math.min((cr.width-2*pad)/Math.max(1,nx2-nx1),(cr.height-2*pad)/Math.max(1,ny2-ny1));
+      if(sk<MIN&&wahl.length>(q?1:0))break;x1=nx1;y1=ny1;x2=nx2;y2=ny2;wahl.push(e.id);}
+    passeEin(wahl,0.74,MIN);}
+  function vbKlick(id){const q=vbQuelle();if(!q){vbEnde();return;}const xs=(VB.K&&VB.K.get(id))||[];
+    if(!xs.length){vbEnde();waehle(id);return;}   // nicht passend → Modus aus, diese Karte auswählen
+    if(xs.length===1){vbSchalte(q,xs[0]);return;}
+    // Mehrere passende Ports an EINER Karte (z. B. Store mit mehreren Write-Fns) → kleine Auswahl an der Karte.
+    canvas.querySelectorAll(".gvbwahl").forEach(e=>e.remove());
+    const el=world.querySelector('[data-id="'+id+'"]'),cr=canvas.getBoundingClientRect(),r=el.getBoundingClientRect();
+    const box=h("div",{class:"gvbwahl"},h("div",{class:"gpick-t"},"Welcher Anschluss?"),
+      ...xs.map(x=>h("button",{onclick:()=>{box.remove();vbSchalte(vbQuelle(),x);}},(vbPartner(q,x)?"✓ ":"")+slotLabel(x))));
+    box.style.left=(r.right-cr.left+6)+"px";box.style.top=(r.top-cr.top)+"px";
+    ["pointerdown","click"].forEach(ev=>box.addEventListener(ev,e=>e.stopPropagation()));canvas.append(box);}
+  // Ein NEUER, bisher unverbundener Knoten (Gruppe „geteilt") zieht beim ersten Verbinden in die Spalte seiner Gruppe um.
+  //   Etablierte Knoten bleiben stehen (kein Springen beim Umschalten); kein Voll-Render — nur neu platzieren + Kanten.
+  function mitUmzug(ids,aendern){const gruppe=id=>{const n=graphNodes().find(m=>m.id===id);return n?groupKeyOf(n):null;};
+    const vorher=ids.map(gruppe);aendern();
+    const weg=ids.filter((id,i)=>id&&vorher[i]===SHARED_KEY&&gruppe(id)!==SHARED_KEY);if(!weg.length)return;
+    const L=KPOS[VIEW.details?"d":"k"]||{};weg.forEach(id=>{delete L[id];const n=graphNodes().find(m=>m.id===id);if(n){delete n.ref.x;delete n.ref.y;delete n.ref._kpos;}});
+    packLayout();drawEdges();drawMinimap();}
+  function vbSchalte(q,x){if(!q||!x)return;const partner=vbPartner(q,x),ziel=knotenIdVon(x);
+    // Bei Einzel-Ports hängt der BISHERIGE Partner mit dran (dessen Karte verliert ihr ✓ / ihre Kante).
+    const alt=VB&&VB.einzel?[...(VB.K||new Map()).entries()].filter(([,xs])=>xs.some(y=>vbPartner(q,y))).map(([id])=>id):[];
+    mitUmzug([SEL,ziel],()=>imModus([SEL,ziel,...alt],()=>{if(partner)loeseLink(partner,x);else applyLink(q,x);}));
+    vbZeige(false);}
   // Kanten aus dem MODEL zeichnen (Slot-Mitte → Slot-Mitte; eingeklappt → an den Kopf).
   //   Eingeklappt: an die passende KOPF-SEITE (Ausgang rechts, Eingang links, oben mittig) statt in die Kopfmitte.
   function anchor(el){if(el.offsetParent!==null)return slotCenter(el);const nd=el.closest(".gnode2");const hd=nd&&nd.querySelector(".ghead");
@@ -1872,16 +2215,19 @@ public static class HtmlPresenter
   // Anschlussseite eines Slots: rechts (.o)=+1, links (.i)=-1, oben/sonst=0.
   const sdir=el=>el&&el.classList.contains("o")?1:(el&&el.classList.contains("i")?-1:0);
   const knotenIdVon=el=>{const g=el&&el.closest(".gnode2");return g?g.dataset.id:"";};
+  let KANTEN=[];   // gezeichnete Port-Paare [schlüsselA, schlüsselB] — Grundlage für ✓/Lösen im Verbinden-Modus
   function drawEdges(){
-    if(!svg)return;[...svg.querySelectorAll(".glink:not(.tmp)")].forEach(p=>p.remove());
+    if(!svg)return;KANTEN=[];[...svg.querySelectorAll(".glink:not(.tmp)")].forEach(p=>p.remove());
     if(svgTop)[...svgTop.querySelectorAll(".glink")].forEach(p=>p.remove());
+    // Pfade sammeln und erst am Ende einhängen: Lesen (Anker) und Schreiben (DOM) nicht verschränken → ein Layout statt Hunderte.
+    const fSvg=document.createDocumentFragment(),fTop=document.createDocumentFragment();
     // Kurve mit Anschlussrichtung je Ende (da/db: +1 tritt nach rechts aus, -1 nach links).
     const mk=(A,B,da,db,color,dash,cls,ds,tgt)=>{const dx=Math.max(46,Math.abs(B.x-A.x)*0.5);
       const p=document.createElementNS(SVGNS,"path");p.setAttribute("class","glink"+(cls?" "+cls:""));p.setAttribute("fill","none");
       p.setAttribute("stroke",color);p.setAttribute("stroke-width","2.2");if(dash)p.setAttribute("stroke-dasharray","5 4");
       if(ds){p.dataset.dec=ds[0];p.dataset.app=ds[1];}
-      p.setAttribute("d","M"+A.x+","+A.y+" C"+(A.x+da*dx)+","+A.y+" "+(B.x+db*dx)+","+B.y+" "+B.x+","+B.y);(tgt||svg).append(p);return p;};
-    const add=(k1,k2,color,dash)=>{const a=SLOTS[k1],b=SLOTS[k2];if(!a||!b)return;const A=anchor(a),B=anchor(b);
+      p.setAttribute("d","M"+A.x+","+A.y+" C"+(A.x+da*dx)+","+A.y+" "+(B.x+db*dx)+","+B.y+" "+B.x+","+B.y);((tgt||svg)===svg?fSvg:fTop).append(p);return p;};
+    const add=(k1,k2,color,dash)=>{const a=SLOTS[k1],b=SLOTS[k2];if(!a||!b)return;KANTEN.push([k1,k2]);const A=anchor(a),B=anchor(b);
       let da=sdir(a),db=sdir(b);if(!da)da=B.x>=A.x?1:-1;if(!db)db=A.x>=B.x?1:-1;
       const p=mk(A,B,da,db,color,dash);p.dataset.a=knotenIdVon(a);p.dataset.b=knotenIdVon(b);};
     MODEL.decider.forEach(d=>{
@@ -1957,9 +2303,11 @@ public static class HtmlPresenter
       else if(hd.inputKind==="event"&&hd.event)add("evt:out:"+hd.event,"pl:in:"+p._id+":"+hi,"#4fb06a");
       // yield ICommand.
       (hd.sends||[]).forEach(c=>{if(c)add("pl:send:"+p._id+":"+hi+":"+c,"cmd:in:"+c,"#4a86d6");});
+      // Fähigkeit (Read-Fn als Parameter) → Store-Fn.
+      (hd.fns||[]).forEach(fid=>{const f=fnById(fid);if(f)add("rcall:out:pl:"+p._id+":"+hi+":"+fid,"rcall:in:"+f.store._id+":"+fid,"#c08a3e");});
       // yield IPipelineTrigger → verbrauchende Pipeline (die Kette, z. B. FileWatch → ImageProcessing).
       (hd.emits||[]).forEach(tn=>MODEL.pipelines.forEach(q=>{if(q._id!==p._id)(q.handles||[]).forEach((qh,qi)=>{if(qh.inputKind==="trigger"&&qh.input===tn)add("pl:emit:"+p._id+":"+hi+":"+tn,"pl:in:"+q._id+":"+qi,"#f0883e");});}));
-      // ScheduleSelf → passender Self-Handle (Name-Match), gestrichelter Loop.
+      // Selbst<T> → passender Self-Handle (Name-Match), gestrichelter Loop.
       (hd.schedules||[]).forEach(sc=>{const ti=(p.handles||[]).findIndex(x=>x.inputKind==="self"&&x.selfName===sc.name);
         if(ti>=0)add("pl:sched:"+p._id+":"+hi+":"+sc.name,"pl:in:"+p._id+":"+ti,"#c98a3a",true);});
       if(hd.codeSrc)add("code:out:"+hd.codeSrc,"plctrl:in:"+p._id+":"+hi,CODE,true);});});
@@ -1986,6 +2334,11 @@ public static class HtmlPresenter
     KONTRAKT.forEach(([u,v])=>{const eu=ELS.get(u),ev=ELS.get(v);if(!eu||!ev)return;
       const kv=(NODEBY.get(v)||{}).kind,col=kv==="event"?"#4fb06a":(kv==="command"?"#4a86d6":"#8a8f9c");
       const p=mk(kopf(eu,1),kopf(ev,-1),1,-1,col,false,"kontrakt");p.dataset.a=u;p.dataset.b=v;});
+    // ── Hub-Kanten: Handle → Besitzer (Projektion/Reader/Reaktion/Pipeline), Store-Fn → Store — gestrichelt, wie Decider → Aggregat. ──
+    NODEBY.forEach(n=>{if(n.kind!=="handle"&&n.kind!=="fn")return;const eu=ELS.get(n.id),eo=ELS.get(n.own.id);if(!eu||!eo)return;
+      const links=eo.offsetLeft<eu.offsetLeft,A=kopf(eu,links?-1:1),B=kopf(eo,links?1:-1);
+      const l=mk(A,B,links?-1:1,links?1:-1,"#6f7a91",true,"hub");l.dataset.a=n.id;l.dataset.b=n.own.id;});
+    svg.append(fSvg);if(svgTop)svgTop.append(fTop);
     wendeFokusAn();
   }
   // Interne Linien hervorheben, wenn man über die zugehörige Decider-/Applier-Zeile fährt.
@@ -2015,11 +2368,17 @@ public static class HtmlPresenter
   //       sichtbaren Besitzer (Chips + Inspector-Sektionen); Pfade durch sie werden als Kopf-Kanten zusammengezogen.
   //   (4) Semantischer Zoom: Landkarte (<0.4, Aggregat-Kacheln + gebündelte Kanten) · Ablauf (<0.75, nur Titel) · Detail.
   //   (5) Slice-Fokus: Klick auf einen Knoten → sein vertikaler Schnitt bleibt hell, der Rest tritt zurück.
-  let VIEW={kompakt:true,details:false}, VKEY="cqrs-ansicht", KPKEY="cqrs-kpos", KPOS={k:{},d:{}};
+  // details: Decider/Applier/State/Code/LLM/Ablehnung/Typen sind IMMER eigene Knoten auf dem Graphen (nie eingeklappt).
+  const KPOS_VERSION=4;   // hochzählen, wenn sich Kartengrößen ändern → gespeicherte Anordnung wird einmalig neu gepackt
+  let VIEW={kompakt:true,details:true,lod:"ablauf",aus:[]}, VKEY="cqrs-ansicht", KPKEY="cqrs-kpos", KPOS={k:{},d:{}};
   function ladeAnsicht(k){VKEY="cqrs-ansicht"+(k?":"+k:"");KPKEY="cqrs-kpos"+(k?":"+k:"");
     try{const v=JSON.parse(localStorage.getItem(VKEY)||"null");if(v)VIEW={...VIEW,...v};}catch(e){}
+    VIEW.details=true;VIEW.kompakt=true;
     try{KPOS=JSON.parse(localStorage.getItem(KPKEY)||"{}")||{};}catch(e){KPOS={};}
-    if(!KPOS.k||!KPOS.d)KPOS={k:{},d:{}};}
+    if(!KPOS.k||!KPOS.d||KPOS.v!==KPOS_VERSION)KPOS={k:{},d:{},v:KPOS_VERSION};}
+  // Ausgeblendete Knotenarten (Auswahl-Menü „👁 Ausblenden"): pro Browser + Solution gespeichert (VIEW.aus).
+  const istAus=k=>Array.isArray(VIEW.aus)&&VIEW.aus.includes(k);
+  function setzeAus(k,aus){const a=new Set(VIEW.aus||[]);if(aus)a.add(k);else a.delete(k);VIEW.aus=[...a];speichereAnsicht();render();}
   function speichereAnsicht(){try{localStorage.setItem(VKEY,JSON.stringify(VIEW));}catch(e){}}
   function speichereKpos(){try{localStorage.setItem(KPKEY,JSON.stringify(KPOS));}catch(e){}}
   // Position eines Knotens in der AKTUELLEN Ansicht. Voll = x/y im Modell (wandert ins Board); Kompakt = eigenes,
@@ -2062,7 +2421,7 @@ public static class HtmlPresenter
       const out=res.length?res:[id];memo.set(id,out);return out;};
     VIS=new Set();VERTRETER=new Map();DETAILS=new Map();EINGEKLAPPT=new Set();
     alle.forEach(n=>{const v=vert(n.id,new Set());VERTRETER.set(n.id,v);
-      if(v.length===1&&v[0]===n.id){if(!HIDDEN.has(groupKeyOf(n)))VIS.add(n.id);}
+      if(v.length===1&&v[0]===n.id){if(!HIDDEN.has(groupKeyOf(n))&&!istAus(n.kind))VIS.add(n.id);}
       else{EINGEKLAPPT.add(n.id);v.forEach(o=>push(DETAILS,o,n.id));}});
     // Zusammengezogene Kanten: sichtbar →(eingeklappt)*→ sichtbar. Ins Aggregat nicht (das zeigt der Block).
     KONTRAKT=[];if(VIEW.details)return;
@@ -2097,16 +2456,18 @@ public static class HtmlPresenter
       if(k==="reader")inn(id).forEach(y=>{if(N(y).kind==="query")add(y,false);});}
     return res;}
   let SEL=null, FOCUS=null;
-  function waehle(id){SEL=id||null;FOCUS=SEL?sliceVon(SEL):null;wendeFokusAn();zeigeInspector();}
+  function waehle(id){
+    if(VB){if(id&&id!==SEL){vbKlick(id);return;}if(!id){vbEnde();return;}}
+    SEL=id||null;FOCUS=SEL?sliceVon(SEL):null;wendeFokusAn();zeigeInspector();}
   function wendeFokusAn(){if(!world)return;const an=!!FOCUS;world.classList.toggle("fokus",an);
     const selV=SEL?(VERTRETER.get(SEL)||[SEL]):[];
     world.querySelectorAll(".gnode2").forEach(el=>{const id=el.dataset.id;el.classList.toggle("inslice",an&&FOCUS.has(id));el.classList.toggle("sel",selV.includes(id));});
     if(!an)return;
     world.querySelectorAll(".glink").forEach(p=>p.classList.toggle("inslice",FOCUS.has(p.dataset.a)&&FOCUS.has(p.dataset.b)));
     world.querySelectorAll(".gtile").forEach(t=>t.classList.toggle("inslice",(t.dataset.ids||"").split("|").some(i=>FOCUS.has(i))));}
-  document.addEventListener("keydown",e=>{if(e.key==="Escape"&&SEL)waehle(null);});
+  document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if(VB){vbEnde();return;}if(SEL)waehle(null);});
 
-  // ── (1) INSPECTOR: das Formular des gewählten Knotens + seiner eingeklappten Details + Nachbarn zum Springen.
+  // ── (1) INSPECTOR: die Detail-Sicht GENAU EINES Knotens (sein Formular) + Nachbarn zum Springen.
   function zeigeInspector(){if(!canvas)return;const alt=canvas.querySelector(".ginsp");if(alt)alt.remove();if(!SEL)return;
     const n=NODEBY.get(SEL);if(!n){SEL=null;return;}
     const p=h("div",{class:"ginsp"});p.dataset.sel=SEL;
@@ -2119,13 +2480,11 @@ public static class HtmlPresenter
     const sektion=(m,titel)=>{const sec=h("div",{class:"gi-sec"});
       if(titel)sec.append(h("div",{class:"gi-st kc-"+m.kind},titel));
       const b=h("div",{class:"gbody"});INSP=true;try{fuelleKoerper(b,m);}finally{INSP=false;}sec.append(b);return sec;};
+    // NUR der gewählte Knoten — Decider, Ablehnung, Code, LLM … sind eigene Knoten auf dem Graphen mit eigener Detail-Sicht.
+    p.append(h("div",{class:"gi-hint"},"⊕ anklicken → passende Knoten leuchten → anklicken = verbinden / lösen · Esc oder ⊕ nochmal = fertig"));
     p.append(sektion(n,null));
-    const ORD=["decider","rejection","applier","state","codenode","llmnode","valueobject","enum","queryresponse"];
-    const det=(DETAILS.get(n.id)||[]).map(id=>NODEBY.get(id)).filter(Boolean).sort((a,b)=>ORD.indexOf(a.kind)-ORD.indexOf(b.kind));
-    const titelVon=m=>m.kind==="codenode"?"{ } Rumpf"+(m.name&&m.name!=="Code"?" · "+m.name:""):(NODELABEL[m.kind]||m.kind)+(m.name?" · "+m.name:"");
-    det.forEach(m=>p.append(sektion(m,titelVon(m))));
-    // Nachbarn (über eingeklappte Details hinweg, auf ihre sichtbaren Vertreter abgebildet).
-    const eigen=new Set([n.id,...det.map(m=>m.id)]),rein=new Set(),raus=new Set();
+    // Nachbarn zum Springen (Klick wählt den Nachbarn und zeigt DESSEN Detail-Sicht).
+    const eigen=new Set([n.id]),rein=new Set(),raus=new Set();
     const sammle=(ids,ziel)=>(ids||[]).forEach(y=>(VERTRETER.get(y)||[y]).forEach(v=>{if(!eigen.has(v))ziel.add(v);}));
     eigen.forEach(x=>{sammle(ADJ.inn.get(x),rein);sammle(ADJ.out.get(x),raus);});
     const rel=h("div",{class:"gi-rel"});
@@ -2143,15 +2502,20 @@ public static class HtmlPresenter
       t=ev.length?"→ "+kurz(ev):"→ (kein Decider)";}
     else if(k==="event"){const c=MODEL.decider.filter(d=>(d.ergibt||[]).some(o=>o.event===r.name)).map(d=>d.command);t=c.length?"← "+kurz(c):"";}
     else if(k==="aggregate")t=MODEL.decider.filter(d=>d.aggregat===r.name).length+" Commands · "+MODEL.applier.filter(a=>a.aggregat===r.name).length+" Events · "+(r.state||[]).length+" State-Felder";
-    else if(k==="projektion"||k==="reaktion")t="← "+kurz((r.handles||[]).map(x=>x.event));
-    else if(k==="reader")t="? "+kurz((r.handles||[]).map(x=>x.query));
+    else if(k==="projektion"||k==="reaktion")t=(r.handles||[]).length+" Handles · ← "+kurz((r.handles||[]).map(x=>x.event));
+    else if(k==="reader")t=(r.handles||[]).length+" Handles · ? "+kurz((r.handles||[]).map(x=>x.query));
     else if(k==="pipeline")t=(r.handles||[]).length+" Handle · → "+kurz((r.handles||[]).flatMap(x=>x.sends||[]));
     else if(k==="saga")t="Auslöser: "+(r.triggerEvent||"—")+" · "+transOf(r).length+" Regeln";
     else if(k==="transition")t="WENN "+kurz(r.wenn)+" → "+kurz((r.dann||[]).map(d=>d.sende));
     else if(k==="store")t=(r.writeFns||[]).length+" schreibend · "+(r.readFns||[]).length+" lesend";
+    else if(k==="handle"){const aus=(r.ausgaenge||[]).length?(r.ausgaenge||[]).filter(a=>a.art!=="storefn"&&a.art!=="self").map(a=>a.typ)
+        :[...(r.responses||[]),...(r.sends||[]),...(r.emits||[]),...(r.publishes||[])];
+      const fns=(r.fns||[]).map(fid=>{const f=fnById(fid);return f?f.fn.name:null;}).filter(Boolean);
+      t=(aus.length?"→ "+[...new Set(aus)].join(" | "):(fns.length?"":"→ nichts"))+(fns.length?(aus.length?" · ":"")+"ruft "+kurz(fns):"")+(r.signaturOffen?" · ⚠ offen":"");}
+    else if(k==="fn")t="("+(r.params||[]).map(x=>x.typ).join(", ")+")"+(r.rueckgabe?" → "+r.rueckgabe:"");
     else if(k==="codenode"){const v=vorschlagFuer(r._id);t=v?"🤖 Vorschlag wartet auf ✓ Übernehmen":((r.text||"").trim().split("\n")[0]||"// leer");}
     else if(k==="llmnode"){const kid=r.promptZiel?konsolenId(r.promptZiel):null,m=kid&&MELD[kid];
-      t=(kid&&LAUF[kid]?"● "+LAUF[kid].was+" … · ":kid&&VOR[kid]?"🤖 Vorschlag im Block · ":m?m.t.slice(0,40)+" · ":"")+((r.intent||"").trim().split("\n")[0]||"(Auftrag fehlt)");}
+      t=(kid&&LAUF[kid]?"● "+LAUF[kid].was+" … · ":kid&&VOR[kid]?"🤖 Vorschlag im Block · ":m?m.t.slice(0,40)+" · ":"")+(((llmVerlauf(r).slice(-1)[0]||{}).text||"").split("\n")[0]||"(noch kein Prompt)");}
     if(Array.isArray(r.felder)&&k!=="aggregate")t+=(t?" · ":"")+r.felder.length+" Felder";
     const box=h("div",{class:"gsum",title:"Klick: im Inspector bearbeiten",onclick:()=>waehle(n.id)});
     if(t)box.append(h("div",{class:"gs-t",title:t},t));
@@ -2167,10 +2531,12 @@ public static class HtmlPresenter
     return box;}
 
   // ── (4) SEMANTISCHER ZOOM ──
+  // Ansicht Landkarte ⇄ Ablauf: NUR per Hand umgeschaltet (VIEW.lod) — der Zoom schaltet nichts mehr um.
   let LOD=null;
-  const lodVon=s=>s<0.4?"karte":(s<0.75?"ablauf":"detail");
-  function pruefeLod(){if(!canvas||!world)return;world.style.setProperty("--inv",(1/PAN.s).toFixed(3));
-    const l=lodVon(PAN.s);if(l===LOD)return;const vorher=LOD;LOD=l;
+  function setzeLod(l){VIEW.lod=l==="karte"?"karte":"ablauf";speichereAnsicht();pruefeLod();}
+  // --inv: fester Größenfaktor der Landkarte (so groß wie früher bei Zoom 0,25) — Schrift und Linien zoomen mit, sehen also immer gleich aus.
+  function pruefeLod(){if(!canvas||!world)return;world.style.setProperty("--inv","4");
+    const l=VIEW.lod==="karte"?"karte":"ablauf";if(l===LOD)return;const vorher=LOD;LOD=l;
     canvas.classList.toggle("lod-karte",l==="karte");canvas.classList.toggle("lod-ablauf",l==="ablauf");
     if(l==="karte")baueKarte();else if(vorher!==null)drawEdges();   // Anker wandern (Körper ein/aus) → neu zeichnen
     document.querySelectorAll("#de .gview .lod span").forEach(s=>s.classList.toggle("on",s.dataset.l===l));}
@@ -2198,7 +2564,11 @@ public static class HtmlPresenter
       const div=h("div",{class:"gtile",title:"Klick: hineinzoomen"},h("div",{class:"gtl-t"},titel),h("div",{class:"gtl-c"},zahlen));
       div.style.left=(t.x1-PAD)+"px";div.style.top=(t.y1-PAD)+"px";div.style.width=(t.x2-t.x1+2*PAD)+"px";div.style.height=(t.y2-t.y1+2*PAD)+"px";
       div.style.borderColor="hsl("+hue+" 45% 55%)";div.dataset.ids=t.ids.join("|");
-      div.onclick=()=>{if(!PANNED)passeEin(t.ids,1,0.45);};
+      // Schrift in Welt-Einheiten, passend zur Kachelgröße: zoomt mit (sieht immer gleich aus) und füllt die Kachel lesbar.
+      const W=t.x2-t.x1+2*PAD,H=t.y2-t.y1+2*PAD,fs=Math.round(Math.max(28,Math.min(W/9,H/3.2,220)));
+      div.style.padding=Math.round(fs*0.45)+"px "+Math.round(fs*0.55)+"px";div.style.borderWidth=Math.max(3,Math.round(fs/12))+"px";div.style.borderRadius=Math.round(fs*0.5)+"px";
+      div.firstChild.style.fontSize=fs+"px";div.lastChild.style.fontSize=Math.round(fs*0.55)+"px";div.lastChild.style.marginTop=Math.round(fs*0.25)+"px";
+      div.onclick=()=>{if(PANNED)return;setzeLod("ablauf");passeEin(t.ids,1,0.45);};
       world.append(div);});
     const cnt=new Map();ADJ.out.forEach((bs,a)=>bs.forEach(b=>{const ka=kOf.get(vertreterId(a)),kb=kOf.get(vertreterId(b));if(!ka||!kb||ka===kb)return;
       const key=ka<kb?ka+"\u0000"+kb:kb+"\u0000"+ka;cnt.set(key,(cnt.get(key)||0)+1);}));
@@ -2215,21 +2585,14 @@ public static class HtmlPresenter
   // Ansichts-Leiste über der Fläche.
   function ansichtLeiste(){
     const btn=(lbl,on,title,fn)=>h("button",{class:on?"on":"",title,onclick:fn},lbl);
-    const alle=auf=>{graphNodes().forEach(n=>{if(!VIS.has(n.id))return;
-      if(VIEW.kompakt){if(auf)n.ref._offen=true;else delete n.ref._offen;}else{if(auf)delete n.ref._collapsed;else n.ref._collapsed=true;}});render();};
-    const lod=h("span",{class:"lod",title:"Semantischer Zoom — Mausrad oder hier klicken"},
-      ...[["karte","Landkarte",0.25],["ablauf","Ablauf",0.55],["detail","Detail",1]].map(([l,t,s])=>{const sp=h("span",{onclick:()=>zoomAuf(s)},t);sp.dataset.l=l;if(LOD===l)sp.classList.add("on");return sp;}));
-    const nDet=graphNodes().filter(n=>DETAIL_KINDS.has(n.kind)).length;
+    const lod=h("span",{class:"lod",title:"Ansicht umschalten: Landkarte (Bereiche) oder Ablauf (Karten) — der Zoom schaltet nicht um"},
+      ...[["karte","Landkarte"],["ablauf","Ablauf"]].map(([l,t])=>{const sp=h("span",{onclick:()=>{setzeLod(l);if(l==="karte")passeEin([...VIS],0.35);}},t);sp.dataset.l=l;if((VIEW.lod||"ablauf")===l)sp.classList.add("on");return sp;}));
     return h("div",{class:"gview"},
       h("b",{style:"color:#cbd3e1"},"Ansicht"),
-      btn("▣ Kompakt",VIEW.kompakt,"Karten eingeklappt, Bearbeiten im Inspector rechts (eigenes Layout)",()=>{VIEW.kompakt=!VIEW.kompakt;speichereAnsicht();render();}),
-      btn("⚙ Details ("+nDet+")",VIEW.details,"Decider/Applier/State/Code/Typen/Ablehnungen als eigene Knoten zeigen — sonst eingeklappt in ihren Besitzer",()=>{VIEW.details=!VIEW.details;speichereAnsicht();render();}),
-      h("span",{class:"sep"}),
-      btn("⊟ Alle zu",false,"Alle Karten einklappen",()=>alle(false)),
-      btn("⊞ Alle auf",false,"Alle Karten aufklappen",()=>alle(true)),
       btn("⤢ Alles zeigen",false,"Ganzes Board einpassen",()=>passeEin([...VIS],1)),
+      btn("👁 Ausblenden"+((VIEW.aus||[]).length?" ("+VIEW.aus.length+")":"")+" ▾",FILTER_OPEN,"Knotenarten und Domänen ein-/ausblenden",()=>{FILTER_OPEN=!FILTER_OPEN;render();}),
       lod,
-      h("span",{style:"margin-left:8px"},"Kopf antippen = auswählen + Slice · Esc = Fokus aus · ▸ = auf-/zuklappen · Kopf ziehen = verschieben · Punkt ziehen = verbinden"));}
+      h("span",{style:"margin-left:8px"},"Karte antippen = Panel · ⊕ im Panel = passende Knoten leuchten, anklicken = verbinden/lösen · Esc = fertig · Kopf ziehen = verschieben"));}
 
   function renderGraph(){
     const root=document.getElementById("de-form");
@@ -2286,6 +2649,7 @@ public static class HtmlPresenter
       if(t.closest&&t.closest(".gnode2,.ginsp,.gfilter,.gminimap,.gtile,.gpick"))return;if(SEL)waehle(null);};
     drawEdges();requestAnimationFrame(drawEdges);
     zeigeInspector();
+    if(VB)vbZeige(false);
   }
   function showPicker(canvas,sx,sy,wx,wy){
     canvas.querySelectorAll(".gpick").forEach(p=>p.remove());
@@ -2305,7 +2669,7 @@ public static class HtmlPresenter
 
   // Prozess-HUB: Prozess<Auslöser>. Transitionen stecken sich HIER an (sichtbare Kante, keine Ableitung).
   function prozessHubCard(body,s){
-    body.append(topSlot("event","Auslöser (startet): "+(s.triggerEvent||"— (Event hineinziehen)"),{type:"evtUse",dir:"in",saga:s.name,trigger:true},"saga:trigger:"+s.name));
+    body.append(topSlot("event","Auslöser (startet): "+(s.triggerEvent||"— ⊕ Event wählen"),{type:"evtUse",dir:"in",saga:s.name,trigger:true},"saga:trigger:"+s.name));
     body.append(nameInp(s,"name","Prozess","saga"));
     body.append(h("input",{value:s.namespace??"",oninput:e=>s.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
     const aggs=sagaAggs(s);
@@ -2465,7 +2829,12 @@ public static class HtmlPresenter
     // Code-Knoten der Entwürfe/ungeschriebenen Leseseite mitnehmen (sonst hingen deren codeSrc ins Leere).
     const referenziert=new Set();JSON.stringify(neu,(k,v)=>{if(k==="codeSrc"&&v)referenziert.add(v);return v;});
     (alt.codeNodes||[]).forEach(c=>{if(referenziert.has(c._id)&&!codeNodesNeu.has(c._id))neu.codeNodes.push(c);});
-    neu.llmNodes=(alt.llmNodes||[]).map(l=>({...l,promptZiel:codeUmzug.get(l.promptZiel)||l.promptZiel}));
+    // 🤖-Knoten: über den SLOT-Schlüssel (Art|Besitzer|Disc) wieder an „ihren" Code-Block hängen — für JEDE Slot-Art.
+    //   Code-Knoten-Ids werden beim Einlesen neu vergeben; nur Decider/Applier ließen sich über den Besitzer umziehen.
+    const neuBySlot=new Map();neu.codeNodes.forEach(c=>{const k=konsolenId(c._id,neu);if(k&&!neuBySlot.has(k))neuBySlot.set(k,c._id);});
+    neu.llmNodes=(alt.llmNodes||[]).map(l=>{const slot=(l.promptZiel&&konsolenId(l.promptZiel,alt))||l.promptSlot||null;
+      const ziel=(slot&&neuBySlot.get(slot))||codeUmzug.get(l.promptZiel)||l.promptZiel;
+      const x={...l,promptZiel:ziel};if(slot)x.promptSlot=slot;return x;});
     // Transitionen (Saga-Regeln): unverändert → Code-Stand; im Board geändert/ergänzt → Board-Stand je Prozess.
     const altTr=(alt.transitions||[]);
     const proProzess=p=>altTr.filter(t=>t.prozess===p);
@@ -2492,7 +2861,7 @@ public static class HtmlPresenter
   //   in-memory), NIE für „C# schreiben“ (in die Datei kommt ein Vorschlag nur über ✓ Übernehmen).
   function payload(mitVorschlag){deriveMembership();prepareSaga();const m=JSON.parse(JSON.stringify(MODEL));
     const txt=id=>{const v=mitVorschlag?vorschlagFuer(id):null;if(v)return v.rumpf;const c=m.codeNodes.find(x=>x._id===id);return c?c.text:null;};
-    [...m.decider,...m.applier].forEach(n=>{if(n.leer)n.rumpf="";else if(n.codeSrc){const t=txt(n.codeSrc);if(t!=null)n.rumpf=t;}});
+    [...m.decider,...m.applier].forEach(n=>{if(n.leer)n.rumpf="";else if(n.codeSrc){const t=txt(n.codeSrc);if(t!=null&&t.trim())n.rumpf=t;}});
     return m;}
   async function post(path){const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload(path!=="/api/editor/write"))});
     if(!r.ok)throw new Error("HTTP "+r.status);return r;}
@@ -2635,7 +3004,7 @@ public static class HtmlPresenter
           h("b",{},(f.herkunft==="saga"?"⤷ "+f.saga+": ":"")+f.command),h("span",{style:"opacity:.6"}," → "+f.label+(f.werte?" ("+f.werte+")":"")));
         if(f.unrouted)el.append(h("span",{class:"ev rej"},"⚠ von keinem Aggregat behandelt (im Cluster ein Hang)"));
         f.events.forEach(e=>el.append(h("span",{class:"ev"+(e.persistent?"":" rej")},(e.persistent?"● ":"✗ ")+e.typ+(e.werte?" ("+e.werte+")":""),
-          e.warum?h("span",{class:"warum"}," weil "+e.warum):null)));
+          null)));
         v.append(el);});}
     const ib=document.getElementById("sim-inst");if(ib){ib.innerHTML="";
       if(!SIM.instanzen.length)ib.append(h("div",{class:"hint"},"Keine Instanz angelegt."));

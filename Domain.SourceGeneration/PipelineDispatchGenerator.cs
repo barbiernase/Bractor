@@ -17,7 +17,7 @@ namespace Domain.SourceGeneration;
 /// Vorlage: SubscriberDispatchGenerator
 ///
 /// Erkennung: Handle-Methoden mit Signatur:
-///   (T, PipelineContext) → IEnumerable&lt;ICommand&gt; | IAsyncEnumerable&lt;ICommand&gt; | Task
+///   (T, PipelineContext, Fähigkeit…) → (Async)Enumerable&lt;OneOf&lt;…&gt;&gt; | Task
 ///
 /// Unterscheidung nach Parameter[0]:
 ///   IPipelineTrigger → Trigger-Kanal (DispatchTriggerAsync)
@@ -72,6 +72,10 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
         var iCommandType = context.SemanticModel.Compilation
             .GetTypeByMetadataName("Abstractions.ICommand");
 
+        // Planungs-Typen über das Symbol (nicht über den Namen): Frist<TCmd> / FristStorno<TCmd>.
+        var fristTyp = context.SemanticModel.Compilation.GetTypeByMetadataName("Abstractions.Frist`1");
+        var stornoTyp = context.SemanticModel.Compilation.GetTypeByMetadataName("Abstractions.FristStorno`1");
+
         if (pipelineContextType == null || iPipelineTriggerType == null ||
             iEventType == null || iCommandType == null)
             return null;
@@ -79,9 +83,10 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
         // Handle-Methoden finden: (T, PipelineContext)
         var handleMethods = classSymbol.GetMembers("Handle")
             .OfType<IMethodSymbol>()
-            .Where(m => m.Parameters.Length == 2 &&
+            .Where(m => m.Parameters.Length >= 2 &&
                         SymbolEqualityComparer.Default.Equals(
-                            m.Parameters[1].Type, pipelineContextType))
+                            m.Parameters[1].Type, pipelineContextType) &&
+                        m.Parameters.Skip(2).All(p => FaehigkeitsTypen.IstFaehigkeit(p.Type, context.SemanticModel.Compilation)))
             .ToList();
 
         if (handleMethods.Count == 0)
@@ -102,7 +107,8 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
             if (!string.IsNullOrEmpty(inputNamespace))
                 allNamespaces.Add(inputNamespace);
 
-            var handlerInfo = AnalyzeReturnType(returnType, inputTypeName, allNamespaces, iCommandType);
+            var handlerInfo = AnalyzeReturnType(returnType, inputTypeName, allNamespaces, fristTyp, stornoTyp);
+            handlerInfo.FaehigkeitsArgumente = FaehigkeitsTypen.ArgumentListe(FaehigkeitsTypen.Argumente(method, 2));
 
             // Kanal bestimmen: IPipelineSelfMessage, IPipelineTrigger oder IEvent?
             // Self-Messages zuerst prüfen (könnten theoretisch auch Trigger sein,
@@ -139,63 +145,37 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
     }
 
     /// <summary>
-    /// Analysiert den Rückgabetyp einer Handle-Methode.
-    /// Erkennt: Task, IEnumerable&lt;ICommand&gt;, IAsyncEnumerable&lt;ICommand&gt;,
-    /// IEnumerable&lt;OneOf&lt;...&gt;&gt;, IAsyncEnumerable&lt;OneOf&lt;...&gt;&gt;.
+    /// Analysiert den Rückgabetyp einer Handle-Methode: Task, IEnumerable&lt;OneOf&lt;...&gt;&gt;,
+    /// IAsyncEnumerable&lt;OneOf&lt;...&gt;&gt;. Ein offener Element-Typ (<c>ICommand</c> …) ist CQRS050 und
+    /// kommt hier nicht mehr an.
     /// </summary>
     private static PipelineHandlerInfo AnalyzeReturnType(
-        ITypeSymbol returnType, string inputTypeName,
-        HashSet<string> namespaces, INamedTypeSymbol iCommandType)
+        ITypeSymbol returnType, string inputTypeName, HashSet<string> namespaces,
+        INamedTypeSymbol? fristTyp, INamedTypeSymbol? stornoTyp)
     {
-        // Task → Fire-and-Forget, keine Commands
-        if (returnType.Name == "Task" && returnType is INamedTypeSymbol { IsGenericType: false })
+        if (returnType is INamedTypeSymbol { IsGenericType: true } folge && IsOneOfType(folge.TypeArguments[0]))
         {
-            return new PipelineHandlerInfo(inputTypeName, PipelineHandlerKind.Task, new List<string>());
-        }
-
-        // IEnumerable<T> → sync
-        if (returnType is INamedTypeSymbol { IsGenericType: true } enumerable
-            && enumerable.OriginalDefinition.ToDisplayString()
-                .StartsWith("System.Collections.Generic.IEnumerable"))
-        {
-            var elementType = enumerable.TypeArguments[0];
-
-            // OneOf<...> erkennen
-            if (IsOneOfType(elementType))
+            var def = folge.OriginalDefinition.ToDisplayString();
+            var kind = def.StartsWith("System.Collections.Generic.IAsyncEnumerable") ? PipelineHandlerKind.OneOfAsyncEnumerable
+                : def.StartsWith("System.Collections.Generic.IEnumerable") ? PipelineHandlerKind.OneOfEnumerable
+                : (PipelineHandlerKind?)null;
+            if (kind is { } k)
             {
-                return new PipelineHandlerInfo(inputTypeName, PipelineHandlerKind.OneOfEnumerable, new List<string>());
-            }
-
-            // Plain ICommand
-            if (elementType.AllInterfaces.Contains(iCommandType, SymbolEqualityComparer.Default)
-                || SymbolEqualityComparer.Default.Equals(elementType, iCommandType))
-            {
-                return new PipelineHandlerInfo(inputTypeName, PipelineHandlerKind.Enumerable, new List<string>());
+                var info = new PipelineHandlerInfo(inputTypeName, k, new List<string>());
+                // Frist<TCmd>/FristStorno<TCmd>: der Kontext (Command-Typname) wird hier als Konstante eingesetzt.
+                foreach (var a in ((INamedTypeSymbol)folge.TypeArguments[0]).TypeArguments.OfType<INamedTypeSymbol>())
+                {
+                    var istFrist = SymbolEqualityComparer.Default.Equals(a.OriginalDefinition, fristTyp);
+                    var istStorno = SymbolEqualityComparer.Default.Equals(a.OriginalDefinition, stornoTyp);
+                    if (istFrist || istStorno)
+                        info.Fristen.Add((a.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat),
+                            a.TypeArguments[0].ToDisplayString(), istStorno));
+                }
+                return info;
             }
         }
 
-        // IAsyncEnumerable<T> → async
-        if (returnType is INamedTypeSymbol { IsGenericType: true } asyncEnum
-            && asyncEnum.OriginalDefinition.ToDisplayString()
-                .StartsWith("System.Collections.Generic.IAsyncEnumerable"))
-        {
-            var elementType = asyncEnum.TypeArguments[0];
-
-            // OneOf<...> erkennen
-            if (IsOneOfType(elementType))
-            {
-                return new PipelineHandlerInfo(inputTypeName, PipelineHandlerKind.OneOfAsyncEnumerable, new List<string>());
-            }
-
-            // Plain ICommand
-            if (elementType.AllInterfaces.Contains(iCommandType, SymbolEqualityComparer.Default)
-                || SymbolEqualityComparer.Default.Equals(elementType, iCommandType))
-            {
-                return new PipelineHandlerInfo(inputTypeName, PipelineHandlerKind.AsyncEnumerable, new List<string>());
-            }
-        }
-
-        // Fallback: behandle wie Task
+        // Task (Fire-and-Forget, nur Seiteneffekte)
         return new PipelineHandlerInfo(inputTypeName, PipelineHandlerKind.Task, new List<string>());
     }
 
@@ -304,7 +284,9 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
         sb.AppendLine("        PipelineContext ctx,");
         sb.AppendLine("        Func<ICommand, Task> sendCommand,");
         sb.AppendLine("        Func<IPipelineTrigger, Task> sendTrigger,");
-        sb.AppendLine("        Func<ITransientEvent, Task> broadcastTransient)");
+        sb.AppendLine("        Func<ITransientEvent, Task> broadcastTransient,");
+        sb.AppendLine("        Func<IPlanung, Task> plane,");
+        sb.AppendLine("        IFaehigkeiten faehigkeiten)");
         sb.AppendLine("    {");
 
         if (model.TriggerHandlers.Count == 0)
@@ -319,7 +301,7 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
             foreach (var handler in model.TriggerHandlers)
             {
                 var simpleName = GetSimpleTypeName(handler.InputTypeName);
-                EmitDispatchCase(sb, simpleName, "t", handler.Kind);
+                EmitDispatchCase(sb, simpleName, "t", handler);
             }
 
             sb.AppendLine("        }");
@@ -337,7 +319,9 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
         sb.AppendLine("        PipelineContext ctx,");
         sb.AppendLine("        Func<ICommand, Task> sendCommand,");
         sb.AppendLine("        Func<IPipelineTrigger, Task> sendTrigger,");
-        sb.AppendLine("        Func<ITransientEvent, Task> broadcastTransient)");
+        sb.AppendLine("        Func<ITransientEvent, Task> broadcastTransient,");
+        sb.AppendLine("        Func<IPlanung, Task> plane,");
+        sb.AppendLine("        IFaehigkeiten faehigkeiten)");
         sb.AppendLine("    {");
 
         if (model.EventHandlers.Count == 0)
@@ -352,7 +336,7 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
             foreach (var handler in model.EventHandlers)
             {
                 var simpleName = GetSimpleTypeName(handler.InputTypeName);
-                EmitDispatchCase(sb, simpleName, "e", handler.Kind);
+                EmitDispatchCase(sb, simpleName, "e", handler);
             }
 
             sb.AppendLine("        }");
@@ -370,7 +354,9 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
         sb.AppendLine("        PipelineContext ctx,");
         sb.AppendLine("        Func<ICommand, Task> sendCommand,");
         sb.AppendLine("        Func<IPipelineTrigger, Task> sendTrigger,");
-        sb.AppendLine("        Func<ITransientEvent, Task> broadcastTransient)");
+        sb.AppendLine("        Func<ITransientEvent, Task> broadcastTransient,");
+        sb.AppendLine("        Func<IPlanung, Task> plane,");
+        sb.AppendLine("        IFaehigkeiten faehigkeiten)");
         sb.AppendLine("    {");
 
         if (model.SelfHandlers.Count == 0)
@@ -385,7 +371,7 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
             foreach (var handler in model.SelfHandlers)
             {
                 var simpleName = GetSimpleTypeName(handler.InputTypeName);
-                EmitDispatchCase(sb, simpleName, "s", handler.Kind);
+                EmitDispatchCase(sb, simpleName, "s", handler);
             }
 
             sb.AppendLine("        }");
@@ -399,38 +385,23 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
     }
 
     private static void EmitDispatchCase(
-        StringBuilder sb, string typeName, string varName, PipelineHandlerKind kind)
+        StringBuilder sb, string typeName, string varName, PipelineHandlerInfo handler)
     {
-        switch (kind)
+        var aufruf = $"Handle({varName}, ctx{handler.FaehigkeitsArgumente})";
+        switch (handler.Kind)
         {
-            case PipelineHandlerKind.Enumerable:
-                sb.AppendLine($"            case {typeName} {varName}:");
-                sb.AppendLine($"                foreach (var cmd in Handle({varName}, ctx))");
-                sb.AppendLine($"                    await sendCommand(cmd);");
-                sb.AppendLine($"                break;");
-                sb.AppendLine();
-                break;
-
-            case PipelineHandlerKind.AsyncEnumerable:
-                sb.AppendLine($"            case {typeName} {varName}:");
-                sb.AppendLine($"                await foreach (var cmd in Handle({varName}, ctx))");
-                sb.AppendLine($"                    await sendCommand(cmd);");
-                sb.AppendLine($"                break;");
-                sb.AppendLine();
-                break;
-
             case PipelineHandlerKind.Task:
                 sb.AppendLine($"            case {typeName} {varName}:");
-                sb.AppendLine($"                await Handle({varName}, ctx);");
+                sb.AppendLine($"                await {aufruf};");
                 sb.AppendLine($"                break;");
                 sb.AppendLine();
                 break;
 
             case PipelineHandlerKind.OneOfEnumerable:
                 sb.AppendLine($"            case {typeName} {varName}:");
-                sb.AppendLine($"                foreach (var oneOf in Handle({varName}, ctx))");
+                sb.AppendLine($"                foreach (var oneOf in {aufruf})");
                 sb.AppendLine($"                {{");
-                EmitOneOfSwitch(sb);
+                EmitOneOfSwitch(sb, handler);
                 sb.AppendLine($"                }}");
                 sb.AppendLine($"                break;");
                 sb.AppendLine();
@@ -438,9 +409,9 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
 
             case PipelineHandlerKind.OneOfAsyncEnumerable:
                 sb.AppendLine($"            case {typeName} {varName}:");
-                sb.AppendLine($"                await foreach (var oneOf in Handle({varName}, ctx))");
+                sb.AppendLine($"                await foreach (var oneOf in {aufruf})");
                 sb.AppendLine($"                {{");
-                EmitOneOfSwitch(sb);
+                EmitOneOfSwitch(sb, handler);
                 sb.AppendLine($"                }}");
                 sb.AppendLine($"                break;");
                 sb.AppendLine();
@@ -452,10 +423,21 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
     /// Generiert den inneren Switch für OneOf-Output-Routing.
     /// Reihenfolge wichtig: ITransientEvent vor IEvent prüfen (ITransientEvent : IEvent).
     /// </summary>
-    private static void EmitOneOfSwitch(StringBuilder sb)
+    private static void EmitOneOfSwitch(StringBuilder sb, PipelineHandlerInfo handler)
     {
         sb.AppendLine($"                    switch (oneOf.Value)");
         sb.AppendLine($"                    {{");
+        foreach (var (typ, cmd, storno) in handler.Fristen)
+        {
+            sb.AppendLine($"                        case {typ} __frist:");
+            sb.AppendLine(storno
+                ? $"                            await plane(new FristAuftrag(\"{cmd}\", __frist.ZielAggregatId, null));"
+                : $"                            await plane(new FristAuftrag(\"{cmd}\", __frist.ZielAggregatId, __frist.Dauer));");
+            sb.AppendLine($"                            break;");
+        }
+        sb.AppendLine($"                        case ISelbstPlanung __selbst:");
+        sb.AppendLine($"                            await plane(__selbst);");
+        sb.AppendLine($"                            break;");
         sb.AppendLine($"                        case ICommand cmd:");
         sb.AppendLine($"                            await sendCommand(cmd);");
         sb.AppendLine($"                            break;");
@@ -481,12 +463,6 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
 
 internal enum PipelineHandlerKind
 {
-    /// <summary>IEnumerable&lt;ICommand&gt; — sync, yields Commands</summary>
-    Enumerable,
-
-    /// <summary>IAsyncEnumerable&lt;ICommand&gt; — async, yields Commands</summary>
-    AsyncEnumerable,
-
     /// <summary>Task — Fire-and-Forget, nur Seiteneffekte</summary>
     Task,
 
@@ -502,6 +478,10 @@ internal class PipelineHandlerInfo
     public string InputTypeName { get; }
     public PipelineHandlerKind Kind { get; }
     public List<string> ProducedTypes { get; }
+    /// <summary>„, faehigkeiten.Hole&lt;…&gt;()" je Fähigkeits-Parameter.</summary>
+    public string FaehigkeitsArgumente { get; set; } = "";
+    /// <summary>Frist-Varianten des OneOf: (Typ voll qualifiziert, Command-Typname = Kontext, Storno?).</summary>
+    public List<(string Typ, string Cmd, bool Storno)> Fristen { get; } = new();
 
     public PipelineHandlerInfo(string inputTypeName, PipelineHandlerKind kind, List<string> producedTypes)
     {

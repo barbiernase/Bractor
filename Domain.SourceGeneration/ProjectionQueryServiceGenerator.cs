@@ -14,7 +14,7 @@ namespace Domain.SourceGeneration;
 /// Reader werden NICHT intern erstellt — DI liefert fertige Instanzen mit ihrem ReadStore.
 /// Projektionen werden nur für SubscriberId gebraucht (Deps-Routing).
 ///
-/// Handle-Signatur: (IQuery, IMessageEnvelope, ReadContext)
+/// Handle-Signatur: (IQuery, IMessageEnvelope, ReadContext, Fähigkeit…) — je Query ein Fähigkeits-Bereich.
 /// ExecuteAsync erstellt QueryEnvelope für Transport-Metadaten.
 /// </summary>
 [Generator]
@@ -70,7 +70,8 @@ public class ProjectionQueryServiceGenerator : IIncrementalGenerator
 
         var handleMethods = classSymbol.GetMembers("Handle")
             .OfType<IMethodSymbol>()
-            .Where(m => m.Parameters.Length == 3 &&
+            .Where(m => m.Parameters.Length >= 3 &&
+                        m.Parameters.Skip(3).All(p => FaehigkeitsTypen.IstFaehigkeit(p.Type, context.SemanticModel.Compilation)) &&
                         SymbolEqualityComparer.Default.Equals(
                             m.Parameters[1].Type, messageEnvelopeType) &&
                         SymbolEqualityComparer.Default.Equals(
@@ -178,6 +179,7 @@ public class ProjectionQueryServiceGenerator : IIncrementalGenerator
             sb.AppendLine($"    private readonly {proj.ReaderName} {readerField};");
         }
         sb.AppendLine($"    private readonly IReadModelDepsReader? _depsReader;");
+        sb.AppendLine($"    private readonly IFaehigkeitsFabrik _faehigkeiten;");
         sb.AppendLine($"    private readonly Dictionary<Type, QueryHandlerEntry> _handlers;");
         sb.AppendLine();
 
@@ -195,6 +197,7 @@ public class ProjectionQueryServiceGenerator : IIncrementalGenerator
             var projParam = ToCamelCase(proj.ProjectionName);
             sb.AppendLine($"        {proj.ProjectionName} {projParam},");
         }
+        sb.AppendLine("        IFaehigkeitsFabrik faehigkeiten,");
         sb.AppendLine("        IReadModelDepsReader? depsReader = null)");
         sb.AppendLine("    {");
 
@@ -205,6 +208,7 @@ public class ProjectionQueryServiceGenerator : IIncrementalGenerator
             sb.AppendLine($"        {readerField} = {readerParam};");
         }
         sb.AppendLine("        _depsReader = depsReader;");
+        sb.AppendLine("        _faehigkeiten = faehigkeiten;");
         sb.AppendLine();
 
         // Handler-Dictionary: Reader dispatcht, Projektion liefert SubscriberId
@@ -220,7 +224,7 @@ public class ProjectionQueryServiceGenerator : IIncrementalGenerator
             foreach (var queryType in proj.QueryTypes)
             {
                 var simpleType = GetSimpleTypeName(queryType);
-                sb.AppendLine($"            [typeof({simpleType})] = new((q, env, ctx) => {readerField}.DispatchAsync(q, env, ctx), {projParam}.SubscriberId, {trackDeps}),");
+                sb.AppendLine($"            [typeof({simpleType})] = new((q, env, ctx, f) => {readerField}.DispatchAsync(q, env, ctx, f), {projParam}.SubscriberId, {trackDeps}),");
             }
         }
 
@@ -242,7 +246,10 @@ public class ProjectionQueryServiceGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine("        var ctx = new ReadContext();");
         sb.AppendLine("        var envelope = new QueryEnvelope();");
-        sb.AppendLine("        var data = await entry.Handler(query, envelope, ctx);");
+        sb.AppendLine("        // Ein Fähigkeits-Bereich je Query: die Store-Funktionen, die der Handle als Parameter verlangt.");
+        sb.AppendLine("        IQueryResponse data;");
+        sb.AppendLine("        using (var bereich = _faehigkeiten.Oeffne())");
+        sb.AppendLine("            data = await entry.Handler(query, envelope, ctx, bereich);");
         sb.AppendLine();
         sb.AppendLine("        // Read-Your-Writes: die vom Client mitgeschickten \"zuletzt geschrieben\"-IDs zusätzlich als");
         sb.AppendLine("        // Deps tracken. So liefert der Deps-Read auch deren (evtl. noch stale) Read-Model-Version →");
@@ -278,7 +285,7 @@ public class ProjectionQueryServiceGenerator : IIncrementalGenerator
 
         // ── QueryHandlerEntry ──
         sb.AppendLine("    private record QueryHandlerEntry(");
-        sb.AppendLine("        Func<IQuery, IMessageEnvelope, ReadContext, Task<IQueryResponse>> Handler,");
+        sb.AppendLine("        Func<IQuery, IMessageEnvelope, ReadContext, IFaehigkeiten, Task<IQueryResponse>> Handler,");
         sb.AppendLine("        string SubscriberId,");
         sb.AppendLine("        bool TrackDeps);");
 

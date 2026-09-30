@@ -8,7 +8,7 @@ namespace Domain.Pipeline.ImageProcessing;
 ///
 /// Ersetzt den nativen FileWatcherActor. Läuft jetzt als Pipeline:
 ///   - Kein eigener Actor-Code — der PipelineActorGenerator erzeugt den Actor
-///   - Self-Messaging via ScheduleSelf (mailbox-safe, Proto.Actor ReenterAfter)
+///   - Self-Messaging als typisierter Ausgang Selbst&lt;PollTick&gt; (mailbox-safe, ReenterAfter im Actor)
 ///   - Output ist ein IPipelineTrigger (DateiErkannt), wird vom Generator
 ///     über TriggerToPipelineId an die ImageProcessingPipeline geroutet
 ///
@@ -22,7 +22,7 @@ namespace Domain.Pipeline.ImageProcessing;
 ///
 /// Design-Entscheidungen (unverändert zum alten FileWatcherActor):
 ///   - Kein FileSystemWatcher: inotify funktioniert nicht auf CIFS/Samba-Mounts
-///   - Polling per Self-Tick (mailbox-safe über ScheduleSelf)
+///   - Polling per Self-Tick (der erste über Handle(PipelineGestartet), danach je Tick der nächste)
 ///   - HashSet statt Fingerprint: Dateinamen sind global eindeutig
 ///   - HashSet-Cap 2×Ringpuffergröße: verhindert unbegrenztes Wachstum,
 ///     behält gelöschte Einträge als Flicker-Schutz
@@ -34,7 +34,7 @@ public partial class FileWatchPipeline : IPipelineHandler
     /// <summary>
     /// Interne Tick-Message — löst einen Verzeichnis-Scan aus.
     /// Public weil die Handle-Methode public ist (vom Generator gefordert).
-    /// Wird nur über ScheduleSelf zugestellt — nie von außen.
+    /// Wird nur über einen Selbst&lt;PollTick&gt;-Ausgang geplant — nie von außen.
     /// </summary>
     public record PollTick : IPipelineSelfMessage;
 
@@ -53,7 +53,8 @@ public partial class FileWatchPipeline : IPipelineHandler
 
     public string PipelineId => "file-watch";
 
-    public Task OnInitializeAsync(PipelineContext ctx)
+    /// <summary>Start: Bestand als „schon gesehen" markieren und den ersten Tick planen.</summary>
+    public IEnumerable<OneOf<Selbst<PollTick>>> Handle(PipelineGestartet start, PipelineContext ctx)
     {
         if (!Directory.Exists(_config.WatchPath))
         {
@@ -79,15 +80,16 @@ public partial class FileWatchPipeline : IPipelineHandler
         }
 
         // Ersten Tick anstoßen
-        ctx.ScheduleSelf(new PollTick(), _config.PollInterval);
-        return Task.CompletedTask;
+        yield return NaechsterTick();
     }
 
-    public async IAsyncEnumerable<OneOf<DateiErkannt>> Handle(PollTick _, PipelineContext ctx)
+    private Selbst<PollTick> NaechsterTick() => Selbst.In(new PollTick(), _config.PollInterval);
+
+    public async IAsyncEnumerable<OneOf<DateiErkannt, Selbst<PollTick>>> Handle(PollTick _, PipelineContext ctx)
     {
         if (!Directory.Exists(_config.WatchPath))
         {
-            ctx.ScheduleSelf(new PollTick(), _config.PollInterval);
+            yield return NaechsterTick();
             yield break;
         }
 
@@ -99,7 +101,11 @@ public partial class FileWatchPipeline : IPipelineHandler
         catch (Exception ex)
         {
             _logger.LogError(ex, "FileWatchPipeline: Polling-Fehler auf {Path}", _config.WatchPath);
-            ctx.ScheduleSelf(new PollTick(), _config.PollInterval);
+            files = null!;
+        }
+        if (files == null)
+        {
+            yield return NaechsterTick();
             yield break;
         }
 
@@ -157,7 +163,7 @@ public partial class FileWatchPipeline : IPipelineHandler
         }
 
         // Nächsten Tick einplanen
-        ctx.ScheduleSelf(new PollTick(), _config.PollInterval);
+        yield return NaechsterTick();
 
         await Task.CompletedTask;
     }

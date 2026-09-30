@@ -83,6 +83,14 @@ Alle `Error` (der Build bricht), sofern nicht anders vermerkt.
 | **CQRS020** | Roher Command-Send | `RequestAsync<CommandResult>` nur in Emitter/Dispatcher |
 | **CQRS021** | Unbounded Command-Kante | kein `CancellationToken.None`/`default` auf Command-Kante |
 | **CQRS030** | DTO-Mapper-Gen fehlgeschlagen | Generator-Exception wird lauter Fehler, nicht still |
+| **CQRS050** | Offener Ausgabe-Vertrag (`AusgabeVertragAnalyzer`, Domain.SourceGeneration) | Decide/Handle (Projektion, Reaktion, Reader, Pipeline) geben einen **konkreten Typ oder `OneOf<…>` konkreter Typen** zurück — kein Interface (`ICommand`, `IEvent` …), Typ-Parameter, `object`, keine abstrakte Klasse. `Task`/`void` (reine Effekte) erlaubt. Grund: WAS entstehen kann, ist dann ein Typ-Fakt (Compiler-garantiert) statt einer unvollständigen Rumpf-Analyse |
+| **CQRS051** | Fähigkeit mit ≠ 1 Funktion (`FaehigkeitAnalyzer`) | Ein `IWriteStore`/`IReadStore`-Interface trägt genau EINE Store-Funktion und erbt keine andere Fähigkeit; gebündelt wird im Store-Interface (`IStore`) |
+| **CQRS052** | Schreib-Fähigkeiten aus mehreren Stores (`PullPathGenerator`) | Alle Schreib-Fähigkeiten der Handles einer Projektion gehören zu EINEM Store (eine Transaktionsgrenze, eine Marke) — Achse B kommt aus diesen Parametern |
+| **CQRS053** | Fähigkeit mehrdeutig (`ProjectionServicesGenerator`) | Genau eine Store-Klasse je Fähigkeit (die DI registriert sie Scoped unter jeder Fähigkeit + dem Bündel) |
+| **CQRS054** | Store im Konsumenten (`FaehigkeitAnalyzer`) | Projektion/Reader/Reaktion/Pipeline halten keinen Store und keinen `IFristplan` in Ctor/Feld/Eigenschaft — Store-Funktionen nur als Fähigkeits-Parameter eines `Handle` |
+| **CQRS055** | Store selbst gebaut (`FaehigkeitAnalyzer`) | Kein `new …Store()` — Stores nur aus der DI (eine Instanz je Fähigkeits-Bereich) |
+| **CQRS056** | Frist-Command nicht baubar (`PipelineActorGenerator`) | `Frist<TCmd>`: `TCmd` braucht einen öffentlichen Ctor `(Guid zielAggregatId)` — daraus baut der generierte Fristen-Router den Command |
+| **CQRS057** | Handler wird nicht dispatcht (`HandlerFormAnalyzer`) | Ein an seinen Typen erkannter Handler (Eingang + Kontext) heißt `Handle` und hat die feste Form (Kontext an fester Stelle, dahinter nur Fähigkeiten) — sonst zeigte ihn der Editor, die Laufzeit übersähe ihn still |
 | **CQRS040** | Mehrdeutige Upcast-Kante | eine Version → genau eine ausgehende `IUpcast` |
 | **CQRS041** | Upcast-Kette endet nicht aktuell | Kette erreicht eine aktuelle Gestalt |
 | **CQRS042** | Zyklus in Upcast-Kette | Upcasting azyklisch |

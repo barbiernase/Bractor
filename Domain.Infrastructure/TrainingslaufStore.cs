@@ -7,9 +7,9 @@ namespace Domain.Infrastructure;
 /// <summary>
 /// Co-Commit-Store der Trainingslauf-Projektion. Exactly-once-Naht in
 /// <see cref="MartenCoCommitStoreBase"/>; hier nur die fachlichen Write-Effekte. Die Projektion ist
-/// <see cref="Abstractions.IAppendProjektion"/> (MetrikHistorie wächst je Epoche). TRANSIENT registriert.
+/// <see cref="Abstractions.IAppendProjektion"/> (MetrikHistorie wächst je Epoche). SCOPED registriert (eine Instanz je Fähigkeits-Bereich, unter jeder Fähigkeit).
 /// </summary>
-public sealed class TrainingslaufStore : MartenCoCommitStoreBase, ITrainingslaufWriteStore
+public sealed partial class TrainingslaufStore : MartenCoCommitStoreBase, ITrainingslaufStore
 {
     public TrainingslaufStore(IDocumentStore store) : base(store) { }
 

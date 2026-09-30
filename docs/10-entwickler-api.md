@@ -46,25 +46,33 @@ sind ausgenommen). Sonst Build-Fehler (CQRS030 macht ihn laut).
 
 ## 10.3 Eine Projektion
 
-`partial class X : ISubscriber, IPullSubscriber`, mit `SubscriberId` und einem
-tracker-fähigen Write-Store im Ctor (→ automatisch **replaybar**):
+`partial class X : ISubscriber, IPullSubscriber`, mit `SubscriberId` und **ohne Store im Konstruktor**. Jeder
+`Handle` bekommt genau die Store-Funktionen, die er benutzen darf, als **Fähigkeits-Parameter** (→ automatisch
+**replaybar**, weil der Store dahinter der Co-Commit-Tracker ist):
 ```csharp
-public async Task Handle(BetragReserviert evt, IAggregateEnvelope env, ProjectionWriter writer) =>
+// Fähigkeit = Interface mit GENAU EINER Funktion (CQRS051); das Bündel (IStore) ist der Store.
+public interface IReserviereBetrag : IWriteStore { Task ReserviereAsync(Guid konto, decimal betrag); }
+public interface IFindeKonto       : IReadStore  { Task<KontoSicht?> FindeAsync(Guid konto); }
+public interface IKontoStore : IStore, IReserviereBetrag, IFindeKonto { }   // eine Klasse implementiert es
+
+public async Task Handle(BetragReserviert evt, IAggregateEnvelope env, ProjectionWriter writer, IReserviereBetrag store) =>
     await writer.Execute(env.AggregateId, ctx => {
         ctx.Track<Konto>(env.AggregateId);
-        return _store.UpsertAsync(env.AggregateId, evt.Betrag);
+        return store.ReserviereAsync(env.AggregateId, evt.Betrag);
     });
 ```
-Alles Weitere (Kind, Receiver, Poller, Achsen-Schnitt) generiert `PullPathGenerator`. Optionaler
-GA-1-Marker `IAppendProjektion` erzwingt einen Co-Commit-Tracker. Beispiel:
-`Domain.Projections/ImagePairProjection.cs`.
+Der generierte Dispatch löst die Fähigkeiten aus einem DI-Bereich auf (eine Store-Instanz je Bereich → Effekt +
+Marke in einer Transaktion). Alles Weitere (Kind, Receiver, Poller, Achsen-Schnitt aus den Schreib-Fähigkeiten)
+generiert `PullPathGenerator`; Schreib-Fähigkeiten aus zwei Stores in einer Klasse sind CQRS052. Ein Store im
+Konstruktor/Feld eines Konsumenten ist CQRS054, `new …Store()` CQRS055. Optionaler GA-1-Marker `IAppendProjektion`
+erzwingt einen Co-Commit-Tracker. Beispiel: `Domain.Projections/ImagePairProjection.cs`.
 
 > Hinweis: der produktive `MartenProjectionTracker` committet Effekt und Marke aktuell in
 > getrennten Sessions (at-least-once) — siehe [04 §4.3](04-konsum-und-prozess-maschine.md).
 
 ## 10.4 Eine Reaktion (Command emittieren)
 
-Dieselben Marker (`ISubscriber, IPullSubscriber`), **kein** tracker-fähiger Store → automatisch
+Dieselben Marker (`ISubscriber, IPullSubscriber`), **keine** Schreib-Fähigkeit → automatisch
 **emittierend**. `Handle` gibt `IAsyncEnumerable<OneOf<TCmd>>` zurück und `yield return`t
 Commands:
 ```csharp
@@ -72,7 +80,8 @@ public async IAsyncEnumerable<OneOf<WirkeReaktion>> Handle(ImagePairKomplett evt
     yield return new WirkeReaktion(env.AggregateId);
 }
 ```
-Nie selbst `RequestAsync` aufrufen (CQRS020) und nie `CancellationToken.None` auf eine
+Die Rückgabe nennt die möglichen Commands **als Typen** (`OneOf<…>` konkreter Typen; `IAsyncEnumerable<ICommand>` o. ä. ist
+CQRS050, gilt ebenso für Decide, Reader und Pipeline). Nie selbst `RequestAsync` aufrufen (CQRS020) und nie `CancellationToken.None` auf eine
 Command-Kante geben (CQRS021). Beispiel: `Domain.Projections/ImagePairReaktion.cs`.
 
 ## 10.5 Ein Prozess / eine Saga
@@ -97,9 +106,17 @@ Host ruft einmalig `AddGeneratedProzesse()`. Beispiele: `Domain/Ueberweisung/`,
 ## 10.6 Eine Pipeline
 
 `partial class X : IPipelineHandler` mit `PipelineId` + `Handle(TTrigger, PipelineContext)` /
-`Handle(TEvent, PipelineContext)`, `yield`t `ICommand`. Persistierte Events laufen über den
-Pull-Pfad, transiente über den Broker (P6.1/P6.2). Beispiel:
-`Domain.Pipeline/ImageProcessing/ImageProcessingPipeline.cs`.
+`Handle(TEvent, PipelineContext)` → `IAsyncEnumerable<OneOf<Cmd…, Trigger…>>` (CQRS050: die möglichen Ausgaben als
+Typen, nie `ICommand`) oder `Task` für reine Effekte. Lese-Fähigkeiten als Parameter wie beim Reader. **Planen ist
+ein Ausgang, kein Aufruf:** `Selbst<T>` (Selbst-Nachricht nach Verzögerung, erste über `Handle(PipelineGestartet, ctx)`),
+`Frist<TCmd>` (durable Frist → `TCmd` an die Ziel-Id; der Router ist generiert, `TCmd` braucht einen Ctor `(Guid)`,
+sonst CQRS056) und `FristStorno<TCmd>`:
+```csharp
+public IEnumerable<OneOf<Frist<MarkiereAlsHaengengeblieben>>> Handle(TrainingBegonnen evt, PipelineContext ctx)
+{ yield return new Frist<MarkiereAlsHaengengeblieben>(ctx.SourceAggregateId!.Value, _config.Timeout); }
+```
+Persistierte Events laufen über den Pull-Pfad (dort kein `Selbst<T>` — keine Mailbox), transiente über den Broker
+(P6.1/P6.2). Beispiele: `Domain.Pipeline/ImageProcessing/FileWatchPipeline.cs`, `Domain.Pipeline/Trainingslauf/TrainingFristPipeline.cs`.
 
 ## 10.7 Schema-Evolution (Upcasting)
 

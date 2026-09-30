@@ -22,13 +22,6 @@ namespace Domain.Projections;
 /// </summary>
 public partial class ImagePairHistorieProjection : ISubscriber, IPullSubscriber, IAppendProjektion
 {
-    private readonly IImagePairHistorieWriteStore _store;
-
-    public ImagePairHistorieProjection(IImagePairHistorieWriteStore store)
-    {
-        _store = store;
-    }
-
     public string SubscriberId => "imagepair-historie";
 
     // ═══════════════════════════════════════════════════════════
@@ -36,12 +29,12 @@ public partial class ImagePairHistorieProjection : ISubscriber, IPullSubscriber,
     // ═══════════════════════════════════════════════════════════
 
     public async Task Handle(
-        ImagePairErstellt evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        ImagePairErstellt evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendHistorieEintrag appendHistorieEintrag)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ImagePair.ImagePair>(envelope.AggregateId);
-            await _store.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
+            await appendHistorieEintrag.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
                 Zeitpunkt: envelope.CreatedAtUtc,
                 EreignisTyp: nameof(ImagePairErstellt),
                 Beschreibung: "ImagePair erstellt",
@@ -51,12 +44,12 @@ public partial class ImagePairHistorieProjection : ISubscriber, IPullSubscriber,
     }
 
     public async Task Handle(
-        BildVerfuegbar evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        BildVerfuegbar evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendHistorieEintrag appendHistorieEintrag)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ImagePair.ImagePair>(envelope.AggregateId);
-            await _store.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
+            await appendHistorieEintrag.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
                 Zeitpunkt: envelope.CreatedAtUtc,
                 EreignisTyp: nameof(BildVerfuegbar),
                 Beschreibung: $"{evt.Version} verfügbar",
@@ -66,12 +59,12 @@ public partial class ImagePairHistorieProjection : ISubscriber, IPullSubscriber,
     }
 
     public async Task Handle(
-        ImagePairKomplett evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        ImagePairKomplett evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendHistorieEintrag appendHistorieEintrag)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ImagePair.ImagePair>(envelope.AggregateId);
-            await _store.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
+            await appendHistorieEintrag.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
                 Zeitpunkt: envelope.CreatedAtUtc,
                 EreignisTyp: nameof(ImagePairKomplett),
                 Beschreibung: "Beide Bilder verfügbar",
@@ -84,12 +77,12 @@ public partial class ImagePairHistorieProjection : ISubscriber, IPullSubscriber,
     // ═══════════════════════════════════════════════════════════
 
     public async Task Handle(
-        EinzelBildDurchKiKlassifiziert evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        EinzelBildDurchKiKlassifiziert evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendHistorieEintrag appendHistorieEintrag)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ImagePair.ImagePair>(envelope.AggregateId);
-            await _store.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
+            await appendHistorieEintrag.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
                 Zeitpunkt: envelope.CreatedAtUtc,
                 EreignisTyp: nameof(EinzelBildDurchKiKlassifiziert),
                 Beschreibung: $"KI: {evt.Version} klassifiziert",
@@ -99,12 +92,12 @@ public partial class ImagePairHistorieProjection : ISubscriber, IPullSubscriber,
     }
 
     public async Task Handle(
-        BildPaarDurchKiKlassifiziert evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        BildPaarDurchKiKlassifiziert evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendHistorieEintrag appendHistorieEintrag)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ImagePair.ImagePair>(envelope.AggregateId);
-            await _store.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
+            await appendHistorieEintrag.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
                 Zeitpunkt: envelope.CreatedAtUtc,
                 EreignisTyp: nameof(BildPaarDurchKiKlassifiziert),
                 Beschreibung: "KI: Bildpaar klassifiziert",
@@ -118,12 +111,12 @@ public partial class ImagePairHistorieProjection : ISubscriber, IPullSubscriber,
     // ═══════════════════════════════════════════════════════════
 
     public async Task Handle(
-        BildRegionGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        BildRegionGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendHistorieEintrag appendHistorieEintrag)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ImagePair.ImagePair>(envelope.AggregateId);
-            await _store.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
+            await appendHistorieEintrag.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
                 Zeitpunkt: envelope.CreatedAtUtc,
                 EreignisTyp: nameof(BildRegionGelabelt),
                 Beschreibung: $"Region {evt.RegionIndex} gelabelt ({evt.Version})",
@@ -133,12 +126,12 @@ public partial class ImagePairHistorieProjection : ISubscriber, IPullSubscriber,
     }
 
     public async Task Handle(
-        EinzelBildGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        EinzelBildGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendHistorieEintrag appendHistorieEintrag)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ImagePair.ImagePair>(envelope.AggregateId);
-            await _store.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
+            await appendHistorieEintrag.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
                 Zeitpunkt: envelope.CreatedAtUtc,
                 EreignisTyp: nameof(EinzelBildGelabelt),
                 Beschreibung: $"Einzelbild {evt.Version} gelabelt",
@@ -148,12 +141,12 @@ public partial class ImagePairHistorieProjection : ISubscriber, IPullSubscriber,
     }
 
     public async Task Handle(
-        BildPaarGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        BildPaarGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendHistorieEintrag appendHistorieEintrag)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ImagePair.ImagePair>(envelope.AggregateId);
-            await _store.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
+            await appendHistorieEintrag.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
                 Zeitpunkt: envelope.CreatedAtUtc,
                 EreignisTyp: nameof(BildPaarGelabelt),
                 Beschreibung: "Bildpaar gelabelt",
@@ -167,12 +160,12 @@ public partial class ImagePairHistorieProjection : ISubscriber, IPullSubscriber,
     // ═══════════════════════════════════════════════════════════
 
     public async Task Handle(
-        PhysischesProduktGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        PhysischesProduktGelabelt evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendHistorieEintrag appendHistorieEintrag)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ImagePair.ImagePair>(envelope.AggregateId);
-            await _store.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
+            await appendHistorieEintrag.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
                 Zeitpunkt: envelope.CreatedAtUtc,
                 EreignisTyp: nameof(PhysischesProduktGelabelt),
                 Beschreibung: "Produkt gelabelt",
@@ -186,12 +179,12 @@ public partial class ImagePairHistorieProjection : ISubscriber, IPullSubscriber,
     // ═══════════════════════════════════════════════════════════
 
     public async Task Handle(
-        ImagePairInspiziert evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+        ImagePairInspiziert evt, IAggregateEnvelope envelope, ProjectionWriter writer, IAppendHistorieEintrag appendHistorieEintrag)
     {
         await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
         {
             ctx.Track<ImagePair.ImagePair>(envelope.AggregateId);
-            await _store.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
+            await appendHistorieEintrag.AppendEintragAsync(envelope.AggregateId, new HistorieEintrag(
                 Zeitpunkt: envelope.CreatedAtUtc,
                 EreignisTyp: nameof(ImagePairInspiziert),
                 Beschreibung: "Inspiziert",

@@ -241,7 +241,7 @@ public sealed class GraphBuilder
                 if (_evtId.TryGetValue(evtFull, out var evtNode))
                 {
                     Edge(cmdNode, evtNode, EdgeKind.produces, "GeneratedCommandRouting");
-                    cmd.Command!.Produces.Add(new CommandOutcome { Event = SimpleEvt(evtFull), Persisted = true, Guard = GuardFor(cmdFull, SimpleEvt(evtFull)) });
+                    cmd.Command!.Produces.Add(new CommandOutcome { Event = SimpleEvt(evtFull), Persisted = true });
                 }
         }
     }
@@ -254,20 +254,8 @@ public sealed class GraphBuilder
                 if (_cmdId.TryGetValue(cmdFull, out var cmdNode) && _evtId.TryGetValue(evtFull, out var evtNode))
                 {
                     Edge(cmdNode, evtNode, EdgeKind.produces, "decider");
-                    _byId[cmdNode].Command!.Produces.Add(new CommandOutcome { Event = SimpleEvt(evtFull), Persisted = false, Guard = GuardFor(cmdFull, SimpleEvt(evtFull)) });
+                    _byId[cmdNode].Command!.Produces.Add(new CommandOutcome { Event = SimpleEvt(evtFull), Persisted = false });
                 }
-    }
-
-    private Dictionary<string, string>? _guardMap;
-
-    /// <summary>Der Guard-Ausdruck dieses Zweigs (aus der Decider-Syntax) — das „Warum". Null = Sonst-Zweig.</summary>
-    private string? GuardFor(string cmdFull, string evtSimple)
-    {
-        _guardMap ??= _dom.Aggregates
-            .SelectMany(a => a.Guards)
-            .GroupBy(kv => kv.Key)
-            .ToDictionary(g => g.Key, g => g.First().Value);
-        return _guardMap.TryGetValue(cmdFull + "|" + evtSimple, out var g) ? g : null;
     }
 
     private void BuildProcessEdges()
@@ -542,11 +530,31 @@ public sealed class GraphBuilder
             d.Add(new Finding { Severity = "warning", Code = "ENUM-ZERO",
                 Message = $"Enum '{e.Name}' hat einen Wert 0 — geht auf dem Proto-Wire als Default verloren (1-basiert empfohlen)." });
 
-        // Mehrere Impls desselben Store-Interfaces → ProjectionServicesGenerator nimmt FirstOrDefault (reihenfolgeabhängig).
+        // Mehrere Klassen implementieren dieselbe Fähigkeit → CQRS053 im Build (hier der Rückhalt).
         foreach (var s in _dom.Stores)
             foreach (var m in s.MehrdeutigeImpls)
                 d.Add(new Finding { Severity = "warning", Code = "STORE-AMBIGUOUS",
-                    Message = $"Store-Interface mit mehreren Implementierungen ({m}) — DI-Auflösung reihenfolgeabhängig." });
+                    Message = $"Fähigkeit mit mehreren Implementierungen ({m}) — die DI wüsste nicht, welche (CQRS053)." });
+
+        // ── Handle-Verträge (Projektion/Reader/Reaktion/Pipeline): was ein Handler erzeugen kann, steht in der Signatur. ──
+        var handleVertraege = _dom.Projections.SelectMany(p => p.HandleVertraege.Select(kv => (Wer: p.Name, Ein: kv.Key, V: kv.Value)))
+            .Concat(_dom.Readers.SelectMany(r => r.HandleVertraege.Select(kv => (Wer: r.Name, Ein: kv.Key, V: kv.Value))))
+            .Concat(_dom.Pipelines.SelectMany(p => p.HandleVertraege.Select(kv => (Wer: p.Name, Ein: Short(kv.Key), V: kv.Value))))
+            .ToList();
+        // Offene Signatur: der Vertrag ist unbekannt — der Extractor rät NICHT aus dem Rumpf (CQRS050 macht das zum Build-Fehler;
+        //   diese Diagnose ist nur der Rückhalt, falls der Analyzer nicht lief).
+        foreach (var (wer, ein, v) in handleVertraege.Where(x => x.V.SignaturOffen))
+            d.Add(new Finding { Severity = "error", Code = "HANDLE-OFFEN",
+                Message = $"'{wer}.Handle({ein})' gibt '{v.Signatur}' zurück — offene Signatur, die möglichen Ausgaben sind unbekannt (CQRS050: OneOf<…> konkreter Typen)." });
+        // Response, die kein Reader-Handle erzeugen kann → toter Typ (analog UNUSED-EVENT).
+        var beantwortet = _dom.Readers.SelectMany(r => r.HandleResponses.Values.SelectMany(x => x)).ToHashSet(StringComparer.Ordinal);
+        // Als Feld-/Element-Typ einer anderen Response verwendet (z. B. ModellAntwort in ModellListe.Items) = lebendig.
+        foreach (var f in _dom.Responses.SelectMany(r => r.Fields))
+            foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(f.Type + " " + f.ElementTyp, @"[A-Za-z_]\w*"))
+                beantwortet.Add(m.Value);
+        foreach (var resp in _dom.Responses.Where(r => r.Meta.IstDomäne && !beantwortet.Contains(r.Name)))
+            d.Add(new Finding { Severity = "warning", Code = "RESPONSE-OHNE-QUERY",
+                Message = $"Response '{resp.Name}' wird von keinem Reader-Handle erzeugt (in keiner Handle-Signatur) — toter Typ." });
 
         // Persistiertes Event ohne jeden Konsumenten (kein Konsument, kein Prozess, keine Pipeline).
         foreach (var evt in _g.Nodes.Where(n => n.Kind == NodeKind.@event && n.Event!.Persisted))

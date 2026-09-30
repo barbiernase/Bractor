@@ -47,6 +47,7 @@ namespace Infrastructure.SourceGeneration
 
             context.AddSource("PipelineActors.g.cs", actorsSource);
             context.AddSource("GeneratedPipelines.g.cs", registrationSource);
+            context.AddSource("GeneratedFristen.g.cs", GenerateFristRouter(context, sorted));
         }
 
         // ═══════════════════════════════════════════════════════
@@ -137,38 +138,6 @@ namespace Infrastructure.SourceGeneration
             return result;
         }
 
-        /// <summary>
-        /// Extrahiert den PipelineId-String aus dem Property einer Pipeline-Klasse.
-        /// Unterstützt: public string PipelineId => "xyz";
-        /// </summary>
-        private string ExtractPipelineId(INamedTypeSymbol pipelineSymbol)
-        {
-            var property = pipelineSymbol.GetMembers("PipelineId")
-                .OfType<IPropertySymbol>()
-                .FirstOrDefault();
-
-            if (property == null)
-                return null;
-
-            // Syntax-Node des Properties holen
-            var syntaxRef = property.DeclaringSyntaxReferences.FirstOrDefault();
-            if (syntaxRef == null)
-                return null;
-
-            var syntaxNode = syntaxRef.GetSyntax();
-            var text = syntaxNode.ToString();
-
-            // "image-processing" aus => "image-processing" extrahieren
-            var startQuote = text.IndexOf('"');
-            var endQuote = text.LastIndexOf('"');
-            if (startQuote >= 0 && endQuote > startQuote)
-            {
-                return text.Substring(startQuote + 1, endQuote - startQuote - 1);
-            }
-
-            return null;
-        }
-
         // ═══════════════════════════════════════════════════════
         // PipelineActors.g.cs
         // ═══════════════════════════════════════════════════════
@@ -212,9 +181,14 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"    public {actorName}(");
                 sb.AppendLine($"        {name} logic,");
                 sb.AppendLine($"        Cluster cluster,");
+                sb.AppendLine($"        IFaehigkeiten faehigkeiten,");
                 sb.AppendLine($"        Infrastructure.PubSub.BrokerPublisher? publisher = null,");
-                sb.AppendLine($"        ILogger<{actorName}>? logger = null)");
-                sb.AppendLine($"        : base(logic, cluster, publisher, logger) {{ }}");
+                sb.AppendLine($"        ILogger<{actorName}>? logger = null,");
+                sb.AppendLine($"        Infrastructure.Deadlines.FristPlaner? fristPlaner = null)");
+                sb.AppendLine($"        : base(logic, cluster, publisher, logger, fristPlaner) {{ _faehigkeiten = faehigkeiten; }}");
+                sb.AppendLine();
+                sb.AppendLine($"    /// <summary>Fähigkeits-Bereich dieses Actors: die Store-Funktionen, die die Handles als Parameter verlangen.</summary>");
+                sb.AppendLine($"    private readonly IFaehigkeiten _faehigkeiten;");
                 sb.AppendLine();
 
                 // GetSubscribedEventTypes
@@ -237,8 +211,9 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"        IPipelineTrigger trigger, PipelineContext ctx,");
                 sb.AppendLine($"        Func<ICommand, Task> sendCommand,");
                 sb.AppendLine($"        Func<IPipelineTrigger, Task> sendTrigger,");
-                sb.AppendLine($"        Func<ITransientEvent, Task> broadcastTransient)");
-                sb.AppendLine($"        => _logic.DispatchTriggerAsync(trigger, ctx, sendCommand, sendTrigger, broadcastTransient);");
+                sb.AppendLine($"        Func<ITransientEvent, Task> broadcastTransient,");
+                sb.AppendLine($"        Func<IPlanung, Task> plane)");
+                sb.AppendLine($"        => _logic.DispatchTriggerAsync(trigger, ctx, sendCommand, sendTrigger, broadcastTransient, plane, _faehigkeiten);");
                 sb.AppendLine();
 
                 // DispatchEventAsync
@@ -246,8 +221,9 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"        IAggregateEnvelope envelope, PipelineContext ctx,");
                 sb.AppendLine($"        Func<ICommand, Task> sendCommand,");
                 sb.AppendLine($"        Func<IPipelineTrigger, Task> sendTrigger,");
-                sb.AppendLine($"        Func<ITransientEvent, Task> broadcastTransient)");
-                sb.AppendLine($"        => _logic.DispatchEventAsync(envelope, ctx, sendCommand, sendTrigger, broadcastTransient);");
+                sb.AppendLine($"        Func<ITransientEvent, Task> broadcastTransient,");
+                sb.AppendLine($"        Func<IPlanung, Task> plane)");
+                sb.AppendLine($"        => _logic.DispatchEventAsync(envelope, ctx, sendCommand, sendTrigger, broadcastTransient, plane, _faehigkeiten);");
                 sb.AppendLine();
 
                 // DispatchSelfAsync
@@ -255,8 +231,9 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"        IPipelineSelfMessage selfMsg, PipelineContext ctx,");
                 sb.AppendLine($"        Func<ICommand, Task> sendCommand,");
                 sb.AppendLine($"        Func<IPipelineTrigger, Task> sendTrigger,");
-                sb.AppendLine($"        Func<ITransientEvent, Task> broadcastTransient)");
-                sb.AppendLine($"        => _logic.DispatchSelfAsync(selfMsg, ctx, sendCommand, sendTrigger, broadcastTransient);");
+                sb.AppendLine($"        Func<ITransientEvent, Task> broadcastTransient,");
+                sb.AppendLine($"        Func<IPlanung, Task> plane)");
+                sb.AppendLine($"        => _logic.DispatchSelfAsync(selfMsg, ctx, sendCommand, sendTrigger, broadcastTransient, plane, _faehigkeiten);");
 
                 sb.AppendLine("}");
                 sb.AppendLine();
@@ -361,7 +338,7 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"            {{");
                 sb.AppendLine($"                var logic = provider.GetRequiredService<{name}>();");
                 sb.AppendLine($"                var logger = provider.GetService<ILogger<{actorName}>>();");
-                sb.AppendLine($"                return new {actorName}(logic, cluster, publisher, logger);");
+                sb.AppendLine($"                return new {actorName}(logic, cluster, provider.GetRequiredService<IFaehigkeitsFabrik>().Oeffne(), publisher, logger, provider.GetService<Infrastructure.Deadlines.FristPlaner>());");
                 sb.AppendLine($"            }})");
                 sb.AppendLine($"        );");
                 sb.AppendLine();
@@ -400,7 +377,7 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"                    var cluster = system.Cluster();");
                 sb.AppendLine($"                    var publisher = provider.GetRequiredService<Infrastructure.PubSub.BrokerPublisher>();");
                 sb.AppendLine($"                    var logger = provider.GetService<ILogger<{actorName}>>();");
-                sb.AppendLine($"                    return new {actorName}(handler_{name}, cluster, publisher, logger);");
+                sb.AppendLine($"                    return new {actorName}(handler_{name}, cluster, provider.GetRequiredService<IFaehigkeitsFabrik>().Oeffne(), publisher, logger, provider.GetService<Infrastructure.Deadlines.FristPlaner>());");
                 sb.AppendLine($"                }})");
                 sb.AppendLine($"            ));");
                 sb.AppendLine($"        }}");
@@ -505,8 +482,11 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine("                    ev => DetachedEmit.Wrap(router.EmitFor(ev, CancellationToken.None));");
                 sb.AppendLine("                Func<IPipelineTrigger, string, Task> sendTrigger =");
                 sb.AppendLine("                    (trig, _) => PipelineTriggerSender.SendAsync(cluster, trig, null);");
+                sb.AppendLine("                var faehigkeiten = provider.GetRequiredService<IFaehigkeitsFabrik>().Oeffne();");
+                sb.AppendLine("                var fristPlaner = provider.GetService<Infrastructure.Deadlines.FristPlaner>();");
                 sb.AppendLine("                var dispatch = PipelineEventPullBridge.Wrap(");
-                sb.AppendLine("                    handler.DispatchEventAsync, emitFactory, sendTrigger);");
+                sb.AppendLine("                    (env, ctx, sc, st, bt, pl) => handler.DispatchEventAsync(env, ctx, sc, st, bt, pl, faehigkeiten),");
+                sb.AppendLine("                    emitFactory, sendTrigger, fristPlaner == null ? null : new Func<FristAuftrag, Task>(f => fristPlaner.PlaneAsync(f)));");
                 sb.AppendLine("                return (handler.PipelineId, (IProjectionTracker?)null, emittentenCursor, dispatch);");
                 sb.AppendLine("            }, depsSink)));");
                 sb.AppendLine("    }");
@@ -514,6 +494,62 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine();
             }
 
+            return sb.ToString();
+        }
+
+        // ═══════════════════════════════════════════════════════
+        // GeneratedFristen.g.cs — Frist-Kontext → Command (aus den Frist<TCmd>-Ausgängen der Signaturen)
+        // ═══════════════════════════════════════════════════════
+
+        /// <summary>CQRS056: der Command einer <c>Frist&lt;TCmd&gt;</c> muss aus der Ziel-Id baubar sein.</summary>
+        private static readonly DiagnosticDescriptor FristCommandNichtBaubar = new(
+            "CQRS056",
+            "Frist-Command nicht aus der Ziel-Id baubar",
+            "'{0}' wird als Frist<{0}> geplant, hat aber keinen öffentlichen Konstruktor mit genau einem Guid-Parameter (der Ziel-Aggregat-Id)",
+            "Cqrs.Fristen",
+            DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        private static string GenerateFristRouter(GeneratorExecutionContext context, List<INamedTypeSymbol> pipelines)
+        {
+            var fristTyp = context.Compilation.GetTypeByMetadataName("Abstractions.Frist`1");
+            var guid = context.Compilation.GetTypeByMetadataName("System.Guid");
+            var cmds = new List<INamedTypeSymbol>();
+            foreach (var p in pipelines)
+                foreach (var m in p.GetMembers("Handle").OfType<IMethodSymbol>())
+                    if (m.ReturnType is INamedTypeSymbol { IsGenericType: true } folge
+                        && folge.TypeArguments[0] is INamedTypeSymbol { Name: "OneOf" } oneOf)
+                        foreach (var a in oneOf.TypeArguments.OfType<INamedTypeSymbol>())
+                            if (SymbolEqualityComparer.Default.Equals(a.OriginalDefinition, fristTyp)
+                                && a.TypeArguments[0] is INamedTypeSymbol cmd && !cmds.Contains(cmd, SymbolEqualityComparer.Default))
+                                cmds.Add(cmd);
+
+            var sb = new StringBuilder();
+            sb.AppendLine("// <auto-generated/> — PipelineActorGenerator: Fristen-Router aus den Frist<TCmd>-Ausgängen.");
+            sb.AppendLine("#nullable enable");
+            sb.AppendLine("using Abstractions;");
+            sb.AppendLine();
+            sb.AppendLine("namespace Infrastructure.Pipeline.Generated;");
+            sb.AppendLine();
+            sb.AppendLine("/// <summary>Fällige Frist → Command. Der Kontext IST der Command-Typname (vom Dispatch als Konstante gesetzt).</summary>");
+            sb.AppendLine("public static class GeneratedFristen");
+            sb.AppendLine("{");
+            sb.AppendLine("    public static ICommand Baue(Frist f) => f.Kontext switch");
+            sb.AppendLine("    {");
+            foreach (var cmd in cmds.OrderBy(c => c.ToDisplayString()))
+            {
+                var ok = cmd.InstanceConstructors.Any(c => c.DeclaredAccessibility == Accessibility.Public
+                    && c.Parameters.Length == 1 && SymbolEqualityComparer.Default.Equals(c.Parameters[0].Type, guid));
+                if (!ok)
+                {
+                    context.ReportDiagnostic(Diagnostic.Create(FristCommandNichtBaubar, cmd.Locations.FirstOrDefault(), cmd.ToDisplayString()));
+                    continue;
+                }
+                sb.AppendLine($"        \"{cmd.ToDisplayString()}\" => new {cmd.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}(f.ZielAggregatId),");
+            }
+            sb.AppendLine("        _ => throw new System.InvalidOperationException($\"Unbekannter Frist-Kontext '{f.Kontext}' — keine Pipeline plant eine Frist<{f.Kontext}>.\"),");
+            sb.AppendLine("    };");
+            sb.AppendLine("}");
             return sb.ToString();
         }
     }

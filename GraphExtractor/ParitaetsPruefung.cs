@@ -138,10 +138,18 @@ public static class ParitaetsPruefung
             var iPayload = Get(Vertrag.IMessagePayload); var iOut = Get(Vertrag.IPipelineOutput);
             var iSelf = Get(Vertrag.IPipelineSelfMessage); var iTrig = Get(Vertrag.IPipelineTrigger);
             var iReader = Get(Vertrag.IReader); var iDecider = Get(Vertrag.IDecider); var iApplier = Get(Vertrag.IApplier);
-            var iWStore = Get(Vertrag.IWriteStore); var iRStore = Get(Vertrag.IReadStore); var iRStoreT = Get(Vertrag.IReadStoreT);
+            var iWStore = Get(Vertrag.IWriteStore); var iRStore = Get(Vertrag.IReadStore); var iStore = Get(Vertrag.IStore);
             var iWert = Get(Vertrag.IWertobjekt); var iEnv = Get(Vertrag.IAggregateEnvelope);
             bool Innen(INamedTypeSymbol t, INamedTypeSymbol? g) => g != null && t.AllInterfaces.Any(i => i.OriginalDefinition.ToDisplayString() == g.ToDisplayString());
             bool Domäne(IAssemblySymbol? a) => a != null && domänen.Contains(a.Name);
+
+            // Fähigkeiten, die ein Bündel (IStore) erbt — die sind KEIN eigener Store.
+            var imBuendel = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var comp in comps.Where(c => domänen.Contains(c.AssemblyName ?? "")))
+                foreach (var tree in comp.SyntaxTrees.Where(t => !Projektlage.IstGeneriert(t)))
+                    foreach (var decl in tree.GetRoot().DescendantNodes().OfType<InterfaceDeclarationSyntax>())
+                        if (comp.GetSemanticModel(tree).GetDeclaredSymbol(decl) is INamedTypeSymbol b && Sym.Implements(b, iStore))
+                            foreach (var i in b.AllInterfaces) imBuendel.Add(i.Fq());
 
             foreach (var comp in comps.Where(c => domänen.Contains(c.AssemblyName ?? "")))
                 foreach (var tree in comp.SyntaxTrees.Where(t => !Projektlage.IstGeneriert(t)))
@@ -154,9 +162,10 @@ public static class ParitaetsPruefung
                         if (decl is EnumDeclarationSyntax) { inv.Enums.Add(full); continue; }
                         if (decl is InterfaceDeclarationSyntax)
                         {
-                            // Store = jede Schreib-Seite, plus jede Lese-Seite OHNE Schreib-Partner (IReadStore<T> hängt an T).
-                            if (Sym.Implements(t, iWStore)
-                                || Sym.Implements(t, iRStore) && !t.AllInterfaces.Any(i => i.OriginalDefinition.Fq() == iRStoreT?.Fq()))
+                            // Store = jedes Bündel (IStore), plus jede Fähigkeit OHNE Bündel (dann ihr eigener Store).
+                            if (Sym.Implements(t, iStore)
+                                || (Sym.Implements(t, iWStore) || Sym.Implements(t, iRStore))
+                                   && !imBuendel.Contains(full))
                                 inv.Stores.Add(full);
                             continue;
                         }

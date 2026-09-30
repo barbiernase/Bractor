@@ -124,10 +124,11 @@ public class SignalDeliveryClusterTests : IClassFixture<PostgresFixture>
         return es;
     }
 
-    private static Func<EventEnvelope, ProjectionWriter, Task> Dispatch(IImagePairHistorieWriteStore effektStore)
+    private static Func<EventEnvelope, ProjectionWriter, Task> Dispatch(IAppendHistorieEintrag effektStore)
     {
-        var projection = new ImagePairHistorieProjection(effektStore);
-        return (e, writer) => projection.DispatchAsync(e, writer, _ => Task.CompletedTask);
+        var projection = new ImagePairHistorieProjection();
+        var faehigkeiten = new FaehigkeitenAus(effektStore);
+        return (e, writer) => projection.DispatchAsync(e, writer, _ => Task.CompletedTask, faehigkeiten);
     }
 
     private sealed class NoopFactory : IAggregateHandlerFactory
