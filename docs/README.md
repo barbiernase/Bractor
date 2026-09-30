@@ -74,6 +74,10 @@ auf die jeweiligen Architektur-Kapitel.
 > LLM-Füllung von Code-Blöcken (Kontext nur aus Code + Graph, ausgelöst durch einen LLM-Knoten; Informationen je
 > Slot-Art, Budget für lokales Modell; Kontext-Erzeugung `--kontexte` gebaut, LLM-Aufruf noch nicht):
 > [`konzept-llm-minimalkontext.md`](konzept-llm-minimalkontext.md).
+> **Kompositions-Sprache** (Alphabet · Grammatik · Operatoren · Kapselung · Muster · Linsen — beliebig komplexe Domänen/Pipelines
+> entwerfen, nicht nur abbilden; Konzept): [`konzept-editor-komposition.md`](konzept-editor-komposition.md).
+> Pipelines im Editor als Anwendung davon (Rand-Band Ingress → Pipeline → Ziele/Zeit, Kanäle mit Garantie, Frist als Ausgang, Guardrails,
+> Laufzeit-Befunde als Voraussetzung; Konzept, nicht umgesetzt): [`konzept-editor-pipelines.md`](konzept-editor-pipelines.md).
 >
 > **Konzept / Vor-Analyse:** [`konzept-exactly-once-naht.md`](konzept-exactly-once-naht.md) —
 > wie voraussetzungsreich exactly-once ist, welche Verträge ein Co-Commit-Store erfüllen muss
