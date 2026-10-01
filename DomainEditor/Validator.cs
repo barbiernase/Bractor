@@ -99,7 +99,147 @@ public static class Validator
             }
         }
 
+        befunde.AddRange(PruefeGrammatik(modell));
         return befunde;
+    }
+
+    /// <summary>
+    /// Die GRAMMATIK (<see cref="Grammatik"/>) auf dem Nachrichtenfluss: Sorte × Eingang, Kardinalität, Erzeugung und Zusatzregeln.
+    /// Jeder Befund trägt die Regel-Id als Code und nennt die Regel beim Namen (samt Build-Gegenstück).
+    /// </summary>
+    public static IReadOnlyList<Befund> PruefeGrammatik(EditorModell modell) => PruefeGrammatik(modell, Fluss.Aus(modell));
+
+    public static IReadOnlyList<Befund> PruefeGrammatik(EditorModell modell, Fluss fluss)
+    {
+        var befunde = new List<Befund>();
+        void Melde(string regel, string meldung, string? schwere = null) =>
+            befunde.Add(new(schwere ?? Grammatik.RegelVon(regel).Schwere, regel, $"{meldung} — {Grammatik.Beschreibe(regel)}"));
+        string Art(string id) => fluss.KnotenVon(id)?.Art ?? "?";
+        string Name(string id) => fluss.KnotenVon(id)?.Name ?? id;
+        string Wer(string id) => $"{Grammatik.BausteinName(Art(id))} {Name(id)}";
+        var recs = modell.Records.GroupBy(r => r.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+
+        // (1) Sorte × Eingang + Kardinalität je Nachricht.
+        foreach (var g in fluss.Kanten.Where(k => Art(k.Nach) != "nachricht").GroupBy(k => (k.Nachricht, k.Sorte)))
+        {
+            var konsumenten = g.Select(k => k.Nach).Distinct().ToList();
+            foreach (var kid in konsumenten)
+                if (Grammatik.KonsumVon(g.Key.Sorte, Art(kid)) == null)
+                    Melde(RegelFuerSorte(g.Key.Sorte), $"{Grammatik.SorteName(g.Key.Sorte)} '{g.Key.Nachricht}' läuft in {Wer(kid)} — dieser Eingang nimmt die Sorte nicht an", "error");
+            foreach (var kg in konsumenten.GroupBy(Art))
+            {
+                var konsum = Grammatik.KonsumVon(g.Key.Sorte, kg.Key);
+                if (konsum?.Kardinalitaet == Grammatik.GenauEins && kg.Count() > 1)
+                    Melde(konsum.Regel, $"{Grammatik.SorteName(g.Key.Sorte)} '{g.Key.Nachricht}' hat {kg.Count()} Konsumenten: {string.Join(", ", kg.Select(Wer))}");
+            }
+            // Selbst: nur in der Pipeline, die sie plant.
+            if (g.Key.Sorte == Grammatik.Selbst)
+            {
+                var planer = fluss.Kanten.Where(k => k.Nach == "msg:" + g.Key.Nachricht).Select(k => k.Von).ToHashSet();
+                foreach (var kid in konsumenten.Where(k => planer.Count > 0 && !planer.Contains(k)))
+                    Melde("GR-SELBST", $"Selbst '{g.Key.Nachricht}' kommt in {Wer(kid)} an, geplant wird sie von {string.Join(", ", planer.Select(Wer))}");
+            }
+        }
+
+        // (2) Erzeugung: Baustein-Ausgang → Sorte.
+        foreach (var k in fluss.Kanten.Where(k => Art(k.Von) != "nachricht" && Art(k.Nach) == "nachricht" && k.Sorte != Grammatik.Faehigkeit))
+            if (Grammatik.ErzeugungVon(Art(k.Von), k.Sorte) == null)
+            {
+                var regel = Art(k.Von) == Grammatik.Pipeline && k.Sorte == Grammatik.Event ? "GR-KEIN-EVENT-AUS-PIPELINE" : RegelFuerBaustein(Art(k.Von));
+                Melde(regel, $"{Wer(k.Von)} erzeugt {Grammatik.SorteName(k.Sorte)} '{k.Nachricht}'" + (k.Handle != null ? $" (Handle {k.Handle})" : ""), "error");
+            }
+
+        // (3) Zusatzregeln an den Pipeline-Handles: Selbst ohne Event-Eingang, Start höchstens einmal, Garantie; Frist-Command-Ctor.
+        foreach (var p in modell.Lesen?.Pipelines ?? [])
+        {
+            var starts = p.Handles.Count(h => h.Eingang == nameof(Abstractions.PipelineGestartet));
+            if (starts > 1) Melde("GR-START-EINMAL", $"Pipeline {p.Name} hat {starts} Start-Handles");
+            foreach (var h in p.Handles)
+            {
+                var eingang = recs.TryGetValue(h.Eingang, out var er) ? Grammatik.SorteVonRecordArt(er.Kind) : null;
+                var ausgaenge = h.Ausgaenge.Select(Fluss.Generisch).ToList();
+                if (eingang is Grammatik.Event or Grammatik.Transient && ausgaenge.Any(a => a.Huelle == typeof(Abstractions.Selbst<>).Name.Split('`')[0]))
+                    Melde("GR-SELBST-OHNE-EVENT", $"{p.Name}.Handle({h.Eingang}) plant Selbst, hat aber einen Event-Eingang (keine Mailbox)");
+                var verlierbar = eingang is null or Grammatik.Trigger or Grammatik.Selbst or Grammatik.Transient;   // null: Start/Selbst ohne Record
+                if (verlierbar)
+                    foreach (var c in h.Ausgaenge.Where(a => recs.TryGetValue(a, out var r) && r.Kind == RecordArt.Command))
+                        Melde("GR-GARANTIE", $"{p.Name}.Handle({h.Eingang}) sendet {c} ab einem verlierbaren Eingang — nicht idempotent, ein Re-Trigger kann doppelt wirken");
+                foreach (var (huelle, arg) in ausgaenge.Where(a => a.Huelle == typeof(Abstractions.Frist<>).Name.Split('`')[0]))
+                    if (arg != null && recs.TryGetValue(arg, out var fc) && !HatGuidKtor(fc))
+                        Melde("GR-FRIST-CTOR", $"{p.Name}.Handle({h.Eingang}) plant Frist<{arg}>, aber {arg} hat keinen Konstruktor (Guid)");
+            }
+        }
+        foreach (var k in modell.Lesen?.Konsumenten ?? [])
+            foreach (var h in k.Handles.Where(h => recs.TryGetValue(h.Eingang, out var r) && r.Kind == RecordArt.Rejection))
+                foreach (var c in h.Ausgaenge.Where(a => recs.TryGetValue(a, out var r) && r.Kind == RecordArt.Command))
+                    Melde("GR-GARANTIE", $"{k.Name}.Handle({h.Eingang}) sendet {c} ab einem transienten Event (verlierbar)");
+
+        // (4) Zyklus ohne Zustandsschritt: Kreise im Fluss ohne Aggregat (Selbst-Schleifen sind der Schleifen-Operator).
+        foreach (var zyklus in ZyklenOhneZustand(fluss))
+            Melde("GR-ZYKLUS", $"Kreis ohne Aggregat: {string.Join(" → ", zyklus.Select(Name))}");
+
+        // (5) Regel Z: Zustand in zustandslosen Übersetzern (Hinweis).
+        foreach (var k in modell.Lesen?.Konsumenten ?? [])
+            if (k.Zustand is { Count: > 0 } z) Melde("GR-ZUSTAND", $"{k.Name} hält Zustand in {string.Join(", ", z)}");
+        foreach (var p in modell.Lesen?.Pipelines ?? [])
+            if (p.Zustand is { Count: > 0 } z) Melde("GR-ZUSTAND", $"Pipeline {p.Name} hält Zustand in {string.Join(", ", z)} — im Entwurf wird das Gedächtnis ein Aggregat");
+
+        // (6) Offene Modul-Ports (Entwurf von oben nach unten): je Nachricht einmal, am innersten Modul benannt.
+        foreach (var n in fluss.Knoten.Where(n => n.Art == "nachricht"))
+        {
+            if (Module.BrauchtKonsument.Contains(n.Sorte!) && !fluss.Aus(n.Id).Any())
+                Melde("GR-MODUL-EINGANG-OFFEN", $"Modul {n.Namespace}: Eingang {Grammatik.SorteName(n.Sorte!)} '{n.Name}' ohne Konsument");
+            else if (Module.BrauchtErzeuger.Contains(n.Sorte!) && !fluss.Ein(n.Id).Any())
+                Melde("GR-MODUL-AUSGANG-OFFEN", $"Modul {n.Namespace}: Ausgang {Grammatik.SorteName(n.Sorte!)} '{n.Name}' ohne Erzeuger");
+        }
+        return befunde;
+    }
+
+    private static string RegelFuerSorte(string sorte) =>
+        Grammatik.Konsume.FirstOrDefault(k => k.Sorte == sorte)?.Regel ?? "GR-AUSGANG-GESCHLOSSEN";
+    private static string RegelFuerBaustein(string baustein) =>
+        Grammatik.Erzeugungen.FirstOrDefault(e => e.Baustein == baustein)?.Regel ?? "GR-AUSGANG-GESCHLOSSEN";
+
+    /// <summary>Konstruktor (Guid): genau ein Positions-Parameter vom Typ Guid (Property-Felder zählen nicht).</summary>
+    private static bool HatGuidKtor(Record r) =>
+        !r.OhneParameterliste && r.Felder.Where(f => f.Zugriff == null).Select(f => f.Typ).SequenceEqual(["Guid"]);
+
+    /// <summary>
+    /// Kreise im Fluss, die durch KEIN Aggregat laufen (Tarjan über den Fluss ohne Aggregat-Knoten und ohne Selbst-Kanten).
+    /// Rückgabe: je starker Zusammenhangskomponente mit Kreis die Bausteine darin.
+    /// </summary>
+    internal static List<List<string>> ZyklenOhneZustand(Fluss fluss)
+    {
+        var kanten = fluss.Kanten.Where(k => k.Sorte != Grammatik.Selbst
+                && fluss.KnotenVon(k.Von)?.Art != Grammatik.Aggregat && fluss.KnotenVon(k.Nach)?.Art != Grammatik.Aggregat)
+            .GroupBy(k => k.Von).ToDictionary(g => g.Key, g => g.Select(k => k.Nach).Distinct().ToList(), StringComparer.Ordinal);
+        var index = new Dictionary<string, int>(StringComparer.Ordinal);
+        var low = new Dictionary<string, int>(StringComparer.Ordinal);
+        var stapel = new Stack<string>();
+        var aufStapel = new HashSet<string>(StringComparer.Ordinal);
+        var ergebnis = new List<List<string>>();
+        var i = 0;
+        void Besuche(string v)
+        {
+            index[v] = low[v] = i++;
+            stapel.Push(v);
+            aufStapel.Add(v);
+            foreach (var w in kanten.GetValueOrDefault(v) ?? [])
+            {
+                if (!index.ContainsKey(w)) { Besuche(w); low[v] = Math.Min(low[v], low[w]); }
+                else if (aufStapel.Contains(w)) low[v] = Math.Min(low[v], index[w]);
+            }
+            if (low[v] != index[v]) return;
+            var komp = new List<string>();
+            string x;
+            do { x = stapel.Pop(); aufStapel.Remove(x); komp.Add(x); } while (x != v);
+            var selbstschleife = komp.Count == 1 && (kanten.GetValueOrDefault(v)?.Contains(v) ?? false);
+            if (komp.Count > 1 || selbstschleife)
+                ergebnis.Add(komp.Where(id => fluss.KnotenVon(id)?.Art != "nachricht").OrderBy(id => id, StringComparer.Ordinal).ToList());
+        }
+        foreach (var v in fluss.Knoten.Select(k => k.Id).OrderBy(x => x, StringComparer.Ordinal))
+            if (!index.ContainsKey(v)) Besuche(v);
+        return ergebnis;
     }
 
     /// <summary>Basistyp bekannt? Streift <c>?</c> und Collection-Wrapper (List&lt;X&gt; …) ab.</summary>

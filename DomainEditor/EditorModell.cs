@@ -454,6 +454,8 @@ public sealed record Konsument
     public string? Datei { get; init; }
     /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
     public string? Herkunft { get; init; }
+    /// <summary>Regel Z (Code-Fakt, nur gelesen): Instanzfelder, die Zustand halten (siehe <see cref="PipelineKarte.Zustand"/>).</summary>
+    public IReadOnlyList<string>? Zustand { get; init; }
 }
 
 /// <summary>Ein Reader (<c>IReader&lt;TProjektion&gt;</c>), Handles <c>Handle(TQuery, IMessageEnvelope, ReadContext, Fähigkeit…)</c>.</summary>
@@ -498,6 +500,12 @@ public sealed record PipelineKarte
     public string? Datei { get; init; }
     /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
     public string? Herkunft { get; init; }
+    /// <summary>
+    /// Regel Z (Code-Fakt, nur gelesen, nie geschrieben — die Felder stehen verbatim im <see cref="Zusatz"/>): die Instanzfelder, die
+    /// ZUSTAND halten — nicht <c>readonly</c>, oder <c>readonly</c> mit einem Referenztyp, der weder Konstruktor-Parameter-Typ
+    /// (injiziert: Konfig, Dienst, Logger) noch <c>string</c> ist (z. B. <c>HashSet&lt;string&gt; _seen = new()</c>). Null/leer = zustandslos.
+    /// </summary>
+    public IReadOnlyList<string>? Zustand { get; init; }
 }
 
 /// <summary>

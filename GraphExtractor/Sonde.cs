@@ -107,7 +107,7 @@ public static class Sonde
             Console.WriteLine($"   [Graph-Diagnose {d.Severity}] {d.Code}: {d.Message}");
 
         // ── Volle Parität auf dem Fork (Inventar + Fixpunkt: zurückschreiben, neu kompilieren, neu extrahieren) ──
-        var befunde = await ParitaetsPruefung.PruefeAsync(fork, lage2, analyse, board);
+        var befunde = await ParitaetsPruefung.PruefeAsync(fork, lage2, analyse, board, ModellMapper.Ingress(cr));
         foreach (var b in befunde.Where(b => b.Schweregrad == "error"))
         {
             Console.WriteLine($"   ✗ [{b.Bereich}] {b.Meldung}");
@@ -210,6 +210,10 @@ public static class Sonde
                                                                  + (A(h, "fns").Any() ? $" -> {Fns(h)}" : ""))));
             foreach (var h in A(p, "handles").Where(h => S(h, "inputKind") == "trigger")) sondenTrigger.Add(S(h, "input"));
         }
+        // Regel Z: Zustandsfelder der zustandslosen Übersetzer (Symbol-Fakt, Validator-Hinweis GR-ZUSTAND).
+        foreach (var (liste, art) in new[] { ("pipelines", "pipeline"), ("projektionen", "projektion"), ("reaktionen", "reaktion") })
+            foreach (var o in A(b, liste).Where(Sonde).Where(o => A(o["code"], "zustand").Any()))
+                z.Add($"zustand {art} {S(o, "namespace")}.{S(o, "name")} | {string.Join(", ", A(o["code"], "zustand").Select(x => (string?)x))}");
         // Handle-Verträge: was jeder Handler erzeugen KANN und welche Store-Fns er rufen DARF — nur aus der Signatur.
         string Ausgaenge(JsonNode h) => string.Join("; ", A(h, "ausgaenge").Select(a =>
             $"{S(a, "art")}:{(S(a, "art") == "storefn" ? S(a, "store") + "." : "")}{S(a, "typ")}"));

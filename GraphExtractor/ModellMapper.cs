@@ -187,6 +187,7 @@ public static class ModellMapper
                 .Select(ev => AlsHandle(ev, p.HandleSigs.GetValueOrDefault(ev), p.HandleVertraege.GetValueOrDefault(ev))).ToList(),
             Doku = p.Quelle.Doku, Typart = p.Quelle.Typart, Basen = p.Quelle.Basen, Attribute = p.Quelle.Attribute,
             Zusatz = p.Quelle.Zusatz, Usings = p.Quelle.Usings, Datei = Rel(p.Quelle.Datei),
+            Zustand = p.Quelle.Zustand.Count > 0 ? p.Quelle.Zustand : null,
         }).ToList();
 
         var reader = dom.Readers.OrderBy(r => r.Name, StringComparer.Ordinal).Select(r => new Leser
@@ -204,6 +205,7 @@ public static class ModellMapper
                 p.HandleVertraege.GetValueOrDefault(h.InputFull))).ToList(),
             Doku = p.Quelle.Doku, Typart = p.Quelle.Typart, Basen = p.Quelle.Basen, Attribute = p.Quelle.Attribute,
             Zusatz = p.Quelle.Zusatz, Usings = p.Quelle.Usings,
+            Zustand = p.Quelle.Zustand.Count > 0 ? p.Quelle.Zustand : null,
         }).ToList();
 
         return new Leseseite { Stores = stores, Konsumenten = konsumenten, Reader = reader, Pipelines = pipelines };
@@ -273,6 +275,10 @@ public static class ModellMapper
     /// (Pipelines mit Trigger/Event/Self-Kanal, Trigger-Nachrichten mit Feldern, Fristen, Dienste,
     /// HostSettings). Die Positionen liefert das Board (autoLayout), nicht dieser Seed.
     /// </summary>
+    /// <summary>Die Ingress-Bindungen der Composition Root als Modell-Bindungen (Trigger, Modus, Ort).</summary>
+    public static List<IngressBindung> Ingress(CompositionRoot cr) =>
+        cr.Triggers.Select(tb => new IngressBindung { Trigger = tb.MsgName, Modus = tb.Modus, Ort = tb.Route ?? tb.Interval ?? tb.Path }).ToList();
+
     public static string ZuBoardJson(KnowledgeGraph graph, DomainModel dom, CompositionRoot cr)
     {
         var modell = ZuEditorModell(graph, dom);
@@ -280,6 +286,9 @@ public static class ModellMapper
         // Die Leseseite zeigt das Board in seinen eigenen Sammlungen (stores/projektionen/reader/…) — mit den Code-Fakten
         //   darin (Datei, Zusatz, Signatur verbatim); Board → Modell (DomainEditor.BoardLeseseite) liest sie zurück.
         root.Remove("lesen");
+        // Die Grammatik der Kompositions-Sprache (EINE Quelle: DomainEditor.Grammatik) — der Editor bietet danach nur gültige
+        //   Verbindungen an. Reine Editor-Sicht: EditorModell.Rahmen kennt das Feld nicht (beim Zurücklesen ignoriert).
+        root["rahmen"]!.AsObject()["grammatik"] = JsonSerializer.SerializeToNode(Grammatik.AlsJson(), EditorModell.JsonOptionen);
         var records = root["records"]!.AsArray();
 
         // (Store, Methode, isRead) → Board-Fn-Id — damit Projektion/Reader-Handles die aufgerufene Store-Fn
@@ -553,9 +562,9 @@ public static class ModellMapper
     /// <summary>Die Klasse eines Konsumenten/Readers verbatim (Datei, Form, Basen, Attribute, Zusatz, usings, Doku) — Board-Feld „code".</summary>
     private static object? KlassenCode(object? k) => k switch
     {
-        Konsument x => new { datei = x.Datei, doku = x.Doku, typart = x.Typart, basen = x.Basen, attribute = x.Attribute, zusatz = x.Zusatz, usings = x.Usings, herkunft = x.Herkunft },
+        Konsument x => new { datei = x.Datei, doku = x.Doku, typart = x.Typart, basen = x.Basen, attribute = x.Attribute, zusatz = x.Zusatz, usings = x.Usings, herkunft = x.Herkunft, zustand = x.Zustand },
         Leser x => new { datei = x.Datei, doku = x.Doku, typart = x.Typart, basen = x.Basen, attribute = x.Attribute, zusatz = x.Zusatz, usings = x.Usings, herkunft = x.Herkunft },
-        PipelineKarte x => new { datei = x.Datei, doku = x.Doku, typart = x.Typart, basen = x.Basen, attribute = x.Attribute, zusatz = x.Zusatz, usings = x.Usings, herkunft = x.Herkunft },
+        PipelineKarte x => new { datei = x.Datei, doku = x.Doku, typart = x.Typart, basen = x.Basen, attribute = x.Attribute, zusatz = x.Zusatz, usings = x.Usings, herkunft = x.Herkunft, zustand = x.Zustand },
         _ => null,
     };
 

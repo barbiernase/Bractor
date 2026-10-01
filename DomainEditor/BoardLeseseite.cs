@@ -143,7 +143,7 @@ public static class BoardLeseseite
                 // Basisliste aus dem Code, die Marker nach den Flags (Pull/Append) nachgezogen.
                 Basen = code?["basen"] is JsonArray ? Marker(Marker(Strings(code, "basen"), nameof(IPullSubscriber), pull), nameof(IAppendProjektion), append) : null,
                 Attribute = N(code, "attribute"), Zusatz = N(code, "zusatz"), Usings = Strings(code, "usings"), Datei = N(code, "datei"),
-                Herkunft = N(code, "herkunft"),
+                Herkunft = N(code, "herkunft"), Zustand = code?["zustand"] is JsonArray ? Strings(code, "zustand") : null,
             };
         }).Where(k => k.Name.Length > 0 && k.Namespace.Length > 0).OrderBy(k => k.Name, StringComparer.Ordinal).ToList();
 
@@ -190,6 +190,7 @@ public static class BoardLeseseite
                 Basen = code?["basen"] is JsonArray ? Strings(code, "basen") : null,
                 Attribute = N(code, "attribute"), Zusatz = N(code, "zusatz"), Usings = Strings(code, "usings"),
                 Datei = N(code, "datei") ?? N(p, "datei"), Herkunft = N(p, "herkunft") ?? N(code, "herkunft"),
+                Zustand = code?["zustand"] is JsonArray ? Strings(code, "zustand") : null,
             };
         }).Where(p => p.Name.Length > 0 && p.Namespace.Length > 0).OrderBy(p => p.Name, StringComparer.Ordinal).ToList();
 

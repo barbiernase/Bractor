@@ -241,3 +241,31 @@ State-Felder, OneOf, Prozess-Regeln, Handle-Ausgänge, Store-Fn-Signatur, Flags 
 Neu im Panel: **SubscriberId** an Projektion/Reaktion, **Konfigs** an der Pipeline (Konstruktor nur bei neuer Pipeline), Palette
 **„+ Konfig“**. **👁 Vorschau** zeigt vor dem Schreiben, was angelegt/geändert würde und was NICHT (mit Grund).
 
+
+## 11 · Grammatik und Module in der Bedienung (2026-09-30)
+
+Volltext: `docs/konzept-editor-komposition.md` §11 (Phase 1 Grammatik, Phase 2 Kapselung).
+
+**Verbinden nach der Grammatik.** Der Verbinden-Modus fragt für jeden typgleichen Kandidaten zusätzlich die Grammatik
+(`rahmen.grammatik`, eine Quelle: `DomainEditor/Grammatik.cs`):
+
+- **grün leuchtend** = erlaubt (wie bisher, ✓ = schon verbunden — bestehende Verbindungen bleiben immer lösbar);
+- **rot „✕ Regel"** = typgleich, aber verboten (z. B. ein Command, den schon ein anderes Aggregat entscheidet; ein Trigger, den schon
+  eine Pipeline behandelt; eine Query, die schon ein Reader beantwortet; Selbst in eine fremde Pipeline). Hover zeigt den Grund, ein
+  Klick verbindet **nicht**, sondern nennt die Regel beim Namen (Flash + Ausgabe-Panel, z. B.
+  „[GR-COMMAND] … — Regel »Command → genau ein Aggregat« (GR-COMMAND; Build: CQRS010, CQRS002)"); der Modus bleibt offen.
+- „+ plant Self-Tick ↺" fehlt an Handles mit Event-Eingang (Regel `GR-SELBST-OHNE-EVENT`).
+- **📐 Grammatik** (Kopfleiste) listet Sorte → Eingang mit Kardinalität, wer was erzeugt, und je Regel ihr Build-Gegenstück.
+- **✓ Prüfen** meldet zusätzlich die Grammatik-Befunde des Validators (Code = Regel-Id), u. a. Garantie, Zyklus ohne Aggregat,
+  Regel Z (Zustand in Pipeline/Reaktion, Hinweis) und offene Modul-Ports.
+
+**Module als Ebenen** (eingeklappte Modul-Karten, aufklappen = hineingehen) waren kurz gebaut und sind zurückgenommen — die
+Oberfläche bleibt wie in §8–§10; die Aufklapp-Semantik kommt später.
+
+**Blank-Start und Domänen laden (2026-09-30).** Der Editor startet **leer**; ein Start-Dialog („Womit starten?") listet die Module
+(Namespaces unter der Wurzel, eingerückt nach Hierarchie, mit Anzahl der Code-Elemente). **◻ Leer starten**, einzelne Domänen
+anhaken (ein Häkchen am Eltern-Modul lädt alles darunter) und **Laden**, oder **Alles laden**. Wieder öffnen über **🗂 Domänen laden**
+(Kopfleiste) bzw. den 📂-Knopf in der Ansicht-Leiste; die letzte Wahl ist vorausgewählt (je Browser und Solution). Das ist reine
+Editor-Sicht: Nicht Geladenes wird nicht gezeigt, ist kein Verbindungsziel und erscheint auf den Schnittstellen nicht; das Modell
+bleibt vollständig — ✓ Prüfen, 👁 Vorschau und „C# schreiben" sehen weiterhin alles (additiv, nichts Nicht-Geladenes wird angefasst).
+Entwürfe (neu im Editor) sind immer sichtbar. Der alte Aggregat-Filter liegt unter „👁 Ausblenden".

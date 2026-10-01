@@ -1,6 +1,7 @@
 # Konzept: Der Editor als Kompositions-Sprache
 
-> Stand 2026-09-30 · Konzept, **nicht umgesetzt**. Übergeordnet zu `docs/konzept-editor-pipelines.md` (Pipelines sind eine
+> Stand 2026-09-30 · Konzept; **Phase 1 (Grammatik) umgesetzt, Phase 2 (Kapselung) nur im Modell** (§11) — die Ebenen-Ansicht im Editor
+> ist auf Wunsch zurückgenommen (kommt später, bewusst nicht automatisch); Phasen 3–5 offen. Übergeordnet zu `docs/konzept-editor-pipelines.md` (Pipelines sind eine
 > Anwendung dieser Sprache) und zu `docs/konzept-domaenen-editor.md` (Palette, Bedienung). Programmiermodell:
 > `docs/konzept-handle-ausgaenge.md` §10–§13.
 
@@ -167,8 +168,8 @@ Die drei Pipeline-Bilder aus der Diskussion (Schienen, Matrix, Ablauf) sind solc
 
 | Fehlt | Für | Aufwand |
 |---|---|---|
-| Kapselung: Modul-Knoten, einklappen/aufklappen, abgeleitete Ports | §5 | groß, das Kernstück |
-| Grammatik-Matrix als EINE Quelle (Editor-Picker + Validator + Analyzer-Liste) | §3 | mittel |
+| Kapselung: Modul-Knoten, einklappen/aufklappen (abgeleitete Ports im Modell: §11.2; Editor-Ansicht offen) | §5 | groß, das Kernstück |
+| ~~Grammatik-Matrix als EINE Quelle (Editor-Picker + Validator + Analyzer-Liste)~~ → umgesetzt, §11.1 | §3 | mittel |
 | Operator-Gesten (Verzweigung/Schleife/Warten/Barriere als ein Klick) | §4 | mittel |
 | Muster-Makros (Stufe 1) | §6 | mittel |
 | Linsen Garantie/Zeit/Ablauf | §7 | klein bis mittel |
@@ -193,3 +194,71 @@ Die drei Pipeline-Bilder aus der Diskussion (Schienen, Matrix, Ablauf) sind solc
 3. **Regel Z verbindlich (kein Zustand außerhalb von Aggregaten/Lesemodellen)?** Empfehlung: ja, als Analyzer auf Felder in
    Pipelines/Reaktionen (ausgenommen Konfig/Dienst/Logger).
 4. **Muster: Makro oder Code-Fakt?** Empfehlung: Makro zuerst, Code-Fakt, sobald ein Muster geändert und neu expandiert werden soll.
+
+**Entschieden in der Umsetzung (2026-09-30), je der Default:** (1) Modulgrenze = Namespace — ja. (2) Schnittstelle nur
+abgeleitet; `public`/`internal` als Erzwingung bleibt Phase 5. (3) Regel Z in dieser Runde **kein Analyzer**, nur ein
+Validator-Hinweis (`GR-ZUSTAND`, Schwere info). (4) Muster nicht Teil dieser Runde.
+
+## 11 · Umgesetzt (2026-09-30)
+
+### 11.1 Phase 1 — Grammatik als EINE Quelle
+
+**Was.** Die Tabelle aus §3 (Sorte × Baustein-Eingang mit Kardinalität), die Erzeugungs-Spalte aus §2.2 (wer darf welche Sorte
+erzeugen) und die Zusatzregeln liegen **einmal** im Code: `DomainEditor/Grammatik.cs` (Roslyn-frei). Jede Regel hat eine Id, einen
+Namen, einen Satz und ihr **Build-Gegenstück** (Analyzer-/Generator-ID, Compiler, Boot-Guard oder „offen"). Daraus gespeist:
+
+| Stelle | Wie |
+|---|---|
+| **Editor** | GraphExtractor legt die Grammatik als `rahmen.grammatik` ins Board (`ModellMapper.ZuBoardJson`), samt der Abbildung Editor-Port → Sorte/Baustein (`portSorte`, `portBaustein`, `recordSorte`, `ausgangSorte`). Das JS kodiert keine Regel: `grPruefe(O, I)` prüft jede Verbindung (Nachricht → Eingang: Sorte + Kardinalität; Ausgang → Nachricht: Erzeugung; Baustein → Baustein: Trigger-Kette, Ingress, Selbst). Im Verbinden-Modus leuchten nur erlaubte Ziele; typgleiche, aber verbotene Ziele sind rot „✕ Regel" und nennen beim Klick die Regel beim Namen (Modus bleibt, nichts wird verbunden). „+ plant Self-Tick" gibt es an Event-Handles nicht mehr (`GR-SELBST-OHNE-EVENT`). **📐 Grammatik** zeigt die Tabelle und „Regel → Build-Gegenstück". |
+| **Validator** | `Validator.PruefeGrammatik` auf dem **Nachrichtenfluss** (`DomainEditor/Fluss.cs`: Erzeuger → Nachricht → Konsument aus Decide-OneOf, Apply, Prozess-Regeln, Handle-Eingang/-Ausgängen/-Fähigkeiten, Ingress; Außenwelt = Client/Ingress). Jeder Befund trägt die Regel-Id als Code und den Satz „Regel »Name« (Id; Build: …)". Geprüft: Sorte × Eingang, Kardinalität (`GR-COMMAND`, `GR-TRIGGER`, `GR-QUERY`, `GR-FALTUNG`), Selbst in fremder Pipeline (`GR-SELBST`), Erzeugung (`GR-AUS-*`), **Zusatzregeln** Selbst nur ohne Event-Eingang, kein persistentes Event aus Pipelines, Start höchstens einmal, Frist-Command braucht Ctor `(Guid)`, **Garantie** (Command ab Trigger/Selbst/Start bzw. ab transientem Event), **Zyklus ohne Zustandsschritt** (Tarjan über den Fluss ohne Aggregate und ohne Selbst-Kanten), **Regel Z** (Hinweis), offene Modul-Ports. |
+| **Build-Gegenstück** | `dotnet run --project GraphExtractor -- --grammatik` druckt die Liste. `--check` prüft, dass jede genannte ID als Diagnose-Literal im Code existiert (10 IDs: CQRS002/003/010/020/050/051/052/053/056/057) und listet die Regeln ohne Gegenstück. |
+
+**Regel Z als Code-Fakt.** Der Extractor liest je Pipeline/Projektion/Reaktion die **Zustandsfelder** aus dem Symbol (kein Rumpf):
+Instanzfeld, das nicht `readonly` ist, oder `readonly` mit einem Referenztyp, der weder Konstruktor-Parametertyp (injiziert: Konfig,
+Dienst, Logger) noch `string` ist. Träger: `PipelineKarte.Zustand`/`Konsument.Zustand` (nur gelesen, nie geschrieben; die Felder
+stehen verbatim im `Zusatz`; nicht im Herkunfts-Stempel). Treffer im Code: `FileWatchPipeline` mit `_seen`, `_pending`.
+
+**Offen (bewusst, nur gelistet):** die Analyzer für `GR-TRIGGER`, `GR-QUERY`, `GR-SELBST`, `GR-SELBST-OHNE-EVENT`,
+`GR-KEIN-EVENT-AUS-PIPELINE`, `GR-GARANTIE`, `GR-ZUSTAND`, `GR-FALTUNG`, `GR-MODUL-AUSGANG-OFFEN` und die Erweiterung des
+Azyklizitäts-Guards auf Reaktionen/Pipelines. Transiente Events haben im Editor noch keinen Konsum-Port (die Grammatik erlaubt sie,
+die Oberfläche bietet sie nicht an). Garantie/Zyklus/Regel Z meldet nur der Validator — keine Live-Markierung der Einzelkanten.
+
+### 11.2 Phase 2 — Kapselung
+
+**Was.** Jeder Namespace ist ein Modul; die Hierarchie ist die Namespace-Hierarchie. `DomainEditor/Module.cs` leitet aus dem
+Nachrichtenfluss die Ports ab: eine Kante Erzeuger → Nachricht bzw. Nachricht → Konsument, deren Enden auf verschiedenen Seiten der
+Modulgrenze liegen, ist ein **Eingang** (Ziel drinnen) bzw. **Ausgang** (Quelle drinnen); die Außenwelt liegt außerhalb jedes Moduls.
+Dazu die **offenen** Ports: eine Nachricht im Modul, die einen Konsumenten braucht und keinen hat (Command, Query, Trigger, Selbst →
+„Eingang ohne Konsument", `GR-MODUL-EINGANG-OFFEN`), bzw. einen Erzeuger braucht und keinen hat (Event, Ablehnung, Response →
+„Ausgang ohne Erzeuger", `GR-MODUL-AUSGANG-OFFEN`). Die Grammatik gilt für Modul-Knoten wie für jeden Baustein (dieselbe
+Kardinalitäts-Prüfung beim Verbinden, auch wenn das Ziel eingeklappt ist).
+
+**Editor: zurückgenommen (2026-10-01).** Eine erste Ebenen-Ansicht (Module eingeklappt als Karten mit Ports, aufklappen =
+hineingehen) war gebaut und im Browser geprüft, wurde aber auf Wunsch wieder entfernt: die bisherige Oberfläche bleibt; die
+Aufklapp-Semantik kommt später und nicht automatisch. Im Code geblieben sind nur die Ableitung in C# (`DomainEditor/Module.cs`,
+Validator-Befunde „Eingang ohne Konsument"/„Ausgang ohne Erzeuger", `--check`, `/api/editor/module`). Der Stand der zurückgenommenen
+Ansicht liegt nicht im Repo.
+
+**Blank-Start (Domänen laden).** Der Editor startet leer; ein Start-Dialog wählt, welche Domänen (Namespaces) geladen werden
+(leer, einzelne, alle). Nur Sicht: das Modell bleibt vollständig (Validator/Vorschau/Schreiben sehen alles), Nicht-Geladenes ist
+unsichtbar und kein Verbindungsziel; Entwürfe sind immer sichtbar. Bedienung: `konzept-editor-panel-bearbeitung.md` §11.
+
+**Parität/Idempotenz.** Kein neues Modell-Feld außer dem gelesenen Regel-Z-Fakt, nichts im Herkunfts-Stempel. `--check` vergleicht
+die Modul-Ports aus dem Code-Modell mit denen aus dem Board.
+
+### 11.3 Gemessen
+
+| Prüfung | Ergebnis |
+|---|---|
+| `dotnet build` | 0 Fehler |
+| Prüfstand | **179/179** (neu: 8 `DomainEditorKompositionTests` — Grammatik geschlossen + Gegenstücke, gültiges Modell ohne Verstoß, Regel beim Namen (GR-COMMAND/CQRS010), Pipeline-Zusatzregeln inkl. Regel Z als Hinweis, Trigger/Query genau einmal + Zyklus ohne Aggregat, Module/Ports/Eltern-Ebene, Top-down mit offenen Ports, Fähigkeit/Frist über Modulgrenzen) |
+| `--check` | grün; **Grammatik:** 27 Regeln (16 Konsum, 17 Erzeugung), alle 10 genannten Build-IDs im Code gefunden; der echte Code verletzt keine Regel mit Build-Gegenstück — 2× `GR-GARANTIE` (ImageProcessing: Commands ab Trigger), 2× `GR-MODUL-AUSGANG-OFFEN` (nie erzeugte Ablehnung `ImagePairEingabeUngueltig`, Response `ModellAntwort`), 1× `GR-ZUSTAND` (FileWatch). **Module:** 13 Namespaces, 189 Ports (4 offen), Board = Code. Board ⇄ Modell inkl. Stempel-Idempotenz und Fixpunkt (242 Typen) unverändert grün |
+| `--sonde` | grün, **67** Soll-Fakten (von Hand +1: `zustand pipeline Leihwesen.Lesen.MahnlaufPipeline | _gemahnt, _runden` — die Sonden-Pipeline hat dafür je ein Feld jeder Art bekommen: injiziert, readonly-Sammlung, veränderlich, readonly int/string, statisch) |
+| Trockenlauf | `GraphExtractor` → `SimHost --trocken domain-model.json`: leer |
+| Browser (SimHost `/editor`), 2026-10-01 | Bisherige Oberfläche unverändert, dazu: Start leer (0 Karten) mit Dialog; „ImagePair“ geladen ⇒ 73 Karten, 120 Kanten, keine ins Leere; **ungültige Verbindung:** Decider ⊕ Command ⇒ schon entschiedene Commands rot „✕ Regel“, Klick ⇒ „[GR-COMMAND] … Regel »Command → genau ein Aggregat« (Build: CQRS010, CQRS002)“, nichts verbunden; 👁 Vorschau auf unverändertem Board: „nichts zu schreiben“. (Die zurückgenommene Ebenen-Ansicht war vorher ebenfalls geprüft: Ports JS = C# 189 = 189.) |
+
+### 11.4 Bewusst offen
+
+- **Ebenen-/Aufklapp-Ansicht im Editor** — zurückgenommen, kommt später (bewusst nicht automatisch).
+- Die Analyzer der offenen Regeln (§11.1), `public`/`internal` als erzwungene Schnittstelle (Phase 5), Muster/Operator-Gesten
+  (Phase 3), Linsen (Phase 4).

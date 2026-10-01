@@ -22,6 +22,18 @@ Console.WriteLine("\n╔══════════════════�
 Console.WriteLine("║        Wissensgraph-Extractor (Neubau)        ║");
 Console.WriteLine("╚══════════════════════════════════════════════╝\n");
 
+// --grammatik: die Grammatik der Kompositions-Sprache als Liste „Regel → Build-Gegenstück" (braucht keine Solution).
+if (args.Contains("--grammatik"))
+{
+    foreach (var r in DomainEditor.Grammatik.Regeln)
+        Console.WriteLine($"{r.Id,-28} {r.Schwere,-8} {r.Name}\n{"",37}Build: {string.Join(" · ", r.Build.Select(g => (g.Kennung ?? g.Art) + " — " + g.Ort))}");
+    Console.WriteLine("\nKonsum (Sorte → Eingang, Kardinalität je Nachricht):");
+    foreach (var k in DomainEditor.Grammatik.Konsume) Console.WriteLine($"  {k.Sorte,-11} → {k.Baustein,-11} {k.Kardinalitaet,-9} {k.Regel}");
+    Console.WriteLine("Erzeugung (Baustein → Sorte):");
+    foreach (var e in DomainEditor.Grammatik.Erzeugungen) Console.WriteLine($"  {e.Baustein,-11} → {e.Sorte,-11} {e.Regel}");
+    return 0;
+}
+
 // --check: reine Paritäts-Prüfung (schreibt NICHTS), Exit-Code ≠ 0 bei Abweichung — das CI-/Vorab-Gate.
 var check = args.Contains("--check");
 // --sonde: die Agnostik-Sonde (unbekannte Domäne im Speicher) gegen ihr handgeschriebenes Soll; --sonde-ist zeigt das Ist.
@@ -101,7 +113,7 @@ if (check)
     Console.WriteLine("\n── Paritäts-Prüfung (Code ⇄ Extraktion ⇄ Editor-Modell) ──");
     var boardJson = ModellMapper.ZuBoardJson(graph, dom, compositionRoot);
     var befunde = await ParitaetsPruefung.PruefeAsync(solution, lage,
-        new ParitaetsPruefung.Analyse(routing, dom, graph, compilations), boardJson);
+        new ParitaetsPruefung.Analyse(routing, dom, graph, compilations), boardJson, ModellMapper.Ingress(compositionRoot));
     foreach (var g in befunde.GroupBy(b => b.Bereich))
     {
         Console.WriteLine($"\n   [{g.Key}] {g.Count(b => b.Schweregrad != "info")} Befund(e)");

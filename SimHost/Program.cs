@@ -106,6 +106,15 @@ app.MapPost("/api/editor/validate", (JsonElement body) =>
     return Results.Json(Validator.Prüfe(modell), EditorModell.JsonOptionen);
 });
 
+// Kapselung: die Module (Namespaces) mit ihren abgeleiteten Ports — dieselbe Ableitung, die der Editor live rechnet
+// (Parität: der Editor vergleicht seine Ports mit diesen Zeilen). Body = das volle Board-MODEL.
+app.MapPost("/api/editor/module", (JsonElement body) =>
+{
+    var modell = BoardLeseseite.AusBoard(body.GetRawText());
+    var module = Module.Ableiten(modell);
+    return Results.Json(new { module, zeilen = Module.AlsZeilen(module) }, EditorModell.JsonOptionen);
+});
+
 // ── SIMULATION: EINE Laufzeit — Modell → Scaffolder → In-Memory-Kompilat (echte Generatoren) → SagaLaufwerk. ──
 var simulation = new ModellSimulation();
 

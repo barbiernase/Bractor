@@ -83,3 +83,8 @@ trigger PruefeVormerkungen | LeserId:Guid
 pipeline Leihwesen.Vormerkung.Vormerkpruefung id=vormerkpruefung konfigs=VormerkKonfig | PruefeVormerkungen(trigger) -> sendet EroeffneMahnung -> IVormerkbuch.ZaehleAsync; VormerkTick(self) -> sendet MeldeSchaden
 ausgang Vormerkpruefung.PruefeVormerkungen strom | command:EroeffneMahnung; self:VormerkTick; storefn:IVormerkbuch.ZaehleAsync
 ausgang Vormerkpruefung.VormerkTick strom | command:MeldeSchaden
+
+# ── Regel Z (Kompositions-Sprache §4): Zustand nur in Aggregaten/Lesemodellen — die Pipeline hält zwei Felder Gedächtnis ──
+#    _gemahnt (readonly, aber eigene Sammlung) und _runden (nicht readonly). NICHT: _konfig (injiziert), _maximum (readonly int),
+#    _praefix (readonly string), Takt (statisch).
+zustand pipeline Leihwesen.Lesen.MahnlaufPipeline | _gemahnt, _runden

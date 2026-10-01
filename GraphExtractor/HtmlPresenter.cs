@@ -325,6 +325,18 @@ public static class HtmlPresenter
 #de .gworld.fokus .gnode2:not(.inslice){opacity:.13}
 #de .gworld.fokus .glink:not(.inslice){opacity:.04}
 #de .gworld.fokus .glink.inslice{opacity:1;stroke-width:3}
+/* Start-Dialog (Blank-Start): Domänen laden */
+#de .gstart{position:absolute;left:50%;top:40px;transform:translateX(-50%);z-index:40;width:min(560px,92%);max-height:80%;overflow:auto;
+  background:#141a26;border:1px solid #8fa3c8;border-radius:12px;padding:16px 18px;box-shadow:0 10px 40px #000c;color:#cbd3e1;font:13px system-ui}
+#de .gstart h3{margin:0 0 6px;font-size:17px;color:#fff}
+#de .gstart-t{color:#9aa3b7;line-height:1.4;margin-bottom:10px}
+#de .gstart-k{display:flex;gap:8px;margin:10px 0}
+#de .gstart-l{display:flex;flex-direction:column;gap:2px;border-top:1px solid #2a3244;border-bottom:1px solid #2a3244;padding:8px 0}
+#de .gstart-l label{display:flex;gap:8px;align-items:center;cursor:pointer;padding:3px 4px;border-radius:5px}
+#de .gstart-l label:hover{background:#1c2434}
+#de .gstart-n{flex:1;font-weight:600}#de .gstart-z{color:#6b7488;font-size:11.5px}
+#de .gworld.vbmodus .gnode2.vb-gesperrt{opacity:.6!important;box-shadow:0 0 0 2px #b5504a;cursor:not-allowed}
+#de .gworld.vbmodus .gnode2.vb-gesperrt .ghead::after{content:"✕ Regel";margin-left:auto;font:600 10px system-ui;color:#ffd0cc;padding-left:6px}
 /* Verbinden-Modus (Hybrid): passende Knoten leuchten, Rest abgeblendet; ✓ = schon verbunden */
 #de .gworld.vbmodus .gnode2{opacity:.14!important}
 #de .gworld.vbmodus .glink{opacity:.05!important}
@@ -411,8 +423,9 @@ public static class HtmlPresenter
     <span class="sp"></span>
     <button class="act" onclick="deReload()">↻ Vom Graph laden</button>
     <button class="act" onclick="deReflow()">▦ Neu anordnen</button>
-    <button class="act" onclick="deFilter()">🗂 Domänen</button>
+    <button class="act" onclick="deLaden()" title="Domänen laden: wählen, welche Domänen auf dem Board erscheinen (leer, einzelne, alle)">🗂 Domänen laden</button>
     <button class="act" onclick="deValidate()">✓ Prüfen</button>
+    <button class="act" onclick="deGrammatik()" title="Die Grammatik: was sich womit verbinden lässt, und je Regel ihr Gegenstück im Build">📐 Grammatik</button>
     <button class="act" onclick="deCompile()">⚙ Kompilieren</button>
     <button class="act" id="de-llmalle" onclick="deLlmAlle()" title="Alle 🤖-Knoten mit Auftrag nacheinander ausführen — jeder Vorschlag wartet auf ✓ Übernehmen">🤖 Alle ausführen</button>
     <button class="act run" id="de-simbtn" onclick="deSim()">▶ Simulation</button>
@@ -920,7 +933,8 @@ public static class HtmlPresenter
       (hd.schedules||[]).forEach((sc,si)=>{const ss=port("self");ss.classList.add("o");reg("pl:sched:"+p._id+":"+hi+":"+sc.name,ss,{type:"self",dir:"out",pipeline:p._id,handleIdx:hi,name:sc.name});
         body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.schedules.splice(si,1);render();}},"✕"),
           h("input",{value:sc.name,oninput:e=>sc.name=e.target.value,onchange:()=>render(),placeholder:"SelfMsg",style:"flex:1"}),h("span",{class:"slotlbl"},"↺"),ss));});
-      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"opacity:.8"},"+ plant Self-Tick ↺"),
+      if(!grSelbstErlaubt(hd))body.append(h("div",{class:"slotrow o",title:grText("GR-SELBST-OHNE-EVENT")},h("span",{class:"slotlbl",style:"opacity:.6"},"↺ Selbst nur ohne Event-Eingang")));
+      else body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"opacity:.8"},"+ plant Self-Tick ↺"),
         h("button",{class:"codeadd",title:"Selbst<T>-Ausgang + Self-Handle anlegen",onclick:()=>{const nm=uniq("Tick");(hd.schedules=hd.schedules||[]).push({name:nm});if(!p.handles.some(x=>x.inputKind==="self"&&x.selfName===nm))p.handles.push({inputKind:"self",selfName:nm,sends:[],emits:[],schedules:[]});render();}},"＋")));
       body.append(codePort("plctrl:in:"+p._id+":"+hi,{k:"plHandle",pipeline:p._id,hi:hi},hd.codeSrc,"Pipeline-Logik"));
   }
@@ -2152,13 +2166,143 @@ public static class HtmlPresenter
     render();
   }
 
+  // ══ GRAMMATIK (Phase 1, docs/konzept-editor-komposition.md §3): EINE Quelle — DomainEditor.Grammatik, vom Extractor als
+  //   rahmen.grammatik ins Board gelegt. Hier ist nichts davon hart kodiert: Sorten, Tabelle, Regeln und die Abbildung der
+  //   Editor-Ports auf die Sprache kommen aus dem Board. Der Verbinden-Modus bietet nur erlaubte Ziele an; ein gesperrtes Ziel
+  //   nennt die Regel beim Namen (derselbe Satz wie der Validator).
+  const GR=()=>(MODEL.rahmen&&MODEL.rahmen.grammatik)||null;
+  const grRegel=id=>{const g=GR();return (g&&(g.regeln||[]).find(r=>r.id===id))||{id,name:id,build:"?"};};
+  const grText=id=>{const r=grRegel(id);return "Regel »"+r.name+"« ("+r.id+"; Build: "+r.build+")";};
+  const grName=(liste,id)=>{const g=GR();const x=g&&(g[liste]||[]).find(y=>y.id===id);return x?x.name:id;};
+  const grSymbol=s=>{const g=GR();const x=g&&(g.sorten||[]).find(y=>y.id===s);return x?x.symbol:"•";};
+  const grVerlierbar=s=>{const g=GR();const x=g&&(g.sorten||[]).find(y=>y.id===s);return !!x&&x.garantie==="verlierbar";};
+  const grKonsum=(s,b)=>(GR().konsume||[]).find(k=>k.sorte===s&&k.baustein===b)||null;
+  const grErzeugung=(b,s)=>(GR().erzeugungen||[]).find(e=>e.baustein===b&&e.sorte===s)||null;
+  const grRegelSorte=s=>((GR().konsume||[]).find(k=>k.sorte===s)||{}).regel||"GR-AUSGANG-GESCHLOSSEN";
+  const grRegelBaustein=b=>((GR().erzeugungen||[]).find(e=>e.baustein===b)||{}).regel||"GR-AUSGANG-GESCHLOSSEN";
+  // Welcher Baustein steckt hinter einem Editor-Port (Info-Felder dec/proj/pipeline …)?
+  function grBaustein(I){for(const [k,b] of (GR().portBaustein||[]))if(I[k]!=null&&I[k]!=="")return b;return null;}
+  // Nachricht (Name) → Sorte: Record-Art, Trigger-Karte, Selbst-Nachricht.
+  function grNachrichtSorte(name){const g=GR(),r=recByName(name);if(r)return (g.recordSorte||{})[r.kind]||null;
+    if(MODEL.triggers.some(t=>(t.msgName||t.name)===name))return "trigger";
+    if((MODEL.selbstNachrichten||[]).some(x=>x.name===name))return "selbst";return null;}
+  // Wer konsumiert die Nachricht schon (für die Kardinalität „genau eins")?
+  function grKonsumenten(name,sorte,baustein){
+    if(baustein==="aggregat"&&sorte==="command")return MODEL.decider.filter(d=>d.command===name).map(d=>({dec:d._id,name:"Decider ("+(d.aggregat||"?")+")"}));
+    if(baustein==="aggregat"&&sorte==="event")return MODEL.applier.filter(a=>a.event===name).map(a=>({app:a._id,name:"Applier ("+(a.aggregat||"?")+")"}));
+    if(baustein==="reader")return MODEL.reader.filter(r=>(r.handles||[]).some(x=>x.query===name)).map(r=>({reader:r._id,name:"Reader "+r.name}));
+    if(baustein==="pipeline"&&sorte==="trigger")return MODEL.pipelines.filter(p=>(p.handles||[]).some(x=>x.inputKind==="trigger"&&x.input===name)).map(p=>({pipeline:p._id,name:"Pipeline "+p.name}));
+    return [];}
+  const grSelbeStelle=(x,I)=>(x.dec&&x.dec===I.dec)||(x.app&&x.app===I.app)||(x.reader&&x.reader===I.reader)||(x.pipeline&&x.pipeline===I.pipeline);
+  const grVerstoss=(regel,text)=>({regel,text:text+" — "+grText(regel)});
+  // Eine Verbindung Ausgang O → Eingang I gegen die Grammatik prüfen. null = erlaubt, sonst {regel, text}.
+  function grPruefe(O,I){const g=GR();if(!g)return null;
+    // (a) Nachricht → Baustein-Eingang: Sorte × Eingang, Kardinalität je Nachricht.
+    if(O.rec&&!I.rec){const s=grNachrichtSorte(O.rec),b=grBaustein(I);if(!s||!b)return null;
+      const k=grKonsum(s,b);if(!k)return grVerstoss(grRegelSorte(s),grName("sorten",s)+" '"+O.rec+"' passt nicht in einen "+grName("bausteine",b)+"-Eingang");
+      if(k.kardinalitaet==="eins"){const andere=grKonsumenten(O.rec,s,b).filter(x=>!grSelbeStelle(x,I));
+        if(andere.length)return grVerstoss(k.regel,grName("sorten",s)+" '"+O.rec+"' hat schon einen Konsumenten: "+andere.map(x=>x.name).join(", "));}
+      return null;}
+    // (b) Baustein-Ausgang → Nachricht: wer darf welche Sorte erzeugen.
+    if(I.rec&&!O.rec){const b=grBaustein(O);let s=grNachrichtSorte(I.rec);if(!b||!s)return null;
+      Object.keys(g.ausgangSorte||{}).forEach(k=>{if(O[k]!=null&&O[k]!=="")s=g.ausgangSorte[k];});
+      if(!grErzeugung(b,s))return grVerstoss(b==="pipeline"&&s==="event"?"GR-KEIN-EVENT-AUS-PIPELINE":grRegelBaustein(b),
+        grName("bausteine",b)+" erzeugt kein "+grName("sorten",s)+" ('"+I.rec+"')");
+      return null;}
+    // (c) Baustein → Baustein: Trigger-Kette, Ingress → Pipeline, Selbst-Schleife.
+    const s=(g.portSorte||{})[O.type];if(!s)return null;
+    const bo=grBaustein(O),bi=grBaustein(I);
+    if(bo&&!grErzeugung(bo,s))return grVerstoss(grRegelBaustein(bo),grName("bausteine",bo)+" erzeugt kein "+grName("sorten",s));
+    if(!bi)return null;const k=grKonsum(s,bi);
+    if(!k)return grVerstoss(grRegelSorte(s),grName("sorten",s)+" passt nicht in einen "+grName("bausteine",bi)+"-Eingang");
+    if(k.kardinalitaet==="dieselbe"&&O.pipeline!==I.pipeline)return grVerstoss(k.regel,"Selbst '"+(O.name||"?")+"' kommt nur in der planenden Pipeline an");
+    if(s==="selbst"){const p=MODEL.pipelines.find(x=>x._id===O.pipeline),hd=p&&(p.handles||[])[O.handleIdx];
+      if(hd&&!grSelbstErlaubt(hd))return grVerstoss("GR-SELBST-OHNE-EVENT","Handle "+(hd.event||"?")+" hat einen Event-Eingang (keine Mailbox)");}
+    if(k.kardinalitaet==="eins"&&s==="trigger"){const nm=O.msgName||(O.trigId?trigMsgLabel(O.trigId):"");
+      const andere=grKonsumenten(nm,"trigger","pipeline").filter(x=>x.pipeline!==I.pipeline);
+      if(nm&&andere.length)return grVerstoss(k.regel,"Trigger '"+nm+"' behandelt schon "+andere.map(x=>x.name).join(", "));}
+    return null;}
+  // Darf dieser Pipeline-Handle ein Selbst planen? Nur ohne Event-Eingang (GR-SELBST-OHNE-EVENT).
+  const grSelbstErlaubt=hd=>(hd.inputKind||"event")!=="event";
+  // 📐 Grammatik: die Tabelle und „Regel → Build-Gegenstück" ins Ausgabe-Panel.
+  window.deGrammatik=function(){const g=GR(),out=document.getElementById("de-out");if(!out)return;out.innerHTML="";
+    if(!g){out.append(h("div",{class:"find warning"},"Keine Grammatik im Board — GraphExtractor neu laufen lassen."));return;}
+    const KARD={eins:"genau 1",beliebig:"beliebig viele",dieselbe:"dieselbe"};
+    out.append(h("div",{class:"find"},"📐 Grammatik der Kompositions-Sprache — Sorte → Eingang (Kardinalität je Nachricht):"));
+    g.konsume.forEach(k=>out.append(h("div",{class:"find info"},grSymbol(k.sorte)+" "+grName("sorten",k.sorte)+" → "+grName("bausteine",k.baustein)+" · "+(KARD[k.kardinalitaet]||k.kardinalitaet)+" · "+k.regel)));
+    out.append(h("div",{class:"find"},"Wer erzeugt was:"));
+    g.erzeugungen.forEach(e=>out.append(h("div",{class:"find info"},grName("bausteine",e.baustein)+" → "+grSymbol(e.sorte)+" "+grName("sorten",e.sorte)+" · "+e.regel)));
+    out.append(h("div",{class:"find"},"Regel → Build-Gegenstück:"));
+    g.regeln.forEach(r=>out.append(h("div",{class:"find "+(r.build==="offen"?"warning":"info"),title:r.text},r.id+" · "+r.name+" — Build: "+r.build)));};
+
+  // ══ DOMÄNEN LADEN (Blank-Start): Der Editor startet LEER; im Start-Dialog wählt man, welche Domänen (Namespaces) geladen werden.
+  //   Reine Editor-Sicht: das Modell bleibt vollständig (Prüfen, Vorschau, C# schreiben sehen alles) — nicht Geladenes wird nur nicht
+  //   gezeigt und ist kein Verbindungsziel. Entwürfe (neu im Editor) sind immer sichtbar.
+  let LADEN=null, START_OFFEN=false;   // null = alles geladen, [] = leer, sonst die gewählten Namespaces
+  const elternNs=ns=>{const i=(ns||"").lastIndexOf(".");return i>0?ns.slice(0,i):"";};
+  const drinNs=(E,ns)=>!!ns&&(E===""||ns===E||ns.startsWith(E+"."));
+  const letztesSeg=ns=>(ns||"").slice((ns||"").lastIndexOf(".")+1);
+  // Namespace eines Knotens — aus dem Code (Namespace-Feld) bzw. über die Verdrahtung zu seinem Besitzer; null = keiner.
+  function nsVon(n){const r=n.ref,k=n.kind;
+    if(k==="handle"||k==="fn")return nsVon(n.own);
+    if(k==="decider"||k==="applier"||k==="state"){const a=MODEL.aggregate.find(x=>x.name===r.aggregat);return a?a.namespace:null;}
+    if(k==="transition"){const s=MODEL.sagas.find(x=>x.name===r.prozess);return s?s.namespace:null;}
+    if(k==="codenode"){const o=findCodeOwner(r._id);return o?nsVon(o):null;}
+    if(k==="llmnode"){const o=r.promptZiel&&findCodeOwner(r.promptZiel);return o?nsVon(o):null;}
+    if(k==="frist"){const c=recByName(r.sendet);return c?c.namespace:null;}
+    if(k==="dienst"){const ps=MODEL.pipelines.filter(p=>(p.dienste||[]).includes(r.vertrag||r.name));return ps.length===1?ps[0].namespace:null;}
+    if(k==="hostsetting"){const c=recByName(r.konfig);return c?c.namespace:null;}
+    return r.namespace||null;}
+  // Stammt der Knoten aus dem Code (sonst: Entwurf, immer sichtbar)? Abgeleitete Knoten folgen ihrem Besitzer.
+  function ausCodeVon(n){const k=n.kind,r=n.ref;
+    if(k==="handle"||k==="fn")return ausCodeVon(n.own);
+    if(k==="state"){const a=MODEL.aggregate.find(x=>x.name===r.aggregat);return !!(a&&a.ausCode);}
+    if(k==="transition"){const sg=MODEL.sagas.find(x=>x.name===r.prozess);return sg?!!sg.ausCode:r.ausCode===true;}
+    if(k==="codenode"){const o=findCodeOwner(r._id);return !!(o&&ausCodeVon(o));}
+    if(k==="llmnode"){const o=r.promptZiel&&findCodeOwner(r.promptZiel);return !!(o&&ausCodeVon(o));}
+    return r.ausCode===true;}
+  function geladen(n){if(LADEN===null||!ausCodeVon(n))return true;const x=nsVon(n);return !!x&&LADEN.some(g=>drinNs(g,x));}
+  window.deLaden=function(){START_OFFEN=true;render();};
+  // Start-Dialog: leer starten, Domänen wählen (Häkchen am Eltern-Namespace lädt alles darunter) oder alles laden.
+  function zeigeStart(){if(!canvas)return;const alt=canvas.querySelector(".gstart");if(alt)alt.remove();if(!START_OFFEN)return;
+    const nsAlle=new Set();["records","enums","aggregate","sagas","readModels","stores","projektionen","reader","reaktionen","pipelines","triggers"]
+      .forEach(c=>(MODEL[c]||[]).forEach(x=>{if(x&&x.namespace&&x.ausCode)for(let p=x.namespace;p;p=elternNs(p))nsAlle.add(p);}));
+    // Wurzel ohne Ein-Kind-Kette (z. B. „Domain“) nicht als Wahl zeigen — darunter beginnen die Domänen.
+    let top="";for(;;){const k=[...nsAlle].filter(x=>elternNs(x)===top);if(k.length!==1)break;top=k[0];}
+    const alle=[...nsAlle].filter(x=>x!==top&&drinNs(top,x)).sort();
+    const zahl=new Map();basisZaehl(alle,zahl);
+    const vor=new Set((LADEN&&LADEN.length?LADEN:VIEW.geladen)||[]),cbs=new Map();   // Vorauswahl: die letzte Wahl
+    const box=h("div",{class:"gstart"});["pointerdown","dblclick","wheel","click"].forEach(ev=>box.addEventListener(ev,e=>e.stopPropagation()));
+    const anwenden=wahl=>{LADEN=wahl;START_ERST=false;if(wahl)VIEW.geladen=wahl;speichereAnsicht();START_OFFEN=false;SEL=null;render();
+      requestAnimationFrame(()=>passeEin([...VIS],1,0.2));};
+    box.append(h("h3",{},"Womit starten?"),
+      h("div",{class:"gstart-t"},"Das Board startet leer. Wähle die Domänen, die geladen werden — der Rest bleibt im Code unberührt (Prüfen und „C# schreiben“ sehen weiter alles). Neues entsteht als Entwurf und ist immer sichtbar."),
+      h("div",{class:"gstart-k"},h("button",{class:"act go",onclick:()=>anwenden([])},"◻ Leer starten"),h("button",{class:"act",onclick:()=>anwenden(null)},"Alles laden")));
+    const liste=h("div",{class:"gstart-l"});
+    const gewaehlt=()=>[...cbs.entries()].filter(([,c])=>c.checked&&!c.disabled).map(([x])=>x);
+    const knopf=h("button",{class:"act go",onclick:()=>anwenden(gewaehlt())},"Laden ("+vor.size+")");
+    alle.forEach(ns=>{const tiefe=ns.split(".").length-(top?top.split(".").length:0)-1;const cb=h("input",{type:"checkbox"});cb.checked=vor.has(ns);cbs.set(ns,cb);
+      cb.onchange=()=>{cbs.forEach((c,x)=>{if(x!==ns&&drinNs(ns,x)){c.checked=false;c.disabled=cb.checked;}});knopf.textContent="Laden ("+gewaehlt().length+")";};
+      liste.append(h("label",{style:"padding-left:"+(tiefe*18)+"px"},cb,h("span",{class:"gstart-n"},letztesSeg(ns)),h("span",{class:"gstart-z"},(zahl.get(ns)||0)+" Elemente")));});
+    cbs.forEach((c,ns)=>{if(c.checked)cbs.forEach((d,x)=>{if(x!==ns&&drinNs(ns,x)){d.checked=false;d.disabled=true;}});});
+    box.append(liste,h("div",{class:"gstart-k"},knopf,!START_ERST?h("button",{class:"act",onclick:()=>{START_OFFEN=false;render();}},"Abbrechen"):null));
+    canvas.append(box);}
+  let START_ERST=false;
+  // Code-Elemente je Namespace (rekursiv) für die Anzeige im Dialog.
+  function basisZaehl(alle,zahl){graphNodes().forEach(n=>{if(["handle","fn","codenode","llmnode","state","decider","applier","transition"].includes(n.kind)||!ausCodeVon(n))return;
+      const x=nsVon(n);if(x)alle.forEach(m=>{if(drinNs(m,x))zahl.set(m,(zahl.get(m)||0)+1);});});}
+
   // ══ VERBINDEN-MODUS (Hybrid, docs/konzept-editor-panel-bearbeitung.md §3.3): Port im Panel anklicken → alle PASSENDEN
   //   Knoten leuchten auf dem Graphen (Ablauf-Ansicht, Rest abgeblendet) → Karte anklicken = verbinden, ✓-Karte = lösen.
   //   Einfache Ports enden nach einem Klick, Listen-Ports bleiben offen bis Esc/Fertig. Typregel: compatible().
   let VB=null;   // {key, label, einzel, filter}
   function vbQuelle(){const i=canvas&&canvas.querySelector(".ginsp");return VB&&i?[...i.querySelectorAll(".slot")].find(x=>x.__key===VB.key)||null:null;}
-  function vbKandidaten(q){const m=new Map();Object.values(SLOTS).forEach(x=>{if(!x||!compatible(q,x))return;const id=knotenIdVon(x);if(!id)return;
-    if(!m.has(id))m.set(id,[]);m.get(id).push(x);});return m;}
+  // Kandidaten: typgleich (compatible) UND von der Grammatik erlaubt; typgleich, aber verboten → VB.G (gesperrt, mit Regel).
+  function vbKandidaten(q){const m=new Map(),gs=new Map();Object.values(SLOTS).forEach(x=>{if(!x||!compatible(q,x))return;const id=knotenIdVon(x);if(!id)return;
+    const O=q.__slot.dir==="out"?q.__slot:x.__slot,I=q.__slot.dir==="out"?x.__slot:q.__slot;
+    const v=vbPartner(q,x)?null:grPruefe(O,I);   // bestehende Verbindungen bleiben lösbar
+    if(v){if(!gs.has(id))gs.set(id,[]);gs.get(id).push({x,v});return;}
+    if(!m.has(id))m.set(id,[]);m.get(id).push(x);});if(VB)VB.G=gs;return m;}
   // Verbunden? Eine gezeichnete Kante zwischen dem Kandidaten-Port und einem Port DIESES Knotens mit demselben Typ.
   //   Genau dieser Port (gleicher Schlüssel) — nur „offene" Sammel-Ports (…:open, z. B. „+ Ausgang") zählen knotenweit.
   function vbPartner(q,x){const offen=/:open\b|open(evt|trg)?$/.test(q.__key);
@@ -2184,7 +2328,7 @@ public static class HtmlPresenter
   function vbStart(x){if(!x.__key)return;if(VB&&VB.key===x.__key){vbEnde();return;}
     if(VIEW.lod==="karte")setzeLod("ablauf");VB={key:x.__key,label:slotLabel(x),einzel:istEinzel(x.__slot)};vbZeige(true);}
   function vbEnde(){VB=null;if(!world)return;world.classList.remove("vbmodus");if(canvas)canvas.classList.remove("vbaktiv");
-    world.querySelectorAll(".vb-kand,.vb-verb,.vb-quelle").forEach(e=>e.classList.remove("vb-kand","vb-verb","vb-quelle"));
+    world.querySelectorAll(".vb-kand,.vb-verb,.vb-quelle,.vb-gesperrt").forEach(e=>e.classList.remove("vb-kand","vb-verb","vb-quelle","vb-gesperrt"));
     canvas.querySelectorAll(".gvbwahl").forEach(e=>e.remove());canvas.querySelectorAll(".ginsp .slot.vb-aktiv").forEach(e=>e.classList.remove("vb-aktiv"));}
   function vbZeige(einpassen){if(!VB||!world||!canvas)return;const q=vbQuelle();if(!q){vbEnde();return;}
     const K=vbKandidaten(q);VB.K=K;
@@ -2193,8 +2337,9 @@ public static class HtmlPresenter
     const insp=q.closest(".ginsp");if(insp){const d=q.getBoundingClientRect().top-insp.getBoundingClientRect().top;if(d<0||d>insp.clientHeight-30)insp.scrollTop+=d-40;}
     world.querySelectorAll(".gnode2").forEach(el=>{const id=el.dataset.id,xs=K.get(id);
       const passt=!!xs;
-      el.classList.toggle("vb-kand",passt);el.classList.toggle("vb-verb",passt&&xs.some(x=>vbPartner(q,x)));el.classList.toggle("vb-quelle",id===SEL);});
-    if(!K.size)deFlash("Keine passenden Knoten für diesen Anschluss.",false);
+      el.classList.toggle("vb-kand",passt);el.classList.toggle("vb-verb",passt&&xs.some(x=>vbPartner(q,x)));el.classList.toggle("vb-quelle",id===SEL);
+      const gs=!passt&&VB.G&&VB.G.get(id);el.classList.toggle("vb-gesperrt",!!gs);el.title=gs?"✕ "+gs[0].v.text:"";});
+    if(!K.size)deFlash("Keine passenden Knoten für diesen Anschluss"+(VB.G&&VB.G.size?" — "+VB.G.size+" gesperrt: "+[...VB.G.values()][0][0].v.text:"."),false);
     if(einpassen){const cr=canvas.getBoundingClientRect(),imBild=[...K.keys()].some(id=>{const el=world.querySelector('[data-id="'+id+'"]');if(!el)return false;
       const r=el.getBoundingClientRect();return r.right>cr.left&&r.left<cr.right&&r.bottom>cr.top&&r.top<cr.bottom;});
       if(!imBild)vbEinpassen([...K.keys()].filter(id=>VIS.has(id)));}}
@@ -2212,6 +2357,9 @@ public static class HtmlPresenter
       if(sk<MIN&&wahl.length>(q?1:0))break;x1=nx1;y1=ny1;x2=nx2;y2=ny2;wahl.push(e.id);}
     passeEin(wahl,0.74,MIN);}
   function vbKlick(id){const q=vbQuelle();if(!q){vbEnde();return;}const xs=(VB.K&&VB.K.get(id))||[];
+    // Typgleich, aber von der Grammatik verboten → nicht verbinden, die Regel nennen (Modus bleibt).
+    if(!xs.length&&VB.G&&VB.G.get(id)){const v=VB.G.get(id)[0].v;deFlash("✕ "+v.text,false);const o=document.getElementById("de-out");
+      if(o){o.innerHTML="";o.append(h("div",{class:"find error"},"["+v.regel+"] "+v.text));}return;}
     if(!xs.length){vbEnde();waehle(id);return;}   // nicht passend → Modus aus, diese Karte auswählen
     if(xs.length===1){vbSchalte(q,xs[0]);return;}
     // Mehrere passende Ports an EINER Karte (z. B. Store mit mehreren Write-Fns) → kleine Auswahl an der Karte.
@@ -2447,7 +2595,7 @@ public static class HtmlPresenter
       const out=res.length?res:[id];memo.set(id,out);return out;};
     VIS=new Set();VERTRETER=new Map();DETAILS=new Map();EINGEKLAPPT=new Set();
     alle.forEach(n=>{const v=vert(n.id,new Set());VERTRETER.set(n.id,v);
-      if(v.length===1&&v[0]===n.id){if(!HIDDEN.has(groupKeyOf(n))&&!istAus(n.kind))VIS.add(n.id);}
+      if(v.length===1&&v[0]===n.id){if(!HIDDEN.has(groupKeyOf(n))&&!istAus(n.kind)&&geladen(n))VIS.add(n.id);}
       else{EINGEKLAPPT.add(n.id);v.forEach(o=>push(DETAILS,o,n.id));}});
     // Zusammengezogene Kanten: sichtbar →(eingeklappt)*→ sichtbar. Ins Aggregat nicht (das zeigt der Block).
     KONTRAKT=[];if(VIEW.details)return;
@@ -2615,6 +2763,7 @@ public static class HtmlPresenter
       ...[["karte","Landkarte"],["ablauf","Ablauf"]].map(([l,t])=>{const sp=h("span",{onclick:()=>{setzeLod(l);if(l==="karte")passeEin([...VIS],0.35);}},t);sp.dataset.l=l;if((VIEW.lod||"ablauf")===l)sp.classList.add("on");return sp;}));
     return h("div",{class:"gview"},
       h("b",{style:"color:#cbd3e1"},"Ansicht"),
+      h("button",{title:"Geladene Domänen ändern",onclick:()=>deLaden()},"📂 "+(LADEN===null?"alles geladen":!LADEN.length?"leer":LADEN.map(letztesSeg).join(", "))),
       btn("⤢ Alles zeigen",false,"Ganzes Board einpassen",()=>passeEin([...VIS],1)),
       btn("👁 Ausblenden"+((VIEW.aus||[]).length?" ("+VIEW.aus.length+")":"")+" ▾",FILTER_OPEN,"Knotenarten und Domänen ein-/ausblenden",()=>{FILTER_OPEN=!FILTER_OPEN;render();}),
       lod,
@@ -2654,7 +2803,8 @@ public static class HtmlPresenter
     const vis=nodes.filter(n=>VIS.has(n.id));
     vis.forEach(n=>world.append(nodeEditor(n)));
     svgTop=document.createElementNS(SVGNS,"svg");svgTop.setAttribute("class","gedges top");world.append(svgTop);
-    if(!vis.length)world.append(h("div",{class:"gempty"},"Nichts sichtbar — alle Domänen ausgeblendet (🗂) oder leeres Modell."));
+    if(!vis.length)world.append(h("div",{class:"gempty"},LADEN&&!LADEN.length?"Leeres Board — über die Palette neu entwerfen oder „🗂 Domänen laden“."
+      :"Nichts sichtbar — nichts geladen (🗂 Domänen laden), alles ausgeblendet (👁) oder leeres Modell."));
     canvas.append(world);root.append(canvas);
     buildMinimap(canvas);
     renderFilterPanel();
@@ -2675,6 +2825,7 @@ public static class HtmlPresenter
       if(t.closest&&t.closest(".gnode2,.ginsp,.gfilter,.gminimap,.gtile,.gpick"))return;if(SEL)waehle(null);};
     drawEdges();requestAnimationFrame(drawEdges);
     zeigeInspector();
+    zeigeStart();
     if(VB)vbZeige(false);
   }
   function showPicker(canvas,sx,sy,wx,wy){
@@ -2787,6 +2938,8 @@ public static class HtmlPresenter
     const code=live||(embedded&&(embedded.records||embedded.aggregate)?embedded:null);
     schluesselFuer(code);
     const gespeichert=(await loadBoard())||loadLocal();
+    // Blank-Start: leer, der Start-Dialog fragt, welche Domänen geladen werden (Vorauswahl: die letzte Wahl).
+    LADEN=[];START_OFFEN=true;START_ERST=true;
     MODEL=mergeBoard(code,gespeichert);render();meldeMerge();
   };
 

@@ -28,13 +28,56 @@ public static class ParitaetsPruefung
     public sealed record Analyse(RoutingTruth Routing, DomainModel Dom, KnowledgeGraph Graph, List<Compilation> Compilations);
 
     public static async Task<List<ParitaetsBefund>> PruefeAsync(
-        Solution solution, Projektlage lage, Analyse ist, string boardJson)
+        Solution solution, Projektlage lage, Analyse ist, string boardJson, IReadOnlyList<IngressBindung>? ingress = null)
     {
         var befunde = new List<ParitaetsBefund>();
         Inventar(ist, lage, boardJson, befunde);
         BoardModell(ist, boardJson, befunde);
+        GrammatikUndModule(solution, ist, boardJson, ingress, befunde);
         await Fixpunkt(solution, lage, ist, befunde);
         return befunde;
+    }
+
+    // ══ Grammatik + Module ═══════════════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// (1) Jede Regel der <see cref="DomainEditor.Grammatik"/>, die ein Build-Gegenstück mit Kennung nennt (Analyzer-/Generator-ID),
+    /// muss diese ID als Diagnose-Literal im Code haben — sonst verspricht der Editor eine Prüfung, die es nicht gibt.
+    /// (2) Die Modul-Schnittstellen aus dem Board = die aus dem Code (dieselbe Ableitung, zwei Quellen).
+    /// (3) Die Grammatik auf dem Code-Modell: was der Code heute verletzt (Bericht; Fehler nur, wo die Regel ein Build-Gegenstück hat).
+    /// </summary>
+    private static void GrammatikUndModule(Solution solution, Analyse ist, string boardJson, IReadOnlyList<IngressBindung>? ingress, List<ParitaetsBefund> befunde)
+    {
+        var literale = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var d in solution.Projects.SelectMany(p => p.Documents).Where(d => d.FilePath != null && !d.FilePath.Contains("/obj/") && File.Exists(d.FilePath)))   // Sonde: Dokumente nur im Speicher
+            foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(File.ReadAllText(d.FilePath!), "\"(CQRS\\d{3})\""))
+                literale.Add(m.Groups[1].Value);
+        var genannt = Grammatik.Regeln.SelectMany(r => r.Build.Where(g => g.Kennung != null).Select(g => (r.Id, g.Kennung!))).ToList();
+        foreach (var (regel, id) in genannt.Where(x => !literale.Contains(x.Item2)))
+            befunde.Add(new("Grammatik", "error", $"{regel}: Build-Gegenstück {id} gibt es im Code nicht."));
+        var offen = Grammatik.Regeln.Where(r => r.Build.All(g => g.Art == "offen")).Select(r => r.Id).ToList();
+        befunde.Add(new("Grammatik", "info",
+            $"{Grammatik.Regeln.Count} Regeln ({Grammatik.Konsume.Count} Konsum, {Grammatik.Erzeugungen.Count} Erzeugung); " +
+            $"{genannt.Select(x => x.Item2).Distinct().Count()} Build-IDs im Code gefunden ({string.Join(", ", genannt.Select(x => x.Item2).Distinct().OrderBy(x => x))}); " +
+            $"ohne Build-Gegenstück (offen): {string.Join(", ", offen)}."));
+
+        // Die Ingress-Bindungen stehen in der Composition Root (Code-Fakt, eigene Extraktion) — nicht im Domänen-Modell.
+        var ausCode = ModellMapper.ZuEditorModell(ist.Graph, ist.Dom) with { Ingress = ingress };
+        var ausBoard = BoardLeseseite.AusBoard(boardJson);
+        var mc = Module.Ableiten(ausCode);
+        var zc = Module.AlsZeilen(mc);
+        var zb = Module.AlsZeilen(Module.Ableiten(ausBoard));
+        foreach (var z in zc.Except(zb)) befunde.Add(new("Module", "error", $"Port nur aus dem Code: {z}"));
+        foreach (var z in zb.Except(zc)) befunde.Add(new("Module", "error", $"Port nur aus dem Board: {z}"));
+        befunde.Add(new("Module", "info",
+            $"{mc.Count} Module (Namespaces), {zc.Count} Ports ({zc.Count(z => z.EndsWith("|offen"))} offen) — Board = Code: {(zc.SequenceEqual(zb) ? "ja" : "NEIN")}."));
+
+        var g = Validator.PruefeGrammatik(ausCode);
+        foreach (var b in g.Where(b => b.IstFehler))
+            befunde.Add(new("Grammatik", Grammatik.RegelVon(b.Code).Build.Any(x => x.Art != "offen") ? "error" : "warning", b.Meldung));
+        befunde.Add(new("Grammatik", "info",
+            $"Code-Modell gegen die Grammatik: {g.Count(b => b.IstFehler)} Fehler, {g.Count(b => b.Schweregrad == "warning")} Warnungen, " +
+            $"{g.Count(b => b.Schweregrad == "info")} Hinweise ({string.Join(", ", g.GroupBy(b => b.Code).OrderBy(x => x.Key).Select(x => $"{x.Key}×{x.Count()}"))})."));
     }
 
     /// <summary>Extraktions-Pipeline auf beliebigen Compilations (Original oder Fork).</summary>

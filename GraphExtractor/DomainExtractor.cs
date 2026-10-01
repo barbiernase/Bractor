@@ -164,6 +164,8 @@ public sealed class KlassenQuelle
 {
     public string? Datei, Doku, Typart, Attribute, Zusatz;
     public List<string> Basen = new(), Usings = new();
+    /// <summary>Regel Z: Instanzfelder, die Zustand halten (Symbol-Fakt, siehe <c>PipelineKarte.Zustand</c>); leer = zustandslos.</summary>
+    public List<string> Zustand = new();
 }
 
 /// <summary>Die Signatur eines Handles verbatim: Parameternamen, Fähigkeits-Parameter, Rückgabe, Modifizierer, Rumpf.</summary>
@@ -1134,11 +1136,28 @@ public sealed class DomainExtractor
         q.Attribute = attrs.Count == 0 ? null : string.Join("\n", attrs);
         var handleSyntax = handles.SelectMany(h => h.DeclaringSyntaxReferences).Select(r => r.GetSyntax()).ToHashSet();
         q.Zusatz = MemberText(decls.SelectMany(d => d.Members).Where(mm => !handleSyntax.Contains(mm)));
+        q.Zustand = ZustandsFelder(t);
         q.Usings = decls.SelectMany(d => d.SyntaxTree.GetRoot().DescendantNodes(n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax)
                 .OfType<UsingDirectiveSyntax>().Where(u => u.GlobalKeyword.IsKind(SyntaxKind.None)))
             .Select(u => u.ToString().Trim()[("using ".Length)..].TrimEnd(';').Trim())
             .Where(u => !_impliziteUsings.Contains(u)).Distinct(StringComparer.Ordinal).OrderBy(u => u, StringComparer.Ordinal).ToList();
         return q;
+    }
+
+    /// <summary>
+    /// Regel Z als Symbol-Fakt (kein Rumpf): Instanzfelder, die ZUSTAND halten — nicht <c>readonly</c>, oder <c>readonly</c> mit einem
+    /// Referenztyp, der weder der Typ eines Konstruktor-Parameters (injiziert: Konfig, Dienst, Logger) noch <c>string</c> ist.
+    /// Compiler-erzeugte Felder (Auto-Properties, primäre Konstruktoren) zählen nicht.
+    /// </summary>
+    private static List<string> ZustandsFelder(INamedTypeSymbol t)
+    {
+        var injiziert = t.InstanceConstructors.SelectMany(c => c.Parameters).Select(p => p.Type)
+            .ToHashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
+        return t.GetMembers().OfType<IFieldSymbol>()
+            .Where(f => !f.IsStatic && !f.IsConst && !f.IsImplicitlyDeclared && f.AssociatedSymbol == null)
+            .Where(f => !f.IsReadOnly
+                        || (!f.Type.IsValueType && f.Type.SpecialType != SpecialType.System_String && !injiziert.Contains(f.Type)))
+            .Select(f => f.Name).ToList();
     }
 
     /// <summary>Die Signatur eines Handles verbatim; <paramref name="kontext"/> = Anzahl Kontext-Parameter nach dem Eingang (CQRS057).</summary>

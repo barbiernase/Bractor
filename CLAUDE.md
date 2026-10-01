@@ -95,6 +95,9 @@ integriert; `CqrsFrameworkOptions` toter `[Obsolete]`-Typ.
   DI-Bereich auf. Kein Store/`IFristplan` in Ctor/Feld eines Konsumenten (CQRS054), kein `new …Store()` (CQRS055).
   Planen ist ein Ausgang: `Selbst<T>`, `Frist<TCmd>`, `FristStorno<TCmd>` im OneOf. Der Rumpf liefert dem
   Extractor NICHTS (keine Guards, keine Store-Aufrufe) — nur die Signatur zählt.
+- **Grammatik = EINE Quelle:** Was sich im Editor womit verbinden lässt (Sorte × Eingang, Kardinalität, Zusatzregeln, je Regel ihr
+  Build-Gegenstück) steht nur in `DomainEditor/Grammatik.cs`; Editor (`rahmen.grammatik`), Validator und `--check` lesen sie. Module
+  = Namespaces, Ports abgeleitet (`DomainEditor/Module.cs`, nur Modell/Validator — Ebenen-Ansicht im Editor bewusst noch nicht).
 - **Ausgabe-Vertrag in der Signatur (CQRS050):** Decide und jedes Handle geben einen konkreten Typ oder `OneOf<…>`
   konkreter Typen zurück (nie `ICommand`/`IEvent` …). WAS entstehen kann, lesen Generatoren/Extractor/Editor NUR aus der
   Signatur.
@@ -117,6 +120,7 @@ NICHT Timeout-tunebar; xUnit schluckt App-Logs (Cluster-Diagnose → Last-Harnes
 - Integration (braucht Postgres/Consul/Redis, sequentiell): `dotnet test Infrastructure.Integration.Tests/Infrastructure.Integration.Tests.csproj`
 - Domänen-Editor + Simulation (einzige Oberfläche): `dotnet run --project GraphExtractor` (erzeugt editor.html + domain-model.json), dann `dotnet run --project SimHost` → http://localhost:5178/editor; Bearbeiten nur im Panel: Karte anklicken, ⊕-Punkt im Panel → passende Knoten leuchten → anklicken = verbinden/lösen (`docs/konzept-editor-panel-bearbeitung.md`); 🤖-LLM-Knoten am Code-Block = Chat: Prompt senden → `claude -p` (Abo, nie API) → geprüft → .cs geschrieben → Laufzeit-Projekt gebaut (alle Generatoren) → neu eingelesen (Konzept §12); Kontexte erzeugt SimHost selbst
 - Editor-Parität (Code ⇄ Extraktion ⇄ Editor, schreibt nichts): `dotnet run --project GraphExtractor -- --check`
+- Grammatik als Liste „Regel → Build-Gegenstück": `dotnet run --project GraphExtractor -- --grammatik`
 - Agnostik-Sonde (unbekannte Domäne im Speicher gegen handgeschriebenes Soll + Fixpunkt): `dotnet run --project GraphExtractor -- --sonde`
 - LLM-Kontext je Code-Block (`docs/konzept-llm-minimalkontext.md`): `dotnet run --project GraphExtractor -- --kontexte <verz>` (Graph-Skelett + Slot-Teile) bzw. `--kontext <Disc> [--auftrag "…"]`; Isolation aller Code-Block-Stellen: `--slots`
 - Last/Durchsatz: `dotnet run --project LoadHarness -- --accounts 500 --credits 40 --concurrency 128 --log warning`

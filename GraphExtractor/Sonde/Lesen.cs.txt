@@ -113,6 +113,13 @@ public partial class MahnlaufPipeline : IPipelineHandler
 {
     public const string Kennung = "mahnlauf";
     private readonly MahnlaufKonfig _konfig;
+    // Regel Z (Symbol-Fakt): Zustand = nicht readonly ODER readonly mit Referenztyp, der weder injiziert (Ctor-Parametertyp) noch
+    // string ist. Kein Zustand: der injizierte Konfig-Record, readonly Werttyp, readonly string, statische Felder.
+    private readonly HashSet<Guid> _gemahnt = new();
+    private int _runden;
+    private readonly int _maximum = 3;
+    private readonly string _praefix = "M";
+    private static readonly TimeSpan Takt = TimeSpan.FromHours(1);
 
     public MahnlaufPipeline(MahnlaufKonfig konfig) { _konfig = konfig; }
 
@@ -143,6 +150,7 @@ public partial class MahnlaufPipeline : IPipelineHandler
 
     public IEnumerable<OneOf<EroeffneMahnung, Selbst<Mahnrunde>, Frist<MeldeSchaden>>> Handle(Mahnrunde runde, PipelineContext ctx)
     {
-        yield return Selbst.In(new Mahnrunde(), TimeSpan.FromHours(1));
+        if (++_runden > _maximum || !_gemahnt.Add(Guid.Empty) || _praefix.Length == 0) yield break;
+        yield return Selbst.In(new Mahnrunde(), Takt);
     }
 }
