@@ -215,3 +215,48 @@ auslöst, bevor Code läuft.
 4. **Ingress im Host oder in der Domäne?** Empfehlung: Domäne (§7.3), sonst bleibt Timer/Datei im Editor unschreibbar.
 5. **Frist-Knoten ganz entfernen oder als Sicht behalten?** Empfehlung: als **Sicht** (Frist-Klammer über `Frist`/`FristStorno`
    desselben Commands), nicht als eigenständiges Modell-Element.
+
+## 12 · Nachrichten mit zwei Seiten: „◀ kommt aus" / „geht an ▶" (2026-10-01, umgesetzt)
+
+**Befund (GUI).** Eine Pipeline gibt ein OneOf zurück; die Laufzeit routet jede Variante **nach ihrem Typ** (Command → Aggregat,
+Trigger → Pipeline, transientes Event → Broker, `Selbst<T>` → derselbe Actor, `Frist<T>` → Fristplan → Aggregat). Das Board machte
+es umgekehrt: je Ausgangsart ein eigener Port und eine eigene Liste (`sends`/`emits`/`schedules`), Kanten/Picker/Kurzzeile je Art von
+Hand. Was in keine Schiene passte, war unsichtbar:
+
+- **Frist/FristStorno** standen nur im alten Frist-Knoten (Composition-Root-Sicht), nicht am Handle — die Handles der
+  `TrainingFristPipeline` hatten keinen einzigen Ausgang.
+- **Transiente Events** (Board-Art „Ablehnung") hatten keinen Ausgang: `PaarNichtKomplett → ImageProcessingPipeline` wurde nicht
+  gezeichnet und war nicht neu verdrahtbar; „veröffentlicht" fehlte am Pipeline-Handle. Der Schreiber hätte einen transienten
+  OneOf-Typ beim „C# schreiben" entfernt.
+- **Teil-Laden** („Domänen laden"): Pipelines liegen in `Domain.Pipeline.*`, ihre Commands im Aggregat-Namespace — ohne beide
+  geladen endeten die Handles im Leeren; nicht Geladenes war kein Ziel und nicht einmal benannt.
+- **Trigger-Ketten** liefen Handle → Handle an der Trigger-Nachricht vorbei.
+
+**Leitidee.** Jede Nachricht ist eine Karte mit **zwei Seiten**: ◀ *kommt aus* (Erzeuger) und *geht an* ▶ (Konsumenten). Das ist
+dieselbe Kante wie der Ausgang am Erzeuger — **eine** Wahrheit (die OneOf-Signatur des Erzeugers), zwei Enden. „kommt aus" ist
+keine zweite Liste am Command, sondern die umgekehrte Sicht; Verbinden von der Nachricht aus schreibt in den OneOf des Handles.
+
+| Nachricht | ◀ kommt aus | geht an ▶ |
+|---|---|---|
+| Command | beliebig: Außenwelt (abgeleitet), Prozess, Reaktion, Pipeline, Pipeline per Frist ⏳ (✕⏳ Storno) | genau ein Aggregat (Decider) |
+| Event | genau ein Aggregat (Decider); reaktiv veröffentlicht | beliebig: Applier, Prozess, Projektion, Reaktion, Pipeline |
+| Transient | Decider (Ablehnung), Projektion/Reaktion/Pipeline (veröffentlicht) | beliebig: Projektion, Reaktion, Pipeline |
+| Trigger | Ingress (Code-Fakt `[Ingress]`), Pipeline; ohne Erzeuger: Außenwelt | genau eine Pipeline |
+| Query / Response | Außenwelt / Reader | Reader / Außenwelt |
+
+Die Kardinalität kommt aus der Grammatik (`rahmen.grammatik.konsume`), nicht aus dem Board-Code.
+
+**Umsetzung.**
+1. **Ein Ausgangs-Port je Pipeline-Handle** („+ Ausgang ▶", Port-Typ `aus`). Die Art folgt aus der angeklickten Karte: Command →
+   `sends`, transientes Event → `publishes`, Trigger-Karte → `emits`; ein persistentes Event ist gesperrt (GR-KEIN-EVENT-AUS-PIPELINE).
+   Je Command-Zeile wählt man **sofort · ⏳ Frist · ✕⏳ Storno** (`hd.fristen = [{command, art: frist|storno}]`).
+2. **Nachrichtenkarten** (Command/Event/Ablehnung/Query/Response/Trigger) zeigen „◀ kommt aus" und „geht an ▶" als Listen der
+   Partner (anklickbar = springen; ✕ an Handle-Ausgängen = lösen) plus je Seite einen ⊕-Port. Die Ablehnung/transientes Event hat
+   jetzt einen Ausgang. Die Trigger-Karte hat „◀ kommt aus"; Ketten laufen Handle → Trigger-Karte → Handle.
+3. **Grenz-Partner:** ein Partner aus einer nicht geladenen Domäne erscheint als „↗ außerhalb · Namespace"; Klick lädt die Domäne
+   dazu. Die Kurzzeile zeigt „↗ n außerhalb".
+4. **Frist ist ein Ausgang**, kein Knoten: der Mapper leitet keinen Frist-Knoten mehr ab, die Palette bietet ihn nicht mehr an; der
+   Trigger-Modus „Frist" entfällt.
+5. **Extractor/Mapper/Schreiber:** Ausgangs-Art `transient` (vor `event`); Pipeline-Handles tragen `publishes` und `fristen`;
+   `BoardLeseseite` schreibt sie zurück (`Frist<T>`/`FristStorno<T>`, transiente Typen bleiben erhalten).
+6. **`--check`:** jede Variante einer Pipeline-Signatur muss am Board-Handle als Ausgang stehen.

@@ -441,6 +441,12 @@ public static class ModellMapper
                         // Selbst-Nachrichten = die Selbst<T>-Varianten der Signatur (Verzögerung ist Rumpf → nicht gezeigt).
                         schedules = (Vertrag(p.HandleVertraege, hd.InputFull)?.Ausgaenge ?? new()).Where(a => a.Art == "self")
                             .Select(a => (object)new { name = a.Typ, delay = "" }).ToArray(),
+                        // Veröffentlichte Events (transient → Broker; ein persistentes hier ist ein Grammatik-Verstoß, bleibt aber sichtbar).
+                        publishes = (Vertrag(p.HandleVertraege, hd.InputFull)?.Ausgaenge ?? new()).Where(a => a.Art is "transient" or "event")
+                            .Select(a => a.Typ).ToArray(),
+                        // Frist<TCmd>/FristStorno<TCmd> = ein Command „per Frist" bzw. dessen Storno — ein Ausgang am Handle, kein eigener Knoten.
+                        fristen = (Vertrag(p.HandleVertraege, hd.InputFull)?.Ausgaenge ?? new()).Where(a => a.Art is "frist" or "fristStorno")
+                            .Select(a => (object)new { command = a.Typ, art = a.Art == "frist" ? "frist" : "storno" }).ToArray(),
                         fns = StoreFns(p.HandleFaehigkeiten, hd.InputFull),
                         rumpf = Rumpf(p.HandleBodies, hd.InputFull),
                         form = Vertrag(p.HandleVertraege, hd.InputFull)?.Form, signatur = Vertrag(p.HandleVertraege, hd.InputFull)?.Signatur,
@@ -539,11 +545,7 @@ public static class ModellMapper
         root["pipelines"] = Knoten(pipelines);
         root["triggers"] = triggersNode;
         root["stores"] = Knoten(stores);
-        root["frists"] = Knoten(cr.Frists.Select((f, i) => new
-        {
-            _id = "fr" + (i + 1), name = f.Name, kontext = f.Kontext, sendet = f.Sendet,
-            aggregat = f.Aggregat, plant = f.Plant, storniert = f.Storniert, dauerSetting = f.DauerSetting,
-        }));
+        // Fristen sind Ausgänge der Pipeline-Handles (fristen[]) — kein eigener Board-Knoten mehr (eine Wahrheit: die Signatur).
         root["dienste"] = Knoten(cr.Dienste.Select((d, i) => new
         {
             _id = "di" + (i + 1), name = d.Name, vertrag = d.Vertrag, @extern = d.Extern, codeSrc = (string?)null,

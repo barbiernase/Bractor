@@ -185,6 +185,13 @@ public static class HtmlPresenter
 #de .ghl{display:block;cursor:pointer;color:#9fb6d6;font-size:11.5px;padding:1px 0;text-decoration:none}#de .ghl:hover{color:#dbe6f5;text-decoration:underline}
 #de .gaus{font-size:10.5px;color:#8f9bb0;margin:-2px 0 4px 18px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #de .gaus.tot{color:#d08a6a}#de .gaus.offen{color:#d0b35a}
+/* Nachricht mit zwei Seiten (§12): ◀ kommt aus · geht an ▶ — Partner-Zeilen, „↗ außerhalb" = Domäne nicht geladen */
+#de .gp-row{display:flex;align-items:center;gap:6px;font-size:11.5px;color:#c9d4e4;padding:2px 2px 2px 6px;border-radius:5px;cursor:pointer}
+#de .gp-row:hover{background:#ffffff10}#de .gp-row .rm{margin-left:auto}
+#de .gp-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#de .gp-abg{color:#8f9bb0;font-style:italic}
+#de .gp-mark{font-size:10px;color:#d0b35a;white-space:nowrap}#de .gp-welt{font-style:normal;color:#8f9bb0;flex:none}
+#de .gp-aussen{opacity:.75;border:1px dashed #6b7690}#de .gp-leer{color:#8f9bb0;cursor:default}
+#de .gmodus{font-size:10.5px;padding:0 2px;max-width:92px}
 #de .gsig{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:#b9c4d8;margin:2px 0 6px;word-break:break-all}
 #de .gnode2.n-applier .ghead{background:#d0a35a}
 #de .gnode2.n-saga .ghead{background:#9d78d6}
@@ -472,7 +479,7 @@ public static class HtmlPresenter
     // Reaktion = emittierender Konsument (ISubscriber → IAsyncEnumerable<OneOf<Cmd>>): Trigger-Event → Handle → OneOf-Commands.
     m.reaktionen.forEach(r=>{if(!r._id)r._id="rk"+(NID++);r.handles=r.handles||[];r.handles.forEach(hd=>{hd.sends=hd.sends||[];hd.publishes=hd.publishes||[];});});
     // Pipeline = 4. durabler Konsument (IPipelineHandler): Trigger-Msg ODER Event → Handle → OneOf-Command(s).
-    m.pipelines.forEach(p=>{if(!p._id)p._id="pl"+(NID++);p.handles=p.handles||[];p.handles.forEach(hd=>{hd.sends=hd.sends||[];hd.emits=hd.emits||[];hd.schedules=hd.schedules||[];
+    m.pipelines.forEach(p=>{if(!p._id)p._id="pl"+(NID++);p.handles=p.handles||[];p.handles.forEach(hd=>{hd.sends=hd.sends||[];hd.emits=hd.emits||[];hd.schedules=hd.schedules||[];   /* publishes/fristen bewusst NICHT vorbelegen: sonst gälte ein gespeichertes Board als „geändert" (Herkunfts-Hash) */
       hd.inputKind=hd.inputKind||(hd.trigId?"trigger":"event");
       if(hd.trigId&&!hd.prod){hd.prod={k:"tg",id:hd.trigId};hd.input=hd.input||"";}});});
     // Trigger = Ingress-Wecker (Timer/Webhook/FileWatch/Frist), erzeugt eine IPipelineTrigger-Nachricht.
@@ -642,6 +649,81 @@ public static class HtmlPresenter
   const addEnum=()=>neuerKnoten("enum");
   const addSaga=()=>neuerKnoten("saga");
 
+  // ══ NACHRICHT MIT ZWEI SEITEN (docs/konzept-editor-pipelines.md §12): „◀ kommt aus" = wer diesen Typ erzeugt, „geht an ▶" = wer
+  //   ihn konsumiert. KEINE zweite Liste: beide Seiten sind die umgekehrte Sicht auf die Ausgänge/Eingänge der Bausteine (eine
+  //   Wahrheit = die Signatur des Erzeugers). Je Partner: Knoten-Id (springen), Text, Markierung, optional „lösen".
+  const hdId=(kind,o,hd)=>{const ids=handleIds(o,HANDLE_ART[kind][1]+":"+o._id);return ids[(o.handles||[]).indexOf(hd)];};
+  const ohneX=(arr,x)=>(arr||[]).filter(v=>v!==x);
+  const trigName=t=>t.msgName||t.name||"";
+  function partnerVon(nm,trig){
+    const ein=[],aus=[],P=(arr,id,text,mark,los)=>arr.push({id,text,mark:mark||"",los});
+    const r=trig?null:recByName(nm),k=trig?"trigger":(r?r.kind:"");if(!nm)return {ein,aus,k};
+    const HD=(kind,coll,f)=>(MODEL[coll]||[]).forEach(o=>(o.handles||[]).forEach(hd=>f(o,hd,hdId(kind,o,hd))));
+    const hText=(o,hd)=>o.name+".Handle("+handleDisc(hd)+")";
+    if(k==="command"){
+      MODEL.transitions.forEach(t=>(t.dann||[]).forEach(d=>{
+        if(d.sende===nm)P(ein,"tr:"+t._id,"Regel · "+(t.prozess||"Prozess"));
+        if(d.kompensation===nm)P(ein,"tr:"+t._id,"Regel · "+(t.prozess||"Prozess"),"↩ Kompensation");}));
+      HD("reaktion","reaktionen",(o,hd,id)=>{if((hd.sends||[]).includes(nm))P(ein,id,hText(o,hd),"",()=>{hd.sends=ohneX(hd.sends,nm);});});
+      HD("pipeline","pipelines",(o,hd,id)=>{
+        if((hd.sends||[]).includes(nm))P(ein,id,hText(o,hd),"",()=>{hd.sends=ohneX(hd.sends,nm);});
+        (hd.fristen||[]).filter(f=>f.command===nm).forEach(f=>P(ein,id,hText(o,hd),f.art==="storno"?"✕⏳ Storno":"⏳ per Frist",
+          ()=>{hd.fristen=(hd.fristen||[]).filter(x=>x!==f);}));});
+      MODEL.frists.forEach(f=>{if(f.sendet===nm)P(ein,"fr:"+f._id,"Frist "+(f.name||""),"⏳");});
+      if(!ein.length)P(ein,null,"Außenwelt (Client)","abgeleitet: kein interner Erzeuger");
+      MODEL.decider.forEach(d=>{if(d.command===nm)P(aus,"dec:"+d._id,"Decide @ "+(d.aggregat||"— kein Aggregat"));});}
+    else if(k==="event"||k==="rejection"){
+      MODEL.decider.forEach(d=>{if((d.ergibt||[]).some(o=>o.event===nm))P(ein,"dec:"+d._id,"Decide("+(d.command||"?")+") @ "+(d.aggregat||"—"));});
+      [["projektion","projektionen"],["reaktion","reaktionen"],["pipeline","pipelines"]].forEach(([kind,coll])=>{
+        HD(kind,coll,(o,hd,id)=>{if((hd.publishes||[]).includes(nm))P(ein,id,hText(o,hd),"veröffentlicht",()=>{hd.publishes=ohneX(hd.publishes,nm);});
+          if(hd.event===nm&&(kind!=="pipeline"||(hd.inputKind||"event")==="event"))P(aus,id,hText(o,hd));});});
+      MODEL.applier.forEach(a=>{if(a.event===nm)P(aus,"app:"+a._id,"Apply @ "+(a.aggregat||"—"));});
+      MODEL.sagas.forEach(sg=>{if(sg.triggerEvent===nm)P(aus,"saga:"+sg.name,"Prozess "+sg.name,"Auslöser");});
+      MODEL.transitions.forEach(t=>{if((t.wenn||[]).includes(nm)||t.sammelEvent===nm)P(aus,"tr:"+t._id,"Regel · "+(t.prozess||"Prozess"),t.sammelEvent===nm?"Σ sammelt":"");});}
+    else if(k==="query"){P(ein,null,"Außenwelt (Client)","abgeleitet");
+      HD("reader","reader",(o,hd,id)=>{if(hd.query===nm)P(aus,id,hText(o,hd));});}
+    else if(k==="queryresponse"){HD("reader","reader",(o,hd,id)=>{if((hd.responses||[]).includes(nm))P(ein,id,hText(o,hd));});
+      P(aus,null,"Außenwelt (Client)","abgeleitet");}
+    else if(k==="trigger"){const t=trig;
+      if(t.modus)P(ein,null,"Ingress · "+t.modus+(t.route||t.intervall||t.pfad?" "+(t.route||t.intervall||t.pfad):""),"Code-Fakt");
+      HD("pipeline","pipelines",(o,hd,id)=>{if((hd.emits||[]).includes(nm))P(ein,id,hText(o,hd),"",()=>{hd.emits=ohneX(hd.emits,nm);});
+        if((hd.inputKind==="trigger")&&(hd.input===nm||hd.trigId===t._id||(hd.prod&&hd.prod.k==="tg"&&hd.prod.id===t._id)))P(aus,id,hText(o,hd));});
+      if(!ein.length)P(ein,null,"Außenwelt (Client)","abgeleitet: kein interner Erzeuger");}
+    return {ein,aus,k};}
+  // Kardinalität der Konsumenten-Seite AUS DER GRAMMATIK (nie im Board-Code): „genau eins" / „dieselbe" / „beliebig".
+  function grKardinalitaet(sorte){const g=GR();if(!g||!sorte)return "";const ks=(g.konsume||[]).filter(k=>k.sorte===sorte);
+    if(!ks.length)return "";if(ks.every(k=>k.kardinalitaet==="eins"))return "genau eins";if(ks.some(k=>k.kardinalitaet==="dieselbe"))return "dieselbe Pipeline";return "beliebig viele";}
+  // Ein Partner, dessen Domäne nicht geladen ist, steht als „↗ außerhalb" — Klick lädt die Domäne dazu.
+  function partnerZeile(x){
+    const n=x.id&&NODEBY.get(x.id),v=n?vertreterId(n.id):null,sichtbar=!!v&&VIS.has(v),aussen=!!n&&!geladen(n);
+    const ns=n?nsVon(n):null;
+    const mark=x.mark?h("span",{class:"gp-mark"},x.mark):null;
+    const text=h("span",{class:"gp-t"+(n?"":" gp-abg"),title:n?(NODELABEL[n.kind]||n.kind):""},x.text);
+    const row=h("div",{class:"gp-row"+(aussen?" gp-aussen":"")},
+      n?h("i",{class:"kc-"+n.kind,style:"display:inline-block;width:7px;height:7px;border-radius:50%;flex:none"}):h("i",{class:"gp-welt"},"◌"),
+      text,mark);
+    if(aussen)row.append(h("span",{class:"gp-mark",title:"Domäne "+(ns||"?")+" ist nicht geladen — Klick lädt sie dazu"},"↗ außerhalb · "+letztesSeg(ns||"?")));
+    if(n)row.onclick=()=>{if(aussen&&ns&&LADEN){if(!LADEN.some(g=>drinNs(g,ns)))LADEN=LADEN.concat([ns]);VIEW.geladen=LADEN;speichereAnsicht();render();}
+      const m=NODEBY.get(n.id);if(m){waehle(m.id);centerOn(m);pulseNode(m);}};
+    if(x.los)row.append(h("button",{class:"rm",title:"Verbindung lösen (ändert den Ausgang des Erzeugers)",onclick:e=>{e.stopPropagation();x.los();render();}},"✕"));
+    return row;}
+  // Die zwei Seiten einer Nachricht: ◀ kommt aus (+ ⊕ Erzeuger) · geht an ▶ (+ ⊕ Konsument). Ports: die bestehenden Slot-Schlüssel.
+  function zweiSeiten(body,nm,trig,einPort,ausPort){
+    const pv=partnerVon(nm,trig),sorte=trig?"trigger":grNachrichtSorte(nm),kard=grKardinalitaet(sorte);
+    const sek=h("div",{class:"gp"});
+    sek.append(h("div",{class:"gsec"},"◀ kommt aus"));
+    pv.ein.forEach(x=>sek.append(partnerZeile(x)));
+    if(einPort)sek.append(einPort);
+    sek.append(h("div",{class:"gsec"},"geht an ▶"+(kard?" · "+kard:"")));
+    if(!pv.aus.length)sek.append(h("div",{class:"gp-row gp-leer"},"— noch kein Konsument"));
+    pv.aus.forEach(x=>sek.append(partnerZeile(x)));
+    if(kard==="genau eins"&&pv.aus.length>1)sek.append(h("div",{class:"llmmeld err"},"⚠ "+pv.aus.length+" Konsumenten — die Grammatik erlaubt genau einen"));
+    if(ausPort)sek.append(ausPort);
+    body.append(sek);}
+  // Partner außerhalb der geladenen Domänen (für die Kurzzeile „↗ n außerhalb") — über die Board-Kanten, für jede Knotenart gleich.
+  function aussenAnzahl(n){if(LADEN===null)return 0;const ids=new Set([...(ADJ.inn.get(n.id)||[]),...(ADJ.out.get(n.id)||[])]);let z=0;
+    ids.forEach(id=>{const m=NODEBY.get(id);if(m&&!geladen(m))z++;});return z;}
+
   function recordCard(body,r){
     body.append(h("div",{class:"gsec"},"Name · Art"));
     body.append(nameInp(r,"name","RecordName","record"));
@@ -655,13 +737,17 @@ public static class HtmlPresenter
     if(r.kind==="command"||r.kind==="event"||r.kind==="rejection"){const ag=recordAgg(r.name);
       body.append(h("div",{class:"gsec",title:"abgeleitet aus Decider/Applier"},"Aggregat: "+(ag||"— keinem (Decider/Applier verdrahten)")));}
     if(r.kind==="command")body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>r.istErzeugung=e.target.checked||undefined,...(r.istErzeugung?{checked:"checked"}:{})}),"Erzeugung (ICreationCommand)"));
-    if(r.kind==="command"){body.append(slotRow("sagacmd","◀ ausgelöst von (Saga/Reaktion)","l",{type:"sagaCmd",dir:"in",rec:r.name},"cmd:in:"+r.name));
-      body.append(slotRow("command","cmd ▶","r",{type:"cmd",dir:"out",rec:r.name},"cmd:out:"+r.name));}
-    else if(r.kind==="event"){body.append(slotRow("event","◀ erzeugt von (Decider / reaktiv veröffentlicht)","l",{type:"evtOut",dir:"in",rec:r.name},"evt:in:"+r.name));
-      body.append(slotRow("event","evt ▶","r",{type:"evtUse",dir:"out",rec:r.name},"evt:out:"+r.name));}
-    else if(r.kind==="rejection")body.append(slotRow("rejection","◀ von Decider","l",{type:"evtOut",dir:"in",rec:r.name},"evt:in:"+r.name));
-    else if(r.kind==="query")body.append(slotRow("query","query ▶","r",{type:"query",dir:"out",rec:r.name},"qry:out:"+r.name));
-    else if(r.kind==="queryresponse")body.append(slotRow("qrsp","◀ von Reader","l",{type:"qrsp",dir:"in",rec:r.name},"qrsp:in:"+r.name));
+    // Zwei Seiten je Nachricht (§12): ◀ kommt aus (⊕ Erzeuger) · geht an ▶ (⊕ Konsument). Auf der Fläche nur die Ports (Kanten),
+    //   im Panel dazu die Partner-Listen. Ein transientes Event (Ablehnung) hat jetzt auch einen Ausgang (→ Projektion/Reaktion/Pipeline).
+    {let ein=null,aus=null;
+     if(r.kind==="command"){ein=slotRow("sagacmd","+ Erzeuger ⊕ (Prozess · Reaktion · Pipeline)","l",{type:"sagaCmd",dir:"in",rec:r.name},"cmd:in:"+r.name);
+       aus=slotRow("command","+ Konsument ⊕ (Decider) ▶","r",{type:"cmd",dir:"out",rec:r.name},"cmd:out:"+r.name);}
+     else if(r.kind==="event"||r.kind==="rejection"){const c=r.kind==="event"?"event":"rejection";
+       ein=slotRow(c,"+ Erzeuger ⊕ (Decider · veröffentlicht)","l",{type:"evtOut",dir:"in",rec:r.name},"evt:in:"+r.name);
+       aus=slotRow(c,"+ Konsument ⊕"+(r.kind==="event"?"":" (Projektion · Reaktion · Pipeline)")+" ▶","r",{type:"evtUse",dir:"out",rec:r.name},"evt:out:"+r.name);}
+     else if(r.kind==="query")aus=slotRow("query","+ Konsument ⊕ (Reader) ▶","r",{type:"query",dir:"out",rec:r.name},"qry:out:"+r.name);
+     else if(r.kind==="queryresponse")ein=slotRow("qrsp","+ Erzeuger ⊕ (Reader)","l",{type:"qrsp",dir:"in",rec:r.name},"qrsp:in:"+r.name);
+     if(ein||aus){if(INSP)zweiSeiten(body,r.name,null,ein,aus);else{if(ein)body.append(ein);if(aus)body.append(aus);}}}
     if(r.kind==="valueobject")body.append(slotRow("ftype","als Feldtyp ▶","r",{type:"ftype",dir:"out",typeName:r.name},"ftype:out:rec:"+r.name));
     body.append(h("div",{class:"gsec"},"Felder"));
     (r.felder||[]).forEach((f,fi)=>body.append(feldRow(f,()=>{r.felder.splice(fi,1);render();},undefined,r.name)));
@@ -910,19 +996,27 @@ public static class HtmlPresenter
       const tlabel=(hd.prod&&hd.prod.k==="tg")?(trigMsgLabel(hd.prod.id)||hd.input):hd.input;
       const lbl=isTrig?("◀ Trigger "+(tlabel||"?")):(isSelf?("◀ Self "+(hd.selfName||"?")):("◀ Auf "+(hd.event||"?")));
       body.append(h("div",{class:"slotrow"},sl,h("span",{class:"slotlbl",style:"flex:1"},lbl),h("button",{class:"rm",onclick:()=>{p.handles.splice(hi,1);render();}},"✕")));
-      // yield ICommand → Aggregat
-      (hd.sends||[]).forEach((c,ci)=>{const so=port("command");so.classList.add("o");reg("pl:send:"+p._id+":"+hi+":"+c,so,{type:"sagaCmd",dir:"out",pipeline:p._id,handleIdx:hi});
-        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.sends.splice(ci,1);render();}},"✕"),
-          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"sendet "+(c||"?")+" ▶"),so));});
-      const so=port("command");so.classList.add("o");reg("pl:send:"+p._id+":"+hi+":open",so,{type:"sagaCmd",dir:"out",pipeline:p._id,handleIdx:hi});
-      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Command ▶"),so));
-      // yield IPipelineTrigger → an eine andere Pipeline (Verkettung, z. B. FileWatch → ImageProcessing)
-      (hd.emits||[]).forEach((nm,ei)=>{const eo=port("trigmsg");eo.classList.add("o");reg("pl:emit:"+p._id+":"+hi+":"+nm,eo,{type:"trigmsg",dir:"out",pipeline:p._id,handleIdx:hi,msgName:nm});
+      // ── Ausgänge NACH TYP (§12): EIN Port „+ Ausgang ▶" — die Art folgt aus der angeklickten Karte (Command → sends,
+      //    transientes Event → publishes, Trigger-Karte → emits; persistentes Event gesperrt: GR-KEIN-EVENT-AUS-PIPELINE).
+      //    Je Command: sofort · ⏳ Frist<T> · ✕⏳ FristStorno<T> (eine Frist ist ein Ausgang, kein Knoten).
+      const ausPort=(key,extra)=>{const so=port("command");so.classList.add("o");reg(key,so,Object.assign({type:"aus",dir:"out",pipeline:p._id,handleIdx:hi},extra||{}));return so;};
+      const modus=(c,akt)=>{const sel=h("select",{class:"gmodus",title:"Wie wird der Command ausgelöst?",onchange:e=>{const v=e.target.value;
+          hd.sends=ohneX(hd.sends,c);hd.fristen=(hd.fristen||[]).filter(f=>!(f.command===c&&f.art===akt));
+          if(v==="sofort"){if(!hd.sends.includes(c))hd.sends.push(c);}
+          else if(!hd.fristen.some(f=>f.command===c&&f.art===v))hd.fristen.push({command:c,art:v});render();}});
+        [["sofort","▶ sofort"],["frist","⏳ per Frist"],["storno","✕⏳ Storno"]].forEach(([v,l])=>{const o=h("option",{value:v},l);if(v===akt)o.selected=true;sel.append(o);});return sel;};
+      const ausZeile=(label,so,los,extra)=>body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{los();render();}},"✕"),
+          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},label),...(extra?[extra]:[]),so));
+      (hd.sends||[]).forEach(c=>ausZeile("Command "+(c||"?")+" ▶",ausPort("pl:send:"+p._id+":"+hi+":"+c,{sofort:true}),()=>{hd.sends=ohneX(hd.sends,c);},modus(c,"sofort")));
+      (hd.fristen||[]).forEach(f=>ausZeile((f.art==="storno"?"storniert Frist ":"Frist → ")+(f.command||"?")+" ▶",
+          ausPort("pl:frist:"+p._id+":"+hi+":"+f.art+":"+f.command,{fristArt:f.art}),()=>{hd.fristen=(hd.fristen||[]).filter(x=>x!==f);},modus(f.command,f.art)));
+      (hd.publishes||[]).forEach(ev=>ausZeile("veröffentlicht "+(ev||"?")+" ▶",ausPort("pl:pub:"+p._id+":"+hi+":"+ev),()=>{hd.publishes=ohneX(hd.publishes,ev);}));
+      // Trigger → die Trigger-Karte (sie trägt Felder + Ingress); von dort geht er an genau eine Pipeline. Umbenennen bleibt möglich.
+      (hd.emits||[]).forEach((nm,ei)=>{const eo=ausPort("pl:emit:"+p._id+":"+hi+":"+nm,{msgName:nm});
         body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.emits.splice(ei,1);render();}},"✕"),
-          h("input",{value:nm,oninput:e=>hd.emits[ei]=e.target.value,onchange:()=>render(),placeholder:"TriggerMsg",style:"flex:1"}),h("span",{class:"slotlbl"},"▶"),eo));});
-      // Persistenter, gleichwertiger Ausgangs-Port: eine Handle yieldet Command ODER Trigger (OneOf<…>).
-      const eopen=port("trigmsg");eopen.classList.add("o");reg("pl:emit:"+p._id+":"+hi+":open",eopen,{type:"trigmsg",dir:"out",pipeline:p._id,handleIdx:hi,msgName:""});
-      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ erzeugt Trigger ▶"),eopen));
+          h("span",{class:"slotlbl"},"Trigger"),h("input",{value:nm,oninput:e=>hd.emits[ei]=e.target.value,onchange:()=>render(),placeholder:"TriggerMsg",style:"flex:1"}),h("span",{class:"slotlbl"},"▶"),eo));});
+      body.append(h("div",{class:"slotrow o",title:"Klick auf ⊕: alle Nachrichten leuchten, die diese Pipeline erzeugen darf — die Art folgt aus dem Typ"},
+        h("span",{class:"slotlbl"},"+ Ausgang ▶ (Command · Trigger · transientes Event)"),ausPort("pl:aus:"+p._id+":"+hi+":open")));
       // Fähigkeiten (Read-Fns als Handle-Parameter) — wie am Reader-Handle.
       (hd.fns||[]).forEach((fid,fj)=>{const rr=fnById(fid);const s=port("store");s.classList.add("o");reg("rcall:out:pl:"+p._id+":"+hi+":"+fid,s,{type:"rcall",dir:"out",pipeline:p._id,handleIdx:hi});
         body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.fns.splice(fj,1);render();}},"✕"),
@@ -1010,7 +1104,7 @@ public static class HtmlPresenter
   // Trigger = Ingress-WECKER. Modus + Config; erzeugt EINE IPipelineTrigger-Nachricht (Name + Felder) → Pipeline.
   function triggerCard(body,t){
     body.append(nameInp(t,"name","Trigger","trigger"));
-    const modi=[["timer","⏱ Timer (Intervall)"],["webhook","🔗 Webhook (HTTP)"],["filewatch","📁 FileWatch (Datei)"],["frist","⏳ Frist (Deadline)"]];
+    const modi=[["timer","⏱ Timer (Intervall)"],["webhook","🔗 Webhook (HTTP)"],["filewatch","📁 FileWatch (Datei)"]];
     const sel=h("select",{onchange:e=>{t.modus=e.target.value||undefined;render();}});
     // Ohne Bindung im Code (Composition Root) ist der Modus UNBESTIMMT — nicht geraten.
     const leer=h("option",{value:""},"— Modus (im Code nicht gebunden)");if(!t.modus)leer.selected=true;sel.append(leer);
@@ -1020,14 +1114,15 @@ public static class HtmlPresenter
       body.append(inp(t.route,v=>t.route=v,"/webhooks/x"));body.append(tinp(t.reqTyp,v=>t.reqTyp=v));}
     else if(t.modus==="filewatch"){body.append(h("div",{class:"gsec"},"Pfad · Muster"));
       body.append(inp(t.pfad,v=>t.pfad=v,"/data/incoming"));body.append(inp(t.muster,v=>t.muster=v,"*.png"));}
-    else if(t.modus==="frist"){body.append(h("div",{class:"gsec"},"Dauer / Fälligkeit (IDbClock)"));
-      body.append(inp(t.dauer,v=>t.dauer=v,"z. B. 24:00:00 oder aus Feld"));}
     else {body.append(h("div",{class:"gsec"},"Intervall"));body.append(inp(t.intervall,v=>t.intervall=v,"30s"));}
     body.append(h("div",{class:"gsec"},"Trigger-Nachricht (IPipelineTrigger)"));
     body.append(inp(t.msgName,v=>{t.msgName=v;},"z. B. DateiErkannt"));
     (t.felder||[]).forEach((f,fi)=>body.append(feldRow(f,()=>{t.felder.splice(fi,1);render();})));
     body.append(h("button",{class:"add",onclick:()=>{(t.felder=t.felder||[]).push({_id:"f"+(NID++),name:uniqFeldName(t.felder,"feld"),typ:"Guid"});render();}},"+ Feld"));
-    body.append(slotRow("trigmsg","erzeugt "+(t.msgName||"Trigger-Msg")+" ▶","r",{type:"trigmsg",dir:"out",trigId:t._id,msgName:t.msgName},"trg:msg:"+t._id));
+    // Zwei Seiten (§12): ◀ kommt aus = Ingress-Bindung + Pipelines, die den Trigger erzeugen · geht an ▶ = die eine Pipeline.
+    const tin=slotRow("trigmsg","+ Erzeuger ⊕ (Pipeline)","l",{type:"trgIn",dir:"in",trigId:t._id},"trg:in:"+t._id);
+    const tout=slotRow("trigmsg","+ Konsument ⊕ (Pipeline) ▶","r",{type:"trigmsg",dir:"out",trigId:t._id,msgName:t.msgName},"trg:msg:"+t._id);
+    if(INSP)zweiSeiten(body,trigName(t),t,tin,tout);else body.append(tin,tout);
   }
   // Pipeline = 4. durabler Konsument (IPipelineHandler): je Handle EIN Eingang (Trigger/Event/Self) →
   //   yield ICommand UND/ODER yield IPipelineTrigger (→ andere Pipeline) UND/ODER ScheduleSelf (Tick/Timeout).
@@ -1486,7 +1581,7 @@ public static class HtmlPresenter
           if(d.sendeAusdruck)d.sendeAusdruck=d.sendeAusdruck.replace(rx,nv);if(d.kompensationAusdruck)d.kompensationAusdruck=d.kompensationAusdruck.replace(rx,nv);}));
         // Reaktion-Handles: ausgelöste Commands mitziehen.
         MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>{hd.sends=(hd.sends||[]).map(x=>x===old?nv:x);}));
-        MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{hd.sends=(hd.sends||[]).map(x=>x===old?nv:x);}));
+        MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{hd.sends=(hd.sends||[]).map(x=>x===old?nv:x);(hd.fristen||[]).forEach(f=>{if(f.command===old)f.command=nv;});}));
         MODEL.frists.forEach(f=>{if(f.sendet===old)f.sendet=nv;});
       }else{
         MODEL.decider.forEach(d=>(d.ergibt||[]).forEach(o=>{if(o.event===old)o.event=nv;}));
@@ -1497,7 +1592,7 @@ public static class HtmlPresenter
         MODEL.reader.forEach(r=>(r.handles||[]).forEach(hd=>{if(hd.query===old)hd.query=nv;hd.responses=(hd.responses||[]).map(x=>x===old?nv:x);}));
         // Reaktion-Handles: Trigger-Event mitziehen.
         MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>{if(hd.event===old)hd.event=nv;}));
-        MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.event===old)hd.event=nv;}));
+        MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.event===old)hd.event=nv;hd.publishes=(hd.publishes||[]).map(x=>x===old?nv:x);}));
         // Projektion-Handles: Trigger-Event (Abo) UND veröffentlichte reaktive Events mitziehen.
         MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.event===old)hd.event=nv;hd.publishes=(hd.publishes||[]).map(x=>x===old?nv:x);}));
         MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>{hd.publishes=(hd.publishes||[]).map(x=>x===old?nv:x);}));
@@ -1652,10 +1747,14 @@ public static class HtmlPresenter
         if(hd.inputKind==="trigger"){const pr=hd.prod||(hd.trigId?{k:"tg",id:hd.trigId}:null);
           if(pr&&pr.k==="tg")push("tg:"+pr.id,H(hd));
           else if(pr&&pr.k==="pl"){const q=MODEL.pipelines.find(x=>x._id===pr.plId),qh=q&&(q.handles||[])[pr.hi];if(qh)push(H(qh),H(hd));}}
+        // Ausgänge nach Typ: Command (sofort oder per Frist), veröffentlichtes Event — je über die Nachrichten-Karte.
         (hd.sends||[]).forEach(c=>{if(recByName(c))push(H(hd),rec(c));});
+        (hd.fristen||[]).forEach(f=>{if(recByName(f.command))push(H(hd),rec(f.command));});
+        (hd.publishes||[]).forEach(ev=>{if(recByName(ev))push(H(hd),rec(ev));});
         (hd.fns||[]).forEach(fid=>{if(fnById(fid))push(H(hd),"fn:"+fid);});
-        // ge-yieldeter Trigger → jeder Handle einer anderen Pipeline mit dieser Trigger-Nachricht als Eingang (die Kette).
-        (hd.emits||[]).forEach(tn=>MODEL.pipelines.forEach(q=>{if(q._id!==p._id)(q.handles||[]).forEach(qh=>{if(qh.inputKind==="trigger"&&qh.input===tn)push(H(hd),H(qh));});}));
+        // ge-yieldeter Trigger → die Trigger-Karte (von dort an die eine Pipeline); ohne Karte (Entwurf) direkt an den Handle.
+        (hd.emits||[]).forEach(tn=>{const t=MODEL.triggers.find(x=>trigName(x)===tn);if(t){push(H(hd),"tg:"+t._id);return;}
+          MODEL.pipelines.forEach(q=>{if(q._id!==p._id)(q.handles||[]).forEach(qh=>{if(qh.inputKind==="trigger"&&qh.input===tn)push(H(hd),H(qh));});});});
         // Selbst<T> → der Self-Handle derselben Pipeline (Tick/Timeout-Schleife).
         (hd.schedules||[]).forEach(sc=>(p.handles||[]).forEach(qh=>{if(qh.inputKind==="self"&&qh.selfName===sc.name&&qh!==hd)push(H(hd),H(qh));}));
         if(hd.codeSrc)push(codeId(hd.codeSrc),H(hd));});
@@ -2035,7 +2134,12 @@ public static class HtmlPresenter
     return {x:(r.left+r.width/2-wr.left)/PAN.s,y:(r.top+r.height/2-wr.top)/PAN.s};}
   const bez=(x1,y1,x2,y2)=>{const dx=Math.max(46,Math.abs(x2-x1)*0.5);return "M"+x1+","+y1+" C"+(x1+dx)+","+y1+" "+(x2-dx)+","+y2+" "+x2+","+y2;};
 
-  function compatible(a,b){const A=a.__slot,B=b.__slot;if(!A||!B)return false;if(A.dir===B.dir)return false;if(A.type!==B.type)return false;
+  // „aus" = der EINE Ausgangs-Port eines Pipeline-Handles: passt an jeden Nachrichten-Eingang („◀ kommt aus" von Command,
+  //   Event/transientem Event, Trigger-Karte) — welche Sorte erlaubt ist, entscheidet danach die Grammatik (grPruefe).
+  const AUS_ZIEL=new Set(["sagaCmd","evtOut","trgIn"]);
+  function compatible(a,b){const A=a.__slot,B=b.__slot;if(!A||!B)return false;if(A.dir===B.dir)return false;
+    if(A.type==="aus"||B.type==="aus"){const o=A.type==="aus"?A:B,i=o===A?B:A;return o.dir==="out"&&i.dir==="in"&&AUS_ZIEL.has(i.type);}
+    if(A.type!==B.type)return false;
     if((A.kind==="arg")!==(B.kind==="arg"))return false;              // Argument-Pin nur an Argument-Pin
     if(A.kind==="arg"&&A.trans!==B.trans)return false;                 // und nur innerhalb derselben Transition
     if(A.type==="field"){const src=A.dir==="out"?A:B,snk=A.dir==="out"?B:A;   // Feld-Quelle muss den Wunsch des Eingangs erfüllen
@@ -2069,6 +2173,14 @@ public static class HtmlPresenter
       else if(I.pipeline){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p){p.handles=p.handles||[];
         if(I.handleIdx==="openevt"||I.handleIdx==="open"){if(!p.handles.some(x=>x.event===O.rec&&x.inputKind==="event"))p.handles.push({inputKind:"event",event:O.rec,sends:[]});}
         else{p.handles[I.handleIdx].event=O.rec;p.handles[I.handleIdx].inputKind="event";delete p.handles[I.handleIdx].trigId;}}}}
+    // Pipeline-Ausgang nach TYP: Command → sends (eine Frist-Zeile bleibt Frist), transientes Event → publishes, Trigger-Karte → emits.
+    else if(O.type==="aus"){const p=MODEL.pipelines.find(x=>x._id===O.pipeline);const hd=p&&p.handles[O.handleIdx];if(hd){
+      const dazu=(feld,x)=>{hd[feld]=hd[feld]||[];if(x&&!hd[feld].includes(x))hd[feld].push(x);};
+      if(I.trgIn)dazu("emits",trigMsgLabel(I.trgIn));
+      else{const r=recByName(I.rec),k=r&&r.kind;
+        if(k==="command"){if(O.fristArt){hd.fristen=hd.fristen||[];if(!hd.fristen.some(f=>f.command===I.rec&&f.art===O.fristArt))hd.fristen.push({command:I.rec,art:O.fristArt});}
+          else dazu("sends",I.rec);}
+        else if(k==="rejection"||k==="event")dazu("publishes",I.rec);}}}
     else if(O.type==="sagaCmd"){
       if(O.reaktion){const r=MODEL.reaktionen.find(x=>x._id===O.reaktion);const hd=r&&r.handles[O.handleIdx];if(hd){hd.sends=hd.sends||[];if(!hd.sends.includes(I.rec))hd.sends.push(I.rec);}}
       else if(O.pipeline){const p=MODEL.pipelines.find(x=>x._id===O.pipeline);const hd=p&&p.handles[O.handleIdx];if(hd){hd.sends=hd.sends||[];if(!hd.sends.includes(I.rec))hd.sends.push(I.rec);}}
@@ -2142,6 +2254,11 @@ public static class HtmlPresenter
       else if(I.proj){const p=MODEL.projektionen.find(x=>x._id===I.proj);if(p)p.handles=(p.handles||[]).filter(h=>h.event!==O.rec);}
       else if(I.reaktion){const r=MODEL.reaktionen.find(x=>x._id===I.reaktion);if(r)r.handles=(r.handles||[]).filter(h=>h.event!==O.rec);}
       else if(I.pipeline){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p)p.handles=(p.handles||[]).filter(h=>!(h.inputKind==="event"&&h.event===O.rec));}}
+    else if(O.type==="aus"){const hd=handle(MODEL.pipelines,O.pipeline,O.handleIdx);if(hd){
+      if(I.trgIn)hd.emits=ohne(hd.emits,trigMsgLabel(I.trgIn));
+      // Eine Zeile löst nur sich selbst (sofort ODER diese Frist); der offene Port löst alles zu dieser Nachricht.
+      else{if(!O.fristArt)hd.sends=ohne(hd.sends,I.rec);if(!O.fristArt&&!O.sofort)hd.publishes=ohne(hd.publishes,I.rec);
+        if(!O.sofort)hd.fristen=(hd.fristen||[]).filter(f=>!(f.command===I.rec&&(!O.fristArt||f.art===O.fristArt)));}}}
     else if(O.type==="sagaCmd"){
       if(O.reaktion||O.pipeline){const hd=handle(O.reaktion?MODEL.reaktionen:MODEL.pipelines,O.reaktion||O.pipeline,O.handleIdx);if(hd)hd.sends=ohne(hd.sends,I.rec);}
       else if(O.frist){const f=MODEL.frists.find(x=>x._id===O.frist);if(f)f.sendet="";}
@@ -2477,10 +2594,15 @@ public static class HtmlPresenter
       else if(hd.inputKind==="event"&&hd.event)add("evt:out:"+hd.event,"pl:in:"+p._id+":"+hi,"#4fb06a");
       // yield ICommand.
       (hd.sends||[]).forEach(c=>{if(c)add("pl:send:"+p._id+":"+hi+":"+c,"cmd:in:"+c,"#4a86d6");});
+      // Command per Frist (⏳, durabel über den Fristplan) bzw. deren Storno (✕⏳) — gestrichelt, eigene Farbe.
+      (hd.fristen||[]).forEach(f=>{if(f.command)add("pl:frist:"+p._id+":"+hi+":"+f.art+":"+f.command,"cmd:in:"+f.command,f.art==="storno"?"#cf6f68":"#c98a3a",true);});
+      // Veröffentlichtes (transientes) Event → Broker: verlierbar, gestrichelt teal (wie an Projektion/Reaktion).
+      (hd.publishes||[]).forEach(ev=>{if(ev)add("pl:pub:"+p._id+":"+hi+":"+ev,"evt:in:"+ev,"#2fd6b0",true);});
       // Fähigkeit (Read-Fn als Parameter) → Store-Fn.
       (hd.fns||[]).forEach(fid=>{const f=fnById(fid);if(f)add("rcall:out:pl:"+p._id+":"+hi+":"+fid,"rcall:in:"+f.store._id+":"+fid,"#c08a3e");});
       // yield IPipelineTrigger → verbrauchende Pipeline (die Kette, z. B. FileWatch → ImageProcessing).
-      (hd.emits||[]).forEach(tn=>MODEL.pipelines.forEach(q=>{if(q._id!==p._id)(q.handles||[]).forEach((qh,qi)=>{if(qh.inputKind==="trigger"&&qh.input===tn)add("pl:emit:"+p._id+":"+hi+":"+tn,"pl:in:"+q._id+":"+qi,"#f0883e");});}));
+      (hd.emits||[]).forEach(tn=>{const t=MODEL.triggers.find(x=>trigName(x)===tn);if(t){add("pl:emit:"+p._id+":"+hi+":"+tn,"trg:in:"+t._id,"#f0883e");return;}
+        MODEL.pipelines.forEach(q=>{if(q._id!==p._id)(q.handles||[]).forEach((qh,qi)=>{if(qh.inputKind==="trigger"&&qh.input===tn)add("pl:emit:"+p._id+":"+hi+":"+tn,"pl:in:"+q._id+":"+qi,"#f0883e");});});});
       // Selbst<T> → passender Self-Handle (Name-Match), gestrichelter Loop.
       (hd.schedules||[]).forEach(sc=>{const ti=(p.handles||[]).findIndex(x=>x.inputKind==="self"&&x.selfName===sc.name);
         if(ti>=0)add("pl:sched:"+p._id+":"+hi+":"+sc.name,"pl:in:"+p._id+":"+ti,"#c98a3a",true);});
@@ -2614,9 +2736,38 @@ public static class HtmlPresenter
   //    Aggregat/Prozess als Start: ihre angesteckten Decider/Applier/State bzw. Regeln sind Mit-Startpunkte.
   const STOP=new Set(["aggregate","command","saga","transition","reaktion","pipeline","frist","valueobject","enum","dienst","hostsetting","trigger","konfig"]);
   const LESE_START=new Set(["projektion","reader","query","store","readmodel","queryresponse"]);
+  // ── KETTE (§12): von einer Nachricht/einem Handle/Decider/Applier/einer Regel aus dem Nachrichtenfluss TRANSITIV folgen —
+  //    vorwärts alle Konsumenten (Command → Decider → Events → Handles → Commands …), rückwärts alle Erzeuger. So erscheint die
+  //    geschlossene Kette (z. B. FileWatch → DateiErkannt → ImageProcessing → ImagePair → ImagePairKomplett → ImageProcessing …).
+  //    Besitzer (Aggregat/Pipeline/Projektion/Reaktion/Reader/Prozess/Store) werden gezeigt, aber nicht durchlaufen — sonst
+  //    leuchteten über ihre übrigen Handles/Decider alle fremden Ketten mit. Typen/Betrieb (VO, Enum, Konfig, Dienst) gehören nicht dazu.
+  const KETTE_HUB=new Set(["aggregate","pipeline","projektion","reaktion","reader","saga","store"]);
+  const KETTE_FLUSS=new Set(["command","event","rejection","query","queryresponse","trigger","handle","decider","applier","transition","frist","fn",...KETTE_HUB]);
+  const KETTE_START=new Set(["command","event","rejection","trigger","handle","decider","applier","transition","pipeline","reaktion"]);
+  function ketteVon(start){const N=id=>NODEBY.get(id)||{},k0=N(start).kind;
+    // Pipeline/Reaktion als Start: ihre Handles sind die Startpunkte (der Besitzer selbst hat keinen Fluss).
+    const starts=[start,...(k0==="pipeline"||k0==="reaktion"?(ADJ.inn.get(start)||[]).filter(y=>N(y).kind==="handle"):[])];
+    const res=new Set(starts);
+    const lauf=nach=>{const q=[...starts],seen=new Set();
+      while(q.length){const id=q.shift();if(seen.has(id))continue;seen.add(id);
+        if(!starts.includes(id)&&KETTE_HUB.has(N(id).kind))continue;
+        nach(id).forEach(y=>{if(KETTE_FLUSS.has(N(y).kind)){res.add(y);q.push(y);}});}};
+    lauf(id=>ADJ.out.get(id)||[]);lauf(id=>ADJ.inn.get(id)||[]);
+    // Auch rückwärts erreichte Handles/Decider/Applier zeigen ihren Besitzer (Pipeline, Aggregat …).
+    [...res].forEach(id=>{if(!["handle","decider","applier","fn"].includes(N(id).kind))return;
+      (ADJ.out.get(id)||[]).forEach(y=>{if(KETTE_HUB.has(N(y).kind))res.add(y);});});
+    // Leseseite nachziehen (wie der Schnitt unten): an Projektion/Store die Reader + Read Models.
+    [...res].forEach(id=>{const k=N(id).kind;if(k!=="projektion"&&k!=="store")return;
+      (ADJ.inn.get(id)||[]).forEach(y=>{const ky=N(y).kind;if(ky==="reader"||ky==="readmodel")res.add(y);});});
+    // Rümpfe (📝 + 🤖) der beteiligten Handles/Decider/Applier/Fns als Blätter.
+    [...res].forEach(id=>{if(!["handle","decider","applier","fn"].includes(N(id).kind))return;
+      (ADJ.inn.get(id)||[]).forEach(y=>{if(N(y).kind!=="codenode")return;res.add(y);(ADJ.inn.get(y)||[]).forEach(z=>{if(N(z).kind==="llmnode")res.add(z);});});});
+    return res;}
   function sliceVon(start){const res=new Set([start]),N=id=>NODEBY.get(id)||{};
     const inn=id=>ADJ.inn.get(id)||[],out=id=>ADJ.out.get(id)||[];
     const k0=N(start).kind,seeds=[start];
+    // Projektions-/Reader-Handles behalten den Leseseiten-Schnitt unten; alle Fluss-Knoten zeigen die ganze Kette.
+    if(KETTE_START.has(k0)&&!(k0==="handle"&&["reader"].includes((N(start).own||{}).kind)))return ketteVon(start);
     if(k0==="aggregate"||k0==="saga")inn(start).forEach(x=>{res.add(x);seeds.push(x);});
     const zurueck=(id,seen)=>inn(id).forEach(x=>{if(seen.has(x))return;seen.add(x);res.add(x);if(EINGEKLAPPT.has(x))zurueck(x,seen);});
     seeds.forEach(s=>zurueck(s,new Set()));
@@ -2663,13 +2814,21 @@ public static class HtmlPresenter
     eigen.forEach(x=>{sammle(ADJ.inn.get(x),rein);sammle(ADJ.out.get(x),raus);});
     const rel=h("div",{class:"gi-rel"});
     const liste=(titel,set)=>{if(!set.size)return;rel.append(h("h5",{},titel));
-      [...set].map(id=>NODEBY.get(id)).filter(Boolean).forEach(m=>rel.append(h("a",{title:NODELABEL[m.kind]||m.kind,onclick:()=>{waehle(m.id);centerOn(m);pulseNode(m);}},
-        h("i",{class:"kc-"+m.kind,style:"display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px"}),m.name||NODELABEL[m.kind])));};
+      // Nachbar in einer nicht geladenen Domäne: benannt („↗ außerhalb"), Klick lädt die Domäne dazu und springt hin.
+      [...set].map(id=>NODEBY.get(id)).filter(Boolean).forEach(m=>{const aussen=!geladen(m),ns=nsVon(m);
+        rel.append(h("a",{title:(NODELABEL[m.kind]||m.kind)+(aussen?" — Domäne "+(ns||"?")+" nicht geladen: Klick lädt sie dazu":""),
+          onclick:()=>{if(aussen&&ns&&LADEN){if(!LADEN.some(g=>drinNs(g,ns)))LADEN=LADEN.concat([ns]);VIEW.geladen=LADEN;speichereAnsicht();render();}
+            const n2=NODEBY.get(m.id);if(n2){waehle(n2.id);centerOn(n2);pulseNode(n2);}}},
+          h("i",{class:"kc-"+m.kind,style:"display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:5px"}),m.name||NODELABEL[m.kind],
+          aussen?h("span",{class:"gp-mark",style:"margin-left:6px"},"↗ außerhalb · "+letztesSeg(ns||"?")):null));});};
     liste("◀ Eingang",rein);liste("Ausgang ▶",raus);if(rel.childNodes.length)p.append(rel);
     canvas.append(p);
     if(INSP_SCROLL&&INSP_SCROLL.id===SEL)p.scrollTop=INSP_SCROLL.top;INSP_SCROLL=null;}
 
   // Kurzfassung auf der eingeklappten Karte: das Wesentliche in einer Zeile + Chips der eingeklappten Details.
+  // Alle Ausgänge eines Pipeline-Handles nach Typ (aus den Board-Listen — sie sind nach dem Bearbeiten die Wahrheit).
+  const plAusgaenge=hd=>[...(hd.sends||[]),...(hd.fristen||[]).map(f=>(f.art==="storno"?"✕⏳":"⏳")+f.command),
+    ...(hd.publishes||[]),...(hd.emits||[]).map(x=>"⚡"+x),...(hd.schedules||[]).map(x=>"↺"+x.name)];
   const kurz=xs=>{xs=[...new Set((xs||[]).filter(Boolean))];return xs.slice(0,2).join(", ")+(xs.length>2?" +"+(xs.length-2):"");};
   function kurzfassung(n){const r=n.ref,k=n.kind;let t="";
     if(k==="command"){const ev=MODEL.decider.filter(d=>d.command===r.name).flatMap(d=>(d.ergibt||[]).map(o=>o.event)).filter(e=>(recByName(e)||{}).kind!=="rejection");
@@ -2678,11 +2837,11 @@ public static class HtmlPresenter
     else if(k==="aggregate")t=MODEL.decider.filter(d=>d.aggregat===r.name).length+" Commands · "+MODEL.applier.filter(a=>a.aggregat===r.name).length+" Events · "+(r.state||[]).length+" State-Felder";
     else if(k==="projektion"||k==="reaktion")t=(r.handles||[]).length+" Handles · ← "+kurz((r.handles||[]).map(x=>x.event));
     else if(k==="reader")t=(r.handles||[]).length+" Handles · ? "+kurz((r.handles||[]).map(x=>x.query));
-    else if(k==="pipeline")t=(r.handles||[]).length+" Handle · → "+kurz((r.handles||[]).flatMap(x=>x.sends||[]));
+    else if(k==="pipeline")t=(r.handles||[]).length+" Handle · → "+kurz((r.handles||[]).flatMap(plAusgaenge));
     else if(k==="saga")t="Auslöser: "+(r.triggerEvent||"—")+" · "+transOf(r).length+" Regeln";
     else if(k==="transition")t="WENN "+kurz(r.wenn)+" → "+kurz((r.dann||[]).map(d=>d.sende));
     else if(k==="store")t=(r.writeFns||[]).length+" schreibend · "+(r.readFns||[]).length+" lesend";
-    else if(k==="handle"){const aus=(r.ausgaenge||[]).length?(r.ausgaenge||[]).filter(a=>a.art!=="storefn"&&a.art!=="self").map(a=>a.typ)
+    else if(k==="handle"){const aus=n.own.kind==="pipeline"?plAusgaenge(r):(r.ausgaenge||[]).length?(r.ausgaenge||[]).filter(a=>a.art!=="storefn"&&a.art!=="self").map(a=>a.typ)
         :[...(r.responses||[]),...(r.sends||[]),...(r.emits||[]),...(r.publishes||[])];
       const fns=(r.fns||[]).map(fid=>{const f=fnById(fid);return f?f.fn.name:null;}).filter(Boolean);
       t=(aus.length?"→ "+[...new Set(aus)].join(" | "):(fns.length?"":"→ nichts"))+(fns.length?(aus.length?" · ":"")+"ruft "+kurz(fns):"")+(r.signaturOffen?" · ⚠ offen":"");}
@@ -2691,6 +2850,8 @@ public static class HtmlPresenter
     else if(k==="llmnode"){const kid=r.promptZiel?konsolenId(r.promptZiel):null,m=kid&&MELD[kid];
       t=(kid&&LAUF[kid]?"● "+LAUF[kid].was+" … · ":kid&&VOR[kid]?"🤖 Vorschlag im Block · ":m?m.t.slice(0,40)+" · ":"")+(((llmVerlauf(r).slice(-1)[0]||{}).text||"").split("\n")[0]||"(noch kein Prompt)");}
     if(Array.isArray(r.felder)&&k!=="aggregate")t+=(t?" · ":"")+r.felder.length+" Felder";
+    // Partner in nicht geladenen Domänen: die Kante endet nicht im Leeren, sie ist benannt (Panel: „↗ außerhalb", Klick lädt).
+    {const za=aussenAnzahl(n);if(za)t+=(t?" · ":"")+"↗ "+za+" außerhalb";}
     const box=h("div",{class:"gsum",title:"Klick: im Inspector bearbeiten",onclick:()=>waehle(n.id)});
     if(t)box.append(h("div",{class:"gs-t",title:t},t));
     const det=(DETAILS.get(n.id)||[]).map(id=>NODEBY.get(id)).filter(Boolean);
@@ -2787,7 +2948,7 @@ public static class HtmlPresenter
       tb("state","+ State"),tb("decider","+ Decider"),tb("applier","+ Applier"),tb("saga","+ Prozess"),tb("transition","+ Regel"),
       tb("readmodel","+ Read Model"),tb("store","+ Store"),tb("projektion","+ Projektion"),tb("query","+ Query"),tb("queryresponse","+ Response"),tb("reader","+ Reader"),tb("reaktion","+ Reaktion"),
       tb("trigger","+ Trigger"),tb("pipeline","+ Pipeline"),
-      tb("frist","+ ⏳ Frist"),tb("dienst","+ Dienst"),tb("hostsetting","+ HostSetting"),
+      tb("dienst","+ Dienst"),tb("hostsetting","+ HostSetting"),
       tb("codenode","+ 📝 Code"),tb("llmnode","+ 🤖 LLM"),
       h("button",{class:"add island-btn",style:"margin-left:auto",
         title:"Einsame Inseln (unverbundene Knoten) — Hover: markieren · Klick: der Reihe nach anspringen",
@@ -2838,7 +2999,7 @@ public static class HtmlPresenter
       opt("state","State"),opt("decider","Decider"),opt("applier","Applier"),opt("saga","Prozess"),opt("transition","Regel"),
       opt("readmodel","Read Model"),opt("store","Store"),opt("projektion","Projektion"),opt("query","Query"),opt("queryresponse","Response"),opt("reader","Reader"),opt("reaktion","Reaktion"),
       opt("trigger","Trigger"),opt("pipeline","Pipeline"),
-      opt("frist","⏳ Frist"),opt("dienst","Dienst"),opt("hostsetting","HostSetting"),
+      opt("dienst","Dienst"),opt("hostsetting","HostSetting"),
       opt("codenode","📝 Code"),opt("llmnode","🤖 LLM"));
     canvas.append(pick);
     setTimeout(()=>{const off=ev=>{if(!pick.contains(ev.target)){pick.remove();document.removeEventListener("pointerdown",off);}};document.addEventListener("pointerdown",off);},0);

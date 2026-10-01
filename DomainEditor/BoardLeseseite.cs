@@ -109,7 +109,8 @@ public static class BoardLeseseite
         {
             var sig = hd?["sig"];
             var sigAus = sig?["ausgangsTypen"] is JsonArray ? Strings(sig, "ausgangsTypen") : null;
-            var aus = AusgaengeAbgleich(sigAus, boardAusgaenge, art);
+            // Fristen editiert das Board, sobald der Handle sie trägt (fristen[]); ältere Boards ohne das Feld lassen sie, wie der Code sie hat.
+            var aus = AusgaengeAbgleich(sigAus, boardAusgaenge, art, fristenImBoard: hd?["fristen"] is JsonArray);
             var rueck = N(sig, "rueckgabe");
             if (rueck != null && sigAus != null && !aus.SequenceEqual(sigAus)) rueck = Umhuellen(rueck, aus, art);
             return new Handle
@@ -182,9 +183,12 @@ public static class BoardLeseseite
                 Name = S(p, "name"), Namespace = S(p, "namespace"),
                 PipelineId = N(p, "pipelineId") is { Length: > 0 } pid ? pid : code == null ? S(p, "name") : null,
                 Konfigs = Strings(p, "konfigs"),
+                // Ausgänge nach Typ: Command (sofort), Trigger, veröffentlichtes Event, Selbst<T>, Frist<T>/FristStorno<T> (Command per Frist).
                 Handles = A(p, "handles").Where(hd => Eingang(hd).Length > 0).Select(hd => AlsHandle(hd, Eingang(hd), "ctx",
-                    Strings(hd, "sends").Concat(Strings(hd, "emits"))
-                        .Concat(A(hd, "schedules").Select(sc => S(sc, "name")).Where(x => x.Length > 0).Select(x => $"{Selbst}<{x}>")).Distinct().ToList(),
+                    Strings(hd, "sends").Concat(Strings(hd, "emits")).Concat(Strings(hd, "publishes"))
+                        .Concat(A(hd, "schedules").Select(sc => S(sc, "name")).Where(x => x.Length > 0).Select(x => $"{Selbst}<{x}>"))
+                        .Concat(A(hd, "fristen").Where(f => S(f, "command").Length > 0)
+                            .Select(f => $"{(S(f, "art") == "storno" ? FristStorno : Frist)}<{S(f, "command")}>")).Distinct().ToList(),
                     Wrapper.Pipeline) with { Parameter = hd["sig"] != null ? N(hd["sig"], "parameter") ?? "ein" : ParameterName(Eingang(hd)) }).ToList(),
                 Doku = N(code, "doku"), Typart = N(code, "typart"),
                 Basen = code?["basen"] is JsonArray ? Strings(code, "basen") : null,
@@ -269,12 +273,13 @@ public static class BoardLeseseite
 
     /// <summary>
     /// Die Ausgänge nach dem Board: aus dem Code die Reihenfolge der Signatur (was bleibt), neue hinten dran. Fristen
-    /// (<c>Frist&lt;T&gt;</c>/<c>FristStorno&lt;T&gt;</c>) editiert das Board nicht — sie bleiben, wie der Code sie hat.
+    /// (<c>Frist&lt;T&gt;</c>/<c>FristStorno&lt;T&gt;</c>) editiert das Board, wenn der Handle sie trägt (<paramref name="fristenImBoard"/>);
+    /// sonst bleiben sie, wie der Code sie hat.
     /// </summary>
-    private static List<string> AusgaengeAbgleich(IReadOnlyList<string>? sig, IReadOnlyList<string> board, Wrapper art)
+    private static List<string> AusgaengeAbgleich(IReadOnlyList<string>? sig, IReadOnlyList<string> board, Wrapper art, bool fristenImBoard = false)
     {
         if (sig == null) return board.ToList();
-        bool Editierbar(string t) => art != Wrapper.Pipeline
+        bool Editierbar(string t) => art != Wrapper.Pipeline || fristenImBoard
             || !(t.StartsWith(Frist + "<", StringComparison.Ordinal) || t.StartsWith(FristStorno + "<", StringComparison.Ordinal));
         return sig.Where(t => !Editierbar(t) || board.Contains(t)).Concat(board.Where(t => !sig.Contains(t))).ToList();
     }

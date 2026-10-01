@@ -297,6 +297,47 @@ public static class ParitaetsPruefung
         befunde.Add(new("Board ⇄ Modell", "info", befunde.Count == vorher
             ? $"Leseseite aus dem Board = Leseseite aus dem Code ({ausCode.Lesen?.Stores.Count} Stores, {ausCode.Lesen?.Konsumenten.Count} Projektionen/Reaktionen, {ausCode.Lesen?.Reader.Count} Reader, {ausCode.Lesen?.Pipelines.Count} Pipelines)."
             : "Leseseite aus dem Board weicht vom Code ab."));
+        PipelineAusgaengeImBoard(ist, boardJson, befunde);
+    }
+
+    /// <summary>
+    /// Jede Variante einer Pipeline-Signatur (OneOf) steht am Board-Handle als Ausgang — in der Liste ihrer Art (sends, emits,
+    /// publishes, schedules, fristen). Sonst zeigt die GUI eine Kante nicht, die die Laufzeit nach Typ routet.
+    /// </summary>
+    private static void PipelineAusgaengeImBoard(Analyse ist, string boardJson, List<ParitaetsBefund> befunde)
+    {
+        var board = JsonNode.Parse(boardJson);
+        var vorher = befunde.Count;
+        var n = 0;
+        foreach (var p in ist.Dom.Pipelines)
+        {
+            var bp = (board?["pipelines"] as JsonArray)?.FirstOrDefault(x => (string?)x?["name"] == p.Name);
+            foreach (var (input, v) in p.HandleVertraege)
+            {
+                var ein = input[(input.LastIndexOf('.') + 1)..];
+                var bh = (bp?["handles"] as JsonArray)?.FirstOrDefault(h => ((string?)h?["input"] ?? (string?)h?["event"]) == ein);
+                string[] L(string feld) => (bh?[feld] as JsonArray)?.Select(x => x is JsonObject o ? (string?)(o["name"] ?? o["command"]) ?? "" : (string?)x ?? "").ToArray() ?? [];
+                bool Frist(string art, string typ) => (bh?["fristen"] as JsonArray)?.Any(f => (string?)f?["command"] == typ && (string?)f?["art"] == art) == true;
+                foreach (var a in v.Ausgaenge.Where(a => a.Art != "storefn"))
+                {
+                    n++;
+                    var da = a.Art switch
+                    {
+                        "command" => L("sends").Contains(a.Typ),
+                        "trigger" => L("emits").Contains(a.Typ),
+                        "transient" or "event" => L("publishes").Contains(a.Typ),
+                        "self" => L("schedules").Contains(a.Typ),
+                        "frist" => Frist("frist", a.Typ),
+                        "fristStorno" => Frist("storno", a.Typ),
+                        _ => true,
+                    };
+                    if (!da) befunde.Add(new("Board ⇄ Modell", "error",
+                        $"Pipeline {p.Name}.Handle({ein}): Ausgang {a.Art}:{a.Typ} steht in der Signatur, aber nicht am Board-Handle."));
+                }
+            }
+        }
+        if (befunde.Count == vorher)
+            befunde.Add(new("Board ⇄ Modell", "info", $"Pipeline-Ausgänge: alle {n} Signatur-Varianten stehen am Board-Handle."));
     }
 
     private static async Task Fixpunkt(Solution solution, Projektlage lage, Analyse ist, List<ParitaetsBefund> befunde)

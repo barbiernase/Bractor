@@ -172,10 +172,13 @@ public sealed class KontextBauer
                 $"{S(h, "query")} -> {string.Join(", ", Str(h, "fns").Select(x => fnName.GetValueOrDefault(x, x)))} => {string.Join(" | ", Str(h, "responses"))}")));
         foreach (var p in A(_board, "pipelines"))
             b.AppendLine($"PIPELINE {S(p, "name")} dienste=[{string.Join(", ", Str(p, "dienste"))}] konfigs=[{string.Join(", ", Str(p, "konfigs"))}]: " + string.Join("; ", A(p, "handles").Select(h =>
-                $"{S(h, "input")} ({S(h, "inputKind")}) -> {string.Join(", ", Str(h, "sends").Concat(Str(h, "emits")))}")));
+                $"{S(h, "input")} ({S(h, "inputKind")}) -> {string.Join(", ", Str(h, "sends").Concat(Str(h, "emits")).Concat(Str(h, "publishes")))}")));
         foreach (var t in A(_board, "triggers")) b.AppendLine($"trigger {S(t, "name")}({F(t)})");
-        foreach (var f in A(_board, "frists"))
-            b.AppendLine($"FRIST {S(f, "name")}: plant bei {string.Join(", ", Str(f, "plant"))}; storniert bei {string.Join(", ", Str(f, "storniert"))}; fällig -> {S(f, "sendet")}");
+        // Fristen = Ausgänge der Pipeline-Handles (Frist<TCmd> plant, FristStorno<TCmd> storniert).
+        foreach (var p in A(_board, "pipelines"))
+            foreach (var h in A(p, "handles"))
+                foreach (var f in A(h, "fristen"))
+                    b.AppendLine($"FRIST {S(f, "command")}: {(S(f, "art") == "storno" ? "storniert" : "plant")} bei {S(h, "input")} ({S(p, "name")}); fällig -> {S(f, "command")}");
         foreach (var d in A(_board, "dienste")) b.AppendLine($"dienst {S(d, "vertrag")} -> {S(d, "name")}");
         return b.ToString();
     }

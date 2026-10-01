@@ -1343,6 +1343,7 @@ public sealed class DomainExtractor
         Sym.Implements(t, _iQueryResponse) ? "response"
         : Sym.Implements(t, _iCommand) ? "command"
         : Sym.Implements(t, _iPipelineTrigger) ? "trigger"
+        : Sym.Implements(t, _iTransient) ? "transient"   // vor IEvent: ITransientEvent : IEvent (Broker statt Log)
         : Sym.Implements(t, _iEvent) ? "event"
         : "typ";
 
