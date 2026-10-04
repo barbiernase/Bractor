@@ -1,6 +1,7 @@
 using Abstractions;
 using Core;
 using Leihwesen.Ausleihe;
+using Leihwesen.Ausleihe.Befehle;
 using Leihwesen.Gebuehren;
 
 // SONDE — Leseseite mit FREIEN Namen (keine Namenskonvention), class-ReadModel, OneOf-Antwort,
@@ -148,9 +149,17 @@ public partial class MahnlaufPipeline : IPipelineHandler
         yield return Selbst.In(new Mahnrunde(), TimeSpan.FromHours(1));
     }
 
-    public IEnumerable<OneOf<EroeffneMahnung, Selbst<Mahnrunde>, Frist<MeldeSchaden>>> Handle(Mahnrunde runde, PipelineContext ctx)
+    public IEnumerable<OneOf<EroeffneMahnung, Selbst<Mahnrunde>, Frist<MeldeSchaden>>> Handle(Mahnrunde runde, PipelineContext ctx, IGebuehrenOrakel orakel)
     {
         if (++_runden > _maximum || !_gemahnt.Add(Guid.Empty) || _praefix.Length == 0) yield break;
         yield return Selbst.In(new Mahnrunde(), Takt);
     }
 }
+
+// Akteure: frei benannt; die Befugnis steht NUR in der Basisliste (IDarf<T>) — Reihenfolge = Deklaration. Kein Name verrät
+// die Rolle (keine *Akteur-/*Rolle-Endung); eine Query zu dürfen ist dasselbe Wort wie ein Command.
+public sealed record Theke : IAkteur, IDarf<LeiheAus>, IDarf<GibZurueck>, IDarf<OffeneAusleihen>;
+
+// Ein DIENST als Akteur (frei benannt, ein Vertrag mit Methode): der Mahnrunden-Handle nimmt ihn als Parameter und entscheidet
+// damit in seinem Auftrag — die Kante „im Auftrag" steht in der Signatur, nicht im Konstruktor.
+public interface IGebuehrenOrakel : IAkteur, IDarf<EroeffneMahnung> { decimal Schaetze(Guid ziel); }

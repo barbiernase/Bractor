@@ -37,6 +37,7 @@ from __future__ import annotations
 
 from pathlib import Path
 import asyncio
+import os
 import logging
 from typing import Any, ClassVar, Generic, TypeVar, get_args
 
@@ -84,7 +85,10 @@ class CqrsClient(HandlerBase, Generic[S]):
         self._gen = generated_module
         self._config = config or {}
 
-        self._proxy = GrpcProxy(generated_module)
+        self._proxy = GrpcProxy(
+            generated_module,
+            akteur_token=self._config.get("akteur_token") or os.environ.get("CQRS_AKTEUR_TOKEN"),
+        )
         self._mapper = PayloadMapper(generated_module)
         self._router = MessageRouter()
         self._connection = ConnectionManager(self._proxy)

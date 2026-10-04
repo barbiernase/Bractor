@@ -1,6 +1,7 @@
 // REPO-PFAD: Infrastructure/GrpcClient/CqrsClientService.cs  (MODIFIZIERT)
 using System.Collections.Concurrent;
 using Abstractions;
+using Infrastructure.Akteure;
 using Domain.Projections;
 using Grpc.Core;
 using Infrastructure.Extensions;
@@ -42,6 +43,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     private readonly TriggerHandlerRegistry _triggerHandlerRegistry;
     private readonly QueryHandlerRegistry _queryHandlerRegistry;
     private readonly BrokerPublisher _publisher;
+    private readonly AkteurTor? _akteurTor;
     private readonly ILogger _logger;
 
     /// <summary>
@@ -85,6 +87,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         TriggerHandlerRegistry triggerHandlerRegistry,
         QueryHandlerRegistry queryHandlerRegistry,
         BrokerPublisher publisher,
+        AkteurTor? akteurTor = null,
         ILogger<CqrsClientServiceImpl>? logger = null)
     {
         _actorSystem = actorSystem ?? throw new ArgumentNullException(nameof(actorSystem));
@@ -94,6 +97,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         _triggerHandlerRegistry = triggerHandlerRegistry ?? throw new ArgumentNullException(nameof(triggerHandlerRegistry));
         _queryHandlerRegistry = queryHandlerRegistry ?? throw new ArgumentNullException(nameof(queryHandlerRegistry));
         _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
+        _akteurTor = akteurTor; // null = Akteure nicht konfiguriert → Pfad offen wie bisher (opt-in)
         _logger = logger ?? NullLogger<CqrsClientServiceImpl>.Instance;
         _capabilitiesHandler = new CapabilitiesHandler();
     }
@@ -107,6 +111,20 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         var ct = context.CancellationToken;
         
         _logger.LogInformation("New connection {Session} from {Peer}", sessionId, context.Peer);
+
+        // Akteur (docs/konzept-akteure.md): wer sich anmeldet, ist EIN Akteur; seine Befugnisse gelten für die
+        // ganze Session. Ohne konfiguriertes Tor bleibt akteur = null (alles erlaubt, wie bisher).
+        AkteurRechte? akteur = null;
+        if (_akteurTor != null)
+        {
+            akteur = _akteurTor.Erkenne(context.RequestHeaders.GetValue(AkteurOptionen.TokenHeader));
+            if (akteur == null)
+            {
+                _logger.LogWarning("{Session} abgewiesen: kein gültiges Akteur-Token ({Peer})", sessionId, context.Peer);
+                throw new RpcException(new Status(StatusCode.Unauthenticated, "Kein gültiges Akteur-Token"));
+            }
+            _logger.LogInformation("{Session} Akteur: {Akteur}", sessionId, akteur.Name);
+        }
 
         PID? proxyPid = null;
 
@@ -142,7 +160,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                     var clientMessage = requestStream.Current;
                     await ProcessMessageAsync(
                         clientMessage, responseStream, subscriptionTracker,
-                        proxyPid,
+                        proxyPid, akteur,
                         sessionId, ct);
                 }
 
@@ -227,6 +245,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
         SubscriptionTracker subscriptionTracker,
         PID proxyPid,
+        AkteurRechte? akteur,
         string sessionId,
         CancellationToken ct)
     {
@@ -235,11 +254,11 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             switch (message.MessageCase)
             {
                 case ProtoRepo.ClientMessage.MessageOneofCase.Command:
-                    await HandleCommandAsync(message.Command, responseStream, sessionId, ct);
+                    await HandleCommandAsync(message.Command, responseStream, akteur, sessionId, ct);
                     break;
 
                 case ProtoRepo.ClientMessage.MessageOneofCase.Subscribe:
-                    await HandleSubscribeAsync(message.Subscribe, responseStream, subscriptionTracker, sessionId, ct);
+                    await HandleSubscribeAsync(message.Subscribe, responseStream, subscriptionTracker, akteur, sessionId, ct);
                     break;
 
                 case ProtoRepo.ClientMessage.MessageOneofCase.Unsubscribe:
@@ -247,15 +266,15 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                     break;
 
                 case ProtoRepo.ClientMessage.MessageOneofCase.Capabilities:
-                    await HandleCapabilitiesAsync(message.Capabilities, responseStream, subscriptionTracker, proxyPid, sessionId, ct);
+                    await HandleCapabilitiesAsync(message.Capabilities, responseStream, subscriptionTracker, proxyPid, akteur, sessionId, ct);
                     break;
 
                 case ProtoRepo.ClientMessage.MessageOneofCase.Query:
-                    await HandleQueryAsync(message.Query, responseStream, proxyPid, sessionId, ct);
+                    await HandleQueryAsync(message.Query, responseStream, proxyPid, akteur, sessionId, ct);
                     break;
 
                 case ProtoRepo.ClientMessage.MessageOneofCase.Trigger:
-                    await HandleTriggerAsync(message.Trigger, responseStream, proxyPid, sessionId, ct);
+                    await HandleTriggerAsync(message.Trigger, responseStream, proxyPid, akteur, sessionId, ct);
                     break;
 
                 // ═════════════════════════════════════════
@@ -263,7 +282,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 // ═════════════════════════════════════════
 
                 case ProtoRepo.ClientMessage.MessageOneofCase.TransientEvent:
-                    await HandleTransientEventAsync(message.TransientEvent, responseStream, sessionId, ct);
+                    await HandleTransientEventAsync(message.TransientEvent, responseStream, akteur, sessionId, ct);
                     break;
 
                 case ProtoRepo.ClientMessage.MessageOneofCase.QueryAnswer:
@@ -295,6 +314,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
         SubscriptionTracker subscriptionTracker,
         PID proxyPid,
+        AkteurRechte? akteur,
         string sessionId,
         CancellationToken ct)
     {
@@ -312,6 +332,21 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         {
             // 1. Capabilities ermitteln (universell)
             var result = _capabilitiesHandler.Handle(request, sessionId);
+
+            // 1b. Akteur: Befugnis statt Selbstauskunft — erlaubte Mengen aus IDarf, Hören abgeleitet,
+            //     Zuständigkeit nur für Lücken (das System bedient den Typ nicht selbst) und nur einmal.
+            if (akteur != null)
+            {
+                var verweigert = AkteurTor.Wende(result, akteur,
+                    loese: n => MessageTypeMapping.Resolve(n).Type,
+                    internBedient: t => ProjectionQueryService.SupportedQueryTypes.Contains(t)
+                                        || GeneratedPipelines.TriggerToPipelineId.ContainsKey(t),
+                    schonVergeben: n => _queryHandlerRegistry.GetHandler(n) is { } q && !q.Equals(proxyPid)
+                                        || _triggerHandlerRegistry.GetHandler(n) is { } t && !t.Equals(proxyPid));
+                if (verweigert.Count > 0)
+                    _logger.LogWarning("{Session} Akteur {Akteur} verweigert: [{Verweigert}]",
+                        sessionId, akteur.Name, string.Join(", ", verweigert));
+            }
 
             // 2. Für jeden gültigen Event-Typ subscriben
             foreach (var eventTypeName in result.SubscribedEvents)
@@ -377,6 +412,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     private async Task HandleCommandAsync(
         ProtoRepo.CommandRequest request,
         IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        AkteurRechte? akteur,
         string sessionId,
         CancellationToken ct)
     {
@@ -386,6 +422,22 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         {
             var envelope = _mapper.MapToDomain(request.Envelope);
             envelope = envelope with { OriginSessionId = sessionId };
+
+            if (akteur != null)
+            {
+                // Wer hineingibt, steht im Envelope — vom Tor gestempelt, nicht vom Client behauptet.
+                envelope = envelope with { UserId = akteur.Name };
+                if (!akteur.DarfHinein(envelope.Payload.GetType()))
+                {
+                    _logger.LogWarning("{Session} Akteur {Akteur} darf {Command} nicht",
+                        sessionId, akteur.Name, envelope.Payload.GetType().Name);
+                    if (string.IsNullOrWhiteSpace(envelope.AggregateType))
+                        envelope = envelope with { AggregateType = AggregateDispatcherExtensions.ResolveAggregateType(envelope.Payload) };
+                    if (AkteurVerweigerung.Baue(envelope, akteur.Name) is { } verweigert)
+                        await _publisher.PublishAsync(verweigert);
+                    return;
+                }
+            }
 
             // Routing über Typen (Invariante 3): der AggregateType ist serverseitig autoritativ aus
             // dem Command-Typ ableitbar (generierte CommandToAggregate-Map). Clients, die ihn nicht
@@ -432,6 +484,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         ProtoRepo.TriggerRequest request,
         IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
         PID proxyPid,
+        AkteurRechte? akteur,
         string sessionId,
         CancellationToken ct)
     {
@@ -443,6 +496,13 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             var triggerTypeName = trigger.GetType().Name;
 
             _logger.LogDebug("{Session} Trigger type: {Trigger}", sessionId, triggerTypeName);
+
+            if (!AkteurTor.Darf(akteur, trigger.GetType()))
+            {
+                await SendTriggerAckAsync(responseStream, false, request.CorrelationId,
+                    $"Akteur '{akteur!.Name}' darf {triggerTypeName} nicht", ct);
+                return;
+            }
 
             // NEU: Erst TriggerHandlerRegistry prüfen (Client-Handler)
             var handlerPid = _triggerHandlerRegistry.GetHandler(triggerTypeName);
@@ -531,6 +591,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         ProtoRepo.QueryRequest request,
         IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
         PID proxyPid,
+        AkteurRechte? akteur,
         string sessionId,
         CancellationToken ct)
     {
@@ -542,6 +603,13 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             var queryTypeName = query.GetType().Name;
 
             _logger.LogDebug("{Session} Query type: {Query}", sessionId, queryTypeName);
+
+            if (!AkteurTor.Darf(akteur, query.GetType()))
+            {
+                await SendErrorAsync(responseStream, "AKTEUR_DARF_NICHT",
+                    $"Akteur '{akteur!.Name}' darf {queryTypeName} nicht", request.CorrelationId, ct);
+                return;
+            }
 
             // NEU: Erst QueryHandlerRegistry prüfen (Client-Handler)
             var handlerPid = _queryHandlerRegistry.GetHandler(queryTypeName);
@@ -638,6 +706,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     private async Task HandleTransientEventAsync(
         ProtoRepo.TransientEventRequest request,
         IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        AkteurRechte? akteur,
         string sessionId,
         CancellationToken ct)
     {
@@ -655,6 +724,15 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                     "", ct);
                 return;
             }
+
+            if (!AkteurTor.Darf(akteur, envelope.Payload.GetType()))
+            {
+                await SendErrorAsync(responseStream, "AKTEUR_DARF_NICHT",
+                    $"Akteur '{akteur!.Name}' darf {envelope.Payload.GetType().Name} nicht", "", ct);
+                return;
+            }
+            if (akteur != null)
+                envelope = envelope with { UserId = akteur.Name };
 
             await _publisher.PublishAsync(envelope, ct);
 
@@ -715,6 +793,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         ProtoRepo.SubscribeRequest request,
         IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
         SubscriptionTracker subscriptionTracker,
+        AkteurRechte? akteur,
         string sessionId,
         CancellationToken ct)
     {
@@ -722,6 +801,13 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
 
         try
         {
+            if (akteur != null && MessageTypeMapping.Resolve(request.EventType).Type is { } evt && !akteur.DarfHoeren(evt))
+            {
+                await SendErrorAsync(responseStream, "AKTEUR_DARF_NICHT",
+                    $"Akteur '{akteur.Name}' darf {request.EventType} nicht hören", "", ct);
+                return;
+            }
+
             var success = await subscriptionTracker.SubscribeAsync(request.EventType, ct);
 
             if (!success)

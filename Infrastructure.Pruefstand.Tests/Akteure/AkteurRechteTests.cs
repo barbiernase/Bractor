@@ -1,0 +1,170 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using Abstractions;
+using Domain.Akteure;
+using Domain.ImagePair;
+using Domain.Modell;
+using Domain.Projections;
+using Domain.Trainingslauf;
+using FluentAssertions;
+using Infrastructure.Akteure;
+using Xunit;
+
+namespace Infrastructure.Pruefstand.Akteure;
+
+/// <summary>
+/// Akteure (docs/konzept-akteure.md): die generierte Befugnis-Tabelle (deklariert aus <c>IDarf&lt;T&gt;</c>, Hören
+/// aus dem Graphen abgeleitet) und das Tor am Handshake — rein, ohne gRPC/Cluster.
+/// </summary>
+public class AkteurRechteTests
+{
+    private static AkteurRechte R(string name) => GeneratedAkteurRechte.Alle[name];
+
+    [Fact]
+    public void Tabelle_kennt_alle_IAkteur_Typen()
+    {
+        GeneratedAkteurRechte.Alle.Keys.Should().Contain(new[] { "Inspektor", "Trainer", "KlassifikationsWorker", "TrainingsWorker" });
+        R("Inspektor").Typ.Should().Be(typeof(Inspektor));
+    }
+
+    [Fact]
+    public void IDarf_wird_nach_Art_sortiert()
+    {
+        var i = R("Inspektor");
+        i.Commands.Should().BeEquivalentTo(new[] { typeof(LabelEinzelBild), typeof(MarkiereAlsInspiziert) });
+        i.Queries.Should().BeEquivalentTo(new[] { typeof(SucheImagePairs), typeof(GetImagePair) });
+        i.Trigger.Should().BeEmpty();
+        i.TransientEvents.Should().BeEmpty();
+    }
+
+    [Fact]
+    public void Hoeren_abgeleitet_aus_dem_Aggregat_der_eigenen_Commands()
+    {
+        // Der Klassifikator wirkt auf ImagePair ein → er hört die ImagePair-Events (genau, was der Python-Worker abonniert).
+        var k = R("KlassifikationsWorker");
+        k.DarfHoeren(typeof(BildVerfuegbar)).Should().BeTrue();
+        k.DarfHoeren(typeof(ImagePairKomplett)).Should().BeTrue();
+        k.DarfHoeren(typeof(TrainingAngefordert)).Should().BeFalse("er wirkt nicht auf Trainingsläufe ein");
+
+        var t = R("TrainingsWorker");
+        t.DarfHoeren(typeof(TrainingAngefordert)).Should().BeTrue();
+        t.DarfHoeren(typeof(TrainingAbgebrochen)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Hoeren_abgeleitet_aus_der_Projektion_hinter_den_eigenen_Queries()
+    {
+        // Trainer fragt HoleModelle → ModellReader → ModellProjektion → deren Events.
+        R("Trainer").DarfHoeren(typeof(ModellAktiviert)).Should().BeTrue();
+        R("Inspektor").DarfHoeren(typeof(ModellAktiviert)).Should().BeFalse();
+    }
+
+    [Fact]
+    public void CommandFailed_darf_jeder_hoeren()
+        => R("Inspektor").DarfHoeren(typeof(CommandFailed)).Should().BeTrue();
+
+    // ── Tor ──
+
+    private static AkteurTor Tor(Action<AkteurOptionen> k)
+    {
+        var o = new AkteurOptionen();
+        k(o);
+        return new AkteurTor(o, GeneratedAkteurRechte.Alle);
+    }
+
+    [Fact]
+    public void Tor_ordnet_Token_zu_und_weist_ohne_Standard_ab()
+    {
+        var tor = Tor(o => o.Token<Inspektor>("geheim"));
+        tor.Erkenne("geheim")!.Name.Should().Be("Inspektor");
+        tor.Erkenne("falsch").Should().BeNull();
+        tor.Erkenne(null).Should().BeNull();
+    }
+
+    [Fact]
+    public void Tor_mit_Standard_nimmt_den_Standard_Akteur()
+        => Tor(o => o.Standardmaessig<Trainer>()).Erkenne(null)!.Name.Should().Be("Trainer");
+
+    [Fact]
+    public void Unbekannter_Akteur_in_der_Konfiguration_bricht_den_Start()
+    {
+        var act = () => new ServiceCollectionStub().Konfiguriere(o => o.Token("x", "Gibtsnicht"));
+        act.Should().Throw<InvalidOperationException>().WithMessage("*Gibtsnicht*");
+    }
+
+    [Fact]
+    public void Ohne_Akteur_ist_alles_erlaubt()
+    {
+        AkteurTor.Darf(null, typeof(StarteTraining)).Should().BeTrue();
+        AkteurTor.DarfHoeren(null, typeof(TrainingAngefordert)).Should().BeTrue();
+    }
+
+    [Fact]
+    public void Handshake_wird_Befugnis_statt_Selbstauskunft()
+    {
+        var wunsch = new CapabilitiesResult
+        {
+            AllowedCommands = { "StarteTraining", "KlassifiziereBildPaarDurchKi" },  // Selbstauskunft
+            SubscribedEvents = { "ImagePairKomplett", "TrainingAngefordert" },
+        };
+
+        var verweigert = AkteurTor.Wende(wunsch, R("KlassifikationsWorker"), Loese, _ => false, _ => false);
+
+        wunsch.AllowedCommands.Should().Equal("KlassifiziereBildPaarDurchKi");
+        wunsch.SubscribedEvents.Should().Equal("ImagePairKomplett");
+        verweigert.Should().Equal("hören: TrainingAngefordert");
+    }
+
+    [Fact]
+    public void Zustaendigkeit_nur_fuer_Luecken_und_nur_einmal()
+    {
+        var trainer = R("Trainer");
+
+        Ergebnis(trainer, internBedient: false, vergeben: false).Should().Equal("HoleModelle");
+        Ergebnis(trainer, internBedient: true, vergeben: false).Should().BeEmpty("einen Server-Reader kann niemand kapern");
+        Ergebnis(trainer, internBedient: false, vergeben: true).Should().BeEmpty("Kardinalität eins");
+        Ergebnis(R("Inspektor"), internBedient: false, vergeben: false).Should().BeEmpty("Inspektor darf HoleModelle nicht");
+
+        static List<string> Ergebnis(AkteurRechte a, bool internBedient, bool vergeben)
+        {
+            var r = new CapabilitiesResult { HandlingQueries = { "HoleModelle" } };
+            AkteurTor.Wende(r, a, Loese, _ => internBedient, _ => vergeben);
+            return r.HandlingQueries;
+        }
+    }
+
+    [Fact]
+    public void Verweigerter_Command_wird_targeted_CommandFailed()
+    {
+        var env = new CommandEnvelope
+        {
+            AggregateId = Guid.NewGuid(),
+            Payload = new SetzeModellAktiv(Guid.NewGuid()),
+            Modus = new CommandModus.Client(1),
+            AggregateType = "Modell",
+            OriginSessionId = "session-0007",
+        };
+
+        var failed = AkteurVerweigerung.Baue(env, "Inspektor")!;
+        failed.TargetSubscriberId.Should().Be("session-0007");
+        failed.CorrelationId.Should().Be(env.CorrelationId);
+        ((CommandFailed)failed.Payload).Reason.Should().Be("Akteur 'Inspektor' darf SetzeModellAktiv nicht");
+        AkteurVerweigerung.Baue(env with { OriginSessionId = null }, "Inspektor").Should().BeNull();
+    }
+
+    private static readonly Dictionary<string, Type> Typen = new[]
+    {
+        typeof(StarteTraining), typeof(KlassifiziereBildPaarDurchKi), typeof(ImagePairKomplett),
+        typeof(TrainingAngefordert), typeof(HoleModelle),
+    }.ToDictionary(t => t.Name);
+
+    private static Type? Loese(string name) => Typen.GetValueOrDefault(name);
+
+    private sealed class ServiceCollectionStub
+    {
+        public void Konfiguriere(Action<AkteurOptionen> k) =>
+            Microsoft.Extensions.DependencyInjection.ServiceCollectionContainerBuilderExtensions
+                .BuildServiceProvider(new Microsoft.Extensions.DependencyInjection.ServiceCollection().AddAkteure(k));
+    }
+}

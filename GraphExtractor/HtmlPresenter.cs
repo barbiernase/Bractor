@@ -117,16 +117,26 @@ public static class HtmlPresenter
 #de .gcanvas{position:relative;flex:1;min-height:0;overflow:hidden;border:1px solid #232a38;border-radius:8px;
   background-color:#0b0e15;background-image:radial-gradient(#1a2436 1.1px,transparent 1.1px);background-size:22px 22px;cursor:grab;touch-action:none}
 #de .gcanvas.panning{cursor:grabbing}
-#de .gworld{position:absolute;left:0;top:0;width:6000px;height:4000px;transform-origin:0 0;will-change:transform}
+/* Render-Architektur (Zoom/Pan): die Welt ist KEINE Dauer-GPU-Ebene. will-change nur während eines Zieh-Pans (reines
+   Verschieben → Raster wiederverwendbar); danach rastert der Browser in der echten Zoomstufe neu. Dauerhaft gesetzt
+   rasterte er die ganze Welt (bis ~7000×11000 px) in der Start-Zoomstufe → beim Rauszoomen Kachel-Budget gesprengt =
+   Knoten laden nicht nach / flackern / verschwinden (auch Inspector + Minimap, die sich das GPU-Budget teilen).
+   Größe = Inhalt (messeWelt), nicht fest 6000×4000 — sonst liegen Knoten/Kanten außerhalb der Ebenen-Grenzen. */
+#de .gworld{position:absolute;left:0;top:0;width:6000px;height:4000px;transform-origin:0 0}
+#de .gcanvas.bewegt .gworld{will-change:transform}
+/* Außerhalb des Sichtfensters (+ Rand): nicht malen (Layout bleibt → Maße/Anker/Kanten stimmen weiter). */
+#de .gnode2.weg{visibility:hidden}
+/* Weit rausgezoomt: die teuren weichen Schatten weglassen (unsichtbar klein, aber das Teuerste beim Rastern). */
+#de .gcanvas.fern{--gsch:none}
 #de svg.gedges{position:absolute;left:0;top:0;width:6000px;height:4000px;pointer-events:none;overflow:visible}
 #de .glink{pointer-events:none}
 #de .glink.internal{stroke:#7f8aa0;stroke-width:1.5;opacity:.4;pointer-events:stroke;transition:opacity .1s,stroke-width .1s}
 #de .glink.internal:hover,#de .glink.internal.hot{stroke:#cbb8ff;stroke-width:3;opacity:1}
 /* Minimap (klickbar, zeigt Viewport) + Domänen-Filter */
-#de .gminimap{position:absolute;right:10px;bottom:10px;width:212px;height:150px;background:#0b0e15cc;border:1px solid #2c3547;border-radius:8px;overflow:hidden;z-index:20;cursor:pointer;box-shadow:0 6px 20px #0009}
+#de .gminimap{position:absolute;right:10px;bottom:10px;width:212px;height:150px;background:#0b0e15cc;border:1px solid #2c3547;border-radius:8px;overflow:hidden;z-index:20;cursor:pointer;box-shadow:0 6px 20px #0009;contain:strict;transform:translateZ(0)}
 #de .gminimap svg{display:block;width:100%;height:100%}
 #de .gminimap .mmvp{fill:#7fb0e61f;stroke:#8fc0ff;stroke-width:1.5}
-#de .gfilter{position:absolute;left:10px;top:10px;width:216px;max-height:calc(100% - 20px);overflow:auto;background:#0d1119f2;border:1px solid #2c3547;border-radius:8px;z-index:22;padding:9px;font-size:12px;box-shadow:0 10px 28px #000b}
+#de .gfilter{position:absolute;left:10px;top:10px;width:216px;max-height:calc(100% - 20px);overflow:auto;background:#0d1119f2;border:1px solid #2c3547;border-radius:8px;z-index:22;padding:9px;font-size:12px;box-shadow:0 10px 28px #000b;contain:layout paint;transform:translateZ(0)}
 #de .gfilter h4{margin:0 0 8px;font-size:12px;color:#cbd3e1;display:flex;justify-content:space-between;align-items:center}
 #de .gfilter label{display:flex;align-items:center;gap:6px;padding:3px 3px;color:#aab3c5;cursor:pointer;border-radius:4px}
 #de .gfilter label:hover{background:#1a2130}
@@ -135,7 +145,7 @@ public static class HtmlPresenter
 #de .gfilter .mm-q button:hover{background:#222c3d}
 /* Code-Knoten: Vorschau im Knoten + anklickbares Modal mit vollem Code */
 #de .gcodeprev{margin:4px 0;padding:7px 9px;background:#0d1119;border:1px solid #263041;border-radius:6px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;line-height:1.45;color:#c7d0df;white-space:pre;overflow:hidden;max-height:130px;cursor:default}
-#de .gnode2{position:absolute;width:250px;background:#161b27;border:1px solid #2c3547;border-radius:9px;box-shadow:0 4px 14px #0008}
+#de .gnode2{position:absolute;width:250px;background:#161b27;border:1px solid #2c3547;border-radius:9px;box-shadow:var(--gsch,0 4px 14px #0008)}
 #de .gnode2.dragging{box-shadow:0 14px 34px #000c;z-index:9}
 #de .gnode2.typehi{outline:2px solid #ffd76a;box-shadow:0 0 0 2px #ffd76a55,0 0 20px #ffd76a66;z-index:7}
 #de .gnode2.island{outline:1px dashed #e0844d;box-shadow:0 0 0 1px #e0844d44}
@@ -149,6 +159,7 @@ public static class HtmlPresenter
 #de .gtoolbar button.add.jumpable{cursor:pointer}
 #de .gminimap svg rect.mmhi{fill:#ffd76a !important;opacity:1 !important;stroke:#fff3c9;stroke-width:.6}
 #de .gnode2.n-command{border-color:#3b6fb0}
+#de .gnode2.n-akteur{border-color:#b04f86;width:240px}
 #de .gnode2.n-event{border-color:#3f9d5a}
 #de .gnode2.n-rejection{border-color:#b5504a}
 #de .gnode2.n-valueobject{border-color:#2f8f7d}
@@ -173,6 +184,7 @@ public static class HtmlPresenter
 #de .gnode2.collapsed .gbody{display:none}
 #de .ghead{display:flex;align-items:center;gap:6px;padding:5px 9px;border-radius:8px 8px 0 0;cursor:grab;color:#0d0f14;font-weight:700;font-size:12px;user-select:none;touch-action:none}
 #de .gnode2.n-command .ghead{background:#5b8fd0}
+#de .gnode2.n-akteur .ghead{background:#e07ab4}
 #de .gnode2.n-event .ghead{background:#57b673}
 #de .gnode2.n-rejection .ghead{background:#cf6f68}
 #de .gnode2.n-valueobject .ghead{background:#49a996}
@@ -237,6 +249,7 @@ public static class HtmlPresenter
 #de .slotrow.codeempty .codemiss{color:#e0b46a;font-weight:600}
 #de .slotrow.codeempty .slot.s-code{box-shadow:0 0 0 2px #0b0e15,0 0 0 4px #e0b46a66}
 #de .slot.s-command{background:#4a86d6}
+#de .slot.s-darf{background:#e07ab4}#de .slot.s-auftrag{background:#b05fd0}
 #de .slot.s-event{background:#4fb06a}
 #de .slot.s-rejection{background:#c25b52}
 #de .slot.s-decagg{background:#33b1a6}
@@ -269,6 +282,39 @@ public static class HtmlPresenter
 #de .gpick .gpick-t{font-size:11px;color:#9aa3b7;padding:2px 6px 4px}
 #de .gpick button{background:#233047;color:#cfe;border:1px solid #35507a;border-radius:5px;padding:5px 10px;cursor:pointer;text-align:left;font:12px system-ui}
 #de .gpick button:hover{background:#2c3d5c}
+/* Domänen-Rahmen: visuelle Blöcke um das Layout, hierarchisch (Unterdomäne im Eltern-Rahmen); nur der Kopf ist klickbar. */
+#de .grahmen-ebene{position:absolute;left:0;top:0;width:0;height:0;--rz:1;--lz:1}
+#de .gcanvas.lod-karte .grahmen-ebene{display:none}
+#de .gworld.fokus .grahmen-ebene{opacity:.5}
+#de .grahmen{position:absolute;box-sizing:border-box;border:calc(1.5px * var(--lz)) solid var(--dc);border-radius:14px;background:color-mix(in srgb,var(--dc) 7%,transparent);pointer-events:none}
+#de .grahmen.unter{border-style:dashed}
+#de .grahmen-k{position:absolute;left:0;right:0;top:0;height:calc(38px * var(--rz));transform-origin:0 0;display:flex;align-items:center;gap:8px;padding:0 10px 0 14px;pointer-events:auto;cursor:default;
+  background:linear-gradient(90deg,color-mix(in srgb,var(--dc) 24%,transparent),transparent 75%);border-radius:12px 12px 0 0;border-bottom:1px solid color-mix(in srgb,var(--dc) 30%,transparent)}
+#de .grahmen-k .gr-t{font:700 calc(16px * var(--rz)) ui-monospace,monospace;color:#e6ebf5;white-space:nowrap}
+#de .grahmen-k .gr-p{font-size:11px;color:#7f8aa0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+#de .grahmen-k .gr-z{font-size:11px;color:#9aa3b7;margin-left:auto;white-space:nowrap}
+#de .grahmen-k button{background:#1d2638;color:#d6e4ff;border:1px solid #35507a;border-radius:6px;padding:2px 8px;cursor:pointer;font:12px system-ui;flex:none}
+#de .grahmen-k button:hover{background:#2c3d5c}
+#de .gr-leer{position:absolute;left:24px;top:62px;color:#6b7690;font-size:13px;font-style:italic}
+/* Spalten-Rahmen: die senkrechten Rollen-Spalten innerhalb einer Domäne; nur der Kopf ist klickbar. */
+#de .gspalte{position:absolute;box-sizing:border-box;border:calc(1px * var(--lz)) solid #ffffff22;border-radius:10px;background:#ffffff05;pointer-events:none}
+#de .gspalte.insel{border-style:dashed;border-color:#e0844d66}
+#de .gspalte-k{position:absolute;left:0;right:0;top:0;height:calc(28px * min(var(--rz),1.15));display:flex;align-items:center;gap:6px;padding:0 6px 0 9px;pointer-events:auto;
+  background:#ffffff0a;border-bottom:1px solid #ffffff14;border-radius:9px 9px 0 0;overflow:hidden}
+#de .gspalte-k i{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
+#de .gspalte-k .gs-t{font:600 calc(11.5px * var(--rz)) system-ui;color:#cbd3e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+#de .gspalte-k .gs-z{font-size:11px;color:#7f8aa0;margin-left:auto}
+#de .gspalte-k button{background:#1d2638;color:#d6e4ff;border:1px solid #35507a;border-radius:5px;padding:0 6px;cursor:pointer;font:12px system-ui;line-height:18px;flex:none}
+#de .gspalte-k button:hover{background:#2c3d5c}
+#de .gmenue{z-index:45;max-height:min(70vh,560px);overflow:auto;min-width:220px}
+#de .gmenue .gm-tr{height:1px;background:#2c3547;margin:3px 2px}
+#de .gmenue button.gm-gefahr{background:#2a1b20;border-color:#6b3540;color:#ffc9cf}
+#de .gmenue button.gm-gefahr:hover{background:#3a2028}
+#de .gmenue button:disabled{opacity:.45;cursor:not-allowed}
+#de .gmenue input{background:#0d1119;color:#e6ebf5;border:1px solid #35507a;border-radius:5px;padding:6px 8px;font:13px ui-monospace,monospace}
+#de .gmenue .gm-hint{font-size:11px;color:#7f8aa0;padding:2px}
+#de .gmenue .gm-fehler{font-size:11px;color:#ff9aa5;padding:0 2px;min-height:0}
+#de .gmenue .gm-fehler:empty{display:none}
 #de .glegend{display:flex;gap:14px;margin:6px 2px 10px;font-size:11px;color:#9aa3b7;flex-wrap:wrap}
 #de .glegend span{display:inline-flex;align-items:center;gap:5px}
 #de .glegend i{width:20px;height:0;border-top:2px solid;display:inline-block}
@@ -318,7 +364,7 @@ public static class HtmlPresenter
 #de .gview .lod span{padding:4px 9px;cursor:pointer;color:#8b93a7}
 #de .gview .lod span.on{background:#2b3a5c;color:#e6efff}
 #de .gview .sep{width:1px;height:18px;background:#2c3547;margin:0 4px}
-#de .gworld{--inv:1}
+#de .gworld{--inv:4}
 #de .gworld.kompakt .gnode2.collapsed{width:230px}
 #de .gworld.kompakt .gnode2:not(.collapsed){z-index:4}
 #de .gsum{display:none;padding:4px 9px 7px;font-size:11px;color:#aab3c5;cursor:pointer}
@@ -367,7 +413,7 @@ public static class HtmlPresenter
 #de .ginsp .slot.vb-aktiv{box-shadow:0 0 0 3px #fff,0 0 0 6px #3fae7f}
 #de .glink.kontrakt{opacity:.75}
 /* Inspector: Bearbeiten rechts statt Formular im Knoten */
-#de .ginsp{position:absolute;right:10px;top:10px;bottom:170px;width:min(380px,calc(100% - 40px));overflow:auto;background:#10141df7;border:1px solid #2c3547;border-radius:10px;z-index:25;box-shadow:0 10px 30px #000c;font-size:12px}
+#de .ginsp{position:absolute;right:10px;top:10px;bottom:170px;width:min(380px,calc(100% - 40px));overflow:auto;background:#10141df7;border:1px solid #2c3547;border-radius:10px;z-index:25;box-shadow:0 10px 30px #000c;font-size:12px;contain:layout paint;transform:translateZ(0)}
 #de .ginsp .gi-h{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:6px;padding:8px 10px;background:#161c2a;border-bottom:1px solid #2c3547}
 #de .ginsp .gi-h .gi-k{font-size:10px;padding:1px 7px;border-radius:8px;color:#0d0f14;font-weight:700}
 #de .ginsp .gi-h .gi-n{flex:1;font:700 13px ui-monospace,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
@@ -401,6 +447,7 @@ public static class HtmlPresenter
 #de .kc-pipeline{background:#e08a44}#de .kc-trigger{background:#d29a4a}#de .kc-reader{background:#9678d6}#de .kc-query{background:#5b8fd0}
 #de .kc-queryresponse{background:#49a996}#de .kc-codenode{background:#9aa0aa}#de .kc-llmnode{background:#a48fd6}
 #de .kc-frist,#de .kc-dienst,#de .kc-hostsetting{background:#c9a24b}
+#de .kc-akteur{background:#e07ab4}
 /* Semantischer Zoom: Landkarte (<0.4) · Ablauf (<0.75) · Detail */
 #de .gcanvas.lod-ablauf .gnode2 .gbody,#de .gcanvas.lod-ablauf .gnode2 .gsum{display:none}
 #de .gcanvas.lod-ablauf .gnode2{width:230px}
@@ -455,7 +502,7 @@ public static class HtmlPresenter
   // Vertrags-Fakten aus dem Rahmen (vom Extractor aus dem Code gelesen).
   const ID_FELD=()=>((MODEL.rahmen&&MODEL.rahmen.aggregatIdFeld)||"");
   const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"],konfig:["Konfiguration","vo"],query:["Query","qry"],queryresponse:["Response","qrsp"]};
-  let MODEL={schemaVersion:"2",records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],reaktionen:[],pipelines:[],triggers:[],frists:[],dienste:[],hostSettings:[],codeNodes:[],llmNodes:[]};
+  let MODEL={schemaVersion:"2",akteure:[],records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],reaktionen:[],pipelines:[],triggers:[],frists:[],dienste:[],hostSettings:[],codeNodes:[],llmNodes:[]};
   let NID=1;
   const embedded=/*__MODEL_JSON__*/;
   // Domänen-Filter (welche Domänen ausgeblendet sind) — pro Browser UND pro Solution persistiert (rahmen.kennung),
@@ -476,6 +523,8 @@ public static class HtmlPresenter
   const kindKlasse=k=>(KINDINFO[k]||["?","vo"])[1];
   function normalize(m){m=m||{};m.records=m.records||[];m.enums=m.enums||[];m.aggregate=m.aggregate||[];m.decider=m.decider||[];m.applier=m.applier||[];m.sagas=m.sagas||[];m.states=m.states||[];m.transitions=m.transitions||[];
     m.readModels=m.readModels||[];m.stores=m.stores||[];m.projektionen=m.projektionen||[];m.reader=m.reader||[];m.reaktionen=m.reaktionen||[];m.pipelines=m.pipelines||[];m.triggers=m.triggers||[];m.frists=m.frists||[];m.dienste=m.dienste||[];m.hostSettings=m.hostSettings||[];m.codeNodes=m.codeNodes||[];m.llmNodes=m.llmNodes||[];
+    // Akteur (docs/konzept-akteure.md): wer von außen hineingibt — darf[] = die Typen seiner IDarf<T> (Command/Query/Trigger).
+    m.akteure=m.akteure||[];m.akteure.forEach(a=>{if(!a._id)a._id="ak"+(NID++);a.darf=a.darf||[];});
     // Reaktion = emittierender Konsument (ISubscriber → IAsyncEnumerable<OneOf<Cmd>>): Trigger-Event → Handle → OneOf-Commands.
     m.reaktionen.forEach(r=>{if(!r._id)r._id="rk"+(NID++);r.handles=r.handles||[];r.handles.forEach(hd=>{hd.sends=hd.sends||[];hd.publishes=hd.publishes||[];});});
     // Pipeline = 4. durabler Konsument (IPipelineHandler): Trigger-Msg ODER Event → Handle → OneOf-Command(s).
@@ -526,7 +575,7 @@ public static class HtmlPresenter
     if(!val||!MODEL.aggregate.some(a=>a.name===val)){const o=h("option",{value:val||""},val||"— Aggregat —");o.selected=true;s.append(o);}
     MODEL.aggregate.forEach(a=>{const o=h("option",{value:a.name},a.name);if(a.name===val)o.selected=true;s.append(o);});return s;};
   // Standard-Namespace für neue Knoten: der eines vorhandenen Aggregats/Records; sonst eine Projekt-Wurzel aus dem Code (Rahmen).
-  function defaultNs(){const w=Object.keys((MODEL.rahmen||{}).verzeichnisse||{}).sort((a,b)=>a.length-b.length)[0];
+  function defaultNsGlobal(){const w=Object.keys((MODEL.rahmen||{}).verzeichnisse||{}).sort((a,b)=>a.length-b.length)[0];
     return MODEL.aggregate[0]?.namespace||MODEL.records[0]?.namespace||(w?w+".Neu":"Neu");}
 
   function h(tag,attrs,...kids){const e=document.createElement(tag);
@@ -586,7 +635,7 @@ public static class HtmlPresenter
   function imModus(ids,aendern){TEIL={gerufen:false};try{aendern();}finally{const g=TEIL.gerufen;TEIL=null;if(g)teilNeu(ids.filter(Boolean));}}
 
   // Eindeutiger Name — Namen sind der Referenzschlüssel für Kanten/Decider/Applier.
-  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.reaktionen.map(x=>x.name),...MODEL.pipelines.map(x=>x.name),...MODEL.triggers.map(x=>x.name),...MODEL.frists.map(x=>x.name),...MODEL.dienste.map(x=>x.name),...MODEL.hostSettings.map(x=>x.name),...MODEL.codeNodes.map(x=>x.name),...MODEL.llmNodes.map(x=>x.name)]);
+  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.reaktionen.map(x=>x.name),...MODEL.pipelines.map(x=>x.name),...MODEL.triggers.map(x=>x.name),...MODEL.frists.map(x=>x.name),...MODEL.dienste.map(x=>x.name),...MODEL.hostSettings.map(x=>x.name),...MODEL.codeNodes.map(x=>x.name),...MODEL.llmNodes.map(x=>x.name),...MODEL.akteure.map(x=>x.name)]);
     if(!all.has(base))return base;let i=2;while(all.has(base+i))i++;return base+i;}
 
   function enumCard(e,ei){const c=h("div",{class:"card"});
@@ -618,16 +667,18 @@ public static class HtmlPresenter
   // opt.still: nicht auswählen/anspringen (Verbinden-Modus legt an und verbindet selbst).
   function neuerKnoten(kind,x,y,opt){
     const vorher=new Set(graphNodes().map(n=>n.id));
+    // opt.ns (Band-Menü der Domänen-Ablage): Namespace der Domäne; opt.agg/opt.saga: naheliegender Besitzer in ihr.
+    const defaultNs=()=>(opt&&opt.ns)||defaultNsGlobal(), AGG=(opt&&opt.agg)||"", SAGA=(opt&&opt.saga)||"";
     // Ohne Klickposition keine Position: packLayout setzt den Knoten in die Spalte seiner Art (typreine Spalten).
     let pos=(typeof x==="number")?{x:Math.round(x/GRID)*GRID,y:Math.round(y/GRID)*GRID}:{};
     if(VIEW.kompakt&&pos.x!=null&&!pos._kpos)pos={...pos,_kpos:{x:pos.x,y:pos.y}};
     if(kind==="aggregate")MODEL.aggregate.push({name:uniq("NeuesAggregat"),namespace:defaultNs(),state:[],...pos});
-    else if(kind==="decider")MODEL.decider.push({_id:"d"+(NID++),aggregat:"",command:"",ergibt:[],...pos});
-    else if(kind==="applier")MODEL.applier.push({_id:"a"+(NID++),aggregat:"",event:"",...pos});
-    else if(kind==="state")MODEL.states.push({_id:"s"+(NID++),aggregat:"",felder:[],...pos});
+    else if(kind==="decider")MODEL.decider.push({_id:"d"+(NID++),aggregat:AGG,command:"",ergibt:[],...pos});
+    else if(kind==="applier")MODEL.applier.push({_id:"a"+(NID++),aggregat:AGG,event:"",...pos});
+    else if(kind==="state")MODEL.states.push({_id:"s"+(NID++),aggregat:AGG,felder:[],...pos});
     else if(kind==="enum")MODEL.enums.push({name:uniq("NeuEnum"),namespace:defaultNs(),werte:["A","B"],...pos});
     else if(kind==="saga")MODEL.sagas.push({name:uniq("NeuerProzess"),namespace:defaultNs(),triggerEvent:"",schritte:[],extraUsings:[],...pos});
-    else if(kind==="transition")MODEL.transitions.push({_id:"t"+(NID++),prozess:"",wenn:[],dann:[{}],...pos});
+    else if(kind==="transition")MODEL.transitions.push({_id:"t"+(NID++),prozess:SAGA,wenn:[],dann:[{}],...pos});
     else if(kind==="readmodel")MODEL.readModels.push({_id:"rm"+(NID++),name:uniq("NeuReadModel"),namespace:defaultNs(),felder:[{_id:"f"+(NID++),name:"Id",typ:"Guid"}],store:"",...pos});
     else if(kind==="store")MODEL.stores.push({_id:"st"+(NID++),name:uniq("NeuStore"),namespace:defaultNs(),writeFns:[],readFns:[],...pos});
     else if(kind==="projektion")MODEL.projektionen.push({_id:"pj"+(NID++),name:uniq("NeueProjektion"),namespace:defaultNs(),stores:[],append:false,pull:true,handles:[],...pos});
@@ -638,9 +689,13 @@ public static class HtmlPresenter
     else if(kind==="frist")MODEL.frists.push({_id:"fr"+(NID++),name:uniq("NeueFrist"),kontext:"",dauerSetting:"",plant:[],storniert:[],sendet:"",aggregat:"",...pos});
     else if(kind==="dienst")MODEL.dienste.push({_id:"di"+(NID++),name:uniq("NeuerDienst"),vertrag:"IDienst",extern:false,codeSrc:null,...pos});
     else if(kind==="hostsetting")MODEL.hostSettings.push({_id:"hs"+(NID++),name:uniq("NeuSetting"),typ:"string",default:"",envKey:"",...pos});
+    else if(kind==="akteur")MODEL.akteure.push({_id:"ak"+(NID++),name:uniq("NeuerAkteur"),namespace:defaultNs(),darf:[],...pos});
     else if(kind==="codenode")MODEL.codeNodes.push({_id:"cn"+(NID++),name:uniq("Code"),text:"",...pos});
     else if(kind==="llmnode")MODEL.llmNodes.push({_id:"ln"+(NID++),name:uniq("LLM"),intent:"",...pos});
     else MODEL.records.push({name:uniq("Neu"+kindLabel(kind).replace(/\s/g,"")),kind,namespace:defaultNs(),felder:kind==="command"&&ID_FELD()?[{_id:"f"+(NID++),name:ID_FELD(),typ:"Guid"}]:[],...pos});
+    // Heimat-Domäne in der Ansicht merken: trägt Namespace-lose Arten (📝/🤖, Dienst, HostSetting …) und hält Abhängige
+    //   (Decider/Applier/State/Regel) in ihrer Domäne, auch wenn ihr Besitzer gelöscht wird. Der Code-Namespace geht vor (domKey).
+    if(opt&&opt.ns){const neu=graphNodes().find(n=>!vorher.has(n.id));if(neu){VIEW.heim={...(VIEW.heim||{}),[neu.id]:opt.ns};if(opt.blk)VIEW.heimBlk={...(VIEW.heimBlk||{}),[neu.id]:opt.blk};speichereAnsicht();}}
     render();
     if(!(opt&&opt.still))fokussiereNeu(vorher,true);
   }
@@ -666,11 +721,12 @@ public static class HtmlPresenter
         if(d.kompensation===nm)P(ein,"tr:"+t._id,"Regel · "+(t.prozess||"Prozess"),"↩ Kompensation");}));
       HD("reaktion","reaktionen",(o,hd,id)=>{if((hd.sends||[]).includes(nm))P(ein,id,hText(o,hd),"",()=>{hd.sends=ohneX(hd.sends,nm);});});
       HD("pipeline","pipelines",(o,hd,id)=>{
-        if((hd.sends||[]).includes(nm))P(ein,id,hText(o,hd),"",()=>{hd.sends=ohneX(hd.sends,nm);});
+        if((hd.sends||[]).includes(nm))P(ein,id,hText(o,hd),hd.akteur?"im Auftrag 👤 "+hd.akteur:"",()=>{hd.sends=ohneX(hd.sends,nm);});
         (hd.fristen||[]).filter(f=>f.command===nm).forEach(f=>P(ein,id,hText(o,hd),f.art==="storno"?"✕⏳ Storno":"⏳ per Frist",
           ()=>{hd.fristen=(hd.fristen||[]).filter(x=>x!==f);}));});
       MODEL.frists.forEach(f=>{if(f.sendet===nm)P(ein,"fr:"+f._id,"Frist "+(f.name||""),"⏳");});
-      if(!ein.length)P(ein,null,"Außenwelt (Client)","abgeleitet: kein interner Erzeuger");
+      akteurePartner(ein,nm,P);
+      if(!ein.length)P(ein,null,"Außenwelt (Client)","abgeleitet: kein interner Erzeuger · kein Akteur");
       MODEL.decider.forEach(d=>{if(d.command===nm)P(aus,"dec:"+d._id,"Decide @ "+(d.aggregat||"— kein Aggregat"));});}
     else if(k==="event"||k==="rejection"){
       MODEL.decider.forEach(d=>{if((d.ergibt||[]).some(o=>o.event===nm))P(ein,"dec:"+d._id,"Decide("+(d.command||"?")+") @ "+(d.aggregat||"—"));});
@@ -680,16 +736,23 @@ public static class HtmlPresenter
       MODEL.applier.forEach(a=>{if(a.event===nm)P(aus,"app:"+a._id,"Apply @ "+(a.aggregat||"—"));});
       MODEL.sagas.forEach(sg=>{if(sg.triggerEvent===nm)P(aus,"saga:"+sg.name,"Prozess "+sg.name,"Auslöser");});
       MODEL.transitions.forEach(t=>{if((t.wenn||[]).includes(nm)||t.sammelEvent===nm)P(aus,"tr:"+t._id,"Regel · "+(t.prozess||"Prozess"),t.sammelEvent===nm?"Σ sammelt":"");});}
-    else if(k==="query"){P(ein,null,"Außenwelt (Client)","abgeleitet");
+    else if(k==="query"){akteurePartner(ein,nm,P);if(!ein.length)P(ein,null,"Außenwelt (Client)","abgeleitet · kein Akteur");
       HD("reader","reader",(o,hd,id)=>{if(hd.query===nm)P(aus,id,hText(o,hd));});}
-    else if(k==="queryresponse"){HD("reader","reader",(o,hd,id)=>{if((hd.responses||[]).includes(nm))P(ein,id,hText(o,hd));});
-      P(aus,null,"Außenwelt (Client)","abgeleitet");}
+    else if(k==="queryresponse"){const qs=[];HD("reader","reader",(o,hd,id)=>{if((hd.responses||[]).includes(nm)){P(ein,id,hText(o,hd));qs.push(hd.query);}});
+      // Die Antwort geht an den, der fragen darf (Akteure der Query) — sonst an die anonyme Außenwelt.
+      MODEL.akteure.forEach(a=>{if(qs.some(q=>(a.darf||[]).includes(q)))P(aus,"akt:"+a._id,"Akteur "+a.name,"fragt");});
+      if(!aus.length)P(aus,null,"Außenwelt (Client)","abgeleitet · kein Akteur");}
     else if(k==="trigger"){const t=trig;
       if(t.modus)P(ein,null,"Ingress · "+t.modus+(t.route||t.intervall||t.pfad?" "+(t.route||t.intervall||t.pfad):""),"Code-Fakt");
       HD("pipeline","pipelines",(o,hd,id)=>{if((hd.emits||[]).includes(nm))P(ein,id,hText(o,hd),"",()=>{hd.emits=ohneX(hd.emits,nm);});
         if((hd.inputKind==="trigger")&&(hd.input===nm||hd.trigId===t._id||(hd.prod&&hd.prod.k==="tg"&&hd.prod.id===t._id)))P(aus,id,hText(o,hd));});
-      if(!ein.length)P(ein,null,"Außenwelt (Client)","abgeleitet: kein interner Erzeuger");}
+      akteurePartner(ein,nm,P);
+      if(!ein.length)P(ein,null,"Außenwelt (Client)","abgeleitet: kein interner Erzeuger · kein Akteur");}
     return {ein,aus,k};}
+  // Akteure, die diesen Typ hineingeben dürfen — als Erzeuger auf der „◀ kommt aus"-Seite; „lösen" entzieht das Recht.
+  function akteurePartner(ein,nm,P){MODEL.akteure.forEach(a=>{if((a.darf||[]).includes(nm))P(ein,"akt:"+a._id,"Akteur "+a.name,"darf",()=>{a.darf=ohneX(a.darf,nm);});});}
+  // Der Akteur-Eingang einer Nachricht (Command/Query/Trigger): ⊕ → Akteure leuchten → anklicken = ihm das Recht geben.
+  const darfPort=nm=>slotRow("darf","+ Akteur ⊕ (darf)","l",{type:"darf",dir:"in",rec:nm},"darf:in:"+nm);
   // Kardinalität der Konsumenten-Seite AUS DER GRAMMATIK (nie im Board-Code): „genau eins" / „dieselbe" / „beliebig".
   function grKardinalitaet(sorte){const g=GR();if(!g||!sorte)return "";const ks=(g.konsume||[]).filter(k=>k.sorte===sorte);
     if(!ks.length)return "";if(ks.every(k=>k.kardinalitaet==="eins"))return "genau eins";if(ks.some(k=>k.kardinalitaet==="dieselbe"))return "dieselbe Pipeline";return "beliebig viele";}
@@ -747,6 +810,8 @@ public static class HtmlPresenter
        aus=slotRow(c,"+ Konsument ⊕"+(r.kind==="event"?"":" (Projektion · Reaktion · Pipeline)")+" ▶","r",{type:"evtUse",dir:"out",rec:r.name},"evt:out:"+r.name);}
      else if(r.kind==="query")aus=slotRow("query","+ Konsument ⊕ (Reader) ▶","r",{type:"query",dir:"out",rec:r.name},"qry:out:"+r.name);
      else if(r.kind==="queryresponse")ein=slotRow("qrsp","+ Erzeuger ⊕ (Reader)","l",{type:"qrsp",dir:"in",rec:r.name},"qrsp:in:"+r.name);
+     // Akteur-Eingang: Command und Query (was ein Akteur hineingeben darf).
+     if(r.kind==="command"||r.kind==="query"){const dp=darfPort(r.name);ein=ein?h("div",{},ein,dp):dp;}
      if(ein||aus){if(INSP)zweiSeiten(body,r.name,null,ein,aus);else{if(ein)body.append(ein);if(aus)body.append(aus);}}}
     if(r.kind==="valueobject")body.append(slotRow("ftype","als Feldtyp ▶","r",{type:"ftype",dir:"out",typeName:r.name},"ftype:out:rec:"+r.name));
     body.append(h("div",{class:"gsec"},"Felder"));
@@ -1017,6 +1082,14 @@ public static class HtmlPresenter
           h("span",{class:"slotlbl"},"Trigger"),h("input",{value:nm,oninput:e=>hd.emits[ei]=e.target.value,onchange:()=>render(),placeholder:"TriggerMsg",style:"flex:1"}),h("span",{class:"slotlbl"},"▶"),eo));});
       body.append(h("div",{class:"slotrow o",title:"Klick auf ⊕: alle Nachrichten leuchten, die diese Pipeline erzeugen darf — die Art folgt aus dem Typ"},
         h("span",{class:"slotlbl"},"+ Ausgang ▶ (Command · Trigger · transientes Event)"),ausPort("pl:aus:"+p._id+":"+hi+":open")));
+      // Im Auftrag eines Akteur-Dienstes (z. B. der KI): ein Parameter wie eine Fähigkeit — der Handle entscheidet für ihn,
+      //   sendet nur, was er darf (CQRS060), und der Command trägt ihn als Urheber. ⊕ → Dienst-Akteure leuchten.
+      {const ak=port("auftrag");ak.classList.add("i");reg("auftrag:in:"+p._id+":"+hi,ak,{type:"auftrag",dir:"in",pipeline:p._id,handleIdx:hi});
+       const a=hd.akteur&&MODEL.akteure.find(x=>x.name===hd.akteur),fremd=a?(hd.sends||[]).filter(c=>!(a.darf||[]).includes(c)):[];
+       body.append(h("div",{class:"slotrow",title:"Akteur-Dienst als Handle-Parameter (CQRS060)"},ak,
+         h("span",{class:"slotlbl",style:"flex:1"},hd.akteur?"◀ im Auftrag von 👤 "+hd.akteur:"◀ im Auftrag von … ⊕ (Dienst-Akteur)"),
+         hd.akteur?h("button",{class:"rm",title:"Auftrag lösen",onclick:()=>{delete hd.akteur;render();}},"✕"):null));
+       if(fremd.length)body.append(h("div",{class:"llmmeld err"},"⚠ "+hd.akteur+" darf "+fremd.join(", ")+" nicht (CQRS060)"));}
       // Fähigkeiten (Read-Fns als Handle-Parameter) — wie am Reader-Handle.
       (hd.fns||[]).forEach((fid,fj)=>{const rr=fnById(fid);const s=port("store");s.classList.add("o");reg("rcall:out:pl:"+p._id+":"+hi+":"+fid,s,{type:"rcall",dir:"out",pipeline:p._id,handleIdx:hi});
         body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.fns.splice(fj,1);render();}},"✕"),
@@ -1122,7 +1195,8 @@ public static class HtmlPresenter
     // Zwei Seiten (§12): ◀ kommt aus = Ingress-Bindung + Pipelines, die den Trigger erzeugen · geht an ▶ = die eine Pipeline.
     const tin=slotRow("trigmsg","+ Erzeuger ⊕ (Pipeline)","l",{type:"trgIn",dir:"in",trigId:t._id},"trg:in:"+t._id);
     const tout=slotRow("trigmsg","+ Konsument ⊕ (Pipeline) ▶","r",{type:"trigmsg",dir:"out",trigId:t._id,msgName:t.msgName},"trg:msg:"+t._id);
-    if(INSP)zweiSeiten(body,trigName(t),t,tin,tout);else body.append(tin,tout);
+    {const dp=darfPort(trigName(t));
+     if(INSP)zweiSeiten(body,trigName(t),t,h("div",{},tin,dp),tout);else body.append(tin,dp,tout);}
   }
   // Pipeline = 4. durabler Konsument (IPipelineHandler): je Handle EIN Eingang (Trigger/Event/Self) →
   //   yield ICommand UND/ODER yield IPipelineTrigger (→ andere Pipeline) UND/ODER ScheduleSelf (Tick/Timeout).
@@ -1209,6 +1283,41 @@ public static class HtmlPresenter
 
   // HostSetting = operativer Config-Wert (Name/Typ/Default/EnvKey) — die Editor-Repräsentation von
   //   appsettings/env für DOMÄNEN-relevante Werte (Pfad/Intervall/Timeout). Speist Trigger/Frist.
+  // 👤 AKTEUR: Name, Namespace, und EINE Liste — was er darf (IDarf<T>). ⊕ „+ darf" → passende Commands/Queries/Trigger
+  //   leuchten → anklicken = erlauben, ✓-Karte = entziehen. Was er HÖREN darf, ist abgeleitet (Generator), keine Eingabe.
+  function akteurCard(body,a){
+    body.append(h("div",{class:"gsec"},"Name · Namespace"));
+    body.append(nameInp(a,"name","AkteurName","akteur"));
+    body.append(h("input",{value:a.namespace??"",oninput:e=>a.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
+    body.append(h("label",{class:"cbx",title:"Ein Dienst-Vertrag (Interface, z. B. die KI) statt eines Records: ein Pipeline-Handle nimmt ihn als Parameter und entscheidet in seinem Auftrag"},
+      h("input",{type:"checkbox",onchange:e=>{a.dienst=e.target.checked||undefined;render();},...(a.dienst?{checked:"checked"}:{}),...(a.datei?{disabled:"disabled"}:{})}),"⚙ Dienst (Vertrag/Interface)"));
+    body.append(h("div",{class:"gsec",title:(a.dienst?"public interface ":"public sealed record ")+a.name+" : IAkteur, IDarf<…>"},"darf ▶ — was er hineingeben darf"));
+    if(!(a.darf||[]).length)body.append(h("div",{class:"gp-row gp-leer"},"— noch nichts (am Tor käme er nirgends durch)"));
+    (a.darf||[]).forEach(nm=>{const r=recByName(nm),t=!r&&MODEL.triggers.find(x=>trigName(x)===nm);
+      const art=r?kindLabel(r.kind):t?"Trigger":"⚠ unbekannt";
+      const s=anchorDot("darf");s.classList.add("o");reg("akt:darf:"+a._id+":"+nm,s,{type:"darf",dir:"out",akt:a._id,anker:true});
+      body.append(h("div",{class:"slotrow o"},
+        h("span",{class:"slotlbl",style:"flex:1;text-align:right"},nm+" · "+art),
+        h("button",{class:"rm",title:"Recht entziehen",onclick:()=>{a.darf=a.darf.filter(x=>x!==nm);render();}},"✕"),s));});
+    body.append(slotRow("darf","+ darf ⊕ (Command · Query · Trigger) ▶","r",{type:"darf",dir:"out",akt:a._id},"akt:darf:"+a._id+":open"));
+    if(a.dienst){body.append(h("div",{class:"gsec",title:"Pipeline-Handles, die diesen Dienst als Parameter nehmen (CQRS060)"},"entscheidet in ▶"));
+      const im=[];MODEL.pipelines.forEach(p=>(p.handles||[]).forEach((hd,hi)=>{if(hd.akteur===a.name)im.push([p,hd,hi]);}));
+      im.forEach(([p,hd,hi])=>{const s=anchorDot("auftrag");s.classList.add("o");reg("akt:auftrag:"+a._id+":"+p._id+":"+hi,s,{type:"auftrag",dir:"out",akt:a._id,anker:true});
+        body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},p.name+".Handle("+handleDisc(hd)+")"),s));});
+      body.append(slotRow("auftrag","+ Handle ⊕ (Pipeline) ▶","r",{type:"auftrag",dir:"out",akt:a._id},"akt:auftrag:"+a._id+":open"));}
+    const hoert=akteurHoert(a);
+    body.append(h("div",{class:"gsec",title:"abgeleitet: Events der Aggregate seiner Commands + Events der Projektionen hinter seinen Queries"},"hört (abgeleitet)"));
+    body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},hoert.length?hoert.join(", "):"— nichts"));
+  }
+  // Abgeleitet wie im Generator (AkteurRechteGenerator): Aggregat der erlaubten Commands → dessen Events; erlaubte Query →
+  //   Reader → Projektion → deren Handle-Events. Nur Anzeige — die Laufzeit-Tabelle erzeugt der Generator.
+  function akteurHoert(a){const evs=new Set();
+    (a.darf||[]).forEach(nm=>{const r=recByName(nm);if(!r)return;
+      if(r.kind==="command"){const agg=(MODEL.decider.find(d=>d.command===nm)||{}).aggregat;
+        if(agg)MODEL.decider.filter(d=>d.aggregat===agg).forEach(d=>(d.ergibt||[]).forEach(o=>o.event&&evs.add(o.event)));}
+      if(r.kind==="query")MODEL.reader.forEach(rd=>{if(!(rd.handles||[]).some(hd=>hd.query===nm))return;
+        const p=MODEL.projektionen.find(x=>x.name===rd.projektion);(p&&p.handles||[]).forEach(hd=>hd.event&&evs.add(hd.event));});});
+    return [...evs].sort();}
   function hostSettingCard(body,s){
     body.append(nameInp(s,"name","HostSetting","hostsetting"));
     body.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"Typ"),tinp(s.typ,v=>s.typ=v)));
@@ -1239,9 +1348,7 @@ public static class HtmlPresenter
   let SYNC={}, WATCH=new Set();
   const ankerKey=a=>a?a.kind+":"+a.namespace+":"+a.disc:"";
   function syncReg(id,anker,apply,gid){if(INSP&&SYNC[id])return;SYNC[id]={anker,apply,hash:null,gid};}
-  function imBlick(gid){if(!canvas||!world||!gid)return true;const el=world.querySelector('[data-id="'+gid+'"]');
-    if(!el)return true;const cr=canvas.getBoundingClientRect(),r=el.getBoundingClientRect();
-    return !(r.right<cr.left||r.left>cr.right||r.bottom<cr.top||r.top>cr.bottom);}
+  function imBlick(gid){if(!canvas||!world||!gid)return true;const g=GEO.get(gid);return !g||!g.weg;}
   // Kontinuierlich gepollt wird NUR, was via ✎ geöffnet wurde (WATCH). Sichtbare Blöcke werden EINMAL
   //   gespiegelt (Vorschau füllen), dann Ruhe → im Leerlauf keine Requests, kein Terminal-Flut.
   async function syncTick(){const de=document.getElementById("de");if(!de||!de.classList.contains("on"))return;
@@ -1452,7 +1559,7 @@ public static class HtmlPresenter
   //    Applier→Aggregat(rechts) · Applier→State-Feld(oben, optionale Zuweisungs-Markierung).
   const SVGNS="http://www.w3.org/2000/svg";
   const GRID=20;
-  const NODELABEL={command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",pipeline:"Pipeline",trigger:"Trigger",frist:"Frist",dienst:"Dienst",hostsetting:"HostSetting",codenode:"Code",llmnode:"LLM",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn"};
+  const NODELABEL={akteur:"Akteur",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",pipeline:"Pipeline",trigger:"Trigger",frist:"Frist",dienst:"Dienst",hostsetting:"HostSetting",codenode:"Code",llmnode:"LLM",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn"};
   let PAN={x:40,y:30,s:1}, canvas=null, world=null, svg=null, svgTop=null, SLOTS={};
   // Typ-Navigation: HLKIND = aktuell hervorgehobener Node-Typ (Board+Minimap); JUMPIX = Sprung-Cursor je Typ.
   let HLKIND=null; const JUMPIX={};
@@ -1566,11 +1673,14 @@ public static class HtmlPresenter
   function topAnchor(color,label,key){const s=anchorDot(color);s.classList.add("t");reg(key,s,null);return h("div",{class:"gtopfield"},s,h("span",{class:"slotlbl"},label));}
   // Namens-Eingabe: benennt um UND zieht alle Verbindungen mit (Namen sind der Referenzschlüssel).
   function renameRefs(kind,obj,old,nv){
+    if(kind==="akteur")MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.akteur===old)hd.akteur=nv;}));
     if(kind==="aggregate"){
       MODEL.decider.forEach(d=>{if(d.aggregat===old)d.aggregat=nv;});
       MODEL.applier.forEach(a=>{if(a.aggregat===old)a.aggregat=nv;});
       MODEL.states.forEach(s=>{if(s.aggregat===old)s.aggregat=nv;});
     }else if(kind==="record"){
+      // Akteure dürfen den Typ unter seinem neuen Namen (IDarf<T> folgt dem Typ).
+      MODEL.akteure.forEach(a=>{a.darf=(a.darf||[]).map(x=>x===old?nv:x);});
       if(obj.kind==="valueobject")retypeFelder(old,nv);   // Typ-Komposition: Feldtypen mitziehen
       if(obj.kind==="command"){
         MODEL.decider.forEach(d=>{if(d.command===old)d.command=nv;});
@@ -1647,7 +1757,8 @@ public static class HtmlPresenter
     return h("div",{class:"gtopfield"},s,h("span",{class:"slotlbl"},label));}
 
   function graphNodes(){
-    return [...MODEL.records.map(r=>({id:"rec:"+r.name,name:r.name,kind:r.kind,ref:r})),
+    return [...MODEL.akteure.map(a=>({id:"akt:"+a._id,name:a.name,kind:"akteur",ref:a})),
+            ...MODEL.records.map(r=>({id:"rec:"+r.name,name:r.name,kind:r.kind,ref:r})),
             ...MODEL.aggregate.map(a=>({id:"agg:"+a.name,name:a.name,kind:"aggregate",ref:a})),
             ...MODEL.states.map(s=>({id:"st:"+s._id,name:s.aggregat||"frei",kind:"state",ref:s})),
             ...MODEL.decider.map(d=>({id:"dec:"+d._id,name:d.command||"",kind:"decider",ref:d})),
@@ -1672,6 +1783,10 @@ public static class HtmlPresenter
   // ── AGGREGATSWEISE ANORDNUNG: jedes Aggregat ein gekachelter Block (eigenes Rollen-Mini-Layout),
   //    aggregat-übergreifende Knoten (Sagas/Pipelines/Trigger/Reaktionen/geteilte Typen) im „Geteilt"-Band.
   const SHARED_KEY="§geteilt";
+  // Das AKTEUR-BAND (docs/konzept-akteure.md §4.1): ein eigener Block je Domäne — ganz links, auf der Eingangsseite, vor den
+  //   Aggregat-Blöcken. Kommt DAZU, ersetzt keine Spalte. Domäne aus dem Graphen (alle IDarf-Ziele in einer Domäne → dort).
+  const AKTEUR_KEY="§akteure";
+  const ROLE_AKTEUR={akteur:0};
   // Rollen-Spalten innerhalb eines Aggregat-Blocks (links→rechts = Schreibfluss, dann Leseseite).
   //   Leseseite: Projektion (Hub) → ihre Handles → Store-Fns → Store/ReadModel; Query → Reader-Handle → Response, Reader (Hub).
   const ROLE_AGG={command:0,decider:1,aggregate:2,state:2,event:3,rejection:3,applier:4,valueobject:5,enum:5,projektion:6,"handle:projektion":7,"handle:reaktion":7,
@@ -1681,6 +1796,7 @@ public static class HtmlPresenter
     fn:10,store:11,readmodel:11,"handle:projektion":12,projektion:13,"handle:reader":14,reader:15,query:14,queryresponse:16,codenode:17,llmnode:17};
   // Rolle eines Knotens: Handles je Besitzer-Art (Projektions- vs. Reader-Handle liegen in verschiedenen Spalten).
   const rolle=(n,map)=>{const k=n.kind==="handle"?"handle:"+n.own.kind:n.kind;return map[k]!==undefined?map[k]:99;};
+  const rollenVon=blk=>blk===SHARED_KEY?ROLE_SHARED:blk===AKTEUR_KEY?ROLE_AKTEUR:ROLE_AGG;
 
   // Wer besitzt diesen 📝/🤖-Knoten? (Rumpf-Ziel) — für die Gruppen-Zuordnung.
   function findCodeOwner(id,m){m=m||MODEL;
@@ -1709,6 +1825,9 @@ public static class HtmlPresenter
     const E=[]; const rec=n=>"rec:"+n;
     const codeId=id=>MODEL.codeNodes.some(c=>c._id===id)?"cn:"+id:(MODEL.llmNodes.some(l=>l._id===id)?"ln:"+id:null);
     const push=(a,b)=>{if(a&&b)E.push([a,b]);};
+    // Akteur → was er darf (Command/Query über die Record-Karte, Trigger über die Trigger-Karte).
+    MODEL.akteure.forEach(a=>(a.darf||[]).forEach(nm=>{if(recByName(nm))push("akt:"+a._id,rec(nm));
+      else{const t=MODEL.triggers.find(x=>trigName(x)===nm);if(t)push("akt:"+a._id,"tg:"+t._id);}}));
     MODEL.decider.forEach(d=>{if(recByName(d.command))push(rec(d.command),"dec:"+d._id);
       if(d.aggregat)push("dec:"+d._id,"agg:"+d.aggregat);
       (d.ergibt||[]).forEach(o=>{if(recByName(o.event))push("dec:"+d._id,rec(o.event));});
@@ -1757,7 +1876,8 @@ public static class HtmlPresenter
           MODEL.pipelines.forEach(q=>{if(q._id!==p._id)(q.handles||[]).forEach(qh=>{if(qh.inputKind==="trigger"&&qh.input===tn)push(H(hd),H(qh));});});});
         // Selbst<T> → der Self-Handle derselben Pipeline (Tick/Timeout-Schleife).
         (hd.schedules||[]).forEach(sc=>(p.handles||[]).forEach(qh=>{if(qh.inputKind==="self"&&qh.selfName===sc.name&&qh!==hd)push(H(hd),H(qh));}));
-        if(hd.codeSrc)push(codeId(hd.codeSrc),H(hd));});
+        if(hd.codeSrc)push(codeId(hd.codeSrc),H(hd));
+        {const a=hd.akteur&&MODEL.akteure.find(x=>x.name===hd.akteur);if(a)push("akt:"+a._id,H(hd));}});
       (p.dienste||[]).forEach(dn=>{const d=MODEL.dienste.find(x=>(x.vertrag||x.name)===dn);if(d)push("di:"+d._id,"pl:"+p._id);});});
     MODEL.frists.forEach(f=>{(f.plant||[]).forEach(ev=>{if(recByName(ev))push(rec(ev),"fr:"+f._id);});
       (f.storniert||[]).forEach(ev=>{if(recByName(ev))push(rec(ev),"fr:"+f._id);});
@@ -1806,6 +1926,7 @@ public static class HtmlPresenter
 
   function groupKeyOf(n){
     const k=n.kind, r=n.ref;
+    if(k==="akteur") return AKTEUR_KEY;
     if(k==="aggregate") return r.name;
     if(k==="handle"||k==="fn") return groupKeyOf(n.own);   // Handle/Fn gehören zu ihrem Besitzer
     if(k==="state") return r.aggregat||SHARED_KEY;
@@ -1845,7 +1966,7 @@ public static class HtmlPresenter
     // Raster-Signatur (sichtbare Knoten + Zahl ihrer Code-Eingänge): ändert sie sich (Handle/Fn dazu, Art aus-/eingeblendet),
     //   stimmen die reservierten Zeilen nicht mehr → neu packen. Gleiche Signatur = Handanordnung bleibt.
     const LAY=KPOS[VIEW.details?"d":"k"]||(KPOS[VIEW.details?"d":"k"]={});
-    const sig=hash(all.map(n=>n.id+":"+((codeEingaenge(n)||[]).length)).join("|")+"#"+(VIEW.aus||[]).join(","));
+    const sig=hash(all.map(n=>n.id+":"+((codeEingaenge(n)||[]).length)+":"+domKey(n)).join("|")+"#"+(VIEW.aus||[]).join(",")+"#"+(VIEW.domNeu||[]).join(","));
     if(LAY.__sig!==sig)force=true;
     // Wie viele Knotenpaare überlappen aktuell deutlich? (früher Abbruch, sobald „viele").
     const overlaps=()=>{const b=all.map(n=>{const s=sz(n),p=P(n);return {x:p.x||0,y:p.y||0,w:s.w,h:s.h};});let c=0;
@@ -1856,7 +1977,7 @@ public static class HtmlPresenter
     // Stand aus localStorage/board-model.json → heilen). „▦ Neu anordnen" ruft mit force=true.
     if(!force && all.some(positioned) && overlaps() < Math.max(3, Math.floor(all.length*0.12))) return;
 
-    const COLGAP=48,ROWGAP=26,SHELFGAP=150,COMPGAP=240;
+    const COLGAP=48,ROWGAP=26,SHELFGAP=150,COMPGAP=240,KGAP=90,LEER_W=640,LEER_H=110;   // RP/RK: Rahmen-Rand/-Kopf (zeichneRahmen)
     const isCode=n=>n.kind==="codenode"||n.kind==="llmnode";
     // ── ZEILENRASTER: jede Karte belegt genau eine Rasterzeile (Höhe = höchste sichtbare Karte + Abstand), alles fluchtet.
     //   Ein Knoten mit Code-Eingängen (Decider, Applier, Projektion, Reader, Reaktion, Pipeline, Store, Dienst) belegt
@@ -1931,7 +2052,8 @@ public static class HtmlPresenter
           (llmByCode.get(c.ref._id)||[]).forEach(l=>{placed.push({n:l,rx:cx+EINZUG,ry:z*ZEILE});w=Math.max(w,sz(l).w+EINZUG);z++;});});
         orphanLlm.forEach(l=>{placed.push({n:l,rx:cx,ry:z*ZEILE});w=Math.max(w,sz(l).w);z++;});
         maxZ=Math.max(maxZ,z);cx+=w+COLGAP;}
-      return {placed,w:Math.max(0,cx-COLGAP),h:Math.max(0,maxZ*ZEILE-ZGAP)};
+      // Über jeder Spalte Platz für ihren Spalten-Rahmen-Kopf (SPK, zeichneRahmen).
+      return {placed:placed.map(p=>({...p,ry:p.ry+SPK})),w:Math.max(0,cx-COLGAP),h:Math.max(0,maxZ*ZEILE-ZGAP)+SPK};
     };
     // Shelf-Packing über {w,h,…}-Boxen; setzt rx/ry; liefert Gesamtmaße.
     const shelf=(boxes,gap,factor)=>{const area=boxes.reduce((s,b)=>s+b.w*b.h,0),maxW=Math.max(1,...boxes.map(b=>b.w));
@@ -1940,28 +2062,36 @@ public static class HtmlPresenter
       return {w:tw,h:ry+rh};};
     // Eine KOMPONENTE: Aggregat-Blöcke (ROLE_AGG) + EIN Brücken-Block (ROLE_SHARED, cross-cutting), intern gepackt.
     const layoutComp=(nodes)=>{
-      const subs=new Map();nodes.forEach(n=>{const s=subGroupOf(n)||SHARED_KEY;if(!subs.has(s))subs.set(s,[]);subs.get(s).push(n);});
-      const aggKeys=[...subs.keys()].filter(k=>k!==SHARED_KEY).sort();
-      const blocks=aggKeys.map(k=>layoutBlock(subs.get(k),ROLE_AGG));
+      const subs=new Map();nodes.forEach(n=>{const s=blockVon(n);if(!subs.has(s))subs.set(s,[]);subs.get(s).push(n);});
+      const aggKeys=[...subs.keys()].filter(k=>k!==SHARED_KEY&&k!==AKTEUR_KEY).sort();
+      // Akteur-Band zuerst → beim Shelf-Packing ganz links (Eingangsseite).
+      const blocks=(subs.has(AKTEUR_KEY)?[layoutBlock(subs.get(AKTEUR_KEY),ROLE_AKTEUR)]:[]).concat(aggKeys.map(k=>layoutBlock(subs.get(k),ROLE_AGG)));
       if(subs.has(SHARED_KEY))blocks.push(layoutBlock(subs.get(SHARED_KEY),ROLE_SHARED));
       const d=shelf(blocks,SHELFGAP,1.35);
       const placed=[];blocks.forEach(b=>b.placed.forEach(p=>placed.push({n:p.n,rx:b.rx+p.rx,ry:b.ry+p.ry})));
       return {placed,w:d.w,h:d.h};
     };
-    // Komponenten bilden; Inseln (winzige Komponenten ohne Aggregat) aussortieren.
-    const {byC}=islandInfo();
-    const islandNodes=[],mainComps=[];
-    byC.forEach(alle=>{const nodes=alle.filter(n=>VIS.has(n.id));if(!nodes.length)return;
-      if(alle.length<=ISLE_MAX && !alle.some(n=>n.kind==="aggregate")) islandNodes.push(...nodes); else mainComps.push(nodes); });
-    // Jede Haupt-Komponente → Region-Box, nach Fläche absteigend (größtes Subsystem zuerst), dann shelf-gepackt.
-    const regions=mainComps.map(nodes=>layoutComp(nodes)).sort((a,b)=>b.w*b.h-a.w*a.h);
-    const total=shelf(regions,COMPGAP,1.05);
-    // Region-Knoten platzieren (absolut = Region-Ursprung + Block-Offset + relative Position).
-    regions.forEach(d=>d.placed.forEach(p=>setze(p.n,d.rx+p.rx,d.ry+p.ry)));
-    // Inseln: kompakte Gitter-Zeile ganz unten (die „einsamen"/unverdrahteten Knoten).
-    if(islandNodes.length){const IW=Math.max(700,total.w);let ix=0,iy=total.h+COMPGAP,rh=0;
-      islandNodes.forEach(n=>{const s=sz(n);if(ix>0&&ix+s.w>IW){iy+=rh+ROWGAP;ix=0;rh=0;}
-        setze(n,ix,iy);ix+=s.w+COLGAP;rh=Math.max(rh,s.h);});}
+    // ── HIERARCHISCH NACH DOMÄNEN (Namespace-Baum): je Domäne eine Region = ihre Aggregat-/Brücken-Blöcke wie gehabt
+    //   (layoutComp: Rollen-Spalten, Code/🤖 unter dem Besitzer), darunter ihre Inseln, darunter ihre Unterdomänen.
+    //   Jede Region reserviert Rand (RP) + Kopfzeile (RK) für den Rahmen (zeichneRahmen) → Rahmen überlappen nie.
+    const proDom=new Map();all.forEach(n=>{const d=domKey(n);if(!proDom.has(d))proDom.set(d,[]);proDom.get(d).push(n);});
+    const BAUM=domBaum([...proDom.keys(),...(VIEW.domNeu||[])]);
+    const region=ns=>{const eigen=proDom.get(ns)||[],kinder=(BAUM.kinder.get(ns)||[]).map(region);
+      const placed=[],leer=[];let y=RK+RP,w=0;
+      const insel=eigen.filter(istInselLage),haupt=eigen.filter(n=>!istInselLage(n));
+      if(haupt.length){const c=layoutComp(haupt);c.placed.forEach(p=>placed.push({n:p.n,rx:RP+p.rx,ry:y+p.ry}));y+=c.h;w=c.w;}
+      if(insel.length){if(haupt.length)y+=SHELFGAP/2;const IW=Math.max(700,w);let ix=0,iy=0,rh=0;
+        insel.forEach(n=>{const s=sz(n);if(ix>0&&ix+s.w>IW){iy+=rh+ROWGAP;ix=0;rh=0;}placed.push({n,rx:RP+ix,ry:y+iy});ix+=s.w+COLGAP;rh=Math.max(rh,s.h);w=Math.max(w,ix-COLGAP);});
+        y+=iy+rh;}
+      if(!eigen.length&&!kinder.length){leer.push({ns,rx:0,ry:0});w=LEER_W;y+=LEER_H;}
+      if(kinder.length){if(eigen.length)y+=KGAP;const d=shelf(kinder,KGAP,1.2);
+        kinder.forEach(k=>{k.placed.forEach(p=>placed.push({n:p.n,rx:RP+k.rx+p.rx,ry:y+k.ry+p.ry}));k.leer.forEach(l=>leer.push({ns:l.ns,rx:RP+k.rx+l.rx,ry:y+k.ry+l.ry}));});
+        y+=d.h;w=Math.max(w,d.w);}
+      return {placed,leer,w:w+2*RP,h:y+RP};};
+    const regions=BAUM.oben.map(region);
+    shelf(regions,COMPGAP,1.05);
+    regions.forEach(d=>{d.placed.forEach(p=>setze(p.n,d.rx+p.rx,d.ry+p.ry));
+      d.leer.forEach(l=>{LAY["§leer:"+l.ns]={x:d.rx+l.rx,y:d.ry+l.ry};});});
     LAY.__sig=sig;if(VIEW.kompakt)speichereKpos();
   }
   // Karten auf der Fläche sind immer kompakt (Kopf + Kurzfassung); das Formular lebt im Panel.
@@ -2001,6 +2131,7 @@ public static class HtmlPresenter
     else if(n.kind==="frist")fristCard(body,n.ref);
     else if(n.kind==="dienst")dienstCard(body,n.ref);
     else if(n.kind==="hostsetting")hostSettingCard(body,n.ref);
+    else if(n.kind==="akteur")akteurCard(body,n.ref);
     else if(n.kind==="codenode")codeNodeCard(body,n.ref);
     else if(n.kind==="llmnode")llmNodeCard(body,n.ref);
     else if(n.kind==="handle")handleCard(body,n);
@@ -2008,6 +2139,8 @@ public static class HtmlPresenter
     else recordCard(body,n.ref);
   }
   function delNode(n){const k=n.kind,ref=n.ref;
+    if(VIEW.heim&&VIEW.heim[n.id]){delete VIEW.heim[n.id];speichereAnsicht();}
+    if(VIEW.heimBlk&&VIEW.heimBlk[n.id]){delete VIEW.heimBlk[n.id];speichereAnsicht();}
     if(k==="aggregate")MODEL.aggregate.splice(MODEL.aggregate.indexOf(ref),1);
     else if(k==="state")MODEL.states.splice(MODEL.states.indexOf(ref),1);
     else if(k==="decider")MODEL.decider.splice(MODEL.decider.indexOf(ref),1);
@@ -2025,6 +2158,7 @@ public static class HtmlPresenter
     else if(k==="frist")MODEL.frists.splice(MODEL.frists.indexOf(ref),1);
     else if(k==="dienst")MODEL.dienste.splice(MODEL.dienste.indexOf(ref),1);
     else if(k==="hostsetting")MODEL.hostSettings.splice(MODEL.hostSettings.indexOf(ref),1);
+    else if(k==="akteur")MODEL.akteure.splice(MODEL.akteure.indexOf(ref),1);
     else if(k==="codenode")MODEL.codeNodes.splice(MODEL.codeNodes.indexOf(ref),1);
     else if(k==="llmnode")MODEL.llmNodes.splice(MODEL.llmNodes.indexOf(ref),1);
     else if(k==="handle"){const hs=n.own.ref.handles||[];hs.splice(hs.indexOf(ref),1);}
@@ -2034,7 +2168,33 @@ public static class HtmlPresenter
     render();}
 
   // Koordinaten: Welt = unskaliert; canvas = Bildschirm.
-  function applyPan(){if(world)world.style.transform="translate("+PAN.x+"px,"+PAN.y+"px) scale("+PAN.s+")";updateMinimapViewport();pruefeLod();}
+  // Nur der Transform wird sofort geschrieben (billig, der Browser bündelt ihn ohnehin je Frame). Alles daraus Abgeleitete
+  //   (Minimap-Rahmen, Culling, Schatten-LOD) läuft gebündelt EINMAL pro Frame (sichtFrame) — nie je Wheel-/Pointer-Event,
+  //   und ohne Layout-Lesen: die Canvas-Größe kommt aus dem ResizeObserver-Cache (CV), die Knoten-Geometrie aus GEO.
+  function applyPan(){if(!world)return;world.style.transform="translate("+PAN.x+"px,"+PAN.y+"px) scale("+PAN.s+")";pruefeLod();planeSicht();}
+  let SICHT_RAF=0, CV={w:0,h:0}, CV_RO=null, GEO=new Map();
+  function planeSicht(){if(!SICHT_RAF)SICHT_RAF=requestAnimationFrame(()=>{SICHT_RAF=0;sichtFrame();});}
+  function sichtFrame(){if(!canvas||!world)return;canvas.classList.toggle("fern",PAN.s<0.45);updateMinimapViewport();kulle();
+    // Domänen-Rahmen: Linie + Kopf wachsen beim Rauszoomen mit (Variable NUR auf der Rahmen-Ebene → invalidiert nur die Rahmen).
+    const re=world.querySelector(".grahmen-ebene"),rz=Math.min(2,Math.max(1,1/PAN.s)).toFixed(2),lz=Math.min(8,Math.max(1,1/PAN.s)).toFixed(2);
+    if(re&&(re.style.getPropertyValue("--rz")!==rz||re.style.getPropertyValue("--lz")!==lz)){re.style.setProperty("--rz",rz);re.style.setProperty("--lz",lz);}}
+  function beobachteCanvas(){if(CV_RO)CV_RO.disconnect();CV_RO=null;const r=canvas.getBoundingClientRect();CV.w=r.width;CV.h=r.height;
+    if(window.ResizeObserver){CV_RO=new ResizeObserver(es=>{const c=es[es.length-1].contentRect;CV.w=c.width;CV.h=c.height;planeSicht();});CV_RO.observe(canvas);}}
+  // Zieh-Gesten (Pan, Minimap-Ziehen): nur WÄHREND der Geste eine eigene GPU-Ebene (reines Verschieben → Raster bleibt gültig).
+  //   Danach fällt sie weg → Neu-Rastern in der aktuellen Zoomstufe (scharf, und rausgezoomt winzig statt Welt×Start-Zoom).
+  const bewegtAn=()=>{if(canvas)canvas.classList.add("bewegt");}, bewegtAus=()=>{if(canvas)canvas.classList.remove("bewegt");};
+  // Knoten-Geometrie (Welt-Koordinaten) EINMAL je Layout-Änderung messen; die Welt-/Kanten-Ebene auf den Inhalt ausdehnen.
+  function messeWelt(){GEO=new Map();if(!world)return;let mx=0,my=0;
+    world.querySelectorAll(".gnode2").forEach(el=>{const g={el,x:el.offsetLeft,y:el.offsetTop,w:el.offsetWidth,h:el.offsetHeight,weg:el.classList.contains("weg")};
+      GEO.set(el.dataset.id,g);mx=Math.max(mx,g.x+g.w);my=Math.max(my,g.y+g.h);});
+    const rb=zeichneRahmen();mx=Math.max(mx,rb.x2);my=Math.max(my,rb.y2);
+    const W=Math.max(6000,Math.ceil(mx+400))+"px",H=Math.max(4000,Math.ceil(my+400))+"px";
+    [world,svg,svgTop].forEach(e=>{if(e&&(e.style.width!==W||e.style.height!==H)){e.style.width=W;e.style.height=H;}});
+    planeSicht();}
+  // Culling: Knoten außerhalb Sichtfenster + ½ Fenster Rand werden nicht gemalt (visibility — Maße bleiben für Anker/Kanten).
+  function kulle(){if(!CV.w||!GEO.size)return;const W=CV.w/PAN.s,H=CV.h/PAN.s,x0=-PAN.x/PAN.s-W/2,y0=-PAN.y/PAN.s-H/2,x1=x0+2*W,y1=y0+2*H;
+    GEO.forEach(g=>{const weg=!g.el.classList.contains("dragging")&&(g.x>x1||g.x+g.w<x0||g.y>y1||g.y+g.h<y0);
+      if(weg!==g.weg){g.weg=weg;g.el.classList.toggle("weg",weg);}});}
 
   // ── DOMÄNEN-FILTER ────────────────────────────────────────────────────────────────────────
   function allDomains(){
@@ -2089,21 +2249,22 @@ public static class HtmlPresenter
     const s=document.createElementNS(SVGNS,"svg");box.append(s);
     cv.append(box);
     MM={box:box,svg:s,vp:null,scale:1,minx:0,miny:0};
-    const jump=ev=>{const r=box.getBoundingClientRect();
+    let drag=false,br=null;   // Minimap-Rechteck einmal je Geste messen, nicht je pointermove
+    const jump=ev=>{const r=br||box.getBoundingClientRect();
       const wx=MM.minx+(ev.clientX-r.left)/MM.scale, wy=MM.miny+(ev.clientY-r.top)/MM.scale;
-      const cr=canvas.getBoundingClientRect();PAN.x=cr.width/2-wx*PAN.s;PAN.y=cr.height/2-wy*PAN.s;applyPan();};
-    let drag=false;
-    box.addEventListener("pointerdown",e=>{e.stopPropagation();e.preventDefault();drag=true;try{box.setPointerCapture(e.pointerId);}catch(x){}jump(e);});
+      PAN.x=CV.w/2-wx*PAN.s;PAN.y=CV.h/2-wy*PAN.s;applyPan();};
+    const ende=()=>{if(!drag)return;drag=false;br=null;bewegtAus();};
+    box.addEventListener("pointerdown",e=>{e.stopPropagation();e.preventDefault();drag=true;br=box.getBoundingClientRect();bewegtAn();try{box.setPointerCapture(e.pointerId);}catch(x){}jump(e);});
     box.addEventListener("pointermove",e=>{if(drag)jump(e);});
-    box.addEventListener("pointerup",()=>{drag=false;});
+    box.addEventListener("pointerup",ende);box.addEventListener("pointercancel",ende);box.addEventListener("lostpointercapture",ende);
     box.addEventListener("dblclick",e=>e.stopPropagation());
   }
   function drawMinimap(){
     if(!MM||!MM.svg||!world)return;
     while(MM.svg.firstChild)MM.svg.removeChild(MM.svg.firstChild);
     const vis=graphNodes().filter(n=>VIS.has(n.id));
-    const boxes=vis.map(n=>{const el=world.querySelector('[data-id="'+n.id+'"]'),p=P(n);
-      return {x:p.x||0,y:p.y||0,w:(el&&el.offsetWidth)||250,h:(el&&el.offsetHeight)||120,key:groupKeyOf(n),kind:n.kind};});
+    const boxes=vis.map(n=>{const g=GEO.get(n.id),p=P(n);
+      return {x:p.x||0,y:p.y||0,w:(g&&g.w)||250,h:(g&&g.h)||120,key:groupKeyOf(n),kind:n.kind};});
     if(!boxes.length){MM.vp=null;return;}
     let minx=1e9,miny=1e9,maxx=-1e9,maxy=-1e9;
     boxes.forEach(b=>{minx=Math.min(minx,b.x);miny=Math.min(miny,b.y);maxx=Math.max(maxx,b.x+b.w);maxy=Math.max(maxy,b.y+b.h);});
@@ -2123,7 +2284,7 @@ public static class HtmlPresenter
   }
   function updateMinimapViewport(){
     if(!MM||!MM.vp||!canvas)return;
-    const cr=canvas.getBoundingClientRect();if(!cr.width)return;
+    const cr={width:CV.w,height:CV.h};if(!cr.width)return;
     MM.vp.setAttribute("x",((-PAN.x/PAN.s-MM.minx)*MM.scale).toFixed(1));
     MM.vp.setAttribute("y",((-PAN.y/PAN.s-MM.miny)*MM.scale).toFixed(1));
     MM.vp.setAttribute("width",Math.max(3,(cr.width/PAN.s)*MM.scale).toFixed(1));
@@ -2137,7 +2298,7 @@ public static class HtmlPresenter
   // „aus" = der EINE Ausgangs-Port eines Pipeline-Handles: passt an jeden Nachrichten-Eingang („◀ kommt aus" von Command,
   //   Event/transientem Event, Trigger-Karte) — welche Sorte erlaubt ist, entscheidet danach die Grammatik (grPruefe).
   const AUS_ZIEL=new Set(["sagaCmd","evtOut","trgIn"]);
-  function compatible(a,b){const A=a.__slot,B=b.__slot;if(!A||!B)return false;if(A.dir===B.dir)return false;
+  function compatible(a,b){const A=a.__slot,B=b.__slot;if(!A||!B||A.anker||B.anker)return false;if(A.dir===B.dir)return false;
     if(A.type==="aus"||B.type==="aus"){const o=A.type==="aus"?A:B,i=o===A?B:A;return o.dir==="out"&&i.dir==="in"&&AUS_ZIEL.has(i.type);}
     if(A.type!==B.type)return false;
     if((A.kind==="arg")!==(B.kind==="arg"))return false;              // Argument-Pin nur an Argument-Pin
@@ -2149,7 +2310,11 @@ public static class HtmlPresenter
     return true;}
   function applyLink(a,b){
     const O=a.__slot.dir==="out"?a.__slot:b.__slot, I=a.__slot.dir==="out"?b.__slot:a.__slot;
-    if(O.type==="cmd"){const d=dec(I.dec);if(d)d.command=O.rec;}
+    if(O.type==="darf"){const ak=MODEL.akteure.find(x=>x._id===O.akt);if(ak&&I.rec&&!(ak.darf=ak.darf||[]).includes(I.rec))ak.darf.push(I.rec);}
+    else if(O.type==="auftrag"){const ak=MODEL.akteure.find(x=>x._id===O.akt),p=MODEL.pipelines.find(x=>x._id===I.pipeline),hd=p&&p.handles[I.handleIdx];
+      if(ak&&hd){hd.akteur=ak.name;const fremd=(hd.sends||[]).filter(c=>!(ak.darf||[]).includes(c));
+        if(fremd.length)deFlash("⚠ "+ak.name+" darf "+fremd.join(", ")+" nicht — CQRS060 (ergänze darf ⊕ oder nimm den Auftrag weg)",false);}}
+    else if(O.type==="cmd"){const d=dec(I.dec);if(d)d.command=O.rec;}
     else if(O.type==="evtOut"){
       if(O.dec){const d=dec(O.dec);if(d&&!(d.ergibt||[]).some(x=>x.event===I.rec))(d.ergibt=d.ergibt||[]).push({event:I.rec});}
       // Konsument veröffentlicht ein reaktives Event (HandlerOutputRouter: yield IEvent → Broker-Re-Publish).
@@ -2241,7 +2406,9 @@ public static class HtmlPresenter
     const O=a.__slot.dir==="out"?a.__slot:b.__slot, I=a.__slot.dir==="out"?b.__slot:a.__slot;
     const ohne=(arr,x)=>(arr||[]).filter(v=>v!==x);
     const handle=(liste,id,idx)=>{const o=liste.find(x=>x._id===id);return o&&typeof idx==="number"?(o.handles||[])[idx]:null;};
-    if(O.type==="cmd"){const d=dec(I.dec);if(d&&d.command===O.rec)d.command="";}
+    if(O.type==="darf"){const ak=MODEL.akteure.find(x=>x._id===O.akt);if(ak)ak.darf=ohne(ak.darf,I.rec);}
+    else if(O.type==="auftrag"){const p=MODEL.pipelines.find(x=>x._id===I.pipeline),hd=p&&p.handles[I.handleIdx];if(hd)delete hd.akteur;}
+    else if(O.type==="cmd"){const d=dec(I.dec);if(d&&d.command===O.rec)d.command="";}
     else if(O.type==="evtOut"){
       if(O.dec){const d=dec(O.dec);if(d)d.ergibt=(d.ergibt||[]).filter(x=>x.event!==I.rec);}
       else{const hd=handle(O.proj?MODEL.projektionen:MODEL.reaktionen,O.proj||O.reaktion,O.handleIdx);if(hd)hd.publishes=ohne(hd.publishes,I.rec);}}
@@ -2378,7 +2545,10 @@ public static class HtmlPresenter
     if(k==="codenode"){const o=findCodeOwner(r._id);return !!(o&&ausCodeVon(o));}
     if(k==="llmnode"){const o=r.promptZiel&&findCodeOwner(r.promptZiel);return !!(o&&ausCodeVon(o));}
     return r.ausCode===true;}
-  function geladen(n){if(LADEN===null||!ausCodeVon(n))return true;const x=nsVon(n);return !!x&&LADEN.some(g=>drinNs(g,x));}
+  // Geladen, wenn seine DOMÄNE (Graph-Zuordnung, domKey — z. B. ImagePairProjection → ImagePair) ODER sein eigener Namespace
+  //   (z. B. „Projections“ ausdrücklich gewählt) in der Auswahl liegt. Die Domänen-Gehörigkeit steht über dem Namespace.
+  function geladen(n){if(LADEN===null||!ausCodeVon(n))return true;const x=nsVon(n),d=domKey(n);
+    return LADEN.some(g=>(x&&drinNs(g,x))||(d!==OHNE_DOM&&drinNs(g,d)));}
   window.deLaden=function(){START_OFFEN=true;render();};
   // Start-Dialog: leer starten, Domänen wählen (Häkchen am Eltern-Namespace lädt alles darunter) oder alles laden.
   function zeigeStart(){if(!canvas)return;const alt=canvas.querySelector(".gstart");if(alt)alt.remove();if(!START_OFFEN)return;
@@ -2407,7 +2577,7 @@ public static class HtmlPresenter
   let START_ERST=false;
   // Code-Elemente je Namespace (rekursiv) für die Anzeige im Dialog.
   function basisZaehl(alle,zahl){graphNodes().forEach(n=>{if(["handle","fn","codenode","llmnode","state","decider","applier","transition"].includes(n.kind)||!ausCodeVon(n))return;
-      const x=nsVon(n);if(x)alle.forEach(m=>{if(drinNs(m,x))zahl.set(m,(zahl.get(m)||0)+1);});});}
+      const x=nsVon(n),d=domKey(n);alle.forEach(m=>{if((x&&drinNs(m,x))||(d!==OHNE_DOM&&drinNs(m,d)))zahl.set(m,(zahl.get(m)||0)+1);});});}
 
   // ══ VERBINDEN-MODUS (Hybrid, docs/konzept-editor-panel-bearbeitung.md §3.3): Port im Panel anklicken → alle PASSENDEN
   //   Knoten leuchten auf dem Graphen (Ablauf-Ansicht, Rest abgeblendet) → Karte anklicken = verbinden, ✓-Karte = lösen.
@@ -2435,6 +2605,7 @@ public static class HtmlPresenter
   // Hält der Port EINEN Wert (Decider→Command, Applier→Event …)? Dann endet der Modus nach einem Klick.
   function istEinzel(I){const t=I.type,d=I.dir;
     if(t==="cmd")return d==="in";
+    if(t==="auftrag")return d==="in";   // ein Handle handelt im Auftrag höchstens EINES Akteurs
     if(t==="prozess"||t==="decAgg"||t==="appAgg"||t==="projref"||t==="readmodel"||t==="state"||t==="prompt")return d==="out";
     if(t==="code"||t==="setting"||t==="ftype"||t==="self")return d==="in";
     if(t==="evtUse")return d==="in"&&(!!I.app||!!I.trigger||typeof I.handleIdx==="number"||typeof I.wennIdx==="number");
@@ -2508,19 +2679,26 @@ public static class HtmlPresenter
   const knotenIdVon=el=>{const g=el&&el.closest(".gnode2");return g?g.dataset.id:"";};
   let KANTEN=[];   // gezeichnete Port-Paare [schlüsselA, schlüsselB] — Grundlage für ✓/Lösen im Verbinden-Modus
   function drawEdges(){
-    if(!svg)return;KANTEN=[];[...svg.querySelectorAll(".glink:not(.tmp)")].forEach(p=>p.remove());
+    if(!svg)return;messeWelt();KANTEN=[];[...svg.querySelectorAll(".glink:not(.tmp)")].forEach(p=>p.remove());
     if(svgTop)[...svgTop.querySelectorAll(".glink")].forEach(p=>p.remove());
     // Pfade sammeln und erst am Ende einhängen: Lesen (Anker) und Schreiben (DOM) nicht verschränken → ein Layout statt Hunderte.
     const fSvg=document.createDocumentFragment(),fTop=document.createDocumentFragment();
-    // Kurve mit Anschlussrichtung je Ende (da/db: +1 tritt nach rechts aus, -1 nach links).
-    const mk=(A,B,da,db,color,dash,cls,ds,tgt)=>{const dx=Math.max(46,Math.abs(B.x-A.x)*0.5);
-      const p=document.createElementNS(SVGNS,"path");p.setAttribute("class","glink"+(cls?" "+cls:""));p.setAttribute("fill","none");
-      p.setAttribute("stroke",color);p.setAttribute("stroke-width","2.2");if(dash)p.setAttribute("stroke-dasharray","5 4");
-      if(ds){p.dataset.dec=ds[0];p.dataset.app=ds[1];}
-      p.setAttribute("d","M"+A.x+","+A.y+" C"+(A.x+da*dx)+","+A.y+" "+(B.x+db*dx)+","+B.y+" "+B.x+","+B.y);((tgt||svg)===svg?fSvg:fTop).append(p);return p;};
-    const add=(k1,k2,color,dash)=>{const a=SLOTS[k1],b=SLOTS[k2];if(!a||!b)return;KANTEN.push([k1,k2]);const A=anchor(a),B=anchor(b);
-      let da=sdir(a),db=sdir(b);if(!da)da=B.x>=A.x?1:-1;if(!db)db=A.x>=B.x?1:-1;
-      const p=mk(A,B,da,db,color,dash);p.dataset.a=knotenIdVon(a);p.dataset.b=knotenIdVon(b);};
+    // DYNAMISCHE ANSCHLUSSSEITEN: Kanten werden erst GESAMMELT (KZ), dann gezeichnet. Ein Ende ist entweder eine eingeklappte
+    //   Karte ({el}) — dann wählt sie je Kante die dem Partner ZUGEWANDTE Seite (oben/unten/links/rechts; horizontaler vs.
+    //   vertikaler Abstand der Rechtecke) und mehrere Linien auf derselben Seite werden entlang der Seite verteilt (nach Lage des
+    //   Partners sortiert → keine Kreuzungen, kein Sammelpunkt) — oder ein sichtbarer Slot ({pt,dir}, fester Punkt).
+    const KZ=[];
+    const mkE=(EA,EB,color,dash,cls,ds,tgt)=>{const k={EA,EB,color,dash,cls,ds,tgt,dataset:{}};KZ.push(k);return k;};
+    const mk=(A,B,da,db,color,dash,cls,ds,tgt)=>mkE({pt:A,dir:{x:da,y:0}},{pt:B,dir:{x:db,y:0}},color,dash,cls,ds,tgt);
+    const ende=sl=>{if(sl.offsetParent!==null){const d=sdir(sl);return {pt:slotCenter(sl),dir:d?{x:d,y:0}:null};}
+      const nd=sl.closest(".gnode2");return nd?{el:nd}:{pt:slotCenter(sl),dir:null};};
+    const add=(k1,k2,color,dash)=>{const a=SLOTS[k1],b=SLOTS[k2];if(!a||!b)return;KANTEN.push([k1,k2]);
+      const p=mkE(ende(a),ende(b),color,dash);p.dataset.a=knotenIdVon(a);p.dataset.b=knotenIdVon(b);};
+    // Akteur → was er darf (rosa): vom Akteur-Band zur Nachricht.
+    MODEL.akteure.forEach(a=>(a.darf||[]).forEach(nm=>add("akt:darf:"+a._id+":"+nm,"darf:in:"+nm,"#e07ab4")));
+    // Dienst-Akteur → Pipeline-Handle, der in seinem Auftrag entscheidet (gestrichelt violett).
+    MODEL.pipelines.forEach(p=>(p.handles||[]).forEach((hd,hi)=>{const a=hd.akteur&&MODEL.akteure.find(x=>x.name===hd.akteur);
+      if(a)add("akt:auftrag:"+a._id+":"+p._id+":"+hi,"auftrag:in:"+p._id+":"+hi,"#b05fd0",true);}));
     MODEL.decider.forEach(d=>{
       if(d.command)add("cmd:out:"+d.command,"dec:cmdin:"+d._id,"#4a86d6");
       if(d.aggregat)add("dec:aggout:"+d._id,"agg:left:"+d.aggregat+":"+d._id,"#33b1a6",true);
@@ -2626,14 +2804,38 @@ public static class HtmlPresenter
       else if(enNamen.has(bt))add("ftype:out:enum:"+bt,"ftype:in:"+owner+":"+f._id,"#8a8aa0",true);});
     // ── Zusammengezogene Kanten: Pfade DURCH eingeklappte Details (Command →[Decider]→ Event …) Kopf an Kopf. ──
     const ELS=new Map([...world.querySelectorAll(".gnode2")].map(e=>[e.dataset.id,e]));
-    const kopf=(e,seite)=>{const hd=e.querySelector(".ghead");return {x:e.offsetLeft+(seite>0?e.offsetWidth:0),y:e.offsetTop+(hd?hd.offsetHeight/2:12)};};
     KONTRAKT.forEach(([u,v])=>{const eu=ELS.get(u),ev=ELS.get(v);if(!eu||!ev)return;
       const kv=(NODEBY.get(v)||{}).kind,col=kv==="event"?"#4fb06a":(kv==="command"?"#4a86d6":"#8a8f9c");
-      const p=mk(kopf(eu,1),kopf(ev,-1),1,-1,col,false,"kontrakt");p.dataset.a=u;p.dataset.b=v;});
+      const p=mkE({el:eu},{el:ev},col,false,"kontrakt");p.dataset.a=u;p.dataset.b=v;});
     // ── Hub-Kanten: Handle → Besitzer (Projektion/Reader/Reaktion/Pipeline), Store-Fn → Store — gestrichelt, wie Decider → Aggregat. ──
     NODEBY.forEach(n=>{if(n.kind!=="handle"&&n.kind!=="fn")return;const eu=ELS.get(n.id),eo=ELS.get(n.own.id);if(!eu||!eo)return;
-      const links=eo.offsetLeft<eu.offsetLeft,A=kopf(eu,links?-1:1),B=kopf(eo,links?1:-1);
-      const l=mk(A,B,links?-1:1,links?1:-1,"#6f7a91",true,"hub");l.dataset.a=n.id;l.dataset.b=n.own.id;});
+      const l=mkE({el:eu},{el:eo},"#6f7a91",true,"hub");l.dataset.a=n.id;l.dataset.b=n.own.id;});
+    // ── Zeichnen: Seiten wählen → je Karte+Seite verteilen → Kurve senkrecht zur Seite. ──
+    const RC=new Map();
+    const rect=el=>{let r=RC.get(el);if(!r){const hd=el.querySelector(".ghead");
+      r={x1:el.offsetLeft,y1:el.offsetTop,x2:el.offsetLeft+el.offsetWidth,y2:el.offsetTop+el.offsetHeight,hy:el.offsetTop+(hd?hd.offsetHeight/2:12)};RC.set(el,r);}return r;};
+    const box=E=>E.el?rect(E.el):{x1:E.pt.x,y1:E.pt.y,x2:E.pt.x,y2:E.pt.y};
+    const seite=(R,Q)=>{const gx=Math.max(Q.x1-R.x2,R.x1-Q.x2),gy=Math.max(Q.y1-R.y2,R.y1-Q.y2);
+      if(gx>=gy)return (Q.x1+Q.x2)>=(R.x1+R.x2)?"r":"l";return (Q.y1+Q.y2)>=(R.y1+R.y2)?"u":"o";};
+    const grp=new Map();
+    const reg=(E,s,other,k,end)=>{const key=E.el.dataset.id+"|"+s;let g=grp.get(key);if(!g)grp.set(key,g=[]);g.push({k,end,other,el:E.el});};
+    KZ.forEach(k=>{const RA=box(k.EA),RB=box(k.EB);
+      if(k.EA.el){k.sa=seite(RA,RB);reg(k.EA,k.sa,RB,k,"a");}
+      if(k.EB.el){k.sb=seite(RB,RA);reg(k.EB,k.sb,RA,k,"b");}});
+    grp.forEach((g,key)=>{const s=key.slice(key.lastIndexOf("|")+1),R=rect(g[0].el),quer=s==="o"||s==="u",n=g.length;
+      g.sort((p,q)=>quer?(p.other.x1+p.other.x2)-(q.other.x1+q.other.x2):(p.other.y1+p.other.y2)-(q.other.y1+q.other.y2));
+      g.forEach((e,i)=>{const t=(i+0.5)/n;
+        e.k["p"+e.end]=quer?{x:R.x1+(R.x2-R.x1)*(0.15+0.7*t),y:s==="o"?R.y1:R.y2}
+                           :{x:s==="l"?R.x1:R.x2,y:n===1?R.hy:R.y1+6+(R.y2-R.y1-12)*t};});});
+    const DIR={r:{x:1,y:0},l:{x:-1,y:0},o:{x:0,y:-1},u:{x:0,y:1}};
+    KZ.forEach(k=>{const A=k.pa||k.EA.pt,B=k.pb||k.EB.pt;
+      const va=k.sa?DIR[k.sa]:(k.EA.dir||{x:B.x>=A.x?1:-1,y:0}),vb=k.sb?DIR[k.sb]:(k.EB.dir||{x:A.x>=B.x?1:-1,y:0});
+      const d=Math.min(400,Math.max(40,Math.hypot(B.x-A.x,B.y-A.y)*0.4));
+      const p=document.createElementNS(SVGNS,"path");p.setAttribute("class","glink"+(k.cls?" "+k.cls:""));p.setAttribute("fill","none");
+      p.setAttribute("stroke",k.color);p.setAttribute("stroke-width","2.2");if(k.dash)p.setAttribute("stroke-dasharray","5 4");
+      if(k.ds){p.dataset.dec=k.ds[0];p.dataset.app=k.ds[1];}Object.assign(p.dataset,k.dataset);
+      p.setAttribute("d","M"+A.x+","+A.y+" C"+(A.x+va.x*d)+","+(A.y+va.y*d)+" "+(B.x+vb.x*d)+","+(B.y+vb.y*d)+" "+B.x+","+B.y);
+      ((k.tgt||svg)===svg?fSvg:fTop).append(p);});
     svg.append(fSvg);if(svgTop)svgTop.append(fTop);
     wendeFokusAn();
   }
@@ -2653,9 +2855,9 @@ public static class HtmlPresenter
       if(!moved){if(onClick)onClick();}else{if(VIEW.kompakt)speichereKpos();autosave();drawMinimap();}};
     window.addEventListener("pointermove",mv);window.addEventListener("pointerup",up);}
   let PANNED=false;
-  function startPan(e){e.preventDefault();canvas.classList.add("panning");const sx=e.clientX,sy=e.clientY,ox=PAN.x,oy=PAN.y;PANNED=false;
+  function startPan(e){e.preventDefault();canvas.classList.add("panning");bewegtAn();const sx=e.clientX,sy=e.clientY,ox=PAN.x,oy=PAN.y;PANNED=false;
     const mv=ev=>{if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)>3)PANNED=true;PAN.x=ox+(ev.clientX-sx);PAN.y=oy+(ev.clientY-sy);applyPan();};
-    const up=()=>{canvas.classList.remove("panning");window.removeEventListener("pointermove",mv);window.removeEventListener("pointerup",up);};
+    const up=()=>{canvas.classList.remove("panning");bewegtAus();window.removeEventListener("pointermove",mv);window.removeEventListener("pointerup",up);};
     window.addEventListener("pointermove",mv);window.addEventListener("pointerup",up);}
 
   // ══ ANSICHT (reine Darstellung — Modell, Scaffolder und Round-trip bleiben unberührt) ══════════════════════
@@ -2665,8 +2867,8 @@ public static class HtmlPresenter
   //   (4) Semantischer Zoom: Landkarte (<0.4, Aggregat-Kacheln + gebündelte Kanten) · Ablauf (<0.75, nur Titel) · Detail.
   //   (5) Slice-Fokus: Klick auf einen Knoten → sein vertikaler Schnitt bleibt hell, der Rest tritt zurück.
   // details: Decider/Applier/State/Code/LLM/Ablehnung/Typen sind IMMER eigene Knoten auf dem Graphen (nie eingeklappt).
-  const KPOS_VERSION=4;   // hochzählen, wenn sich Kartengrößen ändern → gespeicherte Anordnung wird einmalig neu gepackt
-  let VIEW={kompakt:true,details:true,lod:"ablauf",aus:[]}, VKEY="cqrs-ansicht", KPKEY="cqrs-kpos", KPOS={k:{},d:{}};
+  const KPOS_VERSION=6;   // hochzählen, wenn sich Kartengrößen ändern → gespeicherte Anordnung wird einmalig neu gepackt
+  let VIEW={kompakt:true,details:true,lod:"ablauf",aus:[],domNeu:[],heim:{},heimBlk:{}}, VKEY="cqrs-ansicht", KPKEY="cqrs-kpos", KPOS={k:{},d:{}};
   function ladeAnsicht(k){VKEY="cqrs-ansicht"+(k?":"+k:"");KPKEY="cqrs-kpos"+(k?":"+k:"");
     try{const v=JSON.parse(localStorage.getItem(VKEY)||"null");if(v)VIEW={...VIEW,...v};}catch(e){}
     VIEW.details=true;VIEW.kompakt=true;
@@ -2715,7 +2917,7 @@ public static class HtmlPresenter
       if(pfad.has(id))return [];pfad.add(id);
       const res=[...new Set(direkteBesitzer(n).filter(Boolean).flatMap(o=>vert(o,pfad)))];pfad.delete(id);
       const out=res.length?res:[id];memo.set(id,out);return out;};
-    VIS=new Set();VERTRETER=new Map();DETAILS=new Map();EINGEKLAPPT=new Set();
+    VIS=new Set();VERTRETER=new Map();DOMKEY=new Map();EINHEIT=new Map();DETAILS=new Map();EINGEKLAPPT=new Set();
     alle.forEach(n=>{const v=vert(n.id,new Set());VERTRETER.set(n.id,v);
       if(v.length===1&&v[0]===n.id){if(!HIDDEN.has(groupKeyOf(n))&&!istAus(n.kind)&&geladen(n))VIS.add(n.id);}
       else{EINGEKLAPPT.add(n.id);v.forEach(o=>push(DETAILS,o,n.id));}});
@@ -2734,7 +2936,7 @@ public static class HtmlPresenter
   //    • Leseseite nachziehen: an Projektion/Store die Reader + Read Models, am Reader seine Queries;
   //    • rückwärts nur der Auslöser (durch eingeklappte Details bis zum ersten sichtbaren Knoten).
   //    Aggregat/Prozess als Start: ihre angesteckten Decider/Applier/State bzw. Regeln sind Mit-Startpunkte.
-  const STOP=new Set(["aggregate","command","saga","transition","reaktion","pipeline","frist","valueobject","enum","dienst","hostsetting","trigger","konfig"]);
+  const STOP=new Set(["akteur","aggregate","command","saga","transition","reaktion","pipeline","frist","valueobject","enum","dienst","hostsetting","trigger","konfig"]);
   const LESE_START=new Set(["projektion","reader","query","store","readmodel","queryresponse"]);
   // ── KETTE (§12): von einer Nachricht/einem Handle/Decider/Applier/einer Regel aus dem Nachrichtenfluss TRANSITIV folgen —
   //    vorwärts alle Konsumenten (Command → Decider → Events → Handles → Commands …), rückwärts alle Erzeuger. So erscheint die
@@ -2744,7 +2946,7 @@ public static class HtmlPresenter
   const KETTE_HUB=new Set(["aggregate","pipeline","projektion","reaktion","reader","saga","store"]);
   const KETTE_FLUSS=new Set(["command","event","rejection","query","queryresponse","trigger","handle","decider","applier","transition","frist","fn",...KETTE_HUB]);
   const KETTE_START=new Set(["command","event","rejection","trigger","handle","decider","applier","transition","pipeline","reaktion"]);
-  function ketteVon(start){const N=id=>NODEBY.get(id)||{},k0=N(start).kind;
+  function ketteVon(start,nurVorwaerts){const N=id=>NODEBY.get(id)||{},k0=N(start).kind;
     // Pipeline/Reaktion als Start: ihre Handles sind die Startpunkte (der Besitzer selbst hat keinen Fluss).
     const starts=[start,...(k0==="pipeline"||k0==="reaktion"?(ADJ.inn.get(start)||[]).filter(y=>N(y).kind==="handle"):[])];
     const res=new Set(starts);
@@ -2752,7 +2954,7 @@ public static class HtmlPresenter
       while(q.length){const id=q.shift();if(seen.has(id))continue;seen.add(id);
         if(!starts.includes(id)&&KETTE_HUB.has(N(id).kind))continue;
         nach(id).forEach(y=>{if(KETTE_FLUSS.has(N(y).kind)){res.add(y);q.push(y);}});}};
-    lauf(id=>ADJ.out.get(id)||[]);lauf(id=>ADJ.inn.get(id)||[]);
+    lauf(id=>ADJ.out.get(id)||[]);if(!nurVorwaerts)lauf(id=>ADJ.inn.get(id)||[]);
     // Auch rückwärts erreichte Handles/Decider/Applier zeigen ihren Besitzer (Pipeline, Aggregat …).
     [...res].forEach(id=>{if(!["handle","decider","applier","fn"].includes(N(id).kind))return;
       (ADJ.out.get(id)||[]).forEach(y=>{if(KETTE_HUB.has(N(y).kind))res.add(y);});});
@@ -2766,6 +2968,8 @@ public static class HtmlPresenter
   function sliceVon(start){const res=new Set([start]),N=id=>NODEBY.get(id)||{};
     const inn=id=>ADJ.inn.get(id)||[],out=id=>ADJ.out.get(id)||[];
     const k0=N(start).kind,seeds=[start];
+    // PERSONA-SICHT: ein Akteur zeigt, was er auslösen/fragen darf, und alles, was daraus FOLGT (nur vorwärts).
+    if(k0==="akteur"){out(start).forEach(t=>{res.add(t);ketteVon(t,true).forEach(x=>res.add(x));});return res;}
     // Projektions-/Reader-Handles behalten den Leseseiten-Schnitt unten; alle Fluss-Knoten zeigen die ganze Kette.
     if(KETTE_START.has(k0)&&!(k0==="handle"&&["reader"].includes((N(start).own||{}).kind)))return ketteVon(start);
     if(k0==="aggregate"||k0==="saga")inn(start).forEach(x=>{res.add(x);seeds.push(x);});
@@ -2841,6 +3045,7 @@ public static class HtmlPresenter
     else if(k==="saga")t="Auslöser: "+(r.triggerEvent||"—")+" · "+transOf(r).length+" Regeln";
     else if(k==="transition")t="WENN "+kurz(r.wenn)+" → "+kurz((r.dann||[]).map(d=>d.sende));
     else if(k==="store")t=(r.writeFns||[]).length+" schreibend · "+(r.readFns||[]).length+" lesend";
+    else if(k==="akteur")t=(r.dienst?"⚙ Dienst · ":"")+((r.darf||[]).length?"darf "+kurz(r.darf):"darf nichts");
     else if(k==="handle"){const aus=n.own.kind==="pipeline"?plAusgaenge(r):(r.ausgaenge||[]).length?(r.ausgaenge||[]).filter(a=>a.art!=="storefn"&&a.art!=="self").map(a=>a.typ)
         :[...(r.responses||[]),...(r.sends||[]),...(r.emits||[]),...(r.publishes||[])];
       const fns=(r.fns||[]).map(fid=>{const f=fnById(fid);return f?f.fn.name:null;}).filter(Boolean);
@@ -2869,8 +3074,8 @@ public static class HtmlPresenter
   // Ansicht Landkarte ⇄ Ablauf: NUR per Hand umgeschaltet (VIEW.lod) — der Zoom schaltet nichts mehr um.
   let LOD=null;
   function setzeLod(l){VIEW.lod=l==="karte"?"karte":"ablauf";speichereAnsicht();pruefeLod();}
-  // --inv: fester Größenfaktor der Landkarte (so groß wie früher bei Zoom 0,25) — Schrift und Linien zoomen mit, sehen also immer gleich aus.
-  function pruefeLod(){if(!canvas||!world)return;world.style.setProperty("--inv","4");
+  // --inv (CSS, .gworld): fester Größenfaktor der Landkarte (so groß wie früher bei Zoom 0,25) — Schrift und Linien zoomen mit, sehen also immer gleich aus.
+  function pruefeLod(){if(!canvas||!world)return;
     const l=VIEW.lod==="karte"?"karte":"ablauf";if(l===LOD)return;const vorher=LOD;LOD=l;
     canvas.classList.toggle("lod-karte",l==="karte");canvas.classList.toggle("lod-ablauf",l==="ablauf");
     if(l==="karte")baueKarte();else if(vorher!==null)drawEdges();   // Anker wandern (Körper ein/aus) → neu zeichnen
@@ -2917,6 +3122,201 @@ public static class HtmlPresenter
     world.insertBefore(s,world.firstChild);
     wendeFokusAn();}
 
+  // ══ DOMÄNEN-RAHMEN: rein visuelle Blöcke UM das bestehende Layout (Rollen-Spalten, Code/🤖 unter dem Besitzer bleiben).
+  //   Domäne = Namespace, hierarchisch (Unterdomänen liegen im Rahmen ihrer Eltern-Domäne; packLayout sortiert danach).
+  //   Der Rahmen folgt den ECHTEN Kartenpositionen (GEO) — zieht man Karten, wächst er mit. Kopf = kleine Menüleiste.
+  //   Leere neue Domänen (VIEW.domNeu) und die Heimat namespace-loser Knoten (VIEW.heim) leben nur in der Ansicht.
+  const RP=36, RK=46, SPK=34, SPAD=8;   // Domänen-Rand/-Kopf, Spalten-Kopf/-Rand (Welt-px) — packLayout reserviert RP/RK je Region, SPK je Spalte
+  const OHNE_DOM="§ohne";
+  // Domänen-Zugehörigkeit steht über allem: gehört ein Baustein laut GRAPH zu einem Aggregat (groupKeyOf — Projektion über
+  //   ihre Events, Reader/Store/ReadModel/Query/Response über ihre Projektion, Code über seinen Besitzer …), ist seine Domäne
+  //   der Namespace dieses Aggregats — egal, in welchem Namespace die Klasse liegt (z. B. Domain.Projections). Nur
+  //   aggregat-übergreifende Bausteine (Prozesse, Pipelines, geteilte Typen) fallen auf ihren eigenen Namespace zurück.
+  //   Je Render einmal berechnet (DOMKEY, geleert in berechneSicht) — zeichneRahmen läuft auch beim Ziehen.
+  let DOMKEY=new Map();
+  const aggDom=n=>{const g=groupKeyOf(n),a=g!==SHARED_KEY&&MODEL.aggregate.find(x=>x.name===g);return (a&&a.namespace)||null;};
+  // JEDER Baustein ohne eigenes Aggregat (Feldtyp-VO/Enum, Response, aber auch Pipeline/Reaktion/Prozess samt Handles,
+  //   Triggern, Code) folgt seinen Graph-Nachbarn, wenn die alle in GENAU EINER Aggregat-Domäne liegen. Die Suche läuft
+  //   transitiv durch aggregat-lose Knoten (Pipeline ↔ Handle ↔ Trigger …) und stoppt an Aggregat-Domänen → eine
+  //   Pipeline-Einheit landet geschlossen in ihrer Domäne. Berührt sie mehrere Domänen, bleibt sie bei ihrem Namespace.
+  //   (a) EINHEIT = Ablauf-Bausteine, die zusammengehören: Pipeline/Reaktion ↔ Handles ↔ Trigger ↔ Code/🤖 ↔ Dienst,
+  //       Prozess ↔ Regeln. Die Suche läuft NUR durch solche Bausteine (nicht durch Datentypen — die würden fremde Einheiten
+  //       verkleben) und sammelt die Aggregat-Domänen ihrer Nachbarn. Genau eine → die. Sonst entscheidet, wohin die Einheit
+  //       COMMANDS schickt (sie gehört dorthin, wo sie wirkt; Lesen woanders ist nur Abhängigkeit). Je Einheit einmal.
+  //   (b) Datentypen (VO/Enum/Konfig/Response …) folgen schrittweise ihren Nachbarn (Enum → VO → ReadModel → Domäne).
+  const EINHEIT_ARTEN=new Set(["saga","transition","reaktion","pipeline","handle","trigger","codenode","llmnode","dienst","hostsetting","frist"]);
+  let EINHEIT=new Map();
+  function einheitDom(n){if(EINHEIT.has(n.id))return EINHEIT.get(n.id);
+    const seen=new Set([n.id]),q=[n.id],ds=new Set(),dc=new Set();
+    const nachbarn=id=>{const m=NODEBY.get(id),r=[...(ADJ.inn.get(id)||[]),...(ADJ.out.get(id)||[])];
+      if(m&&m.kind==="saga")MODEL.transitions.forEach(t=>{if(t.prozess===m.name)r.push("tr:"+t._id);});
+      if(m&&m.kind==="transition"&&m.ref.prozess)r.push("saga:"+m.ref.prozess);return r;};
+    while(q.length){nachbarn(q.pop()).forEach(x=>{const m=NODEBY.get(x);if(!m)return;const z=aggDom(m);
+      if(z){ds.add(z);if(m.kind==="command")dc.add(z);return;}
+      if(EINHEIT_ARTEN.has(m.kind)&&!seen.has(x)){seen.add(x);q.push(x);}});}
+    const d=ds.size===1?[...ds][0]:dc.size===1?[...dc][0]:null;seen.forEach(id=>EINHEIT.set(id,d));return d;}
+  function datenDom(n,besucht){if(besucht.has(n.id))return null;besucht.add(n.id);const ds=new Set();
+    [...(ADJ.inn.get(n.id)||[]),...(ADJ.out.get(n.id)||[])].forEach(x=>{const m=NODEBY.get(x),z=m&&graphDom(m,besucht);if(z)ds.add(z);});
+    return ds.size===1?[...ds][0]:null;}
+  function graphDom(n,besucht){return aggDom(n)||(EINHEIT_ARTEN.has(n.kind)?einheitDom(n):datenDom(n,besucht||new Set()));}
+  function domKey(n){let d=DOMKEY.get(n.id);if(d)return d;
+    d=graphDom(n)||nsVon(n)||(VIEW.heim||{})[n.id]||OHNE_DOM;DOMKEY.set(n.id,d);return d;}
+  const domLabel=ns=>ns===OHNE_DOM?"⋯ ohne Domäne":letztesSeg(ns);
+  // Block (Aggregat bzw. Brücke) eines Knotens: aus dem Graphen; ein über eine Spalte angelegter, noch unverdrahteter Knoten
+  //   behält bis zur Verdrahtung den Block dieser Spalte (VIEW.heimBlk) — statt im Inselkasten zu landen.
+  const blockVon=n=>subGroupOf(n)||(VIEW.heimBlk||{})[n.id]||SHARED_KEY;
+  const istInselLage=n=>ISLE.has(n.id)&&!(VIEW.heimBlk||{})[n.id];
+  const domOrd=(a,b)=>a===OHNE_DOM?1:b===OHNE_DOM?-1:a.localeCompare(b);
+  const bausteine=z=>z+(z===1?" Baustein":" Bausteine");
+  // Gemeinsame Wurzel (z. B. „Domain“) — darunter beginnen die Domänen (wie im Start-Dialog).
+  function domWurzel(){const alle=new Set();graphNodes().forEach(n=>{const x=domKey(n)===OHNE_DOM?null:domKey(n);if(x)for(let p=x;p;p=elternNs(p))alle.add(p);});
+    (VIEW.domNeu||[]).forEach(x=>{for(let p=x;p;p=elternNs(p))alle.add(p);});
+    let top="";for(;;){const k=[...alle].filter(x=>elternNs(x)===top);if(k.length!==1||![...alle].some(y=>elternNs(y)===k[0]))break;top=k[0];}
+    return top;}
+  // Baum über die gegebenen Domänen (+ ihre Eltern-Namespaces bis unter die Wurzel).
+  function domBaum(keys){const w=domWurzel(),alle=new Set();
+    keys.forEach(ns=>{if(ns===OHNE_DOM||ns===w){alle.add(ns);return;}for(let p=ns;p&&p!==w;p=elternNs(p)){alle.add(p);if(!drinNs(w,p))break;}});
+    const elternIn=ns=>{if(ns===OHNE_DOM||ns===w)return null;const e=elternNs(ns);return alle.has(e)&&e!==w?e:null;};
+    const kinder=new Map();alle.forEach(ns=>{const e=elternIn(ns);if(e){if(!kinder.has(e))kinder.set(e,[]);kinder.get(e).push(ns);}});
+    kinder.forEach(a=>a.sort(domOrd));
+    return {oben:[...alle].filter(ns=>!elternIn(ns)).sort(domOrd),kinder,elternIn};}
+  // Rahmen aus GEO zeichnen (nach jeder Geometrie-Messung). Liefert die Ausdehnung für die Weltgröße.
+  function zeichneRahmen(){const aus={x2:0,y2:0};if(!world)return aus;
+    let ebene=world.querySelector(".grahmen-ebene");if(!ebene){ebene=h("div",{class:"grahmen-ebene"});world.insertBefore(ebene,world.firstChild);}
+    ebene.textContent="";
+    const box=new Map(),zahl=new Map(),ids=new Map();
+    const dazu=(ns,x1,y1,x2,y2)=>{const b=box.get(ns);if(!b)box.set(ns,{x1,y1,x2,y2});else{b.x1=Math.min(b.x1,x1);b.y1=Math.min(b.y1,y1);b.x2=Math.max(b.x2,x2);b.y2=Math.max(b.y2,y2);}};
+    GEO.forEach((g,id)=>{const n=NODEBY.get(id);if(!n)return;const d=domKey(n);dazu(d,g.x,g.y,g.x+g.w,g.y+g.h);
+      if(!ids.has(d))ids.set(d,[]);ids.get(d).push(id);});
+    // ── SPALTEN-RAHMEN: die senkrechten Rollen-Spalten je Block (Aggregat bzw. Brücke) einer Domäne — dieselbe Zuordnung
+    //   wie packLayout (subGroupOf + rolle). 📝/🤖 gehören zur Spalte ihres Besitzers (sie stehen eingerückt darunter);
+    //   Inseln bilden einen eigenen Kasten. Aus GEO gebildet → folgt gezogenen Karten.
+    const spalten=new Map(),codes=[];
+    const sp=(key,init)=>{let c=spalten.get(key);if(!c)spalten.set(key,c={...init,x1:1e9,y1:1e9,x2:-1e9,y2:-1e9,ids:[],kinds:new Set()});return c;};
+    const nimm=(c,id,g,k)=>{c.x1=Math.min(c.x1,g.x);c.y1=Math.min(c.y1,g.y);c.x2=Math.max(c.x2,g.x+g.w);c.y2=Math.max(c.y2,g.y+g.h);c.ids.push(id);if(k)c.kinds.add(k);};
+    GEO.forEach((g,id)=>{const n=NODEBY.get(id);if(!n)return;const d=domKey(n);
+      if(istInselLage(n)){nimm(sp(d+"|§insel",{dom:d,blk:null,role:"insel"}),id,g,n.kind);return;}
+      if(n.kind==="codenode"||n.kind==="llmnode"){codes.push([n,g,id]);return;}
+      const blk=blockVon(n),role=rolle(n,rollenVon(blk));
+      nimm(sp(d+"|"+blk+"|"+role,{dom:d,blk,role}),id,g,n.kind==="handle"?"handle:"+n.own.kind:n.kind);});
+    const fest=[...spalten.values()].filter(c=>c.role!=="insel");
+    codes.forEach(([n,g,id])=>{const d=domKey(n),bk=blockVon(n);let best=null;
+      fest.forEach(c=>{if(c.dom!==d||c.blk!==bk||g.x<c.x1-4||g.x>c.x1+80||g.y<c.y1)return;if(!best||c.x1>best.x1)best=c;});
+      if(best)nimm(best,id,g,null);else nimm(sp(d+"|"+blockVon(n)+"|code",{dom:d,blk:blockVon(n),role:"code"}),id,g,n.kind);});
+    spalten.forEach(c=>{c.r={x1:c.x1-SPAD,y1:c.y1-SPK,x2:c.x2+SPAD,y2:c.y2+SPAD};dazu(c.dom,c.r.x1,c.r.y1,c.r.x2,c.r.y2);});
+    const B=domBaum([...box.keys(),...(VIEW.domNeu||[])]);
+    const LAY=KPOS[VIEW.details?"d":"k"]||{};
+    let unten=0;box.forEach(b=>unten=Math.max(unten,b.y2));
+    const rahmen=[];
+    // Bottom-up: Rahmen = eigene Karten + Kinder-Rahmen, um Rand und Kopf erweitert.
+    const rechne=(ns,tiefe)=>{const kinder=(B.kinder.get(ns)||[]).map(k=>rechne(k,tiefe+1)).filter(Boolean);
+      const b=box.get(ns);let r=b?{x1:b.x1-RP,y1:b.y1-RP-RK,x2:b.x2+RP,y2:b.y2+RP}:null;
+      kinder.forEach(k=>{if(!r)r={x1:k.x1-RP,y1:k.y1-RP-RK,x2:k.x2+RP,y2:k.y2+RP};else{r.x1=Math.min(r.x1,k.x1-RP);r.y1=Math.min(r.y1,k.y1-RP-RK);r.x2=Math.max(r.x2,k.x2+RP);r.y2=Math.max(r.y2,k.y2+RP);}});
+      if(!r){if(!(VIEW.domNeu||[]).includes(ns))return null;   // leere neue Domäne: Platzhalter (von packLayout reserviert)
+        const p=LAY["§leer:"+ns]||{x:0,y:unten+RP+RK+120};unten=Math.max(unten,p.y+RK+2*RP+110);
+        r={x1:p.x,y1:p.y,x2:p.x+640+2*RP,y2:p.y+RK+2*RP+110,leer:true};}
+      const z=(ids.get(ns)||[]).length+kinder.reduce((s,k)=>s+k.z,0);
+      const out={...r,ns,tiefe,z,eigen:ids.get(ns)||[],kinderIds:kinder.flatMap(k=>k.alleIds),alleIds:[...(ids.get(ns)||[]),...kinder.flatMap(k=>k.alleIds)]};
+      rahmen.push(out);return out;};
+    B.oben.forEach(ns=>rechne(ns,0));
+    rahmen.sort((a,b)=>a.tiefe-b.tiefe).forEach(r=>{const hue=domHue(r.ns===OHNE_DOM?SHARED_KEY:r.ns);
+      const fr=h("div",{class:"grahmen"+(r.tiefe?" unter":"")});fr.dataset.ns=r.ns;
+      Object.assign(fr.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});fr.style.setProperty("--dc","hsl("+hue+" 45% 55%)");
+      const k=h("div",{class:"grahmen-k",title:r.ns===OHNE_DOM?"Knoten ohne Namespace":r.ns},
+        h("span",{class:"gr-t"},domLabel(r.ns)),h("span",{class:"gr-p"},r.ns===OHNE_DOM?"":r.ns),
+        h("span",{class:"gr-z"},r.leer?"leer":bausteine(r.z)),
+        h("button",{title:"Baustein in dieser Domäne anlegen",onclick:e=>{e.stopPropagation();bausteinMenue(e.clientX,e.clientY,r.ns);}},"＋"),
+        r.ns!==OHNE_DOM?h("button",{title:"Unterdomäne anlegen",onclick:e=>{e.stopPropagation();neueDomaene(e.clientX,e.clientY,r.ns);}},"＋ ▤"):null,
+        h("button",{title:"Domäne einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"),
+        h("button",{title:"Mehr",onclick:e=>{e.stopPropagation();domMenue(e.clientX,e.clientY,r);}},"⋯"));
+      k.oncontextmenu=e=>{e.preventDefault();e.stopPropagation();domMenue(e.clientX,e.clientY,r);};
+      k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};
+      fr.append(k);if(r.leer)fr.append(h("div",{class:"gr-leer"},"Leere Domäne — ＋ legt den ersten Baustein an"));
+      ebene.append(fr);aus.x2=Math.max(aus.x2,r.x2);aus.y2=Math.max(aus.y2,r.y2);});
+    spalten.forEach(c=>{const el=h("div",{class:"gspalte"+(c.role==="insel"?" insel":"")});const r=c.r;
+      Object.assign(el.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});
+      const ORD=Object.keys(NODELABEL),ix=k=>{const i=ORD.indexOf(k.replace(/^handle:.*/,"handle"));return i<0?99:i;};
+      const kinds=[...c.kinds].sort((x,y)=>ix(x)-ix(y)),haupt=kinds[0]||"codenode";
+      const titel=c.role==="insel"?"⚠ Inseln":c.role==="code"?"📝 Code":[...new Set(kinds.map(spaltenName))].join(" · ");
+      const neu=spaltenNeu(c);
+      const k=h("div",{class:"gspalte-k",title:titel+" — "+(c.blk===AKTEUR_KEY?"👤 Akteur-Band · ":c.blk&&c.blk!==SHARED_KEY?"Aggregat "+c.blk+" · ":"")+domLabel(c.dom)},
+        h("i",{class:"kc-"+(haupt.startsWith("handle:")?"handle":haupt)}),h("span",{class:"gs-t"},titel),h("span",{class:"gs-z"},String(c.ids.length)),
+        neu.length?h("button",{title:"In dieser Spalte anlegen",onclick:e=>{e.stopPropagation();
+          if(neu.length===1)spalteAnlegen(c,neu[0]);else menue(e.clientX,e.clientY,titel,neu.map(kk=>({t:"＋ "+(NODELABEL[kk]||kk),fn:()=>spalteAnlegen(c,kk)})));}},"＋"):null,
+        h("button",{title:"Spalte markieren (Slice)",onclick:e=>{e.stopPropagation();FOCUS=new Set(c.ids);wendeFokusAn();}},"◎"));
+      k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};
+      el.append(k);ebene.append(el);});
+    return aus;}
+  // Spalten-Kopf: Name je Art; ＋ legt eine Art dieser Rolle an (Handles/Store-Fns entstehen am Besitzer, nicht frei).
+  const spaltenName=k=>k==="handle:projektion"?"Projektion-Handle":k==="handle:reader"?"Reader-Handle":k==="handle:pipeline"?"Pipeline-Handle":k==="handle:reaktion"?"Reaktion-Handle":NODELABEL[k]||k;
+  const NICHT_FREI=new Set(["fn","handle"]);
+  function spaltenNeu(c){if(c.role==="insel")return [];if(c.role==="code")return ["codenode","llmnode"];
+    const map=rollenVon(c.blk);
+    return Object.keys(map).filter(k=>map[k]===c.role&&!k.includes(":")&&!NICHT_FREI.has(k));}
+  function spalteAnlegen(c,kind){const agg=c.blk&&c.blk!==SHARED_KEY&&c.blk!==AKTEUR_KEY?c.blk:(MODEL.aggregate.find(a=>a.namespace===c.dom)||{}).name,
+    sg=MODEL.sagas.find(s=>s.namespace===c.dom);
+    neuerKnoten(kind,undefined,undefined,{ns:c.dom===OHNE_DOM?null:c.dom,agg,saga:sg&&sg.name,blk:c.blk||SHARED_KEY});}
+  function einpassenRahmen(r){if(!CV.w)return;const w=r.x2-r.x1,hh=r.y2-r.y1,s=Math.max(0.08,Math.min(1,(CV.w-80)/w,(CV.h-80)/hh));
+    PAN.s=s;PAN.x=CV.w/2-(r.x1+w/2)*s;PAN.y=CV.h/2-(r.y1+hh/2)*s;applyPan();}
+
+  // Popover-Menü (gpick-Optik) an einer Bildschirmposition. items: {t,fn,aus,gefahr,title} | {kopf} | {trenn}
+  function menue(cx,cy,titel,items){if(!canvas)return;canvas.querySelectorAll(".gpick").forEach(p=>p.remove());
+    const r=canvas.getBoundingClientRect(),m=h("div",{class:"gpick gmenue"});
+    if(titel)m.append(h("div",{class:"gpick-t"},titel));
+    items.forEach(it=>{if(!it)return;if(it.trenn){m.append(h("div",{class:"gm-tr"}));return;}
+      if(it.kopf){m.append(h("div",{class:"gpick-t"},it.kopf));return;}
+      const b=h("button",{class:it.gefahr?"gm-gefahr":"",title:it.title||"",onclick:e=>{e.stopPropagation();m.remove();if(!it.aus)it.fn();}},it.t);
+      if(it.aus)b.disabled=true;m.append(b);});
+    ["pointerdown","dblclick","wheel","click","contextmenu"].forEach(ev=>m.addEventListener(ev,e=>{e.stopPropagation();if(ev==="contextmenu")e.preventDefault();}));
+    canvas.append(m);
+    m.style.left=Math.max(4,Math.min(cx-r.left,r.width-m.offsetWidth-8))+"px";m.style.top=Math.max(4,Math.min(cy-r.top,r.height-m.offsetHeight-8))+"px";
+    const zu=e=>{if(!m.contains(e.target)){m.remove();window.removeEventListener("pointerdown",zu,true);}};
+    setTimeout(()=>window.addEventListener("pointerdown",zu,true),0);}
+  // Kleine Eingabe (Name einer neuen Domäne).
+  function frage(cx,cy,titel,vorschlag,hinweis,ok){if(!canvas)return;canvas.querySelectorAll(".gpick").forEach(p=>p.remove());
+    const r=canvas.getBoundingClientRect(),m=h("div",{class:"gpick gmenue"});
+    const inp=h("input",{value:vorschlag||"",spellcheck:"false"}),fehler=h("div",{class:"gm-fehler"});
+    const los=()=>{const f=ok(inp.value.trim());if(f){fehler.textContent=f;return;}m.remove();};
+    inp.onkeydown=e=>{e.stopPropagation();if(e.key==="Enter")los();if(e.key==="Escape")m.remove();};
+    m.append(h("div",{class:"gpick-t"},titel),inp,hinweis?h("div",{class:"gm-hint"},hinweis):null,fehler,
+      h("div",{style:"display:flex;gap:4px"},h("button",{onclick:los},"Anlegen"),h("button",{onclick:()=>m.remove()},"Abbrechen")));
+    ["pointerdown","dblclick","wheel","click","contextmenu"].forEach(ev=>m.addEventListener(ev,e=>e.stopPropagation()));
+    canvas.append(m);m.style.left=Math.max(4,Math.min(cx-r.left,r.width-m.offsetWidth-8))+"px";m.style.top=Math.max(4,Math.min(cy-r.top,r.height-m.offsetHeight-8))+"px";
+    inp.focus();inp.select();}
+  const NS_SEG=/^[\p{L}_][\p{L}\p{N}_]*$/u;
+  function neueDomaene(cx,cy,eltern){const wurzel=eltern||domWurzel();
+    frage(cx,cy,eltern?"＋ Unterdomäne in „"+letztesSeg(eltern)+"“":"＋ Neue Domäne","Bestellung",
+      "Namespace: "+(wurzel?wurzel+".":"")+"<Name> — Punkte = tiefer schachteln",name=>{
+        if(!name)return "Name fehlt";
+        if(!name.split(".").every(s=>NS_SEG.test(s)))return "Nur Buchstaben, Ziffern, _ (je Segment, nicht mit Ziffer beginnen)";
+        const ns=(wurzel?wurzel+".":"")+name;
+        if(graphNodes().some(n=>nsVon(n)===ns)||(VIEW.domNeu||[]).includes(ns))return "„"+name+"“ gibt es schon";
+        VIEW.domNeu=[...(VIEW.domNeu||[]),ns];
+        if(LADEN&&!LADEN.some(g=>drinNs(g,ns))){LADEN=LADEN.concat([ns]);VIEW.geladen=LADEN;}
+        speichereAnsicht();render();
+        requestAnimationFrame(()=>{const fr=world&&[...world.querySelectorAll(".grahmen")].find(d=>d.dataset.ns===ns);
+          if(fr)einpassenRahmen({x1:fr.offsetLeft,y1:fr.offsetTop,x2:fr.offsetLeft+fr.offsetWidth,y2:fr.offsetTop+fr.offsetHeight});});
+        deFlash("＋ Domäne "+ns,true);return null;});}
+  // ＋ in der Menüleiste: Baustein IN dieser Domäne (Namespace; Decider/Applier/State ans Aggregat, Regel an den Prozess der Domäne).
+  const BAU_GRUPPEN=[["Außen",["akteur"]],["Schreibseite",["command","event","rejection","aggregate","state","decider","applier"]],
+    ["Typen",["valueobject","enum","konfig"]],["Abläufe",["saga","transition","reaktion","pipeline","trigger"]],
+    ["Leseseite",["readmodel","store","projektion","query","queryresponse","reader"]],["Betrieb",["dienst","hostsetting"]],["Code",["codenode","llmnode"]]];
+  function bausteinMenue(cx,cy,ns){const agg=MODEL.aggregate.find(a=>a.namespace===ns),sg=MODEL.sagas.find(s=>s.namespace===ns);
+    const it=[];BAU_GRUPPEN.forEach(([g,ks])=>{it.push({kopf:g});ks.forEach(k=>it.push({t:"＋ "+(k==="codenode"?"📝 Code":k==="llmnode"?"🤖 LLM":NODELABEL[k]||k),
+      fn:()=>neuerKnoten(k,undefined,undefined,{ns:ns===OHNE_DOM?null:ns,agg:agg&&agg.name,saga:sg&&sg.name})}));});
+    menue(cx,cy,"＋ in "+domLabel(ns),it);}
+  function domMenue(cx,cy,r){const neu=(VIEW.domNeu||[]).includes(r.ns);
+    menue(cx,cy,r.ns===OHNE_DOM?domLabel(r.ns):r.ns,[
+      {t:"＋ Baustein…",fn:()=>bausteinMenue(cx,cy,r.ns)},
+      r.ns!==OHNE_DOM?{t:"＋ Unterdomäne…",fn:()=>neueDomaene(cx,cy,r.ns)}:null,
+      {t:"⤢ Einpassen",fn:()=>einpassenRahmen(r)},
+      r.alleIds.length?{t:"◎ Slice: alle Bausteine markieren",fn:()=>{FOCUS=new Set(r.alleIds);wendeFokusAn();}}:null,
+      neu?{trenn:1}:null,
+      neu?{t:"✕ Leere Domäne entfernen",gefahr:1,aus:!r.leer,title:r.leer?"":"Erst die Bausteine löschen — eine Domäne mit Inhalt entsteht aus dem Code",
+        fn:()=>{VIEW.domNeu=(VIEW.domNeu||[]).filter(x=>x!==r.ns);speichereAnsicht();render();}}:null]);}
+  // Rechtsklick auf die leere Fläche: neue Domäne.
+  function flaechenMenue(e){e.preventDefault();menue(e.clientX,e.clientY,"Fläche",[{t:"＋ Neue Domäne…",fn:()=>neueDomaene(e.clientX,e.clientY,null)}]);}
+
   // Ansichts-Leiste über der Fläche.
   function ansichtLeiste(){
     const btn=(lbl,on,title,fn)=>h("button",{class:on?"on":"",title,onclick:fn},lbl);
@@ -2924,6 +3324,7 @@ public static class HtmlPresenter
       ...[["karte","Landkarte"],["ablauf","Ablauf"]].map(([l,t])=>{const sp=h("span",{onclick:()=>{setzeLod(l);if(l==="karte")passeEin([...VIS],0.35);}},t);sp.dataset.l=l;if((VIEW.lod||"ablauf")===l)sp.classList.add("on");return sp;}));
     return h("div",{class:"gview"},
       h("b",{style:"color:#cbd3e1"},"Ansicht"),
+      btn("＋ Domäne",false,"Neue Domäne (Namespace) anlegen — Rechtsklick auf die Fläche geht auch",e=>neueDomaene(e.clientX,e.clientY+20,null)),
       h("button",{title:"Geladene Domänen ändern",onclick:()=>deLaden()},"📂 "+(LADEN===null?"alles geladen":!LADEN.length?"leer":LADEN.map(letztesSeg).join(", "))),
       btn("⤢ Alles zeigen",false,"Ganzes Board einpassen",()=>passeEin([...VIS],1)),
       btn("👁 Ausblenden"+((VIEW.aus||[]).length?" ("+VIEW.aus.length+")":"")+" ▾",FILTER_OPEN,"Knotenarten und Domänen ein-/ausblenden",()=>{FILTER_OPEN=!FILTER_OPEN;render();}),
@@ -2943,7 +3344,7 @@ public static class HtmlPresenter
       onmouseenter:()=>highlightKind(kind,true),onmouseleave:()=>highlightKind(kind,false),
       onclick:e=>{if(e.ctrlKey||e.metaKey){e.preventDefault();jumpNextOfKind(kind);}else neuerKnoten(kind);}},label);
     root.append(h("div",{class:"gtoolbar"},
-      tb("command","+ Command"),tb("event","+ Event"),tb("rejection","+ Ablehnung"),
+      tb("akteur","+ 👤 Akteur"),tb("command","+ Command"),tb("event","+ Event"),tb("rejection","+ Ablehnung"),
       tb("valueobject","+ Value Object"),tb("konfig","+ Konfig"),tb("enum","+ Enum"),tb("aggregate","+ Aggregat"),
       tb("state","+ State"),tb("decider","+ Decider"),tb("applier","+ Applier"),tb("saga","+ Prozess"),tb("transition","+ Regel"),
       tb("readmodel","+ Read Model"),tb("store","+ Store"),tb("projektion","+ Projektion"),tb("query","+ Query"),tb("queryresponse","+ Response"),tb("reader","+ Reader"),tb("reaktion","+ Reaktion"),
@@ -2967,14 +3368,17 @@ public static class HtmlPresenter
     if(!vis.length)world.append(h("div",{class:"gempty"},LADEN&&!LADEN.length?"Leeres Board — über die Palette neu entwerfen oder „🗂 Domänen laden“."
       :"Nichts sichtbar — nichts geladen (🗂 Domänen laden), alles ausgeblendet (👁) oder leeres Modell."));
     canvas.append(world);root.append(canvas);
+    beobachteCanvas();
     buildMinimap(canvas);
     renderFilterPanel();
     packLayout();  // jetzt ist world im Dokument → echte Knotengrößen messbar → überlappungsfreies Packing
+    messeWelt();   // Geometrie-Cache (Minimap, Culling) + Weltgröße = Inhalt
     applyPan();
     drawMinimap();
     canvas.onpointerdown=e=>{const t=e.target;
       if(t.closest&&(t.closest(".ghead")||t.closest("input,textarea,select,button,.slot")))return;
       startPan(e);};
+    canvas.oncontextmenu=e=>{const t=e.target;if(t.closest&&t.closest(".gnode2,.ginsp,.gfilter,.gminimap,.gpick,.gstart"))return;flaechenMenue(e);};
     canvas.ondblclick=e=>{if(e.target.closest&&e.target.closest(".gnode2"))return;
       const w=toWorld(e.clientX,e.clientY),r=canvas.getBoundingClientRect();
       showPicker(canvas,e.clientX-r.left,e.clientY-r.top,w.x,w.y);};
@@ -2994,7 +3398,7 @@ public static class HtmlPresenter
     const pick=h("div",{class:"gpick"});pick.style.left=sx+"px";pick.style.top=sy+"px";
     const opt=(kind,label)=>h("button",{onclick:()=>{pick.remove();neuerKnoten(kind,wx,wy);}},label);
     pick.append(h("div",{class:"gpick-t"},"Was soll hier entstehen?"),
-      opt("command","Command"),opt("event","Event"),opt("rejection","Ablehnung"),
+      opt("akteur","👤 Akteur"),opt("command","Command"),opt("event","Event"),opt("rejection","Ablehnung"),
       opt("valueobject","Value Object"),opt("konfig","Konfiguration"),opt("enum","Enum"),opt("aggregate","Aggregat"),
       opt("state","State"),opt("decider","Decider"),opt("applier","Applier"),opt("saga","Prozess"),opt("transition","Regel"),
       opt("readmodel","Read Model"),opt("store","Store"),opt("projektion","Projektion"),opt("query","Query"),opt("queryresponse","Response"),opt("reader","Reader"),opt("reaktion","Reaktion"),
@@ -3114,7 +3518,7 @@ public static class HtmlPresenter
   const MERGE_KEYS={records:r=>r.kind+"|"+r.namespace+"|"+r.name,enums:e=>e.namespace+"|"+e.name,aggregate:a=>a.namespace+"|"+a.name,
     decider:d=>d.aggregat+"|"+d.command,applier:a=>a.aggregat+"|"+a.event,sagas:x=>x.namespace+"|"+x.name,
     readModels:x=>x.name,stores:x=>x.name,projektionen:x=>x.name,reaktionen:x=>x.name,reader:x=>x.name,pipelines:x=>x.name,
-    triggers:x=>x.msgName||x.name,frists:x=>x.name,dienste:x=>x.name,hostSettings:x=>x.name};
+    triggers:x=>x.msgName||x.name,frists:x=>x.name,dienste:x=>x.name,hostSettings:x=>x.name,akteure:x=>x.namespace+"|"+x.name};
   const LAYOUT=new Set(["x","y","ausCode","ungeschrieben","codeSrc","leer","rumpf","schritte","herkunft"]);
   function inhalt(o){return JSON.stringify(o,(k,v)=>(k.startsWith("_")||LAYOUT.has(k))?undefined:v);}
   // Leseseite: „steht die Änderung schon im Code?“ — Fn-Ids (je Einlesen neu nummeriert) über „Store.Fn“ vergleichen und die
@@ -3200,7 +3604,7 @@ public static class HtmlPresenter
   // Node-Art (graphNodes().kind) → Modell-Sammlung (für die Entwurf-Markierung: nur Sammlungen, die aus dem Code kommen).
   function kollektionVon(kind){return {command:"records",event:"records",rejection:"records",valueobject:"records",konfig:"records",query:"records",queryresponse:"records",
     enum:"enums",aggregate:"aggregate",decider:"decider",applier:"applier",saga:"sagas",readmodel:"readModels",store:"stores",
-    projektion:"projektionen",reaktion:"reaktionen",reader:"reader",pipeline:"pipelines",trigger:"triggers",frist:"frists",dienst:"dienste",hostsetting:"hostSettings"}[kind]||null;}
+    projektion:"projektionen",reaktion:"reaktionen",reader:"reader",pipeline:"pipelines",trigger:"triggers",frist:"frists",dienst:"dienste",hostsetting:"hostSettings",akteur:"akteure"}[kind]||null;}
   function meldeMerge(){const u=MERGE_INFO.ungeschrieben,e=MERGE_INFO.entwuerfe;
     if(u||e)deFlash("↔ Code geladen · "+u+" ungeschrieben · "+e+" Entwurf/Entwürfe",true);}
   window.deDownload=function(){deriveMembership();prepareSaga();const blob=new Blob([JSON.stringify(MODEL,null,2)],{type:"application/json"});

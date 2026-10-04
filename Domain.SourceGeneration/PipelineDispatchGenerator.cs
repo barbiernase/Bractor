@@ -86,7 +86,8 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
             .Where(m => m.Parameters.Length >= 2 &&
                         SymbolEqualityComparer.Default.Equals(
                             m.Parameters[1].Type, pipelineContextType) &&
-                        m.Parameters.Skip(2).All(p => FaehigkeitsTypen.IstFaehigkeit(p.Type, context.SemanticModel.Compilation)))
+                        m.Parameters.Skip(2).All(p => FaehigkeitsTypen.IstFaehigkeit(p.Type, context.SemanticModel.Compilation)
+                                                      || FaehigkeitsTypen.IstAkteurDienst(p.Type, context.SemanticModel.Compilation)))
             .ToList();
 
         if (handleMethods.Count == 0)
@@ -109,6 +110,9 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
 
             var handlerInfo = AnalyzeReturnType(returnType, inputTypeName, allNamespaces, fristTyp, stornoTyp);
             handlerInfo.FaehigkeitsArgumente = FaehigkeitsTypen.ArgumentListe(FaehigkeitsTypen.Argumente(method, 2));
+            // Akteur-Dienst als Parameter → der Handle entscheidet im Auftrag dieses Akteurs (CQRS060: höchstens einer).
+            handlerInfo.Akteur = method.Parameters.Skip(2)
+                .FirstOrDefault(p => FaehigkeitsTypen.IstAkteurDienst(p.Type, context.SemanticModel.Compilation))?.Type.Name;
 
             // Kanal bestimmen: IPipelineSelfMessage, IPipelineTrigger oder IEvent?
             // Self-Messages zuerst prüfen (könnten theoretisch auch Trigger sein,
@@ -388,6 +392,26 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
         StringBuilder sb, string typeName, string varName, PipelineHandlerInfo handler)
     {
         var aufruf = $"Handle({varName}, ctx{handler.FaehigkeitsArgumente})";
+        if (handler.Akteur != null)
+        {
+            // Im Auftrag eines Akteurs: der Emit stempelt ihn als Urheber (UserId) — für genau diesen Aufruf.
+            sb.AppendLine($"            case {typeName} {varName}:");
+            sb.AppendLine($"                using (global::Abstractions.ImAuftrag.Von(\"{handler.Akteur}\"))");
+            sb.AppendLine($"                {{");
+            if (handler.Kind == PipelineHandlerKind.Task)
+                sb.AppendLine($"                    await {aufruf};");
+            else
+            {
+                sb.AppendLine($"                    {(handler.Kind == PipelineHandlerKind.OneOfAsyncEnumerable ? "await " : "")}foreach (var oneOf in {aufruf})");
+                sb.AppendLine($"                    {{");
+                EmitOneOfSwitch(sb, handler);
+                sb.AppendLine($"                    }}");
+            }
+            sb.AppendLine($"                }}");
+            sb.AppendLine($"                break;");
+            sb.AppendLine();
+            return;
+        }
         switch (handler.Kind)
         {
             case PipelineHandlerKind.Task:
@@ -480,6 +504,8 @@ internal class PipelineHandlerInfo
     public List<string> ProducedTypes { get; }
     /// <summary>„, faehigkeiten.Hole&lt;…&gt;()" je Fähigkeits-Parameter.</summary>
     public string FaehigkeitsArgumente { get; set; } = "";
+    /// <summary>Name des Akteur-Dienstes, in dessen Auftrag der Handle entscheidet (null = keiner).</summary>
+    public string? Akteur { get; set; }
     /// <summary>Frist-Varianten des OneOf: (Typ voll qualifiziert, Command-Typname = Kontext, Storno?).</summary>
     public List<(string Typ, string Cmd, bool Storno)> Fristen { get; } = new();
 

@@ -91,6 +91,9 @@ Alle `Error` (der Build bricht), sofern nicht anders vermerkt.
 | **CQRS055** | Store selbst gebaut (`FaehigkeitAnalyzer`) | Kein `new …Store()` — Stores nur aus der DI (eine Instanz je Fähigkeits-Bereich) |
 | **CQRS056** | Frist-Command nicht baubar (`PipelineActorGenerator`) | `Frist<TCmd>`: `TCmd` braucht einen öffentlichen Ctor `(Guid zielAggregatId)` — daraus baut der generierte Fristen-Router den Command |
 | **CQRS057** | Handler wird nicht dispatcht (`HandlerFormAnalyzer`) | Ein an seinen Typen erkannter Handler (Eingang + Kontext) heißt `Handle` und hat die feste Form (Kontext an fester Stelle, dahinter nur Fähigkeiten) — sonst zeigte ihn der Editor, die Laufzeit übersähe ihn still |
+| **CQRS058** | Ungültige Akteur-Befugnis (`AkteurAnalyzer`) | `IDarf<T>` nur für Hineingehendes — konkreter Command, Query, Trigger oder Transient-Event — und nur an einem `IAkteur` (`docs/konzept-akteure.md`) |
+| **CQRS060** | Im Auftrag eines Akteurs (`AkteurAnalyzer`) | Ein Akteur-Dienst (Interface mit `IAkteur`, z. B. die KI) kommt als Parameter an den Pipeline-Handle (nicht in Ctor/Feld), höchstens einer je Handle, und der Handle gibt nur Commands aus, die dieser Akteur darf |
+| **CQRS059** | Zwei Akteure gleichen Namens (`AkteurRechteGenerator`) | Die Composition Root ordnet Tokens über den einfachen Typnamen zu → eindeutig |
 | **CQRS040** | Mehrdeutige Upcast-Kante | eine Version → genau eine ausgehende `IUpcast` |
 | **CQRS041** | Upcast-Kette endet nicht aktuell | Kette erreicht eine aktuelle Gestalt |
 | **CQRS042** | Zyklus in Upcast-Kette | Upcasting azyklisch |

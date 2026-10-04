@@ -76,6 +76,8 @@ internal sealed class Abgleich(EditorModell modell, Arbeitsbereich ws, IReadOnly
             Datei(d.Datei!, $"decide {d.Aggregat}.{d.Command}", t => DecideRueckgabe(t, d));
         foreach (var s in modell.Sagas.Where(s => s.Datei != null && Herkunft.Geaendert(s.Herkunft, Herkunft.Von(s))))
             Datei(s.Datei!, $"prozess {s.Namespace}.{s.Name}", t => ProzessRegeln(t, s));
+        foreach (var a in modell.Akteure.Where(a => a.Datei != null && Herkunft.Geaendert(a.Herkunft, Herkunft.Von(a))))
+            Datei(a.Datei!, $"akteur {a.Namespace}.{a.Name}", t => AkteurBefugnisse(t, a));
 
         var l = modell.Lesen;
         if (l == null) return;
@@ -384,6 +386,22 @@ internal sealed class Abgleich(EditorModell modell, Arbeitsbereich ws, IReadOnly
                 return (text[..zeilenEnde] + "\n" + einzug + anw + text[zeilenEnde..], $"Bindung {b.Modus} {b.Ort}");
             });
         }
+    }
+
+    // ── Akteur: die Basisliste IST der Akteur — IAkteur + IDarf<…> nach dem Modell (auch Entziehen), Fremdes bleibt ──
+    private (string, string)? AkteurBefugnisse(string text, Akteur a)
+    {
+        if (Typ(Parse(text), a.Name, a.Namespace) is not TypeDeclarationSyntax decl) return (text, $"Akteur {a.Name} nicht gefunden");
+        var soll = Scaffolder.AkteurBasen(a);
+        var fremd = decl.BaseList?.Types.Select(t => t.ToString().Trim()).Where(t => !Scaffolder.IstAkteurBasis(t)).ToList() ?? [];
+        var neu = string.Join(", ", soll.Take(1).Concat(fremd).Concat(soll.Skip(1)));
+        if (decl.BaseList is { } bl)
+        {
+            if (N(string.Join(",", bl.Types.Select(t => t.ToString()))) == N(neu)) return null;
+            return (MitNamespaces(Anwenden(text, [(bl.Types[0].SpanStart, bl.Types[^1].Span.End, neu)]), a.Darf), "Befugnisse");
+        }
+        var at = (decl as RecordDeclarationSyntax)?.ParameterList?.Span.End ?? decl.Identifier.Span.End;
+        return (MitNamespaces(Anwenden(text, [(at, at, " : " + neu)]), a.Darf), "Befugnisse");
     }
 
     // ── Bausteine ──────────────────────────────────────────────────────────────────────────────

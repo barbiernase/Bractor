@@ -29,6 +29,8 @@ public static class Vertrag
     public static readonly string IWriteStore = typeof(IWriteStore).FullName!;
     public static readonly string IReadStore = typeof(IReadStore).FullName!;
     public static readonly string IStore = typeof(IStore).FullName!;
+    public static readonly string IAkteur = typeof(IAkteur).FullName!;
+    public static readonly string IDarf = typeof(IDarf<>).FullName!;
     public static readonly string IWertobjekt = typeof(IWertobjekt).FullName!;
     public static readonly string IPipelineHandler = typeof(IPipelineHandler).FullName!;
     public static readonly string IPipelineTrigger = typeof(IPipelineTrigger).FullName!;

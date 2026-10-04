@@ -20,6 +20,17 @@ internal static class FaehigkeitsTypen
         return i.AllInterfaces.Any(x => SymbolEqualityComparer.Default.Equals(x, w) || SymbolEqualityComparer.Default.Equals(x, r));
     }
 
+    /// <summary>
+    /// Akteur-Dienst: ein Interface, das <c>Abstractions.IAkteur</c> trägt (z. B. die KI). Ein Pipeline-Handle nimmt ihn als
+    /// Parameter wie eine Fähigkeit — dann entscheidet der Handle IM AUFTRAG dieses Akteurs (docs/konzept-akteure.md).
+    /// </summary>
+    public static bool IstAkteurDienst(ITypeSymbol typ, Compilation comp)
+    {
+        if (typ is not INamedTypeSymbol { TypeKind: TypeKind.Interface } i) return false;
+        var a = comp.GetTypeByMetadataName("Abstractions.IAkteur");
+        return a != null && i.AllInterfaces.Any(x => SymbolEqualityComparer.Default.Equals(x, a));
+    }
+
     /// <summary>Die Fähigkeits-Parameter ab <paramref name="ab"/>, voll qualifiziert.</summary>
     public static IEnumerable<string> Argumente(IMethodSymbol m, int ab) =>
         m.Parameters.Skip(ab).Select(p => p.Type.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat));

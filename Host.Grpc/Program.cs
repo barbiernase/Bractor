@@ -1,3 +1,4 @@
+using Infrastructure.Akteure;
 // ═══════════════════════════════════════════════════════════════════
 // SERVER — ASP.NET + Kestrel + gRPC.
 //
@@ -133,6 +134,10 @@ builder.Services.AddBackendMonitoring();
 // Deadlines (Feature-Strom): DB-Uhr-getriebener Scheduler feuert fällige Fristen als Command.
 // Welcher Command, steht im Typ der Planung (Frist<TCmd> im OneOf einer Pipeline) — der Router ist generiert.
 builder.Services.AddDeadlines(Infrastructure.Pipeline.Generated.GeneratedFristen.Baue);
+
+// Akteure (docs/konzept-akteure.md): Token → Akteur am gRPC-Handshake; Befugnisse aus den IDarf<T> generiert.
+// Opt-in: ohne Sektion "Akteure" in der Konfiguration bleibt der gRPC-Pfad offen wie bisher.
+builder.Services.AddAkteure(builder.Configuration.GetSection("Akteure"));
 
 // ─── Build + Run ───
 

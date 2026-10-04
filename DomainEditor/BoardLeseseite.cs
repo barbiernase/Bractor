@@ -102,7 +102,10 @@ public static class BoardLeseseite
                 if (!faehigkeitVonFn.TryGetValue(id, out var fa) || aus.Any(p => Basisname(p.Typ) == fa.Name)) continue;
                 aus.Add(alt.FirstOrDefault(p => Basisname(p.Typ) == fa.Name) ?? new Parameter { Typ = fa.Name, Name = ParameterName(fa.Name) });
             }
-            return aus;
+            // Im Auftrag eines Akteur-Dienstes (Board-Feld „akteur"): ein Parameter wie eine Fähigkeit; Reihenfolge wie im Code.
+            if (N(hd, "akteur") is { Length: > 0 } akteur && aus.All(p => Basisname(p.Typ) != akteur))
+                aus.Add(alt.FirstOrDefault(p => Basisname(p.Typ) == akteur) ?? new Parameter { Typ = akteur, Name = ParameterName(akteur) });
+            return aus.OrderBy(p => alt.FindIndex(x => Basisname(x.Typ) == Basisname(p.Typ)) is var i && i < 0 ? int.MaxValue : i).ToList();
         }
         // Ein Handle: aus dem Code (sig) unverändert, außer Fähigkeiten und Ausgänge, die das Board trägt.
         Handle AlsHandle(JsonNode? hd, string eingang, string standardParameter, IReadOnlyList<string> boardAusgaenge, Wrapper art)

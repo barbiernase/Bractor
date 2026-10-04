@@ -78,6 +78,9 @@ public static class Scaffolder
     private static readonly string IPipelineSelfMessage = nameof(Abstractions.IPipelineSelfMessage);
     private static readonly string PipelineContext = nameof(Abstractions.PipelineContext);
     private static readonly string PipelineId = nameof(Abstractions.IPipelineHandler.PipelineId);
+    // ── Akteure ──
+    private static readonly string IAkteur = nameof(Abstractions.IAkteur);
+    private static readonly string IDarf = typeof(IDarf<>).Name.Split('`')[0];
     /// <summary>
     /// Der Methodenname, den die Dispatch-Generatoren rufen — Framework-Vertrag, erzwungen durch CQRS057
     /// (HandlerFormAnalyzer): ein anders benannter Handler ist ein Build-Fehler, kein stilles Auseinanderlaufen.
@@ -103,6 +106,13 @@ public static class Scaffolder
             Gruppe(e.Datei ?? TypZiel(modell, e.Namespace, "enum", e.Name), e.Namespace).Enums.Add(e);
         foreach (var ((pfad, _), g) in gruppen)
             dateien.Add(new(pfad, TypDatei(g.Ns, g.Records, g.Enums, modell), DateiArt.Typen, !pfad.StartsWith(Unplatziert, StringComparison.Ordinal)));
+
+        // ── Akteure → ihre echte Datei; sonst die (eine) Akteur-Datei ihres Namespace; sonst Akteure.cs im Verzeichnis ──
+        //    Ein bestehender Dienst-Vertrag gehört dem Code (Methoden!) — nur seine Basisliste gleicht der Abgleich ab.
+        foreach (var g in modell.Akteure.Where(a => !(a.Dienst && a.Datei != null))
+                     .GroupBy(a => (Pfad: a.Datei ?? AkteurZiel(modell, a.Namespace), a.Namespace)))
+            dateien.Add(new(g.Key.Pfad, AkteurDatei(g.Key.Namespace, g.ToList(), modell), DateiArt.Typen,
+                !g.Key.Pfad.StartsWith(Unplatziert, StringComparison.Ordinal)));
 
         // ── Aggregate → State; Decider/Applier je Aggregat aus den eigenständigen Regeln ──
         foreach (var agg in modell.Aggregate)
@@ -183,6 +193,39 @@ public static class Scaffolder
             if (v.TryGetValue(präfix, out var basis)) return basis + "/" + string.Join('/', teile[n..]);
         }
         return null;
+    }
+
+    // ── Akteure ───────────────────────────────────────────────────────────────────────────────
+    private static string AkteurZiel(EditorModell m, string ns)
+    {
+        var dateien = m.Akteure.Where(a => a.Namespace == ns && a.Datei != null).Select(a => a.Datei!).Distinct(StringComparer.Ordinal).ToList();
+        if (dateien.Count == 1) return dateien[0];
+        var v = Verzeichnis(m, ns);
+        return v != null ? $"{v}/Akteure.cs" : $"{Unplatziert}Akteure.cs";
+    }
+
+    /// <summary>Die Basisliste eines Akteurs: <c>IAkteur, IDarf&lt;A&gt;, IDarf&lt;B&gt;</c> — der ganze Akteur steht in ihr.</summary>
+    public static IReadOnlyList<string> AkteurBasen(Akteur a) => [IAkteur, .. a.Darf.Select(d => $"{IDarf}<{d}>")];
+
+    /// <summary>Gehört dieser Basistyp zum Akteur-Vertrag (<c>IAkteur</c> bzw. <c>IDarf&lt;…&gt;</c>)? Alles andere bleibt beim Abgleich stehen.</summary>
+    public static bool IstAkteurBasis(string basis)
+    {
+        var name = basis.Split('<')[0].Split('.').Last().Trim();
+        return name == IAkteur || name == IDarf;
+    }
+
+    private static string AkteurDatei(string ns, List<Akteur> akteure, EditorModell modell)
+    {
+        var b = Kopf(ns, Usings(ns, modell, [modell.Rahmen.VertragsNamespace], akteure.SelectMany(a => a.Darf), []));
+        for (var i = 0; i < akteure.Count; i++)
+        {
+            Doku(b, akteure[i].Doku, "");
+            b.AppendLine(akteure[i].Dienst
+                ? $"public interface {akteure[i].Name} : {string.Join(", ", AkteurBasen(akteure[i]))} {{ }}"
+                : $"public sealed record {akteure[i].Name} : {string.Join(", ", AkteurBasen(akteure[i]))};");
+            if (i < akteure.Count - 1) b.AppendLine();
+        }
+        return b.ToString();
     }
 
     // ── Typ-Dateien aus Records/Enums ─────────────────────────────────────────────────────────

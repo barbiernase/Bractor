@@ -43,7 +43,7 @@ public sealed class HandlerFormAnalyzer : DiagnosticAnalyzer
                 IEvent = T("Abstractions.IEvent"), IQuery = T("Abstractions.IQuery"),
                 IAggEnv = T("Abstractions.IAggregateEnvelope"), IMsgEnv = T("Abstractions.IMessageEnvelope"),
                 Writer = T("Core.ProjectionWriter"), ReadCtx = T("Abstractions.ReadContext"), PipeCtx = T("Abstractions.PipelineContext"),
-                IWrite = T("Abstractions.IWriteStore"), IRead = T("Abstractions.IReadStore"),
+                IWrite = T("Abstractions.IWriteStore"), IRead = T("Abstractions.IReadStore"), IAkteur = T("Abstractions.IAkteur"),
             };
             if (m.ISubscriber == null && m.IReader == null && m.IPipeline == null) return;
             start.RegisterSymbolAction(ctx => Pruefe(ctx, m), SymbolKind.Method);
@@ -52,7 +52,7 @@ public sealed class HandlerFormAnalyzer : DiagnosticAnalyzer
 
     private sealed class M
     {
-        public INamedTypeSymbol? ISubscriber, IReader, IPipeline, IEvent, IQuery, IAggEnv, IMsgEnv, Writer, ReadCtx, PipeCtx, IWrite, IRead;
+        public INamedTypeSymbol? ISubscriber, IReader, IPipeline, IEvent, IQuery, IAggEnv, IMsgEnv, Writer, ReadCtx, PipeCtx, IWrite, IRead, IAkteur;
     }
 
     private static bool Gleich(ITypeSymbol a, INamedTypeSymbol? b) => b != null && SymbolEqualityComparer.Default.Equals(a, b);
@@ -81,8 +81,11 @@ public sealed class HandlerFormAnalyzer : DiagnosticAnalyzer
         if (mm.Name != Handle) grund = $"der Methodenname ist '{mm.Name}', der Dispatch ruft nur '{Handle}'";
         else if (ps.Length < fähigAb || !Gleich(ps[1].Type, k1) || (k2 != null && !Gleich(ps[2].Type, k2)))
             grund = "der Framework-Kontext steht nicht an der erwarteten Stelle";
-        else if (ps.Skip(fähigAb).FirstOrDefault(p => !(p.Type.TypeKind == TypeKind.Interface && (Hat(p.Type, m.IWrite) || Hat(p.Type, m.IRead)))) is { } fremd)
-            grund = $"der Parameter '{fremd.Name}' ({fremd.Type.Name}) ist keine Fähigkeit (IWriteStore/IReadStore) — Dienste gehören in den Konstruktor";
+        else if (ps.Skip(fähigAb).FirstOrDefault(p => !(p.Type.TypeKind == TypeKind.Interface && (Hat(p.Type, m.IWrite) || Hat(p.Type, m.IRead)
+                     // Akteur-Dienst (IAkteur): nur am Pipeline-Handle — dort entscheidet der Handle in seinem Auftrag.
+                     || k1 == m.PipeCtx && Hat(p.Type, m.IAkteur)))) is { } fremd)
+            grund = $"der Parameter '{fremd.Name}' ({fremd.Type.Name}) ist keine Fähigkeit (IWriteStore/IReadStore)"
+                + (Hat(fremd.Type, m.IAkteur) ? " — ein Akteur-Dienst ist nur am Pipeline-Handle erlaubt" : " — Dienste gehören in den Konstruktor");
         if (grund == null) return;
 
         ctx.ReportDiagnostic(Diagnostic.Create(Form, mm.Locations.FirstOrDefault(), typ.Name, mm.Name, p0.Name, grund, erwartet));

@@ -16,6 +16,7 @@ public static class Herkunft
     public static string Von(Enumeration e) => Hash(e with { Datei = null, Herkunft = null, Doku = null });
     public static string Von(Aggregat a) => Hash(a.State.Select(f => f with { ElementTyp = null }).ToList());
     public static string Von(DecideRegel d) => Hash(new { d.Aggregat, d.Command, d.Ergibt });
+    public static string Von(Akteur a) => Hash(new { a.Name, a.Darf });
     public static string Von(Saga s) => Hash(new { s.TriggerEvent, Schritte = s.Schritte.Select(Wirksam).ToList() });
 
     /// <summary>
@@ -58,6 +59,7 @@ public static class Herkunft
             Aggregate = m.Aggregate.Select(a => a with { Herkunft = Von(a) }).ToList(),
             Decider = m.Decider.Select(d => d with { Herkunft = Von(d) }).ToList(),
             Sagas = m.Sagas.Select(s => s with { Herkunft = Von(s) }).ToList(),
+            Akteure = m.Akteure.Select(a => a with { Herkunft = Von(a) }).ToList(),
             Lesen = l == null ? null : l with
             {
                 Stores = l.Stores.Select(s => s with { Fns = s.Fns.Select(f => f with { Herkunft = Von(f) }).ToList() }).ToList(),
@@ -78,6 +80,7 @@ public static class Herkunft
         foreach (var a in m.Aggregate) Pruefe(a.Herkunft, Von(a), $"state {a.Namespace}.{a.Name}");
         foreach (var d in m.Decider) Pruefe(d.Herkunft, Von(d), $"decide {d.Aggregat}.{d.Command}");
         foreach (var s in m.Sagas) Pruefe(s.Herkunft, Von(s), $"prozess {s.Namespace}.{s.Name}");
+        foreach (var a in m.Akteure) Pruefe(a.Herkunft, Von(a), $"akteur {a.Namespace}.{a.Name}");
         var l = m.Lesen;
         if (l == null) return aus;
         foreach (var st in l.Stores) foreach (var f in st.Fns) Pruefe(f.Herkunft, Von(f), $"fähigkeit {st.Name}.{f.Methode}");

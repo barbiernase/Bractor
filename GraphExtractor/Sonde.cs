@@ -202,12 +202,15 @@ public static class Sonde
         foreach (var r in A(b, "reader").Where(Sonde))
             z.Add($"reader {S(r, "namespace")}.{S(r, "name")} projektion={S(r, "projektion")} trackDeps={r["trackDeps"]} | "
                   + string.Join("; ", A(r, "handles").Select(h => $"{S(h, "query")} -> {Fns(h)} => {string.Join("|", A(h, "responses").Select(x => (string?)x))}")));
+        foreach (var ak in A(b, "akteure").Where(Sonde))
+            z.Add($"akteur {S(ak, "namespace")}.{S(ak, "name")}{(ak["dienst"]?.GetValue<bool>() == true ? " dienst" : "")} | darf {string.Join(", ", A(ak, "darf").Select(x => (string?)x))}");
         var sondenTrigger = new HashSet<string>();
         foreach (var p in A(b, "pipelines").Where(Sonde))
         {
             z.Add($"pipeline {S(p, "namespace")}.{S(p, "name")} id={S(p, "pipelineId")} konfigs={string.Join(",", A(p, "konfigs").Select(x => (string?)x))} | "
                   + string.Join("; ", A(p, "handles").Select(h => $"{S(h, "input")}({S(h, "inputKind")}) -> sendet {string.Join(", ", A(h, "sends").Select(x => (string?)x))}"
-                                                                 + (A(h, "fns").Any() ? $" -> {Fns(h)}" : ""))));
+                                                                 + (A(h, "fns").Any() ? $" -> {Fns(h)}" : "")
+                                                                 + (h["akteur"] is { } ak ? $" im Auftrag {ak}" : ""))));
             foreach (var h in A(p, "handles").Where(h => S(h, "inputKind") == "trigger")) sondenTrigger.Add(S(h, "input"));
         }
         // Regel Z: Zustandsfelder der zustandslosen Übersetzer (Symbol-Fakt, Validator-Hinweis GR-ZUSTAND).

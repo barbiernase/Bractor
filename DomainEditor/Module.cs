@@ -35,6 +35,8 @@ public sealed record Modul
 public static class Module
 {
     public const string Aussenwelt = "Außenwelt";
+    /// <summary>Partner-Präfix eines Akteurs (ein benannter Teil der Außenwelt): „Akteur Inspektor".</summary>
+    public const string AkteurPraefix = "Akteur ";
     /// <summary>Sorten, deren Nachricht einen Konsumenten braucht (sonst offener Eingang).</summary>
     public static readonly IReadOnlySet<string> BrauchtKonsument = new HashSet<string> { Grammatik.Command, Grammatik.Query, Grammatik.Trigger, Grammatik.Selbst };
     /// <summary>Sorten, deren Nachricht einen Erzeuger braucht (sonst offener Ausgang).</summary>
@@ -52,7 +54,8 @@ public static class Module
             if (!direkt.TryGetValue(ns, out var d)) direkt[ns] = d = new Dictionary<string, int>(StringComparer.Ordinal);
             d[art] = d.GetValueOrDefault(art) + 1;
         }
-        foreach (var k in fluss.Knoten.Where(k => k.Id != Fluss.AussenId)) Zaehle(k.Namespace, k.Sorte ?? k.Art);
+        // Akteure liegen wie die Außenwelt AUSSERHALB jedes Moduls (sie sind die Außenwelt — mit Namen).
+        foreach (var k in fluss.Knoten.Where(k => k.Id != Fluss.AussenId && k.Art != Grammatik.Akteur)) Zaehle(k.Namespace, k.Sorte ?? k.Art);
         foreach (var r in m.Records.Where(r => Grammatik.SorteVonRecordArt(r.Kind) == null)) Zaehle(r.Namespace, r.Kind);
         foreach (var e in m.Enums) Zaehle(e.Namespace, "enum");
         var alle = new SortedSet<string>(StringComparer.Ordinal);
@@ -69,7 +72,9 @@ public static class Module
             else if (offen && !p.Offen) d[key] = p = (true, p.Partner);
             if (partner != null) p.Partner.Add(partner);
         }
-        string? NsVon(string id) => id == Fluss.AussenId ? null : fluss.KnotenVon(id)?.Namespace;
+        string? NsVon(string id) => id == Fluss.AussenId || IstAkteur(id) ? null : fluss.KnotenVon(id)?.Namespace;
+        bool IstAkteur(string id) => fluss.KnotenVon(id)?.Art == Grammatik.Akteur;
+        string Aussen(string id) => IstAkteur(id) ? $"{AkteurPraefix}{fluss.KnotenVon(id)!.Name}" : Aussenwelt;
         foreach (var k in fluss.Kanten)
         {
             var von = NsVon(k.Von);
@@ -77,8 +82,8 @@ public static class Module
             foreach (var modul in alle)
             {
                 bool drinVon = Drin(modul, von), drinNach = Drin(modul, nach);
-                if (drinNach && !drinVon) Port(modul, "ein", k.Sorte, k.Nachricht, false, von ?? Aussenwelt);
-                else if (drinVon && !drinNach) Port(modul, "aus", k.Sorte, k.Nachricht, false, nach ?? Aussenwelt);
+                if (drinNach && !drinVon) Port(modul, "ein", k.Sorte, k.Nachricht, false, von ?? Aussen(k.Von));
+                else if (drinVon && !drinNach) Port(modul, "aus", k.Sorte, k.Nachricht, false, nach ?? Aussen(k.Nach));
             }
         }
         foreach (var n in fluss.Knoten.Where(n => n.Art == "nachricht" && n.Namespace != null))

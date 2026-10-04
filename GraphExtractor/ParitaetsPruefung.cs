@@ -100,7 +100,8 @@ public static class ParitaetsPruefung
             $"{soll.Aggregate.Values.Sum(a => a.Apply.Count)} Apply), {soll.Commands.Count} Commands, {soll.Events.Count} Events, " +
             $"{soll.Ablehnungen.Count} Ablehnungen, {soll.ValueObjects.Count} VOs, {soll.Konfigs.Count} Konfigs, {soll.Stores.Count} Stores, {soll.Enums.Count} Enums, {soll.Sagas.Count} Sagas " +
             $"({soll.Sagas.Values.Sum()} Regeln), {soll.Queries.Count} Queries, {soll.Responses.Count} Responses, {soll.ReadModels.Count} ReadModels, " +
-            $"{soll.Subscriber.Count} Projektionen/Reaktionen, {soll.Readers.Count} Reader, {soll.Pipelines.Count} Pipelines."));
+            $"{soll.Subscriber.Count} Projektionen/Reaktionen, {soll.Readers.Count} Reader, {soll.Pipelines.Count} Pipelines, " +
+            $"{soll.Akteure.Count} Akteure ({soll.AkteurRechte.Values.Sum(x => x.Count)} Befugnisse)."));
 
         HashSet<string> BoardRecords(string kind) => (board["records"]?.AsArray() ?? new JsonArray())
             .Where(r => (string?)r?["kind"] == kind)
@@ -122,6 +123,15 @@ public static class ParitaetsPruefung
         Vergleiche("ReadModel", soll.ReadModels, BoardListe("readModels"), befunde);
         Vergleiche("Reader", soll.Readers, BoardListe("reader"), befunde);
         Vergleiche("Pipeline", soll.Pipelines, BoardListe("pipelines"), befunde);
+        Vergleiche("Akteur", soll.Akteure, BoardListe("akteure"), befunde);
+        // Je Akteur seine Befugnisse: Soll = IDarf<T> der Basisliste, Ist = darf[] der Board-Karte.
+        foreach (var a in board["akteure"]?.AsArray() ?? new JsonArray())
+        {
+            var full = $"{a!["namespace"]}.{a["name"]}";
+            if (!soll.AkteurRechte.TryGetValue(full, out var sollDarf)) continue;
+            var istDarf = (a["darf"]?.AsArray() ?? new JsonArray()).Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal);
+            Vergleiche($"Befugnis ({a["name"]})", sollDarf.Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istDarf, befunde);
+        }
         Vergleiche("Projektion/Reaktion", soll.Subscriber,
             BoardListe("projektionen").Concat(BoardListe("reaktionen")).ToHashSet(StringComparer.Ordinal), befunde);
 
@@ -166,7 +176,9 @@ public static class ParitaetsPruefung
     {
         public HashSet<string> Commands = new(), Events = new(), Ablehnungen = new(), ValueObjects = new(),
             Queries = new(), Responses = new(), Enums = new(), ReadModels = new(), Readers = new(),
-            Pipelines = new(), Subscriber = new(), Konfigs = new(), Stores = new();
+            Pipelines = new(), Subscriber = new(), Konfigs = new(), Stores = new(), Akteure = new();
+        /// <summary>Akteur → seine IDarf-Ziele (einfache Namen) — aus der Basisliste, unabhängig vom DomainExtractor.</summary>
+        public Dictionary<string, HashSet<string>> AkteurRechte = new(StringComparer.Ordinal);
         public List<string> AlleRecordNamen = new();
         public Dictionary<string, (HashSet<string> Decide, HashSet<string> Apply)> Aggregate = new();
         public Dictionary<string, int> Sagas = new();
@@ -184,6 +196,7 @@ public static class ParitaetsPruefung
             var iReader = Get(Vertrag.IReader); var iDecider = Get(Vertrag.IDecider); var iApplier = Get(Vertrag.IApplier);
             var iWStore = Get(Vertrag.IWriteStore); var iRStore = Get(Vertrag.IReadStore); var iStore = Get(Vertrag.IStore);
             var iWert = Get(Vertrag.IWertobjekt); var iEnv = Get(Vertrag.IAggregateEnvelope);
+            var iAkteur = Get(Vertrag.IAkteur); var iDarf = Get(Vertrag.IDarf);
             bool Innen(INamedTypeSymbol t, INamedTypeSymbol? g) => g != null && t.AllInterfaces.Any(i => i.OriginalDefinition.ToDisplayString() == g.ToDisplayString());
             bool Domäne(IAssemblySymbol? a) => a != null && domänen.Contains(a.Name);
 
@@ -206,6 +219,14 @@ public static class ParitaetsPruefung
                         if (decl is EnumDeclarationSyntax) { inv.Enums.Add(full); continue; }
                         if (decl is InterfaceDeclarationSyntax)
                         {
+                            // Akteur-Dienst: ein Vertrag mit IAkteur (z. B. die KI).
+                            if (iAkteur != null && full != iAkteur.Fq() && Sym.Implements(t, iAkteur))
+                            {
+                                inv.Akteure.Add(full);
+                                inv.AkteurRechte[full] = t.AllInterfaces.Where(i => iDarf != null && i.OriginalDefinition.Fq() == iDarf.Fq())
+                                    .Select(i => i.TypeArguments[0].Name).ToHashSet(StringComparer.Ordinal);
+                                continue;
+                            }
                             // Store = jedes Bündel (IStore), plus jede Fähigkeit OHNE Bündel (dann ihr eigener Store).
                             if (Sym.Implements(t, iStore)
                                 || (Sym.Implements(t, iWStore) || Sym.Implements(t, iRStore))
@@ -216,7 +237,13 @@ public static class ParitaetsPruefung
                         var istRecord = decl is RecordDeclarationSyntax;
                         if (istRecord && t.ContainingType == null) inv.AlleRecordNamen.Add(full);
 
-                        if (Sym.Implements(t, iCmd)) inv.Commands.Add(full);
+                        if (iAkteur != null && Sym.Implements(t, iAkteur) && !t.AllInterfaces.Any(i => i.Fq() != iAkteur.Fq() && Sym.Implements(i, iAkteur)))
+                        {
+                            inv.Akteure.Add(full);
+                            inv.AkteurRechte[full] = t.AllInterfaces.Where(i => iDarf != null && i.OriginalDefinition.Fq() == iDarf.Fq())
+                                .Select(i => i.TypeArguments[0].Name).ToHashSet(StringComparer.Ordinal);
+                        }
+                        else if (Sym.Implements(t, iCmd)) inv.Commands.Add(full);
                         else if (Sym.Implements(t, iTr)) inv.Ablehnungen.Add(full);
                         else if (Sym.Implements(t, iEvt)) inv.Events.Add(full);
                         else if (Sym.Implements(t, iQ)) inv.Queries.Add(full);

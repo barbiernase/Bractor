@@ -21,7 +21,7 @@ public static class Grammatik
 
     // ── Alphabet: Bausteine (die Knoten) ─────────────────────────────────────────────────────────────────────────────
     public const string Aggregat = "aggregat", Prozess = "prozess", Projektion = "projektion", Reaktion = "reaktion", Reader = "reader",
-        Pipeline = "pipeline", Ingress = "ingress", Store = "store", Aussenwelt = "aussenwelt";
+        Pipeline = "pipeline", Ingress = "ingress", Store = "store", Aussenwelt = "aussenwelt", Akteur = "akteur";
 
     /// <summary>Kardinalität eines Konsum-Eingangs.</summary>
     public const string GenauEins = "eins", Beliebig = "beliebig", Dieselbe = "dieselbe";
@@ -54,6 +54,7 @@ public static class Grammatik
         new(Aggregat, "Aggregat", true), new(Prozess, "Prozess", true), new(Projektion, "Projektion", false),
         new(Reaktion, "Reaktion", false), new(Reader, "Reader", false), new(Pipeline, "Pipeline", false),
         new(Ingress, "Ingress", false), new(Store, "Store", true), new(Aussenwelt, "Außenwelt", false),
+        new(Akteur, "Akteur", false),
     ];
 
     // ── Regeln (Id = der Name, unter dem Validator und Editor sie melden) ──────────────────────────────────────────────
@@ -117,6 +118,16 @@ public static class Grammatik
             [new("boot", null, "Azyklizitäts-Guard (ProzessManagerWiring) — nur Prozesse"), Offen("Reaktionen/Pipelines")]),
         new("GR-ZUSTAND", "Regel Z: Zustand nur in Aggregaten und Lesemodellen", "Pipelines, Reaktionen und Projektionen sind zustandslose Übersetzer; Gedächtnis gehört in ein Aggregat.", "info",
             [Offen("Hinweis im Validator; Analyzer bewusst noch nicht gebaut")]),
+        new("GR-AKTEUR", "Akteur → nur, was er darf", "Ein Akteur gibt nur hinein, was er per IDarf<T> darf: Command, Query, Trigger oder "
+            + "Transient-Event. Was er hören darf, wird abgeleitet (Aggregate seiner Commands, Projektionen hinter seinen Queries).", "error",
+            [An("CQRS058", "Domain.SourceGeneration/AkteurAnalyzer.cs"), Gen("CQRS059", "Infrastructure.SourceGeneration/AkteurRechteGenerator.cs (Name eindeutig)"),
+             new("laufzeit", null, "Infrastructure/Akteure/AkteurTor.cs (Handshake + jede hineingehende Nachricht)")]),
+        new("GR-AUFTRAG", "Im Auftrag eines Akteur-Dienstes", "Ein Pipeline-Handle, der einen Akteur-Dienst (z. B. die KI) als Parameter "
+            + "nimmt, entscheidet in dessen Auftrag: höchstens einer je Handle, und er sendet nur Commands, die dieser Akteur darf.", "error",
+            [An("CQRS060", "Domain.SourceGeneration/AkteurAnalyzer.cs"), new("laufzeit", null, "Abstractions.ImAuftrag → CommandEmitter stempelt UserId")]),
+        new("GR-AKTEUR-FEHLT", "Von außen, aber kein Akteur", "Sobald es Akteure gibt: ein Command, eine Query oder ein Trigger ohne internen "
+            + "Erzeuger, den kein Akteur darf — am Tor kommt er nie durch (unbekannter Akteur).", "warning",
+            [new("laufzeit", null, "Infrastructure/Akteure/AkteurTor.cs (abgewiesen)"), Offen("kein Build-Fehler")]),
         new("GR-MODUL-EINGANG-OFFEN", "Eingang ohne Konsument", "Ein Command, eine Query, ein Trigger oder eine Selbst-Nachricht, die niemand konsumiert — offener Eingang des Moduls.", "warning",
             [Gen("CQRS002", "nur: Prozess sendet Command ohne Decider"), Offen("sonst")]),
         new("GR-MODUL-AUSGANG-OFFEN", "Ausgang ohne Erzeuger", "Ein Event, eine Ablehnung oder eine Response, die niemand erzeugt — offener Ausgang des Moduls.", "warning",
@@ -151,6 +162,7 @@ public static class Grammatik
         new(Ingress, Trigger, "GR-AUS-INGRESS"),
         new(Store, Faehigkeit, "GR-FAEHIGKEIT"),
         new(Aussenwelt, Command, "GR-COMMAND"), new(Aussenwelt, Query, "GR-QUERY"), new(Aussenwelt, Trigger, "GR-AUS-INGRESS"),
+        new(Akteur, Command, "GR-AKTEUR"), new(Akteur, Query, "GR-AKTEUR"), new(Akteur, Trigger, "GR-AKTEUR"), new(Akteur, Transient, "GR-AKTEUR"),
     ];
 
     /// <summary>Record-Art → Nachrichtensorte (null = keine Nachricht: Value Object, Konfig, ReadModel).</summary>
@@ -187,7 +199,7 @@ public static class Grammatik
     public static readonly IReadOnlyList<(string Schluessel, string Baustein)> EditorPortBaustein =
     [
         ("dec", Aggregat), ("app", Aggregat), ("trans", Prozess), ("saga", Prozess), ("proj", Projektion), ("reaktion", Reaktion),
-        ("pipeline", Pipeline), ("reader", Reader), ("trigId", Ingress), ("frist", Pipeline),
+        ("pipeline", Pipeline), ("reader", Reader), ("trigId", Ingress), ("frist", Pipeline), ("akt", Akteur),
     ];
     /// <summary>Editor-Port-Schlüssel, deren Ausgang eine andere Sorte trägt als die Ziel-Karte (Frist-Knoten → Command = Sorte Frist).</summary>
     public static readonly IReadOnlyDictionary<string, string> EditorAusgangSorte = new Dictionary<string, string> { ["frist"] = Frist };

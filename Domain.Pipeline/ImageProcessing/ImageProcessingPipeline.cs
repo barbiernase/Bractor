@@ -14,7 +14,6 @@ namespace Domain.Pipeline.ImageProcessing;
 /// </summary>
 public partial class ImageProcessingPipeline : IPipelineHandler
 {
-    private readonly IClassifierService _classifier;
     private readonly IImageResizer _resizer;
     private readonly IHistogramEqualizer _equalizer;
     private readonly string _preprocessedPath;
@@ -23,13 +22,11 @@ public partial class ImageProcessingPipeline : IPipelineHandler
     private const int PreviewHeight = 512;
 
     public ImageProcessingPipeline(
-        IClassifierService classifier,
         IImageResizer resizer,
         IHistogramEqualizer equalizer,
         PreprocessingConfig config,
         ILogger<ImageProcessingPipeline> logger)
     {
-        _classifier = classifier;
         _resizer = resizer;
         _equalizer = equalizer;
         _preprocessedPath = config.OutputPath;
@@ -121,11 +118,13 @@ public partial class ImageProcessingPipeline : IPipelineHandler
     // EVENT-HANDLER (PubSub)
     // ═══════════════════════════════════════════════════
 
+    // Die KI ist ein Akteur (IClassifierService : IAkteur): dieser Handle entscheidet in IHREM Auftrag — sie steht deshalb
+    //   in der Signatur, nicht im Konstruktor (CQRS060), und der erzeugte Command trägt sie als Urheber.
     public async IAsyncEnumerable<OneOf<KlassifiziereBildPaarDurchKi>> Handle(
-        ImagePairKomplett evt, PipelineContext ctx)
+        ImagePairKomplett evt, PipelineContext ctx, IClassifierService ki)
     {
         var aggregateId = ctx.SourceAggregateId!.Value;
-        var result = await _classifier.ClassifyPairAsync(aggregateId);
+        var result = await ki.ClassifyPairAsync(aggregateId);
         yield return new KlassifiziereBildPaarDurchKi(aggregateId, result.Label);
     }
 

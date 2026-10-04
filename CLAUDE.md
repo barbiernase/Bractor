@@ -101,6 +101,11 @@ integriert; `CqrsFrameworkOptions` toter `[Obsolete]`-Typ.
 - **Ausgabe-Vertrag in der Signatur (CQRS050):** Decide und jedes Handle geben einen konkreten Typ oder `OneOf<…>`
   konkreter Typen zurück (nie `ICommand`/`IEvent` …). WAS entstehen kann, lesen Generatoren/Extractor/Editor NUR aus der
   Signatur.
+- **Akteure = EIN Wort:** `record X : IAkteur, IDarf<T>…` — `IDarf` nur für Hineingehendes (Command/Query/Trigger/Transient,
+  CQRS058). Was ein Akteur hört, wird aus dem Graphen abgeleitet (`GeneratedAkteurRechte`), nie deklariert. Durchgesetzt am
+  gRPC-Handshake (Token-Header `akteur-token`), opt-in über `AddAkteure` — ohne Konfiguration offen. Auch ein DIENST kann
+  Akteur sein (die KI: `interface IClassifierService : IAkteur, IDarf<…>`): er kommt als Parameter an den Pipeline-Handle, der in
+  seinem Auftrag entscheidet (CQRS060), nie in den Konstruktor; Werkzeuge ohne Entscheidung bleiben im Ctor. `docs/konzept-akteure.md`.
 - **Kein `InMemoryEventStore`:** Store-Semantik nur gegen echtes Marten (Integration). Der
   Prüfstand testet nur store-freie Logik. Nie faken, was man nicht besitzt.
 - **Proto-Regenerierung bei neuen Domain-Typen:** jeder neue Command/Event/Query/Trigger

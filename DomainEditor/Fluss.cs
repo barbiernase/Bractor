@@ -16,7 +16,7 @@ public sealed record FlussKante(string Von, string Nach, string Nachricht, strin
 /// Der NACHRICHTENFLUSS des Modells — die Grundlage, auf der die Grammatik geprüft und die Modul-Schnittstellen abgeleitet werden.
 /// Nur Signatur-Fakten: Decide-OneOf, Apply-Eingang, Prozess-Regeln, Handle-Eingang/-Ausgänge/-Fähigkeiten, Ingress-Bindungen.
 /// Bausteine: <c>agg:</c> Aggregat, <c>saga:</c> Prozess, <c>kon:</c> Projektion/Reaktion, <c>rdr:</c> Reader, <c>pl:</c> Pipeline,
-/// <c>sto:</c> Store, <c>aussen</c> Außenwelt (Client/Ingress). Nachrichten: <c>msg:</c> Record-Name, <c>faeh:</c> Fähigkeit.
+/// <c>sto:</c> Store, <c>akt:</c> Akteur, <c>aussen</c> Außenwelt (unbekannter Client/Ingress). Nachrichten: <c>msg:</c> Record-Name, <c>faeh:</c> Fähigkeit.
 /// </summary>
 public sealed class Fluss
 {
@@ -158,6 +158,13 @@ public sealed class Fluss
                     foreach (var fp in h.Faehigkeiten) K(F(fp), pid, h.Eingang);
                 }
             }
+        }
+
+        // Akteure: Akteur → was er darf (IDarf<T>). Sie ersetzen für diese Nachrichten die anonyme Außenwelt.
+        foreach (var a in m.Akteure)
+        {
+            var aid = B("akt", Grammatik.Akteur, a.Name, a.Namespace);
+            foreach (var d in a.Darf) K(aid, N(d, null, null));
         }
 
         // Außenwelt: Commands/Queries ohne internen Erzeuger (Client), Trigger mit Ingress-Bindung oder ohne Erzeuger.

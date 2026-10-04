@@ -32,6 +32,11 @@ public sealed record EditorModell
     public IReadOnlyList<ApplyRegel> Applier { get; init; } = [];
     public IReadOnlyList<Saga> Sagas { get; init; } = [];
     /// <summary>
+    /// Akteure (<c>docs/konzept-akteure.md</c>): wer von außen hineingibt — je Akteur die Typen, die er darf
+    /// (<c>IDarf&lt;T&gt;</c>: Commands, Queries, Trigger, Transient-Events). Was er hören darf, ist abgeleitet, nicht Modell.
+    /// </summary>
+    public IReadOnlyList<Akteur> Akteure { get; init; } = [];
+    /// <summary>
     /// Die LESESEITE als Signatur-Fakten: Stores (Fähigkeiten + Bündel + Impl-Klasse), Projektionen/Reaktionen, Reader und
     /// die Fähigkeits-Parameter der Pipeline-Handles. ReadModels/Queries/Responses sind <see cref="Record"/>s (eigene Arten).
     /// Null = das Modell trägt keine Leseseite (z. B. Simulation) — der Scaffolder erzeugt dann keine Leseseiten-Dateien.
@@ -525,4 +530,24 @@ public sealed record IngressBindung
     public string? Anweisung { get; init; }
     public string? TypArgument { get; init; }
     public string? OrtArgument { get; init; }
+}
+
+/// <summary>
+/// Ein Akteur: <c>public sealed record {Name} : IAkteur, IDarf&lt;A&gt;, IDarf&lt;B&gt;;</c> — Mensch in einer Rolle oder
+/// Fremdsystem (bewusst keine Unterscheidung). <see cref="Darf"/> = einfache Typnamen in Deklarations-Reihenfolge.
+/// </summary>
+public sealed record Akteur
+{
+    public string Name { get; init; } = "";
+    public string Namespace { get; init; } = "";
+    public IReadOnlyList<string> Darf { get; init; } = [];
+    /// <summary>
+    /// true = ein DIENST ist der Akteur (sein Vertrag, ein Interface — z. B. die KI): ein Pipeline-Handle, der ihn als Parameter
+    /// nimmt, entscheidet in seinem Auftrag (CQRS060). false = ein Record (Mensch in einer Rolle / Fremdsystem am Tor).
+    /// </summary>
+    public bool Dienst { get; init; }
+    public string? Doku { get; init; }
+    /// <summary>Datei der Deklaration (relativ zur Solution); null = neu im Editor.</summary>
+    public string? Datei { get; init; }
+    public string? Herkunft { get; init; }
 }

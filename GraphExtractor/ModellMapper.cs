@@ -144,6 +144,10 @@ public static class ModellMapper
         return Herkunft.Stempeln(new EditorModell
         {
             Records = records, Enums = enums, Aggregate = aggregate, Decider = decider, Applier = applier, Sagas = sagas, Rahmen = rahmen,
+            Akteure = dom.Akteure.Select(x => new Akteur
+            {
+                Name = x.Name, Namespace = x.Namespace, Darf = x.Darf, Dienst = x.Dienst, Doku = x.Doku, Datei = Rel(x.Datei),
+            }).ToList(),
             Lesen = Leseseite(dom),
         });
     }
@@ -448,6 +452,8 @@ public static class ModellMapper
                         fristen = (Vertrag(p.HandleVertraege, hd.InputFull)?.Ausgaenge ?? new()).Where(a => a.Art is "frist" or "fristStorno")
                             .Select(a => (object)new { command = a.Typ, art = a.Art == "frist" ? "frist" : "storno" }).ToArray(),
                         fns = StoreFns(p.HandleFaehigkeiten, hd.InputFull),
+                        // Im Auftrag eines Akteur-Dienstes (z. B. der KI) — ein Handle-Parameter wie eine Fähigkeit.
+                        akteur = p.HandleAkteur.GetValueOrDefault(hd.InputFull),
                         rumpf = Rumpf(p.HandleBodies, hd.InputFull),
                         form = Vertrag(p.HandleVertraege, hd.InputFull)?.Form, signatur = Vertrag(p.HandleVertraege, hd.InputFull)?.Signatur,
                         signaturOffen = Vertrag(p.HandleVertraege, hd.InputFull)?.SignaturOffen == true ? true : (bool?)null,

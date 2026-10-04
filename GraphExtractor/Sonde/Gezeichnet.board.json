@@ -1,5 +1,5 @@
 {
-  "_zweck": "Eine im Editor GEZEICHNETE Leseseite (so, wie der Browser sie ins Board legt: neue Karten ohne Datei/Signatur). Die Sonde hängt sie an das Board der Sonden-Domäne, liest sie über BoardLeseseite ins Modell, lässt den Scaffolder schreiben und liest den Fork neu ein. Fähigkeit von MerkeVorAsync im Panel benannt, die von ZaehleAsync abgeleitet. Dazu Betrieb: neue Pipeline mit Konfig-Record, neuem Trigger, Self-Tick (neue Selbst-Nachricht) und Lese-Fähigkeit als Parameter.",
+  "_zweck": "Eine im Editor GEZEICHNETE Leseseite (so, wie der Browser sie ins Board legt: neue Karten ohne Datei/Signatur). Die Sonde hängt sie an das Board der Sonden-Domäne, liest sie über BoardLeseseite ins Modell, lässt den Scaffolder schreiben und liest den Fork neu ein. Fähigkeit von MerkeVorAsync im Panel benannt, die von ZaehleAsync abgeleitet. Dazu Betrieb: neue Pipeline mit Konfig-Record, neuem Trigger, Self-Tick (neue Selbst-Nachricht) und Lese-Fähigkeit als Parameter. Akteur: im Editor gezeichnet (ohne Datei), darf einen Command und die gezeichnete Query.",
   "records": [
     {
       "name": "Vormerkungen",
@@ -192,6 +192,17 @@
           "emits": [],
           "schedules": []
         }
+      ]
+    }
+  ],
+  "akteure": [
+    {
+      "_id": "gak1",
+      "name": "Mahnstelle",
+      "namespace": "Leihwesen.Gebuehren",
+      "darf": [
+        "EroeffneMahnung",
+        "Vormerkungen"
       ]
     }
   ]

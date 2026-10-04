@@ -43,6 +43,12 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
     private ConnectionState _currentState = ConnectionState.Disconnected;
     public ConnectionState CurrentState => _currentState;
     public string? SessionId { get; private set; }
+
+    /// <summary>
+    /// Akteur-Token (docs/konzept-akteure.md) — reist als gRPC-Header <c>akteur-token</c>; der Server ordnet es einem
+    /// <c>IAkteur</c> zu und lässt nur dessen <c>IDarf&lt;…&gt;</c> durch. <c>null</c> = kein Header.
+    /// </summary>
+    public string? AkteurToken { get; set; }
     public bool IsConnected => _currentState == ConnectionState.Connected;
     
     // Channel Readers (für Consumer)
@@ -87,7 +93,9 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
             _client = new CqrsClientService.CqrsClientServiceClient(_channel);
             
             // 2. Bidirektionalen Stream öffnen
-            _stream = _client.Connect(cancellationToken: ct);
+            _stream = _client.Connect(
+                headers: AkteurToken is { Length: > 0 } token ? new Metadata { { "akteur-token", token } } : null,
+                cancellationToken: ct);
             
             // 3. Capabilities Request senden
             var capabilitiesRequest = new ClientMessage

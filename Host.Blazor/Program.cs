@@ -30,7 +30,8 @@ builder.Services.AddApexCharts();   // Live-Trainingskurven im Training-Dashboar
 builder.Services.AddSingleton(new GrpcServerConfig(grpcAddress));
 builder.Services.AddScoped<ClientBus>(_ => new ClientBus(null));
 builder.Services.AddScoped<IBus>(sp => sp.GetRequiredService<ClientBus>());
-builder.Services.AddScoped<GrpcProxy>();
+// Akteur-Token aus der Konfiguration ("Akteur:Token"); ohne Eintrag kein Header (Server ohne Akteure: offen).
+builder.Services.AddScoped<GrpcProxy>(_ => new GrpcProxy { AkteurToken = builder.Configuration["Akteur:Token"] });
 builder.Services.AddScoped<IGrpcProxy>(sp => sp.GetRequiredService<GrpcProxy>());
 builder.Services.AddScoped<VersioningModule>();
 builder.Services.AddScoped<IVersioningModule>(sp => sp.GetRequiredService<VersioningModule>());

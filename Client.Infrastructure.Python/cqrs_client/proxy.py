@@ -36,8 +36,11 @@ class GrpcProxy:
     auf dem wir unabhängig senden und empfangen können.
     """
 
-    def __init__(self, generated_module):
+    def __init__(self, generated_module, akteur_token: str | None = None):
         self._gen = generated_module
+        # Akteur (docs/konzept-akteure.md): Token im gRPC-Header "akteur-token" — der Server ordnet es einem
+        # IAkteur zu und lässt nur dessen IDarf<…> durch. None = kein Header (Server ohne Akteure: alles offen).
+        self._akteur_token = akteur_token
         self._channel: Channel | None = None
         self._stream: Any = None
         self._session_id: str = ""
@@ -117,6 +120,7 @@ class GrpcProxy:
             Cardinality.STREAM_STREAM,
             self._client_msg_cls,
             self._server_msg_cls,
+            metadata={"akteur-token": self._akteur_token} if self._akteur_token else None,
         )
         # Context betreten (öffnet den HTTP/2-Stream)
         await self._stream.__aenter__()

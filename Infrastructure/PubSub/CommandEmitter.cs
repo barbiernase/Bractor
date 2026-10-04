@@ -81,6 +81,8 @@ public sealed class CommandEmitter : ICommandEmitter
             Modus = new CommandModus.Emittiert(),               // KEINE Version (§4.2)
             CorrelationId = korrelation.ToString(),             // → Ziel-Event-Metadatum (P5-Poll-Routing)
             Payload = cmd,
+            // Akteur: entschied ein Akteur-Dienst (Handle mit Akteur-Parameter, generiert gesetzt), steht er als Urheber im Envelope.
+            UserId = ImAuftrag.Akteur ?? "system",
         };
         var identity = ClusterIdentity.Create(cmd.AggregateId.ToString(), aggregateType);
 
