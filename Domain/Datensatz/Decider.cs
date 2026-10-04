@@ -13,6 +13,8 @@ public partial class Datensatz
         public IEnumerable<OneOf<DatensatzErstellt, DatensatzExistiertBereits>> Decide(
             ErstelleDatensatz cmd)
         {
+            // 🤖 Prompt: und checke ob der datensatz leer ist!
+            // Stream noch leer? Nur dann darf der Datensatz erstellt werden.
             if (this.State.Existiert)
             {
                 yield return new DatensatzExistiertBereits(cmd.AggregateId);

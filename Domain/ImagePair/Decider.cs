@@ -28,6 +28,7 @@ public partial class ImagePair
         public IEnumerable<OneOf<BildVerfuegbar, ImagePairKomplett, ImagePairNichtGefunden, BildVersionBereitsVerfuegbar>> Decide(
             MeldeBildVerfuegbar cmd)
         {
+            // 🤖 Prompt: wir brauchen eine initiationslogik der vorab schaut, ob wirklich alles leer ist.
             if (this.State.Version == 0)
             {
                 yield return new ImagePairNichtGefunden(cmd.AggregateId);
@@ -40,29 +41,23 @@ public partial class ImagePair
                 yield break;
             }
 
-            var breiteProRegion = 100.0 / 8;
-            var regionen = Enumerable.Range(0, 8)
-                .Select(i => new RegionBewertung(
+            const int anzahlRegionen = 8;
+            const double regionBreite = 100.0 / anzahlRegionen;
+            var regionen = new List<RegionBewertung>(anzahlRegionen);
+            for (var i = 0; i < anzahlRegionen; i++)
+            {
+                regionen.Add(new RegionBewertung(
                     RegionIndex: i,
-                    Position: new RegionPosition(
-                        XProzent: i * breiteProRegion,
-                        YProzent: 0,
-                        BreiteProzent: breiteProRegion,
-                        HoeheProzent: 100),
+                    Position: new RegionPosition(i * regionBreite, 0.0, regionBreite, 100.0),
                     KiKlassifikation: null,
-                    MenschLabel: null))
-                .ToList();
+                    MenschLabel: null));
+            }
 
             yield return new BildVerfuegbar(cmd.Version, cmd.Meta, cmd.Pfad, regionen);
 
-            var andereVersion = cmd.Version == BildVersion.Dc0
-                ? BildVersion.Dc2
-                : BildVersion.Dc0;
-
+            var andereVersion = cmd.Version == BildVersion.Dc0 ? BildVersion.Dc2 : BildVersion.Dc0;
             if (this.State.GetBild(andereVersion) != null)
-            {
                 yield return new ImagePairKomplett();
-            }
         }
 
         // ═══════════════════════════════════════════════════
