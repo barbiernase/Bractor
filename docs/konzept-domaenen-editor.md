@@ -99,6 +99,10 @@ in `Program.cs` zu verstecken — dieselbe Bewegung wie bei den Code-Inseln.
 **Kanten-Wahrheit:** `boardEdges` (Knoten→Knoten) spiegelt exakt `drawEdges` (Slot→Slot). Daraus
 Union-Find-Komponenten → mess-basiertes Shelf-Packing (`packLayout`) + Insel-Erkennung. Die
 Typprüfung sitzt in `compatible` (gleicher Typ, entgegengesetzte Richtung; Feld-Wunsch-Constraints).
+**Anschlussseiten dynamisch** (`drawEdges`): Auf der Fläche sind Karten eingeklappt; eine Kante dockt je Ende an der
+Seite an, die dem Partner **zugewandt** ist (oben/unten/links/rechts — horizontaler vs. vertikaler Abstand der Karten),
+nicht fest „Ausgang rechts, Eingang links". Mehrere Linien auf derselben Seite werden entlang der Seite verteilt (nach
+Lage des Partners sortiert), die Kurve tritt senkrecht zur Seite aus. Sichtbare Slots (Panel) behalten ihren Punkt.
 
 ---
 
@@ -268,6 +272,57 @@ Palette (oder Doppelklick auf die Fläche) legt Knoten an.
 
 **Toolbar:** ↻ Vom Graph laden · ▦ Neu anordnen · 🗂 Domänen · ✓ Prüfen · ⚙ Kompilieren · ▶ Testen ·
 `</>` C# erzeugen · 💾 Speichern · ⬇ Modell.
+
+### 9.1 Domänen-Rahmen (visuelle Blöcke, hierarchisch)
+
+Das Layout bleibt das bewährte: je Aggregat ein Block mit hochkant stehenden Rollen-Spalten, Code-Blöcke (📝) und
+🤖-LLM-Plätze direkt unter ihrem Besitzer, Karten frei ziehbar. Darum liegen nur **rein visuelle Rahmen**:
+- **Domänen-Zugehörigkeit aus dem Graphen steht über allem** (`domKey`): gehört ein Baustein laut Graph zu einem
+  Aggregat (`groupKeyOf`: Projektion über ihre Events, Reader/Store/ReadModel/Query/Response über die Projektion, Code
+  über den Besitzer), ist seine Domäne der Namespace dieses Aggregats — auch wenn die Klasse in `Domain.Projections`
+  liegt. **Ablauf-Einheiten** (Pipeline/Reaktion + Handles + Trigger + Code/🤖 + Dienst, Prozess + Regeln) werden als
+  Ganzes zugeordnet: die Domäne ihrer Aggregat-Nachbarn, wenn eindeutig — sonst die, an die sie **Commands schickt**
+  (Lesen woanders ist nur Abhängigkeit; z. B. DatensatzResolverPipeline liest ImagePair, schreibt Datensatz → Datensatz).
+  **Datentypen** ohne Aggregat (Feldtyp-VO/Enum/Konfig/Response) folgen schrittweise ihren Nachbarn. Erst danach zählt
+  der eigene Namespace (z. B. BenchmarkPipeline ohne Domänen-Bezug, Inseln).
+- **Domäne = Namespace dieser Zuordnung**, hierarchisch: Unterdomänen (`Domain.Pipeline.Trainingslauf`) liegen gestrichelt im Rahmen
+  ihrer Eltern-Domäne. `packLayout` ordnet auf oberster Ebene nach diesem Baum (alphabetisch, „ohne Domäne“ zuletzt;
+  je Domäne: Aggregat-/Brücken-Blöcke, dann ihre Inseln, dann die Unterdomänen) und reserviert je Region Rand + Kopf,
+  sodass sich Rahmen nie schneiden.
+- Der Rahmen folgt den **echten** Kartenpositionen (`zeichneRahmen` aus `GEO`, nach jeder Messung) — zieht man eine
+  Karte heraus, wächst er mit. Linie und Kopf wachsen beim Rauszoomen mit (lesbar in der Übersicht).
+- **Menüleiste im Kopf:** `＋` Baustein in dieser Domäne (Namespace gesetzt; Decider/Applier/State ans Aggregat der
+  Domäne, Regel an ihren Prozess) · `＋ ▤` Unterdomäne · `⤢` einpassen (auch Doppelklick) · `⋯` (Slice markieren,
+  leere Domäne entfernen). Ansicht-Leiste `＋ Domäne`, Rechtsklick auf die Fläche ebenso.
+- **Spalten-Rahmen:** innerhalb einer Domäne ist jede senkrechte Rollen-Spalte eines Blocks (Aggregat bzw. Brücke) eigens
+  eingerahmt — Command | Decider | Aggregat · State | Event · Ablehnung | Applier | VO · Enum | Projektion |
+  Projektion-Handle | Store-Fn | Read Model · Store | Query | Reader-Handle | Response | Reader (bzw. Prozess | Regel |
+  Reaktion | Pipeline | Trigger … in der Brücke). 📝/🤖 zählen zur Spalte ihres Besitzers; Inseln haben einen eigenen
+  Kasten. `layoutBlock` reserviert über jeder Spalte den Kopf (`SPK`). Kopf: Name · Anzahl · `＋` (legt eine Art dieser
+  Spalte in Domäne + Aggregat des Blocks an; Handles/Store-Fns entstehen weiter am Besitzer) · `◎` (Spalte als Slice
+  markieren) · Doppelklick = einpassen. Ein über `＋` angelegter, noch unverdrahteter Baustein behält bis zur
+  Verdrahtung seine Spalte (`VIEW.heimBlk`) statt im Inselkasten zu landen.
+- **Nur Sicht:** leere neue Domänen (`VIEW.domNeu`) und die Heimat namespace-loser Bausteine (`VIEW.heim`) leben in der
+  Ansicht; im Code entsteht ein Namespace erst mit seinem ersten Typ. Code-Namespace geht vor (`domKey`).
+
+### 9.2 Render-Architektur der Fläche (Zoom/Pan/Minimap)
+
+Gemessen am vollen Bestand: ~550 Karten, ~800 Kanten-Pfade, ~24.500 DOM-Elemente, Inhalt bis ~7.000 × 11.300 px.
+Regeln (alle in `HtmlPresenter.cs`, `applyPan`/`sichtFrame`/`messeWelt`/`kulle`):
+- **Keine Dauer-GPU-Ebene.** `.gworld` trägt `will-change:transform` nur während einer Zieh-Geste (`.bewegt`:
+  Pan, Minimap-Ziehen — reines Verschieben, Raster bleibt gültig). Dauerhaft gesetzt rasterte der Browser die
+  ganze Welt in der Start-Zoomstufe; beim Rauszoomen sprengte das das Kachel-Budget → Karten luden nicht
+  nach, flackerten, verschwanden — auch Inspector und Minimap, die sich das GPU-Budget teilen.
+- **Transform sofort, Abgeleitetes einmal je Frame.** `applyPan` schreibt nur den Transform; Minimap-Rahmen,
+  Culling und Schatten-LOD laufen gebündelt in `sichtFrame` (rAF) — ohne Layout-Lesen (Canvas-Größe aus
+  `ResizeObserver` → `CV`, Knoten-Geometrie aus `GEO`).
+- **Geometrie-Cache `GEO`** wird je Layout-Änderung (`drawEdges`) einmal gemessen; Welt- und Kanten-Ebene
+  wachsen auf die Inhaltsgröße (statt fest 6000 × 4000, über die der Bestand hinausragte).
+- **Culling:** Karten außerhalb Sichtfenster + ½ Fenster Rand bekommen `.weg` (`visibility:hidden` — Maße
+  bleiben, Anker/Kanten/Einpassen stimmen weiter).
+- **Schatten-LOD:** unter Zoom 0,45 entfallen die weichen Karten-Schatten (`.fern` → `--gsch:none`);
+  Hervorhebungs-Schatten (Sim, Typ, Verbinden) bleiben.
+- **Overlays gekapselt:** Inspector, Minimap, Filter sind eigene, `contain`-gekapselte Ebenen.
 
 ---
 
