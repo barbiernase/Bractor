@@ -38,6 +38,7 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
         public string? Corr;
         public string? Caus;
         public string? AggType;
+        public string? Akteur;
         // RunContinuationsAsynchronously: die Actor-Fortsetzung darf NICHT inline auf dem Flush-Loop-Thread
         // laufen (sonst serialisiert der Loop hinter Actor-Arbeit und der Group-Commit verpufft).
         public readonly TaskCompletionSource Tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -85,7 +86,8 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
         IReadOnlyList<IEvent> events,
         string? correlationId = null,
         string? causationId = null,
-        string? aggregateType = null)
+        string? aggregateType = null,
+        string? akteur = null)
     {
         if (expectedVersion < 0)
             throw new ArgumentException($"ExpectedVersion must be >= 0, was {expectedVersion}.", nameof(expectedVersion));
@@ -99,7 +101,8 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
             Events = events,
             Corr = correlationId,
             Caus = causationId,
-            AggType = aggregateType
+            AggType = aggregateType,
+            Akteur = akteur
         };
 
         if (!_channel.Writer.TryWrite(p))
@@ -158,7 +161,7 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
         for (var i = 0; i < batch.Count; i++)
         {
             var p = batch[i];
-            appends[i] = new BatchAppend(p.StreamId, p.ExpectedVersion, p.Events, p.Corr, p.Caus, p.AggType);
+            appends[i] = new BatchAppend(p.StreamId, p.ExpectedVersion, p.Events, p.Corr, p.Caus, p.AggType, p.Akteur);
         }
 
         try
@@ -182,7 +185,7 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
         {
             try
             {
-                await _inner.AppendEventsAsync(p.StreamId, p.ExpectedVersion, p.Events, p.Corr, p.Caus, p.AggType)
+                await _inner.AppendEventsAsync(p.StreamId, p.ExpectedVersion, p.Events, p.Corr, p.Caus, p.AggType, p.Akteur)
                     .ConfigureAwait(false);
                 p.Tcs.TrySetResult();
             }

@@ -466,3 +466,159 @@ Zusätzliche Graph-Diagnosen: `UNUSED-EVENT` (Domänen-Event/Ablehnung in keiner
 - **>3 `Und`** im Scaffolder (Fluent-Builder-Grenze, s. §5).
 - **VO-Behavior / Specification / Entity** — aus der Domänen-Analyse nicht gebraucht, kein Ziel.
 - Scaffolder/`ModellMapper`/Proto werden von den reinen Editor-Erweiterungen **nicht** berührt.
+
+## 12 · Akteure: Rahmen je Domäne × Akteur (umgesetzt 2026-10-05)
+
+> Grundlage: `docs/konzept-akteure.md` §8. Akteure sind Domänen-Experten, deklariert wird nur `IDarf<T>`, ein Command kann mehrere
+> Akteure haben, Ketten-Commands erben den Akteur. **Vorgabe (Tobi):** Die jetzige Darstellung bleibt, aber es gibt nicht mehr
+> einen Rahmen je Domäne, sondern **einen je Domäne × Akteur**. ImagePair erscheint also einmal je Akteur. **Doppelungen landen
+> dort, wo sie zuerst auftreten.** (Verworfen: ein zentraler Akteur-Katalog mit Chips und Linse statt eigener Rahmen.)
+
+### 12.1 Bild
+
+```
+┌ ImagePair ─────────────────────────────────────────────────────────────────────────────────────────┐
+│ ┌ ImagePair · ⚙ KameraSystem ───────────────────────────────────────────────────── ＋ ◎ ⤢ ⋯ ┐ │
+│ │ Trigger │ Pipeline │ Command            │ Decider │ State     │ Event          │ Applier │…  │ │
+│ │ DateiEr…│ FileWatch│ ErstelleImagePair┄ │ Decide  │ ImagePair │ ImagePairErst… │ Apply   │   │ │
+│ │         │ BildEing.│ MeldeBildVerfueg.┄ │ Decide  │ BildMeta  │ BildVerfuegbar │ Apply   │   │ │
+│ │         │          │                    │         │ BildVersion│ ImagePairKompl│         │   │ │
+│ └──────────────────────────────────────────────────────────────────────────────────────────────┘ │
+│ ┌ ImagePair · 🤖 Klassifizierer ──────────────────────────────────────────────────────────────┐ │
+│ │ Command                         │ Decider │ Event                         │ Applier │ Enum    │ │
+│ │ KlassifiziereBildPaarDurchKi    │ Decide  │ BildPaarDurchKiKlassifiziert  │ Apply   │ Klassif.│ │
+│ │ KlassifiziereEinzelBildDurchKi  │ Decide  │ EinzelBildDurchKiKlassifiziert│ Apply   │         │ │
+│ └──────────────────────────────────────────────────────────────────────────────────────────────┘ │
+│ ┌ ImagePair · 👤 Inspekteur ────────────────────────────────────────────────────────────────────┐ │
+│ │ Command: LabelBildPaar, LabelEinzelBild, LabelBildRegion, MarkiereAlsInspiziert │ … │          │ │
+│ │ Query: SucheImagePairs, GetImagePair, …  │ Reader │ Projektion │ Read Model │ Response         │ │
+│ └──────────────────────────────────────────────────────────────────────────────────────────────┘ │
+│ ┌ ImagePair · 👤 Produktprüfer ─────────────────────────────────────────────────────────────────┐ │
+│ │ Command: LabelPhysischesProdukt │ Decider │ Event: PhysischesProduktGelabelt │ Applier         │ │
+│ │ ↥ auch: GetImagePair, SucheImagePairs (bei Inspekteur)                                         │ │
+│ └──────────────────────────────────────────────────────────────────────────────────────────────┘ │
+└────────────────────────────────────────────────────────────────────────────────────────────────────┘
+```
+
+Innerhalb jedes Akteur-Rahmens gilt **unverändert** das heutige Layout: Aggregat-Block mit hochkant stehenden Rollen-Spalten,
+Brücken-Block (Pipeline/Prozess/Trigger …), Spalten-Rahmen mit Kopf ＋/◎, 📝/🤖 unter dem Besitzer, Inseln. Neu ist nur eine
+Gruppierungs-Ebene zwischen Domäne und Block. Der Domänen-Rahmen bleibt als dünner Außenrahmen um seine Akteur-Rahmen, damit die
+Hierarchie (§9.1, Unterdomänen) erhalten bleibt.
+
+### 12.2 Der Anteil eines Akteurs an einer Domäne
+
+Welche Bausteine gehören in den Rahmen `Domäne × A`? Die Antwort steht ganz im Graphen, es gibt kein neues Wort:
+
+| Seite | gehört zu A, wenn … |
+|---|---|
+| **Eingang** (Command/Query/Trigger) | A ∈ Akteur-Menge (direkt `IDarf` **oder** über die Kette, Akteur-Konzept §8.4) |
+| **Schreibseite** | Decide-Methode eines Commands von A; die Events/Ablehnungen aus ihrer Signatur; deren Applier; State/Aggregat, VO/Enum, die diese berühren |
+| **Leseseite** | Queries von A → Reader-Handle → Reader → Projektion (+ Handles, Store-Fns, Read Model, Response) |
+| **Ablauf** | Arme, deren Ausgaben zu A gehören (Pipeline/Prozess/Reaktion/Frist inkl. Handles, Trigger, Code 📝/🤖, Dienst) |
+
+Die Domäne eines Bausteins bleibt wie heute (`domKey`, „Domänen-Gehörigkeit steht über allem“). Der Akteur ist **innerhalb** der
+Domäne die zweite Koordinate.
+
+### 12.3 „Wo zuerst auftritt“: Reihenfolge der Akteur-Rahmen
+
+Ein Baustein, der zu mehreren Akteuren gehört (State, ein Event mit zwei Erzeugern, eine Projektion für zwei Fragende, ein
+Command mit zwei Akteuren), steht **genau einmal**, nämlich im ersten Akteur-Rahmen seiner Domäne. „Zuerst“ braucht deshalb eine
+feste Reihenfolge der Akteure **je Domäne**, und auch die wird abgeleitet: **in der Ablauf-Reihenfolge.**
+
+1. **Wer das Ding erschafft:** Der Akteur des Creation-Commands (`ICreationCommand`) des Aggregats kommt zuerst. Für ImagePair
+   ist das KameraSystem (`ErstelleImagePair` über die Kette), für Datensatz, Trainingslauf und Modell der KIOperator.
+2. **Wer worauf reagiert:** B kommt nach A, wenn ein Eingang oder Arm von B ein Event aus dem Anteil von A hört. Der
+   Klassifizierer hört `ImagePairKomplett` (KameraSystem), also kommt er danach.
+3. **Gleichstand:** nach Art (Maschine → KI → Mensch), dann nach Name.
+4. **„ohne Akteur“ zuletzt:** Bausteine, die keinem Akteur gehören (Eingang ohne `IDarf` und ohne Kette = GR-HERKUNFT, Projektion
+   ohne Fragenden), stehen in einem Rahmen `Domäne · ⚠ ohne Akteur` mit rotem Kopf. **Ohne jeden Akteur sieht eine Domäne damit
+   genau so aus wie heute**, nämlich ein Rahmen (z. B. Sammelvorgang, solange es keinen Disponent gibt).
+
+Durchgerechnet für ImagePair: **KameraSystem** (State, VO, `ImagePairErstellt`, `BildVerfuegbar`, `ImagePairKomplett`,
+`ImagePairNichtGefunden` …) → **Klassifizierer** (KI-Commands, KI-Events, `PaarNichtKomplett`, `BildNichtVerfuegbar`, Enum
+`Klassifikation`) → **Inspekteur** (Label-Commands, `MarkiereAlsInspiziert`, die ganze Leseseite) → **Produktprüfer** (nur
+`LabelPhysischesProdukt` + `PhysischesProduktGelabelt`; seine Queries stehen schon beim Inspekteur).
+
+**Die Reihenfolge ist der Hebel des Entwerfers:** Der Akteur-Rahmen lässt sich im Kopf (`⋯ → nach oben/unten`) umsortieren. Das
+wird als Sicht gespeichert (`VIEW.akteurOrdnung[dom]`, wie `VIEW.heim`), und die geteilten Bausteine wandern mit zum neuen Ersten.
+Ohne Eingriff gilt die Ableitung.
+
+### 12.4 Was mit den Doppelungen passiert
+
+- Der Baustein steht im ersten Rahmen. Kanten aus späteren Rahmen laufen **sichtbar hinüber** (wie heute Kanten zwischen Blöcken),
+  sodass `LabelBildPaar → Decide → BildPaarGelabelt → Apply` beim Inspekteur auf den State beim KameraSystem zeigt.
+- Im Kopf jedes späteren Rahmens zeigt eine kleine **„↥ auch“-Zeile** die Doppelungen, die woanders stehen, als Text-Verweise und
+  nicht als Karten (Klick = dorthin springen und markieren). Der Produktprüfer sieht so, dass er `GetImagePair` mitbenutzt.
+- **Leerer Akteur-Rahmen** (alles schon weiter oben, z. B. Inspekteur in Datensatz, wenn er nur `FriereEin` darf, das der
+  KIOperator auch darf): Er wird nur als Kopf mit „↥ auch“-Zeile gezeichnet. Der Akteur bleibt in der Domäne sichtbar, ohne Platz
+  zu verbrauchen.
+- Kein Baustein erscheint zweimal. Die Kartenzahl bleibt gleich wie heute (Parität `--check` unverändert).
+
+### 12.5 Der Akteur im Rahmen-Kopf
+
+- Kopf: `Domäne · Art-Symbol Akteur`, dazu die bekannte Menüleiste (`＋ · ⤢ · ◎ · ⋯`).
+- **Klick auf den Akteur-Namen** öffnet das Akteur-Panel (Art umschalten, `darf ⊕/✕`, wirkt in [Domänen], hört). Die Definition
+  ist der eine Record. Eine eigene Akteur-Karte gibt es nur im **ersten** Rahmen, in dem der Akteur auftritt (wieder „wo zuerst“),
+  als Spalte „Akteur“ ganz links. Das bisherige Akteur-Band wird damit zu dieser Spalte.
+- **`＋` im Akteur-Rahmen entwirft für diesen Akteur:** Ein neuer Command, eine neue Query oder ein neuer Trigger bekommt sofort
+  `IDarf` beim Akteur (Basisliste über `DateiAbgleich.AkteurBefugnisse`). Ein neues Event oder ein neuer Decider entsteht in der
+  Domäne und bleibt bis zur Verdrahtung in diesem Rahmen (`VIEW.heimAkteur`, analog `VIEW.heimBlk`).
+- `＋ Akteur` im Domänen-Kopf legt einen neuen Akteur-Record an und öffnet für ihn einen leeren Rahmen in dieser Domäne.
+- **Zuordnung per Ziehen gibt es nicht:** Wird eine Karte in einen anderen Akteur-Rahmen gezogen, ändert sich nur die Lage. Wem sie
+  gehört, folgt aus `IDarf` und der Kette (Code-Fakten, „Extractor erkennt nur Code-Fakten“). Ändern geht über ⊕/✕ im Panel.
+- Akteur-Rahmen ohne `IDarf` direkt in die Domäne (nur über die Kette) bekommen einen gestrichelten Rahmen.
+
+### 12.6 Ableitung: eine Quelle
+
+- **C#:** `DomainEditor/Akteure.cs` auf `Fluss` (wie `Module.cs`): Akteur-Mengen (Fixpunkt), Anteil je Domäne (§12.2), Reihenfolge
+  (§12.3), daraus `heimAkteur[knoten]` = erster Akteur. Das Board liefert es mit (`rahmen.akteure`).
+- **JS-Spiegel** für das live Bearbeiten (⊕/✕ ändert die Mengen sofort). Parität über `deAkteurParitaet()`, `--check` vergleicht
+  C# ⇄ JS ⇄ `GeneratedAkteurRechte`.
+- **Grammatik:** `GR-HERKUNFT` (füllt „ohne Akteur“), `GR-INGRESS-EINDEUTIG`, `GR-AKTEUR-DIENST`, `GR-VERKOERPERUNG`, optional
+  `GR-ART`, je Regel mit ihrem Build-Gegenstück.
+
+### 12.7 Umsetzung in `HtmlPresenter.cs` (Layout bleibt, eine Ebene mehr)
+
+| Stelle | Heute | Neu |
+|---|---|---|
+| Gruppierung | `region(ns)` → `layoutComp(haupt)` | `region(ns)` → je Akteur (Reihenfolge §12.3) `layoutComp(anteil)`, untereinander mit Kopf-Reserve |
+| Zuordnung | `domKey(n)`, `blockVon(n)` | zusätzlich `akteurVon(n)` = `heimAkteur` bzw. `VIEW.heimAkteur`, sonst „ohne Akteur“ |
+| Rahmen | `zeichneRahmen`: Domäne → Spalten | Domäne (dünn) → **Akteur** (Kopf + Menü + „↥ auch“) → Spalten |
+| Akteur-Band | `AKTEUR_KEY`/`ROLE_AKTEUR` je Domäne | Spalte „Akteur“ nur im ersten Akteur-Rahmen |
+| Lade-Filter | `geladen()` nach `domKey` | unverändert; optional zusätzlich „nur Akteur X laden“ |
+| Anordnung | `KPOS_VERSION = 6` | `7` (einmalig neu packen) |
+
+### 12.8 Reihenfolge der Umsetzung
+
+| Phase | Inhalt |
+|---|---|
+| A | Laufzeit-Grundlage (Akteur-Konzept §8.5, Schritte 1–3) + `DomainEditor/Akteure.cs` + Grammatik + `--check` |
+| B | Akteur-Rahmen im Layout (§12.7), „ohne Akteur“-Rahmen, Kanten über Rahmen, KPOS 7 |
+| C | Kopf: Akteur-Panel, „↥ auch“-Zeile, leere Rahmen eingeklappt, Umsortieren |
+| D | `＋` entwirft für den Akteur, `＋ Akteur`, Panel „Wer?“ (direkt ⊕/✕ · über die Kette mit Pfad) |
+| E | Slice je Akteur-Rahmen (◎), Simulation „als Akteur“ |
+
+### 12.9 Umsetzung (2026-10-05) — wie gebaut
+
+- **Ableitung** in `HtmlPresenter.cs`: `akteurMengen()` (Nachrichten, Spiegel von `AkteurAnteile.cs`), `akteurSet(n)` (Karte → Akteure:
+  Nachrichten direkt, Decider/Applier/State über ihre Commands/Events, Reader über Queries, Projektion/Store/Fn/ReadModel über die,
+  die lesen, Pipeline-/Reaktions-Handle über den Eingang bzw. Dienst-Wechsel, ohne Kette über die Ausgaben bzw. die Pipeline,
+  Datentypen über ihre Nachbarn), `akteurOrdnung(dom)` (§12.3), `akteurVon(n)` (erster Akteur der Ordnung).
+- **Wer einen Rahmen begründet:** nur fachliche Bausteine — VO/Enum/Konfig/HostSetting/Dienst/Code/🤖/Response gehen mit ihrem
+  Träger mit, öffnen aber keinen eigenen Akteur-Rahmen (sonst stünden in jeder Domäne leere Rahmen aller Akteure).
+- **Akteur-Karte:** in der ersten Domäne, in die der Akteur SELBST etwas hineingibt (IDarf-Ziele), dort in der Spalte „Akteur"
+  seines Rahmens.
+- **Layout:** `region()` legt je Akteur ein `layoutComp` untereinander (Rand `AP`, Kopf `AK`, Abstand `AGAP`), leere Rahmen nur als
+  Kopf (`§aktleer:`-Lage); die Lage-Signatur enthält den Akteur-Rahmen → wandert eine Karte, wird neu gepackt. `KPOS_VERSION 7`.
+- **Rahmen:** die Domäne ist EIN großer Rahmen (`.grahmen.mitakt`: kräftiger Rand, eigener Kopf mit „👤 A › B › …", Tobi
+  2026-10-05) und umschließt ihre Domäne × Akteur-Felder (`.grahmen.akt`, Farbe je Akteur; gestrichelt = nur über die Kette;
+  rot = „ohne Akteur") → Spalten wie bisher (Schlüssel jetzt Domäne|Akteur|Block|Rolle).
+- **Kopf:** Name (Klick = Akteur-Panel) · Domäne · „↥ auch" (Doppelungen bei früheren Akteuren, Klick = hinspringen) · Zahl · ＋
+  (Command/Query/Trigger für diesen Akteur, IDarf sofort) · ◎ · ⤢ · ⋯ (↑/↓/↺ Reihenfolge → `VIEW.akteurOrdnung`).
+- **Panels:** Akteur — Art-Auswahl, darf, „bewirkt über die Kette", „wirkt in [Domänen]", Dienst + „entscheidet in"; Nachricht —
+  „👤 über die Kette" mit Pfad (`FriereEin → EinfrierenAngefordert → SchliesseEinfrierenAb`) bzw. ⚠ GR-HERKUNFT.
+- **Löschen** eines Eingangs entfernt ihn aus den IDarf-Listen.
+- **Diagnose:** `deAkteure()` (je Domäne Ordnung + Rahmen-Inhalt), `deAkteurParitaet()`.
+- **Gemessen (Bestand):** 14 Akteur-Rahmen, 0 Überlappungen, Parität C# = JS; ImagePair: KameraSystem › Klassifizierer › Inspekteur ›
+  KIOperator › Produktprüfer.
+- **Offen:** Simulation „als Akteur" (Phase E), Slice entlang der Kette über Domänen.

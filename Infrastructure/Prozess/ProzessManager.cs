@@ -28,6 +28,8 @@ public sealed class ProzessManager
 {
     private readonly IEventStoreRepository _store;
     private readonly IReadOnlyDictionary<string, ProzessRegeln> _registry;
+    // Korrelation → Akteur des Prozesses (aus dem Manager-Log gefaltet, je Weckung aufgefrischt).
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, string?> _akteurVon = new();
     private readonly Func<Guid, ICommand, Guid, CancellationToken, Task> _dispatch;
     private readonly IProzessOffenIndex? _offenIndex;
     private readonly IDeadLetterSink? _deadLetters;   // ★ #12: KlärungNötig beobachtbar machen (optional, best-effort)
@@ -83,7 +85,11 @@ public sealed class ProzessManager
         var mz = await LadeStatusAsync(korrelation, ct);
         if (!mz.Gestartet)
         {
-            await AppendAsync(korrelation, mz.Version, new ProzessGestartet(prozessName, auslöserStream, auslöserVersion), ct);
+            // Kausalkette (docs/konzept-akteure.md §8.4): der Prozess handelt im Auftrag des Akteurs, dessen Event ihn auslöste —
+            //   einmal beim Start gelesen und mit ProzessGestartet ins Manager-Log gestempelt (Header), danach aus dem Log gefaltet.
+            var auslöser = (await _store.ReadStreamAsync(auslöserStream, auslöserVersion, ct))
+                .FirstOrDefault(e => e.AggregateVersion == auslöserVersion);
+            await AppendAsync(korrelation, mz.Version, new ProzessGestartet(prozessName, auslöserStream, auslöserVersion), ct, auslöser?.UserId);
         }
         await WakeAsync(korrelation, ct);
     }
@@ -93,6 +99,7 @@ public sealed class ProzessManager
     {
         var mz = await LadeStatusAsync(korrelation, ct);
         if (!mz.Gestartet || mz.Beendet) return;
+        _akteurVon[korrelation] = mz.Akteur;
         if (!_registry.TryGetValue(mz.ProzessName, out var regeln)) return;
 
         var kandidaten = await FaltMarkingMitCursorAsync(korrelation, mz, regeln, ct);
@@ -201,6 +208,8 @@ public sealed class ProzessManager
     // Der Regel-Command bleibt REIN (keine Vorgang-Injektion); die Idempotenz sichert die CommandId.
     private Task FeuereAsync(Guid korrelation, ICommand cmd, Guid vorgang, CancellationToken ct)
     {
+        // Im Auftrag des Auslöser-Akteurs (der Emit liest ImAuftrag synchron beim Bauen des Envelopes).
+        using var imAuftrag = ImAuftrag.IstAkteur(_akteurVon.GetValueOrDefault(korrelation)) ? ImAuftrag.Von(_akteurVon[korrelation]!) : null;
         // ★ P5b: das befeuerte Ziel ist ab jetzt „dirty" — die nächste Weckung MUSS genau diesen Stream nachfalten
         //   (dort erscheint das Ergebnis der Transition). Alles andere trägt der HOT-Cache.
         if (CursorAktiv)
@@ -537,6 +546,8 @@ public sealed class ProzessManager
         public IReadOnlyDictionary<Guid, string> Gescheitert { get; init; } = new Dictionary<Guid, string>();
         public bool Beendet { get; init; }
         public bool Erfolg { get; init; }
+        /// <summary>Der Akteur, in dessen Auftrag der Prozess handelt (Auslöser-Event; null = keiner).</summary>
+        public string? Akteur { get; init; }
     }
 
     public async Task<ManagerStatus> LadeStatusAsync(Guid korrelation, CancellationToken ct = default)
@@ -546,6 +557,7 @@ public sealed class ProzessManager
         string name = "", grund = "";
         Guid auslöserStream = default;
         int auslöserVersion = 0;
+        string? akteur = null;
         var gescheitert = new Dictionary<Guid, string>();
 
         foreach (var env in log)
@@ -554,6 +566,7 @@ public sealed class ProzessManager
             {
                 case ProzessGestartet g:
                     gestartet = true; name = g.ProzessName; auslöserStream = g.AuslöserStream; auslöserVersion = g.AuslöserVersion;
+                    akteur = ImAuftrag.IstAkteur(env.UserId) ? env.UserId : null;
                     break;
                 case SchrittGescheitert f:
                     gescheitert[f.Vorgang] = f.Grund;
@@ -568,13 +581,13 @@ public sealed class ProzessManager
         {
             Gestartet = gestartet, ProzessName = name,
             AuslöserStream = auslöserStream, AuslöserVersion = auslöserVersion,
-            Version = log.Count, Gescheitert = gescheitert, Beendet = beendet, Erfolg = erfolg,
+            Version = log.Count, Gescheitert = gescheitert, Beendet = beendet, Erfolg = erfolg, Akteur = akteur,
         };
     }
 
-    private async Task AppendAsync(Guid korrelation, int erwarteteVersion, IEvent ereignis, CancellationToken ct)
+    private async Task AppendAsync(Guid korrelation, int erwarteteVersion, IEvent ereignis, CancellationToken ct, string? akteur = null)
     {
-        await _store.AppendEventsAsync(korrelation, erwarteteVersion, new[] { ereignis }, aggregateType: "ProzessManager");
+        await _store.AppendEventsAsync(korrelation, erwarteteVersion, new[] { ereignis }, aggregateType: "ProzessManager", akteur: akteur);
 
         // Offen-Index NACH dem durablen Log-Append pflegen — das Log ist die Wahrheit, der Index nur ein
         // best-effort-Hinweis für den §3-Backstop. Ein Fehler hier ist folgenlos (siehe IProzessOffenIndex):
@@ -597,5 +610,6 @@ public sealed class ProzessManager
         //   (die nächste Weckung faltet Beendet und kehrt sofort zurück). HOT + Store aufräumen (best-effort).
         if (CursorAktiv && ereignis is ProzessBeendet)
             await VerwirfMarkingAsync(korrelation, ct);
+        if (ereignis is ProzessBeendet) _akteurVon.TryRemove(korrelation, out _);
     }
 }

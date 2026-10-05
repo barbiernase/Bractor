@@ -63,6 +63,27 @@ public class MetadataPostgresTests : IClassFixture<MetadataPostgresTests.Fixture
         events[0].AggregateType.Should().BeEmpty();
     }
 
+    [Fact]
+    public async Task Der_Akteur_reist_als_Header_mit_dem_Event_einzeln_und_gebuendelt()
+    {
+        // Kausalkette (docs/konzept-akteure.md §8.4): der Akteur des Commands steht als Header „akteur" am Event und kommt
+        //   über ReadStreamAsync als UserId zurück — Grundlage dafür, dass Pipelines/Prozesse/Fristen in seinem Auftrag handeln.
+        var es = new MartenEventStore(_fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance);
+        var einzeln = Guid.NewGuid();
+        await es.AppendEventsAsync(einzeln, 0, new IEvent[] { new ImagePairInspiziert() }, aggregateType: "ImagePair", akteur: "Inspekteur");
+
+        var gebuendelt = Guid.NewGuid();
+        await new MartenEventBatchWriter(_fx.Store, NullLogger<MartenEventBatchWriter>.Instance).WriteBatchAsync(
+            new[] { new BatchAppend(gebuendelt, 0, new IEvent[] { new ImagePairInspiziert() }, null, null, "ImagePair", "KameraSystem") }, default);
+
+        var ohne = Guid.NewGuid();
+        await es.AppendEventsAsync(ohne, 0, new IEvent[] { new ImagePairInspiziert() }, akteur: ImAuftrag.Ohne);
+
+        (await es.ReadStreamAsync(einzeln, 0, default)).Single().UserId.Should().Be("Inspekteur");
+        (await es.ReadStreamAsync(gebuendelt, 0, default)).Single().UserId.Should().Be("KameraSystem");
+        (await es.ReadStreamAsync(ohne, 0, default)).Single().UserId.Should().Be(ImAuftrag.Ohne, "„system“ wird nicht geschrieben");
+    }
+
     private sealed class NoopFactory : IAggregateHandlerFactory
     {
         public IAggregateHandler CreateHandler(IState state)

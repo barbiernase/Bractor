@@ -62,7 +62,8 @@ public class MartenEventStore : IEventStoreRepository
         IReadOnlyList<IEvent> events,
         string? correlationId = null,
         string? causationId = null,
-        string? aggregateType = null)
+        string? aggregateType = null,
+        string? akteur = null)
     {
         // Guard: expectedVersion muss >= 0 sein.
         // Der Actor prüft bereits gegen seinen State, aber falls
@@ -84,6 +85,7 @@ public class MartenEventStore : IEventStoreRepository
         if (correlationId != null) session.CorrelationId = correlationId;
         if (causationId != null) session.CausationId = causationId;
         if (!string.IsNullOrEmpty(aggregateType)) session.SetHeader("aggregate_type", aggregateType);
+        if (ImAuftrag.IstAkteur(akteur)) session.SetHeader(ImAuftrag.Header, akteur!);
 
         if (expectedVersion == 0)
         {
@@ -211,6 +213,8 @@ public class MartenEventStore : IEventStoreRepository
                 && e.Headers.TryGetValue("aggregate_type", out var at)
                     ? at?.ToString() ?? string.Empty
                     : string.Empty;
+            // Der Akteur der Kette (Header „akteur") — fehlt er (Alt-Events, reine Automation), bleibt der Default.
+            var akteur = e.Headers != null && e.Headers.TryGetValue(ImAuftrag.Header, out var ak) ? ak?.ToString() : null;
 
             // ★ Upcasting-Seam: eine Stored-Position wird zu ein (1:1) oder — bei einem künftigen
             //   Split — mehreren materialisierten Events. Alle teilen dieselbe AggregateVersion, tragen
@@ -230,6 +234,7 @@ public class MartenEventStore : IEventStoreRepository
                     CorrelationId    = e.CorrelationId ?? string.Empty,
                     CausationId      = e.CausationId  ?? string.Empty,
                     AggregateType    = aggregateType,
+                    UserId           = akteur ?? ImAuftrag.Ohne,
                     Payload          = materialisiert[si]
                 });
             }

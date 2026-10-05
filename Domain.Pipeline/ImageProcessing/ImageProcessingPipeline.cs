@@ -6,9 +6,9 @@ using OpenCvSharp;
 namespace Domain.Pipeline.ImageProcessing;
 
 /// <summary>
-/// Orchestriert den Lebenszyklus eines ImagePairs:
-///   1. DateiErkannt → Parsen → ErstelleImagePair + Preprocessing + MeldeBildVerfuegbar
-///   2. ImagePairKomplett (Event) → KI-Klassifikation starten
+/// Bild-Eingang des KameraSystems: DateiErkannt → Parsen → ErstelleImagePair + Preprocessing + MeldeBildVerfuegbar.
+/// Die Commands tragen den Akteur des Triggers (KameraSystem, der einzige mit IDarf&lt;DateiErkannt&gt;).
+/// Klassifiziert wird NICHT hier: das tut der Akteur Klassifizierer draußen (Python-Worker am Tor, hört ImagePairKomplett).
 ///
 /// WICHTIG: Die gesamte Dateinamen-Interpretation liegt hier — nicht im FileWatcher!
 /// </summary>
@@ -112,28 +112,6 @@ public partial class ImageProcessingPipeline : IPipelineHandler
             resolved.Version,
             meta,
             outputPath);
-    }
-
-    // ═══════════════════════════════════════════════════
-    // EVENT-HANDLER (PubSub)
-    // ═══════════════════════════════════════════════════
-
-    // Die KI ist ein Akteur (IClassifierService : IAkteur): dieser Handle entscheidet in IHREM Auftrag — sie steht deshalb
-    //   in der Signatur, nicht im Konstruktor (CQRS060), und der erzeugte Command trägt sie als Urheber.
-    public async IAsyncEnumerable<OneOf<KlassifiziereBildPaarDurchKi>> Handle(
-        ImagePairKomplett evt, PipelineContext ctx, IClassifierService ki)
-    {
-        var aggregateId = ctx.SourceAggregateId!.Value;
-        var result = await ki.ClassifyPairAsync(aggregateId);
-        yield return new KlassifiziereBildPaarDurchKi(aggregateId, result.Label);
-    }
-
-    public Task Handle(PaarNichtKomplett rejection, PipelineContext ctx)
-    {
-        _logger.LogWarning(
-            "Pipeline: Paar {Id} noch nicht komplett, warte auf zweites Bild",
-            ctx.SourceAggregateId);
-        return Task.CompletedTask;
     }
 }
 

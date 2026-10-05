@@ -16,7 +16,7 @@ public static class Herkunft
     public static string Von(Enumeration e) => Hash(e with { Datei = null, Herkunft = null, Doku = null });
     public static string Von(Aggregat a) => Hash(a.State.Select(f => f with { ElementTyp = null }).ToList());
     public static string Von(DecideRegel d) => Hash(new { d.Aggregat, d.Command, d.Ergibt });
-    public static string Von(Akteur a) => Hash(new { a.Name, a.Darf });
+    public static string Von(Akteur a) => Hash(new { a.Name, a.Darf, a.Art });
     public static string Von(Saga s) => Hash(new { s.TriggerEvent, Schritte = s.Schritte.Select(Wirksam).ToList() });
 
     /// <summary>

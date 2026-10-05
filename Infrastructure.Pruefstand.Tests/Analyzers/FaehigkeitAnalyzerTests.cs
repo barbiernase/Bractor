@@ -120,7 +120,8 @@ public record Antwort() : IQueryResponse;
 public record Los() : IPipelineTrigger;
 public interface IFinde : IReadStore { Task<int> FindeAsync(Guid id); }
 public record Konfig(int Wert);
-public interface IKi : IAkteur { int Rate(); }
+public sealed record Gutachter : IKi;
+public interface IGutachten : IAkteurDienst<Gutachter> { int Rate(); }
 " + code + " }") }, refs, new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
         comp.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error).Should().BeEmpty("die Probe selbst muss kompilieren");
         var ds = await comp.WithAnalyzers(ImmutableArray.Create<DiagnosticAnalyzer>(new HandlerFormAnalyzer())).GetAnalyzerDiagnosticsAsync();
@@ -157,10 +158,10 @@ public partial class L : IPipelineHandler { public string PipelineId => ""l"";
     {
         (await Ids(@"
 public partial class L : IPipelineHandler { public string PipelineId => ""l"";
-    public Task Handle(Los t, PipelineContext ctx, IKi ki) => Task.CompletedTask; }")).Should().BeEmpty();
+    public Task Handle(Los t, PipelineContext ctx, IGutachten ki) => Task.CompletedTask; }")).Should().BeEmpty();
         (await Ids(@"
 public partial class P : ISubscriber { public string SubscriberId => ""p"";
-    public Task Handle(Gemacht e, IAggregateEnvelope env, ProjectionWriter w, IKi ki) => Task.CompletedTask; }"))
+    public Task Handle(Gemacht e, IAggregateEnvelope env, ProjectionWriter w, IGutachten ki) => Task.CompletedTask; }"))
             .Should().Equal(HandlerFormAnalyzer.FormId);
     }
 }

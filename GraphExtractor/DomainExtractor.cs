@@ -289,8 +289,10 @@ public sealed class AkteurRaw
 {
     public string Name = "", Namespace = "", Full = "";
     public List<string> Darf = new();
-    /// <summary>Der Akteur ist ein Dienst-Vertrag (Interface), z. B. die KI.</summary>
-    public bool Dienst;
+    /// <summary>„Mensch" / „Maschine" / „Ki" aus der Basisliste, sonst null.</summary>
+    public string? Art;
+    /// <summary>Dienst-Verträge dieses Akteurs (<c>IAkteurDienst&lt;Akteur&gt;</c>), einfache Namen.</summary>
+    public List<string> Dienste = new();
     public string? Datei, Doku;
 }
 
@@ -353,7 +355,7 @@ public sealed class DomainExtractor
     /// <summary>Die globalen usings der Domänen-Compilations (ImplicitUsings + global using) + der Vertrags-Namespace — nie „explizit".</summary>
     private readonly HashSet<string> _impliziteUsings;
     private readonly INamedTypeSymbol? _iDecider, _iApplier, _iAggEnvelope, _pipelineContext,
-        _iWriteStore, _iReadStore, _iStore, _iWertobjekt, _prozessTyp, _iAkteur, _iDarf;
+        _iWriteStore, _iReadStore, _iStore, _iWertobjekt, _prozessTyp, _iAkteur, _iDarf, _iAkteurDienst;
     /// <summary>State-FullName → die Typen, die <c>IDecider&lt;State&gt;</c> bzw. <c>IApplier&lt;State&gt;</c> implementieren (egal wo deklariert).</summary>
     private readonly Dictionary<string, List<INamedTypeSymbol>> _deciderJeState = new(StringComparer.Ordinal), _applierJeState = new(StringComparer.Ordinal);
 
@@ -390,6 +392,7 @@ public sealed class DomainExtractor
         _iReadStore = Get(Vertrag.IReadStore);
         _iStore = Get(Vertrag.IStore);
         _iAkteur = Get(Vertrag.IAkteur);
+        _iAkteurDienst = Get(Vertrag.IAkteurDienst);
         _iDarf = Get(Vertrag.IDarf);
         _iWertobjekt = Get(Vertrag.IWertobjekt);
         _prozessTyp = Get(Vertrag.ProzessMetadatenName);
@@ -523,6 +526,7 @@ public sealed class DomainExtractor
 
     private void CatalogDomainTypes(DomainModel m)
     {
+        var dienstZu = new List<(string, string)>();   // (Dienst-Vertrag, Akteur-Full) aus IAkteurDienst<A>
         foreach (var t in DomainQuellTypen())
         {
             if (t.TypeKind == TypeKind.Enum)
@@ -530,14 +534,14 @@ public sealed class DomainExtractor
                 m.Enums.Add(ReadEnum(t));
                 continue;
             }
-            // Akteur-Dienst: ein Vertrag (Interface) mit IAkteur — die Implementierungsklasse ist kein eigener Akteur.
-            if (t.TypeKind == TypeKind.Interface && IstAkteurVertrag(t)) { m.Akteure.Add(ReadAkteur(t)); continue; }
+            // Akteur-Dienst: ein Vertrag (Interface) mit IAkteurDienst<A> — kein Akteur, er gehört A (wird unten zugeordnet).
+            if (t.TypeKind == TypeKind.Interface && AkteurVonDienst(t) is { } dienstVon) { dienstZu.Add((t.Name, dienstVon.Fq())); continue; }
             // Geschachtelte Typen gehören zum Handcode ihres Containers (Zusatz), keine eigenen Bausteine.
             if (t.ContainingType != null || t.TypeKind is not (TypeKind.Class or TypeKind.Struct) || t.IsStatic || t.IsAbstract) continue;
 
             var raw = new RecordRaw { Name = t.Name, Full = t.Fq(), Fields = Felder(t), Meta = Meta(t) };
-            if (_iAkteur != null && Sym.Implements(t, _iAkteur) && !t.AllInterfaces.Any(IstAkteurVertrag)) m.Akteure.Add(ReadAkteur(t));
-            else if (t.AllInterfaces.Any(IstAkteurVertrag)) { }   // Implementierung eines Akteur-Dienstes: Dienst, kein Wert
+            if (_iAkteur != null && Sym.Implements(t, _iAkteur)) m.Akteure.Add(ReadAkteur(t));
+            else if (t.AllInterfaces.Any(i => AkteurVonDienst(i) != null)) { }   // Implementierung eines Akteur-Dienstes: Dienst, kein Wert
             else if (Sym.Implements(t, _iQueryResponse)) m.Responses.Add(raw);
             else if (Sym.Implements(t, _iReadModel)) m.ReadModels.Add(raw);
             else if (Sym.Implements(t, _iPipelineTrigger)) m.Triggers.Add(raw);
@@ -552,6 +556,8 @@ public sealed class DomainExtractor
         }
         m.Enums.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Akteure.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
+        foreach (var (dienst, akteur) in dienstZu.OrderBy(x => x.Item1, StringComparer.Ordinal))
+            m.Akteure.FirstOrDefault(a => a.Full == akteur)?.Dienste.Add(dienst);
         m.ValueObjects.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Responses.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.ReadModels.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
@@ -622,9 +628,11 @@ public sealed class DomainExtractor
         m.Konfigs.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
     }
 
-    /// <summary>Ein Akteur-Vertrag: ein Interface (nicht IAkteur selbst), das IAkteur trägt — z. B. die KI.</summary>
-    private bool IstAkteurVertrag(INamedTypeSymbol i) =>
-        _iAkteur != null && i.TypeKind == TypeKind.Interface && i.Fq() != _iAkteur.Fq() && Sym.Implements(i, _iAkteur);
+    /// <summary>Ein Akteur-Dienst (<c>interface X : IAkteurDienst&lt;A&gt;</c>) → A; sonst null. Der Dienst ist kein Akteur.</summary>
+    private INamedTypeSymbol? AkteurVonDienst(INamedTypeSymbol i) =>
+        _iAkteurDienst == null || i.TypeKind != TypeKind.Interface ? null
+            : (i.OriginalDefinition.Fq() == _iAkteurDienst.Fq() ? i : i.AllInterfaces.FirstOrDefault(x => x.OriginalDefinition.Fq() == _iAkteurDienst.Fq()))
+                ?.TypeArguments.FirstOrDefault() as INamedTypeSymbol;
 
     // ── Akteure: IAkteur + IDarf<T> in der Basisliste (Code-Fakt; Reihenfolge = Deklaration, Geerbtes danach) ───────
     private AkteurRaw ReadAkteur(INamedTypeSymbol t)
@@ -633,7 +641,10 @@ public sealed class DomainExtractor
         bool IstDarf(INamedTypeSymbol i) => _iDarf != null && i.OriginalDefinition.Fq() == _iDarf.Fq() && i.TypeArguments.Length == 1;
         var darf = t.Interfaces.Where(IstDarf).Concat(t.AllInterfaces.Where(IstDarf))
             .Select(i => i.TypeArguments[0].Name).Distinct(StringComparer.Ordinal).ToList();
-        return new AkteurRaw { Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Full = t.Fq(), Darf = darf, Dienst = t.TypeKind == TypeKind.Interface,
+        var art = t.AllInterfaces.Select(i => i.Fq()).ToList() is var basen
+            ? basen.Contains(Vertrag.IMensch) ? "Mensch" : basen.Contains(Vertrag.IMaschine) ? "Maschine" : basen.Contains(Vertrag.IKi) ? "Ki" : null
+            : null;
+        return new AkteurRaw { Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Full = t.Fq(), Darf = darf, Art = art,
             Datei = decl?.SyntaxTree.FilePath, Doku = decl == null ? null : Summary(decl) };
     }
 
@@ -1324,8 +1335,8 @@ public sealed class DomainExtractor
             if (trigs.Count > 0) pipe.HandleEmitsTriggers[input.Fq()] = trigs;
             var fs = FaehigkeitenVon(method);
             if (fs.Count > 0) pipe.HandleFaehigkeiten[input.Fq()] = fs;
-            // Im Auftrag eines Akteur-Dienstes (Parameter-Typ = Akteur-Vertrag; CQRS060: höchstens einer).
-            if (method.Parameters.Select(p => p.Type).OfType<INamedTypeSymbol>().FirstOrDefault(IstAkteurVertrag) is { } akteur)
+            // Im Auftrag eines Akteurs über seinen Dienst (Parameter-Typ : IAkteurDienst<A> → A; CQRS060: höchstens einer).
+            if (method.Parameters.Select(p => p.Type).OfType<INamedTypeSymbol>().Select(AkteurVonDienst).FirstOrDefault(a => a != null) is { } akteur)
                 pipe.HandleAkteur[input.Fq()] = akteur.Name;
             pipe.HandleSigs[input.Fq()] = LiesHandleSig(method, 1);
         }

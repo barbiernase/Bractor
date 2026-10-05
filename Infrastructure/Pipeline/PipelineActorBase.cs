@@ -36,6 +36,8 @@ public abstract class PipelineActorBase<THandler> : IActor
     /// Ermöglicht deterministisches Cancel: gleiches Token → altes Schedule verworfen.
     /// </summary>
     private readonly Dictionary<string, CancellationTokenSource> _scheduledTokens = new();
+    // Selbst-Nachricht → Akteur, in dessen Auftrag sie geplant wurde (Referenz-Identität; mailbox-sicher, ein Thread).
+    private readonly Dictionary<object, string> _selbstAkteur = new(ReferenceEqualityComparer.Instance);
 
     // P6.2: NUR für TRANSIENTE Events (ITransientEvent) — die sind nicht im Log und können daher nicht
     // auf den Pull-Pfad; sie bleiben per Invariante 6 auf dem verlierbaren Push-Broker. Persistierte
@@ -69,17 +71,25 @@ public abstract class PipelineActorBase<THandler> : IActor
 
                 // Kanal 0: Self-Messages (Selbst<T>-Ausgang → eigene Mailbox)
                 case IPipelineSelfMessage selfMsg:
-                    await OnSelfMessageAsync(selfMsg, context);
+                {
+                    // Kausalkette über die eigene Mailbox: geplant im Auftrag eines Akteurs → so auch ausgeführt.
+                    _selbstAkteur.Remove(selfMsg, out var ak);
+                    using (Infrastructure.Akteure.AkteurHerkunft.Aus(ak))
+                        await OnSelfMessageAsync(selfMsg, context);
                     break;
+                }
 
                 // Kanal 1: Direkte Trigger-Messages von nativen Actors oder anderen Pipelines
                 case IPipelineTrigger trigger:
-                    await OnTriggerAsync(trigger, context);
+                    // Ein Trigger kommt ohne Envelope: sein Akteur ist der eine, der ihn per IDarf hineingibt (Ingress).
+                    using (Infrastructure.Akteure.AkteurHerkunft.Aus(Infrastructure.Akteure.AkteurHerkunft.EindeutigerHalter(trigger.GetType())))
+                        await OnTriggerAsync(trigger, context);
                     break;
 
                 // Kanal 2: seit P6.2 nur noch TRANSIENTE Events via Push-Broker (persistierte laufen über Pull).
                 case IAggregateEnvelope envelope:
-                    await OnEnvelopeAsync(envelope, context, context.CancellationToken);
+                    using (Infrastructure.Akteure.AkteurHerkunft.Aus(envelope.UserId))
+                        await OnEnvelopeAsync(envelope, context, context.CancellationToken);
                     break;
 
                 case Stopping:
@@ -234,9 +244,10 @@ public abstract class PipelineActorBase<THandler> : IActor
                     _scheduledTokens[token] = cts;
                 }
                 var nachricht = s.Nachricht;
+                if (ImAuftrag.IstAkteur(ImAuftrag.Akteur)) _selbstAkteur[nachricht] = ImAuftrag.Akteur!;
                 actorCtx.ReenterAfter(Task.Delay(s.Verzoegerung, cts.Token), () =>
                 {
-                    if (cts.IsCancellationRequested) return;
+                    if (cts.IsCancellationRequested) { _selbstAkteur.Remove(nachricht); return; }
                     actorCtx.Send(actorCtx.Self, nachricht);
                     if (s.Token is { } t) _scheduledTokens.Remove(t);
                 });
@@ -330,6 +341,8 @@ public abstract class PipelineActorBase<THandler> : IActor
             CorrelationId = ctx.CorrelationId,
             AggregateId = ctx.SourceAggregateId ?? Guid.Empty,
             AggregateType = ctx.SourceAggregateType ?? _logic.PipelineId,
+            // Kausalkette: auch ein verlierbarer Hinweis trägt den Akteur, in dessen Auftrag die Pipeline gerade handelt.
+            UserId = ImAuftrag.Akteur ?? ImAuftrag.Ohne,
         };
 
         await _publisher.PublishAsync(envelope);

@@ -38,7 +38,7 @@ public class ProjectionRebuilderTests
             => Task.FromResult(new StreamChanges(
                 _events.Select(e => e.AggregateId).Distinct().ToList(), _events.Count));
 
-        public Task AppendEventsAsync(Guid a, int v, IReadOnlyList<IEvent> e, string? c = null, string? ca = null, string? at = null)
+        public Task AppendEventsAsync(Guid a, int v, IReadOnlyList<IEvent> e, string? c = null, string? ca = null, string? at = null, string? ak = null)
             => throw new NotSupportedException();
         public Task<TState?> LoadStateAsync<TState>(Guid id) where TState : class, IState, new()
             => throw new NotSupportedException();

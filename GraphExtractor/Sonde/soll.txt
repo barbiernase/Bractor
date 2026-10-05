@@ -41,7 +41,7 @@ store Leihwesen.Lesen.ILeihBuch | schreibt SchreibeAsync(eintrag:LeihEintrag), S
 projektion Leihwesen.Lesen.Leihliste id=leihliste pull | Ausgeliehen -> ILeihBuch.SchreibeAsync; Zurueckgegeben -> ILeihBuch.SchliesseAsync
 reaktion Leihwesen.Lesen.MahnungBeiSchaden id=mahnung-bei-schaden | SchadenGemeldet -> sendet EroeffneMahnung
 reader Leihwesen.Lesen.LeihAuskunftLeser projektion=Leihliste trackDeps=false | OffeneAusleihen -> ILeihBuch.OffeneAsync => OffeneAusleihenAntwort|KeineAusleihen
-pipeline Leihwesen.Lesen.MahnlaufPipeline id=mahnlauf konfigs=MahnlaufKonfig | MahnlaufAngestossen(trigger) -> sendet EroeffneMahnung, MeldeSchaden; MahnlaufGeprueft(trigger) -> sendet EroeffneMahnung, MeldeSchaden -> ILeihBuch.OffeneAsync; PipelineGestartet(self) -> sendet ; Mahnrunde(self) -> sendet EroeffneMahnung im Auftrag IGebuehrenOrakel
+pipeline Leihwesen.Lesen.MahnlaufPipeline id=mahnlauf konfigs=MahnlaufKonfig | MahnlaufAngestossen(trigger) -> sendet EroeffneMahnung, MeldeSchaden; MahnlaufGeprueft(trigger) -> sendet EroeffneMahnung, MeldeSchaden -> ILeihBuch.OffeneAsync; PipelineGestartet(self) -> sendet ; Mahnrunde(self) -> sendet EroeffneMahnung im Auftrag Gutachterin
 trigger MahnlaufAngestossen | Ziel:Guid, Betrag:decimal
 trigger MahnlaufGeprueft | Ziel:Guid, Betrag:decimal
 
@@ -89,8 +89,8 @@ ausgang Vormerkpruefung.VormerkTick strom | command:MeldeSchaden
 #    _praefix (readonly string), Takt (statisch).
 zustand pipeline Leihwesen.Lesen.MahnlaufPipeline | _gemahnt, _runden
 
-# ── Akteure: IAkteur + IDarf<T> in der Basisliste (Code-Fakt), frei benannt; einer im Code, einer im Editor gezeichnet ──
+# ── Akteure: IAkteur/Art + IDarf<T> in der Basisliste (Code-Fakt), frei benannt; einer im Code, einer im Editor gezeichnet ──
 akteur Leihwesen.Lesen.Theke | darf LeiheAus, GibZurueck, OffeneAusleihen
 akteur Leihwesen.Gebuehren.Mahnstelle | darf EroeffneMahnung, Vormerkungen
-# ── Ein DIENST als Akteur (Vertrag mit Methode) — der Mahnrunden-Handle entscheidet in seinem Auftrag (Parameter) ──
-akteur Leihwesen.Lesen.IGebuehrenOrakel dienst | darf EroeffneMahnung
+# ── Eine KI als Akteur mit ihrem Dienst (IAkteurDienst<A>, selbst kein Akteur) — der Mahnrunden-Handle entscheidet in ihrem Auftrag ──
+akteur Leihwesen.Lesen.Gutachterin Ki dienste IGebuehrenOrakel | darf EroeffneMahnung

@@ -33,7 +33,7 @@ public class AppendBatchingTests
         public int EinzelAppends;
 
         public Task AppendEventsAsync(Guid id, int expV, IReadOnlyList<IEvent> events,
-            string? c = null, string? ca = null, string? at = null)
+            string? c = null, string? ca = null, string? at = null, string? ak = null)
         {
             lock (_lock)
             {

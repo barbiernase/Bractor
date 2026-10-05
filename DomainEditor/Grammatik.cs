@@ -122,12 +122,17 @@ public static class Grammatik
             + "Transient-Event. Was er hören darf, wird abgeleitet (Aggregate seiner Commands, Projektionen hinter seinen Queries).", "error",
             [An("CQRS058", "Domain.SourceGeneration/AkteurAnalyzer.cs"), Gen("CQRS059", "Infrastructure.SourceGeneration/AkteurRechteGenerator.cs (Name eindeutig)"),
              new("laufzeit", null, "Infrastructure/Akteure/AkteurTor.cs (Handshake + jede hineingehende Nachricht)")]),
-        new("GR-AUFTRAG", "Im Auftrag eines Akteur-Dienstes", "Ein Pipeline-Handle, der einen Akteur-Dienst (z. B. die KI) als Parameter "
-            + "nimmt, entscheidet in dessen Auftrag: höchstens einer je Handle, und er sendet nur Commands, die dieser Akteur darf.", "error",
+        new("GR-AUFTRAG", "Im Auftrag eines Akteurs über seinen Dienst", "Ein Dienst ist kein Akteur, er gehört einem (IAkteurDienst<A>). Ein "
+            + "Pipeline-Handle, der ihn als Parameter nimmt, entscheidet im Auftrag von A: höchstens einer je Handle, und er sendet nur "
+            + "Commands, die A darf; als Konstruktor-Abhängigkeit ist der Dienst in keiner Klasse erlaubt.", "error",
             [An("CQRS060", "Domain.SourceGeneration/AkteurAnalyzer.cs"), new("laufzeit", null, "Abstractions.ImAuftrag → CommandEmitter stempelt UserId")]),
-        new("GR-AKTEUR-FEHLT", "Von außen, aber kein Akteur", "Sobald es Akteure gibt: ein Command, eine Query oder ein Trigger ohne internen "
-            + "Erzeuger, den kein Akteur darf — am Tor kommt er nie durch (unbekannter Akteur).", "warning",
-            [new("laufzeit", null, "Infrastructure/Akteure/AkteurTor.cs (abgewiesen)"), Offen("kein Build-Fehler")]),
+        new("GR-HERKUNFT", "Alles kommt von einem Akteur", "Sobald es Akteure gibt: jeder Command, jede Query und jeder Trigger kommt von "
+            + "einem Akteur — direkt (IDarf<T>) oder über die Kette (eine Pipeline, ein Prozess oder eine Frist erzeugt ihn aus einem "
+            + "Event, das von einem Akteur stammt). Sonst steht er im Rahmen „ohne Akteur“.", "warning",
+            [new("laufzeit", null, "Infrastructure/Akteure/AkteurTor.cs (ohne IDarf abgewiesen)"), Offen("Fixpunkt im Generator (docs/konzept-akteure.md §8.4)")]),
+        new("GR-INGRESS-EINDEUTIG", "Ingress-Trigger: genau ein Akteur", "Entsteht ein Trigger ohne Kette (Datei, Timer, Selbst-Tick), ist sein "
+            + "Akteur der eine, der ihn per IDarf darf — mehrere machen offen, wer ihn liefert.", "warning",
+            [Offen("Generator-Diagnose (docs/konzept-akteure.md §8.3, Regel 2)")]),
         new("GR-MODUL-EINGANG-OFFEN", "Eingang ohne Konsument", "Ein Command, eine Query, ein Trigger oder eine Selbst-Nachricht, die niemand konsumiert — offener Eingang des Moduls.", "warning",
             [Gen("CQRS002", "nur: Prozess sendet Command ohne Decider"), Offen("sonst")]),
         new("GR-MODUL-AUSGANG-OFFEN", "Ausgang ohne Erzeuger", "Ein Event, eine Ablehnung oder eine Response, die niemand erzeugt — offener Ausgang des Moduls.", "warning",

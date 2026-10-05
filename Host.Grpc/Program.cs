@@ -11,7 +11,7 @@ using Infrastructure.Akteure;
 //   - gRPC bidirektionaler Stream für Clients
 //
 // Konfiguration über CqrsFrameworkBuilder.
-// Domain-Pipeline-Services (IClassifierService, Trigger) separat.
+// Domain-Pipeline-Services (Bildvorverarbeitung, Trigger) separat.
 //
 // ═══════════════════════════════════════════════════════════════════
 // KONFIGURATION:

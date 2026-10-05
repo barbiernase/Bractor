@@ -35,7 +35,7 @@ public class EmittentenPfadAdapterTests
             => Task.FromResult<IReadOnlyList<EventEnvelope>>(
                 _events.Where(e => e.AggregateVersion >= fromVersion).OrderBy(e => e.AggregateVersion).ToList());
 
-        public Task AppendEventsAsync(Guid a, int v, IReadOnlyList<IEvent> e, string? c = null, string? ca = null, string? at = null)
+        public Task AppendEventsAsync(Guid a, int v, IReadOnlyList<IEvent> e, string? c = null, string? ca = null, string? at = null, string? ak = null)
             => throw new NotSupportedException();
         public Task<StreamChanges> ReadChangedStreamsAsync(long after, CancellationToken ct)
             => throw new NotSupportedException();

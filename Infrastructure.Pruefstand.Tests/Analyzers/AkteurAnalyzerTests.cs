@@ -41,8 +41,10 @@ public record Starte() : IPipelineTrigger;
 public record Storniere(Guid AggregateId) : ICommand;
 public record Gebucht2() : IEvent;
 public record Ki(int Wert);
-public interface IKasse : IAkteur, IDarf<Buche> { Ki Frage(); }
-public interface IPruefer : IAkteur, IDarf<Storniere> { }
+public sealed record Kassierer : IMensch, IDarf<Buche>;
+public sealed record Revisor : IMensch, IDarf<Storniere>;
+public interface IKasse : IAkteurDienst<Kassierer> { Ki Frage(); }
+public interface IPruefer : IAkteurDienst<Revisor> { }
 ";
 
     [Fact]
@@ -66,7 +68,11 @@ public interface IPruefer : IAkteur, IDarf<Storniere> { }
     public async Task Ein_Akteur_ohne_IDarf_ist_erlaubt()
         => (await Ids("public sealed record Gast : IAkteur;")).Should().BeEmpty();
 
-    // ── CQRS060: Dienste als Akteure — im Auftrag steht in der Signatur, nur was der Akteur darf ──
+    [Fact]
+    public async Task Ein_Dienst_ist_kein_Akteur()
+        => (await Ids("public interface IRobo : IKi, IDarf<Buche> { }")).Should().Equal("CQRS058");
+
+    // ── CQRS060: der Dienst eines Akteurs — im Auftrag steht in der Signatur, nur was der Akteur darf ──
 
     private const string Pipeline = @"
 public partial class P : IPipelineHandler
@@ -88,6 +94,10 @@ public partial class P : IPipelineHandler
     public async Task Hoechstens_ein_Akteur_je_Handle()
         => (await Ids(Pipeline + @"public IEnumerable<OneOf<Buche>> Handle(Gebucht2 e, PipelineContext ctx, IKasse a, IPruefer b) { yield break; } }"))
             .Should().Equal("CQRS060");
+
+    [Fact]
+    public async Task Akteur_Dienst_im_Konstruktor_irgendeiner_Klasse_ist_ein_Fehler()
+        => (await Ids("public sealed class Hilfe { public Hilfe(IKasse k) { } }")).Should().Equal("CQRS060");
 
     [Fact]
     public async Task Akteur_Dienst_im_Konstruktor_ist_ein_Fehler()

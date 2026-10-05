@@ -14,7 +14,8 @@ public readonly record struct BatchAppend(
     IReadOnlyList<IEvent> Events,
     string? CorrelationId,
     string? CausationId,
-    string? AggregateType);
+    string? AggregateType,
+    string? Akteur = null);
 
 /// <summary>
 /// Schreibt eine ganze Menge von Append-Aufträgen ALL-ODER-NICHTS in EINER nativen Transaktion

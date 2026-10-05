@@ -24,30 +24,56 @@ public class AkteurRechteTests
     [Fact]
     public void Tabelle_kennt_alle_IAkteur_Typen()
     {
-        GeneratedAkteurRechte.Alle.Keys.Should().Contain(new[] { "Inspektor", "Trainer", "KlassifikationsWorker", "TrainingsWorker" });
-        R("Inspektor").Typ.Should().Be(typeof(Inspektor));
+        GeneratedAkteurRechte.Alle.Keys.Should().Contain(new[]
+            { "KameraSystem", "TrainingsSystem", "Klassifizierer", "Inspekteur", "Produktpruefer", "KIOperator", "Modellfreigeber" });
+        R("Inspekteur").Typ.Should().Be(typeof(Inspekteur));
     }
+
+    [Fact]
+    public void Art_kommt_aus_der_Basisliste()
+    {
+        R("KameraSystem").Art.Should().Be("Maschine");
+        R("Klassifizierer").Art.Should().Be("Ki");
+        R("Inspekteur").Art.Should().Be("Mensch");
+    }
+
+    [Fact]
+    public void Ein_Dienst_ist_kein_Akteur()
+        => GeneratedAkteurRechte.Alle.Keys.Should().NotContain(k => k.StartsWith("I") && char.IsUpper(k[1]), "Akteure sind Records, keine Dienst-Verträge");
+
+    [Fact]
+    public void Ein_Command_kann_mehrere_Akteure_haben()
+    {
+        R("Inspekteur").Queries.Should().Contain(typeof(GetImagePair));
+        R("Produktpruefer").Queries.Should().Contain(typeof(GetImagePair));
+    }
+
+    [Fact]
+    public void Ketten_Commands_darf_niemand_direkt()
+        => GeneratedAkteurRechte.Alle.Values.Should().NotContain(a => a.DarfHinein(typeof(Domain.Datensatz.NimmRangeAuf)),
+            "„nie von der GUI“: der Resolver erzeugt ihn in der Kette");
 
     [Fact]
     public void IDarf_wird_nach_Art_sortiert()
     {
-        var i = R("Inspektor");
-        i.Commands.Should().BeEquivalentTo(new[] { typeof(LabelEinzelBild), typeof(MarkiereAlsInspiziert) });
-        i.Queries.Should().BeEquivalentTo(new[] { typeof(SucheImagePairs), typeof(GetImagePair) });
-        i.Trigger.Should().BeEmpty();
-        i.TransientEvents.Should().BeEmpty();
+        var p = R("Produktpruefer");
+        p.Commands.Should().BeEquivalentTo(new[] { typeof(LabelPhysischesProdukt) });
+        p.Queries.Should().BeEquivalentTo(new[] { typeof(SucheImagePairs), typeof(GetImagePair) });
+        p.Trigger.Should().BeEmpty();
+        p.TransientEvents.Should().BeEmpty();
+        R("KameraSystem").Trigger.Should().BeEquivalentTo(new[] { typeof(Domain.Pipeline.ImageProcessing.DateiErkannt) });
     }
 
     [Fact]
     public void Hoeren_abgeleitet_aus_dem_Aggregat_der_eigenen_Commands()
     {
         // Der Klassifikator wirkt auf ImagePair ein → er hört die ImagePair-Events (genau, was der Python-Worker abonniert).
-        var k = R("KlassifikationsWorker");
+        var k = R("Klassifizierer");
         k.DarfHoeren(typeof(BildVerfuegbar)).Should().BeTrue();
         k.DarfHoeren(typeof(ImagePairKomplett)).Should().BeTrue();
         k.DarfHoeren(typeof(TrainingAngefordert)).Should().BeFalse("er wirkt nicht auf Trainingsläufe ein");
 
-        var t = R("TrainingsWorker");
+        var t = R("TrainingsSystem");
         t.DarfHoeren(typeof(TrainingAngefordert)).Should().BeTrue();
         t.DarfHoeren(typeof(TrainingAbgebrochen)).Should().BeTrue();
     }
@@ -55,14 +81,14 @@ public class AkteurRechteTests
     [Fact]
     public void Hoeren_abgeleitet_aus_der_Projektion_hinter_den_eigenen_Queries()
     {
-        // Trainer fragt HoleModelle → ModellReader → ModellProjektion → deren Events.
-        R("Trainer").DarfHoeren(typeof(ModellAktiviert)).Should().BeTrue();
-        R("Inspektor").DarfHoeren(typeof(ModellAktiviert)).Should().BeFalse();
+        // Der KIOperator fragt HoleModelle → ModellReader → ModellProjektion → deren Events.
+        R("KIOperator").DarfHoeren(typeof(ModellAktiviert)).Should().BeTrue();
+        R("Inspekteur").DarfHoeren(typeof(ModellAktiviert)).Should().BeFalse();
     }
 
     [Fact]
     public void CommandFailed_darf_jeder_hoeren()
-        => R("Inspektor").DarfHoeren(typeof(CommandFailed)).Should().BeTrue();
+        => R("Inspekteur").DarfHoeren(typeof(CommandFailed)).Should().BeTrue();
 
     // ── Tor ──
 
@@ -76,15 +102,15 @@ public class AkteurRechteTests
     [Fact]
     public void Tor_ordnet_Token_zu_und_weist_ohne_Standard_ab()
     {
-        var tor = Tor(o => o.Token<Inspektor>("geheim"));
-        tor.Erkenne("geheim")!.Name.Should().Be("Inspektor");
+        var tor = Tor(o => o.Token<Inspekteur>("geheim"));
+        tor.Erkenne("geheim")!.Name.Should().Be("Inspekteur");
         tor.Erkenne("falsch").Should().BeNull();
         tor.Erkenne(null).Should().BeNull();
     }
 
     [Fact]
     public void Tor_mit_Standard_nimmt_den_Standard_Akteur()
-        => Tor(o => o.Standardmaessig<Trainer>()).Erkenne(null)!.Name.Should().Be("Trainer");
+        => Tor(o => o.Standardmaessig<KIOperator>()).Erkenne(null)!.Name.Should().Be("KIOperator");
 
     [Fact]
     public void Unbekannter_Akteur_in_der_Konfiguration_bricht_den_Start()
@@ -109,9 +135,9 @@ public class AkteurRechteTests
             SubscribedEvents = { "ImagePairKomplett", "TrainingAngefordert" },
         };
 
-        var verweigert = AkteurTor.Wende(wunsch, R("KlassifikationsWorker"), Loese, _ => false, _ => false);
+        var verweigert = AkteurTor.Wende(wunsch, R("Klassifizierer"), Loese, _ => false, _ => false);
 
-        wunsch.AllowedCommands.Should().Equal("KlassifiziereBildPaarDurchKi");
+        wunsch.AllowedCommands.Should().BeEquivalentTo("KlassifiziereBildPaarDurchKi", "KlassifiziereEinzelBildDurchKi");
         wunsch.SubscribedEvents.Should().Equal("ImagePairKomplett");
         verweigert.Should().Equal("hören: TrainingAngefordert");
     }
@@ -119,12 +145,12 @@ public class AkteurRechteTests
     [Fact]
     public void Zustaendigkeit_nur_fuer_Luecken_und_nur_einmal()
     {
-        var trainer = R("Trainer");
+        var trainer = R("KIOperator");
 
         Ergebnis(trainer, internBedient: false, vergeben: false).Should().Equal("HoleModelle");
         Ergebnis(trainer, internBedient: true, vergeben: false).Should().BeEmpty("einen Server-Reader kann niemand kapern");
         Ergebnis(trainer, internBedient: false, vergeben: true).Should().BeEmpty("Kardinalität eins");
-        Ergebnis(R("Inspektor"), internBedient: false, vergeben: false).Should().BeEmpty("Inspektor darf HoleModelle nicht");
+        Ergebnis(R("Inspekteur"), internBedient: false, vergeben: false).Should().BeEmpty("der Inspekteur darf HoleModelle nicht");
 
         static List<string> Ergebnis(AkteurRechte a, bool internBedient, bool vergeben)
         {
@@ -146,11 +172,11 @@ public class AkteurRechteTests
             OriginSessionId = "session-0007",
         };
 
-        var failed = AkteurVerweigerung.Baue(env, "Inspektor")!;
+        var failed = AkteurVerweigerung.Baue(env, "Inspekteur")!;
         failed.TargetSubscriberId.Should().Be("session-0007");
         failed.CorrelationId.Should().Be(env.CorrelationId);
-        ((CommandFailed)failed.Payload).Reason.Should().Be("Akteur 'Inspektor' darf SetzeModellAktiv nicht");
-        AkteurVerweigerung.Baue(env with { OriginSessionId = null }, "Inspektor").Should().BeNull();
+        ((CommandFailed)failed.Payload).Reason.Should().Be("Akteur 'Inspekteur' darf SetzeModellAktiv nicht");
+        AkteurVerweigerung.Baue(env with { OriginSessionId = null }, "Inspekteur").Should().BeNull();
     }
 
     private static readonly Dictionary<string, Type> Typen = new[]

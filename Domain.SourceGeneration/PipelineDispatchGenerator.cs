@@ -112,7 +112,8 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
             handlerInfo.FaehigkeitsArgumente = FaehigkeitsTypen.ArgumentListe(FaehigkeitsTypen.Argumente(method, 2));
             // Akteur-Dienst als Parameter → der Handle entscheidet im Auftrag dieses Akteurs (CQRS060: höchstens einer).
             handlerInfo.Akteur = method.Parameters.Skip(2)
-                .FirstOrDefault(p => FaehigkeitsTypen.IstAkteurDienst(p.Type, context.SemanticModel.Compilation))?.Type.Name;
+                .Select(p => FaehigkeitsTypen.AkteurVonDienst(p.Type, context.SemanticModel.Compilation))
+                .FirstOrDefault(a => a != null)?.Name;
 
             // Kanal bestimmen: IPipelineSelfMessage, IPipelineTrigger oder IEvent?
             // Self-Messages zuerst prüfen (könnten theoretisch auch Trigger sein,
@@ -504,7 +505,7 @@ internal class PipelineHandlerInfo
     public List<string> ProducedTypes { get; }
     /// <summary>„, faehigkeiten.Hole&lt;…&gt;()" je Fähigkeits-Parameter.</summary>
     public string FaehigkeitsArgumente { get; set; } = "";
-    /// <summary>Name des Akteur-Dienstes, in dessen Auftrag der Handle entscheidet (null = keiner).</summary>
+    /// <summary>Name des Akteurs (TAkteur eines <c>IAkteurDienst&lt;TAkteur&gt;</c>-Parameters), in dessen Auftrag der Handle entscheidet (null = keiner).</summary>
     public string? Akteur { get; set; }
     /// <summary>Frist-Varianten des OneOf: (Typ voll qualifiziert, Command-Typname = Kontext, Storno?).</summary>
     public List<(string Typ, string Cmd, bool Storno)> Fristen { get; } = new();

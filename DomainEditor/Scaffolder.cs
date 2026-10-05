@@ -109,7 +109,7 @@ public static class Scaffolder
 
         // ── Akteure → ihre echte Datei; sonst die (eine) Akteur-Datei ihres Namespace; sonst Akteure.cs im Verzeichnis ──
         //    Ein bestehender Dienst-Vertrag gehört dem Code (Methoden!) — nur seine Basisliste gleicht der Abgleich ab.
-        foreach (var g in modell.Akteure.Where(a => !(a.Dienst && a.Datei != null))
+        foreach (var g in modell.Akteure
                      .GroupBy(a => (Pfad: a.Datei ?? AkteurZiel(modell, a.Namespace), a.Namespace)))
             dateien.Add(new(g.Key.Pfad, AkteurDatei(g.Key.Namespace, g.ToList(), modell), DateiArt.Typen,
                 !g.Key.Pfad.StartsWith(Unplatziert, StringComparison.Ordinal)));
@@ -204,14 +204,24 @@ public static class Scaffolder
         return v != null ? $"{v}/Akteure.cs" : $"{Unplatziert}Akteure.cs";
     }
 
-    /// <summary>Die Basisliste eines Akteurs: <c>IAkteur, IDarf&lt;A&gt;, IDarf&lt;B&gt;</c> — der ganze Akteur steht in ihr.</summary>
-    public static IReadOnlyList<string> AkteurBasen(Akteur a) => [IAkteur, .. a.Darf.Select(d => $"{IDarf}<{d}>")];
+    /// <summary>Die Basisliste eines Akteurs: <c>IMensch, IDarf&lt;A&gt;, IDarf&lt;B&gt;</c> (Art bzw. <c>IAkteur</c>) — der ganze Akteur steht in ihr.</summary>
+    public static IReadOnlyList<string> AkteurBasen(Akteur a) => [ArtBasis(a.Art), .. a.Darf.Select(d => $"{IDarf}<{d}>")];
+
+    /// <summary>Die Art als Basistyp: „Mensch" → <c>IMensch</c>, „Maschine" → <c>IMaschine</c>, „Ki" → <c>IKi</c>, sonst <c>IAkteur</c>.</summary>
+    public static string ArtBasis(string? art) => art switch
+    {
+        "Mensch" => nameof(Abstractions.IMensch),
+        "Maschine" => nameof(Abstractions.IMaschine),
+        "Ki" => nameof(Abstractions.IKi),
+        _ => IAkteur,
+    };
 
     /// <summary>Gehört dieser Basistyp zum Akteur-Vertrag (<c>IAkteur</c> bzw. <c>IDarf&lt;…&gt;</c>)? Alles andere bleibt beim Abgleich stehen.</summary>
     public static bool IstAkteurBasis(string basis)
     {
         var name = basis.Split('<')[0].Split('.').Last().Trim();
-        return name == IAkteur || name == IDarf;
+        return name == IAkteur || name == IDarf
+            || name == nameof(Abstractions.IMensch) || name == nameof(Abstractions.IMaschine) || name == nameof(Abstractions.IKi);
     }
 
     private static string AkteurDatei(string ns, List<Akteur> akteure, EditorModell modell)
@@ -220,9 +230,7 @@ public static class Scaffolder
         for (var i = 0; i < akteure.Count; i++)
         {
             Doku(b, akteure[i].Doku, "");
-            b.AppendLine(akteure[i].Dienst
-                ? $"public interface {akteure[i].Name} : {string.Join(", ", AkteurBasen(akteure[i]))} {{ }}"
-                : $"public sealed record {akteure[i].Name} : {string.Join(", ", AkteurBasen(akteure[i]))};");
+            b.AppendLine($"public sealed record {akteure[i].Name} : {string.Join(", ", AkteurBasen(akteure[i]))};");
             if (i < akteure.Count - 1) b.AppendLine();
         }
         return b.ToString();

@@ -23,7 +23,8 @@ public sealed class AkteurAnalyzer : DiagnosticAnalyzer
         "CQRS.Akteur", DiagnosticSeverity.Error, isEnabledByDefault: true);
 
     /// <summary>
-    /// CQRS060 — Im Auftrag eines Akteur-Dienstes (z. B. der KI): der Dienst kommt als Parameter an den Pipeline-Handle (so
+    /// CQRS060 — Im Auftrag eines Akteurs über seinen Dienst (<c>IAkteurDienst&lt;A&gt;</c>, z. B. der Classifier-Dienst des
+    /// Klassifizierers): der Dienst kommt als Parameter an den Pipeline-Handle (so
     /// steht in der Signatur, WER entscheidet), höchstens einer je Handle, und der Handle gibt nur Commands aus, die dieser
     /// Akteur darf. Im Konstruktor/Feld eines Konsumenten wäre die Verbindung unsichtbar (wie ein Store, CQRS054).
     /// </summary>
@@ -50,17 +51,24 @@ public sealed class AkteurAnalyzer : DiagnosticAnalyzer
             start.RegisterSymbolAction(ctx => Pruefe(ctx, iDarf, iAkteur, hinein), SymbolKind.NamedType);
             var k = new Konsumenten(T("Abstractions.ISubscriber"), T("Abstractions.IReader`1"), T("Abstractions.IPipelineHandler"),
                 T("Abstractions.PipelineContext"), T("Abstractions.ICommand"));
-            start.RegisterSymbolAction(ctx => PruefeKonsument(ctx, iAkteur, k), SymbolKind.NamedType);
-            start.RegisterSymbolAction(ctx => PruefeHandle(ctx, iDarf, iAkteur, k), SymbolKind.Method);
+            var iDienst = T("Abstractions.IAkteurDienst`1");
+            if (iDienst == null) return;
+            start.RegisterSymbolAction(ctx => PruefeKonsument(ctx, iDienst, k), SymbolKind.NamedType);
+            start.RegisterSymbolAction(ctx => PruefeHandle(ctx, iDarf, iDienst, k), SymbolKind.Method);
         });
     }
 
     private static void Pruefe(SymbolAnalysisContext ctx, INamedTypeSymbol iDarf, INamedTypeSymbol iAkteur, INamedTypeSymbol[] hinein)
     {
         var typ = (INamedTypeSymbol)ctx.Symbol;
+        var ort = typ.Locations.FirstOrDefault() ?? Location.None;
+        // Ein Akteur ist ein Record (Domänen-Experte), nie ein Dienst-Vertrag: der Dienst gehört einem Akteur (IAkteurDienst<A>).
+        if (typ.TypeKind == TypeKind.Interface && typ.ContainingNamespace?.ToDisplayString() != "Abstractions"
+            && typ.AllInterfaces.Contains(iAkteur, SymbolEqualityComparer.Default))
+            ctx.ReportDiagnostic(Diagnostic.Create(Befugnis, ort, typ.Name,
+                "ein Dienst ist kein Akteur — Akteure sind Records (IMensch/IMaschine/IKi); lass den Dienst einem Akteur gehören: IAkteurDienst<TAkteur>"));
         var darf = typ.Interfaces.Where(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iDarf)).ToList();
         if (darf.Count == 0) return;
-        var ort = typ.Locations.FirstOrDefault() ?? Location.None;
 
         if (!typ.AllInterfaces.Contains(iAkteur, SymbolEqualityComparer.Default))
             ctx.ReportDiagnostic(Diagnostic.Create(Befugnis, ort, typ.Name,
@@ -89,30 +97,35 @@ public sealed class AkteurAnalyzer : DiagnosticAnalyzer
     private static bool Hat(ITypeSymbol t, INamedTypeSymbol? i) => i != null &&
         (SymbolEqualityComparer.Default.Equals(t.OriginalDefinition, i) || t.AllInterfaces.Any(x => SymbolEqualityComparer.Default.Equals(x.OriginalDefinition, i)));
 
-    private static bool IstAkteurDienst(ITypeSymbol t, INamedTypeSymbol iAkteur) =>
-        t.TypeKind == TypeKind.Interface && t.AllInterfaces.Contains(iAkteur, SymbolEqualityComparer.Default);
+    /// <summary>Der Akteur eines Akteur-Dienstes (<c>IAkteurDienst&lt;A&gt;</c> → A), sonst null.</summary>
+    private static ITypeSymbol? AkteurVon(ITypeSymbol t, INamedTypeSymbol iDienst) =>
+        t.TypeKind != TypeKind.Interface ? null
+            : t.AllInterfaces.FirstOrDefault(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iDienst))?.TypeArguments.FirstOrDefault();
 
-    // Akteur-Dienst im Konstruktor/Feld eines Konsumenten: die Verbindung „wer entscheidet" stünde nicht in der Signatur.
-    private static void PruefeKonsument(SymbolAnalysisContext ctx, INamedTypeSymbol iAkteur, Konsumenten k)
+    private static bool IstAkteurDienst(ITypeSymbol t, INamedTypeSymbol iDienst) => AkteurVon(t, iDienst) != null;
+
+    // Akteur-Dienst im Konstruktor/Feld einer Klasse: die Verbindung „wer entscheidet" stünde nicht in der Signatur.
+    private static void PruefeKonsument(SymbolAnalysisContext ctx, INamedTypeSymbol iDienst, Konsumenten k)
     {
         var t = (INamedTypeSymbol)ctx.Symbol;
-        if (t.TypeKind != TypeKind.Class || !(Hat(t, k.Subscriber) || Hat(t, k.Reader) || Hat(t, k.Pipeline))) return;
+        // In JEDER Klasse (nicht nur Konsumenten): sonst wäre offen, wer den Dienst benutzt (docs/konzept-akteure.md §7.2).
+        if (t.TypeKind != TypeKind.Class) return;
         foreach (var ctor in t.InstanceConstructors.Where(x => !x.IsImplicitlyDeclared))
-            foreach (var p in ctor.Parameters.Where(p => IstAkteurDienst(p.Type, iAkteur)))
+            foreach (var p in ctor.Parameters.Where(p => IstAkteurDienst(p.Type, iDienst)))
                 ctx.ReportDiagnostic(Diagnostic.Create(Auftrag, p.Locations.FirstOrDefault(), t.Name,
                     $"der Akteur-Dienst {p.Type.Name} steht im Konstruktor — er gehört als Parameter an den Handle, der in seinem Auftrag entscheidet"));
-        foreach (var f in t.GetMembers().OfType<IFieldSymbol>().Where(f => !f.IsImplicitlyDeclared && IstAkteurDienst(f.Type, iAkteur)))
+        foreach (var f in t.GetMembers().OfType<IFieldSymbol>().Where(f => !f.IsImplicitlyDeclared && IstAkteurDienst(f.Type, iDienst)))
             ctx.ReportDiagnostic(Diagnostic.Create(Auftrag, f.Locations.FirstOrDefault(), t.Name,
                 $"das Feld '{f.Name}' hält den Akteur-Dienst {f.Type.Name} — er gehört als Parameter an den Handle"));
     }
 
     // Handle mit Akteur-Parameter: höchstens einer, und nur Commands, die dieser Akteur darf.
-    private static void PruefeHandle(SymbolAnalysisContext ctx, INamedTypeSymbol iDarf, INamedTypeSymbol iAkteur, Konsumenten k)
+    private static void PruefeHandle(SymbolAnalysisContext ctx, INamedTypeSymbol iDarf, INamedTypeSymbol iDienst, Konsumenten k)
     {
         var m = (IMethodSymbol)ctx.Symbol;
         if (m.MethodKind != MethodKind.Ordinary || m.ContainingType is not { } typ || !Hat(typ, k.Pipeline)) return;
         if (m.Parameters.Length < 2 || !SymbolEqualityComparer.Default.Equals(m.Parameters[1].Type, k.PipeCtx)) return;
-        var akteure = m.Parameters.Skip(2).Where(p => IstAkteurDienst(p.Type, iAkteur)).ToList();
+        var akteure = m.Parameters.Skip(2).Where(p => IstAkteurDienst(p.Type, iDienst)).ToList();
         if (akteure.Count == 0) return;
         var ort = m.Locations.FirstOrDefault() ?? Location.None;
         if (akteure.Count > 1)
@@ -121,7 +134,7 @@ public sealed class AkteurAnalyzer : DiagnosticAnalyzer
                 $"entscheidet im Auftrag mehrerer Akteure ({string.Join(", ", akteure.Select(a => a.Type.Name))}) — höchstens einer je Handle"));
             return;
         }
-        var akteur = akteure[0].Type;
+        var akteur = AkteurVon(akteure[0].Type, iDienst)!;
         var darf = akteur.AllInterfaces.Where(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iDarf))
             .Select(i => i.TypeArguments[0]).ToImmutableHashSet<ITypeSymbol>(SymbolEqualityComparer.Default);
         foreach (var cmd in Ausgaben(m.ReturnType).Where(t => Hat(t, k.Command) && !darf.Contains(t)))

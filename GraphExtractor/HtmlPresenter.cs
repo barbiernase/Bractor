@@ -288,6 +288,19 @@ public static class HtmlPresenter
 #de .gworld.fokus .grahmen-ebene{opacity:.5}
 #de .grahmen{position:absolute;box-sizing:border-box;border:calc(1.5px * var(--lz)) solid var(--dc);border-radius:14px;background:color-mix(in srgb,var(--dc) 7%,transparent);pointer-events:none}
 #de .grahmen.unter{border-style:dashed}
+#de .grahmen.mitakt{border-width:calc(2.5px * var(--lz));border-radius:18px;background:color-mix(in srgb,var(--dc) 10%,#0b0f17)}
+#de .grahmen.mitakt>.grahmen-k{background:color-mix(in srgb,var(--dc) 22%,#0b0f17);border-bottom:1px solid color-mix(in srgb,var(--dc) 60%,transparent);border-radius:16px 16px 0 0}
+#de .grahmen.mitakt>.grahmen-k .gr-t{font-size:calc(18px * var(--rz))}
+#de .grahmen.akt{border-radius:12px;border-width:calc(1.5px * var(--lz));background:color-mix(in srgb,var(--dc) 7%,#0d121c)}
+#de .grahmen.akt>.grahmen-k{height:calc(32px * var(--rz))}
+#de .grahmen.akt.kette{border-style:dashed}
+#de .grahmen.akt.ohne{background:color-mix(in srgb,#d0584f 5%,transparent)}
+#de .grahmen.akt.leer{background:transparent;border-style:dotted}
+#de .grahmen-k.akt-k .akt-n{cursor:pointer;font-size:calc(14px * var(--rz))}
+#de .grahmen-k.akt-k .akt-n:hover{text-decoration:underline}
+#de .grahmen-k .akt-auch{display:flex;align-items:center;gap:4px;font-size:11px;color:#9aa3b7;white-space:nowrap;overflow:hidden;min-width:0}
+#de .grahmen-k .akt-auch .akt-ref{padding:0 6px;font-size:11px;background:transparent;border-style:dashed}
+#de button.akt-dom{background:#1d2638;color:#d6e4ff;border:1px solid #35507a;border-radius:6px;padding:1px 8px;cursor:pointer;font:12px system-ui}
 #de .grahmen-k{position:absolute;left:0;right:0;top:0;height:calc(38px * var(--rz));transform-origin:0 0;display:flex;align-items:center;gap:8px;padding:0 10px 0 14px;pointer-events:auto;cursor:default;
   background:linear-gradient(90deg,color-mix(in srgb,var(--dc) 24%,transparent),transparent 75%);border-radius:12px 12px 0 0;border-bottom:1px solid color-mix(in srgb,var(--dc) 30%,transparent)}
 #de .grahmen-k .gr-t{font:700 calc(16px * var(--rz)) ui-monospace,monospace;color:#e6ebf5;white-space:nowrap}
@@ -524,7 +537,7 @@ public static class HtmlPresenter
   function normalize(m){m=m||{};m.records=m.records||[];m.enums=m.enums||[];m.aggregate=m.aggregate||[];m.decider=m.decider||[];m.applier=m.applier||[];m.sagas=m.sagas||[];m.states=m.states||[];m.transitions=m.transitions||[];
     m.readModels=m.readModels||[];m.stores=m.stores||[];m.projektionen=m.projektionen||[];m.reader=m.reader||[];m.reaktionen=m.reaktionen||[];m.pipelines=m.pipelines||[];m.triggers=m.triggers||[];m.frists=m.frists||[];m.dienste=m.dienste||[];m.hostSettings=m.hostSettings||[];m.codeNodes=m.codeNodes||[];m.llmNodes=m.llmNodes||[];
     // Akteur (docs/konzept-akteure.md): wer von außen hineingibt — darf[] = die Typen seiner IDarf<T> (Command/Query/Trigger).
-    m.akteure=m.akteure||[];m.akteure.forEach(a=>{if(!a._id)a._id="ak"+(NID++);a.darf=a.darf||[];});
+    m.akteure=m.akteure||[];m.akteure.forEach(a=>{if(!a._id)a._id="ak"+(NID++);a.darf=a.darf||[];});   /* art/dienste bewusst nicht vorbelegen (Herkunfts-Hash) */
     // Reaktion = emittierender Konsument (ISubscriber → IAsyncEnumerable<OneOf<Cmd>>): Trigger-Event → Handle → OneOf-Commands.
     m.reaktionen.forEach(r=>{if(!r._id)r._id="rk"+(NID++);r.handles=r.handles||[];r.handles.forEach(hd=>{hd.sends=hd.sends||[];hd.publishes=hd.publishes||[];});});
     // Pipeline = 4. durabler Konsument (IPipelineHandler): Trigger-Msg ODER Event → Handle → OneOf-Command(s).
@@ -617,7 +630,7 @@ public static class HtmlPresenter
   //    Record/Enum sein → so komponieren sich Records.
   // NUR der Node-Editor, DESIGN-IN-PLACE: jeder Knoten wird direkt auf der Fläche bestückt.
   let TEIL=null;   // Verbinden-Modus: statt Voll-Render nur die betroffenen Karten neu (Set der Knoten-Ids)
-  function render(){ if(TEIL){TEIL.gerufen=true;return;} ELEM=null; deriveMembership(); renderGraph(); autosave(); if(window.simNachRender)simNachRender(); }
+  function render(){ if(TEIL){TEIL.gerufen=true;return;} ELEM=null; AKM=null; deriveMembership(); renderGraph(); autosave(); if(window.simNachRender)simNachRender(); }
   // Teil-Neuaufbau: betroffene Karten ersetzen, Kurzfassungen/Kanten/Panel auffrischen — Fläche, Zoom und Layout bleiben stehen.
   function teilNeu(ids){if(!world||!canvas){render();return;}
     ELEM=null;deriveMembership();ISLE=islandInfo().ids;berechneSicht();
@@ -696,6 +709,10 @@ public static class HtmlPresenter
     // Heimat-Domäne in der Ansicht merken: trägt Namespace-lose Arten (📝/🤖, Dienst, HostSetting …) und hält Abhängige
     //   (Decider/Applier/State/Regel) in ihrer Domäne, auch wenn ihr Besitzer gelöscht wird. Der Code-Namespace geht vor (domKey).
     if(opt&&opt.ns){const neu=graphNodes().find(n=>!vorher.has(n.id));if(neu){VIEW.heim={...(VIEW.heim||{}),[neu.id]:opt.ns};if(opt.blk)VIEW.heimBlk={...(VIEW.heimBlk||{}),[neu.id]:opt.blk};speichereAnsicht();}}
+    // Im Akteur-Rahmen angelegt: der Akteur darf den neuen Eingang sofort (IDarf) — so bleibt er auch in seinem Rahmen.
+    if(opt&&opt.akt){const neu=graphNodes().find(n=>!vorher.has(n.id)),ak=MODEL.akteure.find(a=>a.name===opt.akt);
+      if(neu&&ak){const nm=neu.kind==="trigger"?trigName(neu.ref):neu.ref.name;if(nm&&!(ak.darf=ak.darf||[]).includes(nm))ak.darf.push(nm);
+        VIEW.heimAkteur={...(VIEW.heimAkteur||{}),[neu.id]:opt.akt};speichereAnsicht();}}
     render();
     if(!(opt&&opt.still))fokussiereNeu(vorher,true);
   }
@@ -739,6 +756,8 @@ public static class HtmlPresenter
     else if(k==="query"){akteurePartner(ein,nm,P);if(!ein.length)P(ein,null,"Außenwelt (Client)","abgeleitet · kein Akteur");
       HD("reader","reader",(o,hd,id)=>{if(hd.query===nm)P(aus,id,hText(o,hd));});}
     else if(k==="queryresponse"){const qs=[];HD("reader","reader",(o,hd,id)=>{if((hd.responses||[]).includes(nm)){P(ein,id,hText(o,hd));qs.push(hd.query);}});
+      // Verschachtelte Antwort (Element einer Listen-Antwort): sie kommt als Teil ihres Trägers heraus.
+      if(!ein.length)alleFelder().forEach(({owner,f})=>{if(innerTyp(f.typ)===nm&&recByName(owner))P(ein,"rec:"+owner,"Teil von "+owner,"Feld "+f.name);});
       // Die Antwort geht an den, der fragen darf (Akteure der Query) — sonst an die anonyme Außenwelt.
       MODEL.akteure.forEach(a=>{if(qs.some(q=>(a.darf||[]).includes(q)))P(aus,"akt:"+a._id,"Akteur "+a.name,"fragt");});
       if(!aus.length)P(aus,null,"Außenwelt (Client)","abgeleitet · kein Akteur");}
@@ -770,6 +789,31 @@ public static class HtmlPresenter
       const m=NODEBY.get(n.id);if(m){waehle(m.id);centerOn(m);pulseNode(m);}};
     if(x.los)row.append(h("button",{class:"rm",title:"Verbindung lösen (ändert den Ausgang des Erzeugers)",onclick:e=>{e.stopPropagation();x.los();render();}},"✕"));
     return row;}
+  // Diagnose: je Nachricht, was „◀ kommt aus" zeigt (Erzeuger + Akteure) — Lücken-Suche „woher wird das ausgelöst?".
+  window.deHerkunft=()=>{const r=[];NODEBY.forEach(n=>{let nm=null,trig=null;
+    if(["command","query","event","rejection","queryresponse"].includes(n.kind))nm=n.name;else if(n.kind==="trigger"){trig=n.ref;nm=trigName(n.ref);}else return;
+    const pv=partnerVon(nm,trig),m=akteurMengen().get(nm);
+    r.push({kind:n.kind,name:nm,ein:pv.ein.map(x=>x.text+(x.mark?" ["+x.mark+"]":"")),aus:pv.aus.map(x=>x.text),
+      direkt:m?[...m.direkt]:[],kette:m?[...m.kette]:[]});});return r;};
+  window.deHandles=()=>{const r=[];Object.entries(HANDLE_ART).forEach(([k,[coll]])=>(MODEL[coll]||[]).forEach(o=>(o.handles||[]).forEach(hd=>
+    r.push({art:k,owner:o.name,eingang:k==="pipeline"?pipeEingang(hd):(hd.event||hd.query||""),kind:hd.inputKind||"",akteure:[...(handleAkteure(k,hd)||[])]}))));return r;};
+  // „Wer?" (§12.8 D): von welchem Akteur kommt die Nachricht — direkt (IDarf, oben unter „kommt aus") und über die Kette
+  //   (abgeleitet, read-only, mit Pfad). Ein Eingang ohne beides ist eine Lücke (GR-HERKUNFT).
+  function wer(sek,nm){if(!MODEL.akteure.length)return;const m=akteurMengen().get(nm),kette=m?[...m.kette].filter(a=>!m.direkt.has(a)).sort():[];
+    if(kette.length){sek.append(h("div",{class:"gsec",title:"abgeleitet: eine Pipeline, ein Prozess, ein Reader oder Decide erzeugt sie aus einer Nachricht dieses Akteurs — kein IDarf nötig"},"👤 über die Kette"));
+      kette.forEach(a=>{const ak=MODEL.akteure.find(x=>x.name===a),pfad=kettenPfad(nm,a);
+        const row=h("div",{class:"gp-row",title:pfad.join(" → ")},h("span",{class:"gp-t"},(ART_SYM[ak&&ak.art]||"👤 ")+a),h("span",{class:"gp-mark"},pfad.join(" → ")));
+        if(ak)row.onclick=()=>waehle("akt:"+ak._id);sek.append(row);});}
+    else if(istEingangName(nm)&&!(m&&m.direkt.size))sek.append(h("div",{class:"llmmeld err",title:"GR-HERKUNFT"},"⚠ kommt von keinem Akteur — ⊕ darf oder über eine Kette erzeugen"));}
+  // Ein Pfad, auf dem nm im Namen von akt entsteht (rückwärts bis zu dessen direktem Eingang bzw. Dienst-Wechsel).
+  function kettenPfad(nm,akt){const R=flussRegeln(),seen=new Set();
+    const zurueck=(x,tiefe)=>{if(tiefe>10||seen.has(x))return null;seen.add(x);
+      const m=akteurMengen().get(x);if(m&&m.direkt.has(akt))return [x];
+      for(const [ein,aus,w] of R){if(!aus.includes(x))continue;
+        if(w===akt)return ["⚙ "+akt,x];
+        for(const e of ein){if(!mengeVon(e).has(akt))continue;const p=zurueck(e,tiefe+1);if(p)return [...p,x];}}
+      return null;};
+    return zurueck(nm,0)||[nm];}
   // Die zwei Seiten einer Nachricht: ◀ kommt aus (+ ⊕ Erzeuger) · geht an ▶ (+ ⊕ Konsument). Ports: die bestehenden Slot-Schlüssel.
   function zweiSeiten(body,nm,trig,einPort,ausPort){
     const pv=partnerVon(nm,trig),sorte=trig?"trigger":grNachrichtSorte(nm),kard=grKardinalitaet(sorte);
@@ -777,6 +821,7 @@ public static class HtmlPresenter
     sek.append(h("div",{class:"gsec"},"◀ kommt aus"));
     pv.ein.forEach(x=>sek.append(partnerZeile(x)));
     if(einPort)sek.append(einPort);
+    wer(sek,nm);
     sek.append(h("div",{class:"gsec"},"geht an ▶"+(kard?" · "+kard:"")));
     if(!pv.aus.length)sek.append(h("div",{class:"gp-row gp-leer"},"— noch kein Konsument"));
     pv.aus.forEach(x=>sek.append(partnerZeile(x)));
@@ -1268,11 +1313,11 @@ public static class HtmlPresenter
   }
 
   // Dienst-Bindung = Vertrag (Interface) → Impl (📝-Insel ODER externer Adapter). Gibt dem freistehenden
-  //   Domain-Service (SplitZuteiler, ImagePairName) UND den Handler-Dependencies (IClassifierService) ein Zuhause.
+  //   Domain-Service (SplitZuteiler, ImagePairName) UND den Handler-Dependencies (IImageResizer …) ein Zuhause.
   function dienstCard(body,d){
     body.append(nameInp(d,"name","Dienst","dienst"));
     body.append(h("div",{class:"gsec"},"Vertrag (Interface)"));
-    body.append(inp(d.vertrag,v=>d.vertrag=v,"z. B. IClassifierService"));
+    body.append(inp(d.vertrag,v=>d.vertrag=v,"z. B. IImageResizer"));
     const vo=port("store");vo.classList.add("o");reg("di:vertrag:"+d._id,vo,{type:"dienst",dir:"out",dienst:d._id});
     body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"Vertrag "+(d.vertrag||"?")+" ▶"),vo));
     body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>{d.extern=e.target.checked||undefined;render();},...(d.extern?{checked:"checked"}:{})}),"Externer Dienst (HTTP/ML) — Impl außerhalb"));
@@ -1283,15 +1328,156 @@ public static class HtmlPresenter
 
   // HostSetting = operativer Config-Wert (Name/Typ/Default/EnvKey) — die Editor-Repräsentation von
   //   appsettings/env für DOMÄNEN-relevante Werte (Pfad/Intervall/Timeout). Speist Trigger/Frist.
+  // ══ AKTEURE: von wem kommt was? (docs/konzept-akteure.md §8, docs/konzept-domaenen-editor.md §12) ══
+  //   Deklariert ist nur IDarf (direkt). Was eine Pipeline/Reaktion/ein Reader/Prozess/Decide aus einer Nachricht erzeugt,
+  //   trägt deren Akteure (Kette); ein Handle mit dem Dienst eines Akteurs (IAkteurDienst<A>) wechselt zu A. Spiegel von
+  //   DomainEditor/AkteurAnteile.cs — Parität: deAkteurParitaet() gegen rahmen.akteurMengen.
+  const ART_SYM={Mensch:"👤 ",Maschine:"⚙ ",Ki:"🤖 "}, ART_RANG={Maschine:0,Ki:1,Mensch:2};
+  const artBasis=a=>a==="Mensch"?"IMensch":a==="Maschine"?"IMaschine":a==="Ki"?"IKi":"IAkteur";
+  const OHNE_AKT="§ohneAkteur";
+  let AKM=null,AKTSET=new Map(),AKTORD=new Map(),AKTDOM=null;
+  function istEingangName(nm){const r=recByName(nm);return r?(r.kind==="command"||r.kind==="query"||r.kind==="trigger"):MODEL.triggers.some(t=>trigName(t)===nm);}
+  // Eingang eines Pipeline-Handles als Nachrichten-Name (Event, Trigger, Selbst-Nachricht).
+  function pipeEingang(hd){const k=hd.inputKind||"event";
+    if(k==="event")return hd.event||"";
+    if(k==="self")return hd.selfName||"";
+    if(hd.input)return hd.input;
+    const tid=hd.trigId||(hd.prod&&hd.prod.k==="tg"?hd.prod.id:null),t=tid&&MODEL.triggers.find(x=>x._id===tid);
+    return t?trigName(t):"";}
+  // Frist<T> liefert einen Command; FristStorno<T> löscht nur eine Frist — kein Nachrichtenfluss (wie Fluss.cs).
+  const fristAus=hd=>(hd.fristen||[]).filter(f=>f.art!=="storno").map(f=>f.command);
+  // Die Regeln des Flusses: [Eingänge, Ausgänge, Akteur-Wechsel|null] — dieselben Kanten wie Fluss.cs.
+  function flussRegeln(){const R=[];
+    MODEL.decider.forEach(d=>{if(d.command)R.push([[d.command],(d.ergibt||[]).map(o=>o.event).filter(Boolean),null]);});
+    const dienstAkteur=nm=>MODEL.akteure.some(a=>a.name===nm&&(a.dienste||[]).length)?nm:null;
+    MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{const e=pipeEingang(hd);
+      R.push([e?[e]:[],[...(hd.sends||[]),...fristAus(hd),...(hd.emits||[]),...(hd.publishes||[]),...(hd.schedules||[]).map(x=>x.name)].filter(Boolean),
+        hd.akteur?dienstAkteur(hd.akteur):null]);}));
+    MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>R.push([[hd.event].filter(Boolean),[...(hd.sends||[]),...(hd.publishes||[])],null])));
+    MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>R.push([[hd.event].filter(Boolean),[...(hd.publishes||[])],null])));
+    MODEL.reader.forEach(r=>(r.handles||[]).forEach(hd=>R.push([[hd.query].filter(Boolean),[...(hd.responses||[])],null])));
+    MODEL.sagas.forEach(sg=>{const ts=MODEL.transitions.filter(t=>t.prozess===sg.name);
+      R.push([[sg.triggerEvent,...ts.flatMap(t=>t.wenn||[])].filter(Boolean),ts.flatMap(t=>(t.dann||[]).flatMap(d=>[d.sende,d.kompensation])).filter(Boolean),null]);});
+    return R;}
+  // Nachricht → {direkt:Set, kette:Set}; Fixpunkt über Mengen (ein Command kann von mehreren Akteuren kommen).
+  function akteurMengen(){if(AKM)return AKM;const M=new Map();
+    const g=nm=>{let m=M.get(nm);if(!m)M.set(nm,m={direkt:new Set(),kette:new Set()});return m;};
+    MODEL.akteure.forEach(a=>(a.darf||[]).forEach(nm=>g(nm).direkt.add(a.name)));
+    const alle=nm=>{const m=M.get(nm);return m?[...m.direkt,...m.kette]:[];};
+    const R=flussRegeln();
+    for(let ge=true;ge;){ge=false;R.forEach(([ein,aus,w])=>{const q=w?[w]:ein.flatMap(alle);
+      aus.forEach(o=>{const z=g(o).kette;q.forEach(x=>{if(!z.has(x)){z.add(x);ge=true;}});});});}
+    return AKM=M;}
+  const mengeVon=nm=>{const m=akteurMengen().get(nm);return m?new Set([...m.direkt,...m.kette]):new Set();};
+  // Parität mit der C#-Ableitung (nur sinnvoll für ein unverändertes Board).
+  window.deAkteurParitaet=()=>{const soll=(MODEL.rahmen&&MODEL.rahmen.akteurMengen)||{},ist=akteurMengen(),diff=[];
+    const s=x=>[...x].sort().join(",");
+    new Set([...Object.keys(soll),...[...ist.keys()].filter(k=>ist.get(k).direkt.size||ist.get(k).kette.size)]).forEach(k=>{
+      const a=soll[k]||{direkt:[],kette:[]},b=ist.get(k)||{direkt:new Set(),kette:new Set()};
+      if(s(a.direkt)!==s(b.direkt)||s(a.kette)!==s(b.kette))diff.push(k+": C# "+s(a.direkt)+"|"+s(a.kette)+" ≠ JS "+s(b.direkt)+"|"+s(b.kette));});
+    return {gleich:diff.length===0,anzahl:Object.keys(soll).length,diff};};
+  // Akteur-Menge einer KARTE (Domäne × Akteur-Rahmen): Nachrichten aus der Ableitung, Bausteine über das, was sie tragen.
+  function akteurSet(n){let s=AKTSET.get(n.id);if(s)return s;AKTSET.set(n.id,s=new Set());const r=n.ref,add=x=>x&&x.forEach(v=>s.add(v));
+    switch(n.kind){
+      case "akteur":s.add(r.name);break;
+      case "command":case "query":case "event":case "rejection":case "queryresponse":add(mengeVon(r.name));
+        if(n.kind==="query"&&!s.size)MODEL.reader.forEach(rd=>{if((rd.handles||[]).some(h=>h.query===r.name))add(akteurSet({id:"rdr:"+rd._id,kind:"reader",ref:rd}));});
+        break;
+      case "trigger":add(mengeVon(trigName(r)));break;
+      case "decider":add(mengeVon(r.command));break;
+      case "applier":add(mengeVon(r.event));break;
+      case "aggregate":MODEL.decider.filter(d=>d.aggregat===r.name).forEach(d=>add(mengeVon(d.command)));break;
+      case "state":MODEL.decider.filter(d=>d.aggregat===r.aggregat).forEach(d=>add(mengeVon(d.command)));break;
+      case "reader":(r.handles||[]).forEach(hd=>add(mengeVon(hd.query)));break;
+      case "pipeline":case "reaktion":(r.handles||[]).forEach(hd=>add(handleAkteure(n.kind,hd)));break;
+      case "handle":{const o=n.own;if(o.kind==="projektion")add(projektionAkteure(o.ref));else if(o.kind==="reader")add(mengeVon(r.query));
+        else{add(handleAkteure(o.kind,r));if(!s.size)add(akteurSet(o));}   // Start-/Tick-Handle ohne Kette: wie seine Pipeline
+        break;}
+      case "saga":MODEL.transitions.filter(t=>t.prozess===r.name).forEach(t=>(t.dann||[]).forEach(d=>add(mengeVon(d.sende))));
+        add(mengeVon(r.triggerEvent));break;
+      case "transition":(r.dann||[]).forEach(d=>add(mengeVon(d.sende)));(r.wenn||[]).forEach(e=>add(mengeVon(e)));break;
+      case "frist":add(mengeVon(r.sendet));break;
+      case "projektion":add(projektionAkteure(r));break;
+      case "store":add(storeAkteure(r));break;
+      case "fn":{const l=fnLeser(r._id);add(l.size?l:storeAkteure(n.own.ref));break;}
+      case "readmodel":{const st=MODEL.stores.find(x=>x.name===r.store);if(st)add(storeAkteure(st));break;}
+      case "dienst":{const a=MODEL.akteure.find(x=>(x.dienste||[]).includes(r.vertrag||r.name));
+        if(a)s.add(a.name);else MODEL.pipelines.filter(p=>(p.dienste||[]).includes(r.vertrag||r.name)).forEach(p=>add(akteurSet({id:"pl:"+p._id,kind:"pipeline",ref:p})));break;}
+      case "codenode":case "llmnode":{const cid=n.kind==="llmnode"?r.promptZiel:r._id,o=cid&&codeBesitzerKnoten(cid);if(o&&o.id!==n.id)add(akteurSet(o));break;}
+      default:{   // VO/Enum/Konfig/HostSetting …: folgen ihren Nachbarn (ohne Daten-Daten-Ketten)
+        const nb=[...(ADJ.inn.get(n.id)||[]),...(ADJ.out.get(n.id)||[])].map(x=>NODEBY.get(x)).filter(m=>m&&m.kind!=="akteur");
+        nb.filter(m=>!DATEN_ARTEN.has(m.kind)).forEach(m=>add(akteurSet(m)));
+        if(!s.size)nb.filter(m=>DATEN_ARTEN.has(m.kind)).forEach(m=>add(akteurSet(m)));}}   // VO in VO: über den Träger
+    // Datentypen ohne eigene Kette (verschachtelte Response, Read Model ohne Store …) gehen mit ihren Nachbarn. Eingänge NIE —
+    //   ein Command/eine Query/ein Trigger ohne Akteur ist eine Lücke (GR-HERKUNFT) und steht sichtbar „ohne Akteur".
+    if(!s.size&&(n.kind==="queryresponse"||n.kind==="readmodel")){
+      [...(ADJ.inn.get(n.id)||[]),...(ADJ.out.get(n.id)||[])].map(x=>NODEBY.get(x)).filter(m=>m&&m.kind!=="akteur").forEach(m=>add(akteurSet(m)));}
+    return s;}
+  const DATEN_ARTEN=new Set(["valueobject","enum","konfig","hostsetting"]);
+  // Arten, die mit ihrem Träger mitgehen, aber keinen Akteur-Rahmen begründen.
+  const NUR_MIT=new Set(["valueobject","enum","konfig","hostsetting","dienst","codenode","llmnode","queryresponse"]);
+  // Diagnose: je Domäne die Akteur-Reihenfolge und je Rahmen die Bausteine mit ihrer Akteur-Menge.
+  window.deAkteure=()=>{const r={};NODEBY.forEach(n=>{if(!VIS.has(n.id))return;const d=domKey(n),o=akteurOrdnung(d),a=o.length?akteurVon(n):"—";
+    const x=r[d]||(r[d]={ordnung:o,rahmen:{}});(x.rahmen[a]=x.rahmen[a]||[]).push(n.kind+":"+n.name+" {"+[...akteurSet(n)].join(",")+"}");});return r;};
+  // Pipeline-/Reaktions-Handle: Dienst-Wechsel → dieser Akteur; sonst die Akteure seines Eingangs; ohne Kette (Ingress,
+  //   Selbst-Tick ohne Akteur) die Akteure seiner Ausgaben (FileWatch → DateiErkannt → KameraSystem).
+  function handleAkteure(art,hd){const s=new Set();
+    if(art==="projektion"||art==="reader"){return null;}
+    if(art==="pipeline"&&hd.akteur&&MODEL.akteure.some(a=>a.name===hd.akteur&&(a.dienste||[]).length))return new Set([hd.akteur]);
+    mengeVon(art==="pipeline"?pipeEingang(hd):hd.event).forEach(x=>s.add(x));
+    if(!s.size)[...(hd.sends||[]),...fristAus(hd),...(hd.emits||[]),...(hd.publishes||[])].forEach(o=>mengeVon(o).forEach(x=>s.add(x)));
+    return s;}
+  // Wer liest eine Store-Fn? Reader- und Pipeline-Handles, die sie als Fähigkeit nehmen.
+  function fnLeser(fid){const s=new Set();
+    MODEL.reader.forEach(rd=>(rd.handles||[]).forEach(hd=>{if((hd.fns||[]).includes(fid))mengeVon(hd.query).forEach(x=>s.add(x));}));
+    MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{if((hd.fns||[]).includes(fid))(handleAkteure("pipeline",hd)||[]).forEach(x=>s.add(x));}));
+    return s;}
+  function storeAkteure(st){const s=new Set();(st.readFns||[]).forEach(f=>fnLeser(f._id).forEach(x=>s.add(x)));return s;}
+  // Projektion: wer sie liest — über ihre Reader und die Stores, in die sie schreibt.
+  function projektionAkteure(p){const s=new Set();
+    MODEL.reader.filter(rd=>rd.projektion===p.name).forEach(rd=>(rd.handles||[]).forEach(hd=>mengeVon(hd.query).forEach(x=>s.add(x))));
+    derivedStores(p).forEach(nm=>{const st=MODEL.stores.find(x=>x.name===nm);if(st)storeAkteure(st).forEach(x=>s.add(x));});
+    return s;}
+  // Die Karte, an der ein Rumpf (📝) hängt — Decider/Applier/Handle/Fn/Dienst.
+  function codeBesitzerKnoten(cid){for(const n of NODEBY.values()){const r=n.ref;if(n.kind!=="codenode"&&n.kind!=="llmnode"&&r&&r.codeSrc===cid)return n;}return null;}
+  // Reihenfolge der Akteur-Rahmen einer Domäne (§12.3): wer das Ding erschafft, dann wer worauf reagiert (Dienst-Wechsel),
+  //   dann Art (Maschine → KI → Mensch), dann Name. Die Ansicht kann sie umsortieren (VIEW.akteurOrdnung[dom]).
+  function akteurOrdnung(dom){let o=AKTORD.get(dom);if(o)return o;
+    // Wer wirkt hier? Nur fachliche Bausteine zählen — ein Datentyp/Dienst/Code, den viele berühren, macht keinen eigenen Rahmen auf.
+    const da=new Set();NODEBY.forEach(n=>{if(n.kind!=="akteur"&&!NUR_MIT.has(n.kind)&&VIS.has(n.id)&&!istInselLage(n)&&domKey(n)===dom)akteurSet(n).forEach(x=>da.add(x));});
+    const art=nm=>(MODEL.akteure.find(a=>a.name===nm)||{}).art;
+    const schoepfer=new Set();MODEL.records.forEach(r=>{if(r.kind==="command"&&r.istErzeugung){const d=MODEL.decider.find(x=>x.command===r.name),
+      ag=d&&MODEL.aggregate.find(a=>a.name===d.aggregat);if(ag&&ag.namespace===dom)mengeVon(r.name).forEach(x=>schoepfer.add(x));}});
+    const basis=[...da].sort((a,b)=>(schoepfer.has(a)?0:1)-(schoepfer.has(b)?0:1)||(ART_RANG[art(a)]??3)-(ART_RANG[art(b)]??3)||a.localeCompare(b));
+    // Reagiert B per Dienst-Wechsel auf ein Event von A → A vor B.
+    const vor=new Map();MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{const w=handleAkteure("pipeline",hd);
+      if(!(hd.akteur&&w&&w.has(hd.akteur)))return;mengeVon(pipeEingang(hd)).forEach(a=>{if(a!==hd.akteur){if(!vor.has(hd.akteur))vor.set(hd.akteur,new Set());vor.get(hd.akteur).add(a);}});}));
+    const aus=[],rest=[...basis];
+    while(rest.length){const i=rest.findIndex(b=>[...(vor.get(b)||[])].every(a=>!rest.includes(a)||a===b));const k=i<0?0:i;aus.push(rest.splice(k,1)[0]);}
+    const wunsch=((VIEW.akteurOrdnung||{})[dom]||[]).filter(x=>aus.includes(x));
+    o=[...wunsch,...aus.filter(x=>!wunsch.includes(x))];AKTORD.set(dom,o);return o;}
+  // Akteur-Rahmen einer Karte: der ERSTE Akteur der Domäne (Reihenfolge), zu dem sie gehört — Doppelungen stehen dort, wo
+  //   sie zuerst auftreten. Ohne Akteur (bzw. Domäne ohne Akteure): OHNE_AKT.
+  function akteurVon(n){const ord=akteurOrdnung(domKey(n));if(!ord.length)return OHNE_AKT;
+    const s=akteurSet(n),h=(VIEW.heimAkteur||{})[n.id];
+    if(!s.size&&h&&ord.includes(h))return h;
+    return ord.find(a=>s.has(a))||OHNE_AKT;}
+  // Domänen, in denen ein Akteur wirkt (sortiert wie die Domänen-Rahmen).
+  function akteurDomaenen(name){if(!AKTDOM){AKTDOM=new Map();NODEBY.forEach(n=>{if(n.kind==="akteur"||NUR_MIT.has(n.kind))return;const d=domKey(n);
+      akteurSet(n).forEach(a=>{if(!AKTDOM.has(a))AKTDOM.set(a,new Set());AKTDOM.get(a).add(d);});});}
+    return [...(AKTDOM.get(name)||[])].sort(domOrd);}
   // 👤 AKTEUR: Name, Namespace, und EINE Liste — was er darf (IDarf<T>). ⊕ „+ darf" → passende Commands/Queries/Trigger
   //   leuchten → anklicken = erlauben, ✓-Karte = entziehen. Was er HÖREN darf, ist abgeleitet (Generator), keine Eingabe.
   function akteurCard(body,a){
     body.append(h("div",{class:"gsec"},"Name · Namespace"));
     body.append(nameInp(a,"name","AkteurName","akteur"));
     body.append(h("input",{value:a.namespace??"",oninput:e=>a.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
-    body.append(h("label",{class:"cbx",title:"Ein Dienst-Vertrag (Interface, z. B. die KI) statt eines Records: ein Pipeline-Handle nimmt ihn als Parameter und entscheidet in seinem Auftrag"},
-      h("input",{type:"checkbox",onchange:e=>{a.dienst=e.target.checked||undefined;render();},...(a.dienst?{checked:"checked"}:{}),...(a.datei?{disabled:"disabled"}:{})}),"⚙ Dienst (Vertrag/Interface)"));
-    body.append(h("div",{class:"gsec",title:(a.dienst?"public interface ":"public sealed record ")+a.name+" : IAkteur, IDarf<…>"},"darf ▶ — was er hineingeben darf"));
+    // Art = Basistyp (IMensch / IMaschine / IKi) — ein Akteur ist immer ein Record, nie ein Dienst.
+    body.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"Art"),
+      h("select",{onchange:e=>{a.art=e.target.value||undefined;render();}},
+        ...[["","— (nur IAkteur)"],["Mensch","👤 Mensch (IMensch)"],["Maschine","⚙ Maschine (IMaschine)"],["Ki","🤖 KI (IKi)"]]
+          .map(([v,t])=>h("option",{value:v,...((a.art||"")===v?{selected:"selected"}:{})},t)))));
+    body.append(h("div",{class:"gsec",title:"public sealed record "+a.name+" : "+artBasis(a.art)+", IDarf<…>"},"darf ▶ — was er SELBST hineingibt"));
     if(!(a.darf||[]).length)body.append(h("div",{class:"gp-row gp-leer"},"— noch nichts (am Tor käme er nirgends durch)"));
     (a.darf||[]).forEach(nm=>{const r=recByName(nm),t=!r&&MODEL.triggers.find(x=>trigName(x)===nm);
       const art=r?kindLabel(r.kind):t?"Trigger":"⚠ unbekannt";
@@ -1300,7 +1486,18 @@ public static class HtmlPresenter
         h("span",{class:"slotlbl",style:"flex:1;text-align:right"},nm+" · "+art),
         h("button",{class:"rm",title:"Recht entziehen",onclick:()=>{a.darf=a.darf.filter(x=>x!==nm);render();}},"✕"),s));});
     body.append(slotRow("darf","+ darf ⊕ (Command · Query · Trigger) ▶","r",{type:"darf",dir:"out",akt:a._id},"akt:darf:"+a._id+":open"));
-    if(a.dienst){body.append(h("div",{class:"gsec",title:"Pipeline-Handles, die diesen Dienst als Parameter nehmen (CQRS060)"},"entscheidet in ▶"));
+    // Was in seinem Namen über eine Kette entsteht (abgeleitet, nicht deklariert): Pipeline/Prozess/Frist aus seinen Events.
+    {const km=akteurMengen(),bew=[...km.entries()].filter(([nm,m])=>m.kette.has(a.name)&&!m.direkt.has(a.name)&&istEingangName(nm)).map(([nm])=>nm).sort();
+      body.append(h("div",{class:"gsec",title:"abgeleitet: Commands/Trigger, die eine Pipeline, ein Prozess oder eine Frist aus Events dieses Akteurs erzeugt — kein IDarf nötig, am Tor nicht erlaubt"},"bewirkt über die Kette (abgeleitet)"));
+      body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},bew.length?bew.join(", "):"— nichts"));}
+    const wirkt=akteurDomaenen(a.name);
+    if(wirkt.length){body.append(h("div",{class:"gsec"},"wirkt in"));
+      body.append(h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px"},...wirkt.map(d=>h("button",{class:"akt-dom",title:"Rahmen "+domLabel(d)+" · "+a.name+" einpassen",
+        onclick:()=>{const fr=world&&[...world.querySelectorAll(".grahmen.akt")].find(x=>x.dataset.ns===d&&x.dataset.akt===a.name);
+          if(fr)einpassenRahmen({x1:fr.offsetLeft,y1:fr.offsetTop,x2:fr.offsetLeft+fr.offsetWidth,y2:fr.offsetTop+fr.offsetHeight});}},domLabel(d)))));}
+    // Dienste (IAkteurDienst<A>, Code-Fakt): Werkzeug, mit dem der Akteur DRINNEN entscheidet — sie sind keine Akteure.
+    if((a.dienste||[]).length){body.append(h("div",{class:"gsec",title:"interface X : IAkteurDienst<"+a.name+"> — der Dienst gehört diesem Akteur"},"⚙ Dienst: "+a.dienste.join(", ")));
+      body.append(h("div",{class:"gsec",title:"Pipeline-Handles, die den Dienst als Parameter nehmen — sie entscheiden im Auftrag von "+a.name+" (CQRS060)"},"entscheidet in ▶"));
       const im=[];MODEL.pipelines.forEach(p=>(p.handles||[]).forEach((hd,hi)=>{if(hd.akteur===a.name)im.push([p,hd,hi]);}));
       im.forEach(([p,hd,hi])=>{const s=anchorDot("auftrag");s.classList.add("o");reg("akt:auftrag:"+a._id+":"+p._id+":"+hi,s,{type:"auftrag",dir:"out",akt:a._id,anker:true});
         body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},p.name+".Handle("+handleDisc(hd)+")"),s));});
@@ -1966,7 +2163,9 @@ public static class HtmlPresenter
     // Raster-Signatur (sichtbare Knoten + Zahl ihrer Code-Eingänge): ändert sie sich (Handle/Fn dazu, Art aus-/eingeblendet),
     //   stimmen die reservierten Zeilen nicht mehr → neu packen. Gleiche Signatur = Handanordnung bleibt.
     const LAY=KPOS[VIEW.details?"d":"k"]||(KPOS[VIEW.details?"d":"k"]={});
-    const sig=hash(all.map(n=>n.id+":"+((codeEingaenge(n)||[]).length)+":"+domKey(n)).join("|")+"#"+(VIEW.aus||[]).join(",")+"#"+(VIEW.domNeu||[]).join(","));
+    // Der Akteur-Rahmen gehört zur Lage (Domäne × Akteur): wandert eine Karte in einen anderen Akteur-Rahmen, neu packen.
+    const sig=hash(all.map(n=>n.id+":"+((codeEingaenge(n)||[]).length)+":"+domKey(n)+":"+akteurVon(n)).join("|")+"#"+(VIEW.aus||[]).join(",")+"#"+(VIEW.domNeu||[]).join(",")
+      +"#"+JSON.stringify(VIEW.akteurOrdnung||{}));
     if(LAY.__sig!==sig)force=true;
     // Wie viele Knotenpaare überlappen aktuell deutlich? (früher Abbruch, sobald „viele").
     const overlaps=()=>{const b=all.map(n=>{const s=sz(n),p=P(n);return {x:p.x||0,y:p.y||0,w:s.w,h:s.h};});let c=0;
@@ -2077,21 +2276,32 @@ public static class HtmlPresenter
     const proDom=new Map();all.forEach(n=>{const d=domKey(n);if(!proDom.has(d))proDom.set(d,[]);proDom.get(d).push(n);});
     const BAUM=domBaum([...proDom.keys(),...(VIEW.domNeu||[])]);
     const region=ns=>{const eigen=proDom.get(ns)||[],kinder=(BAUM.kinder.get(ns)||[]).map(region);
-      const placed=[],leer=[];let y=RK+RP,w=0;
+      const placed=[],leer=[],aktLeer=[];let y=RK+RP,w=0;
       const insel=eigen.filter(istInselLage),haupt=eigen.filter(n=>!istInselLage(n));
-      if(haupt.length){const c=layoutComp(haupt);c.placed.forEach(p=>placed.push({n:p.n,rx:RP+p.rx,ry:y+p.ry}));y+=c.h;w=c.w;}
+      // Domäne × Akteur (§12): je Akteur (Reihenfolge der Domäne) ein eigener Rahmen mit dem bewährten Block-Layout darin,
+      //   untereinander; „ohne Akteur" zuletzt. Eine Domäne ohne Akteure bleibt, wie sie war (ein Block-Layout).
+      const ord=akteurOrdnung(ns);
+      if(haupt.length&&!ord.length){const c=layoutComp(haupt);c.placed.forEach(p=>placed.push({n:p.n,rx:RP+p.rx,ry:y+p.ry}));y+=c.h;w=c.w;}
+      else if(ord.length){const gr=new Map();haupt.forEach(n=>{const a=akteurVon(n);if(!gr.has(a))gr.set(a,[]);gr.get(a).push(n);});
+        let erst=true;
+        [...ord,OHNE_AKT].forEach(a=>{const g=gr.get(a);if(!g&&a===OHNE_AKT)return;if(!erst)y+=AGAP;erst=false;
+          if(!g){aktLeer.push({ns,akt:a,rx:RP,ry:y});y+=AK;w=Math.max(w,AKLEER_W);return;}   // leer: nur Kopf + „↥ auch“
+          const c=layoutComp(g);c.placed.forEach(p=>placed.push({n:p.n,rx:RP+AP+p.rx,ry:y+AK+AP+p.ry}));
+          y+=AK+2*AP+c.h;w=Math.max(w,c.w+2*AP);});}
       if(insel.length){if(haupt.length)y+=SHELFGAP/2;const IW=Math.max(700,w);let ix=0,iy=0,rh=0;
         insel.forEach(n=>{const s=sz(n);if(ix>0&&ix+s.w>IW){iy+=rh+ROWGAP;ix=0;rh=0;}placed.push({n,rx:RP+ix,ry:y+iy});ix+=s.w+COLGAP;rh=Math.max(rh,s.h);w=Math.max(w,ix-COLGAP);});
         y+=iy+rh;}
       if(!eigen.length&&!kinder.length){leer.push({ns,rx:0,ry:0});w=LEER_W;y+=LEER_H;}
-      if(kinder.length){if(eigen.length)y+=KGAP;const d=shelf(kinder,KGAP,1.2);
-        kinder.forEach(k=>{k.placed.forEach(p=>placed.push({n:p.n,rx:RP+k.rx+p.rx,ry:y+k.ry+p.ry}));k.leer.forEach(l=>leer.push({ns:l.ns,rx:RP+k.rx+l.rx,ry:y+k.ry+l.ry}));});
+      if(kinder.length){if(eigen.length||aktLeer.length)y+=KGAP;const d=shelf(kinder,KGAP,1.2);
+        kinder.forEach(k=>{k.placed.forEach(p=>placed.push({n:p.n,rx:RP+k.rx+p.rx,ry:y+k.ry+p.ry}));k.leer.forEach(l=>leer.push({ns:l.ns,rx:RP+k.rx+l.rx,ry:y+k.ry+l.ry}));
+          k.aktLeer.forEach(l=>aktLeer.push({ns:l.ns,akt:l.akt,rx:RP+k.rx+l.rx,ry:y+k.ry+l.ry}));});
         y+=d.h;w=Math.max(w,d.w);}
-      return {placed,leer,w:w+2*RP,h:y+RP};};
+      return {placed,leer,aktLeer,w:w+2*RP,h:y+RP};};
     const regions=BAUM.oben.map(region);
     shelf(regions,COMPGAP,1.05);
     regions.forEach(d=>{d.placed.forEach(p=>setze(p.n,d.rx+p.rx,d.ry+p.ry));
-      d.leer.forEach(l=>{LAY["§leer:"+l.ns]={x:d.rx+l.rx,y:d.ry+l.ry};});});
+      d.leer.forEach(l=>{LAY["§leer:"+l.ns]={x:d.rx+l.rx,y:d.ry+l.ry};});
+      d.aktLeer.forEach(l=>{LAY["§aktleer:"+l.ns+"|"+l.akt]={x:d.rx+l.rx,y:d.ry+l.ry};});});
     LAY.__sig=sig;if(VIEW.kompakt)speichereKpos();
   }
   // Karten auf der Fläche sind immer kompakt (Kopf + Kurzfassung); das Formular lebt im Panel.
@@ -2139,8 +2349,11 @@ public static class HtmlPresenter
     else recordCard(body,n.ref);
   }
   function delNode(n){const k=n.kind,ref=n.ref;
+    // Ein gelöschter Eingang (Command/Query/Trigger) verschwindet auch aus den Befugnissen (IDarf) der Akteure.
+    {const nm=k==="trigger"?trigName(ref):(MODEL.records.includes(ref)?ref.name:null);if(nm)MODEL.akteure.forEach(a=>{if((a.darf||[]).includes(nm))a.darf=ohneX(a.darf,nm);});}
     if(VIEW.heim&&VIEW.heim[n.id]){delete VIEW.heim[n.id];speichereAnsicht();}
     if(VIEW.heimBlk&&VIEW.heimBlk[n.id]){delete VIEW.heimBlk[n.id];speichereAnsicht();}
+    if(VIEW.heimAkteur&&VIEW.heimAkteur[n.id]){delete VIEW.heimAkteur[n.id];speichereAnsicht();}
     if(k==="aggregate")MODEL.aggregate.splice(MODEL.aggregate.indexOf(ref),1);
     else if(k==="state")MODEL.states.splice(MODEL.states.indexOf(ref),1);
     else if(k==="decider")MODEL.decider.splice(MODEL.decider.indexOf(ref),1);
@@ -2867,8 +3080,8 @@ public static class HtmlPresenter
   //   (4) Semantischer Zoom: Landkarte (<0.4, Aggregat-Kacheln + gebündelte Kanten) · Ablauf (<0.75, nur Titel) · Detail.
   //   (5) Slice-Fokus: Klick auf einen Knoten → sein vertikaler Schnitt bleibt hell, der Rest tritt zurück.
   // details: Decider/Applier/State/Code/LLM/Ablehnung/Typen sind IMMER eigene Knoten auf dem Graphen (nie eingeklappt).
-  const KPOS_VERSION=6;   // hochzählen, wenn sich Kartengrößen ändern → gespeicherte Anordnung wird einmalig neu gepackt
-  let VIEW={kompakt:true,details:true,lod:"ablauf",aus:[],domNeu:[],heim:{},heimBlk:{}}, VKEY="cqrs-ansicht", KPKEY="cqrs-kpos", KPOS={k:{},d:{}};
+  const KPOS_VERSION=7;   // hochzählen, wenn sich Kartengrößen ändern → gespeicherte Anordnung wird einmalig neu gepackt
+  let VIEW={kompakt:true,details:true,lod:"ablauf",aus:[],domNeu:[],heim:{},heimBlk:{},heimAkteur:{},akteurOrdnung:{}}, VKEY="cqrs-ansicht", KPKEY="cqrs-kpos", KPOS={k:{},d:{}};
   function ladeAnsicht(k){VKEY="cqrs-ansicht"+(k?":"+k:"");KPKEY="cqrs-kpos"+(k?":"+k:"");
     try{const v=JSON.parse(localStorage.getItem(VKEY)||"null");if(v)VIEW={...VIEW,...v};}catch(e){}
     VIEW.details=true;VIEW.kompakt=true;
@@ -2918,6 +3131,7 @@ public static class HtmlPresenter
       const res=[...new Set(direkteBesitzer(n).filter(Boolean).flatMap(o=>vert(o,pfad)))];pfad.delete(id);
       const out=res.length?res:[id];memo.set(id,out);return out;};
     VIS=new Set();VERTRETER=new Map();DOMKEY=new Map();EINHEIT=new Map();DETAILS=new Map();EINGEKLAPPT=new Set();
+    AKM=null;AKTSET=new Map();AKTORD=new Map();AKTDOM=null;
     alle.forEach(n=>{const v=vert(n.id,new Set());VERTRETER.set(n.id,v);
       if(v.length===1&&v[0]===n.id){if(!HIDDEN.has(groupKeyOf(n))&&!istAus(n.kind)&&geladen(n))VIS.add(n.id);}
       else{EINGEKLAPPT.add(n.id);v.forEach(o=>push(DETAILS,o,n.id));}});
@@ -3045,7 +3259,7 @@ public static class HtmlPresenter
     else if(k==="saga")t="Auslöser: "+(r.triggerEvent||"—")+" · "+transOf(r).length+" Regeln";
     else if(k==="transition")t="WENN "+kurz(r.wenn)+" → "+kurz((r.dann||[]).map(d=>d.sende));
     else if(k==="store")t=(r.writeFns||[]).length+" schreibend · "+(r.readFns||[]).length+" lesend";
-    else if(k==="akteur")t=(r.dienst?"⚙ Dienst · ":"")+((r.darf||[]).length?"darf "+kurz(r.darf):"darf nichts");
+    else if(k==="akteur")t=(ART_SYM[r.art]||"")+((r.dienste||[]).length?"⚙ "+r.dienste.join(", ")+" · ":"")+((r.darf||[]).length?"darf "+kurz(r.darf):"darf nichts");
     else if(k==="handle"){const aus=n.own.kind==="pipeline"?plAusgaenge(r):(r.ausgaenge||[]).length?(r.ausgaenge||[]).filter(a=>a.art!=="storefn"&&a.art!=="self").map(a=>a.typ)
         :[...(r.responses||[]),...(r.sends||[]),...(r.emits||[]),...(r.publishes||[])];
       const fns=(r.fns||[]).map(fid=>{const f=fnById(fid);return f?f.fn.name:null;}).filter(Boolean);
@@ -3127,6 +3341,7 @@ public static class HtmlPresenter
   //   Der Rahmen folgt den ECHTEN Kartenpositionen (GEO) — zieht man Karten, wächst er mit. Kopf = kleine Menüleiste.
   //   Leere neue Domänen (VIEW.domNeu) und die Heimat namespace-loser Knoten (VIEW.heim) leben nur in der Ansicht.
   const RP=36, RK=46, SPK=34, SPAD=8;   // Domänen-Rand/-Kopf, Spalten-Kopf/-Rand (Welt-px) — packLayout reserviert RP/RK je Region, SPK je Spalte
+  const AP=22, AK=40, AGAP=28, AKLEER_W=560;   // Akteur-Rahmen (Domäne × Akteur, §12): Rand, Kopf, Abstand, Breite eines leeren
   const OHNE_DOM="§ohne";
   // Domänen-Zugehörigkeit steht über allem: gehört ein Baustein laut GRAPH zu einem Aggregat (groupKeyOf — Projektion über
   //   ihre Events, Reader/Store/ReadModel/Query/Response über ihre Projektion, Code über seinen Besitzer …), ist seine Domäne
@@ -3160,6 +3375,10 @@ public static class HtmlPresenter
     return ds.size===1?[...ds][0]:null;}
   function graphDom(n,besucht){return aggDom(n)||(EINHEIT_ARTEN.has(n.kind)?einheitDom(n):datenDom(n,besucht||new Set()));}
   function domKey(n){let d=DOMKEY.get(n.id);if(d)return d;
+    // Akteur-Karte: in der ERSTEN Domäne, in der er wirkt (dort steht sie in seinem Akteur-Rahmen; §12.5) — sonst wie gehabt.
+    if(n.kind==="akteur"){const eig=[...new Set((n.ref.darf||[]).map(nm=>NODEBY.get("rec:"+nm)||[...NODEBY.values()].find(x=>x.kind==="trigger"&&trigName(x.ref)===nm))
+        .filter(Boolean).map(domKey))].sort(domOrd),ds=eig.length?eig:akteurDomaenen(n.ref.name);
+      if(ds.length){DOMKEY.set(n.id,ds[0]);return ds[0];}}
     d=graphDom(n)||nsVon(n)||(VIEW.heim||{})[n.id]||OHNE_DOM;DOMKEY.set(n.id,d);return d;}
   const domLabel=ns=>ns===OHNE_DOM?"⋯ ohne Domäne":letztesSeg(ns);
   // Block (Aggregat bzw. Brücke) eines Knotens: aus dem Graphen; ein über eine Spalte angelegter, noch unverdrahteter Knoten
@@ -3194,16 +3413,28 @@ public static class HtmlPresenter
     const spalten=new Map(),codes=[];
     const sp=(key,init)=>{let c=spalten.get(key);if(!c)spalten.set(key,c={...init,x1:1e9,y1:1e9,x2:-1e9,y2:-1e9,ids:[],kinds:new Set()});return c;};
     const nimm=(c,id,g,k)=>{c.x1=Math.min(c.x1,g.x);c.y1=Math.min(c.y1,g.y);c.x2=Math.max(c.x2,g.x+g.w);c.y2=Math.max(c.y2,g.y+g.h);c.ids.push(id);if(k)c.kinds.add(k);};
+    // Akteur-Rahmen (Domäne × Akteur, §12): nur in Domänen mit Akteuren; sonst null (ein Block-Layout wie bisher).
+    const aktVon=n=>akteurOrdnung(domKey(n)).length?akteurVon(n):null;
     GEO.forEach((g,id)=>{const n=NODEBY.get(id);if(!n)return;const d=domKey(n);
-      if(istInselLage(n)){nimm(sp(d+"|§insel",{dom:d,blk:null,role:"insel"}),id,g,n.kind);return;}
+      if(istInselLage(n)){nimm(sp(d+"|§insel",{dom:d,blk:null,role:"insel",akt:null}),id,g,n.kind);return;}
       if(n.kind==="codenode"||n.kind==="llmnode"){codes.push([n,g,id]);return;}
-      const blk=blockVon(n),role=rolle(n,rollenVon(blk));
-      nimm(sp(d+"|"+blk+"|"+role,{dom:d,blk,role}),id,g,n.kind==="handle"?"handle:"+n.own.kind:n.kind);});
+      const blk=blockVon(n),role=rolle(n,rollenVon(blk)),akt=aktVon(n);
+      nimm(sp(d+"|"+akt+"|"+blk+"|"+role,{dom:d,blk,role,akt}),id,g,n.kind==="handle"?"handle:"+n.own.kind:n.kind);});
     const fest=[...spalten.values()].filter(c=>c.role!=="insel");
-    codes.forEach(([n,g,id])=>{const d=domKey(n),bk=blockVon(n);let best=null;
-      fest.forEach(c=>{if(c.dom!==d||c.blk!==bk||g.x<c.x1-4||g.x>c.x1+80||g.y<c.y1)return;if(!best||c.x1>best.x1)best=c;});
-      if(best)nimm(best,id,g,null);else nimm(sp(d+"|"+blockVon(n)+"|code",{dom:d,blk:blockVon(n),role:"code"}),id,g,n.kind);});
+    codes.forEach(([n,g,id])=>{const d=domKey(n),bk=blockVon(n),ak=aktVon(n);let best=null;
+      fest.forEach(c=>{if(c.dom!==d||c.blk!==bk||c.akt!==ak||g.x<c.x1-4||g.x>c.x1+80||g.y<c.y1)return;if(!best||c.x1>best.x1)best=c;});
+      if(best)nimm(best,id,g,null);else nimm(sp(d+"|"+ak+"|"+blockVon(n)+"|code",{dom:d,blk:blockVon(n),role:"code",akt:ak}),id,g,n.kind);});
     spalten.forEach(c=>{c.r={x1:c.x1-SPAD,y1:c.y1-SPK,x2:c.x2+SPAD,y2:c.y2+SPAD};dazu(c.dom,c.r.x1,c.r.y1,c.r.x2,c.r.y2);});
+    // Akteur-Rahmen = Hülle seiner Spalten (+ Rand/Kopf); leere (alles schon weiter oben) = nur Kopf an der Packlage.
+    const LAYA=KPOS[VIEW.details?"d":"k"]||{};
+    const akt=new Map();
+    spalten.forEach(c=>{if(c.akt==null)return;const k=c.dom+"|"+c.akt,e=AP-SPAD;let a=akt.get(k);
+      const x1=c.r.x1-e,y1=c.r.y1-e-AK,x2=c.r.x2+e,y2=c.r.y2+e;
+      if(!a)akt.set(k,a={dom:c.dom,akt:c.akt,x1,y1,x2,y2,ids:[]});else{a.x1=Math.min(a.x1,x1);a.y1=Math.min(a.y1,y1);a.x2=Math.max(a.x2,x2);a.y2=Math.max(a.y2,y2);}
+      a.ids.push(...c.ids);});
+    new Set([...box.keys()]).forEach(d=>akteurOrdnung(d).forEach(a=>{const k=d+"|"+a;if(akt.has(k))return;const p=LAYA["§aktleer:"+k];
+      if(p)akt.set(k,{dom:d,akt:a,x1:p.x,y1:p.y,x2:p.x+AKLEER_W,y2:p.y+AK,ids:[],leer:true});}));
+    akt.forEach(a=>dazu(a.dom,a.x1,a.y1,a.x2,a.y2));
     const B=domBaum([...box.keys(),...(VIEW.domNeu||[])]);
     const LAY=KPOS[VIEW.details?"d":"k"]||{};
     let unten=0;box.forEach(b=>unten=Math.max(unten,b.y2));
@@ -3220,10 +3451,11 @@ public static class HtmlPresenter
       rahmen.push(out);return out;};
     B.oben.forEach(ns=>rechne(ns,0));
     rahmen.sort((a,b)=>a.tiefe-b.tiefe).forEach(r=>{const hue=domHue(r.ns===OHNE_DOM?SHARED_KEY:r.ns);
-      const fr=h("div",{class:"grahmen"+(r.tiefe?" unter":"")});fr.dataset.ns=r.ns;
+      const fr=h("div",{class:"grahmen"+(r.tiefe?" unter":"")+(akteurOrdnung(r.ns).length?" mitakt":"")});fr.dataset.ns=r.ns;
       Object.assign(fr.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});fr.style.setProperty("--dc","hsl("+hue+" 45% 55%)");
       const k=h("div",{class:"grahmen-k",title:r.ns===OHNE_DOM?"Knoten ohne Namespace":r.ns},
         h("span",{class:"gr-t"},domLabel(r.ns)),h("span",{class:"gr-p"},r.ns===OHNE_DOM?"":r.ns),
+        akteurOrdnung(r.ns).length?h("span",{class:"gr-p",title:"Akteur-Rahmen dieser Domäne (Reihenfolge = wo Geteiltes steht)"},"👤 "+akteurOrdnung(r.ns).join(" › ")):null,
         h("span",{class:"gr-z"},r.leer?"leer":bausteine(r.z)),
         h("button",{title:"Baustein in dieser Domäne anlegen",onclick:e=>{e.stopPropagation();bausteinMenue(e.clientX,e.clientY,r.ns);}},"＋"),
         r.ns!==OHNE_DOM?h("button",{title:"Unterdomäne anlegen",onclick:e=>{e.stopPropagation();neueDomaene(e.clientX,e.clientY,r.ns);}},"＋ ▤"):null,
@@ -3233,6 +3465,7 @@ public static class HtmlPresenter
       k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};
       fr.append(k);if(r.leer)fr.append(h("div",{class:"gr-leer"},"Leere Domäne — ＋ legt den ersten Baustein an"));
       ebene.append(fr);aus.x2=Math.max(aus.x2,r.x2);aus.y2=Math.max(aus.y2,r.y2);});
+    akt.forEach(a=>{ebene.append(akteurRahmen(a));aus.x2=Math.max(aus.x2,a.x2);aus.y2=Math.max(aus.y2,a.y2);});
     spalten.forEach(c=>{const el=h("div",{class:"gspalte"+(c.role==="insel"?" insel":"")});const r=c.r;
       Object.assign(el.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});
       const ORD=Object.keys(NODELABEL),ix=k=>{const i=ORD.indexOf(k.replace(/^handle:.*/,"handle"));return i<0?99:i;};
@@ -3247,6 +3480,48 @@ public static class HtmlPresenter
       k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};
       el.append(k);ebene.append(el);});
     return aus;}
+  // Ein Akteur-Rahmen (Domäne × Akteur, §12.5): Kopf = Akteur (Klick → sein Panel) · Domäne · Zahl · „↥ auch“ (Doppelungen,
+  //   die in einem früheren Akteur-Rahmen stehen) · ＋ (für diesen Akteur entwerfen) · ◎ · ⤢ · ⋯ (Reihenfolge).
+  function akteurRahmen(a){const ohne=a.akt===OHNE_AKT,ak=!ohne&&MODEL.akteure.find(x=>x.name===a.akt),
+    r={x1:a.x1,y1:a.y1,x2:a.x2,y2:a.y2};
+    const fr=h("div",{class:"grahmen akt"+(ohne?" ohne":"")+(a.leer?" leer":"")+(ak&&!akteurDirektIn(ak,a.dom)?" kette":"")});
+    fr.dataset.ns=a.dom;fr.dataset.akt=a.akt;
+    Object.assign(fr.style,{left:a.x1+"px",top:a.y1+"px",width:(a.x2-a.x1)+"px",height:(a.y2-a.y1)+"px"});
+    fr.style.setProperty("--dc",ohne?"#d0584f":"hsl("+domHue("akt:"+a.akt)+" 55% 64%)");
+    const auch=ohne?[]:auchWoanders(a.akt,a.dom);
+    const k=h("div",{class:"grahmen-k akt-k",title:(ohne?"Bausteine ohne Akteur — kein IDarf und keine Kette (GR-HERKUNFT)":
+        a.akt+" in "+a.dom+(ak&&!akteurDirektIn(ak,a.dom)?" — wirkt hier nur über die Kette":""))},
+      h("span",{class:"gr-t akt-n",onclick:e=>{e.stopPropagation();if(ak)waehle("akt:"+ak._id);}},ohne?"⚠ ohne Akteur":(ART_SYM[ak&&ak.art]||"👤 ")+a.akt),
+      auch.length?h("span",{class:"akt-auch",title:"Gehört auch "+a.akt+", steht aber im Rahmen eines früheren Akteurs (Doppelungen dort, wo sie zuerst auftreten)"},
+        "↥ auch: ",...auch.slice(0,6).map(([n,wo])=>h("button",{class:"akt-ref",title:n.name+" — steht bei "+wo,onclick:e=>{e.stopPropagation();zeigeKnoten(n.id);}},n.name)),
+        auch.length>6?h("span",{class:"gr-z"}," +"+(auch.length-6)):null):null,
+      h("span",{class:"gr-z"},a.leer?"alles schon weiter oben":bausteine(a.ids.length)),
+      ak?h("button",{title:"Für "+a.akt+" entwerfen: neuer Command / neue Query / neuer Trigger — "+a.akt+" darf ihn sofort (IDarf)",
+        onclick:e=>{e.stopPropagation();menue(e.clientX,e.clientY,"＋ für "+a.akt,["command","query","trigger"].map(kk=>({t:"＋ "+(NODELABEL[kk]||kk),fn:()=>fuerAkteurAnlegen(a,kk)})));}},"＋"):null,
+      h("button",{title:"Rahmen markieren (Slice)",onclick:e=>{e.stopPropagation();FOCUS=new Set(a.ids);wendeFokusAn();}},"◎"),
+      h("button",{title:"Rahmen einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"),
+      !ohne?h("button",{title:"Reihenfolge der Akteur-Rahmen",onclick:e=>{e.stopPropagation();akteurRahmenMenue(e.clientX,e.clientY,a);}},"⋯"):null);
+    k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};
+    fr.append(k);return fr;}
+  // Gibt der Akteur in dieser Domäne direkt etwas hinein (IDarf) — oder wirkt er hier nur über eine Kette?
+  function akteurDirektIn(ak,dom){return (ak.darf||[]).some(nm=>{const n=NODEBY.get("rec:"+nm)||[...NODEBY.values()].find(x=>x.kind==="trigger"&&trigName(x.ref)===nm);return n&&domKey(n)===dom;});}
+  // Doppelungen: Bausteine dieser Domäne, die auch dem Akteur gehören, aber im Rahmen eines früheren Akteurs stehen.
+  function auchWoanders(name,dom){const r=[];const ART=["command","query","trigger","event","rejection","aggregate","reader","projektion","pipeline","reaktion","saga","handle","store","readmodel","queryresponse"];
+    NODEBY.forEach(n=>{if(!VIS.has(n.id)||!ART.includes(n.kind)||domKey(n)!==dom||!akteurSet(n).has(name))return;const wo=akteurVon(n);if(wo!==name)r.push([n,wo]);});
+    return r.sort((x,y)=>ART.indexOf(x[0].kind)-ART.indexOf(y[0].kind)||x[0].name.localeCompare(y[0].name));}
+  function zeigeKnoten(id){const g=GEO.get(id);if(g)einpassenRahmen({x1:g.x-260,y1:g.y-160,x2:g.x+g.w+260,y2:g.y+g.h+160});waehle(id);}
+  // ＋ im Akteur-Rahmen: der neue Eingang gehört sofort diesem Akteur (IDarf) — Entwerfen „für wen".
+  function fuerAkteurAnlegen(a,kind){const ag=MODEL.aggregate.find(x=>x.namespace===a.dom);
+    neuerKnoten(kind,undefined,undefined,{ns:a.dom===OHNE_DOM?null:a.dom,agg:ag&&ag.name,blk:kind==="trigger"?SHARED_KEY:(ag?ag.name:SHARED_KEY),akt:a.akt});}
+  function akteurRahmenMenue(cx,cy,a){const ord=akteurOrdnung(a.dom),i=ord.indexOf(a.akt),ak=MODEL.akteure.find(x=>x.name===a.akt);
+    const setze=neu=>{VIEW.akteurOrdnung={...(VIEW.akteurOrdnung||{}),[a.dom]:neu};speichereAnsicht();render();};
+    menue(cx,cy,a.akt+" · "+domLabel(a.dom),[
+      {t:"↑ weiter nach oben",aus:i<=0,title:"Geteilte Bausteine wandern mit zum neuen Ersten",fn:()=>{const o=[...ord];o.splice(i-1,0,o.splice(i,1)[0]);setze(o);}},
+      {t:"↓ weiter nach unten",aus:i<0||i>=ord.length-1,fn:()=>{const o=[...ord];o.splice(i+1,0,o.splice(i,1)[0]);setze(o);}},
+      {t:"↺ abgeleitete Reihenfolge",aus:!((VIEW.akteurOrdnung||{})[a.dom]),title:"Ersteller → wer worauf reagiert → Art → Name",
+        fn:()=>{const v={...(VIEW.akteurOrdnung||{})};delete v[a.dom];VIEW.akteurOrdnung=v;speichereAnsicht();render();}},
+      {trenn:true},
+      {t:"👤 Akteur öffnen",aus:!ak,fn:()=>waehle("akt:"+ak._id)}]);}
   // Spalten-Kopf: Name je Art; ＋ legt eine Art dieser Rolle an (Handles/Store-Fns entstehen am Besitzer, nicht frei).
   const spaltenName=k=>k==="handle:projektion"?"Projektion-Handle":k==="handle:reader"?"Reader-Handle":k==="handle:pipeline"?"Pipeline-Handle":k==="handle:reaktion"?"Reaktion-Handle":NODELABEL[k]||k;
   const NICHT_FREI=new Set(["fn","handle"]);

@@ -422,11 +422,16 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         {
             var envelope = _mapper.MapToDomain(request.Envelope);
             envelope = envelope with { OriginSessionId = sessionId };
+            // Tor aus (opt-in): niemand ist angemeldet — die Herkunft folgt dann dem Modell: darf genau EIN Akteur den Typ,
+            //   kommt er von ihm (sonst bliebe die ganze Kette dahinter ohne Akteur). Mit Tor stempelt unten das Token.
+            if (akteur == null && !ImAuftrag.IstAkteur(envelope.UserId)
+                && Infrastructure.Akteure.AkteurHerkunft.EindeutigerHalter(envelope.Payload.GetType()) is { } halter)
+                envelope = envelope with { UserId = halter };
 
             if (akteur != null)
             {
                 // Wer hineingibt, steht im Envelope — vom Tor gestempelt, nicht vom Client behauptet.
-                envelope = envelope with { UserId = akteur.Name };
+                envelope = envelope with { UserId = akteur.AkteurFuer(envelope.Payload.GetType()) };
                 if (!akteur.DarfHinein(envelope.Payload.GetType()))
                 {
                     _logger.LogWarning("{Session} Akteur {Akteur} darf {Command} nicht",
@@ -732,7 +737,9 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 return;
             }
             if (akteur != null)
-                envelope = envelope with { UserId = akteur.Name };
+                envelope = envelope with { UserId = akteur.AkteurFuer(envelope.Payload.GetType()) };
+            else if (!ImAuftrag.IstAkteur(envelope.UserId) && Infrastructure.Akteure.AkteurHerkunft.EindeutigerHalter(envelope.Payload.GetType()) is { } halter)
+                envelope = envelope with { UserId = halter };   // Tor aus: Herkunft laut Modell (der eine Akteur mit IDarf)
 
             await _publisher.PublishAsync(envelope, ct);
 

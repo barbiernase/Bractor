@@ -1,7 +1,7 @@
 namespace Infrastructure.Akteure;
 
 /// <summary>
-/// Das Tor am gRPC-Handshake: wer sich anmeldet, wird EINEM Akteur zugeordnet; seine Session bekommt dessen
+/// Das Tor am gRPC-Handshake: wer sich anmeldet, wird einem Akteur (oder einer Akteur-Menge) zugeordnet; seine Session bekommt dessen
 /// Befugnisse (<see cref="AkteurRechte"/>), und jede hineingehende Nachricht wird dagegen geprüft.
 /// Reine Logik (kein gRPC, kein Cluster) — der <c>CqrsClientServiceImpl</c> ruft sie nur auf.
 /// </summary>
@@ -22,8 +22,8 @@ public sealed class AkteurTor
     /// </summary>
     public AkteurRechte? Erkenne(string? token)
     {
-        if (!string.IsNullOrEmpty(token) && _optionen.Tokens.TryGetValue(token, out var name))
-            return _rechte[name];
+        if (!string.IsNullOrEmpty(token) && _optionen.Tokens.TryGetValue(token, out var namen) && namen.Count > 0)
+            return AkteurRechte.Vereinige(namen.Select(n => _rechte[n]).ToList());
         return _optionen.Standard is { } standard ? _rechte[standard] : null;
     }
 

@@ -9,7 +9,7 @@ using System.Text;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Akteure (<c>docs/konzept-akteure.md</c>): erzeugt <c>GeneratedAkteurRechte</c> — je <c>IAkteur</c>-Typ seine
+    /// Akteure (<c>docs/konzept-akteure.md</c>): erzeugt <c>GeneratedAkteurRechte</c> — je <c>IAkteur</c>-Record seine
     /// Befugnisse, reflexionsfrei als Tabelle.
     ///
     /// <para><b>Deklariert</b> (Basisliste): jedes <c>IDarf&lt;T&gt;</c>, nach Art sortiert (Command, Query, Trigger,
@@ -93,14 +93,14 @@ namespace Infrastructure.SourceGeneration
             }
 
             // ── Akteure ──
-            // Akteur = ein Typ mit IAkteur — ein Record (Mensch/Fremdsystem) ODER ein Dienst-Vertrag (Interface, z. B. die KI).
-            //   Die Implementierungsklasse eines Akteur-Dienstes ist kein eigener Akteur (der Vertrag ist es).
-            var vertraege = new List<INamedTypeSymbol>();
-            CollectInterfaces(c.GlobalNamespace, vertraege);
-            bool IstAkteurVertrag(INamedTypeSymbol i) => !SymbolEqualityComparer.Default.Equals(i, iAkteur) && Implementiert(i, iAkteur);
-            var akteure = alle.Where(t => Implementiert(t, iAkteur) && !t.AllInterfaces.Any(IstAkteurVertrag))
-                .Concat(vertraege.Where(IstAkteurVertrag))
+            // Akteur = ein Record/eine Klasse mit IAkteur (Domänen-Experte). Ein Dienst ist nie Akteur — er gehört einem
+            //   (IAkteurDienst<A>, docs/konzept-akteure.md §8); Interfaces zählen daher nicht.
+            var akteure = alle.Where(t => Implementiert(t, iAkteur))
                 .OrderBy(t => t.Name, System.StringComparer.Ordinal).ToList();
+            string ArtVon(INamedTypeSymbol t) =>
+                t.AllInterfaces.Any(i => i.ToDisplayString() == "Abstractions.IMensch") ? "Mensch"
+                : t.AllInterfaces.Any(i => i.ToDisplayString() == "Abstractions.IMaschine") ? "Maschine"
+                : t.AllInterfaces.Any(i => i.ToDisplayString() == "Abstractions.IKi") ? "Ki" : "";
             foreach (var g in akteure.GroupBy(a => a.Name).Where(g => g.Count() > 1))
                 context.ReportDiagnostic(Diagnostic.Create(NameKollision, g.First().Locations.FirstOrDefault() ?? Location.None,
                     g.Key, string.Join(", ", g.Select(a => a.ToDisplayString(fq)))));
@@ -140,7 +140,8 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"            Queries: {Menge(queries.Select(t => t.ToDisplayString(fq)))},");
                 sb.AppendLine($"            Trigger: {Menge(trigger.Select(t => t.ToDisplayString(fq)))},");
                 sb.AppendLine($"            TransientEvents: {Menge(transient.Select(t => t.ToDisplayString(fq)))},");
-                sb.AppendLine($"            Hoert: {Menge(hoert)}),");
+                sb.AppendLine($"            Hoert: {Menge(hoert)},");
+                sb.AppendLine($"            Art: \"{ArtVon(a)}\"),");
             }
             sb.AppendLine("    };");
             sb.AppendLine("}");
@@ -190,14 +191,6 @@ namespace Infrastructure.SourceGeneration
                 CollectNested(type, results);
             foreach (var sub in ns.GetNamespaceMembers())
                 CollectTypes(sub, results);
-        }
-
-        private static void CollectInterfaces(INamespaceSymbol ns, List<INamedTypeSymbol> results)
-        {
-            foreach (var type in ns.GetTypeMembers())
-                if (type.TypeKind == TypeKind.Interface) results.Add(type);
-            foreach (var sub in ns.GetNamespaceMembers())
-                CollectInterfaces(sub, results);
         }
 
         private static void CollectNested(INamedTypeSymbol type, List<INamedTypeSymbol> results)

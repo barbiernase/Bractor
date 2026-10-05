@@ -43,7 +43,7 @@ public sealed class HandlerFormAnalyzer : DiagnosticAnalyzer
                 IEvent = T("Abstractions.IEvent"), IQuery = T("Abstractions.IQuery"),
                 IAggEnv = T("Abstractions.IAggregateEnvelope"), IMsgEnv = T("Abstractions.IMessageEnvelope"),
                 Writer = T("Core.ProjectionWriter"), ReadCtx = T("Abstractions.ReadContext"), PipeCtx = T("Abstractions.PipelineContext"),
-                IWrite = T("Abstractions.IWriteStore"), IRead = T("Abstractions.IReadStore"), IAkteur = T("Abstractions.IAkteur"),
+                IWrite = T("Abstractions.IWriteStore"), IRead = T("Abstractions.IReadStore"), IAkteur = T("Abstractions.IAkteurDienst`1"),
             };
             if (m.ISubscriber == null && m.IReader == null && m.IPipeline == null) return;
             start.RegisterSymbolAction(ctx => Pruefe(ctx, m), SymbolKind.Method);
@@ -82,7 +82,7 @@ public sealed class HandlerFormAnalyzer : DiagnosticAnalyzer
         else if (ps.Length < fähigAb || !Gleich(ps[1].Type, k1) || (k2 != null && !Gleich(ps[2].Type, k2)))
             grund = "der Framework-Kontext steht nicht an der erwarteten Stelle";
         else if (ps.Skip(fähigAb).FirstOrDefault(p => !(p.Type.TypeKind == TypeKind.Interface && (Hat(p.Type, m.IWrite) || Hat(p.Type, m.IRead)
-                     // Akteur-Dienst (IAkteur): nur am Pipeline-Handle — dort entscheidet der Handle in seinem Auftrag.
+                     // Akteur-Dienst (IAkteurDienst<A>): nur am Pipeline-Handle — dort entscheidet der Handle in seinem Auftrag.
                      || k1 == m.PipeCtx && Hat(p.Type, m.IAkteur)))) is { } fremd)
             grund = $"der Parameter '{fremd.Name}' ({fremd.Type.Name}) ist keine Fähigkeit (IWriteStore/IReadStore)"
                 + (Hat(fremd.Type, m.IAkteur) ? " — ein Akteur-Dienst ist nur am Pipeline-Handle erlaubt" : " — Dienste gehören in den Konstruktor");

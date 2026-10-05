@@ -21,14 +21,20 @@ internal static class FaehigkeitsTypen
     }
 
     /// <summary>
-    /// Akteur-Dienst: ein Interface, das <c>Abstractions.IAkteur</c> trägt (z. B. die KI). Ein Pipeline-Handle nimmt ihn als
-    /// Parameter wie eine Fähigkeit — dann entscheidet der Handle IM AUFTRAG dieses Akteurs (docs/konzept-akteure.md).
+    /// Akteur-Dienst: ein Interface, das <c>Abstractions.IAkteurDienst&lt;TAkteur&gt;</c> trägt (z. B. der Classifier-Dienst
+    /// des Klassifizierers). Ein Pipeline-Handle nimmt ihn als Parameter wie eine Fähigkeit — dann entscheidet der Handle IM
+    /// AUFTRAG von TAkteur (docs/konzept-akteure.md §8). Der Dienst selbst ist kein Akteur.
     /// </summary>
-    public static bool IstAkteurDienst(ITypeSymbol typ, Compilation comp)
+    public static bool IstAkteurDienst(ITypeSymbol typ, Compilation comp) => AkteurVonDienst(typ, comp) != null;
+
+    /// <summary>Der Akteur, dem dieser Dienst gehört (<c>IAkteurDienst&lt;TAkteur&gt;</c> → TAkteur), sonst null.</summary>
+    public static INamedTypeSymbol? AkteurVonDienst(ITypeSymbol typ, Compilation comp)
     {
-        if (typ is not INamedTypeSymbol { TypeKind: TypeKind.Interface } i) return false;
-        var a = comp.GetTypeByMetadataName("Abstractions.IAkteur");
-        return a != null && i.AllInterfaces.Any(x => SymbolEqualityComparer.Default.Equals(x, a));
+        if (typ is not INamedTypeSymbol { TypeKind: TypeKind.Interface } i) return null;
+        var d = comp.GetTypeByMetadataName("Abstractions.IAkteurDienst`1");
+        if (d == null) return null;
+        return i.AllInterfaces.FirstOrDefault(x => SymbolEqualityComparer.Default.Equals(x.OriginalDefinition, d))
+            ?.TypeArguments.FirstOrDefault() as INamedTypeSymbol;
     }
 
     /// <summary>Die Fähigkeits-Parameter ab <paramref name="ab"/>, voll qualifiziert.</summary>

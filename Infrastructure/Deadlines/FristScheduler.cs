@@ -78,7 +78,11 @@ public sealed class FristScheduler : IHostedService
         _cts = new CancellationTokenSource();
         var emitter = new CommandEmitter(_system.Cluster(), _logger);
         Func<Frist, Task> feuere = frist =>
-            emitter.EmitAsync(_baueCommand(frist), FristId.FürZustellung(frist.Id), frist.Id, _cts!.Token);
+        {
+            // Die Frist feuert im Auftrag dessen, in dessen Kette sie geplant wurde.
+            using (Infrastructure.Akteure.AkteurHerkunft.Aus(frist.Akteur))
+                return emitter.EmitAsync(_baueCommand(frist), FristId.FürZustellung(frist.Id), frist.Id, _cts!.Token);
+        };
 
         _loop = LoopAsync(feuere, _cts.Token);
         _logger?.LogInformation("Deadline-Scheduler gestartet (Intervall {Intervall}s, DB-Uhr)", Intervall.TotalSeconds);

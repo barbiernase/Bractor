@@ -203,7 +203,7 @@ public static class Sonde
             z.Add($"reader {S(r, "namespace")}.{S(r, "name")} projektion={S(r, "projektion")} trackDeps={r["trackDeps"]} | "
                   + string.Join("; ", A(r, "handles").Select(h => $"{S(h, "query")} -> {Fns(h)} => {string.Join("|", A(h, "responses").Select(x => (string?)x))}")));
         foreach (var ak in A(b, "akteure").Where(Sonde))
-            z.Add($"akteur {S(ak, "namespace")}.{S(ak, "name")}{(ak["dienst"]?.GetValue<bool>() == true ? " dienst" : "")} | darf {string.Join(", ", A(ak, "darf").Select(x => (string?)x))}");
+            z.Add($"akteur {S(ak, "namespace")}.{S(ak, "name")}{(ak["art"]?.GetValue<string>() is { Length: > 0 } art ? " " + art : "")}{(A(ak, "dienste").Any() ? " dienste " + string.Join(", ", A(ak, "dienste").Select(x => (string?)x)) : "")} | darf {string.Join(", ", A(ak, "darf").Select(x => (string?)x))}");
         var sondenTrigger = new HashSet<string>();
         foreach (var p in A(b, "pipelines").Where(Sonde))
         {

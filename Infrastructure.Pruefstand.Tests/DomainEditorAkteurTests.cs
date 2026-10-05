@@ -58,11 +58,11 @@ public sealed class DomainEditorAkteurTests
     }
 
     [Fact]
-    public void Ohne_Akteure_keine_Akteur_Warnung_mit_Akteuren_fuer_jede_Luecke()
+    public void Ohne_Akteure_keine_Herkunfts_Warnung_mit_Akteuren_fuer_jede_Luecke()
     {
-        Validator.PruefeGrammatik(Shop()).Should().NotContain(b => b.Code == "GR-AKTEUR-FEHLT", "ohne Akteure ist der Pfad offen — wie am Tor");
+        Validator.PruefeGrammatik(Shop()).Should().NotContain(b => b.Code == "GR-HERKUNFT", "ohne Akteure ist der Pfad offen — wie am Tor");
 
-        var befunde = Validator.PruefeGrammatik(Shop(Kunde)).Where(b => b.Code == "GR-AKTEUR-FEHLT").ToList();
+        var befunde = Validator.PruefeGrammatik(Shop(Kunde)).Where(b => b.Code == "GR-HERKUNFT").ToList();
         befunde.Should().ContainSingle().Which.Meldung.Should().Contain("Storniere");
     }
 
@@ -87,6 +87,9 @@ public sealed class DomainEditorAkteurTests
         datei.Inhalt.Should().Contain("namespace Shop.Akteure;")
             .And.Contain("using Shop.Bestellung;").And.Contain("using Shop.Lesen;")
             .And.Contain("public sealed record Kunde : IAkteur, IDarf<Bestelle>, IDarf<Bestellungen>;");
+
+        var mensch = Scaffolder.Generiere(Shop(Kunde with { Art = "Mensch" })).Single(d => d.Pfad.EndsWith("Akteure.cs"));
+        mensch.Inhalt.Should().Contain("public sealed record Kunde : IMensch, IDarf<Bestelle>, IDarf<Bestellungen>;");
     }
 
     [Fact]
@@ -99,6 +102,8 @@ public sealed class DomainEditorAkteurTests
         Herkunft.Geaenderte(entzogen).Should().Equal("akteur Shop.Akteure.Kunde");
 
         Scaffolder.IstAkteurBasis("IAkteur").Should().BeTrue();
+        Scaffolder.IstAkteurBasis("IKi").Should().BeTrue("die Art ist Teil der Akteur-Basisliste");
+        Herkunft.Geaenderte(gelesen with { Akteure = [gelesen.Akteure[0] with { Art = "Mensch" }] }).Should().Equal("akteur Shop.Akteure.Kunde");
         Scaffolder.IstAkteurBasis("IDarf<Shop.Bestellung.Bestelle>").Should().BeTrue();
         Scaffolder.IstAkteurBasis("IEquatable<Kunde>").Should().BeFalse("fremde Basen bleiben beim Abgleich stehen");
     }
@@ -110,37 +115,63 @@ public sealed class DomainEditorAkteurTests
         EditorModell.AusJson(m.AlsJson()).Akteure.Should().BeEquivalentTo(m.Akteure);
     }
 
-    // ── Dienste als Akteure (die KI): Vertrag mit IAkteur, Pipeline-Handle im Auftrag (Parameter) ──
+    // ── Der Dienst eines Akteurs (IAkteurDienst<A>): kein Akteur; ein Handle mit ihm als Parameter entscheidet im Auftrag von A ──
 
-    private static EditorModell MitKi(IReadOnlyList<string> sendet, IReadOnlyList<string> kiDarf) => Shop(new Akteur
+    private static EditorModell MitKi(IReadOnlyList<string> sendet, IReadOnlyList<string> kiDarf) => Shop(Kunde, new Akteur
     {
-        Name = "IKi", Namespace = "Shop.Ki", Darf = kiDarf, Dienst = true,
+        Name = "Gutachter", Namespace = "Shop.Akteure", Art = "Ki", Darf = kiDarf, Dienste = ["IGutachten"],
     }) with
     {
         Lesen = new Leseseite
         {
             Pipelines = [new() { Name = "Bewerter", Namespace = "Shop.Ki", Handles =
-                [new() { Eingang = "Bestellt", Ausgaenge = sendet, Faehigkeiten = [new() { Typ = "IKi", Name = "ki" }] }] }],
+                [new() { Eingang = "Bestellt", Ausgaenge = sendet, Faehigkeiten = [new() { Typ = "IGutachten", Name = "ki" }] }] }],
         },
     };
 
     [Fact]
-    public void Handle_im_Auftrag_sendet_nur_was_der_Dienst_darf()
+    public void Handle_im_Auftrag_sendet_nur_was_der_Akteur_darf()
     {
-        Validator.PruefeGrammatik(MitKi(["Bestelle"], ["Bestelle"])).Should().NotContain(b => b.Code == "GR-AUFTRAG");
+        Validator.PruefeGrammatik(MitKi(["Storniere"], ["Storniere"])).Should().NotContain(b => b.Code == "GR-AUFTRAG");
         Validator.PruefeGrammatik(MitKi(["Storniere"], ["Bestelle"]))
-            .Should().ContainSingle(b => b.Code == "GR-AUFTRAG").Which.Meldung.Should().Contain("Storniere").And.Contain("IKi");
+            .Should().ContainSingle(b => b.Code == "GR-AUFTRAG").Which.Meldung.Should().Contain("Storniere").And.Contain("Gutachter");
     }
 
     [Fact]
-    public void Dienst_Akteur_wird_als_Vertrag_geschrieben_ein_bestehender_bleibt_dem_Code()
-    {
-        var neu = Scaffolder.Generiere(MitKi(["Bestelle"], ["Bestelle"])).Single(d => d.Pfad.EndsWith("Akteure.cs") && d.Inhalt.Contains("IKi"));
-        neu.Inhalt.Should().Contain("public interface IKi : IAkteur, IDarf<Bestelle> { }");
+    public void Ein_Dienst_wird_nie_als_Akteur_geschrieben()
+        => Scaffolder.Generiere(MitKi(["Storniere"], ["Storniere"])).Should()
+            .NotContain(d => d.Inhalt.Contains("interface IGutachten"), "der Dienst gehört dem Code; geschrieben wird nur der Akteur-Record");
 
-        var bestehend = MitKi(["Bestelle"], ["Bestelle"]) is var m ? m with { Akteure = [m.Akteure[0] with { Datei = "Shop/Ki/IKi.cs" }] } : null;
-        Scaffolder.Generiere(bestehend!).Should().NotContain(d => d.Pfad == "Shop/Ki/IKi.cs",
-            "ein bestehender Dienst-Vertrag trägt Methoden — nur seine Basisliste gleicht der Abgleich ab");
+    // ── Anteile: direkt (IDarf) und über die Kette; Akteur-Wechsel über den Dienst ──
+
+    private static EditorModell Kette(bool mitDienst) => Shop(Kunde, new Akteur { Name = "Gutachter", Namespace = "Shop.Akteure", Art = "Ki", Dienste = ["IGutachten"] }) with
+    {
+        Lesen = new Leseseite
+        {
+            Pipelines = [new() { Name = "Folge", Namespace = "Shop.Bestellung", Handles =
+                [new() { Eingang = "Bestellt", Ausgaenge = ["Storniere"], Faehigkeiten = mitDienst ? [new() { Typ = "IGutachten", Name = "g" }] : [] }] }],
+        },
+    };
+
+    [Fact]
+    public void Ketten_Command_traegt_den_Akteur_des_ausloesenden_Events()
+    {
+        var a = AkteurAnteile.Aus(Kette(mitDienst: false));
+        a.Direkt["Bestelle"].Should().Equal("Kunde");
+        a.Kette["Bestellt"].Should().Equal("Kunde");
+        a.Kette["Storniere"].Should().Equal(new[] { "Kunde" }, "die Pipeline erzeugt ihn aus Bestellt → Kunde");
+        a.Direkt.Should().NotContainKey("Storniere", "Ketten-Commands darf niemand direkt");
+        Validator.PruefeGrammatik(Kette(false)).Should().NotContain(b => b.Code == "GR-HERKUNFT");
+    }
+
+    [Fact]
+    public void Der_Dienst_wechselt_den_Akteur_mitten_in_der_Kette()
+        => AkteurAnteile.Aus(Kette(mitDienst: true)).Kette["Storniere"].Should().Equal("Gutachter");
+
+    [Fact]
+    public void Ein_Command_kann_von_zwei_Akteuren_kommen()
+    {
+        var m = Shop(Kunde, new Akteur { Name = "Haendler", Namespace = "Shop.Akteure", Art = "Mensch", Darf = ["Bestelle"] });
+        AkteurAnteile.Aus(m).AkteureVon("Bestellt").Should().Equal("Haendler", "Kunde");
     }
 }
-

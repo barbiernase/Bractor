@@ -358,7 +358,8 @@ public abstract class AggregateActorBase<TState> : IActor
                 zuSchreiben,
                 correlationId: cmdEnvelope.CorrelationId,
                 causationId: cmdEnvelope.CommandId.ToString(),
-                aggregateType: typeof(TState).Name);
+                aggregateType: typeof(TState).Name,
+                akteur: cmdEnvelope.UserId);   // Kausalkette: der Akteur reist mit den Events zu Pipelines/Prozessen/Fristen
 
             // ★ Audit-Fix H1: Ab HIER ist der Command DURABEL (der Append hat committet). Alles Folgende
             //   (Applier auf den In-Memory-State, Redis, Snapshot, Publish) ist nur die abgeleitete
@@ -465,7 +466,8 @@ public abstract class AggregateActorBase<TState> : IActor
             new IEvent[] { new Infrastructure.Aggregate.KommandoVerarbeitet(cmdEnvelope.CommandId) },
             correlationId: cmdEnvelope.CorrelationId,
             causationId: cmdEnvelope.CommandId.ToString(),
-            aggregateType: typeof(TState).Name);
+            aggregateType: typeof(TState).Name,
+            akteur: cmdEnvelope.UserId);
 
         _state!.Version++;
         _verarbeiteteCommandIds.Add(cmdEnvelope.CommandId);
@@ -486,7 +488,8 @@ public abstract class AggregateActorBase<TState> : IActor
             new IEvent[] { new Infrastructure.Aggregate.KommandoAbgelehnt(cmdEnvelope.CommandId, grund) },
             correlationId: cmdEnvelope.CorrelationId,
             causationId: cmdEnvelope.CommandId.ToString(),
-            aggregateType: typeof(TState).Name);
+            aggregateType: typeof(TState).Name,
+            akteur: cmdEnvelope.UserId);
 
         _state!.Version++;
         _abgelehnteCommandIds.Add(cmdEnvelope.CommandId);

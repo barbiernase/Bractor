@@ -160,6 +160,8 @@ public partial class MahnlaufPipeline : IPipelineHandler
 // die Rolle (keine *Akteur-/*Rolle-Endung); eine Query zu dürfen ist dasselbe Wort wie ein Command.
 public sealed record Theke : IAkteur, IDarf<LeiheAus>, IDarf<GibZurueck>, IDarf<OffeneAusleihen>;
 
-// Ein DIENST als Akteur (frei benannt, ein Vertrag mit Methode): der Mahnrunden-Handle nimmt ihn als Parameter und entscheidet
-// damit in seinem Auftrag — die Kante „im Auftrag" steht in der Signatur, nicht im Konstruktor.
-public interface IGebuehrenOrakel : IAkteur, IDarf<EroeffneMahnung> { decimal Schaetze(Guid ziel); }
+// Eine KI als Akteur (frei benannt, Art in der Basisliste) und ihr DIENST (ein Vertrag mit Methode, selbst kein Akteur): der
+// Mahnrunden-Handle nimmt den Dienst als Parameter und entscheidet damit im Auftrag der Gutachterin — die Kante „im Auftrag"
+// steht in der Signatur, nicht im Konstruktor.
+public sealed record Gutachterin : IKi, IDarf<EroeffneMahnung>;
+public interface IGebuehrenOrakel : IAkteurDienst<Gutachterin> { decimal Schaetze(Guid ziel); }

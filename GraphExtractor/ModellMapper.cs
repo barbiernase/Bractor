@@ -146,7 +146,7 @@ public static class ModellMapper
             Records = records, Enums = enums, Aggregate = aggregate, Decider = decider, Applier = applier, Sagas = sagas, Rahmen = rahmen,
             Akteure = dom.Akteure.Select(x => new Akteur
             {
-                Name = x.Name, Namespace = x.Namespace, Darf = x.Darf, Dienst = x.Dienst, Doku = x.Doku, Datei = Rel(x.Datei),
+                Name = x.Name, Namespace = x.Namespace, Darf = x.Darf, Art = x.Art, Dienste = x.Dienste, Doku = x.Doku, Datei = Rel(x.Datei),
             }).ToList(),
             Lesen = Leseseite(dom),
         });
@@ -293,6 +293,8 @@ public static class ModellMapper
         // Die Grammatik der Kompositions-Sprache (EINE Quelle: DomainEditor.Grammatik) — der Editor bietet danach nur gültige
         //   Verbindungen an. Reine Editor-Sicht: EditorModell.Rahmen kennt das Feld nicht (beim Zurücklesen ignoriert).
         root["rahmen"]!.AsObject()["grammatik"] = JsonSerializer.SerializeToNode(Grammatik.AlsJson(), EditorModell.JsonOptionen);
+        // Von welchem Akteur kommt was (direkt / über die Kette) — der Editor rechnet live nach, Parität über deAkteurParitaet().
+        root["rahmen"]!.AsObject()["akteurMengen"] = JsonSerializer.SerializeToNode(AkteurAnteile.Aus(modell).AlsJson(), EditorModell.JsonOptionen);
         var records = root["records"]!.AsArray();
 
         // (Store, Methode, isRead) → Board-Fn-Id — damit Projektion/Reader-Handles die aufgerufene Store-Fn
@@ -452,7 +454,7 @@ public static class ModellMapper
                         fristen = (Vertrag(p.HandleVertraege, hd.InputFull)?.Ausgaenge ?? new()).Where(a => a.Art is "frist" or "fristStorno")
                             .Select(a => (object)new { command = a.Typ, art = a.Art == "frist" ? "frist" : "storno" }).ToArray(),
                         fns = StoreFns(p.HandleFaehigkeiten, hd.InputFull),
-                        // Im Auftrag eines Akteur-Dienstes (z. B. der KI) — ein Handle-Parameter wie eine Fähigkeit.
+                        // Im Auftrag eines Akteurs über seinen Dienst (IAkteurDienst<A> → A) — ein Handle-Parameter wie eine Fähigkeit.
                         akteur = p.HandleAkteur.GetValueOrDefault(hd.InputFull),
                         rumpf = Rumpf(p.HandleBodies, hd.InputFull),
                         form = Vertrag(p.HandleVertraege, hd.InputFull)?.Form, signatur = Vertrag(p.HandleVertraege, hd.InputFull)?.Signatur,

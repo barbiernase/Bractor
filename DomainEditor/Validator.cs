@@ -193,26 +193,28 @@ public static class Validator
                 Melde("GR-MODUL-AUSGANG-OFFEN", $"Modul {n.Namespace}: Ausgang {Grammatik.SorteName(n.Sorte!)} '{n.Name}' ohne Erzeuger");
         }
 
-        // (6b) Im Auftrag eines Akteur-Dienstes (CQRS060): höchstens einer je Pipeline-Handle, nur Commands, die er darf.
-        var dienste = modell.Akteure.Where(a => a.Dienst).ToDictionary(a => a.Name, StringComparer.Ordinal);
+        // (6b) Im Auftrag eines Akteurs über seinen Dienst (CQRS060): höchstens einer je Pipeline-Handle, nur Commands, die er darf.
+        var dienstVon = modell.Akteure.SelectMany(a => a.Dienste.Select(d => (d, a))).GroupBy(x => x.d, StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => g.First().a, StringComparer.Ordinal);
         foreach (var p in modell.Lesen?.Pipelines ?? [])
             foreach (var h in p.Handles)
             {
-                var auftrag = h.Faehigkeiten.Select(f => Fluss.Basisname(f.Typ)).Where(dienste.ContainsKey).Distinct().ToList();
-                if (auftrag.Count > 1) Melde("GR-AUFTRAG", $"{p.Name}.Handle({h.Eingang}) entscheidet im Auftrag mehrerer Akteure: {string.Join(", ", auftrag)}");
+                var auftrag = h.Faehigkeiten.Select(f => Fluss.Basisname(f.Typ)).Where(dienstVon.ContainsKey).Select(d => dienstVon[d]).Distinct().ToList();
+                if (auftrag.Count > 1) Melde("GR-AUFTRAG", $"{p.Name}.Handle({h.Eingang}) entscheidet im Auftrag mehrerer Akteure: {string.Join(", ", auftrag.Select(a => a.Name))}");
                 else if (auftrag.Count == 1)
-                    foreach (var c in h.Ausgaenge.Where(a => recs.TryGetValue(a, out var r) && r.Kind == RecordArt.Command && !dienste[auftrag[0]].Darf.Contains(a)))
-                        Melde("GR-AUFTRAG", $"{p.Name}.Handle({h.Eingang}) sendet {c} im Auftrag von {auftrag[0]}, aber {auftrag[0]} darf das nicht");
+                    foreach (var c in h.Ausgaenge.Where(a => recs.TryGetValue(a, out var r) && r.Kind == RecordArt.Command && !auftrag[0].Darf.Contains(a)))
+                        Melde("GR-AUFTRAG", $"{p.Name}.Handle({h.Eingang}) sendet {c} im Auftrag von {auftrag[0].Name}, aber {auftrag[0].Name} darf das nicht");
             }
 
-        // (7) Akteure — erst, wenn das Modell welche hat (wie am Tor: ohne Akteure ist der Pfad offen): was nur aus der anonymen
-        //     Außenwelt kommt, darf kein Akteur → am Tor käme es nie durch. Ingress-Trigger (Webhook/Timer/Datei) sind kein Akteur-Pfad.
+        // (7) Herkunft (docs/konzept-akteure.md §8.3) — erst, wenn das Modell Akteure hat (wie am Tor: ohne Akteure ist der Pfad offen):
+        //     jeder Command, jede Query und jeder Trigger kommt von einem Akteur — direkt (IDarf) oder über die Kette.
         if (modell.Akteure.Count > 0)
         {
-            var ingress = new HashSet<string>((modell.Ingress ?? []).Select(i => i.Trigger), StringComparer.Ordinal);
-            foreach (var k in fluss.Aus(Fluss.AussenId).Where(k => k.Sorte is Grammatik.Command or Grammatik.Query
-                         || k.Sorte == Grammatik.Trigger && !ingress.Contains(k.Nachricht)))
-                Melde("GR-AKTEUR-FEHLT", $"{Grammatik.SorteName(k.Sorte)} '{k.Nachricht}' kommt von außen, aber kein Akteur darf es");
+            var anteile = AkteurAnteile.Aus(modell, fluss);
+            foreach (var (nachricht, sorte) in anteile.Eingaenge.Where(e => anteile.AkteureVon(e.Nachricht).Count == 0))
+                Melde("GR-HERKUNFT", $"{Grammatik.SorteName(sorte)} '{nachricht}' kommt von keinem Akteur — weder IDarf noch über eine Kette");
+            foreach (var (nachricht, kandidaten) in anteile.MehrdeutigeIngresse)
+                Melde("GR-INGRESS-EINDEUTIG", $"Trigger '{nachricht}' entsteht ohne Kette, aber mehrere Akteure dürfen ihn ({string.Join(", ", kandidaten)}) — wer liefert ihn?");
         }
         return befunde;
     }

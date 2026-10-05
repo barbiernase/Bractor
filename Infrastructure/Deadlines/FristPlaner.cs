@@ -21,7 +21,8 @@ public sealed class FristPlaner
     public async Task PlaneAsync(FristAuftrag auftrag, CancellationToken ct = default)
     {
         if (auftrag.Dauer is { } dauer)
-            await _plan.PlaneAsync(new Frist(auftrag.FristId, await _uhr.JetztAsync(ct) + dauer, auftrag.ZielAggregatId, auftrag.Kontext), ct);
+            await _plan.PlaneAsync(new Frist(auftrag.FristId, await _uhr.JetztAsync(ct) + dauer, auftrag.ZielAggregatId, auftrag.Kontext,
+                ImAuftrag.IstAkteur(ImAuftrag.Akteur) ? ImAuftrag.Akteur : null), ct);
         else
             await _plan.EntferneAsync(auftrag.FristId, ct);   // folgenlos, falls schon gefeuert/entfernt
     }

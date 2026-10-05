@@ -75,6 +75,9 @@ public static class ParitaetsPruefung
         var g = Validator.PruefeGrammatik(ausCode);
         foreach (var b in g.Where(b => b.IstFehler))
             befunde.Add(new("Grammatik", Grammatik.RegelVon(b.Code).Build.Any(x => x.Art != "offen") ? "error" : "warning", b.Meldung));
+        // Akteur-Lücken namentlich zeigen (Rahmen „ohne Akteur" im Editor): Warnung, kein Paritätsfehler.
+        foreach (var b in g.Where(b => b.Code is "GR-HERKUNFT" or "GR-INGRESS-EINDEUTIG"))
+            befunde.Add(new("Grammatik", "info", $"{b.Code}: {b.Meldung}"));
         befunde.Add(new("Grammatik", "info",
             $"Code-Modell gegen die Grammatik: {g.Count(b => b.IstFehler)} Fehler, {g.Count(b => b.Schweregrad == "warning")} Warnungen, " +
             $"{g.Count(b => b.Schweregrad == "info")} Hinweise ({string.Join(", ", g.GroupBy(b => b.Code).OrderBy(x => x.Key).Select(x => $"{x.Key}×{x.Count()}"))})."));
@@ -219,14 +222,7 @@ public static class ParitaetsPruefung
                         if (decl is EnumDeclarationSyntax) { inv.Enums.Add(full); continue; }
                         if (decl is InterfaceDeclarationSyntax)
                         {
-                            // Akteur-Dienst: ein Vertrag mit IAkteur (z. B. die KI).
-                            if (iAkteur != null && full != iAkteur.Fq() && Sym.Implements(t, iAkteur))
-                            {
-                                inv.Akteure.Add(full);
-                                inv.AkteurRechte[full] = t.AllInterfaces.Where(i => iDarf != null && i.OriginalDefinition.Fq() == iDarf.Fq())
-                                    .Select(i => i.TypeArguments[0].Name).ToHashSet(StringComparer.Ordinal);
-                                continue;
-                            }
+                            // Ein Akteur-Dienst (IAkteurDienst<A>) ist kein Akteur — er ist Teil von A (nicht gezählt).
                             // Store = jedes Bündel (IStore), plus jede Fähigkeit OHNE Bündel (dann ihr eigener Store).
                             if (Sym.Implements(t, iStore)
                                 || (Sym.Implements(t, iWStore) || Sym.Implements(t, iRStore))
@@ -237,7 +233,7 @@ public static class ParitaetsPruefung
                         var istRecord = decl is RecordDeclarationSyntax;
                         if (istRecord && t.ContainingType == null) inv.AlleRecordNamen.Add(full);
 
-                        if (iAkteur != null && Sym.Implements(t, iAkteur) && !t.AllInterfaces.Any(i => i.Fq() != iAkteur.Fq() && Sym.Implements(i, iAkteur)))
+                        if (iAkteur != null && Sym.Implements(t, iAkteur))
                         {
                             inv.Akteure.Add(full);
                             inv.AkteurRechte[full] = t.AllInterfaces.Where(i => iDarf != null && i.OriginalDefinition.Fq() == iDarf.Fq())

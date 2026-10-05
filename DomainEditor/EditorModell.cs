@@ -533,19 +533,22 @@ public sealed record IngressBindung
 }
 
 /// <summary>
-/// Ein Akteur: <c>public sealed record {Name} : IAkteur, IDarf&lt;A&gt;, IDarf&lt;B&gt;;</c> — Mensch in einer Rolle oder
-/// Fremdsystem (bewusst keine Unterscheidung). <see cref="Darf"/> = einfache Typnamen in Deklarations-Reihenfolge.
+/// Ein Akteur — ein Domänen-Experte: <c>public sealed record {Name} : IMensch, IDarf&lt;A&gt;, IDarf&lt;B&gt;;</c>
+/// (<c>docs/konzept-akteure.md</c> §8). <see cref="Darf"/> = einfache Typnamen in Deklarations-Reihenfolge — nur, was er SELBST
+/// hineingibt; was eine Kette in seinem Namen erzeugt, wird abgeleitet (<see cref="AkteurAnteile"/>).
 /// </summary>
 public sealed record Akteur
 {
     public string Name { get; init; } = "";
     public string Namespace { get; init; } = "";
     public IReadOnlyList<string> Darf { get; init; } = [];
+    /// <summary>Art aus der Basisliste: „Mensch" (<c>IMensch</c>), „Maschine" (<c>IMaschine</c>), „Ki" (<c>IKi</c>); null = nur <c>IAkteur</c>.</summary>
+    public string? Art { get; init; }
     /// <summary>
-    /// true = ein DIENST ist der Akteur (sein Vertrag, ein Interface — z. B. die KI): ein Pipeline-Handle, der ihn als Parameter
-    /// nimmt, entscheidet in seinem Auftrag (CQRS060). false = ein Record (Mensch in einer Rolle / Fremdsystem am Tor).
+    /// Die Dienste dieses Akteurs (<c>interface X : IAkteurDienst&lt;Akteur&gt;</c>, einfache Namen). Ein Dienst ist kein Akteur;
+    /// ein Pipeline-Handle, der ihn als Parameter nimmt, entscheidet im Auftrag dieses Akteurs (CQRS060). Nur Code-Fakt (gelesen).
     /// </summary>
-    public bool Dienst { get; init; }
+    public IReadOnlyList<string> Dienste { get; init; } = [];
     public string? Doku { get; init; }
     /// <summary>Datei der Deklaration (relativ zur Solution); null = neu im Editor.</summary>
     public string? Datei { get; init; }

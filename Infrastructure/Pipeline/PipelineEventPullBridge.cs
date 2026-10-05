@@ -47,8 +47,10 @@ public static class PipelineEventPullBridge
         if (emitFactory is null) throw new ArgumentNullException(nameof(emitFactory));
         if (sendTrigger is null) throw new ArgumentNullException(nameof(sendTrigger));
 
-        return (e, _writer) =>
+        return async (e, _writer) =>
         {
+            // Kausalkette: der Handle handelt im Auftrag des Akteurs, von dem das Event stammt (Header im Log).
+            using var imAuftrag = Infrastructure.Akteure.AkteurHerkunft.Aus(e.UserId);
             var ctx = new PipelineContext
             {
                 CorrelationId = e.CorrelationId ?? "",
@@ -59,7 +61,7 @@ public static class PipelineEventPullBridge
 
             var emit = emitFactory(e);   // Func<IPipelineOutput,Task> — ICommand→Emit, IEvent→Publish (Router)
 
-            return dispatchEvent(
+            await dispatchEvent(
                 e, ctx,
                 cmd => emit(cmd),                              // ICommand : IPipelineOutput
                 trig => sendTrigger(trig, ctx.CorrelationId),  // pipeline→pipeline

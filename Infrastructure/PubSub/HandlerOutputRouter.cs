@@ -89,6 +89,8 @@ public sealed class HandlerOutputRouter
         var pos = triggerSub == 0 ? $"{triggerVersion}" : $"{triggerVersion}.{triggerSub}";
         var korrelation = Guid.TryParse(trigger.CorrelationId, out var kr) ? kr : Guid.Empty;
         var k = new EmitKausalität(korrelation, trigger.AggregateId, $"{pos}:{command.GetType().Name}");
-        return _emitter.EmitAsync(command, k, ct);
+        // Kausalkette: die Reaktion handelt im Auftrag des Akteurs, von dem das auslösende Event stammt.
+        using (Infrastructure.Akteure.AkteurHerkunft.Aus(trigger.UserId))
+            return _emitter.EmitAsync(command, k, ct);
     }
 }

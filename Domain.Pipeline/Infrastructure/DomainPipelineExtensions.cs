@@ -44,9 +44,6 @@ public static class DomainPipelineExtensions
         // Handler-Dependencies
         // ═══════════════════════════════════════════════════════
 
-        services.AddSingleton<IClassifierService, ClassifierService>();
-        Console.WriteLine("  + IClassifierService");
-
         // Bildvorverarbeitung
         services.AddSingleton<IImageResizer, ImageResizer>();
         services.AddSingleton<IHistogramEqualizer, HistogramEqualizer>();
@@ -72,20 +69,5 @@ public static class DomainPipelineExtensions
 
         Console.WriteLine();
         return services;
-    }
-}
-
-/// <summary>
-/// Konkrete Classifier-Implementierung.
-/// In Produktion: HTTP-Client zu einem ML-Service.
-/// Hier: Placeholder.
-/// </summary>
-internal class ClassifierService : IClassifierService
-{
-    public Task<ClassificationResult> ClassifyPairAsync(Guid pairId)
-    {
-        // TODO: Echte KI-Klassifikation
-        return Task.FromResult(new ClassificationResult(
-            Domain.ImagePair.Klassifikation.KeineAnomalie));
     }
 }

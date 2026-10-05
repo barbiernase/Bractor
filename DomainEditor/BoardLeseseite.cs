@@ -93,6 +93,10 @@ public static class BoardLeseseite
             });
         }
 
+        // Akteur → sein (erster) Dienst-Vertrag (IAkteurDienst<A>), für den „im Auftrag"-Parameter.
+        var dienstVonAkteur = A(b, "akteure").Where(a => Strings(a, "dienste").Count > 0)
+            .GroupBy(a => S(a, "name"), StringComparer.Ordinal)
+            .ToDictionary(g => g.Key, g => Strings(g.First(), "dienste")[0], StringComparer.Ordinal);
         List<Parameter> Faehigkeiten(JsonNode? hd)
         {
             var alt = A(hd?["sig"], "faehigkeitParameter").Select(p => new Parameter { Typ = S(p, "typ"), Name = S(p, "name") }).ToList();
@@ -102,9 +106,10 @@ public static class BoardLeseseite
                 if (!faehigkeitVonFn.TryGetValue(id, out var fa) || aus.Any(p => Basisname(p.Typ) == fa.Name)) continue;
                 aus.Add(alt.FirstOrDefault(p => Basisname(p.Typ) == fa.Name) ?? new Parameter { Typ = fa.Name, Name = ParameterName(fa.Name) });
             }
-            // Im Auftrag eines Akteur-Dienstes (Board-Feld „akteur"): ein Parameter wie eine Fähigkeit; Reihenfolge wie im Code.
-            if (N(hd, "akteur") is { Length: > 0 } akteur && aus.All(p => Basisname(p.Typ) != akteur))
-                aus.Add(alt.FirstOrDefault(p => Basisname(p.Typ) == akteur) ?? new Parameter { Typ = akteur, Name = ParameterName(akteur) });
+            // Im Auftrag eines Akteurs (Board-Feld „akteur" = der Akteur): sein Dienst (IAkteurDienst<A>) ist der Parameter, wie eine
+            //   Fähigkeit; Reihenfolge wie im Code. Ein Akteur ohne Dienst kann nicht „drinnen" entscheiden — dann kein Parameter.
+            if (N(hd, "akteur") is { Length: > 0 } akteur && dienstVonAkteur.TryGetValue(akteur, out var dienst) && aus.All(p => Basisname(p.Typ) != dienst))
+                aus.Add(alt.FirstOrDefault(p => Basisname(p.Typ) == dienst) ?? new Parameter { Typ = dienst, Name = ParameterName(dienst) });
             return aus.OrderBy(p => alt.FindIndex(x => Basisname(x.Typ) == Basisname(p.Typ)) is var i && i < 0 ? int.MaxValue : i).ToList();
         }
         // Ein Handle: aus dem Code (sig) unverändert, außer Fähigkeiten und Ausgänge, die das Board trägt.
