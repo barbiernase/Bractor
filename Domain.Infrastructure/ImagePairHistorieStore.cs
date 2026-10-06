@@ -15,16 +15,9 @@ public sealed class ImagePairHistorieStore
 
     // ─── Write: nur puffern (load-or-create-append im Commit-Batch) ───
     public Task AppendEintragAsync(Guid pairId, HistorieEintrag eintrag)
-    {
-        Enqueue(async s =>
-        {
-            var existing = await s.LoadAsync<ImagePairHistorieReadModel>(pairId);
-            s.Store(existing is null
-                ? new ImagePairHistorieReadModel { Id = pairId, Eintraege = new List<HistorieEintrag> { eintrag } }
-                : existing with { Eintraege = new List<HistorieEintrag>(existing.Eintraege) { eintrag } });
-        });
-        return Task.CompletedTask;
-    }
+        => EnqueueAnlegenOderAendern<ImagePairHistorieReadModel>(pairId, existing => existing is null
+            ? new ImagePairHistorieReadModel { Id = pairId, Eintraege = new List<HistorieEintrag> { eintrag } }
+            : existing with { Eintraege = new List<HistorieEintrag>(existing.Eintraege) { eintrag } });
 
     // ─── Read ───
     public async Task<ImagePairHistorieReadModel?> GetByPairIdAsync(Guid pairId)

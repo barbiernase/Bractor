@@ -13,7 +13,7 @@ public sealed partial class TrainingslaufStore : MartenCoCommitStoreBase, ITrain
 {
     public TrainingslaufStore(IDocumentStore store) : base(store) { }
 
-    public Task UpsertAsync(TrainingslaufReadModel model) => EnqueueStore(model);
+    public Task UpsertAsync(TrainingslaufReadModel model) => EnqueueStore(model.Id, model);
 
     public Task SetBegonnenAsync(Guid id, DateTimeOffset startzeit)
         => EnqueueTransform<TrainingslaufReadModel>(id, existing => existing with

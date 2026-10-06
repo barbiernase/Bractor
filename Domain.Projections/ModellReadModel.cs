@@ -37,8 +37,12 @@ public record ModellReadModel : IReadModel
 /// Der Singleton-Zeiger auf das aktuell aktive Modell (Konzept §5: „genau ein aktives Modell").
 /// Wird bei jedem <c>ModellAktiviert</c> überschrieben (die jüngste Aktivierung gewinnt). Der
 /// Inferenz-Worker/Klassifikator liest hier, welches Modell er nutzen soll.
+///
+/// GETEILT (<see cref="IGeteiltesReadModel"/>): jedes Modell ist ein eigener Stream, also schreiben mehrere Streams
+/// in dieses eine Dokument. „Jüngste gewinnt“ heißt deshalb nach <see cref="AktiviertAm"/> (Event-Zeit), nicht nach
+/// der Ankunft — zwischen Streams gibt es keine Ordnung. Gleichzeitige Schreiber prüft die Versionsprüfung.
 /// </summary>
-public record AktivesModellReadModel : IReadModel
+public record AktivesModellReadModel : IReadModel, IGeteiltesReadModel
 {
     /// <summary>Feste Singleton-Id (ein globaler „Zweck").</summary>
     public const string Singleton = "aktiv";

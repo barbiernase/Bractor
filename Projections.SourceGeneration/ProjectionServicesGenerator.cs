@@ -12,7 +12,8 @@ namespace Projections.SourceGeneration
     /// steile Boilerplate-Herd: ~6 Registrierungen + 1 Marten-Schema-Block PRO Projektion).
     ///
     /// Alles typ-/interface-getrieben entdeckt (Namen sind unzuverlässig: „Projection" vs „Projektion"):
-    ///   - Marten-Schema: je <c>IReadModel</c> ein uniformer <c>Schema.For&lt;T&gt;()</c>-Block.
+    ///   - Marten-Schema: je <c>IReadModel</c> ein uniformer <c>Schema.For&lt;T&gt;()</c>-Block; Optimistic Concurrency nur
+    ///     für <c>IGeteiltesReadModel</c> (aus mehreren Streams beschrieben).
     ///   - Stores: jede Klasse mit Fähigkeiten (Marker <c>IWriteStore</c>/<c>IReadStore</c>) SCOPED — eine Instanz je
     ///     Fähigkeits-Bereich —, umgeleitet unter jeder Fähigkeit und dem Bündel (<c>IStore</c>). Ctor-Argumente per
     ///     Parameter-Inspektion. Eine Fähigkeit mit zwei Klassen ist CQRS053.
@@ -40,13 +41,14 @@ namespace Projections.SourceGeneration
         {
             var comp = context.Compilation;
             var iReadModel = comp.GetTypeByMetadataName("Abstractions.IReadModel");
+            var iGeteilt = comp.GetTypeByMetadataName("Abstractions.IGeteiltesReadModel");
             var iSubscriber = comp.GetTypeByMetadataName("Abstractions.ISubscriber");
             var iPull = comp.GetTypeByMetadataName("Abstractions.IPullSubscriber");
             var iReader = comp.GetTypeByMetadataName("Abstractions.IReader`1");
             var iWrite = comp.GetTypeByMetadataName("Abstractions.IWriteStore");
             var iRead = comp.GetTypeByMetadataName("Abstractions.IReadStore");
             var iStore = comp.GetTypeByMetadataName("Abstractions.IStore");
-            if (iReadModel == null || iSubscriber == null || iPull == null || iReader == null
+            if (iReadModel == null || iGeteilt == null || iSubscriber == null || iPull == null || iReader == null
                 || iWrite == null || iRead == null || iStore == null)
                 return;
 
@@ -119,12 +121,14 @@ namespace Projections.SourceGeneration
             // Marten-Schema
             sb.AppendLine("        services.ConfigureMarten(options =>");
             sb.AppendLine("        {");
+            // Optimistic Concurrency nur für GETEILTE Dokumente (aus mehreren Streams beschrieben): alle übrigen haben
+            // per Schreib-Regel der Store-Basis genau einen Schreiber (ihren Stream) — dort wäre die Prüfung reine Last.
             foreach (var rm in readModels)
             {
                 sb.AppendLine($"            options.Schema.For<{rm.ToDisplayString(full)}>()");
                 sb.AppendLine("                .DatabaseSchemaName(\"rm\")");
                 sb.AppendLine("                .Identity(x => x.Id)");
-                sb.AppendLine("                .UseOptimisticConcurrency(false);");
+                sb.AppendLine($"                .UseOptimisticConcurrency({(Impl(rm, iGeteilt) ? "true" : "false")});");
             }
             sb.AppendLine("        });");
             sb.AppendLine();

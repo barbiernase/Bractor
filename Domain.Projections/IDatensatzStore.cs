@@ -55,7 +55,7 @@ public interface IHoleSamples : IReadStore
 
 /// <summary>
 /// Rückwärts-Index: alle Datensätze, in denen das Bildpaar (als Entwurfs-Mitglied) liegt.
-/// Liest die <see cref="DatensatzMitgliedschaftReadModel"/>-Zeile und joint die Kopf-Daten.
+/// Liest die <see cref="DatensatzMitgliedschaftZeile"/>n des Paares und joint die Kopf-Daten.
 /// </summary>
 public interface IHoleDatensaetzeFuerPaar : IReadStore { Task<IReadOnlyList<DatensatzReadModel>> HoleDatensaetzeFuerPaarAsync(Guid imagePairId); }
 

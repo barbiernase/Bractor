@@ -46,12 +46,15 @@ public sealed partial class DatensatzStore
     {
         await using var session = Store.QuerySession();
 
-        var doc = await session.LoadAsync<DatensatzMitgliedschaftReadModel>(imagePairId);
-        if (doc is null || doc.DatensatzIds.Count == 0)
+        var datensatzIds = await session.Query<DatensatzMitgliedschaftZeile>()
+            .Where(z => z.ImagePairId == imagePairId)
+            .Select(z => z.DatensatzId)
+            .ToListAsync();
+        if (datensatzIds.Count == 0)
             return Array.Empty<DatensatzReadModel>();
 
         // Join: Kopf-Daten (Name/Status/Version) frisch aus den Datensatz-Read-Models.
-        var modelle = await session.LoadManyAsync<DatensatzReadModel>(doc.DatensatzIds.ToArray());
+        var modelle = await session.LoadManyAsync<DatensatzReadModel>(datensatzIds.Distinct().ToArray());
         return modelle.ToList();
     }
 }

@@ -13,7 +13,7 @@ public sealed partial class ImagePairStore : MartenCoCommitStoreBase, IImagePair
 {
     public ImagePairStore(IDocumentStore store) : base(store) { }
 
-    public Task UpsertAsync(ImagePairReadModel model) => EnqueueStore(model);
+    public Task UpsertAsync(ImagePairReadModel model) => EnqueueStore(model.Id, model);
 
     public Task SetBildVerfuegbarAsync(
         Guid id, BildVersion version, BildMeta meta, string pfad, DateTimeOffset aktualisierung)

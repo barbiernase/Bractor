@@ -73,7 +73,30 @@ public sealed class ProjectionAdapter
     public async Task WakeAsync(Guid streamId, CancellationToken ct = default)
         => await WakeAsync(streamId, vomPoll: false, ct);
 
+    /// <summary>Wie oft ein Stapel nach einem Schreibkonflikt sofort wiederholt wird, bevor der Poll übernimmt.</summary>
+    private const int KonfliktVersuche = 5;
+
     public async Task WakeAsync(Guid streamId, bool vomPoll, CancellationToken ct = default)
+    {
+        for (var versuch = 1; ; versuch++)
+        {
+            try
+            {
+                await WakeEinmalAsync(streamId, vomPoll, ct);
+                return;
+            }
+            catch (SchreibKonfliktException) when (versuch < KonfliktVersuche)
+            {
+                // Ein geteiltes Dokument wurde von einem anderen Stream zwischenzeitlich geändert. Nichts aus dem
+                // Stapel ist durabel (Effekte und Marke fielen gemeinsam zurück) → frisch ab der Marke wiederholen;
+                // kurz und gestreut warten, damit zwei Konkurrenten nicht im Gleichtakt erneut kollidieren.
+                // Nach dem letzten Versuch fliegt die Ausnahme: kein WakeAck, der Poll weckt erneut.
+                await Task.Delay(Random.Shared.Next(5, 25 * versuch), ct);
+            }
+        }
+    }
+
+    private async Task WakeEinmalAsync(Guid streamId, bool vomPoll, CancellationToken ct)
     {
         int applied;
         if (_tracker is not null)

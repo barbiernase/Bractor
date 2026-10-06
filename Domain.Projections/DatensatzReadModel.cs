@@ -84,21 +84,22 @@ public record DatensatzSampleReadModel : IReadModel
 // ═══════════════════════════════════════════════════════════════
 
 /// <summary>
-/// Der serverseitige Rückwärts-Index (Konzept datensatz-kuratierung §4.3): je
-/// ImagePairId die Menge der Datensätze, in denen das Paar (als Entwurfs-Mitglied) liegt.
-/// Grundlage der „in Datensätzen: …"-Chips im Einbild — O(1)-Rückwärts-Lookup statt
-/// Voll-Scan aller Datensätze.
+/// Der serverseitige Rückwärts-Index (Konzept datensatz-kuratierung §4.3): je (Datensatz, Bildpaar) eine Zeile, solange
+/// das Paar Entwurfs-Mitglied des Datensatzes ist. Grundlage der „in Datensätzen: …"-Chips im Einbild — Lookup über
+/// <see cref="ImagePairId"/> statt Voll-Scan aller Datensätze.
 ///
-/// Bewusst schlank: nur die Datensatz-<em>Ids</em>. Name/Status/Version zieht der Reader
-/// per Join aus dem <see cref="DatensatzReadModel"/> — so bleibt der Index frei von
-/// Duplikaten und ist beim Einfrieren (Status/Version-Wechsel) ohne eigenen Handler frisch.
-/// Co-committet mit dem Vorwärts-Delta (dieselbe Transaktion) → exactly-once.
+/// Bewusst ZEILEN statt einer Liste je Bildpaar: jeder Datensatz ist ein eigener Stream, und die Konsum-Maschine
+/// garantiert einen Schreiber nur je Stream. Eine Liste je Bildpaar würden mehrere Datensatz-Streams parallel lesen,
+/// ändern und zurückschreiben (Lost Update). Eine Zeile gehört genau EINEM Datensatz (Id <c>{DatensatzId}:{ImagePairId}</c>)
+/// — zwei Streams berühren nie dieselbe Zeile. Name/Status/Version zieht der Reader per Join aus dem
+/// <see cref="DatensatzReadModel"/>. Co-committet mit dem Vorwärts-Delta (dieselbe Transaktion) → exactly-once.
 /// </summary>
-public record DatensatzMitgliedschaftReadModel : IReadModel
+public record DatensatzMitgliedschaftZeile : IReadModel
 {
-    /// <summary>== ImagePairId (Marten-Dokument-Id).</summary>
-    public Guid Id { get; init; }
+    /// <summary><c>{DatensatzId:N}:{ImagePairId:N}</c> (Marten-Dokument-Id).</summary>
+    public string Id { get; init; } = "";
+    public Guid DatensatzId { get; init; }
+    public Guid ImagePairId { get; init; }
 
-    /// <summary>Die Datensätze, in denen dieses Bildpaar liegt (dedupliziert).</summary>
-    public List<Guid> DatensatzIds { get; init; } = new();
+    public static string MakeId(Guid datensatzId, Guid imagePairId) => $"{datensatzId:N}:{imagePairId:N}";
 }

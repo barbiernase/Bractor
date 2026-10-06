@@ -14,7 +14,7 @@ public sealed partial class DatensatzStore : MartenCoCommitStoreBase, IDatensatz
 {
     public DatensatzStore(IDocumentStore store) : base(store) { }
 
-    public Task UpsertAsync(DatensatzReadModel model) => EnqueueStore(model);
+    public Task UpsertAsync(DatensatzReadModel model) => EnqueueStore(model.Id, model);
 
     public Task NimmRangeAufAsync(
         Guid id, IReadOnlyList<Guid> imagePairIds, RangeHerkunft herkunft, DateTimeOffset aktualisierung)
@@ -97,52 +97,39 @@ public sealed partial class DatensatzStore : MartenCoCommitStoreBase, IDatensatz
             LetzteAktualisierung = aktualisierung
         });
 
-        // 2) Je Mitglied eine Sample-Zeile (immutable Snapshot; idempotent über die zusammengesetzte Id).
-        Enqueue(s =>
-        {
-            foreach (var m in mitglieder)
+        // 2) Je Mitglied eine Sample-Zeile dieses Datensatzes (immutable Snapshot; idempotent über die zusammengesetzte Id).
+        foreach (var m in mitglieder)
+            EnqueueZeile(id, new DatensatzSampleReadModel
             {
-                s.Store(new DatensatzSampleReadModel
-                {
-                    Id = DatensatzSampleReadModel.MakeId(id, version, m.ImagePairId),
-                    DatensatzId = id,
-                    Version = version,
-                    ImagePairId = m.ImagePairId,
-                    Dc0Pfad = m.Dc0Pfad,
-                    Dc2Pfad = m.Dc2Pfad,
-                    Label = m.Label,
-                    Split = m.Split
-                });
-            }
-            return Task.CompletedTask;
-        });
+                Id = DatensatzSampleReadModel.MakeId(id, version, m.ImagePairId),
+                DatensatzId = id,
+                Version = version,
+                ImagePairId = m.ImagePairId,
+                Dc0Pfad = m.Dc0Pfad,
+                Dc2Pfad = m.Dc2Pfad,
+                Label = m.Label,
+                Split = m.Split
+            });
 
         return Task.CompletedTask;
     }
 
     /// <summary>
-    /// Puffert die Rückwärts-Index-Pflege: <c>imagePairId → +/− datensatzId</c>. Idempotent
-    /// (Union bzw. Remove), co-committet im selben Batch wie das Vorwärts-Delta.
+    /// Puffert die Rückwärts-Index-Pflege als ZEILE dieses Datensatzes: drin → Zeile <c>{datensatzId}:{imagePairId}</c>
+    /// anlegen (idempotent), raus → entfernen. Keine Liste je Bildpaar: die würden mehrere Datensatz-Streams parallel
+    /// überschreiben. Co-committet im selben Batch wie das Vorwärts-Delta.
     /// </summary>
     private void BufferRueckwaerts(Guid imagePairId, Guid datensatzId, bool drin)
     {
-        Enqueue(async s =>
-        {
-            var doc = await s.LoadAsync<DatensatzMitgliedschaftReadModel>(imagePairId)
-                      ?? new DatensatzMitgliedschaftReadModel { Id = imagePairId };
-
-            if (drin)
+        var zeilenId = DatensatzMitgliedschaftZeile.MakeId(datensatzId, imagePairId);
+        if (drin)
+            EnqueueZeile(datensatzId, new DatensatzMitgliedschaftZeile
             {
-                if (doc.DatensatzIds.Contains(datensatzId)) return;   // schon drin → idempotent
-                s.Store(doc with { DatensatzIds = new List<Guid>(doc.DatensatzIds) { datensatzId } });
-            }
-            else
-            {
-                if (!doc.DatensatzIds.Contains(datensatzId)) return;
-                var ids = new List<Guid>(doc.DatensatzIds);
-                ids.Remove(datensatzId);
-                s.Store(doc with { DatensatzIds = ids });
-            }
-        });
+                Id = zeilenId,
+                DatensatzId = datensatzId,
+                ImagePairId = imagePairId
+            });
+        else
+            EnqueueZeileEntfernen<DatensatzMitgliedschaftZeile>(datensatzId, zeilenId);
     }
 }

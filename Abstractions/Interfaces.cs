@@ -276,6 +276,28 @@ public interface IAggregateRepository
     public interface IReadModel { }
 
     /// <summary>
+    /// Marker: dieses ReadModel ist ein GETEILTES Dokument — es wird aus MEHREREN Streams beschrieben (z. B. ein
+    /// Singleton-Zeiger). Die Konsum-Maschine garantiert einen Schreiber nur je (Projektion, Stream); für ein
+    /// geteiltes Dokument gilt das nicht. Deshalb registriert der Generator es mit Optimistic Concurrency, und ein
+    /// Store darf es nur über den konfliktgeprüften Weg ändern (Lesen → Ändern → Schreiben mit Versionsprüfung;
+    /// ein Konflikt verwirft den ganzen Stapel samt Marke, der Adapter wiederholt ihn).
+    ///
+    /// Wo es geht, ist ein geteiltes Dokument zu vermeiden: Zeilen je (Stream, Schlüssel) mit zusammengesetzter Id
+    /// berühren nie dasselbe Dokument und brauchen keine Versionsprüfung.
+    /// </summary>
+    public interface IGeteiltesReadModel : IReadModel { }
+
+    /// <summary>
+    /// Ein Store meldet beim Commit eines Stapels, dass ein geteiltes Dokument zwischenzeitlich von einem anderen
+    /// Stream geändert wurde. Nichts aus dem Stapel ist durabel (Effekte und Marke fielen gemeinsam zurück) — der
+    /// Stapel kann gefahrlos wiederholt werden. Store-agnostisch: der Adapter kennt nur diese Ausnahme.
+    /// </summary>
+    public sealed class SchreibKonfliktException : Exception
+    {
+        public SchreibKonfliktException(string message, Exception inner) : base(message, inner) { }
+    }
+
+    /// <summary>
     /// Marker: dieses Interface ist eine SCHREIB-FÄHIGKEIT eines Projektions-Stores — genau EINE Funktion
     /// (CQRS051). Ein Handle bekommt die Fähigkeiten, die er benutzen darf, als Parameter; der generierte
     /// Dispatch löst sie aus dem DI-Bereich auf (eine Store-Instanz je Bereich → Co-Commit bleibt). So steht die
