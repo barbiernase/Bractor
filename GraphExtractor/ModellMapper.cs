@@ -45,7 +45,7 @@ public static class ModellMapper
         foreach (var r in dom.Responses.OrderBy(r => r.Full, StringComparer.Ordinal))
             records.Add(AlsRecord(r.Name, RecordArt.Antwort, r.Fields, r.Meta, dom.Wurzel));
         foreach (var r in dom.ReadModels.OrderBy(r => r.Full, StringComparer.Ordinal))
-            records.Add(AlsRecord(r.Name, RecordArt.ReadModel, r.Fields, r.Meta, dom.Wurzel));
+            records.Add(AlsRecord(r.Name, RecordArt.ReadModel, r.Fields, r.Meta, dom.Wurzel) with { Geteilt = r.Geteilt });
         // Betrieb: Konfigurations-Records (Ctor-Injektion), Trigger-Nachrichten, Selbst-Nachrichten der Pipelines.
         foreach (var r in dom.Konfigs)
             records.Add(AlsRecord(r.Name, RecordArt.Konfig, r.Fields, r.Meta, dom.Wurzel));
@@ -364,6 +364,7 @@ public static class ModellMapper
             typart = rm.Meta.Typart, doku = rm.Meta.Doku, datei = Relativ(dom.Wurzel, rm.Meta.Datei),
             zusatz = rm.Meta.Zusatz, usings = rm.Meta.Usings.Count > 0 ? rm.Meta.Usings : null, basen = rm.Meta.Basen, attribute = rm.Meta.Attribute,
             ohneParameterliste = rm.Meta.OhneParameterliste ? true : (bool?)null,
+            geteilt = rm.Geteilt ? true : (bool?)null,
             herkunft = modell.Records.FirstOrDefault(r => r.Kind == RecordArt.ReadModel && r.Name == rm.Name && r.Namespace == rm.Meta.Namespace)?.Herkunft,
         }).ToList();
 

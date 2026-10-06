@@ -92,6 +92,8 @@ public sealed class RecordRaw
     public string? Store;
     /// <summary>Nur ReadModel: mehrere Stores nennen den Typ — keine Zuordnung geraten, sondern alle Kandidaten.</summary>
     public List<string>? StoreKandidaten;
+    /// <summary>Nur ReadModel: geteiltes Dokument (Marker <c>IGeteiltesReadModel</c>) — aus mehreren Streams beschrieben.</summary>
+    public bool Geteilt;
 }
 
 public sealed class EnumRaw
@@ -370,7 +372,7 @@ public sealed class DomainExtractor
     private readonly List<INamedTypeSymbol> _types;
 
     private readonly INamedTypeSymbol? _iState, _iCommand, _iCreation, _iEvent, _iTransient,
-        _iSubscriber, _iPull, _iAppend, _iReader, _iQuery, _iQueryResponse, _iReadModel,
+        _iSubscriber, _iPull, _iAppend, _iReader, _iQuery, _iQueryResponse, _iReadModel, _iGeteilt,
         _iPipelineHandler, _iPipelineTrigger, _iSelfMessage, _iProzessDef, _iPayload, _iPipelineOutput;
 
 
@@ -403,6 +405,7 @@ public sealed class DomainExtractor
         _iQuery = Get(Vertrag.IQuery);
         _iQueryResponse = Get(Vertrag.IQueryResponse);
         _iReadModel = Get(Vertrag.IReadModel);
+        _iGeteilt = Get(Vertrag.IGeteiltesReadModel);
         _iPipelineHandler = Get(Vertrag.IPipelineHandler);
         _iPipelineTrigger = Get(Vertrag.IPipelineTrigger);
         _iSelfMessage = Get(Vertrag.IPipelineSelfMessage);
@@ -577,7 +580,7 @@ public sealed class DomainExtractor
             if (_iAkteur != null && Sym.Implements(t, _iAkteur)) m.Akteure.Add(ReadAkteur(t));
             else if (t.AllInterfaces.Any(i => AkteurVonDienst(i) != null)) { }   // Implementierung eines Akteur-Dienstes: Dienst, kein Wert
             else if (Sym.Implements(t, _iQueryResponse)) m.Responses.Add(raw);
-            else if (Sym.Implements(t, _iReadModel)) m.ReadModels.Add(raw);
+            else if (Sym.Implements(t, _iReadModel)) { raw.Geteilt = _iGeteilt != null && Sym.Implements(t, _iGeteilt); m.ReadModels.Add(raw); }
             else if (Sym.Implements(t, _iPipelineTrigger)) m.Triggers.Add(raw);
             else if (_iSelfMessage != null && Sym.Implements(t, _iSelfMessage)) m.SelbstNachrichten.Add(raw);
             // Value Object = als Wertobjekt markiert ODER ein Record (Datenträger per Sprachkonstrukt) ohne jede Rolle.
@@ -1069,7 +1072,7 @@ public sealed class DomainExtractor
         {
             var model = Model(decl.SyntaxTree);
             // Die Rollen-Marker (sie bestimmen die Art und werden aus ihr geschrieben) — alle übrigen Basen sind Code-Fakt.
-            var rollen = new[] { _iCommand, _iCreation, _iEvent, _iTransient, _iQuery, _iQueryResponse, _iReadModel, _iPipelineTrigger, _iSelfMessage }
+            var rollen = new[] { _iCommand, _iCreation, _iEvent, _iTransient, _iQuery, _iQueryResponse, _iReadModel, _iGeteilt, _iPipelineTrigger, _iSelfMessage }
                 .Where(x => x != null).Select(x => x!.Fq()).ToHashSet(StringComparer.Ordinal);
             basen = bl.Types.Where(b => model.GetTypeInfo(b.Type).Type is not INamedTypeSymbol bt || !rollen.Contains(bt.Fq()))
                 .Select(b => b.ToString()).ToList();

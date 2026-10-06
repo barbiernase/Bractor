@@ -18,7 +18,8 @@ namespace SimHost;
 //      Anweisung · Graph-Skelett · Slot-Teil · Auftrag · [aktueller Rumpf · Befund/Anpassung]
 //    Nie ein Gesprächsverlauf — nur der letzte Rumpf reist mit.
 //  • Prüfen: Syntax (alle Slot-Arten); Decide/Apply zusätzlich In-Memory-Compile mit den echten Generatoren
-//    (dasselbe Kompilat wie /api/editor/compile). Nur NEUE Fehler gegenüber dem unveränderten Modell zählen.
+//    (dasselbe Kompilat wie /api/editor/compile); Store-Funktionen gegen das echte Projekt inkl. der Store-Regeln
+//    CQRS066/067 (ProjektPruefung). Nur NEUE Fehler gegenüber dem Unveränderten zählen.
 //  • Ausführen (Editor, ▶ am 🤖-Knoten): ein GEPRÜFTER Rumpf geht sofort in die echte Datei, danach laufen die Generatoren
 //    (Build des Laufzeit-Projekts). Übernehmen (Konsole bzw. ungeprüfter Vorschlag) schreibt auf Klick. Beides mit
 //    Hash-Sperre, Sicherung, Rückgängig.
@@ -119,10 +120,12 @@ public sealed class LlmKonsole
     private readonly Func<ILlmAnbieter> _anbieter;
     private readonly object _sperre = new();
     private readonly Dictionary<string, CompileErgebnis> _basisFehler = new();
+    private readonly ProjektPruefung _projekt;
 
     public LlmKonsole(string slnRoot, ModellSimulation sim)
     {
         _sln = slnRoot; _sim = sim;
+        _projekt = new ProjektPruefung(slnRoot);
         _verz = Path.Combine(slnRoot, ".llm-kontext");
         // Ausschließlich Claude Code über die Anmeldung dieses Rechners (Abo, keine API-Kosten); BRACTOR_LLM_MODELL wählt optional das Modell.
         _anbieter = () => new ClaudeCliAnbieter(Environment.GetEnvironmentVariable("BRACTOR_LLM_MODELL"));
@@ -263,7 +266,7 @@ public sealed class LlmKonsole
         return ("rumpf", Dedent(code), null);
     }
 
-    // ── Prüfen: Syntax für alle; Decide/Apply zusätzlich In-Memory-Compile mit den echten Generatoren ──
+    // ── Prüfen: Syntax für alle; Decide/Apply In-Memory-Compile mit den echten Generatoren; Store gegen das echte Projekt ──
 
     public List<string> Pruefe(JsonObject slot, string rumpf)
     {
@@ -272,7 +275,10 @@ public sealed class LlmKonsole
             .Select(d => $"Syntax {d.Id} Zeile {d.Location.GetLineSpan().StartLinePosition.Line}: {d.GetMessage()}").ToList();
         if (befunde.Count > 0) return befunde;
         var art = S(slot, "art");
-        if (art is not ("decide" or "apply")) return befunde;   // Leseseite/Pipeline/Store: Compile erst beim Bauen nach dem Übernehmen
+        // Store: das Editor-Modell trägt keine Store-Rümpfe → gegen das echte Projekt, mit den Store-Regeln CQRS066/067 —
+        // so sieht die Korrekturrunde einen Schreibweg am Puffer vorbei, BEVOR er in die Datei geht.
+        if (art == "store") return _projekt.Pruefe(Anker(slot), rumpf);
+        if (art is not ("decide" or "apply")) return befunde;   // Leseseite/Pipeline: Compile erst beim Bauen nach dem Übernehmen
         var modell = SimModell();
         if (modell == null) return new List<string> { "domain-model.json fehlt — Kontexte neu erzeugen." };
         var basis = BasisKompilat(modell);
@@ -282,6 +288,15 @@ public sealed class LlmKonsole
         var bekannt = basis.Fehler.Select(f => f.Code + "|" + f.Meldung).ToHashSet();
         return neu.Fehler.Where(f => f.Schweregrad == "error" && !bekannt.Contains(f.Code + "|" + f.Meldung))
             .Select(f => $"{f.Code}: {f.Meldung}").Distinct().Take(20).ToList();
+    }
+
+    /// <summary>Prüfen per Slot-Id (Kommandozeile <c>--pruefe-rumpf</c>, Endpunkt <c>/api/llm/pruefen</c>) — schreibt nichts.</summary>
+    public object PruefePerId(string id, string rumpf)
+    {
+        var slot = Slot(id);
+        if (slot == null) return new { ok = false, grund = "Unbekannter Slot — Kontexte neu erzeugen." };
+        var befunde = Pruefe(slot, rumpf);
+        return new { ok = befunde.Count == 0, befunde };
     }
 
     private CompileErgebnis BasisKompilat(EditorModell modell)

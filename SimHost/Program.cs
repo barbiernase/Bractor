@@ -14,6 +14,16 @@ if (args.Length >= 2 && args[0] is "--trocken" or "--schreiben")
     return;
 }
 
+// Kommandozeile (ohne Web, ohne LLM): einen Kandidaten-Rumpf für einen Code-Block prüfen, wie die Konsole es vor dem
+// Schreiben tut — --pruefe-rumpf <Slot-Id> <Datei mit Rumpf>. Schreibt nichts.
+if (args.Length >= 3 && args[0] == "--pruefe-rumpf")
+{
+    var cliErgebnis = new LlmKonsole(SlnRoot(), new ModellSimulation()).PruefePerId(args[1], File.ReadAllText(args[2]));
+    Console.WriteLine(JsonSerializer.Serialize(cliErgebnis, new JsonSerializerOptions { WriteIndented = true,
+        Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
+    return;
+}
+
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAnyHeader().AllowAnyMethod()));
 var app = builder.Build();
@@ -200,6 +210,8 @@ app.MapPost("/api/llm/ausfuehren", async (JsonElement b, CancellationToken ct) =
 app.MapPost("/api/llm/simulieren", (JsonElement b) => Results.Json(konsole.Simuliere(
     b.GetProperty("id").GetString()!, b.GetProperty("rumpf").GetString()!, b.GetProperty("command").GetString()!,
     b.TryGetProperty("werte", out var w) ? w : default, b.TryGetProperty("neu", out var n) && n.ValueKind == JsonValueKind.True), EditorModell.JsonOptionen));
+app.MapPost("/api/llm/pruefen", (JsonElement b) => Results.Json(konsole.PruefePerId(
+    b.GetProperty("id").GetString()!, b.GetProperty("rumpf").GetString()!)));
 app.MapPost("/api/llm/uebernehmen", (JsonElement b) => Results.Json(konsole.Uebernehmen(
     b.GetProperty("id").GetString()!, b.GetProperty("rumpf").GetString()!,
     b.TryGetProperty("auftrag", out var a) ? a.GetString() : null,

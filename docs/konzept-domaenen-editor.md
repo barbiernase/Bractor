@@ -180,10 +180,19 @@ Das tragende Modell sind **zwei Code-Schichten gegen verdrahtete Verträge**:
 |---|---|---|
 | **Transport** | ☑ *Geordneter Pull* (Default) | `IPullSubscriber` — jedes Event genau einmal, in Reihenfolge (Normalfall) |
 | | ☐ aus | Signal (`ISubscriber`) — schnell, best-effort, darf verloren/doppelt/ungeordnet sein (UI-Feedback/Ticks) |
-| **Garantie** | ☐ *Append-artig* (Default aus) | idempotenter Upsert (last-writer-wins) → **at-least-once genügt** |
+| **Garantie** | ☐ *Append-artig* (Default aus) | idempotenter Upsert → **at-least-once genügt** |
 | | ☑ an | Append-artig (Ledger/Historie) → verlangt **Co-Commit-Store → exactly-once** (Boot-Check **GA-1**) |
 
 **Faustregel:** Append-Häkchen an, sobald eine Write-Fn *anhängt* (Liste/Historie); bei *Upsert* aus.
+
+**Am ReadModel: ☐ *geteilt*** (Marker `IGeteiltesReadModel`, Code-Fakt). Die Maschine garantiert einen Schreiber nur je
+(Projektion, Stream). Ein Dokument, das mehrere Streams beschreiben (Singleton-Zeiger, Zähler über viele Aggregate), ist
+*geteilt*: generiert mit Versionsprüfung, im Store nur über `EnqueueGeteilt` änderbar (ein Konflikt wiederholt den Stapel);
+„neuer gewinnt“ dort nach Event-Zeit, nie nach Ankunft. Ohne Häkchen gehört das Dokument dem Stream seiner Id — eine Menge
+über viele Streams besser als **Zeilen je Stream** (Id enthält den Besitzer) ablegen statt geteilt. Umschalten schreibt nur
+diesen Marker in die Basisliste; die Karte zeigt „⇄ geteilt“. Schreibt der Store ein abgewähltes Dokument noch geteilt,
+meldet es der Bau (`EnqueueGeteilt` verlangt den Marker). Regeln des Store-Rumpfs: `docs/10-entwickler-api.md` §10.3
+(CQRS066/067); die 🤖-Konsole prüft einen Store-Rumpf damit **vor** dem Schreiben gegen das echte Projekt.
 Transport und Garantie sind unabhängig — jede Kombination gültig; ein Klartext-Hinweis unter den
 Häkchen spiegelt die Semantik. Beide gesetzt (replaybar + emittierend) = Validator-Fehler (spiegelt
 den Ctor-Guard).

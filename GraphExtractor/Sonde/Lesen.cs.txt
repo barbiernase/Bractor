@@ -19,6 +19,13 @@ public class LeihEintrag : IReadModel
     public bool Offen { get; set; }
 }
 
+// Geteiltes Dokument (Marker IGeteiltesReadModel): mehrere Streams schreiben hinein — frei benannt, ohne Store-Kante.
+public record Ausleihzaehler : IReadModel, IGeteiltesReadModel
+{
+    public string Id { get; init; } = "gesamt";
+    public int Offen { get; init; }
+}
+
 // Fähigkeiten: frei benannt, je genau EINE Funktion; das Bündel (IStore) ist der Store.
 public interface INotiereAusleihe : IWriteStore { Task SchreibeAsync(LeihEintrag eintrag); }
 public interface ISchliesseAusleihe : IWriteStore { Task SchliesseAsync(Guid id); }

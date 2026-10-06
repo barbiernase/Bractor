@@ -20,6 +20,9 @@
          und über den store-freien Kern ausführen — kein Proto, keine Platte, kein Neustart. -->
     <ProjectReference Include="../Domain.SourceGeneration/Domain.SourceGeneration.csproj"
                       OutputItemType="none" ReferenceOutputAssembly="true" />
+    <!-- Store-Regeln (CQRS066/067) für die Prüfung eines Store-Rumpfs vor dem Schreiben (ProjektPruefung). -->
+    <ProjectReference Include="../Projections.SourceGeneration/Projections.SourceGeneration.csproj"
+                      OutputItemType="none" ReferenceOutputAssembly="true" />
   </ItemGroup>
 
   <ItemGroup>

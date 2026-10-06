@@ -107,6 +107,12 @@ public sealed record Record
     /// <summary>Nur command: erzeugt das Aggregat (<c>ICreationCommand</c> statt nur <c>ICommand</c>).</summary>
     public bool IstErzeugung { get; init; }
     /// <summary>
+    /// Nur readmodel: GETEILTES Dokument (<c>IGeteiltesReadModel</c>) — mehrere Streams schreiben hinein. Folge: Optimistic
+    /// Concurrency (generiert) und Ändern nur über den konfliktgeprüften Weg der Store-Basis.
+    /// </summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Geteilt { get; init; }
+    /// <summary>
     /// Zusätzliche Member im Record-Rumpf als roher C#-Text (z. B. <c>static Default</c>, abgeleitete
     /// Props) — Handcode, den der Scaffolder verbatim in <c>{ … }</c> einhängt. Null ⇒ <c>record X(…);</c>.
     /// </summary>

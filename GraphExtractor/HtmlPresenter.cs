@@ -1032,6 +1032,10 @@ public static class HtmlPresenter
     body.append(slotRow("readmodel","Store ▶"+(rm.store?" ("+rm.store+")":" — frei"),"r",{type:"readmodel",dir:"out",rm:rm._id},"rm:out:"+rm._id));
     body.append(nameInp(rm,"name","ReadModel"));
     body.append(h("input",{value:rm.namespace??"",oninput:e=>rm.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
+    body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>{rm.geteilt=e.target.checked||undefined;render();},...(rm.geteilt?{checked:"checked"}:{})}),"geteilt — mehrere Streams schreiben hinein (IGeteiltesReadModel)"));
+    body.append(h("div",{class:"gsec",style:"opacity:.6"},rm.geteilt
+      ?"Geteilt ⇒ Versionsprüfung (Optimistic Concurrency); der Store ändert es nur konfliktgeprüft (EnqueueGeteilt), ein Konflikt wiederholt den Stapel. Neuer gewinnt nach Event-Zeit, nie nach Ankunft."
+      :"Ein Schreiber: das Dokument gehört dem Stream seiner Id. Eine Menge über viele Streams besser als Zeilen je Stream ablegen."));
     body.append(h("div",{class:"gsec"},"Dokument-Felder (Typ per Dropdown)"));
     (rm.felder||[]).forEach((f,fi)=>body.append(stateFeldRow(f,()=>{rm.felder.splice(fi,1);render();},rm.name)));
     body.append(h("button",{class:"add",onclick:()=>{(rm.felder=rm.felder||[]).push({_id:"f"+(NID++),name:uniqFeldName(rm.felder,"feld"),typ:"string"});render();}},"+ Feld"));
@@ -3551,6 +3555,7 @@ public static class HtmlPresenter
     else if(k==="saga")t="Auslöser: "+(r.triggerEvent||"—")+" · "+transOf(r).length+" Regeln";
     else if(k==="transition")t="WENN "+kurz(r.wenn)+" → "+kurz((r.dann||[]).map(d=>d.sende));
     else if(k==="store")t=(r.writeFns||[]).length+" schreibend · "+(r.readFns||[]).length+" lesend";
+    else if(k==="readmodel"&&r.geteilt)t="⇄ geteilt";
     else if(k==="auf")t="◀ "+(r.eingang||"?")+" → "+((r.ausgaenge||[]).length?kurz(r.ausgaenge)+(r.strom?" (Strom)":""):"zur Kenntnis");
     else if(k==="akteur")t=(ART_SYM[r.art]||"")+((r.dienste||[]).length?"⚙ "+r.dienste.join(", ")+" · ":"")+((r.darf||[]).length?"darf "+kurz(r.darf):"darf nichts")
       +((r.vertrag||[]).length?" · Zusagen auf "+kurz(r.vertrag.map(x=>x.eingang)):"");

@@ -188,7 +188,8 @@ public static class Sonde
         string Fns(JsonNode h) => string.Join(", ", A(h, "fns").Select(x => fnName.GetValueOrDefault((string?)x ?? "", "?")));
 
         foreach (var rm in A(b, "readModels").Where(Sonde))
-            z.Add($"readmodel {S(rm, "namespace")}.{S(rm, "name")} store={S(rm, "store")} | {Felder(rm)}");
+            z.Add($"readmodel {S(rm, "namespace")}.{S(rm, "name")} store={S(rm, "store")}"
+                  + (rm["geteilt"]?.GetValue<bool>() == true ? " geteilt" : "") + $" | {Felder(rm)}");
         foreach (var st in A(b, "stores").Where(Sonde))
             z.Add($"store {S(st, "namespace")}.{S(st, "name")} | schreibt {string.Join(", ", A(st, "writeFns").Select(f => $"{S(f, "name")}({string.Join(", ", A(f, "params").Select(p => $"{S(p, "name")}:{S(p, "typ")}"))})"))}"
                   + $" | liest {string.Join(", ", A(st, "readFns").Select(f => $"{S(f, "name")}({string.Join(", ", A(f, "params").Select(p => $"{S(p, "name")}:{S(p, "typ")}"))}):{S(f, "rueckgabe")}"))}");

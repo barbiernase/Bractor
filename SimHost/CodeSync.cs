@@ -146,6 +146,24 @@ public static class CodeSync
         var alt = RumpfInhalt(t);
         if (baseHash != null && Hash(alt) != baseHash) return (false, "Die Datei wurde seit dem Füllen geändert (Hash passt nicht) — neu laden.", null, null, 0);
 
+        var neuText = NeuerText(t, rumpf, prompt);
+        File.WriteAllText(t.Pfad, neuText);
+        var neu = Finde(a, slnRoot);
+        return (true, "", alt, neu.Ok ? Hash(RumpfInhalt(neu)) : null, t.M!.GetLocation().GetLineSpan().StartLinePosition.Line + 1);
+    }
+
+    /// <summary>
+    /// Der Dateitext MIT dem Kandidaten-Rumpf, ohne zu schreiben — für die Prüfung vor dem Übernehmen (dieselbe Einsetzung wie
+    /// <see cref="SetzeRumpf"/>, damit geprüft wird, was später in der Datei steht).
+    /// </summary>
+    public static (bool Ok, string Grund, string? Pfad, string? NeuText) MitRumpf(MethodenAnker a, string rumpf, string slnRoot)
+    {
+        var t = Finde(a, slnRoot);
+        return t.Ok ? (true, "", t.Pfad, NeuerText(t, rumpf, null)) : (false, t.Grund, null, null);
+    }
+
+    private static string NeuerText(MethodenTreffer t, string rumpf, string? prompt)
+    {
         var nl = t.Text.Contains("\r\n") ? "\r\n" : "\n";
         var m = t.M!;
         var methodenSpalte = m.GetLocation().GetLineSpan().StartLinePosition.Character;
@@ -166,9 +184,7 @@ public static class CodeSync
             var vorher = t.Text[..start].TrimEnd(' ');
             neuText = vorher + nl + new string(' ', methodenSpalte) + "{" + inhalt + "}" + t.Text[ende..];
         }
-        File.WriteAllText(t.Pfad, neuText);
-        var neu = Finde(a, slnRoot);
-        return (true, "", alt, neu.Ok ? Hash(RumpfInhalt(neu)) : null, m.GetLocation().GetLineSpan().StartLinePosition.Line + 1);
+        return neuText;
     }
 
     /// <summary>Rückgängig: den gesicherten alten Rumpf-Inhalt wörtlich zurückschreiben (nur wenn seitdem unverändert).</summary>

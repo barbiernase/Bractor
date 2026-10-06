@@ -37,6 +37,7 @@ record Leihwesen.Lesen.OffeneAusleihenAntwort queryresponse | Anzahl:int
 record Leihwesen.Lesen.KeineAusleihen queryresponse |
 record Leihwesen.Lesen.MahnlaufKonfig konfig | Mindestbetrag:decimal
 readmodel Leihwesen.Lesen.LeihEintrag store=ILeihBuch | Id:Guid { get; set; }, LeserId:Guid { get; set; }, Offen:bool { get; set; }
+readmodel Leihwesen.Lesen.Ausleihzaehler store= geteilt | Id:string="gesamt" { get; init; }, Offen:int { get; init; }
 store Leihwesen.Lesen.ILeihBuch | schreibt SchreibeAsync(eintrag:LeihEintrag), SchliesseAsync(id:Guid) | liest OffeneAsync(leserId:Guid):IReadOnlyList<LeihEintrag>
 projektion Leihwesen.Lesen.Leihliste id=leihliste pull | Ausgeliehen -> ILeihBuch.SchreibeAsync; Zurueckgegeben -> ILeihBuch.SchliesseAsync
 reaktion Leihwesen.Lesen.MahnungBeiSchaden id=mahnung-bei-schaden | SchadenGemeldet -> sendet EroeffneMahnung

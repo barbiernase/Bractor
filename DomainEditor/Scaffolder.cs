@@ -60,6 +60,7 @@ public static class Scaffolder
     private static readonly string IQuery = nameof(Abstractions.IQuery);
     private static readonly string IQueryResponse = nameof(Abstractions.IQueryResponse);
     private static readonly string IReadModel = nameof(Abstractions.IReadModel);
+    private static readonly string IGeteiltesReadModel = nameof(Abstractions.IGeteiltesReadModel);
     private static readonly string IWriteStore = nameof(Abstractions.IWriteStore);
     private static readonly string IReadStore = nameof(Abstractions.IReadStore);
     private static readonly string IStore = nameof(Abstractions.IStore);
@@ -387,7 +388,8 @@ public static class Scaffolder
             if (liste.Count > 0) abschnitte.Add(() =>
             {
                 for (var i = 0; i < liste.Count; i++)
-                    RecordZeilen(b, liste[i], marker, i < liste.Count - 1);
+                    RecordZeilen(b, liste[i], liste[i].Geteilt && art == RecordArt.ReadModel ? $"{marker}, {IGeteiltesReadModel}" : marker,
+                        i < liste.Count - 1);
             });
         }
 

@@ -353,7 +353,11 @@ und `/login` (Abo) ausführen — sonst meldet der Knoten „Not logged in“.
    Nie ein Verlauf; nur der letzte Rumpf reist mit.
 2. **Antwort** — ein ```csharp-Block (Rumpf ohne äußere Klammern) oder `AUSSERHALB: braucht …` (→ Editor-Struktur).
 3. **Prüfen** — Syntax für alle Slot-Arten; Decide/Apply zusätzlich In-Memory-Compile mit den echten Generatoren
-   (`domain-model.json` mit ersetztem Rumpf, nur neue Fehler zählen). Bei Befund automatisch nächste Runde (max. 3).
+   (`domain-model.json` mit ersetztem Rumpf, nur neue Fehler zählen); Store-Funktionen gegen das **echte Projekt**
+   (`SimHost/ProjektPruefung.cs`: Rumpf im Speicher eingesetzt, Referenzen wie im Build aus `project.assets.json`, mit den
+   Store-Regeln CQRS066/067 — ein Schreibweg am Puffer vorbei wird so Befund, bevor er in die Datei geht). Pipeline/übrige
+   Leseseite: Compile erst beim Bauen nach dem Übernehmen. Bei Befund automatisch nächste Runde (max. 3). Ohne LLM prüfbar:
+   `POST /api/llm/pruefen {id, rumpf}` bzw. `dotnet run --project SimHost -- --pruefe-rumpf <Slot-Id> <Datei>`.
 4. **Simulieren** (Decide/Apply) — der Kandidat ersetzt nur in der Simulation den Rumpf; Command mit Werten schicken.
 5. **Anpassen** — Wunschtext → neue Runde mit Kontext + Auftrag + aktuellem Rumpf + Anpassung.
 6. **Übernehmen** — in der Konsole auf Klick (im Editor automatisch nach bestandener Prüfung): `CodeSync.SetzeRumpf` schreibt Rumpf + `// 🤖 Prompt: <Auftrag>` (Ausdrucks-Rumpf → Block),

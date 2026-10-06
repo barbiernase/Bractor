@@ -151,7 +151,35 @@ internal sealed class Abgleich(EditorModell modell, Arbeitsbereich ws, IReadOnly
             $"public {(f.Pflicht ? "required " : "")}{f.Typ} {f.Name} {f.Zugriff}" + (f.Standard is null ? "" : $" = {f.Standard};"))).ToList();
         if (Eigenschaften(decl, soll, p => Feldregeln.Eigenschaft(p) is { } e ? (e.Name, $"{N(e.Typ)}|{e.Standard}|{e.Zugriff}|{e.Pflicht}") : null, new HashSet<string>(), edits))
             notiz.Add("Property-Felder");
+        if (r.Kind == RecordArt.ReadModel && GeteiltMarker(decl, r.Geteilt, edits)) notiz.Add(r.Geteilt ? "geteilt" : "nicht mehr geteilt");
         return (MitNamespaces(Anwenden(text, edits), r.Felder.Select(f => f.Typ)), string.Join(", ", notiz));
+    }
+
+    /// <summary>
+    /// „geteilt“ eines ReadModels = der Marker <c>IGeteiltesReadModel</c> in der Basisliste. Nur dieser eine Eintrag wird
+    /// hinzugefügt bzw. entfernt (samt Komma); alle übrigen Basen bleiben Wort für Wort.
+    /// </summary>
+    private static bool GeteiltMarker(TypeDeclarationSyntax decl, bool soll, List<(int, int, string)> edits)
+    {
+        var marker = nameof(Abstractions.IGeteiltesReadModel);
+        var typen = decl.BaseList?.Types;
+        var i = typen?.IndexOf(t => N(t.Type.ToString()).Split('.').Last() == marker) ?? -1;
+        if ((i >= 0) == soll) return false;
+        if (soll)
+        {
+            if (decl.BaseList is { } bl) edits.Add((bl.Span.End, bl.Span.End, ", " + marker));
+            else
+            {
+                var at = (decl as RecordDeclarationSyntax)?.ParameterList?.Span.End ?? decl.TypeParameterList?.Span.End ?? decl.Identifier.Span.End;
+                edits.Add((at, at, " : " + marker));
+            }
+            return true;
+        }
+        var liste = typen!.Value;
+        if (liste.Count == 1) edits.Add((decl.BaseList!.ColonToken.SpanStart, decl.BaseList.Span.End, ""));
+        else if (i > 0) edits.Add((liste.GetSeparator(i - 1).SpanStart, liste[i].Span.End, ""));
+        else edits.Add((liste[0].SpanStart, liste[1].SpanStart, ""));
+        return true;
     }
 
     private (string, string)? StateFelder(string text, Aggregat a)
