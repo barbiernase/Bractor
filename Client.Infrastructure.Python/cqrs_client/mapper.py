@@ -144,9 +144,9 @@ class PayloadMapper:
         """
         Verpackt einen Command in einen CommandEnvelopeDto.
 
-        Setzt das richtige oneof-Feld basierend auf dem Typ. `causation` (router.Kausalitaet): die Reaktion
+        Setzt das richtige oneof-Feld basierend auf dem Typ. `causation` (router.Kausalitaet): die Zusage
         antwortet auf ein Event — Stream + Version + Typ + Index reisen mit, der Server leitet daraus die
-        CommandId deterministisch ab (doppelt zugestellt ≠ doppelt wirksam, docs/konzept-akteure.md §9.7).
+        CommandId deterministisch ab (doppelt zugestellt ≠ doppelt wirksam, docs/konzept-akteure.md §5.3).
         """
         envelope_cls = getattr(self._gen, "CommandEnvelopeDto")
         envelope = envelope_cls(

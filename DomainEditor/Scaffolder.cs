@@ -114,6 +114,11 @@ public static class Scaffolder
             dateien.Add(new(g.Key.Pfad, AkteurDatei(g.Key.Namespace, g.ToList(), modell), DateiArt.Typen,
                 !g.Key.Pfad.StartsWith(Unplatziert, StringComparison.Ordinal)));
 
+        // ── Clients (docs/konzept-akteure.md §4) → ihre echte Datei; sonst die (eine) Client-Datei ihres Namespace; sonst Clients.cs ──
+        foreach (var g in modell.Clients.GroupBy(c => (Pfad: c.Datei ?? ClientZiel(modell, c.Namespace), c.Namespace)))
+            dateien.Add(new(g.Key.Pfad, ClientDatei(g.Key.Namespace, g.ToList(), modell), DateiArt.Typen,
+                !g.Key.Pfad.StartsWith(Unplatziert, StringComparison.Ordinal)));
+
         // ── Aggregate → State; Decider/Applier je Aggregat aus den eigenständigen Regeln ──
         foreach (var agg in modell.Aggregate)
         {
@@ -224,6 +229,65 @@ public static class Scaffolder
             || name == nameof(Abstractions.IMensch) || name == nameof(Abstractions.IMaschine) || name == nameof(Abstractions.IKi);
     }
 
+    // ── Clients ─────────────────────────────────────────────────────────────────────────────────
+    private static readonly string IClientVertrag = nameof(Abstractions.IClientVertrag);
+    private static readonly string ISendet = typeof(ISendet<>).Name.Split('`')[0];
+    private static readonly string IFragt = typeof(IFragt<>).Name.Split('`')[0];
+
+    private static string ClientZiel(EditorModell m, string ns)
+    {
+        var dateien = m.Clients.Where(c => c.Namespace == ns && c.Datei != null).Select(c => c.Datei!).Distinct(StringComparer.Ordinal).ToList();
+        if (dateien.Count == 1) return dateien[0];
+        var v = Verzeichnis(m, ns);
+        return v != null ? $"{v}/Clients.cs" : $"{Unplatziert}Clients.cs";
+    }
+
+    /// <summary>
+    /// Die Basisliste eines Client-Vertrags: <c>IClientVertrag, ITeil…, ISendet&lt;C&gt;…, IFragt&lt;Q&gt;…</c> — der ganze Rand bis auf die
+    /// Kenntnis-Methoden steht in ihr.
+    /// </summary>
+    public static IReadOnlyList<string> ClientBasen(Client c) =>
+        [IClientVertrag, .. c.Traegt, .. c.Sendet.Select(s => $"{ISendet}<{s}>"), .. c.Fragt.Select(q => $"{IFragt}<{q}>")];
+
+    /// <summary>Gehört dieser Basistyp zum Client-Vertrag (wird vom Abgleich verwaltet)? <paramref name="teile"/> = bekannte Vertrags-Teile.</summary>
+    public static bool IstClientBasis(string basis, ISet<string> teile)
+    {
+        var name = basis.Split('<')[0].Split('.').Last().Trim();
+        return name == IClientVertrag || name == ISendet || name == IFragt || teile.Contains(name);
+    }
+
+    /// <summary>Kenntnis als Signatur: <c>void Auf(E e)</c>.</summary>
+    public static string KenntnisMethode(string e) => $"void {Abstractions.Akteurvertrag.Auf}({e} e)";
+
+    /// <summary>Ein Client-Vertrag: <c>public interface IX : IClientVertrag, … { void Auf(E e); }</c>.</summary>
+    public static string ClientInterface(Client c)
+    {
+        var b = new StringBuilder();
+        var basen = ClientBasen(c);
+        b.AppendLine($"public interface {c.Name} : {string.Join(",\n    ", basen)}");
+        b.AppendLine("{");
+        foreach (var e in c.Kenntnis) b.AppendLine($"    {KenntnisMethode(e)};");
+        b.AppendLine("}");
+        return b.ToString();
+    }
+
+    private static string ClientDatei(string ns, List<Client> clients, EditorModell modell)
+    {
+        // usings: Vertrags-Teile liegen beim Akteur (dessen Namespace), Nachrichten bei ihren Records.
+        var teilNs = modell.Akteure.Where(a => a.Vertrag.Count > 0)
+            .SelectMany(a => a.Vertrag.Select(r => r.Teil ?? a.VertragTyp).Distinct().Select(t => (t, a.Namespace)))
+            .Where(x => clients.Any(c => c.Traegt.Contains(x.t))).Select(x => x.Namespace);
+        var b = Kopf(ns, Usings(ns, modell, [modell.Rahmen.VertragsNamespace, .. teilNs],
+            clients.SelectMany(c => c.Sendet.Concat(c.Fragt).Concat(c.Kenntnis)), []));
+        for (var i = 0; i < clients.Count; i++)
+        {
+            Doku(b, clients[i].Doku, "");
+            b.Append(ClientInterface(clients[i]));
+            if (i < clients.Count - 1) b.AppendLine();
+        }
+        return b.ToString();
+    }
+
     private static string AkteurDatei(string ns, List<Akteur> akteure, EditorModell modell)
     {
         var b = Kopf(ns, Usings(ns, modell, [modell.Rahmen.VertragsNamespace],
@@ -245,28 +309,29 @@ public static class Scaffolder
     private static readonly string IAkteurVertrag = typeof(Abstractions.IAkteurVertrag<>).Name.Split('`')[0];
 
     /// <summary>
-    /// Der Vertrag eines Akteurs (<c>docs/konzept-akteure.md</c> §9): <c>public interface IX : IAkteurVertrag&lt;X&gt; { … Auf(E e); }</c> —
-    /// je Reaktion eine Methode in Modell-Reihenfolge.
+    /// Der Vertrag eines Akteurs (<c>docs/konzept-akteure.md</c> §3): <c>public interface IX : IAkteurVertrag&lt;X&gt; { … Auf(E e); }</c> —
+    /// je Zusage eine Methode in Modell-Reihenfolge.
     /// </summary>
     public static string VertragsInterface(Akteur a)
     {
         var b = new StringBuilder();
         b.AppendLine($"public interface {a.VertragTyp} : {IAkteurVertrag}<{a.Name}>");
         b.AppendLine("{");
-        for (var i = 0; i < a.Vertrag.Count; i++)
+        var haupt = a.Vertrag.Where(r => r.Teil == null).ToList();   // weitere Vertrags-Teile liest der Editor nur
+        for (var i = 0; i < haupt.Count; i++)
         {
-            Doku(b, a.Vertrag[i].Doku, "    ");
-            b.AppendLine($"    {VertragsMethode(a.Vertrag[i])};");
-            if (i < a.Vertrag.Count - 1) b.AppendLine();
+            Doku(b, haupt[i].Doku, "    ");
+            b.AppendLine($"    {VertragsMethode(haupt[i])};");
+            if (i < haupt.Count - 1) b.AppendLine();
         }
         b.AppendLine("}");
         return b.ToString();
     }
 
-    /// <summary>Eine Reaktion als Signatur: <c>void Auf(E e)</c>, <c>OneOf&lt;A, B&gt; Auf(E e)</c> bzw. <c>IAsyncEnumerable&lt;OneOf&lt;…&gt;&gt; Auf(E e)</c>.</summary>
-    public static string VertragsMethode(AkteurReaktion r) => $"{VertragsRueckgabe(r)} {Abstractions.Akteurvertrag.Auf}({r.Eingang} e)";
+    /// <summary>Eine Zusage als Signatur: <c>void Auf(E e)</c>, <c>OneOf&lt;A, B&gt; Auf(E e)</c> bzw. <c>IAsyncEnumerable&lt;OneOf&lt;…&gt;&gt; Auf(E e)</c>.</summary>
+    public static string VertragsMethode(AkteurZusage r) => $"{VertragsRueckgabe(r)} {Abstractions.Akteurvertrag.Auf}({r.Eingang} e)";
 
-    public static string VertragsRueckgabe(AkteurReaktion r)
+    public static string VertragsRueckgabe(AkteurZusage r)
     {
         if (r.Ausgaenge.Count == 0) return "void";
         var oneOf = $"OneOf<{string.Join(", ", r.Ausgaenge)}>";

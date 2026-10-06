@@ -28,7 +28,7 @@ log = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class Kausalitaet:
-    """Worauf eine Ausgabe antwortet: das Event (Stream + Version + Typ) und ihr Index in der Reaktion."""
+    """Worauf eine Ausgabe antwortet: das Event (Stream + Version + Typ) und ihr Index in der Zusage."""
     stream_id: str
     version: int
     typ: str
@@ -155,8 +155,8 @@ class MessageRouter:
             envelope.aggregate_id[:8] if envelope.aggregate_id else "?"
         )
 
-        # Dispatch + Output-Routing. Jede Ausgabe trägt ihre Kausalität (dieses Event + Index in der Reaktion) —
-        # der Server leitet daraus eine deterministische CommandId ab (docs/konzept-akteure.md §9.7).
+        # Dispatch + Output-Routing. Jede Ausgabe trägt ihre Kausalität (dieses Event + Index in der Zusage) —
+        # der Server leitet daraus eine deterministische CommandId ab (docs/konzept-akteure.md §5.3).
         index = 0
         async for output in handle.receive(instance, payload, ctx, state):
             await self._route_output(output, ctx, proxy, mapper, registry,
@@ -290,7 +290,7 @@ class MessageRouter:
                 log.error("Command %s has no aggregate_id", type(output).__name__)
                 return
 
-            # Aus einem Event-Handler gelieferte Commands sind REAKTIONEN, keine Client-Commands
+            # Aus einem Event-Handler gelieferte Commands sind ZUSAGEN, keine Client-Commands
             # mit behaupteter Version: sie werden im Emittiert-Modus (§4.2) gesendet — keine OCC,
             # die Empfaenger-Inbox dedupliziert. Sonst scheitern sie am co-committeten
             # KommandoVerarbeitet-Marker (der Stream steht eine Version hoeher als das Event, auf

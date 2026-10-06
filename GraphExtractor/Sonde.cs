@@ -212,6 +212,11 @@ public static class Sonde
                       + string.Join("; ", A(ak, "vertrag").Select(r => $"{S(r, "eingang")} -> {(r["strom"]?.GetValue<bool>() == true ? "strom " : "")}"
                                                                        + string.Join(", ", A(r, "ausgaenge").Select(x => (string?)x)))));
         }
+        // Clients (docs/konzept-akteure.md §4): je Client sein Rand — trägt (Teile), sendet, fragt, hört.
+        foreach (var c in A(b, "clients").Where(Sonde))
+            z.Add($"client {S(c, "namespace")}.{S(c, "name")} | traegt {string.Join(", ", A(c, "traegt").Select(x => (string?)x))}; "
+                  + $"sendet {string.Join(", ", A(c, "sendet").Select(x => (string?)x))}; fragt {string.Join(", ", A(c, "fragt").Select(x => (string?)x))}; "
+                  + $"hoert {string.Join(", ", A(c, "kenntnis").Select(x => (string?)x))}");
         var sondenTrigger = new HashSet<string>();
         foreach (var p in A(b, "pipelines").Where(Sonde))
         {

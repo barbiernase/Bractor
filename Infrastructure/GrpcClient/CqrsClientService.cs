@@ -127,7 +127,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         }
 
         PID? proxyPid = null;
-        // Wer diese Session ist: vom Tor (Token), ggf. erst am Handshake vom Akteur-Vertrag festgelegt (§9.6).
+        // Wer diese Session ist: vom Tor (Token), ggf. erst am Handshake vom Akteur-Vertrag festgelegt (Akteur-Konzept §5.2).
         var sitzung = new AkteurSitzung(akteur);
 
         try
@@ -331,11 +331,11 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         string sessionId,
         CancellationToken ct)
     {
-        // 0. Akteur-Vertrag (docs/konzept-akteure.md §9.6): „ich bin Vertrag X" — geprüft gegen die generierte Tabelle (mit Tor:
+        // 0. Akteur-Vertrag (docs/konzept-akteure.md §5.2): „ich bin Vertrag X" — geprüft gegen die generierte Tabelle (mit Tor:
         //    das Token muss ihn verkörpern; abweichender Hash = Warnung bzw. im strengen Modus Ablehnung). Ohne Tor sagt der Vertrag,
         //    wer da ist: die Session bekommt seine Befugnisse.
         var vp = AkteurVertragsPruefung.Pruefe(request.Vertrag, request.VertragHash, sitzung.Akteur, GeneratedAkteurRechte.Alle,
-            _akteurTor?.VertragStreng ?? false);
+            _akteurTor?.VertragStreng ?? false, GeneratedClientVertraege.Alle);
         if (vp.Ablehnung is { } ablehnung)
         {
             _logger.LogWarning("{Session} Vertrag {Vertrag} abgelehnt: {Grund}", sessionId, request.Vertrag, ablehnung);
@@ -347,8 +347,11 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         if (vp.Vertrag is { } vertrag)
         {
             sitzung.Vertrag = vertrag;
-            sitzung.Akteur ??= vertrag;
-            _logger.LogInformation("{Session} Vertrag {Vertrag} ({Typ}) angenommen", sessionId, vertrag.Name, vertrag.VertragTyp?.Name);
+            // Client-Vertrag: die Schnittmenge Vertrag ∩ Token IST die Befugnis der Session (docs/konzept-akteure.md §4.3).
+            if (vp.Client != null) sitzung.Akteur = vertrag;
+            else sitzung.Akteur ??= vertrag;
+            _logger.LogInformation("{Session} Vertrag {Vertrag} ({Typ}) angenommen{Akteure}", sessionId, vertrag.Name, vertrag.VertragTyp?.Name,
+                vp.Client != null ? $" — verkörpert {string.Join(", ", vertrag.Teile.Select(t => t.Name))}" : "");
         }
         var akteur = sitzung.Akteur;
 
@@ -500,9 +503,9 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             if (string.IsNullOrWhiteSpace(envelope.AggregateType))
                 envelope = envelope with { AggregateType = AggregateDispatcherExtensions.ResolveAggregateType(envelope.Payload) };
 
-            // Emittiert-Modus über die gRPC-Grenze (§4.2): ein externer Reaktions-Treiber — der
+            // Emittiert-Modus über die gRPC-Grenze (§4.2): ein externer Zusage-Treiber — der
             // Python-Worker reagiert auf TrainingAngefordert und emittiert Melde*-Commands — ist
-            // semantisch eine Reaktion, kein Client mit behaupteter Version. OCC würde ihn am
+            // semantisch wie der Backend-Baustein Reaktion (emittierend), kein Client mit behaupteter Version. OCC würde ihn am
             // co-committeten KommandoVerarbeitet-Marker scheitern lassen (Stream steht auf v2, das
             // Event war v1). Der Wire kennt nur expected_version; negativ = Sentinel für Emittiert
             // (keine Version, Empfänger-Inbox dedupliziert) — dieselbe Semantik wie der interne
@@ -510,7 +513,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             if (request.Envelope.ExpectedVersion < 0)
                 envelope = envelope with { Modus = new CommandModus.Emittiert() };
 
-            // Reaktion von außen mit Kausalität (§9.7): der Client nennt das Event, auf das er antwortet. Mit Vertrag muss die
+            // Zusage von außen mit Kausalität (Akteur-Konzept §5.3): der Client nennt das Event, auf das er antwortet. Mit Vertrag muss die
             // Antwort darin stehen (Auf(Event) → dieser Command); die CommandId wird deterministisch abgeleitet — doppelt
             // zugestellt ≠ doppelt wirksam (die Inbox des Ziels dedupliziert, Emittiert-Modus wie beim internen Emit).
             var c = request.Envelope;
@@ -518,7 +521,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             {
                 var cmdTyp = envelope.Payload.GetType();
                 if (sitzung.Vertrag is { } vertrag
-                    && !(MessageTypeMapping.Resolve(c.CausationType).Type is { } ausloeser && vertrag.AntwortetMit(ausloeser, cmdTyp)))
+                    && !(MessageTypeMapping.Resolve(c.CausationType).Type is { } ausloeser && vertrag.Zugesagt(ausloeser, cmdTyp)))
                 {
                     _logger.LogWarning("{Session} {Command} ist laut Vertrag {Vertrag} keine Antwort auf {Ausloeser}",
                         sessionId, cmdTyp.Name, vertrag.Name, c.CausationType);
@@ -534,6 +537,9 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                         c.CausationIndex, cmdTyp, envelope.AggregateId),
                     Modus = new CommandModus.Emittiert(),
                 };
+                // Im Namen des Akteurs, dessen getragener Vertrag diese Antwort vorsieht (ein Client kann mehrere Akteure tragen).
+                if (sitzung.Vertrag is { } v2 && MessageTypeMapping.Resolve(c.CausationType).Type is { } ausl)
+                    envelope = envelope with { UserId = v2.AkteurFuerZusage(ausl, cmdTyp) };
             }
 
             _logger.LogDebug("{Session} Command {Command} → {AggregateType} ({Modus}), CorrelationId {CorrelationId}",

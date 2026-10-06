@@ -26,20 +26,20 @@ public sealed record AkteurRechte(
     IReadOnlySet<Type> Hoert,
     string Art = "")
 {
-    /// <summary>Der Vertrag des Akteurs (<c>IAkteurVertrag&lt;A&gt;</c>, docs/konzept-akteure.md §9) — null, wenn er nur spontan handelt.</summary>
+    /// <summary>Der Vertrag des Akteurs (<c>IAkteurVertrag&lt;A&gt;</c>, docs/konzept-akteure.md §3) — null, wenn er nur spontan handelt.</summary>
     public Type? VertragTyp { get; init; }
 
     /// <summary>Hash der kanonischen Vertragsform (<see cref="Akteurvertrag.Hash"/>) — der Client meldet ihn am Handshake mit.</summary>
     public string VertragHash { get; init; } = "";
 
-    /// <summary>Je Reaktion <c>Auf(Event)</c>: die Commands, die der Akteur darauf hineingeben darf (leer = nur zur Kenntnis).</summary>
+    /// <summary>Je Zusage <c>Auf(Event)</c>: die Commands, die der Akteur darauf hineingeben darf (leer = nur zur Kenntnis).</summary>
     public IReadOnlyDictionary<Type, IReadOnlySet<Type>> Vertrag { get; init; } = new Dictionary<Type, IReadOnlySet<Type>>();
 
-    /// <summary>Die Eingänge, auf die der Akteur mit einem Strom antwortet (mehrere Commands je Reaktion).</summary>
+    /// <summary>Die Eingänge, auf die der Akteur mit einem Strom antwortet (mehrere Commands je Zusage).</summary>
     public IReadOnlySet<Type> Stroeme { get; init; } = new HashSet<Type>();
 
     /// <summary>Darf der Akteur auf das Event <paramref name="ausloeser"/> mit <paramref name="command"/> antworten (laut Vertrag)?</summary>
-    public bool AntwortetMit(Type ausloeser, Type command) =>
+    public bool Zugesagt(Type ausloeser, Type command) =>
         (Teile.Count > 0 ? Teile : [this]).Any(t => t.Vertrag.TryGetValue(ausloeser, out var aus) && aus.Contains(command));
 
     /// <summary>
@@ -51,6 +51,13 @@ public sealed record AkteurRechte(
     /// <summary>Wer aus dieser Session gibt <paramref name="typ"/> hinein? Der (erste) Teil-Akteur, der ihn darf — sonst <see cref="Name"/>.
     /// Das ist der Akteur, den der Envelope trägt (und der durch die Kette reist).</summary>
     public string AkteurFuer(Type typ) => Teile.FirstOrDefault(t => t.DarfHinein(typ))?.Name ?? Name;
+
+    /// <summary>
+    /// Wer antwortet mit <paramref name="command"/> auf <paramref name="ausloeser"/>? Der Teil-Akteur, dessen (getragener) Vertrag diese
+    /// Antwort vorsieht — bei einem Client mit mehreren Akteuren nicht einfach der erste, der den Command darf.
+    /// </summary>
+    public string AkteurFuerZusage(Type ausloeser, Type command) =>
+        Teile.FirstOrDefault(t => t.Vertrag.TryGetValue(ausloeser, out var aus) && aus.Contains(command))?.Name ?? AkteurFuer(command);
 
     /// <summary>Mehrere Akteure als eine Session-Befugnis: Vereinigung aller Mengen, Name „A+B".</summary>
     public static AkteurRechte Vereinige(IReadOnlyList<AkteurRechte> akteure)

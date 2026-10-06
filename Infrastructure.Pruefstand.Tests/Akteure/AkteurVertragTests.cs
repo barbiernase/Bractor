@@ -14,7 +14,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Akteure;
 
 /// <summary>
-/// Akteur-Verträge am Handshake und die Kausalität einer Reaktion von außen (<c>docs/konzept-akteure.md</c> §9.6/9.7) — rein, ohne
+/// Akteur-Verträge am Handshake und die Kausalität einer Zusage von außen (<c>docs/konzept-akteure.md</c> §5.2/5.3) — rein, ohne
 /// gRPC/Cluster. Dazu der Abgleich der zwei Generate: der Vertrags-Hash im Python-Generat (Cqrs.Codegen) = der in der Server-Tabelle.
 /// </summary>
 public class AkteurVertragTests
@@ -80,7 +80,7 @@ public class AkteurVertragTests
     }
 
     [Fact]
-    public void Reaktion_von_aussen_bekommt_eine_deterministische_CommandId()
+    public void Zusage_von_aussen_bekommt_eine_deterministische_CommandId()
     {
         var stream = Guid.NewGuid();
         var ziel = Guid.NewGuid();
@@ -99,8 +99,8 @@ public class AkteurVertragTests
     public void AntwortetMit_kennt_auch_die_Teile_einer_Session()
     {
         var s = AkteurRechte.Vereinige([R("Inspekteur"), R("TrainingsSystem")]);
-        s.AntwortetMit(typeof(TrainingAngefordert), typeof(MeldeFortschritt)).Should().BeTrue();
-        s.AntwortetMit(typeof(TrainingAbgebrochen), typeof(MeldeFortschritt)).Should().BeFalse("darauf antwortet er nur zur Kenntnis");
+        s.Zugesagt(typeof(TrainingAngefordert), typeof(MeldeFortschritt)).Should().BeTrue();
+        s.Zugesagt(typeof(TrainingAbgebrochen), typeof(MeldeFortschritt)).Should().BeFalse("darauf antwortet er nur zur Kenntnis");
     }
 
     /// <summary>Beide Generate kommen aus derselben Quelle (Akteurvertrag.Kanon) — der Python-Worker meldet so den Server-Hash.</summary>
@@ -109,7 +109,8 @@ public class AkteurVertragTests
     {
         var datei = Path.Combine(Wurzel(), "Domain.Client.Worker.Python.ML", "domain_client", "generated", "vertraege.py");
         var text = File.ReadAllText(datei);
-        var klassen = Regex.Matches(text, "class (\\w+)Basis\\(AkteurVertragBasis\\[S\\]\\):[\\s\\S]*?VERTRAG_HASH: ClassVar\\[str\\] = \"(\\w+)\"")
+        // Nur die Akteur-Basen (AKTEUR = …); die Client-Basen (CLIENT = …) prüft ClientVertragTests.
+        var klassen = Regex.Matches(text, "class (\\w+)Basis\\(AkteurVertragBasis\\[S\\]\\):\\s*\"\"\"Vertrag[\\s\\S]*?VERTRAG_HASH: ClassVar\\[str\\] = \"(\\w+)\"")
             .ToDictionary(m => m.Groups[1].Value, m => m.Groups[2].Value);
         var server = GeneratedAkteurRechte.Alle.Values.Where(a => a.VertragTyp != null).ToDictionary(a => a.Name, a => a.VertragHash);
         klassen.Should().BeEquivalentTo(server, "vertraege.py ist veraltet → ./codegen.sh --force");

@@ -74,7 +74,7 @@ public class AkteurRechteTests
         p.DarfHoeren(typeof(TrainingAngefordert)).Should().BeFalse();
     }
 
-    // ── Vertrag (§9): Befugt = IDarf ∪ Ausgaben, Hört = exakt die Eingänge ──
+    // ── Vertrag (Akteur-Konzept §3): Befugt = IDarf ∪ Ausgaben, Hört = exakt die Eingänge ──
 
     [Fact]
     public void Vertrag_steht_in_der_Tabelle()
@@ -99,8 +99,8 @@ public class AkteurRechteTests
         var k = R("Klassifizierer");
         k.Commands.Should().BeEquivalentTo(new[] { typeof(KlassifiziereBildPaarDurchKi), typeof(KlassifiziereEinzelBildDurchKi) });
         R("TrainingsSystem").DarfHinein(typeof(MeldeFortschritt)).Should().BeTrue("Ausgabe seines Vertrags — kein zweites IDarf nötig");
-        k.AntwortetMit(typeof(ImagePairKomplett), typeof(KlassifiziereBildPaarDurchKi)).Should().BeTrue();
-        k.AntwortetMit(typeof(BildVerfuegbar), typeof(KlassifiziereBildPaarDurchKi)).Should().BeFalse();
+        k.Zugesagt(typeof(ImagePairKomplett), typeof(KlassifiziereBildPaarDurchKi)).Should().BeTrue();
+        k.Zugesagt(typeof(BildVerfuegbar), typeof(KlassifiziereBildPaarDurchKi)).Should().BeFalse();
     }
 
     [Fact]
@@ -124,9 +124,9 @@ public class AkteurRechteTests
     {
         var kanon = Akteurvertrag.Kanon("Klassifizierer", new[]
         {
-            new Akteurvertrag.Reaktion("ModellAktiviert", [], false),
-            new Akteurvertrag.Reaktion("ImagePairKomplett", ["KlassifiziereBildPaarDurchKi"], false),
-            new Akteurvertrag.Reaktion("BildVerfuegbar", [], false),
+            new Akteurvertrag.Zusage("ModellAktiviert", [], false),
+            new Akteurvertrag.Zusage("ImagePairKomplett", ["KlassifiziereBildPaarDurchKi"], false),
+            new Akteurvertrag.Zusage("BildVerfuegbar", [], false),
         });
         kanon.Should().Be("Klassifizierer:BildVerfuegbar>;ImagePairKomplett>KlassifiziereBildPaarDurchKi;ModellAktiviert>");
         R("Klassifizierer").VertragHash.Should().Be(Akteurvertrag.Hash(kanon)).And.HaveLength(16);

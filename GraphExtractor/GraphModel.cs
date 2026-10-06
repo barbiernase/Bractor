@@ -39,7 +39,7 @@ public sealed class GraphMeta
 
 // ── Knoten ──────────────────────────────────────────────────────────────────
 
-public enum NodeKind { aggregate, command, @event, process, projection, query, pipeline, akteur, vertrag }
+public enum NodeKind { aggregate, command, @event, process, projection, query, pipeline, akteur, vertrag, client }
 
 public sealed class Node
 {
@@ -66,6 +66,22 @@ public sealed class Node
     public PipelineInfo? Pipeline { get; set; }
     public AkteurInfo? Akteur { get; set; }
     public VertragInfo? Vertrag { get; set; }
+    public ClientInfo? Client { get; set; }
+}
+
+/// <summary>
+/// Ein Client (<c>interface IX : IClientVertrag</c>, docs/konzept-akteure.md §4) — die Software an der Leitung: getragene
+/// Akteur-Vertrags-Teile, was er sendet/fragt, was er nur zur Kenntnis hört; verkörpert ist abgeleitet.
+/// </summary>
+public sealed class ClientInfo
+{
+    /// <summary>Handshake-Name (Interface ohne führendes I).</summary>
+    public string Handshake { get; set; } = "";
+    public List<string> Traegt { get; set; } = new();
+    public List<string> Sendet { get; set; } = new();
+    public List<string> Fragt { get; set; } = new();
+    public List<string> Kenntnis { get; set; } = new();
+    public List<string> Verkoerpert { get; set; } = new();
 }
 
 /// <summary>Ein Akteur (<c>IAkteur</c>): Art und was er spontan hineingibt (<c>IDarf&lt;T&gt;</c>, einfache Namen).</summary>
@@ -78,17 +94,17 @@ public sealed class AkteurInfo
 }
 
 /// <summary>
-/// Ein Akteur-Vertrag (<c>interface IX : IAkteurVertrag&lt;X&gt;</c>, docs/konzept-akteure.md §9) — die Schnittstelle, gegen die der Client
-/// programmiert: je <c>Auf(Event)</c> eine Reaktion. Hash = derselbe, den Server-Tabelle und Python-Generat tragen.
+/// Ein Akteur-Vertrag (<c>interface IX : IAkteurVertrag&lt;X&gt;</c>, docs/konzept-akteure.md §3) — die Schnittstelle, gegen die der Client
+/// programmiert: je <c>Auf(Event)</c> eine Zusage. Hash = derselbe, den Server-Tabelle und Python-Generat tragen.
 /// </summary>
 public sealed class VertragInfo
 {
     public string Akteur { get; set; } = "";
     public string Hash { get; set; } = "";
-    public List<VertragsReaktion> Reaktionen { get; set; } = new();
+    public List<VertragsZusage> Zusagen { get; set; } = new();
 }
 
-public sealed class VertragsReaktion
+public sealed class VertragsZusage
 {
     public string Eingang { get; set; } = "";
     public List<string> Ausgaenge { get; set; } = new();
@@ -225,8 +241,13 @@ public enum EdgeKind
     pipelineEmits,  // pipeline → command
     darf,           // akteur   → command/query (IDarf<T>: spontan)
     hatVertrag,     // akteur   → vertrag     (IAkteurVertrag<A>)
-    reagiertAuf,    // event    → vertrag     (Auf(Event)) — Via = Event
-    antwortetMit    // vertrag  → command     (Rückgabe von Auf(Event)) — Via = Event
+    zusageAuf,    // event    → vertrag     (Auf(Event)) — Via = Event
+    zusageGibt,   // vertrag  → command     (Rückgabe von Auf(Event)) — Via = Event
+    traegt,         // client   → vertrag     (IClientVertrag erbt den Akteur-Vertrags-Teil)
+    sendet,         // client   → command     (ISendet<T>)
+    fragt,          // client   → query       (IFragt<T>)
+    hoert,          // event    → client      (void Auf(E) im Client-Vertrag: Kenntnis)
+    verkoerpert     // client   → akteur      (abgeleitet: Teil-Akteure + IDarf-Halter von Sendet/Fragt)
 }
 
 public sealed class Edge

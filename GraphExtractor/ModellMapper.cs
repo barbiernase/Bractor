@@ -149,7 +149,12 @@ public static class ModellMapper
                 Name = x.Name, Namespace = x.Namespace, Darf = x.Darf, Art = x.Art, Dienste = x.Dienste, Doku = x.Doku, Datei = Rel(x.Datei),
                 VertragName = x.VertragName,
                 VertragDatei = x.VertragDatei == null || x.VertragDatei == x.Datei ? null : Rel(x.VertragDatei),
-                Vertrag = x.Vertrag.Select(r => new AkteurReaktion { Eingang = r.Eingang, Ausgaenge = r.Ausgaenge, Strom = r.Strom, Doku = r.Doku }).ToList(),
+                Vertrag = x.Vertrag.Select(r => new AkteurZusage { Eingang = r.Eingang, Ausgaenge = r.Ausgaenge, Strom = r.Strom, Doku = r.Doku, Teil = r.Teil }).ToList(),
+            }).ToList(),
+            Clients = dom.Clients.Select(x => new Client
+            {
+                Name = x.Name, Namespace = x.Namespace, Traegt = x.Traegt, Sendet = x.Sendet, Fragt = x.Fragt, Kenntnis = x.Kenntnis,
+                Doku = x.Doku, Datei = Rel(x.Datei),
             }).ToList(),
             Lesen = Leseseite(dom),
         });

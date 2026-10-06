@@ -21,7 +21,7 @@ public static class Grammatik
 
     // ── Alphabet: Bausteine (die Knoten) ─────────────────────────────────────────────────────────────────────────────
     public const string Aggregat = "aggregat", Prozess = "prozess", Projektion = "projektion", Reaktion = "reaktion", Reader = "reader",
-        Pipeline = "pipeline", Ingress = "ingress", Store = "store", Aussenwelt = "aussenwelt", Akteur = "akteur";
+        Pipeline = "pipeline", Ingress = "ingress", Store = "store", Aussenwelt = "aussenwelt", Akteur = "akteur", Client = "client";
 
     /// <summary>Kardinalität eines Konsum-Eingangs.</summary>
     public const string GenauEins = "eins", Beliebig = "beliebig", Dieselbe = "dieselbe";
@@ -54,7 +54,7 @@ public static class Grammatik
         new(Aggregat, "Aggregat", true), new(Prozess, "Prozess", true), new(Projektion, "Projektion", false),
         new(Reaktion, "Reaktion", false), new(Reader, "Reader", false), new(Pipeline, "Pipeline", false),
         new(Ingress, "Ingress", false), new(Store, "Store", true), new(Aussenwelt, "Außenwelt", false),
-        new(Akteur, "Akteur", false),
+        new(Akteur, "Akteur", false), new(Client, "Client", false),
     ];
 
     // ── Regeln (Id = der Name, unter dem Validator und Editor sie melden) ──────────────────────────────────────────────
@@ -126,7 +126,7 @@ public static class Grammatik
             + "Pipeline-Handle, der ihn als Parameter nimmt, entscheidet im Auftrag von A: höchstens einer je Handle, und er sendet nur "
             + "Commands, die A darf; als Konstruktor-Abhängigkeit ist der Dienst in keiner Klasse erlaubt.", "error",
             [An("CQRS060", "Domain.SourceGeneration/AkteurAnalyzer.cs"), new("laufzeit", null, "Abstractions.ImAuftrag → CommandEmitter stempelt UserId")]),
-        new("GR-VERTRAG", "Reaktion im Akteur-Vertrag", "Reagiert ein Akteur draußen auf ein Event, steht es in seinem Vertrag "
+        new("GR-VERTRAG", "Zusage im Akteur-Vertrag", "Reagiert ein Akteur draußen auf ein Event, steht es in seinem Vertrag "
             + "(interface IX : IAkteurVertrag<X>): je Event höchstens ein Auf(E), der Rückgabetyp nennt nur konkrete Commands (void = zur "
             + "Kenntnis). Was er so hineingibt, darf er (kein IDarf), und er hört genau diese Events; höchstens ein Vertrag je Akteur.", "error",
             [An("CQRS061", "Domain.SourceGeneration/AkteurAnalyzer.cs (Form)"), An("CQRS062", "Domain.SourceGeneration/AkteurAnalyzer.cs (Ausgabe-Vertrag)"),
@@ -138,10 +138,22 @@ public static class Grammatik
         new("GR-HERKUNFT", "Alles kommt von einem Akteur", "Sobald es Akteure gibt: jeder Command, jede Query und jeder Trigger kommt von "
             + "einem Akteur — direkt (IDarf<T>) oder über die Kette (eine Pipeline, ein Prozess oder eine Frist erzeugt ihn aus einem "
             + "Event, das von einem Akteur stammt). Sonst steht er im Rahmen „ohne Akteur“.", "warning",
-            [new("laufzeit", null, "Infrastructure/Akteure/AkteurTor.cs (ohne IDarf abgewiesen)"), Offen("Fixpunkt im Generator (docs/konzept-akteure.md §8.4)")]),
+            [new("laufzeit", null, "Infrastructure/Akteure/AkteurTor.cs (ohne IDarf abgewiesen)"), Offen("Fixpunkt im Generator (docs/konzept-akteure.md §2.3)")]),
         new("GR-INGRESS-EINDEUTIG", "Ingress-Trigger: genau ein Akteur", "Entsteht ein Trigger ohne Kette (Datei, Timer, Selbst-Tick), ist sein "
             + "Akteur der eine, der ihn per IDarf darf — mehrere machen offen, wer ihn liefert.", "warning",
-            [Offen("Generator-Diagnose (docs/konzept-akteure.md §8.3, Regel 2)")]),
+            [Offen("Generator-Diagnose (docs/konzept-akteure.md §7, Regel 2)")]),
+        new("GR-CLIENT", "Client-Vertrag: nur der Rand", "Ein Client (interface IX : IClientVertrag) stellt zusammen, was über SEINE "
+            + "Leitung geht: getragene Akteur-Vertrags-Teile (Zusagen im Namen des jeweiligen Akteurs), ISendet<T>/IFragt<T> und eigene "
+            + "Kenntnis (void Auf(E)) — keine eigene Ausgabe, keine client-internen Typen, je Event höchstens eine Methode.", "error",
+            [An("CQRS063", "Domain.SourceGeneration/AkteurAnalyzer.cs (Form)"), An("CQRS065", "Domain.SourceGeneration/AkteurAnalyzer.cs (je Event einmal)"),
+             new("generator", null, "Infrastructure.SourceGeneration/AkteurRechteGenerator.cs (GeneratedClientVertraege, Client-Hash)"),
+             new("laufzeit", null, "Infrastructure/GrpcClient/CqrsClientService.cs (Handshake je Client, Vertrag ∩ Token)")]),
+        new("GR-CLIENT-BEFUGT", "Client sendet nur, was ein Akteur darf", "Was ein Client sendet (ISendet) oder fragt (IFragt), muss ein "
+            + "Akteur per IDarf<T> dürfen — der Client-Vertrag schneidet aus der Befugnis, er erweitert sie nie.", "error",
+            [An("CQRS064", "Domain.SourceGeneration/AkteurAnalyzer.cs"), new("laufzeit", null, "Infrastructure/Akteure/ClientVertrag.cs (Rechte = Vertrag ∩ IDarf ∩ Token)")]),
+        new("GR-GETRAGEN", "Jede Zusage hat einen Client", "Eine Zusage mit Ausgabe (Auf(E) → Command) im Vertrag eines Akteurs wird von "
+            + "mindestens einem Client getragen — sonst bricht die Kette an dieser Stelle (das Event erreicht niemanden, der antwortet).", "warning",
+            [Offen("Editor-/--check-Befund; kein Build-Fehler (ein Akteur-Vertrag ohne Client ist ein Entwurf)")]),
         new("GR-MODUL-EINGANG-OFFEN", "Eingang ohne Konsument", "Ein Command, eine Query, ein Trigger oder eine Selbst-Nachricht, die niemand konsumiert — offener Eingang des Moduls.", "warning",
             [Gen("CQRS002", "nur: Prozess sendet Command ohne Decider"), Offen("sonst")]),
         new("GR-MODUL-AUSGANG-OFFEN", "Ausgang ohne Erzeuger", "Ein Event, eine Ablehnung oder eine Response, die niemand erzeugt — offener Ausgang des Moduls.", "warning",
@@ -162,6 +174,7 @@ public static class Grammatik
         new(Query, Reader, GenauEins, "GR-QUERY"),
         new(Faehigkeit, Projektion, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Reader, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Pipeline, Beliebig, "GR-FAEHIGKEIT"),
         new(Event, Akteur, Beliebig, "GR-VERTRAG"), new(Transient, Akteur, Beliebig, "GR-VERTRAG"),
+        new(Event, Client, Beliebig, "GR-CLIENT"), new(Transient, Client, Beliebig, "GR-CLIENT"),
     ];
 
     /// <summary>Wer welche Sorten erzeugen darf (§2.2 Spalte „Ausgänge").</summary>
@@ -178,6 +191,8 @@ public static class Grammatik
         new(Store, Faehigkeit, "GR-FAEHIGKEIT"),
         new(Aussenwelt, Command, "GR-COMMAND"), new(Aussenwelt, Query, "GR-QUERY"), new(Aussenwelt, Trigger, "GR-AUS-INGRESS"),
         new(Akteur, Command, "GR-AKTEUR"), new(Akteur, Query, "GR-AKTEUR"), new(Akteur, Trigger, "GR-AKTEUR"), new(Akteur, Transient, "GR-AKTEUR"),
+        new(Client, Command, "GR-CLIENT-BEFUGT"), new(Client, Query, "GR-CLIENT-BEFUGT"), new(Client, Trigger, "GR-CLIENT-BEFUGT"),
+        new(Client, Transient, "GR-CLIENT-BEFUGT"),
     ];
 
     /// <summary>Record-Art → Nachrichtensorte (null = keine Nachricht: Value Object, Konfig, ReadModel).</summary>
@@ -214,7 +229,7 @@ public static class Grammatik
     public static readonly IReadOnlyList<(string Schluessel, string Baustein)> EditorPortBaustein =
     [
         ("dec", Aggregat), ("app", Aggregat), ("trans", Prozess), ("saga", Prozess), ("proj", Projektion), ("reaktion", Reaktion),
-        ("pipeline", Pipeline), ("reader", Reader), ("trigId", Ingress), ("frist", Pipeline), ("akt", Akteur),
+        ("pipeline", Pipeline), ("reader", Reader), ("trigId", Ingress), ("frist", Pipeline), ("akt", Akteur), ("client", Client),
     ];
     /// <summary>Editor-Port-Schlüssel, deren Ausgang eine andere Sorte trägt als die Ziel-Karte (Frist-Knoten → Command = Sorte Frist).</summary>
     public static readonly IReadOnlyDictionary<string, string> EditorAusgangSorte = new Dictionary<string, string> { ["frist"] = Frist };

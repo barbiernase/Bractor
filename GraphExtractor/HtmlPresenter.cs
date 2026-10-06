@@ -160,6 +160,25 @@ public static class HtmlPresenter
 #de .gminimap svg rect.mmhi{fill:#ffd76a !important;opacity:1 !important;stroke:#fff3c9;stroke-width:.6}
 #de .gnode2.n-command{border-color:#3b6fb0}
 #de .gnode2.n-akteur{border-color:#b04f86;width:240px}
+#de .gnode2.n-client{border-color:#5aa0c8;width:420px}
+#de .gnode2.n-client .ghead{background:#5aa0c8}
+#de .gnode2.n-client .gsum.gleiste{display:block;font:11px ui-monospace,monospace;color:#c4cde0;padding:6px 10px 9px}
+#de .gleiste .lz{white-space:normal;line-height:1.55}
+#de .gleiste .lk{color:#8fb7d6;margin-right:6px;white-space:nowrap}
+#de .gleiste .lz.lt .lk{color:#e7a3cb}
+#de .gleiste .lz.lwarn .lk{color:#e0b46a}
+#de .gleiste .lz.lleer{color:#7f8aa0}
+#de .gleiste .lp{cursor:pointer;color:#e6ebf5;border-bottom:1px dotted #5a6a85}
+#de .gleiste .lp:hover,#de .gleiste .lp.an{color:#fff;background:#2c3d5c;border-bottom-color:#9cc3ff}
+#de .gleiste .lp.lp-fehlt{color:#e0b46a;cursor:default}
+#de .grahmen.client{border-style:dashed;border-width:calc(2px * var(--lz));background:color-mix(in srgb,var(--dc) 6%,#0b0f17)}
+#de .grahmen.client>.grahmen-k .akt-n{cursor:pointer}
+#de .grahmen-k .cl-stecker{display:flex;align-items:center;gap:3px;font-size:11px;color:#8fb7d6;white-space:nowrap;overflow:hidden;min-width:0}
+#de .grahmen-k .cl-stecker .akt-ref{padding:0 6px;font-size:11px;background:transparent;border-color:#5aa0c8;color:#cfe6ff}
+#de .glink.gbuendel{stroke-width:7px;opacity:.55;pointer-events:stroke;cursor:pointer}
+#de .glink.gbuendel:hover{opacity:.95}
+#de .glink.gbuendel-t{fill:#cfe6ff;font:12px ui-monospace,monospace;stroke:#0b0f17;stroke-width:3px;paint-order:stroke;pointer-events:none}
+#de .glink.gauf{stroke-width:2.5px}
 #de .gnode2.n-auf{border-color:#b04f86;border-style:dashed;width:240px}
 #de .gnode2.n-event{border-color:#3f9d5a}
 #de .gnode2.n-rejection{border-color:#b5504a}
@@ -475,6 +494,10 @@ public static class HtmlPresenter
 #de .gcanvas.lod-ablauf .ghead .gcol,#de .gcanvas.lod-ablauf .ghead .gx{display:none}
 #de .gcanvas.lod-ablauf .gnode2.ungeschrieben .ghead::before,#de .gcanvas.lod-ablauf .gnode2.entwurf .ghead::before,#de .gcanvas.lod-ablauf .gnode2.island .ghead::after{display:none}
 #de .gcanvas.lod-karte .gnode2{visibility:hidden}
+/* Client (docs/konzept-akteure.md §4): die Anschlussleiste IST der Vertrag — in jeder Ansicht lesbar, Breite fest. */
+#de .gcanvas .gworld .gnode2.n-client{width:420px}
+#de .gcanvas .gnode2.n-client .gsum.gleiste{display:block}
+#de .gcanvas.lod-ablauf .gnode2.n-client .ghead .gtitle.hatname .gk{display:inline}
 #de .gcanvas.lod-karte svg.gedges{display:none}
 #de .gtile,#de svg.gtilesvg{display:none}
 #de .gcanvas.lod-karte .gtile,#de .gcanvas.lod-karte svg.gtilesvg{display:block}
@@ -520,7 +543,7 @@ public static class HtmlPresenter
   // Vertrags-Fakten aus dem Rahmen (vom Extractor aus dem Code gelesen).
   const ID_FELD=()=>((MODEL.rahmen&&MODEL.rahmen.aggregatIdFeld)||"");
   const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"],konfig:["Konfiguration","vo"],query:["Query","qry"],queryresponse:["Response","qrsp"]};
-  let MODEL={schemaVersion:"2",akteure:[],records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],reaktionen:[],pipelines:[],triggers:[],frists:[],dienste:[],hostSettings:[],codeNodes:[],llmNodes:[]};
+  let MODEL={schemaVersion:"2",akteure:[],clients:[],records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],reaktionen:[],pipelines:[],triggers:[],frists:[],dienste:[],hostSettings:[],codeNodes:[],llmNodes:[]};
   let NID=1;
   const embedded=/*__MODEL_JSON__*/;
   // Domänen-Filter (welche Domänen ausgeblendet sind) — pro Browser UND pro Solution persistiert (rahmen.kennung),
@@ -543,6 +566,8 @@ public static class HtmlPresenter
     m.readModels=m.readModels||[];m.stores=m.stores||[];m.projektionen=m.projektionen||[];m.reader=m.reader||[];m.reaktionen=m.reaktionen||[];m.pipelines=m.pipelines||[];m.triggers=m.triggers||[];m.frists=m.frists||[];m.dienste=m.dienste||[];m.hostSettings=m.hostSettings||[];m.codeNodes=m.codeNodes||[];m.llmNodes=m.llmNodes||[];
     // Akteur (docs/konzept-akteure.md): wer von außen hineingibt — darf[] = die Typen seiner IDarf<T> (Command/Query/Trigger).
     m.akteure=m.akteure||[];m.akteure.forEach(a=>{if(!a._id)a._id="ak"+(NID++);a.darf=a.darf||[];});   /* art/dienste bewusst nicht vorbelegen (Herkunfts-Hash) */
+    // Client (docs/konzept-akteure.md §4): die Software an der Leitung — traegt[] = Akteur-Vertrags-Teile, sendet/fragt/kenntnis = der Rand.
+    m.clients=m.clients||[];m.clients.forEach(c=>{if(!c._id)c._id="cl"+(NID++);c.traegt=c.traegt||[];c.sendet=c.sendet||[];c.fragt=c.fragt||[];c.kenntnis=c.kenntnis||[];});
     // Reaktion = emittierender Konsument (ISubscriber → IAsyncEnumerable<OneOf<Cmd>>): Trigger-Event → Handle → OneOf-Commands.
     m.reaktionen.forEach(r=>{if(!r._id)r._id="rk"+(NID++);r.handles=r.handles||[];r.handles.forEach(hd=>{hd.sends=hd.sends||[];hd.publishes=hd.publishes||[];});});
     // Pipeline = 4. durabler Konsument (IPipelineHandler): Trigger-Msg ODER Event → Handle → OneOf-Command(s).
@@ -653,7 +678,7 @@ public static class HtmlPresenter
   function imModus(ids,aendern){TEIL={gerufen:false};try{aendern();}finally{const g=TEIL.gerufen;TEIL=null;if(g)teilNeu(ids.filter(Boolean));}}
 
   // Eindeutiger Name — Namen sind der Referenzschlüssel für Kanten/Decider/Applier.
-  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.reaktionen.map(x=>x.name),...MODEL.pipelines.map(x=>x.name),...MODEL.triggers.map(x=>x.name),...MODEL.frists.map(x=>x.name),...MODEL.dienste.map(x=>x.name),...MODEL.hostSettings.map(x=>x.name),...MODEL.codeNodes.map(x=>x.name),...MODEL.llmNodes.map(x=>x.name),...MODEL.akteure.map(x=>x.name)]);
+  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.reaktionen.map(x=>x.name),...MODEL.pipelines.map(x=>x.name),...MODEL.triggers.map(x=>x.name),...MODEL.frists.map(x=>x.name),...MODEL.dienste.map(x=>x.name),...MODEL.hostSettings.map(x=>x.name),...MODEL.codeNodes.map(x=>x.name),...MODEL.llmNodes.map(x=>x.name),...MODEL.akteure.map(x=>x.name),...MODEL.clients.map(x=>x.name)]);
     if(!all.has(base))return base;let i=2;while(all.has(base+i))i++;return base+i;}
 
   function enumCard(e,ei){const c=h("div",{class:"card"});
@@ -708,6 +733,7 @@ public static class HtmlPresenter
     else if(kind==="dienst")MODEL.dienste.push({_id:"di"+(NID++),name:uniq("NeuerDienst"),vertrag:"IDienst",extern:false,codeSrc:null,...pos});
     else if(kind==="hostsetting")MODEL.hostSettings.push({_id:"hs"+(NID++),name:uniq("NeuSetting"),typ:"string",default:"",envKey:"",...pos});
     else if(kind==="akteur")MODEL.akteure.push({_id:"ak"+(NID++),name:uniq("NeuerAkteur"),namespace:defaultNs(),darf:[],...pos});
+    else if(kind==="client")MODEL.clients.push({_id:"cl"+(NID++),name:uniq("INeuerClient"),namespace:defaultNs(),traegt:[],sendet:[],fragt:[],kenntnis:[],...pos});
     else if(kind==="codenode")MODEL.codeNodes.push({_id:"cn"+(NID++),name:uniq("Code"),text:"",...pos});
     else if(kind==="llmnode")MODEL.llmNodes.push({_id:"ln"+(NID++),name:uniq("LLM"),intent:"",...pos});
     else MODEL.records.push({name:uniq("Neu"+kindLabel(kind).replace(/\s/g,"")),kind,namespace:defaultNs(),felder:kind==="command"&&ID_FELD()?[{_id:"f"+(NID++),name:ID_FELD(),typ:"Guid"}]:[],...pos});
@@ -748,8 +774,8 @@ public static class HtmlPresenter
           ()=>{hd.fristen=(hd.fristen||[]).filter(x=>x!==f);}));});
       MODEL.frists.forEach(f=>{if(f.sendet===nm)P(ein,"fr:"+f._id,"Frist "+(f.name||""),"⏳");});
       akteurePartner(ein,nm,P);
-      // Reaktion im Akteur-Vertrag (§9): der Akteur antwortet draußen auf ein Event mit diesem Command.
-      vertragsReaktionen().forEach(({a,r,id})=>{if((r.ausgaenge||[]).includes(nm))P(ein,id,a.name+" · Reaktion auf "+(r.eingang||"?"),"Vertrag",()=>{r.ausgaenge=ohneX(r.ausgaenge,nm);});});
+      // Zusage im Akteur-Vertrag (Akteur-Konzept §3): der Akteur antwortet draußen auf ein Event mit diesem Command.
+      vertragsZusagen().forEach(({a,r,id})=>{if((r.ausgaenge||[]).includes(nm))P(ein,id,a.name+" · Zusage auf "+(r.eingang||"?"),"Vertrag",()=>{r.ausgaenge=ohneX(r.ausgaenge,nm);});});
       if(!ein.length)P(ein,null,"Außenwelt (Client)","abgeleitet: kein interner Erzeuger · kein Akteur");
       MODEL.decider.forEach(d=>{if(d.command===nm)P(aus,"dec:"+d._id,"Decide @ "+(d.aggregat||"— kein Aggregat"));});}
     else if(k==="event"||k==="rejection"){
@@ -760,8 +786,10 @@ public static class HtmlPresenter
       MODEL.applier.forEach(a=>{if(a.event===nm)P(aus,"app:"+a._id,"Apply @ "+(a.aggregat||"—"));});
       MODEL.sagas.forEach(sg=>{if(sg.triggerEvent===nm)P(aus,"saga:"+sg.name,"Prozess "+sg.name,"Auslöser");});
       MODEL.transitions.forEach(t=>{if((t.wenn||[]).includes(nm)||t.sammelEvent===nm)P(aus,"tr:"+t._id,"Regel · "+(t.prozess||"Prozess"),t.sammelEvent===nm?"Σ sammelt":"");});
-      vertragsReaktionen().forEach(({a,r,id})=>{if(r.eingang===nm)P(aus,id,a.name+" · Reaktion",(r.ausgaenge||[]).length?"Vertrag → "+r.ausgaenge.join(", "):"Vertrag · zur Kenntnis",
-        ()=>{a.vertrag=(a.vertrag||[]).filter(x=>x!==r);});});}
+      vertragsZusagen().forEach(({a,r,id})=>{if(r.eingang===nm)P(aus,id,a.name+" · Zusage",((r.ausgaenge||[]).length?"Vertrag → "+r.ausgaenge.join(", "):"Vertrag · zur Kenntnis")
+        +(()=>{const cs=clientTraeger(r.teil||vertragsTyp(a));return cs.length?" · 🔌 "+cs.map(clientAnzeige).join(", "):"";})(),
+        ()=>{a.vertrag=(a.vertrag||[]).filter(x=>x!==r);});});
+      MODEL.clients.forEach(c=>{if((c.kenntnis||[]).includes(nm))P(aus,"cl:"+c._id,"Client "+clientAnzeige(c),"Kenntnis",()=>{c.kenntnis=ohneX(c.kenntnis,nm);});});}
     else if(k==="query"){akteurePartner(ein,nm,P);if(!ein.length)P(ein,null,"Außenwelt (Client)","abgeleitet · kein Akteur");
       HD("reader","reader",(o,hd,id)=>{if(hd.query===nm)P(aus,id,hText(o,hd));});}
     else if(k==="queryresponse"){const qs=[];HD("reader","reader",(o,hd,id)=>{if((hd.responses||[]).includes(nm)){P(ein,id,hText(o,hd));qs.push(hd.query);}});
@@ -777,12 +805,78 @@ public static class HtmlPresenter
       akteurePartner(ein,nm,P);
       if(!ein.length)P(ein,null,"Außenwelt (Client)","abgeleitet: kein interner Erzeuger · kein Akteur");}
     return {ein,aus,k};}
-  // Alle Reaktionen der Akteur-Verträge (§9) mit ihrer Karten-Id — je Auf(Event) eine Karte „Reaktion" im Akteur-Rahmen.
+  // Alle Zusagen der Akteur-Verträge (Akteur-Konzept §3) mit ihrer Karten-Id — je Auf(Event) eine Karte „Zusage" im Akteur-Rahmen.
   const aufId=(a,i)=>"auf:"+a._id+":"+i;
   const vertragsTyp=a=>a.vertragName||("I"+(a.name||""));
-  function vertragsReaktionen(){return MODEL.akteure.flatMap(a=>(a.vertrag||[]).map((r,i)=>({a,r,i,id:aufId(a,i)})));}
+  function vertragsZusagen(){return MODEL.akteure.flatMap(a=>(a.vertrag||[]).map((r,i)=>({a,r,i,id:aufId(a,i)})));}
+
+  // ══ CLIENTS (docs/konzept-akteure.md §4): die Software an der Leitung — je Client EIN Vertrag (IClientVertrag). Er steht als
+  //   eigener Rahmen rechts neben den Domänen; seine Karte ist die ANSCHLUSSLEISTE (jede Zeile nennt ihre Nachricht); die Leitungen
+  //   bündeln je Ziel-Rahmen. Zoom ändert daran nichts — Einzelkanten gibt es nur durch eine Handlung (Klick auf Zeile/Bündel → AUF).
+  const CL_PRE="§client:";
+  const istClientDom=d=>typeof d==="string"&&d.startsWith(CL_PRE);
+  // Handshake-Name = Interface ohne führendes I (IArbeitsplatz → Arbeitsplatz), wie Abstractions.Akteurvertrag.ClientName.
+  const clientAnzeige=c=>{const n=(c&&c.name)||"";return n.length>1&&n[0]==="I"&&n[1]!==n[1].toLowerCase()?n.slice(1):n;};
+  // Vertrags-Teil (Interface-Name) → Akteur: sein Haupt-Vertrag (vertragsTyp) oder ein weiterer Teil an einer Zusage (r.teil).
+  function teilAkteur(teil){return MODEL.akteure.find(a=>(a.vertrag||[]).length&&(vertragsTyp(a)===teil||(a.vertrag||[]).some(r=>r.teil===teil)));}
+  function teilZusagen(teil){const a=teilAkteur(teil);if(!a)return [];
+    return (a.vertrag||[]).map((r,i)=>({a,r,i,id:aufId(a,i)})).filter(x=>(x.r.teil||vertragsTyp(a))===teil);}
+  const darfHalter=nm=>MODEL.akteure.filter(a=>(a.darf||[]).includes(nm)).map(a=>a.name);
+  // Verkörpert (abgeleitet wie AkteurRechteGenerator): Akteure der getragenen Teile, dazu je Sendet/Fragt die IDarf-Halter — falls
+  //   keiner der Teil-Akteure den Typ schon darf.
+  function clientAkteure(c){const basis=new Set((c.traegt||[]).map(teilAkteur).filter(Boolean).map(a=>a.name)),s=new Set(basis);
+    [...(c.sendet||[]),...(c.fragt||[])].forEach(nm=>{const hs=darfHalter(nm);if(!hs.some(x=>basis.has(x)))hs.forEach(x=>s.add(x));});
+    return [...s].sort();}
+  const clientTraeger=teil=>MODEL.clients.filter(c=>(c.traegt||[]).includes(teil));
+  // Die Ports der Anschlussleiste: Richtung, Nachricht, in wessen Namen (Akteur), Ziel-Knoten.
+  function clientPorts(c){const P=[],ver=clientAkteure(c);
+    const node=nm=>{if(recByName(nm))return "rec:"+nm;const t=MODEL.triggers.find(x=>trigName(x)===nm);return t?"tg:"+t._id:null;};
+    const als=nm=>{const hs=darfHalter(nm),drin=hs.filter(x=>ver.includes(x));return drin.length?drin:hs;};
+    (c.traegt||[]).forEach(t=>{const rs=teilZusagen(t);if(!rs.length)P.push({ri:"zusage",msg:"?",teil:t,akteure:[],aus:[],node:null,fehlt:true});
+      rs.forEach(({a,r,id})=>P.push({ri:"zusage",msg:r.eingang||"?",aus:r.ausgaenge||[],strom:!!r.strom,akteure:[a.name],teil:t,node:id}));});
+    (c.sendet||[]).forEach(nm=>P.push({ri:"sendet",msg:nm,akteure:als(nm),node:node(nm)}));
+    (c.fragt||[]).forEach(nm=>P.push({ri:"fragt",msg:nm,akteure:als(nm),node:node(nm)}));
+    (c.kenntnis||[]).forEach(nm=>P.push({ri:"kenntnis",msg:nm,akteure:[],node:node(nm)}));
+    return P;}
+  // Ziel-Rahmen eines Ports: eine Zusage → der Vertrags-Rahmen ihres Akteurs; sonst der Domäne × Akteur-Rahmen der Nachrichten-Karte
+  //   (bzw. der Domänen-Rahmen, wenn die Domäne keine Akteur-Rahmen hat).
+  function portRahmen(p){if(!p.node)return null;if(p.ri==="zusage")return "§vertrag:"+p.akteure[0];
+    const n=NODEBY.get(vertreterId(p.node));if(!n)return null;const d=domKey(n);return d+"|"+(akteurOrdnung(d).length?akteurVon(n):"");}
+  // Die Bündel eines Clients: je Ziel-Rahmen eine Leitung (durabel, sobald sie eine Zusage trägt — Akteur-Konzept §5.4).
+  function clientBuendel(c){const m=new Map();clientPorts(c).forEach(p=>{const k=portRahmen(p);if(!k)return;let b=m.get(k);
+      if(!b)m.set(k,b={key:k,ports:[],durabel:false});b.ports.push(p);if(p.ri==="zusage"&&(p.aus||[]).length)b.durabel=true;});
+    return [...m.values()];}
+  // Beschriftung in Worten (keine Zähler, keine Kürzel): „sendet A, B · fragt Q · hört E · trägt IX (ImagePairKomplett → Klassifiziere…)".
+  function buendelText(b){const L=(xs)=>{const u=[...new Set(xs)];return u.length>3?u.slice(0,3).join(", ")+" … und "+(u.length-3)+" weitere":u.join(", ");};
+    const by=ri=>b.ports.filter(p=>p.ri===ri);const t=[];
+    if(by("zusage").length){const teile=[...new Set(by("zusage").map(p=>p.teil))];
+      t.push("trägt "+teile.join(", ")+" ("+L(by("zusage").map(p=>p.msg+((p.aus||[]).length?" → "+p.aus.join("/"):" · Kenntnis")))+")");}
+    if(by("sendet").length)t.push("sendet "+L(by("sendet").map(p=>p.msg)));
+    if(by("fragt").length)t.push("fragt "+L(by("fragt").map(p=>p.msg)));
+    if(by("kenntnis").length)t.push("hört "+L(by("kenntnis").map(p=>p.msg)));
+    return t.join(" · ");}
+  const rahmenLabel=k=>k.startsWith("§vertrag:")?"📜 Vertrag "+k.slice(9):(()=>{const [d,a]=k.split("|");return domLabel(d)+(a?" · "+(a===OHNE_AKT?"ohne Akteur":a):"");})();
+  // Welche Clients stecken an welchem Rahmen (Stecker-Zeile im Kopf): Rahmen-Schlüssel → Clients. Vertrags-Bündel zählen beim Akteur-Rahmen.
+  function clientStecker(){const m=new Map(),dazu=(k,c)=>{if(!m.has(k))m.set(k,[]);if(!m.get(k).includes(c))m.get(k).push(c);};
+    MODEL.clients.forEach(c=>{if(!VIS.has("cl:"+c._id))return;clientBuendel(c).forEach(b=>{
+      if(b.key.startsWith("§vertrag:")){const a=MODEL.akteure.find(x=>x.name===b.key.slice(9)),n=a&&NODEBY.get("akt:"+a._id);
+        if(n){const d=domKey(n);dazu(d+"|"+(akteurOrdnung(d).length?a.name:""),c);}}
+      else dazu(b.key,c);});});
+    return m;}
+  // Auffächern (nur durch eine Handlung): {client, key?, msg?} — null = nur die Bündel.
+  let AUF=null;
+  const aufPasst=(was,p)=>(!was.keys||was.keys.includes(portRahmen(p)))&&(!was.msg||p.msg===was.msg);
+  function auffaechern(c,was){waehle("cl:"+c._id);AUF={client:c._id,...was};
+    const ids=new Set(["cl:"+c._id]);clientPorts(c).filter(p=>aufPasst(was,p)&&p.node)
+      .forEach(p=>{ids.add(vertreterId(p.node));if(p.ri==="zusage"){const a=MODEL.akteure.find(x=>x.name===p.akteure[0]);if(a)ids.add("akt:"+a._id);}});
+    FOCUS=ids;drawEdges();wendeFokusAn();}
+  window.deClients=()=>MODEL.clients.map(c=>({name:c.name,handshake:clientAnzeige(c),akteure:clientAkteure(c),
+    buendel:clientBuendel(c).map(b=>({ziel:b.key,durabel:b.durabel,text:buendelText(b)}))}));
   // Akteure, die diesen Typ hineingeben dürfen — als Erzeuger auf der „◀ kommt aus"-Seite; „lösen" entzieht das Recht.
-  function akteurePartner(ein,nm,P){MODEL.akteure.forEach(a=>{if((a.darf||[]).includes(nm))P(ein,"akt:"+a._id,"Akteur "+a.name,"darf",()=>{a.darf=ohneX(a.darf,nm);});});}
+  function akteurePartner(ein,nm,P){MODEL.akteure.forEach(a=>{if((a.darf||[]).includes(nm))P(ein,"akt:"+a._id,"Akteur "+a.name,"darf",()=>{a.darf=ohneX(a.darf,nm);});});
+    // Clients, deren Vertrag die Nachricht sendet bzw. fragt (der Rand; der Akteur oben ist die Befugnis dahinter).
+    MODEL.clients.forEach(c=>{if((c.sendet||[]).includes(nm))P(ein,"cl:"+c._id,"Client "+clientAnzeige(c),"sendet",()=>{c.sendet=ohneX(c.sendet,nm);});
+      if((c.fragt||[]).includes(nm))P(ein,"cl:"+c._id,"Client "+clientAnzeige(c),"fragt",()=>{c.fragt=ohneX(c.fragt,nm);});});}
   // Der Akteur-Eingang einer Nachricht (Command/Query/Trigger): ⊕ → Akteure leuchten → anklicken = ihm das Recht geben.
   const darfPort=nm=>slotRow("darf","+ Akteur ⊕ (darf)","l",{type:"darf",dir:"in",rec:nm},"darf:in:"+nm);
   // Kardinalität der Konsumenten-Seite AUS DER GRAMMATIK (nie im Board-Code): „genau eins" / „dieselbe" / „beliebig".
@@ -1341,7 +1435,7 @@ public static class HtmlPresenter
 
   // HostSetting = operativer Config-Wert (Name/Typ/Default/EnvKey) — die Editor-Repräsentation von
   //   appsettings/env für DOMÄNEN-relevante Werte (Pfad/Intervall/Timeout). Speist Trigger/Frist.
-  // ══ AKTEURE: von wem kommt was? (docs/konzept-akteure.md §8, docs/konzept-domaenen-editor.md §12) ══
+  // ══ AKTEURE: von wem kommt was? (docs/konzept-akteure.md §2, docs/konzept-domaenen-editor.md §12) ══
   //   Deklariert ist nur IDarf (direkt). Was eine Pipeline/Reaktion/ein Reader/Prozess/Decide aus einer Nachricht erzeugt,
   //   trägt deren Akteure (Kette); ein Handle mit dem Dienst eines Akteurs (IAkteurDienst<A>) wechselt zu A. Spiegel von
   //   DomainEditor/AkteurAnteile.cs — Parität: deAkteurParitaet() gegen rahmen.akteurMengen.
@@ -1369,8 +1463,8 @@ public static class HtmlPresenter
     MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>R.push([[hd.event].filter(Boolean),[...(hd.sends||[]),...(hd.publishes||[])],null])));
     MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>R.push([[hd.event].filter(Boolean),[...(hd.publishes||[])],null])));
     MODEL.reader.forEach(r=>(r.handles||[]).forEach(hd=>R.push([[hd.query].filter(Boolean),[...(hd.responses||[])],null])));
-    // Vertrag (§9): Event → Akteur → Commands; die Ausgänge gehören dem Akteur (Wechsel wie beim Dienst).
-    vertragsReaktionen().forEach(({a,r})=>R.push([[r.eingang].filter(Boolean),[...(r.ausgaenge||[])],a.name]));
+    // Vertrag (Akteur-Konzept §3): Event → Akteur → Commands; die Ausgänge gehören dem Akteur (Wechsel wie beim Dienst).
+    vertragsZusagen().forEach(({a,r})=>R.push([[r.eingang].filter(Boolean),[...(r.ausgaenge||[])],a.name]));
     MODEL.sagas.forEach(sg=>{const ts=MODEL.transitions.filter(t=>t.prozess===sg.name);
       R.push([[sg.triggerEvent,...ts.flatMap(t=>t.wenn||[])].filter(Boolean),ts.flatMap(t=>(t.dann||[]).flatMap(d=>[d.sende,d.kompensation])).filter(Boolean),null]);});
     return R;}
@@ -1468,7 +1562,7 @@ public static class HtmlPresenter
     // Reagiert B per Dienst-Wechsel auf ein Event von A → A vor B.
     const vor=new Map();MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{const w=handleAkteure("pipeline",hd);
       if(!(hd.akteur&&w&&w.has(hd.akteur)))return;mengeVon(pipeEingang(hd)).forEach(a=>{if(a!==hd.akteur){if(!vor.has(hd.akteur))vor.set(hd.akteur,new Set());vor.get(hd.akteur).add(a);}});}));
-    vertragsReaktionen().forEach(({a,r})=>mengeVon(r.eingang).forEach(x=>{if(x!==a.name){if(!vor.has(a.name))vor.set(a.name,new Set());vor.get(a.name).add(x);}}));
+    vertragsZusagen().forEach(({a,r})=>mengeVon(r.eingang).forEach(x=>{if(x!==a.name){if(!vor.has(a.name))vor.set(a.name,new Set());vor.get(a.name).add(x);}}));
     const aus=[],rest=[...basis];
     while(rest.length){const i=rest.findIndex(b=>[...(vor.get(b)||[])].every(a=>!rest.includes(a)||a===b));const k=i<0?0:i;aus.push(rest.splice(k,1)[0]);}
     const wunsch=((VIEW.akteurOrdnung||{})[dom]||[]).filter(x=>aus.includes(x));
@@ -1519,19 +1613,68 @@ public static class HtmlPresenter
       im.forEach(([p,hd,hi])=>{const s=anchorDot("auftrag");s.classList.add("o");reg("akt:auftrag:"+a._id+":"+p._id+":"+hi,s,{type:"auftrag",dir:"out",akt:a._id,anker:true});
         body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},p.name+".Handle("+handleDisc(hd)+")"),s));});
       body.append(slotRow("auftrag","+ Handle ⊕ (Pipeline) ▶","r",{type:"auftrag",dir:"out",akt:a._id},"akt:auftrag:"+a._id+":open"));}
-    // Vertrag (§9): worauf er DRAUSSEN reagiert — je Auf(Event) eine Karte „Reaktion" (Spalte neben dem Akteur). ⊕ → Events leuchten.
+    // Vertrag (Akteur-Konzept §3): worauf er DRAUSSEN reagiert — je Auf(Event) eine Karte „Zusage" (Spalte neben dem Akteur). ⊕ → Events leuchten.
     body.append(h("div",{class:"gsec",title:"public interface "+vertragsTyp(a)+" : IAkteurVertrag<"+a.name+"> { … Auf(Event e); } — der Client (Python, Blazor) implementiert ihn; was er so hineingibt, darf er"},
-      "reagiert auf ◀ (Vertrag "+vertragsTyp(a)+")"));
+      "Zusagen ◀ (Vertrag "+vertragsTyp(a)+")"));
     (a.vertrag||[]).forEach((r,i)=>{const s=anchorDot("event");s.classList.add("i");reg("akt:auf:"+a._id+":"+i,s,{type:"evtUse",dir:"in",akt:a._id,aufIdx:i,anker:true});
       const row=h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"flex:1"},(r.eingang||"?")+((r.ausgaenge||[]).length?" → "+r.ausgaenge.join(", ")+(r.strom?" (Strom)":""):" · zur Kenntnis")),
-        h("button",{class:"rm",title:"Reaktion entfernen",onclick:e=>{e.stopPropagation();a.vertrag.splice(i,1);render();}},"✕"));
+        h("button",{class:"rm",title:"Zusage entfernen",onclick:e=>{e.stopPropagation();a.vertrag.splice(i,1);render();}},"✕"));
       row.onclick=()=>waehle(aufId(a,i));body.append(row);});
     {const oi=port("event");oi.classList.add("i");reg("akt:auf:"+a._id+":open",oi,{type:"evtUse",dir:"in",akt:a._id,aufIdx:"open"});
-      body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Reaktion ⊕ (Event)")));}
+      body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Zusage ⊕ (Event)")));}
+    // 🔌 Clients (docs/konzept-akteure.md §4): wer diesen Vertrag trägt (Port für „trägt ⊕") und wo der Akteur sonst ankommt.
+    if((a.vertrag||[]).length){const tp=port("traegt");tp.classList.add("i");reg("akt:traegt:"+a._id,tp,{type:"traegt",dir:"in",akt:a._id});
+      const tr=clientTraeger(vertragsTyp(a));
+      body.append(h("div",{class:"slotrow"},tp,h("span",{class:"slotlbl",style:"flex:1"},"🔌 getragen von: "+(tr.length?tr.map(clientAnzeige).join(", "):"⚠ keinem Client (GR-GETRAGEN)"))));}
+    {const cs=MODEL.clients.filter(c=>clientAkteure(c).includes(a.name));
+      if(cs.length)body.append(h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px;cursor:default"},h("span",{class:"slotlbl"},"🔌 Clients:"),
+        ...cs.map(c=>h("button",{class:"akt-dom",onclick:()=>waehle("cl:"+c._id)},clientAnzeige(c)))));}
     const hoert=akteurHoert(a);
     body.append(h("div",{class:"gsec",title:(a.vertrag||[]).length?"abgeleitet: genau die Events seines Vertrags + Events der Projektionen hinter seinen Queries"
       :"abgeleitet: Events der Aggregate seiner Commands + Events der Projektionen hinter seinen Queries"},"hört (abgeleitet)"));
     body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},hoert.length?hoert.join(", "):"— nichts"));
+  }
+  // 🔌 CLIENT-Panel (docs/konzept-akteure.md §4): der eine Vertrag dieses Clients — trägt (Akteur-Vertrags-Teile) · sendet/fragt ·
+  //   hört (Kenntnis). Je Abschnitt ⊕ → passende Karten leuchten → anklicken = verbinden / ✓ = lösen. Verkörpert ist abgeleitet.
+  function clientCard(body,c){
+    body.append(h("div",{class:"gsec",title:"public interface "+c.name+" : IClientVertrag, …"},"Name (Interface) · Namespace"));
+    if(!c.datei)body.append(nameInp(c,"name","IClient","client"));
+    else body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default"},c.name+" — aus dem Code (Umbenennen ist ein Refactoring)"));
+    body.append(h("input",{value:c.namespace??"",oninput:e=>c.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
+    body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},"Handshake: „"+clientAnzeige(c)+"“ · Python-Basis "+clientAnzeige(c)
+      +"Basis (domain_client/generated/vertraege.py) · Server: GeneratedClientVertraege"));
+    const akt=clientAkteure(c);
+    body.append(h("div",{class:"gsec",title:"abgeleitet: Akteure der getragenen Teile + IDarf-Halter von Sendet/Fragt (falls kein Teil-Akteur es darf). Am Handshake gilt: ∩ Akteure des Tokens"},"verkörpert (abgeleitet)"));
+    body.append(h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px;cursor:default"},...(akt.length?akt.map(n=>{const a=MODEL.akteure.find(x=>x.name===n);
+      return h("button",{class:"akt-dom",onclick:()=>a&&waehle("akt:"+a._id)},(ART_SYM[a&&a.art]||"👤 ")+n);}):[h("span",{},"— noch keiner")])));
+    // ↺ trägt: Akteur-Vertrags-Teile (⊕ → Akteure mit Vertrag leuchten).
+    body.append(h("div",{class:"gsec",title:"interface "+c.name+" : …, IKlassifizierer — die Zusagen des Teils gehen über diese Leitung, im Namen seines Akteurs"},"↺ trägt (Akteur-Verträge)"));
+    (c.traegt||[]).forEach(t=>{const a=teilAkteur(t),s=anchorDot("traegt");s.classList.add("o");reg("cl:traegt:"+c._id+":"+t,s,{type:"traegt",dir:"out",client:c._id,anker:true});
+      const n=teilZusagen(t).length;
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},t+(a?" · "+a.name+" · "+n+(n===1?" Zusage":" Zusagen"):" · ⚠ kein Akteur-Vertrag")),
+        h("button",{class:"rm",title:"nicht mehr tragen",onclick:()=>{c.traegt=ohneX(c.traegt,t);render();}},"✕"),s));});
+    body.append(slotRow("traegt","+ trägt ⊕ (Akteur mit Vertrag) ▶","r",{type:"traegt",dir:"out",client:c._id},"cl:traegt:"+c._id+":open"));
+    // ▶ sendet / ? fragt: der spontane Rand — nur, was ein Akteur darf (sonst ⚠, GR-CLIENT-BEFUGT).
+    body.append(h("div",{class:"gsec",title:"ISendet<T> / IFragt<T> — muss ein Akteur per IDarf dürfen; der Client-Vertrag schneidet aus der Befugnis"},"▶ sendet · ? fragt"));
+    [...(c.sendet||[]).map(x=>["sendet",x]),...(c.fragt||[]).map(x=>["fragt",x])].forEach(([f,nm])=>{
+      const s=anchorDot("darf");s.classList.add("o");reg("cl:darf:"+c._id+":"+nm,s,{type:"darf",dir:"out",client:c._id,anker:true});
+      const hs=darfHalter(nm);
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},(f==="sendet"?"▶ ":"? ")+nm
+          +(hs.length?" · als "+hs.join("/"):" · ⚠ kein Akteur darf es")),
+        h("button",{class:"rm",title:"aus dem Vertrag nehmen",onclick:()=>{c[f]=ohneX(c[f],nm);render();}},"✕"),s));});
+    body.append(slotRow("darf","+ sendet / fragt ⊕ (Command · Query · Trigger) ▶","r",{type:"darf",dir:"out",client:c._id},"cl:darf:"+c._id+":open"));
+    // ◀ hört: eigene Kenntnis (void Auf(E)) — ohne Ausgabe.
+    body.append(h("div",{class:"gsec",title:"void Auf(E e) im Client-Vertrag — nur zur Kenntnis (UI-Aktualisierung), verlierbar zugestellt"},"◀ hört (Kenntnis)"));
+    (c.kenntnis||[]).forEach(nm=>{const s=anchorDot("event");s.classList.add("i");reg("cl:kenntnis:"+c._id+":"+nm,s,{type:"evtUse",dir:"in",client:c._id,anker:true});
+      body.append(h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"flex:1"},"◀ "+nm),
+        h("button",{class:"rm",title:"nicht mehr hören",onclick:()=>{c.kenntnis=ohneX(c.kenntnis,nm);render();}},"✕")));});
+    {const oi=port("event");oi.classList.add("i");reg("cl:kenntnis:"+c._id+":open",oi,{type:"evtUse",dir:"in",client:c._id});
+      body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ hört ⊕ (Event)")));}
+    // Die Leitungen dieses Clients (je Ziel-Rahmen ein Bündel) — Klick fächert auf.
+    const bs=clientBuendel(c);
+    if(bs.length){body.append(h("div",{class:"gsec"},"🔌 Leitungen (je Ziel-Rahmen)"));
+      bs.forEach(b=>{const row=h("div",{class:"gp-row",title:buendelText(b)},h("span",{class:"gp-t"},rahmenLabel(b.key)),
+        h("span",{class:"gp-mark"},(b.durabel?"durabel · ":"")+buendelText(b)));row.onclick=()=>auffaechern(c,{keys:[b.key]});body.append(row);});}
   }
   // Abgeleitet wie im Generator (AkteurRechteGenerator): Aggregat der erlaubten Commands → dessen Events; erlaubte Query →
   //   Reader → Projektion → deren Handle-Events. Nur Anzeige — die Laufzeit-Tabelle erzeugt der Generator.
@@ -1543,23 +1686,24 @@ public static class HtmlPresenter
       if(r.kind==="query")MODEL.reader.forEach(rd=>{if(!(rd.handles||[]).some(hd=>hd.query===nm))return;
         const p=MODEL.projektionen.find(x=>x.name===rd.projektion);(p&&p.handles||[]).forEach(hd=>hd.event&&evs.add(hd.event));});});
     return [...evs].sort();}
-  // ◀ REAKTION (Vertrag, §9): eine Methode Auf(Event) im Vertrag des Akteurs — Eingang, Ausgänge (konkrete Commands), Strom.
+  // ◀ ZUSAGE (Vertrag, Akteur-Konzept §3): eine Methode Auf(Event) im Vertrag des Akteurs — Eingang, Ausgänge (konkrete Commands), Strom.
   //   Implementiert wird sie draußen (Python-Worker gegen die generierte Basis); hier steht nur die Signatur.
   function aufCard(body,n){const a=n.own.ref,r=n.ref,i=n.idx;
     body.append(h("div",{class:"gsec",title:"public interface "+vertragsTyp(a)+" : IAkteurVertrag<"+a.name+">"},"Vertrag "+vertragsTyp(a)+" · 👤 "+a.name));
     // Der Name ist nur im Entwurf frei — ein Vertrag aus dem Code behält seinen (Umbenennen ist ein Refactoring, kein Zeichnen).
     if(!a.datei)body.append(h("div",{class:"frow",title:"Name des Vertrags-Interfaces (leer = I + Akteur)"},h("span",{class:"slotlbl"},"Vertrag"),
-      inp(a.vertragName,v=>{a.vertragName=v||undefined;},"I"+a.name)));
+      inp(a.vertragName,v=>{const alt=vertragsTyp(a);a.vertragName=v||undefined;const neu=vertragsTyp(a);
+        MODEL.clients.forEach(c=>{c.traegt=(c.traegt||[]).map(t=>t===alt?neu:t);});},"I"+a.name)));
     const sl=port("event");sl.classList.add("i");reg("auf:in:"+a._id+":"+i,sl,{type:"evtUse",dir:"in",akt:a._id,aufIdx:i});
     body.append(h("div",{class:"slotrow"},sl,h("span",{class:"slotlbl",style:"flex:1"},"◀ Auf "+(r.eingang||"?")),
-      h("button",{class:"rm",title:"Reaktion entfernen",onclick:()=>{a.vertrag.splice(i,1);render();}},"✕")));
+      h("button",{class:"rm",title:"Zusage entfernen",onclick:()=>{a.vertrag.splice(i,1);render();}},"✕")));
     (r.ausgaenge||[]).forEach((c,ci)=>{const s=port("command");s.classList.add("o");reg("auf:send:"+a._id+":"+i+":"+c,s,{type:"sagaCmd",dir:"out",akt:a._id,aufIdx:i});
       body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{r.ausgaenge.splice(ci,1);render();}},"✕"),
         h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"gibt hinein "+c+" ▶"),s));});
     const so=port("command");so.classList.add("o");reg("auf:send:"+a._id+":"+i+":open",so,{type:"sagaCmd",dir:"out",akt:a._id,aufIdx:i});
     body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},(r.ausgaenge||[]).length?"+ Ausgang ▶ (Command)":"+ Ausgang ▶ (Command) — ohne: nur zur Kenntnis"),so));
-    body.append(h("label",{class:"cbx",title:"IAsyncEnumerable<OneOf<…>>: mehrere Commands je Reaktion (z. B. Fortschritt)"},
-      h("input",{type:"checkbox",onchange:e=>{if(e.target.checked)r.strom=true;else delete r.strom;render();},...(r.strom?{checked:"checked"}:{})}),"Strom (mehrere Commands je Reaktion)"));
+    body.append(h("label",{class:"cbx",title:"IAsyncEnumerable<OneOf<…>>: mehrere Commands je Zusage (z. B. Fortschritt)"},
+      h("input",{type:"checkbox",onchange:e=>{if(e.target.checked)r.strom=true;else delete r.strom;render();},...(r.strom?{checked:"checked"}:{})}),"Strom (mehrere Commands je Zusage)"));
     body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal;font-family:monospace"},
       ((r.ausgaenge||[]).length?(r.strom?"IAsyncEnumerable<OneOf<"+r.ausgaenge.join(", ")+">>":"OneOf<"+r.ausgaenge.join(", ")+">"):"void")+" Auf("+(r.eingang||"?")+" e);"));
   }
@@ -1804,7 +1948,7 @@ public static class HtmlPresenter
   //    Applier→Aggregat(rechts) · Applier→State-Feld(oben, optionale Zuweisungs-Markierung).
   const SVGNS="http://www.w3.org/2000/svg";
   const GRID=20;
-  const NODELABEL={akteur:"Akteur",auf:"Reaktion",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",pipeline:"Pipeline",trigger:"Trigger",frist:"Frist",dienst:"Dienst",hostsetting:"HostSetting",codenode:"Code",llmnode:"LLM",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn"};
+  const NODELABEL={akteur:"Akteur",client:"Client",auf:"Zusage",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Zusage",pipeline:"Pipeline",trigger:"Trigger",frist:"Frist",dienst:"Dienst",hostsetting:"HostSetting",codenode:"Code",llmnode:"LLM",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn"};
   let PAN={x:40,y:30,s:1}, canvas=null, world=null, svg=null, svgTop=null, SLOTS={};
   // Typ-Navigation: HLKIND = aktuell hervorgehobener Node-Typ (Board+Minimap); JUMPIX = Sprung-Cursor je Typ.
   let HLKIND=null; const JUMPIX={};
@@ -1918,7 +2062,9 @@ public static class HtmlPresenter
   function topAnchor(color,label,key){const s=anchorDot(color);s.classList.add("t");reg(key,s,null);return h("div",{class:"gtopfield"},s,h("span",{class:"slotlbl"},label));}
   // Namens-Eingabe: benennt um UND zieht alle Verbindungen mit (Namen sind der Referenzschlüssel).
   function renameRefs(kind,obj,old,nv){
-    if(kind==="akteur")MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.akteur===old)hd.akteur=nv;}));
+    if(kind==="akteur"){MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.akteur===old)hd.akteur=nv;}));
+      // Ein Vertrag ohne eigenen Namen heißt I+Akteur — Clients, die ihn tragen, ziehen mit.
+      if(!obj.vertragName)MODEL.clients.forEach(c=>{c.traegt=(c.traegt||[]).map(t=>t==="I"+old?"I"+nv:t);});}
     if(kind==="aggregate"){
       MODEL.decider.forEach(d=>{if(d.aggregat===old)d.aggregat=nv;});
       MODEL.applier.forEach(a=>{if(a.aggregat===old)a.aggregat=nv;});
@@ -1927,6 +2073,8 @@ public static class HtmlPresenter
       // Akteure dürfen den Typ unter seinem neuen Namen (IDarf<T> folgt dem Typ).
       MODEL.akteure.forEach(a=>{a.darf=(a.darf||[]).map(x=>x===old?nv:x);
         (a.vertrag||[]).forEach(r=>{if(r.eingang===old)r.eingang=nv;r.ausgaenge=(r.ausgaenge||[]).map(x=>x===old?nv:x);});});
+      // … und der Rand der Clients (ISendet/IFragt/Kenntnis folgen dem Typ).
+      MODEL.clients.forEach(c=>["sendet","fragt","kenntnis"].forEach(f=>{c[f]=(c[f]||[]).map(x=>x===old?nv:x);}));
       if(obj.kind==="valueobject")retypeFelder(old,nv);   // Typ-Komposition: Feldtypen mitziehen
       if(obj.kind==="command"){
         MODEL.decider.forEach(d=>{if(d.command===old)d.command=nv;});
@@ -2004,7 +2152,8 @@ public static class HtmlPresenter
 
   function graphNodes(){
     return [...MODEL.akteure.map(a=>({id:"akt:"+a._id,name:a.name,kind:"akteur",ref:a})),
-            ...vertragsReaktionen().map(({a,r,i,id})=>({id,name:r.eingang||"?",kind:"auf",ref:r,idx:i,own:{id:"akt:"+a._id,name:a.name,kind:"akteur",ref:a}})),
+            ...MODEL.clients.map(c=>({id:"cl:"+c._id,name:clientAnzeige(c),kind:"client",ref:c})),
+            ...vertragsZusagen().map(({a,r,i,id})=>({id,name:r.eingang||"?",kind:"auf",ref:r,idx:i,own:{id:"akt:"+a._id,name:a.name,kind:"akteur",ref:a}})),
             ...MODEL.records.map(r=>({id:"rec:"+r.name,name:r.name,kind:r.kind,ref:r})),
             ...MODEL.aggregate.map(a=>({id:"agg:"+a.name,name:a.name,kind:"aggregate",ref:a})),
             ...MODEL.states.map(s=>({id:"st:"+s._id,name:s.aggregat||"frei",kind:"state",ref:s})),
@@ -2030,10 +2179,10 @@ public static class HtmlPresenter
   // ── AGGREGATSWEISE ANORDNUNG: jedes Aggregat ein gekachelter Block (eigenes Rollen-Mini-Layout),
   //    aggregat-übergreifende Knoten (Sagas/Pipelines/Trigger/Reaktionen/geteilte Typen) im „Geteilt"-Band.
   const SHARED_KEY="§geteilt";
-  // Das AKTEUR-BAND (docs/konzept-akteure.md §4.1): ein eigener Block je Domäne — ganz links, auf der Eingangsseite, vor den
+  // Das AKTEUR-BAND (docs/konzept-akteure.md §8): ein eigener Block je Domäne — ganz links, auf der Eingangsseite, vor den
   //   Aggregat-Blöcken. Kommt DAZU, ersetzt keine Spalte. Domäne aus dem Graphen (alle IDarf-Ziele in einer Domäne → dort).
   const AKTEUR_KEY="§akteure";
-  const ROLE_AKTEUR={akteur:0,auf:1};   // Spalte „Reaktion" (Vertrag, §9) neben dem Akteur
+  const ROLE_AKTEUR={akteur:0,auf:1};   // Spalte „Zusage" (Vertrag, Akteur-Konzept §3) neben dem Akteur
   // Rollen-Spalten innerhalb eines Aggregat-Blocks (links→rechts = Schreibfluss, dann Leseseite).
   //   Leseseite: Projektion (Hub) → ihre Handles → Store-Fns → Store/ReadModel; Query → Reader-Handle → Response, Reader (Hub).
   const ROLE_AGG={command:0,decider:1,aggregate:2,state:2,event:3,rejection:3,applier:4,valueobject:5,enum:5,projektion:6,"handle:projektion":7,"handle:reaktion":7,
@@ -2075,8 +2224,8 @@ public static class HtmlPresenter
     // Akteur → was er darf (Command/Query über die Record-Karte, Trigger über die Trigger-Karte).
     MODEL.akteure.forEach(a=>(a.darf||[]).forEach(nm=>{if(recByName(nm))push("akt:"+a._id,rec(nm));
       else{const t=MODEL.triggers.find(x=>trigName(x)===nm);if(t)push("akt:"+a._id,"tg:"+t._id);}}));
-    // Vertrag (§9): Event → Reaktion → Commands; die Reaktion hängt an ihrem Akteur (Hub-Kante wie Handle → Besitzer).
-    vertragsReaktionen().forEach(({a,r,id})=>{push(id,"akt:"+a._id);if(recByName(r.eingang))push(rec(r.eingang),id);
+    // Vertrag (Akteur-Konzept §3): Event → Zusage → Commands; die Zusage hängt an ihrem Akteur (Hub-Kante wie Handle → Besitzer).
+    vertragsZusagen().forEach(({a,r,id})=>{push(id,"akt:"+a._id);if(recByName(r.eingang))push(rec(r.eingang),id);
       (r.ausgaenge||[]).forEach(c=>{if(recByName(c))push(id,rec(c));});});
     MODEL.decider.forEach(d=>{if(recByName(d.command))push(rec(d.command),"dec:"+d._id);
       if(d.aggregat)push("dec:"+d._id,"agg:"+d.aggregat);
@@ -2167,7 +2316,7 @@ public static class HtmlPresenter
     const comp=components(), all=graphNodes(), byC=new Map();
     all.forEach(n=>{const c=comp.get(n.id);if(!byC.has(c))byC.set(c,[]);byC.get(c).push(n);});
     const ids=new Set();
-    byC.forEach(nodes=>{const fach=nodes.filter(n=>n.kind!=="codenode"&&n.kind!=="llmnode");
+    byC.forEach(nodes=>{const fach=nodes.filter(n=>n.kind!=="codenode"&&n.kind!=="llmnode"&&n.kind!=="client");   // ein Client hängt über seinen Vertrag, nicht über Kanten
       if(fach.length<=ISLE_MAX && !fach.some(n=>n.kind==="aggregate"))fach.forEach(n=>ids.add(n.id));});
     return {comp,byC,ids};
   }
@@ -2218,7 +2367,9 @@ public static class HtmlPresenter
     const LAY=KPOS[VIEW.details?"d":"k"]||(KPOS[VIEW.details?"d":"k"]={});
     // Der Akteur-Rahmen gehört zur Lage (Domäne × Akteur): wandert eine Karte in einen anderen Akteur-Rahmen, neu packen.
     const sig=hash(all.map(n=>n.id+":"+((codeEingaenge(n)||[]).length)+":"+domKey(n)+":"+akteurVon(n)).join("|")+"#"+(VIEW.aus||[]).join(",")+"#"+(VIEW.domNeu||[]).join(",")
-      +"#"+JSON.stringify(VIEW.akteurOrdnung||{}));
+      +"#"+JSON.stringify(VIEW.akteurOrdnung||{})
+      // Clients stapeln sich nach ihrer Höhe (die Anschlussleiste wächst mit dem Vertrag) → ändert sie sich, neu packen.
+      +"#"+all.filter(n=>n.kind==="client").map(n=>n.id+":"+Math.round(sz(n).h/20)).join(","));
     if(LAY.__sig!==sig)force=true;
     // Wie viele Knotenpaare überlappen aktuell deutlich? (früher Abbruch, sobald „viele").
     const overlaps=()=>{const b=all.map(n=>{const s=sz(n),p=P(n);return {x:p.x||0,y:p.y||0,w:s.w,h:s.h};});let c=0;
@@ -2238,7 +2389,7 @@ public static class HtmlPresenter
     //   Query … stehen in der Zeile ihres Partners (Decider, Applier, Reader …). Ausgeblendete Arten reservieren nichts.
     const EINZUG=16, ZGAP=12;
     const codeAn=!istAus("codenode"), llmAn=codeAn&&!istAus("llmnode");
-    const ZEILE=Math.max(28,...all.map(n=>sz(n).h))+ZGAP;
+    const ZEILE=Math.max(28,...all.filter(n=>n.kind!=="client").map(n=>sz(n).h))+ZGAP;   // die (hohe) Anschlussleiste eines Clients taktet nicht mit
     const layoutBlock=(nodes,roleMap)=>{
       const rest=nodes.filter(n=>!isCode(n)), codes=nodes.filter(n=>n.kind==="codenode"), llms=nodes.filter(n=>n.kind==="llmnode");
       const codeById=new Map(codes.map(c=>[c.ref._id,c]));
@@ -2350,8 +2501,13 @@ public static class HtmlPresenter
           k.aktLeer.forEach(l=>aktLeer.push({ns:l.ns,akt:l.akt,rx:RP+k.rx+l.rx,ry:y+k.ry+l.ry}));});
         y+=d.h;w=Math.max(w,d.w);}
       return {placed,leer,aktLeer,w:w+2*RP,h:y+RP};};
-    const regions=BAUM.oben.map(region);
+    const regions=BAUM.oben.filter(ns=>!istClientDom(ns)).map(region);
     shelf(regions,COMPGAP,1.05);
+    // Clients (docs/konzept-akteure.md §4): je Client ein Rahmen, untereinander RECHTS neben allen Domänen (Außenwelt).
+    {const CLGAP=520;let rechts=0,cy=0;regions.forEach(d=>rechts=Math.max(rechts,d.rx+d.w));
+      BAUM.oben.filter(istClientDom).forEach(ns=>{const d=region(ns);d.rx=rechts+(regions.length?CLGAP:0);d.ry=cy;
+        // Höhe aus der echten Karte (die Leiste ist höher als eine Rasterzeile).
+        const hh=Math.max(d.h,...(proDom.get(ns)||[]).map(n=>sz(n).h+RK+2*RP+SPK));cy+=hh+KGAP;regions.push(d);});}
     regions.forEach(d=>{d.placed.forEach(p=>setze(p.n,d.rx+p.rx,d.ry+p.ry));
       d.leer.forEach(l=>{LAY["§leer:"+l.ns]={x:d.rx+l.rx,y:d.ry+l.ry};});
       d.aktLeer.forEach(l=>{LAY["§aktleer:"+l.ns+"|"+l.akt]={x:d.rx+l.rx,y:d.ry+l.ry};});});
@@ -2395,6 +2551,7 @@ public static class HtmlPresenter
     else if(n.kind==="dienst")dienstCard(body,n.ref);
     else if(n.kind==="hostsetting")hostSettingCard(body,n.ref);
     else if(n.kind==="akteur")akteurCard(body,n.ref);
+    else if(n.kind==="client")clientCard(body,n.ref);
     else if(n.kind==="auf")aufCard(body,n);
     else if(n.kind==="codenode")codeNodeCard(body,n.ref);
     else if(n.kind==="llmnode")llmNodeCard(body,n.ref);
@@ -2405,8 +2562,12 @@ public static class HtmlPresenter
   function delNode(n){const k=n.kind,ref=n.ref;
     // Ein gelöschter Eingang (Command/Query/Trigger) verschwindet auch aus den Befugnissen (IDarf) der Akteure.
     {const nm=k==="trigger"?trigName(ref):(MODEL.records.includes(ref)?ref.name:null);if(nm)MODEL.akteure.forEach(a=>{if((a.darf||[]).includes(nm))a.darf=ohneX(a.darf,nm);
-      // … und aus den Verträgen: als Eingang fällt die ganze Reaktion weg, als Ausgang nur der Ausgang.
-      if((a.vertrag||[]).length)a.vertrag=a.vertrag.filter(r=>r.eingang!==nm).map(r=>(r.ausgaenge||[]).includes(nm)?{...r,ausgaenge:ohneX(r.ausgaenge,nm)}:r);});}
+      // … und aus den Verträgen: als Eingang fällt die ganze Zusage weg, als Ausgang nur der Ausgang.
+      if((a.vertrag||[]).length)a.vertrag=a.vertrag.filter(r=>r.eingang!==nm).map(r=>(r.ausgaenge||[]).includes(nm)?{...r,ausgaenge:ohneX(r.ausgaenge,nm)}:r);});
+      // … und aus dem Rand der Clients (sendet/fragt/kenntnis).
+      MODEL.clients.forEach(c=>{["sendet","fragt","kenntnis"].forEach(f=>{if((c[f]||[]).includes(nm))c[f]=ohneX(c[f],nm);});});}
+    {const nm=MODEL.records.includes(ref)&&(ref.kind==="event"||ref.kind==="rejection")?ref.name:null;
+      if(nm)MODEL.clients.forEach(c=>{if((c.kenntnis||[]).includes(nm))c.kenntnis=ohneX(c.kenntnis,nm);});}
     if(VIEW.heim&&VIEW.heim[n.id]){delete VIEW.heim[n.id];speichereAnsicht();}
     if(VIEW.heimBlk&&VIEW.heimBlk[n.id]){delete VIEW.heimBlk[n.id];speichereAnsicht();}
     if(VIEW.heimAkteur&&VIEW.heimAkteur[n.id]){delete VIEW.heimAkteur[n.id];speichereAnsicht();}
@@ -2428,6 +2589,7 @@ public static class HtmlPresenter
     else if(k==="dienst")MODEL.dienste.splice(MODEL.dienste.indexOf(ref),1);
     else if(k==="hostsetting")MODEL.hostSettings.splice(MODEL.hostSettings.indexOf(ref),1);
     else if(k==="akteur")MODEL.akteure.splice(MODEL.akteure.indexOf(ref),1);
+    else if(k==="client"){MODEL.clients.splice(MODEL.clients.indexOf(ref),1);AUF=null;}
     else if(k==="auf"){const v=n.own.ref.vertrag||[];v.splice(v.indexOf(ref),1);}
     else if(k==="codenode")MODEL.codeNodes.splice(MODEL.codeNodes.indexOf(ref),1);
     else if(k==="llmnode")MODEL.llmNodes.splice(MODEL.llmNodes.indexOf(ref),1);
@@ -2580,7 +2742,11 @@ public static class HtmlPresenter
     return true;}
   function applyLink(a,b){
     const O=a.__slot.dir==="out"?a.__slot:b.__slot, I=a.__slot.dir==="out"?b.__slot:a.__slot;
-    if(O.type==="darf"){const ak=MODEL.akteure.find(x=>x._id===O.akt);if(ak&&I.rec&&!(ak.darf=ak.darf||[]).includes(I.rec))ak.darf.push(I.rec);}
+    if(O.type==="darf"&&O.client){const c=MODEL.clients.find(x=>x._id===O.client);if(c&&I.rec){const f=(recByName(I.rec)||{}).kind==="query"?"fragt":"sendet";
+        if(!(c[f]=c[f]||[]).includes(I.rec))c[f].push(I.rec);if(!darfHalter(I.rec).length)deFlash("⚠ kein Akteur darf "+I.rec+" — GR-CLIENT-BEFUGT (erst darf ⊕ beim Akteur)",false);}}
+    else if(O.type==="traegt"){const c=MODEL.clients.find(x=>x._id===O.client),a=MODEL.akteure.find(x=>x._id===I.akt);
+      if(c&&a){const t=vertragsTyp(a);if(!(c.traegt=c.traegt||[]).includes(t))c.traegt.push(t);}}
+    else if(O.type==="darf"){const ak=MODEL.akteure.find(x=>x._id===O.akt);if(ak&&I.rec&&!(ak.darf=ak.darf||[]).includes(I.rec))ak.darf.push(I.rec);}
     else if(O.type==="auftrag"){const ak=MODEL.akteure.find(x=>x._id===O.akt),p=MODEL.pipelines.find(x=>x._id===I.pipeline),hd=p&&p.handles[I.handleIdx];
       if(ak&&hd){hd.akteur=ak.name;const fremd=(hd.sends||[]).filter(c=>!(ak.darf||[]).includes(c));
         if(fremd.length)deFlash("⚠ "+ak.name+" darf "+fremd.join(", ")+" nicht — CQRS060 (ergänze darf ⊕ oder nimm den Auftrag weg)",false);}}
@@ -2592,14 +2758,15 @@ public static class HtmlPresenter
       else if(O.reaktion){const r=MODEL.reaktionen.find(x=>x._id===O.reaktion);const hd=r&&r.handles[O.handleIdx];if(hd){hd.publishes=hd.publishes||[];if(!hd.publishes.includes(I.rec))hd.publishes.push(I.rec);}}}
     else if(O.type==="prozess"){const t=MODEL.transitions.find(x=>x._id===O.trans);if(t)t.prozess=I.saga;}
     else if(O.type==="evtUse"){
-      if(I.app){const p=app(I.app);if(p)p.event=O.rec;}
+      if(I.client){const c=MODEL.clients.find(x=>x._id===I.client);if(c&&!(c.kenntnis=c.kenntnis||[]).includes(O.rec))c.kenntnis.push(O.rec);}
+      else if(I.app){const p=app(I.app);if(p)p.event=O.rec;}
       // Event → Frist: plant / storniert (die Drei-End-Relation der Composition-Root-Frist).
       else if(I.frist){const f=MODEL.frists.find(x=>x._id===I.frist);if(f){const arr=I.role==="storniert"?(f.storniert=f.storniert||[]):(f.plant=f.plant||[]);if(!arr.includes(O.rec))arr.push(O.rec);}}
       else if(I.proj){const p=MODEL.projektionen.find(x=>x._id===I.proj);if(p){p.handles=p.handles||[];
         if(I.handleIdx==="open"){if(!p.handles.some(x=>x.event===O.rec))p.handles.push({event:O.rec,effekt:""});}
         else p.handles[I.handleIdx].event=O.rec;}}
       else if(I.trigger){const sg=MODEL.sagas.find(x=>x.name===I.saga);if(sg)sg.triggerEvent=O.rec;}
-      // Event → Reaktion im Vertrag eines Akteurs (§9): neue Reaktion bzw. Eingang einer bestehenden umhängen.
+      // Event → Zusage im Vertrag eines Akteurs (Akteur-Konzept §3): neue Zusage bzw. Eingang einer bestehenden umhängen.
       else if(I.akt&&I.aufIdx!=null){const ak=MODEL.akteure.find(x=>x._id===I.akt);if(ak){ak.vertrag=ak.vertrag||[];
         if(I.aufIdx==="open"){if(!ak.vertrag.some(r=>r.eingang===O.rec))ak.vertrag.push({eingang:O.rec,ausgaenge:[]});}
         else if(ak.vertrag[I.aufIdx])ak.vertrag[I.aufIdx].eingang=O.rec;}}
@@ -2682,7 +2849,9 @@ public static class HtmlPresenter
     const O=a.__slot.dir==="out"?a.__slot:b.__slot, I=a.__slot.dir==="out"?b.__slot:a.__slot;
     const ohne=(arr,x)=>(arr||[]).filter(v=>v!==x);
     const handle=(liste,id,idx)=>{const o=liste.find(x=>x._id===id);return o&&typeof idx==="number"?(o.handles||[])[idx]:null;};
-    if(O.type==="darf"){const ak=MODEL.akteure.find(x=>x._id===O.akt);if(ak)ak.darf=ohne(ak.darf,I.rec);}
+    if(O.type==="darf"&&O.client){const c=MODEL.clients.find(x=>x._id===O.client);if(c){c.sendet=ohne(c.sendet,I.rec);c.fragt=ohne(c.fragt,I.rec);}}
+    else if(O.type==="traegt"){const c=MODEL.clients.find(x=>x._id===O.client),a=MODEL.akteure.find(x=>x._id===I.akt);if(c&&a)c.traegt=ohne(c.traegt,vertragsTyp(a));}
+    else if(O.type==="darf"){const ak=MODEL.akteure.find(x=>x._id===O.akt);if(ak)ak.darf=ohne(ak.darf,I.rec);}
     else if(O.type==="auftrag"){const p=MODEL.pipelines.find(x=>x._id===I.pipeline),hd=p&&p.handles[I.handleIdx];if(hd)delete hd.akteur;}
     else if(O.type==="cmd"){const d=dec(I.dec);if(d&&d.command===O.rec)d.command="";}
     else if(O.type==="evtOut"){
@@ -2690,7 +2859,8 @@ public static class HtmlPresenter
       else{const hd=handle(O.proj?MODEL.projektionen:MODEL.reaktionen,O.proj||O.reaktion,O.handleIdx);if(hd)hd.publishes=ohne(hd.publishes,I.rec);}}
     else if(O.type==="prozess"){const t=MODEL.transitions.find(x=>x._id===O.trans);if(t)t.prozess="";}
     else if(O.type==="evtUse"){
-      if(I.app){const p=app(I.app);if(p)p.event="";}
+      if(I.client){const c=MODEL.clients.find(x=>x._id===I.client);if(c)c.kenntnis=ohne(c.kenntnis,O.rec);}
+      else if(I.app){const p=app(I.app);if(p)p.event="";}
       else if(I.frist){const f=MODEL.frists.find(x=>x._id===I.frist);if(f){if(I.role==="storniert")f.storniert=ohne(f.storniert,O.rec);else f.plant=ohne(f.plant,O.rec);}}
       else if(I.trigger){const sg=MODEL.sagas.find(x=>x.name===I.saga);if(sg)sg.triggerEvent="";}
       else if(I.akt&&I.aufIdx!=null){const ak=MODEL.akteure.find(x=>x._id===I.akt);if(ak)ak.vertrag=(ak.vertrag||[]).filter(r=>r.eingang!==O.rec);}
@@ -2826,7 +2996,8 @@ public static class HtmlPresenter
     return r.ausCode===true;}
   // Geladen, wenn seine DOMÄNE (Graph-Zuordnung, domKey — z. B. ImagePairProjection → ImagePair) ODER sein eigener Namespace
   //   (z. B. „Projections“ ausdrücklich gewählt) in der Auswahl liegt. Die Domänen-Gehörigkeit steht über dem Namespace.
-  function geladen(n){if(LADEN===null||!ausCodeVon(n))return true;const x=nsVon(n),d=domKey(n);
+  function geladen(n){if(n.kind==="client")return LADEN===null||clientPorts(n.ref).some(p=>{const m=p.node&&NODEBY.get(p.node);return m&&m.kind!=="client"&&geladen(m);});
+    if(LADEN===null||!ausCodeVon(n))return true;const x=nsVon(n),d=domKey(n);
     return LADEN.some(g=>(x&&drinNs(g,x))||(d!==OHNE_DOM&&drinNs(g,d)));}
   window.deLaden=function(){START_OFFEN=true;render();};
   // Start-Dialog: leer starten, Domänen wählen (Häkchen am Eltern-Namespace lädt alles darunter) oder alles laden.
@@ -2975,9 +3146,15 @@ public static class HtmlPresenter
       const p=mkE(ende(a),ende(b),color,dash);p.dataset.a=knotenIdVon(a);p.dataset.b=knotenIdVon(b);};
     // Akteur → was er darf (rosa): vom Akteur-Band zur Nachricht.
     MODEL.akteure.forEach(a=>(a.darf||[]).forEach(nm=>add("akt:darf:"+a._id+":"+nm,"darf:in:"+nm,"#e07ab4")));
-    // Vertrag (§9): Event → Reaktion → Commands (rosa) — die Kette läuft durch den Akteur draußen.
-    vertragsReaktionen().forEach(({a,r,i})=>{if(r.eingang)add("evt:out:"+r.eingang,"auf:in:"+a._id+":"+i,"#e07ab4");
+    // Vertrag (Akteur-Konzept §3): Event → Zusage → Commands (rosa) — die Kette läuft durch den Akteur draußen.
+    vertragsZusagen().forEach(({a,r,i})=>{if(r.eingang)add("evt:out:"+r.eingang,"auf:in:"+a._id+":"+i,"#e07ab4");
       (r.ausgaenge||[]).forEach(c=>{if(c)add("auf:send:"+a._id+":"+i+":"+c,"cmd:in:"+c,"#e07ab4");});});
+    // Client-Vertrag (docs/konzept-akteure.md §4): die bestehenden Verbindungen kennt der Verbinden-Modus (✓/lösen) über KANTEN —
+    //   gezeichnet werden sie als BÜNDEL (unten); Einzelkanten nur aufgefächert (AUF, durch eine Handlung).
+    MODEL.clients.forEach(c=>{
+      (c.sendet||[]).concat(c.fragt||[]).forEach(nm=>{if(SLOTS["cl:darf:"+c._id+":"+nm]&&SLOTS["darf:in:"+nm])KANTEN.push(["cl:darf:"+c._id+":"+nm,"darf:in:"+nm]);});
+      (c.kenntnis||[]).forEach(nm=>{if(SLOTS["cl:kenntnis:"+c._id+":"+nm]&&SLOTS["evt:out:"+nm])KANTEN.push(["evt:out:"+nm,"cl:kenntnis:"+c._id+":"+nm]);});
+      (c.traegt||[]).forEach(t=>{const a=teilAkteur(t);if(a&&SLOTS["cl:traegt:"+c._id+":"+t]&&SLOTS["akt:traegt:"+a._id])KANTEN.push(["cl:traegt:"+c._id+":"+t,"akt:traegt:"+a._id]);});});
     // Dienst-Akteur → Pipeline-Handle, der in seinem Auftrag entscheidet (gestrichelt violett).
     MODEL.pipelines.forEach(p=>(p.handles||[]).forEach((hd,hi)=>{const a=hd.akteur&&MODEL.akteure.find(x=>x.name===hd.akteur);
       if(a)add("akt:auftrag:"+a._id+":"+p._id+":"+hi,"auftrag:in:"+p._id+":"+hi,"#b05fd0",true);}));
@@ -3093,23 +3270,39 @@ public static class HtmlPresenter
     NODEBY.forEach(n=>{if(n.kind!=="handle"&&n.kind!=="fn")return;const eu=ELS.get(n.id),eo=ELS.get(n.own.id);if(!eu||!eo)return;
       const l=mkE({el:eu},{el:eo},"#6f7a91",true,"hub");l.dataset.a=n.id;l.dataset.b=n.own.id;});
     // ── Zeichnen: Seiten wählen → je Karte+Seite verteilen → Kurve senkrecht zur Seite. ──
+    const DIR={r:{x:1,y:0},l:{x:-1,y:0},o:{x:0,y:-1},u:{x:0,y:1}};
     const RC=new Map();
     const rect=el=>{let r=RC.get(el);if(!r){const hd=el.querySelector(".ghead");
       r={x1:el.offsetLeft,y1:el.offsetTop,x2:el.offsetLeft+el.offsetWidth,y2:el.offsetTop+el.offsetHeight,hy:el.offsetTop+(hd?hd.offsetHeight/2:12)};RC.set(el,r);}return r;};
     const box=E=>E.el?rect(E.el):{x1:E.pt.x,y1:E.pt.y,x2:E.pt.x,y2:E.pt.y};
     const seite=(R,Q)=>{const gx=Math.max(Q.x1-R.x2,R.x1-Q.x2),gy=Math.max(Q.y1-R.y2,R.y1-Q.y2);
       if(gx>=gy)return (Q.x1+Q.x2)>=(R.x1+R.x2)?"r":"l";return (Q.y1+Q.y2)>=(R.y1+R.y2)?"u":"o";};
+    // ── Client-Leitungen: je Client × Ziel-Rahmen EIN Bündel (dick; durchgezogen = trägt eine Zusage/durabel, gestrichelt = nur
+    //   Kenntnis/Fragen/Senden), beschriftet in Worten. Aufgefächert (AUF) zusätzlich die Einzelkanten Karte → Karte. Zoom ändert nichts.
+    MODEL.clients.forEach(c=>{const ec=ELS.get("cl:"+c._id);if(!ec)return;const farbe="hsl("+domHue(CL_PRE+c.name)+" 60% 62%)";
+      clientBuendel(c).forEach(b=>{const R=FRGEO.get(b.key);if(!R)return;
+        const Q={x1:ec.offsetLeft,y1:ec.offsetTop,x2:ec.offsetLeft+ec.offsetWidth,y2:ec.offsetTop+ec.offsetHeight};
+        const s=seite(R,Q),cy=Math.max(R.y1+40,Math.min(R.y2-20,(Q.y1+Q.y2)/2)),cx=Math.max(R.x1+40,Math.min(R.x2-40,(Q.x1+Q.x2)/2));
+        const pt=s==="r"?{x:R.x2,y:cy}:s==="l"?{x:R.x1,y:cy}:s==="o"?{x:cx,y:R.y1}:{x:cx,y:R.y2};
+        const k=mkE({el:ec},{pt,dir:DIR[s]},farbe,!b.durabel,"gbuendel");k.festA="l";k.label=buendelText(b);k.titel="🔌 "+clientAnzeige(c)+" → "+rahmenLabel(b.key)+"\n"+k.label
+          +"\n"+(b.durabel?"durchgezogen: trägt eine Zusage — die Kette hängt durabel an diesem Client":"gestrichelt: nur Senden/Fragen/Kenntnis (verlierbar)")+"\nKlick: auffächern";
+        k.dataset.a="cl:"+c._id;k.dataset.b=(b.ports.find(p=>p.node)||{}).node||"";k.klick=()=>auffaechern(c,{keys:[b.key]});});
+      if(!AUF||AUF.client!==c._id)return;
+      const FARBE={zusage:"#e07ab4",sendet:"#4a86d6",fragt:"#9678d6",kenntnis:"#4fb06a"};
+      clientPorts(c).filter(p=>p.node&&aufPasst(AUF,p)).forEach(p=>{const ziel=ELS.get(vertreterId(p.node));if(!ziel)return;
+        const k=p.ri==="kenntnis"?mkE({el:ziel},{el:ec},FARBE[p.ri],true,"gauf"):mkE({el:ec},{el:ziel},FARBE[p.ri],p.ri!=="zusage","gauf");
+        if(p.ri==="kenntnis")k.festB="l";else k.festA="l";   // Clients stehen rechts: Leitungen treten links aus
+        k.dataset.a="cl:"+c._id;k.dataset.b=vertreterId(p.node);});});
     const grp=new Map();
     const reg=(E,s,other,k,end)=>{const key=E.el.dataset.id+"|"+s;let g=grp.get(key);if(!g)grp.set(key,g=[]);g.push({k,end,other,el:E.el});};
     KZ.forEach(k=>{const RA=box(k.EA),RB=box(k.EB);
-      if(k.EA.el){k.sa=seite(RA,RB);reg(k.EA,k.sa,RB,k,"a");}
-      if(k.EB.el){k.sb=seite(RB,RA);reg(k.EB,k.sb,RA,k,"b");}});
+      if(k.EA.el){k.sa=k.festA||seite(RA,RB);reg(k.EA,k.sa,RB,k,"a");}
+      if(k.EB.el){k.sb=k.festB||seite(RB,RA);reg(k.EB,k.sb,RA,k,"b");}});
     grp.forEach((g,key)=>{const s=key.slice(key.lastIndexOf("|")+1),R=rect(g[0].el),quer=s==="o"||s==="u",n=g.length;
       g.sort((p,q)=>quer?(p.other.x1+p.other.x2)-(q.other.x1+q.other.x2):(p.other.y1+p.other.y2)-(q.other.y1+q.other.y2));
       g.forEach((e,i)=>{const t=(i+0.5)/n;
         e.k["p"+e.end]=quer?{x:R.x1+(R.x2-R.x1)*(0.15+0.7*t),y:s==="o"?R.y1:R.y2}
                            :{x:s==="l"?R.x1:R.x2,y:n===1?R.hy:R.y1+6+(R.y2-R.y1-12)*t};});});
-    const DIR={r:{x:1,y:0},l:{x:-1,y:0},o:{x:0,y:-1},u:{x:0,y:1}};
     KZ.forEach(k=>{const A=k.pa||k.EA.pt,B=k.pb||k.EB.pt;
       const va=k.sa?DIR[k.sa]:(k.EA.dir||{x:B.x>=A.x?1:-1,y:0}),vb=k.sb?DIR[k.sb]:(k.EB.dir||{x:A.x>=B.x?1:-1,y:0});
       const d=Math.min(400,Math.max(40,Math.hypot(B.x-A.x,B.y-A.y)*0.4));
@@ -3117,7 +3310,14 @@ public static class HtmlPresenter
       p.setAttribute("stroke",k.color);p.setAttribute("stroke-width","2.2");if(k.dash)p.setAttribute("stroke-dasharray","5 4");
       if(k.ds){p.dataset.dec=k.ds[0];p.dataset.app=k.ds[1];}Object.assign(p.dataset,k.dataset);
       p.setAttribute("d","M"+A.x+","+A.y+" C"+(A.x+va.x*d)+","+(A.y+va.y*d)+" "+(B.x+vb.x*d)+","+(B.y+vb.y*d)+" "+B.x+","+B.y);
-      ((k.tgt||svg)===svg?fSvg:fTop).append(p);});
+      ((k.tgt||svg)===svg?fSvg:fTop).append(p);
+      // Client-Bündel: Titel (Hover), Klick = auffächern, Beschriftung in Worten an der Kurvenmitte (Bezier t=½).
+      if(k.klick){const tt=document.createElementNS(SVGNS,"title");tt.textContent=k.titel||"";p.append(tt);
+        p.addEventListener("pointerdown",e=>e.stopPropagation());p.addEventListener("click",e=>{e.stopPropagation();k.klick();});}
+      if(k.label){const c1={x:A.x+va.x*d,y:A.y+va.y*d},c2={x:B.x+vb.x*d,y:B.y+vb.y*d};
+        const mx=0.125*A.x+0.375*c1.x+0.375*c2.x+0.125*B.x,my=0.125*A.y+0.375*c1.y+0.375*c2.y+0.125*B.y;
+        const t=document.createElementNS(SVGNS,"text");t.setAttribute("class","glink gbuendel-t");t.setAttribute("x",mx);t.setAttribute("y",my-8);
+        t.setAttribute("text-anchor","middle");t.textContent=k.label;Object.assign(t.dataset,k.dataset);fSvg.append(t);}});
     svg.append(fSvg);if(svgTop)svgTop.append(fTop);
     wendeFokusAn();
   }
@@ -3149,7 +3349,7 @@ public static class HtmlPresenter
   //   (4) Semantischer Zoom: Landkarte (<0.4, Aggregat-Kacheln + gebündelte Kanten) · Ablauf (<0.75, nur Titel) · Detail.
   //   (5) Slice-Fokus: Klick auf einen Knoten → sein vertikaler Schnitt bleibt hell, der Rest tritt zurück.
   // details: Decider/Applier/State/Code/LLM/Ablehnung/Typen sind IMMER eigene Knoten auf dem Graphen (nie eingeklappt).
-  const KPOS_VERSION=7;   // hochzählen, wenn sich Kartengrößen ändern → gespeicherte Anordnung wird einmalig neu gepackt
+  const KPOS_VERSION=8;   // hochzählen, wenn sich Kartengrößen ändern → gespeicherte Anordnung wird einmalig neu gepackt
   let VIEW={kompakt:true,details:true,lod:"ablauf",aus:[],domNeu:[],heim:{},heimBlk:{},heimAkteur:{},akteurOrdnung:{}}, VKEY="cqrs-ansicht", KPKEY="cqrs-kpos", KPOS={k:{},d:{}};
   function ladeAnsicht(k){VKEY="cqrs-ansicht"+(k?":"+k:"");KPKEY="cqrs-kpos"+(k?":"+k:"");
     try{const v=JSON.parse(localStorage.getItem(VKEY)||"null");if(v)VIEW={...VIEW,...v};}catch(e){}
@@ -3270,7 +3470,12 @@ public static class HtmlPresenter
   let SEL=null, FOCUS=null;
   function waehle(id){
     if(VB){if(id&&id!==SEL){vbKlick(id);return;}if(!id){vbEnde();return;}}
-    SEL=id||null;FOCUS=SEL?sliceVon(SEL):null;wendeFokusAn();zeigeInspector();}
+    if(AUF&&id!=="cl:"+AUF.client){AUF=null;if(world)drawEdges();}
+    const cn=SEL!==id&&id&&NODEBY.get(id);
+    SEL=id||null;FOCUS=SEL?(cn&&cn.kind==="client"?clientSlice(cn.ref):sliceVon(SEL)):null;wendeFokusAn();zeigeInspector();}
+  // Slice eines Clients: er selbst + alles, woran seine Leitung steckt (Nachrichten-Karten, Zusagen, Akteure der Teile).
+  function clientSlice(c){const ids=new Set(["cl:"+c._id]);clientPorts(c).forEach(p=>{if(p.node)ids.add(vertreterId(p.node));
+      if(p.ri==="zusage"){const a=MODEL.akteure.find(x=>x.name===p.akteure[0]);if(a)ids.add("akt:"+a._id);}});return ids;}
   function wendeFokusAn(){if(!world)return;const an=!!FOCUS;world.classList.toggle("fokus",an);
     const selV=SEL?(VERTRETER.get(SEL)||[SEL]):[];
     world.querySelectorAll(".gnode2").forEach(el=>{const id=el.dataset.id;el.classList.toggle("inslice",an&&FOCUS.has(id));el.classList.toggle("sel",selV.includes(id));});
@@ -3317,7 +3522,25 @@ public static class HtmlPresenter
   const plAusgaenge=hd=>[...(hd.sends||[]),...(hd.fristen||[]).map(f=>(f.art==="storno"?"✕⏳":"⏳")+f.command),
     ...(hd.publishes||[]),...(hd.emits||[]).map(x=>"⚡"+x),...(hd.schedules||[]).map(x=>"↺"+x.name)];
   const kurz=xs=>{xs=[...new Set((xs||[]).filter(Boolean))];return xs.slice(0,2).join(", ")+(xs.length>2?" +"+(xs.length-2):"");};
-  function kurzfassung(n){const r=n.ref,k=n.kind;let t="";
+  // 🔌 Die ANSCHLUSSLEISTE eines Clients (= sein Vertrag), immer lesbar auf der Karte: je Richtung, darin je Akteur, jede Nachricht beim
+  //   Namen. Klick auf eine Nachricht fächert genau diese Leitung auf (Einzelkante); der Rest bleibt gebündelt.
+  function anschlussleiste(n){const c=n.ref,P=clientPorts(c),box=h("div",{class:"gsum gleiste",onclick:()=>waehle(n.id)});
+    const name=(p,txt)=>{const b=h("span",{class:"lp"+(p.node?"":" lp-fehlt")+(AUF&&AUF.client===c._id&&AUF.msg===p.msg?" an":""),
+        title:p.node?"Klick: diese Leitung auffächern":"⚠ nicht im Modell"},txt||p.msg);
+      b.onclick=e=>{e.stopPropagation();if(p.node)auffaechern(c,{msg:p.msg});};return b;};
+    const zeile=(kopf,teile,kl)=>{const z=h("div",{class:"lz"+(kl?" "+kl:"")},h("span",{class:"lk"},kopf));
+      teile.forEach((t,i)=>{if(i)z.append(", ");z.append(t);});box.append(z);};
+    const sym=a=>(ART_SYM[(MODEL.akteure.find(x=>x.name===a)||{}).art]||"👤 ")+a;
+    const grp=ri=>{const m=new Map();P.filter(p=>p.ri===ri).forEach(p=>{const k=(p.akteure||[]).join(" / ");if(!m.has(k))m.set(k,[]);m.get(k).push(p);});return m;};
+    (c.traegt||[]).forEach(t=>{const a=teilAkteur(t);
+      zeile("↺ trägt "+t+(a?" · als "+sym(a.name):" · ⚠ kein Akteur-Vertrag"),[],"lt");
+      P.filter(p=>p.ri==="zusage"&&p.teil===t&&!p.fehlt).forEach(p=>zeile("   ◀",[name(p,p.msg+((p.aus||[]).length?" → "+p.aus.join(", ")+(p.strom?" (Strom)":""):" · Kenntnis"))],"lr"));});
+    [["sendet","▶ sendet"],["fragt","? fragt"]].forEach(([ri,kopf])=>grp(ri).forEach((ps,k)=>
+      zeile(kopf+(k?" als "+k.split(" / ").map(sym).join(" / "):" · ⚠ kein Akteur darf es"),ps.map(p=>name(p)),k?"":"lwarn")));
+    if(P.some(p=>p.ri==="kenntnis"))zeile("◀ hört",P.filter(p=>p.ri==="kenntnis").map(p=>name(p)));
+    if(!P.length)box.append(h("div",{class:"lz lleer"},"— leerer Vertrag: im Panel ⊕ trägt / sendet / hört"));
+    return box;}
+  function kurzfassung(n){if(n.kind==="client")return anschlussleiste(n);const r=n.ref,k=n.kind;let t="";
     if(k==="command"){const ev=MODEL.decider.filter(d=>d.command===r.name).flatMap(d=>(d.ergibt||[]).map(o=>o.event)).filter(e=>(recByName(e)||{}).kind!=="rejection");
       t=ev.length?"→ "+kurz(ev):"→ (kein Decider)";}
     else if(k==="event"){const c=MODEL.decider.filter(d=>(d.ergibt||[]).some(o=>o.event===r.name)).map(d=>d.command);t=c.length?"← "+kurz(c):"";}
@@ -3330,7 +3553,7 @@ public static class HtmlPresenter
     else if(k==="store")t=(r.writeFns||[]).length+" schreibend · "+(r.readFns||[]).length+" lesend";
     else if(k==="auf")t="◀ "+(r.eingang||"?")+" → "+((r.ausgaenge||[]).length?kurz(r.ausgaenge)+(r.strom?" (Strom)":""):"zur Kenntnis");
     else if(k==="akteur")t=(ART_SYM[r.art]||"")+((r.dienste||[]).length?"⚙ "+r.dienste.join(", ")+" · ":"")+((r.darf||[]).length?"darf "+kurz(r.darf):"darf nichts")
-      +((r.vertrag||[]).length?" · reagiert auf "+kurz(r.vertrag.map(x=>x.eingang)):"");
+      +((r.vertrag||[]).length?" · Zusagen auf "+kurz(r.vertrag.map(x=>x.eingang)):"");
     else if(k==="handle"){const aus=n.own.kind==="pipeline"?plAusgaenge(r):(r.ausgaenge||[]).length?(r.ausgaenge||[]).filter(a=>a.art!=="storefn"&&a.art!=="self").map(a=>a.typ)
         :[...(r.responses||[]),...(r.sends||[]),...(r.emits||[]),...(r.publishes||[])];
       const fns=(r.fns||[]).map(fid=>{const f=fnById(fid);return f?f.fn.name:null;}).filter(Boolean);
@@ -3419,7 +3642,7 @@ public static class HtmlPresenter
   //   der Namespace dieses Aggregats — egal, in welchem Namespace die Klasse liegt (z. B. Domain.Projections). Nur
   //   aggregat-übergreifende Bausteine (Prozesse, Pipelines, geteilte Typen) fallen auf ihren eigenen Namespace zurück.
   //   Je Render einmal berechnet (DOMKEY, geleert in berechneSicht) — zeichneRahmen läuft auch beim Ziehen.
-  let DOMKEY=new Map();
+  let DOMKEY=new Map(), FRGEO=new Map();   // FRGEO: Rahmen-Geometrie je Schlüssel (Domäne|Akteur, §vertrag:Akteur) — Ziel der Client-Leitungen
   const aggDom=n=>{const g=groupKeyOf(n),a=g!==SHARED_KEY&&MODEL.aggregate.find(x=>x.name===g);return (a&&a.namespace)||null;};
   // JEDER Baustein ohne eigenes Aggregat (Feldtyp-VO/Enum, Response, aber auch Pipeline/Reaktion/Prozess samt Handles,
   //   Triggern, Code) folgt seinen Graph-Nachbarn, wenn die alle in GENAU EINER Aggregat-Domäne liegen. Die Suche läuft
@@ -3447,28 +3670,30 @@ public static class HtmlPresenter
   function graphDom(n,besucht){return aggDom(n)||(EINHEIT_ARTEN.has(n.kind)?einheitDom(n):datenDom(n,besucht||new Set()));}
   function domKey(n){let d=DOMKEY.get(n.id);if(d)return d;
     // Akteur-Karte: in der ERSTEN Domäne, in der er wirkt (dort steht sie in seinem Akteur-Rahmen; §12.5) — sonst wie gehabt.
-    // Reaktion: der Vertrag steht GESCHLOSSEN beim Akteur (ein Rahmen), die Kanten führen zu den Events hinüber.
+    // Zusage: der Vertrag steht GESCHLOSSEN beim Akteur (ein Rahmen), die Kanten führen zu den Events hinüber.
     if(n.kind==="auf"){const x=domKey(NODEBY.get(n.own.id)||n.own);DOMKEY.set(n.id,x);return x;}
+    // Client: ein eigener Rahmen außerhalb der Domänen (rechts daneben gepackt).
+    if(n.kind==="client"){const x=CL_PRE+n.ref.name;DOMKEY.set(n.id,x);return x;}
     if(n.kind==="akteur"){const eig=[...new Set([...(n.ref.darf||[]),...(n.ref.vertrag||[]).map(r=>r.eingang)].map(nm=>NODEBY.get("rec:"+nm)||[...NODEBY.values()].find(x=>x.kind==="trigger"&&trigName(x.ref)===nm))
         .filter(Boolean).map(domKey))].sort(domOrd),ds=eig.length?eig:akteurDomaenen(n.ref.name);
       if(ds.length){DOMKEY.set(n.id,ds[0]);return ds[0];}}
     d=graphDom(n)||nsVon(n)||(VIEW.heim||{})[n.id]||OHNE_DOM;DOMKEY.set(n.id,d);return d;}
-  const domLabel=ns=>ns===OHNE_DOM?"⋯ ohne Domäne":letztesSeg(ns);
+  const domLabel=ns=>ns===OHNE_DOM?"⋯ ohne Domäne":istClientDom(ns)?"🔌 "+clientAnzeige({name:ns.slice(CL_PRE.length)}):letztesSeg(ns);
   // Block (Aggregat bzw. Brücke) eines Knotens: aus dem Graphen; ein über eine Spalte angelegter, noch unverdrahteter Knoten
   //   behält bis zur Verdrahtung den Block dieser Spalte (VIEW.heimBlk) — statt im Inselkasten zu landen.
   const blockVon=n=>subGroupOf(n)||(VIEW.heimBlk||{})[n.id]||SHARED_KEY;
   const istInselLage=n=>ISLE.has(n.id)&&!(VIEW.heimBlk||{})[n.id];
-  const domOrd=(a,b)=>a===OHNE_DOM?1:b===OHNE_DOM?-1:a.localeCompare(b);
+  const domOrd=(a,b)=>istClientDom(a)!==istClientDom(b)?(istClientDom(a)?1:-1):a===OHNE_DOM?1:b===OHNE_DOM?-1:a.localeCompare(b);
   const bausteine=z=>z+(z===1?" Baustein":" Bausteine");
   // Gemeinsame Wurzel (z. B. „Domain“) — darunter beginnen die Domänen (wie im Start-Dialog).
-  function domWurzel(){const alle=new Set();graphNodes().forEach(n=>{const x=domKey(n)===OHNE_DOM?null:domKey(n);if(x)for(let p=x;p;p=elternNs(p))alle.add(p);});
+  function domWurzel(){const alle=new Set();graphNodes().forEach(n=>{const x=domKey(n)===OHNE_DOM||istClientDom(domKey(n))?null:domKey(n);if(x)for(let p=x;p;p=elternNs(p))alle.add(p);});
     (VIEW.domNeu||[]).forEach(x=>{for(let p=x;p;p=elternNs(p))alle.add(p);});
     let top="";for(;;){const k=[...alle].filter(x=>elternNs(x)===top);if(k.length!==1||![...alle].some(y=>elternNs(y)===k[0]))break;top=k[0];}
     return top;}
   // Baum über die gegebenen Domänen (+ ihre Eltern-Namespaces bis unter die Wurzel).
   function domBaum(keys){const w=domWurzel(),alle=new Set();
-    keys.forEach(ns=>{if(ns===OHNE_DOM||ns===w){alle.add(ns);return;}for(let p=ns;p&&p!==w;p=elternNs(p)){alle.add(p);if(!drinNs(w,p))break;}});
-    const elternIn=ns=>{if(ns===OHNE_DOM||ns===w)return null;const e=elternNs(ns);return alle.has(e)&&e!==w?e:null;};
+    keys.forEach(ns=>{if(ns===OHNE_DOM||ns===w||istClientDom(ns)){alle.add(ns);return;}for(let p=ns;p&&p!==w;p=elternNs(p)){alle.add(p);if(!drinNs(w,p))break;}});
+    const elternIn=ns=>{if(ns===OHNE_DOM||ns===w||istClientDom(ns))return null;const e=elternNs(ns);return alle.has(e)&&e!==w?e:null;};
     const kinder=new Map();alle.forEach(ns=>{const e=elternIn(ns);if(e){if(!kinder.has(e))kinder.set(e,[]);kinder.get(e).push(ns);}});
     kinder.forEach(a=>a.sort(domOrd));
     return {oben:[...alle].filter(ns=>!elternIn(ns)).sort(domOrd),kinder,elternIn};}
@@ -3489,6 +3714,7 @@ public static class HtmlPresenter
     // Akteur-Rahmen (Domäne × Akteur, §12): nur in Domänen mit Akteuren; sonst null (ein Block-Layout wie bisher).
     const aktVon=n=>akteurOrdnung(domKey(n)).length?akteurVon(n):null;
     GEO.forEach((g,id)=>{const n=NODEBY.get(id);if(!n)return;const d=domKey(n);
+      if(n.kind==="client")return;   // die Client-Karte IST die Anschlussleiste — keine Spalte darum
       if(istInselLage(n)){nimm(sp(d+"|§insel",{dom:d,blk:null,role:"insel",akt:null}),id,g,n.kind);return;}
       if(n.kind==="codenode"||n.kind==="llmnode"){codes.push([n,g,id]);return;}
       const blk=blockVon(n),role=rolle(n,rollenVon(blk)),akt=aktVon(n);
@@ -3511,7 +3737,7 @@ public static class HtmlPresenter
     const B=domBaum([...box.keys(),...(VIEW.domNeu||[])]);
     const LAY=KPOS[VIEW.details?"d":"k"]||{};
     let unten=0;box.forEach(b=>unten=Math.max(unten,b.y2));
-    const rahmen=[];
+    const rahmen=[];FRGEO=new Map();const STK=clientStecker();
     // Bottom-up: Rahmen = eigene Karten + Kinder-Rahmen, um Rand und Kopf erweitert.
     const rechne=(ns,tiefe)=>{const kinder=(B.kinder.get(ns)||[]).map(k=>rechne(k,tiefe+1)).filter(Boolean);
       const b=box.get(ns);let r=b?{x1:b.x1-RP,y1:b.y1-RP-RK,x2:b.x2+RP,y2:b.y2+RP}:null;
@@ -3523,13 +3749,16 @@ public static class HtmlPresenter
       const out={...r,ns,tiefe,z,eigen:ids.get(ns)||[],kinderIds:kinder.flatMap(k=>k.alleIds),alleIds:[...(ids.get(ns)||[]),...kinder.flatMap(k=>k.alleIds)]};
       rahmen.push(out);return out;};
     B.oben.forEach(ns=>rechne(ns,0));
-    rahmen.sort((a,b)=>a.tiefe-b.tiefe).forEach(r=>{const hue=domHue(r.ns===OHNE_DOM?SHARED_KEY:r.ns);
+    rahmen.sort((a,b)=>a.tiefe-b.tiefe).forEach(r=>{FRGEO.set(r.ns+"|",r);
+      if(istClientDom(r.ns)){ebene.append(clientRahmen(r));aus.x2=Math.max(aus.x2,r.x2);aus.y2=Math.max(aus.y2,r.y2);return;}
+      const hue=domHue(r.ns===OHNE_DOM?SHARED_KEY:r.ns);
       const fr=h("div",{class:"grahmen"+(r.tiefe?" unter":"")+(akteurOrdnung(r.ns).length?" mitakt":"")});fr.dataset.ns=r.ns;
       Object.assign(fr.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});fr.style.setProperty("--dc","hsl("+hue+" 45% 55%)");
       const k=h("div",{class:"grahmen-k",title:r.ns===OHNE_DOM?"Knoten ohne Namespace":r.ns},
         h("span",{class:"gr-t"},domLabel(r.ns)),h("span",{class:"gr-p"},r.ns===OHNE_DOM?"":r.ns),
         akteurOrdnung(r.ns).length?h("span",{class:"gr-p",title:"Akteur-Rahmen dieser Domäne (Reihenfolge = wo Geteiltes steht)"},"👤 "+akteurOrdnung(r.ns).join(" › ")):null,
         h("span",{class:"gr-z"},r.leer?"leer":bausteine(r.z)),
+        akteurOrdnung(r.ns).length?null:steckerZeile(STK.get(r.ns+"|"),[r.ns+"|"]),
         h("button",{title:"Baustein in dieser Domäne anlegen",onclick:e=>{e.stopPropagation();bausteinMenue(e.clientX,e.clientY,r.ns);}},"＋"),
         r.ns!==OHNE_DOM?h("button",{title:"Unterdomäne anlegen",onclick:e=>{e.stopPropagation();neueDomaene(e.clientX,e.clientY,r.ns);}},"＋ ▤"):null,
         h("button",{title:"Domäne einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"),
@@ -3538,8 +3767,8 @@ public static class HtmlPresenter
       k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};
       fr.append(k);if(r.leer)fr.append(h("div",{class:"gr-leer"},"Leere Domäne — ＋ legt den ersten Baustein an"));
       ebene.append(fr);aus.x2=Math.max(aus.x2,r.x2);aus.y2=Math.max(aus.y2,r.y2);});
-    akt.forEach(a=>{ebene.append(akteurRahmen(a));aus.x2=Math.max(aus.x2,a.x2);aus.y2=Math.max(aus.y2,a.y2);});
-    spalten.forEach(c=>{if(c.blk===AKTEUR_KEY&&c.role===ROLE_AKTEUR.auf){ebene.append(vertragsRahmen(c));return;}
+    akt.forEach(a=>{FRGEO.set(a.dom+"|"+a.akt,a);ebene.append(akteurRahmen(a,STK.get(a.dom+"|"+a.akt)));aus.x2=Math.max(aus.x2,a.x2);aus.y2=Math.max(aus.y2,a.y2);});
+    spalten.forEach(c=>{if(c.blk===AKTEUR_KEY&&c.role===ROLE_AKTEUR.auf){FRGEO.set("§vertrag:"+c.akt,c.r);ebene.append(vertragsRahmen(c));return;}
       const el=h("div",{class:"gspalte"+(c.role==="insel"?" insel":"")});const r=c.r;
       Object.assign(el.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});
       const ORD=Object.keys(NODELABEL),ix=k=>{const i=ORD.indexOf(k.replace(/^handle:.*/,"handle"));return i<0?99:i;};
@@ -3554,9 +3783,9 @@ public static class HtmlPresenter
       k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};
       el.append(k);ebene.append(el);});
     return aus;}
-  // 📜 Der VERTRAG eines Akteurs als Rahmen (docs/konzept-akteure.md §9): die Schnittstelle, gegen die der Client programmiert —
-  //   innen je Auf(Event) eine Reaktions-Karte, die Kanten laufen zu den Events (◀) und Commands (▶). Kopf: Name · Ein/Aus ·
-  //   ＋ Reaktion (Events leuchten) · ◎ · ⤢. Klick auf den Namen = Akteur-Panel.
+  // 📜 Der VERTRAG eines Akteurs als Rahmen (docs/konzept-akteure.md §3): die Schnittstelle, gegen die der Client programmiert —
+  //   innen je Auf(Event) eine Zusage-Karte, die Kanten laufen zu den Events (◀) und Commands (▶). Kopf: Name · Ein/Aus ·
+  //   ＋ Zusage (Events leuchten) · ◎ · ⤢. Klick auf den Namen = Akteur-Panel.
   function vertragsRahmen(c){const r=c.r,ak=MODEL.akteure.find(x=>x.name===c.akt),v=(ak&&ak.vertrag)||[];
     const el=h("div",{class:"gspalte vertrag"});
     Object.assign(el.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});
@@ -3567,7 +3796,7 @@ public static class HtmlPresenter
         onclick:e=>{e.stopPropagation();if(ak)waehle("akt:"+ak._id);}},
       h("i",{class:"kc-auf"}),h("span",{class:"gs-t"},"📜 Vertrag "+typ),
       h("span",{class:"gs-z"},"◀ "+ein.length+" · "+aus.length+" ▶"),
-      ak?h("button",{title:"Neue Reaktion: Event wählen (passende Events leuchten)",onclick:e=>{e.stopPropagation();waehle("akt:"+ak._id);
+      ak?h("button",{title:"Neue Zusage: Event wählen (passende Events leuchten)",onclick:e=>{e.stopPropagation();waehle("akt:"+ak._id);
         setTimeout(()=>{const p=SLOTS["akt:auf:"+ak._id+":open"];if(p)vbStart(p);},0);}},"＋"):null,
       h("button",{title:"Vertrag markieren (Slice)",onclick:e=>{e.stopPropagation();FOCUS=new Set(c.ids);wendeFokusAn();}},"◎"),
       h("button",{title:"Vertrag einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"));
@@ -3575,7 +3804,7 @@ public static class HtmlPresenter
     el.append(k);return el;}
   // Ein Akteur-Rahmen (Domäne × Akteur, §12.5): Kopf = Akteur (Klick → sein Panel) · Domäne · Zahl · „↥ auch“ (Doppelungen,
   //   die in einem früheren Akteur-Rahmen stehen) · ＋ (für diesen Akteur entwerfen) · ◎ · ⤢ · ⋯ (Reihenfolge).
-  function akteurRahmen(a){const ohne=a.akt===OHNE_AKT,ak=!ohne&&MODEL.akteure.find(x=>x.name===a.akt),
+  function akteurRahmen(a,stecker){const ohne=a.akt===OHNE_AKT,ak=!ohne&&MODEL.akteure.find(x=>x.name===a.akt),
     r={x1:a.x1,y1:a.y1,x2:a.x2,y2:a.y2};
     const fr=h("div",{class:"grahmen akt"+(ohne?" ohne":"")+(a.leer?" leer":"")+(ak&&!akteurDirektIn(ak,a.dom)?" kette":"")});
     fr.dataset.ns=a.dom;fr.dataset.akt=a.akt;
@@ -3589,6 +3818,7 @@ public static class HtmlPresenter
         "↥ auch: ",...auch.slice(0,6).map(([n,wo])=>h("button",{class:"akt-ref",title:n.name+" — steht bei "+wo,onclick:e=>{e.stopPropagation();zeigeKnoten(n.id);}},n.name)),
         auch.length>6?h("span",{class:"gr-z"}," +"+(auch.length-6)):null):null,
       h("span",{class:"gr-z"},a.leer?"alles schon weiter oben":bausteine(a.ids.length)),
+      steckerZeile(stecker,[a.dom+"|"+a.akt,"§vertrag:"+a.akt]),
       ak?h("button",{title:"Für "+a.akt+" entwerfen: neuer Command / neue Query / neuer Trigger — "+a.akt+" darf ihn sofort (IDarf)",
         onclick:e=>{e.stopPropagation();menue(e.clientX,e.clientY,"＋ für "+a.akt,["command","query","trigger"].map(kk=>({t:"＋ "+(NODELABEL[kk]||kk),fn:()=>fuerAkteurAnlegen(a,kk)})));}},"＋"):null,
       h("button",{title:"Rahmen markieren (Slice)",onclick:e=>{e.stopPropagation();FOCUS=new Set(a.ids);wendeFokusAn();}},"◎"),
@@ -3596,6 +3826,23 @@ public static class HtmlPresenter
       !ohne?h("button",{title:"Reihenfolge der Akteur-Rahmen",onclick:e=>{e.stopPropagation();akteurRahmenMenue(e.clientX,e.clientY,a);}},"⋯"):null);
     k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};
     fr.append(k);return fr;}
+  // 🔌 Stecker-Zeile im Rahmen-Kopf: welche Clients an diesem Rahmen stecken (Klick = Client wählen, seine Leitung hierher auffächern).
+  function steckerZeile(cs,keys){if(!cs||!cs.length)return null;
+    return h("span",{class:"cl-stecker",title:"Clients, deren Leitung an diesem Rahmen steckt (docs/konzept-akteure.md §4)"},"🔌 ",
+      ...cs.map(c=>h("button",{class:"akt-ref",title:"Client "+clientAnzeige(c)+" — Klick: seine Leitung hierher auffächern",
+        onclick:e=>{e.stopPropagation();auffaechern(c,{keys});}},clientAnzeige(c))));}
+  // 🔌 Der Rahmen eines Clients (Außenwelt): Kopf = Name (Handshake) · verkörperte Akteure · generierte Basis · ◎ · ⤢. Innen die Karte
+  //   = die Anschlussleiste. Gestrichelt umrandet: der Client ist Software draußen, nicht Domäne.
+  function clientRahmen(r){const c=MODEL.clients.find(x=>CL_PRE+x.name===r.ns),fr=h("div",{class:"grahmen client"});fr.dataset.ns=r.ns;
+    Object.assign(fr.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});
+    fr.style.setProperty("--dc","hsl("+domHue(r.ns)+" 60% 62%)");
+    const akt=c?clientAkteure(c):[];
+    const k=h("div",{class:"grahmen-k",title:c?"public interface "+c.name+" : IClientVertrag, … — Handshake „"+clientAnzeige(c)+"“, Python-Basis "+clientAnzeige(c)+"Basis (domain_client/generated/vertraege.py)":""},
+      h("span",{class:"gr-t akt-n",onclick:e=>{e.stopPropagation();if(c)waehle("cl:"+c._id);}},domLabel(r.ns)),
+      h("span",{class:"gr-p"},akt.length?"verkörpert "+akt.map(n=>(ART_SYM[(MODEL.akteure.find(a=>a.name===n)||{}).art]||"👤 ")+n).join(", "):"verkörpert noch keinen Akteur"),
+      c?h("button",{title:"Client markieren (Slice)",onclick:e=>{e.stopPropagation();waehle("cl:"+c._id);}},"◎"):null,
+      h("button",{title:"Client einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"));
+    k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};fr.append(k);return fr;}
   // Gibt der Akteur in dieser Domäne direkt etwas hinein (IDarf) — oder wirkt er hier nur über eine Kette?
   function akteurDirektIn(ak,dom){return (ak.darf||[]).some(nm=>{const n=NODEBY.get("rec:"+nm)||[...NODEBY.values()].find(x=>x.kind==="trigger"&&trigName(x.ref)===nm);return n&&domKey(n)===dom;});}
   // Doppelungen: Bausteine dieser Domäne, die auch dem Akteur gehören, aber im Rahmen eines früheren Akteurs stehen.
@@ -3666,7 +3913,7 @@ public static class HtmlPresenter
           if(fr)einpassenRahmen({x1:fr.offsetLeft,y1:fr.offsetTop,x2:fr.offsetLeft+fr.offsetWidth,y2:fr.offsetTop+fr.offsetHeight});});
         deFlash("＋ Domäne "+ns,true);return null;});}
   // ＋ in der Menüleiste: Baustein IN dieser Domäne (Namespace; Decider/Applier/State ans Aggregat, Regel an den Prozess der Domäne).
-  const BAU_GRUPPEN=[["Außen",["akteur"]],["Schreibseite",["command","event","rejection","aggregate","state","decider","applier"]],
+  const BAU_GRUPPEN=[["Außen",["akteur","client"]],["Schreibseite",["command","event","rejection","aggregate","state","decider","applier"]],
     ["Typen",["valueobject","enum","konfig"]],["Abläufe",["saga","transition","reaktion","pipeline","trigger"]],
     ["Leseseite",["readmodel","store","projektion","query","queryresponse","reader"]],["Betrieb",["dienst","hostsetting"]],["Code",["codenode","llmnode"]]];
   function bausteinMenue(cx,cy,ns){const agg=MODEL.aggregate.find(a=>a.namespace===ns),sg=MODEL.sagas.find(s=>s.namespace===ns);
@@ -3886,7 +4133,8 @@ public static class HtmlPresenter
   const MERGE_KEYS={records:r=>r.kind+"|"+r.namespace+"|"+r.name,enums:e=>e.namespace+"|"+e.name,aggregate:a=>a.namespace+"|"+a.name,
     decider:d=>d.aggregat+"|"+d.command,applier:a=>a.aggregat+"|"+a.event,sagas:x=>x.namespace+"|"+x.name,
     readModels:x=>x.name,stores:x=>x.name,projektionen:x=>x.name,reaktionen:x=>x.name,reader:x=>x.name,pipelines:x=>x.name,
-    triggers:x=>x.msgName||x.name,frists:x=>x.name,dienste:x=>x.name,hostSettings:x=>x.name,akteure:x=>x.namespace+"|"+x.name};
+    triggers:x=>x.msgName||x.name,frists:x=>x.name,dienste:x=>x.name,hostSettings:x=>x.name,akteure:x=>x.namespace+"|"+x.name,
+    clients:x=>x.namespace+"|"+x.name};
   const LAYOUT=new Set(["x","y","ausCode","ungeschrieben","codeSrc","leer","rumpf","schritte","herkunft"]);
   function inhalt(o){return JSON.stringify(o,(k,v)=>(k.startsWith("_")||LAYOUT.has(k))?undefined:v);}
   // Leseseite: „steht die Änderung schon im Code?“ — Fn-Ids (je Einlesen neu nummeriert) über „Store.Fn“ vergleichen und die
@@ -3972,7 +4220,7 @@ public static class HtmlPresenter
   // Node-Art (graphNodes().kind) → Modell-Sammlung (für die Entwurf-Markierung: nur Sammlungen, die aus dem Code kommen).
   function kollektionVon(kind){return {command:"records",event:"records",rejection:"records",valueobject:"records",konfig:"records",query:"records",queryresponse:"records",
     enum:"enums",aggregate:"aggregate",decider:"decider",applier:"applier",saga:"sagas",readmodel:"readModels",store:"stores",
-    projektion:"projektionen",reaktion:"reaktionen",reader:"reader",pipeline:"pipelines",trigger:"triggers",frist:"frists",dienst:"dienste",hostsetting:"hostSettings",akteur:"akteure"}[kind]||null;}
+    projektion:"projektionen",reaktion:"reaktionen",reader:"reader",pipeline:"pipelines",trigger:"triggers",frist:"frists",dienst:"dienste",hostsetting:"hostSettings",akteur:"akteure",client:"clients"}[kind]||null;}
   function meldeMerge(){const u=MERGE_INFO.ungeschrieben,e=MERGE_INFO.entwuerfe;
     if(u||e)deFlash("↔ Code geladen · "+u+" ungeschrieben · "+e+" Entwurf/Entwürfe",true);}
   window.deDownload=function(){deriveMembership();prepareSaga();const blob=new Blob([JSON.stringify(MODEL,null,2)],{type:"application/json"});

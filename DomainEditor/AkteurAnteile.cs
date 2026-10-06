@@ -1,14 +1,14 @@
 namespace DomainEditor;
 
 /// <summary>
-/// Von welchem Akteur kommt was? (<c>docs/konzept-akteure.md</c> §8.2/§8.4) — abgeleitet aus dem <see cref="Fluss"/>, kein
+/// Von welchem Akteur kommt was? (<c>docs/konzept-akteure.md</c> §2.3/§8.4) — abgeleitet aus dem <see cref="Fluss"/>, kein
 /// weiteres Wort im Code:
 /// <list type="bullet">
 /// <item><b>direkt</b>: der Akteur darf die Nachricht selbst hineingeben (<c>IDarf&lt;T&gt;</c>, Kante <c>akt:</c> → Nachricht);</item>
 /// <item><b>Kette</b>: ein Baustein erzeugt sie aus einer Nachricht, die von dem Akteur stammt — Decide (Command → Events), Pipeline-,
 ///   Reaktions-, Reader-Handle (Eingang → Ausgänge desselben Handles), Prozess (Auslöser/Wenn → Sende), Frist. Ein Handle, der
 ///   einen Akteur-Dienst (<c>IAkteurDienst&lt;A&gt;</c>) als Parameter nimmt, wechselt den Akteur: seine Ausgaben stammen von A.
-///   Ebenso eine Reaktion im Vertrag von A (<c>Auf(Event)</c>, Kante <c>akt:A</c> mit Handle): ihre Ausgaben stammen von A.</item>
+///   Ebenso eine Zusage im Vertrag von A (<c>Auf(Event)</c>, Kante <c>akt:A</c> mit Handle): ihre Ausgaben stammen von A.</item>
 /// </list>
 /// Fixpunkt über Akteur-MENGEN: ein Command kann von mehreren Akteuren kommen (zur Laufzeit trägt er genau den einen der Kette).
 /// Dieselbe Ableitung rechnet der Editor live nach (<c>akteurMengen()</c> in HtmlPresenter) — Parität über <c>rahmen.akteurMengen</c>.
@@ -55,7 +55,7 @@ public sealed class AkteurAnteile
             return s;
         }
 
-        // Direkt: Akteur → was er darf. Eine Vertrags-Reaktion (Kante mit Handle = Event) ist ein Akteur-Wechsel: Kette von A.
+        // Direkt: Akteur → was er darf. Eine Vertrags-Zusage (Kante mit Handle = Event) ist ein Akteur-Wechsel: Kette von A.
         foreach (var k in fluss.Kanten.Where(k => k.Von.StartsWith("akt:", StringComparison.Ordinal)))
             Menge(k.Handle == null ? direkt : kette, k.Nach).Add(fluss.KnotenVon(k.Von)!.Name);
 

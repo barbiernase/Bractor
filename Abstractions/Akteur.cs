@@ -1,7 +1,7 @@
 namespace Abstractions;
 
 /// <summary>
-/// Ein AKTEUR — ein Domänen-Experte, von dem alles kommt, was hineingeht (<c>docs/konzept-akteure.md</c> §8). Seine Art
+/// Ein AKTEUR — ein Domänen-Experte, von dem alles kommt, was hineingeht (<c>docs/konzept-akteure.md</c> §2). Seine Art
 /// steht in der Basisliste (<see cref="IMensch"/>, <see cref="IMaschine"/>, <see cref="IKi"/>), was er selbst hineingeben
 /// darf als <see cref="IDarf{T}"/> — Code-Fakten, die Generator, Extractor und Editor aus der Signatur lesen:
 /// <code>public sealed record Inspekteur : IMensch, IDarf&lt;LabelBildPaar&gt;, IDarf&lt;GetImagePair&gt;;</code>
@@ -29,15 +29,48 @@ public interface IKi : IAkteur { }
 public interface IAkteurDienst<TAkteur> where TAkteur : IAkteur { }
 
 /// <summary>
-/// Der VERTRAG eines Akteurs, der draußen auf Events reagiert (<c>docs/konzept-akteure.md</c> §9) — ein Interface in der Domäne,
+/// Der VERTRAG eines Akteurs, der draußen auf Events reagiert (<c>docs/konzept-akteure.md</c> §3) — ein Interface in der Domäne,
 /// gegen das der Client (Python-Worker, später Blazor) programmiert:
 /// <code>public interface IKlassifizierer : IAkteurVertrag&lt;Klassifizierer&gt; { OneOf&lt;KlassifiziereBildPaarDurchKi&gt; Auf(ImagePairKomplett e); void Auf(BildVerfuegbar e); }</code>
-/// Je Methode <c>Auf(TEvent)</c> eine Reaktion; der Rückgabetyp ist der Ausgabe-Vertrag (<c>void</c>, ein konkreter Command,
-/// <c>OneOf&lt;…&gt;</c> oder ein Strom <c>IAsyncEnumerable&lt;OneOf&lt;…&gt;&gt;</c>). Was ein Akteur als Reaktion hineingibt, darf er damit
-/// (kein zweites <c>IDarf</c>), und er hört genau die Events seiner <c>Auf</c>-Methoden. Höchstens ein Vertrag je Akteur
-/// (CQRS061/062). Server, Editor und Handshake kennen damit jede Reaktion als Code-Fakt; implementiert wird er nur draußen.
+/// Je Methode <c>Auf(TEvent)</c> eine Zusage; der Rückgabetyp ist der Ausgabe-Vertrag (<c>void</c>, ein konkreter Command,
+/// <c>OneOf&lt;…&gt;</c> oder ein Strom <c>IAsyncEnumerable&lt;OneOf&lt;…&gt;&gt;</c>). Was ein Akteur als Zusage hineingibt, darf er damit
+/// (kein zweites <c>IDarf</c>), und er hört genau die Events seiner <c>Auf</c>-Methoden (CQRS061/062).
+/// <para>Ein Akteur darf seinen Vertrag in <b>Teile</b> schneiden (mehrere Interfaces mit <c>IAkteurVertrag&lt;A&gt;</c>, auch geerbt):
+/// über alle Teile höchstens eine Zusage je Event. Ein Teil ist der Baustein, den ein Client trägt (<see cref="IClientVertrag"/>);
+/// der ganze Vertrag des Akteurs ist die Vereinigung seiner Teile.</para>
+/// Server, Editor und Handshake kennen damit jede Zusage als Code-Fakt; implementiert wird er nur draußen.
 /// </summary>
 public interface IAkteurVertrag<TAkteur> where TAkteur : IAkteur { }
+
+/// <summary>
+/// Der VERTRAG eines CLIENTS — der Software, die an der Leitung hängt (Python-Worker, Blazor-Arbeitsplatz …),
+/// <c>docs/konzept-akteure.md</c> §4. Ein Client ist nicht ein Akteur: er kann mehrere Akteure verkörpern, und ein Akteur
+/// kann über mehrere Clients laufen. Der Client-Vertrag ist ein Interface, das zusammenstellt, was über SEINE Leitung geht:
+/// <code>public interface IMlWorker : IClientVertrag, IKlassifizierer, ITrainingsSystem, ISendet&lt;KlassifiziereEinzelBildDurchKi&gt;, IFragt&lt;HoleAktivesModell&gt; { void Auf(ModellAktiviert e); }</code>
+/// <list type="bullet">
+/// <item>erbt <b>Akteur-Vertrags-Teile</b> (<see cref="IAkteurVertrag{TAkteur}"/>) → trägt deren Zusagen, im Namen des jeweiligen Akteurs;</item>
+/// <item><see cref="ISendet{T}"/> / <see cref="IFragt{T}"/> → was er von sich aus hineingibt bzw. fragt (muss ein Akteur dürfen);</item>
+/// <item>eigene Methoden nur <c>void Auf(TEvent e)</c> → Kenntnis (UI-Aktualisierung), nie eine Ausgabe.</item>
+/// </list>
+/// Welche Akteure er verkörpert, wird abgeleitet: die Akteure der Teile, dazu je Sendet/Fragt die <c>IDarf</c>-Halter, falls keiner der
+/// Teil-Akteure den Typ schon darf. Wirksam ist am Handshake
+/// die Schnittmenge mit den Akteuren des Tokens. Die client-INTERNEN Commands/Events (Intents, ClientEvents, Python-State) stehen hier
+/// nie — der Vertrag ist nur der Rand (CQRS063–065).
+/// </summary>
+public interface IClientVertrag { }
+
+/// <summary>
+/// Am Client-Vertrag (<see cref="IClientVertrag"/>): der Client gibt <typeparamref name="T"/> von sich aus hinein — ein Command, ein
+/// Trigger oder ein Transient-Event. Ein verkörperter Akteur muss <c>IDarf&lt;T&gt;</c> haben (CQRS064): der Client-Vertrag schneidet aus
+/// der Befugnis, er erweitert sie nie.
+/// </summary>
+public interface ISendet<T> { }
+
+/// <summary>
+/// Am Client-Vertrag (<see cref="IClientVertrag"/>): der Client stellt die Query <typeparamref name="T"/> (und bekommt ihre Response).
+/// Ein verkörperter Akteur muss <c>IDarf&lt;T&gt;</c> haben (CQRS064).
+/// </summary>
+public interface IFragt<T> { }
 
 /// <summary>
 /// Der Akteur darf <typeparamref name="T"/> in das System hineingeben — EIN Wort für alles, was hineingeht:

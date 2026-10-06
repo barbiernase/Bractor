@@ -37,6 +37,12 @@ public sealed record EditorModell
     /// </summary>
     public IReadOnlyList<Akteur> Akteure { get; init; } = [];
     /// <summary>
+    /// Clients (<c>docs/konzept-akteure.md</c> §4): die Software an der Leitung — je Client EIN Vertrag
+    /// (<c>interface IX : IClientVertrag, …</c>): getragene Akteur-Vertrags-Teile, Sendet/Fragt, eigene Kenntnis. Welche Akteure er
+    /// verkörpert, ist abgeleitet, nicht Modell.
+    /// </summary>
+    public IReadOnlyList<Client> Clients { get; init; } = [];
+    /// <summary>
     /// Die LESESEITE als Signatur-Fakten: Stores (Fähigkeiten + Bündel + Impl-Klasse), Projektionen/Reaktionen, Reader und
     /// die Fähigkeits-Parameter der Pipeline-Handles. ReadModels/Queries/Responses sind <see cref="Record"/>s (eigene Arten).
     /// Null = das Modell trägt keine Leseseite (z. B. Simulation) — der Scaffolder erzeugt dann keine Leseseiten-Dateien.
@@ -534,7 +540,7 @@ public sealed record IngressBindung
 
 /// <summary>
 /// Ein Akteur — ein Domänen-Experte: <c>public sealed record {Name} : IMensch, IDarf&lt;A&gt;, IDarf&lt;B&gt;;</c>
-/// (<c>docs/konzept-akteure.md</c> §8). <see cref="Darf"/> = einfache Typnamen in Deklarations-Reihenfolge — nur, was er SELBST
+/// (<c>docs/konzept-akteure.md</c> §2). <see cref="Darf"/> = einfache Typnamen in Deklarations-Reihenfolge — nur, was er SELBST
 /// hineingibt; was eine Kette in seinem Namen erzeugt, wird abgeleitet (<see cref="AkteurAnteile"/>).
 /// </summary>
 public sealed record Akteur
@@ -550,11 +556,11 @@ public sealed record Akteur
     /// </summary>
     public IReadOnlyList<string> Dienste { get; init; } = [];
     /// <summary>
-    /// Der VERTRAG des Akteurs (<c>interface IX : IAkteurVertrag&lt;X&gt;</c>, <c>docs/konzept-akteure.md</c> §9): je <c>Auf(Event)</c> eine
-    /// Reaktion mit ihren Ausgängen. Was er so hineingibt, darf er (kein IDarf), und er hört genau diese Eingänge. Leer = rein spontan.
+    /// Der VERTRAG des Akteurs (<c>interface IX : IAkteurVertrag&lt;X&gt;</c>, <c>docs/konzept-akteure.md</c> §3): je <c>Auf(Event)</c> eine
+    /// Zusage mit ihren Ausgängen. Was er so hineingibt, darf er (kein IDarf), und er hört genau diese Eingänge. Leer = rein spontan.
     /// </summary>
-    public IReadOnlyList<AkteurReaktion> Vertrag { get; init; } = [];
-    /// <summary>Name des Vertrags-Interfaces (null = <c>I{Name}</c>, sobald es Reaktionen gibt).</summary>
+    public IReadOnlyList<AkteurZusage> Vertrag { get; init; } = [];
+    /// <summary>Name des Vertrags-Interfaces (null = <c>I{Name}</c>, sobald es Zusagen gibt).</summary>
     public string? VertragName { get; init; }
     /// <summary>Datei des Vertrags, wenn sie nicht die des Akteurs ist (relativ zur Solution).</summary>
     public string? VertragDatei { get; init; }
@@ -568,13 +574,43 @@ public sealed record Akteur
 }
 
 /// <summary>
-/// Eine Reaktion im Akteur-Vertrag: <c>Auf(Eingang e)</c> mit dem Ausgabe-Vertrag als Rückgabetyp — keine Ausgänge = <c>void</c> (nur zur
-/// Kenntnis), sonst <c>OneOf&lt;…&gt;</c>, bei <see cref="Strom"/> <c>IAsyncEnumerable&lt;OneOf&lt;…&gt;&gt;</c> (mehrere Commands je Reaktion).
+/// Eine Zusage im Akteur-Vertrag: <c>Auf(Eingang e)</c> mit dem Ausgabe-Vertrag als Rückgabetyp — keine Ausgänge = <c>void</c> (nur zur
+/// Kenntnis), sonst <c>OneOf&lt;…&gt;</c>, bei <see cref="Strom"/> <c>IAsyncEnumerable&lt;OneOf&lt;…&gt;&gt;</c> (mehrere Commands je Zusage).
 /// </summary>
-public sealed record AkteurReaktion
+public sealed record AkteurZusage
 {
     public string Eingang { get; init; } = "";
     public IReadOnlyList<string> Ausgaenge { get; init; } = [];
     public bool Strom { get; init; }
     public string? Doku { get; init; }
+    /// <summary>
+    /// Der Vertrags-TEIL, in dem die Zusage steht, wenn es nicht der Haupt-Vertrag (<see cref="Akteur.VertragTyp"/>) ist — ein Akteur darf
+    /// seinen Vertrag in Teile schneiden, die Clients einzeln tragen (CQRS061). Null = Haupt-Vertrag. Teile liest der Editor nur.
+    /// </summary>
+    public string? Teil { get; init; }
+}
+
+/// <summary>
+/// Ein CLIENT — die Software an der Leitung (Python-Worker, Blazor-Arbeitsplatz …), <c>docs/konzept-akteure.md</c> §4:
+/// <c>public interface {Name} : IClientVertrag, ITeil…, ISendet&lt;C&gt;, IFragt&lt;Q&gt; { void Auf(E e); }</c>. Ein Client kann mehrere
+/// Akteure verkörpern, ein Akteur über mehrere Clients laufen; je Client genau dieser eine Vertrag. Nur der RAND steht hier — die
+/// client-internen Commands/Events (Intents, ClientEvents, Python-State) nie.
+/// </summary>
+public sealed record Client
+{
+    /// <summary>Der Interface-Name wie im Code (<c>IArbeitsplatz</c>); der Handshake-Name ist er ohne führendes I.</summary>
+    public string Name { get; init; } = "";
+    public string Namespace { get; init; } = "";
+    /// <summary>Getragene Akteur-Vertrags-Teile (Interface-Namen, z. B. <c>IKlassifizierer</c>) — ihre Zusagen im Namen des Akteurs.</summary>
+    public IReadOnlyList<string> Traegt { get; init; } = [];
+    /// <summary><c>ISendet&lt;T&gt;</c>: Command/Trigger/Transient, von sich aus (muss ein Akteur dürfen).</summary>
+    public IReadOnlyList<string> Sendet { get; init; } = [];
+    /// <summary><c>IFragt&lt;T&gt;</c>: die Queries des Clients (muss ein Akteur dürfen).</summary>
+    public IReadOnlyList<string> Fragt { get; init; } = [];
+    /// <summary>Eigene <c>void Auf(E e)</c>: nur zur Kenntnis (UI-Aktualisierung), keine Ausgabe.</summary>
+    public IReadOnlyList<string> Kenntnis { get; init; } = [];
+    public string? Doku { get; init; }
+    /// <summary>Datei der Deklaration (relativ zur Solution); null = neu im Editor.</summary>
+    public string? Datei { get; init; }
+    public string? Herkunft { get; init; }
 }

@@ -3,8 +3,8 @@
 TrainingWorker — der out-of-process Trainings-Job (Konzept §4.2).
 
 Derselbe Event→Command-Reaktor wie der Classifier, nur LANGLAUFEND mit Fortschritt — der Akteur
-TrainingsSystem, programmiert gegen seinen Vertrag (ITrainingsSystem: die Reaktion auf TrainingAngefordert
-ist ein Strom, docs/konzept-akteure.md §9):
+TrainingsSystem, programmiert gegen seinen Vertrag (ITrainingsSystem: die Zusage auf TrainingAngefordert
+ist ein Strom, docs/konzept-akteure.md §3):
 subscribed `TrainingAngefordert`, zieht die eingefrorene Sample-Liste über den typisierten
 Query-Kanal (`self.query(HoleDatensatzSamples…)`, M7), fährt das Training in
 `asyncio.to_thread` (Event-Loop bleibt frei) und **yieldet über die Zeit mehrfach** Commands
@@ -46,7 +46,7 @@ from domain_client.generated import (
     MeldeTrainingAbgeschlossenDto,
     MeldeTrainingGescheitertDto,
 )
-from domain_client.generated.vertraege import TrainingsSystemBasis
+from domain_client.generated.vertraege import TrainingsWorkerBasis
 
 log = logging.getLogger(__name__)
 
@@ -58,7 +58,7 @@ class TrainingState:
     abbruch: dict[str, threading.Event] = field(default_factory=dict)
 
 
-class TrainingWorker(TrainingsSystemBasis[TrainingState]):
+class TrainingWorker(TrainingsWorkerBasis[TrainingState]):
     """Der Akteur TrainingsSystem — programmiert gegen seinen Vertrag (Domain.Akteure.ITrainingsSystem)."""
 
     # Seiten-Größe beim Ziehen der Samples (paginiert, wie SucheImagePairs).

@@ -161,7 +161,7 @@ public sealed class Fluss
         }
 
         // Akteure: Akteur → was er darf (IDarf<T>). Sie ersetzen für diese Nachrichten die anonyme Außenwelt.
-        //   Vertrag (§9): Event → Akteur → Commands, Handle = das Event (eine Reaktion draußen, wie ein Handle drinnen).
+        //   Vertrag (§9): Event → Akteur → Commands, Handle = das Event (eine Zusage draußen, wie ein Handle drinnen).
         foreach (var a in m.Akteure)
         {
             var aid = B("akt", Grammatik.Akteur, a.Name, a.Namespace);

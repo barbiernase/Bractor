@@ -1,10 +1,10 @@
 # REPO-PFAD: Domain.Client.Worker.Python.ML/domain_client/classifier.py
 """
-KI-Classifier für industrielle Bildinspektion — der Akteur Klassifizierer.
+KI-Classifier für industrielle Bildinspektion — der Client KlassifikationsWorker (verkörpert den Akteur Klassifizierer).
 
-Programmiert gegen seinen Vertrag (Domain.Akteure.IKlassifizierer, docs/konzept-akteure.md §9): die generierte
-Basis `KlassifiziererBasis` verdrahtet den Dispatch, prüft jede Ausgabe gegen den Vertrag und meldet Vertrag + Hash
-am Handshake. Fehlt eine `auf_…`-Methode, startet der Worker nicht.
+Programmiert gegen seinen Client-Vertrag (Domain.Clients.IKlassifikationsWorker, docs/konzept-akteure.md §4), der den
+Akteur-Vertrag IKlassifizierer trägt: die generierte Basis `KlassifikationsWorkerBasis` verdrahtet den Dispatch, prüft jede
+Ausgabe gegen den Vertrag und meldet Client + Hash am Handshake. Fehlt eine `auf_…`-Methode, startet der Worker nicht.
 """
 
 from __future__ import annotations
@@ -22,7 +22,7 @@ from domain_client.generated import (
     KlassifiziereBildPaarDurchKiDto,
     ModellAktiviertDto,
 )
-from domain_client.generated.vertraege import KlassifiziererBasis
+from domain_client.generated.vertraege import KlassifikationsWorkerBasis
 from domain_client.image_loader import download_and_convert
 
 log = logging.getLogger(__name__)
@@ -50,7 +50,7 @@ class ClassifierState:
     aktives_modell: str = ""
 
 
-class ImageClassifier(KlassifiziererBasis[ClassifierState]):
+class ImageClassifier(KlassifikationsWorkerBasis[ClassifierState]):
 
     def __init__(self, registry, generated_module, config: dict):
         super().__init__(registry, generated_module, config)

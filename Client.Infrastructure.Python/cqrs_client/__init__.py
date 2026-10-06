@@ -13,7 +13,7 @@ und nutzt dasselbe Protokoll (domain.proto).
 """
 
 from .client import CqrsClient
-from .vertrag import AkteurVertragBasis, Reaktion, VertragsVerletzung
+from .vertrag import AkteurVertragBasis, Zusage, VertragsVerletzung
 from .dispatch import HandleDescriptor, HandlerBase, handle
 from .registry import CategoryRegistry, MessageCategory
 from .router import MessageContext
@@ -22,7 +22,7 @@ from .versioning import VersionTracker
 __all__ = [
     "AkteurVertragBasis",
     "CqrsClient",
-    "Reaktion",
+    "Zusage",
     "VertragsVerletzung",
     "CategoryRegistry",
     "HandleDescriptor",

@@ -45,6 +45,14 @@ public sealed record Kassierer : IMensch, IDarf<Buche>;
 public sealed record Revisor : IMensch, IDarf<Storniere>;
 public interface IKasse : IAkteurDienst<Kassierer> { Ki Frage(); }
 public interface IPruefer : IAkteurDienst<Revisor> { }
+public record Sperre(Guid AggregateId) : ICommand;
+public sealed record Leser : IMensch, IDarf<Zeige>;
+";
+
+    /// <summary>Zwei Akteur-Verträge für die Client-Proben (CQRS063–065).</summary>
+    private const string Teile = @"
+public interface IKasse1 : IAkteurVertrag<Kassierer> { OneOf<Buche> Auf(Gebucht e); void Auf(Hinweis e); }
+public interface IRevision : IAkteurVertrag<Revisor> { IAsyncEnumerable<OneOf<Storniere>> Auf(Gebucht2 e); }
 ";
 
     [Fact]
@@ -105,10 +113,10 @@ public partial class P : IPipelineHandler
             public IEnumerable<OneOf<Buche>> Handle(Gebucht2 e, PipelineContext ctx) { yield break; } }"))
             .Should().Equal("CQRS060", "CQRS060");
 
-    // ── CQRS061/062: Akteur-Vertrag (docs/konzept-akteure.md §9) ──
+    // ── CQRS061/062: Akteur-Vertrag (docs/konzept-akteure.md §3) ──
 
     [Fact]
-    public async Task Vertrag_mit_Reaktion_Kenntnis_und_Strom_ist_ok()
+    public async Task Vertrag_mit_Zusage_Kenntnis_und_Strom_ist_ok()
         => (await Ids(@"public interface IKassierer : IAkteurVertrag<Kassierer>
             { OneOf<Buche> Auf(Gebucht e); void Auf(Hinweis e); IAsyncEnumerable<OneOf<Buche, Storniere>> Auf(Gebucht2 e); }"))
             .Should().BeEmpty();
@@ -122,12 +130,18 @@ public partial class P : IPipelineHandler
         => (await Ids("public sealed class Kassierer2 : IAkteurVertrag<Kassierer> { }")).Should().Equal("CQRS061");
 
     [Fact]
-    public async Task Hoechstens_ein_Vertrag_je_Akteur()
-        => (await Ids(@"public interface IKassiererA : IAkteurVertrag<Kassierer> { }
-            public interface IKassiererB : IAkteurVertrag<Kassierer> { }")).Should().Equal("CQRS061", "CQRS061");
+    public async Task Ein_Akteur_darf_seinen_Vertrag_in_Teile_schneiden()
+        => (await Ids(@"public interface IKassiererA : IAkteurVertrag<Kassierer> { OneOf<Buche> Auf(Gebucht e); }
+            public interface IKassiererB : IAkteurVertrag<Kassierer> { void Auf(Hinweis e); }
+            public interface IKassierer : IKassiererA, IKassiererB { void Auf(Gebucht2 e); }")).Should().BeEmpty();
 
     [Fact]
-    public async Task Reaktionen_heissen_Auf()
+    public async Task Ueber_alle_Teile_hoechstens_eine_Zusage_je_Event()
+        => (await Ids(@"public interface IKassiererA : IAkteurVertrag<Kassierer> { OneOf<Buche> Auf(Gebucht e); }
+            public interface IKassiererB : IAkteurVertrag<Kassierer> { void Auf(Gebucht e); }")).Should().Equal("CQRS061", "CQRS061");
+
+    [Fact]
+    public async Task Zusagen_heissen_Auf()
         => (await Ids("public interface IKassierer : IAkteurVertrag<Kassierer> { void Bei(Gebucht e); }")).Should().Equal("CQRS061");
 
     [Fact]
@@ -135,7 +149,7 @@ public partial class P : IPipelineHandler
         => (await Ids("public interface IKassierer : IAkteurVertrag<Kassierer> { void Auf(Buche c); }")).Should().Equal("CQRS061");
 
     [Fact]
-    public async Task Je_Event_hoechstens_eine_Reaktion()
+    public async Task Je_Event_hoechstens_eine_Zusage()
         => (await Ids("public interface IKassierer : IAkteurVertrag<Kassierer> { void Auf(Gebucht e); Buche Auf(Gebucht e, int x); }"))
             .Should().Equal("CQRS061");
 
@@ -167,4 +181,49 @@ public partial class P : IPipelineHandler
         => (await Ids(@"public interface IKassierer : IAkteurVertrag<Kassierer> { OneOf<Buche> Auf(Gebucht e); }" + Pipeline
             + @"public IEnumerable<OneOf<Buche>> Handle(Gebucht e, PipelineContext ctx, IKasse ki) { yield break; } }"))
             .Should().Equal("CQRS060");
+
+    // ── CQRS063–065: Client-Vertrag (docs/konzept-akteure.md §4) ──
+
+    [Fact]
+    public async Task Ein_Client_mit_zwei_Akteuren_ist_ok()
+        => (await Ids(Teile + @"public interface IKassenplatz : IClientVertrag, IKasse1, IRevision, ISendet<Buche>, ISendet<Storniere>, IFragt<Zeige>
+            { void Auf(Gebucht2b e); }
+            public record Gebucht2b() : IEvent;")).Should().BeEmpty("zwei Teile verschiedener Akteure in EINEM Client sind kein zweiter Vertrag je Akteur");
+
+    [Fact]
+    public async Task Ein_Akteur_ueber_zwei_Clients_ist_ok()
+        => (await Ids(Teile + @"public interface IKasseA : IClientVertrag, IKasse1 { }
+            public interface IKasseB : IClientVertrag, IKasse1, ISendet<Buche> { }")).Should().BeEmpty();
+
+    [Fact]
+    public async Task Ein_Client_ist_ein_Interface()
+        => (await Ids("public sealed class Kassenplatz : IClientVertrag { }")).Should().Equal("CQRS063");
+
+    [Fact]
+    public async Task Ein_Client_ist_selbst_kein_Vertrags_Teil()
+        => (await Ids("public interface IKassenplatz : IClientVertrag, IAkteurVertrag<Kassierer> { }")).Should().Equal("CQRS063");
+
+    [Fact]
+    public async Task Ein_Client_erbt_nichts_Fremdes()
+        => (await Ids("public interface IKassenplatz : IClientVertrag, IDisposable { }")).Should().Equal("CQRS063");
+
+    [Fact]
+    public async Task Eine_Ausgabe_gehoert_in_einen_Akteur_Vertrag()
+        => (await Ids("public interface IKassenplatz : IClientVertrag { OneOf<Buche> Auf(Gebucht e); }")).Should().Equal("CQRS063");
+
+    [Fact]
+    public async Task Kenntnis_nur_von_Events()
+        => (await Ids("public interface IKassenplatz : IClientVertrag { void Auf(Buche c); }")).Should().Equal("CQRS063");
+
+    [Fact]
+    public async Task Senden_nur_was_ein_Akteur_darf()
+        => (await Ids("public interface IKassenplatz : IClientVertrag, ISendet<Sperre> { }")).Should().Equal("CQRS064");
+
+    [Fact]
+    public async Task Fragen_nur_Queries_senden_keine_Queries()
+        => (await Ids("public interface IKassenplatz : IClientVertrag, ISendet<Zeige>, IFragt<Buche> { }")).Should().Equal("CQRS064", "CQRS064");
+
+    [Fact]
+    public async Task Je_Event_hoechstens_eine_Methode_im_Client()
+        => (await Ids(Teile + "public interface IKassenplatz : IClientVertrag, IKasse1 { void Auf(Gebucht e); }")).Should().Equal("CQRS065");
 }

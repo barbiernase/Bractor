@@ -11,7 +11,7 @@ using Microsoft.Extensions.Hosting;
 namespace Infrastructure.Integration.Tests;
 
 /// <summary>
-/// Akteur-Vertrag §9.7 — „doppelt zugestellt ≠ doppelt wirksam" für eine Reaktion von AUSSEN, gegen echtes Marten/Consul/Redis.
+/// Akteur-Vertrag §9.7 — „doppelt zugestellt ≠ doppelt wirksam" für eine Zusage von AUSSEN, gegen echtes Marten/Consul/Redis.
 ///
 /// Der Python-Klassifizierer antwortet auf <see cref="ImagePairKomplett"/> mit <see cref="KlassifiziereBildPaarDurchKi"/> und nennt dabei
 /// das Event (Stream + Version + Typ) und den Index seiner Ausgabe. Der gRPC-Service leitet daraus die CommandId ab
@@ -21,10 +21,10 @@ namespace Infrastructure.Integration.Tests;
 /// Beweiskraft: der Decider des Paars würde jede Klassifikation annehmen (kein Guard gegen Wiederholung) — dass es bei einem Fakt
 /// bleibt, kann nur die Inbox (KommandoVerarbeitet je CommandId) leisten, und die greift nur bei gleicher Id.
 /// </summary>
-public class VertragsReaktionE2ETests
+public class VertragsZusageE2ETests
 {
     [Fact]
-    public async Task Doppelt_zugestellte_Reaktion_wirkt_genau_einmal()
+    public async Task Doppelt_zugestellte_Zusage_wirkt_genau_einmal()
     {
         var watchDir = Path.Combine(Path.GetTempPath(), "vertrag-e2e-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(watchDir);

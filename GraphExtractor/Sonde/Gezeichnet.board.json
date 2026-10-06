@@ -205,8 +205,35 @@
         "Vormerkungen"
       ],
       "vertrag": [
-        { "eingang": "MahnungEroeffnet", "ausgaenge": [] },
-        { "eingang": "SchadenGemeldet", "ausgaenge": [ "EroeffneMahnung" ] }
+        {
+          "eingang": "MahnungEroeffnet",
+          "ausgaenge": []
+        },
+        {
+          "eingang": "SchadenGemeldet",
+          "ausgaenge": [
+            "EroeffneMahnung"
+          ]
+        }
+      ]
+    }
+  ],
+  "clients": [
+    {
+      "_id": "gcl1",
+      "name": "IMahnportal",
+      "namespace": "Leihwesen.Gebuehren",
+      "traegt": [
+        "IMahnstelle"
+      ],
+      "sendet": [
+        "EroeffneMahnung"
+      ],
+      "fragt": [
+        "Vormerkungen"
+      ],
+      "kenntnis": [
+        "Zurueckgegeben"
       ]
     }
   ]

@@ -33,6 +33,9 @@ public static class Vertrag
     public static readonly string IDarf = typeof(IDarf<>).FullName!;
     public static readonly string IAkteurDienst = typeof(IAkteurDienst<>).FullName!;
     public static readonly string IAkteurVertrag = typeof(IAkteurVertrag<>).FullName!;
+    public static readonly string IClientVertrag = typeof(IClientVertrag).FullName!;
+    public static readonly string ISendet = typeof(ISendet<>).FullName!;
+    public static readonly string IFragt = typeof(IFragt<>).FullName!;
     public static readonly string IMensch = typeof(IMensch).FullName!;
     public static readonly string IMaschine = typeof(IMaschine).FullName!;
     public static readonly string IKi = typeof(IKi).FullName!;

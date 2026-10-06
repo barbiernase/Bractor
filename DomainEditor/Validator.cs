@@ -206,18 +206,18 @@ public static class Validator
                         Melde("GR-AUFTRAG", $"{p.Name}.Handle({h.Eingang}) sendet {c} im Auftrag von {auftrag[0].Name}, aber {auftrag[0].Name} darf das nicht");
             }
 
-        // (6c) Akteur-Vertrag (CQRS061/062): je Event höchstens eine Reaktion, Eingang ist ein Event, Ausgänge sind Commands; und keine
+        // (6c) Akteur-Vertrag (CQRS061/062): je Event höchstens eine Zusage, Eingang ist ein Event, Ausgänge sind Commands; und keine
         //      zweite Verkörperung derselben Entscheidung über einen Dienst desselben Akteurs (CQRS060).
         foreach (var a in modell.Akteure.Where(a => a.Vertrag.Count > 0))
         {
             foreach (var g in a.Vertrag.GroupBy(r => r.Eingang, StringComparer.Ordinal).Where(g => g.Count() > 1))
-                Melde("GR-VERTRAG", $"{a.VertragTyp}: zwei Reaktionen auf {g.Key} — je Event höchstens ein Auf");
+                Melde("GR-VERTRAG", $"{a.VertragTyp}: zwei Zusagen auf {g.Key} — je Event höchstens ein Auf");
             foreach (var r in a.Vertrag)
             {
                 if (!recs.TryGetValue(r.Eingang, out var ein) || ein.Kind is not (RecordArt.Event or RecordArt.Rejection))
                     Melde("GR-VERTRAG", $"{a.VertragTyp}.Auf({r.Eingang}) — reagieren kann man nur auf ein Event");
                 foreach (var aus in r.Ausgaenge.Where(x => !recs.TryGetValue(x, out var c) || c.Kind != RecordArt.Command))
-                    Melde("GR-VERTRAG", $"{a.VertragTyp}.Auf({r.Eingang}) gibt {aus} aus — eine Reaktion gibt nur Commands hinein");
+                    Melde("GR-VERTRAG", $"{a.VertragTyp}.Auf({r.Eingang}) gibt {aus} aus — eine Zusage gibt nur Commands hinein");
             }
             foreach (var p in modell.Lesen?.Pipelines ?? [])
                 foreach (var h in p.Handles.Where(h => h.Faehigkeiten.Any(f => a.Dienste.Contains(Fluss.Basisname(f.Typ)))))
@@ -225,7 +225,46 @@ public static class Validator
                         Melde("GR-VERKOERPERUNG", $"{a.Name} entscheidet {c} auf {h.Eingang} zweimal: in {p.Name} (Dienst) und im Vertrag {a.VertragTyp}");
         }
 
-        // (7) Herkunft (docs/konzept-akteure.md §8.3) — erst, wenn das Modell Akteure hat (wie am Tor: ohne Akteure ist der Pfad offen):
+        // (6d) Client-Verträge (docs/konzept-akteure.md §4, CQRS063–065): getragene Teile sind Akteur-Verträge, Sendet/Fragt darf ein
+        //      Akteur, Kenntnis nur von Events, je Event eine Methode; und — sobald es Clients gibt — jede Zusage mit Ausgabe hat einen Träger.
+        if (modell.Clients.Count > 0)
+        {
+            // Vertrags-Teil (Interface-Name) → Akteur und seine Zusagen (Haupt-Vertrag = VertragTyp, weitere Teile über AkteurZusage.Teil).
+            var teilVon = new Dictionary<string, (Akteur A, List<AkteurZusage> R)>(StringComparer.Ordinal);
+            foreach (var a in modell.Akteure.Where(a => a.Vertrag.Count > 0))
+                foreach (var g in a.Vertrag.GroupBy(r => r.Teil ?? a.VertragTyp, StringComparer.Ordinal))
+                    teilVon[g.Key] = (a, g.ToList());
+            var darfIrgendwer = modell.Akteure.SelectMany(a => a.Darf).ToHashSet(StringComparer.Ordinal);
+            foreach (var c in modell.Clients)
+            {
+                var eingaenge = new Dictionary<string, string>(StringComparer.Ordinal);
+                foreach (var t in c.Traegt)
+                {
+                    if (!teilVon.TryGetValue(t, out var teil)) { Melde("GR-CLIENT", $"{c.Name} trägt {t} — das ist kein Akteur-Vertrag (interface IX : IAkteurVertrag<A>)"); continue; }
+                    foreach (var r in teil.R)
+                        if (!eingaenge.TryAdd(r.Eingang, t)) Melde("GR-CLIENT", $"{c.Name}: {r.Eingang} kommt aus {eingaenge[r.Eingang]} und aus {t} — je Event höchstens eine Methode");
+                }
+                foreach (var e in c.Kenntnis)
+                {
+                    if (!recs.TryGetValue(e, out var ev) || ev.Kind is not (RecordArt.Event or RecordArt.Rejection))
+                        Melde("GR-CLIENT", $"{c.Name}.Auf({e}) — Kenntnis gibt es nur von einem Event");
+                    else if (!eingaenge.TryAdd(e, c.Name)) Melde("GR-CLIENT", $"{c.Name}: {e} kommt schon aus {eingaenge[e]} — je Event höchstens eine Methode");
+                }
+                foreach (var s in c.Sendet)
+                    if (!recs.TryGetValue(s, out var r) || r.Kind is RecordArt.Query or RecordArt.Event or RecordArt.Antwort)
+                        Melde("GR-CLIENT-BEFUGT", $"{c.Name} sendet {s} — senden kann man einen Command, Trigger oder ein Transient-Event");
+                    else if (!darfIrgendwer.Contains(s)) Melde("GR-CLIENT-BEFUGT", $"{c.Name} sendet {s}, aber kein Akteur darf {s} (IDarf)");
+                foreach (var q in c.Fragt)
+                    if (!recs.TryGetValue(q, out var r) || r.Kind != RecordArt.Query) Melde("GR-CLIENT-BEFUGT", $"{c.Name} fragt {q} — fragen kann man nur eine Query");
+                    else if (!darfIrgendwer.Contains(q)) Melde("GR-CLIENT-BEFUGT", $"{c.Name} fragt {q}, aber kein Akteur darf {q} (IDarf)");
+            }
+            var getragen = modell.Clients.SelectMany(c => c.Traegt).ToHashSet(StringComparer.Ordinal);
+            foreach (var (teil, (a, rs)) in teilVon.Where(t => !getragen.Contains(t.Key)))
+                foreach (var r in rs.Where(r => r.Ausgaenge.Count > 0))
+                    Melde("GR-GETRAGEN", $"{teil}.Auf({r.Eingang}) → {string.Join(", ", r.Ausgaenge)}: kein Client trägt den Vertrag von {a.Name} — die Kette bricht hier ab");
+        }
+
+        // (7) Herkunft (docs/konzept-akteure.md §7) — erst, wenn das Modell Akteure hat (wie am Tor: ohne Akteure ist der Pfad offen):
         //     jeder Command, jede Query und jeder Trigger kommt von einem Akteur — direkt (IDarf) oder über die Kette.
         if (modell.Akteure.Count > 0)
         {

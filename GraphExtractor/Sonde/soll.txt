@@ -94,8 +94,13 @@ akteur Leihwesen.Lesen.Theke | darf LeiheAus, GibZurueck, OffeneAusleihen
 akteur Leihwesen.Gebuehren.Mahnstelle | darf EroeffneMahnung, Vormerkungen
 # ── Eine KI als Akteur mit ihrem Dienst (IAkteurDienst<A>, selbst kein Akteur) — der Mahnrunden-Handle entscheidet in ihrem Auftrag ──
 akteur Leihwesen.Lesen.Gutachterin Ki dienste IGebuehrenOrakel | darf EroeffneMahnung
-# ── Akteur-Verträge (§9): IAkteurVertrag<A> ist der Anker, je Auf(E) Eingang → Ausgänge aus dem RÜCKGABETYP (einzeln, Strom, void);
+# ── Akteur-Verträge (Akteur-Konzept §3): IAkteurVertrag<A> ist der Anker, je Auf(E) Eingang → Ausgänge aus dem RÜCKGABETYP (einzeln, Strom, void);
 #    einer im Code (frei benannt: Archiv/IRegal), einer im Editor gezeichnet (Mahnstelle → I + Name, vom Scaffolder geschrieben) ──
 akteur Leihwesen.Lesen.Archiv Maschine | darf 
 vertrag Leihwesen.Lesen.IRegal akteur=Archiv | Zurueckgegeben -> MeldeSchaden; SchadenGemeldet -> strom EroeffneMahnung, MeldeSchaden; Ausgeliehen -> 
 vertrag Leihwesen.Gebuehren.IMahnstelle akteur=Mahnstelle | MahnungEroeffnet -> ; SchadenGemeldet -> EroeffneMahnung
+# ── Clients (docs/konzept-akteure.md §4): IClientVertrag ist der Anker; Rand = getragene Teile + ISendet/IFragt + eigene Kenntnis.
+#    Lesesaal verkörpert zwei Akteure (Archiv + Theke), das Archiv läuft über zwei Clients (Lesesaal + Depot); Mahnportal ist gezeichnet. ──
+client Leihwesen.Lesen.ILesesaal | traegt IRegal; sendet LeiheAus; fragt OffeneAusleihen; hoert MahnungEroeffnet
+client Leihwesen.Lesen.IDepot | traegt IRegal; sendet ; fragt ; hoert
+client Leihwesen.Gebuehren.IMahnportal | traegt IMahnstelle; sendet EroeffneMahnung; fragt Vormerkungen; hoert Zurueckgegeben

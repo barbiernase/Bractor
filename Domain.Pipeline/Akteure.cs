@@ -10,14 +10,14 @@ using Domain.Trainingslauf;
 
 namespace Domain.Akteure;
 
-// Die Akteure der Domäne — Domänen-Experten, von denen alles kommt, was hineingeht (docs/konzept-akteure.md §8).
+// Die Akteure der Domäne — Domänen-Experten, von denen alles kommt, was hineingeht (docs/konzept-akteure.md §2).
 // Deklariert wird nur, was ein Akteur SELBST hineingibt (IDarf<T>). Was eine Pipeline, ein Prozess oder eine Frist daraus
 // erzeugt (NimmRangeAuf, ErstelleImagePair, MarkiereAlsHaengengeblieben …), trägt den Akteur der Kette — es steht hier
 // bewusst NICHT: am Tor käme es so nie durch („nie von der GUI" ist ein Typ-Fakt). Ein Command darf bei mehreren Akteuren
 // stehen. Hier liegen sie, weil dieses Projekt Commands, Queries UND Pipeline-Trigger sieht.
 //
-// IDarf ist das SPONTANE (der Mensch klickt, der Worker fragt von sich aus). Was ein Akteur draußen als REAKTION auf ein Event
-// hineingibt, steht in seinem Vertrag (IAkteurVertrag<A>, §9): Auf(Event) mit dem Ausgabe-Vertrag als Rückgabetyp. Daraus
+// IDarf ist das SPONTANE (der Mensch klickt, der Worker fragt von sich aus). Was ein Akteur draußen als ZUSAGE auf ein Event
+// hineingibt, steht in seinem Vertrag (IAkteurVertrag<A>, docs/konzept-akteure.md §3): Auf(Event) mit dem Ausgabe-Vertrag als Rückgabetyp. Daraus
 // entstehen die Client-Basis (Python), die Rechte (Befugt = IDarf ∪ Ausgaben, Hört = Eingänge) und die Kante im Editor.
 
 // ── Maschinen ──────────────────────────────────────────────────────────────────────────────────────────────────────
