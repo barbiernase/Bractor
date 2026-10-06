@@ -53,6 +53,9 @@ public static class ModellMapper
             records.Add(AlsRecord(r.Name, RecordArt.Trigger, r.Fields, r.Meta, dom.Wurzel));
         foreach (var r in dom.SelbstNachrichten)
             records.Add(AlsRecord(r.Name, RecordArt.Selbst, r.Fields, r.Meta, dom.Wurzel));
+        // Katalog-Funktionen: der Auftrag (IAuftrag<F>) als eigene Record-Art — der eine Eingang je Funktion.
+        foreach (var r in dom.Auftraege)
+            records.Add(AlsRecord(r.Name, RecordArt.Auftrag, r.Fields, r.Meta, dom.Wurzel) with { Funktion = r.Funktion });
 
         var enums = dom.Enums.Select(e => new Enumeration
         {
@@ -106,7 +109,9 @@ public static class ModellMapper
                 Wenn = r.WhenFull.Select(Evt).ToList(),
                 SammelEvent = r.SammelFull is null ? null : Evt(r.SammelFull),
                 SammelAusdruck = r.SammelLambda,
-                Sende = Cmd(r.SendsFull),
+                Sende = r.RuftFull is null ? Cmd(r.SendsFull) : "",
+                Rufe = r.RuftFull is null ? null : Kurz(r.RuftFull),
+                Zeitlimit = r.Zeitlimit,
                 SendeJe = r.FanOut,
                 SendeAusdruck = r.SendLambda,
                 Kompensation = r.CompensatesFull is null ? null : Cmd(r.CompensatesFull),
@@ -144,6 +149,11 @@ public static class ModellMapper
         return Herkunft.Stempeln(new EditorModell
         {
             Records = records, Enums = enums, Aggregate = aggregate, Decider = decider, Applier = applier, Sagas = sagas, Rahmen = rahmen,
+            Funktionen = dom.Funktionen.Select(f => new Funktion
+            {
+                Name = f.Name, Namespace = f.Namespace, Auftrag = Kurz(f.AuftragFull), Ergebnisse = f.ErgebnisseFull.Select(Evt).ToList(),
+                Doku = f.Doku, Datei = Rel(f.Datei),
+            }).ToList(),
             Akteure = dom.Akteure.Select(x => new Akteur
             {
                 Name = x.Name, Namespace = x.Namespace, Darf = x.Darf, Art = x.Art, Dienste = x.Dienste, Doku = x.Doku, Datei = Rel(x.Datei),

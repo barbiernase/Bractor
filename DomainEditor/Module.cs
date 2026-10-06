@@ -38,7 +38,7 @@ public static class Module
     /// <summary>Partner-Präfix eines Akteurs (ein benannter Teil der Außenwelt): „Akteur Inspektor".</summary>
     public const string AkteurPraefix = "Akteur ";
     /// <summary>Sorten, deren Nachricht einen Konsumenten braucht (sonst offener Eingang).</summary>
-    public static readonly IReadOnlySet<string> BrauchtKonsument = new HashSet<string> { Grammatik.Command, Grammatik.Query, Grammatik.Trigger, Grammatik.Selbst };
+    public static readonly IReadOnlySet<string> BrauchtKonsument = new HashSet<string> { Grammatik.Command, Grammatik.Query, Grammatik.Trigger, Grammatik.Selbst, Grammatik.Auftrag };
     /// <summary>Sorten, deren Nachricht einen Erzeuger braucht (sonst offener Ausgang).</summary>
     public static readonly IReadOnlySet<string> BrauchtErzeuger = new HashSet<string> { Grammatik.Event, Grammatik.Transient, Grammatik.Response };
 

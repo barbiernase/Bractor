@@ -32,6 +32,11 @@ public sealed record EditorModell
     public IReadOnlyList<ApplyRegel> Applier { get; init; } = [];
     public IReadOnlyList<Saga> Sagas { get; init; } = [];
     /// <summary>
+    /// Katalog-Funktionen (<c>interface IX : IFunktion</c>): ein Auftrag hinein, OneOf-Ergebnis-Events heraus. Ein Prozess ruft sie mit
+    /// <c>Rufe&lt;IX&gt;</c> wie ein Aggregat mit <c>Sende&lt;Cmd&gt;</c>; die Implementierung (C#, Python, extern) ist Bindung, kein Modell.
+    /// </summary>
+    public IReadOnlyList<Funktion> Funktionen { get; init; } = [];
+    /// <summary>
     /// Akteure (<c>docs/konzept-akteure.md</c>): wer von außen hineingibt — je Akteur die Typen, die er darf
     /// (<c>IDarf&lt;T&gt;</c>: Commands, Queries, Trigger, Transient-Events). Was er hören darf, ist abgeleitet, nicht Modell.
     /// </summary>
@@ -87,8 +92,9 @@ public static class RecordArt
     public const string Konfig = "konfig";          // reiner Record, per Ctor in einen Konsumenten injiziert → Konfigs.cs
     public const string Trigger = "trigger";        // : IPipelineTrigger → Triggers.cs
     public const string Selbst = "selbst";          // : IPipelineSelfMessage (Selbst<T>-Nachricht einer Pipeline) → SelbstNachrichten.cs
+    public const string Auftrag = "auftrag";        // : IAuftrag<F> (der eine Eingang einer Katalog-Funktion) → Auftraege.cs
 
-    public static readonly IReadOnlyList<string> Alle = [Command, Event, Rejection, ValueObject, Query, Antwort, ReadModel, Konfig, Trigger, Selbst];
+    public static readonly IReadOnlyList<string> Alle = [Command, Event, Rejection, ValueObject, Query, Antwort, ReadModel, Konfig, Trigger, Selbst, Auftrag];
 }
 
 /// <summary>
@@ -112,6 +118,8 @@ public sealed record Record
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
     public bool Geteilt { get; init; }
+    /// <summary>Nur auftrag: die Katalog-Funktion, deren Eingang er ist (Marker <c>IAuftrag&lt;Funktion&gt;</c>).</summary>
+    public string? Funktion { get; init; }
     /// <summary>
     /// Zusätzliche Member im Record-Rumpf als roher C#-Text (z. B. <c>static Default</c>, abgeleitete
     /// Props) — Handcode, den der Scaffolder verbatim in <c>{ … }</c> einhängt. Null ⇒ <c>record X(…);</c>.
@@ -276,7 +284,15 @@ public sealed record SagaSchritt
     public string? SammelAnzahl { get; init; }
     /// <summary>Der echte Count-Join-Lambda-Ausdruck verbatim (z. B. <c>t => t.Anzahl</c>); Vorrang vor <see cref="SammelAnzahl"/>.</summary>
     public string? SammelAusdruck { get; init; }
-    public required string Sende { get; init; }
+    /// <summary>Der gesendete Command (<c>Sende&lt;Cmd&gt;</c>). Leer, wenn der Schritt eine Funktion ruft (<see cref="Rufe"/>).</summary>
+    public string Sende { get; init; } = "";
+    /// <summary>
+    /// Statt eines Commands: die gerufene Katalog-Funktion (<c>Rufe&lt;F&gt;</c>) — der Aufruf-Knoten im Graph. Der Lambda (Auftrag aus dem
+    /// Match) steht in <see cref="SendeAusdruck"/>; ohne ihn schreibt der Scaffolder einen Stub mit dem Auftrag der Funktion.
+    /// </summary>
+    public string? Rufe { get; init; }
+    /// <summary>Zeitlimit des Aufrufs als C#-Ausdruck verbatim (z. B. <c>TimeSpan.FromSeconds(30)</c>); null = keins.</summary>
+    public string? Zeitlimit { get; init; }
     /// <summary>Fan-out: <c>SendeJe</c> statt <c>Sende</c> — iteriert <see cref="SendeJeCollection"/> mit <see cref="SendeJeElement"/>.</summary>
     public bool SendeJe { get; init; }
     public string? SendeJeCollection { get; init; }
@@ -293,6 +309,24 @@ public sealed record SagaSchritt
     public string? KompensationAusdruck { get; init; }
     /// <summary>Kompensation als Fan-out (<c>RückgängigDurchJe</c>).</summary>
     public bool KompensationJe { get; init; }
+}
+
+/// <summary>
+/// Eine Katalog-Funktion — nur ihre Signatur: <c>public interface {Name} : IFunktion { Task&lt;OneOf&lt;Ergebnisse…&gt;&gt; RufeAsync({Auftrag} a,
+/// IAusfuehrung x); }</c>. Der Auftrag ist ein <see cref="Record"/> der Art <see cref="RecordArt.Auftrag"/>, die Ergebnisse sind Event-Records.
+/// </summary>
+public sealed record Funktion
+{
+    public required string Name { get; init; }
+    public required string Namespace { get; init; }
+    /// <summary>Der Auftrag (Record-Name, Art <c>auftrag</c>) — der eine Eingang.</summary>
+    public required string Auftrag { get; init; }
+    /// <summary>Die Ergebnis-Events (OneOf-Fälle, Record-Namen) — die Ausgänge der Funktion im Graph.</summary>
+    public IReadOnlyList<string> Ergebnisse { get; init; } = [];
+    public string? Doku { get; init; }
+    public string? Datei { get; init; }
+    /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
+    public string? Herkunft { get; init; }
 }
 
 /// <summary>

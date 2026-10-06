@@ -35,6 +35,10 @@ public sealed class DomainModel
     public List<RecordRaw> SelbstNachrichten { get; } = new();
     /// <summary>Enums in Domain-Assemblies.</summary>
     public List<EnumRaw> Enums { get; } = new();
+    /// <summary>Katalog-Funktionen (<c>interface IX : IFunktion</c>): Auftrag und Ergebnisse aus der Signatur.</summary>
+    public List<FunktionRaw> Funktionen { get; } = new();
+    /// <summary>Aufträge (<c>IAuftrag&lt;F&gt;</c>): der eine Eingang je Katalog-Funktion.</summary>
+    public List<RecordRaw> Auftraege { get; } = new();
     /// <summary>
     /// Konfigurations-Records: Records ohne Nachrichten-Rolle, die per DI in den KONSTRUKTOR eines Konsumenten
     /// (Pipeline, Projektion/Reaktion, Reader, Store-Impl) injiziert werden — keine Value Objects der Domäne.
@@ -94,6 +98,20 @@ public sealed class RecordRaw
     public List<string>? StoreKandidaten;
     /// <summary>Nur ReadModel: geteiltes Dokument (Marker <c>IGeteiltesReadModel</c>) — aus mehreren Streams beschrieben.</summary>
     public bool Geteilt;
+    /// <summary>Nur Auftrag: die Funktion, deren Eingang er ist (<c>IAuftrag&lt;F&gt;</c>, einfacher Name).</summary>
+    public string? Funktion;
+}
+
+/// <summary>
+/// Eine Katalog-Funktion (<c>interface IX : IFunktion { Task&lt;OneOf&lt;E…&gt;&gt; RufeAsync(XAuftrag a, IAusfuehrung x); }</c>) — nur
+/// die Signatur: welcher Auftrag hinein, welche Ergebnis-Events heraus. Die Implementierung ist Bindung, kein Modell-Fakt.
+/// </summary>
+public sealed class FunktionRaw
+{
+    public string Name = "", Full = "", Namespace = "";
+    public string AuftragFull = "";
+    public List<string> ErgebnisseFull = new();
+    public string? Doku, Datei;
 }
 
 public sealed class EnumRaw
@@ -155,6 +173,10 @@ public sealed class RuleRaw
     public string? SammelLambda;
     public bool FanOut;
     public string SendsFull = "";
+    /// <summary>Statt Sende: die gerufene Katalog-Funktion (<c>Rufe&lt;F&gt;</c>, FullName); der Lambda steht in <see cref="SendLambda"/>.</summary>
+    public string? RuftFull;
+    /// <summary>Der Zeitlimit-Ausdruck verbatim (<c>.Zeitlimit(TimeSpan.FromSeconds(30))</c> → <c>TimeSpan.FromSeconds(30)</c>).</summary>
+    public string? Zeitlimit;
     /// <summary>Der Sende-/SendeJe-Lambda verbatim.</summary>
     public string? SendLambda;
     public string? CompensatesFull;
@@ -382,7 +404,7 @@ public sealed class DomainExtractor
     private readonly HashSet<string> _impliziteUsings;
     private readonly INamedTypeSymbol? _iDecider, _iApplier, _iAggEnvelope, _pipelineContext,
         _iWriteStore, _iReadStore, _iStore, _iWertobjekt, _prozessTyp, _iAkteur, _iDarf, _iAkteurDienst, _iAkteurVertrag,
-        _iClient, _iSendet, _iFragt;
+        _iClient, _iSendet, _iFragt, _iFunktion, _iAuftrag;
     /// <summary>State-FullName → die Typen, die <c>IDecider&lt;State&gt;</c> bzw. <c>IApplier&lt;State&gt;</c> implementieren (egal wo deklariert).</summary>
     private readonly Dictionary<string, List<INamedTypeSymbol>> _deciderJeState = new(StringComparer.Ordinal), _applierJeState = new(StringComparer.Ordinal);
 
@@ -427,6 +449,8 @@ public sealed class DomainExtractor
         _iFragt = Get(Vertrag.IFragt);
         _iDarf = Get(Vertrag.IDarf);
         _iWertobjekt = Get(Vertrag.IWertobjekt);
+        _iFunktion = Get(Vertrag.IFunktion);
+        _iAuftrag = Get(Vertrag.IAuftrag);
         _prozessTyp = Get(Vertrag.ProzessMetadatenName);
 
         // Aggregat-Komposition über den TYP: wer IDecider<T>/IApplier<T> implementiert, gehört zum State T.
@@ -567,6 +591,8 @@ public sealed class DomainExtractor
                 m.Enums.Add(ReadEnum(t));
                 continue;
             }
+            // Katalog-Funktion: ein Interface mit IFunktion — nur seine Signatur (Auftrag → Ergebnisse) zählt.
+            if (t.TypeKind == TypeKind.Interface && _iFunktion != null && Sym.Implements(t, _iFunktion)) { if (ReadFunktion(t) is { } f) m.Funktionen.Add(f); continue; }
             // Akteur-Dienst: ein Vertrag (Interface) mit IAkteurDienst<A> — kein Akteur, er gehört A (wird unten zugeordnet).
             if (t.TypeKind == TypeKind.Interface && AkteurVonDienst(t) is { } dienstVon) { dienstZu.Add((t.Name, dienstVon.Fq())); continue; }
             // Client-Vertrag (IClientVertrag): die Software an der Leitung — vor dem Akteur-Vertrag, denn er ERBT Vertrags-Teile.
@@ -583,6 +609,7 @@ public sealed class DomainExtractor
             else if (Sym.Implements(t, _iReadModel)) { raw.Geteilt = _iGeteilt != null && Sym.Implements(t, _iGeteilt); m.ReadModels.Add(raw); }
             else if (Sym.Implements(t, _iPipelineTrigger)) m.Triggers.Add(raw);
             else if (_iSelfMessage != null && Sym.Implements(t, _iSelfMessage)) m.SelbstNachrichten.Add(raw);
+            else if (FunktionVonAuftrag(t) is { } fürFunktion) { raw.Funktion = fürFunktion.Name; m.Auftraege.Add(raw); }
             // Value Object = als Wertobjekt markiert ODER ein Record (Datenträger per Sprachkonstrukt) ohne jede Rolle.
             // Klassen ohne Marker sind Dienste/Helfer (z. B. Store-Implementierungen), keine Werte.
             else if ((Sym.Implements(t, _iWertobjekt) || t.IsRecord)
@@ -613,6 +640,30 @@ public sealed class DomainExtractor
         m.Triggers.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.SelbstNachrichten.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Triggers.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
+        m.Funktionen.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
+        m.Auftraege.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
+    }
+
+    /// <summary>Ein Auftrag (<c>record X : IAuftrag&lt;F&gt;</c>) → F; sonst null.</summary>
+    private INamedTypeSymbol? FunktionVonAuftrag(INamedTypeSymbol t) =>
+        _iAuftrag == null ? null
+            : t.AllInterfaces.FirstOrDefault(i => i.OriginalDefinition.Fq() == _iAuftrag.Fq())?.TypeArguments.FirstOrDefault() as INamedTypeSymbol;
+
+    /// <summary>
+    /// Die Signatur einer Katalog-Funktion: die eine Methode (<see cref="Vertrag.FunktionsMethode"/>), ihr Auftrag (1. Parameter)
+    /// und ihre Ergebnisse (OneOf der Rückgabe). Weicht die Form ab, gibt es keine Funktion im Modell — CQRS068 meldet es im Build.
+    /// </summary>
+    private FunktionRaw? ReadFunktion(INamedTypeSymbol t)
+    {
+        var methode = t.GetMembers(Vertrag.FunktionsMethode).OfType<IMethodSymbol>().FirstOrDefault();
+        if (methode is not { Parameters.Length: 2 } || methode.Parameters[0].Type is not INamedTypeSymbol auftrag) return null;
+        var decl = QuellDeklarationen(t).FirstOrDefault();
+        return new FunktionRaw
+        {
+            Name = t.Name, Full = t.Fq(), Namespace = t.ContainingNamespace.Fq(), AuftragFull = auftrag.Fq(),
+            ErgebnisseFull = UniverseEvents(methode.ReturnType).Select(e => e.Fq()).ToList(),
+            Doku = decl == null ? null : Summary(decl), Datei = decl?.SyntaxTree.FilePath,
+        };
     }
 
     private EnumRaw ReadEnum(INamedTypeSymbol t)
@@ -1074,7 +1125,8 @@ public sealed class DomainExtractor
             // Die Rollen-Marker (sie bestimmen die Art und werden aus ihr geschrieben) — alle übrigen Basen sind Code-Fakt.
             var rollen = new[] { _iCommand, _iCreation, _iEvent, _iTransient, _iQuery, _iQueryResponse, _iReadModel, _iGeteilt, _iPipelineTrigger, _iSelfMessage }
                 .Where(x => x != null).Select(x => x!.Fq()).ToHashSet(StringComparer.Ordinal);
-            basen = bl.Types.Where(b => model.GetTypeInfo(b.Type).Type is not INamedTypeSymbol bt || !rollen.Contains(bt.Fq()))
+            basen = bl.Types.Where(b => model.GetTypeInfo(b.Type).Type is not INamedTypeSymbol bt
+                                        || !(rollen.Contains(bt.Fq()) || (_iAuftrag != null && bt.OriginalDefinition.Fq() == _iAuftrag.Fq())))
                 .Select(b => b.ToString()).ToList();
             if (basen.Count == 0) basen = null;
         }
@@ -1226,6 +1278,8 @@ public sealed class DomainExtractor
         var rule = new RuleRaw();
         foreach (var (ms, inv) in kette)
         {
+            // Zeitlimit trägt kein Typ-Argument: der Ausdruck (z. B. TimeSpan.FromSeconds(30)) verbatim.
+            if (ms.Name == Vertrag.Zeitlimit) { rule.Zeitlimit = inv.ArgumentList.Arguments.FirstOrDefault()?.Expression.ToString(); continue; }
             if (ms.TypeArguments.FirstOrDefault() is not INamedTypeSymbol argTyp) continue;
             var arg = argTyp.Fq();
             var lambdaArg = inv.ArgumentList.Arguments.FirstOrDefault()?.Expression;
@@ -1235,6 +1289,7 @@ public sealed class DomainExtractor
             else if (verb == Vertrag.UndAlle) { rule.Join = "count"; rule.SammelFull = arg; rule.SammelLambda = lambdaText; }
             else if (verb == Vertrag.Sende) { rule.SendsFull = arg; rule.SendLambda = lambdaText; }
             else if (verb == Vertrag.SendeJe) { rule.SendsFull = arg; rule.FanOut = true; rule.SendLambda = lambdaText; }
+            else if (verb == Vertrag.Rufe) { rule.RuftFull = arg; rule.SendLambda = lambdaText; }
             else if (verb == Vertrag.RückgängigDurch || verb == Vertrag.RückgängigDurchJe)
             {
                 rule.CompensatesFull = arg;
@@ -1244,7 +1299,7 @@ public sealed class DomainExtractor
         }
         if (rule.Join != "count")
             rule.Join = rule.WhenFull.Count > 1 ? "and" : "single";
-        return string.IsNullOrEmpty(rule.SendsFull) ? null : rule;
+        return string.IsNullOrEmpty(rule.SendsFull) && rule.RuftFull == null ? null : rule;
     }
 
     /// <summary>

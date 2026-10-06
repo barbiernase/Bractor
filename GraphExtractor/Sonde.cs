@@ -166,6 +166,7 @@ public static class Sonde
                   + (r["istErzeugung"]?.GetValue<bool>() == true ? " erzeugung" : "")
                   + (r["aggregat"] is { } ag ? $" aggregat={ag}" : "")
                   + (r["typart"] is { } ta ? $" typart={ta}" : "")
+                  + (r["funktion"] is { } fn ? $" funktion={fn}" : "")
                   + $" | {Felder(r)}");
         foreach (var e in A(b, "enums").Where(Sonde))
             z.Add($"enum {S(e, "namespace")}.{S(e, "name")} | {string.Join(", ", A(e, "werte").Select(w => (string?)w))}");
@@ -178,8 +179,13 @@ public static class Sonde
             z.Add($"apply {S(a, "aggregat")}.{S(a, "event")}");
         foreach (var s in A(b, "sagas").Where(Sonde))
             z.Add($"saga {S(s, "namespace")}.{S(s, "name")} auslöser={S(s, "triggerEvent")} | " + string.Join("; ", A(s, "schritte").Select(t =>
-                $"wenn {string.Join("+", A(t, "wenn").Select(x => (string?)x))} -> {(t["sendeJe"]?.GetValue<bool>() == true ? "sendeJe" : "sende")} {S(t, "sende")}"
+                $"wenn {string.Join("+", A(t, "wenn").Select(x => (string?)x))} -> "
+                + (t["rufe"] is { } rf ? $"rufe {rf}" : $"{(t["sendeJe"]?.GetValue<bool>() == true ? "sendeJe" : "sende")} {S(t, "sende")}")
+                + (t["zeitlimit"] is { } zl ? $" zeitlimit={zl}" : "")
                 + (t["kompensation"] is { } k ? $" kompensiert {k}" : ""))));
+        // Katalog-Funktionen: Auftrag → Ergebnisse (nur die Signatur).
+        foreach (var f in A(b, "funktionen").Where(Sonde))
+            z.Add($"funktion {S(f, "namespace")}.{S(f, "name")} | {S(f, "auftrag")} -> {string.Join("; ", A(f, "ergebnisse").Select(x => (string?)x))}");
 
         // Leseseite: Store-Fn-Ids → „Store.Fn" auflösen.
         var fnName = new Dictionary<string, string>();

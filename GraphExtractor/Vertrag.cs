@@ -42,6 +42,10 @@ public static class Vertrag
     public static readonly string IMaschine = typeof(IMaschine).FullName!;
     public static readonly string IKi = typeof(IKi).FullName!;
     public static readonly string IWertobjekt = typeof(IWertobjekt).FullName!;
+    public static readonly string IFunktion = typeof(IFunktion).FullName!;
+    public static readonly string IAuftrag = typeof(IAuftrag<>).FullName!;
+    /// <summary>Die eine Methode einer Katalog-Funktion (EINE Quelle: Abstractions.Funktionsvertrag).</summary>
+    public const string FunktionsMethode = Funktionsvertrag.Methode;
     public static readonly string IPipelineHandler = typeof(IPipelineHandler).FullName!;
     public static readonly string IPipelineTrigger = typeof(IPipelineTrigger).FullName!;
     public static readonly string IPipelineSelfMessage = typeof(IPipelineSelfMessage).FullName!;
@@ -96,10 +100,12 @@ public static class Vertrag
     public static readonly string UndAlle = nameof(RegelBauer<IEvent>.UndAlle);
     public static readonly string Sende = nameof(RegelBauer<IEvent>.Sende);
     public static readonly string SendeJe = nameof(RegelBauer<IEvent>.SendeJe);
+    public static readonly string Rufe = nameof(RegelBauer<IEvent>.Rufe);
+    public static readonly string Zeitlimit = nameof(RegelAbschluss<IEvent>.Zeitlimit);
     public static readonly string RückgängigDurch = nameof(RegelAbschluss<IEvent>.RückgängigDurch);
     public static readonly string RückgängigDurchJe = nameof(RegelAbschluss<IEvent>.RückgängigDurchJe);
     public static readonly HashSet<string> RegelVerben = new(StringComparer.Ordinal)
-        { Auf, Und, UndAlle, Sende, SendeJe, RückgängigDurch, RückgängigDurchJe };
+        { Auf, Und, UndAlle, Sende, SendeJe, Rufe, Zeitlimit, RückgängigDurch, RückgängigDurchJe };
 
     // ── OneOf (Decide-/Handler-Rückgaben) ──
     public static readonly string OneOf = typeof(OneOf<>).Name.Split('`')[0];

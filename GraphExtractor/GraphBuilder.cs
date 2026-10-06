@@ -156,7 +156,9 @@ public sealed class GraphBuilder
                     Join = r.Join,
                     Sammel = r.SammelFull is null ? null : SimpleEvt(r.SammelFull),
                     FanOut = r.FanOut,
-                    Sends = SimpleCmd(r.SendsFull),
+                    Sends = r.RuftFull is null ? SimpleCmd(r.SendsFull) : "",
+                    Ruft = r.RuftFull is null ? null : r.RuftFull[(r.RuftFull.LastIndexOf('.') + 1)..],
+                    Zeitlimit = r.Zeitlimit,
                     Compensates = r.CompensatesFull is null ? null : SimpleCmd(r.CompensatesFull),
                 });
             }
@@ -571,7 +573,7 @@ public sealed class GraphBuilder
             {
                 foreach (var cmd in new[] { r.Sends, r.Compensates })
                 {
-                    if (cmd == null) continue;
+                    if (string.IsNullOrEmpty(cmd)) continue;   // eine Regel mit Rufe<F> sendet keinen Command
                     var node = _g.Nodes.FirstOrDefault(n => n.Kind == NodeKind.command && n.Name == cmd);
                     if (node?.Command?.RoutedTo == null)
                         d.Add(new Finding { Severity = "error", Code = "UNROUTED-SAGA-CMD",
@@ -596,7 +598,9 @@ public sealed class GraphBuilder
         }
 
         // Domänen-Event/Ablehnung, das KEIN Decider erzeugt (kein OneOf-Ausgang) → toter Typ (eine echte Insel).
-        var erzeugt = _dom.Aggregates.SelectMany(a => a.DecideOutcomes.Values.SelectMany(x => x)).ToHashSet(StringComparer.Ordinal);
+        // Auch die Ergebnisse einer Katalog-Funktion sind erzeugt (OneOf ihrer Signatur) — keine toten Typen.
+        var erzeugt = _dom.Aggregates.SelectMany(a => a.DecideOutcomes.Values.SelectMany(x => x))
+            .Concat(_dom.Funktionen.SelectMany(f => f.ErgebnisseFull)).ToHashSet(StringComparer.Ordinal);
         foreach (var (full, et) in _dom.Events.Where(kv => kv.Value.Meta.IstDomäne && !erzeugt.Contains(kv.Key)))
             d.Add(new Finding { Severity = "warning", Code = "UNUSED-EVENT",
                 Message = $"{(et.Persisted ? "Event" : "Ablehnung")} '{et.Simple}' wird von keinem Decider erzeugt (in keiner Decide-OneOf-Signatur) — toter Typ." });

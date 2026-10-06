@@ -189,6 +189,8 @@ public static class HtmlPresenter
 #de .gnode2.n-applier{border-color:#c08a3e;width:258px}
 #de .gnode2.n-saga{border-color:#8a5cc0;width:300px}
 #de .gnode2.n-transition{border-color:#8a6fc8;width:276px}
+#de .gnode2.n-funktion{border-color:#c08a2e;width:290px}
+#de .gnode2.n-auftrag{border-color:#c08a2e}
 #de .gnode2.n-state{border-color:#c9a24b;width:250px}
 #de .gnode2.n-readmodel{border-color:#b98a3c;width:250px}
 #de .gnode2.n-store{border-color:#2f9d95;width:290px}
@@ -229,6 +231,8 @@ public static class HtmlPresenter
 #de .gnode2.n-applier .ghead{background:#d0a35a}
 #de .gnode2.n-saga .ghead{background:#9d78d6}
 #de .gnode2.n-transition .ghead{background:#a48fd6}
+#de .gnode2.n-funktion .ghead{background:#c08a2e}
+#de .gnode2.n-auftrag .ghead{background:#d6a85a}
 #de .gnode2.n-state .ghead{background:#d4b45f}
 #de .gnode2.n-readmodel .ghead{background:#d0a45a}
 #de .gnode2.n-store .ghead{background:#3fb0a6}
@@ -542,7 +546,7 @@ public static class HtmlPresenter
   const SCALARS=()=>((MODEL.rahmen&&MODEL.rahmen.skalare)||[]);
   // Vertrags-Fakten aus dem Rahmen (vom Extractor aus dem Code gelesen).
   const ID_FELD=()=>((MODEL.rahmen&&MODEL.rahmen.aggregatIdFeld)||"");
-  const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"],konfig:["Konfiguration","vo"],query:["Query","qry"],queryresponse:["Response","qrsp"]};
+  const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"],konfig:["Konfiguration","vo"],query:["Query","qry"],queryresponse:["Response","qrsp"],auftrag:["Auftrag","cmd"]};
   let MODEL={schemaVersion:"2",akteure:[],clients:[],records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],reaktionen:[],pipelines:[],triggers:[],frists:[],dienste:[],hostSettings:[],codeNodes:[],llmNodes:[]};
   let NID=1;
   const embedded=/*__MODEL_JSON__*/;
@@ -567,6 +571,8 @@ public static class HtmlPresenter
     // Akteur (docs/konzept-akteure.md): wer von außen hineingibt — darf[] = die Typen seiner IDarf<T> (Command/Query/Trigger).
     m.akteure=m.akteure||[];m.akteure.forEach(a=>{if(!a._id)a._id="ak"+(NID++);a.darf=a.darf||[];});   /* art/dienste bewusst nicht vorbelegen (Herkunfts-Hash) */
     // Client (docs/konzept-akteure.md §4): die Software an der Leitung — traegt[] = Akteur-Vertrags-Teile, sendet/fragt/kenntnis = der Rand.
+    // Katalog-Funktion (IFunktion): Auftrag → Ergebnis-Events; ein Prozess ruft sie mit Rufe<F> (Dann ƒ an der Regel).
+    m.funktionen=m.funktionen||[];m.funktionen.forEach(f=>{if(!f._id)f._id="fk"+(NID++);f.ergebnisse=f.ergebnisse||[];});
     m.clients=m.clients||[];m.clients.forEach(c=>{if(!c._id)c._id="cl"+(NID++);c.traegt=c.traegt||[];c.sendet=c.sendet||[];c.fragt=c.fragt||[];c.kenntnis=c.kenntnis||[];});
     // Reaktion = emittierender Konsument (ISubscriber → IAsyncEnumerable<OneOf<Cmd>>): Trigger-Event → Handle → OneOf-Commands.
     m.reaktionen.forEach(r=>{if(!r._id)r._id="rk"+(NID++);r.handles=r.handles||[];r.handles.forEach(hd=>{hd.sends=hd.sends||[];hd.publishes=hd.publishes||[];});});
@@ -612,7 +618,8 @@ public static class HtmlPresenter
     m.sagas.forEach(s=>{(s.schritte||[]).forEach(st=>m.transitions.push({_id:"t"+(NID++),prozess:s.name,wenn:(st.wenn||[]).slice(),
         ...(st.sammelEvent?{sammelEvent:st.sammelEvent,sammelAusdruck:st.sammelAusdruck,sammelAnzahl:st.sammelAnzahl}:{}),
         dann:[{sende:st.sende||"",sendeJe:!!st.sendeJe,sendeJeCollection:st.sendeJeCollection||"",kompensation:st.kompensation||"",
-          sendeAusdruck:st.sendeAusdruck,kompensationAusdruck:st.kompensationAusdruck,kompensationJe:!!st.kompensationJe}]}));s.schritte=[];});
+          sendeAusdruck:st.sendeAusdruck,kompensationAusdruck:st.kompensationAusdruck,kompensationJe:!!st.kompensationJe,
+          ...(st.rufe?{rufe:st.rufe}:{}),...(st.zeitlimit?{zeitlimit:st.zeitlimit}:{})}]}));s.schritte=[];});
     return m;}
   const aggSelect=(val,on)=>{const s=h("select",{onchange:e=>on(e.target.value)});
     if(!val||!MODEL.aggregate.some(a=>a.name===val)){const o=h("option",{value:val||""},val||"— Aggregat —");o.selected=true;s.append(o);}
@@ -678,7 +685,7 @@ public static class HtmlPresenter
   function imModus(ids,aendern){TEIL={gerufen:false};try{aendern();}finally{const g=TEIL.gerufen;TEIL=null;if(g)teilNeu(ids.filter(Boolean));}}
 
   // Eindeutiger Name — Namen sind der Referenzschlüssel für Kanten/Decider/Applier.
-  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.reaktionen.map(x=>x.name),...MODEL.pipelines.map(x=>x.name),...MODEL.triggers.map(x=>x.name),...MODEL.frists.map(x=>x.name),...MODEL.dienste.map(x=>x.name),...MODEL.hostSettings.map(x=>x.name),...MODEL.codeNodes.map(x=>x.name),...MODEL.llmNodes.map(x=>x.name),...MODEL.akteure.map(x=>x.name),...MODEL.clients.map(x=>x.name)]);
+  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.reaktionen.map(x=>x.name),...MODEL.pipelines.map(x=>x.name),...MODEL.triggers.map(x=>x.name),...MODEL.frists.map(x=>x.name),...MODEL.dienste.map(x=>x.name),...MODEL.hostSettings.map(x=>x.name),...MODEL.codeNodes.map(x=>x.name),...MODEL.llmNodes.map(x=>x.name),...MODEL.akteure.map(x=>x.name),...MODEL.clients.map(x=>x.name),...MODEL.funktionen.map(x=>x.name)]);
     if(!all.has(base))return base;let i=2;while(all.has(base+i))i++;return base+i;}
 
   function enumCard(e,ei){const c=h("div",{class:"card"});
@@ -731,6 +738,9 @@ public static class HtmlPresenter
     else if(kind==="trigger")MODEL.triggers.push({_id:"tg"+(NID++),name:uniq("NeuTrigger"),namespace:defaultNs(),msgName:uniq("NeuTriggerMsg"),felder:[],...pos});
     else if(kind==="frist")MODEL.frists.push({_id:"fr"+(NID++),name:uniq("NeueFrist"),kontext:"",dauerSetting:"",plant:[],storniert:[],sendet:"",aggregat:"",...pos});
     else if(kind==="dienst")MODEL.dienste.push({_id:"di"+(NID++),name:uniq("NeuerDienst"),vertrag:"IDienst",extern:false,codeSrc:null,...pos});
+    else if(kind==="funktion"){const nm=uniq("INeueFunktion"),ns=defaultNs(),an=uniq(nm.replace(/^I/,"")+"Auftrag");
+      MODEL.records.push({name:an,kind:"auftrag",funktion:nm,namespace:ns,felder:[]});
+      MODEL.funktionen.push({_id:"fk"+(NID++),name:nm,namespace:ns,auftrag:an,ergebnisse:[],...pos});}
     else if(kind==="hostsetting")MODEL.hostSettings.push({_id:"hs"+(NID++),name:uniq("NeuSetting"),typ:"string",default:"",envKey:"",...pos});
     else if(kind==="akteur")MODEL.akteure.push({_id:"ak"+(NID++),name:uniq("NeuerAkteur"),namespace:defaultNs(),darf:[],...pos});
     else if(kind==="client")MODEL.clients.push({_id:"cl"+(NID++),name:uniq("INeuerClient"),namespace:defaultNs(),traegt:[],sendet:[],fragt:[],kenntnis:[],...pos});
@@ -966,6 +976,8 @@ public static class HtmlPresenter
      if(r.kind==="command"||r.kind==="query"){const dp=darfPort(r.name);ein=ein?h("div",{},ein,dp):dp;}
      if(ein||aus){if(INSP)zweiSeiten(body,r.name,null,ein,aus);else{if(ein)body.append(ein);if(aus)body.append(aus);}}}
     if(r.kind==="valueobject")body.append(slotRow("ftype","als Feldtyp ▶","r",{type:"ftype",dir:"out",typeName:r.name},"ftype:out:rec:"+r.name));
+    if(r.kind==="auftrag"){const a=anchorDot("command");a.classList.add("o");reg("auf:out:"+r.name,a,null);
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"Eingang von ƒ "+(r.funktion||"— (an der Funktion wählen)")+" ▶"),a));}
     body.append(h("div",{class:"gsec"},"Felder"));
     (r.felder||[]).forEach((f,fi)=>body.append(feldRow(f,()=>{r.felder.splice(fi,1);render();},undefined,r.name)));
     body.append(h("button",{class:"add",onclick:()=>{(r.felder=r.felder||[]).push({_id:"f"+(NID++),name:uniqFeldName(r.felder,"feld"),typ:"string"});render();}},"+ Feld"));
@@ -1421,6 +1433,30 @@ public static class HtmlPresenter
     body.append(h("div",{class:"slotrow"},ds,h("span",{class:"slotlbl"},"◀ Dauer: "+(f.dauerSetting||"— HostSetting andocken"))));
     const so=port("command");so.classList.add("o");reg("fr:send:"+f._id,so,{type:"sagaCmd",dir:"out",frist:f._id});
     body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"fällig → "+(f.sendet||"Command")+(f.aggregat?" @ "+f.aggregat:"")+" ▶"),so));
+  }
+
+  // KATALOG-FUNKTION (IFunktion): nur die Signatur — EIN Auftrag hinein, OneOf-Ergebnis-Events heraus. Ein Prozess ruft sie mit
+  //   Rufe<F> (Regel: „Dann ƒ"); die Implementierung (C#, Python, extern) ist Bindung im Host, kein Teil des Graphen.
+  function funktionCard(body,f){
+    body.append(topAnchor("command","◀ gerufen von Regeln (Rufe<"+(f.name||"F")+">)","fk:in:"+f.name));
+    body.append(nameInp(f,"name","Funktion","funktion"));
+    body.append(h("input",{value:f.namespace??"",oninput:e=>f.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
+    body.append(h("div",{class:"gsec"},"◀ Auftrag (der eine Eingang)"));
+    const ai=anchorDot("command");ai.classList.add("i");reg("fk:auftrag:"+f._id,ai,null);
+    const aSel=recSelect(f.auftrag,v=>{const alt=recByName(f.auftrag);if(alt&&alt.kind==="auftrag"&&alt.funktion===f.name)delete alt.funktion;
+      f.auftrag=v;const neu=recByName(v);if(neu)neu.funktion=f.name;render();},["auftrag"]);
+    body.append(h("div",{class:"slotrow"},ai,aSel));
+    body.append(h("button",{class:"add",onclick:()=>{const an=uniq((f.name||"F").replace(/^I/,"")+"Auftrag");
+      MODEL.records.push({name:an,kind:"auftrag",funktion:f.name,namespace:f.namespace,felder:[]});f.auftrag=an;render();}},"+ neuer Auftrag"));
+    body.append(h("div",{class:"gsec"},"Ergebnisse ▶ (OneOf, persistente Events)"));
+    (f.ergebnisse||[]).forEach((e,i)=>{const o=anchorDot("event");o.classList.add("o");reg("fk:out:"+f._id+":"+e,o,null);
+      body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{f.ergebnisse.splice(i,1);render();}},"✕"),
+        h("span",{class:"slotlbl",style:"flex:1;text-align:right"},e+" ▶"),o));});
+    const eSel=recSelect("",v=>{if(v&&!(f.ergebnisse=f.ergebnisse||[]).includes(v))f.ergebnisse.push(v);render();},["event"]);
+    body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Ergebnis"),eSel));
+    body.append(h("button",{class:"add",onclick:()=>{const en=uniq((f.name||"F").replace(/^I/,"")+"Erledigt");
+      MODEL.records.push({name:en,kind:"event",namespace:f.namespace,felder:[]});(f.ergebnisse=f.ergebnisse||[]).push(en);render();}},"+ neues Ergebnis-Event"));
+    body.append(h("div",{class:"gsec",style:"opacity:.6"},"Implementierung = Bindung im Host (AddFunktion<"+(f.name||"F")+", …>) — C#, Python oder extern; nicht im Graph."));
   }
 
   // Dienst-Bindung = Vertrag (Interface) → Impl (📝-Insel ODER externer Adapter). Gibt dem freistehenden
@@ -1952,7 +1988,7 @@ public static class HtmlPresenter
   //    Applier→Aggregat(rechts) · Applier→State-Feld(oben, optionale Zuweisungs-Markierung).
   const SVGNS="http://www.w3.org/2000/svg";
   const GRID=20;
-  const NODELABEL={akteur:"Akteur",client:"Client",auf:"Zusage",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Zusage",pipeline:"Pipeline",trigger:"Trigger",frist:"Frist",dienst:"Dienst",hostsetting:"HostSetting",codenode:"Code",llmnode:"LLM",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn"};
+  const NODELABEL={akteur:"Akteur",client:"Client",auf:"Zusage",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Zusage",pipeline:"Pipeline",trigger:"Trigger",frist:"Frist",dienst:"Dienst",hostsetting:"HostSetting",codenode:"Code",llmnode:"LLM",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn",funktion:"Funktion",auftrag:"Auftrag"};
   let PAN={x:40,y:30,s:1}, canvas=null, world=null, svg=null, svgTop=null, SLOTS={};
   // Typ-Navigation: HLKIND = aktuell hervorgehobener Node-Typ (Board+Minimap); JUMPIX = Sprung-Cursor je Typ.
   let HLKIND=null; const JUMPIX={};
@@ -2046,16 +2082,18 @@ public static class HtmlPresenter
   // Vor Serveraufruf: Transitionen → Saga.Schritte (inkl. UndAlle/SendeJe) + ExtraUsings; Argumente positionsvoll.
   function prepareSaga(){MODEL.sagas.forEach(s=>{const ts=transOf(s);
     // Ein Join, mehrere Dann → je Dann EINE Regel (gleiche Bedingung). flatMap fächert die Dann auf.
-    s.schritte=ts.filter(t=>(t.wenn||[]).length).flatMap(t=>(t.dann||[]).filter(d=>d.sende).map(d=>{
-      const st={wenn:(t.wenn||[]).slice(),sende:d.sende};
+    s.schritte=ts.filter(t=>(t.wenn||[]).length).flatMap(t=>(t.dann||[]).filter(d=>d.sende||d.rufe).map(d=>{
+      // Ein Aufruf je Dann: ein Command an ein Aggregat (Sende) ODER eine Katalog-Funktion (Rufe) — beide mit optionalem Zeitlimit.
+      const st=d.rufe?{wenn:(t.wenn||[]).slice(),rufe:d.rufe}:{wenn:(t.wenn||[]).slice(),sende:d.sende};
+      if(d.zeitlimit)st.zeitlimit=d.zeitlimit;
       // Aus dem Code gelesene Ausdrücke (verbatim) reisen unverändert zurück — Vorrang vor Stub-Argumenten.
       if(t.sammelEvent){st.sammelEvent=t.sammelEvent;if(t.sammelAusdruck)st.sammelAusdruck=t.sammelAusdruck;if(t.sammelAnzahl)st.sammelAnzahl=t.sammelAnzahl;}
       if(d.sendeAusdruck)st.sendeAusdruck=d.sendeAusdruck;
       if(d.kompensationAusdruck)st.kompensationAusdruck=d.kompensationAusdruck;
       if(d.kompensationJe)st.kompensationJe=true;
       // Count-Anzahl: Feld-Auswahl (D/S); ein 📝-Ausdruck (H-Fallback) hat Vorrang.
-      if(d.sendeJe){st.sendeJe=true;if(d.sendeJeCollection)st.sendeJeCollection=d.sendeJeCollection;}
-      const sa=argListe(d.sende,d.sendeArgs);if(sa.length)st.sendeArgumente=sa;
+      if(d.sendeJe&&!d.rufe){st.sendeJe=true;if(d.sendeJeCollection)st.sendeJeCollection=d.sendeJeCollection;}
+      if(!d.rufe){const sa=argListe(d.sende,d.sendeArgs);if(sa.length)st.sendeArgumente=sa;}
       if(d.kompensation){st.kompensation=d.kompensation;const ka=argListe(d.kompensation,d.kompArgs);if(ka.length)st.kompensationArgumente=ka;}
       return st;}));
     // usings: der Scaffolder leitet sie aus den referenzierten Records ab (inkl. Auslöser-Namespace);
@@ -2066,6 +2104,8 @@ public static class HtmlPresenter
   function topAnchor(color,label,key){const s=anchorDot(color);s.classList.add("t");reg(key,s,null);return h("div",{class:"gtopfield"},s,h("span",{class:"slotlbl"},label));}
   // Namens-Eingabe: benennt um UND zieht alle Verbindungen mit (Namen sind der Referenzschlüssel).
   function renameRefs(kind,obj,old,nv){
+    if(kind==="funktion"){MODEL.transitions.forEach(t=>(t.dann||[]).forEach(d=>{if(d.rufe===old)d.rufe=nv;}));
+      MODEL.records.forEach(r=>{if(r.kind==="auftrag"&&r.funktion===old)r.funktion=nv;});}
     if(kind==="akteur"){MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.akteur===old)hd.akteur=nv;}));
       // Ein Vertrag ohne eigenen Namen heißt I+Akteur — Clients, die ihn tragen, ziehen mit.
       if(!obj.vertragName)MODEL.clients.forEach(c=>{c.traegt=(c.traegt||[]).map(t=>t==="I"+old?"I"+nv:t);});}
@@ -2074,6 +2114,8 @@ public static class HtmlPresenter
       MODEL.applier.forEach(a=>{if(a.aggregat===old)a.aggregat=nv;});
       MODEL.states.forEach(s=>{if(s.aggregat===old)s.aggregat=nv;});
     }else if(kind==="record"){
+      // Katalog-Funktionen: ihr Auftrag und ihre Ergebnisse sind Record-Namen.
+      MODEL.funktionen.forEach(f=>{if(f.auftrag===old)f.auftrag=nv;f.ergebnisse=(f.ergebnisse||[]).map(x=>x===old?nv:x);});
       // Akteure dürfen den Typ unter seinem neuen Namen (IDarf<T> folgt dem Typ).
       MODEL.akteure.forEach(a=>{a.darf=(a.darf||[]).map(x=>x===old?nv:x);
         (a.vertrag||[]).forEach(r=>{if(r.eingang===old)r.eingang=nv;r.ausgaenge=(r.ausgaenge||[]).map(x=>x===old?nv:x);});});
@@ -2165,7 +2207,8 @@ public static class HtmlPresenter
             ...MODEL.applier.map(a=>({id:"app:"+a._id,name:a.event||"",kind:"applier",ref:a})),
             ...MODEL.enums.map(e=>({id:"enum:"+e.name,name:e.name,kind:"enum",ref:e})),
             ...MODEL.sagas.map(s=>({id:"saga:"+s.name,name:s.name,kind:"saga",ref:s})),
-            ...MODEL.transitions.map(t=>({id:"tr:"+t._id,name:((t.dann||[]).map(d=>d.sende).filter(Boolean).join(", ")),kind:"transition",ref:t})),
+            ...MODEL.transitions.map(t=>({id:"tr:"+t._id,name:((t.dann||[]).map(d=>d.rufe||d.sende).filter(Boolean).join(", ")),kind:"transition",ref:t})),
+            ...MODEL.funktionen.map(f=>({id:"fk:"+f._id,name:f.name,kind:"funktion",ref:f})),
             ...MODEL.readModels.map(rm=>({id:"rm:"+rm._id,name:rm.name,kind:"readmodel",ref:rm})),
             ...MODEL.stores.map(s=>({id:"sto:"+s._id,name:s.name,kind:"store",ref:s})),
             ...MODEL.projektionen.map(p=>({id:"prj:"+p._id,name:p.name,kind:"projektion",ref:p})),
@@ -2192,7 +2235,7 @@ public static class HtmlPresenter
   const ROLE_AGG={command:0,decider:1,aggregate:2,state:2,event:3,rejection:3,applier:4,valueobject:5,enum:5,projektion:6,"handle:projektion":7,"handle:reaktion":7,
     fn:8,store:9,readmodel:9,query:10,"handle:reader":11,queryresponse:12,reader:13};
   // Rollen-Spalten im Geteilt-Band.
-  const ROLE_SHARED={saga:0,transition:1,reaktion:2,"handle:reaktion":3,pipeline:4,"handle:pipeline":5,trigger:6,frist:6,dienst:7,hostsetting:7,konfig:7,valueobject:8,enum:8,command:9,event:9,rejection:9,
+  const ROLE_SHARED={saga:0,transition:1,auftrag:2,funktion:3,reaktion:2,"handle:reaktion":3,pipeline:4,"handle:pipeline":5,trigger:6,frist:6,dienst:7,hostsetting:7,konfig:7,valueobject:8,enum:8,command:9,event:9,rejection:9,
     fn:10,store:11,readmodel:11,"handle:projektion":12,projektion:13,"handle:reader":14,reader:15,query:14,queryresponse:16,codenode:17,llmnode:17};
   // Rolle eines Knotens: Handles je Besitzer-Art (Projektions- vs. Reader-Handle liegen in verschiedenen Spalten).
   const rolle=(n,map)=>{const k=n.kind==="handle"?"handle:"+n.own.kind:n.kind;return map[k]!==undefined?map[k]:99;};
@@ -2241,7 +2284,10 @@ public static class HtmlPresenter
     MODEL.sagas.forEach(s=>{if(recByName(s.triggerEvent))push(rec(s.triggerEvent),"saga:"+s.name);});
     MODEL.transitions.forEach(t=>{if(t.prozess)push("tr:"+t._id,"saga:"+t.prozess);
       (t.wenn||[]).forEach(e=>{if(recByName(e))push(rec(e),"tr:"+t._id);});
-      (t.dann||[]).forEach(d=>{if(recByName(d.sende))push("tr:"+t._id,rec(d.sende));if(recByName(d.kompensation))push("tr:"+t._id,rec(d.kompensation));});});
+      (t.dann||[]).forEach(d=>{if(recByName(d.sende))push("tr:"+t._id,rec(d.sende));if(recByName(d.kompensation))push("tr:"+t._id,rec(d.kompensation));
+        const fk=d.rufe&&MODEL.funktionen.find(f=>f.name===d.rufe);if(fk)push("tr:"+t._id,"fk:"+fk._id);});});
+    MODEL.funktionen.forEach(f=>{if(recByName(f.auftrag))push(rec(f.auftrag),"fk:"+f._id);
+      (f.ergebnisse||[]).forEach(e=>{if(recByName(e))push("fk:"+f._id,rec(e));});});
     MODEL.readModels.forEach(rm=>{const st=MODEL.stores.find(s=>s.name===rm.store);if(st)push("rm:"+rm._id,"sto:"+st._id);});
     // Store-Fns: eigene Knoten am Store (Hub-Kante Fn → Store), ihr Impl-Rumpf hängt an der Fn.
     MODEL.stores.forEach(st=>(st.writeFns||[]).concat(st.readFns||[]).forEach(fn=>{push("fn:"+fn._id,"sto:"+st._id);if(fn.codeSrc)push(codeId(fn.codeSrc),"fn:"+fn._id);}));
@@ -2553,6 +2599,7 @@ public static class HtmlPresenter
     else if(n.kind==="trigger")triggerCard(body,n.ref);
     else if(n.kind==="frist")fristCard(body,n.ref);
     else if(n.kind==="dienst")dienstCard(body,n.ref);
+    else if(n.kind==="funktion")funktionCard(body,n.ref);
     else if(n.kind==="hostsetting")hostSettingCard(body,n.ref);
     else if(n.kind==="akteur")akteurCard(body,n.ref);
     else if(n.kind==="client")clientCard(body,n.ref);
@@ -2591,6 +2638,7 @@ public static class HtmlPresenter
     else if(k==="trigger")MODEL.triggers.splice(MODEL.triggers.indexOf(ref),1);
     else if(k==="frist")MODEL.frists.splice(MODEL.frists.indexOf(ref),1);
     else if(k==="dienst")MODEL.dienste.splice(MODEL.dienste.indexOf(ref),1);
+    else if(k==="funktion")MODEL.funktionen.splice(MODEL.funktionen.indexOf(ref),1);
     else if(k==="hostsetting")MODEL.hostSettings.splice(MODEL.hostSettings.indexOf(ref),1);
     else if(k==="akteur")MODEL.akteure.splice(MODEL.akteure.indexOf(ref),1);
     else if(k==="client"){MODEL.clients.splice(MODEL.clients.indexOf(ref),1);AUF=null;}
@@ -3189,10 +3237,14 @@ public static class HtmlPresenter
       if(t.prozess)add("tr:prozess:"+t._id,"hub:in:"+t.prozess+":"+t._id,"#9d78d6",true);
       (t.wenn||[]).forEach((e,j)=>{if(e)add("evt:out:"+e,"tr:in:"+t._id+":"+j,"#4fb06a");});
       (t.dann||[]).forEach((d,di)=>{
+        if(d.rufe)add("tr:rufe:"+t._id+":"+di,"fk:in:"+d.rufe,"#c08a2e");
         if(d.sende)add("tr:sende:"+t._id+":"+di,"cmd:in:"+d.sende,"#4a86d6");
         if(d.kompensation)add("tr:komp:"+t._id+":"+di,"cmd:in:"+d.kompensation,"#cf6f68",true);
       });
     });
+    // Katalog-Funktion: Auftrag (Record) → Funktion (gestrichelt), Funktion → ihre Ergebnis-Events.
+    MODEL.funktionen.forEach(f=>{if(f.auftrag)add("auf:out:"+f.auftrag,"fk:auftrag:"+f._id,"#c08a2e",true);
+      (f.ergebnisse||[]).forEach(e=>{if(e)add("fk:out:"+f._id+":"+e,"evt:in:"+e,"#4fb06a");});});
     // ── Leseseite: ReadModel→Store, Projektion/Reader→Store-Scope, Event→Projektion, Query→Reader,
     //    Reader→Response, und CODE (📝/🤖) → Rumpf-Ports (gestrichelt). ──
     const CODE="#8a8f9c";
@@ -3553,7 +3605,9 @@ public static class HtmlPresenter
     else if(k==="reader")t=(r.handles||[]).length+" Handles · ? "+kurz((r.handles||[]).map(x=>x.query));
     else if(k==="pipeline")t=(r.handles||[]).length+" Handle · → "+kurz((r.handles||[]).flatMap(plAusgaenge));
     else if(k==="saga")t="Auslöser: "+(r.triggerEvent||"—")+" · "+transOf(r).length+" Regeln";
-    else if(k==="transition")t="WENN "+kurz(r.wenn)+" → "+kurz((r.dann||[]).map(d=>d.sende));
+    else if(k==="transition")t="WENN "+kurz(r.wenn)+" → "+kurz((r.dann||[]).map(d=>d.rufe?"ƒ "+d.rufe+(d.zeitlimit?" ⏳":""):d.sende+(d.zeitlimit?" ⏳":"")));
+    else if(k==="funktion")t=(r.auftrag||"?")+" → "+((r.ergebnisse||[]).length?kurz(r.ergebnisse):"(kein Ergebnis)");
+    else if(k==="auftrag")t="Eingang von ƒ "+(r.funktion||"—");
     else if(k==="store")t=(r.writeFns||[]).length+" schreibend · "+(r.readFns||[]).length+" lesend";
     else if(k==="readmodel"&&r.geteilt)t="⇄ geteilt";
     else if(k==="auf")t="◀ "+(r.eingang||"?")+" → "+((r.ausgaenge||[]).length?kurz(r.ausgaenge)+(r.strom?" (Strom)":""):"zur Kenntnis");
@@ -3919,7 +3973,7 @@ public static class HtmlPresenter
         deFlash("＋ Domäne "+ns,true);return null;});}
   // ＋ in der Menüleiste: Baustein IN dieser Domäne (Namespace; Decider/Applier/State ans Aggregat, Regel an den Prozess der Domäne).
   const BAU_GRUPPEN=[["Außen",["akteur","client"]],["Schreibseite",["command","event","rejection","aggregate","state","decider","applier"]],
-    ["Typen",["valueobject","enum","konfig"]],["Abläufe",["saga","transition","reaktion","pipeline","trigger"]],
+    ["Typen",["valueobject","enum","konfig"]],["Abläufe",["saga","transition","funktion","reaktion","pipeline","trigger"]],
     ["Leseseite",["readmodel","store","projektion","query","queryresponse","reader"]],["Betrieb",["dienst","hostsetting"]],["Code",["codenode","llmnode"]]];
   function bausteinMenue(cx,cy,ns){const agg=MODEL.aggregate.find(a=>a.namespace===ns),sg=MODEL.sagas.find(s=>s.namespace===ns);
     const it=[];BAU_GRUPPEN.forEach(([g,ks])=>{it.push({kopf:g});ks.forEach(k=>it.push({t:"＋ "+(k==="codenode"?"📝 Code":k==="llmnode"?"🤖 LLM":NODELABEL[k]||k),
@@ -3969,7 +4023,7 @@ public static class HtmlPresenter
       tb("state","+ State"),tb("decider","+ Decider"),tb("applier","+ Applier"),tb("saga","+ Prozess"),tb("transition","+ Regel"),
       tb("readmodel","+ Read Model"),tb("store","+ Store"),tb("projektion","+ Projektion"),tb("query","+ Query"),tb("queryresponse","+ Response"),tb("reader","+ Reader"),tb("reaktion","+ Reaktion"),
       tb("trigger","+ Trigger"),tb("pipeline","+ Pipeline"),
-      tb("dienst","+ Dienst"),tb("hostsetting","+ HostSetting"),
+      tb("funktion","+ ƒ Funktion"),tb("dienst","+ Dienst"),tb("hostsetting","+ HostSetting"),
       tb("codenode","+ 📝 Code"),tb("llmnode","+ 🤖 LLM"),
       h("button",{class:"add island-btn",style:"margin-left:auto",
         title:"Einsame Inseln (unverbundene Knoten) — Hover: markieren · Klick: der Reihe nach anspringen",
@@ -4023,7 +4077,7 @@ public static class HtmlPresenter
       opt("state","State"),opt("decider","Decider"),opt("applier","Applier"),opt("saga","Prozess"),opt("transition","Regel"),
       opt("readmodel","Read Model"),opt("store","Store"),opt("projektion","Projektion"),opt("query","Query"),opt("queryresponse","Response"),opt("reader","Reader"),opt("reaktion","Reaktion"),
       opt("trigger","Trigger"),opt("pipeline","Pipeline"),
-      opt("dienst","Dienst"),opt("hostsetting","HostSetting"),
+      opt("funktion","ƒ Funktion"),opt("dienst","Dienst"),opt("hostsetting","HostSetting"),
       opt("codenode","📝 Code"),opt("llmnode","🤖 LLM"));
     canvas.append(pick);
     setTimeout(()=>{const off=ev=>{if(!pick.contains(ev.target)){pick.remove();document.removeEventListener("pointerdown",off);}};document.addEventListener("pointerdown",off);},0);
@@ -4038,7 +4092,7 @@ public static class HtmlPresenter
     body.append(h("div",{class:"gsec"},"berührt (abgeleitet): "+(aggs.length?aggs.join(" · "):"—")));
     body.append(h("div",{class:"gsec"},"Regeln ◀ (anstecken)"));
     transOf(s).forEach(t=>{const p=anchorDot("prozess");p.classList.add("i");reg("hub:in:"+s.name+":"+t._id,p,null);
-      body.append(h("div",{class:"slotrow"},p,h("span",{class:"slotlbl"},"WENN "+((t.wenn||[])[0]||"?")+((t.wenn||[]).length>1?" +"+((t.wenn.length-1)+(t.sammelEvent?1:0))+"":(t.sammelEvent?" +alle":""))+" → "+((t.dann||[]).map(d=>d.sende||"?").join(", ")||"?"))));});
+      body.append(h("div",{class:"slotrow"},p,h("span",{class:"slotlbl"},"WENN "+((t.wenn||[])[0]||"?")+((t.wenn||[]).length>1?" +"+((t.wenn.length-1)+(t.sammelEvent?1:0))+"":(t.sammelEvent?" +alle":""))+" → "+((t.dann||[]).map(d=>d.rufe?"ƒ "+d.rufe:(d.sende||"?")).join(", ")||"?"))));});
     const oi=port("prozess");oi.classList.add("i");reg("hub:in:"+s.name+":open",oi,{type:"prozess",dir:"in",saga:s.name});
     body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Regel anstecken")));
   }
@@ -4064,16 +4118,34 @@ public static class HtmlPresenter
     body.append(h("div",{class:"slotrow"},oi,mk("+ und","weiteres Bedingungs-Event")));
     // ── DANN (mehrere): ein Join, N Commands — je Dann ein Command-Ausgang + eigene Kompensation ──
     (t.dann||[]).forEach((d,di)=>{
+      if(d.rufe!==undefined){
+        // Aufruf-Knoten: die Funktion steht ausdrücklich da (Rufe<F>), ihre Ergebnisse sind die nächsten Events im Graph.
+        const fa=anchorDot("command");fa.classList.add("o");reg("tr:rufe:"+t._id+":"+di,fa,null);
+        const sel=h("select",{onchange:e=>{d.rufe=e.target.value;delete d.sendeAusdruck;render();}});
+        if(!d.rufe||!MODEL.funktionen.some(f=>f.name===d.rufe)){const o=h("option",{value:d.rufe||""},d.rufe||"— Funktion wählen —");o.selected=true;sel.append(o);}
+        MODEL.funktionen.forEach(f=>{const o=h("option",{value:f.name},"ƒ "+f.name);if(f.name===d.rufe)o.selected=true;sel.append(o);});
+        body.append(h("div",{class:"slotrow o"},
+          h("button",{class:"rm",onclick:()=>{t.dann.splice(di,1);if(!t.dann.length)t.dann.push({});render();}},"✕"),
+          h("span",{class:"slotlbl",style:"opacity:.75"},"Dann rufe"),sel,fa));
+        const fk=MODEL.funktionen.find(f=>f.name===d.rufe);
+        if(fk)body.append(h("div",{class:"gsec",style:"opacity:.7"},"Auftrag "+(fk.auftrag||"?")+" → "+((fk.ergebnisse||[]).join(" | ")||"(kein Ergebnis)")));
+        if(d.sendeAusdruck)body.append(h("div",{class:"gsec",title:"aus dem Code gelesen — wird verbatim zurückgeschrieben",style:"font-family:monospace;opacity:.7;white-space:pre-wrap"},"λ "+d.sendeAusdruck));
+        body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"⏳"),inp(d.zeitlimit,v=>{if(v)d.zeitlimit=v;else delete d.zeitlimit;},"Zeitlimit, z. B. TimeSpan.FromSeconds(30)")));
+        const ko2=port("rejection");ko2.classList.add("o");ko2.title=d.kompensation||"(Kompensation)";reg("tr:komp:"+t._id+":"+di,ko2,{type:"sagaCmd",dir:"out",trans:t._id,dannIdx:di,role:"komp"});
+        body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right;opacity:.55"},"↩ "+(d.kompensation||"")),ko2));
+        return;}
       const so=port("command");so.classList.add("o");so.title=d.sende||"(Command)";reg("tr:sende:"+t._id+":"+di,so,{type:"sagaCmd",dir:"out",trans:t._id,dannIdx:di,role:"sende"});
       body.append(h("div",{class:"slotrow o"},
         h("button",{class:"rm",onclick:()=>{t.dann.splice(di,1);if(!t.dann.length)t.dann.push({});render();}},"✕"),
         h("span",{class:"slotlbl",style:"flex:1;text-align:right;opacity:.75"},"Dann "+(d.sende||"")),
         mk("×N","Fan-out (SendeJe) — N Commands je Element",!!d.sendeJe,()=>{d.sendeJe=d.sendeJe?undefined:true;render();}),so));
       if(d.sendeAusdruck)body.append(h("div",{class:"gsec",title:"aus dem Code gelesen — wird verbatim zurückgeschrieben",style:"font-family:monospace;opacity:.7;white-space:pre-wrap"},"λ "+d.sendeAusdruck));
+      if(d.sende||d.zeitlimit)body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"⏳"),inp(d.zeitlimit,v=>{if(v)d.zeitlimit=v;else delete d.zeitlimit;},"Zeitlimit (optional), z. B. TimeSpan.FromMinutes(5)")));
       const ko=port("rejection");ko.classList.add("o");ko.title=d.kompensation||"(Kompensation)";reg("tr:komp:"+t._id+":"+di,ko,{type:"sagaCmd",dir:"out",trans:t._id,dannIdx:di,role:"komp"});
       body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right;opacity:.55"},"↩ "+(d.kompensation||"")),ko));
     });
     body.append(h("button",{class:"add",onclick:()=>{(t.dann=t.dann||[]).push({});render();}},"+ Dann (weiterer Command am selben Join)"));
+    body.append(h("button",{class:"add",onclick:()=>{(t.dann=t.dann||[]).push({rufe:(MODEL.funktionen[0]||{}).name||""});render();}},"+ Dann ƒ (Katalog-Funktion rufen)"));
     // Je Dann → eine Regel (gleiche Bedingung). Argument-Bau = mechanisches Feld-Mapping (D/S) → default-Stub.
     // KEIN Code/LLM-Port: eine Regel trägt keine freie Logik, nur die Verdrahtung Events→Command.
   }
@@ -4139,7 +4211,7 @@ public static class HtmlPresenter
     decider:d=>d.aggregat+"|"+d.command,applier:a=>a.aggregat+"|"+a.event,sagas:x=>x.namespace+"|"+x.name,
     readModels:x=>x.name,stores:x=>x.name,projektionen:x=>x.name,reaktionen:x=>x.name,reader:x=>x.name,pipelines:x=>x.name,
     triggers:x=>x.msgName||x.name,frists:x=>x.name,dienste:x=>x.name,hostSettings:x=>x.name,akteure:x=>x.namespace+"|"+x.name,
-    clients:x=>x.namespace+"|"+x.name};
+    clients:x=>x.namespace+"|"+x.name,funktionen:x=>x.namespace+"|"+x.name};
   const LAYOUT=new Set(["x","y","ausCode","ungeschrieben","codeSrc","leer","rumpf","schritte","herkunft"]);
   function inhalt(o){return JSON.stringify(o,(k,v)=>(k.startsWith("_")||LAYOUT.has(k))?undefined:v);}
   // Leseseite: „steht die Änderung schon im Code?“ — Fn-Ids (je Einlesen neu nummeriert) über „Store.Fn“ vergleichen und die
@@ -4216,7 +4288,7 @@ public static class HtmlPresenter
       const lt=neu.transitions.filter(t=>t.prozess===sg.name);
       const edit=at.some(t=>(!t.ausCode&&!altFormat)||(t._herkunft&&hash(inhalt(t))!==t._herkunft));
       if(edit){neu.transitions=neu.transitions.filter(t=>t.prozess!==sg.name).concat(at.map(t=>({...t,ungeschrieben:true})));MERGE_INFO.ungeschrieben++;}
-      else{const sig=t=>JSON.stringify([t.wenn||[],t.sammelEvent||"",(t.dann||[]).map(d=>[d.sende||"",d.kompensation||""])]);
+      else{const sig=t=>JSON.stringify([t.wenn||[],t.sammelEvent||"",(t.dann||[]).map(d=>[d.sende||"",d.rufe||"",d.kompensation||""])]);
         const altBySig=new Map(at.map(t=>[sig(t),t]));
         lt.forEach(t=>{const a=altBySig.get(sig(t));if(a&&a.x!=null){t.x=a.x;t.y=a.y;}});}});
     // Entwurfs-Transitionen neuer (Entwurfs-)Prozesse behalten.
@@ -4225,7 +4297,7 @@ public static class HtmlPresenter
   // Node-Art (graphNodes().kind) → Modell-Sammlung (für die Entwurf-Markierung: nur Sammlungen, die aus dem Code kommen).
   function kollektionVon(kind){return {command:"records",event:"records",rejection:"records",valueobject:"records",konfig:"records",query:"records",queryresponse:"records",
     enum:"enums",aggregate:"aggregate",decider:"decider",applier:"applier",saga:"sagas",readmodel:"readModels",store:"stores",
-    projektion:"projektionen",reaktion:"reaktionen",reader:"reader",pipeline:"pipelines",trigger:"triggers",frist:"frists",dienst:"dienste",hostsetting:"hostSettings",akteur:"akteure",client:"clients"}[kind]||null;}
+    projektion:"projektionen",reaktion:"reaktionen",reader:"reader",pipeline:"pipelines",trigger:"triggers",frist:"frists",dienst:"dienste",hostsetting:"hostSettings",akteur:"akteure",client:"clients",funktion:"funktionen",auftrag:"records"}[kind]||null;}
   function meldeMerge(){const u=MERGE_INFO.ungeschrieben,e=MERGE_INFO.entwuerfe;
     if(u||e)deFlash("↔ Code geladen · "+u+" ungeschrieben · "+e+" Entwurf/Entwürfe",true);}
   window.deDownload=function(){deriveMembership();prepareSaga();const blob=new Blob([JSON.stringify(MODEL,null,2)],{type:"application/json"});

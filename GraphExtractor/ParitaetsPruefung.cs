@@ -117,6 +117,8 @@ public static class ParitaetsPruefung
         Vergleiche("Event", soll.Events, BoardRecords(RecordArt.Event), befunde);
         Vergleiche("Ablehnung", soll.Ablehnungen, BoardRecords(RecordArt.Rejection), befunde);
         Vergleiche("Value Object", soll.ValueObjects, BoardRecords(RecordArt.ValueObject), befunde);
+        Vergleiche("Auftrag", soll.Auftraege, BoardRecords(RecordArt.Auftrag), befunde);
+        Vergleiche("Funktion", soll.Funktionen, BoardListe("funktionen"), befunde);
         Vergleiche("Konfiguration", soll.Konfigs, BoardRecords("konfig"), befunde);
         Vergleiche("Store", soll.Stores, BoardListe("stores"), befunde);
         Vergleiche("Query", soll.Queries, BoardRecords("query"), befunde);
@@ -167,7 +169,7 @@ public static class ParitaetsPruefung
                 applier.Where(x => x.StartsWith(name + "|", StringComparison.Ordinal)).ToHashSet(StringComparer.Ordinal), befunde);
         }
 
-        // Saga-Regeln: Soll = Anzahl Sende/SendeJe-Verben im Regeln-Ausdruck, Ist = Schritte im Board.
+        // Saga-Regeln: Soll = Anzahl Sende/SendeJe/Rufe-Verben im Regeln-Ausdruck, Ist = Schritte im Board.
         foreach (var (saga, anzahl) in soll.Sagas)
         {
             var node = (board["sagas"]?.AsArray() ?? new JsonArray())
@@ -196,7 +198,7 @@ public static class ParitaetsPruefung
     {
         public HashSet<string> Commands = new(), Events = new(), Ablehnungen = new(), ValueObjects = new(),
             Queries = new(), Responses = new(), Enums = new(), ReadModels = new(), Readers = new(),
-            Pipelines = new(), Subscriber = new(), Konfigs = new(), Stores = new(), Akteure = new();
+            Pipelines = new(), Subscriber = new(), Konfigs = new(), Stores = new(), Akteure = new(), Funktionen = new(), Auftraege = new();
         /// <summary>Akteur → seine IDarf-Ziele (einfache Namen) — aus der Basisliste, unabhängig vom DomainExtractor.</summary>
         public Dictionary<string, HashSet<string>> AkteurRechte = new(StringComparer.Ordinal);
         /// <summary>Akteur → seine Zusagen „Event&gt;Ausgabe,…[*]" aus den Vertrags-Interfaces (IAkteurVertrag&lt;A&gt;, alle Teile).</summary>
@@ -226,6 +228,7 @@ public static class ParitaetsPruefung
             var iWert = Get(Vertrag.IWertobjekt); var iEnv = Get(Vertrag.IAggregateEnvelope);
             var iAkteur = Get(Vertrag.IAkteur); var iDarf = Get(Vertrag.IDarf); var iVertrag = Get(Vertrag.IAkteurVertrag);
             var iClient = Get(Vertrag.IClientVertrag); var iSendet = Get(Vertrag.ISendet); var iFragt = Get(Vertrag.IFragt);
+            var iFunktion = Get(Vertrag.IFunktion); var iAuftrag = Get(Vertrag.IAuftrag);
             bool Innen(INamedTypeSymbol t, INamedTypeSymbol? g) => g != null && t.AllInterfaces.Any(i => i.OriginalDefinition.ToDisplayString() == g.ToDisplayString());
             bool Domäne(IAssemblySymbol? a) => a != null && domänen.Contains(a.Name);
 
@@ -248,6 +251,8 @@ public static class ParitaetsPruefung
                         if (decl is EnumDeclarationSyntax) { inv.Enums.Add(full); continue; }
                         if (decl is InterfaceDeclarationSyntax)
                         {
+                            // Katalog-Funktion (IFunktion): ein eigener Baustein — nur ihre Signatur.
+                            if (iFunktion != null && Sym.Implements(t, iFunktion)) { inv.Funktionen.Add(full); continue; }
                             // Client-Vertrag (IClientVertrag): sein Rand aus der Basisliste (direkt) und den eigenen Auf-Methoden. Er erbt
                             //   Vertrags-Teile, ist aber selbst keiner (darum vor dem Akteur-Vertrag).
                             if (iClient != null && Sym.Implements(t, iClient))
@@ -301,6 +306,7 @@ public static class ParitaetsPruefung
                         else if (Sym.Implements(t, iQ)) inv.Queries.Add(full);
                         else if (Sym.Implements(t, iQr)) inv.Responses.Add(full);
                         else if (Sym.Implements(t, iRm)) inv.ReadModels.Add(full);
+                        else if (Innen(t, iAuftrag)) inv.Auftraege.Add(full);
                         else if ((istRecord || Sym.Implements(t, iWert)) && t.ContainingType == null && !Sym.Implements(t, iPayload) && !Sym.Implements(t, iOut)
                                  && !Sym.Implements(t, iSelf) && !Sym.Implements(t, iTrig) && !Sym.Implements(t, iState)
                                  && !Sym.Implements(t, iWStore) && !Sym.Implements(t, iRStore))
@@ -345,7 +351,7 @@ public static class ParitaetsPruefung
                         {
                             var regeln = decl.DescendantNodes().OfType<PropertyDeclarationSyntax>().FirstOrDefault(p => p.Identifier.Text == Vertrag.Regeln);
                             inv.Sagas[full] = regeln?.DescendantNodes().OfType<GenericNameSyntax>()
-                                .Count(g => g.Identifier.Text == Vertrag.Sende || g.Identifier.Text == Vertrag.SendeJe) ?? 0;
+                                .Count(g => g.Identifier.Text == Vertrag.Sende || g.Identifier.Text == Vertrag.SendeJe || g.Identifier.Text == Vertrag.Rufe) ?? 0;
                         }
                     }
                 }

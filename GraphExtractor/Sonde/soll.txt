@@ -29,7 +29,12 @@ decide Schadensfall.MeldeSchaden -> SchadenGemeldet; SchadenExistiert
 decide Mahnvorgang.EroeffneMahnung -> MahnungEroeffnet; MahnungExistiert
 apply Schadensfall.SchadenGemeldet
 apply Mahnvorgang.MahnungEroeffnet
-saga Leihwesen.Gebuehren.SchadenBeiRueckgabe auslöser=Zurueckgegeben | wenn Zurueckgegeben -> sende MeldeSchaden
+saga Leihwesen.Gebuehren.SchadenBeiRueckgabe auslöser=Zurueckgegeben | wenn Zurueckgegeben -> sende MeldeSchaden; wenn SchadenGemeldet -> rufe ISchadensSchaetzung zeitlimit=TimeSpan.FromMinutes(5); wenn SchadenGeschaetzt -> sende EroeffneMahnung
+# Katalog-Funktion: IFunktion-Interface, Auftrag mit IAuftrag<F>, persistente Ergebnis-Events ohne Aggregat
+record Leihwesen.Gebuehren.SchaetzeSchaden auftrag typart=public sealed record funktion=ISchadensSchaetzung | LeserId:Guid, Neuwert:decimal
+record Leihwesen.Gebuehren.SchadenGeschaetzt event | Betrag:decimal
+record Leihwesen.Gebuehren.NichtSchaetzbar event | Grund:string
+funktion Leihwesen.Gebuehren.ISchadensSchaetzung | SchaetzeSchaden -> SchadenGeschaetzt; NichtSchaetzbar
 
 # ── Lesen: frei benannte Fähigkeiten + Bündel (Marker statt Namensregel), class-ReadModel, OneOf, Konstanten-Ids ──
 record Leihwesen.Lesen.OffeneAusleihen query | LeserId:Guid { get; init; }

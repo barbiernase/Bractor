@@ -53,12 +53,18 @@ liest der Manager nur die seit dem letzten Fold befeuerten Streams nach → auch
 (gemessen echtes Postgres: bis 9× schnellere Wall-Clock bei N=60; mit Aggregat-Historie 5,5×). Kaltstart
 faltet voll (Invariante 1). Äquivalenz + Sagas grün.
 
+**Katalog-Funktionen im Prozess (2026-10-07):** `Rufe<F>` neben `Sende<Cmd>` — eine Funktion (`IFunktion`: ein `IAuftrag<F>` hinein,
+OneOf-Ergebnis-Events heraus) wird wie ein Aggregat gerufen; kurz und lang gleich, nur `.Zeitlimit(…)` (für jeden Aufruf). Generierter
+Dispatch (`FunktionsGenerator`, CQRS068/069), `FunktionsAusfuehrer` (Slots, Wiederholen, genau ein Ergebnis im Ausführungs-Stream),
+Bindung `AddFunktion<F, Impl>` + Boot-Guard; Editor: Funktions-Karte, „Dann ƒ", ⏳. Doku `docs/10-entwickler-api.md` §10.5a.
+Offen: Python-/externer Ausführer, Saga-DSL (Cqrs.Testing) und Simulation kennen `Rufe` noch nicht.
+
 **Akteure, Verträge, Clients (2026-10-06):** Akteure mit Befugnis und Kette bis in den Event-Header; Akteur-Verträge (Zusagen
 draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer CommandId; Clients (`IClientVertrag`, n:m zu Akteuren) mit
 Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an
 Clients (`docs/konzept-akteure.md` §9).
 
-**Tests (echt gemessen): Prüfstand 280/280 (2026-10-06, in-memory, store-frei); Integration gegen echtes Marten/Consul/Redis,
+**Tests (echt gemessen): Prüfstand 320/320 (2026-10-07, in-memory, store-frei); Integration gegen echtes Marten/Consul/Redis,
 sequentiell (voll gezählt zuletzt 2026-08: 33/33; der `SnapshotLive`-Cold-Boot-Flake ausgenommen).**
 
 **Bewusst offen (Priorität):**

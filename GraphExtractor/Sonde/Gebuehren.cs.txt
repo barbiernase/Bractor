@@ -1,7 +1,8 @@
 using Abstractions;
 using Leihwesen.Ausleihe;
 
-// SONDE — ZWEI Aggregate im SELBEN Namespace + Saga mit expliziter Interface-Implementierung und Block-Lambda.
+// SONDE — ZWEI Aggregate im SELBEN Namespace + Saga mit expliziter Interface-Implementierung und Block-Lambda,
+//         dazu eine KATALOG-FUNKTION (IFunktion) mit eigenem Auftrag, die die Saga per Rufe<F> mit Zeitlimit ruft.
 
 namespace Leihwesen.Gebuehren;
 
@@ -12,6 +13,16 @@ public record SchadenExistiert(Guid Id) : ITransientEvent;
 public record EroeffneMahnung(Guid AggregateId, decimal Betrag) : ICreationCommand;
 public record MahnungEroeffnet(decimal Betrag) : IEvent;
 public record MahnungExistiert(Guid Id) : ITransientEvent;
+
+// Katalog-Funktion: der Auftrag bindet sich per IAuftrag<F> an genau sie; die Ergebnisse sind persistente Events.
+public sealed record SchaetzeSchaden(Guid LeserId, decimal Neuwert) : IAuftrag<ISchadensSchaetzung>;
+public record SchadenGeschaetzt(decimal Betrag) : IEvent;
+public record NichtSchaetzbar(string Grund) : IEvent;
+
+public interface ISchadensSchaetzung : IFunktion
+{
+    Task<OneOf<SchadenGeschaetzt, NichtSchaetzbar>> RufeAsync(SchaetzeSchaden auftrag, IAusfuehrung x);
+}
 
 public partial class Schadensfall : IState
 {
@@ -43,5 +54,12 @@ public sealed class SchadenBeiRueckgabe : IProzessDefinition
     {
         p.Auf<Zurueckgegeben>()
          .Sende<MeldeSchaden>(e => new MeldeSchaden(Guid.NewGuid(), e.LeserId));
+
+        p.Auf<SchadenGemeldet>()
+         .Rufe<ISchadensSchaetzung>(s => new SchaetzeSchaden(s.LeserId, 25m))
+         .Zeitlimit(TimeSpan.FromMinutes(5));
+
+        p.Auf<SchadenGeschaetzt>()
+         .Sende<EroeffneMahnung>(g => new EroeffneMahnung(Guid.NewGuid(), g.Betrag));
     });
 }

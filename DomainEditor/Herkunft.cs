@@ -18,6 +18,7 @@ public static class Herkunft
     public static string Von(DecideRegel d) => Hash(new { d.Aggregat, d.Command, d.Ergibt });
     public static string Von(Akteur a) => Hash(new { a.Name, a.Darf, a.Art, Vertrag = a.Vertrag.Count == 0 ? null : a.Vertrag, VertragName = a.Vertrag.Count == 0 ? null : a.VertragTyp });
     public static string Von(Client c) => Hash(new { c.Name, c.Traegt, c.Sendet, c.Fragt, c.Kenntnis });
+    public static string Von(Funktion f) => Hash(new { f.Name, f.Auftrag, f.Ergebnisse });
     public static string Von(Saga s) => Hash(new { s.TriggerEvent, Schritte = s.Schritte.Select(Wirksam).ToList() });
 
     /// <summary>
@@ -40,6 +41,7 @@ public static class Herkunft
             KompensationArgumente = komp != null ? null : LL(t.KompensationArgumente),
             SammelAnzahl = sammel != null ? null : L(t.SammelAnzahl),
             SammelEvent = L(t.SammelEvent), Kompensation = L(t.Kompensation),
+            Rufe = L(t.Rufe), Zeitlimit = L(t.Zeitlimit), Sende = t.Sende ?? "",
         };
     }
     public static string Von(Faehigkeit f) => Hash(new { f.Name, f.Methode, f.Lesen, f.Rueckgabe, f.Parameter });
@@ -60,6 +62,7 @@ public static class Herkunft
             Aggregate = m.Aggregate.Select(a => a with { Herkunft = Von(a) }).ToList(),
             Decider = m.Decider.Select(d => d with { Herkunft = Von(d) }).ToList(),
             Sagas = m.Sagas.Select(s => s with { Herkunft = Von(s) }).ToList(),
+            Funktionen = m.Funktionen.Select(f => f with { Herkunft = Von(f) }).ToList(),
             Akteure = m.Akteure.Select(a => a with { Herkunft = Von(a) }).ToList(),
             Clients = m.Clients.Select(c => c with { Herkunft = Von(c) }).ToList(),
             Lesen = l == null ? null : l with
@@ -82,6 +85,7 @@ public static class Herkunft
         foreach (var a in m.Aggregate) Pruefe(a.Herkunft, Von(a), $"state {a.Namespace}.{a.Name}");
         foreach (var d in m.Decider) Pruefe(d.Herkunft, Von(d), $"decide {d.Aggregat}.{d.Command}");
         foreach (var s in m.Sagas) Pruefe(s.Herkunft, Von(s), $"prozess {s.Namespace}.{s.Name}");
+        foreach (var f in m.Funktionen) Pruefe(f.Herkunft, Von(f), $"funktion {f.Namespace}.{f.Name}");
         foreach (var a in m.Akteure) Pruefe(a.Herkunft, Von(a), $"akteur {a.Namespace}.{a.Name}");
         foreach (var c in m.Clients) Pruefe(c.Herkunft, Von(c), $"client {c.Namespace}.{c.Name}");
         var l = m.Lesen;

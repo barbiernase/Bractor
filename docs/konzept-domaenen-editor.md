@@ -146,6 +146,14 @@ eine Transition, die Event-Typen joint und Commands feuert). Der Editor bildet d
      Feld-Mapping Event→Command-Parameter → **`default`-Stub** (`argListe` füllt fehlende mit
      `default`), von Hand im Code füllbar. Genau wie Decide/Apply-Stubs.
 
+**Katalog-Funktionen (2026-10-07).** Neben „Dann ▶ Command" kennt die Regel **„Dann ƒ Funktion"** (`Rufe<F>`): im Panel
+„+ Dann ƒ (Katalog-Funktion rufen)", Funktion per Auswahl, darunter Auftrag → Ergebnisse der gewählten Funktion. Jeder Aufruf (Command
+oder Funktion) hat ein **⏳ Zeitlimit**-Feld (C#-Ausdruck verbatim, z. B. `TimeSpan.FromSeconds(30)`). Die **Funktions-Karte**
+(Palette „+ ƒ Funktion", legt ihren Auftrag gleich mit an) zeigt: ◀ gerufen von Regeln · ◀ Auftrag (Record der Art „Auftrag") ·
+Ergebnisse ▶ (Events). Kanten: Regel → Funktion, Auftrag → Funktion (gestrichelt), Funktion → Ergebnis-Events. Die Implementierung ist
+Bindung im Host (`AddFunktion<F, Impl>`), nicht Teil des Graphen. Code-Fakten: `IFunktion`, `IAuftrag<F>`, `Rufe<F>`, `Zeitlimit`
+(Extractor, Sonde, `--check`); Grammatik: Baustein `funktion`, Sorte `auftrag` (GR-FUNKTION-AUFTRAG, GR-AUS-FUNKTION, GR-FUNKTION-GEBUNDEN).
+
 **Entfernt (2026-09-14): der Count-Join Σ (`UndAlle`/„sammle").** Er ist über ein selbst
 modelliertes **Zähl-Aggregat** (zählt Teil-Events, feuert EIN Abschluss-Event) + normalen
 Einzel-Trigger ausdrückbar → der Editor bleibt minimal. Der Fan-out `×N` bleibt. Siehe auch das

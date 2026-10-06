@@ -17,11 +17,12 @@ public static class Grammatik
 {
     // ── Alphabet: Nachrichtensorten (die Kanten) ──────────────────────────────────────────────────────────────────────
     public const string Command = "command", Event = "event", Transient = "transient", Trigger = "trigger", Selbst = "selbst",
-        Frist = "frist", Query = "query", Response = "response", Faehigkeit = "faehigkeit";
+        Frist = "frist", Query = "query", Response = "response", Faehigkeit = "faehigkeit", Auftrag = "auftrag";
 
     // ── Alphabet: Bausteine (die Knoten) ─────────────────────────────────────────────────────────────────────────────
     public const string Aggregat = "aggregat", Prozess = "prozess", Projektion = "projektion", Reaktion = "reaktion", Reader = "reader",
-        Pipeline = "pipeline", Ingress = "ingress", Store = "store", Aussenwelt = "aussenwelt", Akteur = "akteur", Client = "client";
+        Pipeline = "pipeline", Ingress = "ingress", Store = "store", Aussenwelt = "aussenwelt", Akteur = "akteur", Client = "client",
+        Funktion = "funktion";
 
     /// <summary>Kardinalität eines Konsum-Eingangs.</summary>
     public const string GenauEins = "eins", Beliebig = "beliebig", Dieselbe = "dieselbe";
@@ -47,6 +48,7 @@ public static class Grammatik
         new(Query, "Query", "?", "synchron", "Lesen"),
         new(Response, "Response", "↩", "synchron", "Antwort eines Readers"),
         new(Faehigkeit, "Fähigkeit", "⚙", "im Handle-Aufruf", "Store-Funktion (Lesen/Schreiben)"),
+        new(Auftrag, "Auftrag", "ƒ", "durabel (Ergebnis im Log, Ausführungs-Id)", "Aufruf einer Katalog-Funktion (Rufe<F>)"),
     ];
 
     public static readonly IReadOnlyList<BausteinInfo> Bausteine =
@@ -54,7 +56,7 @@ public static class Grammatik
         new(Aggregat, "Aggregat", true), new(Prozess, "Prozess", true), new(Projektion, "Projektion", false),
         new(Reaktion, "Reaktion", false), new(Reader, "Reader", false), new(Pipeline, "Pipeline", false),
         new(Ingress, "Ingress", false), new(Store, "Store", true), new(Aussenwelt, "Außenwelt", false),
-        new(Akteur, "Akteur", false), new(Client, "Client", false),
+        new(Akteur, "Akteur", false), new(Client, "Client", false), new(Funktion, "Funktion", false),
     ];
 
     // ── Regeln (Id = der Name, unter dem Validator und Editor sie melden) ──────────────────────────────────────────────
@@ -87,7 +89,7 @@ public static class Grammatik
         // Erzeugung: Baustein-Ausgang → Sorte
         new("GR-AUS-AGGREGAT", "Aggregat erzeugt Events", "Ein Aggregat (Decide) erzeugt persistente Events und Ablehnungen (transient) — sonst nichts.", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)")]),
-        new("GR-AUS-PROZESS", "Prozess erzeugt Commands", "Ein Prozess erzeugt Commands (und Kompensations-Commands).", "error",
+        new("GR-AUS-PROZESS", "Prozess erzeugt Commands und Aufträge", "Ein Prozess erzeugt Commands (und Kompensations-Commands) und ruft Katalog-Funktionen (Rufe<F> → Auftrag).", "error",
             [Gen("CQRS003", "Domain.SourceGeneration/ProzessRegelDiagnosticGenerator.cs"), Comp("Sende<TCmd> where TCmd : ICommand")]),
         new("GR-AUS-PROJEKTION", "Projektion erzeugt nur Transientes", "Eine Projektion schreibt über Fähigkeiten und veröffentlicht höchstens transiente Events — kein Command (dann ist sie eine Reaktion), kein Fakt.", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)"), Gen("CQRS052", "Infrastructure.SourceGeneration/PullPathGenerator.cs (ein Store je Konsument)")]),
@@ -97,6 +99,12 @@ public static class Grammatik
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)")]),
         new("GR-AUS-PIPELINE", "Pipeline erzeugt Commands/Trigger/Zeit", "Eine Pipeline erzeugt Command, Trigger, transientes Event, Selbst und Frist (und liest über Lese-Fähigkeiten).", "error",
             [An("CQRS050", "Domain.SourceGeneration (Ausgabe-Vertrag)"), An("CQRS057", "Domain.SourceGeneration (HandlerFormAnalyzer)")]),
+        new("GR-FUNKTION-AUFTRAG", "Auftrag → genau eine Funktion", "Ein Auftrag (IAuftrag<F>) ist der eine Eingang genau einer Katalog-Funktion; ein Prozess ruft sie mit Rufe<F>.", "error",
+            [Comp("IAuftrag<F> + Rufe<F>(Func<…, IAuftrag<F>>)"), Gen("CQRS069", "Infrastructure.SourceGeneration/FunktionsGenerator.cs (Auftrag für mehrere Funktionen)")]),
+        new("GR-AUS-FUNKTION", "Funktion erzeugt persistente Ergebnis-Events", "Eine Katalog-Funktion antwortet mit genau einem ihrer OneOf-Ergebnisse — ein persistentes Event im Log, das weitere Regeln mit Auf<…> hören.", "error",
+            [Gen("CQRS068", "Infrastructure.SourceGeneration/FunktionsGenerator.cs (feste Form der Funktion)")]),
+        new("GR-FUNKTION-GEBUNDEN", "Gerufene Funktion ist gebunden", "Jede Funktion, die ein Prozess ruft, braucht im Host eine Bindung (AddFunktion<F, Impl>) — sonst bricht der Start.", "error",
+            [new("boot", null, "Infrastructure/Funktionen/FunktionsExtensions.cs (PrüfeBindungen)")]),
         new("GR-AUS-INGRESS", "Ingress erzeugt Trigger", "Ein Ingress (Webhook, Timer, Datei) erzeugt genau Trigger-Nachrichten.", "error",
             [Comp("[Ingress]-Methoden: Trigger-Typ : IPipelineTrigger")]),
         // Zusatzregeln
@@ -173,6 +181,7 @@ public static class Grammatik
         new(Frist, Aggregat, GenauEins, "GR-FRIST"),
         new(Query, Reader, GenauEins, "GR-QUERY"),
         new(Faehigkeit, Projektion, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Reader, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Pipeline, Beliebig, "GR-FAEHIGKEIT"),
+        new(Auftrag, Funktion, GenauEins, "GR-FUNKTION-AUFTRAG"),
         new(Event, Akteur, Beliebig, "GR-VERTRAG"), new(Transient, Akteur, Beliebig, "GR-VERTRAG"),
         new(Event, Client, Beliebig, "GR-CLIENT"), new(Transient, Client, Beliebig, "GR-CLIENT"),
     ];
@@ -181,7 +190,8 @@ public static class Grammatik
     public static readonly IReadOnlyList<Erzeugung> Erzeugungen =
     [
         new(Aggregat, Event, "GR-AUS-AGGREGAT"), new(Aggregat, Transient, "GR-AUS-AGGREGAT"),
-        new(Prozess, Command, "GR-AUS-PROZESS"),
+        new(Prozess, Command, "GR-AUS-PROZESS"), new(Prozess, Auftrag, "GR-AUS-PROZESS"),
+        new(Funktion, Event, "GR-AUS-FUNKTION"),
         new(Projektion, Transient, "GR-AUS-PROJEKTION"),
         new(Reaktion, Command, "GR-AUS-REAKTION"), new(Reaktion, Transient, "GR-AUS-REAKTION"),
         new(Reader, Response, "GR-AUS-READER"),
@@ -199,7 +209,7 @@ public static class Grammatik
     public static string? SorteVonRecordArt(string kind) => kind switch
     {
         RecordArt.Command => Command, RecordArt.Event => Event, RecordArt.Rejection => Transient, RecordArt.Query => Query,
-        RecordArt.Antwort => Response, RecordArt.Trigger => Trigger, RecordArt.Selbst => Selbst, _ => null,
+        RecordArt.Antwort => Response, RecordArt.Trigger => Trigger, RecordArt.Selbst => Selbst, RecordArt.Auftrag => Auftrag, _ => null,
     };
 
     public static Regel RegelVon(string id) => Regeln.First(r => r.Id == id);
@@ -230,6 +240,7 @@ public static class Grammatik
     [
         ("dec", Aggregat), ("app", Aggregat), ("trans", Prozess), ("saga", Prozess), ("proj", Projektion), ("reaktion", Reaktion),
         ("pipeline", Pipeline), ("reader", Reader), ("trigId", Ingress), ("frist", Pipeline), ("akt", Akteur), ("client", Client),
+        ("funktion", Funktion),
     ];
     /// <summary>Editor-Port-Schlüssel, deren Ausgang eine andere Sorte trägt als die Ziel-Karte (Frist-Knoten → Command = Sorte Frist).</summary>
     public static readonly IReadOnlyDictionary<string, string> EditorAusgangSorte = new Dictionary<string, string> { ["frist"] = Frist };

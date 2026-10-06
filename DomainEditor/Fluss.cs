@@ -87,7 +87,17 @@ public sealed class Fluss
         foreach (var ap in m.Applier.Where(a => a.Aggregat.Length > 0))
             K(N(ap.Event, null, null), B("agg", Grammatik.Aggregat, ap.Aggregat, aggNs.GetValueOrDefault(ap.Aggregat)), ap.Event);
 
-        // Prozess: Auslöser + Wenn-Join → Sende/Kompensation.
+        // Katalog-Funktion: Auftrag → Funktion → Ergebnis-Events (nur die Signatur).
+        var auftragVon = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var f in m.Funktionen)
+        {
+            var fid = B("fn", Grammatik.Funktion, f.Name, f.Namespace);
+            auftragVon.TryAdd(f.Name, f.Auftrag);
+            K(N(f.Auftrag, Grammatik.Auftrag, f.Namespace), fid, f.Auftrag);
+            foreach (var e in f.Ergebnisse) K(fid, N(e, Grammatik.Event, f.Namespace), f.Auftrag);
+        }
+
+        // Prozess: Auslöser + Wenn-Join → Sende/Rufe/Kompensation.
         foreach (var s in m.Sagas)
         {
             var sg = B("saga", Grammatik.Prozess, s.Name, s.Namespace);
@@ -96,7 +106,9 @@ public sealed class Fluss
             {
                 foreach (var w in st.Wenn) K(N(w, null, null), sg);
                 if (st.SammelEvent is { } se) K(N(se, null, null), sg);
-                K(sg, N(st.Sende, null, null));
+                if (!string.IsNullOrWhiteSpace(st.Rufe))
+                    K(sg, N(auftragVon.GetValueOrDefault(st.Rufe!) ?? st.Rufe!, Grammatik.Auftrag, s.Namespace));
+                else K(sg, N(st.Sende, null, null));
                 if (st.Kompensation is { } ko) K(sg, N(ko, null, null));
             }
         }

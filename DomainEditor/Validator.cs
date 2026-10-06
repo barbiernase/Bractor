@@ -92,11 +92,32 @@ public static class Validator
                     befunde.Add(new("error", "EDIT-SAGA-WENN", $"Saga {saga.Name}: eine Transition ohne Auf/Wenn-Event."));
                 else if (modell.Rahmen.UndMax > 0 && s.Wenn.Count > modell.Rahmen.UndMax)
                     befunde.Add(new("error", "EDIT-SAGA-JOIN-MAX", $"Saga {saga.Name}: Join über {s.Wenn.Count} Events — die DSL trägt höchstens {modell.Rahmen.UndMax}."));
-                if (!commandNamen.Contains(s.Sende))
+                if (!string.IsNullOrWhiteSpace(s.Zeitlimit) && !string.IsNullOrWhiteSpace(s.SammelEvent))
+                    befunde.Add(new("error", "EDIT-SAGA-ZEITLIMIT", $"Saga {saga.Name}: ein Zeitlimit geht nicht hinter einem Count-Join (UndAlle) — dort endet die Regel ohne Abschluss."));
+                if (!string.IsNullOrWhiteSpace(s.Rufe) && (s.SendeJe || !string.IsNullOrWhiteSpace(s.SammelEvent)))
+                    befunde.Add(new("error", "EDIT-SAGA-FUNKTION", $"Saga {saga.Name} ruft '{s.Rufe}' mit Fan-out/Count-Join — Rufe<F> steht nur in einer einfachen Regel (Auf/Und)."));
+                if (!string.IsNullOrWhiteSpace(s.Rufe))
+                {
+                    if (!modell.Funktionen.Any(f => f.Name == s.Rufe))
+                        befunde.Add(new("error", "EDIT-SAGA-FUNKTION", $"Saga {saga.Name} ruft '{s.Rufe}', das keine Katalog-Funktion ist."));
+                }
+                else if (!commandNamen.Contains(s.Sende))
                     befunde.Add(new("error", "EDIT-UNROUTED-SAGA-CMD", $"Saga {saga.Name} sendet '{s.Sende}', der kein Command-Record ist (Runtime-Hang)."));
                 if (s.Kompensation is not null && !commandNamen.Contains(s.Kompensation))
                     befunde.Add(new("error", "EDIT-UNROUTED-SAGA-CMD", $"Saga {saga.Name} kompensiert mit '{s.Kompensation}', der kein Command-Record ist."));
             }
+        }
+
+        // Katalog-Funktionen (Form CQRS068): ein Auftrag der Art „auftrag", der zu ihr gehört; persistente Ergebnis-Events.
+        foreach (var f in modell.Funktionen)
+        {
+            var auftrag = modell.Records.FirstOrDefault(r => r.Name == f.Auftrag);
+            if (auftrag is null || auftrag.Kind != RecordArt.Auftrag || auftrag.Funktion != f.Name)
+                befunde.Add(new("error", "EDIT-FUNKTION-AUFTRAG", $"Funktion {f.Name}: '{f.Auftrag}' ist kein Auftrag dieser Funktion (record … : IAuftrag<{f.Name}>)."));
+            if (f.Ergebnisse.Count == 0)
+                befunde.Add(new("error", "EDIT-FUNKTION-ERGEBNIS", $"Funktion {f.Name} hat kein Ergebnis — mindestens ein persistentes Event (OneOf)."));
+            foreach (var e in f.Ergebnisse.Where(e => !persistentEvents.Contains(e)))
+                befunde.Add(new("error", "EDIT-FUNKTION-ERGEBNIS", $"Funktion {f.Name}: Ergebnis '{e}' ist kein persistenter Event-Record."));
         }
 
         befunde.AddRange(PruefeGrammatik(modell));

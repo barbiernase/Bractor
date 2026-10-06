@@ -171,7 +171,9 @@ public sealed class SagaRule
     public string Join { get; set; } = "single";     // single | and | count
     public string? Sammel { get; set; }              // Count-Join-Event (bei Join=count)
     public bool FanOut { get; set; }                 // SendeJe → N Commands aus einem Match
-    public string Sends { get; set; } = "";          // gefeuerter Command
+    public string Sends { get; set; } = "";          // gefeuerter Command (leer, wenn die Regel eine Funktion ruft)
+    public string? Ruft { get; set; }                // gerufene Katalog-Funktion (Rufe<F>)
+    public string? Zeitlimit { get; set; }           // Zeitlimit-Ausdruck verbatim
     public string? Compensates { get; set; }         // Gegenzug-Command (RückgängigDurch)
 }
 

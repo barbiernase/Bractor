@@ -53,6 +53,12 @@ public static class Scaffolder
     private static readonly string UndAlle = nameof(RegelBauer<IEvent>.UndAlle);
     private static readonly string Sende = nameof(RegelBauer<IEvent>.Sende);
     private static readonly string SendeJe = nameof(RegelBauer<IEvent>.SendeJe);
+    private static readonly string Rufe = nameof(RegelBauer<IEvent>.Rufe);
+    private static readonly string Zeitlimit = nameof(RegelAbschluss<IEvent>.Zeitlimit);
+    // ── Katalog-Funktionen ──
+    private static readonly string IFunktion = nameof(Abstractions.IFunktion);
+    private static readonly string IAuftrag = typeof(IAuftrag<>).Name.Split('`')[0];
+    private static readonly string IAusfuehrung = nameof(Abstractions.IAusfuehrung);
     private static readonly string RückgängigDurch = nameof(RegelAbschluss<IEvent>.RückgängigDurch);
     private static readonly string RückgängigDurchJe = nameof(RegelAbschluss<IEvent>.RückgängigDurchJe);
     private static readonly string OneOf = typeof(OneOf<>).Name.Split('`')[0];
@@ -135,6 +141,10 @@ public static class Scaffolder
         foreach (var saga in modell.Sagas)
             dateien.Add(Platziert(saga.Datei, Verzeichnis(modell, saga.Namespace), $"{saga.Name}.cs", SagaDatei(saga, modell), DateiArt.Saga));
 
+        // ── Katalog-Funktionen → je Funktion ihre Schnittstelle (nur die Signatur; die Implementierung ist Bindung) ──
+        foreach (var f in modell.Funktionen)
+            dateien.Add(Platziert(f.Datei, Verzeichnis(modell, f.Namespace), $"{f.Name}.cs", FunktionsDatei(f, modell), DateiArt.Typen));
+
         if (modell.Lesen is { } lesen) dateien.AddRange(LeseseitenDateien(modell, lesen));
 
         return dateien.OrderBy(d => d.Pfad, StringComparer.Ordinal).ToList();
@@ -176,6 +186,7 @@ public static class Scaffolder
             RecordArt.Konfig => "Konfigs.cs",
             RecordArt.Trigger => "Triggers.cs",
             RecordArt.Selbst => "SelbstNachrichten.cs",
+            RecordArt.Auftrag => "Auftraege.cs",
             _ => "Enums.cs",
         };
         var v = Verzeichnis(m, ns);
@@ -393,11 +404,40 @@ public static class Scaffolder
             });
         }
 
+        // Aufträge: je Record der Marker seiner Funktion (IAuftrag<F>) — der eine Eingang einer Katalog-Funktion.
+        var auftraege = records.Where(r => r.Kind == RecordArt.Auftrag).ToList();
+        if (auftraege.Count > 0) abschnitte.Add(() =>
+        {
+            for (var i = 0; i < auftraege.Count; i++)
+                RecordZeilen(b, auftraege[i], string.IsNullOrWhiteSpace(auftraege[i].Funktion) ? null : $"{IAuftrag}<{auftraege[i].Funktion}>",
+                    i < auftraege.Count - 1);
+        });
+
         for (var i = 0; i < abschnitte.Count; i++)
         {
             if (i > 0) b.AppendLine();
             abschnitte[i]();
         }
+        return b.ToString();
+    }
+
+    // ── Katalog-Funktion: nur die Signatur (CQRS068) ─────────────────────────────────────────
+    private static string FunktionsDatei(Funktion f, EditorModell modell)
+    {
+        var b = Kopf(f.Namespace, Usings(f.Namespace, modell, [modell.Rahmen.VertragsNamespace], [f.Auftrag, .. f.Ergebnisse], []));
+        Doku(b, f.Doku, "");
+        b.Append(FunktionsInterface(f));
+        return b.ToString();
+    }
+
+    /// <summary><c>public interface IX : IFunktion { Task&lt;OneOf&lt;E…&gt;&gt; RufeAsync(XAuftrag auftrag, IAusfuehrung x); }</c></summary>
+    public static string FunktionsInterface(Funktion f)
+    {
+        var b = new StringBuilder();
+        b.AppendLine($"public interface {f.Name} : {IFunktion}");
+        b.AppendLine("{");
+        b.AppendLine($"    Task<{OneOf}<{string.Join(", ", f.Ergebnisse)}>> {Funktionsvertrag.Methode}({f.Auftrag} auftrag, {IAusfuehrung} x);");
+        b.AppendLine("}");
         return b.ToString();
     }
 
@@ -434,7 +474,8 @@ public static class Scaffolder
         if (leerzeileDanach && (r.Zusatz is not null || r.Doku is not null || eigenschaften.Count > 0)) b.AppendLine();
     }
 
-    private static IEnumerable<string> RecordTypen(Record r) => r.Felder.Select(f => f.Typ);
+    private static IEnumerable<string> RecordTypen(Record r) =>
+        string.IsNullOrWhiteSpace(r.Funktion) ? r.Felder.Select(f => f.Typ) : r.Felder.Select(f => f.Typ).Append(r.Funktion);
 
     // ── Aggregat-Komposition ──────────────────────────────────────────────────────────────────
     private static IEnumerable<string> AggregatTypen(Aggregat agg, IReadOnlyList<DecideRegel> decider, IReadOnlyList<ApplyRegel> applier) =>
@@ -528,7 +569,8 @@ public static class Scaffolder
         foreach (var st in saga.Schritte)
         {
             referenzen.AddRange(st.Wenn);
-            referenzen.Add(st.Sende);
+            if (!string.IsNullOrWhiteSpace(st.Rufe)) { referenzen.Add(st.Rufe); referenzen.Add(AuftragVon(st.Rufe, modell) ?? st.Rufe); }
+            else referenzen.Add(st.Sende);
             if (st.SammelEvent is not null) referenzen.Add(st.SammelEvent);
             if (st.Kompensation is not null) referenzen.Add(st.Kompensation);
         }
@@ -550,6 +592,10 @@ public static class Scaffolder
         return b.ToString();
     }
 
+    /// <summary>Der Auftrag der Funktion (ihr einer Eingang) — aus dem Modell; null, wenn die Funktion (noch) unbekannt ist.</summary>
+    private static string? AuftragVon(string funktion, EditorModell modell) =>
+        modell.Funktionen.FirstOrDefault(f => f.Name == funktion)?.Auftrag;
+
     private static void SchrittZeilen(StringBuilder b, SagaSchritt s, EditorModell modell)
     {
         var auf = new StringBuilder($"        p.{Auf}<{s.Wenn[0]}>()");
@@ -565,9 +611,18 @@ public static class Scaffolder
 
         var lambda = LambdaKopf(s.Wenn.Count + (hatSammel ? 1 : 0));
         var hatKomp = s.Kompensation is not null;
+        var hatLimit = !string.IsNullOrWhiteSpace(s.Zeitlimit);
         var verb = s.SendeJe ? SendeJe : Sende;
         string sende;
-        if (!string.IsNullOrWhiteSpace(s.SendeAusdruck))
+        if (!string.IsNullOrWhiteSpace(s.Rufe))
+        {
+            // Aufruf-Knoten: die Funktion steht im Typ-Argument (CQRS003), der Lambda baut ihren Auftrag (verbatim oder Stub).
+            var auftrag = AuftragVon(s.Rufe, modell);
+            var ausdruck = !string.IsNullOrWhiteSpace(s.SendeAusdruck) ? s.SendeAusdruck
+                : auftrag is null ? $"{lambda} => default!" : $"{lambda} => new {auftrag}({ArgListe(s.SendeArgumente, auftrag, modell)})";
+            sende = $"            .{Rufe}<{s.Rufe}>({ausdruck})";
+        }
+        else if (!string.IsNullOrWhiteSpace(s.SendeAusdruck))
             sende = $"            .{verb}<{s.Sende}>({s.SendeAusdruck})";
         else if (s.SendeJe)
         {
@@ -578,7 +633,8 @@ public static class Scaffolder
         }
         else
             sende = $"            .{Sende}<{s.Sende}>({lambda} => new {s.Sende}({ArgListe(s.SendeArgumente, s.Sende, modell)}))";
-        b.AppendLine(hatKomp ? sende : sende + ";");
+        b.AppendLine(hatKomp || hatLimit ? sende : sende + ";");
+        if (hatLimit) b.AppendLine($"            .{Zeitlimit}({s.Zeitlimit})" + (hatKomp ? "" : ";"));
 
         if (hatKomp)
         {
