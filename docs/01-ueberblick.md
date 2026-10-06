@@ -79,7 +79,7 @@ Gemessen (2026-08-12): **452 C#-Dateien / ~46.000 Zeilen** (ohne generierte `.g.
 | Projekt | Rolle |
 |---|---|
 | `Client.Infrastructure.Python` | `cqrs_client` — paritätisches Python-SDK (gRPC-Client) |
-| `Domain.Client.Worker.Python.ML` | ML-Worker (Torch-Bildklassifikation als out-of-process-Reaktion) |
+| `Domain.Client.Worker.Python.ML` | ML-Worker: Clients `KlassifikationsWorker`/`TrainingsWorker` — Zusagen der Akteure Klassifizierer/TrainingsSystem, out-of-process (`docs/konzept-akteure.md`) |
 
 ### Werkzeuge & Tests
 | Projekt | Rolle |

@@ -3,6 +3,11 @@
 Zwei Projekte: das domänenfreie Framework-Paket `cqrs_client` und der domänenspezifische
 ML-Worker `domain_client`.
 
+> **Seit 2026-10-05/06 (nicht in diesem Kapitel vom 2026-08-12):** Worker programmieren gegen **generierte Basen** statt
+> `@handle.register`: je Client-Vertrag `<Client>Basis` (z. B. `KlassifikationsWorkerBasis`) in `domain_client/generated/vertraege.py`
+> (`./codegen.sh`), Basis-Klasse `cqrs_client/vertrag.py`. Die Basis verdrahtet den Dispatch `auf_<event>`, prüft jede Ausgabe gegen die
+> Zusage, prüft `query()` gegen den Vertrag und meldet Client + Hash am Handshake. Begriffe und Regeln: `docs/konzept-akteure.md` §4–§6.
+
 ## 9.1 Gesamtbild
 
 Der Python-Teil ist ein **First-Class-Client-SDK**, das sich als gleichberechtigter Teilnehmer

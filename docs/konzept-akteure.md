@@ -1,806 +1,293 @@
-# Konzept: Akteure
+# Akteure, Verträge, Clients
 
-> Status: **umgesetzt** (2026-10-03) — Laufzeit (Generator, Tor am Handshake, Analyzer), Extractor/Editor-Modell, Akteur-Band im
-> Editor. Abweichungen vom ersten Entwurf: §3.1 (Beantworten = `IDarf<Query>`), Umsetzungs-Landkarte §6.
-> Ziel: Der Domänen-Editor soll DDD tragen — dazu fehlt die Rolle der **Akteure**: *Wer darf was entscheiden?*
->
-> **Neu 2026-10-05: §9 „Akteur-Verträge" (Konzept, nicht umgesetzt)** — je Akteur ein C#-Vertrag, aus dem die Client-Schnittstellen
-> (Python, Blazor) generiert werden; schließt die Lücke „woher wird das ausgelöst?" an den externen Akteuren.
->
-> **Revision 2026-10-05 (§8 umgesetzt inkl. Laufzeit-Kette — §8.7):** §7 (Befund + Prüfung) und **§8 „Akteure als Domänen-Experten"**. Ein Dienst
-> ist kein Akteur mehr. Akteure sind fachliche Experten (KameraSystem, Klassifizierer, Inspekteur, KIOperator, …), ein Command kann
-> mehrere haben; deklariert wird nur `IDarf`, der Akteur eines Ketten-Commands folgt aus der Kette. §8 ersetzt §3.3b sowie §7.3/§7.4.
+> **Status 2026-10-06: umgesetzt** bis auf §9 (offen). Kanonische Referenz für *wer* etwas hineingibt (Akteur), *was er draußen
+> zusagt* (Akteur-Vertrag) und *welche Software es über welche Leitung tut* (Client). Ersetzt die früheren Fassungen dieses Dokuments
+> und `konzept-client-vertraege.md` (Historie in git). Editor-Darstellung: `docs/konzept-domaenen-editor.md` §12.
 
-## 1. Befund (Ist-Zustand)
+---
 
-**Editor.** Es gibt keinen Akteur. Einziger Stellvertreter für Menschen und Fremdsysteme ist der Pseudo-Knoten
-**„Außenwelt (Client)"** — abgeleitet: ein Command/eine Query ohne internen Erzeuger bekommt die Außenwelt als Quelle
-(`DomainEditor/Fluss.cs:163-177`, `DomainEditor/Grammatik.cs:153`). Wer etwas auslöst, sieht man nie.
+## 1. Begriffe
 
-**Programmiermodell.**
-- `CommandEnvelope.UserId` ist ein `string` mit Default `"system"`; kein Client setzt ihn, Marten persistiert ihn
-  nicht (`MartenEventBatchWriter.cs` speichert nur Causation/Correlation), `Decide(cmd)` sieht ihn nie.
-- Der generierte `ProjectionQueryService` baut einen leeren `QueryEnvelope` (`UserId = "anonymous"`).
-- Keine Authentifizierung, keine Rollen, keine Mandanten (vgl. `docs/konzept-client-haertung.md` §4, P1-2).
-
-**Capabilities-Handshake** (`Infrastructure/GrpcClient/CapabilitiesHandler.cs`, `ProtoRepo/domain.proto:47-52, 107-116`).
-Beim `Connect` meldet jeder Client an, welche Typen er braucht (`message_types`, `handle_queries`, `handle_triggers`).
-Der Server sortiert nur ein und antwortet mit `allowed_commands`, `supported_queries`, `allowed_triggers`, ….
-- **Selbstauskunft ohne Durchsetzung:** `AllowedCommands` wird berechnet und zurückgeschickt, aber
-  `HandleCommandAsync` prüft nie dagegen.
-- Blazor nutzt den Alt-Pfad (nur `event_types`); der Server leitet „erlaubte Commands" als Geschwister-Commands
-  desselben Aggregats ab (`MessageTypeMapping.cs:70-90`).
-- Keine Identität: die Session ist ein Zähler (`session-0001`).
-
-## 2. Leitlinie: so wenig Begriffe wie möglich
-
-Verworfen: ein Akteur mit fünf Relationen (`ISendet`/`IFragt`/`IHört`/`IBeantwortet`/`IVerarbeitet`) — das sind
-Wire-Begriffe, keine Fachsprache, und zu viel mental load. Im Event Modeling *löst* ein Akteur etwas aus und *sieht*
-etwas; die fachliche Frage dahinter ist nur: **Wer darf das?**
-
-Daraus:
-- **Ein Begriff:** `IAkteur`. Keine Trennung Mensch/System — ein Fremdsystem ist ein Akteur mit Namen.
-- **Ein Wort:** `IDarf<T>` — für **alles, was ein Akteur in das System hineingibt**.
-- **Alles andere wird aus dem Graphen abgeleitet.**
-
-## 3. Programmiermodell
-
-```csharp
-public sealed record Disponent : IAkteur,
-    IDarf<SetzeModellAktiv>, IDarf<RegistriereModell>, IDarf<HoleModelle>;
-
-public sealed record KlassifikationsWorker : IAkteur,
-    IDarf<KlassifiziereBildPaarDurchKi>;
-
-public sealed record Teamleiter : Disponent, IDarf<ArchiviereModell>;   // Vererbung = Rollen-Hierarchie
-```
-
-Passt zu den bestehenden Regeln: Akteur = **Typ** (Inv. 3), Relation = **Code-Fakt** in der Signatur (Extractor findet
-sie ohne Namensraten), Muster wie das Store-Bündel (`: IStore, IFähigkeitA, …`). Der Command bleibt reiner Vertrag.
-
-### 3.1 Was `IDarf<T>` abdeckt (alles, was hineingeht)
-
-| Typ | Bedeutung |
-|---|---|
-| Command | darf auslösen |
-| Query | darf fragen — bzw. als Zuständiger beantworten (nur Lücke, nur einer, §3.2) |
-| Trigger (Client startet Pipeline) | darf starten — bzw. als Zuständiger verarbeiten (nur Lücke, nur einer) |
-| Transient-Event (Hinweis vom Client) | darf veröffentlichen |
-
-Umgesetzt anders als zuerst gedacht: **Beantworten** ist `IDarf<Query>`, nicht `IDarf<Response>` — eine extern beantwortete
-Query hat im Graphen keinen Reader, also keine Query→Response-Kante, an der ein Response-Recht hängen könnte. Damit bleibt
-es bei EINER Lesart: `IDarf<T>` = „T darf über mich ins System" (als Fragender oder als Zuständiger). Analyzer CQRS058
-lässt nur Command/Query/Trigger/Transient zu; ein Event aus dem Log oder eine Response kann man nicht „dürfen".
-
-**Regel ohne Ausnahme:** Ohne `IDarf` darf es niemand — auch bei Queries. Der Editor zeigt die Lücken.
-
-### 3.2 Was abgeleitet wird
-
-**Hören (Event-Abo).** Ein Akteur hört, was er ohnehin wissen darf:
-
-| Weg im Graphen | Lesart |
-|---|---|
-| `IDarf<Cmd>` → Aggregat des Commands → dessen Events | „Du hörst das Ding, auf das du einwirkst" (inkl. Rückmeldung/Ablehnung) |
-| `IDarf<Query>` → Reader → Projektion → deren Trigger-Events | „Du hörst, was du sowieso lesen darfst" |
-
-Hör-Menge = Vereinigung. Kein Leck über das hinaus, was der Akteur fragen oder bewirken darf. Weg 1 liegt schon
-generiert vor (`GeneratedCommandRouting.CommandToAggregate`/`CommandToEvents` — der Blazor-Alt-Pfad nutzt ihn
-umgekehrt); Weg 2 steht im Graphen, muss generiert werden. Grenze: Filter je Event-*Typ*, nicht je Datensatz (wie bei
-Queries).
-
-**Zuständigkeit (`handle_queries` / `handle_triggers`).** Ein externer Client darf nur übernehmen, was
-- im Graphen eine **Lücke** ist (Query ohne Reader, Trigger ohne Pipeline) — einen Server-Reader kann niemand kapern;
-- noch **niemand** übernommen hat (Kardinalität `eins`, GR-QUERY/GR-TRIGGER);
-- und er den Typ selbst darf (`IDarf<Query>` bzw. `IDarf<Trigger>`).
-
-Rest-Risiko (bewusst): Ein berechtigter Worker, der sich zuerst als Zuständiger für einen Trigger einträgt, könnte ihn
-verschlucken — er gewinnt dadurch kein Recht, das er nicht schon hat.
-
-### 3.3 Handshake: von Selbstauskunft zu Befugnis
-
-```
-Connect + Token im gRPC-Header (kein Proto-Feld)
-   │
-   ▼  Composition Root: Token → Akteur-Typ            (einzige String-Stelle, Betrieb — nicht Domäne)
-   │      services.AddAkteure(a => a.Token<Disponent>(geheim));   bzw. Konfig "Akteure:Tokens"
-   ▼  GeneratedAkteurRechte[Disponent]                 (generiert aus IDarf<…> + Ableitungen §3.2)
-   │
-CapabilitiesResponse: allowed_commands / supported_queries / allowed_triggers / subscribed_events
-                      = genau diese Mengen            (alle Felder existieren schon)
-Session merkt sie sich → HandleCommand/Query/Trigger prüfen O(1) → sonst CommandFailed (existiert)
-```
-
-- Die Geschwister-Ableitung des Alt-Pfads entfällt.
-- Python: `_declared_command_types` wird überflüssig (höchstens Abgleich „ich will, was ich nicht darf").
-- Bonus: Blazor kennt nach dem Connect `allowed_commands` → kann Buttons ausblenden.
-- Envelope: die Session stempelt den Akteur in `UserId` (umgesetzt). **Noch offen:** als Marten-Header persistieren
-  (neben `aggregate_type`) und über `EmitKausalität`/`HandlerOutputRouter` weiterreichen („Automation X im Auftrag von Y").
-
-### 3.3b Dienste als Akteure (die KI)
-
-Ein Dienst kann Akteur sein — die KI entscheidet, wie ein Bildpaar klassifiziert wird. Gleiches Wort, kein neues Konzept:
-
-```csharp
-public interface IClassifierService : IAkteur, IDarf<KlassifiziereBildPaarDurchKi> { Task<ClassificationResult> ClassifyPairAsync(Guid id); }
-
-public async IAsyncEnumerable<OneOf<KlassifiziereBildPaarDurchKi>> Handle(
-    ImagePairKomplett evt, PipelineContext ctx, IClassifierService ki)   // ← im Auftrag der KI: steht in der Signatur
-```
-
-- **Wer entscheidet, steht in der Signatur:** der Dienst kommt als Handle-Parameter (wie eine Fähigkeit, aus der DI aufgelöst),
-  nicht über den Konstruktor (Fähigkeiten statt Rumpf). Trennlinie: ein Dienst, der **fachlich entscheidet**, ist ein Akteur
-  (Parameter); ein **Werkzeug** (`IImageResizer`, `IHistogramEqualizer`) bleibt im Konstruktor.
-- **Build (CQRS060):** höchstens ein Akteur je Handle; der Handle gibt nur Commands aus, die der Akteur darf; ein Akteur-Dienst
-  im Konstruktor/Feld eines Konsumenten ist ein Fehler. Nur am Pipeline-Handle (CQRS057).
-- **Laufzeit:** der generierte Dispatch setzt `ImAuftrag.Von("IClassifierService")` um den Handle-Aufruf (fluss-lokal,
-  `AsyncLocal`); `CommandEmitter` stempelt ihn als `UserId` — auf dem Pull- wie auf dem Actor-Pfad, ohne die Idempotenz (CommandId)
-  zu berühren. Ohne Akteur bleibt es `system` (reine Automation).
-- **Rechte-Tabelle:** der Vertrag ist der Akteur (`GeneratedAkteurRechte["IClassifierService"]`), seine Implementierung nicht.
-- **Ein Akteur, zwei Verkörperungen:** dieselbe Fähigkeit „klassifizieren" gibt es heute draußen (Python-Worker, Record-Akteur
-  `KlassifikationsWorker` am Tor) und drinnen (Dienst-Akteur in der Pipeline) — beide dürfen `KlassifiziereBildPaarDurchKi`.
-- **Editor:** Dienst-Akteure stehen im Akteur-Band (Karte „⚙ Dienst"), mit „entscheidet in ▶" → Pipeline-Handle; am Handle
-  „◀ im Auftrag von 👤 X" (⊕ = nur Dienst-Akteure leuchten, ✕ = lösen); Validator **GR-AUFTRAG** = CQRS060. Board-Feld
-  `handles[].akteur`; „C# schreiben" setzt/entfernt den Parameter; ein bestehender Vertrag (mit Methoden) gehört dem Code —
-  nur seine Basisliste wird abgeglichen, ein neuer wird `public interface X : IAkteur, IDarf<…> { }`.
-
-### 3.4 Wenn das „Wer" fachlich ist
-
-Beispiel Vier-Augen-Prinzip („Freigeber ≠ Antragsteller"): das „Wer" ist dann Domäne und steht **explizit als Feld**
-in Command und Event — normale Modellierung, kein neues Konzept. (Option für später: ein typisierter
-`Akteur<T>`-Parameter an `Decide`, vom generierten Dispatch aus der Session gefüllt.)
-
-## 4. Editor
-
-- **Ein neuer Knoten „Akteur"** — ersetzt die anonyme Außenwelt (die bleibt als „unbekannter Akteur", sichtbar markiert).
-- **Eine Kante:** Akteur → Command/Query/Trigger. Im Panel am Command als **„Wer?"**: ⊕ → Akteure leuchten →
-  anklicken = verbinden; der `DateiSchreiber` ergänzt additiv `IDarf<X>` am Akteur-Record.
-- **Grammatik** (eine Quelle, `Grammatik.cs`): `akteur` erzeugt Command, Query, Trigger, Transient (**GR-AKTEUR**, Build:
-  CQRS058/059 + Tor). **GR-AKTEUR-FEHLT** (Warnung, nur wenn es Akteure gibt): Command/Query/Trigger ohne internen Erzeuger
-  und ohne Akteur — am Tor käme es nie durch.
-- **Persona-Sicht:** Klick auf den Akteur → Slice: alles, was er auslösen kann, und was daraus folgt.
-
-### 4.1 Eigenes Akteur-Band
-
-Akteure bekommen ein **eigenes Band** — ein Block wie „⋯ Geteilt" (`SHARED_KEY`), nur mit eigenem Schlüssel
-(`AKTEUR_KEY = "§akteure"`, Label „👤 Akteure") und eigener Rollen-Tabelle `ROLE_AKTEUR`. Das bestehende Layout bleibt:
-das Band kommt **dazu**, es ersetzt keine Spalte und keinen Block.
-
-```
-┌ Domäne ImagePair ──────────────────────────────────────────────────────────────────────┐
-│ ┌ 👤 Akteure ┐   ┌ Aggregat ImagePair ─────────────────────────────┐   ┌ ⋯ Geteilt ──┐ │
-│ │ Disponent  │──▶│ Command │ Decider │ State │ Event │ … │ Reader  │   │ Saga │ …    │ │
-│ │ KI-Worker  │──▶│                                                  │   │              │ │
-│ └────────────┘   └──────────────────────────────────────────────────┘   └──────────────┘ │
-└────────────────────────────────────────────────────────────────────────────────────────┘
-```
-
-- **Position: ganz links** — vor den Aggregat-Blöcken, also auf der Eingangsseite. Das Spalten-Lesen bleibt
-  links→rechts (Akteur → Command → … → Reader), wie im Event Modeling „Akteur oben/vorn".
-- **Spalten im Band** (`ROLE_AKTEUR`): zunächst genau eine — `akteur`. Platz für später: eine zweite Spalte
-  „Bildschirm" (Brücke zum Blazor-Client), erst wenn das Frontend in den Editor kommt.
-- **Domänen-Zugehörigkeit aus dem Graphen** (wie `domKey`): Liegen alle `IDarf`-Ziele eines Akteurs in einer Domäne,
-  steht er im Akteur-Band **dieser** Domäne. Wirkt er über mehrere Domänen, steht er in einem Akteur-Band **auf
-  oberster Ebene** (außerhalb der Domänen-Rahmen, ganz links). Ein Akteur ohne `IDarf` → oberste Ebene.
-- **Kanten:** Akteur → Command/Query/Trigger laufen aus dem Band nach rechts in die Command-/Query-Spalten der Blöcke.
-- **Rahmen-Menüleiste** wie bei den anderen Spalten (`.gspalte`, Kopf ＋/◎): ＋ legt einen neuen Akteur an.
-- **„Außenwelt"** wandert ebenfalls in dieses Band — als graue Karte „unbekannter Akteur", solange Commands ohne
-  Akteur existieren (sichtbarer Befund statt stiller Ableitung).
-- **Laden-Filter / Domänen-Filter:** das Band gehört zur Domäne wie alles andere (`domKey`), damit „nur ImagePair
-  laden" die Akteure dieser Domäne mitlädt.
-- **Simulation (später):** in SimHost „als Disponent ausführen" — nicht erlaubte Commands werden abgelehnt.
-
-## 5. Bewusst nicht Teil
-
-- **Mandanten** — eigene Achse, eigenes Konzept.
-- **Datensatz-Rechte** („nur eigene Datensätze") — Domäne (§3.4) bzw. Reader-Filter.
-- **Transport-Sicherheit** (TLS, Token-Quelle OIDC/mTLS) — `docs/konzept-client-haertung.md` T1.
-
-## 6. Umsetzungs-Landkarte (2026-10-03)
-
-| Teil | Ort |
-|---|---|
-| Vertrag | `Abstractions/Akteur.cs` (`IAkteur`, `IDarf<T>`) |
-| Befugnis-Tabelle (generiert) | `Infrastructure.SourceGeneration/AkteurRechteGenerator.cs` → `GeneratedAkteurRechte` (CQRS059) |
-| Tor | `Infrastructure/Akteure/` — `AkteurRechte`, `AkteurOptionen` + `AddAkteure(...)`, `AkteurTor` (Erkennen, Handshake-Filter, `AkteurVerweigerung`) |
-| Durchsetzung | `Infrastructure/GrpcClient/CqrsClientService.cs` — Token-Header `akteur-token` am `Connect` (sonst `Unauthenticated`), Capabilities gefiltert, Command → `CommandFailed`, Query/Transient → `AKTEUR_DARF_NICHT`, Trigger → negatives Ack, Subscribe gefiltert, `UserId` = Akteur |
-| Opt-in | `Host.Grpc/Program.cs`: `AddAkteure(Configuration.GetSection("Akteure"))` — ohne Sektion offen wie bisher |
-| Clients | Blazor `GrpcProxy.AkteurToken` (`Akteur:Token`), Python `GrpcProxy(akteur_token=…)` / `CQRS_AKTEUR_TOKEN` |
-| Analyzer | `Domain.SourceGeneration/AkteurAnalyzer.cs` (CQRS058) |
-| Beispiel-Akteure | `Domain.Projections/Akteure.cs` (Inspektor, Trainer, KlassifikationsWorker, TrainingsWorker); Dienst-Akteur `IClassifierService` (KI) in `Domain.Pipeline/ImageProcessing` |
-| Dienste als Akteure | `Abstractions.ImAuftrag`, `PipelineDispatchGenerator` (Akteur-Parameter), `CommandEmitter` (UserId), `AkteurAnalyzer` CQRS060, `HandlerFormAnalyzer` (CQRS057 erlaubt den Parameter am Pipeline-Handle) |
-| Extractor / Modell | `DomainExtractor.ReadAkteur`, `EditorModell.Akteure`, `Herkunft`, `ModellMapper`, Inventar in `ParitaetsPruefung` |
-| Sprache | `Grammatik` (Baustein `akteur`, GR-AKTEUR, GR-AKTEUR-FEHLT), `Fluss` (`akt:`), `Module` (Akteur = benannte Außenwelt), `Validator` |
-| Schreiben | `Scaffolder.AkteurDatei` (neu: `Akteure.cs` im Namespace-Verzeichnis), `DateiAbgleich.AkteurBefugnisse` (Basisliste nach Modell, auch Entziehen) |
-| Editor | `HtmlPresenter.cs`: Akteur-Band (`AKTEUR_KEY`), Akteur-Karte (darf ⊕/✕, „hört" abgeleitet), `darf`-Port an Command/Query/Trigger, „◀ kommt aus" nennt Akteure, Persona-Slice |
-| Tests | `Akteure/AkteurRechteTests`, `Analyzers/AkteurAnalyzerTests`, `DomainEditorAkteurTests`; Sonde (`Theke`, gezeichnete `Mahnstelle`) |
-
-**Offen:** echte Authentifizierung hinter dem Token (TLS/OIDC, `konzept-client-haertung.md` T1); `Akteur<T>`-Parameter an
-`Decide` (§3.4); Bildschirm-Spalte im Band; die Python-Worker melden sich noch ohne Token an (opt-in: Server ohne Akteure).
-
-
-
-## 7. Revision: Rollen statt Dienst-Akteure (Entwurf 2026-10-05)
-
-> Auftrag (Tobi): Der Dienst ist nicht der Akteur. Es gibt drei **Rollen** — **Classifier** (die KI), **Maschine** (erzeugt die
-> Bilder), **Mensch** (kümmert sich um die Commands). Erst prüfen, ob man beim Dienst klar sagen kann, *wer* ihn benutzt; dann ein
-> System, das Commands, Pipeline-Trigger und alles Weitere vom Akteur her verzahnt.
-
-### 7.1 Nachvollzug: wer löst heute was aus?
-
-Alle Commands der Domäne, ihr tatsächlicher Erzeuger im Code und ihr heutiger Stempel (`UserId`):
-
-| Command | Erzeuger heute (Code-Fakt) | Stempel heute | Rolle (Soll) |
+| Begriff | Frage | Code-Fakt | Beispiel |
 |---|---|---|---|
-| `ErstelleImagePair`, `MeldeBildVerfuegbar` | `ImageProcessingPipeline.Handle(DateiErkannt)` ← `FileWatchPipeline` (Datei auf dem Share) | `system` | **Maschine** (über Arm) |
-| `KlassifiziereBildPaarDurchKi` | **zweimal**: `ImageProcessingPipeline.Handle(ImagePairKomplett, …, IClassifierService)` *und* Python `classifier.py on_image_pair_komplett` | `IClassifierService` bzw. `KlassifikationsWorker` | **Classifier** |
-| `KlassifiziereEinzelBildDurchKi` | niemand (Lücke) | — | Classifier |
-| `LabelBildPaar`, `LabelPhysischesProdukt`, `MarkiereAlsInspiziert` | Blazor (`LabelingIntentHandler`, `DataEffects.razor`) | Token-Akteur bzw. `system` | **Mensch** |
-| `LabelEinzelBild`, `LabelBildRegion` | niemand (Lücke) — `Inspektor` darf `LabelEinzelBild`, Blazor sendet es nie | — | Mensch |
-| `ErstelleDatensatz`, `FuegeRangeHinzu`, `SetzeSplit`, `FriereEin`, `NimmPaarAuf`, `EntfernePaar` | Blazor (`DatensatzKomposition…`, `Kuratieren…`) | Token-Akteur | **Mensch** |
-| `NimmRangeAuf`, `SchliesseEinfrierenAb` | `DatensatzResolverPipeline` (auf `RangeAngefordert`/`EinfrierenAngefordert`) | `system` | Mensch (über Arm) |
-| `StarteTraining`, `BricheTrainingAb`, `RegistriereModell`, `SetzeModellAktiv`, `ArchiviereModell` | Blazor (`TrainingDashboard…`, `Modell…`) | Token-Akteur | **Mensch** |
-| `MeldeTrainingBegonnen/Fortschritt/Abgeschlossen/Gescheitert` | Python `training_worker.py` | `TrainingsWorker` | **offen** (§7.6) |
-| `MarkiereAlsHaengengeblieben` | Frist aus `TrainingFristPipeline` | `system` | offen (§7.6) |
-| `StarteSammelvorgang`, `StarteTeilauftrag`, `MeldeTeilFertig` | Lücke bzw. `TeilFertigProzess` | `system` | Beispiel-Domäne, unverändert |
+| **Akteur** | *Wer* handelt fachlich, was darf er spontan hineingeben? | `record X : IMensch\|IMaschine\|IKi, IDarf<T>…` | Inspekteur darf `LabelBildPaar` |
+| **Zusage** | Worauf antwortet ein Akteur *draußen*, und womit? | eine Methode `Auf(TEvent e)` mit Ausgabe | Klassifizierer: `ImagePairKomplett` → `KlassifiziereBildPaarDurchKi` |
+| **Kenntnis** | Welches Event nimmt er nur zur Kenntnis? | `void Auf(TEvent e)` | Klassifizierer lädt bei `ModellAktiviert` das neue Modell |
+| **Akteur-Vertrag** | Alle Zusagen und Kenntnisse eines Akteurs | `interface IX : IAkteurVertrag<X>` (auch in Teilen) | `IKlassifizierer` |
+| **Client** | *Welche Software* hängt an der Leitung, was geht über sie? | `interface IX : IClientVertrag, …` | `IKlassifikationsWorker` (Python), `IArbeitsplatz` (Blazor) |
+| **Identität** | Wer meldet sich an? | Token → Akteur-Menge (Composition Root) | Token `anna` → {Inspekteur, KIOperator} |
 
-**Befunde**
+**Abgrenzung:** *Reaktion* ist im Projekt der **Backend-Baustein** (`ISubscriber`, ein interner Konsument, der auf Events hin Commands
+ausgibt). Eine **Zusage** ist dasselbe Muster *draußen*, im Namen eines Akteurs, implementiert von einem Client. Die beiden Wörter werden
+nicht vermischt.
 
-1. **Der Dienst steht an der Stelle der Rolle.** `IClassifierService : IAkteur, IDarf<…>` — die KI *ist* der Vertrag. Dieselbe
-   Fähigkeit gibt es ein zweites Mal als Record `KlassifikationsWorker`. Zwei Akteure für eine Rolle.
-2. **Doppelte Klassifikation.** C#-Pipeline und Python-Worker reagieren beide auf `ImagePairKomplett` und senden beide
-   `KlassifiziereBildPaarDurchKi`. Der C#-`ClassifierService` ist ein Platzhalter (immer `KeineAnomalie`). Läuft der Python-Worker,
-   wird jedes Paar zweimal klassifiziert — einmal mit Fantasie-Label.
-3. **Die Maschine kommt nicht vor.** Die ganze Bild-Kette (`DateiErkannt` → `ErstelleImagePair`, `MeldeBildVerfuegbar`) läuft als
-   `system`; niemand darf `DateiErkannt` (`IDarf` fehlt).
-4. **Die Menschen-Rollen passen nicht zum Client.** Der *eine* Blazor-Client (ein Token = ein Akteur) sendet 14 Commands; `Inspektor`
-   deckt davon 1 ab (`MarkiereAlsInspiziert`, dafür das nie gesendete `LabelEinzelBild`), `Trainer` 5. Mit eingeschaltetem Tor
-   würden `LabelBildPaar`, `LabelPhysischesProdukt`, `FuegeRangeHinzu`, `SetzeSplit`, `FriereEin`, `NimmPaarAuf`, `EntfernePaar`,
-   `BricheTrainingAb` und `RegistriereModell` abgelehnt.
-5. **Der Akteur reißt nach dem ersten Schritt ab.** `MartenEventBatchWriter` schreibt nur `aggregate_type` als Header; `UserId`
-   landet nicht im Log. Jede Automation dahinter (`DatensatzResolverPipeline`, Prozesse, Fristen) stempelt `system` — der Mensch,
-   der den Datensatz eingefroren hat, ist an `SchliesseEinfrierenAb` nicht mehr zu sehen.
+**Leitlinie:** so wenig Begriffe wie möglich, alles Code-Fakt in Basisliste oder Signatur (keine Namenskonvention, keine Attribute zum
+Raten). Was abgeleitet werden kann (wer etwas über die Kette bewirkt, was ein Akteur hört, welche Akteure ein Client verkörpert), wird
+nicht deklariert.
 
-### 7.2 Prüfung: Kann man beim Dienst klar sagen, wer ihn benutzt?
+```
+            Identität (Token)            Client (Software, eine Leitung)          Akteur (fachlich)
+  Token gpu-01 ──────────────►  KlassifikationsWorker ───────────────────────►  Klassifizierer
+  Token train-01 ────────────►  TrainingsWorker ─────────────────────────────►  TrainingsSystem
+  Token anna ────────────────►  Arbeitsplatz ──────┬─────────────────────────►  Inspekteur
+     (Anna = Inspekteur)                           ├─────────────────────────►  KIOperator
+                                                   ├─────────────────────────►  Modellfreigeber
+                                                   └─────────────────────────►  Produktpruefer
+  Wirksam ist immer:  Vertrag(Client) ∩ Akteure(Token)   — Anna am Arbeitsplatz = nur der Inspekteur-Anteil
+```
 
-**Heute: halb.**
+---
 
-- *Vom Handle aus* ja: der Dienst ist ein Handle-Parameter (Code-Fakt), der Generator kennt jede Stelle. Heute gibt es genau eine:
-  `ImageProcessingPipeline.Handle(ImagePairKomplett, …, IClassifierService)`.
-- *Vom Dienst aus* nein:
-  - Der Dienst nennt keine Rolle — er *ist* eine (Befund 1).
-  - CQRS060 verbietet den Dienst nur im Ctor/Feld von **Konsumenten** (Subscriber/Reader/Pipeline). Jede andere Klasse (ein
-    Blazor-Effect, ein Hosted Service, ein Domänen-Service) kann ihn über DI injizieren, und niemand sieht es. Die Menge der
-    Benutzer ist also nicht geschlossen.
-  - Der Python-Worker benutzt den Dienst gar nicht, trifft aber dieselbe Entscheidung. Im Graphen hängen die beiden nicht zusammen.
+## 2. Akteur
 
-**Mit zwei Regeln: ja, vollständig aus Code-Fakten.**
-
-1. Der Dienst nennt **seine Rolle** in der Basisliste: `interface IClassifierService : IBenutztVon<Classifier>`.
-2. Ein Rollen-Dienst darf **nur als Handle-Parameter** auftreten. Ctor-, Feld- oder Property-Injektion ist in *jeder* Klasse ein
-   Fehler (CQRS060 auf alle Typen ausgeweitet). Ausgenommen ist nur die Composition Root (`services.Add…`).
-
-Damit gilt: *Wer benutzt den Dienst?* → die Rolle (deklariert) und genau die Handles mit diesem Parameter (abgeleitet,
-abgeschlossen). *Wer entscheidet in diesem Handle?* → die Rolle des Dienst-Parameters.
-
-### 7.3 Modell: drei Begriffe (überholt durch §8)
-
-| Begriff | Code | Bedeutung |
-|---|---|---|
-| **Rolle** (= Akteur) | `record Classifier : IAkteur, IDarf<…>` | einziger Akteur-Typ; trägt die Befugnisse |
-| **Dienst einer Rolle** | `interface IClassifierService : IBenutztVon<Classifier>` | Werkzeug, mit dem die Rolle *drinnen* entscheidet; selbst kein Akteur, kein `IDarf` |
-| **Verkörperung** | Token → Rolle (Tor) · Rollen-Dienst (Handle-Parameter) · Ingress eines Triggers, den die Rolle darf | *wie* eine Rolle hineinkommt — Betrieb, nicht Domäne |
+### 2.1 Deklaration
 
 ```csharp
-namespace Domain.Akteure;
-
-public sealed record Mensch : IAkteur,
-    IDarf<LabelBildPaar>, IDarf<LabelPhysischesProdukt>, IDarf<LabelEinzelBild>, IDarf<MarkiereAlsInspiziert>,
-    IDarf<ErstelleDatensatz>, IDarf<FuegeRangeHinzu>, IDarf<SetzeSplit>, IDarf<FriereEin>, IDarf<NimmPaarAuf>, IDarf<EntfernePaar>,
-    IDarf<NimmRangeAuf>, IDarf<SchliesseEinfrierenAb>,                 // über den Arm DatensatzResolver
-    IDarf<StarteTraining>, IDarf<BricheTrainingAb>, IDarf<RegistriereModell>, IDarf<SetzeModellAktiv>, IDarf<ArchiviereModell>,
-    IDarf<SucheImagePairs>, IDarf<GetImagePair>, /* … alle Queries des Clients … */;
-
-public sealed record Maschine : IAkteur,
-    IDarf<DateiErkannt>,                                               // über den Arm FileWatch
-    IDarf<ErstelleImagePair>, IDarf<MeldeBildVerfuegbar>;              // über den Arm ImageProcessing
-
-public sealed record Classifier : IAkteur,
-    IDarf<KlassifiziereBildPaarDurchKi>, IDarf<KlassifiziereEinzelBildDurchKi>;
-
-// Domain.Pipeline — der Dienst gehört der Rolle, er IST sie nicht:
-public interface IClassifierService : IBenutztVon<Classifier> { Task<ClassificationResult> ClassifyPairAsync(Guid id); }
-```
-
-`Inspektor`/`Trainer` gehen in `Mensch` auf. Eine Rollen-Hierarchie per Vererbung (§3) bleibt möglich, wenn der Mensch später
-aufgeteilt werden soll. `KlassifikationsWorker` entfällt, der Python-Worker meldet sich mit dem Token der Rolle `Classifier` an.
-
-### 7.4 Verzahnung: was hineinkommt, kommt von einem Akteur (Regeln übernommen in §8.3)
-
-**Invariante (DDD):** Jeder Command, jede Query und jeder Trigger hat einen Akteur, also eine Rolle mit `IDarf<T>`. Das gilt ohne
-Ausnahme: Es gibt kein `system` und keine Automation ohne Akteur. Pipeline, Prozess, Frist und Dienst sind **nie** Akteur. Sie sind
-der **Arm**, über den eine Rolle ihren Command ins System bringt.
-
-**Eine Quelle für das Wer: `IDarf`.** Der Akteur eines Commands ist die Rolle, die ihn darf, egal ob er übers Tor oder über einen
-Arm kommt. Nichts wird vererbt, nichts geraten:
-
-| Hineingehend | Weg | Akteur |
-|---|---|---|
-| `LabelBildPaar`, `FriereEin`, `StarteTraining`, … | Tor (Blazor) | Mensch |
-| `NimmRangeAuf`, `SchliesseEinfrierenAb` | Arm `DatensatzResolverPipeline` | Mensch (der Resolver führt *seinen* Datensatz-Auftrag aus) |
-| `DateiErkannt` (Trigger) | Arm `FileWatchPipeline` (Sensor am Share) | Maschine |
-| `ErstelleImagePair`, `MeldeBildVerfuegbar` | Arm `ImageProcessingPipeline.Handle(DateiErkannt)` | Maschine |
-| `KlassifiziereBildPaarDurchKi` | Tor (Python-Worker) **oder** Arm mit `IClassifierService`, nicht beides | Classifier |
-| `MeldeTraining*`, Query `HoleDatensatzSamples` | Tor (Python-Trainings-Worker) | offen (§7.6) |
-| `MarkiereAlsHaengengeblieben` | Arm Frist (`TrainingFristPipeline`) | offen (§7.6) |
-
-**Regeln (Build + Editor, eine Quelle in `Grammatik`):**
-
-1. **Herkunft:** Jeder Command, jede Query und jeder Trigger hat mindestens eine Rolle mit `IDarf`, sonst „kommt von niemandem“.
-   Heute betrifft das `LabelBildRegion`, `KlassifiziereEinzelBildDurchKi`, `StarteSammelvorgang`, `StarteTeilauftrag`, `BenchPing`,
-   die Bild-Kette und die Resolver-/Frist-Commands.
-2. **Ein Arm, eine Rolle:** Alles, was ein Handle ausgibt, darf **dieselbe** eine Rolle. Daraus folgt die Rolle des Handles. Ein
-   Handle, der Maschinen- und Classifier-Commands mischt, ist ein Fehler.
-3. **Ein Weg hinein:** Ein Command kommt entweder direkt (Tor, nur wenn er im Graphen eine Lücke ist) oder über einen Arm.
-   - Hat er einen Arm, lehnt das Tor ihn ab, auch für die berechtigte Rolle. Der Mensch kann `SchliesseEinfrierenAb` nicht am
-     Resolver vorbei mit erfundener Mitgliederliste schicken.
-   - Die doppelte Klassifikation (Befund 2) ist damit ein Build-Fehler statt ein Laufzeit-Unfall.
-4. **Dienst passt zur Rolle:** Nimmt ein Handle einen Rollen-Dienst (`IBenutztVon<R>`), muss `R` die Rolle des Handles aus
-   Regel 2 sein. *Wer benutzt den Dienst?* bleibt damit vollständig beantwortet (§7.2).
-
-**Was nicht hineinkommt, braucht kein `IDarf`:** Events sind Folgen *im* Aggregat, keine Eingänge. Ein Arm, der über
-Store-Fähigkeiten liest (`ISearchImagePairs` im Resolver), stellt keine Query. Was eine Rolle hört, bleibt abgeleitet (§3.2).
-
-Durchgespielt, jede Spur beginnt bei einer Rolle:
-
-```
-Maschine   ─ DateiErkannt ─▶ [FileWatch]   ─▶ [ImageProcessing] ─ ErstelleImagePair, MeldeBildVerfuegbar ─▶ ImagePair ─▶ ImagePairKomplett
-Classifier ─ hört ImagePairKomplett ─ (Python-Worker | [Arm + IClassifierService]) ─ KlassifiziereBildPaarDurchKi ─▶ ImagePair
-Mensch     ─ FriereEin ─▶ Datensatz ─▶ EinfrierenAngefordert ─▶ [DatensatzResolver] ─ SchliesseEinfrierenAb ─▶ Datensatz
-Mensch     ─ LabelBildPaar / MarkiereAlsInspiziert ─▶ ImagePair
-```
-
-**Laufzeit:** Der Generator schreibt eine Tabelle `Command/Trigger → Rolle` (aus `IDarf`, eindeutig für Arm-Ausgaben nach Regel 2).
-Der `CommandEmitter` stempelt die Rolle aus der Tabelle, das Tor die Rolle des Tokens. Eine Kausalketten-Vererbung über Event-Header
-ist dafür **nicht** nötig. Der Header `akteur` im Log bleibt nur als Audit („wer hat das bewirkt“), optional. Der Fachcode sieht
-nichts davon (Inv. 5).
-
-### 7.5 Editor
-
-- **Akteur-Band = Rollen-Band:** nur noch Rollen-Karten. Ein Dienst hängt als „⚙ IClassifierService" **unter** seiner Rolle
-  („benutzt von Classifier"), nicht als eigene Akteur-Karte.
-- **Rollen-Spuren:** jeder Command, Trigger, jede Query und jeder Arm trägt die Farbe seiner Rolle. Über das Tor ist er voll
-  gefüllt, über einen Arm gestrichelt. Das ist die Event-Modeling-Swimlane, abgeleitet statt gezeichnet.
-- **Persona-Slice:** Klick auf *Maschine* zeigt Datei → Paar → komplett, dort beginnt die Classifier-Spur.
-- **Grammatik:** `GR-HERKUNFT` (Regel 1, ersetzt die Warnung GR-AKTEUR-FEHLT als Fehler), `GR-ARM-ROLLE` (Regel 2 + 4),
-  `GR-EIN-WEG` (Regel 3).
-
-### 7.6 Offene Entscheidungen (fachlich, nicht technisch)
-
-1. **Classifier drinnen oder draußen?** Empfehlung: **draußen** (Python-Worker, Token `Classifier`). Den C#-Platzhalter-Handle
-   streichen, bis es einen echten In-Process-Classifier gibt. Sonst wird jedes Paar doppelt klassifiziert. Das Modell trägt beides,
-   aktiv sein darf nur eins.
-2. **Wem gehört der Trainings-Worker?** Er meldet `MeldeTraining*` und fragt `HoleDatensatzSamples`. Er ist ML, aber kein
-   Classifier. Optionen: in die Rolle `Classifier` (KI = eine Rolle) oder eine vierte Rolle.
-2b. **Wem gehört die Frist `MarkiereAlsHaengengeblieben`?** Nach der Invariante braucht auch sie eine Rolle. Kandidaten: der
-   Mensch (er hat das Training gestartet und will nicht ewig warten) oder dieselbe Rolle wie der Trainings-Worker.
-3. **Mensch als eine Rolle** (wie der eine Blazor-Client) oder aufgeteilt (Inspektor/Trainer, zwei Tokens)? Empfehlung: erst eine,
-   denn Aufteilen ist später per Vererbung additiv.
-4. **Identität ≠ Rolle:** *welcher* Mensch (Login) ist eine eigene Achse (OIDC, `konzept-client-haertung.md` T1). Der Header
-   `akteur` trägt die Rolle; eine spätere `person` kommt daneben.
-
-### 7.7 Umsetzungsschritte
-
-| # | Schritt | Ort |
-|---|---|---|
-| 1 | `IBenutztVon<TRolle>` einführen; `IClassifierService` umhängen; Rollen `Mensch`/`Maschine`/`Classifier` statt `Inspektor`/`Trainer`/`KlassifikationsWorker` | `Abstractions/Akteur.cs`, `Domain.Projections/Akteure.cs`, `Domain.Pipeline/ImageProcessing/IClassifierService.cs` |
-| 2 | Analyzer: Rollen-Dienst nur als Handle-Parameter (alle Typen), Rolle eindeutig, Dienst ohne `IDarf`; Ausgaben ⊆ `IDarf(Rolle)` | `AkteurAnalyzer` (CQRS060 erweitert) |
-| 3 | Generator: Dienste nicht mehr als Akteure; Tabelle `Command/Trigger → Rolle`; Regeln 1–4 als Build-Diagnosen | `AkteurRechteGenerator`, `AkteurAnalyzer` |
-| 4 | Stempel: `CommandEmitter`/`HandlerOutputRouter` aus der Tabelle; Tor lehnt Arm-Commands ab (Regel 3); optional Audit-Header `akteur` | `Infrastructure/PubSub`, `Infrastructure/Akteure`, `MartenEventBatchWriter` |
-| 5 | Extractor/Modell/Grammatik/Editor: Rollen-Band, Dienst unter Rolle, Rollen-Spuren, zwei neue Regeln | `DomainExtractor`, `EditorModell`, `Grammatik`, `HtmlPresenter`, Sonde + `soll.txt` |
-| 6 | Tests: Prüfstand (Regeln 1–4, Tabelle, Stempel, Tor-Ablehnung); Integration (Kette Mensch → Resolver trägt Mensch) | `Akteure/*Tests`, Integration |
-
-
-## 8. Akteure als Domänen-Experten (umgesetzt 2026-10-05)
-
-> Auftrag (Tobi): Mehr Akteure, als Domänen-Experten entworfen, nicht „Maschine/Mensch/KI“ als Sammeltopf. Die Bilder kommen vom
-> **KameraSystem**, die KI ist der **Klassifizierer**, Datensätze erzeugt der **KIOperator**, gelabelt wird vom **Inspekteur**.
-> Gesucht: weitere Akteure und eine deklarative, typbasierte Umsetzung.
-
-### 8.1 Akteur-Katalog (aus der Fachsprache des Codes)
-
-Die Domäne selbst nennt die Akteure schon in Kommentaren. `ImagePair/Commands.cs` gliedert in drei **Stränge**: „KI klassifiziert
-Kamerabilder“, „Mensch labelt Kamerabilder“ und „Mensch labelt **physisches Produkt**“. `Datensatz/Commands.cs` sagt über
-`NimmRangeAuf`/`SchliesseEinfrierenAb`: „Wird vom Resolver ausgelöst, **nie von der GUI**“. Diese Regel steht heute nur im Kommentar.
-
-| Akteur | Art | Fachliche Aufgabe | gibt selbst hinein (`IDarf`) | wird in seinem Namen erzeugt (Kette, abgeleitet) |
-|---|---|---|---|---|
-| **KameraSystem** | Maschine | nimmt Bildpaare (dc0/dc2) an der Linie auf | `DateiErkannt` (Ingress `FileWatchPipeline`) | `ErstelleImagePair`, `MeldeBildVerfuegbar` (über `BildEingangPipeline`) |
-| **Klassifizierer** | KI | beurteilt Bildpaare/Einzelbilder mit dem aktiven Modell | `KlassifiziereBildPaarDurchKi`, `KlassifiziereEinzelBildDurchKi`, `HoleAktivesModell` | — (Python-Worker am Tor) |
-| **Inspekteur** | Mensch | befundet Kamerabilder (Strang 2) | `LabelBildPaar`, `LabelEinzelBild`, `LabelBildRegion`, `MarkiereAlsInspiziert`, `SucheImagePairs`, `GetImagePair`, `GetImagePairHistorie`, `GetImagePairStatistik`, `GetProduktionsTage`, `GetUnklassifizierteImagePairs` | — |
-| **Produktprüfer** *(neu gefunden)* | Mensch | prüft das **physische Teil** und liefert damit die Ground Truth (Strang 3), nicht am Bildschirm | `LabelPhysischesProdukt`, `GetImagePair`, `SucheImagePairs` | — |
-| **KIOperator** | Mensch | stellt Datensätze zusammen, kuratiert, startet und bricht Trainings ab, registriert Modelle | `ErstelleDatensatz`, `FuegeRangeHinzu`, `NimmPaarAuf`, `EntfernePaar`, `SetzeSplit`, `FriereEin`, `StarteTraining`, `BricheTrainingAb`, `RegistriereModell`, `HoleDatensaetze`, `HoleDatensatz`, `HoleDatensaetzeFuerPaar`, `HoleTrainingslaeufe`, `HoleTrainingslauf`, `HoleModelle`, `SucheImagePairs` | `NimmRangeAuf`, `SchliesseEinfrierenAb` (Resolver), `MarkiereAlsHaengengeblieben` (Frist) |
-| **TrainingsSystem** *(neu)* | Maschine | GPU-Worker, der trainiert und Fortschritt meldet | `MeldeTrainingBegonnen`, `MeldeFortschritt`, `MeldeTrainingAbgeschlossen`, `MeldeTrainingGescheitert`, `HoleDatensatzSamples` | — (Python-Worker am Tor) |
-| **Modellfreigeber** *(Vorschlag)* | Mensch | schaltet ein Modell für die Produktions-Inferenz scharf oder zieht es zurück | `SetzeModellAktiv`, `ArchiviereModell`, `HoleModelle`, `HoleAktivesModell` | — |
-| Disponent *(Beispiel-Domäne)* | Mensch | startet Sammelvorgänge/Teilaufträge | `StarteSammelvorgang`, `StarteTeilauftrag` | `MeldeTeilFertig` (`TeilFertigProzess`) |
-
-Begründungen für die Funde:
-- **Produktprüfer ≠ Inspekteur:** Der Code trennt die Stränge bewusst. Das Label am physischen Produkt ist die Wahrheit, gegen
-  die Bild-Labels und KI gemessen werden. Wer am Bildschirm befundet, darf diese Wahrheit nicht setzen.
-- **Modellfreigeber:** `SetzeModellAktiv` wechselt laut Kommentar das Modell, das der Inferenz-Worker lädt, also das, was
-  in der Produktion entscheidet. Das ist eine Freigabe-Entscheidung und ein typischer Vier-Augen-Kandidat (Trainieren ≠
-  Freigeben). Wer das nicht will, gibt die zwei Rechte dem KIOperator.
-- **TrainingsSystem ≠ Klassifizierer:** Der eine trainiert, der andere urteilt. Es sind zwei Prozesse mit verschiedenen Rechten.
-- **Die Frist trägt den, der das Training gestartet hat** (heute der KIOperator). Sie ist sein Wecker, nicht der Akteur.
-- **Benchmark (`BenchPing`)** ist Technik, keine Domäne. Er bekommt einen technischen Akteur `Lasttest` (Art Maschine) oder fällt
-  aus der Herkunfts-Regel heraus, weil die Benchmark-Pipeline nur im Lasttest-Host registriert ist.
-
-### 8.2 Deklarativ und typbasiert: `IDarf` reicht, der Rest folgt aus dem Graphen
-
-> Zwischenstand verworfen (Tobi: „brauchen wir IHandeltFuer wirklich?“). `IHandeltFuer<A>` an Pipelines legt einen Arm auf
-> **einen** Akteur fest. Kann ein Command von zwei Akteuren kommen, ist das falsch: Friert der KIOperator *oder* der Modellfreigeber
-> einen Datensatz ein, handelt der Resolver mal für den einen, mal für den anderen. Der Akteur eines Arms ist also kein
-> Klassen-Fakt, sondern folgt aus der Kette.
-
-**Deklariert wird nur der Akteur selbst:**
-
-```csharp
-// Abstractions/Akteur.cs
-public interface IAkteur { }
-public interface IMensch : IAkteur { }  public interface IMaschine : IAkteur { }  public interface IKi : IAkteur { }
-public interface IDarf<T> { }           // was der Akteur selbst hineingibt (Tor ODER Ingress drinnen)
-
-// Domain.Akteure — ein Command darf bei mehreren Akteuren stehen
 public sealed record KameraSystem   : IMaschine, IDarf<DateiErkannt>;
-public sealed record Klassifizierer : IKi,      IDarf<KlassifiziereBildPaarDurchKi>, IDarf<KlassifiziereEinzelBildDurchKi>, IDarf<HoleAktivesModell>;
-public sealed record Inspekteur     : IMensch,  IDarf<LabelBildPaar>, IDarf<MarkiereAlsInspiziert>, IDarf<FriereEin> /* … */;
-public sealed record KIOperator     : IMensch,  IDarf<ErstelleDatensatz>, IDarf<FriereEin>, IDarf<StarteTraining> /* … */;
-//                                                          ▲ FriereEin von ZWEI Akteuren — nichts weiter zu tun
+public sealed record Klassifizierer : IKi,       IDarf<KlassifiziereEinzelBildDurchKi>, IDarf<HoleAktivesModell>;
+public sealed record Inspekteur     : IMensch,   IDarf<LabelBildPaar>, IDarf<MarkiereAlsInspiziert>, IDarf<SucheImagePairs> /* … */;
 ```
 
-Pipelines, Prozesse und Fristen bekommen **keine** Markierung.
+- **Art** in der Basisliste: `IMensch`, `IMaschine`, `IKi` (alle `: IAkteur`). Ein Akteur ist immer ein Record, nie ein Dienst.
+- **`IDarf<T>`** = was der Akteur *selbst* hineingibt: Command, Query, Trigger oder Transient-Event (CQRS058). Ein Command darf bei
+  mehreren Akteuren stehen.
+- Was eine Pipeline, ein Prozess oder eine Frist daraus erzeugt, wird **nicht** deklariert — es trägt den Akteur der Kette (§2.3). Ein
+  Command, den niemand per `IDarf` darf, kommt am Tor nie durch („nie von der GUI" ist damit ein Typ-Fakt).
 
-**Wer ist der Akteur eines Commands?** Drei Fälle, in dieser Reihenfolge:
+### 2.2 Katalog (`Domain.Pipeline/Akteure.cs`)
+
+| Akteur | Art | gibt selbst hinein (`IDarf`) | Vertrag |
+|---|---|---|---|
+| KameraSystem | Maschine | `DateiErkannt` (Ingress `FileWatchPipeline`) | — |
+| TrainingsSystem | Maschine | `HoleDatensatzSamples` | `ITrainingsSystem` |
+| Klassifizierer | KI | `KlassifiziereEinzelBildDurchKi`, `HoleAktivesModell` | `IKlassifizierer` |
+| Inspekteur | Mensch | Labeln, `MarkiereAlsInspiziert`, Lese-Queries der Bildpaare | — |
+| Produktpruefer | Mensch | `LabelPhysischesProdukt`, `GetImagePair`, `SucheImagePairs` | — |
+| KIOperator | Mensch | Datensätze, Training, `RegistriereModell`, deren Queries | — |
+| Modellfreigeber | Mensch | `SetzeModellAktiv`, `ArchiviereModell`, `HoleModelle`, `HoleAktivesModell` | — |
+| Disponent | Mensch | `StarteSammelvorgang`, `StarteTeilauftrag`, `SchließeTeilauftragAb` | — |
+
+### 2.3 Von welchem Akteur kommt ein Command?
 
 | Fall | Akteur | Beispiel |
 |---|---|---|
-| 1. Kommt durchs **Tor** | der Akteur des Tokens; er muss `IDarf<T>` haben | `FriereEin` vom Blazor-Client: Inspekteur *oder* KIOperator, je nach Token |
-| 2. Gibt ein **Arm in einer Kette** aus (Handle auf ein Event, Prozess, Frist) | **der Akteur des auslösenden Events**, geerbt; braucht kein `IDarf` | `SchliesseEinfrierenAb` trägt den, der `FriereEin` geschickt hat |
-| 3. Gibt ein **Arm ohne Kette** aus (Ingress: `Selbst<PollTick>`, Timer, Boot) | **der** Akteur mit `IDarf<T>`; genau einer, sonst Build-Fehler | `DateiErkannt` aus `FileWatchPipeline` → KameraSystem |
+| 1. kommt durchs **Tor** (Client) | der Akteur der Sitzung, der `IDarf<T>` hat (bzw. dessen Zusage es ist, §4.3) | `FriereEin` vom Arbeitsplatz → KIOperator |
+| 2. gibt ein **Arm in einer Kette** aus (Handle auf ein Event, Prozess, Frist) | der Akteur des auslösenden Events, geerbt | `SchliesseEinfrierenAb` trägt den, der `FriereEin` schickte |
+| 3. gibt ein **Arm ohne Kette** aus (Ingress: Datei, Timer, `Selbst<T>`) | **der eine** Akteur mit `IDarf<T>` (sonst GR-INGRESS-EINDEUTIG) | `DateiErkannt` → KameraSystem |
 
-Jede Kette beginnt damit bei einem Akteur (Fall 1 oder 3) und trägt ihn weiter (Fall 2). So kommt alles von einem Akteur, und
-`system` gibt es nicht.
+Jede Kette beginnt bei einem Akteur (Fall 1 oder 3) und trägt ihn weiter (Fall 2). Statisch hat ein Command eine Akteur-*Menge*
+(Fixpunkt über den Graphen, `DomainEditor/AkteurAnteile.cs`), zur Laufzeit genau einen (§5.1).
 
-**Mehrere Akteure je Command gehen in allen drei Fällen:**
-- **Tor:** Mehrere Akteure stehen mit `IDarf<FriereEin>` da, und das Token entscheidet.
-- **Kette:** Der Arm ist neutral. Statisch hat `SchliesseEinfrierenAb` die Akteur-*Menge* {Inspekteur, KIOperator}, zur Laufzeit
-  genau den einen aus der Kette.
-- **Direkt und über eine Kette:** Ein Inspekteur darf `ErstelleImagePair` per Hand hochladen (`IDarf`), und die KameraSystem-Kette
-  erzeugt es ebenfalls. Beides ist korrekt gestempelt.
+### 2.4 Dienst eines Akteurs
 
-**„Nie von der GUI“ ohne Sonderregel:** `NimmRangeAuf` dürfen niemand per `IDarf`. Das Tor lehnt es ab, und es entsteht nur als
-Ausgabe der Kette. Wer einen Ketten-Command doch direkt erlauben will, schreibt `IDarf` dazu. Das ist dann eine sichtbare
-Entscheidung.
+Entscheidet ein Akteur *drinnen* über einen Dienst, gehört der Dienst ihm: `interface IGutachten : IAkteurDienst<Gutachter>`. Ein
+Pipeline-Handle, der ihn als **Parameter** nimmt, entscheidet im Auftrag dieses Akteurs (der einzige Akteur-Wechsel mitten in einer Kette);
+seine Ausgaben muss der Akteur dürfen, im Konstruktor/Feld ist der Dienst verboten (CQRS060). Damit steht fest, wer den Dienst benutzt.
+Im Bestand ungenutzt (klassifiziert wird nur draußen), als Sprachmittel aber erhalten.
 
-**Einzige Ausnahme: die Entscheidung *eines anderen* Akteurs mitten in der Kette.** Der In-Process-Klassifizierer läuft in einer
-Kette, die beim KameraSystem beginnt. `KlassifiziereBildPaarDurchKi` ist aber die Entscheidung des Klassifizierers. Hier reicht die
-Kette nicht. Der Akteur-Wechsel steht dort, wo er passiert, nämlich am Dienst:
+### 2.5 Person, Rolle und fachliches „Wer"
 
-```csharp
-public interface IClassifierService : IAkteurDienst<Klassifizierer> { … }   // Handle(…, IClassifierService ki) ⇒ Akteur = Klassifizierer
-```
+- **Eine Person kann mehrere Akteure verkörpern:** Token → Akteur-*Menge* (`AkteurOptionen.Token<Inspekteur, KIOperator>(…)` bzw. Konfig
+  `"Akteure:Tokens"`). Das Tor ist opt-in (ohne Sektion `Akteure` bleibt der gRPC-Pfad offen).
+- **Ist das „Wer" selbst fachlich** (Vier-Augen: Freigeber ≠ Antragsteller), steht es als Feld in Command und Event — normale Modellierung.
 
-Damit ist auch beantwortet, wer den Dienst benutzt (§7.2): der Klassifizierer, und zwar genau an den Handles mit diesem Parameter.
-Bleibt der Klassifizierer draußen (Python-Worker am Tor, Empfehlung §7.6), entfällt auch dieses Wort. Dann gibt es nur `IDarf`.
+---
 
-**Mensch ≠ Person:** Eine Person kann mehrere Akteure verkörpern (Blazor: Inspekteur **und** KIOperator). Die Composition Root
-bildet künftig ein Token auf eine Akteur-*Menge* ab (`a.Token<Inspekteur, KIOperator>(…)`). Das Tor prüft gegen die Vereinigung
-und stempelt den Akteur, dessen `IDarf` passt (bei mehreren: den ersten in der Konfiguration oder einen, den der Client wählt).
+## 3. Akteur-Vertrag: Zusagen und Kenntnis
 
-### 8.3 Regeln (eine Quelle `Grammatik`, Build = Analyzer/Generator, Editor = Validator)
-
-| # | Regel | Prüft |
-|---|---|---|
-| 1 | **Herkunft:** Jeder Command, jede Query und jeder Trigger hat statisch eine nicht-leere Akteur-Menge (Fixpunkt §8.4). | Lücken wie `LabelBildRegion` oder `StarteSammelvorgang` ohne Akteur fallen auf. |
-| 2 | **Ingress eindeutig:** Eine Ausgabe ohne Kette (Fall 3) hat genau einen Akteur mit `IDarf`. | Sonst ist offen, wer `DateiErkannt` liefert. |
-| 3 | **Akteur-Dienst:** `IAkteurDienst<A>` ist nur Handle-Parameter (nie Ctor/Feld, in keiner Klasse), höchstens einer je Handle, und die Ausgaben ⊆ `IDarf(A)`. | Geschlossen ist damit, wer den Dienst benutzt (bisher CQRS060). |
-| 4 | **Eine Verkörperung je Entscheidung:** Ein Akteur darf auf dasselbe Event nicht über zwei Wege dieselbe Entscheidung treffen. | Die doppelte Klassifikation (Befund 2) wird zum Build-Fehler. |
-| 5 | *optional* **Art:** `record SetzeModellAktiv(…) : ICommand, IVerlangt<IMensch>`; die ganze Akteur-Menge muss diese Art haben. | Die KI kann sich nicht selbst freigeben, auch nicht über eine Kette. |
-
-### 8.4 Was abgeleitet wird
-
-- **Akteur-Menge, statisch (Generator/Extractor), Fixpunkt:**
-  `A(Cmd) = {IDarf-Halter, falls übers Tor} ∪ ⋃ A(Handle, das Cmd ausgibt)`;
-  `A(Handle) = {A} bei IAkteurDienst<A>, sonst A(Eingangs-Event), ohne Kette: IDarf-Halter (Regel 2)`;
-  `A(Event) = ⋃ A(Cmd), deren Decide es liefert` (`GeneratedCommandRouting.CommandToEvents`).
-  Ergebnis in `GeneratedAkteurRechte`: je Akteur **„bewirkt“** (Commands, die in seinem Namen entstehen können).
-- **Akteur, zur Laufzeit (genau einer, Kausalkette wie Correlation):**
-  1. `MartenEventBatchWriter` schreibt den Akteur als Header `akteur`, `MartenEventStore` liest ihn in den Envelope.
-  2. Der generierte Dispatch (Pipeline, Prozess, Reaktion) setzt `ImAuftrag.Von(envelope.Akteur)` um den Handle bzw.
-     `ImAuftrag.Von(A)` bei einem `IAkteurDienst<A>`-Parameter.
-  3. Eine `Frist` speichert den Akteur beim Planen mit und feuert in seinem Namen.
-  4. Ein Prozess-Join (wartet auf mehrere Events) nimmt den Akteur des Events, das die Regel feuern lässt.
-  5. `CommandEmitter` stempelt `ImAuftrag.Akteur`. Ist er leer, gilt Fall 3 aus der generierten Tabelle; gibt es auch dort keinen,
-     ist das nach Regel 1/2 schon im Build aufgefallen.
-- **hört:** wie bisher (§3.2).
-- **Editor:** eine Swimlane je Akteur, gruppiert nach Art. Ein Command mit mehreren Akteuren erscheint als **eine** Karte mit
-  Akteur-Chips, nicht doppelt. Direkt (Tor) ist voll gefüllt, über die Kette gestrichelt.
-
-```
-Maschine │ KameraSystem    ─ DateiErkannt ▸ [FileWatch] ▸ [BildEingang] ─ ErstelleImagePair, MeldeBildVerfuegbar ─┐
-KI       │ Klassifizierer  ◂ hört ImagePairKomplett ─ KlassifiziereBildPaarDurchKi ──────────────────────────────────┤ ImagePair
-Mensch   │ Inspekteur      ─ LabelBildPaar, MarkiereAlsInspiziert ───────────────────────────────────────────────────┤
-Mensch   │ Produktprüfer   ─ LabelPhysischesProdukt ─────────────────────────────────────────────────────────────────┘
-Mensch   │ KIOperator      ─ ErstelleDatensatz, FriereEin ▸ Datensatz ▸ [Resolver] ┄ SchliesseEinfrierenAb (KIOperator)
-         │                 ─ StarteTraining ▸ Trainingslauf ▸ [TrainingFrist] ┄ MarkiereAlsHaengengeblieben (KIOperator)
-Maschine │ TrainingsSystem ◂ hört TrainingAngefordert ─ MeldeTraining* ▸ Trainingslauf
-Mensch   │ Modellfreigeber ─ SetzeModellAktiv ▸ Modell ─▸ (Klassifizierer hört ModellAktiviert)
-```
-
-### 8.5 Umsetzungsschritte
-
-| # | Schritt | Ort |
-|---|---|---|
-| 1 | `IMensch`/`IMaschine`/`IKi`, `IAkteurDienst<A>` (nur falls In-Process-KI bleibt), optional `IVerlangt<T>` | `Abstractions/Akteur.cs` |
-| 2 | Akteur-Katalog; `IClassifierService` umhängen oder den C#-Platzhalter streichen; `ImageProcessingPipeline` teilen (Bild-Eingang ≠ Klassifikation) | `Domain.Projections/Akteure.cs`, `Domain.Pipeline/*` |
-| 3 | Fixpunkt + Regeln 1–5 als Diagnosen; Tabelle „Ingress → Akteur“ und „bewirkt“ | `AkteurRechteGenerator`, `AkteurAnalyzer` |
-| 4 | Kausalkette: Header `akteur` schreiben/lesen; Dispatch setzt `ImAuftrag`; `Frist` trägt Akteur; Token → Akteur-Menge | `MartenEventBatchWriter`, `MartenEventStore`, Pipeline-/Prozess-Dispatch, `Fristplan`, `AkteurOptionen`/`AkteurTor` |
-| 5 | Extractor/Modell/Grammatik/Editor: Akteur-Art, Akteur-Mengen, Swimlanes mit Chips, Regeln; Sonde + `soll.txt` | `DomainExtractor`, `EditorModell`, `Grammatik`, `HtmlPresenter` |
-| 6 | Clients: Tokens (Classifier → Klassifizierer, Training → TrainingsSystem, Blazor → Inspekteur+KIOperator) | `appsettings`, `GrpcProxy` |
-| 7 | Tests: Prüfstand (Fixpunkt, Regeln, Tor lehnt Ketten-Commands ab); Integration (Header-Round-trip; `FriereEin` von zwei Akteuren → `SchliesseEinfrierenAb` trägt jeweils den richtigen) | `Akteure/*Tests`, Integration |
-
-### 8.6 Folgen für die Commands: keine
-
-- **Kein Command, kein Event und kein Proto-DTO ändert sich.** Der Akteur reist im Envelope und im Event-Header, nicht im Command
-  (Inv. 5, §3.4). Eine Proto-Regenerierung ist nicht nötig.
-- **`…DurchKi` bleibt.** Das Suffix sieht nach einem Akteur im Namen aus, ist aber Fachlichkeit: Der Decider führt getrennte
-  Stränge mit eigenen Events (`BildPaarDurchKiKlassifiziert` ≠ `BildPaarGelabelt`). Ein KI-Urteil ist ein anderes Faktum als ein
-  Befund. Würde man die Stränge zu *einem* `LabelBildPaar` zusammenlegen und den Akteur entscheiden lassen, bräuchte `Decide` den
-  Akteur. Das wäre genau das, was §3.4 nur für fachliches „Wer“ erlaubt.
-- **Nur Kommentare:** „nie von der GUI“ (`NimmRangeAuf`, `SchliesseEinfrierenAb`) und „GUI-Command“ werden zu Typ-Fakten (fehlendes
-  bzw. vorhandenes `IDarf`) und können weg.
-- **Einzige mögliche Änderung, optional:** Regel 5 (`IVerlangt<IMensch>`) stünde in der Basisliste von z. B. `SetzeModellAktiv`. Ist
-  das „Wer“ selbst fachlich (Vier-Augen: Freigeber ≠ Trainierender), gehört es als Feld in Command und Event (§3.4). Beides ist eine
-  bewusste Domänen-Entscheidung je Command, keine Voraussetzung für das Akteur-Modell.
-
-### 8.7 Umsetzung (2026-10-05)
-
-| Teil | Ort | Stand |
-|---|---|---|
-| Arten + Dienst eines Akteurs | `Abstractions/Akteur.cs`: `IMensch`, `IMaschine`, `IKi`, `IAkteurDienst<TAkteur>` | ✅ |
-| Katalog | `Domain.Pipeline/Akteure.cs` (zieht von `Domain.Projections` um — sieht jetzt auch `DateiErkannt`): KameraSystem, TrainingsSystem, Klassifizierer, Inspekteur, Produktpruefer, KIOperator, Modellfreigeber, Disponent | ✅ |
-| Dienst ist kein Akteur | `IClassifierService : IAkteurDienst<Klassifizierer>`; Generator zählt nur Records; CQRS058 meldet ein Interface mit `IAkteur`; CQRS060 verbietet den Dienst in Ctor/Feld **jeder** Klasse | ✅ |
-| Art in der Rechte-Tabelle | `AkteurRechte.Art` | ✅ |
-| Ableitung direkt/Kette | `DomainEditor/AkteurAnteile.cs` (Fixpunkt auf `Fluss`), Board `rahmen.akteurMengen`, JS-Spiegel + `deAkteurParitaet()` (127 Nachrichten, gleich) | ✅ |
-| Regeln | `GR-HERKUNFT` (ersetzt GR-AKTEUR-FEHLT), `GR-INGRESS-EINDEUTIG`, `GR-AUFTRAG` (Dienst → Akteur); `--check` nennt die Lücken (heute nur `BenchPing`) | ✅ (Build-Gegenstück offen) |
-| Extractor/Modell/Scaffolder | `Akteur.Art`, `Akteur.Dienste`; `handles[].akteur` = Akteur (nicht Dienst); Scaffolder schreibt `record X : IMensch, IDarf<…>`; Sonde: `Gutachterin : IKi` + `IGebuehrenOrakel : IAkteurDienst<Gutachterin>` | ✅ |
-| Editor | `docs/konzept-domaenen-editor.md` §12 | ✅ |
-| Laufzeit-Kette: Log | `IEventStoreRepository.AppendEventsAsync(…, akteur)` → Header `akteur` (Einzel- und Batch-Append, `ImAuftrag.Header`); `ReadStreamAsync` → `EventEnvelope.UserId`; `AggregateActorBase` gibt `cmdEnvelope.UserId` mit | ✅ (Integrationstest `MetadataPostgresTests.Der_Akteur_reist_als_Header…` geschrieben, mangels Docker nicht gelaufen) |
-| Laufzeit-Kette: Weitergabe | `Infrastructure/Akteure/AkteurHerkunft.cs`; Pipeline-Pull (`PipelineEventPullBridge`), transiente Events, Selbst-Nachrichten (Akteur beim Planen gemerkt), Reaktionen (`HandlerOutputRouter`), Fristen (`Frist.Akteur`, `FristScheduler`), Prozesse (Auslöser-Akteur mit `ProzessGestartet` geloggt, `FeuereAsync` im Auftrag) | ✅ |
-| Ingress ohne Kette | Trigger kommen ohne Envelope → der eine Akteur mit `IDarf<Trigger>` (`EindeutigerHalter`), ebenso ein Command ohne Kette im `CommandEmitter` | ✅ |
-| Token → Akteur-Menge | `AkteurOptionen.Token<A,B>(…)` bzw. Konfig `"Inspekteur,KIOperator"`; `AkteurRechte.Vereinige` + `AkteurFuer(Typ)` → der Envelope trägt den Teil-Akteur, der den Typ darf | ✅ |
-| C#-Platzhalter-Klassifizierer | `IClassifierService`, `ClassifierService`, `ImageProcessingPipeline.Handle(ImagePairKomplett)` + `Handle(PaarNichtKomplett)` **gelöscht** — klassifiziert wird nur draußen (Python-Worker, Akteur Klassifizierer) | ✅ |
-
-**Abweichungen vom Entwurf:**
-- **Prozess = Akteur seines Auslösers:** ein Prozess-Command trägt den Akteur des Events, das den Prozess startete (ein Join
-  über Events mehrerer Akteure bleibt beim Auslöser) — so muss das Marking keine Akteure je Token führen.
-- **Trigger aus einer Kette** (eine Pipeline yieldet einen Trigger an eine andere): Trigger reisen ohne Envelope; ihr Akteur ist
-  der eindeutige IDarf-Halter. Ein Ketten-Trigger, den niemand darf, trägt deshalb `system` (im Bestand nicht der Fall).
-- **Die Frist `MarkiereAlsHaengengeblieben` trägt das TrainingsSystem**, nicht den KIOperator: abgeleitet aus der Kette
-  `MeldeTrainingBegonnen` (TrainingsSystem) → `TrainingBegonnen` → TrainingFristPipeline.
-- **Inspektor/Trainer → Inspekteur/KIOperator**; der Blazor-Client braucht ein Token für Inspekteur+KIOperator(+Modellfreigeber).
-  Das Tor bleibt opt-in (`Host.Grpc` ohne Sektion `Akteure` = offen), die Python-Worker melden sich noch ohne Token an.
-- `IAkteurDienst<A>` bleibt als Sprachmittel (Analyzer, Generator, Editor, Sonde), wird im Bestand aber nicht mehr benutzt.
-
-
-## 9. Akteur-Verträge: generierte Schnittstellen für die Clients (Konzept 2026-10-05, Phasen 1–4 umgesetzt 2026-10-05)
-
-> Auftrag (Tobi): „Wir sollten eine Art Interface für die Clients erzeugen, gegen das die Clients (Python, Blazor …) programmieren."
-> Anlass: die Lücken-Prüfung (§9.1) — überall dort, wo ein Akteur DRAUSSEN auf ein Event reagiert, bricht die sichtbare Kette ab.
-
-### 9.1 Befund
-
-**Die Kette ist innen geschlossen, an den externen Akteuren offen.** Diagnose im Editor (`deHerkunft()`) über alle 130 Nachrichten:
-
-| Event | „geht an ▶" im Editor | was wirklich passiert (nur im Python-Code) | „◀ kommt aus" des Folge-Commands |
-|---|---|---|---|
-| `ImagePairKomplett` | nur Projektionen | `classifier.py on_image_pair_komplett` → `KlassifiziereBildPaarDurchKi` | „Akteur Klassifizierer · darf" |
-| `TrainingAngefordert` | nur Projektion | `training_worker.py on_training_angefordert` → `MeldeTrainingBegonnen/Fortschritt/Abgeschlossen/Gescheitert` | „Akteur TrainingsSystem · darf" |
-| `TrainingAbgebrochen` | nur Projektion | `training_worker.py on_training_abgebrochen` (bricht ab) | — |
-| `BildVerfuegbar` | nur Projektionen | `classifier.py on_bild_verfuegbar` (merkt Pfade) | — |
-| `ModellAktiviert` | nur Projektion | der Klassifizierer soll das neue Modell laden (Kommentar an `SetzeModellAktiv`) | — |
-
-**Der Client erklärt selbst, was er ist** — der Server kann es nur hinnehmen oder (mit Tor) beschneiden:
-- Python: `HandleDescriptor` registriert per Type-Hint (`@handle.register`), was der Client empfängt; `_declared_command_types` listet von
-  Hand, was er sendet; `_build_capabilities_request` schickt beides als `message_types`/`handle_queries`/`handle_triggers`.
-- Blazor: die IntentHandler geben `IEnumerable<object>` zurück (`LabelingIntentHandler`) — WAS ein Bildschirm auslösen kann, steht
-  nirgends im Typ.
-- „hört" ist am Akteur nur grob abgeleitet (alle Events der Aggregate seiner Commands + Projektionen seiner Queries), nicht das, worauf
-  er tatsächlich reagiert.
-
-**Reaktionen von außen sind nicht idempotent:** der Python-Client schickt einen Command mit frischer CommandId (`CommandEnvelopeDto`
-hat keine Kausalität) — wird ein Event erneut zugestellt (Reconnect, Replay), klassifiziert der Worker doppelt. Intern löst das die
-deterministische Emit-Id (`EmitId.Ableiten` aus Auslöse-Position) — draußen fehlt sie.
-
-### 9.2 Idee: der Vertrag steht in der Domäne, der Client implementiert ihn
-
-**Je Akteur ein Vertrag in C#** — derselbe Ort und dieselbe Sprache wie alles andere (Code-Fakt in der Signatur, keine Namenskonvention).
-Daraus **generiert** das Framework je Client-Sprache eine Basis/Schnittstelle, gegen die der Client programmieren MUSS. Der Server
-kennt damit jede Reaktion vorher, der Editor zeigt sie, der Handshake prüft sie, und ein Bruch fällt beim Bauen des Clients auf.
-
-```
-          Domäne (C#, eine Quelle)                       generiert                       Client programmiert dagegen
- record Klassifizierer : IKi, IDarf<…>         ┌─► Python: KlassifiziererBasis(ABC)  ──►  class Classifier(KlassifiziererBasis)
- interface IKlassifizierer :                   │
-     IAkteurVertrag<Klassifizierer>  ──────────┼─► Blazor: IInspekteurClient (C#)   ──►  LabelingIntentHandler : …
-   { OneOf<…> Auf(ImagePairKomplett e); … }    │
-                                               └─► Server: Vertrags-Tabelle (Handshake, Tor, Editor-Graph)
-```
-
-### 9.3 Programmiermodell (C#)
+### 3.1 Form
 
 ```csharp
-namespace Domain.Akteure;
-
-public sealed record Klassifizierer : IKi, IDarf<HoleAktivesModell>;      // spontan: was er von sich aus fragt/sendet
-
-/// Worauf der Klassifizierer reagiert — und was er dann hineingibt (Ausgabe-Vertrag in der Signatur, wie Decide/Handle).
 public interface IKlassifizierer : IAkteurVertrag<Klassifizierer>
 {
-    OneOf<KlassifiziereBildPaarDurchKi> Auf(ImagePairKomplett e);          // Reaktion mit Ausgang
-    void Auf(BildVerfuegbar e);                                            // nur zur Kenntnis (Pfade merken)
-    void Auf(ModellAktiviert e);                                           // nur zur Kenntnis (Modell neu laden)
+    OneOf<KlassifiziereBildPaarDurchKi> Auf(ImagePairKomplett e);   // Zusage: auf dieses Event antwortet er mit diesem Command
+    void Auf(BildVerfuegbar e);                                     // Kenntnis
+    void Auf(ModellAktiviert e);                                    // Kenntnis
 }
 
-public sealed record TrainingsSystem : IMaschine, IDarf<HoleDatensatzSamples>;
 public interface ITrainingsSystem : IAkteurVertrag<TrainingsSystem>
 {
     IAsyncEnumerable<OneOf<MeldeTrainingBegonnen, MeldeFortschritt, MeldeTrainingAbgeschlossen, MeldeTrainingGescheitert>>
-        Auf(TrainingAngefordert e);                                        // Strom: mehrere Meldungen je Reaktion
+        Auf(TrainingAngefordert e);                                 // Zusage als Strom: mehrere Commands je Event
     void Auf(TrainingAbgebrochen e);
 }
 ```
 
-- **Ein Wort neu:** `IAkteurVertrag<TAkteur>` (Abstractions). Methoden heißen `Auf(TEvent)`; der Rückgabetyp ist der Ausgabe-Vertrag
-  (`void` / konkreter Command / `OneOf<…>` / `IAsyncEnumerable<OneOf<…>>` für Ströme) — wie CQRS050 für Handles.
-- Optional später: `Beantworte(TQuery)` (der Akteur ist zuständig für eine Query-Lücke, heute `handle_queries`) und `Verarbeite(TTrigger)`
-  (Trigger-Lücke, heute `handle_triggers`) — gleiche Regel, gleicher Mechanismus.
-- **`IDarf` bleibt für SPONTANES** (der Mensch klickt, der Worker fragt von sich aus). Was ein Akteur als **Reaktion** hineingibt, steht
-  in den `Auf`-Signaturen und wird NICHT doppelt als `IDarf` deklariert — die generierte Rechte-Tabelle vereinigt beides
-  (`Befugt = IDarf ∪ Ausgaben(Vertrag)`), `Hoert = Eingänge(Vertrag)` (+ Projektionen hinter seinen Queries).
-- **Menschen** haben meist keinen `Auf`-Teil, der Commands erzeugt (sie handeln spontan); ihr Vertrag beschreibt, was ihr Bildschirm
-  bekommt (`void Auf(X)` = Aktualisierung) — für Blazor die Grundlage typisierter IntentHandler (§9.5b).
-- **Ein Vertrag je Akteur** (Analyzer), ein Akteur ohne Vertrag ist erlaubt (rein spontan).
+- Je `Auf(TEvent)` eine Zusage; der **Rückgabetyp ist der Ausgabe-Vertrag**: `void`, ein konkreter Command, `OneOf<…>` oder ein Strom
+  `IAsyncEnumerable<OneOf<…>>` (CQRS062, wie CQRS050 bei Handles).
+- **Befugt = IDarf ∪ Ausgaben der Zusagen** (was er zusagt, darf er, ohne zweites `IDarf`); **Hört = genau die Eingänge**.
+- Implementiert wird der Vertrag nur draußen — von einem Client, der ihn trägt (§4).
 
-### 9.4 Regeln (Analyzer + Grammatik, je mit Build-Gegenstück)
+### 3.2 Teile
 
-| ID | Regel |
-|---|---|
-| CQRS061 | `IAkteurVertrag<A>`: höchstens einer je Akteur; nur `Auf(TEvent)` (bzw. später `Beantworte`/`Verarbeite`); `TEvent` ist ein Event aus dem Log oder ein Transient-Event; je Event höchstens ein `Auf`. |
-| CQRS062 | Ausgabe-Vertrag: nur konkrete Commands (bzw. `OneOf` davon), nie `ICommand`/`object` (wie CQRS050). |
-| GR-VERTRAG | Editor: Reaktions-Kante Event → Akteur → Command; geprüft wie oben. |
-| GR-VERKOERPERUNG | Reagiert ein Akteur im Vertrag auf ein Event, darf nicht zusätzlich ein interner Arm DESSELBEN Akteurs (Dienst) auf dasselbe Event dieselbe Entscheidung treffen (jetzt sichtbar → prüfbar, §8.3 Regel 4). |
+Ein Akteur darf seinen Vertrag in **Teile** schneiden (mehrere Interfaces mit `IAkteurVertrag<A>`, auch voneinander geerbt). Über alle Teile
+gilt: je Event höchstens ein `Auf` (CQRS061). Der ganze Vertrag ist die Vereinigung der Teile; ein Client kann einen einzelnen Teil tragen.
 
-### 9.5 Generierung
-
-Alles aus der EINEN Quelle (Vertrag + Akteur-Record), reflexionsfrei; die Generate liegen neben den bestehenden.
-
-**(a) Server** — `AkteurRechteGenerator` erweitert: je Akteur `Vertrag` (Event → erlaubte Ausgaben), `Befugt`, `Hoert` exakt. Daraus
-die Handshake-Antwort (ohne Selbstauskunft) und die Prüfung „dieser Command antwortet auf dieses Event".
-
-**(b) Python** — `Cqrs.Codegen` (der Prepass, der schon `domain.proto` und die STJ-Kontexte erzeugt) schreibt zusätzlich
-`Domain.Client.Worker.Python.ML/domain_client/generated/vertraege.py` (Drift-Gate wie `codegen.sh --check`):
-
-```python
-# GENERIERT aus Domain.Akteure.IKlassifizierer — nicht von Hand ändern
-class KlassifiziererBasis(CqrsClient[S], ABC):
-    AKTEUR: ClassVar[str] = "Klassifizierer"
-    VERTRAG_HASH: ClassVar[str] = "…"                      # Drift-Erkennung am Handshake
-    @abstractmethod
-    async def auf_image_pair_komplett(self, e: ImagePairKomplettDto, ctx, state: S) -> AsyncIterator[KlassifiziereBildPaarDurchKiDto]: ...
-    @abstractmethod
-    async def auf_bild_verfuegbar(self, e: BildVerfuegbarDto, ctx, state: S) -> None: ...
-    @abstractmethod
-    async def auf_modell_aktiviert(self, e: ModellAktiviertDto, ctx, state: S) -> None: ...
+```csharp
+public interface IPaarKlassifikation : IAkteurVertrag<Klassifizierer> { OneOf<KlassifiziereBildPaarDurchKi> Auf(ImagePairKomplett e); }
+public interface IKlassifizierer : IPaarKlassifikation { void Auf(BildVerfuegbar e); void Auf(ModellAktiviert e); }
 ```
 
-- Die Basis verdrahtet den Dispatch selbst (Event-Typ → `auf_…`), baut den `CapabilitiesRequest` aus dem Vertrag (kein
-  `@handle.register`, kein `_declared_command_types` mehr) und **prüft jedes Yield**: ein DTO außerhalb des Ausgabe-Vertrags → Fehler
-  (zur Laufzeit; statisch zusätzlich per pyright/mypy über die Typ-Annotation).
-- Fehlt eine Methode, lässt sich der Worker nicht instanziieren (ABC) — der Vertragsbruch fällt beim Start auf, nicht beim ersten Event.
-- `classifier.py`, `training_worker.py`, `run_stub.py` erben von der Basis; die freie Registrierung bleibt für Clients ohne Vertrag
-  (Übergang) erhalten.
+---
 
-**(c) Blazor/C#** — ein Generator in `Client.SourceGeneration`: ein Modul erklärt `: IAkteurClient<Inspekteur>`; seine IntentHandler
-geben `IEnumerable<OneOf<…>>` statt `IEnumerable<object>` zurück, und der Analyzer prüft: Ausgaben ⊆ Befugt(Inspekteur). Refresh-
-Handler für `Auf(X)` werden aus dem Vertrag erwartet. (Phase 2 — erst nach den Python-Workern.)
+## 4. Client
 
-### 9.6 Handshake: „ich bin Vertrag X"
+### 4.1 Form
 
-- `CapabilitiesRequest` bekommt `vertrag` (Akteur-Name) + `vertrag_hash` (Proto-Feld im Framework-Teil von `domain.proto`). Der Server
-  nimmt die Fähigkeiten aus der generierten Tabelle — die Selbstauskunft (`message_types` …) wird ignoriert bzw. nur noch abgeglichen.
-- **Mit Tor:** das Token muss den Vertrags-Akteur verkörpern (sonst `Unauthenticated`). **Ohne Tor:** der Vertrag sagt, wer da ist —
-  besser als der Rückfall „eindeutiger IDarf-Halter" (§8.7).
-- **Hash ungleich** (Client gegen alte Domäne gebaut) → Warnung + Ablehnung im strikten Modus; nennt die abweichenden Methoden.
+```csharp
+namespace Domain.Clients;   // Domain.Pipeline/Clients.cs
 
-### 9.7 Kausalität und Idempotenz für Reaktionen von außen
+public interface IKlassifikationsWorker : IClientVertrag,
+    IKlassifizierer,                                 // trägt den Akteur-Vertrag (Zusagen im Namen des Klassifizierers)
+    ISendet<KlassifiziereEinzelBildDurchKi>,         // spontan (muss ein Akteur dürfen)
+    IFragt<HoleAktivesModell>                        // Query
+{ }
 
-- Antwortet der Client auf ein Event, schickt die generierte Basis die **Auslöse-Position** mit (`causation_event_id` bzw.
-  Stream + Version im `CommandEnvelopeDto`). Der Server leitet daraus wie beim internen Emit eine **deterministische CommandId** ab
-  (`EmitId.Ableiten`, Diskriminator = Vertragsmethode + Index im Strom) und stempelt `CommandModus.Emittiert` → die Empfänger-Inbox
-  dedupliziert. Doppelt zugestellt ≠ doppelt klassifiziert.
-- Der Command trägt den Vertrags-Akteur als `UserId`; die Correlation des auslösenden Events reist mit → die Kette (§8.4) läuft durch
-  den externen Akteur hindurch weiter.
+public interface IArbeitsplatz : IClientVertrag,
+    ISendet<LabelBildPaar>, ISendet<FriereEin>, ISendet<SetzeModellAktiv> /* … */,
+    IFragt<SucheImagePairs>, IFragt<HoleDatensaetze> /* … */
+{
+    void Auf(ImagePairKomplett e);                   // eigene Kenntnis (Live-Aktualisierung)
+    /* … */
+}
+```
 
-### 9.8 Graph, Editor, Sprache
+- Ein Client ist **eine Verbindung, eine Sitzung, ein Vertrag**. Er kann mehrere Akteure verkörpern, und ein Akteur kann über mehrere
+  Clients laufen (n:m).
+- Er **erbt Akteur-Vertrags-Teile** (deren Zusagen gehen im Namen ihres Akteurs über seine Leitung), nennt `ISendet<T>`/`IFragt<T>` und
+  deklariert selbst **nur Kenntnis** (`void Auf(E)`) — eine Ausgabe gehört in einen Akteur-Vertrag, sonst hätte sie keinen Akteur (CQRS063).
+- Handshake-Name = Interface ohne führendes I (`IKlassifikationsWorker` → `KlassifikationsWorker`); Akteur- und Client-Namen sind
+  eindeutig (CQRS059).
 
-- **Extractor:** `IAkteurVertrag<A>` + `Auf`-Signaturen → `EditorModell.Akteure[].Vertrag[] = { Eingang, Ausgaenge[], Strom }`.
-- **Fluss / AkteurAnteile:** Kante `msg:Event → akt:A → msg:Command` mit Handle = Event; die Ausgaben gehören A (Akteur-Wechsel wie beim
-  Dienst). Damit ist `KameraSystem → … → ImagePairKomplett → Klassifizierer → KlassifiziereBildPaarDurchKi` eine geschlossene Kette.
-- **Editor:** im Akteur-Rahmen eine Spalte **„Reaktion"** (je `Auf` eine Karte: ◀ Event · Ausgänge ▶); „geht an ▶" des Events nennt
-  „Klassifizierer · Reaktion", „◀ kommt aus" des Commands „Klassifizierer · Reaktion auf ImagePairKomplett". „hört" am Akteur = exakt die
-  Vertrags-Events. Entwerfen: ⊕ „+ Reaktion" am Akteur → Event wählen → Ausgänge wählen; „C# schreiben" schreibt die `Auf`-Methode ins
-  Vertrags-Interface (additiv, wie Handles), danach Codegen → die Python-Basis bekommt die neue abstrakte Methode.
-- **Grammatik:** neue Sorte-×-Baustein-Paare `Event → Akteur (Reaktion)` und `Akteur → Command (Reaktion)`; GR-VERTRAG.
-- **Sonde:** frei benannter Vertrag in der Sonden-Domäne + `soll.txt`-Zeilen; `--check` vergleicht Vertrag ⇄ Board.
+### 4.2 Verkörpert (abgeleitet)
 
-### 9.9 Phasen
+Die Akteure der getragenen Teile; dazu je `ISendet`/`IFragt` die `IDarf`-Halter — **nur, wenn keiner der Teil-Akteure den Typ schon darf**
+(sonst wäre der KlassifikationsWorker über `HoleAktivesModell` auch Modellfreigeber). Generator, Python-Prepass, Wissensgraph und Editor
+rechnen gleich.
 
-| Phase | Inhalt | Beweis |
+### 4.3 Rechte und Stempel
+
+- **Wirksam = Vertrag ∩ Token-Akteure** (`ClientVertrag.Rechte`): je verkörpertem Akteur ein Teil mit Commands = (Sendet ∩ IDarf) ∪
+  Ausgaben seiner getragenen Zusagen, Queries = Fragt ∩ IDarf. Verkörpert das Token keinen Akteur des Clients → Ablehnung.
+- **Gestempelt** wird eine Zusage im Namen des Akteurs, dessen Teil sie vorsieht (`AkteurRechte.AkteurFuerZusage`), ein spontaner
+  Command im Namen des ersten Teil-Akteurs, der ihn darf.
+- Der Client-Vertrag **schneidet aus der Befugnis, er erweitert sie nie** (CQRS064).
+
+### 4.4 Innen und Rand
+
+Ein Client hat eine Innenseite (Blazor: Intents, ClientEvents, Stores; Python: State) und einen Rand (den Vertrag). Nur der Rand geht über
+die Leitung; client-interne Typen stehen nie im Vertrag.
+
+### 4.5 Bestand und Befund
+
+| Client | verkörpert | trägt | sendet / fragt |
+|---|---|---|---|
+| `KlassifikationsWorker` (`classifier.py`, `run_stub.py`) | Klassifizierer | `IKlassifizierer` | `KlassifiziereEinzelBildDurchKi` / `HoleAktivesModell` |
+| `TrainingsWorker` (`training_worker.py`) | TrainingsSystem | `ITrainingsSystem` | — / `HoleDatensatzSamples` |
+| `Arbeitsplatz` (Blazor) | Inspekteur, KIOperator, Modellfreigeber, Produktpruefer | — | 14 Commands / 12 Queries, 12 Kenntnis-Events |
+
+**Befund (offen, Domänen-Entscheidung):** Der Blazor-Code schickt `NimmRangeAuf` (Kuratieren) und fragt `HoleDatensatzSamples`
+(Komposition) — beides darf kein Akteur des Arbeitsplatzes. Es steht deshalb nicht im Vertrag; mit Tor würde es abgelehnt. Entweder `IDarf`
+ergänzen oder den Client-Code ändern.
+
+---
+
+## 5. Laufzeit
+
+### 5.1 Die Kette
+
+- Der Akteur reist als Event-Header **`akteur`** (`ImAuftrag.Header`): `MartenEventBatchWriter` schreibt ihn, `MartenEventStore` liest ihn
+  in den Envelope (`UserId`), `AggregateActorBase` gibt ihn weiter.
+- Der generierte Dispatch (Pipeline, Prozess, Konsument) setzt `ImAuftrag.Von(envelope.Akteur)` um den Handle — bzw. den Dienst-Akteur bei
+  `IAkteurDienst<A>`. `CommandEmitter` stempelt `ImAuftrag.Akteur`; ist er leer, gilt Fall 3 (§2.3).
+- Eine **Frist** speichert den Akteur beim Planen (`Frist.Akteur`) und feuert in seinem Namen; ein **Prozess** trägt den Akteur des Events,
+  das ihn startete. (Die Frist `MarkiereAlsHaengengeblieben` trägt so das TrainingsSystem.)
+- Trigger reisen ohne Envelope: ihr Akteur ist der eindeutige `IDarf`-Halter (`AkteurHerkunft.EindeutigerHalter`).
+
+### 5.2 Handshake
+
+- Der Client nennt im `CapabilitiesRequest` **`vertrag`** (Client-Name; als Übergang auch ein Akteur-Name mit Vertrag) und
+  **`vertrag_hash`**. Der Server nimmt die Fähigkeiten aus **seiner** Tabelle, nicht aus der Selbstauskunft, und abonniert genau die
+  Eingänge (Zusagen + Kenntnis) (`AkteurVertragsPruefung`).
+- Mit Tor muss das Token einen Akteur des Clients verkörpern (sonst `PermissionDenied`). Hash ≠ Server → Warnung, im strengen Modus
+  (`"Akteure": { "VertragStreng": true }`) Ablehnung.
+
+### 5.3 Kausalität und deterministische CommandId
+
+Antwortet ein Client auf ein Event, schickt die generierte Basis die Auslöse-Position mit (`causation_stream_id/version/type/index` im
+`CommandEnvelopeDto`). Der Server prüft, ob die Antwort zugesagt ist (`AkteurRechte.Zugesagt`, sonst gezieltes `CommandFailed`), leitet die
+**CommandId deterministisch** ab (`EmitId.Ableiten`, Diskriminator `Version:Event#Index:Command`) und stempelt `Emittiert` — die Inbox des
+Ziels dedupliziert: doppelt zugestellt ≠ doppelt wirksam (`VertragsZusageE2ETests`). Die Id enthält keinen Client: zwei Clients, die
+dieselbe Zusage tragen, erzeugen für dieselbe Antwort dieselbe Id.
+
+### 5.4 Zustellung an Clients — heute und Ziel
+
+- **Heute:** verlierbarer Push (Inv. 6) an **jede** abonnierte Sitzung (Broadcast); `SubscriptionTracker` heilt nur das Abo.
+- **Ziel (offen, §9):** Kenntnis bleibt verlierbar. Eine **Zusage mit Ausgabe** ist eine durable Abhängigkeit der Kette → je getragenem
+  Vertrags-Teil ein Emittenten-Cursor (dieselbe Konsum-Maschine), nachholend beim Reconnect; tragen mehrere Clients denselben Teil, je
+  StreamId genau einer (Zuteilung, Übernahme bei Abbruch). Die deterministische CommandId (§5.3) deckt den Übergabemoment ab.
+
+---
+
+## 6. Generierung (eine Quelle: die Signaturen)
+
+| Generat | Ort | Inhalt |
 |---|---|---|
-| 1 | `IAkteurVertrag<A>`, CQRS061/062, Verträge `IKlassifizierer`/`ITrainingsSystem`, Rechte-Tabelle (Befugt/Hoert/Vertrag) | Prüfstand: Analyzer + Tabelle |
-| 2 | Extractor/Modell/Fluss/AkteurAnteile/Grammatik + Editor-Spalte „Reaktion", Sonde | `--check`, `--sonde`, `deHerkunft()`: keine offene Stelle mehr an den Workern |
-| 3 | Python-Generierung in `Cqrs.Codegen` + Drift-Gate; Worker erben die Basis; Yield-Prüfung | Python-Tests (`tests/`), Worker starten gegen Host |
-| 4 | Handshake `vertrag`/`vertrag_hash`, Tor-Prüfung, Kausalität → deterministische CommandId | Prüfstand (Tor, Id-Ableitung), Integration (doppelt zugestellt → einmal wirksam) |
-| 5 | Blazor: `IAkteurClient<A>`, typisierte IntentHandler, Analyzer | Blazor-Build |
+| `GeneratedAkteurRechte` | `Infrastructure.SourceGeneration/AkteurRechteGenerator.cs` | je Akteur: Art, Commands (IDarf ∪ Zusage-Ausgaben), Queries, Trigger, Transient, Hört, Vertrag (Event → Ausgaben über alle Teile), Ströme, Hash |
+| `GeneratedClientVertraege` | dito | je Client: getragene Zusagen je Akteur, Sendet, Fragt, Kenntnis, Verkörpert, Client-Hash |
+| `domain_client/generated/vertraege.py` | `Cqrs.Codegen/PythonVertragsEmitter.cs` (`./codegen.sh`) | je Akteur-Vertrag `<Akteur>Basis`, je Client `<Client>Basis` (`CLIENT`, `AKTEURE`, `ZUSAGEN` mit Akteur je Eintrag, `SPONTAN`, `FRAGT`, abstrakte `auf_<event>`) |
 
-### 9.10 Offen / bewusst nicht
+- **Kanon und Hash** an einer Stelle (`Abstractions/Akteurvertrag.cs`: `Kanon`, `ClientKanon`, `Hash` = 16 Hex von SHA-256): Server,
+  Python und Wissensgraph ergeben denselben Hash; ein Client gegen einen anderen Stand fällt am Handshake auf.
+- **Python-Basis** (`cqrs_client/vertrag.py`): verdrahtet den Dispatch Event → `auf_<event>`, verweigert den Start bei fehlender Methode
+  (ABC), prüft jedes Yield gegen die Zusage (`VertragsVerletzung`), prüft `query()` gegen `FRAGT`, meldet Vertrag + Hash am Handshake.
 
-- Statische Typprüfung in Python (pyright im CI) — optional; die Laufzeit-Prüfung der Yields reicht für den Anfang.
-- Versionierung mehrerer Vertragsstände parallel (alter Worker während Rollout) — erst Hash + Warnung, später ggf. Vertrags-Versionen.
-- Ein Akteur mit zwei Verkörperungen (zwei Worker-Prozesse desselben Vertrags) ist erlaubt — Lastverteilung ist Betrieb, nicht Domäne.
+---
 
-### 9.11 Umsetzung (2026-10-05) — Phasen 1–4
+## 7. Regeln (Build ⇄ Editor-Grammatik)
 
-| Teil | Ort | Stand |
+| Build | Grammatik | Regel |
 |---|---|---|
-| Wort `IAkteurVertrag<TAkteur>` | `Abstractions/Akteur.cs` | ✅ |
-| Eine Quelle für Methodenname + Kanon + Hash | `Abstractions/Akteurvertrag.cs` (`Auf`, `Kanon`, `Hash` = 16 Hex von SHA-256), per Link in beiden Generator-Projekten (dort `internal`), direkt in Extractor und `Cqrs.Codegen` | ✅ |
-| Verträge | `Domain.Pipeline/Akteure.cs`: `IKlassifizierer` (`OneOf<KlassifiziereBildPaarDurchKi> Auf(ImagePairKomplett)`, `void Auf(BildVerfuegbar)`, `void Auf(ModellAktiviert)`), `ITrainingsSystem` (Strom `Auf(TrainingAngefordert)` → 4 Melde-Commands, `void Auf(TrainingAbgebrochen)`); die Melde-Commands und `KlassifiziereBildPaarDurchKi` aus den `IDarf`-Listen entfernt | ✅ |
-| CQRS061/062 | `Domain.SourceGeneration/AkteurAnalyzer.cs`: Interface, einer je Akteur, nur `Auf(Event)`, je Event einmal, keine Properties; Ausgaben `void`/Command/`OneOf`/`(Async)Enumerable`, nie `ICommand`/`Task`/Event | ✅ 13 Analyzer-Tests |
-| GR-VERKÖRPERUNG im Build | CQRS060: ein Handle im Auftrag von A (Dienst) darf nicht dieselbe Entscheidung treffen wie A's Vertrag; Vertrags-Ausgaben zählen dort als befugt | ✅ |
-| Rechte-Tabelle | `AkteurRechteGenerator` → `AkteurRechte.VertragTyp`, `VertragHash`, `Vertrag` (Event → Ausgaben), `Stroeme`, `AntwortetMit`; `Commands` = IDarf ∪ Ausgaben; `Hoert` mit Vertrag = Eingänge ∪ Query-Projektionen | ✅ |
-| Extractor/Modell | `DomainExtractor.ReadVertrag` → `EditorModell.Akteur.Vertrag[] {Eingang, Ausgaenge, Strom, Doku}`, `VertragName`, `VertragDatei`; `Herkunft` hasht den Vertrag mit | ✅ |
-| Fluss/Anteile/Grammatik/Validator | Kante `msg:E → akt:A → msg:C` (Handle = E), in `AkteurAnteile` Kette von A (Wechsel); `GR-VERTRAG` + `GR-VERKOERPERUNG`, Konsum `Event/Transient → Akteur` | ✅ |
-| Editor | Rahmen „📜 Vertrag IX" neben dem Akteur, darin je `Auf` eine Reaktions-Karte (`docs/konzept-domaenen-editor.md` §12.10) | ✅ live: Parität gleich, 5/5 Events mit Reaktion |
-| Wissensgraph | `knowledge-graph.json`: Knoten `akteur:X` und `vertrag:IX` (Reaktionen + Hash), Kanten `darf`, `hatVertrag`, Event —`reagiertAuf`→ Vertrag —`antwortetMit`→ Command; Command-Herkunft `akteur-vertrag`; LLM-Kontext nennt den Vertrag als Quelle | ✅ 8 Akteure, 2 Verträge, 12 Vertrags-Kanten |
-| Scaffolder/Abgleich | `Scaffolder.VertragsInterface`; `DateiAbgleich.AkteurVertrag` | ✅ (CLI-Lauf `--schreiben`: Rückgabe ersetzt, Reaktion gestrichen, neuer Vertrag angelegt) |
-| Sonde/Parität | `Archiv : IMaschine` + `IRegal` (frei benannt), gezeichnet `Mahnstelle` → `IMahnstelle`; `--check` vergleicht je Akteur den Vertrag (2 Verträge, 5 Reaktionen) | ✅ |
-| Python-Generat | `Cqrs.Codegen/PythonVertragsEmitter.cs` → `Domain.Client.Worker.Python.ML/domain_client/generated/vertraege.py` (`KlassifiziererBasis`, `TrainingsSystemBasis`: `AKTEUR`, `VERTRAG`, `VERTRAG_HASH`, `REAKTIONEN`, `SPONTAN`, abstrakte `auf_<event>`); Drift-Gate in `codegen.sh` | ✅ |
-| Python-Basis | `Client.Infrastructure.Python/cqrs_client/vertrag.py`: `AkteurVertragBasis` (Metaklasse HandlerMeta + ABCMeta), Prüf-Wrapper je Reaktion (`VertragsVerletzung` bei fremdem Typ bzw. >1 ohne Strom), Registry ergänzt, CapabilitiesRequest mit Vertrag + Hash | ✅ 7 SDK-Tests |
-| Worker | `classifier.py` (lädt bei `ModellAktiviert` das neue Modell), `training_worker.py`, `run_stub.py` erben die Basis; `@handle.register`/`_declared_command_types` entfallen | ✅ 6 Worker-Tests |
-| Handshake | Proto: `CapabilitiesRequest.vertrag/vertrag_hash`, `CapabilitiesResponse.vertrag/vertrag_hash`; `AkteurVertragsPruefung.Pruefe` (unbekannt / Token verkörpert ihn nicht → Ablehnung `PermissionDenied`; Hash ≠ → Warnung, streng = Ablehnung) und `.Wende` (Abo = genau die Vertrags-Events); ohne Tor bekommt die Session die Befugnisse des Vertrags (`AkteurSitzung`) | ✅ |
-| Kausalität | Proto: `CommandEnvelopeDto.causation_stream_id/version/type/index`; Python-Router nummeriert die Ausgaben je Event und reicht Korrelation + Kausalität mit; Server prüft `AntwortetMit` (sonst targeted `CommandFailed`) und setzt `CommandId = AkteurVertragsPruefung.CommandId(…)` (= `EmitId.Ableiten`, Diskriminator `Version:Event#Index:Command`) + `Emittiert` | ✅ |
+| CQRS058 | GR-AKTEUR | `IDarf<T>` nur für Hineingehendes, nur an einem `IAkteur` |
+| CQRS059 | — | Akteur- und Client-Namen eindeutig |
+| CQRS060 | GR-AUFTRAG, GR-VERKOERPERUNG | Dienst nur als Handle-Parameter; Ausgaben ⊆ Befugnis; dieselbe Entscheidung nicht drinnen *und* als Zusage |
+| CQRS061 | GR-VERTRAG | Vertrag ist Interface, nur `Auf(Event)`, je Event einmal über alle Teile des Akteurs |
+| CQRS062 | GR-VERTRAG | Ausgabe einer Zusage: nur konkrete Commands (void / T / OneOf / Strom) |
+| CQRS063 | GR-CLIENT | Client: Interface; erbt nur Teile/ISendet/IFragt/Client-Verträge; eigene Methoden nur Kenntnis |
+| CQRS064 | GR-CLIENT-BEFUGT | Sendet/Fragt: ein Akteur hat `IDarf<T>`; Sendet = Command/Trigger/Transient, Fragt = Query |
+| CQRS065 | GR-CLIENT | je Event höchstens eine Methode im Client (getragen oder eigen) |
+| — (Laufzeit-Tor) | GR-HERKUNFT | jeder Command/Query/Trigger kommt von einem Akteur (direkt oder Kette) |
+| — | GR-INGRESS-EINDEUTIG | ein Trigger ohne Kette hat genau einen `IDarf`-Halter |
+| — | GR-GETRAGEN | sobald es Clients gibt: jede Zusage mit Ausgabe trägt mindestens ein Client (sonst bricht die Kette) |
 
-**Gemessen:** Prüfstand 253/253 (vorher 224; +29: Analyzer, Tabelle, Editor, Handshake, Id-Ableitung, Hash-Gleichheit Python ⇄ Server);
-`--check` und `--sonde` grün; Python 17/17 (SDK) und 9/9 (Worker); Builds Host.Grpc, SimHost, Integration grün. Integration gegen echte
-Infra: 19/20, darunter neu `VertragsReaktionE2ETests` (dieselbe Antwort zweimal = ein Fakt, eine andere Ausgabe = zweiter Fakt) und erstmals
-gelaufen `MetadataPostgresTests` (Akteur-Header, §8.7); rot ist nur `TwoNodeCommandDispatchTests` (`NewVersion` 2 statt 1), auf 4513100
-identisch, also älter. **Live** (Host.Grpc + `run_stub.py`): Server nimmt `IKlassifizierer` an, abonniert genau die 3 Events; ein per
-Command komplettiertes Paar wird vom Stub klassifiziert, das Event trägt Header `akteur = Klassifizierer`, die Inbox-Marke genau die
-abgeleitete CommandId.
+Die Grammatik ist eine Quelle (`DomainEditor/Grammatik.cs`); `--check` prüft, dass jede genannte Build-ID im Code existiert.
 
-**Abweichungen vom Entwurf:**
-- **`IDarf<KlassifiziereEinzelBildDurchKi>` bleibt** am Klassifizierer: kein Worker reagiert heute damit (`Auf(BildVerfuegbar)` ist nur
-  Kenntnis, wie in §9.3) — ohne `IDarf` hätte der Command keinen Akteur (GR-HERKUNFT). Wird die Einzelbild-Klassifikation eine Reaktion,
-  wandert er in den Rückgabetyp von `Auf(BildVerfuegbar)`.
-- **Kausalität = Stream + Version + Typ + Index** statt `causation_event_id`: dieselbe Position wie beim internen Emit, prüfbar gegen den
-  Vertrag (Typ), und der Index unterscheidet die Ausgaben eines Stroms. Sie wird für **jede** Event-Reaktion eines Python-Clients
-  mitgeschickt (auch ohne Vertrag) — nur geprüft wird sie, wenn die Session einen Vertrag hat.
-- **Ohne Vertrag bleibt alles beim Alten** (Selbstauskunft, Tor wie §8). Die Python-Registry (`domain_registry.py`) bleibt handgepflegt;
-  die Vertragsbasis ergänzt ihre Typen selbst (`CategoryRegistry.ergaenzt`). Das veraltete Python-Proto-Generat ist nebenbei nachgezogen
-  (u. a. fehlte `ModellAktiviertDto`).
-- **Hash-Abweichung** ist ohne Konfiguration nur eine Warnung (`AkteurOptionen.VertragsHashStreng()` bzw. `"Akteure": { "VertragStreng": true }`
-  = Ablehnung) — Rollout alter Worker bricht nicht sofort.
-- **Abgleich streicht** entfernte Reaktionen (das Interface hat keine Rümpfe, die Signaturen gehören dem Modell); ein ganz geleerter Vertrag
-  bleibt als leeres Interface stehen.
-- **Phase 5 (Blazor)** nicht umgesetzt (wie beauftragt).
+---
+
+## 8. Editor (Kurzfassung — Volltext `docs/konzept-domaenen-editor.md` §12)
+
+- **Rahmen je Domäne × Akteur**; Doppelungen stehen beim ersten Akteur in Ablauf-Reihenfolge, „↥ auch" verweist.
+- **📜 Vertrags-Rahmen** neben der Akteur-Karte, darin je `Auf` eine Karte **Zusage** (◀ Event · Ausgänge ▶).
+- **🔌 Client-Rahmen** rechts neben den Domänen; die Karte ist die **Anschlussleiste** (trägt / sendet als … / fragt als … / hört). Je
+  Client × Ziel-Rahmen **ein Bündel**, in Worten beschriftet (durchgezogen = trägt eine Zusage mit Ausgabe). Der Zoom ändert nichts;
+  Einzelkanten nur durch einen Klick (Leisten-Zeile, Bündel, 🔌 in der Stecker-Zeile eines Akteur-Rahmens).
+- Bearbeiten im Panel über ⊕: Akteur „darf ⊕", „+ Zusage ⊕ (Event)"; Client „trägt ⊕", „sendet/fragt ⊕", „hört ⊕". „C# schreiben"
+  schreibt Akteur-Record, Vertrags-Interface und Client-Interface (neu additiv, bestehend chirurgisch über den Herkunfts-Stempel).
+
+---
+
+## 9. Stand und offen
+
+**Gemessen 2026-10-06:** Prüfstand 280/280; Python SDK 19/19, Worker 11/11; Integration `VertragsZusageE2ETests` + `MetadataPostgresTests`
+grün gegen echte Infra; `--check` (8 Akteure, 2 Verträge, 3 Clients / 43 Rand-Ports) und `--sonde` (Lesesaal = 2 Akteure, Archiv über 2
+Clients, gezeichnetes Mahnportal) grün. Live: `run_stub.py` meldet sich als `KlassifikationsWorker`, der Server nimmt den Vertrag an und
+abonniert genau die 3 Vertrags-Events.
+
+**Offen:**
+1. **Durable Zustellung + Zuteilung** an Clients (§5.4).
+2. **`als` im CommandEnvelope** für spontane Commands, die mehrere Akteure eines Clients dürfen (heute: der erste).
+3. **Blazor:** `IArbeitsplatz` gegen den Client-Code prüfen (typisierte IntentHandler, Capabilities aus dem Vertrag), Editor-Innenseite.
+4. **Befund §4.5** (`NimmRangeAuf`, `HoleDatensatzSamples` am Arbeitsplatz).
+5. Python-Worker melden sich noch ohne Token an; `Host.Grpc` hat das Tor nicht konfiguriert (opt-in).
+6. Der Abgleich schreibt eine geänderte Client-Basisliste einzeilig; weitere Vertrags-Teile eines Akteurs liest der Editor, schreibt sie
+   aber nicht.

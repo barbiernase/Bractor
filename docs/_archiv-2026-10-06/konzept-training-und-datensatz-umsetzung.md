@@ -110,7 +110,7 @@ dotnet test Infrastructure.Pruefstand.Tests/Infrastructure.Pruefstand.Tests.cspr
 dotnet test Infrastructure.Integration.Tests/Infrastructure.Integration.Tests.csproj # braucht Infra, sequentiell
 ```
 
-Vor Integration/Lasttest **`docs/testen-und-lasttest.md` lesen** (Integration sequentiell lassen;
+Vor Integration/Lasttest **`docs/12-tests-und-vermessung.md` lesen** (Integration sequentiell lassen;
 bekannter `SnapshotLive`-Cold-Boot-Flake ist Consul-Boot).
 
 ---

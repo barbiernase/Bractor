@@ -24,7 +24,7 @@ daneben.
 | **Decider / Applier** | `Domain/Verkauf/Decider.cs`, `Applier.cs` | reine Entscheidung (`OneOf`-Ablehnungen) + einzige Zustandsmutation |
 | **Specification** | `Domain/Spezifikation/Spezifikation.cs` (generisch) + `Domain/Verkauf/Kunde.cs` (Beispiel) | `Und`/`Oder`/`Nicht`-Kombinatoren; komponierte Regel = Fachsprache |
 | **Domain Service** | `Domain/Verkauf/WechselkursDienst.cs` | zustandslose Operation über `Geldwert`, keinem Aggregat zugehörig |
-| **Saga / Process Manager** | *nativ:* die Prozess-Maschine (`Domain/**/…Prozess.cs`, Event-Regel-DAG) | durable Orchestrierung + Kompensation — `docs/architektur/03-prozess-maschine.md` |
+| **Saga / Process Manager** | *nativ:* die Prozess-Maschine (`Domain/**/…Prozess.cs`, Event-Regel-DAG) | durable Orchestrierung + Kompensation — `docs/04-konsum-und-prozess-maschine.md` |
 | **Repository** | *nativ:* der Marten-Event-Store (`Infrastructure/Persistence/MartenEventStore.cs`) | Aggregat = Fold seiner Events; Laden per Replay, Speichern per Append |
 
 Test-Dateien: `Ddd/VerkaufAggregatTests` (Aggregat/Entity/VO/Events über die generierte

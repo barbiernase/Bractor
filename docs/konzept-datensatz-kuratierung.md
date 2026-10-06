@@ -1,6 +1,7 @@
 # Konzept — Datensatz als kuratierter Tag (dedizierte Auswahl beim Betrachten)
 
-> **Stand: 2026-08-18. Status: KONZEPT — nicht implementiert. Präsentation, kein Bauauftrag.**
+> **Stand: 2026-08-18. Status: umgesetzt** (geprüft 2026-10-06: Modul `Kuratieren`, Query `HoleDatensaetzeFuerPaar` im Code; Übergabe im
+> Archiv `_archiv-2026-10-06/`).
 > Neuausrichtung der Datensatz-Erzeugung: weg vom „Korb, den man aus Filter-Ranges füllt",
 > hin zu **Datensatz = Tag, den man beim Betrachten der Bilder vergibt** — gekoppelt an die
 > Galerie (Phase 1, gebaut) und die Einbild-Anzeige, über eine **dedizierte Auswahl**.

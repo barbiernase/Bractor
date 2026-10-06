@@ -3,9 +3,10 @@
 Projektgedächtnis für Claude Code. Bewusst schlank — wird bei jeder Session geladen.
 Volltexte liegen in `docs/` und werden bei Bedarf gelesen, nicht hier eingebettet.
 
-> **Einstieg in die Doku:** `docs/README.md` (Wegweiser). Ist-Zustand: `docs/architektur/`
-> (00–05). Aktueller Stand + offene Baustellen: `docs/backend-analyse-2026-08-11.md`. Das
-> „Warum": `docs/design-philosophie.md`. Prozess schreiben: `docs/anleitung-prozess-schreiben.md`.
+> **Einstieg in die Doku:** `docs/README.md` (Wegweiser). Ist-Zustand: `docs/01-ueberblick.md` bis
+> `docs/13-reifegrad-schulden-bewertung.md` (flach, kanonisch). Stärken/Schulden/offene Baustellen: `docs/13-reifegrad-schulden-bewertung.md`. Das „Warum":
+> `docs/02-design-prinzipien.md`. Wie schreibe ich X (inkl. Prozess): `docs/10-entwickler-api.md`. Akteure/Verträge/Clients:
+> `docs/konzept-akteure.md`. Editor: `docs/konzept-domaenen-editor.md`. Altes liegt in `docs/_archiv-2026-08-12/` (nur Historie).
 
 ## Was das Projekt ist
 
@@ -38,7 +39,7 @@ keine Taxonomie — der Unterschied fällt aus Ctor-Stores + Rückgabetypen:
 - **Transport:** Signal (schnell) + Poll (30 s, Sicherheit) wecken dieselbe Cluster-Identität.
 - **Emit:** genau ein Weg (`CommandEmitter`), erzwungen durch den Analyzer **CQRS020/021**.
 
-## Aktueller Stand (2026-08-11)
+## Aktueller Stand (Kern 2026-08-11, ergänzt 2026-10-06)
 
 **Kern fertig und in sich konsistent:** Schreibseite, Konsum-Maschine (Projektion + Reaktion),
 Prozess-Maschine (Event-Regel-DAG). **Feature-Strom geliefert:** Timer-/Webhook-Trigger,
@@ -52,8 +53,13 @@ liest der Manager nur die seit dem letzten Fold befeuerten Streams nach → auch
 (gemessen echtes Postgres: bis 9× schnellere Wall-Clock bei N=60; mit Aggregat-Historie 5,5×). Kaltstart
 faltet voll (Invariante 1). Äquivalenz + Sagas grün.
 
-**Tests (echt gemessen): Prüfstand 106/106 grün (in-memory, store-frei), Integration 33/33
-(gegen echtes Marten/Consul/Redis, sequentiell; der `SnapshotLive`-Cold-Boot-Flake ausgenommen).**
+**Akteure, Verträge, Clients (2026-10-06):** Akteure mit Befugnis und Kette bis in den Event-Header; Akteur-Verträge (Zusagen
+draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer CommandId; Clients (`IClientVertrag`, n:m zu Akteuren) mit
+Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an
+Clients (`docs/konzept-akteure.md` §9).
+
+**Tests (echt gemessen): Prüfstand 280/280 (2026-10-06, in-memory, store-frei); Integration gegen echtes Marten/Consul/Redis,
+sequentiell (voll gezählt zuletzt 2026-08: 33/33; der `SnapshotLive`-Cold-Boot-Flake ausgenommen).**
 
 **Bewusst offen (Priorität):**
 1. **Cross-Node/Multi-Node** — **Iteration 1 + 2 geliefert; Multi-Node-Block geschlossen.** Generierter,
@@ -63,9 +69,8 @@ faltet voll (Invariante 1). Äquivalenz + Sagas grün.
    Pipeline-/Prozess-Plane (`PID`-Converter via `PID.FromAddress`). **Bewiesen:**
    `TwoNodeCommandDispatchTests`, `TwoNodePubSubSignalTests`, `RemotePidDeliverySmokeTests`; cross-node
    Saga (`LoadHarness --mode saga`) + echter 3-Node-Container-Betrieb (`deploy-multinode/`,
-   `docs/multi-node-deployment.md`). Weg B robust via Re-Assert (`ClientSubscriptionReassertTests`,
-   `docs/multi-node-weg-b-client-gateway-konzept.md`). **Offener Folge-Schritt:** Cold-Start-Schema-
-   Migrator (`docs/multi-node-schema-migrator-handoff.md`).
+   `docs/06-transport-multinode-betrieb.md`). Weg B robust via Re-Assert (`ClientSubscriptionReassertTests`).
+   **Offener Folge-Schritt:** Cold-Start-Schema-Migrator (Übergabe: `docs/_archiv-2026-08-12/multi-node-schema-migrator-handoff.md`).
 2. **P5b-Restfeinschliff (klein):** die `MarkingKompakt`-Größe ist für einen extremen Fan-out noch
    O(N) (Payloads je Vorgang); die volle Zähler+Bitset-Verdichtung (Konzept §4) bleibt optionaler
    Feinschliff. Der O(N²)→O(N)-Read-Gewinn (das eigentliche Problem) ist voll geliefert. Die
@@ -76,9 +81,6 @@ faltet voll (Invariante 1). Äquivalenz + Sagas grün.
 **Kleinere Schulden:** `DtoMapperGenerator` fragil (hartkodierte Enums, Encoding-Schäden);
 `Reaktionsempfaenger`-Dedup-Menge (Domänen-Leak); Deadline-Primitiv nicht in einen Prozess
 integriert; `CqrsFrameworkOptions` toter `[Obsolete]`-Typ.
-
-> **Nebenbefund (nicht Backend):** `Domain.Client` (Blazor-Frontend) baut derzeit nicht
-> (`_publish` fehlt, laufender Client-Generator-Umbau). Unabhängig von der Backend-Kette.
 
 ## Konventionen
 
@@ -101,19 +103,18 @@ integriert; `CqrsFrameworkOptions` toter `[Obsolete]`-Typ.
 - **Ausgabe-Vertrag in der Signatur (CQRS050):** Decide und jedes Handle geben einen konkreten Typ oder `OneOf<…>`
   konkreter Typen zurück (nie `ICommand`/`IEvent` …). WAS entstehen kann, lesen Generatoren/Extractor/Editor NUR aus der
   Signatur.
-- **Akteure = Domänen-Experten:** `record X : IMensch|IMaschine|IKi, IDarf<T>…` — `IDarf` nur für das, was der Akteur SELBST
-  hineingibt (Command/Query/Trigger/Transient, CQRS058); ein Command darf mehrere Akteure haben. Was eine Pipeline/ein Prozess/
-  eine Frist daraus erzeugt, trägt den Akteur der Kette (abgeleitet: `DomainEditor/AkteurAnteile.cs`, im Editor gespiegelt) — kein
-  `IDarf` dafür, das Tor lehnt es ab. Ein DIENST ist nie Akteur, er gehört einem: `interface IClassifierService :
-  IAkteurDienst<Klassifizierer>`; als Handle-Parameter wechselt er den Akteur (CQRS060), in Ctor/Feld keiner Klasse erlaubt.
-  Hören abgeleitet (`GeneratedAkteurRechte`), Tor am gRPC-Handshake opt-in über `AddAkteure`. Editor: Rahmen je Domäne × Akteur.
-  `docs/konzept-akteure.md` §8, `docs/konzept-domaenen-editor.md` §12.
-- **Akteur-Vertrag = was ein Akteur DRAUSSEN auf Events tut:** `interface IX : IAkteurVertrag<X> { OneOf<Cmd> Auf(Event e); void Auf(E2 e); }`
-  (höchstens einer je Akteur, nur `Auf(Event)`, Rückgabe = Ausgabe-Vertrag: CQRS061/062). `IDarf` bleibt fürs Spontane; was im
-  Vertrag steht, darf er (Befugt = IDarf ∪ Ausgaben), er hört genau die Eingänge. Daraus generiert: Rechte/Hash (`AkteurRechteGenerator`,
-  Kanon in `Abstractions/Akteurvertrag.cs`), Python-Basis `domain_client/generated/vertraege.py` (`./codegen.sh`), gegen die die Worker
-  programmieren (`auf_<event>`, jede Ausgabe geprüft). Handshake nennt Vertrag + Hash, Antworten tragen ihre Kausalität → deterministische
-  CommandId. Editor: Spalte „Reaktion" im Akteur-Rahmen. `docs/konzept-akteure.md` §9.
+- **Akteure, Verträge, Clients** (`docs/konzept-akteure.md`; Editor §12 des Editor-Konzepts) — drei Begriffe, nicht vermischen:
+  - **Akteur** = Domänen-Experte: `record X : IMensch|IMaschine|IKi, IDarf<T>…` — `IDarf` nur für das, was er SELBST hineingibt
+    (CQRS058). Was eine Pipeline/ein Prozess/eine Frist daraus erzeugt, trägt den Akteur der Kette (abgeleitet, kein `IDarf`). Ein
+    Dienst ist nie Akteur, er gehört einem (`IAkteurDienst<A>`, nur als Handle-Parameter, CQRS060).
+  - **Akteur-Vertrag** = was ein Akteur DRAUSSEN auf Events tut: `interface IX : IAkteurVertrag<X> { OneOf<Cmd> Auf(E e); void Auf(E2 e); }`.
+    Ein `Auf` mit Ausgabe ist eine **Zusage**, `void Auf` eine **Kenntnis** (CQRS061/062; mehrere Teile je Akteur erlaubt). **„Reaktion"
+    ist nur der Backend-Baustein (`ISubscriber`) — nie für Zusagen verwenden.**
+  - **Client** = die Software an EINER Leitung: `interface IX : IClientVertrag, ITeil…, ISendet<C>, IFragt<Q> { void Auf(E e); }` — trägt
+    Vertrags-Teile (auch mehrerer Akteure), sendet/fragt nur, was ein Akteur darf, eigene Methoden nur Kenntnis (CQRS063–065). Verkörpert
+    ist abgeleitet; wirksam am Handshake = Vertrag ∩ Token.
+  - Generiert: `GeneratedAkteurRechte`, `GeneratedClientVertraege`, Python-Basen (`./codegen.sh`). Editor: Rahmen je Domäne × Akteur,
+    📜-Vertrags-Rahmen mit Zusage-Karten, 🔌-Client-Rahmen mit Anschlussleiste und Bündeln; Einzelkanten nur per Klick, Zoom ändert nichts.
 - **Kein `InMemoryEventStore`:** Store-Semantik nur gegen echtes Marten (Integration). Der
   Prüfstand testet nur store-freie Logik. Nie faken, was man nicht besitzt.
 - **Proto-Regenerierung bei neuen Domain-Typen:** jeder neue Command/Event/Query/Trigger
@@ -123,7 +124,7 @@ integriert; `CqrsFrameworkOptions` toter `[Obsolete]`-Typ.
 
 ## Build / Test
 
-**⚠ Vor Test/Lasttest: `docs/testen-und-lasttest.md` lesen.** Drei Ebenen (Prüfstand in-memory
+**⚠ Vor Test/Lasttest: `docs/12-tests-und-vermessung.md` lesen.** Drei Ebenen (Prüfstand in-memory
 / Integration gegen echte Infra / Last-Harness), plus reale Fallstricke: Integration
 **sequentiell** lassen; der bekannte `SnapshotLiveE2ETests`-Cold-Boot-Flake ist Consul-Boot,
 NICHT Timeout-tunebar; xUnit schluckt App-Logs (Cluster-Diagnose → Last-Harness `--log debug`).
@@ -138,5 +139,5 @@ NICHT Timeout-tunebar; xUnit schluckt App-Logs (Cluster-Diagnose → Last-Harnes
 - LLM-Kontext je Code-Block (`docs/konzept-llm-minimalkontext.md`): `dotnet run --project GraphExtractor -- --kontexte <verz>` (Graph-Skelett + Slot-Teile) bzw. `--kontext <Disc> [--auftrag "…"]`; Isolation aller Code-Block-Stellen: `--slots`
 - Last/Durchsatz: `dotnet run --project LoadHarness -- --accounts 500 --credits 40 --concurrency 128 --log warning`
 - Infra hochfahren: `docker compose -f deploy-linux/docker-compose.infrastructure.yml up -d`
-- Multi-Node (3 Nodes + 1 Consul, echt containerisiert): `docker compose -f deploy-multinode/docker-compose.yml up -d --build` (Anleitung + Ergebnis: `docs/multi-node-deployment.md`)
+- Multi-Node (3 Nodes + 1 Consul, echt containerisiert): `docker compose -f deploy-multinode/docker-compose.yml up -d --build` (Anleitung + Ergebnis: `docs/06-transport-multinode-betrieb.md`)
 - Hosts: `Host_Blazor`, `Host_Grpc` (siehe deploy.sh).

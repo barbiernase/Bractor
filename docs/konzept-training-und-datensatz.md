@@ -1,6 +1,7 @@
 # Konzept — Datensätze & Training (KI-Modell-Lebenszyklus)
 
-> **Stand: 2026-08-17. Status: KONZEPT — nicht implementiert.** Vollständiger Entwurf der
+> **Stand: 2026-08-17. Status: umgesetzt** (geprüft 2026-10-06: Aggregate `Datensatz`, `Trainingslauf`, `Modell`, Leseseite, Python-TrainingWorker,
+> Blazor-Module `DatensatzKomposition`/`TrainingDashboard` stehen im Code; Abweichungen vom Entwurf gelten dort). Ursprünglich: Vollständiger Entwurf der
 > Erweiterung, mit der aus kontinuierlich gesammelten, gelabelten Bildpaaren **Datensätze**
 > dynamisch zusammengeführt und daraus **KI-Modelle trainiert** werden — reproduzierbar,
 > event-sourced, im Stil des bestehenden Frameworks (sechs Invarianten, vier Konsumenten,
