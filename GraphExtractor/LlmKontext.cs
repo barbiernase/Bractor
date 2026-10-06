@@ -495,6 +495,8 @@ public sealed class KontextBauer
                 if (cmd != null)
                 {
                     if (cmd.Command!.Origin.Contains("client")) quellen.Add("Client");
+                    foreach (var v in _graph.Edges.Where(e => e.To == cmd.Id && e.Kind == EdgeKind.antwortetMit))
+                        quellen.Add($"Akteur-Vertrag {v.From["vertrag:".Length..]} (Reaktion auf {v.Via})");
                     foreach (var e in _graph.Edges.Where(e => e.To == cmd.Id))
                     {
                         var von = _graph.Nodes.FirstOrDefault(n => n.Id == e.From);

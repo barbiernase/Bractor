@@ -108,6 +108,12 @@ integriert; `CqrsFrameworkOptions` toter `[Obsolete]`-Typ.
   IAkteurDienst<Klassifizierer>`; als Handle-Parameter wechselt er den Akteur (CQRS060), in Ctor/Feld keiner Klasse erlaubt.
   Hören abgeleitet (`GeneratedAkteurRechte`), Tor am gRPC-Handshake opt-in über `AddAkteure`. Editor: Rahmen je Domäne × Akteur.
   `docs/konzept-akteure.md` §8, `docs/konzept-domaenen-editor.md` §12.
+- **Akteur-Vertrag = was ein Akteur DRAUSSEN auf Events tut:** `interface IX : IAkteurVertrag<X> { OneOf<Cmd> Auf(Event e); void Auf(E2 e); }`
+  (höchstens einer je Akteur, nur `Auf(Event)`, Rückgabe = Ausgabe-Vertrag: CQRS061/062). `IDarf` bleibt fürs Spontane; was im
+  Vertrag steht, darf er (Befugt = IDarf ∪ Ausgaben), er hört genau die Eingänge. Daraus generiert: Rechte/Hash (`AkteurRechteGenerator`,
+  Kanon in `Abstractions/Akteurvertrag.cs`), Python-Basis `domain_client/generated/vertraege.py` (`./codegen.sh`), gegen die die Worker
+  programmieren (`auf_<event>`, jede Ausgabe geprüft). Handshake nennt Vertrag + Hash, Antworten tragen ihre Kausalität → deterministische
+  CommandId. Editor: Spalte „Reaktion" im Akteur-Rahmen. `docs/konzept-akteure.md` §9.
 - **Kein `InMemoryEventStore`:** Store-Semantik nur gegen echtes Marten (Integration). Der
   Prüfstand testet nur store-freie Logik. Nie faken, was man nicht besitzt.
 - **Proto-Regenerierung bei neuen Domain-Typen:** jeder neue Command/Event/Query/Trigger

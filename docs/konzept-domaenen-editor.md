@@ -622,3 +622,30 @@ Ohne Eingriff gilt die Ableitung.
 - **Gemessen (Bestand):** 14 Akteur-Rahmen, 0 Überlappungen, Parität C# = JS; ImagePair: KameraSystem › Klassifizierer › Inspekteur ›
   KIOperator › Produktprüfer.
 - **Offen:** Simulation „als Akteur" (Phase E), Slice entlang der Kette über Domänen.
+
+### 12.10 Spalte „Reaktion" — der Akteur-Vertrag im Rahmen (umgesetzt 2026-10-05)
+
+Reagiert ein Akteur DRAUSSEN auf ein Event (`interface IX : IAkteurVertrag<X> { … Auf(Event e); }`, `docs/konzept-akteure.md` §9), steht
+die Reaktion im Graphen — vorher brach die sichtbare Kette an den Python-Workern ab (`deHerkunft()`: `ImagePairKomplett`,
+`TrainingAngefordert`, `TrainingAbgebrochen`, `BildVerfuegbar`, `ModellAktiviert` ohne Konsument).
+
+- **Rahmen „📜 Vertrag IX"** (Tobi: „ein Rahmen mit Vertrag"): der ganze Vertrag steht GESCHLOSSEN neben der Akteur-Karte — die
+  Spalte `ROLE_AKTEUR.auf` im Akteur-Band wird als Vertrags-Rahmen gezeichnet (`vertragsRahmen`, rosa, Kopf: Name · ◀ Eingänge ·
+  Ausgänge ▶ · ＋ Reaktion · ◎ · ⤢, Tooltip mit Interface und generierter Python-Basis). Die Karten liegen in der Domäne des AKTEURS
+  (nicht verteilt auf die Domänen der Events); die Kanten führen zu den Events/Commands hinüber.
+- **Karte „Reaktion"** (Art `auf`, Id `auf:<akteur>:<index>`): je `Auf(Event)` eine Karte im Vertrags-Rahmen
+  (`ROLE_AKTEUR = {akteur:0, auf:1}`, Block `§akteure` — das Layout bleibt, die Spalte kommt dazu). Panel: Vertrag-Name (nur im Entwurf frei), ◀ Auf Event (Port `evtUse`), Ausgänge ▶ (Port
+  `sagaCmd`, ✕ je Ausgang), „Strom" (IAsyncEnumerable), die Signatur als Zeile (`OneOf<…> Auf(E e);` bzw. `void …`).
+- **Akteur-Panel:** „reagiert auf ◀ (Vertrag IX)" mit je einer Zeile (Klick = Karte), ⊕ „+ Reaktion (Event)" → Events leuchten →
+  anklicken = neue Reaktion; „hört" ist mit Vertrag exakt dessen Eingänge (wie der Generator).
+- **Zwei Seiten:** „geht an ▶" des Events nennt „Klassifizierer · Reaktion" (Vertrag → Ausgänge bzw. zur Kenntnis), „◀ kommt aus" des
+  Commands „Klassifizierer · Reaktion auf ImagePairKomplett" — beide lösbar.
+- **Ableitung:** `flussRegeln()` hat je Reaktion die Regel `[Event] → Ausgänge` mit Akteur-Wechsel (Spiegel von `Fluss.cs`: Kante
+  `msg:E → akt:A → msg:C`, Handle = Event; `AkteurAnteile` zählt sie zur Kette von A). `akteurOrdnung` stellt den Reagierenden hinter
+  die Akteure seines Events (KameraSystem vor Klassifizierer). Grammatik: `Event/Transient → Akteur` (GR-VERTRAG).
+- **Schreiben:** Scaffolder legt das Interface neben den Akteur (`VertragsInterface`), der Abgleich (`SimHost/DateiAbgleich.cs`
+  `AkteurVertrag`) hängt fehlende `Auf` an, ersetzt geänderte Rückgaben, streicht entfernte; danach `./codegen.sh` → die Python-Basis
+  bekommt die neue abstrakte Methode.
+- **Gemessen:** `deAkteurParitaet().gleich === true` (127 Nachrichten), `deHerkunft()` zeigt bei allen fünf Events die Reaktion; `--check`
+  vergleicht je Akteur den Vertrag (Code ⇄ Board), `--sonde` enthält einen frei benannten Vertrag (`Archiv`/`IRegal`) und einen
+  gezeichneten (`Mahnstelle` → `IMahnstelle`, über den Scaffolder zurückgeschrieben).

@@ -39,7 +39,7 @@ public sealed class GraphMeta
 
 // ── Knoten ──────────────────────────────────────────────────────────────────
 
-public enum NodeKind { aggregate, command, @event, process, projection, query, pipeline }
+public enum NodeKind { aggregate, command, @event, process, projection, query, pipeline, akteur, vertrag }
 
 public sealed class Node
 {
@@ -64,6 +64,35 @@ public sealed class Node
     public ProjectionInfo? Projection { get; set; }
     public QueryInfo? Query { get; set; }
     public PipelineInfo? Pipeline { get; set; }
+    public AkteurInfo? Akteur { get; set; }
+    public VertragInfo? Vertrag { get; set; }
+}
+
+/// <summary>Ein Akteur (<c>IAkteur</c>): Art und was er spontan hineingibt (<c>IDarf&lt;T&gt;</c>, einfache Namen).</summary>
+public sealed class AkteurInfo
+{
+    public string? Art { get; set; }
+    public List<string> Darf { get; set; } = new();
+    /// <summary>Id des Vertrags-Knotens (<c>vertrag:IX</c>), wenn der Akteur draußen auf Events reagiert.</summary>
+    public string? Vertrag { get; set; }
+}
+
+/// <summary>
+/// Ein Akteur-Vertrag (<c>interface IX : IAkteurVertrag&lt;X&gt;</c>, docs/konzept-akteure.md §9) — die Schnittstelle, gegen die der Client
+/// programmiert: je <c>Auf(Event)</c> eine Reaktion. Hash = derselbe, den Server-Tabelle und Python-Generat tragen.
+/// </summary>
+public sealed class VertragInfo
+{
+    public string Akteur { get; set; } = "";
+    public string Hash { get; set; } = "";
+    public List<VertragsReaktion> Reaktionen { get; set; } = new();
+}
+
+public sealed class VertragsReaktion
+{
+    public string Eingang { get; set; } = "";
+    public List<string> Ausgaenge { get; set; } = new();
+    public bool Strom { get; set; }
 }
 
 public sealed class AggregateInfo
@@ -193,7 +222,11 @@ public enum EdgeKind
     advances,       // event    → process     (Prozess-DSL: Bedingungs-Event einer Nicht-Auslöser-Regel)
     consumedBy,     // event    → projection  (ISubscriber.Handle)
     readsFrom,      // query    → projection  (IReader<TProjection>)
-    pipelineEmits   // pipeline → command
+    pipelineEmits,  // pipeline → command
+    darf,           // akteur   → command/query (IDarf<T>: spontan)
+    hatVertrag,     // akteur   → vertrag     (IAkteurVertrag<A>)
+    reagiertAuf,    // event    → vertrag     (Auf(Event)) — Via = Event
+    antwortetMit    // vertrag  → command     (Rückgabe von Auf(Event)) — Via = Event
 }
 
 public sealed class Edge

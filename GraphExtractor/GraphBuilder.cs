@@ -35,6 +35,7 @@ public sealed class GraphBuilder
         BuildProjectionNodes();
         BuildQueryNodes();
         BuildPipelineNodes();
+        BuildAkteurNodes();      // Akteur + sein Vertrag (Client-Schnittstelle) samt Kanten
 
         BuildRoutingEdges();     // command → aggregat, aggregat → event  (autoritativ)
         BuildRejectEdges();      // aggregat → ablehnung  (decider)
@@ -59,6 +60,8 @@ public sealed class GraphBuilder
             ["projection"] = _g.Nodes.Count(n => n.Kind == NodeKind.projection),
             ["query"] = _g.Nodes.Count(n => n.Kind == NodeKind.query),
             ["pipeline"] = _g.Nodes.Count(n => n.Kind == NodeKind.pipeline),
+            ["akteur"] = _g.Nodes.Count(n => n.Kind == NodeKind.akteur),
+            ["vertrag"] = _g.Nodes.Count(n => n.Kind == NodeKind.vertrag),
             ["edges"] = _g.Edges.Count,
         };
         return _g;
@@ -216,6 +219,48 @@ public sealed class GraphBuilder
         }
     }
 
+    /// <summary>
+    /// Akteure und ihre Verträge als Knoten (docs/konzept-akteure.md §9): <c>akteur:X</c> —darf→ Command/Query, —hatVertrag→ <c>vertrag:IX</c>;
+    /// Event —reagiertAuf→ Vertrag —antwortetMit→ Command. So ist die Kette auch durch den Client hindurch ein Graph.
+    /// </summary>
+    private void BuildAkteurNodes()
+    {
+        string? NachrichtId(string simple) =>
+            _g.Nodes.FirstOrDefault(n => n.Name == simple && n.Kind is NodeKind.command or NodeKind.@event or NodeKind.query)?.Id;
+        var kanten = new List<(string, string, EdgeKind, string?)>();
+        foreach (var a in _dom.Akteure)
+        {
+            var aid = $"akteur:{a.Name}";
+            var vid = a.VertragName == null ? null : $"vertrag:{a.VertragName}";
+            Add(new Node
+            {
+                Id = aid, Kind = NodeKind.akteur, Name = a.Name, FullName = a.Full, Namespace = a.Namespace,
+                Akteur = new AkteurInfo { Art = a.Art, Darf = a.Darf.ToList(), Vertrag = vid },
+            });
+            foreach (var d in a.Darf)
+                if (NachrichtId(d) is { } ziel) kanten.Add((aid, ziel, EdgeKind.darf, null));
+            if (vid == null) continue;
+            var kanon = Abstractions.Akteurvertrag.Kanon(a.Name, a.Vertrag.Select(r => new Abstractions.Akteurvertrag.Reaktion(r.Eingang, r.Ausgaenge, r.Strom)));
+            Add(new Node
+            {
+                Id = vid, Kind = NodeKind.vertrag, Name = a.VertragName!, Namespace = a.Namespace,
+                Vertrag = new VertragInfo
+                {
+                    Akteur = a.Name, Hash = Abstractions.Akteurvertrag.Hash(kanon),
+                    Reaktionen = a.Vertrag.Select(r => new VertragsReaktion { Eingang = r.Eingang, Ausgaenge = r.Ausgaenge.ToList(), Strom = r.Strom }).ToList(),
+                },
+            });
+            kanten.Add((aid, vid, EdgeKind.hatVertrag, null));
+            foreach (var r in a.Vertrag)
+            {
+                if (NachrichtId(r.Eingang) is { } ein) kanten.Add((ein, vid, EdgeKind.reagiertAuf, r.Eingang));
+                foreach (var aus in r.Ausgaenge)
+                    if (NachrichtId(aus) is { } ziel) kanten.Add((vid, ziel, EdgeKind.antwortetMit, r.Eingang));
+            }
+        }
+        foreach (var (von, nach, art, via) in kanten) Edge(von, nach, art, "akteur", via);
+    }
+
     // ── Kanten ────────────────────────────────────────────────────────────────
 
     private void Edge(string from, string to, EdgeKind kind, string provenance, string? via = null)
@@ -326,6 +371,8 @@ public sealed class GraphBuilder
                 if (e.Kind == EdgeKind.sends) origins.Add("process");
                 else if (e.Kind == EdgeKind.compensates) origins.Add("process-compensation");
                 else if (e.Kind == EdgeKind.pipelineEmits) origins.Add("pipeline");
+                else if (e.Kind == EdgeKind.antwortetMit) origins.Add("akteur-vertrag");   // Reaktion eines Clients auf ein Event
+                else if (e.Kind == EdgeKind.darf) origins.Add("client");   // IDarf = übers Tor, also vom Client
             }
             // Kein interner Erzeuger und geroutet ⇒ Einstieg von außen (Client) — inkl. Creation-Commands.
             if (n.Command!.IsCreation || origins.Count == 0)

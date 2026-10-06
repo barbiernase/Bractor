@@ -592,7 +592,7 @@ Mensch   │ Modellfreigeber ─ SetzeModellAktiv ▸ Modell ─▸ (Klassifizie
 - `IAkteurDienst<A>` bleibt als Sprachmittel (Analyzer, Generator, Editor, Sonde), wird im Bestand aber nicht mehr benutzt.
 
 
-## 9. Akteur-Verträge: generierte Schnittstellen für die Clients (Konzept 2026-10-05, nicht umgesetzt)
+## 9. Akteur-Verträge: generierte Schnittstellen für die Clients (Konzept 2026-10-05, Phasen 1–4 umgesetzt 2026-10-05)
 
 > Auftrag (Tobi): „Wir sollten eine Art Interface für die Clients erzeugen, gegen das die Clients (Python, Blazor …) programmieren."
 > Anlass: die Lücken-Prüfung (§9.1) — überall dort, wo ein Akteur DRAUSSEN auf ein Event reagiert, bricht die sichtbare Kette ab.
@@ -758,3 +758,49 @@ Handler für `Auf(X)` werden aus dem Vertrag erwartet. (Phase 2 — erst nach de
 - Statische Typprüfung in Python (pyright im CI) — optional; die Laufzeit-Prüfung der Yields reicht für den Anfang.
 - Versionierung mehrerer Vertragsstände parallel (alter Worker während Rollout) — erst Hash + Warnung, später ggf. Vertrags-Versionen.
 - Ein Akteur mit zwei Verkörperungen (zwei Worker-Prozesse desselben Vertrags) ist erlaubt — Lastverteilung ist Betrieb, nicht Domäne.
+
+### 9.11 Umsetzung (2026-10-05) — Phasen 1–4
+
+| Teil | Ort | Stand |
+|---|---|---|
+| Wort `IAkteurVertrag<TAkteur>` | `Abstractions/Akteur.cs` | ✅ |
+| Eine Quelle für Methodenname + Kanon + Hash | `Abstractions/Akteurvertrag.cs` (`Auf`, `Kanon`, `Hash` = 16 Hex von SHA-256), per Link in beiden Generator-Projekten (dort `internal`), direkt in Extractor und `Cqrs.Codegen` | ✅ |
+| Verträge | `Domain.Pipeline/Akteure.cs`: `IKlassifizierer` (`OneOf<KlassifiziereBildPaarDurchKi> Auf(ImagePairKomplett)`, `void Auf(BildVerfuegbar)`, `void Auf(ModellAktiviert)`), `ITrainingsSystem` (Strom `Auf(TrainingAngefordert)` → 4 Melde-Commands, `void Auf(TrainingAbgebrochen)`); die Melde-Commands und `KlassifiziereBildPaarDurchKi` aus den `IDarf`-Listen entfernt | ✅ |
+| CQRS061/062 | `Domain.SourceGeneration/AkteurAnalyzer.cs`: Interface, einer je Akteur, nur `Auf(Event)`, je Event einmal, keine Properties; Ausgaben `void`/Command/`OneOf`/`(Async)Enumerable`, nie `ICommand`/`Task`/Event | ✅ 13 Analyzer-Tests |
+| GR-VERKÖRPERUNG im Build | CQRS060: ein Handle im Auftrag von A (Dienst) darf nicht dieselbe Entscheidung treffen wie A's Vertrag; Vertrags-Ausgaben zählen dort als befugt | ✅ |
+| Rechte-Tabelle | `AkteurRechteGenerator` → `AkteurRechte.VertragTyp`, `VertragHash`, `Vertrag` (Event → Ausgaben), `Stroeme`, `AntwortetMit`; `Commands` = IDarf ∪ Ausgaben; `Hoert` mit Vertrag = Eingänge ∪ Query-Projektionen | ✅ |
+| Extractor/Modell | `DomainExtractor.ReadVertrag` → `EditorModell.Akteur.Vertrag[] {Eingang, Ausgaenge, Strom, Doku}`, `VertragName`, `VertragDatei`; `Herkunft` hasht den Vertrag mit | ✅ |
+| Fluss/Anteile/Grammatik/Validator | Kante `msg:E → akt:A → msg:C` (Handle = E), in `AkteurAnteile` Kette von A (Wechsel); `GR-VERTRAG` + `GR-VERKOERPERUNG`, Konsum `Event/Transient → Akteur` | ✅ |
+| Editor | Rahmen „📜 Vertrag IX" neben dem Akteur, darin je `Auf` eine Reaktions-Karte (`docs/konzept-domaenen-editor.md` §12.10) | ✅ live: Parität gleich, 5/5 Events mit Reaktion |
+| Wissensgraph | `knowledge-graph.json`: Knoten `akteur:X` und `vertrag:IX` (Reaktionen + Hash), Kanten `darf`, `hatVertrag`, Event —`reagiertAuf`→ Vertrag —`antwortetMit`→ Command; Command-Herkunft `akteur-vertrag`; LLM-Kontext nennt den Vertrag als Quelle | ✅ 8 Akteure, 2 Verträge, 12 Vertrags-Kanten |
+| Scaffolder/Abgleich | `Scaffolder.VertragsInterface`; `DateiAbgleich.AkteurVertrag` | ✅ (CLI-Lauf `--schreiben`: Rückgabe ersetzt, Reaktion gestrichen, neuer Vertrag angelegt) |
+| Sonde/Parität | `Archiv : IMaschine` + `IRegal` (frei benannt), gezeichnet `Mahnstelle` → `IMahnstelle`; `--check` vergleicht je Akteur den Vertrag (2 Verträge, 5 Reaktionen) | ✅ |
+| Python-Generat | `Cqrs.Codegen/PythonVertragsEmitter.cs` → `Domain.Client.Worker.Python.ML/domain_client/generated/vertraege.py` (`KlassifiziererBasis`, `TrainingsSystemBasis`: `AKTEUR`, `VERTRAG`, `VERTRAG_HASH`, `REAKTIONEN`, `SPONTAN`, abstrakte `auf_<event>`); Drift-Gate in `codegen.sh` | ✅ |
+| Python-Basis | `Client.Infrastructure.Python/cqrs_client/vertrag.py`: `AkteurVertragBasis` (Metaklasse HandlerMeta + ABCMeta), Prüf-Wrapper je Reaktion (`VertragsVerletzung` bei fremdem Typ bzw. >1 ohne Strom), Registry ergänzt, CapabilitiesRequest mit Vertrag + Hash | ✅ 7 SDK-Tests |
+| Worker | `classifier.py` (lädt bei `ModellAktiviert` das neue Modell), `training_worker.py`, `run_stub.py` erben die Basis; `@handle.register`/`_declared_command_types` entfallen | ✅ 6 Worker-Tests |
+| Handshake | Proto: `CapabilitiesRequest.vertrag/vertrag_hash`, `CapabilitiesResponse.vertrag/vertrag_hash`; `AkteurVertragsPruefung.Pruefe` (unbekannt / Token verkörpert ihn nicht → Ablehnung `PermissionDenied`; Hash ≠ → Warnung, streng = Ablehnung) und `.Wende` (Abo = genau die Vertrags-Events); ohne Tor bekommt die Session die Befugnisse des Vertrags (`AkteurSitzung`) | ✅ |
+| Kausalität | Proto: `CommandEnvelopeDto.causation_stream_id/version/type/index`; Python-Router nummeriert die Ausgaben je Event und reicht Korrelation + Kausalität mit; Server prüft `AntwortetMit` (sonst targeted `CommandFailed`) und setzt `CommandId = AkteurVertragsPruefung.CommandId(…)` (= `EmitId.Ableiten`, Diskriminator `Version:Event#Index:Command`) + `Emittiert` | ✅ |
+
+**Gemessen:** Prüfstand 253/253 (vorher 224; +29: Analyzer, Tabelle, Editor, Handshake, Id-Ableitung, Hash-Gleichheit Python ⇄ Server);
+`--check` und `--sonde` grün; Python 17/17 (SDK) und 9/9 (Worker); Builds Host.Grpc, SimHost, Integration grün. Integration gegen echte
+Infra: 19/20, darunter neu `VertragsReaktionE2ETests` (dieselbe Antwort zweimal = ein Fakt, eine andere Ausgabe = zweiter Fakt) und erstmals
+gelaufen `MetadataPostgresTests` (Akteur-Header, §8.7); rot ist nur `TwoNodeCommandDispatchTests` (`NewVersion` 2 statt 1), auf 4513100
+identisch, also älter. **Live** (Host.Grpc + `run_stub.py`): Server nimmt `IKlassifizierer` an, abonniert genau die 3 Events; ein per
+Command komplettiertes Paar wird vom Stub klassifiziert, das Event trägt Header `akteur = Klassifizierer`, die Inbox-Marke genau die
+abgeleitete CommandId.
+
+**Abweichungen vom Entwurf:**
+- **`IDarf<KlassifiziereEinzelBildDurchKi>` bleibt** am Klassifizierer: kein Worker reagiert heute damit (`Auf(BildVerfuegbar)` ist nur
+  Kenntnis, wie in §9.3) — ohne `IDarf` hätte der Command keinen Akteur (GR-HERKUNFT). Wird die Einzelbild-Klassifikation eine Reaktion,
+  wandert er in den Rückgabetyp von `Auf(BildVerfuegbar)`.
+- **Kausalität = Stream + Version + Typ + Index** statt `causation_event_id`: dieselbe Position wie beim internen Emit, prüfbar gegen den
+  Vertrag (Typ), und der Index unterscheidet die Ausgaben eines Stroms. Sie wird für **jede** Event-Reaktion eines Python-Clients
+  mitgeschickt (auch ohne Vertrag) — nur geprüft wird sie, wenn die Session einen Vertrag hat.
+- **Ohne Vertrag bleibt alles beim Alten** (Selbstauskunft, Tor wie §8). Die Python-Registry (`domain_registry.py`) bleibt handgepflegt;
+  die Vertragsbasis ergänzt ihre Typen selbst (`CategoryRegistry.ergaenzt`). Das veraltete Python-Proto-Generat ist nebenbei nachgezogen
+  (u. a. fehlte `ModellAktiviertDto`).
+- **Hash-Abweichung** ist ohne Konfiguration nur eine Warnung (`AkteurOptionen.VertragsHashStreng()` bzw. `"Akteure": { "VertragStreng": true }`
+  = Ablehnung) — Rollout alter Worker bricht nicht sofort.
+- **Abgleich streicht** entfernte Reaktionen (das Interface hat keine Rümpfe, die Signaturen gehören dem Modell); ein ganz geleerter Vertrag
+  bleibt als leeres Interface stehen.
+- **Phase 5 (Blazor)** nicht umgesetzt (wie beauftragt).

@@ -160,6 +160,7 @@ public static class HtmlPresenter
 #de .gminimap svg rect.mmhi{fill:#ffd76a !important;opacity:1 !important;stroke:#fff3c9;stroke-width:.6}
 #de .gnode2.n-command{border-color:#3b6fb0}
 #de .gnode2.n-akteur{border-color:#b04f86;width:240px}
+#de .gnode2.n-auf{border-color:#b04f86;border-style:dashed;width:240px}
 #de .gnode2.n-event{border-color:#3f9d5a}
 #de .gnode2.n-rejection{border-color:#b5504a}
 #de .gnode2.n-valueobject{border-color:#2f8f7d}
@@ -185,6 +186,7 @@ public static class HtmlPresenter
 #de .ghead{display:flex;align-items:center;gap:6px;padding:5px 9px;border-radius:8px 8px 0 0;cursor:grab;color:#0d0f14;font-weight:700;font-size:12px;user-select:none;touch-action:none}
 #de .gnode2.n-command .ghead{background:#5b8fd0}
 #de .gnode2.n-akteur .ghead{background:#e07ab4}
+#de .gnode2.n-auf .ghead{background:#eaa0c9}
 #de .gnode2.n-event .ghead{background:#57b673}
 #de .gnode2.n-rejection .ghead{background:#cf6f68}
 #de .gnode2.n-valueobject .ghead{background:#49a996}
@@ -312,6 +314,9 @@ public static class HtmlPresenter
 /* Spalten-Rahmen: die senkrechten Rollen-Spalten innerhalb einer Domäne; nur der Kopf ist klickbar. */
 #de .gspalte{position:absolute;box-sizing:border-box;border:calc(1px * var(--lz)) solid #ffffff22;border-radius:10px;background:#ffffff05;pointer-events:none}
 #de .gspalte.insel{border-style:dashed;border-color:#e0844d66}
+#de .gspalte.vertrag{border:calc(2px * var(--lz)) solid #e07ab4aa;background:#e07ab40d}
+#de .gspalte.vertrag .gspalte-k{background:#e07ab42a;border-bottom-color:#e07ab455;cursor:pointer}
+#de .gspalte.vertrag .gspalte-k .gs-t{color:#ffd3ea}
 #de .gspalte-k{position:absolute;left:0;right:0;top:0;height:calc(28px * min(var(--rz),1.15));display:flex;align-items:center;gap:6px;padding:0 6px 0 9px;pointer-events:auto;
   background:#ffffff0a;border-bottom:1px solid #ffffff14;border-radius:9px 9px 0 0;overflow:hidden}
 #de .gspalte-k i{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
@@ -460,7 +465,7 @@ public static class HtmlPresenter
 #de .kc-pipeline{background:#e08a44}#de .kc-trigger{background:#d29a4a}#de .kc-reader{background:#9678d6}#de .kc-query{background:#5b8fd0}
 #de .kc-queryresponse{background:#49a996}#de .kc-codenode{background:#9aa0aa}#de .kc-llmnode{background:#a48fd6}
 #de .kc-frist,#de .kc-dienst,#de .kc-hostsetting{background:#c9a24b}
-#de .kc-akteur{background:#e07ab4}
+#de .kc-akteur{background:#e07ab4}#de .kc-auf{background:#eaa0c9}
 /* Semantischer Zoom: Landkarte (<0.4) · Ablauf (<0.75) · Detail */
 #de .gcanvas.lod-ablauf .gnode2 .gbody,#de .gcanvas.lod-ablauf .gnode2 .gsum{display:none}
 #de .gcanvas.lod-ablauf .gnode2{width:230px}
@@ -743,6 +748,8 @@ public static class HtmlPresenter
           ()=>{hd.fristen=(hd.fristen||[]).filter(x=>x!==f);}));});
       MODEL.frists.forEach(f=>{if(f.sendet===nm)P(ein,"fr:"+f._id,"Frist "+(f.name||""),"⏳");});
       akteurePartner(ein,nm,P);
+      // Reaktion im Akteur-Vertrag (§9): der Akteur antwortet draußen auf ein Event mit diesem Command.
+      vertragsReaktionen().forEach(({a,r,id})=>{if((r.ausgaenge||[]).includes(nm))P(ein,id,a.name+" · Reaktion auf "+(r.eingang||"?"),"Vertrag",()=>{r.ausgaenge=ohneX(r.ausgaenge,nm);});});
       if(!ein.length)P(ein,null,"Außenwelt (Client)","abgeleitet: kein interner Erzeuger · kein Akteur");
       MODEL.decider.forEach(d=>{if(d.command===nm)P(aus,"dec:"+d._id,"Decide @ "+(d.aggregat||"— kein Aggregat"));});}
     else if(k==="event"||k==="rejection"){
@@ -752,7 +759,9 @@ public static class HtmlPresenter
           if(hd.event===nm&&(kind!=="pipeline"||(hd.inputKind||"event")==="event"))P(aus,id,hText(o,hd));});});
       MODEL.applier.forEach(a=>{if(a.event===nm)P(aus,"app:"+a._id,"Apply @ "+(a.aggregat||"—"));});
       MODEL.sagas.forEach(sg=>{if(sg.triggerEvent===nm)P(aus,"saga:"+sg.name,"Prozess "+sg.name,"Auslöser");});
-      MODEL.transitions.forEach(t=>{if((t.wenn||[]).includes(nm)||t.sammelEvent===nm)P(aus,"tr:"+t._id,"Regel · "+(t.prozess||"Prozess"),t.sammelEvent===nm?"Σ sammelt":"");});}
+      MODEL.transitions.forEach(t=>{if((t.wenn||[]).includes(nm)||t.sammelEvent===nm)P(aus,"tr:"+t._id,"Regel · "+(t.prozess||"Prozess"),t.sammelEvent===nm?"Σ sammelt":"");});
+      vertragsReaktionen().forEach(({a,r,id})=>{if(r.eingang===nm)P(aus,id,a.name+" · Reaktion",(r.ausgaenge||[]).length?"Vertrag → "+r.ausgaenge.join(", "):"Vertrag · zur Kenntnis",
+        ()=>{a.vertrag=(a.vertrag||[]).filter(x=>x!==r);});});}
     else if(k==="query"){akteurePartner(ein,nm,P);if(!ein.length)P(ein,null,"Außenwelt (Client)","abgeleitet · kein Akteur");
       HD("reader","reader",(o,hd,id)=>{if(hd.query===nm)P(aus,id,hText(o,hd));});}
     else if(k==="queryresponse"){const qs=[];HD("reader","reader",(o,hd,id)=>{if((hd.responses||[]).includes(nm)){P(ein,id,hText(o,hd));qs.push(hd.query);}});
@@ -768,6 +777,10 @@ public static class HtmlPresenter
       akteurePartner(ein,nm,P);
       if(!ein.length)P(ein,null,"Außenwelt (Client)","abgeleitet: kein interner Erzeuger · kein Akteur");}
     return {ein,aus,k};}
+  // Alle Reaktionen der Akteur-Verträge (§9) mit ihrer Karten-Id — je Auf(Event) eine Karte „Reaktion" im Akteur-Rahmen.
+  const aufId=(a,i)=>"auf:"+a._id+":"+i;
+  const vertragsTyp=a=>a.vertragName||("I"+(a.name||""));
+  function vertragsReaktionen(){return MODEL.akteure.flatMap(a=>(a.vertrag||[]).map((r,i)=>({a,r,i,id:aufId(a,i)})));}
   // Akteure, die diesen Typ hineingeben dürfen — als Erzeuger auf der „◀ kommt aus"-Seite; „lösen" entzieht das Recht.
   function akteurePartner(ein,nm,P){MODEL.akteure.forEach(a=>{if((a.darf||[]).includes(nm))P(ein,"akt:"+a._id,"Akteur "+a.name,"darf",()=>{a.darf=ohneX(a.darf,nm);});});}
   // Der Akteur-Eingang einer Nachricht (Command/Query/Trigger): ⊕ → Akteure leuchten → anklicken = ihm das Recht geben.
@@ -1356,6 +1369,8 @@ public static class HtmlPresenter
     MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>R.push([[hd.event].filter(Boolean),[...(hd.sends||[]),...(hd.publishes||[])],null])));
     MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>R.push([[hd.event].filter(Boolean),[...(hd.publishes||[])],null])));
     MODEL.reader.forEach(r=>(r.handles||[]).forEach(hd=>R.push([[hd.query].filter(Boolean),[...(hd.responses||[])],null])));
+    // Vertrag (§9): Event → Akteur → Commands; die Ausgänge gehören dem Akteur (Wechsel wie beim Dienst).
+    vertragsReaktionen().forEach(({a,r})=>R.push([[r.eingang].filter(Boolean),[...(r.ausgaenge||[])],a.name]));
     MODEL.sagas.forEach(sg=>{const ts=MODEL.transitions.filter(t=>t.prozess===sg.name);
       R.push([[sg.triggerEvent,...ts.flatMap(t=>t.wenn||[])].filter(Boolean),ts.flatMap(t=>(t.dann||[]).flatMap(d=>[d.sende,d.kompensation])).filter(Boolean),null]);});
     return R;}
@@ -1380,6 +1395,7 @@ public static class HtmlPresenter
   function akteurSet(n){let s=AKTSET.get(n.id);if(s)return s;AKTSET.set(n.id,s=new Set());const r=n.ref,add=x=>x&&x.forEach(v=>s.add(v));
     switch(n.kind){
       case "akteur":s.add(r.name);break;
+      case "auf":s.add(n.own.ref.name);break;
       case "command":case "query":case "event":case "rejection":case "queryresponse":add(mengeVon(r.name));
         if(n.kind==="query"&&!s.size)MODEL.reader.forEach(rd=>{if((rd.handles||[]).some(h=>h.query===r.name))add(akteurSet({id:"rdr:"+rd._id,kind:"reader",ref:rd}));});
         break;
@@ -1452,6 +1468,7 @@ public static class HtmlPresenter
     // Reagiert B per Dienst-Wechsel auf ein Event von A → A vor B.
     const vor=new Map();MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{const w=handleAkteure("pipeline",hd);
       if(!(hd.akteur&&w&&w.has(hd.akteur)))return;mengeVon(pipeEingang(hd)).forEach(a=>{if(a!==hd.akteur){if(!vor.has(hd.akteur))vor.set(hd.akteur,new Set());vor.get(hd.akteur).add(a);}});}));
+    vertragsReaktionen().forEach(({a,r})=>mengeVon(r.eingang).forEach(x=>{if(x!==a.name){if(!vor.has(a.name))vor.set(a.name,new Set());vor.get(a.name).add(x);}}));
     const aus=[],rest=[...basis];
     while(rest.length){const i=rest.findIndex(b=>[...(vor.get(b)||[])].every(a=>!rest.includes(a)||a===b));const k=i<0?0:i;aus.push(rest.splice(k,1)[0]);}
     const wunsch=((VIEW.akteurOrdnung||{})[dom]||[]).filter(x=>aus.includes(x));
@@ -1502,19 +1519,50 @@ public static class HtmlPresenter
       im.forEach(([p,hd,hi])=>{const s=anchorDot("auftrag");s.classList.add("o");reg("akt:auftrag:"+a._id+":"+p._id+":"+hi,s,{type:"auftrag",dir:"out",akt:a._id,anker:true});
         body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},p.name+".Handle("+handleDisc(hd)+")"),s));});
       body.append(slotRow("auftrag","+ Handle ⊕ (Pipeline) ▶","r",{type:"auftrag",dir:"out",akt:a._id},"akt:auftrag:"+a._id+":open"));}
+    // Vertrag (§9): worauf er DRAUSSEN reagiert — je Auf(Event) eine Karte „Reaktion" (Spalte neben dem Akteur). ⊕ → Events leuchten.
+    body.append(h("div",{class:"gsec",title:"public interface "+vertragsTyp(a)+" : IAkteurVertrag<"+a.name+"> { … Auf(Event e); } — der Client (Python, Blazor) implementiert ihn; was er so hineingibt, darf er"},
+      "reagiert auf ◀ (Vertrag "+vertragsTyp(a)+")"));
+    (a.vertrag||[]).forEach((r,i)=>{const s=anchorDot("event");s.classList.add("i");reg("akt:auf:"+a._id+":"+i,s,{type:"evtUse",dir:"in",akt:a._id,aufIdx:i,anker:true});
+      const row=h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"flex:1"},(r.eingang||"?")+((r.ausgaenge||[]).length?" → "+r.ausgaenge.join(", ")+(r.strom?" (Strom)":""):" · zur Kenntnis")),
+        h("button",{class:"rm",title:"Reaktion entfernen",onclick:e=>{e.stopPropagation();a.vertrag.splice(i,1);render();}},"✕"));
+      row.onclick=()=>waehle(aufId(a,i));body.append(row);});
+    {const oi=port("event");oi.classList.add("i");reg("akt:auf:"+a._id+":open",oi,{type:"evtUse",dir:"in",akt:a._id,aufIdx:"open"});
+      body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Reaktion ⊕ (Event)")));}
     const hoert=akteurHoert(a);
-    body.append(h("div",{class:"gsec",title:"abgeleitet: Events der Aggregate seiner Commands + Events der Projektionen hinter seinen Queries"},"hört (abgeleitet)"));
+    body.append(h("div",{class:"gsec",title:(a.vertrag||[]).length?"abgeleitet: genau die Events seines Vertrags + Events der Projektionen hinter seinen Queries"
+      :"abgeleitet: Events der Aggregate seiner Commands + Events der Projektionen hinter seinen Queries"},"hört (abgeleitet)"));
     body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},hoert.length?hoert.join(", "):"— nichts"));
   }
   // Abgeleitet wie im Generator (AkteurRechteGenerator): Aggregat der erlaubten Commands → dessen Events; erlaubte Query →
   //   Reader → Projektion → deren Handle-Events. Nur Anzeige — die Laufzeit-Tabelle erzeugt der Generator.
-  function akteurHoert(a){const evs=new Set();
+  function akteurHoert(a){const evs=new Set(),vertrag=(a.vertrag||[]).length>0;
+    (a.vertrag||[]).forEach(r=>r.eingang&&evs.add(r.eingang));   // mit Vertrag: exakt seine Eingänge
     (a.darf||[]).forEach(nm=>{const r=recByName(nm);if(!r)return;
-      if(r.kind==="command"){const agg=(MODEL.decider.find(d=>d.command===nm)||{}).aggregat;
+      if(r.kind==="command"&&!vertrag){const agg=(MODEL.decider.find(d=>d.command===nm)||{}).aggregat;
         if(agg)MODEL.decider.filter(d=>d.aggregat===agg).forEach(d=>(d.ergibt||[]).forEach(o=>o.event&&evs.add(o.event)));}
       if(r.kind==="query")MODEL.reader.forEach(rd=>{if(!(rd.handles||[]).some(hd=>hd.query===nm))return;
         const p=MODEL.projektionen.find(x=>x.name===rd.projektion);(p&&p.handles||[]).forEach(hd=>hd.event&&evs.add(hd.event));});});
     return [...evs].sort();}
+  // ◀ REAKTION (Vertrag, §9): eine Methode Auf(Event) im Vertrag des Akteurs — Eingang, Ausgänge (konkrete Commands), Strom.
+  //   Implementiert wird sie draußen (Python-Worker gegen die generierte Basis); hier steht nur die Signatur.
+  function aufCard(body,n){const a=n.own.ref,r=n.ref,i=n.idx;
+    body.append(h("div",{class:"gsec",title:"public interface "+vertragsTyp(a)+" : IAkteurVertrag<"+a.name+">"},"Vertrag "+vertragsTyp(a)+" · 👤 "+a.name));
+    // Der Name ist nur im Entwurf frei — ein Vertrag aus dem Code behält seinen (Umbenennen ist ein Refactoring, kein Zeichnen).
+    if(!a.datei)body.append(h("div",{class:"frow",title:"Name des Vertrags-Interfaces (leer = I + Akteur)"},h("span",{class:"slotlbl"},"Vertrag"),
+      inp(a.vertragName,v=>{a.vertragName=v||undefined;},"I"+a.name)));
+    const sl=port("event");sl.classList.add("i");reg("auf:in:"+a._id+":"+i,sl,{type:"evtUse",dir:"in",akt:a._id,aufIdx:i});
+    body.append(h("div",{class:"slotrow"},sl,h("span",{class:"slotlbl",style:"flex:1"},"◀ Auf "+(r.eingang||"?")),
+      h("button",{class:"rm",title:"Reaktion entfernen",onclick:()=>{a.vertrag.splice(i,1);render();}},"✕")));
+    (r.ausgaenge||[]).forEach((c,ci)=>{const s=port("command");s.classList.add("o");reg("auf:send:"+a._id+":"+i+":"+c,s,{type:"sagaCmd",dir:"out",akt:a._id,aufIdx:i});
+      body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{r.ausgaenge.splice(ci,1);render();}},"✕"),
+        h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"gibt hinein "+c+" ▶"),s));});
+    const so=port("command");so.classList.add("o");reg("auf:send:"+a._id+":"+i+":open",so,{type:"sagaCmd",dir:"out",akt:a._id,aufIdx:i});
+    body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},(r.ausgaenge||[]).length?"+ Ausgang ▶ (Command)":"+ Ausgang ▶ (Command) — ohne: nur zur Kenntnis"),so));
+    body.append(h("label",{class:"cbx",title:"IAsyncEnumerable<OneOf<…>>: mehrere Commands je Reaktion (z. B. Fortschritt)"},
+      h("input",{type:"checkbox",onchange:e=>{if(e.target.checked)r.strom=true;else delete r.strom;render();},...(r.strom?{checked:"checked"}:{})}),"Strom (mehrere Commands je Reaktion)"));
+    body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal;font-family:monospace"},
+      ((r.ausgaenge||[]).length?(r.strom?"IAsyncEnumerable<OneOf<"+r.ausgaenge.join(", ")+">>":"OneOf<"+r.ausgaenge.join(", ")+">"):"void")+" Auf("+(r.eingang||"?")+" e);"));
+  }
   function hostSettingCard(body,s){
     body.append(nameInp(s,"name","HostSetting","hostsetting"));
     body.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"Typ"),tinp(s.typ,v=>s.typ=v)));
@@ -1756,7 +1804,7 @@ public static class HtmlPresenter
   //    Applier→Aggregat(rechts) · Applier→State-Feld(oben, optionale Zuweisungs-Markierung).
   const SVGNS="http://www.w3.org/2000/svg";
   const GRID=20;
-  const NODELABEL={akteur:"Akteur",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",pipeline:"Pipeline",trigger:"Trigger",frist:"Frist",dienst:"Dienst",hostsetting:"HostSetting",codenode:"Code",llmnode:"LLM",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn"};
+  const NODELABEL={akteur:"Akteur",auf:"Reaktion",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",pipeline:"Pipeline",trigger:"Trigger",frist:"Frist",dienst:"Dienst",hostsetting:"HostSetting",codenode:"Code",llmnode:"LLM",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn"};
   let PAN={x:40,y:30,s:1}, canvas=null, world=null, svg=null, svgTop=null, SLOTS={};
   // Typ-Navigation: HLKIND = aktuell hervorgehobener Node-Typ (Board+Minimap); JUMPIX = Sprung-Cursor je Typ.
   let HLKIND=null; const JUMPIX={};
@@ -1877,7 +1925,8 @@ public static class HtmlPresenter
       MODEL.states.forEach(s=>{if(s.aggregat===old)s.aggregat=nv;});
     }else if(kind==="record"){
       // Akteure dürfen den Typ unter seinem neuen Namen (IDarf<T> folgt dem Typ).
-      MODEL.akteure.forEach(a=>{a.darf=(a.darf||[]).map(x=>x===old?nv:x);});
+      MODEL.akteure.forEach(a=>{a.darf=(a.darf||[]).map(x=>x===old?nv:x);
+        (a.vertrag||[]).forEach(r=>{if(r.eingang===old)r.eingang=nv;r.ausgaenge=(r.ausgaenge||[]).map(x=>x===old?nv:x);});});
       if(obj.kind==="valueobject")retypeFelder(old,nv);   // Typ-Komposition: Feldtypen mitziehen
       if(obj.kind==="command"){
         MODEL.decider.forEach(d=>{if(d.command===old)d.command=nv;});
@@ -1955,6 +2004,7 @@ public static class HtmlPresenter
 
   function graphNodes(){
     return [...MODEL.akteure.map(a=>({id:"akt:"+a._id,name:a.name,kind:"akteur",ref:a})),
+            ...vertragsReaktionen().map(({a,r,i,id})=>({id,name:r.eingang||"?",kind:"auf",ref:r,idx:i,own:{id:"akt:"+a._id,name:a.name,kind:"akteur",ref:a}})),
             ...MODEL.records.map(r=>({id:"rec:"+r.name,name:r.name,kind:r.kind,ref:r})),
             ...MODEL.aggregate.map(a=>({id:"agg:"+a.name,name:a.name,kind:"aggregate",ref:a})),
             ...MODEL.states.map(s=>({id:"st:"+s._id,name:s.aggregat||"frei",kind:"state",ref:s})),
@@ -1983,7 +2033,7 @@ public static class HtmlPresenter
   // Das AKTEUR-BAND (docs/konzept-akteure.md §4.1): ein eigener Block je Domäne — ganz links, auf der Eingangsseite, vor den
   //   Aggregat-Blöcken. Kommt DAZU, ersetzt keine Spalte. Domäne aus dem Graphen (alle IDarf-Ziele in einer Domäne → dort).
   const AKTEUR_KEY="§akteure";
-  const ROLE_AKTEUR={akteur:0};
+  const ROLE_AKTEUR={akteur:0,auf:1};   // Spalte „Reaktion" (Vertrag, §9) neben dem Akteur
   // Rollen-Spalten innerhalb eines Aggregat-Blocks (links→rechts = Schreibfluss, dann Leseseite).
   //   Leseseite: Projektion (Hub) → ihre Handles → Store-Fns → Store/ReadModel; Query → Reader-Handle → Response, Reader (Hub).
   const ROLE_AGG={command:0,decider:1,aggregate:2,state:2,event:3,rejection:3,applier:4,valueobject:5,enum:5,projektion:6,"handle:projektion":7,"handle:reaktion":7,
@@ -2025,6 +2075,9 @@ public static class HtmlPresenter
     // Akteur → was er darf (Command/Query über die Record-Karte, Trigger über die Trigger-Karte).
     MODEL.akteure.forEach(a=>(a.darf||[]).forEach(nm=>{if(recByName(nm))push("akt:"+a._id,rec(nm));
       else{const t=MODEL.triggers.find(x=>trigName(x)===nm);if(t)push("akt:"+a._id,"tg:"+t._id);}}));
+    // Vertrag (§9): Event → Reaktion → Commands; die Reaktion hängt an ihrem Akteur (Hub-Kante wie Handle → Besitzer).
+    vertragsReaktionen().forEach(({a,r,id})=>{push(id,"akt:"+a._id);if(recByName(r.eingang))push(rec(r.eingang),id);
+      (r.ausgaenge||[]).forEach(c=>{if(recByName(c))push(id,rec(c));});});
     MODEL.decider.forEach(d=>{if(recByName(d.command))push(rec(d.command),"dec:"+d._id);
       if(d.aggregat)push("dec:"+d._id,"agg:"+d.aggregat);
       (d.ergibt||[]).forEach(o=>{if(recByName(o.event))push("dec:"+d._id,rec(o.event));});
@@ -2123,7 +2176,7 @@ public static class HtmlPresenter
 
   function groupKeyOf(n){
     const k=n.kind, r=n.ref;
-    if(k==="akteur") return AKTEUR_KEY;
+    if(k==="akteur"||k==="auf") return AKTEUR_KEY;
     if(k==="aggregate") return r.name;
     if(k==="handle"||k==="fn") return groupKeyOf(n.own);   // Handle/Fn gehören zu ihrem Besitzer
     if(k==="state") return r.aggregat||SHARED_KEY;
@@ -2342,6 +2395,7 @@ public static class HtmlPresenter
     else if(n.kind==="dienst")dienstCard(body,n.ref);
     else if(n.kind==="hostsetting")hostSettingCard(body,n.ref);
     else if(n.kind==="akteur")akteurCard(body,n.ref);
+    else if(n.kind==="auf")aufCard(body,n);
     else if(n.kind==="codenode")codeNodeCard(body,n.ref);
     else if(n.kind==="llmnode")llmNodeCard(body,n.ref);
     else if(n.kind==="handle")handleCard(body,n);
@@ -2350,7 +2404,9 @@ public static class HtmlPresenter
   }
   function delNode(n){const k=n.kind,ref=n.ref;
     // Ein gelöschter Eingang (Command/Query/Trigger) verschwindet auch aus den Befugnissen (IDarf) der Akteure.
-    {const nm=k==="trigger"?trigName(ref):(MODEL.records.includes(ref)?ref.name:null);if(nm)MODEL.akteure.forEach(a=>{if((a.darf||[]).includes(nm))a.darf=ohneX(a.darf,nm);});}
+    {const nm=k==="trigger"?trigName(ref):(MODEL.records.includes(ref)?ref.name:null);if(nm)MODEL.akteure.forEach(a=>{if((a.darf||[]).includes(nm))a.darf=ohneX(a.darf,nm);
+      // … und aus den Verträgen: als Eingang fällt die ganze Reaktion weg, als Ausgang nur der Ausgang.
+      if((a.vertrag||[]).length)a.vertrag=a.vertrag.filter(r=>r.eingang!==nm).map(r=>(r.ausgaenge||[]).includes(nm)?{...r,ausgaenge:ohneX(r.ausgaenge,nm)}:r);});}
     if(VIEW.heim&&VIEW.heim[n.id]){delete VIEW.heim[n.id];speichereAnsicht();}
     if(VIEW.heimBlk&&VIEW.heimBlk[n.id]){delete VIEW.heimBlk[n.id];speichereAnsicht();}
     if(VIEW.heimAkteur&&VIEW.heimAkteur[n.id]){delete VIEW.heimAkteur[n.id];speichereAnsicht();}
@@ -2372,6 +2428,7 @@ public static class HtmlPresenter
     else if(k==="dienst")MODEL.dienste.splice(MODEL.dienste.indexOf(ref),1);
     else if(k==="hostsetting")MODEL.hostSettings.splice(MODEL.hostSettings.indexOf(ref),1);
     else if(k==="akteur")MODEL.akteure.splice(MODEL.akteure.indexOf(ref),1);
+    else if(k==="auf"){const v=n.own.ref.vertrag||[];v.splice(v.indexOf(ref),1);}
     else if(k==="codenode")MODEL.codeNodes.splice(MODEL.codeNodes.indexOf(ref),1);
     else if(k==="llmnode")MODEL.llmNodes.splice(MODEL.llmNodes.indexOf(ref),1);
     else if(k==="handle"){const hs=n.own.ref.handles||[];hs.splice(hs.indexOf(ref),1);}
@@ -2542,6 +2599,10 @@ public static class HtmlPresenter
         if(I.handleIdx==="open"){if(!p.handles.some(x=>x.event===O.rec))p.handles.push({event:O.rec,effekt:""});}
         else p.handles[I.handleIdx].event=O.rec;}}
       else if(I.trigger){const sg=MODEL.sagas.find(x=>x.name===I.saga);if(sg)sg.triggerEvent=O.rec;}
+      // Event → Reaktion im Vertrag eines Akteurs (§9): neue Reaktion bzw. Eingang einer bestehenden umhängen.
+      else if(I.akt&&I.aufIdx!=null){const ak=MODEL.akteure.find(x=>x._id===I.akt);if(ak){ak.vertrag=ak.vertrag||[];
+        if(I.aufIdx==="open"){if(!ak.vertrag.some(r=>r.eingang===O.rec))ak.vertrag.push({eingang:O.rec,ausgaenge:[]});}
+        else if(ak.vertrag[I.aufIdx])ak.vertrag[I.aufIdx].eingang=O.rec;}}
       else if(I.trans){const t=MODEL.transitions.find(x=>x._id===I.trans);if(t){
         t.wenn=t.wenn||[];if(I.wennIdx==="open"){if(!t.wenn.includes(O.rec))t.wenn.push(O.rec);}else t.wenn[I.wennIdx]=O.rec;}}
       else if(I.reaktion){const r=MODEL.reaktionen.find(x=>x._id===I.reaktion);if(r){r.handles=r.handles||[];
@@ -2560,7 +2621,9 @@ public static class HtmlPresenter
           else dazu("sends",I.rec);}
         else if(k==="rejection"||k==="event")dazu("publishes",I.rec);}}}
     else if(O.type==="sagaCmd"){
-      if(O.reaktion){const r=MODEL.reaktionen.find(x=>x._id===O.reaktion);const hd=r&&r.handles[O.handleIdx];if(hd){hd.sends=hd.sends||[];if(!hd.sends.includes(I.rec))hd.sends.push(I.rec);}}
+      if(O.akt&&typeof O.aufIdx==="number"){const ak=MODEL.akteure.find(x=>x._id===O.akt),r=ak&&(ak.vertrag||[])[O.aufIdx];
+        if(r){r.ausgaenge=r.ausgaenge||[];if(!r.ausgaenge.includes(I.rec))r.ausgaenge.push(I.rec);}}
+      else if(O.reaktion){const r=MODEL.reaktionen.find(x=>x._id===O.reaktion);const hd=r&&r.handles[O.handleIdx];if(hd){hd.sends=hd.sends||[];if(!hd.sends.includes(I.rec))hd.sends.push(I.rec);}}
       else if(O.pipeline){const p=MODEL.pipelines.find(x=>x._id===O.pipeline);const hd=p&&p.handles[O.handleIdx];if(hd){hd.sends=hd.sends||[];if(!hd.sends.includes(I.rec))hd.sends.push(I.rec);}}
       // Frist fällig → genau ein Command @ Aggregat (der AddDeadlines-Router: Kontext → Command).
       else if(O.frist){const f=MODEL.frists.find(x=>x._id===O.frist);if(f){f.sendet=I.rec;f.aggregat=recordAgg(I.rec)||f.aggregat;}}
@@ -2630,6 +2693,7 @@ public static class HtmlPresenter
       if(I.app){const p=app(I.app);if(p)p.event="";}
       else if(I.frist){const f=MODEL.frists.find(x=>x._id===I.frist);if(f){if(I.role==="storniert")f.storniert=ohne(f.storniert,O.rec);else f.plant=ohne(f.plant,O.rec);}}
       else if(I.trigger){const sg=MODEL.sagas.find(x=>x.name===I.saga);if(sg)sg.triggerEvent="";}
+      else if(I.akt&&I.aufIdx!=null){const ak=MODEL.akteure.find(x=>x._id===I.akt);if(ak)ak.vertrag=(ak.vertrag||[]).filter(r=>r.eingang!==O.rec);}
       else if(I.trans){const t=MODEL.transitions.find(x=>x._id===I.trans);if(t)t.wenn=ohne(t.wenn,O.rec);}
       else if(I.proj){const p=MODEL.projektionen.find(x=>x._id===I.proj);if(p)p.handles=(p.handles||[]).filter(h=>h.event!==O.rec);}
       else if(I.reaktion){const r=MODEL.reaktionen.find(x=>x._id===I.reaktion);if(r)r.handles=(r.handles||[]).filter(h=>h.event!==O.rec);}
@@ -2640,7 +2704,8 @@ public static class HtmlPresenter
       else{if(!O.fristArt)hd.sends=ohne(hd.sends,I.rec);if(!O.fristArt&&!O.sofort)hd.publishes=ohne(hd.publishes,I.rec);
         if(!O.sofort)hd.fristen=(hd.fristen||[]).filter(f=>!(f.command===I.rec&&(!O.fristArt||f.art===O.fristArt)));}}}
     else if(O.type==="sagaCmd"){
-      if(O.reaktion||O.pipeline){const hd=handle(O.reaktion?MODEL.reaktionen:MODEL.pipelines,O.reaktion||O.pipeline,O.handleIdx);if(hd)hd.sends=ohne(hd.sends,I.rec);}
+      if(O.akt&&typeof O.aufIdx==="number"){const ak=MODEL.akteure.find(x=>x._id===O.akt),r=ak&&(ak.vertrag||[])[O.aufIdx];if(r)r.ausgaenge=ohne(r.ausgaenge,I.rec);}
+      else if(O.reaktion||O.pipeline){const hd=handle(O.reaktion?MODEL.reaktionen:MODEL.pipelines,O.reaktion||O.pipeline,O.handleIdx);if(hd)hd.sends=ohne(hd.sends,I.rec);}
       else if(O.frist){const f=MODEL.frists.find(x=>x._id===O.frist);if(f)f.sendet="";}
       else{const t=MODEL.transitions.find(x=>x._id===O.trans);const d=t&&(t.dann||[])[O.dannIdx];
         if(d){if(O.role==="komp"){delete d.kompensation;delete d.kompensationAusdruck;}else{d.sende="";delete d.sendeAusdruck;}}}}
@@ -2742,6 +2807,7 @@ public static class HtmlPresenter
   // Namespace eines Knotens — aus dem Code (Namespace-Feld) bzw. über die Verdrahtung zu seinem Besitzer; null = keiner.
   function nsVon(n){const r=n.ref,k=n.kind;
     if(k==="handle"||k==="fn")return nsVon(n.own);
+    if(k==="auf"){const e=recByName(r.eingang);return e?e.namespace:nsVon(n.own);}
     if(k==="decider"||k==="applier"||k==="state"){const a=MODEL.aggregate.find(x=>x.name===r.aggregat);return a?a.namespace:null;}
     if(k==="transition"){const s=MODEL.sagas.find(x=>x.name===r.prozess);return s?s.namespace:null;}
     if(k==="codenode"){const o=findCodeOwner(r._id);return o?nsVon(o):null;}
@@ -2752,7 +2818,7 @@ public static class HtmlPresenter
     return r.namespace||null;}
   // Stammt der Knoten aus dem Code (sonst: Entwurf, immer sichtbar)? Abgeleitete Knoten folgen ihrem Besitzer.
   function ausCodeVon(n){const k=n.kind,r=n.ref;
-    if(k==="handle"||k==="fn")return ausCodeVon(n.own);
+    if(k==="handle"||k==="fn"||k==="auf")return ausCodeVon(n.own);
     if(k==="state"){const a=MODEL.aggregate.find(x=>x.name===r.aggregat);return !!(a&&a.ausCode);}
     if(k==="transition"){const sg=MODEL.sagas.find(x=>x.name===r.prozess);return sg?!!sg.ausCode:r.ausCode===true;}
     if(k==="codenode"){const o=findCodeOwner(r._id);return !!(o&&ausCodeVon(o));}
@@ -2821,7 +2887,7 @@ public static class HtmlPresenter
     if(t==="auftrag")return d==="in";   // ein Handle handelt im Auftrag höchstens EINES Akteurs
     if(t==="prozess"||t==="decAgg"||t==="appAgg"||t==="projref"||t==="readmodel"||t==="state"||t==="prompt")return d==="out";
     if(t==="code"||t==="setting"||t==="ftype"||t==="self")return d==="in";
-    if(t==="evtUse")return d==="in"&&(!!I.app||!!I.trigger||typeof I.handleIdx==="number"||typeof I.wennIdx==="number");
+    if(t==="evtUse")return d==="in"&&(!!I.app||!!I.trigger||typeof I.handleIdx==="number"||typeof I.wennIdx==="number"||typeof I.aufIdx==="number");
     if(t==="sagaCmd")return d==="out"&&(!!I.frist||!!I.trans);
     if(t==="trigmsg")return d==="in"&&typeof I.handleIdx==="number";
     return false;}
@@ -2909,6 +2975,9 @@ public static class HtmlPresenter
       const p=mkE(ende(a),ende(b),color,dash);p.dataset.a=knotenIdVon(a);p.dataset.b=knotenIdVon(b);};
     // Akteur → was er darf (rosa): vom Akteur-Band zur Nachricht.
     MODEL.akteure.forEach(a=>(a.darf||[]).forEach(nm=>add("akt:darf:"+a._id+":"+nm,"darf:in:"+nm,"#e07ab4")));
+    // Vertrag (§9): Event → Reaktion → Commands (rosa) — die Kette läuft durch den Akteur draußen.
+    vertragsReaktionen().forEach(({a,r,i})=>{if(r.eingang)add("evt:out:"+r.eingang,"auf:in:"+a._id+":"+i,"#e07ab4");
+      (r.ausgaenge||[]).forEach(c=>{if(c)add("auf:send:"+a._id+":"+i+":"+c,"cmd:in:"+c,"#e07ab4");});});
     // Dienst-Akteur → Pipeline-Handle, der in seinem Auftrag entscheidet (gestrichelt violett).
     MODEL.pipelines.forEach(p=>(p.handles||[]).forEach((hd,hi)=>{const a=hd.akteur&&MODEL.akteure.find(x=>x.name===hd.akteur);
       if(a)add("akt:auftrag:"+a._id+":"+p._id+":"+hi,"auftrag:in:"+p._id+":"+hi,"#b05fd0",true);}));
@@ -3259,7 +3328,9 @@ public static class HtmlPresenter
     else if(k==="saga")t="Auslöser: "+(r.triggerEvent||"—")+" · "+transOf(r).length+" Regeln";
     else if(k==="transition")t="WENN "+kurz(r.wenn)+" → "+kurz((r.dann||[]).map(d=>d.sende));
     else if(k==="store")t=(r.writeFns||[]).length+" schreibend · "+(r.readFns||[]).length+" lesend";
-    else if(k==="akteur")t=(ART_SYM[r.art]||"")+((r.dienste||[]).length?"⚙ "+r.dienste.join(", ")+" · ":"")+((r.darf||[]).length?"darf "+kurz(r.darf):"darf nichts");
+    else if(k==="auf")t="◀ "+(r.eingang||"?")+" → "+((r.ausgaenge||[]).length?kurz(r.ausgaenge)+(r.strom?" (Strom)":""):"zur Kenntnis");
+    else if(k==="akteur")t=(ART_SYM[r.art]||"")+((r.dienste||[]).length?"⚙ "+r.dienste.join(", ")+" · ":"")+((r.darf||[]).length?"darf "+kurz(r.darf):"darf nichts")
+      +((r.vertrag||[]).length?" · reagiert auf "+kurz(r.vertrag.map(x=>x.eingang)):"");
     else if(k==="handle"){const aus=n.own.kind==="pipeline"?plAusgaenge(r):(r.ausgaenge||[]).length?(r.ausgaenge||[]).filter(a=>a.art!=="storefn"&&a.art!=="self").map(a=>a.typ)
         :[...(r.responses||[]),...(r.sends||[]),...(r.emits||[]),...(r.publishes||[])];
       const fns=(r.fns||[]).map(fid=>{const f=fnById(fid);return f?f.fn.name:null;}).filter(Boolean);
@@ -3376,7 +3447,9 @@ public static class HtmlPresenter
   function graphDom(n,besucht){return aggDom(n)||(EINHEIT_ARTEN.has(n.kind)?einheitDom(n):datenDom(n,besucht||new Set()));}
   function domKey(n){let d=DOMKEY.get(n.id);if(d)return d;
     // Akteur-Karte: in der ERSTEN Domäne, in der er wirkt (dort steht sie in seinem Akteur-Rahmen; §12.5) — sonst wie gehabt.
-    if(n.kind==="akteur"){const eig=[...new Set((n.ref.darf||[]).map(nm=>NODEBY.get("rec:"+nm)||[...NODEBY.values()].find(x=>x.kind==="trigger"&&trigName(x.ref)===nm))
+    // Reaktion: der Vertrag steht GESCHLOSSEN beim Akteur (ein Rahmen), die Kanten führen zu den Events hinüber.
+    if(n.kind==="auf"){const x=domKey(NODEBY.get(n.own.id)||n.own);DOMKEY.set(n.id,x);return x;}
+    if(n.kind==="akteur"){const eig=[...new Set([...(n.ref.darf||[]),...(n.ref.vertrag||[]).map(r=>r.eingang)].map(nm=>NODEBY.get("rec:"+nm)||[...NODEBY.values()].find(x=>x.kind==="trigger"&&trigName(x.ref)===nm))
         .filter(Boolean).map(domKey))].sort(domOrd),ds=eig.length?eig:akteurDomaenen(n.ref.name);
       if(ds.length){DOMKEY.set(n.id,ds[0]);return ds[0];}}
     d=graphDom(n)||nsVon(n)||(VIEW.heim||{})[n.id]||OHNE_DOM;DOMKEY.set(n.id,d);return d;}
@@ -3466,7 +3539,8 @@ public static class HtmlPresenter
       fr.append(k);if(r.leer)fr.append(h("div",{class:"gr-leer"},"Leere Domäne — ＋ legt den ersten Baustein an"));
       ebene.append(fr);aus.x2=Math.max(aus.x2,r.x2);aus.y2=Math.max(aus.y2,r.y2);});
     akt.forEach(a=>{ebene.append(akteurRahmen(a));aus.x2=Math.max(aus.x2,a.x2);aus.y2=Math.max(aus.y2,a.y2);});
-    spalten.forEach(c=>{const el=h("div",{class:"gspalte"+(c.role==="insel"?" insel":"")});const r=c.r;
+    spalten.forEach(c=>{if(c.blk===AKTEUR_KEY&&c.role===ROLE_AKTEUR.auf){ebene.append(vertragsRahmen(c));return;}
+      const el=h("div",{class:"gspalte"+(c.role==="insel"?" insel":"")});const r=c.r;
       Object.assign(el.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});
       const ORD=Object.keys(NODELABEL),ix=k=>{const i=ORD.indexOf(k.replace(/^handle:.*/,"handle"));return i<0?99:i;};
       const kinds=[...c.kinds].sort((x,y)=>ix(x)-ix(y)),haupt=kinds[0]||"codenode";
@@ -3480,6 +3554,25 @@ public static class HtmlPresenter
       k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};
       el.append(k);ebene.append(el);});
     return aus;}
+  // 📜 Der VERTRAG eines Akteurs als Rahmen (docs/konzept-akteure.md §9): die Schnittstelle, gegen die der Client programmiert —
+  //   innen je Auf(Event) eine Reaktions-Karte, die Kanten laufen zu den Events (◀) und Commands (▶). Kopf: Name · Ein/Aus ·
+  //   ＋ Reaktion (Events leuchten) · ◎ · ⤢. Klick auf den Namen = Akteur-Panel.
+  function vertragsRahmen(c){const r=c.r,ak=MODEL.akteure.find(x=>x.name===c.akt),v=(ak&&ak.vertrag)||[];
+    const el=h("div",{class:"gspalte vertrag"});
+    Object.assign(el.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});
+    const ein=v.map(x=>x.eingang).filter(Boolean),aus=[...new Set(v.flatMap(x=>x.ausgaenge||[]))];
+    const typ=ak?vertragsTyp(ak):"?";
+    const k=h("div",{class:"gspalte-k",title:"public interface "+typ+" : IAkteurVertrag<"+c.akt+"> — der Client (Python-Worker …) implementiert ihn; "
+        +"generiert: domain_client/generated/vertraege.py ("+c.akt+"Basis)\n◀ hört: "+(ein.join(", ")||"—")+"\n▶ gibt hinein: "+(aus.join(", ")||"—"),
+        onclick:e=>{e.stopPropagation();if(ak)waehle("akt:"+ak._id);}},
+      h("i",{class:"kc-auf"}),h("span",{class:"gs-t"},"📜 Vertrag "+typ),
+      h("span",{class:"gs-z"},"◀ "+ein.length+" · "+aus.length+" ▶"),
+      ak?h("button",{title:"Neue Reaktion: Event wählen (passende Events leuchten)",onclick:e=>{e.stopPropagation();waehle("akt:"+ak._id);
+        setTimeout(()=>{const p=SLOTS["akt:auf:"+ak._id+":open"];if(p)vbStart(p);},0);}},"＋"):null,
+      h("button",{title:"Vertrag markieren (Slice)",onclick:e=>{e.stopPropagation();FOCUS=new Set(c.ids);wendeFokusAn();}},"◎"),
+      h("button",{title:"Vertrag einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"));
+    k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};
+    el.append(k);return el;}
   // Ein Akteur-Rahmen (Domäne × Akteur, §12.5): Kopf = Akteur (Klick → sein Panel) · Domäne · Zahl · „↥ auch“ (Doppelungen,
   //   die in einem früheren Akteur-Rahmen stehen) · ＋ (für diesen Akteur entwerfen) · ◎ · ⤢ · ⋯ (Reihenfolge).
   function akteurRahmen(a){const ohne=a.akt===OHNE_AKT,ak=!ohne&&MODEL.akteure.find(x=>x.name===a.akt),
@@ -3524,7 +3617,7 @@ public static class HtmlPresenter
       {t:"👤 Akteur öffnen",aus:!ak,fn:()=>waehle("akt:"+ak._id)}]);}
   // Spalten-Kopf: Name je Art; ＋ legt eine Art dieser Rolle an (Handles/Store-Fns entstehen am Besitzer, nicht frei).
   const spaltenName=k=>k==="handle:projektion"?"Projektion-Handle":k==="handle:reader"?"Reader-Handle":k==="handle:pipeline"?"Pipeline-Handle":k==="handle:reaktion"?"Reaktion-Handle":NODELABEL[k]||k;
-  const NICHT_FREI=new Set(["fn","handle"]);
+  const NICHT_FREI=new Set(["fn","handle","auf"]);
   function spaltenNeu(c){if(c.role==="insel")return [];if(c.role==="code")return ["codenode","llmnode"];
     const map=rollenVon(c.blk);
     return Object.keys(map).filter(k=>map[k]===c.role&&!k.includes(":")&&!NICHT_FREI.has(k));}
