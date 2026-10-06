@@ -19,7 +19,7 @@ public sealed record Frist(
     DateTimeOffset Fällig,
     Guid ZielAggregatId,
     string Kontext,
-    string? Akteur = null);   // in wessen Auftrag geplant (Kausalkette, docs/konzept-akteure.md §8.4) — feuert in seinem Namen
+    string? Akteur = null);   // in wessen Auftrag geplant (Kausalkette, docs/konzept-akteure.md §5.1) — feuert in seinem Namen
 
 /// <summary>
 /// Durabler Fristplan: Fristen anlegen, die fälligen abfragen (gegen die DB-Uhr) und nach dem Feuern

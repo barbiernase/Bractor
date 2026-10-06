@@ -16,7 +16,7 @@ using Cqrs.Codegen;
 //   1. ProtoRepo/domain.proto                     (für protoc / gRPC)
 //   2. EventJsonSerializerContext.g.cs             (für den STJ-Source-Generator, Marten-Storage)
 //   3. CqrsWireJsonContext.g.cs                    (für den STJ-Source-Generator, Cross-Node-Wire)
-//   4. domain_client/generated/vertraege.py        (Akteur-Verträge → Python-Basisklassen, docs/konzept-akteure.md §9)
+//   4. domain_client/generated/vertraege.py        (Akteur-Verträge → Python-Basisklassen, docs/konzept-akteure.md §3)
 //
 // Früher öffnete dieser Prepass die ganze Solution über MSBuildWorkspace (geschachteltes
 // MSBuild, fragil, plattformabhängig). Jetzt liest er nur die Metadaten der drei gebauten

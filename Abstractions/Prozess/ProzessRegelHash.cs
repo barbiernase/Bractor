@@ -6,7 +6,7 @@ namespace Abstractions;
 
 /// <summary>
 /// Deterministischer STRUKTUR-Hash eines <see cref="ProzessRegeln"/>-Satzes (P5b, Marking-Cursor-Invalidierung,
-/// docs/prozess-marking-cursor-konzept.md §2/§5). Analog zur <see cref="Snapshot{TState}.SchemaVersion"/> der
+/// docs/04-konsum-und-prozess-maschine.md §4.5). Analog zur <see cref="Snapshot{TState}.SchemaVersion"/> der
 /// Aggregat-Snapshots: ändert sich die Struktur der Regeln (Auslöser, Bedingungen, produzierte Commands,
 /// Count-Join-Typ), passt der Hash nicht mehr → ein zuvor gecachtes <see cref="ProzessMarking"/> ist ungültig
 /// und wird verworfen (Voll-Fold ab 0). Die Wahrheit bleibt der Log (Invariante 1); der Hash schützt nur davor,

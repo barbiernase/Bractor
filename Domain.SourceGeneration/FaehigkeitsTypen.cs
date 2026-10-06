@@ -23,7 +23,7 @@ internal static class FaehigkeitsTypen
     /// <summary>
     /// Akteur-Dienst: ein Interface, das <c>Abstractions.IAkteurDienst&lt;TAkteur&gt;</c> trägt (z. B. der Classifier-Dienst
     /// des Klassifizierers). Ein Pipeline-Handle nimmt ihn als Parameter wie eine Fähigkeit — dann entscheidet der Handle IM
-    /// AUFTRAG von TAkteur (docs/konzept-akteure.md §8). Der Dienst selbst ist kein Akteur.
+    /// AUFTRAG von TAkteur (docs/konzept-akteure.md §2). Der Dienst selbst ist kein Akteur.
     /// </summary>
     public static bool IstAkteurDienst(ITypeSymbol typ, Compilation comp) => AkteurVonDienst(typ, comp) != null;
 

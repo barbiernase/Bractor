@@ -46,7 +46,7 @@ var watchPath = builder.Configuration.GetValue<string>("Pipeline:WatchPath")
     ?? "/data/input";
 var preprocessedPath = builder.Configuration.GetValue<string>("Pipeline:PreprocessedPath");
 
-// ─── Marten-Schema-Rolle (Multi-Node-Cold-Start, docs/multi-node-deployment.md) ───
+// ─── Marten-Schema-Rolle (Multi-Node-Cold-Start, docs/06-transport-multinode-betrieb.md) ───
 //   Cluster__Role = migrator | member | standalone (default).
 //   migrator: legt ALLE Schema-Objekte (inkl. lazy Snapshot-Tabellen) eager + lock-gesichert an → exit 0.
 //   member:   AutoCreate.None (kein Runtime-Lazy-Create → kein Cold-Start-Race; Migrator lief vorher).

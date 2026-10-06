@@ -33,7 +33,7 @@ public abstract class AggregateActorBase<TState> : IActor
     private readonly BrokerPublisher? _publisher;
     private readonly ILogger? _logger;
 
-    // ★ Snapshot-Naht (docs/snapshot-konzept.md): abgeleiteter, nicht-autoritativer Cache. Null → aus,
+    // ★ Snapshot-Naht (docs/04-konsum-und-prozess-maschine.md §4.7): abgeleiteter, nicht-autoritativer Cache. Null → aus,
     //   Voll-Replay wie bisher. Der Schema-String invalidiert stale Snapshots; der Schwellwert steuert das
     //   best-effort-Schreiben. Alle drei kommen optional aus DI (unregistriert → Snapshots schlicht inaktiv).
     private readonly ISnapshotStore? _snapshots;
@@ -525,7 +525,7 @@ public abstract class AggregateActorBase<TState> : IActor
         }
     }
 
-    // ─── Snapshot (docs/snapshot-konzept.md §7): capture-in-turn + fire-and-forget ───
+    // ─── Snapshot (docs/04-konsum-und-prozess-maschine.md §4.7): capture-in-turn + fire-and-forget ───
 
     /// <summary>
     /// Schreibt einen Snapshot, wenn seit dem letzten mindestens <c>_snapshotThreshold</c> Events kamen.

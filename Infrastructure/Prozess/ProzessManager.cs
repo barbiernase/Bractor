@@ -34,7 +34,7 @@ public sealed class ProzessManager
     private readonly IProzessOffenIndex? _offenIndex;
     private readonly IDeadLetterSink? _deadLetters;   // ★ #12: KlärungNötig beobachtbar machen (optional, best-effort)
 
-    // ── P5b: der nicht-autoritative Marking-Cursor (docs/prozess-marking-cursor-konzept.md) ──
+    // ── P5b: der nicht-autoritative Marking-Cursor (docs/04-konsum-und-prozess-maschine.md §4.5) ──
     // Aktiv genau dann, wenn ein Store injiziert ist. Der HOT-Cache hält das gefaltete Marking über die
     // Weckungen EINER Manager-Instanz (der Actor lebt je Korrelation) — so faltet der Warm-Pfad nur den Tail,
     // ohne den durablen Store bei jeder Weckung zu treffen. Der Store ist die durable Kopie für den Kaltstart
@@ -85,7 +85,7 @@ public sealed class ProzessManager
         var mz = await LadeStatusAsync(korrelation, ct);
         if (!mz.Gestartet)
         {
-            // Kausalkette (docs/konzept-akteure.md §8.4): der Prozess handelt im Auftrag des Akteurs, dessen Event ihn auslöste —
+            // Kausalkette (docs/konzept-akteure.md §5.1): der Prozess handelt im Auftrag des Akteurs, dessen Event ihn auslöste —
             //   einmal beim Start gelesen und mit ProzessGestartet ins Manager-Log gestempelt (Header), danach aus dem Log gefaltet.
             var auslöser = (await _store.ReadStreamAsync(auslöserStream, auslöserVersion, ct))
                 .FirstOrDefault(e => e.AggregateVersion == auslöserVersion);

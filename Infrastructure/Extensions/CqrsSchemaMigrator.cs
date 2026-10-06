@@ -5,7 +5,7 @@ using Microsoft.Extensions.DependencyInjection;
 namespace Infrastructure.Extensions;
 
 /// <summary>
-/// Dedizierter Marten-Schema-Migrator für Multi-Node-Cold-Start (docs/multi-node-deployment.md).
+/// Dedizierter Marten-Schema-Migrator für Multi-Node-Cold-Start (docs/06-transport-multinode-betrieb.md).
 ///
 /// Legt ALLE konfigurierten Marten-Objekte — Event-Tabellen UND die sonst LAZY erzeugten
 /// Snapshot-Tabellen (<c>es.mt_doc_snapshot_&lt;typ&gt;</c>) — EAGER und advisory-lock-gesichert an.

@@ -67,7 +67,7 @@ class CapabilitiesRequest(betterproto.Message):
     handle_queries: List[str] = betterproto.string_field(4)
     vertrag: str = betterproto.string_field(5)
     """
-    Akteur-Vertrag (docs/konzept-akteure.md §9): "ich bin Vertrag X" — der Server nimmt die Fähigkeiten aus der
+    Akteur-Vertrag (docs/konzept-akteure.md §3): "ich bin Vertrag X" — der Server nimmt die Fähigkeiten aus der
      generierten Tabelle statt aus der Selbstauskunft; der Hash erkennt einen Client, der gegen einen anderen Stand gebaut ist.
     """
 
@@ -226,7 +226,7 @@ class CommandEnvelopeDto(betterproto.Message):
     origin_session_id: str = betterproto.string_field(8)
     causation_stream_id: str = betterproto.string_field(9)
     """
-    Kausalität einer Reaktion von außen (§9.7): auf welches Event (Stream + Version + Typ) und als wievielte Ausgabe
+    Kausalität einer Zusage von außen (Akteur-Konzept §5.3): auf welches Event (Stream + Version + Typ) und als wievielte Ausgabe
      der Reaktion — daraus leitet der Server eine deterministische CommandId ab (doppelt zugestellt ≠ doppelt wirksam).
     """
 

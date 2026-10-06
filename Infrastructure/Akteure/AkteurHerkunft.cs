@@ -3,7 +3,7 @@ using Abstractions;
 namespace Infrastructure.Akteure;
 
 /// <summary>
-/// Von welchem Akteur kommt, was das Framework gerade erzeugt? (<c>docs/konzept-akteure.md</c> §8.2/§8.4) — zur Laufzeit:
+/// Von welchem Akteur kommt, was das Framework gerade erzeugt? (<c>docs/konzept-akteure.md</c> §2.3/§8.4) — zur Laufzeit:
 /// <list type="number">
 /// <item><b>Kette:</b> der Akteur des auslösenden Events (Header <c>akteur</c> im Log → <see cref="EventEnvelope.UserId"/>) —
 ///   der Konsument setzt ihn als <see cref="ImAuftrag"/> um den Handle (<see cref="Aus"/>), der Emit stempelt ihn.</item>

@@ -135,7 +135,7 @@ public static class CqrsServiceExtensions
         
         // Marten (PostgreSQL EventStore)
         //
-        // ★ MULTI-NODE-COLD-START (docs/multi-node-deployment.md): die AutoCreate-Strategie hängt an der
+        // ★ MULTI-NODE-COLD-START (docs/06-transport-multinode-betrieb.md): die AutoCreate-Strategie hängt an der
         //   Node-Rolle (siehe MartenSchemaRole). Member laufen mit AutoCreate.None (kein Runtime-Lazy-
         //   Create → kein CREATE-TABLE-Race), der EINE Migrator legt alles eager + advisory-lock-gesichert
         //   an (der Host ruft dafür CqrsSchemaMigrator.ApplyAllAsync und exitet). Standalone = unverändert.
@@ -206,11 +206,11 @@ public static class CqrsServiceExtensions
             // DB-Uhr-getriebene Scheduler feuert die fälligen und entfernt sie danach.
             options.Schema.For<Frist>().Identity(x => x.Id);
 
-            // ★ Snapshots (docs/snapshot-konzept.md): ein jsonb-Dokument je Aggregat-Typ
+            // ★ Snapshots (docs/03-schreibseite.md): ein jsonb-Dokument je Aggregat-Typ
             //   (Snapshot<Konto> → es.mt_doc_snapshot_konto). Registrierung generiert, reflection-frei.
             Persistence.RegisteredSnapshotTypes.Register(options);
 
-            // ★ P5b: der Prozess-Marking-Cursor (docs/prozess-marking-cursor-konzept.md): ein jsonb-Dokument je
+            // ★ P5b: der Prozess-Marking-Cursor (docs/04-konsum-und-prozess-maschine.md §4.5): ein jsonb-Dokument je
             //   Korrelation, abgeleiteter Cache des gefalteten Markings → Tail-Fold statt Voll-Fold (O(N²)→O(N)).
             options.Schema.For<Persistence.ProzessMarkingDoc>().Identity(x => x.Id);
         });
@@ -219,7 +219,7 @@ public static class CqrsServiceExtensions
         //   `CREATE TABLE mt_doc_snapshot_<typ>`. `ApplyAllDatabaseChangesOnStartup` auf ALLEN Nodes ersetzt das
         //   nur durch Migrations-Lock-Contention (Verlierer crasht). Der saubere Fix ist jetzt verdrahtet: genau
         //   EIN Migrator (SchemaRole.Migrator, Host ruft CqrsSchemaMigrator.ApplyAllAsync → exit 0), die übrigen
-        //   Nodes SchemaRole.Member (AutoCreate.None). Per-Node über `Cluster__Role`. Siehe docs/multi-node-deployment.md.
+        //   Nodes SchemaRole.Member (AutoCreate.None). Per-Node über `Cluster__Role`. Siehe docs/06-transport-multinode-betrieb.md.
 
         services.AddSingleton<IEventStoreRepository>(provider =>
         {
@@ -572,7 +572,7 @@ public class CqrsFrameworkBuilder
     public int RedisDatabase { get; set; } = 1;
 
     /// <summary>
-    /// Snapshot-Schwellwert (docs/snapshot-konzept.md): der Aggregat-Actor schreibt best-effort nach je so
+    /// Snapshot-Schwellwert (docs/03-schreibseite.md): der Aggregat-Actor schreibt best-effort nach je so
     /// vielen Events einen Snapshot. Default 200 — hoch genug, dass kurze Aggregate nie snapshotten. Tests
     /// setzen ihn klein, um den Snapshot-Pfad billig auszulösen. 0 schaltet das Schwellwert-Schreiben ab.
     /// </summary>

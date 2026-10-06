@@ -5,7 +5,7 @@ using System.Threading.Tasks;
 namespace Abstractions;
 
 /// <summary>
-/// Abgeleiteter, NICHT-autoritativer Zustands-Cache eines Aggregats (Snapshot-Konzept, docs/snapshot-konzept.md).
+/// Abgeleiteter, NICHT-autoritativer Zustands-Cache eines Aggregats (Snapshot-Konzept, docs/04-konsum-und-prozess-maschine.md §4.7).
 /// Verkürzt die Rehydration von O(n) auf O(Tail): statt den Stream bei jeder Actor-Aktivierung von 0 zu falten,
 /// seedet der Actor aus dem Snapshot und liest nur den Rest ab <see cref="Version"/>+1.
 ///

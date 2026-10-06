@@ -19,7 +19,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Akteure;
 
 /// <summary>
-/// Die Kausalkette zur Laufzeit (docs/konzept-akteure.md §8.4): der Akteur reist mit dem Event (Header im Log →
+/// Die Kausalkette zur Laufzeit (docs/konzept-akteure.md §5.1): der Akteur reist mit dem Event (Header im Log →
 /// <see cref="EventEnvelope.UserId"/>), der Konsument setzt ihn als „im Auftrag von", der EINE Emit stempelt ihn. Ohne
 /// Kette (Ingress) gilt der eine Akteur mit IDarf; ein Ketten-Command hat keinen IDarf-Halter. Ein Token kann mehrere
 /// Akteure verkörpern. Ohne Cluster: echte Bridge + echter <see cref="CommandEmitter"/> über die Sende-Naht.

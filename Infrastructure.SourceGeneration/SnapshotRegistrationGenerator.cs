@@ -6,7 +6,7 @@ using System.Text;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Generiert die Snapshot-Ablage-Naht (docs/snapshot-konzept.md §8) reflection-frei:
+    /// Generiert die Snapshot-Ablage-Naht (docs/04-konsum-und-prozess-maschine.md §4.7) reflection-frei:
     ///
     /// 1. <c>Infrastructure.Persistence.RegisteredSnapshotTypes.Register(StoreOptions)</c> — registriert je
     ///    IState-Aggregat den Marten-Dokumenttyp <c>Snapshot&lt;TState&gt;</c> mit sauberem Tabellen-Alias

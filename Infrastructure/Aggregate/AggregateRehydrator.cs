@@ -20,7 +20,7 @@ public sealed record RehydrationResult<TState>(
 
 /// <summary>
 /// Rehydriert ein Aggregat in EINEM Tail-Fold — State UND Framework-Inbox aus einem einzigen
-/// Stream-Read (Snapshot-Konzept §6, docs/snapshot-konzept.md). Ersetzt das frühere Doppel-Lesen
+/// Stream-Read (Snapshot-Konzept §6, docs/04-konsum-und-prozess-maschine.md §4.7). Ersetzt das frühere Doppel-Lesen
 /// (LoadStateAsync + ReadStreamAsync(0)) im Actor; mit Snapshot seedet der Fold und liest nur den Rest.
 ///
 /// In einen puren Helfer extrahiert, damit die Falt-Logik in-memory OHNE Proto-Actor beweisbar ist

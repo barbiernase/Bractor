@@ -27,7 +27,7 @@ public sealed class AkteurOptionen
     public string? Standard { get; private set; }
 
     /// <summary>
-    /// Akteur-Vertrag am Handshake (<c>docs/konzept-akteure.md</c> §9.6): ein abweichender Vertrags-Hash (Client gegen einen anderen
+    /// Akteur-Vertrag am Handshake (<c>docs/konzept-akteure.md</c> §5.2): ein abweichender Vertrags-Hash (Client gegen einen anderen
     /// Domänen-Stand gebaut) wird abgelehnt statt nur gewarnt.
     /// </summary>
     public bool VertragStreng { get; private set; }

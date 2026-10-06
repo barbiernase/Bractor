@@ -6,7 +6,7 @@ using System.Threading.Tasks;
 namespace Abstractions;
 
 /// <summary>
-/// Der abgeleitete, NICHT-autoritative Marking-Cache eines Prozesses (P5b, docs/prozess-marking-cursor-konzept.md).
+/// Der abgeleitete, NICHT-autoritative Marking-Cache eines Prozesses (P5b, docs/04-konsum-und-prozess-maschine.md §4.5).
 /// Das prozess-lokale Analogon zum Aggregat-<see cref="Snapshot{TState}"/>: statt bei JEDER Weckung jeden
 /// Ziel-Stream ab 0 zu falten (das O(N²) des <c>ProzessManager</c>-Folds), hält er je Ziel-Stream einen
 /// <see cref="StreamCursor"/> und faltet nur den <b>Tail</b> nach — jedes Ziel-Event wird genau EINMAL gelesen

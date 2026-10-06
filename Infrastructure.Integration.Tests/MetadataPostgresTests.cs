@@ -66,7 +66,7 @@ public class MetadataPostgresTests : IClassFixture<MetadataPostgresTests.Fixture
     [Fact]
     public async Task Der_Akteur_reist_als_Header_mit_dem_Event_einzeln_und_gebuendelt()
     {
-        // Kausalkette (docs/konzept-akteure.md §8.4): der Akteur des Commands steht als Header „akteur" am Event und kommt
+        // Kausalkette (docs/konzept-akteure.md §5.1): der Akteur des Commands steht als Header „akteur" am Event und kommt
         //   über ReadStreamAsync als UserId zurück — Grundlage dafür, dass Pipelines/Prozesse/Fristen in seinem Auftrag handeln.
         var es = new MartenEventStore(_fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance);
         var einzeln = Guid.NewGuid();

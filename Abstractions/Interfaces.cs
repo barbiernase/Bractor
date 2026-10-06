@@ -131,7 +131,7 @@ public interface IAggregateRepository
         /// <param name="causationId">Optional: Verursacher-Id (auslösender Command), wird ins Log gestempelt.</param>
         /// <param name="aggregateType">Optional: Aggregat-Typname, wird als Log-Header gestempelt.</param>
         /// <param name="akteur">Optional: der Akteur des auslösenden Commands (Header <c>akteur</c>) — reist so durch die Kette
-        /// zu Pipelines/Prozessen/Fristen, die daraus Commands erzeugen (docs/konzept-akteure.md §8.4).</param>
+        /// zu Pipelines/Prozessen/Fristen, die daraus Commands erzeugen (docs/konzept-akteure.md §5.1).</param>
         Task AppendEventsAsync(
             Guid aggregateId,
             int expectedVersion,
