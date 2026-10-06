@@ -31,6 +31,11 @@ public sealed class ProzessManager
     // Korrelation → Akteur des Prozesses (aus dem Manager-Log gefaltet, je Weckung aufgefrischt).
     private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, string?> _akteurVon = new();
     private readonly Func<Guid, ICommand, Guid, CancellationToken, Task> _dispatch;
+    // Funktions-Aufruf (Rufe<F>): Auftrag an den Ausführer übergeben — fire-and-forget, OHNE Selbst-Weckung (das Ergebnis
+    //   kann Stunden dauern; der Ausführer weckt den Manager, sobald es im Log liegt). Null = keine Funktionen verdrahtet.
+    private readonly Func<Guid, IAuftrag, Guid, string?, CancellationToken, Task>? _rufe;
+    // Die Uhr für Zeitlimits — live die DB-Uhr (die Event-Zeitstempel sind DB-generiert, also kein Skew).
+    private readonly Func<CancellationToken, Task<DateTimeOffset>>? _jetzt;
     private readonly IProzessOffenIndex? _offenIndex;
     private readonly IDeadLetterSink? _deadLetters;   // ★ #12: KlärungNötig beobachtbar machen (optional, best-effort)
 
@@ -65,11 +70,15 @@ public sealed class ProzessManager
         IProzessOffenIndex? offenIndex = null,
         IDeadLetterSink? deadLetters = null,
         IProzessMarkingStore? markingStore = null,
-        int markingSchreibIntervall = 32)
+        int markingSchreibIntervall = 32,
+        Func<Guid, IAuftrag, Guid, string?, CancellationToken, Task>? rufe = null,
+        Func<CancellationToken, Task<DateTimeOffset>>? jetzt = null)
     {
         _store = store;
         _registry = registry;
         _dispatch = dispatch;
+        _rufe = rufe;
+        _jetzt = jetzt;
         _offenIndex = offenIndex;
         _deadLetters = deadLetters;
         _markingStore = markingStore;
@@ -114,14 +123,25 @@ public sealed class ProzessManager
         var neuAbgelehnt = kandidaten
             .Where(k => k.AbgelehntDa && !mz.Gescheitert.ContainsKey(k.Vorgang))
             .GroupBy(k => k.Vorgang)
-            .Select(g => g.First())
+            .Select(g => (g.Key, g.First().AbgelehntGrund))
             .ToList();
+        // ── Zeitlimit: ein offener Aufruf (kein Ergebnis), dessen Limit seit der Aktivierung abgelaufen ist, scheitert
+        //   wie eine Ablehnung. Die Aktivierung ist das jüngste gematchte Event (DB-Zeit, aus dem Log) — kein eigener
+        //   Timer-Zustand, der §3-Backstop weckt offene Prozesse ohnehin periodisch. Nur wenn ein Limit offen ist, wird
+        //   die Uhr gelesen.
+        if (mz.Gescheitert.Count == 0 && kandidaten.Any(k => !k.ErgebnisDa && k.Regel.Zeitlimit is not null))
+        {
+            var jetzt = _jetzt is null ? DateTimeOffset.UtcNow : await _jetzt(ct);
+            foreach (var k in kandidaten.Where(k => !k.ErgebnisDa && k.Regel.Zeitlimit is not null && k.Bereit != default))
+                if (jetzt >= k.Bereit + k.Regel.Zeitlimit!.Value && !neuAbgelehnt.Any(n => n.Key == k.Vorgang))
+                    neuAbgelehnt.Add((k.Vorgang, $"Zeitlimit ({k.Regel.Zeitlimit.Value}) für {k.Ziel}"));
+        }
         if (neuAbgelehnt.Count > 0)
         {
             var v = mz.Version;
-            foreach (var k in neuAbgelehnt)
+            foreach (var (vorgang, grundA) in neuAbgelehnt)
             {
-                await AppendAsync(korrelation, v, new SchrittGescheitert(k.Vorgang, k.AbgelehntGrund), ct);
+                await AppendAsync(korrelation, v, new SchrittGescheitert(vorgang, grundA), ct);
                 v++;
             }
             // Frisch falten: mz.Gescheitert trägt den Fehlschlag jetzt → Kompensationszweig.
@@ -131,13 +151,23 @@ public sealed class ProzessManager
 
         if (mz.Gescheitert.Count == 0)
         {
-            // ── Vorwärts: die erste noch nicht erledigte Transition feuern (sequenziell, Spec §8) ──
-            var pending = kandidaten.FirstOrDefault(k => !k.ErgebnisDa);
+            var offen = kandidaten.Where(k => !k.ErgebnisDa).ToList();
+
+            // ── Funktionen: ALLE offenen Aufträge beauftragen (parallel). Ein schon laufender oder erledigter Auftrag
+            //   verpufft beim Ausführer (Dedupe über den Vorgang = Ausführungs-Id) — deshalb ist das bei jeder Weckung
+            //   gefahrlos und heilt zugleich einen Auftrag, dessen Ausführer verloren ging.
+            foreach (var k in offen.Where(k => k.Auftrag is not null))
+                await BeauftrageAsync(korrelation, k.Auftrag!, k.Vorgang, ct);
+
+            // ── Commands: die erste noch nicht erledigte Transition feuern (sequenziell, Spec §8, unverändert) ──
+            var pending = offen.FirstOrDefault(k => k.Cmd is not null);
             if (pending != null)
             {
-                await FeuereAsync(korrelation, pending.Cmd, pending.Vorgang, ct);
+                await FeuereAsync(korrelation, pending.Cmd!, pending.Vorgang, ct);
                 return;
             }
+            // Nur noch laufende Funktionen → warten; der Ausführer weckt mit dem Ergebnis (Backstop als Netz).
+            if (offen.Count > 0) return;
             // Keine offene Transition, kein Fehler → Erfolg terminal.
             await AppendAsync(korrelation, mz.Version, new ProzessBeendet(true, ""), ct);
             return;
@@ -220,10 +250,27 @@ public sealed class ProzessManager
         return _dispatch(korrelation, cmd, vorgang, ct);
     }
 
+    // ── Beauftragen: Funktions-Auftrag an den Ausführer (fire-and-forget, ohne Selbst-Weckung) ──
+    // Der Ausführungs-Stream IST der Vorgang: dort schreibt der Ausführer genau ein Ergebnis (OCC auf Version 0) mit
+    // CausationId == Vorgang — der Fold liest es wie das Event eines Aggregats.
+    private Task BeauftrageAsync(Guid korrelation, IAuftrag auftrag, Guid vorgang, CancellationToken ct)
+    {
+        if (_rufe is null)
+            throw new InvalidOperationException(
+                $"Der Prozess ruft eine Funktion ({auftrag.GetType().Name}), aber es ist kein Funktions-Ausführer verdrahtet (AddFunktionen).");
+        if (CursorAktiv)
+        {
+            if (!_dirty.TryGetValue(korrelation, out var set)) { set = new HashSet<Guid>(); _dirty[korrelation] = set; }
+            set.Add(vorgang);
+        }
+        var akteur = _akteurVon.GetValueOrDefault(korrelation);
+        return _rufe(korrelation, auftrag, vorgang, ImAuftrag.IstAkteur(akteur) ? akteur : null, ct);
+    }
+
     // ── Marking falten (Fixpunkt über die Ziel-Streams) ──
 
     /// <summary>Ein Token = ein Event-Payload plus seine Herkunft (Stream/Version), für Vorgang-Ableitung + Join.</summary>
-    private sealed record Token(IEvent Payload, Guid Stream, int Version);
+    private sealed record Token(IEvent Payload, Guid Stream, int Version, DateTimeOffset Zeit);
 
     /// <summary>
     /// Eine mögliche Transition (Regel × gematchte Tokens) samt deterministischem Vorgang und ZWEI getrennten
@@ -240,10 +287,15 @@ public sealed class ProzessManager
     ///     <c>SchrittGescheitert</c>. OHNE diese Achse läse der Vorwärtszweig den Marker nur als
     ///     <paramref name="ErgebnisDa"/> und schriebe fälschlich <c>ProzessBeendet(true)</c> (§4-Kopplung).
     ///     <paramref name="AbgelehntGrund"/> trägt den getippten Ablehnungs-Grund in den Fehlschlag.
+    /// Genau eines von <paramref name="Cmd"/> (Aggregat) / <paramref name="Auftrag"/> (Funktion) ist gesetzt.
+    /// <paramref name="Bereit"/> = Aktivierung (jüngstes gematchtes Event, DB-Zeit) — die Basis des Zeitlimits.
     /// </summary>
     private sealed record Kandidat(
-        Regel Regel, int RegelIndex, IReadOnlyList<Token> Match, ICommand Cmd, Guid Vorgang,
-        bool ErgebnisDa, bool WirkungDa, bool AbgelehntDa, string AbgelehntGrund);
+        Regel Regel, int RegelIndex, IReadOnlyList<Token> Match, ICommand? Cmd, IAuftrag? Auftrag, Guid Vorgang,
+        bool ErgebnisDa, bool WirkungDa, bool AbgelehntDa, string AbgelehntGrund, DateTimeOffset Bereit)
+    {
+        public string Ziel => Cmd?.GetType().Name ?? Auftrag!.GetType().Name;
+    }
 
     /// <summary>
     /// P5b-Einstieg: entscheidet Voll-Fold vs. inkrementellen Cursor-Fold und pflegt den Marking-Cache. Ist der
@@ -308,6 +360,7 @@ public sealed class ProzessManager
                 else if (e.Payload is not IProzessIntern && !vm.Wirkung)
                 {
                     vm.Wirkung = true; vm.TokenStream = s; vm.TokenVersion = e.AggregateVersion; vm.TokenPayload = e.Payload;
+                    vm.TokenZeit = e.CreatedAtUtc;
                 }
                 // sonst (KommandoVerarbeitet-Noop u. a. IProzessIntern): nur „aufgelöst" (Schlüssel-Präsenz).
             }
@@ -318,12 +371,14 @@ public sealed class ProzessManager
         if (marking.AuslöserPayload is null)
         {
             var auslöserEvents = await _store.ReadStreamAsync(mz.AuslöserStream, 0, ct);
-            marking.AuslöserPayload = auslöserEvents.FirstOrDefault(e => e.AggregateVersion == mz.AuslöserVersion)?.Payload;
+            var auslöserEnv = auslöserEvents.FirstOrDefault(e => e.AggregateVersion == mz.AuslöserVersion);
+            marking.AuslöserPayload = auslöserEnv?.Payload;
+            marking.AuslöserZeit = auslöserEnv?.CreatedAtUtc ?? default;
         }
 
         var tokens = new List<Token>();
         if (marking.AuslöserPayload is not null)
-            tokens.Add(new Token(marking.AuslöserPayload, mz.AuslöserStream, mz.AuslöserVersion));
+            tokens.Add(new Token(marking.AuslöserPayload, mz.AuslöserStream, mz.AuslöserVersion, marking.AuslöserZeit));
 
         var kandidaten = new List<Kandidat>();
         bool geändert = true;
@@ -338,39 +393,49 @@ public sealed class ProzessManager
                 var regel = regeln.Regeln[ri];
                 foreach (var match in Belegungen(regel, schnappschuss))
                 {
-                    var cmds = regel.Sende(match.Select(t => (IEvent)t.Payload).ToList());
-                    foreach (var (cmd, ci) in cmds.Select((c, i) => (c, i)))
+                    var payloads = match.Select(t => (IEvent)t.Payload).ToList();
+                    var bereit = match.Any(t => t.Zeit == default) ? default : match.Max(t => t.Zeit);
+                    // Ein Aufruf je Ausgang: Command an ein Aggregat (Sende) ODER Auftrag an eine Funktion (Ruft).
+                    var aufrufe = regel.Sende is not null
+                        ? regel.Sende(payloads).Select(c => ((object)c, c.GetType().Name)).ToList()
+                        : regel.Ruft!(payloads).Select(a => ((object)a, a.GetType().Name)).ToList();
+                    foreach (var ((ausgang, typName), ci) in aufrufe.Select((c, i) => (c, i)))
                     {
+                        var cmd = ausgang as ICommand;
+                        var auftrag = ausgang as IAuftrag;
                         var primär = match[0];
                         // ★ Befund 7/8: RegelIndex (ri) + Instanz-Index (ci) in den Diskriminator → zwei Regeln
                         //   mit gleichem Auslöser/Command/Ziel kollidieren nicht (8); Fan-out an DASSELBE Ziel
                         //   bekommt distinkte Vorgänge (7). Deterministisch (Sende ist rein, Ordnung stabil).
+                        //   Ein Funktions-Auftrag hat kein Ziel-Aggregat: sein Diskriminator ist der Regel-/Instanz-Index.
                         var vorgang = ProzessId.FürTransition(
-                            korrelation, primär.Stream, primär.Version, cmd.GetType().Name,
-                            $"{ri}:{ci}:{cmd.AggregateId:N}");
+                            korrelation, primär.Stream, primär.Version, typName,
+                            cmd is not null ? $"{ri}:{ci}:{cmd.AggregateId:N}" : $"{ri}:{ci}:auftrag");
+                        // Ziel-Stream: das Aggregat des Commands bzw. der Ausführungs-Stream (= Vorgang) der Funktion.
+                        var zielStream = cmd?.AggregateId ?? vorgang;
 
                         // Den Ziel-Stream bis Head einarbeiten (Tail-Read bei aktivem Cursor, ab 0 beim Voll-Fold),
                         // DANN die Achsen aus dem Marking lesen — statt den Stream bei jeder Weckung neu zu scannen.
                         // ★ Feuer-gerichtet (warm): NUR befeuerte (dirty) oder nie-gesehene Streams lesen; für alle
                         //   anderen trägt das gecachte Marking die Wahrheit (ihr Ergebnis kann sich nicht geändert
                         //   haben). nurDirty == null (Kaltstart/Voll-Fold) → jeden Stream lesen (Fallback).
-                        if (nurDirty is null || nurDirty.Contains(cmd.AggregateId) || !marking.StreamCursor.ContainsKey(cmd.AggregateId))
-                            await Integriere(cmd.AggregateId);
+                        if (nurDirty is null || nurDirty.Contains(zielStream) || !marking.StreamCursor.ContainsKey(zielStream))
+                            await Integriere(zielStream);
                         var marke = marking.Vorgänge.GetValueOrDefault(vorgang.ToString());
                         var aufgeloest = marke is not null;                 // irgendein Ziel-Event mit dieser Kausalität
                         var wirkung = marke?.Wirkung ?? false;               // ein Domänen-Event → kompensierbar + Join
                         var abgelehnt = marke?.Abgelehnt ?? false;           // KommandoAbgelehnt-Marke → SchrittGescheitert
                         var abgelehntGrund = marke?.Grund ?? "abgelehnt";
                         kandidaten.Add(new Kandidat(
-                            regel, ri, match, cmd, vorgang,
-                            aufgeloest, wirkung, abgelehnt, abgelehntGrund));
+                            regel, ri, match, cmd, auftrag, vorgang,
+                            aufgeloest, wirkung, abgelehnt, abgelehntGrund, bereit));
 
                         // Nur eine WIRKUNG bringt ein neues Token in den Fold (aktiviert Downstream-Joins). Eine
                         // reine Marke (Noop/Ablehnung) ist inert — sie darf keinen Join scharf schalten.
                         if (wirkung && marke!.TokenPayload is not null &&
                             !tokens.Any(t => t.Stream == marke.TokenStream && t.Version == marke.TokenVersion))
                         {
-                            tokens.Add(new Token(marke.TokenPayload, marke.TokenStream, marke.TokenVersion));
+                            tokens.Add(new Token(marke.TokenPayload, marke.TokenStream, marke.TokenVersion, marke.TokenZeit));
                             geändert = true;
                         }
                     }

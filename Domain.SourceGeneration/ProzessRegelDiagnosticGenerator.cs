@@ -58,7 +58,7 @@ namespace Domain.SourceGeneration
 
         // Die typ-tragenden Emissions-Methoden der Fluent-DSL (alle generisch: <TCmd>).
         private static readonly HashSet<string> EmissionsMethoden =
-            new() { "Sende", "SendeJe", "RückgängigDurch", "RückgängigDurchJe" };
+            new() { "Sende", "SendeJe", "RückgängigDurch", "RückgängigDurchJe", "Rufe" };
 
         public void Initialize(GeneratorInitializationContext context) { }
 

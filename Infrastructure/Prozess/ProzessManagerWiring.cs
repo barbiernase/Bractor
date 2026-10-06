@@ -27,8 +27,10 @@ internal sealed class ProzessManagerKind : IClusterKindContributor
         var offenIndex = provider.GetRequiredService<IProzessOffenIndex>();
         var deadLetters = provider.GetService<IDeadLetterSink>();   // ★ #12: optional, best-effort Ops-Sicht
         var markingStore = provider.GetService<IProzessMarkingStore>();   // ★ P5b: optional, best-effort Cursor
+        var ausfuehrer = provider.GetService<Infrastructure.Funktionen.FunktionsAusfuehrer>();   // Rufe<F>: Katalog-Funktionen
+        var uhr = provider.GetService<IDbClock>();   // Zeitlimit gegen die DB-Uhr (Event-Zeitstempel sind DB-generiert)
         return new ClusterKind(ProzessManagerActor.KindName, Props.FromProducer(() =>
-            new ProzessManagerActor(eventStore, registry, system.Cluster(), offenIndex, deadLetters, markingStore)));
+            new ProzessManagerActor(eventStore, registry, system.Cluster(), offenIndex, deadLetters, markingStore, ausfuehrer, uhr)));
     }
 }
 
@@ -51,6 +53,7 @@ public sealed class ProzessManagerStartupService : IHostedService
     private readonly IReadOnlyDictionary<string, ProzessRegeln> _registry;
     private readonly IPollCursorStore _pollCursors;
     private readonly IProzessOffenIndex _offenIndex;
+    private readonly IEnumerable<Infrastructure.Funktionen.FunktionsBindung> _bindungen;
     private readonly ILogger<ProzessManagerStartupService>? _logger;
 
     private PID? _routerPid;
@@ -64,8 +67,10 @@ public sealed class ProzessManagerStartupService : IHostedService
         IReadOnlyDictionary<string, ProzessRegeln> registry,
         IPollCursorStore pollCursors,
         IProzessOffenIndex offenIndex,
+        IEnumerable<Infrastructure.Funktionen.FunktionsBindung> bindungen,
         ILogger<ProzessManagerStartupService>? logger = null)
     {
+        _bindungen = bindungen;
         _system = system;
         _store = store;
         _registry = registry;
@@ -100,8 +105,10 @@ public sealed class ProzessManagerStartupService : IHostedService
         //   PRÄZISEN Command→Event-Map (GeneratedCommandRouting.CommandToEvents, aus den Decide-OneOf-Rückgaben),
         //   nicht mehr aus der aggregat-groben Map, die Falsch-Zyklen erzeugte. Ein tatsächlich zyklischer
         //   Regelsatz (Command → Event → Command → …) bricht damit am Start statt zur Laufzeit endlos zu feuern.
-        Abstractions.ProzessAzyklizität.PrüfeAlle(
-            _registry, Infrastructure.Mapping.GeneratedCommandRouting.Produziert);
+        //   Eine gerufene Funktion ist darin ein Knoten wie ein Command (Bedingung → Funktion → ihre Ergebnis-Events).
+        Abstractions.ProzessAzyklizität.PrüfeAlle(_registry, Infrastructure.Funktionen.FunktionsExtensions.Produziert);
+        // Jede gerufene Funktion muss gebunden sein (fail-fast statt eines still unbeantworteten Auftrags).
+        Infrastructure.Funktionen.FunktionsExtensions.PrüfeBindungen(_registry, _bindungen);
 
         // Auslöser-Typ → Prozess-Name (der Start bindet den Typ); Union aller teilnehmenden Event-Typen.
         var auslöserZuProzess = new Dictionary<Type, string>();
@@ -240,6 +247,8 @@ public static class GeneratedProzesse
     {
         services.AddSingleton<IReadOnlyDictionary<string, ProzessRegeln>>(Domain.Prozess.GeneratedProzessRegeln.Alle);
         services.AddSingleton<IClusterKindContributor, ProzessManagerKind>();
+        // Der Ausführer der Katalog-Funktionen (Rufe<F>); die Funktionen selbst bindet der Host mit AddFunktion<F, Impl>().
+        services.AddSingleton(Infrastructure.Funktionen.FunktionsExtensions.BaueAusfuehrer);
         services.AddHostedService<ProzessManagerStartupService>();
         return services;
     }

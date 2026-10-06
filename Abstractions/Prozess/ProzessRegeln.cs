@@ -18,19 +18,51 @@ public sealed class Regel
 {
     public Regel(
         IReadOnlyList<Type> bedingung,
-        Func<IReadOnlyList<IEvent>, IReadOnlyList<ICommand>> sende,
+        Func<IReadOnlyList<IEvent>, IReadOnlyList<ICommand>>? sende,
         Func<IReadOnlyList<IEvent>, IReadOnlyList<ICommand>>? rückgängigDurch,
         SammelBedingung? sammel = null,
-        IReadOnlyList<Type>? produziertCommands = null)
+        IReadOnlyList<Type>? produziertCommands = null,
+        Func<IReadOnlyList<IEvent>, IReadOnlyList<IAuftrag>>? ruft = null,
+        IReadOnlyList<Type>? gerufeneFunktionen = null,
+        TimeSpan? zeitlimit = null)
     {
         if (bedingung is null || bedingung.Count == 0)
             throw new ArgumentException("Eine Regel braucht mindestens einen Bedingungs-Event-Typ.", nameof(bedingung));
+        if ((sende is null) == (ruft is null))
+            throw new ArgumentException("Eine Regel ruft GENAU EIN Ziel: entweder Sende (Command an ein Aggregat) oder Rufe (Katalog-Funktion).");
+        if (zeitlimit is { } z && z <= TimeSpan.Zero)
+            throw new ArgumentOutOfRangeException(nameof(zeitlimit), "Ein Zeitlimit muss positiv sein.");
         Bedingung = bedingung;
-        Sende = sende ?? throw new ArgumentNullException(nameof(sende));
+        Sende = sende;
+        Ruft = ruft;
         RückgängigDurch = rückgängigDurch;
         Sammel = sammel;
         ProduziertCommands = produziertCommands ?? Array.Empty<Type>();
+        GerufeneFunktionen = gerufeneFunktionen ?? Array.Empty<Type>();
+        Zeitlimit = zeitlimit;
     }
+
+    /// <summary>
+    /// Die Katalog-Funktionen, die <see cref="Ruft"/> aufruft (Typ-Argument von <c>Rufe&lt;TFunktion&gt;</c>, ohne Laufzeit-Invoke
+    /// erfasst). Für den Azyklizitäts-Check ist eine Funktion ein Knoten wie ein Command: Bedingungs-Event → Funktion →
+    /// ihre Ergebnis-Events (aus der Signatur, generiert).
+    /// </summary>
+    public IReadOnlyList<Type> GerufeneFunktionen { get; }
+
+    /// <summary>
+    /// Baut aus den gematchten Events die Aufträge an Katalog-Funktionen (statt Commands an Aggregate). Genau eines von
+    /// <see cref="Sende"/>/<see cref="Ruft"/> ist gesetzt — beide sind ein „Aufruf" mit OneOf-Ergebnis, nur das Ziel
+    /// unterscheidet sich (zustandsbehaftet vs. zustandslos).
+    /// </summary>
+    public Func<IReadOnlyList<IEvent>, IReadOnlyList<IAuftrag>>? Ruft { get; }
+
+    /// <summary>
+    /// Optionales Zeitlimit des Aufrufs (Command oder Funktion), gemessen ab dem Zeitpunkt, an dem die Transition
+    /// aktiviert wurde (das jüngste gematchte Event, DB-Zeit). Liegt bis dahin kein Ergebnis vor, gilt der Schritt als
+    /// gescheitert (Grund „Zeitlimit") → Kompensation bzw. <c>ProzessBeendet(false)</c>. Ein später eintreffendes
+    /// Ergebnis ändert daran nichts.
+    /// </summary>
+    public TimeSpan? Zeitlimit { get; }
 
     /// <summary>
     /// Die Command-Typen, die <see cref="Sende"/> feuert (beim Bauen über die generische Signatur erfasst,
@@ -50,8 +82,11 @@ public sealed class Regel
     /// </summary>
     public SammelBedingung? Sammel { get; }
 
-    /// <summary>Baut aus den gematchten Event-Payloads (in <see cref="Bedingung"/>-Reihenfolge) die zu feuernden Commands.</summary>
-    public Func<IReadOnlyList<IEvent>, IReadOnlyList<ICommand>> Sende { get; }
+    /// <summary>
+    /// Baut aus den gematchten Event-Payloads (in <see cref="Bedingung"/>-Reihenfolge) die zu feuernden Commands.
+    /// <c>null</c> genau dann, wenn die Regel eine Funktion ruft (<see cref="Ruft"/>).
+    /// </summary>
+    public Func<IReadOnlyList<IEvent>, IReadOnlyList<ICommand>>? Sende { get; }
 
     /// <summary>
     /// Optionaler Gegenzug (Kompensation) — bekommt dieselben gematchten Events wie die Vorwärts-Regel und

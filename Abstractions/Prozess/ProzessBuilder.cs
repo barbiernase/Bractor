@@ -53,10 +53,13 @@ internal readonly struct RegelHandle
     public RegelHandle(List<Regel> regeln, int index) { _regeln = regeln; _index = index; }
 
     public void SetzeRückgängig(Func<IReadOnlyList<IEvent>, IReadOnlyList<ICommand>> rückgängig)
-    {
-        var alt = _regeln[_index];
-        _regeln[_index] = new Regel(alt.Bedingung, alt.Sende, rückgängig, alt.Sammel, alt.ProduziertCommands);
-    }
+        => _regeln[_index] = Kopie(_regeln[_index], rückgängig, _regeln[_index].Zeitlimit);
+
+    public void SetzeZeitlimit(TimeSpan dauer)
+        => _regeln[_index] = Kopie(_regeln[_index], _regeln[_index].RückgängigDurch, dauer);
+
+    private static Regel Kopie(Regel alt, Func<IReadOnlyList<IEvent>, IReadOnlyList<ICommand>>? rückgängig, TimeSpan? zeitlimit)
+        => new(alt.Bedingung, alt.Sende, rückgängig, alt.Sammel, alt.ProduziertCommands, alt.Ruft, alt.GerufeneFunktionen, zeitlimit);
 }
 
 // ── Arität 1: Auf<E1> ──
@@ -88,6 +91,15 @@ public sealed class RegelBauer<TE1> where TE1 : IEvent
     public RegelAbschluss<TE1> SendeJe<TCmd>(Func<TE1, IEnumerable<TCmd>> baue) where TCmd : ICommand
         => Abschluss(new[] { typeof(TCmd) }, evts => baue((TE1)evts[0]).Cast<ICommand>().ToArray());
 
+    /// <summary>
+    /// Ruft die Katalog-Funktion <typeparamref name="TFunktion"/> — der Aufruf-Knoten im Graph. Die Lambda baut ihren EINEN
+    /// Auftrag aus dem Match (typgeprüft: nur ein <c>IAuftrag&lt;TFunktion&gt;</c> passt). Das Ergebnis (ein OneOf-Fall der
+    /// Funktion) landet als Event im Log und ist mit <c>Auf&lt;Ergebnis&gt;()</c> weiter verwendbar — genau wie ein Aggregat-Event.
+    /// </summary>
+    public RegelAbschluss<TE1> Rufe<TFunktion>(Func<TE1, IAuftrag<TFunktion>> baue) where TFunktion : IFunktion
+        => new(_bauer.Registriere(new Regel(_bedingung, null, null,
+            ruft: evts => new IAuftrag[] { baue((TE1)evts[0]) }, gerufeneFunktionen: new[] { typeof(TFunktion) })));
+
     private RegelAbschluss<TE1> Abschluss(Type[] cmdTypen, Func<IReadOnlyList<IEvent>, IReadOnlyList<ICommand>> sende)
         => new(_bauer.Registriere(new Regel(_bedingung, sende, null, produziertCommands: cmdTypen)));
 }
@@ -97,6 +109,12 @@ public readonly struct RegelAbschluss<TE1> where TE1 : IEvent
 {
     private readonly RegelHandle _handle;
     internal RegelAbschluss(RegelHandle handle) { _handle = handle; }
+
+    /// <summary>
+    /// Zeitlimit des Aufrufs, ab Aktivierung der Transition (DB-Zeit). Kein Ergebnis bis dahin → der Schritt gilt als
+    /// gescheitert („Zeitlimit") → Kompensation bzw. Fehlschlag-Terminal. Gleich für Command und Funktion.
+    /// </summary>
+    public RegelAbschluss<TE1> Zeitlimit(TimeSpan dauer) { _handle.SetzeZeitlimit(dauer); return this; }
 
     public void RückgängigDurch<TCmd>(Func<TE1, TCmd> baue) where TCmd : ICommand
         => _handle.SetzeRückgängig(evts => new ICommand[] { baue((TE1)evts[0]) });
@@ -181,6 +199,11 @@ public sealed class RegelBauer<TE1, TE2>
     public RegelAbschluss<TE1, TE2> SendeJe<TCmd>(Func<TE1, TE2, IEnumerable<TCmd>> baue) where TCmd : ICommand
         => Abschluss(new[] { typeof(TCmd) }, evts => baue((TE1)evts[0], (TE2)evts[1]).Cast<ICommand>().ToArray());
 
+    /// <summary>Ruft die Katalog-Funktion <typeparamref name="TFunktion"/>, sobald beide Bedingungen da sind (Join).</summary>
+    public RegelAbschluss<TE1, TE2> Rufe<TFunktion>(Func<TE1, TE2, IAuftrag<TFunktion>> baue) where TFunktion : IFunktion
+        => new(_bauer.Registriere(new Regel(_bedingung, null, null,
+            ruft: evts => new IAuftrag[] { baue((TE1)evts[0], (TE2)evts[1]) }, gerufeneFunktionen: new[] { typeof(TFunktion) })));
+
     private RegelAbschluss<TE1, TE2> Abschluss(Type[] cmdTypen, Func<IReadOnlyList<IEvent>, IReadOnlyList<ICommand>> sende)
         => new(_bauer.Registriere(new Regel(_bedingung, sende, null, produziertCommands: cmdTypen)));
 }
@@ -191,6 +214,12 @@ public readonly struct RegelAbschluss<TE1, TE2>
 {
     private readonly RegelHandle _handle;
     internal RegelAbschluss(RegelHandle handle) { _handle = handle; }
+
+    /// <summary>
+    /// Zeitlimit des Aufrufs, ab Aktivierung der Transition (DB-Zeit). Kein Ergebnis bis dahin → der Schritt gilt als
+    /// gescheitert („Zeitlimit") → Kompensation bzw. Fehlschlag-Terminal. Gleich für Command und Funktion.
+    /// </summary>
+    public RegelAbschluss<TE1, TE2> Zeitlimit(TimeSpan dauer) { _handle.SetzeZeitlimit(dauer); return this; }
 
     public void RückgängigDurch<TCmd>(Func<TE1, TE2, TCmd> baue) where TCmd : ICommand
         => _handle.SetzeRückgängig(evts => new ICommand[] { baue((TE1)evts[0], (TE2)evts[1]) });
@@ -214,6 +243,11 @@ public sealed class RegelBauer<TE1, TE2, TE3>
     public RegelAbschluss<TE1, TE2, TE3> SendeJe<TCmd>(Func<TE1, TE2, TE3, IEnumerable<TCmd>> baue) where TCmd : ICommand
         => Abschluss(new[] { typeof(TCmd) }, evts => baue((TE1)evts[0], (TE2)evts[1], (TE3)evts[2]).Cast<ICommand>().ToArray());
 
+    /// <summary>Ruft die Katalog-Funktion <typeparamref name="TFunktion"/>, sobald alle drei Bedingungen da sind (Join).</summary>
+    public RegelAbschluss<TE1, TE2, TE3> Rufe<TFunktion>(Func<TE1, TE2, TE3, IAuftrag<TFunktion>> baue) where TFunktion : IFunktion
+        => new(_bauer.Registriere(new Regel(_bedingung, null, null,
+            ruft: evts => new IAuftrag[] { baue((TE1)evts[0], (TE2)evts[1], (TE3)evts[2]) }, gerufeneFunktionen: new[] { typeof(TFunktion) })));
+
     private RegelAbschluss<TE1, TE2, TE3> Abschluss(Type[] cmdTypen, Func<IReadOnlyList<IEvent>, IReadOnlyList<ICommand>> sende)
         => new(_bauer.Registriere(new Regel(_bedingung, sende, null, produziertCommands: cmdTypen)));
 }
@@ -225,6 +259,12 @@ public readonly struct RegelAbschluss<TE1, TE2, TE3>
 {
     private readonly RegelHandle _handle;
     internal RegelAbschluss(RegelHandle handle) { _handle = handle; }
+
+    /// <summary>
+    /// Zeitlimit des Aufrufs, ab Aktivierung der Transition (DB-Zeit). Kein Ergebnis bis dahin → der Schritt gilt als
+    /// gescheitert („Zeitlimit") → Kompensation bzw. Fehlschlag-Terminal. Gleich für Command und Funktion.
+    /// </summary>
+    public RegelAbschluss<TE1, TE2, TE3> Zeitlimit(TimeSpan dauer) { _handle.SetzeZeitlimit(dauer); return this; }
 
     public void RückgängigDurch<TCmd>(Func<TE1, TE2, TE3, TCmd> baue) where TCmd : ICommand
         => _handle.SetzeRückgängig(evts => new ICommand[] { baue((TE1)evts[0], (TE2)evts[1], (TE3)evts[2]) });

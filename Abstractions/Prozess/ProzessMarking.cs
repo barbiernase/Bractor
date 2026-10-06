@@ -68,6 +68,12 @@ public sealed class MarkingKompakt
     /// <summary>Der Payload des Wurzel-(Auslöse-)Events, einmalig gelesen und zwischengehalten (Token-Wurzel des Folds).</summary>
     public IEvent? AuslöserPayload { get; set; }
 
+    /// <summary>
+    /// Zeitpunkt (DB-Zeit) des Auslöse-Events. Mit <see cref="VorgangMarke.TokenZeit"/> die Grundlage des Zeitlimits:
+    /// eine Transition gilt ab dem jüngsten ihrer gematchten Events als aktiviert.
+    /// </summary>
+    public DateTimeOffset AuslöserZeit { get; set; }
+
     /// <summary>Eine tiefe Kopie (der Voll-Fold darf den Cache nicht mutieren; der inkrementelle baut auf einer Kopie auf).</summary>
     public MarkingKompakt Kopie()
     {
@@ -76,6 +82,7 @@ public sealed class MarkingKompakt
             StreamCursor = new Dictionary<Guid, int>(StreamCursor),
             Vorgänge = new Dictionary<string, VorgangMarke>(Vorgänge.Count),
             AuslöserPayload = AuslöserPayload,
+            AuslöserZeit = AuslöserZeit,
         };
         foreach (var (id, m) in Vorgänge) k.Vorgänge[id] = m.Kopie();
         return k;
@@ -110,6 +117,9 @@ public sealed class VorgangMarke
     /// <summary>Der Payload des von der Wirkung erzeugten Downstream-Tokens (nur bei <see cref="Wirkung"/> gesetzt).</summary>
     public IEvent? TokenPayload { get; set; }
 
+    /// <summary>Zeitpunkt (DB-Zeit) des Downstream-Tokens — für das Zeitlimit nachfolgender Transitionen.</summary>
+    public DateTimeOffset TokenZeit { get; set; }
+
     public VorgangMarke Kopie() => new()
     {
         Wirkung = Wirkung,
@@ -118,6 +128,7 @@ public sealed class VorgangMarke
         TokenStream = TokenStream,
         TokenVersion = TokenVersion,
         TokenPayload = TokenPayload,
+        TokenZeit = TokenZeit,
     };
 }
 

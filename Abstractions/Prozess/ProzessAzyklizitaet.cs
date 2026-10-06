@@ -26,7 +26,9 @@ public static class ProzessAzyklizität
         foreach (var regel in regeln.Regeln)
         {
             var bedingung = regel.Bedingung.Select(Name).ToList();
-            foreach (var cmd in regel.ProduziertCommands)
+            // Eine gerufene Funktion ist ein Knoten wie ein Command: Bedingung → Funktion → ihre Ergebnis-Events
+            // (der Aufrufer liefert beides über <paramref name="produziert"/>: Decide-OneOf bzw. Funktions-Signatur).
+            foreach (var cmd in regel.ProduziertCommands.Concat(regel.GerufeneFunktionen))
             {
                 tupel.Add((bedingung, Name(cmd)));
                 if (!produziertMap.ContainsKey(Name(cmd)))

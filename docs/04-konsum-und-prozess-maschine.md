@@ -172,6 +172,14 @@ mit Aggregat-Historie **5,5×**.
 - **§3-Backstop** (15 s): scannt den durablen `IProzessOffenIndex` und weckt jeden offenen
   Prozess bounded — das Netz für verlorene Selbst-Weckungen.
 
+**Funktionen als Ziel (`Rufe<F>`, 2026-10-07).** Eine Regel ruft entweder ein Aggregat (`Sende<Cmd>`) oder eine Katalog-Funktion
+(`Rufe<F>`, `IFunktion` + `IAuftrag<F>`). Beides ist ein Aufruf mit OneOf-Ergebnis; für den Fold ist eine Funktion ein Ziel-Stream
+wie jeder andere (Ausführungs-Stream = Vorgang). Unterschiede, bewusst klein: Funktions-Aufträge werden **alle** offenen auf einmal
+übergeben (parallel; Commands bleiben sequenziell, Spec §8) und ohne Selbst-Weckung — der `FunktionsAusfuehrer` weckt mit dem
+Ergebnis. Dazu das **Zeitlimit** je Regel (`.Zeitlimit(…)`, Command oder Funktion): ein offener Aufruf, dessen Limit seit seiner
+Aktivierung abgelaufen ist (Event-Zeitstempel aus dem Log gegen `IDbClock`), wird `SchrittGescheitert` — damit ist auch die alte
+Lücke „Frist nicht im Prozess" für den Timeout-Fall geschlossen. Details und Beispiel: [10 §10.5a](10-entwickler-api.md).
+
 ## 4.6 Pipeline (P6.1 / P6.2)
 
 `PipelineActorBase<THandler>` ist das serverseitige Gegenstück zum gRPC-Client: empfängt

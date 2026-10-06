@@ -34,6 +34,14 @@ public static class ProzessRegelHash
             foreach (var t in r.ProduziertCommands) sb.Append(t.FullName).Append(',');
             sb.Append(";sammel=").Append(r.Sammel?.Typ.FullName ?? "-");
             sb.Append(";rückgängig=").Append(r.RückgängigDurch is null ? "0" : "1");
+            // Funktions-Aufruf und Zeitlimit nur, wenn gesetzt — so bleibt der Hash bestehender Regelsätze unverändert
+            // (kein unnötiger Voll-Fold nach dem Update), und jede neue Struktur bekommt trotzdem einen eigenen Schlüssel.
+            if (r.GerufeneFunktionen.Count > 0)
+            {
+                sb.Append(";ruft=");
+                foreach (var t in r.GerufeneFunktionen) sb.Append(t.FullName).Append(',');
+            }
+            if (r.Zeitlimit is { } z) sb.Append(";zeitlimit=").Append(z.Ticks);
             sb.Append('\n');
         }
 

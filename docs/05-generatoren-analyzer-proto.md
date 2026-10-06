@@ -100,6 +100,8 @@ Alle `Error` (der Build bricht), sofern nicht anders vermerkt.
 | **CQRS044** | Merge (N:1) verboten | keine mehreren Kanten auf dasselbe Ziel |
 | **CQRS045** | Split-Sekundärziel mit eigener Kette | in Stufe 2 nur das erste Ziel setzt die Kette fort |
 | **CQRS046** | Split (1:N) nicht produktionsreif | **jeder** 1:N-Upcaster bricht bewusst den Build, bis die Consumer-Fabric steht |
+| **CQRS068** | Funktion außer Form (`FunktionsGenerator`) | `IFunktion`: genau eine Methode `Task<OneOf<Events>> RufeAsync(TAuftrag, IAusfuehrung)`, `TAuftrag : IAuftrag<F>`, Ergebnisse persistente Events |
+| **CQRS069** | Auftrag für mehrere Funktionen (`FunktionsGenerator`) | Ein Auftrag ist Eingang genau einer Funktion (sonst wäre der generierte Dispatch mehrdeutig) |
 
 Einziger echter `DiagnosticAnalyzer` ist `CommandEmitAnalyzer` (syntaktischer Vorfilter
 `RequestAsync<T>` + semantische Bestätigung `T == CommandResult`). Alle anderen Diagnostics

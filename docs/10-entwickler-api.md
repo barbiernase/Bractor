@@ -123,6 +123,40 @@ Decider), CQRS003 (explizites `T`), CQRS012 (eindeutiger Name), Azyklizitäts-Bo
 Host ruft einmalig `AddGeneratedProzesse()`. Beispiele: `Domain/Ueberweisung/`,
 `Domain/Reiseauftrag/` (Diamant + Kompensation), `Domain/Sammelueberweisung/` (Fan-out).
 
+## 10.5a Eine Katalog-Funktion rufen (`Rufe<F>`)
+
+Eine **Katalog-Funktion** ist eine Schnittstelle mit genau einer Methode: ein Auftrag hinein, OneOf-Ergebnis-Events heraus.
+Ein Prozess ruft sie mit `Rufe<F>` so, wie er ein Aggregat mit `Sende<Cmd>` ruft. Ob sie 50 ms oder Stunden braucht, ist nur
+ein Zeitlimit, keine eigene Architektur.
+```csharp
+public sealed record SchaetzeSchaden(Guid LeserId, decimal Neuwert) : IAuftrag<ISchadensSchaetzung>;   // der EINE Eingang
+public record SchadenGeschaetzt(decimal Betrag) : IEvent;                                               // Ergebnisse = persistente Events
+public record NichtSchaetzbar(string Grund) : IEvent;
+
+public interface ISchadensSchaetzung : IFunktion
+{
+    Task<OneOf<SchadenGeschaetzt, NichtSchaetzbar>> RufeAsync(SchaetzeSchaden auftrag, IAusfuehrung x);
+}
+
+// im Prozess: der Aufruf-Knoten — die Funktion steht ausdrücklich im Typ-Argument (CQRS003)
+p.Auf<SchadenGemeldet>().Rufe<ISchadensSchaetzung>(s => new SchaetzeSchaden(s.LeserId, 25m)).Zeitlimit(TimeSpan.FromMinutes(5));
+p.Auf<SchadenGeschaetzt>().Sende<EroeffneMahnung>(g => new EroeffneMahnung(Guid.NewGuid(), g.Betrag));
+```
+Im Host bindet man die Implementierung (Laufort ist Bindung, nicht Teil der Funktion):
+`services.AddFunktion<ISchadensSchaetzung, Schaetzer>(slots: 2, wiederholungen: 1);`
+
+Was passiert: Der Prozess-Manager übergibt **alle** offenen Aufträge (parallel, auch bei jeder weiteren Weckung — der Ausführer
+dedupliziert über die Ausführungs-Id = Vorgang) an den `FunktionsAusfuehrer`. Der rechnet im Slot und schreibt **genau ein**
+Ergebnis in den Ausführungs-Stream (Stream-Id = Vorgang, `CausationId` = Vorgang): den OneOf-Fall als Event, bei einer Ausnahme
+nach den Wiederholungen die `KommandoAbgelehnt`-Marke. Der Fold liest es wie das Event eines Aggregats — ein Ergebnis aktiviert
+`Auf<Ergebnis>`, eine Marke wird `SchrittGescheitert` → Kompensation. **Zeitlimit** (für Command UND Funktion): ab dem jüngsten
+gematchten Event (DB-Zeit); läuft es ab, scheitert der Schritt („Zeitlimit"), der §3-Backstop weckt ohnehin periodisch.
+
+Regeln: CQRS068 (feste Form), CQRS069 (ein Auftrag je Funktion), CQRS003 (`Rufe` mit explizitem Typ), Boot-Guard
+„jede gerufene Funktion ist gebunden", Azyklizitäts-Guard (Funktion → Ergebnisse aus der Signatur). Kein `Zeitlimit` hinter
+`UndAlle`, kein `Rufe` mit Fan-out (Validator). Ergebnis-Events sind normale Domänen-Typen: Proto regenerieren wie bei jedem
+neuen Event. Beispiel: Sonde `GraphExtractor/Sonde/Gebuehren.cs.txt`; Laufzeit-Beweis `Infrastructure.Pruefstand.Tests/Funktionen/`.
+
 ## 10.6 Eine Pipeline
 
 `partial class X : IPipelineHandler` mit `PipelineId` + `Handle(TTrigger, PipelineContext)` /

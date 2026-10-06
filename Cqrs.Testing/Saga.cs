@@ -326,7 +326,10 @@ public sealed class SagaLaufwerk
                 var matched = TryMatch(regeln.Regeln[ri], regeln, inst.Arrived);
                 if (matched is null) continue;
                 inst.Fired.Add(ri);
-                foreach (var cmd in regeln.Regeln[ri].Sende(matched))
+                // Funktionsaufrufe (Rufe<F>) kennt diese Saga-DSL noch nicht — laut statt still übergangen.
+                var sende = regeln.Regeln[ri].Sende ?? throw new NotSupportedException(
+                    $"Prozess '{name}', Regel {ri}: Funktionsaufrufe (Rufe<…>) unterstützt die Saga-DSL noch nicht.");
+                foreach (var cmd in sende(matched))
                     next.Add((cmd, name, ri));
             }
         }
