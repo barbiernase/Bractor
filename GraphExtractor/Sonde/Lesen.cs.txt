@@ -165,3 +165,14 @@ public sealed record Theke : IAkteur, IDarf<LeiheAus>, IDarf<GibZurueck>, IDarf<
 // steht in der Signatur, nicht im Konstruktor.
 public sealed record Gutachterin : IKi, IDarf<EroeffneMahnung>;
 public interface IGebuehrenOrakel : IAkteurDienst<Gutachterin> { decimal Schaetze(Guid ziel); }
+
+// Ein Akteur, der DRAUSSEN reagiert (Vertrag, docs/konzept-akteure.md §9): frei benannt — weder der Akteur noch sein Vertrag
+// verraten über den Namen, was zusammengehört (IAkteurVertrag<A> ist der einzige Anker). Ein Akteur ohne IDarf: was er als
+// Reaktion hineingibt, steht in der Signatur — einzeln (konkreter Typ), als Strom, und eine Reaktion nur zur Kenntnis.
+public sealed record Archiv : IMaschine;
+public interface IRegal : IAkteurVertrag<Archiv>
+{
+    MeldeSchaden Auf(Zurueckgegeben e);
+    IAsyncEnumerable<OneOf<EroeffneMahnung, MeldeSchaden>> Auf(SchadenGemeldet e);
+    void Auf(Ausgeliehen e);
+}

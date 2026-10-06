@@ -94,3 +94,8 @@ akteur Leihwesen.Lesen.Theke | darf LeiheAus, GibZurueck, OffeneAusleihen
 akteur Leihwesen.Gebuehren.Mahnstelle | darf EroeffneMahnung, Vormerkungen
 # ── Eine KI als Akteur mit ihrem Dienst (IAkteurDienst<A>, selbst kein Akteur) — der Mahnrunden-Handle entscheidet in ihrem Auftrag ──
 akteur Leihwesen.Lesen.Gutachterin Ki dienste IGebuehrenOrakel | darf EroeffneMahnung
+# ── Akteur-Verträge (§9): IAkteurVertrag<A> ist der Anker, je Auf(E) Eingang → Ausgänge aus dem RÜCKGABETYP (einzeln, Strom, void);
+#    einer im Code (frei benannt: Archiv/IRegal), einer im Editor gezeichnet (Mahnstelle → I + Name, vom Scaffolder geschrieben) ──
+akteur Leihwesen.Lesen.Archiv Maschine | darf 
+vertrag Leihwesen.Lesen.IRegal akteur=Archiv | Zurueckgegeben -> MeldeSchaden; SchadenGemeldet -> strom EroeffneMahnung, MeldeSchaden; Ausgeliehen -> 
+vertrag Leihwesen.Gebuehren.IMahnstelle akteur=Mahnstelle | MahnungEroeffnet -> ; SchadenGemeldet -> EroeffneMahnung

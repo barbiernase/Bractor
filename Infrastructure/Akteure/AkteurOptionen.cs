@@ -26,6 +26,19 @@ public sealed class AkteurOptionen
     /// <summary>Akteur für Verbindungen ohne/mit unbekanntem Token; <c>null</c> = solche Verbindungen werden abgewiesen.</summary>
     public string? Standard { get; private set; }
 
+    /// <summary>
+    /// Akteur-Vertrag am Handshake (<c>docs/konzept-akteure.md</c> §9.6): ein abweichender Vertrags-Hash (Client gegen einen anderen
+    /// Domänen-Stand gebaut) wird abgelehnt statt nur gewarnt.
+    /// </summary>
+    public bool VertragStreng { get; private set; }
+
+    /// <summary>Abweichender Vertrags-Hash = Ablehnung (statt Warnung).</summary>
+    public AkteurOptionen VertragsHashStreng(bool streng = true)
+    {
+        VertragStreng = streng;
+        return this;
+    }
+
     /// <summary>Typisiert: wer <paramref name="token"/> vorzeigt, ist <typeparamref name="TAkteur"/>.</summary>
     public AkteurOptionen Token<TAkteur>(string token) where TAkteur : IAkteur
         => Token(token, typeof(TAkteur).Name);
@@ -85,7 +98,7 @@ public static class AkteurExtensions
     }
 
     /// <summary>
-    /// Aus einer Konfigurations-Sektion (<c>"Akteure": { "Tokens": { "&lt;token&gt;": "Inspekteur,KIOperator" }, "Standard": "Gast" }</c>).
+    /// Aus einer Konfigurations-Sektion (<c>"Akteure": { "Tokens": { "&lt;token&gt;": "Inspekteur,KIOperator" }, "Standard": "Gast", "VertragStreng": true }</c>).
     /// Fehlt die Sektion, passiert nichts — der Pfad bleibt offen wie bisher.
     /// </summary>
     public static IServiceCollection AddAkteure(this IServiceCollection services, IConfigurationSection sektion)
@@ -100,6 +113,7 @@ public static class AkteurExtensions
                 foreach (var e in t.GetChildren()) if (e.Value is { } a) o.Token(t.Key, a);
             }
             if (sektion["Standard"] is { Length: > 0 } standard) o.Standardmaessig(standard);
+            if (bool.TryParse(sektion["VertragStreng"], out var streng)) o.VertragsHashStreng(streng);
         });
     }
 }

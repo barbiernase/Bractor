@@ -104,4 +104,67 @@ public partial class P : IPipelineHandler
         => (await Ids(Pipeline + @"private readonly IKasse _ki; public P(IKasse ki) { _ki = ki; }
             public IEnumerable<OneOf<Buche>> Handle(Gebucht2 e, PipelineContext ctx) { yield break; } }"))
             .Should().Equal("CQRS060", "CQRS060");
+
+    // ── CQRS061/062: Akteur-Vertrag (docs/konzept-akteure.md §9) ──
+
+    [Fact]
+    public async Task Vertrag_mit_Reaktion_Kenntnis_und_Strom_ist_ok()
+        => (await Ids(@"public interface IKassierer : IAkteurVertrag<Kassierer>
+            { OneOf<Buche> Auf(Gebucht e); void Auf(Hinweis e); IAsyncEnumerable<OneOf<Buche, Storniere>> Auf(Gebucht2 e); }"))
+            .Should().BeEmpty();
+
+    [Fact]
+    public async Task Ein_konkreter_Command_als_Rueckgabe_ist_ok()
+        => (await Ids("public interface IKassierer : IAkteurVertrag<Kassierer> { Buche Auf(Gebucht e); }")).Should().BeEmpty();
+
+    [Fact]
+    public async Task Ein_Vertrag_ist_ein_Interface()
+        => (await Ids("public sealed class Kassierer2 : IAkteurVertrag<Kassierer> { }")).Should().Equal("CQRS061");
+
+    [Fact]
+    public async Task Hoechstens_ein_Vertrag_je_Akteur()
+        => (await Ids(@"public interface IKassiererA : IAkteurVertrag<Kassierer> { }
+            public interface IKassiererB : IAkteurVertrag<Kassierer> { }")).Should().Equal("CQRS061", "CQRS061");
+
+    [Fact]
+    public async Task Reaktionen_heissen_Auf()
+        => (await Ids("public interface IKassierer : IAkteurVertrag<Kassierer> { void Bei(Gebucht e); }")).Should().Equal("CQRS061");
+
+    [Fact]
+    public async Task Reagieren_kann_man_nur_auf_Events()
+        => (await Ids("public interface IKassierer : IAkteurVertrag<Kassierer> { void Auf(Buche c); }")).Should().Equal("CQRS061");
+
+    [Fact]
+    public async Task Je_Event_hoechstens_eine_Reaktion()
+        => (await Ids("public interface IKassierer : IAkteurVertrag<Kassierer> { void Auf(Gebucht e); Buche Auf(Gebucht e, int x); }"))
+            .Should().Equal("CQRS061");
+
+    [Fact]
+    public async Task Kein_Property_im_Vertrag()
+        => (await Ids("public interface IKassierer : IAkteurVertrag<Kassierer> { int Zaehler { get; } }")).Should().Equal("CQRS061");
+
+    [Fact]
+    public async Task Ausgabe_ICommand_ist_ein_Fehler()
+        => (await Ids("public interface IKassierer : IAkteurVertrag<Kassierer> { OneOf<ICommand> Auf(Gebucht e); }")).Should().Equal("CQRS062");
+
+    [Fact]
+    public async Task Ausgabe_als_Task_ist_ein_Fehler()
+        => (await Ids("public interface IKassierer : IAkteurVertrag<Kassierer> { System.Threading.Tasks.Task<Buche> Auf(Gebucht e); }"))
+            .Should().Equal("CQRS062");
+
+    [Fact]
+    public async Task Ausgabe_Event_ist_ein_Fehler()
+        => (await Ids("public interface IKassierer : IAkteurVertrag<Kassierer> { OneOf<Gebucht2> Auf(Gebucht e); }")).Should().Equal("CQRS062");
+
+    [Fact]
+    public async Task Vertrags_Ausgabe_darf_der_Akteur_auch_drinnen()
+        => (await Ids(@"public interface IKassierer : IAkteurVertrag<Kassierer> { OneOf<Storniere> Auf(Gebucht e); }" + Pipeline
+            + @"public IEnumerable<OneOf<Storniere>> Handle(Gebucht2 e, PipelineContext ctx, IKasse ki) { yield break; } }"))
+            .Should().BeEmpty("Befugt = IDarf ∪ Ausgaben(Vertrag)");
+
+    [Fact]
+    public async Task Dieselbe_Entscheidung_drinnen_und_draussen_ist_ein_Fehler()
+        => (await Ids(@"public interface IKassierer : IAkteurVertrag<Kassierer> { OneOf<Buche> Auf(Gebucht e); }" + Pipeline
+            + @"public IEnumerable<OneOf<Buche>> Handle(Gebucht e, PipelineContext ctx, IKasse ki) { yield break; } }"))
+            .Should().Equal("CQRS060");
 }

@@ -203,6 +203,10 @@
       "darf": [
         "EroeffneMahnung",
         "Vormerkungen"
+      ],
+      "vertrag": [
+        { "eingang": "MahnungEroeffnet", "ausgaenge": [] },
+        { "eingang": "SchadenGemeldet", "ausgaenge": [ "EroeffneMahnung" ] }
       ]
     }
   ]

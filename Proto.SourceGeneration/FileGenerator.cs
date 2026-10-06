@@ -196,6 +196,10 @@ public class FileGenerator
                  repeated string message_types = 2;
                  repeated string handle_triggers = 3;
                  repeated string handle_queries = 4;
+                 // Akteur-Vertrag (docs/konzept-akteure.md §9): "ich bin Vertrag X" — der Server nimmt die Fähigkeiten aus der
+                 // generierten Tabelle statt aus der Selbstauskunft; der Hash erkennt einen Client, der gegen einen anderen Stand gebaut ist.
+                 string vertrag = 5;
+                 string vertrag_hash = 6;
              }
 
              {{queryRequestMessage}}
@@ -249,6 +253,9 @@ public class FileGenerator
                  repeated string unknown_types = 6;
                  repeated string handling_triggers = 7;
                  repeated string handling_queries = 8;
+                 // Der angenommene Akteur-Vertrag (leer = keiner bzw. abgelehnt) und — bei abweichendem Hash — der Server-Hash.
+                 string vertrag = 9;
+                 string vertrag_hash = 10;
              }
 
              {{queryResponseMessage}}
@@ -276,6 +283,12 @@ public class FileGenerator
                  string correlation_id = 6;
                  string user_id = 7;
                  string origin_session_id = 8;
+                 // Kausalität einer Reaktion von außen (§9.7): auf welches Event (Stream + Version + Typ) und als wievielte Ausgabe
+                 // der Reaktion — daraus leitet der Server eine deterministische CommandId ab (doppelt zugestellt ≠ doppelt wirksam).
+                 string causation_stream_id = 9;
+                 int32 causation_version = 10;
+                 string causation_type = 11;
+                 int32 causation_index = 12;
              
                  oneof payload {
              {{commandOneOfs}}

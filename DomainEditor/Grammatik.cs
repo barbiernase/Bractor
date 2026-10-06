@@ -126,6 +126,15 @@ public static class Grammatik
             + "Pipeline-Handle, der ihn als Parameter nimmt, entscheidet im Auftrag von A: höchstens einer je Handle, und er sendet nur "
             + "Commands, die A darf; als Konstruktor-Abhängigkeit ist der Dienst in keiner Klasse erlaubt.", "error",
             [An("CQRS060", "Domain.SourceGeneration/AkteurAnalyzer.cs"), new("laufzeit", null, "Abstractions.ImAuftrag → CommandEmitter stempelt UserId")]),
+        new("GR-VERTRAG", "Reaktion im Akteur-Vertrag", "Reagiert ein Akteur draußen auf ein Event, steht es in seinem Vertrag "
+            + "(interface IX : IAkteurVertrag<X>): je Event höchstens ein Auf(E), der Rückgabetyp nennt nur konkrete Commands (void = zur "
+            + "Kenntnis). Was er so hineingibt, darf er (kein IDarf), und er hört genau diese Events; höchstens ein Vertrag je Akteur.", "error",
+            [An("CQRS061", "Domain.SourceGeneration/AkteurAnalyzer.cs (Form)"), An("CQRS062", "Domain.SourceGeneration/AkteurAnalyzer.cs (Ausgabe-Vertrag)"),
+             new("generator", null, "Infrastructure.SourceGeneration/AkteurRechteGenerator.cs (Befugt/Hört/Vertrags-Hash)"),
+             new("laufzeit", null, "Infrastructure/GrpcClient/CqrsClientService.cs (Handshake vertrag/vertrag_hash, Antwort auf Event)")]),
+        new("GR-VERKOERPERUNG", "Eine Verkörperung je Entscheidung", "Reagiert ein Akteur im Vertrag auf ein Event, trifft nicht zusätzlich ein "
+            + "Pipeline-Handle im Auftrag desselben Akteurs (Dienst) auf dasselbe Event dieselbe Entscheidung.", "error",
+            [An("CQRS060", "Domain.SourceGeneration/AkteurAnalyzer.cs (Dienst und Vertrag)")]),
         new("GR-HERKUNFT", "Alles kommt von einem Akteur", "Sobald es Akteure gibt: jeder Command, jede Query und jeder Trigger kommt von "
             + "einem Akteur — direkt (IDarf<T>) oder über die Kette (eine Pipeline, ein Prozess oder eine Frist erzeugt ihn aus einem "
             + "Event, das von einem Akteur stammt). Sonst steht er im Rahmen „ohne Akteur“.", "warning",
@@ -152,6 +161,7 @@ public static class Grammatik
         new(Frist, Aggregat, GenauEins, "GR-FRIST"),
         new(Query, Reader, GenauEins, "GR-QUERY"),
         new(Faehigkeit, Projektion, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Reader, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Pipeline, Beliebig, "GR-FAEHIGKEIT"),
+        new(Event, Akteur, Beliebig, "GR-VERTRAG"), new(Transient, Akteur, Beliebig, "GR-VERTRAG"),
     ];
 
     /// <summary>Wer welche Sorten erzeugen darf (§2.2 Spalte „Ausgänge").</summary>

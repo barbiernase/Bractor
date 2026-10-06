@@ -16,6 +16,9 @@ public sealed class AkteurTor
         _rechte = rechte;
     }
 
+    /// <summary>Abweichender Vertrags-Hash am Handshake = Ablehnung (<see cref="AkteurOptionen.VertragsHashStreng"/>).</summary>
+    public bool VertragStreng => _optionen.VertragStreng;
+
     /// <summary>
     /// Ordnet ein (evtl. fehlendes) Token einem Akteur zu. <c>null</c> = abweisen (kein gültiges Token und kein
     /// Standard-Akteur konfiguriert).

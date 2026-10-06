@@ -67,15 +67,70 @@ public class AkteurRechteTests
     [Fact]
     public void Hoeren_abgeleitet_aus_dem_Aggregat_der_eigenen_Commands()
     {
-        // Der Klassifikator wirkt auf ImagePair ein → er hört die ImagePair-Events (genau, was der Python-Worker abonniert).
+        // Ohne Vertrag (rein spontan): wer auf ein Aggregat einwirkt, hört dessen Events.
+        var p = R("Produktpruefer");
+        p.VertragTyp.Should().BeNull();
+        p.DarfHoeren(typeof(ImagePairKomplett)).Should().BeTrue("LabelPhysischesProdukt wirkt auf ImagePair ein");
+        p.DarfHoeren(typeof(TrainingAngefordert)).Should().BeFalse();
+    }
+
+    // ── Vertrag (§9): Befugt = IDarf ∪ Ausgaben, Hört = exakt die Eingänge ──
+
+    [Fact]
+    public void Vertrag_steht_in_der_Tabelle()
+    {
         var k = R("Klassifizierer");
-        k.DarfHoeren(typeof(BildVerfuegbar)).Should().BeTrue();
+        k.VertragTyp.Should().Be(typeof(IKlassifizierer));
+        k.Vertrag.Keys.Should().BeEquivalentTo(new[] { typeof(ImagePairKomplett), typeof(BildVerfuegbar), typeof(ModellAktiviert) });
+        k.Vertrag[typeof(ImagePairKomplett)].Should().BeEquivalentTo(new[] { typeof(KlassifiziereBildPaarDurchKi) });
+        k.Vertrag[typeof(BildVerfuegbar)].Should().BeEmpty("nur zur Kenntnis");
+        k.Stroeme.Should().BeEmpty();
+
+        var t = R("TrainingsSystem");
+        t.VertragTyp.Should().Be(typeof(ITrainingsSystem));
+        t.Stroeme.Should().BeEquivalentTo(new[] { typeof(TrainingAngefordert) });
+        t.Vertrag[typeof(TrainingAngefordert)].Should().BeEquivalentTo(new[]
+            { typeof(MeldeTrainingBegonnen), typeof(MeldeFortschritt), typeof(MeldeTrainingAbgeschlossen), typeof(MeldeTrainingGescheitert) });
+    }
+
+    [Fact]
+    public void Befugt_ist_IDarf_vereinigt_mit_den_Vertrags_Ausgaben()
+    {
+        var k = R("Klassifizierer");
+        k.Commands.Should().BeEquivalentTo(new[] { typeof(KlassifiziereBildPaarDurchKi), typeof(KlassifiziereEinzelBildDurchKi) });
+        R("TrainingsSystem").DarfHinein(typeof(MeldeFortschritt)).Should().BeTrue("Ausgabe seines Vertrags — kein zweites IDarf nötig");
+        k.AntwortetMit(typeof(ImagePairKomplett), typeof(KlassifiziereBildPaarDurchKi)).Should().BeTrue();
+        k.AntwortetMit(typeof(BildVerfuegbar), typeof(KlassifiziereBildPaarDurchKi)).Should().BeFalse();
+    }
+
+    [Fact]
+    public void Mit_Vertrag_hoert_der_Akteur_genau_seine_Eingaenge()
+    {
+        var k = R("Klassifizierer");
         k.DarfHoeren(typeof(ImagePairKomplett)).Should().BeTrue();
-        k.DarfHoeren(typeof(TrainingAngefordert)).Should().BeFalse("er wirkt nicht auf Trainingsläufe ein");
+        k.DarfHoeren(typeof(BildVerfuegbar)).Should().BeTrue();
+        k.DarfHoeren(typeof(ModellAktiviert)).Should().BeTrue();
+        k.DarfHoeren(typeof(ImagePairInspiziert)).Should().BeFalse("darauf reagiert er nicht (früher: alle ImagePair-Events)");
+        k.DarfHoeren(typeof(TrainingAngefordert)).Should().BeFalse();
 
         var t = R("TrainingsSystem");
         t.DarfHoeren(typeof(TrainingAngefordert)).Should().BeTrue();
         t.DarfHoeren(typeof(TrainingAbgebrochen)).Should().BeTrue();
+        t.DarfHoeren(typeof(TrainingBegonnen)).Should().BeFalse("sein eigenes Echo braucht er nicht");
+    }
+
+    [Fact]
+    public void Vertrags_Hash_kommt_aus_der_kanonischen_Form()
+    {
+        var kanon = Akteurvertrag.Kanon("Klassifizierer", new[]
+        {
+            new Akteurvertrag.Reaktion("ModellAktiviert", [], false),
+            new Akteurvertrag.Reaktion("ImagePairKomplett", ["KlassifiziereBildPaarDurchKi"], false),
+            new Akteurvertrag.Reaktion("BildVerfuegbar", [], false),
+        });
+        kanon.Should().Be("Klassifizierer:BildVerfuegbar>;ImagePairKomplett>KlassifiziereBildPaarDurchKi;ModellAktiviert>");
+        R("Klassifizierer").VertragHash.Should().Be(Akteurvertrag.Hash(kanon)).And.HaveLength(16);
+        R("Inspekteur").VertragHash.Should().BeEmpty();
     }
 
     [Fact]

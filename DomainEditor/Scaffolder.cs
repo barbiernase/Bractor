@@ -226,14 +226,51 @@ public static class Scaffolder
 
     private static string AkteurDatei(string ns, List<Akteur> akteure, EditorModell modell)
     {
-        var b = Kopf(ns, Usings(ns, modell, [modell.Rahmen.VertragsNamespace], akteure.SelectMany(a => a.Darf), []));
+        var b = Kopf(ns, Usings(ns, modell, [modell.Rahmen.VertragsNamespace],
+            akteure.SelectMany(a => a.Darf.Concat(a.Vertrag.SelectMany(r => r.Ausgaenge.Append(r.Eingang)))), []));
         for (var i = 0; i < akteure.Count; i++)
         {
             Doku(b, akteure[i].Doku, "");
             b.AppendLine($"public sealed record {akteure[i].Name} : {string.Join(", ", AkteurBasen(akteure[i]))};");
+            if (akteure[i].Vertrag.Count > 0)
+            {
+                b.AppendLine();
+                b.Append(VertragsInterface(akteure[i]));
+            }
             if (i < akteure.Count - 1) b.AppendLine();
         }
         return b.ToString();
+    }
+
+    private static readonly string IAkteurVertrag = typeof(Abstractions.IAkteurVertrag<>).Name.Split('`')[0];
+
+    /// <summary>
+    /// Der Vertrag eines Akteurs (<c>docs/konzept-akteure.md</c> §9): <c>public interface IX : IAkteurVertrag&lt;X&gt; { … Auf(E e); }</c> —
+    /// je Reaktion eine Methode in Modell-Reihenfolge.
+    /// </summary>
+    public static string VertragsInterface(Akteur a)
+    {
+        var b = new StringBuilder();
+        b.AppendLine($"public interface {a.VertragTyp} : {IAkteurVertrag}<{a.Name}>");
+        b.AppendLine("{");
+        for (var i = 0; i < a.Vertrag.Count; i++)
+        {
+            Doku(b, a.Vertrag[i].Doku, "    ");
+            b.AppendLine($"    {VertragsMethode(a.Vertrag[i])};");
+            if (i < a.Vertrag.Count - 1) b.AppendLine();
+        }
+        b.AppendLine("}");
+        return b.ToString();
+    }
+
+    /// <summary>Eine Reaktion als Signatur: <c>void Auf(E e)</c>, <c>OneOf&lt;A, B&gt; Auf(E e)</c> bzw. <c>IAsyncEnumerable&lt;OneOf&lt;…&gt;&gt; Auf(E e)</c>.</summary>
+    public static string VertragsMethode(AkteurReaktion r) => $"{VertragsRueckgabe(r)} {Abstractions.Akteurvertrag.Auf}({r.Eingang} e)";
+
+    public static string VertragsRueckgabe(AkteurReaktion r)
+    {
+        if (r.Ausgaenge.Count == 0) return "void";
+        var oneOf = $"OneOf<{string.Join(", ", r.Ausgaenge)}>";
+        return r.Strom ? $"IAsyncEnumerable<{oneOf}>" : oneOf;
     }
 
     // ── Typ-Dateien aus Records/Enums ─────────────────────────────────────────────────────────

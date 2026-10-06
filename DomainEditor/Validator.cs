@@ -206,6 +206,25 @@ public static class Validator
                         Melde("GR-AUFTRAG", $"{p.Name}.Handle({h.Eingang}) sendet {c} im Auftrag von {auftrag[0].Name}, aber {auftrag[0].Name} darf das nicht");
             }
 
+        // (6c) Akteur-Vertrag (CQRS061/062): je Event höchstens eine Reaktion, Eingang ist ein Event, Ausgänge sind Commands; und keine
+        //      zweite Verkörperung derselben Entscheidung über einen Dienst desselben Akteurs (CQRS060).
+        foreach (var a in modell.Akteure.Where(a => a.Vertrag.Count > 0))
+        {
+            foreach (var g in a.Vertrag.GroupBy(r => r.Eingang, StringComparer.Ordinal).Where(g => g.Count() > 1))
+                Melde("GR-VERTRAG", $"{a.VertragTyp}: zwei Reaktionen auf {g.Key} — je Event höchstens ein Auf");
+            foreach (var r in a.Vertrag)
+            {
+                if (!recs.TryGetValue(r.Eingang, out var ein) || ein.Kind is not (RecordArt.Event or RecordArt.Rejection))
+                    Melde("GR-VERTRAG", $"{a.VertragTyp}.Auf({r.Eingang}) — reagieren kann man nur auf ein Event");
+                foreach (var aus in r.Ausgaenge.Where(x => !recs.TryGetValue(x, out var c) || c.Kind != RecordArt.Command))
+                    Melde("GR-VERTRAG", $"{a.VertragTyp}.Auf({r.Eingang}) gibt {aus} aus — eine Reaktion gibt nur Commands hinein");
+            }
+            foreach (var p in modell.Lesen?.Pipelines ?? [])
+                foreach (var h in p.Handles.Where(h => h.Faehigkeiten.Any(f => a.Dienste.Contains(Fluss.Basisname(f.Typ)))))
+                    foreach (var c in h.Ausgaenge.Where(c => a.Vertrag.Any(r => r.Eingang == h.Eingang && r.Ausgaenge.Contains(c))))
+                        Melde("GR-VERKOERPERUNG", $"{a.Name} entscheidet {c} auf {h.Eingang} zweimal: in {p.Name} (Dienst) und im Vertrag {a.VertragTyp}");
+        }
+
         // (7) Herkunft (docs/konzept-akteure.md §8.3) — erst, wenn das Modell Akteure hat (wie am Tor: ohne Akteure ist der Pfad offen):
         //     jeder Command, jede Query und jeder Trigger kommt von einem Akteur — direkt (IDarf) oder über die Kette.
         if (modell.Akteure.Count > 0)

@@ -29,6 +29,17 @@ public interface IKi : IAkteur { }
 public interface IAkteurDienst<TAkteur> where TAkteur : IAkteur { }
 
 /// <summary>
+/// Der VERTRAG eines Akteurs, der draußen auf Events reagiert (<c>docs/konzept-akteure.md</c> §9) — ein Interface in der Domäne,
+/// gegen das der Client (Python-Worker, später Blazor) programmiert:
+/// <code>public interface IKlassifizierer : IAkteurVertrag&lt;Klassifizierer&gt; { OneOf&lt;KlassifiziereBildPaarDurchKi&gt; Auf(ImagePairKomplett e); void Auf(BildVerfuegbar e); }</code>
+/// Je Methode <c>Auf(TEvent)</c> eine Reaktion; der Rückgabetyp ist der Ausgabe-Vertrag (<c>void</c>, ein konkreter Command,
+/// <c>OneOf&lt;…&gt;</c> oder ein Strom <c>IAsyncEnumerable&lt;OneOf&lt;…&gt;&gt;</c>). Was ein Akteur als Reaktion hineingibt, darf er damit
+/// (kein zweites <c>IDarf</c>), und er hört genau die Events seiner <c>Auf</c>-Methoden. Höchstens ein Vertrag je Akteur
+/// (CQRS061/062). Server, Editor und Handshake kennen damit jede Reaktion als Code-Fakt; implementiert wird er nur draußen.
+/// </summary>
+public interface IAkteurVertrag<TAkteur> where TAkteur : IAkteur { }
+
+/// <summary>
 /// Der Akteur darf <typeparamref name="T"/> in das System hineingeben — EIN Wort für alles, was hineingeht:
 /// Command (auslösen), Query (fragen bzw. als Zuständiger beantworten), Trigger (starten bzw. verarbeiten), Transient-Event.
 /// Andere <typeparamref name="T"/> meldet der Analyzer CQRS058.

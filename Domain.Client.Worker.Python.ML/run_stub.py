@@ -19,13 +19,14 @@ from uuid import UUID
 sys.path.insert(0, str(Path(__file__).parent.parent / "Client.Infrastructure.Python"))
 
 import logging
-from cqrs_client import CqrsClient, handle
 from domain_client.domain_registry import create_registry
 from domain_client.generated import (
     BildVerfuegbarDto,
     ImagePairKomplettDto,
     KlassifiziereBildPaarDurchKiDto,
+    ModellAktiviertDto,
 )
+from domain_client.generated.vertraege import KlassifiziererBasis
 
 log = logging.getLogger("stub")
 VERSION_NAMES = {0: "dc0", 1: "dc2"}
@@ -47,12 +48,10 @@ class StubState:
     events: int = 0
 
 
-class StubClassifier(CqrsClient[StubState]):
+class StubClassifier(KlassifiziererBasis[StubState]):
+    """Derselbe Vertrag wie der echte Classifier (IKlassifizierer) — nur ohne Modell."""
 
-    _declared_command_types = [KlassifiziereBildPaarDurchKiDto]
-
-    @handle.register
-    async def on_bild(self, event: BildVerfuegbarDto, ctx, state: StubState):
+    async def auf_bild_verfuegbar(self, event: BildVerfuegbarDto, ctx, state: StubState):
         state.events += 1
         agg = ctx.aggregate_id
         v = VERSION_NAMES.get(event.version, "?")
@@ -61,8 +60,7 @@ class StubClassifier(CqrsClient[StubState]):
         state.bilder[agg][event.version] = event.pfad
         log.info("📥 BildVerfuegbar #%d: %s %s → %s", state.events, str(agg)[:8], v, event.pfad)
 
-    @handle.register
-    async def on_komplett(self, event: ImagePairKomplettDto, ctx, state: StubState):
+    async def auf_image_pair_komplett(self, event: ImagePairKomplettDto, ctx, state: StubState):
         state.events += 1
         agg = ctx.aggregate_id
         pfade = state.bilder.get(agg, {})
@@ -73,6 +71,9 @@ class StubClassifier(CqrsClient[StubState]):
 
         yield KlassifiziereBildPaarDurchKiDto(aggregate_id=str(agg), label=0)
         log.info("✅ Gesendet!")
+
+    async def auf_modell_aktiviert(self, event: ModellAktiviertDto, ctx, state: StubState):
+        log.info("📥 ModellAktiviert: %s (%s) — Stub lädt nichts", event.name, event.pfad)
 
 
 if __name__ == "__main__":

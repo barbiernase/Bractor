@@ -6,6 +6,7 @@
 #   - ProtoRepo/domain.proto
 #   - Infrastructure/Serialization/EventJsonSerializerContext.g.cs
 #   - Infrastructure/Serialization/CqrsWireJsonContext.g.cs
+#   - Domain.Client.Worker.Python.ML/domain_client/generated/vertraege.py  (Akteur-Verträge → Python)
 #
 # Nutzung:
 #   ./codegen.sh           # hash-getriggert: nur generieren, wenn sich Domain-Quellen änderten
@@ -22,6 +23,7 @@ ARTEFAKTE=(
   "ProtoRepo/domain.proto"
   "Infrastructure/Serialization/EventJsonSerializerContext.g.cs"
   "Infrastructure/Serialization/CqrsWireJsonContext.g.cs"
+  "Domain.Client.Worker.Python.ML/domain_client/generated/vertraege.py"
 )
 
 # Der Output hängt allein an den Domain-Quellen der gescannten Projekte.

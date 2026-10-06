@@ -549,8 +549,32 @@ public sealed record Akteur
     /// ein Pipeline-Handle, der ihn als Parameter nimmt, entscheidet im Auftrag dieses Akteurs (CQRS060). Nur Code-Fakt (gelesen).
     /// </summary>
     public IReadOnlyList<string> Dienste { get; init; } = [];
+    /// <summary>
+    /// Der VERTRAG des Akteurs (<c>interface IX : IAkteurVertrag&lt;X&gt;</c>, <c>docs/konzept-akteure.md</c> §9): je <c>Auf(Event)</c> eine
+    /// Reaktion mit ihren Ausgängen. Was er so hineingibt, darf er (kein IDarf), und er hört genau diese Eingänge. Leer = rein spontan.
+    /// </summary>
+    public IReadOnlyList<AkteurReaktion> Vertrag { get; init; } = [];
+    /// <summary>Name des Vertrags-Interfaces (null = <c>I{Name}</c>, sobald es Reaktionen gibt).</summary>
+    public string? VertragName { get; init; }
+    /// <summary>Datei des Vertrags, wenn sie nicht die des Akteurs ist (relativ zur Solution).</summary>
+    public string? VertragDatei { get; init; }
     public string? Doku { get; init; }
     /// <summary>Datei der Deklaration (relativ zur Solution); null = neu im Editor.</summary>
     public string? Datei { get; init; }
     public string? Herkunft { get; init; }
+
+    /// <summary>Der Name des Vertrags-Interfaces, wie er im Code steht bzw. geschrieben wird.</summary>
+    public string VertragTyp => VertragName ?? "I" + Name;
+}
+
+/// <summary>
+/// Eine Reaktion im Akteur-Vertrag: <c>Auf(Eingang e)</c> mit dem Ausgabe-Vertrag als Rückgabetyp — keine Ausgänge = <c>void</c> (nur zur
+/// Kenntnis), sonst <c>OneOf&lt;…&gt;</c>, bei <see cref="Strom"/> <c>IAsyncEnumerable&lt;OneOf&lt;…&gt;&gt;</c> (mehrere Commands je Reaktion).
+/// </summary>
+public sealed record AkteurReaktion
+{
+    public string Eingang { get; init; } = "";
+    public IReadOnlyList<string> Ausgaenge { get; init; } = [];
+    public bool Strom { get; init; }
+    public string? Doku { get; init; }
 }

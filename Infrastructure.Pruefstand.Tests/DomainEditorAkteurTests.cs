@@ -174,4 +174,53 @@ public sealed class DomainEditorAkteurTests
         var m = Shop(Kunde, new Akteur { Name = "Haendler", Namespace = "Shop.Akteure", Art = "Mensch", Darf = ["Bestelle"] });
         AkteurAnteile.Aus(m).AkteureVon("Bestellt").Should().Equal("Haendler", "Kunde");
     }
+
+    // ── Vertrag (docs/konzept-akteure.md §9): Event → Akteur → Command, die Ausgänge gehören dem Akteur ──
+
+    private static Akteur Kasse => new()
+    {
+        Name = "Kasse", Namespace = "Shop.Akteure",
+        Vertrag = [new() { Eingang = "Bestellt", Ausgaenge = ["Storniere"] }, new() { Eingang = "Bestellt2" }],
+    };
+
+    [Fact]
+    public void Vertrag_ist_Reaktions_Kante_mit_Akteur_Wechsel()
+    {
+        var m = Shop(Kunde, Kasse with { Vertrag = [Kasse.Vertrag[0]] });
+        var fluss = Fluss.Aus(m);
+        fluss.Ein("akt:Kasse").Should().ContainSingle(k => k.Nachricht == "Bestellt" && k.Handle == "Bestellt");
+        fluss.Aus("akt:Kasse").Should().ContainSingle(k => k.Nachricht == "Storniere" && k.Handle == "Bestellt");
+        fluss.Aus(Fluss.AussenId).Should().BeEmpty("Storniere hat jetzt einen Erzeuger");
+
+        var anteile = AkteurAnteile.Aus(m);
+        anteile.Kette["Storniere"].Should().Equal("Kasse");   // Wechsel: nicht der Kunde, dessen Bestelle das Event auslöste
+        anteile.Direkt.ContainsKey("Storniere").Should().BeFalse("eine Reaktion ist kein IDarf");
+        Validator.PruefeGrammatik(m).Should().NotContain(b => b.Code == "GR-HERKUNFT");
+    }
+
+    [Fact]
+    public void Vertrag_auf_Nicht_Event_oder_mit_Nicht_Command_ist_ein_Grammatik_Fehler()
+    {
+        var befunde = Validator.PruefeGrammatik(Shop(Kunde, Kasse with
+        {
+            Vertrag = [new() { Eingang = "Bestelle" }, new() { Eingang = "Bestellt", Ausgaenge = ["Bestellt"] }, new() { Eingang = "Bestellt" }],
+        })).Where(b => b.Code == "GR-VERTRAG").Select(b => b.Meldung).ToList();
+        befunde.Should().Contain(x => x.Contains("Auf(Bestelle)")).And.Contain(x => x.Contains("gibt Bestellt aus")).And.Contain(x => x.Contains("zwei Reaktionen"));
+    }
+
+    [Fact]
+    public void Scaffolder_schreibt_den_Vertrag_neben_den_Akteur()
+    {
+        var a = Kasse with
+        {
+            Vertrag = [new() { Eingang = "Bestellt", Ausgaenge = ["Storniere", "Bestelle"], Strom = true }, new() { Eingang = "Bestellt" }],
+        };
+        a.VertragTyp.Should().Be("IKasse");
+        var text = Scaffolder.VertragsInterface(a);
+        text.Should().Contain("public interface IKasse : IAkteurVertrag<Kasse>")
+            .And.Contain("IAsyncEnumerable<OneOf<Storniere, Bestelle>> Auf(Bestellt e);")
+            .And.Contain("void Auf(Bestellt e);");
+        Scaffolder.VertragsRueckgabe(new() { Eingang = "X", Ausgaenge = ["Y"] }).Should().Be("OneOf<Y>");
+        (a with { VertragName = "IRegal" }).VertragTyp.Should().Be("IRegal");
+    }
 }

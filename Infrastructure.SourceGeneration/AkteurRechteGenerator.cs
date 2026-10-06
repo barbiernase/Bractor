@@ -20,6 +20,10 @@ namespace Infrastructure.SourceGeneration
     /// (2) alle Events, die die Projektion hinter einer erlaubten Query behandelt (Query → Reader-Handle →
     ///     <c>IReader&lt;TProjektion&gt;</c> → Projektions-Handle mit <c>IAggregateEnvelope</c>) — „du hörst, was du
     ///     sowieso lesen darfst".</para>
+    /// <para><b>Vertrag</b> (<c>IAkteurVertrag&lt;A&gt;</c>, docs/konzept-akteure.md §9): je <c>Auf(TEvent)</c> die erlaubten Ausgaben.
+    /// Hat ein Akteur einen Vertrag, gilt <b>Befugt = IDarf ∪ Ausgaben(Vertrag)</b> und <b>Hört = Eingänge(Vertrag) ∪ (2)</b> — exakt
+    /// das, worauf er reagiert, statt der groben Regel (1). Dazu der Vertrags-Hash (<c>Abstractions.Akteurvertrag</c>), gegen den
+    /// der Handshake prüft.</para>
     /// </summary>
     [Generator]
     public class AkteurRechteGenerator : ISourceGenerator
@@ -54,6 +58,17 @@ namespace Infrastructure.SourceGeneration
 
             var alle = new List<INamedTypeSymbol>();
             CollectTypes(c.GlobalNamespace, alle);
+            var iVertrag = c.GetTypeByMetadataName("Abstractions.IAkteurVertrag`1");
+            var vertraege = new Dictionary<INamedTypeSymbol, INamedTypeSymbol>(SymbolEqualityComparer.Default);   // Akteur → Vertrag
+            if (iVertrag != null)
+            {
+                var schnitt = new List<INamedTypeSymbol>();
+                CollectInterfaces(c.GlobalNamespace, schnitt);
+                foreach (var v in schnitt.OrderBy(x => x.ToDisplayString(), System.StringComparer.Ordinal))
+                    foreach (var i in v.AllInterfaces.Where(i => SymbolEqualityComparer.Default.Equals(i.OriginalDefinition, iVertrag)))
+                        if (i.TypeArguments[0] is INamedTypeSymbol akt && !vertraege.ContainsKey(akt))
+                            vertraege[akt] = v;   // mehrere je Akteur meldet CQRS061; hier zählt der erste
+            }
 
             // ── Graph: Command → Aggregat, Aggregat → Events (aus den Decide-Signaturen) ──
             var cmdZuAgg = new Dictionary<INamedTypeSymbol, INamedTypeSymbol>(SymbolEqualityComparer.Default);
@@ -129,9 +144,25 @@ namespace Infrastructure.SourceGeneration
                 var trigger = darf.Where(t => Implementiert(t, iTrigger)).ToList();
                 var transient = darf.Where(t => Implementiert(t, iTransient)).ToList();
 
+                // Vertrag: je Auf(Event) die Ausgaben (konkrete Commands; die Form prüft CQRS061/062).
+                vertraege.TryGetValue(a, out var vertrag);
+                var reaktionen = new List<(INamedTypeSymbol Ein, List<INamedTypeSymbol> Aus, bool Strom)>();
+                if (vertrag != null)
+                    foreach (var m in vertrag.GetMembers(Abstractions.Akteurvertrag.Auf).OfType<IMethodSymbol>())
+                        if (m.Parameters.Length == 1 && m.Parameters[0].Type is INamedTypeSymbol ein)
+                        {
+                            var aus = VertragsAusgaben(m.ReturnType, out var strom).Where(t => Implementiert(t, iCommand)).ToList();
+                            reaktionen.Add((ein, aus, strom));
+                        }
+                foreach (var t in reaktionen.SelectMany(r => r.Aus))
+                    if (!cmds.Contains(t, SymbolEqualityComparer.Default)) cmds.Add(t);   // Befugt = IDarf ∪ Ausgaben(Vertrag)
+
                 var hoert = new SortedSet<string>(System.StringComparer.Ordinal);
-                foreach (var cmd in cmds)
-                    if (cmdZuAgg.TryGetValue(cmd, out var agg) && aggEvents.TryGetValue(agg, out var evs)) hoert.UnionWith(evs);
+                if (vertrag != null)
+                    foreach (var r in reaktionen) hoert.Add(r.Ein.ToDisplayString(fq));   // exakt: worauf er reagiert
+                else
+                    foreach (var cmd in cmds)
+                        if (cmdZuAgg.TryGetValue(cmd, out var agg) && aggEvents.TryGetValue(agg, out var evs)) hoert.UnionWith(evs);
                 foreach (var q in queries)
                     if (queryZuProj.TryGetValue(q, out var p) && projEvents.TryGetValue(p, out var evs)) hoert.UnionWith(evs);
 
@@ -141,7 +172,24 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"            Trigger: {Menge(trigger.Select(t => t.ToDisplayString(fq)))},");
                 sb.AppendLine($"            TransientEvents: {Menge(transient.Select(t => t.ToDisplayString(fq)))},");
                 sb.AppendLine($"            Hoert: {Menge(hoert)},");
-                sb.AppendLine($"            Art: \"{ArtVon(a)}\"),");
+                if (vertrag == null)
+                {
+                    sb.AppendLine($"            Art: \"{ArtVon(a)}\"),");
+                    continue;
+                }
+                var kanon = Abstractions.Akteurvertrag.Kanon(a.Name, reaktionen.Select(r =>
+                    new Abstractions.Akteurvertrag.Reaktion(r.Ein.Name, r.Aus.Select(x => x.Name).ToList(), r.Strom)));
+                sb.AppendLine($"            Art: \"{ArtVon(a)}\")");
+                sb.AppendLine("        {");
+                sb.AppendLine($"            VertragTyp = typeof({vertrag.ToDisplayString(fq)}),");
+                sb.AppendLine($"            VertragHash = \"{Abstractions.Akteurvertrag.Hash(kanon)}\",");
+                sb.AppendLine("            Vertrag = new Dictionary<Type, IReadOnlySet<Type>>");
+                sb.AppendLine("            {");
+                foreach (var r in reaktionen.OrderBy(r => r.Ein.Name, System.StringComparer.Ordinal))
+                    sb.AppendLine($"                [typeof({r.Ein.ToDisplayString(fq)})] = {Menge(r.Aus.Select(t => t.ToDisplayString(fq)))},");
+                sb.AppendLine("            },");
+                sb.AppendLine($"            Stroeme = {Menge(reaktionen.Where(r => r.Strom).Select(r => r.Ein.ToDisplayString(fq)))},");
+                sb.AppendLine("        },");
             }
             sb.AppendLine("    };");
             sb.AppendLine("}");
@@ -154,6 +202,23 @@ namespace Infrastructure.SourceGeneration
             return liste.Count == 0
                 ? "new HashSet<Type>()"
                 : "new HashSet<Type> { " + string.Join(", ", liste.Select(t => $"typeof({t})")) + " }";
+        }
+
+        /// <summary>Ausgaben einer Reaktion: void → keine; T/OneOf&lt;…&gt; → eine; (Async)Enumerable davon → Strom.</summary>
+        private static List<INamedTypeSymbol> VertragsAusgaben(ITypeSymbol rueckgabe, out bool strom)
+        {
+            strom = false;
+            var el = rueckgabe;
+            if (el.SpecialType == SpecialType.System_Void) return new List<INamedTypeSymbol>();
+            if (el is INamedTypeSymbol en && en.TypeArguments.Length == 1
+                && (en.Name == "IEnumerable" || en.Name == "IAsyncEnumerable"))
+            {
+                strom = true;
+                el = en.TypeArguments[0];
+            }
+            if (el is INamedTypeSymbol oneOf && oneOf.Name == "OneOf")
+                return oneOf.TypeArguments.OfType<INamedTypeSymbol>().ToList();
+            return el is INamedTypeSymbol n ? new List<INamedTypeSymbol> { n } : new List<INamedTypeSymbol>();
         }
 
         /// <summary>Events, die eine Projektion behandelt: erster Parameter jedes <c>Handle(evt, IAggregateEnvelope, …)</c>.</summary>
@@ -191,6 +256,15 @@ namespace Infrastructure.SourceGeneration
                 CollectNested(type, results);
             foreach (var sub in ns.GetNamespaceMembers())
                 CollectTypes(sub, results);
+        }
+
+        private static void CollectInterfaces(INamespaceSymbol ns, List<INamedTypeSymbol> results)
+        {
+            foreach (var type in ns.GetTypeMembers())
+                if (type.TypeKind == TypeKind.Interface && type.ContainingNamespace.ToDisplayString() != "Abstractions")
+                    results.Add(type);
+            foreach (var sub in ns.GetNamespaceMembers())
+                CollectInterfaces(sub, results);
         }
 
         private static void CollectNested(INamedTypeSymbol type, List<INamedTypeSymbol> results)

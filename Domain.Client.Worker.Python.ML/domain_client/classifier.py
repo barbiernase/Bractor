@@ -1,7 +1,10 @@
 # REPO-PFAD: Domain.Client.Worker.Python.ML/domain_client/classifier.py
 """
-KI-Classifier für industrielle Bildinspektion.
-Entspricht den Stores/Handlers in Domain.Client.ImagePair (C#).
+KI-Classifier für industrielle Bildinspektion — der Akteur Klassifizierer.
+
+Programmiert gegen seinen Vertrag (Domain.Akteure.IKlassifizierer, docs/konzept-akteure.md §9): die generierte
+Basis `KlassifiziererBasis` verdrahtet den Dispatch, prüft jede Ausgabe gegen den Vertrag und meldet Vertrag + Hash
+am Handshake. Fehlt eine `auf_…`-Methode, startet der Worker nicht.
 """
 
 from __future__ import annotations
@@ -13,13 +16,13 @@ from uuid import UUID
 
 import torch
 
-from cqrs_client import CqrsClient, handle
-
 from domain_client.generated import (
     BildVerfuegbarDto,
     ImagePairKomplettDto,
     KlassifiziereBildPaarDurchKiDto,
+    ModellAktiviertDto,
 )
+from domain_client.generated.vertraege import KlassifiziererBasis
 from domain_client.image_loader import download_and_convert
 
 log = logging.getLogger(__name__)
@@ -44,11 +47,10 @@ class ClassifierState:
     downloads_ok: int = 0
     downloads_failed: int = 0
     bilder: dict[UUID, dict[int, BildInfo]] = field(default_factory=dict)
+    aktives_modell: str = ""
 
 
-class ImageClassifier(CqrsClient[ClassifierState]):
-
-    _declared_command_types = [KlassifiziereBildPaarDurchKiDto]
+class ImageClassifier(KlassifiziererBasis[ClassifierState]):
 
     def __init__(self, registry, generated_module, config: dict):
         super().__init__(registry, generated_module, config)
@@ -65,8 +67,7 @@ class ImageClassifier(CqrsClient[ClassifierState]):
         model.eval()
         return model
 
-    @handle.register
-    async def on_bild_verfuegbar(
+    async def auf_bild_verfuegbar(
         self, event: BildVerfuegbarDto, ctx, state: ClassifierState
     ):
         state.bilder_empfangen += 1
@@ -79,8 +80,7 @@ class ImageClassifier(CqrsClient[ClassifierState]):
         )
         log.info("BildVerfuegbar: %s %s", str(agg_id)[:8], version_name)
 
-    @handle.register
-    async def on_image_pair_komplett(
+    async def auf_image_pair_komplett(
         self, event: ImagePairKomplettDto, ctx, state: ClassifierState
     ):
         agg_id = ctx.aggregate_id
@@ -116,6 +116,17 @@ class ImageClassifier(CqrsClient[ClassifierState]):
         state.pairs_klassifiziert += 1
         log.info("  → Klassifikation: %d [#%d]", label, state.pairs_klassifiziert)
         yield KlassifiziereBildPaarDurchKiDto(aggregate_id=str(agg_id), label=label)
+
+    async def auf_modell_aktiviert(
+        self, event: ModellAktiviertDto, ctx, state: ClassifierState
+    ):
+        """Ein neues Modell ist freigegeben → laden. Schlägt das fehl, bleibt das bisherige aktiv."""
+        log.info("ModellAktiviert: %s (%s)", event.name, event.pfad)
+        try:
+            self._model = await asyncio.to_thread(self._load_model, event.pfad)
+            state.aktives_modell = event.pfad
+        except Exception as e:                        # noqa: BLE001 — altes Modell weiter benutzen
+            log.error("Modell %s nicht geladen, bisheriges bleibt aktiv: %s", event.pfad, e)
 
     async def _classify_pair(self, dc0: torch.Tensor, dc2: torch.Tensor) -> int:
         def _infer():

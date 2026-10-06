@@ -293,7 +293,19 @@ public sealed class AkteurRaw
     public string? Art;
     /// <summary>Dienst-Verträge dieses Akteurs (<c>IAkteurDienst&lt;Akteur&gt;</c>), einfache Namen.</summary>
     public List<string> Dienste = new();
+    /// <summary>Sein Vertrag (<c>IAkteurVertrag&lt;Akteur&gt;</c>): Interface-Name, Datei und je <c>Auf(E)</c> die Reaktion.</summary>
+    public string? VertragName, VertragDatei;
+    public List<AkteurReaktionRaw> Vertrag = new();
     public string? Datei, Doku;
+}
+
+/// <summary>Eine Reaktion im Akteur-Vertrag: <c>Auf(Eingang)</c> → Ausgänge (einfache Namen), Strom = (Async)Enumerable.</summary>
+public sealed class AkteurReaktionRaw
+{
+    public string Eingang = "";
+    public List<string> Ausgaenge = new();
+    public bool Strom;
+    public string? Doku;
 }
 
 /// <summary>Eine Store-Funktion (aus dem Store-Interface + Impl-Rumpf).</summary>
@@ -355,7 +367,7 @@ public sealed class DomainExtractor
     /// <summary>Die globalen usings der Domänen-Compilations (ImplicitUsings + global using) + der Vertrags-Namespace — nie „explizit".</summary>
     private readonly HashSet<string> _impliziteUsings;
     private readonly INamedTypeSymbol? _iDecider, _iApplier, _iAggEnvelope, _pipelineContext,
-        _iWriteStore, _iReadStore, _iStore, _iWertobjekt, _prozessTyp, _iAkteur, _iDarf, _iAkteurDienst;
+        _iWriteStore, _iReadStore, _iStore, _iWertobjekt, _prozessTyp, _iAkteur, _iDarf, _iAkteurDienst, _iAkteurVertrag;
     /// <summary>State-FullName → die Typen, die <c>IDecider&lt;State&gt;</c> bzw. <c>IApplier&lt;State&gt;</c> implementieren (egal wo deklariert).</summary>
     private readonly Dictionary<string, List<INamedTypeSymbol>> _deciderJeState = new(StringComparer.Ordinal), _applierJeState = new(StringComparer.Ordinal);
 
@@ -393,6 +405,7 @@ public sealed class DomainExtractor
         _iStore = Get(Vertrag.IStore);
         _iAkteur = Get(Vertrag.IAkteur);
         _iAkteurDienst = Get(Vertrag.IAkteurDienst);
+        _iAkteurVertrag = Get(Vertrag.IAkteurVertrag);
         _iDarf = Get(Vertrag.IDarf);
         _iWertobjekt = Get(Vertrag.IWertobjekt);
         _prozessTyp = Get(Vertrag.ProzessMetadatenName);
@@ -527,6 +540,7 @@ public sealed class DomainExtractor
     private void CatalogDomainTypes(DomainModel m)
     {
         var dienstZu = new List<(string, string)>();   // (Dienst-Vertrag, Akteur-Full) aus IAkteurDienst<A>
+        var vertragZu = new List<(INamedTypeSymbol, string)>();   // (Vertrag, Akteur-Full) aus IAkteurVertrag<A>
         foreach (var t in DomainQuellTypen())
         {
             if (t.TypeKind == TypeKind.Enum)
@@ -536,6 +550,8 @@ public sealed class DomainExtractor
             }
             // Akteur-Dienst: ein Vertrag (Interface) mit IAkteurDienst<A> — kein Akteur, er gehört A (wird unten zugeordnet).
             if (t.TypeKind == TypeKind.Interface && AkteurVonDienst(t) is { } dienstVon) { dienstZu.Add((t.Name, dienstVon.Fq())); continue; }
+            // Akteur-Vertrag: worauf ein Akteur draußen reagiert (IAkteurVertrag<A>) — gehört A (wird unten zugeordnet).
+            if (t.TypeKind == TypeKind.Interface && AkteurVonVertrag(t) is { } vertragVon) { vertragZu.Add((t, vertragVon.Fq())); continue; }
             // Geschachtelte Typen gehören zum Handcode ihres Containers (Zusatz), keine eigenen Bausteine.
             if (t.ContainingType != null || t.TypeKind is not (TypeKind.Class or TypeKind.Struct) || t.IsStatic || t.IsAbstract) continue;
 
@@ -558,6 +574,9 @@ public sealed class DomainExtractor
         m.Akteure.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         foreach (var (dienst, akteur) in dienstZu.OrderBy(x => x.Item1, StringComparer.Ordinal))
             m.Akteure.FirstOrDefault(a => a.Full == akteur)?.Dienste.Add(dienst);
+        // Höchstens ein Vertrag je Akteur (CQRS061) — der erste nach Name zählt.
+        foreach (var (vertrag, akteur) in vertragZu.OrderBy(x => x.Item1.Name, StringComparer.Ordinal))
+            if (m.Akteure.FirstOrDefault(a => a.Full == akteur) is { VertragName: null } a) ReadVertrag(a, vertrag);
         m.ValueObjects.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Responses.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.ReadModels.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
@@ -633,6 +652,40 @@ public sealed class DomainExtractor
         _iAkteurDienst == null || i.TypeKind != TypeKind.Interface ? null
             : (i.OriginalDefinition.Fq() == _iAkteurDienst.Fq() ? i : i.AllInterfaces.FirstOrDefault(x => x.OriginalDefinition.Fq() == _iAkteurDienst.Fq()))
                 ?.TypeArguments.FirstOrDefault() as INamedTypeSymbol;
+
+    /// <summary>Ein Akteur-Vertrag (<c>interface X : IAkteurVertrag&lt;A&gt;</c>) → A; sonst null.</summary>
+    private INamedTypeSymbol? AkteurVonVertrag(INamedTypeSymbol i) =>
+        _iAkteurVertrag == null || i.TypeKind != TypeKind.Interface ? null
+            : i.AllInterfaces.FirstOrDefault(x => x.OriginalDefinition.Fq() == _iAkteurVertrag.Fq())?.TypeArguments.FirstOrDefault() as INamedTypeSymbol;
+
+    /// <summary>
+    /// Der Vertrag: je <c>Auf(E e)</c> (Deklarations-Reihenfolge) Eingang + Ausgänge aus dem RÜCKGABETYP — <c>void</c> keine, <c>T</c>/<c>OneOf&lt;…&gt;</c>
+    /// eine, <c>(Async)Enumerable&lt;…&gt;</c> ein Strom. Nur die Signatur zählt (der Rumpf lebt draußen im Client).
+    /// </summary>
+    private void ReadVertrag(AkteurRaw a, INamedTypeSymbol vertrag)
+    {
+        var decl = QuellDeklarationen(vertrag).FirstOrDefault();
+        a.VertragName = vertrag.Name;
+        a.VertragDatei = decl?.SyntaxTree.FilePath;
+        foreach (var m in vertrag.GetMembers(Abstractions.Akteurvertrag.Auf).OfType<IMethodSymbol>().Where(m => m.Parameters.Length == 1)
+                     .OrderBy(m => m.Locations.FirstOrDefault()?.SourceSpan.Start ?? 0))
+        {
+            var r = new AkteurReaktionRaw { Eingang = m.Parameters[0].Type.Name };
+            ITypeSymbol el = m.ReturnType;
+            if (el.SpecialType != SpecialType.System_Void)
+            {
+                if (el is INamedTypeSymbol { TypeArguments.Length: 1 } en && en.Name is "IEnumerable" or "IAsyncEnumerable")
+                {
+                    r.Strom = true;
+                    el = en.TypeArguments[0];
+                }
+                r.Ausgaenge.AddRange(el is INamedTypeSymbol { Name: "OneOf" } o ? o.TypeArguments.Select(x => x.Name) : [el.Name]);
+            }
+            var mDecl = m.DeclaringSyntaxReferences.Select(x => x.GetSyntax()).OfType<MethodDeclarationSyntax>().FirstOrDefault();
+            r.Doku = mDecl == null ? null : Summary(mDecl);
+            a.Vertrag.Add(r);
+        }
+    }
 
     // ── Akteure: IAkteur + IDarf<T> in der Basisliste (Code-Fakt; Reihenfolge = Deklaration, Geerbtes danach) ───────
     private AkteurRaw ReadAkteur(INamedTypeSymbol t)

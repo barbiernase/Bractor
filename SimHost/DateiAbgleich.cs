@@ -77,7 +77,10 @@ internal sealed class Abgleich(EditorModell modell, Arbeitsbereich ws, IReadOnly
         foreach (var s in modell.Sagas.Where(s => s.Datei != null && Herkunft.Geaendert(s.Herkunft, Herkunft.Von(s))))
             Datei(s.Datei!, $"prozess {s.Namespace}.{s.Name}", t => ProzessRegeln(t, s));
         foreach (var a in modell.Akteure.Where(a => a.Datei != null && Herkunft.Geaendert(a.Herkunft, Herkunft.Von(a))))
+        {
             Datei(a.Datei!, $"akteur {a.Namespace}.{a.Name}", t => AkteurBefugnisse(t, a));
+            Datei(a.VertragDatei ?? a.Datei!, $"vertrag {a.Namespace}.{a.VertragTyp}", t => AkteurVertrag(t, a));
+        }
 
         var l = modell.Lesen;
         if (l == null) return;
@@ -402,6 +405,36 @@ internal sealed class Abgleich(EditorModell modell, Arbeitsbereich ws, IReadOnly
         }
         var at = (decl as RecordDeclarationSyntax)?.ParameterList?.Span.End ?? decl.Identifier.Span.End;
         return (MitNamespaces(Anwenden(text, [(at, at, " : " + neu)]), a.Darf), "Befugnisse");
+    }
+
+    // ── Akteur-Vertrag (docs/konzept-akteure.md §9): das Interface hat keine Rümpfe — seine Auf-Signaturen gehören dem Modell.
+    //    Fehlende Reaktionen anhängen, geänderte Rückgaben ersetzen, entfernte streichen; fehlt das Interface, hinter den Akteur. ──
+    private (string, string)? AkteurVertrag(string text, Akteur a)
+    {
+        var root = Parse(text);
+        var typen = a.Vertrag.SelectMany(r => r.Ausgaenge.Append(r.Eingang)).ToList();
+        var decl = root.DescendantNodes().OfType<InterfaceDeclarationSyntax>().FirstOrDefault(i => i.Identifier.Text == a.VertragTyp);
+        if (decl == null)
+        {
+            if (a.Vertrag.Count == 0) return null;
+            if (Typ(root, a.Name, a.Namespace) is not { } akt) return (text, $"Akteur {a.Name} nicht gefunden — Vertrag nicht geschrieben");
+            var neu = "\n\n" + Scaffolder.VertragsInterface(a).TrimEnd('\n', '\r');
+            return (MitNamespaces(Anwenden(text, [(akt.Span.End, akt.Span.End, neu)]), typen), "Vertrag angelegt");
+        }
+        var edits = new List<(int, int, string)>();
+        var vorhanden = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var m in decl.Members.OfType<MethodDeclarationSyntax>()
+                     .Where(m => m.Identifier.Text == Abstractions.Akteurvertrag.Auf && m.ParameterList.Parameters.Count == 1))
+        {
+            var ein = ErsterTyp(m) ?? "";
+            vorhanden.Add(ein);
+            if (a.Vertrag.FirstOrDefault(r => r.Eingang == ein) is not { } soll) edits.Add((m.FullSpan.Start, m.FullSpan.End, ""));
+            else if (N(m.ReturnType.ToString()) != N(Scaffolder.VertragsRueckgabe(soll)))
+                edits.Add((m.ReturnType.SpanStart, m.ReturnType.Span.End, Scaffolder.VertragsRueckgabe(soll)));
+        }
+        var fehlend = a.Vertrag.Where(r => !vorhanden.Contains(r.Eingang)).Select(r => $"\n    {Scaffolder.VertragsMethode(r)};\n").ToList();
+        if (fehlend.Count > 0) edits.Add((decl.CloseBraceToken.SpanStart, decl.CloseBraceToken.SpanStart, string.Concat(fehlend)));
+        return edits.Count == 0 ? null : (MitNamespaces(Anwenden(text, edits), typen), "Reaktionen");
     }
 
     // ── Bausteine ──────────────────────────────────────────────────────────────────────────────

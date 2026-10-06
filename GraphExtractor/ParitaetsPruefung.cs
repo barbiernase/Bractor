@@ -104,7 +104,7 @@ public static class ParitaetsPruefung
             $"{soll.Ablehnungen.Count} Ablehnungen, {soll.ValueObjects.Count} VOs, {soll.Konfigs.Count} Konfigs, {soll.Stores.Count} Stores, {soll.Enums.Count} Enums, {soll.Sagas.Count} Sagas " +
             $"({soll.Sagas.Values.Sum()} Regeln), {soll.Queries.Count} Queries, {soll.Responses.Count} Responses, {soll.ReadModels.Count} ReadModels, " +
             $"{soll.Subscriber.Count} Projektionen/Reaktionen, {soll.Readers.Count} Reader, {soll.Pipelines.Count} Pipelines, " +
-            $"{soll.Akteure.Count} Akteure ({soll.AkteurRechte.Values.Sum(x => x.Count)} Befugnisse)."));
+            $"{soll.Akteure.Count} Akteure ({soll.AkteurRechte.Values.Sum(x => x.Count)} Befugnisse, {soll.AkteurVertraege.Count} Verträge mit {soll.AkteurVertraege.Values.Sum(x => x.Count)} Reaktionen)."));
 
         HashSet<string> BoardRecords(string kind) => (board["records"]?.AsArray() ?? new JsonArray())
             .Where(r => (string?)r?["kind"] == kind)
@@ -134,6 +134,11 @@ public static class ParitaetsPruefung
             if (!soll.AkteurRechte.TryGetValue(full, out var sollDarf)) continue;
             var istDarf = (a["darf"]?.AsArray() ?? new JsonArray()).Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal);
             Vergleiche($"Befugnis ({a["name"]})", sollDarf.Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istDarf, befunde);
+            // Vertrag (§9): je Auf(E) „E>Ausgänge[*]" — Soll aus den Interface-Signaturen, Ist aus vertrag[] der Board-Karte.
+            var istVertrag = (a["vertrag"]?.AsArray() ?? new JsonArray()).Select(r => $"{full}|" + SyntaxInventar.Reaktion((string?)r!["eingang"] ?? "",
+                (r["ausgaenge"]?.AsArray() ?? new JsonArray()).Select(x => (string?)x ?? ""), r["strom"]?.GetValue<bool>() == true)).ToHashSet(StringComparer.Ordinal);
+            Vergleiche($"Vertrag ({a["name"]})", (soll.AkteurVertraege.GetValueOrDefault(full) ?? []).Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal),
+                istVertrag, befunde);
         }
         Vergleiche("Projektion/Reaktion", soll.Subscriber,
             BoardListe("projektionen").Concat(BoardListe("reaktionen")).ToHashSet(StringComparer.Ordinal), befunde);
@@ -182,6 +187,12 @@ public static class ParitaetsPruefung
             Pipelines = new(), Subscriber = new(), Konfigs = new(), Stores = new(), Akteure = new();
         /// <summary>Akteur → seine IDarf-Ziele (einfache Namen) — aus der Basisliste, unabhängig vom DomainExtractor.</summary>
         public Dictionary<string, HashSet<string>> AkteurRechte = new(StringComparer.Ordinal);
+        /// <summary>Akteur → seine Reaktionen „Event&gt;Ausgabe,…[*]" aus dem Vertrags-Interface (IAkteurVertrag&lt;A&gt;).</summary>
+        public Dictionary<string, HashSet<string>> AkteurVertraege = new(StringComparer.Ordinal);
+
+        /// <summary>Eine Reaktion als Vergleichs-Schlüssel (Ausgänge sortiert, <c>*</c> = Strom).</summary>
+        public static string Reaktion(string eingang, IEnumerable<string> ausgaenge, bool strom) =>
+            $"{eingang}>{string.Join(",", ausgaenge.OrderBy(x => x, StringComparer.Ordinal))}{(strom ? "*" : "")}";
         public List<string> AlleRecordNamen = new();
         public Dictionary<string, (HashSet<string> Decide, HashSet<string> Apply)> Aggregate = new();
         public Dictionary<string, int> Sagas = new();
@@ -199,7 +210,7 @@ public static class ParitaetsPruefung
             var iReader = Get(Vertrag.IReader); var iDecider = Get(Vertrag.IDecider); var iApplier = Get(Vertrag.IApplier);
             var iWStore = Get(Vertrag.IWriteStore); var iRStore = Get(Vertrag.IReadStore); var iStore = Get(Vertrag.IStore);
             var iWert = Get(Vertrag.IWertobjekt); var iEnv = Get(Vertrag.IAggregateEnvelope);
-            var iAkteur = Get(Vertrag.IAkteur); var iDarf = Get(Vertrag.IDarf);
+            var iAkteur = Get(Vertrag.IAkteur); var iDarf = Get(Vertrag.IDarf); var iVertrag = Get(Vertrag.IAkteurVertrag);
             bool Innen(INamedTypeSymbol t, INamedTypeSymbol? g) => g != null && t.AllInterfaces.Any(i => i.OriginalDefinition.ToDisplayString() == g.ToDisplayString());
             bool Domäne(IAssemblySymbol? a) => a != null && domänen.Contains(a.Name);
 
@@ -222,6 +233,19 @@ public static class ParitaetsPruefung
                         if (decl is EnumDeclarationSyntax) { inv.Enums.Add(full); continue; }
                         if (decl is InterfaceDeclarationSyntax)
                         {
+                            // Akteur-Vertrag: je Auf(E) die Reaktion — Ausgänge aus dem Rückgabetyp (void / T / OneOf / Strom).
+                            if (iVertrag != null && t.AllInterfaces.FirstOrDefault(i => i.OriginalDefinition.Fq() == iVertrag.Fq()) is { } vi
+                                && vi.TypeArguments[0] is INamedTypeSymbol vAkt && !inv.AkteurVertraege.ContainsKey(vAkt.Fq()))
+                                inv.AkteurVertraege[vAkt.Fq()] = t.GetMembers(Abstractions.Akteurvertrag.Auf).OfType<IMethodSymbol>()
+                                    .Where(m => m.Parameters.Length == 1).Select(m =>
+                                    {
+                                        ITypeSymbol el = m.ReturnType;
+                                        var strom = el is INamedTypeSymbol { TypeArguments.Length: 1, Name: "IEnumerable" or "IAsyncEnumerable" };
+                                        if (strom) el = ((INamedTypeSymbol)el).TypeArguments[0];
+                                        var aus = el.SpecialType == SpecialType.System_Void ? []
+                                            : el is INamedTypeSymbol { Name: "OneOf" } o ? o.TypeArguments.Select(x => x.Name) : new[] { el.Name };
+                                        return Reaktion(m.Parameters[0].Type.Name, aus, strom);
+                                    }).ToHashSet(StringComparer.Ordinal);
                             // Ein Akteur-Dienst (IAkteurDienst<A>) ist kein Akteur — er ist Teil von A (nicht gezählt).
                             // Store = jedes Bündel (IStore), plus jede Fähigkeit OHNE Bündel (dann ihr eigener Store).
                             if (Sym.Implements(t, iStore)

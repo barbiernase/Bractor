@@ -15,6 +15,10 @@ namespace Domain.Akteure;
 // erzeugt (NimmRangeAuf, ErstelleImagePair, MarkiereAlsHaengengeblieben …), trägt den Akteur der Kette — es steht hier
 // bewusst NICHT: am Tor käme es so nie durch („nie von der GUI" ist ein Typ-Fakt). Ein Command darf bei mehreren Akteuren
 // stehen. Hier liegen sie, weil dieses Projekt Commands, Queries UND Pipeline-Trigger sieht.
+//
+// IDarf ist das SPONTANE (der Mensch klickt, der Worker fragt von sich aus). Was ein Akteur draußen als REAKTION auf ein Event
+// hineingibt, steht in seinem Vertrag (IAkteurVertrag<A>, §9): Auf(Event) mit dem Ausgabe-Vertrag als Rückgabetyp. Daraus
+// entstehen die Client-Basis (Python), die Rechte (Befugt = IDarf ∪ Ausgaben, Hört = Eingänge) und die Kante im Editor.
 
 // ── Maschinen ──────────────────────────────────────────────────────────────────────────────────────────────────────
 
@@ -24,15 +28,38 @@ public sealed record KameraSystem : IMaschine,
 
 /// <summary>GPU-Worker: trainiert auf einer eingefrorenen Datensatz-Version und meldet den Fortschritt.</summary>
 public sealed record TrainingsSystem : IMaschine,
-    IDarf<MeldeTrainingBegonnen>, IDarf<MeldeFortschritt>, IDarf<MeldeTrainingAbgeschlossen>, IDarf<MeldeTrainingGescheitert>,
     IDarf<HoleDatensatzSamples>;
+
+/// <summary>Worauf das TrainingsSystem reagiert (Python-Worker <c>training_worker.py</c>).</summary>
+public interface ITrainingsSystem : IAkteurVertrag<TrainingsSystem>
+{
+    /// <summary>Trainiert langlaufend und meldet über die Zeit Beginn, Fortschritt (×N) und Ende bzw. Scheitern.</summary>
+    IAsyncEnumerable<OneOf<MeldeTrainingBegonnen, MeldeFortschritt, MeldeTrainingAbgeschlossen, MeldeTrainingGescheitert>>
+        Auf(TrainingAngefordert e);
+
+    /// <summary>Bricht ein laufendes Training kooperativ ab (der Lauf steht schon auf „abgebrochen").</summary>
+    void Auf(TrainingAbgebrochen e);
+}
 
 // ── KI ─────────────────────────────────────────────────────────────────────────────────────────────────────────────
 
 /// <summary>Beurteilt Bildpaare und Einzelbilder mit dem aktiven Modell (Strang 1).</summary>
 public sealed record Klassifizierer : IKi,
-    IDarf<KlassifiziereBildPaarDurchKi>, IDarf<KlassifiziereEinzelBildDurchKi>,
+    IDarf<KlassifiziereEinzelBildDurchKi>,
     IDarf<HoleAktivesModell>;
+
+/// <summary>Worauf der Klassifizierer reagiert (Python-Worker <c>classifier.py</c>).</summary>
+public interface IKlassifizierer : IAkteurVertrag<Klassifizierer>
+{
+    /// <summary>Beide Bilder sind da → das Paar mit dem aktiven Modell beurteilen.</summary>
+    OneOf<KlassifiziereBildPaarDurchKi> Auf(ImagePairKomplett e);
+
+    /// <summary>Nur zur Kenntnis: den Pfad des Bildes merken (das Paar wird erst bei Komplett beurteilt).</summary>
+    void Auf(BildVerfuegbar e);
+
+    /// <summary>Nur zur Kenntnis: das neu freigegebene Modell laden.</summary>
+    void Auf(ModellAktiviert e);
+}
 
 // ── Menschen ───────────────────────────────────────────────────────────────────────────────────────────────────────
 

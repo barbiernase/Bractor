@@ -2,7 +2,9 @@
 """
 TrainingWorker — der out-of-process Trainings-Job (Konzept §4.2).
 
-Derselbe Event→Command-Reaktor wie der Classifier, nur LANGLAUFEND mit Fortschritt:
+Derselbe Event→Command-Reaktor wie der Classifier, nur LANGLAUFEND mit Fortschritt — der Akteur
+TrainingsSystem, programmiert gegen seinen Vertrag (ITrainingsSystem: die Reaktion auf TrainingAngefordert
+ist ein Strom, docs/konzept-akteure.md §9):
 subscribed `TrainingAngefordert`, zieht die eingefrorene Sample-Liste über den typisierten
 Query-Kanal (`self.query(HoleDatensatzSamples…)`, M7), fährt das Training in
 `asyncio.to_thread` (Event-Loop bleibt frei) und **yieldet über die Zeit mehrfach** Commands
@@ -32,8 +34,6 @@ import time
 from dataclasses import dataclass, field
 from typing import Callable
 
-from cqrs_client import CqrsClient, handle
-
 from domain_client.generated import (
     TrainingAngefordertDto,
     TrainingAbgebrochenDto,
@@ -46,6 +46,7 @@ from domain_client.generated import (
     MeldeTrainingAbgeschlossenDto,
     MeldeTrainingGescheitertDto,
 )
+from domain_client.generated.vertraege import TrainingsSystemBasis
 
 log = logging.getLogger(__name__)
 
@@ -57,14 +58,8 @@ class TrainingState:
     abbruch: dict[str, threading.Event] = field(default_factory=dict)
 
 
-class TrainingWorker(CqrsClient[TrainingState]):
-
-    _declared_command_types = [
-        MeldeTrainingBegonnenDto,
-        MeldeFortschrittDto,
-        MeldeTrainingAbgeschlossenDto,
-        MeldeTrainingGescheitertDto,
-    ]
+class TrainingWorker(TrainingsSystemBasis[TrainingState]):
+    """Der Akteur TrainingsSystem — programmiert gegen seinen Vertrag (Domain.Akteure.ITrainingsSystem)."""
 
     # Seiten-Größe beim Ziehen der Samples (paginiert, wie SucheImagePairs).
     SEITEN_GROESSE = 500
@@ -80,8 +75,7 @@ class TrainingWorker(CqrsClient[TrainingState]):
     # HAUPT-HANDLER — der langlaufende Trainings-Job
     # ═══════════════════════════════════════════════════
 
-    @handle.register
-    async def on_training_angefordert(
+    async def auf_training_angefordert(
         self, event: TrainingAngefordertDto, ctx, state: TrainingState
     ):
         training_id = str(ctx.aggregate_id)
@@ -161,8 +155,7 @@ class TrainingWorker(CqrsClient[TrainingState]):
     # ABBRUCH — kooperativ (Konzept §4.3)
     # ═══════════════════════════════════════════════════
 
-    @handle.register
-    async def on_training_abgebrochen(
+    async def auf_training_abgebrochen(
         self, event: TrainingAbgebrochenDto, ctx, state: TrainingState
     ):
         ev = state.abbruch.get(str(ctx.aggregate_id))

@@ -147,6 +147,9 @@ public static class ModellMapper
             Akteure = dom.Akteure.Select(x => new Akteur
             {
                 Name = x.Name, Namespace = x.Namespace, Darf = x.Darf, Art = x.Art, Dienste = x.Dienste, Doku = x.Doku, Datei = Rel(x.Datei),
+                VertragName = x.VertragName,
+                VertragDatei = x.VertragDatei == null || x.VertragDatei == x.Datei ? null : Rel(x.VertragDatei),
+                Vertrag = x.Vertrag.Select(r => new AkteurReaktion { Eingang = r.Eingang, Ausgaenge = r.Ausgaenge, Strom = r.Strom, Doku = r.Doku }).ToList(),
             }).ToList(),
             Lesen = Leseseite(dom),
         });

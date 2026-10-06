@@ -9,11 +9,12 @@ namespace Infrastructure.Akteure;
 /// </summary>
 /// <param name="Name">Einfacher Typname des Akteurs (Schlüssel der Composition-Root-Abbildung).</param>
 /// <param name="Typ">Der Akteur-Typ selbst.</param>
-/// <param name="Commands">darf auslösen</param>
 /// <param name="Queries">darf fragen — bzw. als Zuständiger beantworten, wenn das System sie nicht selbst bedient</param>
 /// <param name="Trigger">darf starten — bzw. als Zuständiger verarbeiten, wenn keine Pipeline ihn bedient</param>
 /// <param name="TransientEvents">darf veröffentlichen (verlierbare Hinweise vom Client)</param>
-/// <param name="Hoert">abgeleitet: Events der Aggregate seiner Commands + Events der Projektionen hinter seinen Queries</param>
+/// <param name="Commands">darf auslösen — Befugt = <c>IDarf</c> ∪ Ausgaben seines Vertrags</param>
+/// <param name="Hoert">abgeleitet: mit Vertrag exakt dessen Eingänge, sonst Events der Aggregate seiner Commands; dazu die Events
+/// der Projektionen hinter seinen Queries</param>
 /// <param name="Art">„Mensch", „Maschine", „Ki" (aus <c>IMensch</c>/<c>IMaschine</c>/<c>IKi</c>) oder leer</param>
 public sealed record AkteurRechte(
     string Name,
@@ -25,6 +26,22 @@ public sealed record AkteurRechte(
     IReadOnlySet<Type> Hoert,
     string Art = "")
 {
+    /// <summary>Der Vertrag des Akteurs (<c>IAkteurVertrag&lt;A&gt;</c>, docs/konzept-akteure.md §9) — null, wenn er nur spontan handelt.</summary>
+    public Type? VertragTyp { get; init; }
+
+    /// <summary>Hash der kanonischen Vertragsform (<see cref="Akteurvertrag.Hash"/>) — der Client meldet ihn am Handshake mit.</summary>
+    public string VertragHash { get; init; } = "";
+
+    /// <summary>Je Reaktion <c>Auf(Event)</c>: die Commands, die der Akteur darauf hineingeben darf (leer = nur zur Kenntnis).</summary>
+    public IReadOnlyDictionary<Type, IReadOnlySet<Type>> Vertrag { get; init; } = new Dictionary<Type, IReadOnlySet<Type>>();
+
+    /// <summary>Die Eingänge, auf die der Akteur mit einem Strom antwortet (mehrere Commands je Reaktion).</summary>
+    public IReadOnlySet<Type> Stroeme { get; init; } = new HashSet<Type>();
+
+    /// <summary>Darf der Akteur auf das Event <paramref name="ausloeser"/> mit <paramref name="command"/> antworten (laut Vertrag)?</summary>
+    public bool AntwortetMit(Type ausloeser, Type command) =>
+        (Teile.Count > 0 ? Teile : [this]).Any(t => t.Vertrag.TryGetValue(ausloeser, out var aus) && aus.Contains(command));
+
     /// <summary>
     /// Verkörpert eine Session MEHRERE Akteure (eine Person ist Inspekteur und KIOperator — ein Token, eine Akteur-Menge),
     /// stehen hier die einzelnen; die Mengen oben sind dann ihre Vereinigung (<see cref="Vereinige"/>).

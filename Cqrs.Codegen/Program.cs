@@ -16,6 +16,7 @@ using Cqrs.Codegen;
 //   1. ProtoRepo/domain.proto                     (für protoc / gRPC)
 //   2. EventJsonSerializerContext.g.cs             (für den STJ-Source-Generator, Marten-Storage)
 //   3. CqrsWireJsonContext.g.cs                    (für den STJ-Source-Generator, Cross-Node-Wire)
+//   4. domain_client/generated/vertraege.py        (Akteur-Verträge → Python-Basisklassen, docs/konzept-akteure.md §9)
 //
 // Früher öffnete dieser Prepass die ganze Solution über MSBuildWorkspace (geschachteltes
 // MSBuild, fragil, plattformabhängig). Jetzt liest er nur die Metadaten der drei gebauten
@@ -184,6 +185,18 @@ WriteIfChanged(eventCtxPath, eventContext);
 WriteIfChanged(wireCtxPath, wireContext);
 Console.WriteLine($"✅ {eventCtxPath}");
 Console.WriteLine($"✅ {wireCtxPath}");
+
+// ────────────────────────────────────────────────────────────────────────
+// 4. Akteur-Verträge → Python (die Worker programmieren gegen die generierte Basis)
+// ────────────────────────────────────────────────────────────────────────
+var (vertraegePy, vertragAnzahl) = PythonVertragsEmitter.Emit(assemblies);
+var vertraegePfad = Path.Combine(solutionDir, "Domain.Client.Worker.Python.ML", "domain_client", "generated", "vertraege.py");
+if (Directory.Exists(Path.GetDirectoryName(vertraegePfad)!))
+{
+    WriteIfChanged(vertraegePfad, vertraegePy);
+    Console.WriteLine($"✅ {vertraegePfad} ({vertragAnzahl} Verträge)");
+}
+else Console.WriteLine($"⚠️  Python-Generat-Ordner fehlt — Verträge nicht geschrieben: {Path.GetDirectoryName(vertraegePfad)}");
 
 Console.WriteLine();
 Console.WriteLine($"📊 {stats}");

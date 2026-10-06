@@ -106,6 +106,21 @@ class CategoryRegistry:
             return name[:-3]
         return name
 
+    def ergaenzt(
+        self,
+        events: set[type] | frozenset[type] = frozenset(),
+        commands: set[type] | frozenset[type] = frozenset(),
+        queries: set[type] | frozenset[type] = frozenset(),
+    ) -> "CategoryRegistry":
+        """Eine Registry mit zusätzlichen Typen (z. B. denen eines Akteur-Vertrags) — die eigene bleibt unverändert."""
+        return CategoryRegistry(
+            events=self._events | frozenset(events),
+            commands=self._commands | frozenset(commands),
+            triggers=self._triggers,
+            queries=self._queries | frozenset(queries),
+            query_responses=self._query_responses,
+        )
+
     @property
     def all_events(self) -> frozenset[type]:
         return self._events

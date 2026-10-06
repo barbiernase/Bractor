@@ -161,10 +161,16 @@ public sealed class Fluss
         }
 
         // Akteure: Akteur → was er darf (IDarf<T>). Sie ersetzen für diese Nachrichten die anonyme Außenwelt.
+        //   Vertrag (§9): Event → Akteur → Commands, Handle = das Event (eine Reaktion draußen, wie ein Handle drinnen).
         foreach (var a in m.Akteure)
         {
             var aid = B("akt", Grammatik.Akteur, a.Name, a.Namespace);
             foreach (var d in a.Darf) K(aid, N(d, null, null));
+            foreach (var r in a.Vertrag)
+            {
+                K(N(r.Eingang, Grammatik.Event, a.Namespace), aid, r.Eingang);
+                foreach (var aus in r.Ausgaenge) K(aid, N(aus, null, null), r.Eingang);
+            }
         }
 
         // Außenwelt: Commands/Queries ohne internen Erzeuger (Client), Trigger mit Ingress-Bindung oder ohne Erzeuger.

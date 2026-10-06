@@ -53,6 +53,8 @@ public static class Sonde
         var modell = BoardLeseseite.AusBoard(gezeichnet);
         // Neue Selbst-Nachrichten legt das Modell selbst an (Self-Tick ohne Record) — sie gehören zur Zeichnung.
         namen.UnionWith(modell.Records.Where(r => r.Kind == RecordArt.Selbst && r.Datei == null).Select(r => r.Name));
+        // Der Vertrag eines gezeichneten Akteurs gehört zur Zeichnung (der Scaffolder legt ihn neben den Akteur).
+        namen.UnionWith(modell.Akteure.Where(a => namen.Contains(a.Name) && a.Vertrag.Count > 0).Select(a => a.VertragTyp));
         foreach (var st in (modell.Lesen?.Stores ?? []).Where(s => namen.Contains(s.Name)))
         {
             namen.UnionWith(st.Fns.Select(f => f.Name));
@@ -93,7 +95,7 @@ public static class Sonde
         if (boardAusgabe != null) { await File.WriteAllTextAsync(boardAusgabe, board); Console.WriteLine($"   Board-Modell (inkl. Sonde) → {boardAusgabe}"); }
 
         // ── Soll ⇄ Ist ──
-        var ist = Inventar(JsonNode.Parse(board)!.AsObject());
+        var ist = Inventar(JsonNode.Parse(board)!.AsObject()).Select(z => z.TrimEnd()).ToList();
         if (zeigeIst) { Console.WriteLine("\n── Ist-Inventar der Sonde ──"); foreach (var z in ist) Console.WriteLine(z); }
         var soll = Ressource("soll.txt").Replace("\r\n", "\n").Split('\n')
             .Select(z => z.TrimEnd()).Where(z => z.Length > 0 && !z.StartsWith('#')).ToList();
@@ -203,7 +205,13 @@ public static class Sonde
             z.Add($"reader {S(r, "namespace")}.{S(r, "name")} projektion={S(r, "projektion")} trackDeps={r["trackDeps"]} | "
                   + string.Join("; ", A(r, "handles").Select(h => $"{S(h, "query")} -> {Fns(h)} => {string.Join("|", A(h, "responses").Select(x => (string?)x))}")));
         foreach (var ak in A(b, "akteure").Where(Sonde))
+        {
             z.Add($"akteur {S(ak, "namespace")}.{S(ak, "name")}{(ak["art"]?.GetValue<string>() is { Length: > 0 } art ? " " + art : "")}{(A(ak, "dienste").Any() ? " dienste " + string.Join(", ", A(ak, "dienste").Select(x => (string?)x)) : "")} | darf {string.Join(", ", A(ak, "darf").Select(x => (string?)x))}");
+            if (A(ak, "vertrag").Any())
+                z.Add($"vertrag {S(ak, "namespace")}.{(ak["vertragName"]?.GetValue<string>() is { Length: > 0 } vn ? vn : "I" + S(ak, "name"))} akteur={S(ak, "name")} | "
+                      + string.Join("; ", A(ak, "vertrag").Select(r => $"{S(r, "eingang")} -> {(r["strom"]?.GetValue<bool>() == true ? "strom " : "")}"
+                                                                       + string.Join(", ", A(r, "ausgaenge").Select(x => (string?)x)))));
+        }
         var sondenTrigger = new HashSet<string>();
         foreach (var p in A(b, "pipelines").Where(Sonde))
         {

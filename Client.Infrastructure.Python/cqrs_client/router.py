@@ -26,6 +26,15 @@ from .versioning import VersionTracker
 log = logging.getLogger(__name__)
 
 
+@dataclass(frozen=True)
+class Kausalitaet:
+    """Worauf eine Ausgabe antwortet: das Event (Stream + Version + Typ) und ihr Index in der Reaktion."""
+    stream_id: str
+    version: int
+    typ: str
+    index: int
+
+
 @dataclass
 class MessageContext:
     """
@@ -146,9 +155,17 @@ class MessageRouter:
             envelope.aggregate_id[:8] if envelope.aggregate_id else "?"
         )
 
-        # Dispatch + Output-Routing
+        # Dispatch + Output-Routing. Jede Ausgabe trägt ihre Kausalität (dieses Event + Index in der Reaktion) —
+        # der Server leitet daraus eine deterministische CommandId ab (docs/konzept-akteure.md §9.7).
+        index = 0
         async for output in handle.receive(instance, payload, ctx, state):
-            await self._route_output(output, ctx, proxy, mapper, registry)
+            await self._route_output(output, ctx, proxy, mapper, registry,
+                                     causation=Kausalitaet(
+                                         stream_id=envelope.aggregate_id,
+                                         version=envelope.aggregate_version,
+                                         typ=CategoryRegistry.capabilities_name(type(payload)),
+                                         index=index))
+            index += 1
 
     # ═══════════════════════════════════════════════════
     # TRIGGER FORWARD HANDLING
@@ -250,6 +267,7 @@ class MessageRouter:
         proxy: GrpcProxy,
         mapper: PayloadMapper,
         registry: CategoryRegistry,
+        causation: "Kausalitaet | None" = None,
     ) -> None:
         """
         Routet einen yielded Output basierend auf CategoryRegistry.
@@ -281,7 +299,9 @@ class MessageRouter:
                 output,
                 aggregate_id=agg_id,
                 expected_version=-1,
+                correlation_id=ctx.correlation_id,
                 session_id=proxy.session_id,
+                causation=causation,
             )
             await proxy.send_command(envelope)
             log.info("→ Command: %s (agg=%s)", type(output).__name__, str(agg_id)[:8])

@@ -139,11 +139,14 @@ class PayloadMapper:
         aggregate_type: str = "",
         correlation_id: str = "",
         session_id: str = "",
+        causation=None,
     ):
         """
         Verpackt einen Command in einen CommandEnvelopeDto.
 
-        Setzt das richtige oneof-Feld basierend auf dem Typ.
+        Setzt das richtige oneof-Feld basierend auf dem Typ. `causation` (router.Kausalitaet): die Reaktion
+        antwortet auf ein Event — Stream + Version + Typ + Index reisen mit, der Server leitet daraus die
+        CommandId deterministisch ab (doppelt zugestellt ≠ doppelt wirksam, docs/konzept-akteure.md §9.7).
         """
         envelope_cls = getattr(self._gen, "CommandEnvelopeDto")
         envelope = envelope_cls(
@@ -155,6 +158,11 @@ class PayloadMapper:
             correlation_id=correlation_id or str(uuid4()),
             origin_session_id=session_id,
         )
+        if causation is not None and "causation_stream_id" in getattr(envelope, "__dataclass_fields__", {}):
+            envelope.causation_stream_id = causation.stream_id
+            envelope.causation_version = causation.version
+            envelope.causation_type = causation.typ
+            envelope.causation_index = causation.index
 
         # Oneof-Feld setzen
         field_name = self._get_oneof_field_name(command, self._command_field_map)

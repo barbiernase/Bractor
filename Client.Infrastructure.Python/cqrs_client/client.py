@@ -277,11 +277,15 @@ class CqrsClient(HandlerBase, Generic[S]):
         return state_type()
 
     def _resolve_state_type(self) -> type | None:
-        """Extrahiert den State-Typ aus CqrsClient[S]."""
-        for base in getattr(type(self), '__orig_bases__', ()):
-            origin = getattr(base, "__origin__", None)
-            if origin is CqrsClient:
-                args = get_args(base)
-                if args:
-                    return args[0]
+        """
+        Extrahiert den State-Typ aus CqrsClient[S] — auch über Zwischenklassen (z. B. eine generierte
+        Vertragsbasis: class Worker(KlassifiziererBasis[MeinState])): die erste konkrete Typ-Angabe in der MRO.
+        """
+        for klasse in type(self).__mro__:
+            for base in klasse.__dict__.get('__orig_bases__', ()):
+                origin = getattr(base, "__origin__", None)
+                if isinstance(origin, type) and issubclass(origin, CqrsClient):
+                    args = get_args(base)
+                    if args and not isinstance(args[0], TypeVar):
+                        return args[0]
         return None

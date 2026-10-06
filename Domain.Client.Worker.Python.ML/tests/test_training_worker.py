@@ -1,6 +1,6 @@
 """
 M8 — der TrainingWorker offline: kein Server, kein Torch. Der Proxy-Query wird gefaked
-(liefert DatensatzSamples), dann wird on_training_angefordert als Async-Generator getrieben
+(liefert DatensatzSamples), dann wird auf_training_angefordert als Async-Generator getrieben
 und die zurückgemeldeten Commands gesammelt.
 
 Beweist die Akzeptanz (§5 M7/M8): „der TrainingWorker zieht Samples per query() und meldet
@@ -56,7 +56,7 @@ async def _treibe(worker, event, patch_send_query):
     worker._proxy.send_query = patch_send_query
     ctx = SimpleNamespace(aggregate_id=uuid4())
     outputs = []
-    async for cmd in worker.on_training_angefordert(event, ctx, worker.state):
+    async for cmd in worker.auf_training_angefordert(event, ctx, worker.state):
         outputs.append(cmd)
     return outputs
 

@@ -127,6 +127,8 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         }
 
         PID? proxyPid = null;
+        // Wer diese Session ist: vom Tor (Token), ggf. erst am Handshake vom Akteur-Vertrag festgelegt (§9.6).
+        var sitzung = new AkteurSitzung(akteur);
 
         try
         {
@@ -160,7 +162,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                     var clientMessage = requestStream.Current;
                     await ProcessMessageAsync(
                         clientMessage, responseStream, subscriptionTracker,
-                        proxyPid, akteur,
+                        proxyPid, sitzung,
                         sessionId, ct);
                 }
 
@@ -179,6 +181,12 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled)
         {
             _logger.LogInformation("{Session} client disconnected", sessionId);
+        }
+        catch (RpcException ex)
+        {
+            // Bewusst beendet (z. B. Akteur-Vertrag abgelehnt): der Client bekommt den Status, nicht ein stilles Ende.
+            _logger.LogWarning("{Session} beendet: {Status} {Detail}", sessionId, ex.StatusCode, ex.Status.Detail);
+            throw;
         }
         catch (Exception ex)
         {
@@ -245,16 +253,17 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
         SubscriptionTracker subscriptionTracker,
         PID proxyPid,
-        AkteurRechte? akteur,
+        AkteurSitzung sitzung,
         string sessionId,
         CancellationToken ct)
     {
+        var akteur = sitzung.Akteur;
         try
         {
             switch (message.MessageCase)
             {
                 case ProtoRepo.ClientMessage.MessageOneofCase.Command:
-                    await HandleCommandAsync(message.Command, responseStream, akteur, sessionId, ct);
+                    await HandleCommandAsync(message.Command, responseStream, sitzung, sessionId, ct);
                     break;
 
                 case ProtoRepo.ClientMessage.MessageOneofCase.Subscribe:
@@ -266,7 +275,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                     break;
 
                 case ProtoRepo.ClientMessage.MessageOneofCase.Capabilities:
-                    await HandleCapabilitiesAsync(message.Capabilities, responseStream, subscriptionTracker, proxyPid, akteur, sessionId, ct);
+                    await HandleCapabilitiesAsync(message.Capabilities, responseStream, subscriptionTracker, proxyPid, sitzung, sessionId, ct);
                     break;
 
                 case ProtoRepo.ClientMessage.MessageOneofCase.Query:
@@ -298,6 +307,10 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                     break;
             }
         }
+        catch (RpcException)
+        {
+            throw;   // Session bewusst beenden (Status an den Client), siehe Connect
+        }
         catch (Exception ex)
         {
             _logger.LogError(ex, "{Session} error processing message", sessionId);
@@ -314,10 +327,31 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
         SubscriptionTracker subscriptionTracker,
         PID proxyPid,
-        AkteurRechte? akteur,
+        AkteurSitzung sitzung,
         string sessionId,
         CancellationToken ct)
     {
+        // 0. Akteur-Vertrag (docs/konzept-akteure.md §9.6): „ich bin Vertrag X" — geprüft gegen die generierte Tabelle (mit Tor:
+        //    das Token muss ihn verkörpern; abweichender Hash = Warnung bzw. im strengen Modus Ablehnung). Ohne Tor sagt der Vertrag,
+        //    wer da ist: die Session bekommt seine Befugnisse.
+        var vp = AkteurVertragsPruefung.Pruefe(request.Vertrag, request.VertragHash, sitzung.Akteur, GeneratedAkteurRechte.Alle,
+            _akteurTor?.VertragStreng ?? false);
+        if (vp.Ablehnung is { } ablehnung)
+        {
+            _logger.LogWarning("{Session} Vertrag {Vertrag} abgelehnt: {Grund}", sessionId, request.Vertrag, ablehnung);
+            await SendErrorAsync(responseStream, "VERTRAG_ABGELEHNT", ablehnung, "", ct);
+            throw new RpcException(new Status(StatusCode.PermissionDenied, ablehnung));
+        }
+        if (vp.Warnung is { } warnung)
+            _logger.LogWarning("{Session} Vertrag {Vertrag}: {Warnung}", sessionId, request.Vertrag, warnung);
+        if (vp.Vertrag is { } vertrag)
+        {
+            sitzung.Vertrag = vertrag;
+            sitzung.Akteur ??= vertrag;
+            _logger.LogInformation("{Session} Vertrag {Vertrag} ({Typ}) angenommen", sessionId, vertrag.Name, vertrag.VertragTyp?.Name);
+        }
+        var akteur = sitzung.Akteur;
+
         var messageSource = request.MessageTypes.Any()
             ? $"message_types: [{string.Join(", ", request.MessageTypes)}]"
             : $"event_types: [{string.Join(", ", request.EventTypes)}]";
@@ -333,16 +367,24 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             // 1. Capabilities ermitteln (universell)
             var result = _capabilitiesHandler.Handle(request, sessionId);
 
-            // 1b. Akteur: Befugnis statt Selbstauskunft — erlaubte Mengen aus IDarf, Hören abgeleitet,
-            //     Zuständigkeit nur für Lücken (das System bedient den Typ nicht selbst) und nur einmal.
-            if (akteur != null)
+            // 1b. Akteur: Befugnis statt Selbstauskunft — erlaubte Mengen aus IDarf (∪ Vertrags-Ausgaben), Hören abgeleitet,
+            //     Zuständigkeit nur für Lücken (das System bedient den Typ nicht selbst) und nur einmal. Mit Vertrag: abonniert wird
+            //     genau, worauf er reagiert.
+            Func<string, Type?> loese = n => MessageTypeMapping.Resolve(n).Type;
+            Func<Type, bool> internBedient = t => ProjectionQueryService.SupportedQueryTypes.Contains(t)
+                                                  || GeneratedPipelines.TriggerToPipelineId.ContainsKey(t);
+            Func<string, bool> schonVergeben = n => _queryHandlerRegistry.GetHandler(n) is { } q && !q.Equals(proxyPid)
+                                                    || _triggerHandlerRegistry.GetHandler(n) is { } t && !t.Equals(proxyPid);
+            if (sitzung.Vertrag is { } v)
             {
-                var verweigert = AkteurTor.Wende(result, akteur,
-                    loese: n => MessageTypeMapping.Resolve(n).Type,
-                    internBedient: t => ProjectionQueryService.SupportedQueryTypes.Contains(t)
-                                        || GeneratedPipelines.TriggerToPipelineId.ContainsKey(t),
-                    schonVergeben: n => _queryHandlerRegistry.GetHandler(n) is { } q && !q.Equals(proxyPid)
-                                        || _triggerHandlerRegistry.GetHandler(n) is { } t && !t.Equals(proxyPid));
+                var abweichung = AkteurVertragsPruefung.Wende(result, v, loese, internBedient, schonVergeben);
+                if (abweichung.Count > 0)
+                    _logger.LogInformation("{Session} Vertrag {Vertrag} statt Selbstauskunft: [{Abweichung}]",
+                        sessionId, v.Name, string.Join(", ", abweichung));
+            }
+            else if (akteur != null)
+            {
+                var verweigert = AkteurTor.Wende(result, akteur, loese, internBedient, schonVergeben);
                 if (verweigert.Count > 0)
                     _logger.LogWarning("{Session} Akteur {Akteur} verweigert: [{Verweigert}]",
                         sessionId, akteur.Name, string.Join(", ", verweigert));
@@ -383,8 +425,13 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 _logger.LogWarning("{Session} unknown types: [{Types}]", sessionId, string.Join(", ", result.UnknownTypes));
             }
 
-            // 7. Response senden
+            // 7. Response senden (mit dem angenommenen Vertrag + Server-Hash — der Client sieht so einen abweichenden Stand)
             var response = _capabilitiesHandler.BuildResponse(result);
+            if (sitzung.Vertrag is { } angenommen)
+            {
+                response.Vertrag = angenommen.Name;
+                response.VertragHash = angenommen.VertragHash;
+            }
             var serverMessage = new ProtoRepo.ServerMessage
             {
                 CapabilitiesResponse = response
@@ -412,11 +459,12 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     private async Task HandleCommandAsync(
         ProtoRepo.CommandRequest request,
         IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
-        AkteurRechte? akteur,
+        AkteurSitzung sitzung,
         string sessionId,
         CancellationToken ct)
     {
         _logger.LogDebug("{Session} ← Command", sessionId);
+        var akteur = sitzung.Akteur;
 
         try
         {
@@ -461,6 +509,32 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             // CommandEmitter. Positive Versionen bleiben strikt Client (OCC), z. B. die Blazor-GUI.
             if (request.Envelope.ExpectedVersion < 0)
                 envelope = envelope with { Modus = new CommandModus.Emittiert() };
+
+            // Reaktion von außen mit Kausalität (§9.7): der Client nennt das Event, auf das er antwortet. Mit Vertrag muss die
+            // Antwort darin stehen (Auf(Event) → dieser Command); die CommandId wird deterministisch abgeleitet — doppelt
+            // zugestellt ≠ doppelt wirksam (die Inbox des Ziels dedupliziert, Emittiert-Modus wie beim internen Emit).
+            var c = request.Envelope;
+            if (!string.IsNullOrEmpty(c.CausationStreamId) && Guid.TryParse(c.CausationStreamId, out var ursache))
+            {
+                var cmdTyp = envelope.Payload.GetType();
+                if (sitzung.Vertrag is { } vertrag
+                    && !(MessageTypeMapping.Resolve(c.CausationType).Type is { } ausloeser && vertrag.AntwortetMit(ausloeser, cmdTyp)))
+                {
+                    _logger.LogWarning("{Session} {Command} ist laut Vertrag {Vertrag} keine Antwort auf {Ausloeser}",
+                        sessionId, cmdTyp.Name, vertrag.Name, c.CausationType);
+                    if (string.IsNullOrWhiteSpace(envelope.AggregateType))
+                        envelope = envelope with { AggregateType = AggregateDispatcherExtensions.ResolveAggregateType(envelope.Payload) };
+                    if (AkteurVerweigerung.Baue(envelope, $"{vertrag.Name} (Vertrag: keine Antwort auf {c.CausationType})") is { } verweigert)
+                        await _publisher.PublishAsync(verweigert);
+                    return;
+                }
+                envelope = envelope with
+                {
+                    CommandId = AkteurVertragsPruefung.CommandId(envelope.CorrelationId, ursache, c.CausationVersion, c.CausationType,
+                        c.CausationIndex, cmdTyp, envelope.AggregateId),
+                    Modus = new CommandModus.Emittiert(),
+                };
+            }
 
             _logger.LogDebug("{Session} Command {Command} → {AggregateType} ({Modus}), CorrelationId {CorrelationId}",
                 sessionId, envelope.Payload.GetType().Name, envelope.AggregateType,
