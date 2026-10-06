@@ -50,7 +50,7 @@ public sealed class KontextBauer
     private readonly JsonElement _board;        // Editor-Modell (ModellMapper.ZuBoardJson) — Quelle des Skeletts
     private readonly List<Compilation> _comps;
     private readonly HashSet<string> _domänen, _framework;
-    private readonly INamedTypeSymbol? _iTransient, _iWriteStore, _iReadStore, _iPull, _iAppend, _iTrigger, _iSelf, _iEvent, _iCommand, _iQuery, _iReadModel, _iResponse;
+    private readonly INamedTypeSymbol? _iTransient, _iWriteStore, _iReadStore, _iCoCommit, _iPull, _iAppend, _iTrigger, _iSelf, _iEvent, _iCommand, _iQuery, _iReadModel, _iResponse;
     private readonly Dictionary<string, (string Intent, string Quelle)> _llmKnoten;
 
     public KontextBauer(Projektlage lage, DomainModel dom, KnowledgeGraph graph, CompositionRoot cr, string? boardDatei)
@@ -63,6 +63,7 @@ public sealed class KontextBauer
         _framework = lage.Analyse.Select(a => a.Compilation.AssemblyName ?? "").Where(n => !_domänen.Contains(n)).ToHashSet(StringComparer.Ordinal);
         INamedTypeSymbol? Get(string n) => _comps.Select(c => c.GetTypeByMetadataName(n)).FirstOrDefault(x => x != null);
         _iTransient = Get(Vertrag.ITransientEvent); _iWriteStore = Get(Vertrag.IWriteStore); _iReadStore = Get(Vertrag.IReadStore);
+        _iCoCommit = Get(Vertrag.ICoCommitTracker);
         _iPull = Get(Vertrag.IPullSubscriber); _iAppend = Get(Vertrag.IAppendProjektion); _iTrigger = Get(Vertrag.IPipelineTrigger);
         _iSelf = Get(Vertrag.IPipelineSelfMessage); _iEvent = Get(Vertrag.IEvent); _iCommand = Get(Vertrag.ICommand);
         _iQuery = Get(Vertrag.IQuery); _iReadModel = Get(Vertrag.IReadModel); _iResponse = Get(Vertrag.IQueryResponse);
@@ -283,6 +284,10 @@ public sealed class KontextBauer
                 break;
             case "store":
                 yield return "Signatur vom Store-Interface vorgegeben — Compiler";
+                if (IstCoCommitStore(s.Klasse) && StoreRolle(s) is { } schreibt)
+                    yield return schreibt
+                        ? "Schreib-Fähigkeit: nur puffern über die Puffer-Methoden der Basis, keine committeten Daten lesen (Lesen-Ändern-Schreiben = Puffer-Methode mit Transformation) — Analyzer CQRS066/067"
+                        : "Lese-Fähigkeit: " + Abstractions.StoreZugriff.Hinweis + "; nichts puffern — Analyzer CQRS067";
                 break;
         }
     }
@@ -303,11 +308,35 @@ public sealed class KontextBauer
             if (!_domänen.Contains(bt.ContainingAssembly?.Name ?? "") && !_framework.Contains(bt.ContainingAssembly?.Name ?? "")) continue;
             foreach (var mm in bt.GetMembers().Where(x => x.DeclaredAccessibility is Accessibility.Protected or Accessibility.Public
                                                           && !x.IsImplicitlyDeclared && x is IMethodSymbol { MethodKind: MethodKind.Ordinary } or IPropertySymbol))
-                yield return $"Geerbt     {Sig(mm)}   (aus {bt.Name})";
+                yield return $"Geerbt     {Sig(mm)}   (aus {bt.Name})"
+                             + (IstCoCommitStore(s.Klasse) && IstDatenzugriff(TypVon(mm)) ? "   — " + Abstractions.StoreZugriff.Hinweis : "");
         }
         foreach (var h in Helfer(s)) yield return $"Helfer     {Sig(h)}";
         foreach (var c in s.Klasse.GetMembers().OfType<IFieldSymbol>().Where(f => f.IsConst || f.IsStatic && f.IsReadOnly).Where(IstHand))
             yield return $"Konstante  {c.Type.ToDisplayString(Kurz)} {c.Name}{(c.HasConstantValue ? " = " + c.ConstantValue : "")}";
+    }
+
+    // ── Store-Zugriff (CQRS066/067): dieselbe Positivliste wie der Analyzer (Abstractions.StoreZugriff) ──
+
+    /// <summary>Co-Commit-Store: eine Basis trägt die Marke (ICoCommitTracker) — wie im Analyzer, über Symbole.</summary>
+    private bool IstCoCommitStore(INamedTypeSymbol t)
+    {
+        for (var b = t.BaseType; b != null; b = b.BaseType)
+            if (Sym.Implements(b, _iCoCommit)) return true;
+        return false;
+    }
+
+    private static bool IstDatenzugriff(ITypeSymbol? t) =>
+        t != null && Abstractions.StoreZugriff.DatenzugriffAssemblies.Contains(t.ContainingAssembly?.Name ?? "");
+
+    /// <summary>true = der Slot implementiert eine Schreib-Fähigkeit, false = eine Lese-Fähigkeit, null = keine.</summary>
+    private bool? StoreRolle(SlotInventar.SlotRef s)
+    {
+        foreach (var f in s.Klasse.AllInterfaces.Where(i => Sym.Implements(i, _iWriteStore) || Sym.Implements(i, _iReadStore)))
+            foreach (var m in f.GetMembers().OfType<IMethodSymbol>())
+                if (SymbolEqualityComparer.Default.Equals(s.Klasse.FindImplementationForInterfaceMember(m), s.Methode))
+                    return Sym.Implements(f, _iWriteStore);
+        return null;
     }
 
     private IEnumerable<ISymbol> Felder(SlotInventar.SlotRef s) => s.Klasse.GetMembers()

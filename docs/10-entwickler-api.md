@@ -67,6 +67,26 @@ generiert `PullPathGenerator`; Schreib-Fähigkeiten aus zwei Stores in einer Kla
 Konstruktor/Feld eines Konsumenten ist CQRS054, `new …Store()` CQRS055. Optionaler GA-1-Marker `IAppendProjektion`
 erzwingt einen Co-Commit-Tracker. Beispiel: `Domain.Projections/ImagePairProjection.cs`.
 
+**Schreib-Regel im Store (`MartenCoCommitStoreBase`).** Die Maschine garantiert einen Schreiber je (Projektion, Stream);
+das Co-Commit macht einen Stapel atomar, isoliert aber nicht zwei parallele Stapel verschiedener Streams. Deshalb schreibt
+eine Store-Methode auf genau einem von drei Wegen, und die Basis prüft das beim Puffern:
+
+| Dokument | Weg | Beispiel |
+|---|---|---|
+| eigenes (Schlüssel = Stream des Stapels) | `EnqueueStore(id, doc)`, `EnqueueTransform`, `EnqueueAnlegenOderAendern` | `TrainingslaufReadModel` |
+| Zeile dieses Streams (Id enthält den Besitzer) | `EnqueueZeile(besitzer, zeile)`, `EnqueueZeileEntfernen` | `DatensatzMitgliedschaftZeile` `{Datensatz}:{Paar}` |
+| geteilt (mehrere Streams, Marker `IGeteiltesReadModel`) | `EnqueueGeteilt(id, alt => neu)` — Versionsprüfung; Konflikt verwirft den Stapel samt Marke, der Adapter wiederholt | `AktivesModellReadModel` |
+
+Ein fremdes Dokument über den ersten Weg wirft sofort (statt eines stillen Lost Updates). Wo möglich Zeilen statt eines
+geteilten Dokuments; „neuer gewinnt“ in einem geteilten Dokument nach Event-Zeit, nie nach Ankunft (zwischen Streams gibt
+es keine Ordnung). Belegt gegen echtes Postgres: `GeteilteDokumentePostgresTests`, `SchreibRegelPostgresTests`.
+
+Am Puffer vorbei schreiben (der übliche Marten-Weg `LightweightSession() … SaveChangesAsync()`) ist ein Build-Fehler:
+**CQRS066** erlaubt in einem Co-Commit-Store von der Datenzugriffs-Bibliothek nur `Store.QuerySession()` → `LoadAsync`/
+`LoadManyAsync`/`Query` (+ `ToListAsync`/`CountAsync` …) und verbietet, einen Zugang an fremden Code weiterzureichen;
+**CQRS067** trennt die Rollen (Schreib-Fähigkeit liest nicht, Lese-Fähigkeit puffert nicht). Die Positivliste steht EINMAL in
+`Abstractions/StoreZugriff.cs` (Analyzer `Projections.SourceGeneration/StoreZugriffAnalyzer.cs` und LLM-Kontext lesen sie).
+
 > Hinweis: der produktive `MartenProjectionTracker` committet Effekt und Marke aktuell in
 > getrennten Sessions (at-least-once) — siehe [04 §4.3](04-konsum-und-prozess-maschine.md).
 

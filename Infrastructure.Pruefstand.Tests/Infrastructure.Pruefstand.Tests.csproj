@@ -29,6 +29,8 @@
     <ProjectReference Include="..\Infrastructure.SourceGeneration\Infrastructure.SourceGeneration.csproj" ReferenceOutputAssembly="true" />
     <!-- Ebenso Domain.SourceGeneration → nur um den AusgabeVertragAnalyzer (CQRS050) zu instanziieren. -->
     <ProjectReference Include="..\Domain.SourceGeneration\Domain.SourceGeneration.csproj" ReferenceOutputAssembly="true" />
+    <!-- Ebenso Projections.SourceGeneration → nur um den StoreZugriffAnalyzer (CQRS066/067) zu instanziieren. -->
+    <ProjectReference Include="..\Projections.SourceGeneration\Projections.SourceGeneration.csproj" ReferenceOutputAssembly="true" />
     <ProjectReference Include="..\Domain\Domain.csproj" />
     <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
     <ProjectReference Include="..\Domain.Infrastructure\Domain.Infrastructure.csproj" />

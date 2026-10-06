@@ -26,8 +26,10 @@ public static class Vertrag
     public static readonly string IQuery = typeof(IQuery).FullName!;
     public static readonly string IQueryResponse = typeof(IQueryResponse).FullName!;
     public static readonly string IReadModel = typeof(IReadModel).FullName!;
+    public static readonly string IGeteiltesReadModel = typeof(IGeteiltesReadModel).FullName!;
     public static readonly string IWriteStore = typeof(IWriteStore).FullName!;
     public static readonly string IReadStore = typeof(IReadStore).FullName!;
+    public static readonly string ICoCommitTracker = typeof(ICoCommitTracker).FullName!;
     public static readonly string IStore = typeof(IStore).FullName!;
     public static readonly string IAkteur = typeof(IAkteur).FullName!;
     public static readonly string IDarf = typeof(IDarf<>).FullName!;
