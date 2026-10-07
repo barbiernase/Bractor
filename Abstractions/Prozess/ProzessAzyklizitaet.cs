@@ -20,6 +20,10 @@ public static class ProzessAzyklizität
     /// <summary>Wirft, wenn der Regel-Graph des Prozesses einen Zyklus enthält.</summary>
     public static void Prüfe(string prozessName, ProzessRegeln regeln, Func<Type, IEnumerable<Type>> produziert)
     {
+        // Ein Pipeline-Fluss ist per Konstruktion azyklisch (ein Draht kommt nur von einem früher deklarierten Knoten). Der
+        // Typ-Graph wäre hier sogar falsch: dieselbe Funktion zweimal hintereinander sähe wie ein Kreis aus.
+        if (regeln.IstFluss) return;
+
         var tupel = new List<(IReadOnlyList<string> Bedingung, string Command)>();
         var produziertMap = new Dictionary<string, IReadOnlyList<string>>();
 

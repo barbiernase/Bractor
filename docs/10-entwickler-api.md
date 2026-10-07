@@ -157,7 +157,35 @@ Regeln: CQRS068 (feste Form), CQRS069 (ein Auftrag je Funktion), CQRS003 (`Rufe`
 `UndAlle`, kein `Rufe` mit Fan-out (Validator). Ergebnis-Events sind normale Domänen-Typen: Proto regenerieren wie bei jedem
 neuen Event. Beispiel: Sonde `GraphExtractor/Sonde/Gebuehren.cs.txt`; Laufzeit-Beweis `Infrastructure.Pruefstand.Tests/Funktionen/`.
 
-## 10.6 Eine Pipeline
+## 10.6 Eine Pipeline als Fluss (Quelle → Funktionen → Commands)
+
+Kanonisch seit 2026-10-07 (`docs/konzept-editor-pipelines.md` §14). Eine Pipeline ist eine Klasse `: IPipeline`, deren Knoten vom
+Draht aus verdrahtet werden. Der Variablenname ist die Identität des Knotens (dieselbe Funktion darf mehrfach vorkommen).
+```csharp
+public sealed class Bildeingang : IPipeline
+{
+    public PipelineFluss Fluss => PipelineFluss.Definiere(p =>
+    {
+        var datei    = p.Quelle<DateiErkannt>();                                   // oder p.Auf<Event>() — Event aus dem Log
+        var deuten   = datei.Rufe<IDateinameDeutung>(datei => new DeuteDateiname(datei.Dateiname, datei.Pfad));
+        var vorschau = deuten.Bei<ImagePairDateiGedeutet>().Rufe<IBildVerkleinerung>(deuten => new VerkleinereBild(deuten.Pfad, 512))
+            .Zeitlimit(TimeSpan.FromMinutes(5));                                    // ⏳-Port: vorschau.BeiZeitlimit()
+        var paar     = p.Alle(deuten.Bei<ImagePairDateiGedeutet>(), datei)          // ∧ (bis 4 Drähte), Kontext = ein Vorgänger
+            .Sende<ErstelleImagePair>((deuten, datei) => new ErstelleImagePair(…));
+        // ∨: .Oder(paar.BeiAbgelehnt(), …) — ✕-Port = Ablehnung des Aggregats bzw. gescheiterte Funktion
+        // Je:  var je = x.Bei<Zerlegt>().Je(z => z.Bilder); je.Rufe<F>(b => …); je.Sammle(f.Bei<E>()).Sende<C>((z, liste) => …);
+    });
+}
+```
+Die Quelle ist Katalog + Bindung: `record DateiErkannt(…) : IQuellNachricht { Kennung => … }`, eine `IQuelle<DateiErkannt>` (z. B.
+`DateiQuelle`) und im Host `services.AddQuelle<DateiErkannt, DateiQuelle>()` (+ optional `app.MapQuellWebhook<DateiErkannt>(route)`).
+Jede Nachricht wird genau einmal je Kennung ins Log geschrieben und startet je Pipeline einen Vorgang. Funktionen bindet der Host wie
+in §10.5a; eine Funktion, die ein Python-Worker rechnet, mit `AddExterneFunktion<F>()` (der Worker erbt die generierte
+`<Funktion>Basis` aus `domain_client/generated/funktionen.py`, bietet sie am Handshake an und holt Aufträge per Pull). Pipelines
+liegen in der Domain-Assembly (Registry wie bei Prozessen). Beispiel: `Domain/ImagePair/Bildeingang.cs`; Beweise:
+`Infrastructure.Pruefstand.Tests/Funktionen/PipelineFlussTests.cs`, `BildeingangTests.cs`.
+
+## 10.6b Eine Pipeline im Handle-Modell (Bestand)
 
 `partial class X : IPipelineHandler` mit `PipelineId` + `Handle(TTrigger, PipelineContext)` /
 `Handle(TEvent, PipelineContext)` → `IAsyncEnumerable<OneOf<Cmd…, Trigger…>>` (CQRS050: die möglichen Ausgaben als
@@ -172,7 +200,7 @@ public IEnumerable<OneOf<Frist<MarkiereAlsHaengengeblieben>>> Handle(TrainingBeg
 ```
 Persistierte Events laufen über den Pull-Pfad (dort kein `Selbst<T>` — keine Mailbox), transiente über den Broker
 (P6.1/P6.2). Je PipelineId gibt es genau eine Aktivierung im Cluster; ihr Zustand (Felder) ist nur auf dem Trigger-/Selbst-Kanal
-seriell — Event-Handles laufen im Pull-Actor auf demselben Singleton-Handler. Beispiele: `Domain.Pipeline/ImageProcessing/FileWatchPipeline.cs`, `Domain.Pipeline/Trainingslauf/TrainingFristPipeline.cs`.
+seriell — Event-Handles laufen im Pull-Actor auf demselben Singleton-Handler. Beispiele: `Domain.Pipeline/Trainingslauf/TrainingFristPipeline.cs`, `Domain.Pipeline/Datensatz/DatensatzResolverPipeline.cs` (noch nicht als Fluss umgezogen).
 
 ## 10.7 Schema-Evolution (Upcasting)
 

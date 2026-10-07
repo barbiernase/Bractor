@@ -126,6 +126,7 @@ public static class ParitaetsPruefung
         Vergleiche("Enum", soll.Enums, BoardListe("enums"), befunde);
         Vergleiche("Aggregat", soll.Aggregate.Keys.ToHashSet(StringComparer.Ordinal), BoardListe("aggregate"), befunde);
         Vergleiche("Saga", soll.Sagas.Keys.ToHashSet(StringComparer.Ordinal), BoardListe("sagas"), befunde);
+        Vergleiche("Pipeline (Fluss)", soll.Fluesse, BoardListe("fluesse"), befunde);
         Vergleiche("ReadModel", soll.ReadModels, BoardListe("readModels"), befunde);
         Vergleiche("Reader", soll.Readers, BoardListe("reader"), befunde);
         Vergleiche("Pipeline", soll.Pipelines, BoardListe("pipelines"), befunde);
@@ -198,7 +199,8 @@ public static class ParitaetsPruefung
     {
         public HashSet<string> Commands = new(), Events = new(), Ablehnungen = new(), ValueObjects = new(),
             Queries = new(), Responses = new(), Enums = new(), ReadModels = new(), Readers = new(),
-            Pipelines = new(), Subscriber = new(), Konfigs = new(), Stores = new(), Akteure = new(), Funktionen = new(), Auftraege = new();
+            Pipelines = new(), Subscriber = new(), Konfigs = new(), Stores = new(), Akteure = new(), Funktionen = new(), Auftraege = new(),
+            Fluesse = new();
         /// <summary>Akteur → seine IDarf-Ziele (einfache Namen) — aus der Basisliste, unabhängig vom DomainExtractor.</summary>
         public Dictionary<string, HashSet<string>> AkteurRechte = new(StringComparer.Ordinal);
         /// <summary>Akteur → seine Zusagen „Event&gt;Ausgabe,…[*]" aus den Vertrags-Interfaces (IAkteurVertrag&lt;A&gt;, alle Teile).</summary>
@@ -229,6 +231,7 @@ public static class ParitaetsPruefung
             var iAkteur = Get(Vertrag.IAkteur); var iDarf = Get(Vertrag.IDarf); var iVertrag = Get(Vertrag.IAkteurVertrag);
             var iClient = Get(Vertrag.IClientVertrag); var iSendet = Get(Vertrag.ISendet); var iFragt = Get(Vertrag.IFragt);
             var iFunktion = Get(Vertrag.IFunktion); var iAuftrag = Get(Vertrag.IAuftrag);
+            var iFluss = Get(Vertrag.IPipeline);
             bool Innen(INamedTypeSymbol t, INamedTypeSymbol? g) => g != null && t.AllInterfaces.Any(i => i.OriginalDefinition.ToDisplayString() == g.ToDisplayString());
             bool Domäne(IAssemblySymbol? a) => a != null && domänen.Contains(a.Name);
 
@@ -346,6 +349,9 @@ public static class ParitaetsPruefung
                             }
                         }
 
+                        // Pipeline als Fluss (IPipeline): ein eigener Baustein.
+                        if (iFluss != null && Sym.Implements(t, iFluss)) inv.Fluesse.Add(full);
+
                         // Saga: jede Regel endet in genau einem Sende/SendeJe.
                         if (Sym.Implements(t, iProz))
                         {
@@ -436,12 +442,14 @@ public static class ParitaetsPruefung
         {
             Records = m1.Records, Enums = m1.Enums,
             Aggregate = m1.Aggregate, Decider = m1.Decider, Applier = m1.Applier, Sagas = m1.Sagas, Rahmen = m1.Rahmen,
+            Fluesse = m1.Fluesse,
             Lesen = lesen with { Stores = lesen.Stores.Select(s => s with { Impl = null }).ToList() },
         };
         var abgedeckt = teil.Records.Select(r => $"{r.Namespace}.{r.Name}")
             .Concat(teil.Enums.Select(e => $"{e.Namespace}.{e.Name}"))
             .Concat(teil.Aggregate.Select(a => $"{a.Namespace}.{a.Name}"))
             .Concat(teil.Sagas.Select(s => $"{s.Namespace}.{s.Name}"))
+            .Concat(teil.Fluesse.Select(f => $"{f.Namespace}.{f.Name}"))
             .Concat(lesen.Stores.SelectMany(s => s.Fns.Select(f => $"{f.Namespace ?? s.Namespace}.{f.Name}")
                 .Concat(s.IstBuendel ? [$"{s.Namespace}.{s.Name}"] : [])))
             .Concat(lesen.Konsumenten.Select(k => $"{k.Namespace}.{k.Name}"))
@@ -537,6 +545,7 @@ public static class ParitaetsPruefung
         Liste("Fixpunkt", "Decider", m1.Decider, m2.Decider, d => $"{d.Aggregat}|{d.Command}", d => d with { Datei = null }, befunde);
         Liste("Fixpunkt", "Applier", m1.Applier, m2.Applier, a => $"{a.Aggregat}|{a.Event}", a => a with { Datei = null }, befunde);
         Liste("Fixpunkt", "Saga", m1.Sagas, m2.Sagas, s => $"{s.Namespace}.{s.Name}", s => s with { ExtraUsings = [], Datei = null }, befunde);
+        Liste("Fixpunkt", "Pipeline (Fluss)", m1.Fluesse, m2.Fluesse, f => $"{f.Namespace}.{f.Name}", f => f with { ExtraUsings = [], Datei = null }, befunde);
         VergleicheLeseseite("Fixpunkt", m1, m2, befunde, mitDateien: false);
     }
 

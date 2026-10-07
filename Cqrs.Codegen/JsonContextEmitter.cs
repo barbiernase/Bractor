@@ -51,6 +51,9 @@ public static class JsonContextEmitter
         [JsonSerializable(typeof(ProzessGestartet))]
         [JsonSerializable(typeof(ProzessBeendet))]
         [JsonSerializable(typeof(SchrittGescheitert))]
+        [JsonSerializable(typeof(SchrittUmgeleitet))]
+        [JsonSerializable(typeof(Abstractions.ZeitlimitAbgelaufen))]
+        [JsonSerializable(typeof(Abstractions.SchrittAbgelehnt))]
         [JsonSerializable(typeof(KommandoVerarbeitet))]
         [JsonSerializable(typeof(KommandoAbgelehnt))]
         """;
@@ -63,6 +66,7 @@ public static class JsonContextEmitter
         using System.Text.Json.Serialization;
         using Abstractions;
         using Infrastructure.Aggregate;
+        using Infrastructure.Funktionen;
         using Infrastructure.Prozess;
         using Infrastructure.Projections;
         using Infrastructure.PubSub.Messages;
@@ -81,6 +85,7 @@ public static class JsonContextEmitter
             {
                 typeof(IEventJsonConverter),
                 typeof(ICommandJsonConverter),
+                typeof(IAuftragJsonConverter),
                 typeof(CommandModusJsonConverter),
                 typeof(IStateChangeSignalJsonConverter),
                 typeof(IMessageEnvelopeJsonConverter),
@@ -103,11 +108,19 @@ public static class JsonContextEmitter
         [JsonSerializable(typeof(PipelineAck))]
         [JsonSerializable(typeof(PipelineAktivieren))]
         [JsonSerializable(typeof(ProzessWake))]
+        [JsonSerializable(typeof(AuftragAnbieten))]
+        [JsonSerializable(typeof(HoleArbeit))]
+        [JsonSerializable(typeof(ArbeitZugeteilt))]
+        [JsonSerializable(typeof(ArbeitLebt))]
+        [JsonSerializable(typeof(ArbeitErledigt))]
         // ── Framework: Ergebnis-/Prozess-/Inbox-Events (reisen im Wire) ──
         [JsonSerializable(typeof(CommandFailed))]
         [JsonSerializable(typeof(ProzessGestartet))]
         [JsonSerializable(typeof(ProzessBeendet))]
         [JsonSerializable(typeof(SchrittGescheitert))]
+        [JsonSerializable(typeof(SchrittUmgeleitet))]
+        [JsonSerializable(typeof(Abstractions.ZeitlimitAbgelaufen))]
+        [JsonSerializable(typeof(Abstractions.SchrittAbgelehnt))]
         [JsonSerializable(typeof(KommandoVerarbeitet))]
         [JsonSerializable(typeof(KommandoAbgelehnt))]
         """;
@@ -137,18 +150,19 @@ public static class JsonContextEmitter
                 var isCommand = ifaces.Contains("Abstractions.ICommand");
                 var isTrigger = ifaces.Contains("Abstractions.IPipelineTrigger");
                 var isWire = ifaces.Contains("Abstractions.IWireMessage");
+                var isAuftrag = ifaces.Contains("Abstractions.IAuftrag");
 
                 if (isEvent && !isTransient) persistableEvents.Add(name);
-                if (isEvent || isCommand || isTrigger || isWire) wire.Add(name);
+                if (isEvent || isCommand || isTrigger || isWire || isAuftrag) wire.Add(name);
             }
         }
 
         var eventCtx = Build(EventContextHeader, "EventJsonSerializerContext", persistableEvents,
             "Domänen-Events (Domain.*, persistierbar)");
         var wireCtx = Build(WireContextHeader, "CqrsWireJsonContext", wire,
-            "Domänen-Commands/Events/Trigger (Domain.*)");
+            "Domänen-Commands/Events/Trigger/Aufträge (Domain.*)");
 
-        var stats = $"Storage-Events: {persistableEvents.Count + 5} (5 Framework), Wire-Typen: {wire.Count + 21} (21 Framework)";
+        var stats = $"Storage-Events: {persistableEvents.Count + 8} (8 Framework), Wire-Typen: {wire.Count + 26} (26 Framework)";
         return (eventCtx, wireCtx, stats);
     }
 

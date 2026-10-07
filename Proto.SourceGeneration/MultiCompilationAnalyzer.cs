@@ -384,6 +384,9 @@ public class MultiCompilationAnalyzer
 
         if (interfaces.Contains("Abstractions.IQueryResponse"))
             return DomainType.QueryResponse;
+
+        if (interfaces.Contains("Abstractions.IAuftrag"))
+            return DomainType.Auftrag;
             
         return DomainType.Object;
     }

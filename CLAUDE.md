@@ -59,12 +59,19 @@ Dispatch (`FunktionsGenerator`, CQRS068/069), `FunktionsAusfuehrer` (Slots, Wied
 Bindung `AddFunktion<F, Impl>` + Boot-Guard; Editor: Funktions-Karte, „Dann ƒ", ⏳. Doku `docs/10-entwickler-api.md` §10.5a.
 Offen: Python-/externer Ausführer, Saga-DSL (Cqrs.Testing) und Simulation kennen `Rufe` noch nicht.
 
+**Pipeline als Fluss (2026-10-07, kanonisch — `docs/konzept-editor-pipelines.md` §14):** eine Pipeline ist eine Fläche aus
+Knoten — Quelle (`p.Quelle<IQuellNachricht>()`/`p.Auf<E>()`) → Katalog-Funktionen → Commands —, verdrahtet vom Draht aus
+(`var k = draht.Rufe<F>(λ)`, `p.Alle(…)` ∧, `.Oder(…)` ∨, `BeiZeitlimit()`/`BeiAbgelehnt()`, `draht.Je(…)`/`Sammle`). Läuft auf dem
+Dirigenten (Prozess-Manager) mit Knoten-Herkunft im Token; Funktionen per Vermittler-Actor + Pull (C# im Host, Python-Worker über
+gRPC). Im Editor ein ⛓-Rahmen, entwerfbar auf leerem Board (Sonde beweist gezeichnet → Code → gelesen). `Bildeingang` ersetzt
+FileWatch/ImageProcessing/BildaufbereitungProzess. Offen: Simulation, Integrationstest, Umzug der übrigen Handle-Pipelines.
+
 **Akteure, Verträge, Clients (2026-10-06):** Akteure mit Befugnis und Kette bis in den Event-Header; Akteur-Verträge (Zusagen
 draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer CommandId; Clients (`IClientVertrag`, n:m zu Akteuren) mit
 Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an
 Clients (`docs/konzept-akteure.md` §9).
 
-**Tests (echt gemessen): Prüfstand 325/325 (2026-10-07, in-memory, store-frei); Integration gegen echtes Marten/Consul/Redis,
+**Tests (echt gemessen): Prüfstand 363/363 (2026-10-07, in-memory, store-frei); Python SDK 27/27, Worker 15/15; Integration gegen echtes Marten/Consul/Redis,
 sequentiell (voll gezählt zuletzt 2026-08: 33/33; der `SnapshotLive`-Cold-Boot-Flake ausgenommen).**
 
 **Bewusst offen (Priorität):**

@@ -8,7 +8,7 @@ namespace Domain.SourceGeneration;
 
 /// <summary>
 /// <b>CQRS058 — Akteur-Befugnis.</b> <c>IDarf&lt;T&gt;</c> ist EIN Wort für alles, was ein Akteur in das System
-/// hineingibt: Command, Query, Trigger, Transient-Event. Alles andere (ein Event aus dem Log, eine Response, ein
+/// hineingibt: Command, Query, Trigger, Quell-Nachricht (IQuellNachricht, §14 Pipeline als Fluss), Transient-Event. Alles andere (ein Event aus dem Log, eine Response, ein
 /// Wertobjekt …) kann man nicht „dürfen" — das Hören wird aus dem Graphen abgeleitet. Und <c>IDarf</c> gehört an einen
 /// <c>IAkteur</c>: an einem anderen Typ würde es niemand lesen. Beides ist ein Build-Fehler (docs/konzept-akteure.md).
 /// <para><b>CQRS061/062 — Akteur-Vertrag</b> (docs/konzept-akteure.md §3): <c>IAkteurVertrag&lt;A&gt;</c> ist ein Interface, höchstens eines je Akteur, nur
@@ -85,7 +85,7 @@ public sealed class AkteurAnalyzer : DiagnosticAnalyzer
             var iDarf = T("Abstractions.IDarf`1");
             var iAkteur = T("Abstractions.IAkteur");
             if (iDarf == null || iAkteur == null) return;
-            var hinein = new[] { T("Abstractions.ICommand"), T("Abstractions.IQuery"), T("Abstractions.IPipelineTrigger"), T("Abstractions.ITransientEvent") }
+            var hinein = new[] { T("Abstractions.ICommand"), T("Abstractions.IQuery"), T("Abstractions.IPipelineTrigger"), T("Abstractions.ITransientEvent"), T("Abstractions.IQuellNachricht") }
                 .Where(x => x != null).Cast<INamedTypeSymbol>().ToArray();
             start.RegisterSymbolAction(ctx => Pruefe(ctx, iDarf, iAkteur, hinein), SymbolKind.NamedType);
             var k = new Konsumenten(T("Abstractions.ISubscriber"), T("Abstractions.IReader`1"), T("Abstractions.IPipelineHandler"),
@@ -133,7 +133,7 @@ public sealed class AkteurAnalyzer : DiagnosticAnalyzer
             if (!erlaubt || t.TypeKind == TypeKind.Interface || t.IsAbstract)
                 ctx.ReportDiagnostic(Diagnostic.Create(Befugnis, ort, typ.Name,
                     $"IDarf<{t.Name}> — dürfen kann man nur, was man hineingibt: einen konkreten Command, eine Query, "
-                    + "einen Trigger oder ein Transient-Event (was ein Akteur hört, wird aus dem Graphen abgeleitet)"));
+                    + "einen Trigger, eine Quell-Nachricht oder ein Transient-Event (was ein Akteur hört, wird aus dem Graphen abgeleitet)"));
         }
     }
 

@@ -55,7 +55,11 @@ public sealed class ReflectionTypeAnalyzer
         var results = new List<TypeNode>();
         foreach (var type in _allTypes.Values)
         {
-            if (type.GetInterfaces().Any(i => i.FullName == interfaceFullName))
+            var ifaces = type.GetInterfaces();
+            // IProzessIntern = Maschinerie des Dirigenten (Manager-Log, Fehler-Tokens des Pipeline-Flusses) — proto-frei.
+            if (ifaces.Any(i => i.FullName == "Abstractions.IProzessIntern"))
+                continue;
+            if (ifaces.Any(i => i.FullName == interfaceFullName))
                 results.Add(BuildTypeNode(type));
         }
 
@@ -269,6 +273,8 @@ public sealed class ReflectionTypeAnalyzer
             return DomainType.Query;
         if (interfaces.Contains("Abstractions.IQueryResponse"))
             return DomainType.QueryResponse;
+        if (interfaces.Contains("Abstractions.IAuftrag"))
+            return DomainType.Auftrag;
 
         return DomainType.Object;
     }

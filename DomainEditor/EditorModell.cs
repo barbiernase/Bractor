@@ -37,6 +37,12 @@ public sealed record EditorModell
     /// </summary>
     public IReadOnlyList<Funktion> Funktionen { get; init; } = [];
     /// <summary>
+    /// Pipelines als FLUSS (docs/konzept-editor-pipelines.md §14): eine Quelle, Katalog-Funktionen und Commands, frei verdrahtet
+    /// (<c>class X : IPipeline { PipelineFluss Fluss =&gt; PipelineFluss.Definiere(p =&gt; { var a = …; }) }</c>). Jede Geste im
+    /// Editor ist genau ein Code-Fakt dieser Form — entwerfbar auf leerem Board, 1:1 zurückgelesen.
+    /// </summary>
+    public IReadOnlyList<FlussPipeline> Fluesse { get; init; } = [];
+    /// <summary>
     /// Akteure (<c>docs/konzept-akteure.md</c>): wer von außen hineingibt — je Akteur die Typen, die er darf
     /// (<c>IDarf&lt;T&gt;</c>: Commands, Queries, Trigger, Transient-Events). Was er hören darf, ist abgeleitet, nicht Modell.
     /// </summary>
@@ -327,6 +333,92 @@ public sealed record Funktion
     public string? Datei { get; init; }
     /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
     public string? Herkunft { get; init; }
+}
+
+/// <summary>
+/// Eine Pipeline als Fluss (§14): Knoten in Deklarations-Reihenfolge — die Reihenfolge IST die Code-Reihenfolge (ein Draht
+/// kommt nur von einem früheren Knoten, also ist der Fluss per Konstruktion azyklisch).
+/// </summary>
+public sealed record FlussPipeline
+{
+    public required string Name { get; init; }
+    public required string Namespace { get; init; }
+    public IReadOnlyList<FlussSchritt> Knoten { get; init; } = [];
+    public string? Doku { get; init; }
+    public IReadOnlyList<string> ExtraUsings { get; init; } = [];
+    public string? Datei { get; init; }
+    /// <summary>Der Name des Bauer-Parameters im Lambda (<c>p</c>) — aus dem Code, sonst <c>p</c>.</summary>
+    public string Bauer { get; init; } = "p";
+    /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
+    public string? Herkunft { get; init; }
+}
+
+/// <summary>Die Art eines Fluss-Knotens.</summary>
+public static class FlussArt
+{
+    /// <summary>Katalog-Quelle: <c>p.Quelle&lt;Nachricht&gt;()</c>.</summary>
+    public const string Quelle = "quelle";
+    /// <summary>Event aus dem Log als Quelle: <c>p.Auf&lt;Event&gt;()</c>.</summary>
+    public const string Auf = "auf";
+    /// <summary>Katalog-Funktion: <c>….Rufe&lt;IF&gt;(λ)</c>.</summary>
+    public const string Funktion = "funktion";
+    /// <summary>Command an ein Aggregat: <c>….Sende&lt;Cmd&gt;(λ)</c>.</summary>
+    public const string Command = "command";
+    /// <summary>Je-Rahmen: <c>draht.Je(x =&gt; x.Liste)</c>.</summary>
+    public const string Je = "je";
+}
+
+/// <summary>
+/// Ein Knoten des Flusses: <c>var {Name} = …;</c>. <see cref="Typ"/> = Nachricht (Quelle/Auf), Funktions-Interface, Command bzw.
+/// Element-Typ (Je; nur Anzeige). Ein Aufruf-Knoten hat ≥ 1 Eingang — der erste ist der Hauptaufruf, jeder weitere ein ∨
+/// (<c>.Oder(…)</c>). Ein Je-Knoten hat genau einen Eingang (der Draht mit der Liste) und den Listen-Ausdruck.
+/// </summary>
+public sealed record FlussSchritt
+{
+    public required string Name { get; init; }
+    public required string Art { get; init; }
+    public required string Typ { get; init; }
+    public IReadOnlyList<FlussEingang> Eingaenge { get; init; } = [];
+    /// <summary>Zeitlimit als C#-Ausdruck verbatim (z. B. <c>TimeSpan.FromMinutes(5)</c>); null = keins.</summary>
+    public string? Zeitlimit { get; init; }
+    /// <summary>Nur Je: der Listen-Lambda verbatim (<c>z =&gt; z.Bilder</c>).</summary>
+    public string? Liste { get; init; }
+    /// <summary>Im Code ohne Variable (<c>p.Alle(…).Sende&lt;X&gt;(…);</c>) — der Name ist dann nur die Editor-Identität.</summary>
+    public bool OhneVariable { get; init; }
+    public string? Doku { get; init; }
+}
+
+/// <summary>
+/// Ein Eingang eines Aufruf-Knotens: die Drähte (1 = einfach, mehr = ∧ <c>p.Alle(…)</c>), oder ein Je-Element (<see cref="Je"/>
+/// ohne Drähte), oder das Sammeln eines Je-Rahmens (<see cref="Je"/> + <see cref="Sammle"/>: die Drähte sind die gesammelten).
+/// <see cref="Ausdruck"/> ist der Bau-Lambda verbatim; fehlt er, schreibt der Scaffolder ihn aus <see cref="Argumente"/>
+/// (je Konstruktor-Parameter des Ziels ein Ausdruck in den Lambda-Parametern).
+/// </summary>
+public sealed record FlussEingang
+{
+    public IReadOnlyList<FlussDraht> Draehte { get; init; } = [];
+    /// <summary>Gesetzt: der Eingang gehört zum Je-Rahmen dieses Namens — Element (ohne <see cref="Sammle"/>) bzw. gesammelte Liste.</summary>
+    public string? Je { get; init; }
+    public bool Sammle { get; init; }
+    public string? Ausdruck { get; init; }
+    public IReadOnlyList<string>? Argumente { get; init; }
+}
+
+/// <summary>Ein Draht: Ausgang <see cref="Fall"/> (bzw. Port) des Knotens <see cref="Von"/>.</summary>
+public sealed record FlussDraht
+{
+    public required string Von { get; init; }
+    /// <summary>Der Fall (Typ-Name: Ergebnis der Funktion, Event des Aggregats). Null = der Ausgang einer Quelle selbst.</summary>
+    public string? Fall { get; init; }
+    /// <summary><c>fall</c> (Standard), <c>zeitlimit</c> (⏳) oder <c>abgelehnt</c> (✕).</summary>
+    public string Port { get; init; } = FlussPort.Fall;
+}
+
+public static class FlussPort
+{
+    public const string Fall = "fall";
+    public const string Zeitlimit = "zeitlimit";
+    public const string Abgelehnt = "abgelehnt";
 }
 
 /// <summary>

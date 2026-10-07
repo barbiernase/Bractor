@@ -77,9 +77,13 @@ class MessageRouter:
         mapper: PayloadMapper,
         registry: CategoryRegistry,
         version_tracker: VersionTracker,
+        on_arbeit=None,
     ) -> None:
         """
         Hauptschleife — läuft bis die Verbindung abbricht.
+
+        `on_arbeit` (optional): nimmt einen ArbeitsAuftrag (Katalog-Funktion) entgegen — er läuft entkoppelt,
+        die Schleife wartet nicht auf ihn (FunktionsLaeufer.nimm).
 
         Verarbeitet drei Arten von Messages aus der event_queue:
         - "event": EventNotification → Payload extrahieren → Handler → yield Outputs
@@ -112,6 +116,11 @@ class MessageRouter:
                         msg, proxy, handle, instance, state,
                         mapper, registry
                     )
+                elif msg_type == "arbeits_auftrag":
+                    if on_arbeit is None:
+                        log.warning("ArbeitsAuftrag %s ohne angebotene Funktionen — ignoriert", msg.vorgang)
+                    else:
+                        on_arbeit(msg)
                 else:
                     log.warning("Unknown message type in queue: %s", msg_type)
             except Exception as e:

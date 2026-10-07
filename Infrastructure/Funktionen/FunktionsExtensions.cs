@@ -29,6 +29,18 @@ public static class FunktionsExtensions
         return services;
     }
 
+    /// <summary>
+    /// Bindet <typeparamref name="TFunktion"/> als EXTERNE Funktion: sie rechnet außerhalb des Hosts (z. B. ein Python-Worker,
+    /// der sich am gRPC-Handshake als Anbieter meldet und Aufträge beim Vermittler abholt). Der Host prüft nur, dass sie
+    /// gebunden ist; Laufort und Slots bestimmt der Worker.
+    /// </summary>
+    public static IServiceCollection AddExterneFunktion<TFunktion>(this IServiceCollection services)
+        where TFunktion : class, IFunktion
+    {
+        services.AddSingleton(new FunktionsBindung(typeof(TFunktion), Slots: 0, Extern: true));
+        return services;
+    }
+
     /// <summary>Der Ausführer des Knotens — live an den generierten Dispatch und den Prozess-Manager im Cluster gebunden.</summary>
     internal static FunktionsAusfuehrer BaueAusfuehrer(IServiceProvider sp)
     {

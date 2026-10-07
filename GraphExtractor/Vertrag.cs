@@ -107,6 +107,40 @@ public static class Vertrag
     public static readonly HashSet<string> RegelVerben = new(StringComparer.Ordinal)
         { Auf, Und, UndAlle, Sende, SendeJe, Rufe, Zeitlimit, RückgängigDurch, RückgängigDurchJe };
 
+    // ── Pipeline als Fluss (docs/konzept-editor-pipelines.md §14) — Verben über ihr SYMBOL (Typ + Name), nie über Text ──
+    public static readonly string IPipeline = typeof(IPipeline).FullName!;
+    public static readonly string FlussProperty = nameof(Abstractions.IPipeline.Fluss);
+    public static readonly string FlussDefiniere = nameof(PipelineFluss.Definiere);
+    public static readonly string PipelineFlussTyp = typeof(PipelineFluss).FullName!;
+    public static readonly string FlussQuelle = nameof(PipelineBauer.Quelle);
+    public static readonly string FlussAuf = nameof(PipelineBauer.Auf);
+    public static readonly string FlussAlle = nameof(PipelineBauer.Alle);
+    public static readonly string FlussRufe = nameof(Draht<IEvent>.Rufe);
+    public static readonly string FlussSende = nameof(Draht<IEvent>.Sende);
+    public static readonly string FlussJe = nameof(Draht<IEvent>.Je);
+    public static readonly string FlussBei = nameof(AufrufKnoten.Bei);
+    public static readonly string FlussBeiZeitlimit = nameof(AufrufKnoten.BeiZeitlimit);
+    public static readonly string FlussBeiAbgelehnt = nameof(AufrufKnoten.BeiAbgelehnt);
+    public static readonly string FlussZeitlimit = nameof(RufKnoten<IFunktion>.Zeitlimit);
+    public static readonly string FlussOder = nameof(RufKnoten<IFunktion>.Oder);
+    public static readonly string FlussSammle = nameof(JeKnoten<IEvent, object>.Sammle);
+    /// <summary>Metadatennamen der DSL-Typen (mit Stelligkeit) — ein Verb gehört zum Fluss, wenn sein Typ einer davon ist.</summary>
+    public static readonly HashSet<string> FlussTypen = new(StringComparer.Ordinal)
+    {
+        typeof(PipelineBauer).Name, typeof(Draht<>).Name, typeof(QuellKnoten<>).Name, typeof(AufrufKnoten).Name,
+        typeof(RufKnoten<>).Name, typeof(SendeKnoten<>).Name, typeof(JeKnoten<,>).Name, typeof(SammelDraht<,>).Name,
+        typeof(Verbund<,>).Name, typeof(Verbund<,,>).Name, typeof(Verbund<,,,>).Name,
+    };
+    public static readonly string QuellKnotenTyp = typeof(QuellKnoten<>).Name;
+    public static readonly string JeKnotenTyp = typeof(JeKnoten<,>).Name;
+    public static readonly string PipelineKnotenTyp = typeof(PipelineKnoten).Name;
+
+    /// <summary>Ist <paramref name="m"/> ein Verb der Fluss-DSL (Vertrags-Assembly + DSL-Typ + Name)?</summary>
+    public static bool IstFlussVerb(IMethodSymbol? m, string name) =>
+        m?.ContainingType is { } ct && ct.ContainingAssembly?.Name == VertragsAssembly
+        && ct.ContainingNamespace?.ToDisplayString() == VertragsNamespace
+        && FlussTypen.Contains(ct.OriginalDefinition.MetadataName) && m.Name == name;
+
     // ── OneOf (Decide-/Handler-Rückgaben) ──
     public static readonly string OneOf = typeof(OneOf<>).Name.Split('`')[0];
 

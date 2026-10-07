@@ -63,6 +63,29 @@ internal sealed class ICommandJsonConverter : JsonConverter<ICommand>
     }
 }
 
+/// <summary>Auftrag an eine Katalog-Funktion in <c>AuftragAnbieten</c> (Vermittler, docs/konzept-editor-pipelines.md §14.5).</summary>
+internal sealed class IAuftragJsonConverter : JsonConverter<IAuftrag>
+{
+    public override void Write(Utf8JsonWriter writer, IAuftrag value, JsonSerializerOptions options)
+    {
+        writer.WriteStartArray();
+        writer.WriteStringValue(GeneratedWirePoly.AuftragDiskriminator(value));
+        GeneratedWirePoly.WriteAuftrag(writer, value);
+        writer.WriteEndArray();
+    }
+
+    public override IAuftrag Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+    {
+        if (reader.TokenType != JsonTokenType.StartArray) throw new JsonException("Erwartet: StartArray für IAuftrag-Payload.");
+        reader.Read();
+        var disc = reader.GetString() ?? throw new JsonException("Erwartet: Auftrag-Diskriminator (string).");
+        reader.Read();
+        var auftrag = GeneratedWirePoly.ReadAuftrag(disc, ref reader);
+        reader.Read(); // EndArray
+        return auftrag;
+    }
+}
+
 /// <summary>Signal-Payload einer <see cref="SignalEnvelope"/> (StateChangeVia{Event}). Iteration 2.</summary>
 internal sealed class IStateChangeSignalJsonConverter : JsonConverter<IStateChangeSignal>
 {

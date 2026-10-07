@@ -17,12 +17,12 @@ public static class Grammatik
 {
     // ── Alphabet: Nachrichtensorten (die Kanten) ──────────────────────────────────────────────────────────────────────
     public const string Command = "command", Event = "event", Transient = "transient", Trigger = "trigger", Selbst = "selbst",
-        Frist = "frist", Query = "query", Response = "response", Faehigkeit = "faehigkeit", Auftrag = "auftrag";
+        Frist = "frist", Query = "query", Response = "response", Faehigkeit = "faehigkeit", Auftrag = "auftrag", Quelle = "quelle";
 
     // ── Alphabet: Bausteine (die Knoten) ─────────────────────────────────────────────────────────────────────────────
     public const string Aggregat = "aggregat", Prozess = "prozess", Projektion = "projektion", Reaktion = "reaktion", Reader = "reader",
         Pipeline = "pipeline", Ingress = "ingress", Store = "store", Aussenwelt = "aussenwelt", Akteur = "akteur", Client = "client",
-        Funktion = "funktion";
+        Funktion = "funktion", Fluss = "fluss";
 
     /// <summary>Kardinalität eines Konsum-Eingangs.</summary>
     public const string GenauEins = "eins", Beliebig = "beliebig", Dieselbe = "dieselbe";
@@ -49,6 +49,7 @@ public static class Grammatik
         new(Response, "Response", "↩", "synchron", "Antwort eines Readers"),
         new(Faehigkeit, "Fähigkeit", "⚙", "im Handle-Aufruf", "Store-Funktion (Lesen/Schreiben)"),
         new(Auftrag, "Auftrag", "ƒ", "durabel (Ergebnis im Log, Ausführungs-Id)", "Aufruf einer Katalog-Funktion (Rufe<F>)"),
+        new(Quelle, "Quell-Nachricht", "⛲", "durabel (genau einmal je Kennung)", "Anstoß von außen (Datei, Webhook …) — startet einen Vorgang einer Pipeline"),
     ];
 
     public static readonly IReadOnlyList<BausteinInfo> Bausteine =
@@ -57,6 +58,8 @@ public static class Grammatik
         new(Reaktion, "Reaktion", false), new(Reader, "Reader", false), new(Pipeline, "Pipeline", false),
         new(Ingress, "Ingress", false), new(Store, "Store", true), new(Aussenwelt, "Außenwelt", false),
         new(Akteur, "Akteur", false), new(Client, "Client", false), new(Funktion, "Funktion", false),
+        // Pipeline als Fluss (§14): der Dirigent faltet seinen Vorgang im Log — ein Zustandsschritt wie der Prozess.
+        new(Fluss, "Pipeline (Fluss)", true),
     ];
 
     // ── Regeln (Id = der Name, unter dem Validator und Editor sie melden) ──────────────────────────────────────────────
@@ -105,6 +108,31 @@ public static class Grammatik
             [Gen("CQRS068", "Infrastructure.SourceGeneration/FunktionsGenerator.cs (feste Form der Funktion)")]),
         new("GR-FUNKTION-GEBUNDEN", "Gerufene Funktion ist gebunden", "Jede Funktion, die ein Prozess ruft, braucht im Host eine Bindung (AddFunktion<F, Impl>) — sonst bricht der Start.", "error",
             [new("boot", null, "Infrastructure/Funktionen/FunktionsExtensions.cs (PrüfeBindungen)")]),
+        new("GR-AUS-FLUSS", "Pipeline (Fluss) erzeugt Commands und Aufträge", "Ein Fluss ruft Katalog-Funktionen (Auftrag) und sendet "
+            + "Commands an Aggregate — sonst nichts; Ergebnisse und Antworten der Aggregate laufen als Drähte weiter.", "error",
+            [Comp("Draht<T>.Rufe<F>(…) : IAuftrag<F>, Draht<T>.Sende<C>(…) where C : ICommand")]),
+        // Pipeline als Fluss (docs/konzept-editor-pipelines.md §14): Form und Drähte.
+        new("GR-QUELLE", "Quell-Nachricht → Pipelines", "Eine Quell-Nachricht (record … : IQuellNachricht) wird genau einmal je Kennung ins Log "
+            + "geschrieben und startet je Pipeline, die mit p.Quelle<…>() beginnt, einen Vorgang. Sie kommt von außen (die Maschine/der "
+            + "Akteur hinter der Quelle, IDarf) — eine Pipeline erzeugt sie nicht.", "error",
+            [Comp("PipelineBauer.Quelle<T>() where T : IQuellNachricht"), new("laufzeit", null, "Infrastructure/Quellen/Quellen.cs (QuellEingang: StartStream je Kennung)")]),
+        new("GR-FLUSS-QUELLE", "Eine Quelle je Pipeline", "Ein Fluss beginnt an genau einer Quelle (p.Quelle<Nachricht>() oder "
+            + "p.Auf<Event>()); jede Quell-Nachricht startet einen Vorgang.", "error",
+            [new("laufzeit", null, "Abstractions/Fluss/Pipeline.cs (PipelineBauer: zweite/fehlende Quelle wirft beim Definieren)")]),
+        new("GR-FLUSS-NAME", "Knoten-Namen eindeutig", "Jeder Knoten ist eine Variable im Definiere-Lambda — ihr Name ist seine Identität.", "error",
+            [Comp("CS0128 (lokale Variable doppelt)")]),
+        new("GR-FLUSS-DRAHT", "Draht nur aus einem früheren Knoten, an einem seiner Ausgänge", "Ein Draht kommt von einem früher "
+            + "deklarierten Knoten und trägt einen seiner Fälle: ein Ergebnis der Funktion bzw. ein Event aus dem Decide des Commands "
+            + "(oder die Quelle selbst). So ist ein Fluss per Konstruktion azyklisch.", "error",
+            [Comp("CS0841 (Variable vor der Deklaration)"), Offen("Fall außerhalb der Ausgänge kompiliert, feuert aber nie — nur der Editor prüft")]),
+        new("GR-FLUSS-ZEITLIMIT", "⏳-Port braucht ein Zeitlimit", "Aus dem ⏳-Port eines Knotens führt nur ein Draht, wenn der Knoten ein Zeitlimit hat.", "error",
+            [new("laufzeit", null, "Abstractions/Fluss/Pipeline.cs (Baue: verdrahteter ⏳-Port ohne Zeitlimit wirft)")]),
+        new("GR-FLUSS-JE", "Je-Element und Sammeln nur im Rahmen", "Ein Je-Element bzw. Sammeln bezieht sich auf einen Je-Knoten; ein Je-Knoten "
+            + "hat genau einen Eingang (der Draht mit der Liste) und einen Listen-Ausdruck. ∨ (Oder) geht nur mit Drähten.", "error",
+            [Comp("JeKnoten<TQ,E>.Rufe/Sende/Sammle, RufKnoten.Oder(Draht|Verbund, …)")]),
+        new("GR-FLUSS-WARTET", "∧ wartet auf einen Weg, der nicht immer liefert", "Ein ∧ verbindet einen Ausgang, neben dem der Vorgänger "
+            + "weitere Fälle hat, die nirgends hinführen — kommt einer davon, wartet der Knoten für immer (bis zum Zeitlimit).", "warning",
+            [Offen("Editor-Befund; zur Laufzeit hält der Vorgang an (§3-Backstop beendet ihn nicht)")]),
         new("GR-AUS-INGRESS", "Ingress erzeugt Trigger", "Ein Ingress (Webhook, Timer, Datei) erzeugt genau Trigger-Nachrichten.", "error",
             [Comp("[Ingress]-Methoden: Trigger-Typ : IPipelineTrigger")]),
         // Zusatzregeln
@@ -126,7 +154,7 @@ public static class Grammatik
             [new("boot", null, "Azyklizitäts-Guard (ProzessManagerWiring) — nur Prozesse"), Offen("Reaktionen/Pipelines")]),
         new("GR-ZUSTAND", "Regel Z: Zustand nur in Aggregaten und Lesemodellen", "Pipelines, Reaktionen und Projektionen sind zustandslose Übersetzer; Gedächtnis gehört in ein Aggregat.", "info",
             [Offen("Hinweis im Validator; Analyzer bewusst noch nicht gebaut")]),
-        new("GR-AKTEUR", "Akteur → nur, was er darf", "Ein Akteur gibt nur hinein, was er per IDarf<T> darf: Command, Query, Trigger oder "
+        new("GR-AKTEUR", "Akteur → nur, was er darf", "Ein Akteur gibt nur hinein, was er per IDarf<T> darf: Command, Query, Trigger, Quell-Nachricht oder "
             + "Transient-Event. Was er hören darf, wird abgeleitet (Aggregate seiner Commands, Projektionen hinter seinen Queries).", "error",
             [An("CQRS058", "Domain.SourceGeneration/AkteurAnalyzer.cs"), Gen("CQRS059", "Infrastructure.SourceGeneration/AkteurRechteGenerator.cs (Name eindeutig)"),
              new("laufzeit", null, "Infrastructure/Akteure/AkteurTor.cs (Handshake + jede hineingehende Nachricht)")]),
@@ -173,7 +201,7 @@ public static class Grammatik
     [
         new(Command, Aggregat, GenauEins, "GR-COMMAND"),
         new(Event, Prozess, Beliebig, "GR-EVENT"), new(Event, Projektion, Beliebig, "GR-EVENT"),
-        new(Event, Reaktion, Beliebig, "GR-EVENT"), new(Event, Pipeline, Beliebig, "GR-EVENT"),
+        new(Event, Reaktion, Beliebig, "GR-EVENT"), new(Event, Pipeline, Beliebig, "GR-EVENT"), new(Event, Fluss, Beliebig, "GR-EVENT"),
         new(Event, Aggregat, GenauEins, "GR-FALTUNG"),
         new(Transient, Projektion, Beliebig, "GR-TRANSIENT"), new(Transient, Reaktion, Beliebig, "GR-TRANSIENT"), new(Transient, Pipeline, Beliebig, "GR-TRANSIENT"),
         new(Trigger, Pipeline, GenauEins, "GR-TRIGGER"),
@@ -182,6 +210,7 @@ public static class Grammatik
         new(Query, Reader, GenauEins, "GR-QUERY"),
         new(Faehigkeit, Projektion, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Reader, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Pipeline, Beliebig, "GR-FAEHIGKEIT"),
         new(Auftrag, Funktion, GenauEins, "GR-FUNKTION-AUFTRAG"),
+        new(Quelle, Fluss, Beliebig, "GR-QUELLE"),
         new(Event, Akteur, Beliebig, "GR-VERTRAG"), new(Transient, Akteur, Beliebig, "GR-VERTRAG"),
         new(Event, Client, Beliebig, "GR-CLIENT"), new(Transient, Client, Beliebig, "GR-CLIENT"),
     ];
@@ -192,6 +221,7 @@ public static class Grammatik
         new(Aggregat, Event, "GR-AUS-AGGREGAT"), new(Aggregat, Transient, "GR-AUS-AGGREGAT"),
         new(Prozess, Command, "GR-AUS-PROZESS"), new(Prozess, Auftrag, "GR-AUS-PROZESS"),
         new(Funktion, Event, "GR-AUS-FUNKTION"),
+        new(Fluss, Command, "GR-AUS-FLUSS"), new(Fluss, Auftrag, "GR-AUS-FLUSS"),
         new(Projektion, Transient, "GR-AUS-PROJEKTION"),
         new(Reaktion, Command, "GR-AUS-REAKTION"), new(Reaktion, Transient, "GR-AUS-REAKTION"),
         new(Reader, Response, "GR-AUS-READER"),
@@ -201,11 +231,22 @@ public static class Grammatik
         new(Store, Faehigkeit, "GR-FAEHIGKEIT"),
         new(Aussenwelt, Command, "GR-COMMAND"), new(Aussenwelt, Query, "GR-QUERY"), new(Aussenwelt, Trigger, "GR-AUS-INGRESS"),
         new(Akteur, Command, "GR-AKTEUR"), new(Akteur, Query, "GR-AKTEUR"), new(Akteur, Trigger, "GR-AKTEUR"), new(Akteur, Transient, "GR-AKTEUR"),
+        new(Akteur, Quelle, "GR-AKTEUR"), new(Aussenwelt, Quelle, "GR-QUELLE"),
         new(Client, Command, "GR-CLIENT-BEFUGT"), new(Client, Query, "GR-CLIENT-BEFUGT"), new(Client, Trigger, "GR-CLIENT-BEFUGT"),
         new(Client, Transient, "GR-CLIENT-BEFUGT"),
     ];
 
     /// <summary>Record-Art → Nachrichtensorte (null = keine Nachricht: Value Object, Konfig, ReadModel).</summary>
+    /// <summary>
+    /// Nachrichtensorte eines Records: aus seiner Art — ein Event mit der Basis <c>IQuellNachricht</c> (Code-Fakt der Basisliste) ist eine
+    /// Quell-Nachricht (§14).
+    /// </summary>
+    public static string? SorteVon(Record r) =>
+        r.Kind == RecordArt.Event && (r.Basen?.Contains(QuellBasis) ?? false) ? Quelle : SorteVonRecordArt(r.Kind);
+
+    /// <summary>Die Vertrags-Basis einer Quell-Nachricht (aus dem Vertrag, kein Text-Raten).</summary>
+    public static readonly string QuellBasis = nameof(Abstractions.IQuellNachricht);
+
     public static string? SorteVonRecordArt(string kind) => kind switch
     {
         RecordArt.Command => Command, RecordArt.Event => Event, RecordArt.Rejection => Transient, RecordArt.Query => Query,
@@ -258,6 +299,7 @@ public static class Grammatik
             gegenstuecke = r.Build.Select(g => new { art = g.Art, kennung = g.Kennung, ort = g.Ort }),
         }),
         recordSorte = RecordArt.Alle.Where(k => SorteVonRecordArt(k) != null).ToDictionary(k => k, k => SorteVonRecordArt(k)!),
+        quellBasis = QuellBasis,
         portSorte = EditorPortSorte,
         ausgangSorte = EditorAusgangSorte,
         portBaustein = EditorPortBaustein.Select(x => new[] { x.Schluessel, x.Baustein }),

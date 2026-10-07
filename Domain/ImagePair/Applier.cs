@@ -18,12 +18,6 @@ public partial class ImagePair
             this.State.UrsprungsPfad = evt.UrsprungsPfad;
         }
 
-        public void Apply(RohbildEingegangen evt)
-        {
-            if (evt.Version == BildVersion.Dc0) this.State.Dc0Eingegangen = true;
-            else this.State.Dc2Eingegangen = true;
-        }
-
         public void Apply(BildVerfuegbar evt)
         {
             var bildInfo = new BildInfo(

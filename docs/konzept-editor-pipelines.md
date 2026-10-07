@@ -1,5 +1,9 @@
 # Konzept: Pipelines im Domänen-Editor
 
+> **⚑ Kanonisch ist §14 „Pipeline als Fluss“ (2026-10-07).** Eine Pipeline ist eine frei verdrahtete Fläche aus Katalog-Knoten
+> (Quelle → Funktionen → Commands), entworfen im Editor und als Fluss-Code geschrieben. §1–§13 beschreiben das Handle-Modell davor
+> und bleiben als Historie und Laufzeit-Befund stehen; wo sie §14 widersprechen, gilt §14.
+
 > **Einordnung:** Dieses Dokument ist eine *Anwendung* der allgemeinen Kompositions-Sprache
 > (`docs/konzept-editor-komposition.md`): Alphabet (Kanäle, Bausteine), Grammatik (§6 hier), Operatoren (Schleife, Warten,
 > Verkettung), Kapselung und Linsen gelten dort allgemein. Die Darstellungen hier (Band, Matrix, Ablauf) sind **Linsen**, keine
@@ -379,3 +383,169 @@ Wert-Objekte aus ihren Feldern gebaut; jüngstes Ergebnis vor dem Start) und sin
 echten Prozess trifft die Zuordnung exakt den handgeschriebenen Lambda von `MeldeBildVerfuegbar`; nur Konstanten ohne Quelle
 (Höhe 512) bleiben `default`. Scaffolder: Argumentlisten jetzt auch für Aufträge (`Rufe`), nicht nur für Commands.
 
+
+## 14 · Pipeline als Fluss (2026-10-07, kanonisch)
+
+### 14.1 Befund, der zu diesem Schritt führte
+
+Der Weg einer Datei lief über zwei Bausteine und einen Umweg: `FileWatchPipeline` (PollTick, Start) → Trigger `DateiErkannt` →
+`ImageProcessingPipeline` (Dateiname deuten **im Rumpf**) → `NimmRohbildAuf` → Aggregat → `RohbildEingegangen` → Prozess → ƒ → ƒ →
+Command. Vier Fehler: (1) die Verarbeitung begann erst NACH einem Umweg durchs Aggregat (`NimmRohbildAuf` existierte nur, um den
+Trigger ins Log zu bringen); (2) die Quelle zeigte Mechanik (Tick, Start) statt Bedeutung; (3) Pipeline-Handle, Prozess-Regel und
+Reaktion sind drei Bausteine für eine Idee; (4) das Board ordnete nach Art (≈15 Spalten), nicht nach Fluss.
+
+### 14.2 Das Modell: eine Fläche, eine Knotenform, ein Katalog
+
+**Eine Pipeline ist eine Fläche, auf der Knoten aus dem Katalog mit Drähten verbunden werden.** Sie beginnt an einer **Quelle**; in die
+Aggregat-Welt geht es nur über einen Knoten, der ein Command sendet.
+
+- **Jeder Knoten hat dieselbe Form: ein Eingang, OneOf-Ausgänge (ein Port je Fall).**
+  - **Quelle** — kein Eingang, ein Ausgang. Katalog: Datei, Timer, Webhook, Client … (`IQuelle<T>`), oder ein **Event aus dem Log**
+    (`p.Auf<E>()`), womit jede bisherige Event-Pipeline/Saga ein Sonderfall ist.
+  - **Funktion** — Auftrag hinein, Ergebnis-Fälle heraus (`IFunktion`).
+  - **Aggregat-Knoten** — Command hinein; Ausgänge sind die Events aus der Decide-Signatur. Der Fluss kann nach der Antwort
+    weiterlaufen. *Aggregat und Funktion sind derselbe Knotentyp; nur das Aggregat hat Gedächtnis.*
+- **Ein Draht ist ein Typ** (Ergebnis-Fall eines bestimmten Knotens). **Zuordnung statt `msg`:** die Felder eines Eingangs werden aus
+  den Nachrichten am Draht gebaut; was ein Knoten aus einem früheren Schritt braucht, holt er als weiteren Draht (∧ mit einem
+  Vorgänger — im Editor als „Kontext“ angezeigt). Die Funktionen bleiben domänenfrei.
+- **Eine Quell-Nachricht = ein Vorgang.** Zwischen Vorgängen gibt es keine Joins — wer zwei Vorgänge zusammenbringen muss, braucht
+  Gedächtnis, und das gehört ins Aggregat (Regel Z). Dessen Event ist die Quelle der nächsten Pipeline.
+
+### 14.3 Fluss-Semantik: parallel, verzweigen, warten
+
+| Form | Darstellung | Bedeutung |
+|---|---|---|
+| Ein Port, mehrere Drähte | Auffächern | **alle** bekommen die Nachricht — parallel |
+| Mehrere Ports eines Knotens | OneOf-Fälle | **genau einer** feuert — Verzweigung (eine Weiche ist eine Funktion) |
+| Eingang mit mehreren Drähten | Abzeichen | **∧ `Alle(…)`** warten, oder **∨ `.Oder(…)`** jeder Weg einzeln |
+| Fehler-Ports | ⏳ / ✕ | **`BeiZeitlimit()`**, **`BeiAbgelehnt()`** — verdrahtet = Weg, frei = Vorgang scheitert (wie bisher). Eine Ablehnung des Aggregats (z. B. `ImagePairExistiertBereits`) ist **kein** Fall-Port: das Aggregat schreibt die Ablehnungs-Marke, sie kommt am ✕-Port an |
+| je Element | gestrichelter Rahmen | **`p.Je(draht, x => x.Liste)`**: einmal je Element parallel; **`je.Sammle(…)`** wartet auf alle |
+
+Der Editor **schlägt** ∧/∨ beim Zeichnen vor (Drähte aus sich ausschließenden Ports → ∨, aus Auffächern → ∧); im Code steht es immer
+ausdrücklich. Warnung: „∧ wartet auf einen Weg, der nicht immer liefert“ (ein Fall des Vorgängers ist frei). Parallelität gibt es auf
+zwei Ebenen: **im Vorgang** über Drähte, **zwischen Vorgängen** über die Cluster-Actors (ein Dirigent je Vorgang).
+
+### 14.4 Entwurf zuerst: die Code-Form wird fürs Schreiben entworfen
+
+**Jede Geste im Editor = genau ein Code-Fakt; der Schreiber erzeugt ihn, der Extractor liest ihn 1:1 zurück, ohne Ableitung.** Eine
+Pipeline muss auf leerem Board entstehen können (Fixpunkt: schreiben → bauen → einlesen = dasselbe Board).
+
+```csharp
+public sealed class Bildeingang : IPipeline
+{
+    public PipelineFluss Fluss => PipelineFluss.Definiere(p =>
+    {
+        var datei    = p.Quelle<DateiErkannt>();
+        var deuten   = datei.Rufe<IDateinameDeutung>(datei => new DeuteDateiname(datei.Dateiname, datei.Pfad));
+        var paar     = p.Alle(deuten.Bei<ImagePairDateiGedeutet>(), datei).Sende<ErstelleImagePair>((deuten, datei) => new ErstelleImagePair(…));
+        var vorschau = deuten.Bei<ImagePairDateiGedeutet>().Rufe<IBildVerkleinerung>(deuten => new VerkleinereBild(deuten.Pfad, 512))
+            .Zeitlimit(TimeSpan.FromMinutes(5));
+        var kontrast = vorschau.Bei<BildVerkleinert>().Rufe<IHistogrammAusgleich>(vorschau => new GleicheHistogrammAus(vorschau.Pfad));
+        var melden   = p.Alle(kontrast.Bei<HistogrammAusgeglichen>(), paar.Bei<ImagePairErstellt>(), deuten.Bei<ImagePairDateiGedeutet>(), datei)
+            .Sende<MeldeBildVerfuegbar>((kontrast, paar, deuten, datei) => new MeldeBildVerfuegbar(…))
+            .Oder(p.Alle(kontrast.Bei<HistogrammAusgeglichen>(), paar.BeiAbgelehnt(), deuten.Bei<ImagePairDateiGedeutet>(), datei), (…) => …);
+    });
+}
+```
+
+**Vom Draht aus, nicht vom Bauer aus.** `p.Rufe<F>(draht, λ)` geht in C# nicht: gibt man den Funktionstyp ausdrücklich an, kann der
+Compiler den Typ des Lambda-Parameters nicht mehr ableiten. Deshalb beginnt jeder Aufruf am Draht (`draht.Rufe<F>(λ)`); `p` setzt nur
+die Quelle und bündelt Drähte (`p.Alle(…)`). Die Lambda-Parameter heißen wie die Knoten, von denen die Drähte kommen — so liest sich die
+Zuordnung im Code wie die Tabelle im Editor („Pfad ← vorschau.Pfad“).
+
+| Geste | Code-Fakt |
+|---|---|
+| Knoten | `var name = p.Quelle/Auf/Rufe/Sende/Je<…>(…)` — der **Variablenname ist die Knoten-Identität** im Editor; zur Laufzeit die Deklarations-Reihenfolge. Damit darf dieselbe Funktion beliebig oft im Fluss stehen. |
+| Draht | `knoten.Bei<Fall>()` (bzw. die Quelle selbst), davon aus `.Rufe<F>(λ)` / `.Sende<C>(λ)` / `.Je(x => x.Liste)` |
+| ∧ / ∨ | `p.Alle(…)` (bis 4 Drähte) / `.Oder(draht | p.Alle(…), λ)` |
+| Fehler-Port | `.Zeitlimit(t)` am Knoten, Draht `knoten.BeiZeitlimit()` / `knoten.BeiAbgelehnt()` |
+| je-Rahmen | `var je = draht.Je(x => x.Liste)`; `je.Rufe<F>(e => …)`; `je.Sammle(draht).Sende<C>((q, liste) => …)` |
+| Zuordnung | Lambda nur in Zuordnungsform (`x.Feld`, Konstante) — der Schreiber erzeugt nur diese, also bleibt sie als Tabelle bearbeitbar |
+| Quelle-Einstellung | Host-Bindung `AddQuelle<DateiErkannt, DateiQuelle>(…)` — nicht in der Pipeline |
+
+**Ein Fluss ist per Konstruktion azyklisch** (man verdrahtet nur schon deklarierte Knoten). Invariante 3 bleibt gewahrt: die Knoten-
+Identität ist ein Symbol innerhalb der Definition, Nachrichten werden weiter über Typen geroutet.
+
+Entwerfbar ohne bestehenden Code: neue Funktion (nur Signatur; Rumpf = Stub, 🤖 oder Python), neue Quelle aus Vorlage, neues Command
+(Scaffolder). Simulation ohne Implementierung: je Knoten den Ausgangsfall wählen.
+
+### 14.5 Laufzeit: Dirigent, Vermittler, Ausführer
+
+- **Dirigent = ein virtueller Actor je Vorgang** (der bestehende Prozess-Manager; ein Fluss wird in Prozess-Regeln übersetzt). Er rechnet
+  nicht, er gibt alle bereiten Aufträge zugleich ab. Die Tokens tragen zusätzlich ihre **Herkunft** (Knoten) und ihre **Teile**
+  (Element-Index je Je-Rahmen): ein Draht matcht nur Tokens seines Knotens, ein ∧ nur Tokens desselben Elements.
+- **Quelle**: eine `IQuelle<T>` läuft im Host; jede Nachricht wird mit deterministischer Id (`Kennung`) als erstes Event eines
+  Vorgangs-Streams angehängt (`StartStream` → genau einmal, auch wenn mehrere Knoten dieselbe Datei sehen) und weckt den Dirigenten.
+  Das löst nebenbei „Commands ab Trigger nicht idempotent“ und „FileWatch markiert vor dem Ack“.
+- **Vermittler = ein Actor je Funktion**, nicht maßgeblich (heilt sich aus den erneuten Übergaben des Dirigenten). **Ausführer holen
+  sich Arbeit (Pull)**, sobald sie einen Slot frei haben: C# im Host, Python-Worker über gRPC, GPU-Rechner. Jeder geholte Auftrag hat
+  eine Lease (verlängert per Lebenszeichen); läuft sie ab, wird er neu ausgegeben. Das Ergebnis wird genau einmal geschrieben
+  (OCC auf dem Ausführungs-Stream). Der Auftrag selbst liegt im Log (Ausführungs-Stream, Version 1) — so können ihn entfernte
+  Ausführer lesen, ohne dass der Vermittler Nutzdaten trägt.
+- **Python**: eine Funktion ist ein Vertrag, der Laufort eine Bindung. Ein Worker meldet „ich biete F, n Slots“ an und bekommt eine
+  generierte Basis-Klasse (`rufe(auftrag, x) -> Ergebnis`). Pipeline und Board ändern sich nicht, wenn eine Funktion umzieht.
+  Bewusst zu lösen: Daten als Verweis (gemeinsamer Speicher), Lebenszeichen bei langen Läufen, Ausführungs-Id für Außenwirkung.
+
+### 14.6 Editor
+
+- **Pipeline-Rahmen** als weiterer Rahmen-Typ (wie 📜 Vertrag / 🔌 Client). Innen Anordnung nach **Flusstiefe**, nicht nach Art;
+  Aggregat-Rahmen bleiben unverändert, ein Command-Knoten springt per Klick zum Decider.
+- **Katalog** (Quellen · Funktionen · Aggregate/Commands · Pipelines) mit Signatur; ⊕ am Port → passende Knoten/Einträge leuchten,
+  „＋ neu …“ legt Unbekanntes an.
+- Abzeichen ∧/∨ am Eingang, Fehler-Ports ⏳/✕, je-Rahmen gestrichelt, Zuordnungstabelle „Feld ← Draht.Feld“ im Panel, Laufort
+  einer Funktion (C#/Python) am Knoten.
+- Entfällt für Flüsse: Handle-Karten, Trigger-Records, Selbst-Schleifen, Start-Handle, Regel-Karten.
+
+### 14.7 Abnahme
+
+1. Beispiele (Bildeingang mit doppelter Funktion und ∧; Bestellung mit Verzweigung, ∨ und Zeitlimit-Port; Video mit je-Rahmen)
+   laufen im Prüfstand gegen den echten Dirigenten.
+2. Dieselben Flüsse entstehen auf leerem Board, werden geschrieben, gebaut und identisch wieder eingelesen (Sonde + Fixpunkt).
+3. Danach erst Umzug des Bestands (Bildeingang zuerst).
+
+### 14.8 Bewusst offen
+
+„Der Erste gewinnt“ zwischen parallelen Wegen (heute nur über Zeitlimit-Rennen); transientes Veröffentlichen und „weiter an Pipeline“
+als Knoten; flüchtige (nicht persistierte) Pipelines für Telemetrie; Unterfluss als Funktion; Fähigkeit (Lese-Store) als Parameter
+einer Funktion.
+
+### 14.9 Stand der Umsetzung (2026-10-07)
+
+**Laufzeit**
+- `Abstractions/Fluss/Pipeline.cs`: `IPipeline`, `PipelineFluss.Definiere`, `PipelineBauer` (`Quelle`/`Auf`/`Alle`), `Draht<T>`
+  (`Rufe`/`Sende`/`Je`), `RufKnoten`/`SendeKnoten` (`Bei`/`BeiZeitlimit`/`BeiAbgelehnt`/`Zeitlimit`/`Oder`), `JeKnoten`/`SammelDraht`,
+  `IQuelle<T>`/`IQuellNachricht`. Übersetzt in Prozess-Regeln mit **Knoten-Herkunft** (`Regel.Knoten/VonKnoten/JeKnoten`, erweiterte
+  `SammelBedingung`, `ProzessRegeln.QuellKnoten/Umleiten*`). Formfehler fallen beim Definieren auf (zweite/fehlende Quelle, fremder
+  Draht, ⏳-Port ohne Zeitlimit).
+- Dirigent (`Infrastructure/Prozess/ProzessManager.cs`): Tokens tragen Herkunft und Je-Teile; ein Draht matcht nur Tokens seines
+  Knotens, ein ∧ nur verträgliche Teile; Fehler an verdrahteten Ports werden `SchrittUmgeleitet` (Manager-Log) und dann
+  `ZeitlimitAbgelaufen`/`SchrittAbgelehnt`-Tokens. Klassische Prozesse unverändert (Hash, Matching).
+- Quellen (`Infrastructure/Quellen/Quellen.cs`): `QuellEingang` (genau einmal je Kennung per StartStream, dann Start der Pipelines),
+  `QuellenDienst`, `AddQuelle<T, Q>()`, `MapQuellWebhook<T>()`.
+- Vermittlung (`Infrastructure/Funktionen/FunktionsVermittlung.cs`, `FunktionsVermittlerActor.cs`): ein Actor je Funktion, Pull mit
+  Lease/Lebenszeichen/Long-Poll, `FunktionsAbholer` je Knoten (C#), `AddExterneFunktion<F>()`; Aufträge polymorph auf dem Wire.
+- Python (`Client.Infrastructure.Python/cqrs_client/funktion.py`, generiert `domain_client/generated/funktionen.py`): `FunktionsBasis`,
+  Angebot am Handshake, Ausführung mit Slots + Lebenszeichen; Server-Sitzung `FunktionsAnbieterSitzung`; Proto `FunktionenAnbieten`/
+  `ArbeitsAuftrag`/`ArbeitsErgebnis`/`ArbeitLebtMeldung`, `AuftragPayloadDto`.
+- **Bestand umgezogen:** `FileWatchPipeline` + `ImageProcessingPipeline` + `BildaufbereitungProzess` + der Umweg
+  `NimmRohbildAuf`/`RohbildEingegangen` sind ersetzt durch **`Bildeingang`** (Domain/ImagePair) mit `DateiQuelle` und der Funktion
+  `IDateinameDeutung` (Domain.Pipeline). `DateiErkannt` ist Quell-Nachricht (`IDarf` am KameraSystem bleibt).
+
+**Editor**
+- Modell `EditorModell.Fluesse` (`FlussPipeline` → `Knoten` → `Eingaenge` → `Draehte`), Extractor (`GraphExtractor/FlussLeser.cs`,
+  nur Symbole), Scaffolder (`FlussDatei`, Lambdas aus der Zuordnung), Abgleich bestehender Dateien (nur die Anweisungen des
+  Definiere-Lambdas), Herkunfts-Stempel, Grammatik (Baustein `fluss`, Sorte `quelle`, Regeln GR-QUELLE, GR-AUS-FLUSS, GR-FLUSS-*),
+  Validator (`PruefeFluesse`, inkl. „∧ wartet auf einen Weg, der nicht immer liefert“), Parität/Fixpunkt und Sonde (Code-Fluss +
+  **gezeichneter** Fluss, Soll von Hand).
+- Board: Pipeline-Rahmen „⛓“ (Außen-Domäne wie Clients, Spalten = Flusstiefe), Karten je Knoten, Drähte mit Fall-Beschriftung (Kontext
+  dünn, ⏳ amber, ✕ rot, je blau), Panel: Typ/Katalog, Zeitlimit, Eingänge (∧/∨ umschaltbar, Je-Element/Sammeln), Zuordnungstabelle
+  (automatisch inkl. Wertobjekten, oder Lambda aus dem Code), Ausgänge je Port mit „＋ dann …“ (Katalog-Funktion, Command, neue Funktion,
+  neuer Command, Je, bestehender Knoten — ∧/∨ wird aus den Weichen abgeleitet). „+ ⛓ Pipeline (Fluss)“ in der Toolbar.
+
+**Gemessen:** Prüfstand 363/363; `--check` und `--sonde` (87 Soll-Fakten) grün; Python SDK 27/27, Worker 15/15; im Browser auf leerem Board
+Quelle → ƒ → ƒ → ▶ gezeichnet, automatisch zugeordnet und per Vorschau als Code bestätigt.
+
+**Offen:** Integrationstest gegen Marten/Cluster (Quelle, Vermittler, Python-Worker live); Simulation (SimHost) kennt Flüsse noch nicht;
+LLM-Slots für Fluss-Lambdas; die übrigen Handle-Pipelines (Datensatz-Resolver, Trainings-Frist, Benchmark) noch im alten Modell;
+Akteur-Tor für angebotene Funktionen; Python-Reconnect beendet vermutlich die Verarbeitungsschleife (Bestand, beim Lesen gefunden, nicht geprüft);
+Webhook-Quelle ohne `[Ingress]` (der Editor zeigt die Bindung noch nicht); Unterfluss als Funktion; „der Erste gewinnt“.

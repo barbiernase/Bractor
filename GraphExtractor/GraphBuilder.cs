@@ -600,7 +600,10 @@ public sealed class GraphBuilder
         // Domänen-Event/Ablehnung, das KEIN Decider erzeugt (kein OneOf-Ausgang) → toter Typ (eine echte Insel).
         // Auch die Ergebnisse einer Katalog-Funktion sind erzeugt (OneOf ihrer Signatur) — keine toten Typen.
         var erzeugt = _dom.Aggregates.SelectMany(a => a.DecideOutcomes.Values.SelectMany(x => x))
-            .Concat(_dom.Funktionen.SelectMany(f => f.ErgebnisseFull)).ToHashSet(StringComparer.Ordinal);
+            .Concat(_dom.Funktionen.SelectMany(f => f.ErgebnisseFull))
+            // Die Nachricht einer Quelle (p.Quelle<T>() im Pipeline-Fluss) erzeugt die Quelle selbst, nicht ein Aggregat.
+            .Concat(_dom.Fluesse.SelectMany(f => f.Knoten.Where(k => k.Art == DomainEditor.FlussArt.Quelle).Select(k => k.TypFull)))
+            .ToHashSet(StringComparer.Ordinal);
         foreach (var (full, et) in _dom.Events.Where(kv => kv.Value.Meta.IstDomäne && !erzeugt.Contains(kv.Key)))
             d.Add(new Finding { Severity = "warning", Code = "UNUSED-EVENT",
                 Message = $"{(et.Persisted ? "Event" : "Ablehnung")} '{et.Simple}' wird von keinem Decider erzeugt (in keiner Decide-OneOf-Signatur) — toter Typ." });

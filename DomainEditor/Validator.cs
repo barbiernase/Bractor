@@ -120,7 +120,125 @@ public static class Validator
                 befunde.Add(new("error", "EDIT-FUNKTION-ERGEBNIS", $"Funktion {f.Name}: Ergebnis '{e}' ist kein persistenter Event-Record."));
         }
 
+        befunde.AddRange(PruefeFluesse(modell));
         befunde.AddRange(PruefeGrammatik(modell));
+        return befunde;
+    }
+
+    /// <summary>
+    /// Pipelines als Fluss (§14): eine Quelle, eindeutige Knoten, Drähte nur aus früheren Knoten an deren Ausgängen, Fehler-Ports,
+    /// Je-Rahmen, ∧ höchstens 4, Zuordnung vollständig — und der Hinweis „∧ wartet auf einen Weg, der nicht immer liefert".
+    /// </summary>
+    public static IReadOnlyList<Befund> PruefeFluesse(EditorModell modell)
+    {
+        var befunde = new List<Befund>();
+        var funktionen = modell.Funktionen.ToDictionary(f => f.Name, StringComparer.Ordinal);
+        var commands = modell.Records.Where(r => r.Kind == RecordArt.Command).ToDictionary(r => r.Name, StringComparer.Ordinal);
+        var recordVon = modell.Records.GroupBy(r => r.Name).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        IReadOnlyList<string> Ausgaenge(FlussSchritt k) => k.Art switch
+        {
+            FlussArt.Funktion => funktionen.TryGetValue(k.Typ, out var f) ? f.Ergebnisse : [],
+            // Eine Ablehnung ist kein Fall-Port: sie kommt als Ablehnungs-Marke am ✕-Port an (BeiAbgelehnt).
+            FlussArt.Command => modell.Decider.Where(d => d.Command == k.Typ).SelectMany(d => d.Ergibt.Select(a => a.Event))
+                .Where(e => !recordVon.TryGetValue(e, out var r) || r.Kind != RecordArt.Rejection).Distinct().ToList(),
+            _ => [],
+        };
+
+        foreach (var f in modell.Fluesse)
+        {
+            var wer = $"Pipeline {f.Name}";
+            var quellen = f.Knoten.Count(k => k.Art is FlussArt.Quelle or FlussArt.Auf);
+            if (quellen != 1)
+                befunde.Add(new("error", "GR-FLUSS-QUELLE", $"{wer}: {quellen} Quellen — ein Fluss beginnt an genau einer (p.Quelle<…>() oder p.Auf<…>())."));
+            foreach (var g in f.Knoten.GroupBy(k => k.Name).Where(g => g.Count() > 1))
+                befunde.Add(new("error", "GR-FLUSS-NAME", $"{wer}: der Knoten '{g.Key}' ist {g.Count()}× benannt."));
+
+            var index = new Dictionary<string, int>(StringComparer.Ordinal);
+            for (var i = 0; i < f.Knoten.Count; i++) index.TryAdd(f.Knoten[i].Name, i);
+            var schritt = f.Knoten.GroupBy(k => k.Name).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+            // Welche Fälle je Knoten irgendwo verdrahtet sind (für GR-FLUSS-WARTET).
+            var verdrahtet = f.Knoten.SelectMany(k => k.Eingaenge).SelectMany(e => e.Draehte)
+                .Where(d => d.Port == FlussPort.Fall && d.Fall != null).Select(d => (d.Von, d.Fall!)).ToHashSet();
+
+            for (var i = 0; i < f.Knoten.Count; i++)
+            {
+                var k = f.Knoten[i];
+                var ort = $"{wer}.{k.Name}";
+                if (k.Art == FlussArt.Funktion && !funktionen.ContainsKey(k.Typ))
+                    befunde.Add(new("error", "GR-AUS-FLUSS", $"{ort} ruft '{k.Typ}', das keine Katalog-Funktion ist."));
+                if (k.Art == FlussArt.Command && !commands.ContainsKey(k.Typ))
+                    befunde.Add(new("error", "GR-AUS-FLUSS", $"{ort} sendet '{k.Typ}', der kein Command-Record ist."));
+                if (k.Art is FlussArt.Funktion or FlussArt.Command && k.Eingaenge.Count == 0)
+                    befunde.Add(new("error", "GR-FLUSS-DRAHT", $"{ort} hat keinen Eingang — ein Draht muss hineinführen."));
+                if (k.Art == FlussArt.Je && (k.Eingaenge.Count != 1 || string.IsNullOrWhiteSpace(k.Liste)))
+                    befunde.Add(new("error", "GR-FLUSS-JE", $"{ort}: ein Je-Rahmen hat genau einen Eingang (der Draht mit der Liste) und einen Listen-Ausdruck."));
+
+                for (var ei = 0; ei < k.Eingaenge.Count; ei++)
+                {
+                    var e = k.Eingaenge[ei];
+                    if (e.Je != null)
+                    {
+                        if (!schritt.TryGetValue(e.Je, out var je) || je.Art != FlussArt.Je || index[e.Je] >= i)
+                            befunde.Add(new("error", "GR-FLUSS-JE", $"{ort}: '{e.Je}' ist kein früherer Je-Rahmen."));
+                        if (ei > 0)
+                            befunde.Add(new("error", "GR-FLUSS-JE", $"{ort}: ∨ (Oder) geht nur mit Drähten, nicht mit einem Je-Element/Sammeln."));
+                        if (!e.Sammle && e.Draehte.Count > 0)
+                            befunde.Add(new("error", "GR-FLUSS-JE", $"{ort}: ein Je-Element trägt keine weiteren Drähte."));
+                        if (e.Sammle && e.Draehte.Select(d => d.Fall).Distinct().Count() > 1)
+                            befunde.Add(new("error", "GR-FLUSS-JE", $"{ort}: gesammelt werden Drähte EINES Typs (Sammle<T>)."));
+                    }
+                    else if (e.Draehte.Count == 0)
+                        befunde.Add(new("error", "GR-FLUSS-DRAHT", $"{ort}: ein Eingang ohne Draht."));
+                    if (e.Draehte.Count > 4 && !e.Sammle)
+                        befunde.Add(new("error", "GR-FLUSS-DRAHT", $"{ort}: ∧ über {e.Draehte.Count} Drähte — die DSL trägt höchstens 4."));
+
+                    foreach (var d in e.Draehte)
+                    {
+                        if (!schritt.TryGetValue(d.Von, out var von) || index[d.Von] >= i)
+                        {
+                            befunde.Add(new("error", "GR-FLUSS-DRAHT", $"{ort}: der Draht kommt von '{d.Von}' — das ist kein früherer Knoten."));
+                            continue;
+                        }
+                        if (d.Port == FlussPort.Zeitlimit && string.IsNullOrWhiteSpace(von.Zeitlimit))
+                            befunde.Add(new("error", "GR-FLUSS-ZEITLIMIT", $"{ort}: der ⏳-Port von '{d.Von}' ist verdrahtet, aber '{d.Von}' hat kein Zeitlimit."));
+                        if (d.Port != FlussPort.Fall && von.Art is not (FlussArt.Funktion or FlussArt.Command))
+                            befunde.Add(new("error", "GR-FLUSS-DRAHT", $"{ort}: nur Funktionen und Commands haben ⏳/✕-Ports ('{d.Von}' ist {von.Art})."));
+                        if (d.Port != FlussPort.Fall) continue;
+                        if (von.Art == FlussArt.Je)
+                            befunde.Add(new("error", "GR-FLUSS-JE", $"{ort}: aus dem Je-Rahmen '{d.Von}' führt kein Draht — sein Element geht direkt in den Knoten."));
+                        else if (von.Art is FlussArt.Quelle or FlussArt.Auf)
+                        {
+                            if (d.Fall != null && d.Fall != von.Typ)
+                                befunde.Add(new("error", "GR-FLUSS-DRAHT", $"{ort}: die Quelle '{d.Von}' liefert '{von.Typ}', nicht '{d.Fall}'."));
+                        }
+                        else if (d.Fall == null || !Ausgaenge(von).Contains(d.Fall))
+                            befunde.Add(new("error", "GR-FLUSS-DRAHT", $"{ort}: '{d.Fall ?? "(kein Fall)"}' ist kein Ausgang von '{d.Von}' ({string.Join(", ", Ausgaenge(von))})."));
+                    }
+
+                    // ∧ wartet auf einen Weg, der nicht immer liefert: ein Vorgänger hat weitere Fälle, die nirgends hinführen.
+                    if (e.Draehte.Count > 1 && !e.Sammle)
+                        foreach (var d in e.Draehte.Where(d => d.Port == FlussPort.Fall && d.Fall != null && schritt.ContainsKey(d.Von)))
+                        {
+                            var offen = Ausgaenge(schritt[d.Von]).Where(o => o != d.Fall && !verdrahtet.Contains((d.Von, o))).ToList();
+                            var ohneLimit = string.IsNullOrWhiteSpace(schritt[d.Von].Zeitlimit);
+                            if (offen.Count > 0)
+                                befunde.Add(new("warning", "GR-FLUSS-WARTET",
+                                    $"{ort}: ∧ wartet auf '{d.Von}.{d.Fall}' — liefert '{d.Von}' stattdessen {string.Join("/", offen)}, wartet der Knoten "
+                                    + (ohneLimit ? "für immer." : "bis zum Zeitlimit.") + " Den anderen Fall verdrahten oder bewusst offen lassen."));
+                        }
+
+                    // Zuordnung: ein Lambda aus dem Code oder je Feld des Ziels ein Ausdruck.
+                    if (string.IsNullOrWhiteSpace(e.Ausdruck))
+                    {
+                        var ziel = k.Art == FlussArt.Funktion && funktionen.TryGetValue(k.Typ, out var fk) ? fk.Auftrag : k.Typ;
+                        var felder = recordVon.TryGetValue(ziel, out var zr) ? zr.Felder.Count : -1;
+                        if (felder >= 0 && (e.Argumente?.Count ?? 0) != felder)
+                            befunde.Add(new("warning", "EDIT-FLUSS-ZUORDNUNG",
+                                $"{ort}: {(e.Argumente?.Count ?? 0)} von {felder} Feldern von '{ziel}' zugeordnet — der Rest wird 'default'."));
+                    }
+                }
+            }
+        }
         return befunde;
     }
 
@@ -177,7 +295,7 @@ public static class Validator
             if (starts > 1) Melde("GR-START-EINMAL", $"Pipeline {p.Name} hat {starts} Start-Handles");
             foreach (var h in p.Handles)
             {
-                var eingang = recs.TryGetValue(h.Eingang, out var er) ? Grammatik.SorteVonRecordArt(er.Kind) : null;
+                var eingang = recs.TryGetValue(h.Eingang, out var er) ? Grammatik.SorteVon(er) : null;
                 var ausgaenge = h.Ausgaenge.Select(Fluss.Generisch).ToList();
                 if (eingang is Grammatik.Event or Grammatik.Transient && ausgaenge.Any(a => a.Huelle == typeof(Abstractions.Selbst<>).Name.Split('`')[0]))
                     Melde("GR-SELBST-OHNE-EVENT", $"{p.Name}.Handle({h.Eingang}) plant Selbst, hat aber einen Event-Eingang (keine Mailbox)");

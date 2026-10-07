@@ -15,6 +15,8 @@ public enum DateiArt
     Konsument, Leser,
     /// <summary>Pipeline (Mischen: fehlende Handles nach Eingangstyp; Parameter/Rückgabe-Abgleich gesondert).</summary>
     Pipeline,
+    /// <summary>Pipeline als Fluss (§14): neu → voll; bestehend → nur der Ausdruck der Fluss-Property (Abgleich).</summary>
+    Fluss,
 }
 
 /// <summary>
@@ -55,6 +57,23 @@ public static class Scaffolder
     private static readonly string SendeJe = nameof(RegelBauer<IEvent>.SendeJe);
     private static readonly string Rufe = nameof(RegelBauer<IEvent>.Rufe);
     private static readonly string Zeitlimit = nameof(RegelAbschluss<IEvent>.Zeitlimit);
+    // ── Pipeline als Fluss (§14) ──
+    private static readonly string IPipeline = nameof(Abstractions.IPipeline);
+    private static readonly string PipelineFluss = nameof(Abstractions.PipelineFluss);
+    private static readonly string FlussProperty = nameof(Abstractions.IPipeline.Fluss);
+    private static readonly string FlussDefiniere = nameof(Abstractions.PipelineFluss.Definiere);
+    private static readonly string FlussQuelle = nameof(PipelineBauer.Quelle);
+    private static readonly string FlussAuf = nameof(PipelineBauer.Auf);
+    private static readonly string FlussAlle = nameof(PipelineBauer.Alle);
+    private static readonly string FlussRufe = nameof(Draht<IEvent>.Rufe);
+    private static readonly string FlussSende = nameof(Draht<IEvent>.Sende);
+    private static readonly string FlussJe = nameof(Draht<IEvent>.Je);
+    private static readonly string FlussBei = nameof(AufrufKnoten.Bei);
+    private static readonly string FlussBeiZeitlimit = nameof(AufrufKnoten.BeiZeitlimit);
+    private static readonly string FlussBeiAbgelehnt = nameof(AufrufKnoten.BeiAbgelehnt);
+    private static readonly string FlussZeitlimit = nameof(RufKnoten<IFunktion>.Zeitlimit);
+    private static readonly string FlussOder = nameof(RufKnoten<IFunktion>.Oder);
+    private static readonly string FlussSammle = nameof(JeKnoten<IEvent, object>.Sammle);
     // ── Katalog-Funktionen ──
     private static readonly string IFunktion = nameof(Abstractions.IFunktion);
     private static readonly string IAuftrag = typeof(IAuftrag<>).Name.Split('`')[0];
@@ -140,6 +159,10 @@ public static class Scaffolder
 
         foreach (var saga in modell.Sagas)
             dateien.Add(Platziert(saga.Datei, Verzeichnis(modell, saga.Namespace), $"{saga.Name}.cs", SagaDatei(saga, modell), DateiArt.Saga));
+
+        // ── Pipelines als Fluss → je Pipeline ihre Datei (neu voll; bestehend gleicht DateiAbgleich nur die Fluss-Property ab) ──
+        foreach (var f in modell.Fluesse)
+            dateien.Add(Platziert(f.Datei, Verzeichnis(modell, f.Namespace), $"{f.Name}.cs", FlussDatei(f, modell), DateiArt.Fluss));
 
         // ── Katalog-Funktionen → je Funktion ihre Schnittstelle (nur die Signatur; die Implementierung ist Bindung) ──
         foreach (var f in modell.Funktionen)
@@ -590,6 +613,130 @@ public static class Scaffolder
         b.AppendLine("    });");
         b.AppendLine("}");
         return b.ToString();
+    }
+
+    // ── Pipeline als Fluss (docs/konzept-editor-pipelines.md §14) ─────────────────────────────────────────
+    //    Je Knoten eine Anweisung in Deklarations-Reihenfolge: var name = <Draht>.Rufe<F>(λ).Zeitlimit(…).Oder(…, λ);
+    //    Lambda-Parameter heißen wie die Knoten, von denen der Draht kommt — so liest sich die Zuordnung wie die Tabelle im
+    //    Editor („Pfad ← vorschau.Pfad“).
+
+    private static string FlussDatei(FlussPipeline f, EditorModell modell)
+    {
+        var referenzen = new List<string>();
+        var extraNs = new List<string>(f.ExtraUsings);
+        foreach (var s in f.Knoten)
+        {
+            referenzen.Add(s.Typ);
+            if (s.Art == FlussArt.Funktion && modell.Funktionen.FirstOrDefault(x => x.Name == s.Typ) is { } fk)
+            {
+                extraNs.Add(fk.Namespace);
+                referenzen.Add(fk.Auftrag);
+            }
+            foreach (var e in s.Eingaenge)
+                foreach (var d in e.Draehte)
+                    if (d.Fall != null) referenzen.Add(d.Fall);
+        }
+        var b = Kopf(f.Namespace, Usings(f.Namespace, modell, [modell.Rahmen.VertragsNamespace], referenzen,
+            extraNs.Where(n => n != f.Namespace).Distinct()));
+        Doku(b, f.Doku, "");
+        b.AppendLine($"public sealed class {f.Name} : {IPipeline}");
+        b.AppendLine("{");
+        b.AppendLine($"    public {PipelineFluss} {FlussProperty} => {PipelineFluss}.{FlussDefiniere}({f.Bauer} =>");
+        b.AppendLine("    {");
+        foreach (var zeile in FlussAnweisungen(f, modell)) b.AppendLine("        " + zeile);
+        b.AppendLine("    });");
+        b.AppendLine("}");
+        return b.ToString();
+    }
+
+    /// <summary>Die Anweisungen des Definiere-Lambdas — je Knoten eine (mehrzeilig bei Zeitlimit/Oder).</summary>
+    public static IReadOnlyList<string> FlussAnweisungen(FlussPipeline f, EditorModell modell)
+    {
+        var schritte = f.Knoten.ToDictionary(s => s.Name, StringComparer.Ordinal);
+        var zeilen = new List<string>();
+        foreach (var s in f.Knoten)
+        {
+            var kopf = s.OhneVariable ? "" : $"var {s.Name} = ";
+            string kern;
+            var anhang = new List<string>();
+            switch (s.Art)
+            {
+                case FlussArt.Quelle: kern = $"{f.Bauer}.{FlussQuelle}<{s.Typ}>()"; break;
+                case FlussArt.Auf: kern = $"{f.Bauer}.{FlussAuf}<{s.Typ}>()"; break;
+                case FlussArt.Je:
+                    var quelle = s.Eingaenge.FirstOrDefault();
+                    var liste = string.IsNullOrWhiteSpace(s.Liste) ? "_ => System.Array.Empty<object>()" : s.Liste;
+                    kern = $"{(quelle is null ? "/* Draht */" : Empfänger(quelle, f))}.{FlussJe}({liste})";
+                    break;
+                default:
+                    var verb = s.Art == FlussArt.Funktion ? FlussRufe : FlussSende;
+                    var erster = s.Eingaenge.FirstOrDefault();
+                    kern = erster is null
+                        ? $"/* Eingang */.{verb}<{s.Typ}>(x => default!)"
+                        : $"{Empfänger(erster, f)}.{verb}<{s.Typ}>({FlussLambda(s, erster, f, schritte, modell)})";
+                    if (!string.IsNullOrWhiteSpace(s.Zeitlimit)) anhang.Add($".{FlussZeitlimit}({s.Zeitlimit})");
+                    foreach (var e in s.Eingaenge.Skip(1))
+                        anhang.Add($".{FlussOder}({Empfänger(e, f)}, {FlussLambda(s, e, f, schritte, modell)})");
+                    break;
+            }
+            if (anhang.Count == 0) { zeilen.Add($"{kopf}{kern};"); continue; }
+            zeilen.Add(kopf + kern);
+            for (var i = 0; i < anhang.Count; i++)
+                zeilen.Add("    " + anhang[i] + (i == anhang.Count - 1 ? ";" : ""));
+        }
+        return zeilen;
+    }
+
+    /// <summary>Wovon ein Eingang ausgeht: Draht, ∧-Verbund, Je-Element oder Je-Sammeln.</summary>
+    private static string Empfänger(FlussEingang e, FlussPipeline f)
+    {
+        if (e.Je != null && !e.Sammle) return e.Je;
+        var drähte = e.Draehte.Select(FlussDrahtAusdruck).ToList();
+        if (e.Je != null) return $"{e.Je}.{FlussSammle}({string.Join(", ", drähte)})";
+        return drähte.Count == 1 ? drähte[0] : $"{f.Bauer}.{FlussAlle}({string.Join(", ", drähte)})";
+    }
+
+    private static string FlussDrahtAusdruck(FlussDraht d) => d.Port switch
+    {
+        FlussPort.Zeitlimit => $"{d.Von}.{FlussBeiZeitlimit}()",
+        FlussPort.Abgelehnt => $"{d.Von}.{FlussBeiAbgelehnt}()",
+        _ => d.Fall is null ? d.Von : $"{d.Von}.{FlussBei}<{d.Fall}>()",
+    };
+
+    /// <summary>Der Bau-Lambda eines Eingangs: verbatim aus dem Code, sonst aus der Zuordnung (je Feld des Ziels ein Ausdruck).</summary>
+    private static string FlussLambda(FlussSchritt s, FlussEingang e, FlussPipeline f, IReadOnlyDictionary<string, FlussSchritt> schritte,
+        EditorModell modell)
+    {
+        if (!string.IsNullOrWhiteSpace(e.Ausdruck)) return e.Ausdruck;
+        var namen = FlussParameter(e, schritte);
+        var kopf = namen.Count == 1 ? namen[0] : "(" + string.Join(", ", namen) + ")";
+        var ziel = s.Art == FlussArt.Funktion ? AuftragVon(s.Typ, modell) : s.Typ;
+        return ziel is null ? $"{kopf} => default!" : $"{kopf} => new {ziel}({ArgListe(e.Argumente, ziel, modell)})";
+    }
+
+    /// <summary>
+    /// Die Lambda-Parameter eines Eingangs — benannt nach den Knoten, von denen die Drähte kommen (gleicher Knoten zweimal →
+    /// durchnummeriert). Je-Element: der Name des Rahmens; Sammeln: (Quelle des Rahmens, gesammelter Knoten).
+    /// </summary>
+    public static IReadOnlyList<string> FlussParameter(FlussEingang e, IReadOnlyDictionary<string, FlussSchritt> schritte)
+    {
+        if (e.Je != null && !e.Sammle) return [e.Je];
+        var roh = new List<string>();
+        if (e.Je != null)
+        {
+            var quelle = schritte.TryGetValue(e.Je, out var je) ? je.Eingaenge.FirstOrDefault()?.Draehte.FirstOrDefault()?.Von : null;
+            roh.Add(quelle ?? "quelle");
+            roh.Add(e.Draehte.FirstOrDefault()?.Von ?? "liste");
+        }
+        else roh.AddRange(e.Draehte.Select(d => d.Port == FlussPort.Fall ? d.Von : d.Von + (d.Port == FlussPort.Zeitlimit ? "Zeit" : "Abgelehnt")));
+        var namen = new List<string>();
+        foreach (var n in roh)
+        {
+            var name = n;
+            for (var i = 2; namen.Contains(name); i++) name = n + i;
+            namen.Add(name);
+        }
+        return namen;
     }
 
     /// <summary>Der Auftrag der Funktion (ihr einer Eingang) — aus dem Modell; null, wenn die Funktion (noch) unbekannt ist.</summary>

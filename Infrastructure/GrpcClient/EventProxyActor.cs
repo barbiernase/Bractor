@@ -25,6 +25,12 @@ internal record TriggerForwardMsg(IPipelineTrigger Trigger, string CorrelationId
 internal record QueryForwardMsg(IQuery Query, string CorrelationId);
 
 /// <summary>
+/// Server → Client: eine fertige ServerMessage über DIESEN Actor schreiben — so laufen Schreibvorgänge aus Hintergrund-Schleifen
+/// (z. B. ArbeitsAufträge der Funktions-Anbieter-Sitzung) durch dieselbe Mailbox wie Events und Forwards (ein Schreiber).
+/// </summary>
+internal record ServerNachrichtMsg(ProtoRepo.ServerMessage Nachricht);
+
+/// <summary>
 /// Minimaler Actor pro gRPC-Verbindung.
 /// 
 /// EXISTIERT NUR FÜR DIE PID!
@@ -82,6 +88,10 @@ public class EventProxyActor : IActor
 
             case QueryForwardMsg queryFwd:
                 await HandleQueryForwardAsync(queryFwd);
+                break;
+
+            case ServerNachrichtMsg nachricht:
+                await HandleServerNachrichtAsync(nachricht);
                 break;
 
             case Stopping:
@@ -155,6 +165,26 @@ public class EventProxyActor : IActor
         catch (Exception ex)
         {
             _logger.LogWarning(ex, "[EventProxy-{Session}] Error forwarding trigger", _sessionId);
+        }
+    }
+
+    // ═══════════════════════════════════════════════════
+    // FERTIGE SERVER-NACHRICHT → STREAM (Funktions-Aufträge u. a.)
+    // ═══════════════════════════════════════════════════
+
+    private async Task HandleServerNachrichtAsync(ServerNachrichtMsg msg)
+    {
+        try
+        {
+            await _responseStream.WriteAsync(msg.Nachricht);
+        }
+        catch (RpcException ex) when (ex.StatusCode == StatusCode.Cancelled)
+        {
+            _logger.LogDebug("[EventProxy-{Session}] Stream cancelled during {Case}", _sessionId, msg.Nachricht.MessageCase);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "[EventProxy-{Session}] Error writing {Case}", _sessionId, msg.Nachricht.MessageCase);
         }
     }
 

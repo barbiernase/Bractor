@@ -43,6 +43,7 @@ from typing import Any, ClassVar, Generic, TypeVar, get_args
 
 from .connection import ConnectionManager
 from .dispatch import HandlerBase, handle
+from .funktion import FunktionsBasis, FunktionsLaeufer
 from .mapper import PayloadMapper
 from .proto_sync import ensure_types_current, verify_hash_at_connect
 from .proxy import GrpcProxy
@@ -74,12 +75,15 @@ class CqrsClient(HandlerBase, Generic[S]):
         registry: CategoryRegistry,
         generated_module,
         config: dict[str, Any] | None = None,
+        funktionen: list[FunktionsBasis] | None = None,
     ):
         """
         Args:
             registry: CategoryRegistry mit allen Domain-Typen
             generated_module: Das betterproto-generierte Modul
             config: Optionale Konfiguration für die Subklasse
+            funktionen: Katalog-Funktionen, die dieser Client ANBIETET (generierte <Funktion>Basis-Unterklassen);
+                        nach jedem Handshake meldet er sie an, der Server holt für ihn Aufträge (§14.5)
         """
         self._registry = registry
         self._gen = generated_module
@@ -92,6 +96,7 @@ class CqrsClient(HandlerBase, Generic[S]):
         self._mapper = PayloadMapper(generated_module)
         self._router = MessageRouter()
         self._connection = ConnectionManager(self._proxy)
+        self._funktionen = FunktionsLaeufer(funktionen or [], self._proxy, self._mapper)
         self._version_tracker = VersionTracker()
         self._state: S = self._create_initial_state()
 
@@ -104,6 +109,11 @@ class CqrsClient(HandlerBase, Generic[S]):
     def session_id(self) -> str:
         """Aktuelle Session-ID (leer wenn nicht verbunden)."""
         return self._proxy.session_id
+
+    @property
+    def funktionen(self) -> FunktionsLaeufer:
+        """Die angebotenen Katalog-Funktionen und ihre laufenden Aufträge."""
+        return self._funktionen
 
     @property
     def is_connected(self) -> bool:
@@ -183,7 +193,8 @@ class CqrsClient(HandlerBase, Generic[S]):
             verify_hash_at_connect(file_base_url, generated_dir)
 
         capabilities = self._build_capabilities_request()
-        await self._connection.connect_with_retry(host, port, capabilities)
+        # on_connected läuft nach JEDEM Handshake (auch nach Reconnect): angebotene Funktionen neu anmelden.
+        await self._connection.connect_with_retry(host, port, capabilities, on_connected=self._funktionen.biete_an)
 
         log.info("Connected. Starting processing loops...")
 
@@ -198,6 +209,7 @@ class CqrsClient(HandlerBase, Generic[S]):
                     self._mapper,
                     self._registry,
                     self._version_tracker,
+                    on_arbeit=self._funktionen.nimm,
                 ),
                 self._connection.monitor(),
             )

@@ -5,7 +5,9 @@ using Infrastructure.Akteure;
 using Domain.Projections;
 using Grpc.Core;
 using Infrastructure.Extensions;
+using Infrastructure.Funktionen;
 using Infrastructure.Mapping;
+using Infrastructure.Projections;   // WakeAck
 using Infrastructure.Pipeline;
 using Infrastructure.PubSub;
 using Infrastructure.Serialization;
@@ -44,6 +46,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     private readonly QueryHandlerRegistry _queryHandlerRegistry;
     private readonly BrokerPublisher _publisher;
     private readonly AkteurTor? _akteurTor;
+    private readonly FunktionsAusfuehrer? _funktionsAusfuehrer;
     private readonly ILogger _logger;
 
     /// <summary>
@@ -88,7 +91,8 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         QueryHandlerRegistry queryHandlerRegistry,
         BrokerPublisher publisher,
         AkteurTor? akteurTor = null,
-        ILogger<CqrsClientServiceImpl>? logger = null)
+        ILogger<CqrsClientServiceImpl>? logger = null,
+        FunktionsAusfuehrer? funktionsAusfuehrer = null)
     {
         _actorSystem = actorSystem ?? throw new ArgumentNullException(nameof(actorSystem));
         _mapper = mapper ?? throw new ArgumentNullException(nameof(mapper));
@@ -98,6 +102,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         _queryHandlerRegistry = queryHandlerRegistry ?? throw new ArgumentNullException(nameof(queryHandlerRegistry));
         _publisher = publisher ?? throw new ArgumentNullException(nameof(publisher));
         _akteurTor = akteurTor; // null = Akteure nicht konfiguriert → Pfad offen wie bisher (opt-in)
+        _funktionsAusfuehrer = funktionsAusfuehrer; // null = keine Prozess-/Funktions-Maschinerie → Anbieten wird abgewiesen
         _logger = logger ?? NullLogger<CqrsClientServiceImpl>.Instance;
         _capabilitiesHandler = new CapabilitiesHandler();
     }
@@ -127,6 +132,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         }
 
         PID? proxyPid = null;
+        FunktionsAnbieterSitzung? anbieter = null;
         // Wer diese Session ist: vom Tor (Token), ggf. erst am Handshake vom Akteur-Vertrag festgelegt (Akteur-Konzept §5.2).
         var sitzung = new AkteurSitzung(akteur);
 
@@ -138,6 +144,10 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             proxyPid = _actorSystem.Root.Spawn(proxyProps);
 
             _logger.LogDebug("{Session} EventProxy spawned: {Pid}", sessionId, proxyPid);
+
+            // 1b. Funktions-Anbieter (Katalog-Funktionen extern, §14.5): Hol-Schleifen starten erst, wenn der Worker anbietet.
+            if (_funktionsAusfuehrer != null)
+                anbieter = BaueAnbieterSitzung(sessionId, proxyPid, _funktionsAusfuehrer);
 
             // 2. SubscriptionTracker erstellen (await using = automatisches Cleanup)
             await using var subscriptionTracker = new SubscriptionTracker(
@@ -162,7 +172,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                     var clientMessage = requestStream.Current;
                     await ProcessMessageAsync(
                         clientMessage, responseStream, subscriptionTracker,
-                        proxyPid, sitzung,
+                        proxyPid, sitzung, anbieter,
                         sessionId, ct);
                 }
 
@@ -196,6 +206,14 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         {
             // 4. Cleanup: Registrierungen entfernen, pending Forwards abbrechen, Actor stoppen
             // SubscriptionTracker.DisposeAsync() wird automatisch aufgerufen (await using)
+
+            // Funktions-Anbieter: Hol-Schleifen beenden; Laufendes nicht erledigt melden — die Leases laufen ab, der
+            // Vermittler gibt die Aufträge neu aus (anderer Worker, oder dieser nach Reconnect).
+            if (anbieter != null)
+            {
+                try { await anbieter.DisposeAsync(); }
+                catch (Exception ex) { _logger.LogDebug(ex, "{Session} Funktions-Anbieter: Ende mit Fehler", sessionId); }
+            }
 
             if (proxyPid != null)
             {
@@ -254,6 +272,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         SubscriptionTracker subscriptionTracker,
         PID proxyPid,
         AkteurSitzung sitzung,
+        FunktionsAnbieterSitzung? anbieter,
         string sessionId,
         CancellationToken ct)
     {
@@ -300,6 +319,23 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
 
                 case ProtoRepo.ClientMessage.MessageOneofCase.TriggerResult:
                     HandleTriggerResult(message.TriggerResult, sessionId);
+                    break;
+
+                // ═════════════════════════════════════════
+                // Katalog-Funktionen extern (§14.5)
+                // ═════════════════════════════════════════
+
+                case ProtoRepo.ClientMessage.MessageOneofCase.FunktionenAnbieten:
+                    await HandleFunktionenAnbietenAsync(message.FunktionenAnbieten, responseStream, anbieter, sessionId, ct);
+                    break;
+
+                case ProtoRepo.ClientMessage.MessageOneofCase.ArbeitsErgebnis:
+                    await HandleArbeitsErgebnisAsync(message.ArbeitsErgebnis, responseStream, anbieter, sessionId, ct);
+                    break;
+
+                case ProtoRepo.ClientMessage.MessageOneofCase.ArbeitLebt:
+                    if (anbieter != null && Guid.TryParse(message.ArbeitLebt.Vorgang, out var lebt))
+                        await anbieter.LebtAsync(lebt);
                     break;
 
                 default:
@@ -1006,6 +1042,97 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         {
             // Stream möglicherweise bereits geschlossen
         }
+    }
+
+    // =========================================================================
+    // KATALOG-FUNKTIONEN EXTERN (docs/konzept-editor-pipelines.md §14.5)
+    // =========================================================================
+
+    /// <summary>
+    /// Die Anbieter-Sitzung dieser Verbindung, live verdrahtet: Hol-/Melde-Wege zum Vermittler im Cluster, Weiterreichen über
+    /// den EventProxyActor (EIN Schreiber am Stream), Schreiben über den Ausführer (genau ein Ergebnis + Weckung).
+    /// </summary>
+    private FunktionsAnbieterSitzung BaueAnbieterSitzung(string sessionId, PID proxyPid, FunktionsAusfuehrer ausfuehrer)
+    {
+        var cluster = _actorSystem.Cluster();
+        return new FunktionsAnbieterSitzung(
+            $"{_actorSystem.Address}/{sessionId}",   // Arbeiter-Name am Vermittler: eindeutig über Knoten hinweg
+            name => FunktionsAnbieterSitzung.LoeseImKatalog(name, GeneratedFunktionen.Ergebnisse.Keys),
+            f => GeneratedFunktionen.Ergebnisse.TryGetValue(f, out var e) ? e : Array.Empty<Type>(),
+            (f, anfrage, ct) => cluster.RequestAsync<ArbeitZugeteilt>(FunktionsVermittlerActor.Identitaet(f), anfrage, ct),
+            async (f, nachricht) =>
+            {
+                using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+                await cluster.RequestAsync<WakeAck>(FunktionsVermittlerActor.Identitaet(f), nachricht, cts.Token);
+            },
+            (a, f) =>
+            {
+                _actorSystem.Root.Send(proxyPid, new ServerNachrichtMsg(new ProtoRepo.ServerMessage
+                {
+                    ArbeitsAuftrag = new ProtoRepo.ArbeitsAuftrag
+                    {
+                        Vorgang = a.Vorgang.ToString(),
+                        Korrelation = a.Korrelation.ToString(),
+                        Funktion = f.Name,
+                        Auftrag = _mapper.MapToDto(a.Auftrag),
+                        Akteur = a.Akteur ?? ""
+                    }
+                }));
+                return Task.CompletedTask;
+            },
+            ausfuehrer.SchreibeErgebnisAsync,
+            _logger);
+    }
+
+    private async Task HandleFunktionenAnbietenAsync(
+        ProtoRepo.FunktionenAnbieten request,
+        IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        FunktionsAnbieterSitzung? anbieter,
+        string sessionId,
+        CancellationToken ct)
+    {
+        if (anbieter == null)
+        {
+            await SendErrorAsync(responseStream, "FUNKTIONEN_NICHT_VERFUEGBAR",
+                "Dieser Host führt keine Katalog-Funktionen aus (kein Funktions-Ausführer konfiguriert)", "", ct);
+            return;
+        }
+        var unbekannt = anbieter.Biete(request.Angebote.Select(a => (a.Funktion, a.Slots)));
+        if (unbekannt.Count > 0)
+        {
+            _logger.LogWarning("{Session} bietet unbekannte Funktionen an: [{Unbekannt}]", sessionId, string.Join(", ", unbekannt));
+            await SendErrorAsync(responseStream, "FUNKTION_UNBEKANNT",
+                $"Unbekannte Funktion(en): {string.Join(", ", unbekannt)}", "", ct);
+        }
+    }
+
+    private async Task HandleArbeitsErgebnisAsync(
+        ProtoRepo.ArbeitsErgebnis request,
+        IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        FunktionsAnbieterSitzung? anbieter,
+        string sessionId,
+        CancellationToken ct)
+    {
+        if (anbieter == null || !Guid.TryParse(request.Vorgang, out var vorgang))
+        {
+            await SendErrorAsync(responseStream, "ARBEITS_ERGEBNIS_UNGUELTIG",
+                $"Ergebnis ohne gültigen Vorgang oder ohne Funktions-Ausführer: '{request.Vorgang}'", request.Vorgang, ct);
+            return;
+        }
+
+        var fehler = string.IsNullOrEmpty(request.Fehler) ? null : request.Fehler;
+        IEvent? ergebnis = null;
+        if (fehler == null && request.Ergebnis != null)
+        {
+            try { ergebnis = _mapper.MapErgebnis(request.Ergebnis); }
+            catch (Exception ex) { fehler = $"Ergebnis nicht lesbar: {ex.Message}"; }
+        }
+
+        var ausgang = await anbieter.ErgebnisAsync(vorgang, ergebnis, fehler, ct);
+        _logger.LogDebug("{Session} Ergebnis {Vorgang}: {Ausgang}", sessionId, vorgang, ausgang);
+        if (ausgang == ErgebnisAusgang.Unbekannt)
+            await SendErrorAsync(responseStream, "ARBEIT_UNBEKANNT",
+                $"Vorgang {vorgang} läuft in dieser Sitzung nicht (Lease abgelaufen oder schon erledigt)", request.Vorgang, ct);
     }
 
     private static async Task SendErrorAsync(

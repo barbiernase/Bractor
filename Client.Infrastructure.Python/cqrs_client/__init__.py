@@ -14,6 +14,7 @@ und nutzt dasselbe Protokoll (domain.proto).
 
 from .client import CqrsClient
 from .vertrag import AkteurVertragBasis, Zusage, VertragsVerletzung
+from .funktion import Ausfuehrung, FunktionsBasis, FunktionsLaeufer, FunktionsVerletzung
 from .dispatch import HandleDescriptor, HandlerBase, handle
 from .registry import CategoryRegistry, MessageCategory
 from .router import MessageContext
@@ -21,6 +22,10 @@ from .versioning import VersionTracker
 
 __all__ = [
     "AkteurVertragBasis",
+    "Ausfuehrung",
+    "FunktionsBasis",
+    "FunktionsLaeufer",
+    "FunktionsVerletzung",
     "CqrsClient",
     "Zusage",
     "VertragsVerletzung",

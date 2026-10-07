@@ -69,6 +69,7 @@ class PayloadMapper:
         self._query_field_map = self._build_type_to_field_map("QueryPayloadDto")
         self._query_response_field_map = self._build_type_to_field_map("QueryResponsePayloadDto")
         self._trigger_field_map = self._build_type_to_field_map("TriggerPayloadDto")
+        self._auftrag_field_map = self._build_type_to_field_map("AuftragPayloadDto")
 
     def _build_type_to_field_map(self, envelope_class_name: str) -> dict[type, str]:
         """
@@ -112,6 +113,11 @@ class PayloadMapper:
 
     def extract_query_payload(self, wrapper) -> betterproto.Message:
         """Extrahiert den konkreten Query-Typ aus QueryPayloadDto."""
+        _, payload = extract_oneof_payload(wrapper, "payload")
+        return payload
+
+    def extract_auftrag_payload(self, wrapper) -> betterproto.Message:
+        """Extrahiert den konkreten Auftrag aus AuftragPayloadDto (Katalog-Funktion, ArbeitsAuftrag.auftrag)."""
         _, payload = extract_oneof_payload(wrapper, "payload")
         return payload
 
@@ -200,6 +206,29 @@ class PayloadMapper:
         if field_name:
             setattr(envelope, field_name, event)
 
+        return envelope
+
+    def wrap_ergebnis(self, ergebnis: betterproto.Message, vorgang: str, korrelation: str = ""):
+        """
+        Verpackt das Ergebnis einer Katalog-Funktion (einer ihrer OneOf-Fälle, ein Event) in einen EventEnvelopeDto für
+        ArbeitsErgebnis.ergebnis. Der Server liest nur die Nutzlast und stempelt Stream/Korrelation/Akteur selbst; Stream =
+        Vorgang (Ausführungs-Stream) steht nur zur Lesbarkeit drin.
+        """
+        envelope_cls = getattr(self._gen, "EventEnvelopeDto")
+        envelope = envelope_cls(
+            event_id=str(uuid4()),
+            aggregate_id=vorgang,
+            created_at_utc=int(time.time() * 1_000),
+            causation_id=vorgang,
+            correlation_id=korrelation,
+        )
+        field_name = self._get_oneof_field_name(ergebnis, self._event_field_map)
+        if not field_name:
+            raise TypeError(
+                f"Kein oneof-Feld für {type(ergebnis).__name__} "
+                f"in EventEnvelopeDto gefunden"
+            )
+        setattr(envelope, field_name, ergebnis)
         return envelope
 
     def wrap_query(self, query: betterproto.Message):

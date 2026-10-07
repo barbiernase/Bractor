@@ -17,6 +17,7 @@ using Cqrs.Codegen;
 //   2. EventJsonSerializerContext.g.cs             (für den STJ-Source-Generator, Marten-Storage)
 //   3. CqrsWireJsonContext.g.cs                    (für den STJ-Source-Generator, Cross-Node-Wire)
 //   4. domain_client/generated/vertraege.py        (Akteur-Verträge → Python-Basisklassen, docs/konzept-akteure.md §3)
+//   5. domain_client/generated/funktionen.py       (Katalog-Funktionen → Python-Basisklassen, konzept-editor-pipelines §14.5)
 //
 // Früher öffnete dieser Prepass die ganze Solution über MSBuildWorkspace (geschachteltes
 // MSBuild, fragil, plattformabhängig). Jetzt liest er nur die Metadaten der drei gebauten
@@ -135,6 +136,7 @@ var allGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IMessagePayload"
     .Concat(analyzer.AnalyzeTypesImplementing("Abstractions.IQuery"))
     .Concat(analyzer.AnalyzeTypesImplementing("Abstractions.IQueryResponse"))
     .Concat(analyzer.AnalyzeTypesImplementing("Abstractions.IPipelineTrigger"))
+    .Concat(analyzer.AnalyzeTypesImplementing("Abstractions.IAuftrag"))   // Aufträge der Katalog-Funktionen (externe Ausführer)
     .ToList();
 
 if (allGraphs.Count == 0)
@@ -152,10 +154,11 @@ var eventTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "Event");
 var queryTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "Query");
 var queryResponseTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "QueryResponse");
 var triggerTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "Trigger");
+var auftragTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "Auftrag");
 
 var protoContent = new FileGenerator().GenerateProtoFile(
     ProtoNamespace, objectTypes, commandTypes, eventTypes,
-    queryTypes, queryResponseTypes, triggerTypes);
+    queryTypes, queryResponseTypes, triggerTypes, auftragTypes);
 
 var protoPath = Path.Combine(solutionDir, "ProtoRepo", "domain.proto");
 if (!Directory.Exists(Path.GetDirectoryName(protoPath)!))
@@ -197,6 +200,18 @@ if (Directory.Exists(Path.GetDirectoryName(vertraegePfad)!))
     Console.WriteLine($"✅ {vertraegePfad} ({vertragAnzahl} Verträge)");
 }
 else Console.WriteLine($"⚠️  Python-Generat-Ordner fehlt — Verträge nicht geschrieben: {Path.GetDirectoryName(vertraegePfad)}");
+
+// ────────────────────────────────────────────────────────────────────────
+// 5. Katalog-Funktionen → Python (ein Worker bietet sie an: <Funktion>Basis mit rufe(auftrag, x))
+// ────────────────────────────────────────────────────────────────────────
+var (funktionenPy, funktionAnzahl) = PythonFunktionsEmitter.Emit(assemblies);
+var funktionenPfad = Path.Combine(solutionDir, "Domain.Client.Worker.Python.ML", "domain_client", "generated", "funktionen.py");
+if (Directory.Exists(Path.GetDirectoryName(funktionenPfad)!))
+{
+    WriteIfChanged(funktionenPfad, funktionenPy);
+    Console.WriteLine($"✅ {funktionenPfad} ({funktionAnzahl} Funktionen)");
+}
+else Console.WriteLine($"⚠️  Python-Generat-Ordner fehlt — Funktionen nicht geschrieben: {Path.GetDirectoryName(funktionenPfad)}");
 
 Console.WriteLine();
 Console.WriteLine($"📊 {stats}");

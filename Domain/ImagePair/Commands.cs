@@ -14,18 +14,6 @@ public record ErstelleImagePair(
     string UrsprungsPfad
 ) : ICreationCommand;
 
-/// <summary>
-/// Eine Rohbild-Datei dieses Paars liegt vor (aus der Pipeline am Rand: Datei erkannt → Name gedeutet). Ab hier ist sie im
-/// Log — der <see cref="BildaufbereitungProzess"/> bereitet sie über Katalog-Funktionen auf und meldet sie dann verfügbar.
-/// </summary>
-public record NimmRohbildAuf(
-    Guid AggregateId,
-    BildVersion Version,
-    string Pfad,
-    string Dateiname,
-    long DateigroesseBytes
-) : ICommand;
-
 public record MeldeBildVerfuegbar(
     Guid AggregateId,
     BildVersion Version,

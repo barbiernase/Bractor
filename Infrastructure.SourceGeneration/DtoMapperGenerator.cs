@@ -72,8 +72,11 @@ namespace Infrastructure.SourceGeneration
                 var selfMessageNames = new HashSet<string>(selfMessageGraphs.Select(g => g.FullName));
                 triggerGraphs = triggerGraphs.Where(g => !selfMessageNames.Contains(g.FullName)).ToList();
                 
+                // Aufträge der Katalog-Funktionen (IAuftrag<F>) — reisen zu externen Ausführern (AuftragPayloadDto)
+                var auftragGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IAuftrag");
+
                 // Alle Graphen kombinieren
-                var allGraphs = graphs.Concat(queryGraphs).Concat(queryResponseGraphs).Concat(triggerGraphs).ToList();
+                var allGraphs = graphs.Concat(queryGraphs).Concat(queryResponseGraphs).Concat(triggerGraphs).Concat(auftragGraphs).ToList();
                 
                 debugInfo.Add($"Gefundene Type-Graphen: {allGraphs.Count}");
 
@@ -87,6 +90,7 @@ namespace Infrastructure.SourceGeneration
                 var queryTypes = aggregator.GetTypesSortedByDepth(DomainType.Query);
                 var queryResponseTypes = aggregator.GetTypesSortedByDepth(DomainType.QueryResponse);
                 var triggerTypes = aggregator.GetTypesSortedByDepth(DomainType.Trigger);
+                var auftragTypes = aggregator.GetTypesSortedByDepth(DomainType.Auftrag);
 
 // FIX: Trigger-Typen können vom Aggregator als Object fehlklassifiziert werden,
 // wenn sie als Abhängigkeit eines anderen Typs zuerst entdeckt wurden.
@@ -105,13 +109,14 @@ namespace Infrastructure.SourceGeneration
                 debugInfo.Add($"Queries: {queryTypes.Count}");
                 debugInfo.Add($"QueryResponses: {queryResponseTypes.Count}");
                 debugInfo.Add($"Triggers: {triggerTypes.Count}");
+                debugInfo.Add($"Auftraege: {auftragTypes.Count}");
                 debugInfo.Add($"Value Objects: {objectTypes.Count}");
 
                 // 3. Generiere Debug Output
                 GenerateDebugOutput(context, debugInfo, objectTypes, commandTypes, eventTypes, queryTypes, queryResponseTypes);
 
                 // 4. Generiere echten Mapper Code
-                GenerateMapperCode(context, objectTypes, commandTypes, eventTypes, queryTypes, queryResponseTypes, triggerTypes);
+                GenerateMapperCode(context, objectTypes, commandTypes, eventTypes, queryTypes, queryResponseTypes, triggerTypes, auftragTypes);
             }
             catch (Exception ex)
             {
@@ -130,7 +135,8 @@ namespace Infrastructure.SourceGeneration
             List<TypeAggregationResult> eventTypes,
             List<TypeAggregationResult> queryTypes,
             List<TypeAggregationResult> queryResponseTypes,
-            List<TypeAggregationResult> triggerTypes)
+            List<TypeAggregationResult> triggerTypes,
+            List<TypeAggregationResult> auftragTypes)
         {
             var sb = new StringBuilder();
             
@@ -152,7 +158,8 @@ namespace Infrastructure.SourceGeneration
                 .Concat(eventTypes)
                 .Concat(queryTypes ?? Enumerable.Empty<TypeAggregationResult>())
                 .Concat(queryResponseTypes ?? Enumerable.Empty<TypeAggregationResult>())
-                .Concat(triggerTypes ?? Enumerable.Empty<TypeAggregationResult>());
+                .Concat(triggerTypes ?? Enumerable.Empty<TypeAggregationResult>())
+                .Concat(auftragTypes ?? Enumerable.Empty<TypeAggregationResult>());
                 
             foreach (var type in allTypes)
             {
@@ -171,7 +178,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("{");
             
             // Build type lookup for determining helper classes
-            var typeLookup = BuildTypeLookup(objectTypes, commandTypes, eventTypes, queryTypes, queryResponseTypes, triggerTypes);
+            var typeLookup = BuildTypeLookup(objectTypes, commandTypes, eventTypes, queryTypes, queryResponseTypes, triggerTypes, auftragTypes);
             
             // Enum-Typnamen sammeln für Collection-Element-Erkennung
             _enumTypeNames = new HashSet<string>();
@@ -198,6 +205,9 @@ namespace Infrastructure.SourceGeneration
             
             GenerateStandaloneHelpers(sb, triggerTypes ?? new List<TypeAggregationResult>(), objectTypes,
                 "Trigger", "IPipelineTrigger", "TriggerPayloadDto", "ProtoTriggerMappingHelpers", typeLookup);
+
+            GenerateStandaloneHelpers(sb, auftragTypes ?? new List<TypeAggregationResult>(), objectTypes,
+                "Auftrag", "IAuftrag", "AuftragPayloadDto", "ProtoAuftragMappingHelpers", typeLookup);
             
             sb.AppendLine("}");
             
@@ -366,6 +376,16 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("                TargetSubscriberId = string.IsNullOrEmpty(dto.TargetSubscriberId) ? null : dto.TargetSubscriberId,");
             sb.AppendLine("                Payload = payload");
             sb.AppendLine("            };");
+            sb.AppendLine("        }");
+            sb.AppendLine();
+
+            // Nur die Nutzlast (ohne Envelope-Metadaten): für Ergebnisse externer Funktions-Ausführer, deren Envelope der
+            // Server selbst stempelt (Ausführungs-Stream, Korrelation, Akteur).
+            sb.AppendLine("        public static IEvent MapPayload(EventEnvelopeDto dto)");
+            sb.AppendLine("        {");
+            sb.AppendLine("            if (!EventMappers.TryGetValue(dto.PayloadCase, out var mapper))");
+            sb.AppendLine("                throw new NotSupportedException($\"Unknown event type: {dto.PayloadCase}\");");
+            sb.AppendLine("            return mapper(dto);");
             sb.AppendLine("        }");
             sb.AppendLine();
             
@@ -898,7 +918,8 @@ namespace Infrastructure.SourceGeneration
             List<TypeAggregationResult> eventTypes,
             List<TypeAggregationResult> queryTypes,
             List<TypeAggregationResult> queryResponseTypes,
-            List<TypeAggregationResult> triggerTypes)
+            List<TypeAggregationResult> triggerTypes,
+            List<TypeAggregationResult> auftragTypes = null)
         {
             var lookup = new Dictionary<string, DomainType>();
             
@@ -919,6 +940,7 @@ namespace Infrastructure.SourceGeneration
             AddTypes(queryTypes, DomainType.Query);
             AddTypes(queryResponseTypes, DomainType.QueryResponse);
             AddTypes(triggerTypes, DomainType.Trigger);
+            AddTypes(auftragTypes, DomainType.Auftrag);
             
             return lookup;
         }
@@ -936,6 +958,7 @@ namespace Infrastructure.SourceGeneration
                 DomainType.Query => "ProtoQueryMappingHelpers",
                 DomainType.QueryResponse => "ProtoQueryResponseMappingHelpers",
                 DomainType.Trigger => "ProtoTriggerMappingHelpers",
+                DomainType.Auftrag => "ProtoAuftragMappingHelpers",
                 _ => "ProtoValueObjectHelpers"
             };
         }

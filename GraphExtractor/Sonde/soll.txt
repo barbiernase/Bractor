@@ -36,6 +36,17 @@ record Leihwesen.Gebuehren.SchadenGeschaetzt event | Betrag:decimal
 record Leihwesen.Gebuehren.NichtSchaetzbar event | Grund:string
 funktion Leihwesen.Gebuehren.ISchadensSchaetzung | SchaetzeSchaden -> SchadenGeschaetzt; NichtSchaetzbar
 
+# ── Pipeline als Fluss (Sonde/Fluss.cs.txt): eigene Quelle (IQuellNachricht), Je + Sammle, dieselbe Funktion als zwei Knoten,
+#    ∧ mit Kontext, ∨ über den ⏳-Port, ✕-Port am Command, zwei Knoten ohne Variable (Name = Typ klein, durchnummeriert), Bauer „scan" ──
+record Leihwesen.Pruefung.RueckgabeGescannt event typart=public sealed record | LeserId:Guid, Code:string, Seiten:IReadOnlyList<string>
+record Leihwesen.Pruefung.PruefeSeite auftrag typart=public sealed record funktion=ISeitenPruefung | Seite:string
+record Leihwesen.Pruefung.SeiteGeprueft event | Seite:string, Beschaedigt:bool
+funktion Leihwesen.Pruefung.ISeitenPruefung | PruefeSeite -> SeiteGeprueft
+fluss Leihwesen.Pruefung.RueckgabePruefung bauer=scan | eingang=quelle:RueckgabeGescannt; seiten=je:string <- eingang je{e => e.Seiten}; seite=funktion:ISeitenPruefung <- seiten[] λ{s => new PruefeSeite(s)}; schnell=funktion:ISchadensSchaetzung <- eingang λ{e => new SchaetzeSchaden(e.LeserId, 10m)} ⏳TimeSpan.FromSeconds(30); gruendlich=funktion:ISchadensSchaetzung <- eingang λ{e => new SchaetzeSchaden(e.LeserId, 100m)}; mahnung=command:EroeffneMahnung <- gruendlich.SchadenGeschaetzt+eingang λ{(g, e) => new EroeffneMahnung(e.LeserId, g.Betrag)} ∨ schnell.⏳ λ{z => new EroeffneMahnung(Guid.Empty, 0m)}; meldeSchaden°=command:MeldeSchaden <- seiten.sammle(seite.SeiteGeprueft) λ{(e, geprueft) => new MeldeSchaden(e.LeserId, e.LeserId)}; meldeSchaden2°=command:MeldeSchaden <- mahnung.✕ λ{a => new MeldeSchaden(Guid.Empty, Guid.Empty)}
+# GEZEICHNET (Gezeichnet.board.json, ohne Lambda — nur die Zuordnung): Event-Quelle → ƒ mit Zeitlimit → Command am Ergebnis-Port.
+#    Der Scaffolder benennt die Lambda-Parameter nach den Knoten, von denen der Draht kommt.
+fluss Leihwesen.Gebuehren.MahnungBeiRueckgabe bauer=p | rueckgabe=auf:Zurueckgegeben; schaetzung=funktion:ISchadensSchaetzung <- rueckgabe λ{rueckgabe => new SchaetzeSchaden(rueckgabe.LeserId, 50m)} ⏳TimeSpan.FromMinutes(1); mahnung=command:EroeffneMahnung <- schaetzung.SchadenGeschaetzt λ{schaetzung => new EroeffneMahnung(Guid.NewGuid(), schaetzung.Betrag)}
+
 # ── Lesen: frei benannte Fähigkeiten + Bündel (Marker statt Namensregel), class-ReadModel, OneOf, Konstanten-Ids ──
 record Leihwesen.Lesen.OffeneAusleihen query | LeserId:Guid { get; init; }
 record Leihwesen.Lesen.OffeneAusleihenAntwort queryresponse | Anzahl:int

@@ -36,9 +36,6 @@ public partial class ImagePair : IState
 
     public bool IstKomplett => Dc0 != null && Dc2 != null;
 
-    /// <summary>Rohbild je Version schon im Log (skalar je Version, keine Sammlung) — eine zweite Meldung derselben Datei wirkt nicht.</summary>
-    public bool Dc0Eingegangen { get; set; }
-    public bool Dc2Eingegangen { get; set; }
     public string? UrsprungsPfad { get; set; }
 
     public BildInfo? GetBild(BildVersion version) => version switch

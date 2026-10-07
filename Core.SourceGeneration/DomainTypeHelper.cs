@@ -39,6 +39,12 @@ namespace Core.SourceGeneration
             "IPipelineTrigger"
         };
         
+        private static readonly HashSet<string> AuftragInterfaces = new()
+        {
+            "Abstractions.IAuftrag",
+            "IAuftrag"
+        };
+
         public static Abstractions.SourceGeneration.DomainType ClassifyByInterfaces(IEnumerable<string> interfaces)
         {
             var interfaceList = interfaces.ToList();
@@ -57,6 +63,9 @@ namespace Core.SourceGeneration
 
             if (interfaceList.Any(i => QueryResponseInterfaces.Contains(i) || QueryResponseInterfaces.Any(qri => i.EndsWith(qri))))
                 return DomainType.QueryResponse;
+
+            if (interfaceList.Any(i => AuftragInterfaces.Contains(i)))
+                return DomainType.Auftrag;
             
             return Abstractions.SourceGeneration.DomainType.Object;
         }

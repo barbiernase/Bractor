@@ -4,8 +4,11 @@ using Infrastructure.Aggregate;   // KommandoAbgelehnt — die durable Fehlschla
 
 namespace Infrastructure.Funktionen;
 
-/// <summary>Wie eine Funktion auf diesem Knoten ausgeführt wird: gleichzeitige Slots und Wiederholungen bei Ausnahmen.</summary>
-public sealed record FunktionsBindung(Type Funktion, int Slots = 1, int Wiederholungen = 0);
+/// <summary>
+/// Wie eine Funktion auf diesem Knoten ausgeführt wird: gleichzeitige Slots und Wiederholungen bei Ausnahmen.
+/// <paramref name="Extern"/> = die Funktion rechnet außerhalb (Python-Worker über gRPC) — der Knoten holt sie nicht selbst ab.
+/// </summary>
+public sealed record FunktionsBindung(Type Funktion, int Slots = 1, int Wiederholungen = 0, bool Extern = false);
 
 /// <summary>Was jede Ausführung mitbekommt (siehe <see cref="IAusfuehrung"/>).</summary>
 internal sealed record Ausfuehrung(Guid AusfuehrungsId, Guid Korrelation, CancellationToken Abbruch) : IAusfuehrung;
@@ -98,21 +101,38 @@ public sealed class FunktionsAusfuehrer
             finally { slot.Release(); }
         }
 
+        await SchreibeErgebnisAsync(korrelation, vorgang, ergebnis, akteur, name, ct);
+    }
+
+    /// <summary>
+    /// Schreibt GENAU EIN Ergebnis in den Ausführungs-Stream (StartStream, Version 0 → der Erste gewinnt) und weckt den
+    /// Prozess. Gemeinsamer Abschluss für C#-Ausführung und externe Ausführer (Python-Worker über gRPC): wo gerechnet wurde,
+    /// ändert nichts daran, wie das Ergebnis im Log landet. Liefert, ob nach dem Aufruf ein Ergebnis im Stream liegt
+    /// (von diesem oder einem schnelleren Ausführer).
+    /// </summary>
+    public async Task<bool> SchreibeErgebnisAsync(Guid korrelation, Guid vorgang, IEvent ergebnis, string? akteur,
+        string funktionsName, CancellationToken ct)
+    {
+        var liegt = true;
         try
         {
             await _store.AppendEventsAsync(vorgang, 0, new[] { ergebnis },
                 correlationId: korrelation.ToString(), causationId: vorgang.ToString(),
-                aggregateType: $"Funktion:{name}", akteur: akteur);
+                aggregateType: $"Funktion:{funktionsName}", akteur: akteur);
         }
         catch (Exception ex)
         {
             // Hat ein anderer Knoten denselben Auftrag zuerst abgeschlossen, liegt sein Ergebnis schon da — gut so.
             // Sonst bleibt der Auftrag offen; der Manager übergibt ihn bei der nächsten Weckung erneut (Backstop heilt).
             if ((await _store.ReadStreamAsync(vorgang, 0, ct)).Count == 0)
-                Console.WriteLine($"[Funktion] Ergebnis von {name} ({vorgang}) nicht schreibbar: {ex.Message}");
+            {
+                liegt = false;
+                Console.WriteLine($"[Funktion] Ergebnis von {funktionsName} ({vorgang}) nicht schreibbar: {ex.Message}");
+            }
         }
 
         await WeckeAsync(korrelation, ct);
+        return liegt;
     }
 
     private async Task<IEvent> RechneAsync(IAuftrag auftrag, IAusfuehrung x, FunktionsBindung bindung, string name, Guid vorgang)

@@ -49,6 +49,8 @@ namespace Infrastructure.SourceGeneration
             var iCommand = c.GetTypeByMetadataName("Abstractions.ICommand");
             var iQuery = c.GetTypeByMetadataName("Abstractions.IQuery");
             var iTrigger = c.GetTypeByMetadataName("Abstractions.IPipelineTrigger");
+            // Eine Quell-Nachricht (Pipeline als Fluss, §14) ist der Anstoß von außen wie ein Trigger — gleiche Befugnis-Art.
+            var iQuelle = c.GetTypeByMetadataName("Abstractions.IQuellNachricht");
             var iEvent = c.GetTypeByMetadataName("Abstractions.IEvent");
             var iTransient = c.GetTypeByMetadataName("Abstractions.ITransientEvent");
             var iDecider = c.GetTypeByMetadataName("Abstractions.IDecider`1");
@@ -147,7 +149,7 @@ namespace Infrastructure.SourceGeneration
                     .Distinct<INamedTypeSymbol>(SymbolEqualityComparer.Default).ToList();
                 var cmds = darf.Where(t => Implementiert(t, iCommand)).ToList();
                 var queries = darf.Where(t => Implementiert(t, iQuery)).ToList();
-                var trigger = darf.Where(t => Implementiert(t, iTrigger)).ToList();
+                var trigger = darf.Where(t => Implementiert(t, iTrigger) || Implementiert(t, iQuelle)).ToList();
                 var transient = darf.Where(t => Implementiert(t, iTransient)).ToList();
 
                 // Vertrag: je Auf(Event) die Ausgaben (konkrete Commands; die Form prüft CQRS061/062) — über ALLE Teile des Akteurs.

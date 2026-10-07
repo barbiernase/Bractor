@@ -23,6 +23,14 @@ public sealed record ProzessGestartet(string ProzessName, Guid AuslöserStream, 
 public sealed record SchrittGescheitert(Guid Vorgang, string Grund) : IEvent, IProzessIntern;
 
 /// <summary>
+/// Pipeline-Fluss (docs/konzept-editor-pipelines.md §14): ein Aufruf ist gescheitert (<paramref name="Art"/> = „zeitlimit“ oder
+/// „abgelehnt“), aber der entsprechende Fehler-Port seines Knotens ist VERDRAHTET — der Fehlschlag wird zum Token
+/// (<see cref="ZeitlimitAbgelaufen"/>/<see cref="SchrittAbgelehnt"/>) und läuft dort weiter, statt den Vorgang scheitern zu lassen.
+/// Durabel, weil ein Zeitlimit aus der Uhr kommt (nicht aus einem Ziel-Stream) und ein spätes Ergebnis den Weg nicht mehr umkehren darf.
+/// </summary>
+public sealed record SchrittUmgeleitet(Guid Vorgang, string Art, string Grund) : IEvent, IProzessIntern;
+
+/// <summary>
 /// Der Prozess ist terminal. <paramref name="Erfolg"/> = alle Transitionen erledigt; sonst
 /// kompensiert/fehlgeschlagen. <paramref name="KlärungNötig"/> (Audit-Fix #12) markiert den dritten
 /// Ausgang: ein Schritt scheiterte UND die Kompensation ließ sich NICHT vollziehen (der Gegenzug wurde
@@ -41,3 +49,7 @@ public sealed record ProzessBeendet(bool Erfolg, string Grund, bool KlärungNöt
 public sealed record StateChangeViaProzessGestartet(Guid StreamId, int Version) : IStateChangeSignal;
 public sealed record StateChangeViaSchrittGescheitert(Guid StreamId, int Version) : IStateChangeSignal;
 public sealed record StateChangeViaProzessBeendet(Guid StreamId, int Version) : IStateChangeSignal;
+public sealed record StateChangeViaSchrittUmgeleitet(Guid StreamId, int Version) : IStateChangeSignal;
+// Die Fehler-Tokens des Pipeline-Flusses (Abstractions) leben nur im Dirigenten — ihre Signale sind ebenso inert.
+public sealed record StateChangeViaZeitlimitAbgelaufen(Guid StreamId, int Version) : IStateChangeSignal;
+public sealed record StateChangeViaSchrittAbgelehnt(Guid StreamId, int Version) : IStateChangeSignal;

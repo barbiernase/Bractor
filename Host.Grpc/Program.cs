@@ -34,6 +34,7 @@ using Infrastructure.Funktionen;
 using Infrastructure.GrpcClient;
 using Infrastructure.Monitoring;
 using Infrastructure.Pipeline;
+using Infrastructure.Quellen;
 using Infrastructure.Projections;
 using Infrastructure.Projections.Generated;
 using Infrastructure.Prozess;
@@ -126,10 +127,14 @@ builder.Services.AddDomainPipelineServices(
     preprocessedPath: preprocessedPath);
 GeneratedPipelines.RegisterAllPipelines(builder.Services);
 
-// Katalog-Funktionen der Bildaufbereitung (gerufen vom BildaufbereitungProzess): hier wird nur der Laufort gebunden —
+// Katalog-Funktionen der Bildaufbereitung (gerufen vom Bildeingang): hier wird nur der Laufort gebunden —
 // OpenCV auf diesem Knoten, je zwei Aufträge gleichzeitig. Eine andere Implementierung (Python, extern) ist nur eine andere Zeile.
 builder.Services.AddFunktion<Domain.Bildaufbereitung.IBildVerkleinerung, Domain.Pipeline.ImageProcessing.OpenCvBildVerkleinerung>(slots: 2, wiederholungen: 1);
 builder.Services.AddFunktion<Domain.Bildaufbereitung.IHistogrammAusgleich, Domain.Pipeline.ImageProcessing.OpenCvHistogrammAusgleich>(slots: 2, wiederholungen: 1);
+// Bildeingang (Pipeline als Fluss, docs/konzept-editor-pipelines.md §14): die Datei-Quelle meldet jede stabile Datei genau einmal,
+// die Deutung des Namens ist eine Katalog-Funktion wie die Bildaufbereitung (rein, viele Slots).
+builder.Services.AddQuelle<Domain.ImagePair.DateiErkannt, Domain.Pipeline.ImageProcessing.DateiQuelle>();
+builder.Services.AddFunktion<Domain.ImagePair.IDateinameDeutung, Domain.Pipeline.ImageProcessing.ImagePairDateinameDeutung>(slots: 8);
 
 // P6.2: der EVENT-Pfad der Pipelines läuft über die geordnete Pull-Maschine (nicht mehr Push-Broker).
 builder.Services.AddGeneratedPipelineEventPulls();
@@ -169,12 +174,9 @@ if (schemaRole == MartenSchemaRole.Migrator)
 
 app.MapCqrsGrpcService();
 
-// ─── Webhook-Trigger (Host-Glue, Trigger-Ingress bleibt Push) ───
-// POST /webhook/datei mit JSON { pfad, dateiname, dateigroesseBytes } → DateiErkannt an die Pipeline.
-// Die generische Verdrahtung liegt in Infrastructure (testbar); die Domänen-Wahl trifft der Host.
-app.MapPipelineWebhook<Domain.Pipeline.ImageProcessing.DateiErkannt>(
-    "/webhook/datei",
-    baueTrigger: r => r);   // DateiErkannt IST bereits der Trigger — Identität
+// ─── Webhook als zweiter Weg in dieselbe Quelle ───
+// POST /webhook/datei mit JSON { pfad, dateiname, dateigroesseBytes, erkanntAm } → DateiErkannt startet (genau einmal) den Bildeingang.
+app.MapQuellWebhook<Domain.ImagePair.DateiErkannt>("/webhook/datei");
 
 // ─── Monitoring-Endpoints (GET /health, GET /monitoring/metrics) ───
 app.MapBackendMonitoring();

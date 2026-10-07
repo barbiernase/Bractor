@@ -93,7 +93,7 @@ public static partial class DateiSchreiber
                     m => ErsterTyp(m) is { } e && neueHandles.GetValueOrDefault(KlasseVon(d.Inhalt) ?? "")?.Contains(e) == true, ErsterTyp),
                 _ => null,
             };
-            if (gemischt is null) { if (d.Art != DateiArt.Saga && d.Art != DateiArt.State) uebersprungen.Add($"{rel} (unangetastet)"); }
+            if (gemischt is null) { if (d.Art != DateiArt.Saga && d.Art != DateiArt.State && d.Art != DateiArt.Fluss) uebersprungen.Add($"{rel} (unangetastet)"); }
             else if (gemischt.Value.N > 0) { ws.Setze(rel, gemischt.Value.Neu); ergaenzt.Add($"{rel} (+{gemischt.Value.N})"); }
         }
 

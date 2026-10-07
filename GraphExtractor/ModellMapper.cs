@@ -154,6 +154,19 @@ public static class ModellMapper
                 Name = f.Name, Namespace = f.Namespace, Auftrag = Kurz(f.AuftragFull), Ergebnisse = f.ErgebnisseFull.Select(Evt).ToList(),
                 Doku = f.Doku, Datei = Rel(f.Datei),
             }).ToList(),
+            Fluesse = dom.Fluesse.Select(f => new FlussPipeline
+            {
+                Name = f.Name, Namespace = f.Namespace, Doku = f.Doku, ExtraUsings = f.Usings, Datei = Rel(f.Datei), Bauer = f.Bauer,
+                Knoten = f.Knoten.Select(k => new FlussSchritt
+                {
+                    Name = k.Name, Art = k.Art, Typ = Kurz(k.TypFull), Zeitlimit = k.Zeitlimit, Liste = k.Liste, OhneVariable = k.OhneVariable,
+                    Eingaenge = k.Eingaenge.Select(e => new FlussEingang
+                    {
+                        Je = e.Je, Sammle = e.Sammle, Ausdruck = e.Ausdruck,
+                        Draehte = e.Draehte.Select(d => new FlussDraht { Von = d.Von, Fall = d.FallFull is null ? null : Kurz(d.FallFull), Port = d.Port }).ToList(),
+                    }).ToList(),
+                }).ToList(),
+            }).ToList(),
             Akteure = dom.Akteure.Select(x => new Akteur
             {
                 Name = x.Name, Namespace = x.Namespace, Darf = x.Darf, Art = x.Art, Dienste = x.Dienste, Doku = x.Doku, Datei = Rel(x.Datei),

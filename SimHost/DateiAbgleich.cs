@@ -76,6 +76,8 @@ internal sealed class Abgleich(EditorModell modell, Arbeitsbereich ws, IReadOnly
             Datei(d.Datei!, $"decide {d.Aggregat}.{d.Command}", t => DecideRueckgabe(t, d));
         foreach (var s in modell.Sagas.Where(s => s.Datei != null && Herkunft.Geaendert(s.Herkunft, Herkunft.Von(s))))
             Datei(s.Datei!, $"prozess {s.Namespace}.{s.Name}", t => ProzessRegeln(t, s));
+        foreach (var f in modell.Fluesse.Where(f => f.Datei != null && Herkunft.Geaendert(f.Herkunft, Herkunft.Von(f))))
+            Datei(f.Datei!, $"pipeline {f.Namespace}.{f.Name}", t => FlussKnoten(t, f));
         foreach (var a in modell.Akteure.Where(a => a.Datei != null && Herkunft.Geaendert(a.Herkunft, Herkunft.Von(a))))
         {
             Datei(a.Datei!, $"akteur {a.Namespace}.{a.Name}", t => AkteurBefugnisse(t, a));
@@ -300,6 +302,35 @@ internal sealed class Abgleich(EditorModell modell, Arbeitsbereich ws, IReadOnly
         }
         else neu = text[..alt.ExpressionBody.SpanStart] + genProp.ExpressionBody.ToString() + text[alt.ExpressionBody.Span.End..];
         return (MitUsingsAus(neu, gen!.SyntaxTree.GetRoot()), "Regeln");
+    }
+
+    // ── Pipeline als Fluss: nur die Anweisungen des Definiere-Lambdas (je Knoten eine). Unveränderte Knoten bleiben wörtlich
+    //    samt Kommentaren; neue/geänderte kommen in der Form des Scaffolders. Kopf, Doku und alles um die Property bleiben. ──
+    private static readonly string FlussProp = nameof(Abstractions.IPipeline.Fluss);
+
+    private (string, string)? FlussKnoten(string text, FlussPipeline f)
+    {
+        var gen = generiert.Where(g => g.Art == DateiArt.Fluss).Select(g => Parse(g.Inhalt))
+            .Select(r => r.DescendantNodes().OfType<ClassDeclarationSyntax>().FirstOrDefault(c => c.Identifier.Text == f.Name)).FirstOrDefault(c => c != null);
+        var genProp = gen?.Members.OfType<PropertyDeclarationSyntax>().FirstOrDefault(p => p.Identifier.Text == FlussProp);
+        var alt = Parse(text).DescendantNodes().OfType<ClassDeclarationSyntax>().FirstOrDefault(c => c.Identifier.Text == f.Name)?
+            .Members.OfType<PropertyDeclarationSyntax>().FirstOrDefault(p => p.Identifier.Text == FlussProp);
+        if (genProp?.ExpressionBody == null || alt?.ExpressionBody == null) return (text, "Fluss-Property nicht gefunden (nur => …-Form wird geschrieben)");
+        if (Ohne(alt.ExpressionBody.ToString()) == Ohne(genProp.ExpressionBody.ToString())) return null;
+        static BlockSyntax? Block(ArrowExpressionClauseSyntax a) =>
+            a.DescendantNodes().OfType<LambdaExpressionSyntax>().Select(l => l.Body).OfType<BlockSyntax>().FirstOrDefault();
+        var (altBlock, genBlock) = (Block(alt.ExpressionBody), Block(genProp.ExpressionBody));
+        string neu;
+        if (altBlock is { Statements.Count: > 0 } ab && genBlock is { Statements.Count: > 0 } gb)
+        {
+            var einzug = new string(' ', ab.Statements[0].GetLocation().GetLineSpan().StartLinePosition.Character);
+            var teile = gb.Statements.Select(g => ab.Statements.FirstOrDefault(a => Ohne(a.ToString()) == Ohne(g.ToString())) is { } a
+                ? a.ToFullString().TrimEnd().TrimStart('\n', '\r') : Umgerueckt(g.ToString(), g.GetLocation().GetLineSpan().StartLinePosition.Character, einzug)).ToList();
+            neu = text[..ab.Statements[0].FullSpan.Start] + string.Join("\n", teile.Select((t, i) => i == 0 && t.StartsWith(einzug) ? t : (t.StartsWith(' ') ? t : einzug + t)))
+                  + text[ab.Statements[^1].Span.End..];
+        }
+        else neu = text[..alt.ExpressionBody.SpanStart] + genProp.ExpressionBody.ToString() + text[alt.ExpressionBody.Span.End..];
+        return (MitUsingsAus(neu, gen!.SyntaxTree.GetRoot()), "Fluss");
     }
 
     // ── Fähigkeit: Rückgabe + Parameter am Interface bzw. an der Impl-Methode ──

@@ -40,6 +40,8 @@ namespace Infrastructure.SourceGeneration
                 return;
             var iSelf = compilation.GetTypeByMetadataName("Abstractions.IPipelineSelfMessage");
             var iSignal = compilation.GetTypeByMetadataName("Abstractions.IStateChangeSignal");
+            // Aufträge an Katalog-Funktionen reisen polymorph in AuftragAnbieten/ArbeitZugeteilt (Vermittler, §14.5).
+            var iAuftrag = compilation.GetTypeByMetadataName("Abstractions.IAuftrag");
 
             var all = new List<INamedTypeSymbol>();
             Collect(compilation.GlobalNamespace, all);
@@ -50,6 +52,7 @@ namespace Infrastructure.SourceGeneration
             var commands = new List<INamedTypeSymbol>();
             var events = new List<INamedTypeSymbol>();
             var signals = new List<INamedTypeSymbol>();
+            var auftraege = new List<INamedTypeSymbol>();
 
             foreach (var t in all)
             {
@@ -64,12 +67,15 @@ namespace Infrastructure.SourceGeneration
                     events.Add(t);
                 if (iSignal != null && ifaces.Contains(iSignal, SymbolEqualityComparer.Default))
                     signals.Add(t);
+                if (iAuftrag != null && ifaces.Contains(iAuftrag, SymbolEqualityComparer.Default))
+                    auftraege.Add(t);
             }
 
             wire.Sort(ByName);
             commands.Sort(ByName);
             events.Sort(ByName);
             signals.Sort(ByName);
+            auftraege.Sort(ByName);
 
             var full = SymbolDisplayFormat.FullyQualifiedFormat;
 
@@ -144,6 +150,8 @@ namespace Infrastructure.SourceGeneration
             EmitPoly(sb, "Event", "IEvent", events, full);
             sb.AppendLine();
             EmitPoly(sb, "Command", "ICommand", commands, full);
+            sb.AppendLine();
+            EmitPoly(sb, "Auftrag", "IAuftrag", auftraege, full);
             sb.AppendLine();
             EmitSignalPoly(sb, signals, full);
             sb.AppendLine("}");

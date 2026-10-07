@@ -61,7 +61,7 @@ public class AkteurRechteTests
         p.Queries.Should().BeEquivalentTo(new[] { typeof(SucheImagePairs), typeof(GetImagePair) });
         p.Trigger.Should().BeEmpty();
         p.TransientEvents.Should().BeEmpty();
-        R("KameraSystem").Trigger.Should().BeEquivalentTo(new[] { typeof(Domain.Pipeline.ImageProcessing.DateiErkannt) });
+        R("KameraSystem").Trigger.Should().BeEquivalentTo(new[] { typeof(Domain.ImagePair.DateiErkannt) });
     }
 
     [Fact]

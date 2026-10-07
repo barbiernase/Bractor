@@ -143,11 +143,11 @@ class AkteurVertragBasis(CqrsClient[S], metaclass=VertragsMeta):
         cls._declared_command_types = list(dict.fromkeys(
             [t for r in alle.values() for t in r.ausgaenge] + list(cls.SPONTAN)))
 
-    def __init__(self, registry, generated_module, config: dict[str, Any] | None = None):
+    def __init__(self, registry, generated_module, config: dict[str, Any] | None = None, funktionen=None):
         # Die Vertrags-Typen kennt der Vertrag selbst — die (handgepflegte) Registry wird um sie ergänzt.
         ausgaenge = {t for r in self.ZUSAGEN_ALLE.values() for t in r.ausgaenge}
         registry = registry.ergaenzt(events=set(self.ZUSAGEN_ALLE), commands=ausgaenge)
-        super().__init__(registry, generated_module, config)
+        super().__init__(registry, generated_module, config, funktionen=funktionen)
 
     def _build_capabilities_request(self):
         request = super()._build_capabilities_request()

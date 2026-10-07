@@ -7,6 +7,7 @@
 #   - Infrastructure/Serialization/EventJsonSerializerContext.g.cs
 #   - Infrastructure/Serialization/CqrsWireJsonContext.g.cs
 #   - Domain.Client.Worker.Python.ML/domain_client/generated/vertraege.py  (Akteur-Verträge → Python)
+#   - Domain.Client.Worker.Python.ML/domain_client/generated/funktionen.py (Katalog-Funktionen → Python)
 #
 # Nutzung:
 #   ./codegen.sh           # hash-getriggert: nur generieren, wenn sich Domain-Quellen änderten
@@ -24,6 +25,7 @@ ARTEFAKTE=(
   "Infrastructure/Serialization/EventJsonSerializerContext.g.cs"
   "Infrastructure/Serialization/CqrsWireJsonContext.g.cs"
   "Domain.Client.Worker.Python.ML/domain_client/generated/vertraege.py"
+  "Domain.Client.Worker.Python.ML/domain_client/generated/funktionen.py"
 )
 
 # Der Output hängt allein an den Domain-Quellen der gescannten Projekte.

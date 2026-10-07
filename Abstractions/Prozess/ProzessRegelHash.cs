@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -42,7 +43,26 @@ public static class ProzessRegelHash
                 foreach (var t in r.GerufeneFunktionen) sb.Append(t.FullName).Append(',');
             }
             if (r.Zeitlimit is { } z) sb.Append(";zeitlimit=").Append(z.Ticks);
+            // Pipeline-Fluss (§14): Knoten, Herkunft je Bedingung, Je-Auffächern und Sammel-Drähte — nur wenn gesetzt.
+            if (r.Knoten is int k)
+            {
+                sb.Append(";knoten=").Append(k).Append(";von=");
+                foreach (var v in r.VonKnoten) sb.Append(v?.ToString() ?? "*").Append(',');
+                if (r.JeKnoten is int je) sb.Append(";je=").Append(je);
+                if (r.Sammel is { } sm)
+                {
+                    sb.Append(";sammelJe=").Append(sm.JeKnoten?.ToString() ?? "-").Append(";drähte=");
+                    foreach (var (t, v) in sm.Drähte) sb.Append(t.FullName).Append('@').Append(v?.ToString() ?? "*").Append(',');
+                }
+            }
             sb.Append('\n');
+        }
+        if (regeln.IstFluss)
+        {
+            sb.Append("quelle=").Append(regeln.QuellKnoten).Append(";⏳=");
+            foreach (var z in regeln.UmleitenZeitlimit.OrderBy(x => x)) sb.Append(z).Append(',');
+            sb.Append(";✕=");
+            foreach (var a in regeln.UmleitenAbgelehnt.OrderBy(x => x)) sb.Append(a).Append(',');
         }
 
         Span<byte> hash = stackalloc byte[32];

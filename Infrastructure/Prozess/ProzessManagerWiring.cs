@@ -27,10 +27,12 @@ internal sealed class ProzessManagerKind : IClusterKindContributor
         var offenIndex = provider.GetRequiredService<IProzessOffenIndex>();
         var deadLetters = provider.GetService<IDeadLetterSink>();   // ★ #12: optional, best-effort Ops-Sicht
         var markingStore = provider.GetService<IProzessMarkingStore>();   // ★ P5b: optional, best-effort Cursor
-        var ausfuehrer = provider.GetService<Infrastructure.Funktionen.FunktionsAusfuehrer>();   // Rufe<F>: Katalog-Funktionen
         var uhr = provider.GetService<IDbClock>();   // Zeitlimit gegen die DB-Uhr (Event-Zeitstempel sind DB-generiert)
+        // Rufe<F>/Fluss-Funktionen: der Auftrag geht an den VERMITTLER seiner Funktion (Pull durch die Ausführer, §14.5).
+        Func<Guid, IAuftrag, Guid, string?, CancellationToken, Task> rufe =
+            (k, a, v, akteur, ct) => Infrastructure.Funktionen.FunktionsAnbieter.BieteAnAsync(system, k, a, v, akteur, ct);
         return new ClusterKind(ProzessManagerActor.KindName, Props.FromProducer(() =>
-            new ProzessManagerActor(eventStore, registry, system.Cluster(), offenIndex, deadLetters, markingStore, ausfuehrer, uhr)));
+            new ProzessManagerActor(eventStore, registry, system.Cluster(), offenIndex, deadLetters, markingStore, rufe, uhr)));
     }
 }
 
@@ -249,6 +251,9 @@ public static class GeneratedProzesse
         services.AddSingleton<IClusterKindContributor, ProzessManagerKind>();
         // Der Ausführer der Katalog-Funktionen (Rufe<F>); die Funktionen selbst bindet der Host mit AddFunktion<F, Impl>().
         services.AddSingleton(Infrastructure.Funktionen.FunktionsExtensions.BaueAusfuehrer);
+        // Vermittler je Funktion (Cluster-Kind) + der Abholer dieses Knotens für die hier in C# gebundenen Funktionen.
+        services.AddSingleton<IClusterKindContributor, Infrastructure.Funktionen.FunktionsVermittlerKind>();
+        services.AddHostedService<Infrastructure.Funktionen.FunktionsAbholer>();
         services.AddHostedService<ProzessManagerStartupService>();
         return services;
     }

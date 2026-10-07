@@ -40,6 +40,9 @@ public sealed class OpenCvHistogrammAusgleich(IHistogramEqualizer equalizer, Pre
     }
 }
 
+/// <summary>Wohin die Bildfunktionen ihre Ergebnisse schreiben (Verzeichnis).</summary>
+public record PreprocessingConfig(string OutputPath);
+
 internal static class Zielpfad
 {
     /// <summary><c>{OutputPath}/{Quelle ohne Endung}_{zusatz}.png</c> — das Verzeichnis wird bei Bedarf angelegt.</summary>

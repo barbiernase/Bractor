@@ -58,7 +58,7 @@ public sealed class Fluss
         string? N(string name, string? sorteOhneRecord, string? nsOhneRecord)
         {
             if (name.Length == 0) return null;
-            var sorte = recs.TryGetValue(name, out var r) ? Grammatik.SorteVonRecordArt(r.Kind) : sorteOhneRecord;
+            var sorte = recs.TryGetValue(name, out var r) ? Grammatik.SorteVon(r) : sorteOhneRecord;
             if (sorte == null) return null;
             var id = "msg:" + name;
             knoten.TryAdd(id, new FlussKnoten(id, "nachricht", name, r?.Namespace ?? nsOhneRecord, sorte));
@@ -110,6 +110,23 @@ public sealed class Fluss
                     K(sg, N(auftragVon.GetValueOrDefault(st.Rufe!) ?? st.Rufe!, Grammatik.Auftrag, s.Namespace));
                 else K(sg, N(st.Sende, null, null));
                 if (st.Kompensation is { } ko) K(sg, N(ko, null, null));
+            }
+        }
+
+        // Pipeline als Fluss (§14): Quell-Nachricht und verdrahtete Fälle (Ergebnisse, Decide-Events) hinein; Aufträge und
+        //   Commands hinaus. Die Drähte zwischen den Knoten bleiben im Baustein (sein Inneres), die Nachrichten sind die Kanten.
+        foreach (var f in m.Fluesse)
+        {
+            var fl = B("fl", Grammatik.Fluss, f.Name, f.Namespace);
+            foreach (var k in f.Knoten)
+            {
+                if (k.Art is FlussArt.Quelle or FlussArt.Auf) K(N(k.Typ, null, null), fl);
+                else if (k.Art == FlussArt.Funktion)
+                    K(fl, N(auftragVon.GetValueOrDefault(k.Typ) ?? k.Typ, Grammatik.Auftrag, f.Namespace));
+                else if (k.Art == FlussArt.Command) K(fl, N(k.Typ, null, null));
+                foreach (var e in k.Eingaenge)
+                    foreach (var d in e.Draehte.Where(d => d.Fall != null && d.Port == FlussPort.Fall))
+                        K(N(d.Fall!, null, null), fl);
             }
         }
 

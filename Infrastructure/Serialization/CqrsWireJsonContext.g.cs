@@ -4,6 +4,7 @@
 using System.Text.Json.Serialization;
 using Abstractions;
 using Infrastructure.Aggregate;
+using Infrastructure.Funktionen;
 using Infrastructure.Prozess;
 using Infrastructure.Projections;
 using Infrastructure.PubSub.Messages;
@@ -22,6 +23,7 @@ namespace Infrastructure.Serialization;
     {
         typeof(IEventJsonConverter),
         typeof(ICommandJsonConverter),
+        typeof(IAuftragJsonConverter),
         typeof(CommandModusJsonConverter),
         typeof(IStateChangeSignalJsonConverter),
         typeof(IMessageEnvelopeJsonConverter),
@@ -44,17 +46,27 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(PipelineAck))]
 [JsonSerializable(typeof(PipelineAktivieren))]
 [JsonSerializable(typeof(ProzessWake))]
+[JsonSerializable(typeof(AuftragAnbieten))]
+[JsonSerializable(typeof(HoleArbeit))]
+[JsonSerializable(typeof(ArbeitZugeteilt))]
+[JsonSerializable(typeof(ArbeitLebt))]
+[JsonSerializable(typeof(ArbeitErledigt))]
 // ── Framework: Ergebnis-/Prozess-/Inbox-Events (reisen im Wire) ──
 [JsonSerializable(typeof(CommandFailed))]
 [JsonSerializable(typeof(ProzessGestartet))]
 [JsonSerializable(typeof(ProzessBeendet))]
 [JsonSerializable(typeof(SchrittGescheitert))]
+[JsonSerializable(typeof(SchrittUmgeleitet))]
+[JsonSerializable(typeof(Abstractions.ZeitlimitAbgelaufen))]
+[JsonSerializable(typeof(Abstractions.SchrittAbgelehnt))]
 [JsonSerializable(typeof(KommandoVerarbeitet))]
 [JsonSerializable(typeof(KommandoAbgelehnt))]
-// ── Domänen-Commands/Events/Trigger (Domain.*) (gescannt) ──
+// ── Domänen-Commands/Events/Trigger/Aufträge (Domain.*) (gescannt) ──
 [JsonSerializable(typeof(global::Domain.Bildaufbereitung.BildNichtLesbar))]
 [JsonSerializable(typeof(global::Domain.Bildaufbereitung.BildVerkleinert))]
+[JsonSerializable(typeof(global::Domain.Bildaufbereitung.GleicheHistogrammAus))]
 [JsonSerializable(typeof(global::Domain.Bildaufbereitung.HistogrammAusgeglichen))]
+[JsonSerializable(typeof(global::Domain.Bildaufbereitung.VerkleinereBild))]
 [JsonSerializable(typeof(global::Domain.Datensatz.DatensatzBereitsEingefroren))]
 [JsonSerializable(typeof(global::Domain.Datensatz.DatensatzEingefroren))]
 [JsonSerializable(typeof(global::Domain.Datensatz.DatensatzErstellt))]
@@ -82,9 +94,13 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Domain.ImagePair.BildRegionGelabelt))]
 [JsonSerializable(typeof(global::Domain.ImagePair.BildVerfuegbar))]
 [JsonSerializable(typeof(global::Domain.ImagePair.BildVersionBereitsVerfuegbar))]
+[JsonSerializable(typeof(global::Domain.ImagePair.DateiErkannt))]
+[JsonSerializable(typeof(global::Domain.ImagePair.DateinameUnbekannt))]
+[JsonSerializable(typeof(global::Domain.ImagePair.DeuteDateiname))]
 [JsonSerializable(typeof(global::Domain.ImagePair.EinzelBildDurchKiKlassifiziert))]
 [JsonSerializable(typeof(global::Domain.ImagePair.EinzelBildGelabelt))]
 [JsonSerializable(typeof(global::Domain.ImagePair.ErstelleImagePair))]
+[JsonSerializable(typeof(global::Domain.ImagePair.ImagePairDateiGedeutet))]
 [JsonSerializable(typeof(global::Domain.ImagePair.ImagePairEingabeUngueltig))]
 [JsonSerializable(typeof(global::Domain.ImagePair.ImagePairErstellt))]
 [JsonSerializable(typeof(global::Domain.ImagePair.ImagePairExistiertBereits))]
@@ -99,13 +115,10 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Domain.ImagePair.LabelPhysischesProdukt))]
 [JsonSerializable(typeof(global::Domain.ImagePair.MarkiereAlsInspiziert))]
 [JsonSerializable(typeof(global::Domain.ImagePair.MeldeBildVerfuegbar))]
-[JsonSerializable(typeof(global::Domain.ImagePair.NimmRohbildAuf))]
 [JsonSerializable(typeof(global::Domain.ImagePair.PaarNichtKomplett))]
 [JsonSerializable(typeof(global::Domain.ImagePair.PhysischesProduktGelabelt))]
 [JsonSerializable(typeof(global::Domain.ImagePair.RegionIndexUngueltig))]
 [JsonSerializable(typeof(global::Domain.ImagePair.RegionLabelsUngueltig))]
-[JsonSerializable(typeof(global::Domain.ImagePair.RohbildBereitsEingegangen))]
-[JsonSerializable(typeof(global::Domain.ImagePair.RohbildEingegangen))]
 [JsonSerializable(typeof(global::Domain.Modell.ArchiviereModell))]
 [JsonSerializable(typeof(global::Domain.Modell.ModellAktiviert))]
 [JsonSerializable(typeof(global::Domain.Modell.ModellArchiviert))]
@@ -116,7 +129,6 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Domain.Modell.RegistriereModell))]
 [JsonSerializable(typeof(global::Domain.Modell.SetzeModellAktiv))]
 [JsonSerializable(typeof(global::Domain.Pipeline.Benchmark.BenchPing))]
-[JsonSerializable(typeof(global::Domain.Pipeline.ImageProcessing.DateiErkannt))]
 [JsonSerializable(typeof(global::Domain.Sammelvorgang.MeldeTeilFertig))]
 [JsonSerializable(typeof(global::Domain.Sammelvorgang.SammelvorgangAbgeschlossen))]
 [JsonSerializable(typeof(global::Domain.Sammelvorgang.SammelvorgangBereitsAbgeschlossen))]

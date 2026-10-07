@@ -295,6 +295,36 @@ class GrpcProxy:
         await self._send(msg)
 
     # ═══════════════════════════════════════════════════
+    # KATALOG-FUNKTIONEN (docs/konzept-editor-pipelines.md §14.5)
+    # ═══════════════════════════════════════════════════
+
+    async def send_funktionen_anbieten(self, angebote: list[tuple[str, int]]) -> None:
+        """„Ich biete Funktion F mit n Slots“ — der Server holt dann für diese Session Aufträge beim Vermittler."""
+        anbieten_cls = getattr(self._gen, "FunktionenAnbieten")
+        angebot_cls = getattr(self._gen, "FunktionsAngebot")
+        msg = self._client_msg_cls(
+            funktionen_anbieten=anbieten_cls(
+                angebote=[angebot_cls(funktion=f, slots=s) for f, s in angebote]
+            )
+        )
+        await self._send(msg)
+
+    async def send_arbeits_ergebnis(self, vorgang: str, ergebnis_envelope=None, fehler: str = "") -> None:
+        """Ergebnis eines ArbeitsAuftrags: der Event-Envelope ODER ein Fehler (nicht leer = gescheitert)."""
+        ergebnis_cls = getattr(self._gen, "ArbeitsErgebnis")
+        felder = {"vorgang": vorgang, "fehler": fehler}
+        if ergebnis_envelope is not None:   # bei Fehler bleibt das Feld leer (nicht None — betterproto serialisiert das nicht)
+            felder["ergebnis"] = ergebnis_envelope
+        msg = self._client_msg_cls(arbeits_ergebnis=ergebnis_cls(**felder))
+        await self._send(msg)
+
+    async def send_arbeit_lebt(self, vorgang: str) -> None:
+        """Lebenszeichen eines laufenden Auftrags — verlängert seine Lease beim Vermittler."""
+        lebt_cls = getattr(self._gen, "ArbeitLebtMeldung")
+        msg = self._client_msg_cls(arbeit_lebt=lebt_cls(vorgang=vorgang))
+        await self._send(msg)
+
+    # ═══════════════════════════════════════════════════
     # READ-LOOP (Server → Client)
     # ═══════════════════════════════════════════════════
 
@@ -324,6 +354,9 @@ class GrpcProxy:
 
                 elif field_name == "query_forward":
                     await self._event_queue.put(("query_forward", payload))
+
+                elif field_name == "arbeits_auftrag":
+                    await self._event_queue.put(("arbeits_auftrag", payload))
 
                 elif field_name == "query_response":
                     self._complete_future(

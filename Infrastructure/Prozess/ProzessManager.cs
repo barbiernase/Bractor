@@ -121,9 +121,9 @@ public sealed class ProzessManager
         //   Idempotent gegen die (in Scheibe A noch aktive) Quittung: nur Vorgänge, die NICHT schon in
         //   mz.Gescheitert stehen, werden gestempelt; ein Doppel-Stempel unterbleibt.
         var neuAbgelehnt = kandidaten
-            .Where(k => k.AbgelehntDa && !mz.Gescheitert.ContainsKey(k.Vorgang))
+            .Where(k => k.AbgelehntDa && !mz.Gescheitert.ContainsKey(k.Vorgang) && !mz.Umgeleitet.ContainsKey(k.Vorgang))
             .GroupBy(k => k.Vorgang)
-            .Select(g => (g.Key, g.First().AbgelehntGrund))
+            .Select(g => (Kandidat: g.First(), Art: "abgelehnt", Grund: g.First().AbgelehntGrund))
             .ToList();
         // ── Zeitlimit: ein offener Aufruf (kein Ergebnis), dessen Limit seit der Aktivierung abgelaufen ist, scheitert
         //   wie eine Ablehnung. Die Aktivierung ist das jüngste gematchte Event (DB-Zeit, aus dem Log) — kein eigener
@@ -133,18 +133,23 @@ public sealed class ProzessManager
         {
             var jetzt = _jetzt is null ? DateTimeOffset.UtcNow : await _jetzt(ct);
             foreach (var k in kandidaten.Where(k => !k.ErgebnisDa && k.Regel.Zeitlimit is not null && k.Bereit != default))
-                if (jetzt >= k.Bereit + k.Regel.Zeitlimit!.Value && !neuAbgelehnt.Any(n => n.Key == k.Vorgang))
-                    neuAbgelehnt.Add((k.Vorgang, $"Zeitlimit ({k.Regel.Zeitlimit.Value}) für {k.Ziel}"));
+                if (jetzt >= k.Bereit + k.Regel.Zeitlimit!.Value && !neuAbgelehnt.Any(n => n.Kandidat.Vorgang == k.Vorgang))
+                    neuAbgelehnt.Add((k, "zeitlimit", $"Zeitlimit ({k.Regel.Zeitlimit.Value}) für {k.Ziel}"));
         }
         if (neuAbgelehnt.Count > 0)
         {
             var v = mz.Version;
-            foreach (var (vorgang, grundA) in neuAbgelehnt)
+            foreach (var (k, art, grundA) in neuAbgelehnt)
             {
-                await AppendAsync(korrelation, v, new SchrittGescheitert(vorgang, grundA), ct);
+                // Pipeline-Fluss (§14): ist der passende Fehler-Port des Knotens verdrahtet, wird der Fehlschlag zum Token
+                //   (eigener Weg) statt den Vorgang scheitern zu lassen.
+                var umleiten = k.Regel.Knoten is int knoten &&
+                    (art == "zeitlimit" ? regeln.UmleitenZeitlimit : regeln.UmleitenAbgelehnt).Contains(knoten);
+                await AppendAsync(korrelation, v,
+                    umleiten ? new SchrittUmgeleitet(k.Vorgang, art, grundA) : new SchrittGescheitert(k.Vorgang, grundA), ct);
                 v++;
             }
-            // Frisch falten: mz.Gescheitert trägt den Fehlschlag jetzt → Kompensationszweig.
+            // Frisch falten: mz.Gescheitert (bzw. die Umleitung) trägt den Fehlschlag jetzt.
             await WakeAsync(korrelation, ct);
             return;
         }
@@ -270,7 +275,7 @@ public sealed class ProzessManager
     // ── Marking falten (Fixpunkt über die Ziel-Streams) ──
 
     /// <summary>Ein Token = ein Event-Payload plus seine Herkunft (Stream/Version), für Vorgang-Ableitung + Join.</summary>
-    private sealed record Token(IEvent Payload, Guid Stream, int Version, DateTimeOffset Zeit);
+    private sealed record Token(IEvent Payload, Guid Stream, int Version, DateTimeOffset Zeit, int Herkunft, Teile Teile);
 
     /// <summary>
     /// Eine mögliche Transition (Regel × gematchte Tokens) samt deterministischem Vorgang und ZWEI getrennten
@@ -292,7 +297,7 @@ public sealed class ProzessManager
     /// </summary>
     private sealed record Kandidat(
         Regel Regel, int RegelIndex, IReadOnlyList<Token> Match, ICommand? Cmd, IAuftrag? Auftrag, Guid Vorgang,
-        bool ErgebnisDa, bool WirkungDa, bool AbgelehntDa, string AbgelehntGrund, DateTimeOffset Bereit)
+        bool ErgebnisDa, bool WirkungDa, bool AbgelehntDa, string AbgelehntGrund, DateTimeOffset Bereit, Teile Teile)
     {
         public string Ziel => Cmd?.GetType().Name ?? Auftrag!.GetType().Name;
     }
@@ -378,7 +383,8 @@ public sealed class ProzessManager
 
         var tokens = new List<Token>();
         if (marking.AuslöserPayload is not null)
-            tokens.Add(new Token(marking.AuslöserPayload, mz.AuslöserStream, mz.AuslöserVersion, marking.AuslöserZeit));
+            tokens.Add(new Token(marking.AuslöserPayload, mz.AuslöserStream, mz.AuslöserVersion, marking.AuslöserZeit,
+                regeln.QuellKnoten ?? -1, Teile.Leer));
 
         var kandidaten = new List<Kandidat>();
         bool geändert = true;
@@ -395,6 +401,9 @@ public sealed class ProzessManager
                 {
                     var payloads = match.Select(t => (IEvent)t.Payload).ToList();
                     var bereit = match.Any(t => t.Zeit == default) ? default : match.Max(t => t.Zeit);
+                    // Teile (Je-Elemente) des Ergebnisses: die der gematchten Tokens — beim Sammeln nur die des Auslösers
+                    //   (die Element-Teile werden dort zusammengefasst), beim Je-Auffächern plus das eigene Element.
+                    var basisTeile = Teile.Vereinige(regel.Sammel is null ? match : match.Take(regel.Bedingung.Count));
                     // Ein Aufruf je Ausgang: Command an ein Aggregat (Sende) ODER Auftrag an eine Funktion (Ruft).
                     var aufrufe = regel.Sende is not null
                         ? regel.Sende(payloads).Select(c => ((object)c, c.GetType().Name)).ToList()
@@ -426,16 +435,34 @@ public sealed class ProzessManager
                         var wirkung = marke?.Wirkung ?? false;               // ein Domänen-Event → kompensierbar + Join
                         var abgelehnt = marke?.Abgelehnt ?? false;           // KommandoAbgelehnt-Marke → SchrittGescheitert
                         var abgelehntGrund = marke?.Grund ?? "abgelehnt";
+                        var teile = regel.JeKnoten is int je ? basisTeile.Mit(je, ci) : basisTeile;
+                        var herkunft = regel.Knoten ?? -1;
+
+                        // Pipeline-Fluss (§14): ein umgeleiteter Fehlschlag (verdrahteter ⏳/✕-Port) ist aufgelöst; er liefert
+                        //   statt der (evtl. später doch eintreffenden) Wirkung genau ein Fehler-Token an seinem Port.
+                        if (mz.Umgeleitet.TryGetValue(vorgang, out var umleitung))
+                        {
+                            aufgeloest = true; wirkung = false; abgelehnt = false;
+                            if (!tokens.Any(t => t.Stream == vorgang && t.Version == -1))
+                            {
+                                IEvent fehler = umleitung.Art == "zeitlimit"
+                                    ? new ZeitlimitAbgelaufen(umleitung.Grund)
+                                    : new SchrittAbgelehnt(umleitung.Grund);
+                                tokens.Add(new Token(fehler, vorgang, -1, umleitung.Zeit, herkunft, teile));
+                                geändert = true;
+                            }
+                        }
+
                         kandidaten.Add(new Kandidat(
                             regel, ri, match, cmd, auftrag, vorgang,
-                            aufgeloest, wirkung, abgelehnt, abgelehntGrund, bereit));
+                            aufgeloest, wirkung, abgelehnt, abgelehntGrund, bereit, teile));
 
                         // Nur eine WIRKUNG bringt ein neues Token in den Fold (aktiviert Downstream-Joins). Eine
                         // reine Marke (Noop/Ablehnung) ist inert — sie darf keinen Join scharf schalten.
                         if (wirkung && marke!.TokenPayload is not null &&
                             !tokens.Any(t => t.Stream == marke.TokenStream && t.Version == marke.TokenVersion))
                         {
-                            tokens.Add(new Token(marke.TokenPayload, marke.TokenStream, marke.TokenVersion, marke.TokenZeit));
+                            tokens.Add(new Token(marke.TokenPayload, marke.TokenStream, marke.TokenVersion, marke.TokenZeit, herkunft, teile));
                             geändert = true;
                         }
                     }
@@ -513,7 +540,9 @@ public sealed class ProzessManager
     /// <summary>
     /// Alle Belegungen einer Regel: für normale Regeln die kartesischen Konjunktions-Matches; für einen
     /// COUNT-JOIN die Bedingungs-Matches, an die ALLE Sammel-Tokens angehängt werden — aber nur, wenn ihre
-    /// Zahl die aus dem Auslöser abgeleitete Breite erreicht (buche erst nach allen N).
+    /// Zahl die aus dem Auslöser abgeleitete Breite erreicht (buche erst nach allen N). Beim Sammeln eines
+    /// JE-Rahmens (Pipeline-Fluss) zählt genau ein Token je Element, geordnet nach Element-Index; eine leere
+    /// Liste sammelt sofort.
     /// </summary>
     private static IEnumerable<IReadOnlyList<Token>> Belegungen(Regel regel, List<Token> tokens)
     {
@@ -523,31 +552,94 @@ public sealed class ProzessManager
             yield break;
         }
 
-        var sammel = tokens.Where(t => regel.Sammel.Typ.IsInstanceOfType(t.Payload)).ToList();
+        var je = regel.Sammel.JeKnoten;
         foreach (var trig in Matches(regel, tokens))   // Matches nutzt regel.Bedingung (nur der/die Auslöser)
         {
+            var trigTeile = Teile.Vereinige(trig);
+            var sammel = tokens.Where(t =>
+                    regel.Sammel.Drähte.Any(d => d.Typ.IsInstanceOfType(t.Payload) && (d.Von is null || d.Von == t.Herkunft)) &&
+                    (je is null || t.Teile.Hat(je.Value)) &&
+                    (je is null ? t.Teile : t.Teile.Ohne(je.Value)).VerträglichMit(trigTeile))
+                .ToList();
             var erwartet = regel.Sammel.Anzahl((IEvent)trig[0].Payload);
-            if (erwartet > 0 && sammel.Count >= erwartet)
+            if (je is int j)
+            {
+                var jeElement = sammel.GroupBy(t => t.Teile.Von(j)).Select(g => g.First()).OrderBy(t => t.Teile.Von(j)).ToList();
+                if (erwartet >= 0 && jeElement.Count >= erwartet)
+                    yield return trig.Concat(jeElement.Take(erwartet)).ToList();
+            }
+            else if (erwartet > 0 && sammel.Count >= erwartet)
                 yield return trig.Concat(sammel).ToList();
         }
     }
 
-    /// <summary>Kartesische Konjunktions-Matches über <see cref="Regel.Bedingung"/> (pro Typ die passenden Tokens).</summary>
+    /// <summary>
+    /// Kartesische Konjunktions-Matches über <see cref="Regel.Bedingung"/> (pro Typ die passenden Tokens). Im Pipeline-Fluss
+    /// zählt zusätzlich die HERKUNFT (ein Draht kommt von genau einem Knoten) und die Verträglichkeit der Teile (ein ∧ verbindet
+    /// nur Tokens desselben Je-Elements).
+    /// </summary>
     private static IEnumerable<IReadOnlyList<Token>> Matches(Regel regel, List<Token> tokens)
     {
         var perTyp = regel.Bedingung
-            .Select(t => tokens.Where(tok => t.IsInstanceOfType(tok.Payload)).ToList())
+            .Select((t, i) => tokens.Where(tok => t.IsInstanceOfType(tok.Payload) &&
+                                                  (regel.VonKnoten[i] is not int von || tok.Herkunft == von)).ToList())
             .ToList();
         if (perTyp.Any(l => l.Count == 0)) yield break;
 
         var indizes = new int[perTyp.Count];
         while (true)
         {
-            yield return Enumerable.Range(0, perTyp.Count).Select(i => perTyp[i][indizes[i]]).ToList();
+            var kombi = Enumerable.Range(0, perTyp.Count).Select(i => perTyp[i][indizes[i]]).ToList();
+            if (Teile.AlleVerträglich(kombi)) yield return kombi;
 
             int k = perTyp.Count - 1;
             while (k >= 0 && ++indizes[k] >= perTyp[k].Count) { indizes[k] = 0; k--; }
             if (k < 0) yield break;
+        }
+    }
+
+    /// <summary>
+    /// Die Je-Teile eines Tokens: je JE-Rahmen (Knoten-Index) der Element-Index, aus dem es stammt. Zwei Tokens sind verträglich,
+    /// wenn sie in jedem gemeinsamen Rahmen vom selben Element kommen. Unveränderlich; leer für klassische Prozesse.
+    /// </summary>
+    private sealed class Teile
+    {
+        public static readonly Teile Leer = new(new SortedDictionary<int, int>());
+        private readonly SortedDictionary<int, int> _d;
+        private Teile(SortedDictionary<int, int> d) { _d = d; }
+
+        public bool Hat(int je) => _d.ContainsKey(je);
+        public int Von(int je) => _d[je];
+
+        public Teile Mit(int je, int element)
+            => new(new SortedDictionary<int, int>(_d) { [je] = element });
+
+        public Teile Ohne(int je)
+        {
+            if (!_d.ContainsKey(je)) return this;
+            var d = new SortedDictionary<int, int>(_d);
+            d.Remove(je);
+            return new Teile(d);
+        }
+
+        public bool VerträglichMit(Teile andere)
+            => _d.All(kv => !andere._d.TryGetValue(kv.Key, out var w) || w == kv.Value);
+
+        public static bool AlleVerträglich(IReadOnlyList<Token> tokens)
+        {
+            for (var i = 0; i < tokens.Count; i++)
+                for (var j = i + 1; j < tokens.Count; j++)
+                    if (!tokens[i].Teile.VerträglichMit(tokens[j].Teile)) return false;
+            return true;
+        }
+
+        public static Teile Vereinige(IEnumerable<Token> tokens)
+        {
+            SortedDictionary<int, int>? d = null;
+            foreach (var t in tokens)
+                foreach (var kv in t.Teile._d)
+                    (d ??= new SortedDictionary<int, int>())[kv.Key] = kv.Value;
+            return d is null ? Leer : new Teile(d);
         }
     }
 
@@ -609,6 +701,9 @@ public sealed class ProzessManager
         public int AuslöserVersion { get; init; }
         public int Version { get; init; }
         public IReadOnlyDictionary<Guid, string> Gescheitert { get; init; } = new Dictionary<Guid, string>();
+        /// <summary>Pipeline-Fluss: umgeleitete Fehlschläge je Vorgang (Art „zeitlimit“/„abgelehnt“, Grund, Log-Zeit).</summary>
+        public IReadOnlyDictionary<Guid, (string Art, string Grund, DateTimeOffset Zeit)> Umgeleitet { get; init; }
+            = new Dictionary<Guid, (string, string, DateTimeOffset)>();
         public bool Beendet { get; init; }
         public bool Erfolg { get; init; }
         /// <summary>Der Akteur, in dessen Auftrag der Prozess handelt (Auslöser-Event; null = keiner).</summary>
@@ -624,6 +719,7 @@ public sealed class ProzessManager
         int auslöserVersion = 0;
         string? akteur = null;
         var gescheitert = new Dictionary<Guid, string>();
+        var umgeleitet = new Dictionary<Guid, (string, string, DateTimeOffset)>();
 
         foreach (var env in log)
         {
@@ -636,6 +732,9 @@ public sealed class ProzessManager
                 case SchrittGescheitert f:
                     gescheitert[f.Vorgang] = f.Grund;
                     break;
+                case SchrittUmgeleitet u:
+                    umgeleitet[u.Vorgang] = (u.Art, u.Grund, env.CreatedAtUtc);
+                    break;
                 case ProzessBeendet b:
                     beendet = true; erfolg = b.Erfolg; grund = b.Grund;
                     break;
@@ -646,7 +745,7 @@ public sealed class ProzessManager
         {
             Gestartet = gestartet, ProzessName = name,
             AuslöserStream = auslöserStream, AuslöserVersion = auslöserVersion,
-            Version = log.Count, Gescheitert = gescheitert, Beendet = beendet, Erfolg = erfolg, Akteur = akteur,
+            Version = log.Count, Gescheitert = gescheitert, Umgeleitet = umgeleitet, Beendet = beendet, Erfolg = erfolg, Akteur = akteur,
         };
     }
 

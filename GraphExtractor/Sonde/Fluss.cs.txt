@@ -1,0 +1,38 @@
+using Abstractions;
+using Leihwesen.Gebuehren;
+
+// SONDE — PIPELINE ALS FLUSS (docs/konzept-editor-pipelines.md §14): eigene Quelle, Je-Rahmen mit Sammeln, DIESELBE Funktion
+//         zweimal (verschiedene Knoten), ∧ mit Kontext, ∨ über den ⏳-Port, ✕-Port am Command, zwei Knoten ohne Variable und ein
+//         frei benannter Bauer-Parameter. Nur Code-Fakten: IPipeline + die DSL-Verben über ihr Symbol.
+
+namespace Leihwesen.Pruefung;
+
+public sealed record RueckgabeGescannt(Guid LeserId, string Code, IReadOnlyList<string> Seiten) : IQuellNachricht
+{
+    public string Kennung => Code;
+}
+
+public sealed record PruefeSeite(string Seite) : IAuftrag<ISeitenPruefung>;
+public record SeiteGeprueft(string Seite, bool Beschaedigt) : IEvent;
+
+public interface ISeitenPruefung : IFunktion
+{
+    Task<OneOf<SeiteGeprueft>> RufeAsync(PruefeSeite auftrag, IAusfuehrung x);
+}
+
+public sealed class RueckgabePruefung : IPipeline
+{
+    public PipelineFluss Fluss => PipelineFluss.Definiere(scan =>
+    {
+        var eingang = scan.Quelle<RueckgabeGescannt>();
+        var seiten = eingang.Je(e => e.Seiten);
+        var seite = seiten.Rufe<ISeitenPruefung>(s => new PruefeSeite(s));
+        var schnell = eingang.Rufe<ISchadensSchaetzung>(e => new SchaetzeSchaden(e.LeserId, 10m))
+            .Zeitlimit(TimeSpan.FromSeconds(30));
+        var gruendlich = eingang.Rufe<ISchadensSchaetzung>(e => new SchaetzeSchaden(e.LeserId, 100m));
+        var mahnung = scan.Alle(gruendlich.Bei<SchadenGeschaetzt>(), eingang).Sende<EroeffneMahnung>((g, e) => new EroeffneMahnung(e.LeserId, g.Betrag))
+            .Oder(schnell.BeiZeitlimit(), z => new EroeffneMahnung(Guid.Empty, 0m));
+        seiten.Sammle(seite.Bei<SeiteGeprueft>()).Sende<MeldeSchaden>((e, geprueft) => new MeldeSchaden(e.LeserId, e.LeserId));
+        mahnung.BeiAbgelehnt().Sende<MeldeSchaden>(a => new MeldeSchaden(Guid.Empty, Guid.Empty));
+    });
+}

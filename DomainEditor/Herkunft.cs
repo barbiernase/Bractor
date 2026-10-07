@@ -44,6 +44,19 @@ public static class Herkunft
             Rufe = L(t.Rufe), Zeitlimit = L(t.Zeitlimit), Sende = t.Sende ?? "",
         };
     }
+    /// <summary>Ein Fluss so, wie der Scaffolder ihn schreibt: ein gelesener Ausdruck hat Vorrang vor Zuordnungs-Argumenten.</summary>
+    public static string Von(FlussPipeline f) => Hash(new
+    {
+        Knoten = f.Knoten.Select(s => s with
+        {
+            Doku = null,
+            Zeitlimit = string.IsNullOrWhiteSpace(s.Zeitlimit) ? null : s.Zeitlimit,
+            Liste = string.IsNullOrWhiteSpace(s.Liste) ? null : s.Liste,
+            Eingaenge = s.Eingaenge.Select(e => string.IsNullOrWhiteSpace(e.Ausdruck)
+                ? e with { Ausdruck = null, Argumente = e.Argumente is { Count: > 0 } ? e.Argumente : null }
+                : e with { Argumente = null }).ToList(),
+        }).ToList(),
+    });
     public static string Von(Faehigkeit f) => Hash(new { f.Name, f.Methode, f.Lesen, f.Rueckgabe, f.Parameter });
     public static string Von(Handle h) => Hash(new { h.Eingang, h.Faehigkeiten, h.Ausgaenge, h.Rueckgabe });
     public static string Von(Konsument k) => Hash(new { k.SubscriberId, k.Pull, k.Append, k.Basen });
@@ -64,6 +77,7 @@ public static class Herkunft
             Decider = m.Decider.Select(d => d with { Herkunft = Von(d) }).ToList(),
             Sagas = m.Sagas.Select(s => s with { Herkunft = Von(s) }).ToList(),
             Funktionen = m.Funktionen.Select(f => f with { Herkunft = Von(f) }).ToList(),
+            Fluesse = m.Fluesse.Select(f => f with { Herkunft = Von(f) }).ToList(),
             Akteure = m.Akteure.Select(a => a with { Herkunft = Von(a) }).ToList(),
             Clients = m.Clients.Select(c => c with { Herkunft = Von(c) }).ToList(),
             Lesen = l == null ? null : l with
@@ -87,6 +101,7 @@ public static class Herkunft
         foreach (var d in m.Decider) Pruefe(d.Herkunft, Von(d), $"decide {d.Aggregat}.{d.Command}");
         foreach (var s in m.Sagas) Pruefe(s.Herkunft, Von(s), $"prozess {s.Namespace}.{s.Name}");
         foreach (var f in m.Funktionen) Pruefe(f.Herkunft, Von(f), $"funktion {f.Namespace}.{f.Name}");
+        foreach (var f in m.Fluesse) Pruefe(f.Herkunft, Von(f), $"pipeline {f.Namespace}.{f.Name}");
         foreach (var a in m.Akteure) Pruefe(a.Herkunft, Von(a), $"akteur {a.Namespace}.{a.Name}");
         foreach (var c in m.Clients) Pruefe(c.Herkunft, Von(c), $"client {c.Namespace}.{c.Name}");
         var l = m.Lesen;

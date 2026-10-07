@@ -13,6 +13,8 @@ public sealed class DomainModel
 {
     public List<AggregateRaw> Aggregates { get; } = new();
     public List<ProcessRaw> Processes { get; } = new();
+    /// <summary>Pipelines als Fluss (<c>IPipeline</c>, §14) — die Knoten-Anweisungen 1:1.</summary>
+    public List<FlussRaw> Fluesse { get; } = new();
     public List<ProjectionRaw> Projections { get; } = new();
     public List<QueryRaw> Queries { get; } = new();
     public List<ReaderRaw> Readers { get; } = new();
@@ -388,7 +390,7 @@ public sealed class StoreRaw
 /// Extrahiert das gesamte Domänen-Modell semantisch (über Marker-Interfaces, nicht textuell) — inklusive der
 /// Sagas aus dem Prozess-DSL und der Handcode-Anteile, die der Scaffolder für den Round-trip braucht.
 /// </summary>
-public sealed class DomainExtractor
+public sealed partial class DomainExtractor
 {
     private readonly List<Compilation> _comps;
     private readonly List<INamedTypeSymbol> _types;
@@ -452,6 +454,7 @@ public sealed class DomainExtractor
         _iFunktion = Get(Vertrag.IFunktion);
         _iAuftrag = Get(Vertrag.IAuftrag);
         _prozessTyp = Get(Vertrag.ProzessMetadatenName);
+        _iPipeline = Get(Vertrag.IPipeline);
 
         // Aggregat-Komposition über den TYP: wer IDecider<T>/IApplier<T> implementiert, gehört zum State T.
         foreach (var t in _types)
@@ -493,6 +496,7 @@ public sealed class DomainExtractor
         {
             if (Sym.Implements(t, _iState) && _deciderJeState.ContainsKey(t.Fq())) m.Aggregates.Add(ReadAggregate(t));
             if (Sym.Implements(t, _iProzessDef)) m.Processes.Add(ReadProcess(t));
+            if (_iPipeline != null && Sym.Implements(t, _iPipeline)) m.Fluesse.Add(ReadFluss(t));
             if (Sym.Implements(t, _iSubscriber)) { var p = TryReadProjection(t); if (p != null) m.Projections.Add(p); }
             if (Sym.Implements(t, _iQuery)) m.Queries.Add(ReadQuery(t));
             if (Sym.Implements(t, _iPipelineHandler)) m.Pipelines.Add(ReadPipeline(t));
@@ -516,6 +520,7 @@ public sealed class DomainExtractor
         // Deterministische Reihenfolge (die Symbol-Enumeration ist es nicht garantiert).
         m.Aggregates.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Processes.Sort((a, b) => string.CompareOrdinal(a.Namespace + "." + a.Name, b.Namespace + "." + b.Name));
+        m.Fluesse.Sort((a, b) => string.CompareOrdinal(a.Namespace + "." + a.Name, b.Namespace + "." + b.Name));
         return m;
     }
 
@@ -1320,7 +1325,8 @@ public sealed class DomainExtractor
                     var oc = asg.Right.DescendantNodesAndSelf().OfType<ObjectCreationExpressionSyntax>().FirstOrDefault();
                     if (oc == null) continue;
                     model ??= c.GetSemanticModel(tree);
-                    if (model.GetTypeInfo(oc).Type is INamedTypeSymbol pt && Sym.Implements(pt, _iProzessDef))
+                    if (model.GetTypeInfo(oc).Type is INamedTypeSymbol pt &&
+                        (Sym.Implements(pt, _iProzessDef) || (_iPipeline != null && Sym.Implements(pt, _iPipeline))))
                         m.RegisteredProcesses.Add(name);
                 }
             }

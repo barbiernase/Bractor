@@ -32,10 +32,12 @@ public class FileGenerator
     List<(string TypeName, int Depth, TypeNode Node)> eventTypes,
     List<(string TypeName, int Depth, TypeNode Node)> queryTypes,
     List<(string TypeName, int Depth, TypeNode Node)> queryResponseTypes,
-    List<(string TypeName, int Depth, TypeNode Node)> triggerTypes = null)
+    List<(string TypeName, int Depth, TypeNode Node)> triggerTypes = null,
+    List<(string TypeName, int Depth, TypeNode Node)> auftragTypes = null)
 {
-    // Trigger-Liste: null-safe für Abwärtskompatibilität
+    // Trigger-/Auftrag-Liste: null-safe für Abwärtskompatibilität
     triggerTypes = triggerTypes ?? new List<(string, int, TypeNode)>();
+    auftragTypes = auftragTypes ?? new List<(string, int, TypeNode)>();
 
     // ═══════════════════════════════════════════════════
     // Payload-Kategorien — neue Kategorie = ein Eintrag
@@ -49,10 +51,11 @@ public class FileGenerator
         ("QUERY PAYLOADS",    queryTypes),
         ("QUERY RESPONSE PAYLOADS", queryResponseTypes),
         ("TRIGGER PAYLOADS",  triggerTypes),
+        ("AUFTRAG PAYLOADS",  auftragTypes),
     };
 
     // Enum-Typen aus ALLEN Listen sammeln (vor dem Filtern!)
-    _enumTypeNames = CollectEnumTypeNames(objectTypes, commandTypes, eventTypes, queryTypes, queryResponseTypes, triggerTypes);
+    _enumTypeNames = CollectEnumTypeNames(objectTypes, commandTypes, eventTypes, queryTypes, queryResponseTypes, triggerTypes, auftragTypes);
 
     // Messages + OneOfs generieren — in einem Loop
     var allMessages = new StringBuilder();
@@ -76,6 +79,7 @@ public class FileGenerator
     var queryOneOfs = GenerateOneOfPart(queryTypes, 20);
     var queryResponseOneOfs = GenerateOneOfPart(queryResponseTypes, 20);
     var triggerOneOfs = GenerateOneOfPart(triggerTypes, 20);
+    var auftragOneOfs = GenerateOneOfPart(auftragTypes, 20);
 
     // Standalone-Wrapper nur generieren wenn Typen existieren
     var queryRequestMessage = queryTypes.Any() 
@@ -99,6 +103,8 @@ public class FileGenerator
     // TriggerPayloadDto hat dann ein leeres oneof — das ist valides Protobuf.
     var triggerRequestMessage = GenerateTriggerRequestMessage();
     var triggerPayloadMessage = GenerateStandalonePayloadDto("TriggerPayloadDto", triggerOneOfs);
+    // Aufträge der Katalog-Funktionen (IAuftrag<F>) — IMMER generieren (ServerMessage.ArbeitsAuftrag referenziert sie).
+    var auftragPayloadMessage = GenerateStandalonePayloadDto("AuftragPayloadDto", auftragOneOfs);
 
     // ClientMessage: Trigger-Feld + neue First-Citizen-Felder
     var clientMessageExtensions = """
@@ -106,6 +112,9 @@ public class FileGenerator
                     TransientEventRequest transient_event = 7;
                     QueryResponseFromClient query_answer = 8;
                     TriggerResult trigger_result = 9;
+                    FunktionenAnbieten funktionen_anbieten = 10;
+                    ArbeitsErgebnis arbeits_ergebnis = 11;
+                    ArbeitLebtMeldung arbeit_lebt = 12;
             """;
 
     // TriggerAck immer generieren (Protokoll-Message)
@@ -144,6 +153,40 @@ public class FileGenerator
               string correlation_id = 1;
               bool accepted = 2;
               string error_message = 3;
+          }
+
+          // Katalog-Funktionen extern ausführen (docs/konzept-editor-pipelines.md §14.5): ein Worker bietet Funktionen an,
+          // der Server holt für ihn Aufträge beim Vermittler (Pull, Slots = Gleichzeitigkeit), reicht sie weiter und schreibt
+          // das Ergebnis genau einmal in den Ausführungs-Stream.
+          message FunktionenAnbieten {
+              repeated FunktionsAngebot angebote = 1;
+          }
+
+          message FunktionsAngebot {
+              // Einfacher Name der Funktions-Schnittstelle, z. B. "IBildVerkleinerung".
+              string funktion = 1;
+              int32 slots = 2;
+          }
+
+          message ArbeitsAuftrag {
+              // Ausführungs-Id (deterministisch je Prozess-Transition) — Schlüssel für Ergebnis und Lebenszeichen.
+              string vorgang = 1;
+              string korrelation = 2;
+              string funktion = 3;
+              AuftragPayloadDto auftrag = 4;
+              string akteur = 5;
+          }
+
+          message ArbeitsErgebnis {
+              string vorgang = 1;
+              // Der gewählte OneOf-Fall der Funktion als Event (nur die Nutzlast zählt).
+              EventEnvelopeDto ergebnis = 2;
+              // Nicht leer = die Funktion ist gescheitert → durable Fehlschlag-Marke statt Ergebnis.
+              string fehler = 3;
+          }
+
+          message ArbeitLebtMeldung {
+              string vorgang = 1;
           }
           """;
     
@@ -222,6 +265,7 @@ public class FileGenerator
                      TriggerAck trigger_ack = 8;
                      TriggerForward trigger_forward = 9;
                      QueryForward query_forward = 10;
+                     ArbeitsAuftrag arbeits_auftrag = 11;
                  }
              }
 
@@ -317,6 +361,8 @@ public class FileGenerator
              {{queryResponsePayloadMessage}}
 
              {{triggerPayloadMessage}}
+
+             {{auftragPayloadMessage}}
 
              // ============================================================================
              // ALL PAYLOAD MESSAGES

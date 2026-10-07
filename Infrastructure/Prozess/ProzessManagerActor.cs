@@ -39,7 +39,7 @@ public sealed class ProzessManagerActor : IActor
     private readonly IProzessOffenIndex? _offenIndex;
     private readonly IDeadLetterSink? _deadLetters;
     private readonly IProzessMarkingStore? _markingStore;   // ★ P5b: nicht-autoritativer Marking-Cursor (optional)
-    private readonly Infrastructure.Funktionen.FunktionsAusfuehrer? _ausfuehrer;   // Rufe<F>: Aufträge an Katalog-Funktionen
+    private readonly Func<Guid, IAuftrag, Guid, string?, CancellationToken, Task>? _rufe;   // Rufe<F>: Auftrag an den Vermittler
     private readonly IDbClock? _uhr;                                                // Zeitlimit gegen die DB-Uhr
     private Guid _korrelation;
     private ProzessManager? _manager;
@@ -52,10 +52,10 @@ public sealed class ProzessManagerActor : IActor
         IProzessOffenIndex? offenIndex = null,
         IDeadLetterSink? deadLetters = null,
         IProzessMarkingStore? markingStore = null,
-        Infrastructure.Funktionen.FunktionsAusfuehrer? ausfuehrer = null,
+        Func<Guid, IAuftrag, Guid, string?, CancellationToken, Task>? rufe = null,
         IDbClock? uhr = null)
     {
-        _ausfuehrer = ausfuehrer;
+        _rufe = rufe;
         _uhr = uhr;
         _eventStore = eventStore;
         _registry = registry;
@@ -76,7 +76,7 @@ public sealed class ProzessManagerActor : IActor
                 // Das EINE Emit-Primitiv, an den Cluster gebunden (Cluster ist zur Spawn-Zeit fertig — (A)-Fix).
                 _emitter = new CommandEmitter(_cluster);
                 _manager = new ProzessManager(_eventStore, _registry, ErzeugeDispatch(), _offenIndex, _deadLetters, _markingStore,
-                    rufe: _ausfuehrer is null ? null : _ausfuehrer.BeauftrageAsync,
+                    rufe: _rufe,
                     jetzt: _uhr is null ? null : _uhr.JetztAsync);
                 break;
 

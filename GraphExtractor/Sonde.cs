@@ -183,6 +183,20 @@ public static class Sonde
                 + (t["rufe"] is { } rf ? $"rufe {rf}" : $"{(t["sendeJe"]?.GetValue<bool>() == true ? "sendeJe" : "sende")} {S(t, "sende")}")
                 + (t["zeitlimit"] is { } zl ? $" zeitlimit={zl}" : "")
                 + (t["kompensation"] is { } k ? $" kompensiert {k}" : ""))));
+        // Pipelines als Fluss (§14): je Knoten Name=Art:Typ, Eingänge (∨ getrennt) mit Drähten und Lambda verbatim, Zeitlimit, Liste.
+        string Draht(JsonNode d) => S(d, "von") + (S(d, "port") switch
+        {
+            "zeitlimit" => ".⏳", "abgelehnt" => ".✕", _ => d["fall"] is { } f ? $".{f}" : "",
+        });
+        string Eingang(JsonNode e) => (e["je"] is { } je
+                ? (e["sammle"]?.GetValue<bool>() == true ? $"{je}.sammle({string.Join("+", A(e, "draehte").Select(Draht))})" : $"{je}[]")
+                : string.Join("+", A(e, "draehte").Select(Draht)))
+            + (e["ausdruck"] is { } la ? $" λ{{{la}}}" : "") + (e["argumente"] is JsonArray ar ? $" args({string.Join(", ", ar.Select(x => (string?)x))})" : "");
+        foreach (var f in A(b, "fluesse").Where(Sonde))
+            z.Add($"fluss {S(f, "namespace")}.{S(f, "name")} bauer={S(f, "bauer")} | " + string.Join("; ", A(f, "knoten").Select(k =>
+                $"{S(k, "name")}{(k["ohneVariable"]?.GetValue<bool>() == true ? "°" : "")}={S(k, "art")}:{S(k, "typ")}"
+                + (A(k, "eingaenge").Any() ? " <- " + string.Join(" ∨ ", A(k, "eingaenge").Select(Eingang)) : "")
+                + (k["zeitlimit"] is { } zl ? $" ⏳{zl}" : "") + (k["liste"] is { } li ? $" je{{{li}}}" : ""))));
         // Katalog-Funktionen: Auftrag → Ergebnisse (nur die Signatur).
         foreach (var f in A(b, "funktionen").Where(Sonde))
             z.Add($"funktion {S(f, "namespace")}.{S(f, "name")} | {S(f, "auftrag")} -> {string.Join("; ", A(f, "ergebnisse").Select(x => (string?)x))}");

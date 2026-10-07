@@ -273,6 +273,10 @@ namespace Core.SourceGeneration
 
             if (interfaces.Contains("Abstractions.IQueryResponse"))
                 return DomainType.QueryResponse;
+
+            // Auftrag einer Katalog-Funktion — eigene Proto-Kategorie (AuftragPayloadDto), nicht Value Object.
+            if (interfaces.Contains("Abstractions.IAuftrag"))
+                return DomainType.Auftrag;
                 
             return DomainType.Object;
         }

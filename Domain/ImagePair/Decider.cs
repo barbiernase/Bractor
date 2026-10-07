@@ -25,25 +25,6 @@ public partial class ImagePair
                 cmd.UrsprungsPfad);
         }
 
-        public IEnumerable<OneOf<RohbildEingegangen, ImagePairNichtGefunden, RohbildBereitsEingegangen>> Decide(
-            NimmRohbildAuf cmd)
-        {
-            if (this.State.Version == 0)
-            {
-                yield return new ImagePairNichtGefunden(cmd.AggregateId);
-                yield break;
-            }
-
-            var schonDa = cmd.Version == BildVersion.Dc0 ? this.State.Dc0Eingegangen : this.State.Dc2Eingegangen;
-            if (schonDa || this.State.GetBild(cmd.Version) != null)
-            {
-                yield return new RohbildBereitsEingegangen(cmd.Version);
-                yield break;
-            }
-
-            yield return new RohbildEingegangen(cmd.AggregateId, cmd.Version, cmd.Pfad, cmd.Dateiname, cmd.DateigroesseBytes);
-        }
-
         public IEnumerable<OneOf<BildVerfuegbar, ImagePairKomplett, ImagePairNichtGefunden, BildVersionBereitsVerfuegbar>> Decide(
             MeldeBildVerfuegbar cmd)
         {

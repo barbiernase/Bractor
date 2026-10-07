@@ -97,11 +97,13 @@ var messagePayloadGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IMess
 var queryGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IQuery");
 var queryResponseGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IQueryResponse");
 var triggerGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IPipelineTrigger");
+var auftragGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IAuftrag");
 
 var allGraphs = messagePayloadGraphs
     .Concat(queryGraphs)
     .Concat(queryResponseGraphs)
     .Concat(triggerGraphs)
+    .Concat(auftragGraphs)
     .ToList();
 
 if (allGraphs.Count == 0)
@@ -120,6 +122,7 @@ var eventTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "Event");
 var queryTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "Query");
 var queryResponseTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "QueryResponse");
 var triggerTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "Trigger");
+var auftragTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "Auftrag");
 
 Console.WriteLine();
 Console.WriteLine("📊 Gefundene Typen:");
@@ -140,7 +143,8 @@ var protoContent = generator.GenerateProtoFile(
     eventTypes,
     queryTypes,
     queryResponseTypes,
-    triggerTypes);
+    triggerTypes,
+    auftragTypes);
 
 // Output im ProtoRepo-Projektordner
 var solutionDir = Path.GetDirectoryName(solutionPath) ?? ".";
