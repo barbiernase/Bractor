@@ -272,47 +272,50 @@ class CommandEnvelopeDto(betterproto.Message):
     melde_bild_verfuegbar: "MeldeBildVerfuegbarDto" = betterproto.message_field(
         36, group="payload"
     )
-    archiviere_modell: "ArchiviereModellDto" = betterproto.message_field(
+    nimm_rohbild_auf: "NimmRohbildAufDto" = betterproto.message_field(
         37, group="payload"
     )
-    registriere_modell: "RegistriereModellDto" = betterproto.message_field(
+    archiviere_modell: "ArchiviereModellDto" = betterproto.message_field(
         38, group="payload"
     )
-    setze_modell_aktiv: "SetzeModellAktivDto" = betterproto.message_field(
+    registriere_modell: "RegistriereModellDto" = betterproto.message_field(
         39, group="payload"
     )
-    melde_teil_fertig: "MeldeTeilFertigDto" = betterproto.message_field(
+    setze_modell_aktiv: "SetzeModellAktivDto" = betterproto.message_field(
         40, group="payload"
     )
-    starte_sammelvorgang: "StarteSammelvorgangDto" = betterproto.message_field(
+    melde_teil_fertig: "MeldeTeilFertigDto" = betterproto.message_field(
         41, group="payload"
     )
-    schliesse_teilauftrag_ab: "SchliesseTeilauftragAbDto" = betterproto.message_field(
+    starte_sammelvorgang: "StarteSammelvorgangDto" = betterproto.message_field(
         42, group="payload"
     )
-    starte_teilauftrag: "StarteTeilauftragDto" = betterproto.message_field(
+    schliesse_teilauftrag_ab: "SchliesseTeilauftragAbDto" = betterproto.message_field(
         43, group="payload"
     )
-    briche_training_ab: "BricheTrainingAbDto" = betterproto.message_field(
+    starte_teilauftrag: "StarteTeilauftragDto" = betterproto.message_field(
         44, group="payload"
     )
+    briche_training_ab: "BricheTrainingAbDto" = betterproto.message_field(
+        45, group="payload"
+    )
     markiere_als_haengengeblieben: "MarkiereAlsHaengengebliebenDto" = (
-        betterproto.message_field(45, group="payload")
+        betterproto.message_field(46, group="payload")
     )
     melde_fortschritt: "MeldeFortschrittDto" = betterproto.message_field(
-        46, group="payload"
+        47, group="payload"
     )
     melde_training_abgeschlossen: "MeldeTrainingAbgeschlossenDto" = (
-        betterproto.message_field(47, group="payload")
+        betterproto.message_field(48, group="payload")
     )
     melde_training_begonnen: "MeldeTrainingBegonnenDto" = betterproto.message_field(
-        48, group="payload"
+        49, group="payload"
     )
     melde_training_gescheitert: "MeldeTrainingGescheitertDto" = (
-        betterproto.message_field(49, group="payload")
+        betterproto.message_field(50, group="payload")
     )
     starte_training: "StarteTrainingDto" = betterproto.message_field(
-        50, group="payload"
+        51, group="payload"
     )
 
 
@@ -353,148 +356,163 @@ class EventEnvelopeDto(betterproto.Message):
         betterproto.message_field(27, group="payload")
     )
     command_failed: "CommandFailedDto" = betterproto.message_field(28, group="payload")
-    datensatz_bereits_eingefroren: "DatensatzBereitsEingefrorenDto" = (
-        betterproto.message_field(29, group="payload")
+    bild_nicht_lesbar: "BildNichtLesbarDto" = betterproto.message_field(
+        29, group="payload"
     )
-    datensatz_eingefroren: "DatensatzEingefrorenDto" = betterproto.message_field(
+    bild_verkleinert: "BildVerkleinertDto" = betterproto.message_field(
         30, group="payload"
     )
-    datensatz_erstellt: "DatensatzErstelltDto" = betterproto.message_field(
+    histogramm_ausgeglichen: "HistogrammAusgeglichenDto" = betterproto.message_field(
         31, group="payload"
     )
-    datensatz_existiert_bereits: "DatensatzExistiertBereitsDto" = (
+    datensatz_bereits_eingefroren: "DatensatzBereitsEingefrorenDto" = (
         betterproto.message_field(32, group="payload")
     )
-    datensatz_leer: "DatensatzLeerDto" = betterproto.message_field(33, group="payload")
-    einfrieren_angefordert: "EinfrierenAngefordertDto" = betterproto.message_field(
+    datensatz_eingefroren: "DatensatzEingefrorenDto" = betterproto.message_field(
+        33, group="payload"
+    )
+    datensatz_erstellt: "DatensatzErstelltDto" = betterproto.message_field(
         34, group="payload"
     )
+    datensatz_existiert_bereits: "DatensatzExistiertBereitsDto" = (
+        betterproto.message_field(35, group="payload")
+    )
+    datensatz_leer: "DatensatzLeerDto" = betterproto.message_field(36, group="payload")
+    einfrieren_angefordert: "EinfrierenAngefordertDto" = betterproto.message_field(
+        37, group="payload"
+    )
     paar_aufgenommen: "PaarAufgenommenDto" = betterproto.message_field(
-        35, group="payload"
-    )
-    paare_aufgenommen: "PaareAufgenommenDto" = betterproto.message_field(
-        36, group="payload"
-    )
-    paar_entfernt: "PaarEntferntDto" = betterproto.message_field(37, group="payload")
-    range_angefordert: "RangeAngefordertDto" = betterproto.message_field(
         38, group="payload"
     )
-    range_leer: "RangeLeerDto" = betterproto.message_field(39, group="payload")
-    split_gesetzt: "SplitGesetztDto" = betterproto.message_field(40, group="payload")
-    split_ungueltig: "SplitUngueltigDto" = betterproto.message_field(
+    paare_aufgenommen: "PaareAufgenommenDto" = betterproto.message_field(
+        39, group="payload"
+    )
+    paar_entfernt: "PaarEntferntDto" = betterproto.message_field(40, group="payload")
+    range_angefordert: "RangeAngefordertDto" = betterproto.message_field(
         41, group="payload"
     )
-    bild_nicht_verfuegbar: "BildNichtVerfuegbarDto" = betterproto.message_field(
-        42, group="payload"
-    )
-    bild_paar_durch_ki_klassifiziert: "BildPaarDurchKiKlassifiziertDto" = (
-        betterproto.message_field(43, group="payload")
-    )
-    bild_paar_gelabelt: "BildPaarGelabeltDto" = betterproto.message_field(
+    range_leer: "RangeLeerDto" = betterproto.message_field(42, group="payload")
+    split_gesetzt: "SplitGesetztDto" = betterproto.message_field(43, group="payload")
+    split_ungueltig: "SplitUngueltigDto" = betterproto.message_field(
         44, group="payload"
     )
-    bild_region_gelabelt: "BildRegionGelabeltDto" = betterproto.message_field(
+    bild_nicht_verfuegbar: "BildNichtVerfuegbarDto" = betterproto.message_field(
         45, group="payload"
     )
+    bild_paar_durch_ki_klassifiziert: "BildPaarDurchKiKlassifiziertDto" = (
+        betterproto.message_field(46, group="payload")
+    )
+    bild_paar_gelabelt: "BildPaarGelabeltDto" = betterproto.message_field(
+        47, group="payload"
+    )
+    bild_region_gelabelt: "BildRegionGelabeltDto" = betterproto.message_field(
+        48, group="payload"
+    )
     bild_verfuegbar: "BildVerfuegbarDto" = betterproto.message_field(
-        46, group="payload"
-    )
-    bild_version_bereits_verfuegbar: "BildVersionBereitsVerfuegbarDto" = (
-        betterproto.message_field(47, group="payload")
-    )
-    einzel_bild_durch_ki_klassifiziert: "EinzelBildDurchKiKlassifiziertDto" = (
-        betterproto.message_field(48, group="payload")
-    )
-    einzel_bild_gelabelt: "EinzelBildGelabeltDto" = betterproto.message_field(
         49, group="payload"
     )
-    image_pair_eingabe_ungueltig: "ImagePairEingabeUngueltigDto" = (
+    bild_version_bereits_verfuegbar: "BildVersionBereitsVerfuegbarDto" = (
         betterproto.message_field(50, group="payload")
     )
+    einzel_bild_durch_ki_klassifiziert: "EinzelBildDurchKiKlassifiziertDto" = (
+        betterproto.message_field(51, group="payload")
+    )
+    einzel_bild_gelabelt: "EinzelBildGelabeltDto" = betterproto.message_field(
+        52, group="payload"
+    )
+    image_pair_eingabe_ungueltig: "ImagePairEingabeUngueltigDto" = (
+        betterproto.message_field(53, group="payload")
+    )
     image_pair_erstellt: "ImagePairErstelltDto" = betterproto.message_field(
-        51, group="payload"
+        54, group="payload"
     )
     image_pair_existiert_bereits: "ImagePairExistiertBereitsDto" = (
-        betterproto.message_field(52, group="payload")
+        betterproto.message_field(55, group="payload")
     )
     image_pair_nicht_gefunden: "ImagePairNichtGefundenDto" = betterproto.message_field(
-        53, group="payload"
-    )
-    physisches_produkt_gelabelt: "PhysischesProduktGelabeltDto" = (
-        betterproto.message_field(54, group="payload")
-    )
-    region_index_ungueltig: "RegionIndexUngueltigDto" = betterproto.message_field(
-        55, group="payload"
-    )
-    region_labels_ungueltig: "RegionLabelsUngueltigDto" = betterproto.message_field(
         56, group="payload"
     )
-    modell_aktiviert: "ModellAktiviertDto" = betterproto.message_field(
-        57, group="payload"
+    physisches_produkt_gelabelt: "PhysischesProduktGelabeltDto" = (
+        betterproto.message_field(57, group="payload")
     )
-    modell_bereits_archiviert: "ModellBereitsArchiviertDto" = betterproto.message_field(
+    region_index_ungueltig: "RegionIndexUngueltigDto" = betterproto.message_field(
         58, group="payload"
     )
-    modell_existiert_bereits: "ModellExistiertBereitsDto" = betterproto.message_field(
+    region_labels_ungueltig: "RegionLabelsUngueltigDto" = betterproto.message_field(
         59, group="payload"
     )
-    modell_nicht_gefunden: "ModellNichtGefundenDto" = betterproto.message_field(
-        60, group="payload"
+    rohbild_bereits_eingegangen: "RohbildBereitsEingegangenDto" = (
+        betterproto.message_field(60, group="payload")
     )
-    modell_registriert: "ModellRegistriertDto" = betterproto.message_field(
+    rohbild_eingegangen: "RohbildEingegangenDto" = betterproto.message_field(
         61, group="payload"
     )
-    sammelvorgang_bereits_abgeschlossen: "SammelvorgangBereitsAbgeschlossenDto" = (
-        betterproto.message_field(62, group="payload")
+    modell_aktiviert: "ModellAktiviertDto" = betterproto.message_field(
+        62, group="payload"
     )
-    sammelvorgang_existiert_bereits: "SammelvorgangExistiertBereitsDto" = (
-        betterproto.message_field(63, group="payload")
+    modell_bereits_archiviert: "ModellBereitsArchiviertDto" = betterproto.message_field(
+        63, group="payload"
     )
-    sammelvorgang_gestartet: "SammelvorgangGestartetDto" = betterproto.message_field(
+    modell_existiert_bereits: "ModellExistiertBereitsDto" = betterproto.message_field(
         64, group="payload"
     )
-    sammelvorgang_nicht_gefunden: "SammelvorgangNichtGefundenDto" = (
-        betterproto.message_field(65, group="payload")
+    modell_nicht_gefunden: "ModellNichtGefundenDto" = betterproto.message_field(
+        65, group="payload"
     )
-    teil_verbucht: "TeilVerbuchtDto" = betterproto.message_field(66, group="payload")
-    teilauftrag_abgeschlossen: "TeilauftragAbgeschlossenDto" = (
+    modell_registriert: "ModellRegistriertDto" = betterproto.message_field(
+        66, group="payload"
+    )
+    sammelvorgang_bereits_abgeschlossen: "SammelvorgangBereitsAbgeschlossenDto" = (
         betterproto.message_field(67, group="payload")
     )
-    teilauftrag_bereits_fertig: "TeilauftragBereitsFertigDto" = (
+    sammelvorgang_existiert_bereits: "SammelvorgangExistiertBereitsDto" = (
         betterproto.message_field(68, group="payload")
     )
+    sammelvorgang_gestartet: "SammelvorgangGestartetDto" = betterproto.message_field(
+        69, group="payload"
+    )
+    sammelvorgang_nicht_gefunden: "SammelvorgangNichtGefundenDto" = (
+        betterproto.message_field(70, group="payload")
+    )
+    teil_verbucht: "TeilVerbuchtDto" = betterproto.message_field(71, group="payload")
+    teilauftrag_abgeschlossen: "TeilauftragAbgeschlossenDto" = (
+        betterproto.message_field(72, group="payload")
+    )
+    teilauftrag_bereits_fertig: "TeilauftragBereitsFertigDto" = (
+        betterproto.message_field(73, group="payload")
+    )
     teilauftrag_existiert_bereits: "TeilauftragExistiertBereitsDto" = (
-        betterproto.message_field(69, group="payload")
+        betterproto.message_field(74, group="payload")
     )
     teilauftrag_gestartet: "TeilauftragGestartetDto" = betterproto.message_field(
-        70, group="payload"
-    )
-    teilauftrag_nicht_gefunden: "TeilauftragNichtGefundenDto" = (
-        betterproto.message_field(71, group="payload")
-    )
-    training_abgeschlossen: "TrainingAbgeschlossenDto" = betterproto.message_field(
-        72, group="payload"
-    )
-    training_angefordert: "TrainingAngefordertDto" = betterproto.message_field(
-        73, group="payload"
-    )
-    training_bereits_beendet: "TrainingBereitsBeendetDto" = betterproto.message_field(
-        74, group="payload"
-    )
-    training_fortschritt: "TrainingFortschrittDto" = betterproto.message_field(
         75, group="payload"
     )
-    training_gescheitert: "TrainingGescheitertDto" = betterproto.message_field(
-        76, group="payload"
+    teilauftrag_nicht_gefunden: "TeilauftragNichtGefundenDto" = (
+        betterproto.message_field(76, group="payload")
     )
-    training_nicht_aktiv: "TrainingNichtAktivDto" = betterproto.message_field(
+    training_abgeschlossen: "TrainingAbgeschlossenDto" = betterproto.message_field(
         77, group="payload"
     )
+    training_angefordert: "TrainingAngefordertDto" = betterproto.message_field(
+        78, group="payload"
+    )
+    training_bereits_beendet: "TrainingBereitsBeendetDto" = betterproto.message_field(
+        79, group="payload"
+    )
+    training_fortschritt: "TrainingFortschrittDto" = betterproto.message_field(
+        80, group="payload"
+    )
+    training_gescheitert: "TrainingGescheitertDto" = betterproto.message_field(
+        81, group="payload"
+    )
+    training_nicht_aktiv: "TrainingNichtAktivDto" = betterproto.message_field(
+        82, group="payload"
+    )
     trainingslauf_existiert_bereits: "TrainingslaufExistiertBereitsDto" = (
-        betterproto.message_field(78, group="payload")
+        betterproto.message_field(83, group="payload")
     )
     trainingslauf_nicht_gefunden: "TrainingslaufNichtGefundenDto" = (
-        betterproto.message_field(79, group="payload")
+        betterproto.message_field(84, group="payload")
     )
 
 
@@ -781,6 +799,24 @@ class ImagePairFilterDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
+class StateChangeViaBildNichtLesbarDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaBildVerkleinertDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaHistogrammAusgeglichenDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
 class StateChangeViaDatensatzEingefrorenDto(betterproto.Message):
     stream_id: str = betterproto.string_field(1)
     version: int = betterproto.int32_field(2)
@@ -884,6 +920,12 @@ class StateChangeViaImagePairKomplettDto(betterproto.Message):
 
 @dataclass(eq=False, repr=False)
 class StateChangeViaPhysischesProduktGelabeltDto(betterproto.Message):
+    stream_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class StateChangeViaRohbildEingegangenDto(betterproto.Message):
     stream_id: str = betterproto.string_field(1)
     version: int = betterproto.int32_field(2)
 
@@ -1099,6 +1141,15 @@ class MeldeBildVerfuegbarDto(betterproto.Message):
 
 
 @dataclass(eq=False, repr=False)
+class NimmRohbildAufDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+    pfad: str = betterproto.string_field(3)
+    dateiname: str = betterproto.string_field(4)
+    dateigroesse_bytes: int = betterproto.int64_field(5)
+
+
+@dataclass(eq=False, repr=False)
 class ArchiviereModellDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
 
@@ -1234,6 +1285,27 @@ class CommandFailedDto(betterproto.Message):
     command_type: str = betterproto.string_field(1)
     reason: str = betterproto.string_field(2)
     aggregate_id: str = betterproto.string_field(3)
+
+
+@dataclass(eq=False, repr=False)
+class BildNichtLesbarDto(betterproto.Message):
+    pfad: str = betterproto.string_field(1)
+    grund: str = betterproto.string_field(2)
+
+
+@dataclass(eq=False, repr=False)
+class BildVerkleinertDto(betterproto.Message):
+    pfad: str = betterproto.string_field(1)
+    breite_pixel: int = betterproto.int32_field(2)
+    hoehe_pixel: int = betterproto.int32_field(3)
+
+
+@dataclass(eq=False, repr=False)
+class HistogrammAusgeglichenDto(betterproto.Message):
+    pfad: str = betterproto.string_field(1)
+    breite_pixel: int = betterproto.int32_field(2)
+    hoehe_pixel: int = betterproto.int32_field(3)
+    erstellt_am: int = betterproto.int64_field(4)
 
 
 @dataclass(eq=False, repr=False)
@@ -1395,6 +1467,20 @@ class RegionIndexUngueltigDto(betterproto.Message):
 @dataclass(eq=False, repr=False)
 class RegionLabelsUngueltigDto(betterproto.Message):
     anzahl: int = betterproto.int32_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class RohbildBereitsEingegangenDto(betterproto.Message):
+    version: int = betterproto.int32_field(1)
+
+
+@dataclass(eq=False, repr=False)
+class RohbildEingegangenDto(betterproto.Message):
+    aggregate_id: str = betterproto.string_field(1)
+    version: int = betterproto.int32_field(2)
+    pfad: str = betterproto.string_field(3)
+    dateiname: str = betterproto.string_field(4)
+    dateigroesse_bytes: int = betterproto.int64_field(5)
 
 
 @dataclass(eq=False, repr=False)
