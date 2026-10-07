@@ -218,7 +218,9 @@ public static partial class DateiSchreiber
                 var root = CSharpSyntaxTree.ParseText(text).GetRoot();
                 var m = root.DescendantNodes().OfType<ClassDeclarationSyntax>().Where(c => c.Identifier.Text == o.Klasse)
                     .SelectMany(c => c.Members.OfType<MethodDeclarationSyntax>())
-                    .FirstOrDefault(x => ErsterTyp(x) == o.Handle.Eingang && x.ParameterList.Parameters.Count > o.Kontext);
+                    // Eingang: der bearbeitete — oder, falls der Abgleich ihn (noch) nicht umgeschrieben hat, der im Code.
+                    .FirstOrDefault(x => (ErsterTyp(x) == o.Handle.Eingang || ErsterTyp(x) == o.Handle.EingangImCode)
+                                         && x.ParameterList.Parameters.Count > o.Kontext);
                 if (m == null) { uebersprungen.Add($"{gruppe.Key} ({o.Klasse}.Handle({o.Handle.Eingang}) nicht gefunden)"); continue; }
                 var ps = m.ParameterList.Parameters;
                 var ist = ps.Skip(1 + o.Kontext).ToList();

@@ -45,8 +45,11 @@ public sealed record FristStorno<TCmd>(Guid ZielAggregatId) : IPlanung where TCm
 /// <summary>
 /// Die vom generierten Dispatch aufgelöste Form einer Frist-Planung: der Kontext ist der voll qualifizierte
 /// Command-Typname (vom Generator als Konstante eingesetzt, keine Reflection). <see cref="Dauer"/> null = Storno.
+/// <see cref="Ab"/> = die Basis der Fälligkeit: die Log-Zeit (DB) des auslösenden Events, wenn es eines gibt — so ergibt
+/// jedes erneute Lesen desselben Events (Poll ab 0, Redelivery) dieselbe Fälligkeit, statt die Frist nach hinten zu
+/// schieben. null (Trigger-/Selbst-Pfad, kein Log-Event) = die DB-Uhr beim Planen.
 /// </summary>
-public sealed record FristAuftrag(string Kontext, Guid ZielAggregatId, TimeSpan? Dauer) : IPlanung
+public sealed record FristAuftrag(string Kontext, Guid ZielAggregatId, TimeSpan? Dauer, DateTimeOffset? Ab = null) : IPlanung
 {
     /// <summary>Deterministische Frist-Id aus Kontext + Ziel — Planen und Stornieren treffen dieselbe Frist.</summary>
     public Guid FristId => Abstractions.FristId.Für(Kontext, ZielAggregatId);

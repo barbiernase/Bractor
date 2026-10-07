@@ -122,9 +122,12 @@ public static class BoardLeseseite
             var aus = AusgaengeAbgleich(sigAus, boardAusgaenge, art, fristenImBoard: hd?["fristen"] is JsonArray);
             var rueck = N(sig, "rueckgabe");
             if (rueck != null && sigAus != null && !aus.SequenceEqual(sigAus)) rueck = Umhuellen(rueck, aus, art);
+            // input = der Eingang beim Einlesen aus dem Code; weicht er vom bearbeiteten ab, steht im Code noch der alte.
+            var imCode = sig != null && N(hd, "input") is { Length: > 0 } ein && ein != eingang ? ein : null;
             return new Handle
             {
                 Eingang = eingang,
+                EingangImCode = imCode,
                 Parameter = N(sig, "parameter") ?? standardParameter,
                 Kontext = sig?["kontext"] is JsonArray ? Strings(sig, "kontext") : null,
                 Faehigkeiten = Faehigkeiten(hd),
@@ -178,12 +181,21 @@ public static class BoardLeseseite
 
         // ── Pipelines: Eingang (Trigger/Event/Selbst) → Commands, Trigger, Selbst<T> (+ Frist<T> aus dem Code) ──
         var triggerName = A(b, "triggers").Where(t => N(t, "_id") != null).ToDictionary(t => N(t, "_id")!, t => N(t, "msgName") ?? S(t, "name"));
-        string Eingang(JsonNode hd) => N(hd, "input") ?? (S(hd, "inputKind") switch
+        // Der Eingang folgt dem Feld, das der Editor beim Umverdrahten/Umbenennen pflegt (event / selfName / die
+        // Trigger-Karte über trigId bzw. prod.id) — input ist nur der Rückfall (z. B. Trigger-Karte nicht geladen).
+        // Früher gewann input: ein umverdrahteter oder umbenannter Eingang ging dadurch still verloren.
+        string Eingang(JsonNode hd)
         {
-            "trigger" => N(hd, "trigId") is { } tid && triggerName.TryGetValue(tid, out var tn) ? tn : "",
-            "self" => S(hd, "selfName"),
-            _ => S(hd, "event"),
-        });
+            var art = S(hd, "inputKind");
+            var name = art switch
+            {
+                "trigger" => (N(hd, "trigId") ?? (N(hd["prod"], "k") == "tg" ? N(hd["prod"], "id") : null)) is { } tid
+                             && triggerName.TryGetValue(tid, out var tn) ? tn : null,
+                "self" => N(hd, "selfName"),
+                _ => N(hd, "event"),
+            };
+            return !string.IsNullOrEmpty(name) ? name : N(hd, "input") ?? "";
+        }
         var pipelines = A(b, "pipelines").Select(p =>
         {
             var code = p?["code"];

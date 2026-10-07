@@ -986,7 +986,8 @@ public static class Scaffolder
     private static string ArgListe(IReadOnlyList<string>? ausdruecke, string command, EditorModell modell)
     {
         if (ausdruecke is { Count: > 0 }) return string.Join(", ", ausdruecke);
-        var record = modell.Records.FirstOrDefault(r => r.Name == command && r.Kind == RecordArt.Command);
+        // Command oder Auftrag einer Funktion — beide werden positionsweise gebaut.
+        var record = modell.Records.FirstOrDefault(r => r.Name == command && (r.Kind == RecordArt.Command || r.Kind == RecordArt.Auftrag));
         if (record is null) return "/* TODO: Argumente */";
         return string.Join(", ", record.Felder.Select(_ => "default"));
     }

@@ -462,6 +462,11 @@ public sealed record Handle
 {
     /// <summary>Einfacher Typname des Eingangs (Event / Query / Trigger / Selbst-Nachricht) — identifiziert den Handle.</summary>
     public required string Eingang { get; init; }
+    /// <summary>
+    /// Der Eingang, wie er im Code steht, wenn er im Editor umverdrahtet/umbenannt wurde (sonst null) — damit „C# schreiben"
+    /// die bestehende Methode findet und ihren Eingangs-Typ umschreibt, statt sie als „nicht gefunden" zu übergehen.
+    /// </summary>
+    public string? EingangImCode { get; init; }
     /// <summary>Parametername des Eingangs.</summary>
     public string Parameter { get; init; } = "evt";
     /// <summary>Namen der Kontext-Parameter (Umschlag, Schreiber/Lese-Kontext) verbatim; null = Standardnamen.</summary>

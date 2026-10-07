@@ -1357,7 +1357,9 @@ public static class HtmlPresenter
       body.append(inp(t.pfad,v=>t.pfad=v,"/data/incoming"));body.append(inp(t.muster,v=>t.muster=v,"*.png"));}
     else {body.append(h("div",{class:"gsec"},"Intervall"));body.append(inp(t.intervall,v=>t.intervall=v,"30s"));}
     body.append(h("div",{class:"gsec"},"Trigger-Nachricht (IPipelineTrigger)"));
-    body.append(inp(t.msgName,v=>{t.msgName=v;},"z. B. DateiErkannt"));
+    body.append(inp(t.msgName,v=>{const alt=t.msgName;t.msgName=v;if(!alt||alt===v)return;
+      MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.inputKind==="trigger"&&hd.input===alt)hd.input=v;
+        hd.emits=(hd.emits||[]).map(x=>x===alt?v:x);}));},"z. B. DateiErkannt"));
     (t.felder||[]).forEach((f,fi)=>body.append(feldRow(f,()=>{t.felder.splice(fi,1);render();})));
     body.append(h("button",{class:"add",onclick:()=>{(t.felder=t.felder||[]).push({_id:"f"+(NID++),name:uniqFeldName(t.felder,"feld"),typ:"Guid"});render();}},"+ Feld"));
     // Zwei Seiten (§12): ◀ kommt aus = Ingress-Bindung + Pipelines, die den Trigger erzeugen · geht an ▶ = die eine Pipeline.
@@ -1457,6 +1459,15 @@ public static class HtmlPresenter
     body.append(h("button",{class:"add",onclick:()=>{const en=uniq((f.name||"F").replace(/^I/,"")+"Erledigt");
       MODEL.records.push({name:en,kind:"event",namespace:f.namespace,felder:[]});(f.ergebnisse=f.ergebnisse||[]).push(en);render();}},"+ neues Ergebnis-Event"));
     body.append(h("div",{class:"gsec",style:"opacity:.6"},"Implementierung = Bindung im Host (AddFunktion<"+(f.name||"F")+", …>) — C#, Python oder extern; nicht im Graph."));
+    // Ablauf als Kette: was NACH dieser Funktion kommt — je Ablauf (Prozess), in dem sie gerufen wird.
+    body.append(h("div",{class:"gsec"},"Ablauf ▶ dann …"));
+    kettenZeilen(body,"fk:"+f._id);
+    const sgs=[...new Set(MODEL.transitions.filter(t=>(t.dann||[]).some(d=>d.rufe===f.name)).map(t=>t.prozess))].map(n=>MODEL.sagas.find(x=>x.name===n)).filter(Boolean);
+    if(!sgs.length){body.append(h("div",{class:"gsec",style:"opacity:.6"},"Noch in keinem Ablauf — am Prozess unter „erst …“ oder an einer anderen Funktion unter „dann …“ einhängen."));return;}
+    const erg=(f.ergebnisse||[]);if(!erg.length){body.append(h("div",{class:"gsec",style:"opacity:.6"},"Erst ein Ergebnis festlegen — es löst den nächsten Schritt aus."));return;}
+    let bei=erg[0];
+    if(erg.length>1){const bs=h("select",{onchange:e=>bei=e.target.value});erg.forEach(e=>bs.append(h("option",{value:e},"weiter bei "+e)));body.append(h("div",{class:"slotrow o"},bs));}
+    sgs.forEach(sg=>body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},sgs.length>1?sg.name+":":""),kettenPool(z=>kettenAnhaengen(sg,bei,z)))));
   }
 
   // Dienst-Bindung = Vertrag (Interface) → Impl (📝-Insel ODER externer Adapter). Gibt dem freistehenden
@@ -1531,6 +1542,8 @@ public static class HtmlPresenter
       case "akteur":s.add(r.name);break;
       case "auf":s.add(n.own.ref.name);break;
       case "command":case "query":case "event":case "rejection":case "queryresponse":add(mengeVon(r.name));
+        // Ergebnis einer Funktion: trägt keine eigene Kette — es gehört zum Ablauf, der die Funktion ruft.
+        if(n.kind==="event"&&!s.size){const f=ergebnisVon(r.name);if(f)add(akteurSet({id:"fk:"+f._id,kind:"funktion",ref:f}));}
         if(n.kind==="query"&&!s.size)MODEL.reader.forEach(rd=>{if((rd.handles||[]).some(h=>h.query===r.name))add(akteurSet({id:"rdr:"+rd._id,kind:"reader",ref:rd}));});
         break;
       case "trigger":add(mengeVon(trigName(r)));break;
@@ -1545,7 +1558,11 @@ public static class HtmlPresenter
         break;}
       case "saga":MODEL.transitions.filter(t=>t.prozess===r.name).forEach(t=>(t.dann||[]).forEach(d=>add(mengeVon(d.sende))));
         add(mengeVon(r.triggerEvent));break;
-      case "transition":(r.dann||[]).forEach(d=>add(mengeVon(d.sende)));(r.wenn||[]).forEach(e=>add(mengeVon(e)));break;
+      case "transition":(r.dann||[]).forEach(d=>add(mengeVon(d.sende)));(r.wenn||[]).forEach(e=>add(mengeVon(e)));
+        // Regel nur aus Funktions-Ergebnissen/-Aufrufen (keine eigene Kette): sie steht im Rahmen ihres Prozesses.
+        if(!s.size){const sg=MODEL.sagas.find(x=>x.name===r.prozess);if(sg)add(akteurSet({id:"saga:"+sg.name,kind:"saga",ref:sg}));}
+        break;
+      case "funktion":MODEL.transitions.filter(t=>(t.dann||[]).some(d=>d.rufe===r.name)).forEach(t=>add(akteurSet({id:"tr:"+t._id,kind:"transition",ref:t})));break;
       case "frist":add(mengeVon(r.sendet));break;
       case "projektion":add(projektionAkteure(r));break;
       case "store":add(storeAkteure(r));break;
@@ -2075,6 +2092,75 @@ public static class HtmlPresenter
   // Ein Feld-Typ-Eingang (◀): eine VO/Enum-Quelle andocken → setzt den Feldtyp. Klein, links.
   function typeInPort(owner,f){if(!f._id)f._id="f"+(NID++);const s=port("ftype");s.classList.add("i","sm");s.title="Typ verdrahten (VO/Enum an dieses Feld)";
     reg("ftype:in:"+owner+":"+f._id,s,{type:"ftype",dir:"in",fobj:f});return s;}
+  // ── ABLAUF ALS KETTE (Node-RED-Bild): jede Prozess-Regel wird KANTEN statt einer Karte — Quelle → Ziel. Quelle = die Funktion,
+  //   die das auslösende Ergebnis liefert; der Prozess selbst, wenn es sein Start ist; sonst das Event. Ziel = ƒ oder Command.
+  //   Verzweigung: je Ergebnis eine eigene Kante („bei X“). Zusammenführung: mehrere Drähte in einen Knoten („und“; UndAlle „alle“).
+  //   Fan-out „×N“, Kompensation gestrichelt „↩ rückgängig“ (vom Schritt zum Gegen-Command), Zeitlimit „⏳“. Das Start-Event als
+  //   zusätzliches Join-Event ist nur Kontext (seine Daten), kein Draht. Nur eine noch leere Regel (ohne Wenn/Ziel) bleibt eine Karte.
+  function quelleVon(sg,e){const f=ergebnisVon(e);return f?"fk:"+f._id:e===sg.triggerEvent?"saga:"+sg.name:"rec:"+e;}
+  function zielVon(d){const zf=d.rufe&&MODEL.funktionen.find(x=>x.name===d.rufe);return zf?"fk:"+zf._id:d.sende&&recByName(d.sende)?"rec:"+d.sende:null;}
+  function kettenKanten(t){const sg=MODEL.sagas.find(x=>x.name===t.prozess);if(!sg)return [];
+    const w=(t.wenn||[]).filter(Boolean),dn=t.dann||[];if(!w.length||!dn.length)return [];
+    const ziele=dn.map(d=>({d,nach:zielVon(d)}));if(ziele.some(z=>!z.nach))return [];
+    const ohne=w.filter(e=>e!==sg.triggerEvent);
+    const quellen=(ohne.length?ohne:[sg.triggerEvent]).map(e=>({e,von:quelleVon(sg,e)}));
+    if(t.sammelEvent)quellen.push({e:t.sammelEvent,von:quelleVon(sg,t.sammelEvent),alle:true});
+    const join=quellen.length>1,out=[];
+    ziele.forEach(({d,nach})=>{
+      quellen.forEach(q=>{const f=ergebnisVon(q.e),zweig=f&&(f.ergebnisse||[]).length>1&&f.ergebnisse[0]!==q.e;
+        const teile=[q.von.startsWith("saga:")?"erst":"dann"];if(zweig)teile.push("bei "+q.e);if(join)teile.push(q.alle?"alle":"und");
+        if(d.sendeJe)teile.push("×N");if(d.zeitlimit)teile.push("⏳");
+        out.push({t,sg,von:q.von,nach,bei:q.e,d,label:teile.join(" · "),art:"dann"});});
+      if(d.kompensation&&recByName(d.kompensation))out.push({t,sg,von:nach,nach:"rec:"+d.kompensation,bei:"",d,label:"↩ rückgängig",art:"komp"});});
+    return out;}
+  // ── ARGUMENTE AUTOMATISCH ZUORDNEN (wie msg in Node-RED, nur typisiert): je Feld des Ziels (Command bzw. Auftrag) die passende
+  //   Quelle aus den Join-Events (Lambda-Parameter t, r, g …): gleicher Name → Name endet gleich (QuellPfad ← Pfad) → einziger
+  //   gleicher Typ. Ein Wert-Objekt wird aus seinen Feldern gebaut. Das jüngste Ergebnis geht vor dem Start. Unpassendes bleibt
+  //   "default" — im Panel als Tabelle „Feld ← Quelle“ änderbar. Ergebnis ist sichtbarer Code, keine Laufzeit-Magie.
+  function quellFelder(wenn){const out=[];(wenn||[]).forEach((e,i)=>{const r=recByName(e),p=["t","r","g"][i]||("e"+(i+1));
+    ((r&&r.felder)||[]).forEach(f=>out.push({ausdruck:p+"."+f.name,name:f.name,typ:baseTyp(f.typ),i}));});return out.sort((a,b)=>b.i-a.i);}
+  function ordneZu(feld,quellen,tiefe){const typ=baseTyp(feld.typ),nm=(feld.name||"").toLowerCase(),gl=quellen.filter(q=>q.typ===typ);
+    const genau=gl.find(q=>q.name.toLowerCase()===nm);if(genau)return genau.ausdruck;
+    const endet=gl.filter(q=>{const qn=q.name.toLowerCase();return qn.length>2&&(nm.endsWith(qn)||qn.endsWith(nm));});if(endet.length)return endet[0].ausdruck;
+    if(gl.length===1)return gl[0].ausdruck;
+    const vo=recByName(typ);if(vo&&vo.kind==="valueobject"&&tiefe<2&&(vo.felder||[]).length){const a=vo.felder.map(f=>ordneZu(f,quellen,tiefe+1));
+      if(a.some(x=>x!=="default"))return "new "+typ+"("+a.join(", ")+")";}
+    return "default";}
+  const auftragVon=fn=>(MODEL.funktionen.find(f=>f.name===fn)||{}).auftrag;
+  const zielRecord=d=>d.rufe?auftragVon(d.rufe):d.sende;
+  function autoArgs(zielName,wenn){const z=recByName(zielName);if(!z)return [];const q=quellFelder(wenn);return (z.felder||[]).map(f=>ordneZu(f,q,0));}
+  // Nächsten Schritt anhängen — die Argumente werden gleich zugeordnet. Der Start kommt als Kontext in den Join, wenn das mehr
+  //   Felder füllt (z. B. die Paar-Id für einen Command am Ende der Kette).
+  function kettenAnhaengen(sg,bei,ziel){const zr=ziel.rufe?auftragVon(ziel.rufe):ziel.sende,voll=xs=>xs.filter(x=>x!=="default").length;
+    let wenn=[bei],args=autoArgs(zr,wenn);
+    if(sg.triggerEvent&&bei!==sg.triggerEvent){const mit=[sg.triggerEvent,bei],a2=autoArgs(zr,mit);if(voll(a2)>voll(args)){wenn=mit;args=a2;}}
+    MODEL.transitions.push({_id:"t"+(NID++),prozess:sg.name,wenn,dann:[{...(ziel.rufe?{rufe:ziel.rufe}:{sende:ziel.sende}),sendeArgs:args}]});render();}
+  // ARGUMENT-TABELLE eines Schritts: Feld ← Quelle (Vorschläge aus den Join-Events), „↻ automatisch“ füllt neu.
+  //   Ein aus dem Code gelesener Ausdruck (λ) bleibt, bis man ihn bewusst durch die Tabelle ersetzt.
+  function argTabelle(body,t,d){const zr=zielRecord(d),z=recByName(zr);if(!z||!(z.felder||[]).length)return;
+    if(d.sendeAusdruck){body.append(h("button",{class:"add",title:"Den gelesenen Ausdruck durch eine Feld-Zuordnung ersetzen",
+      onclick:()=>{delete d.sendeAusdruck;d.sendeArgs=autoArgs(zr,t.wenn);render();}},"⇄ als Zuordnung bearbeiten"));return;}
+    if(!d.sendeArgs||d.sendeArgs.length!==z.felder.length)d.sendeArgs=z.felder.map((_,i)=>(d.sendeArgs||[])[i]||autoArgs(zr,t.wenn)[i]||"default");
+    body.append(h("div",{class:"gsec"},"Argumente ← (aus "+(t.wenn||[]).map((e,i)=>(["t","r","g"][i]||"e"+(i+1))+" = "+e).join(", ")+")"));
+    const q=quellFelder(t.wenn),dl="dl"+(NID++);
+    z.felder.forEach((f,i)=>{const vor=q.filter(x=>x.typ===baseTyp(f.typ)).map(x=>x.ausdruck);
+      const ein=h("input",{value:d.sendeArgs[i]||"",list:dl+"_"+i,placeholder:"default",onchange:e=>{d.sendeArgs[i]=e.target.value||"default";render();},
+        style:d.sendeArgs[i]==="default"?"border-color:#cf6f68":""});
+      body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl",style:"min-width:40%"},f.name+" : "+f.typ),ein,
+        h("datalist",{id:dl+"_"+i},...vor.map(v=>h("option",{value:v})),h("option",{value:"default"}))));});
+    body.append(h("button",{class:"add",onclick:()=>{d.sendeArgs=autoArgs(zr,t.wenn);render();}},"↻ automatisch zuordnen"));}
+  // Pool-Auswahl „dann ▶“: alle Funktionen und Commands; die Wahl hängt den Schritt an.
+  function kettenPool(onWahl){const sel=h("select",{onchange:e=>{const v=e.target.value;if(!v)return;const [art,nm]=v.split("|");onWahl(art==="fk"?{rufe:nm}:{sende:nm});}});
+    sel.append(h("option",{value:""},"＋ aus dem Pool wählen …"));
+    const gf=h("optgroup",{label:"ƒ Funktionen"});MODEL.funktionen.forEach(f=>gf.append(h("option",{value:"fk|"+f.name},"ƒ "+f.name)));sel.append(gf);
+    const gc=h("optgroup",{label:"Commands"});MODEL.records.filter(r=>r.kind==="command").forEach(r=>gc.append(h("option",{value:"cmd|"+r.name},"▶ "+r.name)));sel.append(gc);
+    return sel;}
+  // Die Schritte, die von einem Knoten (Prozess-Start oder Funktion) aus „dann“ folgen — mit ✕ zum Lösen.
+  function kettenZeilen(body,vonId){MODEL.transitions.flatMap(kettenKanten).filter(k=>k.art==="dann"&&k.von===vonId).forEach(k=>{
+    const d=k.d,ziel=d.rufe?"ƒ "+d.rufe:"▶ "+d.sende;
+    body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",title:"Schritt lösen",onclick:()=>{MODEL.transitions=MODEL.transitions.filter(x=>x!==k.t);render();}},"✕"),
+      h("span",{class:"slotlbl",style:"flex:1;text-align:right"},k.label+" ▶ "+ziel),
+      h("button",{class:"rm",title:"Schritt öffnen (Argumente, Zeitlimit)",onclick:()=>waehle("tr:"+k.t._id)},"⚙")));});}
   // Berührte Aggregate (abgeleitet aus den Namespaces der referenzierten Events/Commands der Transitionen).
   function sagaAggs(s){const ns=new Set();transOf(s).forEach(t=>{[...(t.wenn||[]),t.sammelEvent].forEach(e=>ns.add(recordAgg(e)));
     (t.dann||[]).forEach(d=>[d.sende,d.kompensation].forEach(c=>ns.add(recordAgg(c))));});
@@ -2093,7 +2179,7 @@ public static class HtmlPresenter
       if(d.kompensationJe)st.kompensationJe=true;
       // Count-Anzahl: Feld-Auswahl (D/S); ein 📝-Ausdruck (H-Fallback) hat Vorrang.
       if(d.sendeJe&&!d.rufe){st.sendeJe=true;if(d.sendeJeCollection)st.sendeJeCollection=d.sendeJeCollection;}
-      if(!d.rufe){const sa=argListe(d.sende,d.sendeArgs);if(sa.length)st.sendeArgumente=sa;}
+      {const sa=argListe(zielRecord(d),d.sendeArgs);if(sa.length)st.sendeArgumente=sa;}   // Command ODER Auftrag einer Funktion
       if(d.kompensation){st.kompensation=d.kompensation;const ka=argListe(d.kompensation,d.kompArgs);if(ka.length)st.kompensationArgumente=ka;}
       return st;}));
     // usings: der Scaffolder leitet sie aus den referenzierten Records ab (inkl. Auslöser-Namespace);
@@ -2122,11 +2208,16 @@ public static class HtmlPresenter
       // … und der Rand der Clients (ISendet/IFragt/Kenntnis folgen dem Typ).
       MODEL.clients.forEach(c=>["sendet","fragt","kenntnis"].forEach(f=>{c[f]=(c[f]||[]).map(x=>x===old?nv:x);}));
       if(obj.kind==="valueobject")retypeFelder(old,nv);   // Typ-Komposition: Feldtypen mitziehen
+      // Konfig (Ctor-Record einer Pipeline) — stand früher nur im Command-Zweig und griff daher nie.
+      MODEL.hostSettings.forEach(hs=>{if(hs.konfig===old)hs.konfig=nv;});
+      // Pipelines: Konfigs und der Eingang jedes Handles (input ist der Name, den der Server zuerst liest),
+      // Selbst-Nachricht, ausgegebene Trigger und geplante Self-Ticks folgen dem Typ.
+      MODEL.pipelines.forEach(p=>{p.konfigs=(p.konfigs||[]).map(k=>k===old?nv:k);
+        (p.handles||[]).forEach(hd=>{if(hd.input===old)hd.input=nv;if(hd.selfName===old)hd.selfName=nv;
+          hd.emits=(hd.emits||[]).map(x=>x===old?nv:x);(hd.schedules||[]).forEach(sc=>{if(sc.name===old)sc.name=nv;});});});
       if(obj.kind==="command"){
         MODEL.decider.forEach(d=>{if(d.command===old)d.command=nv;});
         const rx=new RegExp("\\b"+old.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"\\b","g");
-        MODEL.hostSettings.forEach(hs=>{if(hs.konfig===old)hs.konfig=nv;});
-        MODEL.pipelines.forEach(p=>{p.konfigs=(p.konfigs||[]).map(k=>k===old?nv:k);});
         MODEL.transitions.forEach(t=>(t.dann||[]).forEach(d=>{if(d.sende===old)d.sende=nv;if(d.kompensation===old)d.kompensation=nv;
           if(d.sendeAusdruck)d.sendeAusdruck=d.sendeAusdruck.replace(rx,nv);if(d.kompensationAusdruck)d.kompensationAusdruck=d.kompensationAusdruck.replace(rx,nv);}));
         // Reaktion-Handles: ausgelöste Commands mitziehen.
@@ -2232,13 +2323,20 @@ public static class HtmlPresenter
   const ROLE_AKTEUR={akteur:0,auf:1};   // Spalte „Zusage" (Vertrag, Akteur-Konzept §3) neben dem Akteur
   // Rollen-Spalten innerhalb eines Aggregat-Blocks (links→rechts = Schreibfluss, dann Leseseite).
   //   Leseseite: Projektion (Hub) → ihre Handles → Store-Fns → Store/ReadModel; Query → Reader-Handle → Response, Reader (Hub).
-  const ROLE_AGG={command:0,decider:1,aggregate:2,state:2,event:3,rejection:3,applier:4,valueobject:5,enum:5,projektion:6,"handle:projektion":7,"handle:reaktion":7,
-    fn:8,store:9,readmodel:9,query:10,"handle:reader":11,queryresponse:12,reader:13};
+  //   Davor der Eingang von außen (Trigger → Pipeline → ihre Handles), nach dem Event der Prozess (Regel → Auftrag → ƒ → Ergebnis),
+  //   der in die Command-Spalte zurück sendet — so liest sich ein Ablauf in EINEM Block.
+  const ROLE_AGG={trigger:0,pipeline:1,"handle:pipeline":2,command:3,decider:4,aggregate:5,state:5,event:6,rejection:6,applier:7,
+    saga:8,transition:9,auftrag:10,funktion:11,ergebnis:12,valueobject:13,enum:13,projektion:14,"handle:projektion":15,"handle:reaktion":15,
+    fn:16,store:17,readmodel:17,query:18,"handle:reader":19,queryresponse:20,reader:21};
   // Rollen-Spalten im Geteilt-Band.
   const ROLE_SHARED={saga:0,transition:1,auftrag:2,funktion:3,reaktion:2,"handle:reaktion":3,pipeline:4,"handle:pipeline":5,trigger:6,frist:6,dienst:7,hostsetting:7,konfig:7,valueobject:8,enum:8,command:9,event:9,rejection:9,
     fn:10,store:11,readmodel:11,"handle:projektion":12,projektion:13,"handle:reader":14,reader:15,query:14,queryresponse:16,codenode:17,llmnode:17};
   // Rolle eines Knotens: Handles je Besitzer-Art (Projektions- vs. Reader-Handle liegen in verschiedenen Spalten).
-  const rolle=(n,map)=>{const k=n.kind==="handle"?"handle:"+n.own.kind:n.kind;return map[k]!==undefined?map[k]:99;};
+  // Ergebnis-Events einer Funktion stehen hinter ihr (eigene Spalte „ergebnis“), nicht bei den Events des Aggregats.
+  //   Funktionen einer Kette: je Tiefe eine eigene Spalte (11.01, 11.02 …) — die Reihenfolge des Ablaufs steht nebeneinander.
+  const rolle=(n,map)=>{const k=n.kind==="handle"?"handle:"+n.own.kind:n.kind==="event"&&map.ergebnis!==undefined&&ergebnisVon(n.ref.name)?"ergebnis":n.kind;
+    if(k==="funktion"&&map.funktion!==undefined)return map.funktion+Math.min(TIEFE.get(n.id)||0,90)/100;
+    return map[k]!==undefined?map[k]:99;};
   const rollenVon=blk=>blk===SHARED_KEY?ROLE_SHARED:blk===AKTEUR_KEY?ROLE_AKTEUR:ROLE_AGG;
 
   // Wer besitzt diesen 📝/🤖-Knoten? (Rumpf-Ziel) — für die Gruppen-Zuordnung.
@@ -2380,7 +2478,7 @@ public static class HtmlPresenter
     if(k==="handle"||k==="fn") return groupKeyOf(n.own);   // Handle/Fn gehören zu ihrem Besitzer
     if(k==="state") return r.aggregat||SHARED_KEY;
     if(k==="decider"||k==="applier") return r.aggregat||SHARED_KEY;
-    if(k==="command"||k==="event"||k==="rejection") return recordAgg(r.name)||SHARED_KEY;
+    if(k==="command"||k==="event"||k==="rejection") return recordAgg(r.name)||ergebnisAgg(r.name)||SHARED_KEY;
     if(k==="valueobject"||k==="enum") return typAgg(r.name)||SHARED_KEY;
     if(k==="projektion"){const a=(r.handles||[]).map(h=>recordAgg(h.event));return (a.length&&eindeutig(a))||SHARED_KEY;}
     if(k==="reader"){const p=r.projektion&&MODEL.projektionen.find(x=>x.name===r.projektion);return (p&&groupKeyOf({kind:"projektion",ref:p}))||SHARED_KEY;}
@@ -2392,8 +2490,30 @@ public static class HtmlPresenter
     if(k==="readmodel"){const st=MODEL.stores.find(s=>s.name===r.store);return st?groupKeyOf({kind:"store",ref:st}):SHARED_KEY;}
     if(k==="codenode"){const o=findCodeOwner(r._id);return o?groupKeyOf(o):SHARED_KEY;}
     if(k==="llmnode"){const o=r.promptZiel&&findCodeOwner(r.promptZiel);return o?groupKeyOf(o):SHARED_KEY;}
-    return SHARED_KEY; // saga, transition, pipeline, trigger, reaktion
+    // ABLAUF-BAUSTEINE stehen im Block des Aggregats, auf das sie WIRKEN (eindeutig) — so liest sich die Kette in EINEM Block
+    //   links→rechts: Trigger → Pipeline → Command → Decider → Event → Prozess → Regel → Auftrag → ƒ Funktion → Ergebnis.
+    //   Wirkt ein Baustein auf mehrere Aggregate (echte Brücke), bleibt er im Geteilt-Band.
+    if(k==="pipeline") return pipelineAgg(r)||SHARED_KEY;
+    if(k==="trigger"){const p=triggerKonsument(trigName(r));return (p&&pipelineAgg(p))||SHARED_KEY;}
+    if(k==="saga") return sagaAgg(r)||SHARED_KEY;
+    if(k==="transition"){const sg=MODEL.sagas.find(x=>x.name===r.prozess);return (sg&&sagaAgg(sg))||SHARED_KEY;}
+    if(k==="funktion") return funktionAgg(r)||SHARED_KEY;
+    if(k==="auftrag"){const f=MODEL.funktionen.find(x=>x.auftrag===r.name);return (f&&funktionAgg(f))||SHARED_KEY;}
+    return SHARED_KEY; // reaktion, dienst, hostsetting … und Ablauf-Bausteine über mehrere Aggregate
   }
+  // Wohin eine Pipeline wirkt: die Aggregate ihrer Commands (sofort und per Frist); ein ausgegebener Trigger zählt mit dem
+  //   Ziel der Pipeline, die ihn verarbeitet (FileWatch → DateiErkannt → ImageProcessing → ImagePair). Eindeutig oder keins.
+  function pipelineAgg(p,seen){seen=seen||new Set();if(!p||seen.has(p.name))return "";seen.add(p.name);const a=[];
+    (p.handles||[]).forEach(hd=>{(hd.sends||[]).forEach(c=>a.push(recordAgg(c)));(hd.fristen||[]).forEach(f=>a.push(recordAgg(f.command)));
+      (hd.emits||[]).forEach(t=>a.push(pipelineAgg(triggerKonsument(t),seen)));});
+    return eindeutig(a.filter(Boolean));}
+  const triggerKonsument=nm=>MODEL.pipelines.find(p=>(p.handles||[]).some(hd=>(hd.inputKind||"event")==="trigger"&&pipeEingang(hd)===nm));
+  function sagaAgg(sg){const a=sagaAggs(sg);return a.length===1?a[0]:"";}
+  // Eine Funktion gehört dorthin, wo die Prozesse liegen, die sie rufen; ihr Auftrag und ihre Ergebnisse mit ihr.
+  function funktionAgg(f){return eindeutig(MODEL.transitions.filter(t=>(t.dann||[]).some(d=>d.rufe===f.name))
+    .map(t=>MODEL.sagas.find(x=>x.name===t.prozess)).filter(Boolean).map(sagaAgg).filter(Boolean));}
+  const ergebnisVon=nm=>MODEL.funktionen.find(f=>(f.ergebnisse||[]).includes(nm));
+  function ergebnisAgg(nm){const f=ergebnisVon(nm);return f?funktionAgg(f):"";}
   // ── MESS-BASIERTES PACKING: nach dem Rendern die ECHTEN Knotengrößen messen und die Aggregat-
   //    Blöcke ÜBERLAPPUNGSFREI per Shelf-Packing setzen. Nur frische/Seed-Boards (alle x/y leer);
   //    vollständig arrangierte Boards (Handanordnung) bleiben unberührt. Zwei Ebenen:
@@ -2463,9 +2583,13 @@ public static class HtmlPresenter
       const setzeZ=(role,n,z,len)=>{const b=belegt.get(role);for(let i=0;i<len;i++)b.add(z+i);zeile.set(n.id,z);};
       const ab=(role,z,len)=>{while(!frei(role,z,len))z++;return z;};
       const imBlock=new Set(rest.map(n=>n.id));
-      const nachbarZ=id=>[...(ADJ.inn.get(id)||[]),...(ADJ.out.get(id)||[])].filter(x=>imBlock.has(x)&&zeile.has(x)).map(x=>zeile.get(x));
+      // Nachbarn = Board-Kanten UND Ablauf-Kette (Prozess → ƒ → ƒ): so liegt eine Kette auf einer Zeile.
+      const kettenNb=id=>KETTE.filter(k=>k.von===id||k.nach===id).map(k=>k.von===id?k.nach:k.von);
+      const nachbarZ=id=>[...(ADJ.inn.get(id)||[]),...(ADJ.out.get(id)||[]),...kettenNb(id)].filter(x=>imBlock.has(x)&&zeile.has(x)).map(x=>zeile.get(x));
       // Wunschzeile: Event → sein Applier (sonst der erzeugende Decider); sonst die oberste Zeile eines platzierten Nachbarn.
-      const wunsch=n=>{if(n.kind==="event"){const ap=(ADJ.out.get(n.id)||[]).filter(x=>x.startsWith("app:")&&zeile.has(x)).map(x=>zeile.get(x));if(ap.length)return Math.min(...ap);}
+      const wunsch=n=>{const vor=KETTE.filter(k=>k.art==="dann"&&k.nach===n.id&&imBlock.has(k.von)&&zeile.has(k.von)).map(k=>zeile.get(k.von));
+        if(vor.length)return Math.min(...vor);   // Kettenschritt: auf der Zeile seines Vorgängers (erst … dann … auf einer Linie)
+        if(n.kind==="event"){const ap=(ADJ.out.get(n.id)||[]).filter(x=>x.startsWith("app:")&&zeile.has(x)).map(x=>zeile.get(x));if(ap.length)return Math.min(...ap);}
         const z=nachbarZ(n.id);return z.length?Math.min(...z):null;};
       const zweiHop=n=>{let best=null;[n.id,...(ADJ.inn.get(n.id)||[]),...(ADJ.out.get(n.id)||[])].forEach(x=>nachbarZ(x).forEach(z=>{if(best===null||z<best)best=z;}));return best;};
       // (1) Besitzer-Spalten zuerst, lückenlos gestapelt (Reihenfolge: nahe an bereits platzierten Nachbarn, sonst Modell-Reihenfolge).
@@ -2829,8 +2953,8 @@ public static class HtmlPresenter
         else r.handles[I.handleIdx].event=O.rec;}}
       // Event → Pipeline-Handle (die „Reaktion IST eine Pipeline"-Naht).
       else if(I.pipeline){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p){p.handles=p.handles||[];
-        if(I.handleIdx==="openevt"||I.handleIdx==="open"){if(!p.handles.some(x=>x.event===O.rec&&x.inputKind==="event"))p.handles.push({inputKind:"event",event:O.rec,sends:[]});}
-        else{p.handles[I.handleIdx].event=O.rec;p.handles[I.handleIdx].inputKind="event";delete p.handles[I.handleIdx].trigId;}}}}
+        if(I.handleIdx==="openevt"||I.handleIdx==="open"){if(!p.handles.some(x=>x.event===O.rec&&x.inputKind==="event"))p.handles.push({inputKind:"event",event:O.rec,input:O.rec,sends:[]});}
+        else{const hd=p.handles[I.handleIdx];hd.event=O.rec;hd.input=O.rec;hd.inputKind="event";delete hd.trigId;delete hd.prod;delete hd.selfName;}}}}
     // Pipeline-Ausgang nach TYP: Command → sends (eine Frist-Zeile bleibt Frist), transientes Event → publishes, Trigger-Karte → emits.
     else if(O.type==="aus"){const p=MODEL.pipelines.find(x=>x._id===O.pipeline);const hd=p&&p.handles[O.handleIdx];if(hd){
       const dazu=(feld,x)=>{hd[feld]=hd[feld]||[];if(x&&!hd[feld].includes(x))hd[feld].push(x);};
@@ -2860,7 +2984,7 @@ public static class HtmlPresenter
       if(I.handleIdx==="opentrg"||I.handleIdx==="open"){if(!p.handles.some(x=>x.inputKind==="trigger"&&x.input===nm))p.handles.push({inputKind:"trigger",input:nm,prod,sends:[],emits:[],schedules:[]});}
       else{const hd=p.handles[I.handleIdx];hd.inputKind="trigger";hd.input=nm;hd.prod=prod;delete hd.event;delete hd.selfName;delete hd.trigId;}}}
     // ScheduleSelf-Ausgang → Self-Handle derselben Pipeline (interner Tick/Timeout-Loop).
-    else if(O.type==="self"){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);const hd=p&&p.handles[I.handleIdx];if(hd&&hd.inputKind==="self")hd.selfName=O.name;}
+    else if(O.type==="self"){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);const hd=p&&p.handles[I.handleIdx];if(hd&&hd.inputKind==="self"){hd.selfName=O.name;hd.input=O.name;}}
     else if(O.type==="decAgg"){const d=dec(O.dec);if(d)d.aggregat=I.agg;}
     else if(O.type==="appAgg"){const p=app(O.app);if(p)p.aggregat=I.agg;}
     // ── Leseseite: ReadModel→Store, Projektion-Handle→Write-Fn, Reader-Handle→Read-Fn, Reader→Projektion,
@@ -3322,6 +3446,10 @@ public static class HtmlPresenter
     KONTRAKT.forEach(([u,v])=>{const eu=ELS.get(u),ev=ELS.get(v);if(!eu||!ev)return;
       const kv=(NODEBY.get(v)||{}).kind,col=kv==="event"?"#4fb06a":(kv==="command"?"#4a86d6":"#8a8f9c");
       const p=mkE({el:eu},{el:ev},col,false,"kontrakt");p.dataset.a=u;p.dataset.b=v;});
+    // ── Ablauf-Kette: Start/ƒ → nächster Schritt (ƒ oder Command), beschriftet mit dem auslösenden Ergebnis; Klick öffnet den Schritt. ──
+    KETTE.forEach(k=>{const eu=ELS.get(k.von),ev=ELS.get(k.nach);if(!eu||!ev)return;const komp=k.art==="komp";
+      const l=mkE({el:eu},{el:ev},komp?"#cf6f68":"#c08a2e",komp,"kette");l.dataset.a=k.von;l.dataset.b=k.nach;
+      l.label=k.label;l.titel=(k.bei?"bei "+k.bei+" — ":"")+"Klick: Schritt öffnen (Argumente, Zeitlimit)";l.klick=()=>waehle("tr:"+k.t._id);});
     // ── Hub-Kanten: Handle → Besitzer (Projektion/Reader/Reaktion/Pipeline), Store-Fn → Store — gestrichelt, wie Decider → Aggregat. ──
     NODEBY.forEach(n=>{if(n.kind!=="handle"&&n.kind!=="fn")return;const eu=ELS.get(n.id),eo=ELS.get(n.own.id);if(!eu||!eo)return;
       const l=mkE({el:eu},{el:eo},"#6f7a91",true,"hub");l.dataset.a=n.id;l.dataset.b=n.own.id;});
@@ -3427,7 +3555,7 @@ public static class HtmlPresenter
   let INSP=false, INSP_SCROLL=null;   // INSP: gerade wird eine Inspector-Kopie gebaut (keine Slot-Registrierung)
 
   const DETAIL_KINDS=new Set(["decider","applier","state","codenode","llmnode","rejection","valueobject","enum","queryresponse"]);
-  let VIS=new Set(), VERTRETER=new Map(), DETAILS=new Map(), EINGEKLAPPT=new Set(), NODEBY=new Map(), KONTRAKT=[];
+  let VIS=new Set(), VERTRETER=new Map(), DETAILS=new Map(), EINGEKLAPPT=new Set(), NODEBY=new Map(), KONTRAKT=[], KETTE=[], TIEFE=new Map();
   let ADJ={out:new Map(),inn:new Map()};
   const vertreterId=id=>(VERTRETER.get(id)||[id])[0];
   // Direkte Besitzer eines Detail-Knotens (Knoten-Ids) — aus der Verdrahtung, nie aus Namen.
@@ -3460,6 +3588,18 @@ public static class HtmlPresenter
     alle.forEach(n=>{const v=vert(n.id,new Set());VERTRETER.set(n.id,v);
       if(v.length===1&&v[0]===n.id){if(!HIDDEN.has(groupKeyOf(n))&&!istAus(n.kind)&&geladen(n))VIS.add(n.id);}
       else{EINGEKLAPPT.add(n.id);v.forEach(o=>push(DETAILS,o,n.id));}});
+    // Ablauf als Kette: Kettenschritt-Regeln werden Kanten; Auftrag und Ergebnis-Events einer Funktion liegen IN ihrem Knoten
+    //   (ein Ergebnis nur, wenn es niemand außer Kettenschritten liest — sonst bleibt es eine Karte).
+    KETTE=MODEL.transitions.flatMap(kettenKanten);const weg=new Set(KETTE.map(k=>"tr:"+k.t._id));
+    MODEL.funktionen.forEach(f=>{const fid="fk:"+f._id;
+      if(f.auftrag&&recByName(f.auftrag)&&(ADJ.out.get("rec:"+f.auftrag)||[]).every(x=>x===fid))weg.add("rec:"+f.auftrag);
+      (f.ergebnisse||[]).forEach(e=>{if(recByName(e)&&(ADJ.out.get("rec:"+e)||[]).every(x=>weg.has(x)))weg.add("rec:"+e);});});
+    weg.forEach(id=>{if(VIS.delete(id))EINGEKLAPPT.add(id);});
+    // Tiefe in der Kette (Start = 0): Funktionen stehen danach in eigenen Spalten nebeneinander — erst … dann … von links nach rechts.
+    TIEFE=new Map();const tiefe=(id,pfad)=>{if(TIEFE.has(id))return TIEFE.get(id);if(pfad.has(id))return 0;pfad.add(id);
+      const vor=KETTE.filter(k=>k.art==="dann"&&k.nach===id).map(k=>k.von.startsWith("fk:")?tiefe(k.von,pfad)+1:1);
+      const t=vor.length?Math.max(...vor):0;TIEFE.set(id,t);return t;};
+    MODEL.funktionen.forEach(f=>tiefe("fk:"+f._id,new Set()));
     // Zusammengezogene Kanten: sichtbar →(eingeklappt)*→ sichtbar. Ins Aggregat nicht (das zeigt der Block).
     KONTRAKT=[];if(VIEW.details)return;
     const direkt=new Set();ADJ.out.forEach((bs,a)=>bs.forEach(b=>{direkt.add(a+"\u0000"+b);direkt.add(b+"\u0000"+a);}));
@@ -3483,11 +3623,12 @@ public static class HtmlPresenter
   //    Besitzer (Aggregat/Pipeline/Projektion/Reaktion/Reader/Prozess/Store) werden gezeigt, aber nicht durchlaufen — sonst
   //    leuchteten über ihre übrigen Handles/Decider alle fremden Ketten mit. Typen/Betrieb (VO, Enum, Konfig, Dienst) gehören nicht dazu.
   const KETTE_HUB=new Set(["aggregate","pipeline","projektion","reaktion","reader","saga","store"]);
-  const KETTE_FLUSS=new Set(["command","event","rejection","query","queryresponse","trigger","handle","decider","applier","transition","frist","fn",...KETTE_HUB]);
-  const KETTE_START=new Set(["command","event","rejection","trigger","handle","decider","applier","transition","pipeline","reaktion"]);
+  const KETTE_FLUSS=new Set(["command","event","rejection","query","queryresponse","trigger","handle","decider","applier","transition","frist","fn","funktion","auftrag",...KETTE_HUB]);
+  const KETTE_START=new Set(["command","event","rejection","trigger","handle","decider","applier","transition","pipeline","reaktion","saga","funktion","auftrag"]);
   function ketteVon(start,nurVorwaerts){const N=id=>NODEBY.get(id)||{},k0=N(start).kind;
-    // Pipeline/Reaktion als Start: ihre Handles sind die Startpunkte (der Besitzer selbst hat keinen Fluss).
-    const starts=[start,...(k0==="pipeline"||k0==="reaktion"?(ADJ.inn.get(start)||[]).filter(y=>N(y).kind==="handle"):[])];
+    // Pipeline/Reaktion/Prozess als Start: ihre Handles bzw. Regeln sind die Startpunkte (der Besitzer selbst hat keinen Fluss).
+    const starts=[start,...(k0==="pipeline"||k0==="reaktion"?(ADJ.inn.get(start)||[]).filter(y=>N(y).kind==="handle")
+      :k0==="saga"?(ADJ.inn.get(start)||[]).filter(y=>N(y).kind==="transition"):[])];
     const res=new Set(starts);
     const lauf=nach=>{const q=[...starts],seen=new Set();
       while(q.length){const id=q.shift();if(seen.has(id))continue;seen.add(id);
@@ -3606,7 +3747,8 @@ public static class HtmlPresenter
     else if(k==="pipeline")t=(r.handles||[]).length+" Handle · → "+kurz((r.handles||[]).flatMap(plAusgaenge));
     else if(k==="saga")t="Auslöser: "+(r.triggerEvent||"—")+" · "+transOf(r).length+" Regeln";
     else if(k==="transition")t="WENN "+kurz(r.wenn)+" → "+kurz((r.dann||[]).map(d=>d.rufe?"ƒ "+d.rufe+(d.zeitlimit?" ⏳":""):d.sende+(d.zeitlimit?" ⏳":"")));
-    else if(k==="funktion")t=(r.auftrag||"?")+" → "+((r.ergebnisse||[]).length?kurz(r.ergebnisse):"(kein Ergebnis)");
+    else if(k==="funktion"){const dn=KETTE.filter(x=>x.art==="dann"&&x.von==="fk:"+r._id).map(x=>x.d.rufe?"ƒ "+x.d.rufe:x.d.sende);
+      t=(r.auftrag||"?")+" → "+((r.ergebnisse||[]).length?kurz(r.ergebnisse):"(kein Ergebnis)")+(dn.length?" · dann "+kurz(dn):"");}
     else if(k==="auftrag")t="Eingang von ƒ "+(r.funktion||"—");
     else if(k==="store")t=(r.writeFns||[]).length+" schreibend · "+(r.readFns||[]).length+" lesend";
     else if(k==="readmodel"&&r.geteilt)t="⇄ geteilt";
@@ -3777,7 +3919,7 @@ public static class HtmlPresenter
       if(istInselLage(n)){nimm(sp(d+"|§insel",{dom:d,blk:null,role:"insel",akt:null}),id,g,n.kind);return;}
       if(n.kind==="codenode"||n.kind==="llmnode"){codes.push([n,g,id]);return;}
       const blk=blockVon(n),role=rolle(n,rollenVon(blk)),akt=aktVon(n);
-      nimm(sp(d+"|"+akt+"|"+blk+"|"+role,{dom:d,blk,role,akt}),id,g,n.kind==="handle"?"handle:"+n.own.kind:n.kind);});
+      nimm(sp(d+"|"+akt+"|"+blk+"|"+role,{dom:d,blk,role,akt}),id,g,n.kind==="handle"?"handle:"+n.own.kind:role===rollenVon(blk).ergebnis?"ergebnis":n.kind);});
     const fest=[...spalten.values()].filter(c=>c.role!=="insel");
     codes.forEach(([n,g,id])=>{const d=domKey(n),bk=blockVon(n),ak=aktVon(n);let best=null;
       fest.forEach(c=>{if(c.dom!==d||c.blk!==bk||c.akt!==ak||g.x<c.x1-4||g.x>c.x1+80||g.y<c.y1)return;if(!best||c.x1>best.x1)best=c;});
@@ -3922,8 +4064,8 @@ public static class HtmlPresenter
       {trenn:true},
       {t:"👤 Akteur öffnen",aus:!ak,fn:()=>waehle("akt:"+ak._id)}]);}
   // Spalten-Kopf: Name je Art; ＋ legt eine Art dieser Rolle an (Handles/Store-Fns entstehen am Besitzer, nicht frei).
-  const spaltenName=k=>k==="handle:projektion"?"Projektion-Handle":k==="handle:reader"?"Reader-Handle":k==="handle:pipeline"?"Pipeline-Handle":k==="handle:reaktion"?"Reaktion-Handle":NODELABEL[k]||k;
-  const NICHT_FREI=new Set(["fn","handle","auf"]);
+  const spaltenName=k=>k==="handle:projektion"?"Projektion-Handle":k==="handle:reader"?"Reader-Handle":k==="handle:pipeline"?"Pipeline-Handle":k==="handle:reaktion"?"Reaktion-Handle":k==="ergebnis"?"Ergebnis ƒ":NODELABEL[k]||k;
+  const NICHT_FREI=new Set(["fn","handle","auf","ergebnis"]);
   function spaltenNeu(c){if(c.role==="insel")return [];if(c.role==="code")return ["codenode","llmnode"];
     const map=rollenVon(c.blk);
     return Object.keys(map).filter(k=>map[k]===c.role&&!k.includes(":")&&!NICHT_FREI.has(k));}
@@ -4095,6 +4237,11 @@ public static class HtmlPresenter
       body.append(h("div",{class:"slotrow"},p,h("span",{class:"slotlbl"},"WENN "+((t.wenn||[])[0]||"?")+((t.wenn||[]).length>1?" +"+((t.wenn.length-1)+(t.sammelEvent?1:0))+"":(t.sammelEvent?" +alle":""))+" → "+((t.dann||[]).map(d=>d.rufe?"ƒ "+d.rufe:(d.sende||"?")).join(", ")||"?"))));});
     const oi=port("prozess");oi.classList.add("i");reg("hub:in:"+s.name+":open",oi,{type:"prozess",dir:"in",saga:s.name});
     body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Regel anstecken")));
+    // Ablauf als Kette: was beim Start ZUERST passiert (weitere Schritte hängen an den Funktions-Knoten: „dann ▶“).
+    body.append(h("div",{class:"gsec"},"Ablauf ▶ erst …"));
+    kettenZeilen(body,"saga:"+s.name);
+    if(s.triggerEvent)body.append(h("div",{class:"slotrow o"},kettenPool(z=>kettenAnhaengen(s,s.triggerEvent,z))));
+    else body.append(h("div",{class:"gsec",style:"opacity:.6"},"Erst einen Auslöser wählen."));
   }
   // Elementtyp der SendeJe-Collection (z. B. List<Guid> → Guid) — für den Typ des z-Pins.
   function collElemTyp(t){if(!t.sendeJeCollection)return "";const dot=t.sendeJeCollection.indexOf(".");if(dot<0)return "";
@@ -4130,6 +4277,7 @@ public static class HtmlPresenter
         const fk=MODEL.funktionen.find(f=>f.name===d.rufe);
         if(fk)body.append(h("div",{class:"gsec",style:"opacity:.7"},"Auftrag "+(fk.auftrag||"?")+" → "+((fk.ergebnisse||[]).join(" | ")||"(kein Ergebnis)")));
         if(d.sendeAusdruck)body.append(h("div",{class:"gsec",title:"aus dem Code gelesen — wird verbatim zurückgeschrieben",style:"font-family:monospace;opacity:.7;white-space:pre-wrap"},"λ "+d.sendeAusdruck));
+        argTabelle(body,t,d);
         body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"⏳"),inp(d.zeitlimit,v=>{if(v)d.zeitlimit=v;else delete d.zeitlimit;},"Zeitlimit, z. B. TimeSpan.FromSeconds(30)")));
         const ko2=port("rejection");ko2.classList.add("o");ko2.title=d.kompensation||"(Kompensation)";reg("tr:komp:"+t._id+":"+di,ko2,{type:"sagaCmd",dir:"out",trans:t._id,dannIdx:di,role:"komp"});
         body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right;opacity:.55"},"↩ "+(d.kompensation||"")),ko2));
@@ -4140,6 +4288,7 @@ public static class HtmlPresenter
         h("span",{class:"slotlbl",style:"flex:1;text-align:right;opacity:.75"},"Dann "+(d.sende||"")),
         mk("×N","Fan-out (SendeJe) — N Commands je Element",!!d.sendeJe,()=>{d.sendeJe=d.sendeJe?undefined:true;render();}),so));
       if(d.sendeAusdruck)body.append(h("div",{class:"gsec",title:"aus dem Code gelesen — wird verbatim zurückgeschrieben",style:"font-family:monospace;opacity:.7;white-space:pre-wrap"},"λ "+d.sendeAusdruck));
+      argTabelle(body,t,d);
       if(d.sende||d.zeitlimit)body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"⏳"),inp(d.zeitlimit,v=>{if(v)d.zeitlimit=v;else delete d.zeitlimit;},"Zeitlimit (optional), z. B. TimeSpan.FromMinutes(5)")));
       const ko=port("rejection");ko.classList.add("o");ko.title=d.kompensation||"(Kompensation)";reg("tr:komp:"+t._id+":"+di,ko,{type:"sagaCmd",dir:"out",trans:t._id,dannIdx:di,role:"komp"});
       body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right;opacity:.55"},"↩ "+(d.kompensation||"")),ko));

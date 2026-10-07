@@ -457,7 +457,7 @@ public class PipelineDispatchGenerator : IIncrementalGenerator
             sb.AppendLine($"                        case {typ} __frist:");
             sb.AppendLine(storno
                 ? $"                            await plane(new FristAuftrag(\"{cmd}\", __frist.ZielAggregatId, null));"
-                : $"                            await plane(new FristAuftrag(\"{cmd}\", __frist.ZielAggregatId, __frist.Dauer));");
+                : $"                            await plane(new FristAuftrag(\"{cmd}\", __frist.ZielAggregatId, __frist.Dauer, ctx.SourceEventZeit));");
             sb.AppendLine($"                            break;");
         }
         sb.AppendLine($"                        case ISelbstPlanung __selbst:");

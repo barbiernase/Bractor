@@ -44,7 +44,7 @@ public static class DomainPipelineExtensions
         // Handler-Dependencies
         // ═══════════════════════════════════════════════════════
 
-        // Bildvorverarbeitung
+        // Bildaufbereitung: genutzt von den OpenCV-Implementierungen der Katalog-Funktionen (Bindung im Host)
         services.AddSingleton<IImageResizer, ImageResizer>();
         services.AddSingleton<IHistogramEqualizer, HistogramEqualizer>();
         services.AddSingleton(new PreprocessingConfig(effectivePreprocessed));

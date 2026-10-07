@@ -101,6 +101,7 @@ public static class JsonContextEmitter
         [JsonSerializable(typeof(GetSubscriberCount))]
         [JsonSerializable(typeof(SubscriberCountResponse))]
         [JsonSerializable(typeof(PipelineAck))]
+        [JsonSerializable(typeof(PipelineAktivieren))]
         [JsonSerializable(typeof(ProzessWake))]
         // ── Framework: Ergebnis-/Prozess-/Inbox-Events (reisen im Wire) ──
         [JsonSerializable(typeof(CommandFailed))]

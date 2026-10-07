@@ -57,6 +57,7 @@ public static class PipelineEventPullBridge
                 SourceAggregateId = e.AggregateId,
                 SourceAggregateType = e.AggregateType,
                 SourceAggregateVersion = e.AggregateVersion,
+                SourceEventZeit = e.CreatedAtUtc,   // aus dem Log gelesen = DB-Zeitstempel (Basis einer Frist)
             };
 
             var emit = emitFactory(e);   // Func<IPipelineOutput,Task> — ICommand→Emit, IEvent→Publish (Router)

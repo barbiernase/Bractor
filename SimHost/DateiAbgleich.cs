@@ -100,7 +100,7 @@ internal sealed class Abgleich(EditorModell modell, Arbeitsbereich ws, IReadOnly
         foreach (var r in l.Reader.Where(r => r.Datei != null && Herkunft.Geaendert(r.Herkunft, Herkunft.Von(r))))
             Datei(r.Datei!, $"reader {r.Name}", t => Klasse(t, r.Name, r.Basen, null, r.TrackDeps));
         foreach (var p in l.Pipelines.Where(p => p.Datei != null && Herkunft.Geaendert(p.Herkunft, Herkunft.Von(p))))
-            Datei(p.Datei!, $"pipeline {p.Name}", t => Klasse(t, p.Name, p.Basen, (PipelineId, p.PipelineId), null));
+            Datei(p.Datei!, $"pipeline {p.Name}", t => PipelineKlasse(t, p));
         foreach (var (besitzer, h) in l.Konsumenten.SelectMany(k => k.Handles.Select(h => (k.Name, h)))
                      .Concat(l.Reader.SelectMany(r => r.Handles.Select(h => (r.Name, h))))
                      .Concat(l.Pipelines.SelectMany(p => p.Handles.Select(h => (p.Name, h))))
@@ -320,17 +320,28 @@ internal sealed class Abgleich(EditorModell modell, Arbeitsbereich ws, IReadOnly
         return (MitNamespaces(Anwenden(text, edits), f.Parameter.Select(p => p.Typ).Append(f.Rueckgabe)), "Signatur");
     }
 
-    // ── Handle: Rückgabe (Ausgänge); die Fähigkeits-Parameter gleicht ParameterAbgleich ab ──
+    // ── Handle: Eingang (umverdrahtet) + Rückgabe (Ausgänge); die Fähigkeits-Parameter gleicht ParameterAbgleich ab ──
     private (string, string)? HandleRueckgabe(string text, string klasse, Handle h)
     {
-        if (h.Rueckgabe == null) return null;
+        var imCode = h.EingangImCode ?? h.Eingang;
         var root = Parse(text);
         var m = root.DescendantNodes().OfType<ClassDeclarationSyntax>().Where(c => c.Identifier.Text == klasse)
-            .SelectMany(c => c.Members.OfType<MethodDeclarationSyntax>()).FirstOrDefault(x => ErsterTyp(x) == h.Eingang);
+            .SelectMany(c => c.Members.OfType<MethodDeclarationSyntax>()).FirstOrDefault(x => ErsterTyp(x) == imCode);
         if (m == null) return (text, "Handle nicht gefunden");
-        if (N(m.ReturnType.ToString()) == N(h.Rueckgabe)) return null;
-        var neu = text[..m.ReturnType.SpanStart] + h.Rueckgabe + text[m.ReturnType.Span.End..];
-        return (MitNamespaces(neu, h.Ausgaenge), "Ausgänge");
+        var edits = new List<(int, int, string)>();
+        var notiz = new List<string>();
+        if (imCode != h.Eingang && m.ParameterList.Parameters[0].Type is { } eingangsTyp)
+        {
+            edits.Add((eingangsTyp.SpanStart, eingangsTyp.Span.End, h.Eingang));
+            notiz.Add($"Eingang {imCode} → {h.Eingang}");
+        }
+        if (h.Rueckgabe != null && N(m.ReturnType.ToString()) != N(h.Rueckgabe))
+        {
+            edits.Add((m.ReturnType.SpanStart, m.ReturnType.Span.End, h.Rueckgabe));
+            notiz.Add("Ausgänge");
+        }
+        if (edits.Count == 0) return null;
+        return (MitNamespaces(Anwenden(text, edits), h.Ausgaenge.Append(h.Eingang)), string.Join(", ", notiz));
     }
 
     // ── Klasse: Basisliste (Pull/Append-Marker, IReader<P>), SubscriberId/PipelineId-Literal, TrackDeps ──
@@ -386,6 +397,87 @@ internal sealed class Abgleich(EditorModell modell, Arbeitsbereich ws, IReadOnly
         var neu = Anwenden(text, edits);
         if (basen != null && neu != text) neu = MitNamespaces(neu, basen);
         return (neu, string.Join(", ", notiz));
+    }
+
+    // ── Pipeline: Basisliste + PipelineId (wie jede Klasse), dazu neue Konfigs im Konstruktor ──
+    // Umbenennen/Verschieben und das Entfernen einer Konfig schreibt der Abgleich NICHT (der Rumpf kann sie nutzen) —
+    // er sagt es ausdrücklich, statt die Änderung still fallen zu lassen.
+    private (string, string)? PipelineKlasse(string text, PipelineKarte p)
+    {
+        var klasse = Parse(text).DescendantNodes().OfType<ClassDeclarationSyntax>().FirstOrDefault(c => c.Identifier.Text == p.Name);
+        if (klasse == null)
+            return (text, $"Klasse {p.Name} nicht in {p.Datei} — das Umbenennen einer bestehenden Pipeline wird nicht geschrieben (von Hand umbenennen)");
+        var notiz = new List<string>();
+        var ns = klasse.Ancestors().OfType<BaseNamespaceDeclarationSyntax>().FirstOrDefault()?.Name.ToString();
+        if (ns != null && ns != p.Namespace)
+            notiz.Add($"Namespace {ns} → {p.Namespace} wird nicht geschrieben (von Hand verschieben)");
+        var neu = text;
+        if (Klasse(neu, p.Name, p.Basen, (PipelineId, p.PipelineId), null) is { } k)
+        {
+            neu = k.Item1;
+            if (k.Item2.Length > 0) notiz.Add(k.Item2);
+        }
+        var (mitKonfigs, konfigNotiz) = KonfigsImCtor(neu, p);
+        neu = mitKonfigs;
+        notiz.AddRange(konfigNotiz);
+        return (neu, string.Join(", ", notiz));
+    }
+
+    /// <summary>
+    /// Fehlende Konfigs (Records im öffentlichen Konstruktor, so liest sie der Extractor) ergänzen — in der Form des
+    /// Scaffolders: Parameter <c>K k</c>, Feld <c>private readonly K _k;</c>, Zuweisung im Ctor-Rumpf. Ohne öffentlichen
+    /// Ctor entsteht einer. Eine im Editor entfernte Konfig wird nur gemeldet.
+    /// </summary>
+    private (string Text, List<string> Notiz) KonfigsImCtor(string text, PipelineKarte p)
+    {
+        var notiz = new List<string>();
+        var klasse = Parse(text).DescendantNodes().OfType<ClassDeclarationSyntax>().FirstOrDefault(c => c.Identifier.Text == p.Name);
+        if (klasse == null) return (text, notiz);
+        var ctor = klasse.Members.OfType<ConstructorDeclarationSyntax>()
+            .Where(c => c.Modifiers.Any(m => m.Text == "public") && !c.Modifiers.Any(m => m.Text == "static"))
+            .OrderByDescending(c => c.ParameterList.Parameters.Count).FirstOrDefault();
+        var vorhanden = ctor?.ParameterList.Parameters.Select(x => BoardLeseseite.Basisname(x.Type?.ToString() ?? "")).ToHashSet() ?? [];
+        var konfigTypen = modell.Records.Where(r => r.Kind == "konfig").Select(r => r.Name).ToHashSet();
+        foreach (var weg in vorhanden.Where(t => konfigTypen.Contains(t) && !p.Konfigs.Select(BoardLeseseite.Basisname).Contains(t)))
+            notiz.Add($"Konfig {weg} im Editor entfernt — der Ctor-Parameter bleibt (von Hand entfernen)");
+        var fehlend = p.Konfigs.Where(k => !vorhanden.Contains(BoardLeseseite.Basisname(k))).ToList();
+        if (fehlend.Count == 0) return (text, notiz);
+
+        var edits = new List<(int, int, string)>();
+        var spalte = (ctor ?? (SyntaxNode)klasse.Members.FirstOrDefault() ?? klasse).GetLocation().GetLineSpan().StartLinePosition.Character;
+        if (klasse.Members.Count == 0) spalte = klasse.GetLocation().GetLineSpan().StartLinePosition.Character + 4;
+        var e = new string(' ', spalte);
+        string Feld(string k) => $"{e}private readonly {k} _{BoardLeseseite.ParameterName(k)};\n";
+        if (ctor == null)
+        {
+            var zeilen = string.Concat(fehlend.Select(Feld)) + "\n"
+                + $"{e}public {p.Name}({string.Join(", ", fehlend.Select(k => $"{k} {BoardLeseseite.ParameterName(k)}"))})\n{e}{{\n"
+                + string.Concat(fehlend.Select(k => $"{e}    _{BoardLeseseite.ParameterName(k)} = {BoardLeseseite.ParameterName(k)};\n")) + $"{e}}}\n";
+            var nachKlammer = text.IndexOf('\n', klasse.OpenBraceToken.Span.End) + 1;
+            edits.Add((nachKlammer, nachKlammer, zeilen + (klasse.Members.Count > 0 ? "\n" : "")));
+            notiz.Add("Konfig-Konstruktor " + string.Join(", ", fehlend));
+        }
+        else if (ctor.Body == null)
+            notiz.Add($"Konstruktor ist ein Ausdruck — Konfig {string.Join(", ", fehlend)} von Hand ergänzen");
+        else
+        {
+            var namen = ctor.ParameterList.Parameters.Select(x => x.Identifier.Text).ToHashSet();
+            var kollision = fehlend.Where(k => namen.Contains(BoardLeseseite.ParameterName(k))).ToList();
+            if (kollision.Count > 0) return (text, [.. notiz, $"Parametername für {string.Join(", ", kollision)} schon vergeben — von Hand ergänzen"]);
+            var zeilenAnfang = text.LastIndexOf('\n', Math.Max(0, (ctor.AttributeLists.Count > 0 ? ctor.AttributeLists[0] : (SyntaxNode)ctor).SpanStart - 1)) + 1;
+            edits.Add((zeilenAnfang, zeilenAnfang, string.Concat(fehlend.Select(Feld)) + "\n"));
+            var liste = ctor.ParameterList;
+            var parameter = string.Join(", ", fehlend.Select(k => $"{k} {BoardLeseseite.ParameterName(k)}"));
+            edits.Add((liste.CloseParenToken.SpanStart, liste.CloseParenToken.SpanStart, (liste.Parameters.Count > 0 ? ", " : "") + parameter));
+            var zuweisungen = fehlend.Select(k => $"_{BoardLeseseite.ParameterName(k)} = {BoardLeseseite.ParameterName(k)};").ToList();
+            var zeilenEnde = text.IndexOf('\n', ctor.Body.OpenBraceToken.Span.End);
+            if (zeilenEnde >= 0 && zeilenEnde < ctor.Body.CloseBraceToken.SpanStart)   // mehrzeiliger Rumpf
+                edits.Add((zeilenEnde + 1, zeilenEnde + 1, string.Concat(zuweisungen.Select(z => $"{e}    {z}\n"))));
+            else                                                                         // „{ … }" auf einer Zeile
+                edits.Add((ctor.Body.OpenBraceToken.Span.End, ctor.Body.OpenBraceToken.Span.End, " " + string.Join(" ", zuweisungen)));
+            notiz.Add("Konfig " + string.Join(", ", fehlend));
+        }
+        return (MitNamespaces(Anwenden(text, edits), fehlend), notiz);
     }
 
     // ── Ingress: neue Bindung nach dem Vorbild einer bestehenden desselben Modus ──

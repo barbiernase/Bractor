@@ -14,6 +14,15 @@ public record ImagePairErstellt(
     string UrsprungsPfad
 ) : IEvent;
 
+/// <summary>Eine Rohbild-Datei ist eingegangen — Auslöser der Bildaufbereitung (trägt die Paar-Id für den Prozess).</summary>
+public record RohbildEingegangen(
+    Guid AggregateId,
+    BildVersion Version,
+    string Pfad,
+    string Dateiname,
+    long DateigroesseBytes
+) : IEvent;
+
 public record BildVerfuegbar(
     BildVersion Version,
     BildMeta Meta,
@@ -69,6 +78,7 @@ public record ImagePairInspiziert() : IEvent;
 public record ImagePairExistiertBereits(Guid PairId) : ITransientEvent;
 public record ImagePairNichtGefunden(Guid PairId) : ITransientEvent;
 public record BildVersionBereitsVerfuegbar(BildVersion Version) : ITransientEvent;
+public record RohbildBereitsEingegangen(BildVersion Version) : ITransientEvent;
 public record BildNichtVerfuegbar(BildVersion Version) : ITransientEvent;
 public record RegionIndexUngueltig(int RegionIndex) : ITransientEvent;
 public record RegionLabelsUngueltig(int Anzahl) : ITransientEvent;

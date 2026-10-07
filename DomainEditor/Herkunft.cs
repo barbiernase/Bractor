@@ -48,7 +48,8 @@ public static class Herkunft
     public static string Von(Handle h) => Hash(new { h.Eingang, h.Faehigkeiten, h.Ausgaenge, h.Rueckgabe });
     public static string Von(Konsument k) => Hash(new { k.SubscriberId, k.Pull, k.Append, k.Basen });
     public static string Von(Leser r) => Hash(new { r.Projektion, r.TrackDeps, r.Basen });
-    public static string Von(PipelineKarte p) => Hash(new { p.PipelineId, p.Basen });
+    // Name/Namespace/Konfigs gehören dazu: sonst ging eine Änderung daran im Editor still verloren (weder geschrieben noch gemeldet).
+    public static string Von(PipelineKarte p) => Hash(new { p.Name, p.Namespace, p.PipelineId, p.Basen, p.Konfigs });
 
     /// <summary>Alle änderbaren Elemente des (aus dem Code gelesenen) Modells stempeln.</summary>
     public static EditorModell Stempeln(EditorModell m)

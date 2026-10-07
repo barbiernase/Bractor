@@ -1,6 +1,6 @@
 # Konzept & Anleitung — Der Domänen-Editor
 
-> **Stand:** 2026-10-06 (§12 Akteure, Verträge, Clients) · **Status:** GEBAUT, teils ohne Codegen/Sim (je Abschnitt vermerkt).
+> **Stand:** 2026-10-07 (§3/§7/§9/§10 Pipelines nachgezogen; §12 Akteure, Verträge, Clients 2026-10-06) · **Status:** GEBAUT, teils ohne Codegen/Sim (je Abschnitt vermerkt).
 > **Ort:** ausschließlich `GraphExtractor/HtmlPresenter.cs`, Konstante `EditorBlock` (ein eingebettetes
 > HTML/CSS/JS, aus C# als String erzeugt). **Die EINE Oberfläche:** `http://localhost:5178/editor`
 > (`/` leitet dorthin um). Das frühere read-only Board (`knowledge-graph.html`) und seine SimEngine sind
@@ -89,9 +89,8 @@ in `Program.cs` zu verstecken — dieselbe Bewegung wie bei den Code-Inseln.
 | | Reader (Controller) | `liest Projektion ▶` (IReader<TProjektion>), `Query ◀` je Handle, `ruft Read-Fn ▶`, OneOf-`Response ▶`, `Controller ◀ code` | D/S |
 | | Reaktion (emittierend) | Trigger-`Event ◀`, `sendet Command ▶` (OneOf), `veröffentlicht Event ▶`, `Controller ◀ code` | D |
 | | Query · Response | `query ▶` / `◀ von Reader` | D |
-| **Betrieb/Host** | Trigger (Ingress) | Modus timer/webhook/filewatch/frist + Config, `erzeugt TriggerMsg ▶` | D/S |
-| | Pipeline (4. Konsument) | Handle-Eingang Trigger/Event/Self, `yield Command ▶`, `erzeugt Trigger ▶`, `plant Self-Tick ↺`, `nutzt Dienst ◀`, `Rumpf ◀ code` | D, Rumpf H |
-| | Frist (Drei-End-Relation) | `plant ◀ Event`, `storniert ◀ Event`, `Dauer ◀ HostSetting`, `fällig → Command ▶` | D |
+| **Betrieb/Host** | Trigger (Ingress) | Modus timer/webhook/filewatch + Config, `erzeugt TriggerMsg ▶`; geschrieben wird nur eine Webhook-Bindung (nach Vorbild im Host) | D/S |
+| | Pipeline (4. Konsument) | Kopf: PipelineId, Konfigs (Ctor); je Handle eine eigene Karte: Eingang Trigger/Event/Self, **ein** Port „+ Ausgang ▶“ (Command mit sofort · ⏳ Frist · ✕⏳ Storno, Trigger, transientes Event), `plant Self-Tick ↺`, `◀ im Auftrag von` (Akteur-Dienst), Read-Fn, `Rumpf ◀ code`; `nutzt Dienst ◀` wird (noch) nicht geschrieben | D, Rumpf H |
 | | Dienst (Vertrag→Impl) | `Vertrag ▶`, `Impl ◀ code` **oder** „extern"-Marker | D + H/extern |
 | | HostSetting | `{Name,Typ,Default,EnvKey}`, `Wert ▶` | D |
 | **Logik** | 📝 Code / 🤖 LLM | `code ▶`; Klick öffnet ein editierbares Modal (Text bzw. Intent) | H |
@@ -220,7 +219,9 @@ ist aber zugunsten „Code als verdrahteter Wert" (Controller-/Impl-Rümpfe als 
 
 ## 7 · Betrieb/Host: der Composition Root
 
-> **Status:** Editor-Board + Extractor-Round-trip IMPLEMENTIERT; **kein Codegen** (Folge-Schritt).
+> **Status:** Editor-Board + Extractor-Round-trip IMPLEMENTIERT. Geschrieben werden Fristen (als Pipeline-Ausgang) und
+> Webhook-Bindungen (nach dem Vorbild einer bestehenden); Timer/Datei, Dienst-Bindung und HostSettings nicht.
+> Stand 2026-10-07 — die Primitive 2 und 4 unten sind die ursprüngliche Fassung, siehe die Anmerkungen.
 
 Die dritte Ebene neben Topologie und Logik — **wie das System am Boot verdrahtet/konfiguriert wird**
 (Trigger-Quellen, Fristen, Laufzeit-Config, Dienst-Bindung). Sie ist fast reine Verdrahtung +
@@ -229,21 +230,21 @@ realen `Host.Grpc/Program.cs`:
 
 1. **Trigger-Quelle** → Pipeline (`erzeugt ⟨TriggerMsg⟩ ▶`). Modi timer/webhook/filewatch. Das
    `baueTrigger`-Lambda ist fast immer Identität → keine Code-Insel.
-2. **Frist = Drei-End-Relation** (statt Ingress-Attrappe): `plant ◀ Event` · `storniert ◀ Event(s)` ·
-   `Dauer ◀ HostSetting` · `fällig → Command @ Aggregat`. Der `Kontext`-String ist die stabile
-   Identität (`AddDeadlines`-Router; fehlende „fällig →"-Kante = Boot-Fail-fast). `IDbClock`/
-   `IFristplan`/`FristId` bleiben Framework-Interna (Invariante 5).
+2. **Frist** — *abgelöst (2026-10-01):* kein eigener Knoten mehr, sondern ein **Ausgang am Pipeline-Handle**
+   (`Frist<TCmd>` plant, `FristStorno<TCmd>` storniert; Kontext = Command-Typname, Router `GeneratedFristen` generiert). Die
+   Dauer ist ein Laufzeitwert im Rumpf; fällig ab der Log-Zeit des auslösenden Events (`docs/konzept-editor-pipelines.md` §13.1).
+   `IDbClock`/`IFristplan`/`FristId` bleiben Framework-Interna (Invariante 5).
 3. **Dienst-Bindung** (Vertrag→Impl): schließt zwei Löcher — Handler-Dependencies (`IClassifierService`
    …) **und** den freistehenden Domain-Service (`SplitZuteiler`, `ImagePairName`), ohne VO-Behavior/
    Specification/Entity einzuführen. Impl = 📝-Insel oder „externer Dienst"-Marker (HTTP/ML).
 4. **HostSetting** `{Name,Typ,Default,EnvKey}` — operativer, **nicht** fachlicher Wert (Pfad/Intervall/
-   Timeout); speist Trigger und Frist-Dauern.
+   Timeout). *Seit 2026-09 nicht mehr extrahiert* (Datenfluss durch Ausdrücke ist ein Rumpf-Fakt) — im Editor nur entwerfbar.
 
 **Round-trip (IMPLEMENTIERT):** `GraphExtractor/CompositionRoot.cs` (`CompositionRootExtractor`),
-verdrahtet in `Program.cs` + `ModellMapper.ZuBoardJson`. Liest best-effort `Host.Grpc/Program.cs`
-(`AddDeadlines`, `MapPipelineWebhook<T>`, `GetValue("Pipeline:*")`) und `DomainPipelineExtensions.cs`
-(`AddSingleton<I,Impl>`, `new …Config(TimeSpan…)`). Gemessen an der realen Domäne: 1 Frist, 1 Webhook,
-3 Dienst-Bindungen, 4 HostSettings.
+verdrahtet in `Program.cs` + `ModellMapper.ZuBoardJson` — rein semantisch, ohne Namenswissen: Fristen aus den
+`Frist<TCmd>`/`FristStorno<TCmd>`-Varianten der Pipeline-Signaturen, Ingress aus Aufrufen von `[Ingress(…)]`-Methoden,
+Dienste aus DI-Registrierungen mit Domänen-Vertrag (je Pipeline: Parameter des größten Konstruktors). Gemessen an der realen
+Domäne: 1 Frist (`MarkiereAlsHaengengeblieben`), 1 Webhook (`/webhook/datei` → `DateiErkannt`), keine HostSettings.
 
 **Bewusste Grenze:** nur die **domänen-gerichtete** Naht (Trigger→Pipeline, Frist→Command,
 Dienst-Bindung, domänen-relevante Settings). Reine Infra/Deploy (gRPC-Port, Consul/Redis/Marten,
@@ -277,15 +278,15 @@ einer `wenn[0]`-Konvention.
 ziehen. Gültige Ziele ringeln beim Ziehen **grün**; nur typgleiche Ports rasten ein. `+ …` in der
 Palette (oder Doppelklick auf die Fläche) legt Knoten an.
 
-**Frist — zwei Wege:**
-- **Weg 1 (externer Wecker):** `+ Trigger` → Modus „⏳ Frist" → Dauer + Trigger-Nachricht (`+ Feld` für
-  die Nutzlast) → `erzeugt … ▶` auf „+ Trigger andocken" einer Pipeline; dort `+ Command ▶` auf den
-  Ziel-Command. Entspricht `IPipelineTrigger`.
-- **Weg 2 (interner Timeout, idiomatisch — so macht es `TrainingFristPipeline`):** in einer Pipeline an
-  einem Handle „+ plant Self-Tick ↺" → ＋ klicken. Legt `Tick · 30s · ↺` **und** automatisch einen
-  „◀ Self Tick"-Handle an (gestrichelter Self-Loop). Delay = Frist, Namen sprechend machen, am
-  Self-Handle den Timeout-Command verdrahten. Der Rumpf prüft „noch offen?" und feuert nur dann.
-  Entspricht `ctx.ScheduleSelf` → `IPipelineSelfMessage`.
+**Zeit in einer Pipeline — zwei Wege:**
+- **Durable Frist (so macht es `TrainingFristPipeline`):** am Handle des auslösenden Events „+ Ausgang ▶“ auf den
+  Ziel-Command (er braucht einen Ctor `(Guid)`, CQRS056) und in der Zeile **⏳ Frist** wählen; an den Handles der
+  Abschluss-Events denselben Command mit **✕⏳ Storno**. Entspricht `Frist<TCmd>` / `FristStorno<TCmd>` im OneOf. Die Dauer
+  steht im Rumpf; fällig ab der Log-Zeit des Events, überlebt Neustarts.
+- **Selbst-Tick (verlierbar, z. B. Polling wie `FileWatchPipeline`):** an einem Trigger-/Self-Handle „+ plant Self-Tick ↺“.
+  Legt die Selbst-Nachricht **und** den passenden „◀ Self“-Handle an (gestrichelter Loop). Die Verzögerung steht im Rumpf
+  (`Selbst.In(msg, dauer)`), es gibt kein Feld dafür. An Event-Handles nicht möglich (Pull-Pfad ohne Mailbox). Entspricht
+  `Selbst<T>` mit `T : IPipelineSelfMessage`; der erste Tick kommt aus `Handle(PipelineGestartet, ctx)`.
 
 **Toolbar:** ↻ Vom Graph laden · ▦ Neu anordnen · 🗂 Domänen · ✓ Prüfen · ⚙ Kompilieren · ▶ Testen ·
 `</>` C# erzeugen · 💾 Speichern · ⬇ Modell.
@@ -402,9 +403,8 @@ abgeleitet). **Bewusst nicht:** Kommentare zwischen State-Properties und Doku je
 
 **Inseln (Stand 2026-09-24, nach Extractor-Fix):** Die Insel-Erkennung zählt nur noch Fachknoten (Code-/LLM-Knoten
 blähten Komponenten auf und versteckten unverbundene Stores/Pipelines). Der Extractor trennt **Konfigurations-Records**
-(per DI in Pipeline/Subscriber/Reader/Store-Impl injiziert, Art `konfig`) von Value Objects und verfolgt **HostSettings**
-semantisch: `GetValue("Pipeline:…")` in Program.cs → Parameter der DI-Extension → Feld des Konfig-Records → Pipeline
-(Kanten HostSetting → Konfig → Pipeline). ReadModels werden auch über die Store-**Implementierung** zugeordnet
+(per DI in Pipeline/Subscriber/Reader/Store-Impl injiziert, Art `konfig`) von Value Objects; HostSettings werden seither
+nicht mehr extrahiert (§7). ReadModels werden auch über die Store-**Implementierung** zugeordnet
 (`LoadAsync<T>`), Store-Transfer-Typen hängen am Store, Framework-Stores (DeadLetter) sind raus. Verbleibende Inseln
 sind echt: `ImagePairEingabeUngueltig` (von keinem Decider erzeugt → Diagnose `UNUSED-EVENT`) und die bewusst wirkungslose
 `BenchmarkPipeline`. Diagnose-Hook: `window.deGraph()` liefert Knoten + Kanten des Boards.
@@ -450,19 +450,19 @@ wird als mehrdeutig gemeldet — nie geschätzt.
 | Welche Projekte? | `Projektlage.cs`: Vertrag = Assembly von `IState`; **Laufzeit** = Projekt mit `[RoutingTabelle]`-Generat; Analyse = deren Referenz-Hülle; **Domäne** = Projekte, die im handgeschriebenen Quelltext einen Typ mit Domänen-Rolle deklarieren (Command, Event, State, Decider, Store, Konsument, Pipeline, Prozess, Wertobjekt …); **Hosts** = Programme mit handgeschriebenem Einstiegspunkt |
 | Generiert oder handgeschrieben? | handgeschrieben = Projekt-**Dokument**; Generator-Ausgaben sind nie Dokumente (plus `<auto-generated`-Kopf für eingecheckte Prepass-Dateien) |
 | Aggregat | `IState` + wer `IDecider<State>`/`IApplier<State>` implementiert — **egal wo** (geschachtelt oder nicht, beliebige Datei/Typform) |
-| Decide/Apply/Handle | Parametertypen (`ICommand`, `IEvent`, `IAggregateEnvelope`, `PipelineContext`, `IQuery`) an **handgeschriebenen** Methoden — Methodennamen egal |
+| Decide/Apply/Handle | Parametertypen (`ICommand`, `IEvent`, `IAggregateEnvelope`, `PipelineContext`, `IQuery`) an **handgeschriebenen** Methoden — für den Extractor ist der Methodenname egal; die Dispatch-Generatoren rufen aber nur `Handle` in der CQRS057-Form (Abweichung = Build-Fehler) |
 | Felder | Positions-Parameter eines Records **und** Auto-Properties (`{ get; init; }` …, `required`); Form (record/class/struct, Parameterliste ja/nein, weitere Basen, Attribute) wird mitgeführt und so zurückgeschrieben; Sammlungen per Symbol (`IEnumerable<T>` → `elementTyp`) |
 | Guards | alle umschließenden `if` bis zum Rumpf, verzweigungstreu (`else` ⇒ `!(…)`), Event-Typ aus dem Symbol |
 | Saga-DSL | Verben am **Methoden-Symbol** (Vertrags-Assembly + DSL-Namespace); `Regeln` über die Interface-Implementierung (auch explizit); Ketten auch über lokale Variablen |
 | Stores | Marker **`IWriteStore`** / **`IReadStore<TWrite>`** (Paarung als Typ, Namen frei) — auch der Framework-Generator registriert danach; Store-Aufrufe über das aufgelöste Methoden-Symbol (auch über die konkrete Klasse); ReadModel → Store nur wenn eindeutig (sonst `storeKandidaten`) |
 | Subscriber-/Pipeline-Id | Compile-Zeit-Konstante der Vertrags-Property (`const`, `nameof`, Verkettung); nicht konstant ⇒ leer |
-| Emits (Pipeline/Reaktion) | nur tatsächlich **ausgegebene** Werte (`yield return`/`return`), nicht jedes konstruierte Objekt |
+| Ausgänge (Pipeline/Reaktion/Decide) | nur die **Signatur**: konkreter Typ oder `OneOf<…>` (CQRS050), inkl. `Selbst<T>`/`Frist<TCmd>`/`FristStorno<TCmd>` — der Rumpf liefert nichts |
 | Aggregat-Zugehörigkeit eines Records | Command → Aggregat seines Deciders; Event → Aggregat, das ihn erzeugt/faltet; VO/Enum → Aggregat, dessen Records/State ihn referenzieren — jeweils **eindeutig oder keinem** (im Editor: Decider/Applier per **▲ Aggregat**-Port verdrahtet) |
 | Routing, registrierte Prozesse, DI-registrierte Store-Impl | Generat: `[RoutingTabelle(Art)]`-Properties, `["Name"] = new P()`, erzeugte Typen |
 | Trigger-Ingress | Methoden mit **`[Ingress(Art, Ort = nameof(param))]`** (Webhook-Route, Timer-Intervall, Datei-Pfad) — am Symbol der aufgerufenen Methode, nicht an der Aufrufform |
 | Dienste | DI-Registrierung (`Add*`/`TryAdd*`, auch Fabrik/Instanz) mit Domänen-Vertrag |
-| HostSettings | Argumente DI-registrierter Konfig-Records → Herkunft über lokale Variablen, `??`, Parameter → Aufrufer im Host → `GetValue`, `IConfiguration`-Indexer, `Environment.GetEnvironmentVariable` |
-| Frist | Lambda über `Frist` im Host — Zweige über `f.Kontext` als Ternär, `if`, `switch`-Ausdruck oder -Anweisung; plant/storniert über erreichte `IFristplan`-Aufrufe |
+| HostSettings | nicht extrahiert (Datenfluss durch Ausdrücke = Rumpf-Fakt); nur im Editor entwerfbar |
+| Frist | `Frist<TCmd>` (plant) / `FristStorno<TCmd>` (storniert) im OneOf einer Pipeline-Signatur; Kontext = Command-Typname |
 | Aggregat-Klassen-/Methodennamen, `AggregateId`, OneOf-/Join-Stelligkeit, Wire-Skalare | `Abstractions.Aggregatvertrag` (auch vom Generator gelesen), `nameof(ICommand.AggregateId)`, per Compilation gezählte `OneOf`/`RegelBauer`-Varianten, `ProtoScalarSpecs` (eine Quelle mit dem Proto-Codegen) |
 | Wohin schreiben? | echte Dateipfade im Modell; Verzeichnis je Namespace nur wenn **alle** seine Typen in genau einem Verzeichnis liegen, sonst über den längsten bekannten Namespace/Projekt-Wurzel (MSBuild-Abbildung). Neuer Typ: eindeutige Datei gleicher Art im Namespace, sonst die kanonische Scaffolder-Datei (`Commands.cs` … bzw. `{Agg}.cs`, `{Agg}.Decider.cs`, `{Agg}.Applier.cs`). Ohne bekanntes Verzeichnis: **nicht platzierbar**, wird nicht geschrieben |
 | Browser-Zwischenstand | `localStorage` je Solution (`rahmen.kennung`) — Repos vermischen sich nie |
@@ -475,8 +475,9 @@ Soll (`Sonde/soll.txt`) — plus volle Parität (Inventar + Fixpunkt) auf dem Fo
 
 ## 11 · Offene Punkte / Nicht-Ziele
 
-- **Codegen der Composition-Root-Primitive** (Program.cs-Fragmente/DI-Extensions aus Trigger/Frist/
-  Dienst/HostSetting) — Folge-Schritt, bewusst offen.
+- **Codegen der Composition-Root-Primitive** — Frist (als Pipeline-Ausgang) und Webhook-Bindung (nach Vorbild) werden
+  geschrieben; Timer/Datei-Ingress, Dienst-Bindung und HostSettings bleiben offen (Vorschlag: Ingress als Domänen-Code-Fakt,
+  `docs/konzept-editor-pipelines.md` §7).
 - **×N-Feld-Konsument** (`sendeJeCollectionFeld`-Eingangs-Slot) — der einzige noch fehlende Feld-Port.
 - **Leseseiten-Sim** (Dict-`ICoCommitSession` + Event→Projektion + Reader-Run + Dokument-Inspektor) und
   **LLM-Fill** der H-Rümpfe — spätere Phasen; heute nur Verdrahtung.

@@ -1,117 +1,45 @@
 using Abstractions;
 using Domain.ImagePair;
 using Microsoft.Extensions.Logging;
-using OpenCvSharp;
 
 namespace Domain.Pipeline.ImageProcessing;
 
 /// <summary>
-/// Bild-Eingang des KameraSystems: DateiErkannt → Parsen → ErstelleImagePair + Preprocessing + MeldeBildVerfuegbar.
+/// Bild-Eingang des KameraSystems — nur noch der Übersetzer am Rand: eine erkannte Datei (Trigger, nicht im Log) wird
+/// gedeutet und als Commands ins Log gebracht. Die Aufbereitung selbst (Verkleinern, Histogramm-Ausgleich) ist KEIN Rumpf
+/// mehr, sondern der <see cref="BildaufbereitungProzess"/> aus Katalog-Funktionen, der auf <c>RohbildEingegangen</c> läuft.
 /// Die Commands tragen den Akteur des Triggers (KameraSystem, der einzige mit IDarf&lt;DateiErkannt&gt;).
-/// Klassifiziert wird NICHT hier: das tut der Akteur Klassifizierer draußen (Python-Worker am Tor, hört ImagePairKomplett).
+/// Klassifiziert wird nicht hier: das tut der Akteur Klassifizierer draußen (hört ImagePairKomplett).
 ///
-/// WICHTIG: Die gesamte Dateinamen-Interpretation liegt hier — nicht im FileWatcher!
+/// Die Dateinamen-Interpretation liegt hier — nicht im FileWatcher.
 /// </summary>
 public partial class ImageProcessingPipeline : IPipelineHandler
 {
-    private readonly IImageResizer _resizer;
-    private readonly IHistogramEqualizer _equalizer;
-    private readonly string _preprocessedPath;
     private readonly ILogger<ImageProcessingPipeline> _logger;
 
-    private const int PreviewHeight = 512;
-
-    public ImageProcessingPipeline(
-        IImageResizer resizer,
-        IHistogramEqualizer equalizer,
-        PreprocessingConfig config,
-        ILogger<ImageProcessingPipeline> logger)
+    public ImageProcessingPipeline(ILogger<ImageProcessingPipeline> logger)
     {
-        _resizer = resizer;
-        _equalizer = equalizer;
-        _preprocessedPath = config.OutputPath;
         _logger = logger;
-
-        Directory.CreateDirectory(_preprocessedPath);
     }
 
     public string PipelineId => "image-processing";
 
-    // ═══════════════════════════════════════════════════
-    // TRIGGER-HANDLER
-    // ═══════════════════════════════════════════════════
-
-    public async IAsyncEnumerable<OneOf<ErstelleImagePair, MeldeBildVerfuegbar>> Handle(
-        DateiErkannt trigger, PipelineContext ctx)
+    public IEnumerable<OneOf<ErstelleImagePair, NimmRohbildAuf>> Handle(DateiErkannt trigger, PipelineContext ctx)
     {
-        // ── 1. Dateinamen parsen ──
-
         var resolved = ImagePairFileName.Resolve(trigger.Dateiname);
         if (resolved == null)
         {
-            _logger.LogWarning(
-                "Pipeline: Dateiname entspricht nicht der Convention, wird ignoriert: {File}",
-                trigger.Dateiname);
+            _logger.LogWarning("Pipeline: Dateiname entspricht nicht der Convention, wird ignoriert: {File}", trigger.Dateiname);
             yield break;
         }
 
-        _logger.LogInformation(
-            "Pipeline: {File} → PairKey={PairKey}, Version={Version}, ProduziertAm={ProduziertAm}",
-            trigger.Dateiname, resolved.PairKey, resolved.Version, resolved.ProduziertAm);
-
-        // ── 2. ImagePair erstellen (idempotent) ──
-
+        // Das Paar anlegen (idempotent: die zweite Datei eines Paars wird am Aggregat abgelehnt) …
         yield return new ErstelleImagePair(
-            resolved.AggregateId,
-            resolved.PairKey,
-            resolved.ProduziertAm,
-            DateTimeOffset.UtcNow,
-            trigger.Pfad);
+            resolved.AggregateId, resolved.PairKey, resolved.ProduziertAm, DateTimeOffset.UtcNow, trigger.Pfad);
 
-        // ── 3. Preprocessing: TIFF → Resize → HistEq → PNG ──
-
-        _logger.LogInformation(
-            "Preprocessing: {File} → Resize({Height}) + HistEq",
-            Path.GetFileName(trigger.Pfad), PreviewHeight);
-
-        using var original = await Task.Run(() =>
-            Cv2.ImRead(trigger.Pfad, ImreadModes.Color));
-
-        if (original.Empty())
-        {
-            _logger.LogWarning(
-                "Preprocessing: Konnte Datei nicht lesen: {Path}", trigger.Pfad);
-            yield break;
-        }
-
-        using var resized = _resizer.Resize(original, PreviewHeight);
-        using var equalized = _equalizer.Equalize(resized);
-
-        var outputFileName = Path.GetFileNameWithoutExtension(trigger.Dateiname) + "_preview.png";
-        var outputPath = Path.Combine(_preprocessedPath, outputFileName);
-
-        await Task.Run(() =>
-            Cv2.ImWrite(outputPath, equalized));
-
-        _logger.LogInformation(
-            "Preprocessing: ✔ {Input} → {Output} ({W}x{H})",
-            Path.GetFileName(trigger.Pfad), outputFileName,
-            equalized.Width, equalized.Height);
-
-        // ── 4. Bild als verfügbar melden ──
-
-        var meta = new BildMeta(
-            OriginalDateiname: trigger.Dateiname,
-            DateigroesseBytes: trigger.DateigroesseBytes,
-            BreitePixel: equalized.Width,
-            HoehePixel: equalized.Height,
-            ErstelltAm: DateTimeOffset.UtcNow);
-
-        yield return new MeldeBildVerfuegbar(
-            resolved.AggregateId,
-            resolved.Version,
-            meta,
-            outputPath);
+        // … und das Rohbild dieser Version ins Log — ab hier übernimmt der Prozess.
+        yield return new NimmRohbildAuf(
+            resolved.AggregateId, resolved.Version, trigger.Pfad, trigger.Dateiname, trigger.DateigroesseBytes);
     }
 }
 

@@ -313,8 +313,10 @@ public static class Validator
     /// </summary>
     internal static List<List<string>> ZyklenOhneZustand(Fluss fluss)
     {
-        var kanten = fluss.Kanten.Where(k => k.Sorte != Grammatik.Selbst
-                && fluss.KnotenVon(k.Von)?.Art != Grammatik.Aggregat && fluss.KnotenVon(k.Nach)?.Art != Grammatik.Aggregat)
+        // Zustandsschritte unterbrechen einen Kreis: das Aggregat und der Prozess (er faltet seine Marke im Log — ruft er eine
+        // Funktion, kommt deren Ergebnis zu IHM zurück; das ist sein Weiterlauf, kein Kreis).
+        bool Zustand(string id) => fluss.KnotenVon(id)?.Art is Grammatik.Aggregat or Grammatik.Prozess;
+        var kanten = fluss.Kanten.Where(k => k.Sorte != Grammatik.Selbst && !Zustand(k.Von) && !Zustand(k.Nach))
             .GroupBy(k => k.Von).ToDictionary(g => g.Key, g => g.Select(k => k.Nach).Distinct().ToList(), StringComparer.Ordinal);
         var index = new Dictionary<string, int>(StringComparer.Ordinal);
         var low = new Dictionary<string, int>(StringComparer.Ordinal);

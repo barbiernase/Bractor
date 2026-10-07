@@ -30,6 +30,7 @@ using Infrastructure.Akteure;
 using Domain.Pipeline.Infrastructure;
 using Infrastructure.Deadlines;
 using Infrastructure.Extensions;
+using Infrastructure.Funktionen;
 using Infrastructure.GrpcClient;
 using Infrastructure.Monitoring;
 using Infrastructure.Pipeline;
@@ -124,6 +125,11 @@ builder.Services.AddDomainPipelineServices(
     watchPath: watchPath,
     preprocessedPath: preprocessedPath);
 GeneratedPipelines.RegisterAllPipelines(builder.Services);
+
+// Katalog-Funktionen der Bildaufbereitung (gerufen vom BildaufbereitungProzess): hier wird nur der Laufort gebunden —
+// OpenCV auf diesem Knoten, je zwei Aufträge gleichzeitig. Eine andere Implementierung (Python, extern) ist nur eine andere Zeile.
+builder.Services.AddFunktion<Domain.Bildaufbereitung.IBildVerkleinerung, Domain.Pipeline.ImageProcessing.OpenCvBildVerkleinerung>(slots: 2, wiederholungen: 1);
+builder.Services.AddFunktion<Domain.Bildaufbereitung.IHistogrammAusgleich, Domain.Pipeline.ImageProcessing.OpenCvHistogrammAusgleich>(slots: 2, wiederholungen: 1);
 
 // P6.2: der EVENT-Pfad der Pipelines läuft über die geordnete Pull-Maschine (nicht mehr Push-Broker).
 builder.Services.AddGeneratedPipelineEventPulls();

@@ -109,6 +109,21 @@ public class DomainEditorFunktionTests
     }
 
     [Fact]
+    public void Ein_Aufruf_mit_zugeordneten_Argumenten_baut_den_Auftrag_positionsweise()
+    {
+        // Wie der Editor ihn anlegt (Ablauf-Kette, „Feld ← Quelle“): kein gelesener Ausdruck, sondern Argumente je Auftragsfeld.
+        var m = Modell();
+        m = m with { Sagas = [m.Sagas[0] with { Schritte = [m.Sagas[0].Schritte[0] with { SendeArgumente = ["t.Pfad", "512"] }, m.Sagas[0].Schritte[1]] }] };
+        Datei(m, "BildAufbereitung.cs").Should().Contain(".Rufe<IVorverarbeitung>(t => new VorverarbeitungsAuftrag(t.Pfad, 512))");
+    }
+
+    [Fact]
+    public void Ohne_Zuordnung_wird_der_Auftrag_mit_default_gebaut_nicht_mit_einem_TODO()
+    {
+        Datei(Modell(), "BildAufbereitung.cs").Should().Contain(".Rufe<IVorverarbeitung>(t => new VorverarbeitungsAuftrag(default, default))");
+    }
+
+    [Fact]
     public void Der_Herkunfts_Stempel_sieht_eine_Aenderung_an_Rufe_oder_Zeitlimit()
     {
         var s = Modell().Sagas[0];

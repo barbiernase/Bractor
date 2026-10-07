@@ -22,7 +22,8 @@ public class AusgabeVertragAnalyzerTests
         _ = typeof(Abstractions.ICommand);
         _ = typeof(Core.ProjectionWriter);
         _ = typeof(object);
-        var refs = AppDomain.CurrentDomain.GetAssemblies()
+        // Ausdrücklich angehängt: ein „_ = typeof(…)" darf der JIT verwerfen — ob Core geladen ist, hinge sonst an der Testreihenfolge.
+        var refs = AppDomain.CurrentDomain.GetAssemblies().Concat(new[] { typeof(Abstractions.ICommand).Assembly, typeof(Core.ProjectionWriter).Assembly }).Distinct()
             .Where(a => !a.IsDynamic && !string.IsNullOrEmpty(a.Location))
             .Select(a => (MetadataReference)MetadataReference.CreateFromFile(a.Location))
             .ToImmutableArray();

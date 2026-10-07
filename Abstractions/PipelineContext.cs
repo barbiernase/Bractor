@@ -26,4 +26,10 @@ public class PipelineContext
 
     /// <summary>Nur gesetzt bei Event-Input (PubSub).</summary>
     public int? SourceAggregateVersion { get; init; }
+
+    /// <summary>
+    /// Log-Zeit (DB-Zeitstempel) des auslösenden Events — nur auf dem Pull-Pfad gesetzt, wo das Event aus dem Log
+    /// kommt. Basis einer <see cref="Frist{TCmd}"/>: jedes erneute Lesen desselben Events plant dieselbe Fälligkeit.
+    /// </summary>
+    public DateTimeOffset? SourceEventZeit { get; init; }
 }

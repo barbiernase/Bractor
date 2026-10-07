@@ -65,7 +65,7 @@ sonst → emittierend (bekommt `IEmittentenCursor`).
 | Projektion | tracker-fähiger Write-Store | `Task` + `writer.Execute` | replaybar |
 | Reaktion | keiner | `IAsyncEnumerable<OneOf<Cmd>>` | emittierend |
 | Prozess/Saga | eigener Petri-Manager | (kein `Handle`) | emittierend (Marking-Cursor) |
-| Pipeline-Event | `PipelineEventPullBridge` | `IAsyncEnumerable<ICommand>` | emittierend |
+| Pipeline-Event | `PipelineEventPullBridge` | `(Async)Enumerable<OneOf<Cmd…, Trigger…, Frist<…>…>>` | emittierend |
 
 ## 4.3 Projektionen
 
@@ -190,9 +190,21 @@ Trigger/Events, sendet Commands. Die P6.1/P6.2-Zerlegung trennt Transporte nach 
 - **P6.1 / Rest-Push** — nur noch **transiente Events** (`ITransientEvent`) bleiben auf dem
   verlierbaren Broker; Trigger + Self-Messages ebenso.
 
-Beispiel `Domain.Pipeline/ImageProcessing/ImageProcessingPipeline.cs`: `Handle(DateiErkannt
-trigger, …)` yieldet Commands (Trigger-Pfad), `Handle(ImagePairKomplett evt, …)` reagiert auf
-ein persistiertes Event (Pull-Pfad).
+**Eine Aktivierung je Pipeline im Cluster** (seit 2026-10-07): Die Pipeline lebt nur als virtuelle Identität
+`Pipeline-{PipelineId}` — dieselbe, an die Trigger gehen. Der `PipelineStartupService` jedes Knotens schickt ihr periodisch
+`PipelineAktivieren` (30 s, nach Fehlschlag 2 s): die erste Nachricht aktiviert sie (`Started` → `Handle(PipelineGestartet)`),
+weitere werden nur quittiert; fällt der Knoten weg, aktiviert der nächste Durchlauf sie anderswo. Früher spawnte zusätzlich
+jeder Knoten eine lokale Instanz — eine trigger-lose Pipeline wie FileWatch lief so N-fach.
+
+**Frist aus dem Event-Pfad:** Der Pull-Pfad eines Emittenten liest beim Poll den Stream ab 0 neu. Damit ein `Frist<TCmd>` dabei
+nicht nach hinten rückt, zählt die Fälligkeit ab der Log-Zeit des auslösenden Events (`PipelineContext.SourceEventZeit` →
+`FristAuftrag.Ab`), nicht ab „jetzt“; ohne Event (Trigger/Selbst) gilt die DB-Uhr.
+
+Beispiel `Domain.Pipeline/ImageProcessing/ImageProcessingPipeline.cs`: `Handle(DateiErkannt trigger, …)` ist nur noch der
+Übersetzer am Rand (Dateiname deuten → `ErstelleImagePair` + `NimmRohbildAuf`). Die Verarbeitung selbst ist **kein Pipeline-Rumpf
+mehr**, sondern der `BildaufbereitungProzess` (`Domain/ImagePair/`) aus Katalog-Funktionen (`Domain/Bildaufbereitung/`:
+`IBildVerkleinerung`, `IHistogrammAusgleich`; OpenCV-Implementierungen in `Domain.Pipeline`, gebunden im Host mit
+`AddFunktion`). Faustregel: **eine Pipeline übersetzt am Rand, ein Prozess aus Funktionen verarbeitet.**
 
 ## 4.7 Dead-Letter & Snapshots
 

@@ -110,15 +110,17 @@ public class PipelineEventPullBridgeTests
         var stream = Guid.NewGuid();
         var geplant = new List<FristAuftrag>();
 
-        PipelineEventPullBridge.EventDispatch dispatch = async (env, _, _, _, _, plane) =>
-            await plane(new FristAuftrag("Probe.Cmd", env.AggregateId, TimeSpan.FromMinutes(5)));
+        PipelineEventPullBridge.EventDispatch dispatch = async (env, ctx, _, _, _, plane) =>
+            await plane(new FristAuftrag("Probe.Cmd", env.AggregateId, TimeSpan.FromMinutes(5), ctx.SourceEventZeit));
 
         var pullDispatch = PipelineEventPullBridge.Wrap(dispatch, _ => _ => Task.CompletedTask, (_, _) => Task.CompletedTask,
             f => { geplant.Add(f); return Task.CompletedTask; });
 
-        await pullDispatch(Env(stream, 2, ""), new ProjectionWriter(stream, 2));
+        var env = Env(stream, 2, "");
+        await pullDispatch(env, new ProjectionWriter(stream, 2));
 
         geplant.Should().ContainSingle().Which.ZielAggregatId.Should().Be(stream);
+        geplant[0].Ab.Should().Be(env.CreatedAtUtc, "die Basis der Frist ist die Log-Zeit des auslösenden Events, nicht „jetzt“");
         geplant[0].FristId.Should().Be(FristId.Für("Probe.Cmd", stream), "Planen und Storno treffen dieselbe deterministische Frist");
     }
 

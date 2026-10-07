@@ -122,7 +122,7 @@ public static class Grammatik
             [Comp("CS0111 (zwei Handle-Methoden gleicher Signatur)")]),
         new("GR-GARANTIE", "Garantie-Regel", "Führt ein verlierbarer Pfad (Trigger, Selbst, transientes Event) in einen Schritt, der Durabilität braucht (Command), ist die Kante verlierbar/nicht idempotent.", "warning",
             [Offen("Laufzeit: Kausalität ab Trigger/Selbst = neue Guid (PipelineActorBase); Editor zeigt es gestrichelt")]),
-        new("GR-ZYKLUS", "Zyklus nur durch einen Zustandsschritt", "Ein Kreis ist erlaubt, wenn er durch ein Aggregat läuft (Selbst-Schleifen sind der Schleifen-Operator); sonst nicht.", "warning",
+        new("GR-ZYKLUS", "Zyklus nur durch einen Zustandsschritt", "Ein Kreis ist erlaubt, wenn er durch ein Aggregat oder einen Prozess läuft (beide falten Zustand im Log; Selbst-Schleifen sind der Schleifen-Operator); sonst nicht.", "warning",
             [new("boot", null, "Azyklizitäts-Guard (ProzessManagerWiring) — nur Prozesse"), Offen("Reaktionen/Pipelines")]),
         new("GR-ZUSTAND", "Regel Z: Zustand nur in Aggregaten und Lesemodellen", "Pipelines, Reaktionen und Projektionen sind zustandslose Übersetzer; Gedächtnis gehört in ein Aggregat.", "info",
             [Offen("Hinweis im Validator; Analyzer bewusst noch nicht gebaut")]),

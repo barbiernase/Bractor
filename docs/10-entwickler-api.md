@@ -164,13 +164,15 @@ neuen Event. Beispiel: Sonde `GraphExtractor/Sonde/Gebuehren.cs.txt`; Laufzeit-B
 Typen, nie `ICommand`) oder `Task` für reine Effekte. Lese-Fähigkeiten als Parameter wie beim Reader. **Planen ist
 ein Ausgang, kein Aufruf:** `Selbst<T>` (Selbst-Nachricht nach Verzögerung, erste über `Handle(PipelineGestartet, ctx)`),
 `Frist<TCmd>` (durable Frist → `TCmd` an die Ziel-Id; der Router ist generiert, `TCmd` braucht einen Ctor `(Guid)`,
-sonst CQRS056) und `FristStorno<TCmd>`:
+sonst CQRS056; fällig = Log-Zeit des auslösenden Events + Dauer, ohne Event die DB-Uhr — ein erneutes Lesen desselben Events
+verschiebt sie nicht) und `FristStorno<TCmd>`:
 ```csharp
 public IEnumerable<OneOf<Frist<MarkiereAlsHaengengeblieben>>> Handle(TrainingBegonnen evt, PipelineContext ctx)
 { yield return new Frist<MarkiereAlsHaengengeblieben>(ctx.SourceAggregateId!.Value, _config.Timeout); }
 ```
 Persistierte Events laufen über den Pull-Pfad (dort kein `Selbst<T>` — keine Mailbox), transiente über den Broker
-(P6.1/P6.2). Beispiele: `Domain.Pipeline/ImageProcessing/FileWatchPipeline.cs`, `Domain.Pipeline/Trainingslauf/TrainingFristPipeline.cs`.
+(P6.1/P6.2). Je PipelineId gibt es genau eine Aktivierung im Cluster; ihr Zustand (Felder) ist nur auf dem Trigger-/Selbst-Kanal
+seriell — Event-Handles laufen im Pull-Actor auf demselben Singleton-Handler. Beispiele: `Domain.Pipeline/ImageProcessing/FileWatchPipeline.cs`, `Domain.Pipeline/Trainingslauf/TrainingFristPipeline.cs`.
 
 ## 10.7 Schema-Evolution (Upcasting)
 

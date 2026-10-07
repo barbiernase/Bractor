@@ -92,6 +92,11 @@ public abstract class PipelineActorBase<THandler> : IActor
                         await OnEnvelopeAsync(envelope, context, context.CancellationToken);
                     break;
 
+                // Aktivierung durch den PipelineStartupService (Started ist schon gelaufen): nur quittieren.
+                case PipelineAktivieren:
+                    context.Respond(new PipelineAck(Accepted: true));
+                    break;
+
                 case Stopping:
                     await OnStoppingAsync();
                     break;

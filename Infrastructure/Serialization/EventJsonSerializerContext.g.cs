@@ -20,6 +20,9 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(KommandoVerarbeitet))]
 [JsonSerializable(typeof(KommandoAbgelehnt))]
 // ── Domänen-Events (Domain.*, persistierbar) (gescannt) ──
+[JsonSerializable(typeof(global::Domain.Bildaufbereitung.BildNichtLesbar))]
+[JsonSerializable(typeof(global::Domain.Bildaufbereitung.BildVerkleinert))]
+[JsonSerializable(typeof(global::Domain.Bildaufbereitung.HistogrammAusgeglichen))]
 [JsonSerializable(typeof(global::Domain.Datensatz.DatensatzEingefroren))]
 [JsonSerializable(typeof(global::Domain.Datensatz.DatensatzErstellt))]
 [JsonSerializable(typeof(global::Domain.Datensatz.EinfrierenAngefordert))]
@@ -38,6 +41,7 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(global::Domain.ImagePair.ImagePairInspiziert))]
 [JsonSerializable(typeof(global::Domain.ImagePair.ImagePairKomplett))]
 [JsonSerializable(typeof(global::Domain.ImagePair.PhysischesProduktGelabelt))]
+[JsonSerializable(typeof(global::Domain.ImagePair.RohbildEingegangen))]
 [JsonSerializable(typeof(global::Domain.Modell.ModellAktiviert))]
 [JsonSerializable(typeof(global::Domain.Modell.ModellArchiviert))]
 [JsonSerializable(typeof(global::Domain.Modell.ModellRegistriert))]

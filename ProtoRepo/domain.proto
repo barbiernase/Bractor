@@ -211,20 +211,21 @@ message CommandEnvelopeDto {
         LabelPhysischesProduktDto label_physisches_produkt = 34;
         MarkiereAlsInspiziertDto markiere_als_inspiziert = 35;
         MeldeBildVerfuegbarDto melde_bild_verfuegbar = 36;
-        ArchiviereModellDto archiviere_modell = 37;
-        RegistriereModellDto registriere_modell = 38;
-        SetzeModellAktivDto setze_modell_aktiv = 39;
-        MeldeTeilFertigDto melde_teil_fertig = 40;
-        StarteSammelvorgangDto starte_sammelvorgang = 41;
-        SchliesseTeilauftragAbDto schliesse_teilauftrag_ab = 42;
-        StarteTeilauftragDto starte_teilauftrag = 43;
-        BricheTrainingAbDto briche_training_ab = 44;
-        MarkiereAlsHaengengebliebenDto markiere_als_haengengeblieben = 45;
-        MeldeFortschrittDto melde_fortschritt = 46;
-        MeldeTrainingAbgeschlossenDto melde_training_abgeschlossen = 47;
-        MeldeTrainingBegonnenDto melde_training_begonnen = 48;
-        MeldeTrainingGescheitertDto melde_training_gescheitert = 49;
-        StarteTrainingDto starte_training = 50;
+        NimmRohbildAufDto nimm_rohbild_auf = 37;
+        ArchiviereModellDto archiviere_modell = 38;
+        RegistriereModellDto registriere_modell = 39;
+        SetzeModellAktivDto setze_modell_aktiv = 40;
+        MeldeTeilFertigDto melde_teil_fertig = 41;
+        StarteSammelvorgangDto starte_sammelvorgang = 42;
+        SchliesseTeilauftragAbDto schliesse_teilauftrag_ab = 43;
+        StarteTeilauftragDto starte_teilauftrag = 44;
+        BricheTrainingAbDto briche_training_ab = 45;
+        MarkiereAlsHaengengebliebenDto markiere_als_haengengeblieben = 46;
+        MeldeFortschrittDto melde_fortschritt = 47;
+        MeldeTrainingAbgeschlossenDto melde_training_abgeschlossen = 48;
+        MeldeTrainingBegonnenDto melde_training_begonnen = 49;
+        MeldeTrainingGescheitertDto melde_training_gescheitert = 50;
+        StarteTrainingDto starte_training = 51;
 
     }
 }
@@ -251,57 +252,62 @@ message EventEnvelopeDto {
         TrainingBegonnenDto training_begonnen = 26;
         TrainingHaengengebliebenDto training_haengengeblieben = 27;
         CommandFailedDto command_failed = 28;
-        DatensatzBereitsEingefrorenDto datensatz_bereits_eingefroren = 29;
-        DatensatzEingefrorenDto datensatz_eingefroren = 30;
-        DatensatzErstelltDto datensatz_erstellt = 31;
-        DatensatzExistiertBereitsDto datensatz_existiert_bereits = 32;
-        DatensatzLeerDto datensatz_leer = 33;
-        EinfrierenAngefordertDto einfrieren_angefordert = 34;
-        PaarAufgenommenDto paar_aufgenommen = 35;
-        PaareAufgenommenDto paare_aufgenommen = 36;
-        PaarEntferntDto paar_entfernt = 37;
-        RangeAngefordertDto range_angefordert = 38;
-        RangeLeerDto range_leer = 39;
-        SplitGesetztDto split_gesetzt = 40;
-        SplitUngueltigDto split_ungueltig = 41;
-        BildNichtVerfuegbarDto bild_nicht_verfuegbar = 42;
-        BildPaarDurchKiKlassifiziertDto bild_paar_durch_ki_klassifiziert = 43;
-        BildPaarGelabeltDto bild_paar_gelabelt = 44;
-        BildRegionGelabeltDto bild_region_gelabelt = 45;
-        BildVerfuegbarDto bild_verfuegbar = 46;
-        BildVersionBereitsVerfuegbarDto bild_version_bereits_verfuegbar = 47;
-        EinzelBildDurchKiKlassifiziertDto einzel_bild_durch_ki_klassifiziert = 48;
-        EinzelBildGelabeltDto einzel_bild_gelabelt = 49;
-        ImagePairEingabeUngueltigDto image_pair_eingabe_ungueltig = 50;
-        ImagePairErstelltDto image_pair_erstellt = 51;
-        ImagePairExistiertBereitsDto image_pair_existiert_bereits = 52;
-        ImagePairNichtGefundenDto image_pair_nicht_gefunden = 53;
-        PhysischesProduktGelabeltDto physisches_produkt_gelabelt = 54;
-        RegionIndexUngueltigDto region_index_ungueltig = 55;
-        RegionLabelsUngueltigDto region_labels_ungueltig = 56;
-        ModellAktiviertDto modell_aktiviert = 57;
-        ModellBereitsArchiviertDto modell_bereits_archiviert = 58;
-        ModellExistiertBereitsDto modell_existiert_bereits = 59;
-        ModellNichtGefundenDto modell_nicht_gefunden = 60;
-        ModellRegistriertDto modell_registriert = 61;
-        SammelvorgangBereitsAbgeschlossenDto sammelvorgang_bereits_abgeschlossen = 62;
-        SammelvorgangExistiertBereitsDto sammelvorgang_existiert_bereits = 63;
-        SammelvorgangGestartetDto sammelvorgang_gestartet = 64;
-        SammelvorgangNichtGefundenDto sammelvorgang_nicht_gefunden = 65;
-        TeilVerbuchtDto teil_verbucht = 66;
-        TeilauftragAbgeschlossenDto teilauftrag_abgeschlossen = 67;
-        TeilauftragBereitsFertigDto teilauftrag_bereits_fertig = 68;
-        TeilauftragExistiertBereitsDto teilauftrag_existiert_bereits = 69;
-        TeilauftragGestartetDto teilauftrag_gestartet = 70;
-        TeilauftragNichtGefundenDto teilauftrag_nicht_gefunden = 71;
-        TrainingAbgeschlossenDto training_abgeschlossen = 72;
-        TrainingAngefordertDto training_angefordert = 73;
-        TrainingBereitsBeendetDto training_bereits_beendet = 74;
-        TrainingFortschrittDto training_fortschritt = 75;
-        TrainingGescheitertDto training_gescheitert = 76;
-        TrainingNichtAktivDto training_nicht_aktiv = 77;
-        TrainingslaufExistiertBereitsDto trainingslauf_existiert_bereits = 78;
-        TrainingslaufNichtGefundenDto trainingslauf_nicht_gefunden = 79;
+        BildNichtLesbarDto bild_nicht_lesbar = 29;
+        BildVerkleinertDto bild_verkleinert = 30;
+        HistogrammAusgeglichenDto histogramm_ausgeglichen = 31;
+        DatensatzBereitsEingefrorenDto datensatz_bereits_eingefroren = 32;
+        DatensatzEingefrorenDto datensatz_eingefroren = 33;
+        DatensatzErstelltDto datensatz_erstellt = 34;
+        DatensatzExistiertBereitsDto datensatz_existiert_bereits = 35;
+        DatensatzLeerDto datensatz_leer = 36;
+        EinfrierenAngefordertDto einfrieren_angefordert = 37;
+        PaarAufgenommenDto paar_aufgenommen = 38;
+        PaareAufgenommenDto paare_aufgenommen = 39;
+        PaarEntferntDto paar_entfernt = 40;
+        RangeAngefordertDto range_angefordert = 41;
+        RangeLeerDto range_leer = 42;
+        SplitGesetztDto split_gesetzt = 43;
+        SplitUngueltigDto split_ungueltig = 44;
+        BildNichtVerfuegbarDto bild_nicht_verfuegbar = 45;
+        BildPaarDurchKiKlassifiziertDto bild_paar_durch_ki_klassifiziert = 46;
+        BildPaarGelabeltDto bild_paar_gelabelt = 47;
+        BildRegionGelabeltDto bild_region_gelabelt = 48;
+        BildVerfuegbarDto bild_verfuegbar = 49;
+        BildVersionBereitsVerfuegbarDto bild_version_bereits_verfuegbar = 50;
+        EinzelBildDurchKiKlassifiziertDto einzel_bild_durch_ki_klassifiziert = 51;
+        EinzelBildGelabeltDto einzel_bild_gelabelt = 52;
+        ImagePairEingabeUngueltigDto image_pair_eingabe_ungueltig = 53;
+        ImagePairErstelltDto image_pair_erstellt = 54;
+        ImagePairExistiertBereitsDto image_pair_existiert_bereits = 55;
+        ImagePairNichtGefundenDto image_pair_nicht_gefunden = 56;
+        PhysischesProduktGelabeltDto physisches_produkt_gelabelt = 57;
+        RegionIndexUngueltigDto region_index_ungueltig = 58;
+        RegionLabelsUngueltigDto region_labels_ungueltig = 59;
+        RohbildBereitsEingegangenDto rohbild_bereits_eingegangen = 60;
+        RohbildEingegangenDto rohbild_eingegangen = 61;
+        ModellAktiviertDto modell_aktiviert = 62;
+        ModellBereitsArchiviertDto modell_bereits_archiviert = 63;
+        ModellExistiertBereitsDto modell_existiert_bereits = 64;
+        ModellNichtGefundenDto modell_nicht_gefunden = 65;
+        ModellRegistriertDto modell_registriert = 66;
+        SammelvorgangBereitsAbgeschlossenDto sammelvorgang_bereits_abgeschlossen = 67;
+        SammelvorgangExistiertBereitsDto sammelvorgang_existiert_bereits = 68;
+        SammelvorgangGestartetDto sammelvorgang_gestartet = 69;
+        SammelvorgangNichtGefundenDto sammelvorgang_nicht_gefunden = 70;
+        TeilVerbuchtDto teil_verbucht = 71;
+        TeilauftragAbgeschlossenDto teilauftrag_abgeschlossen = 72;
+        TeilauftragBereitsFertigDto teilauftrag_bereits_fertig = 73;
+        TeilauftragExistiertBereitsDto teilauftrag_existiert_bereits = 74;
+        TeilauftragGestartetDto teilauftrag_gestartet = 75;
+        TeilauftragNichtGefundenDto teilauftrag_nicht_gefunden = 76;
+        TrainingAbgeschlossenDto training_abgeschlossen = 77;
+        TrainingAngefordertDto training_angefordert = 78;
+        TrainingBereitsBeendetDto training_bereits_beendet = 79;
+        TrainingFortschrittDto training_fortschritt = 80;
+        TrainingGescheitertDto training_gescheitert = 81;
+        TrainingNichtAktivDto training_nicht_aktiv = 82;
+        TrainingslaufExistiertBereitsDto trainingslauf_existiert_bereits = 83;
+        TrainingslaufNichtGefundenDto trainingslauf_nicht_gefunden = 84;
 
     }
 }
@@ -507,6 +513,21 @@ message ImagePairFilterDto {
     int32 seiten_groesse = 11;
 }
 
+message StateChangeViaBildNichtLesbarDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaBildVerkleinertDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaHistogrammAusgeglichenDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
 message StateChangeViaDatensatzEingefrorenDto {
     string stream_id = 1;
     int32 version = 2;
@@ -593,6 +614,11 @@ message StateChangeViaImagePairKomplettDto {
 }
 
 message StateChangeViaPhysischesProduktGelabeltDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaRohbildEingegangenDto {
     string stream_id = 1;
     int32 version = 2;
 }
@@ -772,6 +798,14 @@ message MeldeBildVerfuegbarDto {
     string pfad = 4;
 }
 
+message NimmRohbildAufDto {
+    string aggregate_id = 1;
+    int32 version = 2;
+    string pfad = 3;
+    string dateiname = 4;
+    int64 dateigroesse_bytes = 5;
+}
+
 message ArchiviereModellDto {
     string aggregate_id = 1;
 }
@@ -882,6 +916,24 @@ message CommandFailedDto {
     string command_type = 1;
     string reason = 2;
     string aggregate_id = 3;
+}
+
+message BildNichtLesbarDto {
+    string pfad = 1;
+    string grund = 2;
+}
+
+message BildVerkleinertDto {
+    string pfad = 1;
+    int32 breite_pixel = 2;
+    int32 hoehe_pixel = 3;
+}
+
+message HistogrammAusgeglichenDto {
+    string pfad = 1;
+    int32 breite_pixel = 2;
+    int32 hoehe_pixel = 3;
+    int64 erstellt_am = 4;
 }
 
 message DatensatzBereitsEingefrorenDto {
@@ -1015,6 +1067,18 @@ message RegionIndexUngueltigDto {
 
 message RegionLabelsUngueltigDto {
     int32 anzahl = 1;
+}
+
+message RohbildBereitsEingegangenDto {
+    int32 version = 1;
+}
+
+message RohbildEingegangenDto {
+    string aggregate_id = 1;
+    int32 version = 2;
+    string pfad = 3;
+    string dateiname = 4;
+    int64 dateigroesse_bytes = 5;
 }
 
 message ModellAktiviertDto {

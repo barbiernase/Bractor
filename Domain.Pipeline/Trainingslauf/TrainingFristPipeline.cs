@@ -11,9 +11,10 @@ namespace Domain.Pipeline.Trainingslauf;
 ///
 /// Beides sind typisierte AUSGÄNGE der Signatur, keine Aufrufe: der generierte Dispatch reicht sie an den
 /// Fristplan, der Fristen-Router (<c>GeneratedFristen</c>) baut beim Feuern den Command aus der Ziel-Id. Die
-/// Frist-Id ist deterministisch (Command-Typ + Trainingslauf-Id): erneutes Planen (Event-Redelivery)
-/// überschreibt idempotent, das Abräumen trifft genau dieselbe Frist. Eine späte Frist ist wirkungslos —
-/// das Aggregat ignoriert sie, wenn der Lauf schon beendet ist.
+/// Frist-Id ist deterministisch (Command-Typ + Trainingslauf-Id), die Fälligkeit zählt ab der Log-Zeit von
+/// <c>TrainingBegonnen</c>: erneutes Planen (Redelivery, Poll ab 0) ergibt dieselbe Frist und schiebt sie nicht —
+/// sie läuft 6 h nach dem Beginn ab, egal wie viel Fortschritt kommt. Das Abräumen trifft genau dieselbe Frist.
+/// Eine späte Frist ist wirkungslos — das Aggregat ignoriert sie, wenn der Lauf schon beendet ist.
 /// </summary>
 public partial class TrainingFristPipeline : IPipelineHandler
 {

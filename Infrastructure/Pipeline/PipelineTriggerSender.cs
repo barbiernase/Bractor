@@ -18,6 +18,9 @@ public static class PipelineTriggerSender
     /// <summary>Bounded-Frist für Pipeline→Pipeline-Trigger-Sends (W2: kein Infinit-Hang).</summary>
     public static readonly TimeSpan Frist = TimeSpan.FromSeconds(5);
 
+    /// <summary>Die EINE Cluster-Identität einer Pipeline (Kind <c>Pipeline-{id}</c>) — Trigger und Aktivierung treffen dieselbe.</summary>
+    public static ClusterIdentity Identitaet(string pipelineId) => ClusterIdentity.Create(pipelineId, $"Pipeline-{pipelineId}");
+
     public static async Task SendAsync(Cluster cluster, IPipelineTrigger trigger, ILogger? logger = null)
     {
         var triggerType = trigger.GetType();
@@ -28,7 +31,7 @@ public static class PipelineTriggerSender
             return;
         }
 
-        var identity = ClusterIdentity.Create(targetPipelineId, $"Pipeline-{targetPipelineId}");
+        var identity = Identitaet(targetPipelineId);
 
         using var cts = new CancellationTokenSource(Frist);
         PipelineAck? ack;

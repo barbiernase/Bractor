@@ -355,6 +355,39 @@ public sealed class DomainEditorLeseseiteTests
     }
 
     [Fact]
+    public void Pipeline_Eingang_folgt_dem_bearbeiteten_Feld_nicht_dem_alten_input()
+    {
+        // Der Mapper setzt „input" an jedem Handle; der Editor pflegt beim Umverdrahten/Umbenennen aber event/selfName bzw.
+        // die Trigger-Karte. Früher gewann input → der neue Eingang ging still verloren.
+        var board = """
+            { "triggers": [ { "_id": "tg1", "name": "Neu", "msgName": "DateiNeu" } ],
+              "pipelines": [ { "_id": "pl1", "name": "P", "namespace": "Probe", "handles": [
+                { "inputKind": "event", "event": "Umverdrahtet", "input": "Alt", "sends": [], "emits": [], "schedules": [], "fns": [],
+                  "sig": { "parameter": "e", "rueckgabe": "Task", "ausgangsTypen": [], "datei": "Probe/P.cs", "herkunft": "x" } },
+                { "inputKind": "self", "selfName": "TickNeu", "input": "TickAlt", "sends": [], "emits": [], "schedules": [], "fns": [] },
+                { "inputKind": "trigger", "trigId": "tg1", "input": "DateiAlt", "sends": [], "emits": [], "schedules": [], "fns": [] },
+                { "inputKind": "trigger", "prod": { "k": "tg", "id": "tg1" }, "input": "DateiAlt2", "sends": [], "emits": [], "schedules": [], "fns": [] },
+                { "inputKind": "trigger", "trigId": "fehlt", "input": "NurInput", "sends": [], "emits": [], "schedules": [], "fns": [] } ] } ] }
+            """;
+        var hs = BoardLeseseite.AusBoard(board).Lesen!.Pipelines.Single().Handles;
+        hs.Select(h => h.Eingang).Should().Equal("Umverdrahtet", "TickNeu", "DateiNeu", "DateiNeu", "NurInput");
+        // Aus dem Code gelesen und umverdrahtet: der alte Eingang reist mit, damit „C# schreiben" die Methode findet.
+        hs[0].EingangImCode.Should().Be("Alt");
+        hs.Skip(1).Should().OnlyContain(h => h.EingangImCode == null, "ohne Code-Herkunft gibt es nichts umzuschreiben");
+    }
+
+    [Fact]
+    public void Pipeline_Stempel_erkennt_Konfig_Name_und_Namespace()
+    {
+        var p = new PipelineKarte { Name = "P", Namespace = "Probe", PipelineId = "p", Konfigs = ["AKonfig"], Basen = ["IPipelineHandler"] };
+        var stempel = Herkunft.Von(p);
+        Herkunft.Geaendert(stempel, Herkunft.Von(p)).Should().BeFalse("unverändert schreibt nichts");
+        Herkunft.Geaendert(stempel, Herkunft.Von(p with { Konfigs = ["AKonfig", "BKonfig"] })).Should().BeTrue();
+        Herkunft.Geaendert(stempel, Herkunft.Von(p with { Name = "Q" })).Should().BeTrue();
+        Herkunft.Geaendert(stempel, Herkunft.Von(p with { Namespace = "Anders" })).Should().BeTrue();
+    }
+
+    [Fact]
     public void Neue_Store_Fn_mit_Entwurf_bekommt_ihn_als_Rumpf()
     {
         var m = Modell();

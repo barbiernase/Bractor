@@ -64,7 +64,7 @@ draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer Comm
 Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an
 Clients (`docs/konzept-akteure.md` §9).
 
-**Tests (echt gemessen): Prüfstand 320/320 (2026-10-07, in-memory, store-frei); Integration gegen echtes Marten/Consul/Redis,
+**Tests (echt gemessen): Prüfstand 325/325 (2026-10-07, in-memory, store-frei); Integration gegen echtes Marten/Consul/Redis,
 sequentiell (voll gezählt zuletzt 2026-08: 33/33; der `SnapshotLive`-Cold-Boot-Flake ausgenommen).**
 
 **Bewusst offen (Priorität):**
