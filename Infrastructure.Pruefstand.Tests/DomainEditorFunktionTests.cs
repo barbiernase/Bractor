@@ -66,6 +66,28 @@ public class DomainEditorFunktionTests
     }
 
     [Fact]
+    public void Ein_Code_Block_an_einer_neuen_Funktion_legt_ihre_Implementierung_an()
+    {
+        static EditorModell Mit(string? entwurf, string? impl = null) => Modell() with
+        {
+            Funktionen = [Modell().Funktionen[0] with { Entwurf = entwurf, Implementierung = impl }],
+        };
+
+        // Rumpf aus 📝/🤖: async, Block-Rumpf verbatim.
+        var mitRumpf = Datei(Mit("return new Vorverarbeitet(auftrag.Pfad);"), "/Vorverarbeitung.cs");
+        mitRumpf.Should().Contain("public sealed class Vorverarbeitung : IVorverarbeitung")
+            .And.Contain("public async Task<OneOf<Vorverarbeitet, Unlesbar>> RufeAsync(VorverarbeitungsAuftrag auftrag, IAusfuehrung x)")
+            .And.Contain("        return new Vorverarbeitet(auftrag.Pfad);");
+
+        // Leerer Block: throw-Platzhalter (die Konsole ersetzt danach den Block-Rumpf).
+        Datei(Mit(""), "/Vorverarbeitung.cs").Should().Contain("throw new NotImplementedException(\"TODO: IVorverarbeitung\");");
+
+        // Kein Block (extern, z. B. Python) bzw. schon implementiert: keine Klasse.
+        Scaffolder.Generiere(Mit(null)).Should().NotContain(d => d.Pfad.EndsWith("/Vorverarbeitung.cs"));
+        Scaffolder.Generiere(Mit("return default;", impl: "OpenCvVorverarbeitung")).Should().NotContain(d => d.Pfad.EndsWith("/Vorverarbeitung.cs"));
+    }
+
+    [Fact]
     public void Ohne_Ausdruck_baut_der_Stub_den_Auftrag_der_gerufenen_Funktion()
     {
         Datei(Modell(), "BildAufbereitung.cs").Should().Contain(".Rufe<IVorverarbeitung>(t => new VorverarbeitungsAuftrag(");

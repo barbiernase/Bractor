@@ -117,6 +117,7 @@ public sealed class KontextBauer
         foreach (var p in A(b, "pipelines")) foreach (var h in A(p, "handles")) Merke(h, $"pipeline|{S(p, "name")}|{S(h, "input") ?? S(h, "event")}");
         foreach (var st in A(b, "stores"))
             foreach (var f in A(st, "writeFns").Concat(A(st, "readFns"))) Merke(f, $"store|{S(st, "name")}|{S(f, "name")}");
+        foreach (var f in A(b, "funktionen")) Merke(f, $"funktion|{S(f, "name")}|{S(f, "auftrag")}");
         foreach (var l in A(b, "llmNodes"))
             if (S(l, "promptZiel") is { } z && code.TryGetValue(z, out var schl) && !string.IsNullOrWhiteSpace(S(l, "intent")))
                 erg[schl] = (S(l, "intent")!, $"LLM-Knoten „{S(l, "name")}“ im Board");

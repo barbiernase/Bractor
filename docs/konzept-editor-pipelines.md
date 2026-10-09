@@ -497,6 +497,24 @@ Entwerfbar ohne bestehenden Code: neue Funktion (nur Signatur; Rumpf = Stub, �
 - Abzeichen ∧/∨ am Eingang, Fehler-Ports ⏳/✕, je-Rahmen gestrichelt, Zuordnungstabelle „Feld ← Draht.Feld“ im Panel, Laufort
   einer Funktion (C#/Python) am Knoten.
 - Entfällt für Flüsse: Handle-Karten, Trigger-Records, Selbst-Schleifen, Start-Handle, Regel-Karten.
+- **Pipeline in der Domäne (2026-10-09):** ein Knoten = eine ZUGEWIESENE Funktion — sein Eingang und seine Ausgänge ergeben sich
+  aus deren Interface, im Knoten wird nichts definiert: ƒ = Auftrag → Ergebnisse (`IFunktion`), ▶ = Command → Decide-Events, ⛲ → Quell-
+  Nachricht, ◆/⧗ ← Event. Der Knoten wählt nur die Funktion, ordnet die Drähte dem Eingang zu und trägt ⏳. Drähte verbinden Knoten direkt
+  (beschriftet mit dem Typ des Ausgangs). Die Verbindung zur Domäne ist die Zuweisung: ƒ ⇢ Funktions-Karte (Katalog, Signatur mit
+  ◀ Auftrag ⊕ / Ergebnisse ⊕ ▶ — Auftrag und Ergebnisse als Details eingeklappt), ▶ → Command im Aggregat, ⛲ ⇢ Nachricht. Der Rahmen
+  steht IN der Domäne, auf die der Fluss wirkt (Aggregate seiner Commands), unmittelbar über dem Akteur-Rahmen mit diesen Commands.
+  Nachrichten-Panel nennt die Fluss-Knoten (▶ sendet, ⛲ meldet, Drähte/◆/⧗ hören); Kette und ◎ laufen über die Zuweisungen.
+- **Funktions-Karte = der Knoten, der das Interface erzeugt (2026-10-09):** Eingang und Ausgänge sind Record-Karten, per ⊕ angesteckt
+  (◀ Auftrag, Ergebnisse ▶ — sie stehen sichtbar daneben: Auftrag | ƒ | Ergebnis, eingeklappt nur in einer Prozess-Kette). Dazu ein
+  Code-Eingang „RufeAsync“ wie am Decider: 📝 Code-Block bzw. ＋🤖 LLM (Slot `funktion|IX|Auftrag`). Aus dem Code gelesen: die C#-Klasse,
+  die das Interface implementiert (Modell `Funktion.Implementierung` + `Rumpf`, Code-Fakt über das Interface). Neue Funktion mit Block:
+  „C# schreiben“ legt `public sealed class X : IX` an (immer `async`, leerer Block → throw-Platzhalter; Modell `Entwurf`); der 🤖-Lauf
+  legt sie bei unbekanntem Slot selbst an und füllt dann den Rumpf. Ohne Block = extern (Python, `AddExterneFunktion`).
+- **Nachrichten aus anderen Bereichen (2026-10-09, gilt für JEDEN Nachrichten-Port ⊕):** im Verbinden-Modus erscheint neben den
+  leuchtenden Karten ein Katalog „Nachricht aus anderen Bereichen“ — alle Records der passenden Sorte, die nicht als Karte auf dem Board
+  stehen (Domäne nicht geladen, eingeklappt), grammatik-geprüft, durchsuchbar; anklicken = verbinden + Domäne dazuladen. Dazu „＋ neu“:
+  eine neue Nachricht der Sorte als eigene Karte anlegen und sofort verbinden (an der Funktion: `{Stamm}Auftrag`/`{Stamm}Erledigt`).
+  Ein gelöschtes Ergebnis/ein gelöschter Auftrag verschwindet auch aus der Funktion.
 
 ### 14.7 Abnahme
 

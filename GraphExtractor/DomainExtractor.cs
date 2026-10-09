@@ -106,11 +106,14 @@ public sealed class RecordRaw
 
 /// <summary>
 /// Eine Katalog-Funktion (<c>interface IX : IFunktion { Task&lt;OneOf&lt;E…&gt;&gt; RufeAsync(XAuftrag a, IAusfuehrung x); }</c>) — nur
-/// die Signatur: welcher Auftrag hinein, welche Ergebnis-Events heraus. Die Implementierung ist Bindung, kein Modell-Fakt.
+/// die Signatur: welcher Auftrag hinein, welche Ergebnis-Events heraus. Dazu, falls im Code vorhanden, die C#-Implementierung (die
+/// Klasse, die die Schnittstelle implementiert): ihr <c>RufeAsync</c>-Rumpf ist der Code-Block der Funktion im Editor.
 /// </summary>
 public sealed class FunktionRaw
 {
     public string Name = "", Full = "", Namespace = "";
+    /// <summary>Die C#-Implementierung (Klasse, einfacher Name) und ihr RufeAsync-Rumpf — null, wenn es (noch) keine gibt.</summary>
+    public string? ImplKlasse, ImplRumpf;
     public string AuftragFull = "";
     public List<string> ErgebnisseFull = new();
     /// <summary>Lese-Fähigkeiten nach IAusfuehrung (Typ wie geschrieben, Name).</summary>
@@ -514,6 +517,7 @@ public sealed partial class DomainExtractor
         if (schreiber.Count == 1) { m.ProjektionsSchreiber = schreiber[0].Name; m.ProjektionsSchreiberNamespace = schreiber[0].ContainingNamespace.Fq(); }
 
         CatalogDomainTypes(m);
+        LinkFunktionsImpls(m);
         SeparateKonfigs(m);
         LinkReadModelStores(m);
 
@@ -649,6 +653,26 @@ public sealed partial class DomainExtractor
         m.Triggers.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Funktionen.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Auftraege.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
+    }
+
+    /// <summary>
+    /// Je Katalog-Funktion ihre C#-Implementierung: eine Klasse der Domänen-Quellen, die die Schnittstelle implementiert (Code-Fakt
+    /// über das Interface, nie über Namen). Mehrere → die registrierte (AddFunktion), sonst die erste nach Name.
+    /// </summary>
+    private void LinkFunktionsImpls(DomainModel m)
+    {
+        if (m.Funktionen.Count == 0) return;
+        var klassen = DomainQuellTypen().Where(t => t.TypeKind == TypeKind.Class && !t.IsAbstract).OrderBy(t => t.Fq(), StringComparer.Ordinal).ToList();
+        foreach (var f in m.Funktionen)
+        {
+            var impls = klassen.Where(k => k.AllInterfaces.Any(i => i.Fq() == f.Full)).ToList();
+            var impl = impls.FirstOrDefault(k => RegistrierteImpls().Contains(k.Fq())) ?? impls.FirstOrDefault();
+            var iface = impl?.AllInterfaces.First(i => i.Fq() == f.Full);
+            var methode = iface?.GetMembers(Vertrag.FunktionsMethode).OfType<IMethodSymbol>().FirstOrDefault();
+            if (impl == null || methode == null) continue;
+            f.ImplKlasse = impl.Name;
+            f.ImplRumpf = Sym.Implementierung(impl, methode) is IMethodSymbol im ? MethodBody(im) : null;
+        }
     }
 
     /// <summary>Ein Auftrag (<c>record X : IAuftrag&lt;F&gt;</c>) → F; sonst null.</summary>

@@ -335,6 +335,15 @@ public sealed record Funktion
     public string? Datei { get; init; }
     /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
     public string? Herkunft { get; init; }
+    /// <summary>Die C#-Implementierung aus dem Code (Klassenname) — null = es gibt (noch) keine.</summary>
+    public string? Implementierung { get; init; }
+    /// <summary>Ihr <c>RufeAsync</c>-Rumpf (Spiegel der Datei, im Editor ein 📝/🤖-Code-Block; geändert wird er über ✓ Übernehmen).</summary>
+    public string? Rumpf { get; init; }
+    /// <summary>
+    /// Nur ohne <see cref="Implementierung"/>: der Code-Block der Funktion (📝/🤖) — „C# schreiben" legt damit die Implementierungs-Klasse
+    /// an (<c>""</c> = Block noch leer → throw-Platzhalter). null = kein Code-Block (Implementierung extern, z. B. Python).
+    /// </summary>
+    public string? Entwurf { get; init; }
 }
 
 /// <summary>

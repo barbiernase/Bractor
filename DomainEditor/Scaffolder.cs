@@ -169,6 +169,12 @@ public static class Scaffolder
         // ── Katalog-Funktionen → je Funktion ihre Schnittstelle (nur die Signatur; die Implementierung ist Bindung) ──
         foreach (var f in modell.Funktionen)
             dateien.Add(Platziert(f.Datei, Verzeichnis(modell, f.Namespace), $"{f.Name}.cs", FunktionsDatei(f, modell), DateiArt.Typen));
+        // … und ihre C#-Implementierung, wenn der Editor einen Code-Block trägt und der Code noch keine hat (neu: Rumpf aus 📝/🤖).
+        foreach (var f in modell.Funktionen.Where(f => f.Implementierung == null && f.Entwurf != null))
+        {
+            var k = ImplKlasse(f, modell);
+            dateien.Add(Platziert(null, Verzeichnis(modell, f.Namespace), $"{k}.cs", FunktionsImplDatei(f, k, modell), DateiArt.Typen));
+        }
 
         if (modell.Lesen is { } lesen) dateien.AddRange(LeseseitenDateien(modell, lesen));
 
@@ -453,6 +459,43 @@ public static class Scaffolder
             [f.Auftrag, .. f.Ergebnisse, .. f.Faehigkeiten.Select(p => p.Typ)], []));
         Doku(b, f.Doku, "");
         b.Append(FunktionsInterface(f));
+        return b.ToString();
+    }
+
+    /// <summary>Name der neuen Implementierung: die Schnittstelle ohne führendes I (IBildVerkleinerung → BildVerkleinerung), bei Kollision + „Impl".</summary>
+    public static string ImplKlasse(Funktion f, EditorModell modell)
+    {
+        var n = f.Name.Length > 1 && f.Name[0] == 'I' && char.IsUpper(f.Name[1]) ? f.Name[1..] : f.Name + "Impl";
+        return modell.Records.Any(r => r.Name == n) || modell.Funktionen.Any(x => x.Name == n) ? n + "Impl" : n;
+    }
+
+    /// <summary>
+    /// Die C#-Implementierung einer neuen Funktion: <c>public sealed class X : IX { public async Task&lt;OneOf&lt;…&gt;&gt; RufeAsync(…) { Rumpf } }</c>.
+    /// Immer <c>async</c> mit Block-Rumpf — so passt jeder Rumpf aus 📝/🤖 (die Konsole ersetzt nur den Block). Leer: throw-Platzhalter.
+    /// Laufort ist danach eine Bindung im Host (<c>AddFunktion&lt;IX, X&gt;</c>).
+    /// </summary>
+    private static string FunktionsImplDatei(Funktion f, string klasse, EditorModell modell)
+    {
+        var b = Kopf(f.Namespace, Usings(f.Namespace, modell, [modell.Rahmen.VertragsNamespace],
+            [f.Auftrag, .. f.Ergebnisse, .. f.Faehigkeiten.Select(p => p.Typ)], []));
+        b.AppendLine($"public sealed class {klasse} : {f.Name}");
+        b.AppendLine("{");
+        var faehigkeiten = string.Concat(f.Faehigkeiten.Select(p => $", {p.Typ} {p.Name}"));
+        b.AppendLine($"    public async Task<{OneOf}<{string.Join(", ", f.Ergebnisse)}>> {Funktionsvertrag.Methode}({f.Auftrag} auftrag, {IAusfuehrung} x{faehigkeiten})");
+        b.AppendLine("    {");
+        if (string.IsNullOrWhiteSpace(f.Entwurf))
+        {
+            b.AppendLine("        await Task.CompletedTask;");
+            b.AppendLine($"        throw new NotImplementedException(\"TODO: {f.Name}\");");
+        }
+        else
+        {
+            var rb = new StringBuilder();
+            Eingerückt(rb, f.Entwurf, "        ");
+            b.Append(rb.ToString().TrimEnd('\n')).AppendLine();
+        }
+        b.AppendLine("    }");
+        b.AppendLine("}");
         return b.ToString();
     }
 

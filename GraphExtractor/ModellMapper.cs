@@ -153,7 +153,7 @@ public static class ModellMapper
             {
                 Name = f.Name, Namespace = f.Namespace, Auftrag = Kurz(f.AuftragFull), Ergebnisse = f.ErgebnisseFull.Select(Evt).ToList(),
                 Faehigkeiten = f.Faehigkeiten.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
-                Doku = f.Doku, Datei = Rel(f.Datei),
+                Doku = f.Doku, Datei = Rel(f.Datei), Implementierung = f.ImplKlasse, Rumpf = f.ImplRumpf,
             }).ToList(),
             Fluesse = dom.Fluesse.Select(f => new FlussPipeline
             {
