@@ -50,6 +50,7 @@ public sealed record StateChangeViaProzessGestartet(Guid StreamId, int Version) 
 public sealed record StateChangeViaSchrittGescheitert(Guid StreamId, int Version) : IStateChangeSignal;
 public sealed record StateChangeViaProzessBeendet(Guid StreamId, int Version) : IStateChangeSignal;
 public sealed record StateChangeViaSchrittUmgeleitet(Guid StreamId, int Version) : IStateChangeSignal;
-// Die Fehler-Tokens des Pipeline-Flusses (Abstractions) leben nur im Dirigenten — ihre Signale sind ebenso inert.
+// Die Fehler-Tokens und der Quell-Strom des Pipeline-Flusses (Abstractions) leben nur im Dirigenten — ihre Signale sind ebenso inert.
 public sealed record StateChangeViaZeitlimitAbgelaufen(Guid StreamId, int Version) : IStateChangeSignal;
 public sealed record StateChangeViaSchrittAbgelehnt(Guid StreamId, int Version) : IStateChangeSignal;
+public sealed record StateChangeViaQuellStrom(Guid StreamId, int Version) : IStateChangeSignal;

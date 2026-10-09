@@ -326,7 +326,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 // ═════════════════════════════════════════
 
                 case ProtoRepo.ClientMessage.MessageOneofCase.FunktionenAnbieten:
-                    await HandleFunktionenAnbietenAsync(message.FunktionenAnbieten, responseStream, anbieter, sessionId, ct);
+                    await HandleFunktionenAnbietenAsync(message.FunktionenAnbieten, responseStream, anbieter, sitzung, sessionId, ct);
                     break;
 
                 case ProtoRepo.ClientMessage.MessageOneofCase.ArbeitsErgebnis:
@@ -1088,6 +1088,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         ProtoRepo.FunktionenAnbieten request,
         IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
         FunktionsAnbieterSitzung? anbieter,
+        AkteurSitzung sitzung,
         string sessionId,
         CancellationToken ct)
     {
@@ -1097,7 +1098,13 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 "Dieser Host führt keine Katalog-Funktionen aus (kein Funktions-Ausführer konfiguriert)", "", ct);
             return;
         }
-        var unbekannt = anbieter.Biete(request.Angebote.Select(a => (a.Funktion, a.Slots)));
+        // Akteur-Tor: mit angemeldetem Akteur nur, was er rechnen darf (IDarf<F>); ohne Tor/Akteur offen wie jede andere Nachricht.
+        var akteur = sitzung.Akteur;
+        var unbekannt = anbieter.Biete(request.Angebote.Select(a => (a.Funktion, a.Slots)),
+            akteur is null ? null : akteur.DarfRechnen, out var nichtBefugt);
+        if (nichtBefugt.Count > 0)
+            await SendErrorAsync(responseStream, "FUNKTION_NICHT_BEFUGT",
+                $"{akteur!.Name} darf nicht rechnen: {string.Join(", ", nichtBefugt)} (IDarf<…> am Akteur fehlt)", "", ct);
         if (unbekannt.Count > 0)
         {
             _logger.LogWarning("{Session} bietet unbekannte Funktionen an: [{Unbekannt}]", sessionId, string.Join(", ", unbekannt));

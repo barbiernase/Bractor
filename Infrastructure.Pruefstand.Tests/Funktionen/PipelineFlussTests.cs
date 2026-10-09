@@ -141,6 +141,24 @@ public sealed class Video : IPipeline
     });
 }
 
+// ── Beispiel 4: Frist als Rennen (Strom + Warten gegen ein Zeitlimit) ──
+public sealed record LaufBegonnen : IEvent;
+public sealed record LaufFertig(string Modell) : IEvent;
+public sealed record LaufAbgebrochen : IEvent;
+public sealed record MarkiereHaengend(Guid AggregateId) : ICommand;
+public sealed record HaengendMarkiert : IEvent;
+
+/// <summary>Wächter: endet der Lauf nicht binnen 6 h (Fertig ODER Abgebrochen im SELBEN Strom), wird er als hängend markiert.</summary>
+public sealed class LaufWaechter : IPipeline
+{
+    public PipelineFluss Fluss => PipelineFluss.Definiere(p =>
+    {
+        var begonnen = p.Auf<LaufBegonnen>();
+        var ende = begonnen.Strom().Warte<LaufFertig, LaufAbgebrochen>().Zeitlimit(TimeSpan.FromHours(6));
+        p.Alle(ende.BeiZeitlimit(), begonnen.Strom()).Sende<MarkiereHaengend>((endeZeit, begonnenStrom) => new MarkiereHaengend(begonnenStrom.Id));
+    });
+}
+
 /// <summary>
 /// Die Welt eines Laufs: echter Dirigent + echter Ausführer + Log im Speicher. Funktionen und Aggregat sind Delegaten.
 /// </summary>
@@ -193,15 +211,17 @@ internal sealed class FlussWelt
         LegeBestellungAn c => new BestellungAngelegt(c.Weg),
         LehneBestellungAb c => new BestellungAbgelehnt(c.Grund),
         Benachrichtige c => new Benachrichtigt(c.Text),
+        MarkiereHaengend => new HaengendMarkiert(),
         SpeichereBericht c => new BerichtGespeichert(c.Bericht),
         _ => throw new NotSupportedException(cmd.GetType().Name),
     };
 
-    public async Task StarteAsync(IEvent quellNachricht)
+    public async Task<Guid> StarteAsync(IEvent quellNachricht)
     {
         var stream = Guid.NewGuid();
         await Log.AppendEventsAsync(stream, 0, new[] { quellNachricht }, Korrelation.ToString(), null, "Quelle");
         await Manager.StarteAsync(Korrelation, _name, stream, 1);
+        return stream;
     }
 
     public async Task<ProzessManager.ManagerStatus> TreibeAsync(int max = 40, Guid? korrelation = null)
@@ -412,6 +432,56 @@ public class PipelineFlussTests
         st.Erfolg.Should().BeTrue();
         w.Gesendete<MeldeBild>().Should().ContainSingle();
         w.Gesendete<LegePaarAn>().Should().ContainSingle("die zweite Aufnahme derselben Datei startet keinen zweiten Vorgang");
+    }
+
+    [Fact]
+    public async Task Warten_endet_still_wenn_das_Event_im_Strom_vor_dem_Zeitlimit_kommt()
+    {
+        var w = new FlussWelt(new LaufWaechter(), a => throw new NotSupportedException());
+        var lauf = await w.StarteAsync(new LaufBegonnen());
+        (await w.TreibeAsync(max: 3)).Beendet.Should().BeFalse("der Wächter wartet");
+
+        w.Log.Jetzt += TimeSpan.FromHours(2);
+        await w.Log.AppendEventsAsync(lauf, 1, new IEvent[] { new LaufFertig("m.pt") }, Guid.NewGuid().ToString(), null, "Lauf");
+        w.Log.Jetzt += TimeSpan.FromHours(5);   // die Frist ist jetzt vorbei — aber das Ende kam vorher
+        var st = await w.TreibeAsync();
+
+        st.Erfolg.Should().BeTrue();
+        w.Gesendet.Should().BeEmpty("das Rennen hat das Ende gewonnen — keine Markierung");
+    }
+
+    [Fact]
+    public async Task Warten_nimmt_den_Zeitlimit_Port_und_der_Strom_liefert_die_Aggregat_Id()
+    {
+        var w = new FlussWelt(new LaufWaechter(), a => throw new NotSupportedException());
+        var lauf = await w.StarteAsync(new LaufBegonnen());
+        w.Log.Jetzt += TimeSpan.FromHours(6) + TimeSpan.FromSeconds(1);
+        var st = await w.TreibeAsync();
+
+        st.Erfolg.Should().BeTrue("⏳ ist verdrahtet");
+        w.Gesendete<MarkiereHaengend>().Should().ContainSingle().Which.AggregateId.Should().Be(lauf, "quelle.Strom() trägt die Stream-Id");
+    }
+
+    [Fact]
+    public async Task Ein_Event_nach_dem_Zeitlimit_zaehlt_nicht()
+    {
+        var w = new FlussWelt(new LaufWaechter(), a => throw new NotSupportedException());
+        var lauf = await w.StarteAsync(new LaufBegonnen());
+        w.Log.Jetzt += TimeSpan.FromHours(7);
+        // Das Ende wird erst nach der Frist geschrieben, die Weckung kommt danach: die Frist hat gewonnen.
+        await w.Log.AppendEventsAsync(lauf, 1, new IEvent[] { new LaufAbgebrochen() }, Guid.NewGuid().ToString(), null, "Lauf");
+        (await w.TreibeAsync()).Erfolg.Should().BeTrue();
+
+        w.Gesendete<MarkiereHaengend>().Should().ContainSingle();
+    }
+
+    [Fact]
+    public void Warten_ohne_Zeitlimit_ist_ein_Formfehler()
+    {
+        var ohne = () => PipelineFluss.Definiere(p => p.Auf<LaufBegonnen>().Strom().Warte<LaufFertig>());
+        ohne.Should().Throw<InvalidOperationException>().WithMessage("*ohne Zeitlimit*");
+        new LaufWaechter().Fluss.Knoten.Select(k => k.Art)
+            .Should().Equal(PipelineKnotenArt.Auf, PipelineKnotenArt.Warte, PipelineKnotenArt.Command);
     }
 
     [Fact]

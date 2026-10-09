@@ -94,14 +94,29 @@ public sealed class FunktionsAnbieterSitzung : IAsyncDisposable
     /// Nimmt Angebote auf und startet je NEUER Funktion eine Hol-Schleife (ein erneutes Angebot derselben Funktion ändert
     /// nichts). Liefert die Namen, die keine bekannte Funktion sind.
     /// </summary>
-    public IReadOnlyList<string> Biete(IEnumerable<(string Funktion, int Slots)> angebote)
+    public IReadOnlyList<string> Biete(IEnumerable<(string Funktion, int Slots)> angebote) => Biete(angebote, null, out _);
+
+    /// <summary>
+    /// Wie <see cref="Biete(IEnumerable{ValueTuple{string, int}})"/>, mit dem AKTEUR-TOR: eine Funktion, die <paramref name="darf"/> nicht
+    /// erlaubt (der angemeldete Akteur hat kein <c>IDarf&lt;F&gt;</c>), wird nicht angenommen — sie steht in <paramref name="nichtBefugt"/>.
+    /// <paramref name="darf"/> = null: kein Tor (alles offen, wie ohne Akteur-Token).
+    /// </summary>
+    public IReadOnlyList<string> Biete(IEnumerable<(string Funktion, int Slots)> angebote, Func<Type, bool>? darf, out IReadOnlyList<string> nichtBefugt)
     {
         var unbekannt = new List<string>();
+        var abgewiesen = new List<string>();
+        nichtBefugt = abgewiesen;
         foreach (var (name, slots) in angebote)
         {
             if (_loese(name) is not { } funktion)
             {
                 unbekannt.Add(name);
+                continue;
+            }
+            if (darf is not null && !darf(funktion))
+            {
+                abgewiesen.Add(name);
+                _logger?.LogWarning("[Funktion] {Sitzung} darf {Funktion} nicht rechnen (kein IDarf<{Funktion}> am Akteur)", _sitzung, funktion.Name, funktion.Name);
                 continue;
             }
             var anzahl = Math.Max(1, slots);

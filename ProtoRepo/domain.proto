@@ -328,24 +328,29 @@ message EventEnvelopeDto {
         ModellExistiertBereitsDto modell_existiert_bereits = 65;
         ModellNichtGefundenDto modell_nicht_gefunden = 66;
         ModellRegistriertDto modell_registriert = 67;
-        SammelvorgangBereitsAbgeschlossenDto sammelvorgang_bereits_abgeschlossen = 68;
-        SammelvorgangExistiertBereitsDto sammelvorgang_existiert_bereits = 69;
-        SammelvorgangGestartetDto sammelvorgang_gestartet = 70;
-        SammelvorgangNichtGefundenDto sammelvorgang_nicht_gefunden = 71;
-        TeilVerbuchtDto teil_verbucht = 72;
-        TeilauftragAbgeschlossenDto teilauftrag_abgeschlossen = 73;
-        TeilauftragBereitsFertigDto teilauftrag_bereits_fertig = 74;
-        TeilauftragExistiertBereitsDto teilauftrag_existiert_bereits = 75;
-        TeilauftragGestartetDto teilauftrag_gestartet = 76;
-        TeilauftragNichtGefundenDto teilauftrag_nicht_gefunden = 77;
-        TrainingAbgeschlossenDto training_abgeschlossen = 78;
-        TrainingAngefordertDto training_angefordert = 79;
-        TrainingBereitsBeendetDto training_bereits_beendet = 80;
-        TrainingFortschrittDto training_fortschritt = 81;
-        TrainingGescheitertDto training_gescheitert = 82;
-        TrainingNichtAktivDto training_nicht_aktiv = 83;
-        TrainingslaufExistiertBereitsDto trainingslauf_existiert_bereits = 84;
-        TrainingslaufNichtGefundenDto trainingslauf_nicht_gefunden = 85;
+        BenchPingDto bench_ping = 68;
+        KeinMitgliedAuffindbarDto kein_mitglied_auffindbar = 69;
+        MitgliederEingefrorenDto mitglieder_eingefroren = 70;
+        RangeGefundenDto range_gefunden = 71;
+        RangeOhneTrefferDto range_ohne_treffer = 72;
+        SammelvorgangBereitsAbgeschlossenDto sammelvorgang_bereits_abgeschlossen = 73;
+        SammelvorgangExistiertBereitsDto sammelvorgang_existiert_bereits = 74;
+        SammelvorgangGestartetDto sammelvorgang_gestartet = 75;
+        SammelvorgangNichtGefundenDto sammelvorgang_nicht_gefunden = 76;
+        TeilVerbuchtDto teil_verbucht = 77;
+        TeilauftragAbgeschlossenDto teilauftrag_abgeschlossen = 78;
+        TeilauftragBereitsFertigDto teilauftrag_bereits_fertig = 79;
+        TeilauftragExistiertBereitsDto teilauftrag_existiert_bereits = 80;
+        TeilauftragGestartetDto teilauftrag_gestartet = 81;
+        TeilauftragNichtGefundenDto teilauftrag_nicht_gefunden = 82;
+        TrainingAbgeschlossenDto training_abgeschlossen = 83;
+        TrainingAngefordertDto training_angefordert = 84;
+        TrainingBereitsBeendetDto training_bereits_beendet = 85;
+        TrainingFortschrittDto training_fortschritt = 86;
+        TrainingGescheitertDto training_gescheitert = 87;
+        TrainingNichtAktivDto training_nicht_aktiv = 88;
+        TrainingslaufExistiertBereitsDto trainingslauf_existiert_bereits = 89;
+        TrainingslaufNichtGefundenDto trainingslauf_nicht_gefunden = 90;
 
     }
 }
@@ -401,10 +406,7 @@ message QueryResponsePayloadDto {
 }
 
 message TriggerPayloadDto {
-    oneof payload {
-        BenchPingDto bench_ping = 20;
-
-    }
+    // (noch) keine Typen dieser Kategorie
 }
 
 message AuftragPayloadDto {
@@ -412,6 +414,8 @@ message AuftragPayloadDto {
         GleicheHistogrammAusDto gleiche_histogramm_aus = 20;
         VerkleinereBildDto verkleinere_bild = 21;
         DeuteDateinameDto deute_dateiname = 22;
+        FriereMitgliederEinDto friere_mitglieder_ein = 23;
+        SucheRangeDto suche_range = 24;
 
     }
 }
@@ -690,6 +694,31 @@ message StateChangeViaModellArchiviertDto {
 }
 
 message StateChangeViaModellRegistriertDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaBenchPingDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaKeinMitgliedAuffindbarDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaMitgliederEingefrorenDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaRangeGefundenDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaRangeOhneTrefferDto {
     string stream_id = 1;
     int32 version = 2;
 }
@@ -1162,6 +1191,27 @@ message ModellRegistriertDto {
     ModellMetrikenDto metriken = 6;
 }
 
+message BenchPingDto {
+    int32 seq = 1;
+}
+
+message KeinMitgliedAuffindbarDto {
+    int32 angefragt = 1;
+}
+
+message MitgliederEingefrorenDto {
+    repeated DatensatzMitgliedDto mitglieder = 1;
+}
+
+message RangeGefundenDto {
+    repeated string image_pair_ids = 1;
+    RangeHerkunftDto herkunft = 2;
+}
+
+message RangeOhneTrefferDto {
+    RangeKriterienDto kriterien = 1;
+}
+
 message SammelvorgangBereitsAbgeschlossenDto {
     string sammelvorgang_id = 1;
 }
@@ -1474,13 +1524,6 @@ message TrainingslaufNichtGefundenAntwortDto {
 }
 
 // ============================================================================
-// TRIGGER PAYLOADS
-// ============================================================================
-message BenchPingDto {
-    int32 seq = 1;
-}
-
-// ============================================================================
 // AUFTRAG PAYLOADS
 // ============================================================================
 message GleicheHistogrammAusDto {
@@ -1495,5 +1538,14 @@ message VerkleinereBildDto {
 message DeuteDateinameDto {
     string dateiname = 1;
     string pfad = 2;
+}
+
+message FriereMitgliederEinDto {
+    repeated string mitglieder = 1;
+    SplitKonfigDto split = 2;
+}
+
+message SucheRangeDto {
+    RangeKriterienDto kriterien = 1;
 }
 

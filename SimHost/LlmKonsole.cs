@@ -115,6 +115,19 @@ public sealed class LlmKonsole
         Benutze nur Typen und Member, die im Kontext stehen.
         """;
 
+    /// <summary>Die feste Anweisung für einen Fluss-Lambda (docs/konzept-editor-pipelines.md §14.4).</summary>
+    public const string AnweisungFluss = """
+        Du schreibst GENAU EINEN C#-Lambda-Ausdruck eines Pipeline-Flusses: er baut aus den Nachrichten am Draht (seinen Parametern)
+        den Aufruf des Knotens (einen Auftrag bzw. ein Command). Der Kontext besteht aus dem Graph-Skelett und dem Slot-Teil; am Ende
+        stehen Auftrag und ggf. der aktuelle Lambda mit Befund oder Anpassung.
+        Antworte in GENAU einer von zwei Formen, ohne weiteren Text:
+        1) Ein einziger ```csharp-Block mit NUR dem Lambda-Ausdruck — die Parameterliste genau wie in der SIGNATUR, kein Semikolon.
+        2) Eine Zeile: AUSSERHALB: braucht <Art> <Name> — <Grund>
+           wenn der Auftrag mit den Parametern nicht lösbar ist (z. B. ein weiterer Draht, ein neues Feld).
+        Der Lambda ist rein und deterministisch: kein Guid.NewGuid(), keine Uhr, kein I/O. Bevorzuge die Zuordnungsform
+        (param.Feld, Konstanten, new Wertobjekt(…)). Benutze nur Typen und Member, die im Kontext stehen.
+        """;
+
     private readonly string _sln, _verz;
     private readonly ModellSimulation _sim;
     private readonly Func<ILlmAnbieter> _anbieter;
@@ -145,7 +158,14 @@ public sealed class LlmKonsole
     }
 
     /// <summary>Datei-Spiegel eines Slots (jede Art): aktueller Rumpf, Prompt, Hash.</summary>
-    public object Rumpf(string id) => Slot(id) is { } slot ? CodeSync.LeseRumpf(Anker(slot), _sln) : new { ok = false, grund = "Unbekannter Slot." };
+    public object Rumpf(string id) => Slot(id) is { } slot ? Lese(slot) : new { ok = false, grund = "Unbekannter Slot." };
+
+    // ── Fluss-Lambda: eigener Anker (Klasse + Anweisung + Lambda), der „Rumpf“ ist der ganze Lambda-Ausdruck ──
+    private static bool IstFluss(JsonObject slot) => S(slot, "art") == "fluss";
+    private static LambdaAnker LAnker(JsonObject slot) =>
+        new(S(slot, "datei"), S(slot, "klasse"), slot["anweisung"]?.GetValue<int>() ?? -1, slot["lambda"]?.GetValue<int>() ?? -1);
+    private object Lese(JsonObject slot) => IstFluss(slot) ? CodeSync.LeseLambda(LAnker(slot), _sln) : CodeSync.LeseRumpf(Anker(slot), _sln);
+    private string? BasisHash(JsonObject slot) => IstFluss(slot) ? CodeSync.LambdaHash(LAnker(slot), _sln) : CodeSync.RumpfHash(Anker(slot), _sln);
 
     private static string S(JsonNode? n, string p) => n?[p]?.GetValue<string>() ?? "";
     private static string? SN(JsonNode? n, string p) => n?[p] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
@@ -186,7 +206,7 @@ public sealed class LlmKonsole
             : null;
         return new
         {
-            ok = true, slot, slotTeil = teil, aktuell = CodeSync.LeseRumpf(Anker(slot), _sln),
+            ok = true, slot, slotTeil = teil, aktuell = Lese(slot),
             tokenGesamt = (Index()!["tokenSkelett"]?.GetValue<int>() ?? 0) + (slot["tokenSlot"]?.GetValue<int>() ?? 0),
             simulierbar = commands != null, commands,
         };
@@ -218,7 +238,7 @@ public sealed class LlmKonsole
         if (slot == null) return new { ok = false, grund = "Unbekannter Slot — Kontexte neu erzeugen?" };
         if (string.IsNullOrWhiteSpace(a.Auftrag)) return new { ok = false, grund = "Kein Auftrag — ohne Auftrag wird kein Aufruf ausgelöst." };
         var anbieter = _anbieter();
-        var basisHash = CodeSync.RumpfHash(Anker(slot), _sln);
+        var basisHash = BasisHash(slot);
         var runden = new List<object>();
         // Der aktuelle Rumpf (Anpassung) ohne „// 🤖 Prompt:“-Zeile — die Aufträge stehen getrennt im Prompt.
         string? rumpf = a.Rumpf is null ? null : string.Join("\n", a.Rumpf.Replace("\r\n", "\n").Split('\n')
@@ -230,10 +250,10 @@ public sealed class LlmKonsole
             var art = anpassung != null ? "anpassung" : befund != null ? "reparatur" : "erzeugen";
             var uhr = Stopwatch.StartNew();
             LlmAntwort antwort;
-            try { antwort = await anbieter.FrageAsync(Anweisung, prompt, ct); }
+            try { antwort = await anbieter.FrageAsync(IstFluss(slot) ? AnweisungFluss : Anweisung, prompt, ct); }
             catch (Exception ex) { runden.Add(new { nr, art, fehler = ex.Message + (ex.InnerException != null ? " — " + ex.InnerException.Message : "") }); break; }
             uhr.Stop();
-            var (ergebnis, kandidat, ausserhalb) = Zerlege(antwort.Text);
+            var (ergebnis, kandidat, ausserhalb) = IstFluss(slot) ? ZerlegeLambda(antwort.Text) : Zerlege(antwort.Text);
             var befunde = kandidat != null ? Pruefe(slot, kandidat) : new List<string>();
             var runde = new
             {
@@ -266,10 +286,65 @@ public sealed class LlmKonsole
         return ("rumpf", Dedent(code), null);
     }
 
+    /// <summary>Antwort → Lambda | AUSSERHALB | unlesbar (ein Codeblock mit genau einem Lambda-Ausdruck).</summary>
+    private static (string Ergebnis, string? Rumpf, string? Ausserhalb) ZerlegeLambda(string text)
+    {
+        var t = text.Trim();
+        var aus = Regex.Match(t, @"^AUSSERHALB:.*$", RegexOptions.Multiline);
+        var block = Regex.Match(t, @"```(?:csharp|cs|c#)?\s*\n(.*?)```", RegexOptions.Singleline);
+        if (!block.Success && aus.Success) return ("ausserhalb", null, aus.Value.Trim());
+        var code = (block.Success ? block.Groups[1].Value : t).Replace("\r\n", "\n").Trim().TrimEnd(';').Trim();
+        return code.Length == 0 ? ("unlesbar", null, null) : ("rumpf", code, null);
+    }
+
+    /// <summary>
+    /// Fluss-Lambda prüfen: ein Lambda-Ausdruck mit derselben Stelligkeit; dann das Modell mit dem Kandidaten (als Bau-Ausdruck des
+    /// Eingangs bzw. Liste des Je) in-memory übersetzt — dieselbe Übersetzung wie die Simulation (echte Generatoren).
+    /// </summary>
+    private List<string> PruefeLambda(JsonObject slot, string ausdruck)
+    {
+        if (SyntaxFactory.ParseExpression(ausdruck) is not LambdaExpressionSyntax neu || neu.GetDiagnostics().Any(d => d.Severity == DiagnosticSeverity.Error))
+            return new List<string> { "Kein einzelner Lambda-Ausdruck (Syntax)." };
+        var aktuell = JsonSerializer.SerializeToNode(CodeSync.LeseLambda(LAnker(slot), _sln))?["body"]?.GetValue<string>();
+        if (aktuell != null && SyntaxFactory.ParseExpression(aktuell) is LambdaExpressionSyntax alt && Stelligkeit(alt) != Stelligkeit(neu))
+            return new List<string> { $"Der Lambda hat {Stelligkeit(neu)} Parameter, der Knoten liefert {Stelligkeit(alt)} (Drähte)." };
+        var modell = SimModell();
+        if (modell == null) return new List<string> { "domain-model.json fehlt — Kontexte neu erzeugen." };
+        var mit = MitLambda(modell, slot, ausdruck);
+        if (mit is null) return new List<string> { $"Fluss {S(slot, "klasse")}.{S(slot, "knoten")} steht nicht im Modell — Kontexte neu erzeugen." };
+        var basis = BasisKompilat(modell);
+        var bekannt = basis.Fehler.Select(f => f.Code + "|" + f.Meldung).ToHashSet();
+        return _sim.Kompiliere(mit).Fehler.Where(f => f.Schweregrad == "error" && !bekannt.Contains(f.Code + "|" + f.Meldung))
+            .Select(f => $"{f.Code}: {f.Meldung}").Distinct().Take(20).ToList();
+    }
+
+    private static int Stelligkeit(LambdaExpressionSyntax l) => l switch
+    {
+        SimpleLambdaExpressionSyntax => 1,
+        ParenthesizedLambdaExpressionSyntax p => p.ParameterList.Parameters.Count,
+        _ => -1,
+    };
+
+    /// <summary>Das Modell mit dem Kandidaten im passenden Knoten: Lambda i = Eingang i (Haupt-Aufruf, dann je ∨), beim Je die Liste.</summary>
+    private static EditorModell? MitLambda(EditorModell m, JsonObject slot, string ausdruck)
+    {
+        var fluss = m.Fluesse.FirstOrDefault(f => f.Name == S(slot, "klasse"));
+        var knoten = fluss?.Knoten.FirstOrDefault(k => k.Name == S(slot, "knoten"));
+        var i = slot["lambda"]?.GetValue<int>() ?? -1;
+        if (fluss == null || knoten == null || i < 0) return null;
+        FlussSchritt neu;
+        if (knoten.Art == FlussArt.Je && i == 0) neu = knoten with { Liste = ausdruck };
+        else if (i < knoten.Eingaenge.Count)
+            neu = knoten with { Eingaenge = knoten.Eingaenge.Select((e, j) => j == i ? e with { Ausdruck = ausdruck } : e).ToList() };
+        else return null;
+        return m with { Fluesse = m.Fluesse.Select(f => f != fluss ? f : f with { Knoten = f.Knoten.Select(k => k == knoten ? neu : k).ToList() }).ToList() };
+    }
+
     // ── Prüfen: Syntax für alle; Decide/Apply In-Memory-Compile mit den echten Generatoren; Store gegen das echte Projekt ──
 
     public List<string> Pruefe(JsonObject slot, string rumpf)
     {
+        if (IstFluss(slot)) return PruefeLambda(slot, rumpf);
         var befunde = SyntaxFactory.ParseStatement("{\n" + rumpf + "\n}").GetDiagnostics()
             .Where(d => d.Severity == DiagnosticSeverity.Error)
             .Select(d => $"Syntax {d.Id} Zeile {d.Location.GetLineSpan().StartLinePosition.Line}: {d.GetMessage()}").ToList();
@@ -379,6 +454,7 @@ public sealed class LlmKonsole
     {
         var slot = Slot(id);
         if (slot == null) return new { ok = false, grund = "Unbekannter Slot." };
+        if (IstFluss(slot)) return UebernehmeLambda(id, slot, rumpf, basisHash, bauen);
         var anker = Anker(slot);
         var (ok, grund, alt, neuHash, zeile) = CodeSync.SetzeRumpf(anker, rumpf, auftrag, basisHash, _sln);
         if (!ok) return new { ok, grund };
@@ -386,6 +462,20 @@ public sealed class LlmKonsole
         Directory.CreateDirectory(sicherung);
         var datei = Path.Combine(sicherung, $"{DateTime.Now:yyyyMMdd-HHmmss}-{Regex.Replace(id, @"[^\w.@-]", "_")}.json");
         File.WriteAllText(datei, JsonSerializer.Serialize(new { id, anker, alterInhalt = alt, neuerHash = neuHash }));
+        Protokolliere(id, new { aktion = "uebernommen", datei = anker.Datei, zeile });
+        return new { ok = true, datei = anker.Datei, zeile, sicherung = Path.GetFileName(datei), bau = bauen ? Bauen(id) : null,
+            hinweis = "Kontexte sind jetzt veraltet — neu erzeugen, bevor der nächste Slot gefüllt wird." };
+    }
+
+    private object UebernehmeLambda(string id, JsonObject slot, string ausdruck, string? basisHash, bool bauen)
+    {
+        var anker = LAnker(slot);
+        var (ok, grund, alt, neuHash, zeile) = CodeSync.SetzeLambda(anker, ausdruck, basisHash, _sln);
+        if (!ok) return new { ok, grund };
+        var sicherung = Path.Combine(_verz, "sicherung");
+        Directory.CreateDirectory(sicherung);
+        var datei = Path.Combine(sicherung, $"{DateTime.Now:yyyyMMdd-HHmmss}-{Regex.Replace(id, @"[^\w.@-]", "_")}.json");
+        File.WriteAllText(datei, JsonSerializer.Serialize(new { id, lambdaAnker = anker, alterInhalt = alt, neuerHash = neuHash }));
         Protokolliere(id, new { aktion = "uebernommen", datei = anker.Datei, zeile });
         return new { ok = true, datei = anker.Datei, zeile, sicherung = Path.GetFileName(datei), bau = bauen ? Bauen(id) : null,
             hinweis = "Kontexte sind jetzt veraltet — neu erzeugen, bevor der nächste Slot gefüllt wird." };
@@ -399,8 +489,9 @@ public sealed class LlmKonsole
             ? Directory.GetFiles(sicherung, $"*-{muster}.json").OrderByDescending(f => f).FirstOrDefault() : null;
         if (letzte == null) return new { ok = false, grund = "Keine Sicherung für diesen Slot." };
         var o = JsonNode.Parse(File.ReadAllText(letzte))!;
-        var anker = o["anker"].Deserialize<MethodenAnker>()!;
-        var (ok, grund) = CodeSync.SetzeInhaltZurueck(anker, S(o, "alterInhalt"), S(o, "neuerHash"), _sln);
+        var (ok, grund) = o["lambdaAnker"] is { } la
+            ? CodeSync.SetzeLambdaZurueck(la.Deserialize<LambdaAnker>()!, S(o, "alterInhalt"), S(o, "neuerHash"), _sln)
+            : CodeSync.SetzeInhaltZurueck(o["anker"].Deserialize<MethodenAnker>()!, S(o, "alterInhalt"), S(o, "neuerHash"), _sln);
         if (ok) { File.Move(letzte, letzte + ".zurueckgenommen"); Protokolliere(id, new { aktion = "rueckgaengig" }); }
         return new { ok, grund, bau = ok && bauen ? Bauen(id) : null };
     }

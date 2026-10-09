@@ -87,7 +87,8 @@ public sealed class AkteurAnalyzer : DiagnosticAnalyzer
             if (iDarf == null || iAkteur == null) return;
             var hinein = new[] { T("Abstractions.ICommand"), T("Abstractions.IQuery"), T("Abstractions.IPipelineTrigger"), T("Abstractions.ITransientEvent"), T("Abstractions.IQuellNachricht") }
                 .Where(x => x != null).Cast<INamedTypeSymbol>().ToArray();
-            start.RegisterSymbolAction(ctx => Pruefe(ctx, iDarf, iAkteur, hinein), SymbolKind.NamedType);
+            var iFunktion = T("Abstractions.IFunktion");
+            start.RegisterSymbolAction(ctx => Pruefe(ctx, iDarf, iAkteur, hinein, iFunktion), SymbolKind.NamedType);
             var k = new Konsumenten(T("Abstractions.ISubscriber"), T("Abstractions.IReader`1"), T("Abstractions.IPipelineHandler"),
                 T("Abstractions.PipelineContext"), T("Abstractions.ICommand"));
             var v = new VertragsTypen(T("Abstractions.IAkteurVertrag`1"), T("Abstractions.IEvent"), T("Abstractions.ITransientEvent"),
@@ -109,7 +110,8 @@ public sealed class AkteurAnalyzer : DiagnosticAnalyzer
         });
     }
 
-    private static void Pruefe(SymbolAnalysisContext ctx, INamedTypeSymbol iDarf, INamedTypeSymbol iAkteur, INamedTypeSymbol[] hinein)
+    private static void Pruefe(SymbolAnalysisContext ctx, INamedTypeSymbol iDarf, INamedTypeSymbol iAkteur, INamedTypeSymbol[] hinein,
+        INamedTypeSymbol? iFunktion)
     {
         var typ = (INamedTypeSymbol)ctx.Symbol;
         var ort = typ.Locations.FirstOrDefault() ?? Location.None;
@@ -128,12 +130,16 @@ public sealed class AkteurAnalyzer : DiagnosticAnalyzer
         foreach (var d in darf)
         {
             var t = d.TypeArguments[0];
+            // Eine Katalog-Funktion (Interface mit IFunktion): der Akteur darf sie RECHNEN — ihre Ergebnisse gibt er hinein (§14.5).
+            if (iFunktion != null && t.TypeKind == TypeKind.Interface && t.AllInterfaces.Contains(iFunktion, SymbolEqualityComparer.Default))
+                continue;
             var erlaubt = hinein.Any(h => SymbolEqualityComparer.Default.Equals(t, h)
                 || t.AllInterfaces.Contains(h, SymbolEqualityComparer.Default));
             if (!erlaubt || t.TypeKind == TypeKind.Interface || t.IsAbstract)
                 ctx.ReportDiagnostic(Diagnostic.Create(Befugnis, ort, typ.Name,
                     $"IDarf<{t.Name}> — dürfen kann man nur, was man hineingibt: einen konkreten Command, eine Query, "
-                    + "einen Trigger, eine Quell-Nachricht oder ein Transient-Event (was ein Akteur hört, wird aus dem Graphen abgeleitet)"));
+                    + "einen Trigger, eine Quell-Nachricht, ein Transient-Event oder die Ergebnisse einer Katalog-Funktion (IDarf<IFunktion-Typ>: "
+                    + "er darf sie rechnen) — was ein Akteur hört, wird aus dem Graphen abgeleitet"));
         }
     }
 

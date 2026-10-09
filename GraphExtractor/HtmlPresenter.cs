@@ -72,6 +72,16 @@ public static class HtmlPresenter
 #de .sim .fld select,#de .sim .fld input,#de .sim .fld textarea{width:100%;box-sizing:border-box}
 #de .sim .frame{border-left:3px solid #ffb86b;background:#151b27;border-radius:4px;padding:5px 8px;margin:4px 0;cursor:pointer}
 #de .sim .frame.saga{border-left-color:#b48cff}
+#de .sim .frame.fluss{border-left-color:#c08a2e}
+#de .sim .frame.fluss.gesch{border-left-color:#ff6b81}
+#de .sim .tabs{display:flex;gap:4px;margin-bottom:6px}
+#de .sim .tabs button{flex:1}
+#de .sim .tabs button.an{background:#2a3344;outline:1px solid #c08a2e}
+#de .sim .wahl{display:grid;grid-template-columns:110px 1fr;gap:4px 6px;align-items:center}
+#de .sim .wahl label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.85}
+#de .sim .wahl input{grid-column:1/-1}
+#de .glink.simdraht{stroke:#ffb86b!important;stroke-width:4px!important;opacity:1!important}
+#de .glink.simdraht.simrej{stroke:#ff6b81!important}
 #de .sim .frame.rej{border-left-color:#ff6b81}
 #de .sim .frame .ev{display:block;margin-left:10px;opacity:.9}
 #de .sim .frame .ev.rej{color:#ff9aa9}
@@ -1473,7 +1483,17 @@ public static class HtmlPresenter
     body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Ergebnis"),eSel));
     body.append(h("button",{class:"add",onclick:()=>{const en=uniq((f.name||"F").replace(/^I/,"")+"Erledigt");
       MODEL.records.push({name:en,kind:"event",namespace:f.namespace,felder:[]});(f.ergebnisse=f.ergebnisse||[]).push(en);render();}},"+ neues Ergebnis-Event"));
-    body.append(h("div",{class:"gsec",style:"opacity:.6"},"Implementierung = Bindung im Host (AddFunktion<"+(f.name||"F")+", …>) — C#, Python oder extern; nicht im Graph."));
+    // Lese-Fähigkeiten: Parameter nach IAusfuehrung (je Aufruf aus einem Bereich). Nur lesen — schreiben bleibt dem Aggregat.
+    body.append(h("div",{class:"gsec"},"⚙ liest (Lese-Fähigkeiten)"));
+    (f.faehigkeiten||[]).forEach((p,i)=>body.append(h("div",{class:"slotrow"},h("button",{class:"rm",onclick:()=>{f.faehigkeiten.splice(i,1);render();}},"✕"),
+      h("span",{class:"slotlbl",style:"flex:1"},"⚙ "+p.typ+" "+p.name))));
+    const lese=[...new Set(MODEL.stores.flatMap(st=>(st.readFns||[]).map(x=>x.faehigkeit).filter(Boolean)))].filter(t=>!(f.faehigkeiten||[]).some(p=>p.typ===t)).sort();
+    if(lese.length){const ls=h("select",{onchange:e=>{const t=e.target.value;if(!t)return;let nm=t.replace(/^I(?=[A-ZÄÖÜ])/,"");nm=nm.charAt(0).toLowerCase()+nm.slice(1);
+        (f.faehigkeiten=f.faehigkeiten||[]).push({typ:t,name:nm});render();}});
+      ls.append(h("option",{value:""},"+ Lese-Fähigkeit …"));lese.forEach(t=>ls.append(h("option",{value:t},"⚙ "+t)));body.append(h("div",{class:"slotrow"},ls));}
+    body.append(h("div",{class:"gsec",style:"opacity:.6"},(f.faehigkeiten||[]).length
+      ? "Mit Fähigkeiten läuft die Funktion nur im Host (AddFunktion<"+(f.name||"F")+", …>) — nicht in Python/extern."
+      : "Implementierung = Bindung im Host (AddFunktion<"+(f.name||"F")+", …>) — C#, Python oder extern; nicht im Graph."));
     // Ablauf als Kette: was NACH dieser Funktion kommt — je Ablauf (Prozess), in dem sie gerufen wird.
     body.append(h("div",{class:"gsec"},"Ablauf ▶ dann …"));
     kettenZeilen(body,"fk:"+f._id);
@@ -2312,8 +2332,9 @@ public static class HtmlPresenter
   const istFlussDom=d=>typeof d==="string"&&d.startsWith(FL_PRE);
   const istAussenDom=d=>istClientDom(d)||istFlussDom(d);
   const flussVonDom=d=>MODEL.fluesse.find(f=>FL_PRE+f._id===d);
-  const FL_SYM={quelle:"⛲",auf:"◆",funktion:"ƒ",command:"▶",je:"⧉"};
-  const FL_ART={quelle:"Quelle",auf:"Event-Quelle",funktion:"Funktion",command:"Command",je:"Je-Rahmen"};
+  const FL_SYM={quelle:"⛲",auf:"◆",funktion:"ƒ",command:"▶",je:"⧉",warte:"⧗"};
+  const FL_ART={quelle:"Quelle",auf:"Event-Quelle",funktion:"Funktion",command:"Command",je:"Je-Rahmen",warte:"Warten (Event im Strom)"};
+  const flWarteAuf=k=>(k.warteAuf&&k.warteAuf.length?k.warteAuf:[k.typ]).filter(Boolean);
   function flussKnotenNodes(){return MODEL.fluesse.flatMap(f=>(f.knoten||[]).map(k=>({id:"fs:"+k._id,name:(FL_SYM[k.art]||"")+" "+k.name,
     kind:"flussknoten",ref:k,own:{id:"fl:"+f._id,name:f.name,kind:"fluss",ref:f}})));}
   const flKnoten=(f,name)=>(f.knoten||[]).find(k=>k.name===name);
@@ -2323,7 +2344,9 @@ public static class HtmlPresenter
   const flVor=k=>[...new Set((k.eingaenge||[]).flatMap(e=>[...(e.draehte||[]).map(d=>d.von),...(e.je?[e.je]:[])]))];
   // Ausgänge eines Knotens: die Fälle (Ergebnisse der Funktion, Events aus dem Decide des Commands, die Quell-Nachricht).
   function flAusgaenge(k){
-    if(flQuelleArt(k))return [{fall:null,port:"fall",label:k.typ||"Nachricht"}];
+    // Eine Quelle hat zwei Ausgänge: ihre Nachricht und ihren Strom (quelle.Strom(): Id + Version des Aggregats/Vorgangs).
+    if(flQuelleArt(k))return [{fall:null,port:"fall",label:k.typ||"Nachricht"},{fall:null,port:"strom",label:"⇢ Strom (Id, Version)"}];
+    if(k.art==="warte")return flWarteAuf(k).map(e=>({fall:e,port:"fall",label:e}));
     if(k.art==="funktion"){const f=MODEL.funktionen.find(x=>x.name===k.typ);return (f?f.ergebnisse||[]:[]).map(e=>({fall:e,port:"fall",label:e}));}
     // Ablehnungen sind KEIN Fall-Port: das Aggregat schreibt dann die Ablehnungs-Marke — sie kommt am ✕-Port an.
     if(k.art==="command")return flDecideEvents(k).filter(e=>(recByName(e)||{}).kind!=="rejection").map(e=>({fall:e,port:"fall",label:e}));
@@ -2333,6 +2356,7 @@ public static class HtmlPresenter
     if(k.art==="funktion"||k.art==="command"){if(k.zeitlimit)p.push({fall:null,port:"zeitlimit",label:"⏳ Zeitlimit abgelaufen"});
       const abl=k.art==="command"?flDecideEvents(k).filter(e=>(recByName(e)||{}).kind==="rejection"):[];
       p.push({fall:null,port:"abgelehnt",label:k.art==="command"?"✕ abgelehnt"+(abl.length?" ("+abl.join(", ")+")":""):"✕ gescheitert"});}
+    if(k.art==="warte"&&k.zeitlimit)p.push({fall:null,port:"zeitlimit",label:"⏳ Zeitlimit abgelaufen (kein Event)"});
     return p;}
   const flPortGleich=(d,p)=>(d.port||"fall")===p.port&&(p.port!=="fall"||(d.fall||null)===(p.fall||null));
   // Wer an einem Port hängt (Knoten + Eingang).
@@ -2343,14 +2367,15 @@ public static class HtmlPresenter
     return k.art==="command"?recByName(k.typ):null;}
   // Welche Nachricht ein Draht trägt (für die Zuordnung).
   function flDrahtTyp(f,d){const v=flKnoten(f,d.von);if(!v)return null;
-    if(d.port==="zeitlimit")return "ZeitlimitAbgelaufen";if(d.port==="abgelehnt")return "SchrittAbgelehnt";
+    if(d.port==="zeitlimit")return "ZeitlimitAbgelaufen";if(d.port==="abgelehnt")return "SchrittAbgelehnt";if(d.port==="strom")return "QuellStrom";
     return flQuelleArt(v)?v.typ:d.fall;}
   function flFelderVon(typ){if(typ==="ZeitlimitAbgelaufen"||typ==="SchrittAbgelehnt")return [{name:"Grund",typ:"string"}];
+    if(typ==="QuellStrom")return [{name:"Id",typ:"Guid"},{name:"Version",typ:"int"}];
     const r=recByName(typ);return r?(r.felder||[]):[];}
   // Lambda-Parameter wie der Scaffolder (Scaffolder.FlussParameter): benannt nach den Knoten, von denen die Drähte kommen.
   function flParameter(f,e){if(e.je&&!e.sammle)return [e.je];let roh;
     if(e.je){const je=flKnoten(f,e.je),q=((je&&(je.eingaenge||[])[0])||{}).draehte||[];roh=[(q[0]||{}).von||"quelle",((e.draehte||[])[0]||{}).von||"liste"];}
-    else roh=(e.draehte||[]).map(d=>(d.port||"fall")==="fall"?d.von:d.von+(d.port==="zeitlimit"?"Zeit":"Abgelehnt"));
+    else roh=(e.draehte||[]).map(d=>(d.port||"fall")==="fall"?d.von:d.von+(d.port==="zeitlimit"?"Zeit":d.port==="strom"?"Strom":"Abgelehnt"));
     const n=[];roh.forEach(x=>{let y=x,i=2;while(n.includes(y))y=x+(i++);n.push(y);});return n;}
   // Die Quellen der Zuordnung: je Lambda-Parameter seine Felder (Ausdruck „param.Feld").
   function flQuellen(f,e){const ps=flParameter(f,e);
@@ -2445,6 +2470,7 @@ public static class HtmlPresenter
       else if(art==="cmd")neu=flNeu(f,"command",nm,ein);
       else if(art==="cmdneu"){const c=flNeuerCommand(f);if(c)neu=flNeu(f,"command",c,ein);}
       else if(art==="je")neu=flNeu(f,"je","",ein);
+      else if(art==="warte"){neu=flNeu(f,"warte","",ein);neu.warteAuf=[];neu.zeitlimit="TimeSpan.FromHours(1)";}
       else if(art==="zu"){const z=flKnoten(f,nm);if(z&&flVerbinde(f,k.name,p,z))neu=z;}
       if(neu){render();setTimeout(()=>zeigeKnoten("fs:"+neu._id),0);}}});
     sel.append(h("option",{value:""},"＋ dann …"));
@@ -2453,6 +2479,7 @@ public static class HtmlPresenter
     const gc=h("optgroup",{label:"▶ Commands (ins Aggregat)"});MODEL.records.filter(r=>r.kind==="command").forEach(r=>gc.append(h("option",{value:"cmd|"+r.name},"▶ "+r.name)));
     gc.append(h("option",{value:"cmdneu|"},"＋ neuer Command …"));sel.append(gc);
     if(p.port==="fall"&&!(k.art==="je"))sel.append(h("optgroup",{label:"⧉ Rahmen"},h("option",{value:"je|"},"⧉ je Element einer Liste")));
+    if(p.port==="strom")sel.append(h("optgroup",{label:"⧗ Warten"},h("option",{value:"warte|",title:"Auf ein späteres Event in diesem Strom warten — mit Zeitlimit (Frist als Rennen)"},"⧗ warte auf ein Event im Strom …")));
     const spaeter=(f.knoten||[]).filter(z=>z!==k&&z.art!=="je"&&!flQuelleArt(z)&&!flErreicht(f,z.name,k.name));
     if(spaeter.length){const gz=h("optgroup",{label:"→ in einen bestehenden Knoten (∧/∨ automatisch)"});spaeter.forEach(z=>gz.append(h("option",{value:"zu|"+z.name},(FL_SYM[z.art]||"")+" "+z.name)));sel.append(gz);}
     return sel;}
@@ -2470,6 +2497,9 @@ public static class HtmlPresenter
       const at=h("select",{onchange:e=>{k.art=e.target.value;render();}},h("option",{value:"quelle"},"⛲ Katalog-Quelle (Datei, Timer, …)"),h("option",{value:"auf"},"◆ Event aus dem Log"));at.value=k.art;
       body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"Art"),at));
       if(k.art==="quelle")body.append(h("button",{class:"add",onclick:()=>{const q=flNeueQuellNachricht(f);if(q){k.typ=q;render();}}},"+ neue Quell-Nachricht"));
+      // Ingress-Bindungen aus dem Host (MapQuellWebhook<T>(route) …) — Code-Fakt der Composition Root, hier nur angezeigt.
+      (k.bindungen||[]).forEach(b=>body.append(h("div",{class:"gsec",style:"opacity:.8",title:"Bindung im Host"+(b.datei?" · "+b.datei:"")},
+        (b.modus==="webhook"?"🔗 Webhook POST ":b.modus==="timer"?"⏱ Timer ":"📁 Datei ")+(b.ort||"")+"  →  "+(k.typ||"Nachricht"))));
       body.append(h("div",{class:"gsec",style:"opacity:.6"},k.art==="quelle"?"Jede Nachricht startet einen Vorgang (genau einmal, Kennung). Die Quelle selbst ist Bindung im Host: AddQuelle<"+(k.typ||"Nachricht")+", …>().":"Jedes Vorkommen dieses Events im Log startet einen Vorgang."));}
     else if(k.art==="funktion"){const s=h("select",{onchange:e=>{if(e.target.value==="§neu"){const fn=flNeueFunktion(f);if(fn)k.typ=fn;}else k.typ=e.target.value;
         (k.eingaenge||[]).forEach(e2=>{if(!e2.ausdruck)e2.argumente=flAutoArgs(f,k,e2);});render();}});
@@ -2481,10 +2511,16 @@ public static class HtmlPresenter
     else if(k.art==="command"){const s=recSelect(k.typ,v=>{k.typ=v;(k.eingaenge||[]).forEach(e2=>{if(!e2.ausdruck)e2.argumente=flAutoArgs(f,k,e2);});render();},["command"]);
       body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"sendet"),s));
       const dc=MODEL.decider.find(d=>d.command===k.typ);if(dc)body.append(h("div",{class:"gsec",style:"opacity:.7;cursor:pointer",title:"Decider öffnen",onclick:()=>waehle("dec:"+dc._id)},"→ Aggregat "+(dc.aggregat||"?")));}
+    else if(k.art==="warte"){
+      body.append(h("div",{class:"gsec",style:"opacity:.7"},"Wartet im Strom der Quelle auf das ERSTE dieser Events danach — jedes ist ein Ausgang; kommt keines binnen Zeitlimit, feuert ⏳. Ein Event nach dem Zeitlimit zählt nicht."));
+      flWarteAuf(k).forEach((t,i)=>body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",title:"nicht mehr darauf warten",onclick:()=>{k.warteAuf=flWarteAuf(k).filter((_,j)=>j!==i);k.typ=k.warteAuf[0]||"";render();}},"✕"),
+        h("span",{class:"slotlbl",style:"flex:1"},"⧗ "+t))));
+      const ws=recSelect("",v=>{if(!v)return;const l=flWarteAuf(k);if(!l.includes(v))l.push(v);k.warteAuf=l;k.typ=l[0];render();},["event"]);
+      body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"+ warte auf"),ws));}
     else if(k.art==="je"){body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"Liste"),h("input",{value:k.liste||"",placeholder:"x => x.Bilder",onchange:e=>{k.liste=e.target.value;render();}})));
       body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"Element-Typ"),h("input",{value:k.typ||"",placeholder:"string",onchange:e=>{k.typ=e.target.value.trim();render();}})));
       body.append(h("div",{class:"gsec",style:"opacity:.6"},"Die folgenden Knoten laufen einmal je Element, parallel; „Sammle“ wartet auf alle (in Element-Reihenfolge)."));}
-    if(k.art==="funktion"||k.art==="command")body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"⏳ Zeitlimit"),
+    if(k.art==="funktion"||k.art==="command"||k.art==="warte")body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"⏳ Zeitlimit"),
       h("input",{value:k.zeitlimit||"",placeholder:"z. B. TimeSpan.FromMinutes(5)",onchange:e=>{const v=e.target.value.trim();if(v)k.zeitlimit=v;else delete k.zeitlimit;render();}})));
     // ── Eingänge ──
     if(!flQuelleArt(k)){body.append(h("div",{class:"gsec"},"◀ Eingang"+((k.eingaenge||[]).length>1?"  ·  ∨ jeder Weg einzeln":"")));
@@ -2511,7 +2547,7 @@ public static class HtmlPresenter
     const kopf=e.je?(e.sammle?"⧉ sammelt „"+e.je+"“":"⧉ je Element von „"+e.je+"“"):((e.draehte||[]).length>1?"∧ wartet auf alle":"");
     if(ei>0)body.append(h("div",{class:"gsec fl-oder"},"∨ oder"));
     if(kopf)body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl fl-modus"},kopf),h("button",{class:"rm",title:"Eingang entfernen",onclick:()=>{k.eingaenge.splice(ei,1);render();}},"✕")));
-    (e.draehte||[]).forEach(d=>{const v=flKnoten(f,d.von),txt=d.von+((d.port||"fall")==="fall"?(d.fall?"."+d.fall:""):d.port==="zeitlimit"?".⏳":".✕");
+    (e.draehte||[]).forEach(d=>{const v=flKnoten(f,d.von),txt=d.von+((d.port||"fall")==="fall"?(d.fall?"."+d.fall:""):d.port==="zeitlimit"?".⏳":d.port==="strom"?".Strom":".✕");
       const ex=(e.draehte||[]).length>1||(k.eingaenge||[]).filter(x=>!x.je).length>1;
       body.append(h("div",{class:"slotrow fl-draht"},h("span",{class:"fl-ziel",onclick:()=>v&&zeigeKnoten("fs:"+v._id)},"← "+(v?FL_SYM[v.art]+" ":"? ")+txt),
         !e.je&&ex?h("button",{class:"rm",title:(e.draehte||[]).length>1?"Als eigenen Weg (∨) lösen":"Zum ersten Eingang nehmen (∧)",onclick:()=>{flUmschalten(f,k,e,d);render();}},(e.draehte||[]).length>1?"∨":"∧"):null,
@@ -2531,8 +2567,9 @@ public static class HtmlPresenter
         h("datalist",{id:dl+"_"+i},...vor.map(v=>h("option",{value:v})),h("option",{value:"default"}))));});
     body.append(h("button",{class:"add",onclick:()=>{e.argumente=flAutoArgs(f,k,e);render();}},"↻ automatisch zuordnen"));}
   function flussKurz(n){const k=n.ref,f=n.own.ref;
-    if(flQuelleArt(k))return (k.art==="quelle"?"Quelle · meldet ":"Auf ")+(k.typ||"?");
+    if(flQuelleArt(k))return (k.art==="quelle"?"Quelle · meldet ":"Auf ")+(k.typ||"?")+(k.bindungen||[]).map(b=>(b.modus==="webhook"?" · 🔗 ":" · ")+(b.ort||"")).join("");
     if(k.art==="je")return "je Element · "+(k.liste||"Liste?");
+    if(k.art==="warte")return "wartet auf "+(flWarteAuf(k).join(" | ")||"?")+(k.zeitlimit?" · ⏳ "+k.zeitlimit:" · ⏳ fehlt");
     const ein=(k.eingaenge||[]).map(e=>e.je?(e.sammle?"sammle "+e.je:"je "+e.je):(e.draehte||[]).map(d=>d.von).join(" ∧ ")).join(" ∨ ");
     return (k.art==="funktion"?"ƒ ":"▶ ")+(k.typ||"?")+(k.zeitlimit?" · ⏳":"")+(ein?" · ← "+ein:"");}
   // Layout eines Pipeline-Rahmens: Spalte = Flusstiefe, Zeile = Reihenfolge innerhalb der Tiefe (Vorgänger-Zeile bevorzugt).
@@ -2570,9 +2607,9 @@ public static class HtmlPresenter
         if(g){g.ei.add(ei);g.kontext=g.kontext&&kontext;return;}gesehen.set(key,{d,e,ei:new Set([ei]),kontext});});});
     gesehen.forEach(({d,e,ei,kontext})=>{const v=flKnoten(f,d.von),ev=v&&ELS.get("fs:"+v._id);if(!ev)return;
       const port=d.port||"fall",oder=es.length>1&&ei.size<es.length,und=!e.je&&(e.draehte||[]).filter(x=>!istKontext(e,x)).length>1;
-      const farbe=kontext?"#6f7a91":d.je?"#7fa6d9":port==="zeitlimit"?"#d7a23c":port==="abgelehnt"?"#cf6f68":"#c08a2e";
+      const farbe=kontext?"#6f7a91":d.je?"#7fa6d9":port==="zeitlimit"?"#d7a23c":port==="abgelehnt"?"#cf6f68":port==="strom"?"#8fb3d9":"#c08a2e";
       const l=mkE({el:ev},{el:ez},farbe,kontext||port!=="fall"||!!d.je,"fluss"+(kontext?" kontext":""));l.festA="r";l.festB="l";
-      l.label=kontext?"":(d.je?(e.sammle?"⧉ je":"⧉ je Element"):(port==="zeitlimit"?"⏳":port==="abgelehnt"?"✕":(d.fall||"")))
+      l.label=kontext?"":(d.je?(e.sammle?"⧉ je":"⧉ je Element"):(port==="zeitlimit"?"⏳":port==="abgelehnt"?"✕":port==="strom"?"⇢ Strom":(d.fall||"")))
         +(kontext?"":(und&&!e.je?" ∧":"")+(oder?" ∨":"")+(e.sammle&&!d.je?" ⧉ sammle":""));
       l.titel=(kontext?"Kontext: ":"")+d.von+" → "+z.name+(oder?" (∨ eigener Weg)":und?" (∧ wartet auf alle)":"")+"\nKlick: "+z.name+" öffnen";
       l.dataset.a="fs:"+v._id;l.dataset.b="fs:"+z._id;l.klick=()=>waehle("fs:"+z._id);});}));}
@@ -4831,7 +4868,9 @@ public static class HtmlPresenter
   //   (Saga-Regel →) Command → Decider/Aggregat → Events/Ablehnungen → Applier/State. Ändert man das Modell,
   //   spielt der Server die bisherige Geschichte gegen die neue Logik nach (Hot-Reload).
   const SIM={an:false,sid:"editor-"+Math.random().toString(36).slice(2,10),frames:[],instanzen:[],sagas:[],abd:new Set(),
-    abdAn:false,folgen:true,tempo:420,laeuft:false,cmd:null,werte:{},hinweis:null,fehler:[],cmdSig:""};
+    abdAn:false,folgen:true,tempo:420,laeuft:false,cmd:null,werte:{},hinweis:null,fehler:[],cmdSig:"",
+    // Pipeline als Fluss (§14): Modus, gewählte Pipeline, Quell-Werte je Pipeline, Wahl je Funktionsknoten, Verlauf, Vorgänge.
+    modus:"cmd",pipe:null,quellWerte:{},wahl:{},verlauf:[],vorgaenge:[]};
   const uuid=()=>crypto.randomUUID?crypto.randomUUID():"xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx".replace(/x/g,()=>(Math.random()*16|0).toString(16));
   const simCommands=()=>MODEL.records.filter(r=>r.kind==="command");
   const simZiel=c=>{const d=MODEL.decider.find(x=>x.command===c);return d?d.aggregat:null;};
@@ -4849,13 +4888,18 @@ public static class HtmlPresenter
     const tempo=h("select",{title:"Animations-Tempo",onchange:e=>SIM.tempo=+e.target.value});
     [["700","langsam"],["420","normal"],["150","schnell"],["0","sofort"]].forEach(([v,l])=>{const o=h("option",{value:v},l);if(+v===SIM.tempo)o.selected=true;tempo.append(o);});
     kopf.append(tempo);
-    box.append(kopf,h("h4",{},"Command senden"),h("div",{id:"sim-form"}),h("div",{id:"sim-meld"}),
+    box.append(kopf,h("h4",{},"Einspeisen"),h("div",{id:"sim-form"}),h("div",{id:"sim-meld"}),
       h("h4",{},"Verlauf"),h("div",{id:"sim-verlauf"}),h("h4",{},"Instanzen"),h("div",{id:"sim-inst"}),
-      h("h4",{},"Laufende Sagas"),h("div",{id:"sim-sagas"}));
+      h("h4",{},"Laufende Sagas"),h("div",{id:"sim-sagas"}),
+      MODEL.fluesse.length?h("h4",{},"Pipeline-Vorgänge"):null,MODEL.fluesse.length?h("div",{id:"sim-vorg"}):null);
     simForm();simListen();}
 
   // ── Formular: Command wählen (nach Ziel-Aggregat gruppiert) + Felder typgerecht ──
   function simForm(){const box=document.getElementById("sim-form");if(!box)return;box.innerHTML="";
+    // Zwei Wege hinein: ein Command von außen oder eine Quell-Nachricht in eine Pipeline (Fluss).
+    if(MODEL.fluesse.length){const tab=(m,l)=>h("button",{class:"act"+(SIM.modus===m?" an":""),onclick:()=>{SIM.modus=m;simForm();}},l);
+      box.append(h("div",{class:"tabs"},tab("cmd","▶ Command"),tab("fluss","⛓ Pipeline")));
+      if(SIM.modus==="fluss"){simFlussForm(box);return;}}
     const cmds=simCommands();SIM.cmdSig=cmds.map(c=>c.name+":"+(c.felder||[]).map(f=>f.name+"/"+f.typ).join(",")).join("|");
     if(!cmds.length){box.append(h("div",{class:"hint"},"Kein Command im Modell."));return;}
     if(!SIM.cmd||!cmds.some(c=>c.name===SIM.cmd))SIM.cmd=cmds[0].name;
@@ -4898,19 +4942,69 @@ public static class HtmlPresenter
     const t=h("textarea",{rows:2,placeholder:"JSON",oninput:e=>{try{set(e.target.value.trim()===""?null:JSON.parse(e.target.value));t.style.borderColor="";}catch(_){t.style.borderColor="#ff6b81";}}});
     t.value=JSON.stringify(w[f.name]);return t;}
 
-  // ── Senden → Server-Kaskade → Animation ──
-  async function simSenden(){if(SIM.laeuft)return;const c=SIM.cmd;const werte=SIM.werte[c]||{};SIM.laeuft=true;
-    try{const r=await postJson("/api/editor/sim/step",{model:payload(true),sessionId:SIM.sid,command:c,values:werte});const res=await r.json();badge(true);
-      SIM.fehler=res.ok?[]:(res.fehler||[]);SIM.hinweis=res.hinweis||null;
-      // Bei Übersetzungs-/Wertefehlern bleibt der letzte gute Stand (Instanzen, Abdeckung) stehen.
-      if(res.ok){SIM.instanzen=res.instanzen||[];SIM.abd=new Set(res.abdeckung||[]);SIM.sagas=res.sagas||[];const start=SIM.frames.length;res.frames.forEach(f=>SIM.frames.push(f));
-        // Nach dem Anlegen: dieselbe Instanz für Folge-Commands vorwählen.
-        simListen();simOverlay();await simAnimiere(res.frames);simForm();}
-      else{simListen();simOverlay();}}
+  // ── Pipeline durchspielen (docs/konzept-editor-pipelines.md §14): Quell-Nachricht + je Funktionsknoten der Ausgangsfall ──
+  //   Ohne Implementierung (Entwurf zuerst): die Funktion „liefert“ den gewählten Fall mit Musterwerten (gleichnamige Felder aus
+  //   Auftrag/Drähten, sonst Platzhalter; optional JSON). Commands laufen in die Aggregat-Kaskade, Events starten p.Auf<E>()-Flüsse.
+  function simFlussForm(box){const fl=MODEL.fluesse.filter(f=>(f.knoten||[]).some(flQuelleArt));
+    if(!fl.length){box.append(h("div",{class:"hint"},"Keine Pipeline mit Quelle."));return;}
+    if(!SIM.pipe||!fl.some(f=>f.name===SIM.pipe))SIM.pipe=fl[0].name;
+    const sel=h("select",{style:"width:100%",onchange:e=>{SIM.pipe=e.target.value;simForm();}});
+    fl.forEach(f=>{const o=h("option",{value:f.name},"⛓ "+f.name);if(f.name===SIM.pipe)o.selected=true;sel.append(o);});box.append(sel);
+    const f=fl.find(x=>x.name===SIM.pipe),q=(f.knoten||[]).find(flQuelleArt),rec=recByName(q.typ);
+    box.append(h("div",{class:"sub"},(q.art==="auf"?"◆ Event ":"⛲ Quelle ")+q.typ));
+    const w=SIM.quellWerte[f.name]=SIM.quellWerte[f.name]||{};
+    (rec?rec.felder||[]:[]).forEach(fd=>box.append(h("div",{class:"fld"},h("label",{title:fd.typ},fd.name+" : "+fd.typ),simInput(fd,w,null))));
+    // Der Strom der Quelle (quelle.Strom()): bei einem Event aus dem Log das Aggregat, aus dem es stammt.
+    if(q.art==="auf"){const ss=SIM.strom||(SIM.strom={});const s=h("select",{title:"Aus welchem Aggregat stammt das Event? (quelle.Strom().Id)",onchange:e=>{ss[f.name]=e.target.value||undefined;}});
+      s.append(h("option",{value:""},"neuer Strom (Id automatisch)"));SIM.instanzen.forEach(i=>{const o=h("option",{value:i.id},i.label+" · "+i.id.slice(0,8));if(ss[f.name]===i.id)o.selected=true;s.append(o);});
+      box.append(h("div",{class:"fld"},h("label",{},"⇢ Strom"),s));}
+    const wf=SIM.wahl[f.name]=SIM.wahl[f.name]||{};
+    const fk=(f.knoten||[]).filter(k=>k.art==="funktion"||k.art==="warte");
+    if(fk.length){box.append(h("h4",{},"Ausgang je Funktion / Warten"));const g=h("div",{class:"wahl"});
+      fk.forEach(k=>{const fn=k.art==="funktion"?MODEL.funktionen.find(x=>x.name===k.typ):null;
+        const faelle=(k.art==="warte"?flWarteAuf(k):(fn?fn.ergebnisse||[]:[])).map(e=>[e,e]);
+        if(k.zeitlimit)faelle.push(["zeitlimit","⏳ Zeitlimit"]);if(k.art!=="warte")faelle.push(["abgelehnt","✕ abgelehnt"]);
+        const cur=wf[k.name]=wf[k.name]||{fall:faelle[0][0]};if(!faelle.some(x=>x[0]===cur.fall))cur.fall=faelle[0][0];
+        const s=h("select",{onchange:e=>{cur.fall=e.target.value;}});
+        faelle.forEach(([v,l])=>{const o=h("option",{value:v},l);if(v===cur.fall)o.selected=true;s.append(o);});
+        const t=h("input",{placeholder:"Werte automatisch — JSON überschreibt, z. B. {\"Pfad\":\"/x\"}",title:"Werte des Ergebnisses (optional)",
+          value:cur.werte?JSON.stringify(cur.werte):"",oninput:e=>{const v=e.target.value.trim();
+            try{cur.werte=v===""?undefined:JSON.parse(v);t.style.borderColor="";}catch(_){t.style.borderColor="#ff6b81";}}});
+        g.append(h("label",{title:k.typ+(k.zeitlimit?" · ⏳ "+k.zeitlimit:"")},(FL_SYM[k.art]||"ƒ")+" "+k.name),s,t);});
+      box.append(g);}
+    box.append(h("div",{class:"row",style:"margin-top:6px"},h("button",{class:"act run",onclick:simEinspeisen},"▶ Einspeisen"),
+      h("span",{class:"hint"},"Commands laufen in die Aggregate")));}
+
+  async function simEinspeisen(){if(SIM.laeuft||!SIM.pipe)return;SIM.laeuft=true;
+    try{const r=await postJson("/api/editor/sim/fluss",{model:payload(true),sessionId:SIM.sid,pipeline:SIM.pipe,values:SIM.quellWerte[SIM.pipe]||{},wahl:SIM.wahl,
+        strom:(SIM.strom||{})[SIM.pipe]});
+      await simAntwort(await r.json());}
     catch(e){badge(false);SIM.fehler=[{code:"OFFLINE",meldung:"SimHost nicht erreichbar (dotnet run --project SimHost)."}];simListen();}
     finally{SIM.laeuft=false;}}
+
+  // ── Senden → Server-Kaskade → Animation ──
+  async function simSenden(){if(SIM.laeuft)return;const c=SIM.cmd;const werte=SIM.werte[c]||{};SIM.laeuft=true;
+    try{const r=await postJson("/api/editor/sim/step",{model:payload(true),sessionId:SIM.sid,command:c,values:werte,wahl:SIM.wahl});
+      await simAntwort(await r.json());}
+    catch(e){badge(false);SIM.fehler=[{code:"OFFLINE",meldung:"SimHost nicht erreichbar (dotnet run --project SimHost)."}];simListen();}
+    finally{SIM.laeuft=false;}}
+  // Antwort des Servers: Frames (Aggregat-Kaskade) + Fluss-Schritte. Der Verlauf hält beides in Reihenfolge; ein Command-Knoten des
+  //   Flusses trägt seine Frames selbst (sie stehen nicht noch einmal einzeln im Verlauf).
+  async function simAntwort(res){badge(true);
+    SIM.fehler=res.ok?[]:(res.fehler||[]);SIM.hinweis=res.hinweis||null;
+    // Bei Übersetzungs-/Wertefehlern bleibt der letzte gute Stand (Instanzen, Abdeckung) stehen.
+    if(!res.ok){simListen();simOverlay();return;}
+    SIM.instanzen=res.instanzen||[];SIM.abd=new Set(res.abdeckung||[]);SIM.sagas=res.sagas||[];
+    const frames=res.frames||[],fluss=res.fluss||[];res.frames.forEach(f=>SIM.frames.push(f));
+    const imFluss=new Set(fluss.flatMap(s=>s.frames||[]));
+    const ablauf=[];frames.forEach((f,i)=>{if(!imFluss.has(i))ablauf.push({art:"frame",f});});
+    fluss.forEach(st=>ablauf.push({art:"fluss",s:st,frames:(st.frames||[]).map(i=>frames[i]).filter(Boolean)}));
+    ablauf.forEach(a=>SIM.verlauf.push(a));
+    if(res.vorgaenge)res.vorgaenge.forEach(v=>SIM.vorgaenge.push(v));
+    simListen();simOverlay();await simAblauf(ablauf);simForm();}
   async function simReset(){try{await postJson("/api/editor/sim/reset",{sessionId:SIM.sid});}catch(e){}
-    SIM.frames=[];SIM.instanzen=[];SIM.sagas=[];SIM.abd=new Set();SIM.werte={};SIM.hinweis=null;SIM.fehler=[];simLeeren(true);simForm();simListen();simOverlay();}
+    SIM.frames=[];SIM.instanzen=[];SIM.sagas=[];SIM.abd=new Set();SIM.werte={};SIM.hinweis=null;SIM.fehler=[];SIM.verlauf=[];SIM.vorgaenge=[];
+    simLeeren(true);simForm();simListen();simOverlay();}
   async function simStand(){try{const r=await fetch("/api/editor/sim/state?sessionId="+SIM.sid);const res=await r.json();
     SIM.instanzen=res.instanzen||[];SIM.abd=new Set(res.abdeckung||[]);simListen();simOverlay();}catch(e){}}
   async function simDsl(){const out=document.getElementById("de-out");
@@ -4925,14 +5019,21 @@ public static class HtmlPresenter
       if(SIM.hinweis)meld.append(h("div",{class:"hinweis"},"↻ "+SIM.hinweis));
       SIM.fehler.forEach(f=>meld.append(h("div",{class:"fehler"},"["+f.code+"] "+(f.datei?f.datei+": ":"")+f.meldung)));}
     const v=document.getElementById("sim-verlauf");if(v){v.innerHTML="";
-      if(!SIM.frames.length)v.append(h("div",{class:"hint"},"Noch nichts gesendet."));
-      SIM.frames.slice().reverse().forEach(f=>{const rej=f.events.length&&f.events.every(e=>!e.persistent);
+      if(!SIM.verlauf.length)v.append(h("div",{class:"hint"},"Noch nichts gesendet."));
+      SIM.verlauf.slice().reverse().forEach(a=>{
+        if(a.art==="fluss"){v.append(simFlussZeile(a));return;}
+        const f=a.f;const rej=f.events.length&&f.events.every(e=>!e.persistent);
         const el=h("div",{class:"frame"+(f.herkunft==="saga"?" saga":"")+(rej||f.unrouted?" rej":""),title:"erneut abspielen",onclick:()=>simAnimiere([f])},
           h("b",{},(f.herkunft==="saga"?"⤷ "+f.saga+": ":"")+f.command),h("span",{style:"opacity:.6"}," → "+f.label+(f.werte?" ("+f.werte+")":"")));
         if(f.unrouted)el.append(h("span",{class:"ev rej"},"⚠ von keinem Aggregat behandelt (im Cluster ein Hang)"));
         f.events.forEach(e=>el.append(h("span",{class:"ev"+(e.persistent?"":" rej")},(e.persistent?"● ":"✗ ")+e.typ+(e.werte?" ("+e.werte+")":""),
           null)));
         v.append(el);});}
+    const vg=document.getElementById("sim-vorg");if(vg){vg.innerHTML="";
+      if(!SIM.vorgaenge.length)vg.append(h("div",{class:"hint"},"Noch keine Quell-Nachricht eingespeist."));
+      SIM.vorgaenge.slice(-8).reverse().forEach(x=>{const el=h("div",{class:"inst"},h("b",{},(x.erfolg?"✓ ":"✗ ")+"⛓ "+x.pipeline+" #"+x.nummer));
+        if(x.grund)el.append(h("span",{class:"f"+(x.erfolg?"":" neu")},"gescheitert: "+x.grund));
+        (x.wartend||[]).forEach(w=>el.append(h("span",{class:"f"},w)));vg.append(el);});}
     const ib=document.getElementById("sim-inst");if(ib){ib.innerHTML="";
       if(!SIM.instanzen.length)ib.append(h("div",{class:"hint"},"Keine Instanz angelegt."));
       SIM.instanzen.forEach(i=>{const el=h("div",{class:"inst",title:"als Ziel wählen",onclick:()=>{const c=simCommands().find(x=>x.name===SIM.cmd);
@@ -4964,9 +5065,32 @@ public static class HtmlPresenter
     return {st:st.map(x=>x.filter(Boolean)).filter(x=>x.length),rej};}
   const simEl=id=>world&&world.querySelector('[data-id="'+vertreterId(id)+'"]');   // eingeklappte Details → Besitzer
   function simLeeren(ganz){if(!world)return;world.querySelectorAll(".gnode2.simhot").forEach(e=>e.classList.remove("simhot"));
-    if(ganz)world.querySelectorAll(".gnode2.simspur,.gnode2.simrej").forEach(e=>e.classList.remove("simspur","simrej"));}
+    if(ganz){world.querySelectorAll(".gnode2.simspur,.gnode2.simrej").forEach(e=>e.classList.remove("simspur","simrej"));
+      document.querySelectorAll("#de .glink.simdraht").forEach(e=>e.classList.remove("simdraht","simrej"));}}
   const warte=ms=>new Promise(r=>setTimeout(r,ms));
-  async function simAnimiere(frames){simLeeren(true);
+  // ── Fluss-Schritt: Knoten und die Drähte, über die er bedient wurde, leuchten; ein Command-Knoten spielt danach seine Kaskade ──
+  const flId=(pipe,name)=>{const f=MODEL.fluesse.find(x=>x.name===pipe);const k=f&&flKnoten(f,name);return k?"fs:"+k._id:null;};
+  const FL_AUS={zeitlimit:"⏳ Zeitlimit",abgelehnt:"✕ abgelehnt",noop:"∅ Noop",gescheitert:"✗ gescheitert"};
+  function simFlussZeile(a){const st=a.s,gesch=st.ausgang==="gescheitert";
+    const el=h("div",{class:"frame fluss"+(gesch?" gesch":""),title:"erneut abspielen",onclick:()=>simAblauf([a])},
+      h("b",{},"⛓ "+st.pipeline+" #"+st.vorgang+" · "+(FL_SYM[st.art==="funktion"?"funktion":st.art]||"")+" "+st.knoten),
+      h("span",{style:"opacity:.6"}," "+st.typ+(st.element!=null?" [je "+st.element+"]":"")+(st.werte&&st.art!=="quelle"&&st.art!=="auf"?" ("+st.werte+")":"")));
+    if(st.art!=="quelle"&&st.art!=="auf")el.append(h("span",{class:"ev"+(st.ausgang==="fall"?"":" rej")},
+      "→ "+(st.ausgang==="fall"?"● "+st.fall:FL_AUS[st.ausgang]||st.ausgang)+(st.ergebnisWerte&&st.art==="funktion"?" ("+st.ergebnisWerte+")":"")+(st.grund?" — "+st.grund:"")));
+    (a.frames||[]).forEach(f=>f.events.forEach(e=>el.append(h("span",{class:"ev"+(e.persistent?"":" rej")},"  "+f.label+": "+(e.persistent?"● ":"✗ ")+e.typ))));
+    return el;}
+  async function simAblauf(ablauf){simLeeren(true);
+    for(const a of ablauf){
+      if(a.art==="frame"){await simAnimiere([a.f],true);continue;}
+      const st=a.s,z=flId(st.pipeline,st.knoten),rej=st.ausgang!=="fall"&&st.ausgang!=="noop";simLeeren(false);
+      (st.ein||[]).forEach(d=>{const v=flId(st.pipeline,d.von);if(!v||!z)return;
+        document.querySelectorAll('#de .glink[data-a="'+v+'"][data-b="'+z+'"]').forEach(p=>{p.classList.add("simdraht");p.classList.toggle("simrej",d.port!=="fall");});});
+      const el=z&&simEl(z);if(el){el.classList.add("simhot","simspur");if(rej)el.classList.add("simrej");}
+      if(SIM.folgen&&SIM.tempo>0&&z){const n=graphNodes().find(x=>x.id===z);if(n)centerOn(n);}
+      if(SIM.tempo>0)await warte(SIM.tempo);
+      if(a.frames&&a.frames.length)await simAnimiere(a.frames,true);}
+    simLeeren(false);}
+  async function simAnimiere(frames,behalten){if(!behalten)simLeeren(true);
     for(const f of frames){const {st,rej}=simStufen(f);
       for(const ids of st){simLeeren(false);
         ids.forEach(id=>{const el=simEl(id);if(!el)return;el.classList.add("simhot","simspur");if(rej.has(id))el.classList.add("simrej");});
@@ -4984,7 +5108,12 @@ public static class HtmlPresenter
       mark("dec:"+d._id,n===0?"abd-kalt":(n===aus.length?"abd-voll":"abd-teil"),n+"/"+aus.length+" Zweige");});
     MODEL.applier.forEach(a=>mark("app:"+a._id,SIM.abd.has("app:"+a.aggregat+"|"+a.event)?"abd-voll":"abd-kalt"));
     MODEL.sagas.forEach(sg=>{const liste=transOf(sg).filter(t=>(t.wenn||[]).length).flatMap(t=>(t.dann||[]).filter(d=>d.sende).map(()=>t));
-      liste.forEach((t,ri)=>mark("tr:"+t._id,SIM.abd.has("regel:"+sg.name+"#"+ri)?"abd-voll":"abd-kalt"));});}
+      liste.forEach((t,ri)=>mark("tr:"+t._id,SIM.abd.has("regel:"+sg.name+"#"+ri)?"abd-voll":"abd-kalt"));});
+    // Fluss-Knoten: welche Ausgänge (Fälle) im Durchspielen gefeuert haben.
+    MODEL.fluesse.forEach(f=>(f.knoten||[]).forEach(k=>{if(k.art==="je")return;const pre="fl:"+f.name+"|"+k.name+">";
+      const hit=[...SIM.abd].filter(x=>x.startsWith(pre)).map(x=>x.slice(pre.length));
+      const aus=flAusgaenge(k).filter(a=>a.port==="fall").map(a=>a.fall||k.typ);const n=aus.filter(a=>hit.includes(a)).length;
+      mark("fs:"+k._id,hit.length===0?"abd-kalt":(n>=aus.length?"abd-voll":"abd-teil"),aus.length>1?n+"/"+aus.length+" Fälle":null);}));}
 
   // Nach jedem Board-Render: Overlay neu anbringen; Formular nur neu bauen, wenn sich die Commands geändert haben.
   window.simNachRender=function(){if(!SIM.an)return;simOverlay();

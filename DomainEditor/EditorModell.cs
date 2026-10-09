@@ -329,6 +329,8 @@ public sealed record Funktion
     public required string Auftrag { get; init; }
     /// <summary>Die Ergebnis-Events (OneOf-Fälle, Record-Namen) — die Ausgänge der Funktion im Graph.</summary>
     public IReadOnlyList<string> Ergebnisse { get; init; } = [];
+    /// <summary>Lese-Fähigkeiten nach <c>IAusfuehrung</c> (<c>ISucheX suche</c>) — je Aufruf aus einem Bereich; eine solche Funktion läuft nur im Host.</summary>
+    public IReadOnlyList<Parameter> Faehigkeiten { get; init; } = [];
     public string? Doku { get; init; }
     public string? Datei { get; init; }
     /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
@@ -366,6 +368,8 @@ public static class FlussArt
     public const string Command = "command";
     /// <summary>Je-Rahmen: <c>draht.Je(x =&gt; x.Liste)</c>.</summary>
     public const string Je = "je";
+    /// <summary>Warten auf ein Event im Strom der Quelle: <c>quelle.Strom().Warte&lt;A, B&gt;().Zeitlimit(…)</c>.</summary>
+    public const string Warte = "warte";
 }
 
 /// <summary>
@@ -383,6 +387,8 @@ public sealed record FlussSchritt
     public string? Zeitlimit { get; init; }
     /// <summary>Nur Je: der Listen-Lambda verbatim (<c>z =&gt; z.Bilder</c>).</summary>
     public string? Liste { get; init; }
+    /// <summary>Nur Warte: die Events, auf die gewartet wird (Code-Reihenfolge; <see cref="Typ"/> = das erste) — je eines ein Ausgang.</summary>
+    public IReadOnlyList<string> WarteAuf { get; init; } = [];
     /// <summary>Im Code ohne Variable (<c>p.Alle(…).Sende&lt;X&gt;(…);</c>) — der Name ist dann nur die Editor-Identität.</summary>
     public bool OhneVariable { get; init; }
     public string? Doku { get; init; }
@@ -410,7 +416,7 @@ public sealed record FlussDraht
     public required string Von { get; init; }
     /// <summary>Der Fall (Typ-Name: Ergebnis der Funktion, Event des Aggregats). Null = der Ausgang einer Quelle selbst.</summary>
     public string? Fall { get; init; }
-    /// <summary><c>fall</c> (Standard), <c>zeitlimit</c> (⏳) oder <c>abgelehnt</c> (✕).</summary>
+    /// <summary><c>fall</c> (Standard), <c>zeitlimit</c> (⏳), <c>abgelehnt</c> (✕) oder <c>strom</c> (der Strom einer Quelle).</summary>
     public string Port { get; init; } = FlussPort.Fall;
 }
 
@@ -419,6 +425,8 @@ public static class FlussPort
     public const string Fall = "fall";
     public const string Zeitlimit = "zeitlimit";
     public const string Abgelehnt = "abgelehnt";
+    /// <summary>Der zweite Ausgang einer Quelle: ihr Strom (<c>quelle.Strom()</c>, <c>QuellStrom(Id, Version)</c>).</summary>
+    public const string Strom = "strom";
 }
 
 /// <summary>

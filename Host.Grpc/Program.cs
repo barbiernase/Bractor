@@ -135,6 +135,9 @@ builder.Services.AddFunktion<Domain.Bildaufbereitung.IHistogrammAusgleich, Domai
 // die Deutung des Namens ist eine Katalog-Funktion wie die Bildaufbereitung (rein, viele Slots).
 builder.Services.AddQuelle<Domain.ImagePair.DateiErkannt, Domain.Pipeline.ImageProcessing.DateiQuelle>();
 builder.Services.AddFunktion<Domain.ImagePair.IDateinameDeutung, Domain.Pipeline.ImageProcessing.ImagePairDateinameDeutung>(slots: 8);
+// Datensatz-Resolver (Flüsse DatensatzRangeAufloesung/DatensatzEinfrieren): Funktionen mit Lese-Fähigkeit — laufen nur im Host.
+builder.Services.AddFunktion<Domain.Pipeline.Datensatz.IRangeSuche, Domain.Pipeline.Datensatz.RangeSuche>(slots: 2);
+builder.Services.AddFunktion<Domain.Pipeline.Datensatz.IMitgliederEinfrieren, Domain.Pipeline.Datensatz.MitgliederEinfrieren>(slots: 2);
 
 // P6.2: der EVENT-Pfad der Pipelines läuft über die geordnete Pull-Maschine (nicht mehr Push-Broker).
 builder.Services.AddGeneratedPipelineEventPulls();

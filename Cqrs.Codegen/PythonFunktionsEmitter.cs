@@ -27,7 +27,10 @@ public static class PythonFunktionsEmitter
         return (Python(funktionen), funktionen.Count);
     }
 
-    /// <summary>Die feste Form (CQRS068): genau eine Methode RufeAsync(TAuftrag, IAusfuehrung) → Task&lt;OneOf&lt;…&gt;&gt;.</summary>
+    /// <summary>
+    /// Die feste Form (CQRS068): genau eine Methode RufeAsync(TAuftrag, IAusfuehrung) → Task&lt;OneOf&lt;…&gt;&gt;. Eine Funktion mit
+    /// Lese-Fähigkeiten (weitere Parameter) braucht die Stores des Hosts — sie bekommt keine Python-Basis (läuft nur in C#).
+    /// </summary>
     private static FunktionInfo? Lies(Type f)
     {
         var m = f.GetMethods().FirstOrDefault(x => x.Name == "RufeAsync" && x.GetParameters().Length == 2);

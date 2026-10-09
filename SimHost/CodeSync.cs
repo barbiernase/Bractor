@@ -17,6 +17,12 @@ public sealed record CodeAnker(string Kind, string Namespace, string Disc, strin
 public sealed record MethodenAnker(string Datei, string Klasse, string Methode, string? ParameterTyp);
 
 /// <summary>
+/// Anker eines Fluss-Lambdas (docs/konzept-editor-pipelines.md §14.4): Datei, Pipeline-Klasse, die wievielte Anweisung des
+/// Definiere-Lambdas und der wievielte Lambda darin (Code-Reihenfolge; verschachtelte zählen nicht) — wie der Extractor sie zählt.
+/// </summary>
+public sealed record LambdaAnker(string Datei, string Klasse, int Anweisung, int Lambda);
+
+/// <summary>
 /// Die SYNCHRONISATIONS-NAHT zwischen Board (Browser) und echter <c>.cs</c>-Datei. Der Browser schreibt
 /// bewusst NUR eine Sache: die <c>// 🤖 Prompt:</c>-Kommentarzeile im Methoden-Rumpf; echten Code editiert
 /// der Mensch im richtigen Editor. Die Datei ist die Wahrheit; der Anker wird aus dem Graphen abgeleitet
@@ -377,6 +383,73 @@ public static class CodeSync
             zeilen.Insert(idx >= 0 ? idx : Math.Min(1, zeilen.Count), zeile);
         }
         return string.Join("\n", zeilen);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════════════════════
+    //  FLUSS-LAMBDAS: Anker = Klasse + Anweisung + Lambda-Index. Der „Rumpf“ ist der ganze Lambda-Ausdruck.
+    // ════════════════════════════════════════════════════════════════════════════════════════
+
+    private sealed record LambdaTreffer(bool Ok, string Pfad, string Text, LambdaExpressionSyntax? L, string Grund);
+
+    private static LambdaTreffer FindeLambda(LambdaAnker a, string slnRoot)
+    {
+        var pfad = Path.GetFullPath(Path.Combine(slnRoot, a.Datei));
+        if (!pfad.StartsWith(Path.GetFullPath(slnRoot), StringComparison.Ordinal)) return new(false, pfad, "", null, "Pfad liegt außerhalb der Solution.");
+        if (!File.Exists(pfad)) return new(false, pfad, "", null, $"Datei fehlt: {a.Datei}");
+        var text = File.ReadAllText(pfad);
+        var klasse = CSharpSyntaxTree.ParseText(text).GetRoot().DescendantNodes().OfType<ClassDeclarationSyntax>()
+            .FirstOrDefault(c => c.Identifier.Text == a.Klasse);
+        var definiere = klasse?.Members.OfType<PropertyDeclarationSyntax>()
+            .SelectMany(p => p.DescendantNodes().OfType<InvocationExpressionSyntax>())
+            .Select(i => i.ArgumentList.Arguments.FirstOrDefault()?.Expression as LambdaExpressionSyntax)
+            .FirstOrDefault(l => l?.Body is BlockSyntax);
+        if (definiere?.Body is not BlockSyntax block) return new(false, pfad, text, null, $"{a.Klasse}: kein Fluss (Definiere-Lambda) gefunden.");
+        if (a.Anweisung < 0 || a.Anweisung >= block.Statements.Count) return new(false, pfad, text, null, $"{a.Klasse}: Anweisung {a.Anweisung} fehlt.");
+        var st = block.Statements[a.Anweisung];
+        var lambdas = st.DescendantNodes().OfType<LambdaExpressionSyntax>()
+            .Where(l => l.Parent is ArgumentSyntax && !l.Ancestors().TakeWhile(x => x != st).OfType<LambdaExpressionSyntax>().Any()).ToList();
+        return a.Lambda >= 0 && a.Lambda < lambdas.Count
+            ? new(true, pfad, text, lambdas[a.Lambda], "")
+            : new(false, pfad, text, null, $"{a.Klasse}: Anweisung {a.Anweisung} hat keinen Lambda {a.Lambda}.");
+    }
+
+    public static object LeseLambda(LambdaAnker a, string slnRoot)
+    {
+        var t = FindeLambda(a, slnRoot);
+        if (!t.Ok) return new { ok = false, grund = t.Grund };
+        var inhalt = t.L!.ToString().Replace("\r\n", "\n");
+        return new { ok = true, pfad = Rel(t.Pfad, slnRoot), zeile = t.L.GetLocation().GetLineSpan().StartLinePosition.Line + 1,
+            body = Dedent(inhalt), prompt = (string?)null, hash = Hash(inhalt) };
+    }
+
+    public static string? LambdaHash(LambdaAnker a, string slnRoot)
+    {
+        var t = FindeLambda(a, slnRoot);
+        return t.Ok ? Hash(t.L!.ToString().Replace("\r\n", "\n")) : null;
+    }
+
+    /// <summary>Den Lambda-Ausdruck ersetzen (wörtlich). Sperre wie bei Methoden: <paramref name="baseHash"/> muss zum Dateistand passen.</summary>
+    public static (bool Ok, string Grund, string? AlterInhalt, string? NeuerHash, int Zeile) SetzeLambda(
+        LambdaAnker a, string ausdruck, string? baseHash, string slnRoot)
+    {
+        var t = FindeLambda(a, slnRoot);
+        if (!t.Ok) return (false, t.Grund, null, null, 0);
+        var alt = t.L!.ToString();
+        if (baseHash != null && Hash(alt.Replace("\r\n", "\n")) != baseHash)
+            return (false, "Die Datei wurde seit dem Füllen geändert (Hash passt nicht) — neu laden.", null, null, 0);
+        File.WriteAllText(t.Pfad, t.Text[..t.L.Span.Start] + ausdruck.Trim() + t.Text[t.L.Span.End..]);
+        var neu = FindeLambda(a, slnRoot);
+        return (true, "", alt, neu.Ok ? Hash(neu.L!.ToString().Replace("\r\n", "\n")) : null, t.L.GetLocation().GetLineSpan().StartLinePosition.Line + 1);
+    }
+
+    /// <summary>Rückgängig: den alten Lambda wörtlich zurück (nur wenn seitdem unverändert).</summary>
+    public static (bool Ok, string Grund) SetzeLambdaZurueck(LambdaAnker a, string alterInhalt, string erwarteterHash, string slnRoot)
+    {
+        var t = FindeLambda(a, slnRoot);
+        if (!t.Ok) return (false, t.Grund);
+        if (Hash(t.L!.ToString().Replace("\r\n", "\n")) != erwarteterHash) return (false, "Die Datei wurde nach dem Übernehmen weiter geändert — Rückgängig verweigert.");
+        File.WriteAllText(t.Pfad, t.Text[..t.L.Span.Start] + alterInhalt + t.Text[t.L.Span.End..]);
+        return (true, "");
     }
 
     private static string? LiesPrompt(string inner)

@@ -53,6 +53,7 @@ namespace Infrastructure.SourceGeneration
             var iQuelle = c.GetTypeByMetadataName("Abstractions.IQuellNachricht");
             var iEvent = c.GetTypeByMetadataName("Abstractions.IEvent");
             var iTransient = c.GetTypeByMetadataName("Abstractions.ITransientEvent");
+            var iFunktion = c.GetTypeByMetadataName("Abstractions.IFunktion");
             var iDecider = c.GetTypeByMetadataName("Abstractions.IDecider`1");
             var iReader = c.GetTypeByMetadataName("Abstractions.IReader`1");
             var iAggEnvelope = c.GetTypeByMetadataName("Abstractions.IAggregateEnvelope");
@@ -151,6 +152,8 @@ namespace Infrastructure.SourceGeneration
                 var queries = darf.Where(t => Implementiert(t, iQuery)).ToList();
                 var trigger = darf.Where(t => Implementiert(t, iTrigger) || Implementiert(t, iQuelle)).ToList();
                 var transient = darf.Where(t => Implementiert(t, iTransient)).ToList();
+                // Katalog-Funktionen, die er rechnen (= deren Ergebnisse er hineingeben) darf.
+                var funktionen = darf.Where(t => t.TypeKind == TypeKind.Interface && Implementiert(t, iFunktion)).ToList();
 
                 // Vertrag: je Auf(Event) die Ausgaben (konkrete Commands; die Form prüft CQRS061/062) — über ALLE Teile des Akteurs.
                 teile.TryGetValue(a, out var aTeile);
@@ -177,15 +180,17 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"            Trigger: {Menge(trigger.Select(t => t.ToDisplayString(fq)))},");
                 sb.AppendLine($"            TransientEvents: {Menge(transient.Select(t => t.ToDisplayString(fq)))},");
                 sb.AppendLine($"            Hoert: {Menge(hoert)},");
+                var funktionsMenge = Menge(funktionen.Select(t => t.ToDisplayString(fq)));
                 if (vertrag == null)
                 {
-                    sb.AppendLine($"            Art: \"{ArtVon(a)}\"),");
+                    sb.AppendLine($"            Art: \"{ArtVon(a)}\") {{ Funktionen = {funktionsMenge} }},");
                     continue;
                 }
                 var kanon = Abstractions.Akteurvertrag.Kanon(a.Name, zusagen.Select(r =>
                     new Abstractions.Akteurvertrag.Zusage(r.Ein.Name, r.Aus.Select(x => x.Name).ToList(), r.Strom)));
                 sb.AppendLine($"            Art: \"{ArtVon(a)}\")");
                 sb.AppendLine("        {");
+                sb.AppendLine($"            Funktionen = {funktionsMenge},");
                 sb.AppendLine($"            VertragTyp = typeof({vertrag.ToDisplayString(fq)}),");
                 sb.AppendLine($"            VertragHash = \"{Abstractions.Akteurvertrag.Hash(kanon)}\",");
                 sb.AppendLine("            Vertrag = new Dictionary<Type, IReadOnlySet<Type>>");

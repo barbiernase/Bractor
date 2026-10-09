@@ -46,6 +46,15 @@ fluss Leihwesen.Pruefung.RueckgabePruefung bauer=scan | eingang=quelle:Rueckgabe
 # GEZEICHNET (Gezeichnet.board.json, ohne Lambda — nur die Zuordnung): Event-Quelle → ƒ mit Zeitlimit → Command am Ergebnis-Port.
 #    Der Scaffolder benennt die Lambda-Parameter nach den Knoten, von denen der Draht kommt.
 fluss Leihwesen.Gebuehren.MahnungBeiRueckgabe bauer=p | rueckgabe=auf:Zurueckgegeben; schaetzung=funktion:ISchadensSchaetzung <- rueckgabe λ{rueckgabe => new SchaetzeSchaden(rueckgabe.LeserId, 50m)} ⏳TimeSpan.FromMinutes(1); mahnung=command:EroeffneMahnung <- schaetzung.SchadenGeschaetzt λ{schaetzung => new EroeffneMahnung(Guid.NewGuid(), schaetzung.Betrag)}
+# STROM + WARTEN + LESE-FÄHIGKEIT (Sonde/Fluss.cs.txt, Ausleihfrist): der Strom der Quelle als zweiter Ausgang (ausgeliehen.strom),
+#    ein Warte-Knoten (warte:Typen) mit ⏳, eine Funktion mit Fähigkeit nach IAusfuehrung („liest Typ name").
+record Leihwesen.Pruefung.ZaehleOffene auftrag typart=public sealed record funktion=IOffenZaehlung | LeserId:Guid
+record Leihwesen.Pruefung.OffeneGezaehlt event | Anzahl:int
+funktion Leihwesen.Pruefung.IOffenZaehlung | ZaehleOffene -> OffeneGezaehlt liest IZaehleOffene offene
+fluss Leihwesen.Pruefung.Ausleihfrist bauer=p | ausgeliehen=auf:Ausgeliehen; rueckgabe=warte:Zurueckgegeben <- ausgeliehen.strom ⏳TimeSpan.FromDays(28); offen=funktion:IOffenZaehlung <- ausgeliehen λ{ausgeliehen => new ZaehleOffene(ausgeliehen.LeserId)}; mahnung=command:EroeffneMahnung <- rueckgabe.⏳+offen.OffeneGezaehlt+ausgeliehen.strom λ{(rueckgabeZeit, offen, ausgeliehenStrom) => new EroeffneMahnung(ausgeliehenStrom.Id, offen.Anzahl)}
+# GEZEICHNET (Gezeichnet.board.json): dieselbe Frist auf leerem Board — Strom-Draht und ⏳ als Drähte, Zuordnung; der Scaffolder benennt
+#    die Lambda-Parameter nach Knoten + Port (rueckgabeZeit, ausgeliehenStrom).
+fluss Leihwesen.Gebuehren.Rueckgabefrist bauer=p | ausgeliehen=auf:Ausgeliehen; rueckgabe=warte:Zurueckgegeben <- ausgeliehen.strom ⏳TimeSpan.FromDays(28); mahnung=command:EroeffneMahnung <- rueckgabe.⏳+ausgeliehen.strom λ{(rueckgabeZeit, ausgeliehenStrom) => new EroeffneMahnung(ausgeliehenStrom.Id, 0m)}
 
 # ── Lesen: frei benannte Fähigkeiten + Bündel (Marker statt Namensregel), class-ReadModel, OneOf, Konstanten-Ids ──
 record Leihwesen.Lesen.OffeneAusleihen query | LeserId:Guid { get; init; }

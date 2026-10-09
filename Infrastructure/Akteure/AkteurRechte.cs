@@ -35,6 +35,15 @@ public sealed record AkteurRechte(
     /// <summary>Je Zusage <c>Auf(Event)</c>: die Commands, die der Akteur darauf hineingeben darf (leer = nur zur Kenntnis).</summary>
     public IReadOnlyDictionary<Type, IReadOnlySet<Type>> Vertrag { get; init; } = new Dictionary<Type, IReadOnlySet<Type>>();
 
+    /// <summary>
+    /// Die Katalog-Funktionen, die der Akteur RECHNEN darf (<c>IDarf&lt;IFunktion-Typ&gt;</c>): ihre Ergebnisse gibt er ins System —
+    /// ein Worker mit diesem Akteur darf sie am Handshake anbieten (docs/konzept-editor-pipelines.md §14.5).
+    /// </summary>
+    public IReadOnlySet<Type> Funktionen { get; init; } = new HashSet<Type>();
+
+    /// <summary>Darf der Akteur (bzw. einer seiner Teile) die Funktion <paramref name="funktion"/> rechnen?</summary>
+    public bool DarfRechnen(Type funktion) => Funktionen.Contains(funktion) || Teile.Any(t => t.DarfRechnen(funktion));
+
     /// <summary>Die Eingänge, auf die der Akteur mit einem Strom antwortet (mehrere Commands je Zusage).</summary>
     public IReadOnlySet<Type> Stroeme { get; init; } = new HashSet<Type>();
 
@@ -68,7 +77,7 @@ public sealed record AkteurRechte(
             U(akteure.Select(a => a.Commands)), U(akteure.Select(a => a.Queries)), U(akteure.Select(a => a.Trigger)),
             U(akteure.Select(a => a.TransientEvents)), U(akteure.Select(a => a.Hoert)),
             string.Join("+", akteure.Select(a => a.Art).Distinct()))
-        { Teile = akteure };
+        { Teile = akteure, Funktionen = U(akteure.Select(a => a.Funktionen)) };
     }
 
     /// <summary>Darf der Akteur <paramref name="typ"/> hineingeben?</summary>

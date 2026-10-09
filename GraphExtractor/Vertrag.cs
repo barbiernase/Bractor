@@ -48,6 +48,7 @@ public static class Vertrag
     public const string FunktionsMethode = Funktionsvertrag.Methode;
     public static readonly string IPipelineHandler = typeof(IPipelineHandler).FullName!;
     public static readonly string IPipelineTrigger = typeof(IPipelineTrigger).FullName!;
+    public static readonly string IQuellNachricht = typeof(IQuellNachricht).FullName!;
     public static readonly string IPipelineSelfMessage = typeof(IPipelineSelfMessage).FullName!;
     public static readonly string IProzessDefinition = typeof(IProzessDefinition).FullName!;
     public static readonly string IMessagePayload = typeof(IMessagePayload).FullName!;
@@ -124,12 +125,15 @@ public static class Vertrag
     public static readonly string FlussZeitlimit = nameof(RufKnoten<IFunktion>.Zeitlimit);
     public static readonly string FlussOder = nameof(RufKnoten<IFunktion>.Oder);
     public static readonly string FlussSammle = nameof(JeKnoten<IEvent, object>.Sammle);
+    public static readonly string FlussStrom = nameof(QuellKnoten<IEvent>.Strom);
+    public static readonly string FlussWarte = nameof(StromDraht.Warte);
     /// <summary>Metadatennamen der DSL-Typen (mit Stelligkeit) — ein Verb gehört zum Fluss, wenn sein Typ einer davon ist.</summary>
     public static readonly HashSet<string> FlussTypen = new(StringComparer.Ordinal)
     {
         typeof(PipelineBauer).Name, typeof(Draht<>).Name, typeof(QuellKnoten<>).Name, typeof(AufrufKnoten).Name,
         typeof(RufKnoten<>).Name, typeof(SendeKnoten<>).Name, typeof(JeKnoten<,>).Name, typeof(SammelDraht<,>).Name,
         typeof(Verbund<,>).Name, typeof(Verbund<,,>).Name, typeof(Verbund<,,,>).Name,
+        typeof(StromDraht).Name, typeof(WarteKnoten).Name,
     };
     public static readonly string QuellKnotenTyp = typeof(QuellKnoten<>).Name;
     public static readonly string JeKnotenTyp = typeof(JeKnoten<,>).Name;

@@ -1,9 +1,12 @@
 using Abstractions;
+using Leihwesen.Ausleihe;
 using Leihwesen.Gebuehren;
+using Leihwesen.Lesen;
 
 // SONDE — PIPELINE ALS FLUSS (docs/konzept-editor-pipelines.md §14): eigene Quelle, Je-Rahmen mit Sammeln, DIESELBE Funktion
 //         zweimal (verschiedene Knoten), ∧ mit Kontext, ∨ über den ⏳-Port, ✕-Port am Command, zwei Knoten ohne Variable und ein
-//         frei benannter Bauer-Parameter. Nur Code-Fakten: IPipeline + die DSL-Verben über ihr Symbol.
+//         frei benannter Bauer-Parameter. Dazu ein WARTEN am Strom der Quelle (Frist als Rennen) und eine Funktion mit
+//         LESE-Fähigkeit. Nur Code-Fakten: IPipeline + die DSL-Verben über ihr Symbol, Fähigkeit = Parameter nach IAusfuehrung.
 
 namespace Leihwesen.Pruefung;
 
@@ -34,5 +37,24 @@ public sealed class RueckgabePruefung : IPipeline
             .Oder(schnell.BeiZeitlimit(), z => new EroeffneMahnung(Guid.Empty, 0m));
         seiten.Sammle(seite.Bei<SeiteGeprueft>()).Sende<MeldeSchaden>((e, geprueft) => new MeldeSchaden(e.LeserId, e.LeserId));
         mahnung.BeiAbgelehnt().Sende<MeldeSchaden>(a => new MeldeSchaden(Guid.Empty, Guid.Empty));
+    });
+}
+
+public sealed record ZaehleOffene(Guid LeserId) : IAuftrag<IOffenZaehlung>;
+public record OffeneGezaehlt(int Anzahl) : IEvent;
+
+public interface IOffenZaehlung : IFunktion
+{
+    Task<OneOf<OffeneGezaehlt>> RufeAsync(ZaehleOffene auftrag, IAusfuehrung x, IZaehleOffene offene);
+}
+
+public sealed class Ausleihfrist : IPipeline
+{
+    public PipelineFluss Fluss => PipelineFluss.Definiere(p =>
+    {
+        var ausgeliehen = p.Auf<Ausgeliehen>();
+        var rueckgabe = ausgeliehen.Strom().Warte<Zurueckgegeben>().Zeitlimit(TimeSpan.FromDays(28));
+        var offen = ausgeliehen.Rufe<IOffenZaehlung>(ausgeliehen => new ZaehleOffene(ausgeliehen.LeserId));
+        var mahnung = p.Alle(rueckgabe.BeiZeitlimit(), offen.Bei<OffeneGezaehlt>(), ausgeliehen.Strom()).Sende<EroeffneMahnung>((rueckgabeZeit, offen, ausgeliehenStrom) => new EroeffneMahnung(ausgeliehenStrom.Id, offen.Anzahl));
     });
 }

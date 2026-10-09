@@ -287,6 +287,60 @@
           ]
         }
       ]
+    },
+    {
+      "name": "Rueckgabefrist",
+      "namespace": "Leihwesen.Gebuehren",
+      "datei": "__gezeichnet/Rueckgabefrist.cs",
+      "knoten": [
+        {
+          "name": "ausgeliehen",
+          "art": "auf",
+          "typ": "Ausgeliehen"
+        },
+        {
+          "name": "rueckgabe",
+          "art": "warte",
+          "typ": "Zurueckgegeben",
+          "warteAuf": [
+            "Zurueckgegeben"
+          ],
+          "zeitlimit": "TimeSpan.FromDays(28)",
+          "eingaenge": [
+            {
+              "draehte": [
+                {
+                  "von": "ausgeliehen",
+                  "port": "strom"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "name": "mahnung",
+          "art": "command",
+          "typ": "EroeffneMahnung",
+          "eingaenge": [
+            {
+              "draehte": [
+                {
+                  "von": "rueckgabe",
+                  "port": "zeitlimit"
+                },
+                {
+                  "von": "ausgeliehen",
+                  "port": "strom"
+                }
+              ],
+              "argumente": [
+                "ausgeliehenStrom.Id",
+                "0m"
+              ]
+            }
+          ]
+        }
+      ]
     }
   ]
 }

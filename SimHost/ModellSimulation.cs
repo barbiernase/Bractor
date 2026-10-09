@@ -27,7 +27,18 @@ public record SimInstanz(string Aggregat, string Id, string Label, List<SimFeld>
 public record SimWartend(List<string> Bedingung, List<string> Fehlt);
 public record SimSaga(string Prozess, string Korrelation, List<string> Angekommen, List<SimWartend> Wartend);
 public record SimErgebnis(bool Ok, List<CompileFehler> Fehler, List<SimFrame> Frames, List<SimInstanz> Instanzen,
-    List<SimSaga> Sagas, List<string> Abdeckung, int Nachgespielt, string? Hinweis = null);
+    List<SimSaga> Sagas, List<string> Abdeckung, int Nachgespielt, string? Hinweis = null,
+    List<SimFlussSchritt>? Fluss = null, List<SimVorgang>? Vorgaenge = null);
+
+/// <summary>Ein Draht, über den ein Fluss-Knoten bedient wurde: Herkunfts-Knoten (Name), Fall bzw. Port (⏳/✕).</summary>
+public record SimDraht(string Von, string Fall, string Port);
+/// <summary>
+/// Ein Schritt des Dirigenten im Durchspielen (docs/konzept-editor-pipelines.md §14): Knoten (Name wie im Editor), was er rief, welcher
+/// Ausgang feuerte. <see cref="Frames"/> = die Indizes der Aggregat-Frames, die ein Command-Knoten ausgelöst hat.
+/// </summary>
+public record SimFlussSchritt(string Pipeline, int Vorgang, string Knoten, int Index, string Art, string Typ, string Werte,
+    List<SimDraht> Ein, string Ausgang, string? Fall, string? ErgebnisWerte, string? Grund, int? Element, List<int> Frames);
+public record SimVorgang(string Pipeline, int Nummer, bool Erfolg, string? Grund, List<string> Wartend);
 
 /// <summary>
 /// DIE EINE Simulation des Editors (ersetzt die alte, fest an <c>Domain.dll</c> gebundene SimEngine):
@@ -40,7 +51,11 @@ public record SimErgebnis(bool Ok, List<CompileFehler> Fehler, List<SimFrame> Fr
 /// Modell zwischen zwei Schritten, wird neu übersetzt und die bisherigen Wurzel-Commands werden nachgespielt —
 /// man ändert eine Regel und sieht sofort, wie dieselbe Geschichte jetzt ausgeht.
 ///
-/// EHRLICHE GRENZEN: nur die Schreibseite + Sagas (keine Projektionen/Reader/Pipelines, kein Marten/Wire).
+/// Pipelines als Fluss (§14) laufen mit: eine Quell-Nachricht einspeisen (<see cref="StarteFluss"/>), je Funktionsknoten wählt der
+/// Editor den Ausgangsfall (Ergebnis / ⏳ / ✕) — ohne Implementierung; Commands laufen in dieselbe Aggregat-Kaskade, deren Events
+/// Flüsse mit <c>p.Auf&lt;E&gt;()</c> starten. Der Dirigent ist <see cref="FlussLaufwerk"/> (derselbe Belegungs-Kern wie live).
+///
+/// EHRLICHE GRENZEN: Schreibseite + Sagas + Flüsse (keine Projektionen/Reader/Handle-Pipelines, kein Marten/Wire).
 /// Kompilate werden nach Modell-Hash gecacht; alte Assemblies bleiben im Prozess (kein Unload).
 /// </summary>
 public sealed class ModellSimulation
@@ -51,11 +66,15 @@ public sealed class ModellSimulation
         public Assembly? Assembly { get; init; }
     }
 
+    /// <summary>Eine Wurzel der Geschichte (zum Nachspielen): ein Command von außen oder eine eingespeiste Quell-Nachricht.</summary>
+    private sealed record Wurzel(bool IstFluss, string Name, string Werte, string? Wahl, Guid? Strom = null);
+
     private sealed class Session
     {
         public required string Hash;
-        public required SagaLaufwerk Lauf;
-        public readonly List<(string Command, string Werte)> Wurzeln = new();   // zum Nachspielen (Hot-Reload)
+        public required FlussLaufwerk Fluss;
+        public SagaLaufwerk Lauf => Fluss.Aggregate;
+        public readonly List<Wurzel> Wurzeln = new();   // zum Nachspielen (Hot-Reload)
         public ICommand? LetzteWurzel;
         public List<Ereignis> LetzterAusgang = new();
         public readonly Dictionary<(string, Guid), string> Labels = new();
@@ -77,7 +96,7 @@ public sealed class ModellSimulation
     /// Einen Command mit Werten schicken → die ganze wertabhängige Kaskade (inkl. Sagas). Ist das Modell seit
     /// dem letzten Schritt geändert, wird neu übersetzt und die Session-Geschichte nachgespielt.
     /// </summary>
-    public SimErgebnis Schritt(EditorModell modell, string sessionId, string commandName, JsonElement werte)
+    public SimErgebnis Schritt(EditorModell modell, string sessionId, string commandName, JsonElement werte, JsonElement? wahl = null)
     {
         var (session, fehler, nachgespielt, hinweis) = SessionFür(modell, sessionId);
         if (session is null) return new SimErgebnis(false, fehler, [], [], [], [], 0);
@@ -96,10 +115,57 @@ public sealed class ModellSimulation
         }
 
         session.Vorher = session.Lauf.AlleZustände().ToDictionary(z => (z.Typ, z.Id), z => z.Felder);
-        session.Wurzeln.Add((commandName, werte.GetRawText()));
-        var (frames, trace) = Fahre(session, modell, cmd);
-        return new SimErgebnis(true, [], frames, Instanzen(session), Sagas(trace), session.Abdeckung.OrderBy(x => x, StringComparer.Ordinal).ToList(),
-            nachgespielt, hinweis);
+        var wahlText = wahl is { ValueKind: JsonValueKind.Object } w ? w.GetRawText() : null;
+        session.Wurzeln.Add(new Wurzel(false, commandName, werte.GetRawText(), wahlText));
+        try
+        {
+            var lauf = session.Fluss.Fahre(cmd, Wahl(session, modell, wahlText));
+            session.LetzteWurzel = cmd;
+            return Ergebnis(session, modell, lauf, nachgespielt, hinweis);
+        }
+        catch (InvalidOperationException ex)
+        {
+            session.Wurzeln.RemoveAt(session.Wurzeln.Count - 1);
+            return new SimErgebnis(false, [new("error", "SIM-FLUSS", ex.Message, null)], [], Instanzen(session), [], [], nachgespielt);
+        }
+    }
+
+    /// <summary>
+    /// Eine Quell-Nachricht (bzw. das Auslöse-Event) in die Pipeline <paramref name="pipeline"/> einspeisen und den Fluss durchspielen.
+    /// <paramref name="wahl"/>: <c>{ Pipeline: { Knoten: { fall: "Ergebnis" | "zeitlimit" | "abgelehnt", werte: {…} } } }</c> — fehlt ein
+    /// Knoten, liefert er seinen ersten Ergebnis-Fall mit Musterwerten.
+    /// </summary>
+    public SimErgebnis StarteFluss(EditorModell modell, string sessionId, string pipeline, JsonElement werte, JsonElement? wahl = null,
+        Guid? strom = null)
+    {
+        var (session, fehler, nachgespielt, hinweis) = SessionFür(modell, sessionId);
+        if (session is null) return new SimErgebnis(false, fehler, [], [], [], [], 0);
+        var fluss = session.Fluss.Fluesse.FirstOrDefault(f => f.Name == pipeline).Fluss;
+        if (fluss is null)
+            return new SimErgebnis(false, [new("error", "SIM-FLUSS", $"Pipeline '{pipeline}' nicht im Kompilat.", null)], [], Instanzen(session), [], [], nachgespielt);
+
+        IEvent quelle;
+        try { quelle = (IEvent)JsonSerializer.Deserialize(werte.GetRawText(), fluss.Regeln.AuslöserTyp, CmdJson)!; }
+        catch (Exception ex)
+        {
+            return new SimErgebnis(false, [new("error", "SIM-WERTE", $"Werte passen nicht zu {fluss.Regeln.AuslöserTyp.Name}: {ex.Message}", null)],
+                [], Instanzen(session), [], [], nachgespielt);
+        }
+
+        session.Vorher = session.Lauf.AlleZustände().ToDictionary(z => (z.Typ, z.Id), z => z.Felder);
+        var wahlText = wahl is { ValueKind: JsonValueKind.Object } w ? w.GetRawText() : null;
+        // Ohne Angabe ein stabiler Strom je Eingabe (Hot-Reload spielt dieselbe Geschichte mit derselben Id nach).
+        var stromId = strom ?? new Guid(System.Security.Cryptography.MD5.HashData(Encoding.UTF8.GetBytes($"{pipeline}|{session.Wurzeln.Count}|{werte.GetRawText()}")));
+        session.Wurzeln.Add(new Wurzel(true, pipeline, werte.GetRawText(), wahlText, stromId));
+        try
+        {
+            return Ergebnis(session, modell, session.Fluss.Starte(pipeline, quelle, Wahl(session, modell, wahlText), stromId), nachgespielt, hinweis);
+        }
+        catch (InvalidOperationException ex)
+        {
+            session.Wurzeln.RemoveAt(session.Wurzeln.Count - 1);
+            return new SimErgebnis(false, [new("error", "SIM-FLUSS", ex.Message, null)], [], Instanzen(session), [], [], nachgespielt);
+        }
     }
 
     /// <summary>Aktueller Stand einer Session (Instanzen + Abdeckung) ohne neuen Schritt.</summary>
@@ -116,8 +182,8 @@ public sealed class ModellSimulation
         var ziel = s.LetzteWurzel;
         var stateTyp = ZielAggregat(s, ziel);
         if (stateTyp is null) return "// Das letzte Command wird von keinem Aggregat behandelt.";
-        var vorab = s.Wurzeln.Take(s.Wurzeln.Count - 1)
-            .Select(w => Deserialisiere(s, w.Command, w.Werte))
+        var vorab = s.Wurzeln.Take(s.Wurzeln.Count - 1).Where(w => !w.IstFluss)
+            .Select(w => Deserialisiere(s, w.Name, w.Werte))
             .Where(c => c is not null && c.AggregateId == ziel.AggregateId && ZielAggregat(s, c) == stateTyp)
             .Select(c => c!).ToList();
         return DslSchreiber.Aus(stateTyp, Array.Empty<IEvent>(), vorab, ziel, s.LetzterAusgang);
@@ -132,25 +198,40 @@ public sealed class ModellSimulation
 
         if (_sessions.TryGetValue(sessionId, out var alt) && alt.Hash == hash) return (alt, [], 0, null);
 
-        var neu = new Session { Hash = hash, Lauf = BaueLauf(k.Assembly) };
+        var neu = new Session { Hash = hash, Fluss = BaueLauf(k.Assembly) };
         var nachgespielt = 0;
         string? hinweis = null;
         if (alt is not null)
         {
             // Modell geändert → dieselbe Geschichte gegen die neue Logik nachspielen (still, ohne Frames).
-            foreach (var (name, werte) in alt.Wurzeln)
+            foreach (var w in alt.Wurzeln)
             {
-                var c = Deserialisiere(neu, name, werte);
-                if (c is null) continue;
-                neu.Wurzeln.Add((name, werte));
-                Fahre(neu, modell, c);
+                try
+                {
+                    if (w.IstFluss)
+                    {
+                        var typ = neu.Fluss.Fluesse.FirstOrDefault(f => f.Name == w.Name).Fluss?.Regeln.AuslöserTyp;
+                        if (typ is null) continue;
+                        var quelle = (IEvent)JsonSerializer.Deserialize(w.Werte, typ, CmdJson)!;
+                        neu.Fluss.Starte(w.Name, quelle, Wahl(neu, modell, w.Wahl), w.Strom);
+                    }
+                    else
+                    {
+                        var c = Deserialisiere(neu, w.Name, w.Werte);
+                        if (c is null) continue;
+                        neu.Fluss.Fahre(c, Wahl(neu, modell, w.Wahl));
+                        neu.LetzteWurzel = c;
+                    }
+                }
+                catch (Exception) { continue; }   // passt nicht mehr zum Modell
+                neu.Wurzeln.Add(w);
                 nachgespielt++;
             }
             foreach (var kv in alt.Labels) neu.Labels.TryAdd(kv.Key, kv.Value);
             foreach (var kv in alt.Zähler) neu.Zähler[kv.Key] = Math.Max(neu.Zähler.GetValueOrDefault(kv.Key), kv.Value);
             hinweis = nachgespielt == alt.Wurzeln.Count
-                ? $"Modell geändert — {nachgespielt} bisherige Command(s) gegen die neue Logik nachgespielt."
-                : $"Modell geändert — {nachgespielt}/{alt.Wurzeln.Count} Command(s) nachgespielt (übrige passen nicht mehr zum Modell).";
+                ? $"Modell geändert — {nachgespielt} bisherige Eingabe(n) (Commands/Quell-Nachrichten) gegen die neue Logik nachgespielt."
+                : $"Modell geändert — {nachgespielt}/{alt.Wurzeln.Count} Eingabe(n) nachgespielt (übrige passen nicht mehr zum Modell).";
         }
         _sessions[sessionId] = neu;
         return (neu, [], nachgespielt, hinweis);
@@ -176,14 +257,91 @@ public sealed class ModellSimulation
                 .Any(m => m.GetParameters().Length == 1 && m.GetParameters()[0].ParameterType == c.GetType()))?.Name;
 
     // ── Fahren + Frames ─────────────────────────────────────────────────────────────────────
-    private (List<SimFrame>, SagaTrace) Fahre(Session s, EditorModell modell, ICommand wurzel)
+    private SimErgebnis Ergebnis(Session s, EditorModell modell, FlussTrace lauf, int nachgespielt, string? hinweis)
     {
-        var trace = s.Lauf.Fahre(wurzel);
-        s.LetzteWurzel = wurzel;
-        s.LetzterAusgang = trace.Schritte.FirstOrDefault(x => ReferenceEquals(x.Command, wurzel))?.Ausgang.ToList() ?? new();
-
         var frames = new List<SimFrame>();
-        foreach (var st in trace.Schritte)
+        SagaTrace? letzte = null;
+        if (lauf.Wurzel is { } w)
+        {
+            s.LetzterAusgang = w.Schritte.FirstOrDefault(x => ReferenceEquals(x.Command, s.LetzteWurzel))?.Ausgang.ToList() ?? new();
+            frames.AddRange(Frames(s, w, null));
+            letzte = w;
+        }
+
+        var schritte = new List<SimFlussSchritt>();
+        foreach (var st in lauf.Schritte)
+        {
+            var name = KnotenName(modell, st.Pipeline, st.Knoten);
+            var fall = st.Ergebnis?.GetType().Name;
+            s.Abdeckung.Add($"fl:{st.Pipeline}|{name}>{(st.Ausgang == FlussAusgang.Fall ? fall : st.Ausgang)}");
+            var indizes = new List<int>();
+            if (st.Kaskade is { } k)
+            {
+                foreach (var f in Frames(s, k, st.Pipeline)) { indizes.Add(frames.Count); frames.Add(f); }
+                letzte = k;
+            }
+            schritte.Add(new SimFlussSchritt(st.Pipeline, st.Vorgang, name, st.Knoten, st.Art.ToString().ToLowerInvariant(), st.Typ.Name,
+                Werte(st.Nachricht), st.Ein.Select(d => new SimDraht(KnotenName(modell, st.Pipeline, d.Von), d.Fall, d.Port)).ToList(),
+                st.Ausgang, fall, st.Ergebnis is null || st.Art is PipelineKnotenArt.Quelle or PipelineKnotenArt.Auf ? null : Werte(st.Ergebnis),
+                st.Grund, st.Element, indizes));
+        }
+        var vorgänge = lauf.Vorgänge.Select(v => new SimVorgang(v.Pipeline, v.Nummer, v.Erfolg, v.Grund, v.Wartend.ToList())).ToList();
+        return new SimErgebnis(true, [], frames, Instanzen(s), letzte is null ? [] : Sagas(letzte),
+            s.Abdeckung.OrderBy(x => x, StringComparer.Ordinal).ToList(), nachgespielt, hinweis, schritte, vorgänge);
+    }
+
+    /// <summary>Der Knoten-Name wie im Editor: Index = Deklarations-Reihenfolge = Reihenfolge der Knoten im Modell.</summary>
+    private static string KnotenName(EditorModell m, string pipeline, int index)
+    {
+        var f = m.Fluesse.FirstOrDefault(x => x.Name == pipeline);
+        return f is not null && index >= 0 && index < f.Knoten.Count ? f.Knoten[index].Name : $"#{index}";
+    }
+
+    /// <summary>
+    /// Die Wahl des Editors als Antwort-Funktion: je Knoten der Fall (Ergebnis-Typ, <c>zeitlimit</c>, <c>abgelehnt</c>) und optionale
+    /// Werte; ohne Wahl der erste Ergebnis-Fall der Funktion. Das Ergebnis bekommt Musterwerte (<see cref="Musterwerte"/>).
+    /// </summary>
+    private static Func<FlussAufruf, FlussAntwort> Wahl(Session s, EditorModell modell, string? wahlJson)
+    {
+        using var doc = wahlJson is null ? null : JsonDocument.Parse(wahlJson);
+        var wahl = doc?.RootElement.Clone();
+        return aufruf =>
+        {
+            var name = KnotenName(modell, aufruf.Pipeline, aufruf.Knoten);
+            JsonElement? knoten = wahl is { } w && w.TryGetProperty(aufruf.Pipeline, out var p) && p.TryGetProperty(name, out var k) ? k : null;
+            var fall = knoten is { } kk && kk.TryGetProperty("fall", out var fa) ? fa.GetString() : null;
+            JsonElement? werte = knoten is { } kw && kw.TryGetProperty("werte", out var we) ? we : null;
+            if (fall == FlussAusgang.Zeitlimit) return new FlussAntwort.Zeitlimit();
+            if (fall == FlussAusgang.Abgelehnt) return new FlussAntwort.Abgelehnt($"{name} abgelehnt (gewählt)");
+
+            // Ein Warten (strom.Warte<A, B>()) liefert eines der erwarteten Events; eine Funktion einen Fall ihres OneOf.
+            List<Type> fälle;
+            if (aufruf.WartetAuf.Count > 0) fälle = aufruf.WartetAuf.ToList();
+            else
+            {
+                var funktion = s.Fluss.Fluesse.First(f => f.Name == aufruf.Pipeline).Fluss.Knoten.First(x => x.Index == aufruf.Knoten).Typ;
+                fälle = ErgebnisFälle(funktion);
+                if (fälle.Count == 0) throw new InvalidOperationException($"{funktion.Name}: keine Ergebnis-Fälle in der Signatur.");
+            }
+            var typ = fälle.FirstOrDefault(t => t.Name == fall) ?? fälle[0];
+            var ort = $"{aufruf.Pipeline}|{aufruf.Vorgang}|{aufruf.Knoten}|{aufruf.Aufruf}";
+            var quellen = aufruf.Eingang.Cast<object>().Concat(aufruf.Auftrag is null ? [] : [aufruf.Auftrag]).ToList();
+            return new FlussAntwort.Ergebnis((IEvent)Musterwerte.Baue(typ, ort, quellen, werte));
+        };
+    }
+
+    /// <summary>Die OneOf-Fälle aus <c>Task&lt;OneOf&lt;…&gt;&gt; RufeAsync(…)</c> der Funktion (Signatur, wie der Generator sie liest).</summary>
+    private static List<Type> ErgebnisFälle(Type funktion)
+    {
+        var m = funktion.GetMethod(Funktionsvertrag.Methode);
+        var oneOf = m?.ReturnType.IsGenericType == true ? m.ReturnType.GetGenericArguments()[0] : null;
+        return oneOf?.IsGenericType == true ? oneOf.GetGenericArguments().ToList() : [];
+    }
+
+    private List<SimFrame> Frames(Session s, SagaTrace trace, string? pipeline)
+    {
+        var frames = new List<SimFrame>();
+        foreach (var (st, i) in trace.Schritte.Select((x, i) => (x, i)))
         {
             var cmdName = st.Command.GetType().Name;
             if (!st.Unrouted)
@@ -197,12 +355,14 @@ public sealed class ModellSimulation
             }
             if (st.SagaName is not null && st.RegelIndex is int ri) s.Abdeckung.Add($"regel:{st.SagaName}#{ri}");
 
+            // Der erste Schritt einer Fluss-Kaskade ist der Command des Fluss-Knotens (Herkunft „fluss“, Saga = Pipeline).
+            var ausFluss = pipeline is not null && i == 0;
             var events = st.Ausgang.Select(e => new SimEvent(e.Typ, e.Persistent, Werte(e.Event))).ToList();
-            frames.Add(new SimFrame(cmdName, Werte(st.Command), st.Ursprung == Ursprung.Saga ? "saga" : "wurzel",
-                st.SagaName, st.RegelIndex, st.AggregatTyp, st.AggregatId.ToString(),
+            frames.Add(new SimFrame(cmdName, Werte(st.Command), ausFluss ? "fluss" : st.Ursprung == Ursprung.Saga ? "saga" : "wurzel",
+                ausFluss ? pipeline : st.SagaName, st.RegelIndex, st.AggregatTyp, st.AggregatId.ToString(),
                 st.Unrouted ? "—" : Label(s, st.AggregatTyp, st.AggregatId), events, st.Unrouted));
         }
-        return (frames, trace);
+        return frames;
     }
 
     private List<SimInstanz> Instanzen(Session s)
@@ -271,6 +431,24 @@ public sealed class ModellSimulation
         foreach (var e in modell.Enums) nsVon.TryAdd(e.Name, e.Namespace);
 
         var ns = new HashSet<string>(modell.Aggregate.Select(a => a.Namespace).Concat(modell.Sagas.Select(g => g.Namespace)), StringComparer.Ordinal);
+        // Flüsse (§14) laufen mit: ihre Namespaces, die ihrer Funktionen und die der Knoten-Typen (Quell-Nachricht, Auftrag, Ergebnisse).
+        var fnVon = modell.Funktionen.GroupBy(f => f.Name).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        foreach (var g in modell.Sagas)
+            foreach (var st in g.Schritte)
+                if (st.Rufe is { } rufe && fnVon.TryGetValue(rufe, out var gf)) ns.Add(gf.Namespace);
+        foreach (var f in modell.Fluesse)
+        {
+            ns.Add(f.Namespace);
+            foreach (var k in f.Knoten)
+            {
+                if (fnVon.TryGetValue(k.Typ, out var fn))
+                {
+                    ns.Add(fn.Namespace);
+                    foreach (var r in fn.Ergebnisse.Append(fn.Auftrag)) if (nsVon.TryGetValue(r, out var rn)) ns.Add(rn);
+                }
+                else if (nsVon.TryGetValue(k.Typ, out var tn)) ns.Add(tn);
+            }
+        }
         for (var geändert = true; geändert;)
         {
             geändert = false;
@@ -280,11 +458,26 @@ public sealed class ModellSimulation
                 foreach (System.Text.RegularExpressions.Match m in bezeichner.Matches(typ))
                     if (nsVon.TryGetValue(m.Value, out var n) && ns.Add(n)) geändert = true;
         }
+        // usings nur auf Namespaces, die im Kompilat vorkommen (die Leseseite fehlt hier) — sonst CS0234 an einer Datei, die z. B.
+        //   eine Funktion mit Lese-Fähigkeit trägt.
+        bool Bleibt(string u) => ns.Contains(u) || u == modell.Rahmen.VertragsNamespace
+            || u.StartsWith("System", StringComparison.Ordinal) || u.StartsWith("Microsoft", StringComparison.Ordinal);
         return modell with
         {
             Lesen = null,   // Leseseite läuft nicht in der Simulation (eigene Assemblies, Stores)
-            Records = modell.Records.Where(r => ns.Contains(r.Namespace)).ToList(),
+            // Akteure/Clients sind Rechte und Leitungen nach draußen (sie nennen auch Queries der Leseseite) — die Simulation
+            //   fährt die Wirkung, nicht den Handshake.
+            Akteure = [],
+            Clients = [],
+            Records = modell.Records.Where(r => ns.Contains(r.Namespace)).Select(r => r with { Usings = r.Usings.Where(Bleibt).ToList() }).ToList(),
             Enums = modell.Enums.Where(e => ns.Contains(e.Namespace)).ToList(),
+            // Funktionen laufen in der Simulation nicht (die Wahl liefert ihr Ergebnis) — ihre Lese-Fähigkeiten (Leseseite) entfallen,
+            //   die Signatur (Auftrag → OneOf) bleibt.
+            Funktionen = modell.Funktionen.Where(f => ns.Contains(f.Namespace)).Select(f => f with { Faehigkeiten = [] }).ToList(),
+            Fluesse = modell.Fluesse.Select(f => f with
+            {
+                ExtraUsings = f.ExtraUsings.Where(Bleibt).ToList(),
+            }).ToList(),
         };
     }
 
@@ -334,7 +527,7 @@ public sealed class ModellSimulation
         };
     }
 
-    private static SagaLaufwerk BaueLauf(Assembly asm)
+    private static FlussLaufwerk BaueLauf(Assembly asm)
     {
         // Die generierte Handler-Fabrik = der Typ, der den Vertrag IAggregateHandlerFactory implementiert.
         var factoryType = asm.GetTypes().FirstOrDefault(t => t.IsClass && !t.IsAbstract && typeof(IAggregateHandlerFactory).IsAssignableFrom(t))
@@ -350,7 +543,13 @@ public sealed class ModellSimulation
 
         var lauf = new SagaLaufwerk(factory, prozesse);
         LaufAssembly.AddOrUpdate(lauf, asm);
-        return lauf;
+
+        // Pipelines als Fluss (§14): die kompilierten IPipeline-Typen, wie der Host sie registriert.
+        var fluesse = asm.GetTypes()
+            .Where(t => !t.IsAbstract && t.IsClass && typeof(IPipeline).IsAssignableFrom(t))
+            .Select(t => (t.Name, ((IPipeline)Activator.CreateInstance(t)!).Fluss))
+            .ToList();
+        return new FlussLaufwerk(lauf, fluesse);
     }
 
     private static string Hash(string s) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(s)));

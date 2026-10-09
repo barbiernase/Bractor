@@ -34,7 +34,9 @@ namespace Infrastructure.SourceGeneration
         {
             var pipelineSymbols = FindIPipelineHandlerImplementations(context.Compilation);
 
-            if (pipelineSymbols.Count == 0)
+            // Infrastructure liest GeneratedPipelines/GeneratedFristen immer — auch wenn die Domäne keinen Handle-Baustein mehr hat
+            // (alle Pipelines sind Flüsse, docs/konzept-editor-pipelines.md §14): dann leer emittieren.
+            if (pipelineSymbols.Count == 0 && context.Compilation.AssemblyName != "Infrastructure")
                 return;
 
             var sorted = pipelineSymbols.OrderBy(s => s.Name).ToList();
@@ -324,6 +326,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("    {");
             foreach (var symbol in pipelineSymbols)
                 sb.AppendLine($"        yield return (\"{symbol.Name}\", provider.GetRequiredService<{symbol.Name}>().PipelineId);");
+            if (pipelineSymbols.Count == 0) sb.AppendLine("        yield break;");
             sb.AppendLine("    }");
             sb.AppendLine();
 

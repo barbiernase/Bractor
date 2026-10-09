@@ -74,6 +74,8 @@ public static class Scaffolder
     private static readonly string FlussZeitlimit = nameof(RufKnoten<IFunktion>.Zeitlimit);
     private static readonly string FlussOder = nameof(RufKnoten<IFunktion>.Oder);
     private static readonly string FlussSammle = nameof(JeKnoten<IEvent, object>.Sammle);
+    private static readonly string FlussStrom = nameof(QuellKnoten<IEvent>.Strom);
+    private static readonly string FlussWarte = nameof(StromDraht.Warte);
     // ── Katalog-Funktionen ──
     private static readonly string IFunktion = nameof(Abstractions.IFunktion);
     private static readonly string IAuftrag = typeof(IAuftrag<>).Name.Split('`')[0];
@@ -447,7 +449,8 @@ public static class Scaffolder
     // ── Katalog-Funktion: nur die Signatur (CQRS068) ─────────────────────────────────────────
     private static string FunktionsDatei(Funktion f, EditorModell modell)
     {
-        var b = Kopf(f.Namespace, Usings(f.Namespace, modell, [modell.Rahmen.VertragsNamespace], [f.Auftrag, .. f.Ergebnisse], []));
+        var b = Kopf(f.Namespace, Usings(f.Namespace, modell, [modell.Rahmen.VertragsNamespace],
+            [f.Auftrag, .. f.Ergebnisse, .. f.Faehigkeiten.Select(p => p.Typ)], []));
         Doku(b, f.Doku, "");
         b.Append(FunktionsInterface(f));
         return b.ToString();
@@ -459,7 +462,8 @@ public static class Scaffolder
         var b = new StringBuilder();
         b.AppendLine($"public interface {f.Name} : {IFunktion}");
         b.AppendLine("{");
-        b.AppendLine($"    Task<{OneOf}<{string.Join(", ", f.Ergebnisse)}>> {Funktionsvertrag.Methode}({f.Auftrag} auftrag, {IAusfuehrung} x);");
+        var faehigkeiten = string.Concat(f.Faehigkeiten.Select(p => $", {p.Typ} {p.Name}"));
+        b.AppendLine($"    Task<{OneOf}<{string.Join(", ", f.Ergebnisse)}>> {Funktionsvertrag.Methode}({f.Auftrag} auftrag, {IAusfuehrung} x{faehigkeiten});");
         b.AppendLine("}");
         return b.ToString();
     }
@@ -632,6 +636,7 @@ public static class Scaffolder
                 extraNs.Add(fk.Namespace);
                 referenzen.Add(fk.Auftrag);
             }
+            referenzen.AddRange(s.WarteAuf);
             foreach (var e in s.Eingaenge)
                 foreach (var d in e.Draehte)
                     if (d.Fall != null) referenzen.Add(d.Fall);
@@ -663,6 +668,13 @@ public static class Scaffolder
             {
                 case FlussArt.Quelle: kern = $"{f.Bauer}.{FlussQuelle}<{s.Typ}>()"; break;
                 case FlussArt.Auf: kern = $"{f.Bauer}.{FlussAuf}<{s.Typ}>()"; break;
+                case FlussArt.Warte:
+                    // quelle.Strom().Warte<A, B>().Zeitlimit(t) — der Eingang ist der Strom-Draht der Quelle.
+                    var strom = s.Eingaenge.FirstOrDefault();
+                    var typen = s.WarteAuf.Count > 0 ? s.WarteAuf : [s.Typ];
+                    kern = $"{(strom is null ? "/* Strom */" : Empfänger(strom, f))}.{FlussWarte}<{string.Join(", ", typen)}>()";
+                    if (!string.IsNullOrWhiteSpace(s.Zeitlimit)) anhang.Add($".{FlussZeitlimit}({s.Zeitlimit})");
+                    break;
                 case FlussArt.Je:
                     var quelle = s.Eingaenge.FirstOrDefault();
                     var liste = string.IsNullOrWhiteSpace(s.Liste) ? "_ => System.Array.Empty<object>()" : s.Liste;
@@ -700,6 +712,7 @@ public static class Scaffolder
     {
         FlussPort.Zeitlimit => $"{d.Von}.{FlussBeiZeitlimit}()",
         FlussPort.Abgelehnt => $"{d.Von}.{FlussBeiAbgelehnt}()",
+        FlussPort.Strom => $"{d.Von}.{FlussStrom}()",
         _ => d.Fall is null ? d.Von : $"{d.Von}.{FlussBei}<{d.Fall}>()",
     };
 
@@ -728,7 +741,13 @@ public static class Scaffolder
             roh.Add(quelle ?? "quelle");
             roh.Add(e.Draehte.FirstOrDefault()?.Von ?? "liste");
         }
-        else roh.AddRange(e.Draehte.Select(d => d.Port == FlussPort.Fall ? d.Von : d.Von + (d.Port == FlussPort.Zeitlimit ? "Zeit" : "Abgelehnt")));
+        else roh.AddRange(e.Draehte.Select(d => d.Port switch
+        {
+            FlussPort.Fall => d.Von,
+            FlussPort.Zeitlimit => d.Von + "Zeit",
+            FlussPort.Strom => d.Von + "Strom",
+            _ => d.Von + "Abgelehnt",
+        }));
         var namen = new List<string>();
         foreach (var n in roh)
         {

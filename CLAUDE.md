@@ -39,7 +39,7 @@ keine Taxonomie — der Unterschied fällt aus Ctor-Stores + Rückgabetypen:
 - **Transport:** Signal (schnell) + Poll (30 s, Sicherheit) wecken dieselbe Cluster-Identität.
 - **Emit:** genau ein Weg (`CommandEmitter`), erzwungen durch den Analyzer **CQRS020/021**.
 
-## Aktueller Stand (Kern 2026-08-11, ergänzt 2026-10-06)
+## Aktueller Stand (Kern 2026-08-11, ergänzt 2026-10-09)
 
 **Kern fertig und in sich konsistent:** Schreibseite, Konsum-Maschine (Projektion + Reaktion),
 Prozess-Maschine (Event-Regel-DAG). **Feature-Strom geliefert:** Timer-/Webhook-Trigger,
@@ -63,16 +63,21 @@ Offen: Python-/externer Ausführer, Saga-DSL (Cqrs.Testing) und Simulation kenne
 Knoten — Quelle (`p.Quelle<IQuellNachricht>()`/`p.Auf<E>()`) → Katalog-Funktionen → Commands —, verdrahtet vom Draht aus
 (`var k = draht.Rufe<F>(λ)`, `p.Alle(…)` ∧, `.Oder(…)` ∨, `BeiZeitlimit()`/`BeiAbgelehnt()`, `draht.Je(…)`/`Sammle`). Läuft auf dem
 Dirigenten (Prozess-Manager) mit Knoten-Herkunft im Token; Funktionen per Vermittler-Actor + Pull (C# im Host, Python-Worker über
-gRPC). Im Editor ein ⛓-Rahmen, entwerfbar auf leerem Board (Sonde beweist gezeichnet → Code → gelesen). `Bildeingang` ersetzt
-FileWatch/ImageProcessing/BildaufbereitungProzess. Offen: Simulation, Integrationstest, Umzug der übrigen Handle-Pipelines.
+gRPC). Im Editor ein ⛓-Rahmen, entwerfbar auf leerem Board (Sonde beweist gezeichnet → Code → gelesen). Dazu (2026-10-09):
+`quelle.Strom()` (Aggregat-Id der Quelle als Draht), `strom.Warte<A, B>().Zeitlimit(t)` (Frist/Storno als Rennen), Katalog-Funktionen
+mit **Lese-Fähigkeit** als Parameter (nur Host), Akteur-Tor `IDarf<IFunktion>` für angebotene Funktionen, `MapQuellWebhook` mit
+`[Ingress]`. **Alle Domänen-Pipelines sind Flüsse** (Bildeingang, DatensatzRangeAufloesung, DatensatzEinfrieren, TrainingWaechter,
+Benchmark) — `IPipelineHandler` entfällt als Domänen-Baustein, Rückbau der Maschinerie offen (§14.10). Simulation: SimHost spielt Flüsse
+durch (`FlussLaufwerk`, derselbe Belegungs-Kern `FlussBelegung` wie der Dirigent; je Funktion/Warten der Ausgangsfall wählbar). LLM-Slots
+`funktion` + `fluss` (Konsole füllt Lambdas). Integration `PipelineFlussE2ETests` inkl. Python-Worker über gRPC grün.
 
 **Akteure, Verträge, Clients (2026-10-06):** Akteure mit Befugnis und Kette bis in den Event-Header; Akteur-Verträge (Zusagen
 draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer CommandId; Clients (`IClientVertrag`, n:m zu Akteuren) mit
 Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an
 Clients (`docs/konzept-akteure.md` §9).
 
-**Tests (echt gemessen): Prüfstand 363/363 (2026-10-07, in-memory, store-frei); Python SDK 27/27, Worker 15/15; Integration gegen echtes Marten/Consul/Redis,
-sequentiell (voll gezählt zuletzt 2026-08: 33/33; der `SnapshotLive`-Cold-Boot-Flake ausgenommen).**
+**Tests (echt gemessen 2026-10-09): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
+Marten/Consul/Redis, sequentiell: 33/33 (inkl. 4 Fluss-E2E; TwoNodeCommandDispatch an die Inbox-Marke seit T2b angepasst).**
 
 **Bewusst offen (Priorität):**
 1. **Cross-Node/Multi-Node** — **Iteration 1 + 2 geliefert; Multi-Node-Block geschlossen.** Generierter,

@@ -27,12 +27,16 @@ public sealed class Regel
         TimeSpan? zeitlimit = null,
         int? knoten = null,
         IReadOnlyList<int?>? vonKnoten = null,
-        int? jeKnoten = null)
+        int? jeKnoten = null,
+        IReadOnlyList<Type>? wartetAuf = null)
     {
         if (bedingung is null || bedingung.Count == 0)
             throw new ArgumentException("Eine Regel braucht mindestens einen Bedingungs-Event-Typ.", nameof(bedingung));
-        if ((sende is null) == (ruft is null))
-            throw new ArgumentException("Eine Regel ruft GENAU EIN Ziel: entweder Sende (Command an ein Aggregat) oder Rufe (Katalog-Funktion).");
+        var ziele = (sende is null ? 0 : 1) + (ruft is null ? 0 : 1) + (wartetAuf is { Count: > 0 } ? 1 : 0);
+        if (ziele != 1)
+            throw new ArgumentException("Eine Regel hat GENAU EIN Ziel: Sende (Command an ein Aggregat), Rufe (Katalog-Funktion) oder Warte (Event im Strom).");
+        if (wartetAuf is { Count: > 0 } && (bedingung.Count != 1 || bedingung[0] != typeof(QuellStrom)))
+            throw new ArgumentException("Ein Warten hängt an genau einem Draht: dem Strom der Quelle (quelle.Strom().Warte<…>()).");
         if (zeitlimit is { } z && z <= TimeSpan.Zero)
             throw new ArgumentOutOfRangeException(nameof(zeitlimit), "Ein Zeitlimit muss positiv sein.");
         if (vonKnoten is not null && vonKnoten.Count != bedingung.Count)
@@ -48,7 +52,14 @@ public sealed class Regel
         ProduziertCommands = produziertCommands ?? Array.Empty<Type>();
         GerufeneFunktionen = gerufeneFunktionen ?? Array.Empty<Type>();
         Zeitlimit = zeitlimit;
+        WartetAuf = wartetAuf ?? Array.Empty<Type>();
     }
+
+    /// <summary>
+    /// Pipeline-Fluss (§14): gesetzt, wenn diese Regel nichts ruft, sondern WARTET — auf das erste dieser Events im Strom der Quelle
+    /// (Bedingung = ein <see cref="QuellStrom"/>-Token), nach dessen Version. Ihr Ergebnis-Token ist dieses Event; ihr ⏳ das Zeitlimit.
+    /// </summary>
+    public IReadOnlyList<Type> WartetAuf { get; }
 
     /// <summary>
     /// Pipeline-Fluss (docs/konzept-editor-pipelines.md §14): der KNOTEN, zu dem diese Regel gehört (Deklarations-Index im Fluss).
@@ -181,7 +192,7 @@ public sealed class ProzessRegeln
         TeilnehmendeEvents = regeln
             .SelectMany(r => r.Bedingung.Concat(r.Sammel?.Drähte.Select(d => d.Typ) ?? Enumerable.Empty<Type>()))
             .Append(auslöserTyp)
-            .Where(t => t != typeof(ZeitlimitAbgelaufen) && t != typeof(SchrittAbgelehnt))
+            .Where(t => t != typeof(ZeitlimitAbgelaufen) && t != typeof(SchrittAbgelehnt) && t != typeof(QuellStrom))
             .Distinct()
             .ToList();
     }

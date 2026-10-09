@@ -121,6 +121,8 @@ public sealed class Fluss
             foreach (var k in f.Knoten)
             {
                 if (k.Art is FlussArt.Quelle or FlussArt.Auf) K(N(k.Typ, null, null), fl);
+                // Warten: die erwarteten Events kommen (aus dem Strom eines Aggregats) in den Fluss hinein.
+                else if (k.Art == FlussArt.Warte) foreach (var w in k.WarteAuf) K(N(w, Grammatik.Event, null), fl);
                 else if (k.Art == FlussArt.Funktion)
                     K(fl, N(auftragVon.GetValueOrDefault(k.Typ) ?? k.Typ, Grammatik.Auftrag, f.Namespace));
                 else if (k.Art == FlussArt.Command) K(fl, N(k.Typ, null, null));
@@ -169,6 +171,9 @@ public sealed class Fluss
                     foreach (var p in h.Faehigkeiten) K(F(p), rid, h.Eingang);
                 }
             }
+            // Katalog-Funktion mit Lese-Fähigkeit: Fähigkeit → Funktion (sie liest je Aufruf).
+            foreach (var f in m.Funktionen)
+                foreach (var p in f.Faehigkeiten) K(F(p), "fn:" + f.Name, f.Auftrag);
             foreach (var p in lesen.Pipelines)
             {
                 var pid = B("pl", Grammatik.Pipeline, p.Name, p.Namespace);
@@ -211,6 +216,8 @@ public sealed class Fluss
             {
                 Grammatik.Command or Grammatik.Query => !erzeugt,
                 Grammatik.Trigger => !erzeugt || ingress.Contains(n.Name),
+                // Eine Quell-Nachricht mit Ingress-Bindung (MapQuellWebhook<T>) kommt von außen — ohne Bindung von einer Katalog-Quelle im Host.
+                Grammatik.Quelle => ingress.Contains(n.Name),
                 _ => false,
             };
             if (!aussen) continue;

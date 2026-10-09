@@ -72,6 +72,10 @@ konsistent mit Invariante 6).
 - `LagerEvolutionRoundtripPostgresTests` (2) — echte Event-Evolution (Bytes).
 - `ProzessBackstopE2ETests` (3) — Noop-Marke (K2) + §3-Backstop.
 - `ProzessMarkingCursorPerfTests` (2) — ehrlicher Perf-Beweis gegen echtes Postgres.
+- `PipelineFlussE2ETests` (4, 2026-10-09) — Pipeline als Fluss gegen den echten Cluster: Quelle → Dirigent → Vermittler → Abholer →
+  Fakt; derselbe mit einem **Python-Worker** über gRPC (startet `Infrastructure.Integration.Tests/Python/funktions_worker.py`, Python aus
+  `CQRS_PYTHON`, Default `/opt/miniconda3/envs/gpu_env/bin/python`); Trainings-Wächter (Warten + Backstop); Datensatz-Range mit echter
+  Lese-Fähigkeit. Store-frei im Prüfstand: `PipelineFlussTests`, `FlussLaufwerkTests`, `UmgezogeneFluesseTests`.
 
 **Client:** `VirtualCollectionTests` (26) — Paging, Skeleton, `FuegeVorneEin`, `Patch`, `Reset`.
 

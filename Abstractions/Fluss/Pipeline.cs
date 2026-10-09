@@ -57,8 +57,15 @@ public sealed record ZeitlimitAbgelaufen(string Grund) : IEvent, IProzessIntern;
 /// <summary>Token am ✕-Port eines Knotens: das Aggregat hat abgelehnt bzw. die Funktion ist gescheitert (nur im Dirigenten).</summary>
 public sealed record SchrittAbgelehnt(string Grund) : IEvent, IProzessIntern;
 
+/// <summary>
+/// Der Strom, aus dem die Nachricht der Quelle stammt: bei <c>p.Auf&lt;E&gt;()</c> das Aggregat (Stream-Id) und die Version des Events,
+/// bei <c>p.Quelle&lt;T&gt;()</c> der Vorgangs-Stream. Ein Draht wie jeder andere (<c>quelle.Strom()</c>) — so bekommt ein Knoten die Id
+/// des auslösenden Aggregats über die Zuordnung, ohne dass das Event sie tragen muss. Nur im Dirigenten, nie im Log.
+/// </summary>
+public sealed record QuellStrom(Guid Id, int Version) : IEvent, IProzessIntern;
+
 /// <summary>Die Art eines Fluss-Knotens (für Editor, Diagnose und Boot-Prüfungen).</summary>
-public enum PipelineKnotenArt { Quelle, Auf, Funktion, Command, Je }
+public enum PipelineKnotenArt { Quelle, Auf, Funktion, Command, Je, Warte }
 
 /// <summary>Ein Knoten des übersetzten Flusses: Deklarations-Index, Art und Typ (Nachricht, Funktion, Command bzw. Element).</summary>
 public sealed record PipelineKnotenInfo(int Index, PipelineKnotenArt Art, Type Typ, TimeSpan? Zeitlimit);
@@ -171,6 +178,10 @@ public sealed class PipelineBauer
             if (_knoten[von] is not AufrufKnoten { Limit: not null })
                 throw new InvalidOperationException($"Der ⏳-Port von Knoten {von} ist verdrahtet, aber der Knoten hat kein Zeitlimit (.Zeitlimit(…)).");
 
+        foreach (var w in _knoten.OfType<WarteKnoten>())
+            if (w.Limit is null)
+                throw new InvalidOperationException($"Knoten {w.Index} wartet ohne Zeitlimit — ein Warten braucht .Zeitlimit(…) (sonst bleibt der Vorgang offen, wenn das Event nie kommt).");
+
         var infos = _knoten.Select(k => new PipelineKnotenInfo(k.Index, k.Art, k.ZielTyp, (k as AufrufKnoten)?.Limit)).ToList();
         return new PipelineFluss(new ProzessRegeln(_quellTyp, regeln, _quelle.Index, zeitlimit, abgelehnt), infos);
     }
@@ -214,15 +225,67 @@ public class Draht<T> where T : class, IEvent
         => new(this, liste ?? throw new ArgumentNullException(nameof(liste)));
 }
 
-/// <summary>Die Quelle einer Pipeline — Knoten und (einziger) Ausgangs-Draht zugleich.</summary>
+/// <summary>Die Quelle einer Pipeline — Knoten und Ausgangs-Draht zugleich; dazu ihr Strom (<see cref="Strom"/>).</summary>
 public sealed class QuellKnoten<T> : Draht<T> where T : class, IEvent
 {
     internal QuellKnoten(PipelineBauer bauer, PipelineKnotenArt art) : base(new Knoten(bauer, art)) { }
+
+    /// <summary>Der zweite Ausgang der Quelle: der Strom (Aggregat-Id + Version), aus dem die Nachricht stammt.</summary>
+    public StromDraht Strom() => new(Von);
 
     private sealed class Knoten : PipelineKnoten
     {
         public Knoten(PipelineBauer bauer, PipelineKnotenArt art) : base(bauer, art, typeof(T)) { }
     }
+}
+
+/// <summary>
+/// Der Strom-Draht einer Quelle. Von hier aus kann der Fluss auf ein späteres Event DESSELBEN Stroms warten — das Rennen „Event
+/// gegen Zeitlimit“ (z. B. „Training endet“ gegen „6 h“) ist damit ein Knoten statt einer Frist mit Storno.
+/// </summary>
+public sealed class StromDraht : Draht<QuellStrom>
+{
+    internal StromDraht(PipelineKnoten von) : base(von) { }
+
+    /// <summary>Warte auf das erste <typeparamref name="E1"/> im Strom nach der Quell-Nachricht.</summary>
+    public WarteKnoten Warte<E1>() where E1 : class, IEvent => new(Von.Bauer, Def, typeof(E1));
+
+    /// <summary>Warte auf das erste der Events im Strom nach der Quell-Nachricht — jeder Typ ist ein Ausgang.</summary>
+    public WarteKnoten Warte<E1, E2>() where E1 : class, IEvent where E2 : class, IEvent
+        => new(Von.Bauer, Def, typeof(E1), typeof(E2));
+
+    public WarteKnoten Warte<E1, E2, E3>() where E1 : class, IEvent where E2 : class, IEvent where E3 : class, IEvent
+        => new(Von.Bauer, Def, typeof(E1), typeof(E2), typeof(E3));
+
+    public WarteKnoten Warte<E1, E2, E3, E4>()
+        where E1 : class, IEvent where E2 : class, IEvent where E3 : class, IEvent where E4 : class, IEvent
+        => new(Von.Bauer, Def, typeof(E1), typeof(E2), typeof(E3), typeof(E4));
+}
+
+/// <summary>
+/// Ein Knoten, der WARTET: auf das erste der genannten Events im Strom der Quelle (nach ihrer Version). Ausgänge = die Event-Typen,
+/// dazu ⏳ (Pflicht: <see cref="Zeitlimit"/>). Er ruft nichts — der Dirigent liest den Strom bei jeder Weckung nach.
+/// </summary>
+public sealed class WarteKnoten : AufrufKnoten
+{
+    internal WarteKnoten(PipelineBauer bauer, (Type Typ, int Von) strom, params Type[] typen)
+        : base(bauer, PipelineKnotenArt.Warte, typen[0])
+    {
+        Typen = typen;
+        NeuerEingang(new FlussEingang(new[] { strom }, _ => Array.Empty<object>()));
+    }
+
+    /// <summary>Die Events, auf die gewartet wird (in Code-Reihenfolge).</summary>
+    public IReadOnlyList<Type> Typen { get; }
+
+    /// <summary>Wie lange gewartet wird; danach feuert ⏳ (<c>BeiZeitlimit()</c>).</summary>
+    public WarteKnoten Zeitlimit(TimeSpan limit) { SetzeLimit(limit); return this; }
+
+    internal override IEnumerable<Regel> BaueRegeln()
+        => Eingänge.Select(e => new Regel(
+            e.Bedingung.Select(b => b.Typ).ToList(),
+            sende: null, rückgängigDurch: null, zeitlimit: Limit, knoten: Index,
+            vonKnoten: e.Bedingung.Select(b => (int?)b.Von).ToList(), wartetAuf: Typen));
 }
 
 /// <summary>Ein Eingang eines Aufruf-Knotens: Bedingung (Drähte), Bau der Aufrufe, optional Je-Auffächern bzw. Sammeln.</summary>

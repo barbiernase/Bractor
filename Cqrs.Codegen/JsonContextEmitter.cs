@@ -54,6 +54,7 @@ public static class JsonContextEmitter
         [JsonSerializable(typeof(SchrittUmgeleitet))]
         [JsonSerializable(typeof(Abstractions.ZeitlimitAbgelaufen))]
         [JsonSerializable(typeof(Abstractions.SchrittAbgelehnt))]
+        [JsonSerializable(typeof(Abstractions.QuellStrom))]
         [JsonSerializable(typeof(KommandoVerarbeitet))]
         [JsonSerializable(typeof(KommandoAbgelehnt))]
         """;
@@ -121,6 +122,7 @@ public static class JsonContextEmitter
         [JsonSerializable(typeof(SchrittUmgeleitet))]
         [JsonSerializable(typeof(Abstractions.ZeitlimitAbgelaufen))]
         [JsonSerializable(typeof(Abstractions.SchrittAbgelehnt))]
+        [JsonSerializable(typeof(Abstractions.QuellStrom))]
         [JsonSerializable(typeof(KommandoVerarbeitet))]
         [JsonSerializable(typeof(KommandoAbgelehnt))]
         """;

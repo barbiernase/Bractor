@@ -245,9 +245,22 @@ public sealed class ProzessManagerStartupService : IHostedService
 /// </summary>
 public static class GeneratedProzesse
 {
+    /// <summary>
+    /// Die Registry aller Prozesse und Flüsse: je Domänen-Assembly eine generierte (Domain; Domain.Pipeline für Flüsse, deren
+    /// Funktionen Fähigkeiten der Leseseite nehmen). Ein Name zweimal → laut (wie CQRS012 innerhalb einer Assembly).
+    /// </summary>
+    public static IReadOnlyDictionary<string, ProzessRegeln> AlleRegeln()
+    {
+        var alle = new Dictionary<string, ProzessRegeln>(Domain.Prozess.GeneratedProzessRegeln.Alle);
+        foreach (var (name, regeln) in Domain.Pipeline.Prozess.GeneratedProzessRegeln.Alle)
+            if (!alle.TryAdd(name, regeln))
+                throw new InvalidOperationException($"Der Prozess-/Pipeline-Name '{name}' ist in Domain und Domain.Pipeline doppelt vergeben.");
+        return alle;
+    }
+
     public static IServiceCollection AddGeneratedProzesse(this IServiceCollection services)
     {
-        services.AddSingleton<IReadOnlyDictionary<string, ProzessRegeln>>(Domain.Prozess.GeneratedProzessRegeln.Alle);
+        services.AddSingleton<IReadOnlyDictionary<string, ProzessRegeln>>(AlleRegeln());
         services.AddSingleton<IClusterKindContributor, ProzessManagerKind>();
         // Der Ausführer der Katalog-Funktionen (Rufe<F>); die Funktionen selbst bindet der Host mit AddFunktion<F, Impl>().
         services.AddSingleton(Infrastructure.Funktionen.FunktionsExtensions.BaueAusfuehrer);

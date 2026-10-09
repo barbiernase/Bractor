@@ -110,6 +110,27 @@ public class FunktionsAnbieterSitzungTests
     }
 
     [Fact]
+    public async Task Akteur_Tor_nimmt_nur_Funktionen_an_die_der_Akteur_rechnen_darf()
+    {
+        var w = new Welt();
+        await using var s = w.Sitzung();
+        var a = w.Biete("a");
+
+        var unbekannt = s.Biete(new[] { ("IBildVerkleinerung", 1) }, darf: _ => false, out var nichtBefugt);
+
+        unbekannt.Should().BeEmpty();
+        nichtBefugt.Should().Equal("IBildVerkleinerung");
+        s.Angeboten.Should().BeEmpty("ohne IDarf<IBildVerkleinerung> keine Hol-Schleife");
+        await Task.Delay(100);
+        w.Gesendet.Should().BeEmpty("der Auftrag bleibt beim Vermittler für einen befugten Worker");
+
+        s.Biete(new[] { ("IBildVerkleinerung", 1) }, darf: f => f == typeof(IBildVerkleinerung), out nichtBefugt);
+        nichtBefugt.Should().BeEmpty();
+        await Bis(() => w.Gesendet.Count == 1, "mit Befugnis holt die Sitzung den Auftrag");
+        w.Gesendet.Single().Vorgang.Should().Be(a.Vorgang);
+    }
+
+    [Fact]
     public async Task Ergebnis_wird_genau_einmal_geschrieben_erledigt_gemeldet_und_der_Slot_ist_frei()
     {
         var w = new Welt();

@@ -180,7 +180,9 @@ public static class QuellenExtensions
     /// <summary>
     /// Ein zweiter Weg in dieselbe Quelle: <c>POST {route}</c> mit der Nachricht als JSON → genau einmal ins Log, Vorgang gestartet.
     /// Antwortet <c>202 Accepted</c> mit der Vorgangs-Id (dieselbe Nachricht zweimal → derselbe Vorgang).
+    /// <c>[Ingress]</c>: der Editor liest die Bindung (Nachricht = Typ-Argument, Route = <paramref name="route"/>) aus dem Aufruf.
     /// </summary>
+    [Ingress(IngressArt.Webhook, Ort = nameof(route))]
     public static IEndpointRouteBuilder MapQuellWebhook<TNachricht>(this IEndpointRouteBuilder app, string route)
         where TNachricht : class, IQuellNachricht
     {

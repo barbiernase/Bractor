@@ -70,7 +70,13 @@ public static class FunktionsExtensions
     /// </summary>
     public static void PrüfeBindungen(IReadOnlyDictionary<string, ProzessRegeln> registry, IEnumerable<FunktionsBindung> bindungen)
     {
-        var gebunden = new HashSet<Type>(bindungen.Select(b => b.Funktion));
+        var liste = bindungen.ToList();
+        var gebunden = new HashSet<Type>(liste.Select(b => b.Funktion));
+        // Eine Funktion mit Lese-Fähigkeiten braucht die Stores des Hosts — draußen (Python, GPU-Rechner) gibt es sie nicht.
+        foreach (var b in liste.Where(b => b.Extern && GeneratedFunktionen.Faehigkeiten.ContainsKey(b.Funktion)))
+            throw new InvalidOperationException(
+                $"Die Funktion '{b.Funktion.Name}' liest Fähigkeiten ({string.Join(", ", GeneratedFunktionen.Faehigkeiten[b.Funktion].Select(t => t.Name))}) " +
+                "und läuft deshalb nur im Host: services.AddFunktion<…, Implementierung>() statt AddExterneFunktion.");
         foreach (var (name, regeln) in registry)
             foreach (var f in regeln.Regeln.SelectMany(r => r.GerufeneFunktionen).Distinct())
                 if (!gebunden.Contains(f))

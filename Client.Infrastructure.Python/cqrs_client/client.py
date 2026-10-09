@@ -61,10 +61,10 @@ class CqrsClient(HandlerBase, Generic[S]):
     Basisklasse für Python First-Citizen Clients.
 
     Lifecycle:
-        run() → _build_capabilities_request() → connect() → parallel:
+        run() → _build_capabilities_request() → connect() → je Verbindung eine Sitzung, parallel:
             - read_loop (GrpcProxy)
             - process_loop (MessageRouter)
-            - monitor (ConnectionManager)
+          endet die Sitzung (Verbindung weg) → connect_with_retry (Backoff, Funktionen neu anbieten) → nächste Sitzung
     """
 
     # Subklassen überschreiben diese mit ihren Command-Typen
@@ -196,28 +196,37 @@ class CqrsClient(HandlerBase, Generic[S]):
         # on_connected läuft nach JEDEM Handshake (auch nach Reconnect): angebotene Funktionen neu anmelden.
         await self._connection.connect_with_retry(host, port, capabilities, on_connected=self._funktionen.biete_an)
 
-        log.info("Connected. Starting processing loops...")
-
         try:
-            await asyncio.gather(
-                self._proxy.read_loop(),
-                self._router.process_loop(
-                    self._proxy,
-                    self.handle,
-                    self,
-                    self._state,
-                    self._mapper,
-                    self._registry,
-                    self._version_tracker,
-                    on_arbeit=self._funktionen.nimm,
-                ),
-                self._connection.monitor(),
-            )
+            # Je Verbindung EINE Sitzung (Lesen + Verarbeiten). Beide Schleifen enden, wenn die Verbindung abbricht —
+            # dann neu verbinden und eine neue Sitzung starten. (Früher lief nur der Monitor weiter: er verband neu und bot
+            # die Funktionen wieder an, aber niemand las mehr — der Client war nach dem ersten Abbruch taub.)
+            while True:
+                log.info("Connected. Starting processing loops...")
+                await self._sitzung()
+                log.info("Connection lost, starting reconnect...")
+                await self._proxy.disconnect()
+                await self._connection.connect_with_retry(host, port, capabilities, on_connected=self._funktionen.biete_an)
         except asyncio.CancelledError:
             log.info("Client shutting down...")
         finally:
             await self._proxy.disconnect()
             log.info("Client stopped")
+
+    async def _sitzung(self) -> None:
+        """Eine Verbindung lang: Server-Nachrichten lesen und verarbeiten — endet, wenn die Verbindung abbricht."""
+        await asyncio.gather(
+            self._proxy.read_loop(),
+            self._router.process_loop(
+                self._proxy,
+                self.handle,
+                self,
+                self._state,
+                self._mapper,
+                self._registry,
+                self._version_tracker,
+                on_arbeit=self._funktionen.nimm,
+            ),
+        )
 
     # ═══════════════════════════════════════════════════
     # CAPABILITIES

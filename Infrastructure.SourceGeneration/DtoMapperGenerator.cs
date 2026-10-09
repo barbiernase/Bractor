@@ -436,7 +436,18 @@ namespace Infrastructure.SourceGeneration
             string helperClassName,    // "ProtoQueryMappingHelpers", etc.
             Dictionary<string, DomainType> typeLookup)
         {
-            if (!types.Any()) return;
+            if (!types.Any())
+            {
+                // Trigger/Auftrag: die Protokoll-Message existiert immer (leer, ohne oneof) — der Mapper auch, er kennt nur keinen Typ.
+                if (categoryName is not ("Trigger" or "Auftrag")) return;
+                sb.AppendLine($"    internal static class {helperClassName}");
+                sb.AppendLine("    {");
+                sb.AppendLine($"        public static {interfaceName} MapToDomain({payloadDtoName} dto) => throw new NotSupportedException(\"Keine {categoryName}-Typen in der Domäne.\");");
+                sb.AppendLine($"        public static {payloadDtoName} MapToDto({interfaceName} payload) => throw new NotSupportedException($\"Unknown {categoryName.ToLower()} type: {{payload.GetType().Name}}\");");
+                sb.AppendLine("    }");
+                sb.AppendLine();
+                return;
+            }
             
             sb.AppendLine($"    internal static class {helperClassName}");
             sb.AppendLine("    {");

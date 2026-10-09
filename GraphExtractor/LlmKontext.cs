@@ -41,7 +41,7 @@ public sealed class KontextBauer
         miscellaneousOptions: SymbolDisplayMiscellaneousOptions.UseSpecialTypes
                               | SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
-    private static readonly string[] Arten = { "decide", "apply", "projektion", "reaktion", "reader", "pipeline", "store" };
+    private static readonly string[] Arten = { "decide", "apply", "projektion", "reaktion", "reader", "pipeline", "store", "funktion", "fluss" };
 
     private readonly SlotInventar _inv;
     private readonly DomainModel _dom;
@@ -84,8 +84,14 @@ public sealed class KontextBauer
     {
         "decide" or "apply" => s.State?.Name ?? s.Klasse.Name,
         "store" => StoreVon(s)?.Name ?? s.Klasse.Name,
+        "funktion" => FunktionVon(s)?.Name ?? s.Klasse.Name,   // der Editor adressiert die Funktion über ihre Schnittstelle
         _ => s.Klasse.Name,
     };
+
+    /// <summary>Die Katalog-Funktion (Schnittstelle), deren RufeAsync der Slot implementiert.</summary>
+    private INamedTypeSymbol? FunktionVon(SlotInventar.SlotRef s) => s.Methode == null ? null
+        : s.Klasse.AllInterfaces.FirstOrDefault(i => i.GetMembers(Vertrag.FunktionsMethode).OfType<IMethodSymbol>()
+            .Any(m => SymbolEqualityComparer.Default.Equals(s.Klasse.FindImplementationForInterfaceMember(m), s.Methode)));
 
     private string Schlüssel(SlotInventar.SlotRef s) => $"{s.Art}|{Besitzer(s)}|{s.Disc}";
 
@@ -190,6 +196,7 @@ public sealed class KontextBauer
 
     private SlotKontext Baue(SlotInventar.SlotRef s, string? cliAuftrag)
     {
+        if (s.Art == "fluss") return BaueFluss(s, cliAuftrag);
         var m = s.Methode!;
         var model = Model(s.Rumpf.SyntaxTree);
         var k = new SlotKontext { Slot = s, Schlüssel = Schlüssel(s), Titel = $"{s.Art} {Besitzer(s)}.{s.Disc}{(s.Art == "store" ? " @ " + s.Klasse.Name : "")}", RumpfStatus = RumpfStatus(s, model) };
@@ -244,6 +251,69 @@ public sealed class KontextBauer
         return k;
     }
 
+    // ── Fluss-Lambda (docs/konzept-editor-pipelines.md §14.4): ein Bau-Lambda eines Pipeline-Flusses ──
+
+    /// <summary>
+    /// Der Slot-Teil eines Fluss-Lambdas: Anker (Anweisung + Lambda-Index), Signatur aus dem Delegat-Typ, Vertrag (rein, deterministisch,
+    /// Zuordnungsform), erreichbar = die Lambda-Parameter (die Drähte), Typen, und als Umfeld der ganze Fluss (alle Anweisungen).
+    /// </summary>
+    private SlotKontext BaueFluss(SlotInventar.SlotRef s, string? cliAuftrag)
+    {
+        var lam = s.Lambda!;
+        var model = Model(lam.SyntaxTree);
+        var k = new SlotKontext { Slot = s, Schlüssel = Schlüssel(s), Titel = $"fluss {s.Klasse.Name}.{s.Disc}", RumpfStatus = "geschrieben" };
+        if (_llmKnoten.TryGetValue(k.Schlüssel, out var llm)) { k.Auftrag = llm.Intent; k.AuftragQuelle = llm.Quelle; }
+        else if (PromptAus(s) is { } p) { k.Auftrag = p; k.AuftragQuelle = "„// 🤖 Prompt:“ im Lambda"; }
+        else if (cliAuftrag != null) { k.Auftrag = cliAuftrag; k.AuftragQuelle = "Kommandozeile (--auftrag, steht für den LLM-Knoten)"; }
+
+        var verb = (lam.Parent?.Parent?.Parent as InvocationExpressionSyntax) is { } inv ? model.GetSymbolInfo(inv).Symbol as IMethodSymbol : null;
+        var delegat = model.GetTypeInfo(lam).ConvertedType as INamedTypeSymbol;
+        var ziel = delegat?.DelegateInvokeMethod?.ReturnType;
+        var konkret = verb?.TypeArguments.FirstOrDefault() is INamedTypeSymbol ta
+            ? (Sym.Implements(ta, _iCommand) ? ta : _dom.Funktionen.FirstOrDefault(f => f.Full == ta.Fq()) is { } fn ? Typ(fn.AuftragFull) : null)
+            : null;
+        var statement = lam.Ancestors().OfType<StatementSyntax>().First(x => x.Parent is BlockSyntax bl && bl.Parent is LambdaExpressionSyntax);
+        var pos = lam.GetLocation().GetLineSpan();
+
+        var b = new StringBuilder();
+        void Kopf(string t) { b.AppendLine(); b.AppendLine("## " + t); }
+        b.AppendLine($"# SLOT-TEIL {k.Titel}");
+        Kopf("AUFTRAG [L]");
+        b.AppendLine(k.Auftrag == null ? "— kein LLM-Knoten an diesem Code-Block (ohne Auftrag wird kein Aufruf ausgelöst)" : $"{k.Auftrag}   (Quelle: {k.AuftragQuelle})");
+        Kopf("ANKER [S]");
+        b.AppendLine($"{s.Klasse.Name}.Fluss   {Rel(pos.Path)}:{pos.StartLinePosition.Line + 1}   Anweisung {s.Anweisung}, Lambda {s.LambdaIndex} (Knoten {s.Knoten}, Verb {verb?.Name ?? "?"})");
+        Kopf("SIGNATUR [S]");
+        b.AppendLine($"({string.Join(", ", s.Parameter.Select(x => $"{x.Type.ToDisplayString(Kurz)} {x.Name}"))}) => {ziel?.ToDisplayString(Kurz) ?? "?"}"
+                     + (konkret != null ? $"   — konkret: new {konkret.Name}(…)" : ""));
+        Kopf("VERTRAG (nur Erzwungenes) [S]");
+        b.AppendLine($"Rückgabe {ziel?.ToDisplayString(Kurz) ?? "?"} — Compiler (Delegat-Typ des Verbs {verb?.Name})");
+        b.AppendLine("Rein und deterministisch: der Dirigent baut den Aufruf bei jeder Weckung neu und leitet daraus die Vorgang-Id ab — kein Guid.NewGuid(), keine Uhr, kein I/O, kein Zustand");
+        b.AppendLine("Zuordnungsform (param.Feld, Konstante, new Wertobjekt(…)) bleibt im Editor als Tabelle bearbeitbar; alles andere steht dort als Lambda aus dem Code");
+        Kopf("ERREICHBAR IM RUMPF [S]");
+        foreach (var x in s.Parameter)
+        {
+            // Framework-Nachrichten am Draht (QuellStrom, ZeitlimitAbgelaufen, SchrittAbgelehnt) stehen nicht in der Domänen-Hülle — ihre Felder hier.
+            var felder = x.Type is INamedTypeSymbol nt && !IstDomäne(nt) && PrimärKonstruktor(nt) is { } c
+                ? $"   = {nt.Name}({string.Join(", ", c.Parameters.Select(q => $"{q.Type.ToDisplayString(Kurz)} {q.Name}"))})" : "";
+            b.AppendLine($"Parameter  {x.Name} : {x.Type.ToDisplayString(Kurz)}   (Nachricht am Draht){felder}");
+        }
+        Kopf("KOMMENTARE (wörtlich) [S]");
+        var kom = Zeilenkommentare(statement).ToList();
+        if (DokuVon(s.Klasse) is { } kd) kom.Add($"[/// an {s.Klasse.Name}] {kd}");
+        b.AppendLine(kom.Count == 0 ? "keine" : string.Join("\n", kom));
+        Kopf("TYPEN (transitive Hülle der Domänen-Typen; /// = Doku-Kommentar) [S]");
+        var saat = s.Parameter.Select(x => x.Type).ToList();
+        if (konkret != null) saat.Add(konkret);
+        foreach (var t in Transitiv(saat))
+            foreach (var z in Eintrag(t, konkret != null && t.Fq() == konkret.Fq() ? "Ziel" : "Typ")) b.AppendLine(z);
+        Kopf("GRAPH-UMFELD: der ganze Fluss (Anweisungen wörtlich) [K]");
+        if (statement.Parent is BlockSyntax alle)
+            foreach (var st in alle.Statements) b.AppendLine((st == statement ? "► " : "  ") + Regex.Replace(st.ToString(), @"\s+", " "));
+        k.NachbarBlöcke = 0; k.KopplungBlöcke = 0;
+        k.Text = b.ToString().TrimStart('\n');
+        return k;
+    }
+
     // ── Vertrag: nur, was Compiler/Marker/Framework erzwingen ──
 
     private IEnumerable<string> Vertragszeilen(SlotInventar.SlotRef s)
@@ -281,6 +351,13 @@ public sealed class KontextBauer
                 yield return "Eingangskanal: " + (Sym.Implements(input, _iTrigger) ? "Trigger (IPipelineTrigger)"
                     : Sym.Implements(input, _iSelf) ? "Self-Nachricht (IPipelineSelfMessage)"
                     : Sym.Implements(input, _iTransient) ? "Ablehnung (ITransientEvent)" : "Event (IEvent)") + " — Marker";
+                break;
+            case "funktion":
+                yield return $"Genau EIN Ergebnis ⊆ {{{string.Join(", ", aus.Select(a => a.Name))}}} — Compiler (OneOf-Signatur, CQRS068); es landet als Event im Ausführungs-Stream";
+                yield return "Eine Ausnahme ist ein Fehlschlag (✕-Port des Knotens bzw. Wiederholung laut Bindung AddFunktion<…>(wiederholungen)) — Framework";
+                yield return "x.AusfuehrungsId ist deterministisch (Wiederholung = dieselbe Id) — Außenwirkung darüber deduplizieren; x.Abbruch beachten (Zeitlimit/Lease)";
+                if (s.Parameter.Count > 2)
+                    yield return $"Fähigkeiten {string.Join(", ", s.Parameter.Skip(2).Select(p => p.Type.Name))}: nur LESEN, je Aufruf ein Bereich — CQRS068; läuft nur im Host (nicht extern)";
                 break;
             case "store":
                 yield return "Signatur vom Store-Interface vorgegeben — Compiler";
@@ -593,6 +670,22 @@ public sealed class KontextBauer
                         yield return $"{ziel.Split('.').Last()} geht an: Aggregat {agg.Name}";
                 break;
             }
+            case "funktion":
+            {
+                var f = FunktionVon(s);
+                if (f == null) break;
+                yield return $"Katalog-Funktion {f.Name} (implementiert in {s.Klasse.Name}; Laufort = Bindung im Host)";
+                foreach (var fl in _dom.Fluesse)
+                    foreach (var k in fl.Knoten.Where(k => k.TypFull == f.Fq()))
+                    {
+                        var weiter = fl.Knoten.Where(z => z.Eingaenge.Any(e => e.Draehte.Any(d => d.Von == k.Name)))
+                            .Select(z => $"{z.Name} ({string.Join("/", z.Eingaenge.SelectMany(e => e.Draehte).Where(d => d.Von == k.Name).Select(d => d.FallFull?.Split('.').Last() ?? d.Port).Distinct())})");
+                        yield return $"gerufen im Fluss {fl.Name}, Knoten {k.Name}{(k.Zeitlimit != null ? $" (⏳ {k.Zeitlimit})" : "")} → weiter: {string.Join(", ", weiter.DefaultIfEmpty("—"))}";
+                    }
+                foreach (var p in _graph.Nodes.Where(n => n.Process != null && n.Process.Rules.Any(r => r.Ruft == f.Fq() || r.Ruft == f.Name)))
+                    yield return $"gerufen im Prozess {p.Name}";
+                break;
+            }
             case "store":
             {
                 var st = StoreVon(s);
@@ -824,12 +917,24 @@ public static class KontextCli
         // und den Auftrag, falls einer im Code/Board steht.
         var index = alle.Select(k =>
         {
+            if (k.Slot.Art == "fluss")
+            {
+                // Fluss-Lambda: Anker = Klasse + Anweisung + Lambda-Index im Definiere-Lambda (CodeSync.LambdaAnker).
+                var lp = k.Slot.Lambda!.GetLocation().GetLineSpan();
+                return (object)new
+                {
+                    id = k.Schlüssel, schluessel = k.Schlüssel, titel = k.Titel, art = k.Slot.Art, besitzer = k.Schlüssel.Split('|')[1], disc = k.Slot.Disc,
+                    klasse = k.Slot.Klasse.Name, knoten = k.Slot.Knoten, anweisung = k.Slot.Anweisung, lambda = k.Slot.LambdaIndex,
+                    datei = Path.GetRelativePath(solutionDir, lp.Path).Replace('\\', '/'), zeile = lp.StartLinePosition.Line + 1,
+                    rumpf = k.RumpfStatus, auftrag = k.Auftrag, slotDatei = DateiName(k), tokenSlot = Token(k.Text),
+                };
+            }
             var m = k.Slot.Methode!;
             var decl = m.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).First(n => !Projektlage.IstGeneriert(n.SyntaxTree));
             var pos = decl.GetLocation().GetLineSpan();
             // Parametertyp so, wie er im Quelltext steht (Basisname) — der Anker, mit dem CodeSync die Methode wiederfindet.
             var pTyp = (decl as Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax)?.ParameterList.Parameters.FirstOrDefault()?.Type?.ToString();
-            return new
+            return (object)new
             {
                 id = k.Schlüssel + (k.Slot.Art == "store" ? "@" + k.Slot.Klasse.Name : ""),   // eindeutig (Store: mehrere Impls je Interface)
                 schluessel = k.Schlüssel, titel = k.Titel, art = k.Slot.Art, besitzer = k.Schlüssel.Split('|')[1], disc = k.Slot.Disc,

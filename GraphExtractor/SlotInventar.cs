@@ -8,7 +8,8 @@ namespace GraphExtractor;
 //  Slot-Inventar (docs/konzept-llm-minimalkontext.md §13)
 //
 //  Alle Stellen, an denen ein Code-Block hängt (H-Slots), über ihre Marker gefunden — Decide, Apply, Projektion,
-//  Reaktion, Reader, Pipeline, Store-Implementierung, Saga-Lambda — und je Rumpf jedes gebundene Symbol klassifiziert:
+//  Reaktion, Reader, Pipeline, Store-Implementierung, Saga-Lambda, Katalog-Funktion (Implementierung von RufeAsync) und
+//  Fluss-Lambda (jeder Bau-Lambda eines Pipeline-Flusses) — und je Rumpf jedes gebundene Symbol klassifiziert:
 //
 //    P  Parameter des Slots            S  State-Member (Decide/Apply)       F  Feld/Property der Klasse (injiziert)
 //    H  Helfer-Methode der Klasse      X  Aufruf eines anderen Slots        K  statisch/const der Klasse
@@ -25,6 +26,13 @@ public sealed class SlotInventar
         INamedTypeSymbol? State, List<IParameterSymbol> Parameter, List<ITypeSymbol> SignaturTypen)
     {
         public string Id => $"{Art} {Klasse.Name}.{Disc}";
+
+        /// <summary>Nur Fluss-Lambda: der ganze Lambda-Ausdruck, die Anweisung im Definiere-Lambda (0-basiert), der wievielte Lambda
+        /// der Anweisung (Code-Reihenfolge: Haupt-Aufruf bzw. Liste, dann je <c>.Oder</c> einer) und der Knoten-Name.</summary>
+        public LambdaExpressionSyntax? Lambda { get; init; }
+        public int Anweisung { get; init; }
+        public int LambdaIndex { get; init; }
+        public string? Knoten { get; init; }
     }
 
     public sealed record Nutzung(char Kat, string Id, string Anzeige);
@@ -32,7 +40,7 @@ public sealed class SlotInventar
     private readonly List<Compilation> _comps;
     private readonly HashSet<string> _domänen, _framework;
     private readonly INamedTypeSymbol? _iCommand, _iEvent, _iQuery, _iDecider, _iApplier, _iSubscriber, _iReader,
-        _iPipeline, _pipelineContext, _iAggEnvelope, _iWriteStore, _iReadStore, _iProzessDef;
+        _iPipeline, _pipelineContext, _iAggEnvelope, _iWriteStore, _iReadStore, _iProzessDef, _iFunktion, _iFluss;
     public List<SlotRef> Slots { get; } = new();
     public Dictionary<SlotRef, List<Nutzung>> Nutzungen { get; } = new();
     public Dictionary<SlotRef, HashSet<string>> Spielraum { get; } = new();
@@ -53,6 +61,7 @@ public sealed class SlotInventar
         _iReader = Get(Vertrag.IReader); _iPipeline = Get(Vertrag.IPipelineHandler); _pipelineContext = Get(Vertrag.PipelineContext);
         _iAggEnvelope = Get(Vertrag.IAggregateEnvelope); _iWriteStore = Get(Vertrag.IWriteStore); _iReadStore = Get(Vertrag.IReadStore);
         _iProzessDef = Get(Vertrag.IProzessDefinition);
+        _iFunktion = Get(Vertrag.IFunktion); _iFluss = Get(Vertrag.IPipeline);
         Sammle();
         foreach (var s in Slots)
         {
@@ -102,6 +111,26 @@ public sealed class SlotInventar
                             && !Slots.Any(s => SymbolEqualityComparer.Default.Equals(s.Methode, impl)))
                             Add("store", t, impl, null, impl.Name);
 
+            // Katalog-Funktion: die Implementierung von RufeAsync (der Rumpf, den ein Entwurf als Stub, 🤖 oder Python bekommt).
+            if (t.TypeKind == TypeKind.Class && !t.IsAbstract)
+                foreach (var f in t.AllInterfaces.Where(i => _domänen.Contains(i.ContainingAssembly?.Name ?? "") && Sym.Implements(i, _iFunktion)))
+                    foreach (var im in f.GetMembers(Vertrag.FunktionsMethode).OfType<IMethodSymbol>())
+                        if (t.FindImplementationForInterfaceMember(im) is IMethodSymbol impl && Rumpf(impl) != null
+                            && !Slots.Any(s => SymbolEqualityComparer.Default.Equals(s.Methode, impl)))
+                            Add("funktion", t, impl, null);
+
+            // Fluss-Lambdas: je Anweisung des Definiere-Lambdas die Lambda-Argumente der Fluss-Verben (Code-Reihenfolge).
+            if (Sym.Implements(t, _iFluss))
+                foreach (var (anweisung, i, knoten, lam) in FlussLambdas(t))
+                {
+                    var model = Model(lam.SyntaxTree);
+                    var ps = (model.GetSymbolInfo(lam).Symbol as IMethodSymbol)?.Parameters.ToList() ?? new();
+                    var sig = ps.Select(p => p.Type).ToList();
+                    if (model.GetTypeInfo(lam).ConvertedType is INamedTypeSymbol dt) sig.Add(dt);
+                    Slots.Add(new SlotRef("fluss", t, null, lam.Body, $"{knoten}#{i}", null, ps, sig)
+                    { Lambda = lam, Anweisung = anweisung, LambdaIndex = i, Knoten = knoten });
+                }
+
             // Saga-Lambdas: Lambda-Argumente der Regel-Verben in Prozess-Definitionen.
             if (Sym.Implements(t, _iProzessDef))
                 foreach (var syn in t.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).Where(n => !Projektlage.IstGeneriert(n.SyntaxTree)))
@@ -120,6 +149,33 @@ public sealed class SlotInventar
                         }
                     }
                 }
+        }
+    }
+
+    /// <summary>
+    /// Die Lambdas eines Pipeline-Flusses: je Anweisung des <c>Definiere</c>-Lambdas die Lambda-ARGUMENTE (nicht verschachtelte) in
+    /// Code-Reihenfolge — der Haupt-Aufruf (bzw. die Liste eines Je) zuerst, dann je <c>.Oder(…)</c> einer. Knoten = Variablenname
+    /// (ohne Variable: „#Anweisung“). Ankert über die Implementierung der Fluss-Property, nie über ihren Namen.
+    /// </summary>
+    public IEnumerable<(int Anweisung, int Index, string Knoten, LambdaExpressionSyntax Lambda)> FlussLambdas(INamedTypeSymbol t)
+    {
+        var iface = _iFluss?.GetMembers(Vertrag.FlussProperty).OfType<IPropertySymbol>().FirstOrDefault();
+        var impl = iface == null ? null : Sym.Implementierung(t, iface) as IPropertySymbol;
+        var prop = impl?.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).OfType<PropertyDeclarationSyntax>()
+            .FirstOrDefault(p => !Projektlage.IstGeneriert(p.SyntaxTree));
+        var definiere = prop?.DescendantNodes().OfType<InvocationExpressionSyntax>()
+            .Select(inv => inv.ArgumentList.Arguments.FirstOrDefault()?.Expression as LambdaExpressionSyntax)
+            .FirstOrDefault(l => l?.Body is BlockSyntax);
+        if (definiere?.Body is not BlockSyntax block) yield break;
+        for (var a = 0; a < block.Statements.Count; a++)
+        {
+            var st = block.Statements[a];
+            var knoten = st is LocalDeclarationStatementSyntax ld && ld.Declaration.Variables.Count == 1
+                ? ld.Declaration.Variables[0].Identifier.Text : $"#{a}";
+            var lambdas = st.DescendantNodes().OfType<LambdaExpressionSyntax>()
+                .Where(l => l.Parent is ArgumentSyntax && !l.Ancestors().TakeWhile(x => x != st).OfType<LambdaExpressionSyntax>().Any())
+                .ToList();
+            for (var i = 0; i < lambdas.Count; i++) yield return (a, i, knoten, lambdas[i]);
         }
     }
 
@@ -273,7 +329,7 @@ public sealed class SlotInventar
     public string Bericht()
     {
         var b = new StringBuilder();
-        var arten = new[] { "decide", "apply", "projektion", "reaktion", "reader", "pipeline", "store", "saga" };
+        var arten = new[] { "decide", "apply", "projektion", "reaktion", "reader", "pipeline", "store", "funktion", "saga", "fluss" };
         b.AppendLine("── Slot-Inventar: Isolation der Code-Block-Stellen ──\n");
         b.AppendLine($"   {"Art",-11}{"Slots",6}{"Symb/Slot",10}{"Spielraum",11}{"+Graph",8}{"+Nachbar",10}{"+Artgen.",10}{"Rest",7}   {"nutzt F",8}{"nutzt H",8}{"nutzt X",8}");
         foreach (var art in arten)

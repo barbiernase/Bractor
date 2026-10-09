@@ -138,6 +138,7 @@ public static class Validator
         IReadOnlyList<string> Ausgaenge(FlussSchritt k) => k.Art switch
         {
             FlussArt.Funktion => funktionen.TryGetValue(k.Typ, out var f) ? f.Ergebnisse : [],
+            FlussArt.Warte => k.WarteAuf.Count > 0 ? k.WarteAuf : [k.Typ],
             // Eine Ablehnung ist kein Fall-Port: sie kommt als Ablehnungs-Marke am ✕-Port an (BeiAbgelehnt).
             FlussArt.Command => modell.Decider.Where(d => d.Command == k.Typ).SelectMany(d => d.Ergibt.Select(a => a.Event))
                 .Where(e => !recordVon.TryGetValue(e, out var r) || r.Kind != RecordArt.Rejection).Distinct().ToList(),
@@ -170,6 +171,13 @@ public static class Validator
                     befunde.Add(new("error", "GR-AUS-FLUSS", $"{ort} sendet '{k.Typ}', der kein Command-Record ist."));
                 if (k.Art is FlussArt.Funktion or FlussArt.Command && k.Eingaenge.Count == 0)
                     befunde.Add(new("error", "GR-FLUSS-DRAHT", $"{ort} hat keinen Eingang — ein Draht muss hineinführen."));
+                if (k.Art == FlussArt.Warte)
+                {
+                    if (string.IsNullOrWhiteSpace(k.Zeitlimit))
+                        befunde.Add(new("error", "GR-FLUSS-WARTE", $"{ort} wartet ohne Zeitlimit — kommt das Event nie, bliebe der Vorgang offen."));
+                    if (k.Eingaenge.Count != 1 || k.Eingaenge[0].Draehte.Count != 1 || k.Eingaenge[0].Draehte[0].Port != FlussPort.Strom)
+                        befunde.Add(new("error", "GR-FLUSS-WARTE", $"{ort}: ein Warten hängt an genau einem Draht — dem Strom der Quelle (quelle.Strom())."));
+                }
                 if (k.Art == FlussArt.Je && (k.Eingaenge.Count != 1 || string.IsNullOrWhiteSpace(k.Liste)))
                     befunde.Add(new("error", "GR-FLUSS-JE", $"{ort}: ein Je-Rahmen hat genau einen Eingang (der Draht mit der Liste) und einen Listen-Ausdruck."));
 
@@ -201,8 +209,16 @@ public static class Validator
                         }
                         if (d.Port == FlussPort.Zeitlimit && string.IsNullOrWhiteSpace(von.Zeitlimit))
                             befunde.Add(new("error", "GR-FLUSS-ZEITLIMIT", $"{ort}: der ⏳-Port von '{d.Von}' ist verdrahtet, aber '{d.Von}' hat kein Zeitlimit."));
-                        if (d.Port != FlussPort.Fall && von.Art is not (FlussArt.Funktion or FlussArt.Command))
-                            befunde.Add(new("error", "GR-FLUSS-DRAHT", $"{ort}: nur Funktionen und Commands haben ⏳/✕-Ports ('{d.Von}' ist {von.Art})."));
+                        if (d.Port == FlussPort.Strom)
+                        {
+                            if (von.Art is not (FlussArt.Quelle or FlussArt.Auf))
+                                befunde.Add(new("error", "GR-FLUSS-DRAHT", $"{ort}: nur eine Quelle hat einen Strom ('{d.Von}' ist {von.Art})."));
+                            continue;
+                        }
+                        if (d.Port == FlussPort.Abgelehnt && von.Art == FlussArt.Warte)
+                            befunde.Add(new("error", "GR-FLUSS-DRAHT", $"{ort}: ein Warten hat keinen ✕-Port (nur seine Events und ⏳)."));
+                        if (d.Port != FlussPort.Fall && von.Art is not (FlussArt.Funktion or FlussArt.Command or FlussArt.Warte))
+                            befunde.Add(new("error", "GR-FLUSS-DRAHT", $"{ort}: nur Funktionen, Commands und Warten haben ⏳/✕-Ports ('{d.Von}' ist {von.Art})."));
                         if (d.Port != FlussPort.Fall) continue;
                         if (von.Art == FlussArt.Je)
                             befunde.Add(new("error", "GR-FLUSS-JE", $"{ort}: aus dem Je-Rahmen '{d.Von}' führt kein Draht — sein Element geht direkt in den Knoten."));

@@ -26,6 +26,8 @@ public sealed class FlussKnotenRaw
     public string Name = "", Art = "", TypFull = "";
     public bool OhneVariable;
     public string? Zeitlimit, Liste;
+    /// <summary>Nur Warte: die Typ-Argumente von <c>Warte&lt;A, B&gt;()</c> (FullName).</summary>
+    public List<string> WarteAufFull = new();
     public List<FlussEingangRaw> Eingaenge = new();
 }
 
@@ -131,6 +133,13 @@ public sealed partial class DomainExtractor
             if (LiesEmpfänger(jm.Expression, model) is not { } q) return null;
             knoten.Eingaenge.Add(q);
         }
+        else if (Vertrag.IstFlussVerb(k, Vertrag.FlussWarte) && kern.Expression is MemberAccessExpressionSyntax wm)
+        {
+            knoten.Art = DomainEditor.FlussArt.Warte;
+            knoten.WarteAufFull = k.TypeArguments.Select(t => t.Fq()).ToList();
+            if (LiesEmpfänger(wm.Expression, model) is not { } s) return null;
+            knoten.Eingaenge.Add(s);
+        }
         else if ((Vertrag.IstFlussVerb(k, Vertrag.FlussRufe) || Vertrag.IstFlussVerb(k, Vertrag.FlussSende))
                  && kern.Expression is MemberAccessExpressionSyntax rm)
         {
@@ -173,7 +182,7 @@ public sealed partial class DomainExtractor
         return LiesDraht(e, model) is { } einzel ? Ein(einzel) : null;
     }
 
-    /// <summary>Ein Draht: <c>knoten.Bei&lt;Fall&gt;()</c>, <c>knoten.BeiZeitlimit()</c>, <c>knoten.BeiAbgelehnt()</c> oder eine Quelle selbst.</summary>
+    /// <summary>Ein Draht: <c>knoten.Bei&lt;Fall&gt;()</c>, <c>knoten.BeiZeitlimit()</c>, <c>knoten.BeiAbgelehnt()</c>, <c>quelle.Strom()</c> oder eine Quelle selbst.</summary>
     private static (string Von, string? FallFull, string Port)? LiesDraht(ExpressionSyntax e, SemanticModel model)
     {
         if (e is IdentifierNameSyntax id && model.GetSymbolInfo(id).Symbol is ILocalSymbol l
@@ -184,6 +193,7 @@ public sealed partial class DomainExtractor
         if (Vertrag.IstFlussVerb(ms, Vertrag.FlussBei) && ms.TypeArguments.FirstOrDefault() is { } fall)
             return (von.Identifier.Text, fall.Fq(), DomainEditor.FlussPort.Fall);
         if (Vertrag.IstFlussVerb(ms, Vertrag.FlussBeiZeitlimit)) return (von.Identifier.Text, null, DomainEditor.FlussPort.Zeitlimit);
+        if (Vertrag.IstFlussVerb(ms, Vertrag.FlussStrom)) return (von.Identifier.Text, null, DomainEditor.FlussPort.Strom);
         if (Vertrag.IstFlussVerb(ms, Vertrag.FlussBeiAbgelehnt)) return (von.Identifier.Text, null, DomainEditor.FlussPort.Abgelehnt);
         return null;
     }

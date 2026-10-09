@@ -43,6 +43,11 @@ public static class ProzessRegelHash
                 foreach (var t in r.GerufeneFunktionen) sb.Append(t.FullName).Append(',');
             }
             if (r.Zeitlimit is { } z) sb.Append(";zeitlimit=").Append(z.Ticks);
+            if (r.WartetAuf.Count > 0)
+            {
+                sb.Append(";warte=");
+                foreach (var t in r.WartetAuf) sb.Append(t.FullName).Append(',');
+            }
             // Pipeline-Fluss (§14): Knoten, Herkunft je Bedingung, Je-Auffächern und Sammel-Drähte — nur wenn gesetzt.
             if (r.Knoten is int k)
             {

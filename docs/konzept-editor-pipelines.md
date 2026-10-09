@@ -459,6 +459,8 @@ Zuordnung im Code wie die Tabelle im Editor („Pfad ← vorschau.Pfad“).
 | Draht | `knoten.Bei<Fall>()` (bzw. die Quelle selbst), davon aus `.Rufe<F>(λ)` / `.Sende<C>(λ)` / `.Je(x => x.Liste)` |
 | ∧ / ∨ | `p.Alle(…)` (bis 4 Drähte) / `.Oder(draht | p.Alle(…), λ)` |
 | Fehler-Port | `.Zeitlimit(t)` am Knoten, Draht `knoten.BeiZeitlimit()` / `knoten.BeiAbgelehnt()` |
+| Strom der Quelle | `quelle.Strom()` — zweiter Ausgang einer Quelle: `QuellStrom(Id, Version)` (bei `p.Auf<E>()` das Aggregat des Events). Ein Draht wie jeder andere (Typ + Herkunft), im Lambda `quelleStrom.Id` |
+| Warten (Rennen) | `var ende = quelle.Strom().Warte<A, B>().Zeitlimit(t)` — das erste A/B im Strom NACH der Quelle; Ausgänge `ende.Bei<A>()`, `ende.BeiZeitlimit()`. Zeitlimit ist Pflicht; ein Event nach dem Limit zählt nicht |
 | je-Rahmen | `var je = draht.Je(x => x.Liste)`; `je.Rufe<F>(e => …)`; `je.Sammle(draht).Sende<C>((q, liste) => …)` |
 | Zuordnung | Lambda nur in Zuordnungsform (`x.Feld`, Konstante) — der Schreiber erzeugt nur diese, also bleibt sie als Tabelle bearbeitbar |
 | Quelle-Einstellung | Host-Bindung `AddQuelle<DateiErkannt, DateiQuelle>(…)` — nicht in der Pipeline |
@@ -505,47 +507,90 @@ Entwerfbar ohne bestehenden Code: neue Funktion (nur Signatur; Rumpf = Stub, �
 
 ### 14.8 Bewusst offen
 
-„Der Erste gewinnt“ zwischen parallelen Wegen (heute nur über Zeitlimit-Rennen); transientes Veröffentlichen und „weiter an Pipeline“
-als Knoten; flüchtige (nicht persistierte) Pipelines für Telemetrie; Unterfluss als Funktion; Fähigkeit (Lese-Store) als Parameter
-einer Funktion.
+„Der Erste gewinnt“ zwischen parallelen Wegen (heute nur über Zeitlimit-Rennen bzw. `Warte` gegen ein Zeitlimit); transientes
+Veröffentlichen und „weiter an Pipeline“ als Knoten; flüchtige (nicht persistierte) Pipelines für Telemetrie; Unterfluss als Funktion.
 
-### 14.9 Stand der Umsetzung (2026-10-07)
+### 14.9 Stand der Umsetzung (2026-10-09)
 
 **Laufzeit**
 - `Abstractions/Fluss/Pipeline.cs`: `IPipeline`, `PipelineFluss.Definiere`, `PipelineBauer` (`Quelle`/`Auf`/`Alle`), `Draht<T>`
   (`Rufe`/`Sende`/`Je`), `RufKnoten`/`SendeKnoten` (`Bei`/`BeiZeitlimit`/`BeiAbgelehnt`/`Zeitlimit`/`Oder`), `JeKnoten`/`SammelDraht`,
-  `IQuelle<T>`/`IQuellNachricht`. Übersetzt in Prozess-Regeln mit **Knoten-Herkunft** (`Regel.Knoten/VonKnoten/JeKnoten`, erweiterte
-  `SammelBedingung`, `ProzessRegeln.QuellKnoten/Umleiten*`). Formfehler fallen beim Definieren auf (zweite/fehlende Quelle, fremder
-  Draht, ⏳-Port ohne Zeitlimit).
-- Dirigent (`Infrastructure/Prozess/ProzessManager.cs`): Tokens tragen Herkunft und Je-Teile; ein Draht matcht nur Tokens seines
-  Knotens, ein ∧ nur verträgliche Teile; Fehler an verdrahteten Ports werden `SchrittUmgeleitet` (Manager-Log) und dann
-  `ZeitlimitAbgelaufen`/`SchrittAbgelehnt`-Tokens. Klassische Prozesse unverändert (Hash, Matching).
-- Quellen (`Infrastructure/Quellen/Quellen.cs`): `QuellEingang` (genau einmal je Kennung per StartStream, dann Start der Pipelines),
-  `QuellenDienst`, `AddQuelle<T, Q>()`, `MapQuellWebhook<T>()`.
-- Vermittlung (`Infrastructure/Funktionen/FunktionsVermittlung.cs`, `FunktionsVermittlerActor.cs`): ein Actor je Funktion, Pull mit
-  Lease/Lebenszeichen/Long-Poll, `FunktionsAbholer` je Knoten (C#), `AddExterneFunktion<F>()`; Aufträge polymorph auf dem Wire.
-- Python (`Client.Infrastructure.Python/cqrs_client/funktion.py`, generiert `domain_client/generated/funktionen.py`): `FunktionsBasis`,
-  Angebot am Handshake, Ausführung mit Slots + Lebenszeichen; Server-Sitzung `FunktionsAnbieterSitzung`; Proto `FunktionenAnbieten`/
-  `ArbeitsAuftrag`/`ArbeitsErgebnis`/`ArbeitLebtMeldung`, `AuftragPayloadDto`.
-- **Bestand umgezogen:** `FileWatchPipeline` + `ImageProcessingPipeline` + `BildaufbereitungProzess` + der Umweg
-  `NimmRohbildAuf`/`RohbildEingegangen` sind ersetzt durch **`Bildeingang`** (Domain/ImagePair) mit `DateiQuelle` und der Funktion
-  `IDateinameDeutung` (Domain.Pipeline). `DateiErkannt` ist Quell-Nachricht (`IDarf` am KameraSystem bleibt).
+  `IQuelle<T>`/`IQuellNachricht`, **`QuellKnoten.Strom()` → `StromDraht` (`QuellStrom(Id, Version)`) und `StromDraht.Warte<…>()` →
+  `WarteKnoten`** (Regel mit `WartetAuf`, Formfehler „Warten ohne Zeitlimit“ beim Definieren). Übersetzt in Prozess-Regeln mit
+  Knoten-Herkunft (`Regel.Knoten/VonKnoten/JeKnoten/WartetAuf`, erweiterte `SammelBedingung`, `ProzessRegeln.QuellKnoten/Umleiten*`).
+- **Der reine Kern des Dirigenten** liegt in `Abstractions/Prozess/FlussBelegung.cs` (`FlussBelegung.Belegungen/Matches/TeileDesAufrufs`,
+  `JeTeile`, `IFlussToken`) — der Prozess-Manager faltet seine Tokens aus dem Log, die Simulation hält sie im Speicher; beide entscheiden
+  mit DEMSELBEN Kern, was feuert.
+- Dirigent (`Infrastructure/Prozess/ProzessManager.cs`): Tokens tragen Herkunft und Je-Teile, dazu der `QuellStrom`-Token der Quelle; ein
+  **Warte-Knoten** liest den Strom der Quelle bei jeder Weckung nach (kein Cursor; geweckt vom §3-Backstop, ≤ 15 s), ein Event nach dem
+  Zeitlimit zählt nicht. Fehler an verdrahteten Ports werden `SchrittUmgeleitet` und dann `ZeitlimitAbgelaufen`/`SchrittAbgelehnt`-Tokens.
+- Registry je Assembly: `ProzessRegelnGenerator` emittiert `{Assembly}.Prozess.GeneratedProzessRegeln`; `GeneratedProzesse.AlleRegeln()`
+  vereinigt Domain und Domain.Pipeline (Flüsse, deren Funktionen Fähigkeiten der Leseseite nehmen).
+- **Katalog-Funktionen mit Lese-Fähigkeit**: `RufeAsync(Auftrag, IAusfuehrung, ISucheX suche, …)` — nur `IReadStore`-Interfaces (sonst
+  CQRS068); der generierte Dispatch öffnet je Aufruf einen Fähigkeits-Bereich (`IFaehigkeitsFabrik`), `GeneratedFunktionen.Faehigkeiten`;
+  Boot-Guard: eine solche Funktion nie `AddExterneFunktion` (läuft nur im Host); keine Python-Basis.
+- Quellen (`Infrastructure/Quellen/Quellen.cs`): `QuellEingang`, `QuellenDienst`, `AddQuelle<T, Q>()`, **`MapQuellWebhook<T>()` mit
+  `[Ingress(Webhook)]`** (der Editor liest die Bindung: Nachricht = Typ-Argument, Route = Argument).
+- Vermittlung (`FunktionsVermittlung.cs`, `FunktionsVermittlerActor.cs`, `FunktionsAbholer`, `AddExterneFunktion<F>()`). **Akteur-Tor für
+  angebotene Funktionen**: `IDarf<IFunktion-Typ>` = „der Akteur darf diese Funktion rechnen“ (CQRS058 lässt es zu, `AkteurRechte.Funktionen`
+  generiert); mit angemeldetem Akteur nimmt `FunktionsAnbieterSitzung.Biete` nur befugte Funktionen an (Fehler `FUNKTION_NICHT_BEFUGT`),
+  ohne Tor/Akteur offen wie jede andere Nachricht.
+- Python: `FunktionsBasis`, Angebot am Handshake, Slots + Lebenszeichen. **Reconnect behoben**: früher endeten Lese- und
+  Verarbeitungsschleife mit der ersten Verbindung (der Monitor verband neu und bot die Funktionen wieder an, aber niemand las mehr);
+  jetzt je Verbindung eine Sitzung, danach Reconnect und neue Sitzung (`test_client_reconnect.py`).
+
+**Bestand umgezogen — keine Domänen-Pipeline nutzt mehr `IPipelineHandler`**
+- `Bildeingang` (Domain/ImagePair, 2026-10-07).
+- Datensatz-Resolver → **`DatensatzRangeAufloesung`** (`p.Auf<RangeAngefordert>()` → ƒ `IRangeSuche` mit `ISearchImagePairs` →
+  `NimmRangeAuf(angefordertStrom.Id, …)`) und **`DatensatzEinfrieren`** (ƒ `IMitgliederEinfrieren` mit `IFindImagePair` →
+  `SchliesseEinfrierenAb`), Domain.Pipeline/Datensatz; Implementierungen `RangeSuche`/`MitgliederEinfrieren` (gebunden in Host.Grpc).
+- Trainings-Frist → **`TrainingWaechter`** (Domain/Trainingslauf): `begonnen.Strom().Warte<TrainingAbgeschlossen, TrainingGescheitert,
+  TrainingAbgebrochen>().Zeitlimit(6 h)`, am ⏳-Port `MarkiereAlsHaengengeblieben` — ein Rennen statt `Frist` + `FristStorno`
+  (`TrainingFristConfig` entfällt; das Limit ist ein Code-Fakt).
+- Benchmark → **`Benchmark`**: `BenchPing` ist Quell-Nachricht, der Fluss nur die Quelle (gemessen: Quelle → Log → Dirigent → beendet).
+  Der `LoadHarness` aus docs/12 existiert im Repo nicht mehr.
+
+**Simulation (SimHost)**
+- `Cqrs.Testing/Fluss.cs` — `FlussLaufwerk`: der Dirigent im Speicher (Wellen = parallel bereite Aufrufe), Commands über das
+  `SagaLaufwerk` (echtes Aggregat-Kompilat, klassische Sagas inkl.), Events starten `p.Auf<E>()`-Flüsse; je Funktions-/Warte-Knoten
+  liefert die **Wahl** den Ausgang (Ergebnis-Fall / ⏳ / ✕) — ohne Implementierung.
+- `ModellSimulation.StarteFluss` + `POST /api/editor/sim/fluss` (Quell-Nachricht, Wahl, optional Strom); Musterwerte für Ergebnisse
+  (gleichnamige Felder aus Auftrag/Drähten, sonst Platzhalter, deterministische Guids, Listen mit zwei Elementen; JSON-Overlay je Knoten).
+  Hot-Reload spielt auch eingespeiste Quell-Nachrichten nach. Das In-Memory-Kompilat lässt Akteure/Clients und die Fähigkeits-Parameter der
+  Funktionen weg (die Simulation führt sie nicht aus) — vorher brach es an den Leseseiten-Queries der Clients.
+- Editor: Simulations-Panel „▶ Command | ⛓ Pipeline“, je Funktions-/Warte-Knoten der Ausgangsfall, Strom-Auswahl bei Event-Quellen;
+  Knoten und Drähte leuchten (✕/⏳ rot), Command-Knoten spielen ihre Aggregat-Kaskade, Abdeckung je Fall, Liste der Vorgänge
+  (✓/✗, „wartet auf …“).
 
 **Editor**
-- Modell `EditorModell.Fluesse` (`FlussPipeline` → `Knoten` → `Eingaenge` → `Draehte`), Extractor (`GraphExtractor/FlussLeser.cs`,
-  nur Symbole), Scaffolder (`FlussDatei`, Lambdas aus der Zuordnung), Abgleich bestehender Dateien (nur die Anweisungen des
-  Definiere-Lambdas), Herkunfts-Stempel, Grammatik (Baustein `fluss`, Sorte `quelle`, Regeln GR-QUELLE, GR-AUS-FLUSS, GR-FLUSS-*),
-  Validator (`PruefeFluesse`, inkl. „∧ wartet auf einen Weg, der nicht immer liefert“), Parität/Fixpunkt und Sonde (Code-Fluss +
-  **gezeichneter** Fluss, Soll von Hand).
-- Board: Pipeline-Rahmen „⛓“ (Außen-Domäne wie Clients, Spalten = Flusstiefe), Karten je Knoten, Drähte mit Fall-Beschriftung (Kontext
-  dünn, ⏳ amber, ✕ rot, je blau), Panel: Typ/Katalog, Zeitlimit, Eingänge (∧/∨ umschaltbar, Je-Element/Sammeln), Zuordnungstabelle
-  (automatisch inkl. Wertobjekten, oder Lambda aus dem Code), Ausgänge je Port mit „＋ dann …“ (Katalog-Funktion, Command, neue Funktion,
-  neuer Command, Je, bestehender Knoten — ∧/∨ wird aus den Weichen abgeleitet). „+ ⛓ Pipeline (Fluss)“ in der Toolbar.
+- Modell `EditorModell.Fluesse` (+ `FlussArt.Warte`, `FlussSchritt.WarteAuf`, `FlussPort.Strom`), `Funktion.Faehigkeiten`; Extractor
+  (`FlussLeser`: `.Strom()`, `.Warte<…>()`; Funktions-Signatur mit Fähigkeiten), Scaffolder (Lambda-Parameter `quelleStrom`, `knotenZeit`),
+  Grammatik (GR-FLUSS-WARTE, GR-FUNKTION-FAEHIGKEIT, Fähigkeit → Funktion), Validator, Board (⧗-Knoten, „⇢ Strom“-Port mit
+  „⧗ warte auf ein Event im Strom …“, Zuordnung `Id/Version` des Stroms; Funktions-Karte „⚙ liest“), Sonde/soll.txt (Code-Fluss + gezeichneter
+  Fluss mit Warten/Strom, Funktion mit Fähigkeit).
+- **LLM-Slots**: `SlotInventar`/`KontextBauer` kennen `funktion` (Implementierung von `RufeAsync`) und `fluss` (jeder Bau-Lambda, Anker =
+  Anweisung + Lambda-Index). Die LLM-Konsole füllt Fluss-Lambdas mit eigener Anweisung (genau ein Lambda, rein, Zuordnungsform), prüft
+  Stelligkeit + In-Memory-Compile und schreibt den Lambda zurück (`CodeSync.LambdaAnker`, Rückgängig inkl.). Gemessen (`--slots`): alle 11
+  Fluss-Lambdas liegen zu 100 % im eigenen Spielraum (ihre Parameter) — die Zuordnung braucht selten ein LLM, die Funktions-Rümpfe schon
+  (23 % Wissen von außen).
 
-**Gemessen:** Prüfstand 363/363; `--check` und `--sonde` (87 Soll-Fakten) grün; Python SDK 27/27, Worker 15/15; im Browser auf leerem Board
-Quelle → ƒ → ƒ → ▶ gezeichnet, automatisch zugeordnet und per Vorschau als Code bestätigt.
+**Gemessen (2026-10-09):** Prüfstand 381/381; `--check` und `--sonde` (92 Soll-Fakten) grün; Python SDK 28/28, Worker 15/15; Integration
+gegen Marten/Consul/Redis (sequentiell) 33/33, darin `PipelineFlussE2ETests` (4): Bildeingang Quelle → Dirigent → Vermittler → Abholer → Fakt,
+derselbe mit **Python-Worker über gRPC**, Trainings-Wächter (Warten + Backstop), Datensatz-Range mit echter Lese-Fähigkeit.
 
-**Offen:** Integrationstest gegen Marten/Cluster (Quelle, Vermittler, Python-Worker live); Simulation (SimHost) kennt Flüsse noch nicht;
-LLM-Slots für Fluss-Lambdas; die übrigen Handle-Pipelines (Datensatz-Resolver, Trainings-Frist, Benchmark) noch im alten Modell;
-Akteur-Tor für angebotene Funktionen; Python-Reconnect beendet vermutlich die Verarbeitungsschleife (Bestand, beim Lesen gefunden, nicht geprüft);
-Webhook-Quelle ohne `[Ingress]` (der Editor zeigt die Bindung noch nicht); Unterfluss als Funktion; „der Erste gewinnt“.
+**Offen:** Unterfluss als Funktion; „der Erste gewinnt“ ohne Zeitlimit; flüchtige Flüsse (Telemetrie); Timer- und Client-Quelle als
+Katalog-Quellen; ein Warte-Knoten wird nur vom Backstop geweckt (kein Signal-Routing für fremd-korrelierte Events); Rückbau des
+Handle-Modells (§14.10).
+
+### 14.10 Entscheidung: das Handle-Modell (`IPipelineHandler`) entfällt als Domänen-Baustein
+
+Nach dem Umzug hat keine Domänen-Pipeline mehr einen Handle. Alles, was die Handles taten, ist jetzt ein Fluss-Knoten oder eine Quelle:
+Verarbeitung = Katalog-Funktion (auch mit Lese-Fähigkeit), Frist/Storno = `Warte` gegen ein Zeitlimit, Datei/Webhook = `IQuelle` /
+`MapQuellWebhook`, Event→Command = `p.Auf<E>()` → `Sende`. Eine „Quell-Implementierung“ als Handle braucht es nicht: eine Quelle ist
+`IQuelle<T>` (kein Log, kein Fluss, nur Nachrichten liefern) — der Rest ist Fluss.
+
+**Daher:** neue Pipelines werden als Fluss gebaut („+ ⛓ Pipeline (Fluss)“); der Handle-Baustein im Editor („+ Pipeline“) fällt mit dem
+**Rückbau** der Maschinerie (PipelineActor-/PipelineDispatch-Generator, `PipelineActorBase`, Handle-Trigger über gRPC, Timer-/Webhook-
+Trigger, Fristplan für Handles, Editor-Abschnitt „Pipelines“, Analyzer-Zweige) als eigener Schritt, sobald es **Timer-Quelle** und
+**Client-Quelle** (gRPC-Trigger von außen) als Katalog-Quellen gibt und **flüchtige Flüsse** (Inv. 6: Verlierbares bleibt auf dem
+schnellen Kanal) entworfen sind — bis dahin ist das Handle-Modell der einzige Weg für flüchtige Verarbeitung und bleibt technisch erhalten.

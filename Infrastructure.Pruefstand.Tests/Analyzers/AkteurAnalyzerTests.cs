@@ -61,6 +61,16 @@ public interface IRevision : IAkteurVertrag<Revisor> { IAsyncEnumerable<OneOf<St
             .Should().BeEmpty();
 
     [Fact]
+    public async Task Eine_Katalog_Funktion_darf_man_rechnen_ein_anderes_Interface_nicht()
+    {
+        const string funktion = "public sealed record Rechne(int X) : IAuftrag<IRechnen>; public record Gerechnet(int X) : IEvent; "
+            + "public interface IRechnen : IFunktion { System.Threading.Tasks.Task<OneOf<Gerechnet>> RufeAsync(Rechne a, IAusfuehrung x); } "
+            + "public interface IIrgendwas { } ";
+        (await Ids(funktion + "public sealed record Rechner : IMaschine, IDarf<IRechnen>;")).Should().BeEmpty();
+        (await Ids(funktion + "public sealed record Rechner : IMaschine, IDarf<IIrgendwas>;")).Should().Equal("CQRS058");
+    }
+
+    [Fact]
     public async Task Ein_Event_aus_dem_Log_kann_man_nicht_duerfen()
         => (await Ids("public sealed record Kasse : IAkteur, IDarf<Gebucht>;")).Should().Equal("CQRS058");
 

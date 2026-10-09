@@ -106,6 +106,10 @@ public static class Grammatik
             [Comp("IAuftrag<F> + Rufe<F>(Func<…, IAuftrag<F>>)"), Gen("CQRS069", "Infrastructure.SourceGeneration/FunktionsGenerator.cs (Auftrag für mehrere Funktionen)")]),
         new("GR-AUS-FUNKTION", "Funktion erzeugt persistente Ergebnis-Events", "Eine Katalog-Funktion antwortet mit genau einem ihrer OneOf-Ergebnisse — ein persistentes Event im Log, das weitere Regeln mit Auf<…> hören.", "error",
             [Gen("CQRS068", "Infrastructure.SourceGeneration/FunktionsGenerator.cs (feste Form der Funktion)")]),
+        new("GR-FUNKTION-FAEHIGKEIT", "Funktion liest höchstens", "Eine Katalog-Funktion darf nach IAusfuehrung Lese-Fähigkeiten nehmen "
+            + "(ISucheX suche, je Aufruf aus einem Bereich) — schreiben bleibt dem Aggregat. Eine solche Funktion läuft nur im Host (C#), nie extern.", "error",
+            [Gen("CQRS068", "Infrastructure.SourceGeneration/FunktionsGenerator.cs (Parameter nach IAusfuehrung nur IReadStore)"),
+             new("boot", null, "Infrastructure/Funktionen/FunktionsExtensions.cs (PrüfeBindungen: nicht AddExterneFunktion)")]),
         new("GR-FUNKTION-GEBUNDEN", "Gerufene Funktion ist gebunden", "Jede Funktion, die ein Prozess ruft, braucht im Host eine Bindung (AddFunktion<F, Impl>) — sonst bricht der Start.", "error",
             [new("boot", null, "Infrastructure/Funktionen/FunktionsExtensions.cs (PrüfeBindungen)")]),
         new("GR-AUS-FLUSS", "Pipeline (Fluss) erzeugt Commands und Aufträge", "Ein Fluss ruft Katalog-Funktionen (Auftrag) und sendet "
@@ -125,6 +129,10 @@ public static class Grammatik
             + "deklarierten Knoten und trägt einen seiner Fälle: ein Ergebnis der Funktion bzw. ein Event aus dem Decide des Commands "
             + "(oder die Quelle selbst). So ist ein Fluss per Konstruktion azyklisch.", "error",
             [Comp("CS0841 (Variable vor der Deklaration)"), Offen("Fall außerhalb der Ausgänge kompiliert, feuert aber nie — nur der Editor prüft")]),
+        new("GR-FLUSS-WARTE", "Warten am Strom der Quelle, mit Zeitlimit", "Ein Warte-Knoten (quelle.Strom().Warte<A, B>()) hängt am Strom der "
+            + "Quelle und wartet auf das erste dieser Events danach; jedes ist ein Ausgang, dazu ⏳ — er braucht ein Zeitlimit (sonst bliebe der "
+            + "Vorgang offen). Ein Ende nach dem Zeitlimit zählt nicht (Frist und Storno als ein Rennen).", "error",
+            [new("laufzeit", null, "Abstractions/Fluss/Pipeline.cs (Baue: Warten ohne Zeitlimit wirft; Regel: Warten nur am QuellStrom)")]),
         new("GR-FLUSS-ZEITLIMIT", "⏳-Port braucht ein Zeitlimit", "Aus dem ⏳-Port eines Knotens führt nur ein Draht, wenn der Knoten ein Zeitlimit hat.", "error",
             [new("laufzeit", null, "Abstractions/Fluss/Pipeline.cs (Baue: verdrahteter ⏳-Port ohne Zeitlimit wirft)")]),
         new("GR-FLUSS-JE", "Je-Element und Sammeln nur im Rahmen", "Ein Je-Element bzw. Sammeln bezieht sich auf einen Je-Knoten; ein Je-Knoten "
@@ -209,6 +217,7 @@ public static class Grammatik
         new(Frist, Aggregat, GenauEins, "GR-FRIST"),
         new(Query, Reader, GenauEins, "GR-QUERY"),
         new(Faehigkeit, Projektion, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Reader, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Pipeline, Beliebig, "GR-FAEHIGKEIT"),
+        new(Faehigkeit, Funktion, Beliebig, "GR-FUNKTION-FAEHIGKEIT"),
         new(Auftrag, Funktion, GenauEins, "GR-FUNKTION-AUFTRAG"),
         new(Quelle, Fluss, Beliebig, "GR-QUELLE"),
         new(Event, Akteur, Beliebig, "GR-VERTRAG"), new(Transient, Akteur, Beliebig, "GR-VERTRAG"),

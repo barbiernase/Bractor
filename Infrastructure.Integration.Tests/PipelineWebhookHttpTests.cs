@@ -1,7 +1,6 @@
 using System.Net;
 using System.Net.Http.Json;
 using Abstractions;
-using Domain.Pipeline.Benchmark;
 using FluentAssertions;
 using Infrastructure.Pipeline;
 using Microsoft.AspNetCore.Builder;
@@ -20,6 +19,9 @@ namespace Infrastructure.Integration.Tests;
 /// </summary>
 public class PipelineWebhookHttpTests
 {
+    /// <summary>Ein Trigger nur für diesen Test (der Benchmark ist inzwischen eine Quelle, kein Handle-Trigger).</summary>
+    public sealed record WebhookPing(int Seq) : IPipelineTrigger;
+
     [Fact]
     public async Task POST_baut_den_Trigger_aus_dem_Body_und_stellt_ihn_zu()
     {
@@ -30,9 +32,9 @@ public class PipelineWebhookHttpTests
         builder.Logging.ClearProviders();
         var app = builder.Build();
 
-        app.MapPipelineWebhook<BenchPing>(
+        app.MapPipelineWebhook<WebhookPing>(
             "/webhook/bench",
-            baueTrigger: r => r,                          // BenchPing IST der Trigger
+            baueTrigger: r => r,                          // WebhookPing IST der Trigger
             sendeFactory: _ => (t => { gesendet = t; return Task.CompletedTask; }));
 
         await app.StartAsync();
@@ -41,10 +43,10 @@ public class PipelineWebhookHttpTests
             var adresse = app.Urls.First();
             using var client = new HttpClient { BaseAddress = new Uri(adresse) };
 
-            var antwort = await client.PostAsJsonAsync("/webhook/bench", new BenchPing(42));
+            var antwort = await client.PostAsJsonAsync("/webhook/bench", new WebhookPing(42));
 
             antwort.StatusCode.Should().Be(HttpStatusCode.Accepted, "at-least-once: der Empfang ist quittiert");
-            gesendet.Should().BeOfType<BenchPing>()
+            gesendet.Should().BeOfType<WebhookPing>()
                 .Which.Seq.Should().Be(42, "der Trigger wurde aus dem JSON-Body gebaut und zugestellt");
         }
         finally

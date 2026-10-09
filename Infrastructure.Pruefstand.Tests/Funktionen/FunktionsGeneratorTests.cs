@@ -73,6 +73,32 @@ public sealed record Hinweis() : ITransientEvent;
     }
 
     [Fact]
+    public void Lese_Faehigkeiten_nach_IAusfuehrung_werden_je_Aufruf_aus_einem_Bereich_geholt()
+    {
+        var (quelle, ids) = Funktionen(@"namespace Probe {
+            public interface ISuche : IReadStore { Task<int> ZaehleAsync(string x); }
+            public sealed record MachAuftrag(string X) : IAuftrag<IMach>;
+            public interface IMach : IFunktion { Task<OneOf<Gemacht>> RufeAsync(MachAuftrag a, IAusfuehrung x, ISuche suche); } }");
+
+        ids.Should().BeEmpty();
+        quelle.Should().Contain("[typeof(global::Probe.IMach)] = new Type[] { typeof(global::Probe.ISuche) }", "die Fähigkeiten-Tabelle (Boot-Guard: nur im Host)");
+        quelle.Should().Contain("using var b = sp.GetRequiredService<IFaehigkeitsFabrik>().Oeffne();")
+            .And.Contain(".RufeAsync(a, x, b.Hole<global::Probe.ISuche>())");
+    }
+
+    [Theory]
+    [InlineData("public interface ISchreibe : IWriteStore { Task SchreibeAsync(string x); }", "ISchreibe")]   // schreibt
+    [InlineData("", "string")]                                                                             // keine Fähigkeit
+    public void Ein_Parameter_der_keine_Lese_Faehigkeit_ist_ist_CQRS068(string zusatz, string typ)
+    {
+        var (quelle, ids) = Funktionen(@"namespace Probe { " + zusatz + @"
+            public sealed record MachAuftrag(string X) : IAuftrag<IMach>;
+            public interface IMach : IFunktion { Task<OneOf<Gemacht>> RufeAsync(MachAuftrag a, IAusfuehrung x, " + typ + @" f); } }");
+        ids.Should().Contain("CQRS068");
+        quelle.Should().NotContain("global::Probe.IMach>().RufeAsync");
+    }
+
+    [Fact]
     public void Ein_Auftrag_der_zu_einer_anderen_Funktion_gehoert_ist_CQRS068()
     {
         Funktionen(@"namespace Probe {

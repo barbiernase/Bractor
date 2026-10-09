@@ -141,7 +141,20 @@ app.MapPost("/api/editor/sim/step", (JsonElement body) =>
     var sid = body.TryGetProperty("sessionId", out var s) ? s.GetString() ?? "editor" : "editor";
     var command = body.GetProperty("command").GetString() ?? "";
     var werte = body.TryGetProperty("values", out var v) ? v : default;
-    return Results.Json(simulation.Schritt(modell, sid, command, werte), EditorModell.JsonOptionen);
+    JsonElement? wahl = body.TryGetProperty("wahl", out var w) ? w : null;
+    return Results.Json(simulation.Schritt(modell, sid, command, werte, wahl), EditorModell.JsonOptionen);
+});
+// Pipeline als Fluss durchspielen (§14): Quell-Nachricht einspeisen, je Funktionsknoten der gewählte Ausgang (Ergebnis / ⏳ / ✕),
+// Commands laufen in dieselbe Aggregat-Kaskade. Body = { model, sessionId, pipeline, values, wahl, strom? } (strom = Aggregat bei p.Auf<E>()).
+app.MapPost("/api/editor/sim/fluss", (JsonElement body) =>
+{
+    var modell = EditorModell.AusJson(body.GetProperty("model").GetRawText());
+    var sid = body.TryGetProperty("sessionId", out var s) ? s.GetString() ?? "editor" : "editor";
+    var pipeline = body.GetProperty("pipeline").GetString() ?? "";
+    var werte = body.TryGetProperty("values", out var v) ? v : default;
+    JsonElement? wahl = body.TryGetProperty("wahl", out var w) ? w : null;
+    Guid? strom = body.TryGetProperty("strom", out var st) && Guid.TryParse(st.GetString(), out var g) ? g : null;
+    return Results.Json(simulation.StarteFluss(modell, sid, pipeline, werte, wahl, strom), EditorModell.JsonOptionen);
 });
 app.MapPost("/api/editor/sim/reset", (JsonElement body) =>
 {

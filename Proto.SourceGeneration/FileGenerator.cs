@@ -100,7 +100,7 @@ public class FileGenerator
 
     // Trigger-Protokoll-Messages IMMER generieren (auch ohne Trigger-Typen),
     // weil ServerMessage.TriggerAck und ClientMessage.TriggerRequest immer referenziert werden.
-    // TriggerPayloadDto hat dann ein leeres oneof — das ist valides Protobuf.
+    // Ohne Trigger-Typen bleibt TriggerPayloadDto leer (ohne oneof — ein leeres oneof ist kein gültiges proto3).
     var triggerRequestMessage = GenerateTriggerRequestMessage();
     var triggerPayloadMessage = GenerateStandalonePayloadDto("TriggerPayloadDto", triggerOneOfs);
     // Aufträge der Katalog-Funktionen (IAuftrag<F>) — IMMER generieren (ServerMessage.ArbeitsAuftrag referenziert sie).
@@ -423,6 +423,13 @@ private string GenerateQueryResponseMessage()
 /// </summary>
 private string GenerateStandalonePayloadDto(string messageName, string oneOfs)
 {
+    // Ein LEERES oneof ist kein gültiges proto3 (protoc: „Expected type name“) — ohne Typen bleibt die Protokoll-Message leer.
+    if (string.IsNullOrWhiteSpace(oneOfs))
+        return $$"""
+                 message {{messageName}} {
+                     // (noch) keine Typen dieser Kategorie
+                 }
+                 """;
     return $$"""
              message {{messageName}} {
                  oneof payload {

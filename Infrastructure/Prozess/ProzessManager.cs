@@ -275,7 +275,7 @@ public sealed class ProzessManager
     // ── Marking falten (Fixpunkt über die Ziel-Streams) ──
 
     /// <summary>Ein Token = ein Event-Payload plus seine Herkunft (Stream/Version), für Vorgang-Ableitung + Join.</summary>
-    private sealed record Token(IEvent Payload, Guid Stream, int Version, DateTimeOffset Zeit, int Herkunft, Teile Teile);
+    private sealed record Token(IEvent Payload, Guid Stream, int Version, DateTimeOffset Zeit, int Herkunft, JeTeile Teile) : IFlussToken;
 
     /// <summary>
     /// Eine mögliche Transition (Regel × gematchte Tokens) samt deterministischem Vorgang und ZWEI getrennten
@@ -297,9 +297,9 @@ public sealed class ProzessManager
     /// </summary>
     private sealed record Kandidat(
         Regel Regel, int RegelIndex, IReadOnlyList<Token> Match, ICommand? Cmd, IAuftrag? Auftrag, Guid Vorgang,
-        bool ErgebnisDa, bool WirkungDa, bool AbgelehntDa, string AbgelehntGrund, DateTimeOffset Bereit, Teile Teile)
+        bool ErgebnisDa, bool WirkungDa, bool AbgelehntDa, string AbgelehntGrund, DateTimeOffset Bereit, JeTeile Teile)
     {
-        public string Ziel => Cmd?.GetType().Name ?? Auftrag!.GetType().Name;
+        public string Ziel => Cmd?.GetType().Name ?? Auftrag?.GetType().Name ?? "Warten auf " + string.Join("|", Regel.WartetAuf.Select(t => t.Name));
     }
 
     /// <summary>
@@ -383,8 +383,15 @@ public sealed class ProzessManager
 
         var tokens = new List<Token>();
         if (marking.AuslöserPayload is not null)
+        {
             tokens.Add(new Token(marking.AuslöserPayload, mz.AuslöserStream, mz.AuslöserVersion, marking.AuslöserZeit,
-                regeln.QuellKnoten ?? -1, Teile.Leer));
+                regeln.QuellKnoten ?? -1, JeTeile.Leer));
+            // Pipeline-Fluss (§14): der zweite Ausgang der Quelle — ihr Strom (quelle.Strom()). Version −2 hält den Token-Schlüssel
+            //   (Stream, Version) vom Auslöser-Token getrennt; die echte Version trägt der Payload.
+            if (regeln.QuellKnoten is int qk)
+                tokens.Add(new Token(new QuellStrom(mz.AuslöserStream, mz.AuslöserVersion), mz.AuslöserStream, -2, marking.AuslöserZeit,
+                    qk, JeTeile.Leer));
+        }
 
         var kandidaten = new List<Kandidat>();
         bool geändert = true;
@@ -397,13 +404,22 @@ public sealed class ProzessManager
             for (int ri = 0; ri < regeln.Regeln.Count; ri++)
             {
                 var regel = regeln.Regeln[ri];
-                foreach (var match in Belegungen(regel, schnappschuss))
+                foreach (var match in FlussBelegung.Belegungen(regel, schnappschuss))
                 {
                     var payloads = match.Select(t => (IEvent)t.Payload).ToList();
                     var bereit = match.Any(t => t.Zeit == default) ? default : match.Max(t => t.Zeit);
-                    // Teile (Je-Elemente) des Ergebnisses: die der gematchten Tokens — beim Sammeln nur die des Auslösers
-                    //   (die Element-Teile werden dort zusammengefasst), beim Je-Auffächern plus das eigene Element.
-                    var basisTeile = Teile.Vereinige(regel.Sammel is null ? match : match.Take(regel.Bedingung.Count));
+                    // Pipeline-Fluss (§14): ein WARTEN ruft nichts — es liest den Strom der Quelle nach dem ersten passenden Event.
+                    if (regel.WartetAuf.Count > 0)
+                    {
+                        var (k, neu) = await WarteAsync(korrelation, regel, ri, match, bereit, mz, ct);
+                        kandidaten.Add(k);
+                        if (neu is not null && !tokens.Any(t => t.Stream == neu.Stream && t.Version == neu.Version && t.Herkunft == neu.Herkunft))
+                        {
+                            tokens.Add(neu);
+                            geändert = true;
+                        }
+                        continue;
+                    }
                     // Ein Aufruf je Ausgang: Command an ein Aggregat (Sende) ODER Auftrag an eine Funktion (Ruft).
                     var aufrufe = regel.Sende is not null
                         ? regel.Sende(payloads).Select(c => ((object)c, c.GetType().Name)).ToList()
@@ -435,7 +451,7 @@ public sealed class ProzessManager
                         var wirkung = marke?.Wirkung ?? false;               // ein Domänen-Event → kompensierbar + Join
                         var abgelehnt = marke?.Abgelehnt ?? false;           // KommandoAbgelehnt-Marke → SchrittGescheitert
                         var abgelehntGrund = marke?.Grund ?? "abgelehnt";
-                        var teile = regel.JeKnoten is int je ? basisTeile.Mit(je, ci) : basisTeile;
+                        var teile = FlussBelegung.TeileDesAufrufs(regel, match, ci);
                         var herkunft = regel.Knoten ?? -1;
 
                         // Pipeline-Fluss (§14): ein umgeleiteter Fehlschlag (verdrahteter ⏳/✕-Port) ist aufgelöst; er liefert
@@ -470,6 +486,35 @@ public sealed class ProzessManager
             }
         }
         return (tokens, kandidaten);
+    }
+
+    /// <summary>
+    /// Ein WARTE-Knoten (§14): das erste der erwarteten Events im Strom der Quelle NACH ihrer Version. Kein Cursor, kein Marking —
+    /// der Strom wird bei jeder Weckung frisch gelesen (offene Warte-Knoten sind selten und warten lange; der §3-Backstop weckt sie).
+    /// Ein Event, das erst NACH dem Zeitlimit geschrieben wurde, zählt nicht: das Rennen gewinnt, wer zuerst da war (DB-Zeit).
+    /// Ein umgeleiteter Ablauf (⏳ verdrahtet) wird zum Token <see cref="ZeitlimitAbgelaufen"/>.
+    /// </summary>
+    private async Task<(Kandidat Kandidat, Token? Neu)> WarteAsync(
+        Guid korrelation, Regel regel, int ri, IReadOnlyList<Token> match, DateTimeOffset bereit, ManagerStatus mz, CancellationToken ct)
+    {
+        var primär = match[0];
+        var strom = (QuellStrom)primär.Payload;
+        var vorgang = ProzessId.FürTransition(korrelation, primär.Stream, primär.Version, "Warte", $"{ri}:0:{strom.Id:N}");
+        var teile = FlussBelegung.TeileDesAufrufs(regel, match, 0);
+        var herkunft = regel.Knoten ?? -1;
+
+        if (mz.Umgeleitet.TryGetValue(vorgang, out var umleitung))
+            return (new Kandidat(regel, ri, match, null, null, vorgang, true, false, false, "", bereit, teile),
+                new Token(new ZeitlimitAbgelaufen(umleitung.Grund), vorgang, -1, umleitung.Zeit, herkunft, teile));
+
+        var frist = regel.Zeitlimit is { } z && bereit != default ? bereit + z : (DateTimeOffset?)null;
+        var treffer = (await _store.ReadStreamAsync(strom.Id, strom.Version + 1, ct))
+            .FirstOrDefault(e => e.AggregateVersion > strom.Version
+                && regel.WartetAuf.Any(t => t.IsInstanceOfType(e.Payload))
+                && (frist is null || e.CreatedAtUtc <= frist));
+        var kandidat = new Kandidat(regel, ri, match, null, null, vorgang, treffer is not null, treffer is not null, false, "", bereit, teile);
+        return (kandidat, treffer is null ? null
+            : new Token(treffer.Payload, strom.Id, treffer.AggregateVersion, treffer.CreatedAtUtc, herkunft, teile));
     }
 
     // ── P5b: Marking-Cache laden/schreiben (best-effort; ein Fehler kostet nur Tempo, nie Korrektheit) ──
@@ -537,111 +582,7 @@ public sealed class ProzessManager
         catch (Exception ex) { Console.WriteLine($"[Prozess-Marking] Löschen fehlgeschlagen ({korrelation}): {ex.Message}"); }
     }
 
-    /// <summary>
-    /// Alle Belegungen einer Regel: für normale Regeln die kartesischen Konjunktions-Matches; für einen
-    /// COUNT-JOIN die Bedingungs-Matches, an die ALLE Sammel-Tokens angehängt werden — aber nur, wenn ihre
-    /// Zahl die aus dem Auslöser abgeleitete Breite erreicht (buche erst nach allen N). Beim Sammeln eines
-    /// JE-Rahmens (Pipeline-Fluss) zählt genau ein Token je Element, geordnet nach Element-Index; eine leere
-    /// Liste sammelt sofort.
-    /// </summary>
-    private static IEnumerable<IReadOnlyList<Token>> Belegungen(Regel regel, List<Token> tokens)
-    {
-        if (regel.Sammel is null)
-        {
-            foreach (var m in Matches(regel, tokens)) yield return m;
-            yield break;
-        }
-
-        var je = regel.Sammel.JeKnoten;
-        foreach (var trig in Matches(regel, tokens))   // Matches nutzt regel.Bedingung (nur der/die Auslöser)
-        {
-            var trigTeile = Teile.Vereinige(trig);
-            var sammel = tokens.Where(t =>
-                    regel.Sammel.Drähte.Any(d => d.Typ.IsInstanceOfType(t.Payload) && (d.Von is null || d.Von == t.Herkunft)) &&
-                    (je is null || t.Teile.Hat(je.Value)) &&
-                    (je is null ? t.Teile : t.Teile.Ohne(je.Value)).VerträglichMit(trigTeile))
-                .ToList();
-            var erwartet = regel.Sammel.Anzahl((IEvent)trig[0].Payload);
-            if (je is int j)
-            {
-                var jeElement = sammel.GroupBy(t => t.Teile.Von(j)).Select(g => g.First()).OrderBy(t => t.Teile.Von(j)).ToList();
-                if (erwartet >= 0 && jeElement.Count >= erwartet)
-                    yield return trig.Concat(jeElement.Take(erwartet)).ToList();
-            }
-            else if (erwartet > 0 && sammel.Count >= erwartet)
-                yield return trig.Concat(sammel).ToList();
-        }
-    }
-
-    /// <summary>
-    /// Kartesische Konjunktions-Matches über <see cref="Regel.Bedingung"/> (pro Typ die passenden Tokens). Im Pipeline-Fluss
-    /// zählt zusätzlich die HERKUNFT (ein Draht kommt von genau einem Knoten) und die Verträglichkeit der Teile (ein ∧ verbindet
-    /// nur Tokens desselben Je-Elements).
-    /// </summary>
-    private static IEnumerable<IReadOnlyList<Token>> Matches(Regel regel, List<Token> tokens)
-    {
-        var perTyp = regel.Bedingung
-            .Select((t, i) => tokens.Where(tok => t.IsInstanceOfType(tok.Payload) &&
-                                                  (regel.VonKnoten[i] is not int von || tok.Herkunft == von)).ToList())
-            .ToList();
-        if (perTyp.Any(l => l.Count == 0)) yield break;
-
-        var indizes = new int[perTyp.Count];
-        while (true)
-        {
-            var kombi = Enumerable.Range(0, perTyp.Count).Select(i => perTyp[i][indizes[i]]).ToList();
-            if (Teile.AlleVerträglich(kombi)) yield return kombi;
-
-            int k = perTyp.Count - 1;
-            while (k >= 0 && ++indizes[k] >= perTyp[k].Count) { indizes[k] = 0; k--; }
-            if (k < 0) yield break;
-        }
-    }
-
-    /// <summary>
-    /// Die Je-Teile eines Tokens: je JE-Rahmen (Knoten-Index) der Element-Index, aus dem es stammt. Zwei Tokens sind verträglich,
-    /// wenn sie in jedem gemeinsamen Rahmen vom selben Element kommen. Unveränderlich; leer für klassische Prozesse.
-    /// </summary>
-    private sealed class Teile
-    {
-        public static readonly Teile Leer = new(new SortedDictionary<int, int>());
-        private readonly SortedDictionary<int, int> _d;
-        private Teile(SortedDictionary<int, int> d) { _d = d; }
-
-        public bool Hat(int je) => _d.ContainsKey(je);
-        public int Von(int je) => _d[je];
-
-        public Teile Mit(int je, int element)
-            => new(new SortedDictionary<int, int>(_d) { [je] = element });
-
-        public Teile Ohne(int je)
-        {
-            if (!_d.ContainsKey(je)) return this;
-            var d = new SortedDictionary<int, int>(_d);
-            d.Remove(je);
-            return new Teile(d);
-        }
-
-        public bool VerträglichMit(Teile andere)
-            => _d.All(kv => !andere._d.TryGetValue(kv.Key, out var w) || w == kv.Value);
-
-        public static bool AlleVerträglich(IReadOnlyList<Token> tokens)
-        {
-            for (var i = 0; i < tokens.Count; i++)
-                for (var j = i + 1; j < tokens.Count; j++)
-                    if (!tokens[i].Teile.VerträglichMit(tokens[j].Teile)) return false;
-            return true;
-        }
-
-        public static Teile Vereinige(IEnumerable<Token> tokens)
-        {
-            SortedDictionary<int, int>? d = null;
-            foreach (var t in tokens)
-                foreach (var kv in t.Teile._d)
-                    (d ??= new SortedDictionary<int, int>())[kv.Key] = kv.Value;
-            return d is null ? Leer : new Teile(d);
-        }
-    }
+    // Belegungen (Herkunft, Je-Teile, Sammeln) liegen im reinen Kern Abstractions.FlussBelegung — geteilt mit der Simulation.
 
     // ── Kompensation: reverse Regel-Reihenfolge über Erfolgs-Transitionen mit Gegenzug ──
     private sealed record Kompensation(ICommand Cmd, Guid Vorgang);

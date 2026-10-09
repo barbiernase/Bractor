@@ -113,6 +113,8 @@ public sealed class FunktionRaw
     public string Name = "", Full = "", Namespace = "";
     public string AuftragFull = "";
     public List<string> ErgebnisseFull = new();
+    /// <summary>Lese-Fähigkeiten nach IAusfuehrung (Typ wie geschrieben, Name).</summary>
+    public List<(string Typ, string Name)> Faehigkeiten = new();
     public string? Doku, Datei;
 }
 
@@ -661,12 +663,16 @@ public sealed partial class DomainExtractor
     private FunktionRaw? ReadFunktion(INamedTypeSymbol t)
     {
         var methode = t.GetMembers(Vertrag.FunktionsMethode).OfType<IMethodSymbol>().FirstOrDefault();
-        if (methode is not { Parameters.Length: 2 } || methode.Parameters[0].Type is not INamedTypeSymbol auftrag) return null;
+        if (methode is not { Parameters.Length: >= 2 } || methode.Parameters[0].Type is not INamedTypeSymbol auftrag) return null;
         var decl = QuellDeklarationen(t).FirstOrDefault();
+        // Lese-Fähigkeiten: die Parameter nach IAusfuehrung — Typ so, wie er in der Signatur steht (wie bei Handles).
+        var syntax = methode.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).OfType<MethodDeclarationSyntax>().FirstOrDefault();
+        var faehigkeiten = methode.Parameters.Skip(2).Select((p, i) =>
+            (syntax?.ParameterList.Parameters.ElementAtOrDefault(i + 2)?.Type?.ToString() ?? p.Type.Name, p.Name)).ToList();
         return new FunktionRaw
         {
             Name = t.Name, Full = t.Fq(), Namespace = t.ContainingNamespace.Fq(), AuftragFull = auftrag.Fq(),
-            ErgebnisseFull = UniverseEvents(methode.ReturnType).Select(e => e.Fq()).ToList(),
+            ErgebnisseFull = UniverseEvents(methode.ReturnType).Select(e => e.Fq()).ToList(), Faehigkeiten = faehigkeiten,
             Doku = decl == null ? null : Summary(decl), Datei = decl?.SyntaxTree.FilePath,
         };
     }

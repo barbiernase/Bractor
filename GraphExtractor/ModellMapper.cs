@@ -152,6 +152,7 @@ public static class ModellMapper
             Funktionen = dom.Funktionen.Select(f => new Funktion
             {
                 Name = f.Name, Namespace = f.Namespace, Auftrag = Kurz(f.AuftragFull), Ergebnisse = f.ErgebnisseFull.Select(Evt).ToList(),
+                Faehigkeiten = f.Faehigkeiten.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
                 Doku = f.Doku, Datei = Rel(f.Datei),
             }).ToList(),
             Fluesse = dom.Fluesse.Select(f => new FlussPipeline
@@ -160,6 +161,7 @@ public static class ModellMapper
                 Knoten = f.Knoten.Select(k => new FlussSchritt
                 {
                     Name = k.Name, Art = k.Art, Typ = Kurz(k.TypFull), Zeitlimit = k.Zeitlimit, Liste = k.Liste, OhneVariable = k.OhneVariable,
+                    WarteAuf = k.WarteAufFull.Select(Kurz).ToList(),
                     Eingaenge = k.Eingaenge.Select(e => new FlussEingang
                     {
                         Je = e.Je, Sammle = e.Sammle, Ausdruck = e.Ausdruck,
@@ -539,7 +541,20 @@ public static class ModellMapper
         // ── Composition-Root (Betrieb/Host): Webhook-Trigger über die Pipeline-Stubs legen (modus/route),
         //    plus Frist-Relationen, Dienst-Bindungen und HostSettings als eigene Board-Sektionen. ──
         var triggersNode = Knoten(triggers).AsArray();
-        foreach (var tb in cr.Triggers)
+        // Pipeline als Fluss (§14): die Ingress-Bindung einer QUELL-NACHRICHT (MapQuellWebhook<T>) gehört an die Quelle des Flusses —
+        //   keine eigene Trigger-Karte (das wäre der Handle-Baustein). Reine Board-Sicht: das Modell (FlussSchritt) kennt das Feld nicht.
+        var quellen = records.OfType<JsonObject>().Where(r => r["basen"] is JsonArray b && b.Any(x => (string?)x == Grammatik.QuellBasis))
+            .Select(r => (string?)r["name"]).ToHashSet(StringComparer.Ordinal);
+        foreach (var tb in cr.Triggers.Where(tb => quellen.Contains(tb.MsgName)))
+            foreach (var k in (root["fluesse"] as JsonArray ?? new()).OfType<JsonObject>()
+                         .SelectMany(f => (f["knoten"] as JsonArray ?? new()).OfType<JsonObject>())
+                         .Where(k => (string?)k["art"] == FlussArt.Quelle && (string?)k["typ"] == tb.MsgName))
+            {
+                var liste = k["bindungen"] as JsonArray ?? new JsonArray();
+                liste.Add(Knoten(new { modus = tb.Modus, ort = tb.Route ?? tb.Interval ?? tb.Path, datei = Relativ(dom.Wurzel, tb.Datei) }));
+                k["bindungen"] = liste;
+            }
+        foreach (var tb in cr.Triggers.Where(tb => !quellen.Contains(tb.MsgName)))
         {
             var match = triggersNode.FirstOrDefault(n => (string?)n?["msgName"] == tb.MsgName)?.AsObject();
             // Die Bindung aus dem Code (Vorlage für neue Bindungen desselben Modus).

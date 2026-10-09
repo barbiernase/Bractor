@@ -56,7 +56,7 @@ public sealed class CompositionRootExtractor
     private readonly RoutingTruth _routing;
     private readonly DomainModel _dom;
     private readonly List<(Compilation Comp, SyntaxTree Tree)> _hostQuellen, _domänenQuellen;
-    private readonly INamedTypeSymbol? _iCommand, _iTrigger;
+    private readonly INamedTypeSymbol? _iCommand, _iTrigger, _iQuellNachricht;
 
     public CompositionRootExtractor(Solution solution, Projektlage lage, RoutingTruth routing, DomainModel dom)
     {
@@ -69,6 +69,7 @@ public sealed class CompositionRootExtractor
         INamedTypeSymbol? Get(string n) => lage.Compilations.Select(c => c.GetTypeByMetadataName(n)).FirstOrDefault(x => x != null);
         _iCommand = Get(Vertrag.ICommand);
         _iTrigger = Get(Vertrag.IPipelineTrigger);
+        _iQuellNachricht = Get(Vertrag.IQuellNachricht);
     }
 
     public Task<CompositionRoot> ExtractAsync()
@@ -121,7 +122,10 @@ public sealed class CompositionRootExtractor
                 var msg = inv.ArgumentList.Arguments.Select(a => a.Expression).OfType<LambdaExpressionSyntax>()
                     .SelectMany(l => l.Body is ExpressionSyntax body ? new[] { body }
                         : l.Body.DescendantNodes().OfType<ReturnStatementSyntax>().Select(r => r.Expression).OfType<ExpressionSyntax>())
-                    .Select(e => model.GetTypeInfo(e).Type).OfType<INamedTypeSymbol>().FirstOrDefault(t => Sym.Implements(t, _iTrigger));
+                    .Select(e => model.GetTypeInfo(e).Type).OfType<INamedTypeSymbol>().FirstOrDefault(t => Sym.Implements(t, _iTrigger))
+                    // Pipeline als Fluss (§14): eine Quell-Nachricht als Typ-Argument (MapQuellWebhook<T>(route)) — sie startet Flüsse.
+                    ?? (_iQuellNachricht == null ? null
+                        : m.TypeArguments.OfType<INamedTypeSymbol>().FirstOrDefault(t => Sym.Implements(t, _iQuellNachricht)));
                 if (msg == null || cr.Triggers.Any(x => x.MsgName == msg.Name && x.Modus == modus && x.Route == ort)) continue;
                 // Die Vorlage: die ganze Anweisung (nur eine Ausdrucks-Anweisung), das Typ-Argument, das auf den Trigger zeigt,
                 //   und das Ort-Argument — beides als Text, damit eine neue Bindung dieselbe Form bekommt.
