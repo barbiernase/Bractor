@@ -193,6 +193,52 @@ public static class HtmlPresenter
 #de .fl-port.fl-fehler .slotlbl{color:#e0a08a}
 #de .fl-ab .fl-ziel,#de .fl-draht .fl-ziel{flex:1;cursor:pointer;color:#cfe0ff;font-size:12px}
 #de .fl-ab .fl-ziel:hover,#de .fl-draht .fl-ziel:hover{text-decoration:underline}
+/* Zuordnungs-Editor (visuell): Eingänge · Bau-Knoten · Ziel, Drähte = Argumente */
+#de .zo-kurz{border:1px solid #3a4a5e;border-radius:7px;padding:6px 8px;margin:6px 0;cursor:pointer;background:#111722}
+#de .zo-kurz:hover{border-color:#7c5cff}
+#de .zo-kurz-k{font-weight:700;font-size:12px;color:#cfe0ff;margin-bottom:3px}
+#de .zo-kurz-r{font:11px ui-monospace,monospace;color:#b9c4d6;padding:1px 0}
+#de .zo-kurz-r.zo-leer{color:#e0867e}
+#gzo{position:fixed;inset:5vh 4vw;z-index:9000;background:#0c1018;border:1px solid #3a4a5e;border-radius:12px;box-shadow:0 20px 70px #000c;
+  display:flex;flex-direction:column;color:#dfe4ee;font:13px system-ui,sans-serif;overflow:hidden}
+#gzo button{background:#1b2333;color:#dfe4ee;border:1px solid #33405a;border-radius:6px;padding:4px 9px;cursor:pointer;font:12px system-ui,sans-serif}
+#gzo button:hover{border-color:#7c5cff}
+#gzo button.go{background:#2f5d46;border-color:#3f7d5e}
+#gzo input{background:#0d1017;color:#dfe4ee;border:1px solid #2c3547;border-radius:5px;padding:5px 7px;font:12px ui-monospace,monospace;width:100%;box-sizing:border-box;margin-top:6px}
+#gzo .zo-k{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #253046;background:#121a28}
+#gzo .zo-sub2{color:#9fb0c8;font-size:12px}
+#gzo .zo-hin{padding:7px 14px;background:#2a2213;color:#e8c98a;border-bottom:1px solid #4a3a1e;font-size:12px}
+#gzo .zo-hin pre{margin:4px 0 0;white-space:pre-wrap;color:#dfe4ee}
+#gzo .zo-f{position:relative;flex:1;overflow:auto}
+#gzo .zo-svg{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
+#gzo .zo-sp{position:relative;display:flex;gap:80px;padding:18px 24px;align-items:flex-start;min-width:max-content}
+#gzo .zo-col{display:flex;flex-direction:column;gap:14px;min-width:200px}
+#gzo .zo-ct{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#7f8ca3}
+#gzo .zo-n{background:#151c2a;border:1px solid #34425c;border-radius:9px;min-width:240px;position:relative}
+#gzo .zo-n.zo-q{border-color:#3f7d5e}#gzo .zo-n.zo-bau{border-color:#9b7a3a}#gzo .zo-n.zo-z{border-color:#4a86d6}
+#gzo .zo-nh{display:flex;align-items:center;gap:8px;padding:7px 9px;font-weight:700;border-bottom:1px solid #2a3448;border-radius:9px 9px 0 0;background:#1a2335}
+#gzo .zo-n.zo-bau>input{margin:8px;width:calc(100% - 16px)}
+#gzo .zo-r{display:flex;align-items:center;gap:7px;padding:4px 9px;min-height:22px}
+#gzo .zo-r.zo-tief{padding-left:22px;opacity:.85}
+#gzo .zo-r.zo-leer .zo-v{color:#e0867e}
+#gzo .zo-l{font:12px ui-monospace,monospace;color:#e6ecf5}
+#gzo .zo-t{font:11px ui-monospace,monospace;color:#7f8ca3;flex:1}
+#gzo .zo-v{font:11px ui-monospace,monospace;color:#8fd1a8;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#gzo .zo-b{padding:1px 6px;font-size:11px}
+#gzo .zo-x{color:#e0867e}
+#gzo .zo-p{width:12px;height:12px;border-radius:50%;border:2px solid #8fd1a8;background:#0c1018;flex:none;cursor:crosshair}
+#gzo .zo-o{margin-left:auto}
+#gzo .zo-i{border-color:#7fa6d9;cursor:pointer}
+#gzo .zo-p.zo-arm{background:#8fd1a8;box-shadow:0 0 0 4px #8fd1a855}
+#gzo .zo-i.zo-ok{background:#2f9d6a;box-shadow:0 0 0 4px #2f9d6a55}
+#gzo .zo-i.zo-nein{opacity:.25}
+#gzo .zo-draht{fill:none;stroke:#8fd1a8;stroke-width:2.2;pointer-events:stroke;cursor:pointer}
+#gzo .zo-draht.zo-draht-bau{stroke:#d7a23c}
+#gzo .zo-draht:hover{stroke:#e0867e;stroke-width:3.5}
+#gzo .zo-tmp{fill:none;stroke:#cfe0ff;stroke-width:2;stroke-dasharray:6 4}
+#gzo .zo-leer2{color:#7f8ca3;font-size:12px;padding:4px 2px;max-width:260px}
+#gzo .zo-fuss{border-top:1px solid #253046;padding:8px 14px;background:#101623;display:flex;gap:12px;align-items:flex-start}
+#gzo .zo-fuss pre{margin:0;font:12px ui-monospace,monospace;color:#cfe0ff;white-space:pre-wrap;flex:1}
 #de .fl-modus{color:#e8c98a;font-weight:600}
 #de .fl-oder{color:#9fb7e8}
 #de pre.fl-lambda{margin:4px 0;padding:6px 8px;background:#0f141e;border:1px solid #2c3547;border-radius:6px;font-size:11px;white-space:pre-wrap;color:#cfe0ff}
@@ -657,9 +703,6 @@ public static class HtmlPresenter
           sendeAusdruck:st.sendeAusdruck,kompensationAusdruck:st.kompensationAusdruck,kompensationJe:!!st.kompensationJe,
           ...(st.rufe?{rufe:st.rufe}:{}),...(st.zeitlimit?{zeitlimit:st.zeitlimit}:{})}]}));s.schritte=[];});
     return m;}
-  const aggSelect=(val,on)=>{const s=h("select",{onchange:e=>on(e.target.value)});
-    if(!val||!MODEL.aggregate.some(a=>a.name===val)){const o=h("option",{value:val||""},val||"— Aggregat —");o.selected=true;s.append(o);}
-    MODEL.aggregate.forEach(a=>{const o=h("option",{value:a.name},a.name);if(a.name===val)o.selected=true;s.append(o);});return s;};
   // Standard-Namespace für neue Knoten: der eines vorhandenen Aggregats/Records; sonst eine Projekt-Wurzel aus dem Code (Rahmen).
   // Akteure und Clients stehen außerhalb der Domänen in IHREM Katalog (z. B. Domain.Akteure) — ein neuer gesellt sich dazu.
   function haeufigsterNs(liste){const z=new Map();(liste||[]).forEach(x=>x.namespace&&z.set(x.namespace,(z.get(x.namespace)||0)+1));
@@ -679,11 +722,6 @@ public static class HtmlPresenter
   const tinp=(val,on)=>h("input",{value:val??"",list:"de-typen",oninput:e=>on(e.target.value),placeholder:"Typ"});
   function datalistEl(){const dl=h("datalist",{id:"de-typen"});
     [...SCALARS(),...MODEL.records.map(r=>r.name),...MODEL.enums.map(e=>e.name)].forEach(t=>dl.append(h("option",{value:t})));return dl;}
-  // Record-Auswahl gefiltert nach Kind (für Decide/Apply/Saga-Verdrahtung).
-  function recSelect(val,on,kinds){const s=h("select",{onchange:e=>on(e.target.value)});
-    const opts=MODEL.records.filter(r=>kinds.includes(r.kind)).map(r=>r.name);
-    if(!val||!opts.includes(val)){const o=h("option",{value:val||""},val||"— wählen —");o.selected=true;s.append(o);}
-    opts.forEach(n=>{const o=h("option",{value:n},n);if(n===val)o.selected=true;s.append(o);});return s;}
   // Drop-Zone für graphisches Komponieren: Record-Grip aus der Liste hier ablegen.
   function dz(label,accept,onDrop){
     const d=h("div",{class:"dz",
@@ -1025,6 +1063,7 @@ public static class HtmlPresenter
      if(akteurSorten().includes(grNachrichtSorte(r.name))){const dp=darfPort(r.name);ein=ein?h("div",{},ein,dp):dp;}
      if(ein||aus){if(INSP)zweiSeiten(body,r.name,null,ein,aus);else{if(ein)body.append(ein);if(aus)body.append(aus);}}}
     if(r.kind==="valueobject")body.append(slotRow("ftype","als Feldtyp ▶","r",{type:"ftype",dir:"out",typeName:r.name},"ftype:out:rec:"+r.name));
+    if(r.kind==="konfig")body.append(slotRow("trigmsg","Konstruktor einer Pipeline ⊕ ▶","r",{type:"konfig",dir:"out",rec:r.name},"konfig:out:"+r.name));
     if(r.kind==="auftrag")body.append(slotRow("auftrag","Eingang von ƒ "+(r.funktion||"— ⊕ Funktion wählen")+" ▶","r",{type:"auftragFn",dir:"out",rec:r.name},"auf:out:"+r.name));
     body.append(h("div",{class:"gsec"},"Felder"));
     (r.felder||[]).forEach((f,fi)=>body.append(feldRow(f,()=>{r.felder.splice(fi,1);render();},undefined,r.name)));
@@ -1440,12 +1479,10 @@ public static class HtmlPresenter
     body.append(inp(p.pipelineId,v=>p.pipelineId=v,"z. B. bildverarbeitung"));
     // Konfigurations-Records (Konstruktor-Injektion). Geschrieben wird der Konstruktor nur bei einer NEUEN Pipeline.
     body.append(h("div",{class:"gsec"},"Konfigs (Konstruktor)"+(p.code?" — bestehend: Konstruktor ist Handcode":"")));
-    (p.konfigs=p.konfigs||[]).forEach((k,i)=>body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl",style:"flex:1"},"◀ "+k),
-      h("button",{class:"rm",onclick:()=>{p.konfigs.splice(i,1);render();}},"✕"))));
-    {const sel=h("select",{onchange:e=>{if(e.target.value&&!p.konfigs.includes(e.target.value))p.konfigs.push(e.target.value);render();}});
-     sel.append(h("option",{value:""},"+ Konfig-Record …"));
-     MODEL.records.filter(r=>r.kind==="konfig"&&!p.konfigs.includes(r.name)).forEach(r=>sel.append(h("option",{value:r.name},r.name)));
-     body.append(sel);}
+    (p.konfigs=p.konfigs||[]).forEach((k,i)=>{const s=anchorDot("trigmsg");s.classList.add("i");reg("pl:konfig:"+p._id+":"+k,s,{type:"konfig",dir:"in",pipeline:p._id,anker:true});
+      body.append(h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"flex:1;cursor:pointer",title:"Klick: Konfig-Karte öffnen",onclick:()=>zeigeLadend("rec:"+k)},"◀ "+k),
+      h("button",{class:"rm",onclick:()=>{p.konfigs.splice(i,1);render();}},"✕")));});
+    body.append(slotRow("trigmsg","+ Konfig ◀ ⊕ (Konfig-Record)","l",{type:"konfig",dir:"in",pipeline:p._id},"pl:konfig:"+p._id+":open"));
     body.append(h("div",{class:"gsec"},"Handle: Trigger/Event/Self ◀ → yield Command · yield Trigger · ScheduleSelf. Das WIE macht der Rumpf."));
     body.append(handleListe(p,"pl:"+p._id,"je Handle eine eigene Karte"));
     // Genutzte Dienste (Konstruktor-Injektion) — an „Vertrag ▶" eines Dienst-Knotens andocken.
@@ -1500,45 +1537,49 @@ public static class HtmlPresenter
   }
 
   // ══ LOGIK-ELEMENT „Katalog-Funktion" (IFunktion): Signatur + Rumpf — ◀ EIN Auftrag hinein, ▶ OneOf-Ergebnis-Events heraus,
-  //    ⚙ Lese-Fähigkeiten als Parameter, 📝/🤖 der Rumpf (RufeAsync). Die Typen werden HIER angelegt und bearbeitet (Name, Felder),
-  //    nicht nur aus dem Katalog gewählt; derselbe Baustein steht am Fluss-Knoten, der die Funktion ruft (funktionSignatur).
+  //    ⚙ Lese-Fähigkeiten als Parameter, 📝/🤖 der Rumpf (RufeAsync). Die Typen sind EIGENE Karten (Auftrag, Events): am Element stehen
+  //    sie nur als Verweis (Klick öffnet die Karte), verbunden wird per ⊕, „＋" legt eine neue Typ-Karte an und verbindet sie gleich.
+  //    Deklariert (Name, Felder) wird ein Typ nur an seiner Karte — nie im Knoten, der ihn benutzt (auch nicht am rufenden Fluss-Knoten).
   // Eine neue Funktion — EIN Weg (Palette, Fluss, Prozess): I<Stamm> mit Auftrag <Stamm>Auftrag und einem Ergebnis <Stamm>Erledigt.
   function neueFunktion(ns,pos){const nm=uniq("INeueFunktion"),stamm=nm.replace(/^I(?=[A-ZÄÖÜ])/,"");
     const an=uniq(stamm+"Auftrag"),en=uniq(stamm+"Erledigt");
     MODEL.records.push({name:an,kind:"auftrag",funktion:nm,namespace:ns,felder:[]},{name:en,kind:"event",namespace:ns,felder:[]});
     MODEL.funktionen.push({_id:"fk"+(NID++),name:nm,namespace:ns,auftrag:an,ergebnisse:[en],...(pos||{})});return nm;}
-  // Ein Typ IM Logik-Element (Auftrag, Ergebnis …): Name und Felder an Ort und Stelle. Ein Typ aus dem Code behält seinen Namen
-  //   (Umbenennen ist ein Refactoring); seine Felder gleicht „C# schreiben" ab. Keine Feld-Ports — die stehen an der Typ-Karte.
-  function typKasten(body,r,o){o=o||{};
-    const kopf=h("div",{class:"slotrow"+(o.seite==="o"?" o":"")});
-    if(o.port&&o.seite!=="o")kopf.append(o.port);
-    if(o.titel)kopf.append(h("span",{class:"slotlbl"},o.titel));
-    if(!r)kopf.append(h("span",{class:"slotlbl",style:"flex:1;color:#cf6f68"},"⚠ "+(o.name||"?")+" — Typ fehlt"));
-    else if(r.datei)kopf.append(h("span",{class:"slotlbl",style:"flex:1",title:r.namespace+"."+r.name+" — aus dem Code (Umbenennen ist ein Refactoring)"},r.name));
-    else{const ni=nameInp(r,"name","Typ","record");ni.style.flex="1";kopf.append(ni);}
-    if(o.onRemove)kopf.append(h("button",{class:"rm",title:o.removeTitel||"entfernen",onclick:o.onRemove},"✕"));
-    if(o.port&&o.seite==="o")kopf.append(o.port);
-    body.append(kopf);
-    if(!r)return;
-    const box=h("div",{class:"typkasten"});
-    (r.felder||[]).forEach((f,fi)=>box.append(feldRow(f,()=>{r.felder.splice(fi,1);render();})));
-    box.append(h("button",{class:"add",onclick:()=>{(r.felder=r.felder||[]).push({_id:"f"+(NID++),name:uniqFeldName(r.felder,"feld"),typ:"string"});render();}},"+ Feld"));
-    body.append(box);}
-  // Der Signatur-Baustein einer Funktion: Eingang · Ausgänge (OneOf) · Fähigkeiten · Rumpf — auf der Karte UND am rufenden Fluss-Knoten.
+  // Ein Typ an einem Element = VERWEIS auf seine Karte: Name und Felder nur zum Lesen, Klick öffnet die Karte, ✕ löst nur die Verbindung.
+  function typVerweis(name,o){o=o||{};const r=name?recByName(name):null,rechts=o.seite==="o";
+    const row=h("div",{class:"slotrow"+(rechts?" o":"")});
+    if(o.port&&!rechts)row.append(o.port);
+    if(o.titel)row.append(h("span",{class:"slotlbl",style:"opacity:.7"},o.titel));
+    const txt=!name?(o.leer||"— ⊕ verbinden"):r?r.name+"("+(r.felder||[]).map(f=>f.name+": "+f.typ).join(", ")+")":"⚠ "+name+" — Typ fehlt";
+    row.append(h("span",{class:"slotlbl",style:"flex:1"+(rechts?";text-align:right":"")+(r?";cursor:pointer":"")+(name&&!r?";color:#cf6f68":""),
+      title:r?(r.namespace||"")+"."+r.name+" — Klick: Karte öffnen (Name und Felder werden dort bearbeitet)":"",onclick:r?()=>zeigeLadend("rec:"+r.name):null},txt));
+    (o.extra||[]).forEach(x=>row.append(x));
+    if(o.onRemove&&name)row.append(h("button",{class:"rm",title:o.removeTitel||"Verbindung lösen (der Typ bleibt)",onclick:o.onRemove},"✕"));
+    if(o.port&&rechts)row.append(o.port);
+    return row;}
+  // Eine Verbindung zwischen zwei Port-Beschreibungen herstellen — derselbe Weg wie ⊕ (applyLink), ohne Karte auf dem Board.
+  const verbindeInfo=(O,I)=>applyLink({__slot:O},{__slot:I});
+  // „＋" an einer Verbindungs-Zeile: einen neuen Typ als EIGENE Karte anlegen und sofort verbinden (Name/Felder dann an seiner Karte).
+  function neuerTypFuer(kind,basis,ns,verbinde){const r={name:uniq(basis),kind,namespace:ns||defaultNsGlobal(),
+      felder:kind==="command"&&ID_FELD()?[{_id:"f"+(NID++),name:ID_FELD(),typ:"Guid"}]:[]};
+    MODEL.records.push(r);verbinde(r);deFlash("＋ "+r.name+" als eigene Karte angelegt und verbunden — Name und Felder an seiner Karte",true);return r;}
+  const neuKnopf=(titel,on,txt)=>h("button",{class:"rm",title:titel,onclick:on},txt||"＋");
+  // Der Signatur-Baustein einer Funktion: Eingang · Ausgänge (OneOf) · Fähigkeiten · Rumpf — nur auf IHRER Karte.
   function funktionSignatur(body,f){const stamm=(f.name||"Funktion").replace(/^I(?=[A-ZÄÖÜ])/,"");
     body.append(h("div",{class:"gsec",title:"record "+(f.auftrag||"X")+"(…) : IAuftrag<"+(f.name||"F")+">"},"◀ Eingang (Auftrag)"));
-    const au=f.auftrag?recByName(f.auftrag):null;
-    if(au||f.auftrag)typKasten(body,au,{name:f.auftrag});
-    else body.append(h("button",{class:"add",onclick:()=>{const an=uniq(stamm+"Auftrag");
-      MODEL.records.push({name:an,kind:"auftrag",funktion:f.name,namespace:f.namespace,felder:[]});f.auftrag=an;render();}},"+ neuer Auftrag"));
-    body.append(slotRow("auftrag",au?"⊕ anderen Auftrag wählen":"⊕ bestehenden Auftrag wählen","l",{type:"auftragFn",dir:"in",fk:f._id},"fk:auftrag:"+f._id));
+    const ap=port("auftrag");ap.classList.add("i");reg("fk:auftrag:"+f._id,ap,{type:"auftragFn",dir:"in",fk:f._id});
+    body.append(typVerweis(f.auftrag,{port:ap,leer:"— ⊕ Auftrag verbinden",removeTitel:"Auftrag lösen (der Typ bleibt)",
+      onRemove:()=>{const r=recByName(f.auftrag);if(r&&r.funktion===f.name)delete r.funktion;f.auftrag="";render();},
+      extra:f.auftrag?[]:[neuKnopf("Neuen Auftrag als eigene Karte anlegen und verbinden",()=>neuerTypFuer("auftrag",stamm+"Auftrag",f.namespace,
+        r=>verbindeInfo({type:"auftragFn",dir:"out",rec:r.name},{type:"auftragFn",dir:"in",fk:f._id})))]}));
     body.append(h("div",{class:"gsec",title:"Task<OneOf<…>> RufeAsync(…) — je Fall ein Ausgang, persistente Events"},"Ausgänge ▶ (OneOf)"));
     (f.ergebnisse||[]).forEach(e=>{const o=port("event");o.classList.add("o");reg("fk:out:"+f._id+":"+e,o,{type:"evtOut",dir:"out",fk:f._id});
-      typKasten(body,recByName(e),{name:e,port:o,seite:"o",removeTitel:"kein Ergebnis dieser Funktion mehr (der Typ bleibt)",
-        onRemove:()=>{f.ergebnisse=(f.ergebnisse||[]).filter(x=>x!==e);render();}});});
-    body.append(h("button",{class:"add",onclick:()=>{const en=uniq(stamm+((f.ergebnisse||[]).length?"Fall":"Erledigt"));
-      MODEL.records.push({name:en,kind:"event",namespace:f.namespace,felder:[]});(f.ergebnisse=f.ergebnisse||[]).push(en);render();}},"+ neues Ergebnis"));
-    body.append(slotRow("open","⊕ bestehendes Event als Ergebnis ▶","r",{type:"evtOut",dir:"out",fk:f._id},"fk:out:"+f._id+":open"));
+      body.append(typVerweis(e,{port:o,seite:"o",removeTitel:"kein Ergebnis dieser Funktion mehr (der Typ bleibt)",
+        onRemove:()=>{f.ergebnisse=(f.ergebnisse||[]).filter(x=>x!==e);render();}}));});
+    {const op=port("open");op.classList.add("o");reg("fk:out:"+f._id+":open",op,{type:"evtOut",dir:"out",fk:f._id});
+      body.append(h("div",{class:"slotrow o"},neuKnopf("Neues Ergebnis-Event als eigene Karte anlegen und verbinden",()=>neuerTypFuer("event",
+          stamm+((f.ergebnisse||[]).length?"Fall":"Erledigt"),f.namespace,r=>verbindeInfo({type:"evtOut",dir:"out",fk:f._id},{type:"evtOut",dir:"in",rec:r.name}))),
+        h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"+ Ergebnis ⊕ (Event) ▶"),op));}
     funktionFaehigkeiten(body,f);
     // Rumpf = RufeAsync der Implementierung: Code-Eingang wie am Decider (📝 Code-Block, 🤖 LLM füllt ihn). Ohne Block läuft die
     //   Funktion extern (Python-Worker über gRPC) — dann bindet der Host sie mit AddExterneFunktion.
@@ -1546,8 +1587,8 @@ public static class HtmlPresenter
       "Rumpf · RufeAsync"+(f.implementierung?" · "+f.implementierung:" (neu)")));
     body.append(codePort("fk:impl:"+f._id,{k:"funktion",fk:f._id},f.codeSrc,"RufeAsync"));}
   function funktionCard(body,f){
-    if(MODEL.transitions.some(t=>(t.dann||[]).some(d=>d.rufe===f.name))||!MODEL.fluesse.some(x=>(x.knoten||[]).some(k=>k.art==="funktion"&&k.typ===f.name)))
-      body.append(topAnchor("command","◀ gerufen von Regeln (Rufe<"+(f.name||"F")+">)","fk:in:"+f.name));
+    // Wer ruft (Prozess-Regel „Dann rufe", Pipeline-Knoten ƒ, Ablauf „dann …") — ⊕ verbindet von hier aus.
+    body.append(topSlot("auftrag","◀ gerufen von ⊕ (Prozess-Regel · Pipeline-Knoten)",{type:"rufe",dir:"in",fk:f._id},"fk:in:"+f.name));
     body.append(h("div",{class:"gsec"},"Name · Namespace"));
     if(f.datei)body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default"},f.name+" — aus dem Code (Umbenennen ist ein Refactoring)"));
     else body.append(nameInp(f,"name","Funktion","funktion"));
@@ -1562,21 +1603,27 @@ public static class HtmlPresenter
     kettenZeilen(body,"fk:"+f._id);
     if(!sgs.length){body.append(h("div",{class:"gsec",style:"opacity:.6"},"Noch in keinem Ablauf — am Prozess unter „erst …“ oder an einer anderen Funktion unter „dann …“ einhängen."));return;}
     const erg=(f.ergebnisse||[]);if(!erg.length){body.append(h("div",{class:"gsec",style:"opacity:.6"},"Erst ein Ergebnis festlegen — es löst den nächsten Schritt aus."));return;}
-    let bei=erg[0];
-    if(erg.length>1){const bs=h("select",{onchange:e=>bei=e.target.value});erg.forEach(e=>bs.append(h("option",{value:e},"weiter bei "+e)));body.append(h("div",{class:"slotrow o"},bs));}
-    sgs.forEach(sg=>body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},sgs.length>1?sg.name+":":""),kettenPool(z=>kettenAnhaengen(sg,bei,z)))));
+    // Je Ergebnis (und Prozess) ein Ausgang: ⊕ → eine Funktion oder einen Command anklicken = nächster Schritt.
+    sgs.forEach(sg=>erg.forEach(e=>body.append(slotRow("command",(sgs.length>1?sg.name+" · ":"")+"bei "+e+" ▶ dann ⊕ (ƒ · Command)","r",
+      {type:"kette",dir:"out",saga:sg.name,bei:e},"kette:fk:"+f._id+":"+sg.name+":"+e))));
   }
+  // Die Read-Fn eines Stores, deren Fähigkeits-Interface typ ist (neu angelegte Fns ohne festen Namen: ihr Vorschlag).
+  function leseFnZu(typ){for(const st of MODEL.stores)for(const fn of st.readFns||[])
+    if((fn.faehigkeit||(fn.sig?null:faehigkeitVorschlag(st,fn)))===typ)return {store:st,fn};return null;}
   // Lese-Fähigkeiten: Parameter nach IAusfuehrung (je Aufruf aus einem Bereich). Nur lesen — schreiben bleibt dem Aggregat.
+  //   Verbunden wird wie am Handle: ⊕ → eine Read-Fn eines Stores anklicken (ihr Fähigkeits-Interface wird der Parameter).
   function funktionFaehigkeiten(body,f){
     body.append(h("div",{class:"gsec"},"⚙ liest (Lese-Fähigkeiten)"));
-    (f.faehigkeiten||[]).forEach((p,i)=>body.append(h("div",{class:"slotrow"},h("button",{class:"rm",onclick:()=>{f.faehigkeiten.splice(i,1);render();}},"✕"),
-      h("span",{class:"slotlbl",style:"flex:1"},"⚙ "+p.typ+" "+p.name))));
-    const lese=[...new Set(MODEL.stores.flatMap(st=>(st.readFns||[]).map(x=>x.faehigkeit).filter(Boolean)))].filter(t=>!(f.faehigkeiten||[]).some(p=>p.typ===t)).sort();
-    if(lese.length){const ls=h("select",{onchange:e=>{const t=e.target.value;if(!t)return;let nm=t.replace(/^I(?=[A-ZÄÖÜ])/,"");nm=nm.charAt(0).toLowerCase()+nm.slice(1);
-        (f.faehigkeiten=f.faehigkeiten||[]).push({typ:t,name:nm});render();}});
-      ls.append(h("option",{value:""},"+ Lese-Fähigkeit …"));lese.forEach(t=>ls.append(h("option",{value:t},"⚙ "+t)));body.append(h("div",{class:"slotrow"},ls));}
+    (f.faehigkeiten||[]).forEach((p,i)=>{const s=port("store");s.classList.add("o");reg("rcall:out:fk:"+f._id+":"+i,s,{type:"rcall",dir:"out",fk:f._id});
+      const z=leseFnZu(p.typ);
+      body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",title:"Fähigkeit entfernen",onclick:()=>{f.faehigkeiten.splice(i,1);render();}},"✕"),
+        h("span",{class:"slotlbl",style:"flex:1;text-align:right"+(z?";cursor:pointer":""),title:z?"Klick: "+z.store.name+"."+z.fn.name+" öffnen":"",onclick:z?()=>zeigeLadend("fn:"+z.fn._id):null},
+          "⚙ "+p.typ+" "+p.name+(z?" → "+z.store.name+"."+z.fn.name:"")),s));});
+    body.append(slotRow("store","+ Lese-Fähigkeit ⊕ (Read-Fn eines Stores) ▶","r",{type:"rcall",dir:"out",fk:f._id},"rcall:out:fk:"+f._id+":open"));
+    // Angeboten von (IDarf<IFunktion>, Akteur-Tor): ⊕ → einen Akteur anklicken.
     {const anb=MODEL.akteure.filter(a=>(a.darf||[]).includes(f.name));
-      if(anb.length)body.append(h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px;cursor:default"},h("span",{class:"slotlbl"},"angeboten von:"),
+      body.append(slotRow("darf","◀ angeboten von ⊕ (Akteur, IDarf)"+(anb.length?": ":""),"l",{type:"darf",dir:"in",rec:f.name,funktion:true},"darf:in:"+f.name));
+      if(anb.length)body.append(h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px;cursor:default"},
         ...anb.map(a=>h("button",{class:"akt-dom",onclick:()=>waehle("akt:"+a._id)},(ART_SYM[a.art]||"👤 ")+a.name))));}
     body.append(h("div",{class:"gsec",style:"opacity:.6"},(f.faehigkeiten||[]).length
       ? "Mit Fähigkeiten läuft die Funktion nur im Host (AddFunktion<"+(f.name||"F")+", …>) — nicht in Python/extern."
@@ -1665,11 +1712,13 @@ public static class HtmlPresenter
     switch(n.kind){
       case "akteur":s.add(r.name);break;
       case "auf":s.add(n.own.ref.name);break;
-      case "command":case "query":case "event":case "rejection":case "queryresponse":add(mengeVon(r.name));
-        // Ergebnis einer Funktion: trägt keine eigene Kette — es gehört zum Ablauf, der die Funktion ruft.
-        if(n.kind==="event"&&!s.size){const f=ergebnisVon(r.name);if(f)add(akteurSet({id:"fk:"+f._id,kind:"funktion",ref:f}));}
+      case "command":case "query":case "event":case "rejection":case "queryresponse":{
+        // Ergebnis einer Funktion (kein Decider erzeugt es): steht im Rahmen seiner Funktion — Auftrag · ƒ · Ergebnis bleiben beisammen.
+        const f=n.kind==="event"&&ergebnisVon(r.name);
+        if(f&&!MODEL.decider.some(d=>(d.ergibt||[]).some(o=>o.event===r.name))){add(akteurSet({id:"fk:"+f._id,kind:"funktion",ref:f}));if(s.size)break;}
+        add(mengeVon(r.name));
         if(n.kind==="query"&&!s.size)MODEL.reader.forEach(rd=>{if((rd.handles||[]).some(h=>h.query===r.name))add(akteurSet({id:"rdr:"+rd._id,kind:"reader",ref:rd}));});
-        break;
+        break;}
       case "trigger":add(mengeVon(trigName(r)));break;
       case "decider":add(mengeVon(r.command));break;
       case "applier":add(mengeVon(r.event));break;
@@ -1686,7 +1735,11 @@ public static class HtmlPresenter
         // Regel nur aus Funktions-Ergebnissen/-Aufrufen (keine eigene Kette): sie steht im Rahmen ihres Prozesses.
         if(!s.size){const sg=MODEL.sagas.find(x=>x.name===r.prozess);if(sg)add(akteurSet({id:"saga:"+sg.name,kind:"saga",ref:sg}));}
         break;
-      case "funktion":MODEL.transitions.filter(t=>(t.dann||[]).some(d=>d.rufe===r.name)).forEach(t=>add(akteurSet({id:"tr:"+t._id,kind:"transition",ref:t})));break;
+      // Funktion = Auftrag · ƒ · Ergebnisse in EINEM Rahmen: ihre Akteure sind die ihres Auftrags (Kette über Prozess ODER Fluss),
+      //   sonst die der rufenden Regeln.
+      case "funktion":add(mengeVon(r.auftrag));
+        if(!s.size)MODEL.transitions.filter(t=>(t.dann||[]).some(d=>d.rufe===r.name)).forEach(t=>add(akteurSet({id:"tr:"+t._id,kind:"transition",ref:t})));break;
+      case "auftrag":{const f=MODEL.funktionen.find(x=>x.auftrag===r.name);if(f)add(akteurSet({id:"fk:"+f._id,kind:"funktion",ref:f}));else add(mengeVon(r.name));break;}
       case "frist":add(mengeVon(r.sendet));break;
       case "projektion":add(projektionAkteure(r));break;
       case "store":add(storeAkteure(r));break;
@@ -1781,13 +1834,12 @@ public static class HtmlPresenter
     // Angebotene Katalog-Funktionen (IDarf<IFunktion>, Akteur-Tor): er führt sie DRAUSSEN aus (z. B. ein Python-Worker am Vermittler).
     {const fs=(a.darf||[]).filter(nm=>MODEL.funktionen.some(f=>f.name===nm));
       body.append(h("div",{class:"gsec",title:"public sealed record "+a.name+" : …, IDarf<IFunktion> — am Vermittler darf er diese Funktion anbieten (Laufort extern)"},"ƒ bietet an (führt aus)"));
-      fs.forEach(nm=>{const f=MODEL.funktionen.find(x=>x.name===nm);body.append(h("div",{class:"slotrow o"},
+      fs.forEach(nm=>{const f=MODEL.funktionen.find(x=>x.name===nm);const s=anchorDot("darf");s.classList.add("o");reg("akt:darf:"+a._id+":"+nm,s,{type:"darf",dir:"out",akt:a._id,anker:true});
+        body.append(h("div",{class:"slotrow o"},
         h("span",{class:"slotlbl",style:"flex:1;text-align:right;cursor:pointer",onclick:()=>waehle("fk:"+f._id)},"ƒ "+nm),
-        h("button",{class:"rm",title:"nicht mehr anbieten",onclick:()=>{a.darf=a.darf.filter(x=>x!==nm);render();}},"✕")));});
-      const frei=MODEL.funktionen.filter(f=>!(a.darf||[]).includes(f.name));
-      if(frei.length){const sel=h("select",{onchange:e=>{const v=e.target.value;if(!v)return;(a.darf=a.darf||[]).push(v);render();}});
-        sel.append(h("option",{value:""},"+ bietet Funktion an …"));frei.forEach(f=>sel.append(h("option",{value:f.name},"ƒ "+f.name)));
-        body.append(h("div",{class:"slotrow"},sel));}}
+        h("button",{class:"rm",title:"nicht mehr anbieten",onclick:()=>{a.darf=a.darf.filter(x=>x!==nm);render();}},"✕"),s));});
+      // ⊕ → eine Funktions-Karte anklicken (IDarf<IFunktion>).
+      body.append(slotRow("darf","+ bietet an ⊕ (Funktion) ▶","r",{type:"darf",dir:"out",akt:a._id,nurFunktion:true},"akt:darffk:"+a._id+":open"));}
     // Was in seinem Namen über eine Kette entsteht (abgeleitet, nicht deklariert): Pipeline/Prozess/Frist aus seinen Events.
     {const km=akteurMengen(),bew=[...km.entries()].filter(([nm,m])=>m.kette.has(a.name)&&!m.direkt.has(a.name)&&istEingangName(nm)).map(([nm])=>nm).sort();
       body.append(h("div",{class:"gsec",title:"abgeleitet: Commands/Trigger, die eine Pipeline, ein Prozess oder eine Frist aus Events dieses Akteurs erzeugt — kein IDarf nötig, am Tor nicht erlaubt"},"bewirkt über die Kette (abgeleitet)"));
@@ -2311,27 +2363,21 @@ public static class HtmlPresenter
   function kettenAnhaengen(sg,bei,ziel){const zr=ziel.rufe?auftragVon(ziel.rufe):ziel.sende,voll=xs=>xs.filter(x=>x!=="default").length;
     let wenn=[bei],args=autoArgs(zr,wenn);
     if(sg.triggerEvent&&bei!==sg.triggerEvent){const mit=[sg.triggerEvent,bei],a2=autoArgs(zr,mit);if(voll(a2)>voll(args)){wenn=mit;args=a2;}}
-    MODEL.transitions.push({_id:"t"+(NID++),prozess:sg.name,wenn,dann:[{...(ziel.rufe?{rufe:ziel.rufe}:{sende:ziel.sende}),sendeArgs:args}]});render();}
+    MODEL.transitions.push({_id:"t"+(NID++),prozess:sg.name,wenn,dann:[{...(ziel.rufe?{rufe:ziel.rufe}:{sende:ziel.sende}),sendeArgs:args}]});}
+  // Einen Schritt der Kette wieder lösen: die Regel(n) des Prozesses, die bei „bei" genau dieses Ziel rufen/senden.
+  function kettenLoesen(sgName,bei,ziel){MODEL.transitions.filter(t=>t.prozess===sgName).forEach(t=>kettenKanten(t)
+    .filter(k=>k.art==="dann"&&k.bei===bei&&(k.d.rufe||k.d.sende)===ziel).forEach(k=>{
+      if((t.dann||[]).length>1)t.dann=t.dann.filter(x=>x!==k.d);else MODEL.transitions=MODEL.transitions.filter(x=>x!==t);}));}
   // ARGUMENT-TABELLE eines Schritts: Feld ← Quelle (Vorschläge aus den Join-Events), „↻ automatisch“ füllt neu.
   //   Ein aus dem Code gelesener Ausdruck (λ) bleibt, bis man ihn bewusst durch die Tabelle ersetzt.
   function argTabelle(body,t,d){const zr=zielRecord(d),z=recByName(zr);if(!z||!(z.felder||[]).length)return;
-    if(d.sendeAusdruck){body.append(h("button",{class:"add",title:"Den gelesenen Ausdruck durch eine Feld-Zuordnung ersetzen",
-      onclick:()=>{delete d.sendeAusdruck;d.sendeArgs=autoArgs(zr,t.wenn);render();}},"⇄ als Zuordnung bearbeiten"));return;}
-    if(!d.sendeArgs||d.sendeArgs.length!==z.felder.length)d.sendeArgs=z.felder.map((_,i)=>(d.sendeArgs||[])[i]||autoArgs(zr,t.wenn)[i]||"default");
-    body.append(h("div",{class:"gsec"},"Argumente ← (aus "+(t.wenn||[]).map((e,i)=>(["t","r","g"][i]||"e"+(i+1))+" = "+e).join(", ")+")"));
-    const q=quellFelder(t.wenn),dl="dl"+(NID++);
-    z.felder.forEach((f,i)=>{const vor=q.filter(x=>x.typ===baseTyp(f.typ)).map(x=>x.ausdruck);
-      const ein=h("input",{value:d.sendeArgs[i]||"",list:dl+"_"+i,placeholder:"default",onchange:e=>{d.sendeArgs[i]=e.target.value||"default";render();},
-        style:d.sendeArgs[i]==="default"?"border-color:#cf6f68":""});
-      body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl",style:"min-width:40%"},f.name+" : "+f.typ),ein,
-        h("datalist",{id:dl+"_"+i},...vor.map(v=>h("option",{value:v})),h("option",{value:"default"}))));});
-    body.append(h("button",{class:"add",onclick:()=>{d.sendeArgs=autoArgs(zr,t.wenn);render();}},"↻ automatisch zuordnen"));}
-  // Pool-Auswahl „dann ▶“: alle Funktionen und Commands; die Wahl hängt den Schritt an.
-  function kettenPool(onWahl){const sel=h("select",{onchange:e=>{const v=e.target.value;if(!v)return;const [art,nm]=v.split("|");onWahl(art==="fk"?{rufe:nm}:{sende:nm});}});
-    sel.append(h("option",{value:""},"＋ aus dem Pool wählen …"));
-    const gf=h("optgroup",{label:"ƒ Funktionen"});MODEL.funktionen.forEach(f=>gf.append(h("option",{value:"fk|"+f.name},"ƒ "+f.name)));sel.append(gf);
-    const gc=h("optgroup",{label:"Commands"});MODEL.records.filter(r=>r.kind==="command").forEach(r=>gc.append(h("option",{value:"cmd|"+r.name},"▶ "+r.name)));sel.append(gc);
-    return sel;}
+    const sg=MODEL.sagas.find(x=>x.name===t.prozess),cn=d.codeSrc&&MODEL.codeNodes.find(c=>c._id===d.codeSrc);
+    const ps=(t.wenn||[]).map((e,i)=>{const r=recByName(e);return {p:["t","r","g"][i]||("e"+(i+1)),typ:e,felder:(r&&r.felder)||[]};});
+    if(t.sammelEvent)ps.push({p:["t","r","g"][ps.length]||("e"+(ps.length+1)),typ:"IReadOnlyList<"+t.sammelEvent+">",felder:[]});
+    zoKurz(body,()=>({titel:"Prozess "+(sg?sg.name:t.prozess||"?")+" · WENN "+(t.wenn||[]).join(" ∧ ")+" → "+(d.rufe?"ƒ "+d.rufe:d.sende),ziel:z.name,
+      params:ps,args:d.sendeArgs,ausdruck:d.sendeAusdruck,
+      block:cn&&(cn.text||"").trim()?{name:cn.name,text:cn.text,loesen:()=>setCodeSrc({k:"regelLambda",trans:t._id,dannIdx:(t.dann||[]).indexOf(d),teil:"sende"},null)}:null,
+      schreibe:a=>{d.sendeArgs=a;delete d.sendeAusdruck;},auto:()=>autoArgs(zr,t.wenn)}));}
   // Die Schritte, die von einem Knoten (Prozess-Start oder Funktion) aus „dann“ folgen — mit ✕ zum Lösen.
   function kettenZeilen(body,vonId){MODEL.transitions.flatMap(kettenKanten).filter(k=>k.art==="dann"&&k.von===vonId).forEach(k=>{
     const d=k.d,ziel=d.rufe?"ƒ "+d.rufe:"▶ "+d.sende;
@@ -2611,34 +2657,21 @@ public static class HtmlPresenter
     const f={_id:"fl"+(NID++),name:uniq("NeuePipeline"),namespace:ns,bauer:"p",knoten:[]};
     const q={_id:"fs"+(NID++),name:"quelle",art:"quelle",typ:"",eingaenge:[]};f.knoten.push(q);
     MODEL.fluesse.push(f);render();setTimeout(()=>zeigeKnoten("fs:"+q._id),0);}
-  // Neue Funktion aus dem Fluss heraus (nur die Signatur): Auftrag + ein Ergebnis-Event, im Namespace der Pipeline.
-  function flNeueFunktion(f){const nm=neueFunktion(f.namespace);deFlash("ƒ "+nm+" angelegt — Eingang, Ausgänge und Felder direkt am Knoten bearbeiten.",true);return nm;}
-  function flNeuerCommand(f){const n=uniq("NeuerCommand");
-    MODEL.records.push({name:n,kind:"command",namespace:f.namespace,felder:[{_id:"f"+(NID++),name:ID_FELD()||"AggregateId",typ:"Guid"}]});return n;}
+  // Neue Funktion aus dem Fluss heraus: Auftrag + ein Ergebnis-Event als EIGENE Karten, im Namespace der Pipeline.
+  function flNeueFunktion(f){const nm=neueFunktion(f.namespace);deFlash("ƒ "+nm+" angelegt — Auftrag, Ergebnisse und Felder an ihrer Karte (Klick auf „ruft ƒ …“).",true);return nm;}
   function flNeueQuellNachricht(f){const n=uniq("QuelleGemeldet");
     MODEL.records.push({name:n,kind:"event",namespace:f.namespace,basen:["IQuellNachricht"],felder:[{_id:"f"+(NID++),name:"Kennung",typ:"string"}]});return n;}
-  // „＋ dann …" an einem Port: Katalog (Funktionen, Commands, Je) ODER ein bestehender späterer Knoten.
-  function flDannAuswahl(f,k,p){const sel=h("select",{onchange:e=>{const v=e.target.value;e.target.value="";if(!v)return;const [art,nm]=v.split("|");
-      const ein={draehte:[flDraht(k.name,p)]};let neu=null;
-      if(art==="fk")neu=flNeu(f,"funktion",nm,ein);
-      else if(art==="fkneu"){const fn=flNeueFunktion(f);if(fn)neu=flNeu(f,"funktion",fn,ein);}
-      else if(art==="cmd")neu=flNeu(f,"command",nm,ein);
-      else if(art==="cmdneu"){const c=flNeuerCommand(f);if(c)neu=flNeu(f,"command",c,ein);}
-      else if(art==="je")neu=flNeu(f,"je","",ein);
-      else if(art==="warte"){neu=flNeu(f,"warte","",ein);neu.warteAuf=[];neu.zeitlimit="TimeSpan.FromHours(1)";}
-      else if(art==="zu"){const z=flKnoten(f,nm);if(z&&flVerbinde(f,k.name,p,z))neu=z;}
-      if(neu){render();setTimeout(()=>zeigeKnoten("fs:"+neu._id),0);}}});
-    sel.append(h("option",{value:""},"＋ dann …"));
-    const gf=h("optgroup",{label:"ƒ Funktionen (Katalog)"});MODEL.funktionen.forEach(x=>gf.append(h("option",{value:"fk|"+x.name,title:(x.auftrag||"?")+" → "+(x.ergebnisse||[]).join(" | ")},"ƒ "+x.name)));
-    gf.append(h("option",{value:"fkneu|"},"＋ neue Funktion …"));sel.append(gf);
-    const gc=h("optgroup",{label:"▶ Commands (ins Aggregat)"});MODEL.records.filter(r=>r.kind==="command").forEach(r=>gc.append(h("option",{value:"cmd|"+r.name},"▶ "+r.name)));
-    gc.append(h("option",{value:"cmdneu|"},"＋ neuer Command …"));sel.append(gc);
-    if(p.port==="fall"&&!(k.art==="je"))sel.append(h("optgroup",{label:"⧉ Rahmen"},h("option",{value:"je|"},"⧉ je Element einer Liste")));
-    if(p.port==="strom")sel.append(h("optgroup",{label:"⧗ Warten"},h("option",{value:"warte|",title:"Auf ein späteres Event in diesem Strom warten — mit Zeitlimit (Frist als Rennen)"},"⧗ warte auf ein Event im Strom …")));
-    const spaeter=(f.knoten||[]).filter(z=>z!==k&&z.art!=="je"&&!flQuelleArt(z)&&!flErreicht(f,z.name,k.name));
-    if(spaeter.length){const gz=h("optgroup",{label:"→ in einen bestehenden Knoten (∧/∨ automatisch)"});spaeter.forEach(z=>gz.append(h("option",{value:"zu|"+z.name},(FL_SYM[z.art]||"")+" "+z.name)));sel.append(gz);}
-    return sel;}
-  // Die Karte eines Fluss-Knotens (Panel): Pipeline · Knoten · Eingänge (Drähte, ∧/∨, Zuordnung) · Ausgänge (je Port: ＋ dann …).
+  const flKnotenById=id=>{for(const f of MODEL.fluesse)for(const k of f.knoten||[])if(k._id===id)return k;return null;};
+  // Port-Schlüssel eines Ausgangs (Fall je Ergebnis, ⏳, ✕, Strom) — derselbe für das Panel und den Kanten-Abgleich (KANTEN).
+  const flAusKey=(k,p)=>"fs:aus:"+k._id+":"+(p.port||"fall")+":"+(p.fall||"");
+  // Ziel geändert (andere Funktion/anderer Command) → Zuordnung neu vorschlagen; ein aus dem Code gelesener Lambda bleibt.
+  function flNeuZuordnen(k){const f=flFluss(k);if(f)(k.eingaenge||[]).forEach(e=>{if(!e.ausdruck)e.argumente=flAutoArgs(f,k,e);});}
+  // „＋" an einem Ausgang: einen NEUEN Knoten anlegen, vom Port verdrahtet. Was er ruft/sendet, verbindet man danach an ihm (⊕).
+  function flNeuAmPort(f,k,p,art){const neu=flNeu(f,art,"",{draehte:[flDraht(k.name,p)]});
+    if(art==="warte"){neu.warteAuf=[];neu.zeitlimit="TimeSpan.FromHours(1)";}
+    render();setTimeout(()=>zeigeKnoten("fs:"+neu._id),0);}
+  // Die Karte eines Fluss-Knotens (Panel): Pipeline · Knoten · was er ist (Verbindung zu einer EIGENEN Karte: Nachricht, Funktion,
+  //   Command — per ⊕, nie per Dropdown, nie im Knoten deklariert) · Eingänge (Drähte, ∧/∨, Zuordnung) · Ausgänge (je Port ⊕ / ＋).
   function flussKnotenCard(body,n){const k=n.ref,f=n.own.ref;
     body.append(h("div",{class:"gsec"},"⛓ Pipeline"));
     body.append(h("div",{class:"slotrow"},h("input",{value:f.name||"",placeholder:"Pipeline-Name",onchange:e=>{const nv=e.target.value.trim();if(nv&&nv!==f.name){f.name=nv;render();}}}),
@@ -2646,61 +2679,73 @@ public static class HtmlPresenter
     body.append(h("div",{class:"gsec"},(FL_SYM[k.art]||"")+" "+(FL_ART[k.art]||k.art)));
     body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"Name"),h("input",{value:k.name,title:"Der Name ist die Identität im Fluss (var "+k.name+" = …) — Drähte und Ausdrücke ziehen mit",
       onchange:e=>{flUmbenennen(f,k,e.target.value.trim());render();}})));
-    // Typ: Nachricht (Quelle), Funktion, Command bzw. Element-Typ (Je).
-    if(flQuelleArt(k)){const s=recSelect(k.typ,v=>{k.typ=v;render();},["event"]);
-      body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},k.art==="quelle"?"meldet":"Event"),s));
-      const at=h("select",{onchange:e=>{k.art=e.target.value;render();}},h("option",{value:"quelle"},"⛲ Katalog-Quelle (Datei, Timer, …)"),h("option",{value:"auf"},"◆ Event aus dem Log"));at.value=k.art;
-      body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"Art"),at));
-      if(k.art==="quelle")body.append(h("button",{class:"add",onclick:()=>{const q=flNeueQuellNachricht(f);if(q){k.typ=q;render();}}},"+ neue Quell-Nachricht"));
+    if(flQuelleArt(k)){
+      const an=(a,t,ti)=>h("button",{class:"rm",title:ti,style:k.art===a?"background:#2f5d46;color:#c8f0d8;border-color:#2f5d46":"",onclick:()=>{if(k.art!==a){k.art=a;render();}}},t);
+      body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"Art"),an("quelle","⛲ Katalog-Quelle","Datei, Timer, Webhook … — jede Nachricht startet einen Vorgang"),
+        an("auf","◆ Event aus dem Log","Jedes Vorkommen eines Events im Log startet einen Vorgang")));
+      const ep=port("event");ep.classList.add("i");reg("fs:ein:"+k._id,ep,{type:"evtUse",dir:"in",flk:k._id,role:"quelle"});
+      body.append(typVerweis(k.typ,{port:ep,titel:k.art==="quelle"?"meldet":"Event",leer:"— ⊕ "+(k.art==="quelle"?"Quell-Nachricht":"Event")+" verbinden",
+        removeTitel:"Nachricht lösen (der Typ bleibt)",onRemove:()=>{k.typ="";render();},
+        extra:k.art==="quelle"&&!k.typ?[neuKnopf("Neue Quell-Nachricht (IQuellNachricht) als eigene Karte anlegen und verbinden",()=>{const q=flNeueQuellNachricht(f);
+          verbindeInfo({type:"evtUse",dir:"out",rec:q},{type:"evtUse",dir:"in",flk:k._id,role:"quelle"});deFlash("＋ "+q+" als eigene Karte angelegt und verbunden — Felder an seiner Karte",true);})]:[]}));
       // Ingress-Bindungen aus dem Host (MapQuellWebhook<T>(route) …) — Code-Fakt der Composition Root, hier nur angezeigt.
       (k.bindungen||[]).forEach(b=>body.append(h("div",{class:"gsec",style:"opacity:.8",title:"Bindung im Host"+(b.datei?" · "+b.datei:"")},
         (b.modus==="webhook"?"🔗 Webhook POST ":b.modus==="timer"?"⏱ Timer ":"📁 Datei ")+(b.ort||"")+"  →  "+(k.typ||"Nachricht"))));
       body.append(h("div",{class:"gsec",style:"opacity:.6"},k.art==="quelle"?"Jede Nachricht startet einen Vorgang (genau einmal, Kennung). Die Quelle selbst ist Bindung im Host: AddQuelle<"+(k.typ||"Nachricht")+", …>().":"Jedes Vorkommen dieses Events im Log startet einen Vorgang."));}
-    else if(k.art==="funktion"){const s=h("select",{onchange:e=>{if(e.target.value==="§neu"){const fn=flNeueFunktion(f);if(fn)k.typ=fn;}else k.typ=e.target.value;
-        (k.eingaenge||[]).forEach(e2=>{if(!e2.ausdruck)e2.argumente=flAutoArgs(f,k,e2);});render();}});
-      if(!MODEL.funktionen.some(x=>x.name===k.typ))s.append(h("option",{value:k.typ||""},k.typ||"— Funktion wählen —"));
-      MODEL.funktionen.forEach(x=>s.append(h("option",{value:x.name},"ƒ "+x.name)));s.append(h("option",{value:"§neu"},"＋ neue Funktion …"));s.value=k.typ||"";
-      body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"ruft"),s));
-      const fk=MODEL.funktionen.find(x=>x.name===k.typ);
-      if(fk&&!INSP)body.append(h("div",{class:"gsec",style:"opacity:.7"},"Interface: "+flSignatur(k)));
-      // Im Panel: die Funktion SELBST bearbeiten — Eingang, Ausgänge, Felder, Fähigkeiten, Rumpf (gilt für jeden Aufruf von ƒ "+fk.name).
-      if(fk&&INSP){const box=h("div",{class:"fl-signatur"});
-        box.append(h("div",{class:"gsec",style:"cursor:pointer",title:"Klick: Funktions-Karte öffnen",onclick:()=>zeigeLadend("fk:"+fk._id)},
-          "ƒ "+fk.name+(MODEL.fluesse.reduce((n,x)=>n+(x.knoten||[]).filter(z=>z.art==="funktion"&&z.typ===fk.name).length,0)>1?" — gilt für jeden Aufruf":"")));
-        funktionSignatur(box,fk);body.append(box);}}
-    else if(k.art==="command"){const s=recSelect(k.typ,v=>{k.typ=v;(k.eingaenge||[]).forEach(e2=>{if(!e2.ausdruck)e2.argumente=flAutoArgs(f,k,e2);});render();},["command"]);
-      body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"sendet"),s));
+    else if(k.art==="funktion"){const fk=MODEL.funktionen.find(x=>x.name===k.typ);
+      // Die Funktion ist eine eigene Karte (Auftrag, Ergebnisse, Fähigkeiten, Rumpf) — hier nur die Verbindung „ruft".
+      const rp=port("auftrag");rp.classList.add("o");rp.title=k.typ||"(Funktion)";reg("fs:rufe:"+k._id,rp,{type:"rufe",dir:"out",flk:k._id});
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"opacity:.7"},"ruft"),
+        h("span",{class:"slotlbl",style:"flex:1;text-align:right"+(fk?";cursor:pointer":k.typ?";color:#cf6f68":""),title:fk?"Klick: Funktions-Karte öffnen (Auftrag, Ergebnisse, Fähigkeiten, Rumpf)":"",
+          onclick:fk?()=>zeigeLadend("fk:"+fk._id):null},fk?"ƒ "+fk.name:k.typ?"⚠ "+k.typ+" — Funktion fehlt":"— ⊕ Funktion verbinden"),
+        k.typ?h("button",{class:"rm",title:"Funktion lösen",onclick:()=>{k.typ="";render();}},"✕")
+          :neuKnopf("Neue Funktion anlegen und hier rufen (Auftrag und Ergebnisse an ihrer Karte)",()=>{const nm=flNeueFunktion(f);
+            verbindeInfo({type:"rufe",dir:"out",flk:k._id},{type:"rufe",dir:"in",fk:MODEL.funktionen.find(x=>x.name===nm)._id});}),rp));
+      if(fk)body.append(h("div",{class:"gsec",style:"opacity:.7",title:"Das Interface der Funktion — bearbeitet an ihrer Karte"},"Interface: "+flSignatur(k)));}
+    else if(k.art==="command"){
+      const sp=port("command");sp.classList.add("o");reg("fs:send:"+k._id,sp,{type:"sagaCmd",dir:"out",flk:k._id});
+      body.append(typVerweis(k.typ,{port:sp,seite:"o",titel:"sendet",leer:"— ⊕ Command verbinden",removeTitel:"Command lösen (der Typ bleibt)",onRemove:()=>{k.typ="";render();},
+        extra:k.typ?[]:[neuKnopf("Neuen Command als eigene Karte anlegen und verbinden",()=>neuerTypFuer("command","NeuerCommand",f.namespace,
+          r=>verbindeInfo({type:"sagaCmd",dir:"out",flk:k._id},{type:"sagaCmd",dir:"in",rec:r.name})))]}));
       const dc=MODEL.decider.find(d=>d.command===k.typ);if(dc)body.append(h("div",{class:"gsec",style:"opacity:.7;cursor:pointer",title:"Decider öffnen",onclick:()=>waehle("dec:"+dc._id)},"→ Aggregat "+(dc.aggregat||"?")));}
     else if(k.art==="warte"){
       body.append(h("div",{class:"gsec",style:"opacity:.7"},"Wartet im Strom der Quelle auf das ERSTE dieser Events danach — jedes ist ein Ausgang; kommt keines binnen Zeitlimit, feuert ⏳. Ein Event nach dem Zeitlimit zählt nicht."));
-      flWarteAuf(k).forEach((t,i)=>body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",title:"nicht mehr darauf warten",onclick:()=>{k.warteAuf=flWarteAuf(k).filter((_,j)=>j!==i);k.typ=k.warteAuf[0]||"";render();}},"✕"),
-        h("span",{class:"slotlbl",style:"flex:1"},"⧗ "+t))));
-      const ws=recSelect("",v=>{if(!v)return;const l=flWarteAuf(k);if(!l.includes(v))l.push(v);k.warteAuf=l;k.typ=l[0];render();},["event"]);
-      body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"+ warte auf"),ws));}
+      flWarteAuf(k).forEach((t,i)=>body.append(typVerweis(t,{titel:"⧗",removeTitel:"nicht mehr darauf warten",
+        onRemove:()=>{k.warteAuf=flWarteAuf(k).filter((_,j)=>j!==i);k.typ=k.warteAuf[0]||"";render();}})));
+      const wp=port("open");wp.classList.add("i");reg("fs:ein:"+k._id,wp,{type:"evtUse",dir:"in",flk:k._id,role:"warte"});
+      body.append(h("div",{class:"slotrow"},wp,h("span",{class:"slotlbl"},"+ warte auf ⊕ (Event)")));}
     else if(k.art==="je"){body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"Liste"),h("input",{value:k.liste||"",placeholder:"x => x.Bilder",onchange:e=>{k.liste=e.target.value;render();}})));
       body.append(codePort("fle:"+k._id+":je",{k:"flussLambda",fluss:f._id,knoten:k._id,ei:null},k.codeSrc,"λ Liste",!!(f.datei&&k.liste)));
       body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"Element-Typ"),h("input",{value:k.typ||"",placeholder:"string",onchange:e=>{k.typ=e.target.value.trim();render();}})));
       body.append(h("div",{class:"gsec",style:"opacity:.6"},"Die folgenden Knoten laufen einmal je Element, parallel; „Sammle“ wartet auf alle (in Element-Reihenfolge)."));}
     if(k.art==="funktion"||k.art==="command"||k.art==="warte")body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"⏳ Zeitlimit"),
       h("input",{value:k.zeitlimit||"",placeholder:"z. B. TimeSpan.FromMinutes(5)",onchange:e=>{const v=e.target.value.trim();if(v)k.zeitlimit=v;else delete k.zeitlimit;render();}})));
-    // ── Eingänge ──
+    // ── Eingänge: Drähte von früheren Knoten (⊕ = einen Ausgang anklicken), dazu „je Element"/„sammle" aus einem Je-Rahmen ──
     if(!flQuelleArt(k)){body.append(h("div",{class:"gsec"},"◀ Eingang"+((k.eingaenge||[]).length>1?"  ·  ∨ jeder Weg einzeln":"")));
-      if(!(k.eingaenge||[]).length)body.append(h("div",{class:"gsec",style:"opacity:.6"},"Kein Draht — an einem Ausgang eines früheren Knotens „＋ dann …“ wählen."));
+      if(!(k.eingaenge||[]).length)body.append(h("div",{class:"gsec",style:"opacity:.6"},"Kein Draht — ⊕ hier und einen Ausgang eines früheren Knotens anklicken."));
       (k.eingaenge||[]).forEach((e,ei)=>flEingangZeilen(body,f,k,e,ei));
-      if(k.art!=="je"){const je=(f.knoten||[]).filter(x=>x.art==="je"&&x!==k&&!flErreicht(f,x.name,k.name));
-        if(je.length){const s=h("select",{onchange:ev=>{const v=ev.target.value;ev.target.value="";if(!v)return;const [m,nm]=v.split("|");
-            const e2=m==="el"?{je:nm,draehte:[]}:{je:nm,sammle:true,draehte:[]};(k.eingaenge=k.eingaenge||[]).push(e2);if(m==="el")e2.argumente=flAutoArgs(f,k,e2);flOrdne(f);render();}});
-          s.append(h("option",{value:""},"＋ aus Je-Rahmen …"));je.forEach(x=>{s.append(h("option",{value:"el|"+x.name},"⧉ je Element von "+x.name));s.append(h("option",{value:"sa|"+x.name},"⧉ sammle "+x.name));});
-          body.append(h("div",{class:"slotrow"},s));}}}
-    // ── Ausgänge: je Port die Abnehmer + „＋ dann …" ──
+      body.append(slotRow("open","+ Draht ◀ ⊕ (Ausgang eines früheren Knotens)","l",{type:"draht",dir:"in",flk:k._id},"fs:in:"+k._id));
+      if(k.art!=="je"&&(f.knoten||[]).some(x=>x.art==="je"&&x!==k)){
+        body.append(slotRow("open","+ je Element von ⊕ (Je-Rahmen)","l",{type:"jeEl",dir:"in",flk:k._id},"fs:jeein:"+k._id));
+        body.append(slotRow("open","+ sammle ⊕ (Je-Rahmen)","l",{type:"jeSa",dir:"in",flk:k._id},"fs:jesain:"+k._id));}}
+    // ── Ausgänge: je Port ⊕ (in einen bestehenden späteren Knoten, ∧/∨ automatisch) oder ＋ (neuer Knoten), darunter die Abnehmer ──
     body.append(h("div",{class:"gsec"},"Ausgänge ▶"));
-    const ports=k.art==="je"?[]:flPorts(k);
-    if(k.art==="je")body.append(h("div",{class:"gsec",style:"opacity:.6"},"Ein Je-Rahmen hat keinen Draht-Ausgang: Knoten nehmen „je Element“ als Eingang (oben im Panel des Knotens)."));
-    if(!ports.length&&k.art!=="je")body.append(h("div",{class:"gsec",style:"opacity:.6"},k.art==="funktion"?"Die Funktion hat noch kein Ergebnis — oben „+ neues Ergebnis“.":"Noch kein Typ gewählt."));
-    ports.forEach(p=>{const ab=flAbnehmer(f,k,p);
-      body.append(h("div",{class:"slotrow o fl-port"+(p.port!=="fall"?" fl-fehler":"")},h("span",{class:"slotlbl",style:"flex:1"},p.label+" ▶"),flDannAuswahl(f,k,p)));
-      ab.forEach(({z,e})=>body.append(h("div",{class:"slotrow o fl-ab"},h("span",{class:"fl-ziel",onclick:()=>zeigeKnoten("fs:"+z._id)},"→ "+(FL_SYM[z.art]||"")+" "+z.name+((e.draehte||[]).length>1?"  (∧)":"")),
-        h("button",{class:"rm",title:"Draht lösen",onclick:()=>{const d=e.draehte.find(x=>x.von===k.name&&flPortGleich(x,p));if(d)flLoese(f,z,e,d);render();}},"✕"))));});
+    if(k.art==="je"){
+      body.append(slotRow("open","je Element ▶ ⊕ (Knoten, die einmal je Element laufen)","r",{type:"jeEl",dir:"out",flk:k._id},"fs:jeel:"+k._id));
+      body.append(slotRow("open","sammle ▶ ⊕ (Knoten, die auf alle Elemente warten)","r",{type:"jeSa",dir:"out",flk:k._id},"fs:jesa:"+k._id));
+      (f.knoten||[]).forEach(z=>(z.eingaenge||[]).forEach(e=>{if(e.je!==k.name)return;
+        body.append(h("div",{class:"slotrow o fl-ab"},h("span",{class:"fl-ziel",onclick:()=>zeigeKnoten("fs:"+z._id)},"→ "+(FL_SYM[z.art]||"")+" "+z.name+(e.sammle?"  (sammle)":"  (je Element)")),
+          h("button",{class:"rm",title:"lösen",onclick:()=>{z.eingaenge=z.eingaenge.filter(x=>x!==e);render();}},"✕")));}));}
+    else{const ports=flPorts(k);
+      if(!ports.length)body.append(h("div",{class:"gsec",style:"opacity:.6"},k.art==="funktion"?(k.typ?"Die Funktion hat noch kein Ergebnis — an ihrer Karte „+ Ergebnis“.":"Erst ⊕ eine Funktion verbinden — ihre Ergebnisse sind die Ausgänge."):"Erst ⊕ verbinden — die Ausgänge folgen daraus."));
+      ports.forEach(p=>{const ab=flAbnehmer(f,k,p),op=port("open");op.classList.add("o");reg(flAusKey(k,p),op,{type:"draht",dir:"out",flk:k._id,port:p.port,fall:p.fall||null});
+        const neu=[["funktion","＋ƒ","Neuer Funktions-Knoten an diesem Ausgang (was er ruft: an ihm ⊕)"],["command","＋▶","Neuer Command-Knoten an diesem Ausgang (was er sendet: an ihm ⊕)"]];
+        if(p.port==="fall")neu.push(["je","＋⧉","Neuer Je-Rahmen: die folgenden Knoten laufen je Element einer Liste"]);
+        if(p.port==="strom")neu.push(["warte","＋⧗","Auf ein späteres Event in diesem Strom warten — mit Zeitlimit (Frist als Rennen)"]);
+        body.append(h("div",{class:"slotrow o fl-port"+(p.port!=="fall"?" fl-fehler":"")},h("span",{class:"slotlbl",style:"flex:1"},p.label+" ▶"),
+          ...neu.map(([a,t,ti])=>neuKnopf(ti,()=>flNeuAmPort(f,k,p,a),t)),op));
+        ab.forEach(({z,e})=>body.append(h("div",{class:"slotrow o fl-ab"},h("span",{class:"fl-ziel",onclick:()=>zeigeKnoten("fs:"+z._id)},"→ "+(FL_SYM[z.art]||"")+" "+z.name+((e.draehte||[]).length>1?"  (∧)":"")),
+          h("button",{class:"rm",title:"Draht lösen",onclick:()=>{const d=e.draehte.find(x=>x.von===k.name&&flPortGleich(x,p));if(d)flLoese(f,z,e,d);render();}},"✕"))));});}
     body.append(h("button",{class:"add",style:"margin-top:8px",onclick:()=>{flLoeschen(f,k);SEL=null;render();}},"🗑 Knoten löschen"));
     body.append(h("button",{class:"add",onclick:()=>{MODEL.fluesse.splice(MODEL.fluesse.indexOf(f),1);SEL=null;render();}},"🗑 Pipeline löschen"));}
   // Ein Eingang im Panel: seine Drähte (∧/∨ umschaltbar, ✕ lösen) und die Zuordnung „Feld ← Ausdruck".
@@ -2715,20 +2760,156 @@ public static class HtmlPresenter
         h("button",{class:"rm",title:"Draht lösen",onclick:()=>{flLoese(f,k,e,d);render();}},"✕")));});
     // Der Lambda dieses Eingangs ist Logik: 📝 Code-Block + optional 🤖 (füllt/ändert genau diesen Lambda).
     if(flMitLambda(k))body.append(codePort("fle:"+k._id+":"+ei,{k:"flussLambda",fluss:f._id,knoten:k._id,ei},e.codeSrc,"λ Zuordnung",!!(f.datei&&e.ausdruck)));
-    // Zuordnung: ein aus dem Code gelesener Lambda bleibt, bis man ihn als Tabelle bearbeitet.
+    // Zuordnung „Zielfeld ← Eingang": visuell im Zuordnungs-Editor (Knoten + Drähte); im Panel nur die Kurzfassung.
     const z=flZiel(k);if(!z||k.art==="je")return;
-    if(e.ausdruck){body.append(h("pre",{class:"fl-lambda",title:"Bau-Lambda aus dem Code (verbatim)"},e.ausdruck));
-      body.append(h("button",{class:"add",title:"Den gelesenen Ausdruck durch eine Feld-Zuordnung ersetzen",onclick:()=>{delete e.ausdruck;e.argumente=flAutoArgs(f,k,e);render();}},"⇄ als Zuordnung bearbeiten"));return;}
-    const fs=z.felder||[];if(!fs.length){body.append(h("div",{class:"gsec",style:"opacity:.6"},z.name+" hat keine Felder."));return;}
-    if(!e.argumente||e.argumente.length!==fs.length){const auto=flAutoArgs(f,k,e);e.argumente=fs.map((_,i)=>(e.argumente||[])[i]||auto[i]||"default");}
-    const ps=flParameter(f,e);body.append(h("div",{class:"gsec"},z.name+"(…) ← "+ps.join(", ")));
-    const kand=flKandidaten(f,e),dl="fldl"+(NID++);
-    fs.forEach((fe,i)=>{const vor=kand.filter(x=>x.typ===baseTyp(fe.typ)||!x.typ).map(x=>x.ausdruck);
-      const ein=h("input",{value:e.argumente[i]||"",list:dl+"_"+i,placeholder:"default",style:e.argumente[i]==="default"?"border-color:#cf6f68":"",
-        onchange:ev=>{e.argumente[i]=ev.target.value.trim()||"default";render();}});
-      body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl",style:"min-width:40%"},fe.name+" : "+fe.typ),ein,
-        h("datalist",{id:dl+"_"+i},...vor.map(v=>h("option",{value:v})),h("option",{value:"default"}))));});
-    body.append(h("button",{class:"add",onclick:()=>{e.argumente=flAutoArgs(f,k,e);render();}},"↻ automatisch zuordnen"));}
+    const cn=e.codeSrc&&MODEL.codeNodes.find(c=>c._id===e.codeSrc);
+    zoKurz(body,()=>({titel:"⛓ "+f.name+" · "+k.name+" (Eingang "+(ei+1)+")",ziel:z.name,
+      params:flQuellen(f,e).map(q=>({p:q.p,typ:q.typ,felder:q.felder})),args:e.argumente,ausdruck:e.ausdruck,
+      block:cn&&(cn.text||"").trim()?{name:cn.name,text:cn.text,loesen:()=>setCodeSrc({k:"flussLambda",fluss:f._id,knoten:k._id,ei},null)}:null,
+      schreibe:a=>{e.argumente=a;delete e.ausdruck;},auto:()=>flAutoArgs(f,k,e)}));}
+  // ══ ZUORDNUNGS-EDITOR (visuell, Knoten + Drähte): baut den Eingang eines Aufrufs — links die Eingänge (Lambda-Parameter mit ihren
+  //   Feldern, Wert-Objekte aufgeklappt), rechts das Ziel (Auftrag/Command) mit seinen Feldern, dazwischen Bau-Knoten: „new V(…)" für
+  //   ein Wert-Objekt (seine Felder sind wieder Eingänge) und „ƒx" für einen freien Ausdruck. Ein Draht = ein Argument. Gespeichert wird
+  //   wie bisher die Argument-Liste je Zielfeld (der Scaffolder schreibt daraus p => new Ziel(…)); ein aus dem Code gelesener Lambda
+  //   wird beim Öffnen in Knoten zerlegt (Parameter-Namen angeglichen) und erst bei einer Änderung durch die Zuordnung ersetzt.
+  let ZO=null;
+  // Argumente auf oberster Ebene trennen (Klammern und Zeichenketten zählen, „=>" ist kein Schließen).
+  function zoSplit(s){const out=[];let d=0,q=null,cur="";for(let i=0;i<s.length;i++){const c=s[i];
+      if(q){cur+=c;if(c==="\\"){cur+=s[++i]||"";continue;}if(c===q)q=null;continue;}
+      if(c==='"'||c==="'"){q=c;cur+=c;continue;}
+      if("([{".includes(c))d++;else if(")]}".includes(c))d--;
+      if(c===","&&d===0){out.push(cur.trim());cur="";continue;}cur+=c;}
+    if(cur.trim())out.push(cur.trim());return out;}
+  // „new X(a, b)" → {typ, args} — nur, wenn die schließende Klammer das Ende ist.
+  function zoKonstruktor(s){const m=/^new\s+([A-Za-z_][\w.]*)\s*\(/.exec(s||"");if(!m)return null;let d=0,q=null,start=m[0].length-1;
+    for(let i=start;i<s.length;i++){const c=s[i];if(q){if(c==="\\"){i++;continue;}if(c===q)q=null;continue;}
+      if(c==='"'||c==="'"){q=c;continue;}if(c==="(")d++;else if(c===")"){d--;if(d===0)return i===s.length-1?{typ:m[1].split(".").pop(),args:zoSplit(s.slice(start+1,i))}:null;}}
+    return null;}
+  // Ein gelesener Lambda „(a, b) => new Ziel(…)" → Argument-Liste mit den Parameter-Namen des Editors; sonst null.
+  function zoLambda(aus,namen,ziel,anzahl){const m=/^\s*(?:\(([^)]*)\)|([A-Za-z_]\w*))\s*=>\s*([\s\S]*?)\s*;?\s*$/.exec(aus||"");if(!m)return null;
+    const ps=(m[1]!=null?m[1].split(","):[m[2]]).map(x=>x.trim().split(/\s+/).pop()).filter(Boolean);
+    const k=zoKonstruktor(m[3].trim());if(!k||k.typ!==ziel||k.args.length!==anzahl)return null;
+    return k.args.map(a=>{ps.forEach((p,i)=>{if(namen[i]&&p!==namen[i])a=a.replace(new RegExp("\\b"+p+"\\b","g"),"§"+i+"§");});return a.replace(/§(\d+)§/g,(_,i)=>namen[+i]);});}
+  // Alle Quell-Ausdrücke mit Typ: der Parameter selbst, seine Felder und (eine Ebene) die Felder seiner Wert-Objekte.
+  function zoQuellTypen(params){const m=new Map();params.forEach(pa=>{m.set(pa.p,pa.typ||"");(pa.felder||[]).forEach(f=>{const t=baseTyp(f.typ),x=pa.p+"."+f.name;m.set(x,t);
+      const vo=recByName(t);if(vo&&vo.kind==="valueobject")(vo.felder||[]).forEach(g=>m.set(x+"."+g.name,baseTyp(g.typ)));});});return m;}
+  function zoWert(s,qt){s=(s||"").trim();if(!s||s==="default"||s==="default!")return {a:"leer"};
+    if(qt.has(s))return {a:"q",x:s};
+    const k=zoKonstruktor(s);if(k){const r=recByName(k.typ);if(r&&(r.felder||[]).length===k.args.length)return {a:"neu",typ:r.name,args:k.args.map(x=>zoWert(x,qt))};}
+    return {a:"text",x:s};}
+  const zoText=w=>w.a==="q"?w.x:w.a==="text"?((w.x||"").trim()||"default"):w.a==="neu"?"new "+w.typ+"("+w.args.map(zoText).join(", ")+")":"default";
+  function zoHol(p){let w=ZO.baum[p[0]];for(let i=1;i<p.length;i++)w=w&&w.args?w.args[p[i]]:null;return w;}
+  function zoSetze(p,w){if(p.length===1)ZO.baum[p[0]]=w;else{const e=zoHol(p.slice(0,-1));if(e&&e.args)e.args[p[p.length-1]]=w;}zoSchreib();zoRender();}
+  function zoSchreib(){ZO.ctx.schreibe(ZO.baum.map(zoText));ZO.roh=null;autosave();}
+  const zoPasst=(a,b)=>!a||!b||baseTyp(a)===baseTyp(b);
+  function zoOeffne(ctx){const z=recByName(ctx.ziel);if(!z){deFlash("Kein Ziel-Typ — erst ⊕ eine Funktion bzw. einen Command verbinden.",false);return;}
+    const n=(z.felder||[]).length,qt=zoQuellTypen(ctx.params);ctx.qt=qt;let args=null,roh=null;
+    if(ctx.ausdruck){args=zoLambda(ctx.ausdruck,ctx.params.map(p=>p.p),z.name,n);if(!args)roh=ctx.ausdruck;}
+    if(!args)args=ctx.args&&ctx.args.length===n?ctx.args:ctx.auto();
+    ZO={ctx,z,baum:(z.felder||[]).map((_,i)=>zoWert(args[i],qt)),roh,arm:null};
+    document.addEventListener("keydown",zoTaste,true);zoRender();}
+  function zoTaste(e){if(e.key!=="Escape")return;e.stopPropagation();e.preventDefault();if(ZO&&ZO.arm){ZO.arm=null;zoRender();}else zoZu();}
+  function zoZu(){ZO=null;document.removeEventListener("keydown",zoTaste,true);const o=document.getElementById("gzo");if(o)o.remove();render();}
+  // Ausgangs-Punkt (Quelle oder Bau-Knoten) und Eingangs-Punkt (Zielfeld bzw. Feld eines Bau-Knotens).
+  function zoAus(src){const s=h("span",{class:"zo-p zo-o"+(ZO.arm&&JSON.stringify(ZO.arm)===JSON.stringify(src)?" zo-arm":""),title:"Ziehen (oder anklicken, dann ein Feld anklicken) = verbinden"});
+    s.dataset.src=JSON.stringify(src);s.onpointerdown=e=>zoZiehe(e,src,s);return s;}
+  function zoEin(pfad,typ){const s=h("span",{class:"zo-p zo-i",title:"Eingang "+(typ||"")+" — hier ablegen"});s.dataset.pfad=JSON.stringify(pfad);s.dataset.t=typ||"";
+    s.onclick=()=>{if(ZO.arm)zoVerbinde(ZO.arm,pfad,typ);};return s;}
+  function zoVerbinde(src,pfad,typ){
+    if(!zoPasst(src.t,typ)){deFlash("Typ passt nicht: "+(src.t||"?")+" → "+(typ||"?"),false);return;}
+    ZO.arm=null;
+    if(src.x!=null){zoSetze(pfad,{a:"q",x:src.x});return;}
+    const k=JSON.stringify(src.n),z=JSON.stringify(pfad);if(z===k||z.startsWith(k.slice(0,-1)+","))return;   // nicht in sich selbst
+    const w=zoHol(src.n);ZO.arm=null;if(src.n.length===1)ZO.baum[src.n[0]]={a:"leer"};else{const e=zoHol(src.n.slice(0,-1));e.args[src.n[src.n.length-1]]={a:"leer"};}
+    zoSetze(pfad,w);}
+  // Ziehen per Pointer-Capture am Anschluss (Bewegung/Loslassen kommen sicher an); ohne Bewegung = Quelle wählen (Klick-Klick).
+  function zoZiehe(e,src,el){e.preventDefault();e.stopPropagation();const box=ZO.flaeche,svg=ZO.svg,br=()=>box.getBoundingClientRect();
+    const p0=zoPunkt(el),tmp=document.createElementNS("http://www.w3.org/2000/svg","path");tmp.setAttribute("class","zo-tmp");svg.append(tmp);
+    box.querySelectorAll(".zo-i").forEach(i=>i.classList.add(zoPasst(src.t,i.dataset.t)?"zo-ok":"zo-nein"));
+    let bewegt=false,fertig=false;const sx=e.clientX,sy=e.clientY;try{el.setPointerCapture(e.pointerId);}catch(_){}
+    const mv=ev=>{if(Math.abs(ev.clientX-sx)+Math.abs(ev.clientY-sy)>4)bewegt=true;const r=br();
+      tmp.setAttribute("d",zoBez(p0.x,p0.y,ev.clientX-r.left+box.scrollLeft,ev.clientY-r.top+box.scrollTop));};
+    const ende=ev=>{if(fertig)return;fertig=true;el.removeEventListener("pointermove",mv);el.removeEventListener("pointerup",ende);
+      el.removeEventListener("lostpointercapture",ende);tmp.remove();box.querySelectorAll(".zo-i").forEach(i=>i.classList.remove("zo-ok","zo-nein"));
+      if(!bewegt){ZO.arm=ZO.arm&&JSON.stringify(ZO.arm)===JSON.stringify(src)?null:src;zoRender();return;}
+      const t=document.elementFromPoint(ev.clientX,ev.clientY),ziel=t&&t.closest&&t.closest(".zo-i");
+      if(ziel)zoVerbinde(src,JSON.parse(ziel.dataset.pfad),ziel.dataset.t);};
+    el.addEventListener("pointermove",mv);el.addEventListener("pointerup",ende);el.addEventListener("lostpointercapture",ende);}
+  const zoBez=(x1,y1,x2,y2)=>{const dx=Math.max(40,Math.abs(x2-x1)*0.5);return "M"+x1+","+y1+" C"+(x1+dx)+","+y1+" "+(x2-dx)+","+y2+" "+x2+","+y2;};
+  function zoPunkt(el){const r=el.getBoundingClientRect(),b=ZO.flaeche.getBoundingClientRect();
+    return {x:r.left+r.width/2-b.left+ZO.flaeche.scrollLeft,y:r.top+r.height/2-b.top+ZO.flaeche.scrollTop};}
+  // Eine Feld-Zeile mit Eingang: Name : Typ, woher der Wert kommt, ＋ new V / ƒx / ✕.
+  function zoFeld(f,w,pfad){const t=baseTyp(f.typ),vo=recByName(t),row=h("div",{class:"zo-r"+(w.a==="leer"?" zo-leer":"")});
+    row.append(zoEin(pfad,t),h("span",{class:"zo-l"},f.name),h("span",{class:"zo-t"},f.typ));
+    row.append(h("span",{class:"zo-v"},w.a==="q"?"← "+w.x:w.a==="neu"?"← new "+w.typ:w.a==="text"?"← ƒx":"default"));
+    if(vo&&vo.kind==="valueobject"&&w.a!=="neu")row.append(h("button",{class:"zo-b",title:"Wert-Objekt "+vo.name+" aus seinen Feldern bauen (Bau-Knoten)",
+      onclick:()=>zoSetze(pfad,{a:"neu",typ:vo.name,args:(vo.felder||[]).map(()=>({a:"leer"}))})},"＋ new "+vo.name));
+    if(w.a!=="text")row.append(h("button",{class:"zo-b",title:"Freier C#-Ausdruck als Wert (Bau-Knoten ƒx)",onclick:()=>zoSetze(pfad,{a:"text",x:w.a==="q"?w.x:""})},"ƒx"));
+    if(w.a!=="leer")row.append(h("button",{class:"zo-b zo-x",title:"Verbindung lösen (default)",onclick:()=>zoSetze(pfad,{a:"leer"})},"✕"));
+    return row;}
+  function zoRender(){let o=document.getElementById("gzo");if(!ZO){if(o)o.remove();return;}
+    const alt=o&&o.querySelector(".zo-f"),sl=alt?alt.scrollLeft:0,st=alt?alt.scrollTop:0;
+    if(!o){o=h("div",{id:"gzo"});["pointerdown","wheel","click","dblclick"].forEach(ev=>o.addEventListener(ev,e=>e.stopPropagation()));document.body.append(o);}
+    o.textContent="";const {ctx,z}=ZO;
+    const kopfP=ctx.params.map(p=>p.p),kopf=kopfP.length===1?kopfP[0]:"("+kopfP.join(", ")+")";
+    o.append(h("div",{class:"zo-k"},h("b",{},"🔀 Zuordnung"),h("span",{class:"zo-sub2"},ctx.titel),h("span",{style:"flex:1"}),
+      h("button",{title:"Jedes Zielfeld aus den Eingängen vorschlagen (gleicher Name → Namensende + Typ → einziger gleicher Typ)",
+        onclick:()=>{ZO.baum=ctx.auto().map(x=>zoWert(x,ctx.qt));zoSchreib();zoRender();}},"↻ automatisch"),
+      h("button",{class:"go",onclick:zoZu},"Fertig (Esc)")));
+    if(ctx.block&&ctx.block.text)o.append(h("div",{class:"zo-hin"},"⚠ Der Lambda kommt aus dem 📝-Block „"+ctx.block.name+"“ — er hat beim Schreiben Vorrang. ",
+      h("button",{onclick:()=>{ctx.block.loesen();ctx.block=null;zoRender();}},"Block lösen, Zuordnung gilt")));
+    if(ZO.roh)o.append(h("div",{class:"zo-hin"},"Der Lambda aus dem Code ist kein einfacher Konstruktor — die erste Änderung ersetzt ihn durch die Zuordnung:",h("pre",{},ZO.roh)));
+    if(ZO.arm)o.append(h("div",{class:"zo-hin"},"Quelle gewählt — jetzt ein passendes Feld (grün) anklicken · Esc = abbrechen"));
+    const fl=h("div",{class:"zo-f"}),spalten=h("div",{class:"zo-sp"}),svg=document.createElementNS("http://www.w3.org/2000/svg","svg");svg.setAttribute("class","zo-svg");
+    ZO.flaeche=fl;ZO.svg=svg;fl.append(svg,spalten);o.append(fl);
+    // Links: Eingänge.
+    const links=h("div",{class:"zo-col"},h("div",{class:"zo-ct"},"◀ Eingänge (Drähte)"));
+    ctx.params.forEach(pa=>{const fehlt=pa.typ&&!(pa.felder||[]).length&&!recByName(baseTyp(pa.typ))&&!/^IReadOnlyList</.test(pa.typ);
+      const card=h("div",{class:"zo-n zo-q"},h("div",{class:"zo-nh"},h("span",{style:"flex:1"},pa.p+" : "+(pa.typ||"?")),
+        fehlt?h("span",{class:"zo-x",title:"Diesen Typ gibt es (noch) nicht — als Karte anlegen, dann erscheinen seine Felder"},"⚠ Typ fehlt"):null,zoAus({x:pa.p,t:pa.typ||""})));
+      (pa.felder||[]).forEach(f=>{const x=pa.p+"."+f.name,t=baseTyp(f.typ);card.append(h("div",{class:"zo-r"},h("span",{class:"zo-l"},f.name),h("span",{class:"zo-t"},f.typ),zoAus({x,t})));
+        const vo=recByName(t);if(vo&&vo.kind==="valueobject")(vo.felder||[]).forEach(g=>card.append(h("div",{class:"zo-r zo-tief"},h("span",{class:"zo-l"},"· "+g.name),h("span",{class:"zo-t"},g.typ),zoAus({x:x+"."+g.name,t:baseTyp(g.typ)}))));});
+      links.append(card);});
+    if(!ctx.params.length)links.append(h("div",{class:"zo-leer2"},"Kein Draht im Eingang — erst einen Draht verbinden."));
+    // Mitte: Bau-Knoten (Wert-Objekt, Ausdruck) — rekursiv aus dem Baum.
+    const mitte=h("div",{class:"zo-col"},h("div",{class:"zo-ct"},"Bau-Knoten"));
+    const baue=(w,pfad)=>{if(w.a==="neu"){const v=recByName(w.typ);
+        const card=h("div",{class:"zo-n zo-bau"},h("div",{class:"zo-nh"},h("span",{style:"flex:1"},"new "+w.typ+"(…)"),zoAus({n:pfad,t:w.typ})));
+        ((v&&v.felder)||[]).forEach((g,j)=>card.append(zoFeld(g,w.args[j]||{a:"leer"},pfad.concat(j))));mitte.append(card);
+        w.args.forEach((a,j)=>baue(a,pfad.concat(j)));}
+      else if(w.a==="text"){const dl="zodl"+pfad.join("_");
+        mitte.append(h("div",{class:"zo-n zo-bau"},h("div",{class:"zo-nh"},h("span",{style:"flex:1"},"ƒx Ausdruck"),zoAus({n:pfad,t:""})),
+          h("input",{value:w.x||"",list:dl,placeholder:"C#, z. B. "+(kopfP[0]||"p")+".Feld ?? \"\"",onchange:e=>{w.x=e.target.value;zoSchreib();zoRender();}}),
+          h("datalist",{id:dl},...[...ctx.qt.keys()].map(x=>h("option",{value:x})))));}};
+    ZO.baum.forEach((w,i)=>baue(w,[i]));
+    if(mitte.childNodes.length===1)mitte.append(h("div",{class:"zo-leer2"},"Keine — an einem Zielfeld „＋ new …“ oder „ƒx“."));
+    // Rechts: das Ziel.
+    const rechts=h("div",{class:"zo-col"},h("div",{class:"zo-ct"},"Ziel ▶"));
+    const zc=h("div",{class:"zo-n zo-z"},h("div",{class:"zo-nh"},h("span",{style:"flex:1;cursor:pointer",title:"Karte öffnen",onclick:()=>{const id="rec:"+z.name;zoZu();zeigeLadend(id);}},"new "+z.name+"(…)")));
+    (z.felder||[]).forEach((f,i)=>zc.append(zoFeld(f,ZO.baum[i]||{a:"leer"},[i])));
+    if(!(z.felder||[]).length)zc.append(h("div",{class:"zo-leer2"},z.name+" hat keine Felder — an seiner Karte „+ Feld“."));
+    rechts.append(zc);spalten.append(links,mitte,rechts);
+    o.append(h("div",{class:"zo-fuss"},h("span",{class:"zo-ct"},"Lambda"),h("pre",{},kopf+" => new "+z.name+"("+ZO.baum.map(zoText).join(", ")+")")));
+    fl.scrollLeft=sl;fl.scrollTop=st;
+    requestAnimationFrame(()=>{if(!ZO||ZO.svg!==svg)return;svg.setAttribute("width",fl.scrollWidth);svg.setAttribute("height",fl.scrollHeight);
+      if(ZO.arm)fl.querySelectorAll(".zo-i").forEach(i=>i.classList.add(zoPasst(ZO.arm.t,i.dataset.t)?"zo-ok":"zo-nein"));
+      const aus=new Map([...fl.querySelectorAll(".zo-o")].map(e=>[e.dataset.src,e]));
+      fl.querySelectorAll(".zo-i").forEach(ein=>{const pfad=JSON.parse(ein.dataset.pfad),w=zoHol(pfad);if(!w||w.a==="leer")return;
+        const t=fl.querySelector('.zo-o[data-src="'+CSS.escape(JSON.stringify(w.a==="q"?{x:w.x,t:ctx.qt.get(w.x)||""}:{n:pfad,t:w.a==="neu"?w.typ:""}))+'"]')
+          ||[...aus.values()].find(e=>{const s=JSON.parse(e.dataset.src);return w.a==="q"?s.x===w.x:JSON.stringify(s.n)===JSON.stringify(pfad);});
+        if(!t)return;const a=zoPunkt(t),b=zoPunkt(ein),p=document.createElementNS("http://www.w3.org/2000/svg","path");
+        p.setAttribute("d",zoBez(a.x,a.y,b.x,b.y));p.setAttribute("class","zo-draht"+(w.a==="q"?"":" zo-draht-bau"));
+        const ti=document.createElementNS("http://www.w3.org/2000/svg","title");ti.textContent="Klick: lösen";p.append(ti);
+        p.onclick=()=>zoSetze(pfad,{a:"leer"});svg.append(p);});});}
+  // Kurzfassung im Panel: je Zielfeld seine Quelle — bearbeitet wird im Zuordnungs-Editor.
+  function zoKurz(body,mk){const ctx=mk(),z=recByName(ctx.ziel);if(!z)return;
+    const n=(z.felder||[]).length,args=ctx.ausdruck?zoLambda(ctx.ausdruck,ctx.params.map(p=>p.p),z.name,n):(ctx.args&&ctx.args.length===n?ctx.args:null);
+    const box=h("div",{class:"zo-kurz",title:"Klick: Zuordnung im Knoten-Editor bearbeiten",onclick:()=>zoOeffne(mk())});
+    box.append(h("div",{class:"zo-kurz-k"},"🔀 "+z.name+"(…) ← "+ctx.params.map(p=>p.p).join(", ")));
+    if(ctx.ausdruck&&!args)box.append(h("pre",{class:"fl-lambda"},ctx.ausdruck));
+    else (z.felder||[]).forEach((f,i)=>{const a=(args||[])[i]||"default";box.append(h("div",{class:"zo-kurz-r"+(a==="default"?" zo-leer":"")},f.name+" ← "+a));});
+    box.append(h("button",{class:"add",onclick:e=>{e.stopPropagation();zoOeffne(mk());}},"🔀 Zuordnung im Knoten-Editor"));
+    body.append(box);}
   function flussKurz(n){const k=n.ref,f=n.own.ref;
     if(flQuelleArt(k))return (k.art==="quelle"?"Quelle · meldet ":"Auf ")+(k.typ||"?")+(k.bindungen||[]).map(b=>(b.modus==="webhook"?" · 🔗 ":" · ")+(b.ort||"")).join("");
     if(k.art==="je")return "je Element · "+(k.liste||"Liste?");
@@ -2883,7 +3064,8 @@ public static class HtmlPresenter
     const push=(a,b)=>{if(a&&b)E.push([a,b]);};
     // Akteur → was er darf (Command/Query über die Record-Karte, Trigger über die Trigger-Karte).
     MODEL.akteure.forEach(a=>(a.darf||[]).forEach(nm=>{if(recByName(nm))push("akt:"+a._id,rec(nm));
-      else{const t=MODEL.triggers.find(x=>trigName(x)===nm);if(t)push("akt:"+a._id,"tg:"+t._id);}}));
+      else{const t=MODEL.triggers.find(x=>trigName(x)===nm);if(t)push("akt:"+a._id,"tg:"+t._id);
+        else{const fk=MODEL.funktionen.find(x=>x.name===nm);if(fk)push("akt:"+a._id,"fk:"+fk._id);}}}));   // IDarf<IFunktion>: bietet an
     // Vertrag (Akteur-Konzept §3): Event → Zusage → Commands; die Zusage hängt an ihrem Akteur (Hub-Kante wie Handle → Besitzer).
     vertragsZusagen().forEach(({a,r,id})=>{push(id,"akt:"+a._id);if(recByName(r.eingang))push(rec(r.eingang),id);
       (r.ausgaenge||[]).forEach(c=>{if(recByName(c))push(id,rec(c));});});
@@ -2893,8 +3075,11 @@ public static class HtmlPresenter
       if(d.codeSrc)push(codeId(d.codeSrc),"dec:"+d._id);});
     // Pipelines (Fluss): Drähte zwischen den Knoten; Quelle ← ihre Nachricht, Command-Knoten → sein Command, ƒ-Knoten → die Funktion.
     //   Drähte Knoten → Knoten; dazu die Zuweisung (ƒ → Funktion, ▶ → Command, ⛲ → Nachricht) und ◆/⧗ ← Event.
+    //   Richtung = Fluss der Nachricht: die Quell-Nachricht kommt HEREIN (Nachricht → ⛲), ein Draht trägt ein Ergebnis/Event des
+    //   Vorgängers (Ergebnis-Karte → Folgeknoten) — so läuft die Kette durch Funktion und Domäne in die Pipeline zurück.
     MODEL.fluesse.forEach(f=>(f.knoten||[]).forEach(z=>{flVor(z).forEach(v=>{const q=flKnoten(f,v);if(q)push("fs:"+q._id,"fs:"+z._id);});
-      const zw=flZuweisung(z);if(zw)push("fs:"+z._id,zw);
+      const zw=flZuweisung(z);if(zw){if(flQuelleArt(z))push(zw,"fs:"+z._id);else push("fs:"+z._id,zw);}
+      (z.eingaenge||[]).forEach(e=>(e.draehte||[]).forEach(d=>{if((d.port||"fall")==="fall"&&d.fall&&recByName(d.fall))push(rec(d.fall),"fs:"+z._id);}));
       flHoert(z).forEach(nm=>{if(recByName(nm))push(rec(nm),"fs:"+z._id);});
       if(z.codeSrc)push(codeId(z.codeSrc),"fs:"+z._id);(z.eingaenge||[]).forEach(e=>{if(e.codeSrc)push(codeId(e.codeSrc),"fs:"+z._id);});}));
     MODEL.applier.forEach(a=>{if(recByName(a.event))push(rec(a.event),"app:"+a._id);
@@ -2908,7 +3093,9 @@ public static class HtmlPresenter
         if(d.codeSrc)push(codeId(d.codeSrc),"tr:"+t._id);if(d.kompCodeSrc)push(codeId(d.kompCodeSrc),"tr:"+t._id);});});
     MODEL.clients.forEach(c=>(c.implementierungen||[]).forEach(im=>(im.rumpfe||[]).forEach(x=>{if(x.codeSrc)push(codeId(x.codeSrc),"cl:"+c._id);})));
     MODEL.funktionen.forEach(f=>{if(recByName(f.auftrag))push(rec(f.auftrag),"fk:"+f._id);if(f.codeSrc)push(codeId(f.codeSrc),"fk:"+f._id);
-      (f.ergebnisse||[]).forEach(e=>{if(recByName(e))push("fk:"+f._id,rec(e));});});
+      (f.ergebnisse||[]).forEach(e=>{if(recByName(e))push("fk:"+f._id,rec(e));});
+      // ⚙ Lese-Fähigkeit → die Read-Fn, deren Interface sie ist (wie Handle → Fn).
+      (f.faehigkeiten||[]).forEach(p=>{const z=leseFnZu(p.typ);if(z)push("fk:"+f._id,"fn:"+z.fn._id);});});
     MODEL.readModels.forEach(rm=>{const st=MODEL.stores.find(s=>s.name===rm.store);if(st)push("rm:"+rm._id,"sto:"+st._id);});
     // Store-Fns: eigene Knoten am Store (Hub-Kante Fn → Store), ihr Impl-Rumpf hängt an der Fn.
     MODEL.stores.forEach(st=>(st.writeFns||[]).concat(st.readFns||[]).forEach(fn=>{push("fn:"+fn._id,"sto:"+st._id);if(fn.codeSrc)push(codeId(fn.codeSrc),"fn:"+fn._id);}));
@@ -3001,6 +3188,8 @@ public static class HtmlPresenter
     if(k==="handle"||k==="fn") return groupKeyOf(n.own);   // Handle/Fn gehören zu ihrem Besitzer
     if(k==="state") return r.aggregat||SHARED_KEY;
     if(k==="decider"||k==="applier") return r.aggregat||SHARED_KEY;
+    // Ein Ergebnis einer Funktion (das kein Decider erzeugt) steht bei seiner Funktion — wie ein Event beim Decider.
+    if(k==="event"&&ergebnisVon(r.name)&&!MODEL.decider.some(d=>(d.ergibt||[]).some(o=>o.event===r.name)))return ergebnisAgg(r.name)||recordAgg(r.name)||SHARED_KEY;
     if(k==="command"||k==="event"||k==="rejection") return recordAgg(r.name)||ergebnisAgg(r.name)||SHARED_KEY;
     if(k==="valueobject"||k==="enum") return typAgg(r.name)||SHARED_KEY;
     if(k==="projektion"){const a=(r.handles||[]).map(h=>recordAgg(h.event));return (a.length&&eindeutig(a))||SHARED_KEY;}
@@ -3032,9 +3221,11 @@ public static class HtmlPresenter
     return eindeutig(a.filter(Boolean));}
   const triggerKonsument=nm=>MODEL.pipelines.find(p=>(p.handles||[]).some(hd=>(hd.inputKind||"event")==="trigger"&&pipeEingang(hd)===nm));
   function sagaAgg(sg){const a=sagaAggs(sg);return a.length===1?a[0]:"";}
-  // Eine Funktion gehört dorthin, wo die Prozesse liegen, die sie rufen; ihr Auftrag und ihre Ergebnisse mit ihr.
+  // Eine Funktion gehört dorthin, wo die Prozesse liegen, die sie rufen — sonst zum Aggregat, das ihre Ergebnisse faltet (eine
+  //   Pipeline ruft sie). Ihr Auftrag und ihre Ergebnisse stehen mit ihr im selben Block: Auftrag · ƒ · Ergebnis nebeneinander.
   function funktionAgg(f){return eindeutig(MODEL.transitions.filter(t=>(t.dann||[]).some(d=>d.rufe===f.name))
-    .map(t=>MODEL.sagas.find(x=>x.name===t.prozess)).filter(Boolean).map(sagaAgg).filter(Boolean));}
+    .map(t=>MODEL.sagas.find(x=>x.name===t.prozess)).filter(Boolean).map(sagaAgg).filter(Boolean))
+    ||eindeutig((f.ergebnisse||[]).map(recordAgg).filter(Boolean));}
   const ergebnisVon=nm=>MODEL.funktionen.find(f=>(f.ergebnisse||[]).includes(nm));
   function ergebnisAgg(nm){const f=ergebnisVon(nm);return f?funktionAgg(f):"";}
   // ── MESS-BASIERTES PACKING: nach dem Rendern die ECHTEN Knotengrößen messen und die Aggregat-
@@ -3453,7 +3644,16 @@ public static class HtmlPresenter
   const AUS_ZIEL=new Set(["sagaCmd","evtOut","trgIn"]);
   function compatible(a,b){const A=a.__slot,B=b.__slot;if(!A||!B||A.anker||B.anker)return false;if(A.dir===B.dir)return false;
     if(A.type==="aus"||B.type==="aus"){const o=A.type==="aus"?A:B,i=o===A?B:A;return o.dir==="out"&&i.dir==="in"&&AUS_ZIEL.has(i.type);}
+    // „dann …" im Ablauf eines Prozesses: der nächste Schritt ist eine Funktion (Rufe) ODER ein Command (Sende).
+    if(A.type==="kette"||B.type==="kette"){const o=A.type==="kette"?A:B,i=o===A?B:A;return o.dir==="out"&&i.dir==="in"&&(i.type==="rufe"||(i.type==="sagaCmd"&&!!i.rec));}
     if(A.type!==B.type)return false;
+    // Fluss: Drähte und Je-Bezüge nur innerhalb DERSELBEN Pipeline, nur vorwärts (kein Kreis), nie in eine Quelle.
+    if(A.type==="draht"||A.type==="jeEl"||A.type==="jeSa"){const o=A.dir==="out"?A:B,i=o===A?B:A;const v=flKnotenById(o.flk),z=flKnotenById(i.flk),f=v&&flFluss(v);
+      if(!v||!z||!f||flFluss(z)!==f||v===z||flQuelleArt(z)||flErreicht(f,z.name,v.name))return false;
+      if(A.type==="draht")return z.art!=="je"||!(z.eingaenge||[]).length||(z.eingaenge||[]).some(e=>(e.draehte||[]).some(d=>d.von===v.name));
+      return v.art==="je"&&z.art!=="je";}
+    // Akteur-Tor: Funktionen nur über „bietet an" (IDarf<IFunktion>), Nachrichten über „darf"; ein Client sendet keine Funktion.
+    if(A.type==="darf"){const o=A.dir==="out"?A:B,i=o===A?B:A;if(!!o.nurFunktion!==!!i.funktion)return false;}
     if((A.kind==="arg")!==(B.kind==="arg"))return false;              // Argument-Pin nur an Argument-Pin
     if(A.kind==="arg"&&A.trans!==B.trans)return false;                 // und nur innerhalb derselben Transition
     if(A.type==="field"){const src=A.dir==="out"?A:B,snk=A.dir==="out"?B:A;   // Feld-Quelle muss den Wunsch des Eingangs erfüllen
@@ -3472,6 +3672,20 @@ public static class HtmlPresenter
       if(ak&&hd){hd.akteur=ak.name;const fremd=(hd.sends||[]).filter(c=>!(ak.darf||[]).includes(c));
         if(fremd.length)deFlash("⚠ "+ak.name+" darf "+fremd.join(", ")+" nicht — CQRS060 (ergänze darf ⊕ oder nimm den Auftrag weg)",false);}}
     else if(O.type==="cmd"){const d=dec(I.dec);if(d)d.command=O.rec;}
+    // Rufe<F>: eine Prozess-Regel („Dann rufe") bzw. ein Pipeline-Knoten ƒ ruft die Funktion; die Zuordnung wird neu vorgeschlagen.
+    else if(O.type==="rufe"){const fk=MODEL.funktionen.find(x=>x._id===I.fk);if(fk){
+      if(O.flk){const k=flKnotenById(O.flk);if(k){k.typ=fk.name;flNeuZuordnen(k);}}
+      else{const t=MODEL.transitions.find(x=>x._id===O.trans),d=t&&(t.dann||[])[O.dannIdx];if(d){if(d.rufe!==fk.name){delete d.sendeAusdruck;delete d.sendeArgs;}d.rufe=fk.name;}}}}
+    // Ablauf „dann …": ein neuer Schritt im Prozess (Regel bei diesem Ergebnis → Funktion bzw. Command).
+    else if(O.type==="kette"){const sg=MODEL.sagas.find(x=>x.name===O.saga);
+      const z=I.type==="rufe"?{rufe:(MODEL.funktionen.find(x=>x._id===I.fk)||{}).name}:{sende:I.rec};if(sg&&(z.rufe||z.sende))kettenAnhaengen(sg,O.bei,z);}
+    // Fluss: Draht von einem Ausgang in einen späteren Knoten (∧/∨ automatisch); Je-Rahmen → „je Element"/„sammle".
+    else if(O.type==="draht"){const v=flKnotenById(O.flk),z=flKnotenById(I.flk),f=v&&flFluss(v);if(v&&z&&f)flVerbinde(f,v.name,{port:O.port,fall:O.fall},z);}
+    else if(O.type==="jeEl"||O.type==="jeSa"){const v=flKnotenById(O.flk),z=flKnotenById(I.flk),f=v&&flFluss(v),sa=O.type==="jeSa";
+      if(v&&z&&f&&!(z.eingaenge||[]).some(e=>e.je===v.name&&!!e.sammle===sa)){const e2=sa?{je:v.name,sammle:true,draehte:[]}:{je:v.name,draehte:[]};
+        (z.eingaenge=z.eingaenge||[]).push(e2);if(!sa)e2.argumente=flAutoArgs(f,z,e2);flOrdne(f);}}
+    // Konfig-Record → Pipeline (Konstruktor-Injektion).
+    else if(O.type==="konfig"){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p&&O.rec&&!(p.konfigs=p.konfigs||[]).includes(O.rec))p.konfigs.push(O.rec);}
     // Auftrag → Funktion: der eine Eingang (IAuftrag<F>); ein Auftrag gehört genau einer Funktion.
     else if(O.type==="auftragFn"){const f=MODEL.funktionen.find(x=>x._id===I.fk),r=recByName(O.rec);if(f&&r){
       MODEL.funktionen.forEach(x=>{if(x!==f&&x.auftrag===r.name)x.auftrag="";});const alt=recByName(f.auftrag);if(alt&&alt.funktion===f.name)delete alt.funktion;
@@ -3484,7 +3698,9 @@ public static class HtmlPresenter
       else if(O.reaktion){const r=MODEL.reaktionen.find(x=>x._id===O.reaktion);const hd=r&&r.handles[O.handleIdx];if(hd){hd.publishes=hd.publishes||[];if(!hd.publishes.includes(I.rec))hd.publishes.push(I.rec);}}}
     else if(O.type==="prozess"){const t=MODEL.transitions.find(x=>x._id===O.trans);if(t)t.prozess=I.saga;}
     else if(O.type==="evtUse"){
-      if(I.client){const c=MODEL.clients.find(x=>x._id===I.client);if(c&&!(c.kenntnis=c.kenntnis||[]).includes(O.rec))c.kenntnis.push(O.rec);}
+      // Event → Pipeline-Knoten: Quelle (meldet / Event aus dem Log) bzw. Warten (eines von mehreren Events im Strom).
+      if(I.flk){const k=flKnotenById(I.flk);if(k){if(I.role==="warte"){const l=flWarteAuf(k);if(!l.includes(O.rec))l.push(O.rec);k.warteAuf=l;k.typ=l[0];}else k.typ=O.rec;}}
+      else if(I.client){const c=MODEL.clients.find(x=>x._id===I.client);if(c&&!(c.kenntnis=c.kenntnis||[]).includes(O.rec))c.kenntnis.push(O.rec);}
       else if(I.app){const p=app(I.app);if(p)p.event=O.rec;}
       // Event → Frist: plant / storniert (die Drei-End-Relation der Composition-Root-Frist).
       else if(I.frist){const f=MODEL.frists.find(x=>x._id===I.frist);if(f){const arr=I.role==="storniert"?(f.storniert=f.storniert||[]):(f.plant=f.plant||[]);if(!arr.includes(O.rec))arr.push(O.rec);}}
@@ -3520,6 +3736,8 @@ public static class HtmlPresenter
       else if(O.pipeline){const p=MODEL.pipelines.find(x=>x._id===O.pipeline);const hd=p&&p.handles[O.handleIdx];if(hd){hd.sends=hd.sends||[];if(!hd.sends.includes(I.rec))hd.sends.push(I.rec);}}
       // Frist fällig → genau ein Command @ Aggregat (der AddDeadlines-Router: Kontext → Command).
       else if(O.frist){const f=MODEL.frists.find(x=>x._id===O.frist);if(f){f.sendet=I.rec;f.aggregat=recordAgg(I.rec)||f.aggregat;}}
+      // Pipeline-Knoten ▶ sendet genau diesen Command ins Aggregat.
+      else if(O.flk){const k=flKnotenById(O.flk);if(k){k.typ=I.rec;flNeuZuordnen(k);}}
       else{const t=MODEL.transitions.find(x=>x._id===O.trans);const d=t&&(t.dann||[])[O.dannIdx];if(d){
         if(O.role==="komp"){if(d.kompensation!==I.rec)delete d.kompensationAusdruck;d.kompensation=I.rec;}
         else{if(d.sende!==I.rec)delete d.sendeAusdruck;d.sende=I.rec;}}}}
@@ -3543,6 +3761,12 @@ public static class HtmlPresenter
     // Projektion-Handle ruft eine Write-Fn (Store-Scope fällt daraus ab) — anhängen, dedup.
     else if(O.type==="wcall"){const p=MODEL.projektionen.find(x=>x._id===O.proj);const hd=p&&p.handles[O.handleIdx];if(hd){hd.fns=hd.fns||[];if(!hd.fns.includes(I.fn))hd.fns.push(I.fn);}}
     // Reader-Handle ruft eine Read-Fn (auch über mehrere Stores) — anhängen, dedup.
+    // Funktion liest über eine Store-Fähigkeit: ihr Interface wird ein Parameter (nur Read-Fns mit Fähigkeits-Interface).
+    else if(O.type==="rcall"&&O.fk){const f=MODEL.funktionen.find(x=>x._id===O.fk),z=fnById(I.fn);if(f&&z){
+      const t=z.fn.faehigkeit||(z.fn.sig?null:faehigkeitVorschlag(z.store,z.fn));
+      if(!t)deFlash("⚠ "+z.store.name+"."+z.fn.name+" hat kein Fähigkeits-Interface (CQRS051) — als Parameter nicht nutzbar",false);
+      else if(!(f.faehigkeiten=f.faehigkeiten||[]).some(p=>p.typ===t)){if(!z.fn.faehigkeit)z.fn.faehigkeit=t;
+        let nm=t.replace(/^I(?=[A-ZÄÖÜ])/,"");nm=nm.charAt(0).toLowerCase()+nm.slice(1);f.faehigkeiten.push({typ:t,name:nm});}}}
     else if(O.type==="rcall"){const r=O.pipeline?MODEL.pipelines.find(x=>x._id===O.pipeline):MODEL.reader.find(x=>x._id===O.reader);const hd=r&&r.handles[O.handleIdx];if(hd){hd.fns=hd.fns||[];if(!hd.fns.includes(I.fn))hd.fns.push(I.fn);}}
     // IReader<TProjection>: Reader → genau eine Projektion binden.
     else if(O.type==="projref"){const r=MODEL.reader.find(x=>x._id===O.reader);const p=MODEL.projektionen.find(x=>x._id===I.proj);if(r&&p)r.projektion=p.name;}
@@ -3580,6 +3804,14 @@ public static class HtmlPresenter
     else if(O.type==="darf"){const ak=MODEL.akteure.find(x=>x._id===O.akt);if(ak)ak.darf=ohne(ak.darf,I.rec);}
     else if(O.type==="auftrag"){const p=MODEL.pipelines.find(x=>x._id===I.pipeline),hd=p&&p.handles[I.handleIdx];if(hd)delete hd.akteur;}
     else if(O.type==="cmd"){const d=dec(I.dec);if(d&&d.command===O.rec)d.command="";}
+    else if(O.type==="rufe"){if(O.flk){const k=flKnotenById(O.flk);if(k)k.typ="";}
+      else{const t=MODEL.transitions.find(x=>x._id===O.trans),d=t&&(t.dann||[])[O.dannIdx];if(d){d.rufe="";delete d.sendeAusdruck;delete d.sendeArgs;}}}
+    else if(O.type==="kette")kettenLoesen(O.saga,O.bei,I.type==="rufe"?(MODEL.funktionen.find(x=>x._id===I.fk)||{}).name:I.rec);
+    else if(O.type==="draht"){const v=flKnotenById(O.flk),z=flKnotenById(I.flk),f=v&&flFluss(v);if(v&&z&&f)(z.eingaenge||[]).slice().forEach(e=>{
+      const d=(e.draehte||[]).find(x=>x.von===v.name&&flPortGleich(x,{port:O.port,fall:O.fall}));if(d)flLoese(f,z,e,d);});}
+    else if(O.type==="jeEl"||O.type==="jeSa"){const v=flKnotenById(O.flk),z=flKnotenById(I.flk);
+      if(v&&z)z.eingaenge=(z.eingaenge||[]).filter(e=>!(e.je===v.name&&!!e.sammle===(O.type==="jeSa")));}
+    else if(O.type==="konfig"){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p)p.konfigs=ohne(p.konfigs,O.rec);}
     else if(O.type==="auftragFn"){const f=MODEL.funktionen.find(x=>x._id===I.fk),r=recByName(O.rec);if(f&&f.auftrag===O.rec){f.auftrag="";if(r)delete r.funktion;}}
     else if(O.type==="evtOut"){
       if(O.fk){const f=MODEL.funktionen.find(x=>x._id===O.fk);if(f)f.ergebnisse=ohne(f.ergebnisse,I.rec);}
@@ -3587,7 +3819,8 @@ public static class HtmlPresenter
       else{const hd=handle(O.proj?MODEL.projektionen:MODEL.reaktionen,O.proj||O.reaktion,O.handleIdx);if(hd)hd.publishes=ohne(hd.publishes,I.rec);}}
     else if(O.type==="prozess"){const t=MODEL.transitions.find(x=>x._id===O.trans);if(t)t.prozess="";}
     else if(O.type==="evtUse"){
-      if(I.client){const c=MODEL.clients.find(x=>x._id===I.client);if(c)c.kenntnis=ohne(c.kenntnis,O.rec);}
+      if(I.flk){const k=flKnotenById(I.flk);if(k){if(I.role==="warte"){k.warteAuf=flWarteAuf(k).filter(x=>x!==O.rec);k.typ=k.warteAuf[0]||"";}else k.typ="";}}
+      else if(I.client){const c=MODEL.clients.find(x=>x._id===I.client);if(c)c.kenntnis=ohne(c.kenntnis,O.rec);}
       else if(I.app){const p=app(I.app);if(p)p.event="";}
       else if(I.frist){const f=MODEL.frists.find(x=>x._id===I.frist);if(f){if(I.role==="storniert")f.storniert=ohne(f.storniert,O.rec);else f.plant=ohne(f.plant,O.rec);}}
       else if(I.trigger){const sg=MODEL.sagas.find(x=>x.name===I.saga);if(sg)sg.triggerEvent="";}
@@ -3605,6 +3838,7 @@ public static class HtmlPresenter
       if(O.akt&&typeof O.aufIdx==="number"){const ak=MODEL.akteure.find(x=>x._id===O.akt),r=ak&&(ak.vertrag||[])[O.aufIdx];if(r)r.ausgaenge=ohne(r.ausgaenge,I.rec);}
       else if(O.reaktion||O.pipeline){const hd=handle(O.reaktion?MODEL.reaktionen:MODEL.pipelines,O.reaktion||O.pipeline,O.handleIdx);if(hd)hd.sends=ohne(hd.sends,I.rec);}
       else if(O.frist){const f=MODEL.frists.find(x=>x._id===O.frist);if(f)f.sendet="";}
+      else if(O.flk){const k=flKnotenById(O.flk);if(k)k.typ="";}
       else{const t=MODEL.transitions.find(x=>x._id===O.trans);const d=t&&(t.dann||[])[O.dannIdx];
         if(d){if(O.role==="komp"){delete d.kompensation;delete d.kompensationAusdruck;}else{d.sende="";delete d.sendeAusdruck;}}}}
     else if(O.type==="trigmsg"){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p&&typeof I.handleIdx==="number")p.handles.splice(I.handleIdx,1);}
@@ -3613,6 +3847,8 @@ public static class HtmlPresenter
     else if(O.type==="appAgg"){const p=app(O.app);if(p)p.aggregat="";}
     else if(O.type==="readmodel"){const rm=MODEL.readModels.find(x=>x._id===O.rm);if(rm)rm.store="";}
     else if(O.type==="wcall"){const hd=handle(MODEL.projektionen,O.proj,O.handleIdx);if(hd)hd.fns=ohne(hd.fns,I.fn);}
+    else if(O.type==="rcall"&&O.fk){const f=MODEL.funktionen.find(x=>x._id===O.fk),z=fnById(I.fn);
+      if(f&&z)f.faehigkeiten=(f.faehigkeiten||[]).filter(p=>p.typ!==z.fn.faehigkeit);}
     else if(O.type==="rcall"){const hd=O.pipeline?handle(MODEL.pipelines,O.pipeline,O.handleIdx):handle(MODEL.reader,O.reader,O.handleIdx);if(hd)hd.fns=ohne(hd.fns,I.fn);}
     else if(O.type==="projref"){const r=MODEL.reader.find(x=>x._id===O.reader);if(r)r.projektion="";}
     else if(O.type==="query"){const r=MODEL.reader.find(x=>x._id===I.reader);if(r)r.handles=(r.handles||[]).filter(h=>h.query!==O.rec);}
@@ -3774,10 +4010,16 @@ public static class HtmlPresenter
     if(!m.has(id))m.set(id,[]);m.get(id).push(x);});if(VB)VB.G=gs;return m;}
   // Verbunden? Eine gezeichnete Kante zwischen dem Kandidaten-Port und einem Port DIESES Knotens mit demselben Typ.
   //   Genau dieser Port (gleicher Schlüssel) — nur „offene" Sammel-Ports (…:open, z. B. „+ Ausgang") zählen knotenweit.
-  function vbPartner(q,x){const offen=/:open\b|open(evt|trg)?$/.test(q.__key);
+  const istOffenerPort=key=>/:open\b|open(evt|trg)?$/.test(key||"");
+  function vbPartner(q,x){const offen=istOffenerPort(q.__key);
     for(const [k1,k2] of KANTEN){const o=k1===x.__key?k2:(k2===x.__key?k1:null);if(!o)continue;
       if(o===q.__key)return SLOTS[o]||q;
       const e=SLOTS[o];if(offen&&e&&knotenIdVon(e)===SEL&&e.__slot.type===q.__slot.type&&e.__slot.dir===q.__slot.dir&&e.__slot.handleIdx===q.__slot.handleIdx)return e;}
+    // Umgekehrt: der Kandidat bietet nur seinen offenen Sammel-Port an (z. B. Akteur „+ bietet an ⊕"), die Kante hängt an einer
+    //   seiner Zeilen — dann zählt jede Kante zwischen q und einem gleichartigen Port DIESER Karte (Lösen geht über den Namen).
+    if(istOffenerPort(x.__key)){const xid=knotenIdVon(x);
+      for(const [k1,k2] of KANTEN){const o=k1===q.__key?k2:(k2===q.__key?k1:null);if(!o)continue;
+        const e=SLOTS[o];if(e&&knotenIdVon(e)===xid&&e.__slot.type===x.__slot.type&&e.__slot.dir===x.__slot.dir)return q;}}
     return null;}
   // Lesbarer Name eines Ports: Beschriftung + Werte der Eingabefelder seiner Zeile (z. B. der Name einer Store-Funktion).
   const slotLabel=x=>{const r=x.closest(".slotrow,.gtopfield,.frow");if(!r)return x.__slot.type;
@@ -3790,8 +4032,9 @@ public static class HtmlPresenter
     if(t==="auftrag")return d==="in";   // ein Handle handelt im Auftrag höchstens EINES Akteurs
     if(t==="prozess"||t==="decAgg"||t==="appAgg"||t==="projref"||t==="readmodel"||t==="state"||t==="prompt")return d==="out";
     if(t==="code"||t==="setting"||t==="ftype"||t==="self")return d==="in";
-    if(t==="evtUse")return d==="in"&&(!!I.app||!!I.trigger||typeof I.handleIdx==="number"||typeof I.wennIdx==="number"||typeof I.aufIdx==="number");
-    if(t==="sagaCmd")return d==="out"&&(!!I.frist||!!I.trans);
+    if(t==="evtUse")return d==="in"&&(!!I.app||!!I.trigger||typeof I.handleIdx==="number"||typeof I.wennIdx==="number"||typeof I.aufIdx==="number"||(!!I.flk&&I.role!=="warte"));
+    if(t==="sagaCmd")return d==="out"&&(!!I.frist||!!I.trans||!!I.flk);
+    if(t==="rufe")return d==="out";
     if(t==="trigmsg")return d==="in"&&typeof I.handleIdx==="number";
     return false;}
   // ⊕ anklicken = Modus an (derselbe ⊕ nochmal = aus). Beenden auch mit Esc oder Klick ins Leere.
@@ -3960,7 +4203,24 @@ public static class HtmlPresenter
     });
     // Katalog-Funktion: Auftrag (Record) → Funktion (gestrichelt), Funktion → ihre Ergebnis-Events.
     MODEL.funktionen.forEach(f=>{if(f.auftrag)add("auf:out:"+f.auftrag,"fk:auftrag:"+f._id,"#c08a2e",true);
-      (f.ergebnisse||[]).forEach(e=>{if(e)add("fk:out:"+f._id+":"+e,"evt:in:"+e,"#4fb06a");});});
+      (f.ergebnisse||[]).forEach(e=>{if(e)add("fk:out:"+f._id+":"+e,"evt:in:"+e,"#4fb06a");});
+      // ⚙ Lese-Fähigkeit (Parameter) → die Read-Fn, deren Interface sie ist.
+      (f.faehigkeiten||[]).forEach((p,i)=>{const z=leseFnZu(p.typ);if(z)add("rcall:out:fk:"+f._id+":"+i,"rcall:in:"+z.store._id+":"+z.fn._id,"#c08a3e");});});
+    // Konfig-Record → Pipeline (Konstruktor-Injektion).
+    MODEL.pipelines.forEach(p=>(p.konfigs||[]).forEach(k=>add("konfig:out:"+k,"pl:konfig:"+p._id+":"+k,"#f0883e",true)));
+    // Verbindungen, die schon anders gezeichnet werden (Fluss-Kanten, Ablauf-Kette) — hier nur als Port-Paar für ✓/Lösen im Verbinden-Modus.
+    const nurPaar=(k1,k2)=>{if(SLOTS[k1]&&SLOTS[k2])KANTEN.push([k1,k2]);};
+    MODEL.fluesse.forEach(f=>(f.knoten||[]).forEach(z=>{
+      if(z.typ&&z.art==="funktion")nurPaar("fs:rufe:"+z._id,"fk:in:"+z.typ);
+      if(z.typ&&z.art==="command")nurPaar("fs:send:"+z._id,"cmd:in:"+z.typ);
+      if(z.typ&&flQuelleArt(z))nurPaar("evt:out:"+z.typ,"fs:ein:"+z._id);
+      if(z.art==="warte")flWarteAuf(z).forEach(e=>nurPaar("evt:out:"+e,"fs:ein:"+z._id));
+      (z.eingaenge||[]).forEach(e=>{
+        if(e.je){const j=flKnoten(f,e.je);if(j)nurPaar((e.sammle?"fs:jesa:":"fs:jeel:")+j._id,(e.sammle?"fs:jesain:":"fs:jeein:")+z._id);}
+        (e.draehte||[]).forEach(d=>{const v=flKnoten(f,d.von);if(v)nurPaar(flAusKey(v,d),"fs:in:"+z._id);});});}));
+    MODEL.transitions.flatMap(kettenKanten).filter(k=>k.art==="dann").forEach(k=>{
+      const von=k.von.startsWith("fk:")?"kette:fk:"+k.von.slice(3)+":"+k.sg.name+":"+k.bei:k.von.startsWith("saga:")?"kette:saga:"+k.sg.name:null;
+      if(von)nurPaar(von,k.d.rufe?"fk:in:"+k.d.rufe:"cmd:in:"+k.d.sende);});
     // ── Leseseite: ReadModel→Store, Projektion/Reader→Store-Scope, Event→Projektion, Query→Reader,
     //    Reader→Response, und CODE (📝/🤖) → Rumpf-Ports (gestrichelt). ──
     const CODE="#8a8f9c";
@@ -4186,13 +4446,9 @@ public static class HtmlPresenter
     alle.forEach(n=>{const v=vert(n.id,new Set());VERTRETER.set(n.id,v);
       if(v.length===1&&v[0]===n.id){if(!HIDDEN.has(groupKeyOf(n))&&!istAus(n.kind)&&geladen(n))VIS.add(n.id);}
       else{EINGEKLAPPT.add(n.id);v.forEach(o=>push(DETAILS,o,n.id));}});
-    // Ablauf als Kette: Kettenschritt-Regeln werden Kanten; Auftrag und Ergebnis-Events einer Funktion liegen IN ihrem Knoten
-    //   (ein Ergebnis nur, wenn es niemand außer Kettenschritten liest — sonst bleibt es eine Karte).
+    // Ablauf als Kette: Kettenschritt-Regeln werden Kanten. Auftrag und Ergebnis-Events einer Funktion bleiben IMMER eigene Karten —
+    //   die Funktion ist definiert wie ein Decider: ◀ Auftrag-Karte · ƒ (📝 + 🤖 darunter) · Ergebnis-Karten ▶, auf einer Zeile.
     KETTE=MODEL.transitions.flatMap(kettenKanten);const weg=new Set(KETTE.map(k=>"tr:"+k.t._id));
-    MODEL.funktionen.forEach(f=>{const fid="fk:"+f._id;if(!MODEL.transitions.some(t=>(t.dann||[]).some(d=>d.rufe===f.name)))return;
-      if(f.auftrag&&recByName(f.auftrag)&&(ADJ.out.get("rec:"+f.auftrag)||[]).every(x=>x===fid))weg.add("rec:"+f.auftrag);
-      // Ein Ergebnis, das auch ein Decider erzeugt, gehört dem Aggregat und bleibt eine Karte.
-      (f.ergebnisse||[]).forEach(e=>{if(recByName(e)&&(ADJ.out.get("rec:"+e)||[]).every(x=>weg.has(x))&&!(ADJ.inn.get("rec:"+e)||[]).some(x=>x.startsWith("dec:")))weg.add("rec:"+e);});});
     weg.forEach(id=>{if(VIS.delete(id))EINGEKLAPPT.add(id);});
     // Tiefe in der Kette (Start = 0): Funktionen stehen danach in eigenen Spalten nebeneinander — erst … dann … von links nach rechts.
     TIEFE=new Map();const tiefe=(id,pfad)=>{if(TIEFE.has(id))return TIEFE.get(id);if(pfad.has(id))return 0;pfad.add(id);
@@ -4240,8 +4496,8 @@ public static class HtmlPresenter
     // Leseseite nachziehen (wie der Schnitt unten): an Projektion/Store die Reader + Read Models.
     [...res].forEach(id=>{const k=N(id).kind;if(k!=="projektion"&&k!=="store")return;
       (ADJ.inn.get(id)||[]).forEach(y=>{const ky=N(y).kind;if(ky==="reader"||ky==="readmodel")res.add(y);});});
-    // Rümpfe (📝 + 🤖) der beteiligten Handles/Decider/Applier/Fns als Blätter.
-    [...res].forEach(id=>{if(!["handle","decider","applier","fn"].includes(N(id).kind))return;
+    // Rümpfe (📝 + 🤖) der beteiligten Logik-Elemente als Blätter (Handle, Decider, Applier, Store-Fn, Funktion, Fluss-λ, Regel-λ).
+    [...res].forEach(id=>{if(!["handle","decider","applier","fn","funktion","flussknoten","transition"].includes(N(id).kind))return;
       (ADJ.inn.get(id)||[]).forEach(y=>{if(N(y).kind!=="codenode")return;res.add(y);(ADJ.inn.get(y)||[]).forEach(z=>{if(N(z).kind==="llmnode")res.add(z);});});});
     return res;}
   function sliceVon(start){const res=new Set([start]),N=id=>NODEBY.get(id)||{};
@@ -4780,7 +5036,7 @@ public static class HtmlPresenter
       tb("readmodel","+ Read Model"),tb("store","+ Store"),tb("projektion","+ Projektion"),tb("query","+ Query"),tb("queryresponse","+ Response"),tb("reader","+ Reader"),tb("reaktion","+ Reaktion"),
       tb("trigger","+ Trigger"),tb("pipeline","+ Pipeline"),
       h("button",{class:"add",title:"Neue Pipeline als Fluss: Quelle → Katalog-Funktionen → Commands, frei verdrahtet (docs/konzept-editor-pipelines.md §14)",onclick:()=>neuePipeline()},"+ ⛓ Pipeline (Fluss)"),
-      tb("funktion","+ ƒ Funktion"),tb("dienst","+ Dienst"),tb("hostsetting","+ HostSetting"),
+      tb("auftrag","+ Auftrag"),tb("funktion","+ ƒ Funktion"),tb("dienst","+ Dienst"),tb("hostsetting","+ HostSetting"),
       tb("codenode","+ 📝 Code"),tb("llmnode","+ 🤖 LLM"),
       h("button",{class:"add island-btn",style:"margin-left:auto",
         title:"Einsame Inseln (unverbundene Knoten) — Hover: markieren · Klick: der Reihe nach anspringen",
@@ -4857,7 +5113,7 @@ public static class HtmlPresenter
     // Ablauf als Kette: was beim Start ZUERST passiert (weitere Schritte hängen an den Funktions-Knoten: „dann ▶“).
     body.append(h("div",{class:"gsec"},"Ablauf ▶ erst …"));
     kettenZeilen(body,"saga:"+s.name);
-    if(s.triggerEvent)body.append(h("div",{class:"slotrow o"},kettenPool(z=>kettenAnhaengen(s,s.triggerEvent,z))));
+    if(s.triggerEvent)body.append(slotRow("command","bei "+s.triggerEvent+" ▶ erst ⊕ (ƒ · Command)","r",{type:"kette",dir:"out",saga:s.name,bei:s.triggerEvent},"kette:saga:"+s.name));
     else body.append(h("div",{class:"gsec",style:"opacity:.6"},"Erst einen Auslöser wählen."));
   }
   // Elementtyp der SendeJe-Collection (z. B. List<Guid> → Guid) — für den Typ des z-Pins.
@@ -4884,14 +5140,15 @@ public static class HtmlPresenter
     (t.dann||[]).forEach((d,di)=>{
       if(d.rufe!==undefined){
         // Aufruf-Knoten: die Funktion steht ausdrücklich da (Rufe<F>), ihre Ergebnisse sind die nächsten Events im Graph.
-        const fa=anchorDot("command");fa.classList.add("o");reg("tr:rufe:"+t._id+":"+di,fa,null);
-        const sel=h("select",{onchange:e=>{d.rufe=e.target.value;delete d.sendeAusdruck;render();}});
-        if(!d.rufe||!MODEL.funktionen.some(f=>f.name===d.rufe)){const o=h("option",{value:d.rufe||""},d.rufe||"— Funktion wählen —");o.selected=true;sel.append(o);}
-        MODEL.funktionen.forEach(f=>{const o=h("option",{value:f.name},"ƒ "+f.name);if(f.name===d.rufe)o.selected=true;sel.append(o);});
+        // ⊕ → eine Funktions-Karte anklicken; „＋" legt eine neue Funktion an (Auftrag/Ergebnis an IHRER Karte).
+        const fa=port("auftrag");fa.classList.add("o");fa.title=d.rufe||"(Funktion)";reg("tr:rufe:"+t._id+":"+di,fa,{type:"rufe",dir:"out",trans:t._id,dannIdx:di});
+        const fk=MODEL.funktionen.find(f=>f.name===d.rufe);
         body.append(h("div",{class:"slotrow o"},
           h("button",{class:"rm",onclick:()=>{t.dann.splice(di,1);if(!t.dann.length)t.dann.push({});render();}},"✕"),
-          h("span",{class:"slotlbl",style:"opacity:.75"},"Dann rufe"),sel,fa));
-        const fk=MODEL.funktionen.find(f=>f.name===d.rufe);
+          h("span",{class:"slotlbl",style:"flex:1;text-align:right;opacity:.75"+(fk?";cursor:pointer":""),title:fk?"Klick: Funktions-Karte öffnen":"",onclick:fk?()=>zeigeLadend("fk:"+fk._id):null},
+            "Dann rufe "+(fk?"ƒ "+fk.name:d.rufe?"⚠ "+d.rufe:"— ⊕ Funktion")),
+          d.rufe?null:neuKnopf("Neue Funktion anlegen und hier rufen",()=>{const nm=neueFunktion((MODEL.sagas.find(x=>x.name===t.prozess)||{}).namespace||defaultNsGlobal());
+            verbindeInfo({type:"rufe",dir:"out",trans:t._id,dannIdx:di},{type:"rufe",dir:"in",fk:MODEL.funktionen.find(x=>x.name===nm)._id});}),fa));
         if(fk)body.append(h("div",{class:"gsec",style:"opacity:.7"},"Auftrag "+(fk.auftrag||"?")+" → "+((fk.ergebnisse||[]).join(" | ")||"(kein Ergebnis)")));
         if(d.sendeAusdruck)body.append(h("div",{class:"gsec",title:"aus dem Code gelesen — wird verbatim zurückgeschrieben",style:"font-family:monospace;opacity:.7;white-space:pre-wrap"},"λ "+d.sendeAusdruck));
         body.append(regelCodePort(t,d,di,"sende"));
@@ -4915,7 +5172,7 @@ public static class HtmlPresenter
       if(d.kompensation)body.append(regelCodePort(t,d,di,"komp"));
     });
     body.append(h("button",{class:"add",onclick:()=>{(t.dann=t.dann||[]).push({});render();}},"+ Dann (weiterer Command am selben Join)"));
-    body.append(h("button",{class:"add",onclick:()=>{(t.dann=t.dann||[]).push({rufe:(MODEL.funktionen[0]||{}).name||""});render();}},"+ Dann ƒ (Katalog-Funktion rufen)"));
+    body.append(h("button",{class:"add",onclick:()=>{(t.dann=t.dann||[]).push({rufe:""});render();}},"+ Dann ƒ (Katalog-Funktion rufen)"));
     // Je Dann → eine Regel (gleiche Bedingung). Argument-Bau = Feld-Mapping (D/S) → default-Stub; der Bau-Lambda ist Logik und hat
     //   deshalb wie jedes Logik-Element 📝 + optional 🤖 (regelCodePort) — ein gefüllter Block ist der Lambda verbatim.
   }

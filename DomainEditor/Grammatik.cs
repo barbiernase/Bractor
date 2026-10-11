@@ -290,7 +290,7 @@ public static class Grammatik
     [
         ("dec", Aggregat), ("app", Aggregat), ("trans", Prozess), ("saga", Prozess), ("proj", Projektion), ("reaktion", Reaktion),
         ("pipeline", Pipeline), ("reader", Reader), ("trigId", Ingress), ("frist", Pipeline), ("akt", Akteur), ("client", Client),
-        ("fk", Funktion),
+        ("fk", Funktion), ("flk", Fluss),
     ];
     /// <summary>
     /// Editor-Ports, an denen der Baustein des AUSGANGS die Sorte GEBRAUCHT statt sie zu erzeugen: Handle → Store-Fähigkeit (der Port

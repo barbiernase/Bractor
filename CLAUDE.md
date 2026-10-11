@@ -60,10 +60,14 @@ Bindung `AddFunktion<F, Impl>` + Boot-Guard; Editor: Funktions-Karte, „Dann ƒ
 Offen: Saga-DSL (Cqrs.Testing) und die Prozess-Simulation kennen `Rufe` noch nicht (im Fluss simuliert es; Python-Ausführer geliefert).
 
 **Logik-Element = EIN Muster (2026-10-11, `docs/konzept-domaenen-editor.md` §2 c′):** alles mit Logik ist ◀ Eingang · Ausgänge ▶ (OneOf) ·
-⚙ Fähigkeiten · Rumpf (📝 + optional 🤖) — Decide/Apply, Handles, Store-Fns, Funktion (Signatur auch am rufenden Fluss-Knoten definierbar,
+⚙ Fähigkeiten · Rumpf (📝 + optional 🤖) — Decide/Apply, Handles, Store-Fns, Funktion (Signatur nur auf ihrer Karte,
 Abgleich an Interface + Impl), Fluss-λ (`fluss|…`), Prozess-Regel-λ (`saga|Prozess|Regel#Verb`) und die **Zusage/Kenntnis des Akteurs
 draußen** (`zusage|Client|Event@Klasse`: Python-Rumpf der Client-Implementierung — `PythonClients`/`PythonQuelle`/`PythonSync`; neue
 Implementierung legt „C# schreiben" nach dem Bauen aus der generierten Basis an). Akteur-Ableitung JS = C# auch über Flüsse.
+**Editor-Regel: deklariert wird nur an der eigenen Karte, zugewiesen nur per ⊕** — kein Zuweisungs-Dropdown, keine Typ-Definition in
+einem fremden Knoten (Funktion, Fluss-Knoten, Prozess-Kette, Akteur „bietet an", Konfig); „＋" in der Zeile legt eine neue Karte an + verbindet.
+Funktion auf der Fläche wie ein Decider (Auftrag → ƒ + 📝/🤖 → Ergebnisse). Bau-Argumente (Fluss-Eingang, Regel-Dann) im **visuellen
+Zuordnungs-Editor** (Knoten + Drähte, `zoOeffne`; `docs/konzept-editor-pipelines.md` „Zuordnungs-Editor“), gespeichert als Argument-Liste.
 
 **Pipeline als Fluss (2026-10-07, kanonisch — `docs/konzept-editor-pipelines.md` §14):** eine Pipeline ist eine Fläche aus
 Knoten — Quelle (`p.Quelle<IQuellNachricht>()`/`p.Auf<E>()`) → Katalog-Funktionen → Commands —, verdrahtet vom Draht aus

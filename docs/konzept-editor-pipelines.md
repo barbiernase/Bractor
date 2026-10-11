@@ -367,19 +367,22 @@ Prozess-Regeln):
   mit dem Start-Event (Kontext), ohne Kompensation/Fan-out/Sammeln. Sie wird als **Kante** gezeichnet: Prozess (Start) bzw. die Funktion,
   die das auslösende Ergebnis liefert → nächster Schritt; Beschriftung „erst“/„dann“ (+ ⏳ bei Zeitlimit), Klick öffnet die Regel
   (Argumente, Zeitlimit). Andere Regeln bleiben Karten.
-- **Eingeklappt**: Auftrag und Ergebnis-Events einer Funktion stehen nur IN ihrem Knoten (ein Ergebnis bleibt Karte, wenn es außer
-  Kettenschritten noch jemand liest).
+- **Nicht eingeklappt (2026-10-11, Revision):** Auftrag und Ergebnis-Events einer Funktion sind IMMER eigene Karten — die Funktion ist
+  definiert wie ein Decider: Spalten **Auftrag → ƒ Funktion (📝 + 🤖 darunter) → Ergebnis**, auf einer Zeile, im selben Block und
+  Akteur-Rahmen (Akteure der Funktion = die ihres Auftrags). Fluss-Knoten und Prozess-Regeln verweisen nur auf die ƒ-Karte.
 - **Anordnung**: je Kettentiefe eine eigene Funktions-Spalte, Zeile = die des Vorgängers → Prozess → ƒ → ƒ auf einer Linie.
-- **Bearbeiten**: am Prozess „Ablauf ▶ erst …“, an jeder Funktion „Ablauf ▶ dann …“ (bei mehreren Ergebnissen „weiter bei …“) —
-  „＋ aus dem Pool wählen“ (Funktionen, Commands) hängt den nächsten Schritt an, ✕ löst ihn. Ein Command als Schritt bekommt den Start
+- **Bearbeiten**: am Prozess „bei ‹Auslöser› ▶ erst ⊕“, an jeder Funktion je Ergebnis „bei ‹Ergebnis› ▶ dann ⊕“ — eine Funktion oder
+  einen Command auf dem Graphen anklicken hängt den nächsten Schritt an, nochmal anklicken (✓) bzw. ✕ löst ihn (2026-10-11: ⊕ statt
+  Pool-Dropdown). Ein Command als Schritt bekommt den Start
   als Kontext in den Join (er braucht dessen Daten).
 
 **Nachtrag (gleicher Tag) — wie Node-RED:** Nicht nur einfache Schritte, JEDE Prozess-Regel wird Kanten (`kettenKanten`):
 Verzweigung = eine Kante je Ergebnis („bei BildNichtLesbar“), Zusammenführung = mehrere Drähte in einen Knoten („und“; UndAlle „alle“),
 Fan-out „×N“, Kompensation gestrichelt rot „↩ rückgängig“, Zeitlimit „⏳“. Nur eine leere, gerade angelegte Regel bleibt Karte.
 **Argumente** werden beim Anhängen automatisch zugeordnet (`autoArgs`: gleicher Name → Name endet gleich → einziger gleicher Typ;
-Wert-Objekte aus ihren Feldern gebaut; jüngstes Ergebnis vor dem Start) und sind im Schritt-Panel als Tabelle „Feld ← Quelle“
-änderbar („↻ automatisch zuordnen“; ein aus dem Code gelesener λ bleibt, bis man „⇄ als Zuordnung bearbeiten“ wählt). Für den
+Wert-Objekte aus ihren Feldern gebaut; jüngstes Ergebnis vor dem Start) und werden im **Zuordnungs-Editor** visuell geändert
+(2026-10-11: Knoten + Drähte statt Tabelle, siehe §14 „Zuordnungs-Editor“; ein aus dem Code gelesener λ wird beim Öffnen in Knoten
+zerlegt und erst bei einer Änderung ersetzt). Für den
 echten Prozess trifft die Zuordnung exakt den handgeschriebenen Lambda von `MeldeBildVerfuegbar`; nur Konstanten ohne Quelle
 (Höhe 512) bleiben `default`. Scaffolder: Argumentlisten jetzt auch für Aufträge (`Rufe`), nicht nur für Commands.
 
@@ -494,7 +497,7 @@ Entwerfbar ohne bestehenden Code: neue Funktion (nur Signatur; Rumpf = Stub, �
   Aggregat-Rahmen bleiben unverändert, ein Command-Knoten springt per Klick zum Decider.
 - **Katalog** (Quellen · Funktionen · Aggregate/Commands · Pipelines) mit Signatur; ⊕ am Port → passende Knoten/Einträge leuchten,
   „＋ neu …“ legt Unbekanntes an.
-- Abzeichen ∧/∨ am Eingang, Fehler-Ports ⏳/✕, je-Rahmen gestrichelt, Zuordnungstabelle „Feld ← Draht.Feld“ im Panel, Laufort
+- Abzeichen ∧/∨ am Eingang, Fehler-Ports ⏳/✕, je-Rahmen gestrichelt, Zuordnung „Feld ← Draht.Feld“ im visuellen Zuordnungs-Editor, Laufort
   einer Funktion (C#/Python) am Knoten.
 - Entfällt für Flüsse: Handle-Karten, Trigger-Records, Selbst-Schleifen, Start-Handle, Regel-Karten.
 - **Pipeline in der Domäne (2026-10-09):** ein Knoten = eine ZUGEWIESENE Funktion — sein Eingang und seine Ausgänge ergeben sich
@@ -612,3 +615,22 @@ Verarbeitung = Katalog-Funktion (auch mit Lese-Fähigkeit), Frist/Storno = `Wart
 Trigger, Fristplan für Handles, Editor-Abschnitt „Pipelines“, Analyzer-Zweige) als eigener Schritt, sobald es **Timer-Quelle** und
 **Client-Quelle** (gRPC-Trigger von außen) als Katalog-Quellen gibt und **flüchtige Flüsse** (Inv. 6: Verlierbares bleibt auf dem
 schnellen Kanal) entworfen sind — bis dahin ist das Handle-Modell der einzige Weg für flüchtige Verarbeitung und bleibt technisch erhalten.
+
+### Zuordnungs-Editor (visuell, 2026-10-11)
+
+Der Eingang eines Aufrufs (Fluss-Knoten ƒ/▶ je Eingang, Prozess-Regel „Dann") wird nicht als Text oder Tabelle gebaut, sondern in einem
+eigenen Knoten-Editor (Panel: „🔀 Zuordnung im Knoten-Editor“, Kurzfassung „Feld ← Quelle“ antippen):
+
+- **Links die Eingänge** — je Lambda-Parameter eine Karte (Name wie der Scaffolder ihn vergibt: Vorgänger-Knoten bzw. `t, r, g`) mit
+  ihren Feldern als Ausgängen; Wert-Objekt-Felder sind eine Ebene aufgeklappt.
+- **Mitte Bau-Knoten** — `new V(…)` für ein Wert-Objekt (seine Felder sind wieder Eingänge, beliebig tief) und `ƒx` für einen freien
+  C#-Ausdruck (mit Vorschlägen der Quell-Ausdrücke).
+- **Rechts das Ziel** — Auftrag bzw. Command mit seinen Feldern als Eingängen; „＋ new V“ an einem Wert-Objekt-Feld legt den Bau-Knoten
+  an, „ƒx“ einen Ausdruck, ✕ (oder Klick auf den Draht) löst.
+- **Drähte** ziehen (oder Quelle anklicken, dann Feld anklicken); nur typgleiche Ziele leuchten grün, falsche Typen werden abgelehnt.
+  „↻ automatisch“ schlägt alles neu vor; unten steht der entstehende Lambda.
+- **Speicherung unverändert:** je Zielfeld ein Ausdruck (`argumente` bzw. `sendeArgs`) → der Scaffolder schreibt `p => new Ziel(…)`.
+  Ein Lambda aus dem Code wird beim Öffnen zerlegt (Parameter-Namen angeglichen, `new V(…)` → Bau-Knoten, Unbekanntes → `ƒx`); ist er
+  kein einfacher Konstruktor, zeigt der Editor ihn und ersetzt ihn erst bei der ersten Änderung. Ein angedockter 📝-Block hat beim Schreiben
+  Vorrang — der Editor sagt das und bietet „Block lösen“ an.
+

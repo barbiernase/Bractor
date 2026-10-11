@@ -68,8 +68,10 @@ werden alte eingebettete Rümpfe automatisch in einen 📝-Knoten **migriert** u
 
 **(c′) Jedes Logik-Element folgt EINEM Muster (2026-10-11).** Alles, was Logik hat, ist ein Element aus **◀ Eingang** (ein Typ),
 **Ausgänge ▶** (`OneOf<…>` konkreter Typen, `void` = Kenntnis, oder ein Strom), **⚙ Fähigkeiten** (Parameter) und einem **Rumpf** am
-Code-Eingang (📝 + optional 🤖). Die Typen von Ein- und Ausgang werden **am Element selbst** angelegt und bearbeitet (Name, Felder) — nicht
-nur aus einem Katalog gewählt. Wo der Rumpf lebt, bestimmt der Code:
+Code-Eingang (📝 + optional 🤖). Die Typen von Ein- und Ausgang sind **eigene Karten** (Command, Event, Auftrag …): am Element stehen sie
+nur als **Verweis** (Name + Felder zum Lesen, Klick öffnet die Karte), verbunden wird per **⊕** (Verbinden-Modus), „**＋**" in der Zeile legt
+eine neue Typ-Karte an und verbindet sie sofort. **Deklariert wird nur an der eigenen Karte, zugewiesen nur per ⊕ — kein Dropdown, keine
+Typ-Definition in einem fremden Knoten** (2026-10-11, Revision). Wo der Rumpf lebt, bestimmt der Code:
 
 | Logik-Element | Eingang → Ausgänge | Rumpf lebt in | Slot (LLM) |
 |---|---|---|---|
@@ -81,8 +83,12 @@ nur aus einem Katalog gewählt. Wo der Rumpf lebt, bestimmt der Code:
 | Prozess-Regel (Aufruf/Kompensation) | Event der Regel → Command/Auftrag | Lambda der Regel | `saga` (`Prozess\|Regel#Verb`) |
 | **Zusage / Kenntnis** (Akteur draußen) | Event → OneOf<Command> / void / Strom | **Client-Implementierung** (Python `auf_…`) | `zusage` (`Client\|Event@Klasse`) |
 
-Die **Funktion** zeigt denselben Signatur-Baustein auf ihrer Karte und **am Fluss-Knoten, der sie ruft** (dort definierbar: Auftrag,
-Ergebnisse, Felder, Fähigkeiten, Rumpf); „C# schreiben" gleicht eine geänderte Signatur an Interface UND Implementierung ab und hängt den
+Die **Funktion** hat ihren Signatur-Baustein (Auftrag ⊕, Ergebnisse ⊕, ⚙ Lese-Fähigkeiten ⊕ → Read-Fn, angeboten von ⊕ → Akteur, Rumpf)
+**nur auf ihrer Karte**, und auf der Fläche steht sie wie ein Decider: **Auftrag-Karte → ƒ (📝 + 🤖 darunter) → Ergebnis-Karten** auf einer
+Zeile (nie eingeklappt; „+ Auftrag" in der Palette, „＋" an Eingang/Ausgang legt die Typ-Karte an); wer sie ruft — Prozess-Regel „Dann rufe", Fluss-Knoten ƒ „ruft", Ablauf „dann …" —, verbindet sich per ⊕ mit ihr
+(Port-Typ `rufe` bzw. `kette`) und zeigt nur „Interface: Auftrag → Ergebnisse" plus Sprung zur Karte. Ebenso im Fluss: ⛲/◆ „meldet"
+und ⧗ „warte auf" ⊕ → Event, ▶ „sendet" ⊕ → Command, Drähte ⊕ von einem Ausgang in einen späteren Knoten derselben Pipeline (∧/∨
+automatisch, kein Kreis), „je Element"/„sammle" ⊕ → Je-Rahmen; „＋ƒ/＋▶/＋⧉/＋⧗" am Ausgang legt einen neuen Knoten an. „C# schreiben" gleicht eine geänderte Signatur an Interface UND Implementierung ab und hängt den
 `IAuftrag<F>`-Marker um. Lambdas, die im Code stehen, zeigen „◀ λ …: im Code" mit ＋📝/＋🤖; ein gefüllter Block IST der Lambda verbatim.
 Angedockte Blöcke an Lambdas sind Board-Fakt und überleben das Neu-Einlesen (`mergeBoard` überträgt sie je Knoten/Eingang bzw. Dann).
 
