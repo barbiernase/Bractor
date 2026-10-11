@@ -18,7 +18,8 @@ public static class Herkunft
     public static string Von(DecideRegel d) => Hash(new { d.Aggregat, d.Command, d.Ergibt });
     public static string Von(Akteur a) => Hash(new { a.Name, a.Darf, a.Art, Vertrag = a.Vertrag.Count == 0 ? null : a.Vertrag, VertragName = a.Vertrag.Count == 0 ? null : a.VertragTyp });
     public static string Von(Client c) => Hash(new { c.Name, c.Traegt, c.Sendet, c.Fragt, c.Kenntnis });
-    public static string Von(Funktion f) => Hash(new { f.Name, f.Auftrag, f.Ergebnisse });
+    // Die Lese-Fähigkeiten gehören zur Signatur (Parameter nach IAusfuehrung) — sonst ging eine Änderung daran still verloren.
+    public static string Von(Funktion f) => Hash(new { f.Name, f.Auftrag, f.Ergebnisse, f.Faehigkeiten });
     public static string Von(Saga s) => Hash(new { s.TriggerEvent, Schritte = s.Schritte.Select(Wirksam).ToList() });
 
     /// <summary>

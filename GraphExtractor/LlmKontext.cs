@@ -5,6 +5,7 @@ using System.Xml.Linq;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using DomainEditor;
 
 namespace GraphExtractor;
 
@@ -41,7 +42,7 @@ public sealed class KontextBauer
         miscellaneousOptions: SymbolDisplayMiscellaneousOptions.UseSpecialTypes
                               | SymbolDisplayMiscellaneousOptions.IncludeNullableReferenceTypeModifier);
 
-    private static readonly string[] Arten = { "decide", "apply", "projektion", "reaktion", "reader", "pipeline", "store", "funktion", "fluss" };
+    private static readonly string[] Arten = { "decide", "apply", "projektion", "reaktion", "reader", "pipeline", "store", "funktion", "fluss", "saga" };
 
     private readonly SlotInventar _inv;
     private readonly DomainModel _dom;
@@ -118,6 +119,11 @@ public sealed class KontextBauer
         foreach (var st in A(b, "stores"))
             foreach (var f in A(st, "writeFns").Concat(A(st, "readFns"))) Merke(f, $"store|{S(st, "name")}|{S(f, "name")}");
         foreach (var f in A(b, "funktionen")) Merke(f, $"funktion|{S(f, "name")}|{S(f, "auftrag")}");
+        foreach (var c in A(b, "clients"))
+        {
+            var n = S(c, "name") ?? ""; var client = n.Length > 1 && n[0] == 'I' && char.IsUpper(n[1]) ? n[1..] : n;
+            foreach (var i in A(c, "implementierungen")) foreach (var r in A(i, "rumpfe")) Merke(r, $"zusage|{client}|{S(r, "event")}@{S(i, "klasse")}");
+        }
         foreach (var l in A(b, "llmNodes"))
             if (S(l, "promptZiel") is { } z && code.TryGetValue(z, out var schl) && !string.IsNullOrWhiteSpace(S(l, "intent")))
                 erg[schl] = (S(l, "intent")!, $"LLM-Knoten „{S(l, "name")}“ im Board");
@@ -197,7 +203,7 @@ public sealed class KontextBauer
 
     private SlotKontext Baue(SlotInventar.SlotRef s, string? cliAuftrag)
     {
-        if (s.Art == "fluss") return BaueFluss(s, cliAuftrag);
+        if (s.Art is "fluss" or "saga") return BaueFluss(s, cliAuftrag);
         var m = s.Methode!;
         var model = Model(s.Rumpf.SyntaxTree);
         var k = new SlotKontext { Slot = s, Schlüssel = Schlüssel(s), Titel = $"{s.Art} {Besitzer(s)}.{s.Disc}{(s.Art == "store" ? " @ " + s.Klasse.Name : "")}", RumpfStatus = RumpfStatus(s, model) };
@@ -252,6 +258,99 @@ public sealed class KontextBauer
         return k;
     }
 
+    // ── Zusage/Kenntnis eines Akteurs DRAUSSEN (docs/konzept-akteure.md §3/§4): der Python-Rumpf einer Client-Implementierung ──
+
+    public sealed record PythonSlot(string Id, string Titel, string Text, string Client, string Event, string Klasse, string Methode,
+        string? Signatur, IReadOnlyList<string> Ausgaenge, string Datei, int Zeile, bool Fehlt, string? Auftrag, string SlotDatei);
+
+    /// <summary>
+    /// Je Client-Implementierung (Klasse, die die generierte Basis erbt) und Zusage/Kenntnis ein Slot: Signatur aus der Basis, Ausgabe-
+    /// Vertrag, erreichbar (Event-DTO, ctx, state, self), Typen der Domäne, als Nachbarn die übrigen Methoden der Klasse (wörtlich).
+    /// </summary>
+    public IEnumerable<PythonSlot> PythonSlots(string solutionDir)
+    {
+        string? S(JsonElement e, string p) => e.TryGetProperty(p, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        IEnumerable<JsonElement> A(JsonElement e, string p) => e.TryGetProperty(p, out var v) && v.ValueKind == JsonValueKind.Array ? v.EnumerateArray() : Enumerable.Empty<JsonElement>();
+        var rec = A(_board, "records").Where(r => S(r, "name") != null).GroupBy(r => S(r, "name")!).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        string Snake(string n) => Regex.Replace(n, "(?<=[a-z0-9])([A-Z])|(?<=[A-Z])([A-Z][a-z])", "_$1$2").ToLowerInvariant();
+        string Typzeile(string name, string rolle)
+        {
+            if (!rec.TryGetValue(name, out var r)) return $"{name}   [{rolle}]   (unbekannt)";
+            var felder = A(r, "felder").Select(f => $"{S(f, "name")}: {S(f, "typ")}  → .{Snake(S(f, "name") ?? "")}").ToList();
+            var doku = S(r, "doku");
+            return $"{S(r, "kind")} {name}Dto   [{rolle}]   Felder: {(felder.Count == 0 ? "—" : string.Join(" · ", felder))}{(doku is { Length: > 0 } ? $"   /// {Regex.Replace(doku, @"\s+", " ")}" : "")}";
+        }
+        var ctxFelder = MessageContextFelder(solutionDir);
+        foreach (var c in A(_board, "clients"))
+        {
+            var iname = S(c, "name") ?? "";
+            var client = iname.Length > 1 && iname[0] == 'I' && char.IsUpper(iname[1]) ? iname[1..] : iname;
+            foreach (var impl in A(c, "implementierungen"))
+            {
+                var datei = S(impl, "datei") ?? ""; var klasse = S(impl, "klasse") ?? "";
+                var voll = Path.Combine(solutionDir, datei);
+                var text = File.Exists(voll) ? File.ReadAllText(voll) : "";
+                foreach (var r in A(impl, "rumpfe"))
+                {
+                    var ev = S(r, "event") ?? ""; var methode = S(r, "methode") ?? "";
+                    var ausg = A(r, "ausgaenge").Select(x => x.GetString() ?? "").ToList();
+                    var sig = S(r, "signatur");
+                    var m = PythonQuelle.FindeMethode(text, klasse, methode);
+                    // Die Parameter-NAMEN gelten, wie die Implementierung sie schreibt (z. B. „event“ statt „e“); fehlt die Methode, die der Basis.
+                    var zeilenImpl = text.Replace("\r\n", "\n").Split('\n');
+                    var defImpl = m == null ? sig : string.Join(" ", zeilenImpl.Skip(m.DefZeile).Take(m.RumpfStart - m.DefZeile).Select(x => x.Trim()));
+                    var pn = Regex.Match(defImpl ?? "", @"def\s+\w+\s*\((.*)\)").Groups[1].Value.Split(',').Select(x => x.Split(':')[0].Trim()).Where(x => x.Length > 0 && x != "self").ToList();
+                    string P(int i, string std) => i < pn.Count ? pn[i] : std;
+                    var id = $"zusage|{client}|{ev}@{klasse}";
+                    var titel = $"zusage {client}.{ev} @ {klasse}";
+                    var auftrag = _llmKnoten.TryGetValue(id, out var llm) ? llm.Intent : null;
+                    var b = new StringBuilder();
+                    void Kopf(string t) { b.AppendLine(); b.AppendLine("## " + t); }
+                    b.AppendLine($"# SLOT-TEIL {titel}");
+                    Kopf("AUFTRAG [L]");
+                    b.AppendLine(auftrag ?? "— kein LLM-Knoten an diesem Code-Block (ohne Auftrag wird kein Aufruf ausgelöst)");
+                    Kopf("ANKER [S]");
+                    b.AppendLine($"{klasse}.{methode}   {datei}:{(m == null ? "— (Methode fehlt, wird mit der Signatur der Basis angelegt)" : (m.DefZeile + 1).ToString())}   Implementierung des Clients {client}{(S(r, "akteur") is { } ak ? $", antwortet im Namen von {ak}" : "")}");
+                    Kopf("SIGNATUR [S]");
+                    b.AppendLine(defImpl ?? $"async def {methode}(self, e, ctx, state):");
+                    if (m != null && sig != null && defImpl != sig) b.AppendLine($"(Basis: {sig})");
+                    Kopf("VERTRAG (nur Erzwungenes) [S]");
+                    b.AppendLine(ausg.Count == 0
+                        ? "Kenntnis: keine Ausgabe (kein yield) — Framework (die generierte Basis prüft jedes Yield gegen den Vertrag)"
+                        : $"Zusage: liefert nur {string.Join(" | ", ausg.Select(x => x + "Dto"))} per yield — Framework (Basis prüft jedes Yield gegen den Ausgabe-Vertrag)");
+                    b.AppendLine("Ausgaben gehen im Namen des Akteurs durch das Tor; mehrere yields = mehrere Commands");
+                    Kopf("ERREICHBAR IM RUMPF [S]");
+                    b.AppendLine($"Parameter  {P(0, "e")} : {ev}Dto   (das Event — Felder in snake_case, siehe TYPEN)");
+                    b.AppendLine($"Parameter  {P(1, "ctx")} : MessageContext   ({(ctxFelder.Count == 0 ? "Metadaten des Envelopes" : string.Join(", ", ctxFelder))})");
+                    b.AppendLine($"Parameter  {P(2, "state")} : der Zustand der Implementierung (siehe NACHBAR-CODE)");
+                    b.AppendLine("self       : die Implementierung (Felder und Hilfsmethoden siehe NACHBAR-CODE)");
+                    Kopf("TYPEN (Domänen-Records als DTO; /// = Doku-Kommentar) [S]");
+                    b.AppendLine(Typzeile(ev, "Event"));
+                    foreach (var a in ausg) b.AppendLine(Typzeile(a, "Ausgabe"));
+                    Kopf($"NACHBAR-CODE: {Path.GetFileName(datei)} ohne diesen Rumpf [N]");
+                    var z = text.Replace("\r\n", "\n").Split('\n').ToList();
+                    if (m != null) { z.RemoveRange(m.RumpfStart, m.RumpfEnde - m.RumpfStart); z.Insert(m.RumpfStart, "        ...  # ◄ dieser Rumpf"); }
+                    b.AppendLine(string.Join("\n", z.Take(400)));
+                    yield return new PythonSlot(id, titel, b.ToString().TrimStart('\n'), client, ev, klasse, methode, sig, ausg, datei,
+                        m == null ? 0 : m.DefZeile + 1, m == null, auftrag, Regex.Replace($"zusage-{client}.{ev}@{klasse}", @"[^\w.@-]", "_") + ".txt");
+                }
+            }
+        }
+    }
+
+    /// <summary>Die öffentlichen Felder von <c>MessageContext</c> aus dem Python-SDK (Code-Fakt: die Dataclass), sonst leer.</summary>
+    private static List<string> MessageContextFelder(string solutionDir)
+    {
+        foreach (var f in Directory.EnumerateFiles(solutionDir, "router.py", SearchOption.AllDirectories).Where(p => !p.Contains("site-packages") && !p.Contains("/.")))
+        {
+            var t = File.ReadAllText(f).Replace("\r\n", "\n").Split('\n');
+            var i = Array.FindIndex(t, z => z.StartsWith("class MessageContext"));
+            if (i < 0) continue;
+            return t.Skip(i + 1).TakeWhile(z => z.Length == 0 || z.StartsWith(' ')).Select(z => Regex.Match(z, @"^    ([a-z]\w*)\s*:")).Where(m => m.Success).Select(m => m.Groups[1].Value).ToList();
+        }
+        return [];
+    }
+
     // ── Fluss-Lambda (docs/konzept-editor-pipelines.md §14.4): ein Bau-Lambda eines Pipeline-Flusses ──
 
     /// <summary>
@@ -262,7 +361,8 @@ public sealed class KontextBauer
     {
         var lam = s.Lambda!;
         var model = Model(lam.SyntaxTree);
-        var k = new SlotKontext { Slot = s, Schlüssel = Schlüssel(s), Titel = $"fluss {s.Klasse.Name}.{s.Disc}", RumpfStatus = "geschrieben" };
+        var regel = s.Art == "saga";
+        var k = new SlotKontext { Slot = s, Schlüssel = Schlüssel(s), Titel = $"{s.Art} {s.Klasse.Name}.{s.Disc}", RumpfStatus = "geschrieben" };
         if (_llmKnoten.TryGetValue(k.Schlüssel, out var llm)) { k.Auftrag = llm.Intent; k.AuftragQuelle = llm.Quelle; }
         else if (PromptAus(s) is { } p) { k.Auftrag = p; k.AuftragQuelle = "„// 🤖 Prompt:“ im Lambda"; }
         else if (cliAuftrag != null) { k.Auftrag = cliAuftrag; k.AuftragQuelle = "Kommandozeile (--auftrag, steht für den LLM-Knoten)"; }
@@ -273,7 +373,7 @@ public sealed class KontextBauer
         var konkret = verb?.TypeArguments.FirstOrDefault() is INamedTypeSymbol ta
             ? (Sym.Implements(ta, _iCommand) ? ta : _dom.Funktionen.FirstOrDefault(f => f.Full == ta.Fq()) is { } fn ? Typ(fn.AuftragFull) : null)
             : null;
-        var statement = lam.Ancestors().OfType<StatementSyntax>().First(x => x.Parent is BlockSyntax bl && bl.Parent is LambdaExpressionSyntax);
+        var statement = SlotInventar.Anweisung(lam);
         var pos = lam.GetLocation().GetLineSpan();
 
         var b = new StringBuilder();
@@ -282,13 +382,17 @@ public sealed class KontextBauer
         Kopf("AUFTRAG [L]");
         b.AppendLine(k.Auftrag == null ? "— kein LLM-Knoten an diesem Code-Block (ohne Auftrag wird kein Aufruf ausgelöst)" : $"{k.Auftrag}   (Quelle: {k.AuftragQuelle})");
         Kopf("ANKER [S]");
-        b.AppendLine($"{s.Klasse.Name}.Fluss   {Rel(pos.Path)}:{pos.StartLinePosition.Line + 1}   Anweisung {s.Anweisung}, Lambda {s.LambdaIndex} (Knoten {s.Knoten}, Verb {verb?.Name ?? "?"})");
+        b.AppendLine(regel
+            ? $"{s.Klasse.Name}.Regeln   {Rel(pos.Path)}:{pos.StartLinePosition.Line + 1}   Regel {s.Anweisung}, Lambda {s.LambdaIndex} (Verb {verb?.Name ?? "?"})"
+            : $"{s.Klasse.Name}.Fluss   {Rel(pos.Path)}:{pos.StartLinePosition.Line + 1}   Anweisung {s.Anweisung}, Lambda {s.LambdaIndex} (Knoten {s.Knoten}, Verb {verb?.Name ?? "?"})");
         Kopf("SIGNATUR [S]");
         b.AppendLine($"({string.Join(", ", s.Parameter.Select(x => $"{x.Type.ToDisplayString(Kurz)} {x.Name}"))}) => {ziel?.ToDisplayString(Kurz) ?? "?"}"
                      + (konkret != null ? $"   — konkret: new {konkret.Name}(…)" : ""));
         Kopf("VERTRAG (nur Erzwungenes) [S]");
         b.AppendLine($"Rückgabe {ziel?.ToDisplayString(Kurz) ?? "?"} — Compiler (Delegat-Typ des Verbs {verb?.Name})");
-        b.AppendLine("Rein und deterministisch: der Dirigent baut den Aufruf bei jeder Weckung neu und leitet daraus die Vorgang-Id ab — kein Guid.NewGuid(), keine Uhr, kein I/O, kein Zustand");
+        b.AppendLine(regel
+            ? "Rein und deterministisch: der Prozess-Manager faltet die Regeln bei jeder Weckung neu aus dem Log — kein Guid.NewGuid(), keine Uhr, kein I/O, kein Zustand"
+            : "Rein und deterministisch: der Dirigent baut den Aufruf bei jeder Weckung neu und leitet daraus die Vorgang-Id ab — kein Guid.NewGuid(), keine Uhr, kein I/O, kein Zustand");
         b.AppendLine("Zuordnungsform (param.Feld, Konstante, new Wertobjekt(…)) bleibt im Editor als Tabelle bearbeitbar; alles andere steht dort als Lambda aus dem Code");
         Kopf("ERREICHBAR IM RUMPF [S]");
         foreach (var x in s.Parameter)
@@ -296,7 +400,7 @@ public sealed class KontextBauer
             // Framework-Nachrichten am Draht (QuellStrom, ZeitlimitAbgelaufen, SchrittAbgelehnt) stehen nicht in der Domänen-Hülle — ihre Felder hier.
             var felder = x.Type is INamedTypeSymbol nt && !IstDomäne(nt) && PrimärKonstruktor(nt) is { } c
                 ? $"   = {nt.Name}({string.Join(", ", c.Parameters.Select(q => $"{q.Type.ToDisplayString(Kurz)} {q.Name}"))})" : "";
-            b.AppendLine($"Parameter  {x.Name} : {x.Type.ToDisplayString(Kurz)}   (Nachricht am Draht){felder}");
+            b.AppendLine($"Parameter  {x.Name} : {x.Type.ToDisplayString(Kurz)}   ({(regel ? "Event der Regel" : "Nachricht am Draht")}){felder}");
         }
         Kopf("KOMMENTARE (wörtlich) [S]");
         var kom = Zeilenkommentare(statement).ToList();
@@ -307,9 +411,10 @@ public sealed class KontextBauer
         if (konkret != null) saat.Add(konkret);
         foreach (var t in Transitiv(saat))
             foreach (var z in Eintrag(t, konkret != null && t.Fq() == konkret.Fq() ? "Ziel" : "Typ")) b.AppendLine(z);
-        Kopf("GRAPH-UMFELD: der ganze Fluss (Anweisungen wörtlich) [K]");
+        Kopf(regel ? "GRAPH-UMFELD: alle Regeln des Prozesses (wörtlich) [K]" : "GRAPH-UMFELD: der ganze Fluss (Anweisungen wörtlich) [K]");
         if (statement.Parent is BlockSyntax alle)
             foreach (var st in alle.Statements) b.AppendLine((st == statement ? "► " : "  ") + Regex.Replace(st.ToString(), @"\s+", " "));
+        else b.AppendLine("► " + Regex.Replace(statement.ToString(), @"\s+", " "));
         k.NachbarBlöcke = 0; k.KopplungBlöcke = 0;
         k.Text = b.ToString().TrimStart('\n');
         return k;
@@ -918,7 +1023,7 @@ public static class KontextCli
         // und den Auftrag, falls einer im Code/Board steht.
         var index = alle.Select(k =>
         {
-            if (k.Slot.Art == "fluss")
+            if (k.Slot.Art is "fluss" or "saga")
             {
                 // Fluss-Lambda: Anker = Klasse + Anweisung + Lambda-Index im Definiere-Lambda (CodeSync.LambdaAnker).
                 var lp = k.Slot.Lambda!.GetLocation().GetLineSpan();
@@ -947,6 +1052,19 @@ public static class KontextCli
                 slotDatei = DateiName(k), tokenSlot = Token(k.Text),
             };
         }).ToList();
+        // Zusagen/Kenntnisse der Akteure DRAUSSEN: je Client-Implementierung (Python) und Auf ein Slot — eigener Anker (Datei + Klasse + Methode).
+        foreach (var py in bauer.PythonSlots(solutionDir))
+        {
+            File.WriteAllText(Path.Combine(verz, py.SlotDatei), py.Text);
+            md.AppendLine($"| {py.Titel} | {(py.Fehlt ? "fehlt" : "geschrieben")} | {(py.Auftrag == null ? "—" : "✓")} | {Token(py.Text)} | 0 | 0 | {skelTok + Token(py.Text)} |");
+            index.Add(new
+            {
+                id = py.Id, schluessel = py.Id, titel = py.Titel, art = "zusage", besitzer = py.Client, disc = py.Event,
+                klasse = py.Klasse, methode = py.Methode, signatur = py.Signatur, ausgaenge = py.Ausgaenge, datei = py.Datei, zeile = py.Zeile,
+                rumpf = py.Fehlt ? "fehlt" : "geschrieben", auftrag = py.Auftrag, slotDatei = py.SlotDatei, tokenSlot = Token(py.Text),
+            });
+        }
+        File.WriteAllText(Path.Combine(verz, "übersicht.md"), md.ToString());
         File.WriteAllText(Path.Combine(verz, "index.json"), System.Text.Json.JsonSerializer.Serialize(new
         {
             skelettDatei = "00-graph-skelett.txt", tokenSkelett = Token(skelett),

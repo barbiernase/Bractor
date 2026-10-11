@@ -57,7 +57,13 @@ faltet voll (Invariante 1). Äquivalenz + Sagas grün.
 OneOf-Ergebnis-Events heraus) wird wie ein Aggregat gerufen; kurz und lang gleich, nur `.Zeitlimit(…)` (für jeden Aufruf). Generierter
 Dispatch (`FunktionsGenerator`, CQRS068/069), `FunktionsAusfuehrer` (Slots, Wiederholen, genau ein Ergebnis im Ausführungs-Stream),
 Bindung `AddFunktion<F, Impl>` + Boot-Guard; Editor: Funktions-Karte, „Dann ƒ", ⏳. Doku `docs/10-entwickler-api.md` §10.5a.
-Offen: Python-/externer Ausführer, Saga-DSL (Cqrs.Testing) und Simulation kennen `Rufe` noch nicht.
+Offen: Saga-DSL (Cqrs.Testing) und die Prozess-Simulation kennen `Rufe` noch nicht (im Fluss simuliert es; Python-Ausführer geliefert).
+
+**Logik-Element = EIN Muster (2026-10-11, `docs/konzept-domaenen-editor.md` §2 c′):** alles mit Logik ist ◀ Eingang · Ausgänge ▶ (OneOf) ·
+⚙ Fähigkeiten · Rumpf (📝 + optional 🤖) — Decide/Apply, Handles, Store-Fns, Funktion (Signatur auch am rufenden Fluss-Knoten definierbar,
+Abgleich an Interface + Impl), Fluss-λ (`fluss|…`), Prozess-Regel-λ (`saga|Prozess|Regel#Verb`) und die **Zusage/Kenntnis des Akteurs
+draußen** (`zusage|Client|Event@Klasse`: Python-Rumpf der Client-Implementierung — `PythonClients`/`PythonQuelle`/`PythonSync`; neue
+Implementierung legt „C# schreiben" nach dem Bauen aus der generierten Basis an). Akteur-Ableitung JS = C# auch über Flüsse.
 
 **Pipeline als Fluss (2026-10-07, kanonisch — `docs/konzept-editor-pipelines.md` §14):** eine Pipeline ist eine Fläche aus
 Knoten — Quelle (`p.Quelle<IQuellNachricht>()`/`p.Auf<E>()`) → Katalog-Funktionen → Commands —, verdrahtet vom Draht aus

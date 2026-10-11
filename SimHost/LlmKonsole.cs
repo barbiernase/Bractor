@@ -128,6 +128,32 @@ public sealed class LlmKonsole
         (param.Feld, Konstanten, new Wertobjekt(…)). Benutze nur Typen und Member, die im Kontext stehen.
         """;
 
+    /// <summary>Die feste Anweisung für einen Lambda einer Prozess-Regel (Sende/Rufe, Kompensation, Zählung).</summary>
+    public const string AnweisungRegel = """
+        Du schreibst GENAU EINEN C#-Lambda-Ausdruck einer Prozess-Regel: er baut aus dem Event der Regel (seinem Parameter) den Aufruf
+        (einen Command bzw. den Auftrag einer Funktion), die Kompensation oder die erwartete Anzahl. Der Kontext besteht aus dem
+        Graph-Skelett und dem Slot-Teil; am Ende stehen Auftrag und ggf. der aktuelle Lambda mit Befund oder Anpassung.
+        Antworte in GENAU einer von zwei Formen, ohne weiteren Text:
+        1) Ein einziger ```csharp-Block mit NUR dem Lambda-Ausdruck — die Parameterliste genau wie in der SIGNATUR, kein Semikolon.
+        2) Eine Zeile: AUSSERHALB: braucht <Art> <Name> — <Grund>
+           wenn der Auftrag mit dem Event nicht lösbar ist (z. B. ein weiteres Event, ein neues Feld).
+        Der Lambda ist rein und deterministisch: kein Guid.NewGuid(), keine Uhr, kein I/O. Bevorzuge die Zuordnungsform
+        (e.Feld, Konstanten, new Wertobjekt(…)). Benutze nur Typen und Member, die im Kontext stehen.
+        """;
+
+    /// <summary>Die feste Anweisung für eine Zusage/Kenntnis eines Akteurs DRAUSSEN — der Python-Rumpf in der Client-Implementierung.</summary>
+    public const string AnweisungPython = """
+        Du schreibst den Rumpf genau EINER Python-Methode `auf_…` einer Client-Implementierung: so antwortet ein Akteur draußen auf ein
+        Event (Zusage) bzw. nimmt es zur Kenntnis. Der Kontext besteht aus dem Graph-Skelett und dem Slot-Teil (Signatur aus der
+        generierten Basis, Ausgabe-Vertrag, Typen, die übrigen Methoden der Klasse); am Ende stehen Auftrag und ggf. der aktuelle Rumpf.
+        Antworte in GENAU einer von zwei Formen, ohne weiteren Text:
+        1) Ein einziger ```python-Block mit den Anweisungen des Methodenrumpfs — ohne def-Zeile, ohne Einzug der Klasse.
+        2) Eine Zeile: AUSSERHALB: braucht <Art> <Name> — <Grund>
+           wenn der Auftrag mit dem, was im Rumpf erreichbar ist, nicht lösbar ist (z. B. ein neuer Ausgang im Vertrag).
+        Eine Zusage liefert ihre Commands mit `yield <Command>Dto(...)` — NUR die im Ausgabe-Vertrag genannten. Eine Kenntnis liefert
+        nichts. Benutze nur Namen, die im Kontext stehen (Event-Felder in snake_case wie im DTO, `ctx`, `state`, `self`).
+        """;
+
     private readonly string _sln, _verz;
     private readonly ModellSimulation _sim;
     private readonly Func<ILlmAnbieter> _anbieter;
@@ -161,11 +187,17 @@ public sealed class LlmKonsole
     public object Rumpf(string id) => Slot(id) is { } slot ? Lese(slot) : new { ok = false, grund = "Unbekannter Slot." };
 
     // ── Fluss-Lambda: eigener Anker (Klasse + Anweisung + Lambda), der „Rumpf“ ist der ganze Lambda-Ausdruck ──
-    private static bool IstFluss(JsonObject slot) => S(slot, "art") == "fluss";
+    // Lambda-Slots (Fluss-Knoten und Prozess-Regeln) teilen den Anker: Klasse + Anweisung des Definiere-Lambdas + Lambda-Index.
+    private static bool IstFluss(JsonObject slot) => S(slot, "art") is "fluss" or "saga";
     private static LambdaAnker LAnker(JsonObject slot) =>
         new(S(slot, "datei"), S(slot, "klasse"), slot["anweisung"]?.GetValue<int>() ?? -1, slot["lambda"]?.GetValue<int>() ?? -1);
-    private object Lese(JsonObject slot) => IstFluss(slot) ? CodeSync.LeseLambda(LAnker(slot), _sln) : CodeSync.LeseRumpf(Anker(slot), _sln);
-    private string? BasisHash(JsonObject slot) => IstFluss(slot) ? CodeSync.LambdaHash(LAnker(slot), _sln) : CodeSync.RumpfHash(Anker(slot), _sln);
+    // Zusage/Kenntnis eines Akteurs draußen: der Python-Rumpf in der Client-Implementierung (eigener Anker: Datei + Klasse + Methode).
+    private static bool IstPython(JsonObject slot) => S(slot, "art") == "zusage";
+    private static PythonAnker PAnker(JsonObject slot) => new(S(slot, "datei"), S(slot, "klasse"), S(slot, "methode"), SN(slot, "signatur"));
+    private object Lese(JsonObject slot) => IstPython(slot) ? PythonSync.Lese(PAnker(slot), _sln)
+        : IstFluss(slot) ? CodeSync.LeseLambda(LAnker(slot), _sln) : CodeSync.LeseRumpf(Anker(slot), _sln);
+    private string? BasisHash(JsonObject slot) => IstPython(slot) ? PythonSync.RumpfHash(PAnker(slot), _sln)
+        : IstFluss(slot) ? CodeSync.LambdaHash(LAnker(slot), _sln) : CodeSync.RumpfHash(Anker(slot), _sln);
 
     private static string S(JsonNode? n, string p) => n?[p]?.GetValue<string>() ?? "";
     private static string? SN(JsonNode? n, string p) => n?[p] is JsonValue v && v.TryGetValue<string>(out var s) ? s : null;
@@ -222,7 +254,7 @@ public sealed class LlmKonsole
         var b = new StringBuilder();
         b.AppendLine(skelett).AppendLine().AppendLine(teil.Trim()).AppendLine();
         b.AppendLine("## AUFTRAG").AppendLine(auftrag.Trim());
-        if (rumpf != null) b.AppendLine().AppendLine("## AKTUELLER RUMPF").AppendLine("```csharp").AppendLine(rumpf.Trim()).AppendLine("```");
+        if (rumpf != null) b.AppendLine().AppendLine("## AKTUELLER RUMPF").AppendLine(IstPython(slot) ? "```python" : "```csharp").AppendLine(rumpf.Trim()).AppendLine("```");
         if (befund != null) b.AppendLine().AppendLine("## BEFUND (Prüfung des aktuellen Rumpfs) — korrigiere den Rumpf").AppendLine(befund.Trim());
         if (anpassung != null) b.AppendLine().AppendLine("## ANPASSUNG (Wunsch des Entwicklers) — ändere den aktuellen Rumpf").AppendLine(anpassung.Trim());
         return b.ToString();
@@ -250,10 +282,10 @@ public sealed class LlmKonsole
             var art = anpassung != null ? "anpassung" : befund != null ? "reparatur" : "erzeugen";
             var uhr = Stopwatch.StartNew();
             LlmAntwort antwort;
-            try { antwort = await anbieter.FrageAsync(IstFluss(slot) ? AnweisungFluss : Anweisung, prompt, ct); }
+            try { antwort = await anbieter.FrageAsync(IstPython(slot) ? AnweisungPython : S(slot, "art") == "saga" ? AnweisungRegel : IstFluss(slot) ? AnweisungFluss : Anweisung, prompt, ct); }
             catch (Exception ex) { runden.Add(new { nr, art, fehler = ex.Message + (ex.InnerException != null ? " — " + ex.InnerException.Message : "") }); break; }
             uhr.Stop();
-            var (ergebnis, kandidat, ausserhalb) = IstFluss(slot) ? ZerlegeLambda(antwort.Text) : Zerlege(antwort.Text);
+            var (ergebnis, kandidat, ausserhalb) = IstPython(slot) ? ZerlegePython(antwort.Text) : IstFluss(slot) ? ZerlegeLambda(antwort.Text) : Zerlege(antwort.Text);
             var befunde = kandidat != null ? Pruefe(slot, kandidat) : new List<string>();
             var runde = new
             {
@@ -287,6 +319,29 @@ public sealed class LlmKonsole
     }
 
     /// <summary>Antwort → Lambda | AUSSERHALB | unlesbar (ein Codeblock mit genau einem Lambda-Ausdruck).</summary>
+    private static (string Ergebnis, string? Rumpf, string? Ausserhalb) ZerlegePython(string text)
+    {
+        var t = text.Trim();
+        var aus = Regex.Match(t, @"^AUSSERHALB:.*$", RegexOptions.Multiline);
+        var block = Regex.Match(t, @"```(?:python|py)?\s*\n(.*?)```", RegexOptions.Singleline);
+        if (!block.Success && aus.Success) return ("ausserhalb", null, aus.Value.Trim());
+        var code = PythonQuelle.Dedent(block.Success ? block.Groups[1].Value : t);
+        return code.Trim().Length == 0 ? ("unlesbar", null, null) : ("rumpf", code, null);
+    }
+
+    /// <summary>Python-Rumpf prüfen: der ganze Dateitext MIT dem Kandidaten durch Pythons Parser; eine Zusage ohne Ausgabe darf nichts liefern.</summary>
+    private List<string> PruefePython(JsonObject slot, string rumpf)
+    {
+        var (ok, grund, text) = PythonSync.MitRumpf(PAnker(slot), rumpf, null, _sln);
+        if (!ok) return [grund];
+        var befunde = PythonSync.Pruefe(text!);
+        var ausg = slot["ausgaenge"]?.AsArray().Select(x => x!.GetValue<string>()).ToList() ?? [];
+        if (ausg.Count == 0 && Regex.IsMatch(rumpf, @"^\s*yield\b", RegexOptions.Multiline)) befunde.Add("Kenntnis (ohne Ausgabe-Vertrag) darf nichts liefern — kein yield.");
+        foreach (Match y in Regex.Matches(rumpf, @"yield\s+(\w+?)Dto\s*\("))
+            if (!ausg.Contains(y.Groups[1].Value)) befunde.Add($"yield {y.Groups[1].Value} — nicht im Ausgabe-Vertrag ({(ausg.Count == 0 ? "leer" : string.Join(", ", ausg))}).");
+        return befunde;
+    }
+
     private static (string Ergebnis, string? Rumpf, string? Ausserhalb) ZerlegeLambda(string text)
     {
         var t = text.Trim();
@@ -311,7 +366,7 @@ public sealed class LlmKonsole
         var modell = SimModell();
         if (modell == null) return new List<string> { "domain-model.json fehlt — Kontexte neu erzeugen." };
         var mit = MitLambda(modell, slot, ausdruck);
-        if (mit is null) return new List<string> { $"Fluss {S(slot, "klasse")}.{S(slot, "knoten")} steht nicht im Modell — Kontexte neu erzeugen." };
+        if (mit is null) return new List<string> { $"{(S(slot, "art") == "saga" ? "Prozess" : "Fluss")} {S(slot, "klasse")}.{S(slot, "knoten")} steht nicht im Modell — Kontexte neu erzeugen." };
         var basis = BasisKompilat(modell);
         var bekannt = basis.Fehler.Select(f => f.Code + "|" + f.Meldung).ToHashSet();
         return _sim.Kompiliere(mit).Fehler.Where(f => f.Schweregrad == "error" && !bekannt.Contains(f.Code + "|" + f.Meldung))
@@ -328,6 +383,7 @@ public sealed class LlmKonsole
     /// <summary>Das Modell mit dem Kandidaten im passenden Knoten: Lambda i = Eingang i (Haupt-Aufruf, dann je ∨), beim Je die Liste.</summary>
     private static EditorModell? MitLambda(EditorModell m, JsonObject slot, string ausdruck)
     {
+        if (S(slot, "art") == "saga") return MitRegelLambda(m, slot, ausdruck);
         var fluss = m.Fluesse.FirstOrDefault(f => f.Name == S(slot, "klasse"));
         var knoten = fluss?.Knoten.FirstOrDefault(k => k.Name == S(slot, "knoten"));
         var i = slot["lambda"]?.GetValue<int>() ?? -1;
@@ -340,10 +396,29 @@ public sealed class LlmKonsole
         return m with { Fluesse = m.Fluesse.Select(f => f != fluss ? f : f with { Knoten = f.Knoten.Select(k => k == knoten ? neu : k).ToList() }).ToList() };
     }
 
+    /// <summary>Prozess-Regel: Regel = Anweisung; das Verb sagt, welcher Ausdruck (Sende/Rufe, Kompensation, Zählung).</summary>
+    private static EditorModell? MitRegelLambda(EditorModell m, JsonObject slot, string ausdruck)
+    {
+        var saga = m.Sagas.FirstOrDefault(x => x.Name == S(slot, "klasse"));
+        var i = slot["anweisung"]?.GetValue<int>() ?? -1;
+        if (saga == null || i < 0 || i >= saga.Schritte.Count) return null;
+        var alt = saga.Schritte[i];
+        SagaSchritt? neu = S(slot, "knoten") switch
+        {
+            "Sende" or "SendeJe" or "Rufe" => alt with { SendeAusdruck = ausdruck },
+            "RückgängigDurch" or "RückgängigDurchJe" => alt with { KompensationAusdruck = ausdruck },
+            "UndAlle" => alt with { SammelAusdruck = ausdruck },
+            _ => null,
+        };
+        return neu == null ? null
+            : m with { Sagas = m.Sagas.Select(x => x != saga ? x : x with { Schritte = x.Schritte.Select((t, j) => j == i ? neu : t).ToList() }).ToList() };
+    }
+
     // ── Prüfen: Syntax für alle; Decide/Apply In-Memory-Compile mit den echten Generatoren; Store gegen das echte Projekt ──
 
     public List<string> Pruefe(JsonObject slot, string rumpf)
     {
+        if (IstPython(slot)) return PruefePython(slot, rumpf);
         if (IstFluss(slot)) return PruefeLambda(slot, rumpf);
         var befunde = SyntaxFactory.ParseStatement("{\n" + rumpf + "\n}").GetDiagnostics()
             .Where(d => d.Severity == DiagnosticSeverity.Error)
@@ -454,6 +529,7 @@ public sealed class LlmKonsole
     {
         var slot = Slot(id);
         if (slot == null) return new { ok = false, grund = "Unbekannter Slot." };
+        if (IstPython(slot)) return UebernehmePython(id, slot, rumpf, auftrag, basisHash);
         if (IstFluss(slot)) return UebernehmeLambda(id, slot, rumpf, basisHash, bauen);
         var anker = Anker(slot);
         var (ok, grund, alt, neuHash, zeile) = CodeSync.SetzeRumpf(anker, rumpf, auftrag, basisHash, _sln);
@@ -481,6 +557,21 @@ public sealed class LlmKonsole
             hinweis = "Kontexte sind jetzt veraltet — neu erzeugen, bevor der nächste Slot gefüllt wird." };
     }
 
+    // Python: kein Build (kein Generator dahinter) — die Datei IST der Client; Sicherung = der ganze alte Dateitext.
+    private object UebernehmePython(string id, JsonObject slot, string rumpf, string? auftrag, string? basisHash)
+    {
+        var anker = PAnker(slot);
+        var (ok, grund, alt, neuHash, zeile) = PythonSync.SetzeRumpf(anker, rumpf, auftrag, basisHash, _sln);
+        if (!ok) return new { ok, grund };
+        var sicherung = Path.Combine(_verz, "sicherung");
+        Directory.CreateDirectory(sicherung);
+        var datei = Path.Combine(sicherung, $"{DateTime.Now:yyyyMMdd-HHmmss}-{Regex.Replace(id, @"[^\w.@-]", "_")}.json");
+        File.WriteAllText(datei, JsonSerializer.Serialize(new { id, pythonAnker = anker, alterInhalt = alt, neuerHash = neuHash }));
+        Protokolliere(id, new { aktion = "uebernommen", datei = anker.Datei, zeile });
+        return new { ok = true, datei = anker.Datei, zeile, sicherung = Path.GetFileName(datei), bau = (object?)null,
+            hinweis = "Kontexte sind jetzt veraltet — neu erzeugen, bevor der nächste Slot gefüllt wird." };
+    }
+
     public object Rueckgaengig(string id, bool bauen = false)
     {
         var sicherung = Path.Combine(_verz, "sicherung");
@@ -489,7 +580,9 @@ public sealed class LlmKonsole
             ? Directory.GetFiles(sicherung, $"*-{muster}.json").OrderByDescending(f => f).FirstOrDefault() : null;
         if (letzte == null) return new { ok = false, grund = "Keine Sicherung für diesen Slot." };
         var o = JsonNode.Parse(File.ReadAllText(letzte))!;
-        var (ok, grund) = o["lambdaAnker"] is { } la
+        var (ok, grund) = o["pythonAnker"] is { } pa
+            ? PythonSync.Zurueck(pa.Deserialize<PythonAnker>()!, S(o, "alterInhalt"), S(o, "neuerHash"), _sln)
+            : o["lambdaAnker"] is { } la
             ? CodeSync.SetzeLambdaZurueck(la.Deserialize<LambdaAnker>()!, S(o, "alterInhalt"), S(o, "neuerHash"), _sln)
             : CodeSync.SetzeInhaltZurueck(o["anker"].Deserialize<MethodenAnker>()!, S(o, "alterInhalt"), S(o, "neuerHash"), _sln);
         if (ok) { File.Move(letzte, letzte + ".zurueckgenommen"); Protokolliere(id, new { aktion = "rueckgaengig" }); }

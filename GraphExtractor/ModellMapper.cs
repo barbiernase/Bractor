@@ -134,6 +134,7 @@ public static class ModellMapper
             DecideMethode = dom.DecideMethode ?? standard.DecideMethode,
             ApplyMethode = dom.ApplyMethode ?? standard.ApplyMethode,
             Verzeichnisse = verzeichnisse,
+            PythonPaket = PythonClients.Paket(dom.Wurzel),
             Kennung = Kennung(dom.Wurzel),
             Skalare = WireSkalare(),
             OneOfMax = dom.OneOfMax, UndMax = dom.UndMax,
@@ -146,6 +147,7 @@ public static class ModellMapper
             StoreImplNamespace = dom.StoreImplNamespace,
         };
 
+        var pyImpls = PythonClients.Lies(dom.Wurzel);
         return Herkunft.Stempeln(new EditorModell
         {
             Records = records, Enums = enums, Aggregate = aggregate, Decider = decider, Applier = applier, Sagas = sagas, Rahmen = rahmen,
@@ -153,7 +155,7 @@ public static class ModellMapper
             {
                 Name = f.Name, Namespace = f.Namespace, Auftrag = Kurz(f.AuftragFull), Ergebnisse = f.ErgebnisseFull.Select(Evt).ToList(),
                 Faehigkeiten = f.Faehigkeiten.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
-                Doku = f.Doku, Datei = Rel(f.Datei), Implementierung = f.ImplKlasse, Rumpf = f.ImplRumpf,
+                Doku = f.Doku, Datei = Rel(f.Datei), Implementierung = f.ImplKlasse, ImplDatei = Rel(f.ImplDatei), Rumpf = f.ImplRumpf,
             }).ToList(),
             Fluesse = dom.Fluesse.Select(f => new FlussPipeline
             {
@@ -180,6 +182,8 @@ public static class ModellMapper
             {
                 Name = x.Name, Namespace = x.Namespace, Traegt = x.Traegt, Sendet = x.Sendet, Fragt = x.Fragt, Kenntnis = x.Kenntnis,
                 Doku = x.Doku, Datei = Rel(x.Datei),
+                // Handshake-Name = Interface ohne führendes I — derselbe Name, unter dem die generierte Python-Basis den Client führt.
+                Implementierungen = pyImpls.GetValueOrDefault(x.Name.Length > 1 && x.Name[0] == 'I' && char.IsUpper(x.Name[1]) ? x.Name[1..] : x.Name) ?? [],
             }).ToList(),
             Lesen = Leseseite(dom),
         });

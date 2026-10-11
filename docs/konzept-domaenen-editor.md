@@ -66,6 +66,26 @@ werden alte eingebettete Rümpfe automatisch in einen 📝-Knoten **migriert** u
 (`normalize`). Ein leerer Rumpf-Port zeigt einen deutlichen „⚙ …fehlt"-Marker + Ein-Klick-Knöpfe
 (＋📝 / ＋🤖), die den Knoten anlegen und sofort andocken — so werden „Code-Inseln" auffindbar.
 
+**(c′) Jedes Logik-Element folgt EINEM Muster (2026-10-11).** Alles, was Logik hat, ist ein Element aus **◀ Eingang** (ein Typ),
+**Ausgänge ▶** (`OneOf<…>` konkreter Typen, `void` = Kenntnis, oder ein Strom), **⚙ Fähigkeiten** (Parameter) und einem **Rumpf** am
+Code-Eingang (📝 + optional 🤖). Die Typen von Ein- und Ausgang werden **am Element selbst** angelegt und bearbeitet (Name, Felder) — nicht
+nur aus einem Katalog gewählt. Wo der Rumpf lebt, bestimmt der Code:
+
+| Logik-Element | Eingang → Ausgänge | Rumpf lebt in | Slot (LLM) |
+|---|---|---|---|
+| Decide / Apply | Command → OneOf<Event> / Event → State | C# Aggregat | `decide`/`apply` |
+| Projektion-/Reaktion-/Reader-Handle | Event/Query → OneOf<…> (+ Store-Fähigkeiten) | C# | `projektion`/`reaktion`/`reader` |
+| Store-Fähigkeit | Parameter → Rückgabe | C# Store-Impl | `store` |
+| Katalog-Funktion | Auftrag → OneOf<Ergebnis> (+ Lese-Fähigkeiten) | C# Impl (`RufeAsync`) | `funktion` |
+| Fluss-Knoten (Zuordnung) | Fälle am Draht → Auftrag/Command | Lambda im Fluss | `fluss` (`Pipeline\|knoten#i`) |
+| Prozess-Regel (Aufruf/Kompensation) | Event der Regel → Command/Auftrag | Lambda der Regel | `saga` (`Prozess\|Regel#Verb`) |
+| **Zusage / Kenntnis** (Akteur draußen) | Event → OneOf<Command> / void / Strom | **Client-Implementierung** (Python `auf_…`) | `zusage` (`Client\|Event@Klasse`) |
+
+Die **Funktion** zeigt denselben Signatur-Baustein auf ihrer Karte und **am Fluss-Knoten, der sie ruft** (dort definierbar: Auftrag,
+Ergebnisse, Felder, Fähigkeiten, Rumpf); „C# schreiben" gleicht eine geänderte Signatur an Interface UND Implementierung ab und hängt den
+`IAuftrag<F>`-Marker um. Lambdas, die im Code stehen, zeigen „◀ λ …: im Code" mit ＋📝/＋🤖; ein gefüllter Block IST der Lambda verbatim.
+Angedockte Blöcke an Lambdas sind Board-Fakt und überleben das Neu-Einlesen (`mergeBoard` überträgt sie je Knoten/Eingang bzw. Dann).
+
 **(d) Die eine sichtbare unreine Naht.** Invariante 5 (Fachcode bleibt rein) hat einen bewusst
 erlaubten Gegenpol: den Composition Root (§7). Der Editor macht diese Grenze **sichtbar**, statt sie
 in `Program.cs` zu verstecken — dieselbe Bewegung wie bei den Code-Inseln.
@@ -550,7 +570,10 @@ VO/Enum/Konfig/HostSetting/Dienst/Code/Response gehen mit ihrem Träger mit, öf
 - **Zusage-Panel:** Vertrag-Name (nur im Entwurf frei), ◀ Auf Event, Ausgänge ▶ (⊕/✕), „Strom", die Signatur als Zeile.
 - „◀ kommt aus" eines Commands nennt „Akteur · Zusage auf E", „geht an ▶" eines Events „Akteur · Zusage" samt tragenden Clients (🔌).
 - **Schreiben:** Scaffolder legt das Interface neben den Akteur; der Abgleich hängt fehlende `Auf` an, ersetzt geänderte Rückgaben,
-  streicht entfernte (nur im Haupt-Vertrag; weitere Teile liest der Editor). Danach `./codegen.sh` → Python-Basis.
+  streicht entfernte (nur im Haupt-Vertrag; weitere Teile liest der Editor). Der Build danach erzeugt die Python-Basis (Codegen-Prepass).
+- **Rumpf · umgesetzt in (2026-10-11):** die Zusage ist ein Logik-Element — ihr Verhalten steht in der Implementierung jedes Clients, der
+  den Vertrags-Teil trägt. Das Zusage-Panel zeigt je Implementierung (🐍 Klasse · Datei · 🔌 Client) den Rumpf-Port (📝 + 🤖, Slot
+  `zusage|Client|Event@Klasse`). Code-Fakt: eine Python-Klasse, die die generierte `<Client>Basis` erbt (`PythonClients`, `PythonQuelle`).
 
 ### 12.6 Client: Rahmen, Anschlussleiste, Leitungen
 
@@ -567,10 +590,17 @@ VO/Enum/Konfig/HostSetting/Dienst/Code/Response gehen mit ihrem Träger mit, öf
   (Events), die Leitungen je Ziel-Rahmen (Klick = auffächern). ✓-Karte im Verbinden-Modus = lösen.
 - **Schreiben:** neuer Client → Interface in `Clients.cs` des Namespace; bestehender → Abgleich von Basisliste (Teile, `ISendet`, `IFragt`;
   fremde Basistypen bleiben) und Kenntnis-Methoden.
+- **⚙ Implementierung (Verhalten draußen):** je Implementierung (🐍 Klasse · Datei) je Zusage/Kenntnis eine Zeile „◀ Event → Ausgänge ▶" mit
+  Rumpf-Port. „+ 🐍 Python-Implementierung" plant eine neue Klasse im Python-Paket (`rahmen.pythonPaket`); „C# schreiben" legt sie NACH dem
+  Bauen an (die Basis entsteht erst dabei) — je Methode die Signatur der Basis und `raise NotImplementedError`, dann je Methode 📝/🤖.
+  Die 🤖-Konsole schreibt Python-Rümpfe chirurgisch (`PythonSync`: Sperre über Hash, Prüfung mit `ast.parse` + Ausgabe-Vertrag, Rückgängig).
+- **Anlegen:** Palette „+ 🔌 Client", „+ 👤 Akteur" — neue landen im Namespace des Akteur- bzw. Client-Katalogs. „darf ⊕" bietet alle Sorten
+  an, die die Grammatik einem Akteur erlaubt (Command · Query · Trigger · Transient · Quell-Nachricht); „ƒ bietet an" = `IDarf<IFunktion>`.
 
 ### 12.7 Ableitung, Parität, Diagnose
 
-- **Eine Quelle:** C# (`AkteurAnteile`, `Validator`, `Grammatik`) und JS-Spiegel rechnen gleich; das Board bekommt die Akteur-Mengen als
+- **Eine Quelle:** C# (`AkteurAnteile`, `Validator`, `Grammatik`) und JS-Spiegel rechnen gleich — seit 2026-10-11 auch über Flüsse und
+  Katalog-Funktionen (`flussRegeln`; `deAkteurParitaet()` → gleich); das Board bekommt die Akteur-Mengen als
   `rahmen.akteurMengen`, die Grammatik als `rahmen.grammatik`.
 - **`--check`** vergleicht je Akteur Befugnisse und Vertrag, je Client den Rand (Code ⇄ Board); **`--sonde`** enthält frei benannte
   Akteure, Verträge und Clients (n:m) sowie gezeichnete, über den Scaffolder geschriebene.

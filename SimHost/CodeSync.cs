@@ -402,11 +402,13 @@ public static class CodeSync
         var definiere = klasse?.Members.OfType<PropertyDeclarationSyntax>()
             .SelectMany(p => p.DescendantNodes().OfType<InvocationExpressionSyntax>())
             .Select(i => i.ArgumentList.Arguments.FirstOrDefault()?.Expression as LambdaExpressionSyntax)
-            .FirstOrDefault(l => l?.Body is BlockSyntax);
-        if (definiere?.Body is not BlockSyntax block) return new(false, pfad, text, null, $"{a.Klasse}: kein Fluss (Definiere-Lambda) gefunden.");
-        if (a.Anweisung < 0 || a.Anweisung >= block.Statements.Count) return new(false, pfad, text, null, $"{a.Klasse}: Anweisung {a.Anweisung} fehlt.");
-        var st = block.Statements[a.Anweisung];
-        var lambdas = st.DescendantNodes().OfType<LambdaExpressionSyntax>()
+            .FirstOrDefault(l => l != null);
+        if (definiere == null) return new(false, pfad, text, null, $"{a.Klasse}: kein Definiere-Lambda gefunden.");
+        // Block = je Anweisung eine Regel/ein Knoten; Ausdrucks-Lambda (eine einzige Regel) = Anweisung 0.
+        var anweisungen = definiere.Body is BlockSyntax block ? block.Statements.Cast<Microsoft.CodeAnalysis.SyntaxNode>().ToList() : [definiere.Body];
+        if (a.Anweisung < 0 || a.Anweisung >= anweisungen.Count) return new(false, pfad, text, null, $"{a.Klasse}: Anweisung {a.Anweisung} fehlt.");
+        var st = anweisungen[a.Anweisung];
+        var lambdas = st.DescendantNodesAndSelf().OfType<LambdaExpressionSyntax>()
             .Where(l => l.Parent is ArgumentSyntax && !l.Ancestors().TakeWhile(x => x != st).OfType<LambdaExpressionSyntax>().Any()).ToList();
         return a.Lambda >= 0 && a.Lambda < lambdas.Count
             ? new(true, pfad, text, lambdas[a.Lambda], "")

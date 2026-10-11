@@ -337,6 +337,8 @@ public sealed record Funktion
     public string? Herkunft { get; init; }
     /// <summary>Die C#-Implementierung aus dem Code (Klassenname) — null = es gibt (noch) keine.</summary>
     public string? Implementierung { get; init; }
+    /// <summary>Datei der Implementierung (relativ zur Solution) — dort gleicht „C# schreiben" die RufeAsync-Signatur mit ab.</summary>
+    public string? ImplDatei { get; init; }
     /// <summary>Ihr <c>RufeAsync</c>-Rumpf (Spiegel der Datei, im Editor ein 📝/🤖-Code-Block; geändert wird er über ✓ Übernehmen).</summary>
     public string? Rumpf { get; init; }
     /// <summary>
@@ -457,6 +459,11 @@ public sealed record Rahmen
     public string ApplyMethode { get; init; } = Abstractions.Aggregatvertrag.Apply;
     /// <summary>Namespace → Verzeichnis (relativ zur Solution, „/"-getrennt). Enthält auch die Wurzel-Namespaces der Projekte.</summary>
     public IReadOnlyDictionary<string, string> Verzeichnisse { get; init; } = new Dictionary<string, string>();
+    /// <summary>
+    /// Das Python-Paket der Clients (relativ zur Solution, z. B. <c>Domain.Client.Worker.Python.ML/domain_client</c>) — Code-Fakt: dort liegt
+    /// die generierte <c>generated/vertraege.py</c>. Hier legt „C# schreiben" eine neue Client-Implementierung an. Null = keins.
+    /// </summary>
+    public string? PythonPaket { get; init; }
 
     /// <summary>Kennung der Solution, aus der das Modell stammt — trennt Browser-Zwischenstände verschiedener Repos.</summary>
     public string? Kennung { get; init; }
@@ -767,4 +774,32 @@ public sealed record Client
     /// <summary>Datei der Deklaration (relativ zur Solution); null = neu im Editor.</summary>
     public string? Datei { get; init; }
     public string? Herkunft { get; init; }
+    /// <summary>
+    /// Die Software, die den Vertrag umsetzt (Code-Fakt: eine Klasse, die die generierte Basis <c>&lt;Client&gt;Basis</c> erbt) — je
+    /// Zusage/Kenntnis ihr Rumpf. Das ist die LOGIK des Akteurs draußen: im Editor ein 📝-Block (+ 🤖) je <c>Auf</c>. Nicht Teil der
+    /// Signatur (Herkunft), geändert wird sie über ✓ Übernehmen am 🤖 bzw. die IDE.
+    /// </summary>
+    public IReadOnlyList<ClientImpl> Implementierungen { get; init; } = [];
+}
+
+/// <summary>Eine Implementierung eines Clients: Sprache (heute <c>python</c>), Klasse, Datei und je <c>Auf(Event)</c> der Rumpf.</summary>
+public sealed record ClientImpl
+{
+    public string Sprache { get; init; } = "python";
+    public string Klasse { get; init; } = "";
+    public string Datei { get; init; } = "";
+    public IReadOnlyList<ClientRumpf> Rumpfe { get; init; } = [];
+}
+
+/// <summary>Der Rumpf einer Zusage/Kenntnis in der Implementierung (<see cref="Methode"/> wie die generierte Basis sie nennt; null Rumpf = fehlt).</summary>
+public sealed record ClientRumpf
+{
+    public string Event { get; init; } = "";
+    public string Methode { get; init; } = "";
+    public string? Rumpf { get; init; }
+    /// <summary>Die Signatur aus der generierten Basis (<c>async def auf_…(self, e: …Dto, ctx, state) -&gt; …:</c>) — gilt auch für einen fehlenden Rumpf.</summary>
+    public string? Signatur { get; init; }
+    /// <summary>Der Ausgabe-Vertrag der Zusage (Commands, die sie liefern darf; leer = Kenntnis) und der Akteur, in dessen Namen sie antwortet.</summary>
+    public IReadOnlyList<string> Ausgaenge { get; init; } = [];
+    public string? Akteur { get; init; }
 }

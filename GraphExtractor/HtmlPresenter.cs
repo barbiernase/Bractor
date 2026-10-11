@@ -186,6 +186,8 @@ public static class HtmlPresenter
 #de .grahmen.fluss{border-width:calc(2px * var(--lz));background:color-mix(in srgb,var(--dc) 8%,#0b0f17)}
 #de .grahmen.fluss>.grahmen-k .akt-n{cursor:pointer}
 #de .gnode2.n-flussknoten{border-color:#c08a2e;width:240px}
+#de .typkasten{border-left:2px solid #3a4658;margin:0 0 6px 8px;padding-left:6px}
+#de .fl-signatur{border:1px solid #4a3d24;border-radius:6px;padding:4px 6px;margin:6px 0;background:rgba(192,138,46,.06)}
 #de .gnode2.n-flussknoten .ghead{background:#8a6a2e}
 #de .fl-port .slotlbl{color:#e8c98a}
 #de .fl-port.fl-fehler .slotlbl{color:#e0a08a}
@@ -645,6 +647,8 @@ public static class HtmlPresenter
     m.stores.forEach(s=>{(s.writeFns||[]).forEach(f=>mig(f,f.name||"Store-Fn"));(s.readFns||[]).forEach(f=>mig(f,f.name||"Store-Fn"));});
     // Katalog-Funktion: der RufeAsync-Rumpf ihrer C#-Implementierung → eigener Code-Knoten (der Code-Eingang der Funktions-Karte).
     m.funktionen.forEach(f=>mig(f,(f.implementierung||f.name||"Funktion")+".RufeAsync"));
+    // Client-Implementierung (Python): je Zusage/Kenntnis ihr Rumpf → eigener Code-Knoten (das Verhalten des Akteurs draußen).
+    (m.clients||[]).forEach(c=>(c.implementierungen||[]).forEach(im=>(im.rumpfe||[]).forEach(r=>{if(r.rumpf!=null)mig(r,im.klasse+"."+r.methode);})));
     m.aggregate.forEach(a=>{if((a.state||[]).length&&!m.states.some(s=>s.aggregat===a.name))m.states.push({_id:"s"+(NID++),aggregat:a.name});});
     // Round-trip: geladene Saga.Schritte → Transition-Knoten (prozess = Saga-Name), Schritte werden vor Serveraufruf neu erzeugt.
     m.sagas.forEach(s=>{(s.schritte||[]).forEach(st=>m.transitions.push({_id:"t"+(NID++),prozess:s.name,wenn:(st.wenn||[]).slice(),
@@ -657,6 +661,12 @@ public static class HtmlPresenter
     if(!val||!MODEL.aggregate.some(a=>a.name===val)){const o=h("option",{value:val||""},val||"— Aggregat —");o.selected=true;s.append(o);}
     MODEL.aggregate.forEach(a=>{const o=h("option",{value:a.name},a.name);if(a.name===val)o.selected=true;s.append(o);});return s;};
   // Standard-Namespace für neue Knoten: der eines vorhandenen Aggregats/Records; sonst eine Projekt-Wurzel aus dem Code (Rahmen).
+  // Akteure und Clients stehen außerhalb der Domänen in IHREM Katalog (z. B. Domain.Akteure) — ein neuer gesellt sich dazu.
+  function haeufigsterNs(liste){const z=new Map();(liste||[]).forEach(x=>x.namespace&&z.set(x.namespace,(z.get(x.namespace)||0)+1));
+    return [...z.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0]||null;}
+  // Was ein Akteur selbst hineingeben darf — die Sorten aus der Grammatik (Erzeugungen des Bausteins Akteur), nie hart kodiert.
+  function akteurSorten(){return ((GR()||{}).erzeugungen||[]).filter(e=>e.baustein==="akteur").map(e=>e.sorte);}
+  const akteurDarfLabel=()=>akteurSorten().map(x=>grName("sorten",x)).join(" · ")||"Command · Query · Trigger";
   function defaultNsGlobal(){const w=Object.keys((MODEL.rahmen||{}).verzeichnisse||{}).sort((a,b)=>a.length-b.length)[0];
     return MODEL.aggregate[0]?.namespace||MODEL.records[0]?.namespace||(w?w+".Neu":"Neu");}
 
@@ -770,12 +780,10 @@ public static class HtmlPresenter
     else if(kind==="trigger")MODEL.triggers.push({_id:"tg"+(NID++),name:uniq("NeuTrigger"),namespace:defaultNs(),msgName:uniq("NeuTriggerMsg"),felder:[],...pos});
     else if(kind==="frist")MODEL.frists.push({_id:"fr"+(NID++),name:uniq("NeueFrist"),kontext:"",dauerSetting:"",plant:[],storniert:[],sendet:"",aggregat:"",...pos});
     else if(kind==="dienst")MODEL.dienste.push({_id:"di"+(NID++),name:uniq("NeuerDienst"),vertrag:"IDienst",extern:false,codeSrc:null,...pos});
-    else if(kind==="funktion"){const nm=uniq("INeueFunktion"),ns=defaultNs(),an=uniq(nm.replace(/^I/,"")+"Auftrag");
-      MODEL.records.push({name:an,kind:"auftrag",funktion:nm,namespace:ns,felder:[]});
-      MODEL.funktionen.push({_id:"fk"+(NID++),name:nm,namespace:ns,auftrag:an,ergebnisse:[],...pos});}
+    else if(kind==="funktion")neueFunktion(defaultNs(),pos);
     else if(kind==="hostsetting")MODEL.hostSettings.push({_id:"hs"+(NID++),name:uniq("NeuSetting"),typ:"string",default:"",envKey:"",...pos});
-    else if(kind==="akteur")MODEL.akteure.push({_id:"ak"+(NID++),name:uniq("NeuerAkteur"),namespace:defaultNs(),darf:[],...pos});
-    else if(kind==="client")MODEL.clients.push({_id:"cl"+(NID++),name:uniq("INeuerClient"),namespace:defaultNs(),traegt:[],sendet:[],fragt:[],kenntnis:[],...pos});
+    else if(kind==="akteur")MODEL.akteure.push({_id:"ak"+(NID++),name:uniq("NeuerAkteur"),namespace:haeufigsterNs(MODEL.akteure)||defaultNs(),darf:[],...pos});
+    else if(kind==="client")MODEL.clients.push({_id:"cl"+(NID++),name:uniq("INeuerClient"),namespace:haeufigsterNs(MODEL.clients)||defaultNs(),traegt:[],sendet:[],fragt:[],kenntnis:[],...pos});
     else if(kind==="codenode")MODEL.codeNodes.push({_id:"cn"+(NID++),name:uniq("Code"),text:"",...pos});
     else if(kind==="llmnode")MODEL.llmNodes.push({_id:"ln"+(NID++),name:uniq("LLM"),intent:"",...pos});
     else MODEL.records.push({name:uniq("Neu"+kindLabel(kind).replace(/\s/g,"")),kind,namespace:defaultNs(),felder:kind==="command"&&ID_FELD()?[{_id:"f"+(NID++),name:ID_FELD(),typ:"Guid"}]:[],...pos});
@@ -1014,7 +1022,7 @@ public static class HtmlPresenter
      else if(r.kind==="query")aus=slotRow("query","+ Konsument ⊕ (Reader) ▶","r",{type:"query",dir:"out",rec:r.name},"qry:out:"+r.name);
      else if(r.kind==="queryresponse")ein=slotRow("qrsp","+ Erzeuger ⊕ (Reader)","l",{type:"qrsp",dir:"in",rec:r.name},"qrsp:in:"+r.name);
      // Akteur-Eingang: Command und Query (was ein Akteur hineingeben darf).
-     if(r.kind==="command"||r.kind==="query"){const dp=darfPort(r.name);ein=ein?h("div",{},ein,dp):dp;}
+     if(akteurSorten().includes(grNachrichtSorte(r.name))){const dp=darfPort(r.name);ein=ein?h("div",{},ein,dp):dp;}
      if(ein||aus){if(INSP)zweiSeiten(body,r.name,null,ein,aus);else{if(ein)body.append(ein);if(aus)body.append(aus);}}}
     if(r.kind==="valueobject")body.append(slotRow("ftype","als Feldtyp ▶","r",{type:"ftype",dir:"out",typeName:r.name},"ftype:out:rec:"+r.name));
     if(r.kind==="auftrag")body.append(slotRow("auftrag","Eingang von ƒ "+(r.funktion||"— ⊕ Funktion wählen")+" ▶","r",{type:"auftragFn",dir:"out",rec:r.name},"auf:out:"+r.name));
@@ -1110,7 +1118,16 @@ public static class HtmlPresenter
     else if(t.k==="applier"){const a=app(t.app);if(a){a.codeSrc=src;if(src)delete a.leer;}}
     else if(t.k==="sagaCount"){const x=MODEL.transitions.find(z=>z._id===t.trans);if(x)x.sammelCodeSrc=src;}
     else if(t.k==="dienst"){const d=MODEL.dienste.find(x=>x._id===t.dienst);if(d)d.codeSrc=src;}
-    else if(t.k==="funktion"){const f=MODEL.funktionen.find(x=>x._id===t.fk);if(f){f.codeSrc=src;if(src)delete f.leer;}}}
+    else if(t.k==="funktion"){const f=MODEL.funktionen.find(x=>x._id===t.fk);if(f){f.codeSrc=src;if(src)delete f.leer;}}
+    // Zusage/Kenntnis in einer Client-Implementierung (Python): der Rumpf der auf_-Methode.
+    else if(t.k==="clientAuf"){const c=MODEL.clients.find(x=>x._id===t.client),im=c&&(c.implementierungen||[])[t.impl],
+      r=im&&(im.rumpfe||[]).find(x=>x.event===t.event);if(r){r.codeSrc=src;if(src)delete r.leer;}}
+    // Regel-Lambda: der Aufruf (Sende/Rufe) bzw. die Kompensation eines Dann.
+    else if(t.k==="regelLambda"){const tr=MODEL.transitions.find(x=>x._id===t.trans),d=tr&&(tr.dann||[])[t.dannIdx];
+      if(d){if(t.teil==="komp")d.kompCodeSrc=src;else d.codeSrc=src;}}
+    // Fluss-Lambda: je Eingang eines Aufruf-Knotens (Haupt + jedes ∨) bzw. die Liste eines Je-Rahmens.
+    else if(t.k==="flussLambda"){const f=MODEL.fluesse.find(x=>x._id===t.fluss),k=f&&(f.knoten||[]).find(z=>z._id===t.knoten);
+      if(k){if(t.ei==null)k.codeSrc=src;else if((k.eingaenge||[])[t.ei])k.eingaenge[t.ei].codeSrc=src;}}}
   // Rumpf-Port eines Deciders/Appliers, dessen Methode im Code bewusst LEER ist (No-op, kein Platzhalter)?
   function codeOwnerLeer(t){if(t.k==="decider"){const d=dec(t.dec);return !!(d&&d.leer);}
     if(t.k==="applier"){const a=app(t.app);return !!(a&&a.leer);}return false;}
@@ -1124,11 +1141,15 @@ public static class HtmlPresenter
   function addCode(target,kind){const id="cn"+(NID++);MODEL.codeNodes.push({_id:id,name:uniq("Code"),text:""});
     setCodeSrc(target,id);if(kind==="llm")llmAndocken(id);else render();}
   // Code-Eingang (Rumpf): getippter Slot `code`. Leer → deutlicher „⚙ …fehlt"-Marker + Ein-Klick-Knöpfe.
-  function codePort(key,target,codeSrc,label){const s=port("code");s.classList.add("i");reg(key,s,{type:"code",dir:"in",target});
+  function codePort(key,target,codeSrc,label,imCode){const s=port("code");s.classList.add("i");reg(key,s,{type:"code",dir:"in",target});
     const src=codeSrc?nodeName(codeSrc):null;const lbl=label||"Logik";
     // Passiv: der gefüllte Rumpf zeigt nur, welcher Code-Block hängt (kein Editier-Modal am Konsumenten).
     if(src)return h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"color:#9be3bf"},"◀ "+lbl+": "+src));
     if(target&&codeOwnerLeer(target))return h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"opacity:.6",title:"Im Code bewusst leer (No-op) — kein Platzhalter"},"∅ "+lbl+": bewusst leer"));
+    // Die Logik steht schon im Code (z. B. ein gelesener Lambda) — ein Block spiegelt sie, 🤖 ändert sie; nichts „fehlt".
+    if(imCode)return h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"flex:1;opacity:.75",title:"Steht im Code — ＋📝 spiegelt ihn als Code-Block, ＋🤖 ändert ihn per Prompt"},"◀ "+lbl+": im Code"),
+      h("button",{class:"codeadd",title:"Code-Block erzeugen (Spiegel des Codes) und hier andocken",onclick:()=>addCode(target,"code")},"＋📝"),
+      h("button",{class:"codeadd",title:"Code-Block + 🤖 LLM-Knoten — Prompt schreiben, der Vorschlag ersetzt diesen Code erst mit ✓ Übernehmen",onclick:()=>addCode(target,"llm")},"＋🤖"));
     return h("div",{class:"slotrow codeempty"},s,
       h("span",{class:"slotlbl codemiss",style:"flex:1"},"⚙ "+lbl+" fehlt"),
       h("button",{class:"codeadd",title:"Code-Block erzeugen und hier andocken",onclick:()=>addCode(target,"code")},"＋📝"),
@@ -1478,25 +1499,60 @@ public static class HtmlPresenter
     body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"fällig → "+(f.sendet||"Command")+(f.aggregat?" @ "+f.aggregat:"")+" ▶"),so));
   }
 
-  // KATALOG-FUNKTION (IFunktion): nur die Signatur — EIN Auftrag hinein, OneOf-Ergebnis-Events heraus. Ein Prozess ruft sie mit
-  //   Rufe<F> (Regel: „Dann ƒ"); die Implementierung (C#, Python, extern) ist Bindung im Host, kein Teil des Graphen.
+  // ══ LOGIK-ELEMENT „Katalog-Funktion" (IFunktion): Signatur + Rumpf — ◀ EIN Auftrag hinein, ▶ OneOf-Ergebnis-Events heraus,
+  //    ⚙ Lese-Fähigkeiten als Parameter, 📝/🤖 der Rumpf (RufeAsync). Die Typen werden HIER angelegt und bearbeitet (Name, Felder),
+  //    nicht nur aus dem Katalog gewählt; derselbe Baustein steht am Fluss-Knoten, der die Funktion ruft (funktionSignatur).
+  // Eine neue Funktion — EIN Weg (Palette, Fluss, Prozess): I<Stamm> mit Auftrag <Stamm>Auftrag und einem Ergebnis <Stamm>Erledigt.
+  function neueFunktion(ns,pos){const nm=uniq("INeueFunktion"),stamm=nm.replace(/^I(?=[A-ZÄÖÜ])/,"");
+    const an=uniq(stamm+"Auftrag"),en=uniq(stamm+"Erledigt");
+    MODEL.records.push({name:an,kind:"auftrag",funktion:nm,namespace:ns,felder:[]},{name:en,kind:"event",namespace:ns,felder:[]});
+    MODEL.funktionen.push({_id:"fk"+(NID++),name:nm,namespace:ns,auftrag:an,ergebnisse:[en],...(pos||{})});return nm;}
+  // Ein Typ IM Logik-Element (Auftrag, Ergebnis …): Name und Felder an Ort und Stelle. Ein Typ aus dem Code behält seinen Namen
+  //   (Umbenennen ist ein Refactoring); seine Felder gleicht „C# schreiben" ab. Keine Feld-Ports — die stehen an der Typ-Karte.
+  function typKasten(body,r,o){o=o||{};
+    const kopf=h("div",{class:"slotrow"+(o.seite==="o"?" o":"")});
+    if(o.port&&o.seite!=="o")kopf.append(o.port);
+    if(o.titel)kopf.append(h("span",{class:"slotlbl"},o.titel));
+    if(!r)kopf.append(h("span",{class:"slotlbl",style:"flex:1;color:#cf6f68"},"⚠ "+(o.name||"?")+" — Typ fehlt"));
+    else if(r.datei)kopf.append(h("span",{class:"slotlbl",style:"flex:1",title:r.namespace+"."+r.name+" — aus dem Code (Umbenennen ist ein Refactoring)"},r.name));
+    else{const ni=nameInp(r,"name","Typ","record");ni.style.flex="1";kopf.append(ni);}
+    if(o.onRemove)kopf.append(h("button",{class:"rm",title:o.removeTitel||"entfernen",onclick:o.onRemove},"✕"));
+    if(o.port&&o.seite==="o")kopf.append(o.port);
+    body.append(kopf);
+    if(!r)return;
+    const box=h("div",{class:"typkasten"});
+    (r.felder||[]).forEach((f,fi)=>box.append(feldRow(f,()=>{r.felder.splice(fi,1);render();})));
+    box.append(h("button",{class:"add",onclick:()=>{(r.felder=r.felder||[]).push({_id:"f"+(NID++),name:uniqFeldName(r.felder,"feld"),typ:"string"});render();}},"+ Feld"));
+    body.append(box);}
+  // Der Signatur-Baustein einer Funktion: Eingang · Ausgänge (OneOf) · Fähigkeiten · Rumpf — auf der Karte UND am rufenden Fluss-Knoten.
+  function funktionSignatur(body,f){const stamm=(f.name||"Funktion").replace(/^I(?=[A-ZÄÖÜ])/,"");
+    body.append(h("div",{class:"gsec",title:"record "+(f.auftrag||"X")+"(…) : IAuftrag<"+(f.name||"F")+">"},"◀ Eingang (Auftrag)"));
+    const au=f.auftrag?recByName(f.auftrag):null;
+    if(au||f.auftrag)typKasten(body,au,{name:f.auftrag});
+    else body.append(h("button",{class:"add",onclick:()=>{const an=uniq(stamm+"Auftrag");
+      MODEL.records.push({name:an,kind:"auftrag",funktion:f.name,namespace:f.namespace,felder:[]});f.auftrag=an;render();}},"+ neuer Auftrag"));
+    body.append(slotRow("auftrag",au?"⊕ anderen Auftrag wählen":"⊕ bestehenden Auftrag wählen","l",{type:"auftragFn",dir:"in",fk:f._id},"fk:auftrag:"+f._id));
+    body.append(h("div",{class:"gsec",title:"Task<OneOf<…>> RufeAsync(…) — je Fall ein Ausgang, persistente Events"},"Ausgänge ▶ (OneOf)"));
+    (f.ergebnisse||[]).forEach(e=>{const o=port("event");o.classList.add("o");reg("fk:out:"+f._id+":"+e,o,{type:"evtOut",dir:"out",fk:f._id});
+      typKasten(body,recByName(e),{name:e,port:o,seite:"o",removeTitel:"kein Ergebnis dieser Funktion mehr (der Typ bleibt)",
+        onRemove:()=>{f.ergebnisse=(f.ergebnisse||[]).filter(x=>x!==e);render();}});});
+    body.append(h("button",{class:"add",onclick:()=>{const en=uniq(stamm+((f.ergebnisse||[]).length?"Fall":"Erledigt"));
+      MODEL.records.push({name:en,kind:"event",namespace:f.namespace,felder:[]});(f.ergebnisse=f.ergebnisse||[]).push(en);render();}},"+ neues Ergebnis"));
+    body.append(slotRow("open","⊕ bestehendes Event als Ergebnis ▶","r",{type:"evtOut",dir:"out",fk:f._id},"fk:out:"+f._id+":open"));
+    funktionFaehigkeiten(body,f);
+    // Rumpf = RufeAsync der Implementierung: Code-Eingang wie am Decider (📝 Code-Block, 🤖 LLM füllt ihn). Ohne Block läuft die
+    //   Funktion extern (Python-Worker über gRPC) — dann bindet der Host sie mit AddExterneFunktion.
+    body.append(h("div",{class:"gsec",title:f.implementierung?"public sealed class "+f.implementierung+" : "+f.name:"noch keine C#-Implementierung im Code"},
+      "Rumpf · RufeAsync"+(f.implementierung?" · "+f.implementierung:" (neu)")));
+    body.append(codePort("fk:impl:"+f._id,{k:"funktion",fk:f._id},f.codeSrc,"RufeAsync"));}
   function funktionCard(body,f){
     if(MODEL.transitions.some(t=>(t.dann||[]).some(d=>d.rufe===f.name))||!MODEL.fluesse.some(x=>(x.knoten||[]).some(k=>k.art==="funktion"&&k.typ===f.name)))
       body.append(topAnchor("command","◀ gerufen von Regeln (Rufe<"+(f.name||"F")+">)","fk:in:"+f.name));
-    body.append(nameInp(f,"name","Funktion","funktion"));
+    body.append(h("div",{class:"gsec"},"Name · Namespace"));
+    if(f.datei)body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default"},f.name+" — aus dem Code (Umbenennen ist ein Refactoring)"));
+    else body.append(nameInp(f,"name","Funktion","funktion"));
     body.append(h("input",{value:f.namespace??"",oninput:e=>f.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
-    // Nur die Signatur — jede Typ-Definition ist eine EIGENE Karte (Auftrag, Ergebnis-Events), hier nur verbunden (⊕ wie am Decider).
-    body.append(slotRow("auftrag","◀ Auftrag: "+(f.auftrag||"— ⊕ Auftrag wählen"),"l",{type:"auftragFn",dir:"in",fk:f._id},"fk:auftrag:"+f._id));
-    body.append(h("div",{class:"gsec"},"Ergebnisse ▶ (OneOf — je Fall ein Ausgang, persistente Events)"));
-    (f.ergebnisse||[]).forEach(e=>{const o=port("event");o.classList.add("o");reg("fk:out:"+f._id+":"+e,o,{type:"evtOut",dir:"out",fk:f._id});
-      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},e+" ▶"),o));});
-    body.append(slotRow("open","+ Ergebnis ⊕ (Event) ▶","r",{type:"evtOut",dir:"out",fk:f._id},"fk:out:"+f._id+":open"));
-    funktionFaehigkeiten(body,f);
-    // Implementierung = der Rumpf von RufeAsync: ein Code-Eingang wie am Decider (📝 Code-Block, 🤖 LLM füllt ihn). Ohne Block läuft die
-    //   Funktion extern (Python-Worker über gRPC) — dann bindet der Host sie mit AddExterneFunktion.
-    body.append(h("div",{class:"gsec",title:f.implementierung?"public sealed class "+f.implementierung+" : "+f.name:"noch keine C#-Implementierung im Code"},
-      "Implementierung"+(f.implementierung?" · "+f.implementierung:" (neu)")));
-    body.append(codePort("fk:impl:"+f._id,{k:"funktion",fk:f._id},f.codeSrc,"RufeAsync"));
+    funktionSignatur(body,f);
     // Ablauf als Kette (Prozess): was NACH dieser Funktion kommt — nur, wo ein Prozess sie ruft. In einer Pipeline verdrahtet der Fluss.
     const sgs=[...new Set(MODEL.transitions.filter(t=>(t.dann||[]).some(d=>d.rufe===f.name)).map(t=>t.prozess))].map(n=>MODEL.sagas.find(x=>x.name===n)).filter(Boolean);
     const fl=MODEL.fluesse.filter(x=>(x.knoten||[]).some(k=>k.art==="funktion"&&k.typ===f.name));
@@ -1519,6 +1575,9 @@ public static class HtmlPresenter
     if(lese.length){const ls=h("select",{onchange:e=>{const t=e.target.value;if(!t)return;let nm=t.replace(/^I(?=[A-ZÄÖÜ])/,"");nm=nm.charAt(0).toLowerCase()+nm.slice(1);
         (f.faehigkeiten=f.faehigkeiten||[]).push({typ:t,name:nm});render();}});
       ls.append(h("option",{value:""},"+ Lese-Fähigkeit …"));lese.forEach(t=>ls.append(h("option",{value:t},"⚙ "+t)));body.append(h("div",{class:"slotrow"},ls));}
+    {const anb=MODEL.akteure.filter(a=>(a.darf||[]).includes(f.name));
+      if(anb.length)body.append(h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px;cursor:default"},h("span",{class:"slotlbl"},"angeboten von:"),
+        ...anb.map(a=>h("button",{class:"akt-dom",onclick:()=>waehle("akt:"+a._id)},(ART_SYM[a.art]||"👤 ")+a.name))));}
     body.append(h("div",{class:"gsec",style:"opacity:.6"},(f.faehigkeiten||[]).length
       ? "Mit Fähigkeiten läuft die Funktion nur im Host (AddFunktion<"+(f.name||"F")+", …>) — nicht in Python/extern."
       : "Laufort = Bindung im Host: C# mit AddFunktion<"+(f.name||"F")+", …> (Rumpf unten als Code-Block), Python/extern mit AddExterneFunktion (dann kein Code-Block)."));
@@ -1569,8 +1628,20 @@ public static class HtmlPresenter
     MODEL.reader.forEach(r=>(r.handles||[]).forEach(hd=>R.push([[hd.query].filter(Boolean),[...(hd.responses||[])],null])));
     // Vertrag (Akteur-Konzept §3): Event → Akteur → Commands; die Ausgänge gehören dem Akteur (Wechsel wie beim Dienst).
     vertragsZusagen().forEach(({a,r})=>R.push([[r.eingang].filter(Boolean),[...(r.ausgaenge||[])],a.name]));
+    // Katalog-Funktion: Auftrag → Ergebnisse (wie Fluss.cs: fn-Baustein zwischen Auftrag und Ergebnis-Events).
+    const auftragVon=nm=>(MODEL.funktionen.find(f=>f.name===nm)||{}).auftrag||nm;
+    MODEL.funktionen.forEach(f=>{if(f.auftrag)R.push([[f.auftrag],[...(f.ergebnisse||[])],null]);});
     MODEL.sagas.forEach(sg=>{const ts=MODEL.transitions.filter(t=>t.prozess===sg.name);
-      R.push([[sg.triggerEvent,...ts.flatMap(t=>t.wenn||[])].filter(Boolean),ts.flatMap(t=>(t.dann||[]).flatMap(d=>[d.sende,d.kompensation])).filter(Boolean),null]);});
+      R.push([[sg.triggerEvent,...ts.flatMap(t=>t.wenn||[])].filter(Boolean),
+        ts.flatMap(t=>(t.dann||[]).flatMap(d=>[d.rufe?auftragVon(d.rufe):d.sende,d.kompensation])).filter(Boolean),null]);});
+    // Pipeline als Fluss: Quell-/Log-Events, erwartete Events und verdrahtete Fälle hinein; Aufträge und Commands hinaus.
+    MODEL.fluesse.forEach(f=>{const ein=[],aus=[];
+      (f.knoten||[]).forEach(k=>{if(k.art==="quelle"||k.art==="auf")ein.push(k.typ);
+        else if(k.art==="warte")ein.push(...(k.warteAuf||[]));
+        else if(k.art==="funktion")aus.push(auftragVon(k.typ));
+        else if(k.art==="command")aus.push(k.typ);
+        (k.eingaenge||[]).forEach(e=>(e.draehte||[]).forEach(d=>{if(d.fall&&(d.port||"fall")==="fall")ein.push(d.fall);}));});
+      R.push([ein.filter(Boolean),aus.filter(Boolean),null]);});
     return R;}
   // Nachricht → {direkt:Set, kette:Set}; Fixpunkt über Mengen (ein Command kann von mehreren Akteuren kommen).
   function akteurMengen(){if(AKM)return AKM;const M=new Map();
@@ -1700,13 +1771,23 @@ public static class HtmlPresenter
           .map(([v,t])=>h("option",{value:v,...((a.art||"")===v?{selected:"selected"}:{})},t)))));
     body.append(h("div",{class:"gsec",title:"public sealed record "+a.name+" : "+artBasis(a.art)+", IDarf<…>"},"darf ▶ — was er SELBST hineingibt"));
     if(!(a.darf||[]).length)body.append(h("div",{class:"gp-row gp-leer"},"— noch nichts (am Tor käme er nirgends durch)"));
-    (a.darf||[]).forEach(nm=>{const r=recByName(nm),t=!r&&MODEL.triggers.find(x=>trigName(x)===nm);
+    (a.darf||[]).filter(nm=>!MODEL.funktionen.some(f=>f.name===nm)).forEach(nm=>{const r=recByName(nm),t=!r&&MODEL.triggers.find(x=>trigName(x)===nm);
       const art=r?kindLabel(r.kind):t?"Trigger":"⚠ unbekannt";
       const s=anchorDot("darf");s.classList.add("o");reg("akt:darf:"+a._id+":"+nm,s,{type:"darf",dir:"out",akt:a._id,anker:true});
       body.append(h("div",{class:"slotrow o"},
         h("span",{class:"slotlbl",style:"flex:1;text-align:right"},nm+" · "+art),
         h("button",{class:"rm",title:"Recht entziehen",onclick:()=>{a.darf=a.darf.filter(x=>x!==nm);render();}},"✕"),s));});
-    body.append(slotRow("darf","+ darf ⊕ (Command · Query · Trigger) ▶","r",{type:"darf",dir:"out",akt:a._id},"akt:darf:"+a._id+":open"));
+    body.append(slotRow("darf","+ darf ⊕ ("+akteurDarfLabel()+") ▶","r",{type:"darf",dir:"out",akt:a._id},"akt:darf:"+a._id+":open"));
+    // Angebotene Katalog-Funktionen (IDarf<IFunktion>, Akteur-Tor): er führt sie DRAUSSEN aus (z. B. ein Python-Worker am Vermittler).
+    {const fs=(a.darf||[]).filter(nm=>MODEL.funktionen.some(f=>f.name===nm));
+      body.append(h("div",{class:"gsec",title:"public sealed record "+a.name+" : …, IDarf<IFunktion> — am Vermittler darf er diese Funktion anbieten (Laufort extern)"},"ƒ bietet an (führt aus)"));
+      fs.forEach(nm=>{const f=MODEL.funktionen.find(x=>x.name===nm);body.append(h("div",{class:"slotrow o"},
+        h("span",{class:"slotlbl",style:"flex:1;text-align:right;cursor:pointer",onclick:()=>waehle("fk:"+f._id)},"ƒ "+nm),
+        h("button",{class:"rm",title:"nicht mehr anbieten",onclick:()=>{a.darf=a.darf.filter(x=>x!==nm);render();}},"✕")));});
+      const frei=MODEL.funktionen.filter(f=>!(a.darf||[]).includes(f.name));
+      if(frei.length){const sel=h("select",{onchange:e=>{const v=e.target.value;if(!v)return;(a.darf=a.darf||[]).push(v);render();}});
+        sel.append(h("option",{value:""},"+ bietet Funktion an …"));frei.forEach(f=>sel.append(h("option",{value:f.name},"ƒ "+f.name)));
+        body.append(h("div",{class:"slotrow"},sel));}}
     // Was in seinem Namen über eine Kette entsteht (abgeleitet, nicht deklariert): Pipeline/Prozess/Frist aus seinen Events.
     {const km=akteurMengen(),bew=[...km.entries()].filter(([nm,m])=>m.kette.has(a.name)&&!m.direkt.has(a.name)&&istEingangName(nm)).map(([nm])=>nm).sort();
       body.append(h("div",{class:"gsec",title:"abgeleitet: Commands/Trigger, die eine Pipeline, ein Prozess oder eine Frist aus Events dieses Akteurs erzeugt — kein IDarf nötig, am Tor nicht erlaubt"},"bewirkt über die Kette (abgeleitet)"));
@@ -1780,12 +1861,35 @@ public static class HtmlPresenter
         h("button",{class:"rm",title:"nicht mehr hören",onclick:()=>{c.kenntnis=ohneX(c.kenntnis,nm);render();}},"✕")));});
     {const oi=port("event");oi.classList.add("i");reg("cl:kenntnis:"+c._id+":open",oi,{type:"evtUse",dir:"in",client:c._id});
       body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ hört ⊕ (Event)")));}
+    clientImplementierung(body,c,null);
     // Die Leitungen dieses Clients (je Ziel-Rahmen ein Bündel) — Klick fächert auf.
     const bs=clientBuendel(c);
     if(bs.length){body.append(h("div",{class:"gsec"},"🔌 Leitungen (je Ziel-Rahmen)"));
       bs.forEach(b=>{const row=h("div",{class:"gp-row",title:buendelText(b)},h("span",{class:"gp-t"},rahmenLabel(b.key)),
         h("span",{class:"gp-mark"},(b.durabel?"durabel · ":"")+buendelText(b)));row.onclick=()=>auffaechern(c,{keys:[b.key]});body.append(row);});}
   }
+  // ⚙ IMPLEMENTIERUNG eines Clients — das Verhalten des Akteurs DRAUSSEN: je Zusage/Kenntnis ein Logik-Element (◀ Event, Ausgänge ▶ =
+  //   Ausgabe-Vertrag, 📝 Rumpf + optional 🤖). Code-Fakt: eine Python-Klasse, die die aus dem Vertrag generierte Basis erbt.
+  //   nurEvent: nur diese eine Zusage (Ansicht an der Zusage-Karte).
+  function clientImplementierung(body,c,nurEvent){const ims=c.implementierungen||[];
+    if(!nurEvent)body.append(h("div",{class:"gsec",title:"class X("+clientAnzeige(c)+"Basis[…]) im Python-Projekt — die Basis erzeugt der Codegen aus dem Vertrag; je Auf ihre Methode"},"⚙ Implementierung (Verhalten draußen)"));
+    if(!ims.length){if(nurEvent)return;
+      body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},
+        "— noch keine: eine Python-Klasse, die "+clientAnzeige(c)+"Basis erbt (die Basis entsteht beim Bauen aus dem Vertrag)."));
+      const pk=(MODEL.rahmen||{}).pythonPaket;
+      if(pk)body.append(h("button",{class:"add",title:"„C# schreiben“ legt "+pk+"/… an: die Klasse mit je Zusage/Kenntnis der Methode der generierten Basis (Platzhalter-Rumpf) — danach je Methode 📝/🤖",
+        onclick:()=>{const kl=clientAnzeige(c)||"Client";(c.implementierungen=c.implementierungen||[]).push({sprache:"python",klasse:kl,
+          datei:pk+"/"+kl.replace(/(?<=[a-z0-9])([A-Z])|(?<=[A-Z])([A-Z][a-z])/g,"_$1$2").toLowerCase()+".py",rumpfe:[],neu:true});render();}},"+ 🐍 Python-Implementierung"));
+      return;}
+    ims.forEach((im,ii)=>{const rs=(im.rumpfe||[]).filter(x=>!nurEvent||x.event===nurEvent);if(!rs.length&&!(im.neu&&!nurEvent))return;
+      if(im.neu&&!rs.length&&!nurEvent){body.append(h("div",{class:"gsec",style:"opacity:.85",title:im.datei},"🐍 "+im.klasse+" · "+im.datei+" (neu)"),
+        h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},"Entsteht mit „C# schreiben“ (nach dem Bauen der Basis) — je Zusage/Kenntnis eine Methode, dann hier je Methode 📝/🤖."),
+        h("button",{class:"rm",title:"doch nicht anlegen",onclick:()=>{c.implementierungen.splice(ii,1);render();}},"✕"));return;}
+      body.append(h("div",{class:"gsec",style:"opacity:.85",title:im.datei},"🐍 "+im.klasse+" · "+(im.datei||"").split("/").pop()+(nurEvent?" · 🔌 "+clientAnzeige(c):"")));
+      rs.forEach(x=>{if(!nurEvent)body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl",style:"flex:1"},
+          "◀ "+x.event+((x.ausgaenge||[]).length?"  → "+x.ausgaenge.join(" | ")+" ▶":"  · Kenntnis"))));
+        body.append(codePort("cla:"+c._id+":"+ii+":"+x.event+(nurEvent?":z":""),{k:"clientAuf",client:c._id,impl:ii,event:x.event},x.codeSrc,
+          x.methode+(x.rumpf==null&&!x.codeSrc?" (fehlt)":"")));});});}
   // Abgeleitet wie im Generator (AkteurRechteGenerator): Aggregat der erlaubten Commands → dessen Events; erlaubte Query →
   //   Reader → Projektion → deren Handle-Events. Nur Anzeige — die Laufzeit-Tabelle erzeugt der Generator.
   function akteurHoert(a){const evs=new Set(),vertrag=(a.vertrag||[]).length>0;
@@ -1816,6 +1920,12 @@ public static class HtmlPresenter
       h("input",{type:"checkbox",onchange:e=>{if(e.target.checked)r.strom=true;else delete r.strom;render();},...(r.strom?{checked:"checked"}:{})}),"Strom (mehrere Commands je Zusage)"));
     body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal;font-family:monospace"},
       ((r.ausgaenge||[]).length?(r.strom?"IAsyncEnumerable<OneOf<"+r.ausgaenge.join(", ")+">>":"OneOf<"+r.ausgaenge.join(", ")+">"):"void")+" Auf("+(r.eingang||"?")+" e);"));
+    // Das VERHALTEN: je Client, der diesen Vertrags-Teil trägt, der Rumpf seiner Implementierung (📝 + optional 🤖).
+    const tr=clientTraeger(r.teil||vertragsTyp(a));
+    body.append(h("div",{class:"gsec",title:"Die Zusage setzt die Software um, die den Vertrag trägt (Client) — dort steht ihr Rumpf"},"Rumpf · umgesetzt in"));
+    if(!tr.length)body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},"— kein Client trägt "+(r.teil||vertragsTyp(a))+" (⊕ am Client: trägt)"));
+    tr.forEach(c=>{if((c.implementierungen||[]).length)clientImplementierung(body,c,r.eingang);
+      else body.append(h("div",{class:"gp-row gp-leer",style:"cursor:pointer;white-space:normal",onclick:()=>waehle("cl:"+c._id)},"🔌 "+clientAnzeige(c)+": noch keine Implementierung"));});
   }
   function hostSettingCard(body,s){
     body.append(nameInp(s,"name","HostSetting","hostsetting"));
@@ -2048,6 +2158,13 @@ public static class HtmlPresenter
     if(o.kind==="reaktion"){const hd=(r.handles||[]).find(x=>x.codeSrc===codeId);return hd?"reaktion|"+r.name+"|"+hd.event:null;}
     if(o.kind==="store"){const f=(r.writeFns||[]).concat(r.readFns||[]).find(x=>x.codeSrc===codeId);return f?"store|"+r.name+"|"+f.name:null;}
     if(o.kind==="funktion")return r.auftrag?"funktion|"+r.name+"|"+r.auftrag:null;
+    // Zusage/Kenntnis draußen: Client (Handshake-Name) · Event · implementierende Klasse.
+    if(o.kind==="client")return "zusage|"+clientAnzeige(r)+"|"+o.rumpf.event+"@"+o.impl.klasse;
+    // Regel-Lambda: Regel = Anweisung des Definiere-Lambdas (Code-Reihenfolge), Disc = „Anweisung#Verb".
+    if(o.kind==="transition"){const sg=(m||MODEL).sagas.find(x=>x.name===r.prozess);if(!sg)return null;
+      const i=regelFolge(sg,(m||MODEL).transitions).findIndex(x=>x.t===r&&x.d===o.dann);return i<0?null:"saga|"+sg.name+"|"+i+"#"+regelVerb(o.dann,o.teil);}
+    // Fluss-Lambda: wie SlotInventar zählt — Knoten#Lambda-Index der Anweisung (Haupt-Aufruf 0, je ∨ einer mehr; Je: die Liste).
+    if(o.kind==="flussknoten")return "fluss|"+o.fluss.name+"|"+(r.ohneVariable?"#"+(o.fluss.knoten||[]).indexOf(r):r.name)+"#"+(o.ei==null?0:o.ei);
     return null;}
   // Kurzvorschau eines Code-/Intent-Textes (erste Zeilen) für den Knoten.
   function codePreview(t,leer,voll){const s=(t||"").replace(/\t/g,"    ").split("\n");const max=voll?1e9:7;
@@ -2115,6 +2232,11 @@ public static class HtmlPresenter
     return (cmd.felder||[]).map((_,i)=>((args||[])[i])||"default");}
   // Transitionen eines Prozesses (explizit angesteckt via t.prozess).
   const transOf=s=>MODEL.transitions.filter(t=>t.prozess===s.name);
+  // Die Regeln eines Prozesses in CODE-Reihenfolge (je Join × Dann eine Regel = eine Anweisung im Definiere-Lambda) — wie prepareSaga.
+  function regelFolge(s,trans){return (trans||MODEL.transitions).filter(t=>t.prozess===s.name&&(t.wenn||[]).length)
+    .flatMap(t=>(t.dann||[]).filter(d=>d.sende||d.rufe).map(d=>({t,d})));}
+  // Das Regel-Verb eines Lambda-Teils (wie SlotInventar es als Disc führt): Sende/SendeJe/Rufe bzw. RückgängigDurch(Je).
+  const regelVerb=(d,teil)=>teil==="komp"?(d.kompensationJe?"RückgängigDurchJe":"RückgängigDurch"):d.rufe?"Rufe":d.sendeJe?"SendeJe":"Sende";
   // Collection-Felder der Join-Events (für UndAlle-Anzahl / SendeJe-Collection), als "role.field".
   function collFelder(t){const out=[];(t.wenn||[]).forEach((e,i)=>{const r=recByName(e);if(!r)return;const role=["t","r","g"][i]||("e"+(i+1));
     (r.felder||[]).forEach(f=>{if(elementVon(f))out.push(role+"."+f.name);});});return out;}
@@ -2247,6 +2369,7 @@ public static class HtmlPresenter
   function renameRefs(kind,obj,old,nv){
     flTypUmbenannt(old,nv);   // Pipelines (Fluss): Funktions-, Command- und Fall-Typen ziehen mit
     if(kind==="funktion"){MODEL.transitions.forEach(t=>(t.dann||[]).forEach(d=>{if(d.rufe===old)d.rufe=nv;}));
+      MODEL.akteure.forEach(a=>{a.darf=(a.darf||[]).map(x=>x===old?nv:x);});
       MODEL.records.forEach(r=>{if(r.kind==="auftrag"&&r.funktion===old)r.funktion=nv;});}
     if(kind==="akteur"){MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.akteur===old)hd.akteur=nv;}));
       // Ein Vertrag ohne eigenen Namen heißt I+Akteur — Clients, die ihn tragen, ziehen mit.
@@ -2478,6 +2601,8 @@ public static class HtmlPresenter
   // Typ-Umbenennungen (Funktion/Record) ziehen in die Flüsse.
   function flTypUmbenannt(alt,nv){MODEL.fluesse.forEach(f=>(f.knoten||[]).forEach(k=>{if(k.typ===alt)k.typ=nv;
     (k.eingaenge||[]).forEach(e=>(e.draehte||[]).forEach(d=>{if(d.fall===alt)d.fall=nv;}));}));}
+  // Hat der Knoten einen Bau-Lambda je Eingang? (Funktion ruft mit Auftrag, Command baut den Command; Warten/Quellen nicht.)
+  function flMitLambda(k){return k.art==="funktion"||k.art==="command";}
   function flLoeschen(f,k){f.knoten=(f.knoten||[]).filter(x=>x!==k);
     (f.knoten||[]).forEach(z=>{(z.eingaenge||[]).forEach(e=>{e.draehte=(e.draehte||[]).filter(d=>d.von!==k.name);if(e.je===k.name)delete e.je;});
       z.eingaenge=(z.eingaenge||[]).filter(e=>(e.draehte||[]).length||e.je);});}
@@ -2487,11 +2612,7 @@ public static class HtmlPresenter
     const q={_id:"fs"+(NID++),name:"quelle",art:"quelle",typ:"",eingaenge:[]};f.knoten.push(q);
     MODEL.fluesse.push(f);render();setTimeout(()=>zeigeKnoten("fs:"+q._id),0);}
   // Neue Funktion aus dem Fluss heraus (nur die Signatur): Auftrag + ein Ergebnis-Event, im Namespace der Pipeline.
-  function flNeueFunktion(f){const nm=uniq("IVerarbeitung"),stamm=nm.replace(/^I/,"");
-    const an=uniq(stamm+"Auftrag"),en=uniq(stamm+"Erledigt");
-    MODEL.records.push({name:an,kind:"auftrag",funktion:nm,namespace:f.namespace,felder:[]},{name:en,kind:"event",namespace:f.namespace,felder:[]});
-    MODEL.funktionen.push({_id:"fk"+(NID++),name:nm,namespace:f.namespace,auftrag:an,ergebnisse:[en]});
-    deFlash("ƒ "+nm+" angelegt — drei Karten: Auftrag "+an+" → ƒ "+nm+" → Ergebnis "+en+". Namen und Felder an der jeweiligen Karte.");return nm;}
+  function flNeueFunktion(f){const nm=neueFunktion(f.namespace);deFlash("ƒ "+nm+" angelegt — Eingang, Ausgänge und Felder direkt am Knoten bearbeiten.",true);return nm;}
   function flNeuerCommand(f){const n=uniq("NeuerCommand");
     MODEL.records.push({name:n,kind:"command",namespace:f.namespace,felder:[{_id:"f"+(NID++),name:ID_FELD()||"AggregateId",typ:"Guid"}]});return n;}
   function flNeueQuellNachricht(f){const n=uniq("QuelleGemeldet");
@@ -2540,8 +2661,13 @@ public static class HtmlPresenter
       if(!MODEL.funktionen.some(x=>x.name===k.typ))s.append(h("option",{value:k.typ||""},k.typ||"— Funktion wählen —"));
       MODEL.funktionen.forEach(x=>s.append(h("option",{value:x.name},"ƒ "+x.name)));s.append(h("option",{value:"§neu"},"＋ neue Funktion …"));s.value=k.typ||"";
       body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"ruft"),s));
-      const fk=MODEL.funktionen.find(x=>x.name===k.typ);if(fk)body.append(h("div",{class:"gsec",style:"opacity:.7;cursor:pointer",title:"Interface der Funktion — Eingang und Ausgänge dieses Knotens. Klick: Funktions-Karte öffnen",onclick:()=>zeigeLadend("fk:"+fk._id)},
-        "Interface: "+flSignatur(k)));}
+      const fk=MODEL.funktionen.find(x=>x.name===k.typ);
+      if(fk&&!INSP)body.append(h("div",{class:"gsec",style:"opacity:.7"},"Interface: "+flSignatur(k)));
+      // Im Panel: die Funktion SELBST bearbeiten — Eingang, Ausgänge, Felder, Fähigkeiten, Rumpf (gilt für jeden Aufruf von ƒ "+fk.name).
+      if(fk&&INSP){const box=h("div",{class:"fl-signatur"});
+        box.append(h("div",{class:"gsec",style:"cursor:pointer",title:"Klick: Funktions-Karte öffnen",onclick:()=>zeigeLadend("fk:"+fk._id)},
+          "ƒ "+fk.name+(MODEL.fluesse.reduce((n,x)=>n+(x.knoten||[]).filter(z=>z.art==="funktion"&&z.typ===fk.name).length,0)>1?" — gilt für jeden Aufruf":"")));
+        funktionSignatur(box,fk);body.append(box);}}
     else if(k.art==="command"){const s=recSelect(k.typ,v=>{k.typ=v;(k.eingaenge||[]).forEach(e2=>{if(!e2.ausdruck)e2.argumente=flAutoArgs(f,k,e2);});render();},["command"]);
       body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"sendet"),s));
       const dc=MODEL.decider.find(d=>d.command===k.typ);if(dc)body.append(h("div",{class:"gsec",style:"opacity:.7;cursor:pointer",title:"Decider öffnen",onclick:()=>waehle("dec:"+dc._id)},"→ Aggregat "+(dc.aggregat||"?")));}
@@ -2552,6 +2678,7 @@ public static class HtmlPresenter
       const ws=recSelect("",v=>{if(!v)return;const l=flWarteAuf(k);if(!l.includes(v))l.push(v);k.warteAuf=l;k.typ=l[0];render();},["event"]);
       body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"+ warte auf"),ws));}
     else if(k.art==="je"){body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"Liste"),h("input",{value:k.liste||"",placeholder:"x => x.Bilder",onchange:e=>{k.liste=e.target.value;render();}})));
+      body.append(codePort("fle:"+k._id+":je",{k:"flussLambda",fluss:f._id,knoten:k._id,ei:null},k.codeSrc,"λ Liste",!!(f.datei&&k.liste)));
       body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"Element-Typ"),h("input",{value:k.typ||"",placeholder:"string",onchange:e=>{k.typ=e.target.value.trim();render();}})));
       body.append(h("div",{class:"gsec",style:"opacity:.6"},"Die folgenden Knoten laufen einmal je Element, parallel; „Sammle“ wartet auf alle (in Element-Reihenfolge)."));}
     if(k.art==="funktion"||k.art==="command"||k.art==="warte")body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"⏳ Zeitlimit"),
@@ -2569,7 +2696,7 @@ public static class HtmlPresenter
     body.append(h("div",{class:"gsec"},"Ausgänge ▶"));
     const ports=k.art==="je"?[]:flPorts(k);
     if(k.art==="je")body.append(h("div",{class:"gsec",style:"opacity:.6"},"Ein Je-Rahmen hat keinen Draht-Ausgang: Knoten nehmen „je Element“ als Eingang (oben im Panel des Knotens)."));
-    if(!ports.length&&k.art!=="je")body.append(h("div",{class:"gsec",style:"opacity:.6"},k.art==="funktion"?"Die Funktion hat noch kein Ergebnis — an ihrer Karte (ƒ) ⊕ Ergebnis verbinden.":"Noch kein Typ gewählt."));
+    if(!ports.length&&k.art!=="je")body.append(h("div",{class:"gsec",style:"opacity:.6"},k.art==="funktion"?"Die Funktion hat noch kein Ergebnis — oben „+ neues Ergebnis“.":"Noch kein Typ gewählt."));
     ports.forEach(p=>{const ab=flAbnehmer(f,k,p);
       body.append(h("div",{class:"slotrow o fl-port"+(p.port!=="fall"?" fl-fehler":"")},h("span",{class:"slotlbl",style:"flex:1"},p.label+" ▶"),flDannAuswahl(f,k,p)));
       ab.forEach(({z,e})=>body.append(h("div",{class:"slotrow o fl-ab"},h("span",{class:"fl-ziel",onclick:()=>zeigeKnoten("fs:"+z._id)},"→ "+(FL_SYM[z.art]||"")+" "+z.name+((e.draehte||[]).length>1?"  (∧)":"")),
@@ -2586,6 +2713,8 @@ public static class HtmlPresenter
       body.append(h("div",{class:"slotrow fl-draht"},h("span",{class:"fl-ziel",onclick:()=>v&&zeigeKnoten("fs:"+v._id)},"← "+(v?FL_SYM[v.art]+" ":"? ")+txt),
         !e.je&&ex?h("button",{class:"rm",title:(e.draehte||[]).length>1?"Als eigenen Weg (∨) lösen":"Zum ersten Eingang nehmen (∧)",onclick:()=>{flUmschalten(f,k,e,d);render();}},(e.draehte||[]).length>1?"∨":"∧"):null,
         h("button",{class:"rm",title:"Draht lösen",onclick:()=>{flLoese(f,k,e,d);render();}},"✕")));});
+    // Der Lambda dieses Eingangs ist Logik: 📝 Code-Block + optional 🤖 (füllt/ändert genau diesen Lambda).
+    if(flMitLambda(k))body.append(codePort("fle:"+k._id+":"+ei,{k:"flussLambda",fluss:f._id,knoten:k._id,ei},e.codeSrc,"λ Zuordnung",!!(f.datei&&e.ausdruck)));
     // Zuordnung: ein aus dem Code gelesener Lambda bleibt, bis man ihn als Tabelle bearbeitet.
     const z=flZiel(k);if(!z||k.art==="je")return;
     if(e.ausdruck){body.append(h("pre",{class:"fl-lambda",title:"Bau-Lambda aus dem Code (verbatim)"},e.ausdruck));
@@ -2723,6 +2852,14 @@ public static class HtmlPresenter
     for(const r of m.reaktionen||[]) if((r.handles||[]).some(h=>h.codeSrc===id)) return {kind:"reaktion",ref:r};
     for(const d of m.dienste||[]) if(d.codeSrc===id) return {kind:"dienst",ref:d};
     for(const f of m.funktionen||[]) if(f.codeSrc===id) return {kind:"funktion",ref:f};
+    for(const c of m.clients||[]) for(const im of c.implementierungen||[]){const r=(im.rumpfe||[]).find(x=>x.codeSrc===id);
+      if(r) return {kind:"client",ref:c,impl:im,rumpf:r};}
+    for(const t of m.transitions||[]) for(const [di,d] of (t.dann||[]).entries()){
+      if(d.codeSrc===id) return {kind:"transition",ref:t,dann:d,dannIdx:di,teil:"sende"};
+      if(d.kompCodeSrc===id) return {kind:"transition",ref:t,dann:d,dannIdx:di,teil:"komp"};}
+    for(const f of m.fluesse||[]) for(const k of f.knoten||[]){
+      if(k.codeSrc===id) return {kind:"flussknoten",ref:k,fluss:f,ei:null};
+      const ei=(k.eingaenge||[]).findIndex(e=>e.codeSrc===id);if(ei>=0) return {kind:"flussknoten",ref:k,fluss:f,ei};}
     return null;
   }
   // Die Code-EINGÄNGE eines Knotens (je Eingang die codeSrc oder leer) — was der Knoten an Rumpf-Ports hat, auch unbelegt.
@@ -2732,7 +2869,10 @@ public static class HtmlPresenter
       case "decider":case "applier":return [r.codeSrc||null];
       case "dienst":return r.extern?(r.codeSrc?[r.codeSrc]:null):[r.codeSrc||null];
       case "funktion":return [r.codeSrc||null];   // die Implementierung (RufeAsync) — Platz für 📝 + 🤖 wie am Decider
-      case "handle":case "fn":return [r.codeSrc||null];}   // Projektion/Reader/Reaktion/Pipeline/Store: der Code hängt an Handle/Fn
+      case "handle":case "fn":return [r.codeSrc||null];   // Projektion/Reader/Reaktion/Pipeline/Store: der Code hängt an Handle/Fn
+      case "client":return (r.implementierungen||[]).length?(r.implementierungen||[]).flatMap(im=>(im.rumpfe||[]).map(x=>x.codeSrc||null)):null;
+      case "transition":return (r.dann||[]).filter(d=>d.sende||d.rufe).flatMap(d=>[d.codeSrc||null].concat(d.kompensation?[d.kompCodeSrc||null]:[]));
+      case "flussknoten":return r.art==="je"?[r.codeSrc||null]:flMitLambda(r)?(r.eingaenge||[]).map(e=>e.codeSrc||null):null;}
     return null;}
   // Aggregat-Zugehörigkeit eines Knotens (oder SHARED_KEY). Ableitung über Namespace + Verdrahtung.
   // ══ GRAPH-BASIS: alles liegt als Graph vor — Partition nach ECHTER Verbundenheit, nicht nach Namespace. ══
@@ -2755,7 +2895,8 @@ public static class HtmlPresenter
     //   Drähte Knoten → Knoten; dazu die Zuweisung (ƒ → Funktion, ▶ → Command, ⛲ → Nachricht) und ◆/⧗ ← Event.
     MODEL.fluesse.forEach(f=>(f.knoten||[]).forEach(z=>{flVor(z).forEach(v=>{const q=flKnoten(f,v);if(q)push("fs:"+q._id,"fs:"+z._id);});
       const zw=flZuweisung(z);if(zw)push("fs:"+z._id,zw);
-      flHoert(z).forEach(nm=>{if(recByName(nm))push(rec(nm),"fs:"+z._id);});}));
+      flHoert(z).forEach(nm=>{if(recByName(nm))push(rec(nm),"fs:"+z._id);});
+      if(z.codeSrc)push(codeId(z.codeSrc),"fs:"+z._id);(z.eingaenge||[]).forEach(e=>{if(e.codeSrc)push(codeId(e.codeSrc),"fs:"+z._id);});}));
     MODEL.applier.forEach(a=>{if(recByName(a.event))push(rec(a.event),"app:"+a._id);
       if(a.aggregat)push("app:"+a._id,"agg:"+a.aggregat); if(a.codeSrc)push(codeId(a.codeSrc),"app:"+a._id);});
     MODEL.states.forEach(s=>{if(s.aggregat)push("st:"+s._id,"agg:"+s.aggregat);});
@@ -2763,7 +2904,9 @@ public static class HtmlPresenter
     MODEL.transitions.forEach(t=>{if(t.prozess)push("tr:"+t._id,"saga:"+t.prozess);
       (t.wenn||[]).forEach(e=>{if(recByName(e))push(rec(e),"tr:"+t._id);});
       (t.dann||[]).forEach(d=>{if(recByName(d.sende))push("tr:"+t._id,rec(d.sende));if(recByName(d.kompensation))push("tr:"+t._id,rec(d.kompensation));
-        const fk=d.rufe&&MODEL.funktionen.find(f=>f.name===d.rufe);if(fk)push("tr:"+t._id,"fk:"+fk._id);});});
+        const fk=d.rufe&&MODEL.funktionen.find(f=>f.name===d.rufe);if(fk)push("tr:"+t._id,"fk:"+fk._id);
+        if(d.codeSrc)push(codeId(d.codeSrc),"tr:"+t._id);if(d.kompCodeSrc)push(codeId(d.kompCodeSrc),"tr:"+t._id);});});
+    MODEL.clients.forEach(c=>(c.implementierungen||[]).forEach(im=>(im.rumpfe||[]).forEach(x=>{if(x.codeSrc)push(codeId(x.codeSrc),"cl:"+c._id);})));
     MODEL.funktionen.forEach(f=>{if(recByName(f.auftrag))push(rec(f.auftrag),"fk:"+f._id);if(f.codeSrc)push(codeId(f.codeSrc),"fk:"+f._id);
       (f.ergebnisse||[]).forEach(e=>{if(recByName(e))push("fk:"+f._id,rec(e));});});
     MODEL.readModels.forEach(rm=>{const st=MODEL.stores.find(s=>s.name===rm.store);if(st)push("rm:"+rm._id,"sto:"+st._id);});
@@ -3163,7 +3306,7 @@ public static class HtmlPresenter
     else if(k==="trigger")MODEL.triggers.splice(MODEL.triggers.indexOf(ref),1);
     else if(k==="frist")MODEL.frists.splice(MODEL.frists.indexOf(ref),1);
     else if(k==="dienst")MODEL.dienste.splice(MODEL.dienste.indexOf(ref),1);
-    else if(k==="funktion")MODEL.funktionen.splice(MODEL.funktionen.indexOf(ref),1);
+    else if(k==="funktion"){MODEL.funktionen.splice(MODEL.funktionen.indexOf(ref),1);MODEL.akteure.forEach(a=>{a.darf=ohneX(a.darf,ref.name);});}
     else if(k==="hostsetting")MODEL.hostSettings.splice(MODEL.hostSettings.indexOf(ref),1);
     else if(k==="akteur")MODEL.akteure.splice(MODEL.akteure.indexOf(ref),1);
     else if(k==="client"){MODEL.clients.splice(MODEL.clients.indexOf(ref),1);AUF=null;}
@@ -3528,6 +3671,9 @@ public static class HtmlPresenter
       return null;}
     // (c) Baustein → Baustein: Trigger-Kette, Ingress → Pipeline, Selbst-Schleife.
     const s=(g.portSorte||{})[O.type];if(!s)return null;
+    // Gebrauch (Handle → Store-Fähigkeit): der Port sitzt am Handle, die Fähigkeit erzeugt der Store — geprüft wird der Konsum.
+    if((g.portGebrauch||[]).includes(O.type)){const bg=grBaustein(O);if(!bg||grKonsum(s,bg))return null;
+      return grVerstoss(grRegelSorte(s),grName("bausteine",bg)+" benutzt keine "+grName("sorten",s));}
     const bo=grBaustein(O),bi=grBaustein(I);
     if(bo&&!grErzeugung(bo,s))return grVerstoss(grRegelBaustein(bo),grName("bausteine",bo)+" erzeugt kein "+grName("sorten",s));
     if(!bi)return null;const k=grKonsum(s,bi);
@@ -4628,7 +4774,7 @@ public static class HtmlPresenter
       onmouseenter:()=>highlightKind(kind,true),onmouseleave:()=>highlightKind(kind,false),
       onclick:e=>{if(e.ctrlKey||e.metaKey){e.preventDefault();jumpNextOfKind(kind);}else neuerKnoten(kind);}},label);
     root.append(h("div",{class:"gtoolbar"},
-      tb("akteur","+ 👤 Akteur"),tb("command","+ Command"),tb("event","+ Event"),tb("rejection","+ Ablehnung"),
+      tb("akteur","+ 👤 Akteur"),tb("client","+ 🔌 Client"),tb("command","+ Command"),tb("event","+ Event"),tb("rejection","+ Ablehnung"),
       tb("valueobject","+ Value Object"),tb("konfig","+ Konfig"),tb("enum","+ Enum"),tb("aggregate","+ Aggregat"),
       tb("state","+ State"),tb("decider","+ Decider"),tb("applier","+ Applier"),tb("saga","+ Prozess"),tb("transition","+ Regel"),
       tb("readmodel","+ Read Model"),tb("store","+ Store"),tb("projektion","+ Projektion"),tb("query","+ Query"),tb("queryresponse","+ Response"),tb("reader","+ Reader"),tb("reaktion","+ Reaktion"),
@@ -4683,7 +4829,7 @@ public static class HtmlPresenter
     const pick=h("div",{class:"gpick"});pick.style.left=sx+"px";pick.style.top=sy+"px";
     const opt=(kind,label)=>h("button",{onclick:()=>{pick.remove();neuerKnoten(kind,wx,wy);}},label);
     pick.append(h("div",{class:"gpick-t"},"Was soll hier entstehen?"),
-      opt("akteur","👤 Akteur"),opt("command","Command"),opt("event","Event"),opt("rejection","Ablehnung"),
+      opt("akteur","👤 Akteur"),opt("client","🔌 Client"),opt("command","Command"),opt("event","Event"),opt("rejection","Ablehnung"),
       opt("valueobject","Value Object"),opt("konfig","Konfiguration"),opt("enum","Enum"),opt("aggregate","Aggregat"),
       opt("state","State"),opt("decider","Decider"),opt("applier","Applier"),opt("saga","Prozess"),opt("transition","Regel"),
       opt("readmodel","Read Model"),opt("store","Store"),opt("projektion","Projektion"),opt("query","Query"),opt("queryresponse","Response"),opt("reader","Reader"),opt("reaktion","Reaktion"),
@@ -4702,8 +4848,10 @@ public static class HtmlPresenter
     const aggs=sagaAggs(s);
     body.append(h("div",{class:"gsec"},"berührt (abgeleitet): "+(aggs.length?aggs.join(" · "):"—")));
     body.append(h("div",{class:"gsec"},"Regeln ◀ (anstecken)"));
+    // Je Regel eine Zeile — Klick öffnet die Regel (Wenn/Dann, Bau-Lambda mit 📝/🤖, Zeitlimit, Kompensation), wie die Zusagen am Akteur.
     transOf(s).forEach(t=>{const p=anchorDot("prozess");p.classList.add("i");reg("hub:in:"+s.name+":"+t._id,p,null);
-      body.append(h("div",{class:"slotrow"},p,h("span",{class:"slotlbl"},"WENN "+((t.wenn||[])[0]||"?")+((t.wenn||[]).length>1?" +"+((t.wenn.length-1)+(t.sammelEvent?1:0))+"":(t.sammelEvent?" +alle":""))+" → "+((t.dann||[]).map(d=>d.rufe?"ƒ "+d.rufe:(d.sende||"?")).join(", ")||"?"))));});
+      const row=h("div",{class:"slotrow",style:"cursor:pointer",title:"Regel öffnen"},p,h("span",{class:"slotlbl"},"WENN "+((t.wenn||[])[0]||"?")+((t.wenn||[]).length>1?" +"+((t.wenn.length-1)+(t.sammelEvent?1:0))+"":(t.sammelEvent?" +alle":""))+" → "+((t.dann||[]).map(d=>d.rufe?"ƒ "+d.rufe:(d.sende||"?")).join(", ")||"?")));
+      row.onclick=()=>waehle("tr:"+t._id);body.append(row);});
     const oi=port("prozess");oi.classList.add("i");reg("hub:in:"+s.name+":open",oi,{type:"prozess",dir:"in",saga:s.name});
     body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Regel anstecken")));
     // Ablauf als Kette: was beim Start ZUERST passiert (weitere Schritte hängen an den Funktions-Knoten: „dann ▶“).
@@ -4746,10 +4894,12 @@ public static class HtmlPresenter
         const fk=MODEL.funktionen.find(f=>f.name===d.rufe);
         if(fk)body.append(h("div",{class:"gsec",style:"opacity:.7"},"Auftrag "+(fk.auftrag||"?")+" → "+((fk.ergebnisse||[]).join(" | ")||"(kein Ergebnis)")));
         if(d.sendeAusdruck)body.append(h("div",{class:"gsec",title:"aus dem Code gelesen — wird verbatim zurückgeschrieben",style:"font-family:monospace;opacity:.7;white-space:pre-wrap"},"λ "+d.sendeAusdruck));
+        body.append(regelCodePort(t,d,di,"sende"));
         argTabelle(body,t,d);
         body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"⏳"),inp(d.zeitlimit,v=>{if(v)d.zeitlimit=v;else delete d.zeitlimit;},"Zeitlimit, z. B. TimeSpan.FromSeconds(30)")));
         const ko2=port("rejection");ko2.classList.add("o");ko2.title=d.kompensation||"(Kompensation)";reg("tr:komp:"+t._id+":"+di,ko2,{type:"sagaCmd",dir:"out",trans:t._id,dannIdx:di,role:"komp"});
         body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right;opacity:.55"},"↩ "+(d.kompensation||"")),ko2));
+        if(d.kompensation)body.append(regelCodePort(t,d,di,"komp"));
         return;}
       const so=port("command");so.classList.add("o");so.title=d.sende||"(Command)";reg("tr:sende:"+t._id+":"+di,so,{type:"sagaCmd",dir:"out",trans:t._id,dannIdx:di,role:"sende"});
       body.append(h("div",{class:"slotrow o"},
@@ -4757,16 +4907,22 @@ public static class HtmlPresenter
         h("span",{class:"slotlbl",style:"flex:1;text-align:right;opacity:.75"},"Dann "+(d.sende||"")),
         mk("×N","Fan-out (SendeJe) — N Commands je Element",!!d.sendeJe,()=>{d.sendeJe=d.sendeJe?undefined:true;render();}),so));
       if(d.sendeAusdruck)body.append(h("div",{class:"gsec",title:"aus dem Code gelesen — wird verbatim zurückgeschrieben",style:"font-family:monospace;opacity:.7;white-space:pre-wrap"},"λ "+d.sendeAusdruck));
+      if(d.sende)body.append(regelCodePort(t,d,di,"sende"));
       argTabelle(body,t,d);
       if(d.sende||d.zeitlimit)body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"⏳"),inp(d.zeitlimit,v=>{if(v)d.zeitlimit=v;else delete d.zeitlimit;},"Zeitlimit (optional), z. B. TimeSpan.FromMinutes(5)")));
       const ko=port("rejection");ko.classList.add("o");ko.title=d.kompensation||"(Kompensation)";reg("tr:komp:"+t._id+":"+di,ko,{type:"sagaCmd",dir:"out",trans:t._id,dannIdx:di,role:"komp"});
       body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right;opacity:.55"},"↩ "+(d.kompensation||"")),ko));
+      if(d.kompensation)body.append(regelCodePort(t,d,di,"komp"));
     });
     body.append(h("button",{class:"add",onclick:()=>{(t.dann=t.dann||[]).push({});render();}},"+ Dann (weiterer Command am selben Join)"));
     body.append(h("button",{class:"add",onclick:()=>{(t.dann=t.dann||[]).push({rufe:(MODEL.funktionen[0]||{}).name||""});render();}},"+ Dann ƒ (Katalog-Funktion rufen)"));
-    // Je Dann → eine Regel (gleiche Bedingung). Argument-Bau = mechanisches Feld-Mapping (D/S) → default-Stub.
-    // KEIN Code/LLM-Port: eine Regel trägt keine freie Logik, nur die Verdrahtung Events→Command.
+    // Je Dann → eine Regel (gleiche Bedingung). Argument-Bau = Feld-Mapping (D/S) → default-Stub; der Bau-Lambda ist Logik und hat
+    //   deshalb wie jedes Logik-Element 📝 + optional 🤖 (regelCodePort) — ein gefüllter Block ist der Lambda verbatim.
   }
+  function regelCodePort(t,d,di,teil){const sg=MODEL.sagas.find(x=>x.name===t.prozess);
+    const imCode=!!(sg&&sg.datei&&(teil==="komp"?d.kompensationAusdruck:d.sendeAusdruck));
+    return codePort("trl:"+t._id+":"+di+":"+teil,{k:"regelLambda",trans:t._id,dannIdx:di,teil},teil==="komp"?d.kompCodeSrc:d.codeSrc,
+      teil==="komp"?"λ Kompensation":d.rufe!==undefined?"λ Auftrag":"λ Command",imCode);}
 
   // ── Aktionen ──
   window.deOpen=function(){document.getElementById("de").classList.add("on");if(!MODEL.records.length&&!MODEL.aggregate.length)deBoot();else render();};
@@ -4830,7 +4986,7 @@ public static class HtmlPresenter
     readModels:x=>x.name,stores:x=>x.name,projektionen:x=>x.name,reaktionen:x=>x.name,reader:x=>x.name,pipelines:x=>x.name,
     triggers:x=>x.msgName||x.name,frists:x=>x.name,dienste:x=>x.name,hostSettings:x=>x.name,akteure:x=>x.namespace+"|"+x.name,
     clients:x=>x.namespace+"|"+x.name,funktionen:x=>x.namespace+"|"+x.name,fluesse:x=>x.namespace+"|"+x.name};
-  const LAYOUT=new Set(["x","y","ausCode","ungeschrieben","codeSrc","leer","rumpf","schritte","herkunft"]);
+  const LAYOUT=new Set(["x","y","ausCode","ungeschrieben","codeSrc","kompCodeSrc","leer","rumpf","schritte","herkunft"]);
   function inhalt(o){return JSON.stringify(o,(k,v)=>(k.startsWith("_")||LAYOUT.has(k))?undefined:v);}
   // Leseseite: „steht die Änderung schon im Code?“ — Fn-Ids (je Einlesen neu nummeriert) über „Store.Fn“ vergleichen und die
   //   Code-Fakten, die erst der Code liefert (Signatur verbatim, Datei, Fähigkeits-Name, Vertrag), nicht mitzählen.
@@ -4870,12 +5026,27 @@ public static class HtmlPresenter
             // Rumpf-Quelle bleibt die echte Datei (der Code-Knoten des Code-Stands).
             if(l.codeSrc)s.codeSrc=l.codeSrc;else delete s.codeSrc;if(l.leer)s.leer=true;else delete s.leer;
             erg.push(s);MERGE_INFO.ungeschrieben++;}
-          else{if(s.x!=null){l.x=s.x;l.y=s.y;}erg.push(l);}}
+          else{if(s.x!=null){l.x=s.x;l.y=s.y;}if(col==="fluesse")flCodeBindungen(s,l);erg.push(l);}}
         else if(!s.ausCode&&!(altFormat&&s.namespace&&!codeNs.has(s.namespace))){erg.push(s);MERGE_INFO.entwuerfe++;}      // Entwurf: bleibt
         // else: ausCode, aber im Code verschwunden → entfällt
       });
       (neu[col]||[]).forEach(l=>{if(!benutzt.has(l._codeKey))erg.push(l);});
       neu[col]=erg;}
+    // Transitionen (Saga-Regeln): unverändert → Code-Stand; im Board geändert/ergänzt → Board-Stand je Prozess.
+    const altTr=(alt.transitions||[]);
+    const proProzess=p=>altTr.filter(t=>t.prozess===p);
+    neu.sagas.forEach(sg=>{const at=proProzess(sg.name);if(!at.length)return;
+      const lt=neu.transitions.filter(t=>t.prozess===sg.name);
+      const edit=at.some(t=>(!t.ausCode&&!altFormat)||(t._herkunft&&hash(inhalt(t))!==t._herkunft));
+      if(edit){neu.transitions=neu.transitions.filter(t=>t.prozess!==sg.name).concat(at.map(t=>({...t,ungeschrieben:true})));MERGE_INFO.ungeschrieben++;}
+      else{const sig=t=>JSON.stringify([t.wenn||[],t.sammelEvent||"",(t.dann||[]).map(d=>[d.sende||"",d.rufe||"",d.kompensation||""])]);
+        const altBySig=new Map(at.map(t=>[sig(t),t]));
+        lt.forEach(t=>{const a=altBySig.get(sig(t));if(!a)return;if(a.x!=null){t.x=a.x;t.y=a.y;}
+          // Angedockte Code-Blöcke der Regel-Lambdas (Board-Fakt, nicht im Code) bleiben am selben Dann.
+          (t.dann||[]).forEach((d,i)=>{const ad=(a.dann||[])[i];if(!ad)return;if(ad.codeSrc)d.codeSrc=ad.codeSrc;if(ad.kompCodeSrc)d.kompCodeSrc=ad.kompCodeSrc;});});}});
+    // Entwurfs-Transitionen neuer (Entwurfs-)Prozesse behalten.
+    altTr.filter(t=>!neu.sagas.some(sg=>sg.name===t.prozess)&&neu.transitions.indexOf(t)<0).forEach(t=>neu.transitions.push(t));
+    // (Regeln vor den Code-Knoten: ihre angedockten Blöcke zählen beim Mitnehmen als referenziert.)
     // Abgeleitete Knoten: State-Knoten + Code-Knoten (Layout je Besitzer), Prompt-Knoten (Ziel umhängen).
     const altStates=new Map((alt.states||[]).map(x=>[x.aggregat,x]));
     neu.states.forEach(x=>{const a=altStates.get(x.aggregat);if(a&&a.x!=null){x.x=a.x;x.y=a.y;}});
@@ -4899,19 +5070,11 @@ public static class HtmlPresenter
     neu.llmNodes=(alt.llmNodes||[]).map(l=>{const slot=(l.promptZiel&&konsolenId(l.promptZiel,alt))||l.promptSlot||null;
       const ziel=(slot&&neuBySlot.get(slot))||codeUmzug.get(l.promptZiel)||l.promptZiel;
       const x={...l,promptZiel:ziel};if(slot)x.promptSlot=slot;return x;});
-    // Transitionen (Saga-Regeln): unverändert → Code-Stand; im Board geändert/ergänzt → Board-Stand je Prozess.
-    const altTr=(alt.transitions||[]);
-    const proProzess=p=>altTr.filter(t=>t.prozess===p);
-    neu.sagas.forEach(sg=>{const at=proProzess(sg.name);if(!at.length)return;
-      const lt=neu.transitions.filter(t=>t.prozess===sg.name);
-      const edit=at.some(t=>(!t.ausCode&&!altFormat)||(t._herkunft&&hash(inhalt(t))!==t._herkunft));
-      if(edit){neu.transitions=neu.transitions.filter(t=>t.prozess!==sg.name).concat(at.map(t=>({...t,ungeschrieben:true})));MERGE_INFO.ungeschrieben++;}
-      else{const sig=t=>JSON.stringify([t.wenn||[],t.sammelEvent||"",(t.dann||[]).map(d=>[d.sende||"",d.rufe||"",d.kompensation||""])]);
-        const altBySig=new Map(at.map(t=>[sig(t),t]));
-        lt.forEach(t=>{const a=altBySig.get(sig(t));if(a&&a.x!=null){t.x=a.x;t.y=a.y;}});}});
-    // Entwurfs-Transitionen neuer (Entwurfs-)Prozesse behalten.
-    altTr.filter(t=>!neu.sagas.some(sg=>sg.name===t.prozess)&&neu.transitions.indexOf(t)<0).forEach(t=>neu.transitions.push(t));
     return neu;}
+  // Angedockte Code-Blöcke der Fluss-Lambdas (Board-Fakt, nicht im Code) vom gespeicherten auf den eingelesenen Fluss übertragen:
+  //   Knoten über den Namen (die Identität im Fluss), Eingänge über ihre Position.
+  function flCodeBindungen(alt,neu){(neu.knoten||[]).forEach(k=>{const a=(alt.knoten||[]).find(x=>x.name===k.name);if(!a)return;
+    if(a.codeSrc)k.codeSrc=a.codeSrc;(k.eingaenge||[]).forEach((e,i)=>{const ae=(a.eingaenge||[])[i];if(ae&&ae.codeSrc)e.codeSrc=ae.codeSrc;});});}
   // Node-Art (graphNodes().kind) → Modell-Sammlung (für die Entwurf-Markierung: nur Sammlungen, die aus dem Code kommen).
   function kollektionVon(kind){return {command:"records",event:"records",rejection:"records",valueobject:"records",konfig:"records",query:"records",queryresponse:"records",
     enum:"enums",aggregate:"aggregate",decider:"decider",applier:"applier",saga:"sagas",readmodel:"readModels",store:"stores",
@@ -4933,6 +5096,14 @@ public static class HtmlPresenter
     (m.stores||[]).forEach(st=>[...(st.writeFns||[]),...(st.readFns||[])].forEach(entwurf));
     // Funktion ohne C#-Implementierung, aber mit Code-Block: „C# schreiben" legt die Klasse an (leerer Block → throw-Platzhalter).
     (m.funktionen||[]).forEach(f=>{if(!f.implementierung&&f.codeSrc){const t=txt(f.codeSrc);f.entwurf=t||"";}});
+    // Regel-Lambdas: ein gefüllter Code-Block IST der Lambda (verbatim) — Vorrang vor der Feld-Zuordnung.
+    (m.sagas||[]).forEach(sg=>regelFolge(sg,m.transitions).forEach(({d},i)=>{const st=(sg.schritte||[])[i];if(!st)return;
+      if(d.codeSrc){const t=txt(d.codeSrc);if(t!=null&&t.trim()){st.sendeAusdruck=t.trim();delete st.sendeArgumente;}}
+      if(d.kompCodeSrc){const t=txt(d.kompCodeSrc);if(t!=null&&t.trim()){st.kompensationAusdruck=t.trim();delete st.kompensationArgumente;}}}));
+    // Fluss-Lambdas: ein gefüllter Code-Block IST der Lambda (verbatim) — Vorrang vor der Feld-Zuordnung.
+    (m.fluesse||[]).forEach(f=>(f.knoten||[]).forEach(k=>{
+      if(k.codeSrc){const t=txt(k.codeSrc);if(t!=null&&t.trim())k.liste=t.trim();}
+      (k.eingaenge||[]).forEach(e=>{if(!e.codeSrc)return;const t=txt(e.codeSrc);if(t!=null&&t.trim()){e.ausdruck=t.trim();delete e.argumente;}});}));
     return m;}
   async function post(path){const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload(path!=="/api/editor/write"))});
     if(!r.ok)throw new Error("HTTP "+r.status);return r;}

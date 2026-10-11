@@ -290,8 +290,13 @@ public static class Grammatik
     [
         ("dec", Aggregat), ("app", Aggregat), ("trans", Prozess), ("saga", Prozess), ("proj", Projektion), ("reaktion", Reaktion),
         ("pipeline", Pipeline), ("reader", Reader), ("trigId", Ingress), ("frist", Pipeline), ("akt", Akteur), ("client", Client),
-        ("funktion", Funktion),
+        ("fk", Funktion),
     ];
+    /// <summary>
+    /// Editor-Ports, an denen der Baustein des AUSGANGS die Sorte GEBRAUCHT statt sie zu erzeugen: Handle → Store-Fähigkeit (der Port
+    /// sitzt am Handle, die Fähigkeit selbst erzeugt der Store). Geprüft wird dort der Konsum (Sorte × Baustein des Ausgangs).
+    /// </summary>
+    public static readonly IReadOnlyList<string> EditorPortGebrauch = ["wcall", "rcall"];
     /// <summary>Editor-Port-Schlüssel, deren Ausgang eine andere Sorte trägt als die Ziel-Karte (Frist-Knoten → Command = Sorte Frist).</summary>
     public static readonly IReadOnlyDictionary<string, string> EditorAusgangSorte = new Dictionary<string, string> { ["frist"] = Frist };
 
@@ -312,6 +317,7 @@ public static class Grammatik
         portSorte = EditorPortSorte,
         ausgangSorte = EditorAusgangSorte,
         portBaustein = EditorPortBaustein.Select(x => new[] { x.Schluessel, x.Baustein }),
+        portGebrauch = EditorPortGebrauch,
         // Für die Modul-Ableitung im Editor (dieselbe wie DomainEditor.Module): Sorten mit Konsumenten-/Erzeuger-Pflicht, Start-Nachricht.
         offenEin = Module.BrauchtKonsument.Order(StringComparer.Ordinal),
         offenAus = Module.BrauchtErzeuger.Order(StringComparer.Ordinal),

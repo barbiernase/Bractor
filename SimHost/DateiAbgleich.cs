@@ -78,6 +78,15 @@ internal sealed class Abgleich(EditorModell modell, Arbeitsbereich ws, IReadOnly
             Datei(s.Datei!, $"prozess {s.Namespace}.{s.Name}", t => ProzessRegeln(t, s));
         foreach (var f in modell.Fluesse.Where(f => f.Datei != null && Herkunft.Geaendert(f.Herkunft, Herkunft.Von(f))))
             Datei(f.Datei!, $"pipeline {f.Namespace}.{f.Name}", t => FlussKnoten(t, f));
+        // Katalog-Funktion: die Signatur (Auftrag → OneOf-Ergebnisse, Lese-Fähigkeiten) am Interface UND an der Implementierung.
+        //   Der Rumpf gehört dem Code (✓ Übernehmen am 🤖 bzw. die IDE); der Name ist die Identität — Umbenennen ist ein Refactoring.
+        foreach (var f in modell.Funktionen.Where(f => f.Datei != null && Herkunft.Geaendert(f.Herkunft, Herkunft.Von(f))))
+        {
+            var was = $"funktion {f.Namespace}.{f.Name}";
+            Datei(f.Datei!, was, t => FunktionsSignatur(t, f.Name, f, schnittstelle: true));
+            if (f.ImplDatei != null && f.Implementierung != null)
+                Datei(f.ImplDatei, was, t => FunktionsSignatur(t, f.Implementierung, f, schnittstelle: false));
+        }
         foreach (var a in modell.Akteure.Where(a => a.Datei != null && Herkunft.Geaendert(a.Herkunft, Herkunft.Von(a))))
         {
             Datei(a.Datei!, $"akteur {a.Namespace}.{a.Name}", t => AkteurBefugnisse(t, a));
@@ -154,7 +163,8 @@ internal sealed class Abgleich(EditorModell modell, Arbeitsbereich ws, IReadOnly
         if (Eigenschaften(decl, soll, p => Feldregeln.Eigenschaft(p) is { } e ? (e.Name, $"{N(e.Typ)}|{e.Standard}|{e.Zugriff}|{e.Pflicht}") : null, new HashSet<string>(), edits))
             notiz.Add("Property-Felder");
         if (r.Kind == RecordArt.ReadModel && GeteiltMarker(decl, r.Geteilt, edits)) notiz.Add(r.Geteilt ? "geteilt" : "nicht mehr geteilt");
-        return (MitNamespaces(Anwenden(text, edits), r.Felder.Select(f => f.Typ)), string.Join(", ", notiz));
+        if (r.Kind == RecordArt.Auftrag && !string.IsNullOrWhiteSpace(r.Funktion) && AuftragMarker(decl, r.Funktion!, edits)) notiz.Add($"Auftrag von {r.Funktion}");
+        return (MitNamespaces(Anwenden(text, edits), r.Felder.Select(f => f.Typ).Append(r.Funktion ?? "")), string.Join(", ", notiz));
     }
 
     /// <summary>
@@ -252,6 +262,32 @@ internal sealed class Abgleich(EditorModell modell, Arbeitsbereich ws, IReadOnly
     }
 
     // ── Decide: OneOf der Rückgabe (Wrapper bleibt) ──
+    /// <summary>
+    /// Der Marker eines Auftrags (<c>IAuftrag&lt;F&gt;</c>) zeigt auf SEINE Funktion: fehlt er, wird er angehängt; zeigt er auf eine andere,
+    /// wird nur das Typ-Argument ersetzt. Alle übrigen Basen bleiben Wort für Wort.
+    /// </summary>
+    private static bool AuftragMarker(TypeDeclarationSyntax decl, string funktion, List<(int, int, string)> edits)
+    {
+        var marker = typeof(Abstractions.IAuftrag<>).Name.Split('`')[0];
+        var basis = decl.BaseList?.Types.Select(t => t.Type).OfType<GenericNameSyntax>()
+            .FirstOrDefault(g => g.Identifier.Text == marker && g.TypeArgumentList.Arguments.Count == 1);
+        if (basis != null)
+        {
+            var arg = basis.TypeArgumentList.Arguments[0];
+            if (N(arg.ToString()).Split('.').Last() == funktion) return false;
+            edits.Add((arg.SpanStart, arg.Span.End, funktion));
+            return true;
+        }
+        var soll = $"{marker}<{funktion}>";
+        if (decl.BaseList is { } bl) edits.Add((bl.Span.End, bl.Span.End, ", " + soll));
+        else
+        {
+            var at = (decl as RecordDeclarationSyntax)?.ParameterList?.Span.End ?? decl.TypeParameterList?.Span.End ?? decl.Identifier.Span.End;
+            edits.Add((at, at, " : " + soll));
+        }
+        return true;
+    }
+
     private (string, string)? DecideRueckgabe(string text, DecideRegel d)
     {
         var root = Parse(text);
@@ -336,19 +372,49 @@ internal sealed class Abgleich(EditorModell modell, Arbeitsbereich ws, IReadOnly
     // ── Fähigkeit: Rückgabe + Parameter am Interface bzw. an der Impl-Methode ──
     private (string, string)? MethodenSignatur(string text, string klasse, string? methode, Faehigkeit f, bool schnittstelle)
     {
-        var root = Parse(text);
-        var m = root.DescendantNodes().OfType<TypeDeclarationSyntax>().Where(t => t.Identifier.Text == klasse)
-            .SelectMany(t => t.Members.OfType<MethodDeclarationSyntax>()).FirstOrDefault(x => methode == null || x.Identifier.Text == methode);
+        var m = Methode(Parse(text), klasse, methode);
         if (m == null) return schnittstelle ? (text, $"{klasse} nicht gefunden") : null;   // Impl: die Methode liegt in einer anderen Teil-Datei
+        return Signatur(text, m, f.Rueckgabe, f.Parameter);
+    }
+
+    // ── Katalog-Funktion: RufeAsync(Auftrag auftrag, IAusfuehrung x, Fähigkeiten…) → Task<OneOf<Ergebnisse…>>. Die Namen der beiden
+    //    festen Parameter bleiben, wie sie im Code stehen (der Rumpf benutzt sie); die Fähigkeiten gleichen wie bei Handles ab. ──
+    private (string, string)? FunktionsSignatur(string text, string klasse, Funktion f, bool schnittstelle)
+    {
+        var m = Methode(Parse(text), klasse, Abstractions.Funktionsvertrag.Methode);
+        if (m == null) return (text, $"{klasse}.{Abstractions.Funktionsvertrag.Methode} nicht gefunden");
+        var ist = m.ParameterList.Parameters;
+        var ausfuehrung = nameof(Abstractions.IAusfuehrung);
+        var soll = new List<Parameter>
+        {
+            new() { Typ = f.Auftrag, Name = ist.Count > 0 ? ist[0].Identifier.Text : "auftrag" },
+            new() { Typ = ausfuehrung, Name = ist.Count > 1 && N(ist[1].Type?.ToString()).Split('.').Last() == ausfuehrung ? ist[1].Identifier.Text : "x" },
+        };
+        soll.AddRange(f.Faehigkeiten);
+        var alt = m.ReturnType.ToString();
+        var huelle = Wrapper(alt) is "Task" or "ValueTask" ? Wrapper(alt) : "Task";
+        return Signatur(text, m, $"{huelle}<{OneOf}<{string.Join(", ", f.Ergebnisse)}>>", soll);
+    }
+
+    private static MethodDeclarationSyntax? Methode(SyntaxNode root, string klasse, string? methode) =>
+        root.DescendantNodes().OfType<TypeDeclarationSyntax>().Where(t => t.Identifier.Text == klasse)
+            .SelectMany(t => t.Members.OfType<MethodDeclarationSyntax>()).FirstOrDefault(x => methode == null || x.Identifier.Text == methode);
+
+    /// <summary>
+    /// Rückgabe und Parameterliste einer Methode auf die Signatur des Modells bringen — gleiche Parameter bleiben Wort für Wort, die
+    /// Form der Liste (ein-/mehrzeilig) bleibt. Der Rumpf wird nie angefasst; bricht er dadurch, meldet es der anschließende Bau.
+    /// </summary>
+    private (string, string)? Signatur(string text, MethodDeclarationSyntax m, string rueckgabe, IReadOnlyList<Parameter> parameter)
+    {
         var edits = new List<(int, int, string)>();
-        if (N(m.ReturnType.ToString()) != N(f.Rueckgabe)) edits.Add((m.ReturnType.SpanStart, m.ReturnType.Span.End, f.Rueckgabe));
+        if (N(m.ReturnType.ToString()) != N(rueckgabe)) edits.Add((m.ReturnType.SpanStart, m.ReturnType.Span.End, rueckgabe));
         var ist = m.ParameterList.Parameters.ToList();
         bool Gleich(ParameterSyntax p, Parameter q) => p.Identifier.Text == q.Name && N(p.Type?.ToString()) == N(q.Typ);
-        if (ist.Count != f.Parameter.Count || ist.Zip(f.Parameter).Any(z => !Gleich(z.First, z.Second)))
-            edits.Add((m.ParameterList.SpanStart, m.ParameterList.Span.End, Liste(m.ParameterList, f.Parameter.Select(q =>
+        if (ist.Count != parameter.Count || ist.Zip(parameter).Any(z => !Gleich(z.First, z.Second)))
+            edits.Add((m.ParameterList.SpanStart, m.ParameterList.Span.End, Liste(m.ParameterList, parameter.Select(q =>
                 ist.FirstOrDefault(p => Gleich(p, q))?.ToString() ?? $"{q.Typ} {q.Name}" + (q.Standard is null ? "" : $" = {q.Standard}")).ToList())));
         if (edits.Count == 0) return null;
-        return (MitNamespaces(Anwenden(text, edits), f.Parameter.Select(p => p.Typ).Append(f.Rueckgabe)), "Signatur");
+        return (MitNamespaces(Anwenden(text, edits), parameter.Select(p => p.Typ).Append(rueckgabe)), "Signatur");
     }
 
     // ── Handle: Eingang (umverdrahtet) + Rückgabe (Ausgänge); die Fähigkeits-Parameter gleicht ParameterAbgleich ab ──
@@ -664,6 +730,8 @@ internal sealed class Abgleich(EditorModell modell, Arbeitsbereich ws, IReadOnly
             .Concat((modell.Lesen?.Stores ?? []).SelectMany(s => s.Fns.Select(f => (f.Name, f.Namespace ?? s.Namespace)).Append((s.Name, s.Namespace))))
             // Akteur-Vertrags-Teile liegen beim Akteur — ein Client, der einen neuen Teil trägt, braucht dessen Namespace.
             .Concat(modell.Akteure.SelectMany(a => a.Vertrag.Select(r => (Name: r.Teil ?? a.VertragTyp, a.Namespace))))
+            // Katalog-Funktionen: ein Akteur, der eine anbietet (IDarf<IFunktion>), braucht ihren Namespace.
+            .Concat(modell.Funktionen.Select(f => (f.Name, f.Namespace)))
             .GroupBy(x => x.Name).ToDictionary(g => g.Key, g => g.First().Item2, StringComparer.Ordinal);
         var root = Parse(text);
         var dateiNs = root.DescendantNodes().OfType<BaseNamespaceDeclarationSyntax>().FirstOrDefault()?.Name.ToString();

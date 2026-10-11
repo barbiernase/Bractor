@@ -153,4 +153,24 @@ public class DomainEditorFunktionTests
         Herkunft.Von(s with { Schritte = [s.Schritte[0] with { Zeitlimit = "TimeSpan.FromMinutes(1)" }, s.Schritte[1]] }).Should().NotBe(stempel);
         Herkunft.Von(s with { Schritte = [s.Schritte[0] with { Rufe = "IAndere" }, s.Schritte[1]] }).Should().NotBe(stempel);
     }
+
+    [Fact]
+    public void Der_Herkunfts_Stempel_einer_Funktion_umfasst_die_ganze_Signatur_samt_Lese_Faehigkeiten()
+    {
+        var f = Modell().Funktionen[0];
+        var stempel = Herkunft.Von(f);
+        Herkunft.Von(f with { Ergebnisse = ["Vorverarbeitet"] }).Should().NotBe(stempel);
+        Herkunft.Von(f with { Auftrag = "AndererAuftrag" }).Should().NotBe(stempel);
+        Herkunft.Von(f with { Faehigkeiten = [new Parameter { Typ = "ISucheBild", Name = "suche" }] }).Should().NotBe(stempel);
+        Herkunft.Von(f with { Rumpf = "return default;", Doku = "x" }).Should().Be(stempel, "Rumpf und Doku gehören nicht zur Signatur");
+    }
+
+    [Fact]
+    public void Ein_Akteur_der_eine_Funktion_anbietet_bekommt_IDarf_und_den_Namespace_der_Funktion()
+    {
+        var m = Modell() with { Akteure = [new Akteur { Name = "BildWorker", Namespace = "Bild.Akteure", Art = "Maschine", Darf = ["IVorverarbeitung"] }] };
+
+        var akteure = Scaffolder.Generiere(m).Single(d => d.Inhalt.Contains("record BildWorker")).Inhalt;
+        akteure.Should().Contain("IDarf<IVorverarbeitung>").And.Contain("using Bild.Eingang;");
+    }
 }

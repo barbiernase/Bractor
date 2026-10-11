@@ -86,13 +86,17 @@ app.MapPost("/api/editor/write", (JsonElement body, bool? trocken) =>
     var modell = BoardLeseseite.AusBoard(body.GetRawText());
     var root = SlnRoot();
     var bericht = DateiSchreiber.Schreibe(modell, root, trocken == true);
-    if (trocken == true) return Results.Json(bericht, EditorModell.JsonOptionen);
+    // Client-Implementierungen (Python) entstehen aus der GENERIERTEN Basis — die schreibt der Build (Codegen-Prepass). Daher erst nach
+    //   dem Bauen; im Trockenlauf nur gemeldet.
+    void Python() { var (g, u) = PythonSync.ImplementierungenAnlegen(modell, root, trocken == true); bericht.Geschrieben.AddRange(g); bericht.Uebersprungen.AddRange(u); }
+    if (trocken == true) { Python(); return Results.Json(bericht, EditorModell.JsonOptionen); }
     var fehler = new List<string>();
     foreach (var projekt in bericht.Dateien.Select(d => ProjektVon(d, root)).Where(p => p != null).Distinct())
     {
         var b = System.Text.Json.JsonSerializer.SerializeToElement(CodeSync.BaueProjekt(projekt!, root));
         if (b.TryGetProperty("fehler", out var fs)) fehler.AddRange(fs.EnumerateArray().Select(f => f.GetString() ?? "").Where(f => f.Length > 0));
     }
+    Python();
     return Results.Json(bericht with { Fehler = fehler.Distinct().ToList() }, EditorModell.JsonOptionen);
 });
 

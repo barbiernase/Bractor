@@ -131,23 +131,19 @@ public sealed class SlotInventar
                     { Lambda = lam, Anweisung = anweisung, LambdaIndex = i, Knoten = knoten });
                 }
 
-            // Saga-Lambdas: Lambda-Argumente der Regel-Verben in Prozess-Definitionen.
+            // Prozess-Regel-Lambdas: je Regel (Anweisung des Definiere-Lambdas) die Lambda-Argumente der Regel-Verben — derselbe Anker
+            //   wie beim Fluss (Anweisung + Lambda-Index); Disc = „Anweisung#Verb" (Sende/Rufe/SendeJe, RückgängigDurch…, UndAlle).
             if (Sym.Implements(t, _iProzessDef))
-                foreach (var syn in t.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).Where(n => !Projektlage.IstGeneriert(n.SyntaxTree)))
+                foreach (var (anweisung, i, lam) in DefiniereLambdas(t, _iProzessDef, Vertrag.Regeln))
                 {
-                    var model = Model(syn.SyntaxTree);
-                    foreach (var inv in syn.DescendantNodes().OfType<InvocationExpressionSyntax>())
-                    {
-                        if (model.GetSymbolInfo(inv).Symbol is not IMethodSymbol verb || !Vertrag.IstRegelVerb(verb)) continue;
-                        foreach (var lam in inv.ArgumentList.Arguments.Select(a => a.Expression).OfType<LambdaExpressionSyntax>())
-                        {
-                            var ps = (model.GetSymbolInfo(lam).Symbol as IMethodSymbol)?.Parameters.ToList() ?? new();
-                            var sig = ps.Select(p => p.Type).ToList();
-                            if (model.GetTypeInfo(lam).ConvertedType is INamedTypeSymbol dt) sig.Add(dt);
-                            Slots.Add(new SlotRef("saga", t, null, lam.Body, $"{verb.Name}<{string.Join(",", verb.TypeArguments.Select(a => a.Name))}>",
-                                null, ps, sig));
-                        }
-                    }
+                    var model = Model(lam.SyntaxTree);
+                    if ((lam.Parent?.Parent?.Parent as InvocationExpressionSyntax) is not { } inv
+                        || model.GetSymbolInfo(inv).Symbol is not IMethodSymbol verb || !Vertrag.IstRegelVerb(verb)) continue;
+                    var ps = (model.GetSymbolInfo(lam).Symbol as IMethodSymbol)?.Parameters.ToList() ?? new();
+                    var sig = ps.Select(p => p.Type).ToList();
+                    if (model.GetTypeInfo(lam).ConvertedType is INamedTypeSymbol dt) sig.Add(dt);
+                    Slots.Add(new SlotRef("saga", t, null, lam.Body, $"{anweisung}#{verb.Name}", null, ps, sig)
+                    { Lambda = lam, Anweisung = anweisung, LambdaIndex = i, Knoten = verb.Name });
                 }
         }
     }
@@ -159,24 +155,45 @@ public sealed class SlotInventar
     /// </summary>
     public IEnumerable<(int Anweisung, int Index, string Knoten, LambdaExpressionSyntax Lambda)> FlussLambdas(INamedTypeSymbol t)
     {
-        var iface = _iFluss?.GetMembers(Vertrag.FlussProperty).OfType<IPropertySymbol>().FirstOrDefault();
+        foreach (var (a, i, lam) in DefiniereLambdas(t, _iFluss, Vertrag.FlussProperty))
+        {
+            var st = Anweisung(lam);
+            var knoten = st is LocalDeclarationStatementSyntax ld && ld.Declaration.Variables.Count == 1
+                ? ld.Declaration.Variables[0].Identifier.Text : $"#{a}";
+            yield return (a, i, knoten, lam);
+        }
+    }
+
+    /// <summary>
+    /// Die Lambdas eines <c>…Definiere(p =&gt; …)</c> in der Property <paramref name="property"/> des Vertrags (Fluss bzw. Prozess-Regeln):
+    /// je Anweisung (Block) bzw. der eine Ausdruck (Ausdrucks-Lambda = Anweisung 0) die Lambda-ARGUMENTE in Code-Reihenfolge, nicht
+    /// verschachtelte. Ankert über die Implementierung der Property, nie über ihren Namen in der Klasse.
+    /// </summary>
+    public IEnumerable<(int Anweisung, int Index, LambdaExpressionSyntax Lambda)> DefiniereLambdas(INamedTypeSymbol t, INamedTypeSymbol? vertrag, string property)
+    {
+        var iface = vertrag?.GetMembers(property).OfType<IPropertySymbol>().FirstOrDefault();
         var impl = iface == null ? null : Sym.Implementierung(t, iface) as IPropertySymbol;
         var prop = impl?.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).OfType<PropertyDeclarationSyntax>()
             .FirstOrDefault(p => !Projektlage.IstGeneriert(p.SyntaxTree));
         var definiere = prop?.DescendantNodes().OfType<InvocationExpressionSyntax>()
-            .Select(inv => inv.ArgumentList.Arguments.FirstOrDefault()?.Expression as LambdaExpressionSyntax)
-            .FirstOrDefault(l => l?.Body is BlockSyntax);
-        if (definiere?.Body is not BlockSyntax block) yield break;
-        for (var a = 0; a < block.Statements.Count; a++)
+            .Select(inv => inv.ArgumentList.Arguments.FirstOrDefault()?.Expression as LambdaExpressionSyntax).FirstOrDefault(l => l != null);
+        if (definiere == null) yield break;
+        var anweisungen = definiere.Body is BlockSyntax block ? block.Statements.Cast<SyntaxNode>().ToList() : [definiere.Body];
+        for (var a = 0; a < anweisungen.Count; a++)
         {
-            var st = block.Statements[a];
-            var knoten = st is LocalDeclarationStatementSyntax ld && ld.Declaration.Variables.Count == 1
-                ? ld.Declaration.Variables[0].Identifier.Text : $"#{a}";
-            var lambdas = st.DescendantNodes().OfType<LambdaExpressionSyntax>()
+            var st = anweisungen[a];
+            var lambdas = st.DescendantNodesAndSelf().OfType<LambdaExpressionSyntax>()
                 .Where(l => l.Parent is ArgumentSyntax && !l.Ancestors().TakeWhile(x => x != st).OfType<LambdaExpressionSyntax>().Any())
                 .ToList();
-            for (var i = 0; i < lambdas.Count; i++) yield return (a, i, knoten, lambdas[i]);
+            for (var i = 0; i < lambdas.Count; i++) yield return (a, i, lambdas[i]);
         }
+    }
+
+    /// <summary>Die Anweisung des Definiere-Lambdas, in der ein Lambda steht (bei einem Ausdrucks-Lambda: dessen Ausdruck).</summary>
+    public static SyntaxNode Anweisung(LambdaExpressionSyntax lam)
+    {
+        var definiere = lam.Ancestors().OfType<LambdaExpressionSyntax>().Last();
+        return definiere.Body is BlockSyntax b ? lam.Ancestors().First(x => x.Parent == b) : definiere.Body;
     }
 
     private void Add(string art, INamedTypeSymbol t, IMethodSymbol m, INamedTypeSymbol? state, string? disc = null)

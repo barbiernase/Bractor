@@ -114,6 +114,8 @@ public sealed class FunktionRaw
     public string Name = "", Full = "", Namespace = "";
     /// <summary>Die C#-Implementierung (Klasse, einfacher Name) und ihr RufeAsync-Rumpf — null, wenn es (noch) keine gibt.</summary>
     public string? ImplKlasse, ImplRumpf;
+    /// <summary>Die Datei, in der <c>RufeAsync</c> der Implementierung steht (bei partial: die Teil-Datei der Methode).</summary>
+    public string? ImplDatei;
     public string AuftragFull = "";
     public List<string> ErgebnisseFull = new();
     /// <summary>Lese-Fähigkeiten nach IAusfuehrung (Typ wie geschrieben, Name).</summary>
@@ -671,7 +673,9 @@ public sealed partial class DomainExtractor
             var methode = iface?.GetMembers(Vertrag.FunktionsMethode).OfType<IMethodSymbol>().FirstOrDefault();
             if (impl == null || methode == null) continue;
             f.ImplKlasse = impl.Name;
-            f.ImplRumpf = Sym.Implementierung(impl, methode) is IMethodSymbol im ? MethodBody(im) : null;
+            var im = Sym.Implementierung(impl, methode) as IMethodSymbol;
+            f.ImplRumpf = im is null ? null : MethodBody(im);
+            f.ImplDatei = (im?.DeclaringSyntaxReferences ?? impl.DeclaringSyntaxReferences).FirstOrDefault()?.SyntaxTree.FilePath;
         }
     }
 
