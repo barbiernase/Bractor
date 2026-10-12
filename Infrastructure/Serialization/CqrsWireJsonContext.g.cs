@@ -52,6 +52,8 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(ArbeitZugeteilt))]
 [JsonSerializable(typeof(ArbeitLebt))]
 [JsonSerializable(typeof(ArbeitErledigt))]
+[JsonSerializable(typeof(ListeOffene))]
+[JsonSerializable(typeof(OffeneAuftraege))]
 [JsonSerializable(typeof(HalteQuelle))]
 [JsonSerializable(typeof(QuelleGehalten))]
 // ── Framework: Ergebnis-/Prozess-/Inbox-Events (reisen im Wire) ──

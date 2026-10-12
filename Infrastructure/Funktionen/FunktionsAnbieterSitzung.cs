@@ -66,7 +66,7 @@ public sealed class FunktionsAnbieterSitzung : IAsyncDisposable
         Func<AuftragAnbieten, Type, Task> sende,
         Func<Guid, Guid, IEvent, string?, string, CancellationToken, Task<bool>> schreibe,
         ILogger? logger = null,
-        int warteMs = 10_000,
+        int warteMs = 4_000,   // unter dem Request-Timeout des Clusters (5 s), siehe FunktionsAbholer
         TimeSpan? fehlerPause = null)
     {
         _sitzung = sitzung;

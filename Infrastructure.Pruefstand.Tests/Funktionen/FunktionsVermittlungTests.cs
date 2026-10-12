@@ -103,4 +103,29 @@ public class FunktionsVermittlungTests
         }
         finally { await system.ShutdownAsync(); }
     }
+
+    [Fact]
+    public async Task Eine_neuere_Anfrage_desselben_Arbeiters_ersetzt_die_geparkte()
+    {
+        // Der Cluster wiederholt eine Anfrage nach seinem Request-Timeout — die erste ist dann tot. Bekäme sie die Arbeit, hinge der
+        // Auftrag bis zum Ablauf der Lease (gefunden mit dem Einblick der Werkbank: „vergeben“, aber nie gerechnet).
+        var system = new ActorSystem();
+        try
+        {
+            var pid = system.Root.Spawn(Props.FromProducer(() => new FunktionsVermittlerActor(TimeSpan.FromSeconds(30))));
+            var alt = system.Root.RequestAsync<ArbeitZugeteilt>(pid, new HoleArbeit("w1", 1, 5_000), TimeSpan.FromSeconds(10));
+            await Task.Delay(50);
+            var neu = system.Root.RequestAsync<ArbeitZugeteilt>(pid, new HoleArbeit("w1", 1, 5_000), TimeSpan.FromSeconds(10));
+            await Task.Delay(50);
+
+            var a = Angebot("a");
+            await system.Root.RequestAsync<object>(pid, a, TimeSpan.FromSeconds(5));
+            (await neu).Auftraege.Should().ContainSingle().Which.Vorgang.Should().Be(a.Vorgang);
+            alt.IsCompleted.Should().BeFalse("die ersetzte Anfrage bekommt nichts");
+
+            var offen = await system.Root.RequestAsync<OffeneAuftraege>(pid, new ListeOffene(), TimeSpan.FromSeconds(5));
+            offen.Auftraege.Should().ContainSingle().Which.Arbeiter.Should().Be("w1");
+        }
+        finally { await system.ShutdownAsync(); }
+    }
 }

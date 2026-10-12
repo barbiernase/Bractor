@@ -49,7 +49,18 @@ public sealed class FunktionsVermittlerActor : IActor
                 if (los.Count > 0 || h.WarteMs <= 0 || context.Sender is null)
                     context.Respond(new ArbeitZugeteilt(los));
                 else
+                {
+                    // Ein Ausführer fragt nacheinander, nie parallel — eine neuere Anfrage desselben Arbeiters ersetzt die ältere. Sonst
+                    //   bekäme die Arbeit eine Anfrage, deren Absender längst aufgegeben hat (der Cluster wiederholt eine Anfrage nach seinem
+                    //   Request-Timeout), und der Auftrag hinge bis zum Ablauf der Lease.
+                    for (var n = _geparkt.First; n is not null;)
+                    {
+                        var weiter = n.Next;
+                        if (n.Value.Anfrage.Arbeiter == h.Arbeiter) _geparkt.Remove(n);
+                        n = weiter;
+                    }
                     _geparkt.AddLast(new Geparkt(context.Sender, h, _jetzt().AddMilliseconds(h.WarteMs)));
+                }
                 break;
 
             case ArbeitLebt l:
@@ -60,6 +71,10 @@ public sealed class FunktionsVermittlerActor : IActor
             case ArbeitErledigt e:
                 _kern.Erledigt(e.Vorgang);
                 context.Respond(new WakeAck());
+                break;
+
+            case ListeOffene:
+                context.Respond(new OffeneAuftraege(_kern.Offen()));
                 break;
 
             case Tick:
@@ -132,6 +147,23 @@ public static class FunktionsAnbieter
         catch (Exception ex) when (ex is OperationCanceledException or TimeoutException)
         { /* der Dirigent bietet bei der nächsten Weckung erneut an (Backstop) */ }
     }
+
+    /// <summary>
+    /// Einblick (Werkbank P4.7): die offenen Aufträge je Funktion — vom Vermittler jeder Funktion, bounded. Ein Vermittler, der nicht antwortet,
+    /// fehlt in der Liste (er ist nicht maßgeblich; der Dirigent bietet ohnehin neu an).
+    /// </summary>
+    public static async Task<IReadOnlyDictionary<string, IReadOnlyList<OffenerAuftrag>>> ListeOffeneAsync(
+        ActorSystem system, IEnumerable<Type> funktionen, CancellationToken ct)
+    {
+        var anfragen = funktionen.Distinct().Select(async f =>
+        {
+            using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+            cts.CancelAfter(TimeSpan.FromSeconds(3));
+            try { return (f.Name, (await system.Cluster().RequestAsync<OffeneAuftraege>(FunktionsVermittlerActor.Identitaet(f), new ListeOffene(), cts.Token)).Auftraege); }
+            catch (Exception ex) when (ex is OperationCanceledException or TimeoutException) { return (f.Name, (IReadOnlyList<OffenerAuftrag>?)null); }
+        });
+        return (await Task.WhenAll(anfragen)).Where(x => x.Item2 != null).ToDictionary(x => x.Item1, x => x.Item2!);
+    }
 }
 
 /// <summary>
@@ -142,6 +174,8 @@ public static class FunktionsAnbieter
 public sealed class FunktionsAbholer : BackgroundService
 {
     private static readonly TimeSpan LebenszeichenAlle = TimeSpan.FromSeconds(10);
+    // Long-Poll unter dem Request-Timeout des Clusters (Standard 5 s) — sonst wiederholt der Cluster die Anfrage, während sie geparkt ist.
+    private const int WarteMs = 4_000;
     private readonly ActorSystem _system;
     private readonly FunktionsAusfuehrer _ausfuehrer;
     private readonly IReadOnlyList<FunktionsBindung> _bindungen;
@@ -176,7 +210,7 @@ public sealed class FunktionsAbholer : BackgroundService
                 try
                 {
                     zugeteilt = await _system.Cluster().RequestAsync<ArbeitZugeteilt>(
-                        identitaet, new HoleArbeit(arbeiter, frei, 10_000), ct);
+                        identitaet, new HoleArbeit(arbeiter, frei, WarteMs), ct);
                 }
                 finally
                 {

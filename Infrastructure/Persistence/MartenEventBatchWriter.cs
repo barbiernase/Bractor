@@ -74,6 +74,7 @@ public sealed class MartenEventBatchWriter : IEventBatchWriter
         var sw = Stopwatch.StartNew();
         await session.SaveChangesAsync(ct);
         sw.Stop();
+        Infrastructure.Einblick.SpurSignal.Melde();
         BatchWriterStats.Record(eventCount, sw.Elapsed.TotalMilliseconds);
 
         if (_logger.IsEnabled(LogLevel.Debug))

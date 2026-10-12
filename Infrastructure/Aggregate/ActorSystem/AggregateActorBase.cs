@@ -322,6 +322,9 @@ public abstract class AggregateActorBase<TState> : IActor
             {
                 var rejection = rejections.First();
                 _logger?.LogDebug("[Actor] Rejected: {Rejection}", rejection.GetType().Name);
+                // Spur: eine Ablehnung steht (auf dem Client-Pfad) nicht im Log — als verlierbarer Hinweis an die Werkbank.
+                Infrastructure.Einblick.SpurHinweise.Melde(Infrastructure.Einblick.SpurHinweise.Ablehnung, Spur.Aktuell?.Wirker, cmdEnvelope.Ursache,
+                    cmdEnvelope.CorrelationId, $"{cmdEnvelope.Payload.GetType().Name} abgelehnt: {rejection.GetType().Name}");
 
                 // ★ Treiber-Fold (EM-1) — Wende der früheren K2-Entscheidung: auf dem EMITTIERTEN Pfad
                 //   (Reaktion/Prozess) wird die Ablehnung jetzt DURABEL als KommandoAbgelehnt co-committet. Der

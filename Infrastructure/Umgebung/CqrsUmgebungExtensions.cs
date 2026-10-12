@@ -1,3 +1,4 @@
+using Infrastructure.Einblick;
 using Abstractions;
 using Infrastructure.Akteure;
 using Infrastructure.Deadlines;
@@ -96,6 +97,7 @@ public static class CqrsUmgebungExtensions
         s.AddAkteure(builder.Configuration.GetSection(UmgebungsAbschnitte.Identitaeten));
         s.AddQuellen(builder.Configuration);
         s.BindeFunktionen(u.Funktionen);
+        s.AddEinblick(u);
         return builder;
     }
 
@@ -114,6 +116,7 @@ public static class CqrsUmgebungExtensions
         }
         app.MapCqrsGrpcService();
         app.MapBackendMonitoring();
+        app.MapEinblick(u);
         Console.WriteLine();
         Console.WriteLine($"  CQRS/ES Host · Umgebung {u.Umgebung.Name} ({u.Umgebung.Art}) · gRPC :{u.Transport.GrpcPort}"
             + (u.Transport.EinblickPort > 0 ? $" · Einblick :{u.Transport.EinblickPort}" : "") + $" · DB {u.EventStore.Datenbank} · Cluster {u.Cluster.Name} ({u.Cluster.Art})");

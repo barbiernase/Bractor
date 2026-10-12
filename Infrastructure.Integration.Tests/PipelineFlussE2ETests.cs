@@ -130,6 +130,18 @@ public class PipelineFlussE2ETests
             kette.Should().OnlyContain(e => e.Wirker != null);
             kette.Select(e => e.Wirker).Should().Contain(w => w!.StartsWith("funktion:"), "die Kette führt über mindestens eine Funktion");
 
+            // Einblick (Werkbank P4.6/P4.7): der Vorgang steht mit Wurzel und Zustand in der Liste, sein Graph enthält die Kette.
+            var leser = new Infrastructure.Einblick.SpurLeser("Host=localhost;Port=5432;Database=cqrs_events;Username=postgres;Password=postgres", "es");
+            var vg = (await leser.VorgaengeAsync(200, default)).Single(x => x.Korrelation == korrelation.ToString());
+            (vg.Zustand, vg.Prozess, vg.WurzelWirker).Should().Be(("fertig", nameof(Bildeingang), "quelle:DateiErkannt"));
+            (await leser.VorgaengeAsync(200, default)).Should().NotContain(x => x.Korrelation == vorgang.ToString(),
+                "die Quell-Nachricht ist die Wurzel des Prozess-Vorgangs, kein eigener Vorgang");
+            var graph = await leser.VorgangAsync(korrelation.ToString(), default);
+            graph.Select(e => e.Seq).Should().BeInAscendingOrder();
+            graph.First().Wirker.Should().Be("quelle:DateiErkannt", "der Graph beginnt an der Wurzel");
+            graph.Should().Contain(e => e.Wirker == "decide:ImagePair/MeldeBildVerfuegbar" && !e.Intern);
+            (await leser.LeseAbSeqAsync(graph.First().Seq - 1, 1, default)).Single().Seq.Should().Be(graph.First().Seq);
+
             var marten = host.Services.GetRequiredService<IDocumentStore>();
             await using var session = marten.QuerySession();
             var typen = (await session.Events.QueryAllRawEvents().Where(e => e.Timestamp > DateTimeOffset.UtcNow.AddMinutes(-5)).ToListAsync())

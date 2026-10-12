@@ -76,6 +76,9 @@ public sealed class HandlerOutputRouter
 
         await _publisher.PublishAsync(newEnvelope, ct);
         _logger.LogDebug("[{Subscriber}] → reaktives Event: {Event}", _subscriberId, evt.GetType().Name);
+        // Spur: ein reaktives Event geht nur über den Broker (verlierbar) — als Hinweis an die Werkbank.
+        Infrastructure.Einblick.SpurHinweise.Melde(Infrastructure.Einblick.SpurHinweise.Transient, _wirker,
+            Spur.Ursache(trigger.AggregateId, (trigger as IEventEnvelope)?.AggregateVersion ?? 0), trigger.CorrelationId, evt.GetType().Name);
     }
 
     private Task SendReaktionAsync(ICommand command, IAggregateEnvelope trigger, CancellationToken ct)

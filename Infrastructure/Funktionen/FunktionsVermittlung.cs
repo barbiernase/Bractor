@@ -27,6 +27,15 @@ public sealed record ArbeitLebt(Guid Vorgang, string Arbeiter) : IWireMessage;
 /// <summary>Der Auftrag ist erledigt (sein Ergebnis liegt im Log) — der Vermittler vergisst ihn.</summary>
 public sealed record ArbeitErledigt(Guid Vorgang) : IWireMessage;
 
+/// <summary>Einblick (Werkbank P4.7): welche Aufträge hält der Vermittler gerade — wartend oder an einen Ausführer vergeben?</summary>
+public sealed record ListeOffene : IWireMessage;
+
+/// <summary>Ein offener Auftrag: wartend (<paramref name="Arbeiter"/> null) oder vergeben bis <paramref name="LeaseBis"/>.</summary>
+public sealed record OffenerAuftrag(Guid Vorgang, Guid Korrelation, string Auftrag, string? Ursache, string? Arbeiter, DateTimeOffset? LeaseBis);
+
+/// <summary>Die Antwort auf <see cref="ListeOffene"/>.</summary>
+public sealed record OffeneAuftraege(IReadOnlyList<OffenerAuftrag> Auftraege) : IWireMessage;
+
 /// <summary>
 /// Der reine Kern eines Vermittlers (je Funktion): Warteschlange, Leases, Lebenszeichen, kürzlich Erledigtes. Ohne Uhr und
 /// ohne Transport — die Zeit kommt als Argument; im Prüfstand vollständig beweisbar.
@@ -94,6 +103,14 @@ public sealed class FunktionsVermittlung
             while (_erledigtReihenfolge.Count > _erinnerung) _erledigt.Remove(_erledigtReihenfolge.Dequeue());
         }
     }
+
+    /// <summary>Die offenen Aufträge: zuerst die vergebenen, dann die wartenden in Schlangen-Reihenfolge.</summary>
+    public IReadOnlyList<OffenerAuftrag> Offen()
+        => _vergeben.Values.Select(v => new OffenerAuftrag(v.Auftrag.Vorgang, v.Auftrag.Korrelation, v.Auftrag.Auftrag.GetType().Name,
+                                                           v.Auftrag.Ursache, v.Arbeiter, v.Bis))
+            .Concat(_warteschlange.Where(_offen.ContainsKey).Select(g => _offen[g])
+                .Select(a => new OffenerAuftrag(a.Vorgang, a.Korrelation, a.Auftrag.GetType().Name, a.Ursache, null, null)))
+            .ToList();
 
     /// <summary>Abgelaufene Leases zurück an den ANFANG der Schlange (sie warten am längsten).</summary>
     public void GibAbgelaufeneZurück(DateTimeOffset jetzt)

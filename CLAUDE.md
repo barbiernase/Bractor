@@ -97,12 +97,19 @@ der Karte (Compiler: Typ/Member; Boot: `CQRS-BOOT {json}` mit Karte). 🖥 Host-
 Formular-Renderer aus dem Schema; 📸 = Sim-DB-Stände (`<schema>.stand` trägt Proto-Stand und Projektions-Hashes). Code-Hashes (E9): Snapshot-
 Version enthält State + Applier, Projektionen bauen in Sim nach Code-Änderung beim Start neu auf (`ProjektionsStandDienst`).
 
+**Spur (2026-10-12, Werkbank P4):** jeder Log-Eintrag trägt die Header `ursache` (`Stream:Version`), `wirker` (= Karten-Id im Editor:
+`decide:A/C`, `fluss:P#knoten`, `prozess:P#A→C`, `funktion:F`, `quelle:T`, `reaktion:T`, `akteur:A` — EINE Quelle `Abstractions/Spur/WirkerId.cs`,
+Fluss-/Regel-Namen generiert der `ProzessRegelnGenerator` aus dem Quelltext, CQRS072) und `stand` (`-p:CqrsStand` beim Bauen von Host.Grpc).
+Ursache/Wirker reisen fluss-lokal wie der Akteur (`Spur.Von`), über Commands im Envelope, über Funktionen im `AuftragAnbieten`. Karten-Ids
+im Board sind stabil (`_id` = Wirker-Id bzw. natürlicher Schlüssel); `--check` prüft Registry-Namen = Karten. Einblick-API des Hosts (nur
+Einblick-Port): `/einblick/spur?ab=`, `/vorgaenge`, `/vorgang/{k}`, `/auftraege`, `/hinweise`, SSE `/neu` (`Infrastructure/Einblick/`).
+
 **Akteure, Verträge, Clients (2026-10-06):** Akteure mit Befugnis und Kette bis in den Event-Header; Akteur-Verträge (Zusagen
 draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer CommandId; Clients (`IClientVertrag`, n:m zu Akteuren) mit
 Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an
 Clients (`docs/konzept-akteure.md` §9).
 
-**Tests (echt gemessen 2026-10-09): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
+**Tests (echt gemessen 2026-10-09; P4 2026-10-12: Prüfstand 435/435, Integration 38/38): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
 Marten/Consul/Redis, sequentiell: 33/33 (inkl. 4 Fluss-E2E; TwoNodeCommandDispatch an die Inbox-Marke seit T2b angepasst).**
 
 **Bewusst offen (Priorität):**

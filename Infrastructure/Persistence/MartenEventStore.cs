@@ -108,6 +108,7 @@ public class MartenEventStore : IEventStoreRepository
         try
         {
             await session.SaveChangesAsync();
+            Infrastructure.Einblick.SpurSignal.Melde();
 
             _logger.LogDebug(
                 "Appended {EventCount} events to stream {AggregateId}, " +
