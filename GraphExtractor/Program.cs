@@ -137,7 +137,7 @@ Console.WriteLine($"\n✅ {jsonPath}");
 var modell = ModellMapper.ZuEditorModell(graph, dom);
 // Volles Board-Modell: Schreibseite + rekonstruierte Leseseiten-Topologie (Projektion/Reader/
 // Query/Pipeline/Trigger). Das Board lädt dies als Seed und baut es weiter (autoLayout platziert).
-var modellJson = ModellMapper.ZuBoardJson(graph, dom, compositionRoot);
+var modellJson = ModellMapper.ZuBoardJson(graph, dom, compositionRoot, QuellenKonfig.Lies(lage));
 var modellPath = Path.Combine(solutionDir, "domain-model.json");
 await File.WriteAllTextAsync(modellPath, modellJson);
 Console.WriteLine($"✅ {modellPath}  ({modell.Aggregate.Count} Aggregate, {modell.Sagas.Count} Sagas)");

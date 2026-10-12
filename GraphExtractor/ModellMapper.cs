@@ -291,7 +291,7 @@ public static class ModellMapper
         Doku = meta.Doku, Zusatz = meta.Zusatz, Usings = meta.Usings, Datei = Relativ(wurzel, meta.Datei),
         Typart = meta.Typart == "public record" ? null : meta.Typart,
         OhneParameterliste = meta.OhneParameterliste,
-        Basen = meta.Basen, Attribute = meta.Attribute,
+        Basen = meta.Basen, Attribute = meta.Attribute, Treiber = meta.Treiber,
     };
 
     /// <summary>Pfad relativ zur Solution, „/"-getrennt (für den Editor/SimHost); null, wenn außerhalb oder unbekannt.</summary>
@@ -320,7 +320,7 @@ public static class ModellMapper
     public static List<IngressBindung> Ingress(CompositionRoot cr) =>
         cr.Triggers.Select(tb => new IngressBindung { Trigger = tb.MsgName, Modus = tb.Modus, Ort = tb.Route ?? tb.Interval ?? tb.Path }).ToList();
 
-    public static string ZuBoardJson(KnowledgeGraph graph, DomainModel dom, CompositionRoot cr)
+    public static string ZuBoardJson(KnowledgeGraph graph, DomainModel dom, CompositionRoot cr, JsonObject? quellenKonfig = null)
     {
         var modell = ZuEditorModell(graph, dom);
         var root = JsonNode.Parse(modell.AlsJson())!.AsObject();
@@ -332,6 +332,11 @@ public static class ModellMapper
         root["rahmen"]!.AsObject()["grammatik"] = JsonSerializer.SerializeToNode(Grammatik.AlsJson(), EditorModell.JsonOptionen);
         // Von welchem Akteur kommt was (direkt / über die Kette) — der Editor rechnet live nach, Parität über deAkteurParitaet().
         root["rahmen"]!.AsObject()["akteurMengen"] = JsonSerializer.SerializeToNode(AkteurAnteile.Aus(modell).AlsJson(), EditorModell.JsonOptionen);
+        // Quellen (docs/konzept-werkbank.md §3): die fest codierten Treiber (Basis + Felder, zum Anlegen neuer Quellen-Typen) und die
+        //   Konfig-Werte je Host (Abschnitt Quellen:<Typ>) — der Editor zeigt sie an der Quellkarte, er rechnet nichts davon nach.
+        root["rahmen"]!.AsObject()["treiber"] = Knoten(dom.Treiber.ToDictionary(kv => kv.Key,
+            kv => new { basis = kv.Value.Basis, felder = kv.Value.Felder.Select(FeldJson).ToArray() }));
+        root["rahmen"]!.AsObject()["quellenKonfig"] = quellenKonfig?.DeepClone() ?? new JsonObject();
         var records = root["records"]!.AsArray();
 
         // (Store, Methode, isRead) → Board-Fn-Id — damit Projektion/Reader-Handles die aufgerufene Store-Fn
@@ -526,12 +531,12 @@ public static class ModellMapper
         ohneParameterliste = meta.OhneParameterliste ? true : (bool?)null, basen = meta.Basen, attribute = meta.Attribute,
     };
 
-    private static object FeldJson(FieldInfo f) => new { name = f.Name, typ = f.Type, standard = f.Default, zugriff = f.Zugriff, pflicht = f.Pflicht ? true : (bool?)null, elementTyp = f.ElementTyp };
+    private static object FeldJson(FieldInfo f) => new { name = f.Name, typ = f.Type, standard = f.Default, zugriff = f.Zugriff, pflicht = f.Pflicht ? true : (bool?)null, elementTyp = f.ElementTyp, geerbt = f.Geerbt ? true : (bool?)null };
 
     private static JsonNode Knoten(object o) => JsonSerializer.SerializeToNode(o, BoardOpts)!;
 
     private static Feld MappeFeld(FieldInfo f) =>
-        new() { Name = f.Name, Typ = f.Type, Ausdruck = f.Expr, Standard = f.Default, NurGet = f.NurGet, Zugriff = f.Zugriff, Pflicht = f.Pflicht, ElementTyp = f.ElementTyp };
+        new() { Name = f.Name, Typ = f.Type, Ausdruck = f.Expr, Standard = f.Default, NurGet = f.NurGet, Zugriff = f.Zugriff, Pflicht = f.Pflicht, ElementTyp = f.ElementTyp, Geerbt = f.Geerbt };
 
     private static string KurzEvt(DomainModel dom, string full) =>
         dom.Events.TryGetValue(full, out var e) ? e.Simple : Kurz(full);

@@ -8,6 +8,7 @@ using Infrastructure.Funktionen;
 using Infrastructure.Prozess;
 using Infrastructure.Projections;
 using Infrastructure.PubSub.Messages;
+using Infrastructure.Quellen;
 
 namespace Infrastructure.Serialization;
 
@@ -51,6 +52,8 @@ namespace Infrastructure.Serialization;
 [JsonSerializable(typeof(ArbeitZugeteilt))]
 [JsonSerializable(typeof(ArbeitLebt))]
 [JsonSerializable(typeof(ArbeitErledigt))]
+[JsonSerializable(typeof(HalteQuelle))]
+[JsonSerializable(typeof(QuelleGehalten))]
 // ── Framework: Ergebnis-/Prozess-/Inbox-Events (reisen im Wire) ──
 [JsonSerializable(typeof(CommandFailed))]
 [JsonSerializable(typeof(ProzessGestartet))]

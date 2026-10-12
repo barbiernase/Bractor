@@ -97,7 +97,7 @@ public class RemotePidDeliverySmokeTests
             opts.EnableGrpc = false;
             opts.ClusterName = clusterName;
         });
-        builder.Services.AddDomainPipelineServices(watchPath: watchDir, preprocessedPath: null);
+        builder.Services.AddDomainPipelineServices(Path.Combine(watchDir, ".preprocessed"));
         GeneratedPipelines.RegisterAllPipelines(builder.Services);
         builder.Services.AddGeneratedPullPaths();
 

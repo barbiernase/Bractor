@@ -107,14 +107,20 @@ namespace Core.SourceGeneration
                     .Where(c => c.DeclaredAccessibility == Accessibility.Public)
                     .OrderByDescending(c => c.Parameters.Length)
                     .FirstOrDefault();
-                
-                if (constructor == null || constructor.Parameters.Length == 0)
+
+                // Daten-Glieder: die Konstruktor-Parameter — ohne solche die öffentlichen init/set-Properties (auch geerbte,
+                // Basis zuerst), gebaut per Objekt-Initialisierer (z. B. `sealed record DateiErkannt : DateiGemeldet;`).
+                List<(ITypeSymbol Type, string Name)> glieder;
+                if (constructor != null && constructor.Parameters.Length > 0)
+                    glieder = constructor.Parameters.Select(p => ((ITypeSymbol)p.Type, p.Name)).ToList();
+                else
                 {
-                    continue;
+                    glieder = InitProperties(currentType);
+                    if (glieder.Count == 0) continue;
+                    currentNode.ViaInitialisierer = true;
                 }
-                
-                
-                foreach (var param in constructor.Parameters)
+
+                foreach (var param in glieder)
                 {
                     var paramNode = AnalyzeParameterType(param.Type, param.Name);
                     currentNode.ConstructorParameters.Add(paramNode);
@@ -186,6 +192,21 @@ namespace Core.SourceGeneration
             }
             
             return rootNode;
+        }
+
+        /// <summary>
+        /// Öffentliche Instanz-Properties mit öffentlichem init/set über die Vererbungskette, Basis zuerst, je Ebene in
+        /// Deklarations-Reihenfolge — dieselbe Ordnung wie <c>Cqrs.Codegen.ReflectionTypeAnalyzer.InitProperties</c>.
+        /// </summary>
+        public static List<(ITypeSymbol Type, string Name)> InitProperties(INamedTypeSymbol type)
+        {
+            var kette = new List<INamedTypeSymbol>();
+            for (var t = type; t != null && t.SpecialType != SpecialType.System_Object; t = t.BaseType) kette.Insert(0, t);
+            return kette.SelectMany(t => t.GetMembers().OfType<IPropertySymbol>()
+                    .Where(p => !p.IsStatic && !p.IsIndexer && p.DeclaredAccessibility == Accessibility.Public
+                        && p.SetMethod != null && p.SetMethod.DeclaredAccessibility == Accessibility.Public && p.Name != "EqualityContract")
+                    .Select(p => ((ITypeSymbol)p.Type, p.Name)))
+                .ToList();
         }
 
         private TypeNode AnalyzeParameterType(ITypeSymbol paramType, string paramName)

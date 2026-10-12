@@ -16,14 +16,22 @@ using Proto.Cluster;
 namespace Infrastructure.Quellen;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// QUELLEN (docs/konzept-editor-pipelines.md §14.5): eine Katalog-Quelle (IQuelle<T>) liefert Nachrichten; das Framework hängt
-// jede als erstes Event eines VORGANGS-Streams an — Id deterministisch aus Typ + Kennung, geschrieben per StartStream. Dieselbe
-// Nachricht zweimal (Neustart, zweiter Knoten, Re-Scan) startet den Vorgang also genau einmal. Danach wird jede Pipeline geweckt,
-// die mit p.Quelle<T>() beginnt; geht die Weckung verloren, heilt der Poll des Korrelations-Routers (der Typ ist ein Auslöser).
+// QUELLEN = fest codierte Treiber + Konfig (docs/konzept-werkbank.md §3). Eine Domäne benennt ihre Quelle nur als Typ
+// (`sealed record DateiErkannt : DateiGemeldet;`); der Treiber (hier: Datei) liest, die Konfig der Umgebung (`Quellen:<Typ>`) sagt wie.
+// Jede Nachricht wird das erste Event eines VORGANGS-Streams — Id deterministisch aus Typ + Kennung, geschrieben per StartStream.
+// Dieselbe Nachricht zweimal (Neustart, zweiter Knoten, Re-Scan) startet den Vorgang also genau einmal. Danach wird jede Pipeline
+// geweckt, die mit p.Quelle<T>() beginnt; geht die Weckung verloren, heilt der Poll des Korrelations-Routers.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
-/// <summary>Eine gebundene Quelle: welcher Nachrichtentyp, wie sie läuft (aus DI aufgelöst, generisch gebunden — keine Reflection).</summary>
-public sealed record QuellenBindung(Type Nachricht, string Name, Func<IServiceProvider, CancellationToken, IAsyncEnumerable<IQuellNachricht>> Laufe);
+/// <summary>Was ein Datei-Treiber über eine fertige Datei weiß — die Fabrik eines Quellen-Typs baut daraus die Nachricht.</summary>
+public sealed record DateiDaten(string Name, string Pfad, string RelativerPfad, long Groesse, DateTimeOffset GeaendertAm,
+    DateTimeOffset ErkanntAm, string Kennung);
+
+/// <summary>
+/// Ein Quellen-Typ aus der generierten Tabelle <c>GeneratedQuellen.Alle</c>: Typ, Treiber, Konfig-Abschnitt (= Typname), Wirker-Id
+/// und die reflexionsfreie Fabrik des Datei-Treibers.
+/// </summary>
+public sealed record QuellTyp(Type Typ, string Treiber, string Abschnitt, string WirkerId, Func<DateiDaten, IQuellNachricht> DateiFabrik);
 
 /// <summary>Deterministische Vorgangs-Ids der Quellen.</summary>
 public static class QuellVorgang
@@ -67,7 +75,7 @@ public sealed class QuellEingang
     {
         var system = sp.GetRequiredService<ActorSystem>();
         return new QuellEingang(sp.GetRequiredService<IEventStoreRepository>(), sp.GetRequiredService<IReadOnlyDictionary<string, ProzessRegeln>>(),
-            (korr, stream, version, name, ct) => QuellenDienst.WeckeAsync(system, korr, stream, version, name, ct),
+            (korr, stream, version, name, ct) => WeckeAsync(system, korr, stream, version, name, ct),
             AkteurHerkunft.EindeutigerHalter);
     }
 
@@ -96,58 +104,8 @@ public sealed class QuellEingang
             await _wecke(ProzessId.Für(name, stream, 1), stream, 1, name, ct);
         return stream;
     }
-}
 
-/// <summary>
-/// Läuft im Host: jede gebundene Quelle in einer eigenen Schleife; jede Nachricht über den <see cref="QuellEingang"/>. Wirft eine
-/// Quelle, wird sie nach einer Pause neu gestartet (ihre Nachrichten sind idempotent, ein erneutes Liefern schadet nicht).
-/// Läuft auf jedem Knoten — die deterministische Vorgangs-Id macht das korrekt (genau ein StartStream gewinnt).
-/// </summary>
-public sealed class QuellenDienst : BackgroundService
-{
-    private readonly IServiceProvider _sp;
-    private readonly IEnumerable<QuellenBindung> _bindungen;
-    private readonly ILogger<QuellenDienst>? _logger;
-
-    public QuellenDienst(IServiceProvider sp, IEnumerable<QuellenBindung> bindungen, ILogger<QuellenDienst>? logger = null)
-    {
-        _sp = sp;
-        _bindungen = bindungen;
-        _logger = logger;
-    }
-
-    protected override Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        var bindungen = _bindungen.ToList();
-        if (bindungen.Count == 0) return Task.CompletedTask;
-
-        var eingang = QuellEingang.Live(_sp);
-
-        foreach (var b in bindungen)
-            Console.WriteLine($"  ⛲ Quelle {b.Name} → {string.Join(", ", eingang.PipelinesFür(b.Nachricht).DefaultIfEmpty("(keine Pipeline)"))}");
-        return Task.WhenAll(bindungen.Select(b => LaufeAsync(b, eingang, stoppingToken)));
-    }
-
-    private async Task LaufeAsync(QuellenBindung b, QuellEingang eingang, CancellationToken ct)
-    {
-        while (!ct.IsCancellationRequested)
-        {
-            try
-            {
-                await foreach (var n in b.Laufe(_sp, ct).WithCancellation(ct))
-                    await eingang.NimmAufAsync(n, ct);
-                return;   // die Quelle ist zu Ende
-            }
-            catch (OperationCanceledException) when (ct.IsCancellationRequested) { return; }
-            catch (Exception ex)
-            {
-                _logger?.LogWarning(ex, "Quelle {Quelle} fehlgeschlagen — Neustart in 5 s", b.Name);
-                try { await Task.Delay(TimeSpan.FromSeconds(5), ct); } catch (OperationCanceledException) { return; }
-            }
-        }
-    }
-
-    internal static async Task WeckeAsync(ActorSystem system, Guid korrelation, Guid stream, int version, string name, CancellationToken ct)
+    private static async Task WeckeAsync(ActorSystem system, Guid korrelation, Guid stream, int version, string name, CancellationToken ct)
     {
         var identity = ClusterIdentity.Create(korrelation.ToString(), ProzessManagerActor.KindName);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
@@ -158,25 +116,8 @@ public sealed class QuellenDienst : BackgroundService
     }
 }
 
-public static class QuellenExtensions
+public static partial class QuellenExtensions
 {
-    /// <summary>
-    /// Bindet die Quelle <typeparamref name="TQuelle"/> für Nachrichten <typeparamref name="TNachricht"/> (Singleton; ihre
-    /// Einstellungen bekommt sie über den Konstruktor aus DI). Pipelines, die mit <c>p.Quelle&lt;TNachricht&gt;()</c> beginnen,
-    /// starten je Nachricht einen Vorgang.
-    /// </summary>
-    public static IServiceCollection AddQuelle<TNachricht, TQuelle>(this IServiceCollection services)
-        where TNachricht : class, IQuellNachricht
-        where TQuelle : class, IQuelle<TNachricht>
-    {
-        services.AddSingleton<TQuelle>();
-        services.AddSingleton(new QuellenBindung(typeof(TNachricht), typeof(TQuelle).Name,
-            (sp, ct) => sp.GetRequiredService<TQuelle>().LaufeAsync(ct)));
-        if (!services.Any(d => d.ImplementationType == typeof(QuellenDienst)))
-            services.AddHostedService<QuellenDienst>();
-        return services;
-    }
-
     /// <summary>
     /// Ein zweiter Weg in dieselbe Quelle: <c>POST {route}</c> mit der Nachricht als JSON → genau einmal ins Log, Vorgang gestartet.
     /// Antwortet <c>202 Accepted</c> mit der Vorgangs-Id (dieselbe Nachricht zweimal → derselbe Vorgang).

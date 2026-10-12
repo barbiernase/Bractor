@@ -159,7 +159,7 @@ Die Treiber-Wahl steht **nicht** in der Konfig; sie ist ein Code-Fakt (Basistyp)
 1. **Start:** Er listet alle passenden Dateien und fragt **gebündelt** den Log, welche Vorgänge zu diesen Kennungen schon existieren
    (neue Repository-Methode, z. B. eine Abfrage auf `mt_streams` mit `id = any(@ids)`, je ~500 Ids). Nur Unbekannte kommen in die
    Wartezone. Es gibt keinen eigenen Treiber-Stand; die Wahrheit ist der Log.
-2. **Schleife:** Ein Weckruf löst einen Scan aus. Der Weckruf ist das Intervall oder, bei `"Erkennung": "Ereignis+Abfrage"`, ein
+2. **Schleife:** Ein Weckruf löst einen Scan aus. Der Weckruf ist das Intervall oder, bei `"Erkennung": "EreignisUndAbfrage"`, ein
    FileSystemWatcher-Ereignis. Das Ereignis weckt nur, der Scan entscheidet (Inv. 2). Auf CIFS gilt nur `Abfrage`.
 3. **Fertig-Erkennung:**
    - `Stabil`: Größe und Änderungszeit über das Fenster unverändert;

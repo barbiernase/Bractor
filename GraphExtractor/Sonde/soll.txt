@@ -39,6 +39,7 @@ funktion Leihwesen.Gebuehren.ISchadensSchaetzung | SchaetzeSchaden -> SchadenGes
 # ── Pipeline als Fluss (Sonde/Fluss.cs.txt): eigene Quelle (IQuellNachricht), Je + Sammle, dieselbe Funktion als zwei Knoten,
 #    ∧ mit Kontext, ∨ über den ⏳-Port, ✕-Port am Command, zwei Knoten ohne Variable (Name = Typ klein, durchnummeriert), Bauer „scan" ──
 record Leihwesen.Pruefung.RueckgabeGescannt event typart=public sealed record | LeserId:Guid, Code:string, Seiten:IReadOnlyList<string>
+record Leihwesen.Pruefung.AusweisAbgelegt event typart=public sealed record treiber=Datei | Name:string { get; init; } required, Pfad:string { get; init; } required, RelativerPfad:string { get; init; } required, Groesse:long { get; init; } required, GeaendertAm:DateTimeOffset { get; init; } required, ErkanntAm:DateTimeOffset { get; init; } required, Kennung:string { get; init; } required
 record Leihwesen.Pruefung.PruefeSeite auftrag typart=public sealed record funktion=ISeitenPruefung | Seite:string
 record Leihwesen.Pruefung.SeiteGeprueft event | Seite:string, Beschaedigt:bool
 funktion Leihwesen.Pruefung.ISeitenPruefung | PruefeSeite -> SeiteGeprueft

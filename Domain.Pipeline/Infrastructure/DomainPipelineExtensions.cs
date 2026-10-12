@@ -5,62 +5,18 @@ using Microsoft.Extensions.Logging;
 namespace Domain.Pipeline.Infrastructure;
 
 /// <summary>
-/// DI-Registrierung für Pipeline-Komponenten.
-///
-/// Registriert:
-///   1. Handler-Dependencies (Services die Pipeline-Handler brauchen)
-///   2. FileWatchConfig (Konfiguration für die FileWatchPipeline)
-///
-/// NICHT registriert (kommt von anderswo):
-///   - Pipeline-Handler selbst → GeneratedPipelines (generiert)
-///   - PipelineActorBase → Infrastructure
-///   - PipelineStartupService → Infrastructure
-///
-/// Der Watch-Pfad kann per Parameter überschrieben werden. So bleibt die
-/// Konfiguration im Program.cs (Blazor-Host / Scenario-Host / Tests) steuerbar,
-/// ohne dass hier etwas geändert werden muss.
+/// DI-Registrierung der Dienste hinter den Bild-Funktionen (OpenCV-Implementierungen). Die Datei-Quelle ist kein Domänen-Dienst mehr:
+/// sie ist der fest codierte Datei-Treiber, konfiguriert unter <c>Quellen:DateiErkannt</c> (docs/konzept-werkbank.md §3).
 /// </summary>
 public static class DomainPipelineExtensions
 {
-    /// <summary>
-    /// Default-Pfad wurde bewusst entfernt — der Caller (Program.cs)
-    /// muss den Pfad explizit aus der Konfiguration übergeben.
-    /// Nur für Tests existiert ein Fallback.
-    /// </summary>
-    public const string DefaultWatchPath = "/data/input";
-
-    public static IServiceCollection AddDomainPipelineServices(
-        this IServiceCollection services,
-        string? watchPath = null,
-        string? preprocessedPath = null)
+    /// <param name="preprocessedPath">Wohin die Bild-Funktionen ihre Ergebnisse schreiben (Konfig der Funktions-Implementierung).</param>
+    public static IServiceCollection AddDomainPipelineServices(this IServiceCollection services, string preprocessedPath)
     {
-        var effectivePath = watchPath ?? DefaultWatchPath;
-        var effectivePreprocessed = preprocessedPath
-            ?? Path.Combine(effectivePath, ".preprocessed");
-
-        Console.WriteLine("[Domain] Registriere Pipeline-Services...");
-
-        // ═══════════════════════════════════════════════════════
-        // Handler-Dependencies
-        // ═══════════════════════════════════════════════════════
-
-        // Bildaufbereitung: genutzt von den OpenCV-Implementierungen der Katalog-Funktionen (Bindung im Host)
         services.AddSingleton<IImageResizer, ImageResizer>();
         services.AddSingleton<IHistogramEqualizer, HistogramEqualizer>();
-        services.AddSingleton(new PreprocessingConfig(effectivePreprocessed));
-        Console.WriteLine($"  + IImageResizer, IHistogramEqualizer");
-        Console.WriteLine($"  + PreprocessingConfig → {effectivePreprocessed}");
-
-        // ═══════════════════════════════════════════════════════
-        // FileWatch-Konfiguration
-        // ═══════════════════════════════════════════════════════
-
-        services.AddSingleton(new FileWatchConfig(
-            WatchPath: effectivePath,
-            PollInterval: TimeSpan.FromSeconds(1)));
-        Console.WriteLine($"  + FileWatchConfig → {effectivePath}");
-
-        Console.WriteLine();
+        services.AddSingleton(new PreprocessingConfig(preprocessedPath));
+        Console.WriteLine($"[Domain] Bild-Funktionen: IImageResizer, IHistogramEqualizer, PreprocessingConfig → {preprocessedPath}");
         return services;
     }
 }

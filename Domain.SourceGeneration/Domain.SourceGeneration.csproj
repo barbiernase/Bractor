@@ -3,6 +3,7 @@
     <PropertyGroup>
         <TargetFramework>netstandard2.0</TargetFramework>
         <LangVersion>latest</LangVersion>
+    <DefineConstants>$(DefineConstants);VERTRAG_INTERN</DefineConstants>
 
         <IncludeBuildOutput>false</IncludeBuildOutput>
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
@@ -19,6 +20,7 @@
         <!-- Die Aggregat-Namensregel aus dem Vertrag (eine Quelle mit dem Domänen-Extractor). -->
         <Compile Include="..\Abstractions\Aggregatvertrag.cs" Link="Vertrag\Aggregatvertrag.cs" />
         <Compile Include="..\Abstractions\Akteurvertrag.cs" Link="Vertrag\Akteurvertrag.cs" />
+        <Compile Include="..\Abstractions\Quellen\Treibervertrag.cs" Link="Vertrag\Treibervertrag.cs" />
     </ItemGroup>
 
     <ItemGroup>

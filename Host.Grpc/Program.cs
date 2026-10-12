@@ -44,9 +44,8 @@ var builder = WebApplication.CreateBuilder(args);
 // ─── Konfiguration lesen ───
 
 var grpcPort = builder.Configuration.GetValue<int>("Grpc:Port", 5001);
-var watchPath = builder.Configuration.GetValue<string>("Pipeline:WatchPath")
-    ?? "/data/input";
-var preprocessedPath = builder.Configuration.GetValue<string>("Pipeline:PreprocessedPath");
+var preprocessedPath = builder.Configuration.GetValue<string>("Pipeline:PreprocessedPath")
+    ?? throw new InvalidOperationException("Konfig Pipeline:PreprocessedPath fehlt (Ausgabe der Bild-Funktionen).");
 
 // ─── Marten-Schema-Rolle (Multi-Node-Cold-Start, docs/06-transport-multinode-betrieb.md) ───
 //   Cluster__Role = migrator | member | standalone (default).
@@ -120,20 +119,17 @@ builder.Services.AddGeneratedPullPaths();
 builder.Services.AddGeneratedProzesse();
 
 // ─── Domain Pipeline ───
-// WatchPath kommt jetzt aus der Konfiguration statt hardcoded.
-
-builder.Services.AddDomainPipelineServices(
-    watchPath: watchPath,
-    preprocessedPath: preprocessedPath);
+builder.Services.AddDomainPipelineServices(preprocessedPath);
+// Quellen = fest codierte Treiber + Konfig (docs/konzept-werkbank.md §3): die Typen kommen aus GeneratedQuellen, die Werte aus
+// dem Abschnitt Quellen:<Typ> (z. B. Quellen:DateiErkannt:Pfad).
+builder.Services.AddQuellen(builder.Configuration);
 GeneratedPipelines.RegisterAllPipelines(builder.Services);
 
 // Katalog-Funktionen der Bildaufbereitung (gerufen vom Bildeingang): hier wird nur der Laufort gebunden —
 // OpenCV auf diesem Knoten, je zwei Aufträge gleichzeitig. Eine andere Implementierung (Python, extern) ist nur eine andere Zeile.
 builder.Services.AddFunktion<Domain.Bildaufbereitung.IBildVerkleinerung, Domain.Pipeline.ImageProcessing.OpenCvBildVerkleinerung>(slots: 2, wiederholungen: 1);
 builder.Services.AddFunktion<Domain.Bildaufbereitung.IHistogrammAusgleich, Domain.Pipeline.ImageProcessing.OpenCvHistogrammAusgleich>(slots: 2, wiederholungen: 1);
-// Bildeingang (Pipeline als Fluss, docs/konzept-editor-pipelines.md §14): die Datei-Quelle meldet jede stabile Datei genau einmal,
-// die Deutung des Namens ist eine Katalog-Funktion wie die Bildaufbereitung (rein, viele Slots).
-builder.Services.AddQuelle<Domain.ImagePair.DateiErkannt, Domain.Pipeline.ImageProcessing.DateiQuelle>();
+// Bildeingang: die Deutung des Dateinamens ist eine Katalog-Funktion wie die Bildaufbereitung (rein, viele Slots).
 builder.Services.AddFunktion<Domain.ImagePair.IDateinameDeutung, Domain.Pipeline.ImageProcessing.ImagePairDateinameDeutung>(slots: 8);
 // Datensatz-Resolver (Flüsse DatensatzRangeAufloesung/DatensatzEinfrieren): Funktionen mit Lese-Fähigkeit — laufen nur im Host.
 builder.Services.AddFunktion<Domain.Pipeline.Datensatz.IRangeSuche, Domain.Pipeline.Datensatz.RangeSuche>(slots: 2);
@@ -188,8 +184,7 @@ Console.WriteLine();
 Console.WriteLine("==========================================================");
 Console.WriteLine("  CQRS/ES Server");
 Console.WriteLine($"  gRPC listening on http://0.0.0.0:{grpcPort}");
-Console.WriteLine($"  Pipeline WatchPath:      {watchPath}");
-Console.WriteLine($"  Pipeline Preprocessed:   {preprocessedPath ?? "(default: WatchPath/.preprocessed)"}");
+Console.WriteLine($"  Pipeline Preprocessed:   {preprocessedPath}");
 Console.WriteLine("==========================================================");
 Console.WriteLine();
 

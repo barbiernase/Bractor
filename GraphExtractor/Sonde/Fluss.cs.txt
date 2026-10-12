@@ -15,6 +15,9 @@ public sealed record RueckgabeGescannt(Guid LeserId, string Code, IReadOnlyList<
     public string Kennung => Code;
 }
 
+// Eine Quelle mit fest codiertem Treiber (docs/konzept-werkbank.md §3): nur der Typ, der Datei-Treiber befüllt die geerbten Felder.
+public sealed record AusweisAbgelegt : DateiGemeldet;
+
 public sealed record PruefeSeite(string Seite) : IAuftrag<ISeitenPruefung>;
 public record SeiteGeprueft(string Seite, bool Beschaedigt) : IEvent;
 

@@ -17,6 +17,7 @@ using Marten;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -55,7 +56,7 @@ public class PipelineFlussE2ETests
     private static void Verdrahte(IServiceCollection s, string watchDir, string cluster, bool grpc, bool verkleinerungExtern)
     {
         s.AddCqrsFramework(opts => { opts.EnableGrpc = grpc; opts.ClusterName = cluster; });
-        s.AddDomainPipelineServices(watchPath: watchDir, preprocessedPath: null);
+        s.AddDomainPipelineServices(Path.Combine(watchDir, ".preprocessed"));
         GeneratedPipelines.RegisterAllPipelines(s);
         s.AddGeneratedProzesse();
         if (verkleinerungExtern) s.AddExterneFunktion<IBildVerkleinerung>();
@@ -69,7 +70,11 @@ public class PipelineFlussE2ETests
     private static DateiErkannt Datei(string watchDir, DateTimeOffset t, BildVersion v)
     {
         var name = $"{t:yyyy_MM_dd_HH_mm_ss_fff}_{v.ToString().ToUpperInvariant()}.tiff";
-        return new DateiErkannt(Path.Combine(watchDir, name), name, 4711, t);
+        return new DateiErkannt
+        {
+            Name = name, Pfad = Path.Combine(watchDir, name), RelativerPfad = name, Groesse = 4711, GeaendertAm = t, ErkanntAm = t,
+            Kennung = $"{name}|4711",
+        };
     }
 
     [Fact]
@@ -88,7 +93,7 @@ public class PipelineFlussE2ETests
             var eingang = QuellEingang.Live(host.Services);
             var t = new DateTimeOffset(2026, 10, 8, 12, 0, 0, Random.Shared.Next(0, 999), TimeSpan.Zero).AddMinutes(Random.Shared.Next(0, 100000));
             var datei = Datei(watchDir, t, BildVersion.Dc0);
-            var paar = ImagePairFileName.Resolve(datei.Dateiname)!.AggregateId;
+            var paar = ImagePairFileName.Resolve(datei.Name)!.AggregateId;
 
             var vorgang = await eingang.NimmAufAsync(datei, default);
             (await eingang.NimmAufAsync(datei with { }, default)).Should().Be(vorgang, "dieselbe Datei startet genau einen Vorgang");
@@ -163,7 +168,7 @@ public class PipelineFlussE2ETests
             var es = app.Services.GetRequiredService<IEventStoreRepository>();
             var t = new DateTimeOffset(2026, 10, 9, 8, 0, 0, Random.Shared.Next(0, 999), TimeSpan.Zero).AddMinutes(Random.Shared.Next(0, 100000));
             var datei = Datei(watchDir, t, BildVersion.Dc2);
-            var paar = ImagePairFileName.Resolve(datei.Dateiname)!.AggregateId;
+            var paar = ImagePairFileName.Resolve(datei.Name)!.AggregateId;
             await QuellEingang.Live(app.Services).NimmAufAsync(datei, default);
 
             await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is BildVerfuegbar), TimeSpan.FromSeconds(90),
@@ -269,6 +274,72 @@ public class PipelineFlussE2ETests
         finally
         {
             await host.StopAsync();
+            try { Directory.Delete(watchDir, recursive: true); } catch { /* egal */ }
+        }
+    }
+
+    /// <summary>
+    /// P1 (docs/konzept-werkbank.md §3.5): der echte Datei-Treiber gegen ein Temp-Verzeichnis — eine Datei startet genau einen Vorgang
+    /// (bis BildVerfuegbar); nach einem Neustart (neuer Host, derselbe Log) gleicht der Treiber gebündelt mit dem Log ab und meldet
+    /// nichts erneut. Läuft im Default-Laufmodus EinmalImCluster (Lease über die Cluster-Identität quelle/DateiErkannt).
+    /// </summary>
+    [Fact]
+    public async Task Datei_Treiber_meldet_eine_Datei_genau_einmal_auch_nach_Neustart()
+    {
+        var watchDir = Path.Combine(Path.GetTempPath(), "quelle-e2e-" + Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(watchDir);
+        IHost Baue()
+        {
+            var builder = Host.CreateApplicationBuilder();
+            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+            {
+                ["Quellen:DateiErkannt:Pfad"] = watchDir,
+                ["Quellen:DateiErkannt:Muster:0"] = "*.tiff",
+                ["Quellen:DateiErkannt:Intervall"] = "00:00:00.200",
+                ["Quellen:DateiErkannt:Fertig:Fenster"] = "00:00:00.300",
+            });
+            Verdrahte(builder.Services, watchDir, "quelle-e2e-" + Guid.NewGuid().ToString("N")[..8], grpc: false, verkleinerungExtern: false);
+            builder.Services.AddQuellen(builder.Configuration);
+            return builder.Build();
+        }
+
+        var t = new DateTimeOffset(2026, 10, 12, 9, 0, 0, Random.Shared.Next(0, 999), TimeSpan.Zero).AddMinutes(Random.Shared.Next(0, 100000));
+        var name = $"{t:yyyy_MM_dd_HH_mm_ss_fff}_DC0.tiff";
+        var paar = ImagePairFileName.Resolve(name)!.AggregateId;
+        try
+        {
+            using (var host = Baue())
+            {
+                await host.StartAsync();
+                try
+                {
+                    var es = host.Services.GetRequiredService<IEventStoreRepository>();
+                    await File.WriteAllTextAsync(Path.Combine(watchDir, name), "bild");
+                    await Warte(async () => (await es.ReadStreamAsync(paar, 0, default)).Any(e => e.Payload is BildVerfuegbar), TimeSpan.FromSeconds(60),
+                        "Die Datei hat keinen Vorgang bis BildVerfuegbar gestartet — Treiber → QuellEingang → Dirigent lief nicht durch.");
+                    host.Services.GetRequiredService<QuellenZustand>().Meldungen("DateiErkannt").Should().Be(1);
+                }
+                finally { await host.StopAsync(); }
+            }
+
+            using (var host = Baue())
+            {
+                await host.StartAsync();
+                try
+                {
+                    var zustand = host.Services.GetRequiredService<QuellenZustand>();
+                    await Warte(() => Task.FromResult(zustand.Alle.ContainsKey("DateiErkannt")), TimeSpan.FromSeconds(30),
+                        "Der Treiber hat nach dem Neustart nicht gescannt (Lease nicht bekommen?).");
+                    await Task.Delay(1500);   // mehrere Scans über die Fertig-Fenster hinaus
+                    zustand.Meldungen("DateiErkannt").Should().Be(0, "der Start-Abgleich mit dem Log kennt die Datei schon");
+                    var es = host.Services.GetRequiredService<IEventStoreRepository>();
+                    (await es.ReadStreamAsync(paar, 0, default)).Count(e => e.Payload is ImagePairErstellt).Should().Be(1);
+                }
+                finally { await host.StopAsync(); }
+            }
+        }
+        finally
+        {
             try { Directory.Delete(watchDir, recursive: true); } catch { /* egal */ }
         }
     }

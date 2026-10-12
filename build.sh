@@ -163,8 +163,17 @@ cat > "$OUTPUT/grpc/appsettings.json" << EOF
     "AdvertisedHost": "${CLUSTER_ADVERTISED_HOST}"
   },
   "Pipeline": {
-    "WatchPath": "${GRPC_WATCH_PATH}",
     "PreprocessedPath": "${GRPC_PREPROCESSED_PATH}"
+  },
+  "Quellen": {
+    "DateiErkannt": {
+      "Pfad": "${GRPC_WATCH_PATH}",
+      "Erkennung": "Abfrage",
+      "Intervall": "00:00:01",
+      "Fertig": { "Art": "Stabil", "Fenster": "00:00:01" },
+      "Kennung": "PfadGroesseZeit",
+      "Laufmodus": "EinmalImCluster"
+    }
   }
 }
 EOF

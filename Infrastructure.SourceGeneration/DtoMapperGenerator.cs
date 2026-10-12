@@ -251,19 +251,8 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"        public static {typeName} Map{sanitizedTypeName}({dtoName} dto)");
                 sb.AppendLine("        {");
                 sb.AppendLine("            if (dto == null) return null;");
-                sb.AppendLine($"            return new {typeName}(");
-                
                 var parameters = objType.Node.ConstructorParameters;
-                for (int i = 0; i < parameters.Count; i++)
-                {
-                    var param = parameters[i];
-                    var mapping = GenerateParameterMapping(param, "dto", typeLookup);
-                    sb.Append($"                {mapping}");
-                    if (i < parameters.Count - 1) sb.AppendLine(",");
-                    else sb.AppendLine();
-                }
-                
-                sb.AppendLine("            );");
+                EmitNeu(sb, typeName, objType.Node, typeLookup);
                 sb.AppendLine("        }");
                 sb.AppendLine();
                 
@@ -541,26 +530,7 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine("        {");
                 
                 var parameters = type.Node.ConstructorParameters;
-                if (parameters.Count == 0)
-                {
-                    // Parameterloser Konstruktor
-                    sb.AppendLine($"            return new {simpleName}();");
-                }
-                else
-                {
-                    sb.AppendLine($"            return new {simpleName}(");
-                    
-                    for (int i = 0; i < parameters.Count; i++)
-                    {
-                        var param = parameters[i];
-                        var mapping = GenerateParameterMapping(param, "dto", typeLookup);
-                        sb.Append($"                {mapping}");
-                        if (i < parameters.Count - 1) sb.AppendLine(",");
-                        else sb.AppendLine();
-                    }
-                    
-                    sb.AppendLine("            );");
-                }
+                EmitNeu(sb, simpleName, type.Node, typeLookup);
                 sb.AppendLine("        }");
                 sb.AppendLine();
                 
@@ -672,6 +642,31 @@ namespace Infrastructure.SourceGeneration
 
                 return $"if ({sourceVar}.{propName} != null) dto.{propName}.AddRange({sourceVar}.{propName}.Select(x => {helperClass}.MapToDto(x)));";
             }
+        }
+
+        /// <summary>
+        /// <c>return new T(…)</c> über den Konstruktor — oder, wenn der Typ keine Konstruktor-Parameter hat (<see cref="TypeNode.ViaInitialisierer"/>),
+        /// <c>return new T { P = …, … }</c> über seine init-Properties (auch geerbte <c>required</c>-Glieder).
+        /// </summary>
+        private void EmitNeu(StringBuilder sb, string typeName, TypeNode node, Dictionary<string, DomainType> typeLookup)
+        {
+            var parameters = node.ConstructorParameters;
+            if (parameters.Count == 0)
+            {
+                sb.AppendLine($"            return new {typeName}();");
+                return;
+            }
+            sb.AppendLine(node.ViaInitialisierer ? $"            return new {typeName}" : $"            return new {typeName}(");
+            if (node.ViaInitialisierer) sb.AppendLine("            {");
+            for (int i = 0; i < parameters.Count; i++)
+            {
+                var param = parameters[i];
+                var mapping = GenerateParameterMapping(param, "dto", typeLookup);
+                sb.Append(node.ViaInitialisierer ? $"                {ToPascalCase(param.Name)} = {mapping}" : $"                {mapping}");
+                if (i < parameters.Count - 1) sb.AppendLine(",");
+                else sb.AppendLine();
+            }
+            sb.AppendLine(node.ViaInitialisierer ? "            };" : "            );");
         }
 
         private string GenerateParameterMapping(TypeNode param, string sourceVar, Dictionary<string, DomainType> typeLookup = null)

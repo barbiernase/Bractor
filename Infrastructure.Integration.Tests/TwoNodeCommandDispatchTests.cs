@@ -118,7 +118,7 @@ public class TwoNodeCommandDispatchTests
             opts.EnableGrpc = false;
             opts.ClusterName = clusterName;   // GLEICHER Name → ein Cluster, zwei Member
         });
-        builder.Services.AddDomainPipelineServices(watchPath: watchDir, preprocessedPath: null);
+        builder.Services.AddDomainPipelineServices(Path.Combine(watchDir, ".preprocessed"));
         GeneratedPipelines.RegisterAllPipelines(builder.Services);
         builder.Services.AddGeneratedPullPaths();
 

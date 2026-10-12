@@ -11,13 +11,11 @@ namespace Domain.ImagePair;
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 /// <summary>
-/// Eine stabile (fertig geschriebene) Datei auf dem Share — die Nachricht der Datei-Quelle. Kein Domänenwissen: kein PairKey, keine
-/// Version; die Deutung ist ein eigener Schritt im Fluss. <see cref="Kennung"/> = Name + Größe: dieselbe Datei startet genau einen Vorgang.
+/// Eine fertig geschriebene Datei auf dem Share — die Quelle des Bildeingangs. Der Datei-Treiber befüllt alle Felder (Name, Pfad,
+/// Größe, Kennung …); welches Verzeichnis, welche Muster und wann eine Datei fertig ist, sagt die Konfig (<c>Quellen:DateiErkannt</c>).
+/// Kein Domänenwissen: die Deutung des Namens ist ein eigener Schritt im Fluss.
 /// </summary>
-public sealed record DateiErkannt(string Pfad, string Dateiname, long DateigroesseBytes, DateTimeOffset ErkanntAm) : IQuellNachricht
-{
-    public string Kennung => $"{Dateiname}|{DateigroesseBytes}";
-}
+public sealed record DateiErkannt : DateiGemeldet;
 
 /// <summary>Den Dateinamen nach der Aufnahme-Konvention deuten ({Zeitstempel}_{Version}.tiff → Paar + Version).</summary>
 public sealed record DeuteDateiname(string Dateiname, string Pfad) : IAuftrag<IDateinameDeutung>;
@@ -43,13 +41,13 @@ public sealed class Bildeingang : IPipeline
     public PipelineFluss Fluss => PipelineFluss.Definiere(p =>
     {
         var datei = p.Quelle<DateiErkannt>();
-        var deuten = datei.Rufe<IDateinameDeutung>(datei => new DeuteDateiname(datei.Dateiname, datei.Pfad));
+        var deuten = datei.Rufe<IDateinameDeutung>(datei => new DeuteDateiname(datei.Name, datei.Pfad));
         var paar = p.Alle(deuten.Bei<ImagePairDateiGedeutet>(), datei).Sende<ErstelleImagePair>((deuten, datei) => new ErstelleImagePair(deuten.PaarId, deuten.PairKey, deuten.ProduziertAm, datei.ErkanntAm, datei.Pfad));
         var vorschau = deuten.Bei<ImagePairDateiGedeutet>().Rufe<IBildVerkleinerung>(deuten => new VerkleinereBild(deuten.Pfad, 512))
             .Zeitlimit(TimeSpan.FromMinutes(5));
         var kontrast = vorschau.Bei<BildVerkleinert>().Rufe<IHistogrammAusgleich>(vorschau => new GleicheHistogrammAus(vorschau.Pfad))
             .Zeitlimit(TimeSpan.FromMinutes(5));
-        var melden = p.Alle(kontrast.Bei<HistogrammAusgeglichen>(), paar.Bei<ImagePairErstellt>(), deuten.Bei<ImagePairDateiGedeutet>(), datei).Sende<MeldeBildVerfuegbar>((kontrast, paar, deuten, datei) => new MeldeBildVerfuegbar(deuten.PaarId, deuten.Version, new BildMeta(datei.Dateiname, datei.DateigroesseBytes, kontrast.BreitePixel, kontrast.HoehePixel, kontrast.ErstelltAm), kontrast.Pfad))
-            .Oder(p.Alle(kontrast.Bei<HistogrammAusgeglichen>(), paar.BeiAbgelehnt(), deuten.Bei<ImagePairDateiGedeutet>(), datei), (kontrast, paarAbgelehnt, deuten, datei) => new MeldeBildVerfuegbar(deuten.PaarId, deuten.Version, new BildMeta(datei.Dateiname, datei.DateigroesseBytes, kontrast.BreitePixel, kontrast.HoehePixel, kontrast.ErstelltAm), kontrast.Pfad));
+        var melden = p.Alle(kontrast.Bei<HistogrammAusgeglichen>(), paar.Bei<ImagePairErstellt>(), deuten.Bei<ImagePairDateiGedeutet>(), datei).Sende<MeldeBildVerfuegbar>((kontrast, paar, deuten, datei) => new MeldeBildVerfuegbar(deuten.PaarId, deuten.Version, new BildMeta(datei.Name, datei.Groesse, kontrast.BreitePixel, kontrast.HoehePixel, kontrast.ErstelltAm), kontrast.Pfad))
+            .Oder(p.Alle(kontrast.Bei<HistogrammAusgeglichen>(), paar.BeiAbgelehnt(), deuten.Bei<ImagePairDateiGedeutet>(), datei), (kontrast, paarAbgelehnt, deuten, datei) => new MeldeBildVerfuegbar(deuten.PaarId, deuten.Version, new BildMeta(datei.Name, datei.Groesse, kontrast.BreitePixel, kontrast.HoehePixel, kontrast.ErstelltAm), kontrast.Pfad));
     });
 }

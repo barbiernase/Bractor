@@ -71,6 +71,7 @@ public static class JsonContextEmitter
         using Infrastructure.Prozess;
         using Infrastructure.Projections;
         using Infrastructure.PubSub.Messages;
+        using Infrastructure.Quellen;
 
         namespace Infrastructure.Serialization;
 
@@ -114,6 +115,8 @@ public static class JsonContextEmitter
         [JsonSerializable(typeof(ArbeitZugeteilt))]
         [JsonSerializable(typeof(ArbeitLebt))]
         [JsonSerializable(typeof(ArbeitErledigt))]
+        [JsonSerializable(typeof(HalteQuelle))]
+        [JsonSerializable(typeof(QuelleGehalten))]
         // ── Framework: Ergebnis-/Prozess-/Inbox-Events (reisen im Wire) ──
         [JsonSerializable(typeof(CommandFailed))]
         [JsonSerializable(typeof(ProzessGestartet))]

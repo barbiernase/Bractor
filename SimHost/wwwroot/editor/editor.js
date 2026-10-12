@@ -189,8 +189,7 @@
     else if(kind==="reader")MODEL.reader.push({_id:"rd"+(NID++),name:uniq("NeuReader"),namespace:defaultNs(),stores:[],trackDeps:true,handles:[],...pos});
     else if(kind==="reaktion")MODEL.reaktionen.push({_id:"rk"+(NID++),name:uniq("NeueReaktion"),namespace:defaultNs(),pull:true,handles:[],...pos});
     else if(kind==="funktion")neueFunktion(defaultNs(),pos);
-    else if(kind==="quelle"){const qb=(GR()||{}).quellBasis||"IQuellNachricht";
-      MODEL.records.push({name:uniq("NeueQuelle"),kind:"event",namespace:defaultNs(),basen:[qb],felder:[{_id:"f"+(NID++),name:"Kennung",typ:"string"}],...pos});}
+    else if(kind==="quelle")neueQuelle(defaultNs(),"NeueQuelle",pos);
     else if(kind==="akteur")MODEL.akteure.push({_id:"ak"+(NID++),name:uniq("NeuerAkteur"),namespace:haeufigsterNs(MODEL.akteure)||defaultNs(),darf:[],...pos});
     else if(kind==="client")MODEL.clients.push({_id:"cl"+(NID++),name:uniq("INeuerClient"),namespace:haeufigsterNs(MODEL.clients)||defaultNs(),traegt:[],sendet:[],fragt:[],kenntnis:[],...pos});
     else if(kind==="codenode")MODEL.codeNodes.push({_id:"cn"+(NID++),name:uniq("Code"),text:"",...pos});
@@ -423,9 +422,24 @@
      if(ein||aus){if(INSP)zweiSeiten(body,r.name,ein,aus);else{if(ein)body.append(ein);if(aus)body.append(aus);}}}
     if(r.kind==="valueobject")body.append(slotRow("ftype","als Feldtyp ▶","r",{type:"ftype",dir:"out",typeName:r.name},"ftype:out:rec:"+r.name));
     if(r.kind==="auftrag")body.append(slotRow("auftrag","Eingang von ƒ "+(r.funktion||"— ⊕ Funktion wählen")+" ▶","r",{type:"auftragFn",dir:"out",rec:r.name},"auf:out:"+r.name));
+    if(r.treiber){quellTreiber(body,r);return;}
     body.append(h("div",{class:"gsec"},"Felder"));
     (r.felder||[]).forEach((f,fi)=>body.append(feldRow(f,()=>{r.felder.splice(fi,1);render();},undefined,r.name)));
     body.append(h("button",{class:"add",onclick:()=>{(r.felder=r.felder||[]).push({_id:"f"+(NID++),name:uniqFeldName(r.felder,"feld"),typ:"string"});render();}},"+ Feld"));
+  }
+  // Quellen-Typ (docs/konzept-werkbank.md §3): der Treiber ist ein Code-Fakt (Basistyp), die Felder befüllt er (geerbt, nur lesbar),
+  //   die Werte (Pfad, Muster, Fertig-Erkennung …) stehen in der Konfig — hier je Host gezeigt, wie der Server sie gelesen hat.
+  function quellTreiber(body,r){
+    body.append(h("div",{class:"gsec",title:"public sealed record "+r.name+" : "+((r.basen||[])[0]||"DateiGemeldet")+";"},"📁 "+r.treiber+"-Treiber"));
+    const werte=Object.entries((MODEL.rahmen||{}).quellenKonfig||{}).filter(([,q])=>q&&q[r.name]);
+    if(!werte.length)body.append(h("div",{class:"llmmeld err",title:"Start-Prüfung: jede Quelle braucht einen Abschnitt"},"⚠ keine Konfig Quellen:"+r.name+" — der Host startet so nicht"));
+    werte.forEach(([host,q])=>{body.append(h("div",{class:"gsec"},"Werte in "+host));
+      const zeile=(k,v)=>body.append(h("div",{class:"frow"},h("span",{class:"slotlbl",style:"min-width:110px"},k),h("span",{style:"flex:1;font-family:ui-monospace,monospace;font-size:11.5px;overflow-wrap:anywhere"},v)));
+      const flach=(o,pre)=>Object.entries(o||{}).forEach(([k,v])=>v&&typeof v==="object"&&!Array.isArray(v)?flach(v,pre+k+"."):zeile(pre+k,Array.isArray(v)?v.join(", "):String(v)));
+      flach(q[r.name],"");});
+    body.append(h("div",{class:"gsec"},"Felder (vom Treiber befüllt)"));
+    (r.felder||[]).forEach(f=>{const row=h("div",{class:"frow",title:"geerbt von "+((r.basen||[])[0]||"der Treiber-Basis")},
+      h("span",{class:"slotlbl",style:"flex:1"},f.name),h("span",{style:"opacity:.75"},f.typ));if(f.name)row.append(feldPort(r.name,f.name,f.typ,f._id));body.append(row);});
   }
 
   // Aggregat = HUB: State-Knoten oben zuweisen, Decider links, Applier rechts. Keine Feld-Slots.
@@ -1816,8 +1830,12 @@
     MODEL.fluesse.push(f);render();setTimeout(()=>zeigeKnoten("fs:"+q._id),0);}
   // Neue Funktion aus dem Fluss heraus: Auftrag + ein Ergebnis-Event als EIGENE Karten, im Namespace der Pipeline.
   function flNeueFunktion(f){const nm=neueFunktion(f.namespace);deFlash("ƒ "+nm+" angelegt — Auftrag, Ergebnisse und Felder an ihrer Karte (Klick auf „ruft ƒ …“).",true);return nm;}
-  function flNeueQuellNachricht(f){const n=uniq("QuelleGemeldet");
-    MODEL.records.push({name:n,kind:"event",namespace:f.namespace,basen:["IQuellNachricht"],felder:[{_id:"f"+(NID++),name:"Kennung",typ:"string"}]});return n;}
+  function flNeueQuellNachricht(f){return neueQuelle(f.namespace,"QuelleGemeldet");}
+  // Ein neuer Quellen-Typ (docs/konzept-werkbank.md §3): nur der Typ — `public sealed record X : DateiGemeldet;`. Basis und Felder des
+  //   fest codierten Treibers kommen vom Server (rahmen.treiber); die Felder sind geerbt, also nur zum Lesen und Zuordnen da.
+  function neueQuelle(ns,stamm,pos){const tr=((MODEL.rahmen||{}).treiber||{}).Datei||{basis:"DateiGemeldet",felder:[]},n=uniq(stamm);
+    MODEL.records.push({name:n,kind:"event",namespace:ns,treiber:"Datei",basen:[tr.basis],typart:"public sealed record",ohneParameterliste:true,
+      felder:(tr.felder||[]).map(f=>({...f,_id:"f"+(NID++),geerbt:true})),...(pos||{})});return n;}
   const flKnotenById=id=>{for(const f of MODEL.fluesse)for(const k of f.knoten||[])if(k._id===id)return k;return null;};
   // Port-Schlüssel eines Ausgangs (Fall je Ergebnis, ⏳, ✕, Strom) — derselbe für das Panel und den Kanten-Abgleich (KANTEN).
   const flAusKey=(k,p)=>"fs:aus:"+k._id+":"+(p.port||"fall")+":"+(p.fall||"");
@@ -1843,12 +1861,12 @@
       const ep=port("event");ep.classList.add("i");reg("fs:ein:"+k._id,ep,{type:"evtUse",dir:"in",flk:k._id,role:"quelle"});
       body.append(typVerweis(k.typ,{port:ep,titel:k.art==="quelle"?"meldet":"Event",leer:"— ⊕ "+(k.art==="quelle"?"Quell-Nachricht":"Event")+" verbinden",
         removeTitel:"Nachricht lösen (der Typ bleibt)",onRemove:()=>{k.typ="";render();},
-        extra:k.art==="quelle"&&!k.typ?[neuKnopf("Neue Quell-Nachricht (IQuellNachricht) als eigene Karte anlegen und verbinden",()=>{const q=flNeueQuellNachricht(f);
+        extra:k.art==="quelle"&&!k.typ?[neuKnopf("Neue Quelle (Datei-Treiber) als eigene Karte anlegen und verbinden",()=>{const q=flNeueQuellNachricht(f);
           verbindeInfo({type:"evtUse",dir:"out",rec:q},{type:"evtUse",dir:"in",flk:k._id,role:"quelle"});deFlash("＋ "+q+" als eigene Karte angelegt und verbunden — Felder an seiner Karte",true);})]:[]}));
       // Ingress-Bindungen aus dem Host (MapQuellWebhook<T>(route) …) — Code-Fakt der Composition Root, hier nur angezeigt.
       (k.bindungen||[]).forEach(b=>body.append(h("div",{class:"gsec",style:"opacity:.8",title:"Bindung im Host"+(b.datei?" · "+b.datei:"")},
         (b.modus==="webhook"?"🔗 Webhook POST ":b.modus==="timer"?"⏱ Timer ":"📁 Datei ")+(b.ort||"")+"  →  "+(k.typ||"Nachricht"))));
-      body.append(h("div",{class:"gsec",style:"opacity:.6"},k.art==="quelle"?"Jede Nachricht startet einen Vorgang (genau einmal, Kennung). Die Quelle selbst ist Bindung im Host: AddQuelle<"+(k.typ||"Nachricht")+", …>().":"Jedes Vorkommen dieses Events im Log startet einen Vorgang."));}
+      body.append(h("div",{class:"gsec",style:"opacity:.6"},k.art==="quelle"?"Jede Nachricht startet einen Vorgang (genau einmal, Kennung). Der Treiber folgt aus dem Basistyp der Quelle, seine Werte aus der Konfig (Quellen:"+(k.typ||"Typ")+").":"Jedes Vorkommen dieses Events im Log startet einen Vorgang."));}
     else if(k.art==="funktion"){const fk=MODEL.funktionen.find(x=>x.name===k.typ);
       // Die Funktion ist eine eigene Karte (Auftrag, Ergebnisse, Fähigkeiten, Rumpf) — hier nur die Verbindung „ruft".
       const rp=port("auftrag");rp.classList.add("o");rp.title=k.typ||"(Funktion)";reg("fs:rufe:"+k._id,rp,{type:"rufe",dir:"out",flk:k._id});
@@ -2926,7 +2944,7 @@
   // Welcher Baustein steckt hinter einem Editor-Port (Info-Felder dec/proj/pipeline …)?
   function grBaustein(I){for(const [k,b] of (GR().portBaustein||[]))if(I[k]!=null&&I[k]!=="")return b;return null;}
   // Nachricht (Name) → Sorte: Record-Art, Trigger-Karte, Selbst-Nachricht.
-  function grNachrichtSorte(name){const g=GR(),r=recByName(name);if(r)return (r.kind==="event"&&g.quellBasis&&(r.basen||[]).includes(g.quellBasis))?"quelle":(g.recordSorte||{})[r.kind]||null;
+  function grNachrichtSorte(name){const g=GR(),r=recByName(name);if(r)return (r.kind==="event"&&(r.treiber||(g.quellBasis&&(r.basen||[]).includes(g.quellBasis))))?"quelle":(g.recordSorte||{})[r.kind]||null;
     return null;}
   // Wer konsumiert die Nachricht schon (für die Kardinalität „genau eins")?
   function grKonsumenten(name,sorte,baustein){

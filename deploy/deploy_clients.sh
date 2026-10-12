@@ -82,7 +82,8 @@ Grpc__Port=5001 \
 ConnectionStrings__EventStore="Host=localhost;Port=5432;Database=cqrs_events;Username=postgres;Password=postgres" \
 Redis__Endpoint="localhost:6379" \
 Consul__Address="localhost:8500" \
-Pipeline__WatchPath="/mnt/unlabeledgewebebilder/SNP/IO" \
+Quellen__DateiErkannt__Pfad="/mnt/unlabeledgewebebilder/SNP/IO" \
+Quellen__DateiErkannt__Kennung="NameGroesse" \
 Pipeline__PreprocessedPath="/home/wirksam/cqrs-data/preprocessed" \
 DOTNET_ENVIRONMENT=Development \
 nohup ./Host.Grpc > /opt/cqrs/grpc.log 2>&1 &

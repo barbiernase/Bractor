@@ -408,7 +408,7 @@ public static class Scaffolder
         if (persistent.Count + ablehnungen.Count > 0) abschnitte.Add(() =>
         {
             for (var i = 0; i < persistent.Count; i++)
-                RecordZeilen(b, persistent[i], IEvent, i < persistent.Count - 1);
+                RecordZeilen(b, persistent[i], persistent[i].Treiber is null ? IEvent : null, i < persistent.Count - 1);   // Quelle: die Treiber-Basis ist schon ein Event
             if (ablehnungen.Count > 0)
             {
                 if (persistent.Count > 0) b.AppendLine();
@@ -520,8 +520,8 @@ public static class Scaffolder
         Doku(b, r.Doku, "");
         if (!string.IsNullOrWhiteSpace(r.Attribute))
             foreach (var zeile in r.Attribute.Replace("\r\n", "\n").Split('\n')) b.AppendLine(zeile);
-        var positionell = r.Felder.Where(f => f.Zugriff is null).ToList();
-        var eigenschaften = r.Felder.Where(f => f.Zugriff is not null).ToList();
+        var positionell = r.Felder.Where(f => !f.Geerbt && f.Zugriff is null).ToList();
+        var eigenschaften = r.Felder.Where(f => !f.Geerbt && f.Zugriff is not null).ToList();
         var basen = new[] { marker }.Concat(r.Basen ?? []).Where(x => !string.IsNullOrEmpty(x)).ToList();
         var kopf = $"{r.Typart ?? "public record"} {r.Name}"
                    + (r.OhneParameterliste && positionell.Count == 0 ? "" : $"({Parameter(positionell)})")

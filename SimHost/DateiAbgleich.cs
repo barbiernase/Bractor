@@ -144,7 +144,7 @@ internal sealed class Abgleich(EditorModell modell, Arbeitsbereich ws, IReadOnly
         if (Typ(root, r.Name, r.Namespace) is not TypeDeclarationSyntax decl) return (text, $"Typ {r.Name} nicht gefunden");
         var edits = new List<(int, int, string)>();
         var notiz = new List<string>();
-        var pos = r.Felder.Where(f => f.Zugriff is null).ToList();
+        var pos = r.Felder.Where(f => !f.Geerbt && f.Zugriff is null).ToList();   // geerbte Treiber-Felder gehören der Basis
         if (decl is RecordDeclarationSyntax rd)
         {
             var ist = rd.ParameterList?.Parameters.ToList() ?? [];
@@ -158,7 +158,7 @@ internal sealed class Abgleich(EditorModell modell, Arbeitsbereich ws, IReadOnly
                 notiz.Add("Positions-Felder");
             }
         }
-        var soll = r.Felder.Where(f => f.Zugriff is not null).Select(f => (f.Name, $"{N(f.Typ)}|{f.Standard}|{f.Zugriff}|{f.Pflicht}",
+        var soll = r.Felder.Where(f => !f.Geerbt && f.Zugriff is not null).Select(f => (f.Name, $"{N(f.Typ)}|{f.Standard}|{f.Zugriff}|{f.Pflicht}",
             $"public {(f.Pflicht ? "required " : "")}{f.Typ} {f.Name} {f.Zugriff}" + (f.Standard is null ? "" : $" = {f.Standard};"))).ToList();
         if (Eigenschaften(decl, soll, p => Feldregeln.Eigenschaft(p) is { } e ? (e.Name, $"{N(e.Typ)}|{e.Standard}|{e.Zugriff}|{e.Pflicht}") : null, new HashSet<string>(), edits))
             notiz.Add("Property-Felder");

@@ -30,7 +30,7 @@ RUN apt-get update \
 
 COPY --from=build /app .
 
-# WatchPath/PreprocessedPath müssen nicht vorab existieren (die Pipeline legt sie an),
+# Quellen-Pfad/PreprocessedPath müssen nicht vorab existieren (der Datei-Treiber wartet, bis das Verzeichnis da ist),
 # aber wir legen sie an, um die Warn-Logs zu vermeiden.
 RUN mkdir -p /data/input /data/preprocessed
 

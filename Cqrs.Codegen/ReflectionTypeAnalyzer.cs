@@ -117,6 +117,14 @@ public sealed class ReflectionTypeAnalyzer
             foreach (var param in constructor.GetParameters())
                 node.ConstructorParameters.Add(AnalyzeParameter(param, processingStack));
         }
+        else
+        {
+            // Ohne Konstruktor-Parameter: die öffentlichen init/set-Properties (auch geerbte, Basis zuerst) — Objekt-Initialisierer.
+            var props = InitProperties(type);
+            node.ViaInitialisierer = props.Count > 0;
+            foreach (var prop in props)
+                node.ConstructorParameters.Add(AnalyzeMember(prop.PropertyType, prop.Name, processingStack));
+        }
 
         _analyzedTypes[fullName] = node;
         processingStack.Remove(fullName);
@@ -137,6 +145,7 @@ public sealed class ReflectionTypeAnalyzer
             return pub[0];
 
         var all = type.GetConstructors(BindingFlags.Public | BindingFlags.NonPublic | BindingFlags.Instance)
+            .Where(c => !IstKopierKonstruktor(c, type))
             .OrderByDescending(c => c.GetParameters().Length)
             .ToList();
         if (all.Count > 0 && all[0].GetParameters().Length > 0)
@@ -145,10 +154,33 @@ public sealed class ReflectionTypeAnalyzer
         return null;
     }
 
-    private TypeNode AnalyzeParameter(ParameterInfo param, HashSet<string> processingStack)
+    /// <summary>Der Kopier-Konstruktor eines Records (<c>X(X original)</c>) ist kein Daten-Konstruktor.</summary>
+    private static bool IstKopierKonstruktor(ConstructorInfo c, Type type)
     {
-        var paramType = param.ParameterType;
-        var node = new TypeNode { Name = param.Name };
+        var ps = c.GetParameters();
+        return ps.Length == 1 && ps[0].ParameterType == type;
+    }
+
+    /// <summary>
+    /// Öffentliche Instanz-Properties mit öffentlichem init/set — über die Vererbungskette, Basis zuerst, je Ebene in
+    /// Deklarations-Reihenfolge (MetadataToken). Dieselbe Ordnung wie <c>DomainGraphAnalyzer.InitProperties</c> (Roslyn).
+    /// </summary>
+    private static List<PropertyInfo> InitProperties(Type type)
+    {
+        var kette = new List<Type>();
+        for (var t = type; t != null && t != typeof(object); t = t.BaseType) kette.Insert(0, t);
+        return kette.SelectMany(t => t.GetProperties(BindingFlags.Public | BindingFlags.Instance | BindingFlags.DeclaredOnly)
+                .Where(p => p.SetMethod is { IsPublic: true } && p.GetIndexParameters().Length == 0 && p.Name != "EqualityContract")
+                .OrderBy(p => p.MetadataToken))
+            .ToList();
+    }
+
+    private TypeNode AnalyzeParameter(ParameterInfo param, HashSet<string> processingStack)
+        => AnalyzeMember(param.ParameterType, param.Name!, processingStack);
+
+    private TypeNode AnalyzeMember(Type paramType, string name, HashSet<string> processingStack)
+    {
+        var node = new TypeNode { Name = name };
 
         // Enum → Skalar
         if (paramType.IsEnum)
@@ -221,6 +253,7 @@ public sealed class ReflectionTypeAnalyzer
             node.DomainType = GetDomainType(referencedType);
 
             var fullNode = BuildTypeNodeRecursive(referencedType, processingStack);
+            node.ViaInitialisierer = fullNode.ViaInitialisierer;
             foreach (var param in fullNode.ConstructorParameters)
                 node.ConstructorParameters.Add(CloneTypeNode(param));
         }
@@ -251,7 +284,8 @@ public sealed class ReflectionTypeAnalyzer
             IsEnum = source.IsEnum,
             CollectionElementType = source.CollectionElementType,
             DictionaryKeyType = source.DictionaryKeyType,
-            DictionaryValueType = source.DictionaryValueType
+            DictionaryValueType = source.DictionaryValueType,
+            ViaInitialisierer = source.ViaInitialisierer
         };
         foreach (var param in source.ConstructorParameters)
             clone.ConstructorParameters.Add(CloneTypeNode(param));

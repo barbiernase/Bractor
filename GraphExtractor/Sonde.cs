@@ -167,6 +167,7 @@ public static class Sonde
                   + (r["aggregat"] is { } ag ? $" aggregat={ag}" : "")
                   + (r["typart"] is { } ta ? $" typart={ta}" : "")
                   + (r["funktion"] is { } fn ? $" funktion={fn}" : "")
+                  + (r["treiber"] is { } tr ? $" treiber={tr}" : "")
                   + $" | {Felder(r)}");
         foreach (var e in A(b, "enums").Where(Sonde))
             z.Add($"enum {S(e, "namespace")}.{S(e, "name")} | {string.Join(", ", A(e, "werte").Select(w => (string?)w))}");

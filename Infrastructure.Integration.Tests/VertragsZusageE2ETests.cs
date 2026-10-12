@@ -35,7 +35,7 @@ public class VertragsZusageE2ETests
             opts.EnableGrpc = false;
             opts.ClusterName = "vertrag-e2e-" + Guid.NewGuid().ToString("N")[..8];
         });
-        builder.Services.AddDomainPipelineServices(watchPath: watchDir, preprocessedPath: null);
+        builder.Services.AddDomainPipelineServices(Path.Combine(watchDir, ".preprocessed"));
         GeneratedPipelines.RegisterAllPipelines(builder.Services);
 
         using var host = builder.Build();

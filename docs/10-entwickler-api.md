@@ -177,8 +177,14 @@ public sealed class Bildeingang : IPipeline
     });
 }
 ```
-Die Quelle ist Katalog + Bindung: `record DateiErkannt(…) : IQuellNachricht { Kennung => … }`, eine `IQuelle<DateiErkannt>` (z. B.
-`DateiQuelle`) und im Host `services.AddQuelle<DateiErkannt, DateiQuelle>()` (+ optional `app.MapQuellWebhook<DateiErkannt>(route)`).
+Eine Quelle ist ein fest codierter **Treiber** plus Konfig (docs/konzept-werkbank.md §3): die Domäne benennt sie nur als Typ —
+`public sealed record DateiErkannt : DateiGemeldet;` (CQRS070: sealed record, keine eigenen Member). Der Basistyp wählt den Treiber
+(`DateiGemeldet` = Datei-Treiber, befüllt Name, Pfad, RelativerPfad, Groesse, GeaendertAm, ErkanntAm, Kennung); der `QuellenGenerator` erzeugt
+`GeneratedQuellen` (Fabrik ohne Reflection), der Host bindet alles mit `services.AddQuellen(configuration)`. Die Werte stehen im Abschnitt
+`Quellen:<Typ>` (Pfad, Muster, Unterordner, Erkennung `Abfrage|EreignisUndAbfrage`, Intervall, Fertig `Stabil|Marker`, Kennung
+`PfadGroesseZeit|NameGroesse`, Laufmodus `EinmalImCluster|JederKnoten`); unbekannte Felder und Abschnitte ohne Typ sind Start-Fehler. Der
+Treiber liest nur, gleicht beim Start gebündelt mit dem Log ab und meldet nacheinander (Rückstau); ein unlesbares Verzeichnis macht `/health`
+„degraded". Ein `IQuellNachricht` ohne Treiber-Basis bleibt für Webhook-/Test-Quellen erlaubt (`app.MapQuellWebhook<T>(route)`).
 Jede Nachricht wird genau einmal je Kennung ins Log geschrieben und startet je Pipeline einen Vorgang. Funktionen bindet der Host wie
 in §10.5a; eine Funktion, die ein Python-Worker rechnet, mit `AddExterneFunktion<F>()` (der Worker erbt die generierte
 `<Funktion>Basis` aus `domain_client/generated/funktionen.py`, bietet sie am Handshake an und holt Aufträge per Pull). Pipelines

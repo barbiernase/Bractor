@@ -83,7 +83,11 @@ public class BildeingangTests
 
         public async Task<ProzessManager.ManagerStatus> DateiAsync(string name, long groesse = 4711)
         {
-            await Eingang.NimmAufAsync(new DateiErkannt("/in/" + name, name, groesse, Log.Jetzt), default);
+            await Eingang.NimmAufAsync(new DateiErkannt
+            {
+                Name = name, Pfad = "/in/" + name, RelativerPfad = name, Groesse = groesse, GeaendertAm = Log.Jetzt, ErkanntAm = Log.Jetzt,
+                Kennung = $"{name}|{groesse}",
+            }, default);
             var korr = Vorgaenge[^1];
             for (var i = 0; i < 40; i++)
             {

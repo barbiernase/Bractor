@@ -44,7 +44,7 @@ public class LiveCommandE2ETests
         });
 
         // Der ActorSystem-Build registriert Pipeline-Kinds → Pipeline-Services müssen da sein.
-        builder.Services.AddDomainPipelineServices(watchPath: watchDir, preprocessedPath: null);
+        builder.Services.AddDomainPipelineServices(Path.Combine(watchDir, ".preprocessed"));
         GeneratedPipelines.RegisterAllPipelines(builder.Services);
 
         // Der zu prüfende Pull-Pfad (koppelt zugleich den Push-Subscriber ab).

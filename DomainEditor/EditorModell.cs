@@ -149,6 +149,11 @@ public sealed record Record
     public IReadOnlyList<string>? Basen { get; init; }
     /// <summary>Attribut-Listen des Typs verbatim (mehrere zeilengetrennt).</summary>
     public string? Attribute { get; init; }
+    /// <summary>
+    /// Nur Quellen-Typen (docs/konzept-werkbank.md §3): der fest codierte Treiber, gewählt über den Basistyp (<c>Datei</c> für
+    /// <c>DateiGemeldet</c>). Gesetzt ⇒ Event der Sorte „Quelle", geschrieben als <c>public sealed record X : DateiGemeldet;</c>.
+    /// </summary>
+    public string? Treiber { get; init; }
     /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
     public string? Herkunft { get; init; }
 }
@@ -175,6 +180,9 @@ public sealed record Feld
     public bool Pflicht { get; init; }
     /// <summary>Sammlungs-Feld: der Element-Typ (vom Extractor per Symbol bestimmt). Null = keine Sammlung bzw. noch nicht übersetzt.</summary>
     public string? ElementTyp { get; init; }
+    /// <summary>Von der Treiber-Basis eines Quellen-Typs geerbt: zum Lesen und Zuordnen da, nie geschrieben.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    public bool Geerbt { get; init; }
 }
 
 /// <summary>Ein Enum-Typ der Domäne (→ <c>Enums.cs</c>).</summary>

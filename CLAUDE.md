@@ -86,6 +86,11 @@ Benchmark) — `IPipelineHandler` entfällt als Domänen-Baustein, Rückbau der 
 durch (`FlussLaufwerk`, derselbe Belegungs-Kern `FlussBelegung` wie der Dirigent; je Funktion/Warten der Ausgangsfall wählbar). LLM-Slots
 `funktion` + `fluss` (Konsole füllt Lambdas). Integration `PipelineFlussE2ETests` inkl. Python-Worker über gRPC grün.
 
+**Quellen = Treiber + Konfig (2026-10-12, Werkbank P1):** eine Quelle ist nur ein Typ (`public sealed record DateiErkannt : DateiGemeldet;`,
+CQRS070), der Datei-Treiber ist fest codiert (`Infrastructure/Quellen/Treiber/Datei/`), die Werte stehen unter `Quellen:<Typ>` (Pfad, Muster,
+Fertig-Erkennung, Kennung, Laufmodus); `GeneratedQuellen` + `AddQuellen(configuration)`. `IQuelle`/`AddQuelle`/`DateiQuelle` gibt es nicht mehr.
+Umsetzungsplan der Werkbank: `docs/plan-werkbank-umsetzung.md`.
+
 **Akteure, Verträge, Clients (2026-10-06):** Akteure mit Befugnis und Kette bis in den Event-Header; Akteur-Verträge (Zusagen
 draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer CommandId; Clients (`IClientVertrag`, n:m zu Akteuren) mit
 Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an

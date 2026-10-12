@@ -251,7 +251,7 @@ public static class Grammatik
     /// Quell-Nachricht (§14).
     /// </summary>
     public static string? SorteVon(Record r) =>
-        r.Kind == RecordArt.Event && (r.Basen?.Contains(QuellBasis) ?? false) ? Quelle : SorteVonRecordArt(r.Kind);
+        r.Kind == RecordArt.Event && (r.Treiber != null || (r.Basen?.Contains(QuellBasis) ?? false)) ? Quelle : SorteVonRecordArt(r.Kind);
 
     /// <summary>Die Vertrags-Basis einer Quell-Nachricht (aus dem Vertrag, kein Text-Raten).</summary>
     public static readonly string QuellBasis = nameof(Abstractions.IQuellNachricht);

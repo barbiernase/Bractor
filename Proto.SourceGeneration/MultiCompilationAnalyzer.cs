@@ -122,7 +122,12 @@ public class MultiCompilationAnalyzer
         }
         else
         {
-            Console.WriteLine($"      [Analyzer] {typeSymbol.Name}: Kein Konstruktor mit Parametern gefunden");
+            // Ohne Konstruktor-Parameter: die öffentlichen init/set-Properties (auch geerbte, Basis zuerst) — Objekt-Initialisierer.
+            var props = Core.SourceGeneration.DomainGraphAnalyzer.InitProperties(typeSymbol);
+            node.ViaInitialisierer = props.Count > 0;
+            foreach (var (typ, name) in props)
+                node.ConstructorParameters.Add(AnalyzeMember(typ, name, processingStack));
+            Console.WriteLine($"      [Analyzer] {typeSymbol.Name}: {props.Count} init-Properties (kein Konstruktor mit Parametern)");
         }
         
         // Cache the fully analyzed node
@@ -179,7 +184,8 @@ public class MultiCompilationAnalyzer
         // ============================================================
         var memberConstructors = typeSymbol.GetMembers(".ctor")
             .OfType<IMethodSymbol>()
-            .Where(c => c.MethodKind == MethodKind.Constructor)
+            .Where(c => c.MethodKind == MethodKind.Constructor
+                && !(c.Parameters.Length == 1 && SymbolEqualityComparer.Default.Equals(c.Parameters[0].Type, typeSymbol)))   // Record-Kopier-Konstruktor
             .OrderByDescending(c => c.Parameters.Length)
             .ToList();
         
@@ -223,9 +229,11 @@ public class MultiCompilationAnalyzer
     }
 
     private TypeNode AnalyzeParameter(IParameterSymbol param, HashSet<string> processingStack)
+        => AnalyzeMember(param.Type, param.Name, processingStack);
+
+    private TypeNode AnalyzeMember(ITypeSymbol paramType, string name, HashSet<string> processingStack)
     {
-        var paramType = param.Type;
-        var node = new TypeNode { Name = param.Name };
+        var node = new TypeNode { Name = name };
         
         // NEU: Enum-Erkennung — Enums sind Skalare, keine komplexen Typen
         if (paramType is INamedTypeSymbol enumType && enumType.TypeKind == TypeKind.Enum)
@@ -318,6 +326,7 @@ public class MultiCompilationAnalyzer
             var fullNode = BuildTypeNodeRecursive(referencedType, processingStack);
             
             // Copy constructor parameters to this node
+            node.ViaInitialisierer = fullNode.ViaInitialisierer;
             foreach (var param in fullNode.ConstructorParameters)
             {
                 node.ConstructorParameters.Add(CloneTypeNode(param));
@@ -354,7 +363,8 @@ public class MultiCompilationAnalyzer
             IsEnum = source.IsEnum,
             CollectionElementType = source.CollectionElementType,
             DictionaryKeyType = source.DictionaryKeyType,
-            DictionaryValueType = source.DictionaryValueType
+            DictionaryValueType = source.DictionaryValueType,
+            ViaInitialisierer = source.ViaInitialisierer
         };
         
         foreach (var param in source.ConstructorParameters)

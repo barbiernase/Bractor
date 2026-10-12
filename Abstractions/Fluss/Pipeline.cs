@@ -38,19 +38,6 @@ public interface IQuellNachricht : IEvent
     string Kennung { get; }
 }
 
-/// <summary>Nicht-generische Sicht auf eine Quelle (für die Bindung im Host).</summary>
-public interface IQuelle { }
-
-/// <summary>
-/// Eine Katalog-QUELLE: liefert fortlaufend Nachrichten, bis sie abgebrochen wird. Sie kennt weder Pipeline noch Log — das
-/// Framework schreibt jede Nachricht genau einmal ins Log und weckt die Pipelines, die mit <c>p.Quelle&lt;T&gt;()</c> beginnen.
-/// Die Einstellungen (Pfad, Intervall …) bekommt sie über den Konstruktor (Bindung im Host: <c>AddQuelle</c>).
-/// </summary>
-public interface IQuelle<TNachricht> : IQuelle where TNachricht : IQuellNachricht
-{
-    IAsyncEnumerable<TNachricht> LaufeAsync(CancellationToken abbruch);
-}
-
 /// <summary>Token am ⏳-Port eines Knotens: sein Aufruf hat das Zeitlimit überschritten (nur im Dirigenten, nie im Log).</summary>
 public sealed record ZeitlimitAbgelaufen(string Grund) : IEvent, IProzessIntern;
 

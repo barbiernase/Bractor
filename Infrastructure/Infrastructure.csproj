@@ -30,6 +30,8 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
+    <!-- Konfig-Bindung ohne Reflection (Inv. 4): der Source-Generator ersetzt ConfigurationBinder.Get<T> (z. B. Quellen-Konfig). -->
+    <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
   </PropertyGroup>
 
 </Project>

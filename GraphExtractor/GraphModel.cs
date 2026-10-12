@@ -226,6 +226,8 @@ public sealed class FieldInfo
     public bool Pflicht { get; set; }
     /// <summary>Sammlung: der Element-Typ, wenn der Feldtyp <c>IEnumerable&lt;T&gt;</c> ist (per Symbol, nicht per Name; <c>string</c> nicht).</summary>
     public string? ElementTyp { get; set; }
+    /// <summary>Von einer Treiber-Basis geerbt (z. B. <c>DateiGemeldet.Name</c>): sichtbar, aber nie zurückgeschrieben.</summary>
+    public bool Geerbt { get; set; }
 }
 
 // ── Kanten ──────────────────────────────────────────────────────────────────

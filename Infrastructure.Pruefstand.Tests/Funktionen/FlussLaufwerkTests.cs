@@ -32,7 +32,11 @@ public class FlussLaufwerkTests
         _ => throw new NotSupportedException(a.Auftrag.GetType().Name),
     };
 
-    private static DateiErkannt Datei(string name) => new("/share/" + name, name, 42, DateTimeOffset.UnixEpoch);
+    private static DateiErkannt Datei(string name) => new()
+    {
+        Name = name, Pfad = "/share/" + name, RelativerPfad = name, Groesse = 42, GeaendertAm = DateTimeOffset.UnixEpoch,
+        ErkanntAm = DateTimeOffset.UnixEpoch, Kennung = $"{name}|42",
+    };
 
     [Fact]
     public void Erste_Datei_legt_das_Paar_an_und_meldet_das_Bild()
