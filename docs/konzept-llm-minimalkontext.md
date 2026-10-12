@@ -302,7 +302,7 @@ Neu-Einlesen ≈ 1 min; Rückgängig stellt die Datei wörtlich her.
 
 
 ```bash
-dotnet run --project GraphExtractor   # editor.html + domain-model.json (die Kontexte erzeugt SimHost bei Bedarf selbst)
+dotnet run --project GraphExtractor   # domain-model.json (Oberfläche: SimHost/wwwroot/editor/) (die Kontexte erzeugt SimHost bei Bedarf selbst)
 dotnet run --project SimHost          # → http://localhost:5178/editor  (Details: /konsole)
 ```
 

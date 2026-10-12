@@ -60,26 +60,18 @@ fluss Leihwesen.Gebuehren.Rueckgabefrist bauer=p | ausgeliehen=auf:Ausgeliehen; 
 record Leihwesen.Lesen.OffeneAusleihen query | LeserId:Guid { get; init; }
 record Leihwesen.Lesen.OffeneAusleihenAntwort queryresponse | Anzahl:int
 record Leihwesen.Lesen.KeineAusleihen queryresponse |
-record Leihwesen.Lesen.MahnlaufKonfig konfig | Mindestbetrag:decimal
 readmodel Leihwesen.Lesen.LeihEintrag store=ILeihBuch | Id:Guid { get; set; }, LeserId:Guid { get; set; }, Offen:bool { get; set; }
 readmodel Leihwesen.Lesen.Ausleihzaehler store= geteilt | Id:string="gesamt" { get; init; }, Offen:int { get; init; }
 store Leihwesen.Lesen.ILeihBuch | schreibt SchreibeAsync(eintrag:LeihEintrag), SchliesseAsync(id:Guid) | liest OffeneAsync(leserId:Guid):IReadOnlyList<LeihEintrag>
 projektion Leihwesen.Lesen.Leihliste id=leihliste pull | Ausgeliehen -> ILeihBuch.SchreibeAsync; Zurueckgegeben -> ILeihBuch.SchliesseAsync
 reaktion Leihwesen.Lesen.MahnungBeiSchaden id=mahnung-bei-schaden | SchadenGemeldet -> sendet EroeffneMahnung
 reader Leihwesen.Lesen.LeihAuskunftLeser projektion=Leihliste trackDeps=false | OffeneAusleihen -> ILeihBuch.OffeneAsync => OffeneAusleihenAntwort|KeineAusleihen
-pipeline Leihwesen.Lesen.MahnlaufPipeline id=mahnlauf konfigs=MahnlaufKonfig | MahnlaufAngestossen(trigger) -> sendet EroeffneMahnung, MeldeSchaden; MahnlaufGeprueft(trigger) -> sendet EroeffneMahnung, MeldeSchaden -> ILeihBuch.OffeneAsync; PipelineGestartet(self) -> sendet ; Mahnrunde(self) -> sendet EroeffneMahnung im Auftrag Gutachterin
-trigger MahnlaufAngestossen | Ziel:Guid, Betrag:decimal
-trigger MahnlaufGeprueft | Ziel:Guid, Betrag:decimal
 
 # ── Handle-Verträge: WAS aus der Signatur (Form · Art:Typ), WELCHE Store-Fns aus den Fähigkeits-Parametern — kein Rumpf-Fakt ──
 ausgang Leihliste.Ausgeliehen nichts | storefn:ILeihBuch.SchreibeAsync
 ausgang Leihliste.Zurueckgegeben nichts | storefn:ILeihBuch.SchliesseAsync
 ausgang MahnungBeiSchaden.SchadenGemeldet strom | command:EroeffneMahnung
 ausgang LeihAuskunftLeser.OffeneAusleihen einzeln | response:OffeneAusleihenAntwort; response:KeineAusleihen; storefn:ILeihBuch.OffeneAsync
-ausgang MahnlaufPipeline.MahnlaufAngestossen strom | command:EroeffneMahnung; command:MeldeSchaden
-ausgang MahnlaufPipeline.MahnlaufGeprueft strom | command:EroeffneMahnung; command:MeldeSchaden; storefn:ILeihBuch.OffeneAsync
-ausgang MahnlaufPipeline.PipelineGestartet strom | self:Mahnrunde
-ausgang MahnlaufPipeline.Mahnrunde strom | command:EroeffneMahnung; self:Mahnrunde; frist:MeldeSchaden
 
 # ── Fähigkeits-Namen sind Code-Fakt (Interface je Funktion), nicht aus dem Fn-Namen geraten ──
 faehigkeit Leihwesen.Lesen.INotiereAusleihe schreibt ILeihBuch.SchreibeAsync
@@ -102,24 +94,11 @@ ausgang Vormerkliste.Ausgeliehen nichts | storefn:IVormerkbuch.MerkeVorAsync
 ausgang Schadenpruefung.Zurueckgegeben strom | command:MeldeSchaden
 ausgang VormerkAuskunft.Vormerkungen einzeln | response:VormerkungenAntwort; storefn:IVormerkbuch.ZaehleAsync
 
-# ── Gezeichneter BETRIEB: Pipeline mit Konfig (Konstruktor), neuem Trigger, Self-Tick (neue Selbst-Nachricht), Lese-Fähigkeit ──
-#    Konfig = Record im Pipeline-Konstruktor (Code-Fakt), Ausgänge im OneOf (auch der einzelne), Self-Handle als eigener Eingang.
-record Leihwesen.Vormerkung.VormerkKonfig konfig | Tage:int
-trigger PruefeVormerkungen | LeserId:Guid
-pipeline Leihwesen.Vormerkung.Vormerkpruefung id=vormerkpruefung konfigs=VormerkKonfig | PruefeVormerkungen(trigger) -> sendet EroeffneMahnung -> IVormerkbuch.ZaehleAsync; VormerkTick(self) -> sendet MeldeSchaden
-ausgang Vormerkpruefung.PruefeVormerkungen strom | command:EroeffneMahnung; self:VormerkTick; storefn:IVormerkbuch.ZaehleAsync
-ausgang Vormerkpruefung.VormerkTick strom | command:MeldeSchaden
-
-# ── Regel Z (Kompositions-Sprache §4): Zustand nur in Aggregaten/Lesemodellen — die Pipeline hält zwei Felder Gedächtnis ──
-#    _gemahnt (readonly, aber eigene Sammlung) und _runden (nicht readonly). NICHT: _konfig (injiziert), _maximum (readonly int),
-#    _praefix (readonly string), Takt (statisch).
-zustand pipeline Leihwesen.Lesen.MahnlaufPipeline | _gemahnt, _runden
-
 # ── Akteure: IAkteur/Art + IDarf<T> in der Basisliste (Code-Fakt), frei benannt; einer im Code, einer im Editor gezeichnet ──
 akteur Leihwesen.Lesen.Theke | darf LeiheAus, GibZurueck, OffeneAusleihen
 akteur Leihwesen.Gebuehren.Mahnstelle | darf EroeffneMahnung, Vormerkungen
-# ── Eine KI als Akteur mit ihrem Dienst (IAkteurDienst<A>, selbst kein Akteur) — der Mahnrunden-Handle entscheidet in ihrem Auftrag ──
-akteur Leihwesen.Lesen.Gutachterin Ki dienste IGebuehrenOrakel | darf EroeffneMahnung
+# ── Eine KI als Akteur ──
+akteur Leihwesen.Lesen.Gutachterin Ki | darf EroeffneMahnung
 # ── Akteur-Verträge (Akteur-Konzept §3): IAkteurVertrag<A> ist der Anker, je Auf(E) Eingang → Ausgänge aus dem RÜCKGABETYP (einzeln, Strom, void);
 #    einer im Code (frei benannt: Archiv/IRegal), einer im Editor gezeichnet (Mahnstelle → I + Name, vom Scaffolder geschrieben) ──
 akteur Leihwesen.Lesen.Archiv Maschine | darf 

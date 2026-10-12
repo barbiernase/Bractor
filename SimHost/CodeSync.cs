@@ -335,7 +335,7 @@ public static class CodeSync
     }
 
     // ── Neu einlesen (Code → Board): den GraphExtractor laufen lassen — er schreibt domain-model.json,
-    //    knowledge-graph.* und editor.html aus dem AKTUELLEN Code. Der Browser merged danach (Code = Wahrheit). ──
+    //    knowledge-graph.* und domain-model.json aus dem AKTUELLEN Code. Der Browser merged danach (Code = Wahrheit). ──
     public static object Extrahiere(string slnRoot)
     {
         var psi = new ProcessStartInfo("dotnet", "run --project GraphExtractor")

@@ -109,69 +109,12 @@ public partial class MahnungBeiSchaden : ISubscriber, IPullSubscriber
     }
 }
 
-public record MahnlaufAngestossen(Guid Ziel, decimal Betrag) : IPipelineTrigger;
-
-public record MahnlaufGeprueft(Guid Ziel, decimal Betrag) : IPipelineTrigger;
-
-public record MahnlaufKonfig(decimal Mindestbetrag);
-
-public record Mahnrunde : IPipelineSelfMessage;
-
-public partial class MahnlaufPipeline : IPipelineHandler
-{
-    public const string Kennung = "mahnlauf";
-    private readonly MahnlaufKonfig _konfig;
-    // Regel Z (Symbol-Fakt): Zustand = nicht readonly ODER readonly mit Referenztyp, der weder injiziert (Ctor-Parametertyp) noch
-    // string ist. Kein Zustand: der injizierte Konfig-Record, readonly Werttyp, readonly string, statische Felder.
-    private readonly HashSet<Guid> _gemahnt = new();
-    private int _runden;
-    private readonly int _maximum = 3;
-    private readonly string _praefix = "M";
-    private static readonly TimeSpan Takt = TimeSpan.FromHours(1);
-
-    public MahnlaufPipeline(MahnlaufKonfig konfig) { _konfig = konfig; }
-
-    public string PipelineId => Kennung;
-
-    public async IAsyncEnumerable<OneOf<EroeffneMahnung, MeldeSchaden>> Handle(MahnlaufAngestossen trigger, PipelineContext ctx)
-    {
-        await Task.CompletedTask;
-        var betrag = Math.Max(trigger.Betrag, _konfig.Mindestbetrag);
-        var verworfen = new EroeffneMahnung(Guid.Empty, 0m);
-        yield return new EroeffneMahnung(trigger.Ziel, betrag);
-    }
-
-    public async IAsyncEnumerable<OneOf<EroeffneMahnung, MeldeSchaden>> Handle(MahnlaufGeprueft trigger, PipelineContext ctx, IZaehleOffene zaehle)
-    {
-        if ((await zaehle.OffeneAsync(trigger.Ziel)).Count == 0) yield break;
-        if (trigger.Betrag <= 0) yield break;
-        yield return trigger.Betrag > 100m
-            ? new EroeffneMahnung(trigger.Ziel, trigger.Betrag)
-            : new MeldeSchaden(trigger.Ziel, trigger.Ziel);
-    }
-
-    // Planung als typisierter Ausgang: Selbst-Nachricht (erste beim Start) + Frist — kein ScheduleSelf/IFristplan im Rumpf.
-    public IEnumerable<OneOf<Selbst<Mahnrunde>>> Handle(PipelineGestartet start, PipelineContext ctx)
-    {
-        yield return Selbst.In(new Mahnrunde(), TimeSpan.FromHours(1));
-    }
-
-    public IEnumerable<OneOf<EroeffneMahnung, Selbst<Mahnrunde>, Frist<MeldeSchaden>>> Handle(Mahnrunde runde, PipelineContext ctx, IGebuehrenOrakel orakel)
-    {
-        if (++_runden > _maximum || !_gemahnt.Add(Guid.Empty) || _praefix.Length == 0) yield break;
-        yield return Selbst.In(new Mahnrunde(), Takt);
-    }
-}
-
 // Akteure: frei benannt; die Befugnis steht NUR in der Basisliste (IDarf<T>) — Reihenfolge = Deklaration. Kein Name verrät
 // die Rolle (keine *Akteur-/*Rolle-Endung); eine Query zu dürfen ist dasselbe Wort wie ein Command.
 public sealed record Theke : IAkteur, IDarf<LeiheAus>, IDarf<GibZurueck>, IDarf<OffeneAusleihen>;
 
-// Eine KI als Akteur (frei benannt, Art in der Basisliste) und ihr DIENST (ein Vertrag mit Methode, selbst kein Akteur): der
-// Mahnrunden-Handle nimmt den Dienst als Parameter und entscheidet damit im Auftrag der Gutachterin — die Kante „im Auftrag"
-// steht in der Signatur, nicht im Konstruktor.
+// Eine KI als Akteur (frei benannt, Art in der Basisliste).
 public sealed record Gutachterin : IKi, IDarf<EroeffneMahnung>;
-public interface IGebuehrenOrakel : IAkteurDienst<Gutachterin> { decimal Schaetze(Guid ziel); }
 
 // Ein Akteur, der DRAUSSEN reagiert (Vertrag, docs/konzept-akteure.md §3): frei benannt — weder der Akteur noch sein Vertrag
 // verraten über den Namen, was zusammengehört (IAkteurVertrag<A> ist der einzige Anker). Ein Akteur ohne IDarf: was er als

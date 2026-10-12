@@ -29,13 +29,17 @@ builder.Services.AddCors(o => o.AddDefaultPolicy(p => p.AllowAnyOrigin().AllowAn
 var app = builder.Build();
 app.UseCors();
 
-// ── EINE Oberfläche: der Domänen-Editor unter /editor (inkl. Simulation). Das alte Board ist abgelöst. ──
-app.MapGet("/", () => Results.Redirect("/editor"));
-var editorPath = FindNeben("editor.html");
+// ── EINE Oberfläche: der Domänen-Editor unter /editor — statische Dateien aus wwwroot/editor (index.html, editor.css, editor.js). ──
 // no-store: der Browser holt die Oberfläche immer frisch (sonst sieht man nach einem Editor-Update die alte Seite).
-app.MapGet("/editor", (HttpContext ctx) => { ctx.Response.Headers.CacheControl = "no-store"; return editorPath != null && File.Exists(editorPath)
-    ? Results.Content(File.ReadAllText(editorPath), "text/html")
-    : Results.Content("<h1>editor.html nicht gefunden</h1><p>Erst <code>dotnet run --project GraphExtractor</code> laufen lassen.</p>", "text/html"); });
+app.Use(async (ctx, next) =>
+{
+    var pfad = ctx.Request.Path.Value ?? "";
+    if (pfad is "" or "/" or "/editor") { ctx.Response.Redirect("/editor/"); return; }
+    if (pfad.StartsWith("/editor/", StringComparison.Ordinal)) ctx.Response.Headers.CacheControl = "no-store";
+    await next();
+});
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 // ── EDITOR-MODUS: Modell → C# (der EINE Scaffolder) + Struktur-Prüfung. Umkehrung C# → Board. ──
 // Das aktuelle Domänen-Modell (aus dem Round-trip, neben der .sln) — Startpunkt zum Weiterbauen.
@@ -244,7 +248,7 @@ app.MapGet("/api/llm/protokoll", (string? id, int? max) => Results.Json(konsole.
 
 // Port: 5178, außer die Umgebung weist einen zu (PORT) — z. B. wenn mehrere Editor-Instanzen parallel laufen.
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5178";
-Console.WriteLine($"\n▶ SimHost läuft.  Editor: http://localhost:{port}/editor   ({editorPath ?? "editor.html fehlt"})   LLM-Konsole: http://localhost:{port}/konsole\n");
+Console.WriteLine($"\n▶ SimHost läuft.  Editor: http://localhost:{port}/editor/   LLM-Konsole: http://localhost:{port}/konsole\n");
 app.Run($"http://localhost:{port}");
 
 // Wurzelverzeichnis der .sln (für die Code-Sync-Dateipfade).

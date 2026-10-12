@@ -365,17 +365,12 @@ public static class ModellMapper
 
         // Query- und Response-Records stehen schon als Records im Modell (Reader docken daran an). ReadModels zeigt das Board
         //   als eigene Sammlung (readModels) — die Record-Form reist dort mit (Zusatz/Basen/…), Board → Modell baut sie zurück.
-        // Trigger- und Selbst-Nachrichten zeigt das Board ebenfalls in eigenen Sammlungen (triggers / selbstNachrichten).
-        var recordJson = records.Where(r => r != null).ToDictionary(r => $"{r!["kind"]}|{r["name"]}", r => r!, StringComparer.Ordinal);
+        // Trigger- und Selbst-Nachrichten gehören zur Trigger-Welt — der Editor zeigt sie nicht (docs/konzept-werkbank.md §10, P0).
         foreach (var rm in records.Where(r => (string?)r?["kind"] is RecordArt.ReadModel or RecordArt.Trigger or RecordArt.Selbst).ToList()) records.Remove(rm);
-        root["selbstNachrichten"] = new JsonArray(recordJson.Where(kv => kv.Key.StartsWith(RecordArt.Selbst + "|", StringComparison.Ordinal))
-            .Select(kv => kv.Value.DeepClone()).ToArray());
-        JsonNode? TriggerCode(string name) => recordJson.GetValueOrDefault(RecordArt.Trigger + "|" + name)?.DeepClone();
         var lesen = modell.Lesen ?? new Leseseite();
         var storeVon = lesen.Stores.ToDictionary(s => s.Name, StringComparer.Ordinal);
         var konsumentVon = lesen.Konsumenten.ToDictionary(k => k.Name, StringComparer.Ordinal);
         var leserVon = lesen.Reader.ToDictionary(r => r.Name, StringComparer.Ordinal);
-        var pipelineVon = lesen.Pipelines.ToDictionary(p => p.Name, StringComparer.Ordinal);
         // Die Signatur verbatim eines Handles (für Board → Modell: verbinden/lösen ändert nur die Fähigkeits-Parameter).
         static object? Sig(Handle? h) => h == null ? null : new
         {
@@ -455,62 +450,6 @@ public static class ModellMapper
                 }).ToArray(),
             }).ToList();
 
-        // Pipelines + Trigger — je Handle Ingress (Trigger/Event/Self) → Command/Trigger/Selbst/Frist + Fähigkeiten.
-        var triggerFelder = dom.Triggers.ToDictionary(t => t.Name, t => t.Fields, StringComparer.Ordinal);
-        var triggerIds = new Dictionary<string, string>(StringComparer.Ordinal); // Trigger-Msg → _id
-        var pipelines = dom.Pipelines.OrderBy(p => p.Name, StringComparer.Ordinal)
-            .Select((p, pi) => new
-            {
-                _id = "pl" + (pi + 1), name = p.Name, @namespace = p.Namespace, pipelineId = p.PipelineId,
-                datei = pipelineVon.GetValueOrDefault(p.Name)?.Datei,
-                code = KlassenCode(pipelineVon.GetValueOrDefault(p.Name)), herkunft = pipelineVon.GetValueOrDefault(p.Name)?.Herkunft,
-                konfigs = p.Konfigs.ToArray(),
-                dienste = cr.PipelineDienste.TryGetValue(p.Name, out var ds) ? ds.ToArray() : Array.Empty<string>(),
-                handles = p.Handles.Select(hd =>
-                {
-                    var input = KurzEvt(dom, hd.InputFull);
-                    string? trigId = null;
-                    if (hd.InputKind == "trigger" && !triggerIds.TryGetValue(input, out trigId))
-                        triggerIds[input] = trigId = "tg" + (triggerIds.Count + 1);
-                    return new
-                    {
-                        inputKind = hd.InputKind,
-                        sig = Sig(pipelineVon.GetValueOrDefault(p.Name)?.Handles.FirstOrDefault(h => h.Eingang == Kurz(hd.InputFull))),
-                        @event = hd.InputKind == "event" ? input : null,
-                        selfName = hd.InputKind == "self" ? input : null,
-                        input,
-                        trigId,
-                        sends = hd.EmitsFull.Select(c => dom.Commands.TryGetValue(c, out var ct) ? ct.Simple : Kurz(c)).ToArray(),
-                        emits = Liste(p.HandleEmitsTriggers, hd.InputFull),
-                        // Selbst-Nachrichten = die Selbst<T>-Varianten der Signatur (Verzögerung ist Rumpf → nicht gezeigt).
-                        schedules = (Vertrag(p.HandleVertraege, hd.InputFull)?.Ausgaenge ?? new()).Where(a => a.Art == "self")
-                            .Select(a => (object)new { name = a.Typ, delay = "" }).ToArray(),
-                        // Veröffentlichte Events (transient → Broker; ein persistentes hier ist ein Grammatik-Verstoß, bleibt aber sichtbar).
-                        publishes = (Vertrag(p.HandleVertraege, hd.InputFull)?.Ausgaenge ?? new()).Where(a => a.Art is "transient" or "event")
-                            .Select(a => a.Typ).ToArray(),
-                        // Frist<TCmd>/FristStorno<TCmd> = ein Command „per Frist" bzw. dessen Storno — ein Ausgang am Handle, kein eigener Knoten.
-                        fristen = (Vertrag(p.HandleVertraege, hd.InputFull)?.Ausgaenge ?? new()).Where(a => a.Art is "frist" or "fristStorno")
-                            .Select(a => (object)new { command = a.Typ, art = a.Art == "frist" ? "frist" : "storno" }).ToArray(),
-                        fns = StoreFns(p.HandleFaehigkeiten, hd.InputFull),
-                        // Im Auftrag eines Akteurs über seinen Dienst (IAkteurDienst<A> → A) — ein Handle-Parameter wie eine Fähigkeit.
-                        akteur = p.HandleAkteur.GetValueOrDefault(hd.InputFull),
-                        rumpf = Rumpf(p.HandleBodies, hd.InputFull),
-                        form = Vertrag(p.HandleVertraege, hd.InputFull)?.Form, signatur = Vertrag(p.HandleVertraege, hd.InputFull)?.Signatur,
-                        signaturOffen = Vertrag(p.HandleVertraege, hd.InputFull)?.SignaturOffen == true ? true : (bool?)null,
-                        ausgaenge = Ausgaenge(Vertrag(p.HandleVertraege, hd.InputFull)),
-                    };
-                }).ToArray(),
-            }).ToList();
-
-        var triggers = triggerIds.OrderBy(kv => kv.Value, StringComparer.Ordinal)
-            .Select(kv => new
-            {
-                _id = kv.Value, name = kv.Key, msgName = kv.Key,
-                @namespace = dom.Triggers.FirstOrDefault(t => t.Name == kv.Key)?.Meta.Namespace,
-                felder = triggerFelder.TryGetValue(kv.Key, out var tf) ? tf.Select(FeldJson).ToArray() : Array.Empty<object>(),
-                code = TriggerCode(kv.Key),
-            }).ToList();
-
         // Stores — aus dem Roh-Domänenmodell (Bündel IStore + je Fn ihre Fähigkeit + Impl-Rümpfe).
         // Je Fn ihre Fähigkeit verbatim (Rückgabe/Parameter/Ort) — die Store-Karte bleibt die Anzeige, „sig" der Code-Fakt.
         object? FnSig(string store, string methode)
@@ -542,9 +481,6 @@ public static class ModellMapper
             }).ToArray(),
         }).ToList();
 
-        // ── Composition-Root (Betrieb/Host): Webhook-Trigger über die Pipeline-Stubs legen (modus/route),
-        //    plus Frist-Relationen, Dienst-Bindungen und HostSettings als eigene Board-Sektionen. ──
-        var triggersNode = Knoten(triggers).AsArray();
         // Pipeline als Fluss (§14): die Ingress-Bindung einer QUELL-NACHRICHT (MapQuellWebhook<T>) gehört an die Quelle des Flusses —
         //   keine eigene Trigger-Karte (das wäre der Handle-Baustein). Reine Board-Sicht: das Modell (FlussSchritt) kennt das Feld nicht.
         var quellen = records.OfType<JsonObject>().Where(r => r["basen"] is JsonArray b && b.Any(x => (string?)x == Grammatik.QuellBasis))
@@ -558,42 +494,6 @@ public static class ModellMapper
                 liste.Add(Knoten(new { modus = tb.Modus, ort = tb.Route ?? tb.Interval ?? tb.Path, datei = Relativ(dom.Wurzel, tb.Datei) }));
                 k["bindungen"] = liste;
             }
-        foreach (var tb in cr.Triggers.Where(tb => !quellen.Contains(tb.MsgName)))
-        {
-            var match = triggersNode.FirstOrDefault(n => (string?)n?["msgName"] == tb.MsgName)?.AsObject();
-            // Die Bindung aus dem Code (Vorlage für neue Bindungen desselben Modus).
-            var bindung = Knoten(new { datei = Relativ(dom.Wurzel, tb.Datei), anweisung = tb.Anweisung, typArgument = tb.TypArgument, ortArgument = tb.OrtArgument, modus = tb.Modus, ort = tb.Route ?? tb.Interval ?? tb.Path });
-            if (match != null)
-            {
-                match["bindung"] = bindung;
-                match["modus"] = tb.Modus;
-                if (tb.Route != null) match["route"] = tb.Route;
-                if (tb.Interval != null) match["intervall"] = tb.Interval;
-                if (tb.Path != null) match["pfad"] = tb.Path;
-            }
-            else
-            {
-                var neu = Knoten(new
-                {
-                    _id = "tgw" + (triggersNode.Count + 1), name = tb.Name, msgName = tb.MsgName,
-                    @namespace = dom.Triggers.FirstOrDefault(t => t.Name == tb.MsgName)?.Meta.Namespace,
-                    modus = tb.Modus, route = tb.Route, intervall = tb.Interval, pfad = tb.Path,
-                    felder = triggerFelder.TryGetValue(tb.MsgName, out var tf) ? tf.Select(FeldJson).ToArray() : Array.Empty<object>(),
-                }).AsObject();
-                neu["code"] = TriggerCode(tb.MsgName);
-                neu["bindung"] = bindung;
-                triggersNode.Add(neu);
-            }
-        }
-        // Auch Trigger-Nachrichten ohne Pipeline/Bindung sind Code — eigene Karte.
-        foreach (var t in dom.Triggers.Where(t => !triggersNode.Any(n => (string?)n?["msgName"] == t.Name)))
-        {
-            var neu = Knoten(new { _id = "tgc" + (triggersNode.Count + 1), name = t.Name, msgName = t.Name, @namespace = t.Meta.Namespace,
-                felder = t.Fields.Select(FeldJson).ToArray() }).AsObject();
-            neu["code"] = TriggerCode(t.Name);
-            triggersNode.Add(neu);
-        }
-
         // Graph-Diagnosen (MISSING-APPLY, ENUM-ZERO, UNROUTED-SAGA-CMD …) — der Editor zeigt sie bei „✓ Prüfen".
         root["diagnosen"] = Knoten(graph.Views.Diagnostics.Where(d => d.Severity != "info")
             .Select(d => new { schweregrad = d.Severity, code = d.Code, meldung = d.Message }));
@@ -601,19 +501,7 @@ public static class ModellMapper
         root["projektionen"] = Knoten(projektionen);
         root["reaktionen"] = Knoten(reaktionen);
         root["reader"] = Knoten(reader);
-        root["pipelines"] = Knoten(pipelines);
-        root["triggers"] = triggersNode;
         root["stores"] = Knoten(stores);
-        // Fristen sind Ausgänge der Pipeline-Handles (fristen[]) — kein eigener Board-Knoten mehr (eine Wahrheit: die Signatur).
-        root["dienste"] = Knoten(cr.Dienste.Select((d, i) => new
-        {
-            _id = "di" + (i + 1), name = d.Name, vertrag = d.Vertrag, @extern = d.Extern, codeSrc = (string?)null,
-        }));
-        root["hostSettings"] = Knoten(cr.HostSettings.Select((s, i) => new
-        {
-            _id = "hs" + (i + 1), name = s.Name, typ = s.Typ, @default = s.Default, envKey = s.EnvKey,
-            konfig = s.Konfig, feld = s.Feld,
-        }));
         return root.ToJsonString(new JsonSerializerOptions
         {
             WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,

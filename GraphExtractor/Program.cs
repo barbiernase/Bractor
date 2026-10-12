@@ -13,7 +13,7 @@ using Microsoft.CodeAnalysis.MSBuild;
 //      GeneratedCommandRouting (aus der gebauten Infrastructure-Compilation).
 //    • Sagas/Prozesse aus dem Prozess-DSL (Bedingung/Sende/RückgängigDurch/Fan-out).
 //    • Projektionen, Queries, Pipelines.
-//  Emittiert: knowledge-graph.json, domain-model.json (Editor-Modell) + editor.html (die Oberfläche).
+//  Emittiert: knowledge-graph.json, domain-model.json (Editor-Modell). Die Oberfläche liegt statisch in SimHost/wwwroot/editor.
 // ════════════════════════════════════════════════════════════════════════════
 
 MSBuildLocator.RegisterDefaults();
@@ -142,14 +142,9 @@ var modellPath = Path.Combine(solutionDir, "domain-model.json");
 await File.WriteAllTextAsync(modellPath, modellJson);
 Console.WriteLine($"✅ {modellPath}  ({modell.Aggregate.Count} Aggregate, {modell.Sagas.Count} Sagas)");
 
-// Die EINE Oberfläche (Route /editor): Editor + Simulation. Das Modell lädt sie live vom SimHost.
-var editorPath = Path.Combine(solutionDir, "editor.html");
-await File.WriteAllTextAsync(editorPath, HtmlPresenter.EditorPage());
-
 // --kontexte <verz>: zusätzlich zu den Modell-Dateien alle LLM-Kontexte + index.json (Quelle der LLM-Konsole im SimHost).
 if (args.Contains("--kontexte"))
     return KontextCli.Lauf(args, lage, dom, graph, compositionRoot, solutionDir);
-Console.WriteLine($"✅ {editorPath}");
 
 Console.WriteLine($"\n   Diagnosen: {graph.Views.Diagnostics.Count}");
 foreach (var f in graph.Views.Diagnostics.Take(12))

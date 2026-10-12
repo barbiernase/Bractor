@@ -1,5 +1,5 @@
 {
-  "_zweck": "Eine im Editor GEZEICHNETE Leseseite (so, wie der Browser sie ins Board legt: neue Karten ohne Datei/Signatur). Die Sonde hängt sie an das Board der Sonden-Domäne, liest sie über BoardLeseseite ins Modell, lässt den Scaffolder schreiben und liest den Fork neu ein. Fähigkeit von MerkeVorAsync im Panel benannt, die von ZaehleAsync abgeleitet. Dazu Betrieb: neue Pipeline mit Konfig-Record, neuem Trigger, Self-Tick (neue Selbst-Nachricht) und Lese-Fähigkeit als Parameter. Akteur: im Editor gezeichnet (ohne Datei), darf einen Command und die gezeichnete Query. Dazu eine im Editor GEZEICHNETE Pipeline als Fluss (§14): Event-Quelle → Katalog-Funktion (Zuordnung als Tabelle, mit Zeitlimit) → Command am Ergebnis-Port — ohne Lambda, der Scaffolder baut ihn aus der Zuordnung.",
+  "_zweck": "Eine im Editor GEZEICHNETE Leseseite (so, wie der Browser sie ins Board legt: neue Karten ohne Datei/Signatur). Die Sonde hängt sie an das Board der Sonden-Domäne, liest sie über BoardLeseseite ins Modell, lässt den Scaffolder schreiben und liest den Fork neu ein. Fähigkeit von MerkeVorAsync im Panel benannt, die von ZaehleAsync abgeleitet. Akteur: im Editor gezeichnet (ohne Datei), darf einen Command und die gezeichnete Query. Dazu eine im Editor GEZEICHNETE Pipeline als Fluss (§14): Event-Quelle → Katalog-Funktion (Zuordnung als Tabelle, mit Zeitlimit) → Command am Ergebnis-Port — ohne Lambda, der Scaffolder baut ihn aus der Zuordnung.",
   "records": [
     {
       "name": "Vormerkungen",
@@ -21,18 +21,6 @@
       "felder": [
         {
           "name": "Anzahl",
-          "typ": "int"
-        }
-      ]
-    },
-    {
-      "name": "VormerkKonfig",
-      "kind": "konfig",
-      "namespace": "Leihwesen.Vormerkung",
-      "datei": "__gezeichnet/Typen.cs",
-      "felder": [
-        {
-          "name": "Tage",
           "typ": "int"
         }
       ]
@@ -139,58 +127,6 @@
           "responses": [
             "VormerkungenAntwort"
           ]
-        }
-      ]
-    }
-  ],
-  "triggers": [
-    {
-      "_id": "gtg1",
-      "name": "PruefeVormerkungen",
-      "msgName": "PruefeVormerkungen",
-      "namespace": "Leihwesen.Vormerkung",
-      "felder": [
-        {
-          "name": "LeserId",
-          "typ": "Guid"
-        }
-      ]
-    }
-  ],
-  "pipelines": [
-    {
-      "_id": "gpl1",
-      "name": "Vormerkpruefung",
-      "namespace": "Leihwesen.Vormerkung",
-      "pipelineId": "vormerkpruefung",
-      "konfigs": [
-        "VormerkKonfig"
-      ],
-      "handles": [
-        {
-          "inputKind": "trigger",
-          "trigId": "gtg1",
-          "sends": [
-            "EroeffneMahnung"
-          ],
-          "emits": [],
-          "schedules": [
-            {
-              "name": "VormerkTick"
-            }
-          ],
-          "fns": [
-            "grf1"
-          ]
-        },
-        {
-          "inputKind": "self",
-          "selfName": "VormerkTick",
-          "sends": [
-            "MeldeSchaden"
-          ],
-          "emits": [],
-          "schedules": []
         }
       ]
     }

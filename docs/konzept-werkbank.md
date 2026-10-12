@@ -5,6 +5,8 @@
 > dieses. Widersprüchliche Konzepte wurden gelöscht bzw. gekürzt (§15). Ist-Dokumente (`01`–`13`) beschreiben den heutigen Code
 > und werden mit der Umsetzung nachgezogen.
 >
+> **Umsetzungsplan:** `docs/plan-werkbank-umsetzung.md` (Ist-Befund, Lücken, Arbeitspakete).
+>
 > **Für den umsetzenden Agenten:** §2 (Leitsätze) und §14 (Leitplanken) sind Pflicht. Die Phasen in §13 sind nach Abhängigkeit
 > geordnet und haben je eine messbare Abnahme. Entschiedenes steht in §12 und wird nicht neu verhandelt.
 
@@ -172,11 +174,11 @@ Die Treiber-Wahl steht **nicht** in der Konfig; sie ist ein Code-Fakt (Basistyp)
 
 | Wert | Bildung | Folge |
 |---|---|---|
-| `NameGroesse` | `{Name}\|{Groesse}`, **identisch zum heutigen `DateiErkannt.Kennung`** | eine ersetzte Datei gleicher Größe wird nicht erneut erkannt |
+| `NameGroesse` | `{Name}\|{Groesse}` | eine ersetzte Datei gleicher Größe wird nicht erneut erkannt |
 | `PfadGroesseZeit` | `{RelativerPfad}\|{Groesse}\|{GeaendertAm:O}`, Default für neue Quellen | eine ersetzte oder neu geschriebene Datei startet einen neuen Vorgang |
 
-⚠ Die Vorgangs-Id ist `MD5("quelle:" + Typ.FullName + ":" + Kennung)` (`QuellVorgang.StreamFür`). Damit der Bestand nicht erneut
-verarbeitet wird, behält die Quelle **den vollen Typnamen `Domain.ImagePair.DateiErkannt`** und die Kennung **`NameGroesse`**.
+Die Vorgangs-Id ist `MD5("quelle:" + Typ.FullName + ":" + Kennung)` (`QuellVorgang.StreamFür`). **Keine Abwärtskompatibilität**
+(Vorgabe 2026-10-12): Alte Vorgänge und alte Payloads werden nicht migriert; auch `DateiErkannt` nutzt den Default `PfadGroesseZeit`.
 
 **Laufmodus:**
 - `EinmalImCluster` (Default): Eine Cluster-Identität `quelle/<Typ>` hält die Schleife und wandert bei Ausfall eines Knotens mit.
@@ -475,7 +477,7 @@ flüchtige Quellen gibt (§12.2). Der Editor zeigt die Trigger-Welt ab P0 nicht 
 6. Quellen = fest codierte Treiber + Konfig; eine Quelle = ein Nachrichtentyp; die Treiber-Wahl ist ein Code-Fakt (Basistyp).
 7. Treiber lesen nur.
 8. Default-Laufmodus `EinmalImCluster`.
-9. Kennung des Bestands `NameGroesse`, Default für neue Quellen `PfadGroesseZeit`.
+9. Keine Abwärtskompatibilität (2026-10-12): kein Upcast, keine Migration; Kennung überall Default `PfadGroesseZeit`.
 10. Funktions-Laufort ist Konfig je Umgebung.
 11. Neuer Header `ursache` (nicht `CausationId` umdeuten); Wirker auf Karten-Ebene; Spur-Projektion nur in `sim`.
 12. Keine Haltepunkte.
@@ -508,7 +510,7 @@ Die Reihenfolge folgt den Abhängigkeiten. Jede Phase endet grün:
 | Phase | Inhalt | Abnahme |
 |---|---|---|
 | **P0 Aufräumen** (ohne Voraussetzung) | Editor zeigt Trigger, Handle-Pipeline, Dienst, HostSetting und Betriebs-Band nicht mehr; LOD/Landkarte raus; Palette auf Anker (§8.5) | Editor lädt den Bestand ohne diese Karten; `--check` grün; kein Domänen-Konstrukt verschwindet unerklärt (nur Trigger-Welt) |
-| **P1 Datei-Treiber** | `DateiGemeldet` (Abstractions); Datei-Treiber (`Infrastructure/Quellen/Treiber/Datei/`) nach §3.5; gebündelte Bekannt-Abfrage im Repository; `QuellenGenerator` (Tabelle, Fabrik, Wirker-Id); Konfig-Bindung per Source-Generator; Analyzer für Quellen-Typen; Proto für geerbte Properties; Bestand umziehen (§3.6); Extractor: Quellen-Typ → Quellkarte (Kopf „📁 Datei-Treiber“), Konfig-Werte im Panel; Sonde + `soll.txt` | Prüfstand: Kennungsbildung beider Modi, Fertig-Erkennung (Stabil/Marker), Bekannt-Abgleich (store-frei über eine Abfrage-Funktion). Integration: Datei in Temp-Verzeichnis → genau ein Vorgang; dieselbe Datei nach Neustart → kein zweiter; `PipelineFlussE2ETests` grün; Vorgangs-Ids des Bestands unverändert |
+| **P1 Datei-Treiber** | `DateiGemeldet` (Abstractions); Datei-Treiber (`Infrastructure/Quellen/Treiber/Datei/`) nach §3.5; gebündelte Bekannt-Abfrage im Repository; `QuellenGenerator` (Tabelle, Fabrik, Wirker-Id); Konfig-Bindung per Source-Generator; Analyzer für Quellen-Typen; Proto für geerbte Properties; Bestand umziehen (§3.6); Extractor: Quellen-Typ → Quellkarte (Kopf „📁 Datei-Treiber“), Konfig-Werte im Panel; Sonde + `soll.txt` | Prüfstand: Kennungsbildung beider Modi, Fertig-Erkennung (Stabil/Marker), Bekannt-Abgleich (store-frei über eine Abfrage-Funktion). Integration: Datei in Temp-Verzeichnis → genau ein Vorgang; dieselbe Datei nach Neustart → kein zweiter; `PipelineFlussE2ETests` grün |
 | **P2 Umgebungen** | `umgebungen/umgebung.<name>.json` + Schema; `--umgebung`; `AddCqrs(umgebung)`; Siegel-Tabelle + Boot-Prüfung; Cluster-Name und Redis-Präfix aus der Umgebung; Funktions-Laufort als Konfig; `IDbClock` mit Versatz; Composition-Root-Extraktion → Umgebungs-Dateien lesen | Integration: Host mit `sim` gegen DB mit Siegel `prod` startet nicht; zwei Umgebungen parallel auf einer Maschine stören sich nicht (eigene DB, Präfix, Cluster-Name); Versatz verschiebt eine Frist |
 | **P3 Werkbank-Server** | SimHost: ⟳-Kette (Prepass, Proto, Build, Python-Basen) mit Diagnose → Karte; Compose aus der Umgebung generieren und verwalten; Host-Prozess(e) starten/ersetzen; Sim-DB: zurücksetzen, Stand speichern/laden, Prod-Stand übernehmen; Kopfzeile mit Status; Host-Rahmen mit generischem Formular | Im Browser: Compiler-Fehler erscheint an der richtigen Karte; nach Korrektur ⟳ → Host läuft gegen `cqrs_sim_<branch>`; Stand speichern/laden in Sekunden |
 | **P4 Spur** | Header `ursache`/`wirker`/`stand` (Dispatch, `CommandEmitter`, Envelope, `MartenEventBatchWriter`); geteiltes Wirker-Format; `spur_hinweis`; Spur-Projektion; Einblick-API + SSE mit Cursor | Integration: Bildeingang-Vorgang hat lückenlose `ursache`-Kette von der Quelle bis `BildVerfuegbar`; jede Wirker-Id hat eine Karte (`--check`) |

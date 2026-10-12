@@ -1,631 +1,12 @@
-namespace GraphExtractor;
-
-/// <summary>
-/// Rendert die EINE Oberfläche: den Domänen-Editor (Route <c>SimHost /editor</c>) — Node-Editor, Code-Sync,
-/// Prüfen/Kompilieren und die Simulation (Command → Decider → Events → Applier → Saga, animiert auf den Knoten).
-/// Das frühere read-only Event-Modeling-Board ist darin aufgegangen.
-/// </summary>
-public static class HtmlPresenter
-{
-    /// <summary>
-    /// Die Editor-Seite (Route <c>/editor</c>): self-contained HTML/CSS/JS. Bootet aus dem Code
-    /// (<c>/api/editor/model</c>) und merged das gespeicherte Board (Layout, Entwürfe) darüber.
-    /// </summary>
-    public static string EditorPage() =>
-        """
-        <!doctype html>
-        <html lang="de">
-        <head>
-        <meta charset="utf-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Domänen-Editor</title>
-        <style>html,body{margin:0;height:100%;background:#0d1017}</style>
-        </head>
-        <body>
-        __EDITOR__
-        <script>
-          // Standalone: Launch-/Schließen-Button weg, Editor sofort zeigen, aus dem Code booten.
-          var ob=document.getElementById('de-open'); if(ob)ob.style.display='none';
-          var cb=document.getElementById('de-close'); if(cb)cb.style.display='none';
-          deShow(); deBoot();
-        </script>
-        </body>
-        </html>
-        """.Replace("__EDITOR__", EditorBlock.Replace("/*__MODEL_JSON__*/", "null"));
-
-    private const string EditorBlock = """
-<style>
-#de-open{position:fixed;top:12px;right:12px;z-index:40;background:#7c5cff;color:#fff;border:0;
-  border-radius:8px;padding:8px 14px;font:600 13px system-ui;cursor:pointer;box-shadow:0 2px 8px #0006}
-#de-open:hover{background:#8f73ff}
-#de{position:fixed;inset:0;z-index:50;background:#0d1017;color:#dfe4ee;display:none;
-  font:13px/1.5 system-ui;flex-direction:column}
-#de.on{display:flex}
-#de header{display:flex;align-items:center;gap:8px;padding:10px 14px;border-bottom:1px solid #232a38;background:#141926}
-#de header h2{font-size:15px;margin:0;font-weight:700}
-#de header .sp{flex:1}
-#de header .badge{font-size:11px;padding:2px 8px;border-radius:10px;background:#243}
-#de header .badge.off{background:#422}
-#de button.act{background:#233047;color:#cfe;border:1px solid #35507a;border-radius:6px;padding:6px 12px;cursor:pointer;font:600 12px system-ui}
-#de button.act:hover{background:#2c3d5c}
-#de button.act.go{background:#2e7d5b;border-color:#3fae7f}
-#de button.act.go:hover{background:#369268}
-#de button.act.run{background:#4a3a7a;border-color:#7c5cff;color:#e0d4ff}
-#de button.act.run:hover{background:#5a4892}
-#de .test .trow{display:flex;align-items:center;gap:8px;margin:3px 0}
-#de .test .trow label{min-width:180px;color:#9aa3b7;font-size:12px}
-#de .test .trow input{flex:1}
-#de .test .tframe{padding:4px 8px;border-radius:5px;background:#12261c;color:#9be3bf;margin:3px 0;font:12px ui-monospace,monospace}
-#de .test .tframe.rej{background:#3a1f28;color:#ffb3c1}
-#de .test .tstate{padding:4px 8px;border-radius:5px;background:#141926;color:#cfe;margin:3px 0;font:12px ui-monospace,monospace}
-#de .cols{flex:1;display:grid;grid-template-columns:1fr;overflow:hidden}
-#de.simon .cols{grid-template-columns:1fr minmax(320px,400px)}
-#de .sim{display:none}
-@media (max-width:1100px){#de .cols{position:relative}#de.simon .cols{grid-template-columns:1fr}
-  #de.simon .sim{position:absolute;top:0;right:0;bottom:0;width:min(360px,88vw);z-index:40;box-shadow:-8px 0 24px rgba(0,0,0,.5)}}
-#de.simon .sim{display:flex;flex-direction:column;gap:10px;overflow:auto;border-left:1px solid #232a38;background:#10141d;padding:12px;font-size:12px}
-#de .sim h4{margin:6px 0 2px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
-#de .sim .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-#de .sim select,#de .sim input,#de .sim textarea{background:#0a0d13;color:#dfe4ee;border:1px solid #2a3344;border-radius:5px;padding:4px 6px;font:12px ui-monospace,monospace;min-width:0}
-#de .sim .fld{display:grid;grid-template-columns:120px 1fr;gap:6px;align-items:center;margin:3px 0}
-#de .sim .fld label{opacity:.8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#de .sim .fld select,#de .sim .fld input,#de .sim .fld textarea{width:100%;box-sizing:border-box}
-#de .sim .frame{border-left:3px solid #ffb86b;background:#151b27;border-radius:4px;padding:5px 8px;margin:4px 0;cursor:pointer}
-#de .sim .frame.saga{border-left-color:#b48cff}
-#de .sim .frame.fluss{border-left-color:#c08a2e}
-#de .sim .frame.fluss.gesch{border-left-color:#ff6b81}
-#de .sim .tabs{display:flex;gap:4px;margin-bottom:6px}
-#de .sim .tabs button{flex:1}
-#de .sim .tabs button.an{background:#2a3344;outline:1px solid #c08a2e}
-#de .sim .wahl{display:grid;grid-template-columns:110px 1fr;gap:4px 6px;align-items:center}
-#de .sim .wahl label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.85}
-#de .sim .wahl input{grid-column:1/-1}
-#de .glink.simdraht{stroke:#ffb86b!important;stroke-width:4px!important;opacity:1!important}
-#de .glink.simdraht.simrej{stroke:#ff6b81!important}
-#de .sim .frame.rej{border-left-color:#ff6b81}
-#de .sim .frame .ev{display:block;margin-left:10px;opacity:.9}
-#de .sim .frame .ev.rej{color:#ff9aa9}
-#de .sim .frame .warum{opacity:.6}
-#de .sim .inst{background:#151b27;border-radius:4px;padding:5px 8px;margin:4px 0;cursor:pointer}
-#de .sim .inst .f{display:block;margin-left:8px;opacity:.85}
-#de .sim .inst .f.neu{color:#ffd76a;opacity:1}
-#de .sim .hinweis{background:#2a2410;color:#ffd76a;border-radius:4px;padding:4px 8px}
-#de .sim .fehler{background:#3a1a20;color:#ffb3c1;border-radius:4px;padding:4px 8px;margin:2px 0}
-#de .gnode2.simhot{outline:3px solid #ffb86b;outline-offset:2px;box-shadow:0 0 28px #ffb86bcc;z-index:9}
-#de .gnode2.simhot.simrej{outline-color:#ff6b81;box-shadow:0 0 28px #ff6b81cc}
-#de .gnode2.simspur{outline:2px solid #ffb86b88;outline-offset:2px}
-#de .gnode2.simspur.simrej{outline-color:#ff6b8188}
-#de .gnode2.abd-voll{box-shadow:0 0 0 3px #3fb950}
-#de .gnode2.abd-teil{box-shadow:0 0 0 3px #d29922}
-#de .gnode2.abd-kalt{opacity:.4}
-#de .ghead .simabd{font-size:9px;background:#0d1017;color:#dfe4ee;border-radius:3px;padding:0 4px;margin-left:auto}
-#de .col{overflow:auto;padding:14px}
-#de .col.left{border-right:1px solid #232a38}
-#de .col.right{display:none}  /* Ausgabe als schwebendes Panel — erscheint, sobald Prüfen/Kompilieren/Testen etwas melden */
-#de .col.right.zeigen{display:block;position:fixed;right:16px;bottom:16px;width:min(560px,calc(100vw - 32px));max-height:55vh;z-index:60;box-shadow:0 8px 32px rgba(0,0,0,.55)}
-#de .col.right .outzu{position:sticky;top:0;float:right;background:#232a38;color:#cfd6e4;border:0;border-radius:4px;cursor:pointer;padding:2px 8px}
-#de .card{background:#141926;border:1px solid #232a38;border-radius:8px;padding:10px 12px;margin:0 0 12px}
-#de .card h3{margin:0 0 8px;font-size:13px;display:flex;align-items:center;gap:6px}
-#de .card h3 .k{font-size:10px;text-transform:uppercase;letter-spacing:.5px;padding:1px 6px;border-radius:8px}
-#de .k.agg{background:#4a3a1f;color:#fbd38d}
-#de .k.saga{background:#3a2a4a;color:#e0b0ff}
-#de .k.cmd{background:#20344f;color:#9cc9ff}
-#de .k.evt{background:#4a3a1f;color:#fbd38d}
-#de .k.rej{background:#3a1f28;color:#ffb3c1}
-#de .k.vo{background:#26343a;color:#a0e0d0}
-#de .kindsel{width:118px}
-#de .cbx{font-size:11px;color:#9aa3b7;display:flex;align-items:center;gap:3px}
-#de .arow{display:flex;gap:6px;align-items:center;margin:2px 0}
-#de .arow select{width:200px}
-#de .arow input{flex:1}
-/* ── ComfyUI-Node-Editor (getippte Slots + Bézier-Kanten statt Dropdowns) ── */
-#de .col.left{overflow:hidden;display:flex;flex-direction:column}
-#de .gtoolbar{display:flex;gap:6px;flex-wrap:wrap;margin:0 0 8px}
-#de .glegend2{display:flex;gap:12px;flex-wrap:wrap;font-size:11px;color:#9aa3b7;margin:0 2px 8px;align-items:center}
-#de .glegend2 span{display:inline-flex;align-items:center;gap:5px}
-#de .glegend2 i{width:11px;height:11px;border-radius:50%;display:inline-block}
-#de .gcanvas{position:relative;flex:1;min-height:0;overflow:hidden;border:1px solid #232a38;border-radius:8px;
-  background-color:#0b0e15;background-image:radial-gradient(#1a2436 1.1px,transparent 1.1px);background-size:22px 22px;cursor:grab;touch-action:none}
-#de .gcanvas.panning{cursor:grabbing}
-/* Render-Architektur (Zoom/Pan): die Welt ist KEINE Dauer-GPU-Ebene. will-change nur während eines Zieh-Pans (reines
-   Verschieben → Raster wiederverwendbar); danach rastert der Browser in der echten Zoomstufe neu. Dauerhaft gesetzt
-   rasterte er die ganze Welt (bis ~7000×11000 px) in der Start-Zoomstufe → beim Rauszoomen Kachel-Budget gesprengt =
-   Knoten laden nicht nach / flackern / verschwinden (auch Inspector + Minimap, die sich das GPU-Budget teilen).
-   Größe = Inhalt (messeWelt), nicht fest 6000×4000 — sonst liegen Knoten/Kanten außerhalb der Ebenen-Grenzen. */
-#de .gworld{position:absolute;left:0;top:0;width:6000px;height:4000px;transform-origin:0 0}
-#de .gcanvas.bewegt .gworld{will-change:transform}
-/* Außerhalb des Sichtfensters (+ Rand): nicht malen (Layout bleibt → Maße/Anker/Kanten stimmen weiter). */
-#de .gnode2.weg{visibility:hidden}
-/* Weit rausgezoomt: die teuren weichen Schatten weglassen (unsichtbar klein, aber das Teuerste beim Rastern). */
-#de .gcanvas.fern{--gsch:none}
-#de svg.gedges{position:absolute;left:0;top:0;width:6000px;height:4000px;pointer-events:none;overflow:visible}
-#de .glink{pointer-events:none}
-#de .glink.internal{stroke:#7f8aa0;stroke-width:1.5;opacity:.4;pointer-events:stroke;transition:opacity .1s,stroke-width .1s}
-#de .glink.internal:hover,#de .glink.internal.hot{stroke:#cbb8ff;stroke-width:3;opacity:1}
-/* Minimap (klickbar, zeigt Viewport) + Domänen-Filter */
-#de .gminimap{position:absolute;right:10px;bottom:10px;width:212px;height:150px;background:#0b0e15cc;border:1px solid #2c3547;border-radius:8px;overflow:hidden;z-index:20;cursor:pointer;box-shadow:0 6px 20px #0009;contain:strict;transform:translateZ(0)}
-#de .gminimap svg{display:block;width:100%;height:100%}
-#de .gminimap .mmvp{fill:#7fb0e61f;stroke:#8fc0ff;stroke-width:1.5}
-#de .gfilter{position:absolute;left:10px;top:10px;width:216px;max-height:calc(100% - 20px);overflow:auto;background:#0d1119f2;border:1px solid #2c3547;border-radius:8px;z-index:22;padding:9px;font-size:12px;box-shadow:0 10px 28px #000b;contain:layout paint;transform:translateZ(0)}
-#de .gfilter h4{margin:0 0 8px;font-size:12px;color:#cbd3e1;display:flex;justify-content:space-between;align-items:center}
-#de .gfilter label{display:flex;align-items:center;gap:6px;padding:3px 3px;color:#aab3c5;cursor:pointer;border-radius:4px}
-#de .gfilter label:hover{background:#1a2130}
-#de .gfilter .mm-q{display:flex;gap:6px;margin-bottom:7px}
-#de .gfilter .mm-q button{flex:1;font-size:11px;padding:4px;background:#1a2130;color:#cbd3e1;border:1px solid #2c3547;border-radius:5px;cursor:pointer}
-#de .gfilter .mm-q button:hover{background:#222c3d}
-/* Code-Knoten: Vorschau im Knoten + anklickbares Modal mit vollem Code */
-#de .gcodeprev{margin:4px 0;padding:7px 9px;background:#0d1119;border:1px solid #263041;border-radius:6px;font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;line-height:1.45;color:#c7d0df;white-space:pre;overflow:hidden;max-height:130px;cursor:default}
-#de .gnode2{position:absolute;width:250px;background:#161b27;border:1px solid #2c3547;border-radius:9px;box-shadow:var(--gsch,0 4px 14px #0008)}
-#de .gnode2.dragging{box-shadow:0 14px 34px #000c;z-index:9}
-#de .gnode2.typehi{outline:2px solid #ffd76a;box-shadow:0 0 0 2px #ffd76a55,0 0 20px #ffd76a66;z-index:7}
-#de .gnode2.island{outline:1px dashed #e0844d;box-shadow:0 0 0 1px #e0844d44}
-#de .gnode2.ungeschrieben{outline:2px dashed #e0b46a;outline-offset:2px}
-#de .gnode2.ungeschrieben .ghead::before{content:"✎ ungeschrieben";font-size:9px;color:#3a2a00;background:#e0b46a;border-radius:3px;padding:0 4px;margin-right:4px}
-#de .gnode2.entwurf{outline:2px dashed #6aa0e0;outline-offset:2px}
-#de .gnode2.entwurf .ghead::before{content:"Entwurf";font-size:9px;color:#06203a;background:#6aa0e0;border-radius:3px;padding:0 4px;margin-right:4px}
-#de .gnode2.island .ghead::after{content:"⚠ Insel";font-size:9px;color:#e0a06d;margin-left:6px;opacity:.85}
-#de .gtoolbar button.island-btn{border-color:#7a4a2a;color:#e0a06d}
-#de .gnode2.pulse{outline:3px solid #7dd3fc;box-shadow:0 0 26px #7dd3fccc;z-index:8;transition:box-shadow .15s}
-#de .gtoolbar button.add.jumpable{cursor:pointer}
-#de .gminimap svg rect.mmhi{fill:#ffd76a !important;opacity:1 !important;stroke:#fff3c9;stroke-width:.6}
-#de .gnode2.n-command{border-color:#3b6fb0}
-#de .gnode2.n-akteur{border-color:#b04f86;width:240px}
-#de .gnode2.n-client{border-color:#5aa0c8;width:420px}
-#de .gnode2.n-client .ghead{background:#5aa0c8}
-#de .gnode2.n-client .gsum.gleiste{display:block;font:11px ui-monospace,monospace;color:#c4cde0;padding:6px 10px 9px}
-#de .gleiste .lz{white-space:normal;line-height:1.55}
-#de .gleiste .lk{color:#8fb7d6;margin-right:6px;white-space:nowrap}
-#de .gleiste .lz.lt .lk{color:#e7a3cb}
-#de .gleiste .lz.lwarn .lk{color:#e0b46a}
-#de .gleiste .lz.lleer{color:#7f8aa0}
-#de .gleiste .lp{cursor:pointer;color:#e6ebf5;border-bottom:1px dotted #5a6a85}
-#de .gleiste .lp:hover,#de .gleiste .lp.an{color:#fff;background:#2c3d5c;border-bottom-color:#9cc3ff}
-#de .gleiste .lp.lp-fehlt{color:#e0b46a;cursor:default}
-#de .grahmen.client{border-style:dashed;border-width:calc(2px * var(--lz));background:color-mix(in srgb,var(--dc) 6%,#0b0f17)}
-#de .grahmen.client>.grahmen-k .akt-n{cursor:pointer}
-#de .grahmen.fluss{border-width:calc(2px * var(--lz));background:color-mix(in srgb,var(--dc) 8%,#0b0f17)}
-#de .grahmen.fluss>.grahmen-k .akt-n{cursor:pointer}
-#de .gnode2.n-flussknoten{border-color:#c08a2e;width:240px}
-#de .typkasten{border-left:2px solid #3a4658;margin:0 0 6px 8px;padding-left:6px}
-#de .fl-signatur{border:1px solid #4a3d24;border-radius:6px;padding:4px 6px;margin:6px 0;background:rgba(192,138,46,.06)}
-#de .gnode2.n-flussknoten .ghead{background:#8a6a2e}
-#de .fl-port .slotlbl{color:#e8c98a}
-#de .fl-port.fl-fehler .slotlbl{color:#e0a08a}
-#de .fl-ab .fl-ziel,#de .fl-draht .fl-ziel{flex:1;cursor:pointer;color:#cfe0ff;font-size:12px}
-#de .fl-ab .fl-ziel:hover,#de .fl-draht .fl-ziel:hover{text-decoration:underline}
-/* Zuordnungs-Editor (visuell): Eingänge · Bau-Knoten · Ziel, Drähte = Argumente */
-#de .zo-kurz{border:1px solid #3a4a5e;border-radius:7px;padding:6px 8px;margin:6px 0;cursor:pointer;background:#111722}
-#de .zo-kurz:hover{border-color:#7c5cff}
-#de .zo-kurz-k{font-weight:700;font-size:12px;color:#cfe0ff;margin-bottom:3px}
-#de .zo-kurz-r{font:11px ui-monospace,monospace;color:#b9c4d6;padding:1px 0}
-#de .zo-kurz-r.zo-leer{color:#e0867e}
-#gzo{position:fixed;inset:5vh 4vw;z-index:9000;background:#0c1018;border:1px solid #3a4a5e;border-radius:12px;box-shadow:0 20px 70px #000c;
-  display:flex;flex-direction:column;color:#dfe4ee;font:13px system-ui,sans-serif;overflow:hidden}
-#gzo button{background:#1b2333;color:#dfe4ee;border:1px solid #33405a;border-radius:6px;padding:4px 9px;cursor:pointer;font:12px system-ui,sans-serif}
-#gzo button:hover{border-color:#7c5cff}
-#gzo button.go{background:#2f5d46;border-color:#3f7d5e}
-#gzo input{background:#0d1017;color:#dfe4ee;border:1px solid #2c3547;border-radius:5px;padding:5px 7px;font:12px ui-monospace,monospace;width:100%;box-sizing:border-box;margin-top:6px}
-#gzo .zo-k{display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:1px solid #253046;background:#121a28}
-#gzo .zo-sub2{color:#9fb0c8;font-size:12px}
-#gzo .zo-hin{padding:7px 14px;background:#2a2213;color:#e8c98a;border-bottom:1px solid #4a3a1e;font-size:12px}
-#gzo .zo-hin pre{margin:4px 0 0;white-space:pre-wrap;color:#dfe4ee}
-#gzo .zo-f{position:relative;flex:1;overflow:auto}
-#gzo .zo-svg{position:absolute;left:0;top:0;pointer-events:none;overflow:visible}
-#gzo .zo-sp{position:relative;display:flex;gap:80px;padding:18px 24px;align-items:flex-start;min-width:max-content}
-#gzo .zo-col{display:flex;flex-direction:column;gap:14px;min-width:200px}
-#gzo .zo-ct{font-size:11px;letter-spacing:.06em;text-transform:uppercase;color:#7f8ca3}
-#gzo .zo-n{background:#151c2a;border:1px solid #34425c;border-radius:9px;min-width:240px;position:relative}
-#gzo .zo-n.zo-q{border-color:#3f7d5e}#gzo .zo-n.zo-bau{border-color:#9b7a3a}#gzo .zo-n.zo-z{border-color:#4a86d6}
-#gzo .zo-nh{display:flex;align-items:center;gap:8px;padding:7px 9px;font-weight:700;border-bottom:1px solid #2a3448;border-radius:9px 9px 0 0;background:#1a2335}
-#gzo .zo-n.zo-bau>input{margin:8px;width:calc(100% - 16px)}
-#gzo .zo-r{display:flex;align-items:center;gap:7px;padding:4px 9px;min-height:22px}
-#gzo .zo-r.zo-tief{padding-left:22px;opacity:.85}
-#gzo .zo-r.zo-leer .zo-v{color:#e0867e}
-#gzo .zo-l{font:12px ui-monospace,monospace;color:#e6ecf5}
-#gzo .zo-t{font:11px ui-monospace,monospace;color:#7f8ca3;flex:1}
-#gzo .zo-v{font:11px ui-monospace,monospace;color:#8fd1a8;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#gzo .zo-b{padding:1px 6px;font-size:11px}
-#gzo .zo-x{color:#e0867e}
-#gzo .zo-p{width:12px;height:12px;border-radius:50%;border:2px solid #8fd1a8;background:#0c1018;flex:none;cursor:crosshair}
-#gzo .zo-o{margin-left:auto}
-#gzo .zo-i{border-color:#7fa6d9;cursor:pointer}
-#gzo .zo-p.zo-arm{background:#8fd1a8;box-shadow:0 0 0 4px #8fd1a855}
-#gzo .zo-i.zo-ok{background:#2f9d6a;box-shadow:0 0 0 4px #2f9d6a55}
-#gzo .zo-i.zo-nein{opacity:.25}
-#gzo .zo-draht{fill:none;stroke:#8fd1a8;stroke-width:2.2;pointer-events:stroke;cursor:pointer}
-#gzo .zo-draht.zo-draht-bau{stroke:#d7a23c}
-#gzo .zo-draht:hover{stroke:#e0867e;stroke-width:3.5}
-#gzo .zo-tmp{fill:none;stroke:#cfe0ff;stroke-width:2;stroke-dasharray:6 4}
-#gzo .zo-leer2{color:#7f8ca3;font-size:12px;padding:4px 2px;max-width:260px}
-#gzo .zo-fuss{border-top:1px solid #253046;padding:8px 14px;background:#101623;display:flex;gap:12px;align-items:flex-start}
-#gzo .zo-fuss pre{margin:0;font:12px ui-monospace,monospace;color:#cfe0ff;white-space:pre-wrap;flex:1}
-#de .fl-modus{color:#e8c98a;font-weight:600}
-#de .fl-oder{color:#9fb7e8}
-#de pre.fl-lambda{margin:4px 0;padding:6px 8px;background:#0f141e;border:1px solid #2c3547;border-radius:6px;font-size:11px;white-space:pre-wrap;color:#cfe0ff}
-#de .glink.fluss{pointer-events:stroke;cursor:pointer}
-#de .glink.fluss.kontext{stroke-width:1.2px;opacity:.55}
-#de .grahmen-k .cl-stecker{display:flex;align-items:center;gap:3px;font-size:11px;color:#8fb7d6;white-space:nowrap;overflow:hidden;min-width:0}
-#de .grahmen-k .cl-stecker .akt-ref{padding:0 6px;font-size:11px;background:transparent;border-color:#5aa0c8;color:#cfe6ff}
-#de .glink.gbuendel{stroke-width:7px;opacity:.55;pointer-events:stroke;cursor:pointer}
-#de .glink.gbuendel:hover{opacity:.95}
-#de .glink.gbuendel-t{fill:#cfe6ff;font:12px ui-monospace,monospace;stroke:#0b0f17;stroke-width:3px;paint-order:stroke;pointer-events:none}
-#de .glink.gauf{stroke-width:2.5px}
-#de .gnode2.n-auf{border-color:#b04f86;border-style:dashed;width:240px}
-#de .gnode2.n-event{border-color:#3f9d5a}
-#de .gnode2.n-rejection{border-color:#b5504a}
-#de .gnode2.n-valueobject{border-color:#2f8f7d}
-#de .gnode2.n-enum{border-color:#6a6a86}
-#de .gnode2.n-aggregate{border-color:#2f9d95;width:274px}
-#de .gnode2.n-decider{border-color:#7a5cc0;width:258px}
-#de .gnode2.n-applier{border-color:#c08a3e;width:258px}
-#de .gnode2.n-saga{border-color:#8a5cc0;width:300px}
-#de .gnode2.n-transition{border-color:#8a6fc8;width:276px}
-#de .gnode2.n-funktion{border-color:#c08a2e;width:290px}
-#de .gnode2.n-auftrag{border-color:#c08a2e}
-#de .gnode2.n-state{border-color:#c9a24b;width:250px}
-#de .gnode2.n-readmodel{border-color:#b98a3c;width:250px}
-#de .gnode2.n-store{border-color:#2f9d95;width:290px}
-#de .gnode2.n-projektion{border-color:#3f9d5a;width:274px}
-#de .gnode2.n-reaktion{border-color:#c8703a;width:274px}
-#de .gnode2.n-pipeline{border-color:#d97b34;width:274px}
-#de .gnode2.n-trigger{border-color:#c98a3a;width:262px}
-#de .gnode2.n-reader{border-color:#7a5cc0;width:274px}
-#de .gnode2.n-query{border-color:#3b6fb0}
-#de .gnode2.n-queryresponse{border-color:#2f8f7d}
-#de .gnode2.n-codenode{border-color:#6b7280;width:300px}
-#de .gnode2.n-llmnode{border-color:#8a6fc8;width:280px}
-#de .gnode2.collapsed .gbody{display:none}
-#de .ghead{display:flex;align-items:center;gap:6px;padding:5px 9px;border-radius:8px 8px 0 0;cursor:grab;color:#0d0f14;font-weight:700;font-size:12px;user-select:none;touch-action:none}
-#de .gnode2.n-command .ghead{background:#5b8fd0}
-#de .gnode2.n-akteur .ghead{background:#e07ab4}
-#de .gnode2.n-auf .ghead{background:#eaa0c9}
-#de .gnode2.n-event .ghead{background:#57b673}
-#de .gnode2.n-rejection .ghead{background:#cf6f68}
-#de .gnode2.n-valueobject .ghead{background:#49a996}
-#de .gnode2.n-konfig .ghead{background:#8fa3b8}
-#de .gnode2.n-enum .ghead{background:#8a8aa0}
-#de .gnode2.n-aggregate .ghead{background:#3fb0a6}
-#de .gnode2.n-decider .ghead{background:#9678d6}
-#de .gnode2.n-handle{border-color:#4f7fa8}#de .gnode2.n-handle .ghead{background:#5d8fbf}
-#de .gnode2.n-fn{border-color:#2f8f88}#de .gnode2.n-fn .ghead{background:#2f9d95}
-#de .ghl{display:block;cursor:pointer;color:#9fb6d6;font-size:11.5px;padding:1px 0;text-decoration:none}#de .ghl:hover{color:#dbe6f5;text-decoration:underline}
-#de .gaus{font-size:10.5px;color:#8f9bb0;margin:-2px 0 4px 18px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#de .gaus.tot{color:#d08a6a}#de .gaus.offen{color:#d0b35a}
-/* Nachricht mit zwei Seiten (§12): ◀ kommt aus · geht an ▶ — Partner-Zeilen, „↗ außerhalb" = Domäne nicht geladen */
-#de .gp-row{display:flex;align-items:center;gap:6px;font-size:11.5px;color:#c9d4e4;padding:2px 2px 2px 6px;border-radius:5px;cursor:pointer}
-#de .gp-row:hover{background:#ffffff10}#de .gp-row .rm{margin-left:auto}
-#de .gp-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#de .gp-abg{color:#8f9bb0;font-style:italic}
-#de .gp-mark{font-size:10px;color:#d0b35a;white-space:nowrap}#de .gp-welt{font-style:normal;color:#8f9bb0;flex:none}
-#de .gp-aussen{opacity:.75;border:1px dashed #6b7690}#de .gp-leer{color:#8f9bb0;cursor:default}
-#de .gmodus{font-size:10.5px;padding:0 2px;max-width:92px}
-#de .gsig{font-family:ui-monospace,Menlo,monospace;font-size:10.5px;color:#b9c4d8;margin:2px 0 6px;word-break:break-all}
-#de .gnode2.n-applier .ghead{background:#d0a35a}
-#de .gnode2.n-saga .ghead{background:#9d78d6}
-#de .gnode2.n-transition .ghead{background:#a48fd6}
-#de .gnode2.n-funktion .ghead{background:#c08a2e}
-#de .gnode2.n-auftrag .ghead{background:#d6a85a}
-#de .gnode2.n-state .ghead{background:#d4b45f}
-#de .gnode2.n-readmodel .ghead{background:#d0a45a}
-#de .gnode2.n-store .ghead{background:#3fb0a6}
-#de .gnode2.n-projektion .ghead{background:#57b673}
-#de .gnode2.n-reaktion .ghead{background:#d0885a}
-#de .gnode2.n-pipeline .ghead{background:#e08a44}
-#de .gnode2.n-trigger .ghead{background:#d29a4a}
-#de .gnode2.n-reader .ghead{background:#9678d6}
-#de .gnode2.n-query .ghead{background:#5b8fd0}
-#de .gnode2.n-queryresponse .ghead{background:#49a996}
-#de .gnode2.n-codenode .ghead{background:#9aa0aa}
-#de .gnode2.n-llmnode .ghead{background:#a48fd6}
-#de .ghead .gtitle{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:ui-monospace,monospace}
-#de .ghead .gcol{cursor:pointer;opacity:.8;padding:0 2px;font-size:11px}
-#de .ghead .gcol:hover{opacity:1}
-#de .ghead .gx{cursor:pointer;opacity:.7;padding:0 2px}
-#de .ghead .gx:hover{opacity:1}
-#de .gbody{padding:8px 10px 10px}
-#de .gbody .card{background:none;border:0;box-shadow:none;padding:0;margin:0}
-#de .gbody .card h3{margin-bottom:6px}
-#de .gbody .card h3 .k{display:none}
-#de .gbody input,#de .gbody textarea,#de .gbody select{width:100%;box-sizing:border-box}
-#de .gbody .frow{display:flex;gap:4px;margin:2px 0;align-items:center}
-#de .gbody .frow input:first-child{flex:1;width:auto}
-#de .gbody .frow input:nth-child(2){width:92px;flex:none}
-#de .slotrow{display:flex;align-items:center;gap:6px;margin:4px 0;min-height:15px}
-#de .slotrow.o{justify-content:flex-end;text-align:right}
-#de .slotlbl{font-size:10.5px;color:#b3bbcb;font-family:ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#de .slot{width:13px;height:13px;border-radius:50%;border:2px solid #0b0e15;cursor:crosshair;flex:none;box-shadow:0 0 0 1px #000a;touch-action:none}
-#de .slot.i{margin-left:-17px}
-#de .slot.o{margin-right:-17px}
-#de .slot.t{margin-top:-16px}
-#de .slot.ro{cursor:default;opacity:.9}
-#de .slot:hover{filter:brightness(1.4)}
-#de .slot.hot{box-shadow:0 0 0 3px #fff,0 0 0 6px #7c5cff}
-#de .slot.cand{box-shadow:0 0 0 2px #0b0e15,0 0 0 5px #3fae7f}
-#de .codeadd{background:#233047;color:#cfe;border:1px solid #35507a;border-radius:5px;cursor:pointer;font:600 11px system-ui;padding:1px 6px;margin-left:4px}
-#de .codeadd:hover{background:#2c3d5c}
-#de .slotrow.codeempty .codemiss{color:#e0b46a;font-weight:600}
-#de .slotrow.codeempty .slot.s-code{box-shadow:0 0 0 2px #0b0e15,0 0 0 4px #e0b46a66}
-#de .slot.s-command{background:#4a86d6}
-#de .slot.s-darf{background:#e07ab4}#de .slot.s-auftrag{background:#b05fd0}
-#de .slot.s-event{background:#4fb06a}
-#de .slot.s-rejection{background:#c25b52}
-#de .slot.s-decagg{background:#33b1a6}
-#de .slot.s-appagg{background:#d1953f}
-#de .slot.s-field{background:#e0b64d}
-#de .slot.s-open{background:#20293a;border-color:#46557a}
-#de .slot.s-saga{background:#9d78d6}
-#de .slot.s-sagacmd{background:#9d78d6}
-#de .slot.s-arg{background:#e0c46a}
-#de .slot.s-prozess{background:#9d78d6}
-#de .slot.sm{width:10px;height:10px;box-shadow:0 0 0 1px #000a}
-#de .slot.s-state{background:#e0b64d}
-#de .slot.s-readmodel{background:#d0a45a}
-#de .slot.s-store{background:#3fb0a6}
-#de .slot.s-query{background:#5b8fd0}
-#de .slot.s-qrsp{background:#49a996}
-#de .slot.s-code{background:#9aa0aa}
-#de .slot.s-ftype{background:#c58fd6}
-#de .slot.s-trigmsg{background:#f0883e}
-#de .slot.s-self{background:#c98a3a}
-#de .slot.s-prompt{background:#a48fd6}
-#de .gtoprow{display:flex;gap:16px;justify-content:center;flex-wrap:wrap;margin-bottom:5px}
-#de .gtopfield{display:flex;flex-direction:column;align-items:center;gap:1px}
-#de .aggwrap{display:flex;justify-content:space-between;gap:8px;margin:2px 0}
-#de .aggwrap .col2{display:flex;flex-direction:column;gap:2px;min-width:92px}
-#de .gsec{font-size:9.5px;text-transform:uppercase;letter-spacing:.5px;color:#7f8aa0;margin:6px 0 2px}
-#de .gsep{margin:9px 0 3px;padding-top:7px;border-top:1px solid #3a3350;font-size:10px;color:#c9b6ee;text-transform:uppercase;letter-spacing:.5px;font-weight:700}
-#de .gempty{position:absolute;left:60px;top:80px;color:#5c6577;font-size:12px;pointer-events:none}
-#de .gpick{position:absolute;z-index:20;background:#141926;border:1px solid #7c5cff;border-radius:8px;padding:6px;display:flex;flex-direction:column;gap:3px;box-shadow:0 10px 28px #000b;min-width:150px}
-#de .gpick .gpick-t{font-size:11px;color:#9aa3b7;padding:2px 6px 4px}
-#de .gpick button{background:#233047;color:#cfe;border:1px solid #35507a;border-radius:5px;padding:5px 10px;cursor:pointer;text-align:left;font:12px system-ui}
-#de .gpick button:hover{background:#2c3d5c}
-/* Domänen-Rahmen: visuelle Blöcke um das Layout, hierarchisch (Unterdomäne im Eltern-Rahmen); nur der Kopf ist klickbar. */
-#de .grahmen-ebene{position:absolute;left:0;top:0;width:0;height:0;--rz:1;--lz:1}
-#de .gcanvas.lod-karte .grahmen-ebene{display:none}
-#de .gworld.fokus .grahmen-ebene{opacity:.5}
-#de .grahmen{position:absolute;box-sizing:border-box;border:calc(1.5px * var(--lz)) solid var(--dc);border-radius:14px;background:color-mix(in srgb,var(--dc) 7%,transparent);pointer-events:none}
-#de .grahmen.unter{border-style:dashed}
-#de .grahmen.mitakt{border-width:calc(2.5px * var(--lz));border-radius:18px;background:color-mix(in srgb,var(--dc) 10%,#0b0f17)}
-#de .grahmen.mitakt>.grahmen-k{background:color-mix(in srgb,var(--dc) 22%,#0b0f17);border-bottom:1px solid color-mix(in srgb,var(--dc) 60%,transparent);border-radius:16px 16px 0 0}
-#de .grahmen.mitakt>.grahmen-k .gr-t{font-size:calc(18px * var(--rz))}
-#de .grahmen.akt{border-radius:12px;border-width:calc(1.5px * var(--lz));background:color-mix(in srgb,var(--dc) 7%,#0d121c)}
-#de .grahmen.akt>.grahmen-k{height:calc(32px * var(--rz))}
-#de .grahmen.akt.kette{border-style:dashed}
-#de .grahmen.akt.ohne{background:color-mix(in srgb,#d0584f 5%,transparent)}
-#de .grahmen.akt.leer{background:transparent;border-style:dotted}
-#de .grahmen-k.akt-k .akt-n{cursor:pointer;font-size:calc(14px * var(--rz))}
-#de .grahmen-k.akt-k .akt-n:hover{text-decoration:underline}
-#de .grahmen-k .akt-auch{display:flex;align-items:center;gap:4px;font-size:11px;color:#9aa3b7;white-space:nowrap;overflow:hidden;min-width:0}
-#de .grahmen-k .akt-auch .akt-ref{padding:0 6px;font-size:11px;background:transparent;border-style:dashed}
-#de button.akt-dom{background:#1d2638;color:#d6e4ff;border:1px solid #35507a;border-radius:6px;padding:1px 8px;cursor:pointer;font:12px system-ui}
-#de .grahmen-k{position:absolute;left:0;right:0;top:0;height:calc(38px * var(--rz));transform-origin:0 0;display:flex;align-items:center;gap:8px;padding:0 10px 0 14px;pointer-events:auto;cursor:default;
-  background:linear-gradient(90deg,color-mix(in srgb,var(--dc) 24%,transparent),transparent 75%);border-radius:12px 12px 0 0;border-bottom:1px solid color-mix(in srgb,var(--dc) 30%,transparent)}
-#de .grahmen-k .gr-t{font:700 calc(16px * var(--rz)) ui-monospace,monospace;color:#e6ebf5;white-space:nowrap}
-#de .grahmen-k .gr-p{font-size:11px;color:#7f8aa0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-#de .grahmen-k .gr-z{font-size:11px;color:#9aa3b7;margin-left:auto;white-space:nowrap}
-#de .grahmen-k button{background:#1d2638;color:#d6e4ff;border:1px solid #35507a;border-radius:6px;padding:2px 8px;cursor:pointer;font:12px system-ui;flex:none}
-#de .grahmen-k button:hover{background:#2c3d5c}
-#de .gr-leer{position:absolute;left:24px;top:62px;color:#6b7690;font-size:13px;font-style:italic}
-/* Spalten-Rahmen: die senkrechten Rollen-Spalten innerhalb einer Domäne; nur der Kopf ist klickbar. */
-#de .gspalte{position:absolute;box-sizing:border-box;border:calc(1px * var(--lz)) solid #ffffff22;border-radius:10px;background:#ffffff05;pointer-events:none}
-#de .gspalte.insel{border-style:dashed;border-color:#e0844d66}
-#de .gspalte.vertrag{border:calc(2px * var(--lz)) solid #e07ab4aa;background:#e07ab40d}
-#de .gspalte.vertrag .gspalte-k{background:#e07ab42a;border-bottom-color:#e07ab455;cursor:pointer}
-#de .gspalte.vertrag .gspalte-k .gs-t{color:#ffd3ea}
-#de .gspalte-k{position:absolute;left:0;right:0;top:0;height:calc(28px * min(var(--rz),1.15));display:flex;align-items:center;gap:6px;padding:0 6px 0 9px;pointer-events:auto;
-  background:#ffffff0a;border-bottom:1px solid #ffffff14;border-radius:9px 9px 0 0;overflow:hidden}
-#de .gspalte-k i{width:8px;height:8px;border-radius:50%;flex:none;display:inline-block}
-#de .gspalte-k .gs-t{font:600 calc(11.5px * var(--rz)) system-ui;color:#cbd3e1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
-#de .gspalte-k .gs-z{font-size:11px;color:#7f8aa0;margin-left:auto}
-#de .gspalte-k button{background:#1d2638;color:#d6e4ff;border:1px solid #35507a;border-radius:5px;padding:0 6px;cursor:pointer;font:12px system-ui;line-height:18px;flex:none}
-#de .gspalte-k button:hover{background:#2c3d5c}
-#de .gmenue{z-index:45;max-height:min(70vh,560px);overflow:auto;min-width:220px}
-#de .gmenue .gm-tr{height:1px;background:#2c3547;margin:3px 2px}
-#de .gmenue button.gm-gefahr{background:#2a1b20;border-color:#6b3540;color:#ffc9cf}
-#de .gmenue button.gm-gefahr:hover{background:#3a2028}
-#de .gmenue button:disabled{opacity:.45;cursor:not-allowed}
-#de .gmenue input{background:#0d1119;color:#e6ebf5;border:1px solid #35507a;border-radius:5px;padding:6px 8px;font:13px ui-monospace,monospace}
-#de .gmenue .gm-hint{font-size:11px;color:#7f8aa0;padding:2px}
-#de .gmenue .gm-fehler{font-size:11px;color:#ff9aa5;padding:0 2px;min-height:0}
-#de .gmenue .gm-fehler:empty{display:none}
-#de .glegend{display:flex;gap:14px;margin:6px 2px 10px;font-size:11px;color:#9aa3b7;flex-wrap:wrap}
-#de .glegend span{display:inline-flex;align-items:center;gap:5px}
-#de .glegend i{width:20px;height:0;border-top:2px solid;display:inline-block}
-#de .grip{cursor:grab;color:#6b7688;padding:0 6px 0 0;font-size:14px;user-select:none}
-#de .grip:active{cursor:grabbing}
-#de .dz{border:1px dashed #35507a;border-radius:6px;padding:6px 10px;margin:4px 0;color:#7f8aa0;font-size:11px;text-align:center;transition:all .12s}
-#de .dz.over{border-color:#7c5cff;border-style:solid;background:#1b2233;color:#cfe}
-#de .dz.nope{border-color:#a3435a;color:#ffb3c1}
-#de .sub{color:#8b93a7;font-size:11px;margin:8px 0 4px;text-transform:uppercase;letter-spacing:.5px}
-#de input,#de select,#de textarea{background:#0d1017;color:#dfe4ee;border:1px solid #2c3547;border-radius:5px;
-  padding:4px 6px;font:12px ui-monospace,monospace;box-sizing:border-box}
-#de input:focus,#de select:focus,#de textarea:focus{outline:1px solid #7c5cff;border-color:#7c5cff}
-#de table{width:100%;border-collapse:collapse;margin-bottom:4px}
-#de td{padding:2px 3px;vertical-align:top}
-#de .rm{background:#3a1f28;color:#ffb3c1;border:0;border-radius:5px;cursor:pointer;padding:3px 8px;font-weight:700}
-#de .add{background:#1f2f28;color:#9be3bf;border:1px dashed #35604c;border-radius:5px;cursor:pointer;padding:3px 10px;font-size:11px}
-#de .name{font-weight:700;color:#cfe}
-#de .out{font:12px ui-monospace,monospace;background:#0a0d13;border:1px solid #232a38;border-radius:8px;padding:12px;overflow:auto}
-#de .out .f{color:#7c5cff;font-weight:700;margin:14px 0 4px;display:block}
-#de .out .body{white-space:pre;display:block;margin:0 0 6px}
-#de .find{padding:6px 10px;border-radius:6px;margin-bottom:6px;font-size:12px}
-#de .find.error{background:#3a1f28;color:#ffb3c1}
-#de .find.warning{background:#3a331f;color:#ffe1a0}
-#de .hint{color:#8b93a7;font-size:11px;margin:6px 0}
-#de .addbar{display:flex;gap:8px;margin-bottom:12px}
-#de .sec{margin:0 0 20px}
-#de .sectitle{font-size:12px;font-weight:700;color:#b9c2d6;text-transform:uppercase;letter-spacing:.5px;border-bottom:1px solid #232a38;padding-bottom:5px;margin-bottom:9px}
-#de .chips{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:7px}
-#de .chip{display:flex;gap:4px;align-items:center;background:#141926;border:1px solid #4a3a1f;border-radius:8px;padding:4px 6px}
-#de .chip input{width:118px}
-#de .cmdbox{border-left:2px solid #35507a;padding-left:8px;margin:8px 0}
-#de .cmdhead{display:flex;gap:2px;align-items:center;margin-bottom:3px}
-#de .cmdhead .lbl{color:#8b93a7;font-size:11px}
-#de .cmdhead select{width:130px}
-#de table.grid td{padding:2px 3px}
-#de .step{font-size:12px;font-weight:700;color:#cfd7e6;letter-spacing:.3px;margin:14px 0 6px;padding-bottom:3px;border-bottom:1px solid #2b3446}
-#de .cmdn{color:#9be3ff;font-weight:700;font-family:ui-monospace,monospace}
-#de .applybox{border-left:2px solid #3f6a4a;padding-left:8px;margin:8px 0}
-#de .blab{color:#8b93a7;font-size:10px;margin:5px 0 2px}
-#de textarea.code{width:100%;box-sizing:border-box;font:12px/1.45 ui-monospace,monospace;background:#0a0d13;tab-size:4}
-/* ══ ANSICHT: Kompakt-Karten · Inspector · semantischer Zoom · Slice-Fokus (reine Darstellung) ══ */
-#de .gview{display:flex;gap:6px;flex-wrap:wrap;align-items:center;margin:0 0 8px;font-size:11px;color:#9aa3b7}
-#de .gview button{background:#1a2130;color:#cbd3e1;border:1px solid #2c3547;border-radius:6px;padding:4px 10px;cursor:pointer;font:600 11px system-ui}
-#de .gview button:hover{background:#222c3d}
-#de .gview button.on{background:#2b3a5c;border-color:#5b8fd0;color:#e6efff}
-#de .gview .lod{display:inline-flex;border:1px solid #2c3547;border-radius:6px;overflow:hidden;margin-left:6px}
-#de .gview .lod span{padding:4px 9px;cursor:pointer;color:#8b93a7}
-#de .gview .lod span.on{background:#2b3a5c;color:#e6efff}
-#de .gview .sep{width:1px;height:18px;background:#2c3547;margin:0 4px}
-#de .gworld{--inv:4}
-#de .gworld.kompakt .gnode2.collapsed{width:230px}
-#de .gworld.kompakt .gnode2:not(.collapsed){z-index:4}
-#de .gsum{display:none;padding:4px 9px 7px;font-size:11px;color:#aab3c5;cursor:pointer}
-#de .gnode2.collapsed .gsum{display:block}
-#de .gsum .gs-t{font-family:ui-monospace,monospace;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
-#de .gsum .gchips{display:flex;flex-wrap:wrap;gap:3px;margin-top:4px}
-#de .gsum .gchip{font-size:9.5px;padding:0 5px;border-radius:7px;background:#232b3b;color:#b9c2d6;border:1px solid #313b50}
-#de .gsum .gchip.warn{background:#3a2e14;color:#e0b46a;border-color:#6b5222}
-#de .ghead .gtitle .gk{opacity:.75}
-#de .gnode2.sel{outline:2px solid #f5f7ff;outline-offset:3px;z-index:6}
-#de .gworld.fokus .gnode2:not(.inslice){opacity:.13}
-#de .gworld.fokus .glink:not(.inslice){opacity:.04}
-#de .gworld.fokus .glink.inslice{opacity:1;stroke-width:3}
-/* Start-Dialog (Blank-Start): Domänen laden */
-#de .gstart{position:absolute;left:50%;top:40px;transform:translateX(-50%);z-index:40;width:min(560px,92%);max-height:80%;overflow:auto;
-  background:#141a26;border:1px solid #8fa3c8;border-radius:12px;padding:16px 18px;box-shadow:0 10px 40px #000c;color:#cbd3e1;font:13px system-ui}
-#de .gstart h3{margin:0 0 6px;font-size:17px;color:#fff}
-#de .gstart-t{color:#9aa3b7;line-height:1.4;margin-bottom:10px}
-#de .gstart-k{display:flex;gap:8px;margin:10px 0}
-#de .gstart-l{display:flex;flex-direction:column;gap:2px;border-top:1px solid #2a3244;border-bottom:1px solid #2a3244;padding:8px 0}
-#de .gstart-l label{display:flex;gap:8px;align-items:center;cursor:pointer;padding:3px 4px;border-radius:5px}
-#de .gstart-l label:hover{background:#1c2434}
-#de .gstart-n{flex:1;font-weight:600}#de .gstart-z{color:#6b7488;font-size:11.5px}
-#de .gworld.vbmodus .gnode2.vb-gesperrt{opacity:.6!important;box-shadow:0 0 0 2px #b5504a;cursor:not-allowed}
-#de .gworld.vbmodus .gnode2.vb-gesperrt .ghead::after{content:"✕ Regel";margin-left:auto;font:600 10px system-ui;color:#ffd0cc;padding-left:6px}
-/* Verbinden-Modus (Hybrid): passende Knoten leuchten, Rest abgeblendet; ✓ = schon verbunden */
-#de .gworld.vbmodus .gnode2{opacity:.14!important}
-#de .gworld.vbmodus .glink{opacity:.05!important}
-#de .gworld.vbmodus .gnode2.vb-kand,#de .gworld.vbmodus .gnode2.vb-quelle{opacity:1!important}
-#de .gworld.vbmodus .gnode2.vb-kand{box-shadow:0 0 0 3px #3fae7f,0 0 18px #3fae7faa;cursor:pointer}
-#de .gworld.vbmodus .gnode2.vb-kand:hover{box-shadow:0 0 0 4px #7ee0b0,0 0 24px #3fae7f}
-#de .gworld.vbmodus .gnode2.vb-verb{box-shadow:0 0 0 3px #7c5cff,0 0 18px #7c5cffaa}
-#de .gworld.vbmodus .gnode2.vb-verb .ghead::after{content:"✓ verbunden";margin-left:auto;font:600 10px system-ui;color:#d9ccff;padding-left:6px}
-#de .gworld.vbmodus .gnode2.vb-quelle{box-shadow:0 0 0 3px #fff}
-#de .gcanvas.vbaktiv .gminimap{display:none}
-#de .ginsp .gi-hint{margin:6px 10px 0;padding:5px 8px;border-radius:6px;background:#16261e;border:1px solid #2f6b50;color:#9fe0bf;font:11px/1.35 system-ui}
-#de .gvbwahl{position:absolute;z-index:31;display:flex;flex-direction:column;gap:3px;background:#15202c;border:1px solid #3fae7f;border-radius:8px;padding:6px;min-width:180px;box-shadow:0 6px 24px #000a}
-#de .gvbwahl button{text-align:left}
-#de .gvbkat{position:absolute;z-index:31;left:12px;top:12px;width:300px;max-height:60%;display:flex;flex-direction:column;gap:4px;background:#15202c;border:1px solid #3fae7f;border-radius:8px;padding:8px;box-shadow:0 6px 24px #000a}
-#de .gvbkat .gvbliste{overflow:auto;display:flex;flex-direction:column;gap:2px}
-#de .gvbkat button{text-align:left;display:flex;justify-content:space-between;gap:6px}
-#de .gvbkat .gvbns{opacity:.6;font-size:.85em}
-#de .gvbkat .gvbneu{border-color:#3fae7f;color:#9be3bf}
-/* Ports im Panel = ⊕-Knöpfe (auf der Fläche gibt es keine Ports mehr) */
-#de .ginsp .slot{margin:0 8px 0 0!important;width:22px!important;height:22px!important;cursor:pointer;position:relative;flex:none;
-  border:2px solid #3fae7f!important;background:#16261e!important;box-shadow:0 0 8px #3fae7f66}
-#de .ginsp .slot::after{content:"⊕";position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font:700 15px/1 system-ui;color:#7ee0b0}
-#de .ginsp .slot:hover{background:#3fae7f!important}#de .ginsp .slot:hover::after{color:#0b0e15}
-#de .ginsp .slotrow.o{justify-content:flex-end}
-#de .ginsp .slot.o{order:-1;margin:0 8px 0 0!important}
-#de .ginsp .slot.vb-aktiv{box-shadow:0 0 0 3px #fff,0 0 0 6px #3fae7f}
-#de .glink.kontrakt{opacity:.75}
-/* Inspector: Bearbeiten rechts statt Formular im Knoten */
-#de .ginsp{position:absolute;right:10px;top:10px;bottom:170px;width:min(380px,calc(100% - 40px));overflow:auto;background:#10141df7;border:1px solid #2c3547;border-radius:10px;z-index:25;box-shadow:0 10px 30px #000c;font-size:12px;contain:layout paint;transform:translateZ(0)}
-#de .ginsp .gi-h{position:sticky;top:0;z-index:2;display:flex;align-items:center;gap:6px;padding:8px 10px;background:#161c2a;border-bottom:1px solid #2c3547}
-#de .ginsp .gi-h .gi-k{font-size:10px;padding:1px 7px;border-radius:8px;color:#0d0f14;font-weight:700}
-#de .ginsp .gi-h .gi-n{flex:1;font:700 13px ui-monospace,monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#de .ginsp .gi-h button{background:#1a2130;color:#cbd3e1;border:1px solid #2c3547;border-radius:5px;cursor:pointer;padding:2px 7px;font-size:11px}
-#de .ginsp .gi-sec{margin:10px 10px 0;border:1px solid #262f40;border-radius:8px;overflow:hidden}
-#de .ginsp .gi-st{padding:4px 9px;font-size:10.5px;font-weight:700;color:#0d0f14;cursor:pointer}
-#de .ginsp .gbody{padding:8px 10px 10px}
-/* Ports im Panel sind die ⊕-Knöpfe des Verbinden-Modus (siehe oben) — nicht mehr ausgeblendet */
-#de .ginsp .gcodeprev{max-height:none}
-#de .gnode2.llmvor{box-shadow:0 0 0 2px #3f9a64,0 0 14px rgba(63,154,100,.35)}
-#de .gcodeprev.vorschlag{border-color:#3f9a64;background:#0e1d15;color:#c9f2d9}
-#de .llmrun{background:#2f6fd0;color:#fff;border:0;border-radius:5px;cursor:pointer;font:600 11px system-ui;padding:3px 9px}
-#de .llmrun:disabled{opacity:.45;cursor:default}
-#de .llmok{background:#2e8a57;color:#fff;border:0;border-radius:5px;cursor:pointer;font:600 11px system-ui;padding:3px 9px}
-#de .llmmeld{font:11px/1.4 system-ui;margin:4px 0;white-space:normal;color:#aab4c4}
-#de .llmmeld.ok{color:#9be3bf}#de .llmmeld.warn{color:#e0b46a}#de .llmmeld.err{color:#ffb3c1}
-#de .llmrow{display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin:4px 0}
-#de .llmrow input{flex:1;min-width:120px}
-#de .llmchat{display:flex;flex-direction:column;gap:5px;margin:4px 0 6px;max-height:220px;overflow:auto}
-#de .llmmsg{align-self:flex-end;max-width:92%;background:#2a2f45;border:1px solid #5b4f8a;color:#e3ddf7;border-radius:9px 9px 2px 9px;padding:5px 8px;font:12px/1.4 system-ui;white-space:pre-wrap;word-break:break-word}
-#de .llmleer{font:11px system-ui;color:#8a93a6;font-style:italic}
-#de .ginsp .gi-rel{margin:10px;font-size:11px}
-#de .ginsp .gi-rel h5{margin:8px 0 4px;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:#7f8aa0}
-#de .ginsp .gi-rel a{display:inline-block;margin:0 4px 4px 0;padding:1px 7px;border-radius:7px;background:#1a2130;border:1px solid #2c3547;color:#cbd3e1;cursor:pointer;font-family:ui-monospace,monospace}
-#de .ginsp .gi-rel a:hover{border-color:#7c5cff}
-/* Kind-Farben (Kopf) für Inspector-Chips */
-#de .kc-command{background:#5b8fd0}#de .kc-event{background:#57b673}#de .kc-rejection{background:#cf6f68}#de .kc-valueobject{background:#49a996}
-#de .kc-konfig{background:#8fa3b8}#de .kc-enum{background:#8a8aa0}#de .kc-aggregate{background:#3fb0a6}#de .kc-decider{background:#9678d6}
-#de .kc-applier{background:#d0a35a}#de .kc-handle{background:#5d8fbf}#de .kc-fn{background:#2f9d95}#de .kc-saga{background:#9d78d6}#de .kc-transition{background:#a48fd6}#de .kc-state{background:#d4b45f}
-#de .kc-readmodel{background:#d0a45a}#de .kc-store{background:#3fb0a6}#de .kc-projektion{background:#57b673}#de .kc-reaktion{background:#d0885a}
-#de .kc-pipeline{background:#e08a44}#de .kc-trigger{background:#d29a4a}#de .kc-reader{background:#9678d6}#de .kc-query{background:#5b8fd0}
-#de .kc-queryresponse{background:#49a996}#de .kc-codenode{background:#9aa0aa}#de .kc-llmnode{background:#a48fd6}
-#de .kc-frist,#de .kc-dienst,#de .kc-hostsetting{background:#c9a24b}
-#de .kc-akteur{background:#e07ab4}#de .kc-auf{background:#eaa0c9}
-/* Semantischer Zoom: Landkarte (<0.4) · Ablauf (<0.75) · Detail */
-#de .gcanvas.lod-ablauf .gnode2 .gbody,#de .gcanvas.lod-ablauf .gnode2 .gsum{display:none}
-#de .gcanvas.lod-ablauf .gnode2{width:230px}
-#de .gcanvas.lod-ablauf .ghead{padding:6px 10px;border-radius:8px}
-#de .gcanvas.lod-ablauf .ghead .gtitle{font-size:12px;white-space:normal;overflow-wrap:anywhere;line-height:1.15}
-#de .gcanvas.lod-ablauf .ghead .gtitle.hatname .gk{display:none}
-#de .gcanvas.lod-ablauf .ghead .gcol,#de .gcanvas.lod-ablauf .ghead .gx{display:none}
-#de .gcanvas.lod-ablauf .gnode2.ungeschrieben .ghead::before,#de .gcanvas.lod-ablauf .gnode2.entwurf .ghead::before,#de .gcanvas.lod-ablauf .gnode2.island .ghead::after{display:none}
-#de .gcanvas.lod-karte .gnode2{visibility:hidden}
-/* Client (docs/konzept-akteure.md §4): die Anschlussleiste IST der Vertrag — in jeder Ansicht lesbar, Breite fest. */
-#de .gcanvas .gworld .gnode2.n-client{width:420px}
-#de .gcanvas .gnode2.n-client .gsum.gleiste{display:block}
-#de .gcanvas.lod-ablauf .gnode2.n-client .ghead .gtitle.hatname .gk{display:inline}
-#de .gcanvas.lod-karte svg.gedges{display:none}
-#de .gtile,#de svg.gtilesvg{display:none}
-#de .gcanvas.lod-karte .gtile,#de .gcanvas.lod-karte svg.gtilesvg{display:block}
-#de .gtile{position:absolute;box-sizing:border-box;border:calc(2px*var(--inv)) solid;border-radius:calc(12px*var(--inv));background:#141a28d9;cursor:zoom-in;padding:calc(10px*var(--inv)) calc(12px*var(--inv));overflow:hidden}
-#de .gtile:hover{background:#1b2336f0}
-#de .gtile .gtl-t{font:700 calc(17px*var(--inv))/1.15 ui-monospace,monospace;color:#e6ebf5;overflow-wrap:anywhere}
-#de .gtile .gtl-c{font-size:calc(11.5px*var(--inv));line-height:1.35;color:#9aa3b7;margin-top:calc(5px*var(--inv))}
-#de .gworld.fokus .gtile:not(.inslice){opacity:.25}
-#de svg.gtilesvg{position:absolute;left:0;top:0;width:10px;height:10px;overflow:visible;pointer-events:none}
-#de svg.gtilesvg path{fill:none;stroke:#6b7a96;opacity:.7}
-#de svg.gtilesvg text{fill:#cbd3e1;font-family:system-ui;font-weight:700;paint-order:stroke;stroke:#0b0e15}
-</style>
-<button id="de-open" onclick="deOpen()">✎ Editor</button>
-<div id="de">
-  <header>
-    <h2>Domänen-Editor</h2>
-    <span id="de-badge" class="badge off">offline</span>
-    <span class="sp"></span>
-    <button class="act" onclick="deReload()">↻ Vom Graph laden</button>
-    <button class="act" onclick="deReflow()">▦ Neu anordnen</button>
-    <button class="act" onclick="deLaden()" title="Domänen laden: wählen, welche Domänen auf dem Board erscheinen (leer, einzelne, alle)">🗂 Domänen laden</button>
-    <button class="act" onclick="deValidate()">✓ Prüfen</button>
-    <button class="act" onclick="deGrammatik()" title="Die Grammatik: was sich womit verbinden lässt, und je Regel ihr Gegenstück im Build">📐 Grammatik</button>
-    <button class="act" onclick="deCompile()">⚙ Kompilieren</button>
-    <button class="act" id="de-llmalle" onclick="deLlmAlle()" title="Alle 🤖-Knoten mit Auftrag nacheinander ausführen — jeder Vorschlag wartet auf ✓ Übernehmen">🤖 Alle ausführen</button>
-    <button class="act run" id="de-simbtn" onclick="deSim()">▶ Simulation</button>
-    <button class="act" onclick="deVorschau()" title="Trockenlauf: was „C# schreiben“ anlegen/ändern würde — nichts wird geschrieben">👁 Vorschau</button>
-    <button class="act go" onclick="deWrite()">&lt;/&gt; C# schreiben</button>
-    <button class="act" onclick="deSave()">💾 Speichern</button>
-    <button class="act" onclick="deDownload()">⬇ Modell</button>
-    <button class="act" id="de-close" onclick="deClose()">✕ Schließen</button>
-  </header>
-  <div class="cols">
-    <div class="col left" id="de-form"></div>
-    <aside class="sim" id="de-sim"></aside>
-    <div class="col right out" id="de-out"><div class="hint">„C# erzeugen" rendert den echten C#-Scaffolder (über SimHost). „Prüfen" zeigt die Struktur-Diagnosen. Ohne laufenden SimHost editierst du die Form und lädst das Modell-JSON herunter.</div></div>
-  </div>
-</div>
-<script>
 (function(){
   // Skalare = was der Wire trägt (aus dem Codegen, via rahmen.skalare) — keine eigene Liste im Editor.
   const SCALARS=()=>((MODEL.rahmen&&MODEL.rahmen.skalare)||[]);
   // Vertrags-Fakten aus dem Rahmen (vom Extractor aus dem Code gelesen).
   const ID_FELD=()=>((MODEL.rahmen&&MODEL.rahmen.aggregatIdFeld)||"");
   const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"],konfig:["Konfiguration","vo"],query:["Query","qry"],queryresponse:["Response","qrsp"],auftrag:["Auftrag","cmd"]};
-  let MODEL={schemaVersion:"2",akteure:[],clients:[],records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],reaktionen:[],pipelines:[],triggers:[],frists:[],dienste:[],hostSettings:[],codeNodes:[],llmNodes:[],fluesse:[]};
+  let MODEL={schemaVersion:"2",akteure:[],clients:[],records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],reaktionen:[],codeNodes:[],llmNodes:[],fluesse:[]};
   let NID=1;
-  const embedded=/*__MODEL_JSON__*/;
+  const embedded=null;
   // Domänen-Filter (welche Domänen ausgeblendet sind) — pro Browser UND pro Solution persistiert (rahmen.kennung),
   //   damit Zwischenstände verschiedener Repos sich nie vermischen.
   let HKEY="cqrs-hidden-domains", LSKEY="cqrs-board-model";
@@ -643,9 +24,9 @@ public static class HtmlPresenter
   const kindLabel=k=>(KINDINFO[k]||["?","vo"])[0];
   const kindKlasse=k=>(KINDINFO[k]||["?","vo"])[1];
   function normalize(m){m=m||{};m.records=m.records||[];m.enums=m.enums||[];m.aggregate=m.aggregate||[];m.decider=m.decider||[];m.applier=m.applier||[];m.sagas=m.sagas||[];m.states=m.states||[];m.transitions=m.transitions||[];
-    m.readModels=m.readModels||[];m.stores=m.stores||[];m.projektionen=m.projektionen||[];m.reader=m.reader||[];m.reaktionen=m.reaktionen||[];m.pipelines=m.pipelines||[];m.triggers=m.triggers||[];m.frists=m.frists||[];m.dienste=m.dienste||[];m.hostSettings=m.hostSettings||[];m.codeNodes=m.codeNodes||[];m.llmNodes=m.llmNodes||[];
+    m.readModels=m.readModels||[];m.stores=m.stores||[];m.projektionen=m.projektionen||[];m.reader=m.reader||[];m.reaktionen=m.reaktionen||[];m.codeNodes=m.codeNodes||[];m.llmNodes=m.llmNodes||[];
     // Akteur (docs/konzept-akteure.md): wer von außen hineingibt — darf[] = die Typen seiner IDarf<T> (Command/Query/Trigger).
-    m.akteure=m.akteure||[];m.akteure.forEach(a=>{if(!a._id)a._id="ak"+(NID++);a.darf=a.darf||[];});   /* art/dienste bewusst nicht vorbelegen (Herkunfts-Hash) */
+    m.akteure=m.akteure||[];m.akteure.forEach(a=>{if(!a._id)a._id="ak"+(NID++);a.darf=a.darf||[];});   /* art bewusst nicht vorbelegen (Herkunfts-Hash) */
     // Client (docs/konzept-akteure.md §4): die Software an der Leitung — traegt[] = Akteur-Vertrags-Teile, sendet/fragt/kenntnis = der Rand.
     // Katalog-Funktion (IFunktion): Auftrag → Ergebnis-Events; ein Prozess ruft sie mit Rufe<F> (Dann ƒ an der Regel).
     m.funktionen=m.funktionen||[];m.funktionen.forEach(f=>{if(!f._id)f._id="fk"+(NID++);f.ergebnisse=f.ergebnisse||[];});
@@ -654,12 +35,6 @@ public static class HtmlPresenter
     m.clients=m.clients||[];m.clients.forEach(c=>{if(!c._id)c._id="cl"+(NID++);c.traegt=c.traegt||[];c.sendet=c.sendet||[];c.fragt=c.fragt||[];c.kenntnis=c.kenntnis||[];});
     // Reaktion = emittierender Konsument (ISubscriber → IAsyncEnumerable<OneOf<Cmd>>): Trigger-Event → Handle → OneOf-Commands.
     m.reaktionen.forEach(r=>{if(!r._id)r._id="rk"+(NID++);r.handles=r.handles||[];r.handles.forEach(hd=>{hd.sends=hd.sends||[];hd.publishes=hd.publishes||[];});});
-    // Pipeline = 4. durabler Konsument (IPipelineHandler): Trigger-Msg ODER Event → Handle → OneOf-Command(s).
-    m.pipelines.forEach(p=>{if(!p._id)p._id="pl"+(NID++);p.handles=p.handles||[];p.handles.forEach(hd=>{hd.sends=hd.sends||[];hd.emits=hd.emits||[];hd.schedules=hd.schedules||[];   /* publishes/fristen bewusst NICHT vorbelegen: sonst gälte ein gespeichertes Board als „geändert" (Herkunfts-Hash) */
-      hd.inputKind=hd.inputKind||(hd.trigId?"trigger":"event");
-      if(hd.trigId&&!hd.prod){hd.prod={k:"tg",id:hd.trigId};hd.input=hd.input||"";}});});
-    // Trigger = Ingress-Wecker (Timer/Webhook/FileWatch/Frist), erzeugt eine IPipelineTrigger-Nachricht.
-    m.triggers.forEach(t=>{if(!t._id)t._id="tg"+(NID++);t.felder=t.felder||[];t.felder.forEach(f=>{if(f&&!f._id)f._id="f"+(NID++);});});
     // Jedes Objekt-Feld bekommt eine stabile _id → Feld-Ports eindeutig (auch bei gleichnamigen Feldern) und rename-fest.
     const stampFelder=arr=>(arr||[]).forEach(f=>{if(f&&!f._id)f._id="f"+(NID++);});
     m.records.forEach(r=>stampFelder(r.felder));m.aggregate.forEach(a=>stampFelder(a.state));m.states.forEach(s=>stampFelder(s.felder));m.readModels.forEach(rm=>stampFelder(rm.felder));
@@ -686,10 +61,9 @@ public static class HtmlPresenter
     const mig=(node,nm)=>{if(node.rumpf===""&&!node.codeSrc){node.leer=true;delete node.rumpf;return;}
       if(node.rumpf&&!node.codeSrc){const cn={_id:"cn"+(NID++),name:nm||"Code",text:node.rumpf,x:(node.x||0)+320,y:node.y||0};m.codeNodes.push(cn);node.codeSrc=cn._id;delete node.rumpf;}};
     m.decider.forEach(d=>mig(d));m.applier.forEach(a=>mig(a));
-    // Leseseiten-Rümpfe: Projektion-/Reader-/Pipeline-Handler + Store-Fn-Impls → eigene Code-Knoten.
+    // Leseseiten-Rümpfe: Projektion-/Reader-Handler + Store-Fn-Impls → eigene Code-Knoten.
     m.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>mig(hd,"Handle "+(hd.event||""))));
     m.reader.forEach(r=>(r.handles||[]).forEach(hd=>mig(hd,"Handle "+(hd.query||""))));
-    m.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>mig(hd,"Handle "+(hd.input||hd.event||""))));
     m.stores.forEach(s=>{(s.writeFns||[]).forEach(f=>mig(f,f.name||"Store-Fn"));(s.readFns||[]).forEach(f=>mig(f,f.name||"Store-Fn"));});
     // Katalog-Funktion: der RufeAsync-Rumpf ihrer C#-Implementierung → eigener Code-Knoten (der Code-Eingang der Funktions-Karte).
     m.funktionen.forEach(f=>mig(f,(f.implementierung||f.name||"Funktion")+".RufeAsync"));
@@ -709,7 +83,7 @@ public static class HtmlPresenter
     return [...z.entries()].sort((a,b)=>b[1]-a[1])[0]?.[0]||null;}
   // Was ein Akteur selbst hineingeben darf — die Sorten aus der Grammatik (Erzeugungen des Bausteins Akteur), nie hart kodiert.
   function akteurSorten(){return ((GR()||{}).erzeugungen||[]).filter(e=>e.baustein==="akteur").map(e=>e.sorte);}
-  const akteurDarfLabel=()=>akteurSorten().map(x=>grName("sorten",x)).join(" · ")||"Command · Query · Trigger";
+  const akteurDarfLabel=()=>akteurSorten().map(x=>grName("sorten",x)).join(" · ")||"Command · Query";
   function defaultNsGlobal(){const w=Object.keys((MODEL.rahmen||{}).verzeichnisse||{}).sort((a,b)=>a.length-b.length)[0];
     return MODEL.aggregate[0]?.namespace||MODEL.records[0]?.namespace||(w?w+".Neu":"Neu");}
 
@@ -765,7 +139,7 @@ public static class HtmlPresenter
   function imModus(ids,aendern){TEIL={gerufen:false};try{aendern();}finally{const g=TEIL.gerufen;TEIL=null;if(g)teilNeu(ids.filter(Boolean));}}
 
   // Eindeutiger Name — Namen sind der Referenzschlüssel für Kanten/Decider/Applier.
-  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.reaktionen.map(x=>x.name),...MODEL.pipelines.map(x=>x.name),...MODEL.triggers.map(x=>x.name),...MODEL.frists.map(x=>x.name),...MODEL.dienste.map(x=>x.name),...MODEL.hostSettings.map(x=>x.name),...MODEL.codeNodes.map(x=>x.name),...MODEL.llmNodes.map(x=>x.name),...MODEL.akteure.map(x=>x.name),...MODEL.clients.map(x=>x.name),...MODEL.funktionen.map(x=>x.name),...MODEL.fluesse.map(x=>x.name)]);
+  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.reaktionen.map(x=>x.name),...MODEL.codeNodes.map(x=>x.name),...MODEL.llmNodes.map(x=>x.name),...MODEL.akteure.map(x=>x.name),...MODEL.clients.map(x=>x.name),...MODEL.funktionen.map(x=>x.name),...MODEL.fluesse.map(x=>x.name)]);
     if(!all.has(base))return base;let i=2;while(all.has(base+i))i++;return base+i;}
 
   function enumCard(e,ei){const c=h("div",{class:"card"});
@@ -814,23 +188,20 @@ public static class HtmlPresenter
     else if(kind==="projektion")MODEL.projektionen.push({_id:"pj"+(NID++),name:uniq("NeueProjektion"),namespace:defaultNs(),stores:[],append:false,pull:true,handles:[],...pos});
     else if(kind==="reader")MODEL.reader.push({_id:"rd"+(NID++),name:uniq("NeuReader"),namespace:defaultNs(),stores:[],trackDeps:true,handles:[],...pos});
     else if(kind==="reaktion")MODEL.reaktionen.push({_id:"rk"+(NID++),name:uniq("NeueReaktion"),namespace:defaultNs(),pull:true,handles:[],...pos});
-    else if(kind==="pipeline")MODEL.pipelines.push({_id:"pl"+(NID++),name:uniq("NeuePipeline"),namespace:defaultNs(),pipelineId:"",handles:[],...pos});
-    else if(kind==="trigger")MODEL.triggers.push({_id:"tg"+(NID++),name:uniq("NeuTrigger"),namespace:defaultNs(),msgName:uniq("NeuTriggerMsg"),felder:[],...pos});
-    else if(kind==="frist")MODEL.frists.push({_id:"fr"+(NID++),name:uniq("NeueFrist"),kontext:"",dauerSetting:"",plant:[],storniert:[],sendet:"",aggregat:"",...pos});
-    else if(kind==="dienst")MODEL.dienste.push({_id:"di"+(NID++),name:uniq("NeuerDienst"),vertrag:"IDienst",extern:false,codeSrc:null,...pos});
     else if(kind==="funktion")neueFunktion(defaultNs(),pos);
-    else if(kind==="hostsetting")MODEL.hostSettings.push({_id:"hs"+(NID++),name:uniq("NeuSetting"),typ:"string",default:"",envKey:"",...pos});
+    else if(kind==="quelle"){const qb=(GR()||{}).quellBasis||"IQuellNachricht";
+      MODEL.records.push({name:uniq("NeueQuelle"),kind:"event",namespace:defaultNs(),basen:[qb],felder:[{_id:"f"+(NID++),name:"Kennung",typ:"string"}],...pos});}
     else if(kind==="akteur")MODEL.akteure.push({_id:"ak"+(NID++),name:uniq("NeuerAkteur"),namespace:haeufigsterNs(MODEL.akteure)||defaultNs(),darf:[],...pos});
     else if(kind==="client")MODEL.clients.push({_id:"cl"+(NID++),name:uniq("INeuerClient"),namespace:haeufigsterNs(MODEL.clients)||defaultNs(),traegt:[],sendet:[],fragt:[],kenntnis:[],...pos});
     else if(kind==="codenode")MODEL.codeNodes.push({_id:"cn"+(NID++),name:uniq("Code"),text:"",...pos});
     else if(kind==="llmnode")MODEL.llmNodes.push({_id:"ln"+(NID++),name:uniq("LLM"),intent:"",...pos});
     else MODEL.records.push({name:uniq("Neu"+kindLabel(kind).replace(/\s/g,"")),kind,namespace:defaultNs(),felder:kind==="command"&&ID_FELD()?[{_id:"f"+(NID++),name:ID_FELD(),typ:"Guid"}]:[],...pos});
-    // Heimat-Domäne in der Ansicht merken: trägt Namespace-lose Arten (📝/🤖, Dienst, HostSetting …) und hält Abhängige
+    // Heimat-Domäne in der Ansicht merken: trägt Namespace-lose Arten (📝/🤖 …) und hält Abhängige
     //   (Decider/Applier/State/Regel) in ihrer Domäne, auch wenn ihr Besitzer gelöscht wird. Der Code-Namespace geht vor (domKey).
     if(opt&&opt.ns){const neu=graphNodes().find(n=>!vorher.has(n.id));if(neu){VIEW.heim={...(VIEW.heim||{}),[neu.id]:opt.ns};if(opt.blk)VIEW.heimBlk={...(VIEW.heimBlk||{}),[neu.id]:opt.blk};speichereAnsicht();}}
     // Im Akteur-Rahmen angelegt: der Akteur darf den neuen Eingang sofort (IDarf) — so bleibt er auch in seinem Rahmen.
     if(opt&&opt.akt){const neu=graphNodes().find(n=>!vorher.has(n.id)),ak=MODEL.akteure.find(a=>a.name===opt.akt);
-      if(neu&&ak){const nm=neu.kind==="trigger"?trigName(neu.ref):neu.ref.name;if(nm&&!(ak.darf=ak.darf||[]).includes(nm))ak.darf.push(nm);
+      if(neu&&ak){const nm=neu.ref.name;if(nm&&!(ak.darf=ak.darf||[]).includes(nm))ak.darf.push(nm);
         VIEW.heimAkteur={...(VIEW.heimAkteur||{}),[neu.id]:opt.akt};speichereAnsicht();}}
     render();
     if(!(opt&&opt.still))fokussiereNeu(vorher,true);
@@ -845,16 +216,15 @@ public static class HtmlPresenter
   //   Wahrheit = die Signatur des Erzeugers). Je Partner: Knoten-Id (springen), Text, Markierung, optional „lösen".
   const hdId=(kind,o,hd)=>{const ids=handleIds(o,HANDLE_ART[kind][1]+":"+o._id);return ids[(o.handles||[]).indexOf(hd)];};
   const ohneX=(arr,x)=>(arr||[]).filter(v=>v!==x);
-  const trigName=t=>t.msgName||t.name||"";
   // Pipeline-Knoten als Partner einer Nachricht: ▶ sendet / ⛲ meldet sie (◀ kommt aus); Drähte, die sie tragen, und ◆/⧗ (geht an ▶).
   function flussPartner(nm,ein,aus,P){MODEL.fluesse.forEach(f=>(f.knoten||[]).forEach(k=>{const id="fs:"+k._id,txt=(FL_SYM[k.art]||"")+" "+k.name+" · ⛓ "+f.name;
     if((k.art==="command"||k.art==="quelle")&&k.typ===nm)P(ein,id,txt,k.art==="command"?"sendet":"meldet");
     if(flHoert(k).includes(nm))P(aus,id,txt,k.art==="warte"?"wartet darauf":"Auf");
     (k.eingaenge||[]).forEach(e=>(e.draehte||[]).forEach(d=>{if((d.port||"fall")!=="fall"||flDrahtTyp(f,d)!==nm)return;
       P(aus,id,txt,"← "+d.von+((e.draehte||[]).length>1?" ∧":""),()=>flLoese(f,k,e,d));}));}));}
-  function partnerVon(nm,trig){
+  function partnerVon(nm){
     const ein=[],aus=[],P=(arr,id,text,mark,los)=>arr.push({id,text,mark:mark||"",los});
-    const r=trig?null:recByName(nm),k=trig?"trigger":(r?r.kind:"");if(!nm)return {ein,aus,k};
+    const r=recByName(nm),k=r?r.kind:"";if(!nm)return {ein,aus,k};
     const HD=(kind,coll,f)=>(MODEL[coll]||[]).forEach(o=>(o.handles||[]).forEach(hd=>f(o,hd,hdId(kind,o,hd))));
     const hText=(o,hd)=>o.name+".Handle("+handleDisc(hd)+")";
     if(k==="command"){
@@ -862,11 +232,6 @@ public static class HtmlPresenter
         if(d.sende===nm)P(ein,"tr:"+t._id,"Regel · "+(t.prozess||"Prozess"));
         if(d.kompensation===nm)P(ein,"tr:"+t._id,"Regel · "+(t.prozess||"Prozess"),"↩ Kompensation");}));
       HD("reaktion","reaktionen",(o,hd,id)=>{if((hd.sends||[]).includes(nm))P(ein,id,hText(o,hd),"",()=>{hd.sends=ohneX(hd.sends,nm);});});
-      HD("pipeline","pipelines",(o,hd,id)=>{
-        if((hd.sends||[]).includes(nm))P(ein,id,hText(o,hd),hd.akteur?"im Auftrag 👤 "+hd.akteur:"",()=>{hd.sends=ohneX(hd.sends,nm);});
-        (hd.fristen||[]).filter(f=>f.command===nm).forEach(f=>P(ein,id,hText(o,hd),f.art==="storno"?"✕⏳ Storno":"⏳ per Frist",
-          ()=>{hd.fristen=(hd.fristen||[]).filter(x=>x!==f);}));});
-      MODEL.frists.forEach(f=>{if(f.sendet===nm)P(ein,"fr:"+f._id,"Frist "+(f.name||""),"⏳");});
       flussPartner(nm,ein,aus,P);
       akteurePartner(ein,nm,P);
       // Zusage im Akteur-Vertrag (Akteur-Konzept §3): der Akteur antwortet draußen auf ein Event mit diesem Command.
@@ -877,9 +242,9 @@ public static class HtmlPresenter
       MODEL.decider.forEach(d=>{if((d.ergibt||[]).some(o=>o.event===nm))P(ein,"dec:"+d._id,"Decide("+(d.command||"?")+") @ "+(d.aggregat||"—"));});
       MODEL.funktionen.forEach(f=>{if((f.ergebnisse||[]).includes(nm))P(ein,"fk:"+f._id,"ƒ "+f.name,"Ergebnis",()=>{f.ergebnisse=ohneX(f.ergebnisse,nm);});});
       flussPartner(nm,ein,aus,P);
-      [["projektion","projektionen"],["reaktion","reaktionen"],["pipeline","pipelines"]].forEach(([kind,coll])=>{
+      [["projektion","projektionen"],["reaktion","reaktionen"]].forEach(([kind,coll])=>{
         HD(kind,coll,(o,hd,id)=>{if((hd.publishes||[]).includes(nm))P(ein,id,hText(o,hd),"veröffentlicht",()=>{hd.publishes=ohneX(hd.publishes,nm);});
-          if(hd.event===nm&&(kind!=="pipeline"||(hd.inputKind||"event")==="event"))P(aus,id,hText(o,hd));});});
+          if(hd.event===nm)P(aus,id,hText(o,hd));});});
       MODEL.applier.forEach(a=>{if(a.event===nm)P(aus,"app:"+a._id,"Apply @ "+(a.aggregat||"—"));});
       MODEL.sagas.forEach(sg=>{if(sg.triggerEvent===nm)P(aus,"saga:"+sg.name,"Prozess "+sg.name,"Auslöser");});
       MODEL.transitions.forEach(t=>{if((t.wenn||[]).includes(nm)||t.sammelEvent===nm)P(aus,"tr:"+t._id,"Regel · "+(t.prozess||"Prozess"),t.sammelEvent===nm?"Σ sammelt":"");});
@@ -895,12 +260,6 @@ public static class HtmlPresenter
       // Die Antwort geht an den, der fragen darf (Akteure der Query) — sonst an die anonyme Außenwelt.
       MODEL.akteure.forEach(a=>{if(qs.some(q=>(a.darf||[]).includes(q)))P(aus,"akt:"+a._id,"Akteur "+a.name,"fragt");});
       if(!aus.length)P(aus,null,"Außenwelt (Client)","abgeleitet · kein Akteur");}
-    else if(k==="trigger"){const t=trig;
-      if(t.modus)P(ein,null,"Ingress · "+t.modus+(t.route||t.intervall||t.pfad?" "+(t.route||t.intervall||t.pfad):""),"Code-Fakt");
-      HD("pipeline","pipelines",(o,hd,id)=>{if((hd.emits||[]).includes(nm))P(ein,id,hText(o,hd),"",()=>{hd.emits=ohneX(hd.emits,nm);});
-        if((hd.inputKind==="trigger")&&(hd.input===nm||hd.trigId===t._id||(hd.prod&&hd.prod.k==="tg"&&hd.prod.id===t._id)))P(aus,id,hText(o,hd));});
-      akteurePartner(ein,nm,P);
-      if(!ein.length)P(ein,null,"Außenwelt (Client)","abgeleitet: kein interner Erzeuger · kein Akteur");}
     return {ein,aus,k};}
   // Alle Zusagen der Akteur-Verträge (Akteur-Konzept §3) mit ihrer Karten-Id — je Auf(Event) eine Karte „Zusage" im Akteur-Rahmen.
   const aufId=(a,i)=>"auf:"+a._id+":"+i;
@@ -927,7 +286,7 @@ public static class HtmlPresenter
   const clientTraeger=teil=>MODEL.clients.filter(c=>(c.traegt||[]).includes(teil));
   // Die Ports der Anschlussleiste: Richtung, Nachricht, in wessen Namen (Akteur), Ziel-Knoten.
   function clientPorts(c){const P=[],ver=clientAkteure(c);
-    const node=nm=>{if(recByName(nm))return "rec:"+nm;const t=MODEL.triggers.find(x=>trigName(x)===nm);return t?"tg:"+t._id:null;};
+    const node=nm=>recByName(nm)?"rec:"+nm:null;
     const als=nm=>{const hs=darfHalter(nm),drin=hs.filter(x=>ver.includes(x));return drin.length?drin:hs;};
     (c.traegt||[]).forEach(t=>{const rs=teilZusagen(t);if(!rs.length)P.push({ri:"zusage",msg:"?",teil:t,akteure:[],aus:[],node:null,fehlt:true});
       rs.forEach(({a,r,id})=>P.push({ri:"zusage",msg:r.eingang||"?",aus:r.ausgaenge||[],strom:!!r.strom,akteure:[a.name],teil:t,node:id}));});
@@ -994,17 +353,17 @@ public static class HtmlPresenter
     if(x.los)row.append(h("button",{class:"rm",title:"Verbindung lösen (ändert den Ausgang des Erzeugers)",onclick:e=>{e.stopPropagation();x.los();render();}},"✕"));
     return row;}
   // Diagnose: je Nachricht, was „◀ kommt aus" zeigt (Erzeuger + Akteure) — Lücken-Suche „woher wird das ausgelöst?".
-  window.deHerkunft=()=>{const r=[];NODEBY.forEach(n=>{let nm=null,trig=null;
-    if(["command","query","event","rejection","queryresponse"].includes(n.kind))nm=n.name;else if(n.kind==="trigger"){trig=n.ref;nm=trigName(n.ref);}else return;
-    const pv=partnerVon(nm,trig),m=akteurMengen().get(nm);
+  window.deHerkunft=()=>{const r=[];NODEBY.forEach(n=>{
+    if(!["command","query","event","rejection","queryresponse"].includes(n.kind))return;const nm=n.name;
+    const pv=partnerVon(nm),m=akteurMengen().get(nm);
     r.push({kind:n.kind,name:nm,ein:pv.ein.map(x=>x.text+(x.mark?" ["+x.mark+"]":"")),aus:pv.aus.map(x=>x.text),
       direkt:m?[...m.direkt]:[],kette:m?[...m.kette]:[]});});return r;};
   window.deHandles=()=>{const r=[];Object.entries(HANDLE_ART).forEach(([k,[coll]])=>(MODEL[coll]||[]).forEach(o=>(o.handles||[]).forEach(hd=>
-    r.push({art:k,owner:o.name,eingang:k==="pipeline"?pipeEingang(hd):(hd.event||hd.query||""),kind:hd.inputKind||"",akteure:[...(handleAkteure(k,hd)||[])]}))));return r;};
+    r.push({art:k,owner:o.name,eingang:hd.event||hd.query||"",kind:hd.inputKind||"",akteure:[...(handleAkteure(k,hd)||[])]}))));return r;};
   // „Wer?" (§12.8 D): von welchem Akteur kommt die Nachricht — direkt (IDarf, oben unter „kommt aus") und über die Kette
   //   (abgeleitet, read-only, mit Pfad). Ein Eingang ohne beides ist eine Lücke (GR-HERKUNFT).
   function wer(sek,nm){if(!MODEL.akteure.length)return;const m=akteurMengen().get(nm),kette=m?[...m.kette].filter(a=>!m.direkt.has(a)).sort():[];
-    if(kette.length){sek.append(h("div",{class:"gsec",title:"abgeleitet: eine Pipeline, ein Prozess, ein Reader oder Decide erzeugt sie aus einer Nachricht dieses Akteurs — kein IDarf nötig"},"👤 über die Kette"));
+    if(kette.length){sek.append(h("div",{class:"gsec",title:"abgeleitet: ein Fluss, ein Prozess, ein Reader oder Decide erzeugt sie aus einer Nachricht dieses Akteurs — kein IDarf nötig"},"👤 über die Kette"));
       kette.forEach(a=>{const ak=MODEL.akteure.find(x=>x.name===a),pfad=kettenPfad(nm,a);
         const row=h("div",{class:"gp-row",title:pfad.join(" → ")},h("span",{class:"gp-t"},(ART_SYM[ak&&ak.art]||"👤 ")+a),h("span",{class:"gp-mark"},pfad.join(" → ")));
         if(ak)row.onclick=()=>waehle("akt:"+ak._id);sek.append(row);});}
@@ -1019,8 +378,8 @@ public static class HtmlPresenter
       return null;};
     return zurueck(nm,0)||[nm];}
   // Die zwei Seiten einer Nachricht: ◀ kommt aus (+ ⊕ Erzeuger) · geht an ▶ (+ ⊕ Konsument). Ports: die bestehenden Slot-Schlüssel.
-  function zweiSeiten(body,nm,trig,einPort,ausPort){
-    const pv=partnerVon(nm,trig),sorte=trig?"trigger":grNachrichtSorte(nm),kard=grKardinalitaet(sorte);
+  function zweiSeiten(body,nm,einPort,ausPort){
+    const pv=partnerVon(nm),sorte=grNachrichtSorte(nm),kard=grKardinalitaet(sorte);
     const sek=h("div",{class:"gp"});
     sek.append(h("div",{class:"gsec"},"◀ kommt aus"));
     pv.ein.forEach(x=>sek.append(partnerZeile(x)));
@@ -1061,9 +420,8 @@ public static class HtmlPresenter
      else if(r.kind==="queryresponse")ein=slotRow("qrsp","+ Erzeuger ⊕ (Reader)","l",{type:"qrsp",dir:"in",rec:r.name},"qrsp:in:"+r.name);
      // Akteur-Eingang: Command und Query (was ein Akteur hineingeben darf).
      if(akteurSorten().includes(grNachrichtSorte(r.name))){const dp=darfPort(r.name);ein=ein?h("div",{},ein,dp):dp;}
-     if(ein||aus){if(INSP)zweiSeiten(body,r.name,null,ein,aus);else{if(ein)body.append(ein);if(aus)body.append(aus);}}}
+     if(ein||aus){if(INSP)zweiSeiten(body,r.name,ein,aus);else{if(ein)body.append(ein);if(aus)body.append(aus);}}}
     if(r.kind==="valueobject")body.append(slotRow("ftype","als Feldtyp ▶","r",{type:"ftype",dir:"out",typeName:r.name},"ftype:out:rec:"+r.name));
-    if(r.kind==="konfig")body.append(slotRow("trigmsg","Konstruktor einer Pipeline ⊕ ▶","r",{type:"konfig",dir:"out",rec:r.name},"konfig:out:"+r.name));
     if(r.kind==="auftrag")body.append(slotRow("auftrag","Eingang von ƒ "+(r.funktion||"— ⊕ Funktion wählen")+" ▶","r",{type:"auftragFn",dir:"out",rec:r.name},"auf:out:"+r.name));
     body.append(h("div",{class:"gsec"},"Felder"));
     (r.felder||[]).forEach((f,fi)=>body.append(feldRow(f,()=>{r.felder.splice(fi,1);render();},undefined,r.name)));
@@ -1150,13 +508,11 @@ public static class HtmlPresenter
     if(t.k==="pjHandle"){const p=MODEL.projektionen.find(x=>x._id===t.proj);if(p&&p.handles[t.hi])p.handles[t.hi].codeSrc=src;}
     else if(t.k==="rdHandle"){const r=MODEL.reader.find(x=>x._id===t.reader);if(r&&r.handles[t.hi])r.handles[t.hi].codeSrc=src;}
     else if(t.k==="reakHandle"){const r=MODEL.reaktionen.find(x=>x._id===t.reaktion);if(r&&r.handles[t.hi])r.handles[t.hi].codeSrc=src;}
-    else if(t.k==="plHandle"){const p=MODEL.pipelines.find(x=>x._id===t.pipeline);if(p&&p.handles[t.hi])p.handles[t.hi].codeSrc=src;}
     else if(t.k==="writeFn"){const st=MODEL.stores.find(x=>x._id===t.store);const fn=st&&(st.writeFns||[]).find(f=>f._id===t.fn);if(fn)fn.codeSrc=src;}
     else if(t.k==="readFn"){const st=MODEL.stores.find(x=>x._id===t.store);const fn=st&&(st.readFns||[]).find(f=>f._id===t.fn);if(fn)fn.codeSrc=src;}
     else if(t.k==="decider"){const d=dec(t.dec);if(d){d.codeSrc=src;if(src)delete d.leer;}}
     else if(t.k==="applier"){const a=app(t.app);if(a){a.codeSrc=src;if(src)delete a.leer;}}
     else if(t.k==="sagaCount"){const x=MODEL.transitions.find(z=>z._id===t.trans);if(x)x.sammelCodeSrc=src;}
-    else if(t.k==="dienst"){const d=MODEL.dienste.find(x=>x._id===t.dienst);if(d)d.codeSrc=src;}
     else if(t.k==="funktion"){const f=MODEL.funktionen.find(x=>x._id===t.fk);if(f){f.codeSrc=src;if(src)delete f.leer;}}
     // Zusage/Kenntnis in einer Client-Implementierung (Python): der Rumpf der auf_-Methode.
     else if(t.k==="clientAuf"){const c=MODEL.clients.find(x=>x._id===t.client),im=c&&(c.implementierungen||[])[t.impl],
@@ -1322,58 +678,6 @@ public static class HtmlPresenter
       body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"opacity:.7"},"+ veröffentlicht Event ▶ (reaktiv)"),po));
       body.append(codePort("ctrl:in:"+r._id+":"+hi,{k:"reakHandle",reaktion:r._id,hi:hi},hd.codeSrc,"Controller-Logik"));
   }
-  function plHandleBody(body,p,hd,hi){
-
-      const kind=hd.inputKind||"event", isTrig=kind==="trigger", isSelf=kind==="self";
-      const sl=port(isTrig?"trigmsg":(isSelf?"self":"event"));sl.classList.add("i");
-      reg("pl:in:"+p._id+":"+hi,sl,{type:isTrig?"trigmsg":(isSelf?"self":"evtUse"),dir:"in",pipeline:p._id,handleIdx:hi});
-      const tlabel=(hd.prod&&hd.prod.k==="tg")?(trigMsgLabel(hd.prod.id)||hd.input):hd.input;
-      const lbl=isTrig?("◀ Trigger "+(tlabel||"?")):(isSelf?("◀ Self "+(hd.selfName||"?")):("◀ Auf "+(hd.event||"?")));
-      body.append(h("div",{class:"slotrow"},sl,h("span",{class:"slotlbl",style:"flex:1"},lbl),h("button",{class:"rm",onclick:()=>{p.handles.splice(hi,1);render();}},"✕")));
-      // ── Ausgänge NACH TYP (§12): EIN Port „+ Ausgang ▶" — die Art folgt aus der angeklickten Karte (Command → sends,
-      //    transientes Event → publishes, Trigger-Karte → emits; persistentes Event gesperrt: GR-KEIN-EVENT-AUS-PIPELINE).
-      //    Je Command: sofort · ⏳ Frist<T> · ✕⏳ FristStorno<T> (eine Frist ist ein Ausgang, kein Knoten).
-      const ausPort=(key,extra)=>{const so=port("command");so.classList.add("o");reg(key,so,Object.assign({type:"aus",dir:"out",pipeline:p._id,handleIdx:hi},extra||{}));return so;};
-      const modus=(c,akt)=>{const sel=h("select",{class:"gmodus",title:"Wie wird der Command ausgelöst?",onchange:e=>{const v=e.target.value;
-          hd.sends=ohneX(hd.sends,c);hd.fristen=(hd.fristen||[]).filter(f=>!(f.command===c&&f.art===akt));
-          if(v==="sofort"){if(!hd.sends.includes(c))hd.sends.push(c);}
-          else if(!hd.fristen.some(f=>f.command===c&&f.art===v))hd.fristen.push({command:c,art:v});render();}});
-        [["sofort","▶ sofort"],["frist","⏳ per Frist"],["storno","✕⏳ Storno"]].forEach(([v,l])=>{const o=h("option",{value:v},l);if(v===akt)o.selected=true;sel.append(o);});return sel;};
-      const ausZeile=(label,so,los,extra)=>body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{los();render();}},"✕"),
-          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},label),...(extra?[extra]:[]),so));
-      (hd.sends||[]).forEach(c=>ausZeile("Command "+(c||"?")+" ▶",ausPort("pl:send:"+p._id+":"+hi+":"+c,{sofort:true}),()=>{hd.sends=ohneX(hd.sends,c);},modus(c,"sofort")));
-      (hd.fristen||[]).forEach(f=>ausZeile((f.art==="storno"?"storniert Frist ":"Frist → ")+(f.command||"?")+" ▶",
-          ausPort("pl:frist:"+p._id+":"+hi+":"+f.art+":"+f.command,{fristArt:f.art}),()=>{hd.fristen=(hd.fristen||[]).filter(x=>x!==f);},modus(f.command,f.art)));
-      (hd.publishes||[]).forEach(ev=>ausZeile("veröffentlicht "+(ev||"?")+" ▶",ausPort("pl:pub:"+p._id+":"+hi+":"+ev),()=>{hd.publishes=ohneX(hd.publishes,ev);}));
-      // Trigger → die Trigger-Karte (sie trägt Felder + Ingress); von dort geht er an genau eine Pipeline. Umbenennen bleibt möglich.
-      (hd.emits||[]).forEach((nm,ei)=>{const eo=ausPort("pl:emit:"+p._id+":"+hi+":"+nm,{msgName:nm});
-        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.emits.splice(ei,1);render();}},"✕"),
-          h("span",{class:"slotlbl"},"Trigger"),h("input",{value:nm,oninput:e=>hd.emits[ei]=e.target.value,onchange:()=>render(),placeholder:"TriggerMsg",style:"flex:1"}),h("span",{class:"slotlbl"},"▶"),eo));});
-      body.append(h("div",{class:"slotrow o",title:"Klick auf ⊕: alle Nachrichten leuchten, die diese Pipeline erzeugen darf — die Art folgt aus dem Typ"},
-        h("span",{class:"slotlbl"},"+ Ausgang ▶ (Command · Trigger · transientes Event)"),ausPort("pl:aus:"+p._id+":"+hi+":open")));
-      // Im Auftrag eines Akteur-Dienstes (z. B. der KI): ein Parameter wie eine Fähigkeit — der Handle entscheidet für ihn,
-      //   sendet nur, was er darf (CQRS060), und der Command trägt ihn als Urheber. ⊕ → Dienst-Akteure leuchten.
-      {const ak=port("auftrag");ak.classList.add("i");reg("auftrag:in:"+p._id+":"+hi,ak,{type:"auftrag",dir:"in",pipeline:p._id,handleIdx:hi});
-       const a=hd.akteur&&MODEL.akteure.find(x=>x.name===hd.akteur),fremd=a?(hd.sends||[]).filter(c=>!(a.darf||[]).includes(c)):[];
-       body.append(h("div",{class:"slotrow",title:"Akteur-Dienst als Handle-Parameter (CQRS060)"},ak,
-         h("span",{class:"slotlbl",style:"flex:1"},hd.akteur?"◀ im Auftrag von 👤 "+hd.akteur:"◀ im Auftrag von … ⊕ (Dienst-Akteur)"),
-         hd.akteur?h("button",{class:"rm",title:"Auftrag lösen",onclick:()=>{delete hd.akteur;render();}},"✕"):null));
-       if(fremd.length)body.append(h("div",{class:"llmmeld err"},"⚠ "+hd.akteur+" darf "+fremd.join(", ")+" nicht (CQRS060)"));}
-      // Fähigkeiten (Read-Fns als Handle-Parameter) — wie am Reader-Handle.
-      (hd.fns||[]).forEach((fid,fj)=>{const rr=fnById(fid);const s=port("store");s.classList.add("o");reg("rcall:out:pl:"+p._id+":"+hi+":"+fid,s,{type:"rcall",dir:"out",pipeline:p._id,handleIdx:hi});
-        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.fns.splice(fj,1);render();}},"✕"),
-          h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"darf "+(rr?rr.store.name+"."+rr.fn.name:"?")+" ▶"),s));});
-      {const ro=port("store");ro.classList.add("o");reg("rcall:out:pl:"+p._id+":"+hi+":open",ro,{type:"rcall",dir:"out",pipeline:p._id,handleIdx:hi});
-       body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Read-Fn ▶"),ro));}
-      // Selbst<T> → interner Tick/Timeout (Self-Message kommt als eigener ◀ Self-Handle zurück). Die Verzögerung ist Rumpf.
-      (hd.schedules||[]).forEach((sc,si)=>{const ss=port("self");ss.classList.add("o");reg("pl:sched:"+p._id+":"+hi+":"+sc.name,ss,{type:"self",dir:"out",pipeline:p._id,handleIdx:hi,name:sc.name});
-        body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",onclick:()=>{hd.schedules.splice(si,1);render();}},"✕"),
-          h("input",{value:sc.name,oninput:e=>sc.name=e.target.value,onchange:()=>render(),placeholder:"SelfMsg",style:"flex:1"}),h("span",{class:"slotlbl"},"↺"),ss));});
-      if(!grSelbstErlaubt(hd))body.append(h("div",{class:"slotrow o",title:grText("GR-SELBST-OHNE-EVENT")},h("span",{class:"slotlbl",style:"opacity:.6"},"↺ Selbst nur ohne Event-Eingang")));
-      else body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"opacity:.8"},"+ plant Self-Tick ↺"),
-        h("button",{class:"codeadd",title:"Selbst<T>-Ausgang + Self-Handle anlegen",onclick:()=>{const nm=uniq("Tick");(hd.schedules=hd.schedules||[]).push({name:nm});if(!p.handles.some(x=>x.inputKind==="self"&&x.selfName===nm))p.handles.push({inputKind:"self",selfName:nm,sends:[],emits:[],schedules:[]});render();}},"＋")));
-      body.append(codePort("plctrl:in:"+p._id+":"+hi,{k:"plHandle",pipeline:p._id,hi:hi},hd.codeSrc,"Pipeline-Logik"));
-  }
   function rdHandleBody(body,r,hd,hi){
 
       const qin=port("query");qin.classList.add("i");reg("rdr:qin:"+r._id+":"+hi,qin,{type:"query",dir:"in",reader:r._id,handleIdx:hi});
@@ -1397,10 +701,10 @@ public static class HtmlPresenter
       body.append(codePort("ctrl:in:"+r._id+":"+hi,{k:"rdHandle",reader:r._id,hi:hi},hd.codeSrc,"Controller-Logik"));
   }
 
-  // ══ HANDLE- und FN-KNOTEN: jeder Handle einer Projektion/Reader/Reaktion/Pipeline und jede Store-Funktion ist eine
+  // ══ HANDLE- und FN-KNOTEN: jeder Handle einer Projektion/Reader/Reaktion und jede Store-Funktion ist eine
   //   EIGENE Karte (wie der Decider je Command) — mit ihren Ports, ihrem Rumpf und dem Vertrag aus dem Code (was sie
   //   erzeugen KANN und welche Store-Fns sie rufen DARF — nur Signatur). Kein neues Modell-Objekt: die Karte zeigt owner.handles[i] bzw. die Fn.
-  const HANDLE_ART={projektion:["projektionen","prj"],reader:["reader","rdr"],reaktion:["reaktionen","rk"],pipeline:["pipelines","pl"]};
+  const HANDLE_ART={projektion:["projektionen","prj"],reader:["reader","rdr"],reaktion:["reaktionen","rk"]};
   const handleDisc=hd=>hd.query||hd.event||hd.selfName||hd.input||"";
   // Knoten-Ids der Handles eines Besitzers — über den Eingangstyp (rename-fest je Eingang), Index nur bei Kollision/leer.
   function handleIds(o,oid){const seen=new Set();return (o.handles||[]).map((hd,hi)=>{let id="hd:"+oid+":"+(handleDisc(hd)||"#"+hi);
@@ -1430,72 +734,15 @@ public static class HtmlPresenter
     body.append(vertragKopf(hd));
     if(n.own.kind==="projektion")prjHandleBody(body,o,hd,hi);
     else if(n.own.kind==="reader")rdHandleBody(body,o,hd,hi);
-    else if(n.own.kind==="reaktion")rkHandleBody(body,o,hd,hi);
-    else if(n.own.kind==="pipeline")plHandleBody(body,o,hd,hi);}
+    else if(n.own.kind==="reaktion")rkHandleBody(body,o,hd,hi);}
   function fnCard(body,n){const st=n.own.ref;
     body.append(h("a",{class:"ghl",onclick:()=>{const m=NODEBY.get(n.own.id);if(m){waehle(m.id);centerOn(m);}}},"▲ Store: "+(st.name||"?")));
-    body.append(h("div",{class:"gsec"},n.lesen?"Lese-Fähigkeit — ◀ Parameter von Reader-/Pipeline-Handles":"Schreib-Fähigkeit — ◀ Parameter von Projektions-Handles"));
+    body.append(h("div",{class:"gsec"},n.lesen?"Lese-Fähigkeit — ◀ Parameter von Reader-Handles":"Schreib-Fähigkeit — ◀ Parameter von Projektions-Handles"));
     body.append(fnBlock(st,n.ref,n.lesen));
     // Wer diese Fähigkeit als Parameter verlangt (Signatur-Fakt: darf rufen — nicht „ruft wann").
-    const rufer=[];MODEL.projektionen.concat(MODEL.reader,MODEL.pipelines||[]).forEach(o=>(o.handles||[]).forEach(hd=>{if((hd.fns||[]).includes(n.ref._id))rufer.push({o,hd});}));
+    const rufer=[];MODEL.projektionen.concat(MODEL.reader).forEach(o=>(o.handles||[]).forEach(hd=>{if((hd.fns||[]).includes(n.ref._id))rufer.push({o,hd});}));
     if(rufer.length){body.append(h("div",{class:"gsec"},"Fähigkeit von"));
       rufer.forEach(({o,hd})=>body.append(h("div",{class:"gaus"},o.name+".Handle("+handleDisc(hd)+")")));}}
-  // Trigger-Msg eines Handles anzeigen (aktueller msgName des verdrahteten Triggers, rename-fest über trigId).
-  const trigMsgLabel=id=>{const t=MODEL.triggers.find(x=>x._id===id);return t?(t.msgName||t.name||"Trigger"):null;};
-  // ══ INGRESS/PIPELINE: Trigger (Timer/Webhook/FileWatch/Frist) → Trigger-Msg → Pipeline → OneOf-Command(s).
-  // Trigger = Ingress-WECKER. Modus + Config; erzeugt EINE IPipelineTrigger-Nachricht (Name + Felder) → Pipeline.
-  function triggerCard(body,t){
-    body.append(nameInp(t,"name","Trigger","trigger"));
-    const modi=[["timer","⏱ Timer (Intervall)"],["webhook","🔗 Webhook (HTTP)"],["filewatch","📁 FileWatch (Datei)"]];
-    const sel=h("select",{onchange:e=>{t.modus=e.target.value||undefined;render();}});
-    // Ohne Bindung im Code (Composition Root) ist der Modus UNBESTIMMT — nicht geraten.
-    const leer=h("option",{value:""},"— Modus (im Code nicht gebunden)");if(!t.modus)leer.selected=true;sel.append(leer);
-    modi.forEach(([v,l])=>{const o=h("option",{value:v},l);if(t.modus===v)o.selected=true;sel.append(o);});
-    body.append(sel);
-    if(t.modus==="webhook"){body.append(h("div",{class:"gsec"},"Route · Request-Typ"));
-      body.append(inp(t.route,v=>t.route=v,"/webhooks/x"));body.append(tinp(t.reqTyp,v=>t.reqTyp=v));}
-    else if(t.modus==="filewatch"){body.append(h("div",{class:"gsec"},"Pfad · Muster"));
-      body.append(inp(t.pfad,v=>t.pfad=v,"/data/incoming"));body.append(inp(t.muster,v=>t.muster=v,"*.png"));}
-    else {body.append(h("div",{class:"gsec"},"Intervall"));body.append(inp(t.intervall,v=>t.intervall=v,"30s"));}
-    body.append(h("div",{class:"gsec"},"Trigger-Nachricht (IPipelineTrigger)"));
-    body.append(inp(t.msgName,v=>{const alt=t.msgName;t.msgName=v;if(!alt||alt===v)return;
-      MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.inputKind==="trigger"&&hd.input===alt)hd.input=v;
-        hd.emits=(hd.emits||[]).map(x=>x===alt?v:x);}));},"z. B. DateiErkannt"));
-    (t.felder||[]).forEach((f,fi)=>body.append(feldRow(f,()=>{t.felder.splice(fi,1);render();})));
-    body.append(h("button",{class:"add",onclick:()=>{(t.felder=t.felder||[]).push({_id:"f"+(NID++),name:uniqFeldName(t.felder,"feld"),typ:"Guid"});render();}},"+ Feld"));
-    // Zwei Seiten (§12): ◀ kommt aus = Ingress-Bindung + Pipelines, die den Trigger erzeugen · geht an ▶ = die eine Pipeline.
-    const tin=slotRow("trigmsg","+ Erzeuger ⊕ (Pipeline)","l",{type:"trgIn",dir:"in",trigId:t._id},"trg:in:"+t._id);
-    const tout=slotRow("trigmsg","+ Konsument ⊕ (Pipeline) ▶","r",{type:"trigmsg",dir:"out",trigId:t._id,msgName:t.msgName},"trg:msg:"+t._id);
-    {const dp=darfPort(trigName(t));
-     if(INSP)zweiSeiten(body,trigName(t),t,h("div",{},tin,dp),tout);else body.append(tin,dp,tout);}
-  }
-  // Pipeline = 4. durabler Konsument (IPipelineHandler): je Handle EIN Eingang (Trigger/Event/Self) →
-  //   yield ICommand UND/ODER yield IPipelineTrigger (→ andere Pipeline) UND/ODER ScheduleSelf (Tick/Timeout).
-  //   Ein Handle kann auch reiner Seiteneffekt sein (kein yield). Das WIE macht der 📝 Rumpf.
-  function pipelineCard(body,p){
-    body.append(nameInp(p,"name","Pipeline","pipeline"));
-    body.append(h("input",{value:p.namespace??"",oninput:e=>p.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
-    body.append(h("div",{class:"gsec"},"PipelineId"));
-    body.append(inp(p.pipelineId,v=>p.pipelineId=v,"z. B. bildverarbeitung"));
-    // Konfigurations-Records (Konstruktor-Injektion). Geschrieben wird der Konstruktor nur bei einer NEUEN Pipeline.
-    body.append(h("div",{class:"gsec"},"Konfigs (Konstruktor)"+(p.code?" — bestehend: Konstruktor ist Handcode":"")));
-    (p.konfigs=p.konfigs||[]).forEach((k,i)=>{const s=anchorDot("trigmsg");s.classList.add("i");reg("pl:konfig:"+p._id+":"+k,s,{type:"konfig",dir:"in",pipeline:p._id,anker:true});
-      body.append(h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"flex:1;cursor:pointer",title:"Klick: Konfig-Karte öffnen",onclick:()=>zeigeLadend("rec:"+k)},"◀ "+k),
-      h("button",{class:"rm",onclick:()=>{p.konfigs.splice(i,1);render();}},"✕")));});
-    body.append(slotRow("trigmsg","+ Konfig ◀ ⊕ (Konfig-Record)","l",{type:"konfig",dir:"in",pipeline:p._id},"pl:konfig:"+p._id+":open"));
-    body.append(h("div",{class:"gsec"},"Handle: Trigger/Event/Self ◀ → yield Command · yield Trigger · ScheduleSelf. Das WIE macht der Rumpf."));
-    body.append(handleListe(p,"pl:"+p._id,"je Handle eine eigene Karte"));
-    // Genutzte Dienste (Konstruktor-Injektion) — an „Vertrag ▶" eines Dienst-Knotens andocken.
-    (p.dienste||[]).forEach((dn,i)=>{const s=port("store");s.classList.add("i");reg("pl:dienst:"+p._id+":"+dn,s,{type:"dienst",dir:"in",pipeline:p._id});
-      body.append(h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"flex:1"},"◀ nutzt "+(dn||"?")),h("button",{class:"rm",onclick:()=>{p.dienste.splice(i,1);render();}},"✕")));});
-    const dio=port("store");dio.classList.add("i");reg("pl:dienst:"+p._id+":open",dio,{type:"dienst",dir:"in",pipeline:p._id});
-    body.append(h("div",{class:"slotrow"},dio,h("span",{class:"slotlbl"},"+ nutzt Dienst ◀")));
-    const ot=port("trigmsg");ot.classList.add("i");reg("pl:in:"+p._id+":opentrg",ot,{type:"trigmsg",dir:"in",pipeline:p._id,handleIdx:"opentrg"});
-    body.append(h("div",{class:"slotrow"},ot,h("span",{class:"slotlbl"},"+ Trigger andocken")));
-    const oe=port("event");oe.classList.add("i");reg("pl:in:"+p._id+":openevt",oe,{type:"evtUse",dir:"in",pipeline:p._id,handleIdx:"openevt"});
-    body.append(h("div",{class:"slotrow"},oe,h("span",{class:"slotlbl"},"+ Event andocken")));
-  }
-
   // Reader = Controller: Queries (je Handle) + Store-SCOPE + Response; Handle-Rumpf kommt als Code.
   function readerCard(body,r){
     body.append(nameInp(r,"name","Reader"));
@@ -1510,30 +757,6 @@ public static class HtmlPresenter
     body.append(handleListe(r,"rdr:"+r._id,"Query → Handle → Read-Fn(s) → OneOf-Responses · je Handle eine eigene Karte"));
     const oi=port("open");oi.classList.add("i");reg("rdr:qin:"+r._id+":open",oi,{type:"query",dir:"in",reader:r._id,handleIdx:"open"});
     body.append(h("div",{class:"slotrow"},oi,h("span",{class:"slotlbl"},"+ Query andocken")));
-  }
-
-  // ══ BETRIEB / HOST-BAND: die (bewusst unreine) Composition-Root-Naht — Frist, Dienst-Bindung, HostSetting.
-  //    Sie leben real in Program.cs/DI. Der Editor macht die Naht sichtbar statt sie zu verstecken.
-
-  // Frist = Drei-End-Relation (statt Ingress-Attrappe): plant ◀ Event · storniert ◀ Event ·
-  //   Dauer ◀ HostSetting · fällig → Command @ Aggregat. Kontext = stabile Identität (AddDeadlines-Router).
-  function fristCard(body,f){
-    body.append(nameInp(f,"name","Frist","frist"));
-    body.append(h("div",{class:"gsec"},"Kontext (stabile Identität)"));
-    body.append(inp(f.kontext,v=>f.kontext=v,"z. B. training-timeout"));
-    body.append(h("div",{class:"gsec"},"plant auf Event(s) · storniert auf Event(s) · Dauer aus HostSetting"));
-    (f.plant||[]).forEach((ev,i)=>{const s=port("event");s.classList.add("i");reg("fr:plant:"+f._id+":"+ev,s,{type:"evtUse",dir:"in",frist:f._id,role:"plant"});
-      body.append(h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"flex:1"},"◀ plant auf "+(ev||"?")),h("button",{class:"rm",onclick:()=>{f.plant.splice(i,1);render();}},"✕")));});
-    const po=port("event");po.classList.add("i");reg("fr:plant:"+f._id+":open",po,{type:"evtUse",dir:"in",frist:f._id,role:"plant"});
-    body.append(h("div",{class:"slotrow"},po,h("span",{class:"slotlbl"},"+ plant auf Event ◀")));
-    (f.storniert||[]).forEach((ev,i)=>{const s=port("event");s.classList.add("i");reg("fr:cancel:"+f._id+":"+ev,s,{type:"evtUse",dir:"in",frist:f._id,role:"storniert"});
-      body.append(h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"flex:1"},"◀ storniert auf "+(ev||"?")),h("button",{class:"rm",onclick:()=>{f.storniert.splice(i,1);render();}},"✕")));});
-    const co=port("event");co.classList.add("i");reg("fr:cancel:"+f._id+":open",co,{type:"evtUse",dir:"in",frist:f._id,role:"storniert"});
-    body.append(h("div",{class:"slotrow"},co,h("span",{class:"slotlbl"},"+ storniert auf Event ◀")));
-    const ds=port("trigmsg");ds.classList.add("i");reg("fr:dauer:"+f._id,ds,{type:"setting",dir:"in",frist:f._id});
-    body.append(h("div",{class:"slotrow"},ds,h("span",{class:"slotlbl"},"◀ Dauer: "+(f.dauerSetting||"— HostSetting andocken"))));
-    const so=port("command");so.classList.add("o");reg("fr:send:"+f._id,so,{type:"sagaCmd",dir:"out",frist:f._id});
-    body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"fällig → "+(f.sendet||"Command")+(f.aggregat?" @ "+f.aggregat:"")+" ▶"),so));
   }
 
   // ══ LOGIK-ELEMENT „Katalog-Funktion" (IFunktion): Signatur + Rumpf — ◀ EIN Auftrag hinein, ▶ OneOf-Ergebnis-Events heraus,
@@ -1629,22 +852,7 @@ public static class HtmlPresenter
       ? "Mit Fähigkeiten läuft die Funktion nur im Host (AddFunktion<"+(f.name||"F")+", …>) — nicht in Python/extern."
       : "Laufort = Bindung im Host: C# mit AddFunktion<"+(f.name||"F")+", …> (Rumpf unten als Code-Block), Python/extern mit AddExterneFunktion (dann kein Code-Block)."));
   }
-  // Dienst-Bindung = Vertrag (Interface) → Impl (📝-Insel ODER externer Adapter). Gibt dem freistehenden
-  //   Domain-Service (SplitZuteiler, ImagePairName) UND den Handler-Dependencies (IImageResizer …) ein Zuhause.
-  function dienstCard(body,d){
-    body.append(nameInp(d,"name","Dienst","dienst"));
-    body.append(h("div",{class:"gsec"},"Vertrag (Interface)"));
-    body.append(inp(d.vertrag,v=>d.vertrag=v,"z. B. IImageResizer"));
-    const vo=port("store");vo.classList.add("o");reg("di:vertrag:"+d._id,vo,{type:"dienst",dir:"out",dienst:d._id});
-    body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"Vertrag "+(d.vertrag||"?")+" ▶"),vo));
-    body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>{d.extern=e.target.checked||undefined;render();},...(d.extern?{checked:"checked"}:{})}),"Externer Dienst (HTTP/ML) — Impl außerhalb"));
-    if(!d.extern){body.append(h("div",{class:"gsec"},"Impl-Logik"));
-      body.append(codePort("di:impl:"+d._id,{k:"dienst",dienst:d._id},d.codeSrc,"Impl-Logik"));}
-    else body.append(h("div",{class:"gsec",style:"opacity:.6"},"Impl = externer Adapter (nicht im Editor)"));
-  }
 
-  // HostSetting = operativer Config-Wert (Name/Typ/Default/EnvKey) — die Editor-Repräsentation von
-  //   appsettings/env für DOMÄNEN-relevante Werte (Pfad/Intervall/Timeout). Speist Trigger/Frist.
   // ══ AKTEURE: von wem kommt was? (docs/konzept-akteure.md §2, docs/konzept-domaenen-editor.md §12) ══
   //   Deklariert ist nur IDarf (direkt). Was eine Pipeline/Reaktion/ein Reader/Prozess/Decide aus einer Nachricht erzeugt,
   //   trägt deren Akteure (Kette); ein Handle mit dem Dienst eines Akteurs (IAkteurDienst<A>) wechselt zu A. Spiegel von
@@ -1653,27 +861,14 @@ public static class HtmlPresenter
   const artBasis=a=>a==="Mensch"?"IMensch":a==="Maschine"?"IMaschine":a==="Ki"?"IKi":"IAkteur";
   const OHNE_AKT="§ohneAkteur";
   let AKM=null,AKTSET=new Map(),AKTORD=new Map(),AKTDOM=null;
-  function istEingangName(nm){const r=recByName(nm);return r?(r.kind==="command"||r.kind==="query"||r.kind==="trigger"):MODEL.triggers.some(t=>trigName(t)===nm);}
-  // Eingang eines Pipeline-Handles als Nachrichten-Name (Event, Trigger, Selbst-Nachricht).
-  function pipeEingang(hd){const k=hd.inputKind||"event";
-    if(k==="event")return hd.event||"";
-    if(k==="self")return hd.selfName||"";
-    if(hd.input)return hd.input;
-    const tid=hd.trigId||(hd.prod&&hd.prod.k==="tg"?hd.prod.id:null),t=tid&&MODEL.triggers.find(x=>x._id===tid);
-    return t?trigName(t):"";}
-  // Frist<T> liefert einen Command; FristStorno<T> löscht nur eine Frist — kein Nachrichtenfluss (wie Fluss.cs).
-  const fristAus=hd=>(hd.fristen||[]).filter(f=>f.art!=="storno").map(f=>f.command);
+  function istEingangName(nm){const r=recByName(nm);return !!r&&(r.kind==="command"||r.kind==="query");}
   // Die Regeln des Flusses: [Eingänge, Ausgänge, Akteur-Wechsel|null] — dieselben Kanten wie Fluss.cs.
   function flussRegeln(){const R=[];
     MODEL.decider.forEach(d=>{if(d.command)R.push([[d.command],(d.ergibt||[]).map(o=>o.event).filter(Boolean),null]);});
-    const dienstAkteur=nm=>MODEL.akteure.some(a=>a.name===nm&&(a.dienste||[]).length)?nm:null;
-    MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{const e=pipeEingang(hd);
-      R.push([e?[e]:[],[...(hd.sends||[]),...fristAus(hd),...(hd.emits||[]),...(hd.publishes||[]),...(hd.schedules||[]).map(x=>x.name)].filter(Boolean),
-        hd.akteur?dienstAkteur(hd.akteur):null]);}));
     MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>R.push([[hd.event].filter(Boolean),[...(hd.sends||[]),...(hd.publishes||[])],null])));
     MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>R.push([[hd.event].filter(Boolean),[...(hd.publishes||[])],null])));
     MODEL.reader.forEach(r=>(r.handles||[]).forEach(hd=>R.push([[hd.query].filter(Boolean),[...(hd.responses||[])],null])));
-    // Vertrag (Akteur-Konzept §3): Event → Akteur → Commands; die Ausgänge gehören dem Akteur (Wechsel wie beim Dienst).
+    // Vertrag (Akteur-Konzept §3): Event → Akteur → Commands; die Ausgänge gehören dem Akteur (Akteur-Wechsel).
     vertragsZusagen().forEach(({a,r})=>R.push([[r.eingang].filter(Boolean),[...(r.ausgaenge||[])],a.name]));
     // Katalog-Funktion: Auftrag → Ergebnisse (wie Fluss.cs: fn-Baustein zwischen Auftrag und Ergebnis-Events).
     const auftragVon=nm=>(MODEL.funktionen.find(f=>f.name===nm)||{}).auftrag||nm;
@@ -1719,15 +914,14 @@ public static class HtmlPresenter
         add(mengeVon(r.name));
         if(n.kind==="query"&&!s.size)MODEL.reader.forEach(rd=>{if((rd.handles||[]).some(h=>h.query===r.name))add(akteurSet({id:"rdr:"+rd._id,kind:"reader",ref:rd}));});
         break;}
-      case "trigger":add(mengeVon(trigName(r)));break;
       case "decider":add(mengeVon(r.command));break;
       case "applier":add(mengeVon(r.event));break;
       case "aggregate":MODEL.decider.filter(d=>d.aggregat===r.name).forEach(d=>add(mengeVon(d.command)));break;
       case "state":MODEL.decider.filter(d=>d.aggregat===r.aggregat).forEach(d=>add(mengeVon(d.command)));break;
       case "reader":(r.handles||[]).forEach(hd=>add(mengeVon(hd.query)));break;
-      case "pipeline":case "reaktion":(r.handles||[]).forEach(hd=>add(handleAkteure(n.kind,hd)));break;
+      case "reaktion":(r.handles||[]).forEach(hd=>add(handleAkteure(n.kind,hd)));break;
       case "handle":{const o=n.own;if(o.kind==="projektion")add(projektionAkteure(o.ref));else if(o.kind==="reader")add(mengeVon(r.query));
-        else{add(handleAkteure(o.kind,r));if(!s.size)add(akteurSet(o));}   // Start-/Tick-Handle ohne Kette: wie seine Pipeline
+        else{add(handleAkteure(o.kind,r));if(!s.size)add(akteurSet(o));}   // Handle ohne Kette: wie sein Besitzer
         break;}
       case "saga":MODEL.transitions.filter(t=>t.prozess===r.name).forEach(t=>(t.dann||[]).forEach(d=>add(mengeVon(d.sende))));
         add(mengeVon(r.triggerEvent));break;
@@ -1740,41 +934,35 @@ public static class HtmlPresenter
       case "funktion":add(mengeVon(r.auftrag));
         if(!s.size)MODEL.transitions.filter(t=>(t.dann||[]).some(d=>d.rufe===r.name)).forEach(t=>add(akteurSet({id:"tr:"+t._id,kind:"transition",ref:t})));break;
       case "auftrag":{const f=MODEL.funktionen.find(x=>x.auftrag===r.name);if(f)add(akteurSet({id:"fk:"+f._id,kind:"funktion",ref:f}));else add(mengeVon(r.name));break;}
-      case "frist":add(mengeVon(r.sendet));break;
       case "projektion":add(projektionAkteure(r));break;
       case "store":add(storeAkteure(r));break;
       case "fn":{const l=fnLeser(r._id);add(l.size?l:storeAkteure(n.own.ref));break;}
       case "readmodel":{const st=MODEL.stores.find(x=>x.name===r.store);if(st)add(storeAkteure(st));break;}
-      case "dienst":{const a=MODEL.akteure.find(x=>(x.dienste||[]).includes(r.vertrag||r.name));
-        if(a)s.add(a.name);else MODEL.pipelines.filter(p=>(p.dienste||[]).includes(r.vertrag||r.name)).forEach(p=>add(akteurSet({id:"pl:"+p._id,kind:"pipeline",ref:p})));break;}
       case "codenode":case "llmnode":{const cid=n.kind==="llmnode"?r.promptZiel:r._id,o=cid&&codeBesitzerKnoten(cid);if(o&&o.id!==n.id)add(akteurSet(o));break;}
-      default:{   // VO/Enum/Konfig/HostSetting …: folgen ihren Nachbarn (ohne Daten-Daten-Ketten)
+      default:{   // VO/Enum/Konfig …: folgen ihren Nachbarn (ohne Daten-Daten-Ketten)
         const nb=[...(ADJ.inn.get(n.id)||[]),...(ADJ.out.get(n.id)||[])].map(x=>NODEBY.get(x)).filter(m=>m&&m.kind!=="akteur");
         nb.filter(m=>!DATEN_ARTEN.has(m.kind)).forEach(m=>add(akteurSet(m)));
         if(!s.size)nb.filter(m=>DATEN_ARTEN.has(m.kind)).forEach(m=>add(akteurSet(m)));}}   // VO in VO: über den Träger
     // Datentypen ohne eigene Kette (verschachtelte Response, Read Model ohne Store …) gehen mit ihren Nachbarn. Eingänge NIE —
-    //   ein Command/eine Query/ein Trigger ohne Akteur ist eine Lücke (GR-HERKUNFT) und steht sichtbar „ohne Akteur".
+    //   ein Command/eine Query ohne Akteur ist eine Lücke (GR-HERKUNFT) und steht sichtbar „ohne Akteur".
     if(!s.size&&(n.kind==="queryresponse"||n.kind==="readmodel")){
       [...(ADJ.inn.get(n.id)||[]),...(ADJ.out.get(n.id)||[])].map(x=>NODEBY.get(x)).filter(m=>m&&m.kind!=="akteur").forEach(m=>add(akteurSet(m)));}
     return s;}
-  const DATEN_ARTEN=new Set(["valueobject","enum","konfig","hostsetting"]);
+  const DATEN_ARTEN=new Set(["valueobject","enum","konfig"]);
   // Arten, die mit ihrem Träger mitgehen, aber keinen Akteur-Rahmen begründen.
-  const NUR_MIT=new Set(["valueobject","enum","konfig","hostsetting","dienst","codenode","llmnode","queryresponse"]);
+  const NUR_MIT=new Set(["valueobject","enum","konfig","codenode","llmnode","queryresponse"]);
   // Diagnose: je Domäne die Akteur-Reihenfolge und je Rahmen die Bausteine mit ihrer Akteur-Menge.
   window.deAkteure=()=>{const r={};NODEBY.forEach(n=>{if(!VIS.has(n.id))return;const d=domKey(n),o=akteurOrdnung(d),a=o.length?akteurVon(n):"—";
     const x=r[d]||(r[d]={ordnung:o,rahmen:{}});(x.rahmen[a]=x.rahmen[a]||[]).push(n.kind+":"+n.name+" {"+[...akteurSet(n)].join(",")+"}");});return r;};
-  // Pipeline-/Reaktions-Handle: Dienst-Wechsel → dieser Akteur; sonst die Akteure seines Eingangs; ohne Kette (Ingress,
-  //   Selbst-Tick ohne Akteur) die Akteure seiner Ausgaben (FileWatch → DateiErkannt → KameraSystem).
+  // Reaktions-Handle: die Akteure seines Eingangs; ohne Kette die Akteure seiner Ausgaben.
   function handleAkteure(art,hd){const s=new Set();
     if(art==="projektion"||art==="reader"){return null;}
-    if(art==="pipeline"&&hd.akteur&&MODEL.akteure.some(a=>a.name===hd.akteur&&(a.dienste||[]).length))return new Set([hd.akteur]);
-    mengeVon(art==="pipeline"?pipeEingang(hd):hd.event).forEach(x=>s.add(x));
-    if(!s.size)[...(hd.sends||[]),...fristAus(hd),...(hd.emits||[]),...(hd.publishes||[])].forEach(o=>mengeVon(o).forEach(x=>s.add(x)));
+    mengeVon(hd.event).forEach(x=>s.add(x));
+    if(!s.size)[...(hd.sends||[]),...(hd.publishes||[])].forEach(o=>mengeVon(o).forEach(x=>s.add(x)));
     return s;}
-  // Wer liest eine Store-Fn? Reader- und Pipeline-Handles, die sie als Fähigkeit nehmen.
+  // Wer liest eine Store-Fn? Reader-Handles, die sie als Fähigkeit nehmen.
   function fnLeser(fid){const s=new Set();
     MODEL.reader.forEach(rd=>(rd.handles||[]).forEach(hd=>{if((hd.fns||[]).includes(fid))mengeVon(hd.query).forEach(x=>s.add(x));}));
-    MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{if((hd.fns||[]).includes(fid))(handleAkteure("pipeline",hd)||[]).forEach(x=>s.add(x));}));
     return s;}
   function storeAkteure(st){const s=new Set();(st.readFns||[]).forEach(f=>fnLeser(f._id).forEach(x=>s.add(x)));return s;}
   // Projektion: wer sie liest — über ihre Reader und die Stores, in die sie schreibt.
@@ -1782,20 +970,19 @@ public static class HtmlPresenter
     MODEL.reader.filter(rd=>rd.projektion===p.name).forEach(rd=>(rd.handles||[]).forEach(hd=>mengeVon(hd.query).forEach(x=>s.add(x))));
     derivedStores(p).forEach(nm=>{const st=MODEL.stores.find(x=>x.name===nm);if(st)storeAkteure(st).forEach(x=>s.add(x));});
     return s;}
-  // Die Karte, an der ein Rumpf (📝) hängt — Decider/Applier/Handle/Fn/Dienst.
+  // Die Karte, an der ein Rumpf (📝) hängt — Decider/Applier/Handle/Fn.
   function codeBesitzerKnoten(cid){for(const n of NODEBY.values()){const r=n.ref;if(n.kind!=="codenode"&&n.kind!=="llmnode"&&r&&r.codeSrc===cid)return n;}return null;}
-  // Reihenfolge der Akteur-Rahmen einer Domäne (§12.3): wer das Ding erschafft, dann wer worauf reagiert (Dienst-Wechsel),
+  // Reihenfolge der Akteur-Rahmen einer Domäne (§12.3): wer das Ding erschafft, dann wer worauf antwortet (Zusage),
   //   dann Art (Maschine → KI → Mensch), dann Name. Die Ansicht kann sie umsortieren (VIEW.akteurOrdnung[dom]).
   function akteurOrdnung(dom){let o=AKTORD.get(dom);if(o)return o;
-    // Wer wirkt hier? Nur fachliche Bausteine zählen — ein Datentyp/Dienst/Code, den viele berühren, macht keinen eigenen Rahmen auf.
+    // Wer wirkt hier? Nur fachliche Bausteine zählen — ein Datentyp/Code, den viele berühren, macht keinen eigenen Rahmen auf.
     const da=new Set();NODEBY.forEach(n=>{if(n.kind!=="akteur"&&!NUR_MIT.has(n.kind)&&VIS.has(n.id)&&!istInselLage(n)&&domKey(n)===dom)akteurSet(n).forEach(x=>da.add(x));});
     const art=nm=>(MODEL.akteure.find(a=>a.name===nm)||{}).art;
     const schoepfer=new Set();MODEL.records.forEach(r=>{if(r.kind==="command"&&r.istErzeugung){const d=MODEL.decider.find(x=>x.command===r.name),
       ag=d&&MODEL.aggregate.find(a=>a.name===d.aggregat);if(ag&&ag.namespace===dom)mengeVon(r.name).forEach(x=>schoepfer.add(x));}});
     const basis=[...da].sort((a,b)=>(schoepfer.has(a)?0:1)-(schoepfer.has(b)?0:1)||(ART_RANG[art(a)]??3)-(ART_RANG[art(b)]??3)||a.localeCompare(b));
-    // Reagiert B per Dienst-Wechsel auf ein Event von A → A vor B.
-    const vor=new Map();MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{const w=handleAkteure("pipeline",hd);
-      if(!(hd.akteur&&w&&w.has(hd.akteur)))return;mengeVon(pipeEingang(hd)).forEach(a=>{if(a!==hd.akteur){if(!vor.has(hd.akteur))vor.set(hd.akteur,new Set());vor.get(hd.akteur).add(a);}});}));
+    // Antwortet B per Zusage auf ein Event von A → A vor B.
+    const vor=new Map();
     vertragsZusagen().forEach(({a,r})=>mengeVon(r.eingang).forEach(x=>{if(x!==a.name){if(!vor.has(a.name))vor.set(a.name,new Set());vor.get(a.name).add(x);}}));
     const aus=[],rest=[...basis];
     while(rest.length){const i=rest.findIndex(b=>[...(vor.get(b)||[])].every(a=>!rest.includes(a)||a===b));const k=i<0?0:i;aus.push(rest.splice(k,1)[0]);}
@@ -1811,7 +998,7 @@ public static class HtmlPresenter
   function akteurDomaenen(name){if(!AKTDOM){AKTDOM=new Map();NODEBY.forEach(n=>{if(n.kind==="akteur"||NUR_MIT.has(n.kind))return;const d=domKey(n);
       akteurSet(n).forEach(a=>{if(!AKTDOM.has(a))AKTDOM.set(a,new Set());AKTDOM.get(a).add(d);});});}
     return [...(AKTDOM.get(name)||[])].sort(domOrd);}
-  // 👤 AKTEUR: Name, Namespace, und EINE Liste — was er darf (IDarf<T>). ⊕ „+ darf" → passende Commands/Queries/Trigger
+  // 👤 AKTEUR: Name, Namespace, und EINE Liste — was er darf (IDarf<T>). ⊕ „+ darf" → passende Commands/Queries
   //   leuchten → anklicken = erlauben, ✓-Karte = entziehen. Was er HÖREN darf, ist abgeleitet (Generator), keine Eingabe.
   function akteurCard(body,a){
     body.append(h("div",{class:"gsec"},"Name · Namespace"));
@@ -1824,8 +1011,8 @@ public static class HtmlPresenter
           .map(([v,t])=>h("option",{value:v,...((a.art||"")===v?{selected:"selected"}:{})},t)))));
     body.append(h("div",{class:"gsec",title:"public sealed record "+a.name+" : "+artBasis(a.art)+", IDarf<…>"},"darf ▶ — was er SELBST hineingibt"));
     if(!(a.darf||[]).length)body.append(h("div",{class:"gp-row gp-leer"},"— noch nichts (am Tor käme er nirgends durch)"));
-    (a.darf||[]).filter(nm=>!MODEL.funktionen.some(f=>f.name===nm)).forEach(nm=>{const r=recByName(nm),t=!r&&MODEL.triggers.find(x=>trigName(x)===nm);
-      const art=r?kindLabel(r.kind):t?"Trigger":"⚠ unbekannt";
+    (a.darf||[]).filter(nm=>!MODEL.funktionen.some(f=>f.name===nm)).forEach(nm=>{const r=recByName(nm);
+      const art=r?kindLabel(r.kind):"⚠ unbekannt";
       const s=anchorDot("darf");s.classList.add("o");reg("akt:darf:"+a._id+":"+nm,s,{type:"darf",dir:"out",akt:a._id,anker:true});
       body.append(h("div",{class:"slotrow o"},
         h("span",{class:"slotlbl",style:"flex:1;text-align:right"},nm+" · "+art),
@@ -1840,22 +1027,15 @@ public static class HtmlPresenter
         h("button",{class:"rm",title:"nicht mehr anbieten",onclick:()=>{a.darf=a.darf.filter(x=>x!==nm);render();}},"✕"),s));});
       // ⊕ → eine Funktions-Karte anklicken (IDarf<IFunktion>).
       body.append(slotRow("darf","+ bietet an ⊕ (Funktion) ▶","r",{type:"darf",dir:"out",akt:a._id,nurFunktion:true},"akt:darffk:"+a._id+":open"));}
-    // Was in seinem Namen über eine Kette entsteht (abgeleitet, nicht deklariert): Pipeline/Prozess/Frist aus seinen Events.
+    // Was in seinem Namen über eine Kette entsteht (abgeleitet, nicht deklariert): Fluss/Prozess aus seinen Events.
     {const km=akteurMengen(),bew=[...km.entries()].filter(([nm,m])=>m.kette.has(a.name)&&!m.direkt.has(a.name)&&istEingangName(nm)).map(([nm])=>nm).sort();
-      body.append(h("div",{class:"gsec",title:"abgeleitet: Commands/Trigger, die eine Pipeline, ein Prozess oder eine Frist aus Events dieses Akteurs erzeugt — kein IDarf nötig, am Tor nicht erlaubt"},"bewirkt über die Kette (abgeleitet)"));
+      body.append(h("div",{class:"gsec",title:"abgeleitet: Commands, die ein Fluss oder ein Prozess aus Events dieses Akteurs erzeugt — kein IDarf nötig, am Tor nicht erlaubt"},"bewirkt über die Kette (abgeleitet)"));
       body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},bew.length?bew.join(", "):"— nichts"));}
     const wirkt=akteurDomaenen(a.name);
     if(wirkt.length){body.append(h("div",{class:"gsec"},"wirkt in"));
       body.append(h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px"},...wirkt.map(d=>h("button",{class:"akt-dom",title:"Rahmen "+domLabel(d)+" · "+a.name+" einpassen",
         onclick:()=>{const fr=world&&[...world.querySelectorAll(".grahmen.akt")].find(x=>x.dataset.ns===d&&x.dataset.akt===a.name);
           if(fr)einpassenRahmen({x1:fr.offsetLeft,y1:fr.offsetTop,x2:fr.offsetLeft+fr.offsetWidth,y2:fr.offsetTop+fr.offsetHeight});}},domLabel(d)))));}
-    // Dienste (IAkteurDienst<A>, Code-Fakt): Werkzeug, mit dem der Akteur DRINNEN entscheidet — sie sind keine Akteure.
-    if((a.dienste||[]).length){body.append(h("div",{class:"gsec",title:"interface X : IAkteurDienst<"+a.name+"> — der Dienst gehört diesem Akteur"},"⚙ Dienst: "+a.dienste.join(", ")));
-      body.append(h("div",{class:"gsec",title:"Pipeline-Handles, die den Dienst als Parameter nehmen — sie entscheiden im Auftrag von "+a.name+" (CQRS060)"},"entscheidet in ▶"));
-      const im=[];MODEL.pipelines.forEach(p=>(p.handles||[]).forEach((hd,hi)=>{if(hd.akteur===a.name)im.push([p,hd,hi]);}));
-      im.forEach(([p,hd,hi])=>{const s=anchorDot("auftrag");s.classList.add("o");reg("akt:auftrag:"+a._id+":"+p._id+":"+hi,s,{type:"auftrag",dir:"out",akt:a._id,anker:true});
-        body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},p.name+".Handle("+handleDisc(hd)+")"),s));});
-      body.append(slotRow("auftrag","+ Handle ⊕ (Pipeline) ▶","r",{type:"auftrag",dir:"out",akt:a._id},"akt:auftrag:"+a._id+":open"));}
     // Vertrag (Akteur-Konzept §3): worauf er DRAUSSEN reagiert — je Auf(Event) eine Karte „Zusage" (Spalte neben dem Akteur). ⊕ → Events leuchten.
     body.append(h("div",{class:"gsec",title:"public interface "+vertragsTyp(a)+" : IAkteurVertrag<"+a.name+"> { … Auf(Event e); } — der Client (Python, Blazor) implementiert ihn; was er so hineingibt, darf er"},
       "Zusagen ◀ (Vertrag "+vertragsTyp(a)+")"));
@@ -1978,16 +1158,6 @@ public static class HtmlPresenter
     if(!tr.length)body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},"— kein Client trägt "+(r.teil||vertragsTyp(a))+" (⊕ am Client: trägt)"));
     tr.forEach(c=>{if((c.implementierungen||[]).length)clientImplementierung(body,c,r.eingang);
       else body.append(h("div",{class:"gp-row gp-leer",style:"cursor:pointer;white-space:normal",onclick:()=>waehle("cl:"+c._id)},"🔌 "+clientAnzeige(c)+": noch keine Implementierung"));});
-  }
-  function hostSettingCard(body,s){
-    body.append(nameInp(s,"name","HostSetting","hostsetting"));
-    body.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"Typ"),tinp(s.typ,v=>s.typ=v)));
-    body.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"Default"),inp(s.default,v=>s.default=v,"z. B. 6h · /data/input")));
-    body.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"EnvKey"),inp(s.envKey,v=>s.envKey=v,"Abschnitt:Schlüssel")));
-    body.append(h("div",{class:"gsec",title:"aus dem Code verfolgt: GetValue → DI-Extension → Konfig-Feld"},
-      s.konfig?"fließt in "+s.konfig+"."+(s.feld||"?")+" ▶":"— in keiner Konfiguration verwendet"));
-    const wo=port("trigmsg");wo.classList.add("o");reg("hs:wert:"+s._id,wo,{type:"setting",dir:"out",hostSetting:s._id});
-    body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"Wert ▶"),wo));
   }
 
   // 📝 Code-Knoten: der C#-Rumpf. Vorschau im Knoten, KLICK → Modal mit vollem, editierbarem Code.
@@ -2206,7 +1376,6 @@ public static class HtmlPresenter
     if(o.kind==="applier")return "apply|"+r.aggregat+"|"+r.event;
     if(o.kind==="projektion"){const hd=(r.handles||[]).find(x=>x.codeSrc===codeId);return hd?"projektion|"+r.name+"|"+hd.event:null;}
     if(o.kind==="reader"){const hd=(r.handles||[]).find(x=>x.codeSrc===codeId);return hd?"reader|"+r.name+"|"+hd.query:null;}
-    if(o.kind==="pipeline"){const hd=(r.handles||[]).find(x=>x.codeSrc===codeId);return hd?"pipeline|"+r.name+"|"+(hd.input||hd.event):null;}
     if(o.kind==="reaktion"){const hd=(r.handles||[]).find(x=>x.codeSrc===codeId);return hd?"reaktion|"+r.name+"|"+hd.event:null;}
     if(o.kind==="store"){const f=(r.writeFns||[]).concat(r.readFns||[]).find(x=>x.codeSrc===codeId);return f?"store|"+r.name+"|"+f.name:null;}
     if(o.kind==="funktion")return r.auftrag?"funktion|"+r.name+"|"+r.auftrag:null;
@@ -2229,7 +1398,7 @@ public static class HtmlPresenter
   //    Applier→Aggregat(rechts) · Applier→State-Feld(oben, optionale Zuweisungs-Markierung).
   const SVGNS="http://www.w3.org/2000/svg";
   const GRID=20;
-  const NODELABEL={akteur:"Akteur",client:"Client",auf:"Zusage",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Zusage",pipeline:"Pipeline",trigger:"Trigger",frist:"Frist",dienst:"Dienst",hostsetting:"HostSetting",codenode:"Code",llmnode:"LLM",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn",funktion:"Funktion",auftrag:"Auftrag",flussknoten:"Pipeline"};
+  const NODELABEL={akteur:"Akteur",client:"Client",auf:"Zusage",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",quelle:"Quelle",fluss:"Fluss",codenode:"Code",llmnode:"LLM",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn",funktion:"Funktion",auftrag:"Auftrag",flussknoten:"Pipeline"};
   let PAN={x:40,y:30,s:1}, canvas=null, world=null, svg=null, svgTop=null, SLOTS={};
   // Typ-Navigation: HLKIND = aktuell hervorgehobener Node-Typ (Board+Minimap); JUMPIX = Sprung-Cursor je Typ.
   let HLKIND=null; const JUMPIX={};
@@ -2417,7 +1586,7 @@ public static class HtmlPresenter
     if(kind==="funktion"){MODEL.transitions.forEach(t=>(t.dann||[]).forEach(d=>{if(d.rufe===old)d.rufe=nv;}));
       MODEL.akteure.forEach(a=>{a.darf=(a.darf||[]).map(x=>x===old?nv:x);});
       MODEL.records.forEach(r=>{if(r.kind==="auftrag"&&r.funktion===old)r.funktion=nv;});}
-    if(kind==="akteur"){MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.akteur===old)hd.akteur=nv;}));
+    if(kind==="akteur"){
       // Ein Vertrag ohne eigenen Namen heißt I+Akteur — Clients, die ihn tragen, ziehen mit.
       if(!obj.vertragName)MODEL.clients.forEach(c=>{c.traegt=(c.traegt||[]).map(t=>t==="I"+old?"I"+nv:t);});}
     if(kind==="aggregate"){
@@ -2433,13 +1602,6 @@ public static class HtmlPresenter
       // … und der Rand der Clients (ISendet/IFragt/Kenntnis folgen dem Typ).
       MODEL.clients.forEach(c=>["sendet","fragt","kenntnis"].forEach(f=>{c[f]=(c[f]||[]).map(x=>x===old?nv:x);}));
       if(obj.kind==="valueobject")retypeFelder(old,nv);   // Typ-Komposition: Feldtypen mitziehen
-      // Konfig (Ctor-Record einer Pipeline) — stand früher nur im Command-Zweig und griff daher nie.
-      MODEL.hostSettings.forEach(hs=>{if(hs.konfig===old)hs.konfig=nv;});
-      // Pipelines: Konfigs und der Eingang jedes Handles (input ist der Name, den der Server zuerst liest),
-      // Selbst-Nachricht, ausgegebene Trigger und geplante Self-Ticks folgen dem Typ.
-      MODEL.pipelines.forEach(p=>{p.konfigs=(p.konfigs||[]).map(k=>k===old?nv:k);
-        (p.handles||[]).forEach(hd=>{if(hd.input===old)hd.input=nv;if(hd.selfName===old)hd.selfName=nv;
-          hd.emits=(hd.emits||[]).map(x=>x===old?nv:x);(hd.schedules||[]).forEach(sc=>{if(sc.name===old)sc.name=nv;});});});
       if(obj.kind==="command"){
         MODEL.decider.forEach(d=>{if(d.command===old)d.command=nv;});
         const rx=new RegExp("\\b"+old.replace(/[.*+?^${}()|[\]\\]/g,"\\$&")+"\\b","g");
@@ -2447,8 +1609,6 @@ public static class HtmlPresenter
           if(d.sendeAusdruck)d.sendeAusdruck=d.sendeAusdruck.replace(rx,nv);if(d.kompensationAusdruck)d.kompensationAusdruck=d.kompensationAusdruck.replace(rx,nv);}));
         // Reaktion-Handles: ausgelöste Commands mitziehen.
         MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>{hd.sends=(hd.sends||[]).map(x=>x===old?nv:x);}));
-        MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{hd.sends=(hd.sends||[]).map(x=>x===old?nv:x);(hd.fristen||[]).forEach(f=>{if(f.command===old)f.command=nv;});}));
-        MODEL.frists.forEach(f=>{if(f.sendet===old)f.sendet=nv;});
       }else{
         MODEL.decider.forEach(d=>(d.ergibt||[]).forEach(o=>{if(o.event===old)o.event=nv;}));
         MODEL.applier.forEach(a=>{if(a.event===old)a.event=nv;});
@@ -2458,13 +1618,10 @@ public static class HtmlPresenter
         MODEL.reader.forEach(r=>(r.handles||[]).forEach(hd=>{if(hd.query===old)hd.query=nv;hd.responses=(hd.responses||[]).map(x=>x===old?nv:x);}));
         // Reaktion-Handles: Trigger-Event mitziehen.
         MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>{if(hd.event===old)hd.event=nv;}));
-        MODEL.pipelines.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.event===old)hd.event=nv;hd.publishes=(hd.publishes||[]).map(x=>x===old?nv:x);}));
         // Projektion-Handles: Trigger-Event (Abo) UND veröffentlichte reaktive Events mitziehen.
         MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>{if(hd.event===old)hd.event=nv;hd.publishes=(hd.publishes||[]).map(x=>x===old?nv:x);}));
         MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>{hd.publishes=(hd.publishes||[]).map(x=>x===old?nv:x);}));
-        MODEL.frists.forEach(f=>{f.plant=(f.plant||[]).map(x=>x===old?nv:x);f.storniert=(f.storniert||[]).map(x=>x===old?nv:x);});
       }
-    }else if(kind==="hostsetting"){MODEL.frists.forEach(f=>{if(f.dauerSetting===old)f.dauerSetting=nv;});
     }else if(kind==="projektion"){
       // IReader<TProjection>-Bindung (per Name) mitziehen.
       MODEL.reader.forEach(r=>{if(r.projektion===old)r.projektion=nv;});
@@ -2988,17 +2145,12 @@ public static class HtmlPresenter
             ...MODEL.projektionen.map(p=>({id:"prj:"+p._id,name:p.name,kind:"projektion",ref:p})),
             ...MODEL.reader.map(r=>({id:"rdr:"+r._id,name:r.name,kind:"reader",ref:r})),
             ...MODEL.reaktionen.map(r=>({id:"rk:"+r._id,name:r.name,kind:"reaktion",ref:r})),
-            ...MODEL.pipelines.map(p=>({id:"pl:"+p._id,name:p.name,kind:"pipeline",ref:p})),
-            ...MODEL.triggers.map(t=>({id:"tg:"+t._id,name:t.name,kind:"trigger",ref:t})),
-            ...MODEL.frists.map(f=>({id:"fr:"+f._id,name:f.name,kind:"frist",ref:f})),
-            ...MODEL.dienste.map(d=>({id:"di:"+d._id,name:d.name,kind:"dienst",ref:d})),
-            ...MODEL.hostSettings.map(s=>({id:"hs:"+s._id,name:s.name,kind:"hostsetting",ref:s})),
             ...MODEL.codeNodes.map(c=>({id:"cn:"+c._id,name:c.name,kind:"codenode",ref:c})),
             ...MODEL.llmNodes.map(l=>({id:"ln:"+l._id,name:l.name,kind:"llmnode",ref:l})),
             ...flussKnotenNodes(),...handleKnoten(),...fnKnoten()];
   }
   // ── AGGREGATSWEISE ANORDNUNG: jedes Aggregat ein gekachelter Block (eigenes Rollen-Mini-Layout),
-  //    aggregat-übergreifende Knoten (Sagas/Pipelines/Trigger/Reaktionen/geteilte Typen) im „Geteilt"-Band.
+  //    aggregat-übergreifende Knoten (Sagas/Reaktionen/geteilte Typen) im „Geteilt"-Band.
   const SHARED_KEY="§geteilt";
   // Das AKTEUR-BAND (docs/konzept-akteure.md §8): ein eigener Block je Domäne — ganz links, auf der Eingangsseite, vor den
   //   Aggregat-Blöcken. Kommt DAZU, ersetzt keine Spalte. Domäne aus dem Graphen (alle IDarf-Ziele in einer Domäne → dort).
@@ -3006,13 +2158,13 @@ public static class HtmlPresenter
   const ROLE_AKTEUR={akteur:0,auf:1};   // Spalte „Zusage" (Vertrag, Akteur-Konzept §3) neben dem Akteur
   // Rollen-Spalten innerhalb eines Aggregat-Blocks (links→rechts = Schreibfluss, dann Leseseite).
   //   Leseseite: Projektion (Hub) → ihre Handles → Store-Fns → Store/ReadModel; Query → Reader-Handle → Response, Reader (Hub).
-  //   Davor der Eingang von außen (Trigger → Pipeline → ihre Handles), nach dem Event der Prozess (Regel → Auftrag → ƒ → Ergebnis),
+  //   Nach dem Event der Prozess (Regel → Auftrag → ƒ → Ergebnis),
   //   der in die Command-Spalte zurück sendet — so liest sich ein Ablauf in EINEM Block.
-  const ROLE_AGG={trigger:0,pipeline:1,"handle:pipeline":2,command:3,decider:4,aggregate:5,state:5,event:6,rejection:6,applier:7,
+  const ROLE_AGG={command:3,decider:4,aggregate:5,state:5,event:6,rejection:6,applier:7,
     saga:8,transition:9,auftrag:10,funktion:11,ergebnis:12,valueobject:13,enum:13,projektion:14,"handle:projektion":15,"handle:reaktion":15,
     fn:16,store:17,readmodel:17,query:18,"handle:reader":19,queryresponse:20,reader:21};
   // Rollen-Spalten im Geteilt-Band.
-  const ROLE_SHARED={saga:0,transition:1,auftrag:2,funktion:3,ergebnis:3.5,reaktion:2,"handle:reaktion":3,pipeline:4,"handle:pipeline":5,trigger:6,frist:6,dienst:7,hostsetting:7,konfig:7,valueobject:8,enum:8,command:9,event:9,rejection:9,
+  const ROLE_SHARED={saga:0,transition:1,auftrag:2,funktion:3,ergebnis:3.5,reaktion:2,"handle:reaktion":3,konfig:7,valueobject:8,enum:8,command:9,event:9,rejection:9,
     fn:10,store:11,readmodel:11,"handle:projektion":12,projektion:13,"handle:reader":14,reader:15,query:14,queryresponse:16,codenode:17,llmnode:17};
   // Rolle eines Knotens: Handles je Besitzer-Art (Projektions- vs. Reader-Handle liegen in verschiedenen Spalten).
   // Ergebnis-Events einer Funktion stehen hinter ihr (eigene Spalte „ergebnis“), nicht bei den Events des Aggregats.
@@ -3028,10 +2180,8 @@ public static class HtmlPresenter
     for(const a of m.applier||[]) if(a.codeSrc===id) return {kind:"applier",ref:a};
     for(const p of m.projektionen||[]) if((p.handles||[]).some(h=>h.codeSrc===id)) return {kind:"projektion",ref:p};
     for(const r of m.reader||[]) if((r.handles||[]).some(h=>h.codeSrc===id)) return {kind:"reader",ref:r};
-    for(const p of m.pipelines||[]) if((p.handles||[]).some(h=>h.codeSrc===id)) return {kind:"pipeline",ref:p};
     for(const s of m.stores||[]){if(((s.writeFns||[]).concat(s.readFns||[])).some(f=>f.codeSrc===id))return {kind:"store",ref:s};}
     for(const r of m.reaktionen||[]) if((r.handles||[]).some(h=>h.codeSrc===id)) return {kind:"reaktion",ref:r};
-    for(const d of m.dienste||[]) if(d.codeSrc===id) return {kind:"dienst",ref:d};
     for(const f of m.funktionen||[]) if(f.codeSrc===id) return {kind:"funktion",ref:f};
     for(const c of m.clients||[]) for(const im of c.implementierungen||[]){const r=(im.rumpfe||[]).find(x=>x.codeSrc===id);
       if(r) return {kind:"client",ref:c,impl:im,rumpf:r};}
@@ -3048,9 +2198,8 @@ public static class HtmlPresenter
   function codeEingaenge(n){const r=n.ref;
     switch(n.kind){
       case "decider":case "applier":return [r.codeSrc||null];
-      case "dienst":return r.extern?(r.codeSrc?[r.codeSrc]:null):[r.codeSrc||null];
       case "funktion":return [r.codeSrc||null];   // die Implementierung (RufeAsync) — Platz für 📝 + 🤖 wie am Decider
-      case "handle":case "fn":return [r.codeSrc||null];   // Projektion/Reader/Reaktion/Pipeline/Store: der Code hängt an Handle/Fn
+      case "handle":case "fn":return [r.codeSrc||null];   // Projektion/Reader/Reaktion/Store: der Code hängt an Handle/Fn
       case "client":return (r.implementierungen||[]).length?(r.implementierungen||[]).flatMap(im=>(im.rumpfe||[]).map(x=>x.codeSrc||null)):null;
       case "transition":return (r.dann||[]).filter(d=>d.sende||d.rufe).flatMap(d=>[d.codeSrc||null].concat(d.kompensation?[d.kompCodeSrc||null]:[]));
       case "flussknoten":return r.art==="je"?[r.codeSrc||null]:flMitLambda(r)?(r.eingaenge||[]).map(e=>e.codeSrc||null):null;}
@@ -3062,10 +2211,9 @@ public static class HtmlPresenter
     const E=[]; const rec=n=>"rec:"+n;
     const codeId=id=>MODEL.codeNodes.some(c=>c._id===id)?"cn:"+id:(MODEL.llmNodes.some(l=>l._id===id)?"ln:"+id:null);
     const push=(a,b)=>{if(a&&b)E.push([a,b]);};
-    // Akteur → was er darf (Command/Query über die Record-Karte, Trigger über die Trigger-Karte).
+    // Akteur → was er darf (Command/Query über die Record-Karte, IDarf<IFunktion> über die Funktions-Karte).
     MODEL.akteure.forEach(a=>(a.darf||[]).forEach(nm=>{if(recByName(nm))push("akt:"+a._id,rec(nm));
-      else{const t=MODEL.triggers.find(x=>trigName(x)===nm);if(t)push("akt:"+a._id,"tg:"+t._id);
-        else{const fk=MODEL.funktionen.find(x=>x.name===nm);if(fk)push("akt:"+a._id,"fk:"+fk._id);}}}));   // IDarf<IFunktion>: bietet an
+      else{const fk=MODEL.funktionen.find(x=>x.name===nm);if(fk)push("akt:"+a._id,"fk:"+fk._id);}}));   // IDarf<IFunktion>: bietet an
     // Vertrag (Akteur-Konzept §3): Event → Zusage → Commands; die Zusage hängt an ihrem Akteur (Hub-Kante wie Handle → Besitzer).
     vertragsZusagen().forEach(({a,r,id})=>{push(id,"akt:"+a._id);if(recByName(r.eingang))push(rec(r.eingang),id);
       (r.ausgaenge||[]).forEach(c=>{if(recByName(c))push(id,rec(c));});});
@@ -3118,34 +2266,8 @@ public static class HtmlPresenter
       (hd.sends||[]).forEach(c=>{if(recByName(c))push(H(hd),rec(c));});
       (hd.publishes||[]).forEach(ev=>{if(recByName(ev))push(H(hd),rec(ev));});
       if(hd.codeSrc)push(codeId(hd.codeSrc),H(hd));}));
-    MODEL.pipelines.forEach(p=>{(p.handles||[]).forEach(hd=>{push(H(hd),"pl:"+p._id);
-        if(hd.inputKind==="event"&&recByName(hd.event))push(rec(hd.event),H(hd));
-        if(hd.inputKind==="trigger"){const pr=hd.prod||(hd.trigId?{k:"tg",id:hd.trigId}:null);
-          if(pr&&pr.k==="tg")push("tg:"+pr.id,H(hd));
-          else if(pr&&pr.k==="pl"){const q=MODEL.pipelines.find(x=>x._id===pr.plId),qh=q&&(q.handles||[])[pr.hi];if(qh)push(H(qh),H(hd));}}
-        // Ausgänge nach Typ: Command (sofort oder per Frist), veröffentlichtes Event — je über die Nachrichten-Karte.
-        (hd.sends||[]).forEach(c=>{if(recByName(c))push(H(hd),rec(c));});
-        (hd.fristen||[]).forEach(f=>{if(recByName(f.command))push(H(hd),rec(f.command));});
-        (hd.publishes||[]).forEach(ev=>{if(recByName(ev))push(H(hd),rec(ev));});
-        (hd.fns||[]).forEach(fid=>{if(fnById(fid))push(H(hd),"fn:"+fid);});
-        // ge-yieldeter Trigger → die Trigger-Karte (von dort an die eine Pipeline); ohne Karte (Entwurf) direkt an den Handle.
-        (hd.emits||[]).forEach(tn=>{const t=MODEL.triggers.find(x=>trigName(x)===tn);if(t){push(H(hd),"tg:"+t._id);return;}
-          MODEL.pipelines.forEach(q=>{if(q._id!==p._id)(q.handles||[]).forEach(qh=>{if(qh.inputKind==="trigger"&&qh.input===tn)push(H(hd),H(qh));});});});
-        // Selbst<T> → der Self-Handle derselben Pipeline (Tick/Timeout-Schleife).
-        (hd.schedules||[]).forEach(sc=>(p.handles||[]).forEach(qh=>{if(qh.inputKind==="self"&&qh.selfName===sc.name&&qh!==hd)push(H(hd),H(qh));}));
-        if(hd.codeSrc)push(codeId(hd.codeSrc),H(hd));
-        {const a=hd.akteur&&MODEL.akteure.find(x=>x.name===hd.akteur);if(a)push("akt:"+a._id,H(hd));}});
-      (p.dienste||[]).forEach(dn=>{const d=MODEL.dienste.find(x=>(x.vertrag||x.name)===dn);if(d)push("di:"+d._id,"pl:"+p._id);});});
-    MODEL.frists.forEach(f=>{(f.plant||[]).forEach(ev=>{if(recByName(ev))push(rec(ev),"fr:"+f._id);});
-      (f.storniert||[]).forEach(ev=>{if(recByName(ev))push(rec(ev),"fr:"+f._id);});
-      if(recByName(f.sendet))push("fr:"+f._id,rec(f.sendet));
-      if(f.dauerSetting){const hs=MODEL.hostSettings.find(x=>x.name===f.dauerSetting);if(hs)push("hs:"+hs._id,"fr:"+f._id);}});
-    MODEL.dienste.forEach(d=>{if(d.codeSrc)push(codeId(d.codeSrc),"di:"+d._id);});
     // 🤖 → 📝: der LLM-Knoten hängt an seinem Code-Block (Prompt-Kante, wie drawEdges sie zeichnet).
     MODEL.llmNodes.forEach(l=>{if(l.promptZiel&&MODEL.codeNodes.some(c=>c._id===l.promptZiel))push("ln:"+l._id,"cn:"+l.promptZiel);});
-    // Betrieb: HostSetting → Konfigurations-Record (Feld) → Pipeline, die ihn per Konstruktor injiziert.
-    MODEL.hostSettings.forEach(hs=>{if(hs.konfig&&recByName(hs.konfig))push("hs:"+hs._id,rec(hs.konfig));});
-    MODEL.pipelines.forEach(p=>(p.konfigs||[]).forEach(k=>{if(recByName(k))push(rec(k),"pl:"+p._id);}));
     // Store-API: Records in Fn-Parametern/-Rückgaben (Transfer-Typen wie ImagePairStatistik) gehören an ihre Fn.
     MODEL.stores.forEach(st=>(st.writeFns||[]).concat(st.readFns||[]).forEach(fn=>{
       [fn.rueckgabe,...(fn.params||[]).map(x=>x.typ)].forEach(t=>((t||"").match(/[A-Za-z_]\w*/g)||[]).forEach(n=>{
@@ -3203,23 +2325,14 @@ public static class HtmlPresenter
     if(k==="codenode"){const o=findCodeOwner(r._id);return o?groupKeyOf(o):SHARED_KEY;}
     if(k==="llmnode"){const o=r.promptZiel&&findCodeOwner(r.promptZiel);return o?groupKeyOf(o):SHARED_KEY;}
     // ABLAUF-BAUSTEINE stehen im Block des Aggregats, auf das sie WIRKEN (eindeutig) — so liest sich die Kette in EINEM Block
-    //   links→rechts: Trigger → Pipeline → Command → Decider → Event → Prozess → Regel → Auftrag → ƒ Funktion → Ergebnis.
+    //   links→rechts: Command → Decider → Event → Prozess → Regel → Auftrag → ƒ Funktion → Ergebnis.
     //   Wirkt ein Baustein auf mehrere Aggregate (echte Brücke), bleibt er im Geteilt-Band.
-    if(k==="pipeline") return pipelineAgg(r)||SHARED_KEY;
-    if(k==="trigger"){const p=triggerKonsument(trigName(r));return (p&&pipelineAgg(p))||SHARED_KEY;}
     if(k==="saga") return sagaAgg(r)||SHARED_KEY;
     if(k==="transition"){const sg=MODEL.sagas.find(x=>x.name===r.prozess);return (sg&&sagaAgg(sg))||SHARED_KEY;}
     if(k==="funktion") return funktionAgg(r)||SHARED_KEY;
     if(k==="auftrag"){const f=MODEL.funktionen.find(x=>x.auftrag===r.name);return (f&&funktionAgg(f))||SHARED_KEY;}
-    return SHARED_KEY; // reaktion, dienst, hostsetting … und Ablauf-Bausteine über mehrere Aggregate
+    return SHARED_KEY; // reaktion … und Ablauf-Bausteine über mehrere Aggregate
   }
-  // Wohin eine Pipeline wirkt: die Aggregate ihrer Commands (sofort und per Frist); ein ausgegebener Trigger zählt mit dem
-  //   Ziel der Pipeline, die ihn verarbeitet (FileWatch → DateiErkannt → ImageProcessing → ImagePair). Eindeutig oder keins.
-  function pipelineAgg(p,seen){seen=seen||new Set();if(!p||seen.has(p.name))return "";seen.add(p.name);const a=[];
-    (p.handles||[]).forEach(hd=>{(hd.sends||[]).forEach(c=>a.push(recordAgg(c)));(hd.fristen||[]).forEach(f=>a.push(recordAgg(f.command)));
-      (hd.emits||[]).forEach(t=>a.push(pipelineAgg(triggerKonsument(t),seen)));});
-    return eindeutig(a.filter(Boolean));}
-  const triggerKonsument=nm=>MODEL.pipelines.find(p=>(p.handles||[]).some(hd=>(hd.inputKind||"event")==="trigger"&&pipeEingang(hd)===nm));
   function sagaAgg(sg){const a=sagaAggs(sg);return a.length===1?a[0]:"";}
   // Eine Funktion gehört dorthin, wo die Prozesse liegen, die sie rufen — sonst zum Aggregat, das ihre Ergebnisse faltet (eine
   //   Pipeline ruft sie). Ihr Auftrag und ihre Ergebnisse stehen mit ihr im selben Block: Auftrag · ƒ · Ergebnis nebeneinander.
@@ -3451,12 +2564,7 @@ public static class HtmlPresenter
     else if(n.kind==="projektion")projektionCard(body,n.ref);
     else if(n.kind==="reader")readerCard(body,n.ref);
     else if(n.kind==="reaktion")reaktionCard(body,n.ref);
-    else if(n.kind==="pipeline")pipelineCard(body,n.ref);
-    else if(n.kind==="trigger")triggerCard(body,n.ref);
-    else if(n.kind==="frist")fristCard(body,n.ref);
-    else if(n.kind==="dienst")dienstCard(body,n.ref);
     else if(n.kind==="funktion")funktionCard(body,n.ref);
-    else if(n.kind==="hostsetting")hostSettingCard(body,n.ref);
     else if(n.kind==="akteur")akteurCard(body,n.ref);
     else if(n.kind==="client")clientCard(body,n.ref);
     else if(n.kind==="auf")aufCard(body,n);
@@ -3468,8 +2576,8 @@ public static class HtmlPresenter
     else recordCard(body,n.ref);
   }
   function delNode(n){const k=n.kind,ref=n.ref;
-    // Ein gelöschter Eingang (Command/Query/Trigger) verschwindet auch aus den Befugnissen (IDarf) der Akteure.
-    {const nm=k==="trigger"?trigName(ref):(MODEL.records.includes(ref)?ref.name:null);if(nm)MODEL.akteure.forEach(a=>{if((a.darf||[]).includes(nm))a.darf=ohneX(a.darf,nm);
+    // Ein gelöschter Eingang (Command/Query) verschwindet auch aus den Befugnissen (IDarf) der Akteure.
+    {const nm=MODEL.records.includes(ref)?ref.name:null;if(nm)MODEL.akteure.forEach(a=>{if((a.darf||[]).includes(nm))a.darf=ohneX(a.darf,nm);
       // … und aus den Verträgen: als Eingang fällt die ganze Zusage weg, als Ausgang nur der Ausgang.
       if((a.vertrag||[]).length)a.vertrag=a.vertrag.filter(r=>r.eingang!==nm).map(r=>(r.ausgaenge||[]).includes(nm)?{...r,ausgaenge:ohneX(r.ausgaenge,nm)}:r);});
       // … und aus dem Rand der Clients (sendet/fragt/kenntnis).
@@ -3493,12 +2601,7 @@ public static class HtmlPresenter
     else if(k==="projektion")MODEL.projektionen.splice(MODEL.projektionen.indexOf(ref),1);
     else if(k==="reader")MODEL.reader.splice(MODEL.reader.indexOf(ref),1);
     else if(k==="reaktion")MODEL.reaktionen.splice(MODEL.reaktionen.indexOf(ref),1);
-    else if(k==="pipeline")MODEL.pipelines.splice(MODEL.pipelines.indexOf(ref),1);
-    else if(k==="trigger")MODEL.triggers.splice(MODEL.triggers.indexOf(ref),1);
-    else if(k==="frist")MODEL.frists.splice(MODEL.frists.indexOf(ref),1);
-    else if(k==="dienst")MODEL.dienste.splice(MODEL.dienste.indexOf(ref),1);
     else if(k==="funktion"){MODEL.funktionen.splice(MODEL.funktionen.indexOf(ref),1);MODEL.akteure.forEach(a=>{a.darf=ohneX(a.darf,ref.name);});}
-    else if(k==="hostsetting")MODEL.hostSettings.splice(MODEL.hostSettings.indexOf(ref),1);
     else if(k==="akteur")MODEL.akteure.splice(MODEL.akteure.indexOf(ref),1);
     else if(k==="client"){MODEL.clients.splice(MODEL.clients.indexOf(ref),1);AUF=null;}
     else if(k==="auf"){const v=n.own.ref.vertrag||[];v.splice(v.indexOf(ref),1);}
@@ -3507,15 +2610,15 @@ public static class HtmlPresenter
     else if(k==="handle"){const hs=n.own.ref.handles||[];hs.splice(hs.indexOf(ref),1);}
     else if(k==="flussknoten")flLoeschen(n.own.ref,ref);
     else if(k==="fn"){const st=n.own.ref;["writeFns","readFns"].forEach(a=>{const i=(st[a]||[]).indexOf(ref);if(i>=0)st[a].splice(i,1);});
-      MODEL.projektionen.concat(MODEL.reader,MODEL.pipelines).forEach(o=>(o.handles||[]).forEach(hd=>{hd.fns=(hd.fns||[]).filter(x=>x!==ref._id);}));}
+      MODEL.projektionen.concat(MODEL.reader).forEach(o=>(o.handles||[]).forEach(hd=>{hd.fns=(hd.fns||[]).filter(x=>x!==ref._id);}));}
     else MODEL.records.splice(MODEL.records.indexOf(ref),1);
     render();}
 
   // Koordinaten: Welt = unskaliert; canvas = Bildschirm.
   // Nur der Transform wird sofort geschrieben (billig, der Browser bündelt ihn ohnehin je Frame). Alles daraus Abgeleitete
-  //   (Minimap-Rahmen, Culling, Schatten-LOD) läuft gebündelt EINMAL pro Frame (sichtFrame) — nie je Wheel-/Pointer-Event,
+  //   (Minimap-Rahmen, Culling) läuft gebündelt EINMAL pro Frame (sichtFrame) — nie je Wheel-/Pointer-Event,
   //   und ohne Layout-Lesen: die Canvas-Größe kommt aus dem ResizeObserver-Cache (CV), die Knoten-Geometrie aus GEO.
-  function applyPan(){if(!world)return;world.style.transform="translate("+PAN.x+"px,"+PAN.y+"px) scale("+PAN.s+")";pruefeLod();planeSicht();}
+  function applyPan(){if(!world)return;world.style.transform="translate("+PAN.x+"px,"+PAN.y+"px) scale("+PAN.s+")";planeSicht();}
   let SICHT_RAF=0, CV={w:0,h:0}, CV_RO=null, GEO=new Map();
   function planeSicht(){if(!SICHT_RAF)SICHT_RAF=requestAnimationFrame(()=>{SICHT_RAF=0;sichtFrame();});}
   function sichtFrame(){if(!canvas||!world)return;canvas.classList.toggle("fern",PAN.s<0.45);updateMinimapViewport();kulle();
@@ -3639,11 +2742,7 @@ public static class HtmlPresenter
     return {x:(r.left+r.width/2-wr.left)/PAN.s,y:(r.top+r.height/2-wr.top)/PAN.s};}
   const bez=(x1,y1,x2,y2)=>{const dx=Math.max(46,Math.abs(x2-x1)*0.5);return "M"+x1+","+y1+" C"+(x1+dx)+","+y1+" "+(x2-dx)+","+y2+" "+x2+","+y2;};
 
-  // „aus" = der EINE Ausgangs-Port eines Pipeline-Handles: passt an jeden Nachrichten-Eingang („◀ kommt aus" von Command,
-  //   Event/transientem Event, Trigger-Karte) — welche Sorte erlaubt ist, entscheidet danach die Grammatik (grPruefe).
-  const AUS_ZIEL=new Set(["sagaCmd","evtOut","trgIn"]);
   function compatible(a,b){const A=a.__slot,B=b.__slot;if(!A||!B||A.anker||B.anker)return false;if(A.dir===B.dir)return false;
-    if(A.type==="aus"||B.type==="aus"){const o=A.type==="aus"?A:B,i=o===A?B:A;return o.dir==="out"&&i.dir==="in"&&AUS_ZIEL.has(i.type);}
     // „dann …" im Ablauf eines Prozesses: der nächste Schritt ist eine Funktion (Rufe) ODER ein Command (Sende).
     if(A.type==="kette"||B.type==="kette"){const o=A.type==="kette"?A:B,i=o===A?B:A;return o.dir==="out"&&i.dir==="in"&&(i.type==="rufe"||(i.type==="sagaCmd"&&!!i.rec));}
     if(A.type!==B.type)return false;
@@ -3668,9 +2767,6 @@ public static class HtmlPresenter
     else if(O.type==="traegt"){const c=MODEL.clients.find(x=>x._id===O.client),a=MODEL.akteure.find(x=>x._id===I.akt);
       if(c&&a){const t=vertragsTyp(a);if(!(c.traegt=c.traegt||[]).includes(t))c.traegt.push(t);}}
     else if(O.type==="darf"){const ak=MODEL.akteure.find(x=>x._id===O.akt);if(ak&&I.rec&&!(ak.darf=ak.darf||[]).includes(I.rec))ak.darf.push(I.rec);}
-    else if(O.type==="auftrag"){const ak=MODEL.akteure.find(x=>x._id===O.akt),p=MODEL.pipelines.find(x=>x._id===I.pipeline),hd=p&&p.handles[I.handleIdx];
-      if(ak&&hd){hd.akteur=ak.name;const fremd=(hd.sends||[]).filter(c=>!(ak.darf||[]).includes(c));
-        if(fremd.length)deFlash("⚠ "+ak.name+" darf "+fremd.join(", ")+" nicht — CQRS060 (ergänze darf ⊕ oder nimm den Auftrag weg)",false);}}
     else if(O.type==="cmd"){const d=dec(I.dec);if(d)d.command=O.rec;}
     // Rufe<F>: eine Prozess-Regel („Dann rufe") bzw. ein Pipeline-Knoten ƒ ruft die Funktion; die Zuordnung wird neu vorgeschlagen.
     else if(O.type==="rufe"){const fk=MODEL.funktionen.find(x=>x._id===I.fk);if(fk){
@@ -3684,8 +2780,6 @@ public static class HtmlPresenter
     else if(O.type==="jeEl"||O.type==="jeSa"){const v=flKnotenById(O.flk),z=flKnotenById(I.flk),f=v&&flFluss(v),sa=O.type==="jeSa";
       if(v&&z&&f&&!(z.eingaenge||[]).some(e=>e.je===v.name&&!!e.sammle===sa)){const e2=sa?{je:v.name,sammle:true,draehte:[]}:{je:v.name,draehte:[]};
         (z.eingaenge=z.eingaenge||[]).push(e2);if(!sa)e2.argumente=flAutoArgs(f,z,e2);flOrdne(f);}}
-    // Konfig-Record → Pipeline (Konstruktor-Injektion).
-    else if(O.type==="konfig"){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p&&O.rec&&!(p.konfigs=p.konfigs||[]).includes(O.rec))p.konfigs.push(O.rec);}
     // Auftrag → Funktion: der eine Eingang (IAuftrag<F>); ein Auftrag gehört genau einer Funktion.
     else if(O.type==="auftragFn"){const f=MODEL.funktionen.find(x=>x._id===I.fk),r=recByName(O.rec);if(f&&r){
       MODEL.funktionen.forEach(x=>{if(x!==f&&x.auftrag===r.name)x.auftrag="";});const alt=recByName(f.auftrag);if(alt&&alt.funktion===f.name)delete alt.funktion;
@@ -3702,8 +2796,6 @@ public static class HtmlPresenter
       if(I.flk){const k=flKnotenById(I.flk);if(k){if(I.role==="warte"){const l=flWarteAuf(k);if(!l.includes(O.rec))l.push(O.rec);k.warteAuf=l;k.typ=l[0];}else k.typ=O.rec;}}
       else if(I.client){const c=MODEL.clients.find(x=>x._id===I.client);if(c&&!(c.kenntnis=c.kenntnis||[]).includes(O.rec))c.kenntnis.push(O.rec);}
       else if(I.app){const p=app(I.app);if(p)p.event=O.rec;}
-      // Event → Frist: plant / storniert (die Drei-End-Relation der Composition-Root-Frist).
-      else if(I.frist){const f=MODEL.frists.find(x=>x._id===I.frist);if(f){const arr=I.role==="storniert"?(f.storniert=f.storniert||[]):(f.plant=f.plant||[]);if(!arr.includes(O.rec))arr.push(O.rec);}}
       else if(I.proj){const p=MODEL.projektionen.find(x=>x._id===I.proj);if(p){p.handles=p.handles||[];
         if(I.handleIdx==="open"){if(!p.handles.some(x=>x.event===O.rec))p.handles.push({event:O.rec,effekt:""});}
         else p.handles[I.handleIdx].event=O.rec;}}
@@ -3716,43 +2808,16 @@ public static class HtmlPresenter
         t.wenn=t.wenn||[];if(I.wennIdx==="open"){if(!t.wenn.includes(O.rec))t.wenn.push(O.rec);}else t.wenn[I.wennIdx]=O.rec;}}
       else if(I.reaktion){const r=MODEL.reaktionen.find(x=>x._id===I.reaktion);if(r){r.handles=r.handles||[];
         if(I.handleIdx==="open"){if(!r.handles.some(x=>x.event===O.rec))r.handles.push({event:O.rec,sends:[]});}
-        else r.handles[I.handleIdx].event=O.rec;}}
-      // Event → Pipeline-Handle (die „Reaktion IST eine Pipeline"-Naht).
-      else if(I.pipeline){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p){p.handles=p.handles||[];
-        if(I.handleIdx==="openevt"||I.handleIdx==="open"){if(!p.handles.some(x=>x.event===O.rec&&x.inputKind==="event"))p.handles.push({inputKind:"event",event:O.rec,input:O.rec,sends:[]});}
-        else{const hd=p.handles[I.handleIdx];hd.event=O.rec;hd.input=O.rec;hd.inputKind="event";delete hd.trigId;delete hd.prod;delete hd.selfName;}}}}
-    // Pipeline-Ausgang nach TYP: Command → sends (eine Frist-Zeile bleibt Frist), transientes Event → publishes, Trigger-Karte → emits.
-    else if(O.type==="aus"){const p=MODEL.pipelines.find(x=>x._id===O.pipeline);const hd=p&&p.handles[O.handleIdx];if(hd){
-      const dazu=(feld,x)=>{hd[feld]=hd[feld]||[];if(x&&!hd[feld].includes(x))hd[feld].push(x);};
-      if(I.trgIn)dazu("emits",trigMsgLabel(I.trgIn));
-      else{const r=recByName(I.rec),k=r&&r.kind;
-        if(k==="command"){if(O.fristArt){hd.fristen=hd.fristen||[];if(!hd.fristen.some(f=>f.command===I.rec&&f.art===O.fristArt))hd.fristen.push({command:I.rec,art:O.fristArt});}
-          else dazu("sends",I.rec);}
-        else if(k==="rejection"||k==="event")dazu("publishes",I.rec);}}}
+        else r.handles[I.handleIdx].event=O.rec;}}}
     else if(O.type==="sagaCmd"){
       if(O.akt&&typeof O.aufIdx==="number"){const ak=MODEL.akteure.find(x=>x._id===O.akt),r=ak&&(ak.vertrag||[])[O.aufIdx];
         if(r){r.ausgaenge=r.ausgaenge||[];if(!r.ausgaenge.includes(I.rec))r.ausgaenge.push(I.rec);}}
       else if(O.reaktion){const r=MODEL.reaktionen.find(x=>x._id===O.reaktion);const hd=r&&r.handles[O.handleIdx];if(hd){hd.sends=hd.sends||[];if(!hd.sends.includes(I.rec))hd.sends.push(I.rec);}}
-      else if(O.pipeline){const p=MODEL.pipelines.find(x=>x._id===O.pipeline);const hd=p&&p.handles[O.handleIdx];if(hd){hd.sends=hd.sends||[];if(!hd.sends.includes(I.rec))hd.sends.push(I.rec);}}
-      // Frist fällig → genau ein Command @ Aggregat (der AddDeadlines-Router: Kontext → Command).
-      else if(O.frist){const f=MODEL.frists.find(x=>x._id===O.frist);if(f){f.sendet=I.rec;f.aggregat=recordAgg(I.rec)||f.aggregat;}}
       // Pipeline-Knoten ▶ sendet genau diesen Command ins Aggregat.
       else if(O.flk){const k=flKnotenById(O.flk);if(k){k.typ=I.rec;flNeuZuordnen(k);}}
       else{const t=MODEL.transitions.find(x=>x._id===O.trans);const d=t&&(t.dann||[])[O.dannIdx];if(d){
         if(O.role==="komp"){if(d.kompensation!==I.rec)delete d.kompensationAusdruck;d.kompensation=I.rec;}
         else{if(d.sende!==I.rec)delete d.sendeAusdruck;d.sende=I.rec;}}}}
-    // Trigger-Msg → Pipeline-Handle: Quelle = Trigger-Ingress-Node (O.trigId) ODER eine andere Pipeline, die
-    //   den Trigger yieldet (O.pipeline). Producer-Ref bleibt rename-fest.
-    else if(O.type==="trigmsg"){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p){p.handles=p.handles||[];
-      let msgName=O.msgName;
-      // Quelle = offener Pipeline-Emit-Port (noch unbenannt) → Trigger-Ausgang am Quell-Handle materialisieren.
-      if(O.pipeline&&!msgName){const sp=MODEL.pipelines.find(x=>x._id===O.pipeline);const shd=sp&&sp.handles[O.handleIdx];if(shd){msgName=uniq("NeuTriggerMsg");(shd.emits=shd.emits||[]).push(msgName);}}
-      const prod=O.trigId?{k:"tg",id:O.trigId}:(O.pipeline?{k:"pl",plId:O.pipeline,hi:O.handleIdx,name:msgName}:null);
-      const nm=msgName||(prod&&prod.k==="tg"?trigMsgLabel(prod.id):"")||"Trigger";
-      if(I.handleIdx==="opentrg"||I.handleIdx==="open"){if(!p.handles.some(x=>x.inputKind==="trigger"&&x.input===nm))p.handles.push({inputKind:"trigger",input:nm,prod,sends:[],emits:[],schedules:[]});}
-      else{const hd=p.handles[I.handleIdx];hd.inputKind="trigger";hd.input=nm;hd.prod=prod;delete hd.event;delete hd.selfName;delete hd.trigId;}}}
-    // ScheduleSelf-Ausgang → Self-Handle derselben Pipeline (interner Tick/Timeout-Loop).
-    else if(O.type==="self"){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);const hd=p&&p.handles[I.handleIdx];if(hd&&hd.inputKind==="self"){hd.selfName=O.name;hd.input=O.name;}}
     else if(O.type==="decAgg"){const d=dec(O.dec);if(d)d.aggregat=I.agg;}
     else if(O.type==="appAgg"){const p=app(O.app);if(p)p.aggregat=I.agg;}
     // ── Leseseite: ReadModel→Store, Projektion-Handle→Write-Fn, Reader-Handle→Read-Fn, Reader→Projektion,
@@ -3767,7 +2832,7 @@ public static class HtmlPresenter
       if(!t)deFlash("⚠ "+z.store.name+"."+z.fn.name+" hat kein Fähigkeits-Interface (CQRS051) — als Parameter nicht nutzbar",false);
       else if(!(f.faehigkeiten=f.faehigkeiten||[]).some(p=>p.typ===t)){if(!z.fn.faehigkeit)z.fn.faehigkeit=t;
         let nm=t.replace(/^I(?=[A-ZÄÖÜ])/,"");nm=nm.charAt(0).toLowerCase()+nm.slice(1);f.faehigkeiten.push({typ:t,name:nm});}}}
-    else if(O.type==="rcall"){const r=O.pipeline?MODEL.pipelines.find(x=>x._id===O.pipeline):MODEL.reader.find(x=>x._id===O.reader);const hd=r&&r.handles[O.handleIdx];if(hd){hd.fns=hd.fns||[];if(!hd.fns.includes(I.fn))hd.fns.push(I.fn);}}
+    else if(O.type==="rcall"){const r=MODEL.reader.find(x=>x._id===O.reader);const hd=r&&r.handles[O.handleIdx];if(hd){hd.fns=hd.fns||[];if(!hd.fns.includes(I.fn))hd.fns.push(I.fn);}}
     // IReader<TProjection>: Reader → genau eine Projektion binden.
     else if(O.type==="projref"){const r=MODEL.reader.find(x=>x._id===O.reader);const p=MODEL.projektionen.find(x=>x._id===I.proj);if(r&&p)r.projektion=p.name;}
     else if(O.type==="query"){const r=MODEL.reader.find(x=>x._id===I.reader);if(r){r.handles=r.handles||[];
@@ -3778,10 +2843,6 @@ public static class HtmlPresenter
     else if(O.type==="code"){setCodeSrc(I.target,O.codeNode);}
     // 🤖 LLM-Prompt-Node → Code-Block-Eingang: die LLM-Node wird zur Prompt-Quelle dieses Blocks.
     else if(O.type==="prompt"){const l=MODEL.llmNodes.find(x=>x._id===O.llm);if(l&&I.codeBlock)l.promptZiel=I.codeBlock;}
-    // HostSetting → Frist-Dauer (später auch Trigger-Config): der Wert speist die Fälligkeit.
-    else if(O.type==="setting"){const nm=(MODEL.hostSettings.find(x=>x._id===O.hostSetting)||{}).name;if(I.frist){const f=MODEL.frists.find(x=>x._id===I.frist);if(f)f.dauerSetting=nm;}}
-    // Dienst-Vertrag → Konsument (Konstruktor-Injektion): den Vertrag der Dienst-Liste hinzufügen.
-    else if(O.type==="dienst"){const dn=MODEL.dienste.find(x=>x._id===O.dienst)||{};const nm=dn.vertrag||dn.name;if(I.pipeline){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p){p.dienste=p.dienste||[];if(!p.dienste.includes(nm))p.dienste.push(nm);}}}
     // Typ-Komposition: VO/Enum-Quelle → Feld-Typ-Eingang → setzt den Feldtyp (Wrapper bleibt erhalten).
     else if(O.type==="ftype"){if(I.fobj)setFeldTyp(I.fobj,O.typeName);}
     // Feld-Port → Konsument (verdrahtet statt Dropdown): Fan-out-Collection (want=collection). (Σ/Count-Join entfernt.)
@@ -3802,7 +2863,6 @@ public static class HtmlPresenter
     if(O.type==="darf"&&O.client){const c=MODEL.clients.find(x=>x._id===O.client);if(c){c.sendet=ohne(c.sendet,I.rec);c.fragt=ohne(c.fragt,I.rec);}}
     else if(O.type==="traegt"){const c=MODEL.clients.find(x=>x._id===O.client),a=MODEL.akteure.find(x=>x._id===I.akt);if(c&&a)c.traegt=ohne(c.traegt,vertragsTyp(a));}
     else if(O.type==="darf"){const ak=MODEL.akteure.find(x=>x._id===O.akt);if(ak)ak.darf=ohne(ak.darf,I.rec);}
-    else if(O.type==="auftrag"){const p=MODEL.pipelines.find(x=>x._id===I.pipeline),hd=p&&p.handles[I.handleIdx];if(hd)delete hd.akteur;}
     else if(O.type==="cmd"){const d=dec(I.dec);if(d&&d.command===O.rec)d.command="";}
     else if(O.type==="rufe"){if(O.flk){const k=flKnotenById(O.flk);if(k)k.typ="";}
       else{const t=MODEL.transitions.find(x=>x._id===O.trans),d=t&&(t.dann||[])[O.dannIdx];if(d){d.rufe="";delete d.sendeAusdruck;delete d.sendeArgs;}}}
@@ -3811,7 +2871,6 @@ public static class HtmlPresenter
       const d=(e.draehte||[]).find(x=>x.von===v.name&&flPortGleich(x,{port:O.port,fall:O.fall}));if(d)flLoese(f,z,e,d);});}
     else if(O.type==="jeEl"||O.type==="jeSa"){const v=flKnotenById(O.flk),z=flKnotenById(I.flk);
       if(v&&z)z.eingaenge=(z.eingaenge||[]).filter(e=>!(e.je===v.name&&!!e.sammle===(O.type==="jeSa")));}
-    else if(O.type==="konfig"){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p)p.konfigs=ohne(p.konfigs,O.rec);}
     else if(O.type==="auftragFn"){const f=MODEL.funktionen.find(x=>x._id===I.fk),r=recByName(O.rec);if(f&&f.auftrag===O.rec){f.auftrag="";if(r)delete r.funktion;}}
     else if(O.type==="evtOut"){
       if(O.fk){const f=MODEL.funktionen.find(x=>x._id===O.fk);if(f)f.ergebnisse=ohne(f.ergebnisse,I.rec);}
@@ -3822,41 +2881,29 @@ public static class HtmlPresenter
       if(I.flk){const k=flKnotenById(I.flk);if(k){if(I.role==="warte"){k.warteAuf=flWarteAuf(k).filter(x=>x!==O.rec);k.typ=k.warteAuf[0]||"";}else k.typ="";}}
       else if(I.client){const c=MODEL.clients.find(x=>x._id===I.client);if(c)c.kenntnis=ohne(c.kenntnis,O.rec);}
       else if(I.app){const p=app(I.app);if(p)p.event="";}
-      else if(I.frist){const f=MODEL.frists.find(x=>x._id===I.frist);if(f){if(I.role==="storniert")f.storniert=ohne(f.storniert,O.rec);else f.plant=ohne(f.plant,O.rec);}}
       else if(I.trigger){const sg=MODEL.sagas.find(x=>x.name===I.saga);if(sg)sg.triggerEvent="";}
       else if(I.akt&&I.aufIdx!=null){const ak=MODEL.akteure.find(x=>x._id===I.akt);if(ak)ak.vertrag=(ak.vertrag||[]).filter(r=>r.eingang!==O.rec);}
       else if(I.trans){const t=MODEL.transitions.find(x=>x._id===I.trans);if(t)t.wenn=ohne(t.wenn,O.rec);}
       else if(I.proj){const p=MODEL.projektionen.find(x=>x._id===I.proj);if(p)p.handles=(p.handles||[]).filter(h=>h.event!==O.rec);}
-      else if(I.reaktion){const r=MODEL.reaktionen.find(x=>x._id===I.reaktion);if(r)r.handles=(r.handles||[]).filter(h=>h.event!==O.rec);}
-      else if(I.pipeline){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p)p.handles=(p.handles||[]).filter(h=>!(h.inputKind==="event"&&h.event===O.rec));}}
-    else if(O.type==="aus"){const hd=handle(MODEL.pipelines,O.pipeline,O.handleIdx);if(hd){
-      if(I.trgIn)hd.emits=ohne(hd.emits,trigMsgLabel(I.trgIn));
-      // Eine Zeile löst nur sich selbst (sofort ODER diese Frist); der offene Port löst alles zu dieser Nachricht.
-      else{if(!O.fristArt)hd.sends=ohne(hd.sends,I.rec);if(!O.fristArt&&!O.sofort)hd.publishes=ohne(hd.publishes,I.rec);
-        if(!O.sofort)hd.fristen=(hd.fristen||[]).filter(f=>!(f.command===I.rec&&(!O.fristArt||f.art===O.fristArt)));}}}
+      else if(I.reaktion){const r=MODEL.reaktionen.find(x=>x._id===I.reaktion);if(r)r.handles=(r.handles||[]).filter(h=>h.event!==O.rec);}}
     else if(O.type==="sagaCmd"){
       if(O.akt&&typeof O.aufIdx==="number"){const ak=MODEL.akteure.find(x=>x._id===O.akt),r=ak&&(ak.vertrag||[])[O.aufIdx];if(r)r.ausgaenge=ohne(r.ausgaenge,I.rec);}
-      else if(O.reaktion||O.pipeline){const hd=handle(O.reaktion?MODEL.reaktionen:MODEL.pipelines,O.reaktion||O.pipeline,O.handleIdx);if(hd)hd.sends=ohne(hd.sends,I.rec);}
-      else if(O.frist){const f=MODEL.frists.find(x=>x._id===O.frist);if(f)f.sendet="";}
+      else if(O.reaktion){const hd=handle(MODEL.reaktionen,O.reaktion,O.handleIdx);if(hd)hd.sends=ohne(hd.sends,I.rec);}
       else if(O.flk){const k=flKnotenById(O.flk);if(k)k.typ="";}
       else{const t=MODEL.transitions.find(x=>x._id===O.trans);const d=t&&(t.dann||[])[O.dannIdx];
         if(d){if(O.role==="komp"){delete d.kompensation;delete d.kompensationAusdruck;}else{d.sende="";delete d.sendeAusdruck;}}}}
-    else if(O.type==="trigmsg"){const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p&&typeof I.handleIdx==="number")p.handles.splice(I.handleIdx,1);}
-    else if(O.type==="self"){const hd=handle(MODEL.pipelines,I.pipeline,I.handleIdx);if(hd)hd.selfName="";}
     else if(O.type==="decAgg"){const d=dec(O.dec);if(d)d.aggregat="";}
     else if(O.type==="appAgg"){const p=app(O.app);if(p)p.aggregat="";}
     else if(O.type==="readmodel"){const rm=MODEL.readModels.find(x=>x._id===O.rm);if(rm)rm.store="";}
     else if(O.type==="wcall"){const hd=handle(MODEL.projektionen,O.proj,O.handleIdx);if(hd)hd.fns=ohne(hd.fns,I.fn);}
     else if(O.type==="rcall"&&O.fk){const f=MODEL.funktionen.find(x=>x._id===O.fk),z=fnById(I.fn);
       if(f&&z)f.faehigkeiten=(f.faehigkeiten||[]).filter(p=>p.typ!==z.fn.faehigkeit);}
-    else if(O.type==="rcall"){const hd=O.pipeline?handle(MODEL.pipelines,O.pipeline,O.handleIdx):handle(MODEL.reader,O.reader,O.handleIdx);if(hd)hd.fns=ohne(hd.fns,I.fn);}
+    else if(O.type==="rcall"){const hd=handle(MODEL.reader,O.reader,O.handleIdx);if(hd)hd.fns=ohne(hd.fns,I.fn);}
     else if(O.type==="projref"){const r=MODEL.reader.find(x=>x._id===O.reader);if(r)r.projektion="";}
     else if(O.type==="query"){const r=MODEL.reader.find(x=>x._id===I.reader);if(r)r.handles=(r.handles||[]).filter(h=>h.query!==O.rec);}
     else if(O.type==="qrsp"){const hd=handle(MODEL.reader,O.reader,O.handleIdx);if(hd)hd.responses=ohne(hd.responses,I.rec);}
     else if(O.type==="code"){setCodeSrc(I.target,null);}
     else if(O.type==="prompt"){const l=MODEL.llmNodes.find(x=>x._id===O.llm);if(l){l.promptZiel=null;delete l.promptSlot;}}
-    else if(O.type==="setting"){if(I.frist){const f=MODEL.frists.find(x=>x._id===I.frist);if(f)f.dauerSetting="";}}
-    else if(O.type==="dienst"){const dn=MODEL.dienste.find(x=>x._id===O.dienst)||{};const p=MODEL.pipelines.find(x=>x._id===I.pipeline);if(p)p.dienste=ohne(p.dienste,dn.vertrag||dn.name);}
     else if(O.type==="state"){const st=MODEL.states.find(x=>x._id===O.state);if(st)st.aggregat="";}
     else{deFlash("Diese Verbindung lässt sich hier nicht lösen — im Formular ändern.",false);return;}
     render();
@@ -3880,16 +2927,14 @@ public static class HtmlPresenter
   function grBaustein(I){for(const [k,b] of (GR().portBaustein||[]))if(I[k]!=null&&I[k]!=="")return b;return null;}
   // Nachricht (Name) → Sorte: Record-Art, Trigger-Karte, Selbst-Nachricht.
   function grNachrichtSorte(name){const g=GR(),r=recByName(name);if(r)return (r.kind==="event"&&g.quellBasis&&(r.basen||[]).includes(g.quellBasis))?"quelle":(g.recordSorte||{})[r.kind]||null;
-    if(MODEL.triggers.some(t=>(t.msgName||t.name)===name))return "trigger";
-    if((MODEL.selbstNachrichten||[]).some(x=>x.name===name))return "selbst";return null;}
+    return null;}
   // Wer konsumiert die Nachricht schon (für die Kardinalität „genau eins")?
   function grKonsumenten(name,sorte,baustein){
     if(baustein==="aggregat"&&sorte==="command")return MODEL.decider.filter(d=>d.command===name).map(d=>({dec:d._id,name:"Decider ("+(d.aggregat||"?")+")"}));
     if(baustein==="aggregat"&&sorte==="event")return MODEL.applier.filter(a=>a.event===name).map(a=>({app:a._id,name:"Applier ("+(a.aggregat||"?")+")"}));
     if(baustein==="reader")return MODEL.reader.filter(r=>(r.handles||[]).some(x=>x.query===name)).map(r=>({reader:r._id,name:"Reader "+r.name}));
-    if(baustein==="pipeline"&&sorte==="trigger")return MODEL.pipelines.filter(p=>(p.handles||[]).some(x=>x.inputKind==="trigger"&&x.input===name)).map(p=>({pipeline:p._id,name:"Pipeline "+p.name}));
     return [];}
-  const grSelbeStelle=(x,I)=>(x.dec&&x.dec===I.dec)||(x.app&&x.app===I.app)||(x.reader&&x.reader===I.reader)||(x.pipeline&&x.pipeline===I.pipeline);
+  const grSelbeStelle=(x,I)=>(x.dec&&x.dec===I.dec)||(x.app&&x.app===I.app)||(x.reader&&x.reader===I.reader);
   const grVerstoss=(regel,text)=>({regel,text:text+" — "+grText(regel)});
   // Eine Verbindung Ausgang O → Eingang I gegen die Grammatik prüfen. null = erlaubt, sonst {regel, text}.
   function grPruefe(O,I){const g=GR();if(!g)return null;
@@ -3902,10 +2947,10 @@ public static class HtmlPresenter
     // (b) Baustein-Ausgang → Nachricht: wer darf welche Sorte erzeugen.
     if(I.rec&&!O.rec){const b=grBaustein(O);let s=grNachrichtSorte(I.rec);if(!b||!s)return null;
       Object.keys(g.ausgangSorte||{}).forEach(k=>{if(O[k]!=null&&O[k]!=="")s=g.ausgangSorte[k];});
-      if(!grErzeugung(b,s))return grVerstoss(b==="pipeline"&&s==="event"?"GR-KEIN-EVENT-AUS-PIPELINE":grRegelBaustein(b),
+      if(!grErzeugung(b,s))return grVerstoss(grRegelBaustein(b),
         grName("bausteine",b)+" erzeugt kein "+grName("sorten",s)+" ('"+I.rec+"')");
       return null;}
-    // (c) Baustein → Baustein: Trigger-Kette, Ingress → Pipeline, Selbst-Schleife.
+    // (c) Baustein → Baustein (Port-Sorte aus der Grammatik).
     const s=(g.portSorte||{})[O.type];if(!s)return null;
     // Gebrauch (Handle → Store-Fähigkeit): der Port sitzt am Handle, die Fähigkeit erzeugt der Store — geprüft wird der Konsum.
     if((g.portGebrauch||[]).includes(O.type)){const bg=grBaustein(O);if(!bg||grKonsum(s,bg))return null;
@@ -3914,15 +2959,7 @@ public static class HtmlPresenter
     if(bo&&!grErzeugung(bo,s))return grVerstoss(grRegelBaustein(bo),grName("bausteine",bo)+" erzeugt kein "+grName("sorten",s));
     if(!bi)return null;const k=grKonsum(s,bi);
     if(!k)return grVerstoss(grRegelSorte(s),grName("sorten",s)+" passt nicht in einen "+grName("bausteine",bi)+"-Eingang");
-    if(k.kardinalitaet==="dieselbe"&&O.pipeline!==I.pipeline)return grVerstoss(k.regel,"Selbst '"+(O.name||"?")+"' kommt nur in der planenden Pipeline an");
-    if(s==="selbst"){const p=MODEL.pipelines.find(x=>x._id===O.pipeline),hd=p&&(p.handles||[])[O.handleIdx];
-      if(hd&&!grSelbstErlaubt(hd))return grVerstoss("GR-SELBST-OHNE-EVENT","Handle "+(hd.event||"?")+" hat einen Event-Eingang (keine Mailbox)");}
-    if(k.kardinalitaet==="eins"&&s==="trigger"){const nm=O.msgName||(O.trigId?trigMsgLabel(O.trigId):"");
-      const andere=grKonsumenten(nm,"trigger","pipeline").filter(x=>x.pipeline!==I.pipeline);
-      if(nm&&andere.length)return grVerstoss(k.regel,"Trigger '"+nm+"' behandelt schon "+andere.map(x=>x.name).join(", "));}
     return null;}
-  // Darf dieser Pipeline-Handle ein Selbst planen? Nur ohne Event-Eingang (GR-SELBST-OHNE-EVENT).
-  const grSelbstErlaubt=hd=>(hd.inputKind||"event")!=="event";
   // 📐 Grammatik: die Tabelle und „Regel → Build-Gegenstück" ins Ausgabe-Panel.
   window.deGrammatik=function(){const g=GR(),out=document.getElementById("de-out");if(!out)return;out.innerHTML="";
     if(!g){out.append(h("div",{class:"find warning"},"Keine Grammatik im Board — GraphExtractor neu laufen lassen."));return;}
@@ -3949,9 +2986,6 @@ public static class HtmlPresenter
     if(k==="transition"){const s=MODEL.sagas.find(x=>x.name===r.prozess);return s?s.namespace:null;}
     if(k==="codenode"){const o=findCodeOwner(r._id);return o?nsVon(o):null;}
     if(k==="llmnode"){const o=r.promptZiel&&findCodeOwner(r.promptZiel);return o?nsVon(o):null;}
-    if(k==="frist"){const c=recByName(r.sendet);return c?c.namespace:null;}
-    if(k==="dienst"){const ps=MODEL.pipelines.filter(p=>(p.dienste||[]).includes(r.vertrag||r.name));return ps.length===1?ps[0].namespace:null;}
-    if(k==="hostsetting"){const c=recByName(r.konfig);return c?c.namespace:null;}
     return r.namespace||null;}
   // Stammt der Knoten aus dem Code (sonst: Entwurf, immer sichtbar)? Abgeleitete Knoten folgen ihrem Besitzer.
   function ausCodeVon(n){const k=n.kind,r=n.ref;
@@ -3970,7 +3004,7 @@ public static class HtmlPresenter
   window.deLaden=function(){START_OFFEN=true;render();};
   // Start-Dialog: leer starten, Domänen wählen (Häkchen am Eltern-Namespace lädt alles darunter) oder alles laden.
   function zeigeStart(){if(!canvas)return;const alt=canvas.querySelector(".gstart");if(alt)alt.remove();if(!START_OFFEN)return;
-    const nsAlle=new Set();["records","enums","aggregate","sagas","readModels","stores","projektionen","reader","reaktionen","pipelines","triggers"]
+    const nsAlle=new Set();["records","enums","aggregate","sagas","readModels","stores","projektionen","reader","reaktionen"]
       .forEach(c=>(MODEL[c]||[]).forEach(x=>{if(x&&x.namespace&&x.ausCode)for(let p=x.namespace;p;p=elternNs(p))nsAlle.add(p);}));
     // Wurzel ohne Ein-Kind-Kette (z. B. „Domain“) nicht als Wahl zeigen — darunter beginnen die Domänen.
     let top="";for(;;){const k=[...nsAlle].filter(x=>elternNs(x)===top);if(k.length!==1)break;top=k[0];}
@@ -4029,17 +3063,15 @@ public static class HtmlPresenter
   // Hält der Port EINEN Wert (Decider→Command, Applier→Event …)? Dann endet der Modus nach einem Klick.
   function istEinzel(I){const t=I.type,d=I.dir;
     if(t==="cmd")return d==="in";
-    if(t==="auftrag")return d==="in";   // ein Handle handelt im Auftrag höchstens EINES Akteurs
     if(t==="prozess"||t==="decAgg"||t==="appAgg"||t==="projref"||t==="readmodel"||t==="state"||t==="prompt")return d==="out";
-    if(t==="code"||t==="setting"||t==="ftype"||t==="self")return d==="in";
+    if(t==="code"||t==="ftype")return d==="in";
     if(t==="evtUse")return d==="in"&&(!!I.app||!!I.trigger||typeof I.handleIdx==="number"||typeof I.wennIdx==="number"||typeof I.aufIdx==="number"||(!!I.flk&&I.role!=="warte"));
-    if(t==="sagaCmd")return d==="out"&&(!!I.frist||!!I.trans||!!I.flk);
+    if(t==="sagaCmd")return d==="out"&&(!!I.trans||!!I.flk);
     if(t==="rufe")return d==="out";
-    if(t==="trigmsg")return d==="in"&&typeof I.handleIdx==="number";
     return false;}
   // ⊕ anklicken = Modus an (derselbe ⊕ nochmal = aus). Beenden auch mit Esc oder Klick ins Leere.
   function vbStart(x){if(!x.__key)return;if(VB&&VB.key===x.__key){vbEnde();return;}
-    if(VIEW.lod==="karte")setzeLod("ablauf");VB={key:x.__key,label:slotLabel(x),einzel:istEinzel(x.__slot)};vbZeige(true);}
+    VB={key:x.__key,label:slotLabel(x),einzel:istEinzel(x.__slot)};vbZeige(true);}
   function vbEnde(){VB=null;if(!world)return;world.classList.remove("vbmodus");if(canvas)canvas.classList.remove("vbaktiv");
     world.querySelectorAll(".vb-kand,.vb-verb,.vb-quelle,.vb-gesperrt").forEach(e=>e.classList.remove("vb-kand","vb-verb","vb-quelle","vb-gesperrt"));
     canvas.querySelectorAll(".gvbwahl,.gvbkat").forEach(e=>e.remove());canvas.querySelectorAll(".ginsp .slot.vb-aktiv").forEach(e=>e.classList.remove("vb-aktiv"));}
@@ -4166,9 +3198,6 @@ public static class HtmlPresenter
       (c.sendet||[]).concat(c.fragt||[]).forEach(nm=>{if(SLOTS["cl:darf:"+c._id+":"+nm]&&SLOTS["darf:in:"+nm])KANTEN.push(["cl:darf:"+c._id+":"+nm,"darf:in:"+nm]);});
       (c.kenntnis||[]).forEach(nm=>{if(SLOTS["cl:kenntnis:"+c._id+":"+nm]&&SLOTS["evt:out:"+nm])KANTEN.push(["evt:out:"+nm,"cl:kenntnis:"+c._id+":"+nm]);});
       (c.traegt||[]).forEach(t=>{const a=teilAkteur(t);if(a&&SLOTS["cl:traegt:"+c._id+":"+t]&&SLOTS["akt:traegt:"+a._id])KANTEN.push(["cl:traegt:"+c._id+":"+t,"akt:traegt:"+a._id]);});});
-    // Dienst-Akteur → Pipeline-Handle, der in seinem Auftrag entscheidet (gestrichelt violett).
-    MODEL.pipelines.forEach(p=>(p.handles||[]).forEach((hd,hi)=>{const a=hd.akteur&&MODEL.akteure.find(x=>x.name===hd.akteur);
-      if(a)add("akt:auftrag:"+a._id+":"+p._id+":"+hi,"auftrag:in:"+p._id+":"+hi,"#b05fd0",true);}));
     MODEL.decider.forEach(d=>{
       if(d.command)add("cmd:out:"+d.command,"dec:cmdin:"+d._id,"#4a86d6");
       if(d.aggregat)add("dec:aggout:"+d._id,"agg:left:"+d.aggregat+":"+d._id,"#33b1a6",true);
@@ -4206,8 +3235,6 @@ public static class HtmlPresenter
       (f.ergebnisse||[]).forEach(e=>{if(e)add("fk:out:"+f._id+":"+e,"evt:in:"+e,"#4fb06a");});
       // ⚙ Lese-Fähigkeit (Parameter) → die Read-Fn, deren Interface sie ist.
       (f.faehigkeiten||[]).forEach((p,i)=>{const z=leseFnZu(p.typ);if(z)add("rcall:out:fk:"+f._id+":"+i,"rcall:in:"+z.store._id+":"+z.fn._id,"#c08a3e");});});
-    // Konfig-Record → Pipeline (Konstruktor-Injektion).
-    MODEL.pipelines.forEach(p=>(p.konfigs||[]).forEach(k=>add("konfig:out:"+k,"pl:konfig:"+p._id+":"+k,"#f0883e",true)));
     // Verbindungen, die schon anders gezeichnet werden (Fluss-Kanten, Ablauf-Kette) — hier nur als Port-Paar für ✓/Lösen im Verbinden-Modus.
     const nurPaar=(k1,k2)=>{if(SLOTS[k1]&&SLOTS[k2])KANTEN.push([k1,k2]);};
     MODEL.fluesse.forEach(f=>(f.knoten||[]).forEach(z=>{
@@ -4246,7 +3273,7 @@ public static class HtmlPresenter
         (hd.responses||[]).forEach(resp=>{if(resp)add("rdr:rout:"+r._id+":"+hi+":"+resp,"qrsp:in:"+resp,"#9d78d6");});
         if(hd.codeSrc)add("code:out:"+hd.codeSrc,"ctrl:in:"+r._id+":"+hi,CODE,true);});
     });
-    // Reaktion (emittierend): Trigger-Event → Handle, Handle → OneOf-Command(s), 📝 → Controller-Rumpf.
+    // Reaktion (emittierend): Event → Handle, Handle → OneOf-Command(s), 📝 → Controller-Rumpf.
     MODEL.reaktionen.forEach(r=>{
       (r.handles||[]).forEach((hd,hi)=>{
         if(hd.event)add("evt:out:"+hd.event,"rk:in:"+r._id+":"+hi,"#4fb06a");
@@ -4254,37 +3281,6 @@ public static class HtmlPresenter
         (hd.publishes||[]).forEach(ev=>{if(ev)add("rk:pub:"+r._id+":"+hi+":"+ev,"evt:in:"+ev,"#2fd6b0",true);});
         if(hd.codeSrc)add("code:out:"+hd.codeSrc,"ctrl:in:"+r._id+":"+hi,CODE,true);});
     });
-    // ── Ingress/Pipeline: Eingang (Trigger-Node|Pipeline-yield|Event) → Handle; Ausgänge Command/Trigger/Self; 📝 → Rumpf. ──
-    MODEL.pipelines.forEach(p=>{(p.handles||[]).forEach((hd,hi)=>{
-      // Eingangs-Kante je nach Quelle.
-      if(hd.inputKind==="trigger"){const pr=hd.prod||(hd.trigId?{k:"tg",id:hd.trigId}:null);
-        if(pr&&pr.k==="pl")add("pl:emit:"+pr.plId+":"+pr.hi+":"+pr.name,"pl:in:"+p._id+":"+hi,"#f0883e");
-        else if(pr)add("trg:msg:"+pr.id,"pl:in:"+p._id+":"+hi,"#f0883e");}
-      else if(hd.inputKind==="event"&&hd.event)add("evt:out:"+hd.event,"pl:in:"+p._id+":"+hi,"#4fb06a");
-      // yield ICommand.
-      (hd.sends||[]).forEach(c=>{if(c)add("pl:send:"+p._id+":"+hi+":"+c,"cmd:in:"+c,"#4a86d6");});
-      // Command per Frist (⏳, durabel über den Fristplan) bzw. deren Storno (✕⏳) — gestrichelt, eigene Farbe.
-      (hd.fristen||[]).forEach(f=>{if(f.command)add("pl:frist:"+p._id+":"+hi+":"+f.art+":"+f.command,"cmd:in:"+f.command,f.art==="storno"?"#cf6f68":"#c98a3a",true);});
-      // Veröffentlichtes (transientes) Event → Broker: verlierbar, gestrichelt teal (wie an Projektion/Reaktion).
-      (hd.publishes||[]).forEach(ev=>{if(ev)add("pl:pub:"+p._id+":"+hi+":"+ev,"evt:in:"+ev,"#2fd6b0",true);});
-      // Fähigkeit (Read-Fn als Parameter) → Store-Fn.
-      (hd.fns||[]).forEach(fid=>{const f=fnById(fid);if(f)add("rcall:out:pl:"+p._id+":"+hi+":"+fid,"rcall:in:"+f.store._id+":"+fid,"#c08a3e");});
-      // yield IPipelineTrigger → verbrauchende Pipeline (die Kette, z. B. FileWatch → ImageProcessing).
-      (hd.emits||[]).forEach(tn=>{const t=MODEL.triggers.find(x=>trigName(x)===tn);if(t){add("pl:emit:"+p._id+":"+hi+":"+tn,"trg:in:"+t._id,"#f0883e");return;}
-        MODEL.pipelines.forEach(q=>{if(q._id!==p._id)(q.handles||[]).forEach((qh,qi)=>{if(qh.inputKind==="trigger"&&qh.input===tn)add("pl:emit:"+p._id+":"+hi+":"+tn,"pl:in:"+q._id+":"+qi,"#f0883e");});});});
-      // Selbst<T> → passender Self-Handle (Name-Match), gestrichelter Loop.
-      (hd.schedules||[]).forEach(sc=>{const ti=(p.handles||[]).findIndex(x=>x.inputKind==="self"&&x.selfName===sc.name);
-        if(ti>=0)add("pl:sched:"+p._id+":"+hi+":"+sc.name,"pl:in:"+p._id+":"+ti,"#c98a3a",true);});
-      if(hd.codeSrc)add("code:out:"+hd.codeSrc,"plctrl:in:"+p._id+":"+hi,CODE,true);});});
-    // ── Betrieb/Host (Composition Root): Frist-Drei-End-Relation + Dienst-Bindung. ──
-    MODEL.frists.forEach(f=>{
-      (f.plant||[]).forEach(ev=>{if(ev)add("evt:out:"+ev,"fr:plant:"+f._id+":"+ev,"#4fb06a");});
-      (f.storniert||[]).forEach(ev=>{if(ev)add("evt:out:"+ev,"fr:cancel:"+f._id+":"+ev,"#cf6f68",true);});
-      if(f.sendet)add("fr:send:"+f._id,"cmd:in:"+f.sendet,"#4a86d6");
-      if(f.dauerSetting){const hs=MODEL.hostSettings.find(x=>x.name===f.dauerSetting);if(hs)add("hs:wert:"+hs._id,"fr:dauer:"+f._id,"#c98a3a",true);}
-    });
-    MODEL.pipelines.forEach(p=>(p.dienste||[]).forEach(dn=>{const d=MODEL.dienste.find(x=>(x.vertrag||x.name)===dn);if(d)add("di:vertrag:"+d._id,"pl:dienst:"+p._id+":"+dn,"#c9a24b");}));
-    MODEL.dienste.forEach(d=>{if(d.codeSrc)add("code:out:"+d.codeSrc,"di:impl:"+d._id,CODE,true);});
     MODEL.funktionen.forEach(f=>{if(f.codeSrc)add("code:out:"+f.codeSrc,"fk:impl:"+f._id,CODE,true);});
     // 🤖 LLM-Prompt-Node → Code-Block (Eingang): der Prompt speist den Rumpf-Kommentar.
     MODEL.llmNodes.forEach(l=>{if(l.promptZiel)add("llm:prout:"+l._id,"code:prin:"+l.promptZiel,"#a48fd6",true);});
@@ -4385,11 +3381,10 @@ public static class HtmlPresenter
   //   (1) Kompakt-Karten: Knoten standardmäßig eingeklappt (Kopf + Kurzfassung), bearbeitet wird im INSPECTOR.
   //   (2) Details eingeklappt: Decider/Applier/State/Code/LLM/Ablehnung/VO/Enum/Response liegen IN ihrem
   //       sichtbaren Besitzer (Chips + Inspector-Sektionen); Pfade durch sie werden als Kopf-Kanten zusammengezogen.
-  //   (4) Semantischer Zoom: Landkarte (<0.4, Aggregat-Kacheln + gebündelte Kanten) · Ablauf (<0.75, nur Titel) · Detail.
   //   (5) Slice-Fokus: Klick auf einen Knoten → sein vertikaler Schnitt bleibt hell, der Rest tritt zurück.
   // details: Decider/Applier/State/Code/LLM/Ablehnung/Typen sind IMMER eigene Knoten auf dem Graphen (nie eingeklappt).
   const KPOS_VERSION=8;   // hochzählen, wenn sich Kartengrößen ändern → gespeicherte Anordnung wird einmalig neu gepackt
-  let VIEW={kompakt:true,details:true,lod:"ablauf",aus:[],domNeu:[],heim:{},heimBlk:{},heimAkteur:{},akteurOrdnung:{}}, VKEY="cqrs-ansicht", KPKEY="cqrs-kpos", KPOS={k:{},d:{}};
+  let VIEW={kompakt:true,details:true,aus:[],domNeu:[],heim:{},heimBlk:{},heimAkteur:{},akteurOrdnung:{}}, VKEY="cqrs-ansicht", KPKEY="cqrs-kpos", KPOS={k:{},d:{}};
   function ladeAnsicht(k){VKEY="cqrs-ansicht"+(k?":"+k:"");KPKEY="cqrs-kpos"+(k?":"+k:"");
     try{const v=JSON.parse(localStorage.getItem(VKEY)||"null");if(v)VIEW={...VIEW,...v};}catch(e){}
     VIEW.details=true;VIEW.kompakt=true;
@@ -4470,19 +3465,19 @@ public static class HtmlPresenter
   //    • Leseseite nachziehen: an Projektion/Store die Reader + Read Models, am Reader seine Queries;
   //    • rückwärts nur der Auslöser (durch eingeklappte Details bis zum ersten sichtbaren Knoten).
   //    Aggregat/Prozess als Start: ihre angesteckten Decider/Applier/State bzw. Regeln sind Mit-Startpunkte.
-  const STOP=new Set(["akteur","aggregate","command","saga","transition","reaktion","pipeline","frist","valueobject","enum","dienst","hostsetting","trigger","konfig"]);
+  const STOP=new Set(["akteur","aggregate","command","saga","transition","reaktion","valueobject","enum","konfig"]);
   const LESE_START=new Set(["projektion","reader","query","store","readmodel","queryresponse"]);
   // ── KETTE (§12): von einer Nachricht/einem Handle/Decider/Applier/einer Regel aus dem Nachrichtenfluss TRANSITIV folgen —
   //    vorwärts alle Konsumenten (Command → Decider → Events → Handles → Commands …), rückwärts alle Erzeuger. So erscheint die
   //    geschlossene Kette (z. B. FileWatch → DateiErkannt → ImageProcessing → ImagePair → ImagePairKomplett → ImageProcessing …).
   //    Besitzer (Aggregat/Pipeline/Projektion/Reaktion/Reader/Prozess/Store) werden gezeigt, aber nicht durchlaufen — sonst
   //    leuchteten über ihre übrigen Handles/Decider alle fremden Ketten mit. Typen/Betrieb (VO, Enum, Konfig, Dienst) gehören nicht dazu.
-  const KETTE_HUB=new Set(["aggregate","pipeline","projektion","reaktion","reader","saga","store"]);
-  const KETTE_FLUSS=new Set(["command","event","rejection","query","queryresponse","trigger","handle","decider","applier","transition","frist","fn","funktion","auftrag","flussknoten",...KETTE_HUB]);
-  const KETTE_START=new Set(["command","event","rejection","trigger","handle","decider","applier","transition","pipeline","reaktion","saga","funktion","auftrag","flussknoten"]);
+  const KETTE_HUB=new Set(["aggregate","projektion","reaktion","reader","saga","store"]);
+  const KETTE_FLUSS=new Set(["command","event","rejection","query","queryresponse","handle","decider","applier","transition","fn","funktion","auftrag","flussknoten",...KETTE_HUB]);
+  const KETTE_START=new Set(["command","event","rejection","handle","decider","applier","transition","reaktion","saga","funktion","auftrag","flussknoten"]);
   function ketteVon(start,nurVorwaerts){const N=id=>NODEBY.get(id)||{},k0=N(start).kind;
     // Pipeline/Reaktion/Prozess als Start: ihre Handles bzw. Regeln sind die Startpunkte (der Besitzer selbst hat keinen Fluss).
-    const starts=[start,...(k0==="pipeline"||k0==="reaktion"?(ADJ.inn.get(start)||[]).filter(y=>N(y).kind==="handle")
+    const starts=[start,...(k0==="reaktion"?(ADJ.inn.get(start)||[]).filter(y=>N(y).kind==="handle")
       :k0==="saga"?(ADJ.inn.get(start)||[]).filter(y=>N(y).kind==="transition"):[])];
     const res=new Set(starts);
     const lauf=nach=>{const q=[...starts],seen=new Set();
@@ -4532,8 +3527,7 @@ public static class HtmlPresenter
     const selV=SEL?(VERTRETER.get(SEL)||[SEL]):[];
     world.querySelectorAll(".gnode2").forEach(el=>{const id=el.dataset.id;el.classList.toggle("inslice",an&&FOCUS.has(id));el.classList.toggle("sel",selV.includes(id));});
     if(!an)return;
-    world.querySelectorAll(".glink").forEach(p=>p.classList.toggle("inslice",FOCUS.has(p.dataset.a)&&FOCUS.has(p.dataset.b)));
-    world.querySelectorAll(".gtile").forEach(t=>t.classList.toggle("inslice",(t.dataset.ids||"").split("|").some(i=>FOCUS.has(i))));}
+    world.querySelectorAll(".glink").forEach(p=>p.classList.toggle("inslice",FOCUS.has(p.dataset.a)&&FOCUS.has(p.dataset.b)));}
   document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if(VB){vbEnde();return;}if(SEL)waehle(null);});
 
   // ── (1) INSPECTOR: die Detail-Sicht GENAU EINES Knotens (sein Formular) + Nachbarn zum Springen.
@@ -4570,9 +3564,6 @@ public static class HtmlPresenter
     if(INSP_SCROLL&&INSP_SCROLL.id===SEL)p.scrollTop=INSP_SCROLL.top;INSP_SCROLL=null;}
 
   // Kurzfassung auf der eingeklappten Karte: das Wesentliche in einer Zeile + Chips der eingeklappten Details.
-  // Alle Ausgänge eines Pipeline-Handles nach Typ (aus den Board-Listen — sie sind nach dem Bearbeiten die Wahrheit).
-  const plAusgaenge=hd=>[...(hd.sends||[]),...(hd.fristen||[]).map(f=>(f.art==="storno"?"✕⏳":"⏳")+f.command),
-    ...(hd.publishes||[]),...(hd.emits||[]).map(x=>"⚡"+x),...(hd.schedules||[]).map(x=>"↺"+x.name)];
   const kurz=xs=>{xs=[...new Set((xs||[]).filter(Boolean))];return xs.slice(0,2).join(", ")+(xs.length>2?" +"+(xs.length-2):"");};
   // 🔌 Die ANSCHLUSSLEISTE eines Clients (= sein Vertrag), immer lesbar auf der Karte: je Richtung, darin je Akteur, jede Nachricht beim
   //   Namen. Klick auf eine Nachricht fächert genau diese Leitung auf (Einzelkante); der Rest bleibt gebündelt.
@@ -4599,7 +3590,6 @@ public static class HtmlPresenter
     else if(k==="aggregate")t=MODEL.decider.filter(d=>d.aggregat===r.name).length+" Commands · "+MODEL.applier.filter(a=>a.aggregat===r.name).length+" Events · "+(r.state||[]).length+" State-Felder";
     else if(k==="projektion"||k==="reaktion")t=(r.handles||[]).length+" Handles · ← "+kurz((r.handles||[]).map(x=>x.event));
     else if(k==="reader")t=(r.handles||[]).length+" Handles · ? "+kurz((r.handles||[]).map(x=>x.query));
-    else if(k==="pipeline")t=(r.handles||[]).length+" Handle · → "+kurz((r.handles||[]).flatMap(plAusgaenge));
     else if(k==="flussknoten")t=flussKurz(n);
     else if(k==="saga")t="Auslöser: "+(r.triggerEvent||"—")+" · "+transOf(r).length+" Regeln";
     else if(k==="transition")t="WENN "+kurz(r.wenn)+" → "+kurz((r.dann||[]).map(d=>d.rufe?"ƒ "+d.rufe+(d.zeitlimit?" ⏳":""):d.sende+(d.zeitlimit?" ⏳":"")));
@@ -4609,10 +3599,10 @@ public static class HtmlPresenter
     else if(k==="store")t=(r.writeFns||[]).length+" schreibend · "+(r.readFns||[]).length+" lesend";
     else if(k==="readmodel"&&r.geteilt)t="⇄ geteilt";
     else if(k==="auf")t="◀ "+(r.eingang||"?")+" → "+((r.ausgaenge||[]).length?kurz(r.ausgaenge)+(r.strom?" (Strom)":""):"zur Kenntnis");
-    else if(k==="akteur")t=(ART_SYM[r.art]||"")+((r.dienste||[]).length?"⚙ "+r.dienste.join(", ")+" · ":"")+((r.darf||[]).length?"darf "+kurz(r.darf):"darf nichts")
+    else if(k==="akteur")t=(ART_SYM[r.art]||"")+((r.darf||[]).length?"darf "+kurz(r.darf):"darf nichts")
       +((r.vertrag||[]).length?" · Zusagen auf "+kurz(r.vertrag.map(x=>x.eingang)):"");
-    else if(k==="handle"){const aus=n.own.kind==="pipeline"?plAusgaenge(r):(r.ausgaenge||[]).length?(r.ausgaenge||[]).filter(a=>a.art!=="storefn"&&a.art!=="self").map(a=>a.typ)
-        :[...(r.responses||[]),...(r.sends||[]),...(r.emits||[]),...(r.publishes||[])];
+    else if(k==="handle"){const aus=(r.ausgaenge||[]).length?(r.ausgaenge||[]).filter(a=>a.art!=="storefn").map(a=>a.typ)
+        :[...(r.responses||[]),...(r.sends||[]),...(r.publishes||[])];
       const fns=(r.fns||[]).map(fid=>{const f=fnById(fid);return f?f.fn.name:null;}).filter(Boolean);
       t=(aus.length?"→ "+[...new Set(aus)].join(" | "):(fns.length?"":"→ nichts"))+(fns.length?(aus.length?" · ":"")+"ruft "+kurz(fns):"")+(r.signaturOffen?" · ⚠ offen":"");}
     else if(k==="fn")t="("+(r.params||[]).map(x=>x.typ).join(", ")+")"+(r.rueckgabe?" → "+r.rueckgabe:"");
@@ -4636,57 +3626,15 @@ public static class HtmlPresenter
     return box;}
 
   // ── (4) SEMANTISCHER ZOOM ──
-  // Ansicht Landkarte ⇄ Ablauf: NUR per Hand umgeschaltet (VIEW.lod) — der Zoom schaltet nichts mehr um.
-  let LOD=null;
-  function setzeLod(l){VIEW.lod=l==="karte"?"karte":"ablauf";speichereAnsicht();pruefeLod();}
-  // --inv (CSS, .gworld): fester Größenfaktor der Landkarte (so groß wie früher bei Zoom 0,25) — Schrift und Linien zoomen mit, sehen also immer gleich aus.
-  function pruefeLod(){if(!canvas||!world)return;
-    const l=VIEW.lod==="karte"?"karte":"ablauf";if(l===LOD)return;const vorher=LOD;LOD=l;
-    canvas.classList.toggle("lod-karte",l==="karte");canvas.classList.toggle("lod-ablauf",l==="ablauf");
-    if(l==="karte")baueKarte();else if(vorher!==null)drawEdges();   // Anker wandern (Körper ein/aus) → neu zeichnen
-    document.querySelectorAll("#de .gview .lod span").forEach(s=>s.classList.toggle("on",s.dataset.l===l));}
   function zoomAuf(s){if(!canvas)return;const cr=canvas.getBoundingClientRect(),wx=(cr.width/2-PAN.x)/PAN.s,wy=(cr.height/2-PAN.y)/PAN.s;
     PAN.s=s;PAN.x=cr.width/2-wx*s;PAN.y=cr.height/2-wy*s;applyPan();}
-  // Knoten-Menge einpassen (minS: mindestens diese Zoomstufe, z. B. Ablauf nach Klick auf eine Kachel).
+  // Knoten-Menge einpassen (minS: mindestens diese Zoomstufe).
   function passeEin(ids,maxS,minS){if(!canvas||!world||!ids||!ids.length)return;let x1=1e9,y1=1e9,x2=-1e9,y2=-1e9;
     ids.forEach(id=>{const n=NODEBY.get(id),el=world.querySelector('[data-id="'+id+'"]');if(!n||!el)return;const p=P(n);
       x1=Math.min(x1,p.x||0);y1=Math.min(y1,p.y||0);x2=Math.max(x2,(p.x||0)+el.offsetWidth);y2=Math.max(y2,(p.y||0)+el.offsetHeight);});
     if(x1>x2)return;const cr=canvas.getBoundingClientRect(),pad=60;
     const s=Math.max(minS||0.08,Math.min(maxS||1,(cr.width-2*pad)/Math.max(1,x2-x1),(cr.height-2*pad)/Math.max(1,y2-y1)));
     PAN.s=s;PAN.x=cr.width/2-(x1+x2)/2*s;PAN.y=cr.height/2-(y1+y2)/2*s;applyPan();}
-  // Landkarte: je Aggregat (bzw. geteiltem Block / Inseln) eine Kachel mit Zählern; Kanten zwischen Kacheln gebündelt.
-  function baueKarte(){if(!world)return;world.querySelectorAll(".gtile,svg.gtilesvg").forEach(x=>x.remove());
-    const comp=components(),T=new Map();
-    const schl=n=>{const g=subGroupOf(n);if(g)return g;if(ISLE.has(n.id))return "§inseln";return SHARED_KEY+"|"+comp.get(n.id);};
-    VIS.forEach(id=>{const n=NODEBY.get(id),el=world.querySelector('[data-id="'+id+'"]');if(!n||!el)return;const p=P(n),x=p.x||0,y=p.y||0,k=schl(n);
-      let t=T.get(k);if(!t)T.set(k,t={k,x1:1e9,y1:1e9,x2:-1e9,y2:-1e9,kinds:{},ids:[],namen:[]});
-      t.x1=Math.min(t.x1,x);t.y1=Math.min(t.y1,y);t.x2=Math.max(t.x2,x+el.offsetWidth);t.y2=Math.max(t.y2,y+el.offsetHeight);
-      t.kinds[n.kind]=(t.kinds[n.kind]||0)+1;t.ids.push(id);if(["saga","pipeline","reaktion","trigger"].includes(n.kind))t.namen.push(n.name);});
-    const PAD=40,kOf=new Map();T.forEach(t=>t.ids.forEach(id=>kOf.set(id,t.k)));
-    T.forEach(t=>{const geteilt=t.k.startsWith(SHARED_KEY),hue=domHue(geteilt?SHARED_KEY:t.k);
-      const titel=t.k==="§inseln"?"⚠ Inseln":(geteilt?"⋯ "+(t.namen.length?kurz(t.namen):"Geteilt"):t.k);
-      const zahlen=Object.keys(t.kinds).sort((a,b)=>t.kinds[b]-t.kinds[a]).map(k=>t.kinds[k]+" "+(NODELABEL[k]||k)).join(" · ");
-      const div=h("div",{class:"gtile",title:"Klick: hineinzoomen"},h("div",{class:"gtl-t"},titel),h("div",{class:"gtl-c"},zahlen));
-      div.style.left=(t.x1-PAD)+"px";div.style.top=(t.y1-PAD)+"px";div.style.width=(t.x2-t.x1+2*PAD)+"px";div.style.height=(t.y2-t.y1+2*PAD)+"px";
-      div.style.borderColor="hsl("+hue+" 45% 55%)";div.dataset.ids=t.ids.join("|");
-      // Schrift in Welt-Einheiten, passend zur Kachelgröße: zoomt mit (sieht immer gleich aus) und füllt die Kachel lesbar.
-      const W=t.x2-t.x1+2*PAD,H=t.y2-t.y1+2*PAD,fs=Math.round(Math.max(28,Math.min(W/9,H/3.2,220)));
-      div.style.padding=Math.round(fs*0.45)+"px "+Math.round(fs*0.55)+"px";div.style.borderWidth=Math.max(3,Math.round(fs/12))+"px";div.style.borderRadius=Math.round(fs*0.5)+"px";
-      div.firstChild.style.fontSize=fs+"px";div.lastChild.style.fontSize=Math.round(fs*0.55)+"px";div.lastChild.style.marginTop=Math.round(fs*0.25)+"px";
-      div.onclick=()=>{if(PANNED)return;setzeLod("ablauf");passeEin(t.ids,1,0.45);};
-      world.append(div);});
-    const cnt=new Map();ADJ.out.forEach((bs,a)=>bs.forEach(b=>{const ka=kOf.get(vertreterId(a)),kb=kOf.get(vertreterId(b));if(!ka||!kb||ka===kb)return;
-      const key=ka<kb?ka+"\u0000"+kb:kb+"\u0000"+ka;cnt.set(key,(cnt.get(key)||0)+1);}));
-    const s=document.createElementNS(SVGNS,"svg");s.setAttribute("class","gtilesvg");
-    cnt.forEach((c,key)=>{const [a,b]=key.split("\u0000"),A=T.get(a),B=T.get(b);
-      const ax=(A.x1+A.x2)/2,ay=(A.y1+A.y2)/2,bx=(B.x1+B.x2)/2,by=(B.y1+B.y2)/2;
-      const p=document.createElementNS(SVGNS,"path");p.setAttribute("d","M"+ax+","+ay+" L"+bx+","+by);
-      p.style.strokeWidth="calc("+(1.5+Math.log2(c+1)*1.5).toFixed(1)+"px * var(--inv))";s.append(p);
-      const tx=document.createElementNS(SVGNS,"text");tx.setAttribute("x",(ax+bx)/2);tx.setAttribute("y",(ay+by)/2);tx.setAttribute("text-anchor","middle");
-      tx.style.fontSize="calc(12px * var(--inv))";tx.style.strokeWidth="calc(3px * var(--inv))";tx.textContent=String(c);s.append(tx);});
-    world.insertBefore(s,world.firstChild);
-    wendeFokusAn();}
-
   // ══ DOMÄNEN-RAHMEN: rein visuelle Blöcke UM das bestehende Layout (Rollen-Spalten, Code/🤖 unter dem Besitzer bleiben).
   //   Domäne = Namespace, hierarchisch (Unterdomänen liegen im Rahmen ihrer Eltern-Domäne; packLayout sortiert danach).
   //   Der Rahmen folgt den ECHTEN Kartenpositionen (GEO) — zieht man Karten, wächst er mit. Kopf = kleine Menüleiste.
@@ -4710,7 +3658,7 @@ public static class HtmlPresenter
   //       verkleben) und sammelt die Aggregat-Domänen ihrer Nachbarn. Genau eine → die. Sonst entscheidet, wohin die Einheit
   //       COMMANDS schickt (sie gehört dorthin, wo sie wirkt; Lesen woanders ist nur Abhängigkeit). Je Einheit einmal.
   //   (b) Datentypen (VO/Enum/Konfig/Response …) folgen schrittweise ihren Nachbarn (Enum → VO → ReadModel → Domäne).
-  const EINHEIT_ARTEN=new Set(["saga","transition","reaktion","pipeline","handle","trigger","codenode","llmnode","dienst","hostsetting","frist"]);
+  const EINHEIT_ARTEN=new Set(["saga","transition","reaktion","handle","codenode","llmnode"]);
   let EINHEIT=new Map();
   function einheitDom(n){if(EINHEIT.has(n.id))return EINHEIT.get(n.id);
     const seen=new Set([n.id]),q=[n.id],ds=new Set(),dc=new Set();
@@ -4736,7 +3684,7 @@ public static class HtmlPresenter
     // Code-Block (📝/🤖) einer Funktion: dort, wo ihre Karte steht (die Funktion folgt dem Graphen, nicht ihrem Namespace).
     if(n.kind==="codenode"||n.kind==="llmnode"){const o=findCodeOwner(n.kind==="codenode"?n.ref._id:n.ref.promptZiel);
       if(o&&o.kind==="funktion"){const fn=NODEBY.get("fk:"+o.ref._id);if(fn){const x=domKey(fn);DOMKEY.set(n.id,x);return x;}}}
-    if(n.kind==="akteur"){const eig=[...new Set([...(n.ref.darf||[]),...(n.ref.vertrag||[]).map(r=>r.eingang)].map(nm=>NODEBY.get("rec:"+nm)||[...NODEBY.values()].find(x=>x.kind==="trigger"&&trigName(x.ref)===nm))
+    if(n.kind==="akteur"){const eig=[...new Set([...(n.ref.darf||[]),...(n.ref.vertrag||[]).map(r=>r.eingang)].map(nm=>NODEBY.get("rec:"+nm))
         .filter(Boolean).map(domKey))].sort(domOrd),ds=eig.length?eig:akteurDomaenen(n.ref.name);
       if(ds.length){DOMKEY.set(n.id,ds[0]);return ds[0];}}
     d=graphDom(n)||nsVon(n)||(VIEW.heim||{})[n.id]||OHNE_DOM;DOMKEY.set(n.id,d);return d;}
@@ -4887,7 +3835,7 @@ public static class HtmlPresenter
       h("span",{class:"gr-z"},a.leer?"alles schon weiter oben":bausteine(a.ids.length)),
       steckerZeile(stecker,[a.dom+"|"+a.akt,"§vertrag:"+a.akt]),
       ak?h("button",{title:"Für "+a.akt+" entwerfen: neuer Command / neue Query / neuer Trigger — "+a.akt+" darf ihn sofort (IDarf)",
-        onclick:e=>{e.stopPropagation();menue(e.clientX,e.clientY,"＋ für "+a.akt,["command","query","trigger"].map(kk=>({t:"＋ "+(NODELABEL[kk]||kk),fn:()=>fuerAkteurAnlegen(a,kk)})));}},"＋"):null,
+        onclick:e=>{e.stopPropagation();menue(e.clientX,e.clientY,"＋ für "+a.akt,["command","query"].map(kk=>({t:"＋ "+(NODELABEL[kk]||kk),fn:()=>fuerAkteurAnlegen(a,kk)})));}},"＋"):null,
       h("button",{title:"Rahmen markieren (Slice)",onclick:e=>{e.stopPropagation();FOCUS=new Set(a.ids);wendeFokusAn();}},"◎"),
       h("button",{title:"Rahmen einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"),
       !ohne?h("button",{title:"Reihenfolge der Akteur-Rahmen",onclick:e=>{e.stopPropagation();akteurRahmenMenue(e.clientX,e.clientY,a);}},"⋯"):null);
@@ -4911,9 +3859,9 @@ public static class HtmlPresenter
       h("button",{title:"Client einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"));
     k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};fr.append(k);return fr;}
   // Gibt der Akteur in dieser Domäne direkt etwas hinein (IDarf) — oder wirkt er hier nur über eine Kette?
-  function akteurDirektIn(ak,dom){return (ak.darf||[]).some(nm=>{const n=NODEBY.get("rec:"+nm)||[...NODEBY.values()].find(x=>x.kind==="trigger"&&trigName(x.ref)===nm);return n&&domKey(n)===dom;});}
+  function akteurDirektIn(ak,dom){return (ak.darf||[]).some(nm=>{const n=NODEBY.get("rec:"+nm);return n&&domKey(n)===dom;});}
   // Doppelungen: Bausteine dieser Domäne, die auch dem Akteur gehören, aber im Rahmen eines früheren Akteurs stehen.
-  function auchWoanders(name,dom){const r=[];const ART=["command","query","trigger","event","rejection","aggregate","reader","projektion","pipeline","reaktion","saga","handle","store","readmodel","queryresponse"];
+  function auchWoanders(name,dom){const r=[];const ART=["command","query","event","rejection","aggregate","reader","projektion","reaktion","saga","handle","store","readmodel","queryresponse"];
     NODEBY.forEach(n=>{if(!VIS.has(n.id)||!ART.includes(n.kind)||domKey(n)!==dom||!akteurSet(n).has(name))return;const wo=akteurVon(n);if(wo!==name)r.push([n,wo]);});
     return r.sort((x,y)=>ART.indexOf(x[0].kind)-ART.indexOf(y[0].kind)||x[0].name.localeCompare(y[0].name));}
   // Wie zeigeKnoten — liegt der Knoten in einer nicht geladenen Domäne, wird sie erst dazugeladen.
@@ -4923,7 +3871,7 @@ public static class HtmlPresenter
   function zeigeKnoten(id){const g=GEO.get(id);if(g)einpassenRahmen({x1:g.x-260,y1:g.y-160,x2:g.x+g.w+260,y2:g.y+g.h+160});waehle(id);}
   // ＋ im Akteur-Rahmen: der neue Eingang gehört sofort diesem Akteur (IDarf) — Entwerfen „für wen".
   function fuerAkteurAnlegen(a,kind){const ag=MODEL.aggregate.find(x=>x.namespace===a.dom);
-    neuerKnoten(kind,undefined,undefined,{ns:a.dom===OHNE_DOM?null:a.dom,agg:ag&&ag.name,blk:kind==="trigger"?SHARED_KEY:(ag?ag.name:SHARED_KEY),akt:a.akt});}
+    neuerKnoten(kind,undefined,undefined,{ns:a.dom===OHNE_DOM?null:a.dom,agg:ag&&ag.name,blk:ag?ag.name:SHARED_KEY,akt:a.akt});}
   function akteurRahmenMenue(cx,cy,a){const ord=akteurOrdnung(a.dom),i=ord.indexOf(a.akt),ak=MODEL.akteure.find(x=>x.name===a.akt);
     const setze=neu=>{VIEW.akteurOrdnung={...(VIEW.akteurOrdnung||{}),[a.dom]:neu};speichereAnsicht();render();};
     menue(cx,cy,a.akt+" · "+domLabel(a.dom),[
@@ -4985,8 +3933,8 @@ public static class HtmlPresenter
         deFlash("＋ Domäne "+ns,true);return null;});}
   // ＋ in der Menüleiste: Baustein IN dieser Domäne (Namespace; Decider/Applier/State ans Aggregat, Regel an den Prozess der Domäne).
   const BAU_GRUPPEN=[["Außen",["akteur","client"]],["Schreibseite",["command","event","rejection","aggregate","state","decider","applier"]],
-    ["Typen",["valueobject","enum","konfig"]],["Abläufe",["saga","transition","funktion","reaktion","pipeline","trigger"]],
-    ["Leseseite",["readmodel","store","projektion","query","queryresponse","reader"]],["Betrieb",["dienst","hostsetting"]],["Code",["codenode","llmnode"]]];
+    ["Typen",["valueobject","enum","konfig"]],["Abläufe",["saga","transition","funktion","reaktion","quelle"]],
+    ["Leseseite",["readmodel","store","projektion","query","queryresponse","reader"]],["Code",["codenode","llmnode"]]];
   function bausteinMenue(cx,cy,ns){const agg=MODEL.aggregate.find(a=>a.namespace===ns),sg=MODEL.sagas.find(s=>s.namespace===ns);
     const it=[];BAU_GRUPPEN.forEach(([g,ks])=>{it.push({kopf:g});ks.forEach(k=>it.push({t:"＋ "+(k==="codenode"?"📝 Code":k==="llmnode"?"🤖 LLM":NODELABEL[k]||k),
       fn:()=>neuerKnoten(k,undefined,undefined,{ns:ns===OHNE_DOM?null:ns,agg:agg&&agg.name,saga:sg&&sg.name})}));});
@@ -5006,15 +3954,12 @@ public static class HtmlPresenter
   // Ansichts-Leiste über der Fläche.
   function ansichtLeiste(){
     const btn=(lbl,on,title,fn)=>h("button",{class:on?"on":"",title,onclick:fn},lbl);
-    const lod=h("span",{class:"lod",title:"Ansicht umschalten: Landkarte (Bereiche) oder Ablauf (Karten) — der Zoom schaltet nicht um"},
-      ...[["karte","Landkarte"],["ablauf","Ablauf"]].map(([l,t])=>{const sp=h("span",{onclick:()=>{setzeLod(l);if(l==="karte")passeEin([...VIS],0.35);}},t);sp.dataset.l=l;if((VIEW.lod||"ablauf")===l)sp.classList.add("on");return sp;}));
     return h("div",{class:"gview"},
       h("b",{style:"color:#cbd3e1"},"Ansicht"),
       btn("＋ Domäne",false,"Neue Domäne (Namespace) anlegen — Rechtsklick auf die Fläche geht auch",e=>neueDomaene(e.clientX,e.clientY+20,null)),
       h("button",{title:"Geladene Domänen ändern",onclick:()=>deLaden()},"📂 "+(LADEN===null?"alles geladen":!LADEN.length?"leer":LADEN.map(letztesSeg).join(", "))),
       btn("⤢ Alles zeigen",false,"Ganzes Board einpassen",()=>passeEin([...VIS],1)),
       btn("👁 Ausblenden"+((VIEW.aus||[]).length?" ("+VIEW.aus.length+")":"")+" ▾",FILTER_OPEN,"Knotenarten und Domänen ein-/ausblenden",()=>{FILTER_OPEN=!FILTER_OPEN;render();}),
-      lod,
       h("span",{style:"margin-left:8px"},"Karte antippen = Panel · ⊕ im Panel = passende Knoten leuchten, anklicken = verbinden/lösen · Esc = fertig · Kopf ziehen = verschieben"));}
 
   function renderGraph(){
@@ -5024,27 +3969,23 @@ public static class HtmlPresenter
     root.append(datalistEl());
     ISLE=islandInfo().ids;   // einsame Inseln (unverbundene Knoten) aus der Graph-Analyse
     berechneSicht();         // sichtbar / eingeklappte Details / zusammengezogene Kanten
-    if(SEL&&!NODEBY.has(SEL))SEL=null;FOCUS=SEL?sliceVon(SEL):null;LOD=null;
+    if(SEL&&!NODEBY.has(SEL))SEL=null;FOCUS=SEL?sliceVon(SEL):null;
     const tb=(kind,label)=>h("button",{class:"add jumpable",
       title:label.replace(/^\+\s*/,"")+" — Hover: alle hervorheben · Ctrl/Cmd+Klick: zum nächsten springen · Klick: neu",
       onmouseenter:()=>highlightKind(kind,true),onmouseleave:()=>highlightKind(kind,false),
       onclick:e=>{if(e.ctrlKey||e.metaKey){e.preventDefault();jumpNextOfKind(kind);}else neuerKnoten(kind);}},label);
     root.append(h("div",{class:"gtoolbar"},
-      tb("akteur","+ 👤 Akteur"),tb("client","+ 🔌 Client"),tb("command","+ Command"),tb("event","+ Event"),tb("rejection","+ Ablehnung"),
-      tb("valueobject","+ Value Object"),tb("konfig","+ Konfig"),tb("enum","+ Enum"),tb("aggregate","+ Aggregat"),
-      tb("state","+ State"),tb("decider","+ Decider"),tb("applier","+ Applier"),tb("saga","+ Prozess"),tb("transition","+ Regel"),
-      tb("readmodel","+ Read Model"),tb("store","+ Store"),tb("projektion","+ Projektion"),tb("query","+ Query"),tb("queryresponse","+ Response"),tb("reader","+ Reader"),tb("reaktion","+ Reaktion"),
-      tb("trigger","+ Trigger"),tb("pipeline","+ Pipeline"),
-      h("button",{class:"add",title:"Neue Pipeline als Fluss: Quelle → Katalog-Funktionen → Commands, frei verdrahtet (docs/konzept-editor-pipelines.md §14)",onclick:()=>neuePipeline()},"+ ⛓ Pipeline (Fluss)"),
-      tb("auftrag","+ Auftrag"),tb("funktion","+ ƒ Funktion"),tb("dienst","+ Dienst"),tb("hostsetting","+ HostSetting"),
-      tb("codenode","+ 📝 Code"),tb("llmnode","+ 🤖 LLM"),
+      // Palette mit Ankern (docs/konzept-werkbank.md §8.5): etwas NEUES beginnen. Zugehöriges entsteht mit „＋" am Port bzw. im Domänen-Menü.
+      tb("aggregate","+ Aggregat"),
+      h("button",{class:"add",title:"Neuer Fluss: Quelle → Katalog-Funktionen → Commands, frei verdrahtet",onclick:()=>neuePipeline()},"+ ⛓ Fluss"),
+      tb("funktion","+ ƒ Funktion"),tb("quelle","+ 📥 Quelle"),tb("akteur","+ 👤 Akteur"),tb("client","+ 🔌 Client"),tb("projektion","+ Projektion"),
       h("button",{class:"add island-btn",style:"margin-left:auto",
         title:"Einsame Inseln (unverbundene Knoten) — Hover: markieren · Klick: der Reihe nach anspringen",
         onmouseenter:()=>highlightIslands(true),onmouseleave:()=>highlightIslands(false),onclick:()=>jumpIslands()},
         (ISLE.size?"⚠ ":"✓ ")+ISLE.size+" Inseln")));
     root.append(ansichtLeiste());
     SLOTS={};SYNC={};   // Code-Sync-Registry je Render neu aufbauen (nur sichtbare Knoten pollen)
-    canvas=h("div",{class:"gcanvas"});
+    canvas=h("div",{class:"gcanvas ablauf"});   // die Karten-Darstellung (Kopf ohne Körper; bearbeitet wird im Panel)
     world=h("div",{class:"gworld"+(VIEW.kompakt?" kompakt":"")});
     svg=document.createElementNS(SVGNS,"svg");svg.setAttribute("class","gedges");world.append(svg);
     const nodes=graphNodes();
@@ -5074,7 +4015,7 @@ public static class HtmlPresenter
       PAN.s=ns;PAN.x=mx-wx*ns;PAN.y=my-wy*ns;applyPan();};
     // Klick ins Leere (ohne Pannen) = Auswahl/Fokus aufheben.
     canvas.onclick=e=>{if(PANNED)return;const t=e.target;
-      if(t.closest&&t.closest(".gnode2,.ginsp,.gfilter,.gminimap,.gtile,.gpick"))return;if(SEL)waehle(null);};
+      if(t.closest&&t.closest(".gnode2,.ginsp,.gfilter,.gminimap,.gpick"))return;if(SEL)waehle(null);};
     drawEdges();requestAnimationFrame(drawEdges);
     zeigeInspector();
     zeigeStart();
@@ -5085,13 +4026,8 @@ public static class HtmlPresenter
     const pick=h("div",{class:"gpick"});pick.style.left=sx+"px";pick.style.top=sy+"px";
     const opt=(kind,label)=>h("button",{onclick:()=>{pick.remove();neuerKnoten(kind,wx,wy);}},label);
     pick.append(h("div",{class:"gpick-t"},"Was soll hier entstehen?"),
-      opt("akteur","👤 Akteur"),opt("client","🔌 Client"),opt("command","Command"),opt("event","Event"),opt("rejection","Ablehnung"),
-      opt("valueobject","Value Object"),opt("konfig","Konfiguration"),opt("enum","Enum"),opt("aggregate","Aggregat"),
-      opt("state","State"),opt("decider","Decider"),opt("applier","Applier"),opt("saga","Prozess"),opt("transition","Regel"),
-      opt("readmodel","Read Model"),opt("store","Store"),opt("projektion","Projektion"),opt("query","Query"),opt("queryresponse","Response"),opt("reader","Reader"),opt("reaktion","Reaktion"),
-      opt("trigger","Trigger"),opt("pipeline","Pipeline"),
-      opt("funktion","ƒ Funktion"),opt("dienst","Dienst"),opt("hostsetting","HostSetting"),
-      opt("codenode","📝 Code"),opt("llmnode","🤖 LLM"));
+      opt("aggregate","Aggregat"),h("button",{onclick:()=>{pick.remove();neuePipeline();}},"⛓ Fluss"),opt("funktion","ƒ Funktion"),opt("quelle","📥 Quelle"),
+      opt("akteur","👤 Akteur"),opt("client","🔌 Client"),opt("projektion","Projektion"));
     canvas.append(pick);
     setTimeout(()=>{const off=ev=>{if(!pick.contains(ev.target)){pick.remove();document.removeEventListener("pointerdown",off);}};document.addEventListener("pointerdown",off);},0);
   }
@@ -5240,14 +4176,14 @@ public static class HtmlPresenter
   //     • im Board ausCode, aber nicht mehr im Code               → entfällt (im Code gelöscht)
   const MERGE_KEYS={records:r=>r.kind+"|"+r.namespace+"|"+r.name,enums:e=>e.namespace+"|"+e.name,aggregate:a=>a.namespace+"|"+a.name,
     decider:d=>d.aggregat+"|"+d.command,applier:a=>a.aggregat+"|"+a.event,sagas:x=>x.namespace+"|"+x.name,
-    readModels:x=>x.name,stores:x=>x.name,projektionen:x=>x.name,reaktionen:x=>x.name,reader:x=>x.name,pipelines:x=>x.name,
-    triggers:x=>x.msgName||x.name,frists:x=>x.name,dienste:x=>x.name,hostSettings:x=>x.name,akteure:x=>x.namespace+"|"+x.name,
+    readModels:x=>x.name,stores:x=>x.name,projektionen:x=>x.name,reaktionen:x=>x.name,reader:x=>x.name,
+    akteure:x=>x.namespace+"|"+x.name,
     clients:x=>x.namespace+"|"+x.name,funktionen:x=>x.namespace+"|"+x.name,fluesse:x=>x.namespace+"|"+x.name};
   const LAYOUT=new Set(["x","y","ausCode","ungeschrieben","codeSrc","kompCodeSrc","leer","rumpf","schritte","herkunft"]);
   function inhalt(o){return JSON.stringify(o,(k,v)=>(k.startsWith("_")||LAYOUT.has(k))?undefined:v);}
   // Leseseite: „steht die Änderung schon im Code?“ — Fn-Ids (je Einlesen neu nummeriert) über „Store.Fn“ vergleichen und die
   //   Code-Fakten, die erst der Code liefert (Signatur verbatim, Datei, Fähigkeits-Name, Vertrag), nicht mitzählen.
-  const LESE_KOLL=new Set(["stores","projektionen","reaktionen","reader","pipelines","readModels","triggers"]);
+  const LESE_KOLL=new Set(["stores","projektionen","reaktionen","reader","readModels"]);
   const CODEFAKT=new Set(["sig","code","impl","datei","doku","faehigkeit","form","signatur","signaturOffen","ausgaenge","istBuendel","bindung","input","delay","entwurf"]);
   function fnNamen(m){const x=new Map();(m&&m.stores||[]).forEach(st=>(st.writeFns||[]).concat(st.readFns||[]).forEach(f=>x.set(f._id,st.name+"."+f.name)));return x;}
   function leseInhalt(o,fnName){return JSON.stringify(o,(k,v)=>{if(k.startsWith("_")||LAYOUT.has(k)||CODEFAKT.has(k)||v===null)return undefined;
@@ -5335,7 +4271,7 @@ public static class HtmlPresenter
   // Node-Art (graphNodes().kind) → Modell-Sammlung (für die Entwurf-Markierung: nur Sammlungen, die aus dem Code kommen).
   function kollektionVon(kind){return {command:"records",event:"records",rejection:"records",valueobject:"records",konfig:"records",query:"records",queryresponse:"records",
     enum:"enums",aggregate:"aggregate",decider:"decider",applier:"applier",saga:"sagas",readmodel:"readModels",store:"stores",
-    projektion:"projektionen",reaktion:"reaktionen",reader:"reader",pipeline:"pipelines",trigger:"triggers",frist:"frists",dienst:"dienste",hostsetting:"hostSettings",akteur:"akteure",client:"clients",funktion:"funktionen",auftrag:"records",fluss:"fluesse"}[kind]||null;}
+    projektion:"projektionen",reaktion:"reaktionen",reader:"reader",akteur:"akteure",client:"clients",funktion:"funktionen",auftrag:"records",fluss:"fluesse"}[kind]||null;}
   function meldeMerge(){const u=MERGE_INFO.ungeschrieben,e=MERGE_INFO.entwuerfe;
     if(u||e)deFlash("↔ Code geladen · "+u+" ungeschrieben · "+e+" Entwurf/Entwürfe",true);}
   window.deDownload=function(){deriveMembership();prepareSaga();const blob=new Blob([JSON.stringify(MODEL,null,2)],{type:"application/json"});
@@ -5346,10 +4282,10 @@ public static class HtmlPresenter
   function payload(mitVorschlag){deriveMembership();prepareSaga();MODEL.fluesse.forEach(flOrdne);const m=JSON.parse(JSON.stringify(MODEL));
     const txt=id=>{const v=mitVorschlag?vorschlagFuer(id):null;if(v)return v.rumpf;const c=m.codeNodes.find(x=>x._id===id);return c?c.text:null;};
     [...m.decider,...m.applier].forEach(n=>{if(n.leer)n.rumpf="";else if(n.codeSrc){const t=txt(n.codeSrc);if(t!=null&&t.trim())n.rumpf=t;}});
-    // Leseseite/Pipelines: der Code-/LLM-Entwurf einer NEUEN Methode (ohne Code-Signatur) wird ihr Rumpf („entwurf“);
+    // Leseseite: der Code-/LLM-Entwurf einer NEUEN Methode (ohne Code-Signatur) wird ihr Rumpf („entwurf“);
     //   bestehende Rümpfe ändert „C# schreiben“ nicht (dafür: ✓ Übernehmen im LLM-Knoten).
     const entwurf=o=>{if(!o.sig&&o.codeSrc){const t=txt(o.codeSrc);if(t!=null&&t.trim())o.entwurf=t;}};
-    [...(m.projektionen||[]),...(m.reaktionen||[]),...(m.reader||[]),...(m.pipelines||[])].forEach(o=>(o.handles||[]).forEach(entwurf));
+    [...(m.projektionen||[]),...(m.reaktionen||[]),...(m.reader||[])].forEach(o=>(o.handles||[]).forEach(entwurf));
     (m.stores||[]).forEach(st=>[...(st.writeFns||[]),...(st.readFns||[])].forEach(entwurf));
     // Funktion ohne C#-Implementierung, aber mit Code-Block: „C# schreiben" legt die Klasse an (leerer Block → throw-Platzhalter).
     (m.funktionen||[]).forEach(f=>{if(!f.implementierung&&f.codeSrc){const t=txt(f.codeSrc);f.entwurf=t||"";}});
@@ -5672,6 +4608,3 @@ public static class HtmlPresenter
   window.simNachRender=function(){if(!SIM.an)return;simOverlay();
     const sig=simCommands().map(c=>c.name+":"+(c.felder||[]).map(f=>f.name+"/"+f.typ).join(",")).join("|");if(sig!==SIM.cmdSig)simForm();};
 })();
-</script>
-""";
-}

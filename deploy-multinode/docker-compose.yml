@@ -1,7 +1,7 @@
 # ═══════════════════════════════════════════════════════════════════
 # Echtes Multi-Node-Deployment: EIN Consul + Postgres + Redis + DREI
-# gRPC-Cluster-Nodes (grpc1/2/3), plus ein LoadHarness-Node zur
-# cross-node-Verifikation (nur über das Profil "verify").
+# gRPC-Cluster-Nodes (grpc1/2/3). (Der frühere LoadHarness-Verifikationsnode
+# ist mit dem Projekt entfernt, Commit fb07f5e.)
 #
 # Alle Container liegen im selben Docker-Netz → erreichen sich über die
 # Service-Namen (grpc1, consul, postgres, …). Der entscheidende Multi-Node-
@@ -9,7 +9,6 @@
 # können die anderen Member diesen Node über die Leitung erreichen.
 #
 # Start:      docker compose -f deploy-multinode/docker-compose.yml up -d --build
-# Verifizieren: docker compose -f deploy-multinode/docker-compose.yml --profile verify run --rm loadharness
 # Stoppen:    docker compose -f deploy-multinode/docker-compose.yml down -v
 # ═══════════════════════════════════════════════════════════════════
 
@@ -129,28 +128,3 @@ services:
       <<: *infra-deps
       migrate:
         condition: service_completed_successfully
-
-  # Verifikations-Node: joint denselben Cluster (gleicher Cluster__Name), dispatcht Commands über die
-  # native Actor-Plane und prüft per Rehydration exactly-once. PartitionIdentityLookup platziert ~¾ der
-  # Aggregate auf grpc1/2/3 → grün beweist cross-node Wire-Serialisierung. Nur über --profile verify.
-  loadharness:
-    build:
-      context: ..
-      dockerfile: deploy-multinode/Dockerfile
-      args:
-        PROJECT: LoadHarness
-        ENTRY_DLL: LoadHarness.dll
-    image: cqrs-loadharness:mn
-    environment:
-      <<: *cluster-env
-      Cluster__AdvertisedHost: loadharness
-    command: ["--mode", "aggregate", "--accounts", "60", "--credits", "10", "--concurrency", "32", "--log", "warning"]
-    restart: "no"
-    profiles: ["verify"]
-    depends_on:
-      grpc1:
-        condition: service_started
-      grpc2:
-        condition: service_started
-      grpc3:
-        condition: service_started

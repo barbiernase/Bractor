@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Domänen-Editor</title>
+<style>html,body{margin:0;height:100%;background:#0d1017}</style>
+<link rel="stylesheet" href="/editor/editor.css">
+</head>
+<body>
+<button id="de-open" onclick="deOpen()">✎ Editor</button>
+<div id="de">
+  <header>
+    <h2>Domänen-Editor</h2>
+    <span id="de-badge" class="badge off">offline</span>
+    <span class="sp"></span>
+    <button class="act" onclick="deReload()">↻ Vom Graph laden</button>
+    <button class="act" onclick="deReflow()">▦ Neu anordnen</button>
+    <button class="act" onclick="deLaden()" title="Domänen laden: wählen, welche Domänen auf dem Board erscheinen (leer, einzelne, alle)">🗂 Domänen laden</button>
+    <button class="act" onclick="deValidate()">✓ Prüfen</button>
+    <button class="act" onclick="deGrammatik()" title="Die Grammatik: was sich womit verbinden lässt, und je Regel ihr Gegenstück im Build">📐 Grammatik</button>
+    <button class="act" onclick="deCompile()">⚙ Kompilieren</button>
+    <button class="act" id="de-llmalle" onclick="deLlmAlle()" title="Alle 🤖-Knoten mit Auftrag nacheinander ausführen — jeder Vorschlag wartet auf ✓ Übernehmen">🤖 Alle ausführen</button>
+    <button class="act run" id="de-simbtn" onclick="deSim()">▶ Simulation</button>
+    <button class="act" onclick="deVorschau()" title="Trockenlauf: was „C# schreiben“ anlegen/ändern würde — nichts wird geschrieben">👁 Vorschau</button>
+    <button class="act go" onclick="deWrite()">&lt;/&gt; C# schreiben</button>
+    <button class="act" onclick="deSave()">💾 Speichern</button>
+    <button class="act" onclick="deDownload()">⬇ Modell</button>
+    <button class="act" id="de-close" onclick="deClose()">✕ Schließen</button>
+  </header>
+  <div class="cols">
+    <div class="col left" id="de-form"></div>
+    <aside class="sim" id="de-sim"></aside>
+    <div class="col right out" id="de-out"><div class="hint">„C# erzeugen" rendert den echten C#-Scaffolder (über SimHost). „Prüfen" zeigt die Struktur-Diagnosen. Ohne laufenden SimHost editierst du die Form und lädst das Modell-JSON herunter.</div></div>
+  </div>
+</div>
+<script src="/editor/editor.js"></script>
+<script>
+  // Standalone: Launch-/Schließen-Button weg, Editor sofort zeigen, aus dem Code booten.
+  var ob=document.getElementById('de-open'); if(ob)ob.style.display='none';
+  var cb=document.getElementById('de-close'); if(cb)cb.style.display='none';
+  deShow(); deBoot();
+</script>
+</body>
+</html>

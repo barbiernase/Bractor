@@ -76,6 +76,7 @@ Status geprüft 2026-10-12. „umgesetzt" = steht im Code; „Konzept" = Entwurf
 | Datei | Thema | Status |
 |---|---|---|
 | [konzept-werkbank.md](konzept-werkbank.md) | **Zielbild Werkbank** — Entwerfen, Erzeugen, Durchspielen, Spur, Backend in einem Editor; Phasen P0–P8 | **Zieldokument** |
+| [plan-werkbank-umsetzung.md](plan-werkbank-umsetzung.md) | **Umsetzungsplan Werkbank** — Ist-Befund, Lücken zum Zielbild, Entscheidungen E1–E10, Arbeitspakete S0/P0–P8 | **Plan** |
 | [konzept-akteure.md](konzept-akteure.md) | **Akteure, Akteur-Verträge (Zusagen), Clients** — wer hineingibt, was er draußen zusagt, welche Software es tut | umgesetzt; durable Zustellung an Clients offen |
 | [konzept-domaenen-editor.md](konzept-domaenen-editor.md) | **Domänen-Editor** — kanonische Referenz (Leitprinzipien, Palette, Schreib-/Leseseite, Prozess, Betrieb, Bedienung, SimHost, Akteure §12) | gebaut |
 | [konzept-editor-panel-bearbeitung.md](konzept-editor-panel-bearbeitung.md) | Bearbeiten nur im Panel, Graph als Landkarte | umgesetzt |
