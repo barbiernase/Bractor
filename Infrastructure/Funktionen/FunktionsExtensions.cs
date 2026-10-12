@@ -74,15 +74,15 @@ public static class FunktionsExtensions
         var gebunden = new HashSet<Type>(liste.Select(b => b.Funktion));
         // Eine Funktion mit Lese-Fähigkeiten braucht die Stores des Hosts — draußen (Python, GPU-Rechner) gibt es sie nicht.
         foreach (var b in liste.Where(b => b.Extern && GeneratedFunktionen.Faehigkeiten.ContainsKey(b.Funktion)))
-            throw new InvalidOperationException(
+            throw new Infrastructure.Umgebung.BootFehler(
                 $"Die Funktion '{b.Funktion.Name}' liest Fähigkeiten ({string.Join(", ", GeneratedFunktionen.Faehigkeiten[b.Funktion].Select(t => t.Name))}) " +
-                "und läuft deshalb nur im Host: services.AddFunktion<…, Implementierung>() statt AddExterneFunktion.");
+                "und läuft deshalb nur im Host (Funktionen:" + b.Funktion.Name + ":Laufort = Host).", "funktion:" + b.Funktion.Name);
         foreach (var (name, regeln) in registry)
             foreach (var f in regeln.Regeln.SelectMany(r => r.GerufeneFunktionen).Distinct())
                 if (!gebunden.Contains(f))
-                    throw new InvalidOperationException(
-                        $"Der Prozess '{name}' ruft die Funktion '{f.Name}', aber sie ist nicht gebunden. " +
-                        $"Im Host: services.AddFunktion<{f.Name}, Implementierung>().");
+                    throw new Infrastructure.Umgebung.BootFehler(
+                        $"Der Ablauf '{name}' ruft die Funktion '{f.Name}', aber sie ist nicht gebunden — in der Umgebung fehlt Funktionen:{f.Name} (Laufort).",
+                        "funktion:" + f.Name);
     }
 
     /// <summary>
@@ -116,20 +116,20 @@ public static class FunktionsLaufortExtensions
         foreach (var (name, k) in konfig)
         {
             if (!namen.TryGetValue(name, out var funktion))
-                throw new InvalidOperationException($"Funktionen:{name} — keine Katalog-Funktion dieses Namens (bekannt: {string.Join(", ", namen.Keys.OrderBy(n => n))}).");
+                throw new Infrastructure.Umgebung.BootFehler($"Funktionen:{name} — keine Katalog-Funktion dieses Namens (bekannt: {string.Join(", ", namen.Keys.OrderBy(n => n))}).", "host:Funktionen");
             switch (k.Laufort)
             {
                 case Abstractions.FunktionsLaufort.Host:
                     var passend = implementierungen.Where(i => i.Funktion == funktion && (k.Implementierung == null || i.Name == k.Implementierung)).ToList();
                     if (passend.Count != 1)
-                        throw new InvalidOperationException($"Funktionen:{name}: Laufort Host braucht genau eine Implementierung"
+                        throw new Infrastructure.Umgebung.BootFehler($"Funktionen:{name}: Laufort Host braucht genau eine Implementierung"
                             + (k.Implementierung == null ? "" : $" namens '{k.Implementierung}'") + " — gefunden: "
-                            + string.Join(", ", implementierungen.Where(i => i.Funktion == funktion).Select(i => i.Name).DefaultIfEmpty("keine")) + ".");
+                            + string.Join(", ", implementierungen.Where(i => i.Funktion == funktion).Select(i => i.Name).DefaultIfEmpty("keine")) + ".", "funktion:" + name);
                     passend[0].Binde(services, Math.Max(1, k.Slots), Math.Max(0, k.Wiederholungen));
                     break;
                 case Abstractions.FunktionsLaufort.Extern:
                     if (faehigkeiten.ContainsKey(funktion))
-                        throw new InvalidOperationException($"Funktionen:{name}: eine Funktion mit Lese-Fähigkeit läuft nur im Host (Laufort Host).");
+                        throw new Infrastructure.Umgebung.BootFehler($"Funktionen:{name}: eine Funktion mit Lese-Fähigkeit läuft nur im Host (Laufort Host).", "funktion:" + name);
                     externBinden[funktion](services);
                     break;
                 default:

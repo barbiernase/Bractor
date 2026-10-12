@@ -119,18 +119,20 @@ public static partial class QuellenExtensions
         var bekannt = typen.Select(t => t.Abschnitt).ToHashSet(StringComparer.Ordinal);
         var fremd = abschnitt.GetChildren().Select(c => c.Key).Where(k => !bekannt.Contains(k)).ToList();
         if (fremd.Count > 0)
-            throw new InvalidOperationException($"Konfig {Treibervertrag.KonfigAbschnitt}: Abschnitt ohne Quellen-Typ: {string.Join(", ", fremd)} "
-                + $"(bekannt: {string.Join(", ", bekannt.DefaultIfEmpty("—"))}).");
+            throw new Infrastructure.Umgebung.BootFehler($"Konfig {Treibervertrag.KonfigAbschnitt}: Abschnitt ohne Quellen-Typ: {string.Join(", ", fremd)} "
+                + $"(bekannt: {string.Join(", ", bekannt.DefaultIfEmpty("—"))}).", "host:Quellen");
         var fehlend = typen.Where(t => !abschnitt.GetSection(t.Abschnitt).Exists()).Select(t => t.Abschnitt).ToList();
         if (fehlend.Count > 0)
-            throw new InvalidOperationException($"Konfig {Treibervertrag.KonfigAbschnitt}: Quelle ohne Abschnitt: {string.Join(", ", fehlend)}.");
+            throw new Infrastructure.Umgebung.BootFehler($"Konfig {Treibervertrag.KonfigAbschnitt}: Quelle ohne Abschnitt: {string.Join(", ", fehlend)}.", "quelle:" + fehlend[0]);
 
         foreach (var t in typen)
         {
-            var k = abschnitt.GetSection(t.Abschnitt).Get<DateiQuellKonfig>(o => o.ErrorOnUnknownConfiguration = true)
-                ?? throw new InvalidOperationException($"Konfig {Treibervertrag.KonfigAbschnitt}:{t.Abschnitt} ist leer.");
+            DateiQuellKonfig? k;
+            try { k = abschnitt.GetSection(t.Abschnitt).Get<DateiQuellKonfig>(o => o.ErrorOnUnknownConfiguration = true); }
+            catch (InvalidOperationException e) { throw new Infrastructure.Umgebung.BootFehler($"Konfig {Treibervertrag.KonfigAbschnitt}:{t.Abschnitt}: {e.Message}", "quelle:" + t.Abschnitt); }
+            if (k == null) throw new Infrastructure.Umgebung.BootFehler($"Konfig {Treibervertrag.KonfigAbschnitt}:{t.Abschnitt} ist leer.", "quelle:" + t.Abschnitt);
             if (string.IsNullOrWhiteSpace(k.Pfad))
-                throw new InvalidOperationException($"Konfig {Treibervertrag.KonfigAbschnitt}:{t.Abschnitt}:Pfad fehlt.");
+                throw new Infrastructure.Umgebung.BootFehler($"Konfig {Treibervertrag.KonfigAbschnitt}:{t.Abschnitt}:Pfad fehlt.", "quelle:" + t.Abschnitt);
             if (!Directory.Exists(k.Pfad))
                 Console.WriteLine($"  ⚠ Quelle {t.Abschnitt}: Verzeichnis {k.Pfad} beim Start nicht erreichbar — der Treiber versucht es weiter.");
             services.AddSingleton(new KonfigurierteQuelle(t, k));

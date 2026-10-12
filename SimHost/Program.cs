@@ -246,6 +246,34 @@ app.MapPost("/api/llm/aktualisieren", () => Results.Json(konsole.Aktualisieren()
 app.MapGet("/api/llm/rumpf", (string id) => Results.Json(konsole.Rumpf(id)));
 app.MapGet("/api/llm/protokoll", (string? id, int? max) => Results.Json(konsole.Protokoll(string.IsNullOrEmpty(id) ? null : id, max ?? 300)));
 
+// ── WERKBANK (docs/konzept-werkbank.md §5, P3): ⟳ = bauen → Python-Basen → neu lesen → Daten prüfen → Infrastruktur → Host ersetzen.
+//    Die Umgebung (Kopfzeile „Umgebung ▾") wählt Ports, DB und Cluster; der Host-Rahmen bearbeitet ihre Datei (generisches Formular).
+var werkbank = new SimHost.Werkbank.Werkbank(slnRoot);
+var werkbankJson = new JsonSerializerOptions(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
+app.MapGet("/api/werkbank/zustand", () => Results.Json(werkbank.Zustand(), werkbankJson));
+app.MapGet("/api/werkbank/schema", () => Results.Content(SimHost.Werkbank.Schema.Umgebung().ToJsonString(), "application/json"));
+app.MapGet("/api/werkbank/umgebung/{name}", (string name) => Results.Content(werkbank.Umgebungen.Roh(name).ToJsonString(), "application/json"));
+app.MapPost("/api/werkbank/umgebung/{name}", (string name, System.Text.Json.Nodes.JsonObject inhalt) =>
+{
+    werkbank.Umgebungen.Schreibe(name, inhalt);
+    return Results.Json(new { geschrieben = werkbank.Umgebungen.Datei(name) });
+});
+app.MapPost("/api/werkbank/aktiv/{name}", (string name) => { werkbank.Aktiv = name; return Results.Json(werkbank.Zustand(), werkbankJson); });
+app.MapPost("/api/werkbank/kreislauf", async (bool? zuruecksetzen, CancellationToken ct) =>
+    Results.Json(await werkbank.KreislaufAsync(zuruecksetzen == true, ct), werkbankJson));
+app.MapGet("/api/werkbank/kreislauf", () => Results.Json(werkbank.Letzter, werkbankJson));
+app.MapPost("/api/werkbank/host/stopp", async () => { await werkbank.Host.StoppeAsync(); return Results.Json(werkbank.Host.Zustand(), werkbankJson); });
+app.MapGet("/api/werkbank/host/log", (int? max) => Results.Json(werkbank.Host.Log(max ?? 300)));
+app.MapGet("/api/werkbank/simdb/staende", async () => Results.Json(await werkbank.Db.StaendeAsync(werkbank.Umgebungen.Aufgeloest(werkbank.Aktiv))));
+app.MapPost("/api/werkbank/simdb/{aktion}", async (string aktion, string? stand, CancellationToken ct) =>
+{
+    try { return Results.Json(await werkbank.DatenbankAsync(aktion, stand, ct), werkbankJson); }
+    catch (Exception e) when (e is InvalidOperationException or ArgumentException) { return Results.Json(new { ok = false, fehler = e.Message }); }
+});
+app.MapPost("/api/werkbank/infra/start", async (CancellationToken ct) =>
+    Results.Json(await werkbank.Infra.StarteAsync(werkbank.Aktiv, werkbank.Umgebungen.Aufgeloest(werkbank.Aktiv), ct), werkbankJson));
+app.MapPost("/api/werkbank/infra/stopp", async (CancellationToken ct) => Results.Json(await werkbank.Infra.StoppeAsync(werkbank.Aktiv, ct), werkbankJson));
+
 // Port: 5178, außer die Umgebung weist einen zu (PORT) — z. B. wenn mehrere Editor-Instanzen parallel laufen.
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5178";
 Console.WriteLine($"\n▶ SimHost läuft.  Editor: http://localhost:{port}/editor/   LLM-Konsole: http://localhost:{port}/konsole\n");

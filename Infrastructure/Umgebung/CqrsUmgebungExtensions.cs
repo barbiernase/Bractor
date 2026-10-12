@@ -27,11 +27,15 @@ public static class CqrsUmgebungExtensions
     /// <summary>Lädt die Umgebung aus <c>--umgebung &lt;name&gt;</c> (bzw. <c>CQRS_UMGEBUNG</c>) und verdrahtet den Host danach.</summary>
     public static UmgebungKonfig AddCqrs(this WebApplicationBuilder builder, string[] args)
     {
-        var name = UmgebungLader.NameAus(args)
-                   ?? throw new InvalidOperationException($"Keine Umgebung angegeben: {UmgebungLader.Argument} <name> oder {UmgebungLader.Variable}.");
-        var umgebung = UmgebungLader.Lade(builder.Configuration, name, args);
-        builder.AddCqrs(umgebung);
-        return umgebung;
+        try
+        {
+            var name = UmgebungLader.NameAus(args)
+                       ?? throw new BootFehler($"Keine Umgebung angegeben: {UmgebungLader.Argument} <name> oder {UmgebungLader.Variable}.", "host:Umgebung");
+            var umgebung = UmgebungLader.Lade(builder.Configuration, name, args);
+            builder.AddCqrs(umgebung);
+            return umgebung;
+        }
+        catch (Exception e) { CqrsBoot.Melde(e); throw; }
     }
 
     public static WebApplicationBuilder AddCqrs(this WebApplicationBuilder builder, UmgebungKonfig u)
@@ -112,6 +116,7 @@ public static class CqrsUmgebungExtensions
         Console.WriteLine($"  CQRS/ES Host · Umgebung {u.Umgebung.Name} ({u.Umgebung.Art}) · gRPC :{u.Transport.GrpcPort}"
             + (u.Transport.EinblickPort > 0 ? $" · Einblick :{u.Transport.EinblickPort}" : "") + $" · DB {u.EventStore.Datenbank} · Cluster {u.Cluster.Name} ({u.Cluster.Art})");
         Console.WriteLine();
-        await app.RunAsync();
+        try { await app.RunAsync(); }
+        catch (Exception e) { CqrsBoot.Melde(e); throw; }
     }
 }

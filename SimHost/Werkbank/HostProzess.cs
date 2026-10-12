@@ -1,0 +1,97 @@
+using System.Collections.Concurrent;
+using System.Diagnostics;
+using System.Text.Json;
+
+namespace SimHost.Werkbank;
+
+/// <summary>Ein Boot-Fehler des Hosts, möglichst an einer Karte (<c>funktion:X</c>, <c>quelle:X</c>, <c>host:Abschnitt</c>).</summary>
+public sealed record BootMeldung(string Text, string? Karte);
+
+/// <summary>
+/// Der Laufzeit-Host als Prozess (docs/konzept-werkbank.md §5 Schritt 5): <c>dotnet Host.Grpc.dll --umgebung &lt;name&gt;</c> aus dem
+/// Build-Ausgang, <c>CQRS_BRANCH</c> = Branch der Werkbank. Starten ersetzt einen laufenden Host; bereit ist er, wenn <c>/health</c> auf
+/// dem Einblick-Port antwortet. Boot-Fehler kommen als Zeile <c>CQRS-BOOT {json}</c> (bzw. als unbehandelte Ausnahme) zurück.
+/// </summary>
+public sealed class HostProzess(string slnRoot)
+{
+    private Process? _p;
+    private string? _umgebung;
+    private DateTimeOffset? _seit;
+    private readonly ConcurrentQueue<string> _log = new();
+    private readonly List<BootMeldung> _boot = new();
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(2) };
+
+    public bool Laeuft => _p is { HasExited: false };
+
+    public object Zustand() => new
+    {
+        laeuft = Laeuft, umgebung = _umgebung, pid = Laeuft ? _p!.Id : (int?)null, seit = _seit,
+        exitCode = _p is { HasExited: true } p ? p.ExitCode : (int?)null, boot = _boot.ToList(),
+    };
+
+    public IReadOnlyList<string> Log(int max = 300) => _log.Reverse().Take(max).Reverse().ToList();
+
+    public async Task<(bool Ok, IReadOnlyList<BootMeldung> Boot)> StarteAsync(string umgebung, int einblickPort, string branch, CancellationToken ct)
+    {
+        await StoppeAsync();
+        _boot.Clear();
+        _log.Clear();
+        var dll = Path.Combine(slnRoot, "Host.Grpc", "bin", "Debug", "net9.0", "Host.Grpc.dll");
+        if (!File.Exists(dll)) { _boot.Add(new BootMeldung("Host.Grpc ist nicht gebaut (⟳ baut ihn).", null)); return (false, _boot); }
+        var psi = new ProcessStartInfo("dotnet") { WorkingDirectory = Path.GetDirectoryName(dll)!, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
+        psi.ArgumentList.Add(dll);
+        psi.ArgumentList.Add("--umgebung");
+        psi.ArgumentList.Add(umgebung);
+        psi.Environment["CQRS_BRANCH"] = branch;
+        var p = new Process { StartInfo = psi, EnableRaisingEvents = true };
+        void Nimm(string? z)
+        {
+            if (z == null) return;
+            _log.Enqueue(z);
+            while (_log.Count > 2000) _log.TryDequeue(out _);
+            if (z.StartsWith("CQRS-BOOT ", StringComparison.Ordinal))
+                try
+                {
+                    var j = JsonDocument.Parse(z["CQRS-BOOT ".Length..]).RootElement;
+                    lock (_boot) _boot.Add(new BootMeldung(j.GetProperty("text").GetString() ?? z, j.TryGetProperty("karte", out var k) ? k.GetString() : null));
+                }
+                catch (JsonException) { lock (_boot) _boot.Add(new BootMeldung(z, null)); }
+        }
+        p.OutputDataReceived += (_, e) => Nimm(e.Data);
+        p.ErrorDataReceived += (_, e) => Nimm(e.Data);
+        p.Start();
+        p.BeginOutputReadLine();
+        p.BeginErrorReadLine();
+        _p = p;
+        _umgebung = umgebung;
+        _seit = DateTimeOffset.UtcNow;
+
+        var bis = DateTime.UtcNow.AddSeconds(90);
+        while (DateTime.UtcNow < bis && !ct.IsCancellationRequested)
+        {
+            if (p.HasExited)
+            {
+                if (_boot.Count == 0)
+                    _boot.Add(new BootMeldung(string.Join("\n", Log(40).Where(z => z.Contains("Exception", StringComparison.Ordinal) || z.Contains("Fehler", StringComparison.Ordinal)).Take(8))
+                        is { Length: > 0 } t ? t : $"Host beendet (Exit {p.ExitCode})", null));
+                return (false, _boot);
+            }
+            if (einblickPort > 0)
+                try { using var r = await Http.GetAsync($"http://localhost:{einblickPort}/health", ct); return (true, _boot); }
+                catch (Exception) { /* noch nicht bereit */ }
+            await Task.Delay(500, ct);
+        }
+        return (einblickPort == 0 && !p.HasExited, _boot);
+    }
+
+    /// <summary>Hält den Host an: erst SIGTERM (geordnetes Herunterfahren), nach 15 s hart.</summary>
+    public async Task StoppeAsync()
+    {
+        var p = _p;
+        if (p is not { HasExited: false }) return;
+        try { Process.Start("kill", ["-TERM", p.Id.ToString()])?.WaitForExit(2000); } catch { /* kein kill */ }
+        var bis = DateTime.UtcNow.AddSeconds(15);
+        while (!p.HasExited && DateTime.UtcNow < bis) await Task.Delay(200);
+        if (!p.HasExited) try { p.Kill(entireProcessTree: true); } catch { /* schon weg */ }
+    }
+}

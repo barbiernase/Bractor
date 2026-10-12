@@ -116,3 +116,6 @@ __pycache__/
 
 # LLM-Konsole: erzeugte Kontexte, Protokoll, Sicherungen (docs/konzept-llm-minimalkontext.md)
 .llm-kontext/
+
+# Werkbank: Compose-Projekte, Proto-Stand je Sim-DB, gewählte Umgebung (lokal)
+.werkbank/

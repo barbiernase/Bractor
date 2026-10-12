@@ -1,4 +1,7 @@
-namespace Infrastructure.Quellen.Treiber.Datei;
+using System;
+using System.Collections.Generic;
+
+namespace Abstractions;
 
 /// <summary>Wie ein Scan geweckt wird: nur per Intervall oder zusätzlich durch ein Dateisystem-Ereignis (das nur weckt, nie entscheidet).</summary>
 public enum DateiErkennung { Abfrage, EreignisUndAbfrage }

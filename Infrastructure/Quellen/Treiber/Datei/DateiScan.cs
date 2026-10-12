@@ -1,3 +1,4 @@
+using Abstractions;
 namespace Infrastructure.Quellen.Treiber.Datei;
 
 /// <summary>Eine Datei, wie ein Scan sie sieht.</summary>

@@ -281,7 +281,7 @@ public class FunktionsAufrufTests
         var registry = new Dictionary<string, ProzessRegeln> { ["Bild"] = new BildAufbereitung().Regeln };
 
         var ohne = () => FunktionsExtensions.PrüfeBindungen(registry, new[] { new FunktionsBindung(typeof(IVorverarbeitung)) });
-        ohne.Should().Throw<InvalidOperationException>().WithMessage("*IMetadaten*AddFunktion*");
+        ohne.Should().Throw<InvalidOperationException>().WithMessage("*IMetadaten*Funktionen:IMetadaten*");
 
         FunktionsExtensions.PrüfeBindungen(registry,
             new[] { new FunktionsBindung(typeof(IVorverarbeitung)), new FunktionsBindung(typeof(IMetadaten), Slots: 4) });

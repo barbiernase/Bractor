@@ -51,7 +51,7 @@ public sealed class UmgebungsSiegel(UmgebungKonfig umgebung) : IHostedService
         }
         var erwartet = Von(umgebung);
         if (Pruefe(gespeichert, erwartet) is { } grund)
-            throw new InvalidOperationException($"Umgebungs-Siegel: {grund}. Start abgebrochen (Datenbank {umgebung.EventStore.Datenbank}).");
+            throw new BootFehler($"Umgebungs-Siegel: {grund}. Start abgebrochen (Datenbank {umgebung.EventStore.Datenbank}).", "host:EventStore");
         if (gespeichert == null)
         {
             await using var cmd = conn.CreateCommand();
