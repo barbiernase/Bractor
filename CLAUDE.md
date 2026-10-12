@@ -110,12 +110,18 @@ Der Wire-Kontext enthält Queries/Antworten, Enums als Namen. Editor: Leiste unt
 Quellkarte, ⏩ Uhr vor; Formulare kommen aus dem gelesenen Code (`/api/werkbank/formular`). sim-main hat Identitäten (`sim-<akteur>`) — ein
 externer Worker braucht einen Akteur mit `IDarf<F>` (`Bildrechner`), gestartet aus `Funktionen:<F>:Worker`.
 
+**Visualisierung (2026-10-12, Werkbank P6):** vierter Spur-Header `ueber` = Absender (Fluss-Knoten/Regel/Reaktion/Akteur, der den Command bzw.
+Auftrag abschickte; Aggregat aus dem Envelope, Funktion aus `AuftragAnbieten.Wirker`). Der Weg eines Eintrags über die Karten ist EINE reine
+Funktion (`Abstractions/Spur/SpurWeg.Aus`). Die Werkbank spiegelt die Spur (`SimHost/Werkbank/SpurSpiegel.cs`, SSE + Cursor) und liefert fertig:
+`/api/werkbank/spur/puls|vorgaenge|vorgang/{k}`. Editor: Leiste ☰ Vorgänge · ⏱ Zeitleiste · ⚠ Meldungen · 〰 Puls; Spur-Überlagerung (①②③ mit +Δt,
+✕/⏳ rot, alt grau), Schritt-Panel mit ↤/↦; EIN Fokus (Chip in der Ansichts-Leiste, ersetzt Slice/◎/⤢; die statische Kette kommt erst mit P7.3 vom Server).
+
 **Akteure, Verträge, Clients (2026-10-06):** Akteure mit Befugnis und Kette bis in den Event-Header; Akteur-Verträge (Zusagen
 draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer CommandId; Clients (`IClientVertrag`, n:m zu Akteuren) mit
 Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an
 Clients (`docs/konzept-akteure.md` §9).
 
-**Tests (echt gemessen 2026-10-09; P5 2026-10-12: Prüfstand 443/443, Integration 39/39): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
+**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
 Marten/Consul/Redis, sequentiell: 33/33 (inkl. 4 Fluss-E2E; TwoNodeCommandDispatch an die Inbox-Marke seit T2b angepasst).**
 
 **Bewusst offen (Priorität):**

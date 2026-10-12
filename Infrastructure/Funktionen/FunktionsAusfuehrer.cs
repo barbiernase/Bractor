@@ -117,8 +117,9 @@ public sealed class FunktionsAusfuehrer
         var liegt = true;
         try
         {
-            // Spur: das Ergebnis schreibt die Funktion; die Ursache (der Log-Eintrag, der den Aufruf auslöste) kommt mit dem Auftrag.
-            using var spur = Spur.Von(null, WirkerId.FuerFunktion(funktionsName));
+            // Spur: das Ergebnis schreibt die Funktion; Ursache (der Log-Eintrag, der den Aufruf auslöste) und Wirker des Absenders
+            //   (Fluss-Knoten bzw. Regel) kommen mit dem Auftrag — der Absender steht als „ueber" daneben.
+            using var spur = Spur.Von(null, WirkerId.FuerFunktion(funktionsName), Spur.Aktuell?.Wirker);
             await _store.AppendEventsAsync(vorgang, 0, new[] { ergebnis },
                 correlationId: korrelation.ToString(), causationId: vorgang.ToString(),
                 aggregateType: $"Funktion:{funktionsName}", akteur: akteur);

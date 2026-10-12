@@ -23,6 +23,9 @@ public sealed class HostProzess(string slnRoot)
 
     public bool Laeuft => _p is { HasExited: false };
 
+    /// <summary>Seit wann der laufende Host läuft (ein neuer Start = ein neuer Lauf, die Spur wird neu gespiegelt).</summary>
+    public DateTimeOffset? Seit => Laeuft ? _seit : null;
+
     public object Zustand() => new
     {
         laeuft = Laeuft, umgebung = _umgebung, pid = Laeuft ? _p!.Id : (int?)null, seit = _seit,

@@ -3,7 +3,9 @@ namespace Abstractions;
 /// <summary>
 /// Die SPUR eines Log-Eintrags (<c>docs/konzept-werkbank.md</c> §7.1): drei Header, vom Framework gesetzt und unsichtbar für den Fachcode
 /// (Inv. 5) — <see cref="UrsacheHeader"/> (der Log-Eintrag, der ihn ausgelöst hat: <c>Stream:Version</c>), <see cref="WirkerHeader"/> (der
-/// Baustein, der geschrieben hat: <see cref="WirkerId"/> = Karte im Editor) und <see cref="StandHeader"/> (Hash des Builds).
+/// Baustein, der geschrieben hat: <see cref="WirkerId"/> = Karte im Editor), <see cref="UeberHeader"/> (wer den Command bzw. Auftrag
+/// abgeschickt hat, den der Wirker verarbeitet: Fluss-Knoten, Regel, Reaktion, Akteur — der Weg über die Karten dazwischen) und
+/// <see cref="StandHeader"/> (Hash des Builds).
 /// <para>Ursache und Wirker reisen wie der Akteur (<see cref="ImAuftrag"/>) fluss-lokal (<see cref="System.Threading.AsyncLocal{T}"/>): wer
 /// schreibt oder einen Command/Auftrag abschickt, setzt sie um seinen Schritt (<see cref="Von"/>); der Event-Store stempelt sie beim Append,
 /// der Emit legt sie in den Command-Envelope, und das Aggregat setzt sie aus dem Envelope wieder — so ist die Ursache-Kette auch über
@@ -14,6 +16,7 @@ public static class Spur
     public const string UrsacheHeader = "ursache";
     public const string WirkerHeader = "wirker";
     public const string StandHeader = "stand";
+    public const string UeberHeader = "ueber";
 
     /// <summary>Die Ursache als Text: <c>&lt;StreamId&gt;:&lt;Version&gt;</c>.</summary>
     public static string Ursache(Guid stream, long version) => stream.ToString("D") + ":" + version;
@@ -39,16 +42,19 @@ public static class Spur
     /// <summary>Die Spur des laufenden Schritts (Ursache, Wirker) — null außerhalb eines Schritts.</summary>
     public static Kopf? Aktuell => _kopf.Value;
 
-    /// <summary>Setzt Ursache und Wirker bis zum Dispose (stellt die vorherigen wieder her). Ein null-Wert erbt den äußeren.</summary>
-    public static IDisposable Von(string? ursache, string? wirker)
+    /// <summary>
+    /// Setzt Ursache, Wirker und Absender bis zum Dispose (stellt die vorherigen wieder her). Ein null-Wert erbt den äußeren — der Absender
+    /// gehört zum Wirker: ein neuer Wirker ohne Absender hat keinen (sonst trüge er den Absender eines fremden Schritts).
+    /// </summary>
+    public static IDisposable Von(string? ursache, string? wirker, string? ueber = null)
     {
         var vorher = _kopf.Value;
-        _kopf.Value = new Kopf(ursache ?? vorher?.Ursache, wirker ?? vorher?.Wirker);
+        _kopf.Value = new Kopf(ursache ?? vorher?.Ursache, wirker ?? vorher?.Wirker, ueber ?? (wirker == null ? vorher?.Ueber : null));
         return new Zurueck(vorher);
     }
 
-    /// <summary>Ursache und Wirker eines Schritts.</summary>
-    public sealed record Kopf(string? Ursache, string? Wirker);
+    /// <summary>Ursache, Wirker und Absender (<see cref="UeberHeader"/>) eines Schritts.</summary>
+    public sealed record Kopf(string? Ursache, string? Wirker, string? Ueber = null);
 
     private sealed class Zurueck(Kopf? vorher) : IDisposable
     {

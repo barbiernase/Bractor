@@ -96,6 +96,11 @@ public class EingangE2ETests
 
             var nochmal = await Lies(await Sende("/eingang/command", new { typ = "ErstelleDatensatz", daten = new { AggregateId = ds, Name = "Werkbank" } }, "t-ki"));
             nochmal.GetProperty("ablehnung").GetProperty("typ").GetString().Should().Be("DatensatzExistiertBereits");
+            // Einblick (Werkbank P6): der abgelehnte Command von außen ist ein gescheiterter Vorgang; seine Marke trägt den Akteur als Absender.
+            var leser = new SpurLeser(u);
+            var gescheitert = (await leser.VorgaengeAsync(50, default)).Single(v => v.Korrelation == nochmal.GetProperty("korrelation").GetString());
+            (gescheitert.Zustand, gescheitert.Grund).Should().Be(("gescheitert", "DatensatzExistiertBereits"));
+            (await leser.VorgangAsync(gescheitert.Korrelation, default)).Single().Ueber.Should().Be("akteur:KIOperator");
 
             (await Sende("/eingang/command", new { typ = "ErstelleDatensatz", daten = new { AggregateId = Guid.NewGuid(), Name = "x" } }, "t-inspekteur"))
                 .StatusCode.Should().Be(HttpStatusCode.Forbidden, "der Inspekteur hat kein IDarf<ErstelleDatensatz>");

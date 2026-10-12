@@ -96,7 +96,7 @@ internal sealed class LogImSpeicher : IEventStoreRepository
                     CausationId = causationId ?? Guid.NewGuid().ToString(), CorrelationId = correlationId ?? Guid.NewGuid().ToString(),
                     AggregateType = aggregateType ?? "", UserId = akteur ?? "system", CreatedAtUtc = Jetzt,
                     // Spur wie der echte Store (SpurHeader): aus dem Schritt, der gerade schreibt.
-                    Ursache = Spur.Aktuell?.Ursache, Wirker = Spur.Aktuell?.Wirker, Stand = Spur.Stand,
+                    Ursache = Spur.Aktuell?.Ursache, Wirker = Spur.Aktuell?.Wirker, Ueber = Spur.Aktuell?.Ueber, Stand = Spur.Stand,
                 });
             return Task.CompletedTask;
         }
@@ -193,8 +193,9 @@ internal sealed class FunktionsWelt
                 RaeumeVorschauAuf r => new IEvent[] { new VorschauAufgeraeumt(r.Vorschau), new KommandoVerarbeitet(vorgang) },
                 _ => throw new NotSupportedException(cmd.GetType().Name),
             };
-        // Wie AggregateActorBase: die Events schreibt decide:<Aggregat>/<Command>, die Ursache kommt vom Absender (hier der Fluss-Kontext).
-        using (Spur.Von(null, WirkerId.FuerDecide("Bildakte", cmd.GetType().Name)))
+        // Wie AggregateActorBase: die Events schreibt decide:<Aggregat>/<Command>, Ursache und Absender (ueber) kommen vom Absender
+        //   (hier der Fluss-Kontext; im Host über den Envelope).
+        using (Spur.Von(null, WirkerId.FuerDecide("Bildakte", cmd.GetType().Name), Spur.Aktuell?.Wirker))
             await Log.AppendEventsAsync(cmd.AggregateId, stream.Count, evs, korrelation.ToString(), vorgang.ToString(), "Bildakte");
     }
 

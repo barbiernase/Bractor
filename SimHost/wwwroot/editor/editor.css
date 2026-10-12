@@ -605,3 +605,72 @@
 #de .wb-mit{display:flex;gap:4px;flex:1;min-width:0}
 #de .wb-mit input{flex:1;min-width:0}
 #de button.act.klein{padding:2px 7px}
+/* ══ SPUR (docs/konzept-werkbank.md §7.3, Plan P6): Überlagerung, Live-Puls, Fokus, Vorgänge/Zeitleiste/Meldungen ══ */
+#de .gfokus{display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:2px 4px 2px 10px;border:1px solid #a8743a;border-radius:14px;background:#2a2114;color:#ffd9a8;font:600 11px system-ui}
+#de .gfokus .gf-t{max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#de .gfokus .gf-z{color:#c9a477;font-weight:400}
+#de .gfokus button{padding:1px 7px;border-radius:10px;background:#3a2c18;border-color:#7a5a30;color:#ffd9a8}
+#de .gnode2.spur{box-shadow:0 0 0 2px #ffb86b,0 0 16px #ffb86b55}
+#de .gnode2.spur.spur-alt{box-shadow:0 0 0 2px #7d8597,0 0 10px #7d859744}
+#de .gnode2.spur-rot{box-shadow:0 0 0 2px #ff6b81,0 0 16px #ff6b8166!important}
+#de .gnode2.spur-warte{animation:dspuls 1.4s ease-in-out infinite}
+#de .gnode2.spur-verlierbar{outline:2px dashed #ff9fb0;outline-offset:4px}
+#de .gnode2.spur-sel{box-shadow:0 0 0 3px #fff,0 0 20px #ffffff77!important}
+#de .gworld .glink.spur{stroke:#ffb86b!important;stroke-width:3.6px!important;opacity:1!important}
+#de .gworld .glink.spur.spur-alt{stroke:#8a92a6!important}
+#de .gworld .glink.spur.spur-rot{stroke:#ff6b81!important}
+#de .gspur-t{fill:#ffd9a8;font:600 13px system-ui;stroke:#0b0f17;stroke-width:3.5px;paint-order:stroke;cursor:pointer;pointer-events:auto}
+#de .gspur-t.alt{fill:#a3abbd}
+#de .gspur-t.rot{fill:#ff9fb0}
+#de .gspur-t.an{fill:#fff;font-size:15px}
+#de .gspur-nr{position:absolute;top:-12px;left:8px;z-index:7;background:#3a2a14;color:#ffd9a8;border:1px solid #a8743a;border-radius:9px;padding:0 6px;font:600 12px system-ui;cursor:pointer;white-space:nowrap;letter-spacing:1px}
+#de .gspur-nr.alt{background:#23262e;color:#a3abbd;border-color:#4a5163}
+#de .gspur-nr.rot{background:#3a141c;color:#ffb3c0;border-color:#a83a4e}
+#de .gspur-nr.hinw{left:auto;right:8px;letter-spacing:0;font-weight:400;font-size:11px}
+#de .gspur-nr.warte{left:auto;right:8px;background:#3a331f;color:#ffe1a0;border-color:#6a5a30;animation:dspuls 1.4s ease-in-out infinite}
+#de .gspur-nr.an{background:#fff;color:#1a1d26;border-color:#fff}
+#de .gpuls{position:absolute;top:-10px;right:8px;z-index:7;background:#14232b;color:#9fd3e6;border:1px solid #2c5566;border-radius:9px;padding:0 6px;font:11px ui-monospace,monospace;white-space:nowrap}
+#de .gpuls.stau{right:auto;left:8px;background:#3a331f;color:#ffe1a0;border-color:#6a5a30;animation:dspuls 1.6s ease-in-out infinite}
+#de .glink.puls{opacity:.95}
+#de .glink.puls-leer{opacity:.16;stroke-dasharray:2 5}
+#de .gspur-panel .gspur-k{background:#3a2a14;color:#ffd9a8}
+#de .gspur-panel .gspur-k.rot{background:#3a141c;color:#ffb3c0}
+#de .gspur-z{display:flex;gap:8px;align-items:flex-start!important;padding:2px 10px}
+#de .gspur-z .slotlbl{flex:0 0 112px}
+#de .gspur-w{flex:1;min-width:0;overflow-wrap:anywhere}
+#de .gspur-link{color:#9cc4ff;cursor:pointer;text-decoration:underline dotted}
+#de .gspur-weg{color:#ffb3c0}
+#de .gspur-alt-t{color:#a3abbd}
+#de .gspur-rot-t{color:#ffb3c0}
+#de .sp-links{flex-basis:min(560px,50%)!important}
+#de .sp-filter select{flex:1 1 0}
+#de .sp-liste{display:flex;flex-direction:column;gap:3px;overflow:auto}
+#de .sp-z{display:flex;flex-wrap:wrap;align-items:baseline;gap:6px;padding:4px 8px;border:1px solid #232a38;border-radius:6px;cursor:pointer;background:#0f131b}
+#de .sp-z:hover{background:#161c28}
+#de .sp-z.an{border-color:#a8743a;background:#21190f}
+#de .sp-zu{font-size:11px;font-weight:600;white-space:nowrap}
+#de .sp-zu.laeuft{color:#9be3bf}
+#de .sp-zu.wartet{color:#ffe1a0}
+#de .sp-zu.fertig{color:#8fb3d9}
+#de .sp-zu.gescheitert{color:#ff9fb0}
+#de .sp-grund{color:#ff9fb0;font-size:11px;flex-basis:100%}
+#de .sp-schritt{display:flex;gap:8px;align-items:baseline;padding:2px 6px;border-radius:5px;cursor:pointer;overflow-wrap:anywhere}
+#de .sp-schritt:hover{background:#161c28}
+#de .sp-schritt.an{background:#2a2114}
+#de .sp-schritt.spaeter{opacity:.35}
+#de .sp-schritt.rot b{color:#ff9fb0}
+#de .sp-schritt.alt b{color:#a3abbd}
+#de .sp-schritt.verlierbar{border:1px dashed #6a3040;cursor:default}
+#de .sp-nr{color:#ffd9a8;font-weight:600;min-width:20px}
+#de .sp-zeit{display:flex;flex-direction:column;gap:6px;width:100%;min-width:0}
+#de .sp-schieber{flex:1;min-width:120px}
+#de .sp-gitter{display:grid;gap:2px 0;overflow:auto;align-items:center;padding-bottom:6px}
+#de .sp-bl{font-size:11px;color:#c4cde0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;padding-right:8px;cursor:pointer;position:sticky;left:0;background:#10141d;z-index:1}
+#de .sp-dt{font-size:9px;color:#6f7a91;text-align:center;overflow:hidden}
+#de .sp-leer{height:18px;border-bottom:1px solid #1a2030}
+#de .sp-punkt{height:18px;line-height:18px;text-align:center;color:#ffd9a8;font-weight:600;cursor:pointer;border-bottom:1px solid #1a2030;border-radius:4px;background:#2a2114}
+#de .sp-punkt.rot{color:#ffb3c0;background:#2a1418}
+#de .sp-punkt.alt{color:#a3abbd;background:#1d2028}
+#de .sp-punkt.spaeter{opacity:.25}
+#de .sp-punkt.an{outline:2px solid #fff}
+#de .sp-meld{display:flex;flex-direction:column;gap:3px;width:100%}

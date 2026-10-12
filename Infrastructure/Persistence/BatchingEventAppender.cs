@@ -188,7 +188,7 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
         {
             try
             {
-                using (Spur.Von(p.SpurKopf?.Ursache, p.SpurKopf?.Wirker))
+                using (Spur.Von(p.SpurKopf?.Ursache, p.SpurKopf?.Wirker, p.SpurKopf?.Ueber))
                     await _inner.AppendEventsAsync(p.StreamId, p.ExpectedVersion, p.Events, p.Corr, p.Caus, p.AggType, p.Akteur)
                         .ConfigureAwait(false);
                 p.Tcs.TrySetResult();

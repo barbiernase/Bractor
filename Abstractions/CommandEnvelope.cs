@@ -83,6 +83,9 @@ public record EventEnvelope : IEventEnvelope, IWireMessage
     /// <summary>Spur: der Baustein, der dieses Event geschrieben hat (Wirker-Id = Karte im Editor).</summary>
     public string? Wirker { get; init; }
 
+    /// <summary>Spur: wer den Command bzw. Auftrag abgeschickt hat, den der Wirker verarbeitete (Fluss-Knoten, Regel, Reaktion, Akteur).</summary>
+    public string? Ueber { get; init; }
+
     /// <summary>Spur: der Build-Stand, unter dem es geschrieben wurde.</summary>
     public string? Stand { get; init; }
 

@@ -29,6 +29,19 @@ public class SpurTests
     }
 
     [Fact]
+    public void Der_Absender_gehoert_zum_Wirker()
+    {
+        using (Spur.Von("a:1", "decide:A/C", "fluss:P#k"))
+        {
+            Spur.Aktuell!.Ueber.Should().Be("fluss:P#k");
+            using (Spur.Von("b:2", null))
+                Spur.Aktuell!.Ueber.Should().Be("fluss:P#k", "ohne neuen Wirker bleibt der Absender");
+            using (Spur.Von(null, "funktion:F"))
+                Spur.Aktuell!.Ueber.Should().BeNull("ein neuer Wirker ohne Absender trägt keinen fremden");
+        }
+    }
+
+    [Fact]
     public void Ursache_ist_Stream_und_Version()
     {
         var id = Guid.NewGuid();
@@ -60,9 +73,13 @@ public class SpurTests
         var meta = alle.Single(e => e.Payload is MetaGelesen);
         (vor.Wirker, vor.Ursache).Should().Be(("funktion:IVorverarbeitung", wurzel));
         (meta.Wirker, meta.Ursache).Should().Be(("funktion:IMetadaten", wurzel));
+        // Der Absender (ueber) ist die Regel, die die Funktion rief bzw. den Command schickte — der Weg über die Karten dazwischen.
+        vor.Ueber.Should().StartWith("prozess:BildAufbereitung#");
+        meta.Ueber.Should().StartWith("prozess:BildAufbereitung#");
 
         var fertig = alle.Single(e => e.Payload is Fertig);
         fertig.Wirker.Should().Be("decide:Bildakte/MeldeFertig");
+        fertig.Ueber.Should().StartWith("prozess:BildAufbereitung#").And.EndWith("→MeldeFertig");
         fertig.Ursache.Should().BeOneOf(Spur.Ursache(vor.AggregateId, 1), Spur.Ursache(meta.AggregateId, 1));
 
         // Die Kette läuft vom Ergebnis bis zur Quelle zurück, jeder Schritt ist ein Eintrag im Log.

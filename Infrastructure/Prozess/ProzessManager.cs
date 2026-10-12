@@ -145,8 +145,10 @@ public sealed class ProzessManager
                 //   (eigener Weg) statt den Vorgang scheitern zu lassen.
                 var umleiten = k.Regel.Knoten is int knoten &&
                     (art == "zeitlimit" ? regeln.UmleitenZeitlimit : regeln.UmleitenAbgelehnt).Contains(knoten);
-                await AppendAsync(korrelation, v,
-                    umleiten ? new SchrittUmgeleitet(k.Vorgang, art, grundA) : new SchrittGescheitert(k.Vorgang, grundA), ct);
+                // Spur: der Fehlschlag gehört dem Knoten bzw. der Regel, deren Aufruf scheiterte (⏳/✕ an dieser Karte).
+                using (Spur.Von(SpurVon(k, regeln).Ursache, regeln.Wirker(k.RegelIndex)))
+                    await AppendAsync(korrelation, v,
+                        umleiten ? new SchrittUmgeleitet(k.Vorgang, art, grundA) : new SchrittGescheitert(k.Vorgang, grundA), ct);
                 v++;
             }
             // Frisch falten: mz.Gescheitert (bzw. die Umleitung) trägt den Fehlschlag jetzt.

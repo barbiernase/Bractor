@@ -365,6 +365,22 @@ app.MapPost("/api/werkbank/infra/start", async (CancellationToken ct) =>
     Results.Json(await werkbank.Infra.StarteAsync(werkbank.Aktiv, werkbank.Umgebungen.Aufgeloest(werkbank.Aktiv), ct), werkbankJson));
 app.MapPost("/api/werkbank/infra/stopp", async (CancellationToken ct) => Results.Json(await werkbank.Infra.StoppeAsync(werkbank.Aktiv, ct), werkbankJson));
 
+// ── SPUR (docs/konzept-werkbank.md §7, P6): der Spiegel folgt dem laufenden Host (SSE + Cursor) und liefert Vorgänge, nummerierte Wege
+//   und den Live-Puls fertig aus — der Editor schlägt nur Karten-Ids nach.
+var spur = new SimHost.Werkbank.SpurSpiegel(werkbank, () => FindNeben("domain-model.json"));
+_ = Task.Run(() => spur.LaufeAsync(app.Lifetime.ApplicationStopping));
+app.MapGet("/api/werkbank/spur/puls", async (CancellationToken ct) => Results.Json(await spur.PulsAsync(ct), werkbankJson));
+app.MapGet("/api/werkbank/spur/vorgaenge", async (string? quelle, string? akteur, string? aggregat, string? zustand, CancellationToken ct) =>
+{
+    try { return Results.Json(await spur.VorgaengeAsync(quelle, akteur, aggregat, zustand, ct), werkbankJson); }
+    catch (Exception e) when (e is not OperationCanceledException) { return Results.Json(new { laeuft = true, fehler = e.Message, vorgaenge = Array.Empty<object>() }, werkbankJson); }
+});
+app.MapGet("/api/werkbank/spur/vorgang/{korrelation}", async (string korrelation, CancellationToken ct) =>
+{
+    try { return Results.Json(await spur.VorgangAsync(korrelation, ct), werkbankJson); }
+    catch (Exception e) when (e is not OperationCanceledException) { return Results.Json(new { laeuft = true, korrelation, fehler = e.Message }, werkbankJson); }
+});
+
 // Port: 5178, außer die Umgebung weist einen zu (PORT) — z. B. wenn mehrere Editor-Instanzen parallel laufen.
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5178";
 Console.WriteLine($"\n▶ SimHost läuft.  Editor: http://localhost:{port}/editor/   LLM-Konsole: http://localhost:{port}/konsole\n");

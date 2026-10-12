@@ -217,7 +217,7 @@ public class MartenEventStore : IEventStoreRepository
                     : string.Empty;
             // Der Akteur der Kette (Header „akteur") — fehlt er (Alt-Events, reine Automation), bleibt der Default.
             var akteur = e.Headers != null && e.Headers.TryGetValue(ImAuftrag.Header, out var ak) ? ak?.ToString() : null;
-            var (ursache, wirker, stand) = SpurHeader.Lies(e.Headers);
+            var (ursache, wirker, ueber, stand) = SpurHeader.Lies(e.Headers);
 
             // ★ Upcasting-Seam: eine Stored-Position wird zu ein (1:1) oder — bei einem künftigen
             //   Split — mehreren materialisierten Events. Alle teilen dieselbe AggregateVersion, tragen
@@ -240,6 +240,7 @@ public class MartenEventStore : IEventStoreRepository
                     UserId           = akteur ?? ImAuftrag.Ohne,
                     Ursache          = ursache,
                     Wirker           = wirker,
+                    Ueber            = ueber,
                     Stand            = stand,
                     Payload          = materialisiert[si]
                 });

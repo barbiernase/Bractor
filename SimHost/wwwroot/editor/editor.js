@@ -134,7 +134,7 @@
     world.querySelectorAll(".gnode2").forEach(el=>{const n=NODEBY.get(el.dataset.id),alt=el.querySelector(".gsum");if(!n||!alt)return;
       const neu=kurzfassung(n);if(neu.innerHTML!==alt.innerHTML)alt.replaceWith(neu);});   // nur wo sich wirklich etwas ändert
     const altI=canvas.querySelector(".ginsp");INSP_SCROLL=altI?{id:altI.dataset.sel,top:altI.scrollTop}:null;
-    drawEdges();FOCUS=SEL?sliceVon(SEL):null;wendeFokusAn();zeigeInspector();autosave();if(window.simNachRender)simNachRender();}
+    fokusNeu();drawEdges();zeigeInspector();autosave();if(window.simNachRender)simNachRender();}
   // Eine Modell-Änderung aus dem Verbinden-Modus ausführen: ohne Voll-Render, danach nur die betroffenen Karten.
   function imModus(ids,aendern){TEIL={gerufen:false};try{aendern();}finally{const g=TEIL.gerufen;TEIL=null;if(g)teilNeu(ids.filter(Boolean));}}
 
@@ -324,7 +324,7 @@
   function auffaechern(c,was){waehle("cl:"+c._id);AUF={client:c._id,...was};
     const ids=new Set(["cl:"+c._id]);clientPorts(c).filter(p=>aufPasst(was,p)&&p.node)
       .forEach(p=>{ids.add(vertreterId(p.node));if(p.ri==="zusage"){const a=MODEL.akteure.find(x=>x.name===p.akteure[0]);if(a)ids.add("akt:"+a._id);}});
-    FOCUS=ids;drawEdges();wendeFokusAn();}
+    fokussiere("menge",ids,"🔌 "+clientAnzeige(c)+" · aufgefächert");drawEdges();}
   window.deClients=()=>MODEL.clients.map(c=>({name:c.name,handshake:clientAnzeige(c),akteure:clientAkteure(c),
     buendel:clientBuendel(c).map(b=>({ziel:b.key,durabel:b.durabel,text:buendelText(b)}))}));
   // Akteure, die diesen Typ hineingeben dürfen — als Erzeuger auf der „◀ kommt aus"-Seite; „lösen" entzieht das Recht.
@@ -2113,7 +2113,7 @@
     const k=h("div",{class:"grahmen-k",title:f?"public sealed class "+f.name+" : IPipeline — "+(f.namespace||"")+"\nJede Quell-Nachricht startet einen Vorgang; die Knoten laufen als Dirigent (ein Actor je Vorgang), Funktionen holen sich Ausführer per Pull.":""},
       h("span",{class:"gr-t akt-n",onclick:e=>{e.stopPropagation();if(q)waehle("fs:"+q._id);}},"⛓ "+(f?f.name:"?")),
       h("span",{class:"gr-p"},f?(f.namespace||""):""),h("span",{class:"gr-z"},f?(f.knoten||[]).length+" Knoten":""),
-      f?h("button",{title:"Pipeline markieren (Slice) — mit den Nachrichten, über die sie an der Domäne hängt",onclick:e=>{e.stopPropagation();FOCUS=flussSlice(f);wendeFokusAn();}},"◎"):null,
+      f?h("button",{title:"Pipeline markieren (Slice) — mit den Nachrichten, über die sie an der Domäne hängt",onclick:e=>{e.stopPropagation();fokussiere("menge",flussSlice(f),"⛓ "+f.name);}},"◎"):null,
       h("button",{title:"Pipeline einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"));
     k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};fr.append(k);return fr;}
   // Kanten eines Flusses: je Draht Knoten → Knoten, beschriftet mit dem Typ des Ausgangs (∧ = mehrere Drähte in einen Eingang,
@@ -3378,7 +3378,8 @@
         const t=document.createElementNS(SVGNS,"text");t.setAttribute("class","glink gbuendel-t");t.setAttribute("x",mx);t.setAttribute("y",my-8);
         t.setAttribute("text-anchor","middle");t.textContent=k.label;Object.assign(t.dataset,k.dataset);fSvg.append(t);}});
     svg.append(fSvg);if(svgTop)svgTop.append(fTop);
-    wendeFokusAn();
+    wendeFokusAn();fokusChip();
+    if(typeof SP!=="undefined")spurZeichne();
   }
   // Interne Linien hervorheben, wenn man über die zugehörige Decider-/Applier-Zeile fährt.
   function hilite(decId,appId,on){document.querySelectorAll("#de .glink.internal").forEach(p=>{
@@ -3538,12 +3539,33 @@
         if(ky==="reader"||ky==="readmodel")add(y,true);else if(k==="projektion"&&ky==="event"&&LESE_START.has(k0))add(y,false);});
       if(k==="reader")inn(id).forEach(y=>{if(N(y).kind==="query")add(y,false);});}
     return res;}
-  let SEL=null, FOCUS=null;
+  // ══ EIN FOKUS (docs/konzept-werkbank.md §8.5, Plan P6.4): ersetzt Slice, Ketten-Fokus, ◎ und ⤢ — ohne Vorgang die statische Kette der
+  //   gewählten Karte (bzw. eine markierte Menge: Rahmen, Spalte, Vertrag, aufgefächerter Client), mit Vorgang die echte Spur. Angezeigt und
+  //   gelöst wird er an EINER Stelle (Ansichts-Leiste: ◎ Fokus · ⤢ · ✕). FOKUS = {art: kette|menge|vorgang, titel, ids?}; FOCUS = die Karten.
+  //   Die statische Kette rechnet noch ketteVon/sliceVon aus den JS-Kanten — sie zieht mit boardEdges in P7.3 auf den Server.
+  let SEL=null, FOCUS=null, FOKUS=null;
+  function ketteFuer(id){const n=NODEBY.get(id);return n&&n.kind==="client"?clientSlice(n.ref):sliceVon(id);}
+  function fokusNeu(){
+    if(typeof SP!=="undefined"&&SP.vorgang){FOKUS={art:"vorgang",titel:spTitel()};FOCUS=spurMenge();return;}
+    if(FOKUS&&FOKUS.art==="menge"){FOCUS=FOKUS.ids;return;}
+    if(SEL&&NODEBY.has(SEL)){const n=NODEBY.get(SEL);FOKUS={art:"kette",titel:"Kette · "+(n.name||NODELABEL[n.kind]||n.kind)};FOCUS=ketteFuer(SEL);return;}
+    if(FOKUS&&FOKUS.art==="kette")FOKUS=null;FOCUS=null;}
+  function fokussiere(art,ids,titel){FOKUS=art?{art,ids,titel}:null;fokusNeu();wendeFokusAn();fokusChip();}
+  // Alles lösen: Auswahl, Vorgang, markierte Menge.
+  function fokusLoesen(){if(typeof SP!=="undefined"&&SP.gewaehlt){spWaehle(null);}FOKUS=null;if(SEL)waehle(null);else{fokusNeu();wendeFokusAn();fokusChip();}}
+  function fokusChip(){const el=document.getElementById("gfokus");if(!el)return;el.textContent="";
+    if(!FOKUS||!FOCUS){el.style.display="none";return;}el.style.display="";
+    const sym=FOKUS.art==="vorgang"?"⟿":FOKUS.art==="menge"?"▣":"◎";
+    el.append(h("span",{class:"gf-t",title:FOKUS.art==="vorgang"?"Die echte Spur des gewählten Vorgangs":FOKUS.art==="kette"?"Die statische Kette der gewählten Karte":"Markierte Menge"},sym+" "+FOKUS.titel),
+      h("span",{class:"gf-z"},String([...FOCUS].filter(i=>VIS.has(vertreterId(i))).length)),
+      h("button",{title:"Fokus einpassen",onclick:()=>passeEin([...FOCUS].map(vertreterId).filter(i=>VIS.has(i)),1)},"⤢"),
+      h("button",{title:"Fokus lösen (Esc)",onclick:fokusLoesen},"✕"));}
   function waehle(id){
     if(VB){if(id&&id!==SEL){vbKlick(id);return;}if(!id){vbEnde();return;}}
     if(AUF&&id!=="cl:"+AUF.client){AUF=null;if(world)drawEdges();}
-    const cn=SEL!==id&&id&&NODEBY.get(id);
-    SEL=id||null;FOCUS=SEL?(cn&&cn.kind==="client"?clientSlice(cn.ref):sliceVon(SEL)):null;wendeFokusAn();zeigeInspector();}
+    if(typeof SP!=="undefined"&&id)SP.schritt=null;
+    SEL=id||null;if(FOKUS&&FOKUS.art==="menge")FOKUS=null;
+    fokusNeu();wendeFokusAn();fokusChip();zeigeInspector();}
   // Slice eines Clients: er selbst + alles, woran seine Leitung steckt (Nachrichten-Karten, Zusagen, Akteure der Teile).
   function clientSlice(c){const ids=new Set(["cl:"+c._id]);clientPorts(c).forEach(p=>{if(p.node)ids.add(vertreterId(p.node));
       if(p.ri==="zusage"){const a=MODEL.akteure.find(x=>x.name===p.akteure[0]);if(a)ids.add("akt:"+a._id);}});return ids;}
@@ -3552,17 +3574,17 @@
     world.querySelectorAll(".gnode2").forEach(el=>{const id=el.dataset.id;el.classList.toggle("inslice",an&&FOCUS.has(id));el.classList.toggle("sel",selV.includes(id));});
     if(!an)return;
     world.querySelectorAll(".glink").forEach(p=>p.classList.toggle("inslice",FOCUS.has(p.dataset.a)&&FOCUS.has(p.dataset.b)));}
-  document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if(VB){vbEnde();return;}if(SEL)waehle(null);});
+  document.addEventListener("keydown",e=>{if(e.key!=="Escape")return;if(VB){vbEnde();return;}if(SEL){waehle(null);return;}
+    if(typeof SP!=="undefined"&&SP.schritt){SP.schritt=null;zeigeInspector();return;}if(FOKUS)fokusLoesen();});
 
   // ── (1) INSPECTOR: die Detail-Sicht GENAU EINES Knotens (sein Formular) + Nachbarn zum Springen.
-  function zeigeInspector(){if(!canvas)return;const alt=canvas.querySelector(".ginsp");if(alt)alt.remove();if(!SEL)return;
+  function zeigeInspector(){if(!canvas)return;const alt=canvas.querySelector(".ginsp");if(alt)alt.remove();
+    if(!SEL){if(typeof SP!=="undefined"&&SP.schritt)spSchrittPanel();return;}
     const n=NODEBY.get(SEL);if(!n){SEL=null;return;}
     const p=h("div",{class:"ginsp"});p.dataset.sel=SEL;
     ["pointerdown","dblclick","wheel","click"].forEach(ev=>p.addEventListener(ev,e=>e.stopPropagation()));
     const nm=n.name||NODELABEL[n.kind]||n.kind;
     p.append(h("div",{class:"gi-h"},h("span",{class:"gi-k kc-"+n.kind},NODELABEL[n.kind]||n.kind),h("span",{class:"gi-n",title:nm},nm),
-      h("button",{title:"Slice einpassen",onclick:()=>passeEin([...(FOCUS||[])].map(vertreterId).filter(i=>VIS.has(i)),1)},"⤢"),
-      h("button",{title:"Auf der Fläche zeigen",onclick:()=>{centerOn(n);pulseNode(n);}},"◎"),
       h("button",{title:"Schließen (Esc)",onclick:()=>waehle(null)},"✕")));
     const sektion=(m,titel)=>{const sec=h("div",{class:"gi-sec"});
       if(titel)sec.append(h("div",{class:"gi-st kc-"+m.kind},titel));
@@ -3821,7 +3843,7 @@
         h("i",{class:"kc-"+(haupt.startsWith("handle:")?"handle":haupt)}),h("span",{class:"gs-t"},titel),h("span",{class:"gs-z"},String(c.ids.length)),
         neu.length?h("button",{title:"In dieser Spalte anlegen",onclick:e=>{e.stopPropagation();
           if(neu.length===1)spalteAnlegen(c,neu[0]);else menue(e.clientX,e.clientY,titel,neu.map(kk=>({t:"＋ "+(NODELABEL[kk]||kk),fn:()=>spalteAnlegen(c,kk)})));}},"＋"):null,
-        h("button",{title:"Spalte markieren (Slice)",onclick:e=>{e.stopPropagation();FOCUS=new Set(c.ids);wendeFokusAn();}},"◎"));
+        h("button",{title:"Spalte markieren (Fokus)",onclick:e=>{e.stopPropagation();fokussiere("menge",new Set(c.ids),"Spalte "+titel);}},"◎"));
       k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};
       el.append(k);ebene.append(el);});
     return aus;}
@@ -3840,7 +3862,7 @@
       h("span",{class:"gs-z"},"◀ "+ein.length+" · "+aus.length+" ▶"),
       ak?h("button",{title:"Neue Zusage: Event wählen (passende Events leuchten)",onclick:e=>{e.stopPropagation();waehle("akt:"+ak._id);
         setTimeout(()=>{const p=SLOTS["akt:auf:"+ak._id+":open"];if(p)vbStart(p);},0);}},"＋"):null,
-      h("button",{title:"Vertrag markieren (Slice)",onclick:e=>{e.stopPropagation();FOCUS=new Set(c.ids);wendeFokusAn();}},"◎"),
+      h("button",{title:"Vertrag markieren (Fokus)",onclick:e=>{e.stopPropagation();fokussiere("menge",new Set(c.ids),"📜 Vertrag "+typ);}},"◎"),
       h("button",{title:"Vertrag einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"));
     k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};
     el.append(k);return el;}
@@ -3863,7 +3885,7 @@
       steckerZeile(stecker,[a.dom+"|"+a.akt,"§vertrag:"+a.akt]),
       ak?h("button",{title:"Für "+a.akt+" entwerfen: neuer Command / neue Query / neuer Trigger — "+a.akt+" darf ihn sofort (IDarf)",
         onclick:e=>{e.stopPropagation();menue(e.clientX,e.clientY,"＋ für "+a.akt,["command","query"].map(kk=>({t:"＋ "+(NODELABEL[kk]||kk),fn:()=>fuerAkteurAnlegen(a,kk)})));}},"＋"):null,
-      h("button",{title:"Rahmen markieren (Slice)",onclick:e=>{e.stopPropagation();FOCUS=new Set(a.ids);wendeFokusAn();}},"◎"),
+      h("button",{title:"Rahmen markieren (Fokus)",onclick:e=>{e.stopPropagation();fokussiere("menge",new Set(a.ids),(ohne?"ohne Akteur":a.akt)+" in "+domLabel(a.dom));}},"◎"),
       h("button",{title:"Rahmen einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"),
       !ohne?h("button",{title:"Reihenfolge der Akteur-Rahmen",onclick:e=>{e.stopPropagation();akteurRahmenMenue(e.clientX,e.clientY,a);}},"⋯"):null);
     k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};
@@ -3971,7 +3993,7 @@
       {t:"＋ Baustein…",fn:()=>bausteinMenue(cx,cy,r.ns)},
       r.ns!==OHNE_DOM?{t:"＋ Unterdomäne…",fn:()=>neueDomaene(cx,cy,r.ns)}:null,
       {t:"⤢ Einpassen",fn:()=>einpassenRahmen(r)},
-      r.alleIds.length?{t:"◎ Slice: alle Bausteine markieren",fn:()=>{FOCUS=new Set(r.alleIds);wendeFokusAn();}}:null,
+      r.alleIds.length?{t:"◎ Fokus: alle Bausteine markieren",fn:()=>fokussiere("menge",new Set(r.alleIds),"Domäne "+domLabel(r.ns))}:null,
       neu?{trenn:1}:null,
       neu?{t:"✕ Leere Domäne entfernen",gefahr:1,aus:!r.leer,title:r.leer?"":"Erst die Bausteine löschen — eine Domäne mit Inhalt entsteht aus dem Code",
         fn:()=>{VIEW.domNeu=(VIEW.domNeu||[]).filter(x=>x!==r.ns);speichereAnsicht();render();}}:null]);}
@@ -3986,6 +4008,7 @@
       btn("＋ Domäne",false,"Neue Domäne (Namespace) anlegen — Rechtsklick auf die Fläche geht auch",e=>neueDomaene(e.clientX,e.clientY+20,null)),
       h("button",{title:"Geladene Domänen ändern",onclick:()=>deLaden()},"📂 "+(LADEN===null?"alles geladen":!LADEN.length?"leer":LADEN.map(letztesSeg).join(", "))),
       btn("⤢ Alles zeigen",false,"Ganzes Board einpassen",()=>passeEin([...VIS],1)),
+      h("span",{id:"gfokus",class:"gfokus",style:"display:none"}),
       btn("👁 Ausblenden"+((VIEW.aus||[]).length?" ("+VIEW.aus.length+")":"")+" ▾",FILTER_OPEN,"Knotenarten und Domänen ein-/ausblenden",()=>{FILTER_OPEN=!FILTER_OPEN;render();}),
       h("span",{style:"margin-left:8px"},"Karte antippen = Panel · ⊕ im Panel = passende Knoten leuchten, anklicken = verbinden/lösen · Esc = fertig · Kopf ziehen = verschieben"));}
 
@@ -3996,7 +4019,7 @@
     root.append(datalistEl());
     ISLE=islandInfo().ids;   // einsame Inseln (unverbundene Knoten) aus der Graph-Analyse
     berechneSicht();         // sichtbar / eingeklappte Details / zusammengezogene Kanten
-    if(SEL&&!NODEBY.has(SEL))SEL=null;FOCUS=SEL?sliceVon(SEL):null;
+    if(SEL&&!NODEBY.has(SEL))SEL=null;fokusNeu();
     const tb=(kind,label)=>h("button",{class:"add jumpable",
       title:label.replace(/^\+\s*/,"")+" — Hover: alle hervorheben · Ctrl/Cmd+Klick: zum nächsten springen · Klick: neu",
       onmouseenter:()=>highlightKind(kind,true),onmouseleave:()=>highlightKind(kind,false),
@@ -4846,6 +4869,7 @@
       WB.es.onmessage=e=>{let m;try{m=JSON.parse(e.data);}catch(_){return;}
         if(m.art==="schritt"){const out=wbOut(false),s=m.daten;if(out)wbZeile(out,(s.ok?"✓ ":"✗ ")+s.name+(s.dauerMs?" ("+(s.dauerMs/1000).toFixed(1)+" s)":""),s.ok?"":"rot");}
         if(m.art==="umgebung"&&m.daten&&m.daten.name===WB.umgName&&!WB.dirty)wbLadeUmgebung().then(render);
+        if(m.art==="spur"){if(window.spSignal)window.spSignal();return;}
         clearTimeout(t);t=setTimeout(wbZustand,150);};}
     setInterval(()=>{if(!document.hidden)wbZustand();},5000);}
   {const boot=window.deBoot;window.deBoot=async function(){await boot();wbStart();};}
@@ -4871,21 +4895,28 @@
     (roh.match(re)||[]).filter(g=>!/^0{8}-/.test(g)).forEach(g=>{DS.ids=[{id:g,t:etikett},...DS.ids.filter(x=>x.id!==g)].slice(0,40);});}
   const dsAls=()=>{const t=((DS.ident||{}).tokens||[]).find(x=>x.token===DS.token);return t?t.akteure.join(" + "):"(Tor offen)";};
 
-  // ── Die Leiste unten: Konsole · Aufträge · Worker ──
+  // ── Die Leiste unten (§8.1): Vorgänge · Zeitleiste · Konsole · Aufträge · Worker · Meldungen — und der Live-Puls an/aus ──
   function dsLeiste(){const el=document.getElementById("ds-leiste");if(!el)return;el.textContent="";el.classList.toggle("offen",DS.offen);
     el.append(dsTabs());
     el.append(h("datalist",{id:"ds-ids"},...DS.ids.map(x=>h("option",{value:x.id},x.t))));
     if(!DS.offen)return;
     const inhalt=h("div",{class:"ds-inhalt"});el.append(inhalt);
-    if(DS.tab==="konsole")dsKonsole(inhalt);else if(DS.tab==="auftraege")dsAuftraegeTab(inhalt);else dsWorkerTab(inhalt);}
+    const tab={konsole:dsKonsole,auftraege:dsAuftraegeTab,worker:dsWorkerTab,vorgaenge:spVorgaengeTab,zeit:spZeitTab,meldungen:spMeldungenTab}[DS.tab]||dsKonsole;
+    tab(inhalt);}
   function dsTabs(){const n=DS.auftraege.length,wl=DS.worker.filter(w=>w.laeuft).length;
     const umschalten=id=>{if(DS.offen&&DS.tab===id)DS.offen=false;else{DS.offen=true;DS.tab=id;}lsSetze("ds.leiste",DS.offen?DS.tab:"");dsLeiste();};
     const tab=(id,t,titel)=>h("button",{class:"ds-tab"+(DS.offen&&DS.tab===id?" an":"")+(id==="auftraege"&&n?" warte":""),title:titel,onclick:()=>umschalten(id)},t);
+    const fehler=WB.diag.filter(d=>d.schwere!=="warning").length+WB.boot.length;
     return h("div",{class:"ds-tabs"},
+      tab("vorgaenge","☰ Vorgänge"+(SP.gewaehlt?" · "+spTitel():""),"Vorgänge aus dem Log des laufenden Hosts — wählen = Spur auf dem Board"),
+      tab("zeit","⏱ Zeitleiste","Bahnen je Baustein; der Schieber spielt die Aufzeichnung des gewählten Vorgangs ab"),
       tab("konsole","⌨ Konsole · als Akteur","Command oder Query als Akteur an den echten Host (Token → Akteur-Tor)"),
       tab("auftraege","⧗ Aufträge"+(n?" ("+n+")":""),"Funktionen mit Laufort Hand: die Werkbank beantwortet ihre Aufträge"),
       tab("worker","▶ Worker"+(wl?" ("+wl+" läuft)":""),"Externe Funktions-Worker (Laufort Extern) starten und stoppen"),
+      tab("meldungen","⚠ Meldungen"+(fehler?" ("+fehler+")":""),"Build- und Boot-Meldungen des letzten ⟳ — Klick führt zur Karte"),
       h("span",{class:"sp"}),
+      h("button",{class:"ds-tab"+(SP.pulsAn?" an":""),title:"Live-Puls ohne gewählten Vorgang: Zähler und „zuletzt“ je Karte, Kantendicke nach Menge, Stau, nie benutzte Kanten blass",
+        onclick:spPulsUmschalten},"〰 Puls "+(SP.pulsAn?"an":"aus")),
       h("span",{class:"ds-hint"},hostLaeuft()?"● echter Host · "+aktivName():"○ Host steht — ⟳ startet ihn"),
       h("button",{class:"ds-tab",title:DS.offen?"Leiste einklappen":"Leiste aufklappen",onclick:()=>umschalten(DS.tab)},DS.offen?"▾":"▴"));}
 
@@ -5035,7 +5066,7 @@
     DS.sig=sig;
     // Konsole offen: nur die Reiter auffrischen (das Formular behält Fokus); sonst die ganze Leiste.
     const el=document.getElementById("ds-leiste");
-    if(DS.offen&&DS.tab==="konsole"&&el&&el.firstChild&&erzwingen!==true)el.firstChild.replaceWith(dsTabs());else dsLeiste();
+    if(DS.offen&&!["auftraege","worker"].includes(DS.tab)&&el&&el.firstChild&&erzwingen!==true)el.firstChild.replaceWith(dsTabs());else dsLeiste();
     dsBadges();
     // Panel der gewählten Funktion nur neu, wenn sich IHRE Aufträge oder ihr Worker-Zustand geändert haben (ein halb ausgefülltes
     //   Antwort-Formular überlebt das ohnehin — die Werte stehen in DS.antwort —, nur der Fokus nicht).
@@ -5046,5 +5077,228 @@
   async function dsStart(){const t=lsHole("ds.leiste");DS.offen=!!t;if(t)DS.tab=t;dsLeiste();
     setTimeout(()=>dsTakt(true),800);setInterval(()=>{if(!document.hidden)dsTakt();},3000);}
   {const boot=window.deBoot;window.deBoot=async function(){await boot();dsStart();};}
+
+  // ══ SPUR (docs/konzept-werkbank.md §7.3, Plan P6) ═══════════════════════════════════════════════════════════════════════════════
+  //   Nur View auf Einblick-Daten: der Werkbank-Server spiegelt die Spur des laufenden Hosts (SSE „neu bis seq" + Cursor) und liefert
+  //   Vorgänge (gefiltert), nummerierte Wege (je Schritt die Karten, die gegangenen Kanten, Payload, Stand, ↤/↦), Zeitleisten-Bahnen und
+  //   den Live-Puls fertig aus. Das JS schlägt nur Karten-Ids nach (Wirker-Id bzw. rec:Typ → Karte) und setzt Klassen, Nummern, Dicken.
+  var SP={vorgaenge:null,filter:{quelle:"",akteur:"",aggregat:"",zustand:""},gewaehlt:null,zeile:null,vorgang:null,bis:null,schritt:null,
+    puls:null,pulsAn:lsHole("sp.puls")!=="aus",spiel:null,fehler:null};
+  const KREIS="①②③④⑤⑥⑦⑧⑨⑩⑪⑫⑬⑭⑮⑯⑰⑱⑲⑳";
+  const nrText=n=>n>=1&&n<=20?KREIS[n-1]:"("+n+")";
+  const ZUSTAND={laeuft:"● läuft",wartet:"⧗ wartet",fertig:"✓ fertig",gescheitert:"✕ gescheitert"};
+  const SP_ART={event:"",abgelehnt:"✕ abgelehnt",gescheitert:"✕ gescheitert",zeitlimit:"⏳ Zeitlimit",umgeleitet:"↪ umgeleitet"};
+  const vorZeit=t=>{const s=Math.max(0,(Date.now()-Date.parse(t))/1000);return s<60?Math.round(s)+" s":s<3600?Math.round(s/60)+" min":s<86400?Math.round(s/3600)+" h":Math.round(s/86400)+" T";};
+  const uhr=t=>{if(!t)return "—";const d=new Date(t);return d.toLocaleTimeString()+"."+String(d.getMilliseconds()).padStart(3,"0");};
+  const spHint=t=>h("div",{class:"gi-hint"},t);
+  function spTitel(){const z=SP.zeile;return (z?(z.wurzelTyp||z.prozess||"Vorgang"):"Vorgang")+" · "+(SP.gewaehlt||"").slice(0,8);}
+
+  // Karten-Id (Wirker-Id bzw. rec:Typ) → sichtbare Karte (Vertreter). Nur Nachschlagen — je Sicht (NODEBY) einmal aufgebaut.
+  let SPKN=null;
+  function spKarte(id){if(!id)return null;
+    if(!SPKN||SPKN.n!==NODEBY||SPKN.v!==VERTRETER){const m=new Map();NODEBY.forEach(n=>{if(n.kind!=="host"&&n.ref&&n.ref._id&&!m.has(n.ref._id))m.set(n.ref._id,n.id);});SPKN={n:NODEBY,v:VERTRETER,m,c:new Map()};}
+    if(SPKN.c.has(id))return SPKN.c.get(id);
+    let k=NODEBY.has(id)?id:SPKN.m.get(id)||null;
+    if(!k&&id.startsWith("quelle:"))k=recByName(id.slice(7))?"rec:"+id.slice(7):null;
+    if(!k&&id.startsWith("pipeline:")){const f=MODEL.fluesse.find(x=>x._id===id),z=f&&(f.knoten||[])[0];k=z?"fs:"+z._id:null;}
+    const v=k?vertreterId(k):null;SPKN.c.set(id,v);return v;}
+  const spSchritte=()=>{const bis=SP.bis??Infinity;return ((SP.vorgang||{}).schritte||[]).filter(s=>s.nr<=bis);};
+  // Die Karten des Vorgangs bis zum Schieber — der Fokus „mit Vorgang".
+  function spurMenge(){const m=new Set(),dazu=id=>{const k=spKarte(id);if(k)m.add(k);};
+    spSchritte().forEach(s=>{(s.karten||[]).forEach(dazu);(s.paare||[]).forEach(([a,b])=>{dazu(a);dazu(b);});});(SP.vorgang.offen||[]).forEach(dazu);(SP.vorgang.hinweise||[]).forEach(x=>dazu(x.wirker));
+    return m;}
+
+  // ── Überlagerung: nach jedem drawEdges (Kanten tragen data-a/-b = Karten-Ids) ──
+  function spurZeichne(){if(!world||!svg)return;
+    world.querySelectorAll(".gspur-nr,.gpuls").forEach(x=>x.remove());
+    [svg,svgTop].forEach(s=>s&&s.querySelectorAll(".gspur-t").forEach(x=>x.remove()));
+    const KL=["spur","spur-alt","spur-rot","spur-warte","spur-verlierbar","spur-sel"];
+    world.querySelectorAll(".gnode2.spur,.gnode2.spur-rot,.gnode2.spur-warte,.gnode2.spur-verlierbar").forEach(el=>el.classList.remove(...KL));
+    const pfade=[...svg.querySelectorAll("path.glink"),...(svgTop?svgTop.querySelectorAll("path.glink"):[])];
+    pfade.forEach(p=>{if(p.classList.contains("spur")||p.classList.contains("puls")||p.classList.contains("puls-leer")){p.classList.remove("spur","spur-alt","spur-rot","puls","puls-leer");p.style.strokeWidth="";}});
+    world.classList.toggle("spurmodus",!!SP.vorgang);
+    const ELS=new Map([...world.querySelectorAll(".gnode2")].map(e=>[e.dataset.id,e]));
+    const kante=new Map();pfade.forEach(p=>{const a=p.dataset.a,b=p.dataset.b;if(!a||!b)return;
+      [a+"|"+b,b+"|"+a].forEach(k=>{let l=kante.get(k);if(!l)kante.set(k,l=[]);l.push(p);});});
+    if(SP.vorgang)spurVorgang(ELS,kante);else if(SP.pulsAn&&SP.puls)spurPuls(ELS,kante,pfade);}
+  // Der gewählte Vorgang: gegangene Karten und Kanten leuchten, Nummern ①②③ mit Zeit an der Karte, die der Schritt schrieb, und an der
+  //   Kante dorthin; Fehlschläge (✕ ⏳) rot, ältere Stände grau, Verlierbares gestrichelt, offene Aufträge (⧗) pulsieren.
+  function spurVorgang(ELS,kante){const v=SP.vorgang,amZiel=new Map(),anKante=new Map(),ss=spSchritte();
+    const sel=SP.schritt&&ss.find(s=>s.nr===SP.schritt);
+    ss.forEach(s=>{const ks=(s.karten||[]).map(spKarte).filter(Boolean),fehl=s.art!=="event";
+      const alle=new Set(ks);(s.paare||[]).forEach(([a,b])=>[a,b].forEach(x=>{const k=spKarte(x);if(k)alle.add(k);}));
+      alle.forEach(k=>{const el=ELS.get(k);if(!el)return;el.classList.add("spur");if(s.alt)el.classList.add("spur-alt");if(sel===s&&ks.includes(k))el.classList.add("spur-sel");});
+      const ziel=ks[ks.length-1];if(ziel){let l=amZiel.get(ziel);if(!l)amZiel.set(ziel,l=[]);l.push(s);}
+      const ps=s.paare||[];ps.forEach(([a,b],i)=>{const x=spKarte(a),y=spKarte(b);if(!x||!y||x===y)return;
+        (kante.get(x+"|"+y)||[]).forEach(p=>{p.classList.add("spur");if(s.alt)p.classList.add("spur-alt");if(fehl)p.classList.add("spur-rot");
+          // Nummeriert: die Kante in die geschriebene Karte und der Draht zwischen zwei Fluss-Knoten bzw. Regeln (der Weg im Ablauf).
+          if(i===ps.length-1||(/^(fluss|prozess):/.test(a)&&/^(fluss|prozess):/.test(b))){let l=anKante.get(p);if(!l)anKante.set(p,l=[]);if(!l.includes(s))l.push(s);}});});});
+    // alt nur, wo ALLE Schritte an der Karte älter sind
+    ELS.forEach((el,id)=>{if(!el.classList.contains("spur-alt"))return;const l=amZiel.get(id);if(l&&l.some(s=>!s.alt))el.classList.remove("spur-alt");});
+    const text=ss=>ss.map(s=>nrText(s.nr)+(s.art==="zeitlimit"?"⏳":s.art!=="event"?"✕":"")).join("");
+    const titel=ss=>ss.map(s=>nrText(s.nr)+" "+uhr(s.zeit)+" · "+s.name+(SP_ART[s.art]?" — "+SP_ART[s.art]:"")+(s.alt?" · Stand "+s.stand+" (älter)":"")).join("\n")+"\nKlick: Schritt im Panel";
+    amZiel.forEach((l,id)=>{const el=ELS.get(id);if(!el)return;const rot=l.some(s=>s.art!=="event");if(rot)el.classList.add("spur-rot");
+      const b=h("span",{class:"gspur-nr"+(rot?" rot":"")+(l.every(s=>s.alt)?" alt":"")+(sel&&l.includes(sel)?" an":""),title:titel(l)},text(l));
+      b.addEventListener("pointerdown",e=>e.stopPropagation());b.onclick=e=>{e.stopPropagation();spSchritt(l[l.length-1].nr);};el.append(b);});
+    const t0=Date.parse(v.beginn||0),dt=z=>{const d=(Date.parse(z)-t0)/1000;return "+"+(d<10?d.toFixed(2):d<600?d.toFixed(1):Math.round(d))+" s";};
+    anKante.forEach((l,p)=>spLabel(p,text(l)+" "+dt(l[0].zeit),titel(l),()=>spSchritt(l[l.length-1].nr),
+      (l.some(s=>s.art!=="event")?"rot":l.every(s=>s.alt)?"alt":"")+(sel&&l.includes(sel)?" an":"")));
+    (v.hinweise||[]).forEach(x=>{const k=spKarte(x.wirker),el=k&&ELS.get(k);if(!el)return;
+      el.classList.add(x.art==="ablehnung"?"spur-rot":"spur-verlierbar");
+      el.append(h("span",{class:"gspur-nr rot hinw",title:uhr(x.zeit)+" · "+x.art+" (verlierbar, nicht im Log): "+x.text},x.art==="ablehnung"?"✕ abgelehnt":"⇢ "+x.art));});
+    (v.offen||[]).forEach(id=>{const k=spKarte(id),el=k&&ELS.get(k);if(el){el.classList.add("spur","spur-warte");
+      el.append(h("span",{class:"gspur-nr warte",title:"Offener Auftrag dieses Vorgangs — wartet auf einen Ausführer"},"⧗"));}});}
+  function spLabel(p,text,titel,klick,kl){try{const L=p.getTotalLength(),pt=p.getPointAtLength(L*0.55);
+      const t=document.createElementNS(SVGNS,"text");t.setAttribute("class","gspur-t"+(kl?" "+kl:""));t.setAttribute("x",pt.x);t.setAttribute("y",pt.y-7);
+      t.setAttribute("text-anchor","middle");t.textContent=text;const tt=document.createElementNS(SVGNS,"title");tt.textContent=titel;t.append(tt);
+      t.addEventListener("pointerdown",e=>e.stopPropagation());t.addEventListener("click",e=>{e.stopPropagation();klick();});
+      p.parentNode.append(t);}catch(e){}}
+  // Live-Puls (ohne gewählten Vorgang): Zähler und „zuletzt" je Karte, Kantendicke nach Menge, Stau (offene Aufträge), nie benutzte Kanten blass.
+  const PULS_OHNE=new Set(["codenode","llmnode","valueobject","enum","state","host","store","readmodel","fn"]);
+  function spurPuls(ELS,kante,pfade){const P=SP.puls;if(!P||!P.laeuft)return;
+    const nk=new Map();(P.karten||[]).forEach(k=>{const id=spKarte(k.id);if(!id)return;const a=nk.get(id);
+      if(!a||k.n>a.n)nk.set(id,{n:k.n,z:a&&Date.parse(a.z)>Date.parse(k.zuletzt)?a.z:k.zuletzt});});
+    nk.forEach((a,id)=>{const el=ELS.get(id);if(el)el.append(h("span",{class:"gpuls",title:a.n+"× im Log dieses Laufs · zuletzt "+uhr(a.z)},a.n+" · "+vorZeit(a.z)));});
+    const max=Math.max(1,...(P.kanten||[]).map(k=>k.n)),genutzt=new Set();
+    (P.kanten||[]).forEach(k=>{const x=spKarte(k.a),y=spKarte(k.b);if(!x||!y||x===y)return;
+      (kante.get(x+"|"+y)||[]).forEach(p=>{genutzt.add(p);const w=2.4+5*Math.log(1+k.n)/Math.log(1+max);
+        p.style.strokeWidth=Math.max(parseFloat(p.style.strokeWidth)||0,w).toFixed(1)+"px";p.classList.add("puls");});});
+    // Nie benutzte Kanten: nur Nachrichten-Fluss (keine Hub-, Typ-, Code- oder Store-Kanten), und erst, wenn überhaupt etwas lief.
+    if((P.kanten||[]).length)pfade.forEach(p=>{if(genutzt.has(p)||p.classList.contains("hub")||p.classList.contains("internal")||p.classList.contains("gbuendel")||p.classList.contains("gauf"))return;
+      const a=NODEBY.get(p.dataset.a),b=NODEBY.get(p.dataset.b);if(!a||!b||PULS_OHNE.has(a.kind)||PULS_OHNE.has(b.kind))return;p.classList.add("puls-leer");});
+    (P.offen||[]).forEach(o=>{const id=spKarte(o.id),el=id&&ELS.get(id);if(el&&!el.querySelector(".gwait"))el.append(h("span",{class:"gpuls stau",title:o.n+" offene Aufträge beim Vermittler (Stau)"},"⧗ "+o.n));});}
+
+  // ── Auswahl eines Vorgangs, Schieber, Schritt-Panel ──
+  async function spLadeVorgang(){if(!SP.gewaehlt)return;
+    try{const v=await wbJson("/api/werkbank/spur/vorgang/"+encodeURIComponent(SP.gewaehlt));
+      if(v.fehler||v.laeuft===false){SP.fehler=v.fehler||"Der Host steht — ⟳ startet ihn.";return;}SP.fehler=null;SP.vorgang=v;}
+    catch(e){SP.fehler=e.message;}}
+  async function spWaehle(k,zeile){spSpielStopp(true);
+    if(!k||(SP.gewaehlt===k&&zeile)){SP.gewaehlt=null;SP.zeile=null;SP.vorgang=null;SP.bis=null;SP.schritt=null;
+      if(FOKUS&&FOKUS.art==="vorgang")FOKUS=null;fokusNeu();wendeFokusAn();fokusChip();zeigeInspector();spurZeichne();dsLeiste();return;}
+    SP.gewaehlt=k;if(zeile)SP.zeile=zeile;SP.bis=null;SP.schritt=null;SP.vorgang=null;dsLeiste();
+    await spLadeVorgang();if(SP.gewaehlt!==k)return;
+    SEL=null;fokusNeu();wendeFokusAn();fokusChip();zeigeInspector();spurZeichne();dsLeiste();
+    if(FOCUS&&FOCUS.size)passeEin([...FOCUS].filter(i=>VIS.has(i)),1);}
+  function spBis(b){const n=((SP.vorgang||{}).schritte||[]).length;SP.bis=b==null||b>=n?null:Math.max(0,b);
+    fokusNeu();wendeFokusAn();fokusChip();spurZeichne();spZeitAuffrischen();}
+  function spSchritt(nr){SP.schritt=nr;if(SEL){SEL=null;wendeFokusAn();}zeigeInspector();spurZeichne();spZeitAuffrischen();}
+  function spSchrittPanel(){if(!canvas||!SP.vorgang)return;const s=(SP.vorgang.schritte||[]).find(x=>x.nr===SP.schritt);if(!s)return;
+    const p=h("div",{class:"ginsp gspur-panel"});["pointerdown","dblclick","wheel","click"].forEach(ev=>p.addEventListener(ev,e=>e.stopPropagation()));
+    p.append(h("div",{class:"gi-h"},h("span",{class:"gi-k gspur-k"+(s.art!=="event"?" rot":"")},nrText(s.nr)+" Schritt"),h("span",{class:"gi-n",title:s.name},s.name),
+      h("button",{title:"Vorheriger Schritt",onclick:()=>{if(s.nr>1)spSchritt(s.nr-1);}},"‹"),
+      h("button",{title:"Nächster Schritt",onclick:()=>{if(s.nr<SP.vorgang.schritte.length)spSchritt(s.nr+1);}},"›"),
+      h("button",{title:"Schließen (Esc)",onclick:()=>{SP.schritt=null;zeigeInspector();spurZeichne();}},"✕")));
+    const zeile=(k,...v)=>p.append(h("div",{class:"frow gspur-z"},h("span",{class:"slotlbl"},k),h("span",{class:"gspur-w"},...v)));
+    const karte=id=>{if(!id)return h("span",{class:"ds-zeit"},"—");const k=spKarte(id),n=k&&NODEBY.get(k);
+      return n?h("a",{class:"gspur-link",title:id+" — Klick: Karte zeigen",onclick:()=>{centerOn(n);pulseNode(n);}},(NODELABEL[n.kind]||n.kind)+" · "+(n.name||id))
+        :h("span",{class:"gspur-weg",title:"Die Spur stammt von einem Baustein, den der Code nicht mehr hat"},"⚠ Karte gibt es nicht mehr ("+id+")");};
+    if(SP_ART[s.art])zeile("Ausgang",h("b",{class:"gspur-rot-t"},SP_ART[s.art]+(s.daten&&s.daten.Grund?" — "+s.daten.Grund:"")));
+    zeile("Zeit",uhr(s.zeit));
+    zeile("Knoten",karte(s.wirker));
+    if(s.ueber)zeile("über",karte(s.ueber));
+    zeile("Akteur",s.akteur||"—");
+    zeile("Stand",h("span",{class:s.alt?"gspur-alt-t":""},(s.stand||"—")+(s.alt?" · älterer Stand (Board: "+SP.vorgang.stand+")":"")));
+    zeile("Stream",h("code",{},(s.aggregat?s.aggregat+" · ":"")+(s.stream||"").slice(0,8)+" v"+s.version));
+    const nrLink=n=>h("a",{class:"gspur-link",onclick:()=>spSchritt(n)},nrText(n)+" "+((SP.vorgang.schritte.find(x=>x.nr===n)||{}).name||""));
+    zeile("↤ verursacht von",s.vonNr?nrLink(s.vonNr):h("span",{class:"ds-zeit"},s.ursache?"außerhalb des Vorgangs ("+s.ursache+")":"Wurzel — von außen"));
+    zeile("↦ bewirkte",...((s.folgen||[]).length?s.folgen.flatMap((n,i)=>i?[h("br"),nrLink(n)]:[nrLink(n)]):[h("span",{class:"ds-zeit"},"nichts (bisher)")]));
+    p.append(h("div",{class:"gsec"},"Payload"),h("pre",{class:"wb-log"},JSON.stringify(s.daten,null,2)));
+    canvas.append(p);}
+
+  // ── Leiste: ☰ Vorgänge ──
+  async function spLadeVorgaenge(){const q=Object.entries(SP.filter).filter(([,v])=>v).map(([k,v])=>k+"="+encodeURIComponent(v)).join("&");
+    try{SP.vorgaenge=await wbJson("/api/werkbank/spur/vorgaenge"+(q?"?"+q:""));}catch(e){SP.vorgaenge={fehler:e.message,vorgaenge:[]};}}
+  function spVorgaengeTab(box){const v=SP.vorgaenge;
+    if(!v){box.append(spHint("lädt …"));spLadeVorgaenge().then(()=>{if(DS.offen&&DS.tab==="vorgaenge")dsLeiste();});return;}
+    if(v.laeuft===false){box.append(spHint("Der Host steht — ⟳ startet ihn; dann erscheinen hier die Vorgänge aus seinem Log."));return;}
+    const fa=v.facetten||{quellen:[],akteure:[],zustaende:{}},neu=()=>spLadeVorgaenge().then(dsLeiste);
+    const sel=(k,titel,werte)=>{const e=h("select",{title:titel,onchange:ev=>{SP.filter[k]=ev.target.value;neu();}},h("option",{value:""},titel+": alle"),
+      ...werte.map(([w,t])=>h("option",{value:w},t)));e.value=SP.filter[k]||"";return e;};
+    const agg=h("input",{placeholder:"Aggregat-Id …",value:SP.filter.aggregat||"",title:"Ein Stream des Vorgangs (ein Teil der Guid genügt) — Enter",
+      onkeydown:ev=>{if(ev.key==="Enter"){SP.filter.aggregat=ev.target.value.trim();neu();}}});
+    const links=h("div",{class:"ds-links sp-links"}),rechts=h("div",{class:"ds-rechts"});box.append(links,rechts);
+    links.append(h("div",{class:"frow sp-filter"},sel("quelle","Quelle",(fa.quellen||[]).map(x=>[x,x])),sel("akteur","Akteur",(fa.akteure||[]).map(x=>[x,x])),
+      sel("zustand","Zustand",Object.keys(ZUSTAND).map(z=>[z,ZUSTAND[z]+" ("+((fa.zustaende||{})[z]||0)+")"]))),
+      h("div",{class:"frow"},agg,h("button",{class:"act",title:"Neu laden",onclick:neu},"↻"),h("span",{class:"ds-zeit"},(v.vorgaenge||[]).length+" von "+(v.gesamt||0))));
+    if(v.fehler)links.append(h("div",{class:"llmmeld err"},v.fehler));
+    const liste=h("div",{class:"sp-liste"});links.append(liste);
+    (v.vorgaenge||[]).forEach(x=>liste.append(h("div",{class:"sp-z"+(x.korrelation===SP.gewaehlt?" an":""),title:"Korrelation "+x.korrelation+(x.wurzelWirker?" · Wurzel "+x.wurzelWirker:"")+"\nKlick: Spur auf dem Board (nochmal: lösen)",
+        onclick:()=>spWaehle(x.korrelation,x)},
+      h("span",{class:"sp-zu "+x.zustand},ZUSTAND[x.zustand]||x.zustand),h("b",{},x.wurzelTyp||x.prozess||"?"),
+      x.prozess?h("span",{class:"ds-zeit"},"⛓ "+x.prozess):null,x.akteur?h("span",{class:"ds-zeit"},"👤 "+x.akteur):null,
+      h("span",{class:"ds-zeit"},x.eintraege+" Einträge · "+(x.streams||0)+" Streams · vor "+vorZeit(x.zuletzt)),
+      x.grund?h("span",{class:"sp-grund"},x.grund):null)));
+    if(!(v.vorgaenge||[]).length)liste.append(spHint("Keine Vorgänge"+(Object.values(SP.filter).some(Boolean)?" für diesen Filter":"")+" — eine Datei auf die Quellkarte oder ein Command aus der ⌨ Konsole startet einen."));
+    spWeg(rechts);}
+  // Rechts: der Weg des gewählten Vorgangs als Liste (Klick = Schritt im Panel).
+  function spWeg(box){if(!SP.gewaehlt){box.append(spHint("Einen Vorgang wählen: seine Spur erscheint auf dem Board — nummerierte Kanten ①②③ mit Zeit, Fehlschläge rot, ältere Stände grau. Ohne Vorgang zeigt das Board den Live-Puls."));return;}
+    if(SP.fehler){box.append(h("div",{class:"llmmeld err"},SP.fehler));return;}
+    const v=SP.vorgang;if(!v){box.append(spHint("lädt …"));return;}
+    box.append(h("div",{class:"gsec"},"Weg · "+spTitel()+" · "+v.schritte.length+" Schritte"+(v.offen&&v.offen.length?" · ⧗ "+v.offen.length+" offen":"")));
+    const bis=SP.bis??Infinity;
+    v.schritte.forEach(s=>{const k=spKarte(s.wirker),n=k&&NODEBY.get(k);
+      box.append(h("div",{class:"sp-schritt"+(s.nr>bis?" spaeter":"")+(s.art!=="event"?" rot":"")+(s.alt?" alt":"")+(SP.schritt===s.nr?" an":""),onclick:()=>spSchritt(s.nr)},
+        h("span",{class:"sp-nr"},nrText(s.nr)),h("span",{class:"ds-zeit"},uhr(s.zeit)),h("b",{},s.name),
+        h("span",{class:"ds-zeit"},SP_ART[s.art]||""),h("span",{class:n?"ds-zeit":"gspur-weg"},n?"← "+(n.name||s.wirker):"⚠ "+(s.wirker||"ohne Wirker")+" — Karte gibt es nicht mehr")));});
+    (v.hinweise||[]).forEach(x=>box.append(h("div",{class:"sp-schritt rot verlierbar"},h("span",{class:"sp-nr"},"⇢"),h("span",{class:"ds-zeit"},uhr(x.zeit)),
+      h("b",{},x.art),h("span",{class:"ds-zeit"},x.text+" (verlierbar)"))));}
+
+  // ── Leiste: ⏱ Zeitleiste — Bahnen je Baustein, Spalten = Schritte; der Schieber zeigt das Board zum Zeitpunkt (Abspielen der Aufzeichnung) ──
+  function spZeitTab(box){const v=SP.vorgang;
+    if(!v){box.append(spHint(SP.gewaehlt?"lädt …":"Erst einen Vorgang wählen (☰ Vorgänge) — die Zeitleiste spielt seine Aufzeichnung ab, nie erneut aus."));return;}
+    const ss=v.schritte||[],n=ss.length,t0=Date.parse(v.beginn||ss.length&&ss[0].zeit||0);
+    const z=h("div",{class:"sp-zeit"});box.append(z);
+    z.append(h("div",{class:"frow sp-zk"},
+      h("button",{class:"act sp-spiel",title:"Abspielen (Schritt für Schritt)",onclick:()=>SP.spiel?spSpielStopp():spSpiel()},SP.spiel?"⏸":"▶"),
+      h("input",{type:"range",min:0,max:n,value:SP.bis??n,class:"sp-schieber",oninput:e=>spBis(+e.target.value)}),
+      h("span",{class:"ds-zeit sp-lbl"}),
+      h("button",{class:"act",title:"Ganze Aufzeichnung",onclick:()=>spBis(null)},"⇥"),
+      h("span",{class:"ds-zeit"},spTitel())));
+    const g=h("div",{class:"sp-gitter",style:"grid-template-columns:minmax(160px,240px) repeat("+n+",28px)"});z.append(g);
+    g.append(h("div",{class:"sp-bl"}));
+    ss.forEach(s=>g.append(h("div",{class:"sp-dt",title:uhr(s.zeit)},"+"+((Date.parse(s.zeit)-t0)/1000).toFixed(Date.parse(s.zeit)-t0<10000?1:0))));
+    (v.bahnen||[]).forEach(b=>{const k=spKarte(b.wirker),nd=k&&NODEBY.get(k);
+      g.append(h("div",{class:"sp-bl"+(nd?"":" gspur-weg"),title:b.wirker,onclick:()=>{if(nd){centerOn(nd);pulseNode(nd);}}},nd?(NODELABEL[nd.kind]||nd.kind)+" · "+(nd.name||b.wirker):"⚠ "+b.wirker));
+      const in_=new Set(b.schritte);
+      ss.forEach(s=>g.append(in_.has(s.nr)?h("div",{class:"sp-punkt"+(s.art!=="event"?" rot":"")+(s.alt?" alt":""),"data-nr":s.nr,
+          title:nrText(s.nr)+" "+uhr(s.zeit)+" · "+s.name+(SP_ART[s.art]?" — "+SP_ART[s.art]:""),onclick:()=>{spBis(s.nr);spSchritt(s.nr);}},nrText(s.nr)):h("div",{class:"sp-leer"})));});
+    spZeitAuffrischen();}
+  // Schieber, Beschriftung und Punkte im Ort auffrischen (der Schieber behält beim Ziehen den Fokus).
+  function spZeitAuffrischen(){const el=document.querySelector("#ds-leiste .sp-zeit");if(!el||!SP.vorgang)return;const ss=SP.vorgang.schritte||[],n=ss.length,bis=SP.bis??n;
+    const r=el.querySelector(".sp-schieber");if(r&&+r.value!==bis)r.value=bis;
+    const l=el.querySelector(".sp-lbl");if(l)l.textContent=bis>=n?"alle "+n+" Schritte":bis===0?"vor dem ersten Schritt":"bis "+nrText(bis)+" · "+uhr(ss[bis-1].zeit)+" · "+ss[bis-1].name;
+    el.querySelectorAll(".sp-punkt").forEach(p=>{const nr=+p.dataset.nr;p.classList.toggle("spaeter",nr>bis);p.classList.toggle("an",nr===SP.schritt);});
+    const b=el.querySelector(".sp-spiel");if(b)b.textContent=SP.spiel?"⏸":"▶";}
+  function spSpiel(){if(!SP.vorgang)return;const n=SP.vorgang.schritte.length;let i=SP.bis!=null&&SP.bis<n?SP.bis:0;spBis(i);
+    SP.spiel=setInterval(()=>{i++;if(i>n){spSpielStopp();return;}spBis(i);},700);spZeitAuffrischen();}
+  function spSpielStopp(still){if(SP.spiel){clearInterval(SP.spiel);SP.spiel=null;if(!still)spZeitAuffrischen();}}
+
+  // ── Leiste: ⚠ Meldungen — Build (⟳-Schritte), Compiler/Analyzer und Boot an der Karte ──
+  function spMeldungenTab(box){const r=WB.letzter,l=h("div",{class:"sp-meld"});box.append(l);
+    const z=(t,art,klick)=>{const e=h("div",{class:"find"+(art==="rot"?" error":art==="gelb"?" warning":"")},t);if(klick){e.style.cursor="pointer";e.onclick=klick;}l.append(e);};
+    if(!r)z("Noch kein ⟳ in dieser Sitzung.");
+    else{z((r.ok?"✓ ⟳ fertig":"✗ ⟳ angehalten")+" · Stand "+r.stand+" · "+new Date(r.zeit).toLocaleTimeString(),r.ok?"":"rot");
+      (r.schritte||[]).forEach(s=>z((s.ok?"✓ ":"✗ ")+s.name+(s.dauerMs?" ("+(s.dauerMs/1000).toFixed(1)+" s)":"")+(s.meldungen&&s.meldungen.length?" — "+s.meldungen.slice(0,4).join(" · "):""),s.ok?"":"rot"));}
+    wbDiagListe().forEach(x=>{const n=x.ziel&&NODEBY.get(vertreterId(x.ziel));
+      z((n?"→ "+(NODELABEL[n.kind]||n.kind)+" "+n.name+": ":"")+x.text,x.art==="warnung"?"gelb":"rot",n?()=>zeigeLadend(n.id):null);});
+    l.append(h("div",{class:"frow"},h("button",{class:"act",title:"Ausgabe des laufenden Hosts im Ausgabe-Panel",onclick:wbLog},"Host-Log")));}
+
+  // ── Takt: der Server meldet „spur bis" über den Fortschritts-Kanal; dazu alle 10 s (Puls „zuletzt", Zustände der Vorgänge) ──
+  async function spTakt(){if(!hostLaeuft()){if(SP.puls||SP.vorgaenge){SP.puls=null;SP.vorgaenge=null;spurZeichne();if(DS.offen&&DS.tab==="vorgaenge")dsLeiste();}return;}
+    const aufgaben=[];
+    if(SP.pulsAn&&!SP.vorgang)aufgaben.push(wbJson("/api/werkbank/spur/puls").then(p=>{SP.puls=p;}).catch(()=>{}));
+    if(SP.gewaehlt)aufgaben.push(spLadeVorgang());
+    if(DS.offen&&DS.tab==="vorgaenge")aufgaben.push(spLadeVorgaenge());
+    await Promise.all(aufgaben);
+    if(SP.vorgang){fokusNeu();wendeFokusAn();fokusChip();}
+    spurZeichne();
+    if(DS.offen&&DS.tab==="vorgaenge"){const a=document.activeElement;if(!(a&&a.closest&&a.closest("#ds-leiste")&&a.tagName==="INPUT"))dsLeiste();}
+    else if(DS.offen&&DS.tab==="zeit"&&!SP.spiel){const a=document.activeElement;if(!(a&&a.classList&&a.classList.contains("sp-schieber")))dsLeiste();}
+    if(SP.schritt&&!SEL)zeigeInspector();}
+  function spPulsUmschalten(){SP.pulsAn=!SP.pulsAn;lsSetze("sp.puls",SP.pulsAn?"an":"aus");if(!SP.pulsAn)SP.puls=null;spurZeichne();dsLeiste();if(SP.pulsAn)spTakt();}
+  let SP_T=null;
+  window.spSignal=()=>{clearTimeout(SP_T);SP_T=setTimeout(spTakt,250);};
+  {const boot=window.deBoot;window.deBoot=async function(){await boot();setTimeout(spTakt,1200);setInterval(()=>{if(!document.hidden)spTakt();},10000);};}
 
 })();

@@ -306,12 +306,13 @@ Funktion leistet für Funktionen dasselbe auf echtem Weg.
 
 ### 7.1 Spur-Daten
 
-Jeder Log-Eintrag bekommt drei Header, vom Framework gesetzt und unsichtbar für den Fachcode (Inv. 5):
+Jeder Log-Eintrag bekommt vier Header, vom Framework gesetzt und unsichtbar für den Fachcode (Inv. 5):
 
 | Header | Inhalt |
 |---|---|
 | `ursache` | der Log-Eintrag, der ihn ausgelöst hat: `Stream:Version` |
 | `wirker` | der Baustein, der geschrieben hat: **dieselbe Id wie die Karte im Editor** |
+| `ueber` | der Absender des Commands bzw. Auftrags, den der Wirker verarbeitet hat (Fluss-Knoten, Regel, Reaktion, Akteur) — der Weg über die Karten zwischen Ursache und Wirker (ergänzt in P6) |
 | `stand` | Hash des Builds |
 
 - **`ursache` reist wie heute der Akteur** (`ImAuftrag`): Der generierte Dispatch setzt sie um jeden Handle bzw. Fluss-Schritt, der

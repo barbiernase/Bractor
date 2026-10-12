@@ -129,6 +129,9 @@ public class PipelineFlussE2ETests
             schritt.Wirker.Should().Be("quelle:DateiErkannt");
             kette.Should().OnlyContain(e => e.Wirker != null);
             kette.Select(e => e.Wirker).Should().Contain(w => w!.StartsWith("funktion:"), "die Kette führt über mindestens eine Funktion");
+            // Absender (ueber, Werkbank P6): der Fluss-Knoten, der den Command bzw. Auftrag abschickte — der Weg über die Karten dazwischen.
+            bildEnv.Ueber.Should().Be("fluss:Bildeingang#melden");
+            kette.Where(e => e.Wirker!.StartsWith("funktion:")).Should().OnlyContain(e => e.Ueber != null && e.Ueber.StartsWith("fluss:Bildeingang#"));
 
             // Einblick (Werkbank P4.6/P4.7): der Vorgang steht mit Wurzel und Zustand in der Liste, sein Graph enthält die Kette.
             var leser = new Infrastructure.Einblick.SpurLeser("Host=localhost;Port=5432;Database=cqrs_events;Username=postgres;Password=postgres", "es");

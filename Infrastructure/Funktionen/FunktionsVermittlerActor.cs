@@ -142,7 +142,7 @@ public static class FunktionsAnbieter
         try
         {
             await system.Cluster().RequestAsync<WakeAck>(FunktionsVermittlerActor.Identitaet(funktion),
-                new AuftragAnbieten(vorgang, korrelation, akteur, auftrag, Spur.Aktuell?.Ursache), cts.Token);
+                new AuftragAnbieten(vorgang, korrelation, akteur, auftrag, Spur.Aktuell?.Ursache, Spur.Aktuell?.Wirker), cts.Token);
         }
         catch (Exception ex) when (ex is OperationCanceledException or TimeoutException)
         { /* der Dirigent bietet bei der nächsten Weckung erneut an (Backstop) */ }
@@ -250,7 +250,7 @@ public sealed class FunktionsAbholer : BackgroundService
         });
         try
         {
-            using (Spur.Von(a.Ursache, null))
+            using (Spur.Von(a.Ursache, a.Wirker))   // die Spur des Absenders (Regel/Fluss-Knoten), wie beim Anbieten
                 await _ausfuehrer.FuehreAusAsync(a.Korrelation, a.Auftrag, a.Vorgang, a.Akteur, ct);
             await MeldeAsync(identitaet, new ArbeitErledigt(a.Vorgang));
         }

@@ -5,10 +5,13 @@ using Npgsql;
 
 namespace Infrastructure.Einblick;
 
-/// <summary>Ein Log-Eintrag mit seiner Spur (globale Sequenz, Stream-Position, Header) — die Zeile der Einblick-API.</summary>
+/// <summary>
+/// Ein Log-Eintrag mit seiner Spur (globale Sequenz, Stream-Position, Header) — die Zeile der Einblick-API. <c>Typ</c> ist der Marten-Name
+/// (snake_case), <c>Name</c> der Typname im Code (die Karte <c>rec:Name</c>), <c>Ueber</c> der Absender des Commands bzw. Auftrags.
+/// </summary>
 public sealed record SpurEintrag(
-    long Seq, Guid Stream, long Version, string Typ, DateTimeOffset Zeit, string? Korrelation, string? Kausal,
-    string? Akteur, string? Ursache, string? Wirker, string? Stand, string? Aggregat, bool Intern, JsonElement Daten);
+    long Seq, Guid Stream, long Version, string Typ, string Name, DateTimeOffset Zeit, string? Korrelation, string? Kausal,
+    string? Akteur, string? Ursache, string? Wirker, string? Ueber, string? Stand, string? Aggregat, bool Intern, JsonElement Daten);
 
 /// <summary>Ein Vorgang (alle Einträge einer <c>CorrelationId</c>) mit Zustand: <c>laeuft</c> · <c>wartet</c> · <c>fertig</c> · <c>gescheitert</c>.</summary>
 public sealed record Vorgang(
@@ -82,7 +85,8 @@ public sealed class SpurLeser(string verbindung, string schema)
         cmd.CommandText = $"""
             select seq_id, stream_id, version, type, timestamp, correlation_id, causation_id,
                    headers->>'akteur', headers->>'{Abstractions.Spur.UrsacheHeader}', headers->>'{Abstractions.Spur.WirkerHeader}',
-                   headers->>'{Abstractions.Spur.StandHeader}', headers->>'aggregate_type', mt_dotnet_type, data::text
+                   headers->>'{Abstractions.Spur.StandHeader}', headers->>'aggregate_type', mt_dotnet_type, data::text,
+                   headers->>'{Abstractions.Spur.UeberHeader}'
             from "{Schema}".mt_events where {wo}
             """;
         parameter(cmd);
@@ -94,8 +98,8 @@ public sealed class SpurLeser(string verbindung, string schema)
             {
                 string? S(int i) => r.IsDBNull(i) ? null : r.GetString(i);
                 var dotnet = S(12) ?? "";
-                aus.Add(new SpurEintrag(r.GetInt64(0), r.GetGuid(1), r.GetInt64(2), r.GetString(3), r.GetFieldValue<DateTimeOffset>(4),
-                    S(5) is { Length: > 0 } k ? k : S(11) == "ProzessManager" ? r.GetGuid(1).ToString() : null, S(6), S(7), S(8), S(9), S(10), S(11),
+                aus.Add(new SpurEintrag(r.GetInt64(0), r.GetGuid(1), r.GetInt64(2), r.GetString(3), KurzName(dotnet, r.GetString(3)), r.GetFieldValue<DateTimeOffset>(4),
+                    S(5) is { Length: > 0 } k ? k : S(11) == "ProzessManager" ? r.GetGuid(1).ToString() : null, S(6), S(7), S(8), S(9), S(14), S(10), S(11),
                     InternTypen.Any(t => dotnet.StartsWith(t + ",", StringComparison.Ordinal)),
                     JsonDocument.Parse(r.GetString(13)).RootElement.Clone()));
             }
@@ -104,11 +108,21 @@ public sealed class SpurLeser(string verbindung, string schema)
         return aus;
     }
 
+    /// <summary>Der Typname im Code aus dem Marten-Typ (<c>Ns.Typ, Assembly</c>; verschachtelt <c>Ns.Aussen+Typ</c>) — ohne: der Marten-Name.</summary>
+    public static string KurzName(string dotnet, string ersatz)
+    {
+        var t = dotnet.Split(',')[0].Trim();
+        if (t.Length == 0) return ersatz;
+        var i = Math.Max(t.LastIndexOf('.'), t.LastIndexOf('+'));
+        return i >= 0 ? t[(i + 1)..] : t;
+    }
+
     /// <summary>
     /// Die jüngsten <paramref name="n"/> Vorgänge. Ein Vorgang ist die Menge einer <c>CorrelationId</c>; startet ein Prozess (Fluss) aus einer
     /// Quell-Nachricht oder einem Event, ist dessen Auslöser die WURZEL des Vorgangs (Typ, Wirker, Akteur kommen von dort), und die Korrelation
     /// der Quell-Nachricht selbst erscheint nicht noch einmal. Zustand: ein Manager-<c>ProzessBeendet</c> entscheidet fertig/gescheitert; ein
-    /// offener Prozess läuft, solange in den letzten <see cref="Ruhe"/> etwas geschah, sonst wartet er; ohne Prozess (ein Command von außen) fertig.
+    /// offener Prozess läuft, solange in den letzten <see cref="Ruhe"/> etwas geschah, sonst wartet er; ohne Prozess (ein Command von außen)
+    /// fertig — bzw. gescheitert, wenn das Aggregat ihn ablehnte.
     /// </summary>
     public async Task<IReadOnlyList<Vorgang>> VorgaengeAsync(int n, CancellationToken ct)
     {
@@ -123,7 +137,8 @@ public sealed class SpurLeser(string verbindung, string schema)
                      max(case when starts_with(mt_dotnet_type, @g) then data->>'ProzessName' end) as prozess,
                      max(case when starts_with(mt_dotnet_type, @g) then data->>'AuslöserStream' end) as ausl_stream,
                      max(case when starts_with(mt_dotnet_type, @g) then data->>'AuslöserVersion' end) as ausl_version,
-                     max(case when starts_with(mt_dotnet_type, @b) then data->>'Grund' end) as grund
+                     max(case when starts_with(mt_dotnet_type, @b) then data->>'Grund' end) as grund,
+                     max(case when starts_with(mt_dotnet_type, @a) then data->>'Grund' end) as abgelehnt
               from "{Schema}".mt_events
               where {Korrelation} is not null
               group by 1),
@@ -131,7 +146,7 @@ public sealed class SpurLeser(string verbindung, string schema)
               select g.*, coalesce(a.seq_id, g.erste) as wurzel
               from g left join "{Schema}".mt_events a on a.stream_id::text = g.ausl_stream and a.version::text = g.ausl_version)
             select w.k, least(w.erste, w.wurzel), w.letzte, w.n, w.beginn, w.zuletzt, w.fertig, w.gescheitert, w.prozess,
-                   r.type, r.headers->>'{Abstractions.Spur.WirkerHeader}', r.headers->>'akteur', w.grund, now()
+                   r.type, r.headers->>'{Abstractions.Spur.WirkerHeader}', r.headers->>'akteur', w.grund, now(), r.mt_dotnet_type, w.abgelehnt
             from w join "{Schema}".mt_events r on r.seq_id = w.wurzel
             where not exists (select 1 from g p where p.ausl_stream = w.k)
             order by w.letzte desc
@@ -139,6 +154,7 @@ public sealed class SpurLeser(string verbindung, string schema)
             """;
         cmd.Parameters.AddWithValue("b", typeof(Prozess.ProzessBeendet).FullName + ",");
         cmd.Parameters.AddWithValue("g", typeof(Prozess.ProzessGestartet).FullName + ",");
+        cmd.Parameters.AddWithValue("a", typeof(Aggregate.KommandoAbgelehnt).FullName + ",");
         cmd.Parameters.AddWithValue("n", Math.Clamp(n, 1, 2000));
         var aus = new List<Vorgang>();
         try
@@ -150,10 +166,12 @@ public sealed class SpurLeser(string verbindung, string schema)
                 bool B(int i) => !r.IsDBNull(i) && r.GetBoolean(i);
                 var zuletzt = r.GetFieldValue<DateTimeOffset>(5);
                 var prozess = S(8);
-                var zustand = B(6) ? "fertig" : B(7) ? "gescheitert" : prozess == null ? "fertig"
+                // Ohne Prozess (ein Command von außen): abgelehnt = gescheitert (Grund = die Ablehnung), sonst fertig.
+                var abgelehnt = S(15);
+                var zustand = B(6) ? "fertig" : B(7) ? "gescheitert" : prozess == null ? (abgelehnt != null ? "gescheitert" : "fertig")
                     : r.GetFieldValue<DateTimeOffset>(13) - zuletzt < Ruhe ? "laeuft" : "wartet";
                 aus.Add(new Vorgang(r.GetString(0), r.GetInt64(1), r.GetInt64(2), r.GetInt32(3), r.GetFieldValue<DateTimeOffset>(4), zuletzt,
-                    zustand, prozess, S(9), S(10), S(11), S(12) is { Length: > 0 } g ? g : null));
+                    zustand, prozess, S(9) is { } typ ? KurzName(S(14) ?? "", typ) : null, S(10), S(11), S(12) is { Length: > 0 } g ? g : prozess == null ? abgelehnt : null));
             }
         }
         catch (PostgresException e) when (e.SqlState == "42P01") { }

@@ -43,6 +43,7 @@ public static class EventEnvelopeFactory
                 UserId           = userId,
                 Ursache          = spur?.Ursache,
                 Wirker           = spur?.Wirker,
+                Ueber            = spur?.Ueber,
                 Stand            = Spur.Stand,
                 Payload          = events[i]
                 // TargetSubscriberId bleibt null = Broadcast

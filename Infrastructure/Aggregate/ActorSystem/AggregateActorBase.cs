@@ -103,8 +103,9 @@ public abstract class AggregateActorBase<TState> : IActor
                         await InitializeAsync(envelope.AggregateId);
                     }
                     // Spur (docs/konzept-werkbank.md §7.1): die Events dieses Commands schreibt decide:<Aggregat>/<Command>, ausgelöst
-                    //   von dem Log-Eintrag, den der Absender in den Envelope gelegt hat.
-                    using (Spur.Von(envelope.Ursache, WirkerId.FuerDecide(typeof(TState).Name, envelope.Payload.GetType().Name)))
+                    //   von dem Log-Eintrag, den der Absender in den Envelope gelegt hat; der Absender selbst (Fluss-Knoten, Regel, Reaktion,
+                    //   Akteur) steht als „ueber" daneben — der Weg über die Karten zwischen Ursache und Decider.
+                    using (Spur.Von(envelope.Ursache, WirkerId.FuerDecide(typeof(TState).Name, envelope.Payload.GetType().Name), envelope.Wirker))
                         await HandleCommandAsync(context, envelope);
                     break;
 
