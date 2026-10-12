@@ -26,18 +26,20 @@ public sealed class HostProzess(string slnRoot)
     public object Zustand() => new
     {
         laeuft = Laeuft, umgebung = _umgebung, pid = Laeuft ? _p!.Id : (int?)null, seit = _seit,
-        exitCode = _p is { HasExited: true } p ? p.ExitCode : (int?)null, boot = _boot.ToList(),
+        exitCode = _p is { HasExited: true } p ? p.ExitCode : (int?)null, boot = Boot(),
     };
+
+    public IReadOnlyList<BootMeldung> Boot() { lock (_boot) return _boot.ToList(); }
 
     public IReadOnlyList<string> Log(int max = 300) => _log.Reverse().Take(max).Reverse().ToList();
 
     public async Task<(bool Ok, IReadOnlyList<BootMeldung> Boot)> StarteAsync(string umgebung, int einblickPort, string branch, CancellationToken ct)
     {
         await StoppeAsync();
-        _boot.Clear();
+        lock (_boot) _boot.Clear();
         _log.Clear();
         var dll = Path.Combine(slnRoot, "Host.Grpc", "bin", "Debug", "net9.0", "Host.Grpc.dll");
-        if (!File.Exists(dll)) { _boot.Add(new BootMeldung("Host.Grpc ist nicht gebaut (⟳ baut ihn).", null)); return (false, _boot); }
+        if (!File.Exists(dll)) { lock (_boot) _boot.Add(new BootMeldung("Host.Grpc ist nicht gebaut (⟳ baut ihn).", null)); return (false, Boot()); }
         var psi = new ProcessStartInfo("dotnet") { WorkingDirectory = Path.GetDirectoryName(dll)!, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
         psi.ArgumentList.Add(dll);
         psi.ArgumentList.Add("--umgebung");
@@ -71,17 +73,20 @@ public sealed class HostProzess(string slnRoot)
         {
             if (p.HasExited)
             {
-                if (_boot.Count == 0)
-                    _boot.Add(new BootMeldung(string.Join("\n", Log(40).Where(z => z.Contains("Exception", StringComparison.Ordinal) || z.Contains("Fehler", StringComparison.Ordinal)).Take(8))
-                        is { Length: > 0 } t ? t : $"Host beendet (Exit {p.ExitCode})", null));
-                return (false, _boot);
+                p.WaitForExit();   // Ausgabe-Puffer leeren — die CQRS-BOOT-Zeile kommt oft als letzte
+                lock (_boot)
+                    if (_boot.Count == 0)
+                        _boot.Add(new BootMeldung(string.Join("\n", Log(40).Where(z => z.Contains("Exception", StringComparison.Ordinal) || z.Contains("Fehler", StringComparison.Ordinal)).Take(8))
+                            is { Length: > 0 } t ? t : $"Host beendet (Exit {p.ExitCode})", null));
+                return (false, Boot());
             }
             if (einblickPort > 0)
-                try { using var r = await Http.GetAsync($"http://localhost:{einblickPort}/health", ct); return (true, _boot); }
-                catch (Exception) { /* noch nicht bereit */ }
+                try { using var r = await Http.GetAsync($"http://localhost:{einblickPort}/health", ct); return (true, Boot()); }
+                catch (Exception) when (!ct.IsCancellationRequested) { /* noch nicht bereit */ }
             await Task.Delay(500, ct);
         }
-        return (einblickPort == 0 && !p.HasExited, _boot);
+        if (!p.HasExited && einblickPort > 0) lock (_boot) _boot.Add(new BootMeldung($"Host antwortet nach 90 s nicht auf /health (Port {einblickPort}).", "host:Transport"));
+        return (einblickPort == 0 && !p.HasExited, Boot());
     }
 
     /// <summary>Hält den Host an: erst SIGTERM (geordnetes Herunterfahren), nach 15 s hart.</summary>

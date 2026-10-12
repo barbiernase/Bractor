@@ -28,6 +28,9 @@ namespace Domain.Infrastructure;
 /// Ein Schreibzugriff auf das Dokument eines FREMDEN Streams über die ersten beiden Wege wirft sofort — statt still
 /// ein Update eines parallel laufenden Stapels zu überschreiben.
 ///
+/// Jeder Effekt schreibt ein <see cref="IReadModel"/> — die Leseseite ist damit genau die Menge der Read-Model-Typen, die ein
+/// Neuaufbau leert (<c>GeneratedProjectionServices.ReadModelTypen</c>, Werkbank §4.6).
+///
 /// Konkrete Stores erben und schreiben nur noch ihre FACHLICHEN Write-Methoden. Kein Domänenwissen hier, kein
 /// Generat — reiner Marten-Adapter. SCOPED registriert: eine Instanz je Fähigkeits-Bereich (je Stream-Actor →
 /// isolierter Puffer).
@@ -50,7 +53,7 @@ public abstract class MartenCoCommitStoreBase : ICoCommitTracker
 
     /// <summary>Puffert: das eigene Dokument <paramref name="id"/> anlegen bzw. ersetzen. Gibt <c>Task.CompletedTask</c>
     /// zurück, damit fachliche Write-Methoden expression-bodied bleiben.</summary>
-    protected Task EnqueueStore<T>(Guid id, T document) where T : notnull
+    protected Task EnqueueStore<T>(Guid id, T document) where T : IReadModel
     {
         PruefeEigen(id, typeof(T));
         _pending.Add(s => { s.Store(document); return Task.CompletedTask; });
@@ -61,7 +64,7 @@ public abstract class MartenCoCommitStoreBase : ICoCommitTracker
     /// Puffert ein read-modify-store des eigenen Dokuments: lädt es im Batch (read-your-writes über die Identity-Map),
     /// transformiert und staged es. Fehlt es (Event vor dem erzeugenden Upsert), passiert nichts.
     /// </summary>
-    protected Task EnqueueTransform<T>(Guid id, Func<T, T> transform) where T : notnull
+    protected Task EnqueueTransform<T>(Guid id, Func<T, T> transform) where T : IReadModel
     {
         PruefeEigen(id, typeof(T));
         _pending.Add(async s =>
@@ -75,7 +78,7 @@ public abstract class MartenCoCommitStoreBase : ICoCommitTracker
 
     /// <summary>Puffert ein load-or-create des eigenen Dokuments: <paramref name="aendern"/> bekommt das vorhandene
     /// Dokument oder <c>null</c> und liefert das neue.</summary>
-    protected Task EnqueueAnlegenOderAendern<T>(Guid id, Func<T?, T> aendern) where T : class
+    protected Task EnqueueAnlegenOderAendern<T>(Guid id, Func<T?, T> aendern) where T : class, IReadModel
     {
         PruefeEigen(id, typeof(T));
         _pending.Add(async s =>
@@ -95,7 +98,7 @@ public abstract class MartenCoCommitStoreBase : ICoCommitTracker
     /// muss den Besitzer enthalten (z. B. <c>{DatensatzId}:{ImagePairId}</c>) — dann berühren zwei Streams nie
     /// dieselbe Zeile, und eine Menge über viele Streams braucht kein geteiltes Dokument.
     /// </summary>
-    protected Task EnqueueZeile<T>(Guid besitzer, T zeile) where T : notnull
+    protected Task EnqueueZeile<T>(Guid besitzer, T zeile) where T : IReadModel
     {
         PruefeEigen(besitzer, typeof(T));
         _pending.Add(s => { s.Store(zeile); return Task.CompletedTask; });
@@ -103,7 +106,7 @@ public abstract class MartenCoCommitStoreBase : ICoCommitTracker
     }
 
     /// <summary>Puffert: die Zeile <paramref name="id"/> des Streams <paramref name="besitzer"/> entfernen.</summary>
-    protected Task EnqueueZeileEntfernen<T>(Guid besitzer, string id) where T : notnull
+    protected Task EnqueueZeileEntfernen<T>(Guid besitzer, string id) where T : IReadModel
     {
         PruefeEigen(besitzer, typeof(T));
         _pending.Add(s => { s.Delete<T>(id); return Task.CompletedTask; });

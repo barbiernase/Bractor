@@ -91,6 +91,12 @@ CQRS070), der Datei-Treiber ist fest codiert (`Infrastructure/Quellen/Treiber/Da
 Fertig-Erkennung, Kennung, Laufmodus); `GeneratedQuellen` + `AddQuellen(configuration)`. `IQuelle`/`AddQuelle`/`DateiQuelle` gibt es nicht mehr.
 Umsetzungsplan der Werkbank: `docs/plan-werkbank-umsetzung.md`.
 
+**Werkbank-Server + Kopfzeile (2026-10-12, Werkbank P3):** ⟳ im Editor = bauen → Python-Basen → neu lesen → Daten prüfen → Infra → Host
+(`Host.Grpc --umgebung`, Prozess der Werkbank, nur Sim) — `SimHost/Werkbank/`, Endpunkte `/api/werkbank/*`, Fortschritt per SSE. Fehler stehen an
+der Karte (Compiler: Typ/Member; Boot: `CQRS-BOOT {json}` mit Karte). 🖥 Host-Rahmen = Umgebungs-Datei, gezeichnet von EINEM generischen
+Formular-Renderer aus dem Schema; 📸 = Sim-DB-Stände (`<schema>.stand` trägt Proto-Stand und Projektions-Hashes). Code-Hashes (E9): Snapshot-
+Version enthält State + Applier, Projektionen bauen in Sim nach Code-Änderung beim Start neu auf (`ProjektionsStandDienst`).
+
 **Akteure, Verträge, Clients (2026-10-06):** Akteure mit Befugnis und Kette bis in den Event-Header; Akteur-Verträge (Zusagen
 draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer CommandId; Clients (`IClientVertrag`, n:m zu Akteuren) mit
 Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an
@@ -170,7 +176,7 @@ NICHT Timeout-tunebar; xUnit schluckt App-Logs (Cluster-Diagnose → Last-Harnes
 - Build: `dotnet build`
 - Test (Logik, immer grün): `dotnet test Infrastructure.Pruefstand.Tests/Infrastructure.Pruefstand.Tests.csproj`
 - Integration (braucht Postgres/Consul/Redis, sequentiell): `dotnet test Infrastructure.Integration.Tests/Infrastructure.Integration.Tests.csproj`
-- Domänen-Editor + Simulation (einzige Oberfläche; **Ist-Stand** — Ziel: Werkbank ohne Simulationsschicht, `docs/konzept-werkbank.md`): `dotnet run --project GraphExtractor` (erzeugt domain-model.json; die Oberfläche liegt statisch in `SimHost/wwwroot/editor/` — `index.html`, `editor.css`, `editor.js`), dann `dotnet run --project SimHost` → http://localhost:5178/editor/; Palette = Anker (Aggregat · Fluss · Funktion · Quelle · Akteur · Client · Projektion), Trigger-Welt/LOD seit Werkbank-P0 nicht mehr im Editor; Bearbeiten nur im Panel: Karte anklicken, ⊕-Punkt im Panel → passende Knoten leuchten → anklicken = verbinden/lösen (`docs/konzept-editor-panel-bearbeitung.md`); 🤖-LLM-Knoten am Code-Block = Chat: Prompt senden → `claude -p` (Abo, nie API) → geprüft → .cs geschrieben → Laufzeit-Projekt gebaut (alle Generatoren) → neu eingelesen (Konzept §12); Kontexte erzeugt SimHost selbst
+- Domänen-Editor + Simulation (einzige Oberfläche; **Ist-Stand** — Ziel: Werkbank ohne Simulationsschicht, `docs/konzept-werkbank.md`; ⟳ in der Kopfzeile baut und startet den echten Host in der gewählten Umgebung): `dotnet run --project GraphExtractor` (erzeugt domain-model.json; die Oberfläche liegt statisch in `SimHost/wwwroot/editor/` — `index.html`, `editor.css`, `editor.js`), dann `dotnet run --project SimHost` → http://localhost:5178/editor/; Palette = Anker (Aggregat · Fluss · Funktion · Quelle · Akteur · Client · Projektion), Trigger-Welt/LOD seit Werkbank-P0 nicht mehr im Editor; Bearbeiten nur im Panel: Karte anklicken, ⊕-Punkt im Panel → passende Knoten leuchten → anklicken = verbinden/lösen (`docs/konzept-editor-panel-bearbeitung.md`); 🤖-LLM-Knoten am Code-Block = Chat: Prompt senden → `claude -p` (Abo, nie API) → geprüft → .cs geschrieben → Laufzeit-Projekt gebaut (alle Generatoren) → neu eingelesen (Konzept §12); Kontexte erzeugt SimHost selbst
 - Editor-Parität (Code ⇄ Extraktion ⇄ Editor, schreibt nichts): `dotnet run --project GraphExtractor -- --check`
 - Grammatik als Liste „Regel → Build-Gegenstück": `dotnet run --project GraphExtractor -- --grammatik`
 - Agnostik-Sonde (unbekannte Domäne im Speicher gegen handgeschriebenes Soll + Fixpunkt): `dotnet run --project GraphExtractor -- --sonde`

@@ -32,10 +32,22 @@ namespace Infrastructure.SourceGeneration
                 .ToList();
             if (states.Count == 0) return;
 
-            context.AddSource("GeneratedSnapshotRegistration.g.cs", Build(states));
+            context.AddSource("GeneratedSnapshotRegistration.g.cs", Build(states, context.Compilation));
         }
 
-        private static string Build(List<INamedTypeSymbol> states)
+        /// <summary>
+        /// Die Snapshot-Version: Struktur-Hash (Form des States) plus der Code-Hash von State + Applier, den der Domain-Generator in den
+        /// Aggregat-Handler schreibt (<c>{State}AggregateHandler.CodeHash</c>, Plan E9) — eine geänderte Apply-Logik macht Snapshots so
+        /// ebenfalls ungültig. Der Handler ist ein Code-Fakt der Domain-Assembly (Konstante, über Metadaten lesbar).
+        /// </summary>
+        private static string Version(INamedTypeSymbol s, Compilation comp)
+        {
+            var handler = comp.GetTypeByMetadataName($"{s.ContainingNamespace.ToDisplayString()}.{s.Name}AggregateHandler");
+            var code = handler?.GetMembers("CodeHash").OfType<IFieldSymbol>().FirstOrDefault(f => f.IsConst)?.ConstantValue as string;
+            return code == null ? StructuralHash(s) : StructuralHash(s) + "-" + code;
+        }
+
+        private static string Build(List<INamedTypeSymbol> states, Compilation comp)
         {
             var namespaces = new HashSet<string>();
             foreach (var s in states) namespaces.Add(s.ContainingNamespace.ToDisplayString());
@@ -59,7 +71,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("    private static readonly IReadOnlyDictionary<Type, string> _byType = new Dictionary<Type, string>");
             sb.AppendLine("    {");
             foreach (var s in states)
-                sb.AppendLine($"        [typeof({s.Name})] = \"{StructuralHash(s)}\",");
+                sb.AppendLine($"        [typeof({s.Name})] = \"{Version(s, comp)}\",");
             sb.AppendLine("    };");
             sb.AppendLine();
             sb.AppendLine("    /// <summary>Struktur-Version des State-Typs; leer, wenn unbekannt.</summary>");

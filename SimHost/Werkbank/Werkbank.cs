@@ -23,7 +23,15 @@ public sealed class Werkbank
     public HostProzess Host { get; }
     public Infra Infra { get; }
     public SimDatenbank Db { get; } = new();
+    public Fortschritt Fortschritt { get; } = new();
     public KreislaufErgebnis? Letzter { get; private set; }
+    /// <summary>Der Stand, mit dem der laufende Host gebaut wurde („● Entwurf ≠ Lauf", §5).</summary>
+    public string? LaufStand { get; private set; }
+    /// <summary>Inhalt der Umgebungs-Datei beim Start des laufenden Hosts — geändert heißt: ⟳ übernimmt die neue Konfig.</summary>
+    private string? _laufUmgebung;
+    private string? DateiInhalt(string name) => File.Exists(Umgebungen.Datei(name)) ? File.ReadAllText(Umgebungen.Datei(name)) : null;
+    /// <summary>Läuft gerade ⟳ (bzw. eine Sim-DB-Aktion) — und welcher Schritt.</summary>
+    public string? Laeuft { get; private set; }
 
     public Werkbank(string slnRoot)
     {
@@ -43,7 +51,17 @@ public sealed class Werkbank
             var namen = Umgebungen.Namen();
             var gespeichert = File.Exists(AktivDatei) ? File.ReadAllText(AktivDatei).Trim() : null;
             return gespeichert != null && namen.Contains(gespeichert) ? gespeichert
-                : namen.FirstOrDefault(n => Umgebungen.Aufgeloest(n).Umgebung.Art == UmgebungsArt.Sim) ?? namen.FirstOrDefault() ?? "";
+                : namen.OrderBy(n => Rang(n)).FirstOrDefault() ?? "";
+            // Default: die lokal lauffähige Sim-Umgebung (Einzelknoten, verwaltete DB) vor Multi-Node-/Container-Umgebungen und Prod.
+            int Rang(string n)
+            {
+                try
+                {
+                    var u = Umgebungen.Aufgeloest(n);
+                    return (u.Umgebung.Art == UmgebungsArt.Sim ? 0 : 4) + (u.Cluster.Art == ClusterArt.Einzelknoten ? 0 : 2) + (u.EventStore.Betrieb == Betrieb.Verwaltet ? 0 : 1);
+                }
+                catch { return 9; }
+            }
         }
         set
         {
@@ -74,7 +92,19 @@ public sealed class Werkbank
         return Convert.ToHexString(sha.Hash!)[..8].ToLowerInvariant();
     }
 
-    private string ProtoDatei(UmgebungKonfig u) => Path.Combine(_root, ".werkbank", "db", u.EventStore.Datenbank, "domain.proto");
+    private string NeuesProto => Path.Combine(_root, "ProtoRepo", "domain.proto");
+
+    private void Schritt(List<Schritt> schritte, Schritt s)
+    {
+        schritte.Add(s);
+        Fortschritt.Melde("schritt", s);
+    }
+
+    private void Beginne(string schritt)
+    {
+        Laeuft = schritt;
+        Fortschritt.Melde("beginnt", new { schritt });
+    }
 
     public object Zustand()
     {
@@ -88,8 +118,14 @@ public sealed class Werkbank
             umgebungen = Umgebungen.Namen(), aktiv, branch = Umgebungen.Branch(), fehler,
             art = u?.Umgebung.Art.ToString(), datenbank = u?.EventStore.Datenbank, cluster = u?.Cluster.Name,
             ports = u == null ? null : new { grpc = u.Transport.GrpcPort, einblick = u.Transport.EinblickPort },
-            infra = u == null ? null : Infra.Dienste(u), host = Host.Zustand(), stand = Stand(),
-            build = Letzter == null ? null : new { Letzter.Ok, Letzter.Stand, Letzter.Zeit, fehler = Letzter.Diagnosen.Count },
+            infra = u == null ? null : Infra.Dienste(u), host = Host.Zustand(), stand = Stand(), laufStand = Host.Laeuft ? LaufStand : null, laeuft = Laeuft,
+            umgebungGeaendert = Host.Laeuft && _laufUmgebung != null && _laufUmgebung != DateiInhalt(aktiv),
+            // Build-Status = der Schritt „Bauen" (nicht die ganze Kette: ein Boot-Fehler ist kein roter Build).
+            build = Letzter == null ? null : new
+            {
+                ok = Letzter.Schritte.FirstOrDefault(x => x.Name == "Bauen")?.Ok ?? false, Letzter.Stand, Letzter.Zeit,
+                fehler = Letzter.Diagnosen.Count(d => d.Schwere == "error"),
+            },
         };
     }
 
@@ -101,13 +137,20 @@ public sealed class Werkbank
         {
             var schritte = new List<Schritt>();
             var stand = Stand();
+            Fortschritt.Melde("kreislauf", new { stand });
             KreislaufErgebnis Ende(bool ok, IReadOnlyList<Diagnose>? d = null, IReadOnlyList<BootMeldung>? boot = null, IReadOnlyList<string>? frage = null)
-                => Letzter = new KreislaufErgebnis(ok, stand, schritte, d ?? [], boot ?? [], frage, DateTimeOffset.UtcNow);
+            {
+                Letzter = new KreislaufErgebnis(ok, stand, schritte, d ?? [], boot ?? [], frage, DateTimeOffset.UtcNow);
+                Laeuft = null;
+                Fortschritt.Melde("ende", new { ok, stand });
+                return Letzter;
+            }
 
             // 1 Bauen: dotnet build des Laufzeit-Hosts — der Codegen-Prepass (Proto, STJ-Kontexte, Python-Basen) läuft im Build mit.
+            Beginne("Bauen");
             var bau = await Prozesse.LaufeAsync("dotnet", ["build", "Host.Grpc/Host.Grpc.csproj", "-v", "q", "-nologo", "-clp:NoSummary"], _root, ct: ct);
             var diagnosen = Diagnosen.Lies(bau.Zeilen, _root);
-            schritte.Add(new Schritt("Bauen", bau.Ok, (long)bau.Dauer.TotalMilliseconds,
+            Schritt(schritte, new Schritt("Bauen", bau.Ok, (long)bau.Dauer.TotalMilliseconds,
                 bau.Ok ? ["0 Fehler"] : diagnosen.Count > 0 ? diagnosen.Select(x => $"{x.Datei}:{x.Zeile} {x.Code} {x.Text}").Take(20).ToList() : bau.Zeilen.TakeLast(15).ToList()));
             if (!bau.Ok) return Ende(false, diagnosen);
 
@@ -116,89 +159,123 @@ public sealed class Werkbank
             var skript = Path.Combine(_root, "Domain.Client.Worker.Python.ML", "build_python.sh");
             if (File.Exists(skript))
             {
+                Beginne("Python-Basen");
                 var pr = await Prozesse.LaufeAsync("bash", [skript], _root, new Dictionary<string, string> { ["PATH"] = python + ":" + Environment.GetEnvironmentVariable("PATH") }, TimeSpan.FromMinutes(3), ct);
-                schritte.Add(new Schritt("Python-Basen", pr.Ok, (long)pr.Dauer.TotalMilliseconds, pr.Zeilen.TakeLast(3).ToList()));
+                Schritt(schritte, new Schritt("Python-Basen", pr.Ok, (long)pr.Dauer.TotalMilliseconds, pr.Zeilen.TakeLast(3).ToList()));
                 if (!pr.Ok) return Ende(false, diagnosen);
             }
 
             // 3 Board neu lesen (Code = Wahrheit).
+            Beginne("Neu lesen");
             var lesen = await Prozesse.LaufeAsync("dotnet", ["run", "--project", "GraphExtractor"], _root, zeitlimit: TimeSpan.FromMinutes(5), ct: ct);
-            schritte.Add(new Schritt("Neu lesen", lesen.Ok, (long)lesen.Dauer.TotalMilliseconds, lesen.Zeilen.Where(z => z.StartsWith("✅", StringComparison.Ordinal)).ToList()));
+            Schritt(schritte, new Schritt("Neu lesen", lesen.Ok, (long)lesen.Dauer.TotalMilliseconds, lesen.Zeilen.Where(z => z.StartsWith("✅", StringComparison.Ordinal)).ToList()));
             if (!lesen.Ok) return Ende(false, diagnosen);
 
             var name = Aktiv;
             var u = Umgebungen.Aufgeloest(name);
 
-            // 4 Daten prüfen (nur Sim): passen die gespeicherten Events noch zum Code?
-            var neuProto = Path.Combine(_root, "ProtoRepo", "domain.proto");
-            if (u.Umgebung.Art == UmgebungsArt.Sim && File.Exists(ProtoDatei(u)) && File.Exists(neuProto))
+            // Prod läuft über das Deployment, nie als Prozess der Werkbank — dort endet ⟳ nach dem Lesen (Code und Konfig sind geprüft).
+            if (u.Umgebung.Art != UmgebungsArt.Sim)
             {
-                var unvertraeglich = ProtoVergleich.Unvertraeglich(File.ReadAllText(ProtoDatei(u)), File.ReadAllText(neuProto));
+                Schritt(schritte, new Schritt("Starten", true, 0, [$"{name} ist {u.Umgebung.Art} — gestartet wird über das Deployment, nicht aus der Werkbank"]));
+                return Ende(true, diagnosen);
+            }
+
+            // 4 Daten prüfen: passen die gespeicherten Events noch zum Code? (Projektionen und Snapshots prüft der Host selbst beim
+            //   Start über die Code-Hashes — ProjektionsStandDienst bzw. Snapshot-Version.)
+            Beginne("Daten prüfen");
+            var neuProto = File.Exists(NeuesProto) ? await File.ReadAllTextAsync(NeuesProto, ct) : null;
+            var altProto = await Db.LiesAsync(u, u.EventStore.Datenbank, SimDatenbank.ProtoSchluessel);
+            if (altProto != null && neuProto != null)
+            {
+                var unvertraeglich = ProtoVergleich.Unvertraeglich(altProto, neuProto);
                 if (unvertraeglich.Count > 0 && !zuruecksetzen)
                 {
-                    schritte.Add(new Schritt("Daten prüfen", false, 0, unvertraeglich));
+                    Schritt(schritte, new Schritt("Daten prüfen", false, 0, unvertraeglich));
                     return Ende(false, diagnosen, frage: unvertraeglich);
                 }
                 if (unvertraeglich.Count > 0)
                 {
                     await Host.StoppeAsync();
                     await Db.ZuruecksetzenAsync(u);
-                    schritte.Add(new Schritt("Daten prüfen", true, 0, [$"Sim-DB {u.EventStore.Datenbank} zurückgesetzt", .. unvertraeglich]));
+                    Schritt(schritte, new Schritt("Daten prüfen", true, 0, [$"Sim-DB {u.EventStore.Datenbank} zurückgesetzt", .. unvertraeglich]));
                 }
-                else schritte.Add(new Schritt("Daten prüfen", true, 0, ["Daten passen zum Code"]));
+                else Schritt(schritte, new Schritt("Daten prüfen", true, 0, ["Events passen zum Code"]));
             }
+            else Schritt(schritte, new Schritt("Daten prüfen", true, 0, [altProto == null ? "kein gespeicherter Stand (neue oder übernommene Sim-DB) — der neue gilt ab dem Start" : "kein domain.proto"]));
 
             // 5 Infrastruktur.
+            Beginne("Infrastruktur");
             var infra = await Infra.StarteAsync(name, u, ct);
-            schritte.Add(new Schritt("Infrastruktur", infra.Ok, 0, infra.Meldungen));
+            Schritt(schritte, new Schritt("Infrastruktur", infra.Ok, 0, infra.Meldungen));
             if (!infra.Ok) return Ende(false, diagnosen);
 
-            // 6 Host ersetzen.
+            // 6 Host ersetzen; erst nach einem gelungenen Start gilt das neue Proto als Stand der Daten.
+            Beginne("Starten");
             var start = await Host.StarteAsync(name, u.Transport.EinblickPort, Umgebungen.Branch(), ct);
-            schritte.Add(new Schritt("Starten", start.Ok, 0, start.Ok ? [$"Host läuft · {name} · DB {u.EventStore.Datenbank}"] : start.Boot.Select(b => b.Text).ToList()));
+            Schritt(schritte, new Schritt("Starten", start.Ok, 0, start.Ok ? [$"Host läuft · {name} · DB {u.EventStore.Datenbank}"] : start.Boot.Select(b => b.Text).ToList()));
             if (start.Ok)
             {
-                Directory.CreateDirectory(Path.GetDirectoryName(ProtoDatei(u))!);
-                if (File.Exists(neuProto)) File.Copy(neuProto, ProtoDatei(u), overwrite: true);
+                LaufStand = stand;
+                _laufUmgebung = DateiInhalt(name);
+                if (neuProto != null) await Db.SchreibeAsync(u, SimDatenbank.ProtoSchluessel, neuProto);
             }
             return Ende(start.Ok, diagnosen, start.Boot);
+        }
+        catch (Exception e) when (e is not OperationCanceledException)
+        {
+            Laeuft = null;
+            Fortschritt.Melde("ende", new { ok = false, fehler = e.Message });
+            throw;
         }
         finally { _einLauf.Release(); }
     }
 
-    /// <summary>Sim-DB: zurücksetzen bzw. Stand laden — Host anhalten, Aktion, Host wieder starten (wenn er lief).</summary>
+    /// <summary>
+    /// Sim-DB-Aktionen (§4.6): zurücksetzen, Stand speichern/laden/löschen, Prod-Stand übernehmen. Der Host hält dafür an (eine Vorlage
+    /// verträgt keine Verbindungen) und startet danach wieder, wenn er lief — auch wenn die Aktion scheitert.
+    /// </summary>
     public async Task<object> DatenbankAsync(string aktion, string? stand, CancellationToken ct)
     {
         await _einLauf.WaitAsync(ct);
+        var name = Aktiv;
+        var u = Umgebungen.Aufgeloest(name);
+        var lief = Host.Laeuft && aktion != "loeschen";
+        (bool Ok, IReadOnlyList<BootMeldung> Boot) neu = (true, []);
         try
         {
-            var name = Aktiv;
-            var u = Umgebungen.Aufgeloest(name);
-            var lief = Host.Laeuft;
-            await Host.StoppeAsync();
+            if (lief) await Host.StoppeAsync();
+            Beginne("Sim-DB: " + aktion);
+            IReadOnlyList<string> meldungen = [];
+            string Name() => string.IsNullOrWhiteSpace(stand) ? throw new ArgumentException("Name des Stands fehlt") : stand;
             switch (aktion)
             {
                 case "zuruecksetzen": await Db.ZuruecksetzenAsync(u); break;
-                case "speichern":
-                    await Db.SpeichereAsync(u, stand ?? throw new ArgumentException("Name des Stands fehlt"));
-                    if (File.Exists(ProtoDatei(u)))
-                    {
-                        var ziel = Path.Combine(_root, ".werkbank", "db", SimDatenbank.StandName(u, stand), "domain.proto");
-                        Directory.CreateDirectory(Path.GetDirectoryName(ziel)!);
-                        File.Copy(ProtoDatei(u), ziel, true);
-                    }
-                    break;
-                case "laden":
-                    await Db.LadeAsync(u, stand ?? throw new ArgumentException("Name des Stands fehlt"));
-                    var quelle = Path.Combine(_root, ".werkbank", "db", SimDatenbank.StandName(u, stand), "domain.proto");
-                    if (File.Exists(quelle)) { Directory.CreateDirectory(Path.GetDirectoryName(ProtoDatei(u))!); File.Copy(quelle, ProtoDatei(u), true); }
+                case "speichern": await Db.SpeichereAsync(u, Name()); break;
+                case "laden": await Db.LadeAsync(u, Name()); break;
+                case "loeschen": await Db.LoescheStandAsync(u, Name()); break;
+                case "prod":
+                    var prodName = string.IsNullOrWhiteSpace(stand)
+                        ? Umgebungen.Namen().FirstOrDefault(n => Umgebungen.Aufgeloest(n).Umgebung.Art == UmgebungsArt.Prod)
+                          ?? throw new InvalidOperationException("Keine Prod-Umgebung vorhanden.")
+                        : stand;
+                    meldungen = await Db.UebernehmeProdAsync(u, Umgebungen.Aufgeloest(prodName), _root, ct);
                     break;
                 default: throw new ArgumentException($"unbekannte Aktion {aktion}");
             }
-            (bool Ok, IReadOnlyList<BootMeldung> Boot) neu = (true, []);
+            var neuGestartet = lief;
             if (lief) neu = await Host.StarteAsync(name, u.Transport.EinblickPort, Umgebungen.Branch(), ct);
-            return new { ok = neu.Ok, aktion, stand, host = neu.Ok ? (lief ? "neu gestartet" : "stand") : "Start fehlgeschlagen", boot = neu.Boot };
+            lief = false;
+            var aus = new { ok = neu.Ok, aktion, stand, meldungen, host = !Host.Laeuft ? "steht" : neuGestartet ? "neu gestartet" : "läuft", boot = neu.Boot };
+            Fortschritt.Melde("simdb", aus);
+            return aus;
         }
-        finally { _einLauf.Release(); }
+        finally
+        {
+            if (lief) await Host.StarteAsync(name, u.Transport.EinblickPort, Umgebungen.Branch(), CancellationToken.None);   // Aktion gescheitert
+            Laeuft = null;
+            Fortschritt.Melde("ende", new { aktion });
+            _einLauf.Release();
+        }
     }
 }

@@ -134,10 +134,14 @@ public sealed class GenericPullStartupService : IHostedService
 
     private async Task PollLoopAsync(string pollerId, Poller poller, CancellationToken ct)
     {
+        // Der erste Durchlauf sofort (kurz nach dem Start, wenn der Cluster steht): holt nach, was während „unten" geschah, und
+        // startet einen Neuaufbau (Cursor 0, ProjektionsStandDienst) ohne ein Poll-Intervall Wartezeit.
+        var erster = true;
         while (!ct.IsCancellationRequested)
         {
-            try { await Task.Delay(PollInterval, ct); }
+            try { await Task.Delay(erster ? TimeSpan.FromSeconds(2) : PollInterval, ct); }
             catch (OperationCanceledException) { break; }
+            erster = false;
 
             try
             {

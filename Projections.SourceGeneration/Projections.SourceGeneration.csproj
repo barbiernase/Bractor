@@ -16,6 +16,8 @@
   <ItemGroup>
     <!-- Positivliste des Store-Zugriffs (CQRS066/067): EINE Quelle in Abstractions, per Link eingebunden. -->
     <Compile Include="..\Abstractions\StoreZugriff.cs" Link="Vertrag\StoreZugriff.cs" />
+    <Compile Include="..\Abstractions\Kodehash.cs" Link="Vertrag\Kodehash.cs" />
+    <Compile Include="..\Domain.SourceGeneration\Kodeform.cs" Link="Vertrag\Kodeform.cs" />
   </ItemGroup>
 
 </Project>

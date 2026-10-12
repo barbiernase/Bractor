@@ -1377,15 +1377,6 @@
   //   stehen auf dem neuen Code; solange sind ▶/✓ gesperrt (sonst sähe der nächste Block veraltete Nachbarn).
   async function neuEinlesen(){EINLESEN=true;neuZeichnen();try{await deReload();}finally{EINLESEN=false;await llmStatus();neuZeichnen();}}
 
-  // 🤖 Alle ausführen: jeden 🤖-Knoten mit Auftrag nacheinander — jeder geprüfte Rumpf wird geschrieben + gebaut + eingelesen.
-  window.deLlmAlle=async function(){const btn=document.getElementById("de-llmalle");
-    const liste=MODEL.llmNodes.map(l=>({l,kid:l.promptZiel?konsolenId(l.promptZiel):null})).filter(x=>x.kid&&((llmVerlauf(x.l)[0]||{}).text||"").trim());
-    if(!liste.length){deFlash("Kein 🤖-Knoten mit Auftrag",false);return;}
-    btn.disabled=true;
-    for(let i=0;i<liste.length;i++){btn.textContent="🤖 "+(i+1)+"/"+liste.length+" …";await llmAusfuehren(liste[i].kid,llmVerlauf(liste[i].l)[0].text,null);}
-    btn.disabled=false;btn.textContent="🤖 Alle ausführen";
-    const offen=Object.keys(VOR).length;deFlash("🤖 fertig"+(offen?" · "+offen+" ungeprüfte(r) Vorschlag/Vorschläge warten auf ✓":" · alles geschrieben"),!offen);};
-
   // Slot-Schlüssel der LLM-Konsole (wie GraphExtractor --kontexte ihn vergibt): Art|Besitzer|Disc.
   function konsolenId(codeId,m){const o=findCodeOwner(codeId,m);if(!o)return null;const r=o.ref;
     if(o.kind==="decider")return "decide|"+r.aggregat+"|"+r.command;
@@ -1414,7 +1405,7 @@
   //    Applier→Aggregat(rechts) · Applier→State-Feld(oben, optionale Zuweisungs-Markierung).
   const SVGNS="http://www.w3.org/2000/svg";
   const GRID=20;
-  const NODELABEL={akteur:"Akteur",client:"Client",auf:"Zusage",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",quelle:"Quelle",fluss:"Fluss",codenode:"Code",llmnode:"LLM",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn",funktion:"Funktion",auftrag:"Auftrag",flussknoten:"Pipeline"};
+  const NODELABEL={host:"Host",akteur:"Akteur",client:"Client",auf:"Zusage",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",quelle:"Quelle",fluss:"Fluss",codenode:"Code",llmnode:"LLM",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn",funktion:"Funktion",auftrag:"Auftrag",flussknoten:"Pipeline"};
   let PAN={x:40,y:30,s:1}, canvas=null, world=null, svg=null, svgTop=null, SLOTS={};
   // Typ-Navigation: HLKIND = aktuell hervorgehobener Node-Typ (Board+Minimap); JUMPIX = Sprung-Cursor je Typ.
   let HLKIND=null; const JUMPIX={};
@@ -1692,7 +1683,10 @@
   //   eigenen Rahmen (wie ein Client), innen nach FLUSSTIEFE angeordnet (Quelle links, jeder Draht nach rechts).
   const FL_PRE="§fluss:";
   const istFlussDom=d=>typeof d==="string"&&d.startsWith(FL_PRE);
-  const istAussenDom=d=>istClientDom(d)||istFlussDom(d);
+  // 🖥 Host-Rahmen (docs/konzept-werkbank.md §8.1): die Umgebung als Karten rechts neben den Clients — kein Domänen-Modell.
+  const HOST_KEY="§host";
+  const istHostDom=d=>d===HOST_KEY;
+  const istAussenDom=d=>istClientDom(d)||istFlussDom(d)||istHostDom(d);
   const flussVonDom=d=>MODEL.fluesse.find(f=>FL_PRE+f._id===d);
   const FL_SYM={quelle:"⛲",auf:"◆",funktion:"ƒ",command:"▶",je:"⧉",warte:"⧗"};
   const FL_ART={quelle:"Quelle",auf:"Event-Quelle",funktion:"Funktion",command:"Command",je:"Je-Rahmen",warte:"Warten (Event im Strom)"};
@@ -2167,7 +2161,7 @@
             ...MODEL.reaktionen.map(r=>({id:"rk:"+r._id,name:r.name,kind:"reaktion",ref:r})),
             ...MODEL.codeNodes.map(c=>({id:"cn:"+c._id,name:c.name,kind:"codenode",ref:c})),
             ...MODEL.llmNodes.map(l=>({id:"ln:"+l._id,name:l.name,kind:"llmnode",ref:l})),
-            ...flussKnotenNodes(),...handleKnoten(),...fnKnoten()];
+            ...flussKnotenNodes(),...handleKnoten(),...fnKnoten(),...hostKnoten()];
   }
   // ── AGGREGATSWEISE ANORDNUNG: jedes Aggregat ein gekachelter Block (eigenes Rollen-Mini-Layout),
   //    aggregat-übergreifende Knoten (Sagas/Reaktionen/geteilte Typen) im „Geteilt"-Band.
@@ -2316,7 +2310,7 @@
     const comp=components(), all=graphNodes(), byC=new Map();
     all.forEach(n=>{const c=comp.get(n.id);if(!byC.has(c))byC.set(c,[]);byC.get(c).push(n);});
     const ids=new Set();
-    byC.forEach(nodes=>{const fach=nodes.filter(n=>n.kind!=="codenode"&&n.kind!=="llmnode"&&n.kind!=="client");   // ein Client hängt über seinen Vertrag, nicht über Kanten
+    byC.forEach(nodes=>{const fach=nodes.filter(n=>n.kind!=="codenode"&&n.kind!=="llmnode"&&n.kind!=="client"&&n.kind!=="host");   // ein Client hängt über seinen Vertrag, nicht über Kanten; Host-Karten sind Konfig
       if(fach.length<=ISLE_MAX && !fach.some(n=>n.kind==="aggregate"))fach.forEach(n=>ids.add(n.id));});
     return {comp,byC,ids};
   }
@@ -2547,6 +2541,11 @@
       BAUM.oben.filter(istClientDom).forEach(ns=>{const d=region(ns);d.rx=rechts+(regions.length?CLGAP:0);d.ry=cy;
         // Höhe aus der echten Karte (die Leiste ist höher als eine Rasterzeile).
         const hh=Math.max(d.h,...(proDom.get(ns)||[]).map(n=>sz(n).h+RK+2*RP+SPK));cy+=hh+KGAP;regions.push(d);});}
+    // 🖥 Host (Werkbank §8.1): ein Rahmen RECHTS neben den Clients, die Umgebungs-Karten in drei Spalten.
+    {const hk=all.filter(n=>n.kind==="host");if(hk.length){let rechts=0;regions.forEach(d=>rechts=Math.max(rechts,d.rx+d.w));
+      const SP=3,bw=Math.max(...hk.map(n=>sz(n).w)),hs=new Array(SP).fill(RP+RK+SPK),placed=[];
+      hk.forEach((n,i)=>{const c=i%SP;placed.push({n,rx:RP+c*(bw+COLGAP),ry:hs[c]});hs[c]+=sz(n).h+ROWGAP;});
+      regions.push({placed,leer:[],aktLeer:[],rx:rechts+(regions.length?520:0),ry:0,w:2*RP+SP*bw+(SP-1)*COLGAP,h:Math.max(...hs)+RP});}}
     regions.forEach(d=>{d.placed.forEach(p=>setze(p.n,d.rx+p.rx,d.ry+p.ry));
       d.leer.forEach(l=>{LAY["§leer:"+l.ns]={x:d.rx+l.rx,y:d.ry+l.ry};});
       d.aktLeer.forEach(l=>{LAY["§aktleer:"+l.ns+"|"+l.akt]={x:d.rx+l.rx,y:d.ry+l.ry};});});
@@ -2556,13 +2555,14 @@
   const istZu=()=>true;   // Karten sind immer kompakt — bearbeitet wird im Panel
   function nodeEditor(n){
     const zu=istZu(n);
-    const el=h("div",{class:"gnode2 n-"+n.kind+(zu?" collapsed":"")+(ISLE.has(n.id)?" island":"")
+    const el=h("div",{class:"gnode2 n-"+n.kind+(zu?" collapsed":"")+(ISLE.has(n.id)?" island":"")+(diagFuer(n.id).length?" diag":"")
       +(n.kind==="codenode"&&vorschlagFuer(n.ref._id)?" llmvor":"")+((n.own?n.own.ref:n.ref).ungeschrieben?" ungeschrieben":((m=>m.ausCode===false||(m.ausCode===undefined&&MERGE_KEYS[kollektionVon(n.own?n.own.kind:n.kind)]))(n.own?n.own.ref:n.ref)?" entwurf":""))});el.dataset.id=n.id;
     const pos=P(n);el.style.left=(pos.x||0)+"px";el.style.top=(pos.y||0)+"px";
     const title=NODELABEL[n.kind]||n.kind;
     const head=h("div",{class:"ghead"},
       h("span",{class:"gtitle"+(n.name?" hatname":""),title:title+(n.name?" · "+n.name:"")},h("span",{class:"gk"},title+(n.name?" · ":"")),h("span",{class:"gn"},n.name||"")),
-      h("span",{class:"gx",title:"Löschen",onclick:()=>delNode(n)},"✕"));
+      diagFuer(n.id).length?h("span",{class:"gdiag",title:diagFuer(n.id).map(d=>d.text).join("\n")},"⛔ "+diagFuer(n.id).length):null,
+      n.kind==="host"?null:h("span",{class:"gx",title:"Löschen",onclick:()=>delNode(n)},"✕"));
     head.onpointerdown=e=>{if(e.target.classList.contains("gx")||e.target.classList.contains("gcol"))return;startMove(e,el,P(n),()=>waehle(n.id));};
     el.append(head);
     el.append(kurzfassung(n));
@@ -2593,9 +2593,10 @@
     else if(n.kind==="handle")handleCard(body,n);
     else if(n.kind==="fn")fnCard(body,n);
     else if(n.kind==="flussknoten")flussKnotenCard(body,n);
+    else if(n.kind==="host")hostCard(body,n);
     else recordCard(body,n.ref);
   }
-  function delNode(n){const k=n.kind,ref=n.ref;
+  function delNode(n){const k=n.kind,ref=n.ref;if(k==="host")return;
     // Ein gelöschter Eingang (Command/Query) verschwindet auch aus den Befugnissen (IDarf) der Akteure.
     {const nm=MODEL.records.includes(ref)?ref.name:null;if(nm)MODEL.akteure.forEach(a=>{if((a.darf||[]).includes(nm))a.darf=ohneX(a.darf,nm);
       // … und aus den Verträgen: als Eingang fällt die ganze Zusage weg, als Ausgang nur der Ausgang.
@@ -3564,7 +3565,8 @@
       if(titel)sec.append(h("div",{class:"gi-st kc-"+m.kind},titel));
       const b=h("div",{class:"gbody"});INSP=true;try{fuelleKoerper(b,m);}finally{INSP=false;}sec.append(b);return sec;};
     // NUR der gewählte Knoten — Decider, Ablehnung, Code, LLM … sind eigene Knoten auf dem Graphen mit eigener Detail-Sicht.
-    p.append(h("div",{class:"gi-hint"},"⊕ anklicken → passende Knoten leuchten → anklicken = verbinden / lösen · Esc oder ⊕ nochmal = fertig"));
+    if(n.kind!=="host")p.append(h("div",{class:"gi-hint"},"⊕ anklicken → passende Knoten leuchten → anklicken = verbinden / lösen · Esc oder ⊕ nochmal = fertig"));
+    {const dg=diagFuer(n.id);if(dg.length)p.append(h("div",{class:"gi-diag"},...dg.map(d=>h("div",{class:"find "+(d.art==="warnung"?"warning":"error")},d.text))));}
     p.append(sektion(n,null));
     // Nachbarn zum Springen (Klick wählt den Nachbarn und zeigt DESSEN Detail-Sicht).
     const eigen=new Set([n.id]),rein=new Set(),raus=new Set();
@@ -3603,7 +3605,7 @@
     if(P.some(p=>p.ri==="kenntnis"))zeile("◀ hört",P.filter(p=>p.ri==="kenntnis").map(p=>name(p)));
     if(!P.length)box.append(h("div",{class:"lz lleer"},"— leerer Vertrag: im Panel ⊕ trägt / sendet / hört"));
     return box;}
-  function kurzfassung(n){if(n.kind==="client")return anschlussleiste(n);const r=n.ref,k=n.kind;let t="";
+  function kurzfassung(n){if(n.kind==="client")return anschlussleiste(n);if(n.kind==="host")return hostKurz(n);const r=n.ref,k=n.kind;let t="";
     if(k==="command"){const ev=MODEL.decider.filter(d=>d.command===r.name).flatMap(d=>(d.ergibt||[]).map(o=>o.event)).filter(e=>(recByName(e)||{}).kind!=="rejection");
       t=ev.length?"→ "+kurz(ev):"→ (kein Decider)";}
     else if(k==="event"){const c=MODEL.decider.filter(d=>(d.ergibt||[]).some(o=>o.event===r.name)).map(d=>d.command);t=c.length?"← "+kurz(c):"";}
@@ -3697,6 +3699,7 @@
     // Akteur-Karte: in der ERSTEN Domäne, in der er wirkt (dort steht sie in seinem Akteur-Rahmen; §12.5) — sonst wie gehabt.
     // Zusage: der Vertrag steht GESCHLOSSEN beim Akteur (ein Rahmen), die Kanten führen zu den Events hinüber.
     if(n.kind==="auf"){const x=domKey(NODEBY.get(n.own.id)||n.own);DOMKEY.set(n.id,x);return x;}
+    if(n.kind==="host"){DOMKEY.set(n.id,HOST_KEY);return HOST_KEY;}
     // Client: ein eigener Rahmen außerhalb der Domänen (rechts daneben gepackt).
     if(n.kind==="client"){const x=CL_PRE+n.ref.name;DOMKEY.set(n.id,x);return x;}
     // Pipeline (Fluss): ein eigener Rahmen außerhalb der Domänen (rechts daneben gepackt, innen nach Flusstiefe).
@@ -3708,7 +3711,7 @@
         .filter(Boolean).map(domKey))].sort(domOrd),ds=eig.length?eig:akteurDomaenen(n.ref.name);
       if(ds.length){DOMKEY.set(n.id,ds[0]);return ds[0];}}
     d=graphDom(n)||nsVon(n)||(VIEW.heim||{})[n.id]||OHNE_DOM;DOMKEY.set(n.id,d);return d;}
-  const domLabel=ns=>ns===OHNE_DOM?"⋯ ohne Domäne":istClientDom(ns)?"🔌 "+clientAnzeige({name:ns.slice(CL_PRE.length)}):istFlussDom(ns)?"⛓ "+((flussVonDom(ns)||{}).name||"Pipeline"):letztesSeg(ns);
+  const domLabel=ns=>ns===OHNE_DOM?"⋯ ohne Domäne":istHostDom(ns)?"🖥 Host · "+(WB.zustand&&WB.zustand.aktiv||"Umgebung"):istClientDom(ns)?"🔌 "+clientAnzeige({name:ns.slice(CL_PRE.length)}):istFlussDom(ns)?"⛓ "+((flussVonDom(ns)||{}).name||"Pipeline"):letztesSeg(ns);
   // Block (Aggregat bzw. Brücke) eines Knotens: aus dem Graphen; ein über eine Spalte angelegter, noch unverdrahteter Knoten
   //   behält bis zur Verdrahtung den Block dieser Spalte (VIEW.heimBlk) — statt im Inselkasten zu landen.
   const blockVon=n=>subGroupOf(n)||(VIEW.heimBlk||{})[n.id]||SHARED_KEY;
@@ -3748,7 +3751,7 @@
     // Akteur-Rahmen (Domäne × Akteur, §12): nur in Domänen mit Akteuren; sonst null (ein Block-Layout wie bisher).
     const aktVon=n=>akteurOrdnung(domKey(n)).length?akteurVon(n):null;
     GEO.forEach((g,id)=>{const n=NODEBY.get(id);if(!n)return;const d=domKey(n);
-      if(n.kind==="client"||istFlussDom(d))return;   // Client = Anschlussleiste; Pipeline-Knoten + ihre Karten liegen im Pipeline-Rahmen, nicht in Spalten
+      if(n.kind==="client"||istFlussDom(d)||istHostDom(d))return;   // Client = Anschlussleiste; Pipeline-Knoten + ihre Karten liegen im Pipeline-Rahmen, nicht in Spalten
       if(istInselLage(n)){nimm(sp(d+"|§insel",{dom:d,blk:null,role:"insel",akt:null}),id,g,n.kind);return;}
       if(n.kind==="codenode"||n.kind==="llmnode"){codes.push([n,g,id]);return;}
       const blk=blockVon(n),role=rolle(n,rollenVon(blk)),akt=aktVon(n);
@@ -3786,6 +3789,7 @@
     rahmen.sort((a,b)=>a.tiefe-b.tiefe).forEach(r=>{FRGEO.set(r.ns+"|",r);
       if(istClientDom(r.ns)){ebene.append(clientRahmen(r));aus.x2=Math.max(aus.x2,r.x2);aus.y2=Math.max(aus.y2,r.y2);return;}
       if(istFlussDom(r.ns)){ebene.append(flussRahmen(r));aus.x2=Math.max(aus.x2,r.x2);aus.y2=Math.max(aus.y2,r.y2);return;}
+      if(istHostDom(r.ns)){ebene.append(hostRahmen(r));aus.x2=Math.max(aus.x2,r.x2);aus.y2=Math.max(aus.y2,r.y2);return;}
       const hue=domHue(r.ns===OHNE_DOM?SHARED_KEY:r.ns);
       const fr=h("div",{class:"grahmen"+(r.tiefe?" unter":"")+(akteurOrdnung(r.ns).length?" mitakt":"")});fr.dataset.ns=r.ns;
       Object.assign(fr.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});fr.style.setProperty("--dc","hsl("+hue+" 45% 55%)");
@@ -4349,12 +4353,6 @@
       schreibBericht(b,false);
       if(neu||erg)await deReload();   // Code → Board: Geschriebenes wird Code-Stand (nicht mehr „ungeschrieben")
     }catch(e){badge(false);deFlash("⚠ SimHost offline — nicht geschrieben (dotnet run --project SimHost)",false);}};
-  window.deValidate=async function(){const out=document.getElementById("de-out");
-    try{const r=await post("/api/editor/validate");const fs=(await r.json()).concat(MODEL.diagnosen||[]);badge(true);
-      if(!fs.length){out.innerHTML='<div class="find" style="background:#1f3a2a;color:#9be3bf">✓ Keine Befunde — die Form ist stimmig.</div>';return;}
-      out.innerHTML="";fs.forEach(f=>out.append(h("div",{class:"find "+f.schweregrad},"["+f.code+"] "+f.meldung)));
-    }catch(e){badge(false);out.innerHTML='<div class="find error">SimHost nicht erreichbar. Starte ihn: <b>dotnet run --project SimHost</b>.</div>';}};
-
   // Ausgabe-Panel: sobald Prüfen/Kompilieren/Testen hineinschreiben, einblenden (mit ✕ zum Schließen).
   (function(){const out=document.getElementById("de-out");if(!out||!window.MutationObserver)return;
     new MutationObserver(()=>{if(out.querySelector(".outzu"))return;out.classList.add("zeigen");
@@ -4627,4 +4625,219 @@
   // Nach jedem Board-Render: Overlay neu anbringen; Formular nur neu bauen, wenn sich die Commands geändert haben.
   window.simNachRender=function(){if(!SIM.an)return;simOverlay();
     const sig=simCommands().map(c=>c.name+":"+(c.felder||[]).map(f=>f.name+"/"+f.typ).join(",")).join("|");if(sig!==SIM.cmdSig)simForm();};
+  // ══ WERKBANK (docs/konzept-werkbank.md §5 + §8.1, Plan P3.6) ═════════════════════════════════════════════════════════════
+  //   Kopfzeile: Umgebung ▾ · Build (Stand) · Lauf · Postgres/Redis/Consul · ⟳ · 📸. Der 🖥 Host-Rahmen zeigt die Abschnitte der
+  //   gewählten Umgebung als Karten; ihr Panel zeichnet EIN generischer Formular-Renderer aus dem Schema (/api/werkbank/schema) —
+  //   keine handgebauten Formulare je Karte. Befunde des letzten ⟳ (Compiler/Analyzer mit Typ + Member) und Boot-Fehler (mit Karte)
+  //   stehen an der Karte, die sie betreffen. Alle Daten kommen fertig vom Server (Frontend-Bauregel P3): das JS kennt kein
+  //   Umgebungs-Modell, nur das Schema und die Datei, wie sie ist.
+  const WB={zustand:null,schema:null,umg:null,umgName:null,dirty:false,uhr:null,diag:[],boot:[],letzter:null,refs:{},ver:0,es:null};
+  const HOST_ORDNUNG=["Umgebung","EventStore","VersionIndex","Cluster","Schreibpfad","Transport","Identitaeten","Quellen","Funktionen","Konfig"];
+  const HOST_SYM={Umgebung:"🏷",EventStore:"🗄",VersionIndex:"⚡",Cluster:"🕸",Schreibpfad:"✍",Transport:"🔗",Identitaeten:"🪪",Quellen:"📁",Funktionen:"ƒ",Konfig:"⚙",Uhr:"🕰"};
+  function hostKnoten(){if(!WB.schema)return [];
+    const ab=[...HOST_ORDNUNG.filter(k=>WB.schema[k]),...Object.keys(WB.schema).filter(k=>!HOST_ORDNUNG.includes(k)),"Uhr"];
+    return ab.map(k=>({id:"host:"+k,name:(HOST_SYM[k]||"")+" "+k,kind:"host",ref:WB.refs[k]||(WB.refs[k]={abschnitt:k})}));}
+  const wbJson=async(url,opt)=>{const r=await fetch(url,opt);if(!r.ok)throw new Error("HTTP "+r.status);return r.json();};
+  const kurzWert=v=>v==null?"—":Array.isArray(v)?v.join(", "):typeof v==="object"?Object.keys(v).length+" Einträge":String(v);
+
+  // ── Karte + Rahmen ──
+  function hostKurz(n){const k=n.ref.abschnitt,box=h("div",{class:"gsum",onclick:()=>waehle(n.id)});
+    if(k==="Uhr"){box.append(WB.zustand&&WB.zustand.art!=="Sim"?"Prod: Versatz gesperrt (0)":WB.uhr&&WB.uhr.versatz?"Versatz "+WB.uhr.versatz:"Versatz 0 (DB noch nicht angelegt)");return box;}
+    const v=(WB.umg||{})[k],sch=(WB.schema||{})[k]||{};
+    if(v==null){box.append(h("span",{class:"gp-mark"},"Standardwerte"));return box;}
+    if(sch.art==="je"||sch.art==="frei"){const ks=Object.keys(v);box.append(ks.length?ks.join(", "):"—");return box;}
+    Object.entries(v).slice(0,3).forEach(([a,b],i)=>{if(i)box.append(" · ");box.append(h("b",{},a),": "+kurzWert(b));});
+    return box;}
+  function hostRahmen(r){const z=WB.zustand||{},fr=h("div",{class:"grahmen host"});fr.dataset.ns=r.ns;
+    Object.assign(fr.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});
+    fr.style.setProperty("--dc","hsl(200 35% 62%)");
+    const k=h("div",{class:"grahmen-k",title:"umgebungen/umgebung."+(z.aktiv||"?")+".json — bearbeitet wird im Panel, wirksam nach ⟳"},
+      h("span",{class:"gr-t"},domLabel(r.ns)),
+      h("span",{class:"gr-p"},[z.art,z.datenbank&&"DB "+z.datenbank,z.cluster&&"Cluster "+z.cluster,z.ports&&"gRPC :"+z.ports.grpc+(z.ports.einblick?" · Einblick :"+z.ports.einblick:"")].filter(Boolean).join(" · ")),
+      h("button",{title:"Host-Rahmen einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"));
+    k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};fr.append(k);return fr;}
+
+  // ── Panel: EIN generischer Formular-Renderer (Schema-Knoten → Steuerelement) ──
+  //   art klasse → Felder; art je → je Schlüssel eine Klasse (+ anlegen/entfernen); art frei → JSON; typ enum/bool/zahl/dauer/string/liste/map.
+  //   Ein leeres Feld heißt „Standard" (der Schlüssel fällt aus der Datei); Platzhalter zeigen den Standardwert.
+  function wbFeld(sch,wert,setze){if(!sch)return null;
+    if(sch.art==="klasse")return wbKlasse(sch,wert||{},setze);
+    if(sch.art==="je")return wbJe(sch,wert||{},setze);
+    if(sch.art==="frei")return wbFrei(sch,wert,setze);
+    const t=sch.typ,ph=sch.standard!=null?String(sch.standard):"";
+    if(t==="enum"||t==="bool"){const werte=t==="bool"?["true","false"]:sch.werte||[];
+      const sel=h("select",{onchange:e=>{const v=e.target.value;setze(v===""?undefined:t==="bool"?v==="true":v);}},
+        h("option",{value:""},"— Standard"+(ph?" ("+ph+")":"")+" —"),...werte.map(w=>h("option",{value:w},w)));
+      sel.value=wert==null?"":String(wert);return sel;}
+    if(t==="zahl")return h("input",{type:"number",value:wert??"",placeholder:ph,oninput:e=>setze(e.target.value===""?undefined:Number(e.target.value))});
+    if(t==="liste")return h("input",{value:Array.isArray(wert)?wert.join(", "):wert??"",placeholder:ph||"kommagetrennt",
+      oninput:e=>{const v=e.target.value.trim();setze(v?v.split(",").map(x=>x.trim()).filter(Boolean):undefined);}});
+    if(t==="map")return wbMap(wert||{},setze);
+    return h("input",{value:wert??"",placeholder:ph||(t==="dauer"?"hh:mm:ss":""),title:t==="dauer"?"Dauer (hh:mm:ss)":"",oninput:e=>setze(e.target.value===""?undefined:e.target.value)});}
+  function wbKlasse(sch,obj,setze){const box=h("div",{class:"wb-klasse"});
+    Object.entries(sch.felder||{}).forEach(([k,f])=>{
+      const sub=v=>{const neu={...obj};if(v===undefined)delete neu[k];else neu[k]=v;obj=neu;setze(Object.keys(neu).length?neu:undefined);};
+      if(f.art==="klasse")box.append(h("div",{class:"wb-sub"},h("div",{class:"wb-st"},k),wbKlasse(f,obj[k]||{},sub)));
+      else box.append(h("div",{class:"frow"},h("span",{class:"slotlbl",title:f.hilfe||k},k),wbFeld(f,obj[k],sub)));});
+    return box;}
+  function wbJe(sch,obj,setze){const box=h("div",{class:"wb-je"});
+    const neu=v=>{obj=v;setze(Object.keys(v).length?v:undefined);};
+    Object.keys(obj).forEach(name=>{
+      const zeile=h("details",{class:"wb-eintrag",open:""},h("summary",{},name,
+        h("button",{class:"rm",title:sch.schluessel+" "+name+" entfernen",onclick:e=>{e.preventDefault();const x={...obj};delete x[name];neu(x);zeigeInspector();}},"✕")),
+        wbKlasse(sch.wert,obj[name]||{},v=>{neu({...obj,[name]:v||{}});}));
+      box.append(zeile);});
+    const ein=h("input",{placeholder:(sch.schluessel||"Name")+" …"});
+    box.append(h("div",{class:"frow"},ein,h("button",{class:"act",onclick:()=>{const n=ein.value.trim();if(!n||obj[n])return;neu({...obj,[n]:{}});zeigeInspector();}},"＋ "+(sch.schluessel||"Eintrag"))));
+    return box;}
+  function wbMap(obj,setze){const box=h("div",{class:"wb-je"});
+    const neu=v=>{obj=v;setze(Object.keys(v).length?v:undefined);};
+    Object.entries(obj).forEach(([k,v])=>box.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},k),
+      h("input",{value:v??"",oninput:e=>neu({...obj,[k]:e.target.value})}),
+      h("button",{class:"rm",onclick:()=>{const x={...obj};delete x[k];neu(x);zeigeInspector();}},"✕"))));
+    const ein=h("input",{placeholder:"Schlüssel …"});
+    box.append(h("div",{class:"frow"},ein,h("button",{class:"act",onclick:()=>{const n=ein.value.trim();if(!n||n in obj)return;neu({...obj,[n]:""});zeigeInspector();}},"＋")));
+    return box;}
+  function wbFrei(sch,wert,setze){const t=h("textarea",{class:"code",rows:8,title:sch.hilfe||""}),f=h("div",{class:"gm-fehler"});
+    t.value=wert==null?"{}":JSON.stringify(wert,null,2);
+    t.oninput=()=>{try{const v=JSON.parse(t.value||"{}");f.textContent="";setze(Object.keys(v).length?v:undefined);}catch(e){f.textContent="kein gültiges JSON: "+e.message;}};
+    return h("div",{},sch.hilfe?h("div",{class:"gi-hint"},sch.hilfe):null,t,f);}
+  function hostCard(body,n){if(!INSP)return;const k=n.ref.abschnitt,z=WB.zustand||{};
+    if(k==="Uhr"){wbUhrPanel(body,z);return;}
+    const sch=(WB.schema||{})[k];if(!sch||!WB.umg){body.append(h("div",{class:"gi-hint"},"Umgebung nicht geladen."));return;}
+    const knopf=h("button",{class:"act go",onclick:wbSpeichern},"💾 In umgebung."+WB.umgName+".json schreiben");knopf.disabled=!WB.dirty;
+    body.append(h("div",{class:"gi-hint"},"Werte von „"+WB.umgName+"“ ("+(z.art||"?")+") — leer = Standard; ${branch} und ${env:NAME} werden beim Start ersetzt. Wirksam nach ⟳."),
+      wbFeld(sch,WB.umg[k],v=>{const neu={...WB.umg};if(v===undefined)delete neu[k];else neu[k]=v;WB.umg=neu;WB.dirty=true;knopf.disabled=false;}),
+      h("div",{class:"frow"},knopf,h("button",{class:"act",title:"Änderungen verwerfen",onclick:async()=>{await wbLadeUmgebung();render();}},"↺")));}
+  function wbUhrPanel(body,z){const sim=z.art==="Sim",ist=WB.uhr&&WB.uhr.versatz;
+    body.append(h("div",{class:"gi-hint"},sim?"Die Uhr der Sim-DB: IDbClock = now() + Versatz (Fristen, Zeitlimits, Warten). Wirkt sofort, ohne Neustart.":"In "+(z.art||"Prod")+" ist der Versatz gesperrt (0)."));
+    body.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"Versatz"),h("b",{},ist||"0 (DB noch nicht angelegt)")));
+    if(!sim)return;
+    const ein=h("input",{value:ist||"00:00:00",placeholder:"d.hh:mm:ss"});
+    const setze=async v=>{const r=await wbJson("/api/werkbank/uhr?versatz="+encodeURIComponent(v),{method:"POST"});if(!r.ok)deFlash("⚠ "+r.fehler,false);await wbLadeUhr();render();};
+    body.append(h("div",{class:"frow"},ein,h("button",{class:"act",onclick:()=>setze(ein.value.trim())},"Setzen")),
+      h("div",{class:"frow"},...[["+1 h","01:00:00"],["+1 Tag","1.00:00:00"],["+7 Tage","7.00:00:00"],["0","00:00:00"]].map(([t,v])=>
+        h("button",{class:"act",onclick:()=>setze(v)},t))));}
+  async function wbSpeichern(){try{await wbJson("/api/werkbank/umgebung/"+encodeURIComponent(WB.umgName),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(WB.umg)});
+      WB.dirty=false;deFlash("💾 umgebung."+WB.umgName+".json geschrieben — wirksam nach ⟳",true);await wbZustand();render();}
+    catch(e){deFlash("⚠ nicht geschrieben: "+e.message,false);}}
+
+  // ── Befunde an der Karte: Compiler/Analyzer (Typ + Member aus dem Syntaxbaum) und Boot-Fehler (Karte im Wirker-Format) ──
+  function wbZiel(d){
+    if(d.karte){const i=d.karte.indexOf(":"),art=d.karte.slice(0,i),name=d.karte.slice(i+1);
+      if(art==="host")return "host:"+name;
+      if(art==="funktion"){const f=MODEL.funktionen.find(x=>x.name===name);return f?"fk:"+f._id:null;}
+      if(art==="quelle")return recByName(name)?"rec:"+name:null;
+      return null;}
+    const t=d.typ;if(!t)return null;const m=d.member||"",arg=((m.match(/\(([^)]*)\)/)||[])[1]||"").split(",")[0].trim().split(".").pop();
+    if(MODEL.aggregate.some(a=>a.name===t)){
+      if(m.startsWith("Decide(")){const x=MODEL.decider.find(z=>z.aggregat===t&&z.command===arg);if(x)return "dec:"+x._id;}
+      if(m.startsWith("Apply(")){const x=MODEL.applier.find(z=>z.aggregat===t&&z.event===arg);if(x)return "app:"+x._id;}
+      return "agg:"+t;}
+    const f=MODEL.funktionen.find(x=>x.name===t||x.implementierung===t);if(f)return "fk:"+f._id;
+    if(recByName(t))return "rec:"+t;
+    const n=graphNodes().find(x=>x.kind!=="host"&&(x.name===t||(x.ref&&x.ref.name===t)));return n?n.id:null;}
+  let DIAGC=null;
+  function wbDiagListe(){if(DIAGC&&DIAGC.m===MODEL&&DIAGC.v===WB.ver)return DIAGC.l;
+    const l=[...WB.diag.map(d=>({ziel:wbZiel(d),text:"["+d.code+"] "+d.text+" — "+d.datei+":"+d.zeile,art:d.schwere==="warning"?"warnung":"fehler",d})),
+             ...WB.boot.map(b=>({ziel:wbZiel(b),text:"Boot: "+b.text,art:"fehler",d:b}))];
+    DIAGC={m:MODEL,v:WB.ver,l};return l;}
+  function diagFuer(id){if(!WB.diag.length&&!WB.boot.length)return [];
+    return wbDiagListe().filter(x=>x.ziel&&(x.ziel===id||vertreterId(x.ziel)===id));}
+
+  // ── Kopfzeile ──
+  function wbChip(text,art,title,onclick){return h("span",{class:"wb-chip "+(art||""),title:title||"",onclick:onclick||null,style:onclick?"cursor:pointer":""},text);}
+  function wbKopf(){const k=document.getElementById("wb-kopf");if(!k)return;const z=WB.zustand;k.textContent="";
+    if(!z){k.append(wbChip("Werkbank nicht erreichbar","rot"));return;}
+    const sel=h("select",{class:"wb-umg",title:"Umgebung — wählt Ports, DB und Cluster; der 🖥 Host-Rahmen zeigt ihre Werte",onchange:e=>wbAktiv(e.target.value)},
+      ...z.umgebungen.map(n=>h("option",{value:n},n)));sel.value=z.aktiv;
+    k.append(h("span",{class:"wb-l"},"Umgebung"),sel);
+    const b=z.build;let bt,ba;
+    if(!b){bt="○ nicht gebaut";ba="grau";}else if(b.ok){bt="● Build grün ("+b.stand+")";ba="gut";}else{bt="● Build rot · "+b.fehler+" Fehler";ba="rot";}
+    if(b&&b.stand!==z.stand){bt+=" · Entwurf ≠ Build";if(ba==="gut")ba="gelb";}
+    k.append(wbChip(bt,ba,"Stand des Codes: "+z.stand+(b?" · letzter ⟳: "+new Date(b.zeit).toLocaleTimeString():"")+" — Klick: Meldungen",wbMeldungen));
+    const host=z.host||{};let lt,la;
+    if(host.laeuft){lt="● Läuft · "+(z.cluster||"");la="gut";
+      if(z.laufStand&&z.laufStand!==z.stand){lt+=" · Entwurf ≠ Lauf";la="gelb";}
+      if(z.umgebungGeaendert){lt+=" · Konfig geändert";la="gelb";}}
+    // Exit 0 bzw. 143 (SIGTERM) = angehalten; alles andere ist ein Absturz bzw. ein Boot-Fehler.
+    else if(host.exitCode!=null&&host.exitCode!==0&&host.exitCode!==143){lt="● beendet (Exit "+host.exitCode+")"+((host.boot||[]).length?" · "+host.boot.length+" Boot-Fehler":"");la="rot";}
+    else{lt=z.art==="Sim"?"○ Host steht":"○ "+(z.art||"")+" — läuft über das Deployment";la="grau";}
+    k.append(wbChip(lt,la,host.laeuft?"PID "+host.pid+" seit "+new Date(host.seit).toLocaleTimeString()+" — Klick: Log":"Klick: Log",wbLog));
+    (z.infra||[]).forEach(d=>k.append(wbChip(d.name+" "+(d.erreichbar?"●":"○"),d.erreichbar?"gut":d.betrieb==="Verwaltet"?"grau":"rot",
+      d.host+":"+d.port+" · "+d.betrieb+(d.erreichbar?"":d.betrieb==="Verwaltet"?" — ⟳ startet ihn (Docker)":" — nicht erreichbar"))));
+    const lauf=!!z.laeuft;
+    // (disabled als Eigenschaft — h() setzt Attribute, und schon disabled="false" sperrt einen Knopf)
+    const run=h("button",{class:"act go wb-run",title:"⟳ bauen → Python-Basen → neu lesen → Daten prüfen → Infrastruktur → Host ersetzen",onclick:()=>wbKreislauf(false)},lauf?"⟳ "+z.laeuft+" …":"⟳");
+    const foto=h("button",{class:"act",title:"Sim-DB: Stand speichern / laden / zurücksetzen / Prod-Stand übernehmen",onclick:e=>wbStandMenue(e.clientX,e.clientY+14)},"📸");
+    run.disabled=lauf;foto.disabled=lauf||z.art!=="Sim";k.append(run,foto);}
+  async function wbZustand(){try{WB.zustand=await wbJson("/api/werkbank/zustand");}catch(e){WB.zustand=null;}wbKopf();}
+  async function wbLadeUmgebung(){const n=WB.zustand&&WB.zustand.aktiv;if(!n)return;
+    try{WB.umg=await wbJson("/api/werkbank/umgebung/"+encodeURIComponent(n));WB.umgName=n;WB.dirty=false;}catch(e){WB.umg=null;}}
+  async function wbLadeUhr(){try{WB.uhr=await wbJson("/api/werkbank/uhr");}catch(e){WB.uhr=null;}}
+  async function wbLadeDiagnosen(){try{const d=await wbJson("/api/werkbank/diagnosen");WB.diag=d.diagnosen||[];WB.boot=d.boot||[];WB.ver++;}catch(e){}}
+  async function wbAktiv(name){if(WB.dirty&&!confirm("Ungespeicherte Änderungen an umgebung."+WB.umgName+".json verwerfen?")){wbKopf();return;}
+    try{WB.zustand=await wbJson("/api/werkbank/aktiv/"+encodeURIComponent(name),{method:"POST"});}catch(e){}
+    await Promise.all([wbLadeUmgebung(),wbLadeUhr()]);wbKopf();render();}
+
+  // ── ⟳ der Kreislauf ──
+  function wbOut(leeren){const out=document.getElementById("de-out");if(out&&leeren)out.innerHTML="";return out;}
+  function wbZeile(out,text,art,klick){const z=h("div",{class:"find"+(art==="rot"?" error":art==="gelb"?" warning":""),style:(art==="gut"?"background:#1f3a2a;color:#9be3bf;":"")+(klick?"cursor:pointer":"")},text);
+    if(klick)z.onclick=klick;out.append(z);return z;}
+  function wbBericht(r){const out=wbOut(true);if(!out)return;
+    wbZeile(out,(r.ok?"✓ ⟳ fertig":"✗ ⟳ angehalten")+" · Stand "+r.stand+" · "+new Date(r.zeit).toLocaleTimeString(),r.ok?"gut":"rot");
+    (r.schritte||[]).forEach(s=>wbZeile(out,(s.ok?"✓ ":"✗ ")+s.name+(s.dauerMs?" ("+(s.dauerMs/1000).toFixed(1)+" s)":"")+(s.meldungen&&s.meldungen.length?" — "+s.meldungen.slice(0,4).join(" · "):""),s.ok?"":"rot"));
+    wbDiagListe().forEach(x=>{const n=x.ziel&&NODEBY.get(vertreterId(x.ziel));
+      wbZeile(out,(n?"→ "+(NODELABEL[n.kind]||n.kind)+" "+n.name+": ":"")+x.text,x.art==="warnung"?"gelb":"rot",n?()=>zeigeLadend(n.id):null);});}
+  window.wbKreislauf=async function(zuruecksetzen){const out=wbOut(true);
+    if(out)wbZeile(out,"⟳ bauen → Python-Basen → neu lesen → Daten prüfen → Infrastruktur → Host ersetzen …");
+    let r;try{r=await wbJson("/api/werkbank/kreislauf"+(zuruecksetzen?"?zuruecksetzen=true":""),{method:"POST"});}
+    catch(e){if(out)wbZeile(out,"⚠ Werkbank nicht erreichbar: "+e.message,"rot");return;}
+    if(r.fehler){if(out)wbZeile(out,"✗ "+r.fehler,"rot");await wbZustand();return;}
+    WB.letzter=r;WB.diag=r.diagnosen||[];WB.boot=r.boot||[];WB.ver++;
+    if((r.schritte||[]).some(s=>s.name==="Neu lesen"&&s.ok))await deReload({ohneExtract:true});else render();
+    wbBericht(r);await Promise.all([wbZustand(),wbLadeUhr()]);
+    if(r.rueckfrage&&r.rueckfrage.length){const b=document.querySelector("#wb-kopf .wb-run"),rc=b?b.getBoundingClientRect():{left:200,bottom:60};
+      menue(rc.left,rc.bottom+6,"Die Events der Sim-DB passen nicht mehr zum Code",[
+        ...r.rueckfrage.slice(0,6).map(t=>({kopf:"• "+t})),
+        {t:"↺ Sim-DB zurücksetzen und weiter",gefahr:true,title:"Schema-Evolution ist kein Ziel (§1): die Sim-DB wird geleert, gespeicherte Stände mit altem Stand werden ungültig",fn:()=>wbKreislauf(true)},
+        {t:"Abbrechen",fn:()=>{}}]);}};
+  function wbMeldungen(){if(WB.letzter)wbBericht(WB.letzter);else{const out=wbOut(true);if(out)wbZeile(out,"Noch kein ⟳ in dieser Sitzung.");}}
+  async function wbLog(){const out=wbOut(true);if(!out)return;let l=[];try{l=await wbJson("/api/werkbank/host/log?max=200");}catch(e){}
+    WB.boot.forEach(b=>wbZeile(out,"Boot: "+b.text+(b.karte?" ("+b.karte+")":""),"rot",()=>{const id=wbZiel(b);if(id)zeigeLadend(vertreterId(id));}));
+    out.append(h("pre",{class:"wb-log"},l.length?l.join("\n"):"(kein Log — der Host lief in dieser Sitzung nicht)"));}
+
+  // ── 📸 Sim-DB ──
+  async function wbStandMenue(cx,cy){const z=WB.zustand;if(!z)return;let st=[];
+    try{st=await wbJson("/api/werkbank/simdb/staende");}catch(e){}if(!Array.isArray(st))st=[];
+    const sicher=(text,fn)=>()=>menue(cx,cy,text,[{t:"Ja, ausführen",gefahr:true,fn},{t:"Abbrechen",fn:()=>{}}]);
+    menue(cx,cy,"📸 Sim-DB "+(z.datenbank||""),[
+      {t:"📸 Stand speichern …",title:"CREATE DATABASE … TEMPLATE — der Host hält kurz an",fn:()=>frage(cx,cy,"📸 Stand speichern",
+        "stand_"+new Date().toISOString().slice(5,16).replace(/[-T:]/g,""),"Name — Buchstaben, Ziffern, _",name=>{if(!name)return "Name fehlt";if(!/^[A-Za-z0-9_]+$/.test(name))return "Nur Buchstaben, Ziffern, _";wbSimDb("speichern",name);})},
+      st.length?{kopf:"Stand laden"}:null,
+      ...st.map(s=>({t:(s.gueltig?"⤓ ":"⚠ ")+s.name,aus:!s.gueltig,title:s.gueltig?"Sim-DB aus diesem Stand neu anlegen (Host hält kurz an)":"Passt nicht zum Code: "+s.gruende.join("; "),fn:()=>wbSimDb("laden",s.name)})),
+      st.length?{kopf:"Stand löschen"}:null,
+      ...st.map(s=>({t:"🗑 "+s.name,gefahr:true,fn:sicher("Stand „"+s.name+"“ löschen?",()=>wbSimDb("loeschen",s.name))})),
+      {trenn:true},
+      {t:"↺ Sim-DB zurücksetzen",gefahr:true,fn:sicher("Sim-DB "+z.datenbank+" leeren? (Der Host legt sie beim Start neu an.)",()=>wbSimDb("zuruecksetzen"))},
+      {t:"⇩ Prod-Stand übernehmen",gefahr:true,title:"pg_dump der Prod-DB → Sim-DB (Siegel neu auf Sim, Uhr 0); die Prod-DB wird nur gelesen",
+        fn:sicher("Sim-DB durch einen Abzug der Prod-DB ersetzen?",()=>wbSimDb("prod"))}]);}
+  async function wbSimDb(aktion,stand){const out=wbOut(true);if(out)wbZeile(out,"📸 "+aktion+(stand?" „"+stand+"“":"")+" …");
+    const t0=performance.now();let r;
+    try{r=await wbJson("/api/werkbank/simdb/"+aktion+(stand?"?stand="+encodeURIComponent(stand):""),{method:"POST"});}catch(e){r={ok:false,fehler:e.message};}
+    if(out){wbZeile(out,(r.ok?"✓ ":"✗ ")+aktion+(stand?" „"+stand+"“":"")+" · "+((performance.now()-t0)/1000).toFixed(1)+" s"+(r.fehler?" — "+r.fehler:"")+(r.host?" · Host "+r.host:""),r.ok?"gut":"rot");
+      (r.meldungen||[]).forEach(m=>wbZeile(out,m));(r.boot||[]).forEach(b=>wbZeile(out,"Boot: "+b.text,"rot"));}
+    await Promise.all([wbZustand(),wbLadeUhr(),wbLadeDiagnosen()]);render();}
+
+  // ── Start: Schema, Zustand, Umgebung, Uhr, Befunde; Fortschritt per SSE, Lauf-Status alle 5 s ──
+  async function wbStart(){try{WB.schema=await wbJson("/api/werkbank/schema");}catch(e){WB.schema=null;}
+    await wbZustand();await Promise.all([wbLadeUmgebung(),wbLadeUhr(),wbLadeDiagnosen()]);render();
+    if(window.EventSource&&!WB.es){WB.es=new EventSource("/api/werkbank/ereignisse");let t=null;
+      WB.es.onmessage=e=>{let m;try{m=JSON.parse(e.data);}catch(_){return;}
+        if(m.art==="schritt"){const out=wbOut(false),s=m.daten;if(out)wbZeile(out,(s.ok?"✓ ":"✗ ")+s.name+(s.dauerMs?" ("+(s.dauerMs/1000).toFixed(1)+" s)":""),s.ok?"":"rot");}
+        if(m.art==="umgebung"&&m.daten&&m.daten.name===WB.umgName&&!WB.dirty)wbLadeUmgebung().then(render);
+        clearTimeout(t);t=setTimeout(wbZustand,150);};}
+    setInterval(()=>{if(!document.hidden)wbZustand();},5000);}
+  {const boot=window.deBoot;window.deBoot=async function(){await boot();wbStart();};}
+
 })();

@@ -3,6 +3,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using Microsoft.CodeAnalysis;
+using Domain.SourceGeneration;
 
 namespace Projections.SourceGeneration
 {
@@ -162,9 +163,19 @@ namespace Projections.SourceGeneration
                 sb.AppendLine($"        services.AddSingleton<{projectionQueryService.ToDisplayString(full)}>();");
             }
 
+            // Stand der Leseseite (Plan E9): Code-Hash je Store-Klasse (normalisierte Syntax aller Teile) und die Read-Model-Typen —
+            // daraus entscheidet der Host einer Sim-Umgebung beim Start, ob die Projektionen neu aufgebaut werden.
+            sb.AppendLine();
+            foreach (var store in stores)
+                sb.AppendLine($"        services.AddSingleton(new global::Abstractions.StoreStand(typeof({store.ToDisplayString(full)}), \"{Kodeform.Hash(store)}\"));");
+            foreach (var rm in readModels)
+                sb.AppendLine($"        services.AddSingleton(new global::Abstractions.ReadModelTyp(typeof({rm.ToDisplayString(full)})));");
+
             sb.AppendLine();
             sb.AppendLine("        return services;");
             sb.AppendLine("    }");
+            sb.AppendLine();
+
             sb.AppendLine("}");
 
             context.AddSource("GeneratedProjectionServices.g.cs", sb.ToString());

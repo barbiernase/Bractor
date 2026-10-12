@@ -107,7 +107,8 @@ public class SubscriberDispatchGenerator : IIncrementalGenerator
             subscriberNamespace: classSymbol.ContainingNamespace.ToDisplayString(),
             subscriberName: classSymbol.Name,
             handlers: handlers,
-            eventNamespaces: allEventNamespaces.ToList()
+            eventNamespaces: allEventNamespaces.ToList(),
+            codeHash: Kodeform.Hash(classSymbol)
         );
     }
 
@@ -194,6 +195,9 @@ public class SubscriberDispatchGenerator : IIncrementalGenerator
         sb.AppendLine();
         sb.AppendLine($"public partial class {model.SubscriberName}");
         sb.AppendLine("{");
+        sb.AppendLine("    /// <summary>Code-Hash dieser Klasse: ändert er sich (oder der Store), baut eine Sim-Umgebung die Projektion beim Start neu auf.</summary>");
+        sb.AppendLine($"    public const string CodeHash = \"{model.CodeHash}\";");
+        sb.AppendLine();
 
         // ── SubscribedTypes ──
         sb.AppendLine("    /// <summary>");
@@ -337,13 +341,17 @@ internal class SubscriberGeneratorModel
     public string SubscriberName { get; }
     public List<HandlerInfo> Handlers { get; }
     public List<string> EventNamespaces { get; }
+    /// <summary>Code-Hash der Projektions-Klasse (alle Teile) — Teil des Projektions-Stands (Plan E9).</summary>
+    public string CodeHash { get; }
 
     public SubscriberGeneratorModel(
         string subscriberNamespace,
         string subscriberName,
         List<HandlerInfo> handlers,
-        List<string> eventNamespaces)
+        List<string> eventNamespaces,
+        string codeHash)
     {
+        CodeHash = codeHash;
         SubscriberNamespace = subscriberNamespace;
         SubscriberName = subscriberName;
         Handlers = handlers;

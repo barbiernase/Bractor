@@ -249,6 +249,8 @@ app.MapGet("/api/llm/protokoll", (string? id, int? max) => Results.Json(konsole.
 // ── WERKBANK (docs/konzept-werkbank.md §5, P3): ⟳ = bauen → Python-Basen → neu lesen → Daten prüfen → Infrastruktur → Host ersetzen.
 //    Die Umgebung (Kopfzeile „Umgebung ▾") wählt Ports, DB und Cluster; der Host-Rahmen bearbeitet ihre Datei (generisches Formular).
 var werkbank = new SimHost.Werkbank.Werkbank(slnRoot);
+// Der Laufzeit-Host ist ein Kind der Werkbank: endet SimHost, endet er mit (sonst hielte ein verwaister Host Ports und Sim-DB).
+app.Lifetime.ApplicationStopping.Register(() => werkbank.Host.StoppeAsync().GetAwaiter().GetResult());
 var werkbankJson = new JsonSerializerOptions(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
 app.MapGet("/api/werkbank/zustand", () => Results.Json(werkbank.Zustand(), werkbankJson));
 app.MapGet("/api/werkbank/schema", () => Results.Content(SimHost.Werkbank.Schema.Umgebung().ToJsonString(), "application/json"));
@@ -256,19 +258,55 @@ app.MapGet("/api/werkbank/umgebung/{name}", (string name) => Results.Content(wer
 app.MapPost("/api/werkbank/umgebung/{name}", (string name, System.Text.Json.Nodes.JsonObject inhalt) =>
 {
     werkbank.Umgebungen.Schreibe(name, inhalt);
+    werkbank.Fortschritt.Melde("umgebung", new { name });
     return Results.Json(new { geschrieben = werkbank.Umgebungen.Datei(name) });
 });
 app.MapPost("/api/werkbank/aktiv/{name}", (string name) => { werkbank.Aktiv = name; return Results.Json(werkbank.Zustand(), werkbankJson); });
 app.MapPost("/api/werkbank/kreislauf", async (bool? zuruecksetzen, CancellationToken ct) =>
-    Results.Json(await werkbank.KreislaufAsync(zuruecksetzen == true, ct), werkbankJson));
+{
+    try { return Results.Json(await werkbank.KreislaufAsync(zuruecksetzen == true, ct), werkbankJson); }
+    catch (Exception e) when (e is not OperationCanceledException) { return Results.Json(new { ok = false, fehler = e.Message }, werkbankJson); }
+});
 app.MapGet("/api/werkbank/kreislauf", () => Results.Json(werkbank.Letzter, werkbankJson));
+// Befunde des letzten ⟳ (Compiler/Analyzer mit Typ + Member) und Boot-Fehler (mit Karte) — der Editor zeigt sie an der Karte.
+app.MapGet("/api/werkbank/diagnosen", () => Results.Json(new
+{
+    diagnosen = werkbank.Letzter?.Diagnosen ?? [],
+    boot = werkbank.Host.Laeuft || werkbank.Letzter == null ? werkbank.Host.Boot() : werkbank.Letzter.Boot,
+}, werkbankJson));
+// Fortschritt als Server-Sent Events (verlierbar; die Wahrheit bleibt /api/werkbank/zustand).
+app.MapGet("/api/werkbank/ereignisse", (HttpContext ctx) => werkbank.Fortschritt.SendeAsync(ctx.Response, ctx.RequestAborted));
 app.MapPost("/api/werkbank/host/stopp", async () => { await werkbank.Host.StoppeAsync(); return Results.Json(werkbank.Host.Zustand(), werkbankJson); });
 app.MapGet("/api/werkbank/host/log", (int? max) => Results.Json(werkbank.Host.Log(max ?? 300)));
-app.MapGet("/api/werkbank/simdb/staende", async () => Results.Json(await werkbank.Db.StaendeAsync(werkbank.Umgebungen.Aufgeloest(werkbank.Aktiv))));
+app.MapGet("/api/werkbank/simdb/staende", async () =>
+{
+    var u = werkbank.Umgebungen.Aufgeloest(werkbank.Aktiv);
+    if (u.Umgebung.Art != Abstractions.UmgebungsArt.Sim) return Results.Json(Array.Empty<object>());
+    var proto = Path.Combine(slnRoot, "ProtoRepo", "domain.proto");
+    try { return Results.Json(await werkbank.Db.StaendeAsync(u, File.Exists(proto) ? await File.ReadAllTextAsync(proto) : null), werkbankJson); }
+    catch (Exception e) { return Results.Json(new { fehler = e.Message }, werkbankJson); }
+});
 app.MapPost("/api/werkbank/simdb/{aktion}", async (string aktion, string? stand, CancellationToken ct) =>
 {
     try { return Results.Json(await werkbank.DatenbankAsync(aktion, stand, ct), werkbankJson); }
-    catch (Exception e) when (e is InvalidOperationException or ArgumentException) { return Results.Json(new { ok = false, fehler = e.Message }); }
+    catch (Exception e) when (e is not OperationCanceledException) { return Results.Json(new { ok = false, fehler = e.Message }, werkbankJson); }
+});
+// Die Uhr der Sim-DB (§4.4): der Versatz steht in der Datenbank, nicht in der Umgebungs-Datei; der Host liest ihn bei jedem Zugriff.
+app.MapGet("/api/werkbank/uhr", async () =>
+{
+    var u = werkbank.Umgebungen.Aufgeloest(werkbank.Aktiv);
+    try { return Results.Json(new { art = u.Umgebung.Art.ToString(), versatz = (await werkbank.Db.VersatzAsync(u))?.ToString() }); }
+    catch (Exception e) { return Results.Json(new { art = u.Umgebung.Art.ToString(), versatz = (string?)null, fehler = e.Message }); }
+});
+app.MapPost("/api/werkbank/uhr", async (string versatz) =>
+{
+    try
+    {
+        await werkbank.Db.SetzeVersatzAsync(werkbank.Umgebungen.Aufgeloest(werkbank.Aktiv), TimeSpan.Parse(versatz, System.Globalization.CultureInfo.InvariantCulture));
+        werkbank.Fortschritt.Melde("uhr", new { versatz });
+        return Results.Json(new { ok = true, versatz });
+    }
+    catch (Exception e) { return Results.Json(new { ok = false, fehler = e.Message }); }
 });
 app.MapPost("/api/werkbank/infra/start", async (CancellationToken ct) =>
     Results.Json(await werkbank.Infra.StarteAsync(werkbank.Aktiv, werkbank.Umgebungen.Aufgeloest(werkbank.Aktiv), ct), werkbankJson));

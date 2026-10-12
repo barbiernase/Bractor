@@ -14,11 +14,14 @@ namespace Domain.SourceGeneration
         public string ApplierName { get; }
         public List<DecideMethodInfo> DecideMethods { get; }
         public List<string> EventTypes { get; }
+        /// <summary>Code-Hash der Daten-Seite (State + Applier, ohne Decider) — Snapshot-Version (Plan E9).</summary>
+        public string CodeHash { get; }
 
         public HandlerGeneratorModel(
             string ns, string stateTypeName, string handlerName,
-            List<DecideMethodInfo> decideMethods, List<string> eventTypes)
+            List<DecideMethodInfo> decideMethods, List<string> eventTypes, string codeHash)
         {
+            CodeHash = codeHash;
             Namespace = ns;
             StateTypeName = stateTypeName;
             HandlerName = handlerName;
@@ -77,6 +80,9 @@ namespace Domain.SourceGeneration
                      {
                          public partial class {{model.HandlerName}} : AggregateHandlerBase<{{model.StateTypeName}}, {{model.DeciderName}}, {{model.ApplierName}}>
                          {
+                             /// <summary>Code-Hash von State + Applier (ohne Decider): ändert er sich, sind Snapshots dieses Aggregats ungültig.</summary>
+                             public const string CodeHash = "{{model.CodeHash}}";
+
                              public {{model.HandlerName}}({{model.StateTypeName}} state, {{model.DeciderName}} decider, {{model.ApplierName}} applier)
                                  : base(state, decider, applier) { }
                      
@@ -156,7 +162,8 @@ namespace Domain.SourceGeneration
                 stateTypeName: stateTypeName,
                 handlerName: $"{stateTypeName}AggregateHandler",
                 decideMethods: decideMethods,
-                eventTypes: eventTypes
+                eventTypes: eventTypes,
+                codeHash: Kodeform.Hash(classSymbol, n => n is TypeDeclarationSyntax td && td.Identifier.Text == Abstractions.Aggregatvertrag.Decider)
             );
             
             var sourceCode = HandlerCodeGenerationModule.GenerateHandler(model);

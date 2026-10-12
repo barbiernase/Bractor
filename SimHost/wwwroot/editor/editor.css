@@ -536,3 +536,34 @@
 #de .gcanvas .gworld .gnode2.n-client{width:420px}
 #de .gcanvas .gnode2.n-client .gsum.gleiste{display:block}
 #de .gcanvas.ablauf .gnode2.n-client .ghead .gtitle.hatname .gk{display:inline}
+
+/* ══ WERKBANK (Plan P3.6): Kopfzeile, 🖥 Host-Rahmen, Befunde an der Karte ══ */
+#de header{flex-wrap:wrap;row-gap:6px}
+#de .wb-kopf{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;margin-left:6px}
+#de .wb-kopf .wb-l{font-size:11px;color:#8b93a7}
+#de .wb-kopf select.wb-umg{background:#1b2232;color:#dfe4ee;border:1px solid #35507a;border-radius:6px;padding:4px 6px;font:600 12px system-ui}
+#de .wb-chip{font-size:11px;padding:3px 8px;border-radius:10px;background:#1d2433;color:#b9c2d6;border:1px solid #2b3446;white-space:nowrap}
+#de .wb-chip.gut{background:#183126;color:#9be3bf;border-color:#2b5a43}
+#de .wb-chip.rot{background:#3a1f28;color:#ffb3c1;border-color:#6a3040}
+#de .wb-chip.gelb{background:#3a331f;color:#ffe1a0;border-color:#6a5a30}
+#de .wb-chip.grau{color:#8b93a7}
+#de button.act.wb-run{min-width:34px}
+#de button.act:disabled{opacity:.5;cursor:default}
+#de .wb-log{white-space:pre-wrap;font:11px ui-monospace,monospace;color:#c4cde0;max-height:40vh;overflow:auto;margin:6px 0 0}
+#de .grahmen.host{border-style:dotted}
+#de .gnode2.n-host{border-color:#3d5a72}
+#de .gnode2.n-host .ghead{background:#16222e}
+#de .kc-host{background:#3d5a72}
+#de .gnode2.diag{border-color:#d0566b !important;box-shadow:0 0 0 2px #d0566b55}
+#de .gdiag{margin-left:auto;margin-right:4px;font-size:10px;padding:0 6px;border-radius:8px;background:#3a1f28;color:#ffb3c1;white-space:nowrap}
+#de .gi-diag{margin:6px 0}
+#de .wb-klasse{display:flex;flex-direction:column;gap:3px}
+#de .wb-klasse .frow{display:flex;align-items:center;gap:6px}
+#de .wb-klasse .frow .slotlbl{min-width:120px}
+#de .wb-klasse .frow input,#de .wb-klasse .frow select,#de .wb-je .frow input{flex:1 1 auto;width:100%;min-width:0}
+#de .wb-sub{border-left:2px solid #2b3446;padding-left:8px;margin:4px 0}
+#de .wb-st{font-size:11px;color:#8b93a7;margin-bottom:2px}
+#de .wb-je{display:flex;flex-direction:column;gap:4px}
+#de .wb-eintrag{border:1px solid #2b3446;border-radius:6px;padding:4px 8px}
+#de .wb-eintrag summary{cursor:pointer;font-weight:600;display:flex;align-items:center;gap:6px}
+#de .wb-eintrag summary .rm{margin-left:auto}
