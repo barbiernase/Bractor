@@ -17,10 +17,10 @@ namespace GraphExtractor;
 /// Interface-Implementierung, frei benannte Stores, class-ReadModel, OneOf-Antwort, Konstanten-Ids, Reaktion, Pipeline
 /// mit Konfig und einem nie ausgegebenen Objekt.
 ///
-/// Dazu eine im Editor GEZEICHNETE Leseseite (<c>Sonde/Gezeichnet.board.json</c>: neuer Store mit einer im Panel benannten
-/// und einer abgeleiteten Fähigkeit, Projektion, Reaktion, Reader, Query/Response/ReadModel): sie wird an das Board der Sonde
-/// gehängt, über <see cref="BoardLeseseite"/> ins Modell gelesen, vom <see cref="Scaffolder"/> geschrieben und liegt dann als
-/// Code im Fork — das Soll beschreibt, was der Extractor daraus wieder lesen MUSS.
+/// Dazu Bausteine, die im Editor GEZEICHNET werden (<c>Sonde/Gezeichnet.gesten.json</c>: neuer Store mit einer im Panel benannten
+/// und einer abgeleiteten Fähigkeit, Projektion, Reaktion, Reader, Query/Response/ReadModel, Akteur mit Vertrag, Client, zwei Flüsse): ein
+/// Gesten-Skript — je Geste ein Karten-Delta wie aus dem Browser, geschrieben vom Gesten-Motor (<see cref="Gesten"/>) in den Fork, danach neu
+/// gelesen (Werkbank P7.3, L20). Das Soll beschreibt, was der Extractor daraus wieder lesen MUSS.
 ///
 /// Ablauf: Sonde im SPEICHER in ein Aggregat-Projekt der Solution legen (Fork, nichts auf Platte), die ECHTE Pipeline
 /// fahren (Projektlage → Extraktion → Board-Modell), das Inventar der Sonde mit dem VON HAND geschriebenen Soll
@@ -43,37 +43,35 @@ public static class Sonde
                 filePath: Path.Combine(Path.GetDirectoryName(ziel.FilePath)!, "__sonde", name));
         Console.WriteLine($"   Sonde „{Wurzel}\" ({Quellen().Count()} Dateien) im Speicher in {ziel.Name} gelegt.");
 
-        // ── Die gezeichnete Leseseite: Board der Sonde + Zeichnung → Modell → Scaffolder → in den Fork ──
-        var lage1 = await Projektlage.ErmittleAsync(fork, _ => { });
-        var analyse1 = ParitaetsPruefung.Analysiere(lage1.Compilations, lage1.DomänenAssemblies, lage1.Quelltexte);
-        analyse1.Dom.Wurzel = solutionDir;
-        foreach (var (ns, dir) in lage1.ProjektWurzeln()) analyse1.Dom.ProjektWurzeln[ns] = dir;
-        var cr1 = await new CompositionRootExtractor(fork, lage1, analyse1.Routing, analyse1.Dom).ExtractAsync();
-        var gezeichnet = Zeichne(ModellMapper.ZuBoardJson(analyse1.Graph, analyse1.Dom, cr1), Ressource("Gezeichnet.board.json"), out var namen);
-        var modell = BoardLeseseite.AusBoard(gezeichnet);
-        // Neue Selbst-Nachrichten legt das Modell selbst an (Self-Tick ohne Record) — sie gehören zur Zeichnung.
-        namen.UnionWith(modell.Records.Where(r => r.Kind == RecordArt.Selbst && r.Datei == null).Select(r => r.Name));
-        // Der Vertrag eines gezeichneten Akteurs gehört zur Zeichnung (der Scaffolder legt ihn neben den Akteur).
-        namen.UnionWith(modell.Akteure.Where(a => namen.Contains(a.Name) && a.Vertrag.Count > 0).Select(a => a.VertragTyp));
-        foreach (var st in (modell.Lesen?.Stores ?? []).Where(s => namen.Contains(s.Name)))
+        // ── GEZEICHNET = Gesten (Werkbank P7.3, L20): je Geste ein Karten-Delta wie aus dem Browser, geschrieben vom Gesten-Motor in den Fork
+        //    (Scaffolder für Neues, Abgleich für Geändertes), danach neu gelesen — die nächste Geste sieht den neuen Code-Stand wie in der Werkbank. ──
+        CompositionRoot? cr1 = null;
+        var gezeichnet = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var geste in (JsonNode.Parse(Ressource("Gezeichnet.gesten.json"))!["gesten"] as JsonArray ?? []).OfType<JsonObject>())
         {
-            namen.UnionWith(st.Fns.Select(f => f.Name));
-            if (st.Impl != null) namen.Add(st.Impl.Name);
+            var lageG = await Projektlage.ErmittleAsync(fork, _ => { });
+            var analyseG = ParitaetsPruefung.Analysiere(lageG.Compilations, lageG.DomänenAssemblies, lageG.Quelltexte);
+            analyseG.Dom.Wurzel = solutionDir;
+            foreach (var (ns, dir) in lageG.ProjektWurzeln()) analyseG.Dom.ProjektWurzeln[ns] = dir;
+            cr1 ??= await new CompositionRootExtractor(fork, lageG, analyseG.Routing, analyseG.Dom).ExtractAsync();
+            var texte = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var d in fork.Projects.SelectMany(x => x.Documents).Where(d => d.FilePath != null))
+                texte[Path.GetFullPath(d.FilePath!)] = (await d.GetTextAsync()).ToString();
+            var puffer = new Dateipuffer(solutionDir, p => texte.GetValueOrDefault(p) ?? (File.Exists(p) ? File.ReadAllText(p) : null));
+            var bericht = Gesten.Schreibe(ModellMapper.ZuBoard(analyseG.Graph, analyseG.Dom, cr1), KartenDelta.AusJson(geste), puffer);
+            foreach (var patch in bericht.Patch)
+            {
+                var voll = puffer.Voll(patch.Datei);
+                gezeichnet.Add(voll);
+                var doc = fork.Projects.SelectMany(x => x.Documents).FirstOrDefault(d => d.FilePath != null && Path.GetFullPath(d.FilePath) == voll);
+                fork = doc != null
+                    ? patch.Nachher == null ? fork.RemoveDocument(doc.Id) : fork.WithDocumentText(doc.Id, Microsoft.CodeAnalysis.Text.SourceText.From(patch.Nachher))
+                    : fork.AddDocument(DocumentId.CreateNewId(ziel.Id), Path.GetFileName(voll), patch.Nachher ?? "", folders: new[] { "__sonde" }, filePath: voll);
+                if (zeigeIst) Console.WriteLine($"\n── {patch.Datei} ({(patch.Vorher == null ? "neu" : "geändert")}) ──\n{patch.Nachher}");
+            }
+            Console.WriteLine($"   Geste „{(string?)geste["titel"]}“: {bericht.Patch.Count} Datei(en) geschrieben"
+                              + (bericht.Schreiber.Uebersprungen.Count > 0 ? $", übersprungen: {string.Join("; ", bericht.Schreiber.Uebersprungen)}" : "") + ".");
         }
-        var neu = Scaffolder.Generiere(modell).Where(d =>
-        {
-            var typen = CSharpSyntaxTree.ParseText(d.Inhalt).GetRoot().DescendantNodes().OfType<BaseTypeDeclarationSyntax>()
-                .Where(t => t.Parent is BaseNamespaceDeclarationSyntax or CompilationUnitSyntax).Select(t => t.Identifier.Text).ToList();
-            return typen.Count > 0 && typen.All(namen.Contains);
-        }).ToList();
-        foreach (var (d, i) in neu.Select((d, i) => (d, i)))
-        {
-            var name = $"Gezeichnet.{i}.{Path.GetFileName(d.Pfad)}";   // eindeutig: zwei Namespaces können dieselbe Zieldatei haben
-            fork = fork.AddDocument(DocumentId.CreateNewId(ziel.Id), name, d.Inhalt, folders: new[] { "__sonde" },
-                filePath: Path.Combine(Path.GetDirectoryName(ziel.FilePath)!, "__sonde", name));
-        }
-        Console.WriteLine($"   Gezeichnet: {namen.Count} Typen über Board → Modell → Scaffolder in {neu.Count} Datei(en) geschrieben.");
-        if (zeigeIst) foreach (var d in neu) Console.WriteLine($"\n── {d.Pfad} ({d.Art}) ──\n{d.Inhalt}");
 
         var lage2 = await Projektlage.ErmittleAsync(fork, Console.WriteLine);
         var fehler = 0;
@@ -81,7 +79,8 @@ public static class Sonde
         // Die Sonde muss kompilieren — sonst prüft sie nichts.
         foreach (var c in lage2.DomänenCompilations)
             foreach (var d in c.GetDiagnostics().Where(d => d.Severity == DiagnosticSeverity.Error
-                                                             && d.Location.SourceTree?.FilePath.Contains("__sonde") == true).Take(20))
+                                                             && d.Location.SourceTree?.FilePath is { } pfad
+                                                             && (pfad.Contains("__sonde") || gezeichnet.Contains(Path.GetFullPath(pfad)))).Take(20))
             {
                 Console.WriteLine($"   ✗ Sonde kompiliert nicht: {Path.GetFileName(d.Location.SourceTree!.FilePath)} {d.Id}: {d.GetMessage()}");
                 fehler++;
@@ -124,30 +123,8 @@ public static class Sonde
     private static string Kurz(string full) => full[(full.LastIndexOf('.') + 1)..];
 
     /// <summary>
-    /// Die Zeichnung an das Board hängen (Sammlungen anfügen — so, wie der Browser neue Karten anlegt). <paramref name="namen"/>
-    /// = die gezeichneten Typnamen (Records, ReadModels, Stores, Projektionen/Reaktionen, Reader).
-    /// </summary>
-    private static string Zeichne(string board, string zeichnung, out HashSet<string> namen)
-    {
-        var b = JsonNode.Parse(board)!.AsObject();
-        var z = JsonNode.Parse(zeichnung)!.AsObject();
-        namen = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var (k, v) in z)
-        {
-            if (v is not JsonArray neu) continue;
-            if (b[k] is not JsonArray liste) b[k] = liste = new JsonArray();
-            foreach (var x in neu.ToList())
-            {
-                if ((string?)x?["name"] is { } n) namen.Add(n);
-                liste.Add(x!.DeepClone());
-            }
-        }
-        return b.ToJsonString();
-    }
-
-    /// <summary>
-    /// Das Inventar der Sonde als kanonische Zeilen — aus dem BOARD-Modell (dem, was der Editor sieht), gefiltert auf
-    /// den Sonden-Namespace. Ein Fakt je Zeile, deterministisch sortiert.
+    /// Das Inventar der Sonde als kanonische Zeilen — aus dem Board und seiner Sicht (der Kartenliste des Servers: dem, was der Editor sieht),
+    /// gefiltert auf den Sonden-Namespace. Ein Fakt je Zeile, deterministisch sortiert.
     /// </summary>
     private static List<string> Inventar(JsonObject b)
     {
@@ -164,7 +141,7 @@ public static class Sonde
         foreach (var r in A(b, "records").Where(Sonde))
             z.Add($"record {S(r, "namespace")}.{S(r, "name")} {S(r, "kind")}"
                   + (r["istErzeugung"]?.GetValue<bool>() == true ? " erzeugung" : "")
-                  + (r["aggregat"] is { } ag ? $" aggregat={ag}" : "")
+                  + (b["sicht"]?["karten"]?["rec:" + S(r, "name")]?["aggregat"] is { } ag ? $" aggregat={ag}" : "")
                   + (r["typart"] is { } ta ? $" typart={ta}" : "")
                   + (r["funktion"] is { } fn ? $" funktion={fn}" : "")
                   + (r["treiber"] is { } tr ? $" treiber={tr}" : "")
@@ -263,6 +240,13 @@ public static class Sonde
                     z.Add($"ausgang {S(o, "name")}.{S(h, disc)} {S(h, "form")}{(h["signaturOffen"]?.GetValue<bool>() == true ? " offen" : "")} | {Ausgaenge(h)}");
         foreach (var t in A(b, "triggers").Where(t => sondenTrigger.Contains(S(t, "msgName"))))
             z.Add($"trigger {S(t, "msgName")} | {Felder(t)}");
+
+        // Die Sicht (Werkbank P7.3): Domäne und Block je Karte, wie sie der Editor vom Server bekommt — aus dem Graphen, nie aus dem Namespace.
+        var sicht = Sicht.Aus(b);
+        foreach (var k in sicht.Karten.Where(k => k.Art is "valueobject" or "enum" or "query" or "queryresponse" or "readmodel" or "store" or "projektion"
+                                                       or "reader" or "reaktion" or "saga" or "akteur" && Sonde(k.Ref)))
+            z.Add($"sicht {S(k.Ref, "namespace")}.{k.Name} {k.Art} domaene={sicht.Domaene(k)} block={sicht.Block(k)}"
+                  + (sicht.Inseln.Contains(k.Id) ? " insel" : ""));
 
         return z.Select(x => x.TrimEnd()).OrderBy(x => x, StringComparer.Ordinal).ToList();
     }

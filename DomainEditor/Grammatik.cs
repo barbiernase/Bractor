@@ -7,7 +7,8 @@ namespace DomainEditor;
 ///
 /// Sie speist drei Stellen, die sonst auseinanderlaufen würden:
 ///   • den <see cref="Validator"/> (nennt die verletzte Regel beim Namen),
-///   • den Editor (GraphExtractor legt sie als <c>rahmen.grammatik</c> ins Board; der Verbinden-Modus bietet nur gültige Ziele an),
+///   • den Editor (GraphExtractor legt sie als <c>rahmen.grammatik</c> ins Board; ⊕ fragt den Server — GraphExtractor/Sicht.Passt —, der nur
+///     gültige Ziele anbietet; der Editor zeigt die Tabelle nur an),
 ///   • die Liste „Regel → Build-Gegenstück" (<c>--check</c> prüft, dass jede genannte ID im Code existiert).
 ///
 /// Leitsatz: <b>Wenn es sich verbinden lässt, kompiliert es.</b> Die Grammatik darf enger sein als der Compiler, nie weiter.

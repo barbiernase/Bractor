@@ -44,7 +44,7 @@ record Leihwesen.Pruefung.PruefeSeite auftrag typart=public sealed record funkti
 record Leihwesen.Pruefung.SeiteGeprueft event | Seite:string, Beschaedigt:bool
 funktion Leihwesen.Pruefung.ISeitenPruefung | PruefeSeite -> SeiteGeprueft
 fluss Leihwesen.Pruefung.RueckgabePruefung bauer=scan | eingang=quelle:RueckgabeGescannt; seiten=je:string <- eingang je{e => e.Seiten}; seite=funktion:ISeitenPruefung <- seiten[] λ{s => new PruefeSeite(s)}; schnell=funktion:ISchadensSchaetzung <- eingang λ{e => new SchaetzeSchaden(e.LeserId, 10m)} ⏳TimeSpan.FromSeconds(30); gruendlich=funktion:ISchadensSchaetzung <- eingang λ{e => new SchaetzeSchaden(e.LeserId, 100m)}; mahnung=command:EroeffneMahnung <- gruendlich.SchadenGeschaetzt+eingang λ{(g, e) => new EroeffneMahnung(e.LeserId, g.Betrag)} ∨ schnell.⏳ λ{z => new EroeffneMahnung(Guid.Empty, 0m)}; meldeSchaden°=command:MeldeSchaden <- seiten.sammle(seite.SeiteGeprueft) λ{(e, geprueft) => new MeldeSchaden(e.LeserId, e.LeserId)}; meldeSchaden2°=command:MeldeSchaden <- mahnung.✕ λ{a => new MeldeSchaden(Guid.Empty, Guid.Empty)}
-# GEZEICHNET (Gezeichnet.board.json, ohne Lambda — nur die Zuordnung): Event-Quelle → ƒ mit Zeitlimit → Command am Ergebnis-Port.
+# GEZEICHNET (Gezeichnet.gesten.json, ohne Lambda — nur die Zuordnung): Event-Quelle → ƒ mit Zeitlimit → Command am Ergebnis-Port.
 #    Der Scaffolder benennt die Lambda-Parameter nach den Knoten, von denen der Draht kommt.
 fluss Leihwesen.Gebuehren.MahnungBeiRueckgabe bauer=p | rueckgabe=auf:Zurueckgegeben; schaetzung=funktion:ISchadensSchaetzung <- rueckgabe λ{rueckgabe => new SchaetzeSchaden(rueckgabe.LeserId, 50m)} ⏳TimeSpan.FromMinutes(1); mahnung=command:EroeffneMahnung <- schaetzung.SchadenGeschaetzt λ{schaetzung => new EroeffneMahnung(Guid.NewGuid(), schaetzung.Betrag)}
 # STROM + WARTEN + LESE-FÄHIGKEIT (Sonde/Fluss.cs.txt, Ausleihfrist): der Strom der Quelle als zweiter Ausgang (ausgeliehen.strom),
@@ -53,7 +53,7 @@ record Leihwesen.Pruefung.ZaehleOffene auftrag typart=public sealed record funkt
 record Leihwesen.Pruefung.OffeneGezaehlt event | Anzahl:int
 funktion Leihwesen.Pruefung.IOffenZaehlung | ZaehleOffene -> OffeneGezaehlt liest IZaehleOffene offene
 fluss Leihwesen.Pruefung.Ausleihfrist bauer=p | ausgeliehen=auf:Ausgeliehen; rueckgabe=warte:Zurueckgegeben <- ausgeliehen.strom ⏳TimeSpan.FromDays(28); offen=funktion:IOffenZaehlung <- ausgeliehen λ{ausgeliehen => new ZaehleOffene(ausgeliehen.LeserId)}; mahnung=command:EroeffneMahnung <- rueckgabe.⏳+offen.OffeneGezaehlt+ausgeliehen.strom λ{(rueckgabeZeit, offen, ausgeliehenStrom) => new EroeffneMahnung(ausgeliehenStrom.Id, offen.Anzahl)}
-# GEZEICHNET (Gezeichnet.board.json): dieselbe Frist auf leerem Board — Strom-Draht und ⏳ als Drähte, Zuordnung; der Scaffolder benennt
+# GEZEICHNET (Gezeichnet.gesten.json): dieselbe Frist auf leerem Board — Strom-Draht und ⏳ als Drähte, Zuordnung; der Scaffolder benennt
 #    die Lambda-Parameter nach Knoten + Port (rueckgabeZeit, ausgeliehenStrom).
 fluss Leihwesen.Gebuehren.Rueckgabefrist bauer=p | ausgeliehen=auf:Ausgeliehen; rueckgabe=warte:Zurueckgegeben <- ausgeliehen.strom ⏳TimeSpan.FromDays(28); mahnung=command:EroeffneMahnung <- rueckgabe.⏳+ausgeliehen.strom λ{(rueckgabeZeit, ausgeliehenStrom) => new EroeffneMahnung(ausgeliehenStrom.Id, 0m)}
 
@@ -79,7 +79,7 @@ faehigkeit Leihwesen.Lesen.INotiereAusleihe schreibt ILeihBuch.SchreibeAsync
 faehigkeit Leihwesen.Lesen.ISchliesseAusleihe schreibt ILeihBuch.SchliesseAsync
 faehigkeit Leihwesen.Lesen.IZaehleOffene liest ILeihBuch.OffeneAsync
 
-# ── Im Editor GEZEICHNET (Sonde/Gezeichnet.board.json → BoardLeseseite → Scaffolder → Fork → neu eingelesen) ──
+# ── Im Editor GEZEICHNET (Sonde/Gezeichnet.gesten.json → Gesten-Motor → Fork → neu eingelesen) ──
 #    Store neu (Impl-Klasse ohne Basis, weil die Impls im Code keine gemeinsame haben), Fähigkeit von MerkeVorAsync im Panel
 #    benannt, die von ZaehleAsync abgeleitet (I + Methode ohne Async). Kanten = Fähigkeits-Parameter, Ausgänge = Signatur.
 record Leihwesen.Lesen.Vormerkungen query | LeserId:Guid
@@ -110,3 +110,31 @@ vertrag Leihwesen.Gebuehren.IMahnstelle akteur=Mahnstelle | MahnungEroeffnet -> 
 client Leihwesen.Lesen.ILesesaal | traegt IRegal; sendet LeiheAus; fragt OffeneAusleihen; hoert MahnungEroeffnet
 client Leihwesen.Lesen.IDepot | traegt IRegal; sendet ; fragt ; hoert
 client Leihwesen.Gebuehren.IMahnportal | traegt IMahnstelle; sendet EroeffneMahnung; fragt Vormerkungen; hoert Zurueckgegeben
+
+# ── Sicht (Werkbank P7.3): Domäne und Block aus dem GRAPH, nie aus dem Namespace. Die Leseseite in Leihwesen.Lesen gehört zum Leihvorgang,
+#    dessen Events sie liest (Projektion → Reader/Store/ReadModel/Query/Response); Wert-Typen zum Aggregat ihrer Records; Reaktion und Prozess
+#    stehen dort, wohin ihre Commands gehen (berühren sie mehrere Domänen); ein Akteur in der ersten Domäne, in der er wirkt (Befugnisse und
+#    Zusagen). Der geteilte Zähler hat keinen Store und keine Nachbarn: eine Insel in seinem Namespace. ──
+sicht Leihwesen.Ausleihe.Signatur valueobject domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Ausleihe.Zustand enum domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.OffeneAusleihen query domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.OffeneAusleihenAntwort queryresponse domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.KeineAusleihen queryresponse domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.Vormerkungen query domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.VormerkungenAntwort queryresponse domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.LeihEintrag readmodel domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.Ausleihzaehler readmodel domaene=Leihwesen.Lesen block=§geteilt insel
+sicht Leihwesen.Lesen.Vormerkung readmodel domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.ILeihBuch store domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.IVormerkbuch store domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.Leihliste projektion domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.Vormerkliste projektion domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.LeihAuskunftLeser reader domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.VormerkAuskunft reader domaene=Leihwesen.Ausleihe block=Leihvorgang
+sicht Leihwesen.Lesen.MahnungBeiSchaden reaktion domaene=Leihwesen.Gebuehren block=§geteilt
+sicht Leihwesen.Lesen.Schadenpruefung reaktion domaene=Leihwesen.Gebuehren block=§geteilt
+sicht Leihwesen.Gebuehren.SchadenBeiRueckgabe saga domaene=Leihwesen.Gebuehren block=§geteilt
+sicht Leihwesen.Lesen.Theke akteur domaene=Leihwesen.Ausleihe block=§akteure
+sicht Leihwesen.Gebuehren.Mahnstelle akteur domaene=Leihwesen.Ausleihe block=§akteure
+sicht Leihwesen.Lesen.Gutachterin akteur domaene=Leihwesen.Gebuehren block=§akteure
+sicht Leihwesen.Lesen.Archiv akteur domaene=Leihwesen.Ausleihe block=§akteure

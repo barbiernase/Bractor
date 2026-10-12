@@ -118,10 +118,10 @@
   //    Record/Enum sein → so komponieren sich Records.
   // NUR der Node-Editor, DESIGN-IN-PLACE: jeder Knoten wird direkt auf der Fläche bestückt.
   let TEIL=null;   // Verbinden-Modus: statt Voll-Render nur die betroffenen Karten neu (Set der Knoten-Ids)
-  function render(){ if(TEIL){TEIL.gerufen=true;return;} ELEM=null; AKM=null; deriveMembership(); renderGraph(); autosave(); if(window.simNachRender)simNachRender(); }
+  function render(){ if(TEIL){TEIL.gerufen=true;return;} ELEM=null; renderGraph(); autosave(); if(window.simNachRender)simNachRender(); }
   // Teil-Neuaufbau: betroffene Karten ersetzen, Kurzfassungen/Kanten/Panel auffrischen — Fläche, Zoom und Layout bleiben stehen.
   function teilNeu(ids){if(!world||!canvas){render();return;}
-    ELEM=null;deriveMembership();ISLE=islandInfo().ids;berechneSicht();
+    ELEM=null;ISLE=inselMenge();berechneSicht();
     // Knoten entstanden/entfallen (z. B. ein neuer Handle durch „+ Query andocken"): dann voll neu zeichnen (Raster packt neu).
     const gezeichnet=new Set([...world.querySelectorAll(".gnode2")].map(e=>e.dataset.id));
     if(gezeichnet.size!==VIS.size||[...VIS].some(id=>!gezeichnet.has(id))){render();return;}
@@ -269,27 +269,16 @@
   const istClientDom=d=>typeof d==="string"&&d.startsWith(CL_PRE);
   // Handshake-Name = Interface ohne führendes I (IArbeitsplatz → Arbeitsplatz), wie Abstractions.Akteurvertrag.ClientName.
   const clientAnzeige=c=>{const n=(c&&c.name)||"";return n.length>1&&n[0]==="I"&&n[1]!==n[1].toLowerCase()?n.slice(1):n;};
-  // Vertrags-Teil (Interface-Name) → Akteur: sein Haupt-Vertrag (vertragsTyp) oder ein weiterer Teil an einer Zusage (r.teil).
-  function teilAkteur(teil){return MODEL.akteure.find(a=>(a.vertrag||[]).length&&(vertragsTyp(a)===teil||(a.vertrag||[]).some(r=>r.teil===teil)));}
-  function teilZusagen(teil){const a=teilAkteur(teil);if(!a)return [];
-    return (a.vertrag||[]).map((r,i)=>({a,r,i,id:aufId(a,i)})).filter(x=>(x.r.teil||vertragsTyp(a))===teil);}
   const darfHalter=nm=>MODEL.akteure.filter(a=>(a.darf||[]).includes(nm)).map(a=>a.name);
-  // Verkörpert (abgeleitet wie AkteurRechteGenerator): Akteure der getragenen Teile, dazu je Sendet/Fragt die IDarf-Halter — falls
-  //   keiner der Teil-Akteure den Typ schon darf.
-  function clientAkteure(c){const basis=new Set((c.traegt||[]).map(teilAkteur).filter(Boolean).map(a=>a.name)),s=new Set(basis);
-    [...(c.sendet||[]),...(c.fragt||[])].forEach(nm=>{const hs=darfHalter(nm);if(!hs.some(x=>basis.has(x)))hs.forEach(x=>s.add(x));});
-    return [...s].sort();}
   const clientTraeger=teil=>MODEL.clients.filter(c=>(c.traegt||[]).includes(teil));
-  // Die Ports der Anschlussleiste: Richtung, Nachricht, in wessen Namen (Akteur), Ziel-Knoten.
-  function clientPorts(c){const P=[],ver=clientAkteure(c);
-    const node=nm=>recByName(nm)?"rec:"+nm:null;
-    const als=nm=>{const hs=darfHalter(nm),drin=hs.filter(x=>ver.includes(x));return drin.length?drin:hs;};
-    (c.traegt||[]).forEach(t=>{const rs=teilZusagen(t);if(!rs.length)P.push({ri:"zusage",msg:"?",teil:t,akteure:[],aus:[],node:null,fehlt:true});
-      rs.forEach(({a,r,id})=>P.push({ri:"zusage",msg:r.eingang||"?",aus:r.ausgaenge||[],strom:!!r.strom,akteure:[a.name],teil:t,node:id}));});
-    (c.sendet||[]).forEach(nm=>P.push({ri:"sendet",msg:nm,akteure:als(nm),node:node(nm)}));
-    (c.fragt||[]).forEach(nm=>P.push({ri:"fragt",msg:nm,akteure:als(nm),node:node(nm)}));
-    (c.kenntnis||[]).forEach(nm=>P.push({ri:"kenntnis",msg:nm,akteure:[],node:node(nm)}));
-    return P;}
+  // Die Anschlussleiste eines Clients — vom Server (board.sicht.clients): die Ports (Richtung, Nachricht, in wessen Namen, Ziel-Karte), die
+  //   verkörperten Akteure (wie der AkteurRechteGenerator: Akteure der getragenen Teile + IDarf-Halter von Sendet/Fragt) und je getragenem
+  //   Vertrags-Teil sein Akteur. Ein Client, den es im Code noch nicht gibt, hat noch keine.
+  const clientSicht=c=>((SICHT().clients||{})["cl:"+c._id])||{akteure:[],ports:[],teile:[]};
+  const clientAkteure=c=>clientSicht(c).akteure||[];
+  const clientPorts=c=>clientSicht(c).ports||[];
+  // Vertrags-Teil (Interface-Name) → sein Akteur (Haupt-Vertrag oder ein weiterer Teil an einer Zusage).
+  function teilAkteur(c,teil){const n=((clientSicht(c).teile||[]).find(x=>x.teil===teil)||{}).akteur;return n?MODEL.akteure.find(a=>a.name===n)||null:null;}
   // Ziel-Rahmen eines Ports: eine Zusage → der Vertrags-Rahmen ihres Akteurs; sonst der Domäne × Akteur-Rahmen der Nachrichten-Karte
   //   (bzw. der Domänen-Rahmen, wenn die Domäne keine Akteur-Rahmen hat).
   function portRahmen(p){if(!p.node)return null;if(p.ri==="zusage")return "§vertrag:"+p.akteure[0];
@@ -351,28 +340,21 @@
   // Diagnose: je Nachricht, was „◀ kommt aus" zeigt (Erzeuger + Akteure) — Lücken-Suche „woher wird das ausgelöst?".
   window.deHerkunft=()=>{const r=[];NODEBY.forEach(n=>{
     if(!["command","query","event","rejection","queryresponse"].includes(n.kind))return;const nm=n.name;
-    const pv=partnerVon(nm),m=akteurMengen().get(nm);
+    const pv=partnerVon(nm),m=akteurMenge(nm);
     r.push({kind:n.kind,name:nm,ein:pv.ein.map(x=>x.text+(x.mark?" ["+x.mark+"]":"")),aus:pv.aus.map(x=>x.text),
-      direkt:m?[...m.direkt]:[],kette:m?[...m.kette]:[]});});return r;};
-  window.deHandles=()=>{const r=[];Object.entries(HANDLE_ART).forEach(([k,[coll]])=>(MODEL[coll]||[]).forEach(o=>(o.handles||[]).forEach(hd=>
-    r.push({art:k,owner:o.name,eingang:hd.event||hd.query||"",kind:hd.inputKind||"",akteure:[...(handleAkteure(k,hd)||[])]}))));return r;};
+      direkt:[...m.direkt],kette:[...m.kette]});});return r;};
+  window.deHandles=()=>{const r=[];Object.entries(HANDLE_ART).forEach(([k,[coll,pre]])=>(MODEL[coll]||[]).forEach(o=>{const ids=handleIds(o,pre+":"+o._id);
+    (o.handles||[]).forEach((hd,hi)=>r.push({art:k,owner:o.name,eingang:hd.event||hd.query||"",kind:hd.inputKind||"",akteure:((SICHT().karten[ids[hi]]||{}).akteure||[])}));}));return r;};
   // „Wer?" (§12.8 D): von welchem Akteur kommt die Nachricht — direkt (IDarf, oben unter „kommt aus") und über die Kette
   //   (abgeleitet, read-only, mit Pfad). Ein Eingang ohne beides ist eine Lücke (GR-HERKUNFT).
-  function wer(sek,nm){if(!MODEL.akteure.length)return;const m=akteurMengen().get(nm),kette=m?[...m.kette].filter(a=>!m.direkt.has(a)).sort():[];
+  function wer(sek,nm){if(!MODEL.akteure.length)return;const m=akteurMenge(nm),kette=[...m.kette].filter(a=>!m.direkt.has(a)).sort();
     if(kette.length){sek.append(h("div",{class:"gsec",title:"abgeleitet: ein Fluss, ein Prozess, ein Reader oder Decide erzeugt sie aus einer Nachricht dieses Akteurs — kein IDarf nötig"},"👤 über die Kette"));
       kette.forEach(a=>{const ak=MODEL.akteure.find(x=>x.name===a),pfad=kettenPfad(nm,a);
         const row=h("div",{class:"gp-row",title:pfad.join(" → ")},h("span",{class:"gp-t"},(ART_SYM[ak&&ak.art]||"👤 ")+a),h("span",{class:"gp-mark"},pfad.join(" → ")));
         if(ak)row.onclick=()=>waehle("akt:"+ak._id);sek.append(row);});}
-    else if(istEingangName(nm)&&!(m&&m.direkt.size))sek.append(h("div",{class:"llmmeld err",title:"GR-HERKUNFT"},"⚠ kommt von keinem Akteur — ⊕ darf oder über eine Kette erzeugen"));}
-  // Ein Pfad, auf dem nm im Namen von akt entsteht (rückwärts bis zu dessen direktem Eingang bzw. Dienst-Wechsel).
-  function kettenPfad(nm,akt){const R=flussRegeln(),seen=new Set();
-    const zurueck=(x,tiefe)=>{if(tiefe>10||seen.has(x))return null;seen.add(x);
-      const m=akteurMengen().get(x);if(m&&m.direkt.has(akt))return [x];
-      for(const [ein,aus,w] of R){if(!aus.includes(x))continue;
-        if(w===akt)return ["⚙ "+akt,x];
-        for(const e of ein){if(!mengeVon(e).has(akt))continue;const p=zurueck(e,tiefe+1);if(p)return [...p,x];}}
-      return null;};
-    return zurueck(nm,0)||[nm];}
+    else if(istEingangName(nm)&&!m.direkt.size)sek.append(h("div",{class:"llmmeld err",title:"GR-HERKUNFT"},"⚠ kommt von keinem Akteur — ⊕ darf oder über eine Kette erzeugen"));}
+  // Ein Pfad, auf dem nm im Namen von akt entsteht (rückwärts bis zu dessen direktem Eingang bzw. Wechsel) — vom Server.
+  const kettenPfad=(nm,akt)=>(((SICHT().pfade||{})[nm])||{})[akt]||[nm];
   // Die zwei Seiten einer Nachricht: ◀ kommt aus (+ ⊕ Erzeuger) · geht an ▶ (+ ⊕ Konsument). Ports: die bestehenden Slot-Schlüssel.
   function zweiSeiten(body,nm,einPort,ausPort){
     const pv=partnerVon(nm),sorte=grNachrichtSorte(nm),kard=grKardinalitaet(sorte);
@@ -401,7 +383,7 @@
     //   (Command → Decider, Event ← Decider-Ausgang / → Applier), und der Decider/Applier hängt per ▲ an seinem Aggregat.
     body.append(h("div",{class:"gsec"},"Namespace"));
     body.append(h("input",{value:r.namespace??"",oninput:e=>r.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
-    if(r.kind==="command"||r.kind==="event"||r.kind==="rejection"){const ag=recordAgg(r.name);
+    if(r.kind==="command"||r.kind==="event"||r.kind==="rejection"){const ag=(SICHT().karten["rec:"+r.name]||{}).aggregat;
       body.append(h("div",{class:"gsec",title:"abgeleitet aus Decider/Applier"},"Aggregat: "+(ag||"— keinem (Decider/Applier verdrahten)")));}
     if(r.kind==="command")body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>r.istErzeugung=e.target.checked||undefined,...(r.istErzeugung?{checked:"checked"}:{})}),"Erzeugung (ICreationCommand)"));
     // Zwei Seiten je Nachricht (§12): ◀ kommt aus (⊕ Erzeuger) · geht an ▶ (⊕ Konsument). Auf der Fläche nur die Ports (Kanten),
@@ -573,8 +555,8 @@
   function fnById(id){for(const st of MODEL.stores){
     const w=(st.writeFns||[]).find(f=>f._id===id);if(w)return{store:st,fn:w,isRead:false};
     const r=(st.readFns||[]).find(f=>f._id===id);if(r)return{store:st,fn:r,isRead:true};}return null;}
-  // Abgeleiteter Store-Scope eines Konsumenten = die Stores, deren Funktionen seine Handles aufrufen.
-  function derivedStores(node){const s=new Set();(node.handles||[]).forEach(hd=>(hd.fns||[]).forEach(id=>{const r=fnById(id);if(r)s.add(r.store.name);}));return[...s];}
+  // Abgeleiteter Store-Scope eines Konsumenten (die Stores, deren Funktionen seine Handles aufrufen) — vom Server (board.sicht).
+  const storeScope=id=>(SICHT().karten[id]||{}).storeScope||[];
 
   // Store-Knoten = INTERFACE-EDITOR: Write-/Read-Funktionen (Signatur = Name + Parameter [+ Rückgabe]),
   //   je Funktion ein Impl-Code-Port (der Rumpf kommt von 📝/🤖). Read Models docken oben an.
@@ -633,7 +615,7 @@
     // Als Projektion-Ziel (IReader<TProjection>) andockbar + abgeleiteter Store-Scope (aus den Handle-Aufrufen).
     const asp=port("query");asp.classList.add("i");reg("prj:asproj:"+p._id,asp,{type:"projref",dir:"in",proj:p._id});
     body.append(h("div",{class:"slotrow"},asp,h("span",{class:"slotlbl"},"◀ Reader bindet hier an")));
-    const ds=derivedStores(p);
+    const ds=storeScope("prj:"+p._id);
     body.append(h("div",{class:"gsec"},"Stores (abgeleitet): "+(ds.length?ds.join(" · "):"— (Handle → Write-Fn verdrahten)")));
     body.append(handleListe(p,"prj:"+p._id,"Trigger-Event → Handle → Write-Fn(s) · je Handle eine eigene Karte"));
     const oi=port("open");oi.classList.add("i");reg("prj:in:"+p._id+":open",oi,{type:"evtUse",dir:"in",proj:p._id,handleIdx:"open"});
@@ -763,7 +745,7 @@
     // IReader<TProjection>: der Reader liest GENAU EINE Projektion — expliziter Bindungs-Port.
     const pb=port("query");pb.classList.add("o");reg("rdr:proj:"+r._id,pb,{type:"projref",dir:"out",reader:r._id});
     body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"liest Projektion: "+(r.projektion||"— andocken")+" ▶"),pb));
-    const ds=derivedStores(r);
+    const ds=storeScope("rdr:"+r._id);
     body.append(h("div",{class:"gsec"},"Stores (abgeleitet): "+(ds.length?ds.join(" · "):"— (Handle → Read-Fn verdrahten)")));
     body.append(h("div",{class:"gsec"},"Query → Handle → Read-Fn(s) (auch mehrere Stores) → OneOf-Responses. Das WANN macht der Rumpf."));
     body.append(handleListe(r,"rdr:"+r._id,"Query → Handle → Read-Fn(s) → OneOf-Responses · je Handle eine eigene Karte"));
@@ -869,150 +851,44 @@
   }
 
   // ══ AKTEURE: von wem kommt was? (docs/konzept-akteure.md §2, docs/konzept-domaenen-editor.md §12) ══
-  //   Deklariert ist nur IDarf (direkt). Was eine Pipeline/Reaktion/ein Reader/Prozess/Decide aus einer Nachricht erzeugt,
-  //   trägt deren Akteure (Kette); ein Handle mit dem Dienst eines Akteurs (IAkteurDienst<A>) wechselt zu A. Spiegel von
-  //   DomainEditor/AkteurAnteile.cs — Parität: deAkteurParitaet() gegen rahmen.akteurMengen.
-  const ART_SYM={Mensch:"👤 ",Maschine:"⚙ ",Ki:"🤖 "}, ART_RANG={Maschine:0,Ki:1,Mensch:2};
+  //   Deklariert ist nur IDarf (direkt); alles Abgeleitete (Kette, Akteur-Menge je Karte, Akteur-Rahmen, Reihenfolge, Pfade) rechnet der Server
+  //   (DomainEditor/AkteurAnteile.cs → rahmen.akteurMengen, GraphExtractor/Sicht → board.sicht). Hier wird nur nachgeschlagen.
+  const ART_SYM={Mensch:"👤 ",Maschine:"⚙ ",Ki:"🤖 "};
   const artBasis=a=>a==="Mensch"?"IMensch":a==="Maschine"?"IMaschine":a==="Ki"?"IKi":"IAkteur";
   const OHNE_AKT="§ohneAkteur";
-  let AKM=null,AKTSET=new Map(),AKTORD=new Map(),AKTDOM=null;
   function istEingangName(nm){const r=recByName(nm);return !!r&&(r.kind==="command"||r.kind==="query");}
-  // Die Regeln des Flusses: [Eingänge, Ausgänge, Akteur-Wechsel|null] — dieselben Kanten wie Fluss.cs.
-  function flussRegeln(){const R=[];
-    MODEL.decider.forEach(d=>{if(d.command)R.push([[d.command],(d.ergibt||[]).map(o=>o.event).filter(Boolean),null]);});
-    MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>R.push([[hd.event].filter(Boolean),[...(hd.sends||[]),...(hd.publishes||[])],null])));
-    MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>R.push([[hd.event].filter(Boolean),[...(hd.publishes||[])],null])));
-    MODEL.reader.forEach(r=>(r.handles||[]).forEach(hd=>R.push([[hd.query].filter(Boolean),[...(hd.responses||[])],null])));
-    // Vertrag (Akteur-Konzept §3): Event → Akteur → Commands; die Ausgänge gehören dem Akteur (Akteur-Wechsel).
-    vertragsZusagen().forEach(({a,r})=>R.push([[r.eingang].filter(Boolean),[...(r.ausgaenge||[])],a.name]));
-    // Katalog-Funktion: Auftrag → Ergebnisse (wie Fluss.cs: fn-Baustein zwischen Auftrag und Ergebnis-Events).
-    const auftragVon=nm=>(MODEL.funktionen.find(f=>f.name===nm)||{}).auftrag||nm;
-    MODEL.funktionen.forEach(f=>{if(f.auftrag)R.push([[f.auftrag],[...(f.ergebnisse||[])],null]);});
-    MODEL.sagas.forEach(sg=>{const ts=MODEL.transitions.filter(t=>t.prozess===sg.name);
-      R.push([[sg.triggerEvent,...ts.flatMap(t=>t.wenn||[])].filter(Boolean),
-        ts.flatMap(t=>(t.dann||[]).flatMap(d=>[d.rufe?auftragVon(d.rufe):d.sende,d.kompensation])).filter(Boolean),null]);});
-    // Pipeline als Fluss: Quell-/Log-Events, erwartete Events und verdrahtete Fälle hinein; Aufträge und Commands hinaus.
-    MODEL.fluesse.forEach(f=>{const ein=[],aus=[];
-      (f.knoten||[]).forEach(k=>{if(k.art==="quelle"||k.art==="auf")ein.push(k.typ);
-        else if(k.art==="warte")ein.push(...(k.warteAuf||[]));
-        else if(k.art==="funktion")aus.push(auftragVon(k.typ));
-        else if(k.art==="command")aus.push(k.typ);
-        (k.eingaenge||[]).forEach(e=>(e.draehte||[]).forEach(d=>{if(d.fall&&(d.port||"fall")==="fall")ein.push(d.fall);}));});
-      R.push([ein.filter(Boolean),aus.filter(Boolean),null]);});
-    return R;}
-  // Nachricht → {direkt:Set, kette:Set}; Fixpunkt über Mengen (ein Command kann von mehreren Akteuren kommen).
-  function akteurMengen(){if(AKM)return AKM;const M=new Map();
-    const g=nm=>{let m=M.get(nm);if(!m)M.set(nm,m={direkt:new Set(),kette:new Set()});return m;};
-    MODEL.akteure.forEach(a=>(a.darf||[]).forEach(nm=>g(nm).direkt.add(a.name)));
-    const alle=nm=>{const m=M.get(nm);return m?[...m.direkt,...m.kette]:[];};
-    const R=flussRegeln();
-    for(let ge=true;ge;){ge=false;R.forEach(([ein,aus,w])=>{const q=w?[w]:ein.flatMap(alle);
-      aus.forEach(o=>{const z=g(o).kette;q.forEach(x=>{if(!z.has(x)){z.add(x);ge=true;}});});});}
-    return AKM=M;}
-  const mengeVon=nm=>{const m=akteurMengen().get(nm);return m?new Set([...m.direkt,...m.kette]):new Set();};
-  // Parität mit der C#-Ableitung (nur sinnvoll für ein unverändertes Board).
-  window.deAkteurParitaet=()=>{const soll=(MODEL.rahmen&&MODEL.rahmen.akteurMengen)||{},ist=akteurMengen(),diff=[];
-    const s=x=>[...x].sort().join(",");
-    new Set([...Object.keys(soll),...[...ist.keys()].filter(k=>ist.get(k).direkt.size||ist.get(k).kette.size)]).forEach(k=>{
-      const a=soll[k]||{direkt:[],kette:[]},b=ist.get(k)||{direkt:new Set(),kette:new Set()};
-      if(s(a.direkt)!==s(b.direkt)||s(a.kette)!==s(b.kette))diff.push(k+": C# "+s(a.direkt)+"|"+s(a.kette)+" ≠ JS "+s(b.direkt)+"|"+s(b.kette));});
-    return {gleich:diff.length===0,anzahl:Object.keys(soll).length,diff};};
-  // Akteur-Menge einer KARTE (Domäne × Akteur-Rahmen): Nachrichten aus der Ableitung, Bausteine über das, was sie tragen.
-  function akteurSet(n){let s=AKTSET.get(n.id);if(s)return s;AKTSET.set(n.id,s=new Set());const r=n.ref,add=x=>x&&x.forEach(v=>s.add(v));
-    switch(n.kind){
-      case "akteur":s.add(r.name);break;
-      case "auf":s.add(n.own.ref.name);break;
-      case "command":case "query":case "event":case "rejection":case "queryresponse":{
-        // Ergebnis einer Funktion (kein Decider erzeugt es): steht im Rahmen seiner Funktion — Auftrag · ƒ · Ergebnis bleiben beisammen.
-        const f=n.kind==="event"&&ergebnisVon(r.name);
-        if(f&&!MODEL.decider.some(d=>(d.ergibt||[]).some(o=>o.event===r.name))){add(akteurSet({id:"fk:"+f._id,kind:"funktion",ref:f}));if(s.size)break;}
-        add(mengeVon(r.name));
-        if(n.kind==="query"&&!s.size)MODEL.reader.forEach(rd=>{if((rd.handles||[]).some(h=>h.query===r.name))add(akteurSet({id:"rdr:"+rd._id,kind:"reader",ref:rd}));});
-        break;}
-      case "decider":add(mengeVon(r.command));break;
-      case "applier":add(mengeVon(r.event));break;
-      case "aggregate":MODEL.decider.filter(d=>d.aggregat===r.name).forEach(d=>add(mengeVon(d.command)));break;
-      case "state":MODEL.decider.filter(d=>d.aggregat===r.aggregat).forEach(d=>add(mengeVon(d.command)));break;
-      case "reader":(r.handles||[]).forEach(hd=>add(mengeVon(hd.query)));break;
-      case "reaktion":(r.handles||[]).forEach(hd=>add(handleAkteure(n.kind,hd)));break;
-      case "handle":{const o=n.own;if(o.kind==="projektion")add(projektionAkteure(o.ref));else if(o.kind==="reader")add(mengeVon(r.query));
-        else{add(handleAkteure(o.kind,r));if(!s.size)add(akteurSet(o));}   // Handle ohne Kette: wie sein Besitzer
-        break;}
-      case "saga":MODEL.transitions.filter(t=>t.prozess===r.name).forEach(t=>(t.dann||[]).forEach(d=>add(mengeVon(d.sende))));
-        add(mengeVon(r.triggerEvent));break;
-      case "transition":(r.dann||[]).forEach(d=>add(mengeVon(d.sende)));(r.wenn||[]).forEach(e=>add(mengeVon(e)));
-        // Regel nur aus Funktions-Ergebnissen/-Aufrufen (keine eigene Kette): sie steht im Rahmen ihres Prozesses.
-        if(!s.size){const sg=MODEL.sagas.find(x=>x.name===r.prozess);if(sg)add(akteurSet({id:"saga:"+sg.name,kind:"saga",ref:sg}));}
-        break;
-      // Funktion = Auftrag · ƒ · Ergebnisse in EINEM Rahmen: ihre Akteure sind die ihres Auftrags (Kette über Prozess ODER Fluss),
-      //   sonst die der rufenden Regeln.
-      case "funktion":add(mengeVon(r.auftrag));
-        if(!s.size)MODEL.transitions.filter(t=>(t.dann||[]).some(d=>d.rufe===r.name)).forEach(t=>add(akteurSet({id:"tr:"+t._id,kind:"transition",ref:t})));break;
-      case "auftrag":{const f=MODEL.funktionen.find(x=>x.auftrag===r.name);if(f)add(akteurSet({id:"fk:"+f._id,kind:"funktion",ref:f}));else add(mengeVon(r.name));break;}
-      case "projektion":add(projektionAkteure(r));break;
-      case "store":add(storeAkteure(r));break;
-      case "fn":{const l=fnLeser(r._id);add(l.size?l:storeAkteure(n.own.ref));break;}
-      case "readmodel":{const st=MODEL.stores.find(x=>x.name===r.store);if(st)add(storeAkteure(st));break;}
-      case "codenode":case "llmnode":{const cid=n.kind==="llmnode"?r.promptZiel:r._id,o=cid&&codeBesitzerKnoten(cid);if(o&&o.id!==n.id)add(akteurSet(o));break;}
-      default:{   // VO/Enum/Konfig …: folgen ihren Nachbarn (ohne Daten-Daten-Ketten)
-        const nb=[...(ADJ.inn.get(n.id)||[]),...(ADJ.out.get(n.id)||[])].map(x=>NODEBY.get(x)).filter(m=>m&&m.kind!=="akteur");
-        nb.filter(m=>!DATEN_ARTEN.has(m.kind)).forEach(m=>add(akteurSet(m)));
-        if(!s.size)nb.filter(m=>DATEN_ARTEN.has(m.kind)).forEach(m=>add(akteurSet(m)));}}   // VO in VO: über den Träger
-    // Datentypen ohne eigene Kette (verschachtelte Response, Read Model ohne Store …) gehen mit ihren Nachbarn. Eingänge NIE —
-    //   ein Command/eine Query ohne Akteur ist eine Lücke (GR-HERKUNFT) und steht sichtbar „ohne Akteur".
-    if(!s.size&&(n.kind==="queryresponse"||n.kind==="readmodel")){
-      [...(ADJ.inn.get(n.id)||[]),...(ADJ.out.get(n.id)||[])].map(x=>NODEBY.get(x)).filter(m=>m&&m.kind!=="akteur").forEach(m=>add(akteurSet(m)));}
-    return s;}
-  const DATEN_ARTEN=new Set(["valueobject","enum","konfig"]);
-  // Arten, die mit ihrem Träger mitgehen, aber keinen Akteur-Rahmen begründen.
-  const NUR_MIT=new Set(["valueobject","enum","konfig","codenode","llmnode","queryresponse","code"]);
+  // Von welchem Akteur kommt eine Nachricht: direkt (IDarf) bzw. über die Kette.
+  function akteurMenge(nm){const m=((MODEL.rahmen||{}).akteurMengen||{})[nm];return {direkt:new Set(m?m.direkt:[]),kette:new Set(m?m.kette:[])};}
   // Diagnose: je Domäne die Akteur-Reihenfolge und je Rahmen die Bausteine mit ihrer Akteur-Menge.
   window.deAkteure=()=>{const r={};NODEBY.forEach(n=>{if(!VIS.has(n.id))return;const d=domKey(n),o=akteurOrdnung(d),a=o.length?akteurVon(n):"—";
     const x=r[d]||(r[d]={ordnung:o,rahmen:{}});(x.rahmen[a]=x.rahmen[a]||[]).push(n.kind+":"+n.name+" {"+[...akteurSet(n)].join(",")+"}");});return r;};
-  // Reaktions-Handle: die Akteure seines Eingangs; ohne Kette die Akteure seiner Ausgaben.
-  function handleAkteure(art,hd){const s=new Set();
-    if(art==="projektion"||art==="reader"){return null;}
-    mengeVon(hd.event).forEach(x=>s.add(x));
-    if(!s.size)[...(hd.sends||[]),...(hd.publishes||[])].forEach(o=>mengeVon(o).forEach(x=>s.add(x)));
-    return s;}
-  // Wer liest eine Store-Fn? Reader-Handles, die sie als Fähigkeit nehmen.
-  function fnLeser(fid){const s=new Set();
-    MODEL.reader.forEach(rd=>(rd.handles||[]).forEach(hd=>{if((hd.fns||[]).includes(fid))mengeVon(hd.query).forEach(x=>s.add(x));}));
-    return s;}
-  function storeAkteure(st){const s=new Set();(st.readFns||[]).forEach(f=>fnLeser(f._id).forEach(x=>s.add(x)));return s;}
-  // Projektion: wer sie liest — über ihre Reader und die Stores, in die sie schreibt.
-  function projektionAkteure(p){const s=new Set();
-    MODEL.reader.filter(rd=>rd.projektion===p.name).forEach(rd=>(rd.handles||[]).forEach(hd=>mengeVon(hd.query).forEach(x=>s.add(x))));
-    derivedStores(p).forEach(nm=>{const st=MODEL.stores.find(x=>x.name===nm);if(st)storeAkteure(st).forEach(x=>s.add(x));});
-    return s;}
-  // Die Karte, an der ein Rumpf (📝) hängt — Decider/Applier/Handle/Fn.
-  function codeBesitzerKnoten(cid){for(const n of NODEBY.values()){const r=n.ref;if(n.kind!=="codenode"&&n.kind!=="llmnode"&&r&&r.codeSrc===cid)return n;}return null;}
-  // Reihenfolge der Akteur-Rahmen einer Domäne (§12.3): wer das Ding erschafft, dann wer worauf antwortet (Zusage),
-  //   dann Art (Maschine → KI → Mensch), dann Name. Die Ansicht kann sie umsortieren (VIEW.akteurOrdnung[dom]).
-  function akteurOrdnung(dom){let o=AKTORD.get(dom);if(o)return o;
-    // Wer wirkt hier? Nur fachliche Bausteine zählen — ein Datentyp/Code, den viele berühren, macht keinen eigenen Rahmen auf.
-    const da=new Set();NODEBY.forEach(n=>{if(n.kind!=="akteur"&&!NUR_MIT.has(n.kind)&&VIS.has(n.id)&&!istInselLage(n)&&domKey(n)===dom)akteurSet(n).forEach(x=>da.add(x));});
-    const art=nm=>(MODEL.akteure.find(a=>a.name===nm)||{}).art;
-    const schoepfer=new Set();MODEL.records.forEach(r=>{if(r.kind==="command"&&r.istErzeugung){const d=MODEL.decider.find(x=>x.command===r.name),
-      ag=d&&MODEL.aggregate.find(a=>a.name===d.aggregat);if(ag&&ag.namespace===dom)mengeVon(r.name).forEach(x=>schoepfer.add(x));}});
-    const basis=[...da].sort((a,b)=>(schoepfer.has(a)?0:1)-(schoepfer.has(b)?0:1)||(ART_RANG[art(a)]??3)-(ART_RANG[art(b)]??3)||a.localeCompare(b));
-    // Antwortet B per Zusage auf ein Event von A → A vor B.
-    const vor=new Map();
-    vertragsZusagen().forEach(({a,r})=>mengeVon(r.eingang).forEach(x=>{if(x!==a.name){if(!vor.has(a.name))vor.set(a.name,new Set());vor.get(a.name).add(x);}}));
-    const aus=[],rest=[...basis];
-    while(rest.length){const i=rest.findIndex(b=>[...(vor.get(b)||[])].every(a=>!rest.includes(a)||a===b));const k=i<0?0:i;aus.push(rest.splice(k,1)[0]);}
-    const wunsch=((VIEW.akteurOrdnung||{})[dom]||[]).filter(x=>aus.includes(x));
-    o=[...wunsch,...aus.filter(x=>!wunsch.includes(x))];AKTORD.set(dom,o);return o;}
-  // Akteur-Rahmen einer Karte: der ERSTE Akteur der Domäne (Reihenfolge), zu dem sie gehört — Doppelungen stehen dort, wo
-  //   sie zuerst auftreten. Ohne Akteur (bzw. Domäne ohne Akteure): OHNE_AKT.
-  function akteurVon(n){const ord=akteurOrdnung(domKey(n));if(!ord.length)return OHNE_AKT;
-    const s=akteurSet(n),h=(VIEW.heimAkteur||{})[n.id];
-    if(!s.size&&h&&ord.includes(h))return h;
-    return ord.find(a=>s.has(a))||OHNE_AKT;}
   // Domänen, in denen ein Akteur wirkt (sortiert wie die Domänen-Rahmen).
-  function akteurDomaenen(name){if(!AKTDOM){AKTDOM=new Map();NODEBY.forEach(n=>{if(n.kind==="akteur"||NUR_MIT.has(n.kind))return;const d=domKey(n);
-      akteurSet(n).forEach(a=>{if(!AKTDOM.has(a))AKTDOM.set(a,new Set());AKTDOM.get(a).add(d);});});}
-    return [...(AKTDOM.get(name)||[])].sort(domOrd);}
+  const akteurDomaenen=name=>(SICHT().akteurDomaenen||{})[name]||[];
+  // Die Akteure einer Karte (Domäne × Akteur-Rahmen).
+  function akteurSet(n){const k=sk(n);return new Set(k?k.akteure:n.kind==="akteur"?[n.ref.name]:[]);}
+  // Reihenfolge der Akteur-Rahmen einer Domäne (§12.3) — die Ansicht kann sie umsortieren (VIEW.akteurOrdnung[dom]).
+  function akteurOrdnung(dom){const aus=SICHT().akteurOrdnung[dom]||[],wunsch=((VIEW.akteurOrdnung||{})[dom]||[]).filter(x=>aus.includes(x));
+    return [...wunsch,...aus.filter(x=>!wunsch.includes(x))];}
+  // Akteur-Rahmen einer Karte: der ERSTE Akteur der Domäne (Reihenfolge), zu dem sie gehört; eine neue, noch leere Karte bleibt im Rahmen,
+  //   in dem sie angelegt wurde (VIEW.heimAkteur). Ohne Akteur (bzw. Domäne ohne Akteure): OHNE_AKT.
+  function akteurVon(n){const ord=akteurOrdnung(domKey(n));if(!ord.length)return OHNE_AKT;
+    const s=akteurSet(n),h=(VIEW.heimAkteur||{})[n.id];if(!s.size&&h&&ord.includes(h))return h;
+    return ord.find(a=>s.has(a))||OHNE_AKT;}
+
+  // ══ SICHT (Werkbank P7.3, docs/konzept-werkbank.md §8.3): die Ableitungen kommen fertig vom Server (board.sicht, GraphExtractor/Sicht) —
+  //   Domäne, Block, Akteure und Akteur-Rahmen, Inseln, eingeklappte Details, Kanten, Prozess-Kette, Clients; die Fokus-Kette und ⊕ fragt der
+  //   Editor eigens (/api/werkbank/kette, /api/werkbank/passt). Hier wird nichts nachgerechnet; darüber liegen nur die Wünsche der Ansicht
+  //   (Heimat neuer Karten, gewünschte Akteur-Reihenfolge). Code-Blöcke (📝/🤖) gibt es nur im Editor (bis P7.4): sie folgen der Karte, an der
+  //   sie hängen. Eine Karte, die es im Code noch nicht gibt (gerade angelegt, die Geste läuft), hat bis zum nächsten Board keine Sicht.
+  var CODE_ADJ=new Map();
+  const SICHT_LEER={karten:{},kanten:[],kontrakt:[],kette:[],akteurOrdnung:{},fluesse:{},clients:{}};
+  const SICHT=()=>MODEL.sicht||SICHT_LEER;
+  // Die Karte, an der ein Code-Block hängt (über seine Code-Kante); ein 🤖 hängt an seinem 📝.
+  function codeTraeger(n){let id=n.id;for(let i=0;i<3&&id&&(id.startsWith("cn:")||id.startsWith("ln:"));i++)id=(CODE_ADJ.get(id)||[])[0];
+    return id&&id!==n.id?NODEBY.get(id)||null:null;}
+  // Der Sicht-Eintrag einer Karte (bzw. ihres Trägers bei Code-Blöcken); null = (noch) nicht im Code.
+  function sk(n){if(!n)return null;const k=SICHT().karten[n.id];if(k)return k;
+    if(n.kind==="codenode"||n.kind==="llmnode"){const t=codeTraeger(n);return t?SICHT().karten[t.id]||null:null;}return null;}
   // 👤 AKTEUR: Name, Namespace, und EINE Liste — was er darf (IDarf<T>). ⊕ „+ darf" → passende Commands/Queries
   //   leuchten → anklicken = erlauben, ✓-Karte = entziehen. Was er HÖREN darf, ist abgeleitet (Generator), keine Eingabe.
   function akteurCard(body,a){
@@ -1043,7 +919,7 @@
       // ⊕ → eine Funktions-Karte anklicken (IDarf<IFunktion>).
       body.append(slotRow("darf","+ bietet an ⊕ (Funktion) ▶","r",{type:"darf",dir:"out",akt:a._id,nurFunktion:true},"akt:darffk:"+a._id+":open"));}
     // Was in seinem Namen über eine Kette entsteht (abgeleitet, nicht deklariert): Fluss/Prozess aus seinen Events.
-    {const km=akteurMengen(),bew=[...km.entries()].filter(([nm,m])=>m.kette.has(a.name)&&!m.direkt.has(a.name)&&istEingangName(nm)).map(([nm])=>nm).sort();
+    {const bew=Object.entries((MODEL.rahmen||{}).akteurMengen||{}).filter(([nm,m])=>(m.kette||[]).includes(a.name)&&!(m.direkt||[]).includes(a.name)&&istEingangName(nm)).map(([nm])=>nm).sort();
       body.append(h("div",{class:"gsec",title:"abgeleitet: Commands, die ein Fluss oder ein Prozess aus Events dieses Akteurs erzeugt — kein IDarf nötig, am Tor nicht erlaubt"},"bewirkt über die Kette (abgeleitet)"));
       body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},bew.length?bew.join(", "):"— nichts"));}
     const wirkt=akteurDomaenen(a.name);
@@ -1087,8 +963,8 @@
       return h("button",{class:"akt-dom",onclick:()=>a&&waehle("akt:"+a._id)},(ART_SYM[a&&a.art]||"👤 ")+n);}):[h("span",{},"— noch keiner")])));
     // ↺ trägt: Akteur-Vertrags-Teile (⊕ → Akteure mit Vertrag leuchten).
     body.append(h("div",{class:"gsec",title:"interface "+c.name+" : …, IKlassifizierer — die Zusagen des Teils gehen über diese Leitung, im Namen seines Akteurs"},"↺ trägt (Akteur-Verträge)"));
-    (c.traegt||[]).forEach(t=>{const a=teilAkteur(t),s=anchorDot("traegt");s.classList.add("o");reg("cl:traegt:"+c._id+":"+t,s,{type:"traegt",dir:"out",client:c._id,anker:true});
-      const n=teilZusagen(t).length;
+    (c.traegt||[]).forEach(t=>{const a=teilAkteur(c,t),s=anchorDot("traegt");s.classList.add("o");reg("cl:traegt:"+c._id+":"+t,s,{type:"traegt",dir:"out",client:c._id,anker:true});
+      const n=clientPorts(c).filter(p=>p.ri==="zusage"&&p.teil===t&&!p.fehlt).length;
       body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},t+(a?" · "+a.name+" · "+n+(n===1?" Zusage":" Zusagen"):" · ⚠ kein Akteur-Vertrag")),
         h("button",{class:"rm",title:"nicht mehr tragen",onclick:()=>{c.traegt=ohneX(c.traegt,t);render();}},"✕"),s));});
     body.append(slotRow("traegt","+ trägt ⊕ (Akteur mit Vertrag) ▶","r",{type:"traegt",dir:"out",client:c._id},"cl:traegt:"+c._id+":open"));
@@ -1443,21 +1319,8 @@
 
   const dec=id=>MODEL.decider.find(d=>d._id===id);
   const app=id=>MODEL.applier.find(a=>a._id===id);
-  // ZUGEHÖRIGKEIT = BEZIEHUNG, nie Namespace oder Name: Decider/Applier tragen ihr Aggregat (aus dem Code bzw. per
-  //   ▲-Verdrahtung ans Aggregat). Ein Record gehört dem Aggregat, dessen Decider/Applier ihn entscheidet/erzeugt/faltet;
-  //   ein Wert-Typ (VO/Enum) dem Aggregat, dessen Records/State ihn referenzieren — jeweils EINDEUTIG oder keinem.
+  // ZUGEHÖRIGKEIT = BEZIEHUNG, nie Namespace oder Name — abgeleitet auf dem Server (GraphExtractor/Sicht: Block, Aggregat je Karte).
   const recByName=n=>MODEL.records.find(r=>r.name===n);
-  const eindeutig=xs=>{const s=[...new Set(xs)];return s.length===1&&s[0]?s[0]:"";};
-  function recordAgg(n){if(!n)return "";
-    const a=MODEL.decider.filter(d=>d.command===n||(d.ergibt||[]).some(o=>o.event===n)).map(d=>d.aggregat)
-      .concat(MODEL.applier.filter(x=>x.event===n).map(x=>x.aggregat));
-    return a.length?eindeutig(a):"";}
-  function typAgg(t){if(!t)return "";const a=[];
-    MODEL.records.forEach(r=>{if((r.felder||[]).some(f=>innerTyp(f.typ)===t))a.push(recordAgg(r.name));});
-    MODEL.aggregate.forEach(g=>{if((g.state||[]).some(f=>innerTyp(f.typ)===t))a.push(g.name);});
-    return a.length?eindeutig(a):"";}
-  // Records spiegeln ihre (abgeleitete) Zugehörigkeit — Decider/Applier werden NICHT überschrieben.
-  function deriveMembership(){MODEL.records.forEach(r=>{const a=recordAgg(r.name);if(a)r.aggregat=a;else delete r.aggregat;});}
   const baseTyp=x=>(x||"").replace(/\s/g,"").replace(/\?$/,"");
   // Positionsweise vollständige Argumentliste (fehlende Parameter → "default", damit es kompiliert).
   function argListe(cmdName,args){const cmd=recByName(cmdName);
@@ -1507,22 +1370,9 @@
   //   Verzweigung: je Ergebnis eine eigene Kante („bei X“). Zusammenführung: mehrere Drähte in einen Knoten („und“; UndAlle „alle“).
   //   Fan-out „×N“, Kompensation gestrichelt „↩ rückgängig“ (vom Schritt zum Gegen-Command), Zeitlimit „⏳“. Das Start-Event als
   //   zusätzliches Join-Event ist nur Kontext (seine Daten), kein Draht. Nur eine noch leere Regel (ohne Wenn/Ziel) bleibt eine Karte.
-  function quelleVon(sg,e){const f=ergebnisVon(e);return f?"fk:"+f._id:e===sg.triggerEvent?"saga:"+sg.name:"rec:"+e;}
-  function zielVon(d){const zf=d.rufe&&MODEL.funktionen.find(x=>x.name===d.rufe);return zf?"fk:"+zf._id:d.sende&&recByName(d.sende)?"rec:"+d.sende:null;}
-  function kettenKanten(t){const sg=MODEL.sagas.find(x=>x.name===t.prozess);if(!sg)return [];
-    const w=(t.wenn||[]).filter(Boolean),dn=t.dann||[];if(!w.length||!dn.length)return [];
-    const ziele=dn.map(d=>({d,nach:zielVon(d)}));if(ziele.some(z=>!z.nach))return [];
-    const ohne=w.filter(e=>e!==sg.triggerEvent);
-    const quellen=(ohne.length?ohne:[sg.triggerEvent]).map(e=>({e,von:quelleVon(sg,e)}));
-    if(t.sammelEvent)quellen.push({e:t.sammelEvent,von:quelleVon(sg,t.sammelEvent),alle:true});
-    const join=quellen.length>1,out=[];
-    ziele.forEach(({d,nach})=>{
-      quellen.forEach(q=>{const f=ergebnisVon(q.e),zweig=f&&(f.ergebnisse||[]).length>1&&f.ergebnisse[0]!==q.e;
-        const teile=[q.von.startsWith("saga:")?"erst":"dann"];if(zweig)teile.push("bei "+q.e);if(join)teile.push(q.alle?"alle":"und");
-        if(d.sendeJe)teile.push("×N");if(d.zeitlimit)teile.push("⏳");
-        out.push({t,sg,von:q.von,nach,bei:q.e,d,label:teile.join(" · "),art:"dann"});});
-      if(d.kompensation&&recByName(d.kompensation))out.push({t,sg,von:nach,nach:"rec:"+d.kompensation,bei:"",d,label:"↩ rückgängig",art:"komp"});});
-    return out;}
+  //   Die Kanten rechnet der Server (board.sicht.kette); t/sg/d sind die Board-Objekte der Regel.
+  function ketteAusSicht(){return (SICHT().kette||[]).map(k=>{const t=MODEL.transitions.find(x=>"tr:"+x._id===k.tr),d=t&&(t.dann||[])[k.dannIdx];
+    if(!d)return null;return {t,sg:MODEL.sagas.find(x=>x.name===t.prozess),von:k.von,nach:k.nach,bei:k.bei,d,label:k.label,art:k.art};}).filter(Boolean);}
   // ── ARGUMENTE AUTOMATISCH ZUORDNEN (wie msg in Node-RED, nur typisiert): je Feld des Ziels (Command bzw. Auftrag) die passende
   //   Quelle aus den Join-Events (Lambda-Parameter t, r, g …): gleicher Name → Name endet gleich (QuellPfad ← Pfad) → einziger
   //   gleicher Typ. Ein Wert-Objekt wird aus seinen Feldern gebaut. Das jüngste Ergebnis geht vor dem Start. Unpassendes bleibt
@@ -1546,9 +1396,8 @@
     if(sg.triggerEvent&&bei!==sg.triggerEvent){const mit=[sg.triggerEvent,bei],a2=autoArgs(zr,mit);if(voll(a2)>voll(args)){wenn=mit;args=a2;}}
     MODEL.transitions.push({_id:"t"+(NID++),prozess:sg.name,wenn,dann:[{...(ziel.rufe?{rufe:ziel.rufe}:{sende:ziel.sende}),sendeArgs:args}]});}
   // Einen Schritt der Kette wieder lösen: die Regel(n) des Prozesses, die bei „bei" genau dieses Ziel rufen/senden.
-  function kettenLoesen(sgName,bei,ziel){MODEL.transitions.filter(t=>t.prozess===sgName).forEach(t=>kettenKanten(t)
-    .filter(k=>k.art==="dann"&&k.bei===bei&&(k.d.rufe||k.d.sende)===ziel).forEach(k=>{
-      if((t.dann||[]).length>1)t.dann=t.dann.filter(x=>x!==k.d);else MODEL.transitions=MODEL.transitions.filter(x=>x!==t);}));}
+  function kettenLoesen(sgName,bei,ziel){KETTE.filter(k=>k.t.prozess===sgName&&k.art==="dann"&&k.bei===bei&&(k.d.rufe||k.d.sende)===ziel).forEach(k=>{const t=k.t;
+    if((t.dann||[]).length>1)t.dann=t.dann.filter(x=>x!==k.d);else MODEL.transitions=MODEL.transitions.filter(x=>x!==t);});}
   // ARGUMENT-TABELLE eines Schritts: Feld ← Quelle (Vorschläge aus den Join-Events), „↻ automatisch“ füllt neu.
   //   Ein aus dem Code gelesener Ausdruck (λ) bleibt, bis man ihn bewusst durch die Tabelle ersetzt.
   function argTabelle(body,t,d){const zr=zielRecord(d),z=recByName(zr);if(!z||!(z.felder||[]).length)return;
@@ -1560,15 +1409,11 @@
       block:cn&&(cn.text||"").trim()?{name:cn.name,text:cn.text,loesen:()=>setCodeSrc({k:"regelLambda",trans:t._id,dannIdx:(t.dann||[]).indexOf(d),teil:"sende"},null)}:null,
       schreibe:a=>{d.sendeArgs=a;delete d.sendeAusdruck;},auto:()=>autoArgs(zr,t.wenn)}));}
   // Die Schritte, die von einem Knoten (Prozess-Start oder Funktion) aus „dann“ folgen — mit ✕ zum Lösen.
-  function kettenZeilen(body,vonId){MODEL.transitions.flatMap(kettenKanten).filter(k=>k.art==="dann"&&k.von===vonId).forEach(k=>{
+  function kettenZeilen(body,vonId){KETTE.filter(k=>k.art==="dann"&&k.von===vonId).forEach(k=>{
     const d=k.d,ziel=d.rufe?"ƒ "+d.rufe:"▶ "+d.sende;
     body.append(h("div",{class:"slotrow o"},h("button",{class:"rm",title:"Schritt lösen",onclick:()=>{MODEL.transitions=MODEL.transitions.filter(x=>x!==k.t);render();}},"✕"),
       h("span",{class:"slotlbl",style:"flex:1;text-align:right"},k.label+" ▶ "+ziel),
       h("button",{class:"rm",title:"Schritt öffnen (Argumente, Zeitlimit)",onclick:()=>waehle("tr:"+k.t._id)},"⚙")));});}
-  // Berührte Aggregate (abgeleitet aus den Namespaces der referenzierten Events/Commands der Transitionen).
-  function sagaAggs(s){const ns=new Set();transOf(s).forEach(t=>{[...(t.wenn||[]),t.sammelEvent].forEach(e=>ns.add(recordAgg(e)));
-    (t.dann||[]).forEach(d=>[d.sende,d.kompensation].forEach(c=>ns.add(recordAgg(c))));});
-    return [...new Set([...ns].filter(Boolean))];}
   // Vor Serveraufruf: Transitionen → Saga.Schritte (inkl. UndAlle/SendeJe) + ExtraUsings; Argumente positionsvoll.
   function prepareSaga(){MODEL.sagas.forEach(s=>{const ts=transOf(s);
     // Ein Join, mehrere Dann → je Dann EINE Regel (gleiche Bedingung). flatMap fächert die Dann auf.
@@ -1703,9 +1548,7 @@
   //   Knoten definiert: ƒ = Auftrag → Ergebnisse (IFunktion) · ▶ = Command → Decide-Events (Aggregat) · ⛲ = → Quell-Nachricht ·
   //   ◆/⧗ = ← Event. Drähte verbinden Knoten direkt (beschriftet mit dem Typ des Ausgangs). Die Verbindung zur Domäne ist die
   //   Zuweisung: ƒ ⇢ Funktions-Karte (Katalog), ▶ → Command im Aggregat, ⛲ ⇢ Nachricht; ◆/⧗ ← Event aus dem Log.
-  //   Der Rahmen steht IN der Domäne, auf die der Fluss wirkt (die Aggregate seiner Commands, eindeutig — sonst sein Namespace).
-  function flussHeim(f){const ds=[...new Set((f.knoten||[]).filter(k=>k.art==="command"&&k.typ).map(k=>{const n=NODEBY.get("rec:"+k.typ);return n?aggDom(n):null;}).filter(Boolean))];
-    return ds.length===1?ds[0]:(f.namespace||null);}
+  //   Der Rahmen steht IN der Domäne, auf die der Fluss wirkt (die Aggregate seiner Commands, eindeutig — sonst sein Namespace; vom Server).
   function flZuweisung(k){if((k.art==="quelle"||k.art==="command")&&k.typ)return "rec:"+k.typ;
     if(k.art==="funktion"){const fk=MODEL.funktionen.find(x=>x.name===k.typ);return fk?"fk:"+fk._id:null;}return null;}
   const flHoert=k=>k.art==="auf"?(k.typ?[k.typ]:[]):k.art==="warte"?flWarteAuf(k):[];
@@ -2191,10 +2034,9 @@
   // Rollen-Spalten im Geteilt-Band.
   const ROLE_SHARED={saga:0,transition:1,auftrag:2,funktion:3,ergebnis:3.5,reaktion:2,"handle:reaktion":3,konfig:7,valueobject:8,enum:8,command:9,event:9,rejection:9,
     fn:10,store:11,readmodel:11,"handle:projektion":12,projektion:13,"handle:reader":14,reader:15,query:14,queryresponse:16,codenode:17,llmnode:17,code:17};
-  // Rolle eines Knotens: Handles je Besitzer-Art (Projektions- vs. Reader-Handle liegen in verschiedenen Spalten).
-  // Ergebnis-Events einer Funktion stehen hinter ihr (eigene Spalte „ergebnis“), nicht bei den Events des Aggregats.
-  //   Funktionen einer Kette: je Tiefe eine eigene Spalte (11.01, 11.02 …) — die Reihenfolge des Ablaufs steht nebeneinander.
-  const rolle=(n,map)=>{const k=n.kind==="handle"?"handle:"+n.own.kind:n.kind==="event"&&map.ergebnis!==undefined&&ergebnisVon(n.ref.name)?"ergebnis":n.kind;
+  // Rolle eines Knotens (vom Server): Handles je Besitzer-Art (Projektions- vs. Reader-Handle liegen in verschiedenen Spalten), Ergebnis-Events
+  //   einer Funktion hinter ihr (Spalte „ergebnis“), sonst die Art. Funktionen einer Kette: je Tiefe eine eigene Spalte (11.01, 11.02 …).
+  const rolle=(n,map)=>{const sr=(SICHT().karten[n.id]||{}).rolle,k=sr||(n.kind==="handle"?"handle:"+n.own.kind:n.kind);
     if(k==="funktion"&&map.funktion!==undefined)return map.funktion+Math.min(TIEFE.get(n.id)||0,90)/100;
     return map[k]!==undefined?map[k]:99;};
   const rollenVon=blk=>blk===SHARED_KEY?ROLE_SHARED:blk===AKTEUR_KEY?ROLE_AKTEUR:ROLE_AGG;
@@ -2229,143 +2071,33 @@
       case "transition":return (r.dann||[]).filter(d=>d.sende||d.rufe).flatMap(d=>[d.codeSrc||null].concat(d.kompensation?[d.kompCodeSrc||null]:[]));
       case "flussknoten":return r.art==="je"?[r.codeSrc||null]:flMitLambda(r)?(r.eingaenge||[]).map(e=>e.codeSrc||null):null;}
     return null;}
-  // Aggregat-Zugehörigkeit eines Knotens (oder SHARED_KEY). Ableitung über Namespace + Verdrahtung.
-  // ══ GRAPH-BASIS: alles liegt als Graph vor — Partition nach ECHTER Verbundenheit, nicht nach Namespace. ══
-  // Eine einzige Kanten-Quelle auf KNOTEN-Ebene (Node-Id → Node-Id), gespiegelt zu drawEdges' Beziehungen.
-  function boardEdges(){
-    const E=[]; const rec=n=>"rec:"+n;
-    const codeId=id=>MODEL.codeNodes.some(c=>c._id===id)?"cn:"+id:(MODEL.llmNodes.some(l=>l._id===id)?"ln:"+id:null);
-    const push=(a,b)=>{if(a&&b)E.push([a,b]);};
-    // Akteur → was er darf (Command/Query über die Record-Karte, IDarf<IFunktion> über die Funktions-Karte).
-    MODEL.akteure.forEach(a=>(a.darf||[]).forEach(nm=>{if(recByName(nm))push("akt:"+a._id,rec(nm));
-      else{const fk=MODEL.funktionen.find(x=>x.name===nm);if(fk)push("akt:"+a._id,"fk:"+fk._id);}}));   // IDarf<IFunktion>: bietet an
-    // Vertrag (Akteur-Konzept §3): Event → Zusage → Commands; die Zusage hängt an ihrem Akteur (Hub-Kante wie Handle → Besitzer).
-    vertragsZusagen().forEach(({a,r,id})=>{push(id,"akt:"+a._id);if(recByName(r.eingang))push(rec(r.eingang),id);
-      (r.ausgaenge||[]).forEach(c=>{if(recByName(c))push(id,rec(c));});});
-    MODEL.decider.forEach(d=>{if(recByName(d.command))push(rec(d.command),"dec:"+d._id);
-      if(d.aggregat)push("dec:"+d._id,"agg:"+d.aggregat);
-      (d.ergibt||[]).forEach(o=>{if(recByName(o.event))push("dec:"+d._id,rec(o.event));});
-      if(d.codeSrc)push(codeId(d.codeSrc),"dec:"+d._id);});
-    // Pipelines (Fluss): Drähte zwischen den Knoten; Quelle ← ihre Nachricht, Command-Knoten → sein Command, ƒ-Knoten → die Funktion.
-    //   Drähte Knoten → Knoten; dazu die Zuweisung (ƒ → Funktion, ▶ → Command, ⛲ → Nachricht) und ◆/⧗ ← Event.
-    //   Richtung = Fluss der Nachricht: die Quell-Nachricht kommt HEREIN (Nachricht → ⛲), ein Draht trägt ein Ergebnis/Event des
-    //   Vorgängers (Ergebnis-Karte → Folgeknoten) — so läuft die Kette durch Funktion und Domäne in die Pipeline zurück.
-    MODEL.fluesse.forEach(f=>(f.knoten||[]).forEach(z=>{flVor(z).forEach(v=>{const q=flKnoten(f,v);if(q)push("fs:"+q._id,"fs:"+z._id);});
-      const zw=flZuweisung(z);if(zw){if(flQuelleArt(z))push(zw,"fs:"+z._id);else push("fs:"+z._id,zw);}
-      (z.eingaenge||[]).forEach(e=>(e.draehte||[]).forEach(d=>{if((d.port||"fall")==="fall"&&d.fall&&recByName(d.fall))push(rec(d.fall),"fs:"+z._id);}));
-      flHoert(z).forEach(nm=>{if(recByName(nm))push(rec(nm),"fs:"+z._id);});
-      if(z.codeSrc)push(codeId(z.codeSrc),"fs:"+z._id);(z.eingaenge||[]).forEach(e=>{if(e.codeSrc)push(codeId(e.codeSrc),"fs:"+z._id);});}));
-    MODEL.applier.forEach(a=>{if(recByName(a.event))push(rec(a.event),"app:"+a._id);
-      if(a.aggregat)push("app:"+a._id,"agg:"+a.aggregat); if(a.codeSrc)push(codeId(a.codeSrc),"app:"+a._id);});
-    MODEL.states.forEach(s=>{if(s.aggregat)push("st:"+s._id,"agg:"+s.aggregat);});
-    MODEL.sagas.forEach(s=>{if(recByName(s.triggerEvent))push(rec(s.triggerEvent),"saga:"+s.name);});
-    MODEL.transitions.forEach(t=>{if(t.prozess)push("tr:"+t._id,"saga:"+t.prozess);
-      (t.wenn||[]).forEach(e=>{if(recByName(e))push(rec(e),"tr:"+t._id);});
-      (t.dann||[]).forEach(d=>{if(recByName(d.sende))push("tr:"+t._id,rec(d.sende));if(recByName(d.kompensation))push("tr:"+t._id,rec(d.kompensation));
-        const fk=d.rufe&&MODEL.funktionen.find(f=>f.name===d.rufe);if(fk)push("tr:"+t._id,"fk:"+fk._id);
-        if(d.codeSrc)push(codeId(d.codeSrc),"tr:"+t._id);if(d.kompCodeSrc)push(codeId(d.kompCodeSrc),"tr:"+t._id);});});
+  // ══ GRAPH-BASIS: die Kanten auf Karten-Ebene (Karten-Id → Karten-Id) kommen vom Server (board.sicht.kanten — Layout, Inseln, Kette,
+  //   Nachbarn im Panel). Nur die Code-Blöcke (📝/🤖) gibt es allein im Editor (bis P7.4): ihre Kanten (📝 → die Karte, deren Rumpf er ist;
+  //   🤖 → sein 📝) kommen hier dazu.
+  function codeKanten(){const E=[],push=(a,b)=>{if(a&&b)E.push([a,b]);};
+    const codeId=id=>!id?null:MODEL.codeNodes.some(c=>c._id===id)?"cn:"+id:(MODEL.llmNodes.some(l=>l._id===id)?"ln:"+id:null);
+    MODEL.decider.forEach(d=>{if(d.codeSrc)push(codeId(d.codeSrc),"dec:"+d._id);});
+    MODEL.fluesse.forEach(f=>(f.knoten||[]).forEach(z=>{if(z.codeSrc)push(codeId(z.codeSrc),"fs:"+z._id);
+      (z.eingaenge||[]).forEach(e=>{if(e.codeSrc)push(codeId(e.codeSrc),"fs:"+z._id);});}));
+    MODEL.applier.forEach(a=>{if(a.codeSrc)push(codeId(a.codeSrc),"app:"+a._id);});
+    MODEL.transitions.forEach(t=>(t.dann||[]).forEach(d=>{if(d.codeSrc)push(codeId(d.codeSrc),"tr:"+t._id);if(d.kompCodeSrc)push(codeId(d.kompCodeSrc),"tr:"+t._id);}));
     MODEL.clients.forEach(c=>(c.implementierungen||[]).forEach(im=>(im.rumpfe||[]).forEach(x=>{if(x.codeSrc)push(codeId(x.codeSrc),"cl:"+c._id);})));
-    MODEL.funktionen.forEach(f=>{if(recByName(f.auftrag))push(rec(f.auftrag),"fk:"+f._id);if(f.codeSrc)push(codeId(f.codeSrc),"fk:"+f._id);
-      (f.ergebnisse||[]).forEach(e=>{if(recByName(e))push("fk:"+f._id,rec(e));});
-      // ⚙ Lese-Fähigkeit → die Read-Fn, deren Interface sie ist (wie Handle → Fn).
-      (f.faehigkeiten||[]).forEach(p=>{const z=leseFnZu(p.typ);if(z)push("fk:"+f._id,"fn:"+z.fn._id);});});
-    MODEL.readModels.forEach(rm=>{const st=MODEL.stores.find(s=>s.name===rm.store);if(st)push("rm:"+rm._id,"sto:"+st._id);});
-    // Store-Fns: eigene Knoten am Store (Hub-Kante Fn → Store), ihr Impl-Rumpf hängt an der Fn.
-    MODEL.stores.forEach(st=>(st.writeFns||[]).concat(st.readFns||[]).forEach(fn=>{push("fn:"+fn._id,"sto:"+st._id);if(fn.codeSrc)push(codeId(fn.codeSrc),"fn:"+fn._id);}));
-    // Handles: eigene Knoten am Besitzer (Hub-Kante Handle → Besitzer); Eingang → Handle → Ausgänge; Rumpf → Handle.
-    const HID=new Map();Object.entries(HANDLE_ART).forEach(([k,[coll,pre]])=>(MODEL[coll]||[]).forEach(o=>{const ids=handleIds(o,pre+":"+o._id);(o.handles||[]).forEach((hd,hi)=>HID.set(hd,ids[hi]));}));
-    const H=hd=>HID.get(hd);
-    MODEL.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>{push(H(hd),"prj:"+p._id);
-      if(recByName(hd.event))push(rec(hd.event),H(hd));
-      (hd.fns||[]).forEach(fid=>{if(fnById(fid))push(H(hd),"fn:"+fid);});
-      (hd.publishes||[]).forEach(ev=>{if(recByName(ev))push(H(hd),rec(ev));});
-      if(hd.codeSrc)push(codeId(hd.codeSrc),H(hd));}));
-    MODEL.reader.forEach(r=>{const p=r.projektion&&MODEL.projektionen.find(x=>x.name===r.projektion);if(p)push("rdr:"+r._id,"prj:"+p._id);
-      (r.handles||[]).forEach(hd=>{push(H(hd),"rdr:"+r._id);
-        if(recByName(hd.query))push(rec(hd.query),H(hd));
-        (hd.fns||[]).forEach(fid=>{if(fnById(fid))push(H(hd),"fn:"+fid);});
-        (hd.responses||[]).forEach(resp=>{if(recByName(resp))push(H(hd),rec(resp));});
-        if(hd.codeSrc)push(codeId(hd.codeSrc),H(hd));});});
-    MODEL.reaktionen.forEach(r=>(r.handles||[]).forEach(hd=>{push(H(hd),"rk:"+r._id);
-      if(recByName(hd.event))push(rec(hd.event),H(hd));
-      (hd.sends||[]).forEach(c=>{if(recByName(c))push(H(hd),rec(c));});
-      (hd.publishes||[]).forEach(ev=>{if(recByName(ev))push(H(hd),rec(ev));});
-      if(hd.codeSrc)push(codeId(hd.codeSrc),H(hd));}));
-    // 🤖 → 📝: der LLM-Knoten hängt an seinem Code-Block (Prompt-Kante, wie drawEdges sie zeichnet).
+    MODEL.funktionen.forEach(f=>{if(f.codeSrc)push(codeId(f.codeSrc),"fk:"+f._id);});
+    MODEL.stores.forEach(st=>(st.writeFns||[]).concat(st.readFns||[]).forEach(fn=>{if(fn.codeSrc)push(codeId(fn.codeSrc),"fn:"+fn._id);}));
+    Object.entries(HANDLE_ART).forEach(([,[coll,pre]])=>(MODEL[coll]||[]).forEach(o=>{const ids=handleIds(o,pre+":"+o._id);
+      (o.handles||[]).forEach((hd,hi)=>{if(hd.codeSrc)push(codeId(hd.codeSrc),ids[hi]);});}));
     MODEL.llmNodes.forEach(l=>{if(l.promptZiel&&MODEL.codeNodes.some(c=>c._id===l.promptZiel))push("ln:"+l._id,"cn:"+l.promptZiel);});
-    // Store-API: Records in Fn-Parametern/-Rückgaben (Transfer-Typen wie ImagePairStatistik) gehören an ihre Fn.
-    MODEL.stores.forEach(st=>(st.writeFns||[]).concat(st.readFns||[]).forEach(fn=>{
-      [fn.rueckgabe,...(fn.params||[]).map(x=>x.typ)].forEach(t=>((t||"").match(/[A-Za-z_]\w*/g)||[]).forEach(n=>{
-        const r=recByName(n);if(r&&r.kind!=="command")push(rec(n),"fn:"+fn._id);}));}));
-    // Typ-Komposition: VO/Enum → Feld-Owner (Record/Aggregat/ReadModel/State).
-    const voN=new Set(MODEL.records.filter(r=>r.kind==="valueobject").map(r=>r.name)), enN=new Set(MODEL.enums.map(e=>e.name));
-    const ownerId=o=>MODEL.records.some(r=>r.name===o)?"rec:"+o:MODEL.aggregate.some(a=>a.name===o)?"agg:"+o
-      :(MODEL.readModels.find(rm=>rm.name===o)?"rm:"+MODEL.readModels.find(rm=>rm.name===o)._id
-      :(MODEL.states.some(s=>s._id===o)?"st:"+o:null));
-    alleFelder().forEach(({owner,f})=>{const bt=innerTyp(f.typ),oid=ownerId(owner);if(!oid)return;
-      if(voN.has(bt))push("rec:"+bt,oid); else if(enN.has(bt))push("enum:"+bt,oid);});
-    return E;
-  }
+    return E;}
+  const kanten=()=>[...SICHT().kanten,...codeKanten()];
   // Diagnose/Prüf-Skripte: Knoten + Kanten des Boards (dieselbe Wahrheit wie Layout und Insel-Erkennung).
-  window.deGraph=()=>({knoten:graphNodes().map(n=>({id:n.id,kind:n.kind,name:n.name})),kanten:boardEdges()});
-  // Zusammenhangskomponenten (Union-Find) über graphNodes + boardEdges → Map(nodeId → Wurzel-Id).
-  function components(){
-    const p={}, find=x=>{while(p[x]!==x){p[x]=p[p[x]];x=p[x];}return x;};
-    graphNodes().forEach(n=>p[n.id]=n.id);
-    boardEdges().forEach(([a,b])=>{if(p[a]!==undefined&&p[b]!==undefined){const ra=find(a),rb=find(b);if(ra!==rb)p[ra]=rb;}});
-    const m=new Map();graphNodes().forEach(n=>m.set(n.id,find(n.id)));return m;
-  }
-  // Inseln = Knoten in winzigen Komponenten (≤2) OHNE Aggregat — die „einsamen" / unverdrahteten.
-  const ISLE_MAX=2;
-  function islandInfo(){
-    const comp=components(), all=graphNodes(), byC=new Map();
-    all.forEach(n=>{const c=comp.get(n.id);if(!byC.has(c))byC.set(c,[]);byC.get(c).push(n);});
-    const ids=new Set();
-    byC.forEach(nodes=>{const fach=nodes.filter(n=>n.kind!=="codenode"&&n.kind!=="llmnode"&&n.kind!=="client"&&n.kind!=="host");   // ein Client hängt über seinen Vertrag, nicht über Kanten; Host-Karten sind Konfig
-      if(fach.length<=ISLE_MAX && !fach.some(n=>n.kind==="aggregate"))fach.forEach(n=>ids.add(n.id));});
-    return {comp,byC,ids};
-  }
+  window.deGraph=()=>({knoten:graphNodes().map(n=>({id:n.id,kind:n.kind,name:n.name})),kanten:kanten()});
+  // Inseln = Karten in winzigen Komponenten (≤ 2) OHNE Aggregat — die „einsamen" / unverdrahteten (vom Server).
+  const inselMenge=()=>new Set(Object.entries(SICHT().karten).filter(([,k])=>k.insel).map(([id])=>id));
   // Aggregat-Untergruppe (oder null = Brücke: cross-cutting, gehört keinem Aggregat).
   function subGroupOf(n){const g=groupKeyOf(n);return g===SHARED_KEY?null:g;}
 
-  function groupKeyOf(n){
-    const k=n.kind, r=n.ref;
-    if(k==="akteur"||k==="auf") return AKTEUR_KEY;
-    if(k==="aggregate") return r.name;
-    if(k==="handle"||k==="fn") return groupKeyOf(n.own);   // Handle/Fn gehören zu ihrem Besitzer
-    if(k==="state") return r.aggregat||SHARED_KEY;
-    if(k==="decider"||k==="applier") return r.aggregat||SHARED_KEY;
-    // Ein Ergebnis einer Funktion (das kein Decider erzeugt) steht bei seiner Funktion — wie ein Event beim Decider.
-    if(k==="event"&&ergebnisVon(r.name)&&!MODEL.decider.some(d=>(d.ergibt||[]).some(o=>o.event===r.name)))return ergebnisAgg(r.name)||recordAgg(r.name)||SHARED_KEY;
-    if(k==="command"||k==="event"||k==="rejection") return recordAgg(r.name)||ergebnisAgg(r.name)||SHARED_KEY;
-    if(k==="valueobject"||k==="enum") return typAgg(r.name)||SHARED_KEY;
-    if(k==="projektion"){const a=(r.handles||[]).map(h=>recordAgg(h.event));return (a.length&&eindeutig(a))||SHARED_KEY;}
-    if(k==="reader"){const p=r.projektion&&MODEL.projektionen.find(x=>x.name===r.projektion);return (p&&groupKeyOf({kind:"projektion",ref:p}))||SHARED_KEY;}
-    if(k==="query"){const rd=MODEL.reader.find(x=>(x.handles||[]).some(h=>h.query===r.name));return (rd&&groupKeyOf({kind:"reader",ref:rd}))||SHARED_KEY;}
-    if(k==="queryresponse"){const rd=MODEL.reader.find(x=>(x.handles||[]).some(h=>(h.responses||[]).includes(r.name)));return (rd&&groupKeyOf({kind:"reader",ref:rd}))||SHARED_KEY;}
-    if(k==="store"){const u=MODEL.projektionen.find(p=>derivedStores(p).includes(r.name))||MODEL.reader.find(rd=>derivedStores(rd).includes(r.name));
-      if(u)return groupKeyOf({kind:MODEL.projektionen.includes(u)?"projektion":"reader",ref:u});
-      return SHARED_KEY;} // kein Handle→Fn verdrahtet: gehört (noch) keinem Aggregat
-    if(k==="readmodel"){const st=MODEL.stores.find(s=>s.name===r.store);return st?groupKeyOf({kind:"store",ref:st}):SHARED_KEY;}
-    if(k==="codenode"){const o=findCodeOwner(r._id);return o?groupKeyOf(o):SHARED_KEY;}
-    if(k==="llmnode"){const o=r.promptZiel&&findCodeOwner(r.promptZiel);return o?groupKeyOf(o):SHARED_KEY;}
-    // ABLAUF-BAUSTEINE stehen im Block des Aggregats, auf das sie WIRKEN (eindeutig) — so liest sich die Kette in EINEM Block
-    //   links→rechts: Command → Decider → Event → Prozess → Regel → Auftrag → ƒ Funktion → Ergebnis.
-    //   Wirkt ein Baustein auf mehrere Aggregate (echte Brücke), bleibt er im Geteilt-Band.
-    if(k==="saga") return sagaAgg(r)||SHARED_KEY;
-    if(k==="transition"){const sg=MODEL.sagas.find(x=>x.name===r.prozess);return (sg&&sagaAgg(sg))||SHARED_KEY;}
-    if(k==="funktion") return funktionAgg(r)||SHARED_KEY;
-    if(k==="auftrag"){const f=MODEL.funktionen.find(x=>x.auftrag===r.name);return (f&&funktionAgg(f))||SHARED_KEY;}
-    return SHARED_KEY; // reaktion … und Ablauf-Bausteine über mehrere Aggregate
-  }
-  function sagaAgg(sg){const a=sagaAggs(sg);return a.length===1?a[0]:"";}
-  // Eine Funktion gehört dorthin, wo die Prozesse liegen, die sie rufen — sonst zum Aggregat, das ihre Ergebnisse faltet (eine
-  //   Pipeline ruft sie). Ihr Auftrag und ihre Ergebnisse stehen mit ihr im selben Block: Auftrag · ƒ · Ergebnis nebeneinander.
-  function funktionAgg(f){return eindeutig(MODEL.transitions.filter(t=>(t.dann||[]).some(d=>d.rufe===f.name))
-    .map(t=>MODEL.sagas.find(x=>x.name===t.prozess)).filter(Boolean).map(sagaAgg).filter(Boolean))
-    ||eindeutig((f.ergebnisse||[]).map(recordAgg).filter(Boolean));}
-  const ergebnisVon=nm=>MODEL.funktionen.find(f=>(f.ergebnisse||[]).includes(nm));
-  function ergebnisAgg(nm){const f=ergebnisVon(nm);return f?funktionAgg(f):"";}
+  // Block einer Karte (Aggregat, SHARED_KEY = Brücke, AKTEUR_KEY = Akteur-Band) — vom Server (board.sicht).
+  function groupKeyOf(n){const k=sk(n);if(k)return k.block;return n.kind==="akteur"||n.kind==="auf"?AKTEUR_KEY:SHARED_KEY;}
   // ── MESS-BASIERTES PACKING: nach dem Rendern die ECHTEN Knotengrößen messen und die Aggregat-
   //    Blöcke ÜBERLAPPUNGSFREI per Shelf-Packing setzen. Nur frische/Seed-Boards (alle x/y leer);
   //    vollständig arrangierte Boards (Handanordnung) bleiben unberührt. Zwei Ebenen:
@@ -2776,24 +2508,6 @@
     return {x:(r.left+r.width/2-wr.left)/PAN.s,y:(r.top+r.height/2-wr.top)/PAN.s};}
   const bez=(x1,y1,x2,y2)=>{const dx=Math.max(46,Math.abs(x2-x1)*0.5);return "M"+x1+","+y1+" C"+(x1+dx)+","+y1+" "+(x2-dx)+","+y2+" "+x2+","+y2;};
 
-  function compatible(a,b){const A=a.__slot,B=b.__slot;if(!A||!B||A.anker||B.anker)return false;if(A.dir===B.dir)return false;
-    // „dann …" im Ablauf eines Prozesses: der nächste Schritt ist eine Funktion (Rufe) ODER ein Command (Sende).
-    if(A.type==="kette"||B.type==="kette"){const o=A.type==="kette"?A:B,i=o===A?B:A;return o.dir==="out"&&i.dir==="in"&&(i.type==="rufe"||(i.type==="sagaCmd"&&!!i.rec));}
-    if(A.type!==B.type)return false;
-    // Fluss: Drähte und Je-Bezüge nur innerhalb DERSELBEN Pipeline, nur vorwärts (kein Kreis), nie in eine Quelle.
-    if(A.type==="draht"||A.type==="jeEl"||A.type==="jeSa"){const o=A.dir==="out"?A:B,i=o===A?B:A;const v=flKnotenById(o.flk),z=flKnotenById(i.flk),f=v&&flFluss(v);
-      if(!v||!z||!f||flFluss(z)!==f||v===z||flQuelleArt(z)||flErreicht(f,z.name,v.name))return false;
-      if(A.type==="draht")return z.art!=="je"||!(z.eingaenge||[]).length||(z.eingaenge||[]).some(e=>(e.draehte||[]).some(d=>d.von===v.name));
-      return v.art==="je"&&z.art!=="je";}
-    // Akteur-Tor: Funktionen nur über „bietet an" (IDarf<IFunktion>), Nachrichten über „darf"; ein Client sendet keine Funktion.
-    if(A.type==="darf"){const o=A.dir==="out"?A:B,i=o===A?B:A;if(!!o.nurFunktion!==!!i.funktion)return false;}
-    if((A.kind==="arg")!==(B.kind==="arg"))return false;              // Argument-Pin nur an Argument-Pin
-    if(A.kind==="arg"&&A.trans!==B.trans)return false;                 // und nur innerhalb derselben Transition
-    if(A.type==="field"){const src=A.dir==="out"?A:B,snk=A.dir==="out"?B:A;   // Feld-Quelle muss den Wunsch des Eingangs erfüllen
-      if(snk.want==="count")return istColl(src.ftyp)||istGanzzahl(src.ftyp);
-      if(snk.want==="collection")return istColl(src.ftyp);
-      return true;}
-    return true;}
   function applyLink(a,b){
     const O=a.__slot.dir==="out"?a.__slot:b.__slot, I=a.__slot.dir==="out"?b.__slot:a.__slot;gTitel("verbinden ("+O.type+")");
     if(O.type==="darf"&&O.client){const c=MODEL.clients.find(x=>x._id===O.client);if(c&&I.rec){const f=(recByName(I.rec)||{}).kind==="query"?"fragt":"sendet";
@@ -2944,55 +2658,14 @@
   }
 
   // ══ GRAMMATIK (Phase 1, docs/konzept-editor-komposition.md §3): EINE Quelle — DomainEditor.Grammatik, vom Extractor als
-  //   rahmen.grammatik ins Board gelegt. Hier ist nichts davon hart kodiert: Sorten, Tabelle, Regeln und die Abbildung der
-  //   Editor-Ports auf die Sprache kommen aus dem Board. Der Verbinden-Modus bietet nur erlaubte Ziele an; ein gesperrtes Ziel
-  //   nennt die Regel beim Namen (derselbe Satz wie der Validator).
+  //   rahmen.grammatik ins Board gelegt. Hier ist nichts davon hart kodiert: Sorten, Tabelle, Regeln kommen aus dem Board — nur zum ANZEIGEN.
+  //   Was an einen Port passt (⊕), entscheidet der Server (GraphExtractor/Sicht.Passt, POST /api/werkbank/passt); ein gesperrtes Ziel nennt
+  //   die Regel beim Namen.
   const GR=()=>(MODEL.rahmen&&MODEL.rahmen.grammatik)||null;
-  const grRegel=id=>{const g=GR();return (g&&(g.regeln||[]).find(r=>r.id===id))||{id,name:id,build:"?"};};
-  const grText=id=>{const r=grRegel(id);return "Regel »"+r.name+"« ("+r.id+"; Build: "+r.build+")";};
   const grName=(liste,id)=>{const g=GR();const x=g&&(g[liste]||[]).find(y=>y.id===id);return x?x.name:id;};
   const grSymbol=s=>{const g=GR();const x=g&&(g.sorten||[]).find(y=>y.id===s);return x?x.symbol:"•";};
-  const grVerlierbar=s=>{const g=GR();const x=g&&(g.sorten||[]).find(y=>y.id===s);return !!x&&x.garantie==="verlierbar";};
-  const grKonsum=(s,b)=>(GR().konsume||[]).find(k=>k.sorte===s&&k.baustein===b)||null;
-  const grErzeugung=(b,s)=>(GR().erzeugungen||[]).find(e=>e.baustein===b&&e.sorte===s)||null;
-  const grRegelSorte=s=>((GR().konsume||[]).find(k=>k.sorte===s)||{}).regel||"GR-AUSGANG-GESCHLOSSEN";
-  const grRegelBaustein=b=>((GR().erzeugungen||[]).find(e=>e.baustein===b)||{}).regel||"GR-AUSGANG-GESCHLOSSEN";
-  // Welcher Baustein steckt hinter einem Editor-Port (Info-Felder dec/proj/pipeline …)?
-  function grBaustein(I){for(const [k,b] of (GR().portBaustein||[]))if(I[k]!=null&&I[k]!=="")return b;return null;}
-  // Nachricht (Name) → Sorte: Record-Art, Trigger-Karte, Selbst-Nachricht.
+  // Nachricht (Name) → Sorte: Record-Art (Quell-Nachricht über ihre Treiber-Basis).
   function grNachrichtSorte(name){const g=GR(),r=recByName(name);if(r)return (r.kind==="event"&&(r.treiber||(g.quellBasis&&(r.basen||[]).includes(g.quellBasis))))?"quelle":(g.recordSorte||{})[r.kind]||null;
-    return null;}
-  // Wer konsumiert die Nachricht schon (für die Kardinalität „genau eins")?
-  function grKonsumenten(name,sorte,baustein){
-    if(baustein==="aggregat"&&sorte==="command")return MODEL.decider.filter(d=>d.command===name).map(d=>({dec:d._id,name:"Decider ("+(d.aggregat||"?")+")"}));
-    if(baustein==="aggregat"&&sorte==="event")return MODEL.applier.filter(a=>a.event===name).map(a=>({app:a._id,name:"Applier ("+(a.aggregat||"?")+")"}));
-    if(baustein==="reader")return MODEL.reader.filter(r=>(r.handles||[]).some(x=>x.query===name)).map(r=>({reader:r._id,name:"Reader "+r.name}));
-    return [];}
-  const grSelbeStelle=(x,I)=>(x.dec&&x.dec===I.dec)||(x.app&&x.app===I.app)||(x.reader&&x.reader===I.reader);
-  const grVerstoss=(regel,text)=>({regel,text:text+" — "+grText(regel)});
-  // Eine Verbindung Ausgang O → Eingang I gegen die Grammatik prüfen. null = erlaubt, sonst {regel, text}.
-  function grPruefe(O,I){const g=GR();if(!g)return null;
-    // (a) Nachricht → Baustein-Eingang: Sorte × Eingang, Kardinalität je Nachricht.
-    if(O.rec&&!I.rec){const s=grNachrichtSorte(O.rec),b=grBaustein(I);if(!s||!b)return null;
-      const k=grKonsum(s,b);if(!k)return grVerstoss(grRegelSorte(s),grName("sorten",s)+" '"+O.rec+"' passt nicht in einen "+grName("bausteine",b)+"-Eingang");
-      if(k.kardinalitaet==="eins"){const andere=grKonsumenten(O.rec,s,b).filter(x=>!grSelbeStelle(x,I));
-        if(andere.length)return grVerstoss(k.regel,grName("sorten",s)+" '"+O.rec+"' hat schon einen Konsumenten: "+andere.map(x=>x.name).join(", "));}
-      return null;}
-    // (b) Baustein-Ausgang → Nachricht: wer darf welche Sorte erzeugen.
-    if(I.rec&&!O.rec){const b=grBaustein(O);let s=grNachrichtSorte(I.rec);if(!b||!s)return null;
-      Object.keys(g.ausgangSorte||{}).forEach(k=>{if(O[k]!=null&&O[k]!=="")s=g.ausgangSorte[k];});
-      if(!grErzeugung(b,s))return grVerstoss(grRegelBaustein(b),
-        grName("bausteine",b)+" erzeugt kein "+grName("sorten",s)+" ('"+I.rec+"')");
-      return null;}
-    // (c) Baustein → Baustein (Port-Sorte aus der Grammatik).
-    const s=(g.portSorte||{})[O.type];if(!s)return null;
-    // Gebrauch (Handle → Store-Fähigkeit): der Port sitzt am Handle, die Fähigkeit erzeugt der Store — geprüft wird der Konsum.
-    if((g.portGebrauch||[]).includes(O.type)){const bg=grBaustein(O);if(!bg||grKonsum(s,bg))return null;
-      return grVerstoss(grRegelSorte(s),grName("bausteine",bg)+" benutzt keine "+grName("sorten",s));}
-    const bo=grBaustein(O),bi=grBaustein(I);
-    if(bo&&!grErzeugung(bo,s))return grVerstoss(grRegelBaustein(bo),grName("bausteine",bo)+" erzeugt kein "+grName("sorten",s));
-    if(!bi)return null;const k=grKonsum(s,bi);
-    if(!k)return grVerstoss(grRegelSorte(s),grName("sorten",s)+" passt nicht in einen "+grName("bausteine",bi)+"-Eingang");
     return null;}
   // 📐 Grammatik: die Tabelle und „Regel → Build-Gegenstück" ins Ausgabe-Panel.
   window.deGrammatik=function(){const g=GR(),out=document.getElementById("de-out");if(!out)return;out.innerHTML="";
@@ -3067,27 +2740,35 @@
 
   // ══ VERBINDEN-MODUS (Hybrid, docs/konzept-editor-panel-bearbeitung.md §3.3): Port im Panel anklicken → alle PASSENDEN
   //   Knoten leuchten auf dem Graphen (Ablauf-Ansicht, Rest abgeblendet) → Karte anklicken = verbinden, ✓-Karte = lösen.
-  //   Einfache Ports enden nach einem Klick, Listen-Ports bleiben offen bis Esc/Fertig. Typregel: compatible().
+  //   Einfache Ports enden nach einem Klick, Listen-Ports bleiben offen bis Esc/Fertig. Was passt, sagt der Server (vbKandidaten).
   let VB=null;   // {key, label, einzel, filter}
   function vbQuelle(){const i=canvas&&canvas.querySelector(".ginsp");return VB&&i?[...i.querySelectorAll(".slot")].find(x=>x.__key===VB.key)||null:null;}
-  // Kandidaten: typgleich (compatible) UND von der Grammatik erlaubt; typgleich, aber verboten → VB.G (gesperrt, mit Regel).
-  function vbKandidaten(q){const m=new Map(),gs=new Map();Object.values(SLOTS).forEach(x=>{if(!x||!compatible(q,x))return;const id=knotenIdVon(x);if(!id)return;
-    const O=q.__slot.dir==="out"?q.__slot:x.__slot,I=q.__slot.dir==="out"?x.__slot:q.__slot;
-    const v=vbPartner(q,x)?null:grPruefe(O,I);   // bestehende Verbindungen bleiben lösbar
-    if(v){if(!gs.has(id))gs.set(id,[]);gs.get(id).push({x,v});return;}
-    if(!m.has(id))m.set(id,[]);m.get(id).push(x);});if(VB)VB.G=gs;return m;}
-  // Verbunden? Eine gezeichnete Kante zwischen dem Kandidaten-Port und einem Port DIESES Knotens mit demselben Typ.
+  // Kandidaten: typgleich UND von der Grammatik erlaubt → K; typgleich, aber verboten → G (gesperrt, mit Regel) — das Urteil fällt der Server
+  //   (POST /api/werkbank/passt, Anschluss-Regel + DomainEditor.Grammatik). Mitgefragt werden die Nachrichten des Katalogs (nicht als Karte
+  //   auf dem Board). Eine schon gezeichnete Verbindung bleibt lösbar, auch wenn die Grammatik sie heute sperrte (das weiß nur die Fläche).
+  const portInfo=x=>{const o={};for(const [k,v] of Object.entries(x.__slot||{}))if(v==null||typeof v!=="object")o[k]=v;return o;};
+  async function vbKandidaten(q,kat){const by=new Map();Object.values(SLOTS).forEach(x=>{if(x&&knotenIdVon(x))by.set(x.__key,x);});kat.forEach(f=>by.set(f.__key,f));
+    const r=await fetch("/api/werkbank/passt",{method:"POST",headers:{"content-type":"application/json"},
+      body:JSON.stringify({port:{key:q.__key,info:portInfo(q)},kandidaten:[...by.values()].map(x=>({key:x.__key,info:portInfo(x)}))})});
+    const a=await r.json(),K=new Map(),G=new Map(),katOk=new Set(),dazu=(m,id,v)=>{if(!m.has(id))m.set(id,[]);m.get(id).push(v);};
+    a.passt.forEach(k=>{const x=by.get(k);if(!x)return;if(x.__kat)katOk.add(k);else dazu(K,knotenIdVon(x),x);});
+    a.gesperrt.forEach(g=>{const x=by.get(g.key);if(!x||x.__kat)return;if(vbPartner(q,x))dazu(K,knotenIdVon(x),x);else dazu(G,knotenIdVon(x),{x,v:{regel:g.regel,text:g.text}});});
+    return {K,G,katOk};}
+  // Verbunden? Eine gezeichnete Kante zwischen dem Kandidaten-Port und einem Port DIESES Knotens mit demselben Typ. Anker-Zeilen (Decider am
+  //   Aggregat, Regel am Prozess) tragen keine Beschreibung: hängt der Kandidat an einer, ist er verbunden (gelöst wird über den offenen Port).
   //   Genau dieser Port (gleicher Schlüssel) — nur „offene" Sammel-Ports (…:open, z. B. „+ Ausgang") zählen knotenweit.
   const istOffenerPort=key=>/:open\b|open(evt|trg)?$/.test(key||"");
   function vbPartner(q,x){const offen=istOffenerPort(q.__key);
     for(const [k1,k2] of KANTEN){const o=k1===x.__key?k2:(k2===x.__key?k1:null);if(!o)continue;
       if(o===q.__key)return SLOTS[o]||q;
-      const e=SLOTS[o];if(offen&&e&&knotenIdVon(e)===SEL&&e.__slot.type===q.__slot.type&&e.__slot.dir===q.__slot.dir&&e.__slot.handleIdx===q.__slot.handleIdx)return e;}
+      const e=SLOTS[o];if(!offen||!e||knotenIdVon(e)!==SEL)continue;
+      if(!e.__slot)return q;   // eine Anker-Zeile dieser Karte (z. B. Decider am Aggregat): verbunden — gelöst wird über den offenen Port
+      if(e.__slot.type===q.__slot.type&&e.__slot.dir===q.__slot.dir&&e.__slot.handleIdx===q.__slot.handleIdx)return e;}
     // Umgekehrt: der Kandidat bietet nur seinen offenen Sammel-Port an (z. B. Akteur „+ bietet an ⊕"), die Kante hängt an einer
     //   seiner Zeilen — dann zählt jede Kante zwischen q und einem gleichartigen Port DIESER Karte (Lösen geht über den Namen).
     if(istOffenerPort(x.__key)){const xid=knotenIdVon(x);
       for(const [k1,k2] of KANTEN){const o=k1===q.__key?k2:(k2===q.__key?k1:null);if(!o)continue;
-        const e=SLOTS[o];if(e&&knotenIdVon(e)===xid&&e.__slot.type===x.__slot.type&&e.__slot.dir===x.__slot.dir)return q;}}
+        const e=SLOTS[o];if(e&&e.__slot&&knotenIdVon(e)===xid&&e.__slot.type===x.__slot.type&&e.__slot.dir===x.__slot.dir)return q;}}
     return null;}
   // Lesbarer Name eines Ports: Beschriftung + Werte der Eingabefelder seiner Zeile (z. B. der Name einer Store-Funktion).
   const slotLabel=x=>{const r=x.closest(".slotrow,.gtopfield,.frow");if(!r)return x.__slot.type;
@@ -3109,8 +2790,13 @@
   function vbEnde(){VB=null;if(!world)return;world.classList.remove("vbmodus");if(canvas)canvas.classList.remove("vbaktiv");
     world.querySelectorAll(".vb-kand,.vb-verb,.vb-quelle,.vb-gesperrt").forEach(e=>e.classList.remove("vb-kand","vb-verb","vb-quelle","vb-gesperrt"));
     canvas.querySelectorAll(".gvbwahl,.gvbkat").forEach(e=>e.remove());canvas.querySelectorAll(".ginsp .slot.vb-aktiv").forEach(e=>e.classList.remove("vb-aktiv"));}
-  function vbZeige(einpassen){if(!VB||!world||!canvas)return;const q=vbQuelle();if(!q){vbEnde();return;}
-    const K=vbKandidaten(q);VB.K=K;
+  var VB_NR=0;
+  async function vbZeige(einpassen){if(!VB||!world||!canvas)return;let q=vbQuelle();if(!q){vbEnde();return;}
+    const nr=++VB_NR,vb=VB,kat=vbKatalogKandidaten(q);let a;
+    try{a=await vbKandidaten(q,kat);}catch(e){deFlash("⚠ SimHost nicht erreichbar — keine Kandidaten",false);return;}
+    if(nr!==VB_NR||VB!==vb||!world||!canvas)return;   // inzwischen ein anderer Port, der Modus ist aus oder neu gezeichnet
+    q=vbQuelle();if(!q){vbEnde();return;}
+    const K=a.K;VB.K=K;VB.G=a.G;
     world.classList.add("vbmodus");canvas.classList.add("vbaktiv");q.classList.add("vb-aktiv");
     // Aktiven Port im (verkleinerten) Panel sichtbar halten.
     const insp=q.closest(".ginsp");if(insp){const d=q.getBoundingClientRect().top-insp.getBoundingClientRect().top;if(d<0||d>insp.clientHeight-30)insp.scrollTop+=d-40;}
@@ -3118,7 +2804,7 @@
       const passt=!!xs;
       el.classList.toggle("vb-kand",passt);el.classList.toggle("vb-verb",passt&&xs.some(x=>vbPartner(q,x)));el.classList.toggle("vb-quelle",id===SEL);
       const gs=!passt&&VB.G&&VB.G.get(id);el.classList.toggle("vb-gesperrt",!!gs);el.title=gs?"✕ "+gs[0].v.text:"";});
-    vbKatalog(q);
+    vbKatalog(q,kat.filter(f=>a.katOk.has(f.__key)));
     if(!K.size&&!VB.KAT)deFlash("Keine passenden Knoten für diesen Anschluss"+(VB.G&&VB.G.size?" — "+VB.G.size+" gesperrt: "+[...VB.G.values()][0][0].v.text:"."),false);
     if(einpassen){const cr=canvas.getBoundingClientRect(),imBild=[...K.keys()].some(id=>{const el=world.querySelector('[data-id="'+id+'"]');if(!el)return false;
       const r=el.getBoundingClientRect();return r.right>cr.left&&r.left<cr.right&&r.bottom>cr.top&&r.top<cr.bottom;});
@@ -3130,12 +2816,14 @@
   const VB_SORTE={"evtOut|in":["event","rejection"],"evtUse|out":["event","rejection"],"sagaCmd|in":["command"],"cmd|out":["command"],
     "query|out":["query"],"qrsp|in":["queryresponse"],"auftragFn|out":["auftrag"],"ftype|out":["valueobject"]};
   const VB_NEU={event:"NeuesEvent",rejection:"NeueAblehnung",command:"NeuerCommand",query:"NeueQuery",queryresponse:"NeueAntwort",auftrag:"NeuerAuftrag",valueobject:"NeuerWert"};
-  function vbKatalog(q){canvas.querySelectorAll(".gvbkat").forEach(e=>e.remove());VB.KAT=null;
+  // Die Nachrichten, die zum Port passen KÖNNTEN (Sorte des Ports) — ob sie passen, sagt der Server mit den übrigen Kandidaten.
+  function vbKatalogKandidaten(q){const S=q.__slot,gegen=S.dir==="out"?"in":"out",kinds=VB_SORTE[S.type+"|"+gegen];if(!kinds)return [];
+    return MODEL.records.filter(r=>kinds.includes(r.kind)).map(r=>({__key:"kat:"+r.name,__kat:r,__slot:{type:S.type,dir:gegen,rec:r.name}}));}
+  function vbKatalog(q,erlaubt){canvas.querySelectorAll(".gvbkat").forEach(e=>e.remove());VB.KAT=null;
     const S=q.__slot,gegen=S.dir==="out"?"in":"out",kinds=VB_SORTE[S.type+"|"+gegen];if(!kinds)return;
     const fake=r=>({__slot:{type:S.type,dir:gegen,rec:r.name}});
-    const OI=f=>S.dir==="out"?[S,f.__slot]:[f.__slot,S];
-    const liste=MODEL.records.filter(r=>kinds.includes(r.kind)&&!(VB.K&&VB.K.has("rec:"+r.name))).map(r=>({r,f:fake(r)}))
-      .filter(c=>!grPruefe(...OI(c.f))).sort((a,b)=>a.r.name.localeCompare(b.r.name));
+    const liste=erlaubt.map(f=>f.__kat).filter(r=>!(VB.K&&VB.K.has("rec:"+r.name))).map(r=>({r,f:fake(r)}))
+      .sort((a,b)=>a.r.name.localeCompare(b.r.name));
     VB.KAT=liste;
     const verbinde=(r,neu)=>{const q2=vbQuelle()||q;imModus([SEL,"rec:"+r.name],()=>applyLink(q2,fake(r)));
       const n=NODEBY.get("rec:"+r.name)||{kind:r.kind,ref:r,id:"rec:"+r.name};const ns=r.namespace;
@@ -3184,17 +2872,10 @@
       ...xs.map(x=>h("button",{onclick:()=>{box.remove();vbSchalte(vbQuelle(),x);}},(vbPartner(q,x)?"✓ ":"")+slotLabel(x))));
     box.style.left=(r.right-cr.left+6)+"px";box.style.top=(r.top-cr.top)+"px";
     ["pointerdown","click"].forEach(ev=>box.addEventListener(ev,e=>e.stopPropagation()));canvas.append(box);}
-  // Ein NEUER, bisher unverbundener Knoten (Gruppe „geteilt") zieht beim ersten Verbinden in die Spalte seiner Gruppe um.
-  //   Etablierte Knoten bleiben stehen (kein Springen beim Umschalten); kein Voll-Render — nur neu platzieren + Kanten.
-  function mitUmzug(ids,aendern){const gruppe=id=>{const n=graphNodes().find(m=>m.id===id);return n?groupKeyOf(n):null;};
-    const vorher=ids.map(gruppe);aendern();
-    const weg=ids.filter((id,i)=>id&&vorher[i]===SHARED_KEY&&gruppe(id)!==SHARED_KEY);if(!weg.length)return;
-    const L=KPOS[VIEW.details?"d":"k"]||{};weg.forEach(id=>{delete L[id];const n=graphNodes().find(m=>m.id===id);if(n){delete n.ref.x;delete n.ref.y;delete n.ref._kpos;}});
-    packLayout();drawEdges();drawMinimap();}
   function vbSchalte(q,x){if(!q||!x)return;const partner=vbPartner(q,x),ziel=knotenIdVon(x);
     // Bei Einzel-Ports hängt der BISHERIGE Partner mit dran (dessen Karte verliert ihr ✓ / ihre Kante).
     const alt=VB&&VB.einzel?[...(VB.K||new Map()).entries()].filter(([,xs])=>xs.some(y=>vbPartner(q,y))).map(([id])=>id):[];
-    mitUmzug([SEL,ziel],()=>imModus([SEL,ziel,...alt],()=>{if(partner)loeseLink(partner,x);else applyLink(q,x);}));
+    imModus([SEL,ziel,...alt],()=>{if(partner)loeseLink(partner,x);else applyLink(q,x);});
     vbZeige(false);}
   // Kanten aus dem MODEL zeichnen (Slot-Mitte → Slot-Mitte; eingeklappt → an den Kopf).
   //   Eingeklappt: an die passende KOPF-SEITE (Ausgang rechts, Eingang links, oben mittig) statt in die Kopfmitte.
@@ -3231,7 +2912,7 @@
     MODEL.clients.forEach(c=>{
       (c.sendet||[]).concat(c.fragt||[]).forEach(nm=>{if(SLOTS["cl:darf:"+c._id+":"+nm]&&SLOTS["darf:in:"+nm])KANTEN.push(["cl:darf:"+c._id+":"+nm,"darf:in:"+nm]);});
       (c.kenntnis||[]).forEach(nm=>{if(SLOTS["cl:kenntnis:"+c._id+":"+nm]&&SLOTS["evt:out:"+nm])KANTEN.push(["evt:out:"+nm,"cl:kenntnis:"+c._id+":"+nm]);});
-      (c.traegt||[]).forEach(t=>{const a=teilAkteur(t);if(a&&SLOTS["cl:traegt:"+c._id+":"+t]&&SLOTS["akt:traegt:"+a._id])KANTEN.push(["cl:traegt:"+c._id+":"+t,"akt:traegt:"+a._id]);});});
+      (c.traegt||[]).forEach(t=>{const a=teilAkteur(c,t);if(a&&SLOTS["cl:traegt:"+c._id+":"+t]&&SLOTS["akt:traegt:"+a._id])KANTEN.push(["cl:traegt:"+c._id+":"+t,"akt:traegt:"+a._id]);});});
     MODEL.decider.forEach(d=>{
       if(d.command)add("cmd:out:"+d.command,"dec:cmdin:"+d._id,"#4a86d6");
       if(d.aggregat)add("dec:aggout:"+d._id,"agg:left:"+d.aggregat+":"+d._id,"#33b1a6",true);
@@ -3279,7 +2960,7 @@
       (z.eingaenge||[]).forEach(e=>{
         if(e.je){const j=flKnoten(f,e.je);if(j)nurPaar((e.sammle?"fs:jesa:":"fs:jeel:")+j._id,(e.sammle?"fs:jesain:":"fs:jeein:")+z._id);}
         (e.draehte||[]).forEach(d=>{const v=flKnoten(f,d.von);if(v)nurPaar(flAusKey(v,d),"fs:in:"+z._id);});});}));
-    MODEL.transitions.flatMap(kettenKanten).filter(k=>k.art==="dann").forEach(k=>{
+    KETTE.filter(k=>k.art==="dann").forEach(k=>{
       const von=k.von.startsWith("fk:")?"kette:fk:"+k.von.slice(3)+":"+k.sg.name+":"+k.bei:k.von.startsWith("saga:")?"kette:saga:"+k.sg.name:null;
       if(von)nurPaar(von,k.d.rufe?"fk:in:"+k.d.rufe:"cmd:in:"+k.d.sende);});
     // ── Leseseite: ReadModel→Store, Projektion/Reader→Store-Scope, Event→Projektion, Query→Reader,
@@ -3438,122 +3119,57 @@
     if(n.ref._kpos)delete n.ref._kpos;return p;}
   let INSP=false, INSP_SCROLL=null;   // INSP: gerade wird eine Inspector-Kopie gebaut (keine Slot-Registrierung)
 
-  const DETAIL_KINDS=new Set(["decider","applier","state","codenode","llmnode","rejection","valueobject","enum","queryresponse"]);
   let VIS=new Set(), VERTRETER=new Map(), DETAILS=new Map(), EINGEKLAPPT=new Set(), NODEBY=new Map(), KONTRAKT=[], KETTE=[], TIEFE=new Map();
   // Pipeline IN der Domäne: FLHEIM = Rahmen-Schlüssel (§fluss:id) → Domäne, in der der Fluss steht.
   let FLHEIM=new Map();
   let ADJ={out:new Map(),inn:new Map()};
   const vertreterId=id=>(VERTRETER.get(id)||[id])[0];
-  // Direkte Besitzer eines Detail-Knotens (Knoten-Ids) — aus der Verdrahtung, nie aus Namen.
-  function direkteBesitzer(n){const r=n.ref,rec=x=>x&&recByName(x)?"rec:"+x:null,agg=x=>x&&MODEL.aggregate.some(a=>a.name===x)?"agg:"+x:null;
-    switch(n.kind){
-      case "decider":return [rec(r.command)||agg(r.aggregat)];
-      case "applier":return [rec(r.event)||agg(r.aggregat)];
-      case "llmnode":return r.promptZiel?["cn:"+r.promptZiel]:(ADJ.out.get(n.id)||[]);
-      case "codenode":case "state":case "valueobject":case "enum":return ADJ.out.get(n.id)||[];
-      // Nur die erzeugende Seite besitzt: Ablehnung ← Decider, Response ← Reader (nicht VO-Feldtyp-Kanten).
-      case "rejection":return (ADJ.inn.get(n.id)||[]).filter(x=>x.startsWith("dec:"));
-      case "queryresponse":return (ADJ.inn.get(n.id)||[]).filter(x=>x.startsWith("rdr:"));}
-    return [];}
   function berechneSicht(){
     const alle=graphNodes();NODEBY=new Map(alle.map(n=>[n.id,n]));
     const push=(m,k,v)=>{let a=m.get(k);if(!a)m.set(k,a=[]);if(!a.includes(v))a.push(v);};
     ADJ={out:new Map(),inn:new Map()};
-    boardEdges().forEach(([a,b])=>{if(a===b||!NODEBY.has(a)||!NODEBY.has(b))return;push(ADJ.out,a,b);push(ADJ.inn,b,a);});
-    FLHEIM=new Map(MODEL.fluesse.map(f=>[FL_PRE+f._id,flussHeim(f)]));
-    const einklappbar=n=>!VIEW.details&&DETAIL_KINDS.has(n.kind);
-    // Vertreter = sichtbarer Besitzer, transitiv durch eingeklappte Besitzer (Code → Decider → Command).
-    //   Ohne Besitzer bleibt ein Detail selbst sichtbar (neu angelegt / unverdrahtet → nichts verschwindet).
-    const memo=new Map();
-    const vert=(id,pfad)=>{if(memo.has(id))return memo.get(id);const n=NODEBY.get(id);if(!n)return [];
-      if(!einklappbar(n)){memo.set(id,[id]);return [id];}
-      if(pfad.has(id))return [];pfad.add(id);
-      const res=[...new Set(direkteBesitzer(n).filter(Boolean).flatMap(o=>vert(o,pfad)))];pfad.delete(id);
-      const out=res.length?res:[id];memo.set(id,out);return out;};
-    VIS=new Set();VERTRETER=new Map();DOMKEY=new Map();EINHEIT=new Map();DETAILS=new Map();EINGEKLAPPT=new Set();
-    AKM=null;AKTSET=new Map();AKTORD=new Map();AKTDOM=null;
-    alle.forEach(n=>{const v=vert(n.id,new Set());VERTRETER.set(n.id,v);
+    kanten().forEach(([a,b])=>{if(a===b||!NODEBY.has(a)||!NODEBY.has(b))return;push(ADJ.out,a,b);push(ADJ.inn,b,a);});
+    CODE_ADJ=new Map([...ADJ.out].filter(([k])=>/^(cn|ln):/.test(k)));
+    FLHEIM=new Map(MODEL.fluesse.map(f=>[FL_PRE+f._id,((SICHT().fluesse||{})["fl:"+f._id]||{}).heim||f.namespace||null]));
+    // Vertreter (kompakt) = sichtbarer Besitzer, transitiv durch eingeklappte Besitzer (Decider → Command) — vom Server; ein Code-Block hat
+    //   den Vertreter seiner Karte. Ohne Besitzer bleibt ein Detail selbst sichtbar (neu angelegt / unverdrahtet → nichts verschwindet).
+    const vert=n=>{if(VIEW.details)return [n.id];if(n.kind==="codenode"||n.kind==="llmnode"){const t=codeTraeger(n);return t?vert(t):[n.id];}
+      const k=SICHT().karten[n.id];return (k&&k.vertreter)||[n.id];};
+    VIS=new Set();VERTRETER=new Map();DETAILS=new Map();EINGEKLAPPT=new Set();
+    alle.forEach(n=>{const v=vert(n);VERTRETER.set(n.id,v);
       if(v.length===1&&v[0]===n.id){if(!HIDDEN.has(groupKeyOf(n))&&!istAus(n.kind)&&geladen(n))VIS.add(n.id);}
       else{EINGEKLAPPT.add(n.id);v.forEach(o=>push(DETAILS,o,n.id));}});
     // Ablauf als Kette: Kettenschritt-Regeln werden Kanten. Auftrag und Ergebnis-Events einer Funktion bleiben IMMER eigene Karten —
     //   die Funktion ist definiert wie ein Decider: ◀ Auftrag-Karte · ƒ (📝 + 🤖 darunter) · Ergebnis-Karten ▶, auf einer Zeile.
-    KETTE=MODEL.transitions.flatMap(kettenKanten);const weg=new Set(KETTE.map(k=>"tr:"+k.t._id));
+    KETTE=ketteAusSicht();const weg=new Set(KETTE.map(k=>"tr:"+k.t._id));
     weg.forEach(id=>{if(VIS.delete(id))EINGEKLAPPT.add(id);});
     // Tiefe in der Kette (Start = 0): Funktionen stehen danach in eigenen Spalten nebeneinander — erst … dann … von links nach rechts.
-    TIEFE=new Map();const tiefe=(id,pfad)=>{if(TIEFE.has(id))return TIEFE.get(id);if(pfad.has(id))return 0;pfad.add(id);
-      const vor=KETTE.filter(k=>k.art==="dann"&&k.nach===id).map(k=>k.von.startsWith("fk:")?tiefe(k.von,pfad)+1:1);
-      const t=vor.length?Math.max(...vor):0;TIEFE.set(id,t);return t;};
-    MODEL.funktionen.forEach(f=>tiefe("fk:"+f._id,new Set()));
-    // Zusammengezogene Kanten: sichtbar →(eingeklappt)*→ sichtbar. Ins Aggregat nicht (das zeigt der Block).
-    KONTRAKT=[];if(VIEW.details)return;
-    const direkt=new Set();ADJ.out.forEach((bs,a)=>bs.forEach(b=>{direkt.add(a+"\u0000"+b);direkt.add(b+"\u0000"+a);}));
-    VIS.forEach(u=>{const ziele=new Set(),seen=new Set(),stack=(ADJ.out.get(u)||[]).filter(x=>EINGEKLAPPT.has(x));
-      while(stack.length){const x=stack.pop();if(seen.has(x))continue;seen.add(x);
-        (ADJ.out.get(x)||[]).forEach(y=>{if(VIS.has(y)){if(y!==u)ziele.add(y);}else if(EINGEKLAPPT.has(y))stack.push(y);});}
-      ziele.forEach(v=>{if(NODEBY.get(v).kind==="aggregate"||direkt.has(u+"\u0000"+v))return;KONTRAKT.push([u,v]);});});
+    TIEFE=new Map(Object.entries(SICHT().karten).filter(([,k])=>k.tiefe!=null).map(([id,k])=>[id,k.tiefe]));
+    // Zusammengezogene Kanten (kompakt): sichtbar →(eingeklappt)*→ sichtbar, nicht ins Aggregat — vom Server, hier nur die sichtbaren.
+    KONTRAKT=VIEW.details?[]:(SICHT().kontrakt||[]).filter(([u,v])=>VIS.has(u)&&VIS.has(v));
   }
 
-  // ── (5) SLICE: der vertikale Schnitt durch einen Knoten — GERICHTET über die Board-Kanten:
-  //    • vorwärts im Fluss (Command → [Decider] → Events → [Applier] / Projektion → Store …), an Knotenpunkten
-  //      (Aggregat, fremde Commands, Prozess/Regel, Reaktion, Pipeline, Frist, Typen, Betrieb) wird angehalten;
-  //    • Leseseite nachziehen: an Projektion/Store die Reader + Read Models, am Reader seine Queries;
-  //    • rückwärts nur der Auslöser (durch eingeklappte Details bis zum ersten sichtbaren Knoten).
-  //    Aggregat/Prozess als Start: ihre angesteckten Decider/Applier/State bzw. Regeln sind Mit-Startpunkte.
-  const STOP=new Set(["akteur","aggregate","command","saga","transition","reaktion","valueobject","enum","konfig"]);
-  const LESE_START=new Set(["projektion","reader","query","store","readmodel","queryresponse"]);
-  // ── KETTE (§12): von einer Nachricht/einem Handle/Decider/Applier/einer Regel aus dem Nachrichtenfluss TRANSITIV folgen —
-  //    vorwärts alle Konsumenten (Command → Decider → Events → Handles → Commands …), rückwärts alle Erzeuger. So erscheint die
-  //    geschlossene Kette (z. B. FileWatch → DateiErkannt → ImageProcessing → ImagePair → ImagePairKomplett → ImageProcessing …).
-  //    Besitzer (Aggregat/Pipeline/Projektion/Reaktion/Reader/Prozess/Store) werden gezeigt, aber nicht durchlaufen — sonst
-  //    leuchteten über ihre übrigen Handles/Decider alle fremden Ketten mit. Typen/Betrieb (VO, Enum, Konfig, Dienst) gehören nicht dazu.
-  const KETTE_HUB=new Set(["aggregate","projektion","reaktion","reader","saga","store"]);
-  const KETTE_FLUSS=new Set(["command","event","rejection","query","queryresponse","handle","decider","applier","transition","fn","funktion","auftrag","flussknoten",...KETTE_HUB]);
-  const KETTE_START=new Set(["command","event","rejection","handle","decider","applier","transition","reaktion","saga","funktion","auftrag","flussknoten"]);
-  function ketteVon(start,nurVorwaerts){const N=id=>NODEBY.get(id)||{},k0=N(start).kind;
-    // Pipeline/Reaktion/Prozess als Start: ihre Handles bzw. Regeln sind die Startpunkte (der Besitzer selbst hat keinen Fluss).
-    const starts=[start,...(k0==="reaktion"?(ADJ.inn.get(start)||[]).filter(y=>N(y).kind==="handle")
-      :k0==="saga"?(ADJ.inn.get(start)||[]).filter(y=>N(y).kind==="transition"):[])];
-    const res=new Set(starts);
-    const lauf=nach=>{const q=[...starts],seen=new Set();
-      while(q.length){const id=q.shift();if(seen.has(id))continue;seen.add(id);
-        if(!starts.includes(id)&&KETTE_HUB.has(N(id).kind))continue;
-        nach(id).forEach(y=>{if(KETTE_FLUSS.has(N(y).kind)){res.add(y);q.push(y);}});}};
-    lauf(id=>ADJ.out.get(id)||[]);if(!nurVorwaerts)lauf(id=>ADJ.inn.get(id)||[]);
-    // Auch rückwärts erreichte Handles/Decider/Applier zeigen ihren Besitzer (Pipeline, Aggregat …).
-    [...res].forEach(id=>{if(!["handle","decider","applier","fn"].includes(N(id).kind))return;
-      (ADJ.out.get(id)||[]).forEach(y=>{if(KETTE_HUB.has(N(y).kind))res.add(y);});});
-    // Leseseite nachziehen (wie der Schnitt unten): an Projektion/Store die Reader + Read Models.
-    [...res].forEach(id=>{const k=N(id).kind;if(k!=="projektion"&&k!=="store")return;
-      (ADJ.inn.get(id)||[]).forEach(y=>{const ky=N(y).kind;if(ky==="reader"||ky==="readmodel")res.add(y);});});
-    // Rümpfe (📝 + 🤖) der beteiligten Logik-Elemente als Blätter (Handle, Decider, Applier, Store-Fn, Funktion, Fluss-λ, Regel-λ).
-    [...res].forEach(id=>{if(!["handle","decider","applier","fn","funktion","flussknoten","transition"].includes(N(id).kind))return;
-      (ADJ.inn.get(id)||[]).forEach(y=>{if(N(y).kind!=="codenode")return;res.add(y);(ADJ.inn.get(y)||[]).forEach(z=>{if(N(z).kind==="llmnode")res.add(z);});});});
-    return res;}
-  function sliceVon(start){const res=new Set([start]),N=id=>NODEBY.get(id)||{};
-    const inn=id=>ADJ.inn.get(id)||[],out=id=>ADJ.out.get(id)||[];
-    const k0=N(start).kind,seeds=[start];
-    // PERSONA-SICHT: ein Akteur zeigt, was er auslösen/fragen darf, und alles, was daraus FOLGT (nur vorwärts).
-    if(k0==="akteur"){out(start).forEach(t=>{res.add(t);ketteVon(t,true).forEach(x=>res.add(x));});return res;}
-    // Projektions-/Reader-Handles behalten den Leseseiten-Schnitt unten; alle Fluss-Knoten zeigen die ganze Kette.
-    if(KETTE_START.has(k0)&&!(k0==="handle"&&["reader"].includes((N(start).own||{}).kind)))return ketteVon(start);
-    if(k0==="aggregate"||k0==="saga")inn(start).forEach(x=>{res.add(x);seeds.push(x);});
-    const zurueck=(id,seen)=>inn(id).forEach(x=>{if(seen.has(x))return;seen.add(x);res.add(x);if(EINGEKLAPPT.has(x))zurueck(x,seen);});
-    seeds.forEach(s=>zurueck(s,new Set()));
-    const q=[...seeds],fertig=new Set();
-    const add=(x,weiter)=>{res.add(x);if(weiter&&!fertig.has(x))q.push(x);};
-    while(q.length){const id=q.shift();if(fertig.has(id))continue;fertig.add(id);const k=N(id).kind;
-      if(!seeds.includes(id)&&STOP.has(k))continue;
-      out(id).forEach(y=>add(y,true));
-      if(k==="projektion"||k==="store")inn(id).forEach(y=>{const ky=N(y).kind;
-        if(ky==="reader"||ky==="readmodel")add(y,true);else if(k==="projektion"&&ky==="event"&&LESE_START.has(k0))add(y,false);});
-      if(k==="reader")inn(id).forEach(y=>{if(N(y).kind==="query")add(y,false);});}
-    return res;}
   // ══ EIN FOKUS (docs/konzept-werkbank.md §8.5, Plan P6.4): ersetzt Slice, Ketten-Fokus, ◎ und ⤢ — ohne Vorgang die statische Kette der
   //   gewählten Karte (bzw. eine markierte Menge: Rahmen, Spalte, Vertrag, aufgefächerter Client), mit Vorgang die echte Spur. Angezeigt und
   //   gelöst wird er an EINER Stelle (Ansichts-Leiste: ◎ Fokus · ⤢ · ✕). FOKUS = {art: kette|menge|vorgang, titel, ids?}; FOCUS = die Karten.
-  //   Die statische Kette rechnet noch ketteVon/sliceVon aus den JS-Kanten — sie zieht mit boardEdges in P7.3 auf den Server.
+  //   Die statische Kette (Nachrichtenfluss vorwärts/rückwärts bzw. der gerichtete Schnitt einer Leseseite, eines Aggregats, Akteurs oder
+  //   Clients) rechnet der Server (GET /api/werkbank/kette) — je Code-Stand und Ansicht einmal; bis sie da ist, steht die Karte allein im Fokus.
+  //   Code-Blöcke (📝/🤖) kennt nur der Editor: ihre Kette ist die ihrer Karte, die Rümpfe der beteiligten Logik-Elemente hängen mit dran.
   let SEL=null, FOCUS=null, FOKUS=null;
-  function ketteFuer(id){const n=NODEBY.get(id);return n&&n.kind==="client"?clientSlice(n.ref):sliceVon(id);}
+  var KETTEN=new Map(),KETTEN_STAND=null;
+  const RUMPF_ARTEN=new Set(["handle","decider","applier","fn","funktion","flussknoten","transition"]);
+  function mitRuempfen(ids,id){const res=new Set(ids);res.add(id);
+    CODE_ADJ.forEach((ziele,cid)=>{const t=cid.startsWith("cn:")&&NODEBY.get(ziele[0]);if(!t||!ids.has(t.id)||!RUMPF_ARTEN.has(t.kind))return;
+      res.add(cid);(ADJ.inn.get(cid)||[]).forEach(z=>{if(z.startsWith("ln:"))res.add(z);});});
+    return res;}
+  function ketteFuer(id){const n=NODEBY.get(id),t=n&&(n.kind==="codenode"||n.kind==="llmnode")?codeTraeger(n):null,karte=t?t.id:id;
+    if(KETTEN_STAND!==SICHT()){KETTEN_STAND=SICHT();KETTEN=new Map();}
+    const key=karte+"|"+(!!VIEW.details),c=KETTEN.get(key);
+    if(c instanceof Set)return mitRuempfen(c,id);
+    if(!c)KETTEN.set(key,fetch("/api/werkbank/kette?karte="+encodeURIComponent(karte)+"&details="+(!!VIEW.details)).then(r=>r.json())
+      .then(a=>{if(KETTEN.get(key) instanceof Set)return;KETTEN.set(key,new Set(a.ids));if(FOKUS&&FOKUS.art==="kette"&&SEL===id){fokusNeu();wendeFokusAn();fokusChip();}})
+      .catch(()=>KETTEN.delete(key)));
+    return new Set([id]);}
   function fokusNeu(){
     if(typeof SP!=="undefined"&&SP.vorgang){FOKUS={art:"vorgang",titel:spTitel()};FOCUS=spurMenge();return;}
     if(FOKUS&&FOKUS.art==="menge"){FOCUS=FOKUS.ids;return;}
@@ -3575,9 +3191,6 @@
     if(typeof SP!=="undefined"&&id)SP.schritt=null;
     SEL=id||null;if(FOKUS&&FOKUS.art==="menge")FOKUS=null;
     fokusNeu();wendeFokusAn();fokusChip();zeigeInspector();}
-  // Slice eines Clients: er selbst + alles, woran seine Leitung steckt (Nachrichten-Karten, Zusagen, Akteure der Teile).
-  function clientSlice(c){const ids=new Set(["cl:"+c._id]);clientPorts(c).forEach(p=>{if(p.node)ids.add(vertreterId(p.node));
-      if(p.ri==="zusage"){const a=MODEL.akteure.find(x=>x.name===p.akteure[0]);if(a)ids.add("akt:"+a._id);}});return ids;}
   function wendeFokusAn(){if(!world)return;const an=!!FOCUS;world.classList.toggle("fokus",an);
     const selV=SEL?(VERTRETER.get(SEL)||[SEL]):[];
     world.querySelectorAll(".gnode2").forEach(el=>{const id=el.dataset.id;el.classList.toggle("inslice",an&&FOCUS.has(id));el.classList.toggle("sel",selV.includes(id));});
@@ -3631,7 +3244,7 @@
       teile.forEach((t,i)=>{if(i)z.append(", ");z.append(t);});box.append(z);};
     const sym=a=>(ART_SYM[(MODEL.akteure.find(x=>x.name===a)||{}).art]||"👤 ")+a;
     const grp=ri=>{const m=new Map();P.filter(p=>p.ri===ri).forEach(p=>{const k=(p.akteure||[]).join(" / ");if(!m.has(k))m.set(k,[]);m.get(k).push(p);});return m;};
-    (c.traegt||[]).forEach(t=>{const a=teilAkteur(t);
+    (c.traegt||[]).forEach(t=>{const a=teilAkteur(c,t);
       zeile("↺ trägt "+t+(a?" · als "+sym(a.name):" · ⚠ kein Akteur-Vertrag"),[],"lt");
       P.filter(p=>p.ri==="zusage"&&p.teil===t&&!p.fehlt).forEach(p=>zeile("   ◀",[name(p,p.msg+((p.aus||[]).length?" → "+p.aus.join(", ")+(p.strom?" (Strom)":""):" · Kenntnis"))],"lr"));});
     [["sendet","▶ sendet"],["fragt","? fragt"]].forEach(([ri,kopf])=>grp(ri).forEach((ps,k)=>
@@ -3699,53 +3312,18 @@
   const RP=36, RK=46, SPK=34, SPAD=8;   // Domänen-Rand/-Kopf, Spalten-Kopf/-Rand (Welt-px) — packLayout reserviert RP/RK je Region, SPK je Spalte
   const AP=22, AK=40, AGAP=28, AKLEER_W=560;   // Akteur-Rahmen (Domäne × Akteur, §12): Rand, Kopf, Abstand, Breite eines leeren
   const OHNE_DOM="§ohne";
-  // Domänen-Zugehörigkeit steht über allem: gehört ein Baustein laut GRAPH zu einem Aggregat (groupKeyOf — Projektion über
-  //   ihre Events, Reader/Store/ReadModel/Query/Response über ihre Projektion, Code über seinen Besitzer …), ist seine Domäne
-  //   der Namespace dieses Aggregats — egal, in welchem Namespace die Klasse liegt (z. B. Domain.Projections). Nur
-  //   aggregat-übergreifende Bausteine (Prozesse, Pipelines, geteilte Typen) fallen auf ihren eigenen Namespace zurück.
-  //   Je Render einmal berechnet (DOMKEY, geleert in berechneSicht) — zeichneRahmen läuft auch beim Ziehen.
-  let DOMKEY=new Map(), FRGEO=new Map();   // FRGEO: Rahmen-Geometrie je Schlüssel (Domäne|Akteur, §vertrag:Akteur) — Ziel der Client-Leitungen
-  const aggDom=n=>{const g=groupKeyOf(n),a=g!==SHARED_KEY&&MODEL.aggregate.find(x=>x.name===g);return (a&&a.namespace)||null;};
-  // JEDER Baustein ohne eigenes Aggregat (Feldtyp-VO/Enum, Response, aber auch Pipeline/Reaktion/Prozess samt Handles,
-  //   Triggern, Code) folgt seinen Graph-Nachbarn, wenn die alle in GENAU EINER Aggregat-Domäne liegen. Die Suche läuft
-  //   transitiv durch aggregat-lose Knoten (Pipeline ↔ Handle ↔ Trigger …) und stoppt an Aggregat-Domänen → eine
-  //   Pipeline-Einheit landet geschlossen in ihrer Domäne. Berührt sie mehrere Domänen, bleibt sie bei ihrem Namespace.
-  //   (a) EINHEIT = Ablauf-Bausteine, die zusammengehören: Pipeline/Reaktion ↔ Handles ↔ Trigger ↔ Code/🤖 ↔ Dienst,
-  //       Prozess ↔ Regeln. Die Suche läuft NUR durch solche Bausteine (nicht durch Datentypen — die würden fremde Einheiten
-  //       verkleben) und sammelt die Aggregat-Domänen ihrer Nachbarn. Genau eine → die. Sonst entscheidet, wohin die Einheit
-  //       COMMANDS schickt (sie gehört dorthin, wo sie wirkt; Lesen woanders ist nur Abhängigkeit). Je Einheit einmal.
-  //   (b) Datentypen (VO/Enum/Konfig/Response …) folgen schrittweise ihren Nachbarn (Enum → VO → ReadModel → Domäne).
-  const EINHEIT_ARTEN=new Set(["saga","transition","reaktion","handle","codenode","llmnode"]);
-  let EINHEIT=new Map();
-  function einheitDom(n){if(EINHEIT.has(n.id))return EINHEIT.get(n.id);
-    const seen=new Set([n.id]),q=[n.id],ds=new Set(),dc=new Set();
-    const nachbarn=id=>{const m=NODEBY.get(id),r=[...(ADJ.inn.get(id)||[]),...(ADJ.out.get(id)||[])];
-      if(m&&m.kind==="saga")MODEL.transitions.forEach(t=>{if(t.prozess===m.name)r.push("tr:"+t._id);});
-      if(m&&m.kind==="transition"&&m.ref.prozess)r.push("saga:"+m.ref.prozess);return r;};
-    while(q.length){nachbarn(q.pop()).forEach(x=>{const m=NODEBY.get(x);if(!m)return;const z=aggDom(m);
-      if(z){ds.add(z);if(m.kind==="command")dc.add(z);return;}
-      if(EINHEIT_ARTEN.has(m.kind)&&!seen.has(x)){seen.add(x);q.push(x);}});}
-    const d=ds.size===1?[...ds][0]:dc.size===1?[...dc][0]:null;seen.forEach(id=>EINHEIT.set(id,d));return d;}
-  function datenDom(n,besucht){if(besucht.has(n.id))return null;besucht.add(n.id);const ds=new Set();
-    [...(ADJ.inn.get(n.id)||[]),...(ADJ.out.get(n.id)||[])].forEach(x=>{const m=NODEBY.get(x),z=m&&graphDom(m,besucht);if(z)ds.add(z);});
-    return ds.size===1?[...ds][0]:null;}
-  function graphDom(n,besucht){return aggDom(n)||(EINHEIT_ARTEN.has(n.kind)?einheitDom(n):datenDom(n,besucht||new Set()));}
-  function domKey(n){let d=DOMKEY.get(n.id);if(d)return d;
-    // Akteur-Karte: in der ERSTEN Domäne, in der er wirkt (dort steht sie in seinem Akteur-Rahmen; §12.5) — sonst wie gehabt.
-    // Zusage: der Vertrag steht GESCHLOSSEN beim Akteur (ein Rahmen), die Kanten führen zu den Events hinüber.
-    if(n.kind==="auf"){const x=domKey(NODEBY.get(n.own.id)||n.own);DOMKEY.set(n.id,x);return x;}
-    if(n.kind==="host"){DOMKEY.set(n.id,HOST_KEY);return HOST_KEY;}
-    // Client: ein eigener Rahmen außerhalb der Domänen (rechts daneben gepackt).
-    if(n.kind==="client"){const x=CL_PRE+n.ref.name;DOMKEY.set(n.id,x);return x;}
-    // Pipeline (Fluss): ein eigener Rahmen außerhalb der Domänen (rechts daneben gepackt, innen nach Flusstiefe).
-    if(n.kind==="flussknoten"){const x=FL_PRE+n.own.ref._id;DOMKEY.set(n.id,x);return x;}
-    // Code-Block (📝/🤖) einer Funktion: dort, wo ihre Karte steht (die Funktion folgt dem Graphen, nicht ihrem Namespace).
-    if(n.kind==="codenode"||n.kind==="llmnode"){const o=findCodeOwner(n.kind==="codenode"?n.ref._id:n.ref.promptZiel);
-      if(o&&o.kind==="funktion"){const fn=NODEBY.get("fk:"+o.ref._id);if(fn){const x=domKey(fn);DOMKEY.set(n.id,x);return x;}}}
-    if(n.kind==="akteur"){const eig=[...new Set([...(n.ref.darf||[]),...(n.ref.vertrag||[]).map(r=>r.eingang)].map(nm=>NODEBY.get("rec:"+nm))
-        .filter(Boolean).map(domKey))].sort(domOrd),ds=eig.length?eig:akteurDomaenen(n.ref.name);
-      if(ds.length){DOMKEY.set(n.id,ds[0]);return ds[0];}}
-    d=graphDom(n)||nsVon(n)||(VIEW.heim||{})[n.id]||OHNE_DOM;DOMKEY.set(n.id,d);return d;}
+  // Domäne einer Karte (Rahmen) — vom Server (board.sicht): das Aggregat, zu dem sie laut Graph gehört (Projektion über ihre Events,
+  //   Reader/Store/ReadModel über ihre Projektion, Ablauf-Einheiten dort, wo sie wirken, Datentypen bei ihren Nachbarn), sonst ihr Namespace;
+  //   Clients und Pipelines haben eigene Rahmen, Zusagen stehen beim Akteur, ein Akteur in der ersten Domäne, in der er wirkt. Darüber nur die
+  //   Ansicht: die Heimat namespace-loser Karten (VIEW.heim). Eine Karte, die es im Code noch nicht gibt, steht bis zum Board in ihrem Namespace.
+  let FRGEO=new Map();   // FRGEO: Rahmen-Geometrie je Schlüssel (Domäne|Akteur, §vertrag:Akteur) — Ziel der Client-Leitungen
+  function domKey(n){if(n.kind==="host")return HOST_KEY;
+    // Der Rumpf einer Client-Implementierung steht in der Domäne des Client-Namespaces (der Client-Rahmen ist nur die Anschlussleiste).
+    if(n.kind==="codenode"||n.kind==="llmnode"){const t=codeTraeger(n);if(t&&t.kind==="client")return nsVon(t)||OHNE_DOM;}
+    const k=sk(n);if(k&&k.domaene)return k.domaene;
+    if(!k){if(n.kind==="client")return CL_PRE+n.ref.name;if(n.kind==="flussknoten")return FL_PRE+n.own.ref._id;
+      if(n.kind==="codenode"||n.kind==="llmnode"){const t=codeTraeger(n);if(t)return domKey(t);}}
+    return (!k&&nsVon(n))||(VIEW.heim||{})[n.id]||OHNE_DOM;}
   const domLabel=ns=>ns===OHNE_DOM?"⋯ ohne Domäne":istHostDom(ns)?"🖥 Host · "+(WB.zustand&&WB.zustand.aktiv||"Umgebung"):istClientDom(ns)?"🔌 "+clientAnzeige({name:ns.slice(CL_PRE.length)}):istFlussDom(ns)?"⛓ "+((flussVonDom(ns)||{}).name||"Pipeline"):letztesSeg(ns);
   // Block (Aggregat bzw. Brücke) eines Knotens: aus dem Graphen; ein über eine Spalte angelegter, noch unverdrahteter Knoten
   //   behält bis zur Verdrahtung den Block dieser Spalte (VIEW.heimBlk) — statt im Inselkasten zu landen.
@@ -4027,7 +3605,7 @@
     const altI=root.querySelector(".ginsp");INSP_SCROLL=altI?{id:altI.dataset.sel,top:altI.scrollTop}:null;
     root.innerHTML="";
     root.append(datalistEl());
-    ISLE=islandInfo().ids;   // einsame Inseln (unverbundene Knoten) aus der Graph-Analyse
+    ISLE=inselMenge();       // einsame Inseln (unverbundene Knoten) — vom Server
     berechneSicht();         // sichtbar / eingeklappte Details / zusammengezogene Kanten
     if(SEL&&!NODEBY.has(SEL))SEL=null;fokusNeu();
     const tb=(kind,label)=>h("button",{class:"add jumpable",
@@ -4097,7 +3675,7 @@
     body.append(topSlot("event","Auslöser (startet): "+(s.triggerEvent||"— ⊕ Event wählen"),{type:"evtUse",dir:"in",saga:s.name,trigger:true},"saga:trigger:"+s.name));
     body.append(nameInp(s,"name","Prozess","saga"));
     body.append(h("input",{value:s.namespace??"",oninput:e=>s.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
-    const aggs=sagaAggs(s);
+    const aggs=(SICHT().karten["saga:"+s.name]||{}).beruehrt||[];
     body.append(h("div",{class:"gsec"},"berührt (abgeleitet): "+(aggs.length?aggs.join(" · "):"—")));
     body.append(h("div",{class:"gsec"},"Regeln ◀ (anstecken)"));
     // Je Regel eine Zeile — Klick öffnet die Regel (Wenn/Dann, Bau-Lambda mit 📝/🤖, Zeitlimit, Kompensation), wie die Zusagen am Akteur.
@@ -4265,7 +3843,12 @@
     (a.meldungen||[]).forEach((m,i)=>setTimeout(()=>deFlash("⚠ "+m,false),n?1700*(i+1):1700*i));
     if((a.meldungen||[]).length)console.log("Geste „"+a.titel+"“:",a);}
   // Das Board vom Server übernehmen (der neue Code-Stand) — nur die Ansicht des bisherigen Boards bleibt.
-  function gBoardAnwenden(){const b=G_BOARD;G_BOARD=null;if(!b)return;MODEL=uebernimm(b,MODEL);GSTAND=schnappschuss();render();}
+  function gBoardAnwenden(){const b=G_BOARD;G_BOARD=null;if(!b)return;const alt=SICHT().karten;MODEL=uebernimm(b,MODEL);GSTAND=schnappschuss();
+    // Eine Karte, die bisher keinem Aggregat gehörte (geteilt) und jetzt einem gehört (z. B. gerade verbunden), zieht in die Spalte ihres
+    //   Blocks um: ihre Position fällt weg, packLayout setzt sie neu. Etablierte Karten bleiben stehen.
+    const L=KPOS[VIEW.details?"d":"k"]||{};Object.entries(SICHT().karten).forEach(([id,k])=>{const a=alt[id];
+      if(a&&a.block===SHARED_KEY&&k.block!==SHARED_KEY){delete L[id];const n=graphNodes().find(m=>m.id===id);if(n){delete n.ref.x;delete n.ref.y;delete n.ref._kpos;}}});
+    render();}
   // Offenes erst hinausschicken (vor Umbenennen, ↶, Neu lesen).
   async function gesteFlush(){if(G_TIMER){clearTimeout(G_TIMER);G_TIMER=null;}
     for(let i=0;i<200&&G_LAEUFT;i++)await new Promise(r=>setTimeout(r,50));
@@ -4337,12 +3920,12 @@
   //   Knoten über den Namen (die Identität im Fluss), Eingänge über ihre Position.
   function flCodeBindungen(alt,neu){(neu.knoten||[]).forEach(k=>{const a=(alt.knoten||[]).find(x=>x.name===k.name);if(!a)return;
     if(a.codeSrc)k.codeSrc=a.codeSrc;(k.eingaenge||[]).forEach((e,i)=>{const ae=(a.eingaenge||[])[i];if(ae&&ae.codeSrc)e.codeSrc=ae.codeSrc;});});}
-  window.deDownload=function(){deriveMembership();prepareSaga();const blob=new Blob([JSON.stringify(MODEL,null,2)],{type:"application/json"});
+  window.deDownload=function(){prepareSaga();const blob=new Blob([JSON.stringify(MODEL,null,2)],{type:"application/json"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="domain-model.json";a.click();};
   // Server-Payload: das MODEL + die Rümpfe (Code-Knoten-Text bzw. "" für bewusst leer) zurück an Decider/Applier.
   // mitVorschlag: offene 🤖-Vorschläge ersetzen den Datei-Rumpf — für Kompilieren + Simulation (echte Generatoren,
   //   in-memory), NIE für Gesten (in die Datei kommt ein Vorschlag nur über ✓ Übernehmen).
-  function payload(mitVorschlag){deriveMembership();prepareSaga();MODEL.fluesse.forEach(flOrdne);const m=JSON.parse(JSON.stringify(MODEL));
+  function payload(mitVorschlag){prepareSaga();MODEL.fluesse.forEach(flOrdne);const m=JSON.parse(JSON.stringify(MODEL));
     const txt=id=>{const v=mitVorschlag?vorschlagFuer(id):null;if(v)return v.rumpf;const c=m.codeNodes.find(x=>x._id===id);return c?c.text:null;};
     [...m.decider,...m.applier].forEach(n=>{if(n.leer)n.rumpf="";else if(n.codeSrc){const t=txt(n.codeSrc);if(t!=null&&t.trim())n.rumpf=t;}});
     // Leseseite: der Code-/LLM-Entwurf einer NEUEN Methode (ohne Code-Signatur) wird ihr Rumpf („entwurf“);
@@ -4370,7 +3953,7 @@
       const zu=h("button",{class:"outzu",title:"Ausgabe schließen",onclick:()=>out.classList.remove("zeigen")},"✕");out.prepend(zu);})
       .observe(out,{childList:true});})();
   const unreach='<div class="find error">SimHost nicht erreichbar. Starte ihn: <b>dotnet run --project SimHost</b>.</div>';
-  async function postJson(path,obj){deriveMembership();prepareSaga();const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(obj)});if(!r.ok)throw new Error("HTTP "+r.status);return r;}
+  async function postJson(path,obj){prepareSaga();const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(obj)});if(!r.ok)throw new Error("HTTP "+r.status);return r;}
   const alleCommands=()=>MODEL.records.filter(r=>r.kind==="command");
 
   // ⚙ Kompilieren: das Modell IN-MEMORY mit den echten Domain-Generatoren übersetzen.

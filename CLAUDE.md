@@ -114,7 +114,7 @@ externer Worker braucht einen Akteur mit `IDarf<F>` (`Bildrechner`), gestartet a
 Auftrag abschickte; Aggregat aus dem Envelope, Funktion aus `AuftragAnbieten.Wirker`). Der Weg eines Eintrags über die Karten ist EINE reine
 Funktion (`Abstractions/Spur/SpurWeg.Aus`). Die Werkbank spiegelt die Spur (`SimHost/Werkbank/SpurSpiegel.cs`, SSE + Cursor) und liefert fertig:
 `/api/werkbank/spur/puls|vorgaenge|vorgang/{k}`. Editor: Leiste ☰ Vorgänge · ⏱ Zeitleiste · ⚠ Meldungen · 〰 Puls; Spur-Überlagerung (①②③ mit +Δt,
-✕/⏳ rot, alt grau), Schritt-Panel mit ↤/↦; EIN Fokus (Chip in der Ansichts-Leiste, ersetzt Slice/◎/⤢; die statische Kette kommt erst mit P7.3 vom Server).
+✕/⏳ rot, alt grau), Schritt-Panel mit ↤/↦; EIN Fokus (Chip in der Ansichts-Leiste, ersetzt Slice/◎/⤢; die statische Kette kommt seit P7.3 vom Server).
 
 **Warmer Workspace (2026-10-12, Werkbank P7.1):** der Extractor ist Bibliothek (`GraphExtractor.Kern`) + CLI (`GraphExtractor`); EIN Lesepfad
 `Lesen.LiesAsync` → `Lesung`. SimHost hält den Workspace warm (`SimHost/Werkbank/Arbeitsbereich.cs`: einmal kalt laden, Dateiwächter →
@@ -131,12 +131,19 @@ Scaffolder/Abgleich, löscht an `_ort` + `_teile`; Umbenennen = Roslyn-Renamer (
 `.werkbank/verlauf.<branch>.json` (auch 🤖-Übernahmen). Danach liest der warme Workspace neu, Compiler-Befunde der berührten Dateien stehen sofort
 an der Karte. Die Ansicht (Positionen, Filter, 🤖-Knoten) liegt in `.werkbank/ansicht.json`. Nie auf `main`. Tests: `Extractor/GestenTests`.
 
+**Ableitungen nur auf dem Server (2026-10-12, Werkbank P7.3):** der Editor rechnet nichts mehr aus dem Board nach. `GraphExtractor.Kern/Sicht/`
+(`Sicht.Aus(board)`) liefert mit jedem Board `board.sicht`: je Karte (Editor-Id: `rec:`, `dec:`, `hd:prj:…`, `fs:` …) Domäne, Block, Rolle, Akteure,
+Akteur-Rahmen, Insel, Vertreter, Store-Scope, Mitgliedschaft, Tiefe; dazu Kanten, Prozess-Kette, Akteur-Reihenfolge, Fluss-Heimat, Client-Anschlussleisten,
+Ketten-Pfade. ⊕ fragt `POST /api/werkbank/passt` (Port + Kandidaten → passt/gesperrt mit Regel, Grammatik aus `rahmen.grammatik`), der Fokus
+`GET /api/werkbank/kette`. Im JS bleiben nur Nachschlagen + Ansichts-Wünsche; Code-Blöcke (📝/🤖) folgen ihrer Karte. `--check` prüft gegen die
+Server-Kartenliste („Code ohne Karte: 0“, leere Geste = kein Patch); die gezeichnete Sonde ist ein Gesten-Skript (`Sonde/Gezeichnet.gesten.json`).
+
 **Akteure, Verträge, Clients (2026-10-06):** Akteure mit Befugnis und Kette bis in den Event-Header; Akteur-Verträge (Zusagen
 draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer CommandId; Clients (`IClientVertrag`, n:m zu Akteuren) mit
 Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an
 Clients (`docs/konzept-akteure.md` §9).
 
-**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
+**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471; P7.3: Prüfstand 476/476): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
 Marten/Consul/Redis, sequentiell: 33/33 (inkl. 4 Fluss-E2E; TwoNodeCommandDispatch an die Inbox-Marke seit T2b angepasst).**
 
 **Bewusst offen (Priorität):**
@@ -176,7 +183,7 @@ integriert; `CqrsFrameworkOptions` toter `[Obsolete]`-Typ.
   Planen ist ein Ausgang: `Selbst<T>`, `Frist<TCmd>`, `FristStorno<TCmd>` im OneOf. Der Rumpf liefert dem
   Extractor NICHTS (keine Guards, keine Store-Aufrufe) — nur die Signatur zählt.
 - **Grammatik = EINE Quelle:** Was sich im Editor womit verbinden lässt (Sorte × Eingang, Kardinalität, Zusatzregeln, je Regel ihr
-  Build-Gegenstück) steht nur in `DomainEditor/Grammatik.cs`; Editor (`rahmen.grammatik`), Validator und `--check` lesen sie. Module
+  Build-Gegenstück) steht nur in `DomainEditor/Grammatik.cs`; ⊕ (Server: `Sicht.Passt` über `rahmen.grammatik`), Validator und `--check` lesen sie. Module
   = Namespaces, Ports abgeleitet (`DomainEditor/Module.cs`, nur Modell/Validator — Ebenen-Ansicht im Editor bewusst noch nicht).
 - **Ausgabe-Vertrag in der Signatur (CQRS050):** Decide und jedes Handle geben einen konkreten Typ oder `OneOf<…>`
   konkreter Typen zurück (nie `ICommand`/`IEvent` …). WAS entstehen kann, lesen Generatoren/Extractor/Editor NUR aus der
@@ -211,9 +218,9 @@ NICHT Timeout-tunebar; xUnit schluckt App-Logs (Cluster-Diagnose → Last-Harnes
 - Test (Logik, immer grün): `dotnet test Infrastructure.Pruefstand.Tests/Infrastructure.Pruefstand.Tests.csproj`
 - Integration (braucht Postgres/Consul/Redis, sequentiell): `dotnet test Infrastructure.Integration.Tests/Infrastructure.Integration.Tests.csproj`
 - Domänen-Editor + Simulation (einzige Oberfläche; **Ist-Stand** — Ziel: Werkbank ohne Simulationsschicht, `docs/konzept-werkbank.md`; ⟳ in der Kopfzeile baut und startet den echten Host in der gewählten Umgebung): `dotnet run --project SimHost` → http://localhost:5178/editor/ (SimHost lädt den Code selbst in den warmen Workspace und schreibt domain-model.json; die Oberfläche liegt statisch in `SimHost/wwwroot/editor/` — `index.html`, `editor.css`, `editor.js`); Palette = Anker (Aggregat · Fluss · Funktion · Quelle · Akteur · Client · Projektion), Trigger-Welt/LOD seit Werkbank-P0 nicht mehr im Editor; Bearbeiten nur im Panel: Karte anklicken, ⊕-Punkt im Panel → passende Knoten leuchten → anklicken = verbinden/lösen (`docs/konzept-editor-panel-bearbeitung.md`) — jede Änderung geht sofort als Geste in den Code, ↶ nimmt sie zurück; 🤖-LLM-Knoten am Code-Block = Chat: Prompt senden → `claude -p` (Abo, nie API) → geprüft → .cs geschrieben → Laufzeit-Projekt gebaut (alle Generatoren) → neu eingelesen (Konzept §12); Kontexte erzeugt SimHost selbst
-- Editor-Parität (Code ⇄ Extraktion ⇄ Editor, schreibt nichts): `dotnet run --project GraphExtractor -- --check`
+- Editor-Parität (Code ⇄ Extraktion ⇄ Server-Kartenliste, schreibt nichts): `dotnet run --project GraphExtractor -- --check`
 - Grammatik als Liste „Regel → Build-Gegenstück": `dotnet run --project GraphExtractor -- --grammatik`
-- Agnostik-Sonde (unbekannte Domäne im Speicher gegen handgeschriebenes Soll + Fixpunkt): `dotnet run --project GraphExtractor -- --sonde`
+- Agnostik-Sonde (unbekannte Domäne im Speicher + Gesten-Skript gegen handgeschriebenes Soll + Fixpunkt): `dotnet run --project GraphExtractor -- --sonde`
 - Warmer Workspace messen (kalt vs. warm, Board-Gleichheit, Text-Änderung im Speicher): `dotnet run --project GraphExtractor -- --warm`
 - LLM-Kontext je Code-Block (`docs/konzept-llm-minimalkontext.md`): `dotnet run --project GraphExtractor -- --kontexte <verz>` (Graph-Skelett + Slot-Teile) bzw. `--kontext <Disc> [--auftrag "…"]`; Isolation aller Code-Block-Stellen: `--slots`
 - Last/Durchsatz: `LoadHarness` ist entfernt (Commit fb07f5e); historische Messwerte in `docs/12`.

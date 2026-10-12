@@ -439,7 +439,7 @@ Die Ergänzungen sind additiv: Das Spalten-Layout bleibt, bearbeitet wird nur im
 | Laufwerke als Editor-Motor | Nutzung von `Cqrs.Testing/Fluss.cs` (`FlussLaufwerk`) und `Saga.cs` (`SagaLaufwerk`) durch SimHost | — (für Prüfstand-Tests bleiben sie, solange Tests sie nutzen) | P8 |
 | Board-Modell als Wahrheit | `board-model.json`, localStorage-Modell, `mergeBoard`, `_herkunft`/„ungeschrieben“, Entwürfe im Board, `deSave`, Knopf „C# schreiben“, 👁 Vorschau, `/api/editor/board`, `/api/editor/write` (als Sammel-Schreiben) | Code + Ansichts-Datei + Patch je Geste | P7 |
 | Paritätsprüfung Code⇄Board | Großteil von `GraphExtractor.Kern/ParitaetsPruefung.cs` | Code-ohne-Karte-Gate, Wirker⇄Karte | P7 |
-| JS-Ableitungen | `akteurSet`/`akteurVon`, `flussRegeln`, `deriveMembership`, `derivedStores`, `compatible`, `deAkteurParitaet` | Server-Ableitung | P7 |
+| JS-Ableitungen | `akteurSet`/`akteurVon`, `flussRegeln`, `deriveMembership`, `derivedStores`, `compatible`, `deAkteurParitaet` | Server-Ableitung (`board.sicht`, `/api/werkbank/passt`, `/api/werkbank/kette`) | P7.3 ✅ |
 | Validator | `DomainEditor/Validator.cs` | Analyzer/Boot-Guards | P7 |
 | Code-Knoten | 📝/🤖-Karten, Andocken, `normalize`-Migration, Sperre über Hash in `SimHost/CodeSync.cs`/`DateiAbgleich.cs` | Rumpf aus der Datei, 🤖 als Aktion | P7 |
 | Ingress-/Betriebs-UI | Palette: Trigger, Pipeline (Handle), Dienst, HostSetting; JS-Abschnitte „INGRESS/PIPELINE“ und „BETRIEB / HOST-BAND“; Handle-Karten | Quelle, Fluss, 🖥 Host-Rahmen | P0 |

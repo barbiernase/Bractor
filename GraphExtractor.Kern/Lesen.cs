@@ -47,8 +47,11 @@ public static class Lesen
         Phase("Graph");
         var cr = zusammensetzung ?? await new CompositionRootExtractor(solution, lage, routing, dom).ExtractAsync();
         Phase("Composition Root");
-        var board = ModellMapper.ZuBoard(graph, dom, cr, Umgebungen.Lies(wurzel));
+        var board = ModellMapper.ZuBoard(graph, dom, cr, Umgebungen.Lies(wurzel), mitSicht: false);
         Phase("Board");
+        // Die Ableitungen für den Editor (Werkbank P7.3) — eigene Phase, damit ihre Kosten sichtbar bleiben.
+        board["sicht"] = Sicht.Aus(board).AlsJson();
+        Phase("Sicht");
         return new Lesung(lage, routing, dom, graph, cr, board, uebersetzen, uhr.Elapsed, phasen);
     }
 }

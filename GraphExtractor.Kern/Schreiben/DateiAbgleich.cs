@@ -13,22 +13,24 @@ public sealed record DateiPatch(string Datei, string? Vorher, string? Nachher);
 /// <summary>
 /// Die Dateien eines Schreiblaufs im Speicher: gelesen bei Bedarf, geändert im Speicher, gespeichert erst am Ende (Trockenlauf = nie).
 /// Merkt sich den Ausgangsstand jeder Datei — daraus entsteht der Patch einer Geste (und sein Gegenstück für ↶).
+/// <paramref name="quelle"/>: woher eine Datei kommt (voller Pfad → Inhalt, null = gibt es nicht); ohne Angabe die Platte. Die Sonde schreibt
+/// so in einen Solution-Fork im Speicher.
 /// </summary>
-public sealed class Dateipuffer(string root)
+public sealed class Dateipuffer(string root, Func<string, string?>? quelle = null)
 {
     private readonly Dictionary<string, string?> _text = new(StringComparer.Ordinal);
     private readonly Dictionary<string, string?> _vorher = new(StringComparer.Ordinal);
     private readonly List<string> _geaendert = new();
 
     public string Wurzel => root;
-    private string Voll(string rel) => Path.GetFullPath(Path.Combine(root, rel.Replace('/', Path.DirectorySeparatorChar)));
+    public string Voll(string rel) => Path.GetFullPath(Path.Combine(root, rel.Replace('/', Path.DirectorySeparatorChar)));
     public bool Innerhalb(string rel) => Voll(rel).StartsWith(Path.GetFullPath(root), StringComparison.Ordinal);
 
     public string? Lies(string rel)
     {
         if (_text.TryGetValue(rel, out var t)) return t;
         var p = Voll(rel);
-        var inhalt = File.Exists(p) ? File.ReadAllText(p) : null;
+        var inhalt = quelle != null ? quelle(p) : File.Exists(p) ? File.ReadAllText(p) : null;
         _vorher[rel] = inhalt;
         return _text[rel] = inhalt;
     }

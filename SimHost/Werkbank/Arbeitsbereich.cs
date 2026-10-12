@@ -52,6 +52,22 @@ public sealed class Arbeitsbereich : IDisposable
     /// <summary>Das zuletzt gelesene Board als Knoten (nur lesen).</summary>
     public JsonObject? Board => _letzte?.Board;
 
+    private (Lesung Zu, Sicht Sicht)? _sicht;
+    private readonly object _sichtSperre = new();
+    /// <summary>
+    /// Die Ableitungen des zuletzt gelesenen Boards (Werkbank P7.3) für Anfragen, die das Board nicht mitschickt (⊕ passt, Kette) — eine Instanz
+    /// je Lesung, nur unter <paramref name="arbeit"/>s Sperre benutzt (die Sicht merkt sich Zwischenergebnisse).
+    /// </summary>
+    public T MitSicht<T>(Func<Sicht, T> arbeit)
+    {
+        lock (_sichtSperre)
+        {
+            var l = _letzte ?? throw new InvalidOperationException("Noch nichts gelesen.");
+            if (_sicht is not { } s || !ReferenceEquals(s.Zu, l)) _sicht = s = (l, Sicht.Aus(l.Board));
+            return arbeit(s.Sicht);
+        }
+    }
+
     public IReadOnlyList<LeseMessung> Messungen { get { lock (_messungen) return _messungen.ToList(); } }
 
     /// <summary>Kaltes Laden im Hintergrund anstoßen (einmal; danach hält der Wächter den Stand).</summary>

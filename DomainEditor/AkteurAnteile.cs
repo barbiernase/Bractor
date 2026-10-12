@@ -11,7 +11,8 @@ namespace DomainEditor;
 ///   Ebenso eine Zusage im Vertrag von A (<c>Auf(Event)</c>, Kante <c>akt:A</c> mit Handle): ihre Ausgaben stammen von A.</item>
 /// </list>
 /// Fixpunkt über Akteur-MENGEN: ein Command kann von mehreren Akteuren kommen (zur Laufzeit trägt er genau den einen der Kette).
-/// Dieselbe Ableitung rechnet der Editor live nach (<c>akteurMengen()</c> in SimHost/wwwroot/editor/editor.js) — Parität über <c>rahmen.akteurMengen</c>.
+/// Der Editor rechnet nichts davon nach (Werkbank P7.3): er bekommt die Mengen als <c>rahmen.akteurMengen</c>, alles darauf Aufbauende (Akteure
+/// je Karte, Akteur-Rahmen, Pfade) als <c>board.sicht</c> (GraphExtractor/Sicht).
 /// </summary>
 public sealed class AkteurAnteile
 {

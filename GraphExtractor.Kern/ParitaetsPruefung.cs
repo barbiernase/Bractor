@@ -31,10 +31,12 @@ public static class ParitaetsPruefung
         Solution solution, Projektlage lage, Analyse ist, string boardJson, IReadOnlyList<IngressBindung>? ingress = null)
     {
         var befunde = new List<ParitaetsBefund>();
-        Inventar(ist, lage, boardJson, befunde);
-        BoardModell(ist, boardJson, befunde);
+        // Die Server-Kartenliste (Werkbank P7.3, L20): was der Editor zeigt — Karten, Kanten, Ableitungen. Gegen SIE prüft das Inventar.
+        var sicht = Sicht.Aus(JsonNode.Parse(boardJson)!.AsObject());
+        Inventar(ist, lage, sicht, befunde);
+        await BoardModell(solution, ist, boardJson, befunde);
         GrammatikUndModule(solution, ist, boardJson, ingress, befunde);
-        Wirker(ist, boardJson, befunde);
+        Wirker(ist, sicht, befunde);
         Routing(ist, befunde);
         await Fixpunkt(solution, lage, ist, befunde);
         return befunde;
@@ -70,7 +72,7 @@ public static class ParitaetsPruefung
     /// die Karten-Ids liefert der Extractor (<c>_id</c> der Fluss-Knoten und Prozess-Regeln). Beide rechnen über <c>Abstractions.WirkerId</c>.
     /// Die übrigen Arten (decide, funktion, quelle, projektion, reaktion, akteur) sind einfache Typnamen und brauchen keine Tabelle.
     /// </summary>
-    private static void Wirker(Analyse ist, string boardJson, List<ParitaetsBefund> befunde)
+    private static void Wirker(Analyse ist, Sicht sicht, List<ParitaetsBefund> befunde)
     {
         var laufzeit = new HashSet<string>(StringComparer.Ordinal);
         foreach (var comp in ist.Compilations)
@@ -89,11 +91,9 @@ public static class ParitaetsPruefung
             befunde.Add(new("Wirker", "warning", "Keine generierte Prozess-Registry gefunden — Wirker-Ids der Flüsse/Prozesse ungeprüft."));
             return;
         }
-        var board = JsonNode.Parse(boardJson)!.AsObject();
-        IEnumerable<JsonObject> Alle(JsonNode? n) => (n as JsonArray ?? new JsonArray()).OfType<JsonObject>();
-        var karten = Alle(board["fluesse"]).SelectMany(f => Alle(f["knoten"]))
-            .Concat(Alle(board["sagas"]).SelectMany(sg => Alle(sg["schritte"])))
-            .Select(o => (string?)o["_id"]).OfType<string>().ToHashSet(StringComparer.Ordinal);
+        // Die Karten der Fluss-Knoten und Prozess-Regeln, wie der Editor sie zeigt (fs:/tr: + Wirker-Id).
+        var karten = sicht.Karten.Where(k => k.Art is "flussknoten" or "transition").Select(k => k.Id[(k.Id.IndexOf(':') + 1)..])
+            .ToHashSet(StringComparer.Ordinal);
         foreach (var x in laufzeit.Except(karten).OrderBy(x => x, StringComparer.Ordinal))
             befunde.Add(new("Wirker", "error", $"Wirker '{x}' stempelt die Laufzeit, aber keine Karte trägt diese Id."));
         foreach (var x in karten.Except(laufzeit).OrderBy(x => x, StringComparer.Ordinal))
@@ -157,9 +157,8 @@ public static class ParitaetsPruefung
 
     // ══ A · Inventar ═══════════════════════════════════════════════════════════════════════════
 
-    private static void Inventar(Analyse ist, Projektlage lage, string boardJson, List<ParitaetsBefund> befunde)
+    private static void Inventar(Analyse ist, Projektlage lage, Sicht sicht, List<ParitaetsBefund> befunde)
     {
-        var board = JsonNode.Parse(boardJson)!.AsObject();
         var soll = SyntaxInventar.Aus(ist.Compilations, lage.DomänenAssemblies, lage.Quelltexte);
         befunde.Add(new("Inventar", "info",
             $"Soll aus dem Code: {soll.Aggregate.Count} Aggregate ({soll.Aggregate.Values.Sum(a => a.Decide.Count)} Decide, " +
@@ -170,60 +169,63 @@ public static class ParitaetsPruefung
             $"{soll.Akteure.Count} Akteure ({soll.AkteurRechte.Values.Sum(x => x.Count)} Befugnisse, {soll.AkteurVertraege.Count} Verträge mit {soll.AkteurVertraege.Values.Sum(x => x.Count)} Zusagen), "
             + $"{soll.Clients.Count} Clients ({soll.Clients.Values.Sum(x => x.Count)} Rand-Ports)."));
 
-        HashSet<string> BoardRecords(string kind) => (board["records"]?.AsArray() ?? new JsonArray())
-            .Where(r => (string?)r?["kind"] == kind)
-            .Select(r => $"{r!["namespace"]}.{r["name"]}").ToHashSet(StringComparer.Ordinal);
-        HashSet<string> BoardListe(string key) => (board[key]?.AsArray() ?? new JsonArray())
-            .Select(r => $"{r!["namespace"]}.{r["name"]}").ToHashSet(StringComparer.Ordinal);
+        // Ist = die Karten der Server-Kartenliste (Sicht) — je Art „Namespace.Name" ihres Bausteins.
+        static string Voll(SichtKarte k) => $"{(string?)k.Ref["namespace"]}.{(string?)k.Ref["name"]}";
+        IEnumerable<SichtKarte> Arten(params string[] arten) => sicht.Karten.Where(k => arten.Contains(k.Art));
+        HashSet<string> BoardRecords(string kind) => Arten(kind).Select(Voll).ToHashSet(StringComparer.Ordinal);
+        HashSet<string> BoardListe(string art) => Arten(art).Select(Voll).ToHashSet(StringComparer.Ordinal);
+        var vorher = befunde.Count;
 
         Vergleiche("Command", soll.Commands, BoardRecords(RecordArt.Command), befunde);
         Vergleiche("Event", soll.Events, BoardRecords(RecordArt.Event), befunde);
         Vergleiche("Ablehnung", soll.Ablehnungen, BoardRecords(RecordArt.Rejection), befunde);
         Vergleiche("Value Object", soll.ValueObjects, BoardRecords(RecordArt.ValueObject), befunde);
         Vergleiche("Auftrag", soll.Auftraege, BoardRecords(RecordArt.Auftrag), befunde);
-        Vergleiche("Funktion", soll.Funktionen, BoardListe("funktionen"), befunde);
+        Vergleiche("Funktion", soll.Funktionen, BoardListe("funktion"), befunde);
         Vergleiche("Konfiguration", soll.Konfigs, BoardRecords("konfig"), befunde);
-        Vergleiche("Store", soll.Stores, BoardListe("stores"), befunde);
+        Vergleiche("Store", soll.Stores, BoardListe("store"), befunde);
         Vergleiche("Query", soll.Queries, BoardRecords("query"), befunde);
         Vergleiche("Response", soll.Responses, BoardRecords("queryresponse"), befunde);
-        Vergleiche("Enum", soll.Enums, BoardListe("enums"), befunde);
+        Vergleiche("Enum", soll.Enums, BoardListe("enum"), befunde);
         Vergleiche("Aggregat", soll.Aggregate.Keys.ToHashSet(StringComparer.Ordinal), BoardListe("aggregate"), befunde);
-        Vergleiche("Saga", soll.Sagas.Keys.ToHashSet(StringComparer.Ordinal), BoardListe("sagas"), befunde);
-        Vergleiche("Pipeline (Fluss)", soll.Fluesse, BoardListe("fluesse"), befunde);
-        Vergleiche("ReadModel", soll.ReadModels, BoardListe("readModels"), befunde);
+        Vergleiche("Saga", soll.Sagas.Keys.ToHashSet(StringComparer.Ordinal), BoardListe("saga"), befunde);
+        // Ein Fluss zeigt sich über seine Knoten (Karten im ⛓-Rahmen).
+        Vergleiche("Pipeline (Fluss)", soll.Fluesse, Arten("flussknoten").Select(k => Voll(k.Besitzer!)).ToHashSet(StringComparer.Ordinal), befunde);
+        Vergleiche("ReadModel", soll.ReadModels, BoardListe("readmodel"), befunde);
         Vergleiche("Reader", soll.Readers, BoardListe("reader"), befunde);
-        Vergleiche("Pipeline", soll.Pipelines, BoardListe("pipelines"), befunde);
-        Vergleiche("Akteur", soll.Akteure, BoardListe("akteure"), befunde);
-        // Je Akteur seine Befugnisse: Soll = IDarf<T> der Basisliste, Ist = darf[] der Board-Karte.
-        foreach (var a in board["akteure"]?.AsArray() ?? new JsonArray())
+        Vergleiche("Pipeline", soll.Pipelines, BoardListe("pipeline"), befunde);
+        Vergleiche("Akteur", soll.Akteure, BoardListe("akteur"), befunde);
+        foreach (var a in Arten("akteur"))
         {
-            var full = $"{a!["namespace"]}.{a["name"]}";
+            var full = Voll(a);
             if (!soll.AkteurRechte.TryGetValue(full, out var sollDarf)) continue;
-            var istDarf = (a["darf"]?.AsArray() ?? new JsonArray()).Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal);
-            Vergleiche($"Befugnis ({a["name"]})", sollDarf.Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istDarf, befunde);
-            // Vertrag (Akteur-Konzept §3): je Auf(E) „E>Ausgänge[*]" — Soll aus den Interface-Signaturen, Ist aus vertrag[] der Board-Karte.
-            var istVertrag = (a["vertrag"]?.AsArray() ?? new JsonArray()).Select(r => $"{full}|" + SyntaxInventar.Zusage((string?)r!["eingang"] ?? "",
-                (r["ausgaenge"]?.AsArray() ?? new JsonArray()).Select(x => (string?)x ?? ""), r["strom"]?.GetValue<bool>() == true)).ToHashSet(StringComparer.Ordinal);
-            Vergleiche($"Vertrag ({a["name"]})", (soll.AkteurVertraege.GetValueOrDefault(full) ?? []).Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal),
+            // Befugnisse: Soll = IDarf<T> der Basisliste, Ist = die Kanten Akteur → Nachricht/Funktion, die der Editor zeichnet.
+            var istDarf = sicht.Kanten.Where(e => e.Von == a.Id && sicht.KarteVon.ContainsKey(e.Nach))
+                .Select(e => $"{full}|{sicht.KarteVon[e.Nach].Name}").ToHashSet(StringComparer.Ordinal);
+            Vergleiche($"Befugnis ({a.Name})", sollDarf.Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istDarf, befunde);
+            // Vertrag (Akteur-Konzept §3): je Auf(E) „E>Ausgänge[*]" — Soll aus den Interface-Signaturen, Ist = die Zusage-Karten des Akteurs.
+            var istVertrag = Arten("auf").Where(z => z.Besitzer?.Id == a.Id).Select(z => $"{full}|" + SyntaxInventar.Zusage((string?)z.Ref["eingang"] ?? "",
+                (z.Ref["ausgaenge"]?.AsArray() ?? new JsonArray()).Select(x => (string?)x ?? ""), z.Ref["strom"]?.GetValue<bool>() == true)).ToHashSet(StringComparer.Ordinal);
+            Vergleiche($"Vertrag ({a.Name})", (soll.AkteurVertraege.GetValueOrDefault(full) ?? []).Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal),
                 istVertrag, befunde);
         }
         // Clients (docs/konzept-akteure.md §4): je Client sein Rand — Soll aus Basisliste + Auf-Methoden, Ist aus der Board-Karte.
-        Vergleiche("Client", soll.Clients.Keys.ToHashSet(StringComparer.Ordinal), BoardListe("clients"), befunde);
-        foreach (var c in board["clients"]?.AsArray() ?? new JsonArray())
+        Vergleiche("Client", soll.Clients.Keys.ToHashSet(StringComparer.Ordinal), BoardListe("client"), befunde);
+        foreach (var k in Arten("client"))
         {
-            var full = $"{c!["namespace"]}.{c["name"]}";
+            var (c, full) = (k.Ref, Voll(k));
             if (!soll.Clients.TryGetValue(full, out var sollRand)) continue;
             IEnumerable<string> L(string feld, string pre) => (c[feld]?.AsArray() ?? new JsonArray()).Select(x => pre + (string?)x);
             var istRand = L("traegt", "T:").Concat(L("sendet", "S:")).Concat(L("fragt", "F:")).Concat(L("kenntnis", "K:"))
                 .Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal);
-            Vergleiche($"Client-Vertrag ({c["name"]})", sollRand.Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istRand, befunde);
+            Vergleiche($"Client-Vertrag ({k.Name})", sollRand.Select(x => $"{full}|{x}").ToHashSet(StringComparer.Ordinal), istRand, befunde);
         }
         Vergleiche("Projektion/Reaktion", soll.Subscriber,
-            BoardListe("projektionen").Concat(BoardListe("reaktionen")).ToHashSet(StringComparer.Ordinal), befunde);
+            BoardListe("projektion").Concat(BoardListe("reaktion")).ToHashSet(StringComparer.Ordinal), befunde);
 
-        // Decide-/Apply-Methoden je Aggregat: Soll = Methoden im Quelltext, Ist = Decider-/Applier-Knoten im Board.
-        var decider = (board["decider"]?.AsArray() ?? new JsonArray()).Select(d => $"{d!["aggregat"]}|{d["command"]}").ToHashSet(StringComparer.Ordinal);
-        var applier = (board["applier"]?.AsArray() ?? new JsonArray()).Select(a => $"{a!["aggregat"]}|{a["event"]}").ToHashSet(StringComparer.Ordinal);
+        // Decide-/Apply-Methoden je Aggregat: Soll = Methoden im Quelltext, Ist = Decider-/Applier-Karten.
+        var decider = Arten("decider").Select(d => $"{(string?)d.Ref["aggregat"]}|{(string?)d.Ref["command"]}").ToHashSet(StringComparer.Ordinal);
+        var applier = Arten("applier").Select(a => $"{(string?)a.Ref["aggregat"]}|{(string?)a.Ref["event"]}").ToHashSet(StringComparer.Ordinal);
         foreach (var (agg, info) in soll.Aggregate)
         {
             var name = agg[(agg.LastIndexOf('.') + 1)..];
@@ -233,15 +235,17 @@ public static class ParitaetsPruefung
                 applier.Where(x => x.StartsWith(name + "|", StringComparison.Ordinal)).ToHashSet(StringComparer.Ordinal), befunde);
         }
 
-        // Saga-Regeln: Soll = Anzahl Sende/SendeJe/Rufe-Verben im Regeln-Ausdruck, Ist = Schritte im Board.
+        // Saga-Regeln: Soll = Anzahl Sende/SendeJe/Rufe-Verben im Regeln-Ausdruck, Ist = die Regel-Karten des Prozesses.
         foreach (var (saga, anzahl) in soll.Sagas)
         {
-            var node = (board["sagas"]?.AsArray() ?? new JsonArray())
-                .FirstOrDefault(s => $"{s!["namespace"]}.{s["name"]}" == saga);
-            var ist2 = node?["schritte"]?.AsArray().Count ?? 0;
+            var sg = Arten("saga").FirstOrDefault(s => Voll(s) == saga);
+            var ist2 = sg == null ? 0 : Arten("transition").Count(t => (string?)t.Ref["prozess"] == sg.Name);
             if (ist2 != anzahl)
-                befunde.Add(new("Inventar", "error", $"Saga {saga}: {anzahl} Regel(n) im Code, {ist2} im Editor-Modell."));
+                befunde.Add(new("Inventar", "error", $"Saga {saga}: {anzahl} Regel(n) im Code, {ist2} Regel-Karten."));
         }
+        var ohneKarte = befunde.Skip(vorher).Count(b => b.Meldung.Contains("hat keine Karte", StringComparison.Ordinal));
+        befunde.Add(new("Inventar", "info", $"Server-Kartenliste: {sicht.Karten.Count} Karten, {sicht.Kanten.Count} Kanten — Code ohne Karte: {ohneKarte}; " +
+                                             $"Code-Karten (⚠ roh): {sicht.Karten.Count(k => k.Art == "code")}."));
 
         // Namenskollisionen: das Board referenziert Records per EINFACHEM Namen.
         foreach (var dup in soll.AlleRecordNamen.GroupBy(x => x[(x.LastIndexOf('.') + 1)..]).Where(g => g.Count() > 1))
@@ -252,9 +256,9 @@ public static class ParitaetsPruefung
     private static void Vergleiche(string art, HashSet<string> soll, HashSet<string> ist, List<ParitaetsBefund> befunde)
     {
         foreach (var fehlt in soll.Except(ist).OrderBy(x => x, StringComparer.Ordinal))
-            befunde.Add(new("Inventar", "error", $"{art} '{fehlt}' steht im Code, fehlt im Editor-Modell."));
+            befunde.Add(new("Inventar", "error", $"{art} '{fehlt}' steht im Code, hat keine Karte."));
         foreach (var extra in ist.Except(soll).OrderBy(x => x, StringComparer.Ordinal))
-            befunde.Add(new("Inventar", "error", $"{art} '{extra}' steht im Editor-Modell, aber nicht (so) im Code."));
+            befunde.Add(new("Inventar", "error", $"{art} '{extra}' hat eine Karte, steht aber nicht (so) im Code."));
     }
 
     /// <summary>Die unabhängige Soll-Zählung: rein über Syntax + Marker, ohne den DomainExtractor.</summary>
@@ -437,8 +441,20 @@ public static class ParitaetsPruefung
     /// Das Board zeigt die Leseseite in eigenen Sammlungen; <see cref="BoardLeseseite.AusBoard"/> liest sie zurück. Beides muss
     /// dasselbe Modell ergeben wie die Extraktion — sonst schriebe „C# schreiben" etwas anderes, als der Code sagt.
     /// </summary>
-    private static void BoardModell(Analyse ist, string boardJson, List<ParitaetsBefund> befunde)
+    private static async Task BoardModell(Solution solution, Analyse ist, string boardJson, List<ParitaetsBefund> befunde)
     {
+        // Der Gesten-Motor (P7.2) übersetzt Karten über BoardLeseseite ins Modell: eine Geste OHNE Änderung schreibt nichts — sonst fasste jede
+        //   Geste fremden Code an. Gelesen wird aus den Dokumenten der Solution (auch dem Fork der Sonde im Speicher).
+        if (Path.GetDirectoryName(solution.FilePath) is { } wurzel)
+        {
+            var texte = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var d in solution.Projects.SelectMany(p => p.Documents).Where(d => d.FilePath != null))
+                texte[Path.GetFullPath(d.FilePath!)] = (await d.GetTextAsync()).ToString();
+            var leer = Gesten.Schreibe(JsonNode.Parse(boardJson)!.AsObject(), new KartenDelta(),
+                new Dateipuffer(wurzel, p => texte.GetValueOrDefault(p) ?? (File.Exists(p) ? File.ReadAllText(p) : null)));
+            foreach (var p in leer.Patch) befunde.Add(new("Board ⇄ Modell", "error", $"Leere Geste schreibt {p.Datei} — der Gesten-Motor fasst unveränderten Code an."));
+            if (leer.Patch.Count == 0) befunde.Add(new("Board ⇄ Modell", "info", "Leere Geste: kein Patch (der Gesten-Motor fasst unveränderten Code nicht an)."));
+        }
         var ausCode = ModellMapper.ZuEditorModell(ist.Graph, ist.Dom);
         var ausBoard = BoardLeseseite.AusBoard(boardJson);
         var vorher = befunde.Count;

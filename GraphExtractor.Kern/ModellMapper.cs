@@ -330,7 +330,8 @@ public static class ModellMapper
     });
 
     /// <summary>Wie <see cref="ZuBoardJson"/>, aber als Knoten (die Werkbank hält ihn im Speicher).</summary>
-    public static JsonObject ZuBoard(KnowledgeGraph graph, DomainModel dom, CompositionRoot cr, JsonObject? umgebungen = null)
+    /// <param name="mitSicht">false: ohne <c>sicht</c> (das Lesen der Werkbank rechnet sie als eigene, gemessene Phase dazu).</param>
+    public static JsonObject ZuBoard(KnowledgeGraph graph, DomainModel dom, CompositionRoot cr, JsonObject? umgebungen = null, bool mitSicht = true)
     {
         // Code mit Fehlern (Werkbank P7.1): was das Lesen nicht fassen konnte, wird ein Befund an der Karte — nie still verworfen.
         var befunde = new List<Lesebefund>(dom.Befunde);
@@ -342,7 +343,7 @@ public static class ModellMapper
         // Die Grammatik der Kompositions-Sprache (EINE Quelle: DomainEditor.Grammatik) — der Editor bietet danach nur gültige
         //   Verbindungen an. Reine Editor-Sicht: EditorModell.Rahmen kennt das Feld nicht (beim Zurücklesen ignoriert).
         root["rahmen"]!.AsObject()["grammatik"] = JsonSerializer.SerializeToNode(Grammatik.AlsJson(), EditorModell.JsonOptionen);
-        // Von welchem Akteur kommt was (direkt / über die Kette) — der Editor rechnet live nach, Parität über deAkteurParitaet().
+        // Von welchem Akteur kommt was (direkt / über die Kette) — Grundlage der Sicht (Akteure je Karte, Akteur-Rahmen, Pfade).
         root["rahmen"]!.AsObject()["akteurMengen"] = JsonSerializer.SerializeToNode(AkteurAnteile.Aus(modell).AlsJson(), EditorModell.JsonOptionen);
         // Quellen (docs/konzept-werkbank.md §3): die fest codierten Treiber (Basis + Felder, zum Anlegen neuer Quellen-Typen); dazu die
         //   Umgebungen (§4) roh — die Quellkarte zeigt die Werte je Umgebung, der Editor rechnet nichts davon nach.
@@ -545,6 +546,8 @@ public static class ModellMapper
         }
         root["codeKarten"] = codeKarten;
         root["lesebefunde"] = Knoten(befunde.Select(b => new { code = b.Code, text = b.Text, karte = b.Karte, datei = Relativ(dom.Wurzel, b.Datei), zeile = b.Zeile }));
+        // Die Ableitungen (Werkbank P7.3): Domäne, Block, Akteure, Kanten, Inseln, Einklappen, Kette, Clients — der Editor rechnet nichts davon nach.
+        if (mitSicht) root["sicht"] = Sicht.Aus(root).AlsJson();
         return root;
     }
 

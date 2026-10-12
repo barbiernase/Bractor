@@ -83,6 +83,26 @@ app.MapPost("/api/werkbank/umbenennen", async (System.Text.Json.Nodes.JsonObject
 app.MapPost("/api/werkbank/rueckgaengig", async (CancellationToken ct) => GestenErgebnis(await werkbank.Gesten.RueckgaengigAsync(ct)));
 app.MapGet("/api/werkbank/verlauf", () => Results.Json(werkbank.Gesten.Verlauf.Liste(), gestenJson));
 app.MapGet("/api/werkbank/gesten", () => Results.Json(werkbank.Gesten.Messungen(), gestenJson));
+// ── ABLEITUNGEN (Werkbank P7.3): was das Board nicht schon trägt (board.sicht), fragt der Editor hier — gerechnet nur auf dem Server.
+// ⊕: welche Kandidaten-Ports zu einem Port passen (Anschluss-Regel + DomainEditor.Grammatik); Ports sind gezeichnete Anschlüsse, darum schickt
+//   der Editor Port und Kandidaten (Schlüssel + Beschreibung), der Server urteilt.
+app.MapPost("/api/werkbank/passt", async (System.Text.Json.Nodes.JsonObject b, CancellationToken ct) =>
+{
+    await werkbank.Arbeitsbereich.LiesAsync(ct);
+    static GraphExtractor.Sicht.Port Port(System.Text.Json.Nodes.JsonNode? p) =>
+        new((string?)p?["key"] ?? "", p?["info"] as System.Text.Json.Nodes.JsonObject ?? new());
+    var q = Port(b["port"]);
+    var kandidaten = (b["kandidaten"] as System.Text.Json.Nodes.JsonArray ?? []).Select(Port).ToList();
+    var verbunden = (b["verbunden"] as System.Text.Json.Nodes.JsonArray ?? []).Select(x => (string?)x ?? "").ToHashSet(StringComparer.Ordinal);
+    var u = werkbank.Arbeitsbereich.MitSicht(s => s.Passt(q, kandidaten, verbunden));
+    return Results.Json(new { passt = u.Passt, gesperrt = u.Gesperrt.Select(g => new { key = g.Key, regel = g.Regel, text = g.Text }) });
+});
+// Die statische Kette einer Karte (der eine Fokus): details = eingeklappte Details sind eigene Karten.
+app.MapGet("/api/werkbank/kette", async (string karte, bool? details, CancellationToken ct) =>
+{
+    await werkbank.Arbeitsbereich.LiesAsync(ct);
+    return Results.Json(new { karte, ids = werkbank.Arbeitsbereich.MitSicht(s => s.KetteFuer(karte, details == true)) });
+});
 // Die Ansicht (Positionen, Filter, Akteur-Reihenfolge, 🤖-Knoten) — Schlüssel = Karten-Id; nicht der Code, nicht im Board.
 var ansichtDatei = Path.Combine(slnRoot, ".werkbank", "ansicht.json");
 app.MapGet("/api/werkbank/ansicht", () => Results.Content(File.Exists(ansichtDatei) ? File.ReadAllText(ansichtDatei) : "{}", "application/json"));
