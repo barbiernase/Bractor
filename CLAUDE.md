@@ -153,13 +153,15 @@ Rumpf so, wie der warme Workspace ihn liest (Board: `rumpf` + Ort — `_ort` der
 bei Fluss-/Regel-Lambdas, Python-Anker der Client-Implementierung); wo der 📝-Block stand, steht eine abgeleitete Rumpf-Kachel (`rp:<Karte>:<i>`, dieselbe
 Lage). ✎ = Geste `POST /api/werkbank/rumpf` (`GraphExtractor.Kern/Schreiben/Rumpf.cs`: ersetzt genau den Methoden-Rumpf bzw. Lambda, Sperre gegen
 geänderten Text, Prompt-Zeile bleibt; Python über `PythonSync`, `.py` lässt das Board neu lesen); „🤖 füllen“ ist eine Aktion am Rumpf (LLM-Konsole).
+Offen (Empfehlung im Plan §17 P7.4.5): `partnerVon`, `flussSlice`, Fluss-Helfer und `VB_SORTE` leiten im JS noch ab → in `board.sicht`; Geste p50 unter
+Fremdlast 346–470 ms (Ziel 300 ms).
 
 **Akteure, Verträge, Clients (2026-10-06):** Akteure mit Befugnis und Kette bis in den Event-Header; Akteur-Verträge (Zusagen
 draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer CommandId; Clients (`IClientVertrag`, n:m zu Akteuren) mit
 Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an
 Clients (`docs/konzept-akteure.md` §9).
 
-**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471; P7.3: Prüfstand 476/476; P7.4: Prüfstand 479/479, Integration 39/39): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
+**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471; P7.3: Prüfstand 476/476; P7.4: Prüfstand 484/484, Integration 39/39): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
 Marten/Consul/Redis, sequentiell: 33/33 (inkl. 4 Fluss-E2E; TwoNodeCommandDispatch an die Inbox-Marke seit T2b angepasst).**
 
 **Bewusst offen (Priorität):**
