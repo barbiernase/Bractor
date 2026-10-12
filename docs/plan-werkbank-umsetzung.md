@@ -19,10 +19,12 @@
 - Die neun Phasen des Zielbilds (P0–P8) bleiben. Davor kommt **S0 Grundlinie** (Messwerte, Datei-Split des Editors). Kein Spike:
   Die Gesten-Schleife liest nur aus den Domänen-Compilations (E7); gemessen wird direkt in P7.1.
 - **Keine Abwärtskompatibilität:** Bestand wird umgebaut, nicht migriert.
-- P7 („Eine Wahrheit“) ist mit Abstand die größte Phase. Sie wird in **vier Stufen** (P7.1–P7.4) geschnitten, jede einzeln grün.
+- P7 („Eine Wahrheit“) ist mit Abstand die größte Phase. Sie wird in **fünf Stufen** (P7.1–P7.5) geschnitten, jede einzeln grün.
+  P7.5 (ergänzt 2026-10-12) schließt die letzten Stellen, an denen heute noch Handcode nötig ist: Dienst-Bindung, Webhook, Python-Rümpfe
+  externer Funktionen. Danach ist **alles außer den Quell-Treibern** im Editor definierbar und per ⟳ ausführbar.
 - Ab P3 gilt eine **Bauregel für das Frontend:** Neue Editor-Funktionen bekommen ihre Daten fertig vom Server. Es entsteht kein
   neues Modell-Wissen im JS, das P7 wieder löschen müsste.
-- Es gibt **20 Lücken** zwischen Zielbild und Code (§2). Die tragenden sind:
+- Es gibt **23 Lücken** zwischen Zielbild und Code (§2; L21–L23 ergänzt nach P6). Die tragenden sind:
   - Die Proto-/Codegen-Kette kennt nur Konstruktor-Parameter, keine geerbten `required init`-Properties (betrifft `DateiGemeldet`).
   - Laufzeit-Knoten von Flüssen und Prozess-Regeln haben keine Namen, nur Indizes (betrifft die Wirker-Ids).
   - Kestrel spricht nur HTTP/2 (betrifft Einblick/SSE).
@@ -199,6 +201,9 @@
 | L18 | LLM-Prüfung für decide/apply/fluss/saga läuft über `ModellSimulation` | §10 P8 | P7.4 vor P8: Prüfung über den warmen Workspace |
 | L19 | Geste < 300 ms mit v1-`ISourceGenerator`s im Infrastructure-Projekt fraglich | §8.2 | **E7** (entschieden), Messung in P7.1 |
 | L20 | Sonde und Parität lesen Board-JSON und `BoardLeseseite` | §9, P7 | P7.3: auf die Server-Kartenliste umstellen; „gezeichnet“ = Gesten-Skript |
+| L21 | Domänen-Dienste (`IImageResizer`, `IHistogramEqualizer` …) und ihre DI-Registrierung sind Handcode (`Domain.Pipeline/Infrastructure/DomainPipelineExtensions.cs` + eine Zeile in `Host.Grpc/Program.cs`); die Dienst-Karte ist in P0 entfallen, P2 hat Domänen-DI als Code belassen | §1 „alles bauen“, §8.5 | P7.5.1 Dienst-Bindung (**E11**) |
+| L22 | Die Webhook-Bindung einer Quelle (`app.MapQuellWebhook<T>(route)` in `Program.cs`) liest der Extractor, schreiben kann sie niemand | §3, §6 | P7.5.2 Webhook als Konfig (**E12**) |
+| L23 | Externe Funktionen in Python haben keinen Rumpf im Editor: der Worker (`funktions_worker.py`) ist handgeschrieben, `PythonSync` kennt nur Zusagen | §8.4 „Python-Rümpfe (Zusagen, externe Funktionen)“ | P7.5.3 Python-Basis + Rumpf je Funktion (**E13**) |
 
 ---
 
@@ -217,6 +222,10 @@
 | **E9** | Code-Hash für Snapshots und Projektionen | Generator hasht normalisierte Syntax: Aggregat = State + Applier; Projektion = Klasse + benutzte Store-Fähigkeiten + Impl. Snapshot verwirft bei Abweichung (wie `SchemaVersion`); Projektion setzt beim Start zurück (`IProjectionTracker`-Reset, `ProjectionRebuilder` verdrahten) | Erfüllt §4.6 ohne Laufzeit-Reflection; Rebuild nur in Umgebungsart `sim` automatisch, in `prod` nur Meldung |
 | **E10** | Sandbox-Pfad und Python-Interpreter je Umgebung | In der Umgebungs-Datei: `Quellen:<Q>:Pfad` (Sandbox-Default `~/cqrs-sim/<branch>/<Quelle>/`) und `Funktionen:<F>:Worker` (`Python`, `Skript`) | Werkbank startet Worker (P5) ohne Wissen im Code |
 
+| **E11** | Woran erkennt man einen Domänen-Dienst, und wo wird er gebunden | Code-Fakt statt Namensregel: Marker `IDienst` (Abstractions) am Interface; jede Klasse, die es implementiert, ist eine Implementierung. Ein `DienstGenerator` erzeugt die Tabelle Interface → Implementierungen (ohne Reflection), `AddCqrs` bindet je Umgebung `Dienste:<I>:Implementierung` (Default: die einzige). Konfig-Records im Ctor einer Implementierung kommen generisch aus `Konfig:<Record>` (wie heute für Funktionen). Erlaubt nur im Ctor von Funktions- und Dienst-Implementierungen (Analyzer ab CQRS073, Zyklen = Boot-Fehler). Abgrenzung: `IAkteurDienst<A>` bleibt, was es ist (gehört einem Akteur, nur Handle-Parameter, CQRS060) | Dieselbe Mechanik wie Funktionen (Tabelle + Bindung aus der Umgebung) statt einer zweiten; `AddDomainPipelineServices` entfällt ersatzlos |
+| **E12** | Webhook einer Quelle: Code oder Konfig | **Konfig**: `Quellen:<Typ>:Webhook` (Route, optional). `AddCqrs`/`LaufeAsync` mappen jede Quelle mit Route generisch aus `GeneratedQuellen` auf dem Einblick-Port; `MapQuellWebhook` in `Program.cs` entfällt, `[Ingress]` liest der Extractor dann aus der Umgebungs-Datei | Leitsatz „nur Konfig unterscheidet“; die Route ist Betrieb, nicht Domäne; der Editor schreibt sie mit dem generischen Formular-Renderer, ohne einen Schreiber für den Composition Root |
+| **E13** | Python-Rumpf einer externen Funktion | Wie bei den Akteur-Verträgen: der Codegen erzeugt je `IFunktion` eine **Python-Basis** (getypter Auftrag aus den betterproto-DTOs, Ergebnis-Fälle als Union), die Implementierung liegt in `Domain.Client.Worker.Python.ML/funktionen/<funktion>.py` (`rufe(self, auftrag) -> Ergebnis`). Ein **generischer Worker** lädt die Implementierungen aus einer generierten Tabelle (kein Domänenwissen im Runner); `funktions_worker.py` geht darin auf. `PythonSync` liest und schreibt den Rumpf wie bei Zusagen | Ein Muster für alle Python-Rümpfe; „▶ Worker starten“ braucht keine Konfig je Funktion mehr außer dem Laufort |
+
 Fragen, die der Plan bewusst **nicht** stellt: alles aus Zielbild §12.1.
 
 ---
@@ -232,7 +241,7 @@ S0 Grundlinie ──► P0 Aufräumen ──────────────
 ```
 
 **Empfohlene Abarbeitung** (ein Strang):
-S0 → P0 → P1 → P2 → P3 → P4 → P5 → P6 → P7.1 → P7.2 → P7.3 → P7.4 → P8.
+S0 → P0 → P1 → P2 → P3 → P4 → P5 → P6 → P7.1 → P7.2 → P7.3 → P7.4 → P7.5 → P8.
 
 - P1 vor P2, weil P2 den Quellen-Abschnitt nur noch umziehen muss.
 - Jede Phase endet mit:
@@ -493,7 +502,7 @@ Abnahme (Browser):
 
 ---
 
-## 13 · P7 — Eine Wahrheit (vier Stufen)
+## 13 · P7 — Eine Wahrheit (fünf Stufen)
 
 ### P7.1 Warmer Workspace und fehlertolerantes Lesen
 - GraphExtractor wird **Bibliothek plus CLI**: Kern nach `GraphExtractor.Kern` (oder gleiches Projekt als Library), CLI ruft ihn.
@@ -579,6 +588,34 @@ Abnahme (Zielbild):
 - Das Umbenennen eines Events ändert alle Verweise (auch in Lambdas) und baut.
 - Es gibt keine JS-Ableitungsfunktion mehr (Grep-Liste aus §1.1 leer).
 - Eine Geste dauert < 300 ms (p50 gemessen; p95 dokumentiert).
+
+### P7.5 Alles außer Quell-Treibern (ergänzt 2026-10-12)
+Prüfung nach P6 (Frage: „Kann ich alles bis auf die Quell-Treiber im Editor definieren und ausführen?“): Anlegen und Rümpfe gehen für alle
+Bausteine, Ändern kommt mit P7.2, Hilfscode mit der Code-Karte (P7.4). Drei Stellen bleiben danach Handcode — diese Stufe schließt sie.
+
+- **P7.5.1 Dienst-Bindung (E11, L21):**
+  - Abstractions: Marker `IDienst`; Generator `DienstGenerator` → `GeneratedDienste` (Interface → Implementierungen, Konfig-Records je Ctor);
+    `AddCqrs` bindet aus `Dienste:<I>` der Umgebung (Schema-Abschnitt `Dienste`, Host-Rahmen-Karte „🧩 Dienste“); Boot-Guard: fehlende oder
+    mehrdeutige Implementierung, Zyklus.
+  - Analyzer (ab CQRS073): ein `IDienst` nur im Ctor einer Funktions- bzw. Dienst-Implementierung; nie im Fachcode von Aggregat/Projektion/
+    Reaktion (dort bleiben Fähigkeiten als Parameter).
+  - Extractor + Sonde/`soll.txt`: Dienst-Karte (Signatur + Implementierungen als Logik-Element: Eingang · Ausgang · Rumpf 📝/🤖), Kante
+    Funktions-Implementierung → Dienst; Scaffolder legt Interface + Implementierungs-Stub an, verbunden wird per ⊕ (Ctor-Parameter als Geste).
+  - Bestand: `IImageResizer`/`IHistogramEqualizer` werden `IDienst`, `PreprocessingConfig` kommt aus `Konfig:`; `DomainPipelineExtensions.cs`
+    und die Zeile in `Host.Grpc/Program.cs` entfallen.
+- **P7.5.2 Webhook als Konfig (E12, L22):** `QuellKonfig.Webhook` (Route), generisches Mapping aus `GeneratedQuellen` auf dem Einblick-Port,
+  `MapQuellWebhook` aus `Program.cs` raus (der Host ist dann `AddCqrs` + `LaufeAsync`); Extractor liest die Route aus den Umgebungs-Dateien;
+  Quellkarte zeigt „⇥ Webhook /…“ je Umgebung, bearbeitet im Host-Rahmen. Integration: POST auf die Route startet genau einen Vorgang.
+- **P7.5.3 Python-Rümpfe externer Funktionen (E13, L23):** Python-Basis je Funktion aus dem Codegen (`build_python.sh`, Teil der ⟳-Kette),
+  Implementierungs-Datei je Funktion, generischer Worker mit generierter Tabelle, `PythonSync` für den Rumpf (✎/🤖 an der Funktions-Karte, wenn
+  der Laufort `Extern` ist), `funktions_worker.py` aufgelöst. Python-Tests (Worker) + Fluss-E2E mit Python-Worker grün.
+
+Abnahme:
+- Auf einem leeren Branch wird **nur im Editor** eine neue Domäne gebaut: Aggregat (Commands, Events, Decide/Apply), Fluss aus einer
+  Datei-Quelle mit Webhook, eine C#-Funktion mit einem neuen Dienst, eine Python-Funktion (Laufort Extern), Projektion + Reader, Akteur +
+  Client. ⟳ ist grün, der Vorgang läuft durch (Datei-Drop und Webhook), die Spur zeigt den ganzen Weg.
+- `git diff` dieser Domäne enthält nur, was Gesten geschrieben haben; `Program.cs` und der Quell-Treiber sind unverändert.
+- `--check` meldet „Code ohne Karte = 0“, und keiner dieser Bausteine ist eine bloße Code-Karte.
 
 ---
 
