@@ -115,6 +115,8 @@ client Leihwesen.Gebuehren.IMahnportal | traegt IMahnstelle; sendet EroeffneMahn
 #    dessen Events sie liest (Projektion → Reader/Store/ReadModel/Query/Response); Wert-Typen zum Aggregat ihrer Records; Reaktion und Prozess
 #    stehen dort, wohin ihre Commands gehen (berühren sie mehrere Domänen); ein Akteur in der ersten Domäne, in der er wirkt (Befugnisse und
 #    Zusagen). Der geteilte Zähler hat keinen Store und keine Nachbarn: eine Insel in seinem Namespace. ──
+# Code-Karte (Werkbank P7.4): Fristrechnung ist kein Baustein — roh gezeigt, beide partial-Teile an einer Karte, Domäne aus dem Namespace
+code Leihwesen.Ausleihe.Fristrechnung class teile=2 domaene=Leihwesen.Ausleihe block=§geteilt
 sicht Leihwesen.Ausleihe.Signatur valueobject domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Ausleihe.Zustand enum domaene=Leihwesen.Ausleihe block=Leihvorgang
 sicht Leihwesen.Lesen.OffeneAusleihen query domaene=Leihwesen.Ausleihe block=Leihvorgang

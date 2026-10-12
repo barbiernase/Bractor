@@ -76,4 +76,15 @@ namespace Leihwesen.Ausleihe
             }
         }
     }
+
+    // Hilfscode ohne Baustein-Rolle (Werkbank P7.4): wird eine Code-Karte — partial in zwei Teilen, beide gehören zur selben Karte.
+    public static partial class Fristrechnung
+    {
+        public static DateTime Faellig(DateTime ab, int tage) => ab.AddDays(tage);
+    }
+
+    public static partial class Fristrechnung
+    {
+        public static bool Ueberfaellig(DateTime faellig, DateTime jetzt) => jetzt > faellig;
+    }
 }

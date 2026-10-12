@@ -85,7 +85,15 @@ public sealed class DomainModel
     public Dictionary<string, List<Ort>> TypOrte { get; } = new(StringComparer.Ordinal);
     /// <summary>Handgeschriebene Domänen-Typen mit unaufgelöstem Basistyp — sie werden Code-Karten mit ⚠ (bzw. ein Befund an ihrer Karte).</summary>
     public List<UnaufgeloestRaw> Unaufgeloest { get; } = new();
+    /// <summary>
+    /// Jede handgeschriebene Deklaration eines Typs oberster Ebene in den Editor-Projekten (partial: je Teil eine) — Grundlage der Code-Karte
+    /// (Werkbank P7.4, Zielbild §9): was keine Karte über <c>_ort</c>/<c>_teile</c> abdeckt, wird roh gezeigt.
+    /// </summary>
+    public List<TypDeklaration> Deklarationen { get; } = new();
 }
+
+/// <summary>Eine handgeschriebene Typ-Deklaration oberster Ebene: Name, Namespace, Form, Ort und der Code verbatim.</summary>
+public sealed record TypDeklaration(string Name, string Namespace, string Art, Ort Ort, string Code);
 
 /// <summary>
 /// Ein Befund des Lesens (kein Compiler-Befund): <paramref name="Karte"/> ist die stabile Karten-Id (<c>pipeline:P</c>, <c>saga:P</c>,
@@ -587,7 +595,12 @@ public sealed partial class DomainExtractor
         LeseRahmen(m);
         LeseUnaufgeloeste(m);
         foreach (var t in DomainQuellTypen())
+        {
             m.TypOrte[t.Fq()] = QuellDeklarationen(t).Select(Ort.Von).ToList();
+            if (t.ContainingType == null)
+                foreach (var d in QuellDeklarationen(t).OfType<BaseTypeDeclarationSyntax>())
+                    m.Deklarationen.Add(new TypDeklaration(t.Name, t.ContainingNamespace.Fq(), Form(d), Ort.Von(d), d.ToString()));
+        }
 
         // Deterministische Reihenfolge (die Symbol-Enumeration ist es nicht garantiert).
         m.Aggregates.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
@@ -651,16 +664,19 @@ public sealed partial class DomainExtractor
             m.Unaufgeloest.Add(new UnaufgeloestRaw
             {
                 Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Datei = decl.SyntaxTree.FilePath, Zeile = ort.StartLinePosition.Line + 1,
-                Art = decl switch
-                {
-                    RecordDeclarationSyntax r => r.ClassOrStructKeyword.IsKind(SyntaxKind.StructKeyword) ? "record struct" : "record",
-                    InterfaceDeclarationSyntax => "interface", StructDeclarationSyntax => "struct", EnumDeclarationSyntax => "enum", _ => "class",
-                },
+                Art = Form(decl),
                 Code = decl.ToString(), Basen = offen, Start = decl.Span.Start, Ende = decl.Span.End,
             });
         }
         m.Unaufgeloest.Sort((a, b) => string.CompareOrdinal(a.Namespace + "." + a.Name, b.Namespace + "." + b.Name));
     }
+
+    /// <summary>Die Deklarationsform als Wort (für die Code-Karte).</summary>
+    private static string Form(BaseTypeDeclarationSyntax decl) => decl switch
+    {
+        RecordDeclarationSyntax r => r.ClassOrStructKeyword.IsKind(SyntaxKind.StructKeyword) ? "record struct" : "record",
+        InterfaceDeclarationSyntax => "interface", StructDeclarationSyntax => "struct", EnumDeclarationSyntax => "enum", _ => "class",
+    };
 
     /// <summary>Steht in der Basisliste etwas, das der Compiler nicht auflöst (Tippfehler, gelöschter Typ, fehlendes using)?</summary>
     private static bool HatUnaufgeloesteBasis(INamedTypeSymbol t) =>

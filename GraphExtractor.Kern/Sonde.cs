@@ -248,6 +248,10 @@ public static class Sonde
             z.Add($"sicht {S(k.Ref, "namespace")}.{k.Name} {k.Art} domaene={sicht.Domaene(k)} block={sicht.Block(k)}"
                   + (sicht.Inseln.Contains(k.Id) ? " insel" : ""));
 
+        // Code-Karten (Werkbank P7.4): Hilfscode ohne Baustein-Rolle, roh — mit der Zahl seiner Deklarationen (partial: _ort + _teile).
+        foreach (var k in sicht.Karten.Where(k => k.Art == "code" && Sonde(k.Ref)))
+            z.Add($"code {S(k.Ref, "namespace")}.{k.Name} {S(k.Ref, "art")} teile={1 + A(k.Ref, "_teile").Count()} domaene={sicht.Domaene(k)} block={sicht.Block(k)}");
+
         return z.Select(x => x.TrimEnd()).OrderBy(x => x, StringComparer.Ordinal).ToList();
     }
 

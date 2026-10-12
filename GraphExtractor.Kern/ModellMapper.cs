@@ -544,11 +544,64 @@ public static class ModellMapper
             befunde.Add(new Lesebefund("LESEN-BASIS", $"Basistyp nicht aufgelöst: {string.Join(", ", u.Basen)} — {u.Name} wird nicht als Baustein erkannt",
                 karte, u.Datei, u.Zeile));
         }
+        // Vollständigkeit (Zielbild §9): jede Typ-Deklaration der Editor-Projekte, die keine Karte über _ort/_teile abdeckt, wird eine Code-Karte —
+        //   roher Code in ihrer Domäne. Der Extractor rät nichts; was er nicht als Baustein erkennt, zeigt er so.
         root["codeKarten"] = codeKarten;
+        CodeKarten(root, dom, codeKarten);
         root["lesebefunde"] = Knoten(befunde.Select(b => new { code = b.Code, text = b.Text, karte = b.Karte, datei = Relativ(dom.Wurzel, b.Datei), zeile = b.Zeile }));
         // Die Ableitungen (Werkbank P7.3): Domäne, Block, Akteure, Kanten, Inseln, Einklappen, Kette, Clients — der Editor rechnet nichts davon nach.
         if (mitSicht) root["sicht"] = Sicht.Aus(root).AlsJson();
         return root;
+    }
+
+    /// <summary>
+    /// Code-Karten für jede nicht abgedeckte Typ-Deklaration oberster Ebene (partial: die Teile einer Karte). Abgedeckt ist, was in einer
+    /// <c>_ort</c>- oder <c>_teile</c>-Spanne irgendeiner Karte liegt. Id <c>code:Name</c>, bei gleichem Namen in zwei Namespaces <c>code:Ns.Name</c>.
+    /// </summary>
+    private static void CodeKarten(JsonObject root, DomainModel dom, JsonArray codeKarten)
+    {
+        var spannen = Abdeckung(root);
+        bool Abgedeckt(TypDeklaration d) => Relativ(dom.Wurzel, d.Ort.Datei) is { } rel && spannen.TryGetValue(rel, out var l)
+            && l.Any(x => x.Start <= d.Ort.Start && d.Ort.Ende <= x.Ende);
+        var offen = dom.Deklarationen.Where(d => !Abgedeckt(d)).GroupBy(d => d.Namespace + "." + d.Name, StringComparer.Ordinal).ToList();
+        var mehrfach = offen.GroupBy(g => g.First().Name, StringComparer.Ordinal).Where(g => g.Count() > 1).Select(g => g.Key).ToHashSet(StringComparer.Ordinal);
+        foreach (var g in offen)
+        {
+            var (erste, rest) = (g.First(), g.Skip(1).ToList());
+            var karte = Knoten(new
+            {
+                _id = "code:" + (mehrfach.Contains(erste.Name) ? g.Key : erste.Name), name = erste.Name, @namespace = erste.Namespace, art = erste.Art,
+                datei = Relativ(dom.Wurzel, erste.Ort.Datei), code = string.Join("\n\n", g.Select(d => d.Code)), _ort = OrtJson(dom, erste.Ort),
+            });
+            if (rest.Count > 0) karte["_teile"] = new JsonArray(rest.Select(d => (JsonNode?)OrtJson(dom, d.Ort)).ToArray());
+            codeKarten.Add(karte);
+        }
+    }
+
+    /// <summary>Alle Spannen, die Karten belegen (<c>_ort</c> und <c>_teile</c>, auch an verschachtelten Karten wie Fluss-Knoten), je Datei.</summary>
+    public static Dictionary<string, List<(int Start, int Ende)>> Abdeckung(params JsonNode?[] knoten)
+    {
+        var aus = new Dictionary<string, List<(int, int)>>(StringComparer.Ordinal);
+        void Merke(JsonNode? o)
+        {
+            if (o is JsonObject { } x && (string?)x["datei"] is { } d && x["start"] is { } st && x["ende"] is { } en)
+                (aus.TryGetValue(d, out var l) ? l : aus[d] = new()).Add(((int)st, (int)en));
+        }
+        void Lauf(JsonNode? n)
+        {
+            switch (n)
+            {
+                case JsonObject o:
+                    foreach (var (k, v) in o)
+                        if (k == "_ort") Merke(v);
+                        else if (k == "_teile") foreach (var t in v as JsonArray ?? []) Merke(t);
+                        else if (k != "sicht") Lauf(v);
+                    break;
+                case JsonArray a: foreach (var x in a) Lauf(x); break;
+            }
+        }
+        foreach (var k in knoten) Lauf(k);
+        return aus;
     }
 
     /// <summary>Nach Namen nachschlagen — tolerant: ein doppelter Name (halb editiertes Duplikat) wird ein Befund, der erste gilt.</summary>
@@ -593,6 +646,7 @@ public static class ModellMapper
                 if (!Enthalten(o)) orte.Add(o);
             if (orte.Count > 0) k["_teile"] = new JsonArray(orte.Select(o => (JsonNode?)OrtJson(dom, o)).Where(x => x != null).ToArray());
         }
+        var storeVon = dom.Stores.GroupBy(x => x.Namespace + "." + x.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var funktionVon = dom.Funktionen.GroupBy(f => f.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var akteurVon = dom.Akteure.GroupBy(a => a.Namespace + "." + a.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         foreach (var sammlung in new[] { "records", "enums", "sagas", "fluesse", "funktionen", "akteure", "clients", "readModels", "projektionen", "reaktionen", "reader", "stores" })
@@ -604,6 +658,14 @@ public static class ModellMapper
                 var weitere = new List<string> { full };
                 if (sammlung == "funktionen" && funktionVon.GetValueOrDefault(full)?.ImplFull is { } impl) weitere.Add(impl);
                 if (sammlung == "akteure" && akteurVon.TryGetValue(full, out var ak)) weitere.AddRange(ak.VertragTypen);
+                // Die Implementierung eines Stores gehört zu seiner Karte (wie bei Funktionen).
+                if (sammlung == "stores" && storeVon.GetValueOrDefault(full) is { } st)
+                {
+                    if (st.Impl is { } si) weitere.Add(si.Ns + "." + si.Name);
+                    // Eine Store-Funktion steht an ihrer Fähigkeit (Interface mit genau dieser Funktion, CQRS051).
+                    foreach (var fn in Alle(k["writeFns"]).Concat(Alle(k["readFns"])))
+                        if (st.Fns.FirstOrDefault(x => x.Faehigkeit == S(fn, "faehigkeit")) is { } fr) fn["_ort"] = OrtJson(dom, TypOrt(fr.FaehigkeitFull, null));
+                }
                 Teile(k, haupt, weitere);
             }
         var aggVon = dom.Aggregates.GroupBy(a => a.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);

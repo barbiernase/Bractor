@@ -1084,10 +1084,10 @@
   //   • Ausgang „code ▶": in den Rumpf-Port des Konsumenten (Decider/Applier/Store-Fn/Handler …).
   //   • „✎ Im Editor öffnen" + Datei-Spiegel — nur, wo eine echte .cs existiert (heute Schreibseite).
   //   KEIN In-Browser-Editieren, KEIN Klick auf den Block.
-  // Code-Karte (Werkbank P7.1, Zielbild §9): ein Typ, den das Lesen nicht als Baustein erkennt — roh aus der Datei, mit dem Grund (⚠).
-  //   Nur Anzeige; geändert wird der Code (die Karte verschwindet, sobald der Basistyp wieder aufgelöst ist).
+  // Code-Karte (Werkbank P7.1/P7.4, Zielbild §9): ein Typ, den das Lesen nicht als Baustein erkennt — roh aus der Datei; ⚠ mit Grund, wenn
+  //   ein Basistyp nicht aufgelöst ist (die Karte verschwindet, sobald er es wieder ist), sonst Hilfscode ohne Baustein-Rolle.
   function codeKarteCard(body,c){const o=c._ort||{};
-    body.append(h("div",{class:"blab"},"⚠ Basistyp nicht aufgelöst: "+(c.unaufgeloest||[]).join(", ")));
+    body.append(h("div",{class:"blab"},(c.unaufgeloest||[]).length?"⚠ Basistyp nicht aufgelöst: "+c.unaufgeloest.join(", "):"Hilfscode — kein Baustein erkannt, roh aus der Datei"));
     body.append(h("div",{class:"blab",style:"opacity:.75"},(c.art||"Typ")+" · "+(o.datei||c.datei||"")+(o.zeile?":"+o.zeile:"")));
     body.append(h("pre",{class:"gcodeprev",style:"cursor:default;white-space:pre-wrap"},c.code||""));}
   function codeNodeCard(body,c){
@@ -1286,7 +1286,7 @@
   //    Applier→Aggregat(rechts) · Applier→State-Feld(oben, optionale Zuweisungs-Markierung).
   const SVGNS="http://www.w3.org/2000/svg";
   const GRID=20;
-  const NODELABEL={host:"Host",akteur:"Akteur",client:"Client",auf:"Zusage",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",quelle:"Quelle",fluss:"Fluss",codenode:"Code",llmnode:"LLM",code:"⚠ Code",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn",funktion:"Funktion",auftrag:"Auftrag",flussknoten:"Pipeline"};
+  const NODELABEL={host:"Host",akteur:"Akteur",client:"Client",auf:"Zusage",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",quelle:"Quelle",fluss:"Fluss",codenode:"Code",llmnode:"LLM",code:"Code",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn",funktion:"Funktion",auftrag:"Auftrag",flussknoten:"Pipeline"};
   let PAN={x:40,y:30,s:1}, canvas=null, world=null, svg=null, svgTop=null, SLOTS={};
   // Typ-Navigation: HLKIND = aktuell hervorgehobener Node-Typ (Board+Minimap); JUMPIX = Sprung-Cursor je Typ.
   let HLKIND=null; const JUMPIX={};
@@ -2299,9 +2299,9 @@
   function nodeEditor(n){
     const zu=istZu(n);
     const el=h("div",{class:"gnode2 n-"+n.kind+(zu?" collapsed":"")+(ISLE.has(n.id)?" island":"")+(diagFuer(n.id).length?" diag":"")
-      +(n.kind==="codenode"&&vorschlagFuer(n.ref._id)?" llmvor":"")});el.dataset.id=n.id;
+      +(n.kind==="codenode"&&vorschlagFuer(n.ref._id)?" llmvor":"")+(n.kind==="code"&&(n.ref.unaufgeloest||[]).length?" unaufgeloest":"")});el.dataset.id=n.id;
     const pos=P(n);el.style.left=(pos.x||0)+"px";el.style.top=(pos.y||0)+"px";
-    const title=NODELABEL[n.kind]||n.kind;
+    const title=(n.kind==="code"&&(n.ref.unaufgeloest||[]).length?"⚠ ":"")+(NODELABEL[n.kind]||n.kind);
     const head=h("div",{class:"ghead"},
       h("span",{class:"gtitle"+(n.name?" hatname":""),title:title+(n.name?" · "+n.name:"")},h("span",{class:"gk"},title+(n.name?" · ":"")),h("span",{class:"gn"},n.name||"")),
       diagFuer(n.id).length?h("span",{class:"gdiag",title:diagFuer(n.id).map(d=>d.text).join("\n")},"⛔ "+diagFuer(n.id).length):null,
@@ -3253,7 +3253,7 @@
     if(!P.length)box.append(h("div",{class:"lz lleer"},"— leerer Vertrag: im Panel ⊕ trägt / sendet / hört"));
     return box;}
   function kurzfassung(n){if(n.kind==="client")return anschlussleiste(n);if(n.kind==="host")return hostKurz(n);const r=n.ref,k=n.kind;let t="";
-    if(k==="code")t="⚠ "+(r.unaufgeloest||[]).join(", ")+" nicht aufgelöst";
+    if(k==="code")t=(r.unaufgeloest||[]).length?"⚠ "+r.unaufgeloest.join(", ")+" nicht aufgelöst":(r.art||"Typ")+" · kein Baustein — roh";
     if(k==="command"){const ev=MODEL.decider.filter(d=>d.command===r.name).flatMap(d=>(d.ergibt||[]).map(o=>o.event)).filter(e=>(recByName(e)||{}).kind!=="rejection");
       t=ev.length?"→ "+kurz(ev):"→ (kein Decider)";}
     else if(k==="event"){const c=MODEL.decider.filter(d=>(d.ergibt||[]).some(o=>o.event===r.name)).map(d=>d.command);t=c.length?"← "+kurz(c):"";}

@@ -243,9 +243,23 @@ public static class ParitaetsPruefung
             if (ist2 != anzahl)
                 befunde.Add(new("Inventar", "error", $"Saga {saga}: {anzahl} Regel(n) im Code, {ist2} Regel-Karten."));
         }
+        // Vollständigkeit (Zielbild §9): JEDE Typ-Deklaration oberster Ebene der Editor-Projekte liegt in der Spanne einer Karte (_ort/_teile) —
+        //   als Baustein oder als Code-Karte. Unabhängig vom Extractor: Soll aus der Syntax, Ist aus der Server-Kartenliste.
+        //   Ein Fluss ist der ⛓-Rahmen seiner Knoten-Karten (Besitzer).
+        var spannen = ModellMapper.Abdeckung(sicht.Karten.SelectMany(k => new[] { k.Ref, k.Besitzer?.Ref }).Where(r => r != null).Distinct()
+            .Select(r => (JsonNode?)r).ToArray());
+        foreach (var d in soll.Deklarationen)
+        {
+            var rel = Path.GetRelativePath(ist.Dom.Wurzel, d.Datei).Replace('\\', '/');
+            if (!(spannen.TryGetValue(rel, out var l) && l.Any(x => x.Start <= d.Start && d.Ende <= x.Ende)))
+                befunde.Add(new("Inventar", "error", $"Typ '{d.Full}' ({rel}:{d.Zeile}) steht im Code, hat keine Karte."));
+        }
         var ohneKarte = befunde.Skip(vorher).Count(b => b.Meldung.Contains("hat keine Karte", StringComparison.Ordinal));
-        befunde.Add(new("Inventar", "info", $"Server-Kartenliste: {sicht.Karten.Count} Karten, {sicht.Kanten.Count} Kanten — Code ohne Karte: {ohneKarte}; " +
-                                             $"Code-Karten (⚠ roh): {sicht.Karten.Count(k => k.Art == "code")}."));
+        var codeKarten = sicht.Karten.Count(k => k.Art == "code");
+        befunde.Add(new("Inventar", "info", $"Server-Kartenliste: {sicht.Karten.Count} Karten, {sicht.Kanten.Count} Kanten — Code ohne Karte: {ohneKarte} " +
+                                             $"({soll.Deklarationen.Count} Typ-Deklarationen); Code-Karten (roh): {codeKarten} = " +
+                                             $"{100.0 * codeKarten / Math.Max(1, sicht.Karten.Count):0.0} % der Karten " +
+                                             $"({string.Join(", ", sicht.Karten.Where(k => k.Art == "code").Select(k => k.Name).Order(StringComparer.Ordinal))})."));
 
         // Namenskollisionen: das Board referenziert Records per EINFACHEM Namen.
         foreach (var dup in soll.AlleRecordNamen.GroupBy(x => x[(x.LastIndexOf('.') + 1)..]).Where(g => g.Count() > 1))
@@ -279,6 +293,8 @@ public static class ParitaetsPruefung
         public static string Zusage(string eingang, IEnumerable<string> ausgaenge, bool strom) =>
             $"{eingang}>{string.Join(",", ausgaenge.OrderBy(x => x, StringComparer.Ordinal))}{(strom ? "*" : "")}";
         public List<string> AlleRecordNamen = new();
+        /// <summary>Jede handgeschriebene Typ-Deklaration oberster Ebene (partial: je Teil) — das Soll der Vollständigkeit.</summary>
+        public List<(string Full, string Datei, int Start, int Ende, int Zeile)> Deklarationen = new();
         public Dictionary<string, (HashSet<string> Decide, HashSet<string> Apply)> Aggregate = new();
         public Dictionary<string, int> Sagas = new();
 
@@ -318,6 +334,8 @@ public static class ParitaetsPruefung
                     {
                         if (model.GetDeclaredSymbol(decl) is not INamedTypeSymbol t) continue;
                         var full = t.Fq();
+                        if (t.ContainingType == null)
+                            inv.Deklarationen.Add((full, tree.FilePath, decl.Span.Start, decl.Span.End, decl.GetLocation().GetLineSpan().StartLinePosition.Line + 1));
                         if (decl is EnumDeclarationSyntax) { inv.Enums.Add(full); continue; }
                         if (decl is InterfaceDeclarationSyntax)
                         {

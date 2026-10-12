@@ -138,12 +138,17 @@ Ketten-Pfade. ⊕ fragt `POST /api/werkbank/passt` (Port + Kandidaten → passt/
 `GET /api/werkbank/kette`. Im JS bleiben nur Nachschlagen + Ansichts-Wünsche; Code-Blöcke (📝/🤖) folgen ihrer Karte. `--check` prüft gegen die
 Server-Kartenliste („Code ohne Karte: 0“, leere Geste = kein Patch); die gezeichnete Sonde ist ein Gesten-Skript (`Sonde/Gezeichnet.gesten.json`).
 
+**Prüfen = Bauen, Code-Karte (2026-10-12, Werkbank P7.4):** Code-Karte als Gate — jede Typ-Deklaration oberster Ebene der Editor-Projekte liegt in der
+Spanne einer Karte (`_ort`/`_teile`; Store-Impl gehört zur Store-Karte, jede Store-Fn steht an ihrer Fähigkeit); was kein Baustein ist, wird eine Code-Karte
+(`code:T`, roher Code, partial-Teile an einer Karte, ⚠ nur bei unaufgelöster Basis). `--check` prüft das unabhängig aus der Syntax („Code ohne Karte: 0“
+Pflicht, Anteil der Code-Karten als Kennzahl: 9 = 2,1 %).
+
 **Akteure, Verträge, Clients (2026-10-06):** Akteure mit Befugnis und Kette bis in den Event-Header; Akteur-Verträge (Zusagen
 draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer CommandId; Clients (`IClientVertrag`, n:m zu Akteuren) mit
 Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an
 Clients (`docs/konzept-akteure.md` §9).
 
-**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471; P7.3: Prüfstand 476/476): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
+**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471; P7.3: Prüfstand 476/476; P7.4: Prüfstand 477/477): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
 Marten/Consul/Redis, sequentiell: 33/33 (inkl. 4 Fluss-E2E; TwoNodeCommandDispatch an die Inbox-Marke seit T2b angepasst).**
 
 **Bewusst offen (Priorität):**

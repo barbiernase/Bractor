@@ -122,4 +122,49 @@ namespace Probe.B { public interface ILiesZahl : IReadStore { Task<int> LiesAsyn
         var o = knoten[1]["_ort"]!.AsObject();
         Probe[(int)o["start"]!..(int)o["ende"]!].Should().Be("eingang.Sende<Melde>(e => new Melde(Guid.Empty, e.Pfad));");
     }
+
+    private const string MitHilfscode = @"
+using System; using System.Threading.Tasks; using Abstractions;
+namespace Probe
+{
+    public sealed record Zaehler : IReadModel { public string Id { get; init; } = """"; }
+    public interface ISetzeZaehler : IWriteStore { Task SetzeAsync(Zaehler z); }
+    public interface ILiesZaehler : IReadStore { Task<Zaehler?> LiesAsync(string id); }
+    public interface IZaehlerBuch : IStore, ISetzeZaehler, ILiesZaehler { }
+    public sealed class ZaehlerBuch : IZaehlerBuch
+    {
+        public Task SetzeAsync(Zaehler z) => Task.CompletedTask;
+        public Task<Zaehler?> LiesAsync(string id) => Task.FromResult<Zaehler?>(null);
+    }
+    public static partial class Rechner { public static int Doppelt(int x) => 2 * x; }
+    public static partial class Rechner { public static int Halb(int x) => x / 2; }
+}
+";
+
+    [Fact]
+    public async Task Typ_ohne_Baustein_wird_Code_Karte_und_alles_andere_liegt_in_einer_Karten_Spanne()
+    {
+        var board = await LiesAsync(MitHilfscode);
+
+        // Werkbank P7.4 (Zielbild §9): nur der Hilfscode ist roh — beide partial-Teile an EINER Karte.
+        var karte = Alle(board, "codeKarten").Should().ContainSingle().Subject;
+        ((string?)karte["_id"]).Should().Be("code:Rechner");
+        ((string?)karte["art"]).Should().Be("class");
+        karte["_teile"]!.AsArray().Should().HaveCount(1);
+        ((string?)karte["code"]).Should().Contain("Doppelt").And.Contain("Halb");
+        // Die Store-Implementierung gehört zur Store-Karte, jede Store-Funktion steht an ihrer Fähigkeit.
+        var store = Alle(board, "stores").Single();
+        var spannen = store["_teile"]!.AsArray().Select(t => MitHilfscode[(int)t!["start"]!..(int)t["ende"]!]).ToList();
+        spannen.Should().Contain(x => x.StartsWith("public sealed class ZaehlerBuch"));
+        Alle(store, "writeFns").Concat(Alle(store, "readFns")).Select(f => MitHilfscode[(int)f["_ort"]!["start"]!..(int)f["_ort"]!["ende"]!])
+            .Should().BeEquivalentTo("public interface ISetzeZaehler : IWriteStore { Task SetzeAsync(Zaehler z); }",
+                "public interface ILiesZaehler : IReadStore { Task<Zaehler?> LiesAsync(string id); }");
+        // Jede Typ-Deklaration liegt in der Spanne einer Karte (das Gate von --check).
+        var abdeckung = ModellMapper.Abdeckung(board);
+        foreach (var name in new[] { "Zaehler", "ISetzeZaehler", "ILiesZaehler", "IZaehlerBuch", "ZaehlerBuch", "Rechner" })
+        {
+            var i = MitHilfscode.IndexOf(" " + name + " ", StringComparison.Ordinal);
+            abdeckung["Probe.cs"].Should().Contain(x => x.Start <= i && i < x.Ende, name);
+        }
+    }
 }

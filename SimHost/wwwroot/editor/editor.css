@@ -132,7 +132,7 @@
 #de .gtoolbar button.add.jumpable{cursor:pointer}
 #de .gminimap svg rect.mmhi{fill:#ffd76a !important;opacity:1 !important;stroke:#fff3c9;stroke-width:.6}
 #de .gnode2.n-command{border-color:#3b6fb0}
-#de .gnode2.n-code{border-color:#d9a400;border-style:dashed}
+#de .gnode2.n-code{border-color:#8a93a6;border-style:dashed}#de .gnode2.n-code.unaufgeloest{border-color:#d9a400}
 #de .gnode2.n-code .ghead{background:#6b5a1c}
 #de .gnode2.n-akteur{border-color:#b04f86;width:240px}
 #de .gnode2.n-client{border-color:#5aa0c8;width:420px}
