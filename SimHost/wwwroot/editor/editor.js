@@ -4,14 +4,14 @@
   // Vertrags-Fakten aus dem Rahmen (vom Extractor aus dem Code gelesen).
   const ID_FELD=()=>((MODEL.rahmen&&MODEL.rahmen.aggregatIdFeld)||"");
   const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"],konfig:["Konfiguration","vo"],query:["Query","qry"],queryresponse:["Response","qrsp"],auftrag:["Auftrag","cmd"]};
-  let MODEL={schemaVersion:"2",akteure:[],clients:[],records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],reaktionen:[],codeNodes:[],llmNodes:[],fluesse:[],codeKarten:[]};
+  let MODEL={schemaVersion:"2",akteure:[],clients:[],records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],reaktionen:[],fluesse:[],codeKarten:[]};
   let NID=1;
   // Die ANSICHT (Werkbank P7.2): Positionen, Domänen-Filter, Akteur-Reihenfolge und die 🤖-Knoten — eine Datei auf dem Server
   //   (.werkbank/ansicht.json, Schlüssel = Karten-Id). Sie gehört weder zum Code noch zum Board; der Code ist die einzige Wahrheit.
   let HIDDEN=new Set(), ANSICHT={}, _ansT=null;
   async function ansichtLaden(){try{const r=await fetch("/api/werkbank/ansicht");ANSICHT=r.ok?(await r.json())||{}:{};}catch(e){ANSICHT={};}}
   function ansichtSpeichern(){if(_ansT)clearTimeout(_ansT);_ansT=setTimeout(()=>{_ansT=null;
-    ANSICHT.llmNodes=(MODEL.llmNodes||[]).map(l=>{const slot=(l.promptZiel&&konsolenId(l.promptZiel,MODEL))||l.promptSlot||null;return slot?{...l,promptSlot:slot}:l;});
+    delete ANSICHT.llmNodes;   // 🤖 ist seit P7.4 eine Aktion am Rumpf, kein Knoten mehr
     fetch("/api/werkbank/ansicht",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(ANSICHT)}).catch(()=>{});},700);}
   function schluesselFuer(){HIDDEN=new Set(ANSICHT.hidden||[]);ladeAnsicht();}
   function saveHidden(){ANSICHT.hidden=[...HIDDEN];ansichtSpeichern();}
@@ -23,7 +23,7 @@
   const kindLabel=k=>(KINDINFO[k]||["?","vo"])[0];
   const kindKlasse=k=>(KINDINFO[k]||["?","vo"])[1];
   function normalize(m){m=m||{};m.records=m.records||[];m.enums=m.enums||[];m.aggregate=m.aggregate||[];m.decider=m.decider||[];m.applier=m.applier||[];m.sagas=m.sagas||[];m.states=m.states||[];m.transitions=m.transitions||[];
-    m.readModels=m.readModels||[];m.stores=m.stores||[];m.projektionen=m.projektionen||[];m.reader=m.reader||[];m.reaktionen=m.reaktionen||[];m.codeNodes=m.codeNodes||[];m.llmNodes=m.llmNodes||[];
+    m.readModels=m.readModels||[];m.stores=m.stores||[];m.projektionen=m.projektionen||[];m.reader=m.reader||[];m.reaktionen=m.reaktionen||[];
     // Code-Karten (Werkbank P7.1): Typen, die das Lesen nicht als Baustein erkennt (z. B. unaufgelöster Basistyp) — kommen fertig vom Server.
     m.codeKarten=m.codeKarten||[];
     // Akteur (docs/konzept-akteure.md): wer von außen hineingibt — darf[] = die Typen seiner IDarf<T> (Command/Query/Trigger).
@@ -53,22 +53,11 @@
         hd.fns=hd.fns||[];
         // Symmetrie zur Schreibseite (decider.ergibt[]): je Query mehrere Responses als OneOf → responses[].
         hd.responses=hd.responses||[];});});
-    m.codeNodes.forEach(c=>{if(!c._id)c._id="cn"+(NID++);});m.llmNodes.forEach(l=>{if(!l._id)l._id="ln"+(NID++);});
-    // Migration: eingebettete Decide/Apply-Rümpfe → 📝 Code-Knoten (Konsistenz: jede Code-Stelle = Port + Quelle).
-    const mig=(node,nm)=>{if(node.rumpf===""&&!node.codeSrc){node.leer=true;delete node.rumpf;return;}
-      if(node.rumpf&&!node.codeSrc){const cn={_id:"cn"+(NID++),name:nm||"Code",text:node.rumpf,x:(node.x||0)+320,y:node.y||0};m.codeNodes.push(cn);node.codeSrc=cn._id;delete node.rumpf;}};
-    m.decider.forEach(d=>mig(d));m.applier.forEach(a=>mig(a));
-    // Leseseiten-Rümpfe: Projektion-/Reader-Handler + Store-Fn-Impls → eigene Code-Knoten.
-    m.projektionen.forEach(p=>(p.handles||[]).forEach(hd=>mig(hd,"Handle "+(hd.event||""))));
-    m.reader.forEach(r=>(r.handles||[]).forEach(hd=>mig(hd,"Handle "+(hd.query||""))));
-    m.stores.forEach(s=>{(s.writeFns||[]).forEach(f=>mig(f,f.name||"Store-Fn"));(s.readFns||[]).forEach(f=>mig(f,f.name||"Store-Fn"));});
-    // Katalog-Funktion: der RufeAsync-Rumpf ihrer C#-Implementierung → eigener Code-Knoten (der Code-Eingang der Funktions-Karte).
-    m.funktionen.forEach(f=>mig(f,(f.implementierung||f.name||"Funktion")+".RufeAsync"));
-    // Client-Implementierung (Python): je Zusage/Kenntnis ihr Rumpf → eigener Code-Knoten (das Verhalten des Akteurs draußen).
-    (m.clients||[]).forEach(c=>(c.implementierungen||[]).forEach(im=>(im.rumpfe||[]).forEach(r=>{if(r.rumpf!=null)mig(r,im.klasse+"."+r.methode);})));
+    // Rümpfe bleiben, wie der Code sie liefert (Rumpf aus der Datei, P7.4); ein im Code bewusst leerer Rumpf heißt „leer“.
+    [...m.decider,...m.applier].forEach(n=>{if(n.rumpf==="")n.leer=true;});
     m.aggregate.forEach(a=>{if((a.state||[]).length&&!m.states.some(s=>s.aggregat===a.name))m.states.push({_id:"state:"+a.name,aggregat:a.name});});
     // Round-trip: geladene Saga.Schritte → Transition-Knoten (prozess = Saga-Name), Schritte werden vor Serveraufruf neu erzeugt.
-    m.sagas.forEach(s=>{(s.schritte||[]).forEach(st=>m.transitions.push({_id:st._id||"t"+(NID++),prozess:s.name,wenn:(st.wenn||[]).slice(),
+    m.sagas.forEach(s=>{(s.schritte||[]).forEach(st=>m.transitions.push({_id:st._id||"t"+(NID++),prozess:s.name,wenn:(st.wenn||[]).slice(),...(st._ort?{_ort:st._ort}:{}),
         ...(st.sammelEvent?{sammelEvent:st.sammelEvent,sammelAusdruck:st.sammelAusdruck,sammelAnzahl:st.sammelAnzahl}:{}),
         dann:[{sende:st.sende||"",sendeJe:!!st.sendeJe,sendeJeCollection:st.sendeJeCollection||"",kompensation:st.kompensation||"",
           sendeAusdruck:st.sendeAusdruck,kompensationAusdruck:st.kompensationAusdruck,kompensationJe:!!st.kompensationJe,
@@ -136,7 +125,7 @@
   function imModus(ids,aendern){TEIL={gerufen:false};try{aendern();}finally{const g=TEIL.gerufen;TEIL=null;if(g)teilNeu(ids.filter(Boolean));}}
 
   // Eindeutiger Name — Namen sind der Referenzschlüssel für Kanten/Decider/Applier.
-  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.reaktionen.map(x=>x.name),...MODEL.codeNodes.map(x=>x.name),...MODEL.llmNodes.map(x=>x.name),...MODEL.akteure.map(x=>x.name),...MODEL.clients.map(x=>x.name),...MODEL.funktionen.map(x=>x.name),...MODEL.fluesse.map(x=>x.name)]);
+  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.reaktionen.map(x=>x.name),...MODEL.akteure.map(x=>x.name),...MODEL.clients.map(x=>x.name),...MODEL.funktionen.map(x=>x.name),...MODEL.fluesse.map(x=>x.name)]);
     if(!all.has(base))return base;let i=2;while(all.has(base+i))i++;return base+i;}
 
   function enumCard(e,ei){const c=h("div",{class:"card"});
@@ -189,8 +178,6 @@
     else if(kind==="quelle")neueQuelle(defaultNs(),"NeueQuelle",pos);
     else if(kind==="akteur")MODEL.akteure.push({_id:"ak"+(NID++),name:uniq("NeuerAkteur"),namespace:haeufigsterNs(MODEL.akteure)||defaultNs(),darf:[],...pos});
     else if(kind==="client")MODEL.clients.push({_id:"cl"+(NID++),name:uniq("INeuerClient"),namespace:haeufigsterNs(MODEL.clients)||defaultNs(),traegt:[],sendet:[],fragt:[],kenntnis:[],...pos});
-    else if(kind==="codenode")MODEL.codeNodes.push({_id:"cn"+(NID++),name:uniq("Code"),text:"",...pos});
-    else if(kind==="llmnode")MODEL.llmNodes.push({_id:"ln"+(NID++),name:uniq("LLM"),intent:"",...pos});
     else MODEL.records.push({name:uniq("Neu"+kindLabel(kind).replace(/\s/g,"")),kind,namespace:defaultNs(),felder:kind==="command"&&ID_FELD()?[{_id:"f"+(NID++),name:ID_FELD(),typ:"Guid"}]:[],...pos});
     // Heimat-Domäne in der Ansicht merken: trägt Namespace-lose Arten (📝/🤖 …) und hält Abhängige
     //   (Decider/Applier/State/Regel) in ihrer Domäne, auch wenn ihr Besitzer gelöscht wird. Der Code-Namespace geht vor (domKey).
@@ -456,14 +443,14 @@
     const os=port("open");os.classList.add("o");reg("dec:evtout:"+d._id+":open",os,{type:"evtOut",dir:"out",dec:d._id});
     body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Ausgang ▶"),os));
     body.append(h("div",{class:"gsec"},"Decide-Rumpf"));
-    body.append(codePort("dec:rumpf:"+d._id,{k:"decider",dec:d._id},d.codeSrc,"Decide-Logik"));
+    body.append(codePort("dec:rumpf:"+d._id,{k:"decider",dec:d._id},null,"Decide-Logik"));
   }
   // Applier: gespiegelt zum Decider — Event rein (rechts), Aggregat OBEN. Körper = Code.
   function applierCard(body,a){
     body.append(topSlot("appagg","▲ Aggregat: "+(a.aggregat||"— ⊕ Aggregat wählen"),{type:"appAgg",dir:"out",app:a._id},"app:aggout:"+a._id));
     body.append(slotRow("event","Event: "+(a.event||"—")+" ◀","r",{type:"evtUse",dir:"in",app:a._id},"app:evtin:"+a._id));
     body.append(h("div",{class:"gsec"},"Apply-Rumpf"));
-    body.append(codePort("app:rumpf:"+a._id,{k:"applier",app:a._id},a.codeSrc,"Apply-Logik"));
+    body.append(codePort("app:rumpf:"+a._id,{k:"applier",app:a._id},null,"Apply-Logik"));
   }
   // State-Knoten: eigene State-Felder (Typ per Dropdown); per Kante rechts einem Aggregat zuweisen.
   function stateCard(body,s){
@@ -492,57 +479,103 @@
     body.append(h("button",{class:"add",onclick:()=>{(rm.felder=rm.felder||[]).push({_id:"f"+(NID++),name:uniqFeldName(rm.felder,"feld"),typ:"string"});render();}},"+ Feld"));
   }
 
-  // Verträge werden verdrahtet; CODE fließt als Wert von 📝 Code- / 🤖 LLM-Knoten in die Rumpf-Ports.
-  const nodeName=id=>{const c=MODEL.codeNodes.find(x=>x._id===id);if(c)return "📝 "+(c.name||"Code");const l=MODEL.llmNodes.find(x=>x._id===id);if(l)return "🤖 "+(l.name||"LLM");return null;};
-  // Getippter 📝-Text eines Code-Knotens (für kurze Ausdrücke wie den Count-Ausdruck; 🤖 = später generiert → leer).
-  const codeText=id=>{const c=MODEL.codeNodes.find(x=>x._id===id);return c?(c.text||""):"";};
-  // Ein Code-Eingang (Rumpf): getippter Slot `code`; zeigt die verdrahtete Quelle (📝/🤖) oder „— leer".
-  // Setzt die Code-Quelle eines Rumpf-Ports (dieselbe Ziel-Logik wie beim Verdrahten einer code-Kante).
-  function setCodeSrc(t,src){if(!t)return;
-    if(t.k==="pjHandle"){const p=MODEL.projektionen.find(x=>x._id===t.proj);if(p&&p.handles[t.hi])p.handles[t.hi].codeSrc=src;}
-    else if(t.k==="rdHandle"){const r=MODEL.reader.find(x=>x._id===t.reader);if(r&&r.handles[t.hi])r.handles[t.hi].codeSrc=src;}
-    else if(t.k==="reakHandle"){const r=MODEL.reaktionen.find(x=>x._id===t.reaktion);if(r&&r.handles[t.hi])r.handles[t.hi].codeSrc=src;}
-    else if(t.k==="writeFn"){const st=MODEL.stores.find(x=>x._id===t.store);const fn=st&&(st.writeFns||[]).find(f=>f._id===t.fn);if(fn)fn.codeSrc=src;}
-    else if(t.k==="readFn"){const st=MODEL.stores.find(x=>x._id===t.store);const fn=st&&(st.readFns||[]).find(f=>f._id===t.fn);if(fn)fn.codeSrc=src;}
-    else if(t.k==="decider"){const d=dec(t.dec);if(d){d.codeSrc=src;if(src)delete d.leer;}}
-    else if(t.k==="applier"){const a=app(t.app);if(a){a.codeSrc=src;if(src)delete a.leer;}}
-    else if(t.k==="sagaCount"){const x=MODEL.transitions.find(z=>z._id===t.trans);if(x)x.sammelCodeSrc=src;}
-    else if(t.k==="funktion"){const f=MODEL.funktionen.find(x=>x._id===t.fk);if(f){f.codeSrc=src;if(src)delete f.leer;}}
-    // Zusage/Kenntnis in einer Client-Implementierung (Python): der Rumpf der auf_-Methode.
-    else if(t.k==="clientAuf"){const c=MODEL.clients.find(x=>x._id===t.client),im=c&&(c.implementierungen||[])[t.impl],
-      r=im&&(im.rumpfe||[]).find(x=>x.event===t.event);if(r){r.codeSrc=src;if(src)delete r.leer;}}
-    // Regel-Lambda: der Aufruf (Sende/Rufe) bzw. die Kompensation eines Dann.
-    else if(t.k==="regelLambda"){const tr=MODEL.transitions.find(x=>x._id===t.trans),d=tr&&(tr.dann||[])[t.dannIdx];
-      if(d){if(t.teil==="komp")d.kompCodeSrc=src;else d.codeSrc=src;}}
-    // Fluss-Lambda: je Eingang eines Aufruf-Knotens (Haupt + jedes ∨) bzw. die Liste eines Je-Rahmens.
-    else if(t.k==="flussLambda"){const f=MODEL.fluesse.find(x=>x._id===t.fluss),k=f&&(f.knoten||[]).find(z=>z._id===t.knoten);
-      if(k){if(t.ei==null)k.codeSrc=src;else if((k.eingaenge||[])[t.ei])k.eingaenge[t.ei].codeSrc=src;}}}
-  // Rumpf-Port eines Deciders/Appliers, dessen Methode im Code bewusst LEER ist (No-op, kein Platzhalter)?
-  function codeOwnerLeer(t){if(t.k==="decider"){const d=dec(t.dec);return !!(d&&d.leer);}
-    if(t.k==="applier"){const a=app(t.app);return !!(a&&a.leer);}return false;}
-  // 🤖 LLM-Knoten an einen Code-Block andocken — EIN Klick (auch in der Detail-Sicht/im Inspector). Hängt schon einer
-  //   dran, wird nur dessen Prompt-Feld fokussiert. Der Slot-Schlüssel wird mitgemerkt (stabil über Neu-Einlesen).
-  let LLM_FOKUS=null;
-  function llmAndocken(codeId){let l=MODEL.llmNodes.find(x=>x.promptZiel===codeId);
-    if(!l){l={_id:"ln"+(NID++),name:uniq("LLM"),intent:"",promptZiel:codeId};const k=konsolenId(codeId);if(k)l.promptSlot=k;MODEL.llmNodes.push(l);}
-    LLM_FOKUS=l._id;render();}
-  // Ein-Klick am leeren Rumpf-Port: 📝 Code-Block erzeugen und andocken; bei 🤖 zusätzlich den LLM-Knoten an den Block.
-  function addCode(target,kind){const id="cn"+(NID++);MODEL.codeNodes.push({_id:id,name:uniq("Code"),text:""});
-    setCodeSrc(target,id);if(kind==="llm")llmAndocken(id);else render();}
-  // Code-Eingang (Rumpf): getippter Slot `code`. Leer → deutlicher „⚙ …fehlt"-Marker + Ein-Klick-Knöpfe.
-  function codePort(key,target,codeSrc,label,imCode){const s=port("code");s.classList.add("i");reg(key,s,{type:"code",dir:"in",target});
-    const src=codeSrc?nodeName(codeSrc):null;const lbl=label||"Logik";
-    // Passiv: der gefüllte Rumpf zeigt nur, welcher Code-Block hängt (kein Editier-Modal am Konsumenten).
-    if(src)return h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"color:#9be3bf"},"◀ "+lbl+": "+src));
-    if(target&&codeOwnerLeer(target))return h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"opacity:.6",title:"Im Code bewusst leer (No-op) — kein Platzhalter"},"∅ "+lbl+": bewusst leer"));
-    // Die Logik steht schon im Code (z. B. ein gelesener Lambda) — ein Block spiegelt sie, 🤖 ändert sie; nichts „fehlt".
-    if(imCode)return h("div",{class:"slotrow"},s,h("span",{class:"slotlbl",style:"flex:1;opacity:.75",title:"Steht im Code — ＋📝 spiegelt ihn als Code-Block, ＋🤖 ändert ihn per Prompt"},"◀ "+lbl+": im Code"),
-      h("button",{class:"codeadd",title:"Code-Block erzeugen (Spiegel des Codes) und hier andocken",onclick:()=>addCode(target,"code")},"＋📝"),
-      h("button",{class:"codeadd",title:"Code-Block + 🤖 LLM-Knoten — Prompt schreiben, der Vorschlag ersetzt diesen Code erst mit ✓ Übernehmen",onclick:()=>addCode(target,"llm")},"＋🤖"));
-    return h("div",{class:"slotrow codeempty"},s,
-      h("span",{class:"slotlbl codemiss",style:"flex:1"},"⚙ "+lbl+" fehlt"),
-      h("button",{class:"codeadd",title:"Code-Block erzeugen und hier andocken",onclick:()=>addCode(target,"code")},"＋📝"),
-      h("button",{class:"codeadd",title:"Code-Block + 🤖 LLM-Knoten in einem Klick erzeugen und andocken — dann Prompt schreiben und ▶",onclick:()=>addCode(target,"llm")},"＋🤖"));}
+  // ══ RUMPF AUS DER DATEI (Werkbank P7.4, Zielbild §8.4): der Rumpf-Port zeigt den Code direkt aus der Datei — das Board trägt ihn so,
+  //   wie der warme Workspace ihn gelesen hat (rumpf + Ort: _ort der Methode, _rumpf bei Implementierungen, Anweisung + Lambda-Index bei
+  //   Fluss-/Regel-Lambdas, Python-Anker bei Client-Implementierungen). ✎ ersetzt genau diesen Bereich als Geste (POST /api/werkbank/rumpf);
+  //   „🤖 füllen“ ist eine Aktion am Rumpf (LLM-Konsole: füllen → prüfen → schreiben, Slot = kid). 📝/🤖 sind keine eigenen Karten mehr:
+  //   wo der 📝-Block unter seinem Besitzer stand, steht der Rumpf-Ausschnitt — abgeleitet, Id rp:<Karte>:<i>, keine Modell-Daten.
+  function rumpfTeile(n){if(!n)return null;const r=n.ref;
+    const T=(label,text,ort,kid,kachel,extra)=>({label,text:text==null?null:String(text),ort:ort||null,kid:kid||null,kachel:kachel||false,...(extra||{})});
+    switch(n.kind){
+      case "decider":return [T("Decide-Logik",r.rumpf,r._ort,"decide|"+r.aggregat+"|"+r.command,true,{leer:!!r.leer})];
+      case "applier":return [T("Apply-Logik",r.rumpf,r._ort,"apply|"+r.aggregat+"|"+r.event,true,{leer:!!r.leer})];
+      case "handle":{const o=n.own,k=o.kind==="reader"?"reader|"+o.ref.name+"|"+r.query:(o.kind==="reaktion"?"reaktion|":"projektion|")+o.ref.name+"|"+r.event;
+        return [T(o.kind==="reader"?"Reader-Logik":"Handle-Logik",r.rumpf,r._ort,k,true,{kachel:"Handle "+(r.query||r.event||"")})];}
+      case "fn":return [T("Impl-Logik",r.rumpf,r._rumpf,"store|"+n.own.ref.name+"|"+r.name,true,{kachel:r.name||"Store-Fn"})];
+      case "funktion":return [T("RufeAsync",r.rumpf,r._rumpf,r.auftrag?"funktion|"+r.name+"|"+r.auftrag:null,true,{kachel:(r.implementierung||r.name||"Funktion")+".RufeAsync"})];
+      case "client":return (r.implementierungen||[]).length?(r.implementierungen||[]).flatMap(im=>(im.rumpfe||[]).map(x=>T(im.klasse+"."+x.methode,x.rumpf,null,
+        "zusage|"+clientAnzeige(r)+"|"+x.event+"@"+im.klasse,im.klasse+"."+x.methode,{python:{datei:im.datei,klasse:im.klasse,methode:x.methode,signatur:x.signatur||null},event:x.event,impl:im}))):null;
+      case "transition":{const sg=MODEL.sagas.find(x=>x.name===r.prozess),folge=sg?regelFolge(sg,MODEL.transitions):[];
+        // Lambda-Index in der Regel-Anweisung (Code-Reihenfolge): erst das Zählen (UndAlle), dann Sende/Rufe, dann die Kompensation.
+        return (r.dann||[]).filter(d=>d.sende||d.rufe).flatMap(d=>{const i=folge.findIndex(x=>x.t===r&&x.d===d),basis=r.sammelEvent?1:0;
+          const kid=teil=>sg&&i>=0?"saga|"+sg.name+"|"+i+"#"+regelVerb(d,teil):null,ort=k=>r._ort?{...r._ort,lambda:k}:null;
+          return [T(d.rufe!==undefined?"λ Auftrag":"λ Command",d.sendeAusdruck,ort(basis),kid("sende"),false,{dann:d})]
+            .concat(d.kompensation?[T("λ Kompensation",d.kompensationAusdruck,ort(basis+1),kid("komp"),false,{dann:d,teil:"komp"})]:[]);});}
+      case "flussknoten":{const f=n.own.ref,name=r.ohneVariable?"#"+(f.knoten||[]).indexOf(r):r.name,ort=k=>r._ort?{...r._ort,lambda:k}:null;
+        if(r.art==="je")return [T("λ Liste",r.liste,ort(0),"fluss|"+f.name+"|"+name+"#0",false)];
+        return flMitLambda(r)?(r.eingaenge||[]).map((e,ei)=>T("λ Zuordnung",e.ausdruck,ort(ei),"fluss|"+f.name+"|"+name+"#"+ei,false)):null;}}
+    return null;}
+  // Die Rumpf-Kachel unter dem Besitzer (wo früher der 📝-Block stand): nur für Rümpfe, die im Code Text haben. Ihr Name ist der des früheren
+  //   📝-Blocks — die Kartenhöhe taktet das Zeilenraster, so bleibt die Lage aller Karten gleich.
+  const kachelId=(nid,i)=>"rp:"+nid+":"+i;
+  function rumpfKacheln(owners){const out=[];owners.forEach(n=>(rumpfTeile(n)||[]).forEach((t,i)=>{if(t.kachel&&t.text&&t.text.trim())
+    out.push({id:kachelId(n.id,i),name:typeof t.kachel==="string"?t.kachel:t.label,kind:"rumpf",ref:t,own:n,idx:i});}));return out;}
+  // Ein Rumpf-Port im Panel des Besitzers (früher: 📝/🤖 andocken): der Ausschnitt aus der Datei + ✎ + 🤖 — Ziel wie bisher als target.
+  function teilVonZiel(t){if(!t)return null;let id=null,i=0;
+    if(t.k==="decider")id="dec:"+t.dec;else if(t.k==="applier")id="app:"+t.app;else if(t.k==="funktion")id="fk:"+t.fk;
+    else if(t.k==="writeFn"||t.k==="readFn")id="fn:"+t.fn;
+    else if(t.k==="pjHandle"||t.k==="rdHandle"||t.k==="reakHandle"){const [coll,pre]=t.k==="pjHandle"?["projektionen","prj"]:t.k==="rdHandle"?["reader","rdr"]:["reaktionen","rk"];
+      const o=MODEL[coll].find(x=>x._id===(t.proj||t.reader||t.reaktion));if(o)id=handleIds(o,pre+":"+o._id)[t.hi];}
+    else if(t.k==="clientAuf"){id="cl:"+t.client;const c=MODEL.clients.find(x=>x._id===t.client);
+      i=c?(c.implementierungen||[]).flatMap((im,ii)=>(im.rumpfe||[]).map(x=>[ii,x.event])).findIndex(([ii,e])=>ii===t.impl&&e===t.event):-1;}
+    else if(t.k==="regelLambda"){id="tr:"+t.trans;const tr=MODEL.transitions.find(x=>x._id===t.trans),d=tr&&(tr.dann||[])[t.dannIdx];
+      i=(rumpfTeile(NODEBY.get(id))||[]).findIndex(x=>x.dann===d&&(x.teil||"sende")===(t.teil||"sende"));}
+    else if(t.k==="flussLambda"){const f=MODEL.fluesse.find(x=>x._id===t.fluss),k=f&&(f.knoten||[]).find(z=>z._id===t.knoten);if(k)id="fs:"+k._id;i=t.ei==null?0:t.ei;}
+    const n=id&&NODEBY.get(id),teile=n&&rumpfTeile(n);return teile&&i>=0&&teile[i]?{n,i,teil:teile[i]}:null;}
+  function codePort(key,target,_alt,label){const s=port("code");s.classList.add("i");reg(key,s,{type:"code",dir:"in",target});
+    const tv=teilVonZiel(target);
+    if(!tv)return h("div",{class:"slotrow codeempty"},s,h("span",{class:"slotlbl codemiss",style:"flex:1"},"⚙ "+(label||"Logik")+" — erst im Code anlegen (Geste), dann ✎/🤖"));
+    const box=h("div",{class:"rumpfport"});rumpfWerkzeug(box,tv.teil,tv.n.id,tv.i,false,s);return box;}
+  // Zustand der Rumpf-Werkzeuge (je Teil-Schlüssel): ✎ offen (Entwurf) bzw. 🤖 offen (Auftrag).
+  var RUMPF_EDIT={}, RUMPF_LLM={};
+  const teilKey=(nid,i)=>nid+"#"+i;
+  // Ausschnitt + Werkzeuge: ✎ Bearbeiten (Geste an der Spanne), 🤖 füllen (Konsole), Vorschlag ✓/✗, ↶ nach 🤖-Übernahme.
+  function rumpfWerkzeug(box,t,nid,i,voll,slot){const key=teilKey(nid,i),kid=t.kid,v=kid?VOR[kid]:null,leer=!(t.text||"").trim();
+    const kopf=h("div",{class:"slotrow"},slot||null,h("span",{class:"slotlbl",style:"flex:1"+(leer?";opacity:.7":"")},
+      "◀ "+t.label+(leer?(t.leer?": bewusst leer":": leer"):"")),
+      h("button",{class:"codeadd",title:"Diesen Rumpf bearbeiten — eine Geste ersetzt genau diesen Bereich der Datei",onclick:()=>{RUMPF_EDIT[key]=RUMPF_EDIT[key]!=null?undefined:(v?v.rumpf:t.text||"");if(RUMPF_EDIT[key]===undefined)delete RUMPF_EDIT[key];neuZeichnen();}},"✎"),
+      kid?h("button",{class:"codeadd",title:"🤖 füllen: Auftrag schreiben → claude -p füllt den Rumpf → Prüfung (warmer Workspace) → Datei",onclick:()=>{RUMPF_LLM[key]=!RUMPF_LLM[key];neuZeichnen();}},"🤖"):null);
+    box.append(kopf);
+    const ort=t.ort||t.python;if(ort)box.append(h("div",{class:"blab",style:"opacity:.6;font-size:10px"},(ort.datei||"")+(ort.zeile?":"+ort.zeile:"")+(ort.lambda!=null?" · λ "+ort.lambda:"")));
+    if(!leer||v)box.append(h("pre",{class:"gcodeprev"+(v?" vorschlag":""),style:"cursor:default",title:v?"🤖 Vorschlag — noch nicht in der Datei":"aus der Datei (warm gelesen)"},
+      codePreview(v?v.rumpf:t.text,undefined,voll)));
+    if(RUMPF_EDIT[key]!=null){const ta=h("textarea",{class:"code",rows:Math.max(4,String(RUMPF_EDIT[key]).split("\n").length+1)});ta.value=RUMPF_EDIT[key];
+      ta.oninput=e=>{RUMPF_EDIT[key]=e.target.value;};
+      box.append(ta,h("div",{class:"llmrow"},h("button",{class:"llmok",title:"Als Geste schreiben (↶ nimmt sie zurück)",onclick:()=>rumpfSpeichern(t,key)},"✓ Speichern"),
+        h("button",{class:"codeadd",onclick:()=>{delete RUMPF_EDIT[key];neuZeichnen();}},"Abbrechen")));}
+    if(v){const gut=v.ok&&!(v.befunde||[]).length;
+      box.append(h("div",{class:"llmmeld "+(gut?"ok":"warn")},gut?"🤖 Vorschlag · ✓ geprüft · noch nicht in der Datei":"🤖 Vorschlag · "+(v.befunde||[]).length+" Befund(e) · noch nicht in der Datei"));
+      const ok=h("button",{class:"llmok",title:"In die Datei schreiben (mit „// 🤖 Prompt:“), bauen, neu lesen",onclick:()=>llmUebernehmen(kid)},"✓ Übernehmen");
+      const weg=h("button",{class:"codeadd",title:"Vorschlag verwerfen — der Datei-Rumpf gilt",onclick:()=>llmVerwerfen(kid)},"✗ Verwerfen");
+      if(LAUF[kid]||EINLESEN){ok.disabled=true;weg.disabled=true;}box.append(h("div",{class:"llmrow"},ok,weg));}
+    else if(kid&&ZULETZT[kid])box.append(h("div",{class:"llmrow"},h("span",{class:"llmmeld ok",style:"flex:1"},"🤖 übernommen"),
+      h("button",{class:"codeadd",title:"Den alten Rumpf wörtlich wiederherstellen (nur solange die Datei seitdem unverändert ist)",onclick:()=>llmRueckgaengig(kid)},"↶ Rückgängig")));
+    if(kid&&RUMPF_LLM[key]){const ta=h("textarea",{class:"code",rows:2,placeholder:leer?"Auftrag, z. B. „Bestätige nur, wenn Betrag > 0.“":"Anpassung, z. B. „lehne auch ab, wenn Betrag > 1000“"});
+      const ohneKontext=!LLM_STATUS||!LLM_STATUS.index;
+      const senden=async()=>{const text=ta.value.trim();if(!text||LAUF[kid]||EINLESEN)return;ta.value="";
+        await llmAusfuehren(kid,leer?text:"Ändere den bestehenden Rumpf.",leer?null:text,t.text);};
+      ta.onkeydown=e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)){e.preventDefault();senden();}};
+      const knopf=h("button",{class:"llmrun",title:"Senden (Cmd/Ctrl+Enter): claude -p → Prüfung im warmen Workspace → Datei",onclick:senden},"▶ füllen");
+      if(LAUF[kid]||EINLESEN||ohneKontext)knopf.disabled=true;
+      box.append(ta,h("div",{class:"llmrow"},knopf,h("a",{class:"codeadd",href:"/konsole#id="+encodeURIComponent(kid),target:"_blank",title:"Runden, Prompt und Token dieses Rumpfs",style:"text-decoration:none"},"Details ↗")));}
+    if(kid){const lauf=LAUF[kid],m=MELD[kid];const zeile=lauf?{k:"",t:"● "+lauf.was+" …",lauf:lauf.seit}:EINLESEN?{k:"",t:"↻ Code wird neu gelesen …"}:m||null;
+      if(zeile){const el=h("div",{class:"llmmeld "+(zeile.k||"")},zeile.t);if(zeile.lauf)el.dataset.lauf=zeile.lauf;box.append(el);}}}
+  // Panel einer Rumpf-Kachel: der Besitzer (▲) und der ganze Rumpf mit ✎/🤖.
+  function rumpfKachelCard(body,n){
+    body.append(h("a",{class:"ghl",title:"Die Karte, deren Rumpf das ist",onclick:()=>{waehle(n.own.id);centerOn(n.own);}},"▲ "+(NODELABEL[n.own.kind]||n.own.kind)+": "+(n.own.name||"?")));
+    rumpfWerkzeug(body,n.ref,n.own.id,n.idx,INSP);}
+  // ✎ speichern: eine Geste ersetzt genau diesen Bereich (C#: Methoden-Rumpf bzw. Lambda; Python: Rumpf der Methode) — Sperre: der Bereich
+  //   muss noch so aussehen, wie er gezeigt wurde (alt).
+  async function rumpfSpeichern(t,key){const text=RUMPF_EDIT[key];if(text==null)return;
+    if(!t.ort&&!t.python){deFlash("⚠ Für diesen Rumpf kennt der Code noch keinen Ort — erst die Methode anlegen (Geste) und neu lesen.",false);return;}
+    await gesteFlush();G_LAEUFT=true;
+    try{const r=await fetch("/api/werkbank/rumpf",{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({titel:"✎ "+t.label,text,alt:t.text||"",...(t.python?{python:t.python}:{ort:t.ort})})});
+      const a=await r.json();
+      if(!a.ok){deFlash("⚠ "+(a.fehler||"nicht geschrieben"),false);return;}
+      delete RUMPF_EDIT[key];gMeldung(a);await wbLadeDiagnosen();G_BOARD=a.board;gBoardAnwenden();}
+    catch(e){badge(false);deFlash("⚠ SimHost nicht erreichbar — nicht geschrieben",false);}
+    finally{G_LAEUFT=false;neuZeichnen();}}
   // Parameter-Zeilen einer Store-Funktion (Name : Typ) — die API-Signatur.
   function paramRows(fn){const box=h("div",{});
     (fn.params||[]).forEach((pr,pi)=>box.append(h("div",{class:"frow"},
@@ -598,7 +631,7 @@
     if(fn.sig)box.append(h("div",{class:"gsig",title:"Das Fähigkeits-Interface aus dem Code — der Typ, den ein Handle als Parameter nimmt"},"Fähigkeit: "+(fn.faehigkeit||"?")));
     else box.append(h("div",{class:"frow",title:"Name des Fähigkeits-Interfaces, das die Geste anlegt (leer = Vorschlag)"},h("span",{class:"slotlbl"},"Fähigkeit"),
       inp(fn.faehigkeit,v=>{fn.faehigkeit=v.trim()||undefined;},faehigkeitVorschlag(st,fn))));
-    box.append(codePort("impl:in:"+st._id+":"+fn._id,{k:isRead?"readFn":"writeFn",store:st._id,fn:fn._id},fn.codeSrc,"Impl-Logik"));
+    box.append(codePort("impl:in:"+st._id+":"+fn._id,{k:isRead?"readFn":"writeFn",store:st._id,fn:fn._id},null,"Impl-Logik"));
     return box;}
 
   // Projektion = Controller: Trigger-Events (je Handle) + Store-SCOPE (mehrere möglich). Der Handle-Rumpf
@@ -652,7 +685,7 @@
           h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"veröffentlicht "+(ev||"?")+" ▶"),s));});
       const po=port("event");po.classList.add("o");reg("prj:pub:"+p._id+":"+hi+":open",po,{type:"evtOut",dir:"out",proj:p._id,handleIdx:hi});
       body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"opacity:.7"},"+ veröffentlicht Event ▶ (reaktiv)"),po));
-      body.append(codePort("ctrl:in:"+p._id+":"+hi,{k:"pjHandle",proj:p._id,hi:hi},hd.codeSrc,"Controller-Logik"));
+      body.append(codePort("ctrl:in:"+p._id+":"+hi,{k:"pjHandle",proj:p._id,hi:hi},null,"Controller-Logik"));
   }
   function rkHandleBody(body,r,hd,hi){
 
@@ -670,7 +703,7 @@
           h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"veröffentlicht "+(ev||"?")+" ▶"),s));});
       const po=port("event");po.classList.add("o");reg("rk:pub:"+r._id+":"+hi+":open",po,{type:"evtOut",dir:"out",reaktion:r._id,handleIdx:hi});
       body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"opacity:.7"},"+ veröffentlicht Event ▶ (reaktiv)"),po));
-      body.append(codePort("ctrl:in:"+r._id+":"+hi,{k:"reakHandle",reaktion:r._id,hi:hi},hd.codeSrc,"Controller-Logik"));
+      body.append(codePort("ctrl:in:"+r._id+":"+hi,{k:"reakHandle",reaktion:r._id,hi:hi},null,"Controller-Logik"));
   }
   function rdHandleBody(body,r,hd,hi){
 
@@ -692,7 +725,7 @@
       });
       const rop=port("qrsp");rop.classList.add("o");reg("rdr:rout:"+r._id+":"+hi+":open",rop,{type:"qrsp",dir:"out",reader:r._id,handleIdx:hi});
       body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl"},"+ Response ▶"),rop));
-      body.append(codePort("ctrl:in:"+r._id+":"+hi,{k:"rdHandle",reader:r._id,hi:hi},hd.codeSrc,"Controller-Logik"));
+      body.append(codePort("ctrl:in:"+r._id+":"+hi,{k:"rdHandle",reader:r._id,hi:hi},null,"Controller-Logik"));
   }
 
   // ══ HANDLE- und FN-KNOTEN: jeder Handle einer Projektion/Reader/Reaktion und jede Store-Funktion ist eine
@@ -802,7 +835,7 @@
     //   Funktion extern (Python-Worker über gRPC) — der Laufort steht in der Umgebung (Funktionen:<F>:Laufort = Extern).
     body.append(h("div",{class:"gsec",title:f.implementierung?"public sealed class "+f.implementierung+" : "+f.name:"noch keine C#-Implementierung im Code"},
       "Rumpf · RufeAsync"+(f.implementierung?" · "+f.implementierung:" (neu)")));
-    body.append(codePort("fk:impl:"+f._id,{k:"funktion",fk:f._id},f.codeSrc,"RufeAsync"));}
+    body.append(codePort("fk:impl:"+f._id,{k:"funktion",fk:f._id},null,"RufeAsync"));}
   function funktionCard(body,f){
     // Wer ruft (Prozess-Regel „Dann rufe", Pipeline-Knoten ƒ, Ablauf „dann …") — ⊕ verbindet von hier aus.
     body.append(topSlot("auftrag","◀ gerufen von ⊕ (Prozess-Regel · Pipeline-Knoten)",{type:"rufe",dir:"in",fk:f._id},"fk:in:"+f.name));
@@ -880,15 +913,13 @@
   //   Editor eigens (/api/werkbank/kette, /api/werkbank/passt). Hier wird nichts nachgerechnet; darüber liegen nur die Wünsche der Ansicht
   //   (Heimat neuer Karten, gewünschte Akteur-Reihenfolge). Code-Blöcke (📝/🤖) gibt es nur im Editor (bis P7.4): sie folgen der Karte, an der
   //   sie hängen. Eine Karte, die es im Code noch nicht gibt (gerade angelegt, die Geste läuft), hat bis zum nächsten Board keine Sicht.
-  var CODE_ADJ=new Map();
   const SICHT_LEER={karten:{},kanten:[],kontrakt:[],kette:[],akteurOrdnung:{},fluesse:{},clients:{}};
   const SICHT=()=>MODEL.sicht||SICHT_LEER;
-  // Die Karte, an der ein Code-Block hängt (über seine Code-Kante); ein 🤖 hängt an seinem 📝.
-  function codeTraeger(n){let id=n.id;for(let i=0;i<3&&id&&(id.startsWith("cn:")||id.startsWith("ln:"));i++)id=(CODE_ADJ.get(id)||[])[0];
-    return id&&id!==n.id?NODEBY.get(id)||null:null;}
-  // Der Sicht-Eintrag einer Karte (bzw. ihres Trägers bei Code-Blöcken); null = (noch) nicht im Code.
+  // Die Karte, deren Rumpf eine Rumpf-Kachel zeigt (ihr Besitzer).
+  function codeTraeger(n){return n&&n.kind==="rumpf"?n.own:null;}
+  // Der Sicht-Eintrag einer Karte (bzw. ihres Besitzers bei Rumpf-Kacheln); null = (noch) nicht im Code.
   function sk(n){if(!n)return null;const k=SICHT().karten[n.id];if(k)return k;
-    if(n.kind==="codenode"||n.kind==="llmnode"){const t=codeTraeger(n);return t?SICHT().karten[t.id]||null:null;}return null;}
+    if(n.kind==="rumpf")return SICHT().karten[n.own.id]||null;return null;}
   // 👤 AKTEUR: Name, Namespace, und EINE Liste — was er darf (IDarf<T>). ⊕ „+ darf" → passende Commands/Queries
   //   leuchten → anklicken = erlauben, ✓-Karte = entziehen. Was er HÖREN darf, ist abgeleitet (Generator), keine Eingabe.
   function akteurCard(body,a){
@@ -1011,8 +1042,8 @@
       body.append(h("div",{class:"gsec",style:"opacity:.85",title:im.datei},"🐍 "+im.klasse+" · "+(im.datei||"").split("/").pop()+(nurEvent?" · 🔌 "+clientAnzeige(c):"")));
       rs.forEach(x=>{if(!nurEvent)body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl",style:"flex:1"},
           "◀ "+x.event+((x.ausgaenge||[]).length?"  → "+x.ausgaenge.join(" | ")+" ▶":"  · Kenntnis"))));
-        body.append(codePort("cla:"+c._id+":"+ii+":"+x.event+(nurEvent?":z":""),{k:"clientAuf",client:c._id,impl:ii,event:x.event},x.codeSrc,
-          x.methode+(x.rumpf==null&&!x.codeSrc?" (fehlt)":"")));});});}
+        body.append(codePort("cla:"+c._id+":"+ii+":"+x.event+(nurEvent?":z":""),{k:"clientAuf",client:c._id,impl:ii,event:x.event},null,
+          x.methode+(x.rumpf==null?" (fehlt)":"")));});});}
   // Abgeleitet wie im Generator (AkteurRechteGenerator): Aggregat der erlaubten Commands → dessen Events; erlaubte Query →
   //   Reader → Projektion → deren Handle-Events. Nur Anzeige — die Laufzeit-Tabelle erzeugt der Generator.
   function akteurHoert(a){const evs=new Set(),vertrag=(a.vertrag||[]).length>0;
@@ -1051,130 +1082,12 @@
       else body.append(h("div",{class:"gp-row gp-leer",style:"cursor:pointer;white-space:normal",onclick:()=>waehle("cl:"+c._id)},"🔌 "+clientAnzeige(c)+": noch keine Implementierung"));});
   }
 
-  // 📝 Code-Knoten: der C#-Rumpf. Vorschau im Knoten, KLICK → Modal mit vollem, editierbarem Code.
-  // ── CODE-SYNC: Board ⇄ echte .cs-Datei (SimHost). Anker aus dem GRAPHEN abgeleitet: welcher
-  //    Decider/Applier besitzt diesen 📝/🤖-Knoten → Namespace + Command/Event. Heute nur die
-  //    Schreibseite (vom Scaffolder als Datei gedeckt); Leseseite-Rümpfe folgen.
-  function codeAnker(nodeId){const o=findCodeOwner(nodeId);if(!o)return null;
-    if(o.kind==="decider"){const d=o.ref,agg=MODEL.aggregate.find(a=>a.name===d.aggregat);
-      return (agg&&d.command)?{kind:"decider",namespace:agg.namespace,disc:d.command,datei:d.datei||""}:null;}
-    if(o.kind==="applier"){const a=o.ref,agg=MODEL.aggregate.find(x=>x.name===a.aggregat);
-      return (agg&&a.event)?{kind:"applier",namespace:agg.namespace,disc:a.event,datei:a.datei||""}:null;}
-    return null;}
-  async function codeGet(a){if(a.kind==="slot")return fetch("/api/llm/rumpf?id="+encodeURIComponent(a.disc)).then(r=>r.json());
-    const q=new URLSearchParams({kind:a.kind,namespace:a.namespace,disc:a.disc,datei:a.datei||""});
-    return fetch("/api/editor/code?"+q).then(r=>r.json());}
-  async function codeOpen(a){return fetch("/api/editor/open",{method:"POST",
-    headers:{"content-type":"application/json"},body:JSON.stringify(a)}).then(r=>r.json());}
-  // Poll-Registry (Datei→Browser, das Double-Binding): je sichtbarem Knoten ein Updater; bei Hash-Wechsel anwenden.
-  let SYNC={}, WATCH=new Set();
-  const ankerKey=a=>a?a.kind+":"+a.namespace+":"+a.disc:"";
-  function syncReg(id,anker,apply,gid){if(INSP&&SYNC[id])return;SYNC[id]={anker,apply,hash:null,gid};}
-  function imBlick(gid){if(!canvas||!world||!gid)return true;const g=GEO.get(gid);return !g||!g.weg;}
-  // Kontinuierlich gepollt wird NUR, was via ✎ geöffnet wurde (WATCH). Sichtbare Blöcke werden EINMAL
-  //   gespiegelt (Vorschau füllen), dann Ruhe → im Leerlauf keine Requests, kein Terminal-Flut.
-  async function syncTick(){const de=document.getElementById("de");if(!de||!de.classList.contains("on"))return;
-    for(const id in SYNC){const s=SYNC[id];const beobachtet=WATCH.has(ankerKey(s.anker));
-      if(!beobachtet){if(s.hash!==null)continue;if(!imBlick(s.gid))continue;}
-      try{const d=await codeGet(s.anker);if(d&&d.ok&&d.hash!==s.hash){s.hash=d.hash;s.apply(d);}}catch(e){}}}
-  setInterval(syncTick,2000);
-
-  // 📝 Code-Block: PASSIV (Spiegel der echten Datei). ALLGEMEINES PATTERN — jeder Block hat:
-  //   • Eingang „◀ 🤖 Prompt": bei Bedarf eine LLM-Node andocken (dort schreibst du den Prompt).
-  //   • Ausgang „code ▶": in den Rumpf-Port des Konsumenten (Decider/Applier/Store-Fn/Handler …).
-  //   • „✎ Im Editor öffnen" + Datei-Spiegel — nur, wo eine echte .cs existiert (heute Schreibseite).
-  //   KEIN In-Browser-Editieren, KEIN Klick auf den Block.
   // Code-Karte (Werkbank P7.1/P7.4, Zielbild §9): ein Typ, den das Lesen nicht als Baustein erkennt — roh aus der Datei; ⚠ mit Grund, wenn
   //   ein Basistyp nicht aufgelöst ist (die Karte verschwindet, sobald er es wieder ist), sonst Hilfscode ohne Baustein-Rolle.
   function codeKarteCard(body,c){const o=c._ort||{};
     body.append(h("div",{class:"blab"},(c.unaufgeloest||[]).length?"⚠ Basistyp nicht aufgelöst: "+c.unaufgeloest.join(", "):"Hilfscode — kein Baustein erkannt, roh aus der Datei"));
     body.append(h("div",{class:"blab",style:"opacity:.75"},(c.art||"Typ")+" · "+(o.datei||c.datei||"")+(o.zeile?":"+o.zeile:"")));
     body.append(h("pre",{class:"gcodeprev",style:"cursor:default;white-space:pre-wrap"},c.code||""));}
-  function codeNodeCard(body,c){
-    body.append(nameInp(c,"name","Code"));
-    const anker=codeAnker(c._id);
-    const kid=konsolenId(c._id), v=kid?VOR[kid]:null;
-    const voll=INSP;   // im Inspector: der ganze Rumpf statt der Kurzvorschau
-    const prev=h("pre",{class:"gcodeprev"+(v?" vorschlag":""),style:"cursor:default",
-      title:v?"🤖 Vorschlag — noch NICHT in der Datei; Kompilieren + Simulation nutzen ihn schon":(anker||kid)?"Spiegel der echten .cs (passiv)":"passiv"},
-      codePreview(v?v.rumpf:c.text,undefined,voll));
-    body.append(prev);
-    if(v){   // 🤖 Vorschlag: sichtbar im Block, testbar in der Simulation, in die Datei erst mit ✓ Übernehmen
-      const gut=v.ok&&!(v.befunde||[]).length;
-      body.append(h("div",{class:"llmmeld "+(gut?"ok":"warn")},gut?"🤖 Vorschlag · ✓ geprüft · noch nicht in der Datei":"🤖 Vorschlag · "+(v.befunde||[]).length+" Befund(e) · noch nicht in der Datei"));
-      const lauf=LAUF[kid];
-      const ok=h("button",{class:"llmok",title:"In die echte .cs schreiben (mit „// 🤖 Prompt:“), Projekt bauen (Generatoren), Code + Kontexte neu einlesen",onclick:()=>llmUebernehmen(kid)},"✓ Übernehmen");
-      const weg=h("button",{class:"codeadd",title:"Vorschlag verwerfen — der Datei-Rumpf gilt wieder",onclick:()=>llmVerwerfen(kid)},"✗ Verwerfen");
-      if(lauf||EINLESEN){ok.disabled=true;weg.disabled=true;}
-      body.append(h("div",{class:"llmrow"},ok,weg));}
-    else if(kid&&ZULETZT[kid])body.append(h("div",{class:"llmrow"},h("span",{class:"llmmeld ok",style:"flex:1"},"🤖 übernommen"),
-      h("button",{class:"codeadd",title:"Den alten Rumpf wörtlich wiederherstellen (nur solange die Datei seitdem unverändert ist)",onclick:()=>llmRueckgaengig(kid)},"↶ Rückgängig")));
-    // Eingang: 🤖 LLM-Prompt-Node andocken (an JEDEM Code-Block, unabhängig vom Konsumenten-Typ).
-    const pin=port("prompt");pin.classList.add("i");reg("code:prin:"+c._id,pin,{type:"prompt",dir:"in",codeBlock:c._id});
-    const llm=MODEL.llmNodes.find(x=>x.promptZiel===c._id);
-    const prow=h("div",{class:"slotrow"},pin,h("span",{class:"slotlbl",style:"flex:1"},llm?("◀ 🤖 "+(llm.name||"LLM")):"◀ 🤖 Prompt (bei Bedarf)"));
-    body.append(prow);
-    if(!llm)body.append(h("div",{class:"llmrow"},h("button",{class:"llmrun",style:"flex:1",title:"🤖 LLM-Knoten erzeugen und an diesen Code-Block andocken — dann Prompt schreiben und ▶",
-      onclick:()=>llmAndocken(c._id)},"🤖 LLM-Knoten hinzufügen")));
-    // ✎ IMMER (allgemeines Pattern) — ohne echte Datei: klare Meldung statt fehlendem Knopf.
-    body.append(h("div",{class:"frow"},h("button",{class:"codeadd",
-      title:anker?"Echte .cs im Editor öffnen":"Datei folgt — Scaffolder deckt diesen Rumpf noch nicht",
-      onclick:async()=>{if(!anker){deFlash("◦ Datei folgt — Scaffolder deckt diesen Rumpf noch nicht",false);return;}
-        WATCH.add(ankerKey(anker));   // ab jetzt diese eine Datei kontinuierlich spiegeln (Datei→Browser)
-        const r=await codeOpen(anker).catch(()=>null);
-        deFlash(r&&r.ok?"✎ geöffnet: "+r.pfad:"⚠ "+((r&&r.grund)||"SimHost offline"),!!(r&&r.ok));}},"✎ Im Editor öffnen")));
-    // Datei→Browser: die Vorschau spiegelt den echten Rumpf — für JEDE Slot-Art (Decide/Apply über den Code-Anker,
-    //   alle übrigen über den Slot-Schlüssel der Kontexte). Ein offener Vorschlag bleibt sichtbar, bis er entschieden ist.
-    const spiegel=anker||(kid?{kind:"slot",namespace:"",disc:kid}:null);
-    if(spiegel)syncReg(c._id,spiegel,d=>{c.text=d.body;if(!VOR[kid])prev.textContent=codePreview(d.body,undefined,voll);},"cn:"+c._id);
-    body.append(slotRow("code","code ▶","r",{type:"code",dir:"out",codeNode:c._id},"code:out:"+c._id));
-  }
-  // 🤖 LLM-Knoten: Intent-Text; Vertrag wird aus dem verdrahteten Ziel abgeleitet; Ausgang code ▶.
-  // 🤖 LLM-Node = PROMPT-QUELLE. `Prompt ▶` an den Eingang eines Code-Blocks; hier tippst du den Prompt.
-  //   Wo der Block eine echte Datei hat, wird der Prompt als `// 🤖 Prompt:`-Kommentar in den Rumpf geschrieben
-  //   (die einzige Code-Mutation, bei Bedarf). Double-Binding: extern geänderter Prompt spiegelt zurück.
-  // 🤖 LLM-Knoten = CHAT an seinen Code-Block: der Verlauf zeigt die gesendeten Prompts (sonst nichts), darunter die Eingabe.
-  //   Die 1. Nachricht ist der Auftrag, jede weitere passt den aktuellen Rumpf an. Jede Nachricht = ein Durchlauf
-  //   (claude -p → Prüfung → .cs → Generatoren → neu einlesen). Der Verlauf lebt im Knoten (Board/Browser).
-  function llmVerlauf(l){if(!Array.isArray(l.verlauf))l.verlauf=(l.intent||"").trim()?[{text:l.intent.trim()}]:[];return l.verlauf;}
-  function llmNodeCard(body,l){
-    body.append(nameInp(l,"name","LLM"));
-    const block=l.promptZiel?MODEL.codeNodes.find(c=>c._id===l.promptZiel):null;
-    const anker=block?codeAnker(block._id):null;
-    const verlauf=llmVerlauf(l);
-    body.append(h("div",{class:"gsec"},"Chat"+(block?" → 📝 "+(block.name||"Code"):" (an einen Code-Block andocken)")));
-    const liste=h("div",{class:"llmchat"});
-    if(!verlauf.length)liste.append(h("div",{class:"llmleer"},"Noch keine Prompts."));
-    verlauf.forEach(e=>liste.append(h("div",{class:"llmmsg"},e.text)));
-    body.append(liste);
-    // Steht im Code schon ein „// 🤖 Prompt:“ und der Verlauf ist leer, ist das der erste (frühere) Prompt.
-    if(anker)syncReg(l._id,anker,d=>{if(!l.verlauf.length&&(d.prompt||"").trim()){l.verlauf.push({text:d.prompt.trim()});l.intent=d.prompt.trim();neuZeichnen();}},"ln:"+l._id);
-    const kid=block?konsolenId(block._id):null;
-    const ta=h("textarea",{class:"code",rows:2,placeholder:verlauf.length?"Nächster Prompt, z. B. „lehne auch ab, wenn Betrag > 1000“":"Prompt, z. B. „Bestätige nur, wenn Betrag > 0.“"});
-    body.append(ta);
-    if(LLM_FOKUS===l._id)setTimeout(()=>{if(!ta.isConnected)return;LLM_FOKUS=null;ta.focus({preventScroll:true});
-      const insp=ta.closest(".ginsp");if(insp){const d=ta.getBoundingClientRect().top-insp.getBoundingClientRect().top;insp.scrollTop+=d-insp.clientHeight/3;}
-      else{const n=NODEBY.get("ln:"+l._id);if(n){centerOn(n);pulseNode(n);}}},60);
-    if(!kid){body.append(h("div",{class:"llmmeld warn"},block?"Dieser Code-Block hat (noch) keinen Slot im Code.":"Erst an einen Code-Block andocken."));}
-    else{
-      const lauf=LAUF[kid], m=MELD[kid];
-      const ohneKontext=!LLM_STATUS||!LLM_STATUS.index;
-      // Senden: Prompt in den Verlauf, dann derselbe Durchlauf — 1. Prompt = Auftrag, jeder weitere = Anpassung des Rumpfs.
-      const senden=async()=>{const text=ta.value.trim();if(!text||LAUF[kid]||EINLESEN)return;
-        const erster=!verlauf.length;verlauf.push({text,zeit:new Date().toISOString()});if(erster)l.intent=text;ta.value="";neuZeichnen();
-        await llmAusfuehren(kid,l.intent||text,erster?null:text,block.text);};
-      ta.onkeydown=e=>{if(e.key==="Enter"&&(e.metaKey||e.ctrlKey)){e.preventDefault();senden();}};
-      const knopf=h("button",{class:"llmrun",title:"Senden (Cmd/Ctrl+Enter): claude -p schreibt den Rumpf → Prüfung → .cs → Generatoren → neu einlesen",onclick:senden},"▶ Senden");
-      if(lauf||EINLESEN||ohneKontext)knopf.disabled=true;
-      body.append(h("div",{class:"llmrow"},knopf,h("a",{class:"codeadd",href:"/konsole#id="+encodeURIComponent(kid),target:"_blank",
-        title:"Runden, Prompt und Token dieses Blocks",style:"text-decoration:none"},"Details ↗")));
-      const zeile=lauf?{k:"",t:"● "+lauf.was+" …",lauf:lauf.seit}
-        :EINLESEN?{k:"",t:"↻ Code + Kontexte werden neu eingelesen …"}
-        :ohneKontext?{k:"warn",t:LLM_STATUS&&LLM_STATUS.aktualisierungLaeuft?"↻ Kontexte werden erzeugt (≈ 1 min) …":LLM_STATUS?"Keine Kontexte — „↻ Vom Graph laden“":"SimHost offline"}
-        :m?m:null;
-      if(zeile){const el=h("div",{class:"llmmeld "+(zeile.k||"")},zeile.t);if(zeile.lauf)el.dataset.lauf=zeile.lauf;body.append(el);}}
-    body.append(slotRow("prompt","Prompt ▶","r",{type:"prompt",dir:"out",llm:l._id},"llm:prout:"+l._id));
-  }
   // ══ 🤖 LLM-CODE-BLÖCKE — der ganze Weg am 🤖-Knoten, EIN Klick (▶):
   //   claude -p (Abo, keine API) füllt den Rumpf → Prüfung (Syntax; Decide/Apply: In-Memory-Kompilat mit den echten
   //   Generatoren, bis zu 3 Reparaturrunden) → GEPRÜFT: sofort in die echte .cs → Build des Laufzeit-Projekts (alle Code-
@@ -1186,7 +1099,6 @@
   const saveVor=()=>{try{localStorage.setItem(LLM_VKEY,JSON.stringify(VOR));}catch(e){}};
   const LAUF={}, MELD={}, ZULETZT={};   // Slot → läuft seit / letzte Meldung / gerade übernommen (Rückgängig anbieten)
   let EINLESEN=false, LLM_STATUS=null;
-  function vorschlagFuer(codeId){const k=konsolenId(codeId);return k?VOR[k]:null;}
   const istSimulierbar=kid=>/^(decide|apply)\|/.test(kid);
   const neuZeichnen=()=>{try{render();}catch(e){}};
   async function llmStatus(){try{LLM_STATUS=await fetch("/api/llm/status").then(r=>r.json());}catch(e){LLM_STATUS=null;}return LLM_STATUS;}
@@ -1258,23 +1170,6 @@
   //   stehen auf dem neuen Code; solange sind ▶/✓ gesperrt (sonst sähe der nächste Block veraltete Nachbarn).
   async function neuEinlesen(){EINLESEN=true;neuZeichnen();try{await deReload();}finally{EINLESEN=false;await llmStatus();neuZeichnen();}}
 
-  // Slot-Schlüssel der LLM-Konsole (wie GraphExtractor --kontexte ihn vergibt): Art|Besitzer|Disc.
-  function konsolenId(codeId,m){const o=findCodeOwner(codeId,m);if(!o)return null;const r=o.ref;
-    if(o.kind==="decider")return "decide|"+r.aggregat+"|"+r.command;
-    if(o.kind==="applier")return "apply|"+r.aggregat+"|"+r.event;
-    if(o.kind==="projektion"){const hd=(r.handles||[]).find(x=>x.codeSrc===codeId);return hd?"projektion|"+r.name+"|"+hd.event:null;}
-    if(o.kind==="reader"){const hd=(r.handles||[]).find(x=>x.codeSrc===codeId);return hd?"reader|"+r.name+"|"+hd.query:null;}
-    if(o.kind==="reaktion"){const hd=(r.handles||[]).find(x=>x.codeSrc===codeId);return hd?"reaktion|"+r.name+"|"+hd.event:null;}
-    if(o.kind==="store"){const f=(r.writeFns||[]).concat(r.readFns||[]).find(x=>x.codeSrc===codeId);return f?"store|"+r.name+"|"+f.name:null;}
-    if(o.kind==="funktion")return r.auftrag?"funktion|"+r.name+"|"+r.auftrag:null;
-    // Zusage/Kenntnis draußen: Client (Handshake-Name) · Event · implementierende Klasse.
-    if(o.kind==="client")return "zusage|"+clientAnzeige(r)+"|"+o.rumpf.event+"@"+o.impl.klasse;
-    // Regel-Lambda: Regel = Anweisung des Definiere-Lambdas (Code-Reihenfolge), Disc = „Anweisung#Verb".
-    if(o.kind==="transition"){const sg=(m||MODEL).sagas.find(x=>x.name===r.prozess);if(!sg)return null;
-      const i=regelFolge(sg,(m||MODEL).transitions).findIndex(x=>x.t===r&&x.d===o.dann);return i<0?null:"saga|"+sg.name+"|"+i+"#"+regelVerb(o.dann,o.teil);}
-    // Fluss-Lambda: wie SlotInventar zählt — Knoten#Lambda-Index der Anweisung (Haupt-Aufruf 0, je ∨ einer mehr; Je: die Liste).
-    if(o.kind==="flussknoten")return "fluss|"+o.fluss.name+"|"+(r.ohneVariable?"#"+(o.fluss.knoten||[]).indexOf(r):r.name)+"#"+(o.ei==null?0:o.ei);
-    return null;}
   // Kurzvorschau eines Code-/Intent-Textes (erste Zeilen) für den Knoten.
   function codePreview(t,leer,voll){const s=(t||"").replace(/\t/g,"    ").split("\n");const max=voll?1e9:7;
     const head=s.slice(0,max).join("\n");return (t&&t.trim())?(head+(s.length>max?"\n…":"")):(leer||"// leer");}
@@ -1286,7 +1181,7 @@
   //    Applier→Aggregat(rechts) · Applier→State-Feld(oben, optionale Zuweisungs-Markierung).
   const SVGNS="http://www.w3.org/2000/svg";
   const GRID=20;
-  const NODELABEL={host:"Host",akteur:"Akteur",client:"Client",auf:"Zusage",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",quelle:"Quelle",fluss:"Fluss",codenode:"Code",llmnode:"LLM",code:"Code",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn",funktion:"Funktion",auftrag:"Auftrag",flussknoten:"Pipeline"};
+  const NODELABEL={host:"Host",akteur:"Akteur",client:"Client",auf:"Zusage",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",quelle:"Quelle",fluss:"Fluss",rumpf:"Code",code:"Code",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn",funktion:"Funktion",auftrag:"Auftrag",flussknoten:"Pipeline"};
   let PAN={x:40,y:30,s:1}, canvas=null, world=null, svg=null, svgTop=null, SLOTS={};
   // Typ-Navigation: HLKIND = aktuell hervorgehobener Node-Typ (Board+Minimap); JUMPIX = Sprung-Cursor je Typ.
   let HLKIND=null; const JUMPIX={};
@@ -1401,12 +1296,12 @@
   // ARGUMENT-TABELLE eines Schritts: Feld ← Quelle (Vorschläge aus den Join-Events), „↻ automatisch“ füllt neu.
   //   Ein aus dem Code gelesener Ausdruck (λ) bleibt, bis man ihn bewusst durch die Tabelle ersetzt.
   function argTabelle(body,t,d){const zr=zielRecord(d),z=recByName(zr);if(!z||!(z.felder||[]).length)return;
-    const sg=MODEL.sagas.find(x=>x.name===t.prozess),cn=d.codeSrc&&MODEL.codeNodes.find(c=>c._id===d.codeSrc);
+    const sg=MODEL.sagas.find(x=>x.name===t.prozess);
     const ps=(t.wenn||[]).map((e,i)=>{const r=recByName(e);return {p:["t","r","g"][i]||("e"+(i+1)),typ:e,felder:(r&&r.felder)||[]};});
     if(t.sammelEvent)ps.push({p:["t","r","g"][ps.length]||("e"+(ps.length+1)),typ:"IReadOnlyList<"+t.sammelEvent+">",felder:[]});
     zoKurz(body,()=>({titel:"Prozess "+(sg?sg.name:t.prozess||"?")+" · WENN "+(t.wenn||[]).join(" ∧ ")+" → "+(d.rufe?"ƒ "+d.rufe:d.sende),ziel:z.name,
       params:ps,args:d.sendeArgs,ausdruck:d.sendeAusdruck,
-      block:cn&&(cn.text||"").trim()?{name:cn.name,text:cn.text,loesen:()=>setCodeSrc({k:"regelLambda",trans:t._id,dannIdx:(t.dann||[]).indexOf(d),teil:"sende"},null)}:null,
+      block:null,
       schreibe:a=>{d.sendeArgs=a;delete d.sendeAusdruck;},auto:()=>autoArgs(zr,t.wenn)}));}
   // Die Schritte, die von einem Knoten (Prozess-Start oder Funktion) aus „dann“ folgen — mit ✕ zum Lösen.
   function kettenZeilen(body,vonId){KETTE.filter(k=>k.art==="dann"&&k.von===vonId).forEach(k=>{
@@ -1739,7 +1634,7 @@
       const wp=port("open");wp.classList.add("i");reg("fs:ein:"+k._id,wp,{type:"evtUse",dir:"in",flk:k._id,role:"warte"});
       body.append(h("div",{class:"slotrow"},wp,h("span",{class:"slotlbl"},"+ warte auf ⊕ (Event)")));}
     else if(k.art==="je"){body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"Liste"),h("input",{value:k.liste||"",placeholder:"x => x.Bilder",onchange:e=>{k.liste=e.target.value;render();}})));
-      body.append(codePort("fle:"+k._id+":je",{k:"flussLambda",fluss:f._id,knoten:k._id,ei:null},k.codeSrc,"λ Liste",!!(f.datei&&k.liste)));
+      body.append(codePort("fle:"+k._id+":je",{k:"flussLambda",fluss:f._id,knoten:k._id,ei:null},null,"λ Liste",!!(f.datei&&k.liste)));
       body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"Element-Typ"),h("input",{value:k.typ||"",placeholder:"string",onchange:e=>{k.typ=e.target.value.trim();render();}})));
       body.append(h("div",{class:"gsec",style:"opacity:.6"},"Die folgenden Knoten laufen einmal je Element, parallel; „Sammle“ wartet auf alle (in Element-Reihenfolge)."));}
     if(k.art==="funktion"||k.art==="command"||k.art==="warte")body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl"},"⏳ Zeitlimit"),
@@ -1782,14 +1677,13 @@
       body.append(h("div",{class:"slotrow fl-draht"},h("span",{class:"fl-ziel",onclick:()=>v&&zeigeKnoten("fs:"+v._id)},"← "+(v?FL_SYM[v.art]+" ":"? ")+txt),
         !e.je&&ex?h("button",{class:"rm",title:(e.draehte||[]).length>1?"Als eigenen Weg (∨) lösen":"Zum ersten Eingang nehmen (∧)",onclick:()=>{flUmschalten(f,k,e,d);render();}},(e.draehte||[]).length>1?"∨":"∧"):null,
         h("button",{class:"rm",title:"Draht lösen",onclick:()=>{flLoese(f,k,e,d);render();}},"✕")));});
-    // Der Lambda dieses Eingangs ist Logik: 📝 Code-Block + optional 🤖 (füllt/ändert genau diesen Lambda).
-    if(flMitLambda(k))body.append(codePort("fle:"+k._id+":"+ei,{k:"flussLambda",fluss:f._id,knoten:k._id,ei},e.codeSrc,"λ Zuordnung",!!(f.datei&&e.ausdruck)));
+    // Der Lambda dieses Eingangs ist Logik: Ausschnitt aus der Datei, ✎ ersetzt genau diesen Lambda, 🤖 füllt/ändert ihn.
+    if(flMitLambda(k))body.append(codePort("fle:"+k._id+":"+ei,{k:"flussLambda",fluss:f._id,knoten:k._id,ei},null,"λ Zuordnung",!!(f.datei&&e.ausdruck)));
     // Zuordnung „Zielfeld ← Eingang": visuell im Zuordnungs-Editor (Knoten + Drähte); im Panel nur die Kurzfassung.
     const z=flZiel(k);if(!z||k.art==="je")return;
-    const cn=e.codeSrc&&MODEL.codeNodes.find(c=>c._id===e.codeSrc);
     zoKurz(body,()=>({titel:"⛓ "+f.name+" · "+k.name+" (Eingang "+(ei+1)+")",ziel:z.name,
       params:flQuellen(f,e).map(q=>({p:q.p,typ:q.typ,felder:q.felder})),args:e.argumente,ausdruck:e.ausdruck,
-      block:cn&&(cn.text||"").trim()?{name:cn.name,text:cn.text,loesen:()=>setCodeSrc({k:"flussLambda",fluss:f._id,knoten:k._id,ei},null)}:null,
+      block:null,
       schreibe:a=>{e.argumente=a;delete e.ausdruck;},auto:()=>flAutoArgs(f,k,e)}));}
   // ══ ZUORDNUNGS-EDITOR (visuell, Knoten + Drähte): baut den Eingang eines Aufrufs — links die Eingänge (Lambda-Parameter mit ihren
   //   Feldern, Wert-Objekte aufgeklappt), rechts das Ziel (Auftrag/Command) mit seinen Feldern, dazwischen Bau-Knoten: „new V(…)" für
@@ -1995,7 +1889,7 @@
         l.titel=(kontext?"Kontext: ":"")+d.von+" → "+z.name+(oder?" (∨ eigener Weg)":und?" (∧ wartet auf alle)":"")+"\nKlick: "+z.name+" öffnen";
         l.dataset.a="fs:"+v._id;l.dataset.b="fs:"+z._id;l.klick=()=>waehle("fs:"+z._id);});}));}
   function graphNodes(){
-    return [...MODEL.akteure.map(a=>({id:"akt:"+a._id,name:a.name,kind:"akteur",ref:a})),
+    const basis=[...MODEL.akteure.map(a=>({id:"akt:"+a._id,name:a.name,kind:"akteur",ref:a})),
             ...MODEL.clients.map(c=>({id:"cl:"+c._id,name:clientAnzeige(c),kind:"client",ref:c})),
             ...vertragsZusagen().map(({a,r,i,id})=>({id,name:r.eingang||"?",kind:"auf",ref:r,idx:i,own:{id:"akt:"+a._id,name:a.name,kind:"akteur",ref:a}})),
             ...MODEL.records.map(r=>({id:"rec:"+r.name,name:r.name,kind:r.kind,ref:r})),
@@ -2012,10 +1906,9 @@
             ...MODEL.projektionen.map(p=>({id:"prj:"+p._id,name:p.name,kind:"projektion",ref:p})),
             ...MODEL.reader.map(r=>({id:"rdr:"+r._id,name:r.name,kind:"reader",ref:r})),
             ...MODEL.reaktionen.map(r=>({id:"rk:"+r._id,name:r.name,kind:"reaktion",ref:r})),
-            ...MODEL.codeNodes.map(c=>({id:"cn:"+c._id,name:c.name,kind:"codenode",ref:c})),
-            ...MODEL.llmNodes.map(l=>({id:"ln:"+l._id,name:l.name,kind:"llmnode",ref:l})),
             ...MODEL.codeKarten.map(c=>({id:c._id,name:c.name,kind:"code",ref:c})),
             ...flussKnotenNodes(),...handleKnoten(),...fnKnoten(),...hostKnoten()];
+    return [...basis,...rumpfKacheln(basis)];
   }
   // ── AGGREGATSWEISE ANORDNUNG: jedes Aggregat ein gekachelter Block (eigenes Rollen-Mini-Layout),
   //    aggregat-übergreifende Knoten (Sagas/Reaktionen/geteilte Typen) im „Geteilt"-Band.
@@ -2033,7 +1926,7 @@
     fn:16,store:17,readmodel:17,query:18,"handle:reader":19,queryresponse:20,reader:21};
   // Rollen-Spalten im Geteilt-Band.
   const ROLE_SHARED={saga:0,transition:1,auftrag:2,funktion:3,ergebnis:3.5,reaktion:2,"handle:reaktion":3,konfig:7,valueobject:8,enum:8,command:9,event:9,rejection:9,
-    fn:10,store:11,readmodel:11,"handle:projektion":12,projektion:13,"handle:reader":14,reader:15,query:14,queryresponse:16,codenode:17,llmnode:17,code:17};
+    fn:10,store:11,readmodel:11,"handle:projektion":12,projektion:13,"handle:reader":14,reader:15,query:14,queryresponse:16,rumpf:17,code:17};
   // Rolle eines Knotens (vom Server): Handles je Besitzer-Art (Projektions- vs. Reader-Handle liegen in verschiedenen Spalten), Ergebnis-Events
   //   einer Funktion hinter ihr (Spalte „ergebnis“), sonst die Art. Funktionen einer Kette: je Tiefe eine eigene Spalte (11.01, 11.02 …).
   const rolle=(n,map)=>{const sr=(SICHT().karten[n.id]||{}).rolle,k=sr||(n.kind==="handle"?"handle:"+n.own.kind:n.kind);
@@ -2041,54 +1934,12 @@
     return map[k]!==undefined?map[k]:99;};
   const rollenVon=blk=>blk===SHARED_KEY?ROLE_SHARED:blk===AKTEUR_KEY?ROLE_AKTEUR:ROLE_AGG;
 
-  // Wer besitzt diesen 📝/🤖-Knoten? (Rumpf-Ziel) — für die Gruppen-Zuordnung.
-  function findCodeOwner(id,m){m=m||MODEL;
-    for(const d of m.decider||[]) if(d.codeSrc===id) return {kind:"decider",ref:d};
-    for(const a of m.applier||[]) if(a.codeSrc===id) return {kind:"applier",ref:a};
-    for(const p of m.projektionen||[]) if((p.handles||[]).some(h=>h.codeSrc===id)) return {kind:"projektion",ref:p};
-    for(const r of m.reader||[]) if((r.handles||[]).some(h=>h.codeSrc===id)) return {kind:"reader",ref:r};
-    for(const s of m.stores||[]){if(((s.writeFns||[]).concat(s.readFns||[])).some(f=>f.codeSrc===id))return {kind:"store",ref:s};}
-    for(const r of m.reaktionen||[]) if((r.handles||[]).some(h=>h.codeSrc===id)) return {kind:"reaktion",ref:r};
-    for(const f of m.funktionen||[]) if(f.codeSrc===id) return {kind:"funktion",ref:f};
-    for(const c of m.clients||[]) for(const im of c.implementierungen||[]){const r=(im.rumpfe||[]).find(x=>x.codeSrc===id);
-      if(r) return {kind:"client",ref:c,impl:im,rumpf:r};}
-    for(const t of m.transitions||[]) for(const [di,d] of (t.dann||[]).entries()){
-      if(d.codeSrc===id) return {kind:"transition",ref:t,dann:d,dannIdx:di,teil:"sende"};
-      if(d.kompCodeSrc===id) return {kind:"transition",ref:t,dann:d,dannIdx:di,teil:"komp"};}
-    for(const f of m.fluesse||[]) for(const k of f.knoten||[]){
-      if(k.codeSrc===id) return {kind:"flussknoten",ref:k,fluss:f,ei:null};
-      const ei=(k.eingaenge||[]).findIndex(e=>e.codeSrc===id);if(ei>=0) return {kind:"flussknoten",ref:k,fluss:f,ei};}
-    return null;
-  }
-  // Die Code-EINGÄNGE eines Knotens (je Eingang die codeSrc oder leer) — was der Knoten an Rumpf-Ports hat, auch unbelegt.
-  //   null = der Knoten hat keinen Code-Eingang.
-  function codeEingaenge(n){const r=n.ref;
-    switch(n.kind){
-      case "decider":case "applier":return [r.codeSrc||null];
-      case "funktion":return [r.codeSrc||null];   // die Implementierung (RufeAsync) — Platz für 📝 + 🤖 wie am Decider
-      case "handle":case "fn":return [r.codeSrc||null];   // Projektion/Reader/Reaktion/Store: der Code hängt an Handle/Fn
-      case "client":return (r.implementierungen||[]).length?(r.implementierungen||[]).flatMap(im=>(im.rumpfe||[]).map(x=>x.codeSrc||null)):null;
-      case "transition":return (r.dann||[]).filter(d=>d.sende||d.rufe).flatMap(d=>[d.codeSrc||null].concat(d.kompensation?[d.kompCodeSrc||null]:[]));
-      case "flussknoten":return r.art==="je"?[r.codeSrc||null]:flMitLambda(r)?(r.eingaenge||[]).map(e=>e.codeSrc||null):null;}
-    return null;}
+  // Die Rumpf-Plätze eines Knotens (je Rumpf die Kachel-Id oder null) — was der Knoten unter sich an Zeilen reserviert (Rumpf + 🤖-Platz),
+  //   auch leer. null = der Knoten hat keinen Rumpf.
+  function codeEingaenge(n){const t=rumpfTeile(n);return t?t.map((x,i)=>x.kachel&&x.text&&x.text.trim()?kachelId(n.id,i):null):null;}
   // ══ GRAPH-BASIS: die Kanten auf Karten-Ebene (Karten-Id → Karten-Id) kommen vom Server (board.sicht.kanten — Layout, Inseln, Kette,
-  //   Nachbarn im Panel). Nur die Code-Blöcke (📝/🤖) gibt es allein im Editor (bis P7.4): ihre Kanten (📝 → die Karte, deren Rumpf er ist;
-  //   🤖 → sein 📝) kommen hier dazu.
-  function codeKanten(){const E=[],push=(a,b)=>{if(a&&b)E.push([a,b]);};
-    const codeId=id=>!id?null:MODEL.codeNodes.some(c=>c._id===id)?"cn:"+id:(MODEL.llmNodes.some(l=>l._id===id)?"ln:"+id:null);
-    MODEL.decider.forEach(d=>{if(d.codeSrc)push(codeId(d.codeSrc),"dec:"+d._id);});
-    MODEL.fluesse.forEach(f=>(f.knoten||[]).forEach(z=>{if(z.codeSrc)push(codeId(z.codeSrc),"fs:"+z._id);
-      (z.eingaenge||[]).forEach(e=>{if(e.codeSrc)push(codeId(e.codeSrc),"fs:"+z._id);});}));
-    MODEL.applier.forEach(a=>{if(a.codeSrc)push(codeId(a.codeSrc),"app:"+a._id);});
-    MODEL.transitions.forEach(t=>(t.dann||[]).forEach(d=>{if(d.codeSrc)push(codeId(d.codeSrc),"tr:"+t._id);if(d.kompCodeSrc)push(codeId(d.kompCodeSrc),"tr:"+t._id);}));
-    MODEL.clients.forEach(c=>(c.implementierungen||[]).forEach(im=>(im.rumpfe||[]).forEach(x=>{if(x.codeSrc)push(codeId(x.codeSrc),"cl:"+c._id);})));
-    MODEL.funktionen.forEach(f=>{if(f.codeSrc)push(codeId(f.codeSrc),"fk:"+f._id);});
-    MODEL.stores.forEach(st=>(st.writeFns||[]).concat(st.readFns||[]).forEach(fn=>{if(fn.codeSrc)push(codeId(fn.codeSrc),"fn:"+fn._id);}));
-    Object.entries(HANDLE_ART).forEach(([,[coll,pre]])=>(MODEL[coll]||[]).forEach(o=>{const ids=handleIds(o,pre+":"+o._id);
-      (o.handles||[]).forEach((hd,hi)=>{if(hd.codeSrc)push(codeId(hd.codeSrc),ids[hi]);});}));
-    MODEL.llmNodes.forEach(l=>{if(l.promptZiel&&MODEL.codeNodes.some(c=>c._id===l.promptZiel))push("ln:"+l._id,"cn:"+l.promptZiel);});
-    return E;}
-  const kanten=()=>[...SICHT().kanten,...codeKanten()];
+  //   Nachbarn im Panel); die Rumpf-Kacheln hängen über ihren Besitzer (own) am Graphen, nicht über Kanten.
+  const kanten=()=>SICHT().kanten;
   // Diagnose/Prüf-Skripte: Knoten + Kanten des Boards (dieselbe Wahrheit wie Layout und Insel-Erkennung).
   window.deGraph=()=>({knoten:graphNodes().map(n=>({id:n.id,kind:n.kind,name:n.name})),kanten:kanten()});
   // Inseln = Karten in winzigen Komponenten (≤ 2) OHNE Aggregat — die „einsamen" / unverdrahteten (vom Server).
@@ -2120,7 +1971,7 @@
     //   stimmen die reservierten Zeilen nicht mehr → neu packen. Gleiche Signatur = Handanordnung bleibt.
     const LAY=KPOS[VIEW.details?"d":"k"]||(KPOS[VIEW.details?"d":"k"]={});
     // Der Akteur-Rahmen gehört zur Lage (Domäne × Akteur): wandert eine Karte in einen anderen Akteur-Rahmen, neu packen.
-    const sig=hash(all.map(n=>n.id+":"+((codeEingaenge(n)||[]).length)+":"+domKey(n)+":"+akteurVon(n)).join("|")+"#"+(VIEW.aus||[]).join(",")+"#"+(VIEW.domNeu||[]).join(",")
+    const sig=hash(all.filter(n=>n.kind!=="rumpf").map(n=>n.id+":"+((codeEingaenge(n)||[]).length)+":"+domKey(n)+":"+akteurVon(n)).join("|")+"#"+(VIEW.aus||[]).join(",")+"#"+(VIEW.domNeu||[]).join(",")
       +"#"+JSON.stringify(VIEW.akteurOrdnung||{})
       // Clients stapeln sich nach ihrer Höhe (die Anschlussleiste wächst mit dem Vertrag) → ändert sie sich, neu packen.
       +"#"+all.filter(n=>n.kind==="client").map(n=>n.id+":"+Math.round(sz(n).h/20)).join(",")
@@ -2137,29 +1988,25 @@
     if(!force && all.some(positioned) && overlaps() < Math.max(3, Math.floor(all.length*0.12))) return;
 
     const COLGAP=48,ROWGAP=26,SHELFGAP=150,COMPGAP=240,KGAP=90,LEER_W=640,LEER_H=110;   // RP/RK: Rahmen-Rand/-Kopf (zeichneRahmen)
-    const isCode=n=>n.kind==="codenode"||n.kind==="llmnode";
+    const isCode=n=>n.kind==="rumpf";
     // ── ZEILENRASTER: jede Karte belegt genau eine Rasterzeile (Höhe = höchste sichtbare Karte + Abstand), alles fluchtet.
-    //   Ein Knoten mit Code-Eingängen (Decider, Applier, Projektion, Reader, Reaktion, Pipeline, Store, Dienst) belegt
-    //   1 + je Eingang GENAU 2 Zeilen: 📝 Code-Block und 🤖 LLM-Platz — der LLM-Platz ist immer reserviert (auch ohne
-    //   LLM-Knoten), ein leerer Code-Eingang ebenso. Dadurch sind alle Besitzer gleich getaktet; Command/Event/Ablehnung/
-    //   Query … stehen in der Zeile ihres Partners (Decider, Applier, Reader …). Ausgeblendete Arten reservieren nichts.
+    //   Ein Knoten mit Rümpfen (Decider, Applier, Projektion, Reader, Reaktion, Store-Fn, Funktion, Client …) belegt 1 + je Rumpf GENAU
+    //   2 Zeilen: die Rumpf-Kachel (Ausschnitt aus der Datei, P7.4) und darunter den Platz, auf dem früher der 🤖-Knoten stand — er bleibt
+    //   reserviert, damit die Lage der Karten gleich bleibt (🤖 ist jetzt eine Aktion am Rumpf). Ein leerer Rumpf reserviert ebenso.
+    //   Command/Event/Ablehnung/Query … stehen in der Zeile ihres Partners. Ausgeblendete Rümpfe reservieren nichts.
     const EINZUG=16, ZGAP=12;
-    const codeAn=!istAus("codenode"), llmAn=codeAn&&!istAus("llmnode");
+    const codeAn=!istAus("rumpf"), llmAn=codeAn;
     const ZEILE=Math.max(28,...all.filter(n=>n.kind!=="client").map(n=>sz(n).h))+ZGAP;   // die (hohe) Anschlussleiste eines Clients taktet nicht mit
     const layoutBlock=(nodes,roleMap)=>{
-      const rest=nodes.filter(n=>!isCode(n)), codes=nodes.filter(n=>n.kind==="codenode"), llms=nodes.filter(n=>n.kind==="llmnode");
-      const codeById=new Map(codes.map(c=>[c.ref._id,c]));
-      const llmByCode=new Map(), orphanLlm=[];
-      llms.forEach(l=>{const z=l.ref.promptZiel;if(z&&codeById.has(z)){if(!llmByCode.has(z))llmByCode.set(z,[]);llmByCode.get(z).push(l);}else orphanLlm.push(l);});
-      // Code-Plätze je Besitzer in Eingangs-Reihenfolge (Handle/Fn); null = leerer Eingang (Platz bleibt reserviert).
+      const rest=nodes.filter(n=>!isCode(n)), codes=nodes.filter(isCode);
+      const codeById=new Map(codes.map(c=>[c.id,c]));
+      // Rumpf-Plätze je Besitzer in Eingangs-Reihenfolge (Handle/Fn); null = leerer Rumpf (Platz bleibt reserviert).
       const genutzt=new Set();
       const plaetze=n=>{if(!codeAn)return [];
         const src=codeEingaenge(n);if(!src)return [];
-        const ps=src.map(id=>{const c=id&&codeById.get(id);if(c)genutzt.add(c.ref._id);return c||null;});
-        codes.forEach(c=>{if(genutzt.has(c.ref._id))return;const o=findCodeOwner(c.ref._id);if(o&&o.ref===n.ref){genutzt.add(c.ref._id);ps.push(c);}});
-        return ps;};
+        return src.map(id=>{const c=id&&codeById.get(id);if(c)genutzt.add(c.id);return c||null;});};
       const PL=new Map();rest.forEach(n=>{const p=plaetze(n);if(p.length)PL.set(n.id,p);});
-      const hoehe=n=>1+(PL.get(n.id)||[]).reduce((s,c)=>s+(llmAn?1+Math.max(1,c?(llmByCode.get(c.ref._id)||[]).length:1):1),0);
+      const hoehe=n=>1+(PL.get(n.id)||[]).reduce((s,c)=>s+(llmAn?2:1),0);
       const rawOf=n=>rolle(n,roleMap);
       const colRoles=[...new Set(rest.map(rawOf))].sort((a,b)=>a-b);
       const byRole=new Map(colRoles.map(r=>[r,[]]));rest.forEach(n=>byRole.get(rawOf(n)).push(n));
@@ -2194,26 +2041,22 @@
         const mit=rest2.filter(n=>w.get(n.id)!==null).sort((a,b)=>w.get(a.id)-w.get(b.id)), ohneW=rest2.filter(n=>w.get(n.id)===null);
         mit.forEach(n=>setzeZ(role,n,ab(role,w.get(n.id),1),1));
         let z=0;ohneW.forEach(n=>{z=ab(role,z,1);setzeZ(role,n,z,1);z++;});});
-      // Spalten → x; Code/LLM eingerückt unter dem Besitzer.
+      // Spalten → x; Rumpf-Kacheln eingerückt unter dem Besitzer.
       let cx=0,maxZ=0;const placed=[];
       colRoles.forEach(role=>{let w=120;
         byRole.get(role).forEach(n=>{const z=zeile.get(n.id),s=sz(n);placed.push({n,rx:cx,ry:z*ZEILE});
-          // Besitzer: Breite für die Einrückung von Code UND LLM immer reservieren — ein neuer 🤖 verschiebt keine Spalte.
+          // Besitzer: Breite für die Einrückung immer reservieren (wie zu Zeiten der 🤖-Knoten) — die Lage bleibt.
           w=Math.max(w,s.w+(PL.has(n.id)?(llmAn?2:1)*EINZUG:0));
           let zz=z+1;(PL.get(n.id)||[]).forEach(c=>{
             if(c){placed.push({n:c,rx:cx+EINZUG,ry:zz*ZEILE});w=Math.max(w,sz(c).w+EINZUG);}
-            zz++;if(!llmAn)return;
-            const ls=c?(llmByCode.get(c.ref._id)||[]):[];
-            ls.forEach((l,i)=>{placed.push({n:l,rx:cx+2*EINZUG,ry:(zz+i)*ZEILE});w=Math.max(w,sz(l).w+2*EINZUG);});
-            zz+=Math.max(1,ls.length);});
+            zz+=llmAn?2:1;});
           maxZ=Math.max(maxZ,zz);});
         cx+=w+COLGAP;});
-      // Code-Blöcke ohne Besitzer (frei angelegt) + LLM-Knoten ohne Block: eigene Spalte, ebenfalls im Raster.
-      const orphan=codes.filter(c=>!genutzt.has(c.ref._id));
-      if(orphan.length||orphanLlm.length){let w=120,z=0;
-        orphan.forEach(c=>{placed.push({n:c,rx:cx,ry:z*ZEILE});w=Math.max(w,sz(c).w);z++;
-          (llmByCode.get(c.ref._id)||[]).forEach(l=>{placed.push({n:l,rx:cx+EINZUG,ry:z*ZEILE});w=Math.max(w,sz(l).w+EINZUG);z++;});});
-        orphanLlm.forEach(l=>{placed.push({n:l,rx:cx,ry:z*ZEILE});w=Math.max(w,sz(l).w);z++;});
+      // Rumpf-Kacheln ohne Besitzer in diesem Block (z. B. die Rümpfe einer Client-Implementierung: der Client hat seinen eigenen Rahmen,
+      //   seine Rümpfe stehen in der Domäne seines Namespaces): eigene Spalte, ebenfalls im Raster.
+      const orphan=codes.filter(c=>!genutzt.has(c.id));
+      if(orphan.length){let w=120,z=0;
+        orphan.forEach(c=>{placed.push({n:c,rx:cx,ry:z*ZEILE});w=Math.max(w,sz(c).w);z++;});
         maxZ=Math.max(maxZ,z);cx+=w+COLGAP;}
       // Über jeder Spalte Platz für ihren Spalten-Rahmen-Kopf (SPK, zeichneRahmen).
       return {placed:placed.map(p=>({...p,ry:p.ry+SPK})),w:Math.max(0,cx-COLGAP),h:Math.max(0,maxZ*ZEILE-ZGAP)+SPK};
@@ -2300,14 +2143,14 @@
     const zu=istZu(n);
     const dg=diagFuer(n.id),nurWarn=dg.length>0&&dg.every(x=>x.art==="warnung");
     const el=h("div",{class:"gnode2 n-"+n.kind+(zu?" collapsed":"")+(ISLE.has(n.id)?" island":"")+(dg.length?(nurWarn?" diagwarn":" diag"):"")
-      +(n.kind==="codenode"&&vorschlagFuer(n.ref._id)?" llmvor":"")+(n.kind==="code"&&(n.ref.unaufgeloest||[]).length?" unaufgeloest":"")});el.dataset.id=n.id;
+      +(n.kind==="rumpf"&&n.ref.kid&&VOR[n.ref.kid]?" llmvor":"")+(n.kind==="code"&&(n.ref.unaufgeloest||[]).length?" unaufgeloest":"")});el.dataset.id=n.id;
     const pos=P(n);el.style.left=(pos.x||0)+"px";el.style.top=(pos.y||0)+"px";
     const title=(n.kind==="code"&&(n.ref.unaufgeloest||[]).length?"⚠ ":"")+(NODELABEL[n.kind]||n.kind);
     const head=h("div",{class:"ghead"},
       h("span",{class:"gtitle"+(n.name?" hatname":""),title:title+(n.name?" · "+n.name:"")},h("span",{class:"gk"},title+(n.name?" · ":"")),h("span",{class:"gn"},n.name||"")),
       dg.length?h("span",{class:"gdiag"+(nurWarn?" warn":""),title:dg.map(d=>d.text).join("\n")},(nurWarn?"⚠ ":"⛔ ")+dg.length):null,
       dsBadge(n),
-      n.kind==="host"||n.kind==="code"?null:h("span",{class:"gx",title:"Löschen",onclick:()=>delNode(n)},"✕"));
+      n.kind==="host"||n.kind==="code"||n.kind==="rumpf"?null:h("span",{class:"gx",title:"Löschen",onclick:()=>delNode(n)},"✕"));
     head.onpointerdown=e=>{if(e.target.classList.contains("gx")||e.target.classList.contains("gcol"))return;startMove(e,el,P(n),()=>waehle(n.id));};
     el.append(head);
     el.append(kurzfassung(n));
@@ -2333,8 +2176,7 @@
     else if(n.kind==="akteur")akteurCard(body,n.ref);
     else if(n.kind==="client")clientCard(body,n.ref);
     else if(n.kind==="auf")aufCard(body,n);
-    else if(n.kind==="codenode")codeNodeCard(body,n.ref);
-    else if(n.kind==="llmnode")llmNodeCard(body,n.ref);
+    else if(n.kind==="rumpf")rumpfKachelCard(body,n);
     else if(n.kind==="handle")handleCard(body,n);
     else if(n.kind==="fn")fnCard(body,n);
     else if(n.kind==="flussknoten")flussKnotenCard(body,n);
@@ -2372,8 +2214,6 @@
     else if(k==="akteur")MODEL.akteure.splice(MODEL.akteure.indexOf(ref),1);
     else if(k==="client"){MODEL.clients.splice(MODEL.clients.indexOf(ref),1);AUF=null;}
     else if(k==="auf"){const v=n.own.ref.vertrag||[];v.splice(v.indexOf(ref),1);}
-    else if(k==="codenode")MODEL.codeNodes.splice(MODEL.codeNodes.indexOf(ref),1);
-    else if(k==="llmnode")MODEL.llmNodes.splice(MODEL.llmNodes.indexOf(ref),1);
     else if(k==="handle"){const hs=n.own.ref.handles||[];hs.splice(hs.indexOf(ref),1);}
     else if(k==="flussknoten")flLoeschen(n.own.ref,ref);
     else if(k==="fn"){const st=n.own.ref;["writeFns","readFns"].forEach(a=>{const i=(st[a]||[]).indexOf(ref);if(i>=0)st[a].splice(i,1);});
@@ -2428,13 +2268,13 @@
     // (1) Knotenarten ausblenden — z. B. 🤖 LLM, 📝 Code, Ablehnungen, Value Objects. Ausgeblendete Arten reservieren im Raster nichts.
     const zahl=new Map();graphNodes().forEach(n=>zahl.set(n.kind,(zahl.get(n.kind)||0)+1));
     // 📝 Code und 🤖 LLM immer anbieten (auch bevor es einen 🤖-Knoten gibt) — sonst nur Arten, die im Modell vorkommen.
-    const arten=Object.keys(NODELABEL).filter(k=>zahl.has(k)||k==="codenode"||k==="llmnode").concat([...zahl.keys()].filter(k=>!NODELABEL[k]));
-    const MENU={codenode:"📝 Code",llmnode:"🤖 LLM"};
+    const arten=Object.keys(NODELABEL).filter(k=>zahl.has(k)||k==="rumpf").concat([...zahl.keys()].filter(k=>!NODELABEL[k]));
+    const MENU={rumpf:"📝 Rumpf"};
     p.append(h("h4",{},h("span",{},"👁 Knotenarten"),
       h("span",{style:"cursor:pointer;color:#8a93a7",title:"Schließen",onclick:()=>{FILTER_OPEN=false;renderFilterPanel();}},"✕")));
     p.append(h("div",{class:"mm-q"},
       h("button",{onclick:()=>{VIEW.aus=[];speichereAnsicht();render();}},"Alle"),
-      h("button",{title:"Nur die Fachknoten — 📝 Code und 🤖 LLM ausblenden",onclick:()=>{VIEW.aus=["codenode","llmnode"];speichereAnsicht();render();}},"Ohne Code")));
+      h("button",{title:"Nur die Fachknoten — die Rumpf-Ausschnitte (📝) ausblenden",onclick:()=>{VIEW.aus=["rumpf"];speichereAnsicht();render();}},"Ohne Code")));
     arten.forEach(k=>{const cb=h("input",{type:"checkbox"});cb.checked=!istAus(k);
       cb.onchange=()=>setzeAus(k,!cb.checked);
       p.append(h("label",{},cb,h("i",{class:"kc-"+k,style:"width:9px;height:9px;border-radius:50%;flex:none;display:inline-block"}),
@@ -2589,9 +2429,6 @@
       else r.handles[I.handleIdx].query=O.rec;}}
     // OneOf-Response: mehrere Antworten je Query → anhängen (dedup), gespiegelt zu decider.ergibt.
     else if(O.type==="qrsp"){const r=MODEL.reader.find(x=>x._id===O.reader);const hd=r&&r.handles[O.handleIdx];if(hd){hd.responses=hd.responses||[];if(!hd.responses.includes(I.rec))hd.responses.push(I.rec);}}
-    else if(O.type==="code"){setCodeSrc(I.target,O.codeNode);}
-    // 🤖 LLM-Prompt-Node → Code-Block-Eingang: die LLM-Node wird zur Prompt-Quelle dieses Blocks.
-    else if(O.type==="prompt"){const l=MODEL.llmNodes.find(x=>x._id===O.llm);if(l&&I.codeBlock)l.promptZiel=I.codeBlock;}
     // Typ-Komposition: VO/Enum-Quelle → Feld-Typ-Eingang → setzt den Feldtyp (Wrapper bleibt erhalten).
     else if(O.type==="ftype"){if(I.fobj)setFeldTyp(I.fobj,O.typeName);}
     // Feld-Port → Konsument (verdrahtet statt Dropdown): Fan-out-Collection (want=collection). (Σ/Count-Join entfernt.)
@@ -2651,8 +2488,6 @@
     else if(O.type==="projref"){const r=MODEL.reader.find(x=>x._id===O.reader);if(r)r.projektion="";}
     else if(O.type==="query"){const r=MODEL.reader.find(x=>x._id===I.reader);if(r)r.handles=(r.handles||[]).filter(h=>h.query!==O.rec);}
     else if(O.type==="qrsp"){const hd=handle(MODEL.reader,O.reader,O.handleIdx);if(hd)hd.responses=ohne(hd.responses,I.rec);}
-    else if(O.type==="code"){setCodeSrc(I.target,null);}
-    else if(O.type==="prompt"){const l=MODEL.llmNodes.find(x=>x._id===O.llm);if(l){l.promptZiel=null;delete l.promptSlot;}}
     else if(O.type==="state"){const st=MODEL.states.find(x=>x._id===O.state);if(st)st.aggregat="";}
     else{deFlash("Diese Verbindung lässt sich hier nicht lösen — im Formular ändern.",false);return;}
     render();
@@ -2692,16 +2527,14 @@
     if(k==="auf"){const e=recByName(r.eingang);return e?e.namespace:nsVon(n.own);}
     if(k==="decider"||k==="applier"||k==="state"){const a=MODEL.aggregate.find(x=>x.name===r.aggregat);return a?a.namespace:null;}
     if(k==="transition"){const s=MODEL.sagas.find(x=>x.name===r.prozess);return s?s.namespace:null;}
-    if(k==="codenode"){const o=findCodeOwner(r._id);return o?nsVon(o):null;}
-    if(k==="llmnode"){const o=r.promptZiel&&findCodeOwner(r.promptZiel);return o?nsVon(o):null;}
+    if(k==="rumpf")return nsVon(n.own);
     return r.namespace||null;}
   // Stammt der Knoten aus dem Code (sonst: Entwurf, immer sichtbar)? Abgeleitete Knoten folgen ihrem Besitzer.
   function ausCodeVon(n){const k=n.kind,r=n.ref;
     if(k==="handle"||k==="fn"||k==="auf")return ausCodeVon(n.own);
     if(k==="state"){const a=MODEL.aggregate.find(x=>x.name===r.aggregat);return !!(a&&a.ausCode);}
     if(k==="transition"){const sg=MODEL.sagas.find(x=>x.name===r.prozess);return sg?!!sg.ausCode:r.ausCode===true;}
-    if(k==="codenode"){const o=findCodeOwner(r._id);return !!(o&&ausCodeVon(o));}
-    if(k==="llmnode"){const o=r.promptZiel&&findCodeOwner(r.promptZiel);return !!(o&&ausCodeVon(o));}
+    if(k==="rumpf")return ausCodeVon(n.own);
     return r.ausCode===true;}
   // Geladen, wenn seine DOMÄNE (Graph-Zuordnung, domKey — z. B. ImagePairProjection → ImagePair) ODER sein eigener Namespace
   //   (z. B. „Projections“ ausdrücklich gewählt) in der Auswahl liegt. Die Domänen-Gehörigkeit steht über dem Namespace.
@@ -2736,7 +2569,7 @@
     canvas.append(box);}
   let START_ERST=false;
   // Code-Elemente je Namespace (rekursiv) für die Anzeige im Dialog.
-  function basisZaehl(alle,zahl){graphNodes().forEach(n=>{if(["handle","fn","codenode","llmnode","state","decider","applier","transition"].includes(n.kind)||!ausCodeVon(n))return;
+  function basisZaehl(alle,zahl){graphNodes().forEach(n=>{if(["handle","fn","rumpf","state","decider","applier","transition"].includes(n.kind)||!ausCodeVon(n))return;
       const x=nsVon(n),d=domKey(n);alle.forEach(m=>{if((x&&drinNs(m,x))||(d!==OHNE_DOM&&drinNs(m,d)))zahl.set(m,(zahl.get(m)||0)+1);});});}
 
   // ══ VERBINDEN-MODUS (Hybrid, docs/konzept-editor-panel-bearbeitung.md §3.3): Port im Panel anklicken → alle PASSENDEN
@@ -2918,12 +2751,10 @@
       if(d.command)add("cmd:out:"+d.command,"dec:cmdin:"+d._id,"#4a86d6");
       if(d.aggregat)add("dec:aggout:"+d._id,"agg:left:"+d.aggregat+":"+d._id,"#33b1a6",true);
       (d.ergibt||[]).forEach(o=>{if(o.event)add("dec:evtout:"+d._id+":"+o.event,"evt:in:"+o.event,"#4fb06a");});
-      if(d.codeSrc)add("code:out:"+d.codeSrc,"dec:rumpf:"+d._id,"#8a8f9c",true);
     });
     MODEL.applier.forEach(p=>{
       if(p.event)add("evt:out:"+p.event,"app:evtin:"+p._id,"#4fb06a");
       if(p.aggregat)add("app:aggout:"+p._id,"agg:right:"+p.aggregat+":"+p._id,"#d1953f",true);
-      if(p.codeSrc)add("code:out:"+p.codeSrc,"app:rumpf:"+p._id,"#8a8f9c",true);
     });
     MODEL.states.forEach(s=>{if(s.aggregat)add("state:out:"+s._id,"agg:state:"+s.aggregat,"#e0b64d");});
     // Interne Aggregat-Kanten: welcher Decider (links) erzeugt das Event welches Appliers (rechts) — Linie IM Aggregat.
@@ -2969,16 +2800,13 @@
     const CODE="#8a8f9c";
     MODEL.readModels.forEach(rm=>{if(rm.store)add("rm:out:"+rm._id,"sto:rm:"+rm.store,"#c9a24b");});
     MODEL.stores.forEach(st=>{
-      (st.writeFns||[]).forEach(fn=>{if(fn.codeSrc)add("code:out:"+fn.codeSrc,"impl:in:"+st._id+":"+fn._id,CODE,true);});
-      (st.readFns||[]).forEach(fn=>{if(fn.codeSrc)add("code:out:"+fn.codeSrc,"impl:in:"+st._id+":"+fn._id,CODE,true);});
     });
     MODEL.projektionen.forEach(p=>{
       (p.handles||[]).forEach((hd,hi)=>{if(hd.event)add("evt:out:"+hd.event,"prj:in:"+p._id+":"+hi,"#4fb06a");
         // Handle → aufgerufene Write-Fn (Store-Scope ist damit sichtbar-abgeleitet).
         (hd.fns||[]).forEach(fid=>{const f=fnById(fid);if(f)add("wcall:out:"+p._id+":"+hi+":"+fid,"wcall:in:"+f.store._id+":"+fid,"#2f9d95");});
         // veröffentlichtes reaktives Event (gestrichelt/teal = Broker, verlierbar).
-        (hd.publishes||[]).forEach(ev=>{if(ev)add("prj:pub:"+p._id+":"+hi+":"+ev,"evt:in:"+ev,"#2fd6b0",true);});
-        if(hd.codeSrc)add("code:out:"+hd.codeSrc,"ctrl:in:"+p._id+":"+hi,CODE,true);});
+        (hd.publishes||[]).forEach(ev=>{if(ev)add("prj:pub:"+p._id+":"+hi+":"+ev,"evt:in:"+ev,"#2fd6b0",true);});});
     });
     MODEL.reader.forEach(r=>{
       // IReader<TProjection>: Reader → Projektion (der gemeinsame Store ist der Treffpunkt).
@@ -2986,20 +2814,15 @@
       (r.handles||[]).forEach((hd,hi)=>{if(hd.query)add("qry:out:"+hd.query,"rdr:qin:"+r._id+":"+hi,"#9678d6");
         // Handle → aufgerufene Read-Fn(s), auch über mehrere Stores.
         (hd.fns||[]).forEach(fid=>{const f=fnById(fid);if(f)add("rcall:out:"+r._id+":"+hi+":"+fid,"rcall:in:"+f.store._id+":"+fid,"#c08a3e");});
-        (hd.responses||[]).forEach(resp=>{if(resp)add("rdr:rout:"+r._id+":"+hi+":"+resp,"qrsp:in:"+resp,"#9d78d6");});
-        if(hd.codeSrc)add("code:out:"+hd.codeSrc,"ctrl:in:"+r._id+":"+hi,CODE,true);});
+        (hd.responses||[]).forEach(resp=>{if(resp)add("rdr:rout:"+r._id+":"+hi+":"+resp,"qrsp:in:"+resp,"#9d78d6");});});
     });
     // Reaktion (emittierend): Event → Handle, Handle → OneOf-Command(s), 📝 → Controller-Rumpf.
     MODEL.reaktionen.forEach(r=>{
       (r.handles||[]).forEach((hd,hi)=>{
         if(hd.event)add("evt:out:"+hd.event,"rk:in:"+r._id+":"+hi,"#4fb06a");
         (hd.sends||[]).forEach(c=>{if(c)add("rk:send:"+r._id+":"+hi+":"+c,"cmd:in:"+c,"#4a86d6");});
-        (hd.publishes||[]).forEach(ev=>{if(ev)add("rk:pub:"+r._id+":"+hi+":"+ev,"evt:in:"+ev,"#2fd6b0",true);});
-        if(hd.codeSrc)add("code:out:"+hd.codeSrc,"ctrl:in:"+r._id+":"+hi,CODE,true);});
+        (hd.publishes||[]).forEach(ev=>{if(ev)add("rk:pub:"+r._id+":"+hi+":"+ev,"evt:in:"+ev,"#2fd6b0",true);});});
     });
-    MODEL.funktionen.forEach(f=>{if(f.codeSrc)add("code:out:"+f.codeSrc,"fk:impl:"+f._id,CODE,true);});
-    // 🤖 LLM-Prompt-Node → Code-Block (Eingang): der Prompt speist den Rumpf-Kommentar.
-    MODEL.llmNodes.forEach(l=>{if(l.promptZiel)add("llm:prout:"+l._id,"code:prin:"+l.promptZiel,"#a48fd6",true);});
     // ── Typ-Komposition: VO/Enum → Feld (welches Feld benutzt diesen Typ), gestrichelt. ──
     const voNamen=new Set(MODEL.records.filter(r=>r.kind==="valueobject").map(r=>r.name));
     const enNamen=new Set(MODEL.enums.map(e=>e.name));
@@ -3130,11 +2953,10 @@
     const push=(m,k,v)=>{let a=m.get(k);if(!a)m.set(k,a=[]);if(!a.includes(v))a.push(v);};
     ADJ={out:new Map(),inn:new Map()};
     kanten().forEach(([a,b])=>{if(a===b||!NODEBY.has(a)||!NODEBY.has(b))return;push(ADJ.out,a,b);push(ADJ.inn,b,a);});
-    CODE_ADJ=new Map([...ADJ.out].filter(([k])=>/^(cn|ln):/.test(k)));
     FLHEIM=new Map(MODEL.fluesse.map(f=>[FL_PRE+f._id,((SICHT().fluesse||{})["fl:"+f._id]||{}).heim||f.namespace||null]));
     // Vertreter (kompakt) = sichtbarer Besitzer, transitiv durch eingeklappte Besitzer (Decider → Command) — vom Server; ein Code-Block hat
     //   den Vertreter seiner Karte. Ohne Besitzer bleibt ein Detail selbst sichtbar (neu angelegt / unverdrahtet → nichts verschwindet).
-    const vert=n=>{if(VIEW.details)return [n.id];if(n.kind==="codenode"||n.kind==="llmnode"){const t=codeTraeger(n);return t?vert(t):[n.id];}
+    const vert=n=>{if(VIEW.details)return [n.id];if(n.kind==="rumpf")return vert(n.own);
       const k=SICHT().karten[n.id];return (k&&k.vertreter)||[n.id];};
     VIS=new Set();VERTRETER=new Map();DETAILS=new Map();EINGEKLAPPT=new Set();
     alle.forEach(n=>{const v=vert(n);VERTRETER.set(n.id,v);
@@ -3158,12 +2980,12 @@
   //   Code-Blöcke (📝/🤖) kennt nur der Editor: ihre Kette ist die ihrer Karte, die Rümpfe der beteiligten Logik-Elemente hängen mit dran.
   let SEL=null, FOCUS=null, FOKUS=null;
   var KETTEN=new Map(),KETTEN_STAND=null;
-  const RUMPF_ARTEN=new Set(["handle","decider","applier","fn","funktion","flussknoten","transition"]);
+  const RUMPF_ARTEN=new Set(["handle","decider","applier","fn","funktion","flussknoten","transition","client"]);
+  // Die Rumpf-Kacheln der Logik-Elemente in der Kette gehören mit in den Fokus.
   function mitRuempfen(ids,id){const res=new Set(ids);res.add(id);
-    CODE_ADJ.forEach((ziele,cid)=>{const t=cid.startsWith("cn:")&&NODEBY.get(ziele[0]);if(!t||!ids.has(t.id)||!RUMPF_ARTEN.has(t.kind))return;
-      res.add(cid);(ADJ.inn.get(cid)||[]).forEach(z=>{if(z.startsWith("ln:"))res.add(z);});});
+    NODEBY.forEach(n=>{if(n.kind==="rumpf"&&ids.has(n.own.id)&&RUMPF_ARTEN.has(n.own.kind))res.add(n.id);});
     return res;}
-  function ketteFuer(id){const n=NODEBY.get(id),t=n&&(n.kind==="codenode"||n.kind==="llmnode")?codeTraeger(n):null,karte=t?t.id:id;
+  function ketteFuer(id){const n=NODEBY.get(id),t=n&&n.kind==="rumpf"?codeTraeger(n):null,karte=t?t.id:id;
     if(KETTEN_STAND!==SICHT()){KETTEN_STAND=SICHT();KETTEN=new Map();}
     const key=karte+"|"+(!!VIEW.details),c=KETTEN.get(key);
     if(c instanceof Set)return mitRuempfen(c,id);
@@ -3277,9 +3099,8 @@
       const fns=(r.fns||[]).map(fid=>{const f=fnById(fid);return f?f.fn.name:null;}).filter(Boolean);
       t=(aus.length?"→ "+[...new Set(aus)].join(" | "):(fns.length?"":"→ nichts"))+(fns.length?(aus.length?" · ":"")+"ruft "+kurz(fns):"")+(r.signaturOffen?" · ⚠ offen":"");}
     else if(k==="fn")t="("+(r.params||[]).map(x=>x.typ).join(", ")+")"+(r.rueckgabe?" → "+r.rueckgabe:"");
-    else if(k==="codenode"){const v=vorschlagFuer(r._id);t=v?"🤖 Vorschlag wartet auf ✓ Übernehmen":((r.text||"").trim().split("\n")[0]||"// leer");}
-    else if(k==="llmnode"){const kid=r.promptZiel?konsolenId(r.promptZiel):null,m=kid&&MELD[kid];
-      t=(kid&&LAUF[kid]?"● "+LAUF[kid].was+" … · ":kid&&VOR[kid]?"🤖 Vorschlag im Block · ":m?m.t.slice(0,40)+" · ":"")+(((llmVerlauf(r).slice(-1)[0]||{}).text||"").split("\n")[0]||"(noch kein Prompt)");}
+    else if(k==="rumpf"){const v=r.kid&&VOR[r.kid],m=r.kid&&MELD[r.kid];
+      t=r.kid&&LAUF[r.kid]?"● "+LAUF[r.kid].was+" …":v?"🤖 Vorschlag wartet auf ✓ Übernehmen":((r.text||"").trim().split("\n")[0]||"// leer");}
     if(Array.isArray(r.felder)&&k!=="aggregate")t+=(t?" · ":"")+r.felder.length+" Felder";
     // Partner in nicht geladenen Domänen: die Kante endet nicht im Leeren, sie ist benannt (Panel: „↗ außerhalb", Klick lädt).
     {const za=aussenAnzahl(n);if(za)t+=(t?" · ":"")+"↗ "+za+" außerhalb";}
@@ -3287,11 +3108,11 @@
     if(t)box.append(h("div",{class:"gs-t",title:t},t));
     const det=(DETAILS.get(n.id)||[]).map(id=>NODEBY.get(id)).filter(Boolean);
     if(det.length){const chips=h("div",{class:"gchips"}),zahl={};det.forEach(m=>zahl[m.kind]=(zahl[m.kind]||0)+1);
-      const LBL={decider:"⚖ Decider",applier:"↻ Applier",state:"▤ State",llmnode:"🤖 LLM",rejection:"✕ Ablehnung",valueobject:"◇ VO",enum:"◇ Enum",queryresponse:"↩ Response"};
+      const LBL={decider:"⚖ Decider",applier:"↻ Applier",state:"▤ State",rejection:"✕ Ablehnung",valueobject:"◇ VO",enum:"◇ Enum",queryresponse:"↩ Response"};
       Object.keys(zahl).forEach(kk=>{let lbl=(LBL[kk]||kk)+(zahl[kk]>1?" ×"+zahl[kk]:"");
-        if(kk==="codenode")lbl="{ } "+det.filter(m=>m.kind==="codenode").reduce((s,m)=>s+((m.ref.text||"").split("\n").length),0)+" Zeilen";
+        if(kk==="rumpf")lbl="{ } "+det.filter(m=>m.kind==="rumpf").reduce((s,m)=>s+((m.ref.text||"").split("\n").length),0)+" Zeilen";
         chips.append(h("span",{class:"gchip"},lbl));});
-      if(det.some(m=>(m.kind==="decider"||m.kind==="applier")&&!m.ref.codeSrc&&!m.ref.leer))
+      if(det.some(m=>(m.kind==="decider"||m.kind==="applier")&&!(m.ref.rumpf||"").trim()&&!m.ref.leer))
         chips.append(h("span",{class:"gchip warn",title:"Decide-/Apply-Rumpf fehlt"},"⚙ Logik fehlt"));
       box.append(chips);}
     return box;}
@@ -3320,10 +3141,10 @@
   let FRGEO=new Map();   // FRGEO: Rahmen-Geometrie je Schlüssel (Domäne|Akteur, §vertrag:Akteur) — Ziel der Client-Leitungen
   function domKey(n){if(n.kind==="host")return HOST_KEY;
     // Der Rumpf einer Client-Implementierung steht in der Domäne des Client-Namespaces (der Client-Rahmen ist nur die Anschlussleiste).
-    if(n.kind==="codenode"||n.kind==="llmnode"){const t=codeTraeger(n);if(t&&t.kind==="client")return nsVon(t)||OHNE_DOM;}
+    if(n.kind==="rumpf"&&n.own.kind==="client")return nsVon(n.own)||OHNE_DOM;
     const k=sk(n);if(k&&k.domaene)return k.domaene;
     if(!k){if(n.kind==="client")return CL_PRE+n.ref.name;if(n.kind==="flussknoten")return FL_PRE+n.own.ref._id;
-      if(n.kind==="codenode"||n.kind==="llmnode"){const t=codeTraeger(n);if(t)return domKey(t);}}
+      if(n.kind==="rumpf")return domKey(n.own);}
     return (!k&&nsVon(n))||(VIEW.heim||{})[n.id]||OHNE_DOM;}
   const domLabel=ns=>ns===OHNE_DOM?"⋯ ohne Domäne":istHostDom(ns)?"🖥 Host · "+(WB.zustand&&WB.zustand.aktiv||"Umgebung"):istClientDom(ns)?"🔌 "+clientAnzeige({name:ns.slice(CL_PRE.length)}):istFlussDom(ns)?"⛓ "+((flussVonDom(ns)||{}).name||"Pipeline"):letztesSeg(ns);
   // Block (Aggregat bzw. Brücke) eines Knotens: aus dem Graphen; ein über eine Spalte angelegter, noch unverdrahteter Knoten
@@ -3367,7 +3188,7 @@
     GEO.forEach((g,id)=>{const n=NODEBY.get(id);if(!n)return;const d=domKey(n);
       if(n.kind==="client"||istFlussDom(d)||istHostDom(d))return;   // Client = Anschlussleiste; Pipeline-Knoten + ihre Karten liegen im Pipeline-Rahmen, nicht in Spalten
       if(istInselLage(n)){nimm(sp(d+"|§insel",{dom:d,blk:null,role:"insel",akt:null}),id,g,n.kind);return;}
-      if(n.kind==="codenode"||n.kind==="llmnode"){codes.push([n,g,id]);return;}
+      if(n.kind==="rumpf"){codes.push([n,g,id]);return;}
       const blk=blockVon(n),role=rolle(n,rollenVon(blk)),akt=aktVon(n);
       nimm(sp(d+"|"+akt+"|"+blk+"|"+role,{dom:d,blk,role,akt}),id,g,n.kind==="handle"?"handle:"+n.own.kind:role===rollenVon(blk).ergebnis?"ergebnis":n.kind);});
     const fest=[...spalten.values()].filter(c=>c.role!=="insel");
@@ -3425,7 +3246,7 @@
       const el=h("div",{class:"gspalte"+(c.role==="insel"?" insel":"")});const r=c.r;
       Object.assign(el.style,{left:r.x1+"px",top:r.y1+"px",width:(r.x2-r.x1)+"px",height:(r.y2-r.y1)+"px"});
       const ORD=Object.keys(NODELABEL),ix=k=>{const i=ORD.indexOf(k.replace(/^handle:.*/,"handle"));return i<0?99:i;};
-      const kinds=[...c.kinds].sort((x,y)=>ix(x)-ix(y)),haupt=kinds[0]||"codenode";
+      const kinds=[...c.kinds].sort((x,y)=>ix(x)-ix(y)),haupt=kinds[0]||"rumpf";
       const titel=c.role==="insel"?"⚠ Inseln":c.role==="code"?"📝 Code":[...new Set(kinds.map(spaltenName))].join(" · ");
       const neu=spaltenNeu(c);
       const k=h("div",{class:"gspalte-k",title:titel+" — "+(c.blk===AKTEUR_KEY?"👤 Akteur-Band · ":c.blk&&c.blk!==SHARED_KEY?"Aggregat "+c.blk+" · ":"")+domLabel(c.dom)},
@@ -3522,7 +3343,7 @@
   // Spalten-Kopf: Name je Art; ＋ legt eine Art dieser Rolle an (Handles/Store-Fns entstehen am Besitzer, nicht frei).
   const spaltenName=k=>k==="handle:projektion"?"Projektion-Handle":k==="handle:reader"?"Reader-Handle":k==="handle:pipeline"?"Pipeline-Handle":k==="handle:reaktion"?"Reaktion-Handle":k==="ergebnis"?"Ergebnis ƒ":NODELABEL[k]||k;
   const NICHT_FREI=new Set(["fn","handle","auf","ergebnis"]);
-  function spaltenNeu(c){if(c.role==="insel")return [];if(c.role==="code")return ["codenode","llmnode"];
+  function spaltenNeu(c){if(c.role==="insel"||c.role==="code")return [];
     const map=rollenVon(c.blk);
     return Object.keys(map).filter(k=>map[k]===c.role&&!k.includes(":")&&!NICHT_FREI.has(k));}
   function spalteAnlegen(c,kind){const agg=c.blk&&c.blk!==SHARED_KEY&&c.blk!==AKTEUR_KEY?c.blk:(MODEL.aggregate.find(a=>a.namespace===c.dom)||{}).name,
@@ -3572,9 +3393,9 @@
   // ＋ in der Menüleiste: Baustein IN dieser Domäne (Namespace; Decider/Applier/State ans Aggregat, Regel an den Prozess der Domäne).
   const BAU_GRUPPEN=[["Außen",["akteur","client"]],["Schreibseite",["command","event","rejection","aggregate","state","decider","applier"]],
     ["Typen",["valueobject","enum","konfig"]],["Abläufe",["saga","transition","funktion","reaktion","quelle"]],
-    ["Leseseite",["readmodel","store","projektion","query","queryresponse","reader"]],["Code",["codenode","llmnode"]]];
+    ["Leseseite",["readmodel","store","projektion","query","queryresponse","reader"]]];
   function bausteinMenue(cx,cy,ns){const agg=MODEL.aggregate.find(a=>a.namespace===ns),sg=MODEL.sagas.find(s=>s.namespace===ns);
-    const it=[];BAU_GRUPPEN.forEach(([g,ks])=>{it.push({kopf:g});ks.forEach(k=>it.push({t:"＋ "+(k==="codenode"?"📝 Code":k==="llmnode"?"🤖 LLM":NODELABEL[k]||k),
+    const it=[];BAU_GRUPPEN.forEach(([g,ks])=>{it.push({kopf:g});ks.forEach(k=>it.push({t:"＋ "+(NODELABEL[k]||k),
       fn:()=>neuerKnoten(k,undefined,undefined,{ns:ns===OHNE_DOM?null:ns,agg:agg&&agg.name,saga:sg&&sg.name})}));});
     menue(cx,cy,"＋ in "+domLabel(ns),it);}
   function domMenue(cx,cy,r){const neu=(VIEW.domNeu||[]).includes(r.ns);
@@ -3753,7 +3574,7 @@
   }
   function regelCodePort(t,d,di,teil){const sg=MODEL.sagas.find(x=>x.name===t.prozess);
     const imCode=!!(sg&&sg.datei&&(teil==="komp"?d.kompensationAusdruck:d.sendeAusdruck));
-    return codePort("trl:"+t._id+":"+di+":"+teil,{k:"regelLambda",trans:t._id,dannIdx:di,teil},teil==="komp"?d.kompCodeSrc:d.codeSrc,
+    return codePort("trl:"+t._id+":"+di+":"+teil,{k:"regelLambda",trans:t._id,dannIdx:di,teil},null,
       teil==="komp"?"λ Kompensation":d.rufe!==undefined?"λ Auftrag":"λ Command",imCode);}
 
   // ── Aktionen ──
@@ -3786,7 +3607,7 @@
     schluesselFuer();
     // Blank-Start: leer, der Start-Dialog fragt, welche Domänen geladen werden (Vorauswahl: die letzte Wahl).
     LADEN=[];START_OFFEN=true;START_ERST=true;
-    MODEL=uebernimm(live,{llmNodes:ANSICHT.llmNodes||[],codeNodes:[]});GSTAND=schnappschuss();render();
+    MODEL=uebernimm(live,null);GSTAND=schnappschuss();render();
   };
 
   // ══ GESTEN (Werkbank P7.2, docs/plan-werkbank-umsetzung.md §13): jede Bearbeitung ist ein Patch am Code. ══
@@ -3800,7 +3621,7 @@
     :["readModels","stores","projektionen","reaktionen","reader"].includes(c)?(x=>x.name||""):(x=>(x.namespace||"")+"|"+(x.name||""));
   // Verglichen wird nur, was der Code besitzen kann: keine Ansicht (x/y), keine Board-Fakten (_…), keine Code-Knoten-Bindungen und
   //   keine Rümpfe — die spiegelt der Code-Sync aus der Datei (sie gehören dem Code; eine NEUE Karte geht ohnehin ganz hinaus).
-  const GOHNE=new Set(["x","y","ausCode","codeSrc","kompCodeSrc","rumpf","leer"]);
+  const GOHNE=new Set(["x","y","ausCode","rumpf","leer"]);
   const gVergleich=o=>JSON.stringify(o,(k,v)=>(GOHNE.has(k)||k.startsWith("_"))?undefined:v);
   // var: render() fragt den Stand ab, ehe dieser Abschnitt durchlaufen ist (let wäre dort noch nicht initialisiert).
   var GSTAND=null,G_TIMER=null,G_LAEUFT=false,G_AENDERUNG=0,G_TITEL=null,G_BOARD=null;
@@ -3874,8 +3695,7 @@
     finally{G_LAEUFT=false;}};
 
   // ── Board übernehmen (Code-Stand) ───────────────────────────────────────────────────────────
-  // Das Board kommt vollständig aus dem Code. Vom bisherigen Board bleibt nur, was der Code nicht kennt: Positionen (x/y), die Bindungen
-  //   angedockter Code-Blöcke an Regel-/Fluss-Lambdas, die Lage der Code-Knoten und die 🤖-Knoten (Prompt-Ziel über den Slot-Schlüssel).
+  // Das Board kommt vollständig aus dem Code. Vom bisherigen Board bleibt nur, was der Code nicht kennt: Positionen (x/y).
   function hash(t){let h=5381;for(let i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))>>>0;return h.toString(36);}
   function maxId(m){let mx=0;JSON.stringify(m||{}).replace(/"_id":"[a-z_]*?(\d+)"/g,(_,n)=>{mx=Math.max(mx,+n);return _;});return mx;}
   function uebernimm(code,alt){
@@ -3886,64 +3706,26 @@
     if(!alt)return neu;
     alt=normalize(alt);
     GSAMMLUNGEN.forEach(col=>{const key=GKEY(col),altBy=new Map((alt[col]||[]).map(x=>[key(x),x]));
-      (neu[col]||[]).forEach(l=>{const s=altBy.get(key(l));if(!s)return;if(s.x!=null){l.x=s.x;l.y=s.y;}if(col==="fluesse")flCodeBindungen(s,l);});});
-    // Transitionen (Saga-Regeln): Lage und angedockte Code-Blöcke über die Regel-Signatur.
+      (neu[col]||[]).forEach(l=>{const s=altBy.get(key(l));if(!s)return;if(s.x!=null){l.x=s.x;l.y=s.y;}});});
+    // Transitionen (Saga-Regeln): Lage über die Regel-Signatur.
     const altTr=(alt.transitions||[]);
     neu.sagas.forEach(sg=>{const at=altTr.filter(t=>t.prozess===sg.name);if(!at.length)return;
       const sig=t=>JSON.stringify([t.wenn||[],t.sammelEvent||"",(t.dann||[]).map(d=>[d.sende||"",d.rufe||"",d.kompensation||""])]);
       const altBySig=new Map(at.map(t=>[sig(t),t]));
-      neu.transitions.filter(t=>t.prozess===sg.name).forEach(t=>{const a=altBySig.get(sig(t));if(!a)return;if(a.x!=null){t.x=a.x;t.y=a.y;}
-        (t.dann||[]).forEach((d,i)=>{const ad=(a.dann||[])[i];if(!ad)return;if(ad.codeSrc)d.codeSrc=ad.codeSrc;if(ad.kompCodeSrc)d.kompCodeSrc=ad.kompCodeSrc;});});});
-    // Abgeleitete Knoten: State-Knoten + Code-Knoten (Layout je Besitzer), Prompt-Knoten (Ziel umhängen).
-    const codeNodesNeu=new Map(neu.codeNodes.map(c=>[c._id,c]));
+      neu.transitions.filter(t=>t.prozess===sg.name).forEach(t=>{const a=altBySig.get(sig(t));if(a&&a.x!=null){t.x=a.x;t.y=a.y;}});});
+    // Abgeleitete Knoten: State-Knoten (Lage); die Rumpf-Kacheln sind abgeleitet (Lage über ihre Id in der Ansicht).
     const altStates=new Map((alt.states||[]).map(x=>[x.aggregat,x]));
     neu.states.forEach(x=>{const a=altStates.get(x.aggregat);if(a&&a.x!=null){x.x=a.x;x.y=a.y;}});
-    const altCode=new Map((alt.codeNodes||[]).map(c=>[c._id,c]));
-    const ownerKey=(n,col)=>col+"|"+GKEY(col)(n);
-    const codeUmzug=new Map();   // alte Code-Knoten-Id → neue (über den Besitzer)
-    ["decider","applier"].forEach(col=>{const altBy=new Map((alt[col]||[]).map(n=>[ownerKey(n,col),n]));
-      neu[col].forEach(n=>{const a=altBy.get(ownerKey(n,col));if(!a||!a.codeSrc||!n.codeSrc)return;
-        const ac=altCode.get(a.codeSrc),nc=codeNodesNeu.get(n.codeSrc);if(ac&&nc){if(ac.x!=null){nc.x=ac.x;nc.y=ac.y;}codeUmzug.set(ac._id,nc._id);}});});
-    // Übrige Code-Knoten (Leseseite, Store-Fns, Pipelines): Layout über (Name, Rumpf-Text).
-    const altPos=new Map();(alt.codeNodes||[]).forEach(c=>{if(c.x!=null)altPos.set((c.name||"")+"\u0000"+(c.text||""),c);});
-    neu.codeNodes.forEach(c=>{if([...codeUmzug.values()].includes(c._id))return;const a=altPos.get((c.name||"")+"\u0000"+(c.text||""));
-      if(a){c.x=a.x;c.y=a.y;}});
-    // Code-Knoten, an die noch etwas angedockt ist (Regel-/Fluss-Lambdas), mitnehmen.
-    const referenziert=new Set();JSON.stringify(neu,(k,v)=>{if(k==="codeSrc"&&v)referenziert.add(v);return v;});
-    (alt.codeNodes||[]).forEach(c=>{if(referenziert.has(c._id)&&!codeNodesNeu.has(c._id))neu.codeNodes.push(c);});
-    // 🤖-Knoten: über den SLOT-Schlüssel (Art|Besitzer|Disc) wieder an „ihren" Code-Block hängen.
-    const neuBySlot=new Map();neu.codeNodes.forEach(c=>{const k=konsolenId(c._id,neu);if(k&&!neuBySlot.has(k))neuBySlot.set(k,c._id);});
-    neu.llmNodes=(alt.llmNodes||[]).map(l=>{const slot=(l.promptZiel&&konsolenId(l.promptZiel,alt))||l.promptSlot||null;
-      const ziel=(slot&&neuBySlot.get(slot))||codeUmzug.get(l.promptZiel)||l.promptZiel;
-      const x={...l,promptZiel:ziel};if(slot)x.promptSlot=slot;return x;});
     return neu;}
-  // Angedockte Code-Blöcke der Fluss-Lambdas (Board-Fakt, nicht im Code) vom gespeicherten auf den eingelesenen Fluss übertragen:
-  //   Knoten über den Namen (die Identität im Fluss), Eingänge über ihre Position.
-  function flCodeBindungen(alt,neu){(neu.knoten||[]).forEach(k=>{const a=(alt.knoten||[]).find(x=>x.name===k.name);if(!a)return;
-    if(a.codeSrc)k.codeSrc=a.codeSrc;(k.eingaenge||[]).forEach((e,i)=>{const ae=(a.eingaenge||[])[i];if(ae&&ae.codeSrc)e.codeSrc=ae.codeSrc;});});}
   window.deDownload=function(){prepareSaga();const blob=new Blob([JSON.stringify(MODEL,null,2)],{type:"application/json"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="domain-model.json";a.click();};
-  // Server-Payload: das MODEL + die Rümpfe (Code-Knoten-Text bzw. "" für bewusst leer) zurück an Decider/Applier.
-  // mitVorschlag: offene 🤖-Vorschläge ersetzen den Datei-Rumpf — für Kompilieren + Simulation (echte Generatoren,
-  //   in-memory), NIE für Gesten (in die Datei kommt ein Vorschlag nur über ✓ Übernehmen).
+  // Server-Payload für Kompilieren + Simulation (bis P8): das MODEL mit den Rümpfen aus dem Code; mitVorschlag: ein offener 🤖-Vorschlag
+  //   ersetzt den Datei-Rumpf (in-memory, nie in die Datei — dorthin nur über ✓ Übernehmen).
   function payload(mitVorschlag){prepareSaga();MODEL.fluesse.forEach(flOrdne);const m=JSON.parse(JSON.stringify(MODEL));
-    const txt=id=>{const v=mitVorschlag?vorschlagFuer(id):null;if(v)return v.rumpf;const c=m.codeNodes.find(x=>x._id===id);return c?c.text:null;};
-    [...m.decider,...m.applier].forEach(n=>{if(n.leer)n.rumpf="";else if(n.codeSrc){const t=txt(n.codeSrc);if(t!=null&&t.trim())n.rumpf=t;}});
-    // Leseseite: der Code-/LLM-Entwurf einer NEUEN Methode (ohne Code-Signatur) wird ihr Rumpf („entwurf“);
-    //   bestehende Rümpfe ändert eine Geste nicht (dafür: ✓ Übernehmen im LLM-Knoten).
-    const entwurf=o=>{if(!o.sig&&o.codeSrc){const t=txt(o.codeSrc);if(t!=null&&t.trim())o.entwurf=t;}};
-    [...(m.projektionen||[]),...(m.reaktionen||[]),...(m.reader||[])].forEach(o=>(o.handles||[]).forEach(entwurf));
-    (m.stores||[]).forEach(st=>[...(st.writeFns||[]),...(st.readFns||[])].forEach(entwurf));
-    // Funktion ohne C#-Implementierung, aber mit Code-Block: die Geste legt die Klasse an (leerer Block → throw-Platzhalter).
-    (m.funktionen||[]).forEach(f=>{if(!f.implementierung&&f.codeSrc){const t=txt(f.codeSrc);f.entwurf=t||"";}});
-    // Regel-Lambdas: ein gefüllter Code-Block IST der Lambda (verbatim) — Vorrang vor der Feld-Zuordnung.
-    (m.sagas||[]).forEach(sg=>regelFolge(sg,m.transitions).forEach(({d},i)=>{const st=(sg.schritte||[])[i];if(!st)return;
-      if(d.codeSrc){const t=txt(d.codeSrc);if(t!=null&&t.trim()){st.sendeAusdruck=t.trim();delete st.sendeArgumente;}}
-      if(d.kompCodeSrc){const t=txt(d.kompCodeSrc);if(t!=null&&t.trim()){st.kompensationAusdruck=t.trim();delete st.kompensationArgumente;}}}));
-    // Fluss-Lambdas: ein gefüllter Code-Block IST der Lambda (verbatim) — Vorrang vor der Feld-Zuordnung.
-    (m.fluesse||[]).forEach(f=>(f.knoten||[]).forEach(k=>{
-      if(k.codeSrc){const t=txt(k.codeSrc);if(t!=null&&t.trim())k.liste=t.trim();}
-      (k.eingaenge||[]).forEach(e=>{if(!e.codeSrc)return;const t=txt(e.codeSrc);if(t!=null&&t.trim()){e.ausdruck=t.trim();delete e.argumente;}});}));
+    if(mitVorschlag){const v=k=>VOR[k]&&VOR[k].rumpf;
+      m.decider.forEach(d=>{const r=v("decide|"+d.aggregat+"|"+d.command);if(r)d.rumpf=r;});
+      m.applier.forEach(a=>{const r=v("apply|"+a.aggregat+"|"+a.event);if(r)a.rumpf=r;});}
+    [...m.decider,...m.applier].forEach(n=>{if(n.leer)n.rumpf="";});
     return m;}
   // Kompilieren/Simulation: das Modell samt offener 🤖-Vorschläge (in-memory, nie in die Datei).
   async function post(path){const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload(true))});
@@ -4723,7 +4505,7 @@
       t.addEventListener("pointerdown",e=>e.stopPropagation());t.addEventListener("click",e=>{e.stopPropagation();klick();});
       p.parentNode.append(t);}catch(e){}}
   // Live-Puls (ohne gewählten Vorgang): Zähler und „zuletzt" je Karte, Kantendicke nach Menge, Stau (offene Aufträge), nie benutzte Kanten blass.
-  const PULS_OHNE=new Set(["codenode","llmnode","code","valueobject","enum","state","host","store","readmodel","fn"]);
+  const PULS_OHNE=new Set(["rumpf","code","valueobject","enum","state","host","store","readmodel","fn"]);
   function spurPuls(ELS,kante,pfade){const P=SP.puls;if(!P||!P.laeuft)return;
     const nk=new Map();(P.karten||[]).forEach(k=>{const id=spKarte(k.id);if(!id)return;const a=nk.get(id);
       if(!a||k.n>a.n)nk.set(id,{n:k.n,z:a&&Date.parse(a.z)>Date.parse(k.zuletzt)?a.z:k.zuletzt});});

@@ -318,4 +318,76 @@ public sealed class GestenTests : IDisposable
         var neu = patch.Single().Nachher!;
         neu.Should().Contain("var blaetter = eingang.Je(e => e.Seiten);").And.Contain("blaetter.Rufe<ISeitenPruefung>").And.Contain("blaetter.Sammle(");
     }
+
+    // ── Rumpf-Edit (Werkbank P7.4): ✎ am Rumpf-Port ersetzt genau den Bereich, den die Karte aus dem Code kennt ──
+
+    private static RumpfOrt OrtVon(JsonNode o, int? lambda = null) => new((string)o["datei"]!, (int)o["start"]!, (int)o["ende"]!, lambda);
+
+    private void RumpfGeste(RumpfOrt ort, string neu, string? alt)
+    {
+        var puffer = new Dateipuffer(_wurzel);
+        Rumpf.Ersetze(puffer, ort, neu, alt);
+        puffer.Speichern();
+    }
+
+    [Fact]
+    public async Task Rumpf_Edit_ersetzt_genau_den_Methodenrumpf()
+    {
+        var vorher = Text("Ausleihe.cs");
+        var dec = Karte(await BoardAsync(), "decider", d => (string?)d["command"] == "LeiheAus");
+
+        RumpfGeste(OrtVon(dec["_ort"]!), "yield return new BereitsAusgeliehen(befehl.AggregateId);", (string?)dec["rumpf"]);
+
+        var nachher = Text("Ausleihe.cs");
+        nachher.Should().Contain("Decide(LeiheAus befehl)\n            {\n                yield return new BereitsAusgeliehen(befehl.AggregateId);\n            }");
+        // Alles außerhalb des Rumpfs bleibt Wort für Wort — auch der zweite Decide.
+        var start = vorher.IndexOf("Decide(GibZurueck", StringComparison.Ordinal);
+        nachher.Should().EndWith(vorher[start..]);
+        nachher[..nachher.IndexOf("Decide(LeiheAus", StringComparison.Ordinal)].Should().Be(vorher[..vorher.IndexOf("Decide(LeiheAus", StringComparison.Ordinal)]);
+        (await BoardAsync())["decider"]!.AsArray().OfType<JsonObject>().Single(d => (string?)d["command"] == "LeiheAus")["rumpf"]!.GetValue<string>()
+            .Should().Be("yield return new BereitsAusgeliehen(befehl.AggregateId);");
+    }
+
+    [Fact]
+    public async Task Rumpf_Edit_behaelt_die_Prompt_Zeile()
+    {
+        var dec = Karte(await BoardAsync(), "decider", d => (string?)d["command"] == "LeiheAus");
+        RumpfGeste(OrtVon(dec["_ort"]!), "// 🤖 Prompt: nur einmal ausleihen\nyield break;", (string?)dec["rumpf"]);
+        var neu = Karte(await BoardAsync(), "decider", d => (string?)d["command"] == "LeiheAus");
+        RumpfGeste(OrtVon(neu["_ort"]!), "// 🤖 Prompt: nur einmal ausleihen\nyield break; // geprüft", (string?)neu["rumpf"]);
+        Text("Ausleihe.cs").Should().Contain("// 🤖 Prompt: nur einmal ausleihen\n                yield break; // geprüft");
+    }
+
+    [Fact]
+    public async Task Rumpf_Edit_eines_Fluss_Lambdas_ersetzt_nur_diesen_Lambda()
+    {
+        var fluss = Karte(await BoardAsync(), "fluesse", f => (string?)f["name"] == "RueckgabePruefung");
+        var mahnung = fluss["knoten"]!.AsArray().OfType<JsonObject>().First(k => (string?)k["name"] == "mahnung");
+
+        // Eingang 1 = das ∨ (Oder) — der zweite Lambda der Anweisung.
+        RumpfGeste(OrtVon(mahnung["_ort"]!, 1), "z => new EroeffneMahnung(Guid.Empty, 1m)", "z => new EroeffneMahnung(Guid.Empty, 0m)");
+
+        Text("Fluss.cs").Should().Contain(".Oder(schnell.BeiZeitlimit(), z => new EroeffneMahnung(Guid.Empty, 1m));")
+            .And.Contain(".Sende<EroeffneMahnung>((g, e) => new EroeffneMahnung(e.LeserId, g.Betrag))", "der Haupt-Lambda bleibt wortgetreu");
+    }
+
+    [Fact]
+    public async Task Rumpf_Edit_verweigert_wenn_der_Rumpf_inzwischen_anders_ist()
+    {
+        var dec = Karte(await BoardAsync(), "decider", d => (string?)d["command"] == "LeiheAus");
+        var act = () => RumpfGeste(OrtVon(dec["_ort"]!), "yield break;", "yield return new Ausgeliehen(befehl.Medium, befehl.LeserId, 99);");
+        act.Should().Throw<InvalidOperationException>().WithMessage("*inzwischen geändert*");
+        Text("Ausleihe.cs").Should().Contain("yield return new Ausgeliehen(befehl.Medium, befehl.LeserId, befehl.Tage);");
+    }
+
+    [Fact]
+    public async Task Store_Funktion_und_Funktion_kennen_den_Ort_ihres_Rumpfs_in_der_Implementierung()
+    {
+        var board = await BoardAsync();
+        var fn = (board["stores"] as JsonArray)!.OfType<JsonObject>().SelectMany(st => st["writeFns"]!.AsArray().OfType<JsonObject>())
+            .First(f => (string?)f["name"] == "SchreibeAsync");
+        var ort = OrtVon(fn["_rumpf"]!);
+        ort.Datei.Should().Be("Leihwesen/Lesen.cs");
+        Rumpf.Lies(Text("Lesen.cs"), ort).Should().Be((string?)fn["rumpf"]);
+    }
 }

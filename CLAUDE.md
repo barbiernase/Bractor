@@ -65,13 +65,13 @@ Bindung `AddFunktion<F, Impl>` + Boot-Guard; Editor: Funktions-Karte, „Dann ƒ
 Offen: Saga-DSL (Cqrs.Testing) und die Prozess-Simulation kennen `Rufe` noch nicht (im Fluss simuliert es; Python-Ausführer geliefert).
 
 **Logik-Element = EIN Muster (2026-10-11, `docs/konzept-domaenen-editor.md` §2 c′):** alles mit Logik ist ◀ Eingang · Ausgänge ▶ (OneOf) ·
-⚙ Fähigkeiten · Rumpf (📝 + optional 🤖) — Decide/Apply, Handles, Store-Fns, Funktion (Signatur nur auf ihrer Karte,
+⚙ Fähigkeiten · Rumpf (Ausschnitt aus der Datei, ✎ als Geste, „🤖 füllen“ als Aktion — seit P7.4 keine 📝/🤖-Karten) — Decide/Apply, Handles, Store-Fns, Funktion (Signatur nur auf ihrer Karte,
 Abgleich an Interface + Impl), Fluss-λ (`fluss|…`), Prozess-Regel-λ (`saga|Prozess|Regel#Verb`) und die **Zusage/Kenntnis des Akteurs
 draußen** (`zusage|Client|Event@Klasse`: Python-Rumpf der Client-Implementierung — `PythonClients`/`PythonQuelle`/`PythonSync`; neue
 Implementierung legt ⟳ nach dem Bauen aus der generierten Basis an). Akteur-Ableitung JS = C# auch über Flüsse.
 **Editor-Regel: deklariert wird nur an der eigenen Karte, zugewiesen nur per ⊕** — kein Zuweisungs-Dropdown, keine Typ-Definition in
 einem fremden Knoten (Funktion, Fluss-Knoten, Prozess-Kette, Akteur „bietet an", Konfig); „＋" in der Zeile legt eine neue Karte an + verbindet.
-Funktion auf der Fläche wie ein Decider (Auftrag → ƒ + 📝/🤖 → Ergebnisse). Bau-Argumente (Fluss-Eingang, Regel-Dann) im **visuellen
+Funktion auf der Fläche wie ein Decider (Auftrag → ƒ + Rumpf → Ergebnisse). Bau-Argumente (Fluss-Eingang, Regel-Dann) im **visuellen
 Zuordnungs-Editor** (Knoten + Drähte, `zoOeffne`; `docs/konzept-editor-pipelines.md` „Zuordnungs-Editor“), gespeichert als Argument-Liste.
 
 **Pipeline als Fluss (2026-10-07, kanonisch — `docs/konzept-editor-pipelines.md` §14):** eine Pipeline ist eine Fläche aus
@@ -129,13 +129,13 @@ gespeichertes Board und kein Zusammenführen mehr. Der Editor schickt das Karten
 `POST /api/werkbank/geste`; der Motor im Kern (`GraphExtractor.Kern/Schreiben/Gesten.cs`) stempelt die Herkunft aus dem Code-Stand, schreibt über
 Scaffolder/Abgleich, löscht an `_ort` + `_teile`; Umbenennen = Roslyn-Renamer (`/api/werkbank/umbenennen`, alle Verweise auch in Lambdas); ↶ =
 `.werkbank/verlauf.<branch>.json` (auch 🤖-Übernahmen). Danach liest der warme Workspace neu, Compiler-Befunde der berührten Dateien stehen sofort
-an der Karte. Die Ansicht (Positionen, Filter, 🤖-Knoten) liegt in `.werkbank/ansicht.json`. Nie auf `main`. Tests: `Extractor/GestenTests`.
+an der Karte. Die Ansicht (Positionen, Filter) liegt in `.werkbank/ansicht.json`. Nie auf `main`. Tests: `Extractor/GestenTests`.
 
 **Ableitungen nur auf dem Server (2026-10-12, Werkbank P7.3):** der Editor rechnet nichts mehr aus dem Board nach. `GraphExtractor.Kern/Sicht/`
 (`Sicht.Aus(board)`) liefert mit jedem Board `board.sicht`: je Karte (Editor-Id: `rec:`, `dec:`, `hd:prj:…`, `fs:` …) Domäne, Block, Rolle, Akteure,
 Akteur-Rahmen, Insel, Vertreter, Store-Scope, Mitgliedschaft, Tiefe; dazu Kanten, Prozess-Kette, Akteur-Reihenfolge, Fluss-Heimat, Client-Anschlussleisten,
 Ketten-Pfade. ⊕ fragt `POST /api/werkbank/passt` (Port + Kandidaten → passt/gesperrt mit Regel, Grammatik aus `rahmen.grammatik`), der Fokus
-`GET /api/werkbank/kette`. Im JS bleiben nur Nachschlagen + Ansichts-Wünsche; Code-Blöcke (📝/🤖) folgen ihrer Karte. `--check` prüft gegen die
+`GET /api/werkbank/kette`. Im JS bleiben nur Nachschlagen + Ansichts-Wünsche. `--check` prüft gegen die
 Server-Kartenliste („Code ohne Karte: 0“, leere Geste = kein Patch); die gezeichnete Sonde ist ein Gesten-Skript (`Sonde/Gezeichnet.gesten.json`).
 
 **Prüfen = Bauen, Code-Karte (2026-10-12, Werkbank P7.4):** Code-Karte als Gate — jede Typ-Deklaration oberster Ebene der Editor-Projekte liegt in der
@@ -148,6 +148,11 @@ des Extractors entfallen bis auf Info. Die Werkbank holt die eigenen Regeln (CQR
 (`Arbeitsbereich.RegelBefundeAsync`, unabhängig vom inkrementellen Bauen) und je Geste für die berührten Dateien; ein Befund hängt an der innersten
 Karte, deren `_ort` (Zeile bis `bis`) ihn enthält. **LLM-Prüfung (L18):** decide/apply/store/… und Fluss-/Regel-Lambdas probeweise im warmen
 Workspace (`Arbeitsbereich.PruefeProbeweiseAsync`: Datei mit Kandidat, Compiler + Analyzer des Projekts, nur neue Fehler) — `ProjektPruefung` entfällt.
+**Rumpf aus der Datei:** die 📝/🤖-Karten, `codeSrc`, Andocken, Code-Kanten, Code-Sync-Poll und `/api/editor/code|open` sind weg. Der Rumpf-Port zeigt den
+Rumpf so, wie der warme Workspace ihn liest (Board: `rumpf` + Ort — `_ort` der Methode, `_rumpf` bei Store-/Funktions-Implementierung, Anweisung + Lambda-Index
+bei Fluss-/Regel-Lambdas, Python-Anker der Client-Implementierung); wo der 📝-Block stand, steht eine abgeleitete Rumpf-Kachel (`rp:<Karte>:<i>`, dieselbe
+Lage). ✎ = Geste `POST /api/werkbank/rumpf` (`GraphExtractor.Kern/Schreiben/Rumpf.cs`: ersetzt genau den Methoden-Rumpf bzw. Lambda, Sperre gegen
+geänderten Text, Prompt-Zeile bleibt; Python über `PythonSync`, `.py` lässt das Board neu lesen); „🤖 füllen“ ist eine Aktion am Rumpf (LLM-Konsole).
 
 **Akteure, Verträge, Clients (2026-10-06):** Akteure mit Befugnis und Kette bis in den Event-Header; Akteur-Verträge (Zusagen
 draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer CommandId; Clients (`IClientVertrag`, n:m zu Akteuren) mit
@@ -229,7 +234,7 @@ NICHT Timeout-tunebar; xUnit schluckt App-Logs (Cluster-Diagnose → Last-Harnes
 - Build: `dotnet build`
 - Test (Logik, immer grün): `dotnet test Infrastructure.Pruefstand.Tests/Infrastructure.Pruefstand.Tests.csproj`
 - Integration (braucht Postgres/Consul/Redis, sequentiell): `dotnet test Infrastructure.Integration.Tests/Infrastructure.Integration.Tests.csproj`
-- Domänen-Editor + Simulation (einzige Oberfläche; **Ist-Stand** — Ziel: Werkbank ohne Simulationsschicht, `docs/konzept-werkbank.md`; ⟳ in der Kopfzeile baut und startet den echten Host in der gewählten Umgebung): `dotnet run --project SimHost` → http://localhost:5178/editor/ (SimHost lädt den Code selbst in den warmen Workspace und schreibt domain-model.json; die Oberfläche liegt statisch in `SimHost/wwwroot/editor/` — `index.html`, `editor.css`, `editor.js`); Palette = Anker (Aggregat · Fluss · Funktion · Quelle · Akteur · Client · Projektion), Trigger-Welt/LOD seit Werkbank-P0 nicht mehr im Editor; Bearbeiten nur im Panel: Karte anklicken, ⊕-Punkt im Panel → passende Knoten leuchten → anklicken = verbinden/lösen (`docs/konzept-editor-panel-bearbeitung.md`) — jede Änderung geht sofort als Geste in den Code, ↶ nimmt sie zurück; 🤖-LLM-Knoten am Code-Block = Chat: Prompt senden → `claude -p` (Abo, nie API) → geprüft → .cs geschrieben → Laufzeit-Projekt gebaut (alle Generatoren) → neu eingelesen (Konzept §12); Kontexte erzeugt SimHost selbst
+- Domänen-Editor + Simulation (einzige Oberfläche; **Ist-Stand** — Ziel: Werkbank ohne Simulationsschicht, `docs/konzept-werkbank.md`; ⟳ in der Kopfzeile baut und startet den echten Host in der gewählten Umgebung): `dotnet run --project SimHost` → http://localhost:5178/editor/ (SimHost lädt den Code selbst in den warmen Workspace und schreibt domain-model.json; die Oberfläche liegt statisch in `SimHost/wwwroot/editor/` — `index.html`, `editor.css`, `editor.js`); Palette = Anker (Aggregat · Fluss · Funktion · Quelle · Akteur · Client · Projektion), Trigger-Welt/LOD seit Werkbank-P0 nicht mehr im Editor; Bearbeiten nur im Panel: Karte anklicken, ⊕-Punkt im Panel → passende Knoten leuchten → anklicken = verbinden/lösen (`docs/konzept-editor-panel-bearbeitung.md`) — jede Änderung geht sofort als Geste in den Code, ↶ nimmt sie zurück; am Rumpf ✎ (Geste an der Spanne) bzw. „🤖 füllen“: Auftrag → `claude -p` (Abo, nie API) → im warmen Workspace geprüft → .cs geschrieben → Laufzeit-Projekt gebaut (alle Generatoren) → neu eingelesen (Konzept §12); Kontexte erzeugt SimHost selbst
 - Editor-Parität (Code ⇄ Extraktion ⇄ Server-Kartenliste, schreibt nichts): `dotnet run --project GraphExtractor -- --check`
 - Grammatik als Liste „Regel → Build-Gegenstück": `dotnet run --project GraphExtractor -- --grammatik`
 - Agnostik-Sonde (unbekannte Domäne im Speicher + Gesten-Skript gegen handgeschriebenes Soll + Fixpunkt): `dotnet run --project GraphExtractor -- --sonde`

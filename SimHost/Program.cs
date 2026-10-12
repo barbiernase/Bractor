@@ -81,6 +81,19 @@ app.MapPost("/api/werkbank/geste", async (System.Text.Json.Nodes.JsonObject b, C
 app.MapPost("/api/werkbank/umbenennen", async (System.Text.Json.Nodes.JsonObject b, CancellationToken ct) =>
     GestenErgebnis(await werkbank.Gesten.UmbenennenAsync((string?)b["titel"] ?? "Umbenennen", (string?)b["datei"] ?? "", (int?)b["start"] ?? -1,
         (string?)b["neu"] ?? "", ct)));
+// Rumpf-Edit (✎ am Rumpf-Port, P7.4): C# = Ort aus dem Board (_rumpf bzw. _ort + Lambda-Index), Python = Anker der Client-Implementierung.
+app.MapPost("/api/werkbank/rumpf", async (System.Text.Json.Nodes.JsonObject b, CancellationToken ct) =>
+{
+    var titel = (string?)b["titel"] ?? "✎ Rumpf";
+    var text = (string?)b["text"] ?? "";
+    var alt = (string?)b["alt"];
+    if (b["python"] is System.Text.Json.Nodes.JsonObject py)
+        return GestenErgebnis(await werkbank.Gesten.PythonRumpfAsync(titel, new SimHost.PythonAnker((string?)py["datei"] ?? "", (string?)py["klasse"] ?? "",
+            (string?)py["methode"] ?? "", (string?)py["signatur"]), text, alt, ct));
+    var o = b["ort"] as System.Text.Json.Nodes.JsonObject;
+    return GestenErgebnis(await werkbank.Gesten.RumpfAsync(titel, new GraphExtractor.RumpfOrt((string?)o?["datei"] ?? "", (int?)o?["start"] ?? -1,
+        (int?)o?["ende"] ?? -1, (int?)o?["lambda"]), text, alt, ct));
+});
 app.MapPost("/api/werkbank/rueckgaengig", async (CancellationToken ct) => GestenErgebnis(await werkbank.Gesten.RueckgaengigAsync(ct)));
 app.MapGet("/api/werkbank/verlauf", () => Results.Json(werkbank.Gesten.Verlauf.Liste(), gestenJson));
 app.MapGet("/api/werkbank/gesten", () => Results.Json(werkbank.Gesten.Messungen(), gestenJson));
@@ -170,27 +183,6 @@ var konsole = new LlmKonsole(slnRoot, simulation, werkbank.Arbeitsbereich);
 // Eine 🤖-Übernahme ist ein Patch wie jede Geste — derselbe ↶-Stapel.
 konsole.Gesichert = (titel, patch) => werkbank.Gesten.Verlauf.Merke("llm", titel, patch);
 konsole.ErzeugeKontexteFallsFehlend();
-static CodeAnker Anker(JsonElement b) => new(
-    b.GetProperty("kind").GetString() ?? "decider",
-    b.GetProperty("namespace").GetString() ?? "",
-    b.GetProperty("disc").GetString() ?? "",
-    b.TryGetProperty("datei", out var d) ? d.GetString() : null);
-
-// „✎ Im Editor öffnen“ — SimHost öffnet die echte Datei im Standard-Editor (VS Code, Sprung zur Rumpfzeile).
-app.MapPost("/api/editor/open", (JsonElement b) => Results.Json(CodeSync.Oeffne(Anker(b), slnRoot)));
-
-// Spiegel (Datei → Browser): aktuellen Rumpf + Prompt + Hash lesen. Polling dieses Endpunkts = das Double-Binding.
-app.MapGet("/api/editor/code", (string kind, string @namespace, string disc, string? datei) =>
-    Results.Json(CodeSync.Lese(new CodeAnker(kind, @namespace, disc, datei), slnRoot)));
-
-// Browser → Datei: NUR die Prompt-Kommentarzeile setzen (optimistische Sperre via baseHash).
-app.MapPost("/api/editor/code", (JsonElement b) =>
-{
-    var prompt = b.TryGetProperty("prompt", out var p) ? p.GetString() : null;
-    var baseHash = b.TryGetProperty("baseHash", out var h) ? h.GetString() : null;
-    return Results.Json(CodeSync.SetzePrompt(Anker(b), prompt, baseHash, slnRoot));
-});
-
 // Neu einlesen: der warme Workspace liest den aktuellen Code (Code = Wahrheit; der Browser merged). Die LLM-Kontexte zieht die Konsole
 //   danach im Hintergrund nach (GraphExtractor --kontexte, kalt).
 app.MapPost("/api/editor/extract", async (CancellationToken ct) =>

@@ -654,7 +654,12 @@ public static class ModellMapper
                 var haupt = TypOrt(full, (string?)k["datei"]);
                 k["_ort"] = OrtJson(dom, haupt);
                 var weitere = new List<string> { full };
-                if (sammlung == "funktionen" && funktionVon.GetValueOrDefault(full)?.ImplFull is { } impl) weitere.Add(impl);
+                if (sammlung == "funktionen" && funktionVon.GetValueOrDefault(full) is { ImplFull: { } impl } fraw)
+                {
+                    weitere.Add(impl);
+                    // Rumpf-Edit (Werkbank P7.4): der Rumpf der Funktion steht in der RufeAsync-Methode ihrer Implementierung.
+                    if (OrtJson(dom, fraw.ImplOrt) is { } ro) k["_rumpf"] = ro;
+                }
                 if (sammlung == "akteure" && akteurVon.TryGetValue(full, out var ak)) weitere.AddRange(ak.VertragTypen);
                 // Die Implementierung eines Stores gehört zu seiner Karte (wie bei Funktionen).
                 if (sammlung == "stores" && storeVon.GetValueOrDefault(full) is { } st)
@@ -662,7 +667,11 @@ public static class ModellMapper
                     if (st.Impl is { } si) weitere.Add(si.Ns + "." + si.Name);
                     // Eine Store-Funktion steht an ihrer Fähigkeit (Interface mit genau dieser Funktion, CQRS051).
                     foreach (var fn in Alle(k["writeFns"]).Concat(Alle(k["readFns"])))
-                        if (st.Fns.FirstOrDefault(x => x.Faehigkeit == S(fn, "faehigkeit")) is { } fr) fn["_ort"] = OrtJson(dom, TypOrt(fr.FaehigkeitFull, null));
+                        if (st.Fns.FirstOrDefault(x => x.Faehigkeit == S(fn, "faehigkeit")) is { } fr)
+                        {
+                            fn["_ort"] = OrtJson(dom, TypOrt(fr.FaehigkeitFull, null));
+                            if (OrtJson(dom, fr.BodyOrt) is { } ro) fn["_rumpf"] = ro;   // der Rumpf steht in der Implementierung
+                        }
                 }
                 Teile(k, haupt, weitere);
             }

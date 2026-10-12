@@ -237,8 +237,7 @@
 #de .gnode2.n-reader{border-color:#7a5cc0;width:274px}
 #de .gnode2.n-query{border-color:#3b6fb0}
 #de .gnode2.n-queryresponse{border-color:#2f8f7d}
-#de .gnode2.n-codenode{border-color:#6b7280;width:300px}
-#de .gnode2.n-llmnode{border-color:#8a6fc8;width:280px}
+#de .gnode2.n-rumpf{border-color:#6b7280;width:300px}
 #de .gnode2.collapsed .gbody{display:none}
 #de .ghead{display:flex;align-items:center;gap:6px;padding:5px 9px;border-radius:8px 8px 0 0;cursor:grab;color:#0d0f14;font-weight:700;font-size:12px;user-select:none;touch-action:none}
 #de .gnode2.n-command .ghead{background:#5b8fd0}
@@ -279,8 +278,7 @@
 #de .gnode2.n-reader .ghead{background:#9678d6}
 #de .gnode2.n-query .ghead{background:#5b8fd0}
 #de .gnode2.n-queryresponse .ghead{background:#49a996}
-#de .gnode2.n-codenode .ghead{background:#9aa0aa}
-#de .gnode2.n-llmnode .ghead{background:#a48fd6}
+#de .gnode2.n-rumpf .ghead{background:#9aa0aa}
 #de .ghead .gtitle{flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-family:ui-monospace,monospace}
 #de .ghead .gcol{cursor:pointer;opacity:.8;padding:0 2px;font-size:11px}
 #de .ghead .gcol:hover{opacity:1}
@@ -523,7 +521,7 @@
 #de .kc-applier{background:#d0a35a}#de .kc-handle{background:#5d8fbf}#de .kc-fn{background:#2f9d95}#de .kc-saga{background:#9d78d6}#de .kc-transition{background:#a48fd6}#de .kc-state{background:#d4b45f}
 #de .kc-readmodel{background:#d0a45a}#de .kc-store{background:#3fb0a6}#de .kc-projektion{background:#57b673}#de .kc-reaktion{background:#d0885a}
 #de .kc-pipeline{background:#e08a44}#de .kc-trigger{background:#d29a4a}#de .kc-reader{background:#9678d6}#de .kc-query{background:#5b8fd0}
-#de .kc-queryresponse{background:#49a996}#de .kc-codenode{background:#9aa0aa}#de .kc-llmnode{background:#a48fd6}
+#de .kc-queryresponse{background:#49a996}#de .kc-rumpf{background:#9aa0aa}
 #de .kc-frist,#de .kc-dienst,#de .kc-hostsetting{background:#c9a24b}
 #de .kc-akteur{background:#e07ab4}#de .kc-auf{background:#eaa0c9}
 /* Semantischer Zoom: Landkarte (<0.4) · Ablauf (<0.75) · Detail */
@@ -676,3 +674,4 @@
 #de .sp-punkt.spaeter{opacity:.25}
 #de .sp-punkt.an{outline:2px solid #fff}
 #de .sp-meld{display:flex;flex-direction:column;gap:3px;width:100%}
+#de .rumpfport{margin:2px 0 6px;padding:2px 0;border-left:2px solid #2a3446;padding-left:6px}

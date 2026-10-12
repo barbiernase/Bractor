@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using DomainEditor;
 using GraphExtractor;
 
 namespace SimHost.Werkbank;
@@ -71,6 +72,36 @@ public sealed class GestenDienst(string slnRoot, Arbeitsbereich arbeitsbereich, 
         var (patch, alt) = await Umbenennen.Async(stand, Path.GetFullPath(Path.Combine(slnRoot, datei)), start, neu, slnRoot, ct);
         foreach (var p in patch) File.WriteAllText(Path.Combine(slnRoot, p.Datei), p.Nachher!);
         return (patch, patch.Count == 0 ? [$"„{alt}“ heißt schon so"] : new List<string>());
+    }, ct);
+
+    /// <summary>
+    /// Rumpf-Edit (✎ am Rumpf-Port, Werkbank P7.4): genau den Rumpf einer Methode bzw. einen Lambda an seinem Ort ersetzen — der Rest der Datei
+    /// bleibt Wort für Wort. <paramref name="alt"/> = der Rumpf, wie ihn der Editor zeigte (Sperre gegen eine inzwischen geänderte Datei).
+    /// </summary>
+    public Task<GestenAntwort> RumpfAsync(string titel, RumpfOrt ort, string text, string? alt, CancellationToken ct) => AusfuehrenAsync("rumpf", titel, () =>
+    {
+        var puffer = new Dateipuffer(slnRoot);
+        if (!puffer.Innerhalb(ort.Datei)) throw new InvalidOperationException("Pfad liegt außerhalb der Solution.");
+        Rumpf.Ersetze(puffer, ort, text, alt);
+        puffer.Speichern();
+        return Task.FromResult((puffer.Patch(), new List<string>()));
+    }, ct);
+
+    /// <summary>Rumpf-Edit eines Python-Rumpfs (Zusage/Kenntnis einer Client-Implementierung) — über <see cref="PythonSync"/>.</summary>
+    public Task<GestenAntwort> PythonRumpfAsync(string titel, PythonAnker anker, string text, string? alt, CancellationToken ct) => AusfuehrenAsync("rumpf", titel, () =>
+    {
+        var puffer = new Dateipuffer(slnRoot);
+        if (!puffer.Innerhalb(anker.Datei)) throw new InvalidOperationException("Pfad liegt außerhalb der Solution.");
+        var vorher = puffer.Lies(anker.Datei) ?? throw new InvalidOperationException($"Datei fehlt: {anker.Datei}");
+        static string Norm(string? x) => System.Text.RegularExpressions.Regex.Replace(string.Join("\n", (x ?? "").Split('\n')
+            .Where(z => !z.TrimStart().StartsWith(PythonSync.PromptMarke, StringComparison.Ordinal))), @"\s+", " ").Trim();
+        if (alt != null && Norm(PythonQuelle.Rumpf(vorher, anker.Klasse, anker.Methode)) != Norm(alt))
+            throw new InvalidOperationException($"Der Rumpf in {anker.Datei} wurde inzwischen geändert — neu laden.");
+        var (ok, grund, neu) = PythonSync.MitRumpf(anker, text, null, slnRoot);
+        if (!ok) throw new InvalidOperationException(grund);
+        puffer.Setze(anker.Datei, neu!);
+        puffer.Speichern();
+        return Task.FromResult((puffer.Patch(), new List<string>()));
     }, ct);
 
     /// <summary>↶ — den letzten Patch zurücknehmen (Geste oder LLM-Übernahme).</summary>

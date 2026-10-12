@@ -164,6 +164,8 @@ public sealed class FunktionRaw
     public string Name = "", Full = "", Namespace = "";
     /// <summary>Die C#-Implementierung (Klasse, einfacher Name) und ihr RufeAsync-Rumpf — null, wenn es (noch) keine gibt.</summary>
     public string? ImplKlasse, ImplRumpf, ImplFull;
+    /// <summary>Die Methode der Implementierung, deren Rumpf <see cref="ImplRumpf"/> ist (Rumpf-Edit, Werkbank P7.4).</summary>
+    public Ort? ImplOrt;
     /// <summary>Die Datei, in der <c>RufeAsync</c> der Implementierung steht (bei partial: die Teil-Datei der Methode).</summary>
     public string? ImplDatei;
     public string AuftragFull = "";
@@ -428,6 +430,8 @@ public sealed class StoreFnRaw
     public string RueckgabeVoll = "Task";
     public List<(string Typ, string Name, string? Standard)> ParamsVoll = new();
     public string? FaehigkeitNamespace, FaehigkeitDatei, FaehigkeitDoku;
+    /// <summary>Die Methode der Implementierung, deren Rumpf <see cref="Body"/> ist (Rumpf-Edit, Werkbank P7.4).</summary>
+    public Ort? BodyOrt;
 }
 
 /// <summary>
@@ -796,6 +800,7 @@ public sealed partial class DomainExtractor
             f.ImplFull = impl.Fq();
             var im = Sym.Implementierung(impl, methode) as IMethodSymbol;
             f.ImplRumpf = im is null ? null : MethodBody(im);
+            f.ImplOrt = im?.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is MethodDeclarationSyntax imd ? Ort.Von(imd) : null;
             f.ImplDatei = (im?.DeclaringSyntaxReferences ?? impl.DeclaringSyntaxReferences).FirstOrDefault()?.SyntaxTree.FilePath;
         }
     }
@@ -1037,7 +1042,10 @@ public sealed partial class DomainExtractor
                 foreach (var impl in impls)
                     if ((fn.Body == null || IstRegistriert(impl))
                         && Sym.Implementierung(impl, im) is IMethodSymbol implM && MethodBody(implM) is { } body)
+                    {
                         fn.Body = body;
+                        fn.BodyOrt = implM.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is MethodDeclarationSyntax bd ? Ort.Von(bd) : null;
+                    }
                 store.Fns.Add(fn);
                 _faehigkeiten[f.Fq()] = (store.Name, im.Name, isRead);
             }
