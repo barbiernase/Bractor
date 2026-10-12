@@ -112,6 +112,24 @@ public class PipelineFlussE2ETests
                 "Der Dirigent hat den Vorgang nicht beendet.");
             (await es.ReadStreamAsync(korrelation, 0, default)).Select(e => e.Payload).OfType<ProzessBeendet>().Single().Erfolg.Should().BeTrue();
 
+            // Spur (Werkbank P4): von BildVerfuegbar läuft eine lückenlose Ursache-Kette über Funktionen und Commands bis zur Quelle;
+            //   jeder Eintrag trägt seinen Wirker (die Karte im Editor) — gelesen aus den Headern des echten Logs.
+            var bildEnv = stream.Single(e => e.Payload is BildVerfuegbar);
+            bildEnv.Wirker.Should().Be("decide:ImagePair/MeldeBildVerfuegbar");
+            var kette = new List<EventEnvelope> { bildEnv };
+            var schritt = bildEnv;
+            while (schritt.Ursache is { } ursache && kette.Count < 20)
+            {
+                Spur.ZerlegeUrsache(ursache, out var s, out var v).Should().BeTrue($"'{ursache}' ist eine Ursache");
+                schritt = (await es.ReadStreamAsync(s, (int)v, default)).First(e => e.AggregateVersion == v);
+                kette.Add(schritt);
+            }
+            schritt.Payload.Should().BeOfType<DateiErkannt>("die Kette endet an der Quelle: " + string.Join(" ← ", kette.Select(e => e.Wirker)));
+            schritt.AggregateId.Should().Be(vorgang);
+            schritt.Wirker.Should().Be("quelle:DateiErkannt");
+            kette.Should().OnlyContain(e => e.Wirker != null);
+            kette.Select(e => e.Wirker).Should().Contain(w => w!.StartsWith("funktion:"), "die Kette führt über mindestens eine Funktion");
+
             var marten = host.Services.GetRequiredService<IDocumentStore>();
             await using var session = marten.QuerySession();
             var typen = (await session.Events.QueryAllRawEvents().Where(e => e.Timestamp > DateTimeOffset.UtcNow.AddMinutes(-5)).ToListAsync())

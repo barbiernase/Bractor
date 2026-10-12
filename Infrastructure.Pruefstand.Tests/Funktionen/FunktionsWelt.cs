@@ -95,6 +95,8 @@ internal sealed class LogImSpeicher : IEventStoreRepository
                     AggregateId = aggregateId, AggregateVersion = stream.Count + 1, Payload = e,
                     CausationId = causationId ?? Guid.NewGuid().ToString(), CorrelationId = correlationId ?? Guid.NewGuid().ToString(),
                     AggregateType = aggregateType ?? "", UserId = akteur ?? "system", CreatedAtUtc = Jetzt,
+                    // Spur wie der echte Store (SpurHeader): aus dem Schritt, der gerade schreibt.
+                    Ursache = Spur.Aktuell?.Ursache, Wirker = Spur.Aktuell?.Wirker, Stand = Spur.Stand,
                 });
             return Task.CompletedTask;
         }
@@ -166,7 +168,12 @@ internal sealed class FunktionsWelt
         if (umRufe is not null) rufe = umRufe(rufe);
 
         Manager = new ProzessManager(Log,
-            new Dictionary<string, ProzessRegeln> { [nameof(BildAufbereitung)] = new BildAufbereitung(limit, mitKompensation).Regeln },
+            new Dictionary<string, ProzessRegeln>
+            {
+                // Benannt wie die generierte Registry (ProzessRegelnGenerator) — die Namen tragen die Wirker-Ids der Spur.
+                [nameof(BildAufbereitung)] = new BildAufbereitung(limit, mitKompensation).Regeln.Benannt(nameof(BildAufbereitung),
+                    "BildEingegangen→IVorverarbeitung", "BildEingegangen→IMetadaten", "Vorverarbeitet+MetaGelesen→MeldeFertig", "Unlesbar→MeldeUnbrauchbar"),
+            },
             DispatchAsync, markingStore: mitCursor ? new MarkingImSpeicher() : null, markingSchreibIntervall: 1,
             rufe: rufe, jetzt: _ => Task.FromResult(Log.Jetzt));
     }
@@ -186,8 +193,12 @@ internal sealed class FunktionsWelt
                 RaeumeVorschauAuf r => new IEvent[] { new VorschauAufgeraeumt(r.Vorschau), new KommandoVerarbeitet(vorgang) },
                 _ => throw new NotSupportedException(cmd.GetType().Name),
             };
-        await Log.AppendEventsAsync(cmd.AggregateId, stream.Count, evs, korrelation.ToString(), vorgang.ToString(), "Bildakte");
+        // Wie AggregateActorBase: die Events schreibt decide:<Aggregat>/<Command>, die Ursache kommt vom Absender (hier der Fluss-Kontext).
+        using (Spur.Von(null, WirkerId.FuerDecide("Bildakte", cmd.GetType().Name)))
+            await Log.AppendEventsAsync(cmd.AggregateId, stream.Count, evs, korrelation.ToString(), vorgang.ToString(), "Bildakte");
     }
+
+    public Guid AuslöserStream => _auslöserStream;
 
     /// <summary>Startet den Prozess mit einem Bild.</summary>
     public async Task StarteAsync(string pfad = "bild.tiff")

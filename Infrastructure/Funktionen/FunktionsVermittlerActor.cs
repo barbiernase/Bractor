@@ -127,7 +127,7 @@ public static class FunktionsAnbieter
         try
         {
             await system.Cluster().RequestAsync<WakeAck>(FunktionsVermittlerActor.Identitaet(funktion),
-                new AuftragAnbieten(vorgang, korrelation, akteur, auftrag), cts.Token);
+                new AuftragAnbieten(vorgang, korrelation, akteur, auftrag, Spur.Aktuell?.Ursache), cts.Token);
         }
         catch (Exception ex) when (ex is OperationCanceledException or TimeoutException)
         { /* der Dirigent bietet bei der nächsten Weckung erneut an (Backstop) */ }
@@ -216,7 +216,8 @@ public sealed class FunktionsAbholer : BackgroundService
         });
         try
         {
-            await _ausfuehrer.FuehreAusAsync(a.Korrelation, a.Auftrag, a.Vorgang, a.Akteur, ct);
+            using (Spur.Von(a.Ursache, null))
+                await _ausfuehrer.FuehreAusAsync(a.Korrelation, a.Auftrag, a.Vorgang, a.Akteur, ct);
             await MeldeAsync(identitaet, new ArbeitErledigt(a.Vorgang));
         }
         catch (Exception ex)

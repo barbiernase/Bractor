@@ -576,7 +576,12 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 // Im Namen des Akteurs, dessen getragener Vertrag diese Antwort vorsieht (ein Client kann mehrere Akteure tragen).
                 if (sitzung.Vertrag is { } v2 && MessageTypeMapping.Resolve(c.CausationType).Type is { } ausl)
                     envelope = envelope with { UserId = v2.AkteurFuerZusage(ausl, cmdTyp) };
+                // Spur: die Zusage antwortet auf ein Event im Log — das ist die Ursache ihres Commands.
+                envelope = envelope with { Ursache = Spur.Ursache(ursache, c.CausationVersion) };
             }
+            // Spur: von außen schreibt der Akteur (Wirker akteur:<A>); ohne Akteur bleibt der Wirker leer.
+            if (ImAuftrag.IstAkteur(envelope.UserId))
+                envelope = envelope with { Wirker = WirkerId.FuerAkteur(envelope.UserId) };
 
             _logger.LogDebug("{Session} Command {Command} → {AggregateType} ({Modus}), CorrelationId {CorrelationId}",
                 sessionId, envelope.Payload.GetType().Name, envelope.AggregateType,

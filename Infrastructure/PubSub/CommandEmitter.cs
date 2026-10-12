@@ -84,6 +84,9 @@ public sealed class CommandEmitter : ICommandEmitter
             // Akteur (docs/konzept-akteure.md §5.1): der der Kette bzw. des Akteur-Dienstes (ImAuftrag, vom Konsumenten/Dispatch
             //   gesetzt); ohne Kette der eine Akteur, der den Command per IDarf darf; sonst keiner („system").
             UserId = ImAuftrag.Akteur ?? Infrastructure.Akteure.AkteurHerkunft.EindeutigerHalter(cmd.GetType()) ?? ImAuftrag.Ohne,
+            // Spur: der auslösende Log-Eintrag und der absendende Baustein — das Aggregat stempelt die Ursache an seine Events.
+            Ursache = Spur.Aktuell?.Ursache,
+            Wirker = Spur.Aktuell?.Wirker,
         };
         var identity = ClusterIdentity.Create(cmd.AggregateId.ToString(), aggregateType);
 

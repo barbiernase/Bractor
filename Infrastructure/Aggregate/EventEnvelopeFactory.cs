@@ -24,7 +24,8 @@ public static class EventEnvelopeFactory
         string correlationId,
         string causationId,
         string userId,
-        int streamHeadVersion = 0)
+        int streamHeadVersion = 0,
+        Spur.Kopf? spur = null)
     {
         var result = new List<EventEnvelope>(events.Count);
         for (int i = 0; i < events.Count; i++)
@@ -40,6 +41,9 @@ public static class EventEnvelopeFactory
                 CorrelationId    = correlationId,
                 CausationId      = causationId,
                 UserId           = userId,
+                Ursache          = spur?.Ursache,
+                Wirker           = spur?.Wirker,
+                Stand            = Spur.Stand,
                 Payload          = events[i]
                 // TargetSubscriberId bleibt null = Broadcast
             });

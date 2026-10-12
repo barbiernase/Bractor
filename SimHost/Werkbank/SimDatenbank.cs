@@ -10,7 +10,8 @@ namespace SimHost.Werkbank;
 /// Verbindungen) — das ordnet der Aufrufer an.
 /// <para>
 /// Der Stand der Daten liegt IN der Datenbank (Tabelle <c>&lt;schema&gt;.stand</c>, Schlüssel → Wert): <c>proto</c> = das <c>domain.proto</c>,
-/// mit dem die Events geschrieben wurden (Werkbank), <c>projektion:&lt;Id&gt;</c> = Code-Hash je Projektion (Host). Damit reist er mit jedem
+/// mit dem die Events geschrieben wurden, und <c>code</c> = Build-Stand (beide vom Host beim Start), <c>projektion:&lt;Id&gt;</c> = Code-Hash je
+/// Projektion (Host). Damit reist er mit jedem
 /// gespeicherten Stand mit und verschwindet mit einem Zurücksetzen.
 /// </para>
 /// </summary>
@@ -112,12 +113,18 @@ public sealed class SimDatenbank
         await using var c = new NpgsqlConnection(Verbindung(sim, sim.EventStore.Datenbank));
         await c.OpenAsync(ct);
         await using var cmd = c.CreateCommand();
-        // Siegel, Uhr und Stand der Herkunft weg (auch wenn es sie dort nie gab): der Host siegelt beim Start auf Sim, die Uhr steht auf 0,
-        // und ohne Stand baut er die Leseseite aus dem Log neu auf — die Read-Models der Prod-DB stammen womöglich von anderem Code.
+        // Siegel und Uhr der Herkunft weg (auch wenn es sie dort nie gab): der Host siegelt beim Start auf Sim, die Uhr steht auf 0.
+        // Vom Stand bleibt nur das Proto der Herkunft (der Prod-Host schreibt es beim Start) — „Daten prüfen“ vergleicht es vor dem
+        // nächsten Start mit dem Code. Ohne Projektions-Hashes baut der Host die Leseseite aus dem Log neu auf (die Read-Models der Prod-DB
+        // stammen womöglich von anderem Code).
         cmd.CommandText = $"""
             drop table if exists "{schema}".umgebung;
             drop table if exists "{schema}".uhr;
-            drop table if exists "{schema}".stand;
+            do $$ begin
+              if to_regclass('"{schema}".stand') is not null then
+                delete from "{schema}".stand where schluessel <> '{ProtoSchluessel}';
+              end if;
+            end $$;
             """;
         await cmd.ExecuteNonQueryAsync(ct);
         return [$"Prod-Stand aus {prod.EventStore.Datenbank} übernommen ({r.Dauer.TotalSeconds:0.0} s) — der Host siegelt beim Start auf Sim"];
@@ -160,21 +167,6 @@ public sealed class SimDatenbank
         cmd.Parameters.AddWithValue("k", schluessel);
         try { return await cmd.ExecuteScalarAsync() as string; }
         catch (PostgresException e) when (e.SqlState is "42P01" or "3F000") { return null; }   // Tabelle/Schema fehlt
-    }
-
-    public async Task SchreibeAsync(UmgebungKonfig u, string schluessel, string wert)
-    {
-        await using var c = new NpgsqlConnection(Verbindung(u, u.EventStore.Datenbank));
-        await c.OpenAsync();
-        await using var cmd = c.CreateCommand();
-        cmd.CommandText = $"""
-            create schema if not exists "{u.EventStore.Schema}";
-            create table if not exists "{u.EventStore.Schema}".stand (schluessel text primary key, wert text not null);
-            insert into "{u.EventStore.Schema}".stand (schluessel, wert) values (@k, @w) on conflict (schluessel) do update set wert = excluded.wert;
-            """;
-        cmd.Parameters.AddWithValue("k", schluessel);
-        cmd.Parameters.AddWithValue("w", wert);
-        await cmd.ExecuteNonQueryAsync();
     }
 
     /// <summary>Der Versatz der DB-Uhr (§4.4; nur Sim). null: die DB ist noch nicht angelegt.</summary>

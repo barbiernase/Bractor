@@ -29,6 +29,13 @@ public record CommandEnvelope : IAggregateEnvelope, IWireMessage
     /// </summary>
     public string? OriginSessionId { get; init; }
 
+    /// <summary>Spur (<see cref="Spur"/>): der Log-Eintrag, der diesen Command ausgelöst hat (<c>Stream:Version</c>) — das Aggregat
+    /// stempelt ihn als Ursache an seine Events. Null: von außen (Akteur), ohne Vorgänger im Log.</summary>
+    public string? Ursache { get; init; }
+
+    /// <summary>Spur: der Baustein, der den Command abgeschickt hat (Wirker-Id) — für Hinweise wie Ablehnungen.</summary>
+    public string? Wirker { get; init; }
+
     // Explizite Interface-Implementierung
     Guid IMessageEnvelope.MessageId => CommandId;
     IMessagePayload IMessageEnvelope.Payload => Payload;
@@ -69,6 +76,15 @@ public record EventEnvelope : IEventEnvelope, IWireMessage
     /// Wenn null: Event wird an alle Subscriber gesendet (Broadcast).
     /// </summary>
     public string? TargetSubscriberId { get; init; }
+
+    /// <summary>Spur (<see cref="Spur"/>): der auslösende Log-Eintrag (<c>Stream:Version</c>); null = Wurzel (von außen).</summary>
+    public string? Ursache { get; init; }
+
+    /// <summary>Spur: der Baustein, der dieses Event geschrieben hat (Wirker-Id = Karte im Editor).</summary>
+    public string? Wirker { get; init; }
+
+    /// <summary>Spur: der Build-Stand, unter dem es geschrieben wurde.</summary>
+    public string? Stand { get; init; }
 
     // Explizite Interface-Implementierung
     Guid IMessageEnvelope.MessageId => EventId;

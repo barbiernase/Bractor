@@ -39,6 +39,7 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
         public string? Caus;
         public string? AggType;
         public string? Akteur;
+        public Spur.Kopf? SpurKopf;
         // RunContinuationsAsynchronously: die Actor-Fortsetzung darf NICHT inline auf dem Flush-Loop-Thread
         // laufen (sonst serialisiert der Loop hinter Actor-Arbeit und der Group-Commit verpufft).
         public readonly TaskCompletionSource Tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -102,7 +103,9 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
             Corr = correlationId,
             Caus = causationId,
             AggType = aggregateType,
-            Akteur = akteur
+            Akteur = akteur,
+            // Die Spur des Aufrufers jetzt festhalten — geschrieben wird in der Drain-Schleife (anderer Fluss).
+            SpurKopf = Spur.Aktuell
         };
 
         if (!_channel.Writer.TryWrite(p))
@@ -161,7 +164,7 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
         for (var i = 0; i < batch.Count; i++)
         {
             var p = batch[i];
-            appends[i] = new BatchAppend(p.StreamId, p.ExpectedVersion, p.Events, p.Corr, p.Caus, p.AggType, p.Akteur);
+            appends[i] = new BatchAppend(p.StreamId, p.ExpectedVersion, p.Events, p.Corr, p.Caus, p.AggType, p.Akteur, p.SpurKopf);
         }
 
         try
@@ -185,8 +188,9 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
         {
             try
             {
-                await _inner.AppendEventsAsync(p.StreamId, p.ExpectedVersion, p.Events, p.Corr, p.Caus, p.AggType, p.Akteur)
-                    .ConfigureAwait(false);
+                using (Spur.Von(p.SpurKopf?.Ursache, p.SpurKopf?.Wirker))
+                    await _inner.AppendEventsAsync(p.StreamId, p.ExpectedVersion, p.Events, p.Corr, p.Caus, p.AggType, p.Akteur)
+                        .ConfigureAwait(false);
                 p.Tcs.TrySetResult();
             }
             catch (Exception ex)

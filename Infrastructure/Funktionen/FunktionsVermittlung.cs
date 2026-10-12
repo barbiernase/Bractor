@@ -13,7 +13,7 @@ namespace Infrastructure.Funktionen;
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
 /// <summary>Ein angebotener Auftrag: wer ihn will (Korrelation des Vorgangs), seine Ausführungs-Id (Vorgang) und der Inhalt.</summary>
-public sealed record AuftragAnbieten(Guid Vorgang, Guid Korrelation, string? Akteur, IAuftrag Auftrag) : IWireMessage;
+public sealed record AuftragAnbieten(Guid Vorgang, Guid Korrelation, string? Akteur, IAuftrag Auftrag, string? Ursache = null) : IWireMessage;
 
 /// <summary>Ein Ausführer holt bis zu <paramref name="Max"/> Aufträge; ist keiner da, wartet die Anfrage bis zu <paramref name="WarteMs"/>.</summary>
 public sealed record HoleArbeit(string Arbeiter, int Max, int WarteMs) : IWireMessage;

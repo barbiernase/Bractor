@@ -67,7 +67,40 @@ public sealed class UmgebungsSiegel(UmgebungKonfig umgebung) : IHostedService
             cmd.CommandText = $"update \"{schema}\".uhr set versatz = interval '0' where id = 1";
             await cmd.ExecuteNonQueryAsync(ct);
         }
-        Console.WriteLine($"[CQRS] Umgebung {erwartet.Name} ({erwartet.Art}) · DB {umgebung.EventStore.Datenbank} · Cluster {erwartet.Cluster} — Siegel ok");
+        await SchreibeLaufstandAsync(conn, schema, ct);
+        Console.WriteLine($"[CQRS] Umgebung {erwartet.Name} ({erwartet.Art}) · DB {umgebung.EventStore.Datenbank} · Cluster {erwartet.Cluster} — Siegel ok"
+            + (Spur.Stand is { } st ? $" · Stand {st}" : ""));
+    }
+
+    /// <summary>Schlüssel in <c>&lt;schema&gt;.stand</c>: das <c>domain.proto</c> und der Build-Stand des Hosts, der zuletzt startete.</summary>
+    public const string ProtoSchluessel = "proto", CodeSchluessel = "code";
+
+    /// <summary>
+    /// Der Host schreibt beim Start — in JEDER Umgebung — seinen Proto-Stand (aus dem Build eingebettet) und seinen Build-Stand in
+    /// <c>&lt;schema&gt;.stand</c>. So kennt ein übernommener Prod-Stand seine Herkunft, und die Werkbank prüft vor dem nächsten Start, ob die
+    /// gespeicherten Events zum neuen Code passen (Werkbank „Daten prüfen“).
+    /// </summary>
+    private static async Task SchreibeLaufstandAsync(NpgsqlConnection conn, string schema, CancellationToken ct)
+    {
+        string? proto = null;
+        await using (var res = System.Reflection.Assembly.GetEntryAssembly()?.GetManifestResourceStream("cqrs/domain.proto"))
+            if (res != null)
+                using (var leser = new StreamReader(res))
+                    proto = await leser.ReadToEndAsync(ct);
+        if (proto == null && Spur.Stand == null) return;
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"""
+            create table if not exists "{schema}".stand (schluessel text primary key, wert text not null);
+            insert into "{schema}".stand (schluessel, wert) select k, w from (values (@pk, @p), (@ck, @c)) as v(k, w) where w is not null
+              on conflict (schluessel) do update set wert = excluded.wert;
+            """;
+        void Text(string name, string? wert) =>
+            cmd.Parameters.Add(new NpgsqlParameter(name, NpgsqlTypes.NpgsqlDbType.Text) { Value = (object?)wert ?? DBNull.Value });
+        Text("pk", ProtoSchluessel);
+        Text("p", proto);
+        Text("ck", CodeSchluessel);
+        Text("c", Spur.Stand);
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 
     /// <summary>Nur Sim: fehlt die Datenbank, wird sie angelegt (Prod-Datenbanken legt nie ein Host an).</summary>

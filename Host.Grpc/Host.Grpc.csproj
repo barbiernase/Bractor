@@ -19,4 +19,27 @@
     <!-- Die Umgebungen reisen mit dem Host (umgebungen/umgebung.<name>.json neben dem Programm). -->
     <Content Include="..\umgebungen\*.json" Link="umgebungen\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
   </ItemGroup>
+
+  <!-- Spur (docs/konzept-werkbank.md §7.1): der Build-Stand. Die Werkbank baut mit -p:CqrsStand=<hash> (dieselbe Hash-Funktion wie ihr
+       Kopfzeilen-Stand); daraus wird beim Bauen eine Konstante, die der Host beim Laden setzt (keine Reflection). Ohne Property: kein Stand. -->
+  <PropertyGroup>
+    <CqrsStand Condition="'$(CqrsStand)' == ''"></CqrsStand>
+  </PropertyGroup>
+  <Target Name="CqrsStandErzeugen" BeforeTargets="BeforeCompile">
+    <PropertyGroup>
+      <_CqrsStandDatei>$(IntermediateOutputPath)CqrsStand.g.cs</_CqrsStandDatei>
+    </PropertyGroup>
+    <WriteLinesToFile File="$(_CqrsStandDatei)" Overwrite="true" WriteOnlyWhenDifferent="true"
+                      Lines="// &lt;auto-generated/&gt; Stand aus -p:CqrsStand (Werkbank). Nicht editieren.;namespace Host.Grpc.Generiert { internal static class CqrsStandInit { [System.Runtime.CompilerServices.ModuleInitializer] internal static void Setze() =&gt; global::Abstractions.Spur.Stand = &quot;$(CqrsStand)&quot; is { Length: &gt; 0 } s ? s : null%3B } }" />
+    <ItemGroup>
+      <Compile Include="$(_CqrsStandDatei)" />
+      <FileWrites Include="$(_CqrsStandDatei)" />
+    </ItemGroup>
+  </Target>
+
+  <ItemGroup>
+    <!-- Der Proto-Stand dieses Builds — der Host schreibt ihn beim Start in <schema>.stand (jede Umgebung), damit ein übernommener
+         Prod-Stand seine Herkunft kennt (Werkbank „Daten prüfen“). -->
+    <EmbeddedResource Include="..\ProtoRepo\domain.proto" LogicalName="cqrs/domain.proto" />
+  </ItemGroup>
 </Project>

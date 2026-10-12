@@ -233,7 +233,10 @@ public sealed class FunktionsAnbieterSitzung : IAsyncDisposable
             }
 
             var a = l.Auftrag;
-            if (!await _schreibe(a.Korrelation, vorgang, geschrieben, a.Akteur, name, ct))
+            bool liegt;
+            using (Spur.Von(a.Ursache, null))   // Spur: die Ursache reist mit dem Auftrag (der Python-Worker sieht sie nie)
+                liegt = await _schreibe(a.Korrelation, vorgang, geschrieben, a.Akteur, name, ct);
+            if (!liegt)
                 return ErgebnisAusgang.NichtGeschrieben;   // nicht erledigt melden: die Lease heilt
 
             await MeldeAsync(l.Funktion, new ArbeitErledigt(vorgang));

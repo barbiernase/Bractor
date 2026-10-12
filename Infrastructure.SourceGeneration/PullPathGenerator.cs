@@ -232,7 +232,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("                //   (die Factory läuft im Actor-Started, Cluster ist fertig — NICHT bei Kind-Registrierung).");
             sb.AppendLine("                //   DetachedEmit hält den virtuellen Adapter-Turn frei (at-least-once, Empfänger dedupliziert).");
             sb.AppendLine("                var router = new HandlerOutputRouter(");
-            sb.AppendLine("                    system.Cluster(), provider.GetService<BrokerPublisher>(), projection.SubscriberId);");
+            sb.AppendLine($"                    system.Cluster(), provider.GetService<BrokerPublisher>(), projection.SubscriberId, wirker: global::Abstractions.WirkerId.FuerReaktion(\"{p.Name}\"));");
             sb.AppendLine("                Func<EventEnvelope, ProjectionWriter, Task> dispatch =");
             sb.AppendLine("                    (e, writer) => projection.DispatchAsync(e, writer,");
             sb.AppendLine("                        DetachedEmit.Wrap(router.EmitFor(e, System.Threading.CancellationToken.None)), faehigkeiten);");

@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Xunit;
 
-namespace Infrastructure.Pruefstand.Spur;
+namespace Infrastructure.Pruefstand.SpurPruefung;
 
 /// <summary>
 /// Werkbank P4.1/P4.2: das Wirker-Format (eine Quelle, <see cref="WirkerId"/>) und die Namen zur Laufzeit — der ProzessRegelnGenerator

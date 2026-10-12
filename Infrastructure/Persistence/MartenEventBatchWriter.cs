@@ -101,6 +101,7 @@ public sealed class MartenEventBatchWriter : IEventBatchWriter
             if (item.CorrelationId != null) ev.CorrelationId = item.CorrelationId;
             if (!string.IsNullOrEmpty(item.AggregateType)) ev.SetHeader("aggregate_type", item.AggregateType);
             if (ImAuftrag.IstAkteur(item.Akteur)) ev.SetHeader(ImAuftrag.Header, item.Akteur!);
+            SpurHeader.Setze(ev, item.SpurKopf);
         }
     }
 }

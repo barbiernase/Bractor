@@ -90,6 +90,8 @@ public sealed class QuellEingang
         var stream = QuellVorgang.StreamFür(typ, nachricht.Kennung);
         try
         {
+            // Spur: eine Quell-Nachricht ist eine Wurzel (keine Ursache im Log), geschrieben von der Quelle.
+            using var spur = Spur.Von(null, WirkerId.FuerQuelle(typ.Name));
             await _store.AppendEventsAsync(stream, 0, new IEvent[] { nachricht },
                 correlationId: stream.ToString(), causationId: stream.ToString(),
                 aggregateType: $"Quelle:{typ.Name}", akteur: _akteur(typ));

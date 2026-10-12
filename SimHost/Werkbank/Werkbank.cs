@@ -148,7 +148,8 @@ public sealed class Werkbank
 
             // 1 Bauen: dotnet build des Laufzeit-Hosts — der Codegen-Prepass (Proto, STJ-Kontexte, Python-Basen) läuft im Build mit.
             Beginne("Bauen");
-            var bau = await Prozesse.LaufeAsync("dotnet", ["build", "Host.Grpc/Host.Grpc.csproj", "-v", "q", "-nologo", "-clp:NoSummary"], _root, ct: ct);
+            // -p:CqrsStand: der Host stempelt diesen Stand an jedes Event (Spur) — Board, Build und Lauf tragen denselben.
+            var bau = await Prozesse.LaufeAsync("dotnet", ["build", "Host.Grpc/Host.Grpc.csproj", "-v", "q", "-nologo", "-clp:NoSummary", $"-p:CqrsStand={stand}"], _root, ct: ct);
             var diagnosen = Karten.Zuordnen(Diagnosen.Lies(bau.Zeilen, _root), _root);
             Schritt(schritte, new Schritt("Bauen", bau.Ok, (long)bau.Dauer.TotalMilliseconds,
                 bau.Ok ? ["0 Fehler"] : diagnosen.Count > 0 ? diagnosen.Select(x => $"{x.Datei}:{x.Zeile} {x.Code} {x.Text}").Take(20).ToList() : bau.Zeilen.TakeLast(15).ToList()));
@@ -210,7 +211,7 @@ public sealed class Werkbank
             Schritt(schritte, new Schritt("Infrastruktur", infra.Ok, 0, infra.Meldungen));
             if (!infra.Ok) return Ende(false, diagnosen);
 
-            // 6 Host ersetzen; erst nach einem gelungenen Start gilt das neue Proto als Stand der Daten.
+            // 6 Host ersetzen. Den Proto-Stand der Daten schreibt der Host beim Start selbst (UmgebungsSiegel, jede Umgebung).
             Beginne("Starten");
             var start = await Host.StarteAsync(name, u.Transport.EinblickPort, Umgebungen.Branch(), ct);
             Schritt(schritte, new Schritt("Starten", start.Ok, 0, start.Ok ? [$"Host läuft · {name} · DB {u.EventStore.Datenbank}"] : start.Boot.Select(b => b.Text).ToList()));
@@ -218,7 +219,6 @@ public sealed class Werkbank
             {
                 LaufStand = stand;
                 _laufUmgebung = DateiInhalt(name);
-                if (neuProto != null) await Db.SchreibeAsync(u, SimDatenbank.ProtoSchluessel, neuProto);
             }
             return Ende(start.Ok, diagnosen, start.Boot);
         }

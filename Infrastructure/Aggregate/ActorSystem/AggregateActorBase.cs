@@ -102,7 +102,10 @@ public abstract class AggregateActorBase<TState> : IActor
                     {
                         await InitializeAsync(envelope.AggregateId);
                     }
-                    await HandleCommandAsync(context, envelope);
+                    // Spur (docs/konzept-werkbank.md §7.1): die Events dieses Commands schreibt decide:<Aggregat>/<Command>, ausgelöst
+                    //   von dem Log-Eintrag, den der Absender in den Envelope gelegt hat.
+                    using (Spur.Von(envelope.Ursache, WirkerId.FuerDecide(typeof(TState).Name, envelope.Payload.GetType().Name)))
+                        await HandleCommandAsync(context, envelope);
                     break;
 
                 case Stopping:
@@ -629,7 +632,8 @@ public abstract class AggregateActorBase<TState> : IActor
             userId: cmdEnvelope.UserId,
             // Der Actor-State steht hier bereits auf dem Head NACH Domain-Events + co-committer
             // Marke — genau die ExpectedVersion, die der nächste Client-Command tragen muss.
-            streamHeadVersion: _state.Version);
+            streamHeadVersion: _state.Version,
+            spur: Spur.Aktuell);
 
         // ★ Perf: Publish ist reine Benachrichtigung — der Command ist bereits im Log committet
         //   (Schritt 5). Zustellung ist best-effort (Invariante 2); die durablen Konsumenten

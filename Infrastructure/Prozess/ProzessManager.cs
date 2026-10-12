@@ -162,13 +162,13 @@ public sealed class ProzessManager
             //   verpufft beim Ausführer (Dedupe über den Vorgang = Ausführungs-Id) — deshalb ist das bei jeder Weckung
             //   gefahrlos und heilt zugleich einen Auftrag, dessen Ausführer verloren ging.
             foreach (var k in offen.Where(k => k.Auftrag is not null))
-                await BeauftrageAsync(korrelation, k.Auftrag!, k.Vorgang, ct);
+                await BeauftrageAsync(korrelation, k.Auftrag!, k.Vorgang, SpurVon(k, regeln), ct);
 
             // ── Commands: die erste noch nicht erledigte Transition feuern (sequenziell, Spec §8, unverändert) ──
             var pending = offen.FirstOrDefault(k => k.Cmd is not null);
             if (pending != null)
             {
-                await FeuereAsync(korrelation, pending.Cmd!, pending.Vorgang, ct);
+                await FeuereAsync(korrelation, pending.Cmd!, pending.Vorgang, SpurVon(pending, regeln), ct);
                 return;
             }
             // Nur noch laufende Funktionen → warten; der Ausführer weckt mit dem Ergebnis (Backstop als Netz).
@@ -182,7 +182,7 @@ public sealed class ProzessManager
         var (komp, unvollziehbar) = await NächsteKompensationAsync(korrelation, kandidaten, mz.Gescheitert, ct);
         if (komp is not null)
         {
-            await FeuereAsync(korrelation, komp.Cmd, komp.Vorgang, ct);
+            await FeuereAsync(korrelation, komp.Cmd, komp.Vorgang, SpurVon(komp.Von, regeln), ct);
             return;
         }
 
@@ -241,8 +241,11 @@ public sealed class ProzessManager
 
     // ── Feuern: Vorgang → deterministische CommandId (Framework-Inbox), fire-and-forget dispatchen ──
     // Der Regel-Command bleibt REIN (keine Vorgang-Injektion); die Idempotenz sichert die CommandId.
-    private Task FeuereAsync(Guid korrelation, ICommand cmd, Guid vorgang, CancellationToken ct)
+    private Task FeuereAsync(Guid korrelation, ICommand cmd, Guid vorgang, Spur.Kopf spur, CancellationToken ct)
     {
+        // Spur: der Command trägt Ursache (jüngster echter Match-Token) und Wirker (die Regel bzw. der Fluss-Knoten) — der Emit liest sie
+        //   synchron beim Bauen des Envelopes, das Aggregat stempelt die Ursache an seine Events.
+        using var spurScope = Spur.Von(spur.Ursache, spur.Wirker);
         // Im Auftrag des Auslöser-Akteurs (der Emit liest ImAuftrag synchron beim Bauen des Envelopes).
         using var imAuftrag = ImAuftrag.IstAkteur(_akteurVon.GetValueOrDefault(korrelation)) ? ImAuftrag.Von(_akteurVon[korrelation]!) : null;
         // ★ P5b: das befeuerte Ziel ist ab jetzt „dirty" — die nächste Weckung MUSS genau diesen Stream nachfalten
@@ -258,8 +261,10 @@ public sealed class ProzessManager
     // ── Beauftragen: Funktions-Auftrag an den Ausführer (fire-and-forget, ohne Selbst-Weckung) ──
     // Der Ausführungs-Stream IST der Vorgang: dort schreibt der Ausführer genau ein Ergebnis (OCC auf Version 0) mit
     // CausationId == Vorgang — der Fold liest es wie das Event eines Aggregats.
-    private Task BeauftrageAsync(Guid korrelation, IAuftrag auftrag, Guid vorgang, CancellationToken ct)
+    private Task BeauftrageAsync(Guid korrelation, IAuftrag auftrag, Guid vorgang, Spur.Kopf spur, CancellationToken ct)
     {
+        // Spur: der Auftrag nimmt die Ursache mit; das Ergebnis schreibt die Funktion (Wirker funktion:F, FunktionsAusfuehrer).
+        using var spurScope = Spur.Von(spur.Ursache, spur.Wirker);
         if (_rufe is null)
             throw new InvalidOperationException(
                 $"Der Prozess ruft eine Funktion ({auftrag.GetType().Name}), aber es ist kein Funktions-Ausführer verdrahtet (AddFunktionen).");
@@ -585,7 +590,17 @@ public sealed class ProzessManager
     // Belegungen (Herkunft, Je-Teile, Sammeln) liegen im reinen Kern Abstractions.FlussBelegung — geteilt mit der Simulation.
 
     // ── Kompensation: reverse Regel-Reihenfolge über Erfolgs-Transitionen mit Gegenzug ──
-    private sealed record Kompensation(ICommand Cmd, Guid Vorgang);
+    private sealed record Kompensation(ICommand Cmd, Guid Vorgang, Kandidat Von);
+
+    /// <summary>
+    /// Die Spur eines Aufrufs: Ursache = der jüngste ECHTE gematchte Log-Eintrag (synthetische Tokens wie Strom −2 oder Fehler-Port −1
+    /// stehen nicht im Log und zählen nicht), Wirker = die Regel (<c>prozess:P#A→C</c>) bzw. der Fluss-Knoten (<c>fluss:P#knoten</c>).
+    /// </summary>
+    private static Spur.Kopf SpurVon(Kandidat k, ProzessRegeln regeln)
+    {
+        var t = k.Match.Where(t => t.Version > 0).OrderByDescending(t => t.Zeit).ThenByDescending(t => t.Version).FirstOrDefault();
+        return new Spur.Kopf(t is null ? null : Spur.Ursache(t.Stream, t.Version), regeln.Wirker(k.RegelIndex));
+    }
 
     /// <summary>
     /// Liefert den nächsten noch offenen Gegenzug ODER — wenn keiner mehr feuerbar ist — einen etwaigen
@@ -624,8 +639,8 @@ public sealed class ProzessManager
                 //   (gescheitert.ContainsKey bleibt als zweite Quelle stehen: harmlos, deckt Alt-/Boot-Zustände.)
                 var abgelehnt = zielEvents.Any(e =>
                     e.CausationId == vorgang.ToString() && e.Payload is Infrastructure.Aggregate.KommandoAbgelehnt);
-                if (abgelehnt || gescheitert.ContainsKey(vorgang)) { unvollziehbar ??= new Kompensation(cmd, vorgang); continue; }
-                return (new Kompensation(cmd, vorgang), unvollziehbar);
+                if (abgelehnt || gescheitert.ContainsKey(vorgang)) { unvollziehbar ??= new Kompensation(cmd, vorgang, k); continue; }
+                return (new Kompensation(cmd, vorgang, k), unvollziehbar);
             }
         }
         return (null, unvollziehbar);

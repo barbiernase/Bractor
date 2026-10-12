@@ -24,8 +24,12 @@ public sealed class HandlerOutputRouter
     private readonly string _subscriberId;
     private readonly ILogger _logger;
 
-    public HandlerOutputRouter(Cluster cluster, BrokerPublisher? publisher, string subscriberId, ILogger? logger = null)
+    // Spur: die Wirker-Id dieses Konsumenten (reaktion:&lt;Typ&gt;) — vom generierten Pull-Pfad gesetzt.
+    private readonly string? _wirker;
+
+    public HandlerOutputRouter(Cluster cluster, BrokerPublisher? publisher, string subscriberId, ILogger? logger = null, string? wirker = null)
     {
+        _wirker = wirker;
         _logger = logger ?? NullLogger.Instance;
         _emitter = new CommandEmitter(cluster, _logger);   // ★ P3: das EINE Emit-Primitiv (EM-1)
         _publisher = publisher;
@@ -90,6 +94,8 @@ public sealed class HandlerOutputRouter
         var korrelation = Guid.TryParse(trigger.CorrelationId, out var kr) ? kr : Guid.Empty;
         var k = new EmitKausalität(korrelation, trigger.AggregateId, $"{pos}:{command.GetType().Name}");
         // Kausalkette: die Reaktion handelt im Auftrag des Akteurs, von dem das auslösende Event stammt.
+        // Spur: das auslösende Event ist die Ursache, die Reaktion der Wirker des Commands.
+        using (Spur.Von(Spur.Ursache(trigger.AggregateId, triggerVersion), _wirker))
         using (Infrastructure.Akteure.AkteurHerkunft.Aus(trigger.UserId))
             return _emitter.EmitAsync(command, k, ct);
     }
