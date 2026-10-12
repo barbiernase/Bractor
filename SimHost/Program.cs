@@ -308,6 +308,59 @@ app.MapPost("/api/werkbank/uhr", async (string versatz) =>
     }
     catch (Exception e) { return Results.Json(new { ok = false, fehler = e.Message }); }
 });
+// ── DURCHSPIELEN (docs/konzept-werkbank.md §6, P5): nur echte Eingänge — als Akteur (JSON-Eingang des Hosts), Hand-Funktionen beantworten,
+//   Datei in den Pfad der Quelle legen, Uhr vorstellen, externe Worker starten. Die Formulare kommen aus dem gelesenen Code.
+var durchspielen = new SimHost.Werkbank.Durchspielen(werkbank, () => FindNeben("domain-model.json"));
+var worker = new SimHost.Werkbank.Worker(slnRoot);
+app.Lifetime.ApplicationStopping.Register(() => worker.StoppeAlleAsync().GetAwaiter().GetResult());
+app.MapGet("/api/werkbank/identitaeten", () => Results.Json(durchspielen.Identitaeten()));
+app.MapGet("/api/werkbank/formular", (string typ) =>
+{
+    try { return Results.Content(durchspielen.Formular(typ).ToJsonString(), "application/json"); }
+    catch (Exception e) when (e is KeyNotFoundException or FileNotFoundException) { return Results.Json(new { fehler = e.Message }, statusCode: 404); }
+});
+app.MapMethods("/api/werkbank/eingang/{**pfad}", ["GET", "POST"], async (HttpContext ctx, string pfad, CancellationToken ct) =>
+{
+    string? inhalt = null;
+    if (HttpMethods.IsPost(ctx.Request.Method)) using (var r = new StreamReader(ctx.Request.Body)) inhalt = await r.ReadToEndAsync(ct);
+    var (status, antwort) = await durchspielen.EingangAsync(ctx.Request.Method, pfad, ctx.Request.Headers["akteur-token"].FirstOrDefault(), inhalt, ct);
+    return Results.Content(antwort, "application/json", System.Text.Encoding.UTF8, status);
+});
+app.MapGet("/api/werkbank/quelle/{quelle}", (string quelle) => Results.Json(new { quelle, umgebung = werkbank.Aktiv, pfad = durchspielen.QuellPfad(quelle) }));
+app.MapPost("/api/werkbank/quelle/{quelle}/datei", async (HttpContext ctx, string quelle, string name, CancellationToken ct) =>
+{
+    // Bilder dürfen groß sein (TIFF) — die Grenze von Kestrel (30 MB) gilt hier nicht.
+    if (ctx.Features.Get<Microsoft.AspNetCore.Http.Features.IHttpMaxRequestBodySizeFeature>() is { IsReadOnly: false } grenze) grenze.MaxRequestBodySize = null;
+    try { return Results.Json(await durchspielen.LegeAbAsync(quelle, name, ctx.Request.Body, ct)); }
+    catch (Exception e) when (e is not OperationCanceledException) { return Results.Json(new { ok = false, fehler = e.Message }); }
+});
+app.MapPost("/api/werkbank/uhr/vor", async (string um) =>
+{
+    try { return Results.Json(await durchspielen.UhrVorAsync(TimeSpan.Parse(um, System.Globalization.CultureInfo.InvariantCulture))); }
+    catch (Exception e) { return Results.Json(new { ok = false, fehler = e.Message }); }
+});
+app.MapGet("/api/werkbank/worker", () =>
+{
+    try { return Results.Json(new { umgebung = werkbank.Aktiv, worker = worker.Liste(werkbank.Umgebungen.Aufgeloest(werkbank.Aktiv)) }); }
+    catch (Exception e) { return Results.Json(new { umgebung = werkbank.Aktiv, worker = Array.Empty<object>(), fehler = e.Message }); }
+});
+app.MapPost("/api/werkbank/worker/{funktion}/start", async (string funktion) =>
+{
+    try
+    {
+        var aus = await worker.StarteAsync(funktion, werkbank.Umgebungen.Aufgeloest(werkbank.Aktiv), werkbank.Host.Laeuft);
+        werkbank.Fortschritt.Melde("worker", new { funktion });
+        return Results.Json(aus);
+    }
+    catch (Exception e) { return Results.Json(new { ok = false, funktion, fehler = e.Message }); }
+});
+app.MapPost("/api/werkbank/worker/{funktion}/stopp", async (string funktion) =>
+{
+    await worker.StoppeAsync(funktion);
+    werkbank.Fortschritt.Melde("worker", new { funktion });
+    return Results.Json(new { ok = true, funktion });
+});
+app.MapGet("/api/werkbank/worker/{funktion}/log", (string funktion, int? max) => Results.Json(worker.Log(funktion, max ?? 200)));
 app.MapPost("/api/werkbank/infra/start", async (CancellationToken ct) =>
     Results.Json(await werkbank.Infra.StarteAsync(werkbank.Aktiv, werkbank.Umgebungen.Aufgeloest(werkbank.Aktiv), ct), werkbankJson));
 app.MapPost("/api/werkbank/infra/stopp", async (CancellationToken ct) => Results.Json(await werkbank.Infra.StoppeAsync(werkbank.Aktiv, ct), werkbankJson));

@@ -136,6 +136,40 @@ public class UmgebungLaderTests
     }
 
     [Fact]
+    public void Laufort_Hand_bindet_den_Hand_Ausfuehrer_einmal_auch_mit_Lese_Faehigkeit()
+    {
+        // Ein Mensch antwortet — er braucht keine Stores des Hosts; der Hand-Ausführer holt die Aufträge (einer für alle Funktionen).
+        var s = new ServiceCollection();
+        var namen = new Dictionary<string, Type> { ["IA"] = typeof(IA), ["IB"] = typeof(IB) };
+        s.BindeFunktionen(new Dictionary<string, FunktionsKonfig> { ["IA"] = new() { Laufort = FunktionsLaufort.Hand }, ["IB"] = new() { Laufort = FunktionsLaufort.Hand } },
+            namen, [], new Dictionary<Type, Action<IServiceCollection>>(), new Dictionary<Type, Type[]> { [typeof(IB)] = [typeof(object)] });
+        var bindungen = s.Where(d => d.ServiceType == typeof(FunktionsBindung)).Select(d => (FunktionsBindung)d.ImplementationInstance!).ToList();
+        bindungen.Should().BeEquivalentTo([new FunktionsBindung(typeof(IA), 0, 0, Extern: true, Hand: true), new FunktionsBindung(typeof(IB), 0, 0, Extern: true, Hand: true)]);
+        s.Count(d => d.ServiceType == typeof(HandAusfuehrer)).Should().Be(1);
+    }
+
+    [Theory]
+    [InlineData("sim-main")]
+    [InlineData("prod")]
+    [InlineData("multinode")]
+    public void Die_Umgebungen_des_Bestands_binden_streng(string name)
+    {
+        // Die echten Dateien unter umgebungen/ (mit Identitäten, JSON-Eingang, Worker) — ein Tippfehler bräche erst den Host-Start.
+        var verz = AppContext.BaseDirectory;
+        while (verz != null && !Directory.Exists(Path.Combine(verz, "umgebungen"))) verz = Path.GetDirectoryName(verz);
+        Environment.SetEnvironmentVariable("CQRS_UMGEBUNGEN", Path.Combine(verz!, "umgebungen"));
+        var u = UmgebungLader.Lade(new ConfigurationManager(), name, [], branch: "main");
+        u.Umgebung.Name.Should().Be(name);
+        if (name == "sim-main")
+        {
+            u.Transport.JsonEingang.Should().BeTrue("Sim: die Werkbank handelt als Akteur");
+            u.Funktionen["IBildVerkleinerung"].Worker!.Skript.Should().EndWith("funktions_worker.py");
+            u.Funktionen["IBildVerkleinerung"].Worker!.Argumente.Should().Contain(a => a.EndsWith("/cqrs-sim/main/preprocessed"));
+        }
+        else u.Transport.JsonEingang.Should().BeFalse("Prod: kein JSON-Eingang");
+    }
+
+    [Fact]
     public void Unbekannte_Funktion_ist_ein_Fehler()
         => FluentActions.Invoking(() => Gebunden(new() { ["IC"] = new() })).Should().Throw<InvalidOperationException>().WithMessage("*IC*");
 

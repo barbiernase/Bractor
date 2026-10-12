@@ -1,4 +1,5 @@
 using Abstractions;
+using Domain.Bildaufbereitung;
 using Domain.Datensatz;
 using Domain.ImagePair;
 using Domain.Modell;
@@ -25,6 +26,10 @@ namespace Domain.Akteure;
 /// <summary>Nimmt die Bildpaare (dc0/dc2) an der Linie auf und legt sie auf dem Share ab.</summary>
 public sealed record KameraSystem : IMaschine,
     IDarf<DateiErkannt>;
+
+/// <summary>Rechnet die Bildaufbereitung außerhalb des Hosts (Python-Worker <c>funktions_worker.py</c>, Laufort <c>Extern</c>).</summary>
+public sealed record Bildrechner : IMaschine,
+    IDarf<IBildVerkleinerung>, IDarf<IHistogrammAusgleich>;
 
 /// <summary>GPU-Worker: trainiert auf einer eingefrorenen Datensatz-Version und meldet den Fortschritt.</summary>
 public sealed record TrainingsSystem : IMaschine,

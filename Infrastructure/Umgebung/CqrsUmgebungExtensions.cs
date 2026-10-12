@@ -1,4 +1,5 @@
 using Infrastructure.Einblick;
+using Infrastructure.Eingang;
 using Abstractions;
 using Infrastructure.Akteure;
 using Infrastructure.Deadlines;
@@ -117,9 +118,10 @@ public static class CqrsUmgebungExtensions
         app.MapCqrsGrpcService();
         app.MapBackendMonitoring();
         app.MapEinblick(u);
+        app.MapEingang(u);
         Console.WriteLine();
         Console.WriteLine($"  CQRS/ES Host · Umgebung {u.Umgebung.Name} ({u.Umgebung.Art}) · gRPC :{u.Transport.GrpcPort}"
-            + (u.Transport.EinblickPort > 0 ? $" · Einblick :{u.Transport.EinblickPort}" : "") + $" · DB {u.EventStore.Datenbank} · Cluster {u.Cluster.Name} ({u.Cluster.Art})");
+            + (u.Transport.EinblickPort > 0 ? $" · Einblick :{u.Transport.EinblickPort}" + (u.Transport.JsonEingang ? " (+ JSON-Eingang)" : "") : "") + $" · DB {u.EventStore.Datenbank} · Cluster {u.Cluster.Name} ({u.Cluster.Art})");
         Console.WriteLine();
         try { await app.RunAsync(); }
         catch (Exception e) { CqrsBoot.Melde(e); throw; }

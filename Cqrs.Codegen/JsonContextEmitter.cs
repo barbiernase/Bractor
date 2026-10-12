@@ -83,6 +83,7 @@ public static class JsonContextEmitter
         /// </summary>
         [JsonSourceGenerationOptions(
             GenerationMode = JsonSourceGenerationMode.Metadata,
+            UseStringEnumConverter = true,
             Converters = new[]
             {
                 typeof(IEventJsonConverter),
@@ -158,16 +159,18 @@ public static class JsonContextEmitter
                 var isTrigger = ifaces.Contains("Abstractions.IPipelineTrigger");
                 var isWire = ifaces.Contains("Abstractions.IWireMessage");
                 var isAuftrag = ifaces.Contains("Abstractions.IAuftrag");
+                // Queries und Antworten: der JSON-Eingang der Werkbank (Infrastructure/Eingang) liest/schreibt sie über diesen Kontext.
+                var isQuery = ifaces.Contains("Abstractions.IQuery") || ifaces.Contains("Abstractions.IQueryResponse");
 
                 if (isEvent && !isTransient) persistableEvents.Add(name);
-                if (isEvent || isCommand || isTrigger || isWire || isAuftrag) wire.Add(name);
+                if (isEvent || isCommand || isTrigger || isWire || isAuftrag || isQuery) wire.Add(name);
             }
         }
 
         var eventCtx = Build(EventContextHeader, "EventJsonSerializerContext", persistableEvents,
             "Domänen-Events (Domain.*, persistierbar)");
         var wireCtx = Build(WireContextHeader, "CqrsWireJsonContext", wire,
-            "Domänen-Commands/Events/Trigger/Aufträge (Domain.*)");
+            "Domänen-Commands/Events/Trigger/Aufträge/Queries (Domain.*)");
 
         var stats = $"Storage-Events: {persistableEvents.Count + 8} (8 Framework), Wire-Typen: {wire.Count + 28} (28 Framework)";
         return (eventCtx, wireCtx, stats);

@@ -81,6 +81,9 @@ public sealed class TransportKonfig
 {
     public int GrpcPort { get; set; } = 5001;
     public int EinblickPort { get; set; }
+    /// <summary>JSON-Eingang auf dem Einblick-Port (<c>/eingang/*</c>): Commands/Queries als Akteur (Token → Akteur-Tor) und Antworten von
+    /// Hand-Funktionen — der Weg der Werkbank ins echte System. Sim an, Prod aus.</summary>
+    public bool JsonEingang { get; set; }
 }
 
 /// <summary>Laufort einer Katalog-Funktion (Abschnitt <c>Funktionen:&lt;IFunktion&gt;</c>).</summary>
@@ -91,6 +94,23 @@ public sealed class FunktionsKonfig
     public string? Implementierung { get; set; }
     public int Slots { get; set; } = 1;
     public int Wiederholungen { get; set; }
+    /// <summary>Nur Extern: wie die Werkbank den Worker startet (▶ Worker starten). Der Host liest es nie.</summary>
+    public WorkerKonfig? Worker { get; set; }
+}
+
+/// <summary>
+/// Ein externer Funktions-Worker als Prozess (Werkbank, Plan E10): <c>Python Skript Argumente…</c>. Die Werkbank setzt <c>CQRS_GRPC_HOST</c>,
+/// <c>CQRS_GRPC_PORT</c> und <c>CQRS_AKTEUR_TOKEN</c> (aus <see cref="Token"/>) — der Worker meldet sich damit am gRPC-Port an.
+/// </summary>
+public sealed class WorkerKonfig
+{
+    /// <summary>Der Interpreter (leer = <c>CQRS_PYTHON</c> bzw. <c>python3</c>).</summary>
+    public string Python { get; set; } = "";
+    /// <summary>Das Skript, relativ zur Solution.</summary>
+    public string Skript { get; set; } = "";
+    public string[] Argumente { get; set; } = [];
+    /// <summary>Das Akteur-Token (Abschnitt <c>Identitaeten</c>), mit dem sich der Worker anmeldet — sein Akteur braucht <c>IDarf&lt;F&gt;</c>.</summary>
+    public string Token { get; set; } = "";
 }
 
 /// <summary>Die gebundene Umgebung (ohne Quellen, Identitäten, Konfig-Records — die binden ihre eigenen Abschnitte).</summary>

@@ -1,31 +1,101 @@
 {
-  "Umgebung": { "Name": "sim-main", "Art": "Sim" },
+  "Umgebung": {
+    "Name": "sim-main",
+    "Art": "Sim"
+  },
   "EventStore": {
     "Betrieb": "Verwaltet",
     "Verbindung": "Host=localhost;Port=5432;Username=postgres;Password=postgres",
     "Datenbank": "cqrs_sim_${branch}",
     "Schema": "es"
   },
-  "VersionIndex": { "Betrieb": "Verwaltet", "Endpunkt": "localhost:6379", "Datenbank": 1, "Praefix": "sim:${branch}:" },
-  "Cluster": { "Art": "Einzelknoten", "Name": "cqrs-sim-${branch}" },
-  "Transport": { "GrpcPort": 5101, "EinblickPort": 5102 },
+  "VersionIndex": {
+    "Betrieb": "Verwaltet",
+    "Endpunkt": "localhost:6379",
+    "Datenbank": 1,
+    "Praefix": "sim:${branch}:"
+  },
+  "Cluster": {
+    "Art": "Einzelknoten",
+    "Name": "cqrs-sim-${branch}"
+  },
+  "Transport": {
+    "GrpcPort": 5101,
+    "EinblickPort": 5102,
+    "JsonEingang": true
+  },
+  "Identitaeten": {
+    "Tokens": {
+      "sim-bildrechner": "Bildrechner",
+      "sim-disponent": "Disponent",
+      "sim-inspekteur": "Inspekteur",
+      "sim-kioperator": "KIOperator",
+      "sim-kamerasystem": "KameraSystem",
+      "sim-klassifizierer": "Klassifizierer",
+      "sim-modellfreigeber": "Modellfreigeber",
+      "sim-produktpruefer": "Produktpruefer",
+      "sim-trainingssystem": "TrainingsSystem"
+    }
+  },
   "Quellen": {
     "DateiErkannt": {
       "Pfad": "${env:HOME}/cqrs-sim/${branch}/DateiErkannt",
       "Intervall": "00:00:01",
-      "Fertig": { "Art": "Stabil", "Fenster": "00:00:01" },
+      "Fertig": {
+        "Art": "Stabil",
+        "Fenster": "00:00:01"
+      },
       "Kennung": "PfadGroesseZeit",
       "Laufmodus": "EinmalImCluster"
     }
   },
   "Funktionen": {
-    "IBildVerkleinerung": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 },
-    "IHistogrammAusgleich": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 },
-    "IDateinameDeutung": { "Laufort": "Host", "Slots": 8 },
-    "IRangeSuche": { "Laufort": "Host", "Slots": 2 },
-    "IMitgliederEinfrieren": { "Laufort": "Host", "Slots": 2 }
+    "IBildVerkleinerung": {
+      "Laufort": "Host",
+      "Slots": 2,
+      "Wiederholungen": 1,
+      "Worker": {
+        "Skript": "Domain.Client.Worker.Python.ML/funktions_worker.py",
+        "Argumente": [
+          "--ausgabe",
+          "${env:HOME}/cqrs-sim/${branch}/preprocessed",
+          "--funktionen",
+          "IBildVerkleinerung"
+        ],
+        "Token": "sim-bildrechner"
+      }
+    },
+    "IHistogrammAusgleich": {
+      "Laufort": "Host",
+      "Slots": 2,
+      "Wiederholungen": 1,
+      "Worker": {
+        "Skript": "Domain.Client.Worker.Python.ML/funktions_worker.py",
+        "Argumente": [
+          "--ausgabe",
+          "${env:HOME}/cqrs-sim/${branch}/preprocessed",
+          "--funktionen",
+          "IHistogrammAusgleich"
+        ],
+        "Token": "sim-bildrechner"
+      }
+    },
+    "IDateinameDeutung": {
+      "Laufort": "Host",
+      "Slots": 8
+    },
+    "IRangeSuche": {
+      "Laufort": "Host",
+      "Slots": 2
+    },
+    "IMitgliederEinfrieren": {
+      "Laufort": "Host",
+      "Slots": 2
+    }
   },
   "Konfig": {
-    "PreprocessingConfig": { "OutputPath": "${env:HOME}/cqrs-sim/${branch}/preprocessed" }
+    "PreprocessingConfig": {
+      "OutputPath": "${env:HOME}/cqrs-sim/${branch}/preprocessed"
+    }
   }
 }

@@ -102,7 +102,7 @@ public static class FunktionsLaufortExtensions
 {
     /// <summary>
     /// Bindet die Funktionen nach dem Abschnitt <c>Funktionen</c> der Umgebung (docs/konzept-werkbank.md §4.2): je Funktion der Laufort
-    /// (<c>Host</c> mit Implementierung, <c>Extern</c>). Geprüft gegen die generierte Tabelle: Funktion bekannt, Implementierung eindeutig,
+    /// (<c>Host</c> mit Implementierung, <c>Extern</c>, <c>Hand</c>). Geprüft gegen die generierte Tabelle: Funktion bekannt, Implementierung eindeutig,
     /// eine Funktion mit Lese-Fähigkeit läuft nie extern. Eine gerufene, aber nicht gebundene Funktion meldet der Boot-Guard.
     /// </summary>
     public static IServiceCollection BindeFunktionen(this IServiceCollection services, IReadOnlyDictionary<string, Abstractions.FunktionsKonfig> konfig)
@@ -132,8 +132,13 @@ public static class FunktionsLaufortExtensions
                         throw new Infrastructure.Umgebung.BootFehler($"Funktionen:{name}: eine Funktion mit Lese-Fähigkeit läuft nur im Host (Laufort Host).", "funktion:" + name);
                     externBinden[funktion](services);
                     break;
+                case Abstractions.FunktionsLaufort.Hand:
+                    // Ein Mensch antwortet (Werkbank): die Aufträge holt der Hand-Ausführer und hält sie, bis die Antwort kommt.
+                    services.AddSingleton(new FunktionsBindung(funktion, Slots: 0, Extern: true, Hand: true));
+                    services.AddHandAusfuehrer();
+                    break;
                 default:
-                    throw new NotSupportedException($"Funktionen:{name}: Laufort {k.Laufort} gibt es noch nicht (Werkbank P5).");
+                    throw new NotSupportedException($"Funktionen:{name}: Laufort {k.Laufort} gibt es nicht.");
             }
         }
         return services;

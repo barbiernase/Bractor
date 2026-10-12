@@ -431,6 +431,7 @@
   //   die Werte (Pfad, Muster, Fertig-Erkennung …) stehen in der Umgebung — hier je Umgebung gezeigt, wie der Server sie gelesen hat.
   function quellTreiber(body,r){
     body.append(h("div",{class:"gsec",title:"public sealed record "+r.name+" : "+((r.basen||[])[0]||"DateiGemeldet")+";"},"📁 "+r.treiber+"-Treiber"));
+    if(INSP)dsQuelle(body,r);
     const umg=Object.entries((MODEL.rahmen||{}).umgebungen||{}),werte=umg.filter(([,u])=>u&&u.Quellen&&u.Quellen[r.name]).map(([n,u])=>[n,u.Quellen]);
     umg.filter(([,u])=>!(u&&u.Quellen&&u.Quellen[r.name])).forEach(([n])=>body.append(h("div",{class:"llmmeld err",title:"Start-Prüfung: jede Quelle braucht einen Abschnitt"},"⚠ Umgebung "+n+": kein Abschnitt Quellen:"+r.name+" — der Host startet dort nicht")));
     werte.forEach(([host,q])=>{body.append(h("div",{class:"gsec"},"Werte in Umgebung "+host));
@@ -831,6 +832,7 @@
     else body.append(nameInp(f,"name","Funktion","funktion"));
     body.append(h("input",{value:f.namespace??"",oninput:e=>f.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
     funktionSignatur(body,f);
+    if(INSP)dsFunktion(body,f);
     // Ablauf als Kette (Prozess): was NACH dieser Funktion kommt — nur, wo ein Prozess sie ruft. In einer Pipeline verdrahtet der Fluss.
     const sgs=[...new Set(MODEL.transitions.filter(t=>(t.dann||[]).some(d=>d.rufe===f.name)).map(t=>t.prozess))].map(n=>MODEL.sagas.find(x=>x.name===n)).filter(Boolean);
     const fl=MODEL.fluesse.filter(x=>(x.knoten||[]).some(k=>k.art==="funktion"&&k.typ===f.name));
@@ -2562,13 +2564,14 @@
     const head=h("div",{class:"ghead"},
       h("span",{class:"gtitle"+(n.name?" hatname":""),title:title+(n.name?" · "+n.name:"")},h("span",{class:"gk"},title+(n.name?" · ":"")),h("span",{class:"gn"},n.name||"")),
       diagFuer(n.id).length?h("span",{class:"gdiag",title:diagFuer(n.id).map(d=>d.text).join("\n")},"⛔ "+diagFuer(n.id).length):null,
+      dsBadge(n),
       n.kind==="host"?null:h("span",{class:"gx",title:"Löschen",onclick:()=>delNode(n)},"✕"));
     head.onpointerdown=e=>{if(e.target.classList.contains("gx")||e.target.classList.contains("gcol"))return;startMove(e,el,P(n),()=>waehle(n.id));};
     el.append(head);
     el.append(kurzfassung(n));
     const body=h("div",{class:"gbody"});
     fuelleKoerper(body,n);
-    el.append(body);return el;
+    el.append(body);dsDropZiel(el,n);return el;
   }
   // Der Formular-Körper eines Knotens — auf der Fläche (aufgeklappt) UND im Inspector derselbe.
   function fuelleKoerper(body,n){
@@ -4670,15 +4673,21 @@
         h("option",{value:""},"— Standard"+(ph?" ("+ph+")":"")+" —"),...werte.map(w=>h("option",{value:w},w)));
       sel.value=wert==null?"":String(wert);return sel;}
     if(t==="zahl")return h("input",{type:"number",value:wert??"",placeholder:ph,oninput:e=>setze(e.target.value===""?undefined:Number(e.target.value))});
-    if(t==="liste")return h("input",{value:Array.isArray(wert)?wert.join(", "):wert??"",placeholder:ph||"kommagetrennt",
-      oninput:e=>{const v=e.target.value.trim();setze(v?v.split(",").map(x=>x.trim()).filter(Boolean):undefined);}});
+    // Guid und Zeitpunkt (Formulare aus dem Code, P5): Text mit Knopf für einen frischen Wert; Guids schlägt die Liste der zuletzt gesehenen vor.
+    if(t==="guid"||t==="zeit"){const i=h("input",{value:wert??"",list:t==="guid"?"ds-ids":null,placeholder:t==="guid"?"Guid":"2026-10-12T10:00:00+02:00",
+        oninput:e=>setze(e.target.value.trim()===""?undefined:e.target.value.trim())});
+      return h("span",{class:"wb-mit"},i,h("button",{class:"act klein",title:t==="guid"?"neue Guid":"jetzt",
+        onclick:()=>{i.value=t==="guid"?crypto.randomUUID():new Date().toISOString();setze(i.value);}},t==="guid"?"🎲":"jetzt"));}
+    if(t==="liste"){const el=(sch.element||{}).typ,wandle=x=>el==="zahl"?Number(x):el==="bool"?x==="true":x;
+      return h("input",{value:Array.isArray(wert)?wert.join(", "):wert??"",placeholder:ph||"kommagetrennt"+(el&&el!=="string"?" ("+el+")":""),
+      oninput:e=>{const v=e.target.value.trim();setze(v?v.split(",").map(x=>x.trim()).filter(Boolean).map(wandle):undefined);}});}
     if(t==="map")return wbMap(wert||{},setze);
     return h("input",{value:wert??"",placeholder:ph||(t==="dauer"?"hh:mm:ss":""),title:t==="dauer"?"Dauer (hh:mm:ss)":"",oninput:e=>setze(e.target.value===""?undefined:e.target.value)});}
   function wbKlasse(sch,obj,setze){const box=h("div",{class:"wb-klasse"});
     Object.entries(sch.felder||{}).forEach(([k,f])=>{
       const sub=v=>{const neu={...obj};if(v===undefined)delete neu[k];else neu[k]=v;obj=neu;setze(Object.keys(neu).length?neu:undefined);};
       if(f.art==="klasse")box.append(h("div",{class:"wb-sub"},h("div",{class:"wb-st"},k),wbKlasse(f,obj[k]||{},sub)));
-      else box.append(h("div",{class:"frow"},h("span",{class:"slotlbl",title:f.hilfe||k},k),wbFeld(f,obj[k],sub)));});
+      else box.append(h("div",{class:"frow"},h("span",{class:"slotlbl",title:(f.clr?f.clr+" — ":"")+(f.hilfe||k)},k),wbFeld(f,obj[k],sub)));});
     return box;}
   function wbJe(sch,obj,setze){const box=h("div",{class:"wb-je"});
     const neu=v=>{obj=v;setze(Object.keys(v).length?v:undefined);};
@@ -4699,8 +4708,8 @@
     box.append(h("div",{class:"frow"},ein,h("button",{class:"act",onclick:()=>{const n=ein.value.trim();if(!n||n in obj)return;neu({...obj,[n]:""});zeigeInspector();}},"＋")));
     return box;}
   function wbFrei(sch,wert,setze){const t=h("textarea",{class:"code",rows:8,title:sch.hilfe||""}),f=h("div",{class:"gm-fehler"});
-    t.value=wert==null?"{}":JSON.stringify(wert,null,2);
-    t.oninput=()=>{try{const v=JSON.parse(t.value||"{}");f.textContent="";setze(Object.keys(v).length?v:undefined);}catch(e){f.textContent="kein gültiges JSON: "+e.message;}};
+    const leer=sch.liste?"[]":"{}";t.value=wert==null?leer:JSON.stringify(wert,null,2);
+    t.oninput=()=>{try{const v=JSON.parse(t.value||leer);f.textContent="";setze(Object.keys(v).length?v:undefined);}catch(e){f.textContent="kein gültiges JSON: "+e.message;}};
     return h("div",{},sch.hilfe?h("div",{class:"gi-hint"},sch.hilfe):null,t,f);}
   function hostCard(body,n){if(!INSP)return;const k=n.ref.abschnitt,z=WB.zustand||{};
     if(k==="Uhr"){wbUhrPanel(body,z);return;}
@@ -4768,7 +4777,10 @@
     // (disabled als Eigenschaft — h() setzt Attribute, und schon disabled="false" sperrt einen Knopf)
     const run=h("button",{class:"act go wb-run",title:"⟳ bauen → Python-Basen → neu lesen → Daten prüfen → Infrastruktur → Host ersetzen",onclick:()=>wbKreislauf(false)},lauf?"⟳ "+z.laeuft+" …":"⟳");
     const foto=h("button",{class:"act",title:"Sim-DB: Stand speichern / laden / zurücksetzen / Prod-Stand übernehmen",onclick:e=>wbStandMenue(e.clientX,e.clientY+14)},"📸");
-    run.disabled=lauf;foto.disabled=lauf||z.art!=="Sim";k.append(run,foto);}
+    const vs=WB.uhr&&WB.uhr.versatz&&!/^0?0:00:00$/.test(WB.uhr.versatz)?WB.uhr.versatz:null;
+    const vor=h("button",{class:"act",title:"⏩ Uhr der Sim-DB vorstellen — Fristen, Zeitlimits und Warten werden fällig"+(vs?" (Versatz "+vs+")":""),
+      onclick:e=>dsUhrMenue(e.clientX,e.clientY+14)},"⏩"+(vs?" +"+vs:""));
+    run.disabled=lauf;foto.disabled=lauf||z.art!=="Sim";vor.disabled=lauf||z.art!=="Sim";k.append(run,foto,vor);}
   async function wbZustand(){try{WB.zustand=await wbJson("/api/werkbank/zustand");}catch(e){WB.zustand=null;}wbKopf();}
   async function wbLadeUmgebung(){const n=WB.zustand&&WB.zustand.aktiv;if(!n)return;
     try{WB.umg=await wbJson("/api/werkbank/umgebung/"+encodeURIComponent(n));WB.umgName=n;WB.dirty=false;}catch(e){WB.umg=null;}}
@@ -4837,5 +4849,202 @@
         clearTimeout(t);t=setTimeout(wbZustand,150);};}
     setInterval(()=>{if(!document.hidden)wbZustand();},5000);}
   {const boot=window.deBoot;window.deBoot=async function(){await boot();wbStart();};}
+
+  // ══ DURCHSPIELEN (docs/konzept-werkbank.md §6, Plan P5) ════════════════════════════════════════════════════════════════════
+  //   Nur echte Eingänge: als Akteur (Konsole → JSON-Eingang des Hosts hinter dem Akteur-Tor), Hand-Funktionen beantworten (⧗ an der
+  //   Funktions-Karte), Dateien auf die Quellkarte (der echte Treiber meldet sie), ⏩ Uhr vor, ▶ externe Worker. Die Formulare zeichnet der
+  //   generische Renderer aus dem Schema, das der Server aus dem gelesenen Code baut (/api/werkbank/formular) — kein Modell-Wissen im JS.
+  const DS={ident:null,token:null,rechte:null,art:"command",typ:null,schemas:{},werte:{},verlauf:[],auftraege:[],handFn:[],auftragFehler:null,
+    worker:[],offen:false,tab:"konsole",antwort:{},sig:"",lauf:"",ids:[]};
+  const lsHole=k=>{try{return localStorage.getItem(k);}catch(e){return null;}}, lsSetze=(k,v)=>{try{localStorage.setItem(k,v);}catch(e){}};
+  const hostLaeuft=()=>!!(WB.zustand&&WB.zustand.host&&WB.zustand.host.laeuft);
+  const aktivName=()=>(WB.zustand||{}).aktiv||"?";
+  async function dsSchema(typ){if(DS.schemas[typ])return DS.schemas[typ];
+    const r=await fetch("/api/werkbank/formular?typ="+encodeURIComponent(typ)),j=await r.json();
+    if(!r.ok)throw new Error(j.fehler||("HTTP "+r.status));return DS.schemas[typ]=j;}
+  async function dsEingang(pfad,body){const opt={method:body?"POST":"GET",headers:{}};if(DS.token)opt.headers["akteur-token"]=DS.token;
+    if(body){opt.headers["content-type"]="application/json";opt.body=JSON.stringify(body);}
+    let r;try{r=await fetch("/api/werkbank/eingang/"+pfad,opt);}catch(e){return {ok:false,fehler:e.message,status:0};}
+    let j;try{j=await r.json();}catch(e){j={ok:false,fehler:"HTTP "+r.status};}j.status=r.status;return j;}
+  // Guids aus Antworten merken — das Formular schlägt sie vor (die Id eines eben angelegten Aggregats, die Treffer einer Query).
+  function dsMerkeIds(obj,etikett){const roh=JSON.stringify(obj||{}),re=/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi;
+    (roh.match(re)||[]).filter(g=>!/^0{8}-/.test(g)).forEach(g=>{DS.ids=[{id:g,t:etikett},...DS.ids.filter(x=>x.id!==g)].slice(0,40);});}
+  const dsAls=()=>{const t=((DS.ident||{}).tokens||[]).find(x=>x.token===DS.token);return t?t.akteure.join(" + "):"(Tor offen)";};
+
+  // ── Die Leiste unten: Konsole · Aufträge · Worker ──
+  function dsLeiste(){const el=document.getElementById("ds-leiste");if(!el)return;el.textContent="";el.classList.toggle("offen",DS.offen);
+    el.append(dsTabs());
+    el.append(h("datalist",{id:"ds-ids"},...DS.ids.map(x=>h("option",{value:x.id},x.t))));
+    if(!DS.offen)return;
+    const inhalt=h("div",{class:"ds-inhalt"});el.append(inhalt);
+    if(DS.tab==="konsole")dsKonsole(inhalt);else if(DS.tab==="auftraege")dsAuftraegeTab(inhalt);else dsWorkerTab(inhalt);}
+  function dsTabs(){const n=DS.auftraege.length,wl=DS.worker.filter(w=>w.laeuft).length;
+    const umschalten=id=>{if(DS.offen&&DS.tab===id)DS.offen=false;else{DS.offen=true;DS.tab=id;}lsSetze("ds.leiste",DS.offen?DS.tab:"");dsLeiste();};
+    const tab=(id,t,titel)=>h("button",{class:"ds-tab"+(DS.offen&&DS.tab===id?" an":"")+(id==="auftraege"&&n?" warte":""),title:titel,onclick:()=>umschalten(id)},t);
+    return h("div",{class:"ds-tabs"},
+      tab("konsole","⌨ Konsole · als Akteur","Command oder Query als Akteur an den echten Host (Token → Akteur-Tor)"),
+      tab("auftraege","⧗ Aufträge"+(n?" ("+n+")":""),"Funktionen mit Laufort Hand: die Werkbank beantwortet ihre Aufträge"),
+      tab("worker","▶ Worker"+(wl?" ("+wl+" läuft)":""),"Externe Funktions-Worker (Laufort Extern) starten und stoppen"),
+      h("span",{class:"sp"}),
+      h("span",{class:"ds-hint"},hostLaeuft()?"● echter Host · "+aktivName():"○ Host steht — ⟳ startet ihn"),
+      h("button",{class:"ds-tab",title:DS.offen?"Leiste einklappen":"Leiste aufklappen",onclick:()=>umschalten(DS.tab)},DS.offen?"▾":"▴"));}
+
+  // ── Konsole: als Akteur handeln ──
+  function dsKonsole(box){const links=h("div",{class:"ds-links"}),rechts=h("div",{class:"ds-rechts"});box.append(links,rechts);
+    const tokens=(DS.ident&&DS.ident.tokens)||[];
+    if(!tokens.length)links.append(h("div",{class:"gi-hint"},"Keine Identitäten in „"+aktivName()+"“ — das Akteur-Tor ist offen. Tokens stehen im 🖥 Host-Rahmen unter Identitaeten."));
+    else{const sel=h("select",{title:"Token → Akteur(e) (Abschnitt Identitaeten der Umgebung)",
+        onchange:e=>{DS.token=e.target.value;lsSetze("ds.token",DS.token);DS.rechte=null;dsLeiste();dsRechte();}},
+        ...tokens.map(t=>h("option",{value:t.token},t.akteure.join(" + ")+"  ·  "+t.token)));sel.value=DS.token||"";
+      links.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"Als"),sel));}
+    const art=h("select",{onchange:e=>{DS.art=e.target.value;DS.typ=null;dsLeiste();}},h("option",{value:"command"},"Command"),h("option",{value:"query"},"Query"));art.value=DS.art;
+    const liste=DS.rechte?(DS.art==="command"?DS.rechte.commands:DS.rechte.queries)||[]:[];
+    const typ=h("select",{onchange:e=>{DS.typ=e.target.value||null;dsLeiste();}},
+      h("option",{value:""},DS.rechte?(liste.length?"— wählen ("+liste.length+" erlaubt) —":"(nichts erlaubt)"):"…"),...liste.map(t=>h("option",{value:t},t)));typ.value=DS.typ||"";
+    links.append(h("div",{class:"frow"},art,typ));
+    if(DS.rechte&&DS.rechte.fehler)links.append(h("div",{class:"llmmeld err"},DS.rechte.fehler));
+    if(DS.typ&&liste.includes(DS.typ)){const form=h("div",{class:"ds-form"},h("span",{class:"ds-zeit"},"Formular lädt …"));links.append(form);
+      dsSchema(DS.typ).then(sch=>{form.textContent="";form.append(wbFeld(sch,DS.werte[DS.typ],v=>DS.werte[DS.typ]=v),
+          h("div",{class:"frow"},h("button",{class:"act go",onclick:dsSende},"▶ "+(DS.art==="command"?"Senden":"Fragen")),
+            h("button",{class:"act",title:"Formular leeren",onclick:()=>{delete DS.werte[DS.typ];dsLeiste();}},"↺"),
+            h("button",{class:"act",title:"Karte auf dem Board zeigen",onclick:()=>{if(recByName(DS.typ))zeigeLadend("rec:"+DS.typ);}},"◎")));})
+        .catch(e=>{form.textContent="";form.append(h("div",{class:"llmmeld err"},e.message));});}
+    rechts.append(h("div",{class:"gsec"},"Verlauf — Antworten des echten Hosts"));
+    if(!DS.verlauf.length)rechts.append(h("div",{class:"gi-hint"},"Noch nichts gesendet. Ein Command liefert die Events (oder die Ablehnung) seines Aggregats, eine Query die Antwort ihres Readers."));
+    DS.verlauf.forEach(v=>rechts.append(dsVerlaufZeile(v)));}
+  async function dsSende(){const typ=DS.typ,art=DS.art,daten=DS.werte[typ]||{};
+    const v={zeit:new Date(),art,typ,als:dsAls(),daten,laeuft:true};DS.verlauf=[v,...DS.verlauf].slice(0,40);dsLeiste();
+    v.r=await dsEingang(art,{typ,daten});v.laeuft=false;
+    if(v.r.ok)dsMerkeIds(art==="command"?{id:v.r.aggregatId}:v.r.antwort,art==="command"?v.r.aggregat+" ("+typ+")":typ);
+    dsLeiste();}
+  function dsVerlaufZeile(v){const r=v.r||{};let kopf,art;
+    if(v.laeuft){kopf="… "+v.typ;art="";}
+    else if(r.abgelehnt){kopf="✕ "+v.typ+" — "+r.abgelehnt;art="rot";}
+    else if(r.ablehnung){kopf="⚠ "+v.typ+" → abgelehnt: "+r.ablehnung.typ;art="gelb";}
+    else if(r.ok&&v.art==="command"){kopf="✓ "+v.typ+" → "+((r.events||[]).map(e=>e.typ).join(", ")||"kein Event")+"  ·  "+r.aggregat+" v"+r.version;art="gut";}
+    else if(r.ok){kopf="✓ "+v.typ+" → "+(r.antwort?r.antwort.typ:"?");art="gut";}
+    else{kopf="✕ "+v.typ+" — "+(r.fehler||("HTTP "+r.status));art="rot";}
+    const d=h("details",{class:"ds-vz "+art},h("summary",{},h("span",{class:"ds-zeit"},v.zeit.toLocaleTimeString()+" · "+v.als),kopf));
+    const {status,...ohne}=r;d.append(h("pre",{class:"wb-log"},JSON.stringify({gesendet:{typ:v.typ,daten:v.daten},antwort:ohne},null,2)));
+    return d;}
+
+  // ── Aufträge (Laufort Hand) ──
+  function dsAuftraegeTab(box){
+    if(DS.auftragFehler){box.append(h("div",{class:"gi-hint"},DS.auftragFehler));return;}
+    if(!DS.handFn.length){box.append(h("div",{class:"gi-hint"},"Keine Funktion mit Laufort Hand in „"+aktivName()+"“. Im 🖥 Host-Rahmen unter Funktionen den Laufort einer Funktion auf Hand stellen und ⟳ — dann beantwortest du ihre Aufträge hier (oder im Panel der Funktions-Karte)."));return;}
+    const spalte=h("div",{class:"ds-auftraege"});box.append(spalte);
+    spalte.append(h("div",{class:"gi-hint",style:"flex-basis:100%"},"Laufort Hand: "+DS.handFn.join(", ")+" — die Werkbank ist der Ausführer; die Antwort wird wie jedes Funktions-Ergebnis genau einmal ins Log geschrieben."));
+    if(!DS.auftraege.length)spalte.append(h("div",{class:"gi-hint"},"Keine offenen Aufträge."));
+    DS.auftraege.forEach(a=>spalte.append(dsAuftragBox(a)));}
+  function dsAuftragBox(a){const st=DS.antwort[a.vorgang]||(DS.antwort[a.vorgang]={typ:a.ergebnisse[0],werte:{}});
+    const box=h("div",{class:"ds-auftrag"});
+    box.append(h("div",{class:"ds-ak"},h("b",{},"⧗ ƒ "+a.funktion),h("span",{class:"ds-zeit"},"  seit "+new Date(a.seit).toLocaleTimeString()+(a.akteur?" · im Auftrag von "+a.akteur:""))));
+    box.append(h("div",{class:"ds-auf",title:"Vorgang "+a.vorgang+(a.ursache?" · Ursache "+a.ursache:"")},h("span",{class:"slotlbl"},a.auftrag.typ),h("code",{},JSON.stringify(a.auftrag.daten))));
+    const sel=h("select",{onchange:e=>{st.typ=e.target.value;box.replaceWith(dsAuftragBox(a));}},...a.ergebnisse.map(t=>h("option",{value:t},t)));sel.value=st.typ;
+    box.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"Ergebnis"),sel));
+    const form=h("div",{class:"ds-form"});box.append(form);
+    dsSchema(st.typ).then(sch=>{
+      // Bequemlichkeit: gleichnamige Felder des Auftrags vorbelegen (z. B. Pfad) — überschreibbar.
+      if(st.werte[st.typ]===undefined){const vor={};Object.keys(sch.felder||{}).forEach(k=>{const q=Object.keys(a.auftrag.daten||{}).find(x=>x.toLowerCase()===k.toLowerCase());if(q)vor[k]=a.auftrag.daten[q];});
+        st.werte[st.typ]=Object.keys(vor).length?vor:undefined;}
+      form.append(wbFeld(sch,st.werte[st.typ],v=>st.werte[st.typ]=v));}).catch(e=>form.append(h("div",{class:"llmmeld err"},e.message)));
+    const meld=h("div");
+    box.append(h("div",{class:"frow"},h("button",{class:"act go",onclick:()=>dsAntworte(a,{typ:st.typ,daten:st.werte[st.typ]||{}},meld)},"✓ Antworten"),
+      h("button",{class:"act",title:"Der Schritt scheitert — die Fehlschlag-Marke steht im Log, wie bei einer werfenden Funktion",
+        onclick:()=>{const g=prompt("Warum scheitert der Schritt?","von Hand abgelehnt");if(g)dsAntworte(a,{fehler:g},meld);}},"✕ Scheitern lassen")),meld);
+    return box;}
+  async function dsAntworte(a,body,meld){meld.textContent="…";const r=await dsEingang("ergebnis",{vorgang:a.vorgang,...body});
+    if(r.ok){delete DS.antwort[a.vorgang];deFlash("✓ ƒ "+a.funktion+": "+(body.fehler?"gescheitert":body.typ)+" — der Ablauf läuft weiter",true);await dsTakt(true);}
+    else{meld.textContent="";meld.append(h("div",{class:"llmmeld err"},r.fehler||r.ausgang||("HTTP "+r.status)));}}
+
+  // ── Worker (Laufort Extern) ──
+  function dsWorkerTab(box){const ws=DS.worker;
+    if(!ws.length){box.append(h("div",{class:"gi-hint"},"Keine Funktionen in „"+aktivName()+"“ gebunden."));return;}
+    const t=h("div",{class:"ds-worker"});ws.forEach(w=>t.append(dsWorkerZeile(w)));box.append(t);}
+  function dsWorkerZeile(w){const z=h("div",{class:"ds-wz"});
+    z.append(h("b",{},"ƒ "+w.funktion),h("span",{class:"wb-chip"+(w.laufort==="Extern"?"":" grau")},w.laufort));
+    if(w.laufort!=="Extern"){z.append(h("span",{class:"ds-zeit"},w.laufort==="Host"?"rechnet im Host (C#-Implementierung)":"die Werkbank antwortet (⧗ Aufträge)"));return z;}
+    if(!w.worker){z.append(h("span",{class:"ds-zeit"},"kein Worker konfiguriert (Funktionen:"+w.funktion+":Worker)"));return z;}
+    z.append(h("code",{},w.worker));
+    z.append(w.laeuft?h("span",{class:"wb-chip gut"},"● läuft · PID "+w.pid):w.exitCode!=null?h("span",{class:"wb-chip rot"},"beendet (Exit "+w.exitCode+")"):h("span",{class:"wb-chip grau"},"○ steht"));
+    z.append(w.laeuft?h("button",{class:"act",onclick:()=>dsWorker(w.funktion,"stopp")},"■ Stoppen"):h("button",{class:"act go",onclick:()=>dsWorker(w.funktion,"start")},"▶ Worker starten"));
+    z.append(h("button",{class:"act",title:"Ausgabe des Workers",onclick:()=>dsWorkerLog(w.funktion)},"Log"));
+    if(w.zuletzt)z.append(h("div",{class:"ds-zeit",style:"flex-basis:100%;overflow-wrap:anywhere"},"› "+w.zuletzt));
+    return z;}
+  async function dsWorker(f,aktion){let r;try{r=await wbJson("/api/werkbank/worker/"+encodeURIComponent(f)+"/"+aktion,{method:"POST"});}catch(e){r={ok:false,fehler:e.message};}
+    if(!r.ok){deFlash("⚠ Worker "+f+": "+(r.fehler||"?"),false);const out=wbOut(true);if(out){wbZeile(out,"✗ Worker "+f+": "+r.fehler,"rot");(r.log||[]).forEach(l=>wbZeile(out,l));}}
+    else deFlash(aktion==="start"?"▶ Worker "+f+" läuft (PID "+r.pid+")":"■ Worker "+f+" gestoppt",true);
+    await dsTakt(true);}
+  async function dsWorkerLog(f){const out=wbOut(true);if(!out)return;let l=[];try{l=await wbJson("/api/werkbank/worker/"+encodeURIComponent(f)+"/log");}catch(e){}
+    wbZeile(out,"▶ Worker "+f);out.append(h("pre",{class:"wb-log"},l.length?l.join("\n"):"(keine Ausgabe)"));}
+
+  // ── An den Karten: Funktion (⧗ n, Worker) und Quelle (Datei ablegen) ──
+  function dsBadge(n){if(n.kind!=="funktion"||!n.ref)return null;
+    const a=DS.auftraege.filter(x=>x.funktion===n.ref.name).length,w=DS.worker.find(x=>x.funktion===n.ref.name&&x.laeuft);
+    if(!a&&!w)return null;
+    return h("span",{class:"gwait"+(a?"":" ruhig"),title:a?a+" Auftrag/Aufträge warten auf eine Antwort von Hand — Klick auf die Karte":"externer Worker läuft"},a?"⧗ "+a:"▶");}
+  function dsBadges(){if(!world)return;world.querySelectorAll(".gnode2.n-funktion").forEach(el=>{const n=NODEBY.get(el.dataset.id),head=el.querySelector(".ghead");if(!n||!head)return;
+    const alt=head.querySelector(".gwait"),neu=dsBadge(n);if(alt)alt.remove();if(neu)head.insertBefore(neu,head.querySelector(".gx"));});}
+  function dsFunktion(body,f){const w=DS.worker.find(x=>x.funktion===f.name),a=DS.auftraege.filter(x=>x.funktion===f.name),u=aktivName();
+    body.append(h("div",{class:"gsec"},"▶ Durchspielen in "+u));
+    if(!w){body.append(h("div",{class:"gi-hint"},"In „"+u+"“ nicht gebunden (Funktionen:"+f.name+")."));return;}
+    if(w.laufort==="Hand"){if(!a.length)body.append(h("div",{class:"gi-hint"},hostLaeuft()?"Laufort Hand — keine offenen Aufträge.":"Laufort Hand — der Host steht (⟳)."));
+      a.forEach(x=>body.append(dsAuftragBox(x)));}
+    else if(w.laufort==="Extern")body.append(dsWorkerZeile(w));
+    else body.append(h("div",{class:"gi-hint"},"Laufort Host — die C#-Implementierung rechnet im Host. Für eine Antwort von Hand oder einen Python-Worker den Laufort im 🖥 Host-Rahmen (Funktionen) umstellen und ⟳."));}
+  function dsQuelle(body,r){const u=aktivName();body.append(h("div",{class:"gsec"},"▶ Durchspielen in "+u));
+    const pfad=h("div",{class:"ds-zeit",style:"overflow-wrap:anywhere"},"…");body.append(pfad);
+    wbJson("/api/werkbank/quelle/"+encodeURIComponent(r.name)).then(j=>{pfad.textContent=j.pfad?"Der Treiber beobachtet "+j.pfad:"⚠ kein Pfad in "+u;}).catch(()=>{});
+    body.append(h("div",{class:"frow"},h("input",{type:"file",multiple:"",onchange:e=>{dsLegeAb(r.name,[...e.target.files]);e.target.value="";}})),
+      h("div",{class:"gi-hint"},"Oder Dateien auf die Quellkarte ziehen. Die Werkbank legt sie in den Pfad, melden tut sie der echte Treiber"+(hostLaeuft()?".":" — sobald der Host läuft (⟳).")));}
+  async function dsLegeAb(quelle,files){for(const f of files){let r;
+      try{r=await (await fetch("/api/werkbank/quelle/"+encodeURIComponent(quelle)+"/datei?name="+encodeURIComponent(f.name),{method:"POST",body:f})).json();}catch(e){r={ok:false,fehler:e.message};}
+      deFlash(r.ok?"📁 "+f.name+" → "+quelle+(r.hostLaeuft?" — der Treiber meldet sie":" — Host steht, gemeldet wird beim Start"):"⚠ "+f.name+": "+r.fehler,!!r.ok);}}
+  function dsDropZiel(el,n){const r=n.ref;if(!r||!r.treiber||n.kind==="host")return;
+    const hatDateien=e=>[...((e.dataTransfer&&e.dataTransfer.types)||[])].includes("Files");
+    el.addEventListener("dragover",e=>{if(!hatDateien(e))return;e.preventDefault();e.stopPropagation();e.dataTransfer.dropEffect="copy";el.classList.add("ds-drop");});
+    el.addEventListener("dragleave",()=>el.classList.remove("ds-drop"));
+    el.addEventListener("drop",e=>{if(!hatDateien(e))return;e.preventDefault();e.stopPropagation();el.classList.remove("ds-drop");dsLegeAb(r.name,[...e.dataTransfer.files]);});}
+  // Eine Datei neben die Karte fallen gelassen: der Browser würde sie öffnen und den Editor verlassen.
+  ["dragover","drop"].forEach(ev=>window.addEventListener(ev,e=>{if([...((e.dataTransfer&&e.dataTransfer.types)||[])].includes("Files"))e.preventDefault();}));
+
+  // ── ⏩ Uhr vorstellen ──
+  function dsUhrMenue(cx,cy){const vor=um=>async()=>{let r;try{r=await wbJson("/api/werkbank/uhr/vor?um="+encodeURIComponent(um),{method:"POST"});}catch(e){r={ok:false,fehler:e.message};}
+      deFlash(r.ok?"⏩ Uhr der Sim-DB: Versatz "+r.versatz:"⚠ "+r.fehler,!!r.ok);await wbLadeUhr();wbKopf();render();};
+    menue(cx,cy,"⏩ Uhr der Sim-DB"+(WB.uhr&&WB.uhr.versatz?" · Versatz "+WB.uhr.versatz:""),[
+      {t:"+1 Minute",fn:vor("00:01:00")},{t:"+1 Stunde",fn:vor("01:00:00")},{t:"+1 Tag",fn:vor("1.00:00:00")},{t:"+7 Tage",fn:vor("7.00:00:00")},
+      {trenn:true},
+      {t:"↺ zurück auf 0",title:"Versatz 0 — die Uhr der Sim-DB geht wieder wie die echte",fn:async()=>{await wbJson("/api/werkbank/uhr?versatz=00:00:00",{method:"POST"}).catch(()=>{});await wbLadeUhr();wbKopf();render();}}]);}
+
+  // ── Laden und Takt: Identitäten + Rechte (bei Wechsel von Host/Umgebung/Token), Aufträge + Worker alle 3 s ──
+  async function dsRechte(){if(!hostLaeuft()){DS.rechte={fehler:"Der Host steht — ⟳ baut und startet ihn.",commands:[],queries:[]};return;}
+    const r=await dsEingang("rechte");DS.rechte=r.status===200?r:{fehler:r.fehler||("HTTP "+r.status),commands:[],queries:[]};}
+  async function dsTakt(erzwingen){
+    const lauf=hostLaeuft()+"|"+((WB.zustand||{}).laufStand||"")+"|"+aktivName()+"|"+(((WB.zustand||{}).host||{}).pid||"");
+    if(lauf!==DS.lauf||erzwingen===true&&!DS.ident){DS.lauf=lauf;
+      try{DS.ident=await wbJson("/api/werkbank/identitaeten");}catch(e){DS.ident=null;}
+      const t=(DS.ident&&DS.ident.tokens)||[];if(!t.some(x=>x.token===DS.token))DS.token=(t.find(x=>x.token===lsHole("ds.token"))||t[0]||{}).token||null;
+      DS.schemas={};await dsRechte();DS.sig="";}
+    if(hostLaeuft()){const r=await dsEingang("auftraege");
+      if(r.status===200){DS.auftraege=r.auftraege||[];DS.handFn=r.funktionen||[];DS.auftragFehler=null;}
+      else{DS.auftraege=[];DS.handFn=[];DS.auftragFehler=r.fehler||("HTTP "+r.status);}}
+    else{DS.auftraege=[];DS.handFn=[];DS.auftragFehler="Der Host steht — ⟳ startet ihn.";}
+    try{DS.worker=(await wbJson("/api/werkbank/worker")).worker||[];}catch(e){DS.worker=[];}
+    const sig=JSON.stringify([DS.auftraege.map(a=>a.vorgang),DS.worker.map(w=>[w.funktion,w.laufort,w.laeuft,w.exitCode,w.zuletzt]),DS.handFn,DS.auftragFehler]);
+    if(sig===DS.sig&&erzwingen!==true)return;
+    DS.sig=sig;
+    // Konsole offen: nur die Reiter auffrischen (das Formular behält Fokus); sonst die ganze Leiste.
+    const el=document.getElementById("ds-leiste");
+    if(DS.offen&&DS.tab==="konsole"&&el&&el.firstChild&&erzwingen!==true)el.firstChild.replaceWith(dsTabs());else dsLeiste();
+    dsBadges();
+    // Panel der gewählten Funktion nur neu, wenn sich IHRE Aufträge oder ihr Worker-Zustand geändert haben (ein halb ausgefülltes
+    //   Antwort-Formular überlebt das ohnehin — die Werte stehen in DS.antwort —, nur der Fokus nicht).
+    const n=SEL&&NODEBY.get(SEL);
+    if(n&&n.kind==="funktion"){const f=n.ref.name,w=DS.worker.find(x=>x.funktion===f)||{};
+      const fs=JSON.stringify([DS.auftraege.filter(a=>a.funktion===f).map(a=>a.vorgang),w.laufort,w.laeuft,w.exitCode]);
+      if(DS.fsel&&DS.fsel.f===f&&DS.fsel.s!==fs)zeigeInspector();DS.fsel={f,s:fs};}}
+  async function dsStart(){const t=lsHole("ds.leiste");DS.offen=!!t;if(t)DS.tab=t;dsLeiste();
+    setTimeout(()=>dsTakt(true),800);setInterval(()=>{if(!document.hidden)dsTakt();},3000);}
+  {const boot=window.deBoot;window.deBoot=async function(){await boot();dsStart();};}
 
 })();

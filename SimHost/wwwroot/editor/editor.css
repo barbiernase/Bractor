@@ -567,3 +567,41 @@
 #de .wb-eintrag{border:1px solid #2b3446;border-radius:6px;padding:4px 8px}
 #de .wb-eintrag summary{cursor:pointer;font-weight:600;display:flex;align-items:center;gap:6px}
 #de .wb-eintrag summary .rm{margin-left:auto}
+/* ── Durchspielen (Werkbank P5): Leiste unten — Konsole als Akteur · Aufträge (Laufort Hand) · Worker ── */
+#de .ds-leiste{flex:0 0 auto;display:flex;flex-direction:column;border-top:1px solid #232a38;background:#10141d;font-size:12px}
+#de .ds-leiste.offen{height:clamp(220px,34vh,440px)}
+#de .ds-tabs{display:flex;align-items:center;gap:4px;padding:3px 8px}
+#de .ds-leiste.offen .ds-tabs{border-bottom:1px solid #1d2433}
+#de .ds-tabs .sp{flex:1}
+#de .ds-tab{background:transparent;color:#b9c2d6;border:1px solid transparent;border-radius:6px;padding:3px 10px;cursor:pointer;font:600 12px system-ui}
+#de .ds-tab:hover{background:#1b2232}
+#de .ds-tab.an{background:#1d2433;border-color:#35507a;color:#e6ecf7}
+#de .ds-tab.warte{color:#ffe1a0}
+#de .ds-hint{color:#8b93a7;font-size:11px;margin-right:6px}
+#de .ds-inhalt{flex:1;min-height:0;overflow:auto;padding:8px 12px;display:flex;gap:18px}
+#de .ds-links{flex:0 0 min(470px,46%);display:flex;flex-direction:column;gap:6px;overflow:auto}
+#de .ds-rechts{flex:1;min-width:0;overflow:auto}
+#de .ds-leiste select,#de .ds-leiste input,#de .ds-leiste textarea{background:#0a0d13;color:#dfe4ee;border:1px solid #2a3344;border-radius:5px;padding:4px 6px;font:12px ui-monospace,monospace;min-width:0}
+#de .ds-leiste .frow{display:flex;align-items:center;gap:6px}
+#de .ds-leiste .frow select{flex:1}
+#de .ds-form{display:flex;flex-direction:column;gap:6px}
+#de .ds-vz{border:1px solid #232a38;border-radius:6px;padding:4px 8px;margin:4px 0;background:#0f131b}
+#de .ds-vz.gut{border-color:#2b5a43}
+#de .ds-vz.rot{border-color:#6a3040;background:#1d1116}
+#de .ds-vz.gelb{border-color:#6a5a30;background:#1a160c}
+#de .ds-vz summary{cursor:pointer;overflow-wrap:anywhere}
+#de .ds-zeit{color:#8b93a7;font-size:11px;margin-right:6px}
+#de .ds-auftraege{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start;width:100%}
+#de .ds-auftrag{border:1px solid #6a5a30;background:#16130b;border-radius:8px;padding:8px;display:flex;flex-direction:column;gap:6px;width:min(460px,100%);box-sizing:border-box}
+#de .ds-auf{display:flex;gap:6px;align-items:baseline}
+#de .ds-auf code{font-size:11px;color:#c4cde0;overflow-wrap:anywhere}
+#de .ds-worker{display:flex;flex-direction:column;gap:6px;width:100%}
+#de .ds-wz{display:flex;align-items:center;gap:8px;flex-wrap:wrap;border:1px solid #232a38;border-radius:6px;padding:6px 8px}
+#de .ds-wz code{font-size:11px;color:#c4cde0}
+#de .gwait{font-size:11px;padding:0 6px;border-radius:8px;background:#3a331f;color:#ffe1a0;border:1px solid #6a5a30;margin-left:4px;animation:dspuls 1.6s ease-in-out infinite;white-space:nowrap}
+#de .gwait.ruhig{background:#183126;color:#9be3bf;border-color:#2b5a43;animation:none}
+@keyframes dspuls{50%{opacity:.5}}
+#de .gnode2.ds-drop{outline:2px dashed #3fae7f;outline-offset:3px}
+#de .wb-mit{display:flex;gap:4px;flex:1;min-width:0}
+#de .wb-mit input{flex:1;min-width:0}
+#de button.act.klein{padding:2px 7px}

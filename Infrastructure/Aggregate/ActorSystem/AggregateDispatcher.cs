@@ -61,6 +61,22 @@ public class ProtoActorAggregateDispatcher : IAggregateDispatcher
         _ = DispatchWithRetryAsync(envelope);
     }
 
+    /// <summary>
+    /// Der Client-Pfad MIT Antwort (Werkbank-JSON-Eingang, P5): ein Versuch, bounded, das <see cref="CommandResult"/> zurück — Erfolg mit
+    /// Events, Ablehnungs-Event oder Fehler. <c>null</c> = keine Antwort im Zeitlimit (der Command kann trotzdem gewirkt haben).
+    /// </summary>
+    public static async Task<CommandResult?> FrageAsync(Proto.ActorSystem system, CommandEnvelope envelope, TimeSpan zeitlimit, CancellationToken ct)
+    {
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(zeitlimit);
+        try
+        {
+            return await system.Cluster().RequestAsync<CommandResult>(
+                ClusterIdentity.Create(envelope.AggregateId.ToString(), envelope.AggregateType), envelope, cts.Token);
+        }
+        catch (Exception e) when (e is OperationCanceledException or TimeoutException) { return null; }
+    }
+
     private async Task DispatchWithRetryAsync(CommandEnvelope envelope)
     {
         var identity = ClusterIdentity.Create(
