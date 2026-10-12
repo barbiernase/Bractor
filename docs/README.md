@@ -57,7 +57,7 @@ auf die jeweiligen Architektur-Kapitel.
 | 04 | [04-konsum-und-prozess-maschine.md](04-konsum-und-prozess-maschine.md) | vier Konsumenten, Pull-Schleife, Saga-DSL, Marking-Cursor |
 | 05 | [05-generatoren-analyzer-proto.md](05-generatoren-analyzer-proto.md) | Generator-Tabelle, 15 CQRS-Codes, Proto-Flow |
 | 06 | [06-transport-multinode-betrieb.md](06-transport-multinode-betrieb.md) | Wire-Serializer, Cluster, Cold-Start, Deploy, Config, Monitoring |
-| 07 | [07-graph-und-simulation.md](07-graph-und-simulation.md) | GraphExtractor + SimHost + interaktives Board |
+| 07 | — | entfallen (2026-10-12): Extractor-Grundlagen in [konzept-werkbank.md](konzept-werkbank.md) Anhang A.1, Simulation entfällt |
 | 08 | [08-frontend-blazor-client.md](08-frontend-blazor-client.md) | Bus/Store-Stack, Modul-System, Build-Status |
 | 09 | [09-python-sdk.md](09-python-sdk.md) | cqrs_client + ML-Worker |
 | 10 | [10-entwickler-api.md](10-entwickler-api.md) | „Wie schreibe ich X?" für alle Bausteine |
@@ -67,10 +67,15 @@ auf die jeweiligen Architektur-Kapitel.
 
 ## Konzepte, Anleitungen, Analysen (neben den Kapiteln)
 
-Status geprüft 2026-10-06. „umgesetzt" = steht im Code; „Konzept" = Entwurf, nicht gebaut.
+> **Zielbild (verbindlich, 2026-10-12): [konzept-werkbank.md](konzept-werkbank.md)** — Editor als Werkbank: Code als einzige Wahrheit,
+> keine Simulationsschicht (Umgebungen sim/prod mit echter DB), Spur, Quellen als Treiber + Konfig, Backend im Editor. Wo andere
+> Dokumente widersprechen, gilt es; widersprüchliche Konzepte sind gelöscht bzw. gekürzt.
+
+Status geprüft 2026-10-12. „umgesetzt" = steht im Code; „Konzept" = Entwurf, nicht gebaut.
 
 | Datei | Thema | Status |
 |---|---|---|
+| [konzept-werkbank.md](konzept-werkbank.md) | **Zielbild Werkbank** — Entwerfen, Erzeugen, Durchspielen, Spur, Backend in einem Editor; Phasen P0–P8 | **Zieldokument** |
 | [konzept-akteure.md](konzept-akteure.md) | **Akteure, Akteur-Verträge (Zusagen), Clients** — wer hineingibt, was er draußen zusagt, welche Software es tut | umgesetzt; durable Zustellung an Clients offen |
 | [konzept-domaenen-editor.md](konzept-domaenen-editor.md) | **Domänen-Editor** — kanonische Referenz (Leitprinzipien, Palette, Schreib-/Leseseite, Prozess, Betrieb, Bedienung, SimHost, Akteure §12) | gebaut |
 | [konzept-editor-panel-bearbeitung.md](konzept-editor-panel-bearbeitung.md) | Bearbeiten nur im Panel, Graph als Landkarte | umgesetzt |
@@ -78,11 +83,8 @@ Status geprüft 2026-10-06. „umgesetzt" = steht im Code; „Konzept" = Entwurf
 | [konzept-llm-minimalkontext.md](konzept-llm-minimalkontext.md) | LLM-Füllung von Code-Blöcken, Kontext nur aus Code + Graph | gebaut (Kontexte + Konsole) |
 | [konzept-editor-komposition.md](konzept-editor-komposition.md) | Editor als Kompositions-Sprache (Grammatik, Kapselung, Muster) | Phase 1 umgesetzt, Rest Konzept |
 | [konzept-editor-pipelines.md](konzept-editor-pipelines.md) | Pipelines im Editor (Rand-Band, Kanäle mit Garantie, Frist als Ausgang) | Konzept |
-| [konzept-pipeline-stroeme.md](konzept-pipeline-stroeme.md) | Pipeline-Schritte als Actors | Konzept |
-| [analyse-editor-backend-abdeckung-2026-09-24.md](analyse-editor-backend-abdeckung-2026-09-24.md) | Abdeckung Backend ↔ Editor, Roadmap | Momentaufnahme 2026-09-24 |
 | [konzept-exactly-once-naht.md](konzept-exactly-once-naht.md) | Verträge eines Co-Commit-Stores | Analyse, Hebel 1 umgesetzt |
 | [konzept-client-haertung.md](konzept-client-haertung.md) | Client-Oberfläche: Zustellgarantie, Python-SDK, Transport-Sicherheit | Analyse, T2a/T2b/T3 umgesetzt |
-| [konzept-streaming-architektur.md](konzept-streaming-architektur.md) | Streaming-Quellen (OPC UA, MQTT, Börsen-Feeds) | Konzept |
 | [konzept-training-und-datensatz.md](konzept-training-und-datensatz.md) | Datensätze & Training (Modell-Lebenszyklus) | umgesetzt |
 | [konzept-datensatz-kuratierung.md](konzept-datensatz-kuratierung.md) | Datensatz als Tag, Kuratieren beim Betrachten | umgesetzt |
 | [konzept-galerie-datensatz-komposition.md](konzept-galerie-datensatz-komposition.md) | Galerie ↔ Einbild ↔ Datensatz-Komposition | Konzept |

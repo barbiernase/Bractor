@@ -1,247 +1,15 @@
 # Konzept: Pipelines im Domänen-Editor
 
-> **⚑ Kanonisch ist §14 „Pipeline als Fluss“ (2026-10-07).** Eine Pipeline ist eine frei verdrahtete Fläche aus Katalog-Knoten
-> (Quelle → Funktionen → Commands), entworfen im Editor und als Fluss-Code geschrieben. §1–§13 beschreiben das Handle-Modell davor
-> und bleiben als Historie und Laufzeit-Befund stehen; wo sie §14 widersprechen, gilt §14.
+> **Zielbild ist `docs/konzept-werkbank.md`; wo dieses Dokument widerspricht, gilt das Zielbild.** Dieses Dokument enthält nur noch:
+> §12 Nachrichten mit zwei Seiten (gekürzt), §13.6 Ablauf als Kette, §14 Pipeline als Fluss (kanonisch: eine Pipeline ist eine frei
+> verdrahtete Fläche aus Katalog-Knoten, Quelle → Funktionen → Commands) und den Zuordnungs-Editor. Das Handle-Modell davor
+> (§1–§11, §13.1–§13.5) ist entfallen.
 
 > **Einordnung:** Dieses Dokument ist eine *Anwendung* der allgemeinen Kompositions-Sprache
-> (`docs/konzept-editor-komposition.md`): Alphabet (Kanäle, Bausteine), Grammatik (§6 hier), Operatoren (Schleife, Warten,
-> Verkettung), Kapselung und Linsen gelten dort allgemein. Die Darstellungen hier (Band, Matrix, Ablauf) sind **Linsen**, keine
-> Abbildung des Bestands; die Bestands-Pipelines dienen nur als Beispiele.
-
-> Stand 2026-10-07 · **teilweise umgesetzt**: §12 (Ausgänge nach Typ, Frist als Ausgang, `veröffentlicht`, 2026-10-01) und §13
-> (Laufzeit-Befunde aus §8 + Rundweg-Fehler, 2026-10-07). Weiter Konzept: Phasen 1, 3–5 (Kanal-Symbole, Garantie-Strich,
-> Zeit-Spur, Ingress als Domänen-Fakt, Simulation). Grundlage: Laufzeit-Aufnahme (Code-Stellen unten) und die Editor-Arbeit aus
-> `docs/konzept-handle-ausgaenge.md` §11–§13. Verwandt: `docs/konzept-domaenen-editor.md` §7 (Betrieb/Host),
-> `docs/konzept-streaming-architektur.md` (Ingress-Konnektoren), `docs/04-konsum-und-prozess-maschine.md` §4.6 (P6.1/P6.2).
-
-## 1 · Die Frage
-
-Der Editor zeigt Pipelines heute als einen Konsumenten unter vielen: Karte mit Handles, je Handle ein Eingang und einige
-Ausgangs-Ports. Das reicht nicht, weil eine Pipeline anders ist als Projektion, Reaktion oder Prozess:
-
-- Sie ist die **Grenze zur Außenwelt und zur Zeit**. Webhooks, Timer und Dateien kommen als Trigger herein, geplante
-  Selbst-Nachrichten und Fristen als Zeit.
-- Sie hat **fünf Eingangskanäle mit verschiedenen Garantien** und **sechs Ausgangsarten**, auch hier mit verschiedenen
-  Garantien. Welche davon verlierbar sind und welche durabel, ist Invariante 6, und der Editor zeigt es heute nicht.
-- Ihr Programmiermodell hat sich mit §11 geändert: Planen ist ein Ausgang (`Selbst<T>`, `Frist<TCmd>`), kein Aufruf. Der Editor
-  trägt aber noch Knoten aus der Zeit davor, den Frist-Knoten und den Trigger-Modus „Frist“.
-
-Ziel: **Alles, was eine Pipeline ist und tut, ist im Editor sichtbar, zeichenbar und wird exakt geschrieben.** Das gilt für
-Eingänge, Ausgänge, Garantien, Konfiguration und Ingress, jeweils als Code-Fakt aus der Signatur. Kein Rumpf-Fakt, keine
-Namensregel.
-
-## 2 · Was eine Pipeline zur Laufzeit ist (Ist, aus dem Code)
-
-**Vertrag.** Eine Pipeline ist eine Klasse `: IPipelineHandler` mit `PipelineId`. Ihre Handles haben die Form
-`Handle(TEingang, PipelineContext, Fähigkeit…)` (CQRS057). Es gibt zwei Rückgabe-Formen, je nach Ausgabemenge (§13 dort): **keine
-Ausgabe ⇒ `Task`**, sonst **`IAsyncEnumerable<OneOf<…>>` bzw. `IEnumerable<OneOf<…>>`**, auch bei nur einem Ausgang.
-`PipelineContext` ist reine Daten (`CorrelationId`, Quelle-Aggregat nur bei Event-Eingang). Konfig-Records und Dienste kommen
-über den Konstruktor, Fähigkeiten als Parameter. Kein Store und kein Fristplan im Zustand (CQRS054).
-
-**Eingänge**
-
-| Kanal | Woher | Transport | Garantie |
-|---|---|---|---|
-| **Trigger** (`: IPipelineTrigger`) | Ingress (Webhook `MapPipelineWebhook`, Timer `TimerTrigger.Registrierung`, gRPC-Client), eine andere Pipeline | Cluster-Request an `Pipeline-{Id}` (die EINE Aktivierung im Cluster, §13), 5 s, `PipelineAck` | verlierbar; heilt durch Re-Trigger |
-| **Persistentes Event** (`IEvent`) | Aggregat-Log | eigener Pull-Pfad je Stream (`pull-pipeline-{Name}`, `IEmittentenCursor`, Signal + Poll) | at-least-once, parallel über Streams |
-| **Transientes Event** (`ITransientEvent`) | Broker | Push an den Pipeline-Actor | verlierbar |
-| **Selbst-Nachricht** (`: IPipelineSelfMessage`) | eigener `Selbst<T>`-Ausgang | `ReenterAfter` im Actor, Token ersetzt | verlierbar (nur im Speicher) |
-| **Start** (`PipelineGestartet`) | Framework, je Aktivierung (der `PipelineStartupService` jedes Knotens hält sie per `PipelineAktivieren` am Leben) | Selbst-Kanal | einmal je Aktivierung, der einzige Wiederanlauf für Ticks |
-
-**Ausgänge** (die OneOf-Varianten)
-
-| Art | Wohin | Garantie |
-|---|---|---|
-| **Command** | Aggregat über `CommandEmitter` (einziger Emit-Weg, CQRS020/021) | ab Event-Eingang idempotent (Kausalität = Quelle + Version); ab Trigger/Selbst **nicht** idempotent (Kausalität = neue Guid) |
-| **Trigger** | die Pipeline, die diesen Trigger-Typ behandelt | verlierbar |
-| **Transientes Event** | Broker | verlierbar |
-| **`Selbst<T>`** | derselbe Actor, nach Verzögerung | verlierbar; **aus einem Event-Handle nicht möglich** (Pull-Pfad ohne Mailbox → `NotSupportedException`) |
-| **`Frist<TCmd>`** | Fristplan (Marten, DB-Uhr) → Command `TCmd(Guid)` am Ziel-Aggregat | durabel; fällig = Log-Zeit des auslösenden Events + Dauer (ohne Event: DB-Uhr) |
-| **`FristStorno<TCmd>`** | löscht die Frist (deterministische FristId) | durabel |
-
-Code-Stellen: `Abstractions/Planung.cs`, `Abstractions/PipelineContext.cs`, `Infrastructure/Pipeline/PipelineActorBase.cs`,
-`PipelineTriggerSender.cs`, `PipelineEventPullBridge.cs`, `Infrastructure/Deadlines/FristPlaner.cs`,
-`Domain.SourceGeneration/PipelineDispatchGenerator.cs`, `Infrastructure.SourceGeneration/PipelineActorGenerator.cs`.
-
-## 3 · Ist im Editor und die Lücken
-
-Stand der Aufnahme 2026-09-30; ~~durchgestrichen~~ = inzwischen erledigt (§12, §13).
-
-| Thema | Editor heute | Code | Lücke |
-|---|---|---|---|
-| Eingangsarten | Trigger / Event / Self | + transientes Event, + Start, persistent ≠ transient | Transport und Garantie unsichtbar; Start erscheint als „Self PipelineGestartet“ und ist nicht zeichenbar |
-| Ausgänge | „+ Ausgang ▶“: Command (sofort · ⏳ Frist · ✕⏳ Storno), Trigger, transientes Event, Self-Tick, Read-Fn | dieselben OneOf-Varianten | ~~Frist nur als Alt-Knoten; transiente Events fehlen~~ (§12) |
-| Frist | Ausgang am Handle | Ausgang am Handle; Dauer ist ein Laufzeitwert im Rumpf | ~~zwei Wahrheiten~~ (§12); Reste des alten Frist-Knotens stehen noch im Board-JS (§13.3) |
-| Trigger-Modus | Timer / Webhook / FileWatch | Ingress = Aufruf einer `[Ingress]`-Methode | ~~„Frist“ als Modus~~ (§12); Timer/Datei haben im Code kein Vorbild zum Schreiben, `IngressArt.Datei` trägt keine Methode |
-| Verzögerung von `Selbst` | kein Feld (Rumpf) | Rumpf (`Selbst.In(msg, dauer)`) | richtig so, aber nicht erklärt |
-| Handle-Form | automatisch (§13) | `Task` / Strom mit OneOf | erledigt |
-| Dienste | „nutzt Dienst“-Ports, Dienst-Knoten | Konstruktor + DI-Bindung im Host | wird weder gelesen noch geschrieben (`dienste` fehlt in `PipelineKarte`) |
-| Simulation | Pipelines laufen nicht mit | – | keine Vorschau, was ein Trigger bewirkt |
-| Guardrails | keine pipelinespezifischen | siehe §6 | Fehlformen fallen erst zur Laufzeit auf |
-
-## 4 · Leitidee
-
-**Eine Pipeline ist der Übersetzer am Rand: Außenwelt und Zeit hinein, Domänen-Commands hinaus.** Der Editor zeigt sie deshalb
-nicht als Kasten neben Projektionen, sondern als **Band am Rand des Boards**:
-
-- links die **Quellen** (Ingress: Webhook, Timer, Datei, Client),
-- in der Mitte die **Pipeline** mit ihren Handles, wie ein Decider mit Regeln,
-- rechts die **Ziele** (Aggregate über Commands, andere Pipelines über Trigger, der Broker), dazu **die Zeit** als eigene Spur
-  (Selbst-Schleifen, Fristen).
-
-Drei Grundsätze aus den Invarianten:
-
-1. **Nur Signatur.** Eingang = erster Parameter, Ausgänge = OneOf, Abhängigkeiten = Parameter bzw. Konstruktor. Was der Rumpf
-   *wann* tut, zeigt der Editor nicht (wie bei Decidern).
-2. **Garantie ist sichtbar (Invariante 6).** Jede Kante trägt ihre Garantie als Strich: **durchgezogen = durabel**
-   (persistentes Event, Frist, Command ab Event), **gestrichelt = verlierbar** (Trigger, transientes Event, Selbst, Command ab
-   Trigger/Selbst). Wer eine verlierbare Kante auf einen Pfad legt, der Durabilität braucht, sieht es am Strich.
-3. **Die Form folgt dem Inhalt.** Man zeichnet Ausgänge; `Task` oder Strom und OneOf ergeben sich daraus (schon umgesetzt, §13).
-
-## 5 · Zielbild: Knoten, Ports, Kanten
-
-### 5.1 Pipeline-Karte
-
-- Kopf: Name, Namespace, **PipelineId**, **Konfigs** (Konstruktor), **Dienste** (Konstruktor, Port zum Dienst-Knoten).
-- Hinweis-Zeile zur Laufzeit: „ein Actor je PipelineId (serielle Mailbox) · Events parallel je Stream“. Dieser Hinweis gilt erst,
-  wenn die Befunde aus §8 behoben sind; bis dahin zeigt der Editor den Ist-Zustand als Warnung.
-- Liste der Handle-Karten, gruppiert nach Kanal: **Start**, **Trigger**, **Events**, **Selbst**.
-
-### 5.2 Handle-Karte (eigene Karte, wie der Decider)
-
-**Eingangs-Port**, eine Art je Symbol:
-- ⚡ Trigger (Record `: IPipelineTrigger`) — Port zu Ingress-Knoten oder Trigger-Ausgang einer anderen Pipeline
-- ◆ persistentes Event (durabel, Pull) · ◇ transientes Event (verlierbar, Push)
-- ↺ Selbst (Record `: IPipelineSelfMessage`) — der Rückkanal einer Selbst-Schleife
-- ▶ Start (`PipelineGestartet`) — Framework-Eingang, höchstens einer je Pipeline, kein Domänen-Record
-
-**Ausgangs-Ports** = die OneOf-Varianten, je Art ein Symbol, alle auf einer Karte:
-- `sendet Command ▶` → Aggregat. Strich je nach Eingang: ab ◆ durchgezogen (idempotent), sonst gestrichelt.
-- `erzeugt Trigger ▶` → Handle einer anderen Pipeline (Verkettung, z. B. FileWatch → ImageProcessing)
-- `veröffentlicht ▶` → transientes Event (Broker), gestrichelt. **Neu**; ein persistentes Event ist hier nicht wählbar (§6).
-- `plant Selbst ↺` → die Selbst-Nachricht; die Kante läuft als **Schleife** zurück auf den ↺-Handle derselben Pipeline.
-  Anlegen erzeugt Record und Handle (so heute schon, §13).
-- `plant Frist ⏳ Command` → die Frist-Kante endet am Ziel-Aggregat (durabel, mit Uhr-Symbol);
-  `storniert Frist ✕⏳ Command` → dieselbe Frist, von einem anderen Handle. Die **Dauer** ist Rumpf (Laufzeitwert) und wird
-  als „Dauer: im Rumpf“ ausgewiesen.
-- `darf Store.Fn ▶` → Lese-Fähigkeit (Parameter).
-
-**Form-Zeile**: „gibt nichts zurück (Task)“ bzw. „Strom · OneOf<…>“, abgeleitet, nicht editierbar.
-
-### 5.3 Ingress-Knoten (Quelle)
-
-Ein Knoten je Bindung im Host: Modus **Webhook** (Route), **Timer** (Intervall), **Datei** (Pfad/Muster). Er erzeugt genau eine
-Trigger-Nachricht (Kante zum ⚡-Port). Die Trigger-Nachricht selbst ist eine **Record-Karte** (Felder), keine Unterform des
-Ingress-Knotens. So kann derselbe Trigger aus mehreren Quellen kommen (Webhook + gRPC-Client).
-Der Modus „Frist“ entfällt (§5.4).
-
-### 5.4 Frist: vom Knoten zum Ausgang
-
-Der Frist-Knoten ist die Form vor §11. Zielbild: **eine Frist ist ein Paar von Ausgängen** (`Frist<TCmd>` an einem Handle,
-`FristStorno<TCmd>` an anderen) und **eine Kante zum Ziel-Aggregat**. Das Board kann das Paar als „Frist-Klammer“ hervorheben
-(gleicher `TCmd` = gleiche Frist). Migration: Ein Frist-Knoten aus dem Code wird beim Einlesen zu diesen Ausgängen; die Felder
-„Kontext“ und „Dauer aus HostSetting“ entfallen (der Kontext ist der Command-Typname, die Dauer ist Rumpf).
-
-### 5.5 Zeit-Spur
-
-Selbst-Schleifen und Fristen sind die **einzige Zeit** im System. Eine eigene Spur unter den Pipelines macht sichtbar, welche
-Pipeline wovon zeitlich abhängt: ↺ gestrichelt (geht bei Neustart verloren, neu gesät durch ▶ Start), ⏳ durchgezogen.
-
-## 6 · Guardrails: was der Editor verhindert (und der Build erzwingen sollte)
-
-| Regel | Heute | Editor (Validator/Picker) | Build (Vorschlag) |
-|---|---|---|---|
-| `Selbst<T>` nur aus Trigger/Selbst/Start-Handles | Laufzeit-Ausnahme im Pull-Pfad | „plant Selbst“ an ◆-Handles nicht anbieten | neuer Analyzer (Handle mit `IEvent`-Eingang ⇒ kein `Selbst` im OneOf) |
-| Persistentes `IEvent` als Ausgang | still verworfen (kein Fall im Dispatch-Switch) | nur transiente Events wählbar | Analyzer: `IEvent` ohne `ITransientEvent` im Pipeline-OneOf ⇒ Fehler |
-| Trigger von zwei Pipelines behandelt | letzte gewinnt still (`TriggerToPipelineId`) | Fehler beim Verbinden | Generator-Diagnose |
-| Frist-Command braucht Ctor `(Guid)` | CQRS056 | Picker zeigt nur passende Commands | besteht |
-| `IAsyncEnumerable<X>` ohne OneOf | still `Task` im Generat | Scaffolder schreibt immer OneOf | Aufgabe liegt vor (§13) |
-| Start-Handle höchstens einmal | – | ▶ nur einmal anlegbar | (Signatur-Fakt, ggf. CQRS057) |
-| Zyklus Command → Event → Pipeline → Command | Azyklizitäts-Guard deckt Pipelines nicht ab | Zyklus markieren | Guard erweitern (offen seit §11) |
-
-## 7 · Schreiben (Code): Stand und Rest
-
-Schon umgesetzt (§13): neue Pipeline und neue Handles, Konfig-Konstruktor, OneOf- bzw. `Task`-Form, Selbst-Record,
-Trigger-Record, Fähigkeits-Parameter, Rückgabe-Abgleich bei geänderten Ausgängen, Webhook-Bindung nach Vorbild.
-
-Seit §12 (2026-10-01) erledigt: `veröffentlicht` (transientes Event) und Frist/FristStorno als Ausgang im Panel. Seit §13
-(2026-10-07): neue Konfig einer bestehenden Pipeline wird in den Konstruktor geschrieben; ein umverdrahteter Eingang schreibt den
-Eingangs-Typ der bestehenden Methode um.
-
-Offen:
-3. **Ingress für Timer/Datei**: Es gibt im Code keine Bindung als Vorbild, also kann der Schreiber nichts kopieren. Vorschlag:
-   Ingress-Bindungen werden selbst zum **Domänen-Code-Fakt**, zum Beispiel eine statische Methode mit `[Ingress(...)]` im
-   Pipeline-Namespace, die der Host generiert einsammelt. Das entspricht dem Router-Muster von `GeneratedFristen`. Damit
-   wandert die Bindung aus `Program.cs` in die Domäne und wird schreib- und lesbar wie alles andere.
-4. **Dienst-Bindung** (Konstruktor der Pipeline + DI im Host): wie Punkt 3, erst ein Code-Träger, dann Schreiben.
-5. **Konstruktor einer bestehenden Pipeline**: eine neue Konfig schreibt der Abgleich (§13); eine entfernte Konfig, ein Dienst,
-   Umbenennen/Verschieben der Klasse werden nur gemeldet (der Rumpf kann sie nutzen).
-
-## 8 · Voraussetzung: Laufzeit-Befunde, die das Editor-Bild heute falsch machen würden
-
-Der Editor darf nur versprechen, was die Laufzeit hält. Die Aufnahme hat Abweichungen gefunden (geprüft, Code-Stellen):
-
-| Befund | Stelle | Folge für das Bild |
-|---|---|---|
-| ~~**Zwei Instanzen je Pipeline**~~ — **behoben 2026-10-07 (§13.1)**: kein lokaler Spawn mehr, nur die Cluster-Aktivierung `Pipeline-{Id}` | `Infrastructure/Pipeline/PipelineStartupService.cs` | war: FileWatch pollte auf jedem Knoten |
-| **Singleton-Handler** für den Pipeline-Actor UND den Pull-Actor des Event-Pfads | `PipelineActorGenerator.cs` (`AddSingleton`) | Handler-Felder sind nur geschützt, solange der Zustand allein auf dem Trigger-/Selbst-Kanal lebt (so bei FileWatch) |
-| **Commands ab Trigger/Selbst nicht idempotent** (Kausalität = `Guid.NewGuid()`) | `PipelineActorBase.cs:210-214` | ein Re-Trigger kann doppelt wirken; die Strich-Regel (§4) muss das zeigen |
-| **Persistentes Event im OneOf still verworfen** | `PipelineDispatchGenerator.cs:427-450` | siehe §6 |
-| **Trigger → zwei Pipelines: letzte gewinnt still** | `PipelineActorGenerator.cs:98-139` | siehe §6 |
-| **Fähigkeits-Bereich je Actor/Stream, nie freigegeben** | `DiFaehigkeitsFabrik.cs:17`, Generator :341/:485 | Store-Instanzen leben so lange wie der Actor (Lese-Sichten evtl. veraltet) |
-| ~~Doku veraltet~~ (nachgezogen 2026-10-07) | – | – |
-| ~~**Frist rückte bei jedem Poll nach hinten**~~ — **behoben 2026-10-07 (§13.1)** | `FristPlaner.cs` | – |
-
-Entschieden (2026-10-07): **Pipelines sind Cluster-Singletons** je PipelineId (§11.1, umgesetzt in §13.1). „Je Knoten“ bliebe
-ein expliziter Signatur-Marker, falls eine Pipeline je an lokale Ressourcen gebunden sein muss.
-
-## 9 · Simulation (später)
-
-Pipelines in die Editor-Simulation aufnehmen: Ein ⚡-Knopf je Trigger-Record (Felder als Eingabe, wie bei Commands), eine
-**virtuelle Uhr** für ↺ und ⏳ (vorspulen), Commands laufen in die vorhandene Aggregat- und Saga-Simulation. Dienste und
-Fähigkeiten brauchen dafür Doubles aus dem Editor (Dienst-Knoten mit Code-Insel). Das zeigt, was ein Trigger in der Domäne
-auslöst, bevor Code läuft.
-
-## 10 · Umsetzung in Phasen
-
-| Phase | Inhalt | Voraussetzung |
-|---|---|---|
-| **0** | Laufzeit-Befunde §8 entscheiden — Singleton ✔ (§13.1); offen: Idempotenz ab Trigger, Event-Ausgang, Doppel-Trigger | – |
-| **1** | Board-Darstellung: Kanal-Symbole ▶ ◆ ◇ ⚡ ↺, Garantie-Strich an allen Pipeline-Kanten, Start als Framework-Eingang, Form-Zeile | – |
-| **2** | Ausgänge vervollständigen: `veröffentlicht` (transient), `Frist`/`FristStorno` als Ausgang, Frist-Knoten migrieren, Modus „Frist“ entfernen | 1 |
-| **3** | Guardrails §6 im Editor (Picker/Validator) + Analyzer-Vorschläge | 1 |
-| **4** | Ingress als Domänen-Code-Fakt (Timer/Datei/Webhook) + Dienst-Bindung → schreib- und lesbar | 0 |
-| **5** | Zeit-Spur + Simulation mit virtueller Uhr | 2 |
-
-## 11 · Offene Entscheidungen (mit Empfehlung)
-
-1. **Pipeline: Cluster-Singleton oder je Knoten?** ✔ Entschieden und umgesetzt (§13.1): Cluster-Singleton je PipelineId (Trigger landen ohnehin dort,
-   Selbst-Ticks sollen nicht n-fach laufen). „Je Knoten“ nur, wenn eine Pipeline an lokale Ressourcen gebunden ist, und dann
-   als expliziter Signatur-Marker.
-2. **Idempotenz ab Trigger/Selbst?** Empfehlung: Kausalität aus dem Trigger ableiten (z. B. eine Trigger-Id im Umschlag), damit
-   ein Re-Trigger nicht doppelt wirkt. Bis dahin zeigt der Editor diese Kanten gestrichelt.
-3. **Dürfen Pipelines Schreib-Fähigkeiten haben?** Heute bietet der Editor nur Lese-Fns an. Pipelines sind emittierend (Achse B,
-   `IEmittentenCursor`), ein Store-Schreiben wäre also nicht co-committet. Empfehlung: nur lesen; Schreiben geht über Commands.
-4. **Ingress im Host oder in der Domäne?** Empfehlung: Domäne (§7.3), sonst bleibt Timer/Datei im Editor unschreibbar.
-5. **Frist-Knoten ganz entfernen oder als Sicht behalten?** Empfehlung: als **Sicht** (Frist-Klammer über `Frist`/`FristStorno`
-   desselben Commands), nicht als eigenständiges Modell-Element.
+> (`docs/konzept-editor-komposition.md`): Alphabet (Kanäle, Bausteine), Grammatik, Operatoren (Schleife, Warten,
+> Verkettung), Kapselung und Linsen gelten dort allgemein. Die Bestands-Pipelines dienen nur als Beispiele.
 
 ## 12 · Nachrichten mit zwei Seiten: „◀ kommt aus" / „geht an ▶" (2026-10-01, umgesetzt)
-
-**Befund (GUI).** Eine Pipeline gibt ein OneOf zurück; die Laufzeit routet jede Variante **nach ihrem Typ** (Command → Aggregat,
-Trigger → Pipeline, transientes Event → Broker, `Selbst<T>` → derselbe Actor, `Frist<T>` → Fristplan → Aggregat). Das Board machte
-es umgekehrt: je Ausgangsart ein eigener Port und eine eigene Liste (`sends`/`emits`/`schedules`), Kanten/Picker/Kurzzeile je Art von
-Hand. Was in keine Schiene passte, war unsichtbar:
-
-- **Frist/FristStorno** standen nur im alten Frist-Knoten (Composition-Root-Sicht), nicht am Handle — die Handles der
-  `TrainingFristPipeline` hatten keinen einzigen Ausgang.
-- **Transiente Events** (Board-Art „Ablehnung") hatten keinen Ausgang: `PaarNichtKomplett → ImageProcessingPipeline` wurde nicht
-  gezeichnet und war nicht neu verdrahtbar; „veröffentlicht" fehlte am Pipeline-Handle. Der Schreiber hätte einen transienten
-  OneOf-Typ beim „C# schreiben" entfernt.
-- **Teil-Laden** („Domänen laden"): Pipelines liegen in `Domain.Pipeline.*`, ihre Commands im Aggregat-Namespace — ohne beide
-  geladen endeten die Handles im Leeren; nicht Geladenes war kein Ziel und nicht einmal benannt.
-- **Trigger-Ketten** liefen Handle → Handle an der Trigger-Nachricht vorbei.
 
 **Leitidee.** Jede Nachricht ist eine Karte mit **zwei Seiten**: ◀ *kommt aus* (Erzeuger) und *geht an* ▶ (Konsumenten). Das ist
 dieselbe Kante wie der Ausgang am Erzeuger — **eine** Wahrheit (die OneOf-Signatur des Erzeugers), zwei Enden. „kommt aus" ist
@@ -249,113 +17,23 @@ keine zweite Liste am Command, sondern die umgekehrte Sicht; Verbinden von der N
 
 | Nachricht | ◀ kommt aus | geht an ▶ |
 |---|---|---|
-| Command | beliebig: Außenwelt (abgeleitet), Prozess, Reaktion, Pipeline, Pipeline per Frist ⏳ (✕⏳ Storno) | genau ein Aggregat (Decider) |
+| Command | beliebig: Außenwelt (abgeleitet), Prozess, Reaktion | genau ein Aggregat (Decider) |
 | Event | genau ein Aggregat (Decider); reaktiv veröffentlicht | beliebig: Applier, Prozess, Projektion, Reaktion, Pipeline |
 | Transient | Decider (Ablehnung), Projektion/Reaktion/Pipeline (veröffentlicht) | beliebig: Projektion, Reaktion, Pipeline |
-| Trigger | Ingress (Code-Fakt `[Ingress]`), Pipeline; ohne Erzeuger: Außenwelt | genau eine Pipeline |
 | Query / Response | Außenwelt / Reader | Reader / Außenwelt |
 
 Die Kardinalität kommt aus der Grammatik (`rahmen.grammatik.konsume`), nicht aus dem Board-Code.
 
 **Umsetzung.**
-1. **Ein Ausgangs-Port je Pipeline-Handle** („+ Ausgang ▶", Port-Typ `aus`). Die Art folgt aus der angeklickten Karte: Command →
-   `sends`, transientes Event → `publishes`, Trigger-Karte → `emits`; ein persistentes Event ist gesperrt (GR-KEIN-EVENT-AUS-PIPELINE).
-   Je Command-Zeile wählt man **sofort · ⏳ Frist · ✕⏳ Storno** (`hd.fristen = [{command, art: frist|storno}]`).
-2. **Nachrichtenkarten** (Command/Event/Ablehnung/Query/Response/Trigger) zeigen „◀ kommt aus" und „geht an ▶" als Listen der
+1. **Nachrichtenkarten** (Command/Event/Ablehnung/Query/Response) zeigen „◀ kommt aus" und „geht an ▶" als Listen der
    Partner (anklickbar = springen; ✕ an Handle-Ausgängen = lösen) plus je Seite einen ⊕-Port. Die Ablehnung/transientes Event hat
-   jetzt einen Ausgang. Die Trigger-Karte hat „◀ kommt aus"; Ketten laufen Handle → Trigger-Karte → Handle.
-3. **Grenz-Partner:** ein Partner aus einer nicht geladenen Domäne erscheint als „↗ außerhalb · Namespace"; Klick lädt die Domäne
+   jetzt einen Ausgang.
+2. **Grenz-Partner:** ein Partner aus einer nicht geladenen Domäne erscheint als „↗ außerhalb · Namespace"; Klick lädt die Domäne
    dazu. Die Kurzzeile zeigt „↗ n außerhalb".
-4. **Frist ist ein Ausgang**, kein Knoten: der Mapper leitet keinen Frist-Knoten mehr ab, die Palette bietet ihn nicht mehr an; der
-   Trigger-Modus „Frist" entfällt.
-5. **Extractor/Mapper/Schreiber:** Ausgangs-Art `transient` (vor `event`); Pipeline-Handles tragen `publishes` und `fristen`;
-   `BoardLeseseite` schreibt sie zurück (`Frist<T>`/`FristStorno<T>`, transiente Typen bleiben erhalten).
-6. **`--check`:** jede Variante einer Pipeline-Signatur muss am Board-Handle als Ausgang stehen.
 
 ## 13 · Nachvollzug Programmiermodell ⇄ Editor (2026-10-07, umgesetzt)
 
-Die Pipeline wurde einmal vollständig nachverfolgt: Code → Generatoren (`PipelineDispatchGenerator`, `PipelineActorGenerator`) →
-Laufzeit (`PipelineActorBase`, `PipelineEventPullBridge`, `PipelineTriggerSender`, Fristplan) und Code → Extractor → Board → Schreiber.
-Ohne Änderungen im Editor ist der Rundweg verlustfrei (`--check`: Board ⇄ Modell, Fixpunkt mit allen fünf Pipelines). Behoben:
-
-### 13.1 Laufzeit
-
-1. **Frist rückte bei jedem Poll nach hinten.** Ein emittierender Konsument liest beim Poll den Stream bewusst ab 0 neu
-   (at-least-once). Commands dedupliziert der Empfänger, aber `Frist<TCmd>` ging direkt an den `FristPlaner`, und der rechnete
-   `jetzt + Dauer`. Folge: jede Bewegung des Streams (z. B. `TrainingFortschritt`) verschob die 6-h-Frist von `TrainingBegonnen`, sie
-   feuerte nie. **Jetzt** ist die Basis die Log-Zeit des auslösenden Events (`PipelineContext.SourceEventZeit` → `FristAuftrag.Ab`); jedes
-   erneute Lesen ergibt dieselbe Fälligkeit. Ohne Event (Trigger/Selbst) bleibt es die DB-Uhr. Feuert eine schon gefeuerte Frist nach
-   einem Replay erneut, dedupliziert der Empfänger (`FristId.FürZustellung`). Prüfstand: `FristPlanerTests`, `PipelineEventPullBridgeTests`.
-2. **Doppelte Pipeline-Instanz.** Der `PipelineStartupService` spawnte jede Pipeline zusätzlich lokal auf jedem Knoten. **Jetzt**
-   gibt es nur die Cluster-Identität (`PipelineTriggerSender.Identitaet`); der Dienst jedes Knotens schickt ihr alle 30 s (nach Fehlschlag
-   2 s) `PipelineAktivieren` — die erste Nachricht aktiviert sie, jede weitere wird nur quittiert, nach einem Knoten-Ausfall aktiviert der
-   nächste Durchlauf sie anderswo neu. `GetPipelineSpawnInfos` ist durch `GetPipelineIds` ersetzt. Neue Wire-Nachricht
-   `PipelineAktivieren` (Emitter + `CqrsWireJsonContext.g.cs`, `codegen.sh` ohne Drift).
-
-### 13.2 Editor-Rundweg
-
-1. **Umverdrahteter/umbenannter Eingang ging verloren.** `BoardLeseseite` bevorzugte `input`, das JS pflegte aber `event`/`selfName`
-   bzw. die Trigger-Karte. **Jetzt** gilt das bearbeitete Feld (Trigger über `trigId` oder `prod.id`), `input` nur als Rückfall; das JS
-   hält `input` beim Umverdrahten, beim Umbenennen eines Records und beim Umbenennen der Trigger-Nachricht mit. Weicht der Eingang vom
-   Code ab, reist der alte als `Handle.EingangImCode` mit, und „C# schreiben“ schreibt den Eingangs-Typ der bestehenden Methode um.
-2. **Konfig umbenennen** griff nur im Command-Zweig von `renameRefs` — jetzt für jeden Record.
-3. **Änderungen an einer bestehenden Pipeline-Karte** (Konfigs, Name, Namespace) waren nicht im Herkunfts-Stempel. **Jetzt** sind sie
-   es; eine neue Konfig wird im Konstruktor ergänzt (Parameter, Feld, Zuweisung, `using`), Umbenennen/Verschieben und eine entfernte
-   Konfig werden ausdrücklich gemeldet.
-
-### 13.3 Weiter offen (gefunden, nicht behoben)
-
-Laufzeit: Commands ab Trigger/Selbst ohne Dedup (§11.2); Response/beliebiger Typ im Pipeline-OneOf wird still verworfen; `Selbst<T>` in
-einem Event-Handle fällt erst zur Laufzeit auf (kein Analyzer, §6); Trigger → zwei Pipelines: letzte gewinnt; FileWatch markiert eine
-Datei vor dem `PipelineAck` als gesehen und sät beim Start den Bestand als gesehen — eine fehlgeschlagene Datei wird nie verarbeitet;
-teure Event-Handles (z. B. `DatensatzResolverPipeline`) laufen bei jedem Poll erneut (Wirkung dedupliziert, Arbeit nicht).
-
-Editor: „nutzt Dienst“ ohne Wirkung; ein Akteur mit mehreren Diensten bekommt immer den ersten; fehlendes `using` für Akteur-Dienste;
-ein `emits`-Name ohne Trigger-Karte erzeugt keinen Record; Umbenennen eines Self-Ticks bricht die Schleife; der Start-Handle ist nicht
-zeichenbar; gelöschte Handles bleiben ohne Meldung im Code; Extractor (jeder Methodenname) und Dispatch-Generator (nur `Handle`) erkennen
-verschiedene Handles; verschachtelte Selbst-Nachrichten (`FileWatchPipeline.PollTick`) sind keine Records; Reste des alten Frist-Knotens
-im Board-JS; Commands nur per Frist erscheinen im Graph mit Herkunft „client“. `--check`/Sonde vergleichen Ingress und Dienste nicht; die
-Sonde deckt `FristStorno`, Event-Eingang, `publishes`, Trigger-Kette, `Task`-Form und Ingress nicht ab.
-
-### 13.4 Verarbeitung = Prozess aus Katalog-Funktionen (2026-10-07, umgesetzt)
-
-Die `ImageProcessingPipeline` war ein Monolith: Dateiname deuten, OpenCV-Resize, Histogramm-Ausgleich und Melden in EINEM Rumpf —
-im Editor unsichtbar, weil der Rumpf dem Extractor nichts liefert. Jetzt gilt die Trennung aus `konzept-pipeline-stroeme.md`/§11 der
-Katalog-Funktionen („die Prozess-DSL ist der DAG“):
-
-```
-DateiErkannt ─(Pipeline: deuten)─▶ ErstelleImagePair + NimmRohbildAuf ─▶ RohbildEingegangen
-RohbildEingegangen ─ƒ IBildVerkleinerung─▶ BildVerkleinert ─ƒ IHistogrammAusgleich─▶ HistogrammAusgeglichen
-RohbildEingegangen + HistogrammAusgeglichen ─▶ MeldeBildVerfuegbar
-```
-
-- **Funktions-Katalog** `Domain/Bildaufbereitung/Funktionen.cs`: Auftrag → OneOf-Ergebnis-Events, domänenfrei (Bilder als Pfade).
-- **Prozess** `Domain/ImagePair/BildaufbereitungProzess.cs`: je Rohbild eine Instanz; Paar-Id und Metadaten über den Join mit dem Auslöser.
-- **Implementierung** `Domain.Pipeline/ImageProcessing/OpenCvBildaufbereitung.cs`, gebunden in `Host.Grpc/Program.cs` (`AddFunktion`, 2 Slots).
-- **ImagePair**: neuer Eingang `NimmRohbildAuf` → `RohbildEingegangen` (je Version genau einmal, Zustand `Dc0/Dc2Eingegangen`).
-- **Editor**: die zwei Funktionen erscheinen als ƒ-Karten (Auftrag → Ergebnisse), der Prozess als Rahmen mit drei Regeln
-  („WENN RohbildEingegangen → ƒ IBildVerkleinerung ⏳“ …). Eine weitere Funktion ist eine neue ƒ-Karte + „Dann ƒ“ an einer Regel.
-- Validator: GR-ZYKLUS meldete Prozess → ƒ → Ergebnis → Prozess als Kreis — der Prozess zählt jetzt wie das Aggregat als Zustandsschritt.
-- Prüfstand: `BildaufbereitungProzessTests` (echter Prozess, Fake-Funktionen), `ImagePairRohbildTests`.
-
-Offen: `BildNichtLesbar` hat keine fachliche Folge-Regel (der Prozess endet ohne Meldung); der Python-/externe Ausführer fehlt noch
-(nur C#-Bindung); Proto-`oneof`-Nummern verschieben sich beim Regenerieren — Python-/Blazor-Clients neu generieren.
-
-### 13.5 Ein Ablauf = ein Block (Editor-Anordnung, 2026-10-07)
-
-Befund: Pipeline, Prozess, Regeln und Funktionen lagen im Brücken-Block „§geteilt“, nach ART in Spalten sortiert — rückwärts zum
-Fluss (Prozess · Regel · Funktion · Pipeline · Trigger) und getrennt vom Aggregat-Block; die Kette lief quer über das Board.
-Jetzt (nur Darstellung, `HtmlPresenter.cs`):
-
-- **Zuordnung (`groupKeyOf`)**: Ablauf-Bausteine stehen im Block des Aggregats, auf das sie WIRKEN, wenn es eindeutig ist —
-  Pipeline über ihre Commands (ein ausgegebener Trigger zählt mit der Pipeline, die ihn verarbeitet), Trigger über seine Pipeline,
-  Prozess/Regel über die berührten Aggregate, Funktion über die Prozesse, die sie rufen, Auftrag/Ergebnis mit ihrer Funktion.
-  Wirkt etwas auf mehrere Aggregate, bleibt es im Brücken-Block (wie bisher).
-- **Spalten (`ROLE_AGG`)** in Flussfolge: Trigger → Pipeline → Pipeline-Handle → Command → Decider → Aggregat → Event → Applier →
-  Prozess → Regel → Auftrag → Funktion → **Ergebnis ƒ** → Value Object → Leseseite.
-- **Akteur-Rahmen**: Regeln/Funktionen/Ergebnisse ohne eigene Kette erben den Akteur ihres Prozesses — die Kette bleibt in EINEM
-  Rahmen (hier „ImagePair · KameraSystem“).
-- **Ketten-Fokus**: Klick auf Prozess/Funktion/Auftrag leuchtet die ganze Kette (über Regeln, Funktionen, Ergebnisse) auf.
+§13.1–§13.5 entfallen (Handle-Modell), siehe Zielbild `docs/konzept-werkbank.md`.
 
 ### 13.6 Ablauf als Kette: jede Funktion ein Knoten (2026-10-07)
 
@@ -368,7 +46,7 @@ Prozess-Regeln):
   die das auslösende Ergebnis liefert → nächster Schritt; Beschriftung „erst“/„dann“ (+ ⏳ bei Zeitlimit), Klick öffnet die Regel
   (Argumente, Zeitlimit). Andere Regeln bleiben Karten.
 - **Nicht eingeklappt (2026-10-11, Revision):** Auftrag und Ergebnis-Events einer Funktion sind IMMER eigene Karten — die Funktion ist
-  definiert wie ein Decider: Spalten **Auftrag → ƒ Funktion (📝 + 🤖 darunter) → Ergebnis**, auf einer Zeile, im selben Block und
+  definiert wie ein Decider: Spalten **Auftrag → ƒ Funktion (Rumpf aus der Datei, „🤖 füllen“) → Ergebnis**, auf einer Zeile, im selben Block und
   Akteur-Rahmen (Akteure der Funktion = die ihres Auftrags). Fluss-Knoten und Prozess-Regeln verweisen nur auf die ƒ-Karte.
 - **Anordnung**: je Kettentiefe eine eigene Funktions-Spalte, Zeile = die des Vorgängers → Prozess → ƒ → ƒ auf einer Linie.
 - **Bearbeiten**: am Prozess „bei ‹Auslöser› ▶ erst ⊕“, an jeder Funktion je Ergebnis „bei ‹Ergebnis› ▶ dann ⊕“ — eine Funktion oder
@@ -403,7 +81,7 @@ Reaktion sind drei Bausteine für eine Idee; (4) das Board ordnete nach Art (≈
 Aggregat-Welt geht es nur über einen Knoten, der ein Command sendet.
 
 - **Jeder Knoten hat dieselbe Form: ein Eingang, OneOf-Ausgänge (ein Port je Fall).**
-  - **Quelle** — kein Eingang, ein Ausgang. Katalog: Datei, Timer, Webhook, Client … (`IQuelle<T>`), oder ein **Event aus dem Log**
+  - **Quelle** — kein Eingang, ein Ausgang. Quellen sind fest codierte Treiber + Konfig (Zielbild §3), oder ein **Event aus dem Log**
     (`p.Auf<E>()`), womit jede bisherige Event-Pipeline/Saga ein Sonderfall ist.
   - **Funktion** — Auftrag hinein, Ergebnis-Fälle heraus (`IFunktion`).
   - **Aggregat-Knoten** — Command hinein; Ausgänge sind die Events aus der Decide-Signatur. Der Fluss kann nach der Antwort
@@ -466,29 +144,31 @@ Zuordnung im Code wie die Tabelle im Editor („Pfad ← vorschau.Pfad“).
 | Warten (Rennen) | `var ende = quelle.Strom().Warte<A, B>().Zeitlimit(t)` — das erste A/B im Strom NACH der Quelle; Ausgänge `ende.Bei<A>()`, `ende.BeiZeitlimit()`. Zeitlimit ist Pflicht; ein Event nach dem Limit zählt nicht |
 | je-Rahmen | `var je = draht.Je(x => x.Liste)`; `je.Rufe<F>(e => …)`; `je.Sammle(draht).Sende<C>((q, liste) => …)` |
 | Zuordnung | Lambda nur in Zuordnungsform (`x.Feld`, Konstante) — der Schreiber erzeugt nur diese, also bleibt sie als Tabelle bearbeitbar |
-| Quelle-Einstellung | Host-Bindung `AddQuelle<DateiErkannt, DateiQuelle>(…)` — nicht in der Pipeline |
+| Quelle-Einstellung | Umgebungs-Datei, Abschnitt `Quellen` (Zielbild §3.4) — nicht in der Pipeline |
 
 **Ein Fluss ist per Konstruktion azyklisch** (man verdrahtet nur schon deklarierte Knoten). Invariante 3 bleibt gewahrt: die Knoten-
 Identität ist ein Symbol innerhalb der Definition, Nachrichten werden weiter über Typen geroutet.
 
-Entwerfbar ohne bestehenden Code: neue Funktion (nur Signatur; Rumpf = Stub, 🤖 oder Python), neue Quelle aus Vorlage, neues Command
-(Scaffolder). Simulation ohne Implementierung: je Knoten den Ausgangsfall wählen.
+Entwerfbar ohne bestehenden Code: neue Funktion (nur Signatur; Rumpf = Stub, 🤖 oder Python), neue Quelle = Domänen-Typ auf eine
+Treiber-Basis + Konfig, neues Command (Scaffolder). Eine Funktion ohne Implementierung beantwortet man per Hand (`Laufort: Hand`,
+Zielbild §6).
 
 ### 14.5 Laufzeit: Dirigent, Vermittler, Ausführer
 
 - **Dirigent = ein virtueller Actor je Vorgang** (der bestehende Prozess-Manager; ein Fluss wird in Prozess-Regeln übersetzt). Er rechnet
   nicht, er gibt alle bereiten Aufträge zugleich ab. Die Tokens tragen zusätzlich ihre **Herkunft** (Knoten) und ihre **Teile**
   (Element-Index je Je-Rahmen): ein Draht matcht nur Tokens seines Knotens, ein ∧ nur Tokens desselben Elements.
-- **Quelle**: eine `IQuelle<T>` läuft im Host; jede Nachricht wird mit deterministischer Id (`Kennung`) als erstes Event eines
-  Vorgangs-Streams angehängt (`StartStream` → genau einmal, auch wenn mehrere Knoten dieselbe Datei sehen) und weckt den Dirigenten.
+- **Quelle**: ein Treiber (`IQuelle<T>`, Zielbild §3) läuft im Host; jede Nachricht wird mit deterministischer Id (`Kennung`) als
+  erstes Event eines Vorgangs-Streams angehängt (`StartStream` → genau einmal, auch wenn mehrere Knoten dieselbe Datei sehen) und weckt
+  den Dirigenten.
   Das löst nebenbei „Commands ab Trigger nicht idempotent“ und „FileWatch markiert vor dem Ack“.
 - **Vermittler = ein Actor je Funktion**, nicht maßgeblich (heilt sich aus den erneuten Übergaben des Dirigenten). **Ausführer holen
   sich Arbeit (Pull)**, sobald sie einen Slot frei haben: C# im Host, Python-Worker über gRPC, GPU-Rechner. Jeder geholte Auftrag hat
   eine Lease (verlängert per Lebenszeichen); läuft sie ab, wird er neu ausgegeben. Das Ergebnis wird genau einmal geschrieben
   (OCC auf dem Ausführungs-Stream). Der Auftrag selbst liegt im Log (Ausführungs-Stream, Version 1) — so können ihn entfernte
   Ausführer lesen, ohne dass der Vermittler Nutzdaten trägt.
-- **Python**: eine Funktion ist ein Vertrag, der Laufort eine Bindung. Ein Worker meldet „ich biete F, n Slots“ an und bekommt eine
-  generierte Basis-Klasse (`rufe(auftrag, x) -> Ergebnis`). Pipeline und Board ändern sich nicht, wenn eine Funktion umzieht.
+- **Python**: eine Funktion ist ein Vertrag, der Laufort Konfig der Umgebung (Zielbild §4). Ein Worker meldet „ich biete F, n Slots“
+  an und bekommt eine generierte Basis-Klasse (`rufe(auftrag, x) -> Ergebnis`). Pipeline und Board ändern sich nicht, wenn eine Funktion umzieht.
   Bewusst zu lösen: Daten als Verweis (gemeinsamer Speicher), Lebenszeichen bei langen Läufen, Ausführungs-Id für Außenwirkung.
 
 ### 14.6 Editor
@@ -497,8 +177,8 @@ Entwerfbar ohne bestehenden Code: neue Funktion (nur Signatur; Rumpf = Stub, �
   Aggregat-Rahmen bleiben unverändert, ein Command-Knoten springt per Klick zum Decider.
 - **Katalog** (Quellen · Funktionen · Aggregate/Commands · Pipelines) mit Signatur; ⊕ am Port → passende Knoten/Einträge leuchten,
   „＋ neu …“ legt Unbekanntes an.
-- Abzeichen ∧/∨ am Eingang, Fehler-Ports ⏳/✕, je-Rahmen gestrichelt, Zuordnung „Feld ← Draht.Feld“ im visuellen Zuordnungs-Editor, Laufort
-  einer Funktion (C#/Python) am Knoten.
+- Abzeichen ∧/∨ am Eingang, Fehler-Ports ⏳/✕, je-Rahmen gestrichelt, Zuordnung „Feld ← Draht.Feld“ im visuellen Zuordnungs-Editor.
+  Der Laufort einer Funktion (C#/Python) ist Konfig der Umgebung (🖥 Host-Rahmen), nicht am Knoten.
 - Entfällt für Flüsse: Handle-Karten, Trigger-Records, Selbst-Schleifen, Start-Handle, Regel-Karten.
 - **Pipeline in der Domäne (2026-10-09):** ein Knoten = eine ZUGEWIESENE Funktion — sein Eingang und seine Ausgänge ergeben sich
   aus deren Interface, im Knoten wird nichts definiert: ƒ = Auftrag → Ergebnisse (`IFunktion`), ▶ = Command → Decide-Events, ⛲ → Quell-
@@ -506,13 +186,13 @@ Entwerfbar ohne bestehenden Code: neue Funktion (nur Signatur; Rumpf = Stub, �
   (beschriftet mit dem Typ des Ausgangs). Die Verbindung zur Domäne ist die Zuweisung: ƒ ⇢ Funktions-Karte (Katalog, Signatur mit
   ◀ Auftrag ⊕ / Ergebnisse ⊕ ▶ — Auftrag und Ergebnisse als Details eingeklappt), ▶ → Command im Aggregat, ⛲ ⇢ Nachricht. Der Rahmen
   steht IN der Domäne, auf die der Fluss wirkt (Aggregate seiner Commands), unmittelbar über dem Akteur-Rahmen mit diesen Commands.
-  Nachrichten-Panel nennt die Fluss-Knoten (▶ sendet, ⛲ meldet, Drähte/◆/⧗ hören); Kette und ◎ laufen über die Zuweisungen.
+  Nachrichten-Panel nennt die Fluss-Knoten (▶ sendet, ⛲ meldet, Drähte/◆/⧗ hören); der Fokus läuft über die Zuweisungen.
 - **Funktions-Karte = der Knoten, der das Interface erzeugt (2026-10-09):** Eingang und Ausgänge sind Record-Karten, per ⊕ angesteckt
   (◀ Auftrag, Ergebnisse ▶ — sie stehen sichtbar daneben: Auftrag | ƒ | Ergebnis, eingeklappt nur in einer Prozess-Kette). Dazu ein
-  Code-Eingang „RufeAsync“ wie am Decider: 📝 Code-Block bzw. ＋🤖 LLM (Slot `funktion|IX|Auftrag`). Aus dem Code gelesen: die C#-Klasse,
-  die das Interface implementiert (Modell `Funktion.Implementierung` + `Rumpf`, Code-Fakt über das Interface). Neue Funktion mit Block:
-  „C# schreiben“ legt `public sealed class X : IX` an (immer `async`, leerer Block → throw-Platzhalter; Modell `Entwurf`); der 🤖-Lauf
-  legt sie bei unbekanntem Slot selbst an und füllt dann den Rumpf. Ohne Block = extern (Python, `AddExterneFunktion`).
+  Rumpf „RufeAsync“ wie am Decider: der Rumpf aus der Datei, „🤖 füllen“ als Aktion (Slot `funktion|IX|Auftrag`). Aus dem Code gelesen:
+  die C#-Klasse, die das Interface implementiert (Code-Fakt über das Interface). Neue Funktion: die Geste legt `public sealed class X : IX`
+  an (immer `async`, throw-Platzhalter); „🤖 füllen“ legt sie bei unbekanntem Slot selbst an und füllt dann den Rumpf. Läuft sie extern
+  (Python), ist das Konfig der Umgebung (Laufort).
 - **Nachrichten aus anderen Bereichen (2026-10-09, gilt für JEDEN Nachrichten-Port ⊕):** im Verbinden-Modus erscheint neben den
   leuchtenden Karten ein Katalog „Nachricht aus anderen Bereichen“ — alle Records der passenden Sorte, die nicht als Karte auf dem Board
   stehen (Domäne nicht geladen, eingeklappt), grammatik-geprüft, durchsuchbar; anklicken = verbinden + Domäne dazuladen. Dazu „＋ neu“:
@@ -540,7 +220,7 @@ Veröffentlichen und „weiter an Pipeline“ als Knoten; flüchtige (nicht pers
   `WarteKnoten`** (Regel mit `WartetAuf`, Formfehler „Warten ohne Zeitlimit“ beim Definieren). Übersetzt in Prozess-Regeln mit
   Knoten-Herkunft (`Regel.Knoten/VonKnoten/JeKnoten/WartetAuf`, erweiterte `SammelBedingung`, `ProzessRegeln.QuellKnoten/Umleiten*`).
 - **Der reine Kern des Dirigenten** liegt in `Abstractions/Prozess/FlussBelegung.cs` (`FlussBelegung.Belegungen/Matches/TeileDesAufrufs`,
-  `JeTeile`, `IFlussToken`) — der Prozess-Manager faltet seine Tokens aus dem Log, die Simulation hält sie im Speicher; beide entscheiden
+  `JeTeile`, `IFlussToken`) — der Prozess-Manager faltet seine Tokens aus dem Log, das `FlussLaufwerk` (`Cqrs.Testing`, Prüfstand) hält sie im Speicher; beide entscheiden
   mit DEMSELBEN Kern, was feuert.
 - Dirigent (`Infrastructure/Prozess/ProzessManager.cs`): Tokens tragen Herkunft und Je-Teile, dazu der `QuellStrom`-Token der Quelle; ein
   **Warte-Knoten** liest den Strom der Quelle bei jeder Weckung nach (kein Cursor; geweckt vom §3-Backstop, ≤ 15 s), ein Event nach dem
@@ -550,8 +230,9 @@ Veröffentlichen und „weiter an Pipeline“ als Knoten; flüchtige (nicht pers
 - **Katalog-Funktionen mit Lese-Fähigkeit**: `RufeAsync(Auftrag, IAusfuehrung, ISucheX suche, …)` — nur `IReadStore`-Interfaces (sonst
   CQRS068); der generierte Dispatch öffnet je Aufruf einen Fähigkeits-Bereich (`IFaehigkeitsFabrik`), `GeneratedFunktionen.Faehigkeiten`;
   Boot-Guard: eine solche Funktion nie `AddExterneFunktion` (läuft nur im Host); keine Python-Basis.
-- Quellen (`Infrastructure/Quellen/Quellen.cs`): `QuellEingang`, `QuellenDienst`, `AddQuelle<T, Q>()`, **`MapQuellWebhook<T>()` mit
-  `[Ingress(Webhook)]`** (der Editor liest die Bindung: Nachricht = Typ-Argument, Route = Argument).
+- Quellen (`Infrastructure/Quellen/Quellen.cs`): `QuellEingang`, `QuellenDienst`, `AddQuelle<T, Q>()` (entfällt mit dem
+  Datei-Treiber, Zielbild §3.4), **`MapQuellWebhook<T>()` mit `[Ingress(Webhook)]`** (bleibt vorerst; der Editor liest die Bindung:
+  Nachricht = Typ-Argument, Route = Argument).
 - Vermittlung (`FunktionsVermittlung.cs`, `FunktionsVermittlerActor.cs`, `FunktionsAbholer`, `AddExterneFunktion<F>()`). **Akteur-Tor für
   angebotene Funktionen**: `IDarf<IFunktion-Typ>` = „der Akteur darf diese Funktion rechnen“ (CQRS058 lässt es zu, `AkteurRechte.Funktionen`
   generiert); mit angemeldetem Akteur nimmt `FunktionsAnbieterSitzung.Biete` nur befugte Funktionen an (Fehler `FUNKTION_NICHT_BEFUGT`),
@@ -571,50 +252,38 @@ Veröffentlichen und „weiter an Pipeline“ als Knoten; flüchtige (nicht pers
 - Benchmark → **`Benchmark`**: `BenchPing` ist Quell-Nachricht, der Fluss nur die Quelle (gemessen: Quelle → Log → Dirigent → beendet).
   Der `LoadHarness` aus docs/12 existiert im Repo nicht mehr.
 
-**Simulation (SimHost)**
-- `Cqrs.Testing/Fluss.cs` — `FlussLaufwerk`: der Dirigent im Speicher (Wellen = parallel bereite Aufrufe), Commands über das
-  `SagaLaufwerk` (echtes Aggregat-Kompilat, klassische Sagas inkl.), Events starten `p.Auf<E>()`-Flüsse; je Funktions-/Warte-Knoten
-  liefert die **Wahl** den Ausgang (Ergebnis-Fall / ⏳ / ✕) — ohne Implementierung.
-- `ModellSimulation.StarteFluss` + `POST /api/editor/sim/fluss` (Quell-Nachricht, Wahl, optional Strom); Musterwerte für Ergebnisse
-  (gleichnamige Felder aus Auftrag/Drähten, sonst Platzhalter, deterministische Guids, Listen mit zwei Elementen; JSON-Overlay je Knoten).
-  Hot-Reload spielt auch eingespeiste Quell-Nachrichten nach. Das In-Memory-Kompilat lässt Akteure/Clients und die Fähigkeits-Parameter der
-  Funktionen weg (die Simulation führt sie nicht aus) — vorher brach es an den Leseseiten-Queries der Clients.
-- Editor: Simulations-Panel „▶ Command | ⛓ Pipeline“, je Funktions-/Warte-Knoten der Ausgangsfall, Strom-Auswahl bei Event-Quellen;
-  Knoten und Drähte leuchten (✕/⏳ rot), Command-Knoten spielen ihre Aggregat-Kaskade, Abdeckung je Fall, Liste der Vorgänge
-  (✓/✗, „wartet auf …“).
-
 **Editor**
 - Modell `EditorModell.Fluesse` (+ `FlussArt.Warte`, `FlussSchritt.WarteAuf`, `FlussPort.Strom`), `Funktion.Faehigkeiten`; Extractor
   (`FlussLeser`: `.Strom()`, `.Warte<…>()`; Funktions-Signatur mit Fähigkeiten), Scaffolder (Lambda-Parameter `quelleStrom`, `knotenZeit`),
-  Grammatik (GR-FLUSS-WARTE, GR-FUNKTION-FAEHIGKEIT, Fähigkeit → Funktion), Validator, Board (⧗-Knoten, „⇢ Strom“-Port mit
-  „⧗ warte auf ein Event im Strom …“, Zuordnung `Id/Version` des Stroms; Funktions-Karte „⚙ liest“), Sonde/soll.txt (Code-Fluss + gezeichneter
-  Fluss mit Warten/Strom, Funktion mit Fähigkeit).
+  Grammatik (GR-FLUSS-WARTE, GR-FUNKTION-FAEHIGKEIT, Fähigkeit → Funktion), Prüfung (heute `Validator`, wird Analyzer, Zielbild
+  §8.3), Board (⧗-Knoten, „⇢ Strom“-Port mit „⧗ warte auf ein Event im Strom …“, Zuordnung `Id/Version` des Stroms; Funktions-Karte
+  „⚙ liest“), Sonde/soll.txt (Code-Fluss + gezeichneter Fluss mit Warten/Strom, Funktion mit Fähigkeit).
 - **LLM-Slots**: `SlotInventar`/`KontextBauer` kennen `funktion` (Implementierung von `RufeAsync`) und `fluss` (jeder Bau-Lambda, Anker =
   Anweisung + Lambda-Index). Die LLM-Konsole füllt Fluss-Lambdas mit eigener Anweisung (genau ein Lambda, rein, Zuordnungsform), prüft
   Stelligkeit + In-Memory-Compile und schreibt den Lambda zurück (`CodeSync.LambdaAnker`, Rückgängig inkl.). Gemessen (`--slots`): alle 11
   Fluss-Lambdas liegen zu 100 % im eigenen Spielraum (ihre Parameter) — die Zuordnung braucht selten ein LLM, die Funktions-Rümpfe schon
   (23 % Wissen von außen).
 
-**Gemessen (2026-10-09):** Prüfstand 381/381; `--check` und `--sonde` (92 Soll-Fakten) grün; Python SDK 28/28, Worker 15/15; Integration
+**Gemessen (2026-10-09):** Prüfstand 381/381; `--sonde` (92 Soll-Fakten) grün; Python SDK 28/28, Worker 15/15; Integration
 gegen Marten/Consul/Redis (sequentiell) 33/33, darin `PipelineFlussE2ETests` (4): Bildeingang Quelle → Dirigent → Vermittler → Abholer → Fakt,
 derselbe mit **Python-Worker über gRPC**, Trainings-Wächter (Warten + Backstop), Datensatz-Range mit echter Lese-Fähigkeit.
 
-**Offen:** Unterfluss als Funktion; „der Erste gewinnt“ ohne Zeitlimit; flüchtige Flüsse (Telemetrie); Timer- und Client-Quelle als
-Katalog-Quellen; ein Warte-Knoten wird nur vom Backstop geweckt (kein Signal-Routing für fremd-korrelierte Events); Rückbau des
-Handle-Modells (§14.10).
+**Offen:** Unterfluss als Funktion; „der Erste gewinnt“ ohne Zeitlimit; flüchtige Flüsse (Telemetrie); Takt-Treiber, Client meldet
+Quell-Nachrichten (Zielbild §12.2); ein Warte-Knoten wird nur vom Backstop geweckt (kein Signal-Routing für fremd-korrelierte Events);
+Rückbau des Handle-Modells (§14.10).
 
 ### 14.10 Entscheidung: das Handle-Modell (`IPipelineHandler`) entfällt als Domänen-Baustein
 
 Nach dem Umzug hat keine Domänen-Pipeline mehr einen Handle. Alles, was die Handles taten, ist jetzt ein Fluss-Knoten oder eine Quelle:
-Verarbeitung = Katalog-Funktion (auch mit Lese-Fähigkeit), Frist/Storno = `Warte` gegen ein Zeitlimit, Datei/Webhook = `IQuelle` /
-`MapQuellWebhook`, Event→Command = `p.Auf<E>()` → `Sende`. Eine „Quell-Implementierung“ als Handle braucht es nicht: eine Quelle ist
-`IQuelle<T>` (kein Log, kein Fluss, nur Nachrichten liefern) — der Rest ist Fluss.
+Verarbeitung = Katalog-Funktion (auch mit Lese-Fähigkeit), Frist/Storno = `Warte` gegen ein Zeitlimit, Datei = Treiber (Zielbild §3) /
+Webhook = `MapQuellWebhook`, Event→Command = `p.Auf<E>()` → `Sende`. Eine „Quell-Implementierung“ als Handle braucht es nicht: eine Quelle
+ist ein Treiber (kein Log, kein Fluss, nur Nachrichten liefern) — der Rest ist Fluss.
 
-**Daher:** neue Pipelines werden als Fluss gebaut („+ ⛓ Pipeline (Fluss)“); der Handle-Baustein im Editor („+ Pipeline“) fällt mit dem
-**Rückbau** der Maschinerie (PipelineActor-/PipelineDispatch-Generator, `PipelineActorBase`, Handle-Trigger über gRPC, Timer-/Webhook-
-Trigger, Fristplan für Handles, Editor-Abschnitt „Pipelines“, Analyzer-Zweige) als eigener Schritt, sobald es **Timer-Quelle** und
-**Client-Quelle** (gRPC-Trigger von außen) als Katalog-Quellen gibt und **flüchtige Flüsse** (Inv. 6: Verlierbares bleibt auf dem
-schnellen Kanal) entworfen sind — bis dahin ist das Handle-Modell der einzige Weg für flüchtige Verarbeitung und bleibt technisch erhalten.
+**Daher:** neue Pipelines werden als Fluss gebaut („+ ⛓ Pipeline (Fluss)“); der Handle-Baustein („+ Pipeline“) entfällt im Editor
+sofort (Zielbild P0). Nur der **Rückbau** der Laufzeit-Maschinerie (PipelineActor-/PipelineDispatch-Generator, `PipelineActorBase`,
+Handle-Trigger über gRPC, Timer-/Webhook-Trigger, Fristplan für Handles, Analyzer-Zweige) bleibt eine eigene Aufgabe, sobald es
+**Takt-Treiber**, **Client meldet Quell-Nachrichten** und **flüchtige Quellen** (Inv. 6: Verlierbares bleibt auf dem schnellen Kanal)
+gibt (Zielbild §10, §12.2) — bis dahin bleibt das Handle-Modell zur Laufzeit technisch erhalten.
 
 ### Zuordnungs-Editor (visuell, 2026-10-11)
 
@@ -629,8 +298,7 @@ eigenen Knoten-Editor (Panel: „🔀 Zuordnung im Knoten-Editor“, Kurzfassung
   an, „ƒx“ einen Ausdruck, ✕ (oder Klick auf den Draht) löst.
 - **Drähte** ziehen (oder Quelle anklicken, dann Feld anklicken); nur typgleiche Ziele leuchten grün, falsche Typen werden abgelehnt.
   „↻ automatisch“ schlägt alles neu vor; unten steht der entstehende Lambda.
-- **Speicherung unverändert:** je Zielfeld ein Ausdruck (`argumente` bzw. `sendeArgs`) → der Scaffolder schreibt `p => new Ziel(…)`.
+- **Speicherung:** die Geste schreibt den Lambda `p => new Ziel(…)` sofort in den Code (Zielbild §8.2).
   Ein Lambda aus dem Code wird beim Öffnen zerlegt (Parameter-Namen angeglichen, `new V(…)` → Bau-Knoten, Unbekanntes → `ƒx`); ist er
-  kein einfacher Konstruktor, zeigt der Editor ihn und ersetzt ihn erst bei der ersten Änderung. Ein angedockter 📝-Block hat beim Schreiben
-  Vorrang — der Editor sagt das und bietet „Block lösen“ an.
+  kein einfacher Konstruktor, zeigt der Editor ihn und ersetzt ihn erst bei der ersten Änderung.
 

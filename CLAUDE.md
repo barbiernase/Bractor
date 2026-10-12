@@ -7,6 +7,11 @@ Volltexte liegen in `docs/` und werden bei Bedarf gelesen, nicht hier eingebette
 > `docs/13-reifegrad-schulden-bewertung.md` (flach, kanonisch). Stärken/Schulden/offene Baustellen: `docs/13-reifegrad-schulden-bewertung.md`. Das „Warum":
 > `docs/02-design-prinzipien.md`. Wie schreibe ich X (inkl. Prozess): `docs/10-entwickler-api.md`. Akteure/Verträge/Clients:
 > `docs/konzept-akteure.md`. Editor: `docs/konzept-domaenen-editor.md`. Altes liegt in `docs/_archiv-2026-08-12/` (nur Historie).
+>
+> **ZIELBILD (verbindlich, 2026-10-12): `docs/konzept-werkbank.md`** — der Editor als Werkbank: Code ist die einzige Wahrheit (kein
+> Board-Modell), keine Simulationsschicht (echter Host in Umgebung `sim` gegen eigene echte DB), Spur (`ursache`/`wirker`/`stand`),
+> Quellen = fest codierte Treiber + Konfig (zuerst Filewatcher), Backend je Umgebung im Editor. Keine GUIs, keine Schema-Evolution.
+> Umsetzung in Phasen P0–P8 (§13). Wo andere Dokumente widersprechen, gilt das Zielbild.
 
 ## Was das Projekt ist
 
@@ -160,7 +165,7 @@ NICHT Timeout-tunebar; xUnit schluckt App-Logs (Cluster-Diagnose → Last-Harnes
 - Build: `dotnet build`
 - Test (Logik, immer grün): `dotnet test Infrastructure.Pruefstand.Tests/Infrastructure.Pruefstand.Tests.csproj`
 - Integration (braucht Postgres/Consul/Redis, sequentiell): `dotnet test Infrastructure.Integration.Tests/Infrastructure.Integration.Tests.csproj`
-- Domänen-Editor + Simulation (einzige Oberfläche): `dotnet run --project GraphExtractor` (erzeugt editor.html + domain-model.json), dann `dotnet run --project SimHost` → http://localhost:5178/editor; Bearbeiten nur im Panel: Karte anklicken, ⊕-Punkt im Panel → passende Knoten leuchten → anklicken = verbinden/lösen (`docs/konzept-editor-panel-bearbeitung.md`); 🤖-LLM-Knoten am Code-Block = Chat: Prompt senden → `claude -p` (Abo, nie API) → geprüft → .cs geschrieben → Laufzeit-Projekt gebaut (alle Generatoren) → neu eingelesen (Konzept §12); Kontexte erzeugt SimHost selbst
+- Domänen-Editor + Simulation (einzige Oberfläche; **Ist-Stand** — Ziel: Werkbank ohne Simulationsschicht, `docs/konzept-werkbank.md`): `dotnet run --project GraphExtractor` (erzeugt editor.html + domain-model.json), dann `dotnet run --project SimHost` → http://localhost:5178/editor; Bearbeiten nur im Panel: Karte anklicken, ⊕-Punkt im Panel → passende Knoten leuchten → anklicken = verbinden/lösen (`docs/konzept-editor-panel-bearbeitung.md`); 🤖-LLM-Knoten am Code-Block = Chat: Prompt senden → `claude -p` (Abo, nie API) → geprüft → .cs geschrieben → Laufzeit-Projekt gebaut (alle Generatoren) → neu eingelesen (Konzept §12); Kontexte erzeugt SimHost selbst
 - Editor-Parität (Code ⇄ Extraktion ⇄ Editor, schreibt nichts): `dotnet run --project GraphExtractor -- --check`
 - Grammatik als Liste „Regel → Build-Gegenstück": `dotnet run --project GraphExtractor -- --grammatik`
 - Agnostik-Sonde (unbekannte Domäne im Speicher gegen handgeschriebenes Soll + Fixpunkt): `dotnet run --project GraphExtractor -- --sonde`

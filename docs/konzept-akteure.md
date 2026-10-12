@@ -49,16 +49,16 @@ public sealed record Inspekteur     : IMensch,   IDarf<LabelBildPaar>, IDarf<Mar
 ```
 
 - **Art** in der Basisliste: `IMensch`, `IMaschine`, `IKi` (alle `: IAkteur`). Ein Akteur ist immer ein Record, nie ein Dienst.
-- **`IDarf<T>`** = was der Akteur *selbst* hineingibt: Command, Query, Trigger oder Transient-Event (CQRS058). Ein Command darf bei
-  mehreren Akteuren stehen.
-- Was eine Pipeline, ein Prozess oder eine Frist daraus erzeugt, wird **nicht** deklariert — es trägt den Akteur der Kette (§2.3). Ein
+- **`IDarf<T>`** = was der Akteur *selbst* hineingibt: Command, Query, Quell-Nachricht oder Transient-Event (dazu `IDarf<IFunktion>` =
+  darf diese Funktion rechnen) (CQRS058). Ein Command darf bei mehreren Akteuren stehen.
+- Was ein Fluss oder Prozess daraus erzeugt, wird **nicht** deklariert — es trägt den Akteur der Kette (§2.3). Ein
   Command, den niemand per `IDarf` darf, kommt am Tor nie durch („nie von der GUI" ist damit ein Typ-Fakt).
 
 ### 2.2 Katalog (`Domain.Pipeline/Akteure.cs`)
 
 | Akteur | Art | gibt selbst hinein (`IDarf`) | Vertrag |
 |---|---|---|---|
-| KameraSystem | Maschine | `DateiErkannt` (Ingress `FileWatchPipeline`) | — |
+| KameraSystem | Maschine | `DateiErkannt` (Quell-Nachricht über den Datei-Treiber) | — |
 | TrainingsSystem | Maschine | `HoleDatensatzSamples` | `ITrainingsSystem` |
 | Klassifizierer | KI | `KlassifiziereEinzelBildDurchKi`, `HoleAktivesModell` | `IKlassifizierer` |
 | Inspekteur | Mensch | Labeln, `MarkiereAlsInspiziert`, Lese-Queries der Bildpaare | — |
@@ -72,8 +72,8 @@ public sealed record Inspekteur     : IMensch,   IDarf<LabelBildPaar>, IDarf<Mar
 | Fall | Akteur | Beispiel |
 |---|---|---|
 | 1. kommt durchs **Tor** (Client) | der Akteur der Sitzung, der `IDarf<T>` hat (bzw. dessen Zusage es ist, §4.3) | `FriereEin` vom Arbeitsplatz → KIOperator |
-| 2. gibt ein **Arm in einer Kette** aus (Handle auf ein Event, Prozess, Frist) | der Akteur des auslösenden Events, geerbt | `SchliesseEinfrierenAb` trägt den, der `FriereEin` schickte |
-| 3. gibt ein **Arm ohne Kette** aus (Ingress: Datei, Timer, `Selbst<T>`) | **der eine** Akteur mit `IDarf<T>` (sonst GR-INGRESS-EINDEUTIG) | `DateiErkannt` → KameraSystem |
+| 2. gibt ein **Arm in einer Kette** aus (Fluss oder Prozess auf ein Event) | der Akteur des auslösenden Events, geerbt | `SchliesseEinfrierenAb` trägt den, der `FriereEin` schickte |
+| 3. gibt ein **Arm ohne Kette** aus (Quell-Nachricht: Datei-Treiber, Webhook) | **der eine** Akteur mit `IDarf<T>` (sonst GR-INGRESS-EINDEUTIG) | `DateiErkannt` → KameraSystem |
 
 Jede Kette beginnt bei einem Akteur (Fall 1 oder 3) und trägt ihn weiter (Fall 2). Statisch hat ein Command eine Akteur-*Menge*
 (Fixpunkt über den Graphen, `DomainEditor/AkteurAnteile.cs`), zur Laufzeit genau einen (§5.1).
@@ -83,7 +83,8 @@ Jede Kette beginnt bei einem Akteur (Fall 1 oder 3) und trägt ihn weiter (Fall 
 Entscheidet ein Akteur *drinnen* über einen Dienst, gehört der Dienst ihm: `interface IGutachten : IAkteurDienst<Gutachter>`. Ein
 Pipeline-Handle, der ihn als **Parameter** nimmt, entscheidet im Auftrag dieses Akteurs (der einzige Akteur-Wechsel mitten in einer Kette);
 seine Ausgaben muss der Akteur dürfen, im Konstruktor/Feld ist der Dienst verboten (CQRS060). Damit steht fest, wer den Dienst benutzt.
-Im Bestand ungenutzt (klassifiziert wird nur draußen), als Sprachmittel aber erhalten.
+Im Bestand ungenutzt (klassifiziert wird nur draußen), als Sprachmittel aber erhalten. Mit dem Wegfall der Handle-Pipelines ist offen,
+wer `IAkteurDienst` trägt (Zielbild `docs/konzept-werkbank.md` §12.2).
 
 ### 2.5 Person, Rolle und fachliches „Wer"
 
@@ -198,11 +199,13 @@ ergänzen oder den Client-Code ändern.
 
 - Der Akteur reist als Event-Header **`akteur`** (`ImAuftrag.Header`): `MartenEventBatchWriter` schreibt ihn, `MartenEventStore` liest ihn
   in den Envelope (`UserId`), `AggregateActorBase` gibt ihn weiter.
-- Der generierte Dispatch (Pipeline, Prozess, Konsument) setzt `ImAuftrag.Von(envelope.Akteur)` um den Handle — bzw. den Dienst-Akteur bei
+- Der generierte Dispatch (Prozess/Fluss, Konsument; im Ist auch die Handle-Pipeline) setzt `ImAuftrag.Von(envelope.Akteur)` um den Handle — bzw. den Dienst-Akteur bei
   `IAkteurDienst<A>`. `CommandEmitter` stempelt `ImAuftrag.Akteur`; ist er leer, gilt Fall 3 (§2.3).
-- Eine **Frist** speichert den Akteur beim Planen (`Frist.Akteur`) und feuert in seinem Namen; ein **Prozess** trägt den Akteur des Events,
-  das ihn startete. (Die Frist `MarkiereAlsHaengengeblieben` trägt so das TrainingsSystem.)
-- Trigger reisen ohne Envelope: ihr Akteur ist der eindeutige `IDarf`-Halter (`AkteurHerkunft.EindeutigerHalter`).
+- Ein **Prozess** (auch ein Fluss) trägt den Akteur des Events, das ihn startete. (`MarkiereAlsHaengengeblieben` sendet heute der
+  `TrainingWaechter` am ⏳-Port eines `Warte` statt einer Frist.) Im Ist speichert eine **Frist** der Handle-Pipelines den Akteur beim
+  Planen (`Frist.Akteur`) und feuert in seinem Namen.
+- Quell-Nachrichten (und im Ist die Trigger der Handle-Pipelines) reisen ohne Envelope: ihr Akteur ist der eindeutige `IDarf`-Halter
+  (`AkteurHerkunft.EindeutigerHalter`, auch im `QuellEingang`).
 
 ### 5.2 Handshake
 
@@ -254,13 +257,13 @@ dieselbe Zusage tragen, erzeugen für dieselbe Antwort dieselbe Id.
 | CQRS061 | GR-VERTRAG | Vertrag ist Interface, nur `Auf(Event)`, je Event einmal über alle Teile des Akteurs |
 | CQRS062 | GR-VERTRAG | Ausgabe einer Zusage: nur konkrete Commands (void / T / OneOf / Strom) |
 | CQRS063 | GR-CLIENT | Client: Interface; erbt nur Teile/ISendet/IFragt/Client-Verträge; eigene Methoden nur Kenntnis |
-| CQRS064 | GR-CLIENT-BEFUGT | Sendet/Fragt: ein Akteur hat `IDarf<T>`; Sendet = Command/Trigger/Transient, Fragt = Query |
+| CQRS064 | GR-CLIENT-BEFUGT | Sendet/Fragt: ein Akteur hat `IDarf<T>`; Sendet = Command/Trigger/Transient (Quell-Nachricht offen, Zielbild §12.2), Fragt = Query |
 | CQRS065 | GR-CLIENT | je Event höchstens eine Methode im Client (getragen oder eigen) |
-| — (Laufzeit-Tor) | GR-HERKUNFT | jeder Command/Query/Trigger kommt von einem Akteur (direkt oder Kette) |
-| — | GR-INGRESS-EINDEUTIG | ein Trigger ohne Kette hat genau einen `IDarf`-Halter |
+| — (Laufzeit-Tor) | GR-HERKUNFT | jeder Command/Query/Quell-Nachricht kommt von einem Akteur (direkt oder Kette) |
+| — | GR-INGRESS-EINDEUTIG | eine Quell-Nachricht ohne Kette hat genau einen `IDarf`-Halter |
 | — | GR-GETRAGEN | sobald es Clients gibt: jede Zusage mit Ausgabe trägt mindestens ein Client (sonst bricht die Kette) |
 
-Die Grammatik ist eine Quelle (`DomainEditor/Grammatik.cs`); `--check` prüft, dass jede genannte Build-ID im Code existiert.
+Die Grammatik ist eine Quelle (`DomainEditor/Grammatik.cs`); ein Build-/Test-Gate prüft, dass jede genannte Build-ID im Code existiert.
 
 ---
 
@@ -271,8 +274,8 @@ Die Grammatik ist eine Quelle (`DomainEditor/Grammatik.cs`); `--check` prüft, d
 - **🔌 Client-Rahmen** rechts neben den Domänen; die Karte ist die **Anschlussleiste** (trägt / sendet als … / fragt als … / hört). Je
   Client × Ziel-Rahmen **ein Bündel**, in Worten beschriftet (durchgezogen = trägt eine Zusage mit Ausgabe). Der Zoom ändert nichts;
   Einzelkanten nur durch einen Klick (Leisten-Zeile, Bündel, 🔌 in der Stecker-Zeile eines Akteur-Rahmens).
-- Bearbeiten im Panel über ⊕: Akteur „darf ⊕", „+ Zusage ⊕ (Event)"; Client „trägt ⊕", „sendet/fragt ⊕", „hört ⊕". „C# schreiben"
-  schreibt Akteur-Record, Vertrags-Interface und Client-Interface (neu additiv, bestehend chirurgisch über den Herkunfts-Stempel).
+- Bearbeiten im Panel über ⊕: Akteur „darf ⊕", „+ Zusage ⊕ (Event)"; Client „trägt ⊕", „sendet/fragt ⊕", „hört ⊕". Jede Geste
+  schreibt sofort Akteur-Record, Vertrags-Interface bzw. Client-Interface (Zielbild §8.2).
 
 ---
 
@@ -286,7 +289,7 @@ abonniert genau die 3 Vertrags-Events.
 **Offen:**
 1. **Durable Zustellung + Zuteilung** an Clients (§5.4).
 2. **`als` im CommandEnvelope** für spontane Commands, die mehrere Akteure eines Clients dürfen (heute: der erste).
-3. **Blazor:** `IArbeitsplatz` gegen den Client-Code prüfen (typisierte IntentHandler, Capabilities aus dem Vertrag), Editor-Innenseite.
+3. **Blazor:** `IArbeitsplatz` gegen den Client-Code prüfen (typisierte IntentHandler, Capabilities aus dem Vertrag).
 4. **Befund §4.5** (`NimmRangeAuf`, `HoleDatensatzSamples` am Arbeitsplatz).
 5. Python-Worker melden sich noch ohne Token an; `Host.Grpc` hat das Tor nicht konfiguriert (opt-in).
 6. Der Abgleich schreibt eine geänderte Client-Basisliste einzeilig; weitere Vertrags-Teile eines Akteurs liest der Editor, schreibt sie
