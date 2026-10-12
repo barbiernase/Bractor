@@ -229,7 +229,7 @@ dotnet run --project GraphExtractor -- --kontext SetzeSplit [--auftrag "…"]   
 dotnet run --project GraphExtractor -- --slots                                 # Isolations-Messung (§7)
 ```
 
-`GraphExtractor/LlmKontext.cs` (`KontextBauer`, `KontextCli`), Slot-Erkennung aus `GraphExtractor/SlotInventar.cs`.
+`GraphExtractor.Kern/LlmKontext.cs` (`KontextBauer`, `KontextCli`), Slot-Erkennung aus `GraphExtractor.Kern/SlotInventar.cs`.
 
 | Teil | Umsetzung |
 |---|---|

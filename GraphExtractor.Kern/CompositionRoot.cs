@@ -64,8 +64,8 @@ public sealed class CompositionRootExtractor
         _lage = lage;
         _routing = routing;
         _dom = dom;
-        _hostQuellen = lage.Hosts.SelectMany(h => h.Compilation.SyntaxTrees.Where(t => !Projektlage.IstGeneriert(t)).Select(t => (h.Compilation, t))).ToList();
-        _domänenQuellen = lage.DomänenCompilations.SelectMany(c => c.SyntaxTrees.Where(t => !Projektlage.IstGeneriert(t)).Select(t => (c, t))).ToList();
+        _hostQuellen = lage.Hosts.SelectMany(h => h.Compilation.SyntaxTrees.Where(t => !lage.Quelltexte.IstGeneriert(t)).Select(t => (h.Compilation, t))).ToList();
+        _domänenQuellen = lage.DomänenCompilations.SelectMany(c => c.SyntaxTrees.Where(t => !lage.Quelltexte.IstGeneriert(t)).Select(t => (c, t))).ToList();
         INamedTypeSymbol? Get(string n) => lage.Compilations.Select(c => c.GetTypeByMetadataName(n)).FirstOrDefault(x => x != null);
         _iCommand = Get(Vertrag.ICommand);
         _iTrigger = Get(Vertrag.IPipelineTrigger);

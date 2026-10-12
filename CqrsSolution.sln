@@ -59,6 +59,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cqrs.Codegen", "Cqrs.Codege
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Projections.SourceGeneration", "Projections.SourceGeneration\Projections.SourceGeneration.csproj", "{970F88D3-3697-4D99-BA15-CCD26670C26C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GraphExtractor.Kern", "GraphExtractor.Kern\GraphExtractor.Kern.csproj", "{76D8289F-CE85-4993-B023-046974B32124}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -405,6 +407,18 @@ Global
 		{970F88D3-3697-4D99-BA15-CCD26670C26C}.Release|x64.Build.0 = Release|Any CPU
 		{970F88D3-3697-4D99-BA15-CCD26670C26C}.Release|x86.ActiveCfg = Release|Any CPU
 		{970F88D3-3697-4D99-BA15-CCD26670C26C}.Release|x86.Build.0 = Release|Any CPU
+		{76D8289F-CE85-4993-B023-046974B32124}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{76D8289F-CE85-4993-B023-046974B32124}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{76D8289F-CE85-4993-B023-046974B32124}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{76D8289F-CE85-4993-B023-046974B32124}.Debug|x64.Build.0 = Debug|Any CPU
+		{76D8289F-CE85-4993-B023-046974B32124}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{76D8289F-CE85-4993-B023-046974B32124}.Debug|x86.Build.0 = Debug|Any CPU
+		{76D8289F-CE85-4993-B023-046974B32124}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{76D8289F-CE85-4993-B023-046974B32124}.Release|Any CPU.Build.0 = Release|Any CPU
+		{76D8289F-CE85-4993-B023-046974B32124}.Release|x64.ActiveCfg = Release|Any CPU
+		{76D8289F-CE85-4993-B023-046974B32124}.Release|x64.Build.0 = Release|Any CPU
+		{76D8289F-CE85-4993-B023-046974B32124}.Release|x86.ActiveCfg = Release|Any CPU
+		{76D8289F-CE85-4993-B023-046974B32124}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

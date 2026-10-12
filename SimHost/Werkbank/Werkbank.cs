@@ -24,6 +24,8 @@ public sealed class Werkbank
     public Infra Infra { get; }
     public SimDatenbank Db { get; } = new();
     public Fortschritt Fortschritt { get; } = new();
+    /// <summary>Der warme Workspace (P7.1): das gelesene Board, die Karten der Befunde, „Neu lesen“.</summary>
+    public Arbeitsbereich Arbeitsbereich { get; }
     public KreislaufErgebnis? Letzter { get; private set; }
     /// <summary>Der Stand, mit dem der laufende Host gebaut wurde („● Entwurf ≠ Lauf", §5).</summary>
     public string? LaufStand { get; private set; }
@@ -39,6 +41,7 @@ public sealed class Werkbank
         Umgebungen = new Umgebungen(slnRoot);
         Host = new HostProzess(slnRoot);
         Infra = new Infra(slnRoot);
+        Arbeitsbereich = new Arbeitsbereich(slnRoot, Fortschritt.Melde);
     }
 
     private string AktivDatei => Path.Combine(_root, ".werkbank", "aktiv");
@@ -140,17 +143,21 @@ public sealed class Werkbank
             Fortschritt.Melde("kreislauf", new { stand });
             KreislaufErgebnis Ende(bool ok, IReadOnlyList<Diagnose>? d = null, IReadOnlyList<BootMeldung>? boot = null, IReadOnlyList<string>? frage = null)
             {
-                Letzter = new KreislaufErgebnis(ok, stand, schritte, d ?? [], boot ?? [], frage, DateTimeOffset.UtcNow);
+                // Zu den Compiler-Befunden die Lese-Befunde (was das Lesen nicht fassen konnte, z. B. ein unaufgelöster Basistyp).
+                Letzter = new KreislaufErgebnis(ok, stand, schritte, [.. d ?? [], .. Arbeitsbereich.Befunde()], boot ?? [], frage, DateTimeOffset.UtcNow);
                 Laeuft = null;
                 Fortschritt.Melde("ende", new { ok, stand });
                 return Letzter;
             }
 
+            // Der aktuelle Code-Stand im warmen Workspace — Befunde des Bauens finden darüber ihre Karte (auch neu angelegte Typen).
+            var vorher = await Arbeitsbereich.LiesAsync(ct);
+
             // 1 Bauen: dotnet build des Laufzeit-Hosts — der Codegen-Prepass (Proto, STJ-Kontexte, Python-Basen) läuft im Build mit.
             Beginne("Bauen");
             // -p:CqrsStand: der Host stempelt diesen Stand an jedes Event (Spur) — Board, Build und Lauf tragen denselben.
             var bau = await Prozesse.LaufeAsync("dotnet", ["build", "Host.Grpc/Host.Grpc.csproj", "-v", "q", "-nologo", "-clp:NoSummary", $"-p:CqrsStand={stand}"], _root, ct: ct);
-            var diagnosen = Karten.Zuordnen(Diagnosen.Lies(bau.Zeilen, _root), _root);
+            var diagnosen = Karten.Zuordnen(Diagnosen.Lies(bau.Zeilen, _root), vorher.Board);
             Schritt(schritte, new Schritt("Bauen", bau.Ok, (long)bau.Dauer.TotalMilliseconds,
                 bau.Ok ? ["0 Fehler"] : diagnosen.Count > 0 ? diagnosen.Select(x => $"{x.Datei}:{x.Zeile} {x.Code} {x.Text}").Take(20).ToList() : bau.Zeilen.TakeLast(15).ToList()));
             if (!bau.Ok) return Ende(false, diagnosen);
@@ -166,11 +173,15 @@ public sealed class Werkbank
                 if (!pr.Ok) return Ende(false, diagnosen);
             }
 
-            // 3 Board neu lesen (Code = Wahrheit).
+            // 3 Board neu lesen (Code = Wahrheit) — im warmen Workspace, nur was sich geändert hat (E7).
             Beginne("Neu lesen");
-            var lesen = await Prozesse.LaufeAsync("dotnet", ["run", "--project", "GraphExtractor"], _root, zeitlimit: TimeSpan.FromMinutes(5), ct: ct);
-            Schritt(schritte, new Schritt("Neu lesen", lesen.Ok, (long)lesen.Dauer.TotalMilliseconds, lesen.Zeilen.Where(z => z.StartsWith("✅", StringComparison.Ordinal)).ToList()));
-            if (!lesen.Ok) return Ende(false, diagnosen);
+            var leseUhr = System.Diagnostics.Stopwatch.StartNew();
+            var gelesen = await Arbeitsbereich.LiesAsync(ct);
+            var befunde = gelesen.Befunde.Count();
+            Schritt(schritte, new Schritt("Neu lesen", true, (long)leseUhr.Elapsed.TotalMilliseconds,
+                [ReferenceEquals(gelesen, vorher) ? $"Code unverändert seit dem Lesen vor dem Bauen ({gelesen.Routing.Source})"
+                    : $"Board aus dem warmen Workspace ({gelesen.Routing.Source}) · Übersetzen {gelesen.Uebersetzen.TotalMilliseconds:0} ms · Lesen {gelesen.Extrahieren.TotalMilliseconds:0} ms",
+                 befunde == 0 ? "keine Lese-Befunde" : $"{befunde} Lese-Befund(e) an Karten"]));
 
             var name = Aktiv;
             var u = Umgebungen.Aufgeloest(name);

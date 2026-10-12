@@ -305,7 +305,7 @@ public sealed class GraphBuilder
         foreach (var (cmdFull, aggName) in _routing.CommandToAggregate)
         {
             if (!_cmdId.TryGetValue(cmdFull, out var cmdNode)) continue;
-            Edge(cmdNode, AggNodeByName(aggName), EdgeKind.routedTo, "GeneratedCommandRouting");
+            Edge(cmdNode, AggNodeByName(aggName), EdgeKind.routedTo, _routing.Source);
         }
 
         // Handler-sensitiv: der Command produziert GENAU seine persistierten OneOf-Ausgänge (autoritativ).
@@ -316,7 +316,7 @@ public sealed class GraphBuilder
             foreach (var evtFull in events)
                 if (_evtId.TryGetValue(evtFull, out var evtNode))
                 {
-                    Edge(cmdNode, evtNode, EdgeKind.produces, "GeneratedCommandRouting");
+                    Edge(cmdNode, evtNode, EdgeKind.produces, _routing.Source);
                     cmd.Command!.Produces.Add(new CommandOutcome { Event = SimpleEvt(evtFull), Persisted = true });
                 }
         }
@@ -372,7 +372,8 @@ public sealed class GraphBuilder
                     Edge(evtNode, projNode, EdgeKind.consumedBy, "subscriber");
         }
 
-        var projByName = _dom.Projections.ToDictionary(p => p.Name, p => $"proj:{p.Name}", StringComparer.Ordinal);
+        // Tolerant: ein doppelter Projektions-Name (halb editiert) ist ein Lese-Befund (ModellMapper), kein Absturz.
+        var projByName = _dom.Projections.GroupBy(p => p.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => $"proj:{g.Key}", StringComparer.Ordinal);
         foreach (var q in _dom.Queries)
         {
             var node = _byId[$"query:{q.Name}"];
@@ -561,10 +562,15 @@ public sealed class GraphBuilder
 
         d.Add(new Finding
         {
-            Severity = _routing.Source == "GeneratedCommandRouting" ? "info" : "warning",
+            // Warm (Werkbank, E7) sind die Decide-Signaturen der Primärweg — nur ein FEHLENDES Generat beim kalten Lesen ist eine Warnung.
+            Severity = _routing.Source == RoutingTruth.Fallback ? "warning" : "info",
             Code = "ROUTING-SOURCE",
-            Message = $"Routing-Wahrheit: {_routing.Source}" +
-                      (_routing.Source == "GeneratedCommandRouting" ? " (autoritativ, aus dem gebauten Generat)." : " (Decider-Ableitung — Infrastructure nicht gebaut?).")
+            Message = $"Routing-Wahrheit: {_routing.Source}" + (_routing.Source switch
+            {
+                RoutingTruth.Generat => " (autoritativ, aus dem gebauten Generat).",
+                RoutingTruth.DecideSignaturen => " (aus den Decide-Signaturen — warmes Lesen der Werkbank; das Generat ist die Gegenprobe in --check).",
+                _ => " (Decider-Ableitung — Infrastructure nicht gebaut?).",
+            })
         });
 
         // Saga sendet einen Command, den kein Aggregat behandelt → würde zur Laufzeit hängen.

@@ -334,34 +334,6 @@ public static class CodeSync
         return new { ok = p.ExitCode == 0, fehler };
     }
 
-    // ── Neu einlesen (Code → Board): den GraphExtractor laufen lassen — er schreibt domain-model.json,
-    //    knowledge-graph.* und domain-model.json aus dem AKTUELLEN Code. Der Browser merged danach (Code = Wahrheit). ──
-    public static object Extrahiere(string slnRoot)
-    {
-        var psi = new ProcessStartInfo("dotnet", "run --project GraphExtractor")
-        {
-            WorkingDirectory = slnRoot,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        using var p = Process.Start(psi)!;
-        var stdout = p.StandardOutput.ReadToEndAsync();
-        var stderr = p.StandardError.ReadToEndAsync();
-        if (!p.WaitForExit(TimeSpan.FromMinutes(5)))
-        {
-            try { p.Kill(entireProcessTree: true); } catch { /* bereits beendet */ }
-            return new { ok = false, grund = "GraphExtractor: Zeitüberschreitung (5 min)." };
-        }
-        var aus = (stdout.Result + "\n" + stderr.Result).Replace("\r\n", "\n").Split('\n');
-        return new
-        {
-            ok = p.ExitCode == 0,
-            grund = p.ExitCode == 0 ? "" : string.Join("\n", aus.Where(l => l.Contains("error") || l.Contains("❌")).Take(10)),
-            zusammenfassung = aus.Where(l => l.Contains("Aggregate") || l.Contains("Diagnosen")).Select(l => l.Trim()).ToList(),
-        };
-    }
-
     // ── Bausteine ─────────────────────────────────────────────────────────────────────────────
     private static string Inner(Treffer t)
     {

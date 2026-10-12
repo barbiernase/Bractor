@@ -438,12 +438,12 @@ Die Ergänzungen sind additiv: Das Spalten-Layout bleibt, bearbeitet wird nur im
 | Simulation im Editor | `SimHost/ModellSimulation.cs`, `SimHost/Musterwerte.cs`, `/api/editor/sim/*`, `/api/llm/simulieren`, JS-Abschnitt „SIMULATION“ (Animation, Abdeckung, Fluss-Schritt) in `GraphExtractor/HtmlPresenter.cs` | Umgebung `sim` + Spur | P8 |
 | Laufwerke als Editor-Motor | Nutzung von `Cqrs.Testing/Fluss.cs` (`FlussLaufwerk`) und `Saga.cs` (`SagaLaufwerk`) durch SimHost | — (für Prüfstand-Tests bleiben sie, solange Tests sie nutzen) | P8 |
 | Board-Modell als Wahrheit | `board-model.json`, localStorage-Modell, `mergeBoard`, `_herkunft`/„ungeschrieben“, Entwürfe im Board, `deSave`, Knopf „C# schreiben“, 👁 Vorschau, `/api/editor/board`, `/api/editor/write` (als Sammel-Schreiben) | Code + Ansichts-Datei + Patch je Geste | P7 |
-| Paritätsprüfung Code⇄Board | Großteil von `GraphExtractor/ParitaetsPruefung.cs` | Code-ohne-Karte-Gate, Wirker⇄Karte | P7 |
+| Paritätsprüfung Code⇄Board | Großteil von `GraphExtractor.Kern/ParitaetsPruefung.cs` | Code-ohne-Karte-Gate, Wirker⇄Karte | P7 |
 | JS-Ableitungen | `akteurSet`/`akteurVon`, `flussRegeln`, `deriveMembership`, `derivedStores`, `compatible`, `deAkteurParitaet` | Server-Ableitung | P7 |
 | Validator | `DomainEditor/Validator.cs` | Analyzer/Boot-Guards | P7 |
 | Code-Knoten | 📝/🤖-Karten, Andocken, `normalize`-Migration, Sperre über Hash in `SimHost/CodeSync.cs`/`DateiAbgleich.cs` | Rumpf aus der Datei, 🤖 als Aktion | P7 |
 | Ingress-/Betriebs-UI | Palette: Trigger, Pipeline (Handle), Dienst, HostSetting; JS-Abschnitte „INGRESS/PIPELINE“ und „BETRIEB / HOST-BAND“; Handle-Karten | Quelle, Fluss, 🖥 Host-Rahmen | P0 |
-| Composition-Root-Extraktion | `GraphExtractor/CompositionRoot.cs` (Ingress-, Dienst-, Frist-Erkennung) | Lesen der Umgebungs-Dateien nach Schema | P2 |
+| Composition-Root-Extraktion | `GraphExtractor.Kern/CompositionRoot.cs` (Ingress-, Dienst-, Frist-Erkennung) | Lesen der Umgebungs-Dateien nach Schema | P2 |
 | Landkarte/Ablauf | LOD-Reste (`setzeLod`, `pruefeLod`, `VIEW.lod`) | Rahmen + Fokus + Minimap | P0 |
 | Domänen-Quellklasse | `DateiQuelle`, `FileWatchConfig`, `AddQuelle<…>` im Host | Datei-Treiber + Konfig | P1 |
 | Prüfen/Kompilieren/Alle ausführen | Knöpfe der Kopfleiste | ⟳ | P3 |
@@ -572,13 +572,13 @@ Diese Dokumente gelten nur noch als Detail-Referenz. Bei Widerspruch gilt dieses
 ### A.1 Extractor-Grundlagen (aus dem gelöschten Kapitel 07)
 
 - **Geparst statt nachgebaut.** Die Routing-Wahrheit kommt aus dem Laufzeit-Generat `GeneratedCommandRouting`: Der Extractor liest
-  dessen Syntaxbaum und löst die `typeof`-Ausdrücke über das Semantik-Modell auf (`GraphExtractor/RoutingTruth.cs`). Fehlt das Generat,
+  dessen Syntaxbaum und löst die `typeof`-Ausdrücke über das Semantik-Modell auf (`GraphExtractor.Kern/RoutingTruth.cs`). Fehlt das Generat,
   leitet er dieselbe Abbildung aus den `Decide`-Signaturen ab und markiert die Herkunft ehrlich als `decider-fallback`.
 - **Symbole, nicht Text.** Symbole aus verschiedenen Compilations sind nie referenzgleich, deshalb wird über voll-qualifizierte Namen
   verglichen (`Sym.Implements`), dasselbe Idiom wie in den Multi-Compilation-Generatoren.
 - **Prozesse:**
   - die Saga-DSL wird als Syntax gelesen (jede Anweisung im `Definiere`-Lambda eine Regel);
-  - Flüsse liest `GraphExtractor/FlussLeser.cs`;
+  - Flüsse liest `GraphExtractor.Kern/FlussLeser.cs`;
   - welche Prozesse wirklich registriert sind, kommt aus `GeneratedProzessRegeln`.
 - **Graph-Ids** tragen ein Präfix je Art (`cmd:`, `evt:`, `agg:`, `proc:` …). Kanten tragen ihre Herkunft (`provenance`).
 - **Diagnosen** (künftig Analyzer-Kandidaten, §8.3):

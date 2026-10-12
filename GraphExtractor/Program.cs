@@ -50,11 +50,20 @@ workspace.WorkspaceFailed += (_, e) =>
 };
 
 Console.WriteLine("Lade Solution…");
+var uhr = System.Diagnostics.Stopwatch.StartNew();
 var solution = await workspace.OpenSolutionAsync(solutionPath);
+var solutionDir = Path.GetDirectoryName(solutionPath) ?? ".";
+var ladeZeit = uhr.Elapsed;
+
+// --warm: Messung des warmen Workspaces (Werkbank P7.1, E7) — kalt lesen, dann nur aus den Domänen-Compilations, dann nach einer
+//   Text-Änderung. Schreibt nichts.
+if (args.Contains("--warm"))
+    return await WarmMessung.LaufAsync(solution, solutionDir, ladeZeit);
 
 // Welche Projekte analysiert werden, ist ABGELEITET (Vertrag → Laufzeit mit generierter Routing-Tabelle → deren
 // Referenz-Hülle; Domäne/Framework über die Aggregate; Hosts über ihren handgeschriebenen Einstiegspunkt).
 Console.WriteLine("\n── Projektlage (abgeleitet) ──");
+uhr.Restart();
 var lage = await Projektlage.ErmittleAsync(solution, Console.WriteLine);
 var compilations = lage.Compilations;
 
@@ -63,26 +72,22 @@ if (sonde)
     Console.WriteLine("\n── Agnostik-Sonde ──");
     // --sonde-board <datei>: das Board-Modell inkl. Sonde ausgeben (um die Sonde im Editor anzusehen).
     var bi = Array.IndexOf(args, "--sonde-board");
-    return await Sonde.PruefeAsync(solution, lage, Path.GetDirectoryName(solutionPath) ?? ".", args.Contains("--sonde-ist"),
+    return await Sonde.PruefeAsync(solution, lage, solutionDir, args.Contains("--sonde-ist"),
         bi >= 0 && bi + 1 < args.Length ? args[bi + 1] : null);
 }
 
+var lesung = await Lesen.LiesAsync(solution, lage, solutionDir, uebersetzen: uhr.Elapsed);
+var (routing, dom, graph, compositionRoot) = (lesung.Routing, lesung.Dom, lesung.Graph, lesung.CompositionRoot);
 Console.WriteLine("\n── Routing-Wahrheit ──");
-var routing = RoutingTruth.FromCompilations(compilations);
 Console.WriteLine($"   Quelle: {routing.Source}  ({routing.CommandToAggregate.Count} Command→Aggregat, {routing.CommandToEvents.Count} Command→Events)");
-
 Console.WriteLine("\n── Domänen-Extraktion ──");
-var dom = new DomainExtractor(compilations, lage.DomänenAssemblies).Extract();
-dom.Wurzel = Path.GetDirectoryName(solutionPath) ?? ".";
-foreach (var (ns, dir) in lage.ProjektWurzeln()) dom.ProjektWurzeln[ns] = dir;
 Console.WriteLine($"   {dom.Aggregates.Count} Aggregate, {dom.Processes.Count} Sagas, {dom.Projections.Count} Projektionen, {dom.Queries.Count} Queries, {dom.Pipelines.Count} Pipelines");
 Console.WriteLine($"   Prozesse registriert: {string.Join(", ", dom.RegisteredProcesses)}");
-
-Console.WriteLine("\n── Graph aufbauen ──");
-var graph = new GraphBuilder(routing, dom).Build();
+Console.WriteLine("\n── Graph ──");
 foreach (var (k, v) in graph.Meta.Counts) Console.WriteLine($"   {k,-12}: {v}");
-
-var solutionDir = Path.GetDirectoryName(solutionPath) ?? ".";
+Console.WriteLine($"\n   Laden {ladeZeit.TotalSeconds:0.0} s · Übersetzen {lesung.Uebersetzen.TotalSeconds:0.0} s · Lesen {lesung.Extrahieren.TotalSeconds:0.0} s");
+foreach (var b in lesung.Befunde)
+    Console.WriteLine($"   ⚠ {b["code"]} {b["karte"]}: {b["text"]} ({b["datei"]}:{b["zeile"]})");
 
 // --slots: Isolation aller Code-Block-Stellen (Spielraum vs. Nachbarn vs. Wissen von außen).
 if (args.Contains("--slots"))
@@ -92,9 +97,6 @@ if (args.Contains("--slots"))
     return 0;
 }
 
-Console.WriteLine("\n── Composition-Root (Betrieb/Host) ──");
-var compositionRoot = await new CompositionRootExtractor(solution, lage, routing, dom).ExtractAsync();
-Console.WriteLine($"   {compositionRoot.Frists.Count} Frist(en), {compositionRoot.Triggers.Count} Trigger, {compositionRoot.Dienste.Count} Dienst-Bindung(en), {compositionRoot.HostSettings.Count} HostSetting(s)");
 
 // --kontext <Disc|Besitzer.Disc> [--auftrag "…"]: ein LLM-Kontext auf die Konsole (schreibt sonst nichts).
 if (args.Contains("--kontext"))
@@ -111,7 +113,7 @@ var json = JsonSerializer.Serialize(graph, jsonOptions);
 if (check)
 {
     Console.WriteLine("\n── Paritäts-Prüfung (Code ⇄ Extraktion ⇄ Editor-Modell) ──");
-    var boardJson = ModellMapper.ZuBoardJson(graph, dom, compositionRoot);
+    var boardJson = lesung.BoardJson;
     var befunde = await ParitaetsPruefung.PruefeAsync(solution, lage,
         new ParitaetsPruefung.Analyse(routing, dom, graph, compilations), boardJson, ModellMapper.Ingress(compositionRoot));
     foreach (var g in befunde.GroupBy(b => b.Bereich))
@@ -137,7 +139,7 @@ Console.WriteLine($"\n✅ {jsonPath}");
 var modell = ModellMapper.ZuEditorModell(graph, dom);
 // Volles Board-Modell: Schreibseite + rekonstruierte Leseseiten-Topologie (Projektion/Reader/
 // Query/Pipeline/Trigger). Das Board lädt dies als Seed und baut es weiter (autoLayout platziert).
-var modellJson = ModellMapper.ZuBoardJson(graph, dom, compositionRoot, Umgebungen.Lies(solutionDir));
+var modellJson = lesung.BoardJson;
 var modellPath = Path.Combine(solutionDir, "domain-model.json");
 await File.WriteAllTextAsync(modellPath, modellJson);
 Console.WriteLine($"✅ {modellPath}  ({modell.Aggregate.Count} Aggregate, {modell.Sagas.Count} Sagas)");

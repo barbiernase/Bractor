@@ -116,12 +116,20 @@ Funktion (`Abstractions/Spur/SpurWeg.Aus`). Die Werkbank spiegelt die Spur (`Sim
 `/api/werkbank/spur/puls|vorgaenge|vorgang/{k}`. Editor: Leiste ☰ Vorgänge · ⏱ Zeitleiste · ⚠ Meldungen · 〰 Puls; Spur-Überlagerung (①②③ mit +Δt,
 ✕/⏳ rot, alt grau), Schritt-Panel mit ↤/↦; EIN Fokus (Chip in der Ansichts-Leiste, ersetzt Slice/◎/⤢; die statische Kette kommt erst mit P7.3 vom Server).
 
+**Warmer Workspace (2026-10-12, Werkbank P7.1):** der Extractor ist Bibliothek (`GraphExtractor.Kern`) + CLI (`GraphExtractor`); EIN Lesepfad
+`Lesen.LiesAsync` → `Lesung`. SimHost hält den Workspace warm (`SimHost/Werkbank/Arbeitsbereich.cs`: einmal kalt laden, Dateiwächter →
+`WithDocumentText` nur im Speicher, warm gelesen nur aus den Compilations unterhalb der Laufzeit, E7 — Routing aus den Decide-Signaturen, Gegenprobe
+in `--check`). Text-Änderung → Übersetzen + Lesen p50 224 ms; ⟳ „Neu lesen“ und `/api/editor/model` kommen daraus. Kein statischer Zustand mehr
+(`Quelltexte` je Solution-Stand). Code mit Fehlern wird gelesen: unaufgelöster Basistyp → Code-Karte ⚠ (`codeKarten`, `code:T`) bzw. Befund an der
+Karte, Fluss-Anweisung ohne Knoten / verworfene Regel / doppelter Name → Lese-Befund (`lesebefunde`, über `/api/werkbank/diagnosen` an der Karte).
+Jede Karte trägt `_ort {datei, start, ende, zeile}`.
+
 **Akteure, Verträge, Clients (2026-10-06):** Akteure mit Befugnis und Kette bis in den Event-Header; Akteur-Verträge (Zusagen
 draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer CommandId; Clients (`IClientVertrag`, n:m zu Akteuren) mit
 Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an
 Clients (`docs/konzept-akteure.md` §9).
 
-**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
+**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
 Marten/Consul/Redis, sequentiell: 33/33 (inkl. 4 Fluss-E2E; TwoNodeCommandDispatch an die Inbox-Marke seit T2b angepasst).**
 
 **Bewusst offen (Priorität):**
@@ -154,7 +162,7 @@ integriert; `CqrsFrameworkOptions` toter `[Obsolete]`-Typ.
 - **Extractor/Editor erkennen nur Code-Fakten** (Marker, Attribute, Symbole) — nie Namenskonventionen oder
   Namespace-Raten. Stores: Fähigkeit = Interface `: IWriteStore`/`: IReadStore` mit GENAU EINER Funktion (CQRS051),
   Store = Bündel `: IStore, IFähigkeitA, …` (eine Klasse, Namen frei). Ingress-Methoden tragen `[Ingress(...)]`.
-  Neues Konstrukt ⇒ Sonde (`GraphExtractor/Sonde/`) + `soll.txt` erweitern.
+  Neues Konstrukt ⇒ Sonde (`GraphExtractor.Kern/Sonde/`) + `soll.txt` erweitern.
 - **Fähigkeiten statt Rumpf-Analyse:** ein Handle (Projektion/Reader/Pipeline) bekommt die Store-Funktionen, die er
   benutzen darf, als Parameter (`Handle(evt, env, writer, IUpsertX store)`); der generierte Dispatch löst sie aus einem
   DI-Bereich auf. Kein Store/`IFristplan` in Ctor/Feld eines Konsumenten (CQRS054), kein `new …Store()` (CQRS055).
@@ -195,10 +203,11 @@ NICHT Timeout-tunebar; xUnit schluckt App-Logs (Cluster-Diagnose → Last-Harnes
 - Build: `dotnet build`
 - Test (Logik, immer grün): `dotnet test Infrastructure.Pruefstand.Tests/Infrastructure.Pruefstand.Tests.csproj`
 - Integration (braucht Postgres/Consul/Redis, sequentiell): `dotnet test Infrastructure.Integration.Tests/Infrastructure.Integration.Tests.csproj`
-- Domänen-Editor + Simulation (einzige Oberfläche; **Ist-Stand** — Ziel: Werkbank ohne Simulationsschicht, `docs/konzept-werkbank.md`; ⟳ in der Kopfzeile baut und startet den echten Host in der gewählten Umgebung): `dotnet run --project GraphExtractor` (erzeugt domain-model.json; die Oberfläche liegt statisch in `SimHost/wwwroot/editor/` — `index.html`, `editor.css`, `editor.js`), dann `dotnet run --project SimHost` → http://localhost:5178/editor/; Palette = Anker (Aggregat · Fluss · Funktion · Quelle · Akteur · Client · Projektion), Trigger-Welt/LOD seit Werkbank-P0 nicht mehr im Editor; Bearbeiten nur im Panel: Karte anklicken, ⊕-Punkt im Panel → passende Knoten leuchten → anklicken = verbinden/lösen (`docs/konzept-editor-panel-bearbeitung.md`); 🤖-LLM-Knoten am Code-Block = Chat: Prompt senden → `claude -p` (Abo, nie API) → geprüft → .cs geschrieben → Laufzeit-Projekt gebaut (alle Generatoren) → neu eingelesen (Konzept §12); Kontexte erzeugt SimHost selbst
+- Domänen-Editor + Simulation (einzige Oberfläche; **Ist-Stand** — Ziel: Werkbank ohne Simulationsschicht, `docs/konzept-werkbank.md`; ⟳ in der Kopfzeile baut und startet den echten Host in der gewählten Umgebung): `dotnet run --project SimHost` → http://localhost:5178/editor/ (SimHost lädt den Code selbst in den warmen Workspace und schreibt domain-model.json; die Oberfläche liegt statisch in `SimHost/wwwroot/editor/` — `index.html`, `editor.css`, `editor.js`); Palette = Anker (Aggregat · Fluss · Funktion · Quelle · Akteur · Client · Projektion), Trigger-Welt/LOD seit Werkbank-P0 nicht mehr im Editor; Bearbeiten nur im Panel: Karte anklicken, ⊕-Punkt im Panel → passende Knoten leuchten → anklicken = verbinden/lösen (`docs/konzept-editor-panel-bearbeitung.md`); 🤖-LLM-Knoten am Code-Block = Chat: Prompt senden → `claude -p` (Abo, nie API) → geprüft → .cs geschrieben → Laufzeit-Projekt gebaut (alle Generatoren) → neu eingelesen (Konzept §12); Kontexte erzeugt SimHost selbst
 - Editor-Parität (Code ⇄ Extraktion ⇄ Editor, schreibt nichts): `dotnet run --project GraphExtractor -- --check`
 - Grammatik als Liste „Regel → Build-Gegenstück": `dotnet run --project GraphExtractor -- --grammatik`
 - Agnostik-Sonde (unbekannte Domäne im Speicher gegen handgeschriebenes Soll + Fixpunkt): `dotnet run --project GraphExtractor -- --sonde`
+- Warmer Workspace messen (kalt vs. warm, Board-Gleichheit, Text-Änderung im Speicher): `dotnet run --project GraphExtractor -- --warm`
 - LLM-Kontext je Code-Block (`docs/konzept-llm-minimalkontext.md`): `dotnet run --project GraphExtractor -- --kontexte <verz>` (Graph-Skelett + Slot-Teile) bzw. `--kontext <Disc> [--auftrag "…"]`; Isolation aller Code-Block-Stellen: `--slots`
 - Last/Durchsatz: `LoadHarness` ist entfernt (Commit fb07f5e); historische Messwerte in `docs/12`.
 - Infra hochfahren: `docker compose -f deploy-linux/docker-compose.infrastructure.yml up -d`

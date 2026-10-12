@@ -4,7 +4,7 @@
   // Vertrags-Fakten aus dem Rahmen (vom Extractor aus dem Code gelesen).
   const ID_FELD=()=>((MODEL.rahmen&&MODEL.rahmen.aggregatIdFeld)||"");
   const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"],konfig:["Konfiguration","vo"],query:["Query","qry"],queryresponse:["Response","qrsp"],auftrag:["Auftrag","cmd"]};
-  let MODEL={schemaVersion:"2",akteure:[],clients:[],records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],reaktionen:[],codeNodes:[],llmNodes:[],fluesse:[]};
+  let MODEL={schemaVersion:"2",akteure:[],clients:[],records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],reaktionen:[],codeNodes:[],llmNodes:[],fluesse:[],codeKarten:[]};
   let NID=1;
   const embedded=null;
   // Domänen-Filter (welche Domänen ausgeblendet sind) — pro Browser UND pro Solution persistiert (rahmen.kennung),
@@ -25,6 +25,8 @@
   const kindKlasse=k=>(KINDINFO[k]||["?","vo"])[1];
   function normalize(m){m=m||{};m.records=m.records||[];m.enums=m.enums||[];m.aggregate=m.aggregate||[];m.decider=m.decider||[];m.applier=m.applier||[];m.sagas=m.sagas||[];m.states=m.states||[];m.transitions=m.transitions||[];
     m.readModels=m.readModels||[];m.stores=m.stores||[];m.projektionen=m.projektionen||[];m.reader=m.reader||[];m.reaktionen=m.reaktionen||[];m.codeNodes=m.codeNodes||[];m.llmNodes=m.llmNodes||[];
+    // Code-Karten (Werkbank P7.1): Typen, die das Lesen nicht als Baustein erkennt (z. B. unaufgelöster Basistyp) — kommen fertig vom Server.
+    m.codeKarten=m.codeKarten||[];
     // Akteur (docs/konzept-akteure.md): wer von außen hineingibt — darf[] = die Typen seiner IDarf<T> (Command/Query/Trigger).
     m.akteure=m.akteure||[];m.akteure.forEach(a=>{if(!a._id)a._id="ak"+(NID++);a.darf=a.darf||[];});   /* art bewusst nicht vorbelegen (Herkunfts-Hash) */
     // Client (docs/konzept-akteure.md §4): die Software an der Leitung — traegt[] = Akteur-Vertrags-Teile, sendet/fragt/kenntnis = der Rand.
@@ -968,7 +970,7 @@
     return s;}
   const DATEN_ARTEN=new Set(["valueobject","enum","konfig"]);
   // Arten, die mit ihrem Träger mitgehen, aber keinen Akteur-Rahmen begründen.
-  const NUR_MIT=new Set(["valueobject","enum","konfig","codenode","llmnode","queryresponse"]);
+  const NUR_MIT=new Set(["valueobject","enum","konfig","codenode","llmnode","queryresponse","code"]);
   // Diagnose: je Domäne die Akteur-Reihenfolge und je Rahmen die Bausteine mit ihrer Akteur-Menge.
   window.deAkteure=()=>{const r={};NODEBY.forEach(n=>{if(!VIS.has(n.id))return;const d=domKey(n),o=akteurOrdnung(d),a=o.length?akteurVon(n):"—";
     const x=r[d]||(r[d]={ordnung:o,rahmen:{}});(x.rahmen[a]=x.rahmen[a]||[]).push(n.kind+":"+n.name+" {"+[...akteurSet(n)].join(",")+"}");});return r;};
@@ -1211,6 +1213,12 @@
   //   • Ausgang „code ▶": in den Rumpf-Port des Konsumenten (Decider/Applier/Store-Fn/Handler …).
   //   • „✎ Im Editor öffnen" + Datei-Spiegel — nur, wo eine echte .cs existiert (heute Schreibseite).
   //   KEIN In-Browser-Editieren, KEIN Klick auf den Block.
+  // Code-Karte (Werkbank P7.1, Zielbild §9): ein Typ, den das Lesen nicht als Baustein erkennt — roh aus der Datei, mit dem Grund (⚠).
+  //   Nur Anzeige; geändert wird der Code (die Karte verschwindet, sobald der Basistyp wieder aufgelöst ist).
+  function codeKarteCard(body,c){const o=c._ort||{};
+    body.append(h("div",{class:"blab"},"⚠ Basistyp nicht aufgelöst: "+(c.unaufgeloest||[]).join(", ")));
+    body.append(h("div",{class:"blab",style:"opacity:.75"},(c.art||"Typ")+" · "+(o.datei||c.datei||"")+(o.zeile?":"+o.zeile:"")));
+    body.append(h("pre",{class:"gcodeprev",style:"cursor:default;white-space:pre-wrap"},c.code||""));}
   function codeNodeCard(body,c){
     body.append(nameInp(c,"name","Code"));
     const anker=codeAnker(c._id);
@@ -1407,7 +1415,7 @@
   //    Applier→Aggregat(rechts) · Applier→State-Feld(oben, optionale Zuweisungs-Markierung).
   const SVGNS="http://www.w3.org/2000/svg";
   const GRID=20;
-  const NODELABEL={host:"Host",akteur:"Akteur",client:"Client",auf:"Zusage",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",quelle:"Quelle",fluss:"Fluss",codenode:"Code",llmnode:"LLM",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn",funktion:"Funktion",auftrag:"Auftrag",flussknoten:"Pipeline"};
+  const NODELABEL={host:"Host",akteur:"Akteur",client:"Client",auf:"Zusage",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",quelle:"Quelle",fluss:"Fluss",codenode:"Code",llmnode:"LLM",code:"⚠ Code",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn",funktion:"Funktion",auftrag:"Auftrag",flussknoten:"Pipeline"};
   let PAN={x:40,y:30,s:1}, canvas=null, world=null, svg=null, svgTop=null, SLOTS={};
   // Typ-Navigation: HLKIND = aktuell hervorgehobener Node-Typ (Board+Minimap); JUMPIX = Sprung-Cursor je Typ.
   let HLKIND=null; const JUMPIX={};
@@ -2163,6 +2171,7 @@
             ...MODEL.reaktionen.map(r=>({id:"rk:"+r._id,name:r.name,kind:"reaktion",ref:r})),
             ...MODEL.codeNodes.map(c=>({id:"cn:"+c._id,name:c.name,kind:"codenode",ref:c})),
             ...MODEL.llmNodes.map(l=>({id:"ln:"+l._id,name:l.name,kind:"llmnode",ref:l})),
+            ...MODEL.codeKarten.map(c=>({id:c._id,name:c.name,kind:"code",ref:c})),
             ...flussKnotenNodes(),...handleKnoten(),...fnKnoten(),...hostKnoten()];
   }
   // ── AGGREGATSWEISE ANORDNUNG: jedes Aggregat ein gekachelter Block (eigenes Rollen-Mini-Layout),
@@ -2181,7 +2190,7 @@
     fn:16,store:17,readmodel:17,query:18,"handle:reader":19,queryresponse:20,reader:21};
   // Rollen-Spalten im Geteilt-Band.
   const ROLE_SHARED={saga:0,transition:1,auftrag:2,funktion:3,ergebnis:3.5,reaktion:2,"handle:reaktion":3,konfig:7,valueobject:8,enum:8,command:9,event:9,rejection:9,
-    fn:10,store:11,readmodel:11,"handle:projektion":12,projektion:13,"handle:reader":14,reader:15,query:14,queryresponse:16,codenode:17,llmnode:17};
+    fn:10,store:11,readmodel:11,"handle:projektion":12,projektion:13,"handle:reader":14,reader:15,query:14,queryresponse:16,codenode:17,llmnode:17,code:17};
   // Rolle eines Knotens: Handles je Besitzer-Art (Projektions- vs. Reader-Handle liegen in verschiedenen Spalten).
   // Ergebnis-Events einer Funktion stehen hinter ihr (eigene Spalte „ergebnis“), nicht bei den Events des Aggregats.
   //   Funktionen einer Kette: je Tiefe eine eigene Spalte (11.01, 11.02 …) — die Reihenfolge des Ablaufs steht nebeneinander.
@@ -2565,7 +2574,7 @@
       h("span",{class:"gtitle"+(n.name?" hatname":""),title:title+(n.name?" · "+n.name:"")},h("span",{class:"gk"},title+(n.name?" · ":"")),h("span",{class:"gn"},n.name||"")),
       diagFuer(n.id).length?h("span",{class:"gdiag",title:diagFuer(n.id).map(d=>d.text).join("\n")},"⛔ "+diagFuer(n.id).length):null,
       dsBadge(n),
-      n.kind==="host"?null:h("span",{class:"gx",title:"Löschen",onclick:()=>delNode(n)},"✕"));
+      n.kind==="host"||n.kind==="code"?null:h("span",{class:"gx",title:"Löschen",onclick:()=>delNode(n)},"✕"));
     head.onpointerdown=e=>{if(e.target.classList.contains("gx")||e.target.classList.contains("gcol"))return;startMove(e,el,P(n),()=>waehle(n.id));};
     el.append(head);
     el.append(kurzfassung(n));
@@ -2597,6 +2606,7 @@
     else if(n.kind==="fn")fnCard(body,n);
     else if(n.kind==="flussknoten")flussKnotenCard(body,n);
     else if(n.kind==="host")hostCard(body,n);
+    else if(n.kind==="code")codeKarteCard(body,n.ref);
     else recordCard(body,n.ref);
   }
   function delNode(n){const k=n.kind,ref=n.ref;if(k==="host")return;
@@ -3631,6 +3641,7 @@
     if(!P.length)box.append(h("div",{class:"lz lleer"},"— leerer Vertrag: im Panel ⊕ trägt / sendet / hört"));
     return box;}
   function kurzfassung(n){if(n.kind==="client")return anschlussleiste(n);if(n.kind==="host")return hostKurz(n);const r=n.ref,k=n.kind;let t="";
+    if(k==="code")t="⚠ "+(r.unaufgeloest||[]).join(", ")+" nicht aufgelöst";
     if(k==="command"){const ev=MODEL.decider.filter(d=>d.command===r.name).flatMap(d=>(d.ergibt||[]).map(o=>o.event)).filter(e=>(recByName(e)||{}).kind!=="rejection");
       t=ev.length?"→ "+kurz(ev):"→ (kein Decider)";}
     else if(k==="event"){const c=MODEL.decider.filter(d=>(d.ergibt||[]).some(o=>o.event===r.name)).map(d=>d.command);t=c.length?"← "+kurz(c):"";}
@@ -5154,7 +5165,7 @@
       t.addEventListener("pointerdown",e=>e.stopPropagation());t.addEventListener("click",e=>{e.stopPropagation();klick();});
       p.parentNode.append(t);}catch(e){}}
   // Live-Puls (ohne gewählten Vorgang): Zähler und „zuletzt" je Karte, Kantendicke nach Menge, Stau (offene Aufträge), nie benutzte Kanten blass.
-  const PULS_OHNE=new Set(["codenode","llmnode","valueobject","enum","state","host","store","readmodel","fn"]);
+  const PULS_OHNE=new Set(["codenode","llmnode","code","valueobject","enum","state","host","store","readmodel","fn"]);
   function spurPuls(ELS,kante,pfade){const P=SP.puls;if(!P||!P.laeuft)return;
     const nk=new Map();(P.karten||[]).forEach(k=>{const id=spKarte(k.id);if(!id)return;const a=nk.get(id);
       if(!a||k.n>a.n)nk.set(id,{n:k.n,z:a&&Date.parse(a.z)>Date.parse(k.zuletzt)?a.z:k.zuletzt});});

@@ -155,7 +155,7 @@ gematchten Event (DB-Zeit); läuft es ab, scheitert der Schritt („Zeitlimit"),
 Regeln: CQRS068 (feste Form), CQRS069 (ein Auftrag je Funktion), CQRS003 (`Rufe` mit explizitem Typ), Boot-Guard
 „jede gerufene Funktion ist gebunden", Azyklizitäts-Guard (Funktion → Ergebnisse aus der Signatur). Kein `Zeitlimit` hinter
 `UndAlle`, kein `Rufe` mit Fan-out (Validator). Ergebnis-Events sind normale Domänen-Typen: Proto regenerieren wie bei jedem
-neuen Event. Beispiel: Sonde `GraphExtractor/Sonde/Gebuehren.cs.txt`; Laufzeit-Beweis `Infrastructure.Pruefstand.Tests/Funktionen/`.
+neuen Event. Beispiel: Sonde `GraphExtractor.Kern/Sonde/Gebuehren.cs.txt`; Laufzeit-Beweis `Infrastructure.Pruefstand.Tests/Funktionen/`.
 
 ## 10.6 Eine Pipeline als Fluss (Quelle → Funktionen → Commands)
 

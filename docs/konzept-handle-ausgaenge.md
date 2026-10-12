@@ -2,8 +2,8 @@
 
 > **Gekürzt 2026-10-12** auf das mit dem Zielbild `docs/konzept-werkbank.md` Vereinbare.
 
-> **Stand:** 2026-09-30 · **Status:** UMGESETZT (Entscheidung „nur Signatur“ + CQRS050, §10) · **Ort:** `GraphExtractor/DomainExtractor.cs`,
-> `GraphExtractor/ModellMapper.cs`, `GraphExtractor/HtmlPresenter.cs`, `GraphExtractor/Sonde/`
+> **Stand:** 2026-09-30 · **Status:** UMGESETZT (Entscheidung „nur Signatur“ + CQRS050, §10) · **Ort:** `GraphExtractor.Kern/DomainExtractor.cs`,
+> `GraphExtractor.Kern/ModellMapper.cs`, `GraphExtractor/HtmlPresenter.cs`, `GraphExtractor.Kern/Sonde/`
 > Verwandt: [konzept-domaenen-editor.md](konzept-domaenen-editor.md) §3/§6, [konzept-editor-panel-bearbeitung.md](konzept-editor-panel-bearbeitung.md) §8 (Zeilenraster),
 > [konzept-llm-minimalkontext.md](konzept-llm-minimalkontext.md) (Slot-Schlüssel).
 

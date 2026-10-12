@@ -23,15 +23,31 @@ public sealed class RoutingTruth
 
     public string Source { get; private set; } = "unbekannt";
 
-    /// <summary>Enthält die Compilation eine generierte Command→Aggregat-Tabelle?</summary>
-    public static bool HatRouting(Compilation comp) => RoutingProperties(comp).Any(x => x.Art == Art.Aggregat);
+    /// <summary>Herkunft: das Generat der Laufzeit (autoritativ).</summary>
+    public const string Generat = "GeneratedCommandRouting";
+    /// <summary>Herkunft: die Decide-Signaturen, weil das kalte Lesen kein Generat fand.</summary>
+    public const string Fallback = "decider-fallback";
+    /// <summary>Herkunft: die Decide-Signaturen als Primärweg des warmen Lesens (Werkbank, E7) — die Laufzeit wird dort nicht übersetzt.</summary>
+    public const string DecideSignaturen = "decide-signaturen";
 
-    public static RoutingTruth FromCompilations(IReadOnlyList<Compilation> compilations)
+    /// <summary>Command→Aggregat/Events nur aus den Decide-Signaturen (Primärweg des warmen Lesens, Gegenprobe in --check).</summary>
+    public static RoutingTruth AusDecideSignaturen(IReadOnlyList<Compilation> compilations)
+    {
+        var truth = new RoutingTruth();
+        DeciderFallback.Fill(compilations, truth);
+        truth.Source = DecideSignaturen;
+        return truth;
+    }
+
+    /// <summary>Enthält die Compilation eine generierte Command→Aggregat-Tabelle?</summary>
+    public static bool HatRouting(Compilation comp, Quelltexte quelltexte) => RoutingProperties(comp, quelltexte).Any(x => x.Art == Art.Aggregat);
+
+    public static RoutingTruth FromCompilations(IReadOnlyList<Compilation> compilations, Quelltexte quelltexte)
     {
         var truth = new RoutingTruth();
         foreach (var comp in compilations)
         {
-            var props = RoutingProperties(comp).ToList();
+            var props = RoutingProperties(comp, quelltexte).ToList();
             if (!props.Any(x => x.Art == Art.Aggregat)) continue;
             foreach (var (prop, model, art) in props)
                 foreach (var (cmd, rhs) in Entries(prop, model))
@@ -47,22 +63,22 @@ public sealed class RoutingTruth
                         if (events.Count > 0) truth.CommandToEvents[cmd.Full] = events;
                     }
                 }
-            truth.Source = "GeneratedCommandRouting";
+            truth.Source = Generat;
             return truth;
         }
 
         DeciderFallback.Fill(compilations, truth);
-        truth.Source = "decider-fallback";
+        truth.Source = Fallback;
         return truth;
     }
 
     private enum Art { Aggregat, Events }
 
-    private static IEnumerable<(PropertyDeclarationSyntax Prop, SemanticModel Model, Art Art)> RoutingProperties(Compilation comp)
+    private static IEnumerable<(PropertyDeclarationSyntax Prop, SemanticModel Model, Art Art)> RoutingProperties(Compilation comp, Quelltexte quelltexte)
     {
         var anker = comp.GetTypeByMetadataName(Vertrag.RoutingTabelleAttribute);
         if (anker == null) yield break;
-        foreach (var tree in comp.SyntaxTrees.Where(Projektlage.IstGeneriert))
+        foreach (var tree in comp.SyntaxTrees.Where(quelltexte.IstGeneriert))
         {
             var model = comp.GetSemanticModel(tree);
             foreach (var prop in tree.GetRoot().DescendantNodes().OfType<PropertyDeclarationSyntax>().Where(p => p.AttributeLists.Count > 0))

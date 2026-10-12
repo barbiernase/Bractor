@@ -2,6 +2,9 @@ using System.Text.Json;
 using DomainEditor;
 using SimHost;
 
+// Der warme Workspace (Arbeitsbereich) lädt die Solution über MSBuild — der Locator muss vor dem ersten MSBuild-Typ registriert sein.
+if (!Microsoft.Build.Locator.MSBuildLocator.IsRegistered) Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults();
+
 // Kommandozeile (ohne Web): „C# schreiben“ für ein Board-JSON — --trocken zeigt nur, was geschähe; --schreiben schreibt.
 if (args.Length >= 2 && args[0] is "--trocken" or "--schreiben")
 {
@@ -41,10 +44,21 @@ app.Use(async (ctx, next) =>
 app.UseDefaultFiles();
 app.UseStaticFiles();
 
+// ── WERKBANK (docs/konzept-werkbank.md §5, P3): ⟳ = bauen → Python-Basen → neu lesen → Daten prüfen → Infrastruktur → Host ersetzen.
+//    Die Umgebung (Kopfzeile „Umgebung ▾") wählt Ports, DB und Cluster; der Host-Rahmen bearbeitet ihre Datei (generisches Formular).
+var slnRoot = SlnRoot();
+var werkbank = new SimHost.Werkbank.Werkbank(slnRoot);
+// Der warme Workspace (P7.1) lädt sofort im Hintergrund — das erste Board ist da, bevor der Editor fragt.
+_ = werkbank.Arbeitsbereich.StarteAsync();
+app.Lifetime.ApplicationStopping.Register(werkbank.Arbeitsbereich.Dispose);
+
 // ── EDITOR-MODUS: Modell → C# (der EINE Scaffolder) + Struktur-Prüfung. Umkehrung C# → Board. ──
 // Das aktuelle Domänen-Modell (aus dem Round-trip, neben der .sln) — Startpunkt zum Weiterbauen.
-app.MapGet("/api/editor/model", () =>
+// Aus dem warmen Workspace (P7.1): geänderte Dateien werden übernommen und warm neu gelesen; lädt er nicht, die letzte Datei.
+app.MapGet("/api/editor/model", async (CancellationToken ct) =>
 {
+    try { await werkbank.Arbeitsbereich.LiesAsync(ct); if (werkbank.Arbeitsbereich.BoardJson is { } board) return Results.Content(board, "application/json"); }
+    catch (InvalidOperationException) { }
     var p = FindNeben("domain-model.json");
     return p != null && File.Exists(p)
         ? Results.Content(File.ReadAllText(p), "application/json")
@@ -174,7 +188,6 @@ app.MapGet("/api/editor/sim/state", (string? sessionId) => Results.Json(simulati
 app.MapGet("/api/editor/sim/dsl", (string? sessionId) => Results.Text(simulation.Dsl(sessionId ?? "editor"), "text/plain"));
 
 // ── CODE-SYNC: Board ⇄ echte .cs-Datei (Decider/Applier-Rümpfe). Anker = aus dem Graphen abgeleitet. ──
-var slnRoot = SlnRoot();
 // LLM-Code-Blöcke (docs/konzept-llm-minimalkontext.md): Kontexte + Füllen + Übernehmen. Fehlen die Kontexte, erzeugt
 // SimHost sie beim Start im Hintergrund selbst (kein CLI-Schritt nötig).
 var konsole = new LlmKonsole(slnRoot, simulation);
@@ -200,9 +213,18 @@ app.MapPost("/api/editor/code", (JsonElement b) =>
     return Results.Json(CodeSync.SetzePrompt(Anker(b), prompt, baseHash, slnRoot));
 });
 
-// Neu einlesen: GraphExtractor über den aktuellen Code → domain-model.json (Code = Wahrheit; der Browser merged).
-// Ein Lauf schreibt domain-model.json UND die LLM-Kontexte — Modell und Kontexte bleiben so immer auf demselben Code-Stand.
-app.MapPost("/api/editor/extract", () => Results.Json(konsole.Aktualisieren()));
+// Neu einlesen: der warme Workspace liest den aktuellen Code (Code = Wahrheit; der Browser merged). Die LLM-Kontexte zieht die Konsole
+//   danach im Hintergrund nach (GraphExtractor --kontexte, kalt).
+app.MapPost("/api/editor/extract", async (CancellationToken ct) =>
+{
+    try
+    {
+        var l = await werkbank.Arbeitsbereich.LiesAsync(ct);
+        _ = Task.Run(konsole.Aktualisieren);
+        return Results.Json(new { ok = true, meldung = new[] { $"✅ gelesen ({l.Routing.Source}) · Übersetzen {l.Uebersetzen.TotalMilliseconds:0} ms · Lesen {l.Extrahieren.TotalMilliseconds:0} ms" } });
+    }
+    catch (InvalidOperationException e) { return Results.Json(new { ok = false, grund = e.Message }); }
+});
 
 // Bauen (entprellt vom Browser aufgerufen): Generatoren + Proto-Prepass laufen bei dotnet build mit.
 app.MapPost("/api/editor/build", () => Results.Json(CodeSync.Baue(slnRoot)));
@@ -246,9 +268,6 @@ app.MapPost("/api/llm/aktualisieren", () => Results.Json(konsole.Aktualisieren()
 app.MapGet("/api/llm/rumpf", (string id) => Results.Json(konsole.Rumpf(id)));
 app.MapGet("/api/llm/protokoll", (string? id, int? max) => Results.Json(konsole.Protokoll(string.IsNullOrEmpty(id) ? null : id, max ?? 300)));
 
-// ── WERKBANK (docs/konzept-werkbank.md §5, P3): ⟳ = bauen → Python-Basen → neu lesen → Daten prüfen → Infrastruktur → Host ersetzen.
-//    Die Umgebung (Kopfzeile „Umgebung ▾") wählt Ports, DB und Cluster; der Host-Rahmen bearbeitet ihre Datei (generisches Formular).
-var werkbank = new SimHost.Werkbank.Werkbank(slnRoot);
 // Der Laufzeit-Host ist ein Kind der Werkbank: endet SimHost, endet er mit (sonst hielte ein verwaister Host Ports und Sim-DB).
 app.Lifetime.ApplicationStopping.Register(() => werkbank.Host.StoppeAsync().GetAwaiter().GetResult());
 var werkbankJson = new JsonSerializerOptions(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
@@ -269,11 +288,19 @@ app.MapPost("/api/werkbank/kreislauf", async (bool? zuruecksetzen, CancellationT
 });
 app.MapGet("/api/werkbank/kreislauf", () => Results.Json(werkbank.Letzter, werkbankJson));
 // Befunde des letzten ⟳ (Compiler/Analyzer mit Typ + Member) und Boot-Fehler (mit Karte) — der Editor zeigt sie an der Karte.
+// Dazu die Lese-Befunde des aktuellen Boards (warmer Workspace): was das Lesen nicht fassen konnte, steht an seiner Karte.
 app.MapGet("/api/werkbank/diagnosen", () => Results.Json(new
 {
-    diagnosen = werkbank.Letzter?.Diagnosen ?? [],
+    diagnosen = (werkbank.Letzter?.Diagnosen ?? []).Where(d => !d.Code.StartsWith("LESEN", StringComparison.Ordinal)).Concat(werkbank.Arbeitsbereich.Befunde()),
     boot = werkbank.Host.Laeuft || werkbank.Letzter == null ? werkbank.Host.Boot() : werkbank.Letzter.Boot,
 }, werkbankJson));
+// Der warme Workspace (P7.1): Zustand und Messungen; POST liest geänderte Dateien jetzt ein.
+app.MapGet("/api/werkbank/lesen", () => Results.Json(werkbank.Arbeitsbereich.Zustand(), werkbankJson));
+app.MapPost("/api/werkbank/lesen", async (CancellationToken ct) =>
+{
+    try { await werkbank.Arbeitsbereich.LiesAsync(ct); return Results.Json(werkbank.Arbeitsbereich.Zustand(), werkbankJson); }
+    catch (InvalidOperationException e) { return Results.Json(new { ok = false, fehler = e.Message }, werkbankJson); }
+});
 // Fortschritt als Server-Sent Events (verlierbar; die Wahrheit bleibt /api/werkbank/zustand).
 app.MapGet("/api/werkbank/ereignisse", (HttpContext ctx) => werkbank.Fortschritt.SendeAsync(ctx.Response, ctx.RequestAborted));
 app.MapPost("/api/werkbank/host/stopp", async () => { await werkbank.Host.StoppeAsync(); return Results.Json(werkbank.Host.Zustand(), werkbankJson); });

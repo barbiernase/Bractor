@@ -320,8 +320,20 @@ public static class ModellMapper
     public static List<IngressBindung> Ingress(CompositionRoot cr) =>
         cr.Triggers.Select(tb => new IngressBindung { Trigger = tb.MsgName, Modus = tb.Modus, Ort = tb.Route ?? tb.Interval ?? tb.Path }).ToList();
 
-    public static string ZuBoardJson(KnowledgeGraph graph, DomainModel dom, CompositionRoot cr, JsonObject? umgebungen = null)
+    public static string ZuBoardJson(KnowledgeGraph graph, DomainModel dom, CompositionRoot cr, JsonObject? umgebungen = null) =>
+        Serialisiere(ZuBoard(graph, dom, cr, umgebungen));
+
+    /// <summary>Das Board als JSON-Text (eingerückt, Umlaute unmaskiert) — dieselbe Form wie <c>domain-model.json</c>.</summary>
+    public static string Serialisiere(JsonObject board) => board.ToJsonString(new JsonSerializerOptions
     {
+        WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
+    });
+
+    /// <summary>Wie <see cref="ZuBoardJson"/>, aber als Knoten (die Werkbank hält ihn im Speicher).</summary>
+    public static JsonObject ZuBoard(KnowledgeGraph graph, DomainModel dom, CompositionRoot cr, JsonObject? umgebungen = null)
+    {
+        // Code mit Fehlern (Werkbank P7.1): was das Lesen nicht fassen konnte, wird ein Befund an der Karte — nie still verworfen.
+        var befunde = new List<Lesebefund>(dom.Befunde);
         var modell = ZuEditorModell(graph, dom);
         var root = JsonNode.Parse(modell.AlsJson())!.AsObject();
         // Die Leseseite zeigt das Board in seinen eigenen Sammlungen (stores/projektionen/reader/…) — mit den Code-Fakten
@@ -374,9 +386,9 @@ public static class ModellMapper
         // Trigger- und Selbst-Nachrichten gehören zur Trigger-Welt — der Editor zeigt sie nicht (docs/konzept-werkbank.md §10, P0).
         foreach (var rm in records.Where(r => (string?)r?["kind"] is RecordArt.ReadModel or RecordArt.Trigger or RecordArt.Selbst).ToList()) records.Remove(rm);
         var lesen = modell.Lesen ?? new Leseseite();
-        var storeVon = lesen.Stores.ToDictionary(s => s.Name, StringComparer.Ordinal);
-        var konsumentVon = lesen.Konsumenten.ToDictionary(k => k.Name, StringComparer.Ordinal);
-        var leserVon = lesen.Reader.ToDictionary(r => r.Name, StringComparer.Ordinal);
+        var storeVon = Eindeutig(lesen.Stores, s => s.Name, s => s.Namespace, "store:", befunde);
+        var konsumentVon = Eindeutig(lesen.Konsumenten, k => k.Name, k => k.Namespace, "projektion:", befunde);
+        var leserVon = Eindeutig(lesen.Reader, r => r.Name, r => r.Namespace, "reader:", befunde);
         // Die Signatur verbatim eines Handles (für Board → Modell: verbinden/lösen ändert nur die Fähigkeits-Parameter).
         static object? Sig(Handle? h) => h == null ? null : new
         {
@@ -408,6 +420,7 @@ public static class ModellMapper
                 {
                     @event = ev,
                     sig = Sig(konsumentVon.GetValueOrDefault(p.Name)?.Handles.FirstOrDefault(h => h.Eingang == Kurz(ev))),
+                    _ort = OrtJson(dom, p.HandleSigs.GetValueOrDefault(ev)?.Ort),
                     fns = StoreFns(p.HandleFaehigkeiten, ev),
                     publishes = Liste(p.HandlePublishes, ev),
                     rumpf = Rumpf(p.HandleBodies, ev),
@@ -427,6 +440,7 @@ public static class ModellMapper
                 {
                     @event = ev,
                     sig = Sig(konsumentVon.GetValueOrDefault(p.Name)?.Handles.FirstOrDefault(h => h.Eingang == Kurz(ev))),
+                    _ort = OrtJson(dom, p.HandleSigs.GetValueOrDefault(ev)?.Ort),
                     sends = Liste(p.HandleSends, ev),
                     publishes = Liste(p.HandlePublishes, ev),
                     rumpf = Rumpf(p.HandleBodies, ev),
@@ -447,6 +461,7 @@ public static class ModellMapper
                 {
                     query = q,
                     sig = Sig(leserVon.GetValueOrDefault(r.Name)?.Handles.FirstOrDefault(h => h.Eingang == q)),
+                    _ort = OrtJson(dom, r.HandleSigs.GetValueOrDefault(q)?.Ort),
                     fns = StoreFns(r.HandleFaehigkeiten, q),
                     responses = Liste(r.HandleResponses, q),
                     rumpf = Rumpf(r.HandleBodies, q),
@@ -508,10 +523,77 @@ public static class ModellMapper
         root["reaktionen"] = Knoten(reaktionen);
         root["reader"] = Knoten(reader);
         root["stores"] = Knoten(stores);
-        return root.ToJsonString(new JsonSerializerOptions
+        Orte(root, dom);
+
+        // Unaufgelöste Basistypen: ein Typ, den deshalb kein Marker erkennt, wird eine Code-Karte mit ⚠ (roher Code, Diagnose); hat er
+        //   trotzdem eine Karte (z. B. nur ein Zusatz-Interface fehlt), hängt der Befund dort.
+        var codeKarten = new JsonArray();
+        foreach (var u in dom.Unaufgeloest)
         {
-            WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping,
-        });
+            var karte = KartenIds.Zu(u.Name, null, root);
+            if (karte == null)
+            {
+                karte = "code:" + u.Name;
+                codeKarten.Add(Knoten(new
+                {
+                    _id = karte, name = u.Name, @namespace = u.Namespace, art = u.Art, datei = Relativ(dom.Wurzel, u.Datei), code = u.Code,
+                    unaufgeloest = u.Basen, _ort = OrtJson(dom, new Ort(u.Datei ?? "", u.Start, u.Ende, u.Zeile)),
+                }));
+            }
+            befunde.Add(new Lesebefund("LESEN-BASIS", $"Basistyp nicht aufgelöst: {string.Join(", ", u.Basen)} — {u.Name} wird nicht als Baustein erkannt",
+                karte, u.Datei, u.Zeile));
+        }
+        root["codeKarten"] = codeKarten;
+        root["lesebefunde"] = Knoten(befunde.Select(b => new { code = b.Code, text = b.Text, karte = b.Karte, datei = Relativ(dom.Wurzel, b.Datei), zeile = b.Zeile }));
+        return root;
+    }
+
+    /// <summary>Nach Namen nachschlagen — tolerant: ein doppelter Name (halb editiertes Duplikat) wird ein Befund, der erste gilt.</summary>
+    private static Dictionary<string, T> Eindeutig<T>(IEnumerable<T> xs, Func<T, string> name, Func<T, string> ns, string kartenPraefix, List<Lesebefund> befunde)
+    {
+        var aus = new Dictionary<string, T>(StringComparer.Ordinal);
+        foreach (var g in xs.GroupBy(name, StringComparer.Ordinal))
+        {
+            aus[g.Key] = g.First();
+            if (g.Count() > 1)
+                befunde.Add(new Lesebefund("LESEN-DOPPELT", $"Name {g.Key} gibt es mehrfach ({string.Join(", ", g.Select(x => ns(x) + "." + g.Key))}) — gezeigt wird der erste",
+                    kartenPraefix + g.Key, null, 0));
+        }
+        return aus;
+    }
+
+    /// <summary>Ein Ort als Board-Feld: Datei relativ zur Solution, Spanne der Deklaration, Zeile.</summary>
+    private static JsonObject? OrtJson(DomainModel dom, Ort? o) =>
+        o == null || Relativ(dom.Wurzel, o.Datei) is not { } rel ? null
+            : new JsonObject { ["datei"] = rel, ["start"] = o.Start, ["ende"] = o.Ende, ["zeile"] = o.Zeile };
+
+    /// <summary>
+    /// Karten tragen Datei + Spanne (<c>_ort</c>): Typ-Karten über ihre Deklaration (bei partial die in ihrer Datei), Decide/Apply über ihre
+    /// Methode, Fluss-Knoten und Prozess-Regeln über ihre Anweisung, Handles über ihre Methode (beim Erzeugen gesetzt).
+    /// </summary>
+    private static void Orte(JsonObject root, DomainModel dom)
+    {
+        IEnumerable<JsonObject> Alle(JsonNode? n) => (n as JsonArray ?? new JsonArray()).OfType<JsonObject>();
+        string S(JsonObject o, string k) => (string?)o[k] ?? "";
+        Ort? TypOrt(string full, string? datei)
+        {
+            if (!dom.TypOrte.TryGetValue(full, out var l) || l.Count == 0) return null;
+            return l.FirstOrDefault(o => datei != null && Relativ(dom.Wurzel, o.Datei) == datei) ?? l[0];
+        }
+        foreach (var sammlung in new[] { "records", "enums", "sagas", "fluesse", "funktionen", "akteure", "clients", "readModels", "projektionen", "reaktionen", "reader", "stores" })
+            foreach (var k in Alle(root[sammlung]))
+                k["_ort"] = OrtJson(dom, TypOrt(S(k, "namespace") + "." + S(k, "name"), (string?)k["datei"]));
+        var aggVon = dom.Aggregates.GroupBy(a => a.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        foreach (var a in Alle(root["aggregate"]))
+            if (aggVon.TryGetValue(S(a, "name"), out var raw)) a["_ort"] = OrtJson(dom, TypOrt(raw.Full, (string?)a["datei"]));
+        foreach (var d in Alle(root["decider"]))
+            if (aggVon.TryGetValue(S(d, "aggregat"), out var raw)) d["_ort"] = OrtJson(dom, raw.DecideOrte.GetValueOrDefault(S(d, "command")));
+        foreach (var ap in Alle(root["applier"]))
+            if (aggVon.TryGetValue(S(ap, "aggregat"), out var raw)) ap["_ort"] = OrtJson(dom, raw.ApplyOrte.GetValueOrDefault(S(ap, "event")));
+        foreach (var (f, raw) in Alle(root["fluesse"]).Zip(dom.Fluesse))
+            foreach (var (k, kr) in Alle(f["knoten"]).Zip(raw.Knoten)) k["_ort"] = OrtJson(dom, kr.Ort);
+        foreach (var (sg, raw) in Alle(root["sagas"]).Zip(dom.Processes))
+            foreach (var (st, r) in Alle(sg["schritte"]).Zip(raw.Rules)) st["_ort"] = OrtJson(dom, r.Ort);
     }
 
     /// <summary>Die Klasse eines Konsumenten/Readers verbatim (Datei, Form, Basen, Attribute, Zusatz, usings, Doku) — Board-Feld „code".</summary>

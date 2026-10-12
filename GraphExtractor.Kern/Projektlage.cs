@@ -20,11 +20,19 @@ public sealed class Projektlage
 {
     public required Project Vertragsprojekt { get; init; }
     public required Project Laufzeit { get; init; }
-    public required Compilation LaufzeitCompilation { get; init; }
+    /// <summary>
+    /// Die Compilation der Laufzeit — nur beim kalten Lesen. Das warme Lesen der Werkbank (<see cref="NurDomänenAsync"/>, E7) übersetzt
+    /// die Laufzeit (v1-Generatoren, schwer) nicht; dort gilt die Routing-Ableitung aus den Decide-Signaturen.
+    /// </summary>
+    public Compilation? LaufzeitCompilation { get; init; }
+    /// <summary>Wurde die Laufzeit über ihre generierte Routing-Tabelle erkannt (sonst: abgeleitet als Zusammenführung der Aggregat-Projekte)?</summary>
+    public bool LaufzeitAusRouting { get; init; }
     public required List<(Project Projekt, Compilation Compilation)> Analyse { get; init; }
     public required HashSet<string> DomänenAssemblies { get; init; }
     public required List<(Project Projekt, Compilation Compilation)> Hosts { get; init; }
     public required HashSet<string> AggregatAssemblies { get; init; }
+    /// <summary>Welche Syntaxbäume dieses Solution-Stands handgeschrieben sind.</summary>
+    public required Quelltexte Quelltexte { get; init; }
 
     public List<Compilation> Compilations => Analyse.Select(a => a.Compilation).ToList();
 
@@ -34,10 +42,12 @@ public sealed class Projektlage
         .GroupBy(a => a.Projekt.DefaultNamespace ?? a.Projekt.AssemblyName)
         .ToDictionary(g => g.Key, g => Path.GetDirectoryName(g.First().Projekt.FilePath)!, StringComparer.Ordinal);
     public IEnumerable<Compilation> DomänenCompilations => Analyse.Where(a => DomänenAssemblies.Contains(a.Compilation.AssemblyName ?? "")).Select(a => a.Compilation);
+    /// <summary>Die Domänen-Projekte (Editor-Projekte): ihre Dateien beobachtet die Werkbank.</summary>
+    public IEnumerable<Project> DomänenProjekte => Analyse.Where(a => DomänenAssemblies.Contains(a.Compilation.AssemblyName ?? "")).Select(a => a.Projekt);
 
     public static async Task<Projektlage> ErmittleAsync(Solution solution, Action<string> log)
     {
-        RegistriereDokumente(solution);
+        var quelltexte = new Quelltexte(solution);
         var graph = solution.GetProjectDependencyGraph();
         var vertrag = solution.Projects.FirstOrDefault(p => p.AssemblyName == Vertrag.VertragsAssembly)
             ?? throw new InvalidOperationException($"Kein Projekt baut die Vertrags-Assembly '{Vertrag.VertragsAssembly}'.");
@@ -54,10 +64,21 @@ public sealed class Projektlage
         foreach (var p in nutzer)
         {
             var c = await p.GetCompilationAsync();
-            if (c != null && RoutingTruth.HatRouting(c)) { laufzeit = p; laufzeitComp = c; break; }
+            if (c != null && RoutingTruth.HatRouting(c, quelltexte)) { laufzeit = p; laufzeitComp = c; break; }
         }
-        if (laufzeit == null || laufzeitComp == null)
-            throw new InvalidOperationException("Keine Laufzeit gefunden (kein Projekt mit generierter Command→Aggregat-Routing-Tabelle).");
+        var ausRouting = laufzeit != null;
+        if (laufzeit == null)
+        {
+            // Ohne Routing-Generat (Code mit Fehlern, Generator nicht gelaufen) wirft die Lage nicht: Laufzeit ist dann das niedrigste
+            //   Projekt, das alle Aggregat-Projekte zusammenführt (Projekt-Referenzen = Code-Fakt); ohne Aggregate der Vertrag selbst.
+            var aggregatProjekte = new List<ProjectId>();
+            foreach (var p in nutzer)
+                if (await p.GetCompilationAsync() is { } c && Deklariert(c, new[] { Vertrag.IDecider }, quelltexte)) aggregatProjekte.Add(p.Id);
+            laufzeit = aggregatProjekte.Count == 0 ? vertrag : nutzer.FirstOrDefault(p =>
+                aggregatProjekte.All(a => a == p.Id || graph.GetProjectsThatThisProjectTransitivelyDependsOn(p.Id).Contains(a))) ?? vertrag;
+            laufzeitComp = await laufzeit.GetCompilationAsync();
+            log($"   ⚠ Keine generierte Routing-Tabelle — Laufzeit abgeleitet ({laufzeit.Name}), Routing aus den Decide-Signaturen.");
+        }
 
         var hülle = graph.GetProjectsThatThisProjectTransitivelyDependsOn(laufzeit.Id).Append(laufzeit.Id)
             .Select(id => solution.GetProject(id)!)
@@ -71,8 +92,8 @@ public sealed class Projektlage
         }
 
         // Aggregat-Projekte: deklarieren im Quelltext einen Typ, der IDecider<T> implementiert.
-        var aggregatProjekte = analyse.Where(a => Deklariert(a.Item2, new[] { Vertrag.IDecider })).Select(a => a.Item1).ToList();
-        var domäne = analyse.Where(a => a.Item1.Id != laufzeit.Id && a.Item1.Id != vertrag.Id && Deklariert(a.Item2, DomänenRollen))
+        var aggregatProjekte2 = analyse.Where(a => Deklariert(a.Item2, new[] { Vertrag.IDecider }, quelltexte)).Select(a => a.Item1).ToList();
+        var domäne = analyse.Where(a => a.Item1.Id != laufzeit.Id && a.Item1.Id != vertrag.Id && Deklariert(a.Item2, DomänenRollen, quelltexte))
             .Select(a => a.Item2.AssemblyName ?? "").ToHashSet(StringComparer.Ordinal);
 
         // Hosts: Einstiegspunkt im handgeschriebenen Quelltext + Laufzeit in der Hülle.
@@ -84,16 +105,34 @@ public sealed class Projektlage
             var c = await p.GetCompilationAsync();
             var ep = c?.GetEntryPoint(default);
             var ort = ep?.Locations.FirstOrDefault(l => l.IsInSource);
-            if (c == null || ort == null || IstGeneriert(ort.SourceTree!)) continue;
+            if (c == null || ort == null || quelltexte.IstGeneriert(ort.SourceTree!)) continue;
             hosts.Add((p, c));
         }
 
         log($"   Vertrag: {vertrag.Name} · Laufzeit: {laufzeit.Name} · Domäne: {string.Join(", ", domäne.OrderBy(x => x))} · Hosts: {string.Join(", ", hosts.Select(h => h.Item1.Name))}");
         return new Projektlage
         {
-            Vertragsprojekt = vertrag, Laufzeit = laufzeit, LaufzeitCompilation = laufzeitComp, Analyse = analyse,
-            DomänenAssemblies = domäne, Hosts = hosts,
-            AggregatAssemblies = aggregatProjekte.Select(p => p.AssemblyName).ToHashSet(StringComparer.Ordinal),
+            Vertragsprojekt = vertrag, Laufzeit = laufzeit, LaufzeitCompilation = laufzeitComp, LaufzeitAusRouting = ausRouting, Analyse = analyse,
+            DomänenAssemblies = domäne, Hosts = hosts, Quelltexte = quelltexte,
+            AggregatAssemblies = aggregatProjekte2.Select(p => p.AssemblyName).ToHashSet(StringComparer.Ordinal),
+        };
+    }
+
+    /// <summary>
+    /// Dieselbe Lage auf einem neuen Solution-Stand — gelesen nur aus den Compilations UNTERHALB der Laufzeit (Vertrag, Kern, Domänen;
+    /// Werkbank E7): die Laufzeit und die Hosts werden nicht übersetzt (v1-Generatoren, schwer). Projekt-Rollen bleiben, wie die kalte Lage
+    /// sie erkannt hat (neue Projekte brauchen ein neues kaltes Laden). Roslyn übersetzt dabei nur, was sich seit dem letzten Stand geändert hat.
+    /// </summary>
+    public async Task<Projektlage> NurDomänenAsync(Solution neu, CancellationToken ct = default)
+    {
+        var analyse = new List<(Project, Compilation)>();
+        foreach (var (p, _) in Analyse.Where(a => a.Projekt.Id != Laufzeit.Id || a.Projekt.Id == Vertragsprojekt.Id))
+            if (neu.GetProject(p.Id) is { } np && await np.GetCompilationAsync(ct) is { } c) analyse.Add((np, c));
+        return new Projektlage
+        {
+            Vertragsprojekt = neu.GetProject(Vertragsprojekt.Id) ?? Vertragsprojekt, Laufzeit = neu.GetProject(Laufzeit.Id) ?? Laufzeit,
+            LaufzeitCompilation = null, LaufzeitAusRouting = false, Analyse = analyse, DomänenAssemblies = DomänenAssemblies, Hosts = [],
+            AggregatAssemblies = AggregatAssemblies, Quelltexte = new Quelltexte(neu),
         };
     }
 
@@ -106,13 +145,13 @@ public sealed class Projektlage
     };
 
     /// <summary>Deklariert die Compilation im handgeschriebenen Quelltext einen Typ, der einen der Marker implementiert (per Symbol)?</summary>
-    private static bool Deklariert(Compilation c, IEnumerable<string> marker)
+    private static bool Deklariert(Compilation c, IEnumerable<string> marker, Quelltexte quelltexte)
     {
         var ziele = marker.Select(c.GetTypeByMetadataName).Where(x => x != null).Select(x => x!.OriginalDefinition.Fq()).ToHashSet(StringComparer.Ordinal);
         if (ziele.Count == 0) return false;
         return AlleTypen(c.Assembly.GlobalNamespace).Any(t =>
             t.AllInterfaces.Any(i => ziele.Contains(i.OriginalDefinition.Fq()))
-            && t.DeclaringSyntaxReferences.Any(r => !IstGeneriert(r.SyntaxTree)));
+            && t.DeclaringSyntaxReferences.Any(r => quelltexte.IstHand(r.SyntaxTree)));
     }
 
     private static IEnumerable<INamedTypeSymbol> AlleTypen(INamespaceSymbol ns)
@@ -130,14 +169,21 @@ public sealed class Projektlage
             foreach (var x in MitGeschachtelten(n)) yield return x;
     }
 
-    /// <summary>Die Pfade aller Projekt-DOKUMENTE (handgeschrieben) — Source-Generator-Ausgaben sind nie Dokumente.</summary>
-    private static readonly HashSet<string> Dokumente = new(StringComparer.Ordinal);
+}
 
-    /// <summary>Die Dokumente einer (auch geforkten) Solution als handgeschrieben registrieren.</summary>
-    public static void RegistriereDokumente(Solution solution)
+/// <summary>
+/// Welche Syntaxbäume handgeschrieben sind — je Solution-Stand ein eigenes Objekt (kein statischer Zustand: die Werkbank hält einen
+/// warmen Workspace, Sonde und Parität rechnen auf Forks). Handgeschrieben = ein Projekt-DOKUMENT der Solution; Source-Generator-Ausgaben
+/// sind nie Dokumente.
+/// </summary>
+public sealed class Quelltexte
+{
+    private readonly HashSet<string> _dokumente = new(StringComparer.Ordinal);
+
+    public Quelltexte(Solution solution)
     {
         foreach (var d in solution.Projects.SelectMany(p => p.Documents))
-            if (d.FilePath != null) Dokumente.Add(d.FilePath);
+            if (d.FilePath != null) _dokumente.Add(d.FilePath);
     }
 
     /// <summary>
@@ -145,7 +191,10 @@ public sealed class Projektlage
     /// Source-Generator beigesteuert) oder mit dem Generator-Kopf <c>&lt;auto-generated</c> (so markiert der
     /// Codegen-Prepass seine eingecheckte Ausgabe).
     /// </summary>
-    public static bool IstGeneriert(SyntaxTree tree) =>
-        (Dokumente.Count > 0 && !Dokumente.Contains(tree.FilePath))
+    public bool IstGeneriert(SyntaxTree tree) =>
+        (_dokumente.Count > 0 && !_dokumente.Contains(tree.FilePath))
         || tree.GetRoot().GetLeadingTrivia().ToString().Contains("<auto-generated", StringComparison.Ordinal);
+
+    /// <summary>Handgeschrieben (Gegenteil von <see cref="IstGeneriert"/>).</summary>
+    public bool IstHand(SyntaxTree tree) => !IstGeneriert(tree);
 }

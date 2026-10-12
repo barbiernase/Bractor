@@ -54,8 +54,12 @@ public sealed class KontextBauer
     private readonly INamedTypeSymbol? _iTransient, _iWriteStore, _iReadStore, _iCoCommit, _iPull, _iAppend, _iTrigger, _iSelf, _iEvent, _iCommand, _iQuery, _iReadModel, _iResponse;
     private readonly Dictionary<string, (string Intent, string Quelle)> _llmKnoten;
 
+    /// <summary>Welche Syntaxbäume handgeschrieben sind (je Solution-Stand).</summary>
+    private readonly Quelltexte _quelltexte;
+
     public KontextBauer(Projektlage lage, DomainModel dom, KnowledgeGraph graph, CompositionRoot cr, string? boardDatei)
     {
+        _quelltexte = lage.Quelltexte;
         _inv = new SlotInventar(lage, dom);
         _dom = dom; _graph = graph; _cr = cr;
         _board = JsonDocument.Parse(ModellMapper.ZuBoardJson(graph, dom, cr)).RootElement;
@@ -483,7 +487,7 @@ public sealed class KontextBauer
         if (s.State != null) yield return $"State      this.State : {s.State.Name}   ({(s.Art == "decide" ? "nur lesen" : "schreibbar")})";
         foreach (var c in s.Klasse.InstanceConstructors.Where(c => !c.IsImplicitlyDeclared || c.Parameters.Length > 0))
             yield return $"Konstrukt. {s.Klasse.Name}({string.Join(", ", c.Parameters.Select(p => $"{p.Type.ToDisplayString(Kurz)} {p.Name}"))})"
-                         + (c.DeclaringSyntaxReferences.All(r => Projektlage.IstGeneriert(r.SyntaxTree)) ? "   [generiert]" : "");
+                         + (c.DeclaringSyntaxReferences.All(r => _quelltexte.IstGeneriert(r.SyntaxTree)) ? "   [generiert]" : "");
         foreach (var f in Felder(s))
             yield return $"Feld       {f.Name} : {TypVon(f)!.ToDisplayString(Kurz)}   [{FeldArt(TypVon(f)!)}]";
         for (var bt = s.Klasse.BaseType; bt != null && bt.SpecialType != SpecialType.System_Object; bt = bt.BaseType)
@@ -551,11 +555,11 @@ public sealed class KontextBauer
 
     private IEnumerable<string> Kommentare(SlotInventar.SlotRef s)
     {
-        var syn = s.Methode!.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).First(n => !Projektlage.IstGeneriert(n.SyntaxTree));
+        var syn = s.Methode!.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).First(n => !_quelltexte.IstGeneriert(n.SyntaxTree));
         if (DokuVon(s.Methode!) is { } md) yield return $"[/// an {s.Methode!.Name}] {md}";
         foreach (var c in Zeilenkommentare(syn)) yield return $"[// vor {s.Methode!.Name}] {c}";
         if (s.Parameter.FirstOrDefault()?.Type is INamedTypeSymbol ein && _domänen.Contains(ein.ContainingAssembly?.Name ?? ""))
-            foreach (var r in ein.DeclaringSyntaxReferences.Where(r => !Projektlage.IstGeneriert(r.SyntaxTree)).Take(1))
+            foreach (var r in ein.DeclaringSyntaxReferences.Where(r => !_quelltexte.IstGeneriert(r.SyntaxTree)).Take(1))
                 foreach (var c in Zeilenkommentare(r.GetSyntax())) yield return $"[// vor {ein.Name}] {c}";
         if (DokuVon(s.Klasse) is { } kd) yield return $"[/// an {s.Klasse.Name}] {kd}";
     }
@@ -639,7 +643,7 @@ public sealed class KontextBauer
     }
 
     private bool IstDomäne(INamedTypeSymbol t) => _domänen.Contains(t.ContainingAssembly?.Name ?? "")
-        && t.DeclaringSyntaxReferences.Any(r => !Projektlage.IstGeneriert(r.SyntaxTree));
+        && t.DeclaringSyntaxReferences.Any(r => !_quelltexte.IstGeneriert(r.SyntaxTree));
 
     private IEnumerable<string> Eintrag(INamedTypeSymbol t, string rolle)
     {
@@ -963,7 +967,7 @@ public sealed class KontextBauer
         IFieldSymbol f => f.Type, IPropertySymbol p => p.Type, IMethodSymbol mm => mm.ReturnType, _ => null,
     };
 
-    private static bool IstHand(ISymbol m) => m.DeclaringSyntaxReferences.Any(r => !Projektlage.IstGeneriert(r.SyntaxTree));
+    private bool IstHand(ISymbol m) => m.DeclaringSyntaxReferences.Any(r => !_quelltexte.IstGeneriert(r.SyntaxTree));
 
     private INamedTypeSymbol? Typ(string full) => _comps.Select(c => c.GetTypeByMetadataName(full)).FirstOrDefault(x => x != null);
 
@@ -1036,7 +1040,7 @@ public static class KontextCli
                 };
             }
             var m = k.Slot.Methode!;
-            var decl = m.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).First(n => !Projektlage.IstGeneriert(n.SyntaxTree));
+            var decl = m.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).First(n => !lage.Quelltexte.IstGeneriert(n.SyntaxTree));
             var pos = decl.GetLocation().GetLineSpan();
             // Parametertyp so, wie er im Quelltext steht (Basisname) — der Anker, mit dem CodeSync die Methode wiederfindet.
             var pTyp = (decl as Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax)?.ParameterList.Parameters.FirstOrDefault()?.Type?.ToString();

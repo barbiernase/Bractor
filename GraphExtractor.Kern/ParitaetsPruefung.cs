@@ -35,8 +35,31 @@ public static class ParitaetsPruefung
         BoardModell(ist, boardJson, befunde);
         GrammatikUndModule(solution, ist, boardJson, ingress, befunde);
         Wirker(ist, boardJson, befunde);
+        Routing(ist, befunde);
         await Fixpunkt(solution, lage, ist, befunde);
         return befunde;
+    }
+
+    /// <summary>
+    /// Gegenprobe zu E7: die Werkbank liest warm OHNE die Laufzeit-Compilation und nimmt das Routing aus den Decide-Signaturen — das muss
+    /// dieselbe Abbildung sein, die das Generat (<c>GeneratedCommandRouting</c>) zur Laufzeit benutzt.
+    /// </summary>
+    private static void Routing(Analyse ist, List<ParitaetsBefund> befunde)
+    {
+        if (ist.Routing.Source != RoutingTruth.Generat)
+        {
+            befunde.Add(new("Routing", "warning", $"Kein Generat (Quelle: {ist.Routing.Source}) — Gegenprobe der Decide-Signaturen nicht möglich."));
+            return;
+        }
+        var decide = RoutingTruth.AusDecideSignaturen(ist.Compilations);
+        static IEnumerable<string> Zeilen(RoutingTruth r) => r.CommandToAggregate.Select(kv => $"{kv.Key} → {kv.Value}")
+            .Concat(r.CommandToEvents.Select(kv => $"{kv.Key} ⇒ {string.Join(", ", kv.Value.OrderBy(x => x, StringComparer.Ordinal))}"));
+        var generat = Zeilen(ist.Routing).ToHashSet(StringComparer.Ordinal);
+        var signaturen = Zeilen(decide).ToHashSet(StringComparer.Ordinal);
+        foreach (var z in generat.Except(signaturen).Order(StringComparer.Ordinal)) befunde.Add(new("Routing", "error", $"Nur im Generat: {z}"));
+        foreach (var z in signaturen.Except(generat).Order(StringComparer.Ordinal)) befunde.Add(new("Routing", "error", $"Nur aus den Decide-Signaturen: {z}"));
+        befunde.Add(new("Routing", "info",
+            $"Werkbank-Routing (Decide-Signaturen, E7) = Generat: {(generat.SetEquals(signaturen) ? "ja" : "NEIN")} ({decide.CommandToAggregate.Count} Commands)."));
     }
 
     // ══ Wirker-Ids (Werkbank P4.8) ═══════════════════════════════════════════════════════════════
@@ -124,10 +147,10 @@ public static class ParitaetsPruefung
     }
 
     /// <summary>Extraktions-Pipeline auf beliebigen Compilations (Original oder Fork).</summary>
-    public static Analyse Analysiere(List<Compilation> comps, ISet<string> domänen)
+    public static Analyse Analysiere(List<Compilation> comps, ISet<string> domänen, Quelltexte quelltexte)
     {
-        var routing = RoutingTruth.FromCompilations(comps);
-        var dom = new DomainExtractor(comps, domänen).Extract();
+        var routing = RoutingTruth.FromCompilations(comps, quelltexte);
+        var dom = new DomainExtractor(comps, domänen, quelltexte).Extract();
         var graph = new GraphBuilder(routing, dom).Build();
         return new Analyse(routing, dom, graph, comps);
     }
@@ -137,7 +160,7 @@ public static class ParitaetsPruefung
     private static void Inventar(Analyse ist, Projektlage lage, string boardJson, List<ParitaetsBefund> befunde)
     {
         var board = JsonNode.Parse(boardJson)!.AsObject();
-        var soll = SyntaxInventar.Aus(ist.Compilations, lage.DomänenAssemblies);
+        var soll = SyntaxInventar.Aus(ist.Compilations, lage.DomänenAssemblies, lage.Quelltexte);
         befunde.Add(new("Inventar", "info",
             $"Soll aus dem Code: {soll.Aggregate.Count} Aggregate ({soll.Aggregate.Values.Sum(a => a.Decide.Count)} Decide, " +
             $"{soll.Aggregate.Values.Sum(a => a.Apply.Count)} Apply), {soll.Commands.Count} Commands, {soll.Events.Count} Events, " +
@@ -255,7 +278,7 @@ public static class ParitaetsPruefung
         public Dictionary<string, (HashSet<string> Decide, HashSet<string> Apply)> Aggregate = new();
         public Dictionary<string, int> Sagas = new();
 
-        public static SyntaxInventar Aus(List<Compilation> comps, ISet<string> domänen)
+        public static SyntaxInventar Aus(List<Compilation> comps, ISet<string> domänen, Quelltexte quelltexte)
         {
             var inv = new SyntaxInventar();
             INamedTypeSymbol? Get(string n) => comps.Select(c => c.GetTypeByMetadataName(n)).FirstOrDefault(x => x != null);
@@ -278,13 +301,13 @@ public static class ParitaetsPruefung
             // Fähigkeiten, die ein Bündel (IStore) erbt — die sind KEIN eigener Store.
             var imBuendel = new HashSet<string>(StringComparer.Ordinal);
             foreach (var comp in comps.Where(c => domänen.Contains(c.AssemblyName ?? "")))
-                foreach (var tree in comp.SyntaxTrees.Where(t => !Projektlage.IstGeneriert(t)))
+                foreach (var tree in comp.SyntaxTrees.Where(t => !quelltexte.IstGeneriert(t)))
                     foreach (var decl in tree.GetRoot().DescendantNodes().OfType<InterfaceDeclarationSyntax>())
                         if (comp.GetSemanticModel(tree).GetDeclaredSymbol(decl) is INamedTypeSymbol b && Sym.Implements(b, iStore))
                             foreach (var i in b.AllInterfaces) imBuendel.Add(i.Fq());
 
             foreach (var comp in comps.Where(c => domänen.Contains(c.AssemblyName ?? "")))
-                foreach (var tree in comp.SyntaxTrees.Where(t => !Projektlage.IstGeneriert(t)))
+                foreach (var tree in comp.SyntaxTrees.Where(t => !quelltexte.IstGeneriert(t)))
                 {
                     var model = comp.GetSemanticModel(tree);
                     foreach (var decl in tree.GetRoot().DescendantNodes().OfType<BaseTypeDeclarationSyntax>())
@@ -473,6 +496,7 @@ public static class ParitaetsPruefung
 
     private static async Task Fixpunkt(Solution solution, Projektlage lage, Analyse ist, List<ParitaetsBefund> befunde)
     {
+        var quelltexte = lage.Quelltexte;
         var m1 = ModellMapper.ZuEditorModell(ist.Graph, ist.Dom);
         // Ersetzt wird, was in den DOMÄNEN-Projekten deklariert ist (Schreibseite in den Aggregat-Projekten, Leseseite dort,
         //   wo sie liegt). Store-IMPLEMENTIERUNGEN bleiben stehen: sie müssen gegen die geschriebenen Fähigkeiten kompilieren.
@@ -500,7 +524,7 @@ public static class ParitaetsPruefung
         // Namespace → Projekt: das Projekt, in dem die ersetzten Typen dieses Namespace deklariert sind (sonst das erste mit dem Namespace).
         var nsProjekt = new Dictionary<string, (Project Projekt, Compilation Comp)>(StringComparer.Ordinal);
         foreach (var (p, c) in ziele)
-            foreach (var tree in c.SyntaxTrees.Where(t => !Projektlage.IstGeneriert(t)))
+            foreach (var tree in c.SyntaxTrees.Where(t => !quelltexte.IstGeneriert(t)))
             {
                 var model = c.GetSemanticModel(tree);
                 foreach (var d in tree.GetRoot().DescendantNodes().OfType<BaseTypeDeclarationSyntax>())
@@ -508,7 +532,7 @@ public static class ParitaetsPruefung
                         nsProjekt.TryAdd(sym.ContainingNamespace.Fq(), (p, c));
             }
         foreach (var (p, c) in ziele)
-            foreach (var ns in c.SyntaxTrees.Where(t => !Projektlage.IstGeneriert(t))
+            foreach (var ns in c.SyntaxTrees.Where(t => !quelltexte.IstGeneriert(t))
                          .SelectMany(t => t.GetRoot().DescendantNodes().OfType<BaseNamespaceDeclarationSyntax>()).Select(n => n.Name.ToString()))
                 nsProjekt.TryAdd(ns, (p, c));
         teil = teil with
@@ -524,7 +548,7 @@ public static class ParitaetsPruefung
             {
                 var doc = fork.GetDocument(docId)!;
                 var tree = comp.SyntaxTrees.FirstOrDefault(t => t.FilePath == doc.FilePath);
-                if (tree == null || Projektlage.IstGeneriert(tree)) continue;
+                if (tree == null || quelltexte.IstGeneriert(tree)) continue;
                 var root = (CompilationUnitSyntax)(await doc.GetSyntaxRootAsync())!;
                 var model = comp.GetSemanticModel(tree);
                 var weg = tree.GetRoot().DescendantNodes().OfType<BaseTypeDeclarationSyntax>()
@@ -555,7 +579,7 @@ public static class ParitaetsPruefung
                 folders: new[] { "__scaffold" }, filePath: Path.Combine(Path.GetDirectoryName(ziel.FilePath)!, "__scaffold", datei.Pfad));
         }
 
-        Projektlage.RegistriereDokumente(fork);
+        var forkQuelltexte = new Quelltexte(fork);
         var comps = new List<Compilation>();
         foreach (var (projekt, _) in lage.Analyse)
         {
@@ -568,7 +592,7 @@ public static class ParitaetsPruefung
                     befunde.Add(new("Kompilat", "error", $"[{projekt.Name}] {d.Id} {Path.GetFileName(d.Location.SourceTree?.FilePath)}: {d.GetMessage()}"));
         }
 
-        var zweit = Analysiere(comps, lage.DomänenAssemblies);
+        var zweit = Analysiere(comps, lage.DomänenAssemblies, forkQuelltexte);
         zweit.Dom.Wurzel = ist.Dom.Wurzel;
         foreach (var kv in ist.Dom.ProjektWurzeln) zweit.Dom.ProjektWurzeln[kv.Key] = kv.Value;
         var m2 = ModellMapper.ZuEditorModell(zweit.Graph, zweit.Dom);

@@ -45,7 +45,7 @@ public static class Sonde
 
         // ── Die gezeichnete Leseseite: Board der Sonde + Zeichnung → Modell → Scaffolder → in den Fork ──
         var lage1 = await Projektlage.ErmittleAsync(fork, _ => { });
-        var analyse1 = ParitaetsPruefung.Analysiere(lage1.Compilations, lage1.DomänenAssemblies);
+        var analyse1 = ParitaetsPruefung.Analysiere(lage1.Compilations, lage1.DomänenAssemblies, lage1.Quelltexte);
         analyse1.Dom.Wurzel = solutionDir;
         foreach (var (ns, dir) in lage1.ProjektWurzeln()) analyse1.Dom.ProjektWurzeln[ns] = dir;
         var cr1 = await new CompositionRootExtractor(fork, lage1, analyse1.Routing, analyse1.Dom).ExtractAsync();
@@ -87,7 +87,7 @@ public static class Sonde
                 fehler++;
             }
 
-        var analyse = ParitaetsPruefung.Analysiere(lage2.Compilations, lage2.DomänenAssemblies);
+        var analyse = ParitaetsPruefung.Analysiere(lage2.Compilations, lage2.DomänenAssemblies, lage2.Quelltexte);
         analyse.Dom.Wurzel = solutionDir;
         foreach (var (ns, dir) in lage2.ProjektWurzeln()) analyse.Dom.ProjektWurzeln[ns] = dir;
         var cr = await new CompositionRootExtractor(fork, lage2, analyse.Routing, analyse.Dom).ExtractAsync();

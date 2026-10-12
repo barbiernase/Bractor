@@ -77,6 +77,41 @@ public sealed class DomainModel
     public string? StoreImplNamespace;
     /// <summary>Command-FullName → (Simple, IsCreation, Felder, Meta).</summary>
     public Dictionary<string, CommandType> Commands { get; } = new(StringComparer.Ordinal);
+
+    // ── Code mit Fehlern (Werkbank P7.1): nichts verschwindet still ──
+    /// <summary>Was der Extractor nicht lesen konnte — als Befund an der Karte (Fluss-Anweisung, Prozess-Regel, doppelter Name …).</summary>
+    public List<Lesebefund> Befunde { get; } = new();
+    /// <summary>Typ-FullName → seine handgeschriebenen Deklarationen (partial: mehrere), nach Datei geordnet.</summary>
+    public Dictionary<string, List<Ort>> TypOrte { get; } = new(StringComparer.Ordinal);
+    /// <summary>Handgeschriebene Domänen-Typen mit unaufgelöstem Basistyp — sie werden Code-Karten mit ⚠ (bzw. ein Befund an ihrer Karte).</summary>
+    public List<UnaufgeloestRaw> Unaufgeloest { get; } = new();
+}
+
+/// <summary>
+/// Ein Befund des Lesens (kein Compiler-Befund): <paramref name="Karte"/> ist die stabile Karten-Id (<c>pipeline:P</c>, <c>saga:P</c>,
+/// <c>code:T</c> …), <paramref name="Datei"/> absolut, <paramref name="Zeile"/> 1-basiert.
+/// </summary>
+public sealed record Lesebefund(string Code, string Text, string? Karte, string? Datei, int Zeile);
+
+/// <summary>
+/// Wo eine Karte im Code steht: Datei (absolut), Spanne der Deklaration (Zeichen, ohne führende Trivia) und Zeile (1-basiert). Die Werkbank
+/// zeigt damit Rumpf-Ausschnitte und setzt Gesten an der richtigen Stelle an.
+/// </summary>
+public sealed record Ort(string Datei, int Start, int Ende, int Zeile)
+{
+    public static Ort Von(SyntaxNode n) => new(n.SyntaxTree.FilePath, n.Span.Start, n.Span.End, n.GetLocation().GetLineSpan().StartLinePosition.Line + 1);
+}
+
+/// <summary>Ein handgeschriebener Typ, dessen Basisliste Unaufgelöstes enthält (Tippfehler, gelöschter Typ, fehlendes using).</summary>
+public sealed class UnaufgeloestRaw
+{
+    public string Name = "", Namespace = "", Art = "";
+    public string? Datei, Code;
+    public int Zeile;
+    /// <summary>Die nicht aufgelösten Basis-Namen, wie sie im Code stehen.</summary>
+    public List<string> Basen = new();
+    /// <summary>Position der Deklaration (für die Karte: Datei + Spanne).</summary>
+    public int Start, Ende;
 }
 
 /// <summary>Quelltext-Metadaten eines Typs: Doku (summary), Handcode-Rumpf, Datei-usings, Herkunfts-Assembly.</summary>
@@ -142,6 +177,8 @@ public sealed class AggregateRaw
     /// <summary>Absolute Quelldateien: State-Deklaration, innerer Decider, innerer Applier; je Command/Event die Methode.</summary>
     public string? Datei, DeciderDatei, ApplierDatei;
     public Dictionary<string, string> DecideDateien = new(), ApplyDateien = new();
+    /// <summary>Wo Decide(Cmd) bzw. Apply(Evt) steht — Schlüssel ist der einfache Name des Commands bzw. Events.</summary>
+    public Dictionary<string, Ort> DecideOrte = new(), ApplyOrte = new();
     /// <summary>Wie der Code sie benennt (null = nicht genau eine Klasse); Geschachtelt = innere Klasse des States.</summary>
     public string? DeciderKlasse, ApplierKlasse;
     public bool DeciderGeschachtelt, ApplierGeschachtelt;
@@ -193,6 +230,8 @@ public sealed class RuleRaw
     public string? CompensatesFull;
     public bool CompFanOut;
     public string? CompLambda;
+    /// <summary>Die Anweisung der Regel im <c>Definiere</c>-Lambda.</summary>
+    public Ort? Ort;
 }
 
 /// <summary>
@@ -215,6 +254,7 @@ public sealed class HandleSigRaw
     public List<(string Typ, string Name)> Faehigkeiten = new();
     public string Rueckgabe = "", Modifikatoren = "";
     public string? Rumpf, Ausdruck, Datei;
+    public Ort? Ort;
 }
 
 public sealed class ProjectionRaw
@@ -419,8 +459,12 @@ public sealed partial class DomainExtractor
     /// <summary>State-FullName → die Typen, die <c>IDecider&lt;State&gt;</c> bzw. <c>IApplier&lt;State&gt;</c> implementieren (egal wo deklariert).</summary>
     private readonly Dictionary<string, List<INamedTypeSymbol>> _deciderJeState = new(StringComparer.Ordinal), _applierJeState = new(StringComparer.Ordinal);
 
-    public DomainExtractor(IEnumerable<Compilation> comps, ISet<string> domänenAssemblies)
+    /// <summary>Welche Syntaxbäume handgeschrieben sind (je Solution-Stand).</summary>
+    private readonly Quelltexte _quelltexte;
+
+    public DomainExtractor(IEnumerable<Compilation> comps, ISet<string> domänenAssemblies, Quelltexte quelltexte)
     {
+        _quelltexte = quelltexte;
         _comps = comps.ToList();
         _types = Sym.AllConcreteTypes(_comps);
         _domänen = new HashSet<string>(domänenAssemblies, StringComparer.Ordinal);
@@ -492,9 +536,20 @@ public sealed partial class DomainExtractor
     private SemanticModel Model(SyntaxTree tree) =>
         _comps.First(c => c.ContainsSyntaxTree(tree)).GetSemanticModel(tree);
 
+    /// <summary>Befunde des laufenden Lesens (landen in <see cref="DomainModel.Befunde"/>).</summary>
+    private List<Lesebefund> _befunde = new();
+
+    /// <summary>Mehrzeiliges als eine Zeile (gekürzt) — für Befund-Texte.</summary>
+    private static string Einzeilig(string s)
+    {
+        var z = string.Join(" ", s.Split('\n', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries));
+        return z.Length > 140 ? z[..140] + " …" : z;
+    }
+
     public DomainModel Extract()
     {
         var m = new DomainModel();
+        _befunde = m.Befunde;
         if (_comps.Select(c => c.GetTypeByMetadataName(Abstractions.Treibervertrag.DateiBasis)).FirstOrDefault(x => x != null) is { } dateiBasis)
             m.Treiber[Abstractions.Treibervertrag.Datei] = (dateiBasis.Name, GeerbteFelder(dateiBasis, mitSelbst: true));
 
@@ -502,7 +557,6 @@ public sealed partial class DomainExtractor
         ExtractRegisteredProcesses(m);
         // Stores ZUERST: die Konsumenten-Handler lösen ihre Fähigkeits-Parameter gegen die erkannten Fähigkeiten auf.
         ExtractStores(m);
-
         foreach (var t in _types)
         {
             if (Sym.Implements(t, _iState) && _deciderJeState.ContainsKey(t.Fq())) m.Aggregates.Add(ReadAggregate(t));
@@ -514,7 +568,6 @@ public sealed partial class DomainExtractor
             var reader = TryReadReader(t);
             if (reader != null) m.Readers.Add(reader);
         }
-
         // Der Schreiber-Typ der Projektions-Handles (CQRS057: 3. Parameter) — aus dem Code, nur wenn eindeutig.
         var schreiber = _types.Where(t => Sym.Implements(t, _iSubscriber)).SelectMany(OeffentlicheMethoden)
             .Where(mm => mm.Parameters.Length >= 3 && Sym.Implements(mm.Parameters[0].Type, _iEvent)
@@ -528,6 +581,9 @@ public sealed partial class DomainExtractor
         LinkReadModelStores(m);
 
         LeseRahmen(m);
+        LeseUnaufgeloeste(m);
+        foreach (var t in DomainQuellTypen())
+            m.TypOrte[t.Fq()] = QuellDeklarationen(t).Select(Ort.Von).ToList();
 
         // Deterministische Reihenfolge (die Symbol-Enumeration ist es nicht garantiert).
         m.Aggregates.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
@@ -571,6 +627,40 @@ public sealed partial class DomainExtractor
     }
 
     // ── Domänen-Typen ohne Nachrichten-Rolle: Value Objects, Responses, ReadModels, Trigger, Enums ──
+
+    /// <summary>
+    /// Code mit Fehlern (Werkbank P7.1): ein handgeschriebener Domänen-Typ, dessen Basisliste nicht aufgelöst ist, darf nicht still
+    /// verschwinden (ohne Basis erkennt ihn kein Marker). Er wird festgehalten — als Code-Karte mit ⚠ bzw. als Befund an seiner Karte.
+    /// </summary>
+    private void LeseUnaufgeloeste(DomainModel m)
+    {
+        foreach (var t in DomainQuellTypen())
+        {
+            var decl = QuellDeklarationen(t).OfType<BaseTypeDeclarationSyntax>().FirstOrDefault(d => d.BaseList != null);
+            if (decl?.BaseList == null) continue;
+            var model = Model(decl.SyntaxTree);
+            var offen = decl.BaseList.Types
+                .Where(b => model.GetTypeInfo(b.Type).Type is not { } bt || bt.TypeKind == TypeKind.Error)
+                .Select(b => b.Type.ToString()).ToList();
+            if (offen.Count == 0) continue;
+            var ort = decl.GetLocation().GetLineSpan();
+            m.Unaufgeloest.Add(new UnaufgeloestRaw
+            {
+                Name = t.Name, Namespace = t.ContainingNamespace.Fq(), Datei = decl.SyntaxTree.FilePath, Zeile = ort.StartLinePosition.Line + 1,
+                Art = decl switch
+                {
+                    RecordDeclarationSyntax r => r.ClassOrStructKeyword.IsKind(SyntaxKind.StructKeyword) ? "record struct" : "record",
+                    InterfaceDeclarationSyntax => "interface", StructDeclarationSyntax => "struct", EnumDeclarationSyntax => "enum", _ => "class",
+                },
+                Code = decl.ToString(), Basen = offen, Start = decl.Span.Start, Ende = decl.Span.End,
+            });
+        }
+        m.Unaufgeloest.Sort((a, b) => string.CompareOrdinal(a.Namespace + "." + a.Name, b.Namespace + "." + b.Name));
+    }
+
+    /// <summary>Steht in der Basisliste etwas, das der Compiler nicht auflöst (Tippfehler, gelöschter Typ, fehlendes using)?</summary>
+    private static bool HatUnaufgeloesteBasis(INamedTypeSymbol t) =>
+        t.BaseType?.TypeKind == TypeKind.Error || t.Interfaces.Any(i => i.TypeKind == TypeKind.Error);
 
     /// <summary>Quelltext-Typen der Domain*-Assemblies (nicht Framework, nicht Metadaten, nicht generiert).</summary>
     private IEnumerable<INamedTypeSymbol> DomainQuellTypen()
@@ -628,8 +718,9 @@ public sealed partial class DomainExtractor
             else if (_iSelfMessage != null && Sym.Implements(t, _iSelfMessage)) m.SelbstNachrichten.Add(raw);
             else if (FunktionVonAuftrag(t) is { } fürFunktion) { raw.Funktion = fürFunktion.Name; m.Auftraege.Add(raw); }
             // Value Object = als Wertobjekt markiert ODER ein Record (Datenträger per Sprachkonstrukt) ohne jede Rolle.
-            // Klassen ohne Marker sind Dienste/Helfer (z. B. Store-Implementierungen), keine Werte.
-            else if ((Sym.Implements(t, _iWertobjekt) || t.IsRecord)
+            // Klassen ohne Marker sind Dienste/Helfer (z. B. Store-Implementierungen), keine Werte. Ein Record mit UNAUFGELÖSTER Basis
+            //   ist kein Wert, sondern unbekannt (die fehlende Basis kann seine Rolle sein) — er wird eine Code-Karte (LeseUnaufgeloeste).
+            else if (!HatUnaufgeloesteBasis(t) && (Sym.Implements(t, _iWertobjekt) || t.IsRecord)
                      && !Sym.Implements(t, _iPayload) && !Sym.Implements(t, _iPipelineOutput) && !Sym.Implements(t, _iQuery)
                      && !Sym.Implements(t, _iSelfMessage) && !Sym.Implements(t, _iState)
                      && !Sym.Implements(t, _iWriteStore) && !Sym.Implements(t, _iReadStore))
@@ -672,7 +763,7 @@ public sealed partial class DomainExtractor
         foreach (var f in m.Funktionen)
         {
             var impls = klassen.Where(k => k.AllInterfaces.Any(i => i.Fq() == f.Full)).ToList();
-            var impl = impls.FirstOrDefault(k => RegistrierteImpls().Contains(k.Fq())) ?? impls.FirstOrDefault();
+            var impl = impls.FirstOrDefault(IstRegistriert) ?? impls.FirstOrDefault();
             var iface = impl?.AllInterfaces.First(i => i.Fq() == f.Full);
             var methode = iface?.GetMembers(Vertrag.FunktionsMethode).OfType<IMethodSymbol>().FirstOrDefault();
             if (impl == null || methode == null) continue;
@@ -742,7 +833,7 @@ public sealed partial class DomainExtractor
     /// </summary>
     private void SeparateKonfigs(DomainModel m)
     {
-        var voByFull = m.ValueObjects.ToDictionary(v => v.Full, StringComparer.Ordinal);
+        var voByFull = m.ValueObjects.GroupBy(v => v.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var storeImpls = m.Stores.SelectMany(s => s.ImplsFull).ToHashSet(StringComparer.Ordinal);
         var injiziert = new HashSet<string>(StringComparer.Ordinal);
         foreach (var t in _types)
@@ -860,6 +951,28 @@ public sealed partial class DomainExtractor
     private bool IstFaehigkeit(ITypeSymbol t) => t is INamedTypeSymbol { TypeKind: TypeKind.Interface } i
         && (Sym.Implements(i, _iWriteStore) || Sym.Implements(i, _iReadStore)) && !Sym.Implements(i, _iStore);
 
+    private Dictionary<string, List<INamedTypeSymbol>>? _implsJeInterface;
+
+    /// <summary>
+    /// Die konkreten Typen der analysierten Quell-Assemblies, die ein Interface implementieren (Index über alle Interfaces, einmal je Lesen) —
+    /// statt je Fähigkeit über alle Typen samt Metadaten zu laufen.
+    /// </summary>
+    private List<INamedTypeSymbol> ImplsVon(INamedTypeSymbol iface)
+    {
+        if (_implsJeInterface == null)
+        {
+            _implsJeInterface = new(StringComparer.Ordinal);
+            var quellen = _comps.Select(c => c.AssemblyName ?? "").ToHashSet(StringComparer.Ordinal);
+            foreach (var t in _types.Where(t => t.TypeKind is TypeKind.Class or TypeKind.Struct && !t.IsAbstract && quellen.Contains(t.ContainingAssembly?.Name ?? "")))
+                foreach (var i in t.AllInterfaces.Select(i => i.Fq()).Distinct(StringComparer.Ordinal))
+                {
+                    if (!_implsJeInterface.TryGetValue(i, out var l)) _implsJeInterface[i] = l = new();
+                    l.Add(t);
+                }
+        }
+        return _implsJeInterface.GetValueOrDefault(iface.Fq()) ?? [];
+    }
+
     private void ExtractStores(DomainModel m)
     {
         var faehigkeiten = DomainQuellTypen().Where(IstFaehigkeit).ToList();
@@ -871,8 +984,7 @@ public sealed partial class DomainExtractor
         {
             if (_faehigkeiten.ContainsKey(f.Fq())) return;   // schon in einem (anderen) Bündel
             var isRead = Sym.Implements(f, _iReadStore);
-            var impls = _types.Where(t => t.TypeKind is TypeKind.Class or TypeKind.Struct && !t.IsAbstract
-                                          && t.AllInterfaces.Any(x => x.Fq() == f.Fq())).ToList();
+            var impls = ImplsVon(f);
             implsJeFaehigkeit[f.Fq()] = impls.Select(x => x.Name).Distinct().OrderBy(x => x, StringComparer.Ordinal).ToList();
             foreach (var impl in impls) if (!store.ImplsFull.Contains(impl.Fq())) store.ImplsFull.Add(impl.Fq());
             // Genau EINE Funktion je Fähigkeit (CQRS051); mehrere wären ein Analyzer-Fehler — hier: jede wird eine Fn.
@@ -896,7 +1008,7 @@ public sealed partial class DomainExtractor
                 fn.FaehigkeitDatei = fDecl?.SyntaxTree.FilePath;
                 fn.FaehigkeitDoku = fDecl == null ? null : Summary(fDecl);
                 foreach (var impl in impls)
-                    if ((fn.Body == null || RegistrierteImpls().Contains(impl.Fq()))
+                    if ((fn.Body == null || IstRegistriert(impl))
                         && Sym.Implementierung(impl, im) is IMethodSymbol implM && MethodBody(implM) is { } body)
                         fn.Body = body;
                 store.Fns.Add(fn);
@@ -989,26 +1101,51 @@ public sealed partial class DomainExtractor
 
     private static bool IstTask(ITypeSymbol t) => Vertrag.Ist(t, typeof(Task<>)) || Vertrag.Ist(t, typeof(ValueTask<>));
 
-    private HashSet<string>? _registriert;
+    /// <summary>Kandidaten im Generat je einfachem Typnamen: <c>new X(…)</c> und Typ-Argumente <c>&lt;…, X, …&gt;</c> (nur Syntax, gebunden wird bei Bedarf).</summary>
+    private Dictionary<string, List<(Compilation Comp, SyntaxNode Knoten)>>? _generatStellen;
+    private readonly Dictionary<string, bool> _registriert = new(StringComparer.Ordinal);
+
     /// <summary>
-    /// Die konkreten Domänen-Typen, die das GENERAT (DI-Registrierung des Framework-Generators) erzeugt/registriert —
-    /// welche Store-Implementierung die Laufzeit wirklich nimmt, statt einer Namens-Vorliebe.
+    /// Erzeugt bzw. registriert das GENERAT (DI-Registrierung des Framework-Generators) diesen konkreten Domänen-Typ — welche
+    /// Store-/Funktions-Implementierung die Laufzeit wirklich nimmt, statt einer Namens-Vorliebe. Gebunden wird nur an den Stellen, deren
+    /// Name passt (das warme Lesen der Werkbank bindet sonst jedes Generat jeder Compilation).
     /// </summary>
-    private HashSet<string> RegistrierteImpls()
+    private bool IstRegistriert(INamedTypeSymbol impl)
     {
-        if (_registriert != null) return _registriert;
-        _registriert = new HashSet<string>(StringComparer.Ordinal);
-        foreach (var c in _comps)
-            foreach (var tree in c.SyntaxTrees.Where(IstGeneriert))
+        var fq = impl.Fq();
+        if (_registriert.TryGetValue(fq, out var ja)) return ja;
+        if (_generatStellen == null)
+        {
+            _generatStellen = new(StringComparer.Ordinal);
+            static string? Rechts(TypeSyntax t) => t switch
             {
-                var model = c.GetSemanticModel(tree);
-                foreach (var oc in tree.GetRoot().DescendantNodes().OfType<ObjectCreationExpressionSyntax>())
-                    if (model.GetTypeInfo(oc).Type is INamedTypeSymbol nt && IstDomänenAssembly(nt.ContainingAssembly)) _registriert.Add(nt.Fq());
-                foreach (var g in tree.GetRoot().DescendantNodes().OfType<GenericNameSyntax>())
-                    foreach (var ta in g.TypeArgumentList.Arguments)
-                        if (model.GetTypeInfo(ta).Type is INamedTypeSymbol at && at.TypeKind == TypeKind.Class && IstDomänenAssembly(at.ContainingAssembly)) _registriert.Add(at.Fq());
-            }
-        return _registriert;
+                SimpleNameSyntax s => s.Identifier.ValueText,
+                QualifiedNameSyntax q => q.Right.Identifier.ValueText,
+                AliasQualifiedNameSyntax al => al.Name.Identifier.ValueText,
+                _ => null,
+            };
+            foreach (var c in _comps)
+                foreach (var tree in c.SyntaxTrees.Where(IstGeneriert))
+                    foreach (var n in tree.GetRoot().DescendantNodes())
+                    {
+                        var (name, knoten) = n switch
+                        {
+                            ObjectCreationExpressionSyntax oc => (Rechts(oc.Type), (SyntaxNode)oc),
+                            TypeSyntax ta when ta.Parent is TypeArgumentListSyntax => (Rechts(ta), ta),
+                            _ => (null, n),
+                        };
+                        if (name == null) continue;
+                        if (!_generatStellen.TryGetValue(name, out var l)) _generatStellen[name] = l = new();
+                        l.Add((c, knoten));
+                    }
+        }
+        ja = false;
+        foreach (var (c, knoten) in _generatStellen.GetValueOrDefault(impl.Name) ?? [])
+            if (c.GetSemanticModel(knoten.SyntaxTree).GetTypeInfo(knoten).Type is INamedTypeSymbol nt && IstDomänenAssembly(nt.ContainingAssembly)
+                && (knoten is ObjectCreationExpressionSyntax || nt.TypeKind == TypeKind.Class) && nt.Fq() == fq)
+            { ja = true; break; }
+        _registriert[fq] = ja;
+        return ja;
     }
 
 
@@ -1081,6 +1218,7 @@ public sealed partial class DomainExtractor
                     agg.HandlesCommandsFull.Add(cmdFull);
                     agg.DecideMethoden[cmdFull] = method.Name;
                     agg.DecideDateien[cmdFull] = md.SyntaxTree.FilePath;
+                    agg.DecideOrte[cmd.Name] = Ort.Von(md);
                     agg.DecideParams[cmdFull] = method.Parameters[0].Name;
                     var ausgaenge = UniverseEvents(method.ReturnType).ToList();
                     agg.DecideOutcomes[cmdFull] = ausgaenge.Select(e => e.Fq()).ToList();
@@ -1112,6 +1250,7 @@ public sealed partial class DomainExtractor
                     agg.ApplyEventsFull.Add(evt.Fq());
                     agg.ApplyMethoden[evt.Fq()] = method.Name;
                     agg.ApplyDateien[evt.Name] = md.SyntaxTree.FilePath;
+                    agg.ApplyOrte[evt.Name] = Ort.Von(md);
                     agg.ApplyParams[evt.Name] = method.Parameters[0].Name;
                     var ab = MethodBody(method);
                     if (ab != null) agg.ApplyBodies[evt.Name] = ab;
@@ -1135,10 +1274,10 @@ public sealed partial class DomainExtractor
 
     // ── Quelltext-Helfer ─────────────────────────────────────────────────────
 
-    private static bool IstGeneriert(SyntaxTree tree) => Projektlage.IstGeneriert(tree);
+    private bool IstGeneriert(SyntaxTree tree) => _quelltexte.IstGeneriert(tree);
 
     /// <summary>Die handgeschriebenen Deklarationen eines Typs (partial über Dateien), deterministisch nach Dateipfad.</summary>
-    private static IEnumerable<SyntaxNode> QuellDeklarationen(INamedTypeSymbol t) =>
+    private IEnumerable<SyntaxNode> QuellDeklarationen(INamedTypeSymbol t) =>
         t.DeclaringSyntaxReferences
             .Where(r => !IstGeneriert(r.SyntaxTree))
             .OrderBy(r => r.SyntaxTree.FilePath, StringComparer.Ordinal).ThenBy(r => r.Span.Start)
@@ -1307,7 +1446,14 @@ public sealed partial class DomainExtractor
             foreach (var ende in verbAufrufe.Where(x => !fortgesetzt.Contains(x)).OrderBy(x => x.SpanStart))
             {
                 var rule = ReadRule(ende, model);
-                if (rule != null) proc.Rules.Add(rule);
+                if (rule != null)
+                {
+                    var anweisung = ende.FirstAncestorOrSelf<StatementSyntax>();
+                    rule.Ort = Ort.Von(anweisung != null && lambda.Span.Contains(anweisung.Span) ? anweisung : ende);
+                    proc.Rules.Add(rule);
+                }
+                else _befunde.Add(new Lesebefund("LESEN-REGEL", $"Regel wird nicht gelesen (kein Auslöser/Ziel erkannt): {Einzeilig(ende.ToString())}",
+                    "saga:" + proc.Name, ende.SyntaxTree.FilePath, ende.GetLocation().GetLineSpan().StartLinePosition.Line + 1));
             }
             break;
         }
@@ -1446,6 +1592,7 @@ public sealed partial class DomainExtractor
         sig.Rueckgabe = s.ReturnType.ToString();
         sig.Modifikatoren = string.Join(" ", s.Modifiers.Select(x => x.Text));
         sig.Datei = s.SyntaxTree.FilePath;
+        sig.Ort = Ort.Von(s);
         if (s.ExpressionBody is { } e) sig.Ausdruck = Dedent(e.Expression.ToString().Replace("\r\n", "\n")).Trim();
         else sig.Rumpf = MethodBody(mm);
         return sig;
@@ -1650,7 +1797,7 @@ public sealed partial class DomainExtractor
     // ── Helfer ───────────────────────────────────────────────────────────────
 
     /// <summary>Die HANDGESCHRIEBENEN öffentlichen Instanz-Methoden (generierte Dispatch-Member sind keine Handler).</summary>
-    private static IEnumerable<IMethodSymbol> OeffentlicheMethoden(INamedTypeSymbol t) =>
+    private IEnumerable<IMethodSymbol> OeffentlicheMethoden(INamedTypeSymbol t) =>
         t.GetMembers().OfType<IMethodSymbol>().Where(m => m.MethodKind == MethodKind.Ordinary && m.DeclaredAccessibility == Accessibility.Public && !m.IsStatic
                                                           && m.DeclaringSyntaxReferences.Any(r => !IstGeneriert(r.SyntaxTree)));
 

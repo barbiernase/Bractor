@@ -40,12 +40,15 @@ public static class Sym
     private static string Signatur(ISymbol s) =>
         s is IMethodSymbol ms ? string.Join(",", ms.OriginalDefinition.Parameters.Select(p => p.Type.Fq())) : "";
 
-    /// <summary>Alle konkreten (nicht-abstrakten, nicht-Interface) benannten Typen über alle Compilations.</summary>
+    /// <summary>
+    /// Alle konkreten (nicht-abstrakten, nicht-Interface) benannten Typen der analysierten Compilations — nur deren EIGENE Assemblies
+    /// (Quelltext samt Generat), nicht die Metadaten-Referenzen (BCL, Pakete): jede analysierte Assembly ist selbst in der Liste.
+    /// </summary>
     public static List<INamedTypeSymbol> AllConcreteTypes(IEnumerable<Compilation> comps)
     {
         var seen = new Dictionary<string, INamedTypeSymbol>(StringComparer.Ordinal);
         foreach (var comp in comps)
-            Collect(comp.GlobalNamespace, seen);
+            Collect(comp.Assembly.GlobalNamespace, seen);
         return seen.Values.ToList();
     }
 

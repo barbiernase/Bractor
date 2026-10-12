@@ -48,9 +48,13 @@ public sealed class SlotInventar
     public Dictionary<SlotRef, HashSet<string>> GraphRaum { get; } = new();
     private readonly DomainModel _dom;
 
+    /// <summary>Welche Syntaxbäume handgeschrieben sind (je Solution-Stand).</summary>
+    private readonly Quelltexte _quelltexte;
+
     public SlotInventar(Projektlage lage, DomainModel dom)
     {
         _dom = dom;
+        _quelltexte = lage.Quelltexte;
         _comps = lage.Compilations;
         _domänen = new HashSet<string>(lage.DomänenAssemblies, StringComparer.Ordinal);
         // Framework = analysierte Projekte, die keine Domäne sind (Vertrag, Kern, Laufzeit) — abgeleitet, nicht benannt.
@@ -78,7 +82,7 @@ public sealed class SlotInventar
     {
         var typen = _comps.Where(c => _domänen.Contains(c.AssemblyName ?? ""))
             .SelectMany(c => AlleTypen(c.Assembly.GlobalNamespace))
-            .Where(t => t.DeclaringSyntaxReferences.Any(r => !Projektlage.IstGeneriert(r.SyntaxTree)))
+            .Where(t => t.DeclaringSyntaxReferences.Any(r => !_quelltexte.IstGeneriert(r.SyntaxTree)))
             .GroupBy(t => t.Fq()).Select(g => g.First()).ToList();
 
         foreach (var t in typen)
@@ -174,7 +178,7 @@ public sealed class SlotInventar
         var iface = vertrag?.GetMembers(property).OfType<IPropertySymbol>().FirstOrDefault();
         var impl = iface == null ? null : Sym.Implementierung(t, iface) as IPropertySymbol;
         var prop = impl?.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).OfType<PropertyDeclarationSyntax>()
-            .FirstOrDefault(p => !Projektlage.IstGeneriert(p.SyntaxTree));
+            .FirstOrDefault(p => !_quelltexte.IstGeneriert(p.SyntaxTree));
         var definiere = prop?.DescendantNodes().OfType<InvocationExpressionSyntax>()
             .Select(inv => inv.ArgumentList.Arguments.FirstOrDefault()?.Expression as LambdaExpressionSyntax).FirstOrDefault(l => l != null);
         if (definiere == null) yield break;
@@ -225,13 +229,13 @@ public sealed class SlotInventar
                     if (Typ(rm.Full) is { } t) yield return t;
     }
 
-    private static IEnumerable<IMethodSymbol> Methoden(INamedTypeSymbol t) => t.GetMembers().OfType<IMethodSymbol>()
+    private IEnumerable<IMethodSymbol> Methoden(INamedTypeSymbol t) => t.GetMembers().OfType<IMethodSymbol>()
         .Where(m => m.MethodKind == MethodKind.Ordinary && m.DeclaredAccessibility == Accessibility.Public
-                    && m.DeclaringSyntaxReferences.Any(r => !Projektlage.IstGeneriert(r.SyntaxTree)));
+                    && m.DeclaringSyntaxReferences.Any(r => !_quelltexte.IstGeneriert(r.SyntaxTree)));
 
-    private static SyntaxNode? Rumpf(IMethodSymbol m) =>
+    private SyntaxNode? Rumpf(IMethodSymbol m) =>
         m.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).OfType<MethodDeclarationSyntax>()
-            .Where(s => !Projektlage.IstGeneriert(s.SyntaxTree))
+            .Where(s => !_quelltexte.IstGeneriert(s.SyntaxTree))
             .Select(s => (SyntaxNode?)s.Body ?? s.ExpressionBody).FirstOrDefault(b => b != null);
 
     // ── Symbole eines Rumpfs klassifizieren ──

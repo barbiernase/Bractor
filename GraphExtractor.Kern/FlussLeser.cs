@@ -29,6 +29,8 @@ public sealed class FlussKnotenRaw
     /// <summary>Nur Warte: die Typ-Argumente von <c>Warte&lt;A, B&gt;()</c> (FullName).</summary>
     public List<string> WarteAufFull = new();
     public List<FlussEingangRaw> Eingaenge = new();
+    /// <summary>Die Anweisung des Knotens im <c>Definiere</c>-Lambda.</summary>
+    public Ort? Ort;
 }
 
 public sealed class FlussEingangRaw
@@ -83,8 +85,15 @@ public sealed partial class DomainExtractor
                 else if (st is ExpressionStatementSyntax es) ausdruck = es.Expression;
 
                 var knoten = ausdruck == null ? null : LiesKnoten(ausdruck, model);
-                if (knoten == null) { fluss.Unbekannt.Add(st.ToString()); continue; }
+                if (knoten == null)
+                {
+                    fluss.Unbekannt.Add(st.ToString());
+                    _befunde.Add(new Lesebefund("LESEN-FLUSS", $"Anweisung ist kein Fluss-Knoten und wird nicht gelesen: {Einzeilig(st.ToString())}",
+                        "pipeline:" + fluss.Name, st.SyntaxTree.FilePath, st.GetLocation().GetLineSpan().StartLinePosition.Line + 1));
+                    continue;
+                }
                 knoten.OhneVariable = name == null;
+                knoten.Ort = Ort.Von(st);
                 variablen.Add(name);
                 fluss.Knoten.Add(knoten);
             }

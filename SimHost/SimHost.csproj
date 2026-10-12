@@ -26,13 +26,22 @@
   </ItemGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.14.0" />
+    <!-- Dieselbe Roslyn-Version wie der Extractor-Kern (warmer Workspace). -->
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" />
+    <!-- Marten (über Core) zieht Roslyn 4.14 für seinen Laufzeit-Compiler — in SimHost läuft er nie; dieselbe Version für alles (sonst NU1608). -->
+    <PackageReference Include="Microsoft.CodeAnalysis" Version="5.3.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.3.0" />
+    <PackageReference Include="Microsoft.CodeAnalysis.Scripting" Version="5.3.0" />
+    <!-- MSBuildLocator zur Laufzeit; die MSBuild-Assemblies selbst kommen aus dem SDK, nicht aus der Ausgabe. -->
+    <PackageReference Include="Microsoft.Build.Locator" Version="1.11.2" />
+    <PackageReference Include="Microsoft.Build.Framework" Version="17.11.48" ExcludeAssets="runtime" PrivateAssets="all" />
     <!-- Werkbank: Sim-DB verwalten (zurücksetzen, Stände speichern/laden). -->
     <PackageReference Include="Npgsql" Version="9.0.4" />
   </ItemGroup>
 
   <ItemGroup>
-    <!-- Dieselben Feld-Regeln wie der Extractor (Code → Modell) für den Abgleich bestehender Deklarationen (Modell → Code). -->
-    <Compile Include="../GraphExtractor/Codeformen.cs" Link="Codeformen.cs" />
+    <!-- Der Extractor-Kern: warmer Workspace (Arbeitsbereich, Werkbank P7.1) und dieselben Feld-Regeln wie der Extractor
+         (Codeformen: Code → Modell) für den Abgleich bestehender Deklarationen (Modell → Code). -->
+    <ProjectReference Include="../GraphExtractor.Kern/GraphExtractor.Kern.csproj" />
   </ItemGroup>
 </Project>
