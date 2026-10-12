@@ -1,4 +1,6 @@
+using Abstractions;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
@@ -25,6 +27,17 @@ namespace Domain.SourceGeneration
             title: "Zwei Prozesse mit gleichem Namen",
             messageFormat: "Der Prozess-Name '{0}' ist mehrdeutig — er wird von mehreren Definitionen belegt ({1}). "
                 + "Gib mindestens einer ein explizites [ProzessName(\"...\")], um sie zu unterscheiden.",
+            category: "Cqrs",
+            defaultSeverity: DiagnosticSeverity.Error,
+            isEnabledByDefault: true);
+
+        // ★ Werkbank P4 (E4): eine Prozess-Regel heißt nach ihren Typ-Argumenten (A+B→C) — die Wirker-Id im Event-Header und die
+        //   Karte im Editor. Zwei gleiche Namen in einem Prozess wären in der Spur nicht unterscheidbar.
+        private static readonly DiagnosticDescriptor RegelKollision = new DiagnosticDescriptor(
+            id: "CQRS072",
+            title: "Zwei Prozess-Regeln mit gleichem Namen",
+            messageFormat: "Der Prozess '{0}' hat die Regel '{1}' mehrfach — eine Regel heißt nach Auslöser, Und-Events und Ziel. "
+                + "Fasse die Regeln zusammen oder unterscheide sie im Auslöser bzw. Ziel.",
             category: "Cqrs",
             defaultSeverity: DiagnosticSeverity.Error,
             isEnabledByDefault: true);
@@ -63,7 +76,19 @@ namespace Domain.SourceGeneration
                     ProzessKollision, g.First().Def.Locations.FirstOrDefault() ?? Location.None,
                     g.Key, string.Join(", ", g.Select(x => x.Def.ToDisplayString()))));
 
-            context.AddSource("GeneratedProzessRegeln.g.cs", Emit(benannt, iPipeline, ns));
+            // ★ Werkbank P4: die Namen für die Spur aus dem Quelltext (Fluss: Knoten-Variablen; Prozess: E4).
+            var namen = new Dictionary<string, List<string>>();
+            foreach (var (name, d) in benannt)
+            {
+                var istFluss = iPipeline != null && d.AllInterfaces.Contains(iPipeline, SymbolEqualityComparer.Default);
+                var liste = istFluss ? KnotenNamen(comp, d) : RegelNamen(comp, d);
+                namen[name] = liste;
+                if (!istFluss)
+                    foreach (var g in liste.GroupBy(x => x).Where(g => g.Count() > 1))
+                        context.ReportDiagnostic(Diagnostic.Create(RegelKollision, d.Locations.FirstOrDefault() ?? Location.None, name, g.Key));
+            }
+
+            context.AddSource("GeneratedProzessRegeln.g.cs", Emit(benannt, iPipeline, ns, namen));
         }
 
         /// <summary>
@@ -80,6 +105,93 @@ namespace Domain.SourceGeneration
             return def.Name;
         }
 
+        private static readonly HashSet<string> KnotenVerben = new HashSet<string> { "Quelle", "Auf", "Rufe", "Sende", "Je", "Warte" };
+
+        /// <summary>
+        /// Die Knoten eines Flusses in Deklarations-Reihenfolge: jede Anweisung im <c>PipelineFluss.Definiere</c>-Lambda, deren Kern-Aufruf
+        /// ein Knoten-Verb der DSL ist (<c>.Zeitlimit(…)</c>/<c>.Oder(…)</c> abgeschält) — Name = Variable bzw. die Regel aus <see cref="WirkerId"/>.
+        /// Derselbe Weg wie der Extractor (<c>FlussLeser</c>).
+        /// </summary>
+        private static List<string> KnotenNamen(Compilation comp, INamedTypeSymbol def)
+        {
+            var variablen = new List<string?>();
+            var typen = new List<string>();
+            foreach (var lambda in DefiniereLambdas(comp, def, "Fluss", "PipelineFluss"))
+            {
+                if (!(lambda.Body is BlockSyntax block)) continue;
+                var model = comp.GetSemanticModel(lambda.SyntaxTree);
+                foreach (var st in block.Statements)
+                {
+                    string? name = null;
+                    ExpressionSyntax? ausdruck = null;
+                    if (st is LocalDeclarationStatementSyntax ld && ld.Declaration.Variables.Count == 1 && ld.Declaration.Variables[0].Initializer != null)
+                    { name = ld.Declaration.Variables[0].Identifier.Text; ausdruck = ld.Declaration.Variables[0].Initializer!.Value; }
+                    else if (st is ExpressionStatementSyntax es) ausdruck = es.Expression;
+                    if (ausdruck == null) continue;
+                    while (ausdruck is InvocationExpressionSyntax inv && inv.Expression is MemberAccessExpressionSyntax ma
+                           && model.GetSymbolInfo(inv).Symbol is IMethodSymbol m && IstDsl(m) && (m.Name == "Zeitlimit" || m.Name == "Oder"))
+                        ausdruck = ma.Expression;
+                    if (!(ausdruck is InvocationExpressionSyntax kern) || !(model.GetSymbolInfo(kern).Symbol is IMethodSymbol k)
+                        || !IstDsl(k) || !KnotenVerben.Contains(k.Name)) continue;
+                    variablen.Add(name);
+                    typen.Add(k.TypeArguments.FirstOrDefault()?.Name ?? "");
+                }
+            }
+            return WirkerId.KnotenNamen(variablen, typen).ToList();
+        }
+
+        /// <summary>
+        /// Die Regeln eines Prozesses in Laufzeit-Reihenfolge (jedes <c>Sende</c>/<c>SendeJe</c>/<c>Rufe</c> eines Regel-Bauers hängt eine
+        /// Regel an) mit ihrem Namen nach E4 — Bedingung aus den Typ-Argumenten des Bauers (<c>RegelBauer&lt;A, B&gt;</c>), beim Count-Join
+        /// (<c>RegelBauerSammel&lt;…, S&gt;</c>) das letzte als Sammel-Event, Ziel = Typ-Argument des Aufrufs.
+        /// </summary>
+        private static List<string> RegelNamen(Compilation comp, INamedTypeSymbol def)
+        {
+            var namen = new List<string>();
+            foreach (var lambda in DefiniereLambdas(comp, def, "Regeln", "Prozess"))
+            {
+                var model = comp.GetSemanticModel(lambda.SyntaxTree);
+                foreach (var inv in lambda.DescendantNodes().OfType<InvocationExpressionSyntax>().OrderBy(i => i.Span.End))
+                {
+                    if (!(model.GetSymbolInfo(inv).Symbol is IMethodSymbol m) || !IstDsl(m)
+                        || (m.Name != "Sende" && m.Name != "SendeJe" && m.Name != "Rufe")) continue;
+                    var bauer = m.ContainingType;
+                    if (bauer.Name != "RegelBauer" && bauer.Name != "RegelBauerSammel") continue;
+                    var args = bauer.TypeArguments.Select(t => t.Name).ToList();
+                    string? sammel = null;
+                    if (bauer.Name == "RegelBauerSammel") { sammel = args[args.Count - 1]; args.RemoveAt(args.Count - 1); }
+                    namen.Add(WirkerId.Regel(args, sammel, m.TypeArguments.FirstOrDefault()?.Name ?? ""));
+                }
+            }
+            return namen;
+        }
+
+        /// <summary>
+        /// Die Lambdas der <c>Definiere</c>-Aufrufe (am Typ <paramref name="dslTyp"/>) in der Implementierung der Interface-Property
+        /// <paramref name="property"/> — über die Implementierung, nicht den Namen am Typ (auch explizit: <c>ProzessRegeln IProzessDefinition.Regeln</c>).
+        /// </summary>
+        private static IEnumerable<LambdaExpressionSyntax> DefiniereLambdas(Compilation comp, INamedTypeSymbol def, string property, string dslTyp)
+        {
+            var impls = def.AllInterfaces
+                .Where(i => i.ContainingNamespace?.ToDisplayString() == "Abstractions" && (i.Name == "IProzessDefinition" || i.Name == "IPipeline"))
+                .SelectMany(i => i.GetMembers(property))
+                .Select(m => def.FindImplementationForInterfaceMember(m))
+                .OfType<IPropertySymbol>()
+                .Distinct<IPropertySymbol>(SymbolEqualityComparer.Default);
+            foreach (var p in impls)
+                foreach (var r in p.DeclaringSyntaxReferences)
+                {
+                    var syntax = r.GetSyntax();
+                    var model = comp.GetSemanticModel(syntax.SyntaxTree);
+                    foreach (var inv in syntax.DescendantNodes().OfType<InvocationExpressionSyntax>())
+                        if (model.GetSymbolInfo(inv).Symbol is IMethodSymbol m && m.Name == "Definiere" && m.ContainingType?.Name == dslTyp && IstDsl(m)
+                            && inv.ArgumentList.Arguments.FirstOrDefault()?.Expression is LambdaExpressionSyntax l)
+                            yield return l;
+                }
+        }
+
+        private static bool IstDsl(IMethodSymbol m) => m.ContainingType?.ContainingNamespace?.ToDisplayString() == "Abstractions";
+
         private static void Collect(INamespaceSymbol ns, IAssemblySymbol assembly, List<INamedTypeSymbol> acc)
         {
             foreach (var t in ns.GetTypeMembers())
@@ -89,7 +201,8 @@ namespace Domain.SourceGeneration
                 Collect(child, assembly, acc);
         }
 
-        private static string Emit(List<(string Name, INamedTypeSymbol Def)> defs, INamedTypeSymbol? iPipeline, string ns)
+        private static string Emit(List<(string Name, INamedTypeSymbol Def)> defs, INamedTypeSymbol? iPipeline, string ns,
+            Dictionary<string, List<string>> namen)
         {
             var sb = new StringBuilder();
             sb.AppendLine("// <auto-generated/>");
@@ -109,7 +222,8 @@ namespace Domain.SourceGeneration
             foreach (var (name, d) in defs)
             {
                 var istFluss = iPipeline != null && d.AllInterfaces.Contains(iPipeline, SymbolEqualityComparer.Default);
-                sb.AppendLine($"            [\"{name}\"] = new {d.ToDisplayString()}().{(istFluss ? "Fluss.Regeln" : "Regeln")},");
+                var liste = string.Join(", ", namen[name].Select(n => "\"" + n + "\""));
+                sb.AppendLine($"            [\"{name}\"] = (({(istFluss ? "IPipeline" : "IProzessDefinition")})new {d.ToDisplayString()}()).{(istFluss ? "Fluss.Regeln" : "Regeln")}.Benannt(\"{name}\"{(liste.Length > 0 ? ", " + liste : "")}),");
             }
             sb.AppendLine("        };");
             sb.AppendLine("    }");

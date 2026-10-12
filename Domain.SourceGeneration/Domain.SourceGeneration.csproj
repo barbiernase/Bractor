@@ -22,6 +22,7 @@
         <Compile Include="..\Abstractions\Akteurvertrag.cs" Link="Vertrag\Akteurvertrag.cs" />
         <Compile Include="..\Abstractions\Quellen\Treibervertrag.cs" Link="Vertrag\Treibervertrag.cs" />
         <Compile Include="..\Abstractions\Kodehash.cs" Link="Vertrag\Kodehash.cs" />
+        <Compile Include="..\Abstractions\Spur\WirkerId.cs" Link="Vertrag\WirkerId.cs" />
     </ItemGroup>
 
     <ItemGroup>

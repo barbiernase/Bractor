@@ -338,6 +338,7 @@ public static class ModellMapper
             kv => new { basis = kv.Value.Basis, felder = kv.Value.Felder.Select(FeldJson).ToArray() }));
         root["rahmen"]!.AsObject()["umgebungen"] = umgebungen?.DeepClone() ?? new JsonObject();
         var records = root["records"]!.AsArray();
+        StabileIds(root);
 
         // (Store, Methode, isRead) → Board-Fn-Id — damit Projektion/Reader-Handles die aufgerufene Store-Fn
         // referenzieren (die Kante Projektion/Reader → Store, die sonst nur als Rumpf-Text existiert).
@@ -346,9 +347,9 @@ public static class ModellMapper
         {
             var s = dom.Stores[i];
             var wf = s.Fns.Where(f => !f.IsRead).ToList();
-            for (var fi = 0; fi < wf.Count; fi++) fnId[(s.Name, wf[fi].Name, false)] = "wf_" + i + "_" + fi;
+            for (var fi = 0; fi < wf.Count; fi++) fnId[(s.Name, wf[fi].Name, false)] = FnId(s.Name, wf[fi].Name, false);
             var rf = s.Fns.Where(f => f.IsRead).ToList();
-            for (var fi = 0; fi < rf.Count; fi++) fnId[(s.Name, rf[fi].Name, true)] = "rf_" + i + "_" + fi;
+            for (var fi = 0; fi < rf.Count; fi++) fnId[(s.Name, rf[fi].Name, true)] = FnId(s.Name, rf[fi].Name, true);
         }
         // Handle → Fn = die Fähigkeits-Parameter der Signatur (die Seite kommt aus dem Marker der Fähigkeit).
         string[] StoreFns(Dictionary<string, List<(string Store, string Method, bool IsRead)>> calls, string key) =>
@@ -388,7 +389,7 @@ public static class ModellMapper
         // ReadModels — Dokument-Felder + der Store, der sie liest/schreibt.
         var readModels = dom.ReadModels.Select((rm, i) => new
         {
-            _id = "rm" + (i + 1), name = rm.Name, @namespace = rm.Meta.Namespace, store = rm.Store, storeKandidaten = rm.StoreKandidaten,
+            _id = "readmodel:" + rm.Name, name = rm.Name, @namespace = rm.Meta.Namespace, store = rm.Store, storeKandidaten = rm.StoreKandidaten,
             felder = rm.Fields.Select(FeldJson).ToArray(),
             typart = rm.Meta.Typart, doku = rm.Meta.Doku, datei = Relativ(dom.Wurzel, rm.Meta.Datei),
             zusatz = rm.Meta.Zusatz, usings = rm.Meta.Usings.Count > 0 ? rm.Meta.Usings : null, basen = rm.Meta.Basen, attribute = rm.Meta.Attribute,
@@ -401,7 +402,7 @@ public static class ModellMapper
         var projektionen = dom.Projections.Where(p => !p.IstReaktion).OrderBy(p => p.Name, StringComparer.Ordinal)
             .Select((p, i) => new
             {
-                _id = "pj" + (i + 1), name = p.Name, @namespace = p.Namespace, subscriberId = p.SubscriberId, pull = p.Pull, append = p.Append ? true : (bool?)null,
+                _id = Abstractions.WirkerId.FuerProjektion(p.Name), name = p.Name, @namespace = p.Namespace, subscriberId = p.SubscriberId, pull = p.Pull, append = p.Append ? true : (bool?)null,
                 code = KlassenCode(konsumentVon.GetValueOrDefault(p.Name)),
                 handles = p.ConsumesFull.Select(full => KurzEvt(dom, full)).Select(ev => new
                 {
@@ -419,7 +420,7 @@ public static class ModellMapper
         var reaktionen = dom.Projections.Where(p => p.IstReaktion).OrderBy(p => p.Name, StringComparer.Ordinal)
             .Select((p, i) => new
             {
-                _id = "rk" + (i + 1), name = p.Name, @namespace = p.Namespace, subscriberId = p.SubscriberId, pull = p.Pull,
+                _id = Abstractions.WirkerId.FuerReaktion(p.Name), name = p.Name, @namespace = p.Namespace, subscriberId = p.SubscriberId, pull = p.Pull,
                 append = p.Append ? true : (bool?)null,
                 code = KlassenCode(konsumentVon.GetValueOrDefault(p.Name)),
                 handles = p.ConsumesFull.Select(full => KurzEvt(dom, full)).Select(ev => new
@@ -439,7 +440,7 @@ public static class ModellMapper
         var reader = dom.Readers.OrderBy(r => r.Name, StringComparer.Ordinal)
             .Select((r, i) => new
             {
-                _id = "rd" + (i + 1), name = r.Name, @namespace = r.Namespace, trackDeps = r.TrackDeps,
+                _id = "reader:" + r.Name, name = r.Name, @namespace = r.Namespace, trackDeps = r.TrackDeps,
                 projektion = r.ProjectionName,
                 code = KlassenCode(leserVon.GetValueOrDefault(r.Name)),
                 handles = r.QueryNames.Select(q => new
@@ -468,18 +469,18 @@ public static class ModellMapper
         }
         var stores = dom.Stores.Select((s, i) => new
         {
-            _id = "st" + (i + 1), name = s.Name, @namespace = s.Namespace,
+            _id = "store:" + s.Name, name = s.Name, @namespace = s.Namespace,
             datei = storeVon.GetValueOrDefault(s.Name)?.Datei, doku = s.Doku, istBuendel = s.IstBuendel ? (bool?)null : false,
             impl = storeVon.GetValueOrDefault(s.Name)?.Impl,
             writeFns = s.Fns.Where(f => !f.IsRead).Select((f, fi) => new
             {
-                _id = "wf_" + i + "_" + fi, name = f.Name, faehigkeit = f.Faehigkeit,
+                _id = FnId(s.Name, f.Name, false), name = f.Name, faehigkeit = f.Faehigkeit,
                 @params = f.Params.Select(p => new { name = p.Name, typ = p.Type }).ToArray(),
                 rumpf = f.Body, sig = FnSig(s.Name, f.Name),
             }).ToArray(),
             readFns = s.Fns.Where(f => f.IsRead).Select((f, fi) => new
             {
-                _id = "rf_" + i + "_" + fi, name = f.Name, faehigkeit = f.Faehigkeit,
+                _id = FnId(s.Name, f.Name, true), name = f.Name, faehigkeit = f.Faehigkeit,
                 @params = f.Params.Select(p => new { name = p.Name, typ = p.Type }).ToArray(),
                 rueckgabe = f.Return,
                 rumpf = f.Body, sig = FnSig(s.Name, f.Name),
@@ -534,6 +535,38 @@ public static class ModellMapper
     private static object FeldJson(FieldInfo f) => new { name = f.Name, typ = f.Type, standard = f.Default, zugriff = f.Zugriff, pflicht = f.Pflicht ? true : (bool?)null, elementTyp = f.ElementTyp, geerbt = f.Geerbt ? true : (bool?)null };
 
     private static JsonNode Knoten(object o) => JsonSerializer.SerializeToNode(o, BoardOpts)!;
+
+    /// <summary>
+    /// Stabile Karten-Ids (Werkbank P4.8): natürliche Schlüssel statt Positionen oder Zähler — und für jeden Baustein, der in den Log schreibt,
+    /// genau seine Wirker-Id (<see cref="Abstractions.WirkerId"/>). So findet ein Befund, ein Boot-Fehler oder ein Spur-Eintrag seine Karte über
+    /// die Id. Reine Board-Sicht: <c>_</c>-Felder zählen nicht zum Herkunfts-Hash des Editors und werden beim Zurücklesen ignoriert.
+    /// </summary>
+    private static void StabileIds(JsonObject root)
+    {
+        IEnumerable<JsonObject> Alle(JsonNode? n) => (n as JsonArray ?? new JsonArray()).OfType<JsonObject>();
+        string S(JsonObject o, string k) => (string?)o[k] ?? "";
+        foreach (var d in Alle(root["decider"])) d["_id"] = Abstractions.WirkerId.FuerDecide(S(d, "aggregat"), S(d, "command"));
+        foreach (var a in Alle(root["applier"])) a["_id"] = "apply:" + S(a, "aggregat") + "/" + S(a, "event");
+        foreach (var f in Alle(root["funktionen"])) f["_id"] = Abstractions.WirkerId.FuerFunktion(S(f, "name"));
+        foreach (var a in Alle(root["akteure"])) a["_id"] = Abstractions.WirkerId.FuerAkteur(S(a, "name"));
+        foreach (var c in Alle(root["clients"])) c["_id"] = "client:" + S(c, "name");
+        foreach (var f in Alle(root["fluesse"]))
+        {
+            f["_id"] = "pipeline:" + S(f, "name");
+            foreach (var k in Alle(f["knoten"])) k["_id"] = Abstractions.WirkerId.FuerFluss(S(f, "name"), S(k, "name"));
+        }
+        // Prozess-Regeln: Name nach E4 aus Auslöser, Und-Events, Sammel-Event und Ziel — dieselbe Regel wie der ProzessRegelnGenerator.
+        foreach (var sg in Alle(root["sagas"]))
+            foreach (var st in Alle(sg["schritte"]))
+            {
+                var wenn = (st["wenn"] as JsonArray ?? new JsonArray()).Select(x => (string?)x ?? "").ToList();
+                var ziel = (string?)st["rufe"] is { Length: > 0 } rufe ? rufe : S(st, "sende");
+                st["_id"] = Abstractions.WirkerId.FuerProzess(S(sg, "name"), Abstractions.WirkerId.Regel(wenn, (string?)st["sammelEvent"], ziel));
+            }
+    }
+
+    /// <summary>Stabile Id einer Store-Funktion (natürlicher Schlüssel statt Position): <c>wf:IStore.Methode</c> bzw. <c>rf:…</c>.</summary>
+    private static string FnId(string store, string methode, bool lesen) => (lesen ? "rf:" : "wf:") + store + "." + methode;
 
     private static Feld MappeFeld(FieldInfo f) =>
         new() { Name = f.Name, Typ = f.Type, Ausdruck = f.Expr, Standard = f.Default, NurGet = f.NurGet, Zugriff = f.Zugriff, Pflicht = f.Pflicht, ElementTyp = f.ElementTyp, Geerbt = f.Geerbt };

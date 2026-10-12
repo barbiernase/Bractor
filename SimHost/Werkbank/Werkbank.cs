@@ -149,7 +149,7 @@ public sealed class Werkbank
             // 1 Bauen: dotnet build des Laufzeit-Hosts — der Codegen-Prepass (Proto, STJ-Kontexte, Python-Basen) läuft im Build mit.
             Beginne("Bauen");
             var bau = await Prozesse.LaufeAsync("dotnet", ["build", "Host.Grpc/Host.Grpc.csproj", "-v", "q", "-nologo", "-clp:NoSummary"], _root, ct: ct);
-            var diagnosen = Diagnosen.Lies(bau.Zeilen, _root);
+            var diagnosen = Karten.Zuordnen(Diagnosen.Lies(bau.Zeilen, _root), _root);
             Schritt(schritte, new Schritt("Bauen", bau.Ok, (long)bau.Dauer.TotalMilliseconds,
                 bau.Ok ? ["0 Fehler"] : diagnosen.Count > 0 ? diagnosen.Select(x => $"{x.Datei}:{x.Zeile} {x.Code} {x.Text}").Take(20).ToList() : bau.Zeilen.TakeLast(15).ToList()));
             if (!bau.Ok) return Ende(false, diagnosen);

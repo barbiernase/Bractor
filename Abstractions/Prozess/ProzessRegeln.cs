@@ -197,6 +197,42 @@ public sealed class ProzessRegeln
             .ToList();
     }
 
+    /// <summary>
+    /// Benennt die Regeln für die Spur (Wirker-Id, <see cref="WirkerId"/>) — vom <c>ProzessRegelnGenerator</c> aus dem Quelltext
+    /// erzeugt, nie handgeschrieben: bei einem Fluss die Knoten-Namen (Variablen im <c>Definiere</c>-Lambda, je Knoten-Index), bei einem
+    /// Prozess die Regel-Namen nach E4 (je Regel-Index). Passt die Zahl nicht, stimmen Quelltext und Laufzeit nicht überein — Boot-Fehler.
+    /// </summary>
+    public ProzessRegeln Benannt(string prozess, params string[] namen)
+    {
+        if (string.IsNullOrEmpty(prozess)) throw new ArgumentException("Der Prozess-Name fehlt.", nameof(prozess));
+        if (namen is null) throw new ArgumentNullException(nameof(namen));
+        var soll = IstFluss ? (Regeln.Select(r => r.Knoten ?? -1).Append(QuellKnoten ?? -1).Max() + 1) : Regeln.Count;
+        if (IstFluss ? namen.Length < soll : namen.Length != soll)
+            throw new InvalidOperationException(
+                $"'{prozess}': {namen.Length} Namen aus dem Quelltext, aber {soll} {(IstFluss ? "Knoten" : "Regeln")} zur Laufzeit — der Generator hat eine Anweisung nicht als {(IstFluss ? "Knoten" : "Regel")} erkannt.");
+        Name = prozess;
+        if (IstFluss) KnotenNamen = namen;
+        RegelNamen = IstFluss ? Regeln.Select(r => r.Knoten is { } k ? namen[k] : "?").ToArray() : namen;
+        return this;
+    }
+
+    /// <summary>Der Prozess- bzw. Pipeline-Name (Registry-Schlüssel), gesetzt von <see cref="Benannt"/>.</summary>
+    public string? Name { get; private set; }
+
+    /// <summary>Fluss: der Name je Knoten-Index (Variable im Lambda); sonst leer.</summary>
+    public IReadOnlyList<string> KnotenNamen { get; private set; } = Array.Empty<string>();
+
+    /// <summary>Je Regel-Index ihr Name: bei einem Fluss der Name ihres Knotens, bei einem Prozess der Regel-Name (E4).</summary>
+    public IReadOnlyList<string> RegelNamen { get; private set; } = Array.Empty<string>();
+
+    /// <summary>Die Wirker-Id der Regel <paramref name="regel"/> (<c>fluss:P#knoten</c> bzw. <c>prozess:P#A→C</c>); ohne Namen der Index.</summary>
+    public string Wirker(int regel)
+    {
+        var name = Name ?? "?";
+        var r = regel >= 0 && regel < RegelNamen.Count ? RegelNamen[regel] : "#" + regel;
+        return IstFluss ? WirkerId.FuerFluss(name, r) : WirkerId.FuerProzess(name, r);
+    }
+
     /// <summary>Herkunft (Knoten-Index) des Auslöser-Tokens — gesetzt genau für Pipeline-Flüsse.</summary>
     public int? QuellKnoten { get; }
 

@@ -69,9 +69,9 @@
     m.funktionen.forEach(f=>mig(f,(f.implementierung||f.name||"Funktion")+".RufeAsync"));
     // Client-Implementierung (Python): je Zusage/Kenntnis ihr Rumpf → eigener Code-Knoten (das Verhalten des Akteurs draußen).
     (m.clients||[]).forEach(c=>(c.implementierungen||[]).forEach(im=>(im.rumpfe||[]).forEach(r=>{if(r.rumpf!=null)mig(r,im.klasse+"."+r.methode);})));
-    m.aggregate.forEach(a=>{if((a.state||[]).length&&!m.states.some(s=>s.aggregat===a.name))m.states.push({_id:"s"+(NID++),aggregat:a.name});});
+    m.aggregate.forEach(a=>{if((a.state||[]).length&&!m.states.some(s=>s.aggregat===a.name))m.states.push({_id:"state:"+a.name,aggregat:a.name});});
     // Round-trip: geladene Saga.Schritte → Transition-Knoten (prozess = Saga-Name), Schritte werden vor Serveraufruf neu erzeugt.
-    m.sagas.forEach(s=>{(s.schritte||[]).forEach(st=>m.transitions.push({_id:"t"+(NID++),prozess:s.name,wenn:(st.wenn||[]).slice(),
+    m.sagas.forEach(s=>{(s.schritte||[]).forEach(st=>m.transitions.push({_id:st._id||"t"+(NID++),prozess:s.name,wenn:(st.wenn||[]).slice(),
         ...(st.sammelEvent?{sammelEvent:st.sammelEvent,sammelAusdruck:st.sammelAusdruck,sammelAnzahl:st.sammelAnzahl}:{}),
         dann:[{sende:st.sende||"",sendeJe:!!st.sendeJe,sendeJeCollection:st.sendeJeCollection||"",kompensation:st.kompensation||"",
           sendeAusdruck:st.sendeAusdruck,kompensationAusdruck:st.kompensationAusdruck,kompensationJe:!!st.kompensationJe,
@@ -4723,19 +4723,17 @@
     catch(e){deFlash("⚠ nicht geschrieben: "+e.message,false);}}
 
   // ── Befunde an der Karte: Compiler/Analyzer (Typ + Member aus dem Syntaxbaum) und Boot-Fehler (Karte im Wirker-Format) ──
+  // Die Karte zu einer stabilen Id (Werkbank P4.8): Wirker-Ids und natürliche Schlüssel liefert der Server als _id (decide:A/C, fluss:P#k,
+  //   prozess:P#A→C, funktion:F, projektion:P …); Karten mit Namens-Id (rec:/agg:/enum:/saga:/host:) sind schon die Karten-Id.
+  //   Eine Quelle ist ihr Nachrichten-Record, eine Pipeline ihr erster Knoten.
+  function karteVonId(id){if(!id)return null;if(NODEBY.has(id))return id;
+    if(id.startsWith("quelle:"))return recByName(id.slice(7))?"rec:"+id.slice(7):null;
+    if(id.startsWith("pipeline:")){const f=MODEL.fluesse.find(x=>x._id===id),k=f&&(f.knoten||[])[0];return k?"fs:"+k._id:null;}
+    const n=graphNodes().find(x=>x.ref&&x.ref._id===id&&x.kind!=="host");return n?n.id:null;}
   function wbZiel(d){
-    if(d.karte){const i=d.karte.indexOf(":"),art=d.karte.slice(0,i),name=d.karte.slice(i+1);
-      if(art==="host")return "host:"+name;
-      if(art==="funktion"){const f=MODEL.funktionen.find(x=>x.name===name);return f?"fk:"+f._id:null;}
-      if(art==="quelle")return recByName(name)?"rec:"+name:null;
-      return null;}
-    const t=d.typ;if(!t)return null;const m=d.member||"",arg=((m.match(/\(([^)]*)\)/)||[])[1]||"").split(",")[0].trim().split(".").pop();
-    if(MODEL.aggregate.some(a=>a.name===t)){
-      if(m.startsWith("Decide(")){const x=MODEL.decider.find(z=>z.aggregat===t&&z.command===arg);if(x)return "dec:"+x._id;}
-      if(m.startsWith("Apply(")){const x=MODEL.applier.find(z=>z.aggregat===t&&z.event===arg);if(x)return "app:"+x._id;}
-      return "agg:"+t;}
-    const f=MODEL.funktionen.find(x=>x.name===t||x.implementierung===t);if(f)return "fk:"+f._id;
-    if(recByName(t))return "rec:"+t;
+    if(d.karte)return d.karte.startsWith("host:")?d.karte:karteVonId(d.karte);
+    // Typ, den das Board beim Bauen noch nicht kannte (neu angelegt): über den Namen.
+    const t=d.typ;if(!t)return null;if(recByName(t))return "rec:"+t;
     const n=graphNodes().find(x=>x.kind!=="host"&&(x.name===t||(x.ref&&x.ref.name===t)));return n?n.id:null;}
   let DIAGC=null;
   function wbDiagListe(){if(DIAGC&&DIAGC.m===MODEL&&DIAGC.v===WB.ver)return DIAGC.l;

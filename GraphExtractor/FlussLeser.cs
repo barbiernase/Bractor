@@ -73,7 +73,7 @@ public sealed partial class DomainExtractor
                 _ => "p",
             };
             var anweisungen = lambda.Body is BlockSyntax block ? block.Statements.ToList() : new List<StatementSyntax>();
-            var namen = new HashSet<string>(StringComparer.Ordinal);
+            var variablen = new List<string?>();
             foreach (var st in anweisungen)
             {
                 string? name = null;
@@ -84,17 +84,13 @@ public sealed partial class DomainExtractor
 
                 var knoten = ausdruck == null ? null : LiesKnoten(ausdruck, model);
                 if (knoten == null) { fluss.Unbekannt.Add(st.ToString()); continue; }
-                if (name == null)
-                {
-                    knoten.OhneVariable = true;
-                    var basis = Klein(Einfach(knoten.TypFull));
-                    name = basis;
-                    for (var i = 2; namen.Contains(name); i++) name = basis + i;
-                }
-                knoten.Name = name;
-                namen.Add(name);
+                knoten.OhneVariable = name == null;
+                variablen.Add(name);
                 fluss.Knoten.Add(knoten);
             }
+            // Knoten ohne Variable: Name nach der Regel der Wirker-Id (eine Quelle mit dem ProzessRegelnGenerator).
+            var namen = Abstractions.WirkerId.KnotenNamen(variablen, fluss.Knoten.Select(k => Einfach(k.TypFull)).ToList());
+            for (var i = 0; i < namen.Count; i++) fluss.Knoten[i].Name = namen[i];
             break;
         }
         return fluss;
@@ -201,5 +197,4 @@ public sealed partial class DomainExtractor
     private static FlussEingangRaw Ein((string, string?, string) d) => new() { Draehte = { d } };
     private static string? Text(ExpressionSyntax? e) => e == null ? null : Dedent(e.ToString().Replace("\r\n", "\n"));
     private static string Einfach(string full) => full.Contains('.') ? full[(full.LastIndexOf('.') + 1)..] : full;
-    private static string Klein(string s) => s.Length == 0 ? s : char.ToLowerInvariant(s[0]) + s[1..];
 }

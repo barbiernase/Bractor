@@ -5,13 +5,15 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 
 namespace SimHost.Werkbank;
 
-/// <summary>Ein Compiler-/Analyzer-Befund, zugeordnet zum Code-Fakt (Typ + Member), an dem der Editor ihn zeigt.</summary>
-public sealed record Diagnose(string Datei, int Zeile, int Spalte, string Code, string Text, string Schwere, string? Typ, string? Member);
+/// <summary>
+/// Ein Compiler-/Analyzer-Befund, zugeordnet zum Code-Fakt (Typ + Member) und darüber zur Karte (<see cref="Karte"/>: stabile Karten-Id,
+/// <see cref="Karten"/>), an der der Editor ihn zeigt.
+/// </summary>
+public sealed record Diagnose(string Datei, int Zeile, int Spalte, string Code, string Text, string Schwere, string? Typ, string? Member, string? Karte = null);
 
 /// <summary>
 /// Liest die MSBuild-Befunde (<c>datei(zeile,spalte): error CODE: text [projekt]</c>) und ordnet jeden dem umschließenden Typ und Member
-/// zu — über den Syntaxbaum der Datei (Code-Fakt), nie über Namen. Der Editor findet daran die Karte (P3: über Typnamen; ab P7 über
-/// stabile Karten-Ids).
+/// zu — über den Syntaxbaum der Datei (Code-Fakt), nie über Namen. Die Karte dazu bestimmt <see cref="Karten"/> (stabile Karten-Ids).
 /// </summary>
 public static partial class Diagnosen
 {

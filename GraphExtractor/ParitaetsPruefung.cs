@@ -34,8 +34,48 @@ public static class ParitaetsPruefung
         Inventar(ist, lage, boardJson, befunde);
         BoardModell(ist, boardJson, befunde);
         GrammatikUndModule(solution, ist, boardJson, ingress, befunde);
+        Wirker(ist, boardJson, befunde);
         await Fixpunkt(solution, lage, ist, befunde);
         return befunde;
+    }
+
+    // ══ Wirker-Ids (Werkbank P4.8) ═══════════════════════════════════════════════════════════════
+
+    /// <summary>
+    /// Jede Wirker-Id, die die Laufzeit für Flüsse und Prozesse stempelt, hat eine Karte — und umgekehrt. Die Laufzeit-Namen stehen in der
+    /// generierten Registry (<c>GeneratedProzessRegeln</c>: <c>….Benannt("P", "knoten", …)</c>, vom ProzessRegelnGenerator aus dem Quelltext);
+    /// die Karten-Ids liefert der Extractor (<c>_id</c> der Fluss-Knoten und Prozess-Regeln). Beide rechnen über <c>Abstractions.WirkerId</c>.
+    /// Die übrigen Arten (decide, funktion, quelle, projektion, reaktion, akteur) sind einfache Typnamen und brauchen keine Tabelle.
+    /// </summary>
+    private static void Wirker(Analyse ist, string boardJson, List<ParitaetsBefund> befunde)
+    {
+        var laufzeit = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var comp in ist.Compilations)
+            foreach (var baum in comp.SyntaxTrees.Where(t => t.FilePath.EndsWith("GeneratedProzessRegeln.g.cs", StringComparison.Ordinal)))
+                foreach (var inv in baum.GetRoot().DescendantNodes().OfType<InvocationExpressionSyntax>())
+                {
+                    if (inv.Expression is not MemberAccessExpressionSyntax { Name.Identifier.Text: "Benannt" } ma) continue;
+                    var args = inv.ArgumentList.Arguments.Select(a => (a.Expression as LiteralExpressionSyntax)?.Token.ValueText ?? "").ToList();
+                    if (args.Count == 0) continue;
+                    var fluss = ma.Expression.ToString().EndsWith(".Fluss.Regeln", StringComparison.Ordinal);
+                    foreach (var n in args.Skip(1))
+                        laufzeit.Add(fluss ? Abstractions.WirkerId.FuerFluss(args[0], n) : Abstractions.WirkerId.FuerProzess(args[0], n));
+                }
+        if (laufzeit.Count == 0)
+        {
+            befunde.Add(new("Wirker", "warning", "Keine generierte Prozess-Registry gefunden — Wirker-Ids der Flüsse/Prozesse ungeprüft."));
+            return;
+        }
+        var board = JsonNode.Parse(boardJson)!.AsObject();
+        IEnumerable<JsonObject> Alle(JsonNode? n) => (n as JsonArray ?? new JsonArray()).OfType<JsonObject>();
+        var karten = Alle(board["fluesse"]).SelectMany(f => Alle(f["knoten"]))
+            .Concat(Alle(board["sagas"]).SelectMany(sg => Alle(sg["schritte"])))
+            .Select(o => (string?)o["_id"]).OfType<string>().ToHashSet(StringComparer.Ordinal);
+        foreach (var x in laufzeit.Except(karten).OrderBy(x => x, StringComparer.Ordinal))
+            befunde.Add(new("Wirker", "error", $"Wirker '{x}' stempelt die Laufzeit, aber keine Karte trägt diese Id."));
+        foreach (var x in karten.Except(laufzeit).OrderBy(x => x, StringComparer.Ordinal))
+            befunde.Add(new("Wirker", "error", $"Karte '{x}' hat keinen Wirker zur Laufzeit (Generator kennt den Knoten/die Regel nicht)."));
+        befunde.Add(new("Wirker", "info", $"{laufzeit.Count} Wirker-Ids aus der generierten Registry (Fluss-Knoten, Prozess-Regeln), {karten.Count} Karten."));
     }
 
     // ══ Grammatik + Module ═══════════════════════════════════════════════════════════════════════
