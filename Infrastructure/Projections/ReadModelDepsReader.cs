@@ -25,10 +25,14 @@ public class ReadModelDepsReader : IReadModelDepsReader
     private readonly IConnectionMultiplexer _redis;
     private readonly ILogger<ReadModelDepsReader> _logger;
 
+    private readonly Infrastructure.Persistence.RedisPraefix? _praefix;
+
     public ReadModelDepsReader(
         IConnectionMultiplexer redis,
-        ILogger<ReadModelDepsReader> logger)
+        ILogger<ReadModelDepsReader> logger,
+        Infrastructure.Persistence.RedisPraefix? praefix = null)
     {
+        _praefix = praefix;
         _redis = redis ?? throw new ArgumentNullException(nameof(redis));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -51,7 +55,7 @@ public class ReadModelDepsReader : IReadModelDepsReader
 
         try
         {
-            var db = _redis.GetDatabase();
+            var db = Infrastructure.Persistence.RedisPraefix.Db(_redis, _praefix);
             var batch = db.CreateBatch();
 
             // Pipeline: HGETALL fÃ¼r jede ReadModel-ID

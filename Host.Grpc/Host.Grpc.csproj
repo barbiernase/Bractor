@@ -15,4 +15,8 @@
     <ImplicitUsings>enable</ImplicitUsings>
   </PropertyGroup>
 
+  <ItemGroup>
+    <!-- Die Umgebungen reisen mit dem Host (umgebungen/umgebung.<name>.json neben dem Programm). -->
+    <Content Include="..\umgebungen\*.json" Link="umgebungen\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
 </Project>

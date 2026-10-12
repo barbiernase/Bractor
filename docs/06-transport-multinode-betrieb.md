@@ -7,12 +7,16 @@
 | **Host.Grpc** | der einzige Cluster-tragende Prozess: Marten + Consul + Redis + ActorSystem + gRPC |
 | **Host.Blazor** | reiner gRPC-**Client** (kein ActorSystem, kein Consul); redet über den bidirektionalen Stream mit Host.Grpc; entkoppelbar auf eine andere Maschine (`GrpcServer__Address`) |
 
-### Host.Grpc-Bootstrap (`Host.Grpc/Program.cs`)
-- Kestrel/gRPC: reines HTTP/2 (h2c) auf `Grpc:Port` (Default 5001), `ListenAnyIP` (damit
-  Container/andere Hosts erreichen).
-- `AddCqrsFramework(opts => …)` orchestriert 9 Schritte (`CqrsServiceExtension.cs`): Marten +
-  Redis → Domain-Stores → Aggregate → Deps-Naht → PubSub → ActorSystem → QueryService → gRPC →
-  Hosted Services. Alle Werte aus `IConfiguration` (appsettings + `__`-Env-Override).
+### Host.Grpc-Bootstrap (`Host.Grpc/Program.cs`, seit Werkbank-P2)
+- Der Host lädt eine **Umgebung**: `Host.Grpc --umgebung <name>` (bzw. `CQRS_UMGEBUNG`) → `umgebungen/umgebung.<name>.json`
+  (mit dem Host veröffentlicht). Umgebungsvariablen und Argumente überschreiben (`Quellen__DateiErkannt__Pfad=…`), `${env:NAME}` und
+  `${branch}` werden ersetzt; unbekannte Abschnitte/Felder sind Start-Fehler (Bindung per Source-Generator).
+- `builder.AddCqrs(args)` (`Infrastructure/Umgebung/CqrsUmgebungExtensions.cs`) verdrahtet alles: Kestrel (gRPC-Port HTTP/2,
+  Einblick-Port HTTP/1.1+2 für `/health`, Webhook, Werkbank), Siegel, `AddCqrsFramework`, Pull-Pfade, Prozesse/Flüsse, Monitoring,
+  Deadlines, Akteure (`Identitaeten`), Quellen, Funktions-Laufort (`Funktionen`). `app.LaufeAsync(umgebung)` startet (oder migriert).
+- **Umgebungs-Siegel** (`<schema>.umgebung`): ein Host startet nur gegen eine DB mit passendem Namen/Art/Cluster; eine Sim-DB legt
+  der Host bei Bedarf an. **Uhr** (`<schema>.uhr`): Versatz nur in Sim wirksam. Redis-Schlüssel tragen das Präfix der Umgebung.
+- `Cluster:Art = Einzelknoten` (in-memory Mitgliedschaft) oder `Consul`.
 - Konsumenten-Registrierung nach dem Kern: `AddGeneratedPullPaths()`, `AddGeneratedProzesse()`,
   Pipeline-Services, `AddBackendMonitoring()`, `AddDeadlines(...)`.
 - Exponierte Dienste: gRPC `CqrsClientService` (bidirektionaler Stream `Connect`), Webhook
@@ -116,19 +120,22 @@ Docker nur für Infra** (bewusst, wegen GPU-/OpenCV-Zugriff).
 > Der frühere `CqrsFrameworkOptions`-`[Obsolete]`-Typ ist tot; der aktive Pfad ist
 > ausschließlich `CqrsFrameworkBuilder`.
 
-### Env-Variablen (`__`-Notation)
-| Env | Beispiel | Zweck |
+### Umgebungs-Abschnitte (`umgebungen/umgebung.<name>.json`)
+| Abschnitt | Beispiel | Zweck |
 |---|---|---|
-| `Grpc__Port` | 5001 | gRPC/h2c-Port |
-| `ConnectionStrings__EventStore` | `Host=postgres;…` | Marten/Postgres |
-| `EventStore__Schema` | es | Postgres-Schema |
-| `Redis__Endpoint` / `Redis__Database` | redis:6379 / 1 | Version-Index |
-| `Consul__Address` | consul:8500 | Cluster-Discovery |
-| `Cluster__Name` | cqrs-cluster | Cluster-Identität (Join-Schlüssel) |
-| `Cluster__AdvertisedHost` | grpc1 | **cross-node erreichbare Adresse** |
-| `Cluster__Role` | migrator/member | Cold-Start-Schema-Rolle |
-| `Pipeline__WatchPath` / `__PreprocessedPath` | /data/input | FileWatcher / Bildpfade |
-| `Blazor__Urls` / `GrpcServer__Address` | http://0.0.0.0:5010 / http://localhost:5001 | nur Blazor-Host |
+| `Umgebung` | `{ "Name": "prod", "Art": "Prod" }` | Name + Art (Sim/Prod) — beides im Siegel |
+| `EventStore` | `Verbindung`, `Datenbank` (`cqrs_sim_${branch}`), `Schema` | Marten/Postgres |
+| `VersionIndex` | `Betrieb` (Aus/Verwaltet/Vorhanden), `Endpunkt`, `Praefix` | Redis |
+| `Cluster` | `Art` (Einzelknoten/Consul), `Name`, `Consul`, `AdvertisedHost`, `Rolle` (Allein/Migrator/Mitglied) | Proto.Actor |
+| `Schreibpfad` | `GroupCommit`, `BatchGroesse`, `Drain`, `SnapshotSchwelle`, … | Tuning |
+| `Transport` | `GrpcPort`, `EinblickPort` | Ports |
+| `Identitaeten` | `Tokens`, `Standard`, `VertragStreng` | Akteur-Tor |
+| `Quellen` | `DateiErkannt: { Pfad, Muster, Fertig, Kennung, Laufmodus }` | Treiber-Konfig |
+| `Funktionen` | `IBildVerkleinerung: { Laufort, Implementierung, Slots, Wiederholungen }` | Laufort je Funktion |
+| `Konfig` | `PreprocessingConfig: { OutputPath }` | Konfig-Records der Domäne |
+
+Jeder Wert lässt sich per `__`-Variable überschreiben (z. B. `Cluster__AdvertisedHost=grpc1`, `Cluster__Rolle=Migrator`).
+Host.Blazor liest weiter `Blazor__Urls` / `GrpcServer__Address`.
 
 **Ports**: 5001 (gRPC/h2c), 5010 (Blazor UI), 5432 (Postgres), 6379 (Redis), 8500 (Consul).
 
@@ -136,8 +143,7 @@ Docker nur für Infra** (bewusst, wegen GPU-/OpenCV-Zugriff).
 - Infra: `docker compose -f deploy-linux/docker-compose.infrastructure.yml up -d`
 - Single-Node nativ: `./start-server.sh {start|stop|status}` bzw. systemd
 - Build-Pakete: `./build.sh linux|windows`
-- Multi-Node: `docker compose -f deploy-multinode/docker-compose.yml up -d --build`;
-  Verify: `… --profile verify run --rm loadharness`; Teardown `down -v`
+- Multi-Node: `docker compose -f deploy-multinode/docker-compose.yml up -d --build` (Umgebung `multinode`); Teardown `down -v`
 
 ## 6.6 Monitoring
 

@@ -1,0 +1,31 @@
+{
+  "Umgebung": { "Name": "prod", "Art": "Prod" },
+  "EventStore": {
+    "Betrieb": "Vorhanden",
+    "Verbindung": "Host=localhost;Port=5432;Username=postgres;Password=postgres",
+    "Datenbank": "cqrs_events",
+    "Schema": "es"
+  },
+  "VersionIndex": { "Betrieb": "Vorhanden", "Endpunkt": "localhost:6379", "Datenbank": 1, "Praefix": "prod:" },
+  "Cluster": { "Art": "Consul", "Name": "cqrs", "Consul": "localhost:8500", "AdvertisedHost": "localhost" },
+  "Transport": { "GrpcPort": 5001, "EinblickPort": 5002 },
+  "Quellen": {
+    "DateiErkannt": {
+      "Pfad": "/mnt/unlabeledgewebebilder/SNP/IO",
+      "Intervall": "00:00:01",
+      "Fertig": { "Art": "Stabil", "Fenster": "00:00:01" },
+      "Kennung": "NameGroesse",
+      "Laufmodus": "EinmalImCluster"
+    }
+  },
+  "Funktionen": {
+    "IBildVerkleinerung": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 },
+    "IHistogrammAusgleich": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 },
+    "IDateinameDeutung": { "Laufort": "Host", "Slots": 8 },
+    "IRangeSuche": { "Laufort": "Host", "Slots": 2 },
+    "IMitgliederEinfrieren": { "Laufort": "Host", "Slots": 2 }
+  },
+  "Konfig": {
+    "PreprocessingConfig": { "OutputPath": "/home/wirksam/cqrs-data/preprocessed" }
+  }
+}

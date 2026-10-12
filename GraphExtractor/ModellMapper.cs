@@ -320,7 +320,7 @@ public static class ModellMapper
     public static List<IngressBindung> Ingress(CompositionRoot cr) =>
         cr.Triggers.Select(tb => new IngressBindung { Trigger = tb.MsgName, Modus = tb.Modus, Ort = tb.Route ?? tb.Interval ?? tb.Path }).ToList();
 
-    public static string ZuBoardJson(KnowledgeGraph graph, DomainModel dom, CompositionRoot cr, JsonObject? quellenKonfig = null)
+    public static string ZuBoardJson(KnowledgeGraph graph, DomainModel dom, CompositionRoot cr, JsonObject? umgebungen = null)
     {
         var modell = ZuEditorModell(graph, dom);
         var root = JsonNode.Parse(modell.AlsJson())!.AsObject();
@@ -332,11 +332,11 @@ public static class ModellMapper
         root["rahmen"]!.AsObject()["grammatik"] = JsonSerializer.SerializeToNode(Grammatik.AlsJson(), EditorModell.JsonOptionen);
         // Von welchem Akteur kommt was (direkt / über die Kette) — der Editor rechnet live nach, Parität über deAkteurParitaet().
         root["rahmen"]!.AsObject()["akteurMengen"] = JsonSerializer.SerializeToNode(AkteurAnteile.Aus(modell).AlsJson(), EditorModell.JsonOptionen);
-        // Quellen (docs/konzept-werkbank.md §3): die fest codierten Treiber (Basis + Felder, zum Anlegen neuer Quellen-Typen) und die
-        //   Konfig-Werte je Host (Abschnitt Quellen:<Typ>) — der Editor zeigt sie an der Quellkarte, er rechnet nichts davon nach.
+        // Quellen (docs/konzept-werkbank.md §3): die fest codierten Treiber (Basis + Felder, zum Anlegen neuer Quellen-Typen); dazu die
+        //   Umgebungen (§4) roh — die Quellkarte zeigt die Werte je Umgebung, der Editor rechnet nichts davon nach.
         root["rahmen"]!.AsObject()["treiber"] = Knoten(dom.Treiber.ToDictionary(kv => kv.Key,
             kv => new { basis = kv.Value.Basis, felder = kv.Value.Felder.Select(FeldJson).ToArray() }));
-        root["rahmen"]!.AsObject()["quellenKonfig"] = quellenKonfig?.DeepClone() ?? new JsonObject();
+        root["rahmen"]!.AsObject()["umgebungen"] = umgebungen?.DeepClone() ?? new JsonObject();
         var records = root["records"]!.AsArray();
 
         // (Store, Methode, isRead) → Board-Fn-Id — damit Projektion/Reader-Handles die aufgerufene Store-Fn

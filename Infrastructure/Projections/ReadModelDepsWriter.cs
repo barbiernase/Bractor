@@ -42,11 +42,15 @@ public class ReadModelDepsWriter : IReadModelDepsSink
     // Redis Key-Prefix für ReadModel-Deps
     internal const string ReadModelKeyPrefix = "rm:";
 
+    private readonly Infrastructure.Persistence.RedisPraefix? _praefix;
+
     public ReadModelDepsWriter(
         IConnectionMultiplexer redis,
         IVersionTracker versionTracker,
-        ILogger<ReadModelDepsWriter> logger)
+        ILogger<ReadModelDepsWriter> logger,
+        Infrastructure.Persistence.RedisPraefix? praefix = null)
     {
+        _praefix = praefix;
         _redis = redis ?? throw new ArgumentNullException(nameof(redis));
         _versionTracker = versionTracker ?? throw new ArgumentNullException(nameof(versionTracker));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
@@ -176,7 +180,7 @@ public class ReadModelDepsWriter : IReadModelDepsSink
         string subscriberId,
         List<ResolvedWriteResult> results)
     {
-        var db = _redis.GetDatabase();
+        var db = Infrastructure.Persistence.RedisPraefix.Db(_redis, _praefix);
         var batch = db.CreateBatch();
         var tasks = new List<Task>();
 

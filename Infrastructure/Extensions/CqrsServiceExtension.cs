@@ -426,10 +426,16 @@ public static class CqrsServiceExtensions
                         ? builder.ConsulAddress 
                         : $"http://{builder.ConsulAddress}"));
             
+            // Einzelknoten (Umgebung Cluster:Art = Einzelknoten): ohne Consul, Mitgliedschaft in-memory — eine Sim läuft so ohne
+            //   weitere Infrastruktur und kann nie einem fremden Cluster beitreten.
+            IClusterProvider clusterProvider = builder.Einzelknoten
+                ? new Proto.Cluster.Testing.TestProvider(new Proto.Cluster.Testing.TestProviderOptions(), new Proto.Cluster.Testing.InMemAgent())
+                : consulProvider;
+
             var clusterConfig = ClusterConfig
                 .Setup(
                     clusterName: builder.ClusterName,
-                    clusterProvider: consulProvider,
+                    clusterProvider: clusterProvider,
                     identityLookup: new PartitionIdentityLookup())
                 .WithBrokerKinds(loggerFactory);
         
@@ -535,6 +541,9 @@ public class CqrsFrameworkBuilder
     internal IServiceCollection Services { get; }
     
     public string ClusterName { get; set; } = "cqrs-cluster";
+
+    /// <summary>Einzelner Knoten ohne Consul (in-memory Mitgliedschaft). Default false = Consul.</summary>
+    public bool Einzelknoten { get; set; }
     public string ConsulAddress { get; set; } = "localhost:8500";
     
     /// <summary>

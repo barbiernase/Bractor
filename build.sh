@@ -133,51 +133,33 @@ echo "  ✓ Host.Blazor"
 
 echo "▶ Schreibe appsettings..."
 
-cat > "$OUTPUT/grpc/appsettings.json" << EOF
+mkdir -p "$OUTPUT/grpc/umgebungen"
+cat > "$OUTPUT/grpc/umgebungen/umgebung.linux.json" << EOF
 {
-  "Logging": {
-    "LogLevel": {
-      "Default": "Information",
-      "Microsoft.AspNetCore": "Warning"
-    }
-  },
-  "AllowedHosts": "*",
-  "Grpc": {
-    "Port": ${GRPC_PORT}
-  },
-  "ConnectionStrings": {
-    "EventStore": "${POSTGRES_CONN}"
-  },
+  "Umgebung": { "Name": "linux", "Art": "Prod" },
   "EventStore": {
+    "Betrieb": "Vorhanden",
+    "Verbindung": "Host=${POSTGRES_HOST};Port=${POSTGRES_PORT};Username=${POSTGRES_USER};Password=${POSTGRES_PASSWORD}",
+    "Datenbank": "${POSTGRES_DB}",
     "Schema": "${POSTGRES_SCHEMA}"
   },
-  "Redis": {
-    "Endpoint": "${REDIS_ENDPOINT}",
-    "Database": ${REDIS_DATABASE}
-  },
-  "Consul": {
-    "Address": "${CONSUL_ADDRESS}"
-  },
-  "Cluster": {
-    "Name": "${CLUSTER_NAME}",
-    "AdvertisedHost": "${CLUSTER_ADVERTISED_HOST}"
-  },
-  "Pipeline": {
-    "PreprocessedPath": "${GRPC_PREPROCESSED_PATH}"
-  },
+  "VersionIndex": { "Betrieb": "Vorhanden", "Endpunkt": "${REDIS_ENDPOINT}", "Datenbank": ${REDIS_DATABASE}, "Praefix": "prod:" },
+  "Cluster": { "Art": "Consul", "Name": "${CLUSTER_NAME}", "Consul": "${CONSUL_ADDRESS}", "AdvertisedHost": "${CLUSTER_ADVERTISED_HOST}" },
+  "Transport": { "GrpcPort": ${GRPC_PORT}, "EinblickPort": 0 },
   "Quellen": {
-    "DateiErkannt": {
-      "Pfad": "${GRPC_WATCH_PATH}",
-      "Erkennung": "Abfrage",
-      "Intervall": "00:00:01",
-      "Fertig": { "Art": "Stabil", "Fenster": "00:00:01" },
-      "Kennung": "PfadGroesseZeit",
-      "Laufmodus": "EinmalImCluster"
-    }
-  }
+    "DateiErkannt": { "Pfad": "${GRPC_WATCH_PATH}", "Kennung": "NameGroesse", "Laufmodus": "EinmalImCluster" }
+  },
+  "Funktionen": {
+    "IBildVerkleinerung": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 },
+    "IHistogrammAusgleich": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 },
+    "IDateinameDeutung": { "Laufort": "Host", "Slots": 8 },
+    "IRangeSuche": { "Laufort": "Host", "Slots": 2 },
+    "IMitgliederEinfrieren": { "Laufort": "Host", "Slots": 2 }
+  },
+  "Konfig": { "PreprocessingConfig": { "OutputPath": "${GRPC_PREPROCESSED_PATH}" } }
 }
 EOF
-echo "  ✓ grpc/appsettings.json"
+echo "  ✓ grpc/umgebungen/umgebung.linux.json (Host startet mit --umgebung linux)"
 
 cat > "$OUTPUT/blazor/appsettings.json" << EOF
 {

@@ -428,12 +428,12 @@
     body.append(h("button",{class:"add",onclick:()=>{(r.felder=r.felder||[]).push({_id:"f"+(NID++),name:uniqFeldName(r.felder,"feld"),typ:"string"});render();}},"+ Feld"));
   }
   // Quellen-Typ (docs/konzept-werkbank.md §3): der Treiber ist ein Code-Fakt (Basistyp), die Felder befüllt er (geerbt, nur lesbar),
-  //   die Werte (Pfad, Muster, Fertig-Erkennung …) stehen in der Konfig — hier je Host gezeigt, wie der Server sie gelesen hat.
+  //   die Werte (Pfad, Muster, Fertig-Erkennung …) stehen in der Umgebung — hier je Umgebung gezeigt, wie der Server sie gelesen hat.
   function quellTreiber(body,r){
     body.append(h("div",{class:"gsec",title:"public sealed record "+r.name+" : "+((r.basen||[])[0]||"DateiGemeldet")+";"},"📁 "+r.treiber+"-Treiber"));
-    const werte=Object.entries((MODEL.rahmen||{}).quellenKonfig||{}).filter(([,q])=>q&&q[r.name]);
-    if(!werte.length)body.append(h("div",{class:"llmmeld err",title:"Start-Prüfung: jede Quelle braucht einen Abschnitt"},"⚠ keine Konfig Quellen:"+r.name+" — der Host startet so nicht"));
-    werte.forEach(([host,q])=>{body.append(h("div",{class:"gsec"},"Werte in "+host));
+    const umg=Object.entries((MODEL.rahmen||{}).umgebungen||{}),werte=umg.filter(([,u])=>u&&u.Quellen&&u.Quellen[r.name]).map(([n,u])=>[n,u.Quellen]);
+    umg.filter(([,u])=>!(u&&u.Quellen&&u.Quellen[r.name])).forEach(([n])=>body.append(h("div",{class:"llmmeld err",title:"Start-Prüfung: jede Quelle braucht einen Abschnitt"},"⚠ Umgebung "+n+": kein Abschnitt Quellen:"+r.name+" — der Host startet dort nicht")));
+    werte.forEach(([host,q])=>{body.append(h("div",{class:"gsec"},"Werte in Umgebung "+host));
       const zeile=(k,v)=>body.append(h("div",{class:"frow"},h("span",{class:"slotlbl",style:"min-width:110px"},k),h("span",{style:"flex:1;font-family:ui-monospace,monospace;font-size:11.5px;overflow-wrap:anywhere"},v)));
       const flach=(o,pre)=>Object.entries(o||{}).forEach(([k,v])=>v&&typeof v==="object"&&!Array.isArray(v)?flach(v,pre+k+"."):zeile(pre+k,Array.isArray(v)?v.join(", "):String(v)));
       flach(q[r.name],"");});
@@ -819,7 +819,7 @@
         h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"+ Ergebnis ⊕ (Event) ▶"),op));}
     funktionFaehigkeiten(body,f);
     // Rumpf = RufeAsync der Implementierung: Code-Eingang wie am Decider (📝 Code-Block, 🤖 LLM füllt ihn). Ohne Block läuft die
-    //   Funktion extern (Python-Worker über gRPC) — dann bindet der Host sie mit AddExterneFunktion.
+    //   Funktion extern (Python-Worker über gRPC) — der Laufort steht in der Umgebung (Funktionen:<F>:Laufort = Extern).
     body.append(h("div",{class:"gsec",title:f.implementierung?"public sealed class "+f.implementierung+" : "+f.name:"noch keine C#-Implementierung im Code"},
       "Rumpf · RufeAsync"+(f.implementierung?" · "+f.implementierung:" (neu)")));
     body.append(codePort("fk:impl:"+f._id,{k:"funktion",fk:f._id},f.codeSrc,"RufeAsync"));}
@@ -863,8 +863,10 @@
       if(anb.length)body.append(h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px;cursor:default"},
         ...anb.map(a=>h("button",{class:"akt-dom",onclick:()=>waehle("akt:"+a._id)},(ART_SYM[a.art]||"👤 ")+a.name))));}
     body.append(h("div",{class:"gsec",style:"opacity:.6"},(f.faehigkeiten||[]).length
-      ? "Mit Fähigkeiten läuft die Funktion nur im Host (AddFunktion<"+(f.name||"F")+", …>) — nicht in Python/extern."
-      : "Laufort = Bindung im Host: C# mit AddFunktion<"+(f.name||"F")+", …> (Rumpf unten als Code-Block), Python/extern mit AddExterneFunktion (dann kein Code-Block)."));
+      ? "Mit Fähigkeiten läuft die Funktion nur im Host (Laufort Host) — nicht in Python/extern."
+      : "Laufort = Konfig der Umgebung (Funktionen:"+(f.name||"F")+":Laufort): Host (C#-Rumpf unten als Code-Block) oder Extern (Python-Worker, dann kein Code-Block)."));
+    {const lo=Object.entries((MODEL.rahmen||{}).umgebungen||{}).map(([n,u])=>[n,((u||{}).Funktionen||{})[f.name]]);
+      if(lo.length)body.append(h("div",{class:"gsec",style:"opacity:.8"},"Laufort je Umgebung: "+lo.map(([n,k])=>n+" = "+(k?(k.Laufort||"Host")+(k.Slots?" ×"+k.Slots:""):"⚠ nicht gebunden")).join(" · ")));}
   }
 
   // ══ AKTEURE: von wem kommt was? (docs/konzept-akteure.md §2, docs/konzept-domaenen-editor.md §12) ══

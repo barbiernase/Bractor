@@ -10,6 +10,14 @@ namespace Domain.Pipeline.Infrastructure;
 /// </summary>
 public static class DomainPipelineExtensions
 {
+    /// <summary>
+    /// Aus der Umgebung: der Konfig-Record <see cref="PreprocessingConfig"/> steht im Abschnitt <c>Konfig:PreprocessingConfig</c>
+    /// (Struktur ist Code — der Record; der Wert ist Konfig der Umgebung).
+    /// </summary>
+    public static IServiceCollection AddDomainPipelineServices(this IServiceCollection services, Microsoft.Extensions.Configuration.IConfiguration konfig)
+        => services.AddDomainPipelineServices(konfig[$"Konfig:{nameof(PreprocessingConfig)}:{nameof(PreprocessingConfig.OutputPath)}"]
+            ?? throw new InvalidOperationException($"Konfig:{nameof(PreprocessingConfig)}:{nameof(PreprocessingConfig.OutputPath)} fehlt (Ausgabe der Bild-Funktionen)."));
+
     /// <param name="preprocessedPath">Wohin die Bild-Funktionen ihre Ergebnisse schreiben (Konfig der Funktions-Implementierung).</param>
     public static IServiceCollection AddDomainPipelineServices(this IServiceCollection services, string preprocessedPath)
     {

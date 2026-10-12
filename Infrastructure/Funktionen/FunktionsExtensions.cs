@@ -94,3 +94,48 @@ public static class FunktionsExtensions
             ? ergebnisse
             : Infrastructure.Mapping.GeneratedCommandRouting.Produziert(ziel);
 }
+
+/// <summary>Eine Implementierung einer Katalog-Funktion (aus <c>GeneratedFunktionen.Implementierungen</c>): Name + generische Bindung.</summary>
+public sealed record FunktionsImplementierung(Type Funktion, string Name, Action<IServiceCollection, int, int> Binde);
+
+public static class FunktionsLaufortExtensions
+{
+    /// <summary>
+    /// Bindet die Funktionen nach dem Abschnitt <c>Funktionen</c> der Umgebung (docs/konzept-werkbank.md §4.2): je Funktion der Laufort
+    /// (<c>Host</c> mit Implementierung, <c>Extern</c>). Geprüft gegen die generierte Tabelle: Funktion bekannt, Implementierung eindeutig,
+    /// eine Funktion mit Lese-Fähigkeit läuft nie extern. Eine gerufene, aber nicht gebundene Funktion meldet der Boot-Guard.
+    /// </summary>
+    public static IServiceCollection BindeFunktionen(this IServiceCollection services, IReadOnlyDictionary<string, Abstractions.FunktionsKonfig> konfig)
+        => services.BindeFunktionen(konfig, GeneratedFunktionen.Namen, GeneratedFunktionen.Implementierungen, GeneratedFunktionen.Extern,
+            GeneratedFunktionen.Faehigkeiten);
+
+    public static IServiceCollection BindeFunktionen(this IServiceCollection services, IReadOnlyDictionary<string, Abstractions.FunktionsKonfig> konfig,
+        IReadOnlyDictionary<string, Type> namen, IReadOnlyList<FunktionsImplementierung> implementierungen,
+        IReadOnlyDictionary<Type, Action<IServiceCollection>> externBinden, IReadOnlyDictionary<Type, Type[]> faehigkeiten)
+    {
+        foreach (var (name, k) in konfig)
+        {
+            if (!namen.TryGetValue(name, out var funktion))
+                throw new InvalidOperationException($"Funktionen:{name} — keine Katalog-Funktion dieses Namens (bekannt: {string.Join(", ", namen.Keys.OrderBy(n => n))}).");
+            switch (k.Laufort)
+            {
+                case Abstractions.FunktionsLaufort.Host:
+                    var passend = implementierungen.Where(i => i.Funktion == funktion && (k.Implementierung == null || i.Name == k.Implementierung)).ToList();
+                    if (passend.Count != 1)
+                        throw new InvalidOperationException($"Funktionen:{name}: Laufort Host braucht genau eine Implementierung"
+                            + (k.Implementierung == null ? "" : $" namens '{k.Implementierung}'") + " — gefunden: "
+                            + string.Join(", ", implementierungen.Where(i => i.Funktion == funktion).Select(i => i.Name).DefaultIfEmpty("keine")) + ".");
+                    passend[0].Binde(services, Math.Max(1, k.Slots), Math.Max(0, k.Wiederholungen));
+                    break;
+                case Abstractions.FunktionsLaufort.Extern:
+                    if (faehigkeiten.ContainsKey(funktion))
+                        throw new InvalidOperationException($"Funktionen:{name}: eine Funktion mit Lese-Fähigkeit läuft nur im Host (Laufort Host).");
+                    externBinden[funktion](services);
+                    break;
+                default:
+                    throw new NotSupportedException($"Funktionen:{name}: Laufort {k.Laufort} gibt es noch nicht (Werkbank P5).");
+            }
+        }
+        return services;
+    }
+}

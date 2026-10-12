@@ -1,0 +1,113 @@
+using Abstractions;
+using Microsoft.Extensions.Hosting;
+using Npgsql;
+
+namespace Infrastructure.Umgebung;
+
+/// <summary>
+/// Das Umgebungs-Siegel (docs/konzept-werkbank.md §4.3): jede Datenbank trägt in <c>&lt;schema&gt;.umgebung</c> Name, Art und
+/// Cluster-Namen ihrer Umgebung. Ein Host startet nur, wenn seine Umgebung zum Siegel passt — ein Sim-Host schreibt so nie in die
+/// Prod-DB und umgekehrt. Eine leere DB bekommt das Siegel beim ersten Start; eine Sim-DB legt der Host bei Bedarf an (nie Prod).
+/// Dazu die Tabelle <c>&lt;schema&gt;.uhr</c> (Versatz der DB-Uhr, nur in Sim wirksam, §4.4).
+/// </summary>
+public sealed class UmgebungsSiegel(UmgebungKonfig umgebung) : IHostedService
+{
+    public sealed record Siegel(string Name, string Art, string Cluster);
+
+    /// <summary>Der reine Vergleich: null = passt, sonst der Grund.</summary>
+    public static string? Pruefe(Siegel? gespeichert, Siegel erwartet) => gespeichert switch
+    {
+        null => null,
+        _ when gespeichert.Art != erwartet.Art => $"die Datenbank gehört zu einer {gespeichert.Art}-Umgebung ('{gespeichert.Name}'), dieser Host ist {erwartet.Art}",
+        _ when gespeichert.Name != erwartet.Name => $"die Datenbank gehört zur Umgebung '{gespeichert.Name}', dieser Host ist '{erwartet.Name}'",
+        _ when gespeichert.Cluster != erwartet.Cluster => $"die Datenbank gehört zum Cluster '{gespeichert.Cluster}', dieser Host tritt '{erwartet.Cluster}' bei",
+        _ => null,
+    };
+
+    public static Siegel Von(UmgebungKonfig u) => new(u.Umgebung.Name, u.Umgebung.Art.ToString(), u.Cluster.Name);
+
+    public async Task StartAsync(CancellationToken ct)
+    {
+        if (umgebung.Umgebung.Art == UmgebungsArt.Sim) await LegeDatenbankAnAsync(ct);
+        var schema = umgebung.EventStore.Schema;
+        await using var conn = new NpgsqlConnection(UmgebungLader.Verbindung(umgebung.EventStore));
+        await conn.OpenAsync(ct);
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = $"""
+                create schema if not exists "{schema}";
+                create table if not exists "{schema}".umgebung (id int primary key default 1 check (id = 1), name text not null, art text not null, cluster text not null);
+                create table if not exists "{schema}".uhr (id int primary key default 1 check (id = 1), versatz interval not null default interval '0');
+                insert into "{schema}".uhr (id) values (1) on conflict (id) do nothing;
+                """;
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+        Siegel? gespeichert = null;
+        await using (var cmd = conn.CreateCommand())
+        {
+            cmd.CommandText = $"select name, art, cluster from \"{schema}\".umgebung where id = 1";
+            await using var r = await cmd.ExecuteReaderAsync(ct);
+            if (await r.ReadAsync(ct)) gespeichert = new Siegel(r.GetString(0), r.GetString(1), r.GetString(2));
+        }
+        var erwartet = Von(umgebung);
+        if (Pruefe(gespeichert, erwartet) is { } grund)
+            throw new InvalidOperationException($"Umgebungs-Siegel: {grund}. Start abgebrochen (Datenbank {umgebung.EventStore.Datenbank}).");
+        if (gespeichert == null)
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"insert into \"{schema}\".umgebung (id, name, art, cluster) values (1, @n, @a, @c) on conflict (id) do nothing";
+            cmd.Parameters.AddWithValue("n", erwartet.Name);
+            cmd.Parameters.AddWithValue("a", erwartet.Art);
+            cmd.Parameters.AddWithValue("c", erwartet.Cluster);
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+        if (umgebung.Umgebung.Art == UmgebungsArt.Prod)
+        {
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"update \"{schema}\".uhr set versatz = interval '0' where id = 1";
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+        Console.WriteLine($"[CQRS] Umgebung {erwartet.Name} ({erwartet.Art}) · DB {umgebung.EventStore.Datenbank} · Cluster {erwartet.Cluster} — Siegel ok");
+    }
+
+    /// <summary>Nur Sim: fehlt die Datenbank, wird sie angelegt (Prod-Datenbanken legt nie ein Host an).</summary>
+    private async Task LegeDatenbankAnAsync(CancellationToken ct)
+    {
+        var verwaltung = new NpgsqlConnectionStringBuilder(umgebung.EventStore.Verbindung) { Database = "postgres" }.ConnectionString;
+        await using var conn = new NpgsqlConnection(verwaltung);
+        await conn.OpenAsync(ct);
+        await using var pruefe = conn.CreateCommand();
+        pruefe.CommandText = "select 1 from pg_database where datname = @d";
+        pruefe.Parameters.AddWithValue("d", umgebung.EventStore.Datenbank);
+        if (await pruefe.ExecuteScalarAsync(ct) != null) return;
+        await using var lege = conn.CreateCommand();
+        lege.CommandText = $"create database \"{umgebung.EventStore.Datenbank}\"";
+        try { await lege.ExecuteNonQueryAsync(ct); }
+        catch (PostgresException e) when (e.SqlState == "42P04") { /* gleichzeitig angelegt */ }
+    }
+
+    public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
+}
+
+/// <summary>
+/// Die DB-Uhr einer Umgebung (docs/konzept-werkbank.md §4.4): <c>now() + versatz</c> aus <c>&lt;schema&gt;.uhr</c> — nur in Sim; in Prod
+/// immer <c>now()</c>. Betrifft nur Code, der die Zeit über <see cref="IDbClock"/> liest (Fristen, Zeitlimits, Warte-Knoten).
+/// </summary>
+public sealed class UmgebungsDbClock(UmgebungKonfig umgebung) : IDbClock
+{
+    public async Task<DateTimeOffset> JetztAsync(CancellationToken ct = default)
+    {
+        await using var conn = new NpgsqlConnection(UmgebungLader.Verbindung(umgebung.EventStore));
+        await conn.OpenAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = umgebung.Umgebung.Art == UmgebungsArt.Sim
+            ? $"select now() + coalesce((select versatz from \"{umgebung.EventStore.Schema}\".uhr where id = 1), interval '0')"
+            : "select now()";
+        return await cmd.ExecuteScalarAsync(ct) switch
+        {
+            DateTimeOffset dto => dto,
+            DateTime dt => new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc)),
+            _ => throw new InvalidOperationException("now() lieferte keinen Zeitwert"),
+        };
+    }
+}

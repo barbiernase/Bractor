@@ -1,0 +1,25 @@
+{
+  "Umgebung": { "Name": "multinode", "Art": "Sim" },
+  "EventStore": {
+    "Betrieb": "Vorhanden",
+    "Verbindung": "Host=postgres;Port=5432;Username=postgres;Password=postgres",
+    "Datenbank": "cqrs_events",
+    "Schema": "es"
+  },
+  "VersionIndex": { "Betrieb": "Vorhanden", "Endpunkt": "redis:6379", "Datenbank": 1, "Praefix": "multinode:" },
+  "Cluster": { "Art": "Consul", "Name": "cqrs-multinode", "Consul": "consul:8500", "AdvertisedHost": "localhost" },
+  "Transport": { "GrpcPort": 5001, "EinblickPort": 5002 },
+  "Quellen": {
+    "DateiErkannt": { "Pfad": "/data/input", "Kennung": "PfadGroesseZeit", "Laufmodus": "EinmalImCluster" }
+  },
+  "Funktionen": {
+    "IBildVerkleinerung": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 },
+    "IHistogrammAusgleich": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 },
+    "IDateinameDeutung": { "Laufort": "Host", "Slots": 8 },
+    "IRangeSuche": { "Laufort": "Host", "Slots": 2 },
+    "IMitgliederEinfrieren": { "Laufort": "Host", "Slots": 2 }
+  },
+  "Konfig": {
+    "PreprocessingConfig": { "OutputPath": "/data/preprocessed" }
+  }
+}

@@ -41,10 +41,14 @@ public class RedisVersionTracker : IVersionTracker
     private const string FieldType = "t";
     private const string FieldTimestamp = "ts";
 
+    private readonly RedisPraefix? _praefix;
+
     public RedisVersionTracker(
         IConnectionMultiplexer redis,
-        ILogger<RedisVersionTracker> logger)
+        ILogger<RedisVersionTracker> logger,
+        RedisPraefix? praefix = null)
     {
+        _praefix = praefix;
         _redis = redis ?? throw new ArgumentNullException(nameof(redis));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
     }
@@ -60,7 +64,7 @@ public class RedisVersionTracker : IVersionTracker
     {
         try
         {
-            var db = _redis.GetDatabase();
+            var db = RedisPraefix.Db(_redis, _praefix);
             var key = AggregateKey(aggregateId);
             var now = DateTimeOffset.UtcNow.Ticks;
 
@@ -116,7 +120,7 @@ public class RedisVersionTracker : IVersionTracker
     {
         try
         {
-            var db = _redis.GetDatabase();
+            var db = RedisPraefix.Db(_redis, _praefix);
             var key = AggregateKey(aggregateId);
 
             var hash = await db.HashGetAllAsync(key);
@@ -157,7 +161,7 @@ public class RedisVersionTracker : IVersionTracker
 
         try
         {
-            var db = _redis.GetDatabase();
+            var db = RedisPraefix.Db(_redis, _praefix);
             var batch = db.CreateBatch();
 
             // Alle Requests in einer Pipeline

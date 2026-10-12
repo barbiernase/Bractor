@@ -45,15 +45,9 @@ sudo setcap 'cap_net_bind_service=+ep' "$BLAZOR_DIR/Host.Blazor"
 # --- Start Host.Grpc ---
 echo "Starting..."
 cd "$GRPC_DIR"
-Grpc__Port=5001 \
-ConnectionStrings__EventStore="Host=localhost;Port=5432;Database=cqrs_events;Username=postgres;Password=postgres" \
-Redis__Endpoint="localhost:6379" \
-Consul__Address="localhost:8500" \
-Quellen__DateiErkannt__Pfad="/mnt/unlabeledgewebebilder/SNP/IO" \
-Quellen__DateiErkannt__Kennung="NameGroesse" \
-Pipeline__PreprocessedPath="/home/wirksam/cqrs-data/preprocessed" \
+# Alle Werte stehen in umgebungen/umgebung.prod.json (mit dem Host veröffentlicht, docs/konzept-werkbank.md §4).
 DOTNET_ENVIRONMENT=Development \
-nohup ./Host.Grpc > /opt/cqrs/grpc.log 2>&1 &
+nohup ./Host.Grpc --umgebung prod > /opt/cqrs/grpc.log 2>&1 &
 
 echo "  Host.Grpc gestartet (PID $!), warte auf Port 5001..."
 for i in $(seq 1 30); do

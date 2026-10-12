@@ -178,4 +178,4 @@ NICHT Timeout-tunebar; xUnit schluckt App-Logs (Cluster-Diagnose → Last-Harnes
 - Last/Durchsatz: `LoadHarness` ist entfernt (Commit fb07f5e); historische Messwerte in `docs/12`.
 - Infra hochfahren: `docker compose -f deploy-linux/docker-compose.infrastructure.yml up -d`
 - Multi-Node (3 Nodes + 1 Consul, echt containerisiert): `docker compose -f deploy-multinode/docker-compose.yml up -d --build` (Anleitung + Ergebnis: `docs/06-transport-multinode-betrieb.md`)
-- Hosts: `Host_Blazor`, `Host_Grpc` (siehe deploy.sh).
+- Hosts: `Host_Blazor`, `Host_Grpc` (siehe deploy.sh). Host.Grpc startet mit einer Umgebung: `dotnet run --project Host.Grpc -- --umgebung sim-main` (`umgebungen/umgebung.<name>.json`; Sim-DB je Branch `cqrs_sim_<branch>` über `CQRS_BRANCH`, Siegel/Uhr/Redis-Präfix/Einzelknoten — docs/06 §6.1).
