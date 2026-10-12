@@ -105,9 +105,14 @@ public sealed record Lesebefund(string Code, string Text, string? Karte, string?
 /// Wo eine Karte im Code steht: Datei (absolut), Spanne der Deklaration (Zeichen, ohne führende Trivia) und Zeile (1-basiert). Die Werkbank
 /// zeigt damit Rumpf-Ausschnitte und setzt Gesten an der richtigen Stelle an.
 /// </summary>
-public sealed record Ort(string Datei, int Start, int Ende, int Zeile)
+public sealed record Ort(string Datei, int Start, int Ende, int Zeile, int Bis = 0)
 {
-    public static Ort Von(SyntaxNode n) => new(n.SyntaxTree.FilePath, n.Span.Start, n.Span.End, n.GetLocation().GetLineSpan().StartLinePosition.Line + 1);
+    /// <param name="n">Die Deklaration bzw. Anweisung; <see cref="Bis"/> = ihre letzte Zeile (1-basiert) — Befunde einer Zeile finden so die innerste Karte.</param>
+    public static Ort Von(SyntaxNode n)
+    {
+        var z = n.GetLocation().GetLineSpan();
+        return new(n.SyntaxTree.FilePath, n.Span.Start, n.Span.End, z.StartLinePosition.Line + 1, z.EndLinePosition.Line + 1);
+    }
 }
 
 /// <summary>Ein handgeschriebener Typ, dessen Basisliste Unaufgelöstes enthält (Tippfehler, gelöschter Typ, fehlendes using).</summary>

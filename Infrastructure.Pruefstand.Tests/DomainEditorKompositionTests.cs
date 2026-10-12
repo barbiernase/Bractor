@@ -6,7 +6,8 @@ namespace Infrastructure.Pruefstand.Tests;
 
 /// <summary>
 /// Die Kompositions-Sprache des Domänen-Editors (<c>docs/konzept-editor-komposition.md</c>): Phase 1 Grammatik als EINE Quelle
-/// (<see cref="Grammatik"/> → <see cref="Validator"/> nennt die verletzte Regel) und Phase 2 Kapselung (<see cref="Module"/>:
+/// (<see cref="Grammatik"/> — Daten für ⊕ und die Liste „Regel → Build-Gegenstück“; geprüft wird im Build, Analyzer-Tests unter
+/// <c>Analyzers/</c>) und Phase 2 Kapselung (<see cref="Module"/>:
 /// Namespace = Modul, Ports abgeleitet aus dem Nachrichtenfluss, offene Ports beim Entwurf von oben nach unten).
 /// </summary>
 public sealed class DomainEditorKompositionTests
@@ -37,8 +38,6 @@ public sealed class DomainEditorKompositionTests
         },
     };
 
-    private static IEnumerable<string> Grammatikcodes(EditorModell m) => Validator.PruefeGrammatik(m).Select(b => b.Code);
-
     [Fact]
     public void Grammatik_ist_in_sich_geschlossen_und_jede_Regel_hat_ein_Build_Gegenstueck()
     {
@@ -60,100 +59,6 @@ public sealed class DomainEditorKompositionTests
         // Fürs Board: die Editor-Port-Abbildung reist mit (das JS kodiert nichts hart).
         var json = System.Text.Json.JsonSerializer.Serialize(Grammatik.AlsJson(), EditorModell.JsonOptionen);
         json.Should().Contain("\"portBaustein\"").And.Contain("\"recordSorte\"").And.Contain("CQRS010");
-    }
-
-    [Fact]
-    public void Gueltiges_Modell_verletzt_keine_Regel()
-    {
-        Validator.PruefeGrammatik(Shop()).Where(b => b.IstFehler).Should().BeEmpty();
-        Validator.Prüfe(Shop()).Where(b => b.IstFehler).Should().BeEmpty();
-    }
-
-    [Fact]
-    public void Validator_nennt_die_verletzte_Regel_beim_Namen()
-    {
-        // Ein zweites Aggregat entscheidet denselben Command → Kardinalität verletzt (Build: CQRS010).
-        var m = Shop();
-        m = m with
-        {
-            Aggregate = [.. m.Aggregate, new() { Name = "Doppelt", Namespace = "Shop.Bestellung" }],
-            Decider = [.. m.Decider, new() { Aggregat = "Doppelt", Command = "Bestelle", Ergibt = [new() { Event = "Bestellt" }] }],
-        };
-        var b = Validator.PruefeGrammatik(m).Single(x => x.Code == "GR-COMMAND");
-        b.IstFehler.Should().BeTrue();
-        b.Meldung.Should().Contain("Command → genau ein Aggregat").And.Contain("CQRS010").And.Contain("Doppelt");
-    }
-
-    [Fact]
-    public void Pipeline_Zusatzregeln_Selbst_Event_Garantie_Frist_Zustand()
-    {
-        const string ns = "Werk";
-        var m = new EditorModell
-        {
-            Records =
-            [
-                Cmd("Starte", ns), Cmd("Timeout", ns, new Feld { Name = "Grund", Typ = "string" }), Evt("Gestartet", ns),
-                new() { Name = "Anstoss", Kind = RecordArt.Trigger, Namespace = ns },
-                new() { Name = "Tick", Kind = RecordArt.Selbst, Namespace = ns, OhneParameterliste = true },
-            ],
-            Aggregate = [new() { Name = "Werk", Namespace = ns }],
-            Decider =
-            [
-                new() { Aggregat = "Werk", Command = "Starte", Ergibt = [new() { Event = "Gestartet" }] },
-                new() { Aggregat = "Werk", Command = "Timeout", Ergibt = [new() { Event = "Gestartet" }] },
-            ],
-            Lesen = new Leseseite
-            {
-                Pipelines =
-                [
-                    new()
-                    {
-                        Name = "WerkPipeline", Namespace = ns, Zustand = ["_seen"],
-                        Handles =
-                        [
-                            new() { Eingang = "Anstoss", Ausgaenge = ["Starte"] },                                     // Garantie: ab Trigger
-                            new() { Eingang = "Gestartet", Ausgaenge = ["Selbst<Tick>", "Frist<Timeout>", "Gestartet"] }, // Selbst aus Event, Frist ohne (Guid), Event
-                            new() { Eingang = "Tick" },
-                        ],
-                    },
-                ],
-            },
-            Ingress = [new() { Trigger = "Anstoss", Modus = "webhook", Ort = "/anstoss" }],
-        };
-        var codes = Grammatikcodes(m).ToList();
-        codes.Should().Contain(["GR-GARANTIE", "GR-SELBST-OHNE-EVENT", "GR-FRIST-CTOR", "GR-KEIN-EVENT-AUS-PIPELINE", "GR-ZUSTAND"]);
-        Validator.PruefeGrammatik(m).Single(b => b.Code == "GR-ZUSTAND").Schweregrad.Should().Be("info", "Regel Z ist in dieser Runde nur ein Hinweis");
-    }
-
-    [Fact]
-    public void Trigger_und_Query_haben_genau_einen_Konsumenten_und_Kreise_brauchen_ein_Aggregat()
-    {
-        const string ns = "Kette";
-        var m = new EditorModell
-        {
-            Records =
-            [
-                new() { Name = "T1", Kind = RecordArt.Trigger, Namespace = ns }, new() { Name = "T2", Kind = RecordArt.Trigger, Namespace = ns },
-                new() { Name = "Frage", Kind = RecordArt.Query, Namespace = ns }, new() { Name = "Antwort", Kind = RecordArt.Antwort, Namespace = ns },
-            ],
-            Lesen = new Leseseite
-            {
-                Reader =
-                [
-                    new() { Name = "R1", Namespace = ns, Projektion = "P", Handles = [new() { Eingang = "Frage", Ausgaenge = ["Antwort"] }] },
-                    new() { Name = "R2", Namespace = ns, Projektion = "P", Handles = [new() { Eingang = "Frage", Ausgaenge = ["Antwort"] }] },
-                ],
-                Pipelines =
-                [
-                    new() { Name = "A", Namespace = ns, Handles = [new() { Eingang = "T1", Ausgaenge = ["T2"] }] },
-                    new() { Name = "B", Namespace = ns, Handles = [new() { Eingang = "T2", Ausgaenge = ["T1"] }] },
-                    new() { Name = "C", Namespace = ns, Handles = [new() { Eingang = "T2" }] },
-                ],
-            },
-        };
-        var codes = Grammatikcodes(m).ToList();
-        codes.Should().Contain(["GR-QUERY", "GR-TRIGGER", "GR-ZYKLUS"]);
-        Validator.PruefeGrammatik(m).Single(b => b.Code == "GR-ZYKLUS").Meldung.Should().Contain("A").And.Contain("B");
     }
 
     [Fact]
@@ -188,9 +93,6 @@ public sealed class DomainEditorKompositionTests
         var mahnung = Module.Ableiten(m).Single(x => x.Namespace == "Shop.Mahnung");
         mahnung.Eingaenge.Should().ContainSingle(p => p.Nachricht == "NimmAuftragAn" && p.Offen);
         mahnung.Ausgaenge.Should().ContainSingle(p => p.Nachricht == "AuftragErledigt" && p.Offen);
-        var befunde = Validator.PruefeGrammatik(m).ToList();
-        befunde.Should().ContainSingle(x => x.Code == "GR-MODUL-EINGANG-OFFEN" && x.Meldung.Contains("NimmAuftragAn") && x.Meldung.Contains("Shop.Mahnung"));
-        befunde.Should().ContainSingle(x => x.Code == "GR-MODUL-AUSGANG-OFFEN" && x.Meldung.Contains("AuftragErledigt"));
 
         // Füllen: ein Aggregat im Modul entscheidet den Command und erzeugt das Event → beide Ports geschlossen.
         m = m with
@@ -200,7 +102,6 @@ public sealed class DomainEditorKompositionTests
         };
         mahnung = Module.Ableiten(m).Single(x => x.Namespace == "Shop.Mahnung");
         mahnung.Eingaenge.Concat(mahnung.Ausgaenge).Should().OnlyContain(p => !p.Offen);
-        Validator.PruefeGrammatik(m).Should().NotContain(x => x.Code.StartsWith("GR-MODUL-"));
     }
 
     [Fact]
@@ -220,7 +121,5 @@ public sealed class DomainEditorKompositionTests
         mo["Shop.Lesen"].Ausgaenge.Should().ContainSingle(p => p.Sorte == Grammatik.Faehigkeit && p.Nachricht == "IFinde" && p.Partner.Contains("Shop.Mahnung"));
         mo["Shop.Mahnung"].Eingaenge.Should().Contain(p => p.Sorte == Grammatik.Faehigkeit && p.Nachricht == "IFinde");
         mo["Shop.Mahnung"].Ausgaenge.Should().Contain(p => p.Sorte == Grammatik.Frist && p.Nachricht == "Versende" && p.Partner.Contains("Shop.Versand"));
-        Validator.PruefeGrammatik(m).Should().Contain(b => b.Code == "GR-FRIST-CTOR" || b.Code == "GR-MODUL-AUSGANG-OFFEN");
-        Validator.PruefeGrammatik(m).Where(b => b.IstFehler).Should().BeEmpty();
     }
 }

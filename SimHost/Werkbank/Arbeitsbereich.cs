@@ -1,8 +1,10 @@
 using System.Collections.Concurrent;
+using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Text.Json.Nodes;
 using GraphExtractor;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.MSBuild;
 using Microsoft.CodeAnalysis.Text;
 
@@ -136,16 +138,103 @@ public sealed class Arbeitsbereich : IDisposable
             {
                 var baum = comp.SyntaxTrees.FirstOrDefault(t => t.FilePath == voll);
                 if (baum == null) continue;
-                foreach (var d in comp.GetSemanticModel(baum).GetDiagnostics(cancellationToken: ct).Where(d => d.Severity == DiagnosticSeverity.Error))
+                var model = comp.GetSemanticModel(baum);
+                var projekt = lesung.Lage.Analyse.First(a => ReferenceEquals(a.Compilation, comp)).Projekt;
+                var regeln = Regeln(projekt);
+                var diags = model.GetDiagnostics(cancellationToken: ct).Where(d => d.Severity == DiagnosticSeverity.Error).ToList();
+                if (!regeln.IsEmpty)   // die eigenen Regeln (CQRS…) auf dieser Datei — Fehler und Warnungen
+                    diags.AddRange((await comp.WithAnalyzers(regeln, projekt.AnalyzerOptions).GetAnalyzerSemanticDiagnosticsAsync(model, null, ct))
+                        .Where(d => d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning));
+                foreach (var d in diags)
                 {
                     var z = d.Location.GetLineSpan().StartLinePosition;
                     var (typ, member) = Diagnosen.Ort(voll, z.Line + 1);
-                    aus.Add(new Diagnose(rel, z.Line + 1, z.Character + 1, d.Id, d.GetMessage(), "error", typ, member));
+                    aus.Add(new Diagnose(rel, z.Line + 1, z.Character + 1, d.Id, d.GetMessage(), d.Severity == DiagnosticSeverity.Error ? "error" : "warning", typ, member));
                 }
                 break;
             }
         }
         return Karten.Zuordnen(aus, lesung.Board);
+    }
+
+    /// <summary>
+    /// Die eigenen Regeln (Analyzer mit CQRS-Diagnosen) über den ganzen Code-Stand (Werkbank P7.4, „Prüfen = Bauen“): je Domänen-Projekt seine
+    /// Analyzer auf seiner warmen Compilation, dazu die Gesamtbild-Regeln der Laufzeit (sie brauchen alle Domänen-Projekte) auf einer leeren
+    /// Compilation, die die Domänen-Compilations referenziert — so wie die Laufzeit sie sieht, ohne sie zu übersetzen (E7). Unabhängig vom
+    /// inkrementellen Bauen: ein unverändertes Projekt druckt beim Bauen keine Warnungen mehr, hier stehen sie immer.
+    /// </summary>
+    public async Task<IReadOnlyList<Diagnose>> RegelBefundeAsync(CancellationToken ct = default)
+    {
+        var lesung = await LiesAsync(ct);
+        var aus = new List<Diagnose>();
+        var domaenen = lesung.Lage.Analyse.Where(a => lesung.Lage.DomänenAssemblies.Contains(a.Compilation.AssemblyName ?? "")).ToList();
+        foreach (var (projekt, comp) in domaenen)
+        {
+            var regeln = Regeln(projekt);
+            if (regeln.IsEmpty) continue;
+            foreach (var d in await comp.WithAnalyzers(regeln, projekt.AnalyzerOptions).GetAnalyzerDiagnosticsAsync(ct))
+                if (d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning && d.Location.IsInSource)
+                {
+                    var voll = d.Location.SourceTree!.FilePath;
+                    var z = d.Location.GetLineSpan().StartLinePosition;
+                    var (typ, member) = Diagnosen.Ort(voll, z.Line + 1);
+                    aus.Add(new Diagnose(Path.GetRelativePath(_root, voll).Replace('\\', '/'), z.Line + 1, z.Character + 1, d.Id, d.GetMessage(),
+                        d.Severity == DiagnosticSeverity.Error ? "error" : "warning", typ, member));
+                }
+        }
+        // Gesamtbild: die Analyzer der Laufzeit auf einer leeren Compilation über den Domänen-Compilations.
+        if (_solution?.GetProject(_kalt!.Laufzeit.Id) is { } laufzeit && Regeln(laufzeit) is { IsEmpty: false } gesamt && domaenen.Count > 0)
+        {
+            var refs = domaenen.SelectMany(a => a.Compilation.References).Concat(domaenen.Select(a => (MetadataReference)a.Compilation.ToMetadataReference()))
+                .GroupBy(r => r.Display ?? r.ToString()).Select(g => g.First()).ToList();
+            var bild = Microsoft.CodeAnalysis.CSharp.CSharpCompilation.Create("Gesamtbild", [], refs,
+                new Microsoft.CodeAnalysis.CSharp.CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+            foreach (var d in await bild.WithAnalyzers(gesamt, laufzeit.AnalyzerOptions).GetAnalyzerDiagnosticsAsync(ct))
+                if (d.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Warning)
+                {
+                    var text = d.GetMessage();
+                    var typ = text.StartsWith('\'') && text.IndexOf('\'', 1) is var e and > 1 ? text[1..e] : null;
+                    aus.Add(new Diagnose("", 0, 0, d.Id, text, d.Severity == DiagnosticSeverity.Error ? "error" : "warning", typ, null));
+                }
+        }
+        return Karten.Zuordnen(aus, lesung.Board);
+    }
+
+    /// <summary>Die Analyzer eines Projekts, die eigene Regeln (CQRS…) melden — fremde (SDK, xUnit …) laufen hier nicht.</summary>
+    private static ImmutableArray<DiagnosticAnalyzer> Regeln(Project p) => p.AnalyzerReferences.SelectMany(r => r.GetAnalyzers(p.Language))
+        .Where(a => a.SupportedDiagnostics.Any(d => d.Id.StartsWith("CQRS", StringComparison.Ordinal))).ToImmutableArray();
+
+    /// <summary>
+    /// Prüfen = Bauen, ohne zu schreiben (Werkbank P7.4, L18): die Datei <paramref name="pfad"/> probeweise mit <paramref name="neuText"/> in den
+    /// warmen Stand setzen, ihr Projekt übersetzen (mit seinen echten Generatoren) und die Befunde der Datei holen — Compiler UND die Analyzer
+    /// des Projekts (CQRS050, CQRS066/067, CQRS073 ff. …). Es zählen nur NEUE Fehler gegenüber dem unveränderten Stand; der Fork wird verworfen.
+    /// </summary>
+    public async Task<IReadOnlyList<string>> PruefeProbeweiseAsync(string pfad, string neuText, CancellationToken ct = default)
+    {
+        var stand = await StandAsync(ct);
+        var voll = Path.GetFullPath(pfad);
+        var docId = stand.GetDocumentIdsWithFilePath(voll).FirstOrDefault();
+        if (docId == null) return [$"{Path.GetRelativePath(_root, voll)} gehört zu keinem Projekt der Solution."];
+        var vorher = await FehlerAsync(stand.GetDocument(docId)!, ct);
+        var nachher = await FehlerAsync(stand.WithDocumentText(docId, SourceText.From(neuText)).GetDocument(docId)!, ct);
+        return nachher.Where(f => !vorher.Contains(f)).Distinct().Take(20).ToList();
+    }
+
+    /// <summary>Fehler einer Datei: Compiler (gebunden wird nur sie) und die Analyzer ihres Projekts auf ihrem Syntaxbaum — ohne Zeilen, damit
+    /// derselbe Fehler vorher und nachher gleich zählt.</summary>
+    private static async Task<HashSet<string>> FehlerAsync(Document doc, CancellationToken ct)
+    {
+        var comp = (await doc.Project.GetCompilationAsync(ct))!;
+        var baum = (await doc.GetSyntaxTreeAsync(ct))!;
+        var model = comp.GetSemanticModel(baum);
+        var diags = model.GetDiagnostics(cancellationToken: ct).AsEnumerable();
+        var analyzer = Regeln(doc.Project);
+        if (!analyzer.IsEmpty)
+        {
+            var mit = comp.WithAnalyzers(analyzer, doc.Project.AnalyzerOptions);
+            diags = diags.Concat(await mit.GetAnalyzerSemanticDiagnosticsAsync(model, null, ct)).Concat(await mit.GetAnalyzerSyntaxDiagnosticsAsync(baum, ct));
+        }
+        return diags.Where(d => d.Severity == DiagnosticSeverity.Error).Select(d => $"{d.Id}: {d.GetMessage()}").ToHashSet(StringComparer.Ordinal);
     }
 
     /// <summary>Die Lese-Befunde des zuletzt gelesenen Boards als Befunde an der Karte (wie Compiler-Befunde; Schwere „warning“).</summary>

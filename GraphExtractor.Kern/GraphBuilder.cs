@@ -573,77 +573,10 @@ public sealed class GraphBuilder
             })
         });
 
-        // Saga sendet einen Command, den kein Aggregat behandelt → würde zur Laufzeit hängen.
-        foreach (var proc in _g.Nodes.Where(n => n.Kind == NodeKind.process))
-            foreach (var r in proc.Process!.Rules)
-            {
-                foreach (var cmd in new[] { r.Sends, r.Compensates })
-                {
-                    if (string.IsNullOrEmpty(cmd)) continue;   // eine Regel mit Rufe<F> sendet keinen Command
-                    var node = _g.Nodes.FirstOrDefault(n => n.Kind == NodeKind.command && n.Name == cmd);
-                    if (node?.Command?.RoutedTo == null)
-                        d.Add(new Finding { Severity = "error", Code = "UNROUTED-SAGA-CMD",
-                            Message = $"Saga '{proc.Name}' sendet '{cmd}', aber kein Aggregat behandelt ihn (Prozess würde hängen)." });
-                }
-            }
-
-        // Prozess definiert, aber nicht in GeneratedProzessRegeln verdrahtet.
-        foreach (var proc in _g.Nodes.Where(n => n.Kind == NodeKind.process && !n.Process!.Registered))
-            d.Add(new Finding { Severity = "warning", Code = "PROCESS-NOT-REGISTERED",
-                Message = $"Prozess '{proc.Name}' ist definiert, aber NICHT in GeneratedProzessRegeln.Alle registriert (läuft nicht)." });
-
-        // Persistiertes Event, das ein Aggregat produziert, aber sein Applier nicht faltet → der generierte
-        // ApplyEvent-Switch wirft zur Laufzeit NotSupportedException (kein Compile-Check im Framework).
-        foreach (var a in _dom.Aggregates)
-        {
-            var gefaltet = a.ApplyEventsFull.ToHashSet(StringComparer.Ordinal);
-            foreach (var evt in a.DecideOutcomes.Values.SelectMany(x => x).Distinct(StringComparer.Ordinal))
-                if (_dom.Events.TryGetValue(evt, out var et) && et.Persisted && !gefaltet.Contains(evt))
-                    d.Add(new Finding { Severity = "error", Code = "MISSING-APPLY",
-                        Message = $"Aggregat '{a.Name}' produziert '{et.Simple}', hat aber kein Apply({et.Simple}) → NotSupportedException beim Falten." });
-        }
-
-        // Domänen-Event/Ablehnung, das KEIN Decider erzeugt (kein OneOf-Ausgang) → toter Typ (eine echte Insel).
-        // Auch die Ergebnisse einer Katalog-Funktion sind erzeugt (OneOf ihrer Signatur) — keine toten Typen.
-        var erzeugt = _dom.Aggregates.SelectMany(a => a.DecideOutcomes.Values.SelectMany(x => x))
-            .Concat(_dom.Funktionen.SelectMany(f => f.ErgebnisseFull))
-            // Die Nachricht einer Quelle (p.Quelle<T>() im Pipeline-Fluss) erzeugt die Quelle selbst, nicht ein Aggregat.
-            .Concat(_dom.Fluesse.SelectMany(f => f.Knoten.Where(k => k.Art == DomainEditor.FlussArt.Quelle).Select(k => k.TypFull)))
-            .ToHashSet(StringComparer.Ordinal);
-        foreach (var (full, et) in _dom.Events.Where(kv => kv.Value.Meta.IstDomäne && !erzeugt.Contains(kv.Key)))
-            d.Add(new Finding { Severity = "warning", Code = "UNUSED-EVENT",
-                Message = $"{(et.Persisted ? "Event" : "Ablehnung")} '{et.Simple}' wird von keinem Decider erzeugt (in keiner Decide-OneOf-Signatur) — toter Typ." });
-
-        // Enum mit Wert 0: der Proto-Wire (proto3) lässt den Default weg → 0 ist auf dem Draht nicht von „nicht gesetzt" unterscheidbar.
-        foreach (var e in _dom.Enums.Where(e => e.HatNull))
-            d.Add(new Finding { Severity = "warning", Code = "ENUM-ZERO",
-                Message = $"Enum '{e.Name}' hat einen Wert 0 — geht auf dem Proto-Wire als Default verloren (1-basiert empfohlen)." });
-
-        // Mehrere Klassen implementieren dieselbe Fähigkeit → CQRS053 im Build (hier der Rückhalt).
-        foreach (var s in _dom.Stores)
-            foreach (var m in s.MehrdeutigeImpls)
-                d.Add(new Finding { Severity = "warning", Code = "STORE-AMBIGUOUS",
-                    Message = $"Fähigkeit mit mehreren Implementierungen ({m}) — die DI wüsste nicht, welche (CQRS053)." });
-
-        // ── Handle-Verträge (Projektion/Reader/Reaktion/Pipeline): was ein Handler erzeugen kann, steht in der Signatur. ──
-        var handleVertraege = _dom.Projections.SelectMany(p => p.HandleVertraege.Select(kv => (Wer: p.Name, Ein: kv.Key, V: kv.Value)))
-            .Concat(_dom.Readers.SelectMany(r => r.HandleVertraege.Select(kv => (Wer: r.Name, Ein: kv.Key, V: kv.Value))))
-            .Concat(_dom.Pipelines.SelectMany(p => p.HandleVertraege.Select(kv => (Wer: p.Name, Ein: Short(kv.Key), V: kv.Value))))
-            .ToList();
-        // Offene Signatur: der Vertrag ist unbekannt — der Extractor rät NICHT aus dem Rumpf (CQRS050 macht das zum Build-Fehler;
-        //   diese Diagnose ist nur der Rückhalt, falls der Analyzer nicht lief).
-        foreach (var (wer, ein, v) in handleVertraege.Where(x => x.V.SignaturOffen))
-            d.Add(new Finding { Severity = "error", Code = "HANDLE-OFFEN",
-                Message = $"'{wer}.Handle({ein})' gibt '{v.Signatur}' zurück — offene Signatur, die möglichen Ausgaben sind unbekannt (CQRS050: OneOf<…> konkreter Typen)." });
-        // Response, die kein Reader-Handle erzeugen kann → toter Typ (analog UNUSED-EVENT).
-        var beantwortet = _dom.Readers.SelectMany(r => r.HandleResponses.Values.SelectMany(x => x)).ToHashSet(StringComparer.Ordinal);
-        // Als Feld-/Element-Typ einer anderen Response verwendet (z. B. ModellAntwort in ModellListe.Items) = lebendig.
-        foreach (var f in _dom.Responses.SelectMany(r => r.Fields))
-            foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(f.Type + " " + f.ElementTyp, @"[A-Za-z_]\w*"))
-                beantwortet.Add(m.Value);
-        foreach (var resp in _dom.Responses.Where(r => r.Meta.IstDomäne && !beantwortet.Contains(r.Name)))
-            d.Add(new Finding { Severity = "warning", Code = "RESPONSE-OHNE-QUERY",
-                Message = $"Response '{resp.Name}' wird von keinem Reader-Handle erzeugt (in keiner Handle-Signatur) — toter Typ." });
+        // Die Regeln, die hier früher standen, prüft der Build (Werkbank P7.4, „Prüfen = Bauen“): UNROUTED-SAGA-CMD = CQRS002/CQRS078,
+        //   MISSING-APPLY = CQRS079, ENUM-ZERO = CQRS081, UNUSED-EVENT/RESPONSE-OHNE-QUERY = CQRS085, STORE-AMBIGUOUS = CQRS053,
+        //   HANDLE-OFFEN = CQRS050; PROCESS-NOT-REGISTERED entfällt (der ProzessRegelnGenerator registriert jede Definition).
+        //   Hier bleibt nur, was der Build nicht sehen kann: wer ein Event hört, steht auch in Prozess- und Fluss-Rümpfen.
 
         // Persistiertes Event ohne jeden Konsumenten (kein Konsument, kein Prozess, keine Pipeline).
         foreach (var evt in _g.Nodes.Where(n => n.Kind == NodeKind.@event && n.Event!.Persisted))

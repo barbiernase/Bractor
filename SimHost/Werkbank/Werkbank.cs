@@ -186,10 +186,14 @@ public sealed class Werkbank
             var leseUhr = System.Diagnostics.Stopwatch.StartNew();
             var gelesen = await Arbeitsbereich.LiesAsync(ct);
             var befunde = gelesen.Befunde.Count();
+            // Die eigenen Regeln (Analyzer, CQRS…) über den ganzen Stand — vollständig, auch für Projekte, die das Bauen nicht neu übersetzt hat.
+            var regeln = await Arbeitsbereich.RegelBefundeAsync(ct);
+            diagnosen = [.. diagnosen, .. regeln.Where(r => !diagnosen.Any(d => d.Code == r.Code && d.Datei == r.Datei && d.Zeile == r.Zeile && d.Text == r.Text))];
             Schritt(schritte, new Schritt("Neu lesen", true, (long)leseUhr.Elapsed.TotalMilliseconds,
                 [ReferenceEquals(gelesen, vorher) ? $"Code unverändert seit dem Lesen vor dem Bauen ({gelesen.Routing.Source})"
                     : $"Board aus dem warmen Workspace ({gelesen.Routing.Source}) · Übersetzen {gelesen.Uebersetzen.TotalMilliseconds:0} ms · Lesen {gelesen.Extrahieren.TotalMilliseconds:0} ms",
-                 befunde == 0 ? "keine Lese-Befunde" : $"{befunde} Lese-Befund(e) an Karten"]));
+                 befunde == 0 ? "keine Lese-Befunde" : $"{befunde} Lese-Befund(e) an Karten",
+                 $"Regeln (Analyzer): {regeln.Count(r => r.Schwere == "error")} Fehler, {regeln.Count(r => r.Schwere == "warning")} Warnung(en)"]));
 
             var name = Aktiv;
             var u = Umgebungen.Aufgeloest(name);

@@ -294,30 +294,4 @@ public sealed class DomainEditorScaffolderTests
         saga.Should().Contain("using Domain.Teil;", "der Auslöser-Namespace wird abgeleitet (früher CS0246)");
         saga.Should().Contain(".Sende<ReserviereBetrag>(e => new ReserviereBetrag(e.KontoId, 1m));");
     }
-
-    // ── Validator ──────────────────────────────────────────────────────────────────────────────
-    [Fact]
-    public void Validator_ist_still_bei_gesundem_Modell()
-    {
-        Validator.Prüfe(KontoModell()).Where(b => b.IstFehler).Should().BeEmpty();
-    }
-
-    [Fact]
-    public void Validator_meldet_unrouted_Saga_Command()
-    {
-        var m = new EditorModell
-        {
-            Rahmen = TestRahmen,
-            Sagas = [ new() { Name = "Kaputt", Namespace = "Domain.Kaputt", TriggerEvent = "Los", Schritte = [ new() { Wenn = ["Los"], Sende = "NiemandDecided" } ] } ],
-        };
-        Validator.Prüfe(m).Should().Contain(b => b.Code == "EDIT-UNROUTED-SAGA-CMD" && b.IstFehler);
-    }
-
-    [Fact]
-    public void Validator_meldet_Decide_auf_unbekanntes_Event()
-    {
-        var m = KontoModell();
-        var m2 = m with { Decider = [ m.Decider[0] with { Ergibt = [ new() { Event = "GibtsNicht" } ] }, m.Decider[1] ] };
-        Validator.Prüfe(m2).Should().Contain(b => b.Code == "EDIT-EVENT-FEHLT" && b.IstFehler);
-    }
 }

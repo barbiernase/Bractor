@@ -107,7 +107,7 @@ public static class ParitaetsPruefung
     /// (1) Jede Regel der <see cref="DomainEditor.Grammatik"/>, die ein Build-Gegenstück mit Kennung nennt (Analyzer-/Generator-ID),
     /// muss diese ID als Diagnose-Literal im Code haben — sonst verspricht der Editor eine Prüfung, die es nicht gibt.
     /// (2) Die Modul-Schnittstellen aus dem Board = die aus dem Code (dieselbe Ableitung, zwei Quellen).
-    /// (3) Die Grammatik auf dem Code-Modell: was der Code heute verletzt (Bericht; Fehler nur, wo die Regel ein Build-Gegenstück hat).
+    /// (3) Ob der Code die Grammatik einhält, prüft der Build (Analyzer/Generatoren/Boot-Guards) — die Grammatik ist hier nur Daten.
     /// </summary>
     private static void GrammatikUndModule(Solution solution, Analyse ist, string boardJson, IReadOnlyList<IngressBindung>? ingress, List<ParitaetsBefund> befunde)
     {
@@ -134,16 +134,7 @@ public static class ParitaetsPruefung
         foreach (var z in zb.Except(zc)) befunde.Add(new("Module", "error", $"Port nur aus dem Board: {z}"));
         befunde.Add(new("Module", "info",
             $"{mc.Count} Module (Namespaces), {zc.Count} Ports ({zc.Count(z => z.EndsWith("|offen"))} offen) — Board = Code: {(zc.SequenceEqual(zb) ? "ja" : "NEIN")}."));
-
-        var g = Validator.PruefeGrammatik(ausCode);
-        foreach (var b in g.Where(b => b.IstFehler))
-            befunde.Add(new("Grammatik", Grammatik.RegelVon(b.Code).Build.Any(x => x.Art != "offen") ? "error" : "warning", b.Meldung));
-        // Akteur-Lücken namentlich zeigen (Rahmen „ohne Akteur" im Editor): Warnung, kein Paritätsfehler.
-        foreach (var b in g.Where(b => b.Code is "GR-HERKUNFT" or "GR-INGRESS-EINDEUTIG"))
-            befunde.Add(new("Grammatik", "info", $"{b.Code}: {b.Meldung}"));
-        befunde.Add(new("Grammatik", "info",
-            $"Code-Modell gegen die Grammatik: {g.Count(b => b.IstFehler)} Fehler, {g.Count(b => b.Schweregrad == "warning")} Warnungen, " +
-            $"{g.Count(b => b.Schweregrad == "info")} Hinweise ({string.Join(", ", g.GroupBy(b => b.Code).OrderBy(x => x.Key).Select(x => $"{x.Key}×{x.Count()}"))})."));
+        // (3) Ob der Code die Grammatik einhält, sagt der Build (Analyzer, Werkbank P7.4) — hier nichts zu prüfen.
     }
 
     /// <summary>Extraktions-Pipeline auf beliebigen Compilations (Original oder Fork).</summary>

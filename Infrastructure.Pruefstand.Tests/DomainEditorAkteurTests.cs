@@ -51,19 +51,15 @@ public sealed class DomainEditorAkteurTests
         Grammatik.ErzeugungVon(Grammatik.Akteur, Grammatik.Command).Should().NotBeNull();
         Grammatik.ErzeugungVon(Grammatik.Akteur, Grammatik.Query).Should().NotBeNull();
         Grammatik.ErzeugungVon(Grammatik.Akteur, Grammatik.Trigger).Should().NotBeNull();
-        Grammatik.ErzeugungVon(Grammatik.Akteur, Grammatik.Event).Should().BeNull("Fakten entstehen nur im Aggregat");
-
-        var falsch = Shop(Kunde with { Darf = ["Bestellt"] });
-        Validator.PruefeGrammatik(falsch).Should().Contain(b => b.Code == "GR-AKTEUR" && b.IstFehler);
+        Grammatik.ErzeugungVon(Grammatik.Akteur, Grammatik.Event).Should().BeNull("Fakten entstehen nur im Aggregat (Build: CQRS058)");
     }
 
     [Fact]
-    public void Ohne_Akteure_keine_Herkunfts_Warnung_mit_Akteuren_fuer_jede_Luecke()
+    public void Mit_Akteuren_bleibt_jede_Luecke_ohne_Akteur()
     {
-        Validator.PruefeGrammatik(Shop()).Should().NotContain(b => b.Code == "GR-HERKUNFT", "ohne Akteure ist der Pfad offen — wie am Tor");
-
-        var befunde = Validator.PruefeGrammatik(Shop(Kunde)).Where(b => b.Code == "GR-HERKUNFT").ToList();
-        befunde.Should().ContainSingle().Which.Meldung.Should().Contain("Storniere");
+        // GR-HERKUNFT: was weder ein IDarf noch eine Kette hat, steht im Rahmen „ohne Akteur“ (Sicht) und wird am Tor abgewiesen.
+        var a = AkteurAnteile.Aus(Shop(Kunde));
+        a.Eingaenge.Where(e => a.AkteureVon(e.Nachricht).Count == 0).Select(e => e.Nachricht).Should().Equal("Storniere");
     }
 
     [Fact]
@@ -130,14 +126,6 @@ public sealed class DomainEditorAkteurTests
     };
 
     [Fact]
-    public void Handle_im_Auftrag_sendet_nur_was_der_Akteur_darf()
-    {
-        Validator.PruefeGrammatik(MitKi(["Storniere"], ["Storniere"])).Should().NotContain(b => b.Code == "GR-AUFTRAG");
-        Validator.PruefeGrammatik(MitKi(["Storniere"], ["Bestelle"]))
-            .Should().ContainSingle(b => b.Code == "GR-AUFTRAG").Which.Meldung.Should().Contain("Storniere").And.Contain("Gutachter");
-    }
-
-    [Fact]
     public void Ein_Dienst_wird_nie_als_Akteur_geschrieben()
         => Scaffolder.Generiere(MitKi(["Storniere"], ["Storniere"])).Should()
             .NotContain(d => d.Inhalt.Contains("interface IGutachten"), "der Dienst gehört dem Code; geschrieben wird nur der Akteur-Record");
@@ -161,7 +149,7 @@ public sealed class DomainEditorAkteurTests
         a.Kette["Bestellt"].Should().Equal("Kunde");
         a.Kette["Storniere"].Should().Equal(new[] { "Kunde" }, "die Pipeline erzeugt ihn aus Bestellt → Kunde");
         a.Direkt.Should().NotContainKey("Storniere", "Ketten-Commands darf niemand direkt");
-        Validator.PruefeGrammatik(Kette(false)).Should().NotContain(b => b.Code == "GR-HERKUNFT");
+        a.Eingaenge.Should().OnlyContain(e => a.AkteureVon(e.Nachricht).Count > 0, "jeder Eingang kommt von einem Akteur (GR-HERKUNFT)");
     }
 
     [Fact]
@@ -195,17 +183,7 @@ public sealed class DomainEditorAkteurTests
         var anteile = AkteurAnteile.Aus(m);
         anteile.Kette["Storniere"].Should().Equal("Kasse");   // Wechsel: nicht der Kunde, dessen Bestelle das Event auslöste
         anteile.Direkt.ContainsKey("Storniere").Should().BeFalse("eine Zusage ist kein IDarf");
-        Validator.PruefeGrammatik(m).Should().NotContain(b => b.Code == "GR-HERKUNFT");
-    }
-
-    [Fact]
-    public void Vertrag_auf_Nicht_Event_oder_mit_Nicht_Command_ist_ein_Grammatik_Fehler()
-    {
-        var befunde = Validator.PruefeGrammatik(Shop(Kunde, Kasse with
-        {
-            Vertrag = [new() { Eingang = "Bestelle" }, new() { Eingang = "Bestellt", Ausgaenge = ["Bestellt"] }, new() { Eingang = "Bestellt" }],
-        })).Where(b => b.Code == "GR-VERTRAG").Select(b => b.Meldung).ToList();
-        befunde.Should().Contain(x => x.Contains("Auf(Bestelle)")).And.Contain(x => x.Contains("gibt Bestellt aus")).And.Contain(x => x.Contains("zwei Zusagen"));
+        anteile.Eingaenge.Should().OnlyContain(e => anteile.AkteureVon(e.Nachricht).Count > 0, "jeder Eingang kommt von einem Akteur (GR-HERKUNFT)");
     }
 
     [Fact]
@@ -233,41 +211,6 @@ public sealed class DomainEditorAkteurTests
 
     private static EditorModell MitClients(params Client[] clients) =>
         Shop(Kunde, Kasse with { Vertrag = [Kasse.Vertrag[0]] }) with { Clients = clients };
-
-    [Fact]
-    public void Ein_gueltiger_Client_traegt_einen_Akteur_Vertrag_und_sendet_was_ein_Akteur_darf()
-    {
-        var m = MitClients(Laden with { Kenntnis = [] });
-        Validator.PruefeGrammatik(m).Should().NotContain(b => b.Code.StartsWith("GR-CLIENT") || b.Code == "GR-GETRAGEN");
-    }
-
-    [Fact]
-    public void Client_sendet_nur_was_ein_Akteur_darf_und_fragt_nur_Queries()
-    {
-        var befunde = Validator.PruefeGrammatik(MitClients(Laden with { Sendet = ["Storniere"], Fragt = ["Bestelle"], Kenntnis = [] }))
-            .Where(b => b.Code == "GR-CLIENT-BEFUGT").Select(b => b.Meldung).ToList();
-        befunde.Should().Contain(x => x.Contains("sendet Storniere") && x.Contains("kein Akteur"))
-            .And.Contain(x => x.Contains("fragt Bestelle"));
-    }
-
-    [Fact]
-    public void Client_traegt_nur_Akteur_Vertraege_und_hoert_jedes_Event_einmal()
-    {
-        var befunde = Validator.PruefeGrammatik(MitClients(Laden with { Traegt = ["IKasse", "IGibtsNicht"], Kenntnis = ["Bestellt", "Bestelle"] }))
-            .Where(b => b.Code == "GR-CLIENT").Select(b => b.Meldung).ToList();
-        befunde.Should().Contain(x => x.Contains("IGibtsNicht")).And.Contain(x => x.Contains("Bestellt kommt schon aus IKasse"))
-            .And.Contain(x => x.Contains("Auf(Bestelle)"));
-    }
-
-    [Fact]
-    public void Eine_Zusage_ohne_Client_bricht_die_Kette_sobald_es_Clients_gibt()
-    {
-        Validator.PruefeGrammatik(MitClients()).Should().NotContain(b => b.Code == "GR-GETRAGEN", "ohne Clients ist es ein Entwurf ohne Software-Sicht");
-        var andere = new Client { Name = "IAnzeige", Namespace = "Shop.Clients", Kenntnis = ["Bestellt"] };
-        Validator.PruefeGrammatik(MitClients(andere)).Should().ContainSingle(b => b.Code == "GR-GETRAGEN")
-            .Which.Meldung.Should().Contain("IKasse.Auf(Bestellt) → Storniere");
-        Validator.PruefeGrammatik(MitClients(andere, Laden with { Kenntnis = [] })).Should().NotContain(b => b.Code == "GR-GETRAGEN");
-    }
 
     [Fact]
     public void Scaffolder_schreibt_den_Client_als_Interface_mit_seinem_Rand()

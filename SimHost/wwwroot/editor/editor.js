@@ -2298,13 +2298,14 @@
   const istZu=()=>true;   // Karten sind immer kompakt — bearbeitet wird im Panel
   function nodeEditor(n){
     const zu=istZu(n);
-    const el=h("div",{class:"gnode2 n-"+n.kind+(zu?" collapsed":"")+(ISLE.has(n.id)?" island":"")+(diagFuer(n.id).length?" diag":"")
+    const dg=diagFuer(n.id),nurWarn=dg.length>0&&dg.every(x=>x.art==="warnung");
+    const el=h("div",{class:"gnode2 n-"+n.kind+(zu?" collapsed":"")+(ISLE.has(n.id)?" island":"")+(dg.length?(nurWarn?" diagwarn":" diag"):"")
       +(n.kind==="codenode"&&vorschlagFuer(n.ref._id)?" llmvor":"")+(n.kind==="code"&&(n.ref.unaufgeloest||[]).length?" unaufgeloest":"")});el.dataset.id=n.id;
     const pos=P(n);el.style.left=(pos.x||0)+"px";el.style.top=(pos.y||0)+"px";
     const title=(n.kind==="code"&&(n.ref.unaufgeloest||[]).length?"⚠ ":"")+(NODELABEL[n.kind]||n.kind);
     const head=h("div",{class:"ghead"},
       h("span",{class:"gtitle"+(n.name?" hatname":""),title:title+(n.name?" · "+n.name:"")},h("span",{class:"gk"},title+(n.name?" · ":"")),h("span",{class:"gn"},n.name||"")),
-      diagFuer(n.id).length?h("span",{class:"gdiag",title:diagFuer(n.id).map(d=>d.text).join("\n")},"⛔ "+diagFuer(n.id).length):null,
+      dg.length?h("span",{class:"gdiag"+(nurWarn?" warn":""),title:dg.map(d=>d.text).join("\n")},(nurWarn?"⚠ ":"⛔ ")+dg.length):null,
       dsBadge(n),
       n.kind==="host"||n.kind==="code"?null:h("span",{class:"gx",title:"Löschen",onclick:()=>delNode(n)},"✕"));
     head.onpointerdown=e=>{if(e.target.classList.contains("gx")||e.target.classList.contains("gcol"))return;startMove(e,el,P(n),()=>waehle(n.id));};

@@ -31,10 +31,6 @@ public static class WarmMessung
         Console.WriteLine($"   warm (unverändert): Übersetzen {Ms(warmLesung.Uebersetzen)} · Lesen {Ms(warmLesung.Extrahieren)} · Routing {warmLesung.Routing.Source}");
         Console.WriteLine($"     Phasen: {string.Join(" · ", warmLesung.Phasen.Select(p => $"{p.Phase} {Ms(p.Dauer)}"))}");
         var unterschiede = Unterschiede(kaltLesung.Board, warmLesung.Board, "").Take(25).ToList();
-        foreach (var d in (kaltLesung.Board["diagnosen"] as JsonArray ?? []).Select(x => x!.ToJsonString())
-                     .Except((warmLesung.Board["diagnosen"] as JsonArray ?? []).Select(x => x!.ToJsonString()))) Console.WriteLine($"     nur kalt: {d}");
-        foreach (var d in (warmLesung.Board["diagnosen"] as JsonArray ?? []).Select(x => x!.ToJsonString())
-                     .Except((kaltLesung.Board["diagnosen"] as JsonArray ?? []).Select(x => x!.ToJsonString()))) Console.WriteLine($"     nur warm: {d}");
         foreach (var u in unterschiede) Console.WriteLine($"     ≠ {u}");
         var fehler = unterschiede.Count;
         Console.WriteLine(fehler == 0 ? "   ✓ warmes Board = kaltes Board" : $"   ✗ warmes Board weicht ab ({fehler}+ Stellen)");

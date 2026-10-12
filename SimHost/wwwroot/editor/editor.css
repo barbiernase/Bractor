@@ -557,7 +557,7 @@
 #de .gnode2.n-host .ghead{background:#16222e}
 #de .kc-host{background:#3d5a72}
 #de .gnode2.diag{border-color:#d0566b !important;box-shadow:0 0 0 2px #d0566b55}
-#de .gdiag{margin-left:auto;margin-right:4px;font-size:10px;padding:0 6px;border-radius:8px;background:#3a1f28;color:#ffb3c1;white-space:nowrap}
+#de .gdiag{margin-left:auto;margin-right:4px;font-size:10px;padding:0 6px;border-radius:8px;background:#3a1f28;color:#ffb3c1;white-space:nowrap}#de .gdiag.warn{background:#3a3220;color:#ffd98a}#de .gnode2.diagwarn{border-color:#d9a400 !important}
 #de .gi-diag{margin:6px 0}
 #de .wb-klasse{display:flex;flex-direction:column;gap:3px}
 #de .wb-klasse .frow{display:flex;align-items:center;gap:6px}

@@ -8,8 +8,8 @@ namespace Infrastructure.Pruefstand.Tests;
 
 /// <summary>
 /// Pipeline als Fluss im Editor-Modell (docs/konzept-editor-pipelines.md §14): der Scaffolder schreibt die Knoten so, wie der
-/// Editor sie zeichnet (vom Draht aus, Lambda-Parameter = Knoten-Namen, ∧/∨/⏳/Je ausdrücklich), und der Validator meldet, was
-/// der Compiler nicht sieht (Fall außerhalb der Ausgänge, offener ⏳-Port, „∧ wartet auf einen Weg, der nicht immer liefert").
+/// Editor sie zeichnet (vom Draht aus, Lambda-Parameter = Knoten-Namen, ∧/∨/⏳/Je ausdrücklich). Was der Compiler nicht sieht (Fall
+/// außerhalb der Ausgänge, offener ⏳-Port, „∧ wartet auf einen Weg, der nicht immer liefert") meldet der Build: <c>Analyzers/FlussAnalyzerTests</c>.
 /// </summary>
 public class DomainEditorFlussTests
 {
@@ -106,38 +106,6 @@ public class DomainEditorFlussTests
             .And.Contain("teile.Sammle(klein.Bei<Verkleinert>()).Sende<MeldeBild>((datei, klein) => new MeldeBild(System.Guid.Empty, datei.Pfad, klein[0].Pfad));")
             .And.Contain("var notfall = klein.BeiZeitlimit().Sende<MeldeBild>(z => new MeldeBild(System.Guid.Empty, z.Grund, \"\"))")
             .And.Contain("    .Oder(datei, d => new MeldeBild(System.Guid.Empty, d.Pfad, \"\"));");
-        Validator.PruefeFluesse(m).Where(b => b.Schweregrad == "error").Should().BeEmpty();
-    }
-
-    [Fact]
-    public void Ein_gueltig_gezeichneter_Fluss_hat_keine_Fehler_aber_den_Hinweis_auf_den_offenen_Fall()
-    {
-        var befunde = Validator.PruefeFluesse(Modell(Bildeingang()));
-
-        befunde.Where(b => b.Schweregrad == "error").Should().BeEmpty();
-        // ∧ wartet auf deuten.Bilddatei — kommt „Unbekannt", wartet melden für immer (deuten hat kein Zeitlimit).
-        befunde.Should().ContainSingle(b => b.Code == "GR-FLUSS-WARTET")
-            .Which.Meldung.Should().Contain("deuten.Bilddatei").And.Contain("Unbekannt").And.Contain("für immer");
-
-        Validator.PruefeFluesse(Modell(Bildeingang(unbekanntVerdrahtet: true)))
-            .Should().NotContain(b => b.Code == "GR-FLUSS-WARTET", "der andere Fall ist verdrahtet");
-    }
-
-    [Fact]
-    public void Der_Validator_meldet_was_der_Compiler_nicht_sieht()
-    {
-        var schritte = Bildeingang().ToList();
-        schritte[2] = schritte[2] with { Eingaenge = [E(D("deuten", "Verkleinert")) with { Argumente = ["deuten.Pfad", "1"] }] };   // kein Ausgang von deuten
-        schritte[3] = schritte[3] with { Eingaenge = [E(D("daumen", "Verkleinert"))] };                                               // Draht von sich selbst
-        schritte.Add(new() { Name = "zeit", Art = FlussArt.Command, Typ = "MeldeBild", Eingaenge = [E(D("daumen", port: FlussPort.Zeitlimit))] });
-        schritte.Add(new() { Name = "zweite", Art = FlussArt.Auf, Typ = "BildGemeldet" });
-        var befunde = Validator.PruefeFluesse(Modell(schritte.ToArray()));
-
-        befunde.Should().Contain(b => b.Code == "GR-FLUSS-DRAHT" && b.Meldung.Contains("'Verkleinert' ist kein Ausgang von 'deuten'"));
-        befunde.Should().Contain(b => b.Code == "GR-FLUSS-DRAHT" && b.Meldung.Contains("kein früherer Knoten"));
-        befunde.Should().Contain(b => b.Code == "GR-FLUSS-ZEITLIMIT");
-        befunde.Should().Contain(b => b.Code == "GR-FLUSS-QUELLE");
-        befunde.Should().Contain(b => b.Code == "EDIT-FLUSS-ZUORDNUNG" && b.Meldung.Contains("zeit"));
     }
 
     [Fact]
@@ -147,7 +115,6 @@ public class DomainEditorFlussTests
 
         fluss.Ein("fl:Bildeingang").Select(k => k.Nachricht).Should().Contain(["DateiDa", "Bilddatei", "Verkleinert"]);
         fluss.Aus("fl:Bildeingang").Select(k => k.Nachricht).Should().Contain(["DeuteName", "Verkleinere", "MeldeBild"]);
-        Validator.PruefeGrammatik(Modell(Bildeingang())).Should().NotContain(b => b.Schweregrad == "error" && b.Meldung.Contains("Bildeingang"));
     }
 
     [Fact]

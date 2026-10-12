@@ -1035,7 +1035,7 @@ public static class Scaffolder
         b.AppendLine("{");
         var teile = new List<Action>();
         if (r.Zusatz is not null) teile.Add(() => Eingerückt(b, r.Zusatz, "    "));
-        // Ein Reader-Handle ohne Response hat keinen Vertrag (CQRS050) — nicht geschrieben (Validator meldet es).
+        // Ein Reader-Handle ohne Response hat keinen Vertrag (CQRS050) — nicht geschrieben (CQRS050 meldet es im Build).
         foreach (var h in r.Handles.Where(h => h.Rueckgabe != null || h.Ausgaenge.Count > 0))
             teile.Add(() => HandleZeilen(b, h, [IMessageEnvelope, ReadContext], ["envelope", "ctx"],
                 h.Rueckgabe ?? $"Task<{OneOfVon(h.Ausgaenge)}>"));

@@ -141,14 +141,20 @@ Server-Kartenliste („Code ohne Karte: 0“, leere Geste = kein Patch); die gez
 **Prüfen = Bauen, Code-Karte (2026-10-12, Werkbank P7.4):** Code-Karte als Gate — jede Typ-Deklaration oberster Ebene der Editor-Projekte liegt in der
 Spanne einer Karte (`_ort`/`_teile`; Store-Impl gehört zur Store-Karte, jede Store-Fn steht an ihrer Fähigkeit); was kein Baustein ist, wird eine Code-Karte
 (`code:T`, roher Code, partial-Teile an einer Karte, ⚠ nur bei unaufgelöster Basis). `--check` prüft das unabhängig aus der Syntax („Code ohne Karte: 0“
-Pflicht, Anteil der Code-Karten als Kennzahl: 9 = 2,1 %).
+Pflicht, Anteil der Code-Karten als Kennzahl: 9 = 2,1 %). **Prüfen = Bauen:** `DomainEditor/Validator.cs` ist gelöscht; seine Regeln sind Analyzer —
+`Domain.SourceGeneration/FlussAnalyzer.cs` (CQRS073–078), `ModellAnalyzer.cs` (CQRS079–083), `Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs`
+(CQRS084–088: Regeln über alle Domänen-Projekte, in der Laufzeit-Compilation, ohne Quell-Ort — die Meldung beginnt mit `'Typ'`); Graph-Diagnosen
+des Extractors entfallen bis auf Info. Die Werkbank holt die eigenen Regeln (CQRS…) bei ⟳ selbst aus den Analyzern der warmen Compilations
+(`Arbeitsbereich.RegelBefundeAsync`, unabhängig vom inkrementellen Bauen) und je Geste für die berührten Dateien; ein Befund hängt an der innersten
+Karte, deren `_ort` (Zeile bis `bis`) ihn enthält. **LLM-Prüfung (L18):** decide/apply/store/… und Fluss-/Regel-Lambdas probeweise im warmen
+Workspace (`Arbeitsbereich.PruefeProbeweiseAsync`: Datei mit Kandidat, Compiler + Analyzer des Projekts, nur neue Fehler) — `ProjektPruefung` entfällt.
 
 **Akteure, Verträge, Clients (2026-10-06):** Akteure mit Befugnis und Kette bis in den Event-Header; Akteur-Verträge (Zusagen
 draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer CommandId; Clients (`IClientVertrag`, n:m zu Akteuren) mit
 Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an
 Clients (`docs/konzept-akteure.md` §9).
 
-**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471; P7.3: Prüfstand 476/476; P7.4: Prüfstand 477/477): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
+**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471; P7.3: Prüfstand 476/476; P7.4: Prüfstand 479/479, Integration 39/39): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
 Marten/Consul/Redis, sequentiell: 33/33 (inkl. 4 Fluss-E2E; TwoNodeCommandDispatch an die Inbox-Marke seit T2b angepasst).**
 
 **Bewusst offen (Priorität):**
@@ -188,7 +194,8 @@ integriert; `CqrsFrameworkOptions` toter `[Obsolete]`-Typ.
   Planen ist ein Ausgang: `Selbst<T>`, `Frist<TCmd>`, `FristStorno<TCmd>` im OneOf. Der Rumpf liefert dem
   Extractor NICHTS (keine Guards, keine Store-Aufrufe) — nur die Signatur zählt.
 - **Grammatik = EINE Quelle:** Was sich im Editor womit verbinden lässt (Sorte × Eingang, Kardinalität, Zusatzregeln, je Regel ihr
-  Build-Gegenstück) steht nur in `DomainEditor/Grammatik.cs`; ⊕ (Server: `Sicht.Passt` über `rahmen.grammatik`), Validator und `--check` lesen sie. Module
+  Build-Gegenstück) steht nur in `DomainEditor/Grammatik.cs` — als Daten: ⊕ (Server: `Sicht.Passt` über `rahmen.grammatik`), `--grammatik` und `--check`
+  lesen sie; geprüft wird im Build (Analyzer/Generatoren/Boot-Guards, „Prüfen = Bauen“). Neue Regel ⇒ Analyzer + Test + Gegenstück in der Grammatik. Module
   = Namespaces, Ports abgeleitet (`DomainEditor/Module.cs`, nur Modell/Validator — Ebenen-Ansicht im Editor bewusst noch nicht).
 - **Ausgabe-Vertrag in der Signatur (CQRS050):** Decide und jedes Handle geben einen konkreten Typ oder `OneOf<…>`
   konkreter Typen zurück (nie `ICommand`/`IEvent` …). WAS entstehen kann, lesen Generatoren/Extractor/Editor NUR aus der

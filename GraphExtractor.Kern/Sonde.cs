@@ -227,7 +227,7 @@ public static class Sonde
                                                                  + (h["akteur"] is { } ak ? $" im Auftrag {ak}" : ""))));
             foreach (var h in A(p, "handles").Where(h => S(h, "inputKind") == "trigger")) sondenTrigger.Add(S(h, "input"));
         }
-        // Regel Z: Zustandsfelder der zustandslosen Übersetzer (Symbol-Fakt, Validator-Hinweis GR-ZUSTAND).
+        // Regel Z: Zustandsfelder der zustandslosen Übersetzer (Symbol-Fakt, im Build CQRS083 GR-ZUSTAND).
         foreach (var (liste, art) in new[] { ("pipelines", "pipeline"), ("projektionen", "projektion"), ("reaktionen", "reaktion") })
             foreach (var o in A(b, liste).Where(Sonde).Where(o => A(o["code"], "zustand").Any()))
                 z.Add($"zustand {art} {S(o, "namespace")}.{S(o, "name")} | {string.Join(", ", A(o["code"], "zustand").Select(x => (string?)x))}");

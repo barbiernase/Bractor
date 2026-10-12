@@ -454,23 +454,6 @@ public sealed class DomainEditorLeseseiteTests
     }
 
     [Fact]
-    public void Validator_meldet_Reader_ohne_Response_und_doppelte_Faehigkeit()
-    {
-        var m = Modell();
-        var st = m.Lesen!.Stores[0];
-        m = m with
-        {
-            Lesen = m.Lesen with
-            {
-                Stores = [st with { Fns = [st.Fns[0], st.Fns[1] with { Name = st.Fns[0].Name }] }],
-                Reader = [m.Lesen.Reader[0] with { Handles = [new() { Eingang = "HoleZeile" }] }],
-            },
-        };
-        Validator.Prüfe(m).Select(b => b.Code).Should().Contain(["EDIT-FAEHIGKEIT-DUP", "EDIT-READER-OHNE-ANTWORT"]);
-        Validator.Prüfe(Modell()).Where(b => b.Code.StartsWith("EDIT-FAEHIGKEIT") || b.Code.StartsWith("EDIT-READER")).Should().BeEmpty();
-    }
-
-    [Fact]
     public void Leseseite_ist_JSON_roundtrip_stabil()
     {
         var m = Modell();

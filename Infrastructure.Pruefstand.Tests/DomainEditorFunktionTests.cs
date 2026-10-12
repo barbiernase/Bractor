@@ -8,7 +8,7 @@ namespace Infrastructure.Pruefstand.Tests;
 
 /// <summary>
 /// Der Aufruf-Knoten im Editor-Modell: eine Katalog-Funktion (Auftrag → Ergebnis-Events) und ein Prozess-Schritt, der sie mit
-/// <c>Rufe&lt;F&gt;</c> (+ Zeitlimit) ruft — Scaffolder, Validator, Nachrichtenfluss und Grammatik behandeln ihn wie einen Command-Aufruf.
+/// <c>Rufe&lt;F&gt;</c> (+ Zeitlimit) ruft — Scaffolder, Nachrichtenfluss und Grammatik behandeln ihn wie einen Command-Aufruf.
 /// </summary>
 public class DomainEditorFunktionTests
 {
@@ -91,30 +91,6 @@ public class DomainEditorFunktionTests
     public void Ohne_Ausdruck_baut_der_Stub_den_Auftrag_der_gerufenen_Funktion()
     {
         Datei(Modell(), "BildAufbereitung.cs").Should().Contain(".Rufe<IVorverarbeitung>(t => new VorverarbeitungsAuftrag(");
-    }
-
-    [Fact]
-    public void Ein_gueltiger_Funktionsaufruf_verletzt_weder_Validator_noch_Grammatik()
-    {
-        Validator.Prüfe(Modell()).Where(b => b.IstFehler).Should().BeEmpty();
-    }
-
-    [Fact]
-    public void Eine_unbekannte_Funktion_und_ein_falscher_Auftrag_werden_gemeldet()
-    {
-        Validator.Prüfe(Modell(rufe: "IGibtEsNicht")).Select(b => b.Code).Should().Contain("EDIT-SAGA-FUNKTION");
-
-        var falsch = Modell() with { Funktionen = [new() { Name = "IVorverarbeitung", Namespace = Ns, Auftrag = "BildEingegangen", Ergebnisse = ["Vorverarbeitet"] }] };
-        Validator.Prüfe(falsch).Select(b => b.Code).Should().Contain("EDIT-FUNKTION-AUFTRAG");
-    }
-
-    [Fact]
-    public void Zeitlimit_hinter_einem_Count_Join_wird_gemeldet()
-    {
-        var m = Modell();
-        var s = m.Sagas[0];
-        var mitSammel = m with { Sagas = [s with { Schritte = [s.Schritte[0], s.Schritte[1] with { SammelEvent = "Unlesbar", Zeitlimit = "TimeSpan.FromSeconds(1)" }] }] };
-        Validator.Prüfe(mitSammel).Select(b => b.Code).Should().Contain("EDIT-SAGA-ZEITLIMIT");
     }
 
     [Fact]

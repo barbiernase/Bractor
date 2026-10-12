@@ -13,12 +13,17 @@ public sealed record Diagnose(string Datei, int Zeile, int Spalte, string Code, 
 
 /// <summary>
 /// Liest die MSBuild-Befunde (<c>datei(zeile,spalte): error CODE: text [projekt]</c>) und ordnet jeden dem umschließenden Typ und Member
-/// zu — über den Syntaxbaum der Datei (Code-Fakt), nie über Namen. Die Karte dazu bestimmt <see cref="Karten"/> (stabile Karten-Ids).
+/// zu — über den Syntaxbaum der Datei (Code-Fakt), nie über Namen. Befunde ohne Quell-Ort (die Gesamtbild-Regeln der Laufzeit-Compilation,
+/// <c>CSC : error CQRS084: 'Typ' …</c>) tragen den Typ vorn im Text. Die Karte dazu bestimmt <see cref="Karten"/> (stabile Karten-Ids).
 /// </summary>
 public static partial class Diagnosen
 {
     [GeneratedRegex(@"^\s*(?<datei>[^\(\s][^\(]*)\((?<z>\d+),(?<s>\d+)\):\s*(?<schwere>error|warning)\s+(?<code>[A-Z]+\d+):\s*(?<text>.*?)(\s+\[[^\]]+\])?\s*$")]
     private static partial Regex Zeile();
+
+    /// <summary>Ein Befund ohne Quell-Ort (<c>CSC : warning CQRS085: 'Typ' …</c>) — die Gesamtbild-Regeln der Laufzeit-Compilation nennen den Typ vorn.</summary>
+    [GeneratedRegex(@"^\s*[^:\(]+?\s*:\s*(?<schwere>error|warning)\s+(?<code>CQRS\d+):\s*(?<text>'(?<typ>[^']+)'.*?)(\s+\[[^\]]+\])?\s*$")]
+    private static partial Regex OhneOrt();
 
     public static IReadOnlyList<Diagnose> Lies(IEnumerable<string> ausgabe, string slnRoot, bool mitWarnungen = false)
     {
@@ -27,8 +32,17 @@ public static partial class Diagnosen
         foreach (var z in ausgabe)
         {
             var m = Zeile().Match(z);
-            if (!m.Success) continue;
+            if (!m.Success)
+            {
+                // Gesamtbild-Regeln (Werkbank P7.4): der Typ steht vorn im Text, die Karte folgt aus ihm.
+                var o = OhneOrt().Match(z);
+                if (o.Success && (o.Groups["schwere"].Value == "error" || mitWarnungen) && gesehen.Add($"|0|{o.Groups["code"].Value}|{o.Groups["text"].Value}"))
+                    aus.Add(new Diagnose("", 0, 0, o.Groups["code"].Value, o.Groups["text"].Value, o.Groups["schwere"].Value, o.Groups["typ"].Value, null));
+                continue;
+            }
             var schwere = m.Groups["schwere"].Value;
+            // Warnungen nur auf Wunsch: die der eigenen Regeln holt die Werkbank vollständig aus den Analyzern (Arbeitsbereich.RegelBefundeAsync) —
+            //   ein unverändertes Projekt druckt beim inkrementellen Bauen keine Warnungen mehr.
             if (schwere == "warning" && !mitWarnungen) continue;
             var datei = m.Groups["datei"].Value.Trim();
             var zeile = int.Parse(m.Groups["z"].Value);

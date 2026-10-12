@@ -40,6 +40,13 @@ public partial class Konto {
   }
 }
 ```
+Build-Regeln (`ModellAnalyzer`, Werkbank P7.4): CQRS079 ein entschiedenes persistentes Event braucht sein `Apply` (sonst wirft das Falten),
+CQRS080 (Warnung) ein gefaltetes Event, das das Aggregat in keinem Decide erzeugt, CQRS081 (Warnung) Enum-Wert 0 (geht auf dem Proto-Wire als
+Default verloren). Über alle Domänen-Projekte (`GesamtbildAnalyzer` in der Laufzeit-Compilation, Meldung beginnt mit `'Typ'`): CQRS084 eine Query
+beantwortet genau ein Reader, CQRS085 (Warnung) Event/Ablehnung/Response ohne Erzeuger, CQRS086 (Warnung) Command ohne Decider/Query ohne Reader,
+CQRS087 (Warnung) Zusage, die kein Client trägt (sobald es Clients gibt), CQRS088 (Warnung) Kreis aus Projektionen/Reaktionen über transiente
+Events. Für Konsumenten: CQRS082 (Warnung) Command ab einem transienten Eingang, CQRS083 (Warnung, Regel Z) Zustand in Instanzfeldern.
+
 **⚠ Nach neuen Command/Event/Query/Trigger-Typen:** Proto regenerieren —
 `dotnet run --project Proto.SourceGeneration` → ProtoRepo bauen → Infrastructure baut (Signale
 sind ausgenommen). Sonst Build-Fehler (CQRS030 macht ihn laut).
@@ -190,6 +197,9 @@ in §10.5a; eine Funktion, die ein Python-Worker rechnet, mit `AddExterneFunktio
 `<Funktion>Basis` aus `domain_client/generated/funktionen.py`, bietet sie am Handshake an und holt Aufträge per Pull). Pipelines
 liegen in der Domain-Assembly (Registry wie bei Prozessen). Beispiel: `Domain/ImagePair/Bildeingang.cs`; Beweise:
 `Infrastructure.Pruefstand.Tests/Funktionen/PipelineFlussTests.cs`, `BildeingangTests.cs`.
+Build-Regeln des Flusses (`FlussAnalyzer`, Werkbank P7.4 — vorher erst beim Start bzw. nur im Editor): CQRS073 genau eine Quelle, CQRS074 Warten
+mit Zeitlimit, CQRS075 `BeiZeitlimit()` nur an einem Knoten mit Zeitlimit, CQRS076 `Bei<E>()` nur mit einem Ausgang des Knotens (Ablehnung am
+✕-Port: `BeiAbgelehnt()`; ein Warten hat keinen), CQRS077 (Warnung) ∧ wartet auf einen Weg, der nicht immer liefert, CQRS078 `Sende<C>` ohne Decider.
 
 ## 10.6b Eine Pipeline im Handle-Modell (Bestand)
 

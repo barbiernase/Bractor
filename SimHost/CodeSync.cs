@@ -416,6 +416,13 @@ public static class CodeSync
         return (true, "", alt, neu.Ok ? Hash(neu.L!.ToString().Replace("\r\n", "\n")) : null, t.L.GetLocation().GetLineSpan().StartLinePosition.Line + 1);
     }
 
+    /// <summary>Der Dateitext MIT dem Kandidaten-Lambda, ohne zu schreiben — für die Prüfung vor dem Übernehmen (dieselbe Einsetzung wie <see cref="SetzeLambda"/>).</summary>
+    public static (bool Ok, string Grund, string? Pfad, string? NeuText) MitLambda(LambdaAnker a, string ausdruck, string slnRoot)
+    {
+        var t = FindeLambda(a, slnRoot);
+        return t.Ok ? (true, "", t.Pfad, t.Text[..t.L!.Span.Start] + ausdruck.Trim() + t.Text[t.L.Span.End..]) : (false, t.Grund, null, null);
+    }
+
     /// <summary>Rückgängig: den alten Lambda wörtlich zurück (nur wenn seitdem unverändert).</summary>
     public static (bool Ok, string Grund) SetzeLambdaZurueck(LambdaAnker a, string alterInhalt, string erwarteterHash, string slnRoot)
     {

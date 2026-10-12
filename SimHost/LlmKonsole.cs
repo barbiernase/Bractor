@@ -17,9 +17,9 @@ namespace SimHost;
 //  • Jede Runde ist ein NEUER, zustandsloser Aufruf. Reihenfolge stabil → veränderlich:
 //      Anweisung · Graph-Skelett · Slot-Teil · Auftrag · [aktueller Rumpf · Befund/Anpassung]
 //    Nie ein Gesprächsverlauf — nur der letzte Rumpf reist mit.
-//  • Prüfen: Syntax (alle Slot-Arten); Decide/Apply zusätzlich In-Memory-Compile mit den echten Generatoren
-//    (dasselbe Kompilat wie /api/editor/compile); Store-Funktionen gegen das echte Projekt inkl. der Store-Regeln
-//    CQRS066/067 (ProjektPruefung). Nur NEUE Fehler gegenüber dem Unveränderten zählen.
+//  • Prüfen = Bauen (Werkbank P7.4, L18): Syntax, dann der Kandidat probeweise im warmen Workspace — die Datei mit dem neuen Rumpf bzw.
+//    Lambda, ihr Projekt mit seinen echten Generatoren und Analyzern (CQRS050, CQRS066/067, CQRS073 ff. …); Python über den Parser.
+//    Nur NEUE Fehler gegenüber dem Unveränderten zählen. Nichts wird geschrieben, der Fork wird verworfen.
 //  • Ausführen (Editor, ▶ am 🤖-Knoten): ein GEPRÜFTER Rumpf geht sofort in die echte Datei, danach laufen die Generatoren
 //    (Build des Laufzeit-Projekts). Übernehmen (Konsole bzw. ungeprüfter Vorschlag) schreibt auf Klick. Beides mit
 //    Hash-Sperre, Sicherung, Rückgängig.
@@ -156,15 +156,12 @@ public sealed class LlmKonsole
 
     private readonly string _sln, _verz;
     private readonly ModellSimulation _sim;
+    private readonly SimHost.Werkbank.Arbeitsbereich _arbeit;
     private readonly Func<ILlmAnbieter> _anbieter;
-    private readonly object _sperre = new();
-    private readonly Dictionary<string, CompileErgebnis> _basisFehler = new();
-    private readonly ProjektPruefung _projekt;
 
-    public LlmKonsole(string slnRoot, ModellSimulation sim)
+    public LlmKonsole(string slnRoot, ModellSimulation sim, SimHost.Werkbank.Arbeitsbereich arbeitsbereich)
     {
-        _sln = slnRoot; _sim = sim;
-        _projekt = new ProjektPruefung(slnRoot);
+        _sln = slnRoot; _sim = sim; _arbeit = arbeitsbereich;
         _verz = Path.Combine(slnRoot, ".llm-kontext");
         // Ausschließlich Claude Code über die Anmeldung dieses Rechners (Abo, keine API-Kosten); BRACTOR_LLM_MODELL wählt optional das Modell.
         _anbieter = () => new ClaudeCliAnbieter(Environment.GetEnvironmentVariable("BRACTOR_LLM_MODELL"));
@@ -286,7 +283,7 @@ public sealed class LlmKonsole
             catch (Exception ex) { runden.Add(new { nr, art, fehler = ex.Message + (ex.InnerException != null ? " — " + ex.InnerException.Message : "") }); break; }
             uhr.Stop();
             var (ergebnis, kandidat, ausserhalb) = IstPython(slot) ? ZerlegePython(antwort.Text) : IstFluss(slot) ? ZerlegeLambda(antwort.Text) : Zerlege(antwort.Text);
-            var befunde = kandidat != null ? Pruefe(slot, kandidat) : new List<string>();
+            var befunde = kandidat != null ? await PruefeAsync(slot, kandidat, ct) : new List<string>();
             var runde = new
             {
                 nr, art, dauerMs = uhr.ElapsedMilliseconds, promptZeichen = prompt.Length, promptTokenSchaetzung = (int)Math.Ceiling(prompt.Length / 3.3),
@@ -353,24 +350,18 @@ public sealed class LlmKonsole
     }
 
     /// <summary>
-    /// Fluss-Lambda prüfen: ein Lambda-Ausdruck mit derselben Stelligkeit; dann das Modell mit dem Kandidaten (als Bau-Ausdruck des
-    /// Eingangs bzw. Liste des Je) in-memory übersetzt — dieselbe Übersetzung wie die Simulation (echte Generatoren).
+    /// Fluss-Lambda bzw. Regel-Lambda prüfen: ein Lambda-Ausdruck mit derselben Stelligkeit; dann die Datei mit dem Kandidaten an seinem Ort
+    /// (dieselbe Einsetzung wie beim Übernehmen) probeweise im warmen Workspace bauen.
     /// </summary>
-    private List<string> PruefeLambda(JsonObject slot, string ausdruck)
+    private async Task<List<string>> PruefeLambdaAsync(JsonObject slot, string ausdruck, CancellationToken ct)
     {
         if (SyntaxFactory.ParseExpression(ausdruck) is not LambdaExpressionSyntax neu || neu.GetDiagnostics().Any(d => d.Severity == DiagnosticSeverity.Error))
             return new List<string> { "Kein einzelner Lambda-Ausdruck (Syntax)." };
         var aktuell = JsonSerializer.SerializeToNode(CodeSync.LeseLambda(LAnker(slot), _sln))?["body"]?.GetValue<string>();
         if (aktuell != null && SyntaxFactory.ParseExpression(aktuell) is LambdaExpressionSyntax alt && Stelligkeit(alt) != Stelligkeit(neu))
             return new List<string> { $"Der Lambda hat {Stelligkeit(neu)} Parameter, der Knoten liefert {Stelligkeit(alt)} (Drähte)." };
-        var modell = SimModell();
-        if (modell == null) return new List<string> { "domain-model.json fehlt — Kontexte neu erzeugen." };
-        var mit = MitLambda(modell, slot, ausdruck);
-        if (mit is null) return new List<string> { $"{(S(slot, "art") == "saga" ? "Prozess" : "Fluss")} {S(slot, "klasse")}.{S(slot, "knoten")} steht nicht im Modell — Kontexte neu erzeugen." };
-        var basis = BasisKompilat(modell);
-        var bekannt = basis.Fehler.Select(f => f.Code + "|" + f.Meldung).ToHashSet();
-        return _sim.Kompiliere(mit).Fehler.Where(f => f.Schweregrad == "error" && !bekannt.Contains(f.Code + "|" + f.Meldung))
-            .Select(f => $"{f.Code}: {f.Meldung}").Distinct().Take(20).ToList();
+        var (ok, grund, pfad, text) = CodeSync.MitLambda(LAnker(slot), ausdruck, _sln);
+        return ok ? (await _arbeit.PruefeProbeweiseAsync(pfad!, text!, ct)).ToList() : new List<string> { grund };
     }
 
     private static int Stelligkeit(LambdaExpressionSyntax l) => l switch
@@ -380,83 +371,27 @@ public sealed class LlmKonsole
         _ => -1,
     };
 
-    /// <summary>Das Modell mit dem Kandidaten im passenden Knoten: Lambda i = Eingang i (Haupt-Aufruf, dann je ∨), beim Je die Liste.</summary>
-    private static EditorModell? MitLambda(EditorModell m, JsonObject slot, string ausdruck)
-    {
-        if (S(slot, "art") == "saga") return MitRegelLambda(m, slot, ausdruck);
-        var fluss = m.Fluesse.FirstOrDefault(f => f.Name == S(slot, "klasse"));
-        var knoten = fluss?.Knoten.FirstOrDefault(k => k.Name == S(slot, "knoten"));
-        var i = slot["lambda"]?.GetValue<int>() ?? -1;
-        if (fluss == null || knoten == null || i < 0) return null;
-        FlussSchritt neu;
-        if (knoten.Art == FlussArt.Je && i == 0) neu = knoten with { Liste = ausdruck };
-        else if (i < knoten.Eingaenge.Count)
-            neu = knoten with { Eingaenge = knoten.Eingaenge.Select((e, j) => j == i ? e with { Ausdruck = ausdruck } : e).ToList() };
-        else return null;
-        return m with { Fluesse = m.Fluesse.Select(f => f != fluss ? f : f with { Knoten = f.Knoten.Select(k => k == knoten ? neu : k).ToList() }).ToList() };
-    }
+    // ── Prüfen: Syntax, dann probeweise bauen (warmer Workspace) — für jede C#-Methode am Slot; Python über den Parser ──
 
-    /// <summary>Prozess-Regel: Regel = Anweisung; das Verb sagt, welcher Ausdruck (Sende/Rufe, Kompensation, Zählung).</summary>
-    private static EditorModell? MitRegelLambda(EditorModell m, JsonObject slot, string ausdruck)
-    {
-        var saga = m.Sagas.FirstOrDefault(x => x.Name == S(slot, "klasse"));
-        var i = slot["anweisung"]?.GetValue<int>() ?? -1;
-        if (saga == null || i < 0 || i >= saga.Schritte.Count) return null;
-        var alt = saga.Schritte[i];
-        SagaSchritt? neu = S(slot, "knoten") switch
-        {
-            "Sende" or "SendeJe" or "Rufe" => alt with { SendeAusdruck = ausdruck },
-            "RückgängigDurch" or "RückgängigDurchJe" => alt with { KompensationAusdruck = ausdruck },
-            "UndAlle" => alt with { SammelAusdruck = ausdruck },
-            _ => null,
-        };
-        return neu == null ? null
-            : m with { Sagas = m.Sagas.Select(x => x != saga ? x : x with { Schritte = x.Schritte.Select((t, j) => j == i ? neu : t).ToList() }).ToList() };
-    }
-
-    // ── Prüfen: Syntax für alle; Decide/Apply In-Memory-Compile mit den echten Generatoren; Store gegen das echte Projekt ──
-
-    public List<string> Pruefe(JsonObject slot, string rumpf)
+    public async Task<List<string>> PruefeAsync(JsonObject slot, string rumpf, CancellationToken ct = default)
     {
         if (IstPython(slot)) return PruefePython(slot, rumpf);
-        if (IstFluss(slot)) return PruefeLambda(slot, rumpf);
+        if (IstFluss(slot)) return await PruefeLambdaAsync(slot, rumpf, ct);
         var befunde = SyntaxFactory.ParseStatement("{\n" + rumpf + "\n}").GetDiagnostics()
             .Where(d => d.Severity == DiagnosticSeverity.Error)
             .Select(d => $"Syntax {d.Id} Zeile {d.Location.GetLineSpan().StartLinePosition.Line}: {d.GetMessage()}").ToList();
         if (befunde.Count > 0) return befunde;
-        var art = S(slot, "art");
-        // Store: das Editor-Modell trägt keine Store-Rümpfe → gegen das echte Projekt, mit den Store-Regeln CQRS066/067 —
-        // so sieht die Korrekturrunde einen Schreibweg am Puffer vorbei, BEVOR er in die Datei geht.
-        if (art == "store") return _projekt.Pruefe(Anker(slot), rumpf);
-        if (art is not ("decide" or "apply")) return befunde;   // Leseseite/Pipeline: Compile erst beim Bauen nach dem Übernehmen
-        var modell = SimModell();
-        if (modell == null) return new List<string> { "domain-model.json fehlt — Kontexte neu erzeugen." };
-        var basis = BasisKompilat(modell);
-        var mit = MitRumpf(modell, slot, rumpf);
-        if (mit is null) return new List<string> { $"{S(slot, "art")} {S(slot, "aggregat")}.{S(slot, "disc")} steht nicht im Modell — Kontexte neu erzeugen." };
-        var neu = _sim.Kompiliere(mit);
-        var bekannt = basis.Fehler.Select(f => f.Code + "|" + f.Meldung).ToHashSet();
-        return neu.Fehler.Where(f => f.Schweregrad == "error" && !bekannt.Contains(f.Code + "|" + f.Meldung))
-            .Select(f => $"{f.Code}: {f.Meldung}").Distinct().Take(20).ToList();
+        var (ok, grund, pfad, text) = CodeSync.MitRumpf(Anker(slot), rumpf, _sln);
+        return ok ? (await _arbeit.PruefeProbeweiseAsync(pfad!, text!, ct)).ToList() : new List<string> { grund };
     }
 
     /// <summary>Prüfen per Slot-Id (Kommandozeile <c>--pruefe-rumpf</c>, Endpunkt <c>/api/llm/pruefen</c>) — schreibt nichts.</summary>
-    public object PruefePerId(string id, string rumpf)
+    public async Task<object> PruefePerIdAsync(string id, string rumpf, CancellationToken ct = default)
     {
         var slot = Slot(id);
         if (slot == null) return new { ok = false, grund = "Unbekannter Slot — Kontexte neu erzeugen." };
-        var befunde = Pruefe(slot, rumpf);
+        var befunde = await PruefeAsync(slot, rumpf, ct);
         return new { ok = befunde.Count == 0, befunde };
-    }
-
-    private CompileErgebnis BasisKompilat(EditorModell modell)
-    {
-        var schluessel = modell.AlsJson().GetHashCode().ToString();
-        lock (_sperre)
-            if (_basisFehler.TryGetValue(schluessel, out var e)) return e;
-        var erg = _sim.Kompiliere(modell);
-        lock (_sperre) _basisFehler[schluessel] = erg;
-        return erg;
     }
 
     private EditorModell? SimModell()
@@ -642,7 +577,6 @@ public sealed class LlmKonsole
         var o = p.StandardOutput.ReadToEndAsync(); var e = p.StandardError.ReadToEndAsync();
         if (!p.WaitForExit(TimeSpan.FromMinutes(5))) { try { p.Kill(true); } catch { } return new { ok = false, grund = "Zeitüberschreitung (5 min)." }; }
         var zeilen = (o.Result + "\n" + e.Result).Split('\n');
-        lock (_sperre) _basisFehler.Clear();
         var meldung = zeilen.Where(l => l.Contains('✅') || l.Contains('❌') || l.Contains("error")).Select(l => l.Trim()).Take(10).ToList();
         return new { ok = p.ExitCode == 0, meldung, grund = p.ExitCode == 0 ? null : string.Join(" · ", meldung.Take(3)) };
     }

@@ -516,9 +516,6 @@ public static class ModellMapper
                 liste.Add(Knoten(new { modus = tb.Modus, ort = tb.Route ?? tb.Interval ?? tb.Path, datei = Relativ(dom.Wurzel, tb.Datei) }));
                 k["bindungen"] = liste;
             }
-        // Graph-Diagnosen (MISSING-APPLY, ENUM-ZERO, UNROUTED-SAGA-CMD …) — der Editor zeigt sie bei „✓ Prüfen".
-        root["diagnosen"] = Knoten(graph.Views.Diagnostics.Where(d => d.Severity != "info")
-            .Select(d => new { schweregrad = d.Severity, code = d.Code, meldung = d.Message }));
         root["readModels"] = Knoten(readModels);
         root["projektionen"] = Knoten(projektionen);
         root["reaktionen"] = Knoten(reaktionen);
@@ -621,6 +618,7 @@ public static class ModellMapper
     /// <summary>Ein Ort als Board-Feld: Datei relativ zur Solution, Spanne der Deklaration, Zeile.</summary>
     private static JsonObject? OrtJson(DomainModel dom, Ort? o) =>
         o == null || Relativ(dom.Wurzel, o.Datei) is not { } rel ? null
+            : o.Bis > 0 ? new JsonObject { ["datei"] = rel, ["start"] = o.Start, ["ende"] = o.Ende, ["zeile"] = o.Zeile, ["bis"] = o.Bis }
             : new JsonObject { ["datei"] = rel, ["start"] = o.Start, ["ende"] = o.Ende, ["zeile"] = o.Zeile };
 
     /// <summary>

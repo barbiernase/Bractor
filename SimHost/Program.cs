@@ -22,7 +22,8 @@ if (args.Length >= 2 && args[0] is "--trocken" or "--schreiben")
 // Schreiben tut — --pruefe-rumpf <Slot-Id> <Datei mit Rumpf>. Schreibt nichts.
 if (args.Length >= 3 && args[0] == "--pruefe-rumpf")
 {
-    var cliErgebnis = new LlmKonsole(SlnRoot(), new ModellSimulation()).PruefePerId(args[1], File.ReadAllText(args[2]));
+    using var cliArbeit = new SimHost.Werkbank.Arbeitsbereich(SlnRoot());
+    var cliErgebnis = await new LlmKonsole(SlnRoot(), new ModellSimulation(), cliArbeit).PruefePerIdAsync(args[1], File.ReadAllText(args[2]));
     Console.WriteLine(JsonSerializer.Serialize(cliErgebnis, new JsonSerializerOptions { WriteIndented = true,
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
     return;
@@ -113,13 +114,6 @@ app.MapPost("/api/werkbank/ansicht", (System.Text.Json.Nodes.JsonObject inhalt) 
     return Results.Json(new { ok = true });
 });
 
-// Struktur-Guardrails auf dem Modell (spiegeln Compiler/Analyzer). Body = EditorModell-JSON.
-app.MapPost("/api/editor/validate", (JsonElement body) =>
-{
-    var modell = BoardLeseseite.AusBoard(body.GetRawText());   // inkl. Leseseite (dieselbe Sicht wie „C# schreiben")
-    return Results.Json(Validator.Prüfe(modell), EditorModell.JsonOptionen);
-});
-
 // Kapselung: die Module (Namespaces) mit ihren abgeleiteten Ports — dieselbe Ableitung, die der Editor live rechnet
 // (Parität: der Editor vergleicht seine Ports mit diesen Zeilen). Body = das volle Board-MODEL.
 app.MapPost("/api/editor/module", (JsonElement body) =>
@@ -172,7 +166,7 @@ app.MapGet("/api/editor/sim/dsl", (string? sessionId) => Results.Text(simulation
 // ── CODE-SYNC: Board ⇄ echte .cs-Datei (Decider/Applier-Rümpfe). Anker = aus dem Graphen abgeleitet. ──
 // LLM-Code-Blöcke (docs/konzept-llm-minimalkontext.md): Kontexte + Füllen + Übernehmen. Fehlen die Kontexte, erzeugt
 // SimHost sie beim Start im Hintergrund selbst (kein CLI-Schritt nötig).
-var konsole = new LlmKonsole(slnRoot, simulation);
+var konsole = new LlmKonsole(slnRoot, simulation, werkbank.Arbeitsbereich);
 // Eine 🤖-Übernahme ist ein Patch wie jede Geste — derselbe ↶-Stapel.
 konsole.Gesichert = (titel, patch) => werkbank.Gesten.Verlauf.Merke("llm", titel, patch);
 konsole.ErzeugeKontexteFallsFehlend();
@@ -237,8 +231,8 @@ app.MapPost("/api/llm/ausfuehren", async (JsonElement b, CancellationToken ct) =
 app.MapPost("/api/llm/simulieren", (JsonElement b) => Results.Json(konsole.Simuliere(
     b.GetProperty("id").GetString()!, b.GetProperty("rumpf").GetString()!, b.GetProperty("command").GetString()!,
     b.TryGetProperty("werte", out var w) ? w : default, b.TryGetProperty("neu", out var n) && n.ValueKind == JsonValueKind.True), EditorModell.JsonOptionen));
-app.MapPost("/api/llm/pruefen", (JsonElement b) => Results.Json(konsole.PruefePerId(
-    b.GetProperty("id").GetString()!, b.GetProperty("rumpf").GetString()!)));
+app.MapPost("/api/llm/pruefen", async (JsonElement b, CancellationToken ct) => Results.Json(await konsole.PruefePerIdAsync(
+    b.GetProperty("id").GetString()!, b.GetProperty("rumpf").GetString()!, ct)));
 app.MapPost("/api/llm/uebernehmen", (JsonElement b) => Results.Json(konsole.Uebernehmen(
     b.GetProperty("id").GetString()!, b.GetProperty("rumpf").GetString()!,
     b.TryGetProperty("auftrag", out var a) ? a.GetString() : null,
