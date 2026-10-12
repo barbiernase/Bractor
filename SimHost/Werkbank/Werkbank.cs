@@ -26,6 +26,8 @@ public sealed class Werkbank
     public Fortschritt Fortschritt { get; } = new();
     /// <summary>Der warme Workspace (P7.1): das gelesene Board, die Karten der Befunde, „Neu lesen“.</summary>
     public Arbeitsbereich Arbeitsbereich { get; }
+    /// <summary>Geste → Patch (P7.2): jede Bearbeitung im Editor ist eine Änderung am Code, mit ↶.</summary>
+    public GestenDienst Gesten { get; }
     public KreislaufErgebnis? Letzter { get; private set; }
     /// <summary>Der Stand, mit dem der laufende Host gebaut wurde („● Entwurf ≠ Lauf", §5).</summary>
     public string? LaufStand { get; private set; }
@@ -42,6 +44,7 @@ public sealed class Werkbank
         Host = new HostProzess(slnRoot);
         Infra = new Infra(slnRoot);
         Arbeitsbereich = new Arbeitsbereich(slnRoot, Fortschritt.Melde);
+        Gesten = new GestenDienst(slnRoot, Arbeitsbereich, new Verlauf(slnRoot, Umgebungen.Branch), Umgebungen.Branch, Fortschritt.Melde);
     }
 
     private string AktivDatei => Path.Combine(_root, ".werkbank", "aktiv");
@@ -143,7 +146,9 @@ public sealed class Werkbank
             Fortschritt.Melde("kreislauf", new { stand });
             KreislaufErgebnis Ende(bool ok, IReadOnlyList<Diagnose>? d = null, IReadOnlyList<BootMeldung>? boot = null, IReadOnlyList<string>? frage = null)
             {
-                // Zu den Compiler-Befunden die Lese-Befunde (was das Lesen nicht fassen konnte, z. B. ein unaufgelöster Basistyp).
+                // Zu den Compiler-Befunden die Lese-Befunde (was das Lesen nicht fassen konnte, z. B. ein unaufgelöster Basistyp). Der Bau
+                //   ersetzt die Befunde, die Gesten seit dem letzten ⟳ an ihren Dateien gesammelt haben.
+                if (schritte.Any(x => x.Name == "Bauen")) Gesten.BefundeLeeren();
                 Letzter = new KreislaufErgebnis(ok, stand, schritte, [.. d ?? [], .. Arbeitsbereich.Befunde()], boot ?? [], frage, DateTimeOffset.UtcNow);
                 Laeuft = null;
                 Fortschritt.Melde("ende", new { ok, stand });
@@ -169,7 +174,10 @@ public sealed class Werkbank
             {
                 Beginne("Python-Basen");
                 var pr = await Prozesse.LaufeAsync("bash", [skript], _root, new Dictionary<string, string> { ["PATH"] = python + ":" + Environment.GetEnvironmentVariable("PATH") }, TimeSpan.FromMinutes(3), ct);
-                Schritt(schritte, new Schritt("Python-Basen", pr.Ok, (long)pr.Dauer.TotalMilliseconds, pr.Zeilen.TakeLast(3).ToList()));
+                // Neue Client-Implementierungen (Python) entstehen aus der GENERIERTEN Basis — also erst nach dem Bauen (früher „C# schreiben“).
+                var (angelegt, _) = SimHost.PythonSync.ImplementierungenAnlegen(DomainEditor.BoardLeseseite.AusBoard(vorher.BoardJson), _root, trocken: false);
+                Schritt(schritte, new Schritt("Python-Basen", pr.Ok, (long)pr.Dauer.TotalMilliseconds,
+                    [.. pr.Zeilen.TakeLast(3), .. angelegt.Select(a => "＋ " + a)]));
                 if (!pr.Ok) return Ende(false, diagnosen);
             }
 

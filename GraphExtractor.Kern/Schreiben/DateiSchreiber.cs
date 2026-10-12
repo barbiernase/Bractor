@@ -3,7 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace SimHost;
+namespace GraphExtractor;
 
 /// <summary>
 /// Bericht eines Schreiblaufs: was neu, was ergänzt (additiv), was unangetastet blieb. <see cref="Fehler"/>: Compiler-Fehler
@@ -45,10 +45,18 @@ public static partial class DateiSchreiber
     /// </summary>
     public static SchreibBericht Schreibe(EditorModell modell, string slnRoot, bool trocken = false)
     {
+        var ws = new Dateipuffer(slnRoot);
+        var bericht = Schreibe(modell, ws);
+        if (!trocken) ws.Speichern();
+        return bericht;
+    }
+
+    /// <summary>Wie <see cref="Schreibe(EditorModell, string, bool)"/>, aber in einen Puffer (die Geste speichert selbst und merkt sich den Patch).</summary>
+    public static SchreibBericht Schreibe(EditorModell modell, Dateipuffer ws)
+    {
         var geschrieben = new List<string>();
         var ergaenzt = new List<string>();
         var uebersprungen = new List<string>();
-        var ws = new Arbeitsbereich(slnRoot);
         // Neue Handles je Klasse (im Modell ohne Datei) — nur die werden in eine bestehende Klasse eingefügt.
         var lesen = modell.Lesen ?? new Leseseite();
         var neueHandles = lesen.Konsumenten.Select(k => (k.Name, k.Handles)).Concat(lesen.Reader.Select(r => (r.Name, r.Handles)))
@@ -103,7 +111,6 @@ public static partial class DateiSchreiber
         abgleich.Ingress();
         abgleich.MeldeUnbehandelte();
 
-        if (!trocken) ws.Speichern();
         return new SchreibBericht(true, geschrieben, ergaenzt, uebersprungen) { Dateien = ws.Geaendert.ToList() };
     }
 
@@ -198,7 +205,7 @@ public static partial class DateiSchreiber
     /// vorhandener Parameter bleibt wörtlich (Name/Format), ein neuer heißt wie im Modell. Nur die Parameterliste ändert
     /// sich; benutzt der Rumpf einen gelösten Parameter noch, meldet das der anschließende Build.
     /// </summary>
-    private static void ParameterAbgleich(EditorModell modell, Arbeitsbereich ws, List<string> ergaenzt, List<string> uebersprungen)
+    private static void ParameterAbgleich(EditorModell modell, Dateipuffer ws, List<string> ergaenzt, List<string> uebersprungen)
     {
         var lesen = modell.Lesen;
         if (lesen == null) return;

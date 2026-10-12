@@ -5,14 +5,22 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace SimHost;
+namespace GraphExtractor;
 
-/// <summary>Die Dateien eines Schreiblaufs im Speicher: gelesen bei Bedarf, geändert im Speicher, gespeichert erst am Ende (Trockenlauf = nie).</summary>
-internal sealed class Arbeitsbereich(string root)
+/// <summary>Die Änderung einer Geste an EINER Datei: Inhalt vorher (null = neu angelegt) und nachher (null = gelöscht), Pfad relativ zur Solution.</summary>
+public sealed record DateiPatch(string Datei, string? Vorher, string? Nachher);
+
+/// <summary>
+/// Die Dateien eines Schreiblaufs im Speicher: gelesen bei Bedarf, geändert im Speicher, gespeichert erst am Ende (Trockenlauf = nie).
+/// Merkt sich den Ausgangsstand jeder Datei — daraus entsteht der Patch einer Geste (und sein Gegenstück für ↶).
+/// </summary>
+public sealed class Dateipuffer(string root)
 {
-    private readonly Dictionary<string, string> _text = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string?> _text = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string?> _vorher = new(StringComparer.Ordinal);
     private readonly List<string> _geaendert = new();
 
+    public string Wurzel => root;
     private string Voll(string rel) => Path.GetFullPath(Path.Combine(root, rel.Replace('/', Path.DirectorySeparatorChar)));
     public bool Innerhalb(string rel) => Voll(rel).StartsWith(Path.GetFullPath(root), StringComparison.Ordinal);
 
@@ -20,25 +28,40 @@ internal sealed class Arbeitsbereich(string root)
     {
         if (_text.TryGetValue(rel, out var t)) return t;
         var p = Voll(rel);
-        return File.Exists(p) ? _text[rel] = File.ReadAllText(p) : null;
+        var inhalt = File.Exists(p) ? File.ReadAllText(p) : null;
+        _vorher[rel] = inhalt;
+        return _text[rel] = inhalt;
     }
 
     public void Setze(string rel, string text)
     {
-        if (_text.TryGetValue(rel, out var alt) && alt == text) return;
+        if (Lies(rel) == text) return;
         _text[rel] = text;
+        if (!_geaendert.Contains(rel)) _geaendert.Add(rel);
+    }
+
+    /// <summary>Die Datei entfällt (z. B. ihr letzter Typ wurde gelöscht).</summary>
+    public void Entferne(string rel)
+    {
+        if (Lies(rel) == null) return;
+        _text[rel] = null;
         if (!_geaendert.Contains(rel)) _geaendert.Add(rel);
     }
 
     public IReadOnlyList<string> Geaendert => _geaendert;
 
+    /// <summary>Was sich wirklich geändert hat (Datei für Datei, vorher/nachher).</summary>
+    public IReadOnlyList<DateiPatch> Patch() => _geaendert.Where(rel => _vorher.GetValueOrDefault(rel) != _text[rel])
+        .Select(rel => new DateiPatch(rel, _vorher.GetValueOrDefault(rel), _text[rel])).ToList();
+
     public void Speichern()
     {
-        foreach (var rel in _geaendert)
+        foreach (var p in Patch())
         {
-            var p = Voll(rel);
-            Directory.CreateDirectory(Path.GetDirectoryName(p)!);
-            File.WriteAllText(p, _text[rel]);
+            var voll = Voll(p.Datei);
+            if (p.Nachher == null) { if (File.Exists(voll)) File.Delete(voll); continue; }
+            Directory.CreateDirectory(Path.GetDirectoryName(voll)!);
+            File.WriteAllText(voll, p.Nachher);
         }
     }
 }
@@ -49,7 +72,7 @@ internal sealed class Arbeitsbereich(string root)
 /// einer Fähigkeit, Basisliste/Attribut-Argumente); der Code besitzt Rümpfe und Handcode. Vorhandenes, das sich nicht
 /// geändert hat, bleibt Wort für Wort; ersetzt wird nur das Geänderte. Bricht dadurch ein Rumpf, meldet es der Bau.
 /// </summary>
-internal sealed class Abgleich(EditorModell modell, Arbeitsbereich ws, IReadOnlyList<GenerierteDatei> generiert,
+internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyList<GenerierteDatei> generiert,
     List<string> ergaenzt, List<string> uebersprungen)
 {
     private static readonly string OneOf = typeof(Abstractions.OneOf<>).Name.Split('`')[0];
@@ -649,12 +672,34 @@ internal sealed class Abgleich(EditorModell modell, Arbeitsbereich ws, IReadOnly
             var ein = ErsterTyp(m) ?? "";
             vorhanden.Add(ein);
             if (a.Vertrag.FirstOrDefault(r => r.Eingang == ein) is not { } soll) edits.Add((m.FullSpan.Start, m.FullSpan.End, ""));
-            else if (N(m.ReturnType.ToString()) != N(Scaffolder.VertragsRueckgabe(soll)))
+            // Nur eine Zusage mit ANDEREN Ausgängen bekommt die kanonische Rückgabe — eine unberührte bleibt wörtlich (auch die Einzelform
+            //   `T Auf(E e)` statt `OneOf<T>`), wie der Extractor sie liest.
+            else if (!ZusageGleich(m.ReturnType, soll))
                 edits.Add((m.ReturnType.SpanStart, m.ReturnType.Span.End, Scaffolder.VertragsRueckgabe(soll)));
         }
         var fehlend = a.Vertrag.Where(r => !vorhanden.Contains(r.Eingang)).Select(r => $"\n    {Scaffolder.VertragsMethode(r)};\n").ToList();
         if (fehlend.Count > 0) edits.Add((decl.CloseBraceToken.SpanStart, decl.CloseBraceToken.SpanStart, string.Concat(fehlend)));
         return edits.Count == 0 ? null : (MitNamespaces(Anwenden(text, edits), typen), "Zusagen");
+    }
+
+    /// <summary>
+    /// Trägt die Rückgabe dieselben Ausgänge wie die Soll-Zusage? Gelesen wie im Extractor: <c>void</c> = keine, <c>T</c>/<c>OneOf&lt;…&gt;</c> =
+    /// einzeln, <c>(Async)Enumerable&lt;…&gt;</c> = Strom; verglichen werden die einfachen Typnamen in Reihenfolge.
+    /// </summary>
+    private static bool ZusageGleich(TypeSyntax rueckgabe, AkteurZusage soll)
+    {
+        static string Einfach(TypeSyntax t) => t switch
+        {
+            GenericNameSyntax g => g.Identifier.Text, QualifiedNameSyntax q => Einfach(q.Right), SimpleNameSyntax n => n.Identifier.Text,
+            _ => t.ToString(),
+        };
+        var t = rueckgabe;
+        var strom = false;
+        if (t is PredefinedTypeSyntax p && p.Keyword.IsKind(SyntaxKind.VoidKeyword)) return soll.Ausgaenge.Count == 0;
+        if (t is GenericNameSyntax g && g.Identifier.Text is "IAsyncEnumerable" or "IEnumerable" && g.TypeArgumentList.Arguments.Count == 1)
+        { strom = true; t = g.TypeArgumentList.Arguments[0]; }
+        var aus = t is GenericNameSyntax o && o.Identifier.Text == OneOf ? o.TypeArgumentList.Arguments.Select(Einfach).ToList() : [Einfach(t)];
+        return strom == soll.Strom && aus.SequenceEqual(soll.Ausgaenge, StringComparer.Ordinal);
     }
 
     // ── Client-Vertrag (docs/konzept-akteure.md §4): die Basisliste (Teile, ISendet, IFragt) und die Kenntnis-Methoden gehören dem

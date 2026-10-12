@@ -525,10 +525,26 @@ public sealed class LlmKonsole
     // ── Übernehmen / Rückgängig / Bauen ──
 
     /// <param name="bauen">danach das Projekt bauen — der echte Build, die Code-Generatoren laufen mit.</param>
+    /// <summary>Jede Übernahme kommt in den Verlauf der Werkbank (↶, Werkbank P7.2): Titel und Patch der geänderten Datei.</summary>
+    public Action<string, IReadOnlyList<GraphExtractor.DateiPatch>>? Gesichert { get; set; }
+
     public object Uebernehmen(string id, string rumpf, string? auftrag, string? basisHash, bool bauen = false)
     {
         var slot = Slot(id);
         if (slot == null) return new { ok = false, grund = "Unbekannter Slot." };
+        // Die Datei vor und nach dem Schreiben — ihr Unterschied ist der Patch im Verlauf (derselbe Stapel wie die Gesten).
+        var rel = IstPython(slot) ? PAnker(slot).Datei : IstFluss(slot) ? LAnker(slot).Datei : Anker(slot).Datei;
+        var voll = Path.IsPathRooted(rel) ? rel : Path.Combine(_sln, rel);
+        var vorher = File.Exists(voll) ? File.ReadAllText(voll) : null;
+        var ergebnis = UebernehmeIntern(id, slot, rumpf, auftrag, basisHash, bauen);
+        var nachher = File.Exists(voll) ? File.ReadAllText(voll) : null;
+        if (nachher != vorher)
+            Gesichert?.Invoke($"🤖 {id}", [new GraphExtractor.DateiPatch(Path.GetRelativePath(_sln, voll).Replace('\\', '/'), vorher, nachher)]);
+        return ergebnis;
+    }
+
+    private object UebernehmeIntern(string id, JsonObject slot, string rumpf, string? auftrag, string? basisHash, bool bauen)
+    {
         if (IstPython(slot)) return UebernehmePython(id, slot, rumpf, auftrag, basisHash);
         if (IstFluss(slot)) return UebernehmeLambda(id, slot, rumpf, basisHash, bauen);
         var anker = Anker(slot);

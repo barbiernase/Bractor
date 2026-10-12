@@ -580,12 +580,37 @@ public static class ModellMapper
             if (!dom.TypOrte.TryGetValue(full, out var l) || l.Count == 0) return null;
             return l.FirstOrDefault(o => datei != null && Relativ(dom.Wurzel, o.Datei) == datei) ?? l[0];
         }
+        // Die übrigen Deklarationen, die zur Karte gehören (weitere partial-Teile; Decider/Applier außerhalb des State; die Implementierung
+        //   einer Funktion; die Vertrags-Teile eines Akteurs) — „_teile": beim Löschen der Karte gehen sie mit. Verschachteltes zählt nicht extra.
+        void Teile(JsonObject k, Ort? haupt, IEnumerable<string> weitereTypen)
+        {
+            var orte = new List<Ort>();
+            bool Enthalten(Ort o) => orte.Append(haupt).Any(x => x != null && x.Datei == o.Datei && x.Start <= o.Start && o.Ende <= x.Ende);
+            foreach (var o in weitereTypen.SelectMany(t => dom.TypOrte.GetValueOrDefault(t) ?? []))
+                if (!Enthalten(o)) orte.Add(o);
+            if (orte.Count > 0) k["_teile"] = new JsonArray(orte.Select(o => (JsonNode?)OrtJson(dom, o)).Where(x => x != null).ToArray());
+        }
+        var funktionVon = dom.Funktionen.GroupBy(f => f.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        var akteurVon = dom.Akteure.GroupBy(a => a.Namespace + "." + a.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         foreach (var sammlung in new[] { "records", "enums", "sagas", "fluesse", "funktionen", "akteure", "clients", "readModels", "projektionen", "reaktionen", "reader", "stores" })
             foreach (var k in Alle(root[sammlung]))
-                k["_ort"] = OrtJson(dom, TypOrt(S(k, "namespace") + "." + S(k, "name"), (string?)k["datei"]));
+            {
+                var full = S(k, "namespace") + "." + S(k, "name");
+                var haupt = TypOrt(full, (string?)k["datei"]);
+                k["_ort"] = OrtJson(dom, haupt);
+                var weitere = new List<string> { full };
+                if (sammlung == "funktionen" && funktionVon.GetValueOrDefault(full)?.ImplFull is { } impl) weitere.Add(impl);
+                if (sammlung == "akteure" && akteurVon.TryGetValue(full, out var ak)) weitere.AddRange(ak.VertragTypen);
+                Teile(k, haupt, weitere);
+            }
         var aggVon = dom.Aggregates.GroupBy(a => a.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         foreach (var a in Alle(root["aggregate"]))
-            if (aggVon.TryGetValue(S(a, "name"), out var raw)) a["_ort"] = OrtJson(dom, TypOrt(raw.Full, (string?)a["datei"]));
+            if (aggVon.TryGetValue(S(a, "name"), out var raw))
+            {
+                var haupt = TypOrt(raw.Full, (string?)a["datei"]);
+                a["_ort"] = OrtJson(dom, haupt);
+                Teile(a, haupt, raw.TeilTypen.Prepend(raw.Full));
+            }
         foreach (var d in Alle(root["decider"]))
             if (aggVon.TryGetValue(S(d, "aggregat"), out var raw)) d["_ort"] = OrtJson(dom, raw.DecideOrte.GetValueOrDefault(S(d, "command")));
         foreach (var ap in Alle(root["applier"]))

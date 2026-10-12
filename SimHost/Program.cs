@@ -1,5 +1,6 @@
 using System.Text.Json;
 using DomainEditor;
+using GraphExtractor;
 using SimHost;
 
 // Der warme Workspace (Arbeitsbereich) lädt die Solution über MSBuild — der Locator muss vor dem ersten MSBuild-Typ registriert sein.
@@ -65,71 +66,32 @@ app.MapGet("/api/editor/model", async (CancellationToken ct) =>
         : Results.Content("""{"schemaVersion":"1","aggregate":[],"sagas":[]}""", "application/json");
 });
 
-// ── VISUELLER EDITOR: das VOLLE Board-Modell (alle Node-Sammlungen + Layout) durabel. ──
-// Quelle des visuellen Editors — unabhängig vom Scaffolder. Enthält Leseseite, Reaktionen,
-// Pipelines, Trigger, Code-/LLM-Knoten und die Knotenpositionen (x/y), die im EditorModell
-// (Schreibseite) bewusst NICHT stehen. Fehlt die Datei → 404, der Editor fällt dann auf die
-// aus C# abgeleitete Schreibseite (/api/editor/model) zurück.
-app.MapGet("/api/editor/board", () =>
+// ── GESTEN (Werkbank P7.2): jede Bearbeitung im Editor ist ein Patch am Code — Karten ändern/anlegen/löschen, Umbenennen (Renamer), ↶.
+//    Danach liest der warme Workspace neu; die Antwort trägt das Board (Code = einzige Wahrheit) und die Befunde der berührten Dateien.
+var gestenJson = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+IResult GestenErgebnis(SimHost.Werkbank.GestenAntwort a)
 {
-    var p = FindNeben("board-model.json");
-    return p != null && File.Exists(p)
-        ? Results.Content(File.ReadAllText(p), "application/json")
-        : Results.NotFound();
-});
-
-// Volles Board-Modell speichern (roh, hübsch eingerückt für lesbare Diffs). Body = das komplette MODEL.
-app.MapPost("/api/editor/board", (JsonElement body) =>
-{
-    var ziel = ZielNeben("board-model.json");
-    var hübsch = JsonSerializer.Serialize(body, new JsonSerializerOptions { WriteIndented = true });
-    File.WriteAllText(ziel, hübsch);
-    return Results.Json(new { gespeichert = ziel });
-});
-
-// Modell → C# in kanonischer Gestalt (deterministisch, rein). Body = EditorModell-JSON.
-app.MapPost("/api/editor/scaffold", (JsonElement body) =>
-{
-    var modell = EditorModell.AusJson(body.GetRawText());
-    return Results.Json(Scaffolder.Generiere(modell), EditorModell.JsonOptionen);
-});
-
-// Modell → ECHTE .cs-Dateien schreiben (chirurgisch/additiv: neue Records/Methoden anhängen,
-// Handcode nie überschreiben). Body = EditorModell-JSON. So erscheint z. B. ein neues Event in Events.cs.
-// Der Body ist das volle Board-MODEL: die Leseseite (Stores/Fähigkeiten, Projektionen, Reader, Pipeline-Fähigkeiten,
-// ReadModels) liest BoardLeseseite aus den Board-Sammlungen. Danach werden die betroffenen Projekte gebaut — ein gelöster
-// Fähigkeits-Parameter, den der Rumpf noch benutzt, kommt so als Compiler-Fehler zurück (nicht still).
-app.MapPost("/api/editor/write", (JsonElement body, bool? trocken) =>
-{
-    var modell = BoardLeseseite.AusBoard(body.GetRawText());
-    var root = SlnRoot();
-    var bericht = DateiSchreiber.Schreibe(modell, root, trocken == true);
-    // Client-Implementierungen (Python) entstehen aus der GENERIERTEN Basis — die schreibt der Build (Codegen-Prepass). Daher erst nach
-    //   dem Bauen; im Trockenlauf nur gemeldet.
-    void Python() { var (g, u) = PythonSync.ImplementierungenAnlegen(modell, root, trocken == true); bericht.Geschrieben.AddRange(g); bericht.Uebersprungen.AddRange(u); }
-    if (trocken == true) { Python(); return Results.Json(bericht, EditorModell.JsonOptionen); }
-    var fehler = new List<string>();
-    foreach (var projekt in bericht.Dateien.Select(d => ProjektVon(d, root)).Where(p => p != null).Distinct())
-    {
-        var b = System.Text.Json.JsonSerializer.SerializeToElement(CodeSync.BaueProjekt(projekt!, root));
-        if (b.TryGetProperty("fehler", out var fs)) fehler.AddRange(fs.EnumerateArray().Select(f => f.GetString() ?? "").Where(f => f.Length > 0));
-    }
-    Python();
-    return Results.Json(bericht with { Fehler = fehler.Distinct().ToList() }, EditorModell.JsonOptionen);
-});
-
-// Das Projekt (relativ, nächste .csproj aufwärts) einer geschriebenen Datei.
-static string? ProjektVon(string relDatei, string root)
-{
-    var dir = Path.GetDirectoryName(Path.GetFullPath(Path.Combine(root, relDatei)));
-    while (dir != null && dir.StartsWith(root, StringComparison.Ordinal))
-    {
-        var p = Directory.GetFiles(dir, "*.csproj").FirstOrDefault();
-        if (p != null) return Path.GetRelativePath(root, p).Replace('\\', '/');
-        dir = Path.GetDirectoryName(dir);
-    }
-    return null;
+    var o = JsonSerializer.SerializeToNode(a, gestenJson)!.AsObject();
+    if (werkbank.Arbeitsbereich.BoardJson is { } board) o["board"] = System.Text.Json.Nodes.JsonNode.Parse(board);
+    return Results.Content(o.ToJsonString(), "application/json");
 }
+app.MapPost("/api/werkbank/geste", async (System.Text.Json.Nodes.JsonObject b, CancellationToken ct) =>
+    GestenErgebnis(await werkbank.Gesten.AendernAsync((string?)b["titel"] ?? "Geste", GraphExtractor.KartenDelta.AusJson(b), ct)));
+app.MapPost("/api/werkbank/umbenennen", async (System.Text.Json.Nodes.JsonObject b, CancellationToken ct) =>
+    GestenErgebnis(await werkbank.Gesten.UmbenennenAsync((string?)b["titel"] ?? "Umbenennen", (string?)b["datei"] ?? "", (int?)b["start"] ?? -1,
+        (string?)b["neu"] ?? "", ct)));
+app.MapPost("/api/werkbank/rueckgaengig", async (CancellationToken ct) => GestenErgebnis(await werkbank.Gesten.RueckgaengigAsync(ct)));
+app.MapGet("/api/werkbank/verlauf", () => Results.Json(werkbank.Gesten.Verlauf.Liste(), gestenJson));
+app.MapGet("/api/werkbank/gesten", () => Results.Json(werkbank.Gesten.Messungen(), gestenJson));
+// Die Ansicht (Positionen, Filter, Akteur-Reihenfolge, 🤖-Knoten) — Schlüssel = Karten-Id; nicht der Code, nicht im Board.
+var ansichtDatei = Path.Combine(slnRoot, ".werkbank", "ansicht.json");
+app.MapGet("/api/werkbank/ansicht", () => Results.Content(File.Exists(ansichtDatei) ? File.ReadAllText(ansichtDatei) : "{}", "application/json"));
+app.MapPost("/api/werkbank/ansicht", (System.Text.Json.Nodes.JsonObject inhalt) =>
+{
+    Directory.CreateDirectory(Path.GetDirectoryName(ansichtDatei)!);
+    File.WriteAllText(ansichtDatei, inhalt.ToJsonString());
+    return Results.Json(new { ok = true });
+});
 
 // Struktur-Guardrails auf dem Modell (spiegeln Compiler/Analyzer). Body = EditorModell-JSON.
 app.MapPost("/api/editor/validate", (JsonElement body) =>
@@ -191,6 +153,8 @@ app.MapGet("/api/editor/sim/dsl", (string? sessionId) => Results.Text(simulation
 // LLM-Code-Blöcke (docs/konzept-llm-minimalkontext.md): Kontexte + Füllen + Übernehmen. Fehlen die Kontexte, erzeugt
 // SimHost sie beim Start im Hintergrund selbst (kein CLI-Schritt nötig).
 var konsole = new LlmKonsole(slnRoot, simulation);
+// Eine 🤖-Übernahme ist ein Patch wie jede Geste — derselbe ↶-Stapel.
+konsole.Gesichert = (titel, patch) => werkbank.Gesten.Verlauf.Merke("llm", titel, patch);
 konsole.ErzeugeKontexteFallsFehlend();
 static CodeAnker Anker(JsonElement b) => new(
     b.GetProperty("kind").GetString() ?? "decider",
@@ -291,7 +255,8 @@ app.MapGet("/api/werkbank/kreislauf", () => Results.Json(werkbank.Letzter, werkb
 // Dazu die Lese-Befunde des aktuellen Boards (warmer Workspace): was das Lesen nicht fassen konnte, steht an seiner Karte.
 app.MapGet("/api/werkbank/diagnosen", () => Results.Json(new
 {
-    diagnosen = (werkbank.Letzter?.Diagnosen ?? []).Where(d => !d.Code.StartsWith("LESEN", StringComparison.Ordinal)).Concat(werkbank.Arbeitsbereich.Befunde()),
+    // Je Datei gilt der jüngere Stand: was eine Geste seit dem letzten ⟳ berührt hat, zeigt ihre Befunde (warmer Workspace), sonst der Bau.
+    diagnosen = GestenUndBau(),
     boot = werkbank.Host.Laeuft || werkbank.Letzter == null ? werkbank.Host.Boot() : werkbank.Letzter.Boot,
 }, werkbankJson));
 // Der warme Workspace (P7.1): Zustand und Messungen; POST liest geänderte Dateien jetzt ein.
@@ -301,6 +266,12 @@ app.MapPost("/api/werkbank/lesen", async (CancellationToken ct) =>
     try { await werkbank.Arbeitsbereich.LiesAsync(ct); return Results.Json(werkbank.Arbeitsbereich.Zustand(), werkbankJson); }
     catch (InvalidOperationException e) { return Results.Json(new { ok = false, fehler = e.Message }, werkbankJson); }
 });
+IEnumerable<SimHost.Werkbank.Diagnose> GestenUndBau()
+{
+    var (beruehrt, gesten) = werkbank.Gesten.Befunde();
+    return (werkbank.Letzter?.Diagnosen ?? []).Where(d => !d.Code.StartsWith("LESEN", StringComparison.Ordinal) && !beruehrt.Contains(d.Datei))
+        .Concat(gesten).Concat(werkbank.Arbeitsbereich.Befunde());
+}
 // Fortschritt als Server-Sent Events (verlierbar; die Wahrheit bleibt /api/werkbank/zustand).
 app.MapGet("/api/werkbank/ereignisse", (HttpContext ctx) => werkbank.Fortschritt.SendeAsync(ctx.Response, ctx.RequestAborted));
 app.MapPost("/api/werkbank/host/stopp", async () => { await werkbank.Host.StoppeAsync(); return Results.Json(werkbank.Host.Zustand(), werkbankJson); });
@@ -437,19 +408,3 @@ static string? FindNeben(string name)
     }
     return null;
 }
-
-// Ziel-Pfad neben der .sln, AUCH wenn die Datei noch nicht existiert (zum Speichern).
-// Anker = das Verzeichnis mit der .sln; sonst CWD.
-static string ZielNeben(string name)
-{
-    var dir = Directory.GetCurrentDirectory();
-    for (var i = 0; i < 10 && dir != null; i++)
-    {
-        if (Directory.GetFiles(dir, "*.sln").Length > 0)
-            return Path.Combine(dir, name);
-        dir = Path.GetDirectoryName(dir);
-    }
-    return Path.Combine(Directory.GetCurrentDirectory(), name);
-}
-
-

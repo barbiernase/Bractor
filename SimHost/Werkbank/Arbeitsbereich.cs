@@ -91,6 +91,47 @@ public sealed class Arbeitsbereich : IDisposable
         finally { _sperre.Release(); }
     }
 
+    /// <summary>Selbst geschriebene Dateien sofort übernehmen (der Wächter meldet sie erst später) und warm neu lesen.</summary>
+    public Task<Lesung> UebernimmAsync(IEnumerable<string> relativePfade, CancellationToken ct = default)
+    {
+        foreach (var rel in relativePfade) _geaendert[Path.GetFullPath(Path.Combine(_root, rel))] = 0;
+        return LiesAsync(ct);
+    }
+
+    /// <summary>Der aktuelle Solution-Stand (geänderte Dateien übernommen) — für Roslyn-Refactorings wie den Renamer.</summary>
+    public async Task<Solution> StandAsync(CancellationToken ct = default)
+    {
+        await LiesAsync(ct);
+        return _solution!;
+    }
+
+    /// <summary>
+    /// Compiler-Befunde (Fehler) NUR der genannten Dateien aus dem warmen Workspace — billig, gebunden wird nur diese Datei. So steht nach
+    /// einer Geste ein gebrochener Rumpf sofort an seiner Karte (Unfertiges ist Code, der nicht baut); ⟳ ersetzt sie durch den echten Bau.
+    /// </summary>
+    public async Task<IReadOnlyList<Diagnose>> BefundeAsync(IEnumerable<string> relativePfade, CancellationToken ct = default)
+    {
+        var lesung = await LiesAsync(ct);
+        var aus = new List<Diagnose>();
+        foreach (var rel in relativePfade.Distinct())
+        {
+            var voll = Path.GetFullPath(Path.Combine(_root, rel));
+            foreach (var comp in lesung.Lage.Compilations)
+            {
+                var baum = comp.SyntaxTrees.FirstOrDefault(t => t.FilePath == voll);
+                if (baum == null) continue;
+                foreach (var d in comp.GetSemanticModel(baum).GetDiagnostics(cancellationToken: ct).Where(d => d.Severity == DiagnosticSeverity.Error))
+                {
+                    var z = d.Location.GetLineSpan().StartLinePosition;
+                    var (typ, member) = Diagnosen.Ort(voll, z.Line + 1);
+                    aus.Add(new Diagnose(rel, z.Line + 1, z.Character + 1, d.Id, d.GetMessage(), "error", typ, member));
+                }
+                break;
+            }
+        }
+        return Karten.Zuordnen(aus, lesung.Board);
+    }
+
     /// <summary>Die Lese-Befunde des zuletzt gelesenen Boards als Befunde an der Karte (wie Compiler-Befunde; Schwere „warning“).</summary>
     public IReadOnlyList<Diagnose> Befunde() => _letzte == null ? [] : _letzte.Befunde.Select(b => new Diagnose(
         (string?)b["datei"] ?? "", (int?)b["zeile"] ?? 0, 0, (string?)b["code"] ?? "LESEN", (string?)b["text"] ?? "", "warning", null, null,

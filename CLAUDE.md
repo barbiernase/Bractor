@@ -68,7 +68,7 @@ Offen: Saga-DSL (Cqrs.Testing) und die Prozess-Simulation kennen `Rufe` noch nic
 ⚙ Fähigkeiten · Rumpf (📝 + optional 🤖) — Decide/Apply, Handles, Store-Fns, Funktion (Signatur nur auf ihrer Karte,
 Abgleich an Interface + Impl), Fluss-λ (`fluss|…`), Prozess-Regel-λ (`saga|Prozess|Regel#Verb`) und die **Zusage/Kenntnis des Akteurs
 draußen** (`zusage|Client|Event@Klasse`: Python-Rumpf der Client-Implementierung — `PythonClients`/`PythonQuelle`/`PythonSync`; neue
-Implementierung legt „C# schreiben" nach dem Bauen aus der generierten Basis an). Akteur-Ableitung JS = C# auch über Flüsse.
+Implementierung legt ⟳ nach dem Bauen aus der generierten Basis an). Akteur-Ableitung JS = C# auch über Flüsse.
 **Editor-Regel: deklariert wird nur an der eigenen Karte, zugewiesen nur per ⊕** — kein Zuweisungs-Dropdown, keine Typ-Definition in
 einem fremden Knoten (Funktion, Fluss-Knoten, Prozess-Kette, Akteur „bietet an", Konfig); „＋" in der Zeile legt eine neue Karte an + verbindet.
 Funktion auf der Fläche wie ein Decider (Auftrag → ƒ + 📝/🤖 → Ergebnisse). Bau-Argumente (Fluss-Eingang, Regel-Dann) im **visuellen
@@ -124,12 +124,19 @@ in `--check`). Text-Änderung → Übersetzen + Lesen p50 224 ms; ⟳ „Neu les
 Karte, Fluss-Anweisung ohne Knoten / verworfene Regel / doppelter Name → Lese-Befund (`lesebefunde`, über `/api/werkbank/diagnosen` an der Karte).
 Jede Karte trägt `_ort {datei, start, ende, zeile}`.
 
+**Geste → Patch (2026-10-12, Werkbank P7.2):** jede Bearbeitung im Editor ist sofort ein Patch am Code — es gibt kein „C# schreiben“, kein
+gespeichertes Board und kein Zusammenführen mehr. Der Editor schickt das Karten-Delta (geändert/neu ganz, entfernt als natürlicher Schlüssel) an
+`POST /api/werkbank/geste`; der Motor im Kern (`GraphExtractor.Kern/Schreiben/Gesten.cs`) stempelt die Herkunft aus dem Code-Stand, schreibt über
+Scaffolder/Abgleich, löscht an `_ort` + `_teile`; Umbenennen = Roslyn-Renamer (`/api/werkbank/umbenennen`, alle Verweise auch in Lambdas); ↶ =
+`.werkbank/verlauf.<branch>.json` (auch 🤖-Übernahmen). Danach liest der warme Workspace neu, Compiler-Befunde der berührten Dateien stehen sofort
+an der Karte. Die Ansicht (Positionen, Filter, 🤖-Knoten) liegt in `.werkbank/ansicht.json`. Nie auf `main`. Tests: `Extractor/GestenTests`.
+
 **Akteure, Verträge, Clients (2026-10-06):** Akteure mit Befugnis und Kette bis in den Event-Header; Akteur-Verträge (Zusagen
 draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer CommandId; Clients (`IClientVertrag`, n:m zu Akteuren) mit
 Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an
 Clients (`docs/konzept-akteure.md` §9).
 
-**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
+**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
 Marten/Consul/Redis, sequentiell: 33/33 (inkl. 4 Fluss-E2E; TwoNodeCommandDispatch an die Inbox-Marke seit T2b angepasst).**
 
 **Bewusst offen (Priorität):**
@@ -203,7 +210,7 @@ NICHT Timeout-tunebar; xUnit schluckt App-Logs (Cluster-Diagnose → Last-Harnes
 - Build: `dotnet build`
 - Test (Logik, immer grün): `dotnet test Infrastructure.Pruefstand.Tests/Infrastructure.Pruefstand.Tests.csproj`
 - Integration (braucht Postgres/Consul/Redis, sequentiell): `dotnet test Infrastructure.Integration.Tests/Infrastructure.Integration.Tests.csproj`
-- Domänen-Editor + Simulation (einzige Oberfläche; **Ist-Stand** — Ziel: Werkbank ohne Simulationsschicht, `docs/konzept-werkbank.md`; ⟳ in der Kopfzeile baut und startet den echten Host in der gewählten Umgebung): `dotnet run --project SimHost` → http://localhost:5178/editor/ (SimHost lädt den Code selbst in den warmen Workspace und schreibt domain-model.json; die Oberfläche liegt statisch in `SimHost/wwwroot/editor/` — `index.html`, `editor.css`, `editor.js`); Palette = Anker (Aggregat · Fluss · Funktion · Quelle · Akteur · Client · Projektion), Trigger-Welt/LOD seit Werkbank-P0 nicht mehr im Editor; Bearbeiten nur im Panel: Karte anklicken, ⊕-Punkt im Panel → passende Knoten leuchten → anklicken = verbinden/lösen (`docs/konzept-editor-panel-bearbeitung.md`); 🤖-LLM-Knoten am Code-Block = Chat: Prompt senden → `claude -p` (Abo, nie API) → geprüft → .cs geschrieben → Laufzeit-Projekt gebaut (alle Generatoren) → neu eingelesen (Konzept §12); Kontexte erzeugt SimHost selbst
+- Domänen-Editor + Simulation (einzige Oberfläche; **Ist-Stand** — Ziel: Werkbank ohne Simulationsschicht, `docs/konzept-werkbank.md`; ⟳ in der Kopfzeile baut und startet den echten Host in der gewählten Umgebung): `dotnet run --project SimHost` → http://localhost:5178/editor/ (SimHost lädt den Code selbst in den warmen Workspace und schreibt domain-model.json; die Oberfläche liegt statisch in `SimHost/wwwroot/editor/` — `index.html`, `editor.css`, `editor.js`); Palette = Anker (Aggregat · Fluss · Funktion · Quelle · Akteur · Client · Projektion), Trigger-Welt/LOD seit Werkbank-P0 nicht mehr im Editor; Bearbeiten nur im Panel: Karte anklicken, ⊕-Punkt im Panel → passende Knoten leuchten → anklicken = verbinden/lösen (`docs/konzept-editor-panel-bearbeitung.md`) — jede Änderung geht sofort als Geste in den Code, ↶ nimmt sie zurück; 🤖-LLM-Knoten am Code-Block = Chat: Prompt senden → `claude -p` (Abo, nie API) → geprüft → .cs geschrieben → Laufzeit-Projekt gebaut (alle Generatoren) → neu eingelesen (Konzept §12); Kontexte erzeugt SimHost selbst
 - Editor-Parität (Code ⇄ Extraktion ⇄ Editor, schreibt nichts): `dotnet run --project GraphExtractor -- --check`
 - Grammatik als Liste „Regel → Build-Gegenstück": `dotnet run --project GraphExtractor -- --grammatik`
 - Agnostik-Sonde (unbekannte Domäne im Speicher gegen handgeschriebenes Soll + Fixpunkt): `dotnet run --project GraphExtractor -- --sonde`

@@ -150,7 +150,7 @@ public sealed class FunktionRaw
 {
     public string Name = "", Full = "", Namespace = "";
     /// <summary>Die C#-Implementierung (Klasse, einfacher Name) und ihr RufeAsync-Rumpf — null, wenn es (noch) keine gibt.</summary>
-    public string? ImplKlasse, ImplRumpf;
+    public string? ImplKlasse, ImplRumpf, ImplFull;
     /// <summary>Die Datei, in der <c>RufeAsync</c> der Implementierung steht (bei partial: die Teil-Datei der Methode).</summary>
     public string? ImplDatei;
     public string AuftragFull = "";
@@ -179,6 +179,8 @@ public sealed class AggregateRaw
     public Dictionary<string, string> DecideDateien = new(), ApplyDateien = new();
     /// <summary>Wo Decide(Cmd) bzw. Apply(Evt) steht — Schlüssel ist der einfache Name des Commands bzw. Events.</summary>
     public Dictionary<string, Ort> DecideOrte = new(), ApplyOrte = new();
+    /// <summary>Die Decider-/Applier-Typen des Aggregats (FullName) — beim Löschen gehen sie mit.</summary>
+    public List<string> TeilTypen = new();
     /// <summary>Wie der Code sie benennt (null = nicht genau eine Klasse); Geschachtelt = innere Klasse des States.</summary>
     public string? DeciderKlasse, ApplierKlasse;
     public bool DeciderGeschachtelt, ApplierGeschachtelt;
@@ -372,6 +374,8 @@ public sealed class AkteurRaw
     public List<string> Dienste = new();
     /// <summary>Sein Vertrag (<c>IAkteurVertrag&lt;Akteur&gt;</c>): Interface-Name, Datei und je <c>Auf(E)</c> die Zusage.</summary>
     public string? VertragName, VertragDatei;
+    /// <summary>Alle Vertrags-Teile (FullName) — beim Löschen des Akteurs gehen sie mit.</summary>
+    public List<string> VertragTypen = new();
     public List<AkteurZusageRaw> Vertrag = new();
     public string? Datei, Doku;
 }
@@ -768,6 +772,7 @@ public sealed partial class DomainExtractor
             var methode = iface?.GetMembers(Vertrag.FunktionsMethode).OfType<IMethodSymbol>().FirstOrDefault();
             if (impl == null || methode == null) continue;
             f.ImplKlasse = impl.Name;
+            f.ImplFull = impl.Fq();
             var im = Sym.Implementierung(impl, methode) as IMethodSymbol;
             f.ImplRumpf = im is null ? null : MethodBody(im);
             f.ImplDatei = (im?.DeclaringSyntaxReferences ?? impl.DeclaringSyntaxReferences).FirstOrDefault()?.SyntaxTree.FilePath;
@@ -880,6 +885,7 @@ public sealed partial class DomainExtractor
     private void ReadVertrag(AkteurRaw a, INamedTypeSymbol vertrag, string? teil)
     {
         var decl = QuellDeklarationen(vertrag).FirstOrDefault();
+        if (!a.VertragTypen.Contains(vertrag.Fq())) a.VertragTypen.Add(vertrag.Fq());
         if (teil == null)
         {
             a.VertragName = vertrag.Name;
@@ -1201,6 +1207,7 @@ public sealed partial class DomainExtractor
         agg.StateZusatz = MemberText(zusatz);
 
         var deciders = DeciderVon(t);
+        agg.TeilTypen.AddRange(deciders.Concat(ApplierVon(t)).Select(x => x.Fq()).Distinct());
         agg.DeciderKlasse = deciders.Count == 1 ? deciders[0].Name : null;
         agg.DeciderGeschachtelt = deciders.Count == 1 && deciders[0].ContainingType?.Fq() == t.Fq();
         agg.DeciderDatei = deciders.SelectMany(QuellDeklarationen).FirstOrDefault()?.SyntaxTree.FilePath;

@@ -267,6 +267,9 @@ public static class Sonde
         return z.Select(x => x.TrimEnd()).OrderBy(x => x, StringComparer.Ordinal).ToList();
     }
 
+    /// <summary>Die Quelltexte der Sonden-Domäne (Dateiname, Text) — auch die Fixture der Gesten-Tests im Prüfstand.</summary>
+    public static IEnumerable<(string Name, string Text)> Quelltexte() => Quellen();
+
     private static IEnumerable<(string Name, string Text)> Quellen() =>
         typeof(Sonde).Assembly.GetManifestResourceNames()
             .Where(n => n.EndsWith(".cs.txt", StringComparison.Ordinal)).OrderBy(n => n, StringComparer.Ordinal)

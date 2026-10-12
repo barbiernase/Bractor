@@ -6,16 +6,15 @@
   const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"],konfig:["Konfiguration","vo"],query:["Query","qry"],queryresponse:["Response","qrsp"],auftrag:["Auftrag","cmd"]};
   let MODEL={schemaVersion:"2",akteure:[],clients:[],records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],reaktionen:[],codeNodes:[],llmNodes:[],fluesse:[],codeKarten:[]};
   let NID=1;
-  const embedded=null;
-  // Domänen-Filter (welche Domänen ausgeblendet sind) — pro Browser UND pro Solution persistiert (rahmen.kennung),
-  //   damit Zwischenstände verschiedener Repos sich nie vermischen.
-  let HKEY="cqrs-hidden-domains", LSKEY="cqrs-board-model";
-  let HIDDEN=new Set();
-  function schluesselFuer(m){const k=(m&&m.rahmen&&m.rahmen.kennung)||"";
-    HKEY="cqrs-hidden-domains"+(k?":"+k:"");LSKEY="cqrs-board-model"+(k?":"+k:"");
-    HIDDEN=new Set();try{const s=localStorage.getItem(HKEY);if(s)HIDDEN=new Set(JSON.parse(s));}catch(e){}
-    ladeAnsicht(k);}
-  function saveHidden(){try{localStorage.setItem(HKEY,JSON.stringify([...HIDDEN]));}catch(e){}}
+  // Die ANSICHT (Werkbank P7.2): Positionen, Domänen-Filter, Akteur-Reihenfolge und die 🤖-Knoten — eine Datei auf dem Server
+  //   (.werkbank/ansicht.json, Schlüssel = Karten-Id). Sie gehört weder zum Code noch zum Board; der Code ist die einzige Wahrheit.
+  let HIDDEN=new Set(), ANSICHT={}, _ansT=null;
+  async function ansichtLaden(){try{const r=await fetch("/api/werkbank/ansicht");ANSICHT=r.ok?(await r.json())||{}:{};}catch(e){ANSICHT={};}}
+  function ansichtSpeichern(){if(_ansT)clearTimeout(_ansT);_ansT=setTimeout(()=>{_ansT=null;
+    ANSICHT.llmNodes=(MODEL.llmNodes||[]).map(l=>{const slot=(l.promptZiel&&konsolenId(l.promptZiel,MODEL))||l.promptSlot||null;return slot?{...l,promptSlot:slot}:l;});
+    fetch("/api/werkbank/ansicht",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(ANSICHT)}).catch(()=>{});},700);}
+  function schluesselFuer(){HIDDEN=new Set(ANSICHT.hidden||[]);ladeAnsicht();}
+  function saveHidden(){ANSICHT.hidden=[...HIDDEN];ansichtSpeichern();}
   let FILTER_OPEN=false, MM=null;
   function domHue(k){let h=0;for(let i=0;i<(k||"").length;i++)h=(h*31+k.charCodeAt(i))>>>0;return h%360;}
 
@@ -40,11 +39,7 @@
     // Jedes Objekt-Feld bekommt eine stabile _id → Feld-Ports eindeutig (auch bei gleichnamigen Feldern) und rename-fest.
     const stampFelder=arr=>(arr||[]).forEach(f=>{if(f&&!f._id)f._id="f"+(NID++);});
     m.records.forEach(r=>stampFelder(r.felder));m.aggregate.forEach(a=>stampFelder(a.state));m.states.forEach(s=>stampFelder(s.felder));m.readModels.forEach(rm=>stampFelder(rm.felder));
-    m.decider.forEach(d=>{if(!d._id)d._id="d"+(NID++);});m.applier.forEach(a=>{if(!a._id)a._id="a"+(NID++);});m.states.forEach(s=>{if(!s._id)s._id="s"+(NID++);});m.transitions.forEach(t=>{if(!t._id)t._id="t"+(NID++);
-      // Migration „ein Join, mehrere Dann": flaches sende/kompensation → dann[]. Jeder Dann = ein Command (+ eigene Kompensation).
-      if(!t.dann)t.dann=t.sende?[{sende:t.sende,sendeJe:t.sendeJe,sendeJeCollection:t.sendeJeCollection,kompensation:t.kompensation}]:[{}];
-      delete t.sende;delete t.sendeJe;delete t.sendeJeCollection;delete t.kompensation;delete t.sendeArgs;delete t.kompArgs;
-      });
+    m.decider.forEach(d=>{if(!d._id)d._id="d"+(NID++);});m.applier.forEach(a=>{if(!a._id)a._id="a"+(NID++);});m.states.forEach(s=>{if(!s._id)s._id="s"+(NID++);});m.transitions.forEach(t=>{if(!t._id)t._id="t"+(NID++);if(!t.dann)t.dann=[{}];});
     m.readModels.forEach(rm=>{if(!rm._id)rm._id="rm"+(NID++);});
     m.stores.forEach(st=>{if(!st._id)st._id="st"+(NID++);st.writeFns=st.writeFns||[];st.readFns=st.readFns||[];st.writeFns.forEach(f=>{if(!f._id)f._id="wf"+(NID++);f.params=f.params||[];});st.readFns.forEach(f=>{if(!f._id)f._id="rf"+(NID++);f.params=f.params||[];});});
     // Projektion-Handle nimmt je Event eine (oder mehrere) Schreib-FÄHIGKEIT als Parameter → fns[]. Der Store-Scope
@@ -57,7 +52,7 @@
         // Query-Handle nimmt je Query eine/mehrere Lese-Fähigkeiten als Parameter (auch über mehrere Stores) → fns[].
         hd.fns=hd.fns||[];
         // Symmetrie zur Schreibseite (decider.ergibt[]): je Query mehrere Responses als OneOf → responses[].
-        hd.responses=hd.responses||(hd.response?[hd.response]:[]);delete hd.response;});});
+        hd.responses=hd.responses||[];});});
     m.codeNodes.forEach(c=>{if(!c._id)c._id="cn"+(NID++);});m.llmNodes.forEach(l=>{if(!l._id)l._id="ln"+(NID++);});
     // Migration: eingebettete Decide/Apply-Rümpfe → 📝 Code-Knoten (Konsistenz: jede Code-Stelle = Port + Quelle).
     const mig=(node,nm)=>{if(node.rumpf===""&&!node.codeSrc){node.leer=true;delete node.rumpf;return;}
@@ -171,7 +166,7 @@
     else{centerOn(neu);pulseNode(neu);}
     deFlash("+ "+(NODELABEL[neu.kind]||neu.kind)+(neu.name?" · "+neu.name:"")+" — hinzugefügt",true);});}
   // opt.still: nicht auswählen/anspringen (Verbinden-Modus legt an und verbindet selbst).
-  function neuerKnoten(kind,x,y,opt){
+  function neuerKnoten(kind,x,y,opt){gTitel("neu: "+(NODELABEL[kind]||kind));
     const vorher=new Set(graphNodes().map(n=>n.id));
     // opt.ns (Band-Menü der Domänen-Ablage): Namespace der Domäne; opt.agg/opt.saga: naheliegender Besitzer in ihr.
     const defaultNs=()=>(opt&&opt.ns)||defaultNsGlobal(), AGG=(opt&&opt.agg)||"", SAGA=(opt&&opt.saga)||"";
@@ -590,7 +585,7 @@
     // Impl-Klasse: aus dem Code (fest) oder — bei einem neuen Store — benennbar (leer = Vorschlag: Name ohne I-Präfix).
     if(st.impl&&st.impl.datei)body.append(h("div",{class:"gsig",title:"Die Implementierungs-Klasse aus dem Code — neue Fns bekommen dort einen Platzhalter"},"Impl: "+st.impl.name));
     else if(st.datei)body.append(h("div",{class:"gsec",style:"opacity:.7"},"Impl: keine eindeutige Klasse im Code — Methoden werden nicht ergänzt"));
-    else body.append(h("div",{class:"frow",title:"Implementierungs-Klasse, die „C# schreiben“ anlegt"},h("span",{class:"slotlbl"},"Impl"),
+    else body.append(h("div",{class:"frow",title:"Implementierungs-Klasse, die die Geste anlegt"},h("span",{class:"slotlbl"},"Impl"),
       inp(st.impl&&st.impl.name,v=>{v=v.trim();if(v)st.impl={name:v,namespace:(MODEL.rahmen&&MODEL.rahmen.storeImplNamespace)||st.namespace};else delete st.impl;},
         /^I[A-Z]/.test(st.name||"")?st.name.slice(1):(st.name||"")+"Impl")));
     const rms=MODEL.readModels.filter(x=>x.store===st.name);
@@ -619,7 +614,7 @@
     if(isRead)box.append(h("div",{class:"frow"},h("span",{class:"slotlbl"},"→ Rückgabe"),tinp(fn.rueckgabe,v=>fn.rueckgabe=v)));
     // Fähigkeit = das Interface GENAU dieser Fn (CQRS051). Aus dem Code: fest (Code-Fakt). Neu: Name im Panel, leer = Vorschlag.
     if(fn.sig)box.append(h("div",{class:"gsig",title:"Das Fähigkeits-Interface aus dem Code — der Typ, den ein Handle als Parameter nimmt"},"Fähigkeit: "+(fn.faehigkeit||"?")));
-    else box.append(h("div",{class:"frow",title:"Name des Fähigkeits-Interfaces, das „C# schreiben“ anlegt (leer = Vorschlag)"},h("span",{class:"slotlbl"},"Fähigkeit"),
+    else box.append(h("div",{class:"frow",title:"Name des Fähigkeits-Interfaces, das die Geste anlegt (leer = Vorschlag)"},h("span",{class:"slotlbl"},"Fähigkeit"),
       inp(fn.faehigkeit,v=>{fn.faehigkeit=v.trim()||undefined;},faehigkeitVorschlag(st,fn))));
     box.append(codePort("impl:in:"+st._id+":"+fn._id,{k:isRead?"readFn":"writeFn",store:st._id,fn:fn._id},fn.codeSrc,"Impl-Logik"));
     return box;}
@@ -1129,13 +1124,13 @@
       body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},
         "— noch keine: eine Python-Klasse, die "+clientAnzeige(c)+"Basis erbt (die Basis entsteht beim Bauen aus dem Vertrag)."));
       const pk=(MODEL.rahmen||{}).pythonPaket;
-      if(pk)body.append(h("button",{class:"add",title:"„C# schreiben“ legt "+pk+"/… an: die Klasse mit je Zusage/Kenntnis der Methode der generierten Basis (Platzhalter-Rumpf) — danach je Methode 📝/🤖",
+      if(pk)body.append(h("button",{class:"add",title:"⟳ legt nach dem Bauen der Basis "+pk+"/… an: die Klasse mit je Zusage/Kenntnis der Methode der generierten Basis (Platzhalter-Rumpf) — danach je Methode 📝/🤖",
         onclick:()=>{const kl=clientAnzeige(c)||"Client";(c.implementierungen=c.implementierungen||[]).push({sprache:"python",klasse:kl,
           datei:pk+"/"+kl.replace(/(?<=[a-z0-9])([A-Z])|(?<=[A-Z])([A-Z][a-z])/g,"_$1$2").toLowerCase()+".py",rumpfe:[],neu:true});render();}},"+ 🐍 Python-Implementierung"));
       return;}
     ims.forEach((im,ii)=>{const rs=(im.rumpfe||[]).filter(x=>!nurEvent||x.event===nurEvent);if(!rs.length&&!(im.neu&&!nurEvent))return;
       if(im.neu&&!rs.length&&!nurEvent){body.append(h("div",{class:"gsec",style:"opacity:.85",title:im.datei},"🐍 "+im.klasse+" · "+im.datei+" (neu)"),
-        h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},"Entsteht mit „C# schreiben“ (nach dem Bauen der Basis) — je Zusage/Kenntnis eine Methode, dann hier je Methode 📝/🤖."),
+        h("div",{class:"gp-row gp-leer",style:"cursor:default;white-space:normal"},"Entsteht beim nächsten ⟳ (nach dem Bauen der Basis) — je Zusage/Kenntnis eine Methode, dann hier je Methode 📝/🤖."),
         h("button",{class:"rm",title:"doch nicht anlegen",onclick:()=>{c.implementierungen.splice(ii,1);render();}},"✕"));return;}
       body.append(h("div",{class:"gsec",style:"opacity:.85",title:im.datei},"🐍 "+im.klasse+" · "+(im.datei||"").split("/").pop()+(nurEvent?" · 🔌 "+clientAnzeige(c):"")));
       rs.forEach(x=>{if(!nurEvent)body.append(h("div",{class:"slotrow"},h("span",{class:"slotlbl",style:"flex:1"},
@@ -1308,7 +1303,7 @@
   //   claude -p (Abo, keine API) füllt den Rumpf → Prüfung (Syntax; Decide/Apply: In-Memory-Kompilat mit den echten
   //   Generatoren, bis zu 3 Reparaturrunden) → GEPRÜFT: sofort in die echte .cs → Build des Laufzeit-Projekts (alle Code-
   //   Generatoren inkl. Proto-Prepass) → Code + Kontexte neu eingelesen. Hat der Block noch keine Methode (Decide/Apply),
-  //   wird sie vorher als Platzhalter geschrieben („C# schreiben“). Nur ein UNGEPRÜFTER Kandidat bleibt Vorschlag (✓ am Block).
+  //   wird sie vorher als Platzhalter geschrieben (Geste). Nur ein UNGEPRÜFTER Kandidat bleibt Vorschlag (✓ am Block).
   //   Wahrheit ist die Datei; ein Vorschlag hängt am SLOT-Schlüssel (stabil über Neu-Einlesen) und ist lokal gesichert.
   const LLM_VKEY="bractor-llm-vorschlaege";
   let VOR={};try{VOR=JSON.parse(localStorage.getItem(LLM_VKEY)||"{}")||{};}catch(e){}
@@ -1340,8 +1335,8 @@
     // Noch keine Methode im Code (neu gezeichneter Decider/Applier): erst die Struktur schreiben (Platzhalter) + einlesen,
     //   dann derselbe Durchlauf. Leseseiten-Blöcke deckt der Scaffolder (noch) nicht — dort bleibt die Meldung.
     if(r&&!r.ok&&r.unbekannt&&/^(decide|apply|funktion)\|/.test(kid)){
-      LAUF[kid].was="legt die Methode an (C# schreiben) · liest ein";neuZeichnen();
-      await deWrite();
+      LAUF[kid].was="schreibt die Struktur (Geste) · liest ein";neuZeichnen();
+      await gesteFlush();try{await fetch("/api/llm/aktualisieren",{method:"POST"});}catch(e){}
       LAUF[kid].was="LLM schreibt · prüft · baut";neuZeichnen();
       try{r=await postLlm("/api/llm/ausfuehren",anfrage);}catch(e){r={ok:false,grund:"SimHost offline"};}
       if(r&&!r.ok&&r.unbekannt)r.grund=kid.startsWith("funktion|")?"Implementierung konnte nicht angelegt werden — Funktion vollständig (Auftrag ⊕, mindestens ein Ergebnis ⊕)?"
@@ -1644,10 +1639,13 @@
       MODEL.reader.forEach(r=>{if(r.projektion===old)r.projektion=nv;});
     }else if(kind==="enum"){retypeFelder(old,nv);}   // Typ-Komposition: Feldtypen mitziehen
   }
+  // Eine Karte aus dem Code (sie hat einen Ort) benennt der Server um — Roslyn-Renamer, alle Verweise auch in Lambdas (Werkbank P7.2);
+  //   eine gerade erst angelegte zieht ihre Verweise im Board mit und geht mit der nächsten Geste hinaus.
   function nameInp(o,p,ph,kind){const old=o[p];
     return h("input",{value:old??"",placeholder:ph||"Name",
       onchange:e=>{const nv=e.target.value;if(!nv){e.target.value=old??"";return;}
-        if(nv!==old&&kind)renameRefs(kind,o,old,nv);o[p]=nv;render();}});}
+        if(nv!==old&&p==="name"&&o._ort&&o.ausCode){gUmbenennen(o,nv,old);return;}
+        if(nv!==old&&kind)renameRefs(kind,o,old,nv);o[p]=nv;gTitel("umbenennen "+old+" → "+nv);render();}});}
   // Feld-Ausgang: jedes Objekt-Feld ist eine verdrahtbare Wert-Quelle (field ▶). Typ-Check am Eingang.
   // Eindeutiger Default-Feldname innerhalb eines Objekts (keine gleichnamigen Felder → keine doppelten „feld").
   function uniqFeldName(arr,base){const set=new Set((arr||[]).map(f=>f.name));if(!set.has(base))return base;let i=2;while(set.has(base+i))i++;return base+i;}
@@ -1817,6 +1815,8 @@
     else{const e0=z.eingaenge.find(x=>x!==e&&!x.je);if(!e0)return;z.eingaenge=z.eingaenge.filter(x=>x!==e);e0.draehte.push(d);delete e0.ausdruck;e0.argumente=flAutoArgs(f,z,e0);}}
   // Umbenennen: der Name ist die Identität — Drähte, Je-Bezüge und Ausdrücke („name.Feld") ziehen mit.
   function flUmbenennen(f,k,nv){const alt=k.name;nv=(nv||"").replace(/[^A-Za-zÄÖÜäöüß0-9_]/g,"");if(!nv||nv===alt)return;if(flKnoten(f,nv)){deFlash("„"+nv+"“ gibt es in dieser Pipeline schon.",true);return;}
+    // Ein Knoten aus dem Code ist eine Variable im Definiere-Lambda — der Server benennt sie samt Verwendungen um (Renamer).
+    if(k._ort&&!k.ohneVariable&&f.ausCode){gUmbenennen(k,nv,alt);return;}
     const re=new RegExp("\\b"+alt+"\\b","g");
     (f.knoten||[]).forEach(z=>(z.eingaenge||[]).forEach(e=>{(e.draehte||[]).forEach(d=>{if(d.von===alt)d.von=nv;});if(e.je===alt)e.je=nv;
       if(e.argumente)e.argumente=e.argumente.map(a=>a.replace(re,nv));if(e.ausdruck)e.ausdruck=e.ausdruck.replace(re,nv);}));
@@ -2401,7 +2401,7 @@
         if(Math.min(A.x+A.w,B.x+B.w)-Math.max(A.x,B.x)>16 && Math.min(A.y+A.h,B.y+B.h)-Math.max(A.y,B.y)>16){if(++c>all.length)return c;}}
       return c;};
     // Ein arrangiertes Board (Handanordnung) NICHT neu würfeln — AUSSER es überlappt grob (alter/kaputter
-    // Stand aus localStorage/board-model.json → heilen). „▦ Neu anordnen" ruft mit force=true.
+    // Stand aus der Ansichts-Datei → heilen). „▦ Neu anordnen" ruft mit force=true.
     if(!force && all.some(positioned) && overlaps() < Math.max(3, Math.floor(all.length*0.12))) return;
 
     const COLGAP=48,ROWGAP=26,SHELFGAP=150,COMPGAP=240,KGAP=90,LEER_W=640,LEER_H=110;   // RP/RK: Rahmen-Rand/-Kopf (zeichneRahmen)
@@ -2567,7 +2567,7 @@
   function nodeEditor(n){
     const zu=istZu(n);
     const el=h("div",{class:"gnode2 n-"+n.kind+(zu?" collapsed":"")+(ISLE.has(n.id)?" island":"")+(diagFuer(n.id).length?" diag":"")
-      +(n.kind==="codenode"&&vorschlagFuer(n.ref._id)?" llmvor":"")+((n.own?n.own.ref:n.ref).ungeschrieben?" ungeschrieben":((m=>m.ausCode===false||(m.ausCode===undefined&&MERGE_KEYS[kollektionVon(n.own?n.own.kind:n.kind)]))(n.own?n.own.ref:n.ref)?" entwurf":""))});el.dataset.id=n.id;
+      +(n.kind==="codenode"&&vorschlagFuer(n.ref._id)?" llmvor":"")});el.dataset.id=n.id;
     const pos=P(n);el.style.left=(pos.x||0)+"px";el.style.top=(pos.y||0)+"px";
     const title=NODELABEL[n.kind]||n.kind;
     const head=h("div",{class:"ghead"},
@@ -2609,7 +2609,7 @@
     else if(n.kind==="code")codeKarteCard(body,n.ref);
     else recordCard(body,n.ref);
   }
-  function delNode(n){const k=n.kind,ref=n.ref;if(k==="host")return;
+  function delNode(n){const k=n.kind,ref=n.ref;if(k==="host")return;gTitel("löschen "+(NODELABEL[k]||k)+" "+(n.name||""));
     // Ein gelöschter Eingang (Command/Query) verschwindet auch aus den Befugnissen (IDarf) der Akteure.
     {const nm=MODEL.records.includes(ref)?ref.name:null;if(nm)MODEL.akteure.forEach(a=>{if((a.darf||[]).includes(nm))a.darf=ohneX(a.darf,nm);
       // … und aus den Verträgen: als Eingang fällt die ganze Zusage weg, als Ausgang nur der Ausgang.
@@ -2795,7 +2795,7 @@
       return true;}
     return true;}
   function applyLink(a,b){
-    const O=a.__slot.dir==="out"?a.__slot:b.__slot, I=a.__slot.dir==="out"?b.__slot:a.__slot;
+    const O=a.__slot.dir==="out"?a.__slot:b.__slot, I=a.__slot.dir==="out"?b.__slot:a.__slot;gTitel("verbinden ("+O.type+")");
     if(O.type==="darf"&&O.client){const c=MODEL.clients.find(x=>x._id===O.client);if(c&&I.rec){const f=(recByName(I.rec)||{}).kind==="query"?"fragt":"sendet";
         if(!(c[f]=c[f]||[]).includes(I.rec))c[f].push(I.rec);if(!darfHalter(I.rec).length)deFlash("⚠ kein Akteur darf "+I.rec+" — GR-CLIENT-BEFUGT (erst darf ⊕ beim Akteur)",false);}}
     else if(O.type==="traegt"){const c=MODEL.clients.find(x=>x._id===O.client),a=MODEL.akteure.find(x=>x._id===I.akt);
@@ -2891,7 +2891,7 @@
 
   // Verbindung LÖSEN — das Gegenstück zu applyLink (gleiche Port-Typen, gleiche Modell-Felder, nur rückwärts).
   function loeseLink(a,b){
-    const O=a.__slot.dir==="out"?a.__slot:b.__slot, I=a.__slot.dir==="out"?b.__slot:a.__slot;
+    const O=a.__slot.dir==="out"?a.__slot:b.__slot, I=a.__slot.dir==="out"?b.__slot:a.__slot;gTitel("lösen ("+O.type+")");
     const ohne=(arr,x)=>(arr||[]).filter(v=>v!==x);
     const handle=(liste,id,idx)=>{const o=liste.find(x=>x._id===id);return o&&typeof idx==="number"?(o.handles||[])[idx]:null;};
     if(O.type==="darf"&&O.client){const c=MODEL.clients.find(x=>x._id===O.client);if(c){c.sendet=ohne(c.sendet,I.rec);c.fragt=ohne(c.fragt,I.rec);}}
@@ -3006,7 +3006,7 @@
     g.regeln.forEach(r=>out.append(h("div",{class:"find "+(r.build==="offen"?"warning":"info"),title:r.text},r.id+" · "+r.name+" — Build: "+r.build)));};
 
   // ══ DOMÄNEN LADEN (Blank-Start): Der Editor startet LEER; im Start-Dialog wählt man, welche Domänen (Namespaces) geladen werden.
-  //   Reine Editor-Sicht: das Modell bleibt vollständig (Prüfen, Vorschau, C# schreiben sehen alles) — nicht Geladenes wird nur nicht
+  //   Reine Editor-Sicht: das Modell bleibt vollständig (Gesten sehen alles) — nicht Geladenes wird nur nicht
   //   gezeigt und ist kein Verbindungsziel. Entwürfe (neu im Editor) sind immer sichtbar.
   let LADEN=null, START_OFFEN=false;   // null = alles geladen, [] = leer, sonst die gewählten Namespaces
   const elternNs=ns=>{const i=(ns||"").lastIndexOf(".");return i>0?ns.slice(0,i):"";};
@@ -3049,7 +3049,7 @@
     const anwenden=wahl=>{LADEN=wahl;START_ERST=false;if(wahl)VIEW.geladen=wahl;speichereAnsicht();START_OFFEN=false;SEL=null;render();
       requestAnimationFrame(()=>passeEin([...VIS],1,0.2));};
     box.append(h("h3",{},"Womit starten?"),
-      h("div",{class:"gstart-t"},"Das Board startet leer. Wähle die Domänen, die geladen werden — der Rest bleibt im Code unberührt (Prüfen und „C# schreiben“ sehen weiter alles). Neues entsteht als Entwurf und ist immer sichtbar."),
+      h("div",{class:"gstart-t"},"Das Board startet leer. Wähle die Domänen, die geladen werden — der Rest bleibt im Code unberührt. Was du anlegst, wird sofort Code und bleibt sichtbar."),
       h("div",{class:"gstart-k"},h("button",{class:"act go",onclick:()=>anwenden([])},"◻ Leer starten"),h("button",{class:"act",onclick:()=>anwenden(null)},"Alles laden")));
     const liste=h("div",{class:"gstart-l"});
     const gewaehlt=()=>[...cbs.entries()].filter(([,c])=>c.checked&&!c.disabled).map(([x])=>x);
@@ -3419,17 +3419,16 @@
   //   (5) Slice-Fokus: Klick auf einen Knoten → sein vertikaler Schnitt bleibt hell, der Rest tritt zurück.
   // details: Decider/Applier/State/Code/LLM/Ablehnung/Typen sind IMMER eigene Knoten auf dem Graphen (nie eingeklappt).
   const KPOS_VERSION=8;   // hochzählen, wenn sich Kartengrößen ändern → gespeicherte Anordnung wird einmalig neu gepackt
-  let VIEW={kompakt:true,details:true,aus:[],domNeu:[],heim:{},heimBlk:{},heimAkteur:{},akteurOrdnung:{}}, VKEY="cqrs-ansicht", KPKEY="cqrs-kpos", KPOS={k:{},d:{}};
-  function ladeAnsicht(k){VKEY="cqrs-ansicht"+(k?":"+k:"");KPKEY="cqrs-kpos"+(k?":"+k:"");
-    try{const v=JSON.parse(localStorage.getItem(VKEY)||"null");if(v)VIEW={...VIEW,...v};}catch(e){}
+  let VIEW={kompakt:true,details:true,aus:[],domNeu:[],heim:{},heimBlk:{},heimAkteur:{},akteurOrdnung:{}}, KPOS={k:{},d:{}};
+  function ladeAnsicht(){if(ANSICHT.view)VIEW={...VIEW,...ANSICHT.view};
     VIEW.details=true;VIEW.kompakt=true;
-    try{KPOS=JSON.parse(localStorage.getItem(KPKEY)||"{}")||{};}catch(e){KPOS={};}
+    KPOS=ANSICHT.kpos||{};
     if(!KPOS.k||!KPOS.d||KPOS.v!==KPOS_VERSION)KPOS={k:{},d:{},v:KPOS_VERSION};}
   // Ausgeblendete Knotenarten (Auswahl-Menü „👁 Ausblenden"): pro Browser + Solution gespeichert (VIEW.aus).
   const istAus=k=>Array.isArray(VIEW.aus)&&VIEW.aus.includes(k);
   function setzeAus(k,aus){const a=new Set(VIEW.aus||[]);if(aus)a.add(k);else a.delete(k);VIEW.aus=[...a];speichereAnsicht();render();}
-  function speichereAnsicht(){try{localStorage.setItem(VKEY,JSON.stringify(VIEW));}catch(e){}}
-  function speichereKpos(){try{localStorage.setItem(KPKEY,JSON.stringify(KPOS));}catch(e){}}
+  function speichereAnsicht(){ANSICHT.view=VIEW;ansichtSpeichern();}
+  function speichereKpos(){ANSICHT.kpos=KPOS;ansichtSpeichern();}
   // Position eines Knotens in der AKTUELLEN Ansicht. Voll = x/y im Modell (wandert ins Board); Kompakt = eigenes,
   //   nur browser-lokales Layout (KPOS) — die kleineren Karten brauchen eine dichtere Anordnung.
   //   Je Detail-Stufe ein eigenes Layout (k = Details eingeklappt, d = Details als Knoten) — Umschalten verliert nichts.
@@ -4183,143 +4182,152 @@
   window.deClose=function(){document.getElementById("de").classList.remove("on");};
   // Standalone (/editor): sofort zeigen; Boot lädt das gespeicherte Board (nicht mehr leer).
   window.deShow=function(){document.getElementById("de").classList.add("on");};
-  window.deLeer=function(){MODEL=normalize(null);render();};
+  window.deLeer=function(){MODEL=normalize(null);GSTAND=schnappschuss();render();};
   window.dePing=async function(){try{const r=await fetch("/api/editor/model");badge(r.ok);}catch(e){badge(false);}};
   async function loadLive(){try{const r=await fetch("/api/editor/model");if(!r.ok)throw 0;const m=await r.json();badge(true);return m;}catch(e){badge(false);return null;}}
   function badge(live){const b=document.getElementById("de-badge");b.textContent=live?"SimHost live":"offline";b.className="badge"+(live?"":" off");}
-  // ↻ Vom Graph laden: den Code NEU einlesen (GraphExtractor im SimHost) und mit dem Board MERGEN — der Code ist
-  //   die Wahrheit; Layout, Entwürfe und ungeschriebene Änderungen bleiben (kein Ersetzen mehr).
-  window.deReload=async function(opt){opt=opt||{};
+  // ↻ Vom Graph laden: den Code neu einlesen (warmer Workspace) und das Board übernehmen — der Code ist die einzige Wahrheit;
+  //   Offenes geht vorher als Geste hinaus, nur die Ansicht (Positionen, 🤖) bleibt.
+  window.deReload=async function(opt){opt=opt||{};await gesteFlush();
     if(!opt.ohneExtract){deFlash("↻ lese Code neu ein …",true);
       try{const r=await fetch("/api/editor/extract",{method:"POST"});const x=await r.json();if(!x.ok)deFlash("⚠ Einlesen fehlgeschlagen: "+(x.grund||""),false);}
       catch(e){badge(false);}}
-    const live=await loadLive();
-    const code=live||(embedded&&(embedded.records||embedded.aggregate)?embedded:null);
-    const vorher=MODEL&&(MODEL.records.length||MODEL.aggregate.length)?JSON.parse(JSON.stringify(MODEL)):null;
-    MODEL=mergeBoard(code,vorher);render();meldeMerge();};
+    const live=await loadLive();if(!live)return;
+    MODEL=uebernimm(live,MODEL);GSTAND=schnappschuss();render();};
   // ▦ Neu anordnen: alle Positionen verwerfen → aggregatsweises Kachel-Layout neu rechnen.
   window.deReflow=function(){if(VIEW.kompakt){KPOS[VIEW.details?"d":"k"]={};speichereKpos();}else graphNodes().forEach(n=>{delete n.ref.x;delete n.ref.y;});render();};
 
-  // ── DURABLE BOARD-PERSISTENZ: das VOLLE MODEL (alle Sammlungen + Layout) ist die Quelle. ──
-  // Server (board-model.json via SimHost) = geteilte Wahrheit; localStorage = Browser-Sicherheitsnetz
-  //   (schützt ungespeicherte Änderungen, auch offline). Boot-Reihenfolge: Server → localStorage → C#.
-  let _asT=null;
-  // Autosave (debounced) nach jeder Änderung — verliert nichts zwischen zwei „💾 Speichern".
-  function autosave(){if(_asT)clearTimeout(_asT);_asT=setTimeout(saveLocal,600);}
-  function saveLocal(){try{localStorage.setItem(LSKEY,JSON.stringify(MODEL));}catch(e){}}
-  function loadLocal(){try{const s=localStorage.getItem(LSKEY);return s?JSON.parse(s):null;}catch(e){return null;}}
-  async function loadBoard(){try{const r=await fetch("/api/editor/board");if(!r.ok)return null;badge(true);return await r.json();}catch(e){return null;}}
   function deFlash(txt,ok){const b=document.getElementById("de-badge");if(!b)return;const alt=b.textContent,ac=b.className;
     b.textContent=txt;b.className="badge"+(ok?"":" off");setTimeout(()=>{b.textContent=alt;b.className=ac;},1600);}
-  // 💾 Speichern: das komplette MODEL roh auf den Server (board-model.json) + lokal sichern.
-  window.deSave=async function(){deriveMembership();saveLocal();
-    try{const r=await fetch("/api/editor/board",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(MODEL)});
-      if(!r.ok)throw 0;deFlash("💾 Board gespeichert",true);}
-    catch(e){badge(false);deFlash("⚠ Nur lokal gesichert (SimHost offline)",false);}};
-  // Boot: der aus C# gelesene Stand ist die WAHRHEIT; das gespeicherte Board (Server, sonst localStorage)
-  //   liefert nur Layout, Entwürfe und im Editor geänderte, noch nicht geschriebene Elemente (mergeBoard).
+  // Boot: der aus C# gelesene Stand ist die WAHRHEIT (das Board kommt aus dem warmen Workspace); die Ansicht (Positionen, Filter, 🤖)
+  //   kommt aus ihrer eigenen Datei.
   window.deBoot=async function(){
+    await ansichtLaden();
     const live=await loadLive();
-    const code=live||(embedded&&(embedded.records||embedded.aggregate)?embedded:null);
-    schluesselFuer(code);
-    const gespeichert=(await loadBoard())||loadLocal();
+    schluesselFuer();
     // Blank-Start: leer, der Start-Dialog fragt, welche Domänen geladen werden (Vorauswahl: die letzte Wahl).
     LADEN=[];START_OFFEN=true;START_ERST=true;
-    MODEL=mergeBoard(code,gespeichert);render();meldeMerge();
+    MODEL=uebernimm(live,{llmNodes:ANSICHT.llmNodes||[],codeNodes:[]});GSTAND=schnappschuss();render();
   };
 
-  // ── MERGE Code ⇄ Board ──────────────────────────────────────────────────────────────────────
-  // Jedes aus dem Code stammende Element trägt ausCode + _codeKey (Identität im Code) + _herkunft (Hash des
-  //   Inhalts beim Einlesen). Beim nächsten Laden gilt je Element:
-  //     • im Code, im Board unverändert (Hash = _herkunft)      → Code-Stand gewinnt, Layout (x/y) bleibt
-  //     • im Code, im Board geändert (Hash ≠ _herkunft)          → Board-Stand bleibt, markiert „ungeschrieben"
-  //     • im Board als Entwurf (ohne ausCode), nicht im Code     → bleibt (Entwurf)
-  //     • im Board ausCode, aber nicht mehr im Code               → entfällt (im Code gelöscht)
-  const MERGE_KEYS={records:r=>r.kind+"|"+r.namespace+"|"+r.name,enums:e=>e.namespace+"|"+e.name,aggregate:a=>a.namespace+"|"+a.name,
-    decider:d=>d.aggregat+"|"+d.command,applier:a=>a.aggregat+"|"+a.event,sagas:x=>x.namespace+"|"+x.name,
-    readModels:x=>x.name,stores:x=>x.name,projektionen:x=>x.name,reaktionen:x=>x.name,reader:x=>x.name,
-    akteure:x=>x.namespace+"|"+x.name,
-    clients:x=>x.namespace+"|"+x.name,funktionen:x=>x.namespace+"|"+x.name,fluesse:x=>x.namespace+"|"+x.name};
-  const LAYOUT=new Set(["x","y","ausCode","ungeschrieben","codeSrc","kompCodeSrc","leer","rumpf","schritte","herkunft"]);
-  function inhalt(o){return JSON.stringify(o,(k,v)=>(k.startsWith("_")||LAYOUT.has(k))?undefined:v);}
-  // Leseseite: „steht die Änderung schon im Code?“ — Fn-Ids (je Einlesen neu nummeriert) über „Store.Fn“ vergleichen und die
-  //   Code-Fakten, die erst der Code liefert (Signatur verbatim, Datei, Fähigkeits-Name, Vertrag), nicht mitzählen.
-  const LESE_KOLL=new Set(["stores","projektionen","reaktionen","reader","readModels"]);
-  const CODEFAKT=new Set(["sig","code","impl","datei","doku","faehigkeit","form","signatur","signaturOffen","ausgaenge","istBuendel","bindung","input","delay","entwurf"]);
-  function fnNamen(m){const x=new Map();(m&&m.stores||[]).forEach(st=>(st.writeFns||[]).concat(st.readFns||[]).forEach(f=>x.set(f._id,st.name+"."+f.name)));return x;}
-  function leseInhalt(o,fnName){return JSON.stringify(o,(k,v)=>{if(k.startsWith("_")||LAYOUT.has(k)||CODEFAKT.has(k)||v===null)return undefined;
-    if(k==="fns"&&Array.isArray(v))return v.map(id=>fnName.get(id)||id);return v;});}
+  // ══ GESTEN (Werkbank P7.2, docs/plan-werkbank-umsetzung.md §13): jede Bearbeitung ist ein Patch am Code. ══
+  //   Nach einer Änderung (render → autosave) rechnet der Editor den Unterschied seiner Karten zum zuletzt gelesenen Code-Stand (GSTAND) —
+  //   geänderte/neue Karten ganz, entfernte als Schlüssel — und schickt ihn als Geste. Der Server schreibt den Patch (Schreiber, Löschen am
+  //   Ort), liest warm neu und schickt das Board zurück: das ist der neue Stand. Umbenennen ist eine eigene Geste (Roslyn-Renamer), ↶ nimmt
+  //   den letzten Patch zurück. Solange ein Eingabefeld den Fokus hat, wartet die Geste (sonst ein Patch je Tastendruck).
+  const GSAMMLUNGEN=["records","enums","aggregate","decider","applier","sagas","fluesse","funktionen","akteure","clients","readModels","stores","projektionen","reaktionen","reader"];
+  // Natürliche Schlüssel — dieselbe Regel wie der Server (GraphExtractor.KartenSchluessel).
+  const GKEY=c=>c==="decider"?(d=>(d.aggregat||"")+"|"+(d.command||"")):c==="applier"?(a=>(a.aggregat||"")+"|"+(a.event||""))
+    :["readModels","stores","projektionen","reaktionen","reader"].includes(c)?(x=>x.name||""):(x=>(x.namespace||"")+"|"+(x.name||""));
+  // Verglichen wird nur, was der Code besitzen kann: keine Ansicht (x/y), keine Board-Fakten (_…), keine Code-Knoten-Bindungen und
+  //   keine Rümpfe — die spiegelt der Code-Sync aus der Datei (sie gehören dem Code; eine NEUE Karte geht ohnehin ganz hinaus).
+  const GOHNE=new Set(["x","y","ausCode","codeSrc","kompCodeSrc","rumpf","leer"]);
+  const gVergleich=o=>JSON.stringify(o,(k,v)=>(GOHNE.has(k)||k.startsWith("_"))?undefined:v);
+  // var: render() fragt den Stand ab, ehe dieser Abschnitt durchlaufen ist (let wäre dort noch nicht initialisiert).
+  var GSTAND=null,G_TIMER=null,G_LAEUFT=false,G_AENDERUNG=0,G_TITEL=null,G_BOARD=null;
+  function schnappschuss(){const m=payload(false),s={};
+    GSAMMLUNGEN.forEach(c=>{const x=new Map(),k=GKEY(c);(m[c]||[]).forEach(o=>x.set(k(o),{karte:o,vgl:gVergleich(o)}));s[c]=x;});return s;}
+  function gDelta(neu,alt){const karten={},entfernt={},neueNs=new Set();let n=0;
+    GSAMMLUNGEN.forEach(c=>{const a=alt[c]||new Map(),b=neu[c]||new Map();
+      b.forEach((v,k)=>{const w=a.get(k);if(w&&w.vgl===v.vgl)return;(karten[c]=karten[c]||[]).push(v.karte);n++;if(!w&&v.karte.namespace)neueNs.add(v.karte.namespace);});
+      a.forEach((v,k)=>{if(!b.has(k)){(entfernt[c]=entfernt[c]||[]).push(k);n++;}});});
+    return n?{karten,entfernt,neueNs:[...neueNs]}:null;}
+  // Ohne ausdrücklichen Titel: was die Geste an welchen Karten tut (＋ neu, ✎ geändert, ✕ entfernt).
+  function gBeschreibe(d){const t=[];
+    Object.values(d.karten).flat().forEach(k=>t.push((k.ausCode?"✎ ":"＋ ")+(k.name||k.command||k.event||"?")));
+    Object.values(d.entfernt).flat().forEach(k=>t.push("✕ "+k.split("|").pop()));
+    return t.slice(0,3).join(", ")+(t.length>3?" …":"");}
+  // Diagnose (Konsole): was der Editor gerade als Geste schicken würde — je Karte die abweichenden Felder.
+  window.deGestenDelta=()=>{if(!GSTAND)return null;const jetzt=schnappschuss(),d=gDelta(jetzt,GSTAND);if(!d)return null;
+    const felder=(c,k)=>{const a=(GSTAND[c].get(GKEY(c)(k))||{}).karte;if(!a)return "neu";
+      return Object.keys({...a,...k}).filter(f=>!GOHNE.has(f)&&!f.startsWith("_")&&JSON.stringify(a[f])!==JSON.stringify(k[f]));};
+    return {karten:Object.fromEntries(Object.entries(d.karten).map(([c,ks])=>[c,ks.map(k=>({key:GKEY(c)(k),felder:felder(c,k)}))])),entfernt:d.entfernt};};
+  // Was die nächste Geste tut (die erste Beschreibung gewinnt) — Titel im Verlauf (↶).
+  function gTitel(t){if(!G_TITEL)G_TITEL=t;}
+  function gFokus(){const a=document.activeElement;return !!(a&&/^(INPUT|TEXTAREA|SELECT)$/.test(a.tagName)&&a.type!=="checkbox"&&a.closest&&a.closest("#de"));}
+  function autosave(){G_AENDERUNG++;if(G_TIMER)clearTimeout(G_TIMER);G_TIMER=setTimeout(gesteSenden,250);}
+  document.addEventListener("focusout",()=>setTimeout(()=>{if(gFokus())return;if(G_BOARD&&!G_LAEUFT)gBoardAnwenden();autosave();},0));
+  async function gesteSenden(){G_TIMER=null;if(!GSTAND||G_LAEUFT||gFokus())return;
+    const jetzt=schnappschuss(),delta=gDelta(jetzt,GSTAND);if(!delta)return;
+    const titel=G_TITEL||gBeschreibe(delta);G_TITEL=null;G_LAEUFT=true;const stand=G_AENDERUNG;
+    try{const r=await fetch("/api/werkbank/geste",{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({titel,karten:delta.karten,entfernt:delta.entfernt})});
+      const a=await r.json();badge(true);
+      if(!a.ok){deFlash("⚠ "+(a.fehler||"Geste nicht geschrieben"),false);G_BOARD=a.board;gBoardAnwenden();return;}
+      // Neu Angelegtes bleibt sichtbar: seine Domäne zählt ab jetzt als geladen.
+      if(LADEN&&delta.neueNs.length)delta.neueNs.forEach(ns=>{if(!LADEN.some(g=>drinNs(g,ns)))LADEN.push(ns);});
+      gMeldung(a);GSTAND=jetzt;G_BOARD=a.board;await wbLadeDiagnosen();
+      if(G_AENDERUNG===stand&&!gFokus())gBoardAnwenden();else autosave();}
+    catch(e){badge(false);deFlash("⚠ SimHost nicht erreichbar — Geste nicht geschrieben",false);}
+    finally{G_LAEUFT=false;}}
+  function gMeldung(a){const n=(a.dateien||[]).length;
+    if(n)deFlash((/^[✎＋✕↶]/.test(a.titel)?"":"✎ ")+a.titel+" · "+n+" Datei"+(n===1?"":"en")+" · "+a.ms+" ms",true);
+    (a.meldungen||[]).forEach((m,i)=>setTimeout(()=>deFlash("⚠ "+m,false),n?1700*(i+1):1700*i));
+    if((a.meldungen||[]).length)console.log("Geste „"+a.titel+"“:",a);}
+  // Das Board vom Server übernehmen (der neue Code-Stand) — nur die Ansicht des bisherigen Boards bleibt.
+  function gBoardAnwenden(){const b=G_BOARD;G_BOARD=null;if(!b)return;MODEL=uebernimm(b,MODEL);GSTAND=schnappschuss();render();}
+  // Offenes erst hinausschicken (vor Umbenennen, ↶, Neu lesen).
+  async function gesteFlush(){if(G_TIMER){clearTimeout(G_TIMER);G_TIMER=null;}
+    for(let i=0;i<200&&G_LAEUFT;i++)await new Promise(r=>setTimeout(r,50));
+    if(document.activeElement&&gFokus())document.activeElement.blur();await gesteSenden();
+    for(let i=0;i<200&&G_LAEUFT;i++)await new Promise(r=>setTimeout(r,50));}
+  // Umbenennen: das Symbol am Ort der Karte samt aller Verweise (auch in Lambdas) — Roslyn-Renamer auf dem Server.
+  async function gUmbenennen(o,neu,alt){await gesteFlush();G_LAEUFT=true;
+    try{const r=await fetch("/api/werkbank/umbenennen",{method:"POST",headers:{"content-type":"application/json"},
+        body:JSON.stringify({titel:"umbenennen "+alt+" → "+neu,datei:o._ort.datei,start:o._ort.start,neu})});
+      const a=await r.json();
+      if(!a.ok){deFlash("⚠ "+(a.fehler||"nicht umbenannt"),false);render();return;}
+      if(SEL&&SEL.endsWith(":"+alt))SEL=SEL.slice(0,-alt.length)+neu;
+      gMeldung(a);await wbLadeDiagnosen();G_BOARD=a.board;gBoardAnwenden();}
+    catch(e){badge(false);deFlash("⚠ SimHost nicht erreichbar — nicht umbenannt",false);}
+    finally{G_LAEUFT=false;}}
+  // ↶ — den letzten Patch zurücknehmen (Geste oder 🤖-Übernahme).
+  window.deRueckgaengig=async function(){await gesteFlush();G_LAEUFT=true;
+    try{const r=await fetch("/api/werkbank/rueckgaengig",{method:"POST"});const a=await r.json();
+      if(!a.ok){deFlash("⚠ "+(a.fehler||"nichts zurückgenommen"),false);return;}
+      deFlash(a.titel,true);await wbLadeDiagnosen();G_BOARD=a.board;gBoardAnwenden();}
+    catch(e){badge(false);deFlash("⚠ SimHost nicht erreichbar",false);}
+    finally{G_LAEUFT=false;}};
+
+  // ── Board übernehmen (Code-Stand) ───────────────────────────────────────────────────────────
+  // Das Board kommt vollständig aus dem Code. Vom bisherigen Board bleibt nur, was der Code nicht kennt: Positionen (x/y), die Bindungen
+  //   angedockter Code-Blöcke an Regel-/Fluss-Lambdas, die Lage der Code-Knoten und die 🤖-Knoten (Prompt-Ziel über den Slot-Schlüssel).
   function hash(t){let h=5381;for(let i=0;i<t.length;i++)h=((h<<5)+h+t.charCodeAt(i))>>>0;return h.toString(36);}
   function maxId(m){let mx=0;JSON.stringify(m||{}).replace(/"_id":"[a-z_]*?(\d+)"/g,(_,n)=>{mx=Math.max(mx,+n);return _;});return mx;}
-  let MERGE_INFO={ungeschrieben:0,entwuerfe:0};
-  function mergeBoard(code,saved){
-    // Gespeichertes zuerst normalisieren, dann Id-Zähler HINTER alle vergebenen Ids setzen → keine Kollisionen.
-    const alt=saved?normalize(saved):null;
+  function uebernimm(code,alt){
     NID=Math.max(NID,maxId(alt)+1);
     const neu=normalize(code?JSON.parse(JSON.stringify(code)):null);
-    MERGE_INFO={ungeschrieben:0,entwuerfe:0};
-    for(const col in MERGE_KEYS){const key=MERGE_KEYS[col];
-      (neu[col]||[]).forEach(x=>{x.ausCode=true;x._codeKey=key(x);x._herkunft=hash(inhalt(x));});}
-    neu.transitions.forEach(t=>{t.ausCode=true;t._herkunft=hash(inhalt(t));});
+    GSAMMLUNGEN.forEach(col=>(neu[col]||[]).forEach(x=>{x.ausCode=true;}));
+    neu.transitions.forEach(t=>{t.ausCode=true;});
     if(!alt)return neu;
-    // Alt-Board (vor der Herkunfts-Marke): Elemente in Namespaces, die der CODE nicht kennt (z. B. früher mitgezogene
-    //   Framework-Records), entfallen ohne Code-Pendant; Entwürfe in den Namespaces der Domäne bleiben.
-    const altFormat=!JSON.stringify(alt).includes('"ausCode":true');
-    const codeNs=new Set();for(const col in MERGE_KEYS)(neu[col]||[]).forEach(x=>{if(x.namespace)codeNs.add(x.namespace);});
-    const codeNodesNeu=new Map(neu.codeNodes.map(c=>[c._id,c]));
-    const fnAlt=fnNamen(alt),fnNeu=fnNamen(neu);
-    const imCode=(col,s,l)=>LESE_KOLL.has(col)?leseInhalt(s,fnAlt)===leseInhalt(l,fnNeu):inhalt(s)===inhalt(l);
-    for(const col in MERGE_KEYS){const key=MERGE_KEYS[col];
-      const liveByKey=new Map((neu[col]||[]).map(x=>[x._codeKey,x]));
-      const erg=[];const benutzt=new Set();
-      (alt[col]||[]).forEach(s=>{
-        const k=s.ausCode?s._codeKey:key(s);const l=liveByKey.get(k);
-        if(l){benutzt.add(k);
-          const geaendert=s.ausCode&&s._herkunft&&hash(inhalt(s))!==s._herkunft&&!imCode(col,s,l);
-          if(geaendert){s.ungeschrieben=true;s._codeKey=l._codeKey;
-            // Rumpf-Quelle bleibt die echte Datei (der Code-Knoten des Code-Stands).
-            if(l.codeSrc)s.codeSrc=l.codeSrc;else delete s.codeSrc;if(l.leer)s.leer=true;else delete s.leer;
-            erg.push(s);MERGE_INFO.ungeschrieben++;}
-          else{if(s.x!=null){l.x=s.x;l.y=s.y;}if(col==="fluesse")flCodeBindungen(s,l);erg.push(l);}}
-        else if(!s.ausCode&&!(altFormat&&s.namespace&&!codeNs.has(s.namespace))){erg.push(s);MERGE_INFO.entwuerfe++;}      // Entwurf: bleibt
-        // else: ausCode, aber im Code verschwunden → entfällt
-      });
-      (neu[col]||[]).forEach(l=>{if(!benutzt.has(l._codeKey))erg.push(l);});
-      neu[col]=erg;}
-    // Transitionen (Saga-Regeln): unverändert → Code-Stand; im Board geändert/ergänzt → Board-Stand je Prozess.
+    alt=normalize(alt);
+    GSAMMLUNGEN.forEach(col=>{const key=GKEY(col),altBy=new Map((alt[col]||[]).map(x=>[key(x),x]));
+      (neu[col]||[]).forEach(l=>{const s=altBy.get(key(l));if(!s)return;if(s.x!=null){l.x=s.x;l.y=s.y;}if(col==="fluesse")flCodeBindungen(s,l);});});
+    // Transitionen (Saga-Regeln): Lage und angedockte Code-Blöcke über die Regel-Signatur.
     const altTr=(alt.transitions||[]);
-    const proProzess=p=>altTr.filter(t=>t.prozess===p);
-    neu.sagas.forEach(sg=>{const at=proProzess(sg.name);if(!at.length)return;
-      const lt=neu.transitions.filter(t=>t.prozess===sg.name);
-      const edit=at.some(t=>(!t.ausCode&&!altFormat)||(t._herkunft&&hash(inhalt(t))!==t._herkunft));
-      if(edit){neu.transitions=neu.transitions.filter(t=>t.prozess!==sg.name).concat(at.map(t=>({...t,ungeschrieben:true})));MERGE_INFO.ungeschrieben++;}
-      else{const sig=t=>JSON.stringify([t.wenn||[],t.sammelEvent||"",(t.dann||[]).map(d=>[d.sende||"",d.rufe||"",d.kompensation||""])]);
-        const altBySig=new Map(at.map(t=>[sig(t),t]));
-        lt.forEach(t=>{const a=altBySig.get(sig(t));if(!a)return;if(a.x!=null){t.x=a.x;t.y=a.y;}
-          // Angedockte Code-Blöcke der Regel-Lambdas (Board-Fakt, nicht im Code) bleiben am selben Dann.
-          (t.dann||[]).forEach((d,i)=>{const ad=(a.dann||[])[i];if(!ad)return;if(ad.codeSrc)d.codeSrc=ad.codeSrc;if(ad.kompCodeSrc)d.kompCodeSrc=ad.kompCodeSrc;});});}});
-    // Entwurfs-Transitionen neuer (Entwurfs-)Prozesse behalten.
-    altTr.filter(t=>!neu.sagas.some(sg=>sg.name===t.prozess)&&neu.transitions.indexOf(t)<0).forEach(t=>neu.transitions.push(t));
-    // (Regeln vor den Code-Knoten: ihre angedockten Blöcke zählen beim Mitnehmen als referenziert.)
+    neu.sagas.forEach(sg=>{const at=altTr.filter(t=>t.prozess===sg.name);if(!at.length)return;
+      const sig=t=>JSON.stringify([t.wenn||[],t.sammelEvent||"",(t.dann||[]).map(d=>[d.sende||"",d.rufe||"",d.kompensation||""])]);
+      const altBySig=new Map(at.map(t=>[sig(t),t]));
+      neu.transitions.filter(t=>t.prozess===sg.name).forEach(t=>{const a=altBySig.get(sig(t));if(!a)return;if(a.x!=null){t.x=a.x;t.y=a.y;}
+        (t.dann||[]).forEach((d,i)=>{const ad=(a.dann||[])[i];if(!ad)return;if(ad.codeSrc)d.codeSrc=ad.codeSrc;if(ad.kompCodeSrc)d.kompCodeSrc=ad.kompCodeSrc;});});});
     // Abgeleitete Knoten: State-Knoten + Code-Knoten (Layout je Besitzer), Prompt-Knoten (Ziel umhängen).
+    const codeNodesNeu=new Map(neu.codeNodes.map(c=>[c._id,c]));
     const altStates=new Map((alt.states||[]).map(x=>[x.aggregat,x]));
     neu.states.forEach(x=>{const a=altStates.get(x.aggregat);if(a&&a.x!=null){x.x=a.x;x.y=a.y;}});
     const altCode=new Map((alt.codeNodes||[]).map(c=>[c._id,c]));
-    const ownerKey=(n,col)=>col+"|"+MERGE_KEYS[col](n);
+    const ownerKey=(n,col)=>col+"|"+GKEY(col)(n);
     const codeUmzug=new Map();   // alte Code-Knoten-Id → neue (über den Besitzer)
     ["decider","applier"].forEach(col=>{const altBy=new Map((alt[col]||[]).map(n=>[ownerKey(n,col),n]));
       neu[col].forEach(n=>{const a=altBy.get(ownerKey(n,col));if(!a||!a.codeSrc||!n.codeSrc)return;
         const ac=altCode.get(a.codeSrc),nc=codeNodesNeu.get(n.codeSrc);if(ac&&nc){if(ac.x!=null){nc.x=ac.x;nc.y=ac.y;}codeUmzug.set(ac._id,nc._id);}});});
-    // Übrige Code-Knoten (Leseseite, Store-Fns, Pipelines): Layout über (Name, Rumpf-Text) — sonst lägen sie alle auf
-    //   der Normalize-Startposition, das Board überlappte grob und packLayout würfelte die Handanordnung neu.
+    // Übrige Code-Knoten (Leseseite, Store-Fns, Pipelines): Layout über (Name, Rumpf-Text).
     const altPos=new Map();(alt.codeNodes||[]).forEach(c=>{if(c.x!=null)altPos.set((c.name||"")+"\u0000"+(c.text||""),c);});
     neu.codeNodes.forEach(c=>{if([...codeUmzug.values()].includes(c._id))return;const a=altPos.get((c.name||"")+"\u0000"+(c.text||""));
       if(a){c.x=a.x;c.y=a.y;}});
-    // Code-Knoten der Entwürfe/ungeschriebenen Leseseite mitnehmen (sonst hingen deren codeSrc ins Leere).
+    // Code-Knoten, an die noch etwas angedockt ist (Regel-/Fluss-Lambdas), mitnehmen.
     const referenziert=new Set();JSON.stringify(neu,(k,v)=>{if(k==="codeSrc"&&v)referenziert.add(v);return v;});
     (alt.codeNodes||[]).forEach(c=>{if(referenziert.has(c._id)&&!codeNodesNeu.has(c._id))neu.codeNodes.push(c);});
-    // 🤖-Knoten: über den SLOT-Schlüssel (Art|Besitzer|Disc) wieder an „ihren" Code-Block hängen — für JEDE Slot-Art.
-    //   Code-Knoten-Ids werden beim Einlesen neu vergeben; nur Decider/Applier ließen sich über den Besitzer umziehen.
+    // 🤖-Knoten: über den SLOT-Schlüssel (Art|Besitzer|Disc) wieder an „ihren" Code-Block hängen.
     const neuBySlot=new Map();neu.codeNodes.forEach(c=>{const k=konsolenId(c._id,neu);if(k&&!neuBySlot.has(k))neuBySlot.set(k,c._id);});
     neu.llmNodes=(alt.llmNodes||[]).map(l=>{const slot=(l.promptZiel&&konsolenId(l.promptZiel,alt))||l.promptSlot||null;
       const ziel=(slot&&neuBySlot.get(slot))||codeUmzug.get(l.promptZiel)||l.promptZiel;
@@ -4329,26 +4337,20 @@
   //   Knoten über den Namen (die Identität im Fluss), Eingänge über ihre Position.
   function flCodeBindungen(alt,neu){(neu.knoten||[]).forEach(k=>{const a=(alt.knoten||[]).find(x=>x.name===k.name);if(!a)return;
     if(a.codeSrc)k.codeSrc=a.codeSrc;(k.eingaenge||[]).forEach((e,i)=>{const ae=(a.eingaenge||[])[i];if(ae&&ae.codeSrc)e.codeSrc=ae.codeSrc;});});}
-  // Node-Art (graphNodes().kind) → Modell-Sammlung (für die Entwurf-Markierung: nur Sammlungen, die aus dem Code kommen).
-  function kollektionVon(kind){return {command:"records",event:"records",rejection:"records",valueobject:"records",konfig:"records",query:"records",queryresponse:"records",
-    enum:"enums",aggregate:"aggregate",decider:"decider",applier:"applier",saga:"sagas",readmodel:"readModels",store:"stores",
-    projektion:"projektionen",reaktion:"reaktionen",reader:"reader",akteur:"akteure",client:"clients",funktion:"funktionen",auftrag:"records",fluss:"fluesse"}[kind]||null;}
-  function meldeMerge(){const u=MERGE_INFO.ungeschrieben,e=MERGE_INFO.entwuerfe;
-    if(u||e)deFlash("↔ Code geladen · "+u+" ungeschrieben · "+e+" Entwurf/Entwürfe",true);}
   window.deDownload=function(){deriveMembership();prepareSaga();const blob=new Blob([JSON.stringify(MODEL,null,2)],{type:"application/json"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="domain-model.json";a.click();};
   // Server-Payload: das MODEL + die Rümpfe (Code-Knoten-Text bzw. "" für bewusst leer) zurück an Decider/Applier.
   // mitVorschlag: offene 🤖-Vorschläge ersetzen den Datei-Rumpf — für Kompilieren + Simulation (echte Generatoren,
-  //   in-memory), NIE für „C# schreiben“ (in die Datei kommt ein Vorschlag nur über ✓ Übernehmen).
+  //   in-memory), NIE für Gesten (in die Datei kommt ein Vorschlag nur über ✓ Übernehmen).
   function payload(mitVorschlag){deriveMembership();prepareSaga();MODEL.fluesse.forEach(flOrdne);const m=JSON.parse(JSON.stringify(MODEL));
     const txt=id=>{const v=mitVorschlag?vorschlagFuer(id):null;if(v)return v.rumpf;const c=m.codeNodes.find(x=>x._id===id);return c?c.text:null;};
     [...m.decider,...m.applier].forEach(n=>{if(n.leer)n.rumpf="";else if(n.codeSrc){const t=txt(n.codeSrc);if(t!=null&&t.trim())n.rumpf=t;}});
     // Leseseite: der Code-/LLM-Entwurf einer NEUEN Methode (ohne Code-Signatur) wird ihr Rumpf („entwurf“);
-    //   bestehende Rümpfe ändert „C# schreiben“ nicht (dafür: ✓ Übernehmen im LLM-Knoten).
+    //   bestehende Rümpfe ändert eine Geste nicht (dafür: ✓ Übernehmen im LLM-Knoten).
     const entwurf=o=>{if(!o.sig&&o.codeSrc){const t=txt(o.codeSrc);if(t!=null&&t.trim())o.entwurf=t;}};
     [...(m.projektionen||[]),...(m.reaktionen||[]),...(m.reader||[])].forEach(o=>(o.handles||[]).forEach(entwurf));
     (m.stores||[]).forEach(st=>[...(st.writeFns||[]),...(st.readFns||[])].forEach(entwurf));
-    // Funktion ohne C#-Implementierung, aber mit Code-Block: „C# schreiben" legt die Klasse an (leerer Block → throw-Platzhalter).
+    // Funktion ohne C#-Implementierung, aber mit Code-Block: die Geste legt die Klasse an (leerer Block → throw-Platzhalter).
     (m.funktionen||[]).forEach(f=>{if(!f.implementierung&&f.codeSrc){const t=txt(f.codeSrc);f.entwurf=t||"";}});
     // Regel-Lambdas: ein gefüllter Code-Block IST der Lambda (verbatim) — Vorrang vor der Feld-Zuordnung.
     (m.sagas||[]).forEach(sg=>regelFolge(sg,m.transitions).forEach(({d},i)=>{const st=(sg.schritte||[])[i];if(!st)return;
@@ -4359,37 +4361,9 @@
       if(k.codeSrc){const t=txt(k.codeSrc);if(t!=null&&t.trim())k.liste=t.trim();}
       (k.eingaenge||[]).forEach(e=>{if(!e.codeSrc)return;const t=txt(e.codeSrc);if(t!=null&&t.trim()){e.ausdruck=t.trim();delete e.argumente;}});}));
     return m;}
-  async function post(path){const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload(path!=="/api/editor/write"))});
+  // Kompilieren/Simulation: das Modell samt offener 🤖-Vorschläge (in-memory, nie in die Datei).
+  async function post(path){const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload(true))});
     if(!r.ok)throw new Error("HTTP "+r.status);return r;}
-  // &lt;/&gt; C# schreiben: das Modell in die ECHTEN .cs-Dateien schreiben (chirurgisch/additiv über
-  //   /api/editor/write). Neue Records/Methoden werden angehängt, Handcode nie überschrieben.
-  //   Danach spiegelt der Code-Sync die Datei-Rümpfe zurück ins Board.
-  // Bericht eines Schreib-/Vorschau-Laufs ins Ausgabe-Panel: neu, geändert, NICHT geschrieben (mit Grund), Build-Fehler.
-  function schreibBericht(b,vorschau){const out=document.getElementById("de-out");if(!out)return;out.innerHTML="";
-    const gut=(t)=>out.append(h("div",{class:"find",style:"background:#1f3a2a;color:#9be3bf"},t));
-    const nicht=(b.uebersprungen||[]).filter(x=>!/unangetastet/.test(x));
-    if(vorschau)out.append(h("div",{class:"find"},"👁 Vorschau — nichts geschrieben:"));
-    (b.geschrieben||[]).forEach(x=>gut((vorschau?"würde anlegen: ":"＋ ")+x));
-    (b.ergaenzt||[]).forEach(x=>gut((vorschau?"würde ändern: ":"✎ ")+x));
-    nicht.forEach(x=>out.append(h("div",{class:"find warning"},"⚠ nicht geschrieben: "+x)));
-    if((b.fehler||[]).length){out.append(h("div",{class:"find warning"},b.fehler.length+" Compiler-Fehler nach dem Schreiben — der Rumpf passt nicht mehr zur Signatur:"));
-      b.fehler.forEach(f=>out.append(h("div",{class:"find error"},f)));}
-    else if(!vorschau&&((b.geschrieben||[]).length||(b.ergaenzt||[]).length))gut("✓ Betroffene Projekte gebaut — 0 Fehler.");
-    if(!(b.geschrieben||[]).length&&!(b.ergaenzt||[]).length&&!nicht.length)gut("✓ Code und Board stimmen überein — nichts zu schreiben.");}
-  window.deVorschau=async function(){
-    try{const r=await fetch("/api/editor/write?trocken=true",{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload(false))});
-      if(!r.ok)throw 0;badge(true);schreibBericht(await r.json(),true);}
-    catch(e){badge(false);deFlash("⚠ SimHost offline",false);}};
-  window.deWrite=async function(){
-    try{const r=await post("/api/editor/write");const b=await r.json();badge(true);
-      const neu=(b.geschrieben||[]).length, erg=(b.ergaenzt||[]).length, ueb=(b.uebersprungen||[]).length;
-      if(!neu&&!erg){deFlash("✓ Dateien aktuell — nichts zu schreiben ("+ueb+" unverändert)",true);}
-      else{deFlash("✅ geschrieben: "+neu+" neu · "+erg+" ergänzt · "+ueb+" unverändert",true);}
-      console.log("C# schreiben:",b);
-      // Was geschrieben wurde, was NICHT (mit Grund) + der Bau der betroffenen Projekte.
-      schreibBericht(b,false);
-      if(neu||erg)await deReload();   // Code → Board: Geschriebenes wird Code-Stand (nicht mehr „ungeschrieben")
-    }catch(e){badge(false);deFlash("⚠ SimHost offline — nicht geschrieben (dotnet run --project SimHost)",false);}};
   // Ausgabe-Panel: sobald Prüfen/Kompilieren/Testen hineinschreiben, einblenden (mit ✕ zum Schließen).
   (function(){const out=document.getElementById("de-out");if(!out||!window.MutationObserver)return;
     new MutationObserver(()=>{if(out.querySelector(".outzu"))return;out.classList.add("zeigen");
