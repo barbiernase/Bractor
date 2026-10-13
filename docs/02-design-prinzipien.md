@@ -1,159 +1,206 @@
 # 02 — Design-Prinzipien (aus dem Code abgeleitet)
 
-Dieses Kapitel benennt die Prinzipien, die sich **quer über alle Subsysteme** wiederholen —
-nicht als Wunsch, sondern als im Code belegtes Muster. Jedes Prinzip ist mit konkreten
-Fundstellen unterlegt. Diese Prinzipien sind das eigentliche „Warum" hinter der Architektur.
+Stand 2026-10-13, gegen den Code geprüft. Maßstab: docs/konzept-werkbank.md.
 
-## P1 — Der Log ist die einzige Wahrheit; alles andere ist abgeleitet und verwerfbar
+Dieses Kapitel benennt die Prinzipien, die sich **quer über alle Subsysteme** wiederholen — als im Code belegtes Muster, nicht als
+Wunsch. Es ist das „Warum“ hinter der Architektur. Die sechs Invarianten selbst stehen in [01 §1.2](01-ueberblick.md) (und `CLAUDE.md`);
+P1–P6 wiederholen sie nicht, sondern zeigen, **warum** sie so geschnitten sind und **wo** der Code sie einlöst. P14 und P15 kommen aus den
+Werkbank-Leitsätzen (`docs/konzept-werkbank.md` §2).
 
-Jeder Beschleuniger ist nicht-autoritativ und hat einen Voll-Read-Fallback:
-- Redis-Version-Index degradiert bei Ausfall zu einer Warnung, der Command-Flow bricht nicht
-  (`RedisVersionTracker.cs:96`); optional ganz abschaltbar (`NullVersionTracker`).
-- Snapshots sind best-effort; kein Treffer → Voll-Replay (`MartenSnapshotStore.cs`).
-- Der Prozess-Marking-Cursor ist ein „prozess-lokales Snapshot-Analogon"; bei
-  `RegelHash`-Mismatch oder Kaltstart faltet der Manager voll ab 0 (`ProzessManager.cs`).
-- Aggregat-Rehydration liest immer aus dem Log (`AggregateRehydrator`).
+## P1 — Alles außer dem Log ist abgeleitet und verwerfbar (Inv. 1)
 
-**Konsequenz für die Bewertung:** Korrektheit hängt nie an einem Cache. Ein verlorener
-Redis, ein stale Snapshot, ein kaputter Marking-Cursor können die *Latenz* verschlechtern,
-nie die *Korrektheit*.
+**Warum:** Wenn nur der Log Wahrheit ist, darf jeder Beschleuniger kaputtgehen, ohne dass ein Ergebnis falsch wird. Jeder Cache hat
+deshalb einen Voll-Read-Fallback:
+- Der Redis-Version-Index degradiert bei Ausfall zu einer Warnung, der Command-Flow bricht nicht (`RedisVersionTracker`); mit
+  `VersionIndex.Betrieb = Aus` in der Umgebung entfällt er ganz (`NullVersionTracker`).
+- Snapshots sind best-effort; kein Treffer oder eine andere Snapshot-Version → Voll-Replay (`MartenSnapshotStore`, `AggregateRehydrator`).
+- Der Prozess-Marking-Cursor (`MartenProzessMarkingStore`) ist ein Tail-Cursor; bei `RegelHash`-Abweichung oder Kaltstart faltet der
+  Manager voll ab 0 (`ProzessManager`).
+- Die Aggregat-Rehydration liest immer aus dem Log (`AggregateRehydrator`).
 
-## P2 — Das Signal ist nur ein Weckruf (schnell, verlierbar); der Poll ist die Sicherheit
+**Konsequenz:** Ein verlorener Redis, ein veralteter Snapshot, ein kaputter Marking-Cursor verschlechtern die *Latenz*, nie die
+*Korrektheit*.
 
-Das Signal `(StreamId, Version)` wird fire-and-forget publiziert (`AggregateActorBase.cs:634`);
-Verlust ist *normaler Betrieb* (Debug-Level, nicht Warnung). Die Korrektheit kommt aus der
-Kombination Signal + 30-s-Poll + Log-Read. Der Poll-Cursor rückt zudem nur vor, wenn jede
-Weckung als „aufgeholt" bestätigt wird (`Poller.cs:52`), und für Prozesse gibt es zusätzlich
-einen 15-s-Backstop über einen durablen Offen-Index (`ProzessManagerWiring.cs`). Es gibt also
-**mehrere gestaffelte Liveness-Netze**, kein einzelner Zustellweg trägt Korrektheit allein.
+## P2 — Mehrere gestaffelte Liveness-Netze statt eines zuverlässigen Zustellwegs (Inv. 2)
 
-## P3 — Routing über Typen, nie über handgebaute Identitäts-Strings
+**Warum:** Ein zuverlässiger Push-Kanal wäre teuer und trotzdem nicht beweisbar korrekt. Darum ist das Signal billig und verlierbar, und
+die Korrektheit kommt aus der Kombination Signal + Poll + Log-Read:
+- Das Aggregat publiziert Event und Signal fire-and-forget nach dem Commit (`AggregateActorBase`, `PublishFireAndForget`); ein Verlust ist
+  normaler Betrieb (Debug-Level, keine Warnung).
+- Der Poll (30 s) rückt seinen Cursor nur vor, wenn jede Weckung als „aufgeholt“ bestätigt zurückkommt (`Poller`).
+- Für Prozesse und Flüsse gibt es zusätzlich einen 15-s-Backstop über einen durablen Offen-Index (`ProzessManagerWiring`).
 
-Der CLR-Typ *ist* der Routing-Schlüssel — durchgängig, in jeder Sprache:
-- Aggregat-Identität: `ClusterIdentity.Create(guid, aggregateType)` (`AggregateDispatcher.cs:60`).
-- Signal-Sharding: über `Payload.GetType()`, die konkrete Signal-Klasse (`SignalEnvelope.cs`).
-- Command→Aggregat: abgeleitet aus den `IDecider<T>.Decide(TCommand)`-Signaturen, nicht aus
-  Namespaces (`CommandAggregateMapGenerator.cs`).
-- Python: `type(payload)` → Handler-Dict, `type(output)` → Kategorie (`dispatch.py`, `registry.py`).
-- Blazor: nicht-generische `Dictionary<Type, …>` + `message.GetType()` (`ClientBus.cs`).
+Kein einzelner Zustellweg trägt die Korrektheit allein.
 
-Es gibt bewusst **kein** `[Command]`/`[Event]`/`[Aggregate]`-Attribut. Nur zwei *optionale*
-Attribute (`[AggregatName]`, `[ProzessName]`) entkoppeln die *persistierte* Identität vom
-Klassennamen — für Migrations-Stabilität, nicht fürs Routing.
+## P3 — Der Typ ist der Schlüssel (Inv. 3)
 
-## P4 — Keine Runtime-Reflection; alles Dispatchende ist generiert und gegen ein Manifest verriegelt
+**Warum:** Ein handgebauter String kann still auseinanderlaufen; ein Typ nicht — der Compiler hält beide Seiten zusammen. Der CLR-Typ ist
+deshalb durchgängig der Routing-Schlüssel, in jeder Sprache:
+- Aggregat-Identität: `ClusterIdentity.Create(guid, aggregateType)` (`ProtoActorAggregateDispatcher`, `CommandEmitter`).
+- Signal-Sharding: über `Payload.GetType()`, die konkrete Signal-Klasse (`BrokerPublisher`, `SignalEnvelope`).
+- Command → Aggregat: abgeleitet aus den `IDecider<T>.Decide(TCommand)`-Signaturen (`CommandAggregateMapGenerator`).
+- Quellen sind Typen, keine Namen aus der Konfig; der Konfig-Abschnitt `Quellen:<Typ>` folgt dem Typ.
+- Python: `type(payload)` → Handler (`cqrs_client/dispatch.py`); Blazor: `Dictionary<Type, …>` + `message.GetType()` (`ClientBus`).
 
-Jeder dispatchende Pfad ist ein generierter `switch`/`Dictionary` über konkrete Typen,
-gebunden an einen **STJ-Source-Gen-Kontext** (`CqrsWireJsonContext`) statt an
-`JsonSerializer.Deserialize(type, …)`. Der Trick, der die Kopplung *erzwingt*: Generatoren
-referenzieren `Ctx.Default.{Typ}` **namentlich** — driftet die Typmenge, existiert die
-Property nicht → **Build bricht** (`WireSerializerGenerator.cs:96`). So ist „alles Dispatchende
-zur Compile-Zeit erzeugt und gegen das Serialisierungs-Manifest verriegelt" *strukturell*
-garantiert, nicht per Disziplin. Ausnahmen (bewusst, pragmatisch): der JSON-Round-Trip-`Clone`
-für Snapshots (`AggregateActorBase.cs:584`) und punktuelle Reflection in der Test-DSL (`Cqrs.Testing`, Zustandsspiegel) — beide
-außerhalb des heißen Produktionspfads.
+Es gibt **kein** `[Command]`/`[Event]`/`[Aggregate]`-Attribut; Rollen sind Marker-Interfaces. Die vorhandenen Attribute haben je eine
+enge Aufgabe und routen nichts:
+- `[AggregatName]`, `[ProzessName]` (`Abstractions/IdentitaetsAttribute.cs`) entkoppeln die *persistierte* Identität vom Klassennamen.
+- `[RoutingTabelle(Art)]` markiert die generierte Routing-Tabelle, damit der Extractor sie als Code-Fakt findet statt sie an der Syntax zu
+  erraten.
+- `[ProjectionReader]` steuert das Laden von Read-Model-Abhängigkeiten eines Readers.
+- `[assembly: IstClient<IX>]` erklärt eine C#-Assembly zum Client eines Vertrags.
+- `[Ingress]` ist Altlast der Handle-Welt, ohne Domänen-Nutzer, Rückbau offen (docs/13 W11-1).
 
-## P5 — Der Fachcode bleibt rein
+## P4 — Keine Reflection; alles Dispatchende ist generiert und gegen ein Manifest verriegelt (Inv. 4, W10)
 
-Der Entwickler schreibt nur Fachlogik. Alles Maschinelle ist unsichtbar:
-- `Id`/`Version`, `State`-Property und Konstruktoren werden in Decider/Applier generiert.
-- Idempotenz/Dedup/Korrelation liegen in Framework-Marken (`KommandoVerarbeitet`,
-  `KommandoAbgelehnt`), die `IProzessIntern` sind — vom Applier übersprungen, in der Version
-  mitgezählt. Aggregate tragen **kein** Dedup-Feld (Kommentar `Konto.cs:8`: „REINE Domäne").
-- Ein Prozess ist *nur* seine Regeln — kein Manager, kein Treiber, kein Korrelations-Code
-  (`ReiseProzess.cs`).
-- Store-Impl-Typen werden im Generat *nie* genannt; Konsumenten bekommen ihren Store per DI
-  (`PullPathGenerator`: „Store-Impl-Typ wird NIE genannt").
+**Warum:** Reflection verschiebt Fehler vom Build in den Betrieb und macht Typmengen unsichtbar. Jeder dispatchende Pfad ist deshalb ein
+generierter `switch` bzw. eine generierte Tabelle über konkrete Typen, gebunden an einen STJ-Source-Gen-Kontext (`CqrsWireJsonContext`)
+statt an `JsonSerializer.Deserialize(type, …)`. Der Trick, der die Kopplung erzwingt: die Generatoren referenzieren
+`Ctx.Default.{Typ}` **namentlich** (`WireSerializerGenerator`) — driftet die Typmenge, existiert die Property nicht, und der Build bricht.
+Die Kontexte selbst (`CqrsWireJsonContext.g.cs`, `EventJsonSerializerContext.g.cs`) erzeugt der Codegen-Schritt im Build
+(`CqrsCodegenPrepass` → `Cqrs.Codegen`).
 
-**Eine bemerkenswerte Ausnahme-Schuld:** `Reaktionsempfaenger.VerarbeiteteReaktionen` hält
-die Dedup-Menge doch in der Domäne (`Domain/Reaktion/Reaktionsempfaenger.cs`) — das Prinzip
-ist hier noch nicht durchgezogen (Domänen-Leak, siehe [13](13-reifegrad-schulden-bewertung.md)).
+Das Prinzip gilt ohne Ausnahme. Wo der Code es heute noch verletzt, ist das Schuld, keine Erlaubnis: `Cqrs.Codegen` liest die gebauten
+DLLs per `MetadataLoadContext`, `Werkbank/Server/Schema.cs` liest Konfig-Typen per Reflection (docs/13 W10-1); Marten serialisiert per
+Default reflektiv, der Snapshot-`Clone` ist ein JSON-Round-Trip, HTTP-Antworten nutzen anonyme Typen (docs/13 W10-2); die Test-DSL in
+`Cqrs.Testing` nutzt punktuell Reflection.
 
-## P6 — Persistent genau dann, wenn ein durabler Konsument abhängt
+## P5 — Die Maschinerie ist unsichtbar (Inv. 5)
 
-Die P6.1/P6.2-Zerlegung der Pipeline ist der Musterfall: persistierte Events laufen über die
-durable Pull-Maschine, nur transiente Events (`ITransientEvent`) bleiben auf dem verlierbaren
-Broker (`PipelineActorBase.cs`). Ablehnungen sind `ITransientEvent` und nie im Log. Signale
-sind nie persistent. Das hält den Log frei von allem, was niemand durabel braucht.
+**Warum:** Was der Entwickler nicht schreibt, kann er nicht falsch schreiben — und der Fachcode bleibt lesbar als Fachlogik. Alles
+Maschinelle liegt im Framework oder im Generat:
+- `Id`/`Version`, die `State`-Property und der Konstruktor von Decider/Applier werden generiert (`StateGenerator`, `Generator`).
+- Idempotenz und Dedup liegen in Framework-Marken (`KommandoVerarbeitet`, `KommandoAbgelehnt`, `Infrastructure/Aggregate/`), die
+  `IProzessIntern` sind — vom Applier übersprungen, in der Version mitgezählt. Aggregate tragen kein Dedup-Feld.
+- Ein Prozess ist nur seine Regeln — kein Manager, kein Treiber, kein Korrelations-Code. Beispieldomäne: `Domain/Sammelvorgang/TeilFertigProzess.cs`
+  ist ein einziges `p.Auf<…>().Sende<…>(…)`; neutral in der Agnostik-Sonde `GraphExtractor.Kern/Sonde/Gebuehren.cs.txt` (`SchadenBeiRueckgabe`).
+- Store-Implementierungen werden im Generat nie genannt; ein Handle bekommt seine Store-Fähigkeiten als Parameter aus einem DI-Bereich
+  (`PullPathGenerator`).
+- Die Spur ist unsichtbar: jeder Log-Eintrag trägt die Header `ursache`, `wirker`, `ueber`, `stand` (`Abstractions/Spur/Spur.cs`,
+  `Infrastructure/Persistence/SpurHeader.cs`); sie reisen fluss-lokal (`Spur.Von`) und im Command-Envelope. Kein Fachcode setzt sie.
+
+## P6 — Der Log hält nur, was jemand durabel braucht (Inv. 6)
+
+**Warum:** Jedes Event im Log ist für immer da und wird bei jedem Replay gelesen. Was niemand durabel braucht, gehört auf den schnellen
+Kanal. Der heutige Musterfall ist die Grenze zwischen Quell-Nachricht und Ablehnung:
+- Eine **Quell-Nachricht** (`IQuellNachricht`) startet einen Vorgang, auf den ein Fluss durabel wartet — sie wird genau einmal je Kennung
+  das erste Event eines Vorgangs-Streams (`StartStream` mit deterministischer Id, `Infrastructure/Quellen/Quellen.cs`).
+- Eine **Ablehnung** (`ITransientEvent`) ist die Antwort an den Aufrufer und steht nie im Log; durabel wird nur die Framework-Marke
+  `KommandoAbgelehnt` (Inbox-Dedup, Prozess-Fold).
+- Die Fluss-Token `ZeitlimitAbgelaufen`, `SchrittAbgelehnt`, `QuellStrom` leben nur im Dirigenten (`Abstractions/Fluss/Pipeline.cs`).
+- Signale sind nie persistent.
 
 ## P7 — Eine Maschine, keine Taxonomie
 
-Die vier durablen Konsumenten teilen `ProjectionAdapter` + `SignalAdapterActor`. Der
-Unterschied fällt technisch aus **zwei orthogonalen Achsen**, kodiert über Konstruktor-Stores
-und Rückgabetypen — nicht über einen zweiten Marker:
+**Warum:** Vier Konsumenten-Arten mit eigener Maschinerie wären vier Stellen für dieselben Ordnungs- und Exactly-once-Fehler. Projektion,
+Reaktion, Prozess und Fluss teilen deshalb `ProjectionAdapter` + `SignalAdapterActor`. Der Unterschied fällt aus zwei orthogonalen Achsen,
+nicht aus einem zweiten Marker:
 - **Transport:** `IPullSubscriber` wählt Pull statt Push-Broker.
-- **Garantie (Achse B):** `IProjectionTracker` (replaybar, Co-Commit + Reset) **vs.**
-  `IEmittentenCursor` (emittierend, best-effort, **kein** Reset). Beide gesetzt → Konstruktor
-  wirft. Der Generator entscheidet die Achse zur Wiring-Zeit aus den Konstruktor-Argumenten
-  (`PullPathGenerator.cs:139`).
+- **Garantie (Achse B):** `IProjectionTracker` (replaybar, Co-Commit + Reset) **vs.** `IEmittentenCursor` (emittierend, best-effort,
+  **kein** Reset). Welche Achse gilt, folgt aus den **Schreib-Fähigkeiten der Handles**: lösen sie einen Store auf, der zugleich
+  `IProjectionTracker` ist, ist der Konsument replaybar, sonst emittierend (`PullPathGenerator`). Ein Store im Konstruktor ist verboten
+  (CQRS054); Schreib-Fähigkeiten aus mehreren Stores sind CQRS052. Beide Achsen gesetzt → der `ProjectionAdapter`-Konstruktor wirft.
 
-Dass ein Emittent nicht zurückgesetzt werden kann, ist **compile-zeit-wahr**: der Reset liegt
-auf `IReplaybarerTracker`, den ein Emittenten-Cursor nicht implementiert — „blindes Replayen
-geld-bewegender Emittenten ist compile-zeit-unmöglich" (`IEmittentenCursor.cs`).
+Dass ein Emittent nicht zurückgesetzt werden kann, ist compile-zeit-wahr: der Reset liegt auf `IReplaybarerTracker`, den
+`IEmittentenCursor` nicht implementiert — blindes Replay geld-bewegender Emittenten ist unmöglich. Der Co-Commit replaybarer Projektionen
+(Effekt + Marke in einer Transaktion) liegt in `Domain.Infrastructure/MartenCoCommitStoreBase.cs`; der GA-1-Check bricht, wenn eine
+append-artige Projektion keinen Co-Commit-Tracker hat.
 
-## P8 — Genau EIN Weg, per Analyzer erzwungen
+## P8 — Genau ein Weg, per Analyzer erzwungen (W11)
 
-Wo es mehrere Wege gäbe, wird genau einer festgelegt und der Rest zur Build-Zeit verboten:
-- **Ein Emit-Primitiv:** `CommandEmitter.EmitAsync`. Jeder rohe `RequestAsync<CommandResult>`
-  außerhalb der Allow-Liste ist **CQRS020** (Fehler); ein `CancellationToken.None` auf einer
-  Command-Kante ist **CQRS021** (unbounded Kante = Hang-Klasse).
+**Warum:** Zwei Wege für dieselbe Absicht driften auseinander, und jeder Weg muss eigens korrekt sein. Wo es mehrere gäbe, wird einer
+festgelegt und der Rest zur Build-Zeit verboten:
+- **Ein Emit-Primitiv:** `CommandEmitter.EmitAsync` (deterministische CommandId, `CommandModus.Emittiert`, bounded Token). Ein roher
+  `RequestAsync<CommandResult>` außerhalb der Allow-Liste ist **CQRS020**, ein `CancellationToken.None` auf einer Command-Kante **CQRS021**
+  (`CommandEmitAnalyzer`).
+- Ein Ausgabe-Vertrag: Decide und jedes Handle geben einen konkreten Typ oder `OneOf<…>` konkreter Typen zurück (**CQRS050**).
 - Ein Signal je Event, eine Typ-Registry, ein Wire-Kontext, ein Prozess je Auslöser-Event.
 
-## P9 — Fail-fast am Build statt still zur Laufzeit
+Wo der Code heute noch zwei Wege hat (Handle-Pipeline neben Fluss, Prozess- neben Fluss-DSL), steht es in docs/13 W11-1.
 
-15 Diagnose-Codes (CQRS001–046, siehe [05 §2](05-generatoren-analyzer-proto.md)) verwandeln
-konkrete Laufzeit-Stille-Bugs in Compile-Fehler: doppelter Saga-Auslöser, Dangling-Command,
-Identitäts-Kollision, unbounded Token, zyklischer Upcast, Wire-Drift. Dazu Boot-Guards, die
-den Start hart abbrechen: `WireSerializerBootCheck` (Serializer-Lücke), Azyklizitäts-Guard
-(zyklischer Regelsatz), 30-s-Cluster-Join-Timeout. Explizit im Code: „das war bisher nur ein
-Kommentar im Generat; jetzt bricht es den Build" (`CommandAggregateMapGenerator.cs:34`).
+## P9 — Fail-fast am Build und beim Start statt still zur Laufzeit (W5)
+
+**Warum:** Ein stiller Laufzeitfehler in einem verteilten System ist teuer zu finden. Analyzer und Generator-Diagnosen (Übersicht in
+[05](05-generatoren-analyzer-proto.md)) verwandeln konkrete Stille-Bugs in Compile-Fehler — doppelter Saga-Auslöser, Dangling-Command,
+Identitäts-Kollision, unbounded Token, Wire-Drift, offener Ausgabe-Vertrag, Store im Konstruktor, Fluss- und Modell-Regeln, Akteur- und
+Client-Verträge, Dienst-Bindung. Im Code steht es wörtlich: „Das war bisher nur ein Kommentar im Generat; jetzt bricht es den Build“
+(`CommandAggregateMapGenerator`).
+
+Was erst beim Start feststeht, prüfen Boot-Guards und brechen hart ab (als `BootFehler` mit Karte, gemeldet als `CQRS-BOOT {json}`):
+- Umgebung fehlt; unbekannte Abschnitte oder Felder der Umgebungs-Datei (`UmgebungLader`).
+- Umgebungs-Siegel: eine Datenbank gehört genau einer Umgebung (`UmgebungsSiegel`).
+- Quellen-Konfig: Abschnitt ohne Quellen-Typ, Quelle ohne Abschnitt, fehlender Pfad, Webhook ohne Route/Einblick-Port oder doppelt
+  (`QuellenDienst`, `Quellen`).
+- Funktions-Bindung: unbekannte Funktion, Laufort Host ohne genau eine Implementierung, Lese-Fähigkeit außerhalb des Hosts
+  (`FunktionsExtensions`).
+- Dienst-Bindung: fehlende oder mehrdeutige Implementierung, Kreis, fehlender oder unbekannter Konfig-Record bzw. -Feld (`Dienste`).
+- Azyklizität des Regelsatzes über Prozesse und Funktionen (`ProzessManagerWiring` → `ProzessAzyklizität`).
+- Wire-Check: jeder Wire-Typ ist serialisierbar (`WireSerializerBootCheck`).
+- Akteur-Optionen: jeder in der Konfig genannte Akteur existiert als `IAkteur`-Typ (`AkteurOptionen.Pruefe`).
+- Cluster-Join mit 30-s-Grenze (`ClusterStartupService`).
 
 ## P10 — Scharfe Durabilitätsgrenze
 
-Vor dem Append darf ein Command als Fehler quittieren; **nach** dem Append ist Erfolg
-garantiert, und die In-Memory-Nebenwirkungen (State-Mutation, Redis, Snapshot, Publish) sind
-best-effort — wirft eine davon, rehydriert der Actor frisch aus dem Log und quittiert trotzdem
-Erfolg (`AggregateActorBase.cs:364`). Der Batch-Task löst *erst* beim Commit
-(`BatchingEventAppender.cs:19`): Enqueue ≠ durabel.
+**Warum:** Ein falsches Negativ nach einem erfolgreichen Commit ist schlimmer als jeder Folgefehler — ein Prozess würde einen gelungenen
+Schritt kompensieren. Vor dem Append darf ein Command als Fehler quittieren; **nach** dem Append ist Erfolg garantiert. Die
+In-Memory-Nebenwirkungen (State-Mutation, Redis, Snapshot, Publish) sind best-effort — wirft eine davon, rehydriert der Actor frisch aus
+dem Log und quittiert trotzdem Erfolg (`AggregateActorBase`, Post-Append-`catch`). Der Batch-Task löst erst beim Commit
+(`BatchingEventAppender`): Enqueue ist nicht durabel.
 
 ## P11 — Ableiten statt deklarieren
 
-Topologien werden aus Typkanten gefolgert, nicht von Hand gepflegt:
-- **Upcasting:** „frühere vs. aktuelle Version" wird aus der `IUpcast`-DAG *gefolgert* (Quelle
-  einer Kante = alt, Blatt = aktuell); der Diskriminator versioniert sich selbst
-  (`_v2`, `_v3`) aus der DAG-Position (`EventUpcastingGenerator.cs`).
-- **Snapshot-Schema-Version:** FNV-1a-Struktur-Hash über die State-Form — eine Formänderung
-  invalidiert Snapshots automatisch (`SnapshotRegistrationGenerator.cs`).
-- **Signal-Set, Command→Event-Kanten, Wire-Whitelist:** alle aus Symbolen abgeleitet.
+**Warum:** Was abgeleitet ist, kann nicht veralten. Topologien und Mengen werden aus Typkanten gefolgert, nicht von Hand gepflegt:
+- **Command → Aggregat** aus den Decide-Signaturen (`CommandAggregateMapGenerator`); daraus auch die Command → Event-Kanten für den
+  Azyklizitäts-Guard.
+- **Snapshot-Version:** Struktur-Hash der State-Form plus Code-Hash von State + Applier (`SnapshotRegistrationGenerator`,
+  `AggregateHandlerGenerator`) — eine geänderte Form oder Apply-Logik invalidiert Snapshots automatisch.
+- **Hör-Menge eines Akteurs:** mit Vertrag genau dessen Eingänge, sonst die Events der Aggregate seiner Commands (`AkteurRechte`).
+- **Verkörpert:** welche Akteure ein Client verkörpert, folgt aus seinen Vertrags-Teilen und den `IDarf`-Haltern — eine Regel für Server,
+  Python, Wissensgraph und Editor (`Abstractions.Akteurvertrag.Verkoerpert`).
+- **Wirker-Namen** aus Typen und Lambda-Variablen (`Abstractions/Spur/WirkerId.cs`, Regel-Namen aus dem `ProzessRegelnGenerator`).
+- Signal-Typen, Wire-Whitelist, Typ-Registry: aus Symbolen abgeleitet.
 
-## P12 — In-memory testbar durch Seams
+Die Upcasting-Primitive (`IUpcast`, `EventUpcastingGenerator`) folgt demselben Muster (alt/aktuell aus der Kanten-DAG), ist aber eine
+Backend-Primitive für Prod ohne Domänen-Nutzer und kein Editor-Konzept.
 
-Jeder Transport-Berührungspunkt ist ein injizierbarer Delegat (`CommandEmitter.SendeSeam`,
-`ProzessManager._dispatch`, `Poller._wake`), sodass Ebene-1-Tests die *Logik* ohne Cluster/DB
-prüfen. Umgekehrt gilt streng: **Store-Semantik wird nie gefaked** — es gibt keinen
-`InMemoryEventStore`; sie wird ausschließlich gegen echtes Marten getestet (Ebene 2). Siehe
-[12](12-tests-und-vermessung.md). Prinzip: „nie faken, was man nicht besitzt".
+## P12 — In-memory testbar durch Seams, Store-Semantik nie gefaked
 
-## P13 — Symmetrie über Sprachgrenzen
+**Warum:** Logik soll ohne Cluster und DB beweisbar sein, Store-Verhalten nur gegen den echten Store. Jeder Transport-Berührungspunkt ist
+ein injizierbarer Delegat (`CommandEmitter.SendeSeam`, `ProzessManager._dispatch`, `Poller._wake`), sodass der Prüfstand die *Logik* ohne
+Cluster/DB prüft. Umgekehrt gilt streng: es gibt keinen `InMemoryEventStore`; Store-Semantik wird ausschließlich gegen echtes Marten
+getestet. Prinzip: nie faken, was man nicht besitzt. Ebenen und Zahlen: [12](12-tests-und-vermessung.md).
 
-Das Python-SDK ist eine bewusste, architekturtreue Portierung des C#-Clients: dieselben vier
-Nachrichtenklassen auf einem bidirektionalen Stream, derselbe Typ-Dispatch, dieselbe
-Reinheit, ein gemeinsamer `domain.proto`-Vertrag mit Hash-Verifikation gegen Drift
-(`proto_sync.py`). Der Blazor-Client wiederholt dasselbe Muster (Redux/Flux, ein Bus, ein
-Signal, generiertes Wiring). Die Invarianten sind **nicht** backend-lokal — sie sind die
-Systemsprache.
+## P13 — Symmetrie über Sprach- und Prozessgrenzen
+
+**Warum:** Die Invarianten sind die Systemsprache, nicht backend-lokal. Jeder Client folgt denselben Regeln:
+- **Python:** dasselbe Typ-Dispatch-Muster, dieselbe Reinheit; die Verträge kommen als generierte Basen (`generated/vertraege.py`,
+  `generated/funktionen.py`, `generated/funktions_tabelle.py`, erzeugt vom Codegen-Schritt im Build). Der Handshake nennt Vertrag + Hash,
+  der Server nimmt die Fähigkeiten aus seiner eigenen Tabelle; `proto_sync.py` ist das Laufzeit-Netz gegen Proto-Drift.
+- **Blazor:** der Arbeitsplatz ist ein Client mit Vertrag (`[assembly: IstClient<IArbeitsplatz>]`); der Client-Generator liest den Vertrag
+  mit derselben Lesart wie der Server (`Clientvertragslesart`, gleicher Hash), die Analyzer CQRS093–097 halten den Code dagegen.
+- Wirksam ist an jeder Leitung Vertrag ∩ Token (Akteur-Tor).
+
+Wo die Python-Lesart noch von der des Servers abweicht, steht es in docs/13 W10-1.
+
+## P14 — Code ist die einzige Wahrheit; gelesen werden nur Code-Fakten (W1, W2)
+
+**Warum:** Ein zweites Modell neben dem Code (Board, Konfig-Namen, Konventionen) läuft auseinander. Es gibt kein gespeichertes
+Board-Modell; der Graph entsteht über Roslyn aus Marker-Interfaces, Attributen, Symbolen und Signaturen — nie aus Namenskonventionen oder
+Namespace-Raten (Code-Fakt je Primitive: `docs/konzept-werkbank.md` Anhang A.6). Jede Geste im Editor ist ein Patch am Code, jeder Typ der
+Domänen-Projekte gehört zu einer Karte. Die Agnostik-Sonde (`GraphExtractor.Kern/Sonde/`, Domäne „Leihwesen“) beweist, dass der Extractor
+eine unbekannte Domäne nur aus Code-Fakten liest. Wo Framework und Werkzeuge noch feste Projekt- oder Namespace-Namen kennen: docs/13 W2-1.
+
+## P15 — Prüfen = Bauen (W5)
+
+**Warum:** Ein zweiter Prüfer neben dem Compiler hat eigene Lücken und eigene Fehler. Regeln sind Analyzer, Generator-Diagnosen und
+Boot-Guards (P9); einen separaten Validator gibt es nicht. Die Grammatik (`DomainEditor/Grammatik.cs`) ist Daten für ⊕ und `--grammatik`,
+jede Regel nennt ihr Build-Gegenstück. Die Werkbank holt die Befunde aus den Analyzern der warmen Compilations und hängt sie an die Karte
+(`docs/konzept-werkbank.md` §2, §8.3).
 
 ---
 
 ## Wo die Prinzipien (noch) nicht eingelöst sind
 
-Ehrlichkeit als Teil der Bewertungsgrundlage — diese Punkte widersprechen dem Anspruch und
-sind in [13](13-reifegrad-schulden-bewertung.md) priorisiert:
-
-| Prinzip | Verletzung |
-|---|---|
-| P1/Exactly-once | `MartenProjectionTracker` macht **keinen** echten Co-Commit (getrennte Session, at-least-once) |
-| P5 (Reinheit) | `Reaktionsempfaenger`-Dedup-Menge lebt in der Domäne (unbegrenzt wachsend) |
-| P4 (reflexionsfrei) | Snapshot-`Clone` per JSON-Round-Trip; die Test-DSL (`Cqrs.Testing`) nutzt punktuell Reflection |
-| P8/P9 (ein Weg, fail-fast) | Der generierte Pull-Emit-Pfad reicht `CancellationToken.None` durch — CQRS021 greift dort syntaktisch nicht |
-| P11 (ableiten) | `CqrsWireJsonContext` und `domain_registry.py` sind hand-gepflegt (Boot-Check/Compile-Guard fangen Vergessen ab) |
+Abweichungen vom Anspruch stehen nicht hier, sondern in einer Quelle: [13 §13.0](13-reifegrad-schulden-bewertung.md). Die wichtigsten
+Bezüge: Reflection in Werkzeugen und zur Laufzeit (W10-1, W10-2, zu P4), feste Projekt- und Namespace-Namen (W2-1, zu P14), doppelte Wege
+(W11-1, zu P8), `CancellationToken.None` im generierten Pull-Emit-Pfad (P1-6, zu P8/P9), Ableitungen im Editor-JS (W3-1, zu P11/P14).

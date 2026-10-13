@@ -1,199 +1,196 @@
-# 05 — Generatoren, Analyzer & Proto-Flow
+# 05 — Generatoren, Analyzer & Codegen
 
-Alles Dispatchende wird zur Compile-Zeit erzeugt (Invariante 4). Es gibt **drei
-Ausführungsmodelle**: In-Compilation-Generatoren (laufen bei jedem Build mit), ein reiner
-Analyzer (nur Diagnostics), und ein **manuell** laufendes Konsolentool (Proto).
+Stand 2026-10-13, gegen den Code geprüft. Maßstab: docs/konzept-werkbank.md.
 
-## 5.1 Die sechs Generator-Projekte
+Alles Dispatchende wird zur Compile-Zeit erzeugt, ohne Runtime-Reflection (Invariante 4). Drei Bausteine tragen das, alle laufen bei jedem
+`dotnet build` mit:
+1. **In-Compilation-Generatoren** (Roslyn `[Generator]`) erzeugen Dispatch, Registrierungen und Tabellen.
+2. **Analyzer** (`[DiagnosticAnalyzer]`) und Generator-Diagnosen machen Regeln zu Build-Fehlern — **Prüfen = Bauen**. Was sich erst beim
+   Start zeigt, prüfen Boot-Guards.
+3. **Der Codegen-Schritt im Build** (`Cqrs.Codegen`) erzeugt die Artefakte, die ein nachgelagertes Werkzeug braucht (protoc, der
+   STJ-Source-Generator, Python) und die ein In-Compilation-Generator deshalb nicht liefern kann.
 
-| Projekt | TFM | Modell |
+## 5.1 Projekte und Verdrahtung
+
+| Projekt | TFM | Rolle |
 |---|---|---|
-| `Abstractions.SourceGeneration` | net9.0 | reine Modell-Bibliothek (`TypeNode`), kein `[Generator]` |
-| `Core.SourceGeneration` | net9.0 | geteilter Analyse-Kern (Domain-Graph, Multi-Compilation) |
-| `Domain.SourceGeneration` | netstandard2.0 | In-Compilation, **Syntax**-basiert (Domain-Seite) |
-| `Infrastructure.SourceGeneration` | netstandard2.0 | In-Compilation, **Symbol**-basiert + der Analyzer |
-| `Client.SourceGeneration` | netstandard2.0 | In-Compilation (Blazor-Client) |
-| `Proto.SourceGeneration` | net9.0 (Exe) | **manuell** laufendes Tool |
+| `Abstractions.SourceGeneration` | net9.0 | Modell-Bibliothek (`TypeNode`), kein `[Generator]` |
+| `Core.SourceGeneration` | net9.0 | Analyse-Kern ohne `[Generator]`: `DomainGraphAnalyzer`, `TypeAggregator`, `CompilationTypeResolver`, `TypeMappingHelper`, `ProtoScalarSpec`, `NameSanitizer` |
+| `Domain.SourceGeneration` | netstandard2.0 | Generatoren der Domänen-Seite (syntax-lokal) und acht Analyzer |
+| `Infrastructure.SourceGeneration` | netstandard2.0 | Generatoren der Laufzeit-Seite (symbol-basiert) und zwei Analyzer |
+| `Projections.SourceGeneration` | netstandard2.0 | DI-Verdrahtung der Leseseite und ein Analyzer |
+| `Client.SourceGeneration` | netstandard2.0 | Generatoren des Blazor-Clients und ein Analyzer |
+| `Cqrs.Codegen` | net9.0 (Exe) | Werkzeug: der Codegen-Schritt im Build (§5.7) |
+| `Proto.SourceGeneration` | net9.0 (Exe) | liefert den `FileGenerator` (domain.proto), den `Cqrs.Codegen` nutzt; sein eigenes `Program` ist ein zweiter, Roslyn-basierter Leseweg (docs/13 W10-1) |
 
-**Analyzer-Verdrahtung** (bestimmt die Sichtbarkeit, §5.6): `Domain.SourceGeneration` hängt an
-`Domain`, `Domain.Projections`, `Domain.Pipeline`; `Infrastructure.SourceGeneration` nur an
-`Infrastructure`; `Client.SourceGeneration` an `Domain.Client.Modules.Blazor`.
+`Core.SourceGeneration` und `Abstractions.SourceGeneration` werden in `Infrastructure.SourceGeneration` per Link mitkompiliert. Ebenso
+hängen die **Verträge** als verlinkte Quelle in Generator und Laufzeit — eine Regel, eine Datei: `Abstractions/Aggregatvertrag.cs`,
+`Akteurvertrag.cs`, `Dienstvertrag.cs`, `Quellen/Treibervertrag.cs`, `Kodehash.cs`, `Spur/WirkerId.cs`, dazu
+`Infrastructure.SourceGeneration/Clientvertragslesart.cs` (dieselbe Lesart für Server und C#-Client) und `Ctorbindung.cs`.
 
-## 5.2 Vollständige Generator-Tabelle
+**Analyzer-Verdrahtung** (bestimmt die Sichtbarkeit, §5.6):
 
-**Input-Legende:** *Syntax* = liest die Syntax der eigenen Compilation (sieht nur im aktuellen
-Projekt deklarierte Typen). *Symbol* = wandert `GlobalNamespace` und sieht auch referenzierte
-Assemblies.
+| Generator-Projekt | hängt als Analyzer an |
+|---|---|
+| `Domain.SourceGeneration` | `Domain`, `Domain.Projections`, `Domain.Pipeline`, `Domain.Akteure` |
+| `Projections.SourceGeneration` | `Domain.Infrastructure` |
+| `Infrastructure.SourceGeneration` | `Infrastructure` |
+| `Client.SourceGeneration` | `Domain.Client.Modules.Blazor` |
+
+Die Symbol-Generatoren und der `GesamtbildAnalyzer` sehen die Domäne nur, weil `Infrastructure.csproj` die Domänen-Projekte (`Domain`,
+`Domain.Projections`, `Domain.Pipeline`, `Domain.Infrastructure`) referenziert. `Infrastructure` ist damit zugleich Framework und
+Komposition — eine offene Kopplung (docs/13 W2-1).
+
+## 5.2 Die Generatoren
+
+**Input-Legende:** *Syntax* = liest die Syntaxbäume der eigenen Compilation (sieht nur im aktuellen Projekt deklarierte Typen).
+*Symbol* = wandert `GlobalNamespace` und sieht auch referenzierte Assemblies. Dateiname und Klassenname weichen teils ab (Klasse genannt).
 
 ### Domain.SourceGeneration (Syntax)
-| Generator | Input (Marker) | Output → Typ | Zweck |
+| Generator | Input (Marker) | Output | Zweck |
 |---|---|---|---|
-| `Generator` | `IDecider<T>`/`IApplier<T>` | `{State}.State.g.cs` | injiziert `State`-Property + Ctor |
-| `AggregateHandlerGenerator` | `IState` + nested Decider+Applier | `{State}AggregateHandler` | `HandleCommand`/`ApplyEvent`-Switch, entpackt `OneOf` |
-| `HandlerFactoryGenerator` | `IState` | `AggregateHandlerFactory` (ns `Infrastructure`) | State-Typ-Switch → Handler |
+| `Generator` | `IDecider<T>`/`IApplier<T>` | `{State}.{Klasse}.State.g.cs` | injiziert `State`-Property + Ctor in Decider/Applier |
 | `StatePropertyGenerator` | `IState` | `{State}.State.g.cs` | `Guid Id` + `int Version` |
-| `SignalTypeGenerator` | `IEvent` & !`ITransient` | `StateChangeVia{Event}` | Weckruf-Signal je Event (bewusst syntax-lokal) |
-| `SubscriberDispatchGenerator` | `ISubscriber` + `Handle(...)` | `{Sub}.Dispatch.g.cs` | `SubscribedTypes` + `DispatchAsync` |
+| `AggregateHandlerGenerator` | `IState` + nested Decider/Applier | `{State}AggregateHandler` | `HandleCommand`/`ApplyEvent`-Switch, entpackt `OneOf`; `CodeHash` (State + Applier) für Snapshots |
+| `HandlerFactoryGenerator` | `IState` | `AggregateHandlerFactory` (ns `Infrastructure`) | State-Typ → Handler |
+| `SignalTypeGenerator` | `IEvent` & nicht transient | `StateChangeVia{Event}` | Weckruf-Signal je persistiertem Event (bewusst syntax-lokal) |
+| `SubscriberDispatchGenerator` | `ISubscriber` + `Handle(…)` | `{Sub}.Dispatch.g.cs` | `SubscribedTypes` + `DispatchAsync` mit Fähigkeits-Parametern |
 | `ProjectionReaderDispatchGenerator` | `IReader<T>` + `Handle(TQuery,…)` | `{Reader}.Dispatch.g.cs` | Query-Routing |
 | `ProjectionQueryServiceGenerator` | `IReader<T>` | `ProjectionQueryService` (ns `Domain.Projections`) | zentraler Query-Service |
-| `PipelineDispatchGenerator` | `IPipelineHandler` + `Handle(...)` | `{Pipe}.Dispatch.g.cs` | Trigger/Event/Self-Dispatch |
-| `ProzessRegelnGenerator` | `IProzessDefinition` | `GeneratedProzessRegeln` | DAG-Registry Name→Regeln (**CQRS012**) |
-| `ProzessRegelDiagnosticGenerator` | `IProzessDefinition` + `IDecider` | — (nur Diagnostics) | **CQRS001/002/003** |
+| `ProzessRegelnGenerator` | `IProzessDefinition`, `IPipeline` | `GeneratedProzessRegeln` | Registry Name → Regeln, Regel- und Knoten-Namen (CQRS012, CQRS072) |
+| `ProzessRegelDiagnosticGenerator` | `IProzessDefinition` + `IDecider` | — (nur Diagnosen) | CQRS001–003 |
+| `PipelineDispatchGenerator` | `IPipelineHandler` | `{Pipe}.Dispatch.g.cs` | **Altlast** (Handle-Pipeline, ohne Domänen-Nutzer, docs/13 W11-1) |
 
 ### Infrastructure.SourceGeneration (Symbol)
-| Generator | Input | Output → Typ | Zweck |
+| Generator | Input | Output | Zweck |
 |---|---|---|---|
-| `CommandAggregateMapGenerator` | `IDecider<T>.Decide(TCommand)` + OneOf-Rückgaben | `GeneratedCommandRouting` (ns `Infrastructure.Mapping`) | **Dispatch-Kern**: `CommandToAggregate` + `CommandToEvents` + `Produziert()` (**CQRS010/011**) |
-| `AggregateActorGenerator` | `IState` (+ `[AggregatName]`) | `AggregateActors`, `GeneratedAggregates` | Proto.Actor-Actor + DI/ClusterKinds |
-| `PipelineActorGenerator` | `IPipelineHandler` | `PipelineActors`, `GeneratedPipelines` | Pipeline-Actors + Pull-Kind-Wiring |
-| `PullPathGenerator` | `ISubscriber` **&** `IPullSubscriber` | `GeneratedPullPaths` | kompletter Pull-Pfad je Konsument (Store per DI) |
-| `SignalFactoryGenerator` | `IStateChangeSignal<T>` | `GeneratedSignalFactory`, `…Routes` | reflexionsfreie Event→Signal-Factory |
-| `SnapshotRegistrationGenerator` | `IState` | `GeneratedSnapshotRegistration` | Marten-Registrierung + **FNV-1a-Struktur-Hash** als Schema-Version |
-| `EventJsonGenerator` | `IEvent` & !transient & !self | `GeneratedEventJson` | reflexionsfreier Event-JSON-Dispatch |
-| `WireSerializerGenerator` | `IWireMessage` + Payload-Wurzeln | `GeneratedWire` + `GeneratedWirePoly` | Cross-Node-Wire-Dispatch |
-| `EventUpcastingGenerator` | `IUpcast<..>` (Arity 2/3/4) | `GeneratedEventUpcasting` | typisierte Schema-Evolution (**CQRS040–046**) |
-| `DtoMapperSourceGenerator` | `IMessagePayload`/`IQuery`/`IPipelineTrigger` via Domain-Graph | `ProtoMessageMapper.Generated` | Domain↔Proto-DTO-Mapper (**CQRS030**) |
-| `TypeRegistryGenerator` | 6 Interface-Kategorien | `GeneratedTypeRegistry` | Runtime-Typ-Registry (String↔Type) |
+| `CommandAggregateMapGenerator` | jede `IDecider<T>.Decide(TCommand)` + OneOf-Rückgaben | `GeneratedCommandRouting` (ns `Infrastructure.Mapping`) | **Dispatch-Kern**: `CommandToAggregate`, `CommandToEvents`, `Produziert()` (CQRS010/011) |
+| `AggregateActorGenerator` | `IState` | `AggregateActors`, `GeneratedAggregates` | Proto.Actor-Actor + Cluster-Kinds |
+| `PullPathGenerator` | `ISubscriber` & `IPullSubscriber` | `GeneratedPullPaths` | Pull-Pfad je Konsument; Achse B aus den Schreib-Fähigkeiten der Handles (CQRS052, [04 §4.2](04-konsum-und-prozess-maschine.md)) |
+| `SignalFactoryGenerator` | `IStateChangeSignal` | `GeneratedSignalFactory`, `GeneratedSignalRoutes` | Event → Signal ohne Reflection |
+| `SnapshotRegistrationGenerator` | `IState` | `GeneratedSnapshotRegistration` | Marten-Registrierung; Schema-Version = FNV-1a-Struktur-Hash + `CodeHash` |
+| `EventJsonGenerator` | persistierte Events | `GeneratedEventJson` | Event-JSON über `EventJsonSerializerContext.Default.{Typ}` |
+| `WireSerializerGenerator` | `IWireMessage` + Payload-Wurzeln | `GeneratedWire`, `GeneratedWirePoly` | Cross-Node-Wire über `CqrsWireJsonContext.Default.{Typ}` ([06](06-transport-multinode-betrieb.md)) |
+| `FunktionsGenerator` | `IFunktion` + `IAuftrag<F>` | `GeneratedFunktionen` | Dispatch Auftrag → Funktion → Ergebnis, Implementierungen je Funktion (CQRS068/069) |
+| `DienstGenerator` | `IDienst` + Konstruktoren der Implementierungen | `GeneratedDienste` | Fabriken ohne Reflection, Bedarf je Konstruktor, Konfig-Records Feld für Feld |
+| `QuellenGenerator` | Record, der von einer Treiber-Basis erbt (`DateiGemeldet`) | `GeneratedQuellen` | je Quelle Treiber, Konfig-Abschnitt, Wirker-Id, Fabrik |
+| `AkteurRechteGenerator` | `IAkteur` + `IDarf<T>`, `IAkteurVertrag<A>`, `IClientVertrag` | `GeneratedAkteurRechte`, `GeneratedClientVertraege` | Befugnisse, abgeleitete Hör-Menge, Verträge + Hash (CQRS059) |
+| `EventUpcastingGenerator` | `IUpcast<…>` | `GeneratedEventUpcasting` | Backend-Primitive für Schema-Evolution in Prod, kein Editor-Konzept (CQRS040–046; 1:N bricht bewusst den Build) |
+| `DtoMapperSourceGenerator` | Domänen-Graph (`DomainGraphAnalyzer`) | `ProtoMessageMapper.Generated` | Domain ↔ Proto-DTO an der gRPC-Grenze (CQRS030) |
+| `TypeRegistryGenerator` | `IEvent`, `ICommand`, `IQuery`, `IQueryResponse`, `IPipelineTrigger` … | `GeneratedTypeRegistry` | Name ↔ Typ |
+| `PipelineActorGenerator` | `IPipelineHandler` | `PipelineActors`, `GeneratedPipelines`, `GeneratedFristen` | **Altlast** (Handle-Pipeline, Trigger, `Frist<TCmd>`, CQRS056; docs/13 W11-1). `GeneratedPipelines.CommandAggregateTypes` ist nur noch ein Durchreicher auf `GeneratedCommandRouting`, über den u. a. der `CommandEmitter` routet |
+
+### Projections.SourceGeneration
+| Generator | Input | Output | Zweck |
+|---|---|---|---|
+| `ProjectionServicesGenerator` | `IReadModel`, Store-Klassen mit Fähigkeiten, `IReader<T>` | `GeneratedProjectionServices` (ns `Domain.Infrastructure.Generated`) | Marten-Schema je Read-Model, Stores Scoped unter jeder Fähigkeit + Bündel, Reader, Read-Model-Typen für den Neuaufbau (CQRS053) |
 
 ### Client.SourceGeneration (Syntax, außer `WiringGenerator`)
 | Generator | Input | Zweck |
 |---|---|---|
 | `HandleMethodGenerator` | `Handle(TEvent, MessageContext)` | Store-/Handler-Dispatch nach Rückgabetyp |
-| `ViewModelGenerator` | `IViewModel` + `_camelCase`→Cmd/Query/Event | `_publish`/`__InitBus` + öffentliche Methoden + `IRelayCommand` |
-| `ModuleRegistryGenerator` | `IUiModule` | DI-Registrierung |
-| `WiringGenerator` | gemischt (Syntax + `CompilationProvider` über referenzierte Assemblies) | **eine** aggregierte Wiring-Klasse (DI + Subscription depth-first) |
+| `ModuleRegistryGenerator` | `IUiModule` | DI-Registrierung (`GeneratedModuleRegistry`) |
+| `WiringGenerator` | Syntax + referenzierte Assemblies, `[assembly: IstClient<IX>]` | `GeneratedWiring_{Assembly}`: DI, Abos, Vertrag + Hash, Commands/Queries aus dem Vertrag (CQRS093/094) |
+| `ViewModelGenerator` | `IViewModel` | ungenutzt (docs/13 P3-2) |
 
-### Core.SourceGeneration (kein `[Generator]`)
-`DomainGraphAnalyzer`, `MultiCompilationAnalyzer`, `TypeAggregator`, `CompilationTypeResolver`,
-`TypeMappingHelper`, `NameSanitizer` — das string-basierte `TypeNode`-Substrat, geteilt von
-DtoMapper (in-compilation) und Proto-Tool (multi-compilation).
+## 5.3 Die Regeln: Analyzer, Generator-Diagnosen, Boot-Guards
 
-## 5.3 Die 15 Diagnose-Codes (CQRS0xx)
+Es gibt **zwölf Analyzer-Klassen**; dazu melden einzelne Generatoren eigene Diagnosen, und was erst mit DI und Umgebung prüfbar ist, prüft
+der Start. Die eine Quelle der Regeln ist der Code selbst; die Liste „Regel → Build-Gegenstück“ druckt
+`dotnet run --project GraphExtractor -- --grammatik` (aus `DomainEditor/Grammatik.cs`). Die Werkbank holt die CQRS-Befunde bei ⟳ und je Geste
+aus den Analyzern der warmen Compilations und hängt sie an die Karte (`Werkbank/Server/Arbeitsbereich.cs`).
 
-Alle `Error` (der Build bricht), sofern nicht anders vermerkt.
-
-| Code | Titel | Erzwingt |
+| Bereich | IDs | Ort |
 |---|---|---|
-| **CQRS001** | Doppelter Prozess-Auslöser | ein Event startet höchstens EINEN Prozess |
-| **CQRS002** | Command ohne Decider-Handler | jeder Saga-Command wird von einem `Decide` behandelt |
-| **CQRS003** | Command-Typ muss explizit sein | `Sende<T>`/`SendeJe`/`RückgängigDurch` tragen `T` explizit |
-| **CQRS010** | Command von mehreren Aggregaten | jeder Command genau EIN Decider (eindeutiges Routing) |
-| **CQRS011** | Zwei Aggregate gleicher Identität | State-Namenskollision bricht Build |
-| **CQRS012** | Zwei Prozesse gleichen Namens | Prozess-Name eindeutig |
-| **CQRS020** | Roher Command-Send | `RequestAsync<CommandResult>` nur in Emitter/Dispatcher |
-| **CQRS021** | Unbounded Command-Kante | kein `CancellationToken.None`/`default` auf Command-Kante |
-| **CQRS030** | DTO-Mapper-Gen fehlgeschlagen | Generator-Exception wird lauter Fehler, nicht still |
-| **CQRS050** | Offener Ausgabe-Vertrag (`AusgabeVertragAnalyzer`, Domain.SourceGeneration) | Decide/Handle (Projektion, Reaktion, Reader, Pipeline) geben einen **konkreten Typ oder `OneOf<…>` konkreter Typen** zurück — kein Interface (`ICommand`, `IEvent` …), Typ-Parameter, `object`, keine abstrakte Klasse. `Task`/`void` (reine Effekte) erlaubt. Grund: WAS entstehen kann, ist dann ein Typ-Fakt (Compiler-garantiert) statt einer unvollständigen Rumpf-Analyse |
-| **CQRS051** | Fähigkeit mit ≠ 1 Funktion (`FaehigkeitAnalyzer`) | Ein `IWriteStore`/`IReadStore`-Interface trägt genau EINE Store-Funktion und erbt keine andere Fähigkeit; gebündelt wird im Store-Interface (`IStore`) |
-| **CQRS052** | Schreib-Fähigkeiten aus mehreren Stores (`PullPathGenerator`) | Alle Schreib-Fähigkeiten der Handles einer Projektion gehören zu EINEM Store (eine Transaktionsgrenze, eine Marke) — Achse B kommt aus diesen Parametern |
-| **CQRS053** | Fähigkeit mehrdeutig (`ProjectionServicesGenerator`) | Genau eine Store-Klasse je Fähigkeit (die DI registriert sie Scoped unter jeder Fähigkeit + dem Bündel) |
-| **CQRS054** | Store im Konsumenten (`FaehigkeitAnalyzer`) | Projektion/Reader/Reaktion/Pipeline halten keinen Store und keinen `IFristplan` in Ctor/Feld/Eigenschaft — Store-Funktionen nur als Fähigkeits-Parameter eines `Handle` |
-| **CQRS055** | Store selbst gebaut (`FaehigkeitAnalyzer`) | Kein `new …Store()` — Stores nur aus der DI (eine Instanz je Fähigkeits-Bereich) |
-| **CQRS056** | Frist-Command nicht baubar (`PipelineActorGenerator`) | `Frist<TCmd>`: `TCmd` braucht einen öffentlichen Ctor `(Guid zielAggregatId)` — daraus baut der generierte Fristen-Router den Command |
-| **CQRS057** | Handler wird nicht dispatcht (`HandlerFormAnalyzer`) | Ein an seinen Typen erkannter Handler (Eingang + Kontext) heißt `Handle` und hat die feste Form (Kontext an fester Stelle, dahinter nur Fähigkeiten) — sonst zeigte ihn der Editor, die Laufzeit übersähe ihn still |
-| **CQRS058** | Ungültige Akteur-Befugnis (`AkteurAnalyzer`) | `IDarf<T>` nur für Hineingehendes — konkreter Command, Query, Trigger oder Transient-Event — und nur an einem `IAkteur` (`docs/konzept-akteure.md`) |
-| **CQRS060** | Im Auftrag eines Akteurs (`AkteurAnalyzer`) | Ein Akteur-Dienst (Interface mit `IAkteur`, z. B. die KI) kommt als Parameter an den Pipeline-Handle (nicht in Ctor/Feld), höchstens einer je Handle, und der Handle gibt nur Commands aus, die dieser Akteur darf |
-| **CQRS059** | Zwei Akteure gleichen Namens (`AkteurRechteGenerator`) | Die Composition Root ordnet Tokens über den einfachen Typnamen zu → eindeutig |
-| **CQRS040** | Mehrdeutige Upcast-Kante | eine Version → genau eine ausgehende `IUpcast` |
-| **CQRS041** | Upcast-Kette endet nicht aktuell | Kette erreicht eine aktuelle Gestalt |
-| **CQRS042** | Zyklus in Upcast-Kette | Upcasting azyklisch |
-| **CQRS044** | Merge (N:1) verboten | keine mehreren Kanten auf dasselbe Ziel |
-| **CQRS045** | Split-Sekundärziel mit eigener Kette | in Stufe 2 nur das erste Ziel setzt die Kette fort |
-| **CQRS046** | Split (1:N) nicht produktionsreif | **jeder** 1:N-Upcaster bricht bewusst den Build, bis die Consumer-Fabric steht |
-| **CQRS068** | Funktion außer Form (`FunktionsGenerator`) | `IFunktion`: genau eine Methode `Task<OneOf<Events>> RufeAsync(TAuftrag, IAusfuehrung)`, `TAuftrag : IAuftrag<F>`, Ergebnisse persistente Events |
-| **CQRS069** | Auftrag für mehrere Funktionen (`FunktionsGenerator`) | Ein Auftrag ist Eingang genau einer Funktion (sonst wäre der generierte Dispatch mehrdeutig) |
-| **CQRS093** | Client ohne Vertrag (`WiringGenerator`) | Eine Client-Assembly mit Handlern nennt `[assembly: IstClient<IX>]` — sonst wüsste niemand, was sie sendet, fragt und hört |
-| **CQRS094** | C#-Client trägt Vertrags-Teile (`WiringGenerator`) | Zusagen (Antwort auf ein Event mit Kausalität) beantworten nur die Python-Basen; ein C#-Client nennt ISendet/IFragt und Kenntnis |
-| **CQRS095** | Command nicht im Client-Vertrag (`ClientVertragAnalyzer`) | Jeder im Client-Code erzeugte Command steht als `ISendet<T>` im Vertrag |
-| **CQRS096** | Query nicht im Client-Vertrag (`ClientVertragAnalyzer`) | Jede gestellte Query steht als `IFragt<T>` im Vertrag |
-| **CQRS097** | Server-Event nicht im Client-Vertrag (`ClientVertragAnalyzer`) | Jeder `Handle(E, MessageContext)` auf ein Server-Event hat `void Auf(E e)` im Vertrag (abonniert wird nur, was dort steht) |
+| Schreibseite & Routing | CQRS010/011 · CQRS020/021 · CQRS050 · CQRS057 · CQRS079–083 | `CommandAggregateMapGenerator` · `CommandEmitAnalyzer` · `AusgabeVertragAnalyzer` · `HandlerFormAnalyzer` · `ModellAnalyzer` (Apply fehlt, Faltung, Enum-Wert 0, Command ab verlierbarem Eingang, Konsument mit Zustand) |
+| Prozess & Fluss | CQRS001–003 · CQRS012, 072 · CQRS073–078 | `ProzessRegelDiagnosticGenerator` · `ProzessRegelnGenerator` · `FlussAnalyzer` |
+| Leseseite & Store | CQRS051, 054, 055 · CQRS052 · CQRS053 · CQRS066/067 | `FaehigkeitAnalyzer` · `PullPathGenerator` · `ProjectionServicesGenerator` · `StoreZugriffAnalyzer` |
+| Funktionen, Dienste, Quellen | CQRS068/069 · CQRS089–092 · CQRS070 | `FunktionsGenerator` · `DienstAnalyzer` · `QuellenTypAnalyzer` |
+| Akteure, Verträge, Clients | CQRS058, 060–065 · CQRS059 · CQRS093/094 · CQRS095–097 | `AkteurAnalyzer` · `AkteurRechteGenerator` · `WiringGenerator` · `ClientVertragAnalyzer` |
+| Gesamtbild | CQRS084–088 | `GesamtbildAnalyzer` (Query mit mehreren Readern, Ausgang ohne Erzeuger, Eingang ohne Konsument, Zusage ohne Client, Kreis ohne Zustandsschritt) |
+| Proto | CQRS030 | `DtoMapperSourceGenerator` (Generator-Ausnahme wird lauter Fehler) |
+| Upcasting | CQRS040–046 | `EventUpcastingGenerator` |
+| Altlast | CQRS056 | `PipelineActorGenerator` (`Frist<TCmd>`) |
 
-Einziger echter `DiagnosticAnalyzer` ist `CommandEmitAnalyzer` (syntaktischer Vorfilter
-`RequestAsync<T>` + semantische Bestätigung `T == CommandResult`). Alle anderen Diagnostics
-reiten auf `ISourceGenerator`-Läufen mit. Die **Domain-Dispatch-Generatoren melden gar keine
-Diagnostics** — sie signalisieren Fehler durch generierten Laufzeit-`throw` (`_ =>
-NotSupportedException`).
+Die acht Analyzer von `Domain.SourceGeneration` laufen in jedem Domänen-Projekt; der `GesamtbildAnalyzer` läuft in der
+`Infrastructure`-Compilation, sieht alle Domänen-Projekte und meldet ohne Quell-Ort (die Meldung beginnt mit `'Typ'`). Die Domänen-
+Dispatch-Generatoren melden selbst nichts; ein nicht erkannter Fall wird zum generierten Laufzeit-`throw` — dass Handler und Modelle die
+erkannte Form haben, sichern die Analyzer davor.
+
+**Boot-Guards** (beim Start, als maschinenlesbare Zeile `CQRS-BOOT {json}` für die Werkbank, `Infrastructure/Umgebung/BootFehler.cs`):
+Wire-Abdeckung (`WireSerializerBootCheck`), GA-1 (`GaEinsPruefung`), Azyklizität der Regeln, Auslöser-Kollision, Bindung jeder gerufenen
+Funktion, Dienst-Bindung (fehlend, mehrdeutig, Kreis, Konfig), Umgebungs-Datei.
 
 ## 5.4 Der Dispatch-Kern
 
-**`GeneratedCommandRouting`** ist die Routing-Wahrheit. Input: **jede
-`IDecider<TState>.Decide(TCommand)`-Signatur** (`TCommand` gehört strukturell zu `TState`, nicht
-per Namespace). Output: `CommandToAggregate` + `CommandToEvents` (aus den
-`IEnumerable<OneOf<E1,E2,…>>`-Rückgaben, transiente gefiltert) + `Produziert()`. Letzteres ist
-die präzise Command→Event-Kantenmenge und speist den Azyklizitäts-Boot-Guard.
+**`GeneratedCommandRouting`** ist die Routing-Wahrheit. Input: **jede `IDecider<TState>.Decide(TCommand)`-Signatur** (`TCommand` gehört
+strukturell zu `TState`, nicht per Namespace). Output: `CommandToAggregate`, `CommandToEvents` (aus den OneOf-Rückgaben, transiente
+gefiltert) und `Produziert()` — die präzise Command→Event-Kantenmenge, die den Azyklizitäts-Boot-Guard speist.
 
-> **Historie:** `GeneratedEventCommandMapping` existiert **nicht mehr** (gelöscht, nur noch
-> Kommentar-Referenzen). Nachfolger ist `GeneratedCommandRouting`.
+`AggregateActorGenerator` und `CommandAggregateMapGenerator` berechnen die Aggregat-Identität unabhängig; dass sie übereinstimmen, ist nur
+per Kommentar vereinbart (docs/13 P2-9).
 
-**Wire-Serializer, Upcasting** — siehe [06](06-transport-multinode-betrieb.md) bzw. das
-Feature-Inventar [11](11-feature-inventar.md).
+## 5.5 Warum reflexionsfrei — die Verriegelung
 
-## 5.5 Warum reflexionsfrei — der Verriegelungs-Trick
+Jeder dispatchende Serialisierungspfad bindet an `CqrsWireJsonContext.Default.{Typ}` bzw. `EventJsonSerializerContext.Default.{Typ}`
+(STJ-Source-Generation) statt an `JsonSerializer.Deserialize(type, …)`. Beide Kontexte erzeugt der Codegen-Schritt (§5.7) aus der Domäne;
+der STJ-Generator macht daraus die Typ-Infos. Weil `WireSerializerGenerator` und `EventJsonGenerator` die Property `Ctx.Default.{Typ}`
+**namentlich** referenzieren, bricht der Build, sobald ein Typ im erzeugten Kontext fehlt — Dispatch und Serialisierungs-Manifest sind
+strukturell gekoppelt. Durchgängig wird vor jedem Emit geordnet (`OrderBy(…, Ordinal)`) → stabile Diffs, reproduzierbare Builds.
 
-Jeder dispatchende Pfad bindet an `CqrsWireJsonContext.Default.{Typ}` (STJ-Source-Gen) statt an
-`JsonSerializer.Deserialize(type, …)`. Da die Generatoren die Property `Ctx.Default.{Typ}`
-**namentlich** referenzieren, bricht der Build, wenn die Typmenge driftet und der Typ im
-hand-gepflegten Context fehlt. So ist die Kopplung „Dispatch ↔ Serialisierungs-Manifest"
-strukturell erzwungen. Durchgängig: `Sort`/`OrderBy(Ordinal)` vor jedem Emit → stabile Diffs,
-reproduzierbare Builds.
+Grenzen: Marten serialisiert per Default noch reflektiv (der generierte Event-Kontext ist opt-in über `Schreibpfad:GeneriertesJson`), und ein
+Build-Verbot gegen `System.Reflection` fehlt (docs/13 W10-2).
 
 ## 5.6 Sichtbarkeitsgrenzen (architektonisch tragend)
 
-**Ein Domain-Generator sieht fremdes Generat NICHT (Syntax); ein Infrastructure-Generator
-schon (Symbol).**
-- **Domain-Seite** (Syntax): sieht nur im aktuellen Projekt deklarierte Typen. Deshalb muss
-  `SignalTypeGenerator` syntax-lokal bleiben (sonst doppelte Signale in mehreren Assemblies),
-  und Aggregat-Generat **muss selbst-enthalten** sein.
-- **Infrastructure-Seite** (Symbol): sieht die kompilierten Domain-Symbole. Deshalb liegt das
-  *aggregatübergreifende* Routing hier, nicht in Domain.
-- **Client-Seite**: syntax-lokal, außer `WiringGenerator`, das per `CompilationProvider`
-  bewusst referenzierte Assemblies scannt.
+**Ein Domain-Generator sieht fremdes Generat NICHT (Syntax); ein Infrastructure-Generator schon (Symbol).**
+- **Domain-Seite:** sieht nur im aktuellen Projekt deklarierte Typen. Deshalb bleibt `SignalTypeGenerator` syntax-lokal (sonst doppelte
+  Signale in mehreren Assemblies), und Aggregat-Generat muss **selbst-enthalten** sein. Die Prozess-Registry entsteht je Assembly
+  (`GeneratedProzessRegeln` in `Domain` und `Domain.Pipeline`) und wird zur Laufzeit fest vereinigt (docs/13 W2-1).
+- **Infrastructure-Seite:** sieht die kompilierten Domänen-Symbole. Deshalb liegt das *aggregatübergreifende* Routing hier, ebenso die
+  Regeln über alle Domänen-Projekte (`GesamtbildAnalyzer`).
+- **Client-Seite:** syntax-lokal, außer `WiringGenerator`, der per `CompilationProvider` referenzierte Assemblies (den Vertrag in
+  `Domain.Akteure`) liest.
 
-Konsequenz: `AggregateActorGenerator` und `CommandAggregateMapGenerator` berechnen die
-Aggregat-Identität unabhängig und müssen byte-genau übereinstimmen — als Kommentar-Vertrag
-festgehalten, **nicht** maschinell erzwungen (Schuld).
-
-## 5.7 Der Proto-Flow (manuell, dreistufig)
+## 5.7 Der Codegen-Schritt im Build
 
 ```
-Proto.SourceGeneration (Exe)   ── MANUELL: dotnet run --project Proto.SourceGeneration
-  MSBuildWorkspace lädt Domain/Domain.Projections/Domain.Pipeline
-  MultiCompilationAnalyzer + TypeAggregator → File.WriteAllText → ProtoRepo/domain.proto
+Domain · Domain.Projections · Domain.Akteure · Domain.Pipeline     (bauen)
         ▼
-ProtoRepo                       ── dotnet build
-  Grpc.Tools kompiliert domain.proto → {Type}Dto C#-Klassen
+Cqrs.Codegen                     (gebaut über eine reine Build-Reihenfolge-Referenz aus ProtoRepo)
         ▼
-Infrastructure (build)
-  DtoMapperSourceGenerator liest Domain-Symbole + erzeugt Domain↔{Type}Dto-Mapper
+ProtoRepo: Target CqrsCodegenPrepass  (AfterTargets=ResolveProjectReferences, `dotnet exec Cqrs.Codegen.dll`)
+  liest die gebauten Domänen-DLLs per MetadataLoadContext und schreibt nur bei geändertem Inhalt:
+    ProtoRepo/domain.proto
+    Infrastructure/Serialization/EventJsonSerializerContext.g.cs
+    Infrastructure/Serialization/CqrsWireJsonContext.g.cs
+    Domain.Client.Worker.Python.ML/domain_client/generated/vertraege.py · funktionen.py · funktions_tabelle.py
+        ▼
+ProtoRepo: Grpc.Tools kompiliert domain.proto → {Typ}Dto
+        ▼
+Infrastructure: STJ-Generator über beide Kontexte; DtoMapperSourceGenerator mappt Domain ↔ {Typ}Dto
 ```
 
-Der **manuelle Schritt** ist zwingend, weil `Proto.SourceGeneration` ein Exe ist. Ablauf bei
-jedem neuen Command/Event/Query/Trigger: `dotnet run --project Proto.SourceGeneration` →
-ProtoRepo bauen → Infrastructure baut. Vergisst man ihn, kompiliert der DtoMapper gegen
-fehlende `{Type}Dto` → Build-Fehler (dank CQRS030 laut statt still). **Signale sind bewusst
-ausgenommen** — sie queren nie die Proto-Grenze.
+Kein manueller Schritt: jedes `dotnet build` führt die Kette aus. Inkrementell ist das Target über die `.cs`-Dateien von `Domain`,
+`Domain.Projections` und `Domain.Pipeline` (Stempel in `obj/`); `Domain.Akteure` fehlt in diesen Inputs — eine reine Vertragsänderung
+überspringt den Schritt, bis `./codegen.sh --force` läuft (docs/13 W2-1). Die Artefakte sind committet; `./codegen.sh --check` generiert
+frisch und prüft per `git diff` auf Drift (CI-Gate).
 
-## 5.8 Fragilität / Schulden
+Innen: `ReflectionTypeAnalyzer` liest die Typen, `FileGenerator` (aus `Proto.SourceGeneration`) schreibt das Proto über die eine
+Skalar-Tabelle `Core.SourceGeneration/ProtoScalarSpec.cs` (dieselbe, die der `DtoMapperSourceGenerator` liest), `JsonContextEmitter` die
+beiden STJ-Kontexte, `PythonVertragsEmitter`/`PythonFunktionsEmitter` die Python-Basen. Ausgenommen sind Signale (nie über die Proto-Grenze,
+vom Wire-Generator selbst serialisiert) und `IProzessIntern`-Typen (Maschinerie des Dirigenten).
 
-- **`DtoMapperSourceGenerator` (1317 Z.) ist string-basiert** über `TypeNode.FullName` statt
-  Symbole. Positiv: die früher hartkodierte Enum-Liste ist inzwischen dynamisch aus dem
-  Domain-Graph (die CLAUDE.md-Notiz „hartkodierte Enums" ist **veraltet**); die
-  String-Fragilität bleibt.
-- **Zwei divergierende Proto-Typ-Maps**: `Core.SourceGeneration/TypeMappingHelper.cs` und
-  `Proto.SourceGeneration/FileGenerator.cs` duplizieren die C#→Proto-Map und **stimmen bereits
-  nicht überein** (`bool?`→`bool` vs. `bool?`→`int32`) — latenter Serialisierungs-Drift an der
-  gRPC-Grenze.
-- **Verlustbehaftete Proto-Skalare**: `DateTime`→`int64`, `decimal`/`Guid`→`string`. Für die
-  interne Actor-Ebene irrelevant (dort läuft der Wire-/EventJson-Pfad), an der externen
-  gRPC-Grenze semantisch verlustbehaftet.
-- **Manueller Proto-Schritt** ist ein prozessualer Single-Point-of-Failure ohne
-  Build-Verriegelung (erst der Folgefehler zeigt Stale).
-- **Encoding-Schäden (Mojibake)** in Generator-Kommentaren (`MultiCompilationAnalyzer.cs`,
-  `AggregateHandlerGenerator.cs`) — kosmetisch, aber Zeichen von Encoding-Drift.
-- **CQRS046 als absichtliche Sackgasse**: 1:N-Upcasting ist generator-/leseseitig codiert, wird
-  aber von jedem realen Split-Deklarat blockiert, bis die Consumer-Fabric steht.
+Schuld: das Werkzeug liest per Reflection (`MetadataLoadContext`), der Python-Vertrags-Emitter liest Verträge anders als
+`Clientvertragslesart` (der Handshake-Hash kann abweichen), und `Proto.SourceGeneration` hat daneben noch einen eigenen Leseweg
+(docs/13 W10-1).
 
-**Kernbefund:** Die interne Actor-/Event-Ebene ist konsequent symbol-typisiert und
-reflexionsfrei. Die **Proto/DTO-Schiene an der externen gRPC-Grenze** ist die schwächste
-Stelle — string-basiert, dupliziert, manuell, verlustbehaftet — und architektonisch bewusst
-vom Kern isoliert.
+**Proto an der gRPC-Grenze:** `Guid` und `decimal` reisen als `string`, `DateTimeOffset` als `int64` (Unix-Millisekunden); nullable
+Werttypen als proto3 `optional`. Die interne Actor-Ebene nutzt dagegen den Wire-/Event-JSON-Pfad.
+
+## 5.8 Offen
+
+Offene Punkte stehen nur in [13](13-reifegrad-schulden-bewertung.md): Reflection im Codegen und zweiter Leseweg W10-1, reflektive
+Laufzeit-Serialisierung und fehlende Reflection-Sperre W10-2, Projektlage (Infrastructure referenziert Domänen-Projekte, feste
+Namespaces der Generate, Codegen-Inputs ohne `Domain.Akteure`) W2-1, Handle-Pipeline-Generatoren W11-1, Identitäts-Vertrag nur per
+Kommentar P2-9, Prüf-Lücken des Grammatik-Gates WZ-1, Mojibake P3-1, toter `ViewModelGenerator` P3-2.

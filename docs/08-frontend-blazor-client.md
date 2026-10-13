@@ -1,91 +1,138 @@
-# 08 — Frontend (Blazor-Client)
+# 08 — Frontend: C#-Client-Framework und Blazor-Beispiel
+
+Stand 2026-10-13, gegen den Code geprüft. Maßstab: docs/konzept-werkbank.md.
 
 ## 8.1 Charakterisierung
 
-Ein **Blazor-Server**-Client (MudBlazor) auf einem selbstgebauten, generierten,
-reflexionsfreien **Redux/Flux-Bus-/Store-Stack**, der über **bidirektionales gRPC-Streaming** an
-`Host.Grpc` hängt. Er existiert in **zwei Generationen**: alt/monolithisch (`Domain.Client` +
-`Domain.Client.Ui.Blazor`, tot) und neu/modular (`Domain.Client.Modules.Blazor`, produktiv).
-Der Build war blockiert und ist **2026-08-12 repariert** (§8.6); die GUI-Struktur läuft über
-`Domain.Client.Modules.Blazor`.
+Zwei Ebenen, streng getrennt (W11):
 
-## 8.2 Host.Blazor — Startup & Anbindung
+- **Framework** — ein generierter Redux/Flux-Bus-/Store-Stack mit gRPC-Anbindung und Client-Vertrag: `Client.Infrastructure`
+  (Transport, Bus, Store, Virtualisierung), `Client.SourceGeneration` (Generatoren + Vertrags-Analyzer) und der Client-Vertrag
+  (`IClientVertrag`, `[assembly: IstClient<T>]`, Abstractions). Er hängt über **bidirektionales gRPC-Streaming** an `Host.Grpc`.
+- **Beispiel-App** — die Blazor-Server-GUI (MudBlazor) der Beispieldomäne Bildinspektion: `Host.Blazor` (Shell, Startup) +
+  `Domain.Client.Modules.Blazor` (Module). Sie ist ein Prüfling des Frameworks, nicht seine Architektur.
 
-`Host.Blazor/Program.cs` (Blazor Server, net9.0):
-- Config: `Blazor:Urls` (Default `:5010`), `GrpcServer:Address` (Default `http://localhost:5001`),
-  `Pipeline:WatchPath`.
-- DI-Scope = **pro Circuit** (`AddServerSideBlazor`, `AddMudServices`). Der ganze
-  Infrastruktur-Stack ist `Scoped`: `ClientBus`, `GrpcProxy`, `VersioningModule`,
-  `ConnectionModule`, `QueryBridge`, `FileBridge`, `ClientStartupService`.
-- Backend-Anbindung: `new GrpcServerConfig(grpcAddress)`; die Verbindung macht `GrpcProxy` gegen
-  den generierten gRPC-Client. Kein REST.
-- Domain+Module werden generiert eingehängt: `AddClientDomain_Domain_Client_Modules_Blazor()` +
-  `AddModules_Domain_Client_Modules_Blazor()`.
-- Endpunkte: `MapBlazorHub()`, `/api/files/...` (Bild-Auslieferung), Fallback `_Host`. Ein
-  `ProtoEndpointExtensions.cs` (`/api/proto/domain.proto` + Hash, für Python-Clients) existiert,
-  wird in `Program.cs` aber **nicht gemappt** (toter, harmloser Pfad).
+GUIs baut die Werkbank nicht (W12); sie bereitet nur den Client-Vertrag vor (`konzept-werkbank.md` §1).
 
-**Startup-Choreografie** (`Client.Infrastructure/ClientStartupService.cs`): `BootstrapState`
-(Connecting→Hydrating→Ready→Failed). Reihenfolge: `SubscribeAll` → `RegisterQueries` → Module
-aktivieren → `ConnectAsync` (publiziert `ConnectionEstablished` → RefreshHandler feuern
-Start-Queries) → **auf Hydration warten** (alle `IHydrationStore.IsHydrated`, 15 s Timeout) →
-`Ready`. Das koppelt Daten-Timeline an View-Timeline und schließt das „leere Liste beim
-Start"-Rennen konstruktiv aus. Die Shell gated hart auf `Ready`.
+## 8.2 Der Client-Vertrag
 
-## 8.3 Client.Infrastructure — Transport/Bus/Store
+Ein C#-Client nennt seinen Vertrag per Assembly-Attribut; der Code ist dann gegen den Vertrag gehalten. Quelle der Begriffe und Regeln:
+`docs/konzept-akteure.md` §4 (insbesondere §4.6 „C#-Client: Code = Vertrag“) und §5.2 (Handshake).
 
-**Kein Reflection, kein `dynamic`** (durchgehend).
+```csharp
+// Beispieldomäne: Domain.Client.Modules.Blazor/Arbeitsplatz.cs
+[assembly: IstClient<IArbeitsplatz>]
+
+// Beispieldomäne: Domain.Akteure/Clients.cs
+public interface IArbeitsplatz : IClientVertrag,
+    ISendet<LabelBildPaar>, IFragt<SucheImagePairs>, …
+{
+    void Auf(ImagePairErstellt e);   // Kenntnis = Abo
+    …
+}
+```
+
+- **Generiert** (`WiringGenerator`, Klasse `GeneratedWiring_<Assembly>`): `Vertrag` (Handshake-Name = Interface ohne führendes `I`),
+  `VertragHash` (gleiche Lesart wie der Server, `Infrastructure.SourceGeneration/Clientvertragslesart.cs` per Link), `ServerEventTypes`
+  (= Kenntnis `void Auf(E)`), `CommandTypes` (= `ISendet<C>`), `RegisterQueries` (= `IFragt<Q>`), dazu `CommandAggregateTypes`,
+  `HydrationStores`, `SubscribeAll`/`UnsubscribeAll`, `AddClientDomain_<Assembly>`.
+- **Handshake ohne Selbstauskunft:** der Client schickt im `CapabilitiesRequest` nur Vertrag + Hash; Fähigkeiten und Abos nimmt der Server
+  aus **seiner** Tabelle (`GeneratedClientVertraege`), wirksam ist Vertrag ∩ Token. Nimmt der Server den Vertrag nicht an, bricht der
+  Verbindungsaufbau ab; ein abweichender Hash wird gemeldet (Client gegen anderen Stand gebaut).
+- **Build-Regeln** (`Client.SourceGeneration/ClientVertrag.cs`): CQRS093 Client-Assembly ohne Vertrag, CQRS094 C#-Client trägt
+  Akteur-Vertrags-Teile (Zusagen beantworten heute nur Python-Basen) — beide meldet der `WiringGenerator`; der `ClientVertragAnalyzer` meldet
+  CQRS095 (erzeugter Command nicht in `ISendet`), CQRS096 (gestellte Query nicht in `IFragt`), CQRS097 (`Handle` auf ein Server-Event ohne
+  Kenntnis im Vertrag). Gelesen werden Code-Fakten (Objekterzeugung, Signatur), keine Namen.
+- **Verbindung** aus der Umgebung: `Clients:<Name>` (Token, Adresse, Urls, Dateien) — §8.5.
+
+## 8.3 Client.Infrastructure — Transport, Bus, Store
+
+Kein `dynamic`; Routing über Typen (`Dictionary<Type, …>`, Lookup per `message.GetType()`).
 
 **Transport** (`Connection/`):
-- **`GrpcProxy`** — hält die bidirektionale Duplex-Verbindung (`CqrsClientService.Connect`). Ein
-  `SemaphoreSlim` serialisiert alle Stream-Writes; Reads in `ReadLoopAsync`. Drei
-  Nachrichtenklassen: **Commands** fire-and-forget; **Queries** request/response über
-  `ConcurrentDictionary<correlationId, TCS>` (echte parallele Queries); **Events** Server-Push
-  über `Channel<EventEnvelope>`. Serialisierung: `ProtoMessageMapper`.
-- **`ConnectionModule`** — Brücke Bus↔gRPC. Upstream: abonniert alle Command-Typen, baut
-  `CommandEnvelope` (ExpectedVersion via `ICreationCommand`→0 bzw. `VersioningModule`,
-  AggregateType via generiertem Dict, `OriginSessionId`), sendet fire-and-forget. Downstream:
-  liest Events aus dem Channel, `PostToSyncContext` → `bus.Publish` auf dem UI-Thread.
-- **`QueryBridge`** — abonniert je Query-Typ, ruft `proxy.QueryAsync<TResponse>`, trackt `Deps`
-  im `VersioningModule`, publiziert die Response wieder auf den Bus.
-- **`VersioningModule`** — trackt Aggregat-Versionen (OCC) aus Event-`AggregateVersion` und
-  Query-`Deps`.
+- **`GrpcProxy`** — hält die Duplex-Verbindung (`CqrsClientService.Connect`), Akteur-Token als gRPC-Header `akteur-token`. Ein
+  `SemaphoreSlim` serialisiert alle Stream-Writes; Reads in `ReadLoopAsync`. Drei Nachrichtenklassen: **Commands** (gesendet ohne
+  Antwort-Warten); **Queries** request/response über `ConcurrentDictionary<correlationId, TCS>` (parallele Queries); **Events** als
+  Server-Push über `Channel<EventEnvelope>`. Serialisierung: `ProtoMessageMapper`.
+- **`ConnectionModule`** — Brücke Bus↔gRPC. Upstream: abonniert auf dem Bus **nur die Command-Typen des Vertrags** (`CommandTypes` =
+  `ISendet`), baut den `CommandEnvelope` (§8.4) und sendet. Downstream: liest Events aus dem Channel, quittiert offene Commands über die
+  CorrelationId, `PostToSyncContext` → `bus.Publish` auf dem UI-Thread.
+- **`QueryBridge`** — abonniert je Query-Typ des Vertrags, ruft `proxy.QueryAsync<TResponse>`, trackt `Deps` im `VersioningModule`,
+  publiziert die Antwort wieder auf den Bus.
+- **`VersioningModule`** — trackt Aggregat-Versionen (OCC) aus Event-`AggregateVersion` und Query-`Deps`; Read-Your-Writes: gerade
+  beschriebene Aggregate gehen als `expected_fresh_ids` mit den nächsten Queries mit (`MarkWritten`).
 
-**Bus** (`Bus/ClientBus.cs`): `IBus` mit `Dictionary<Type, List<Handler>>`, Dispatch via
-`message.GetType()`. Transaktionsmodell: `IsDispatching`-Flag + `DispatchCompleted`-Event
-(feuert genau einmal pro Root-Publish), Tiefen-Guard (MaxDepth 16 → Zyklus-Erkennung).
+**Bus** (`Bus/ClientBus.cs`): `IBus` mit `Dictionary<Type, List<Handler>>`. Transaktionsmodell: `IsDispatching` + `DispatchCompleted`
+(genau einmal pro Root-Publish), Tiefen-Guard (`MaxDepth` 16 → Zyklus-Erkennung).
 
-**Store** (`Abstractions/StoreBase.cs`): `ObservableObject` (CommunityToolkit.Mvvm),
-Redux-Analogie explizit — `Handle()` = Reducer, `Changed` = subscribe. **Ein** gebatchtes
-Notification-Signal `Changed` (sammelt `[ObservableProperty]`- und `TrackedMap`-Änderungen
-während des Dispatch-Zyklus, feuert im `Flush` einmal). Implementiert `IHydrationStore`.
+**Store** (`Abstractions/StoreBase.cs`): `ObservableObject` (CommunityToolkit.Mvvm), Redux-Analogie — `Handle()` = Reducer, `Changed` =
+subscribe. **Ein** gebatchtes Signal `Changed` (sammelt `[ObservableProperty]`- und `TrackedMap`-Änderungen eines Dispatch-Zyklus, feuert im
+`Flush` einmal). `IHydrationStore` markiert Stores mit Start-Daten.
 
-**View-Anbindung** (`Abstractions/EffectScope.cs`): pro Komponente ein transienter `EffectScope`;
-`Fx.OnChanged(store, () => InvokeAsync(StateHasChanged))`, `Fx.On<TEvent>`, `Fx.Dispatch(msg)`;
-in `Dispose()` aufgeräumt.
+**View-Anbindung** (`Abstractions/EffectScope.cs`): pro Komponente ein transienter `EffectScope` — `OnChanged(store, …)` (auch selektiv über
+eine Facette oder einen Selektor), `On<TEvent>(…)`, `Dispatch(msg)`; in `Dispose()` aufgeräumt.
 
-**Virtualisierung** (`Collections/`): eigenes `VirtualCollection`/`PagedCollection`/`Cursor`/
-`TrackedMap` — virtuelles Fenster mit lazy Seiten-Nachforderung über eine `baueQuery`-Closure.
-Getestet in `Client.Infrastructure.CollectionTests` (26 Tests).
+**Virtualisierung** (`Collections/`): `VirtualCollection`/`PagedCollection`/`Cursor`/`TrackedMap` — virtuelles Fenster mit lazy
+Seiten-Nachforderung über eine `baueQuery`-Closure.
 
-## 8.4 Client.SourceGeneration
+**Startup-Choreografie** (`ClientStartupService.cs`, Eingabe `ClientWiringConfig` aus dem Generat): `BootstrapState`
+Connecting → Hydrating → Ready (bzw. Failed). Reihenfolge: `SubscribeAll` → `RegisterQueries` (nur `IFragt`) → Module aktivieren
+(`ConnectionModule` mit `CommandTypes`, `VersioningModule` mit `ServerEventTypes`) → `ConnectAsync` als dieser Vertrag (publiziert
+`ConnectionEstablished` → RefreshHandler feuern Start-Queries) → warten, bis alle `IHydrationStore.IsHydrated` (Timeout 15 s) → `Ready`. Das
+schließt das „leere Liste beim Start“-Rennen konstruktiv aus.
 
-Vier Incremental-Generatoren (Details in [05](05-generatoren-analyzer-proto.md)):
-- **`HandleMethodGenerator`** — `Handle(TEvent, MessageContext)`; Rückgabetyp entscheidet die
-  Rolle (`void` → Store-`Dispatch`; `IEnumerable<T>` → sync Handler mit emit; `IAsyncEnumerable`
-  → async).
-- **`ViewModelGenerator`** — für `IViewModel`: generiert `_publish` + `__InitBus()` + öffentliche
-  `PascalCase`-Methoden + `IRelayCommand`. Das ist der Mechanismus hinter dem „`_publish`"-Feld.
-- **`WiringGenerator`** (36 KB, Herzstück) — sammelt Stores/Handler/VMs + Domain-Typen und
-  emittiert **eine** Klasse `GeneratedWiring_{Assembly}` mit `AddClientDomain_…`, `SubscribeAll`
-  (Stores **depth-first**, Eltern vor Kindern), `CommandAggregateTypes`, `HydrationStores`,
-  `RegisterQueries`.
-- **`ModuleRegistryGenerator`** — `IUiModule` → `AddScoped`.
+## 8.4 Zustellgarantie für Commands
 
-## 8.5 Blazor-UI — Modul-System
+Der Client sendet at-least-once; der Server macht daraus genau einen Effekt.
 
-**Slot-basiertes Plugin-Modell.** Die `Shell.razor` löst `IEnumerable<IUiModule>` per DI auf und
-rendert jedes Modul via `<DynamicComponent Type="m.ComponentType"/>` in seinen Slot:
+- **Wiederholung bei Stille** (`ConnectionModule.SendWithRetryAsync`, `PendingCommandTracker`): vor dem Senden wird die CorrelationId
+  registriert (sonst ginge eine sehr frühe Antwort verloren). Kommt binnen 5 s keine korrelierte Antwort — ein Event **oder** ein
+  `CommandFailed` mit derselben CorrelationId —, sendet der Client **dieselbe Hülle** erneut, höchstens dreimal. Die `CommandId` wird je
+  Command einmal erzeugt und über alle Wiederholungen beibehalten.
+- **Server: Inbox vor OCC** (`Infrastructure/Aggregate/ActorSystem/CommandVorpruefung.cs`): eine bereits verarbeitete `CommandId` ergibt
+  idempotent denselben Erfolg, eine bereits abgelehnte dieselbe Ablehnung; erst ein frischer Command läuft in die OCC-Prüfung. So liest ein
+  wiederholter, längst erfolgreicher Command keinen falschen Versionskonflikt.
+- **`ExpectedVersion`:** `ICreationCommand` → 0; sonst die aus Event-Pushes bekannte Stream-Head-Version (`CommandModus.Client`); ist keine
+  bekannt (Aggregat nur per Query geladen), geht `-1` mit — der Server behandelt das wie einen emittierten Command (keine OCC, nur Inbox-Dedup).
+- **`CommandFailed`** (`Abstractions/CommandFailed.cs`, `ITransientEvent`, nie im Log) geht gezielt an die auslösende Sitzung: bei Versionskonflikt,
+  technischem Fehler oder falschem Ziel im Aggregat (`AggregateActorBase`), bei Ablehnung am Akteur-Tor und wenn der Dispatcher nach allen
+  begrenzten Platzierungs-Versuchen aufgibt (`AggregateDispatcher`, dazu Dead-Letter). Eine fachliche Ablehnung ist dagegen ein eigenes
+  transientes Event aus dem OneOf von Decide (`ITransientEvent`, im Log steht nur die Inbox-Marke) und geht ebenfalls gezielt an die
+  Sitzung; auch sie quittiert den Command. Jede Sitzung ist automatisch auf `CommandFailed` abonniert.
+- **Client-Events** auf dem Bus (`Connection/ConnectionEvents.cs`): `CommandSendFailed` (nicht verbunden bzw. Senden warf),
+  `CommandUnbestaetigt` (nach allen Versuchen keine Antwort — Ausgang **unbekannt**, nicht „fehlgeschlagen“; erneutes Senden ist sicher),
+  dazu `ConnectionEstablished`, `ConnectionLost`, `ReconnectAttempt`.
+
+## 8.5 Client.SourceGeneration
+
+Vier Generatoren und ein Analyzer (Überblick über alle Generatoren: [05](05-generatoren-analyzer-proto.md)):
+- **`HandleMethodGenerator`** — für partial-Klassen mit `Handle(TEvent, MessageContext)`; der Rückgabetyp entscheidet die Rolle (`void` →
+  Store-Reducer; `IEnumerable<T>` → synchroner Handler, der Nachrichten erzeugt; `IAsyncEnumerable<T>` → asynchron).
+- **`WiringGenerator`** — sammelt Stores/Handler und den Vertrag und emittiert **eine** Klasse `GeneratedWiring_<Assembly>` (§8.2);
+  `SubscribeAll` abonniert Stores **depth-first** (Eltern vor Kindern), dann Standalone-Stores, sync und async Handler.
+- **`ModuleRegistryGenerator`** — jedes `IUiModule` → `AddScoped`, als `AddModules_<Assembly>`.
+- **`ViewModelGenerator`** — für `IViewModel`; ohne Nutzer, toter Code (docs/13 P3-2).
+- **`ClientVertragAnalyzer`** — CQRS095–097 (§8.2).
+
+## 8.6 Beispiel-App: Host.Blazor + Domain.Client.Modules.Blazor
+
+Alles in diesem Abschnitt ist **Beispieldomäne** (Bildinspektion, Datensätze, Training).
+
+**Host.Blazor** (`Host.Blazor/Program.cs`, Blazor Server, net9.0):
+- Start mit Umgebung: `dotnet run --project Host.Blazor -- --umgebung sim-main` (bzw. `CQRS_UMGEBUNG`). Gelesen wird
+  `Clients:<Vertrag>` der Umgebung (`Abstractions/Umgebung/UmgebungKonfig.cs`, `ClientKonfig`): **Token** (Akteur-Token aus `Identitaeten`;
+  leer = kein Header), **Adresse** (leer = `http://localhost:<Transport:GrpcPort>`), **Urls** (eigene URLs, Default `http://localhost:5010`),
+  **Dateien** (Verzeichnisse, die `/api/files/...` ausliefern darf). Fehlt der Abschnitt, startet der Host nicht. Mit `CQRS_BRANCH` werden die
+  Datei-Pfade der Sim-Sandbox aufgelöst.
+- DI-Scope **pro Circuit**; der ganze Stack ist `Scoped`: `ClientBus`, `GrpcProxy`, `VersioningModule`, `ConnectionModule`, `QueryBridge`,
+  `FileBridge`, `ClientStartupService`.
+- Domäne und Module werden generiert eingehängt: `AddClientDomain_Domain_Client_Modules_Blazor()` + `AddModules_Domain_Client_Modules_Blazor()`.
+- Endpunkte: `MapBlazorHub()`, `/api/files/...`, Fallback `_Host`. `ProtoEndpointExtensions.cs` (`/api/proto/...`) existiert, wird aber
+  nicht gemappt (docs/13 P3-2).
+
+**Modul-System.** `Host.Blazor/Shell/Shell.razor` löst `IEnumerable<IUiModule>` per DI auf und rendert jedes Modul per
+`<DynamicComponent Type="m.ComponentType"/>` in seinen Slot; die Shell zeigt die Module erst bei `Ready`. Die Slot-Interfaces liegen im
+Framework (`Client.Infrastructure/Abstractions`):
 
 | Interface | Slot |
 |---|---|
@@ -95,77 +142,31 @@ rendert jedes Modul via `<DynamicComponent Type="m.ComponentType"/>` in seinen S
 | `IFooterModule` | Fußzeile |
 | `IHeadlessModule` | unsichtbar (nur Effekte/Datenlogik) |
 
-`ShellState` hält Sichtbarkeit + aktiven Tab + Sidebar-Expand; `ShellKeyBindingBuilder` die
-Tastaturbindungen.
+`ShellState` hält Sichtbarkeit, aktiven Tab und Sidebar-Zustand; `ShellKeyBindingBuilder` die Tastaturbindungen. Die Module liegen je Ordner
+in `Domain.Client.Modules.Blazor/` (Galerie, Kuratieren, Datensätze, Training-Dashboard, Statistik u. a.).
 
-**13 Module** in `Domain.Client.Modules.Blazor/`: Stages (`Bilder`, `Chart`/ApexCharts,
-`Heatmap`, `Debug`); Sidebars (`Paarliste`, `Historie`, `Suche`); Footer (`Navigation`,
-`Labeling`); Header (`StatusBar`); Headless (`Data`, `Feedback`, `Statistik`); Shared
-(`VirtualList`).
+**Konvention je Feature-Modul** (Ordner unter `Domain.Client.Modules.Blazor/`):
+1. **Modul-Klasse** `XModule : IStageModule|ISidebarModule|…` mit `Id`/`Title`/`ComponentType` → automatisch als `IUiModule` in DI.
+2. **`.razor`-View** mit `@inject Store` + `@inject EffectScope Fx`; `Fx.OnChanged(store, StateHasChanged)`, `Fx.Dispatch(...)`,
+   `Dispose() → Fx.Dispose()`.
+3. **Store** (`partial class : StoreBase`, optional `IHydrationStore`): `void Handle(TEvent, MessageContext)` = Reducer. Store-Properties,
+   die andere Stores sind, definieren den Store-Baum (Subscription-Reihenfolge).
+4. **RefreshHandler** (feuert Queries nach Kontextwechsel) und **IntentHandler** (Client-Event → Command, `IEnumerable<object> Handle(…)`).
+5. Commands/Queries/Events werden **nicht** im Client deklariert — sie kommen aus den referenzierten Domänen-Assemblies; was der Client
+   davon senden, fragen und hören darf, sagt der Vertrag (CQRS095–097).
 
-**Reads anzeigen** (Bsp. `PaarlistenPanel.razor`): `@inject Store` + `@inject EffectScope`; eine
-`<VirtualList>` bindet selektiv an `Store.VirtualImagePairs` + `Store.Cursor` und fordert Seiten
-über die im Store hinterlegte `baueQuery` nach. Der `PaarlisteRefreshHandler` (sync Handler)
-feuert nach jedem Kontextwechsel die Query(s).
+Beispiel Lesen: `PaarlistenPanel.razor` bindet eine `<VirtualList>` an `Store.VirtualImagePairs` + `Store.Cursor` und fordert Seiten über die
+im Store hinterlegte `baueQuery` nach; der `PaarlisteRefreshHandler` feuert nach jedem Kontextwechsel die Query. Beispiel Schreiben: die View
+dispatcht ein Client-Event, ein IntentHandler macht daraus einen Command, `ConnectionModule` sendet ihn.
 
-**Commands/Intents auslösen**: die View ruft `Fx.Dispatch(new ImagePairAusgewaehlt(id))`
-(Client-Event) bzw. ein `IntentHandler` publiziert einen `ICommand` → `ConnectionModule` → gRPC.
-Bemerkenswert: das **neue** Modell nutzt statt fetter ViewModels überwiegend RefreshHandler +
-IntentHandler + Client-Events — im neuen Projekt gibt es **keine** `IViewModel`-Klasse mehr (der
-`ViewModelGenerator` bedient faktisch nur noch das alte `Domain.Client`).
+## 8.7 Prinzipien
 
-## 8.6 Build-Status — 2026-08-12 repariert
+Redux/Flux (unidirektional, ein Bus, ein Signal, transaktionsgebatcht); Symmetrie zum Backend (Command ohne Antwort-Warten mit Wiederholung,
+Query request/response, Event push, dieselben Envelope-Typen); Daten-Timeline vor View-Timeline (Hydration-Gate); Modul = Plugin; Generierung
+statt Handverdrahtung; Vertrag statt Selbstauskunft.
 
-**Vorher** (Ausgangsbefund): `dotnet build Host.Blazor` → EXIT=1, 13 Fehler `CS0103: _publish`
-in `Domain.Client/NavigationViewModel.cs` und `ChartViewModel.cs`. Ursachenkette:
-1. `Host.Blazor.csproj:16` referenzierte **noch** das alte `Domain.Client.Ui.Blazor`.
-2. `Domain.Client.Ui.Blazor` → `Domain.Client`.
-3. `Domain.Client.csproj` referenzierte `Client.SourceGeneration` **nicht** als Analyzer → der
-   `ViewModelGenerator` lief dort nie → `_publish`/`__InitBus` wurden für die alten ViewModels
-   nie generiert → 13 Fehler.
+## 8.8 Offen
 
-**Fix (angewandt 2026-08-12):** in `Host.Blazor.csproj` die tote
-`Domain.Client.Ui.Blazor`-Referenz entfernt (Host referenziert nur noch `Client.Infrastructure`
-+ `Domain.Client.Modules.Blazor`) und das verwaiste `using Domain.Client.ImagePair;` aus
-`Program.cs` gestrichen. Verifiziert: `Host.Blazor` baut mit **0 Fehlern**, der volle
-Solution-Build ist **grün** (128 Warnungen, davon NU1904/CS8524 vorbestehend).
-
-**Noch offen (Cleanup, P2):** die beiden Legacy-Projekte `Domain.Client` und
-`Domain.Client.Ui.Blazor` liegen weiterhin auf Disk (nicht in der `.sln`, nicht mehr
-referenziert) — können bei Gelegenheit gelöscht werden. Die produktive GUI-Struktur läuft
-vollständig über `Domain.Client.Modules.Blazor`.
-
-## 8.7 Öffentliche API aus Entwicklersicht
-
-Siehe auch [10-entwickler-api.md](10-entwickler-api.md). Konvention pro Feature-Modul (Ordner
-unter `Domain.Client.Modules.Blazor/`):
-1. **Modul-Klasse** `XModule : IStageModule|ISidebarModule|…` mit `Id`/`Title`/`ComponentType`
-   → automatisch als `IUiModule` in DI, von der Shell in den Slot gerendert (kein manuelles
-   DI/Routing).
-2. **`.razor`-View** mit `@inject Store` + `@inject EffectScope Fx`; `Fx.OnChanged(store,
-   StateHasChanged)`, `Fx.Dispatch(...)`, `Dispose() → Fx.Dispose()`.
-3. **Store** (`partial class : StoreBase`, optional `IHydrationStore`): `void Handle(TEvent,
-   MessageContext)`-Methoden = Reducer. Public Store-Properties, die andere Stores sind,
-   definieren den Store-Baum (Subscription-Reihenfolge).
-4. **RefreshHandler/IntentHandler** für Query-Feuerung / Intent→Command.
-5. Commands/Queries/Events werden **nicht** client-seitig deklariert — sie kommen aus den
-   referenzierten Backend-Assemblies; der `WiringGenerator` findet sie automatisch.
-
-## 8.8 Design-Prinzipien & Schulden
-
-**Prinzipien:** kein Reflection/`dynamic`; Redux/Flux (unidirektional, ein Bus, ein Signal,
-transaktionsgebatcht); Symmetrie zum Backend (Command fire-and-forget, Query request/response,
-Event push, dieselben Envelope-Typen); Daten-Timeline vor View-Timeline (Hydration-Gate); Modul
-= Plugin; Generierung statt Handverdrahtung; Blazor Server (Circuit-Scoping).
-
-**Schulden:**
-- **Zwei Frontend-Generationen parallel auf Disk** (Aufräum-Schuld — die toten
-  Legacy-Projekte `Domain.Client`/`Domain.Client.Ui.Blazor` können gelöscht werden; §8.6).
-- `ProtoEndpointExtensions.cs` implementiert, aber nicht gemappt — toter Pfad.
-- `GrpcProxy` schreibt viele `Console.WriteLine` (kein strukturiertes Logging); Reconnect-Logik
-  rudimentär (kein sichtbarer Auto-Reconnect-Loop).
-- Kein Client-Test außer `VirtualCollectionTests`; Bus/Store/Transport untestet.
-
-**Reif & solide:** generierter Wiring-/Bus-/Store-Kern, Hydration-Bootstrap, Modul-Slot-System,
-gRPC-Query-Korrelation (parallele Queries, serialisierte Writes) und die eigene
-Virtualisierungs-Collection.
+Offene Punkte stehen nur in `docs/13`: durable Zustellung an Clients, `als` im Envelope, Zusagen über C#-Clients, Anmeldung je Person
+(AK-1); kein TLS (P1-2); toter Code `IViewModel`/`ViewModelGenerator`, nicht gemappte Proto-Endpunkte (P3-2); `ActivatorUtilities` im
+generierten Wiring für ViewModels (W10-2). Welche Client-Tests es gibt: [12](12-tests-und-vermessung.md).

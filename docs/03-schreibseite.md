@@ -1,185 +1,196 @@
-# 03 — Die Schreibseite (Command → Event → Store)
+# 03 — Die Schreibseite (Command → Decider → Event → Store)
 
-Der Schreibpfad ist das dichte Zentrum des Frameworks. `AggregateActorBase` trägt fast alle
-Invarianten und Audit-Fixes und ist ausführlich kommentiert.
+Stand 2026-10-13, gegen den Code geprüft. Maßstab: docs/konzept-werkbank.md.
+
+Der Schreibpfad ist das dichte Zentrum des Frameworks. `AggregateActorBase`
+(`Infrastructure/Aggregate/ActorSystem/AggregateActorBase.cs`) trägt fast alle Invarianten und Audit-Fixes und ist ausführlich
+kommentiert. Die Schalter des Schreibpfads stehen für Nutzer in der Umgebungs-Datei (`umgebungen/umgebung.<name>.json`, Typen in
+`Abstractions/Umgebung/UmgebungKonfig.cs`); `CqrsUmgebungExtensions` übersetzt sie in den internen `CqrsFrameworkBuilder`.
 
 ## 3.1 Command-Flow end-to-end
 
-**(a) Ingress — gRPC-Streaming-Gateway.**
-`CqrsClientService.HandleCommandAsync` (`Infrastructure/GrpcClient/CqrsClientService.cs:376`)
-empfängt eine `CommandRequest`, mappt sie via `ProtoMessageMapper` auf ein `CommandEnvelope`,
-stempelt `OriginSessionId = sessionId` (für Targeted Delivery von Ablehnungen an den Aufrufer)
-und ruft `_dispatcher.Dispatch(envelope)`. Dispatch ist fire-and-forget.
+**(a) Eingänge.** Ein Command kommt auf einem von drei Wegen ins System; alle enden im selben Aggregat-Actor.
+- **gRPC-Streaming-Gateway** (Clients: Blazor, Python): `CqrsClientServiceImpl.HandleCommandAsync`
+  (`Infrastructure/GrpcClient/CqrsClientService.cs`) mappt die `CommandRequest` über `ProtoMessageMapper` auf ein `CommandEnvelope`
+  und stempelt `OriginSessionId` (Targeted Delivery von Ablehnungen an den Aufrufer). Das **Akteur-Tor** (`Infrastructure/Akteure/AkteurTor.cs`)
+  ordnet am Handshake das Token (Header `akteur-token`) einem Akteur zu; jeder Command wird gegen dessen `IDarf`-Menge geprüft, der Akteur
+  wird vom Tor in den Envelope gestempelt, nicht vom Client behauptet. Ohne konfigurierte Identitäten ist das Tor offen; dann folgt der
+  Akteur dem Modell (der eine `IDarf`-Halter). Eine Zusage von außen (Antwort auf ein Event, mit Kausalität) bekommt eine aus der Ursache
+  abgeleitete CommandId und den Modus `Emittiert`; mit Vertrag muss die Antwort im Vertrag stehen. Fehlt der `AggregateType`, löst ihn der
+  Server aus der generierten Command→Aggregat-Map auf. Dann `_dispatcher.Dispatch(envelope)`, fire-and-forget.
+- **JSON-Eingang** (Werkbank, nur Einblick-Port, nur mit `Transport.JsonEingang`): `POST /eingang/command`
+  (`Infrastructure/Eingang/JsonEingang.cs`). Derselbe Weg wie gRPC — Token → Akteur-Tor → Befugnis, Akteur im Envelope, Wirker
+  `akteur:<A>` — nur ohne Proto: Typ über die generierte Registry, Felder über den generierten Wire-Kontext. Anders als gRPC wartet er
+  auf das `CommandResult` (`ProtoActorAggregateDispatcher.FrageAsync`, ein Versuch, bounded). Ohne angegebene Version läuft der Command
+  im Modus `Emittiert`.
+- **Emittiert** (Reaktion, Prozess, Fluss — der Dirigent ist der Prozess-Manager): ausschließlich über `CommandEmitter.EmitAsync`
+  (`Infrastructure/PubSub/CommandEmitter.cs`) — deterministische CommandId, `CommandModus.Emittiert`, bounded Token, at-least-once auf dem
+  Draht; Akteur der Kette und Spur (`Ursache`, `Wirker`) reisen im Envelope. Andere Wege sind per Analyzer verboten (CQRS020/021).
+
+Quell-Nachrichten gehen nicht durch einen Decider: der Treiber hängt sie als erstes Event eines Vorgangs-Streams mit deterministischer Id
+an (`StartStream`, genau einmal je Kennung, `Infrastructure/Quellen/Quellen.cs`).
 
 **(b) Routing — Dispatcher zu Cluster-Identität.**
-`ProtoActorAggregateDispatcher.Dispatch` (`Infrastructure/Aggregate/ActorSystem/AggregateDispatcher.cs:49`)
-baut die Ziel-Identität typbasiert: `ClusterIdentity.Create(guid, envelope.AggregateType)`.
-Der Send ist `cluster.RequestAsync<CommandResult>(identity, envelope, ct)` mit bounded Token
-(10 s/Versuch, 3 Versuche). Erschöpfte Versuche → LogError + durabler Dead-Letter, bewusst
-**kein** Auto-Retry. Die serverseitige Overload `AggregateDispatcherExtensions.Dispatch(cmd)`
-löst den Aggregat-Typ aus `GeneratedPipelines.CommandAggregateTypes` auf — statt aus einem
-Magic String.
+`ProtoActorAggregateDispatcher.Dispatch` (`Infrastructure/Aggregate/ActorSystem/AggregateDispatcher.cs`) baut die Ziel-Identität
+typbasiert: `ClusterIdentity.Create(guid, envelope.AggregateType)`. Der Send ist `cluster.RequestAsync<CommandResult>(identity, envelope, ct)`
+mit bounded Token (10 s je Versuch, 3 Versuche). Sind die Versuche erschöpft: LogError, durabler Dead-Letter und ein targeted
+`CommandFailed` an die `OriginSessionId`, damit der Client nicht still hängt. Der Dispatcher selbst wiederholt nicht über die Versuche
+hinaus; die Wiederholung bei Stille liegt im Client (gleichbleibende CommandId, die Aggregat-Inbox dedupliziert; Ausgang
+`CommandUnbestaetigt` bei totaler Stille — Details in [08](08-frontend-blazor-client.md)). `AggregateDispatcherExtensions.ResolveAggregateType`
+löst den Aggregat-Typ aus der generierten Map (`GeneratedPipelines.CommandAggregateTypes`, Passthrough auf den
+`CommandAggregateMapGenerator`) — statt aus einem Magic String.
 
 **(c) Aggregat-Actor — der Kern.**
-`AggregateActorBase.ReceiveAsync` (`.../AggregateActorBase.cs:90`). Erstes `CommandEnvelope` →
-`InitializeAsync` (Rehydration aus dem Log), dann `HandleCommandAsync`. Es wird **immer**
-`context.Respond(...)` aufgerufen — sonst retryt Proto.Actor.
+`AggregateActorBase.ReceiveAsync`: das erste `CommandEnvelope` löst `InitializeAsync` aus (Rehydration aus dem Log, ggf. ab Snapshot);
+dann läuft `HandleCommandAsync` im Spur-Rahmen `Spur.Von(Ursache, decide:<Aggregat>/<Command>, Wirker des Absenders)`. Es wird **immer**
+`context.Respond(...)` aufgerufen — sonst wiederholt Proto.Actor.
 
 `HandleCommandAsync` dispatcht exhaustiv über den Summentyp `CommandModus`:
-- `Client c` → OCC gegen `c.ExpectedVersion`, `istIdempotent: false`
-- `Emittiert` → `expectedVersion = _state.Version`, `istIdempotent: true`
+- `Client c` → OCC gegen `c.ExpectedVersion`, idempotent (Inbox vor OCC)
+- `Emittiert` → keine behauptete Version (`expectedVersion = _state.Version`), idempotent
 
-Der gemeinsame Kern `HandleCommandCoreAsync` (`:200`):
+Der gemeinsame Kern `HandleCommandCoreAsync`:
 1. Guard: falsche AggregateId → Fehler.
-2. **OCC-Vorprüfung**: `_state.Version != expectedVersion` → `CommandResult(Success=false)`.
-3. **Framework-Inbox-Dedup** (nur idempotenter Pfad): bereits verarbeitete `CommandId` →
-   Noop-Success; bereits abgelehnte → konsistente Ablehnung.
-4. **Decider**: `_handler.HandleCommand(payload).ToList()`.
-5. **Noop** (keine Events) → auf idempotentem Pfad trotzdem `KommandoVerarbeitet`-Marke
-   co-committen (K2-Livelock-Fix).
-6. Trennung `persistentEvents` vs. `rejections` (`ITransientEvent`); ein *gemischtes* Ergebnis
-   wirft laut (`:307`).
-7. **Reine Ablehnung** → kein Append/Apply; bei idempotent `KommandoAbgelehnt`-Marke; Targeted
-   Delivery an den Aufrufer.
-8. **Erfolg**: bei idempotent `KommandoVerarbeitet`-Marke anhängen, dann
-   `_eventStore.AppendEventsAsync(...)`.
-9. **Post-Append-Grenze** (`:372`): ab Commit ist der Command durabel. Applier mutiert `_state`
-   in-memory, Redis-Track, Snapshot, Publish. Wirft etwas davon → `catch` rehydriert frisch
-   aus dem Log und quittiert trotzdem **Erfolg** (H1: kein falsches Negativ).
+2. **Vorprüfung** (`CommandVorpruefung.Prüfe`): erst die Framework-Inbox — bereits verarbeitete `CommandId` → idempotenter Erfolg, bereits
+   abgelehnte → dieselbe Ablehnung —, dann OCC (`_state.Version != expectedVersion` → Versionskonflikt). Die Reihenfolge sorgt dafür, dass
+   ein wiederholt zugestellter Command (Emittiert immer, Client bei Wiederholung nach verlorenem Ack) dasselbe Ergebnis liefert statt
+   eines Versionskonflikts.
+3. **Decider**: `_handler.HandleCommand(payload).ToList()`.
+4. **Noop** (keine Events) → trotzdem eine `KommandoVerarbeitet`-Marke co-committen (sonst bliebe ein Prozess-Schritt ewig offen).
+5. Trennung persistenter Events von Ablehnungen (`ITransientEvent`); ein *gemischtes* Ergebnis oder mehrere Ablehnungen werfen laut.
+6. **Reine Ablehnung** → kein Append der Ablehnung, kein Apply; eine `KommandoAbgelehnt`-Marke wird co-committet, die Ablehnung geht
+   targeted an den Aufrufer und als verlierbarer Hinweis an die Spur.
+7. **Erfolg**: die `KommandoVerarbeitet`-Marke wird an die Events angehängt, dann `_eventStore.AppendEventsAsync(...)` — Effekt und Marke
+   in einer Transaktion.
+8. **Post-Append-Grenze**: ab dem Commit ist der Command durabel. Applier mutiert `_state` in-memory (Marken werden nur in der Version
+   mitgezählt), Redis-Track, Snapshot ab Schwelle, Publish. Wirft etwas davon, rehydriert der `catch` frisch aus dem Log und quittiert
+   trotzdem **Erfolg** (kein falsches Negativ).
+
+Snapshots (best-effort, ab `Schreibpfad.SnapshotSchwelle` und bei Deaktivierung, Version = Struktur-Hash + Code-Hash von State + Applier)
+sind in [04 §4.7](04-konsum-und-prozess-maschine.md) beschrieben.
 
 ## 3.2 Das Aggregat-Modell (reiner Fachcode)
 
-Musterbeispiel `Domain/Konto/`. Ein Aggregat ist eine `partial class : IState` mit zwei
-verschachtelten `partial`-Klassen `Decider : IDecider<T>` und `Applier : IApplier<T>`:
+Beispiel aus der Agnostik-Sonde (`GraphExtractor.Kern/Sonde/Ausleihe.cs.txt`, Domäne „Leihwesen“, gekürzt). Ein Aggregat ist eine
+`partial class : IState` mit zwei verschachtelten `partial`-Klassen `Decider : IDecider<T>` und `Applier : IApplier<T>`; Decider und
+Applier dürfen auch in eigenen Dateien liegen (`Mahnvorgang.Decider.cs.txt`):
 
 ```csharp
-// State — nur fachliche Properties. Id/Version werden generiert.
-public partial class Konto : IState {
-    public decimal Saldo { get; set; }
-    public decimal Reserviert { get; set; }
-    public bool Gesperrt { get; set; }
-    public decimal Verfuegbar => Saldo - Reserviert;
-}
-
-// Command — record mit Guid AggregateId : ICommand, nur fachliche Felder.
-public record ReserviereBetrag(Guid AggregateId, decimal Betrag) : ICommand;
+// Commands — Record mit Guid AggregateId : ICommand; ein erzeugender Command ist ICreationCommand
+// (der C#-Client sendet ihn mit erwarteter Version 0).
+public record LeiheAus(Guid AggregateId, Signatur Medium, Guid LeserId, int Tage = 14) : ICreationCommand;
 
 // Events — persistent : IEvent ; Ablehnung : ITransientEvent (nie im Log).
-public record BetragReserviert(decimal Betrag) : IEvent;
-public record DeckungReichtNicht(decimal Verfuegbar, decimal Angefordert) : ITransientEvent;
+public record Ausgeliehen(Signatur Medium, Guid LeserId, int Tage) : IEvent;
+public record BereitsAusgeliehen(Guid AusleiheId) : ITransientEvent;
 
-// Decider — ein Decide je Command, Rückgabe IEnumerable<OneOf<...>>.
-public partial class Konto {
-  public partial class Decider : IDecider<Konto> {
-    public IEnumerable<OneOf<BetragReserviert, DeckungReichtNicht>> Decide(ReserviereBetrag cmd) {
-        if (State.Gesperrt || State.Verfuegbar < cmd.Betrag) {
-            yield return new DeckungReichtNicht(State.Verfuegbar, cmd.Betrag); yield break; }
-        yield return new BetragReserviert(cmd.Betrag);
+// State — nur fachliche Properties. Id/Version werden generiert.
+public partial class Leihvorgang : IState
+{
+    public Guid LeserId { get; set; }
+    public bool Offen { get; set; }
+
+    // Decider — ein Decide je Command; der Rückgabetyp nennt alle möglichen Ausgänge (OneOf, CQRS050).
+    public partial class Decider : IDecider<Leihvorgang>
+    {
+        public IEnumerable<OneOf<Ausgeliehen, BereitsAusgeliehen>> Decide(LeiheAus befehl)
+        {
+            if (this.State.Offen) { yield return new BereitsAusgeliehen(befehl.AggregateId); yield break; }
+            yield return new Ausgeliehen(befehl.Medium, befehl.LeserId, befehl.Tage);
+        }
     }
-  }
-  // Applier — ein Apply je Event, mutiert State.
-  public partial class Applier : IApplier<Konto> {
-    public void Apply(BetragReserviert e) => State.Reserviert += e.Betrag;
-  }
+
+    // Applier — ein Apply je Event, mutiert State.
+    public partial class Applier : IApplier<Leihvorgang>
+    {
+        public void Apply(Ausgeliehen e) { this.State.LeserId = e.LeserId; this.State.Offen = true; }
+    }
 }
 ```
 
-**Wie der Fachcode rein bleibt:** `this.State`, der `Decider(Konto state)`-Ctor sowie
-`Id`/`Version` sind generiert. OCC, Signal, Cursor, Idempotenz erscheinen ausschließlich im
-Framework. Die Dedup-Marken (`KommandoVerarbeitet`/`KommandoAbgelehnt`) sind `IProzessIntern`,
-werden beim Falten übersprungen (aber versionsgezählt) — der Decider sieht sie nie.
+**Wie der Fachcode rein bleibt:** `this.State` und der Konstruktor `Decider(Leihvorgang state)` (`Domain.SourceGeneration/Generator.cs`)
+sowie `Id`/`Version` (`StateGenerator`) sind generiert. OCC, Signal, Cursor, Idempotenz und Spur erscheinen ausschließlich im Framework.
+Die Dedup-Marken (`KommandoVerarbeitet`/`KommandoAbgelehnt`, `Infrastructure/Aggregate/KommandoVerarbeitet.cs`) sind `IProzessIntern`,
+werden beim Falten übersprungen (aber versionsgezählt) — der Decider sieht sie nie. Command → Aggregat folgt aus den Decide-Signaturen,
+nicht aus Namespaces (`CommandAggregateMapGenerator`).
 
 ## 3.3 Event-Store (Marten)
 
 `Infrastructure/Persistence/MartenEventStore.cs`:
-- **Append** (`:59`): `expectedVersion == 0` → `session.Events.StartStream` (wirft bei
-  Doppel-Erstellung); `> 0` → `session.Events.Append(id, expectedVersion + count, events)`.
-- **OCC**: `EventStreamUnexpectedMaxEventIdException` → `ConcurrencyException`; Collision ebenso.
-  Metadaten (Correlation/Causation/Header `aggregate_type`) werden in **dieselbe** Transaktion
-  gestempelt.
-- **Read** (`ReadStreamAsync`, `:196`): `Where(StreamId== && Version>=from).OrderBy(Version)`,
-  materialisiert `EventEnvelope` mit **Upcasting-Naht** (`GeneratedEventUpcasting.Aufwerten`,
-  1:1 oder 1:N mit `SubIndex`).
-- **Poll-Backstop** (`ReadChangedStreamsAsync`, `:252`): globale Marten-Sequenz `seq_id` mit
-  **Straggler-Karenz** (default 3 s): die High-Water-Mark rückt nur bis zur höchsten Sequenz
-  vor, deren Event älter als die Karenz ist — schützt gegen nebenläufig in umgekehrter
-  Seq-Reihenfolge sichtbare Commits. Referenzzeit ist die DB-Uhr (`select now()`), kein
-  App/DB-Skew.
+- **Append** (`AppendEventsAsync`): `expectedVersion == 0` → `session.Events.StartStream` (wirft bei Doppel-Erstellung); `> 0` →
+  `session.Events.Append(id, expectedVersion + count, events)`.
+- **OCC**: `EventStreamUnexpectedMaxEventIdException` und die Doppel-Erstellung werden zu `ConcurrencyException`.
+- **Metadaten** in **derselben** Transaktion: `CorrelationId`, `CausationId` und die Header
+  - `aggregate_type` — der Aggregat-Typ,
+  - `akteur` — der Akteur der Kette (`ImAuftrag.Header`; reist mit den Events zu Flüssen, Prozessen, Fristen),
+  - die Spur `ursache` (`Stream:Version` des auslösenden Log-Eintrags), `wirker` (Karten-Id des schreibenden Bausteins, z. B.
+    `decide:Leihvorgang/LeiheAus`), `ueber` (der Absender des Commands), `stand` (Code-Stand des Hosts) — geschrieben an einer Stelle
+    (`Infrastructure/Persistence/SpurHeader.cs`, Konstanten in `Abstractions/Spur/Spur.cs`), fehlende Werte werden weggelassen.
+- **Read** (`ReadStreamAsync`): `Where(StreamId == && Version >= from).OrderBy(Version)`, materialisiert `EventEnvelope` (Akteur aus dem
+  Header als `UserId`). Dabei läuft jedes Event durch die Upcasting-Naht `GeneratedEventUpcasting.Aufwerten` (1:1 oder 1:N mit
+  `SubIndex`) — eine Backend-Primitive für Prod (`IUpcast`), die heute keine Domäne nutzt; ohne Upcast ist sie ein Durchreichen.
+- **Poll-Backstop** (`ReadChangedStreamsAsync`): globale Marten-Sequenz `seq_id` mit **Straggler-Karenz** (Default 3 s): die
+  High-Water-Mark rückt nur bis zur höchsten Sequenz vor, deren Event älter als die Karenz ist — schützt gegen nebenläufig in umgekehrter
+  Seq-Reihenfolge sichtbare Commits. Referenzzeit ist die DB-Uhr (`select now()`), kein App/DB-Versatz.
 
 ## 3.4 Group-Commit-Batching + paralleler Drain
 
-`Infrastructure/Persistence/BatchingEventAppender.cs` — Dekorator um `IEventStoreRepository`,
-nur der Schreib-Hotpath wird gebündelt, Reads durchgereicht.
+`Infrastructure/Persistence/BatchingEventAppender.cs` — Dekorator um `IEventStoreRepository`; nur der Schreib-Hotpath wird gebündelt,
+Reads werden durchgereicht. Schalter in der Umgebung: `Schreibpfad.GroupCommit` (an/aus), `BatchGroesse` (Default 256), `LingerMs`
+(Default 0), `Drain` (Default 4).
 
-- **Hotpath**: baut ein `Pending` mit `TaskCompletionSource`, schreibt in einen unbounded
-  Channel, gibt `Tcs.Task` zurück. Der Task löst **erst beim Batch-Commit** — die scharfe
-  Durabilitätsgrenze. Single-Writer bleibt (der Actor awaited vor dem nächsten Command
-  desselben Streams).
-- **Drain**: K parallele Loops (`AppendDrainParallelism`, default 4). Jeder sammelt bis
-  `AppendBatchMaxSize` (256) oder ein optionales `AppendBatchLingerMs`-Fenster (0 =
-  selbstregulierend), dann `FlushAsync`.
-- **Commit** (`MartenEventBatchWriter.WriteBatchAsync`): N Appends in **einer**
-  `LightweightSession` → ein `SaveChangesAsync` = eine Postgres-Transaktion. Metadaten **pro
-  Event** gesetzt (Voraussetzung fürs Bündeln verschiedener Korrelationen).
-- **Fehlermodell**: Batch ist all-or-nothing; wirft er (z. B. OCC-Konflikt eines Streams),
-  wiederholt `IsolateAsync` jeden Auftrag **einzeln** über den inneren Store → nur der
-  Schuldige fällt.
-- **Verteilt-korrekt weil node-lokal**: Proto.Cluster garantiert Single-Activation — ein
-  Stream lebt auf genau einem Node, zwei Nodes bündeln nie denselben Stream, OCC pro Stream
-  bleibt ohne Cross-Node-Koordination korrekt.
+- **Hotpath**: baut ein `Pending` mit `TaskCompletionSource`, schreibt in einen unbounded Channel, gibt `Tcs.Task` zurück. Der Task löst
+  **erst beim Batch-Commit** — die scharfe Durabilitätsgrenze. Single-Writer bleibt (der Actor wartet vor dem nächsten Command desselben
+  Streams).
+- **Drain**: `Drain` parallele Schleifen. Jede sammelt bis `BatchGroesse` oder ein optionales `LingerMs`-Fenster (0 = selbstregulierend:
+  unter Last füllt sich die Queue, während der vorige Commit läuft), dann `FlushAsync`.
+- **Commit** (`MartenEventBatchWriter.WriteBatchAsync`): N Appends in **einer** `LightweightSession` → ein `SaveChangesAsync` = eine
+  Postgres-Transaktion. Metadaten und Spur-Header **pro Event** gesetzt (Voraussetzung fürs Bündeln verschiedener Korrelationen).
+- **Fehlermodell**: der Batch ist all-or-nothing; wirft er (z. B. OCC-Konflikt eines Streams), wiederholt `IsolateAsync` jeden Auftrag
+  **einzeln** über den inneren Store → nur der Schuldige fällt. Beim Herunterfahren werden verbliebene Aufträge isoliert geschrieben.
+- **Verteilt korrekt, weil node-lokal**: Proto.Cluster garantiert Single-Activation — ein Stream lebt auf genau einem Node, zwei Nodes
+  bündeln nie denselben Stream, OCC pro Stream bleibt ohne Cross-Node-Koordination korrekt.
 
-Gemessener Gewinn (Projektnotiz): **+48 %** Schreibdurchsatz; paralleler Drain skaliert
-sublinear (`wait_event` offen, siehe [13](13-reifegrad-schulden-bewertung.md)).
+Messwerte: [12](12-tests-und-vermessung.md).
 
 ## 3.5 Redis Version-Index (nicht-autoritativ)
 
-`RedisVersionTracker.cs`: schneller verteilter Index für Stale-Detection auf der Leseseite
-(Wahrheit bleibt der Log). Datenmodell: Hash `agg:{id}` (Felder `v`/`t`/`ts`) + Sekundär-Set
-`agg_idx:{type}`. Geschrieben **nach** erfolgreichem Append, per Redis-Pipeline. Bei
-**jedem** Track indexiert (Audit-Fix #6 — sonst würden Multi-Event-Aggregate fehlen).
-Graceful Degradation: `RedisConnection/TimeoutException` → nur Warning, Command-Flow bricht
-nicht. Ganz abschaltbar via `EnableVersionTracking=false` → `NullVersionTracker`.
+`Infrastructure/Persistence/RedisVersionTracker.cs`: schneller verteilter Index für Stale-Detection auf der Leseseite (Wahrheit bleibt
+der Log). Datenmodell: Hash `agg:{id}` (Felder `v`/`t`/`ts`) + Sekundär-Set `agg_idx:{type}`, mit Schlüssel-Präfix je Umgebung
+(`VersionIndex.Praefix`). Geschrieben **nach** erfolgreichem Append, per Redis-Pipeline, bei **jedem** Track indexiert. Graceful
+Degradation: `RedisConnectionException`/`TimeoutException` → nur Warning, der Command-Flow bricht nicht. Ganz abschaltbar über
+`VersionIndex.Betrieb = Aus` in der Umgebung → `NullVersionTracker`.
 
 ## 3.6 Signal-Mechanik `(StreamId, Version)`
 
-- **Vertrag**: `IStateChangeSignal` (`Abstractions/IStateChangeSignal.cs`) trägt nur
-  `Guid StreamId` + `int Version`. Typisierte Variante `IStateChangeSignal<TEvent>` trägt die
-  Event→Signal-Kante am Typ.
-- **Erzeugung**: pro persistiertem Event ein `StateChangeVia{Event}` (SignalTypeGenerator);
-  die Instanz baut `GeneratedSignalFactory.Create(payload, aggregateId, version)`.
-- **Verteilung**: im Erfolgspfad **fire-and-forget** über den `BrokerPublisher`
-  (`AggregateActorBase.cs:634`). Kein Warten auf Shard-Acks — der Command ist bereits
-  committet, Zustellung ist best-effort, durable Konsumenten heilen über Log-Read + Poll.
-  Jedes Event trägt seine eigene Position (`baseVersion`, nicht den Batch-Endwert).
-- **Routing**: der `BrokerPublisher` shardet über `Payload.GetType()` — die konkrete
-  Signal-Klasse — sodass nur Receiver dieses Event-Typs geweckt werden.
+- **Vertrag**: `IStateChangeSignal` (`Abstractions/IStateChangeSignal.cs`) trägt nur `Guid StreamId` + `int Version`. Die typisierte
+  Variante `IStateChangeSignal<TEvent>` trägt die Event→Signal-Kante am Typ.
+- **Erzeugung**: pro persistiertem Event ein `StateChangeVia{Event}` (`Domain.SourceGeneration/SignalTypeGenerator.cs`); die Instanz baut
+  `GeneratedSignalFactory.Create(payload, aggregateId, version)` (`SignalFactoryGenerator`, liest das Typ-Argument, keinen Namens-Präfix).
+- **Verteilung**: im Erfolgspfad **fire-and-forget** über den `BrokerPublisher` (`PublishFireAndForget` in `AggregateActorBase`). Kein
+  Warten auf Shard-Acks — der Command ist bereits committet, Zustellung ist best-effort, durable Konsumenten heilen über Log-Read + Poll.
+  Jedes Event trägt seine eigene Position, nicht den Batch-Endwert.
+- **Routing**: der `BrokerPublisher` shardet über `Payload.GetType()` — die konkrete Signal-Klasse —, sodass nur Empfänger dieses
+  Event-Typs geweckt werden.
 
 ## 3.7 Proto.Actor: virtuelle Cluster-Actors
 
-Wiring in `Infrastructure/Extensions/CqrsServiceExtension.cs:408`:
-- `ActorSystem` mit `ConsulProvider` + `PartitionIdentityLookup`.
-- **Aggregate-Kinds generiert**: `GeneratedAggregates.GetAllKinds(system)`. Pro `IState`-Klasse
-  erzeugt der `AggregateActorGenerator` (a) `XActor : AggregateActorBase<X>` mit DI-Ctor und
-  (b) `AddTransient<XActor>()` + `new ClusterKind(identität, PropsFor<XActor>())`. Die
-  Kind-Identität = `[AggregatName("…")]` oder Typname — garantiert konsistent zum Routing.
-- **Identität pro Command**: `ClusterIdentity.Create(aggregateId, aggregateType)` — der
-  Stream-Guid *ist* die virtuelle Actor-Identität. Single-Activation → Single-Writer pro
-  Stream (tragend für Batching + OCC).
-- **Multi-Node**: generierter Wire-Serializer `CqrsWireSerializer` an `WithRemote`;
-  `WireSerializerBootCheck` bricht bei Lücke ab. Siehe [06](06-transport-multinode-betrieb.md).
+Wiring in `Infrastructure/Extensions/CqrsServiceExtension.cs`:
+- `ActorSystem` mit `PartitionIdentityLookup`; der Cluster-Provider folgt `Cluster.Art` der Umgebung: `Einzelknoten` (Mitgliedschaft
+  in-memory, ohne Consul — so läuft eine Sim) oder `Consul` (`ConsulProvider`, mehrere Knoten).
+- **Aggregat-Kinds generiert**: `GeneratedAggregates.GetAllKinds(system)`. Pro `IState`-Klasse erzeugt der `AggregateActorGenerator`
+  (a) `XActor : AggregateActorBase<X>` mit DI-Konstruktor und (b) `AddTransient<XActor>()` + `new ClusterKind(identität, PropsFor<XActor>())`.
+  Die Kind-Identität = `[AggregatName("…")]` oder Typname — konsistent zum Routing.
+- **Identität pro Command**: `ClusterIdentity.Create(aggregateId, aggregateType)` — der Stream-Guid *ist* die virtuelle Actor-Identität.
+  Single-Activation → Single-Writer pro Stream (tragend für Batching und OCC).
+- **Multi-Node**: generierter Wire-Serializer `CqrsWireSerializer` an `WithRemote`; `WireSerializerBootCheck` bricht bei einer Lücke ab.
+  Siehe [06](06-transport-multinode-betrieb.md).
 
-Die alte handgeschriebene `ClusterKindsFactory.cs` ist vollständig auskommentiert — Zeugnis
-der Generator-Migration.
+`Infrastructure/Aggregate/ActorSystem/ClusterKindFactory.cs` (Klasse `ClusterKindsFactory`) ist vollständig auskommentiert — toter Code
+aus der Zeit vor dem Generator (docs/13 P3-2).
 
-## 3.8 Schulden im Schreibpfad (Auszug)
+## 3.8 Schulden im Schreibpfad
 
-Vollständig und priorisiert in [13](13-reifegrad-schulden-bewertung.md). Kurz:
-- **`BoundedInbox` nicht airtight**: FIFO-Verdrängung ab `InboxCap` (10.000) — eine sehr alte
-  Command-Id wird nicht mehr als Duplikat erkannt (bewusster Speicher-Tradeoff).
-- **JSON-Round-Trip-`Clone`** für Snapshots — brüchig bei State-Typen, die nicht sauber
-  round-trippen.
-- **Client-Command-Pfad ist verlustbehaftet**: nach 3 Fehlversuchen Dead-Letter, kein
-  Auto-Retry, und der gRPC-Service hat kein sichtbares Ack-Protokoll — der externe Client
-  müsste selbst erneut senden.
-- **Doppelte Falt-Logik**: `MartenEventStore.LoadStateAsync` (im Live-Pfad tot) und
-  `AggregateRehydrator` müssen synchron bleiben.
+Offenes steht in einer Quelle, [13 §13.0](13-reifegrad-schulden-bewertung.md): der parallele Drain skaliert sublinear (P2-6), die
+`BoundedInbox` verdrängt ab `Schreibpfad.InboxGrenze` FIFO (P2-4), der Snapshot-`Clone` ist ein JSON-Round-Trip (W10-2), der tote
+Lesepfad `LoadStateAsync` neben `AggregateRehydrator` (P2-9), der Client darf den `AggregateType` selbst setzen (W2-1).

@@ -1,140 +1,298 @@
-# 10 — Entwickler-API: „Wie schreibe ich X?"
+# 10 — Entwickler-API: „Wie lege ich X an?"
 
-Praktischer Leitfaden aus Entwicklersicht. Grundregel überall: **du schreibst nur Fachcode;
-alles Dispatchende, Verdrahtende und Serialisierende wird generiert.** Marker-Interfaces sind
-der primäre Auslöser — es gibt fast keine Attribute.
+> Stand 2026-10-13, gegen den Code geprüft. Maßstab: [docs/konzept-werkbank.md](konzept-werkbank.md).
 
-## 10.1 Trigger-Matrix (was löst welchen Generator aus?)
+Wegweiser für jede Primitive des Frameworks. Grundregel: **du schreibst nur Fachcode; alles Dispatchende, Verdrahtende und
+Serialisierende wird generiert** (Inv. 4, W10). Eine Primitive ist ein **Code-Fakt** — ein Marker-Interface, eine Signatur, selten ein
+Attribut —, nie ein Name oder Namespace (W2). Es gibt zwei gleichwertige Wege, die denselben Code ergeben: die Geste in der Werkbank (jede Geste
+ist ein Patch am Code, W4; Liste Geste → Code: [konzept-werkbank §A.2](konzept-werkbank.md)) oder der Code von Hand. Geprüft wird beim Bauen
+(Analyzer, Generator-Diagnosen, Boot-Guards — W5); die Regeln stehen als Daten mit ihrem Build-Gegenstück in `DomainEditor/Grammatik.cs`
+(`dotnet run --project GraphExtractor -- --grammatik`).
 
-| Du schreibst… | …und es entsteht (generiert) |
-|---|---|
-| `class X : IState` + nested `Decider : IDecider<X>` + `Applier : IApplier<X>` | State-Properties (Id/Version/State), AggregateHandler, Factory-Eintrag, Actor, ClusterKind, Snapshot-Registrierung |
-| `record E : IEvent` | Signal `StateChangeViaE`, EventJson-Pfad, Wire-Payload, Typ-Registry, Proto-DTO |
-| `record E : IEvent, ITransientEvent` | wie Event, **aber kein Signal, kein Persist, kein Upcasting** |
-| `record C : ICommand` | Command-Routing (via Decider-Signatur), Wire-Payload, Proto-DTO |
-| `class : IProzessDefinition { … Prozess<E>.Definiere(…) }` | Regel-Registry-Eintrag + CQRS001/002/003-Prüfung |
-| `class : ISubscriber` + `Handle(...)` | Subscriber-Dispatch, ProjectionQueryService |
-| `class : ISubscriber, IPullSubscriber` | zusätzlich kompletter Pull-Pfad (Adapter-Kind, Store per DI) |
-| `class : IPipelineHandler` + `Handle(...)` | Pipeline-Dispatch + Pipeline-Actor |
-| `class : IReader<T>` + `Handle(...)` | Reader-Dispatch (Query-Routing) |
-| `record V1 {}` + `class : IUpcast<V1, VAktuell>` | ganze Upcasting-Kette + Diskriminator + Marten-Registrierung (rein aus Typen) |
-| `class Msg : IWireMessage` | Wire-Whitelist-Eintrag (cross-node) |
-| Blazor: `IViewModel`, `IUiModule`, `Handle(T, MessageContext)` | Client-Dispatch, VM-Bus-Methoden, DI-Wiring |
+Jeder Abschnitt hat dasselbe Raster: **Zweck** · **Werkbank** (Karte, Geste, Port) · **Code** (Beispiel, meist aus der Agnostik-Sonde
+`GraphExtractor.Kern/Sonde/*.cs.txt`, Domäne „Leihwesen") · **Build** (CQRS-IDs, Grammatik-Regel) · **Generiert / Laufzeit** · **Mehr**.
 
-Nur **zwei optionale Attribute**: `[AggregatName("…")]`, `[ProzessName("…")]` — entkoppeln die
-persistierte Identität vom Klassennamen (Migrations-Stabilität). Kein `[Command]`/`[Event]`.
+## 10.1 Übersicht
 
-## 10.2 Ein neues Aggregat (Command + Event)
+| Primitive | Code-Fakt | Werkbank-Anker | § |
+|---|---|---|---|
+| Aggregat | `IState` + `IDecider<S>` / `IApplier<S>` | Palette „+ Aggregat" | 10.2.1 |
+| Command | `ICommand` (`ICreationCommand`) | „＋" am Decider | 10.2.2 |
+| Event | `IEvent` | „＋" am Decide-Ausgang | 10.2.3 |
+| Ablehnung | `ITransientEvent` im Decide-OneOf | „＋" am Decide-Ausgang | 10.2.4 |
+| Wertobjekt / Enum | Record ohne Rolle (`IWertobjekt` optional) / `enum` | Baustein-Menü der Domäne | 10.2.5 |
+| ReadModel | `IReadModel` (`IGeteiltesReadModel`) | Baustein-Menü | 10.3.1 |
+| Store-Fähigkeit | Interface `: IWriteStore` / `: IReadStore`, genau eine Funktion | an der Store-Karte | 10.3.2 |
+| Store-Bündel + Implementierung | `: IStore, IFähigkeit…` + eine Klasse | Baustein-Menü | 10.3.3 |
+| Projektion | `ISubscriber, IPullSubscriber`, Handles mit Schreib-Fähigkeit | Palette „+ Projektion" | 10.3.4 |
+| Query / Antwort | `IQuery` / `IQueryResponse` | Baustein-Menü, „＋" am Reader | 10.3.5 |
+| Reader | `IReader<P>` | Baustein-Menü | 10.3.6 |
+| Reaktion | `ISubscriber, IPullSubscriber`, Handle liefert Commands | Baustein-Menü | 10.4 |
+| Prozess | `IProzessDefinition` + `Prozess<T>.Definiere` | Baustein-Menü (Prozess, Regel) | 10.5 |
+| Katalog-Funktion | Interface `: IFunktion` + Record `: IAuftrag<F>` | Palette „+ ƒ Funktion" | 10.5a |
+| Domänen-Dienst | Interface `: IDienst` | „🧩 braucht" an der Funktion | 10.5b |
+| Konfig-Record | Record im Konstruktor einer Implementierung | Baustein-Menü, 🖥 „⚙ Konfig" | 10.5c |
+| Fluss | `IPipeline` + `PipelineFluss.Definiere` | Palette „+ ⛓ Fluss" | 10.6 |
+| Quelle | `sealed record X : DateiGemeldet;` | Palette „+ 📥 Quelle" | 10.6a |
+| Akteur | `IAkteur` (`IMensch`/`IMaschine`/`IKi`) + `IDarf<T>` | Palette „+ 👤 Akteur" | 10.7 |
+| Akteur-Vertrag | `IAkteurVertrag<A>` (Zusage / Kenntnis) | 📜-Rahmen am Akteur | 10.7a |
+| Client-Vertrag | `IClientVertrag` (+ `ISendet<C>`, `IFragt<Q>`); C#: `[assembly: IstClient<IX>]` | Palette „+ 🔌 Client" | 10.8 |
+| Umgebung | `umgebungen/umgebung.<name>.json` | 🖥 Host-Rahmen | 10.9 |
 
-Siehe [03 §3.2](03-schreibseite.md) für das vollständige `Konto`-Beispiel. Kurz:
+**Werkbank-Wege allgemein** ([konzept-werkbank §8.5](konzept-werkbank.md)): Neues beginnt an der **Palette** (Aggregat · ⛓ Fluss · ƒ Funktion ·
+📥 Quelle · 👤 Akteur · 🔌 Client · Projektion); jede weitere Sorte legt das **Baustein-Menü** einer Domäne an („⋯" bzw. Rechtsklick am
+Domänen-Rahmen → „＋ Baustein…"); Zugehöriges entsteht mit **„＋" am Port**, an dem es hängt; **⊕** im Panel verbindet oder löst (passende Karten
+leuchten, der Server prüft über `POST /api/werkbank/passt`). Deklariert wird nur an der eigenen Karte; Rümpfe stehen aus der Datei am Rumpf-Port
+(✎ bzw. „🤖 füllen"). Der ⊕-Leitsatz: was sich verbinden lässt, kompiliert.
+
+**Attribute** gibt es wenige, alle optional oder Framework-intern: `[AggregatName("…")]`, `[ProzessName("…")]` (persistierte Identität vom
+Klassennamen entkoppeln; Kollision = CQRS011 bzw. CQRS012), `[ProjectionReader(TrackDeps = …)]` (Reader, §10.3.6), `[assembly: IstClient<IX>]`
+(C#-Client, §10.8), `[RoutingTabelle]` (markiert das Routing-Generat, nicht für Fachcode) und `[Ingress]` (Altlast, §10.13).
+
+**Proto, STJ-Kontexte, Python-Basen entstehen automatisch.** Im Build läuft vor dem Compile der Codegen (Target `CqrsCodegenPrepass` in
+`ProtoRepo/ProtoRepo.csproj` → `Cqrs.Codegen`): `domain.proto`, `CqrsWireJsonContext.g.cs`, `EventJsonSerializerContext.g.cs`,
+`generated/vertraege.py`, `funktionen.py`, `funktions_tabelle.py`. Ein neuer Command, ein Event, eine Query braucht keinen Handgriff; scheitert
+der DTO-Mapper, meldet es CQRS030. (Der Codegen liest heute per `MetadataLoadContext` — Schuld, docs/13 W10-1.)
+
+## 10.2 Schreibseite
+
+### 10.2.1 Aggregat (State · Decider · Applier)
+
+**Zweck:** eine konsistente Entscheidungseinheit — Commands werden gegen den gefalteten Zustand entschieden, heraus kommen Events oder eine
+Ablehnung. **Werkbank:** Palette „+ Aggregat" schreibt `{A}.cs`, `{A}.Decider.cs`, `{A}.Applier.cs`; ein neues Decide/Apply bekommt einen
+werfenden Rumpf („⚙ Logik fehlt"), gefüllt mit ✎ oder „🤖 füllen". **Code** (Sonde `Ausleihe.cs.txt`):
 ```csharp
-public partial class Konto : IState { public decimal Saldo { get; set; } }
-public record EroeffneKonto(Guid AggregateId, decimal Start) : ICommand, ICreationCommand;
-public record KontoEroeffnet(decimal Start) : IEvent;
-public partial class Konto {
-  public partial class Decider : IDecider<Konto> {
-    public IEnumerable<OneOf<KontoEroeffnet>> Decide(EroeffneKonto c) { yield return new KontoEroeffnet(c.Start); }
-  }
-  public partial class Applier : IApplier<Konto> {
-    public void Apply(KontoEroeffnet e) => State.Saldo = e.Start;
-  }
+public partial class Leihvorgang : IState
+{
+    public Guid LeserId { get; set; }
+    public bool Offen { get; set; }
+
+    public partial class Decider : IDecider<Leihvorgang>
+    {
+        public IEnumerable<OneOf<Ausgeliehen, BereitsAusgeliehen>> Decide(LeiheAus befehl)
+        {
+            if (this.State.Offen) { yield return new BereitsAusgeliehen(befehl.AggregateId); yield break; }
+            yield return new Ausgeliehen(befehl.Medium, befehl.LeserId, befehl.Tage);
+        }
+    }
+
+    public partial class Applier : IApplier<Leihvorgang>
+    {
+        public void Apply(Ausgeliehen e) { this.State.LeserId = e.LeserId; this.State.Offen = true; }
+    }
 }
 ```
-Build-Regeln (`ModellAnalyzer`, Werkbank P7.4): CQRS079 ein entschiedenes persistentes Event braucht sein `Apply` (sonst wirft das Falten),
-CQRS080 (Warnung) ein gefaltetes Event, das das Aggregat in keinem Decide erzeugt, CQRS081 (Warnung) Enum-Wert 0 (geht auf dem Proto-Wire als
-Default verloren). Über alle Domänen-Projekte (`GesamtbildAnalyzer` in der Laufzeit-Compilation, Meldung beginnt mit `'Typ'`): CQRS084 eine Query
-beantwortet genau ein Reader, CQRS085 (Warnung) Event/Ablehnung/Response ohne Erzeuger, CQRS086 (Warnung) Command ohne Decider/Query ohne Reader,
-CQRS087 (Warnung) Zusage, die kein Client trägt (sobald es Clients gibt), CQRS088 (Warnung) Kreis aus Projektionen/Reaktionen über transiente
-Events. Für Konsumenten: CQRS082 (Warnung) Command ab einem transienten Eingang, CQRS083 (Warnung, Regel Z) Zustand in Instanzfeldern.
+`Id`/`Version` und `State` erzeugt der Generator; Decider/Applier dürfen in eigenen Dateien stehen (Sonde `Mahnvorgang.Decider.cs.txt`).
+**Build:** CQRS050 (Decide gibt konkrete Typen bzw. `OneOf<…>` zurück, nie `IEvent`), CQRS079 (entschiedenes persistentes Event ohne `Apply` —
+Fehler), CQRS080 (gefaltetes Event, das kein Decide erzeugt — Warnung), CQRS010 (Command bei mehreren Aggregaten), CQRS011 (Identitäts-Kollision);
+GR-AUS-AGGREGAT, GR-FALTUNG, GR-COMMAND. **Generiert / Laufzeit:** AggregateHandler (mit Code-Hash von State + Applier für die Snapshot-Version),
+Factory, Actor und `GeneratedCommandRouting` aus den Decide-Signaturen. Ein virtueller Cluster-Actor je Aggregat-Id ist der einzige Schreiber:
+Inbox-Dedup → Decide → Append (Group-Commit) → Apply → Signal; Spur-Wirker `decide:A/C`. **Mehr:** [03 §3.1–§3.2](03-schreibseite.md).
 
-**⚠ Nach neuen Command/Event/Query/Trigger-Typen:** Proto regenerieren —
-`dotnet run --project Proto.SourceGeneration` → ProtoRepo bauen → Infrastructure baut (Signale
-sind ausgenommen). Sonst Build-Fehler (CQRS030 macht ihn laut).
+### 10.2.2 Command
 
-## 10.3 Eine Projektion
+**Zweck:** eine Absicht an genau ein Aggregat. **Werkbank:** „＋" am Decider (bzw. ⊕ an einem vorhandenen Command); Felder im Panel.
+**Code:** `public record LeiheAus(Guid AggregateId, Signatur Medium, Guid LeserId, int Tage = 14) : ICreationCommand;` — `ICommand` verlangt
+`Guid AggregateId`; `ICreationCommand` markiert den anlegenden Command (eine Lesart für Extractor und LLM, keine eigene Laufzeit-Semantik).
+**Build:** CQRS010, CQRS086 (Command ohne Decider, Warnung), CQRS002 bzw. CQRS078 (Prozess bzw. Fluss sendet einen Command ohne Decider);
+GR-COMMAND, GR-AKTEUR (wer ihn hineingibt, braucht `IDarf<C>`). **Generiert / Laufzeit:** Routing-Eintrag, Proto-DTO, Wire-Eintrag. Von außen
+kommt ein Command über gRPC oder den JSON-Eingang durch das Akteur-Tor; intern gibt es genau einen Weg, `ICommandEmitter` (deterministische
+Command-Id + Inbox = genau einmal wirksam; erzwungen durch CQRS020/021). **Mehr:** [03 §3.1](03-schreibseite.md), [04 §4.4](04-konsum-und-prozess-maschine.md).
 
-`partial class X : ISubscriber, IPullSubscriber`, mit `SubscriberId` und **ohne Store im Konstruktor**. Jeder
-`Handle` bekommt genau die Store-Funktionen, die er benutzen darf, als **Fähigkeits-Parameter** (→ automatisch
-**replaybar**, weil der Store dahinter der Co-Commit-Tracker ist):
+### 10.2.3 Event
+
+**Zweck:** ein durabler Fakt im Log — das eigene Aggregat faltet ihn, beliebig viele Konsumenten hören ihn. **Werkbank:** „＋" am Decide-Ausgang;
+„◀ kommt aus · geht an ▶" im Panel zeigt Erzeuger und Konsumenten. **Code:** `public record Ausgeliehen(Signatur Medium, Guid LeserId, int Tage) : IEvent;`
+**Build:** CQRS079/080, CQRS085 (Event ohne Erzeuger, Warnung), CQRS057 (Handle-Form der Konsumenten); GR-EVENT, GR-FALTUNG. **Generiert /
+Laufzeit:** Signal `StateChangeVia{E}`, Event-Typ-Registrierung für Marten, STJ- und Proto-Eintrag. Ordnung und Vollständigkeit kommen nur aus
+dem Stream-Read; das Signal ist nur Weckruf (Poll 30 s als Sicherheit). Jeder Log-Eintrag trägt die Spur-Header `ursache`/`wirker`/`ueber`/`stand`.
+Ein **transientes Event** (`ITransientEvent`, kein Persist, kein Signal) ist verlierbar; es entsteht als Ablehnung (§10.2.4) oder als Ausgang
+einer Projektion/Reaktion (GR-TRANSIENT, GR-AUS-PROJEKTION). **Mehr:** [03 §3.3, §3.6](03-schreibseite.md).
+
+### 10.2.4 Ablehnung
+
+**Zweck:** die fachliche Absage eines Commands — kein Fakt, eine Rückmeldung. **Werkbank:** „＋" am Decide-Ausgang, Art Ablehnung.
+**Code:** `public record BereitsAusgeliehen(Guid AusleiheId) : ITransientEvent;` im OneOf des Decide (es gibt keinen eigenen Marker).
+**Build:** CQRS085; GR-TRANSIENT, GR-AUS-AGGREGAT. **Generiert / Laufzeit:** Proto und Wire wie ein Event, aber kein Signal und keine
+Marten-Registrierung. Eine Ablehnung ist das einzige Ergebnis des Decide. Ein Client-Command bekommt sie als Antwort; bei einem emittierten
+Command co-committet das Aggregat die Marke `KommandoAbgelehnt` — ein Prozess wertet sie als gescheiterten Schritt (Kompensation), ein Fluss als
+✕-Port `BeiAbgelehnt()`. **Mehr:** [03 §3.1](03-schreibseite.md), [04 §4.5](04-konsum-und-prozess-maschine.md).
+
+### 10.2.5 Wertobjekt und Enum
+
+**Zweck:** unveränderliche Feldtypen. **Werkbank:** Baustein-Menü („Value Object", „Enum"); verwendet werden sie über den Feldtyp (Port `ftype`).
+**Code:** `public record Signatur(string Regal, int Nummer);` (Record ohne Rolle; der Marker `IWertobjekt` ist erlaubt, wird aber nicht
+verlangt und von keiner Regel ausgewertet) · `public enum Zustand { Neu = 1, Gebraucht = 2, Beschaedigt = 3 }`. **Build:** CQRS081 (Enum-Wert 0
+geht auf dem Proto-Wire als Default verloren — 1-basiert nummerieren, Warnung). **Generiert:** ein DTO je Wertobjekt, sobald eine Nachricht es
+trägt; im Wire-Kontext stehen Enums als Namen.
+
+## 10.3 Leseseite
+
+Projektionen materialisieren Events in Dokumente; Reader beantworten Queries daraus. Der Fachcode sieht nur **Fähigkeiten** — Interfaces mit genau
+einer Store-Funktion, die ein Handle als Parameter bekommt. Kein Store im Konstruktor oder Feld eines Konsumenten (CQRS054), kein `new …Store()`
+(CQRS055). Beispiel für alles: Sonde `Lesen.cs.txt`; Beispieldomäne: `Domain.Projections/`, Stores in `Domain.Infrastructure/`.
+
+### 10.3.1 ReadModel (+ geteilt)
+
+**Zweck:** ein Dokument der Leseseite. **Werkbank:** Baustein-Menü „Read Model". **Code:**
 ```csharp
-// Fähigkeit = Interface mit GENAU EINER Funktion (CQRS051); das Bündel (IStore) ist der Store.
-public interface IReserviereBetrag : IWriteStore { Task ReserviereAsync(Guid konto, decimal betrag); }
-public interface IFindeKonto       : IReadStore  { Task<KontoSicht?> FindeAsync(Guid konto); }
-public interface IKontoStore : IStore, IReserviereBetrag, IFindeKonto { }   // eine Klasse implementiert es
+public class LeihEintrag : IReadModel { public Guid Id { get; set; } public Guid LeserId { get; set; } public bool Offen { get; set; } }
 
-public async Task Handle(BetragReserviert evt, IAggregateEnvelope env, ProjectionWriter writer, IReserviereBetrag store) =>
-    await writer.Execute(env.AggregateId, ctx => {
-        ctx.Track<Konto>(env.AggregateId);
-        return store.ReserviereAsync(env.AggregateId, evt.Betrag);
-    });
+// geteilt: mehrere Streams schreiben hinein → Versionsprüfung
+public record Ausleihzaehler : IReadModel, IGeteiltesReadModel { public string Id { get; init; } = "gesamt"; public int Offen { get; init; } }
 ```
-Der generierte Dispatch löst die Fähigkeiten aus einem DI-Bereich auf (eine Store-Instanz je Bereich → Effekt +
-Marke in einer Transaktion). Alles Weitere (Kind, Receiver, Poller, Achsen-Schnitt aus den Schreib-Fähigkeiten)
-generiert `PullPathGenerator`; Schreib-Fähigkeiten aus zwei Stores in einer Klasse sind CQRS052. Ein Store im
-Konstruktor/Feld eines Konsumenten ist CQRS054, `new …Store()` CQRS055. Optionaler GA-1-Marker `IAppendProjektion`
-erzwingt einen Co-Commit-Tracker. Beispiel: `Domain.Projections/ImagePairProjection.cs`.
+**Generiert / Laufzeit:** Marten-Dokument mit Identität `Id` (registriert in `AddGeneratedProjectionServices`, Teil von `AddCqrs`); ein geteiltes
+Dokument mit Optimistic Concurrency. Wo möglich Zeilen je (Stream, Schlüssel) statt eines geteilten Dokuments (Schreib-Regel §10.3.3).
 
-**Schreib-Regel im Store (`MartenCoCommitStoreBase`).** Die Maschine garantiert einen Schreiber je (Projektion, Stream);
-das Co-Commit macht einen Stapel atomar, isoliert aber nicht zwei parallele Stapel verschiedener Streams. Deshalb schreibt
-eine Store-Methode auf genau einem von drei Wegen, und die Basis prüft das beim Puffern:
+### 10.3.2 Store-Fähigkeit
 
-| Dokument | Weg | Beispiel |
+**Zweck:** genau eine Store-Funktion als Typ — die Obergrenze dessen, was ein Handle darf, steht in seiner Signatur. **Werkbank:** an der
+Store-Karte als Schreib- bzw. Lese-Fn; ein Handle bekommt sie per ⊕ an seinem Fähigkeits-Port (Geste `ParameterAbgleich`).
+**Code:** `public interface INotiereAusleihe : IWriteStore { Task SchreibeAsync(LeihEintrag eintrag); }` ·
+`public interface IZaehleOffene : IReadStore { Task<IReadOnlyList<LeihEintrag>> OffeneAsync(Guid leserId); }` (Namen frei).
+**Build:** CQRS051 (genau eine Funktion), CQRS053 (Fähigkeit in mehreren Stores), CQRS067 (Schreib-Fähigkeit liest nicht, Lese-Fähigkeit puffert
+nicht); GR-FAEHIGKEIT, GR-FUNKTION-FAEHIGKEIT. **Laufzeit:** der generierte Dispatch löst die Fähigkeiten aus einem DI-Bereich auf — eine
+Store-Instanz je Bereich, damit Effekt und Marke in einer Transaktion landen.
+
+### 10.3.3 Store-Bündel + Implementierung
+
+**Zweck:** das Bündel ist die Transaktionsgrenze aller seiner Fähigkeiten; die Implementierung puffert die Effekte und committet sie mit der Marke.
+**Werkbank:** Baustein-Menü „Store"; die Implementierung gehört zur Store-Karte, jede Store-Fn steht mit ihrem Rumpf an ihrer Fähigkeit (✎).
+**Code:** `public interface ILeihBuch : IStore, INotiereAusleihe, ISchliesseAusleihe, IZaehleOffene { }` und genau eine Klasse, die es
+implementiert. Produktiv erbt sie von `MartenCoCommitStoreBase` (`Domain.Infrastructure/`) und ist damit `IProjectionTracker` mit Co-Commit:
+```csharp
+public sealed partial class ModellStore : MartenCoCommitStoreBase, IModellStore        // Beispieldomäne, Domain.Infrastructure/ModellStore.cs
+{
+    public ModellStore(IDocumentStore store) : base(store) { }
+    public Task UpsertAsync(ModellReadModel model) => EnqueueStore(model.Id, model);
+}
+```
+**Schreib-Regel.** Die Maschine garantiert einen Schreiber je (Projektion, Stream); das Co-Commit macht einen Stapel atomar, isoliert aber nicht zwei
+parallele Stapel verschiedener Streams. Deshalb schreibt eine Store-Methode auf genau einem von drei Wegen, und die Basis prüft das beim Puffern:
+
+| Dokument | Weg | Beispiel (Beispieldomäne) |
 |---|---|---|
 | eigenes (Schlüssel = Stream des Stapels) | `EnqueueStore(id, doc)`, `EnqueueTransform`, `EnqueueAnlegenOderAendern` | `TrainingslaufReadModel` |
 | Zeile dieses Streams (Id enthält den Besitzer) | `EnqueueZeile(besitzer, zeile)`, `EnqueueZeileEntfernen` | `DatensatzMitgliedschaftZeile` `{Datensatz}:{Paar}` |
-| geteilt (mehrere Streams, Marker `IGeteiltesReadModel`) | `EnqueueGeteilt(id, alt => neu)` — Versionsprüfung; Konflikt verwirft den Stapel samt Marke, der Adapter wiederholt | `AktivesModellReadModel` |
+| geteilt (Marker `IGeteiltesReadModel`) | `EnqueueGeteilt(id, alt => neu)` — Versionsprüfung; ein Konflikt verwirft den Stapel samt Marke, der Adapter wiederholt | `AktivesModellReadModel` |
 
-Ein fremdes Dokument über den ersten Weg wirft sofort (statt eines stillen Lost Updates). Wo möglich Zeilen statt eines
-geteilten Dokuments; „neuer gewinnt“ in einem geteilten Dokument nach Event-Zeit, nie nach Ankunft (zwischen Streams gibt
-es keine Ordnung). Belegt gegen echtes Postgres: `GeteilteDokumentePostgresTests`, `SchreibRegelPostgresTests`.
+Ein fremdes Dokument über den ersten Weg wirft sofort (statt eines stillen Lost Updates). „Neuer gewinnt" in einem geteilten Dokument nach
+Event-Zeit, nie nach Ankunft. Am Puffer vorbei zu schreiben ist ein Build-Fehler: **CQRS066** erlaubt in einem Co-Commit-Store von der
+Datenzugriffs-Bibliothek nur `Store.QuerySession()` → `LoadAsync`/`LoadManyAsync`/`Query` (+ `ToListAsync`/`CountAsync` …) und verbietet, einen
+Zugang weiterzureichen; **CQRS067** trennt die Rollen. Die Positivliste steht einmal in `Abstractions/StoreZugriff.cs`.
+**Generiert / Laufzeit:** DI (scoped, die eine Instanz unter jeder Fähigkeit) und ein Code-Hash je Store; ändert sich der Store, baut Sim die
+Leseseite beim Start neu auf (`ProjektionsStandDienst`). **Mehr:** [04 §4.3](04-konsum-und-prozess-maschine.md).
 
-Am Puffer vorbei schreiben (der übliche Marten-Weg `LightweightSession() … SaveChangesAsync()`) ist ein Build-Fehler:
-**CQRS066** erlaubt in einem Co-Commit-Store von der Datenzugriffs-Bibliothek nur `Store.QuerySession()` → `LoadAsync`/
-`LoadManyAsync`/`Query` (+ `ToListAsync`/`CountAsync` …) und verbietet, einen Zugang an fremden Code weiterzureichen;
-**CQRS067** trennt die Rollen (Schreib-Fähigkeit liest nicht, Lese-Fähigkeit puffert nicht). Die Positivliste steht EINMAL in
-`Abstractions/StoreZugriff.cs` (Analyzer `Projections.SourceGeneration/StoreZugriffAnalyzer.cs` und LLM-Kontext lesen sie).
+### 10.3.4 Projektion
 
-> Hinweis: der produktive `MartenProjectionTracker` committet Effekt und Marke aktuell in
-> getrennten Sessions (at-least-once) — siehe [04 §4.3](04-konsum-und-prozess-maschine.md).
-
-## 10.4 Eine Reaktion (Command emittieren)
-
-Dieselben Marker (`ISubscriber, IPullSubscriber`), **keine** Schreib-Fähigkeit → automatisch
-**emittierend**. `Handle` gibt `IAsyncEnumerable<OneOf<TCmd>>` zurück und `yield return`t
-Commands:
+**Zweck:** ein replaybarer durabler Konsument — Events in ReadModels, genau einmal wirksam über Co-Commit. **Werkbank:** Palette „+ Projektion";
+je Event eine Handle-Karte, Schreib-Fähigkeiten per ⊕, Rumpf am Handle. **Code** (Sonde `Lesen.cs.txt`):
 ```csharp
-public async IAsyncEnumerable<OneOf<WirkeReaktion>> Handle(ImagePairKomplett evt, IAggregateEnvelope env) {
-    yield return new WirkeReaktion(env.AggregateId);
+public partial class Leihliste : ISubscriber, IPullSubscriber
+{
+    public string SubscriberId => "leihliste";
+
+    public async Task Handle(Ausgeliehen evt, IAggregateEnvelope envelope, ProjectionWriter writer, INotiereAusleihe notiere)
+        => await writer.Execute(envelope.AggregateId.ToString(), async ctx =>
+        {
+            ctx.Track<Leihvorgang>(envelope.AggregateId);
+            await notiere.SchreibeAsync(new LeihEintrag { Id = envelope.AggregateId, LeserId = evt.LeserId, Offen = true });
+        });
 }
 ```
-Die Rückgabe nennt die möglichen Commands **als Typen** (`OneOf<…>` konkreter Typen; `IAsyncEnumerable<ICommand>` o. ä. ist
-CQRS050, gilt ebenso für Decide, Reader und Pipeline). Nie selbst `RequestAsync` aufrufen (CQRS020) und nie `CancellationToken.None` auf eine
-Command-Kante geben (CQRS021). Beispiel: `Domain.Projections/ImagePairReaktion.cs`.
+Handle-Form: `Handle(TEvent, IAggregateEnvelope, ProjectionWriter, Fähigkeit…)`; ohne Ausgabe `Task`, sonst ein Strom transienter Events als
+`OneOf<…>`. `ProjectionWriter.Execute(string readModelId, …)` und `ctx.Track<A>(id)` melden die Abhängigkeiten für Reader mit `TrackDeps`.
+**Build:** CQRS057 (Form), CQRS050, CQRS052 (Schreib-Fähigkeiten aus mehreren Stores), CQRS054/055, CQRS083 (Zustand in Instanzfeldern,
+Warnung), CQRS088 (Kreis über transiente Events); GR-AUS-PROJEKTION, GR-ZUSTAND. Der Opt-in-Marker `IAppendProjektion` (für nicht-idempotente
+Effekte) lässt den Start brechen, wenn kein Co-Commit-Tracker dahintersteht (GA-1). **Generiert / Laufzeit:** Subscriber-Dispatch und Pull-Pfad
+(`PullPathGenerator`). **Achse B folgt aus den Schreib-Fähigkeiten der Handles:** lösen sie einen Store auf, der `IProjectionTracker` ist, ist der
+Konsument replaybar (Projektion); ohne Schreib-Fähigkeit ist er emittierend (§10.4). Der `ProjectionAdapter` liest ab Marke + 1 aus dem Store,
+dispatcht und committet Effekt + Marke; geweckt über Signal und Poll. **Mehr:** [04 §4.1–§4.3](04-konsum-und-prozess-maschine.md).
 
-## 10.5 Ein Prozess / eine Saga
+### 10.3.5 Query und Query-Antwort
 
-`sealed class X : IProzessDefinition` mit `ProzessRegeln Regeln => Prozess<TAuslöser>.Definiere(…)`.
-Das ist **alles** — kein Manager, kein Treiber, kein Korrelations-Code:
+**Zweck:** eine synchrone Leseanfrage an genau einen Reader und ihre Antworten. **Werkbank:** Baustein-Menü „Query"/„Response"; am Reader-Handle
+„＋" bzw. ⊕ für Eingang und Antworten. **Code:** `public record OffeneAusleihen : IQuery { public Guid LeserId { get; init; } }` ·
+`public record OffeneAusleihenAntwort(int Anzahl) : IQueryResponse;` · `public record KeineAusleihen() : IQueryResponse;`
+**Build:** CQRS084 (genau ein Reader), CQRS086 (Query ohne Reader, Warnung), CQRS085 (Antwort ohne Erzeuger, Warnung); GR-QUERY, GR-AUS-READER,
+GR-AKTEUR (`IDarf<Q>`). **Laufzeit:** über gRPC oder den JSON-Eingang durch das Akteur-Tor in den generierten `ProjectionQueryService`; kein
+Log-Eintrag, keine Spur.
+
+### 10.3.6 Reader
+
+**Zweck:** beantwortet Queries über die Lese-Fähigkeiten einer Projektion. **Werkbank:** Baustein-Menü „Reader"; je Query ein Handle,
+Lese-Fähigkeiten per ⊕ (auch aus mehreren Stores). **Code:**
 ```csharp
-public sealed class UeberweisungsProzess : IProzessDefinition {
-  public ProzessRegeln Regeln => Prozess<UeberweisungBeauftragt>.Definiere(p => {
-    p.Auf<UeberweisungBeauftragt>().Sende<ReserviereBetrag>(e => new ReserviereBetrag(e.Von, e.Betrag))
-                                   .RückgängigDurch<GebeFrei>(e => new GebeFrei(e.Von, e.Betrag));
-    p.Auf<BetragReserviert>().Sende<SchreibeGut>(…);
-    // Diamant: .Und<E2>().Und<E3>() ;  Fan-out: .UndAlle<E>(n) + SendeJe<Cmd>
-  });
+[ProjectionReader(TrackDeps = false)]                                    // optional; Default TrackDeps = true
+public partial class LeihAuskunftLeser : IReader<Leihliste>
+{
+    public async Task<OneOf<OffeneAusleihenAntwort, KeineAusleihen>> Handle(OffeneAusleihen query, IMessageEnvelope envelope, ReadContext ctx, IZaehleOffene zaehle)
+    {
+        var offen = await zaehle.OffeneAsync(query.LeserId);
+        return offen.Count == 0 ? new KeineAusleihen() : new OffeneAusleihenAntwort(offen.Count);
+    }
 }
 ```
-Build-Guards: CQRS001 (ein Auslöser je Prozess), CQRS002 (jeder gesendete Command hat einen
-Decider), CQRS003 (explizites `T`), CQRS012 (eindeutiger Name), Azyklizitäts-Boot-Guard. Der
-Host ruft einmalig `AddGeneratedProzesse()`. Beispiele: `Domain/Ueberweisung/`,
-`Domain/Reiseauftrag/` (Diamant + Kompensation), `Domain/Sammelueberweisung/` (Fan-out).
+**Build:** CQRS057, CQRS050, CQRS054/055, CQRS084. **Generiert / Laufzeit:** Reader-Dispatch und `ProjectionQueryService`; je Query ein
+Fähigkeits-Bereich; mit `TrackDeps` liest er die Abhängigkeiten aus dem Redis-Index. **Mehr:** [04 §4.3](04-konsum-und-prozess-maschine.md).
 
-## 10.5a Eine Katalog-Funktion rufen (`Rufe<F>`)
+## 10.4 Reaktion
 
-Eine **Katalog-Funktion** ist eine Schnittstelle mit genau einer Methode: ein Auftrag hinein, OneOf-Ergebnis-Events heraus.
-Ein Prozess ruft sie mit `Rufe<F>` so, wie er ein Aggregat mit `Sende<Cmd>` ruft. Ob sie 50 ms oder Stunden braucht, ist nur
-ein Zeitlimit, keine eigene Architektur.
+**Zweck:** ein emittierender durabler Konsument — Event → Command. Kein eigener Marker: die Rolle folgt aus der Signatur (ein Handle liefert
+Commands, keine Schreib-Fähigkeit). „Reaktion" heißt nur dieser Backend-Baustein, nie eine Zusage eines Akteurs (§10.7a). **Werkbank:**
+Baustein-Menü „Reaktion"; Ausgänge per „＋"/⊕. **Code** (Sonde `Lesen.cs.txt`):
+```csharp
+public partial class MahnungBeiSchaden : ISubscriber, IPullSubscriber
+{
+    public string SubscriberId => "mahnung-bei-schaden";
+
+    public async IAsyncEnumerable<EroeffneMahnung> Handle(SchadenGemeldet evt, IAggregateEnvelope envelope, ProjectionWriter writer)
+    {
+        await Task.CompletedTask;
+        yield return new EroeffneMahnung(Guid.NewGuid(), 5m);
+    }
+}
+```
+**Build:** CQRS050 (Ausgabe als konkreter Typ oder `OneOf<…>`, nie `ICommand`), CQRS057, CQRS020 (nie selbst `RequestAsync`), CQRS021 (kein
+`CancellationToken.None` auf eine Command-Kante), CQRS082 (Command ab transientem Eingang, Warnung); GR-AUS-REAKTION, GR-GARANTIE.
+**Generiert / Laufzeit:** derselbe Pull-Pfad wie die Projektion, aber mit `IEmittentenCursor` (best-effort, kein Reset). Jeder Command geht über
+`ICommandEmitter` mit deterministischer Id (Stream, Version, Command-Typ) — genau einmal wirksam über die Inbox des Empfängers; Spur-Wirker
+`reaktion:T`. Transiente Ausgänge gehen verlierbar über den Broker. **Mehr:** [04 §4.4](04-konsum-und-prozess-maschine.md).
+
+## 10.5 Prozess
+
+**Zweck:** ein typisiertes Regel-Netz über mehrere Aggregate: jede Regel ist eine Konjunktion von Event-Typen, die Commands sendet oder eine
+Katalog-Funktion ruft; mit Kompensation und Zeitlimit. Abläufe ab einer Quelle mit Funktions-Knoten schreibt man als Fluss (§10.6); beide laufen auf
+demselben Dirigenten (die Doppelung der DSLs ist offen, docs/13 W11-1). **Werkbank:** Baustein-Menü „Prozess" und „Regel"; die Regel zeigt
+WENN (+ und) → Dann; „+ Dann" (weiterer Command), „+ Dann ƒ" (Funktion rufen), „×N" (`SendeJe`), ↩ Kompensation, ⏳ Zeitlimit; Bau-Argumente im
+Zuordnungs-Editor, Lambdas am Rumpf-Port. Ein Count-Join wird gelesen und erhalten („+alle"), angelegt wird er im Code. **Code** (Sonde
+`Gebuehren.cs.txt`):
+```csharp
+public sealed class SchadenBeiRueckgabe : IProzessDefinition
+{
+    ProzessRegeln IProzessDefinition.Regeln => Prozess<Zurueckgegeben>.Definiere(p =>
+    {
+        p.Auf<Zurueckgegeben>().Sende<MeldeSchaden>(e => new MeldeSchaden(Guid.NewGuid(), e.LeserId));
+        p.Auf<SchadenGemeldet>().Rufe<ISchadensSchaetzung>(s => new SchaetzeSchaden(s.LeserId, 25m)).Zeitlimit(TimeSpan.FromMinutes(5));
+        p.Auf<SchadenGeschaetzt>().Sende<EroeffneMahnung>(g => new EroeffneMahnung(Guid.NewGuid(), g.Betrag));
+    });
+}
+```
+Verben (`Abstractions/Prozess/ProzessBuilder.cs`): `Auf<E>()`, Join `.Und<E2>()` (bis drei Events), Count-Join `.UndAlle<S>(e => n).Sende<C>((e, liste) => …)`,
+`.Sende<C>(…)`, Fan-out `.SendeJe<C>(e => …)`, `.Rufe<F>(…)` (§10.5a), danach `.Zeitlimit(t)` und `.RückgängigDurch<C>(…)` bzw. `RückgängigDurchJe`.
+**Build:** CQRS001 (zwei Prozesse mit demselben Auslöser), CQRS002 (gesendeter Command ohne Decider), CQRS003 (Typ-Argument explizit), CQRS012
+(Prozessname doppelt), CQRS072 (Regelname doppelt); Boot-Guards Azyklizität, Funktions-Bindung, Auslöser-Kollision; GR-AUS-PROZESS, GR-ZYKLUS.
+**Generiert / Laufzeit:** `GeneratedProzessRegeln` mit Prozess- und Regelnamen (Spur-Wirker `prozess:P#A→C`). Ein generischer Prozess-Manager je
+Korrelation faltet das Marking aus dem Log (mit nicht-autoritativem Marking-Cursor), sendet mit deterministischer Command-Id, kompensiert
+rückwärts; ein Zeitlimit läuft gegen die DB-Uhr (`IDbClock`) ab Aktivierung der Regel (entdeckt über den Backstop, docs/13 W11-2). **Mehr:** [04 §4.5](04-konsum-und-prozess-maschine.md).
+
+## 10.5a Katalog-Funktion
+
+**Zweck:** ein zustandsloser Aufruf — ein Auftrag hinein, genau ein OneOf-Ergebnis-Event heraus; gerufen wie ein Aggregat. Kurz oder lang ist nur
+ein Zeitlimit. Verarbeitung ist immer eine Katalog-Funktion, nie ein Rumpf am Rand. **Werkbank:** Palette „+ ƒ Funktion" (Funktion mit Auftrag und
+einem Ergebnis); an ihrer Karte Auftrag, Ergebnisse (OneOf), „⚙ liest" (Lese-Fähigkeit per ⊕), „🧩 braucht" (§10.5b), „＋ C#-Implementierung
+anlegen", Rumpf (✎/🤖; bei Laufort `Extern` der Python-Rumpf). Gerufen wird sie aus einer Prozess-Regel („+ Dann ƒ") oder einem Fluss („＋ƒ").
+**Code** (Sonde `Gebuehren.cs.txt`, `Fluss.cs.txt`):
 ```csharp
 public sealed record SchaetzeSchaden(Guid LeserId, decimal Neuwert) : IAuftrag<ISchadensSchaetzung>;   // der EINE Eingang
 public record SchadenGeschaetzt(decimal Betrag) : IEvent;                                               // Ergebnisse = persistente Events
@@ -145,186 +303,263 @@ public interface ISchadensSchaetzung : IFunktion
     Task<OneOf<SchadenGeschaetzt, NichtSchaetzbar>> RufeAsync(SchaetzeSchaden auftrag, IAusfuehrung x);
 }
 
-// im Prozess: der Aufruf-Knoten — die Funktion steht ausdrücklich im Typ-Argument (CQRS003)
-p.Auf<SchadenGemeldet>().Rufe<ISchadensSchaetzung>(s => new SchaetzeSchaden(s.LeserId, 25m)).Zeitlimit(TimeSpan.FromMinutes(5));
-p.Auf<SchadenGeschaetzt>().Sende<EroeffneMahnung>(g => new EroeffneMahnung(Guid.NewGuid(), g.Betrag));
+public sealed class Schadensschaetzer(IWertTabelle tabelle) : ISchadensSchaetzung { /* RufeAsync … */ }   // Implementierung = Code-Fakt
+
+// mit Lese-Fähigkeit (nur Laufort Host): Parameter nach IAusfuehrung
+public interface IOffenZaehlung : IFunktion { Task<OneOf<OffeneGezaehlt>> RufeAsync(ZaehleOffene auftrag, IAusfuehrung x, IZaehleOffene offene); }
 ```
-Die Implementierung ist eine Klasse, die das Interface implementiert (Code-Fakt); den Laufort wählt die Umgebung
-(`Funktionen:ISchadensSchaetzung` = `{ "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 }`, bei mehreren Implementierungen mit
-`"Implementierung"`). Gebaut wird sie über eine generierte Fabrik (`GeneratedFunktionen.Implementierungen`, Konstruktor direkt, ohne
-Reflection) — was ihr Konstruktor braucht (Dienste, Konfig-Records), bindet die Dienst-Bindung (§10.5b).
+**Laufort** ist Konfig, nicht Code: `Funktionen:<F>` = `{ "Laufort": "Host" | "Extern" | "Hand", "Implementierung": …, "Slots": 2,
+"Wiederholungen": 1, "Worker": { … } }` (Default `Host`; `Implementierung` nur bei mehreren C#-Implementierungen).
+- **Host:** die C#-Implementierung, gebaut über die generierte Fabrik `GeneratedFunktionen.Implementierungen` (Konstruktor direkt, ohne Reflection).
+- **Extern:** ein Python-Worker über gRPC. Der Codegen erzeugt je Funktion ohne Lese-Fähigkeit eine Basis in `domain_client/generated/funktionen.py`
+  (`<Name>Basis` mit `FUNKTION`, `AUFTRAG`, `ERGEBNISSE`, `async def rufe(self, auftrag, x)`) und die Tabelle `generated/funktions_tabelle.py`.
+  Die Implementierung liegt in `Domain.Client.Worker.Python.ML/funktionen/<modul>.py` (Regel `Abstractions.Funktionsvertrag`; ⟳ legt eine fehlende
+  aus der Basis an), erbt die Basis und gibt genau ein Ergebnis zurück; Werte in `self.konfig`. Gestartet wird der generische Worker
+  `funktions_worker.py --funktionen <F> [--slots n] [--konfig NAME=WERT …]` mit `CQRS_GRPC_HOST`/`CQRS_GRPC_PORT`/`CQRS_AKTEUR_TOKEN` — in der
+  Werkbank „▶ Worker"; der Akteur des Tokens braucht `IDarf<F>`.
+- **Hand:** der Host hält die Aufträge (`HandAusfuehrer`), die Werkbank beantwortet sie (⧗ Aufträge) — ein Mensch als Ausführer beim Durchspielen.
 
-Was passiert: Der Prozess-Manager übergibt **alle** offenen Aufträge (parallel, auch bei jeder weiteren Weckung — der Ausführer
-dedupliziert über die Ausführungs-Id = Vorgang) an den `FunktionsAusfuehrer`. Der rechnet im Slot und schreibt **genau ein**
-Ergebnis in den Ausführungs-Stream (Stream-Id = Vorgang, `CausationId` = Vorgang): den OneOf-Fall als Event, bei einer Ausnahme
-nach den Wiederholungen die `KommandoAbgelehnt`-Marke. Der Fold liest es wie das Event eines Aggregats — ein Ergebnis aktiviert
-`Auf<Ergebnis>`, eine Marke wird `SchrittGescheitert` → Kompensation. **Zeitlimit** (für Command UND Funktion): ab dem jüngsten
-gematchten Event (DB-Zeit); läuft es ab, scheitert der Schritt („Zeitlimit"), der §3-Backstop weckt ohnehin periodisch.
+**Build:** CQRS068 (feste Form: genau `RufeAsync(TAuftrag, IAusfuehrung[, Lese-Fähigkeit…])`, persistente Ergebnisse), CQRS069 (ein Auftrag je
+Funktion), CQRS003 (`Rufe<F>` mit explizitem Typ); Boot-Guard „jede gerufene Funktion ist gebunden" (`FunktionsExtensions`); GR-FUNKTION-AUFTRAG,
+GR-AUS-FUNKTION, GR-FUNKTION-FAEHIGKEIT, GR-FUNKTION-GEBUNDEN. **Generiert / Laufzeit:** `GeneratedFunktionen` (Auftrag → Funktion, Ergebnisse,
+Fähigkeiten, Fabriken, Dispatch). Der Dirigent bietet alle offenen Aufträge an; ein Vermittler-Actor je Funktion verteilt sie an den Abholer des
+Lauforts; jeder schließt über `FunktionsAusfuehrer` ab: **genau ein** Ergebnis im Ausführungs-Stream (bei einer Ausnahme nach den Wiederholungen die
+Marke `KommandoAbgelehnt` → gescheiterter Schritt). Das Ergebnis aktiviert `Auf<Ergebnis>` bzw. `Bei<Ergebnis>()` wie ein Aggregat-Event;
+Spur-Wirker `funktion:F`. **Mehr:** [konzept-editor-pipelines §14.5](konzept-editor-pipelines.md), [09](09-python-sdk.md),
+[konzept-werkbank §6](konzept-werkbank.md).
 
-Regeln: CQRS068 (feste Form), CQRS069 (ein Auftrag je Funktion), CQRS003 (`Rufe` mit explizitem Typ), Boot-Guard
-„jede gerufene Funktion ist gebunden", Azyklizitäts-Guard (Funktion → Ergebnisse aus der Signatur). Kein `Zeitlimit` hinter
-`UndAlle`, kein `Rufe` mit Fan-out (Validator). Ergebnis-Events sind normale Domänen-Typen: Proto regenerieren wie bei jedem
-neuen Event. Beispiel: Sonde `GraphExtractor.Kern/Sonde/Gebuehren.cs.txt`; Laufzeit-Beweis `Infrastructure.Pruefstand.Tests/Funktionen/`.
+## 10.5b Domänen-Dienst
 
-## 10.5b Ein Domänen-Dienst (`IDienst`) hinter einer Funktion
-
-Technik, die eine Funktions-Implementierung benutzt (Bild skalieren, ein Modell laden …), ist ein **Domänen-Dienst**: ein Interface mit dem
-Marker `IDienst`, jede öffentliche Klasse, die es implementiert, ist eine Implementierung. Die Funktions-Implementierung nimmt ihn **im
-Konstruktor** — zusammen mit Konfig-Records (Werte aus der Umgebung) und `ILogger<T>`:
+**Zweck:** Technik hinter einer Funktions-Implementierung (Bild skalieren, Tabelle nachschlagen …); die Umgebung wählt die Implementierung.
+**Werkbank:** Dienst-Karte 🧩 (Methoden, Implementierungen mit Konstruktor, Rümpfe mit ✎); an der Funktion „🧩 braucht (Konstruktor)" per ⊕ bzw.
+„＋" (neuer Dienst als eigene Karte); die Wahl je Umgebung im 🖥 Host-Rahmen („🧩 Dienste"). **Code** (Sonde `Gebuehren.cs.txt`):
 ```csharp
-public interface IImageResizer : IDienst { Mat Resize(Mat input, int targetHeight); }
-public sealed class ImageResizer : IImageResizer { public Mat Resize(Mat input, int targetHeight) { … } }
-
-public record PreprocessingConfig(string OutputPath);                       // Konfig-Record: Werte aus Konfig:PreprocessingConfig
-
-public sealed class OpenCvBildVerkleinerung(IImageResizer resizer, PreprocessingConfig config) : IBildVerkleinerung { … }
-```
-Umgebung (`umgebungen/umgebung.<name>.json`) — keine Zeile im Programm:
-```json
-"Dienste": { "IImageResizer": { "Implementierung": "ImageResizer" } },     // nur nötig, wenn es mehrere gibt
-"Konfig":  { "PreprocessingConfig": { "OutputPath": "${env:HOME}/cqrs-sim/${branch}/preprocessed" } }
-```
-Generiert (`DienstGenerator` → `GeneratedDienste`): je Dienst seine Implementierungen mit Fabrik, je Implementierung (Funktion oder Dienst) was
-ihr Konstruktor braucht, je Konfig-Record die Bindung Feld für Feld (Text, Zahl, Wahrheitswert, Dauer, Guid, Enum, Text-Liste; ein Default im
-Record gilt, wenn das Feld fehlt; unbekannte Felder sind ein Fehler). `AddCqrs` bindet nach den Funktionen genau das, was die gebundenen
-Funktions-Implementierungen transitiv brauchen. Boot-Fehler (mit Karte `dienst:<IX>` bzw. `host:Konfig`): keine Implementierung, mehrere
-ohne Wahl, unbekannter Name, Kreis über Dienste, fehlender oder fremder Konfig-Abschnitt.
-
-Regeln im Build (`Domain.SourceGeneration/DienstAnalyzer.cs`): CQRS089 ein Dienst nur im Konstruktor einer Funktions-/Dienst-Implementierung
-(nie als Handle-/Decide-Parameter, Feld oder Eigenschaft im Fachcode — dort sind es Fähigkeiten), CQRS090 der Konstruktor nimmt nur Dienste,
-Konfig-Records und `ILogger<T>`, CQRS091 Konfig-Felder sind bindbar, CQRS092 die Implementierung ist öffentlich und nicht generisch.
-Abgrenzung: `IAkteurDienst<A>` gehört einem Akteur und ist nur Handle-Parameter (CQRS060) — etwas anderes.
-
-Im Editor: Dienst-Karte 🧩 (Signatur = Methoden, Implementierungen mit Konstruktor, Rümpfe aus der Datei mit ✎), an der Funktion „🧩 braucht
-(Konstruktor)" mit ⊕ bzw. „＋" (neuer Dienst als eigene Karte); „＋ C#-Implementierung anlegen" an einer Funktion ohne Implementierung; die Wahl
-je Umgebung im 🖥 Host-Rahmen („🧩 Dienste", „⚙ Konfig" mit den Feldern aus dem Code). Beispiel: Sonde `Gebuehren.cs.txt` (`IWertTabelle`).
-
-## 10.6 Eine Pipeline als Fluss (Quelle → Funktionen → Commands)
-
-Kanonisch seit 2026-10-07 (`docs/konzept-editor-pipelines.md` §14). Eine Pipeline ist eine Klasse `: IPipeline`, deren Knoten vom
-Draht aus verdrahtet werden. Der Variablenname ist die Identität des Knotens (dieselbe Funktion darf mehrfach vorkommen).
-```csharp
-public sealed class Bildeingang : IPipeline
+public interface IWertTabelle : IDienst
 {
-    public PipelineFluss Fluss => PipelineFluss.Definiere(p =>
+    decimal Restwert(decimal neuwert, int alterJahre);
+    Task<bool> IstSchaetzbarAsync(Guid leserId);
+}
+public sealed class LineareWertTabelle(WertTabellenKonfig konfig) : IWertTabelle { … }   // jede öffentliche implementierende Klasse
+public sealed class Schadensschaetzer(IWertTabelle tabelle) : ISchadensSchaetzung { … }   // Bedarf im Konstruktor
+```
+Umgebung: `"Dienste": { "IWertTabelle": { "Implementierung": "LineareWertTabelle" } }` — nur nötig, wenn es mehrere gibt. **Build:** CQRS089
+(ein Dienst nur im Konstruktor einer Funktions-/Dienst-Implementierung — nie als Handle-/Decide-Parameter, Feld oder Eigenschaft im Fachcode),
+CQRS090 (der Konstruktor nimmt nur Dienste, Konfig-Records und `ILogger<T>`), CQRS091 (Konfig-Felder bindbar), CQRS092 (Implementierung
+öffentlich, nicht generisch); GR-DIENST, GR-DIENST-BINDBAR, GR-DIENST-GEBUNDEN. **Generiert / Laufzeit:** `GeneratedDienste` (Fabriken, Bedarf je
+Konstruktor, Konfig-Bindung). `AddCqrs` bindet nach den Funktionen transitiv, was deren Implementierungen brauchen; Boot-Fehler bei fehlender,
+mehrdeutiger oder unbekannter Implementierung, Kreis oder Konfig-Fehler (Karte `dienst:<IX>` bzw. `host:Konfig`). **Mehr:**
+[konzept-werkbank §4.1–§4.2](konzept-werkbank.md).
+
+## 10.5c Konfig-Record
+
+**Zweck:** Werte aus der Umgebung für eine Funktions- oder Dienst-Implementierung. Kein Marker: Konfig-Record ist ein Record im öffentlichen
+Konstruktor einer Implementierung. **Werkbank:** Baustein-Menü „Konfig"; die Werte je Umgebung im 🖥 Host-Rahmen („⚙ Konfig", Felder aus dem Code).
+**Code:** `public record WertTabellenKonfig(decimal Mindestwert, int Abschreibungsjahre = 5);` — Umgebung:
+`"Konfig": { "WertTabellenKonfig": { "Mindestwert": 5 } }`. **Build:** CQRS090/091 (bindbare Feldtypen: Text, Zahl, Wahrheitswert, Dauer, Guid,
+Enum, Text-Liste). **Laufzeit:** Feld für Feld aus `Konfig:<Record>` gebunden; ein Default im Record gilt, wenn das Feld fehlt; unbekannte Felder
+und ein fehlender Abschnitt sind Boot-Fehler.
+
+## 10.6 Fluss
+
+**Zweck:** eine Pipeline als Fläche aus Knoten — Quelle (oder Event aus dem Log) → Katalog-Funktionen → Commands, vom Draht aus verdrahtet. Der
+Variablenname ist die Identität des Knotens. **Werkbank:** Palette „+ ⛓ Fluss" (⛓-Rahmen in der Heim-Domäne seiner Commands); an einem Ausgang
+„＋ƒ" (Funktions-Knoten), „＋▶" (Command-Knoten), „＋⧉" (Je-Rahmen), am Strom „＋⧗" (Warten mit Zeitlimit); was ein Knoten ruft oder sendet, per
+⊕; ⏳ Zeitlimit im Panel; Bau-Argumente im Zuordnungs-Editor. **Code** (Sonde `Fluss.cs.txt`):
+```csharp
+public sealed class RueckgabePruefung : IPipeline
+{
+    public PipelineFluss Fluss => PipelineFluss.Definiere(scan =>
     {
-        var datei    = p.Quelle<DateiErkannt>();                                   // oder p.Auf<Event>() — Event aus dem Log
-        var deuten   = datei.Rufe<IDateinameDeutung>(datei => new DeuteDateiname(datei.Dateiname, datei.Pfad));
-        var vorschau = deuten.Bei<ImagePairDateiGedeutet>().Rufe<IBildVerkleinerung>(deuten => new VerkleinereBild(deuten.Pfad, 512))
-            .Zeitlimit(TimeSpan.FromMinutes(5));                                    // ⏳-Port: vorschau.BeiZeitlimit()
-        var paar     = p.Alle(deuten.Bei<ImagePairDateiGedeutet>(), datei)          // ∧ (bis 4 Drähte), Kontext = ein Vorgänger
-            .Sende<ErstelleImagePair>((deuten, datei) => new ErstelleImagePair(…));
-        // ∨: .Oder(paar.BeiAbgelehnt(), …) — ✕-Port = Ablehnung des Aggregats bzw. gescheiterte Funktion
-        // Je:  var je = x.Bei<Zerlegt>().Je(z => z.Bilder); je.Rufe<F>(b => …); je.Sammle(f.Bei<E>()).Sende<C>((z, liste) => …);
+        var eingang    = scan.Quelle<RueckgabeGescannt>();                         // oder p.Auf<Event>() — Event aus dem Log
+        var seiten     = eingang.Je(e => e.Seiten);                                // Je-Rahmen
+        var seite      = seiten.Rufe<ISeitenPruefung>(s => new PruefeSeite(s));
+        var schnell    = eingang.Rufe<ISchadensSchaetzung>(e => new SchaetzeSchaden(e.LeserId, 10m)).Zeitlimit(TimeSpan.FromSeconds(30));
+        var gruendlich = eingang.Rufe<ISchadensSchaetzung>(e => new SchaetzeSchaden(e.LeserId, 100m));   // dieselbe Funktion, anderer Knoten
+        var mahnung    = scan.Alle(gruendlich.Bei<SchadenGeschaetzt>(), eingang)                         // ∧ (2–4 Drähte)
+            .Sende<EroeffneMahnung>((g, e) => new EroeffneMahnung(e.LeserId, g.Betrag))
+            .Oder(schnell.BeiZeitlimit(), z => new EroeffneMahnung(Guid.Empty, 0m));                     // ∨ über den ⏳-Port
+        seiten.Sammle(seite.Bei<SeiteGeprueft>()).Sende<MeldeSchaden>((e, geprueft) => new MeldeSchaden(e.LeserId, e.LeserId));
+        mahnung.BeiAbgelehnt().Sende<MeldeSchaden>(a => new MeldeSchaden(Guid.Empty, Guid.Empty));      // ✕-Port: Ablehnung
     });
 }
+
+// Warten am Strom (Frist als Rennen): das erste Folge-Event im Stream der Quelle — oder ⏳
+var ausgeliehen = p.Auf<Ausgeliehen>();
+var rueckgabe   = ausgeliehen.Strom().Warte<Zurueckgegeben>().Zeitlimit(TimeSpan.FromDays(28));
+p.Alle(rueckgabe.BeiZeitlimit(), ausgeliehen.Strom()).Sende<EroeffneMahnung>((t, strom) => new EroeffneMahnung(strom.Id, 0m));
 ```
-Eine Quelle ist ein fest codierter **Treiber** plus Konfig (docs/konzept-werkbank.md §3): die Domäne benennt sie nur als Typ —
-`public sealed record DateiErkannt : DateiGemeldet;` (CQRS070: sealed record, keine eigenen Member). Der Basistyp wählt den Treiber
-(`DateiGemeldet` = Datei-Treiber, befüllt Name, Pfad, RelativerPfad, Groesse, GeaendertAm, ErkanntAm, Kennung); der `QuellenGenerator` erzeugt
-`GeneratedQuellen` (Fabrik ohne Reflection), der Host bindet alles mit `services.AddQuellen(configuration)`. Die Werte stehen im Abschnitt
-`Quellen:<Typ>` (Pfad, Muster, Unterordner, Erkennung `Abfrage|EreignisUndAbfrage`, Intervall, Fertig `Stabil|Marker`, Kennung
-`PfadGroesseZeit|NameGroesse`, Laufmodus `EinmalImCluster|JederKnoten`); unbekannte Felder und Abschnitte ohne Typ sind Start-Fehler. Der
-Treiber liest nur, gleicht beim Start gebündelt mit dem Log ab und meldet nacheinander (Rückstau); ein unlesbares Verzeichnis macht `/health`
-„degraded". Ein zweiter Weg in dieselbe Quelle ist der **Webhook als Konfig** (Plan E12): `"Quellen": { "DateiErkannt": { …, "Webhook": "/webhook/datei" } }`
-— `LaufeAsync` mappt ihn auf dem Einblick-Port (`Transport:EinblickPort`, HTTP/1.1; ohne Port ist ein Webhook ein Boot-Fehler): `POST` mit der
-Nachricht als JSON (Feldnamen wie der Typ, gelesen über den Wire-Kontext) → `202 Accepted` mit der Vorgangs-Id, dieselbe Nachricht zweimal = derselbe
-Vorgang, ein falscher Body = `400`. Im Programm steht dafür nichts. Ein `IQuellNachricht` ohne Treiber-Basis bleibt erlaubt (Test-Quellen, die
-Tests direkt über `QuellEingang` melden); einen Webhook hat nur eine Quelle mit Konfig-Abschnitt.
-Jede Nachricht wird genau einmal je Kennung ins Log geschrieben und startet je Pipeline einen Vorgang. Funktionen bindet der Host wie
-in §10.5a; eine Funktion, die ein Python-Worker rechnet, mit Laufort `Extern` (§10.9; der Worker erbt die generierte
-`<Funktion>Basis` aus `domain_client/generated/funktionen.py`, bietet sie am Handshake an und holt Aufträge per Pull). Pipelines
-liegen in der Domain-Assembly (Registry wie bei Prozessen). Beispiel: `Domain/ImagePair/Bildeingang.cs`; Beweise:
-`Infrastructure.Pruefstand.Tests/Funktionen/PipelineFlussTests.cs`, `BildeingangTests.cs`.
-Build-Regeln des Flusses (`FlussAnalyzer`, Werkbank P7.4 — vorher erst beim Start bzw. nur im Editor): CQRS073 genau eine Quelle, CQRS074 Warten
-mit Zeitlimit, CQRS075 `BeiZeitlimit()` nur an einem Knoten mit Zeitlimit, CQRS076 `Bei<E>()` nur mit einem Ausgang des Knotens (Ablehnung am
-✕-Port: `BeiAbgelehnt()`; ein Warten hat keinen), CQRS077 (Warnung) ∧ wartet auf einen Weg, der nicht immer liefert, CQRS078 `Sende<C>` ohne Decider.
+Verben (`Abstractions/Fluss/Pipeline.cs`): Einstieg `p.Quelle<T>()` / `p.Auf<E>()`; am Draht `.Rufe<F>(…)`, `.Sende<C>(…)`, `.Je(…)`, `.Strom()`;
+`p.Alle(…)` (∧), `.Oder(…)` (∨) an Ruf- und Sende-Knoten; `.Zeitlimit(t)`; Ausgänge `Bei<E>()`, `BeiZeitlimit()`, `BeiAbgelehnt()` (Ablehnung des
+Aggregats bzw. gescheiterte Funktion); im Je-Rahmen `Sammle(…)`; am Strom `Warte<A[, B …]>()`. **Build** (`FlussAnalyzer`): CQRS073 (genau eine
+Quelle), CQRS074 (Warten mit Zeitlimit), CQRS075 (`BeiZeitlimit()` nur mit Zeitlimit), CQRS076 (`Bei<E>()` nur mit einem Ausgang des Knotens),
+CQRS077 (∧ wartet auf einen Weg, der nicht immer liefert, Warnung), CQRS078 (`Sende<C>` ohne Decider); dazu Compiler und Würfe beim Definieren;
+GR-AUS-FLUSS, GR-FLUSS-QUELLE/-NAME/-DRAHT/-WARTE/-ZEITLIMIT/-JE/-WARTET. **Generiert / Laufzeit:** der `ProzessRegelnGenerator` übersetzt den Fluss
+in Regeln mit Knoten-Herkunft (Knoten-Namen aus dem Quelltext, Spur-Wirker `fluss:P#knoten`); der Dirigent (Prozess-Manager, ein Actor je Vorgang)
+führt ihn mit demselben Belegungs-Kern aus (`FlussBelegung`); jede Quell-Nachricht startet einen Vorgang. Je Auslöser gibt es einen Ablauf
+(Boot-Guard Auslöser-Kollision). **Mehr:** [konzept-editor-pipelines §14](konzept-editor-pipelines.md), [04 §4.6](04-konsum-und-prozess-maschine.md).
 
-## 10.6b Eine Pipeline im Handle-Modell (Bestand)
+## 10.6a Quelle (+ Webhook)
 
-`partial class X : IPipelineHandler` mit `PipelineId` + `Handle(TTrigger, PipelineContext)` /
-`Handle(TEvent, PipelineContext)` → `IAsyncEnumerable<OneOf<Cmd…, Trigger…>>` (CQRS050: die möglichen Ausgaben als
-Typen, nie `ICommand`) oder `Task` für reine Effekte. Lese-Fähigkeiten als Parameter wie beim Reader. **Planen ist
-ein Ausgang, kein Aufruf:** `Selbst<T>` (Selbst-Nachricht nach Verzögerung, erste über `Handle(PipelineGestartet, ctx)`),
-`Frist<TCmd>` (durable Frist → `TCmd` an die Ziel-Id; der Router ist generiert, `TCmd` braucht einen Ctor `(Guid)`,
-sonst CQRS056; fällig = Log-Zeit des auslösenden Events + Dauer, ohne Event die DB-Uhr — ein erneutes Lesen desselben Events
-verschiebt sie nicht) und `FristStorno<TCmd>`:
-```csharp
-public IEnumerable<OneOf<Frist<MarkiereAlsHaengengeblieben>>> Handle(TrainingBegonnen evt, PipelineContext ctx)
-{ yield return new Frist<MarkiereAlsHaengengeblieben>(ctx.SourceAggregateId!.Value, _config.Timeout); }
+**Zweck:** ein Weg von außen in einen Fluss. Eine Quelle ist nur ein Typ; der Treiber ist fest codiert und liest nur, die Werte stehen in der
+Umgebung (W8). **Werkbank:** Palette „+ 📥 Quelle"; die Quellkarte zeigt „Werte in <Umgebung>" (bearbeitet im 🖥 Host-Rahmen, Abschnitt Quellen)
+und die Bindung „⇥ Webhook /… (Umgebung)"; Durchspielen per Datei-Drop auf die Karte. **Code** (Sonde `Fluss.cs.txt`):
+`public sealed record AusweisAbgelegt : DateiGemeldet;` — der Basistyp wählt den Treiber (`DateiGemeldet` = Datei-Treiber, befüllt Name, Pfad,
+RelativerPfad, Groesse, GeaendertAm, ErkanntAm, Kennung). Umgebung:
+```json
+"Quellen": { "AusweisAbgelegt": { "Pfad": "${env:HOME}/cqrs-sim/${branch}/AusweisAbgelegt", "Muster": ["*.pdf"],
+             "Fertig": { "Art": "Stabil", "Fenster": "00:00:01" }, "Kennung": "PfadGroesseZeit", "Laufmodus": "EinmalImCluster",
+             "Webhook": "/webhook/ausweis" } }
 ```
-Persistierte Events laufen über den Pull-Pfad (dort kein `Selbst<T>` — keine Mailbox), transiente über den Broker
-(P6.1/P6.2). Je PipelineId gibt es genau eine Aktivierung im Cluster; ihr Zustand (Felder) ist nur auf dem Trigger-/Selbst-Kanal
-seriell — Event-Handles laufen im Pull-Actor auf demselben Singleton-Handler. Beispiele: `Domain.Pipeline/Trainingslauf/TrainingFristPipeline.cs`, `Domain.Pipeline/Datensatz/DatensatzResolverPipeline.cs` (noch nicht als Fluss umgezogen).
+Weitere Felder: `Unterordner`, `Erkennung` (`Abfrage` | `EreignisUndAbfrage`), `Intervall`, `Fertig.Art` `Marker` mit `Endung`, `Kennung`
+`NameGroesse`, `Laufmodus` `JederKnoten`. **Webhook als Konfig:** mit `Webhook` mappt `LaufeAsync` die Route auf dem Einblick-Port — `POST` mit der
+Nachricht als JSON (Feldnamen wie der Typ, gelesen über den Wire-Kontext) → `202 Accepted` mit Vorgangs-Id; dieselbe Nachricht zweimal = derselbe
+Vorgang; ohne Einblick-Port ist ein Webhook ein Boot-Fehler. Ein `IQuellNachricht` ohne Treiber-Basis (eigene `Kennung`, wie `RueckgabeGescannt`
+oben) bleibt für Test-Quellen erlaubt, die direkt über `QuellEingang` melden. **Build:** CQRS070 (sealed record ohne eigene Member); Boot: jede
+Treiber-Quelle braucht ihren Abschnitt, unbekannte Felder sind Fehler, Webhook-Routen eindeutig; GR-QUELLE. **Generiert / Laufzeit:**
+`GeneratedQuellen` (Fabrik je Quelle); `AddCqrs` bindet sie. Der Treiber gleicht beim Start gebündelt mit dem Log ab und meldet nacheinander; jede
+Nachricht wird **genau einmal je Kennung durabel ins Log** geschrieben (deterministische Stream-Id, Spur-Wirker `quelle:T`); ein unlesbares
+Verzeichnis macht `/health` „degraded". **Mehr:** [konzept-werkbank §3](konzept-werkbank.md).
 
-## 10.7 Schema-Evolution (Upcasting)
+## 10.7 Akteur
 
-Alte Version als Record behalten, eine `IUpcast`-Kante zur neuen Gestalt deklarieren:
+**Zweck:** ein Domänen-Experte, von dem alles kommt, was hineingeht; er deklariert nur, was er **selbst** hineingibt. **Werkbank:** Palette
+„+ 👤 Akteur"; Befugnisse per ⊕ (Geste schreibt die Basisliste, auch Entziehen); das Board ordnet Rahmen je Domäne × Akteur. **Code** (Sonde
+`Lesen.cs.txt`): `public sealed record Theke : IAkteur, IDarf<LeiheAus>, IDarf<GibZurueck>, IDarf<OffeneAusleihen>;` ·
+`public sealed record Gutachterin : IKi, IDarf<EroeffneMahnung>;` — Marker `IAkteur` oder genauer `IMensch`/`IMaschine`/`IKi`. `IDarf<T>` gilt für einen Command, eine
+Query, eine Quell-Nachricht oder eine Funktion (`IDarf<IFunktion-Typ>` = darf sie als externer Worker rechnen). Was ein Prozess, Fluss oder eine
+Frist daraus erzeugt, trägt den Akteur der Kette (abgeleitet, kein `IDarf`). **Build:** CQRS058 (Befugnis nur für Hineingegebenes, nur an einem
+Akteur, ein Dienst ist kein Akteur), CQRS059 (Namens-Kollision); GR-AKTEUR. **Generiert / Laufzeit:** `GeneratedAkteurRechte`. Das Akteur-Tor
+erkennt den Akteur am Token (Header `akteur-token`, Abschnitt `Identitaeten` der Umgebung) und prüft jeden Command und jede Query; die Kette reist
+im Event-Header `akteur`. Ohne `Identitaeten` ist das Tor offen (Prod-Identitäten fehlen, docs/13 P1-2). **Mehr:**
+[konzept-akteure §2, §5](konzept-akteure.md).
+
+## 10.7a Akteur-Vertrag (Zusage / Kenntnis)
+
+**Zweck:** was ein Akteur **draußen** auf Events tut. `Auf(E)` mit Ausgabe ist eine **Zusage**, `void Auf(E)` eine **Kenntnis**. **Werkbank:**
+📜-Rahmen am Akteur mit Zusage-Karten (anlegen per „＋", Event per ⊕); die Zusage zeigt „getragen von" (Clients) und den Python-Rumpf der
+Client-Implementierung (Slot `zusage|Client|Event@Klasse`, ✎/🤖). **Code:**
 ```csharp
-public record LagerEingerichtet_v1(int Bestand) : IEvent;          // alt, nur lesbar
-public record LagerEingerichtet(int AnfangsBestand) : IEvent;      // aktuell
-public class LagerUpcast : IUpcast<LagerEingerichtet_v1, LagerEingerichtet> {
-    public LagerEingerichtet Aufwerten(LagerEingerichtet_v1 alt) => new(alt.Bestand);
+public sealed record Archiv : IMaschine;
+public interface IRegal : IAkteurVertrag<Archiv>
+{
+    MeldeSchaden Auf(Zurueckgegeben e);                                         // Zusage, ein Command
+    IAsyncEnumerable<OneOf<EroeffneMahnung, MeldeSchaden>> Auf(SchadenGemeldet e); // Zusage als Strom
+    void Auf(Ausgeliehen e);                                                    // Kenntnis
 }
 ```
-Der Generator folgert Richtung + Diskriminator (`_v2`) aus der DAG; alte Bytes behalten ihren
-Basisnamen (keine Migration). Guards CQRS040–046. **1:N-Split ist aktuell per CQRS046 blockiert**
-(Consumer-Fabric fehlt).
+Ein Vertrag darf in Teile zerfallen (mehrere `IAkteurVertrag<A>` je Akteur). **Build:** CQRS061 (Form: Interface, nur `Auf(TEvent)`, je Event
+einmal), CQRS062 (Ausgabe konkrete Commands), CQRS087 (Zusage, die kein Client trägt, Warnung); GR-VERTRAG, GR-GETRAGEN. **Generiert / Laufzeit:**
+Kanon + Hash je Vertrag; Python-Basis in `generated/vertraege.py`. Am Handshake prüft der Server Vertrag und Hash; Commands aus einer Zusage
+bekommen eine deterministische Command-Id (Modus „emittiert", genau einmal wirksam). Die Zustellung an Clients ist heute verlierbar (docs/13
+AK-1). **Mehr:** [konzept-akteure §3, §5](konzept-akteure.md).
 
-## 10.8 Eine neue Blazor-UI (Modul)
+## 10.8 Client-Vertrag (+ `IstClient`)
 
-Siehe [08 §8.7](08-frontend-blazor-client.md). Kurz: Modul-Klasse (`IStageModule`/`ISidebarModule`/
-…) + `.razor`-View (`@inject Store`/`EffectScope`) + Store (`StoreBase`, `Handle` = Reducer) +
-optional Refresh-/IntentHandler. Commands/Queries/Events kommen aus den Backend-Assemblies; das
-Wiring ist generiert.
-
-## 10.9 Ein Python-Worker
-
-Siehe [09 §9.5](09-python-sdk.md). Kurz: State-dataclass + `CqrsClient[State]` erben + Handler mit
-Type-Hints (`async def on_x(self, event: XDto, ctx, state)`, `yield`t Commands) +
-`client.run(host, port)`.
-
-**Eine Katalog-Funktion in Python (Laufort Extern, Plan E13).** Der Codegen erzeugt je Funktion ohne Lese-Fähigkeit eine Basis
-(`domain_client/generated/funktionen.py`: `<Name>Basis` mit `FUNKTION`, `AUFTRAG`, `ERGEBNISSE` und `async def rufe(self, auftrag, x)`) und die Tabelle
-des generischen Workers (`generated/funktions_tabelle.py`: Funktion → Basis, Modul, Klasse). Die Implementierung liegt in
-`Domain.Client.Worker.Python.ML/funktionen/<modul>.py` (`IBildVerkleinerung` → `bild_verkleinerung.py`, Klasse `BildVerkleinerung`, Regel in
-`Abstractions.Funktionsvertrag`), erbt die Basis und füllt `rufe` — genau ein Ergebnis per `return`, Werte der Implementierung in `self.konfig`:
-```python
-class BildVerkleinerung(BildVerkleinerungBasis):
-    async def rufe(self, auftrag: VerkleinereBildDto, x: Ausfuehrung) -> BildVerkleinertDto | BildNichtLesbarDto:
-        ausgabe = Path(self.konfig.get("OutputPath", "."))
-        ...
-        return BildVerkleinertDto(pfad=str(ziel), breite_pixel=breite, hoehe_pixel=hoehe)
-```
-Gestartet wird der GENERISCHE Worker (kein Domänenwissen): `python funktions_worker.py --funktionen IBildVerkleinerung [--slots 2] [--konfig NAME=WERT …]
-[--pfad <verz mit eigenem Paket funktionen>]`, Adresse und Token aus `CQRS_GRPC_HOST`/`CQRS_GRPC_PORT`/`CQRS_AKTEUR_TOKEN`. In der Werkbank genügt der
-Laufort: `Funktionen:<F>:Laufort = Extern` → ⟳ legt eine fehlende Implementierung aus der Basis an (Platzhalter `raise NotImplementedError`), der Rumpf
-steht an der Funktions-Karte („rufe · Python“, ✎ und 🤖 — Slot `funktionpy|<F>@<Klasse>`), „▶ Worker starten“ nimmt ohne eigenen
-`Funktionen:<F>:Worker` den generischen Worker mit `--funktionen <F>` und ein Token der Umgebung, dessen Akteur `IDarf<F>` hat.
-
-## 10.10 Einen Test schreiben
-
-Siehe [12 §12.7](12-tests-und-vermessung.md). Kurz — **Ebene 1 (Prüfstand, store-frei)** über die
-generierte Factory:
+**Zweck:** die Software an **einer** Leitung: welche Vertrags-Teile sie trägt (auch mehrerer Akteure), was sie sendet und fragt, was sie selbst zur
+Kenntnis nimmt. Wirksam ist Vertrag ∩ Token. **Werkbank:** Palette „+ 🔌 Client"; 🔌-Rahmen mit Anschlussleiste; Basisliste per ⊕; „+ Python-
+Implementierung" (⟳ legt sie aus der generierten Basis an). **Code** (Sonde `Lesen.cs.txt`):
 ```csharp
-var konto = new Konto();
-var h = new AggregateHandlerFactory().CreateHandler(konto);
-foreach (var e in h.HandleCommand(new EroeffneKonto(Guid.NewGuid(), 20))) h.ApplyEvent(e);
-var evs = h.HandleCommand(new ReserviereBetrag(konto.Id, 30));
-evs.Should().ContainSingle().Which.Should().BeOfType<DeckungReichtNicht>();
+public interface ILesesaal : IClientVertrag, IRegal, ISendet<LeiheAus>, IFragt<OffeneAusleihen>
+{
+    void Auf(MahnungEroeffnet e);                                               // eigene Kenntnis des Clients
+}
 ```
-**Store-Semantik gehört nach Ebene 2** (echtes Marten) — nie faken. Es gibt keinen
-`InMemoryEventStore`.
+Welche Akteure ein Client verkörpert, ist abgeleitet (`Abstractions.Akteurvertrag.Verkoerpert`). **Build:** CQRS063 (Form), CQRS064 (sendet/fragt
+nur, was ein Akteur per `IDarf` darf), CQRS065 (je Event höchstens eine Methode, sonst wäre `auf_<event>` mehrdeutig); GR-CLIENT, GR-CLIENT-BEFUGT. **Generiert / Laufzeit:** `GeneratedClientVertraege`
+(Server) und dieselbe Lesart (`Clientvertragslesart`) im Client-Generator; der Handshake lehnt ein Token ab, das die Akteure des Vertrags nicht
+verkörpert. Verbindung je Umgebung aus `Clients:<Name>` (Token, Adresse, Urls, Dateien).
+- **Python-Client:** die Implementierung erbt die generierte `<Client>Basis` aus `domain_client/generated/vertraege.py` und füllt je Event
+  `auf_<event>` (Zusage: `yield` der Commands; Kenntnis: `None`); Start z. B. `client.run(host, port)` (Muster `run_stub.py`, Beispieldomäne). Mehr: [09](09-python-sdk.md).
+- **C#-Client (Blazor):** `[assembly: IstClient<IArbeitsplatz>]` (Beispieldomäne, `Domain.Client.Modules.Blazor/Arbeitsplatz.cs`) — Name, Hash, Abos,
+  Commands und Queries kommen aus dem Vertrag; der Code wird dagegen gehalten: CQRS093 (Client ohne Vertrag), CQRS094 (C#-Client trägt keine
+  Vertrags-Teile), CQRS095/096 (Command/Query nicht im Vertrag), CQRS097 (gehörtes Event nicht im Vertrag); GR-CLIENT-CODE. Module und Views:
+  [08](08-frontend-blazor-client.md).
 
-Für Kaskaden über mehrere Aggregate, Prozesse und Flüsse gibt es die Test-DSL `Cqrs.Testing`
-(`Szenario.Für<T>(…)`, `SagaSzenario`, `FlussLaufwerk`; Beispiele `SammelvorgangKaskadeTests`, `FlussLaufwerkTests`).
-**Ausprobieren** ist kein Test: in der Werkbank ⟳ (echter Host in Umgebung `sim`, eigene DB), dann über die Leiste unten
-durchspielen (Konsole als Akteur, Datei-Drop auf die Quellkarte, ⏩, ▶ Worker) und in der Spur ansehen
-([konzept-werkbank.md](konzept-werkbank.md) §6/§7). Eine Simulation im Editor gibt es seit Werkbank P8 nicht mehr.
+**Mehr:** [konzept-akteure §4](konzept-akteure.md).
 
-## 10.11 Die Reinheits-Grenze — was NICHT im Fachcode steht
+## 10.9 Umgebung
 
-Bewusst unsichtbar (Framework/Generat): `Id`/`Version`, `State`-Property + Ctor, OCC, Signal,
-Cursor, Exactly-once/Dedup (`KommandoVerarbeitet`-Marken), Sharding, Prozess-Maschinerie,
-Serialisierung, Proto-DTOs, ClusterKinds, DI-Wiring. Wenn eines davon in deinem Fachcode
-auftaucht, ist etwas falsch verdrahtet.
+**Zweck:** alles, was zwischen Umgebungen verschieden ist — Auswahl und Werte, nie Struktur (W7). Je Umgebung eine Datei
+`umgebungen/umgebung.<name>.json`; das Schema sind die Typen in `Abstractions/Umgebung/UmgebungKonfig.cs` (Abschnitte `UmgebungsAbschnitte`);
+ein unbekannter Abschnitt oder ein unbekanntes Feld ist ein Startfehler. **Werkbank:** Umgebung in der Kopfzeile wählen; 🖥 Host-Rahmen = je
+Abschnitt eine Karte, gezeichnet von einem generischen Formular-Renderer aus dem Schema; Werte werden direkt geschrieben (keine Geste).
+**Code:** `Host.Grpc/Program.cs` ist nur `var umgebung = builder.AddCqrs(args); … await app.LaufeAsync(umgebung);` — Prozesse, Flüsse, Projektionen,
+Quellen, Funktionen und Dienste bindet `AddCqrs` aus den generierten Tabellen; es gibt keine Domänen-Zeile im Programm. Start:
+`dotnet run --project Host.Grpc -- --umgebung sim-main`. Auszug (neutral):
+```json
+{
+  "Umgebung":     { "Name": "sim-main", "Art": "Sim" },
+  "Transport":    { "GrpcPort": 5101, "EinblickPort": 5102, "JsonEingang": true },
+  "Identitaeten": { "Tokens": { "sim-theke": "Theke", "sim-lesesaal": "Archiv,Theke" } },
+  "Funktionen":   { "ISchadensSchaetzung": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 } },
+  "Dienste":      { "IWertTabelle": { "Implementierung": "LineareWertTabelle" } },
+  "Konfig":       { "WertTabellenKonfig": { "Mindestwert": 5 } },
+  "Clients":      { "Lesesaal": { "Token": "sim-lesesaal" } }
+}
+```
+| Abschnitt | Inhalt |
+|---|---|
+| `Umgebung`, `EventStore`, `VersionIndex`, `Cluster`, `Schreibpfad`, `Transport` | Betrieb: Art `Sim`/`Prod`, Datenbank, Redis, Einzelknoten/Consul, Group-Commit, Ports, JSON-Eingang |
+| `Identitaeten` | `Tokens` (Token → Akteur-Menge), `Standard`, `VertragStreng` — §10.7 |
+| `Quellen` | je Quelle die Treiber-Konfig, optional `Webhook` — §10.6a |
+| `Funktionen` | je Funktion Laufort, Implementierung, Slots, Wiederholungen, Worker — §10.5a |
+| `Dienste`, `Konfig` | Implementierung je Dienst, Werte je Konfig-Record — §10.5b, §10.5c |
+| `Clients` | je Client Token, Adresse, Urls, Dateien — §10.8 |
+| `Logging` | ASP.NET-Standard |
+
+Platzhalter `${branch}` (aus `CQRS_BRANCH`) und `${env:NAME}`; Geheimnisse nur als Verweis. Das Umgebungs-Siegel verhindert, dass ein Sim-Host in
+eine Prod-DB schreibt. **Mehr:** [konzept-werkbank §4](konzept-werkbank.md), [06 §6.1, §6.5](06-transport-multinode-betrieb.md).
+
+## 10.10 Ausprobieren
+
+Ausprobiert wird das echte System, keine Simulation (W6). **⟳** in der Kopfzeile baut (`-p:CqrsStand`, Codegen + alle Generatoren und Analyzer),
+legt fehlende Python-Implementierungen an, liest neu, prüft die Sim-DB gegen das neue Proto (bei Unverträglichkeit Rückfrage „zurücksetzen?"),
+startet fehlende Infrastruktur und den Host in der gewählten Umgebung; Fehler stehen an der Karte (Compiler, CQRS…, `CQRS-BOOT`). **Durchspielen**
+nur über echte Eingänge: Datei-Drop auf die Quellkarte, Webhook von außen, Konsole als Akteur (Command/Query über den JSON-Eingang), ⧗ Aufträge
+einer Funktion mit Laufort `Hand`, „▶ Worker" für `Extern`, ⏩ Uhr vor. Die **Spur** (Header `ursache`/`wirker`/`ueber`/`stand` an jedem
+Log-Eintrag) zeigt den Weg über die Karten: ☰ Vorgänge, ⏱ Zeitleiste, ⚠ Meldungen, 〰 Puls, ein Fokus. 📸 speichert und lädt Sim-DB-Stände.
+**Mehr:** [konzept-werkbank §5–§7](konzept-werkbank.md).
+
+## 10.11 Testen
+
+Drei Ebenen: **Prüfstand** (in-memory, store-frei) — ein Aggregat über die generierte `AggregateHandlerFactory` treiben, Analyzer und Generatoren
+über eine eigene `CSharpCompilation`, Gesten gegen eine Solution im Speicher; Test-DSL `Cqrs.Testing` (`Szenario.Für<T>(…)`, `SagaSzenario`,
+`FlussLaufwerk` mit demselben Belegungs-Kern wie der Dirigent). **Integration** — Store-Semantik nur gegen echtes Marten/Redis/Consul, sequentiell;
+es gibt keinen `InMemoryEventStore`, nie faken, was man nicht besitzt. **Editor-Parität** — `dotnet run --project GraphExtractor -- --check`
+(„Code ohne Karte: 0") und `--sonde`. Neues Konstrukt im Extractor ⇒ Sonde und `soll.txt` erweitern. Vorlagen, Befehle und Fallstricke:
+[12 §12.6–§12.7](12-tests-und-vermessung.md).
+
+## 10.12 Die Reinheits-Grenze
+
+Bewusst unsichtbar im Fachcode (Framework oder Generat): `Id`/`Version`, OCC, Signal, Cursor, Exactly-once/Dedup (`KommandoVerarbeitet`-Marken),
+Sharding, Prozess-Maschinerie, Serialisierung, Proto-DTOs, ClusterKinds, DI-Wiring, Spur-Header. Taucht eines davon im Fachcode auf, ist etwas falsch
+verdrahtet (Inv. 5). Bekannte Reibung: `ProjectionWriter.Execute`/`ctx.Track` stehen heute im Projektions-Handle.
+
+## 10.13 Altlasten — nicht für Neues verwenden
+
+Noch im Code, ohne Domänen-Nutzer und ohne Rolle im Editor; Rückbau offen (docs/13 W11-1). Analyzer-Zweige und Tests kennen sie noch.
+
+| Altlast | Heute stattdessen |
+|---|---|
+| Handle-Pipeline `IPipelineHandler` (`PipelineId`, `Handle(…, PipelineContext)`, Pipeline-Actor, CQRS056) | Fluss (§10.6) + Katalog-Funktion (§10.5a) |
+| Trigger-Welt `IPipelineTrigger`, `ITriggerRegistration`, `TimerTrigger`, `WebhookTrigger` | Quelle mit Treiber + Konfig, Webhook als Konfig (§10.6a) |
+| `[Ingress]` | Quelle; Webhook-Route in der Umgebung |
+| `Selbst<T>`, `Frist<TCmd>`, `FristStorno<TCmd>` als Handle-Ausgang (Fristplaner, `GeneratedFristen`) | `.Zeitlimit(t)` bzw. `Strom().Warte<…>().Zeitlimit(t)` im Fluss/Prozess (Fristplaner an der Handle-Welt: docs/13 W11-2) |
+| `IAkteurDienst<A>` als Handle-Parameter (CQRS060) | Domänen-Dienst (§10.5b) hinter einer Funktion; Akteur über `IDarf` |
+
+## 10.14 Upcast (Prod, nicht im Editor)
+
+`IUpcast` ist eine Backend-Primitive für die Prod-Datenbank: ändert sich die Gestalt eines persistierten Events, wird die alte Byte-Form beim
+**Lesen** übersetzt, nicht migriert. Im Editor gibt es keine Schema-Evolution (W12) — in Sim fragt ⟳ bei unverträglicher Event-Form, ob die
+Sim-DB zurückgesetzt wird ([konzept-werkbank §4.6](konzept-werkbank.md)). **Code:** die alte Gestalt als Record behalten, eine Kante zur nächsten:
+```csharp
+public record Ausgeliehen_V1(Signatur Medium, Guid LeserId);                          // frühere Gestalt: schlichter Record, nur lesbar
+public sealed class AusgeliehenUpcast : IUpcast<Ausgeliehen_V1, Ausgeliehen>
+{
+    public Ausgeliehen Wandle(Ausgeliehen_V1 alt) => new(alt.Medium, alt.LeserId, 14);   // rein, deterministisch, ohne I/O
+}
+```
+Frühere vs. aktuelle Version leitet der Generator aus den Kanten ab, ebenso Kette und Speicher-Diskriminator (alte Bytes behalten ihren Namen).
+**Build:** CQRS040 (mehrdeutige Kante), CQRS041 (Kette endet nicht an einem aktuellen Event), CQRS042 (Zyklus), CQRS044 (Merge), CQRS045
+(Split-Sekundärziel mit eigener Kette), CQRS046 (Split 1:N noch blockiert). **Generiert / Laufzeit:** `GeneratedEventUpcasting` (Kette,
+Diskriminator, Marten-Registrierung), angewandt im Read-Pfad des Event-Stores. **Mehr:** [03 §3.3](03-schreibseite.md).

@@ -15,6 +15,7 @@ hierher. Stand: 2026-10-13, Commit-Basis `1b1751a`. Maßstab sind die sechs Inva
 | P1-1 | Multi-Node nur container-erprobt, Consul im `-dev`-Modus | P1 |
 | P1-2 | Transport-Sicherheit: kein TLS; Identitäten für Prod fehlen | P1 |
 | P1-6 | `CancellationToken.None` im generierten Pull-Emit-Pfad | P1 |
+| P1-7 | Deploy-Skripte veraltet (starten die Hosts ohne Umgebung, alte Konfig-Schlüssel) | P1 |
 | W11-1 | Doppelte Wege: Handle-Pipeline/Trigger/`[Ingress]` ohne Nutzer, Prozess- vs. Fluss-DSL, zwei Rumpf-Schreibwege | P2 |
 | W11-2 | Zeitlimits nur über den 15-s-Backstop entdeckt; Fristplaner hängt an der Handle-Welt | P2 |
 | W3-1 | Ableitungen im Editor-JS (Karten-Ids, Hör-Menge, Lambda-Parameter, Auto-Zuordnung, Kardinalität) | P2 |
@@ -26,7 +27,8 @@ hierher. Stand: 2026-10-13, Commit-Basis `1b1751a`. Maßstab sind die sechs Inva
 | P2-6 | Schreibpfad: paralleler Drain skaliert sublinear | P2 |
 | P2-8 | Hartkodierte Poll-Intervalle und Test-Verbindungsdaten | P2 |
 | P2-9 | Toter Lesepfad `LoadStateAsync`, Identitäts-Vertrag nur per Kommentar | P2 |
-| P2-10 | Monitoring schmal, Default-Credentials, kein OTel | P2 |
+| P2-10 | Monitoring schmal, Default-Credentials, kein OTel, Logging per `Console.WriteLine` | P2 |
+| P2-11 | Python: Registry von Hand gepflegt (`generate_registry.py` ist ein Stub) | P2 |
 | P3-1 | Mojibake in drei Dateien | P3 |
 | P3-2 | Toter Code und Kleinkram | P3 |
 | P3-3 | Saga-DSL in `Cqrs.Testing` kennt `Rufe` nicht | P3 |
@@ -98,6 +100,9 @@ DtoMapper, `Clientvertragslesart`, Lesart des `FunktionsGenerator`); Wirte: warm
 - Projektlisten: `Cqrs.Codegen/Program.cs`, `Proto.SourceGeneration/Program.cs`, `codegen.sh`, `ProtoRepo.csproj` (Inputs **ohne**
   `Domain.Akteure` → eine reine Vertragsänderung überspringt den Codegen), `Werkbank/Server/WerkbankServer.cs` (Stand-Hash, Host-Projekt,
   Debug-Pfad, Python-Projekt), `Werkbank/Server/Worker.cs` (generischer Worker im Domänen-Projekt).
+- Das Client-Framework `Client.Infrastructure` referenziert `Domain` und `Infrastructure` (`Client.Infrastructure.csproj`).
+- Framework-Code im Domänen-Projekt: `MartenCoCommitStoreBase` (die Co-Commit-Basis aller Stores) liegt in `Domain.Infrastructure`, der generische
+  `funktions_worker.py` in `Domain.Client.Worker.Python.ML`.
 - Namespace-Ausschlusslisten statt Fakt (`Ctorbindung.cs` mit `OpenCvSharp`, `FunktionsGenerator`, `QuellenGenerator`, `WiringGenerator`).
 - Identitäten aus einfachen Typnamen (`BrokerIdentity`, `GeneratedAkteurRechte`); der Client darf das Cluster-Kind eines Commands
   (`AggregateType`) selbst setzen (`CqrsClientService.cs`, `AggregateDispatcher.cs:75`).
@@ -119,6 +124,11 @@ je Person fehlt. *Empfehlung:* TLS (h2) bzw. mTLS, Identitäten für Prod, Tor a
 
 **P1-6 · `CancellationToken.None` im generierten Pull-Emit-Pfad** (`PullPathGenerator.cs:238`). Gebunden nur durch die interne Frist des
 Emitters; CQRS021 greift im Generat nicht. *Empfehlung:* gebundenen Token durchreichen.
+
+**P1-7 · Deploy-Skripte veraltet.** `deploy-linux/start-server.sh`, `deploy/deploy.sh`, `deploy/deploy_clients.sh`, `deploy/cqrs-blazor.env` und
+`deploy-windows/start.ps1` starten die Hosts ohne `--umgebung`/`CQRS_UMGEBUNG` (Startfehler) und setzen alte Schlüssel (`Pipeline__WatchPath`,
+`Blazor__Urls`, `GrpcServer__Address`, `ConnectionStrings__EventStore`); `deploy-*/grpc/appsettings.json` tragen noch `WatchPath`; `build.sh` enthält
+eine Umgebung als Heredoc neben `umgebungen/*.json`. *Empfehlung:* Deploy auf `umgebungen/umgebung.prod.json` + Umgebungsvariablen umstellen.
 
 ### P2
 
@@ -167,16 +177,26 @@ liest ab 0; der `KlärungNötig`-Pfad ist korrekt per Konstruktion, aber ohne Te
 läuft über `AggregateRehydrator`); die Aggregat-Identität ist zwischen `AggregateActorGenerator` und `CommandAggregateMapGenerator` nur per
 Kommentar abgestimmt.
 
-**P2-10 · Monitoring.** Nur `/health` + Kennzahlen; Default-Credentials `postgres/postgres`; kein OpenTelemetry.
+**P2-10 · Monitoring und Logging.** Nur `/health` + Kennzahlen; Default-Credentials `postgres/postgres`; kein OpenTelemetry; `GrpcProxy` (C#-Client)
+loggt per `Console.WriteLine`.
+
+**P2-11 · Python-Kleinschulden.** `generate_registry.py` erzeugt nichts (die Datei wird nie geschrieben), `domain_client/domain_registry.py` ist
+handgepflegt; `VersionTracker.reset()` wird nie aufgerufen; `proxy._detect_route()` ist faktisch eine Konstante; die Köpfe der generierten
+Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
 
 ### P3
 
 - **P3-1 · Mojibake** in `Domain.SourceGeneration/AggregateHandlerGenerator.cs`, `Infrastructure/Projections/ReadModelDepsReader.cs`,
   `Infrastructure/Serialization/ProtoMapper.cs`.
-- **P3-2 · Toter Code und Kleinkram:** `MartenProjectionTracker` (nirgends registriert), `CqrsFrameworkOptions`, `IViewModel` + `ViewModelGenerator`,
+- **P3-2 · Toter Code und Kleinkram:** `MartenProjectionTracker` (nirgends registriert) samt dem leeren Marker `IReplaybarerTracker`, `CqrsFrameworkOptions`, `IViewModel` + `ViewModelGenerator`,
   `ClusterKindFactory.cs` (auskommentiert), auskommentierte Reflection-Scans (`EventTypeResolver`, `MartenEventTypeRegistration`), nicht gemappte
   Proto-Endpunkte in Host.Blazor (das Python-SDK ruft sie trotzdem), `BenchPing` ohne Treiber-Basis; Dateiname ≠ Klassenname bei einigen
-  Generatoren; veraltete Kommentare (z. B. „drei Header“ in `Spur.cs`, „geteilt mit der Simulation“ in `ProzessManager.cs`).
+  Generatoren; veraltete Kommentare und Meldungen (z. B. „drei Header“ in `Spur.cs`, „geteilt mit der Simulation“ in `ProzessManager.cs`, „Client-/OCC-Pfad
+  bleibt marken-frei“ in `AggregateActorBase` — der Client-Pfad läuft mit `istIdempotent: true`; die Fehlermeldung in
+  `AggregateDispatcherExtensions.ResolveAggregateType` spricht noch von der Namespace-Zuordnung; `ConnectionModule.cs` nennt die CommandId „deterministisch“, sie ist aber `Guid.NewGuid()` und nur über
+  Wiederholungen gleich; `CqrsServiceExtension.cs` nennt noch `Cluster__Role`/`migrator|member` statt `Cluster__Rolle`/Allein|Migrator|Mitglied;
+  `ProzessManager.cs` sagt „nie in einem Feld gehalten“ trotz HOT-Cache; `Cqrs.Codegen/Program.cs` nennt sich „reflexionsfrei“, liest aber per
+  `MetadataLoadContext`; `deploy-multinode/Dockerfile` und `docker-compose.yml` erwähnen noch LoadHarness und eine nicht existierende `docs/multi-node-deployment.md`).
 - **P3-3 · Saga-DSL** in `Cqrs.Testing` kennt `Rufe` nicht.
 
 ## 13.4 Korrektheit vs. Reifegrad
@@ -209,7 +229,6 @@ Allgemeingültigkeit oder Hygiene.
 - **Domänen-Leak `Reaktionsempfaenger` (früher P2-1):** mit der Beispieldomäne entfallen.
 - **Proto-Typ-Maps (früher P2-2):** eine Quelle `Core.SourceGeneration/ProtoScalarSpec.cs`.
 - **Extractor/Werkbank in der Solution (früher P2-3);** Simulationsschicht entfernt (Werkbank P8).
-- **Python-Registry (früher P2-7):** `generate_registry.py` erzeugt `domain_registry.py`.
 - **Multi-Node Iteration 1+2** samt Cold-Start-Schema-Migrator (`Infrastructure/Extensions/CqrsSchemaMigrator.cs`).
 
 ## 13.7 Was diese Bewertung offen lässt

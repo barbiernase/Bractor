@@ -1,162 +1,167 @@
 # 01 — Überblick
 
+Stand 2026-10-13, gegen den Code geprüft. Maßstab: docs/konzept-werkbank.md.
+
 ## 1.1 Das System in einem Absatz
 
-Ein Event-getriebenes Backend, das Commands über **typgeroutete virtuelle Actors**
-(Proto.Actor) entgegennimmt, Entscheidungen in reinem Fachcode (Decider) trifft und die
-resultierenden Events in **Marten/PostgreSQL** als einzige Wahrheit anhängt. Aus dem Log
-werden vier durable Konsumenten (Projektion, Reaktion, Prozess/Saga, Pipeline) **genau
-einmal wirksam** bedient — über eine gemeinsame Pull-/Signal-Schleife. Ein schnelles,
-verlierbares Signal `(StreamId, Version)` weckt Konsumenten; ein 30-s-Poll ist das
-Sicherheitsnetz. Sämtliches Dispatching (Handler, Actor, Routing, Serialisierung, Signale,
-Schema-Evolution) wird zur **Compile-Zeit generiert**; Runtime-Reflection ist verbannt.
-Darauf sitzen ein generierter **Blazor-Client**, ein paritätisches **Python-SDK** und ein
-**Werkbank** (Domänen-Editor auf dem Code: Gesten als Patch, echter Host in Umgebung `sim`, Spur).
+Ein Event-getriebenes Backend, das Commands über **typgeroutete virtuelle Actors** (Proto.Actor) entgegennimmt, Entscheidungen in reinem
+Fachcode (Decide) trifft und die resultierenden Events in **Marten/PostgreSQL** als einzige Wahrheit anhängt — jeder Eintrag mit seiner Spur
+(`ursache`, `wirker`, `ueber`, `stand`). Aus dem Log werden durable Konsumenten (Projektion, Reaktion, Prozess, Fluss) **genau einmal wirksam**
+bedient. Ein schnelles, verlierbares Signal `(StreamId, Version)` weckt sie; ein 30-s-Poll ist das Sicherheitsnetz. Eingänge sind Clients
+über gRPC (Akteur-Tor), der JSON-Eingang der Werkbank und Quellen (Treiber + Konfig, Webhook als Konfig). Dispatch, Routing,
+Wire-Serialisierung und Signale sind **generiert**. Darauf sitzen Clients mit Vertrag (Blazor, Python) und die **Werkbank** (§1.6).
 
 ## 1.2 Die sechs Invarianten
 
-Jede Designentscheidung leitet sich aus diesen sechs Sätzen ab. Sie sind im Code
-durchgehend belegbar (siehe [02-design-prinzipien.md](02-design-prinzipien.md)):
+**Die eine Quelle.** Jede Designentscheidung leitet sich aus diesen sechs Sätzen ab; andere Dokumente verweisen hierher.
+Belege im Code: [02-design-prinzipien.md](02-design-prinzipien.md).
 
-1. **Die Wahrheit ist der Log.** Ordnung, Vollständigkeit, Wiederholbarkeit kommen nur aus
-   dem Event-Store-Read. Alles andere (Redis-Index, Snapshots, Marking-Cursor) ist abgeleitet
-   und verwerfbar.
-2. **Das Signal ist nur ein Weckruf.** Es trägt nur `(StreamId, Version)`, darf verloren,
-   doppelt oder ungeordnet sein.
+1. **Die Wahrheit ist der Log.** Ordnung, Vollständigkeit und Wiederholbarkeit kommen nur aus dem Event-Store-Read. Alles andere
+   (Redis-Index, Snapshots, Marking-Cursor) ist abgeleitet und verwerfbar.
+2. **Das Signal ist nur ein Weckruf:** trägt nur `(StreamId, Version)`, darf verloren, doppelt, ungeordnet sein.
 3. **Routing über Typen** — nie ein handgebauter Identitäts-String.
-4. **Keine Runtime-Reflection.** Alles Dispatchende ist generiert.
-5. **Der Fachcode bleibt rein.** Cursor, Signal, Ordnung, Exactly-once, Sharding,
-   Prozess-Maschinerie tauchen im Entwickler-Code nie auf.
-6. **Persistent genau dann, wenn ein durabler Konsument abhängt.** Verlierbares (Tick,
-   UI-Feedback, Datei-Trigger) bleibt auf dem schnellen Kanal.
+4. **Keine Reflection.** Die Laufzeit nutzt generierte Tabellen/Kontexte; Werkzeuge (Codegen, Schema, Extractor) lesen über Roslyn.
+5. **Der Fachcode bleibt rein:** Cursor, Signal, Ordnung, Exactly-once, Sharding, Prozess-Maschinerie tauchen im Entwickler-Code nie auf.
+6. **Persistent genau dann, wenn ein durabler Konsument abhängt.** Verlierbares (Tick, Ablehnung, UI-Feedback, Kenntnis-Push an Clients)
+   bleibt auf dem schnellen Kanal. Quell-Nachrichten (z. B. vom Datei-Treiber) sind durabel: genau einmal je Kennung im Log.
 
-## 1.3 Solution-Landkarte (27 Projekte)
+Wo der Code Invariante 4 noch nicht einlöst, steht in docs/13 (W10-1 Werkzeuge, W10-2 Laufzeit).
 
-Gemessen (2026-08-12): **452 C#-Dateien / ~46.000 Zeilen** (ohne generierte `.g.cs`),
-**18 Python-Module**, **39 Razor-Komponenten**, **3 Proto-Dateien**.
+## 1.3 Projekt-Landkarte
 
-### Verträge & Kern
+Die Solution (`CqrsSolution.sln`) umfasst 30 Projekte; dazu kommen zwei Python-Projekte außerhalb der `.sln`.
+
+### Framework
 | Projekt | Rolle |
 |---|---|
-| `Abstractions` | alle Marker-Interfaces & Verträge (`IState`, `ICommand`, `IEvent`, `IDecider<T>`, `IProzessDefinition`, `IWireMessage`, `IUpcast`, …), `OneOf`, Prozess-DSL |
-| `Core` | store-freie Bausteine (`ProjectionWriter` u.a.), in-memory prüfbar |
-| `Infrastructure` | **das Herz**: Actor-Wiring, Marten-Store, Batching, Redis, PubSub, Pull-Pfad, Prozess-Manager, Pipeline, Wire-Serializer, gRPC-Service, Monitoring (100 Dateien) |
-| `Domain.Infrastructure` | domänenspezifische Infra-Verdrahtung |
+| `Abstractions` | Verträge und Marker (`ICommand`, `IEvent`, `IState`, `IPipeline`, `IQuellNachricht`, `IFunktion`, `IDienst`, `IProzessDefinition`, Akteur- und Client-Verträge, `IWireMessage`, `IUpcast` …), `OneOf`, Prozess- und Fluss-DSL, Spur (`Spur/`), Umgebungs-Schema (`Umgebung/UmgebungKonfig.cs`) |
+| `Core` | store-freie Bausteine (`ProjectionWriter`, `AggregateHandlerBase`), im Prüfstand prüfbar |
+| `Infrastructure` | die Laufzeit: Aggregat-Actors, Marten-Log, Batching, Redis, PubSub/Signal, Pull-Pfad, Prozess-Manager (Dirigent), Quellen und Treiber, Funktionen (Vermittler, Ausführer), Dienste, Akteure, Umgebung, JSON-Eingang, Einblick-API, Wire-Serializer, gRPC-Service, Monitoring |
 
-### Domäne (Fachcode)
+### Generatoren
 | Projekt | Rolle |
 |---|---|
-| `Domain` | Aggregate (`Konto`, `Ueberweisung`, `Lager`, `ImagePair`, …), Decider/Applier, Commands/Events, Saga-Definitionen |
-| `Domain.Projections` | Projektionen & Reaktionen (`ISubscriber`/`IPullSubscriber`) |
-| `Domain.Pipeline` | Pipelines (`IPipelineHandler`) |
+| `Abstractions.SourceGeneration` | geteiltes Typ-Modell (`TypeNode`), kein Generator |
+| `Core.SourceGeneration` | geteilter Analyse-Kern (Domänen-Graph, `ProtoScalarSpec`) |
+| `Domain.SourceGeneration` | Generatoren und Analyzer, die in den Domänen-Projekten laufen (State, Handler, Signale, Prozess-Regeln, Fluss-/Modell-/Dienst-Analyzer) |
+| `Infrastructure.SourceGeneration` | Generatoren und Analyzer der Laufzeit-Compilation (Routing, Actors, Pull-Pfad, Wire, Funktionen, Dienste, Quellen, Akteur-Rechte, Gesamtbild-Analyzer) |
+| `Projections.SourceGeneration` | DI-Verdrahtung der Leseseite (`AddGeneratedProjectionServices`), Store-Zugriffs-Analyzer |
+| `Client.SourceGeneration` | Blazor-Client-Generatoren (Wiring aus dem Client-Vertrag, ViewModels, Module) |
+| `Cqrs.Codegen` | Codegen-Schritt im Build (Target `CqrsCodegenPrepass` in `ProtoRepo/ProtoRepo.csproj`): `domain.proto`, STJ-Kontexte, Python-Basen; liest heute per `MetadataLoadContext` (docs/13 W10-1) |
+| `Proto.SourceGeneration` | Roslyn-Leser für `domain.proto` (`FileGenerator`), von `Cqrs.Codegen` als Bibliothek genutzt |
+| `ProtoRepo` | aus `domain.proto` per Grpc.Tools erzeugte DTOs |
 
-### Generatoren (Compile-Zeit)
+Was welche Generatoren und Analyzer tun: [05](05-generatoren-analyzer-proto.md).
+
+### Werkzeuge (Werkbank)
 | Projekt | Rolle |
 |---|---|
-| `Abstractions.SourceGeneration` | geteiltes Typ-Modell (`TypeNode`), kein `[Generator]` |
-| `Core.SourceGeneration` | geteilter Analyse-Kern (Domain-Graph, Multi-Compilation) |
-| `Domain.SourceGeneration` | Domain-seitige Generatoren (State, Handler, Signale, Dispatch) |
-| `Infrastructure.SourceGeneration` | Infra-seitige Generatoren (Routing, Actors, Pull-Pfad, Wire, Upcasting) + der **Analyzer** |
-| `Client.SourceGeneration` | Blazor-Client-Generatoren (Wiring, ViewModels, Module) |
-| `Proto.SourceGeneration` | **manuell** laufendes Exe: schreibt `domain.proto` |
-| `ProtoRepo` | aus `domain.proto` per Grpc.Tools generierte DTOs |
+| `Werkbank` | Werkbank-Server und Editor-Oberfläche (`Werkbank/Server/`, `Werkbank/wwwroot/editor/`) |
+| `GraphExtractor.Kern` | Lesen (Code → Board), Sicht (`board.sicht`, ⊕-Passung), Schreiben (Gesten → Patch), Sonde, Paritätsprüfung |
+| `GraphExtractor` | CLI: `--check`, `--sonde`, `--grammatik`, `--warm`, `--kontexte` |
+| `DomainEditor` | Editor-Modell, Grammatik (`Grammatik.cs`), Scaffolder |
+| `ProjectScanner` | älteres Struktur-Dump-Tool |
 
-### Hosts & Betrieb
+### Hosts
 | Projekt | Rolle |
 |---|---|
-| `Host.Grpc` | **der Cluster-tragende Prozess** (Marten+Consul+Redis+Actors+gRPC) |
-| `Host.Blazor` | Blazor-Server-**Client** (kein Cluster-Member; redet gRPC mit Host.Grpc) |
-| `LoadHarness` | Durchsatz-/Exactly-once-/Saga-/Serializer-Messwerkzeug (nicht in `.sln`) |
+| `Host.Grpc` | der Cluster-Knoten: `builder.AddCqrs(args)` + `app.LaufeAsync(umgebung)`, Konfiguration aus `umgebungen/umgebung.<name>.json` |
+| `Host.Blazor` | Blazor-Server-Host des Arbeitsplatz-Clients (kein Cluster-Member, gRPC zu `Host.Grpc`), ebenfalls mit `--umgebung` |
 
-### Frontend
+### Clients
 | Projekt | Rolle |
 |---|---|
-| `Client.Infrastructure` | Client-Transport-/Bus-/Store-Stack (gRPC, Bus, StoreBase, Virtualisierung) |
-| `Domain.Client.Modules.Blazor` | **neue** modulare UI (13 Slot-Module) |
-| `Domain.Client` / `Domain.Client.Ui.Blazor` | **alte** monolithische UI (tot, aber noch referenziert → Build-Blocker) |
+| `Client.Infrastructure` | C#-Client-Stack: gRPC-Transport, Bus, Stores, Virtualisierung, Zustellverfolgung |
+| `Client.Infrastructure.Python` (außerhalb der `.sln`) | `cqrs_client`, das Python-SDK |
 
-### Python
+### Beispieldomäne (Prüfling)
+Die Beispieldomäne prüft das Framework; sie ist nicht Architektur (konzept-werkbank W11).
+
 | Projekt | Rolle |
 |---|---|
-| `Client.Infrastructure.Python` | `cqrs_client` — paritätisches Python-SDK (gRPC-Client) |
-| `Domain.Client.Worker.Python.ML` | ML-Worker: Clients `KlassifikationsWorker`/`TrainingsWorker` — Zusagen der Akteure Klassifizierer/TrainingsSystem, out-of-process (`docs/konzept-akteure.md`) |
+| `Domain` | Aggregate, Commands, Events, Decide/Apply, Prozesse und Flüsse der Beispieldomäne |
+| `Domain.Projections` | Projektionen, Reader, Queries, Store-Fähigkeiten |
+| `Domain.Pipeline` | Flüsse und Funktions-Implementierungen samt Diensten |
+| `Domain.Infrastructure` | Store-Implementierungen (Marten), dazu die Basisklasse `MartenCoCommitStoreBase` |
+| `Domain.Akteure` | Akteure und Client-Verträge |
+| `Domain.Client.Modules.Blazor` | die Blazor-Module des Arbeitsplatz-Clients |
+| `Domain.Client.Worker.Python.ML` (außerhalb der `.sln`) | Python-Worker: Funktions-Implementierungen und Zusagen der Akteure |
 
-### Werkzeuge & Tests
+### Tests
 | Projekt | Rolle |
 |---|---|
-| `GraphExtractor` / `GraphExtractor.Kern` | Roslyn-Extractor (CLI: `--check`, `--sonde`, `--warm`, `--kontexte`) bzw. Bibliothek: Lesen, `board.sicht`, Gesten-Motor |
-| `Werkbank` | Werkbank-Server + Domänen-Editor (Port 5178): warmer Workspace, Gesten → Patch, ⟳ baut und startet `Host.Grpc --umgebung`, Durchspielen, Spur — keine Simulationsschicht (`docs/konzept-werkbank.md`) |
+| `Infrastructure.Pruefstand.Tests` | Ebene 1: store-frei, im Speicher |
+| `Infrastructure.Integration.Tests` | Ebene 2: gegen echtes Marten/Consul/Redis, sequentiell |
+| `Client.Infrastructure.CollectionTests` | C#-Client: Virtualisierung, Zustellverfolgung |
 | `Cqrs.Testing` | Test-DSL für den Prüfstand (`Szenario`, `SagaSzenario`, `FlussLaufwerk`) |
-| `ProjectScanner` | älteres Struktur-Dump-Tool (`PROJECT_STRUCTURE.md`) |
-| `Infrastructure.Pruefstand.Tests` | Ebene 1 — store-frei, in-memory (515 Tests, 2026-10-13) |
-| `Infrastructure.Integration.Tests` | Ebene 2 — echte Infra (39 Tests, sequentiell) |
-| `Client.Infrastructure.CollectionTests` | Client-Virtual-Collection (26 Tests) |
+
+Zahlen: [12](12-tests-und-vermessung.md).
 
 ## 1.4 Der Gesamt-Datenfluss
 
 ```
-                         ┌─────────────── Clients ───────────────┐
-                         │  Blazor (Host.Blazor)  ·  Python-SDK   │
-                         └───────────────┬───────────────────────┘
-                                         │ bidirektionaler gRPC-Stream
-                                         │ (Command · Query · Event · Trigger)
-                                         ▼
-   ┌─────────────────────────────  Host.Grpc (Cluster-Node)  ─────────────────────────────┐
-   │  CqrsClientService ──► AggregateDispatcher ──► [ClusterIdentity(Guid, AggregatTyp)]   │
-   │                                                        │                              │
-   │                                            AggregateActor  (Single-Activation)        │
-   │                                                        │ Decider (reiner Fachcode)    │
-   │                                                        ▼ OneOf<Events>                │
-   │                                          BatchingEventAppender (Group-Commit)          │
-   │                                                        ▼                              │
-   │                                   ══════ Marten / PostgreSQL (der Log) ══════          │
-   │                                          │                    │                       │
-   │                    Signal (StreamId,Version)          Redis Version-Index (abgeleitet) │
-   │                     fire-and-forget │  + Poll(30s)                                     │
-   │                                     ▼                                                  │
-   │        ┌────────────── ProjectionAdapter (eine Pull-/Signal-Schleife) ──────────────┐ │
-   │        │  Projektion   ·   Reaktion   ·   Prozess/Saga   ·   Pipeline (persist.)    │ │
-   │        │  (replaybar,       (emittiert    (Petri-Netz-      (Event-Pfad über Pull)  │ │
-   │        │   Co-Commit)        Commands)     Interpreter)                             │ │
-   │        └────────────────────────────────┬───────────────────────────────────────────┘ │
-   │                                          │ neue Commands (CommandEmitter, das 1 Emit)  │
-   │                                          └──────────► zurück in den Aggregat-Dispatch  │
-   └──────────────────────────────────────────────────────────────────────────────────────┘
+ Eingänge
+ ─────────────────────────────────────────────────────────────────────────────────────────────────────────
+  Clients (Blazor, Python)         Werkbank                         Quellen (Konfig Quellen:<Typ>)
+  gRPC CqrsClientService           JSON-Eingang /eingang/*           Datei-Treiber · Webhook (Einblick-Port)
+        │ Handshake: Vertrag+Token        │ Token                            │
+        └──────────► Akteur-Tor ◄─────────┘                                  ▼
+                       │ Befugnis (IDarf), Akteur ins Envelope           QuellEingang
+                       ▼                                                  │ Quell-Nachricht genau einmal
+             AggregateDispatcher                                          │ je Kennung ins Log,
+                       ▼                                                  │ weckt die Flüsse, die damit beginnen
+          Aggregat-Actor (Single-Activation)                              │
+            Decide (reiner Fachcode) → OneOf<Events>                      │
+                       ▼                                                  │
+          BatchingEventAppender (Group-Commit)                            │
+                       ▼                                                  ▼
+ ═══════════════ Marten/PostgreSQL: der Log (jeder Eintrag mit Spur: ursache · wirker · ueber · stand) ═════════
+                       │                                               │
+           Signal (StreamId, Version), verlierbar                Redis-Versions-Index (abgeleitet)
+           + Poll (30 s)                                               
+             ┌─────────┴───────────────────────────┐
+             ▼                                     ▼
+   ProjectionAdapter (Pull-/Signal-Schleife)    Prozess-Manager = Dirigent
+     Projektion (replaybar, Co-Commit)            Prozesse (Event-Regeln) und Flüsse (Quelle → Funktionen → Commands)
+     Reaktion (emittierend)                         │                      │
+             │                                      │ Sende<Cmd>           │ Rufe<F>
+             └──────────────► CommandEmitter ◄──────┘                      ▼
+                         (der eine Emit-Weg)                     Funktions-Vermittler (Actor je Funktion)
+                                │                                          │ Pull: Abholer holen Aufträge
+                                ▼                                          ▼
+                     zurück zum AggregateDispatcher         Laufort Host: FunktionsAbholer → FunktionsAusfuehrer
+                                                            Laufort Extern: Python-Worker über gRPC
+                                                            Laufort Hand: HandAusfuehrer (die Werkbank antwortet)
+                                                                           │ genau ein Ergebnis im Ausführungs-Stream,
+                                                                           ▼ Weckung des Dirigenten
+                                                                         Log
+ Einblick-API (/einblick/*: Spur, Vorgänge, Aufträge, SSE) ──────────────────────────────► Werkbank (Spur-Spiegel)
 ```
 
 **Zwei Achsen prägen das Bild:**
-- **Schnell vs. durabel:** Signal ist schnell und verlierbar; der Poll + der Log heilen alles.
-- **Replaybar vs. emittierend:** Projektionen dürfen zurückgesetzt/neu aufgebaut werden;
-  Emittenten (Reaktion, Prozess, Pipeline) bewegen echte Wirkung und dürfen **nicht** blind
-  replayt werden — das ist im Typsystem verankert (kein Reset auf `IEmittentenCursor`).
+- **Schnell vs. durabel:** Das Signal ist schnell und verlierbar; Poll und Log heilen alles.
+- **Replaybar vs. emittierend:** Projektionen dürfen zurückgesetzt und neu aufgebaut werden; Emittenten (Reaktion, Prozess, Fluss) bewegen
+  echte Wirkung und werden nicht blind wiederholt. Welche Seite gilt, folgt aus den Schreib-Fähigkeiten der Handles (Details: [04](04-konsum-und-prozess-maschine.md)).
 
-## 1.5 Was das System besonders macht (Kurzcharakteristik)
+## 1.5 Was das System besonders macht
 
-- **Vier Konsumenten, eine Maschine.** Projektion/Reaktion/Prozess/Pipeline teilen *dieselbe*
-  Pull-Schleife; der Unterschied fällt aus Konstruktor-Stores + Rückgabetypen, nicht aus
-  einer Taxonomie. Siehe [04](04-konsum-und-prozess-maschine.md).
-- **Compile-Zeit statt Laufzeit.** ~20 Generatoren + 15 Diagnose-Codes verwandeln ganze
-  Fehlerklassen in Build-Fehler. Siehe [05](05-generatoren-analyzer-proto.md).
-- **Sagas als typisierte DSL.** Ein Prozess ist ein `IProzessDefinition` mit Event→Command-
-  Fluent-Regeln; der Rest (Manager, Korrelation, Marking, Kompensation) ist einmal geschrieben.
-- **Reinheit durchgezogen bis in Client & Python.** Auch Blazor und der Python-Worker routen
-  typbasiert, reflexionsarm, mit reinem Fachcode.
-- **Selbstbeobachtung.** Der Extractor macht das ganze System als Karten sichtbar; durchgespielt
-  wird das echte System (Host in Umgebung `sim`), jeder Log-Eintrag trägt seine Spur
-  (`ursache`/`wirker`/`stand`/`ueber`).
+- **Vier Konsumenten, eine Maschine.** Projektion, Reaktion, Prozess und Fluss teilen dieselbe Pull-/Signal-Mechanik; es gibt keine
+  Taxonomie. Ob ein Konsument replaybar oder emittierend ist (Achse B), liest der Generator aus den Schreib-Fähigkeiten seiner Handles.
+  Siehe [04](04-konsum-und-prozess-maschine.md).
+- **Compile-Zeit statt Laufzeit.** Analyzer, Generator-Diagnosen und Boot-Guards machen ganze Fehlerklassen zu Build- bzw. Startfehlern
+  („Prüfen = Bauen“). Siehe [05](05-generatoren-analyzer-proto.md).
+- **Abläufe als typisierte DSL.** Prozesse (`IProzessDefinition`, Event-Regeln mit `Sende<Cmd>`/`Rufe<F>`) und Flüsse (`IPipeline`, vom Draht
+  aus) beschreiben nur die Regel; Dirigent, Korrelation, Marking und Kompensation sind einmal geschrieben.
+- **Ein Weg je Sache.** Commands entstehen nur über den `CommandEmitter` (CQRS020/021); Ausgaben stehen nur in der Signatur (CQRS050).
+- **Dieselben Invarianten in den Clients.** Blazor und Python routen typbasiert, sprechen mit Vertrag und Hash, wirksam ist Vertrag ∩ Token
+  ([konzept-akteure.md](konzept-akteure.md)).
 
-## 1.6 Bekannte, systemprägende Einschränkungen (Vorschau)
+## 1.6 Die Werkbank
 
-Diese drei Punkte sind für eine Bewertung zentral und werden in [13](13-reifegrad-schulden-bewertung.md)
-priorisiert behandelt:
+Die Werkbank ist die eine Oberfläche, auf der eine Anwendung entworfen, als Code erzeugt, gebaut, gestartet, durchgespielt und nachvollzogen wird.
+Der Code ist das Modell: das Board wird über Roslyn aus dem Code gelesen, jede Geste ist sofort ein Patch am Code. Durchgespielt wird der echte
+Host in der Umgebung `sim` gegen eine eigene Datenbank; was geschah, zeigt die Spur im Log. Kanonisch: [konzept-werkbank.md](konzept-werkbank.md).
 
-1. **Kein echter Co-Commit im Marten-Tracker.** Die versprochene Exactly-once-Wirksamkeit der
-   Projektionen ist strukturell vorbereitet, aber der produktive `MartenProjectionTracker`
-   committet Effekt und Marke in *getrennten* Sessions (at-least-once, abgesichert nur über
-   den Dedup-Schlüssel + idempotente Upserts). Siehe [04 §3](04-konsum-und-prozess-maschine.md).
-2. **Frontend-Build 2026-08-12 repariert.** Eine stale Projektreferenz hatte das tote alte
-   UI-Projekt in den Build gezogen (13 Compile-Fehler); die Referenz ist entfernt, der volle
-   Solution-Build ist grün. Die modulare GUI läuft über `Domain.Client.Modules.Blazor`; die
-   beiden Legacy-Projekte liegen noch auf Disk (Cleanup offen). Siehe [08](08-frontend-blazor-client.md).
-3. **Multi-Node ist bewiesen, aber betrieblich noch container-only.** Der produktive
-   Regelweg bleibt Single-Node (systemd/nativ). Siehe [06](06-transport-multinode-betrieb.md).
+## 1.7 Offenes
+
+Offene Punkte und Schulden stehen gesammelt in [13](13-reifegrad-schulden-bewertung.md) §13.0 (Index mit IDs).

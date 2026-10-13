@@ -1,104 +1,98 @@
 # Dokumentation — CQRS/Event-Sourcing-Framework
 
-> **Kapitel 01–13: Stand 2026-08-12** (Wegweiser und Konzept-Liste aktualisiert 2026-10-06). Die Kapitel wurden vollständig neu aus dem Code hergeleitet
-> (agentische Analyse aller Subsysteme, ohne Rückgriff auf die alte Doku). Die
-> frühere Dokumentation liegt unverändert in [`_archiv-2026-08-12/`](_archiv-2026-08-12/).
-> Diese Neufassung ist als **Bewertungsgrundlage** angelegt.
+Stand 2026-10-13, gegen den Code geprüft. Maßstab: [konzept-werkbank.md](konzept-werkbank.md).
+
+Dieser Wegweiser sagt nur, **wo** etwas steht. Reifegrad und Offenes stehen in [13](13-reifegrad-schulden-bewertung.md)
+(§13.0 Index, §13.1 Einschätzung), Zahlen und Messwerte in [12](12-tests-und-vermessung.md).
 
 ## Was ist das?
 
-Ein selbstgebautes, signalbasiertes **CQRS-/Event-Sourcing-Framework** auf .NET 9,
-Proto.Actor (virtuelle Cluster-Actors), Marten/PostgreSQL (Event-Store = einzige Wahrheit)
-und Redis (nicht-autoritativer Versions-Index). Alles Dispatchende wird zur Compile-Zeit
-über Roslyn-Source-Generatoren erzeugt — **ohne Runtime-Reflection**. Dazu kommen ein
-generierter Blazor-Client, ein Python-SDK samt ML-Worker, sowie ein Wissensgraph-Extractor
-als Werkbank (echter Host in Umgebung `sim`, Spur).
-
-## Reifegrad auf einen Blick
-
-| Subsystem | Reife | Kurzbewertung |
-|---|:---:|---|
-| Schreibseite (Command→Event→Store) | 🟢 | kohärent, gemessen grün, produktionsnah |
-| Konsum-/Prozess-Maschine | 🟢 | stark; Co-Commit implementiert & guard-gehärtet (`ICoCommitTracker`, 2026-08-12) |
-| Generatoren & Analyzer | 🟢 | 15 Build-Guards, reflexionsfrei, konsistent |
-| Multi-Node / Wire-Transport | 🟢 / 🟡 | über alle Planes verdrahtet & bewiesen; Betrieb noch container-only |
-| Graph-Extractor + Werkbank | 🟢 | in der `.sln`, Parität `--check` + Sonde `--sonde` grün; Werkbank P0–P8 umgesetzt (keine Simulationsschicht, Gesten → Patch, Spur, Durchspielen) |
-| Python-SDK + ML-Worker | 🟡 | Kernpfad + generierte Vertrags-/Client-Basen, Tests (SDK 19, Worker 11); Registry noch handgepflegt |
-| Frontend (Blazor-Client) | 🟡 | **Build 2026-08-12 repariert** (stale Referenz entfernt); modulare Kette (`Domain.Client.Modules.Blazor`) baut, alte Legacy-Projekte noch auf Disk |
-| Tests & Vermessung | 🟢 | 280 Prüfstand grün (2026-10-06), Integration gegen echte Infra, ehrliche Perf-Belege |
-
-🟢 solide · 🟡 mit erkannten Schulden · 🔴 aktuell blockiert. Details: [13-reifegrad-schulden-bewertung.md](13-reifegrad-schulden-bewertung.md).
+Ein selbstgebautes, signalbasiertes **CQRS-/Event-Sourcing-Framework** auf .NET 9, Proto.Actor (virtuelle Cluster-Actors),
+Marten/PostgreSQL (Event-Store = einzige Wahrheit) und Redis (nicht-autoritativer Versions-Index). Alles Dispatchende ist generiert,
+ohne Reflection. Darauf sitzen Clients mit Vertrag (Blazor, Python) und die **Werkbank**: eine Oberfläche, auf der eine Anwendung
+entworfen, als Code erzeugt, gebaut, im echten Host durchgespielt und über die Spur nachvollzogen wird. Kurzfassung: [01](01-ueberblick.md).
 
 ## Lesepfade
 
-**Für Bewerter / Reviewer (60 Min.):**
-[01](01-ueberblick.md) → [02](02-design-prinzipien.md) → [11](11-feature-inventar.md) →
-[12](12-tests-und-vermessung.md) → [13](13-reifegrad-schulden-bewertung.md).
+**Einstieg (30 Min.):** [01](01-ueberblick.md) → [konzept-werkbank.md](konzept-werkbank.md) §0–§2 → [02](02-design-prinzipien.md).
 
-**Für Architektur-Verständnis:**
-[01](01-ueberblick.md) → [03](03-schreibseite.md) → [04](04-konsum-und-prozess-maschine.md) →
+**Bewertung:** [01](01-ueberblick.md) → [02](02-design-prinzipien.md) → [13](13-reifegrad-schulden-bewertung.md) →
+[12](12-tests-und-vermessung.md).
+
+**Architektur:** [01](01-ueberblick.md) → [03](03-schreibseite.md) → [04](04-konsum-und-prozess-maschine.md) →
 [05](05-generatoren-analyzer-proto.md) → [06](06-transport-multinode-betrieb.md).
 
-**Für Entwickler (neuer Baustein):**
-[10-entwickler-api.md](10-entwickler-api.md) (praktisches „Wie schreibe ich X?"), rückverweisend
-auf die jeweiligen Architektur-Kapitel.
+**Werkbank und Editor:** [konzept-werkbank.md](konzept-werkbank.md), Detail-Referenzen in der Konzept-Tabelle unten.
 
-**Für Betrieb / Ops:**
-[06-transport-multinode-betrieb.md](06-transport-multinode-betrieb.md).
+**Neuer Baustein:** [10](10-entwickler-api.md) („Wie schreibe ich X?“), rückverweisend auf die Architektur-Kapitel.
 
-## Inhalt
+**Clients:** [konzept-akteure.md](konzept-akteure.md) (Akteure, Verträge, Clients) → [08](08-frontend-blazor-client.md) (Blazor) →
+[09](09-python-sdk.md) (Python).
+
+**Betrieb:** [06](06-transport-multinode-betrieb.md), Umgebungen in [konzept-werkbank.md](konzept-werkbank.md) §4.
+
+## Kapitel
 
 | # | Datei | Inhalt |
 |---|---|---|
-| — | [README.md](README.md) | dieser Wegweiser |
-| 01 | [01-ueberblick.md](01-ueberblick.md) | System, 27-Projekte-Landkarte, Gesamt-Datenfluss |
-| 02 | [02-design-prinzipien.md](02-design-prinzipien.md) | aus dem Code abgeleitete Prinzipien (mit Belegen) |
-| 03 | [03-schreibseite.md](03-schreibseite.md) | Command→Decider→Event→Store, Batching, Signal, Actor |
-| 04 | [04-konsum-und-prozess-maschine.md](04-konsum-und-prozess-maschine.md) | vier Konsumenten, Pull-Schleife, Saga-DSL, Marking-Cursor |
-| 05 | [05-generatoren-analyzer-proto.md](05-generatoren-analyzer-proto.md) | Generator-Tabelle, 15 CQRS-Codes, Proto-Flow |
-| 06 | [06-transport-multinode-betrieb.md](06-transport-multinode-betrieb.md) | Wire-Serializer, Cluster, Cold-Start, Deploy, Config, Monitoring |
-| 07 | — | entfallen (2026-10-12): Extractor-Grundlagen in [konzept-werkbank.md](konzept-werkbank.md) Anhang A.1, Simulation entfällt |
-| 08 | [08-frontend-blazor-client.md](08-frontend-blazor-client.md) | Bus/Store-Stack, Modul-System, Build-Status |
-| 09 | [09-python-sdk.md](09-python-sdk.md) | cqrs_client + ML-Worker |
-| 10 | [10-entwickler-api.md](10-entwickler-api.md) | „Wie schreibe ich X?" für alle Bausteine |
-| 11 | [11-feature-inventar.md](11-feature-inventar.md) | vollständige Feature-Aufstellung mit Status |
-| 12 | [12-tests-und-vermessung.md](12-tests-und-vermessung.md) | Test-Ebenen, Zahlen, echte Messwerte, LoadHarness |
-| 13 | [13-reifegrad-schulden-bewertung.md](13-reifegrad-schulden-bewertung.md) | Bewertungs-Dossier: Stärken, Risiken, Empfehlungen |
+| 01 | [01-ueberblick.md](01-ueberblick.md) | das System in einem Absatz, die sechs Invarianten (eine Quelle), Projekt-Landkarte, Gesamt-Datenfluss |
+| 02 | [02-design-prinzipien.md](02-design-prinzipien.md) | aus dem Code abgeleitete Prinzipien mit Belegen |
+| 03 | [03-schreibseite.md](03-schreibseite.md) | Command → Decide → Event → Log: Aggregat-Actor, Batching, Signal, Inbox |
+| 04 | [04-konsum-und-prozess-maschine.md](04-konsum-und-prozess-maschine.md) | vier Konsumenten, eine Pull-/Signal-Schleife; Prozess-Manager als Dirigent; Marking-Cursor |
+| 05 | [05-generatoren-analyzer-proto.md](05-generatoren-analyzer-proto.md) | Generatoren, Analyzer, Boot-Guards, Codegen im Build (Proto, STJ-Kontexte, Python-Basen) |
+| 06 | [06-transport-multinode-betrieb.md](06-transport-multinode-betrieb.md) | Wire-Serializer, Cluster, Multi-Node, Deploy, Monitoring |
+| 07 | — | entfallen (2026-10-12): in [konzept-werkbank.md](konzept-werkbank.md) aufgegangen |
+| 08 | [08-frontend-blazor-client.md](08-frontend-blazor-client.md) | Blazor-Client: Bus/Store-Stack, Modul-System, Client mit Vertrag |
+| 09 | [09-python-sdk.md](09-python-sdk.md) | Python-SDK `cqrs_client` und Python-Worker |
+| 10 | [10-entwickler-api.md](10-entwickler-api.md) | „Wie schreibe ich X?“ für alle Bausteine |
+| 11 | — | entfallen (2026-10-13): Status und Schulden stehen in [13](13-reifegrad-schulden-bewertung.md) |
+| 12 | [12-tests-und-vermessung.md](12-tests-und-vermessung.md) | Test-Ebenen, Zahlen, Messwerte, Fallstricke |
+| 13 | [13-reifegrad-schulden-bewertung.md](13-reifegrad-schulden-bewertung.md) | Reifegrad, Stärken, offene Befunde mit IDs, Erledigtes |
 
-## Konzepte, Anleitungen, Analysen (neben den Kapiteln)
-
-> **Zielbild (verbindlich, 2026-10-12): [konzept-werkbank.md](konzept-werkbank.md)** — Editor als Werkbank: Code als einzige Wahrheit,
-> keine Simulationsschicht (Umgebungen sim/prod mit echter DB), Spur, Quellen als Treiber + Konfig, Backend im Editor. Wo andere
-> Dokumente widersprechen, gilt es; widersprüchliche Konzepte sind gelöscht bzw. gekürzt.
-
-Status geprüft 2026-10-12. „umgesetzt" = steht im Code; „Konzept" = Entwurf, nicht gebaut.
+## Konzepte und Referenzen
 
 | Datei | Thema | Status |
 |---|---|---|
-| [konzept-werkbank.md](konzept-werkbank.md) | **Zielbild Werkbank** — Entwerfen, Erzeugen, Durchspielen, Spur, Backend in einem Editor; Phasen P0–P8 | **umgesetzt** (2026-10-13) |
-| [plan-werkbank-umsetzung.md](plan-werkbank-umsetzung.md) | **Umsetzungsplan Werkbank** — Ist-Befund, Lücken zum Zielbild, Entscheidungen E1–E10, Arbeitspakete S0/P0–P8 | **Plan** |
-| [konzept-akteure.md](konzept-akteure.md) | **Akteure, Akteur-Verträge (Zusagen), Clients** — wer hineingibt, was er draußen zusagt, welche Software es tut | umgesetzt; durable Zustellung an Clients offen |
-| [konzept-domaenen-editor.md](konzept-domaenen-editor.md) | **Domänen-Editor** — kanonische Referenz (Leitprinzipien, Palette, Schreib-/Leseseite, Prozess, Betrieb, Bedienung, Werkbank-Server, Akteure §12) | gebaut |
-| [konzept-editor-panel-bearbeitung.md](konzept-editor-panel-bearbeitung.md) | Bearbeiten nur im Panel, Graph als Landkarte | umgesetzt |
-| [konzept-handle-ausgaenge.md](konzept-handle-ausgaenge.md) | Handle-Ausgänge aus der Signatur (CQRS050) | umgesetzt |
-| [konzept-llm-minimalkontext.md](konzept-llm-minimalkontext.md) | LLM-Füllung von Code-Blöcken, Kontext nur aus Code + Graph | gebaut (Kontexte + Konsole) |
-| [konzept-editor-komposition.md](konzept-editor-komposition.md) | Editor als Kompositions-Sprache (Grammatik, Kapselung, Muster) | Phase 1 umgesetzt, Rest Konzept |
-| [konzept-editor-pipelines.md](konzept-editor-pipelines.md) | Pipelines im Editor (Rand-Band, Kanäle mit Garantie, Frist als Ausgang) | Konzept |
-| [konzept-exactly-once-naht.md](konzept-exactly-once-naht.md) | Verträge eines Co-Commit-Stores | Analyse, Hebel 1 umgesetzt |
-| [konzept-client-haertung.md](konzept-client-haertung.md) | Client-Oberfläche: Zustellgarantie, Python-SDK, Transport-Sicherheit | Analyse, T2a/T2b/T3 umgesetzt |
-| [konzept-training-und-datensatz.md](konzept-training-und-datensatz.md) | Datensätze & Training (Modell-Lebenszyklus) | umgesetzt |
-| [konzept-datensatz-kuratierung.md](konzept-datensatz-kuratierung.md) | Datensatz als Tag, Kuratieren beim Betrachten | umgesetzt |
-| [konzept-galerie-datensatz-komposition.md](konzept-galerie-datensatz-komposition.md) | Galerie ↔ Einbild ↔ Datensatz-Komposition | Konzept |
-| [entscheidungs-debugger-und-test-dsl.md](entscheidungs-debugger-und-test-dsl.md) | Test-DSL (Gegeben/Wenn/Dann) + Entscheidungs-Debugger | Anleitung |
-| [ddd-muster-showcase.md](ddd-muster-showcase.md) | taktische DDD-Bausteine als getestete Referenz (`Domain/Verkauf/`) | Referenz (nicht in 01–13 eingearbeitet) |
+| [konzept-werkbank.md](konzept-werkbank.md) | Werkbank und Editor: Code als einzige Wahrheit, Gesten als Patch, Umgebungen, Durchspielen im echten Host, Spur | **kanonisch** |
+| [konzept-akteure.md](konzept-akteure.md) | Akteure, Akteur-Verträge (Zusagen, Kenntnisse), Clients | Detail-Referenz |
+| [konzept-editor-pipelines.md](konzept-editor-pipelines.md) | Pipeline als Fluss (§12–§14) | Detail-Referenz Fluss, umgesetzt |
+| [konzept-llm-minimalkontext.md](konzept-llm-minimalkontext.md) | LLM-Füllung von Rümpfen, Kontext nur aus Code und Graph | Detail-Referenz |
+| [konzept-editor-komposition.md](konzept-editor-komposition.md) | Editor als Kompositions-Sprache (Grammatik, Kapselung, Muster) | Sprache, Detail-Referenz |
+| [konzept-domaenen-editor.md](konzept-domaenen-editor.md) | früherer Editor-Kanon | wird archiviert (Inhalt aufgegangen in konzept-werkbank §8 und konzept-akteure) |
+| [konzept-editor-panel-bearbeitung.md](konzept-editor-panel-bearbeitung.md) | Bearbeiten im Panel, ⊕ | wird archiviert (Inhalt aufgegangen in konzept-werkbank §8) |
+| [konzept-handle-ausgaenge.md](konzept-handle-ausgaenge.md) | Ausgaben aus der Signatur (CQRS050) | wird archiviert (Inhalt aufgegangen in 05 und 10) |
+| [plan-werkbank-umsetzung.md](plan-werkbank-umsetzung.md) | Umsetzungsplan der Werkbank, Phasen P0–P8 | wird archiviert (Inhalt aufgegangen in konzept-werkbank §12–§13 und 13) |
+| [konzept-exactly-once-naht.md](konzept-exactly-once-naht.md) | Verträge eines Co-Commit-Stores | wird archiviert (Inhalt aufgegangen in 04 und 13) |
+| [konzept-client-haertung.md](konzept-client-haertung.md) | Zustellgarantie, Python-SDK, Transport-Sicherheit | wird archiviert (Inhalt aufgegangen in 09 und 13) |
+| [entscheidungs-debugger-und-test-dsl.md](entscheidungs-debugger-und-test-dsl.md) | Test-DSL (Gegeben/Wenn/Dann) | wird archiviert (Inhalt aufgegangen in 10 und 12) |
 
-**Archive (nur Historie, nicht als Ist lesen):** [`_archiv-2026-08-12/`](_archiv-2026-08-12/) (Doku vor der Neufassung),
-[`_archiv-2026-10-06/`](_archiv-2026-10-06/) (erledigte Übergabe-Dokumente).
+### Beispieldomäne (nicht Framework)
+
+Die Beispieldomäne ist Prüfling, nicht Architektur (konzept-werkbank W11).
+
+| Datei | Thema | Status |
+|---|---|---|
+| [konzept-training-und-datensatz.md](konzept-training-und-datensatz.md) | Datensätze und Training | wird entfernt |
+| [konzept-datensatz-kuratierung.md](konzept-datensatz-kuratierung.md) | Datensatz als Tag, Kuratieren beim Betrachten | wird entfernt |
+| [konzept-galerie-datensatz-komposition.md](konzept-galerie-datensatz-komposition.md) | Galerie ↔ Einbild ↔ Datensatz | wird entfernt |
+| [imageoair-frontend-nachweis/](imageoair-frontend-nachweis/) | Bildnachweis der Blazor-Oberfläche | wird entfernt |
+| [ddd-muster-showcase.md](ddd-muster-showcase.md) | taktische DDD-Bausteine an einer Beispieldomäne | wird entfernt |
+
+**Archive:** [`_archiv-2026-08-12/`](_archiv-2026-08-12/), [`_archiv-2026-10-06/`](_archiv-2026-10-06/) — nur Historie, wird gelöscht.
 
 ## Konventionen dieser Doku
 
-- **Sprache:** Deutsch (Projektkonvention; Domäne und Kommentare sind durchgängig deutsch).
-- **Belege:** Aussagen sind, wo möglich, mit `Datei:Zeile` unterlegt. Zeilennummern sind
-  Momentaufnahmen (Stand 2026-08-12) und können driften.
-- **Messwerte** sind als solche gekennzeichnet („gemessen 2026-08-12") und von
-  Konzept-/Anspruchs-Aussagen getrennt.
+- **Eine Quelle je Thema.** Andere Dokumente nennen ein Thema höchstens kurz und verweisen:
+
+  | Thema | Quelle |
+  |---|---|
+  | Invarianten | [01](01-ueberblick.md) §1.2 |
+  | Werkbank, Editor, Umgebungen, Spur | [konzept-werkbank.md](konzept-werkbank.md) |
+  | Konsum-Maschine | [04](04-konsum-und-prozess-maschine.md) |
+  | Offenes und Schulden | [13](13-reifegrad-schulden-bewertung.md) (§13.0) |
+  | Zahlen und Messwerte | [12](12-tests-und-vermessung.md) |
+  | Regeln (was womit verbunden werden darf) | der Code (Analyzer, Generator-Diagnosen, Boot-Guards) und `dotnet run --project GraphExtractor -- --grammatik` |
+  | Umgebungs-Schema | `Abstractions/Umgebung/UmgebungKonfig.cs` |
+
+- **Gegenwart:** Kapitel beschreiben den Ist-Zustand des Codes. Belege als Datei/Klasse, nicht als Zeilennummer.
+- **Sprache:** Deutsch (Projektkonvention).
