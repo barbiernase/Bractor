@@ -8,7 +8,7 @@ Volltexte liegen in `docs/` und werden bei Bedarf gelesen, nicht hier eingebette
 > `docs/02-design-prinzipien.md`. Wie schreibe ich X (inkl. Prozess): `docs/10-entwickler-api.md`. Akteure/Verträge/Clients:
 > `docs/konzept-akteure.md`. Editor: `docs/konzept-domaenen-editor.md`. Altes liegt in `docs/_archiv-2026-08-12/` (nur Historie).
 >
-> **ZIELBILD (verbindlich, 2026-10-12): `docs/konzept-werkbank.md`** — der Editor als Werkbank: Code ist die einzige Wahrheit (kein
+> **ZIELBILD (verbindlich, 2026-10-12; umgesetzt P0–P8, abgeschlossen 2026-10-13): `docs/konzept-werkbank.md`** — der Editor als Werkbank: Code ist die einzige Wahrheit (kein
 > Board-Modell), keine Simulationsschicht (echter Host in Umgebung `sim` gegen eigene echte DB), Spur (`ursache`/`wirker`/`stand`),
 > Quellen = fest codierte Treiber + Konfig (zuerst Filewatcher), Backend je Umgebung im Editor. Keine GUIs, keine Schema-Evolution.
 > Umsetzung in Phasen P0–P8 (§13). Wo andere Dokumente widersprechen, gilt das Zielbild.
@@ -62,7 +62,7 @@ faltet voll (Invariante 1). Äquivalenz + Sagas grün.
 OneOf-Ergebnis-Events heraus) wird wie ein Aggregat gerufen; kurz und lang gleich, nur `.Zeitlimit(…)` (für jeden Aufruf). Generierter
 Dispatch (`FunktionsGenerator`, CQRS068/069), `FunktionsAusfuehrer` (Slots, Wiederholen, genau ein Ergebnis im Ausführungs-Stream),
 Bindung `AddFunktion<F, Impl>` + Boot-Guard; Editor: Funktions-Karte, „Dann ƒ", ⏳. Doku `docs/10-entwickler-api.md` §10.5a.
-Offen: Saga-DSL (Cqrs.Testing) und die Prozess-Simulation kennen `Rufe` noch nicht (im Fluss simuliert es; Python-Ausführer geliefert).
+Offen: die Saga-DSL (Cqrs.Testing) kennt `Rufe` noch nicht (der Fluss-Laufwerk-Test schon; Python-Ausführer geliefert).
 
 **Logik-Element = EIN Muster (2026-10-11, `docs/konzept-domaenen-editor.md` §2 c′):** alles mit Logik ist ◀ Eingang · Ausgänge ▶ (OneOf) ·
 ⚙ Fähigkeiten · Rumpf (Ausschnitt aus der Datei, ✎ als Geste, „🤖 füllen“ als Aktion — seit P7.4 keine 📝/🤖-Karten) — Decide/Apply, Handles, Store-Fns, Funktion (Signatur nur auf ihrer Karte,
@@ -82,8 +82,9 @@ gRPC). Im Editor ein ⛓-Rahmen, entwerfbar auf leerem Board (Sonde beweist geze
 `quelle.Strom()` (Aggregat-Id der Quelle als Draht), `strom.Warte<A, B>().Zeitlimit(t)` (Frist/Storno als Rennen), Katalog-Funktionen
 mit **Lese-Fähigkeit** als Parameter (nur Host), Akteur-Tor `IDarf<IFunktion>` für angebotene Funktionen, der Webhook einer Quelle als Konfig
 (`Quellen:<Typ>:Webhook`, seit P7.5.2). **Alle Domänen-Pipelines sind Flüsse** (Bildeingang, DatensatzRangeAufloesung, DatensatzEinfrieren, TrainingWaechter,
-Benchmark) — `IPipelineHandler` entfällt als Domänen-Baustein, Rückbau der Maschinerie offen (§14.10). Simulation: SimHost spielt Flüsse
-durch (`FlussLaufwerk`, derselbe Belegungs-Kern `FlussBelegung` wie der Dirigent; je Funktion/Warten der Ausgangsfall wählbar). LLM-Slots
+Benchmark) — `IPipelineHandler` entfällt als Domänen-Baustein, Rückbau der Maschinerie offen (§14.10). Durchgespielt wird der echte Host
+in Umgebung `sim` (Werkbank P5/P6); `FlussLaufwerk` (Cqrs.Testing, derselbe Belegungs-Kern `FlussBelegung` wie der Dirigent) bleibt nur für
+Prüfstand-Tests. LLM-Slots
 `funktion` + `fluss` (Konsole füllt Lambdas). Integration `PipelineFlussE2ETests` inkl. Python-Worker über gRPC grün.
 
 **Quellen = Treiber + Konfig (2026-10-12, Werkbank P1):** eine Quelle ist nur ein Typ (`public sealed record DateiErkannt : DateiGemeldet;`,
@@ -160,6 +161,13 @@ Fremdlast 346–470 ms (Ziel 300 ms).
 Laufort Extern, Projektion + Reader, Akteure + Client) entstand nur über Gesten/⟳ — Vorgang per Datei-Drop und Webhook bis `StandErfasst`, Spur ①–④,
 `Program.cs`/Quell-Treiber unverändert, Code ohne Karte 0. Beleg auf Branch `claude/werkbank-abnahme-p75` (nicht für `main`); Befunde/Offenes im Plan §17.
 
+**Simulation raus (2026-10-13, Werkbank P8 — letzte Phase, Zielbild umgesetzt):** `ModellSimulation`, `Musterwerte`, `/api/editor/sim/*`,
+`/api/editor/compile`, `/api/llm/simulieren`, `DslSchreiber` (Knopf „Als Test“), `Cqrs.Testing/Abdeckung` und der JS-Abschnitt SIMULATION samt CSS
+(„▶ Simulation“) sind gelöscht. Der Werkbank-Server
+(Projekt `Werkbank`, bis P8.3 `SimHost`; `Werkbank/Server/`, Klasse `WerkbankServer`) referenziert nur noch DomainEditor + GraphExtractor.Kern
+(kein Core, kein Cqrs.Testing, keine Generatoren); die LLM-Konsole prüft nur über den warmen Workspace. Durchspielen = echter Host in `sim` + Spur. `Cqrs.Testing` bleibt für
+Prüfstand-Tests (`FlussLaufwerkTests`, `UmgezogeneFluesseTests`, `Sammelvorgang*Tests`).
+
 **Python-Rümpfe externer Funktionen (2026-10-13, Werkbank P7.5.3):** je Funktion ohne Lese-Fähigkeit eine generierte Python-Basis
 (`generated/funktionen.py`) und die Tabelle des GENERISCHEN Workers (`generated/funktions_tabelle.py`); die Implementierung liegt in
 `Domain.Client.Worker.Python.ML/funktionen/<modul>.py` (Regel `Abstractions.Funktionsvertrag`), `funktions_worker.py --funktionen … --konfig …` kennt
@@ -184,7 +192,7 @@ draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer Comm
 Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an
 Clients (`docs/konzept-akteure.md` §9).
 
-**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471; P7.3: Prüfstand 476/476; P7.4: Prüfstand 484/484, Integration 39/39; P7.5.1: Prüfstand 507/507, Integration 39/39; P7.5.2: Prüfstand 509/509, Integration 39/39; P7.5.3: Prüfstand 513/513, Integration 39/39, Python Worker 20/20; P7.5-Abnahme: Prüfstand 515/515, Integration 39/39): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
+**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471; P7.3: Prüfstand 476/476; P7.4: Prüfstand 484/484, Integration 39/39; P7.5.1: Prüfstand 507/507, Integration 39/39; P7.5.2: Prüfstand 509/509, Integration 39/39; P7.5.3: Prüfstand 513/513, Integration 39/39, Python Worker 20/20; P7.5-Abnahme: Prüfstand 515/515, Integration 39/39; P8: Prüfstand 515/515, Integration 39/39): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
 Marten/Consul/Redis, sequentiell: 33/33 (inkl. 4 Fluss-E2E; TwoNodeCommandDispatch an die Inbox-Marke seit T2b angepasst).**
 
 **Bewusst offen (Priorität):**
@@ -259,7 +267,7 @@ NICHT Timeout-tunebar; xUnit schluckt App-Logs (Cluster-Diagnose → Last-Harnes
 - Build: `dotnet build`
 - Test (Logik, immer grün): `dotnet test Infrastructure.Pruefstand.Tests/Infrastructure.Pruefstand.Tests.csproj`
 - Integration (braucht Postgres/Consul/Redis, sequentiell): `dotnet test Infrastructure.Integration.Tests/Infrastructure.Integration.Tests.csproj`
-- Domänen-Editor + Simulation (einzige Oberfläche; **Ist-Stand** — Ziel: Werkbank ohne Simulationsschicht, `docs/konzept-werkbank.md`; ⟳ in der Kopfzeile baut und startet den echten Host in der gewählten Umgebung): `dotnet run --project SimHost` → http://localhost:5178/editor/ (SimHost lädt den Code selbst in den warmen Workspace und schreibt domain-model.json; die Oberfläche liegt statisch in `SimHost/wwwroot/editor/` — `index.html`, `editor.css`, `editor.js`); Palette = Anker (Aggregat · Fluss · Funktion · Quelle · Akteur · Client · Projektion), Trigger-Welt/LOD seit Werkbank-P0 nicht mehr im Editor; Bearbeiten nur im Panel: Karte anklicken, ⊕-Punkt im Panel → passende Knoten leuchten → anklicken = verbinden/lösen (`docs/konzept-editor-panel-bearbeitung.md`) — jede Änderung geht sofort als Geste in den Code, ↶ nimmt sie zurück; am Rumpf ✎ (Geste an der Spanne) bzw. „🤖 füllen“: Auftrag → `claude -p` (Abo, nie API) → im warmen Workspace geprüft → .cs geschrieben → Laufzeit-Projekt gebaut (alle Generatoren) → neu eingelesen (Konzept §12); Kontexte erzeugt SimHost selbst
+- Domänen-Editor = Werkbank (einzige Oberfläche, `docs/konzept-werkbank.md`; keine Simulationsschicht — ⟳ in der Kopfzeile baut und startet den echten Host in der gewählten Umgebung, durchgespielt wird über die Leiste unten, sichtbar in der Spur): `dotnet run --project Werkbank` → http://localhost:5178/editor/ (die Werkbank lädt den Code selbst in den warmen Workspace und schreibt domain-model.json; die Oberfläche liegt statisch in `Werkbank/wwwroot/editor/` — `index.html`, `editor.css`, `editor.js`); Palette = Anker (Aggregat · Fluss · Funktion · Quelle · Akteur · Client · Projektion), Trigger-Welt/LOD seit Werkbank-P0 nicht mehr im Editor; Bearbeiten nur im Panel: Karte anklicken, ⊕-Punkt im Panel → passende Knoten leuchten → anklicken = verbinden/lösen (`docs/konzept-editor-panel-bearbeitung.md`) — jede Änderung geht sofort als Geste in den Code, ↶ nimmt sie zurück; am Rumpf ✎ (Geste an der Spanne) bzw. „🤖 füllen“: Auftrag → `claude -p` (Abo, nie API) → im warmen Workspace geprüft → .cs geschrieben → Laufzeit-Projekt gebaut (alle Generatoren) → neu eingelesen (Konzept §12); Kontexte erzeugt die Werkbank selbst
 - Editor-Parität (Code ⇄ Extraktion ⇄ Server-Kartenliste, schreibt nichts): `dotnet run --project GraphExtractor -- --check`
 - Grammatik als Liste „Regel → Build-Gegenstück": `dotnet run --project GraphExtractor -- --grammatik`
 - Agnostik-Sonde (unbekannte Domäne im Speicher + Gesten-Skript gegen handgeschriebenes Soll + Fixpunkt): `dotnet run --project GraphExtractor -- --sonde`

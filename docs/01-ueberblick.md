@@ -11,7 +11,7 @@ verlierbares Signal `(StreamId, Version)` weckt Konsumenten; ein 30-s-Poll ist d
 Sicherheitsnetz. Sämtliches Dispatching (Handler, Actor, Routing, Serialisierung, Signale,
 Schema-Evolution) wird zur **Compile-Zeit generiert**; Runtime-Reflection ist verbannt.
 Darauf sitzen ein generierter **Blazor-Client**, ein paritätisches **Python-SDK** und ein
-**Wissensgraph-/Simulations-Werkzeug**.
+**Werkbank** (Domänen-Editor auf dem Code: Gesten als Patch, echter Host in Umgebung `sim`, Spur).
 
 ## 1.2 Die sechs Invarianten
 
@@ -84,11 +84,12 @@ Gemessen (2026-08-12): **452 C#-Dateien / ~46.000 Zeilen** (ohne generierte `.g.
 ### Werkzeuge & Tests
 | Projekt | Rolle |
 |---|---|
-| `GraphExtractor` | Roslyn-Extractor → `knowledge-graph.json` + interaktives HTML-Board |
-| `SimHost` | actor-freie Live-Runtime (Port 5178) für wertabhängige Simulation (nicht in `.sln`) |
+| `GraphExtractor` / `GraphExtractor.Kern` | Roslyn-Extractor (CLI: `--check`, `--sonde`, `--warm`, `--kontexte`) bzw. Bibliothek: Lesen, `board.sicht`, Gesten-Motor |
+| `Werkbank` | Werkbank-Server + Domänen-Editor (Port 5178): warmer Workspace, Gesten → Patch, ⟳ baut und startet `Host.Grpc --umgebung`, Durchspielen, Spur — keine Simulationsschicht (`docs/konzept-werkbank.md`) |
+| `Cqrs.Testing` | Test-DSL für den Prüfstand (`Szenario`, `SagaSzenario`, `FlussLaufwerk`) |
 | `ProjectScanner` | älteres Struktur-Dump-Tool (`PROJECT_STRUCTURE.md`) |
-| `Infrastructure.Pruefstand.Tests` | Ebene 1 — store-frei, in-memory (126 Tests) |
-| `Infrastructure.Integration.Tests` | Ebene 2 — echte Infra (41 Tests) |
+| `Infrastructure.Pruefstand.Tests` | Ebene 1 — store-frei, in-memory (515 Tests, 2026-10-13) |
+| `Infrastructure.Integration.Tests` | Ebene 2 — echte Infra (39 Tests, sequentiell) |
 | `Client.Infrastructure.CollectionTests` | Client-Virtual-Collection (26 Tests) |
 
 ## 1.4 Der Gesamt-Datenfluss
@@ -140,8 +141,9 @@ Gemessen (2026-08-12): **452 C#-Dateien / ~46.000 Zeilen** (ohne generierte `.g.
   Fluent-Regeln; der Rest (Manager, Korrelation, Marking, Kompensation) ist einmal geschrieben.
 - **Reinheit durchgezogen bis in Client & Python.** Auch Blazor und der Python-Worker routen
   typbasiert, reflexionsarm, mit reinem Fachcode.
-- **Selbstbeobachtung.** Ein Extractor macht das ganze System als traversierbaren Graph
-  sichtbar und kann es über eine Mini-Runtime *echt* simulieren.
+- **Selbstbeobachtung.** Der Extractor macht das ganze System als Karten sichtbar; durchgespielt
+  wird das echte System (Host in Umgebung `sim`), jeder Log-Eintrag trägt seine Spur
+  (`ursache`/`wirker`/`stand`/`ueber`).
 
 ## 1.6 Bekannte, systemprägende Einschränkungen (Vorschau)
 

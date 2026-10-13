@@ -27,7 +27,7 @@ fail-fast verifiziert), kein fehlender Mechanismus (P0-1).
 | Konsum-/Prozess-Maschine | 🟢 (Co-Commit guard-gehärtet 2026-08-12) |
 | Generatoren & Analyzer | 🟢 |
 | Multi-Node / Transport | 🟢 / 🟡 |
-| Graph-Extractor + SimHost | 🟡 |
+| Graph-Extractor + Werkbank | 🟢 (Werkbank P0–P8 umgesetzt 2026-10-13) |
 | Python-SDK | 🟡 |
 | Frontend | 🟡 (Build 2026-08-12 repariert; Legacy-Cleanup offen) |
 | Tests & Vermessung | 🟢 |
@@ -43,8 +43,8 @@ fail-fast verifiziert), kein fehlender Mechanismus (P0-1).
    Regel; Manager/Korrelation/Marking/Kompensation sind einmal geschrieben.
 4. **Ehrliche Nicht-Autoritativität.** Jeder Beschleuniger (Redis, Snapshot, Marking-Cursor) hat
    einen Voll-Read-Fallback. Korrektheit hängt nie an einem Cache.
-5. **Selbstbeobachtung.** GraphExtractor + SimHost machen das System als traversierbaren Graph
-   sichtbar und *echt* simulierbar — inklusive wertabhängiger Saga-Kaskaden.
+5. **Selbstbeobachtung.** GraphExtractor + Werkbank machen das System als Karten sichtbar; durchgespielt
+   wird das echte System (Host in Umgebung `sim`, eigene DB), sichtbar über die Spur — keine Simulationsschicht.
 6. **Test-/Perf-Kultur.** Store-Semantik nur gegen echtes Marten; generative
    Vollständigkeits-Guards; Perf-Beweise koppeln Durchsatz mit Korrektheit.
 
@@ -153,10 +153,8 @@ wie bei Aggregaten.
 bereits nicht überein (`bool?`→`bool` vs. `int32`) → latenter Serialisierungs-Drift an der
 gRPC-Grenze. *Empfehlung:* auf **eine** geteilte Map konsolidieren.
 
-**P2-3 · Graph/SimHost ungetrackt & außerhalb der `.sln`.** Der ganze Umbau (RoutingTruth,
-DomainExtractor, GraphBuilder, HtmlPresenter, SimHost, knowledge-graph.html) ist nicht committet;
-SimHost fehlt in der Solution. *Empfehlung:* committen, SimHost in die `.sln` aufnehmen (oder
-bewusst als Tool außerhalb markieren).
+**P2-3 · Graph/SimHost ungetrackt & außerhalb der `.sln`. ✅ erledigt.** Extractor und Werkbank (bis 2026-10-13
+`SimHost`) sind committet und in der `.sln`; die Simulationsschicht ist entfernt (Werkbank P8).
 
 **P2-4 · `BoundedInbox` nicht airtight** (FIFO ab 10.000). Theoretisches Loch bei extremem
 Fan-out/langer Latenz. *Empfehlung:* akzeptierter Tradeoff — dokumentieren; ggf. persistente

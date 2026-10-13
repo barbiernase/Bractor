@@ -110,11 +110,11 @@ mit Schulden/Einschränkung · 🟠 teilweise / im Umbau · 🔴 blockiert/unfer
 
 | Feature | Status | Beleg |
 |---|:--:|---|
-| GraphExtractor (Property-Graph + HTML-Board) | 🟡 | 138/169; ungetrackt, `GraphModule` gelöscht |
-| SimHost (Live-Simulation echter Domänenlogik) | 🟡 | Port 5178; nicht in `.sln`, ungetrackt |
+| GraphExtractor (CLI) + GraphExtractor.Kern (Lesen, Sicht, Gesten-Motor) | 🟢 | `--check`, `--sonde` grün (2026-10-13) |
+| Werkbank (Editor-Server: warmer Workspace, Gesten → Patch, ⟳, Durchspielen, Spur; bis 2026-10-13 `SimHost`) | 🟢 | Port 5178, in der `.sln`; Simulationsschicht entfernt (Werkbank P8) |
 | ProjectScanner (Struktur-Dump) | 🟡 | älteres Nebengleis |
-| Prüfstand-Tests (Ebene 1, store-frei) | 🟢 | **126/126 grün** (gemessen 2026-08-12) |
-| Integration-Tests (Ebene 2, echte Infra) | 🟢 | 41 Tests (infra-abhängig) |
+| Prüfstand-Tests (Ebene 1, store-frei) | 🟢 | **515/515 grün** (gemessen 2026-10-13) |
+| Integration-Tests (Ebene 2, echte Infra) | 🟢 | **39/39 grün**, sequentiell (gemessen 2026-10-13) |
 | Client-Collection-Tests | 🟢 | 26 Tests |
 | LoadHarness (Durchsatz/Saga/Serializer) | 🟢 | 4 Modi; nicht in `.sln` |
 

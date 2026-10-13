@@ -1,9 +1,9 @@
 # Zielbild: Die Werkbank
 
-> **Status 2026-10-12: verbindliches Zieldokument, noch nicht umgesetzt.** Es fasst die Entscheidungen vom 2026-10-11/12 zusammen:
+> **Status 2026-10-13: umgesetzt (P0–P8, Plan `docs/plan-werkbank-umsetzung.md` §17).** Verbindliches Zieldokument vom 2026-10-12; es fasst die Entscheidungen vom 2026-10-11/12 zusammen:
 > Quellen als Treiber, Umgebungen statt Simulation, Spur, ein entschlackter Editor, Umfang. Wo ältere Dokumente widersprechen, gilt
-> dieses. Widersprüchliche Konzepte wurden gelöscht bzw. gekürzt (§15). Ist-Dokumente (`01`–`13`) beschreiben den heutigen Code
-> und werden mit der Umsetzung nachgezogen.
+> dieses. Widersprüchliche Konzepte wurden gelöscht bzw. gekürzt (§15). Ist-Dokumente (`01`–`13`) beschreiben den heutigen Code.
+> Der Werkbank-Server heißt seit P8.3 auch im Code `Werkbank` (vorher `SimHost`).
 >
 > **Umsetzungsplan:** `docs/plan-werkbank-umsetzung.md` (Ist-Befund, Lücken, Arbeitspakete).
 >
@@ -435,8 +435,8 @@ Die Ergänzungen sind additiv: Das Spalten-Layout bleibt, bearbeitet wird nur im
 
 | Entfällt | Datei / Symbol | Ersetzt durch | Phase |
 |---|---|---|---|
-| Simulation im Editor | `SimHost/ModellSimulation.cs`, `SimHost/Musterwerte.cs`, `/api/editor/sim/*`, `/api/llm/simulieren`, JS-Abschnitt „SIMULATION“ (Animation, Abdeckung, Fluss-Schritt) in `GraphExtractor/HtmlPresenter.cs` | Umgebung `sim` + Spur | P8 |
-| Laufwerke als Editor-Motor | Nutzung von `Cqrs.Testing/Fluss.cs` (`FlussLaufwerk`) und `Saga.cs` (`SagaLaufwerk`) durch SimHost | — (für Prüfstand-Tests bleiben sie, solange Tests sie nutzen) | P8 |
+| Simulation im Editor | `SimHost/ModellSimulation.cs`, `SimHost/Musterwerte.cs`, `/api/editor/sim/*`, `/api/llm/simulieren`, JS-Abschnitt „SIMULATION“ (Animation, Abdeckung, Fluss-Schritt) (zuletzt `SimHost/wwwroot/editor/editor.js`) | Umgebung `sim` + Spur | P8 ✅ gelöscht |
+| Laufwerke als Editor-Motor | Nutzung von `Cqrs.Testing/Fluss.cs` (`FlussLaufwerk`) und `Saga.cs` (`SagaLaufwerk`) durch SimHost | — (für Prüfstand-Tests bleiben sie, solange Tests sie nutzen) | P8 ✅ (SimHost ohne Cqrs.Testing) |
 | Board-Modell als Wahrheit | `board-model.json`, localStorage-Modell, `mergeBoard`, `_herkunft`/„ungeschrieben“, Entwürfe im Board, `deSave`, Knopf „C# schreiben“, 👁 Vorschau, `/api/editor/board`, `/api/editor/write` (als Sammel-Schreiben) | Code + Ansichts-Datei + Patch je Geste | P7 |
 | Paritätsprüfung Code⇄Board | Großteil von `GraphExtractor.Kern/ParitaetsPruefung.cs` | Code-ohne-Karte-Gate, Wirker⇄Karte | P7 |
 | JS-Ableitungen | `akteurSet`/`akteurVon`, `flussRegeln`, `deriveMembership`, `derivedStores`, `compatible`, `deAkteurParitaet` | Server-Ableitung (`board.sicht`, `/api/werkbank/passt`, `/api/werkbank/kette`) | P7.3 ✅ |
@@ -518,7 +518,7 @@ Die Reihenfolge folgt den Abhängigkeiten. Jede Phase endet grün:
 | **P5 Durchspielen** | Editor als Client (Sim-Token, Konsole mit Formularen); `Laufort: Hand` + offene Aufträge an der Funktions-Karte; Datei-Drop auf Quellkarte; ⏩; Python-Worker starten | Im Browser: Bild ablegen → Vorgang läuft durch; Funktion ohne Implementierung per Hand beantworten → Fluss läuft weiter; Command als Akteur → Event sichtbar |
 | **P6 Visualisierung** | Vorgänge-Liste, Spur-Überlagerung, Zeitleiste, Live-Puls, Fokus (ersetzt Slice/Kette/◎/Inspector), ↤/↦ | Im Browser: gewählter Vorgang zeigt nummerierten Weg; Zeitleiste schiebt; Puls zählt |
 | **P7 Eine Wahrheit** | warmer Roslyn-Workspace im Server; Geste → Patch; Extractor liest Code mit Fehlern; Board-Persistenz/Merge raus; Server-Ableitungen statt JS-Spiegel; Validator → Analyzer; Rumpf aus der Datei, 🤖 als Aktion; Code-Karte + Gate „Code ohne Karte: 0“; Umbenennen/Löschen/Signatur über Roslyn; ↶ = Patch zurück | `--check`: Code ohne Karte = 0; Umbenennen eines Events ändert alle Verweise und baut; keine JS-Ableitungsfunktion mehr; Geste < 300 ms (gemessen) |
-| **P8 Simulation raus** | §10 Zeile „Simulation“ und „Laufwerke“ | SimHost ohne `ModellSimulation`/`Musterwerte`/`/sim/*`; Prüfstand weiter grün |
+| **P8 Simulation raus** | §10 Zeile „Simulation“ und „Laufwerke“ | SimHost ohne `ModellSimulation`/`Musterwerte`/`/sim/*`; Prüfstand weiter grün — ✅ 2026-10-13 |
 
 P0, P1 und P2 sind unabhängig voneinander. P3 braucht P2. P4 kann nach P2 parallel zu P3 laufen. P5 und P6 brauchen P3 und P4. P7
 kann nach P3 beginnen. P8 kommt zuletzt, denn vorher gäbe es ohne P3–P6 kein Durchspielen.

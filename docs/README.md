@@ -12,7 +12,7 @@ Proto.Actor (virtuelle Cluster-Actors), Marten/PostgreSQL (Event-Store = einzige
 und Redis (nicht-autoritativer Versions-Index). Alles Dispatchende wird zur Compile-Zeit
 über Roslyn-Source-Generatoren erzeugt — **ohne Runtime-Reflection**. Dazu kommen ein
 generierter Blazor-Client, ein Python-SDK samt ML-Worker, sowie ein Wissensgraph-Extractor
-mit Live-Simulations-Runtime.
+als Werkbank (echter Host in Umgebung `sim`, Spur).
 
 ## Reifegrad auf einen Blick
 
@@ -22,7 +22,7 @@ mit Live-Simulations-Runtime.
 | Konsum-/Prozess-Maschine | 🟢 | stark; Co-Commit implementiert & guard-gehärtet (`ICoCommitTracker`, 2026-08-12) |
 | Generatoren & Analyzer | 🟢 | 15 Build-Guards, reflexionsfrei, konsistent |
 | Multi-Node / Wire-Transport | 🟢 / 🟡 | über alle Planes verdrahtet & bewiesen; Betrieb noch container-only |
-| Graph-Extractor + SimHost (Domänen-Editor) | 🟡 | in der `.sln`, Parität `--check` + Sonde `--sonde` grün; LLM-Füllung, Simulation „als Akteur" offen |
+| Graph-Extractor + Werkbank | 🟢 | in der `.sln`, Parität `--check` + Sonde `--sonde` grün; Werkbank P0–P8 umgesetzt (keine Simulationsschicht, Gesten → Patch, Spur, Durchspielen) |
 | Python-SDK + ML-Worker | 🟡 | Kernpfad + generierte Vertrags-/Client-Basen, Tests (SDK 19, Worker 11); Registry noch handgepflegt |
 | Frontend (Blazor-Client) | 🟡 | **Build 2026-08-12 repariert** (stale Referenz entfernt); modulare Kette (`Domain.Client.Modules.Blazor`) baut, alte Legacy-Projekte noch auf Disk |
 | Tests & Vermessung | 🟢 | 280 Prüfstand grün (2026-10-06), Integration gegen echte Infra, ehrliche Perf-Belege |
@@ -75,10 +75,10 @@ Status geprüft 2026-10-12. „umgesetzt" = steht im Code; „Konzept" = Entwurf
 
 | Datei | Thema | Status |
 |---|---|---|
-| [konzept-werkbank.md](konzept-werkbank.md) | **Zielbild Werkbank** — Entwerfen, Erzeugen, Durchspielen, Spur, Backend in einem Editor; Phasen P0–P8 | **Zieldokument** |
+| [konzept-werkbank.md](konzept-werkbank.md) | **Zielbild Werkbank** — Entwerfen, Erzeugen, Durchspielen, Spur, Backend in einem Editor; Phasen P0–P8 | **umgesetzt** (2026-10-13) |
 | [plan-werkbank-umsetzung.md](plan-werkbank-umsetzung.md) | **Umsetzungsplan Werkbank** — Ist-Befund, Lücken zum Zielbild, Entscheidungen E1–E10, Arbeitspakete S0/P0–P8 | **Plan** |
 | [konzept-akteure.md](konzept-akteure.md) | **Akteure, Akteur-Verträge (Zusagen), Clients** — wer hineingibt, was er draußen zusagt, welche Software es tut | umgesetzt; durable Zustellung an Clients offen |
-| [konzept-domaenen-editor.md](konzept-domaenen-editor.md) | **Domänen-Editor** — kanonische Referenz (Leitprinzipien, Palette, Schreib-/Leseseite, Prozess, Betrieb, Bedienung, SimHost, Akteure §12) | gebaut |
+| [konzept-domaenen-editor.md](konzept-domaenen-editor.md) | **Domänen-Editor** — kanonische Referenz (Leitprinzipien, Palette, Schreib-/Leseseite, Prozess, Betrieb, Bedienung, Werkbank-Server, Akteure §12) | gebaut |
 | [konzept-editor-panel-bearbeitung.md](konzept-editor-panel-bearbeitung.md) | Bearbeiten nur im Panel, Graph als Landkarte | umgesetzt |
 | [konzept-handle-ausgaenge.md](konzept-handle-ausgaenge.md) | Handle-Ausgänge aus der Signatur (CQRS050) | umgesetzt |
 | [konzept-llm-minimalkontext.md](konzept-llm-minimalkontext.md) | LLM-Füllung von Code-Blöcken, Kontext nur aus Code + Graph | gebaut (Kontexte + Konsole) |

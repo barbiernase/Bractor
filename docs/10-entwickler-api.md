@@ -316,6 +316,12 @@ evs.Should().ContainSingle().Which.Should().BeOfType<DeckungReichtNicht>();
 **Store-Semantik gehört nach Ebene 2** (echtes Marten) — nie faken. Es gibt keinen
 `InMemoryEventStore`.
 
+Für Kaskaden über mehrere Aggregate, Prozesse und Flüsse gibt es die Test-DSL `Cqrs.Testing`
+(`Szenario.Für<T>(…)`, `SagaSzenario`, `FlussLaufwerk`; Beispiele `SammelvorgangKaskadeTests`, `FlussLaufwerkTests`).
+**Ausprobieren** ist kein Test: in der Werkbank ⟳ (echter Host in Umgebung `sim`, eigene DB), dann über die Leiste unten
+durchspielen (Konsole als Akteur, Datei-Drop auf die Quellkarte, ⏩, ▶ Worker) und in der Spur ansehen
+([konzept-werkbank.md](konzept-werkbank.md) §6/§7). Eine Simulation im Editor gibt es seit Werkbank P8 nicht mehr.
+
 ## 10.11 Die Reinheits-Grenze — was NICHT im Fachcode steht
 
 Bewusst unsichtbar (Framework/Generat): `Id`/`Version`, `State`-Property + Ctor, OCC, Signal,

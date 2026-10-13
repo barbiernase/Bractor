@@ -10,7 +10,8 @@ nicht besitzt":
 | 1 — Prüfstand | `Infrastructure.Pruefstand.Tests` | in-memory, **store-frei** | reine store-freie Logik: Decider/Applier, Fold, Routing, Wire-Serializer, Analyzer, Signale | ja |
 | 2 — Integration | `Infrastructure.Integration.Tests` | **echtes** Marten/Postgres, Consul, Redis, Kestrel | Store-**Semantik** + E2E-Cluster-Verhalten | **nein** (erzwungen sequentiell) |
 | Client | `Client.Infrastructure.CollectionTests` | in-memory | Frontend-`VirtualCollection` | ja |
-| Last | `LoadHarness` | echter Cluster (bootet 1×) | Durchsatz, Latenz, Exactly-once, cross-node Saga, Serializer-Bench | n/a |
+| Last | `LoadHarness` (entfernt, Commit fb07f5e; Messwerte unten historisch) | echter Cluster (bootet 1×) | Durchsatz, Latenz, Exactly-once, cross-node Saga, Serializer-Bench | n/a |
+| Werkbank | `Werkbank` + `Host.Grpc --umgebung sim-main` | echter Host gegen die Sim-DB `cqrs_sim_<branch>` | Abnahme im Browser: ⟳ grün, Vorgang durchspielen, Spur, Geste + ↶ — kein Test, kein Ersatz für Ebene 1/2; eine Simulationsschicht gibt es nicht (seit Werkbank P8) | n/a |
 
 **Prinzip:** Ebene 1 testet nur, was ohne Store deterministisch entscheidbar ist. Store-Semantik
 (Co-Commit-Atomarität, `seq_id`-Lücken, Snapshot-Roundtrip, Upcasting-Bytes) wird
@@ -28,7 +29,12 @@ konsistent mit Invariante 6).
 | Client.Infrastructure.CollectionTests | 26 | 0 | 1 | ja |
 | LoadHarness | — | — | 1 (480 LOC) | **nein** |
 
-## 12.3 Echte Messwerte (gemessen 2026-08-12)
+## 12.3 Echte Messwerte
+
+Stand 2026-10-13 (Werkbank P8): Prüfstand **515/515** (14–20 s), Integration **39/39** sequentiell (1 min 41 s),
+`GraphExtractor -- --check` und `--sonde` grün, Python Worker 20/20, SDK 28/28. Verlauf je Phase: `docs/plan-werkbank-umsetzung.md` §16.
+
+Gemessen 2026-08-12 (Grundlinie):
 
 | Messung | Ergebnis |
 |---|---|
@@ -131,6 +137,10 @@ Projektnotizen, nicht im Code hinterlegt.
   `Methoden_Namen_mit_Unterstrich`. Muster: `Phase5/KontoAggregatTests.cs`. Store-Semantik →
   Ebene 2 (`CoCommitPostgresTests` als Vorlage). Minimalbeispiel siehe
   [10 §10.10](10-entwickler-api.md).
+- **Test-DSL `Cqrs.Testing`** (nur Prüfstand): `Szenario`/`SagaSzenario` (Gegeben → Wenn → Dann über die generierte
+  Fabrik) und `FlussLaufwerk` (Flüsse mit gewähltem Ausgangsfall je Funktion). Nutzer: `FlussLaufwerkTests`,
+  `UmgezogeneFluesseTests`, `SammelvorgangKaskadeTests`, `SammelvorgangBarriereTests`. Der frühere Export „Als Test“ aus der
+  Editor-Simulation ist mit ihr entfallen (Werkbank P8).
 
 ## 12.8 Bekannte Flakes
 
