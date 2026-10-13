@@ -3,6 +3,44 @@
 Dies ist die konsolidierte Entscheidungsgrundlage: eine nach Schwere priorisierte Liste aller
 Befunde über alle Subsysteme, jeweils mit Einschätzung und konkreter Handlungsempfehlung.
 
+## 13.0 Offen — Stand 2026-10-13
+
+Eine Quelle für „offen“. Übernommen aus den früheren Abschnitten „Bewusst offen“ und „Kleinere Schulden“ der `CLAUDE.md`, gegen den Code
+korrigiert und um die Befunde der Prüfung gegen das Werkbank-Zielbild (Leitsätze W1–W12) ergänzt. Die älteren Befunde in §13.3 werden im
+nächsten Aufräumschritt nachgezogen; wo sie §13.0 widersprechen, gilt §13.0.
+
+**Leitsatz-Schulden (Werkbank-Zielbild):**
+- **W10 Reflection:** `Cqrs.Codegen` liest die gebauten DLLs per `MetadataLoadContext` (Proto, STJ-Kontexte, Python-Basen); der Python-Vertrags-Emitter
+  filtert dabei anders als `Infrastructure.SourceGeneration/Clientvertragslesart.cs` (Hash-Risiko). `Werkbank/Server/Schema.cs` liest die Konfig-Typen
+  per `GetProperties`/`Activator` aus der eigenen DLL. Laufzeit: Marten-JSON per Default reflektiv (`Schreibpfad.GeneriertesJson` = false),
+  `MartenProzessMarkingStore` (`JsonSerializer` mit `GetType()`), `AggregateActorBase.Clone`, `Results.Json` mit anonymen Typen. Kein Analyzer/BannedApi.
+- **W2 feste Projektnamen:** `Cqrs.Codegen/Program.cs:36`, `Proto.SourceGeneration/Program.cs:20`, `ProtoRepo/ProtoRepo.csproj` (Inputs ohne
+  `Domain.Akteure` → reine Vertragsänderung überspringt den Codegen), `codegen.sh`, `Werkbank/Server/WerkbankServer.cs:83` (Stand-Hash),
+  `Infrastructure.csproj` referenziert Domänen-Projekte, `ProzessManagerWiring.AlleRegeln` vereinigt fest `Domain` + `Domain.Pipeline`,
+  Generate in festen `Domain.*`-Namespaces (`ProjectionQueryServiceGenerator`, `ProjectionServicesGenerator`). Vorbild für die Lösung: `GraphExtractor.Kern/Projektlage.cs`.
+- **W3 Ableitungen im Editor-JS:** `graphNodes`/Karten-Ids, `akteurHoert`, `flParameter`, `autoArgs`, Port-Kardinalität (`Werkbank/wwwroot/editor/editor.js`).
+- **W11 je Absicht ein Weg:** Handle-Pipeline (`IPipelineHandler`), Trigger-Welt und `[Ingress]` ohne Domänen-Nutzer, Rückbau offen;
+  `Selbst<T>`/`Frist<TCmd>` nur in der Handle-Welt — Zeitlimits im Dirigenten werden nur über den 15-s-Backstop entdeckt (skaliert nicht;
+  der Fristplaner gehört als Weck-Quelle in den Dirigenten). Prozess-DSL und Fluss-DSL sind zwei Schreibweisen auf demselben Dirigenten.
+  Zwei Rumpf-Schreibwege (`Rumpf.Ersetze` für ✎, `CodeSync.SetzeRumpf` für 🤖). `IAkteurDienst<A>` nur an der Handle-Pipeline verdrahtet.
+
+**Framework:**
+- P5b-Feinschliff: `MarkingKompakt` ist bei extremem Fan-out O(N) (Payloads je Vorgang); die Kompensation (`NächsteKompensationAsync`) liest ab 0.
+- Schreibpfad: paralleler Drain skaliert sublinear (`wait_event`).
+- `KlärungNötig`-Pfad korrekt per Konstruktion, aber ohne Testdeckung.
+- **Testlücke seit Commit `fb07f5e`:** keine Saga-E2E-, Snapshot- und Marking-Äquivalenz-Tests mehr.
+- Prüf-Lücken der Werkzeuge: Das Grammatik-Gate in `--check` findet die IDs auch in `Grammatik.cs` selbst; der Fixpunkt prüft Akteure, Verträge,
+  Clients, Funktionen und Dienste nicht; die Sonde deckt `SendeJe`, Count-Join, Kompensation, `IMensch`, `IstClient` nicht ab.
+- Toter Code: `MartenProjectionTracker`, `CqrsFrameworkOptions`, `IViewModel` + `ViewModelGenerator`.
+
+**Werkbank und Clients:**
+- Geste p50 unter Fremdlast 346–470 ms (Ziel 300 ms).
+- Akteure/Clients: durable Zustellung an Clients, `als` im Envelope, Zusagen über C#, Anmeldung je Person (`docs/konzept-akteure.md` §9); TLS fehlt.
+- Die Saga-DSL in `Cqrs.Testing` kennt `Rufe` nicht.
+
+**Erledigt (früher hier offen):** Multi-Node Iteration 1+2 samt Cold-Start-Schema-Migrator (`Infrastructure/Extensions/CqrsSchemaMigrator.cs`);
+DtoMapper-Skalarregeln (eine Quelle `ProtoScalarSpec`); `Reaktionsempfaenger`-Dedup (Domäne gelöscht).
+
 ## 13.1 Gesamteinschätzung
 
 Das Projekt ist ein **konzeptionell außergewöhnlich kohärentes** CQRS/ES-Framework: wenige

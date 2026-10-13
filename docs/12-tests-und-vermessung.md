@@ -31,8 +31,9 @@ konsistent mit Invariante 6).
 
 ## 12.3 Echte Messwerte
 
-Stand 2026-10-13 (Werkbank P8): Prüfstand **515/515** (14–20 s), Integration **39/39** sequentiell (1 min 41 s),
-`GraphExtractor -- --check` und `--sonde` grün, Python Worker 20/20, SDK 28/28. Verlauf je Phase: `docs/plan-werkbank-umsetzung.md` §16.
+Stand 2026-10-13 (nach Blazor-Client mit Vertrag, Commit `c7c6608`): Prüfstand **526/526**, Integration **39/39** sequentiell,
+Python SDK **28/28**, Worker **20/20**; `GraphExtractor -- --check` und `--sonde` grün (`--check`: Code ohne Karte 0, Code-Karten 4 = 1,0 %).
+Diese Zeile ist die eine Quelle für aktuelle Testzahlen; andere Dokumente verweisen hierher. Verlauf je Phase: `docs/plan-werkbank-umsetzung.md` §16.
 
 Gemessen 2026-08-12 (Grundlinie):
 

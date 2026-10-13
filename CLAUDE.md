@@ -1,286 +1,116 @@
 # CLAUDE.md
 
-Projektgedächtnis für Claude Code. Bewusst schlank — wird bei jeder Session geladen.
-Volltexte liegen in `docs/` und werden bei Bedarf gelesen, nicht hier eingebettet.
-
-> **Einstieg in die Doku:** `docs/README.md` (Wegweiser). Ist-Zustand: `docs/01-ueberblick.md` bis
-> `docs/13-reifegrad-schulden-bewertung.md` (flach, kanonisch). Stärken/Schulden/offene Baustellen: `docs/13-reifegrad-schulden-bewertung.md`. Das „Warum":
-> `docs/02-design-prinzipien.md`. Wie schreibe ich X (inkl. Prozess): `docs/10-entwickler-api.md`. Akteure/Verträge/Clients:
-> `docs/konzept-akteure.md`. Editor: `docs/konzept-domaenen-editor.md`. Altes liegt in `docs/_archiv-2026-08-12/` (nur Historie).
->
-> **ZIELBILD (verbindlich, 2026-10-12; umgesetzt P0–P8, abgeschlossen 2026-10-13): `docs/konzept-werkbank.md`** — der Editor als Werkbank: Code ist die einzige Wahrheit (kein
-> Board-Modell), keine Simulationsschicht (echter Host in Umgebung `sim` gegen eigene echte DB), Spur (`ursache`/`wirker`/`stand`),
-> Quellen = fest codierte Treiber + Konfig (zuerst Filewatcher), Backend je Umgebung im Editor. Keine GUIs, keine Schema-Evolution.
-> Umsetzung in Phasen P0–P8 (§13). Wo andere Dokumente widersprechen, gilt das Zielbild.
+Projektgedächtnis für Claude Code — bewusst schlank, nur Wissen, kein Changelog (Historie steht in Git).
+**Maßstab ist `docs/konzept-werkbank.md`** (Zielbild, umgesetzt 2026-10-13); wo etwas widerspricht, gilt es. Wegweiser: `docs/README.md`.
+Offenes und Schulden: `docs/13-reifegrad-schulden-bewertung.md` §13.0. Zahlen und Messwerte: `docs/12-tests-und-vermessung.md`.
 
 ## Was das Projekt ist
 
-Selbstgebautes, signalbasiertes CQRS-/Event-Sourcing-Framework auf **Proto.Actor** (virtuelle
-Cluster-Actors), **Marten/PostgreSQL** (Event-Store, einzige Wahrheit) und **Redis**
-(abgeleiteter, nicht-autoritativer Versions-Index). Events werden geordnet und **genau einmal
-wirksam** an Projektionen, Reaktionen, Prozesse und Pipelines zugestellt — ohne
-Runtime-Reflection, alles über Typen geroutet, alles Dispatchende zur Compile-Zeit generiert.
+Ein **allgemeines** signalbasiertes CQRS-/Event-Sourcing-Framework auf **Proto.Actor** (virtuelle Cluster-Actors), **Marten/PostgreSQL**
+(Event-Store, einzige Wahrheit) und **Redis** (nicht-autoritativer Versions-Index). Events werden geordnet und genau einmal wirksam an
+Projektionen, Reaktionen, Prozesse und Flüsse zugestellt; alles Dispatchende ist zur Compile-Zeit generiert. Dazu gehört die **Werkbank**:
+ein Editor, in dem eine Anwendung entworfen, als Code erzeugt, gebaut, im echten Host durchgespielt und über die Spur nachvollzogen wird.
+Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling und Beispiel**, nicht der Maßstab.
 
-## Die sechs Invarianten (jede Entscheidung leitet sich hieraus ab)
+## Die sechs Invarianten
 
-1. Die Wahrheit ist der Log. Ordnung/Vollständigkeit/Wiederholbarkeit kommen NUR aus dem
-   Event-Store-Read.
-2. Das Signal ist nur ein Weckruf: trägt nur `(StreamId, Version)`, darf verloren, doppelt,
-   ungeordnet sein.
+1. Die Wahrheit ist der Log. Ordnung, Vollständigkeit und Wiederholbarkeit kommen NUR aus dem Event-Store-Read.
+2. Das Signal ist nur ein Weckruf: trägt nur `(StreamId, Version)`, darf verloren, doppelt, ungeordnet sein.
 3. Routing über Typen — nie ein handgebauter Identitäts-String.
-4. Keine Runtime-Reflection. Alles generiert.
-5. Der Fachcode bleibt rein. Cursor, Signal, Ordnung, Exactly-once, Sharding,
-   Prozess-Maschinerie tauchen im Entwickler-Code nie auf.
-6. Persistent genau dann, wenn ein durabler Konsument abhängt. Verlierbares (Tick,
-   UI-Feedback, Datei-Trigger) bleibt auf dem schnellen Kanal.
+4. **Keine Reflection.** Die Laufzeit nutzt generierte Tabellen/Kontexte; Werkzeuge (Codegen, Schema, Extractor) lesen über Roslyn.
+5. Der Fachcode bleibt rein: Cursor, Signal, Ordnung, Exactly-once, Sharding, Prozess-Maschinerie tauchen im Entwickler-Code nie auf.
+6. Persistent genau dann, wenn ein durabler Konsument abhängt. Verlierbares (Tick, Ablehnung, UI-Feedback, Kenntnis-Push an Clients) bleibt
+   auf dem schnellen Kanal. Quell-Nachrichten (z. B. vom Datei-Treiber) sind durabel: genau einmal je Kennung im Log.
 
-## Das tragende Bild: vier Konsumenten, eine Maschine
+## Werkbank-Leitsätze (Kurzform von `docs/konzept-werkbank.md`)
 
-Projektion, Reaktion, Prozess und Pipeline sind vier durable Konsumenten, die **dieselbe**
-store-agnostische Pull-/Signal-Schleife (`ProjectionAdapter`) nutzen. Kein zweiter Marker,
-keine Taxonomie — der Unterschied fällt aus Ctor-Stores + Rückgabetypen:
-- **Achse B (replaybar vs. emittierend):** `IProjectionTracker` (Co-Commit + Reset) vs.
-  `IEmittentenCursor` (best-effort, kein Reset). Beide gesetzt → Ctor wirft.
-- **Transport:** Signal (schnell) + Poll (30 s, Sicherheit) wecken dieselbe Cluster-Identität.
-- **Emit:** genau ein Weg (`CommandEmitter`), erzwungen durch den Analyzer **CQRS020/021**.
+- **W1** Code ist die einzige Wahrheit; gespeichert wird nur die Ansicht (`.werkbank/ansicht.json`). Unfertiges = Code, der nicht baut.
+- **W2** Der Graph kommt aus dem Code über Roslyn, nur aus Code-Fakten (Marker, Attribute, Symbole, Signaturen). Keine Namenskonventionen,
+  keine festen Projekt- oder Domänennamen in Framework und Werkzeugen.
+- **W3** Alles läuft im Backend: Ableitungen rechnet der Server (`GraphExtractor.Kern/Sicht`), der Editor ist eine dumme View.
+- **W4** Jede Geste ist sofort ein Patch am Code; ↶ nimmt den Patch zurück.
+- **W5** Prüfen = Bauen (Analyzer, Generatoren, Boot-Guards). `DomainEditor/Grammatik.cs` ist nur Daten (⊕, `--grammatik`).
+- **W6** Keine Simulation: Durchspielen = echter Host in Umgebung `sim` gegen eine eigene, echte DB.
+- **W7** Umgebung = eine Datei (`umgebungen/umgebung.<name>.json`); Struktur ist Code, Auswahl und Werte sind Konfig.
+- **W8** Quellen = fest codierte Treiber + Konfig; die Domäne benennt eine Quelle nur als Typ.
+- **W9** Spur: jeder Log-Eintrag trägt `ursache`, `wirker`, `ueber`, `stand`; der Wirker ist die Karten-Id.
+- **W10** Keine Reflection, auch nicht in Werkzeugen (= Inv. 4).
+- **W11** Allgemeines Framework: eine Primitive bleibt, wenn sie allgemein gebraucht wird — nicht, weil die Beispieldomäne sie nutzt. Je Absicht ein Weg.
+- **W12** Keine GUIs im Editor (Clients nur als Vertrag), keine Schema-Evolution im Editor (`IUpcast` bleibt als Backend-Primitive), kein Deploy.
 
-## Aktueller Stand (Kern 2026-08-11, ergänzt 2026-10-09)
+## Das tragende Bild
 
-**Kern fertig und in sich konsistent:** Schreibseite, Konsum-Maschine (Projektion + Reaktion),
-Prozess-Maschine (Event-Regel-DAG). **Feature-Strom geliefert:** Timer-/Webhook-Trigger,
-Deadlines/Fristen (`IDbClock`), Monitoring (`/health`, `/monitoring/metrics`), Dead-Letter
-(Read+Sink), Pipeline P6.1/P6.2 zerlegt. **Schreibpfad-Perf:** Group-Commit-Batching mit
-parallelem Drain (+48 %), STJ-Serializer (opt-in), optionaler Version-Index. **Snapshots** voll
-verdrahtet. **P5b Marking-Cursor geliefert:** der Prozess-Fold ist von O(N²) auf O(N) Stream-Reads
-(nicht-autoritativer Tail-Cursor, `IProzessMarkingStore` + Marten-`ProzessMarkingDoc`, HOT-Cache je
-Actor; Voll-Fold bleibt Fallback bei fehlendem/stale `RegelHash`). **Feuer-gerichtete Reads:** warm
-liest der Manager nur die seit dem letzten Fold befeuerten Streams nach → auch die DB-Roundtrips O(N²)→O(N)
-(gemessen echtes Postgres: bis 9× schnellere Wall-Clock bei N=60; mit Aggregat-Historie 5,5×). Kaltstart
-faltet voll (Invariante 1). Äquivalenz + Sagas grün.
+- **Schreibseite:** Command → Aggregat-Actor (Single-Writer, Inbox-Dedup) → `Decide` → Events → Group-Commit → Signal.
+- **Vier durable Konsumenten, eine Maschine:** Projektion, Reaktion, Prozess, Fluss. Projektion und Reaktion laufen über die Pull-/Signal-Schleife
+  `ProjectionAdapter` (Signal schnell + Poll 30 s). Ob replaybar (`IProjectionTracker`, Co-Commit) oder emittierend (`IEmittentenCursor`, kein Reset),
+  folgt aus den **Schreib-Fähigkeiten der Handles** und dem Rückgabetyp — kein zweiter Marker.
+- **Dirigent:** Prozesse (`IProzessDefinition`) und Flüsse (`IPipeline`, `PipelineFluss.Definiere`) laufen auf demselben `ProzessManager`
+  (Event-Regeln, Marking-Cursor, Backstop). Verarbeitung ist immer eine **Katalog-Funktion** (`IFunktion`, `Rufe<F>`); Laufort Host/Extern/Hand
+  steht in der Umgebung. Technik hinter einer Funktion ist ein **Domänen-Dienst** (`IDienst`), gebunden nach der Umgebung.
+- **Emit:** genau ein Weg (`CommandEmitter`), erzwungen durch CQRS020/021.
+- **Akteure:** alles, was hineinkommt, kommt von einem Akteur (`IDarf<T>`); Token → Akteur-Menge aus `Identitaeten`.
 
-**Katalog-Funktionen im Prozess (2026-10-07):** `Rufe<F>` neben `Sende<Cmd>` — eine Funktion (`IFunktion`: ein `IAuftrag<F>` hinein,
-OneOf-Ergebnis-Events heraus) wird wie ein Aggregat gerufen; kurz und lang gleich, nur `.Zeitlimit(…)` (für jeden Aufruf). Generierter
-Dispatch (`FunktionsGenerator`, CQRS068/069), `FunktionsAusfuehrer` (Slots, Wiederholen, genau ein Ergebnis im Ausführungs-Stream),
-Bindung `AddFunktion<F, Impl>` + Boot-Guard; Editor: Funktions-Karte, „Dann ƒ", ⏳. Doku `docs/10-entwickler-api.md` §10.5a.
-Offen: die Saga-DSL (Cqrs.Testing) kennt `Rufe` noch nicht (der Fluss-Laufwerk-Test schon; Python-Ausführer geliefert).
+## Wo was liegt
 
-**Logik-Element = EIN Muster (2026-10-11, `docs/konzept-domaenen-editor.md` §2 c′):** alles mit Logik ist ◀ Eingang · Ausgänge ▶ (OneOf) ·
-⚙ Fähigkeiten · Rumpf (Ausschnitt aus der Datei, ✎ als Geste, „🤖 füllen“ als Aktion — seit P7.4 keine 📝/🤖-Karten) — Decide/Apply, Handles, Store-Fns, Funktion (Signatur nur auf ihrer Karte,
-Abgleich an Interface + Impl), Fluss-λ (`fluss|…`), Prozess-Regel-λ (`saga|Prozess|Regel#Verb`) und die **Zusage/Kenntnis des Akteurs
-draußen** (`zusage|Client|Event@Klasse`: Python-Rumpf der Client-Implementierung — `PythonClients`/`PythonQuelle`/`PythonSync`; neue
-Implementierung legt ⟳ nach dem Bauen aus der generierten Basis an). Akteur-Ableitung JS = C# auch über Flüsse.
-**Editor-Regel: deklariert wird nur an der eigenen Karte, zugewiesen nur per ⊕** — kein Zuweisungs-Dropdown, keine Typ-Definition in
-einem fremden Knoten (Funktion, Fluss-Knoten, Prozess-Kette, Akteur „bietet an", Konfig); „＋" in der Zeile legt eine neue Karte an + verbindet.
-Funktion auf der Fläche wie ein Decider (Auftrag → ƒ + Rumpf → Ergebnisse). Bau-Argumente (Fluss-Eingang, Regel-Dann) im **visuellen
-Zuordnungs-Editor** (Knoten + Drähte, `zoOeffne`; `docs/konzept-editor-pipelines.md` „Zuordnungs-Editor“), gespeichert als Argument-Liste.
-
-**Pipeline als Fluss (2026-10-07, kanonisch — `docs/konzept-editor-pipelines.md` §14):** eine Pipeline ist eine Fläche aus
-Knoten — Quelle (`p.Quelle<IQuellNachricht>()`/`p.Auf<E>()`) → Katalog-Funktionen → Commands —, verdrahtet vom Draht aus
-(`var k = draht.Rufe<F>(λ)`, `p.Alle(…)` ∧, `.Oder(…)` ∨, `BeiZeitlimit()`/`BeiAbgelehnt()`, `draht.Je(…)`/`Sammle`). Läuft auf dem
-Dirigenten (Prozess-Manager) mit Knoten-Herkunft im Token; Funktionen per Vermittler-Actor + Pull (C# im Host, Python-Worker über
-gRPC). Im Editor ein ⛓-Rahmen, entwerfbar auf leerem Board (Sonde beweist gezeichnet → Code → gelesen). Dazu (2026-10-09):
-`quelle.Strom()` (Aggregat-Id der Quelle als Draht), `strom.Warte<A, B>().Zeitlimit(t)` (Frist/Storno als Rennen), Katalog-Funktionen
-mit **Lese-Fähigkeit** als Parameter (nur Host), Akteur-Tor `IDarf<IFunktion>` für angebotene Funktionen, der Webhook einer Quelle als Konfig
-(`Quellen:<Typ>:Webhook`, seit P7.5.2). **Alle Domänen-Pipelines sind Flüsse** (Bildeingang, DatensatzRangeAufloesung, DatensatzEinfrieren, TrainingWaechter,
-Benchmark) — `IPipelineHandler` entfällt als Domänen-Baustein, Rückbau der Maschinerie offen (§14.10). Durchgespielt wird der echte Host
-in Umgebung `sim` (Werkbank P5/P6); `FlussLaufwerk` (Cqrs.Testing, derselbe Belegungs-Kern `FlussBelegung` wie der Dirigent) bleibt nur für
-Prüfstand-Tests. LLM-Slots
-`funktion` + `fluss` (Konsole füllt Lambdas). Integration `PipelineFlussE2ETests` inkl. Python-Worker über gRPC grün.
-
-**Quellen = Treiber + Konfig (2026-10-12, Werkbank P1):** eine Quelle ist nur ein Typ (`public sealed record DateiErkannt : DateiGemeldet;`,
-CQRS070), der Datei-Treiber ist fest codiert (`Infrastructure/Quellen/Treiber/Datei/`), die Werte stehen unter `Quellen:<Typ>` (Pfad, Muster,
-Fertig-Erkennung, Kennung, Laufmodus); `GeneratedQuellen` + `AddQuellen(configuration)`. `IQuelle`/`AddQuelle`/`DateiQuelle` gibt es nicht mehr.
-Umsetzungsplan der Werkbank: `docs/plan-werkbank-umsetzung.md`.
-
-**Werkbank-Server + Kopfzeile (2026-10-12, Werkbank P3):** ⟳ im Editor = bauen → Python-Basen → neu lesen → Daten prüfen → Infra → Host
-(`Host.Grpc --umgebung`, Prozess der Werkbank, nur Sim) — `Werkbank/Server/`, Endpunkte `/api/werkbank/*`, Fortschritt per SSE. Fehler stehen an
-der Karte (Compiler: Typ/Member; Boot: `CQRS-BOOT {json}` mit Karte). 🖥 Host-Rahmen = Umgebungs-Datei, gezeichnet von EINEM generischen
-Formular-Renderer aus dem Schema; 📸 = Sim-DB-Stände (`<schema>.stand` trägt Proto-Stand und Projektions-Hashes). Code-Hashes (E9): Snapshot-
-Version enthält State + Applier, Projektionen bauen in Sim nach Code-Änderung beim Start neu auf (`ProjektionsStandDienst`).
-
-**Spur (2026-10-12, Werkbank P4):** jeder Log-Eintrag trägt die Header `ursache` (`Stream:Version`), `wirker` (= Karten-Id im Editor:
-`decide:A/C`, `fluss:P#knoten`, `prozess:P#A→C`, `funktion:F`, `quelle:T`, `reaktion:T`, `akteur:A` — EINE Quelle `Abstractions/Spur/WirkerId.cs`,
-Fluss-/Regel-Namen generiert der `ProzessRegelnGenerator` aus dem Quelltext, CQRS072) und `stand` (`-p:CqrsStand` beim Bauen von Host.Grpc).
-Ursache/Wirker reisen fluss-lokal wie der Akteur (`Spur.Von`), über Commands im Envelope, über Funktionen im `AuftragAnbieten`. Karten-Ids
-im Board sind stabil (`_id` = Wirker-Id bzw. natürlicher Schlüssel); `--check` prüft Registry-Namen = Karten. Einblick-API des Hosts (nur
-Einblick-Port): `/einblick/spur?ab=`, `/vorgaenge`, `/vorgang/{k}`, `/auftraege`, `/hinweise`, SSE `/neu` (`Infrastructure/Einblick/`).
-
-**Durchspielen (2026-10-12, Werkbank P5):** der Host hat einen JSON-Eingang (`/eingang/*` auf dem Einblick-Port, nur mit `Transport:JsonEingang`,
-Sim an): Command (mit Antwort) / Query als Akteur über Token → Akteur-Tor, Laufort `Hand` (`HandAusfuehrer`: die Werkbank beantwortet Aufträge).
-Der Wire-Kontext enthält Queries/Antworten, Enums als Namen. Editor: Leiste unten (Konsole als Akteur, ⧗ Aufträge, ▶ Worker), Datei-Drop auf die
-Quellkarte, ⏩ Uhr vor; Formulare kommen aus dem gelesenen Code (`/api/werkbank/formular`). sim-main hat Identitäten (`sim-<akteur>`) — ein
-externer Worker braucht einen Akteur mit `IDarf<F>` (`Bildrechner`), gestartet aus `Funktionen:<F>:Worker`.
-
-**Visualisierung (2026-10-12, Werkbank P6):** vierter Spur-Header `ueber` = Absender (Fluss-Knoten/Regel/Reaktion/Akteur, der den Command bzw.
-Auftrag abschickte; Aggregat aus dem Envelope, Funktion aus `AuftragAnbieten.Wirker`). Der Weg eines Eintrags über die Karten ist EINE reine
-Funktion (`Abstractions/Spur/SpurWeg.Aus`). Die Werkbank spiegelt die Spur (`Werkbank/Server/SpurSpiegel.cs`, SSE + Cursor) und liefert fertig:
-`/api/werkbank/spur/puls|vorgaenge|vorgang/{k}`. Editor: Leiste ☰ Vorgänge · ⏱ Zeitleiste · ⚠ Meldungen · 〰 Puls; Spur-Überlagerung (①②③ mit +Δt,
-✕/⏳ rot, alt grau), Schritt-Panel mit ↤/↦; EIN Fokus (Chip in der Ansichts-Leiste, ersetzt Slice/◎/⤢; die statische Kette kommt seit P7.3 vom Server).
-
-**Warmer Workspace (2026-10-12, Werkbank P7.1):** der Extractor ist Bibliothek (`GraphExtractor.Kern`) + CLI (`GraphExtractor`); EIN Lesepfad
-`Lesen.LiesAsync` → `Lesung`. Die Werkbank hält den Workspace warm (`Werkbank/Server/Arbeitsbereich.cs`: einmal kalt laden, Dateiwächter →
-`WithDocumentText` nur im Speicher, warm gelesen nur aus den Compilations unterhalb der Laufzeit, E7 — Routing aus den Decide-Signaturen, Gegenprobe
-in `--check`). Text-Änderung → Übersetzen + Lesen p50 224 ms; ⟳ „Neu lesen“ und `/api/editor/model` kommen daraus. Kein statischer Zustand mehr
-(`Quelltexte` je Solution-Stand). Code mit Fehlern wird gelesen: unaufgelöster Basistyp → Code-Karte ⚠ (`codeKarten`, `code:T`) bzw. Befund an der
-Karte, Fluss-Anweisung ohne Knoten / verworfene Regel / doppelter Name → Lese-Befund (`lesebefunde`, über `/api/werkbank/diagnosen` an der Karte).
-Jede Karte trägt `_ort {datei, start, ende, zeile}`.
-
-**Geste → Patch (2026-10-12, Werkbank P7.2):** jede Bearbeitung im Editor ist sofort ein Patch am Code — es gibt kein „C# schreiben“, kein
-gespeichertes Board und kein Zusammenführen mehr. Der Editor schickt das Karten-Delta (geändert/neu ganz, entfernt als natürlicher Schlüssel) an
-`POST /api/werkbank/geste`; der Motor im Kern (`GraphExtractor.Kern/Schreiben/Gesten.cs`) stempelt die Herkunft aus dem Code-Stand, schreibt über
-Scaffolder/Abgleich, löscht an `_ort` + `_teile`; Umbenennen = Roslyn-Renamer (`/api/werkbank/umbenennen`, alle Verweise auch in Lambdas); ↶ =
-`.werkbank/verlauf.<branch>.json` (auch 🤖-Übernahmen). Danach liest der warme Workspace neu, Compiler-Befunde der berührten Dateien stehen sofort
-an der Karte. Die Ansicht (Positionen, Filter) liegt in `.werkbank/ansicht.json`. Nie auf `main`. Tests: `Extractor/GestenTests`.
-
-**Ableitungen nur auf dem Server (2026-10-12, Werkbank P7.3):** der Editor rechnet nichts mehr aus dem Board nach. `GraphExtractor.Kern/Sicht/`
-(`Sicht.Aus(board)`) liefert mit jedem Board `board.sicht`: je Karte (Editor-Id: `rec:`, `dec:`, `hd:prj:…`, `fs:` …) Domäne, Block, Rolle, Akteure,
-Akteur-Rahmen, Insel, Vertreter, Store-Scope, Mitgliedschaft, Tiefe; dazu Kanten, Prozess-Kette, Akteur-Reihenfolge, Fluss-Heimat, Client-Anschlussleisten,
-Ketten-Pfade. ⊕ fragt `POST /api/werkbank/passt` (Port + Kandidaten → passt/gesperrt mit Regel, Grammatik aus `rahmen.grammatik`), der Fokus
-`GET /api/werkbank/kette`. Im JS bleiben nur Nachschlagen + Ansichts-Wünsche. `--check` prüft gegen die
-Server-Kartenliste („Code ohne Karte: 0“, leere Geste = kein Patch); die gezeichnete Sonde ist ein Gesten-Skript (`Sonde/Gezeichnet.gesten.json`).
-
-**Prüfen = Bauen, Code-Karte (2026-10-12, Werkbank P7.4):** Code-Karte als Gate — jede Typ-Deklaration oberster Ebene der Editor-Projekte liegt in der
-Spanne einer Karte (`_ort`/`_teile`; Store-Impl gehört zur Store-Karte, jede Store-Fn steht an ihrer Fähigkeit); was kein Baustein ist, wird eine Code-Karte
-(`code:T`, roher Code, partial-Teile an einer Karte, ⚠ nur bei unaufgelöster Basis). `--check` prüft das unabhängig aus der Syntax („Code ohne Karte: 0“
-Pflicht, Anteil der Code-Karten als Kennzahl: 9 = 2,1 %). **Prüfen = Bauen:** `DomainEditor/Validator.cs` ist gelöscht; seine Regeln sind Analyzer —
-`Domain.SourceGeneration/FlussAnalyzer.cs` (CQRS073–078), `ModellAnalyzer.cs` (CQRS079–083), `Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs`
-(CQRS084–088: Regeln über alle Domänen-Projekte, in der Laufzeit-Compilation, ohne Quell-Ort — die Meldung beginnt mit `'Typ'`); Graph-Diagnosen
-des Extractors entfallen bis auf Info. Die Werkbank holt die eigenen Regeln (CQRS…) bei ⟳ selbst aus den Analyzern der warmen Compilations
-(`Arbeitsbereich.RegelBefundeAsync`, unabhängig vom inkrementellen Bauen) und je Geste für die berührten Dateien; ein Befund hängt an der innersten
-Karte, deren `_ort` (Zeile bis `bis`) ihn enthält. **LLM-Prüfung (L18):** decide/apply/store/… und Fluss-/Regel-Lambdas probeweise im warmen
-Workspace (`Arbeitsbereich.PruefeProbeweiseAsync`: Datei mit Kandidat, Compiler + Analyzer des Projekts, nur neue Fehler) — `ProjektPruefung` entfällt.
-**Rumpf aus der Datei:** die 📝/🤖-Karten, `codeSrc`, Andocken, Code-Kanten, Code-Sync-Poll und `/api/editor/code|open` sind weg. Der Rumpf-Port zeigt den
-Rumpf so, wie der warme Workspace ihn liest (Board: `rumpf` + Ort — `_ort` der Methode, `_rumpf` bei Store-/Funktions-Implementierung, Anweisung + Lambda-Index
-bei Fluss-/Regel-Lambdas, Python-Anker der Client-Implementierung); wo der 📝-Block stand, steht eine abgeleitete Rumpf-Kachel (`rp:<Karte>:<i>`, dieselbe
-Lage). ✎ = Geste `POST /api/werkbank/rumpf` (`GraphExtractor.Kern/Schreiben/Rumpf.cs`: ersetzt genau den Methoden-Rumpf bzw. Lambda, Sperre gegen
-geänderten Text, Prompt-Zeile bleibt; Python über `PythonSync`, `.py` lässt das Board neu lesen); „🤖 füllen“ ist eine Aktion am Rumpf (LLM-Konsole).
-Seit P7.4.5-Rest (2026-10-13) auch auf dem Server: `board.sicht.partner` (◀ kommt aus · geht an ▶ je Nachricht, ✕ als `loesen`-Beschreibung, die der
-Editor an der Karte ausführt), `board.sicht.fluesse` (je Knoten Ports mit Nachricht, Vorgänger, Tiefe, gehörte Events, Zuweisung; Slice), `rahmen.grammatik.katalogSorte`
-(`Grammatik.EditorKatalogSorte`); die Fluss-Knoten ordnet der Schreiber (`FlussPipeline.Geordnet`). Offen: Geste p50 unter
-Fremdlast 346–470 ms (Ziel 300 ms).
-
-**Abnahme P7.5 (2026-10-13):** eine neue Domäne (`Zaehler`: Aggregat, Datei-Quelle mit Webhook, Fluss, C#-Funktion mit neuem Dienst, Python-Funktion
-Laufort Extern, Projektion + Reader, Akteure + Client) entstand nur über Gesten/⟳ — Vorgang per Datei-Drop und Webhook bis `StandErfasst`, Spur ①–④,
-`Program.cs`/Quell-Treiber unverändert, Code ohne Karte 0. Beleg auf Branch `claude/werkbank-abnahme-p75` (nicht für `main`); Befunde/Offenes im Plan §17.
-
-**Simulation raus (2026-10-13, Werkbank P8 — letzte Phase, Zielbild umgesetzt):** `ModellSimulation`, `Musterwerte`, `/api/editor/sim/*`,
-`/api/editor/compile`, `/api/llm/simulieren`, `DslSchreiber` (Knopf „Als Test“), `Cqrs.Testing/Abdeckung` und der JS-Abschnitt SIMULATION samt CSS
-(„▶ Simulation“) sind gelöscht. Der Werkbank-Server
-(Projekt `Werkbank`, bis P8.3 `SimHost`; `Werkbank/Server/`, Klasse `WerkbankServer`) referenziert nur noch DomainEditor + GraphExtractor.Kern
-(kein Core, kein Cqrs.Testing, keine Generatoren); die LLM-Konsole prüft nur über den warmen Workspace. Durchspielen = echter Host in `sim` + Spur. `Cqrs.Testing` bleibt für
-Prüfstand-Tests (`FlussLaufwerkTests`, `UmgezogeneFluesseTests`, `Sammelvorgang*Tests`).
-
-**Python-Rümpfe externer Funktionen (2026-10-13, Werkbank P7.5.3):** je Funktion ohne Lese-Fähigkeit eine generierte Python-Basis
-(`generated/funktionen.py`) und die Tabelle des GENERISCHEN Workers (`generated/funktions_tabelle.py`); die Implementierung liegt in
-`Domain.Client.Worker.Python.ML/funktionen/<modul>.py` (Regel `Abstractions.Funktionsvertrag`), `funktions_worker.py --funktionen … --konfig …` kennt
-keine Domäne. Laufort `Extern` in der Umgebung genügt: ⟳ legt eine fehlende Implementierung an, „▶ Worker“ nimmt den generischen Worker, der Rumpf
-`rufe` steht an der Funktions-Karte (✎/🤖, Slot `funktionpy|…`, PythonSync).
-
-**Webhook als Konfig (2026-10-13, Werkbank P7.5.2):** der zweite Weg in eine Quelle ist `Quellen:<Typ>:Webhook` (Route) der Umgebung —
-`LaufeAsync` mappt jede Quelle mit Route generisch (`MapQuellWebhooks`, Einblick-Port, JSON über den Wire-Kontext, 202 + Vorgangs-Id, gleiche
-Nachricht = derselbe Vorgang); `MapQuellWebhook<T>` gibt es nicht mehr. **Host.Grpc/Program.cs = `AddCqrs(args)` + `LaufeAsync`.** Der Extractor
-liest die Route aus den Umgebungs-Dateien (Bindung „⇥ Webhook /… (Umgebung)“ an der Quelle), bearbeitet im Host-Rahmen; der warme Workspace liest
-das Board auch nach Änderungen an `umgebungen/*.json` neu.
-
-**Dienst-Bindung (2026-10-13, Werkbank P7.5.1):** Technik hinter einer Funktion ist ein Domänen-Dienst — `interface IX : IDienst`, jede öffentliche Klasse,
-die es implementiert, ist eine Implementierung; die Funktions-/Dienst-Implementierung nimmt ihn im Konstruktor (dazu Konfig-Records und `ILogger<T>`).
-`DienstGenerator` → `GeneratedDienste` (Fabriken ohne Reflection, Bedarf je Konstruktor, Konfig-Records Feld für Feld aus `Konfig:<Record>`); `AddCqrs`
-bindet nach den Funktionen transitiv aus `Dienste:<I>:Implementierung` (Default: die einzige) — Boot-Fehler bei fehlend/mehrdeutig/Kreis/Konfig.
-Analyzer CQRS089–092 (`Domain.SourceGeneration/DienstAnalyzer.cs`). Host.Grpc/Program.cs hat keine Domänen-DI mehr. Editor: Dienst-Karte 🧩, an der
-Funktion „🧩 braucht“ (⊕), „＋ C#-Implementierung anlegen“, Host-Rahmen „🧩 Dienste“/„⚙ Konfig“ aus dem Code. Doku `docs/10-entwickler-api.md` §10.5b.
-
-**Akteure, Verträge, Clients (2026-10-06):** Akteure mit Befugnis und Kette bis in den Event-Header; Akteur-Verträge (Zusagen
-draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer CommandId; Clients (`IClientVertrag`, n:m zu Akteuren) mit
-Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Seit 2026-10-13 auch der Blazor-
-Arbeitsplatz als Client mit Vertrag (Handshake, Abos, Commands/Queries aus `IArbeitsplatz`, Build-Regeln CQRS093–097, Token `sim-arbeitsplatz`).
-Offen: durable Zustellung an Clients, Zusagen über C#, Anmeldung je Person (`docs/konzept-akteure.md` §9).
-
-**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471; P7.3: Prüfstand 476/476; P7.4: Prüfstand 484/484, Integration 39/39; P7.5.1: Prüfstand 507/507, Integration 39/39; P7.5.2: Prüfstand 509/509, Integration 39/39; P7.5.3: Prüfstand 513/513, Integration 39/39, Python Worker 20/20; P7.5-Abnahme: Prüfstand 515/515, Integration 39/39; P8: Prüfstand 515/515, Integration 39/39; P7.4.5-/P7.5-Rest: Prüfstand 521/521, Integration 39/39; Blazor-Client mit Vertrag: Prüfstand 526/526, Integration 39/39, Python Worker 20/20, SDK 28/28): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
-Marten/Consul/Redis, sequentiell: 33/33 (inkl. 4 Fluss-E2E; TwoNodeCommandDispatch an die Inbox-Marke seit T2b angepasst).**
-
-**Bewusst offen (Priorität):**
-1. **Cross-Node/Multi-Node** — **Iteration 1 + 2 geliefert; Multi-Node-Block geschlossen.** Generierter,
-   reflexionsfreier Wire-Serializer (`CqrsWireSerializer` + `WireSerializerGenerator` →
-   `GeneratedWire`/`GeneratedWirePoly` über `CqrsWireJsonContext`, Marker `IWireMessage`) am
-   `WithRemote`-Punkt, Boot-Check, Round-trip. Iter. 1 = Command-/Pull-Plane; Iter. 2 = PubSub-/
-   Pipeline-/Prozess-Plane (`PID`-Converter via `PID.FromAddress`). **Bewiesen:**
-   `TwoNodeCommandDispatchTests`, `TwoNodePubSubSignalTests`, `RemotePidDeliverySmokeTests`; cross-node
-   Saga (`LoadHarness --mode saga`) + echter 3-Node-Container-Betrieb (`deploy-multinode/`,
-   `docs/06-transport-multinode-betrieb.md`). Weg B robust via Re-Assert (`ClientSubscriptionReassertTests`).
-   **Offener Folge-Schritt:** Cold-Start-Schema-Migrator (Übergabe: `docs/_archiv-2026-08-12/multi-node-schema-migrator-handoff.md`).
-2. **P5b-Restfeinschliff (klein):** die `MarkingKompakt`-Größe ist für einen extremen Fan-out noch
-   O(N) (Payloads je Vorgang); die volle Zähler+Bitset-Verdichtung (Konzept §4) bleibt optionaler
-   Feinschliff. Der O(N²)→O(N)-Read-Gewinn (das eigentliche Problem) ist voll geliefert. Die
-   Kompensations-`NächsteKompensationAsync` liest noch ab 0 (Fehlerpfad, nicht die Warm-Schleife).
-3. **Schreibpfad-Perf** — paralleler Drain skaliert sublinear (`wait_event` offen).
-4. **KlärungNötig-Pfad** korrekt-per-Konstruktion, aber ohne Testdeckung.
-
-**Kleinere Schulden:** `DtoMapperGenerator` fragil (hartkodierte Enums, Encoding-Schäden);
-`Reaktionsempfaenger`-Dedup-Menge (Domänen-Leak); Deadline-Primitiv nicht in einen Prozess
-integriert; `CqrsFrameworkOptions` toter `[Obsolete]`-Typ.
+| Bereich | Ort |
+|---|---|
+| Verträge, Marker, geteilte Regeln (eine Quelle) | `Abstractions/` (z. B. `Akteurvertrag.cs`, `Funktionsvertrag.cs`, `Dienstvertrag.cs`, `Spur/WirkerId.cs`, `Spur/SpurWeg.cs`, `StoreZugriff.cs`, `Umgebung/UmgebungKonfig.cs`) |
+| Laufzeit | `Infrastructure/` (Prozess, Projections, Quellen/Treiber, Funktionen, Dienste, Umgebung, Einblick, Eingang, Akteure) |
+| Generatoren und Analyzer | `*.SourceGeneration/`; Codegen vor dem Build (Proto, STJ-Kontexte, Python-Basen): `Cqrs.Codegen` über das ProtoRepo-Target |
+| Lesen, Sicht, Schreiben, Prüfen | `GraphExtractor.Kern/` (`Lesen`, `Sicht/`, `Schreiben/`, `Sonde/`, `ParitaetsPruefung`), CLI `GraphExtractor/` |
+| Grammatik, Scaffolder | `DomainEditor/` |
+| Werkbank | `Werkbank/` (Server `Werkbank/Server/`, Oberfläche `Werkbank/wwwroot/editor/`) |
+| Hosts | `Host.Grpc` (`AddCqrs(args)` + `LaufeAsync`), `Host.Blazor` — beide mit `--umgebung <name>` |
+| Beispieldomäne (Prüfling) | `Domain*`, `Domain.Akteure`, `Domain.Client.*` |
 
 ## Konventionen
 
-- Kommentare/Domäne auf Deutsch (Bestand konsistent halten).
-- Neue Verträge → `Abstractions`; Marten/Infra → `Infrastructure`.
-- Nichts mit Runtime-Reflection (Inv. 4). Neue Dispatch-Logik = Generator erweitern, nicht
-  Handschalter.
-- **Extractor/Editor erkennen nur Code-Fakten** (Marker, Attribute, Symbole) — nie Namenskonventionen oder
-  Namespace-Raten. Stores: Fähigkeit = Interface `: IWriteStore`/`: IReadStore` mit GENAU EINER Funktion (CQRS051),
-  Store = Bündel `: IStore, IFähigkeitA, …` (eine Klasse, Namen frei). Ingress-Methoden tragen `[Ingress(...)]`.
-  Neues Konstrukt ⇒ Sonde (`GraphExtractor.Kern/Sonde/`) + `soll.txt` erweitern.
-- **Fähigkeiten statt Rumpf-Analyse:** ein Handle (Projektion/Reader/Pipeline) bekommt die Store-Funktionen, die er
-  benutzen darf, als Parameter (`Handle(evt, env, writer, IUpsertX store)`); der generierte Dispatch löst sie aus einem
-  DI-Bereich auf. Kein Store/`IFristplan` in Ctor/Feld eines Konsumenten (CQRS054), kein `new …Store()` (CQRS055).
-  Planen ist ein Ausgang: `Selbst<T>`, `Frist<TCmd>`, `FristStorno<TCmd>` im OneOf. Der Rumpf liefert dem
-  Extractor NICHTS (keine Guards, keine Store-Aufrufe) — nur die Signatur zählt.
-- **Grammatik = EINE Quelle:** Was sich im Editor womit verbinden lässt (Sorte × Eingang, Kardinalität, Zusatzregeln, je Regel ihr
-  Build-Gegenstück) steht nur in `DomainEditor/Grammatik.cs` — als Daten: ⊕ (Server: `Sicht.Passt` über `rahmen.grammatik`), `--grammatik` und `--check`
-  lesen sie; geprüft wird im Build (Analyzer/Generatoren/Boot-Guards, „Prüfen = Bauen“). Neue Regel ⇒ Analyzer + Test + Gegenstück in der Grammatik. Module
-  = Namespaces, Ports abgeleitet (`DomainEditor/Module.cs`, nur Modell/Validator — Ebenen-Ansicht im Editor bewusst noch nicht).
-- **Ausgabe-Vertrag in der Signatur (CQRS050):** Decide und jedes Handle geben einen konkreten Typ oder `OneOf<…>`
-  konkreter Typen zurück (nie `ICommand`/`IEvent` …). WAS entstehen kann, lesen Generatoren/Extractor/Editor NUR aus der
-  Signatur.
-- **Akteure, Verträge, Clients** (`docs/konzept-akteure.md`; Editor §12 des Editor-Konzepts) — drei Begriffe, nicht vermischen:
-  - **Akteur** = Domänen-Experte: `record X : IMensch|IMaschine|IKi, IDarf<T>…` — `IDarf` nur für das, was er SELBST hineingibt
-    (CQRS058). Was eine Pipeline/ein Prozess/eine Frist daraus erzeugt, trägt den Akteur der Kette (abgeleitet, kein `IDarf`). Ein
-    Dienst ist nie Akteur, er gehört einem (`IAkteurDienst<A>`, nur als Handle-Parameter, CQRS060).
-  - **Akteur-Vertrag** = was ein Akteur DRAUSSEN auf Events tut: `interface IX : IAkteurVertrag<X> { OneOf<Cmd> Auf(E e); void Auf(E2 e); }`.
-    Ein `Auf` mit Ausgabe ist eine **Zusage**, `void Auf` eine **Kenntnis** (CQRS061/062; mehrere Teile je Akteur erlaubt). **„Reaktion"
-    ist nur der Backend-Baustein (`ISubscriber`) — nie für Zusagen verwenden.**
-  - **Client** = die Software an EINER Leitung: `interface IX : IClientVertrag, ITeil…, ISendet<C>, IFragt<Q> { void Auf(E e); }` — trägt
-    Vertrags-Teile (auch mehrerer Akteure), sendet/fragt nur, was ein Akteur darf, eigene Methoden nur Kenntnis (CQRS063–065). Verkörpert
-    ist abgeleitet (EINE Regel: `Abstractions.Akteurvertrag.Verkoerpert`); wirksam am Handshake = Vertrag ∩ Token. Akteure + Clients liegen
-    im leichten Projekt `Domain.Akteure` (ein Client referenziert seinen Vertrag, nicht die Verarbeitung).
-  - **C#-Client = Vertrag:** `[assembly: IstClient<IArbeitsplatz>]`; der Client-Generator nimmt Name, Hash (gleiche Lesart wie der Server,
-    `Clientvertragslesart`), Abos (Kenntnis), Commands (ISendet) und Queries (IFragt) aus dem Vertrag, der Analyzer hält den Code dagegen
-    (CQRS093–097). Keine Selbstauskunft am Handshake. Verbindung aus `Clients:<Name>` der Umgebung (Token, Adresse, Urls, Dateien).
-  - Generiert: `GeneratedAkteurRechte`, `GeneratedClientVertraege`, `GeneratedWiring_<Client>` (Vertrag/Hash), Python-Basen (`./codegen.sh`). Editor: Rahmen je Domäne × Akteur,
-    📜-Vertrags-Rahmen mit Zusage-Karten, 🔌-Client-Rahmen mit Anschlussleiste und Bündeln; Einzelkanten nur per Klick, Zoom ändert nichts.
-- **Kein `InMemoryEventStore`:** Store-Semantik nur gegen echtes Marten (Integration). Der
-  Prüfstand testet nur store-freie Logik. Nie faken, was man nicht besitzt.
-- **Proto-Regenerierung bei neuen Domain-Typen:** jeder neue Command/Event/Query/Trigger
-  braucht einen Proto-DTO, sonst bricht der `DtoMapperGenerator`. Ablauf:
-  `dotnet run --project Proto.SourceGeneration` → `ProtoRepo` neu bauen → Infrastructure baut.
-  (Signale sind bewusst ausgenommen.)
+- Kommentare und Domäne auf Deutsch. Neue Verträge → `Abstractions`; Marten/Infra → `Infrastructure`.
+- **Nur Code-Fakten** (W2): neue Erkennung über Marker/Attribut/Symbol; neues Konstrukt ⇒ Sonde (`GraphExtractor.Kern/Sonde/`) + `soll.txt` erweitern.
+  Die Sonde muss alle allgemeinen Primitive abdecken, nicht nur die der Beispieldomäne.
+- **Neue Dispatch-Logik = Generator erweitern**, nie Handschalter, nie Reflection.
+- **Ausgabe-Vertrag in der Signatur (CQRS050):** Decide und jedes Handle geben einen konkreten Typ oder `OneOf<…>` konkreter Typen zurück.
+  WAS entstehen kann, lesen Generatoren/Extractor/Editor NUR aus der Signatur; Rümpfe liefern nichts.
+- **Fähigkeiten statt Rumpf-Analyse:** ein Handle bekommt die Store-Funktionen als Parameter (`: IWriteStore`/`: IReadStore`, genau eine Funktion,
+  CQRS051; Bündel `: IStore`). Nie Store/`IFristplan` in Ctor/Feld (CQRS054), nie `new …Store()` (CQRS055).
+- **Grammatik = eine Quelle** (`DomainEditor/Grammatik.cs`): neue Regel ⇒ Analyzer + Test + Gegenstück in der Grammatik.
+- **Akteur, Akteur-Vertrag, Client** nicht vermischen (`docs/konzept-akteure.md`): Akteur = `IDarf` für das, was er selbst hineingibt;
+  Vertrag = was er draußen tut (`Auf` mit Ausgabe = **Zusage**, `void Auf` = **Kenntnis**; „Reaktion“ heißt nur der Backend-Baustein `ISubscriber`);
+  Client = Software an einer Leitung, wirksam = Vertrag ∩ Token, C#-Client per `[assembly: IstClient<IX>]`.
+- **Kein `InMemoryEventStore`:** Store-Semantik nur gegen echtes Marten (Integration); der Prüfstand testet nur store-freie Logik.
+- **Proto und STJ-Kontexte entstehen automatisch** beim Build (Target `CqrsCodegenPrepass` in `ProtoRepo/ProtoRepo.csproj`, auch bei ⟳);
+  `./codegen.sh --check` prüft Drift. Kein manueller Schritt.
+- **Werkbank:** Gesten nie auf `main`; „🤖 füllen“ nur über `claude -p` (Abo, nie API).
 
-## Build / Test
+## Build / Test / Werkzeuge
 
-**⚠ Vor Test/Lasttest: `docs/12-tests-und-vermessung.md` lesen.** Drei Ebenen (Prüfstand in-memory
-/ Integration gegen echte Infra / Last-Harness), plus reale Fallstricke: Integration
-**sequentiell** lassen; der bekannte `SnapshotLiveE2ETests`-Cold-Boot-Flake ist Consul-Boot,
-NICHT Timeout-tunebar; xUnit schluckt App-Logs (Cluster-Diagnose → Last-Harness `--log debug`).
+**Vor Test oder Messung `docs/12-tests-und-vermessung.md` lesen.** Integration immer sequentiell; xUnit schluckt App-Logs.
 
 - Build: `dotnet build`
-- Test (Logik, immer grün): `dotnet test Infrastructure.Pruefstand.Tests/Infrastructure.Pruefstand.Tests.csproj`
-- Integration (braucht Postgres/Consul/Redis, sequentiell): `dotnet test Infrastructure.Integration.Tests/Infrastructure.Integration.Tests.csproj`
-- Domänen-Editor = Werkbank (einzige Oberfläche, `docs/konzept-werkbank.md`; keine Simulationsschicht — ⟳ in der Kopfzeile baut und startet den echten Host in der gewählten Umgebung, durchgespielt wird über die Leiste unten, sichtbar in der Spur): `dotnet run --project Werkbank` → http://localhost:5178/editor/ (die Werkbank lädt den Code selbst in den warmen Workspace und schreibt domain-model.json; die Oberfläche liegt statisch in `Werkbank/wwwroot/editor/` — `index.html`, `editor.css`, `editor.js`); Palette = Anker (Aggregat · Fluss · Funktion · Quelle · Akteur · Client · Projektion), Trigger-Welt/LOD seit Werkbank-P0 nicht mehr im Editor; Bearbeiten nur im Panel: Karte anklicken, ⊕-Punkt im Panel → passende Knoten leuchten → anklicken = verbinden/lösen (`docs/konzept-editor-panel-bearbeitung.md`) — jede Änderung geht sofort als Geste in den Code, ↶ nimmt sie zurück; am Rumpf ✎ (Geste an der Spanne) bzw. „🤖 füllen“: Auftrag → `claude -p` (Abo, nie API) → im warmen Workspace geprüft → .cs geschrieben → Laufzeit-Projekt gebaut (alle Generatoren) → neu eingelesen (Konzept §12); Kontexte erzeugt die Werkbank selbst
-- Editor-Parität (Code ⇄ Extraktion ⇄ Server-Kartenliste, schreibt nichts): `dotnet run --project GraphExtractor -- --check`
-- Grammatik als Liste „Regel → Build-Gegenstück": `dotnet run --project GraphExtractor -- --grammatik`
-- Agnostik-Sonde (unbekannte Domäne im Speicher + Gesten-Skript gegen handgeschriebenes Soll + Fixpunkt): `dotnet run --project GraphExtractor -- --sonde`
-- Warmer Workspace messen (kalt vs. warm, Board-Gleichheit, Text-Änderung im Speicher): `dotnet run --project GraphExtractor -- --warm`
-- LLM-Kontext je Code-Block (`docs/konzept-llm-minimalkontext.md`): `dotnet run --project GraphExtractor -- --kontexte <verz>` (Graph-Skelett + Slot-Teile) bzw. `--kontext <Disc> [--auftrag "…"]`; Isolation aller Code-Block-Stellen: `--slots`
-- Last/Durchsatz: `LoadHarness` ist entfernt (Commit fb07f5e); historische Messwerte in `docs/12`.
+- Prüfstand (store-frei, immer grün): `dotnet test Infrastructure.Pruefstand.Tests/Infrastructure.Pruefstand.Tests.csproj`
+- Integration (Postgres/Consul/Redis, sequentiell): `dotnet test Infrastructure.Integration.Tests/Infrastructure.Integration.Tests.csproj`
 - Infra hochfahren: `docker compose -f deploy-linux/docker-compose.infrastructure.yml up -d`
-- Multi-Node (3 Nodes + 1 Consul, echt containerisiert): `docker compose -f deploy-multinode/docker-compose.yml up -d --build` (Anleitung + Ergebnis: `docs/06-transport-multinode-betrieb.md`)
-- Hosts: `Host_Blazor`, `Host_Grpc` (siehe deploy.sh). Beide starten mit einer Umgebung: `dotnet run --project Host.Grpc -- --umgebung sim-main` bzw. `dotnet run --project Host.Blazor -- --umgebung sim-main` (liest `Clients:Arbeitsplatz`; mit `CQRS_BRANCH` für die Datei-Pfade; in `.claude/launch.json` als „Blazor (sim-main)“) (`umgebungen/umgebung.<name>.json`; Sim-DB je Branch `cqrs_sim_<branch>` über `CQRS_BRANCH`, Siegel/Uhr/Redis-Präfix/Einzelknoten — docs/06 §6.1).
+- Werkbank: `dotnet run --project Werkbank` → http://localhost:5178/editor/ (in `.claude/launch.json` als „Werkbank“). ⟳ baut und startet den echten
+  Host in der gewählten Umgebung; Bedienung (Palette, ⊕, ✎, 🤖, ↶, Spur): `docs/konzept-werkbank.md` §6–§8.
+- Hosts: `dotnet run --project Host.Grpc -- --umgebung sim-main` bzw. `Host.Blazor -- --umgebung sim-main` (Sim-DB `cqrs_sim_<branch>` über `CQRS_BRANCH`).
+- Multi-Node (3 Nodes + Consul): `docker compose -f deploy-multinode/docker-compose.yml up -d --build` (`docs/06-transport-multinode-betrieb.md`).
+- Editor-Parität (Code ⇄ Lesen ⇄ Karten, schreibt nichts): `dotnet run --project GraphExtractor -- --check`
+- Agnostik-Sonde (fremde Domäne + Gesten-Skript + Fixpunkt): `dotnet run --project GraphExtractor -- --sonde`
+- Grammatik als Liste „Regel → Build-Gegenstück“: `dotnet run --project GraphExtractor -- --grammatik`
+- Warmer Workspace messen: `dotnet run --project GraphExtractor -- --warm`
+- LLM-Kontexte: `dotnet run --project GraphExtractor -- --kontexte <verz>` bzw. `--kontext <Disc>`, Slots: `--slots` (`docs/konzept-llm-minimalkontext.md`)
+
+## Wo steht was
+
+| Frage | Dokument |
+|---|---|
+| Zielbild, Leitsätze, Bedienung der Werkbank | `docs/konzept-werkbank.md` |
+| Wie schreibe ich X? | `docs/10-entwickler-api.md` |
+| Warum? | `docs/02-design-prinzipien.md` |
+| Akteure, Verträge, Clients | `docs/konzept-akteure.md` |
+| Fluss (Pipeline) im Detail | `docs/konzept-editor-pipelines.md` §14 |
+| Offen, Schulden | `docs/13-reifegrad-schulden-bewertung.md` §13.0 |
+| Tests, Zahlen, Messwerte | `docs/12-tests-und-vermessung.md` |
+
+**Hinweis (2026-10-13):** Die Doku wird gerade gegen das Zielbild aufgeräumt; Kapitel 01–11 enthalten noch veraltete Stellen
+(z. B. gelöschte Beispiel-Domänen, „Ctor-Stores“, manueller Proto-Schritt). Für Fakten gilt der Code, für das Ziel `docs/konzept-werkbank.md`.
