@@ -2,7 +2,7 @@ namespace SimHost;
 
 /// <summary>
 /// Die LLM-Konsole (Route /konsole): Code-Block wählen → Auftrag → Füllen (zustandslose Runden, geprüft) →
-/// Simulieren (Decide/Apply) → Anpassen → Übernehmen (echte Datei) → Bauen / Rückgängig. Eine Seite, kein Build-Schritt.
+/// Anpassen → Übernehmen (echte Datei) → Bauen / Rückgängig. Durchgespielt wird danach im Editor (echter Host, Umgebung sim). Eine Seite, kein Build-Schritt.
 /// Deep-Link aus dem Editor: /konsole#id=&lt;Slot-Id&gt;&amp;auftrag=&lt;Text&gt;.
 /// </summary>
 public static class KonsoleSeite
@@ -220,44 +220,21 @@ function zeichneErgebnis(){
   });
   html += '</div>';
   if (KANDIDAT) {
-    const art = s.art, geprueft = art === 'decide' || art === 'apply';
+    const python = s.art === 'zusage' || s.art === 'funktionpy';
     html += `<div class="kasten"><h2>Kandidat</h2>
-      <p class="hinweis">${geprueft ? 'Geprüft: Syntax + In-Memory-Compile mit den echten Generatoren.' : 'Geprüft: Syntax. Kompiliert wird nach dem Übernehmen mit „Projekt bauen“.'}</p>
+      <p class="hinweis">${python ? 'Geprüft: Syntax (Python-Parser).' : 'Geprüft: Syntax + probeweise gebaut im warmen Workspace (Compiler und Analyzer des Projekts).'}</p>
       <div class="zeile"><button class="b pr" id="uebernehmen" type="button">Übernehmen (in die Datei schreiben)</button>
       <button class="b" id="verwerfen" type="button">Verwerfen</button></div>
       <textarea id="anpassung" placeholder="Anpassung, z. B. „bei Seed 0 den Default-Seed nehmen“"></textarea>
       <div class="zeile"><button class="b" id="anpassen" type="button">Anpassen (neue Runde mit diesem Rumpf)</button></div>
       <div id="geschrieben"></div></div>`;
-    if (DETAIL.simulierbar) html += simKasten();
   }
   $('#ergebnis').innerHTML = html;
   if (KANDIDAT) {
     $('#uebernehmen').onclick = uebernehmen;
     $('#verwerfen').onclick = () => { KANDIDAT = null; zeichneErgebnis(); };
     $('#anpassen').onclick = () => { const t = $('#anpassung').value.trim(); if (t) fuellen(t); };
-    if (DETAIL.simulierbar) simVerdrahten();
   }
-}
-function simKasten(){
-  const cmds = DETAIL.commands || [];
-  const opt = cmds.map(c => `<option ${c.name===DETAIL.slot.disc?'selected':''}>${esc(c.name)}</option>`).join('');
-  return `<div class="kasten"><h2>Simulation mit dem Kandidaten</h2>
-    <p class="hinweis">Dieselbe Laufzeit wie im Editor: Command mit Werten schicken, Events und Zustand ansehen. Der Kandidat ersetzt nur in der Simulation den Rumpf.</p>
-    <div class="zeile"><select id="simcmd">${opt}</select><button class="b" id="simlos" type="button">Ausführen</button><button class="b" id="simneu" type="button">Neu beginnen</button></div>
-    <textarea id="simwerte"></textarea><pre id="simaus" class="leer">—</pre></div>`;
-}
-function simVerdrahten(){
-  const setzeWerte = () => { const c = (DETAIL.commands||[]).find(x => x.name === $('#simcmd').value); const o = {};
-    (c?.felder||[]).forEach(f => o[f.name] = /Guid/.test(f.typ) ? (window.SIMID ||= crypto.randomUUID()) : /int|long|double|decimal/.test(f.typ) ? 0 : /bool/.test(f.typ) ? false : /List|\[\]|IReadOnly|Collection/.test(f.typ) ? [] : '');
-    $('#simwerte').value = JSON.stringify(o, null, 2); };
-  setzeWerte(); $('#simcmd').onchange = setzeWerte;
-  const lauf = async neu => { let werte; try { werte = JSON.parse($('#simwerte').value); } catch(e) { $('#simaus').textContent = 'Werte sind kein gültiges JSON.'; return; }
-    const r = await api('/api/llm/simulieren', { id: AKT, rumpf: KANDIDAT, command: $('#simcmd').value, werte, neu });
-    if (!r.ok) { $('#simaus').textContent = (r.fehler||[]).map(f => f.meldung).join('\n') || r.grund || 'Fehler'; return; }
-    const z = []; (r.frames||[]).forEach(f => { z.push(`▶ ${f.command} → ${f.aggregat}`); (f.events||[]).forEach(e => z.push(`   ${e.persistent?'Event':'Ablehnung'} ${e.typ} ${e.werte}${e.warum?'   weil '+e.warum:''}`)); });
-    (r.instanzen||[]).forEach(i => z.push(`■ ${i.aggregat} ${i.label}: ` + i.felder.map(f => `${f.name}=${f.wert}${f.geaendert?'*':''}`).join(', ')));
-    $('#simaus').textContent = z.join('\n') || 'keine Wirkung'; };
-  $('#simlos').onclick = () => lauf(false); $('#simneu').onclick = () => { window.SIMID = null; setzeWerte(); lauf(true); };
 }
 async function uebernehmen(){
   const r = await api('/api/llm/uebernehmen', { id: AKT, rumpf: KANDIDAT, auftrag: $('#auftrag').value.trim(), basisHash: BASISHASH });

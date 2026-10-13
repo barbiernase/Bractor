@@ -167,13 +167,12 @@ public sealed class LlmKonsole
         """;
 
     private readonly string _sln, _verz;
-    private readonly ModellSimulation _sim;
     private readonly SimHost.Werkbank.Arbeitsbereich _arbeit;
     private readonly Func<ILlmAnbieter> _anbieter;
 
-    public LlmKonsole(string slnRoot, ModellSimulation sim, SimHost.Werkbank.Arbeitsbereich arbeitsbereich)
+    public LlmKonsole(string slnRoot, SimHost.Werkbank.Arbeitsbereich arbeitsbereich)
     {
-        _sln = slnRoot; _sim = sim; _arbeit = arbeitsbereich;
+        _sln = slnRoot; _arbeit = arbeitsbereich;
         _verz = Path.Combine(slnRoot, ".llm-kontext");
         // Ausschließlich Claude Code über die Anmeldung dieses Rechners (Abo, keine API-Kosten); BRACTOR_LLM_MODELL wählt optional das Modell.
         _anbieter = () => new ClaudeCliAnbieter(Environment.GetEnvironmentVariable("BRACTOR_LLM_MODELL"));
@@ -239,19 +238,10 @@ public sealed class LlmKonsole
         var slot = Slot(id);
         if (slot == null) return new { ok = false, grund = "Unbekannter Slot — Kontexte neu erzeugen?" };
         var teil = File.ReadAllText(Path.Combine(_verz, S(slot, "slotDatei")));
-        var modell = SimModell();
-        var commands = S(slot, "art") is "decide" or "apply" && modell != null
-            ? modell.Decider.Where(d => d.Aggregat == S(slot, "aggregat")).Select(d => new
-            {
-                name = d.Command,
-                felder = modell.Records.FirstOrDefault(r => r.Name == d.Command)?.Felder.Select(f => new { name = f.Name, typ = f.Typ }).ToList(),
-            }).ToList()
-            : null;
         return new
         {
             ok = true, slot, slotTeil = teil, aktuell = Lese(slot),
             tokenGesamt = (Index()!["tokenSkelett"]?.GetValue<int>() ?? 0) + (slot["tokenSlot"]?.GetValue<int>() ?? 0),
-            simulierbar = commands != null, commands,
         };
     }
 
@@ -413,41 +403,6 @@ public sealed class LlmKonsole
         if (slot == null) return new { ok = false, grund = "Unbekannter Slot — Kontexte neu erzeugen." };
         var befunde = await PruefeAsync(slot, rumpf, ct);
         return new { ok = befunde.Count == 0, befunde };
-    }
-
-    private EditorModell? SimModell()
-    {
-        var p = Path.Combine(_sln, "domain-model.json");
-        return File.Exists(p) ? EditorModell.AusJson(File.ReadAllText(p)) : null;
-    }
-
-    /// <summary>Das Modell mit dem Kandidaten-Rumpf im passenden Decider/Applier — null, wenn der Slot nicht im Modell steht
-    /// (sonst würde still das unveränderte Modell geprüft und der Kandidat fälschlich als „geprüft“ gelten).</summary>
-    private static EditorModell? MitRumpf(EditorModell m, JsonObject slot, string rumpf)
-    {
-        var agg = S(slot, "aggregat"); var disc = S(slot, "disc");
-        if (S(slot, "art") == "decide")
-            return m.Decider.Any(d => d.Aggregat == agg && d.Command == disc)
-                ? m with { Decider = m.Decider.Select(d => d.Aggregat == agg && d.Command == disc ? d with { Rumpf = rumpf } : d).ToList() }
-                : null;
-        return m.Applier.Any(x => x.Aggregat == agg && x.Event == disc)
-            ? m with { Applier = m.Applier.Select(x => x.Aggregat == agg && x.Event == disc ? x with { Rumpf = rumpf } : x).ToList() }
-            : null;
-    }
-
-    // ── Simulation mit dem Kandidaten (Decide/Apply): dieselbe Laufzeit wie im Editor ──
-
-    public object Simuliere(string id, string rumpf, string command, JsonElement werte, bool neu)
-    {
-        var slot = Slot(id);
-        if (slot == null || S(slot, "art") is not ("decide" or "apply")) return new { ok = false, grund = "Simulation nur für Decide/Apply." };
-        var modell = SimModell();
-        if (modell == null) return new { ok = false, grund = "domain-model.json fehlt." };
-        var session = "konsole:" + id;
-        if (neu) _sim.Reset(session);
-        var mit = MitRumpf(modell, slot, rumpf);
-        if (mit is null) return new { ok = false, grund = "Slot steht nicht im Modell — Kontexte neu erzeugen." };
-        return _sim.Schritt(mit, session, command, werte);
     }
 
     // ── Ausführen: der EINE Durchlauf am 🤖-Knoten — füllen → prüfen → in die Datei → Generatoren ──
