@@ -1,268 +1,220 @@
-# 13 — Reifegrad, Schulden & Bewertungs-Dossier
+# 13 — Reifegrad, Schulden & Bewertung
 
-Dies ist die konsolidierte Entscheidungsgrundlage: eine nach Schwere priorisierte Liste aller
-Befunde über alle Subsysteme, jeweils mit Einschätzung und konkreter Handlungsempfehlung.
+**Die eine Quelle für „offen“.** Andere Dokumente (`CLAUDE.md`, Kapitel 01–12, Konzepte) nennen Schulden höchstens kurz und verweisen
+hierher. Stand: 2026-10-13, Commit-Basis `1b1751a`. Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
+(`docs/konzept-werkbank.md` §2). Zahlen und Messwerte stehen in `docs/12-tests-und-vermessung.md`.
 
-## 13.0 Offen — Stand 2026-10-13
+## 13.0 Offen auf einen Blick
 
-Eine Quelle für „offen“. Übernommen aus den früheren Abschnitten „Bewusst offen“ und „Kleinere Schulden“ der `CLAUDE.md`, gegen den Code
-korrigiert und um die Befunde der Prüfung gegen das Werkbank-Zielbild (Leitsätze W1–W12) ergänzt. Die älteren Befunde in §13.3 werden im
-nächsten Aufräumschritt nachgezogen; wo sie §13.0 widersprechen, gilt §13.0.
-
-**Leitsatz-Schulden (Werkbank-Zielbild):**
-- **W10 Reflection:** `Cqrs.Codegen` liest die gebauten DLLs per `MetadataLoadContext` (Proto, STJ-Kontexte, Python-Basen); der Python-Vertrags-Emitter
-  filtert dabei anders als `Infrastructure.SourceGeneration/Clientvertragslesart.cs` (Hash-Risiko). `Werkbank/Server/Schema.cs` liest die Konfig-Typen
-  per `GetProperties`/`Activator` aus der eigenen DLL. Laufzeit: Marten-JSON per Default reflektiv (`Schreibpfad.GeneriertesJson` = false),
-  `MartenProzessMarkingStore` (`JsonSerializer` mit `GetType()`), `AggregateActorBase.Clone`, `Results.Json` mit anonymen Typen. Kein Analyzer/BannedApi.
-- **W2 feste Projektnamen:** `Cqrs.Codegen/Program.cs:36`, `Proto.SourceGeneration/Program.cs:20`, `ProtoRepo/ProtoRepo.csproj` (Inputs ohne
-  `Domain.Akteure` → reine Vertragsänderung überspringt den Codegen), `codegen.sh`, `Werkbank/Server/WerkbankServer.cs:83` (Stand-Hash),
-  `Infrastructure.csproj` referenziert Domänen-Projekte, `ProzessManagerWiring.AlleRegeln` vereinigt fest `Domain` + `Domain.Pipeline`,
-  Generate in festen `Domain.*`-Namespaces (`ProjectionQueryServiceGenerator`, `ProjectionServicesGenerator`). Vorbild für die Lösung: `GraphExtractor.Kern/Projektlage.cs`.
-- **W3 Ableitungen im Editor-JS:** `graphNodes`/Karten-Ids, `akteurHoert`, `flParameter`, `autoArgs`, Port-Kardinalität (`Werkbank/wwwroot/editor/editor.js`).
-- **W11 je Absicht ein Weg:** Handle-Pipeline (`IPipelineHandler`), Trigger-Welt und `[Ingress]` ohne Domänen-Nutzer, Rückbau offen;
-  `Selbst<T>`/`Frist<TCmd>` nur in der Handle-Welt — Zeitlimits im Dirigenten werden nur über den 15-s-Backstop entdeckt (skaliert nicht;
-  der Fristplaner gehört als Weck-Quelle in den Dirigenten). Prozess-DSL und Fluss-DSL sind zwei Schreibweisen auf demselben Dirigenten.
-  Zwei Rumpf-Schreibwege (`Rumpf.Ersetze` für ✎, `CodeSync.SetzeRumpf` für 🤖). `IAkteurDienst<A>` nur an der Handle-Pipeline verdrahtet.
-
-**Framework:**
-- P5b-Feinschliff: `MarkingKompakt` ist bei extremem Fan-out O(N) (Payloads je Vorgang); die Kompensation (`NächsteKompensationAsync`) liest ab 0.
-- Schreibpfad: paralleler Drain skaliert sublinear (`wait_event`).
-- `KlärungNötig`-Pfad korrekt per Konstruktion, aber ohne Testdeckung.
-- **Testlücke seit Commit `fb07f5e`:** keine Saga-E2E-, Snapshot- und Marking-Äquivalenz-Tests mehr.
-- Prüf-Lücken der Werkzeuge: Das Grammatik-Gate in `--check` findet die IDs auch in `Grammatik.cs` selbst; der Fixpunkt prüft Akteure, Verträge,
-  Clients, Funktionen und Dienste nicht; die Sonde deckt `SendeJe`, Count-Join, Kompensation, `IMensch`, `IstClient` nicht ab.
-- Toter Code: `MartenProjectionTracker`, `CqrsFrameworkOptions`, `IViewModel` + `ViewModelGenerator`.
-
-**Werkbank und Clients:**
-- Geste p50 unter Fremdlast 346–470 ms (Ziel 300 ms).
-- Akteure/Clients: durable Zustellung an Clients, `als` im Envelope, Zusagen über C#, Anmeldung je Person (`docs/konzept-akteure.md` §9); TLS fehlt.
-- Die Saga-DSL in `Cqrs.Testing` kennt `Rufe` nicht.
-
-**Erledigt (früher hier offen):** Multi-Node Iteration 1+2 samt Cold-Start-Schema-Migrator (`Infrastructure/Extensions/CqrsSchemaMigrator.cs`);
-DtoMapper-Skalarregeln (eine Quelle `ProtoScalarSpec`); `Reaktionsempfaenger`-Dedup (Domäne gelöscht).
+| ID | Kurz | Prio |
+|---|---|:--:|
+| W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
+| W10-2 | Reflektive Serialisierung zur Laufzeit (Marten-Default, Marking-Store, Snapshot-`Clone`, HTTP-Antworten); kein Reflection-Verbot im Build | P1 |
+| W2-1 | Feste Projekt- und Namespace-Namen in Komposition, Codegen und Werkbank | P1 |
+| T-1 | Testlücke seit `fb07f5e`: keine Saga-E2E-, Snapshot- und Marking-Äquivalenz-Tests | P1 |
+| P1-1 | Multi-Node nur container-erprobt, Consul im `-dev`-Modus | P1 |
+| P1-2 | Transport-Sicherheit: kein TLS; Identitäten für Prod fehlen | P1 |
+| P1-6 | `CancellationToken.None` im generierten Pull-Emit-Pfad | P1 |
+| W11-1 | Doppelte Wege: Handle-Pipeline/Trigger/`[Ingress]` ohne Nutzer, Prozess- vs. Fluss-DSL, zwei Rumpf-Schreibwege | P2 |
+| W11-2 | Zeitlimits nur über den 15-s-Backstop entdeckt; Fristplaner hängt an der Handle-Welt | P2 |
+| W3-1 | Ableitungen im Editor-JS (Karten-Ids, Hör-Menge, Lambda-Parameter, Auto-Zuordnung, Kardinalität) | P2 |
+| WB-1 | Werkbank: Geste p50 unter Fremdlast 346–470 ms (Ziel 300 ms), tote Endpunkte, Formular/Spiegel lesen `domain-model.json` | P2 |
+| WZ-1 | Prüf-Lücken der Werkzeuge: Grammatik-Gate bestätigt sich selbst, Fixpunkt ohne Akteure/Verträge/Clients/Funktionen/Dienste, Sonde ohne `SendeJe`/Count-Join/Kompensation/`IMensch`/`IstClient` | P2 |
+| AK-1 | Akteure/Clients: durable Zustellung an Clients, `als` im Envelope, Zusagen über C#, Anmeldung je Person | P2 |
+| P2-4 | `BoundedInbox` nicht airtight (FIFO ab 10 000) | P2 |
+| P2-5 | Marking-/Kompensations-Feinschliff, `KlärungNötig` ohne Test | P2 |
+| P2-6 | Schreibpfad: paralleler Drain skaliert sublinear | P2 |
+| P2-8 | Hartkodierte Poll-Intervalle und Test-Verbindungsdaten | P2 |
+| P2-9 | Toter Lesepfad `LoadStateAsync`, Identitäts-Vertrag nur per Kommentar | P2 |
+| P2-10 | Monitoring schmal, Default-Credentials, kein OTel | P2 |
+| P3-1 | Mojibake in drei Dateien | P3 |
+| P3-2 | Toter Code und Kleinkram | P3 |
+| P3-3 | Saga-DSL in `Cqrs.Testing` kennt `Rufe` nicht | P3 |
 
 ## 13.1 Gesamteinschätzung
 
-Das Projekt ist ein **konzeptionell außergewöhnlich kohärentes** CQRS/ES-Framework: wenige
-tragende Ideen (Log = Wahrheit, Single-Activation, generiertes typbasiertes Dispatching, ein
-Emit-Weg, scharfe Durabilitätsgrenze, vier Konsumenten als eine Maschine) sind mit
-bemerkenswerter Disziplin durchgezogen — bis in den Multi-Node-Transport, den Blazor-Client und
-das Python-SDK. Die Compile-Zeit-Guards (15 Diagnose-Codes + Boot-Checks) und die ehrliche
-Test-/Perf-Kultur („nie faken, was man nicht besitzt"; Perf-Beweise gegen echtes Postgres)
-heben es deutlich über typische Eigenbau-Frameworks.
+Das Projekt ist ein **konzeptionell kohärentes** CQRS/ES-Framework: wenige tragende Ideen (Log = Wahrheit, Single-Activation,
+generiertes typbasiertes Dispatching, ein Emit-Weg, scharfe Durabilitätsgrenze, vier Konsumenten als eine Maschine) sind mit Disziplin
+durchgezogen — bis in den Multi-Node-Transport, die Clients (Blazor und Python mit Vertrag) und die Werkbank. Die Compile-Zeit-Guards
+(62 Diagnose-IDs in 12 Analyzern und den Generatoren, dazu Boot-Guards) und die ehrliche Test-Kultur („nie faken, was man nicht besitzt“)
+heben es über typische Eigenbau-Frameworks.
 
-**Der Kern (Schreibseite, Konsum-/Prozess-Maschine, Generatoren, Transport) ist solide, gemessen
-grün und produktionsnah.** Die Schwächen liegen fast durchweg **an den Rändern**. Der Co-Commit
-(exactly-once) ist — anders als in einer früheren Fassung dieses Dossiers behauptet — implementiert
-und bewiesen; die verbleibende Lücke dort ist eine **Typ-/Guard-Härtung** (die Atomarität ist nicht
-fail-fast verifiziert), kein fehlender Mechanismus (P0-1).
-
-**Reifegrad-Ampel** (Wiederholung aus dem [README](README.md)):
+**Der Kern ist solide und gemessen grün.** Die offenen Punkte liegen fast durchweg an zwei Stellen: an den **Rändern** (Transport-Sicherheit,
+Multi-Node-Betrieb) und an der **Allgemeingültigkeit** (W2/W10/W11): Komposition und Werkzeuge kennen die Projekte der Beispieldomäne beim Namen,
+Werkzeuge lesen teils per Reflection, und neben den neuen Wegen (Fluss, Quelle, Umgebung) liegt noch die alte Handle-/Trigger-Welt.
 
 | Subsystem | Reife |
 |---|:--:|
 | Schreibseite | 🟢 |
-| Konsum-/Prozess-Maschine | 🟢 (Co-Commit guard-gehärtet 2026-08-12) |
-| Generatoren & Analyzer | 🟢 |
-| Multi-Node / Transport | 🟢 / 🟡 |
-| Graph-Extractor + Werkbank | 🟢 (Werkbank P0–P8 umgesetzt 2026-10-13) |
-| Python-SDK | 🟡 |
-| Frontend | 🟡 (Build 2026-08-12 repariert; Legacy-Cleanup offen) |
-| Tests & Vermessung | 🟢 |
+| Konsum-/Prozess-Maschine | 🟢 (Testlücke T-1) |
+| Generatoren & Analyzer | 🟢 / 🟡 (W10-1, W2-1) |
+| Multi-Node / Transport | 🟢 / 🟡 (P1-1, P1-2) |
+| Werkbank (Extractor, Editor, Server) | 🟢 / 🟡 (W3-1, WB-1, WZ-1) |
+| Clients (Blazor, Python) | 🟢 / 🟡 (AK-1, P1-2) |
+| Tests & Vermessung | 🟢 / 🟡 (T-1) |
 
-## 13.2 Stärken (was dieses Projekt auszeichnet)
+## 13.2 Stärken
 
-1. **Invarianten-Disziplin über Sprachgrenzen.** Dieselben sechs Invarianten tragen Backend,
-   Blazor und Python. Das ist selten und schwer zu erreichen.
-2. **Compile-Zeit statt Laufzeit.** 15 Diagnose-Codes + Boot-Guards verwandeln ganze
-   Fehlerklassen (Fehlrouting, Dangling-Command, unbounded Token, Wire-Drift, zyklische Saga)
-   in Build-Fehler.
-3. **Sagas als typisierte DSL** mit Diamant/Fan-out/Kompensation — der Fachcode ist *nur* die
-   Regel; Manager/Korrelation/Marking/Kompensation sind einmal geschrieben.
-4. **Ehrliche Nicht-Autoritativität.** Jeder Beschleuniger (Redis, Snapshot, Marking-Cursor) hat
-   einen Voll-Read-Fallback. Korrektheit hängt nie an einem Cache.
-5. **Selbstbeobachtung.** GraphExtractor + Werkbank machen das System als Karten sichtbar; durchgespielt
-   wird das echte System (Host in Umgebung `sim`, eigene DB), sichtbar über die Spur — keine Simulationsschicht.
-6. **Test-/Perf-Kultur.** Store-Semantik nur gegen echtes Marten; generative
-   Vollständigkeits-Guards; Perf-Beweise koppeln Durchsatz mit Korrektheit.
+1. **Invarianten-Disziplin über Sprachgrenzen.** Dieselben Invarianten tragen Backend, Blazor und Python.
+2. **Compile-Zeit statt Laufzeit.** Analyzer, Generator-Diagnosen und Boot-Guards verwandeln ganze Fehlerklassen (Fehlrouting,
+   Dangling-Command, unbounded Token, Wire-Drift, zyklische Regeln, falsche Fluss-Verdrahtung, offene Ausgänge) in Build-Fehler.
+3. **Abläufe als typisierte DSL** (Prozess, Fluss) — der Fachcode ist nur die Regel; Dirigent, Korrelation, Marking und Kompensation sind einmal
+   geschrieben.
+4. **Ehrliche Nicht-Autoritativität.** Jeder Beschleuniger (Redis, Snapshot, Marking-Cursor) hat einen Voll-Read-Fallback.
+5. **Selbstbeobachtung.** Die Werkbank zeigt das System als Karten aus dem Code; durchgespielt wird das echte System, sichtbar über die Spur.
+6. **Test-Kultur.** Store-Semantik nur gegen echtes Marten; generative Vollständigkeits-Guards; Fremd-Domäne als Agnostik-Beweis (`--sonde`).
 
-## 13.3 Priorisierte Befunde
+## 13.3 Befunde
 
-Schweregrade: **P0** = blockiert / korrektheitsrelevant · **P1** = wichtig, produktionsrelevant ·
-**P2** = Wartbarkeit/Hygiene · **P3** = kosmetisch.
+Schweregrade: **P1** = wichtig, produktions- oder allgemeingültigkeitsrelevant · **P2** = Wartbarkeit/Hygiene · **P3** = kosmetisch.
+Aktuell gibt es keinen P0 (kein bekannter aktiver Korrektheits-Bug).
 
-### P0 — blockierend / korrektheitsrelevant
+### P1
 
-**P0-1 · Co-Commit: Atomaritäts-Guard — false-green geschlossen (2026-08-12). ✅ weitgehend erledigt.**
-*(Die früheste Fassung „kein echter Co-Commit" war zu grob.)*
-Co-Commit **ist implementiert und gegen echtes Postgres bewiesen**: `Domain.Infrastructure/ImagePairStore.cs`
-(+ `ImagePairHistorieStore`) puffert Effekte und committet sie mit dem `ProjectionCheckpoint` in
-*einer* `IdentitySession` (`CoCommitPostgresTests`). Der generische `MartenProjectionTracker`
-(getrennte Session) ist der **bewusste at-least-once-Fallback** für idempotente Upserts. **Kein
-aktiver Bug** — die append-artigen Projektionen sind korrekt co-committend verdrahtet.
-*Der Rest war eine Typ-/Guard-Lücke:* `IProjectionTracker` trug keinen Atomaritäts-Beweis, und
-`GaEinsPruefung` prüfte nur `tracker is null` (false-green). **Geschlossen:** Marker
-`ICoCommitTracker : IProjectionTracker` (nur echte Co-Commit-Stores tragen ihn) + GA-1 prüft jetzt
-`tracker is not ICoCommitTracker` → eine `IAppendProjektion` mit bloßem Tracker **bricht laut am
-Boot**. Umgesetzt in `Abstractions/ICoCommitTracker.cs`, den beiden Stores, `GaEinsPruefung.cs`,
-`GaEinsPruefungTests.cs` (4 Fälle, inkl. dem geschlossenen false-green); Prüfstand grün.
-*Offen (bewusst, optional):* die framework-getriebene **Unit-of-Work** (Hebel 2), die Mis-Wiring
-*strukturell* unbaubar macht — zurückgestellt. Und die irreduzible Grenze bleibt: Atomarität ist
-Laufzeit, per Store per Crash-Test zu beweisen (existiert). Vollanalyse:
-[konzept-exactly-once-naht.md](konzept-exactly-once-naht.md). Stance: exactly-once bleibt Opt-in
-(idempotenter Upsert = Normalfall).
+**W10-1 · Reflection in Werkzeugen.** `Cqrs.Codegen` liest die gebauten Domänen-DLLs per `MetadataLoadContext` und erzeugt daraus `domain.proto`,
+die STJ-Kontexte und die Python-Basen (`vertraege.py`, `funktionen.py`, `funktions_tabelle.py`). Daneben existiert mit `Proto.SourceGeneration` ein
+zweiter, Roslyn-basierter Leseweg, der schon abweicht (Filter `IProzessIntern`). Der Python-Vertrags-Emitter liest Verträge anders als
+`Infrastructure.SourceGeneration/Clientvertragslesart.cs` (Ausgaben nicht auf `ICommand` gefiltert, Kenntnis nicht auf Events), der
+Handshake-Hash kann also abweichen. `Werkbank/Server/Schema.cs` liest die Konfig-Typen per `GetProperties`/`Activator` aus der eigenen DLL
+(das Formular veraltet nach einer Änderung der Konfig-Typen bis zum Neustart).
+*Empfehlung:* ein Codegen-Kern über `IAssemblySymbol`, der nur bestehende Roslyn-Leser nutzt (`DomainGraphAnalyzer`/`FileGenerator` wie der
+DtoMapper, `Clientvertragslesart`, Lesart des `FunktionsGenerator`); Wirte: warmer Workspace bei ⟳ und ein MSBuild-Schritt mit
+`CSharpCompilation` über MetadataReferences. Schema aus den Symbolen des warmen Workspace. `Proto.SourceGeneration` darin aufgehen lassen.
 
-**P0-2 · Frontend baut nicht. → ✅ BEHOBEN 2026-08-12.**
-`Host.Blazor` zog über eine stale Referenz (`Host.Blazor.csproj:16` → `Domain.Client.Ui.Blazor`
-→ `Domain.Client` ohne Analyzer) das tote alte UI in den Build → 13 CS0103-Fehler (`_publish`).
-*Fix (angewandt):* stale `Domain.Client.Ui.Blazor`-Referenz + verwaistes `using
-Domain.Client.ImagePair;` entfernt. Verifiziert: `Host.Blazor` 0 Fehler, voller Solution-Build
-grün. Die GUI-Struktur läuft über `Domain.Client.Modules.Blazor`.
-*Rest (nach P2-3 verschoben):* die beiden toten Legacy-Projekte `Domain.Client` und
-`Domain.Client.Ui.Blazor` liegen noch auf Disk und sollten gelöscht werden.
+**W10-2 · Reflektive Serialisierung zur Laufzeit.** Marten serialisiert Events und Dokumente per Default reflektiv (`Schreibpfad.GeneriertesJson`
+= false; Fallback `DefaultJsonTypeInfoResolver` in `CqrsServiceExtension.cs`); `MartenProzessMarkingStore` nutzt `JsonSerializer` mit
+`GetType()` und Typ per FullName; `AggregateActorBase.Clone` macht einen JSON-Round-Trip; `JsonEingang`, `EinblickEndpunkte`, Monitoring und
+`Quellen` antworten mit anonymen Typen; Minimal-API ohne Request-Delegate-Generator; Typprüfungen per `IsAssignableFrom`/`IsInstanceOfType`;
+`ActivatorUtilities` im generierten Client-Wiring. Es gibt **keinen** Analyzer und keine BannedApi gegen `System.Reflection`.
+*Empfehlung:* generierter Kontext als Standard (plus Dokument-Kontext), `Kopie()` vom State-Generator, benannte Records + Kontext für HTTP,
+`EnableRequestDelegateGenerator`, `JsonSerializerIsReflectionEnabledByDefault=false` in den Hosts als Sperre.
 
-### P1 — wichtig / produktionsrelevant
+**W2-1 · Feste Projekt- und Namespace-Namen.**
+- `Infrastructure.csproj` referenziert Domänen-Projekte; `Infrastructure` ist damit zugleich Framework und Komposition.
+- `ProzessManagerWiring.AlleRegeln` vereinigt fest `Domain.Prozess` + `Domain.Pipeline.Prozess`; `ProzessRegelnGenerator` prüft
+  `AssemblyName != "Domain"` — Prozesse in einer dritten Assembly würden still nie registriert.
+- Generate in festen Namespaces: `ProjectionQueryServiceGenerator` (`Domain.Projections`), `ProjectionServicesGenerator`
+  (`Domain.Infrastructure.Generated`), `FactoryGenerator` (`Infrastructure.AggregateHandlerFactory` je Domänen-Assembly).
+- Projektlisten: `Cqrs.Codegen/Program.cs`, `Proto.SourceGeneration/Program.cs`, `codegen.sh`, `ProtoRepo.csproj` (Inputs **ohne**
+  `Domain.Akteure` → eine reine Vertragsänderung überspringt den Codegen), `Werkbank/Server/WerkbankServer.cs` (Stand-Hash, Host-Projekt,
+  Debug-Pfad, Python-Projekt), `Werkbank/Server/Worker.cs` (generischer Worker im Domänen-Projekt).
+- Namespace-Ausschlusslisten statt Fakt (`Ctorbindung.cs` mit `OpenCvSharp`, `FunktionsGenerator`, `QuellenGenerator`, `WiringGenerator`).
+- Identitäten aus einfachen Typnamen (`BrokerIdentity`, `GeneratedAkteurRechte`); der Client darf das Cluster-Kind eines Commands
+  (`AggregateType`) selbst setzen (`CqrsClientService.cs`, `AggregateDispatcher.cs:75`).
+*Empfehlung:* ein Laufzeit-/App-Projekt als Komposition; Registrierung über generierte Assembly-Attribute; `GraphExtractor.Kern/Projektlage.cs`
+als einzige Quelle der Projekt-Rollen; `AggregateType` serverseitig aus `GeneratedCommandRouting`.
 
-**P1-1 · Multi-Node nur container-erprobt, nicht produktiv betrieben.**
-Cross-Node ist über alle Planes verdrahtet und bewiesen, aber der produktive Regelweg bleibt
-Single-Node (systemd/nativ); Multi-Node existiert als Docker-Compose + Verify-Harness. Zudem
-Consul im `-dev`-Modus (kein Quorum). *Empfehlung:* produktives Multi-Node-Setup härten (Consul
-mit Quorum/Persistenz, systemd-Cluster-Rezept, oder container-orchestriert), bevor Multi-Node als
-„produktionsreif" gilt.
+**T-1 · Testlücke seit Commit `fb07f5e` (2026-08-18).** Mit den Beispiel-Domänen Konto/Überweisung/Reise/Lager wurden die Saga-E2E-Tests,
+`SnapshotStorePostgresTests`/`SnapshotLiveE2ETests`, die Upcasting-Tests und die Marking-Cursor-Äquivalenz gelöscht. Prozess-Kompensation,
+Diamant-Sagas, Snapshot-Roundtrip und die Gleichheit Tail-Cursor-Fold == Voll-Fold sind heute ungetestet.
+*Empfehlung:* domänenneutral wiederherstellen (Test-Domäne im Testprojekt, nicht in der Beispieldomäne).
 
-**P1-2 · Transport-Sicherheit fehlt system-weit (TLS + AuthN/AuthZ).**
-Die gesamte gRPC-Oberfläche ist unverschlüsselt und unauthentifiziert: Host.Grpc bindet h2c-plain,
-der Blazor-Client verbindet `http://`, der Python-Client `Channel(host, port)` plain. Kein Token,
-kein Tenant, `user_id` immer leer; keine Authz am `Connect`/Command/Query-Pfad. Deckt sich mit dem
-„Prod-Security"-Ziel. *Empfehlung:* TLS (h2) + Auth-Token/mTLS am Connect-Handshake, Identitäts-/
-Tenant-Propagation in die Envelope-Metadaten. Betrifft **Server + beide Clients gemeinsam** — das
-größte Client-seitige Produktionsthema.
-*(Früher hier: „Rolling Schema-Migration" — auf Nutzer-Entscheid als never-needed gestrichen.)*
+**P1-1 · Multi-Node nur container-erprobt.** Cross-Node ist über alle Planes verdrahtet und bewiesen (`TwoNodeCommandDispatchTests`,
+`RemotePidDeliverySmokeTests`, 3-Node-Compose), der Regelbetrieb ist aber Single-Node; Consul läuft im `-dev`-Modus (kein Quorum).
+*Empfehlung:* Consul mit Quorum/Persistenz, Betriebsrezept.
 
-**P1-3 · Event-Upcasting 1:N (Split) blockiert.**
-CQRS046 bricht **jeden** realen 1:N-Upcaster bis die Consumer-Fabric steht. Generator-/leseseitig
-ist alles da. *Empfehlung:* Consumer-Fabric fertigstellen und CQRS046 lösen — sonst ist die
-Schema-Evolution auf 1:1 beschränkt.
+**P1-2 · Transport-Sicherheit.** gRPC ist h2c ohne TLS, Blazor und Python verbinden unverschlüsselt. Authentifizierung über Akteur-Token,
+Akteur-Tor und Vertrag ∩ Token ist da; die Prod-Umgebung hat aber keine `Identitaeten` (Tor offen), der Quell-Webhook hat kein Tor, eine Anmeldung
+je Person fehlt. *Empfehlung:* TLS (h2) bzw. mTLS, Identitäten für Prod, Tor am Webhook.
 
-**P1-4 · Command-Zustellgarantie: eine stille Verlust-Lücke + nicht-idempotenter Client-Pfad.**
-*(2026-08-12 verifiziert — „quittiert dem Client nicht" war zu grob.)* Der Client WIRD quittiert:
-`CommandSendFailed` (lokal, `ConnectionModule.cs:139/172`), `COMMAND_MAPPING_FAILED` (Server-Mapping,
-`CqrsClientService.cs:398`) und `CommandFailed` (targeted an `OriginSessionId`, Client auto-subscribed
-`:326`) für Ablehnungen + technische Actor-Fehler.
-*Real verbleibend:* (a) Erschöpft der Dispatcher die Platzierung (3× → Dead-Letter, erreicht nie
-einen Actor, `AggregateDispatcher.cs:114`), gibt es **kein** `CommandFailed` → der Client hängt still
-(nur bei nicht-routbarem Cluster). (b) Der Client-Pfad ist `CommandModus.Client` (OCC, **nicht
-idempotent**) ohne deterministische CommandId → Retry nach verlorenem Ack könnte doppelt anwenden
-(daher bewusst kein Auto-Retry); zudem kein Client-Timeout/Pending-Tracking.
-*Empfehlung:* (klein) ~~Dispatcher emittiert bei Erschöpfung ein `CommandFailed`~~ ✅ **umgesetzt
-2026-08-12 (T2a):** `AggregateDispatcher` publiziert bei Erschöpfung ein targeted `CommandFailed` an
-die `OriginSessionId` → stille Lücke geschlossen (Prüfstand `DispatcherCommandFailedTests`).
-(größer) ~~deterministische CommandId + Inbox-Dedup auf dem Client-Pfad~~ ✅ **umgesetzt 2026-08-12
-(T2b):** Client-Pfad `istIdempotent:true` + Inbox-Dedup VOR OCC (`CommandVorpruefung`, 5 Prüfstand-
-Tests) + Client-Retry-Loop (`PendingCommandTracker`, deterministische CommandId, 5 Client-Tests). OCC
-verhinderte Doppel-Apply ohnehin; T2b macht den Retry idempotent-sauber. Ehrliche Grenze: bei totaler
-Stille meldet der Client `CommandUnbestaetigt` (Ausgang unbekannt, sicher wiederholbar). Optionale
-Server-Ack-Verfeinerung offen. Details: [konzept-client-haertung.md](konzept-client-haertung.md).
+**P1-6 · `CancellationToken.None` im generierten Pull-Emit-Pfad** (`PullPathGenerator.cs:238`). Gebunden nur durch die interne Frist des
+Emitters; CQRS021 greift im Generat nicht. *Empfehlung:* gebundenen Token durchreichen.
 
-**P1-5 · Python-SDK unvollständig (Query-Antwort, Client→Client-Trigger, Tests).**
-`router._handle_query_forward` (`router.py:227`) baut ein **leeres** `QueryResponsePayloadDto()` —
-das Response-oneof wird nie gesetzt (`# TODO`) → ein Python-Client kann eine Query empfangen und den
-Handler laufen lassen, aber die Antwort nicht zurückserialisieren. Client→Client-Trigger ist nicht
-implementiert (nur Warnung); keine pytest-Tests. *Empfehlung:* ~~Query-oneof schließen +
-pytest-Grundgerüst~~ ✅ **umgesetzt 2026-08-12 (T3):** `PayloadMapper.wrap_query_response` setzt das
-oneof über die vorhandene Feld-Map, `router` nutzt es (TODO weg); pytest-Grundgerüst (2 Tests, in
-venv verifiziert). **Client→Client-Trigger** ✅ **umgesetzt 2026-08-12:** `mapper.wrap_trigger` +
-`_route_output` sendet via `proxy.send_trigger` (Empfangs-/Registry-Infra existierte schon); Server
-forwarded an den registrierten Client-Handler (4 Python-Tests). Transport-Sicherheit system-weit → P1-2.
-Details: [konzept-client-haertung.md](konzept-client-haertung.md).
+### P2
 
-**P1-6 · `CancellationToken.None` im generierten Pull-Emit-Pfad.**
-`PullPathGenerator` reicht `CancellationToken.None` in `router.EmitFor(...)`; bounded nur durch
-die interne 5-s-Frist des Emitters (CQRS021 greift dort syntaktisch nicht). *Empfehlung:* einen
-gebundenen Token durchreichen oder den Analyzer auch auf den generierten Pfad ausdehnen.
+**W11-1 · Doppelte Wege.** Ohne Domänen-Nutzer, aber verdrahtet: die `IPipelineHandler`-Maschinerie (`PipelineActorBase`, `PipelineEventPullBridge`,
+`PipelineDispatchGenerator`, `GeneratedPipelines`), die Trigger-Welt (`IPipelineTrigger`, `ITriggerRegistration`, `TimerTrigger`, `WebhookTrigger`,
+gRPC-Trigger-Pfad, Proto `Trigger*`), `[Ingress]` mit `GraphExtractor.Kern/CompositionRoot.cs`, `Selbst<T>`/`Frist<TCmd>`/`FristStorno<TCmd>` als
+Handle-Ausgang, `IAkteurDienst<A>` (nur dort verdrahtet). Prozess-DSL und Fluss-DSL sind zwei Schreibweisen auf demselben Dirigenten
+(Kompensation, Count-Join und `SendeJe` nur im Prozess; Quelle, Strom, Warte, `Je`/`Sammle` nur im Fluss). 🤖 schreibt über `CodeSync.SetzeRumpf`
+mit eigener Sicherung neben der ✎-Geste. *Empfehlung:* Rückbau der Handle-/Trigger-Welt, sobald Takt-Treiber und flüchtige Quellen da sind
+(`konzept-werkbank.md` §12.2); die DSL-Frage entscheiden; einen Rumpf-Schreibweg.
 
-### P2 — Wartbarkeit / Hygiene
+**W11-2 · Zeitlimits.** Ein Zeitlimit im Dirigenten wird nur entdeckt, wenn der Backstop alle offenen Vorgänge weckt (alle 15 s) — Genauigkeit
+15 s, Aufwand O(offene Vorgänge). Der durable Fristplaner mit Fälligkeits-Index (`FristScheduler`, `MartenFristplan`) existiert, hängt aber an der
+Handle-Welt. *Empfehlung:* Fristplaner als Weck-Quelle der Zeitlimits in den Dirigenten.
 
-**P2-1 · Domänen-Leak: `Reaktionsempfaenger.VerarbeiteteReaktionen`** wächst unbegrenzt in der
-Domäne (widerspricht P5). *Empfehlung:* auf die Framework-Inbox (`KommandoVerarbeitet`) umstellen,
-wie bei Aggregaten.
+**W3-1 · Ableitungen im Editor-JS.** `graphNodes` baut Karten-Ids parallel zu `Sicht.BaueKarten` (Transition-Id weicht bei fehlender `_id` ab);
+`akteurHoert`, `flParameter`, `faehigkeitVorschlag` (weicht bei Namenskollision von `BoardLeseseite` ab), Auto-Zuordnung (`autoArgs`,
+`flAutoArgs` mit zwei verschiedenen Namens-Heuristiken), Port-Kardinalität, Laufort aus dem rohen Umgebungs-Modell.
+*Empfehlung:* alles über `board.sicht` bzw. `/api/werkbank/*`.
 
-**P2-2 · Zwei divergierende Proto-Typ-Maps** (`TypeMappingHelper` vs. `FileGenerator`) stimmen
-bereits nicht überein (`bool?`→`bool` vs. `int32`) → latenter Serialisierungs-Drift an der
-gRPC-Grenze. *Empfehlung:* auf **eine** geteilte Map konsolidieren.
+**WB-1 · Werkbank.** Geste p50 unter Fremdlast 346–470 ms (Ziel 300 ms). Tote Endpunkte: `/api/werkbank/verlauf|gesten|lesen|host/stopp|infra/*`,
+`GET /kreislauf`, `/api/editor/module|build`, `/api/llm/pruefen|rumpf`; CLI `--schreiben` (Rest von „C# schreiben“). Formular und Spur-Spiegel lesen
+`domain-model.json` vom Datenträger statt aus dem warmen Board. Umgebungs-Werte werden ohne Verlauf und ohne Branch-Sperre geschrieben; die Werkbank
+löst Umgebungs-Dateien anders auf als der Host (fehlendes `${env:X}` wird still leer) und liest `Identitaeten.Tokens` mit einem dritten Parser.
+LLM-Kontexte entstehen kalt (~1 min). Der Renamer ändert keine String-Literale.
 
-**P2-3 · Graph/SimHost ungetrackt & außerhalb der `.sln`. ✅ erledigt.** Extractor und Werkbank (bis 2026-10-13
-`SimHost`) sind committet und in der `.sln`; die Simulationsschicht ist entfernt (Werkbank P8).
+**WZ-1 · Prüf-Lücken der Werkzeuge.** Das Grammatik-Gate in `--check` sucht die IDs als Text in der Solution und findet sie auch in `Grammatik.cs`
+selbst; die Ortsangaben prüft es nicht (CQRS056 steht dort falsch als Analyzer in Domain.SourceGeneration). 18 Diagnose-IDs haben keine
+Grammatik-Regel. Der Fixpunkt prüft Akteure, Verträge, Clients, Funktionen und Dienste nicht; Funktion und Dienst werden im Inventar nur nach
+Namen verglichen. Die Sonde deckt `SendeJe`, Count-Join, Kompensation, `IMensch`, `IstClient`, Laufort und Webhook nicht ab.
 
-**P2-4 · `BoundedInbox` nicht airtight** (FIFO ab 10.000). Theoretisches Loch bei extremem
-Fan-out/langer Latenz. *Empfehlung:* akzeptierter Tradeoff — dokumentieren; ggf. persistente
-Inbox-Marke als Rückfall.
+**AK-1 · Akteure und Clients** (`konzept-akteure.md` §9): durable Zustellung an Clients (Zusagen mit Ausgabe sind durable Abhängigkeiten, werden
+aber verlierbar zugestellt), `als` im Envelope bei mehreren verkörperten Akteuren, Zusagen über C#-Clients (CQRS094), Anmeldung je Person; kein
+Boot-Check, ob `Clients:<Name>:Token` die Akteure des Vertrags verkörpert.
 
-**P2-5 · Marking-/Kompensations-Feinschliff.** `MarkingKompakt` O(N) bei Fan-out;
-`NächsteKompensationAsync` liest ab 0. Der eigentliche O(N²)→O(N)-Gewinn ist geliefert; das ist
-Rest-Feinschliff. *Empfehlung:* niedrige Priorität, außer bei extremem Fan-out.
+**P2-4 · `BoundedInbox` nicht airtight** (FIFO ab 10 000). Akzeptierter Tradeoff; ggf. persistente Inbox-Marke als Rückfall.
 
-**P2-6 · JSON-Round-Trip-`Clone` für Snapshots** — brüchig bei nicht sauber round-trippenden
-State-Typen. *Empfehlung:* generierten Deep-Clone (oder Record-`with`) statt Reflection-JSON.
+**P2-5 · Marking-/Kompensations-Feinschliff.** `MarkingKompakt` ist bei extremem Fan-out O(N) (Payloads je Vorgang); `NächsteKompensationAsync`
+liest ab 0; der `KlärungNötig`-Pfad ist korrekt per Konstruktion, aber ohne Test.
 
-**P2-7 · `generate_registry.py` ist ein Stub** — `domain_registry.py` de facto handgepflegt,
-obwohl Automatisierung beabsichtigt ist. *Empfehlung:* Generierung fertigstellen oder den
-Stub-Anspruch entfernen.
+**P2-6 · Schreibpfad.** Der parallele Drain skaliert sublinear (`wait_event`).
 
-**P2-8 · Hartkodierte Poll-Intervalle** (30 s / 15 s), hartkodierte Connection-Strings in
-Integrationstests, hartkodierte Ausgabe-Namespaces in Generatoren. *Empfehlung:* konfigurierbar
-machen / zentralisieren.
+**P2-8 · Hartkodierte Intervalle und Verbindungsdaten** (Poll 30 s, Backstop 15 s; Connection-Strings je Integrationstest-Klasse).
 
-**P2-9 · Duplizierte Falt-Logik** (`MartenEventStore.LoadStateAsync` tot vs.
-`AggregateRehydrator`) und **Identitäts-Vertrag nur per Kommentar** (`AggregateActorGenerator` vs.
-`CommandAggregateMapGenerator`). *Empfehlung:* toten Pfad entfernen; Identitäts-Berechnung in
-einen geteilten Helfer ziehen (maschinell verriegeln).
+**P2-9 · Toter Lesepfad und Kommentar-Vertrag.** `IEventStoreRepository.LoadStateAsync` wird außer von Test-Doubles nicht genutzt (Rehydration
+läuft über `AggregateRehydrator`); die Aggregat-Identität ist zwischen `AggregateActorGenerator` und `CommandAggregateMapGenerator` nur per
+Kommentar abgestimmt.
 
-**P2-10 · Monitoring schmal & keine Transport-Sicherheit backendseitig.** Nur `/health` + 2
-Zahlen; Default-Credentials `postgres/postgres`; kein OTel. *Empfehlung:* für Produktion OTel +
-echte Credentials + TLS (deckt sich mit P1-5).
+**P2-10 · Monitoring.** Nur `/health` + Kennzahlen; Default-Credentials `postgres/postgres`; kein OpenTelemetry.
 
-### P3 — kosmetisch
+### P3
 
-- **P3-1 · Encoding-Schäden (Mojibake)** in Generator-Kommentaren (`MultiCompilationAnalyzer.cs`,
-  `AggregateHandlerGenerator.cs`). *Empfehlung:* Dateien auf UTF-8 normalisieren.
-- **P3-2 · Dateiname ≠ Klassenname** (`FactoryGenerator`→`HandlerFactoryGenerator`,
-  `DtoMapperGenerator`→`DtoMapperSourceGenerator`), toter Code (`proxy._detect_route`,
-  `ProtoEndpointExtensions` nicht gemappt, `CqrsFrameworkOptions` obsolet), viele
-  `Console.WriteLine` im `GrpcProxy`. *Empfehlung:* aufräumen bei Gelegenheit.
-- **P3-3 · Deadline-Primitiv nicht in einen Prozess integriert** (steht allein). *Empfehlung:*
-  Referenz-Integration zeigen.
+- **P3-1 · Mojibake** in `Domain.SourceGeneration/AggregateHandlerGenerator.cs`, `Infrastructure/Projections/ReadModelDepsReader.cs`,
+  `Infrastructure/Serialization/ProtoMapper.cs`.
+- **P3-2 · Toter Code und Kleinkram:** `MartenProjectionTracker` (nirgends registriert), `CqrsFrameworkOptions`, `IViewModel` + `ViewModelGenerator`,
+  `ClusterKindFactory.cs` (auskommentiert), auskommentierte Reflection-Scans (`EventTypeResolver`, `MartenEventTypeRegistration`), nicht gemappte
+  Proto-Endpunkte in Host.Blazor (das Python-SDK ruft sie trotzdem), `BenchPing` ohne Treiber-Basis; Dateiname ≠ Klassenname bei einigen
+  Generatoren; veraltete Kommentare (z. B. „drei Header“ in `Spur.cs`, „geteilt mit der Simulation“ in `ProzessManager.cs`).
+- **P3-3 · Saga-DSL** in `Cqrs.Testing` kennt `Rufe` nicht.
 
-## 13.4 Korrektheits- vs. Reifegrad-Trennung
+## 13.4 Korrektheit vs. Reifegrad
 
-Wichtig für die Bewertung: **Kein Befund ist ein aktiver Korrektheits-Bug im heutigen Stand.** Die
-meisten sind **Reifegrad/Hygiene**. Die *korrektheitsnahe* Lücke ist **P0-1** — aber als **latenter
-Guard-false-green**, nicht als fehlender Mechanismus: der Co-Commit ist implementiert und bewiesen,
-die append-artigen Projektionen sind korrekt verdrahtet, und der Upsert-Normalfall ist durch
-Idempotenz ohnehin sicher. Alle anderen P0/P1-Punkte sind mechanisch (P0-2, erledigt), betrieblich
-(P1-1), Sicherheit/Client (P1-2/4/5, aktueller Fokus — s. [konzept-client-haertung.md](konzept-client-haertung.md)),
-oder bewusst blockiert (P1-3). Der Aggregat-/Event-/Saga-Kern selbst ist konsistent und getestet.
+Kein Befund ist ein bekannter aktiver Korrektheits-Bug. Korrektheitsnah sind: **T-1** (nicht mehr getestete Prozess-/Snapshot-Pfade),
+**W10-1** (möglicher Hash-Unterschied zwischen Python-Basis und Server beim Handshake), **W2-1** (still nicht registrierte Prozesse in einer
+weiteren Assembly; vom Client gesetztes Cluster-Kind) und **WZ-1** (Prüfungen, die grün sind, ohne es zu beweisen). Alles andere ist Reifegrad,
+Allgemeingültigkeit oder Hygiene.
 
-## 13.5 Empfohlene Reihenfolge (wenn produktiv gehärtet werden soll)
+## 13.5 Empfohlene Reihenfolge
 
-1. ~~**P0-2** Frontend-Referenz entwirren~~ ✅ erledigt 2026-08-12 (Solution-Build grün).
-2. ~~**P0-1** Co-Commit-Guard härten (`ICoCommitTracker` + GA-1)~~ ✅ erledigt 2026-08-12 (Prüfstand
-   grün). Optional offen: framework-getriebene Unit-of-Work (Hebel 2). Analyse: [konzept-exactly-once-naht.md](konzept-exactly-once-naht.md).
-3. **Clienten angehen** (s. [konzept-client-haertung.md](konzept-client-haertung.md)): **P1-4** ✅
-   (T2a Dispatcher-CommandFailed + T2b idempotenter Client-Pfad + Retry-Loop), **P1-5** ✅ (T3
-   Query-oneof + Client→Client-Trigger + pytest). **Offen: P1-2** Transport-Sicherheit (TLS + Auth,
-   system-weit, T1) — zurückgestellt, braucht vorab ein Design-Konzept.
-4. **P1-1** Multi-Node produktiv härten. (Rolling Schema-Migration gestrichen — never-needed.)
-5. **P1-6** Command-Kanten im generierten Pull-Emit-Pfad wirklich bounden.
-6. **P2-1 / P2-2 / P2-9** Reinheits-Leak, Proto-Map-Konsolidierung, Duplikate — Wartbarkeit.
-7. **P1-3** 1:N-Upcasting-Consumer-Fabric (wenn Split-Evolution gebraucht wird).
-8. Hygiene (P2-3 committen, P3-\* aufräumen).
+1. **Wissen aufräumen** (Doku, Gedächtnis — läuft, 2026-10-13).
+2. **T-1** Tests domänenneutral wiederherstellen — Sicherheitsnetz vor jedem Umbau.
+3. **W2-1** Komposition und Projekt-Rollen aus Code-Fakten; **WZ-1** Prüfungen schärfen (Sonde für alle allgemeinen Primitive).
+4. **W10-1/W10-2** Codegen auf Roslyn, Laufzeit-Serialisierung generiert, Reflection-Sperre.
+5. **W11-1/W11-2** Rückbau der Handle-/Trigger-Welt nach Takt-Treiber und flüchtigen Quellen; Fristplaner im Dirigenten; DSL-Frage.
+6. **W3-1/WB-1** Werkbank: letzte Ableitungen auf den Server, ein Rumpf-Schreibweg, tote Endpunkte weg.
+7. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
-## 13.6 Was diese Doku bewusst offen lässt
+## 13.6 Erledigt (früher hier offen)
 
-- **Integration-Tests wurden hier nicht ausgeführt** (benötigen laufendes Postgres/Consul/Redis).
-  Die 41 Tests sind statisch erfasst; ein realer Lauf sollte Teil einer formalen Bewertung sein.
-- **Absolute Perf-Zahlen** (+48 %, 9×) stammen aus Projektnotizen und wurden hier nicht
-  reproduziert; der LoadHarness ist das Werkzeug dafür.
-- **Sicherheits-Audit** (AuthN/AuthZ, Tenant-Isolation, TLS end-to-end) wurde nicht durchgeführt;
-  die Befunde zeigen aber, dass Transport-Sicherheit aktuell weitgehend fehlt.
+- **Co-Commit (früher P0-1):** implementiert und gegen echtes Postgres bewiesen (`MartenCoCommitStoreBase`, `CoCommitPostgresTests`); der
+  Atomaritäts-Guard (`ICoCommitTracker`, GA-1) schließt das frühere false-green. Optional bleibt eine framework-getriebene Unit-of-Work.
+- **Frontend-Build (früher P0-2)** und das Löschen der Legacy-Projekte `Domain.Client`/`Domain.Client.Ui.Blazor`.
+- **Command-Zustellgarantie (früher P1-4):** `CommandFailed` bei Dispatcher-Erschöpfung (T2a); deterministische CommandId und Inbox-Dedup vor OCC
+  auf dem Client-Pfad, Client-Retry (T2b). Optional bleibt ein Server-Ack.
+- **Python-SDK (früher P1-5):** Query-Antwort, Client→Client-Trigger, Tests (SDK 28, Worker 20), Akteur-Token, generierte Vertrags- und
+  Funktions-Basen.
+- **Upcasting 1:N (früher P1-3):** nicht mehr offen — Schema-Evolution ist kein Ziel des Editors; `IUpcast` bleibt als Backend-Primitive (1:1).
+- **Domänen-Leak `Reaktionsempfaenger` (früher P2-1):** mit der Beispieldomäne entfallen.
+- **Proto-Typ-Maps (früher P2-2):** eine Quelle `Core.SourceGeneration/ProtoScalarSpec.cs`.
+- **Extractor/Werkbank in der Solution (früher P2-3);** Simulationsschicht entfernt (Werkbank P8).
+- **Python-Registry (früher P2-7):** `generate_registry.py` erzeugt `domain_registry.py`.
+- **Multi-Node Iteration 1+2** samt Cold-Start-Schema-Migrator (`Infrastructure/Extensions/CqrsSchemaMigrator.cs`).
+
+## 13.7 Was diese Bewertung offen lässt
+
+- Ein formales **Sicherheits-Audit** (AuthN/AuthZ, Tenant-Isolation, TLS end-to-end) wurde nicht durchgeführt.
+- **Absolute Perf-Zahlen** (+48 % Batching, 9× Prozess-Reads) stammen aus Läufen des inzwischen entfernten LoadHarness und wurden seitdem nicht
+  reproduziert.
+- Nebenbefund beim Laden des Workspaces: Marten 8.20.0 meldet zwei kritische Advisories (GHSA-rfx3-98h7-v3xp, GHSA-vmw2-qwm8-x84c).

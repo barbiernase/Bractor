@@ -5,7 +5,7 @@
 > Entstanden als Zielbild 2026-10-12, umgesetzt in den Phasen P0–P8 bis 2026-10-13 (Historie: `docs/plan-werkbank-umsetzung.md`),
 > neu gefasst 2026-10-13. Abschnittsnummern sind stabil, weil Code-Kommentare darauf verweisen.
 >
-> Offenes und Schulden stehen in `docs/13-reifegrad-schulden-bewertung.md` §13.0, Zahlen in `docs/12-tests-und-vermessung.md` §12.3.
+> Offenes und Schulden stehen in `docs/13-reifegrad-schulden-bewertung.md` §13.0, Zahlen in `docs/12-tests-und-vermessung.md` §12.2.
 > Detail-Referenzen: `konzept-editor-pipelines.md` §14 (Fluss), `konzept-akteure.md` (Akteure, Verträge, Clients),
 > `konzept-llm-minimalkontext.md` (LLM-Kontext), `konzept-editor-komposition.md` (Sprache).
 

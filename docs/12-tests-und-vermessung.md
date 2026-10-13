@@ -1,163 +1,134 @@
 # 12 — Tests & Vermessung
 
-## 12.1 Die vier Test-Ebenen (das tragende Prinzip)
+**Die eine Quelle für Zahlen und Messwerte.** Andere Dokumente verweisen hierher. Offene Testlücken stehen als Befund in
+`docs/13-reifegrad-schulden-bewertung.md` (T-1, P2-5). Stand: 2026-10-13.
 
-Die Teststrategie spiegelt die Invarianten „die Wahrheit ist der Log" und „nie faken, was man
-nicht besitzt":
+## 12.1 Die Test-Ebenen
+
+Die Teststrategie folgt den Invarianten „die Wahrheit ist der Log“ und „nie faken, was man nicht besitzt“.
 
 | Ebene | Projekt | Läuft gegen | Testet | Parallel? |
 |---|---|---|---|---|
-| 1 — Prüfstand | `Infrastructure.Pruefstand.Tests` | in-memory, **store-frei** | reine store-freie Logik: Decider/Applier, Fold, Routing, Wire-Serializer, Analyzer, Signale | ja |
-| 2 — Integration | `Infrastructure.Integration.Tests` | **echtes** Marten/Postgres, Consul, Redis, Kestrel | Store-**Semantik** + E2E-Cluster-Verhalten | **nein** (erzwungen sequentiell) |
-| Client | `Client.Infrastructure.CollectionTests` | in-memory | Frontend-`VirtualCollection` | ja |
-| Last | `LoadHarness` (entfernt, Commit fb07f5e; Messwerte unten historisch) | echter Cluster (bootet 1×) | Durchsatz, Latenz, Exactly-once, cross-node Saga, Serializer-Bench | n/a |
-| Werkbank | `Werkbank` + `Host.Grpc --umgebung sim-main` | echter Host gegen die Sim-DB `cqrs_sim_<branch>` | Abnahme im Browser: ⟳ grün, Vorgang durchspielen, Spur, Geste + ↶ — kein Test, kein Ersatz für Ebene 1/2; eine Simulationsschicht gibt es nicht (seit Werkbank P8) | n/a |
+| 1 — Prüfstand | `Infrastructure.Pruefstand.Tests` | in-memory, **store-frei** | Decider/Applier, Fold, Routing, Signale, Wire, Analyzer und Generatoren (über eine eigene `CSharpCompilation`), Extractor/Gesten/Sicht, Funktionen, Akteure, Quellen-Treiber, Umgebung, Spur | ja |
+| 2 — Integration | `Infrastructure.Integration.Tests` | **echtes** Marten/Postgres, Consul, Redis, Kestrel | Store-Semantik und Ende-zu-Ende-Verhalten im Cluster | **nein** (sequentiell erzwungen) |
+| Client (C#) | `Client.Infrastructure.CollectionTests` | in-memory | `VirtualCollection`, `PendingCommandTracker` | ja |
+| Client (Python) | `Client.Infrastructure.Python/tests`, `Domain.Client.Worker.Python.ML/tests` | pytest | SDK (Vertrag, Funktion, Query, Reconnect, Mapper), Worker (Verträge, Funktionen, generischer Worker) | ja |
+| Werkbank | `Werkbank` + `Host.Grpc --umgebung sim-main` | echter Host gegen die Sim-DB | Abnahme im Browser (⟳ grün, Vorgang durchspielen, Spur, Geste + ↶) — kein automatischer Test, kein Ersatz für Ebene 1/2 | n/a |
+| Werkzeug-Gates | `GraphExtractor -- --check`, `-- --sonde` | Solution bzw. fremde Domäne im Speicher | Code ⇄ Karten, Fixpunkt, Wirker, Routing; Agnostik | n/a |
 
-**Prinzip:** Ebene 1 testet nur, was ohne Store deterministisch entscheidbar ist. Store-Semantik
-(Co-Commit-Atomarität, `seq_id`-Lücken, Snapshot-Roundtrip, Upcasting-Bytes) wird
-**ausschließlich** gegen echtes Marten geprüft — ein In-Memory-Store würde sie nur *behaupten*.
-Es gibt bewusst **keinen `InMemoryEventStore`**. In-Memory-Doubles existieren nur für
-nicht-autoritative Randstores (`InMemoryProzessMarkingStore`, `InMemoryEmittentenCursor`, …,
-konsistent mit Invariante 6).
+**Prinzip:** Ebene 1 testet nur, was ohne Store deterministisch entscheidbar ist. Store-Semantik (Co-Commit-Atomarität, `seq_id`-Lücken, geteilte
+Dokumente, Metadaten) wird **ausschließlich** gegen echtes Marten geprüft. Es gibt bewusst **keinen `InMemoryEventStore`**; In-Memory-Doubles gibt
+es nur für nicht-autoritative Randstores (Inv. 6).
 
-## 12.2 Test-Zählung (statisch ermittelt)
+## 12.2 Zahlen
 
-| Projekt | `[Fact]` | `[Theory]` | Dateien | In `.sln`? |
-|---|---:|---:|---:|:--:|
-| Infrastructure.Pruefstand.Tests | 119 | 1 | 33 | ja |
-| Infrastructure.Integration.Tests | 41 | 0 | 26 | ja |
-| Client.Infrastructure.CollectionTests | 26 | 0 | 1 | ja |
-| LoadHarness | — | — | 1 (480 LOC) | **nein** |
+**Aktuell (2026-10-13, gemessen nach Commit `c7c6608`):** Prüfstand **526/526**, Integration **39/39** sequentiell, Python SDK **28/28**,
+Worker **20/20**; `--check` grün (Code ohne Karte 0, Code-Karten 4 = 1,0 %), `--sonde` grün (111 Soll-Fakten).
 
-## 12.3 Echte Messwerte
+Statisch gezählt (2026-10-13):
 
-Stand 2026-10-13 (nach Blazor-Client mit Vertrag, Commit `c7c6608`): Prüfstand **526/526**, Integration **39/39** sequentiell,
-Python SDK **28/28**, Worker **20/20**; `GraphExtractor -- --check` und `--sonde` grün (`--check`: Code ohne Karte 0, Code-Karten 4 = 1,0 %).
-Diese Zeile ist die eine Quelle für aktuelle Testzahlen; andere Dokumente verweisen hierher. Verlauf je Phase: `docs/plan-werkbank-umsetzung.md` §16.
+| Projekt | `[Fact]` | `[Theory]` | Dateien |
+|---|---:|---:|---:|
+| Infrastructure.Pruefstand.Tests | 504 | 6 | 71 |
+| Infrastructure.Integration.Tests | 39 | 0 | 19 |
+| Client.Infrastructure.CollectionTests | 31 | 0 | 2 |
 
-Gemessen 2026-08-12 (Grundlinie):
+Die Differenz zwischen 510 Methoden und 526 Läufen im Prüfstand kommt von den expandierten `[Theory]`-Fällen. Verlauf je Werkbank-Phase:
+`docs/plan-werkbank-umsetzung.md` §16.
 
-| Messung | Ergebnis |
-|---|---|
-| **Prüfstand-Testlauf** | ✅ **126/126 grün**, Dauer 1 m 20 s |
-| **Build Host.Grpc (Backend)** | ✅ 0 Fehler |
-| **Build Host.Blazor (Frontend)** | ✅ 0 Fehler (nach Fix 2026-08-12; vorher 13× CS0103 `_publish` wegen stale `Domain.Client.Ui.Blazor`-Referenz) |
-| **Voller Solution-Build** | ✅ 0 Fehler, 128 Warnungen |
-| **Integration-Tests** | nicht ausgeführt (benötigen laufendes Postgres/Consul/Redis) |
+## 12.3 Was getestet ist
 
-> Die statisch gezählten 119+1 decken sich mit den 126 zur Laufzeit expandierten Tests (die eine
-> `[Theory]` und geteilte Fixtures ergeben die Differenz). Ältere Notizen nannten „106" — die
-> Baseline ist gewachsen.
+**Prüfstand (Ebene 1), nach Bereich (Tests):**
 
-## 12.4 Kern-Test-Klassen und ihr Beweisgegenstand
-
-**Prüfstand (Ebene 1):**
-- `WireSerializerRoundTripTests` (13, größte) — reflexionsfreier Wire-Serializer; ein
-  Boot-Check deckt **jeden** Command/jedes Event ab (generativer Vollständigkeits-Guard).
-- `ProzessMarkingCursorTests` (7) + `Benchmark` (1) — Äquivalenz Tail-Cursor-Fold == Voll-Fold
-  + Skalierungs-Benchmark (N ∈ {50…800}, misst gelesene Events + Wall-Clock).
-- `UpcastingTests` (6), `EventVersioningTests` (4), `EventJsonSerializationTests` (5),
-  `SignalTypeGeneratorTests` (4), `SignalEmitTests` (4), `AppendBatchingTests` (3).
-- `EmitPrimitivTests` (6) + `ReaktionsIdTests` (4) — das eine Emit-Primitiv (Fake-Send).
-- `CommandEmitAnalyzerTests` (3) — fährt den echten Analyzer über eine `CSharpCompilation`;
-  beweist CQRS020/021.
-- `KontoAggregatTests` (4), `ProzessAzyklizitaetTests` (3), `ProzessPollFilterTests` (4),
-  `AblehnungsMarkeTests` (3), `GaEinsPruefungTests`, `DeadLetterReadStoreTests`,
-  `PipelineEventPullBridgeTests`, `FristSchedulerTests`, `BackendMonitoringTests`.
+| Bereich | Tests | Klassen |
+|---|---:|---|
+| Analyzer | 85 | `AkteurAnalyzerTests` (36), `FlussAnalyzerTests`, `FaehigkeitAnalyzerTests`, `GesamtbildAnalyzerTests`, `ModellAnalyzerTests`, `StoreZugriffAnalyzerTests`, `AusgabeVertragAnalyzerTests`, `QuellenTypAnalyzerTests`, `CommandEmitAnalyzerTests` |
+| Editor-Modell, Scaffolder | 73 | `DomainEditorLeseseiteTests`, `DomainEditorAkteurTests`, `DomainEditorScaffolderTests`, `DomainEditorFunktionTests`, `PythonQuelleTests`, `DomainEditorFlussTests`, `DomainEditorKompositionTests` |
+| Funktionen und Flüsse | 69 | `FunktionsAufrufTests`, `PipelineFlussTests`, `FunktionsGeneratorTests`, `FunktionsAnbieterSitzungTests`, `FunktionsVermittlungTests`, `FlussLaufwerkTests`, `BildeingangTests`, `UmgezogeneFluesseTests` |
+| Akteure, Verträge, Clients | 49 | `AkteurRechteTests`, `ClientVertragTests`, `AkteurVertragTests` (Hash Python = Server), `ClientCodeVertragTests`, `AkteurDienstTests` |
+| Extractor, Gesten, Sicht | 47 | `GestenTests` (30), `SichtTests`, `LesenToleranzTests`, `UsingsTests` |
+| Schreibpfad, Signale, Serialisierung | 24 | `SignalTypeGeneratorTests`, `SignalEmitTests`, `SignalWireRoundTripTests`, `EventJsonSerializationTests`, `EventVersioningTests`, `AppendBatchingTests`, `DtoMapperRoundTripTests` |
+| Beispiel-Aggregate | 39 | `DatensatzAggregatTests`, `TrainingslaufAggregatTests`, `SammelvorgangBarriereTests`, `SammelvorgangKaskadeTests`, `BoundedInboxTests` |
+| Quellen, Umgebung, Spur, Dienste | 64 | `DateiTreiberTests` (17), `UmgebungLaderTests`, `ProjektionsStandTests`, `SpurTests`, `WirkerIdTests`, `SpurWegTests`, `DienstBindungTests` (15) |
+| Konsum-Maschine, Prozess | 37 | `EmittentenCursorTests`, `ProjectionRebuilderTests`, `EmittentenPfadAdapterTests`, `GaEinsPruefungTests`, `ProzessPollFilterTests`, `AblehnungsMarkeTests`, `ReaktionsIdTests`, `CommandVorpruefungTests`, `DispatcherCommandFailedTests`, `TransientPersistiertSplitTests`, `DeadLetterReadStoreTests` |
+| Übrige | 23 | `FristSchedulerTests`, `FristPlanerTests`, `BackendMonitoringTests`, `EingangJsonTests`, `BrokerIdentityTests`, Handle-Welt: `PipelineEventPullBridgeTests`, `TimerTriggerTests`, `WebhookTriggerTests` |
 
 **Integration (Ebene 2):**
-- `TwoNodeCommandDispatchTests` — das Multi-Node-Tor: zwei Hosts, `PartitionIdentityLookup`
-  verteilt N=12 Ids → grün beweist cross-node Serialisierung ((½)¹²-Argument im Kommentar).
-- `TwoNodePubSubSignalTests`, `RemotePidDeliverySmokeTests`, `ClientSubscriptionReassertTests`.
-- `BestellSagaE2ETests` (2), `ReiseSagaE2ETests` (1), `ReiseSagaParallelE2ETests` (2),
-  `ProzessVerkettungE2ETests` (1) — Diamant-Sagas: happy/kompensierend/nebenläufig (kein
-  Oversell)/verkettet.
-- `CoCommitPostgresTests` (3) — „das größte Risiko": Effekt + Checkpoint atomar in einer
-  Marten-Session; Absturz dazwischen → genau ein Eintrag.
-- `SequenceGapPostgresTests` (2) — `seq_id`-Lücke + Straggler-Grace.
-- `SnapshotStorePostgresTests` (2) + `SnapshotLiveE2ETests` (1).
-- `LagerEvolutionRoundtripPostgresTests` (2) — echte Event-Evolution (Bytes).
-- `ProzessBackstopE2ETests` (3) — Noop-Marke (K2) + §3-Backstop.
-- `ProzessMarkingCursorPerfTests` (2) — ehrlicher Perf-Beweis gegen echtes Postgres.
-- `PipelineFlussE2ETests` (4, 2026-10-09) — Pipeline als Fluss gegen den echten Cluster: Quelle → Dirigent → Vermittler → Abholer →
-  Fakt; derselbe mit einem **Python-Worker** über gRPC (startet `Infrastructure.Integration.Tests/Python/funktions_worker.py`, Python aus
-  `CQRS_PYTHON`, Default `/opt/miniconda3/envs/gpu_env/bin/python`); Trainings-Wächter (Warten + Backstop); Datensatz-Range mit echter
-  Lese-Fähigkeit. Store-frei im Prüfstand: `PipelineFlussTests`, `FlussLaufwerkTests`, `UmgezogeneFluesseTests`.
 
-**Client:** `VirtualCollectionTests` (26) — Paging, Skeleton, `FuegeVorneEin`, `Patch`, `Reset`.
+| Klasse | Tests | Beweisgegenstand |
+|---|---:|---|
+| `CoCommitPostgresTests` | 3 | Effekt + Checkpoint atomar in einer Marten-Session; Absturz dazwischen → genau ein Eintrag |
+| `GeteilteDokumentePostgresTests`, `SchreibRegelPostgresTests` | 4 + 5 | Single-Writer je Dokument, OCC bei geteilten Dokumenten, Wiederholung |
+| `SequenceGapPostgresTests` | 2 | `seq_id`-Lücke + Straggler-Grace |
+| `MetadataPostgresTests` | 3 | Header-Readback |
+| `DeadlineStorePostgresTests` | 2 | durabler Fristplan |
+| `PollerBackstopPostgresTests` | 1 | Poll-Cursor heilt verlorene Signale |
+| `LiveCommandE2ETests` | 1 | Command → Event → Projektion im Cluster |
+| `TwoNodeCommandDispatchTests`, `RemotePidDeliverySmokeTests`, `SignalDeliveryClusterTests` | 3 | Cross-Node-Serialisierung, Remote-PID, Signal-Zustellung |
+| `PipelineFlussE2ETests` | 5 | Fluss gegen den echten Cluster: Quelle → Dirigent → Vermittler → Abholer → Fakt, auch mit Python-Worker über gRPC; Warten + Backstop; Lese-Fähigkeit |
+| `VertragsZusageE2ETests` | 1 | doppelt zugestellte Zusage wirkt genau einmal |
+| `UmgebungE2ETests`, `LeseseitenStandE2ETests`, `EingangE2ETests` | 3 + 1 + 1 | Siegel, Projektions-Stand nach Code-Änderung, JSON-Eingang/Webhook |
+| `MonitoringHttpTests` | 2 | `/health`, Kennzahlen |
+| Handle-Welt: `PipelineWebhookHttpTests`, `TimerTriggerSchedulingTests` | 2 | Trigger-Pfade ohne Domänen-Nutzer (`docs/13` W11-1) |
 
-## 12.5 Coverage-Bild
+**Client:** `VirtualCollectionTests` (26), `PendingCommandTrackerTests` (5). **Python:** SDK `test_vertrag`, `test_funktion`, `test_client_query`,
+`test_client_reconnect`, `test_mapper_*`; Worker `test_vertraege`, `test_funktionen`, `test_funktions_worker`, `test_training_worker`.
 
-**Gut abgedeckt:** Schreibpfad + Exactly-once (Unit + Integration + LoadHarness-Rehydration);
-Prozess-/Saga-Maschine (DAG-Guards, Fold-Äquivalenz, Sagas in vier Varianten, Backstop);
-Multi-Node (je ein dedizierter Test pro Plane); Store-Fallstricke (seq-gap, Snapshot, Upcasting,
-Metadaten); Analyzer (durabler Regressions-Guard); Wire-Serializer (generativer Vollständigkeits-
-Guard über alle Typen).
+## 12.4 Was nicht getestet ist
 
-**Nicht / schwach abgedeckt:**
-- **`KlärungNötig`-Pfad** — kein Test-Treffer (bestätigt).
-- **Paralleler Drain / Schreibpfad-Skalierung** — nur im LoadHarness beobachtbar, kein
-  Assertion-Test.
-- **`MarkingKompakt`-Verdichtung** — unimplementiert, ungetestet.
-- **Kompensations-Warmpfad** (`NächsteKompensationAsync` ab-0) — ungetestet.
-- **Echtes Shard-Rebalance / Node-Ausfall** — simuliert (direktes `Unsubscribe`), nicht erzwungen.
-- **Client/Blazor jenseits `VirtualCollection`** — untestet; Bus/Store/Transport.
-- **Python** — gar keine Tests.
+- **Prozess-Ende-zu-Ende** (Diamant, Kompensation, nebenläufig, Verkettung), **Snapshot-Roundtrip** gegen Postgres und die **Gleichheit
+  Tail-Cursor-Fold == Voll-Fold**: die Tests sind mit der früheren Beispieldomäne gelöscht (`docs/13` T-1).
+- **`KlärungNötig`-Pfad** und der Kompensations-Warmpfad (`NächsteKompensationAsync` ab 0).
+- **`SendeJe`, Count-Join** — weder Test noch Sonde.
+- **Paralleler Drain / Schreibpfad-Skalierung** — kein Assertion-Test (früher nur im LoadHarness beobachtet).
+- **Shard-Rebalance / Node-Ausfall** — nur simuliert.
+- **Blazor-Client** jenseits `VirtualCollection`/`PendingCommandTracker` (Bus, Store, Transport).
 
-## 12.6 LoadHarness — Modi & Vermessung
+## 12.5 Messwerte
 
-`dotnet run --project LoadHarness -- --mode <m> …`. Cluster wird **einmal** gebootet
-(Readiness-Barriere `WaitRoutableCore`, kein Cold-Boot-Flake):
-- **`aggregate`** (Default): `--accounts × (1 + --credits)` Commands, `--concurrency`. Misst
-  Durchsatz + Latenz p50/p95/p99, dann **Exactly-once via Rehydration** (jeder Saldo == Soll).
-  Gibt ein Group-Commit-Profil aus (Batches, Ø Events/Commit, serielle Commit-Zeit als %).
-- **`saga`**: löst Überweisungen aus, Prozess läuft **cross-node**; verifiziert Gelderhaltung +
-  je Konto `Reserviert == 0`.
-- **`pipeline`**: Trigger→Ack ohne Persistenz. Vorbehalt: eine Pipeline = ein Actor = serielle
-  Mailbox → gemessen wird der Durchsatz *einer* Pipeline.
-- **`serbench`**: Serializer-Mikrobench ohne Cluster/DB — reflection vs. source-gen ns/op +
-  Amdahl-Rechnung (Serialisierungsanteil an der Append-Wall-Clock; Baseline „20500 Events in
-  ~6.46 s").
+**Werkbank (2026-10-12/13):** warmes Lesen nach Text-Änderung p50 224 ms (`GraphExtractor -- --warm`); Geste p50 unter Fremdlast 346–470 ms
+(Ziel 300 ms).
 
-A/B-Schalter über Env (`BRACTOR_BATCHING`, `_BATCH_LINGER`, `_DRAIN_PAR`, `_SOURCEGEN_JSON`,
-`_VERSION_TRACKING`). Konkrete Ergebnisse (+48 % Batching, 9×/5,5× Prozess-Reads) sind
-Projektnotizen, nicht im Code hinterlegt.
+**Prozess-Maschine (P5b, gegen echtes Postgres):** Marking-Cursor und feuer-gerichtete Reads machen den warmen Fold bis 9× schneller bei N = 60
+(5,5× mit Aggregat-Historie); die Stream-Reads sinken von O(N²) auf O(N).
 
-## 12.7 Test-Infrastruktur & wie man einen Test schreibt
+**Schreibpfad (2026-08, mit dem inzwischen entfernten LoadHarness, 4-Kern-localhost):** Group-Commit-Batching mit parallelem Drain +48 % Durchsatz.
+Negativ-Befunde, die nicht erneut untersucht werden müssen:
+- Serialisierung ist für den Durchsatz irrelevant (~0 %); der STJ-Source-Gen-Serializer brachte nichts (bleibt opt-in, `Schreibpfad.GeneriertesJson`).
+- Synchroner Redis-Zugriff im Command-Turn ist bei localhost-Redis irrelevant (~0 %); relevant erst bei Remote-Redis.
+- Die CPU ist unter Volllast zu ~80 % idle; der Hebel ist Parallelität, nicht schnellere Einzel-Commits. Ein eigener COPY-basierter Event-Store
+  ist zurückgestellt.
 
-- **Kein Testcontainers.** Echte Infra extern via `docker compose -f
-  deploy-linux/docker-compose.infrastructure.yml up -d`; Tests verbinden gegen feste Endpunkte
-  (Connection-Strings je Testklasse **hartkodiert** — Wartungslast).
-- **Fixtures pro Klasse** (`IClassFixture<PostgresFixture>` u.a.), kein geteiltes
-  `CollectionDefinition`. Cluster-bootende Tests bauen je Test ihren eigenen Consul-Cluster.
-- **Sequentialität erzwungen** via `xunit.runner.json` (`parallelizeTestCollections: false`).
-- **HTTP-Tests** brauchen kein Postgres/Consul/Redis (minimale `WebApplication`).
-- **Analyzer-Harness**: eigene `CSharpCompilation`.
-- **Keine dedizierte Test-Basisklasse** — der Prüfstand ist bewusst leichtgewichtig. Einstieg:
-  Aggregat über die generierte `AggregateHandlerFactory` treiben, FluentAssertions, deutsche
-  `Methoden_Namen_mit_Unterstrich`. Muster: `Phase5/KontoAggregatTests.cs`. Store-Semantik →
-  Ebene 2 (`CoCommitPostgresTests` als Vorlage). Minimalbeispiel siehe
-  [10 §10.10](10-entwickler-api.md).
-- **Test-DSL `Cqrs.Testing`** (nur Prüfstand): `Szenario`/`SagaSzenario` (Gegeben → Wenn → Dann über die generierte
-  Fabrik) und `FlussLaufwerk` (Flüsse mit gewähltem Ausgangsfall je Funktion). Nutzer: `FlussLaufwerkTests`,
-  `UmgezogeneFluesseTests`, `SammelvorgangKaskadeTests`, `SammelvorgangBarriereTests`. Der frühere Export „Als Test“ aus der
-  Editor-Simulation ist mit ihr entfallen (Werkbank P8).
+**Als korrekt verifiziert (Backend-Audit 2026-08, nicht erneut jagen):** Versionsarithmetik inkl. Inbox-Marken; OCC-Skip auf dem
+`AnyVersion`-Pfad; Append vor State-Mutation; Shard-Hash-Konsistenz Subscribe ↔ gezieltes Publish; Pre-Dispatch-Guard des `ProjectionAdapter`;
+Signal→Wake-Mapping; Kompensations-Dedup und Count-Join ohne verfrühtes Feuern; Snapshot-Schema-Gating; Metadaten-Readback.
 
-## 12.8 Bekannte Flakes
+## 12.6 Wie man einen Test schreibt
 
-- **`SnapshotLiveE2ETests` Cold-Boot-Flake**: bimodal (~1 s grün *oder* Boot-Hang > Timeout),
-  Ursache **Consul-Cold-Boot** (upstream von Append), **nicht** Timeout-tunebar; wird in der
-  Integrations-Bilanz bewusst ausgenommen.
-- **Keine `[Skip]`/`[Trait]`-Attribute** im gesamten Bestand — Flake-Handling per Konvention/Doku
-  statt Annotation (in CI schwer selektiv auszuschließen).
+- **Prüfstand:** ein Aggregat über die generierte Fabrik treiben, FluentAssertions, Methodennamen `Deutsch_mit_Unterstrich`. Muster:
+  `Ddd/DatensatzAggregatTests.cs`, `Aggregate/SammelvorgangBarriereTests.cs`. Analyzer und Generatoren über eine eigene `CSharpCompilation`
+  (Muster: `Analyzers/*Tests.cs`). Gesten gegen eine Solution im Speicher (Muster: `Extractor/GestenTests.cs`).
+- **Test-DSL `Cqrs.Testing`** (nur Prüfstand): `Szenario`/`SagaSzenario` (Gegeben → Wenn → Dann über die generierte Fabrik) und `FlussLaufwerk`
+  (Flüsse mit gewähltem Ausgangsfall je Funktion; derselbe Belegungs-Kern wie der Dirigent). Die Saga-DSL kennt `Rufe` nicht (`docs/13` P3-3).
+- **Integration:** Store-Semantik gegen echtes Marten, Vorlage `CoCommitPostgresTests`. Infrastruktur extern starten
+  (`docker compose -f deploy-linux/docker-compose.infrastructure.yml up -d` bzw. `docker start cqrs-postgres cqrs-redis cqrs-consul`), kein
+  Testcontainers. Fixtures je Klasse; Sequentialität per `xunit.runner.json`; Verbindungsdaten je Klasse hartkodiert (`docs/13` P2-8).
+- **Python:** nur mit dem Interpreter der Umgebung (`CQRS_PYTHON`, lokal `gpu_env`), weil betterproto/pytest dort installiert sind.
 
-## 12.9 Design-Prinzipien der Test-Strategie
+## 12.7 Fallstricke
+
+- **xUnit schluckt App-Logs** (Console, ILogger) bis zum Testende — Hänger zuerst im Prüfstand isolieren (Glue-Test mit der echten
+  Zustell-Selektion), Cluster-Diagnose mit einem eigenständigen Programm mit sichtbaren Logs.
+- **Cluster-Cold-Boot:** Konvergiert die Identitäts-Platzierung beim ersten Start nicht, hilft kein längerer Timeout; viele Cluster-Boot-Läufe
+  hintereinander degradieren die lokale Infra (zwischendurch neu starten).
+- **`SequenceGapPostgresTests`** flaken im Gesamtlauf gelegentlich, einzeln grün.
+- Es gibt keine `[Skip]`/`[Trait]`-Attribute; Flake-Handling ist Konvention.
+
+## 12.8 Prinzipien
 
 1. **Nie faken, was man nicht besitzt** — Store-Semantik nur gegen echtes Marten.
-2. **Testebene folgt der Frage, nicht dem Feature** — dieselbe Fachlogik auf mehreren Ebenen.
-3. **Generative Vollständigkeits-Guards** statt punktueller Fälle (Wire-Boot-Check,
-   Azyklizitäts-Guard).
-4. **Beweiskraft explizit** — jede Integrationsklasse dokumentiert *warum* grün = bewiesen.
-5. **Determinismus durch Sequentialität + direktes Treiben** (Consul-Cold-Boot umgehen).
-6. **Perf ist Teil des Beweises** — LoadHarness koppelt Durchsatz mit einer Korrektheitsprüfung
-   (ein schneller, aber falscher Lauf ist rot).
+2. **Die Testebene folgt der Frage, nicht dem Feature.**
+3. **Generative Vollständigkeits-Guards** statt punktueller Fälle (Wire-Boot-Check, Azyklizitäts-Guard, „Code ohne Karte: 0“).
+4. **Beweiskraft explizit** — jede Integrationsklasse sagt, warum grün = bewiesen.
+5. **Determinismus durch Sequentialität und direktes Treiben.**
+6. **Domänenneutral testen:** Framework-Verhalten gehört in eine Test- oder Sonde-Domäne, nicht an die Beispieldomäne gebunden (W11).
