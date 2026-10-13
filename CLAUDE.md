@@ -156,6 +156,10 @@ geänderten Text, Prompt-Zeile bleibt; Python über `PythonSync`, `.py` lässt d
 Offen (Empfehlung im Plan §17 P7.4.5): `partnerVon`, `flussSlice`, Fluss-Helfer und `VB_SORTE` leiten im JS noch ab → in `board.sicht`; Geste p50 unter
 Fremdlast 346–470 ms (Ziel 300 ms).
 
+**Abnahme P7.5 (2026-10-13):** eine neue Domäne (`Zaehler`: Aggregat, Datei-Quelle mit Webhook, Fluss, C#-Funktion mit neuem Dienst, Python-Funktion
+Laufort Extern, Projektion + Reader, Akteure + Client) entstand nur über Gesten/⟳ — Vorgang per Datei-Drop und Webhook bis `StandErfasst`, Spur ①–④,
+`Program.cs`/Quell-Treiber unverändert, Code ohne Karte 0. Beleg auf Branch `claude/werkbank-abnahme-p75` (nicht für `main`); Befunde/Offenes im Plan §17.
+
 **Python-Rümpfe externer Funktionen (2026-10-13, Werkbank P7.5.3):** je Funktion ohne Lese-Fähigkeit eine generierte Python-Basis
 (`generated/funktionen.py`) und die Tabelle des GENERISCHEN Workers (`generated/funktions_tabelle.py`); die Implementierung liegt in
 `Domain.Client.Worker.Python.ML/funktionen/<modul>.py` (Regel `Abstractions.Funktionsvertrag`), `funktions_worker.py --funktionen … --konfig …` kennt
@@ -180,7 +184,7 @@ draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer Comm
 Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an
 Clients (`docs/konzept-akteure.md` §9).
 
-**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471; P7.3: Prüfstand 476/476; P7.4: Prüfstand 484/484, Integration 39/39; P7.5.1: Prüfstand 507/507, Integration 39/39; P7.5.2: Prüfstand 509/509, Integration 39/39; P7.5.3: Prüfstand 513/513, Integration 39/39, Python Worker 20/20): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
+**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471; P7.3: Prüfstand 476/476; P7.4: Prüfstand 484/484, Integration 39/39; P7.5.1: Prüfstand 507/507, Integration 39/39; P7.5.2: Prüfstand 509/509, Integration 39/39; P7.5.3: Prüfstand 513/513, Integration 39/39, Python Worker 20/20; P7.5-Abnahme: Prüfstand 515/515, Integration 39/39): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
 Marten/Consul/Redis, sequentiell: 33/33 (inkl. 4 Fluss-E2E; TwoNodeCommandDispatch an die Inbox-Marke seit T2b angepasst).**
 
 **Bewusst offen (Priorität):**

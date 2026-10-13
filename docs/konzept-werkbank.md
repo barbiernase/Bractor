@@ -385,7 +385,7 @@ Die Ergänzungen sind additiv: Das Spalten-Layout bleibt, bearbeitet wird nur im
 ### 8.2 Schreiben und Lesen
 
 - **Jede Geste ist ein Patch am Code** (bzw. an der Umgebungs-Datei), ausgeführt auf dem Server über einen **warmen Roslyn-Workspace**.
-  Anlegen nutzt den Scaffolder/`DateiSchreiber`; Umbenennen den Roslyn-`Renamer` über alle Dateien; Signatur ändern und Löschen gehen
+  Anlegen nutzt den Scaffolder/`DateiSchreiber`; Umbenennen den Roslyn-`Renamer` über alle Dateien (ein Typ in `<Name>.cs` nimmt seine Datei mit); Signatur ändern und Löschen gehen
   samt Verweisen. Danach liest der Server inkrementell neu ein und schickt das Board mit allen Ableitungen. Ziel: unter 300 ms je Geste.
 - **↶ Rückgängig** = den letzten Patch zurücknehmen. Ein Mechanismus für alles.
 - **Unfertiges ist Code**, der nicht baut: Die Karte ist rot mit dem Fehler. Der Extractor muss deshalb **Code mit Fehlern** lesen
