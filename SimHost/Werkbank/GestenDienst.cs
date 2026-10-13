@@ -70,7 +70,12 @@ public sealed class GestenDienst(string slnRoot, Arbeitsbereich arbeitsbereich, 
     {
         var stand = await arbeitsbereich.StandAsync(ct);
         var (patch, alt) = await Umbenennen.Async(stand, Path.GetFullPath(Path.Combine(slnRoot, datei)), start, neu, slnRoot, ct);
-        foreach (var p in patch) File.WriteAllText(Path.Combine(slnRoot, p.Datei), p.Nachher!);
+        foreach (var p in patch)
+        {
+            var voll = Path.Combine(slnRoot, p.Datei);
+            if (p.Nachher == null) { if (File.Exists(voll)) File.Delete(voll); }
+            else File.WriteAllText(voll, p.Nachher);
+        }
         return (patch, patch.Count == 0 ? [$"„{alt}“ heißt schon so"] : new List<string>());
     }, ct);
 

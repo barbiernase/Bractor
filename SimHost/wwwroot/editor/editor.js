@@ -954,7 +954,9 @@
     body.append(h("div",{class:"gsec",title:"public interface "+d.name+" : IDienst { Rückgabe Methode(Typ name, …); … }"},"Signatur (Methoden)"));
     (d.methoden||[]).forEach((m,mi)=>body.append(h("div",{class:"frow"},
       h("input",{value:m.rueckgabe??"",list:"de-typen",placeholder:"Rückgabe",style:"max-width:90px",onchange:e=>{m.rueckgabe=e.target.value.trim()||"void";render();}}),
-      h("input",{value:m.name??"",placeholder:"Methode",style:"max-width:110px",onchange:e=>{const v=e.target.value.trim();if(v)m.name=v;render();}}),
+      // Eine Methode aus dem Code: Umbenennen ist ein Refactoring (Renamer — Interface UND Implementierungen); neu: einfach der Name.
+      h("input",{value:m.name??"",placeholder:"Methode",style:"max-width:110px",onchange:e=>{const v=e.target.value.trim(),alt=m.name;if(!v||v===alt)return;
+        if(m._ort&&d.ausCode){gUmbenennen(m,v,alt);return;}m.name=v;render();}}),
       h("input",{value:(m.parameter||[]).map(p=>p.typ+" "+p.name).join(", "),placeholder:"Typ name, …",title:"Parameter: Typ name, Typ name",
         onchange:e=>{m.parameter=parseParams(e.target.value);render();}}),
       h("button",{class:"rm",title:"Methode entfernen (am Interface; die Implementierungen behalten ihren Code)",onclick:()=>{d.methoden.splice(mi,1);render();}},"✕"))));
@@ -963,7 +965,9 @@
     body.append(h("div",{class:"gsec",title:"Klassen, die "+d.name+" implementieren — welche läuft, wählt die Umgebung (Dienste:"+d.name+":Implementierung)"},"Implementierungen"));
     if(!(d.implementierungen||[]).length)body.append(h("div",{class:"gsec",style:"opacity:.7"},"⚠ keine — ohne Implementierung bricht der Start, sobald eine Funktion den Dienst braucht."));
     (d.implementierungen||[]).forEach((im,ii)=>{
-      body.append(h("div",{class:"gsec",style:"opacity:.9",title:"public sealed class "+im.name+"(…) : "+d.name},"▸ "+im.name+(im.datei?"":" (neu)")));
+      body.append(h("div",{class:"frow",title:"public sealed class "+im.name+"(…) : "+d.name},h("span",{class:"slotlbl"},"▸"),
+        h("input",{value:im.name,placeholder:"Klasse",onchange:e=>{const v=e.target.value.trim(),alt=im.name;if(!v||v===alt)return;
+          if(im._ort&&d.ausCode){gUmbenennen(im,v,alt);return;}im.name=v;render();}}),im.datei?null:h("span",{class:"gp-mark"}," neu")));
       (im.konstruktor||[]).forEach((p,pi)=>body.append(konstruktorZeile(p,"dn:out:dn:"+d._id+":"+ii+":"+pi,{type:"dienst",dir:"out",dn:d._id,impl:ii},
         ()=>{im.konstruktor.splice(pi,1);render();})));
       const op=port("dienst");op.classList.add("o");reg("dn:out:dn:"+d._id+":"+ii+":open",op,{type:"dienst",dir:"out",dn:d._id,impl:ii});

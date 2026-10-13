@@ -38,6 +38,20 @@ public static class Umbenennen
                 if (patch.Any(p => p.Datei == rel)) continue;   // dieselbe Datei in mehreren Projekten (verlinkt)
                 patch.Add(new DateiPatch(rel, (await alt.GetTextAsync(ct)).ToString(), (await nachher.GetTextAsync(ct)).ToString()));
             }
+        // Ein Typ in einer Datei seines Namens (<alt>.cs): die Datei zieht mit (entfernt + neu angelegt) — sonst hieße INeuerDienst.cs bald IGrenzwerte.
+        if (symbol is INamedTypeSymbol)
+            foreach (var r in symbol.DeclaringSyntaxReferences.Where(r => Path.GetFileName(r.SyntaxTree.FilePath) == symbol.Name + ".cs"))
+            {
+                var rel = Path.GetRelativePath(wurzel, r.SyntaxTree.FilePath).Replace('\\', '/');
+                var neuRel = Path.Combine(Path.GetDirectoryName(rel) ?? "", neu + ".cs").Replace('\\', '/');
+                if (File.Exists(Path.Combine(wurzel, neuRel)) || patch.Any(p => p.Datei == neuRel)) continue;
+                var i = patch.FindIndex(p => p.Datei == rel);
+                var text = i >= 0 ? patch[i].Nachher : r.SyntaxTree.GetText(ct).ToString();
+                var vorher = i >= 0 ? patch[i].Vorher : text;
+                if (i >= 0) patch.RemoveAt(i);
+                patch.Add(new DateiPatch(rel, vorher, null));
+                patch.Add(new DateiPatch(neuRel, null, text));
+            }
         return (patch, symbol.Name);
     }
 

@@ -474,4 +474,44 @@ public sealed class GestenTests : IDisposable
         var neu = Karte(await BoardAsync(), "funktionen", f => (string?)f["name"] == "ISeitenPruefung");
         ((string?)neu["implementierung"]).Should().Be("SeitenPruefung");
     }
+
+    [Fact]
+    public async Task Umbenennen_eines_Typs_in_seiner_eigenen_Datei_zieht_die_Datei_mit()
+    {
+        var dienst = new JsonObject
+        {
+            ["name"] = "ILeuchte", ["namespace"] = "Leihwesen.Gebuehren",
+            ["methoden"] = new JsonArray(new JsonObject { ["name"] = "Hell", ["rueckgabe"] = "bool", ["parameter"] = new JsonArray(Param("int", "stufe")) }),
+            ["implementierungen"] = new JsonArray(new JsonObject { ["name"] = "Leuchte" }),
+        };
+        await GesteAsync(new KartenDelta { Karten = new() { ["dienste"] = [dienst] } });
+        var karte = Karte(await BoardAsync(), "dienste", d => (string?)d["name"] == "ILeuchte");
+        var methode = karte["methoden"]![0]!["_ort"]!;
+        var impl = karte["implementierungen"]![0]!["_ort"]!;
+        ((string?)impl["datei"]).Should().Be("Leihwesen/Leuchte.cs", "die Implementierung trägt ihren Ort — ihr Name ist umbenennbar");
+
+        var (patch, _) = await Umbenennen.Async(Loesung(), Path.Combine(_wurzel, (string)impl["datei"]!), (int)impl["start"]!, "Lampe", _wurzel);
+
+        patch.Should().Contain(p => p.Datei == "Leihwesen/Leuchte.cs" && p.Nachher == null, "die Datei <alt>.cs fällt weg …")
+            .And.Contain(p => p.Datei == "Leihwesen/Lampe.cs" && p.Vorher == null && p.Nachher!.Contains("public sealed class Lampe : ILeuchte"), "… und heißt wie der Typ");
+
+        (patch, _) = await Umbenennen.Async(Loesung(), Path.Combine(_wurzel, (string)methode["datei"]!), (int)methode["start"]!, "Strahlt", _wurzel);
+        patch.Select(p => p.Datei).Should().BeEquivalentTo(["Leihwesen/ILeuchte.cs", "Leihwesen/Leuchte.cs"], "eine Methode benennt Interface und Implementierung um, keine Datei zieht");
+        patch.Should().OnlyContain(p => p.Nachher!.Contains("Strahlt(int stufe)"));
+    }
+
+    [Fact]
+    public void Ausdrucks_Rumpf_liest_sich_wie_im_Board_und_wird_beim_Ersetzen_ein_Block_ohne_Leerzeile()
+    {
+        const string text = "class S\n{\n    public Task Speichere(int x)\n        => throw new NotImplementedException(\"TODO\");\n\n    public int Zahl() => 42;\n    public void Tu() => Console.WriteLine();\n}\n";
+        var baum = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(text).GetRoot();
+        var m = baum.DescendantNodes().OfType<Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax>().ToList();
+        Rumpf.AlsAnweisung(m[0]).Should().Be("throw new NotImplementedException(\"TODO\");");
+        Rumpf.AlsAnweisung(m[1]).Should().Be("return 42;");
+        Rumpf.AlsAnweisung(m[2]).Should().Be("Console.WriteLine();");
+        var ort = new RumpfOrt("S.cs", m[0].Span.Start, m[0].Span.End, null);
+        Rumpf.Lies(text, ort).Should().Be("throw new NotImplementedException(\"TODO\");", "dieselbe Form wie das Board-Feld rumpf — sonst greift die Sperre des ✎");
+        Rumpf.MitRumpf(text, ort, "return Task.CompletedTask;", null)
+            .Should().Contain("    public Task Speichere(int x)\n    {\n        return Task.CompletedTask;\n    }\n\n    public int Zahl()");
+    }
 }

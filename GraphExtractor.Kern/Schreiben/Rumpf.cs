@@ -40,9 +40,22 @@ public static class Rumpf
         var root = CSharpSyntaxTree.ParseText(text).GetRoot();
         if (ort.Lambda is { } i) return LambdaAm(root, ort, i)?.ToString().Replace("\r\n", "\n");
         if (MethodeAm(root, ort) is not { } m) return null;
-        var inner = m.Body is { } b ? text[b.OpenBraceToken.Span.End..b.CloseBraceToken.Span.Start] : m.ExpressionBody?.Expression.ToString() ?? "";
+        var inner = m.Body is { } b ? text[b.OpenBraceToken.Span.End..b.CloseBraceToken.Span.Start] : AlsAnweisung(m) ?? "";
         return Dedent(string.Join("\n", inner.Replace("\r\n", "\n").Split('\n').Where(z => !z.TrimStart().StartsWith(PromptMarke, StringComparison.Ordinal)))).Trim();
     }
+
+    /// <summary>
+    /// Ein Ausdrucks-Rumpf (<c>=&gt; expr</c>) als Anweisung — so, wie er als Block hieße: <c>throw …;</c> für einen throw-Ausdruck,
+    /// <c>expr;</c> für eine void-Methode, sonst <c>return expr;</c>. Dieselbe Form liest der Extractor (Board-Feld <c>rumpf</c>) — die Sperre des ✎
+    /// vergleicht beide.
+    /// </summary>
+    public static string? AlsAnweisung(MethodDeclarationSyntax m) => m.ExpressionBody?.Expression switch
+    {
+        null => null,
+        ThrowExpressionSyntax t => "throw " + t.Expression + ";",
+        var e when m.ReturnType is PredefinedTypeSyntax { Keyword.RawKind: (int)SyntaxKind.VoidKeyword } => e + ";",
+        var e => "return " + e + ";",
+    };
 
     /// <summary>Der Dateitext mit dem neuen Rumpf am Ort (ohne zu schreiben); <paramref name="prompt"/> = optionale Prompt-Zeile (LLM).</summary>
     public static string MitRumpf(string text, RumpfOrt ort, string neu, string? prompt)
@@ -70,7 +83,8 @@ public static class Rumpf
         if (m.Body is { } b) return text[..b.OpenBraceToken.Span.End] + inhalt + text[b.CloseBraceToken.Span.Start..];
         var start = m.ExpressionBody!.Span.Start;
         var ende = m.SemicolonToken.Span.End;
-        return text[..start].TrimEnd(' ') + nl + new string(' ', spalte) + "{" + inhalt + "}" + text[ende..];
+        // Der Pfeil kann auf der nächsten Zeile stehen: der Leerraum davor (auch Zeilenumbrüche) fällt weg, der Block beginnt auf eigener Zeile.
+        return text[..start].TrimEnd(' ', '\t', '\r', '\n') + nl + new string(' ', spalte) + "{" + inhalt + "}" + text[ende..];
     }
 
     private static MethodDeclarationSyntax? MethodeAm(SyntaxNode root, RumpfOrt ort) =>

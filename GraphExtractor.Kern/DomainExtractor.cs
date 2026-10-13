@@ -196,12 +196,16 @@ public sealed class DienstMethodeRaw
     public string Name = "", Rueckgabe = "";
     public List<(string Typ, string Name)> Parameter = new();
     public string? Doku;
+    /// <summary>Die Deklaration am Interface (Umbenennen per Renamer).</summary>
+    public Ort? Ort;
 }
 
 public sealed class DienstImplRaw
 {
     public string Name = "", Full = "";
     public string? Datei;
+    /// <summary>Die Klassen-Deklaration (Umbenennen per Renamer).</summary>
+    public Ort? Ort;
     public List<(string Typ, string Name)> Konstruktor = new();
     /// <summary>Je Methode des Dienstes: der Rumpf der Implementierung und der Ort ihrer Methode (Rumpf-Edit).</summary>
     public List<(string Methode, string? Rumpf, Ort? Ort)> Rumpfe = new();
@@ -859,6 +863,7 @@ public sealed partial class DomainExtractor
                 {
                     Name = impl.Name, Full = impl.Fq(), Konstruktor = Konstruktor(impl),
                     Datei = QuellDeklarationen(impl).FirstOrDefault()?.SyntaxTree.FilePath,
+                    Ort = QuellDeklarationen(impl).OfType<BaseTypeDeclarationSyntax>().FirstOrDefault() is { } idecl ? Ort.Von(idecl) : null,
                 };
                 foreach (var me in iface.GetMembers().OfType<IMethodSymbol>().Where(x => x.MethodKind == MethodKind.Ordinary))
                 {
@@ -899,7 +904,7 @@ public sealed partial class DomainExtractor
             {
                 Name = me.Name, Rueckgabe = syn?.ReturnType.ToString() ?? ShortType(me.ReturnType),
                 Parameter = me.Parameters.Select((p, i) => (syn?.ParameterList.Parameters.ElementAtOrDefault(i)?.Type?.ToString() ?? ShortType(p.Type), p.Name)).ToList(),
-                Doku = syn == null ? null : Summary(syn),
+                Doku = syn == null ? null : Summary(syn), Ort = syn == null ? null : Ort.Von(syn),
             });
         }
         return d;
@@ -1529,7 +1534,7 @@ public sealed partial class DomainExtractor
                 Microsoft.CodeAnalysis.Text.TextSpan.FromBounds(b.OpenBraceToken.Span.End, b.CloseBraceToken.SpanStart));
             return Dedent(text.Replace("\r\n", "\n")).Trim('\n', '\r', ' ', '\t');
         }
-        if (s.ExpressionBody is { } e) return "return " + e.Expression + ";";
+        if (s.ExpressionBody != null) return Rumpf.AlsAnweisung(s);
         return null;
     }
 

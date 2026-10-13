@@ -684,12 +684,16 @@ public static class ModellMapper
                 if (sammlung == "akteure" && akteurVon.TryGetValue(full, out var ak)) weitere.AddRange(ak.VertragTypen);
                 // Ein Dienst: seine Implementierungen gehören zur Karte; je Methode steht der Rumpf in der Implementierung.
                 if (sammlung == "dienste" && dienstVon.GetValueOrDefault(full) is { } draw)
+                {
+                    foreach (var (m, mraw) in Alle(k["methoden"]).Zip(draw.Methoden)) if (OrtJson(dom, mraw.Ort) is { } mo) m["_ort"] = mo;
                     foreach (var (dimpl, iraw) in Alle(k["implementierungen"]).Zip(draw.Impls))
                     {
                         weitere.Add(iraw.Full);
+                        if (OrtJson(dom, iraw.Ort) is { } io) dimpl["_ort"] = io;
                         foreach (var (r, rraw) in Alle(dimpl["rumpfe"]).Zip(iraw.Rumpfe))
                             if (OrtJson(dom, rraw.Ort) is { } ro) r["_rumpf"] = ro;
                     }
+                }
                 // Die Implementierung eines Stores gehört zu seiner Karte (wie bei Funktionen).
                 if (sammlung == "stores" && storeVon.GetValueOrDefault(full) is { } st)
                 {
