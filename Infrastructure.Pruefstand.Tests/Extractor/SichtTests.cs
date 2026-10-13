@@ -125,4 +125,59 @@ public class SichtTests
         sicht.Passt(q2, [P("k1", new JsonObject { ["type"] = "cmd", ["dir"] = "out", ["rec"] = "LeiheAus" })], new HashSet<string>()).Passt.Should().Equal("k1");
         sicht.Passt(q, [P("k1", new JsonObject { ["type"] = "cmd", ["dir"] = "out", ["rec"] = "LeiheAus" })], new HashSet<string> { "k1" }).Passt.Should().Equal("k1");
     }
+
+    // ── P7.4.5: die zwei Seiten einer Nachricht und die Fluss-Sicht kommen vom Server ──
+
+    [Fact]
+    public async Task Partner_einer_Nachricht_mit_Loesen_als_Beschreibung()
+    {
+        var board = await BoardAsync();
+        var p = board["sicht"]!["partner"]!.AsObject();
+        static IEnumerable<JsonObject> Zeilen(JsonNode? n) => n!.AsArray().OfType<JsonObject>();
+        var leihe = p["LeiheAus"]!;
+        var dec = "dec:" + Id(board, "decider", "command", "LeiheAus");
+        Zeilen(leihe["aus"]).Should().Contain(z => (string?)z["id"] == dec && (string?)z["text"] == "Decide @ Leihvorgang");
+        // ◀ kommt aus: der Akteur, der den Command hineingeben darf — ✕ entzieht das Recht (Liste „darf“ der Akteur-Karte).
+        var theke = Zeilen(leihe["ein"]).Single(z => (string?)z["text"] == "Akteur Theke");
+        theke["mark"]!.GetValue<string>().Should().Be("darf");
+        theke["loesen"]!["feld"]!.GetValue<string>().Should().Be("darf");
+        theke["loesen"]!["wert"]!.GetValue<string>().Should().Be("LeiheAus");
+        Zeilen(p["Ausgeliehen"]!["ein"]).Should().Contain(z => (string?)z["id"] == dec);
+        // Ein Draht trägt seine Nachricht: der Fluss hört SchadenGeschaetzt am Knoten „mahnung“ (∧), ✕ löst genau diesen Draht.
+        var draht = Zeilen(p["SchadenGeschaetzt"]!["aus"]).Single(z => (string?)z["mark"] == "← gruendlich ∧");
+        draht["loesen"]!["eingang"]!.GetValue<int>().Should().Be(0);
+        draht["loesen"]!["draht"]!.GetValue<int>().Should().Be(0);
+    }
+
+    [Fact]
+    public async Task Fluss_Sicht_traegt_Ports_Vorgaenger_Tiefe_Zuweisung_und_Slice()
+    {
+        var board = await BoardAsync();
+        var fl = board["fluesse"]!.AsArray().OfType<JsonObject>().First(f => (string?)f["name"] == "RueckgabePruefung");
+        var fs = board["sicht"]!["fluesse"]!["fl:" + (string)fl["_id"]!]!;
+        JsonNode K(string name) => fs["knoten"]!["fs:" + (string)fl["knoten"]!.AsArray().First(k => (string?)k!["name"] == name)!["_id"]!]!;
+        IEnumerable<string> Str(JsonNode? n) => n!.AsArray().Select(x => (string)x!);
+        K("eingang")["ports"]!.AsArray().Select(x => (string)x!["typ"]!).Should().Equal("RueckgabeGescannt", "QuellStrom");
+        K("schnell")["ports"]!.AsArray().Select(x => (string)x!["port"]!).Should().EndWith(new[] { "zeitlimit", "abgelehnt" }).And.Contain("fall");
+        Str(K("mahnung")["vor"]).Should().Equal("gruendlich", "eingang", "schnell");
+        K("mahnung")["tiefe"]!.GetValue<int>().Should().Be(2);
+        K("mahnung")["draehte"]!.AsArray().Select(e => Str(e).ToList()).Should().BeEquivalentTo(
+            new[] { new[] { "SchadenGeschaetzt", "RueckgabeGescannt" }, new[] { "ZeitlimitAbgelaufen" } }, o => o.WithStrictOrdering());
+        K("schnell")["zuweisung"]!.GetValue<string>().Should().StartWith("fk:");
+        Str(fs["slice"]).Should().Contain(fl["knoten"]!.AsArray().Select(k => "fs:" + (string)k!["_id"]!)).And.Contain("rec:EroeffneMahnung");
+    }
+
+    [Fact]
+    public void Geordnet_stellt_Knoten_hinter_ihre_Quellen_und_laesst_geordnete_unberuehrt()
+    {
+        DomainEditor.FlussSchritt S(string n, params string[] von) => new()
+        {
+            Name = n, Art = "funktion", Typ = "IF",
+            Eingaenge = von.Length == 0 ? [] : [new DomainEditor.FlussEingang { Draehte = von.Select(v => new DomainEditor.FlussDraht { Von = v }).ToList() }],
+        };
+        var f = new DomainEditor.FlussPipeline { Name = "F", Namespace = "N", Knoten = [S("q"), S("c", "b"), S("b", "q")] };
+        f.Geordnet().Knoten.Select(k => k.Name).Should().Equal("q", "b", "c");
+        var geordnet = f.Geordnet();
+        geordnet.Geordnet().Should().BeSameAs(geordnet);
+    }
 }

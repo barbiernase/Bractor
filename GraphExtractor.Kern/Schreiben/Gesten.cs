@@ -97,6 +97,7 @@ public static class Gesten
         var soll = Anwenden(board, delta);
         var vorher = BoardLeseseite.AusBoard(board.ToJsonString());
         var modell = Stempeln(BoardLeseseite.AusBoard(soll.ToJsonString()), vorher);
+        modell = modell with { Fluesse = modell.Fluesse.Select(f => f.Geordnet()).ToList() };
 
         var (geloescht, nicht) = Loeschen(board, soll, delta, ws);
         var bericht = DateiSchreiber.Schreibe(modell, ws);

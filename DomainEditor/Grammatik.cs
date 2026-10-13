@@ -320,6 +320,16 @@ public static class Grammatik
     /// <summary>Editor-Port-Schlüssel, deren Ausgang eine andere Sorte trägt als die Ziel-Karte (Frist-Knoten → Command = Sorte Frist).</summary>
     public static readonly IReadOnlyDictionary<string, string> EditorAusgangSorte = new Dictionary<string, string> { ["frist"] = Frist };
 
+    /// <summary>
+    /// Der Katalog im Verbinden-Modus: welche Record-Arten an einen Editor-Port passen KÖNNEN (Port-Typ + Richtung der Gegenseite), auch wenn
+    /// sie nicht als Karte auf dem Board stehen. Ob eine davon passt, urteilt <c>Sicht.Passt</c> wie bei jedem Kandidaten.
+    /// </summary>
+    public static readonly IReadOnlyDictionary<string, string[]> EditorKatalogSorte = new Dictionary<string, string[]>
+    {
+        ["evtOut|in"] = ["event", "rejection"], ["evtUse|out"] = ["event", "rejection"], ["sagaCmd|in"] = ["command"], ["cmd|out"] = ["command"],
+        ["query|out"] = ["query"], ["qrsp|in"] = ["queryresponse"], ["auftragFn|out"] = ["auftrag"], ["ftype|out"] = ["valueobject"],
+    };
+
     /// <summary>Die Grammatik als JSON-Objekt für das Board (<c>rahmen.grammatik</c>).</summary>
     public static object AlsJson() => new
     {
@@ -338,6 +348,7 @@ public static class Grammatik
         ausgangSorte = EditorAusgangSorte,
         portBaustein = EditorPortBaustein.Select(x => new[] { x.Schluessel, x.Baustein }),
         portGebrauch = EditorPortGebrauch,
+        katalogSorte = EditorKatalogSorte,
         // Für die Modul-Ableitung im Editor (dieselbe wie DomainEditor.Module): Sorten mit Konsumenten-/Erzeuger-Pflicht, Start-Nachricht.
         offenEin = Module.BrauchtKonsument.Order(StringComparer.Ordinal),
         offenAus = Module.BrauchtErzeuger.Order(StringComparer.Ordinal),

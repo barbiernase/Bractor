@@ -9,7 +9,8 @@ public sealed partial class Sicht
     /// <c>board.sicht</c>: je Karte <c>{art, domaene?, block, rolle, akteure, akteurRahmen, insel?, vertreter?, besitzer?, storeScope?, aggregat?, tiefe?,
     /// alsKette?, beruehrt?}</c>,
     /// dazu Kanten, zusammengezogene Kanten der kompakten Ansicht, die Prozess-Kette, die Akteur-Reihenfolge je Domäne, die Heimat der
-    /// Flüsse und die Anschlussleisten der Clients. <c>domaene</c> fehlt, wenn die Karte keine hat (die Ansicht setzt dann ggf. ihre Heimat).
+    /// Flüsse (mit Ports, Vorgängern, Tiefe, Zuweisung je Knoten und dem Slice), die Anschlussleisten der Clients und je Nachricht ihre zwei
+    /// Seiten (<c>partner</c>: ◀ kommt aus · geht an ▶). <c>domaene</c> fehlt, wenn die Karte keine hat (die Ansicht setzt dann ggf. ihre Heimat).
     /// </summary>
     public JsonObject AlsJson()
     {
@@ -41,7 +42,7 @@ public sealed partial class Sicht
         foreach (var dom in domaenen.OrderBy(x => x, StringComparer.Ordinal))
             if (AkteurOrdnung(dom) is { Count: > 0 } o) ordnung[dom] = Arr(o);
         var fluesse = new JsonObject();
-        foreach (var f in _fluesse) fluesse["fl:" + S(f, "_id")] = new JsonObject { ["heim"] = FlussHeim(f) };
+        foreach (var f in _fluesse) fluesse["fl:" + S(f, "_id")] = FlussJson(f);
         var clients = new JsonObject();
         foreach (var c in _clients) clients["cl:" + S(c, "_id")] = Client(c);
         // Je Akteur: die Domänen, in denen er wirkt; je Nachricht und Ketten-Akteur der Pfad, auf dem sie in seinem Namen entsteht.
@@ -71,6 +72,7 @@ public sealed partial class Sicht
             ["clients"] = clients,
             ["akteurDomaenen"] = wirkt,
             ["pfade"] = pfade,
+            ["partner"] = PartnerJson(),
         };
     }
     private static JsonArray Arr(IEnumerable<string> xs) => new(xs.Select(x => (JsonNode?)x).ToArray());

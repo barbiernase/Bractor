@@ -444,6 +444,29 @@ public sealed record FlussPipeline
     public string Bauer { get; init; } = "p";
     /// <summary>Herkunfts-Stempel: Hash des Inhalts beim Einlesen aus dem Code (<see cref="DomainEditor.Herkunft"/>). Abweichung = im Editor geändert; null = neu.</summary>
     public string? Herkunft { get; init; }
+
+    /// <summary>
+    /// Deklarations-Reihenfolge = Code-Reihenfolge: stabil topologisch (ein Draht kommt immer von einem früheren Knoten). Eine Geste darf
+    /// Knoten in beliebiger Reihenfolge schicken (ein neuer Draht nach vorn); ein Kreis bleibt am Ende stehen (der Analyzer meldet ihn).
+    /// </summary>
+    public FlussPipeline Geordnet()
+    {
+        static IEnumerable<string> Vor(FlussSchritt k) =>
+            k.Eingaenge.SelectMany(e => e.Draehte.Select(d => d.Von).Concat(e.Je is { } j ? [j] : []));
+        var namen = Knoten.Select(k => k.Name).ToHashSet(StringComparer.Ordinal);
+        var fertig = new HashSet<string>(StringComparer.Ordinal);
+        var rest = Knoten.ToList();
+        var aus = new List<FlussSchritt>();
+        while (rest.Count > 0)
+        {
+            var i = rest.FindIndex(k => Vor(k).All(v => fertig.Contains(v) || !namen.Contains(v)));
+            if (i < 0) { aus.AddRange(rest); break; }
+            aus.Add(rest[i]);
+            fertig.Add(rest[i].Name);
+            rest.RemoveAt(i);
+        }
+        return aus.SequenceEqual(Knoten) ? this : this with { Knoten = aus };
+    }
 }
 
 /// <summary>Die Art eines Fluss-Knotens.</summary>

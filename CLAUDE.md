@@ -154,7 +154,9 @@ Rumpf so, wie der warme Workspace ihn liest (Board: `rumpf` + Ort — `_ort` der
 bei Fluss-/Regel-Lambdas, Python-Anker der Client-Implementierung); wo der 📝-Block stand, steht eine abgeleitete Rumpf-Kachel (`rp:<Karte>:<i>`, dieselbe
 Lage). ✎ = Geste `POST /api/werkbank/rumpf` (`GraphExtractor.Kern/Schreiben/Rumpf.cs`: ersetzt genau den Methoden-Rumpf bzw. Lambda, Sperre gegen
 geänderten Text, Prompt-Zeile bleibt; Python über `PythonSync`, `.py` lässt das Board neu lesen); „🤖 füllen“ ist eine Aktion am Rumpf (LLM-Konsole).
-Offen (Empfehlung im Plan §17 P7.4.5): `partnerVon`, `flussSlice`, Fluss-Helfer und `VB_SORTE` leiten im JS noch ab → in `board.sicht`; Geste p50 unter
+Seit P7.4.5-Rest (2026-10-13) auch auf dem Server: `board.sicht.partner` (◀ kommt aus · geht an ▶ je Nachricht, ✕ als `loesen`-Beschreibung, die der
+Editor an der Karte ausführt), `board.sicht.fluesse` (je Knoten Ports mit Nachricht, Vorgänger, Tiefe, gehörte Events, Zuweisung; Slice), `rahmen.grammatik.katalogSorte`
+(`Grammatik.EditorKatalogSorte`); die Fluss-Knoten ordnet der Schreiber (`FlussPipeline.Geordnet`). Offen: Geste p50 unter
 Fremdlast 346–470 ms (Ziel 300 ms).
 
 **Abnahme P7.5 (2026-10-13):** eine neue Domäne (`Zaehler`: Aggregat, Datei-Quelle mit Webhook, Fluss, C#-Funktion mit neuem Dienst, Python-Funktion
