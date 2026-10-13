@@ -162,16 +162,8 @@ public static partial class DateiSchreiber
             i == 0 ? einzug + z : z.Length == 0 ? z : einzug + (z.Length >= alt && z[..alt].Trim().Length == 0 ? z[alt..] : z.TrimStart())));
     }
 
-    /// <summary>usings der generierten Datei, die der bestehenden fehlen, oben ergänzen (vor dem ersten using bzw. am Anfang).</summary>
-    private static string MitUsings(string text, SyntaxNode genRoot)
-    {
-        var altRoot = CSharpSyntaxTree.ParseText(text).GetRoot();
-        var da = altRoot.DescendantNodes(n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax).OfType<UsingDirectiveSyntax>()
-            .Select(u => u.ToString().Trim()).ToHashSet(StringComparer.Ordinal);
-        var fehlend = genRoot.DescendantNodes(n => n is CompilationUnitSyntax).OfType<UsingDirectiveSyntax>()
-            .Select(u => u.ToString().Trim()).Where(u => !da.Contains(u)).ToList();
-        return fehlend.Count == 0 ? text : string.Join("\n", fehlend) + "\n" + text;
-    }
+    /// <summary>usings der generierten Datei, die der bestehenden fehlen, einsortieren (<see cref="Usings"/>).</summary>
+    private static string MitUsings(string text, SyntaxNode genRoot) => Usings.ErgaenzeAus(text, genRoot);
 
     /// <summary>
     /// Fähigkeiten/Bündel: fehlende Interfaces anhängen (wie Typ-Dateien) UND in einem bestehenden Bündel die fehlenden
@@ -244,11 +236,7 @@ public static partial class DateiSchreiber
 
                 // Fähigkeit aus einem anderen Namespace: using ergänzen.
                 var dateiNs = root.DescendantNodes().OfType<BaseNamespaceDeclarationSyntax>().FirstOrDefault()?.Name.ToString();
-                foreach (var f in hinzu)
-                    if (nsVonFaehigkeit.TryGetValue(f, out var fns) && fns != dateiNs
-                        && !CSharpSyntaxTree.ParseText(text).GetRoot().DescendantNodes(n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax)
-                            .OfType<UsingDirectiveSyntax>().Any(u => u.Name?.ToString() == fns))
-                        text = $"using {fns};\n" + text;
+                text = Usings.Ergaenze(text, hinzu.Select(f => nsVonFaehigkeit.GetValueOrDefault(f)).OfType<string>().Where(fns => fns != dateiNs));
             }
             if (aenderungen.Count == 0) continue;
             ws.Setze(gruppe.Key, text);

@@ -869,15 +869,8 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyLis
         var fehlend = typen.SelectMany(t => Regex.Matches(t ?? "", @"[A-Za-z_]\w*").Select(m => m.Value))
             .Select(n => _nsVon.GetValueOrDefault(n)).Where(ns => ns != null && ns != dateiNs && !da.Contains(ns) && dateiNs?.StartsWith(ns + ".") != true)
             .Distinct().ToList();
-        return fehlend.Count == 0 ? text : string.Concat(fehlend.Select(ns => $"using {ns};\n")) + text;
+        return Usings.Ergaenze(text, fehlend.OfType<string>());
     }
 
-    private static string MitUsingsAus(string text, SyntaxNode genRoot)
-    {
-        var da = Parse(text).DescendantNodes(n => n is CompilationUnitSyntax or BaseNamespaceDeclarationSyntax).OfType<UsingDirectiveSyntax>()
-            .Select(u => u.ToString().Trim()).ToHashSet(StringComparer.Ordinal);
-        var fehlend = genRoot.DescendantNodes(n => n is CompilationUnitSyntax).OfType<UsingDirectiveSyntax>()
-            .Select(u => u.ToString().Trim()).Where(u => !da.Contains(u)).ToList();
-        return fehlend.Count == 0 ? text : string.Join("\n", fehlend) + "\n" + text;
-    }
+    private static string MitUsingsAus(string text, SyntaxNode genRoot) => Usings.ErgaenzeAus(text, genRoot);
 }
