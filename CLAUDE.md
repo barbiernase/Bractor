@@ -194,7 +194,7 @@ draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer Comm
 Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an
 Clients (`docs/konzept-akteure.md` §9).
 
-**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471; P7.3: Prüfstand 476/476; P7.4: Prüfstand 484/484, Integration 39/39; P7.5.1: Prüfstand 507/507, Integration 39/39; P7.5.2: Prüfstand 509/509, Integration 39/39; P7.5.3: Prüfstand 513/513, Integration 39/39, Python Worker 20/20; P7.5-Abnahme: Prüfstand 515/515, Integration 39/39; P8: Prüfstand 515/515, Integration 39/39): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
+**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471; P7.3: Prüfstand 476/476; P7.4: Prüfstand 484/484, Integration 39/39; P7.5.1: Prüfstand 507/507, Integration 39/39; P7.5.2: Prüfstand 509/509, Integration 39/39; P7.5.3: Prüfstand 513/513, Integration 39/39, Python Worker 20/20; P7.5-Abnahme: Prüfstand 515/515, Integration 39/39; P8: Prüfstand 515/515, Integration 39/39; P7.4.5-/P7.5-Rest: Prüfstand 521/521, Integration 39/39): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
 Marten/Consul/Redis, sequentiell: 33/33 (inkl. 4 Fluss-E2E; TwoNodeCommandDispatch an die Inbox-Marke seit T2b angepasst).**
 
 **Bewusst offen (Priorität):**
