@@ -148,6 +148,7 @@ public static class ModellMapper
         };
 
         var pyImpls = PythonClients.Lies(dom.Wurzel);
+        var pyFunktionen = PythonClients.Funktionen(dom.Wurzel);
         return Herkunft.Stempeln(new EditorModell
         {
             Records = records, Enums = enums, Aggregate = aggregate, Decider = decider, Applier = applier, Sagas = sagas, Rahmen = rahmen,
@@ -157,6 +158,7 @@ public static class ModellMapper
                 Faehigkeiten = f.Faehigkeiten.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
                 Doku = f.Doku, Datei = Rel(f.Datei), Implementierung = f.ImplKlasse, ImplDatei = Rel(f.ImplDatei), Rumpf = f.ImplRumpf,
                 Konstruktor = f.ImplKonstruktor.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
+                Python = pyFunktionen.GetValueOrDefault(f.Name),
             }).ToList(),
             Dienste = dom.Dienste.Select(d => new Dienst
             {

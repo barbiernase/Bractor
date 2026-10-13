@@ -365,6 +365,23 @@ public sealed record Funktion
     /// hier ist die Kante Funktion → Dienst; ⊕ fügt einen Parameter an bzw. entfernt ihn (Geste am Konstruktor).
     /// </summary>
     public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
+    /// <summary>
+    /// Die Python-Implementierung (Laufort Extern, Plan E13) — eine Klasse im Worker-Projekt, die die generierte Basis erbt; null = keine.
+    /// Nur Spiegel der Datei (✎/🤖 am Rumpf über PythonSync), nie Teil der Signatur.
+    /// </summary>
+    public FunktionPython? Python { get; init; }
+}
+
+/// <summary>Die Python-Implementierung einer Funktion: Datei (relativ zur Solution), Klasse, die Methode <c>rufe</c> mit der Signatur der Basis.</summary>
+public sealed record FunktionPython
+{
+    public string Datei { get; init; } = "";
+    public string Klasse { get; init; } = "";
+    public string Basis { get; init; } = "";
+    public string Methode { get; init; } = "rufe";
+    /// <summary>Die <c>def</c>-Zeile aus der generierten Basis — gilt auch für einen fehlenden Rumpf.</summary>
+    public string? Signatur { get; init; }
+    public string? Rumpf { get; init; }
 }
 
 /// <summary>

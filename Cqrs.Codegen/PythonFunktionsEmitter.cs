@@ -20,12 +20,38 @@ public static class PythonFunktionsEmitter
 
     public static (string Inhalt, int Anzahl) Emit(IEnumerable<Assembly> assemblies)
     {
-        var funktionen = assemblies.SelectMany(TypenVon)
-            .Where(t => t.IsInterface && t.GetInterfaces().Any(i => i.FullName == FunktionName))
-            .OrderBy(t => t.FullName, StringComparer.Ordinal)
-            .Select(Lies).Where(f => f != null).Select(f => f!).ToList();
+        var funktionen = Funktionen(assemblies);
         return (Python(funktionen), funktionen.Count);
     }
+
+    /// <summary>
+    /// Die Tabelle des generischen Funktions-Workers (Plan E13): je Funktion mit Python-Basis die Basis, das Modul und die Klasse ihrer
+    /// Implementierung (<c>funktionen/&lt;modul&gt;.py</c>, Regel in <c>Abstractions.Funktionsvertrag</c>) — der Runner kennt keine Domäne.
+    /// </summary>
+    public static string Tabelle(IEnumerable<Assembly> assemblies)
+    {
+        var b = new StringBuilder();
+        b.AppendLine("# GENERIERT von Cqrs.Codegen aus den Katalog-Funktionen der Domäne (IFunktion, Plan E13). Nicht von Hand ändern.");
+        b.AppendLine("#");
+        b.AppendLine("# Die Tabelle des generischen Funktions-Workers (funktions_worker.py): je Funktion mit Python-Basis die Basis (generated/funktionen.py),");
+        b.AppendLine($"# das Modul und die Klasse ihrer Implementierung ({Abstractions.Funktionsvertrag.PythonOrdner}/<modul>.py, die Klasse erbt die Basis und füllt `rufe`).");
+        b.AppendLine("# Welche davon ein Worker anbietet, sagt die Umgebung (Funktionen:<F>:Laufort = Extern, Worker-Argumente).");
+        b.AppendLine("from __future__ import annotations");
+        b.AppendLine();
+        b.AppendLine("TABELLE: dict[str, tuple[str, str, str]] = {");
+        foreach (var f in Funktionen(assemblies))
+        {
+            var n = f.Funktion.Name;
+            b.AppendLine($"    \"{n}\": (\"{Abstractions.Funktionsvertrag.PythonBasis(n)}\", \"{Abstractions.Funktionsvertrag.PythonOrdner}.{Abstractions.Funktionsvertrag.PythonModul(n)}\", \"{Abstractions.Funktionsvertrag.OhneI(n)}\"),");
+        }
+        b.AppendLine("}");
+        return b.ToString();
+    }
+
+    private static List<FunktionInfo> Funktionen(IEnumerable<Assembly> assemblies) => assemblies.SelectMany(TypenVon)
+        .Where(t => t.IsInterface && t.GetInterfaces().Any(i => i.FullName == FunktionName))
+        .OrderBy(t => t.FullName, StringComparer.Ordinal)
+        .Select(Lies).Where(f => f != null).Select(f => f!).ToList();
 
     /// <summary>
     /// Die feste Form (CQRS068): genau eine Methode RufeAsync(TAuftrag, IAusfuehrung) → Task&lt;OneOf&lt;…&gt;&gt;. Eine Funktion mit
@@ -44,8 +70,7 @@ public static class PythonFunktionsEmitter
     }
 
     /// <summary><c>IBildVerkleinerung</c> → <c>BildVerkleinerung</c> (Klassenname der Basis ohne Schnittstellen-I).</summary>
-    public static string OhneI(string name)
-        => name.Length > 1 && name[0] == 'I' && char.IsUpper(name[1]) ? name[1..] : name;
+    public static string OhneI(string name) => Abstractions.Funktionsvertrag.OhneI(name);
 
     private static string Python(List<FunktionInfo> funktionen)
     {

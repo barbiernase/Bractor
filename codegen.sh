@@ -8,6 +8,7 @@
 #   - Infrastructure/Serialization/CqrsWireJsonContext.g.cs
 #   - Domain.Client.Worker.Python.ML/domain_client/generated/vertraege.py  (Akteur-Verträge → Python)
 #   - Domain.Client.Worker.Python.ML/domain_client/generated/funktionen.py (Katalog-Funktionen → Python)
+#   - Domain.Client.Worker.Python.ML/domain_client/generated/funktions_tabelle.py (Tabelle des generischen Funktions-Workers)
 #
 # Nutzung:
 #   ./codegen.sh           # hash-getriggert: nur generieren, wenn sich Domain-Quellen änderten
@@ -26,6 +27,7 @@ ARTEFAKTE=(
   "Infrastructure/Serialization/CqrsWireJsonContext.g.cs"
   "Domain.Client.Worker.Python.ML/domain_client/generated/vertraege.py"
   "Domain.Client.Worker.Python.ML/domain_client/generated/funktionen.py"
+  "Domain.Client.Worker.Python.ML/domain_client/generated/funktions_tabelle.py"
 )
 
 # Der Output hängt allein an den Domain-Quellen der gescannten Projekte.

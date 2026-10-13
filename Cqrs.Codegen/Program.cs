@@ -18,6 +18,7 @@ using Cqrs.Codegen;
 //   3. CqrsWireJsonContext.g.cs                    (für den STJ-Source-Generator, Cross-Node-Wire)
 //   4. domain_client/generated/vertraege.py        (Akteur-Verträge → Python-Basisklassen, docs/konzept-akteure.md §3)
 //   5. domain_client/generated/funktionen.py       (Katalog-Funktionen → Python-Basisklassen, konzept-editor-pipelines §14.5)
+//      + funktions_tabelle.py                   (Funktion → Basis, Modul, Klasse der Implementierung — der generische Worker, Plan E13)
 //
 // Früher öffnete dieser Prepass die ganze Solution über MSBuildWorkspace (geschachteltes
 // MSBuild, fragil, plattformabhängig). Jetzt liest er nur die Metadaten der drei gebauten
@@ -210,6 +211,10 @@ if (Directory.Exists(Path.GetDirectoryName(funktionenPfad)!))
 {
     WriteIfChanged(funktionenPfad, funktionenPy);
     Console.WriteLine($"✅ {funktionenPfad} ({funktionAnzahl} Funktionen)");
+    // … und die Tabelle des generischen Workers (Funktion → Basis, Modul, Klasse der Implementierung, Plan E13).
+    var tabellePfad = Path.Combine(Path.GetDirectoryName(funktionenPfad)!, "funktions_tabelle.py");
+    WriteIfChanged(tabellePfad, PythonFunktionsEmitter.Tabelle(assemblies));
+    Console.WriteLine($"✅ {tabellePfad}");
 }
 else Console.WriteLine($"⚠️  Python-Generat-Ordner fehlt — Funktionen nicht geschrieben: {Path.GetDirectoryName(funktionenPfad)}");
 

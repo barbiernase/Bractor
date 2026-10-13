@@ -25,7 +25,8 @@ public sealed class Worker(string slnRoot)
         {
             funktion = f.Key,
             laufort = f.Value.Laufort.ToString(),
-            worker = f.Value.Worker is { Skript.Length: > 0 } w ? $"{Path.GetFileName(w.Skript)} {string.Join(' ', w.Argumente)}".Trim() : null,
+            worker = f.Value.Worker is { Skript.Length: > 0 } w ? $"{Path.GetFileName(w.Skript)} {string.Join(' ', w.Argumente)}".Trim()
+                : f.Value.Laufort == FunktionsLaufort.Extern ? $"{Path.GetFileName(GenerischesSkript)} --funktionen {f.Key}" : null,
             laeuft,
             pid = laeuft ? l!.Prozess.Id : (int?)null,
             seit = l?.Seit,
@@ -37,12 +38,20 @@ public sealed class Worker(string slnRoot)
     public IReadOnlyList<string> Log(string funktion, int max = 200)
         => _laeufe.TryGetValue(funktion, out var l) ? l.Log.Reverse().Take(max).Reverse().ToList() : [];
 
-    public async Task<object> StarteAsync(string funktion, UmgebungKonfig u, bool hostLaeuft)
+    /// <summary>Der generische Funktions-Worker (Plan E13) — der Standard, wenn die Umgebung keinen eigenen nennt.</summary>
+    public const string GenerischesSkript = "Domain.Client.Worker.Python.ML/funktions_worker.py";
+
+    /// <param name="standardToken">Ohne Token in der Umgebung: ein Token, dessen Akteur die Funktion anbieten darf (IDarf&lt;F&gt;), oder null.</param>
+    public async Task<object> StarteAsync(string funktion, UmgebungKonfig u, bool hostLaeuft, Func<string, string?>? standardToken = null)
     {
         if (!u.Funktionen.TryGetValue(funktion, out var k)) throw new InvalidOperationException($"{funktion} ist in {u.Umgebung.Name} nicht gebunden.");
         if (k.Laufort != FunktionsLaufort.Extern)
             throw new InvalidOperationException($"Laufort von {funktion} in {u.Umgebung.Name} ist {k.Laufort} — erst auf Extern stellen (🖥 Funktionen) und ⟳.");
-        if (k.Worker is not { Skript.Length: > 0 } w) throw new InvalidOperationException($"Funktionen:{funktion}:Worker fehlt in {u.Umgebung.Name} (Skript, Argumente, Token).");
+        // Ohne eigenen Worker in der Umgebung: der generische Worker mit genau dieser Funktion (Implementierung aus der generierten Tabelle) —
+        //   außer dem Laufort braucht eine Funktion keine Konfig (Plan E13); Werte der Implementierung kämen als --konfig in die Argumente.
+        var w = k.Worker is { Skript.Length: > 0 } eigen ? eigen
+            : new WorkerKonfig { Skript = GenerischesSkript, Argumente = ["--funktionen", funktion], Token = k.Worker?.Token ?? "", Python = k.Worker?.Python ?? "" };
+        if (w.Token.Length == 0 && standardToken?.Invoke(funktion) is { } t) w = new WorkerKonfig { Skript = w.Skript, Argumente = w.Argumente, Python = w.Python, Token = t };
         if (!hostLaeuft) throw new InvalidOperationException("Der Host läuft nicht — ⟳ startet ihn; der Worker meldet sich an seinem gRPC-Port an.");
         await StoppeAsync(funktion);
 

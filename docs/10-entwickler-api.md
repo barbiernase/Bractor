@@ -232,7 +232,7 @@ Nachricht als JSON (Feldnamen wie der Typ, gelesen über den Wire-Kontext) → `
 Vorgang, ein falscher Body = `400`. Im Programm steht dafür nichts. Ein `IQuellNachricht` ohne Treiber-Basis bleibt erlaubt (Test-Quellen, die
 Tests direkt über `QuellEingang` melden); einen Webhook hat nur eine Quelle mit Konfig-Abschnitt.
 Jede Nachricht wird genau einmal je Kennung ins Log geschrieben und startet je Pipeline einen Vorgang. Funktionen bindet der Host wie
-in §10.5a; eine Funktion, die ein Python-Worker rechnet, mit `AddExterneFunktion<F>()` (der Worker erbt die generierte
+in §10.5a; eine Funktion, die ein Python-Worker rechnet, mit Laufort `Extern` (§10.9; der Worker erbt die generierte
 `<Funktion>Basis` aus `domain_client/generated/funktionen.py`, bietet sie am Handshake an und holt Aufträge per Pull). Pipelines
 liegen in der Domain-Assembly (Registry wie bei Prozessen). Beispiel: `Domain/ImagePair/Bildeingang.cs`; Beweise:
 `Infrastructure.Pruefstand.Tests/Funktionen/PipelineFlussTests.cs`, `BildeingangTests.cs`.
@@ -283,6 +283,24 @@ Wiring ist generiert.
 Siehe [09 §9.5](09-python-sdk.md). Kurz: State-dataclass + `CqrsClient[State]` erben + Handler mit
 Type-Hints (`async def on_x(self, event: XDto, ctx, state)`, `yield`t Commands) +
 `client.run(host, port)`.
+
+**Eine Katalog-Funktion in Python (Laufort Extern, Plan E13).** Der Codegen erzeugt je Funktion ohne Lese-Fähigkeit eine Basis
+(`domain_client/generated/funktionen.py`: `<Name>Basis` mit `FUNKTION`, `AUFTRAG`, `ERGEBNISSE` und `async def rufe(self, auftrag, x)`) und die Tabelle
+des generischen Workers (`generated/funktions_tabelle.py`: Funktion → Basis, Modul, Klasse). Die Implementierung liegt in
+`Domain.Client.Worker.Python.ML/funktionen/<modul>.py` (`IBildVerkleinerung` → `bild_verkleinerung.py`, Klasse `BildVerkleinerung`, Regel in
+`Abstractions.Funktionsvertrag`), erbt die Basis und füllt `rufe` — genau ein Ergebnis per `return`, Werte der Implementierung in `self.konfig`:
+```python
+class BildVerkleinerung(BildVerkleinerungBasis):
+    async def rufe(self, auftrag: VerkleinereBildDto, x: Ausfuehrung) -> BildVerkleinertDto | BildNichtLesbarDto:
+        ausgabe = Path(self.konfig.get("OutputPath", "."))
+        ...
+        return BildVerkleinertDto(pfad=str(ziel), breite_pixel=breite, hoehe_pixel=hoehe)
+```
+Gestartet wird der GENERISCHE Worker (kein Domänenwissen): `python funktions_worker.py --funktionen IBildVerkleinerung [--slots 2] [--konfig NAME=WERT …]
+[--pfad <verz mit eigenem Paket funktionen>]`, Adresse und Token aus `CQRS_GRPC_HOST`/`CQRS_GRPC_PORT`/`CQRS_AKTEUR_TOKEN`. In der Werkbank genügt der
+Laufort: `Funktionen:<F>:Laufort = Extern` → ⟳ legt eine fehlende Implementierung aus der Basis an (Platzhalter `raise NotImplementedError`), der Rumpf
+steht an der Funktions-Karte („rufe · Python“, ✎ und 🤖 — Slot `funktionpy|<F>@<Klasse>`), „▶ Worker starten“ nimmt ohne eigenen
+`Funktionen:<F>:Worker` den generischen Worker mit `--funktionen <F>` und ein Token der Umgebung, dessen Akteur `IDarf<F>` hat.
 
 ## 10.10 Einen Test schreiben
 

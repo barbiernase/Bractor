@@ -50,6 +50,37 @@ public static class PythonClients
         return erg;
     }
 
+    /// <summary>
+    /// Die PYTHON-Implementierungen der Katalog-Funktionen (Laufort Extern, Plan E13) — Code-Fakt wie bei den Clients: die generierte
+    /// <c>…/generated/funktionen.py</c> nennt je Funktion ihre Basis; jede Klasse im Python-Projekt, die sie erbt, ist eine Implementierung
+    /// (die erste nach Datei), ihr <c>rufe</c>-Rumpf ist der Python-Rumpf der Funktion. Funktion (Interface-Name) → Implementierung.
+    /// </summary>
+    public static Dictionary<string, FunktionPython> Funktionen(string wurzel)
+    {
+        var erg = new Dictionary<string, FunktionPython>(StringComparer.Ordinal);
+        if (string.IsNullOrEmpty(wurzel) || !Directory.Exists(wurzel)) return erg;
+        foreach (var generat in Dateien(wurzel, "funktionen.py", mitGeneriert: true).Where(p => Path.GetFileName(Path.GetDirectoryName(p)) == "generated"))
+        {
+            var basen = PythonQuelle.FunktionsBasen(File.ReadAllText(generat));
+            if (basen.Count == 0) continue;
+            var projekt = Directory.GetParent(Path.GetDirectoryName(Path.GetDirectoryName(generat)!)!)!.FullName;
+            foreach (var py in Dateien(projekt, "*.py", mitGeneriert: false).Where(p => !Path.GetFileName(p).StartsWith("test_", StringComparison.Ordinal))
+                         .OrderBy(p => p, StringComparer.Ordinal))
+            {
+                var text = File.ReadAllText(py);
+                foreach (var k in PythonQuelle.Klassen(text))
+                    foreach (var b in basen.Where(b => k.Basen.Contains(b.Basis) && !erg.ContainsKey(b.Funktion)))
+                        erg[b.Funktion] = new FunktionPython
+                        {
+                            Datei = Path.GetRelativePath(wurzel, py).Replace('\\', '/'), Klasse = k.Name, Basis = b.Basis,
+                            Methode = Abstractions.Funktionsvertrag.PythonMethode, Signatur = b.Def,
+                            Rumpf = PythonQuelle.Rumpf(text, k.Name, Abstractions.Funktionsvertrag.PythonMethode),
+                        };
+            }
+        }
+        return erg;
+    }
+
     private static IEnumerable<string> Dateien(string verz, string muster, bool mitGeneriert)
     {
         var stapel = new Stack<string>([verz]);

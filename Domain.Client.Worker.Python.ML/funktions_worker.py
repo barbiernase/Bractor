@@ -1,77 +1,62 @@
 #!/usr/bin/env python3
 # REPO-PFAD: Domain.Client.Worker.Python.ML/funktions_worker.py
 """
-Die Katalog-Funktionen der Bildaufbereitung in Python (Laufort Extern) — das Gegenstück zu den OpenCV-Implementierungen im Host
-(Domain.Pipeline/ImageProcessing/OpenCvBildaufbereitung.cs). Gestartet von der Werkbank („▶ Worker starten" an der Funktions-Karte,
-Umgebung: Funktionen:<F>:Worker) oder von Hand:
+Der GENERISCHE Funktions-Worker (Plan E13): bietet Katalog-Funktionen mit Laufort Extern über gRPC an. Er kennt keine Domäne — welche
+Funktionen es gibt und wo ihre Implementierung liegt, sagt die generierte Tabelle (domain_client/generated/funktions_tabelle.py:
+Funktion → Basis, Modul, Klasse); die Implementierungen stehen in funktionen/<modul>.py (Klasse erbt die generierte Basis, füllt `rufe`).
+Gestartet von der Werkbank („▶ Worker starten" an der Funktions-Karte, Umgebung: Funktionen:<F>:Worker) oder von Hand:
 
-    python funktions_worker.py --ausgabe <verzeichnis> [--slots 2] [--funktionen IBildVerkleinerung,IHistogrammAusgleich]
+    python funktions_worker.py --funktionen IBildVerkleinerung,IHistogrammAusgleich [--slots 2] [--konfig OutputPath=<verz> …] [--pfad <verz>]
 
 Adresse und Akteur kommen aus CQRS_GRPC_HOST / CQRS_GRPC_PORT / CQRS_AKTEUR_TOKEN (die Werkbank setzt sie). Der Akteur des Tokens braucht
-IDarf<F> für jede angebotene Funktion (Domain.Akteure.Bildrechner).
+IDarf<F> für jede angebotene Funktion. `--konfig NAME=WERT` sind die Werte der Implementierungen (self.konfig), `--pfad` legt ein Verzeichnis
+mit eigenen Implementierungen (ein Paket `funktionen`) vor das Projekt — z. B. Test-Implementierungen.
 """
 
+from __future__ import annotations
+
 import argparse
-import asyncio
+import importlib
 import os
 import sys
-import time
 from dataclasses import dataclass
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).parent.parent / "Client.Infrastructure.Python"))
-sys.path.insert(0, str(Path(__file__).parent))
-
-import cv2  # noqa: E402
+PROJEKT = Path(__file__).resolve().parent
+sys.path.insert(0, str(PROJEKT.parent / "Client.Infrastructure.Python"))
+sys.path.insert(0, str(PROJEKT))
 
 import domain_client.generated as gen  # noqa: E402
 from cqrs_client import CqrsClient  # noqa: E402
+from cqrs_client.funktion import FunktionsBasis  # noqa: E402
 from domain_client.domain_registry import create_registry  # noqa: E402
-from domain_client.generated.funktionen import BildVerkleinerungBasis, HistogrammAusgleichBasis  # noqa: E402
+from domain_client.generated import funktionen as basen  # noqa: E402
+from domain_client.generated.funktions_tabelle import TABELLE  # noqa: E402
 
 
-def zielpfad(ausgabe: Path, quelle: str, zusatz: str) -> Path:
-    """{ausgabe}/{Quelle ohne Endung}_{zusatz}.png — wie Zielpfad.In im Host: eine Wiederholung überschreibt dieselbe Datei."""
-    ausgabe.mkdir(parents=True, exist_ok=True)
-    return ausgabe / f"{Path(quelle).stem}_{zusatz}.png"
+def lade(funktion: str, slots: int, konfig: dict[str, str]) -> FunktionsBasis:
+    """Die Implementierung einer Funktion nach der Tabelle — sie muss die generierte Basis erben (sonst wäre sie nicht diese Funktion)."""
+    if funktion not in TABELLE:
+        raise SystemExit(f"Unbekannte Funktion {funktion} — mit Python-Basis bekannt: {', '.join(TABELLE) or 'keine'}")
+    basis_name, modul, klasse = TABELLE[funktion]
+    try:
+        impl = getattr(importlib.import_module(modul), klasse)
+    except (ModuleNotFoundError, AttributeError) as e:
+        raise SystemExit(f"{funktion}: keine Implementierung {modul}.{klasse} ({e}) — die Werkbank legt sie mit ⟳ an (Laufort Extern)")
+    basis = getattr(basen, basis_name)
+    if not (isinstance(impl, type) and issubclass(impl, basis)):
+        raise SystemExit(f"{funktion}: {modul}.{klasse} erbt nicht {basis_name}")
+    return impl(slots=slots, konfig=konfig)
 
 
-class Verkleinerung(BildVerkleinerungBasis):
-    def __init__(self, ausgabe: Path, slots: int):
-        super().__init__(slots=slots)
-        self.ausgabe = ausgabe
-
-    async def rufe(self, auftrag, x):
-        bild = await asyncio.to_thread(cv2.imread, auftrag.quell_pfad, cv2.IMREAD_COLOR)
-        if bild is None:
-            return gen.BildNichtLesbarDto(pfad=auftrag.quell_pfad, grund="Datei nicht lesbar (Python)")
-        h, w = bild.shape[:2]
-        hoehe = max(1, auftrag.hoehe)
-        breite = max(1, round(w * hoehe / h))
-        klein = await asyncio.to_thread(cv2.resize, bild, (breite, hoehe), interpolation=cv2.INTER_AREA)
-        ziel = zielpfad(self.ausgabe, auftrag.quell_pfad, "klein")
-        await asyncio.to_thread(cv2.imwrite, str(ziel), klein)
-        print(f"[Verkleinerung] {auftrag.quell_pfad} → {ziel} ({breite}×{hoehe})", flush=True)
-        return gen.BildVerkleinertDto(pfad=str(ziel), breite_pixel=breite, hoehe_pixel=hoehe)
-
-
-class HistogrammAusgleich(HistogrammAusgleichBasis):
-    def __init__(self, ausgabe: Path, slots: int):
-        super().__init__(slots=slots)
-        self.ausgabe = ausgabe
-
-    async def rufe(self, auftrag, x):
-        bild = await asyncio.to_thread(cv2.imread, auftrag.quell_pfad, cv2.IMREAD_COLOR)
-        if bild is None:
-            return gen.BildNichtLesbarDto(pfad=auftrag.quell_pfad, grund="Datei nicht lesbar (Python)")
-        ycrcb = cv2.cvtColor(bild, cv2.COLOR_BGR2YCrCb)
-        ycrcb[:, :, 0] = cv2.equalizeHist(ycrcb[:, :, 0])
-        aus = cv2.cvtColor(ycrcb, cv2.COLOR_YCrCb2BGR)
-        ziel = zielpfad(self.ausgabe, auftrag.quell_pfad, "ausgeglichen")
-        await asyncio.to_thread(cv2.imwrite, str(ziel), aus)
-        h, w = aus.shape[:2]
-        print(f"[HistogrammAusgleich] {auftrag.quell_pfad} → {ziel}", flush=True)
-        return gen.HistogrammAusgeglichenDto(pfad=str(ziel), breite_pixel=w, hoehe_pixel=h, erstellt_am=int(time.time() * 1000))
+def werte(paare: list[str]) -> dict[str, str]:
+    aus: dict[str, str] = {}
+    for p in paare:
+        name, _, wert = p.partition("=")
+        if not name or not _:
+            raise SystemExit(f"--konfig erwartet NAME=WERT, nicht '{p}'")
+        aus[name.strip()] = os.path.expanduser(wert)
+    return aus
 
 
 @dataclass
@@ -83,21 +68,25 @@ class FunktionsWorker(CqrsClient[Leer]):
     """Kein Handler, keine Commands — nur ein Anbieter von Katalog-Funktionen."""
 
 
-if __name__ == "__main__":
-    a = argparse.ArgumentParser(description="Bildaufbereitung als externe Katalog-Funktionen")
-    a.add_argument("--ausgabe", required=True, help="Verzeichnis für die erzeugten Bilder (wie Konfig:PreprocessingConfig:OutputPath)")
+def main(argv: list[str] | None = None) -> None:
+    a = argparse.ArgumentParser(description="Generischer Worker für Katalog-Funktionen (Laufort Extern)")
+    a.add_argument("--funktionen", required=True, help="kommagetrennt, z. B. IBildVerkleinerung,IHistogrammAusgleich")
     a.add_argument("--slots", type=int, default=2)
-    a.add_argument("--funktionen", default="IBildVerkleinerung,IHistogrammAusgleich", help="kommagetrennt")
-    args = a.parse_args()
+    a.add_argument("--konfig", action="append", default=[], help="NAME=WERT (mehrfach) — die Werte der Implementierungen")
+    a.add_argument("--pfad", action="append", default=[], help="Verzeichnis mit eigenen Implementierungen (Paket funktionen), vor dem Projekt")
+    args = a.parse_args(argv)
 
-    ausgabe = Path(os.path.expanduser(args.ausgabe))
-    katalog = {"IBildVerkleinerung": Verkleinerung, "IHistogrammAusgleich": HistogrammAusgleich}
+    for p in reversed(args.pfad):
+        sys.path.insert(0, str(Path(p).expanduser().resolve()))
+    konfig = werte(args.konfig)
     gewaehlt = [n.strip() for n in args.funktionen.split(",") if n.strip()]
-    unbekannt = [n for n in gewaehlt if n not in katalog]
-    if unbekannt:
-        sys.exit(f"Unbekannte Funktion(en): {', '.join(unbekannt)} — bekannt: {', '.join(katalog)}")
+    funktionen = [lade(n, args.slots, konfig) for n in gewaehlt]
 
     host = os.environ.get("CQRS_GRPC_HOST", "127.0.0.1")
     port = int(os.environ.get("CQRS_GRPC_PORT", "5101"))
-    print(f"START {host}:{port} · {', '.join(gewaehlt)} · Slots {args.slots} · Ausgabe {ausgabe}", flush=True)
-    FunktionsWorker(create_registry(), gen, funktionen=[katalog[n](ausgabe, args.slots) for n in gewaehlt]).run(host, port)
+    print(f"START {host}:{port} · {', '.join(gewaehlt)} · Slots {args.slots}", flush=True)
+    FunktionsWorker(create_registry(), gen, funktionen=funktionen).run(host, port)
+
+
+if __name__ == "__main__":
+    main()

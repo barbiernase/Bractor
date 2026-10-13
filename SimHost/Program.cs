@@ -360,7 +360,16 @@ app.MapPost("/api/werkbank/worker/{funktion}/start", async (string funktion) =>
 {
     try
     {
-        var aus = await worker.StarteAsync(funktion, werkbank.Umgebungen.Aufgeloest(werkbank.Aktiv), werkbank.Host.Laeuft);
+        // Ohne Token in der Umgebung: ein Token der Umgebung, dessen Akteur die Funktion anbieten darf (IDarf<F>, aus dem Code).
+        string? StandardToken(string f)
+        {
+            var board = werkbank.Arbeitsbereich.BoardJson is { } bj ? System.Text.Json.Nodes.JsonNode.Parse(bj) : null;
+            var duerfen = (board?["akteure"] as System.Text.Json.Nodes.JsonArray ?? []).OfType<System.Text.Json.Nodes.JsonObject>()
+                .Where(a => (a["darf"] as System.Text.Json.Nodes.JsonArray ?? []).Any(x => (string?)x == f)).Select(a => (string?)a["name"]).ToHashSet();
+            var tokens = werkbank.Umgebungen.Roh(werkbank.Aktiv)["Identitaeten"]?["Tokens"] as System.Text.Json.Nodes.JsonObject;
+            return tokens?.Where(kv => ((string?)kv.Value ?? "").Split(',').Any(a => duerfen.Contains(a.Trim()))).Select(kv => kv.Key).Order(StringComparer.Ordinal).FirstOrDefault();
+        }
+        var aus = await worker.StarteAsync(funktion, werkbank.Umgebungen.Aufgeloest(werkbank.Aktiv), werkbank.Host.Laeuft, StandardToken);
         werkbank.Fortschritt.Melde("worker", new { funktion });
         return Results.Json(aus);
     }

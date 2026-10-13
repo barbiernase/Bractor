@@ -175,9 +175,12 @@ public sealed class Werkbank
                 Beginne("Python-Basen");
                 var pr = await Prozesse.LaufeAsync("bash", [skript], _root, new Dictionary<string, string> { ["PATH"] = python + ":" + Environment.GetEnvironmentVariable("PATH") }, TimeSpan.FromMinutes(3), ct);
                 // Neue Client-Implementierungen (Python) entstehen aus der GENERIERTEN Basis — also erst nach dem Bauen (früher „C# schreiben“).
-                var (angelegt, _) = SimHost.PythonSync.ImplementierungenAnlegen(DomainEditor.BoardLeseseite.AusBoard(vorher.BoardJson), _root, trocken: false);
+                var modell = DomainEditor.BoardLeseseite.AusBoard(vorher.BoardJson);
+                var (angelegt, _) = SimHost.PythonSync.ImplementierungenAnlegen(modell, _root, trocken: false);
+                // … ebenso die Python-Implementierungen der Funktionen, die die aktive Umgebung extern rechnen lässt (Plan E13).
+                var (fAngelegt, fNicht) = SimHost.PythonSync.FunktionenAnlegen(modell, Umgebungen.Aufgeloest(Aktiv), _root);
                 Schritt(schritte, new Schritt("Python-Basen", pr.Ok, (long)pr.Dauer.TotalMilliseconds,
-                    [.. pr.Zeilen.TakeLast(3), .. angelegt.Select(a => "＋ " + a)]));
+                    [.. pr.Zeilen.TakeLast(3), .. angelegt.Concat(fAngelegt).Select(a => "＋ " + a), .. fNicht.Select(a => "⚠ " + a)]));
                 if (!pr.Ok) return Ende(false, diagnosen);
             }
 

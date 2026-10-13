@@ -163,7 +163,10 @@ public class PipelineFlussE2ETests
     {
         var python = Environment.GetEnvironmentVariable("CQRS_PYTHON") ?? "/opt/miniconda3/envs/gpu_env/bin/python";
         File.Exists(python).Should().BeTrue($"Python für den Worker fehlt ({python}) — CQRS_PYTHON setzen");
-        var skript = Path.Combine(RepoWurzel(), "Infrastructure.Integration.Tests", "Python", "funktions_worker.py");
+        // Der GENERISCHE Worker (Plan E13) mit der Tabelle aus dem Codegen; die Test-Implementierung (funktionen/bild_verkleinerung.py,
+        //   hängt „_py" an) liegt per --pfad vor der des Projekts.
+        var skript = Path.Combine(RepoWurzel(), "Domain.Client.Worker.Python.ML", "funktions_worker.py");
+        var testImpls = Path.Combine(RepoWurzel(), "Infrastructure.Integration.Tests", "Python");
 
         var watchDir = Path.Combine(Path.GetTempPath(), "fluss-py-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(watchDir);
@@ -180,10 +183,11 @@ public class PipelineFlussE2ETests
         var ausgabe = new System.Collections.Concurrent.ConcurrentQueue<string>();
         using var worker = new Process
         {
-            StartInfo = new ProcessStartInfo(python, $"\"{skript}\" {port}")
+            StartInfo = new ProcessStartInfo(python, $"\"{skript}\" --funktionen IBildVerkleinerung --slots 2 --pfad \"{testImpls}\"")
             {
                 RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false,
                 WorkingDirectory = Path.GetDirectoryName(skript)!,
+                Environment = { ["CQRS_GRPC_HOST"] = "127.0.0.1", ["CQRS_GRPC_PORT"] = port.ToString() },
             },
         };
         worker.OutputDataReceived += (_, e) => { if (e.Data != null) ausgabe.Enqueue(e.Data); };

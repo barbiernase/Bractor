@@ -108,4 +108,63 @@ public class PythonQuelleTests
         PythonQuelle.Rumpf(neu, "Kasse", "auf_storniert").Should().Be("raise NotImplementedError");
         neu.Should().Contain("state: KasseState)").And.NotContain("state: S)");
     }
+
+    // ── Katalog-Funktionen in Python (Plan E13): Basis aus funktionen.py, neue Implementierung, Lesen über die Basis ──
+
+    private const string FunktionsGenerat = """
+        class BildVerkleinerungBasis(FunktionsBasis):
+            \"\"\"Funktion IBildVerkleinerung.\"\"\"
+
+            FUNKTION: ClassVar[str] = "IBildVerkleinerung"
+            AUFTRAG: ClassVar[type] = VerkleinereBildDto
+            ERGEBNISSE: ClassVar[tuple] = (BildVerkleinertDto, BildNichtLesbarDto)
+
+            @abstractmethod
+            async def rufe(self, auftrag: VerkleinereBildDto, x: Ausfuehrung) -> BildVerkleinertDto | BildNichtLesbarDto:
+                \"\"\"genau ein Ergebnis.\"\"\"
+                ...
+        """;
+
+    [Fact]
+    public void Funktions_Basis_nennt_Funktion_Signatur_und_DTOs()
+    {
+        var b = PythonQuelle.FunktionsBasen(FunktionsGenerat).Should().ContainSingle().Subject;
+        (b.Funktion, b.Basis).Should().Be(("IBildVerkleinerung", "BildVerkleinerungBasis"));
+        b.Def.Should().Be("async def rufe(self, auftrag: VerkleinereBildDto, x: Ausfuehrung) -> BildVerkleinertDto | BildNichtLesbarDto:");
+        b.Dtos.Should().Equal("VerkleinereBildDto", "BildVerkleinertDto", "BildNichtLesbarDto");
+    }
+
+    [Fact]
+    public void Neue_Funktions_Implementierung_erbt_die_Basis_und_hat_einen_Platzhalter_den_der_Rumpf_Edit_findet()
+    {
+        var neu = PythonQuelle.NeueFunktionsImplementierung("domain_client", PythonQuelle.FunktionsBasen(FunktionsGenerat)[0], "BildVerkleinerung");
+        neu.Should().Contain("from domain_client.generated.funktionen import BildVerkleinerungBasis")
+            .And.Contain("from domain_client.generated import BildNichtLesbarDto, BildVerkleinertDto, VerkleinereBildDto")
+            .And.Contain("class BildVerkleinerung(BildVerkleinerungBasis):\n    async def rufe(self, auftrag: VerkleinereBildDto, x: Ausfuehrung)");
+        PythonQuelle.Klassen(neu).Single().Basen.Should().Equal("BildVerkleinerungBasis");
+        PythonQuelle.Rumpf(neu, "BildVerkleinerung", "rufe").Should().Be("raise NotImplementedError");
+        PythonQuelle.Rumpf(PythonQuelle.SetzeRumpf(neu, "BildVerkleinerung", "rufe", "return BildNichtLesbarDto(pfad=auftrag.quell_pfad, grund=\"x\")")!,
+            "BildVerkleinerung", "rufe").Should().StartWith("return BildNichtLesbarDto(");
+    }
+
+    [Fact]
+    public void Die_Regel_fuer_Modul_und_Klasse_der_Python_Implementierung()
+    {
+        Abstractions.Funktionsvertrag.PythonModul("IBildVerkleinerung").Should().Be("bild_verkleinerung");
+        Abstractions.Funktionsvertrag.PythonModul("IHistogrammAusgleich").Should().Be("histogramm_ausgleich");
+        Abstractions.Funktionsvertrag.PythonModul("IKIModell").Should().Be("kimodell");
+        Abstractions.Funktionsvertrag.OhneI("IBildVerkleinerung").Should().Be("BildVerkleinerung");
+        Abstractions.Funktionsvertrag.PythonBasis("IBildVerkleinerung").Should().Be("BildVerkleinerungBasis");
+    }
+
+    [Fact]
+    public void Der_Bestand_hat_Python_Implementierungen_der_Bildaufbereitung_als_Code_Fakt()
+    {
+        var wurzel = System.IO.Path.GetFullPath(System.IO.Path.Combine(System.AppContext.BaseDirectory, "..", "..", "..", ".."));
+        var py = PythonClients.Funktionen(wurzel);
+        py["IBildVerkleinerung"].Should().BeEquivalentTo(new { Datei = "Domain.Client.Worker.Python.ML/funktionen/bild_verkleinerung.py",
+            Klasse = "BildVerkleinerung", Basis = "BildVerkleinerungBasis", Methode = "rufe" });
+        py["IBildVerkleinerung"].Rumpf.Should().Contain("cv2.resize");
+        py.Should().ContainKey("IHistogrammAusgleich").And.NotContainKey("IDateinameDeutung", "dafür gibt es (noch) keine Python-Implementierung");
+    }
 }

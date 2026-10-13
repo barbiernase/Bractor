@@ -154,6 +154,18 @@ public sealed class LlmKonsole
         nichts. Benutze nur Namen, die im Kontext stehen (Event-Felder in snake_case wie im DTO, `ctx`, `state`, `self`).
         """;
 
+    public const string AnweisungPythonFunktion = """
+        Du schreibst den Rumpf genau EINER Python-Methode `rufe` einer Katalog-Funktion (Laufort Extern): ein Auftrag hinein, genau ein
+        Ergebnis heraus. Der Kontext besteht aus dem Graph-Skelett und dem Slot-Teil (Signatur aus der generierten Basis, Ergebnis-Vertrag,
+        Typen, die übrigen Zeilen der Datei); am Ende stehen Auftrag und ggf. der aktuelle Rumpf.
+        Antworte in GENAU einer von zwei Formen, ohne weiteren Text:
+        1) Ein einziger ```python-Block mit den Anweisungen des Methodenrumpfs — ohne def-Zeile, ohne Einzug der Klasse.
+        2) Eine Zeile: AUSSERHALB: braucht <Art> <Name> — <Grund>
+           wenn der Auftrag mit dem, was im Rumpf erreichbar ist, nicht lösbar ist (z. B. ein neues Ergebnis im OneOf).
+        Liefere mit `return <Ergebnis>Dto(...)` genau eines der im Vertrag genannten Ergebnisse. Benutze nur Namen, die im Kontext stehen
+        (Auftrags-Felder in snake_case wie im DTO, `x`, `self.konfig`); fehlende Importe dürfen als `import` im Rumpf stehen.
+        """;
+
     private readonly string _sln, _verz;
     private readonly ModellSimulation _sim;
     private readonly SimHost.Werkbank.Arbeitsbereich _arbeit;
@@ -189,7 +201,9 @@ public sealed class LlmKonsole
     private static LambdaAnker LAnker(JsonObject slot) =>
         new(S(slot, "datei"), S(slot, "klasse"), slot["anweisung"]?.GetValue<int>() ?? -1, slot["lambda"]?.GetValue<int>() ?? -1);
     // Zusage/Kenntnis eines Akteurs draußen: der Python-Rumpf in der Client-Implementierung (eigener Anker: Datei + Klasse + Methode).
-    private static bool IstPython(JsonObject slot) => S(slot, "art") == "zusage";
+    private static bool IstPython(JsonObject slot) => S(slot, "art") is "zusage" or "funktionpy";
+    // Der Python-Rumpf einer Katalog-Funktion (Laufort Extern, Plan E13): `rufe` liefert genau ein Ergebnis per return.
+    private static bool IstPythonFunktion(JsonObject slot) => S(slot, "art") == "funktionpy";
     private static PythonAnker PAnker(JsonObject slot) => new(S(slot, "datei"), S(slot, "klasse"), S(slot, "methode"), SN(slot, "signatur"));
     private object Lese(JsonObject slot) => IstPython(slot) ? PythonSync.Lese(PAnker(slot), _sln)
         : IstFluss(slot) ? CodeSync.LeseLambda(LAnker(slot), _sln) : CodeSync.LeseRumpf(Anker(slot), _sln);
@@ -279,7 +293,7 @@ public sealed class LlmKonsole
             var art = anpassung != null ? "anpassung" : befund != null ? "reparatur" : "erzeugen";
             var uhr = Stopwatch.StartNew();
             LlmAntwort antwort;
-            try { antwort = await anbieter.FrageAsync(IstPython(slot) ? AnweisungPython : S(slot, "art") == "saga" ? AnweisungRegel : IstFluss(slot) ? AnweisungFluss : Anweisung, prompt, ct); }
+            try { antwort = await anbieter.FrageAsync(IstPythonFunktion(slot) ? AnweisungPythonFunktion : IstPython(slot) ? AnweisungPython : S(slot, "art") == "saga" ? AnweisungRegel : IstFluss(slot) ? AnweisungFluss : Anweisung, prompt, ct); }
             catch (Exception ex) { runden.Add(new { nr, art, fehler = ex.Message + (ex.InnerException != null ? " — " + ex.InnerException.Message : "") }); break; }
             uhr.Stop();
             var (ergebnis, kandidat, ausserhalb) = IstPython(slot) ? ZerlegePython(antwort.Text) : IstFluss(slot) ? ZerlegeLambda(antwort.Text) : Zerlege(antwort.Text);
@@ -333,6 +347,13 @@ public sealed class LlmKonsole
         if (!ok) return [grund];
         var befunde = PythonSync.Pruefe(text!);
         var ausg = slot["ausgaenge"]?.AsArray().Select(x => x!.GetValue<string>()).ToList() ?? [];
+        if (IstPythonFunktion(slot))
+        {
+            if (Regex.IsMatch(rumpf, @"^\s*yield\b", RegexOptions.Multiline)) befunde.Add("Eine Funktion liefert genau EIN Ergebnis per return — kein yield.");
+            foreach (Match r in Regex.Matches(rumpf, @"return\s+(\w+?)Dto\s*\("))
+                if (!ausg.Contains(r.Groups[1].Value)) befunde.Add($"return {r.Groups[1].Value} — kein Ergebnis der Funktion ({string.Join(", ", ausg)}).");
+            return befunde;
+        }
         if (ausg.Count == 0 && Regex.IsMatch(rumpf, @"^\s*yield\b", RegexOptions.Multiline)) befunde.Add("Kenntnis (ohne Ausgabe-Vertrag) darf nichts liefern — kein yield.");
         foreach (Match y in Regex.Matches(rumpf, @"yield\s+(\w+?)Dto\s*\("))
             if (!ausg.Contains(y.Groups[1].Value)) befunde.Add($"yield {y.Groups[1].Value} — nicht im Ausgabe-Vertrag ({(ausg.Count == 0 ? "leer" : string.Join(", ", ausg))}).");

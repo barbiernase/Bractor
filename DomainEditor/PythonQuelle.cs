@@ -206,6 +206,54 @@ public static class PythonQuelle
         return b.ToString().TrimEnd() + "\n";
     }
 
+    // ── Die GENERIERTE Basis der Katalog-Funktionen (funktionen.py, Cqrs.Codegen): je Basis FUNKTION und die rufe-Signatur (Plan E13) ──
+    private static readonly Regex FunktionWert = new(@"^\s+FUNKTION\s*:\s*ClassVar\[str\]\s*=\s*""(\w+)""", RegexOptions.Compiled);
+
+    /// <summary>Eine Funktions-Basis der generierten <c>funktionen.py</c>: Funktion (Interface-Name), Basis-Klasse und die <c>def rufe</c>-Zeile.</summary>
+    public sealed record FunktionsBasis(string Funktion, string Basis, string Def, IReadOnlyList<string> Dtos);
+
+    public static IReadOnlyList<FunktionsBasis> FunktionsBasen(string funktionenPy)
+    {
+        var erg = new List<FunktionsBasis>();
+        var z = Zeilen(funktionenPy);
+        foreach (var k in Klassen(funktionenPy))
+        {
+            string? funktion = null;
+            for (var i = k.Zeile + 1; i < z.Length; i++)
+            {
+                if (z[i].Trim().Length > 0 && Einzug(z[i]) == 0) break;
+                if (FunktionWert.Match(z[i]) is { Success: true } f) funktion = f.Groups[1].Value;
+            }
+            if (funktion == null) continue;
+            var def = FindeMethode(funktionenPy, k.Name, Abstractions.Funktionsvertrag.PythonMethode) is { } m ? DefText(z, m)
+                : "async def rufe(self, auftrag, x):";
+            var dtos = Regex.Matches(def, @"\b(\w+Dto)\b").Select(x => x.Groups[1].Value).Distinct().ToList();
+            erg.Add(new(funktion, k.Name, def, dtos));
+        }
+        return erg;
+    }
+
+    /// <summary>
+    /// Eine NEUE Python-Implementierung einer Funktion: Klasse, die die generierte Basis erbt, <c>rufe</c> mit der Signatur der Basis und dem
+    /// Platzhalter <c>raise NotImplementedError</c> (✎/🤖 füllt ihn). <paramref name="paket"/> = das Python-Paket der Generate (<c>domain_client</c>).
+    /// </summary>
+    public static string NeueFunktionsImplementierung(string paket, FunktionsBasis basis, string klasse)
+    {
+        var b = new System.Text.StringBuilder();
+        b.AppendLine($"\"\"\"{basis.Funktion} — Python-Implementierung der Katalog-Funktion (Laufort Extern; Basis {basis.Basis}, generiert aus der Signatur).\"\"\"");
+        b.AppendLine("from __future__ import annotations");
+        b.AppendLine();
+        b.AppendLine("from cqrs_client.funktion import Ausfuehrung  # noqa: F401");
+        if (basis.Dtos.Count > 0) b.AppendLine($"from {paket}.generated import {string.Join(", ", basis.Dtos.OrderBy(x => x, StringComparer.Ordinal))}  # noqa: F401");
+        b.AppendLine($"from {paket}.generated.funktionen import {basis.Basis}");
+        b.AppendLine();
+        b.AppendLine();
+        b.AppendLine($"class {klasse}({basis.Basis}):");
+        b.AppendLine($"    {basis.Def.Trim()}");
+        b.AppendLine("        raise NotImplementedError");
+        return b.ToString();
+    }
+
     private static string DefText(string[] z, Methode m) =>
         string.Join(" ", z.Skip(m.DefZeile).Take(m.RumpfStart - m.DefZeile).Select(x => x.Trim()));
 }

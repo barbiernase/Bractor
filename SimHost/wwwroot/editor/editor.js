@@ -501,7 +501,11 @@
       case "handle":{const o=n.own,k=o.kind==="reader"?"reader|"+o.ref.name+"|"+r.query:(o.kind==="reaktion"?"reaktion|":"projektion|")+o.ref.name+"|"+r.event;
         return [T(o.kind==="reader"?"Reader-Logik":"Handle-Logik",r.rumpf,r._ort,k,true,{kachel:"Handle "+(r.query||r.event||"")})];}
       case "fn":return [T("Impl-Logik",r.rumpf,r._rumpf,"store|"+n.own.ref.name+"|"+r.name,true,{kachel:r.name||"Store-Fn"})];
-      case "funktion":return [T("RufeAsync",r.rumpf,r._rumpf,r.auftrag?"funktion|"+r.name+"|"+r.auftrag:null,true,{kachel:(r.implementierung||r.name||"Funktion")+".RufeAsync"})];
+      case "funktion":{const t=[T("RufeAsync",r.rumpf,r._rumpf,r.auftrag?"funktion|"+r.name+"|"+r.auftrag:null,true,{kachel:(r.implementierung||r.name||"Funktion")+".RufeAsync"})];
+        // Die Python-Implementierung (Laufort Extern, Plan E13): `rufe` in funktionen/<modul>.py — ✎ über PythonSync, 🤖 als Slot funktionpy.
+        if(r.python)t.push(T("rufe · Python",r.python.rumpf,null,"funktionpy|"+r.name+"@"+r.python.klasse,true,
+          {kachel:r.python.klasse+".rufe (Python)",python:{datei:r.python.datei,klasse:r.python.klasse,methode:r.python.methode||"rufe",signatur:r.python.signatur||null}}));
+        return t;}
       // Dienst: je Implementierung je Methode ihr Rumpf (aus der Datei); ✎ als Geste an der Methode.
       case "dienst":return (r.implementierungen||[]).flatMap((im,ii)=>(im.rumpfe||[]).map(x=>T(im.name+"."+x.methode,x.rumpf,x._rumpf,null,true,
         {kachel:im.name+"."+x.methode,impl:ii,methode:x.methode})));
@@ -532,6 +536,7 @@
       i=c?(c.implementierungen||[]).flatMap((im,ii)=>(im.rumpfe||[]).map(x=>[ii,x.event])).findIndex(([ii,e])=>ii===t.impl&&e===t.event):-1;}
     else if(t.k==="regelLambda"){id="tr:"+t.trans;const tr=MODEL.transitions.find(x=>x._id===t.trans),d=tr&&(tr.dann||[])[t.dannIdx];
       i=(rumpfTeile(NODEBY.get(id))||[]).findIndex(x=>x.dann===d&&(x.teil||"sende")===(t.teil||"sende"));}
+    else if(t.k==="funktionPy"){id="fk:"+t.fk;i=(rumpfTeile(NODEBY.get(id))||[]).findIndex(x=>!!x.python);}
     else if(t.k==="dienst"){id="dn:"+t.dn;i=(rumpfTeile(NODEBY.get(id))||[]).findIndex(x=>x.impl===t.impl&&x.methode===t.methode);}
     else if(t.k==="flussLambda"){const f=MODEL.fluesse.find(x=>x._id===t.fluss),k=f&&(f.knoten||[]).find(z=>z._id===t.knoten);if(k)id="fs:"+k._id;i=t.ei==null?0:t.ei;}
     const n=id&&NODEBY.get(id),teile=n&&rumpfTeile(n);return teile&&i>=0&&teile[i]?{n,i,teil:teile[i]}:null;}
@@ -850,6 +855,12 @@
     body.append(h("div",{class:"gsec",title:f.implementierung?"public sealed class "+f.implementierung+" : "+f.name:"noch keine C#-Implementierung im Code"},
       "Rumpf · RufeAsync"+(f.implementierung?" · "+f.implementierung:" (neu)")));
     body.append(codePort("fk:impl:"+f._id,{k:"funktion",fk:f._id},null,"RufeAsync"));
+    // Python (Laufort Extern, Plan E13): die Implementierung in funktionen/<modul>.py — ⟳ legt sie an, sobald eine Umgebung die Funktion extern rechnet.
+    {const ext=Object.entries((MODEL.rahmen||{}).umgebungen||{}).filter(([,u])=>(((u||{}).Funktionen||{})[f.name]||{}).Laufort==="Extern").map(([n])=>n);
+      if(f.python){body.append(h("div",{class:"gsec",title:f.python.datei+" — class "+f.python.klasse+"("+(f.python.basis||"…Basis")+")"},
+          "Rumpf · rufe (Python) · "+f.python.klasse+(ext.length?" · Laufort Extern in "+ext.join(", "):" · (Laufort Host — läuft nur mit Extern)")));
+        body.append(codePort("fk:py:"+f._id,{k:"funktionPy",fk:f._id},null,"rufe"));}
+      else if(ext.length)body.append(h("div",{class:"gsec",style:"opacity:.7"},"Python: Laufort Extern in "+ext.join(", ")+" — ⟳ legt die Implementierung (funktionen/…py, Basis aus der Signatur) an, dann ✎/🤖 am Rumpf."));}
     // Noch keine C#-Implementierung: eine Geste legt sie an (Klasse mit RufeAsync als throw-Stub, Konstruktor wie oben) — danach ✎/🤖.
     if(!f.implementierung&&f.entwurf==null)body.append(h("div",{class:"slotrow"},h("button",{class:"add",title:"public sealed class "+f.name.replace(/^I(?=[A-ZÄÖÜ])/,"")+" : "+f.name+" — als Geste in den Code",
       onclick:()=>{f.entwurf="";gTitel("ƒ "+f.name+": C#-Implementierung anlegen");render();}},"＋ C#-Implementierung anlegen")));}

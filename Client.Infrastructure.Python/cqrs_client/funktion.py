@@ -62,7 +62,9 @@ class FunktionsBasis(ABC):
         FUNKTION   — Name der Funktions-Schnittstelle (z. B. "IBildVerkleinerung"), so meldet sich der Worker an;
         AUFTRAG    — der betterproto-Typ des Auftrags;
         ERGEBNISSE — die erlaubten Ergebnis-Events (betterproto-Typen, die OneOf-Fälle).
-    Der Worker setzt SLOTS (wie viele Aufträge gleichzeitig) — als Klassenattribut oder `slots=` im Konstruktor.
+    Der Worker setzt SLOTS (wie viele Aufträge gleichzeitig) — als Klassenattribut oder `slots=` im Konstruktor — und gibt die
+    Werte der Implementierung als `konfig=` mit (Name → Text, z. B. ein Ausgabe-Verzeichnis; der generische Worker liest sie aus
+    `--konfig NAME=WERT`, die Werkbank aus den Worker-Argumenten der Umgebung).
     """
 
     FUNKTION: ClassVar[str] = ""
@@ -70,8 +72,9 @@ class FunktionsBasis(ABC):
     ERGEBNISSE: ClassVar[tuple[type, ...]] = ()
     SLOTS: ClassVar[int] = 1
 
-    def __init__(self, slots: int | None = None):
+    def __init__(self, slots: int | None = None, konfig: dict[str, str] | None = None):
         self.slots = max(1, slots if slots is not None else self.SLOTS)
+        self.konfig: dict[str, str] = dict(konfig or {})
 
     @abstractmethod
     async def rufe(self, auftrag: Any, x: Ausfuehrung) -> Any:

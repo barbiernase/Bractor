@@ -342,6 +342,64 @@ public sealed class KontextBauer
         }
     }
 
+    /// <summary>
+    /// Katalog-Funktionen mit Python-Implementierung (Laufort Extern, Plan E13): je Funktion ein Slot für den <c>rufe</c>-Rumpf — Signatur aus der
+    /// generierten Basis, Vertrag (genau ein Ergebnis aus dem OneOf), erreichbar (Auftrag-DTO, Ausfuehrung, self.konfig), Typen, Nachbar-Code.
+    /// Id <c>funktionpy|&lt;F&gt;@&lt;Klasse&gt;</c>.
+    /// </summary>
+    public IEnumerable<PythonSlot> PythonFunktionsSlots(string solutionDir)
+    {
+        string? S(JsonElement e, string p) => e.TryGetProperty(p, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() : null;
+        IEnumerable<JsonElement> A(JsonElement e, string p) => e.TryGetProperty(p, out var v) && v.ValueKind == JsonValueKind.Array ? v.EnumerateArray() : Enumerable.Empty<JsonElement>();
+        var rec = A(_board, "records").Where(r => S(r, "name") != null).GroupBy(r => S(r, "name")!).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        string Snake(string n) => Regex.Replace(n, "(?<=[a-z0-9])([A-Z])|(?<=[A-Z])([A-Z][a-z])", "_$1$2").ToLowerInvariant();
+        string Typzeile(string name, string rolle)
+        {
+            if (!rec.TryGetValue(name, out var r)) return $"{name}   [{rolle}]   (unbekannt)";
+            var felder = A(r, "felder").Select(f => $"{S(f, "name")}: {S(f, "typ")}  → .{Snake(S(f, "name") ?? "")}").ToList();
+            return $"{S(r, "kind")} {name}Dto   [{rolle}]   Felder: {(felder.Count == 0 ? "—" : string.Join(" · ", felder))}";
+        }
+        foreach (var f in A(_board, "funktionen"))
+        {
+            if (!f.TryGetProperty("python", out var py) || py.ValueKind != JsonValueKind.Object) continue;
+            var name = S(f, "name") ?? ""; var auftrag = S(f, "auftrag") ?? "";
+            var ergebnisse = A(f, "ergebnisse").Select(x => x.GetString() ?? "").ToList();
+            var datei = S(py, "datei") ?? ""; var klasse = S(py, "klasse") ?? ""; var methode = S(py, "methode") ?? Abstractions.Funktionsvertrag.PythonMethode;
+            var sig = S(py, "signatur");
+            var voll = Path.Combine(solutionDir, datei);
+            var text = File.Exists(voll) ? File.ReadAllText(voll) : "";
+            var m = PythonQuelle.FindeMethode(text, klasse, methode);
+            var id = $"funktionpy|{name}@{klasse}";
+            var titel = $"funktion {name} (Python) @ {klasse}";
+            var llmAuftrag = _llmKnoten.TryGetValue(id, out var llm) ? llm.Intent : null;
+            var b = new StringBuilder();
+            void Kopf(string t) { b.AppendLine(); b.AppendLine("## " + t); }
+            b.AppendLine($"# SLOT-TEIL {titel}");
+            Kopf("AUFTRAG [L]");
+            b.AppendLine(llmAuftrag ?? "— kein LLM-Knoten an diesem Code-Block (ohne Auftrag wird kein Aufruf ausgelöst)");
+            Kopf("ANKER [S]");
+            b.AppendLine($"{klasse}.{methode}   {datei}:{(m == null ? "— (Methode fehlt, wird mit der Signatur der Basis angelegt)" : (m.DefZeile + 1).ToString())}   Python-Implementierung der Katalog-Funktion {name} (Laufort Extern)");
+            Kopf("SIGNATUR [S]");
+            b.AppendLine(sig ?? "async def rufe(self, auftrag, x):");
+            Kopf("VERTRAG (nur Erzwungenes) [S]");
+            b.AppendLine($"Genau EIN Ergebnis per return: {string.Join(" | ", ergebnisse.Select(x => x + "Dto"))} — Framework (die Basis prüft das Ergebnis gegen den OneOf; eine Ausnahme ist ein gescheiterter Schritt)");
+            b.AppendLine("Eine Wiederholung nach Absturz trägt dieselbe x.ausfuehrungs_id — Außenwirkung darüber deduplizieren (z. B. Zieldatei aus der Quelle ableiten)");
+            Kopf("ERREICHBAR IM RUMPF [S]");
+            b.AppendLine($"Parameter  auftrag : {auftrag}Dto   (der Auftrag — Felder in snake_case, siehe TYPEN)");
+            b.AppendLine("Parameter  x : Ausfuehrung   (ausfuehrungs_id, korrelation, akteur)");
+            b.AppendLine("self.konfig : dict[str, str]   (Werte der Implementierung aus den Worker-Argumenten der Umgebung: --konfig NAME=WERT)");
+            Kopf("TYPEN (Domänen-Records als DTO) [S]");
+            b.AppendLine(Typzeile(auftrag, "Auftrag"));
+            foreach (var e in ergebnisse) b.AppendLine(Typzeile(e, "Ergebnis"));
+            Kopf($"NACHBAR-CODE: {Path.GetFileName(datei)} ohne diesen Rumpf [N]");
+            var z = text.Replace("\r\n", "\n").Split('\n').ToList();
+            if (m != null) { z.RemoveRange(m.RumpfStart, m.RumpfEnde - m.RumpfStart); z.Insert(m.RumpfStart, "        ...  # ◄ dieser Rumpf"); }
+            b.AppendLine(string.Join("\n", z.Take(400)));
+            yield return new PythonSlot(id, titel, b.ToString().TrimStart('\n'), name, auftrag, klasse, methode, sig, ergebnisse, datei,
+                m == null ? 0 : m.DefZeile + 1, m == null, llmAuftrag, Regex.Replace($"funktionpy-{name}@{klasse}", @"[^\w.@-]", "_") + ".txt");
+        }
+    }
+
     /// <summary>Die öffentlichen Felder von <c>MessageContext</c> aus dem Python-SDK (Code-Fakt: die Dataclass), sonst leer.</summary>
     private static List<string> MessageContextFelder(string solutionDir)
     {
@@ -1064,6 +1122,18 @@ public static class KontextCli
             index.Add(new
             {
                 id = py.Id, schluessel = py.Id, titel = py.Titel, art = "zusage", besitzer = py.Client, disc = py.Event,
+                klasse = py.Klasse, methode = py.Methode, signatur = py.Signatur, ausgaenge = py.Ausgaenge, datei = py.Datei, zeile = py.Zeile,
+                rumpf = py.Fehlt ? "fehlt" : "geschrieben", auftrag = py.Auftrag, slotDatei = py.SlotDatei, tokenSlot = Token(py.Text),
+            });
+        }
+        // Python-Rümpfe der Katalog-Funktionen (Laufort Extern, Plan E13): derselbe Anker (Datei + Klasse + Methode), Art „funktionpy“.
+        foreach (var py in bauer.PythonFunktionsSlots(solutionDir))
+        {
+            File.WriteAllText(Path.Combine(verz, py.SlotDatei), py.Text);
+            md.AppendLine($"| {py.Titel} | {(py.Fehlt ? "fehlt" : "geschrieben")} | {(py.Auftrag == null ? "—" : "✓")} | {Token(py.Text)} | 0 | 0 | {skelTok + Token(py.Text)} |");
+            index.Add(new
+            {
+                id = py.Id, schluessel = py.Id, titel = py.Titel, art = "funktionpy", besitzer = py.Client, disc = py.Event,
                 klasse = py.Klasse, methode = py.Methode, signatur = py.Signatur, ausgaenge = py.Ausgaenge, datei = py.Datei, zeile = py.Zeile,
                 rumpf = py.Fehlt ? "fehlt" : "geschrieben", auftrag = py.Auftrag, slotDatei = py.SlotDatei, tokenSlot = Token(py.Text),
             });
