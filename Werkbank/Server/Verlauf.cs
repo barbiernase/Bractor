@@ -1,7 +1,7 @@
 using System.Text.Json;
 using GraphExtractor;
 
-namespace SimHost.Werkbank;
+namespace Werkbank.Server;
 
 /// <summary>Ein Eintrag im Verlauf: eine Geste (bzw. eine LLM-Übernahme) mit ihrem Patch — Datei für Datei vorher/nachher.</summary>
 public sealed record VerlaufsEintrag(DateTimeOffset Zeit, string Art, string Titel, IReadOnlyList<DateiPatch> Patch);

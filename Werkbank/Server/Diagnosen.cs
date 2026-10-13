@@ -3,7 +3,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace SimHost.Werkbank;
+namespace Werkbank.Server;
 
 /// <summary>
 /// Ein Compiler-/Analyzer-Befund, zugeordnet zum Code-Fakt (Typ + Member) und darüber zur Karte (<see cref="Karte"/>: stabile Karten-Id,

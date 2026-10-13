@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace SimHost.Werkbank;
+namespace Werkbank.Server;
 
 /// <summary>Ein externer Prozess mit gesammelter Ausgabe (stdout + stderr, in Ankunftsreihenfolge).</summary>
 public static class Prozesse

@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace SimHost;
+namespace Werkbank;
 
 // ════════════════════════════════════════════════════════════════════════════
 //  LLM-Konsole (docs/konzept-llm-minimalkontext.md): einen Code-Block füllen, prüfen, anpassen, übernehmen.
@@ -46,7 +46,7 @@ public sealed class ClaudeCliAnbieter(string? modell) : ILlmAnbieter
     private static string Cli => Environment.GetEnvironmentVariable("BRACTOR_CLAUDE") is { Length: > 0 } c ? c : "claude";
     public string Beschreibung => $"{Cli} -p (Claude Code, Anmeldung dieses Rechners){(modell != null ? ", Modell " + modell : "")}";
     public string? Warnung => Environment.GetEnvironmentVariable("ANTHROPIC_API_KEY") is { Length: > 0 }
-        ? "ANTHROPIC_API_KEY ist gesetzt — claude -p würde über die API abrechnen. Variable entfernen, dann SimHost neu starten."
+        ? "ANTHROPIC_API_KEY ist gesetzt — claude -p würde über die API abrechnen. Variable entfernen, dann die Werkbank neu starten."
         : null;
 
     public async Task<LlmAntwort> FrageAsync(string anweisung, string prompt, CancellationToken ct)
@@ -65,7 +65,7 @@ public sealed class ClaudeCliAnbieter(string? modell) : ILlmAnbieter
             // Kein API-Key darf durchsickern (auch nicht aus einer Eltern-Umgebung) — abgerechnet wird nur über das Abo.
             psi.Environment.Remove("ANTHROPIC_API_KEY");
             psi.Environment.Remove("ANTHROPIC_AUTH_TOKEN");
-            // Läuft der SimHost selbst in einer Claude-Code-Sitzung, erbt der Kindprozess deren Umleitung/Sitzungsdaten —
+            // Läuft die Werkbank selbst in einer Claude-Code-Sitzung, erbt der Kindprozess deren Umleitung/Sitzungsdaten —
             //   weg damit: der Aufruf nutzt allein die eigene Anmeldung (claude.ai-Abo). Ein Abo-Token bleibt erlaubt.
             psi.Environment.Remove("ANTHROPIC_BASE_URL");
             psi.Environment.Remove("CLAUDECODE");
@@ -167,10 +167,10 @@ public sealed class LlmKonsole
         """;
 
     private readonly string _sln, _verz;
-    private readonly SimHost.Werkbank.Arbeitsbereich _arbeit;
+    private readonly Werkbank.Server.Arbeitsbereich _arbeit;
     private readonly Func<ILlmAnbieter> _anbieter;
 
-    public LlmKonsole(string slnRoot, SimHost.Werkbank.Arbeitsbereich arbeitsbereich)
+    public LlmKonsole(string slnRoot, Werkbank.Server.Arbeitsbereich arbeitsbereich)
     {
         _sln = slnRoot; _arbeit = arbeitsbereich;
         _verz = Path.Combine(slnRoot, ".llm-kontext");
@@ -532,7 +532,7 @@ public sealed class LlmKonsole
     private readonly SemaphoreSlim _aktualisierung = new(1, 1);
     public bool AktualisierungLaeuft => _aktualisierung.CurrentCount == 0;
 
-    /// <summary>Beim Start: fehlen die Kontexte, erzeugt SimHost sie im Hintergrund (die GUI zeigt „wird erzeugt“).</summary>
+    /// <summary>Beim Start: fehlen die Kontexte, erzeugt die Werkbank sie im Hintergrund (die GUI zeigt „wird erzeugt“).</summary>
     public void ErzeugeKontexteFallsFehlend()
     {
         if (!File.Exists(Path.Combine(_verz, "index.json"))) _ = Task.Run(Aktualisieren);

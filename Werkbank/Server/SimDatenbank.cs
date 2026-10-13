@@ -1,7 +1,7 @@
 using Abstractions;
 using Npgsql;
 
-namespace SimHost.Werkbank;
+namespace Werkbank.Server;
 
 /// <summary>
 /// Die Sim-Datenbank (docs/konzept-werkbank.md §4.6), nur für Umgebungen der Art Sim: zurücksetzen (löschen — der Host legt sie beim

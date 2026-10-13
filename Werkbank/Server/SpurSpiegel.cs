@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 using Abstractions;
 using Eintrag = Abstractions.SpurWeg.Eintrag;
 
-namespace SimHost.Werkbank;
+namespace Werkbank.Server;
 
 /// <summary>
 /// Der Spur-Spiegel der Werkbank (docs/konzept-werkbank.md §7.2, Werkbank P6): folgt dem laufenden Host über die Einblick-API — SSE
@@ -17,7 +17,7 @@ public sealed class SpurSpiegel
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(10) };
     private static readonly HttpClient Strom = new() { Timeout = Timeout.InfiniteTimeSpan };
 
-    private readonly Werkbank _werkbank;
+    private readonly WerkbankServer _werkbank;
     private readonly Lock _sperre = new();
     private string? _lauf;        // Umgebung + DB + Start des Hosts — ein neuer Lauf spiegelt neu
     private long _bis;
@@ -38,7 +38,7 @@ public sealed class SpurSpiegel
     private readonly Func<string?> _modellDatei;
     private (DateTime Stand, Dictionary<(string Pipeline, string Typ), string> Quellknoten)? _modell;
 
-    public SpurSpiegel(Werkbank werkbank, Func<string?> modellDatei)
+    public SpurSpiegel(WerkbankServer werkbank, Func<string?> modellDatei)
     {
         _werkbank = werkbank;
         _modellDatei = modellDatei;

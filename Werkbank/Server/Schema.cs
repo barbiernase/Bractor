@@ -2,7 +2,7 @@ using System.Reflection;
 using System.Text.Json.Nodes;
 using Abstractions;
 
-namespace SimHost.Werkbank;
+namespace Werkbank.Server;
 
 /// <summary>
 /// Das Formular-Schema der Umgebung (docs/konzept-werkbank.md §8.1): aus den Konfig-Typen (<see cref="UmgebungKonfig"/>, Quellen-Konfig,

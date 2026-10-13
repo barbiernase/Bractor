@@ -592,7 +592,7 @@
       const a=await r.json();
       if(!a.ok){deFlash("⚠ "+(a.fehler||"nicht geschrieben"),false);return;}
       delete RUMPF_EDIT[key];gMeldung(a);await wbLadeDiagnosen();G_BOARD=a.board;gBoardAnwenden();}
-    catch(e){badge(false);deFlash("⚠ SimHost nicht erreichbar — nicht geschrieben",false);}
+    catch(e){badge(false);deFlash("⚠ Werkbank nicht erreichbar — nicht geschrieben",false);}
     finally{G_LAEUFT=false;neuZeichnen();}}
   // Parameter-Zeilen einer Store-Funktion (Name : Typ) — die API-Signatur.
   function paramRows(fn){const box=h("div",{});
@@ -1218,14 +1218,14 @@
     const anfrage={id:kid,auftrag,rumpf:anpassung?(v?v.rumpf:(basisRumpf||null)):null,anpassung:anpassung||null,maxRunden:3};
     LAUF[kid]={seit:Date.now(),was:anpassung?"passt an · schreibt · baut":"LLM schreibt · prüft · baut"};delete MELD[kid];neuZeichnen();
     let r;try{r=await postLlm("/api/llm/ausfuehren",anfrage);}
-    catch(e){r={ok:false,grund:"SimHost offline"};}
+    catch(e){r={ok:false,grund:"Werkbank offline"};}
     // Noch keine Methode im Code (neu gezeichneter Decider/Applier): erst die Struktur schreiben (Platzhalter) + einlesen,
     //   dann derselbe Durchlauf. Leseseiten-Blöcke deckt der Scaffolder (noch) nicht — dort bleibt die Meldung.
     if(r&&!r.ok&&r.unbekannt&&/^(decide|apply|funktion)\|/.test(kid)){
       LAUF[kid].was="schreibt die Struktur (Geste) · liest ein";neuZeichnen();
       await gesteFlush();try{await fetch("/api/llm/aktualisieren",{method:"POST"});}catch(e){}
       LAUF[kid].was="LLM schreibt · prüft · baut";neuZeichnen();
-      try{r=await postLlm("/api/llm/ausfuehren",anfrage);}catch(e){r={ok:false,grund:"SimHost offline"};}
+      try{r=await postLlm("/api/llm/ausfuehren",anfrage);}catch(e){r={ok:false,grund:"Werkbank offline"};}
       if(r&&!r.ok&&r.unbekannt)r.grund=kid.startsWith("funktion|")?"Implementierung konnte nicht angelegt werden — Funktion vollständig (Auftrag ⊕, mindestens ein Ergebnis ⊕)?"
         :"Methode konnte nicht angelegt werden — Decider/Applier vollständig verdrahtet (Command/Event, Aggregat, Ausgänge)?";}
     delete LAUF[kid];
@@ -1248,7 +1248,7 @@
   async function llmUebernehmen(kid){const v=VOR[kid];if(!v||LAUF[kid])return;
     LAUF[kid]={seit:Date.now(),was:"schreibt + baut"};neuZeichnen();
     let r;try{r=await postLlm("/api/llm/uebernehmen",{id:kid,rumpf:v.rumpf,auftrag:v.auftrag,basisHash:v.basisHash,bauen:true});}
-    catch(e){r={ok:false,grund:"SimHost offline"};}
+    catch(e){r={ok:false,grund:"Werkbank offline"};}
     delete LAUF[kid];
     if(!r.ok){MELD[kid]={k:"err",t:"⚠ "+r.grund+(/Hash/.test(r.grund||"")?" → ▶ Neu ausführen":"")};neuZeichnen();return;}
     delete VOR[kid];saveVor();ZULETZT[kid]=true;
@@ -1257,7 +1257,7 @@
     await neuEinlesen();}
 
   async function llmRueckgaengig(kid){if(LAUF[kid])return;LAUF[kid]={seit:Date.now(),was:"stellt wieder her + baut"};neuZeichnen();
-    let r;try{r=await postLlm("/api/llm/rueckgaengig",{id:kid,bauen:true});}catch(e){r={ok:false,grund:"SimHost offline"};}
+    let r;try{r=await postLlm("/api/llm/rueckgaengig",{id:kid,bauen:true});}catch(e){r={ok:false,grund:"Werkbank offline"};}
     delete LAUF[kid];
     if(!r.ok){MELD[kid]={k:"err",t:"⚠ "+r.grund};neuZeichnen();return;}
     delete ZULETZT[kid];MELD[kid]={k:"",t:"↶ alter Rumpf wiederhergestellt"+(r.bau&&!r.bau.ok?" · Build rot":"")};await neuEinlesen();}
@@ -2743,7 +2743,7 @@
   var VB_NR=0;
   async function vbZeige(einpassen){if(!VB||!world||!canvas)return;let q=vbQuelle();if(!q){vbEnde();return;}
     const nr=++VB_NR,vb=VB,kat=vbKatalogKandidaten(q);let a;
-    try{a=await vbKandidaten(q,kat);}catch(e){deFlash("⚠ SimHost nicht erreichbar — keine Kandidaten",false);return;}
+    try{a=await vbKandidaten(q,kat);}catch(e){deFlash("⚠ Werkbank nicht erreichbar — keine Kandidaten",false);return;}
     if(nr!==VB_NR||VB!==vb||!world||!canvas)return;   // inzwischen ein anderer Port, der Modus ist aus oder neu gezeichnet
     q=vbQuelle();if(!q){vbEnde();return;}
     const K=a.K;VB.K=K;VB.G=a.G;
@@ -3706,7 +3706,7 @@
   window.deLeer=function(){MODEL=normalize(null);GSTAND=schnappschuss();render();};
   window.dePing=async function(){try{const r=await fetch("/api/editor/model");badge(r.ok);}catch(e){badge(false);}};
   async function loadLive(){try{const r=await fetch("/api/editor/model");if(!r.ok)throw 0;const m=await r.json();badge(true);return m;}catch(e){badge(false);return null;}}
-  function badge(live){const b=document.getElementById("de-badge");b.textContent=live?"SimHost live":"offline";b.className="badge"+(live?"":" off");}
+  function badge(live){const b=document.getElementById("de-badge");b.textContent=live?"Werkbank live":"offline";b.className="badge"+(live?"":" off");}
   // ↻ Vom Graph laden: den Code neu einlesen (warmer Workspace) und das Board übernehmen — der Code ist die einzige Wahrheit;
   //   Offenes geht vorher als Geste hinaus, nur die Ansicht (Positionen, 🤖) bleibt.
   window.deReload=async function(opt){opt=opt||{};await gesteFlush();
@@ -3779,7 +3779,7 @@
       if(LADEN&&delta.neueNs.length)delta.neueNs.forEach(ns=>{if(!LADEN.some(g=>drinNs(g,ns)))LADEN.push(ns);});
       gMeldung(a);GSTAND=jetzt;G_BOARD=a.board;await wbLadeDiagnosen();
       if(G_AENDERUNG===stand&&!gFokus())gBoardAnwenden();else autosave();}
-    catch(e){badge(false);deFlash("⚠ SimHost nicht erreichbar — Geste nicht geschrieben",false);}
+    catch(e){badge(false);deFlash("⚠ Werkbank nicht erreichbar — Geste nicht geschrieben",false);}
     finally{G_LAEUFT=false;}}
   function gMeldung(a){const n=(a.dateien||[]).length;
     if(n)deFlash((/^[✎＋✕↶]/.test(a.titel)?"":"✎ ")+a.titel+" · "+n+" Datei"+(n===1?"":"en")+" · "+a.ms+" ms",true);
@@ -3805,14 +3805,14 @@
       if(!a.ok){deFlash("⚠ "+(a.fehler||"nicht umbenannt"),false);render();return;}
       if(SEL&&SEL.endsWith(":"+alt))SEL=SEL.slice(0,-alt.length)+neu;
       gMeldung(a);await wbLadeDiagnosen();G_BOARD=a.board;gBoardAnwenden();}
-    catch(e){badge(false);deFlash("⚠ SimHost nicht erreichbar — nicht umbenannt",false);}
+    catch(e){badge(false);deFlash("⚠ Werkbank nicht erreichbar — nicht umbenannt",false);}
     finally{G_LAEUFT=false;}}
   // ↶ — den letzten Patch zurücknehmen (Geste oder 🤖-Übernahme).
   window.deRueckgaengig=async function(){await gesteFlush();G_LAEUFT=true;
     try{const r=await fetch("/api/werkbank/rueckgaengig",{method:"POST"});const a=await r.json();
       if(!a.ok){deFlash("⚠ "+(a.fehler||"nichts zurückgenommen"),false);return;}
       deFlash(a.titel,true);await wbLadeDiagnosen();G_BOARD=a.board;gBoardAnwenden();}
-    catch(e){badge(false);deFlash("⚠ SimHost nicht erreichbar",false);}
+    catch(e){badge(false);deFlash("⚠ Werkbank nicht erreichbar",false);}
     finally{G_LAEUFT=false;}};
 
   // ── Board übernehmen (Code-Stand) ───────────────────────────────────────────────────────────

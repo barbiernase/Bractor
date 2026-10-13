@@ -1,6 +1,6 @@
 using System.Text.Json.Nodes;
 
-namespace SimHost.Werkbank;
+namespace Werkbank.Server;
 
 /// <summary>
 /// Ordnet einen Compiler-Befund (Typ + Member aus dem Syntaxbaum, <see cref="Diagnosen"/>) seiner Karte zu — über die stabilen Karten-Ids des

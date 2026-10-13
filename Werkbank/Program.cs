@@ -1,7 +1,7 @@
 using System.Text.Json;
 using DomainEditor;
 using GraphExtractor;
-using SimHost;
+using Werkbank;
 
 // Der warme Workspace (Arbeitsbereich) lädt die Solution über MSBuild — der Locator muss vor dem ersten MSBuild-Typ registriert sein.
 if (!Microsoft.Build.Locator.MSBuildLocator.IsRegistered) Microsoft.Build.Locator.MSBuildLocator.RegisterDefaults();
@@ -22,7 +22,7 @@ if (args.Length >= 2 && args[0] is "--trocken" or "--schreiben")
 // Schreiben tut — --pruefe-rumpf <Slot-Id> <Datei mit Rumpf>. Schreibt nichts.
 if (args.Length >= 3 && args[0] == "--pruefe-rumpf")
 {
-    using var cliArbeit = new SimHost.Werkbank.Arbeitsbereich(SlnRoot());
+    using var cliArbeit = new Werkbank.Server.Arbeitsbereich(SlnRoot());
     var cliErgebnis = await new LlmKonsole(SlnRoot(), cliArbeit).PruefePerIdAsync(args[1], File.ReadAllText(args[2]));
     Console.WriteLine(JsonSerializer.Serialize(cliErgebnis, new JsonSerializerOptions { WriteIndented = true,
         Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }));
@@ -49,7 +49,7 @@ app.UseStaticFiles();
 // ── WERKBANK (docs/konzept-werkbank.md §5, P3): ⟳ = bauen → Python-Basen → neu lesen → Daten prüfen → Infrastruktur → Host ersetzen.
 //    Die Umgebung (Kopfzeile „Umgebung ▾") wählt Ports, DB und Cluster; der Host-Rahmen bearbeitet ihre Datei (generisches Formular).
 var slnRoot = SlnRoot();
-var werkbank = new SimHost.Werkbank.Werkbank(slnRoot);
+var werkbank = new Werkbank.Server.WerkbankServer(slnRoot);
 // Der warme Workspace (P7.1) lädt sofort im Hintergrund — das erste Board ist da, bevor der Editor fragt.
 _ = werkbank.Arbeitsbereich.StarteAsync();
 app.Lifetime.ApplicationStopping.Register(werkbank.Arbeitsbereich.Dispose);
@@ -70,7 +70,7 @@ app.MapGet("/api/editor/model", async (CancellationToken ct) =>
 // ── GESTEN (Werkbank P7.2): jede Bearbeitung im Editor ist ein Patch am Code — Karten ändern/anlegen/löschen, Umbenennen (Renamer), ↶.
 //    Danach liest der warme Workspace neu; die Antwort trägt das Board (Code = einzige Wahrheit) und die Befunde der berührten Dateien.
 var gestenJson = new JsonSerializerOptions(JsonSerializerDefaults.Web);
-IResult GestenErgebnis(SimHost.Werkbank.GestenAntwort a)
+IResult GestenErgebnis(Werkbank.Server.GestenAntwort a)
 {
     var o = JsonSerializer.SerializeToNode(a, gestenJson)!.AsObject();
     if (werkbank.Arbeitsbereich.BoardJson is { } board) o["board"] = System.Text.Json.Nodes.JsonNode.Parse(board);
@@ -88,7 +88,7 @@ app.MapPost("/api/werkbank/rumpf", async (System.Text.Json.Nodes.JsonObject b, C
     var text = (string?)b["text"] ?? "";
     var alt = (string?)b["alt"];
     if (b["python"] is System.Text.Json.Nodes.JsonObject py)
-        return GestenErgebnis(await werkbank.Gesten.PythonRumpfAsync(titel, new SimHost.PythonAnker((string?)py["datei"] ?? "", (string?)py["klasse"] ?? "",
+        return GestenErgebnis(await werkbank.Gesten.PythonRumpfAsync(titel, new Werkbank.PythonAnker((string?)py["datei"] ?? "", (string?)py["klasse"] ?? "",
             (string?)py["methode"] ?? "", (string?)py["signatur"]), text, alt, ct));
     var o = b["ort"] as System.Text.Json.Nodes.JsonObject;
     return GestenErgebnis(await werkbank.Gesten.RumpfAsync(titel, new GraphExtractor.RumpfOrt((string?)o?["datei"] ?? "", (int?)o?["start"] ?? -1,
@@ -138,7 +138,7 @@ app.MapPost("/api/editor/module", (JsonElement body) =>
 
 // ── CODE-SYNC: Board ⇄ echte .cs-Datei (Decider/Applier-Rümpfe). Anker = aus dem Graphen abgeleitet. ──
 // LLM-Code-Blöcke (docs/konzept-llm-minimalkontext.md): Kontexte + Füllen + Übernehmen. Fehlen die Kontexte, erzeugt
-// SimHost sie beim Start im Hintergrund selbst (kein CLI-Schritt nötig).
+// die Werkbank sie beim Start im Hintergrund selbst (kein CLI-Schritt nötig).
 var konsole = new LlmKonsole(slnRoot, werkbank.Arbeitsbereich);
 // Eine 🤖-Übernahme ist ein Patch wie jede Geste — derselbe ↶-Stapel.
 konsole.Gesichert = (titel, patch) => werkbank.Gesten.Verlauf.Merke("llm", titel, patch);
@@ -195,7 +195,7 @@ app.MapPost("/api/llm/aktualisieren", () => Results.Json(konsole.Aktualisieren()
 app.MapGet("/api/llm/rumpf", (string id) => Results.Json(konsole.Rumpf(id)));
 app.MapGet("/api/llm/protokoll", (string? id, int? max) => Results.Json(konsole.Protokoll(string.IsNullOrEmpty(id) ? null : id, max ?? 300)));
 
-// Der Laufzeit-Host ist ein Kind der Werkbank: endet SimHost, endet er mit (sonst hielte ein verwaister Host Ports und Sim-DB).
+// Der Laufzeit-Host ist ein Kind der Werkbank: endet die Werkbank, endet er mit (sonst hielte ein verwaister Host Ports und Sim-DB).
 app.Lifetime.ApplicationStopping.Register(() => werkbank.Host.StoppeAsync().GetAwaiter().GetResult());
 var werkbankJson = new JsonSerializerOptions(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
 app.MapGet("/api/werkbank/zustand", () => Results.Json(werkbank.Zustand(), werkbankJson));
@@ -204,7 +204,7 @@ app.MapGet("/api/werkbank/schema", async (CancellationToken ct) =>
     // Dienste und Konfig-Records kommen aus dem Code (warmer Workspace) — ohne gelesenes Board bleiben sie freie Abschnitte.
     try { await werkbank.Arbeitsbereich.LiesAsync(ct); } catch (Exception) { }
     var board = werkbank.Arbeitsbereich.BoardJson is { } b ? System.Text.Json.Nodes.JsonNode.Parse(b) as System.Text.Json.Nodes.JsonObject : null;
-    return Results.Content(SimHost.Werkbank.Schema.Umgebung(board).ToJsonString(), "application/json");
+    return Results.Content(Werkbank.Server.Schema.Umgebung(board).ToJsonString(), "application/json");
 });
 app.MapGet("/api/werkbank/umgebung/{name}", (string name) => Results.Content(werkbank.Umgebungen.Roh(name).ToJsonString(), "application/json"));
 app.MapPost("/api/werkbank/umgebung/{name}", (string name, System.Text.Json.Nodes.JsonObject inhalt) =>
@@ -237,7 +237,7 @@ app.MapPost("/api/werkbank/lesen", async (CancellationToken ct) =>
     try { await werkbank.Arbeitsbereich.LiesAsync(ct); return Results.Json(werkbank.Arbeitsbereich.Zustand(), werkbankJson); }
     catch (InvalidOperationException e) { return Results.Json(new { ok = false, fehler = e.Message }, werkbankJson); }
 });
-IEnumerable<SimHost.Werkbank.Diagnose> GestenUndBau()
+IEnumerable<Werkbank.Server.Diagnose> GestenUndBau()
 {
     var (beruehrt, gesten) = werkbank.Gesten.Befunde();
     return (werkbank.Letzter?.Diagnosen ?? []).Where(d => !d.Code.StartsWith("LESEN", StringComparison.Ordinal) && !beruehrt.Contains(d.Datei))
@@ -279,8 +279,8 @@ app.MapPost("/api/werkbank/uhr", async (string versatz) =>
 });
 // ── DURCHSPIELEN (docs/konzept-werkbank.md §6, P5): nur echte Eingänge — als Akteur (JSON-Eingang des Hosts), Hand-Funktionen beantworten,
 //   Datei in den Pfad der Quelle legen, Uhr vorstellen, externe Worker starten. Die Formulare kommen aus dem gelesenen Code.
-var durchspielen = new SimHost.Werkbank.Durchspielen(werkbank, () => FindNeben("domain-model.json"));
-var worker = new SimHost.Werkbank.Worker(slnRoot);
+var durchspielen = new Werkbank.Server.Durchspielen(werkbank, () => FindNeben("domain-model.json"));
+var worker = new Werkbank.Server.Worker(slnRoot);
 app.Lifetime.ApplicationStopping.Register(() => worker.StoppeAlleAsync().GetAwaiter().GetResult());
 app.MapGet("/api/werkbank/identitaeten", () => Results.Json(durchspielen.Identitaeten()));
 app.MapGet("/api/werkbank/formular", (string typ) =>
@@ -345,7 +345,7 @@ app.MapPost("/api/werkbank/infra/stopp", async (CancellationToken ct) => Results
 
 // ── SPUR (docs/konzept-werkbank.md §7, P6): der Spiegel folgt dem laufenden Host (SSE + Cursor) und liefert Vorgänge, nummerierte Wege
 //   und den Live-Puls fertig aus — der Editor schlägt nur Karten-Ids nach.
-var spur = new SimHost.Werkbank.SpurSpiegel(werkbank, () => FindNeben("domain-model.json"));
+var spur = new Werkbank.Server.SpurSpiegel(werkbank, () => FindNeben("domain-model.json"));
 _ = Task.Run(() => spur.LaufeAsync(app.Lifetime.ApplicationStopping));
 app.MapGet("/api/werkbank/spur/puls", async (CancellationToken ct) => Results.Json(await spur.PulsAsync(ct), werkbankJson));
 app.MapGet("/api/werkbank/spur/vorgaenge", async (string? quelle, string? akteur, string? aggregat, string? zustand, CancellationToken ct) =>
@@ -361,7 +361,7 @@ app.MapGet("/api/werkbank/spur/vorgang/{korrelation}", async (string korrelation
 
 // Port: 5178, außer die Umgebung weist einen zu (PORT) — z. B. wenn mehrere Editor-Instanzen parallel laufen.
 var port = Environment.GetEnvironmentVariable("PORT") ?? "5178";
-Console.WriteLine($"\n▶ SimHost läuft.  Editor: http://localhost:{port}/editor/   LLM-Konsole: http://localhost:{port}/konsole\n");
+Console.WriteLine($"\n▶ Werkbank läuft.  Editor: http://localhost:{port}/editor/   LLM-Konsole: http://localhost:{port}/konsole\n");
 app.Run($"http://localhost:{port}");
 
 // Wurzelverzeichnis der .sln (für die Code-Sync-Dateipfade).

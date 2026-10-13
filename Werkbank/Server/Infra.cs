@@ -2,7 +2,7 @@ using System.Net.Sockets;
 using Abstractions;
 using Npgsql;
 
-namespace SimHost.Werkbank;
+namespace Werkbank.Server;
 
 /// <summary>
 /// Die Infrastruktur einer Umgebung (docs/konzept-werkbank.md §4.5): Postgres immer, Redis bei <c>VersionIndex = Verwaltet</c>,

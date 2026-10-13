@@ -2,9 +2,9 @@
   "version": "0.0.1",
   "configurations": [
     {
-      "name": "SimHost",
+      "name": "Werkbank",
       "runtimeExecutable": "dotnet",
-      "runtimeArgs": ["run", "--project", "SimHost/SimHost.csproj", "-c", "Debug"],
+      "runtimeArgs": ["run", "--project", "Werkbank/Werkbank.csproj", "-c", "Debug"],
       "port": 5178,
       "autoPort": true
     }

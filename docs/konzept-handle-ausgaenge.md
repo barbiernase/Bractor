@@ -89,7 +89,7 @@ und der Fristen-Pfad sind dort noch zu bestätigen.
 **Offen:** ~~Scaffolder schreibt die Leseseite (Fähigkeit + Bündel + Parameter) noch nicht~~ → geliefert, siehe §12; Reaktionen in den
 Azyklizitäts-Guard aufnehmen (die Ausgänge sind typisiert).
 
-**Nachprüfung „alles aus dem Code abgeleitet?“ (2026-09-30):** Extractor/Editor/SimHost enthalten keine Domänen-Namen und keine
+**Nachprüfung „alles aus dem Code abgeleitet?“ (2026-09-30):** Extractor/Editor/Werkbank enthalten keine Domänen-Namen und keine
 Namensregeln (Treffer sind Anzeige-Labels oder abgeleitet, z. B. Command-Herkunft „Client“ = kein interner Erzeuger). Behoben:
 (1) `Frist`/`FristStorno`/`Guid` wurden in Pipeline-Dispatch und Fristen-Router über Namens-Strings erkannt → jetzt über das Symbol;
 (2) Editor (Handler = Typen) und Dispatch (Name `Handle` + feste Form) konnten still auseinanderlaufen → **CQRS057**

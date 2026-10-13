@@ -312,7 +312,7 @@ public static class ModellMapper
         Basen = meta.Basen, Attribute = meta.Attribute, Treiber = meta.Treiber,
     };
 
-    /// <summary>Pfad relativ zur Solution, „/"-getrennt (für den Editor/SimHost); null, wenn außerhalb oder unbekannt.</summary>
+    /// <summary>Pfad relativ zur Solution, „/"-getrennt (für den Editor/die Werkbank); null, wenn außerhalb oder unbekannt.</summary>
     private static string? Relativ(string wurzel, string? abs)
     {
         if (string.IsNullOrEmpty(abs) || string.IsNullOrEmpty(wurzel)) return null;

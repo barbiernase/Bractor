@@ -50,7 +50,7 @@ referenzieren `Ctx.Default.{Typ}` **namentlich** — driftet die Typmenge, exist
 Property nicht → **Build bricht** (`WireSerializerGenerator.cs:96`). So ist „alles Dispatchende
 zur Compile-Zeit erzeugt und gegen das Serialisierungs-Manifest verriegelt" *strukturell*
 garantiert, nicht per Disziplin. Ausnahmen (bewusst, pragmatisch): der JSON-Round-Trip-`Clone`
-für Snapshots (`AggregateActorBase.cs:584`) und punktuelle Reflection im SimHost — beide
+für Snapshots (`AggregateActorBase.cs:584`) und punktuelle Reflection in der Test-DSL (`Cqrs.Testing`, Zustandsspiegel) — beide
 außerhalb des heißen Produktionspfads.
 
 ## P5 — Der Fachcode bleibt rein
@@ -154,6 +154,6 @@ sind in [13](13-reifegrad-schulden-bewertung.md) priorisiert:
 |---|---|
 | P1/Exactly-once | `MartenProjectionTracker` macht **keinen** echten Co-Commit (getrennte Session, at-least-once) |
 | P5 (Reinheit) | `Reaktionsempfaenger`-Dedup-Menge lebt in der Domäne (unbegrenzt wachsend) |
-| P4 (reflexionsfrei) | Snapshot-`Clone` per JSON-Round-Trip; SimHost nutzt punktuell Reflection |
+| P4 (reflexionsfrei) | Snapshot-`Clone` per JSON-Round-Trip; die Test-DSL (`Cqrs.Testing`) nutzt punktuell Reflection |
 | P8/P9 (ein Weg, fail-fast) | Der generierte Pull-Emit-Pfad reicht `CancellationToken.None` durch — CQRS021 greift dort syntaktisch nicht |
 | P11 (ableiten) | `CqrsWireJsonContext` und `domain_registry.py` sind hand-gepflegt (Boot-Check/Compile-Guard fangen Vergessen ab) |

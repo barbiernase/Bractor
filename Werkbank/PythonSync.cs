@@ -3,7 +3,7 @@ using System.Security.Cryptography;
 using System.Text;
 using DomainEditor;
 
-namespace SimHost;
+namespace Werkbank;
 
 /// <summary>Anker eines Python-Rumpfs (Zusage/Kenntnis einer Client-Implementierung): Datei relativ zur Solution, Klasse, Methode.</summary>
 public sealed record PythonAnker(string Datei, string Klasse, string Methode, string? Signatur);

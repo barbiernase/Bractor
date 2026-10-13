@@ -51,7 +51,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Infrastructure.Integration.
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Cqrs.Testing", "Cqrs.Testing\Cqrs.Testing.csproj", "{2FB6CBAA-8143-4F6A-A5D3-32302D83AAD0}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SimHost", "SimHost\SimHost.csproj", "{BD0144DA-43F2-4E61-9DD9-87FFDC36CCC4}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Werkbank", "Werkbank\Werkbank.csproj", "{BD0144DA-43F2-4E61-9DD9-87FFDC36CCC4}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "DomainEditor", "DomainEditor\DomainEditor.csproj", "{65BAE4A1-8D9C-4804-A3E8-C0FE56533084}"
 EndProject

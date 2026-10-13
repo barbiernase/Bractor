@@ -1,7 +1,7 @@
 using System.Text.Json;
 using System.Threading.Channels;
 
-namespace SimHost.Werkbank;
+namespace Werkbank.Server;
 
 /// <summary>
 /// Der Fortschritts-Kanal der Werkbank (P3.7): jeder Schritt von ⟳, jede Sim-DB-Aktion und jeder Host-Wechsel geht als Ereignis an alle

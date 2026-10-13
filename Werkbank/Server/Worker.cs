@@ -2,7 +2,7 @@ using System.Collections.Concurrent;
 using System.Diagnostics;
 using Abstractions;
 
-namespace SimHost.Werkbank;
+namespace Werkbank.Server;
 
 /// <summary>
 /// Externe Funktions-Worker als Prozesse der Werkbank (docs/konzept-werkbank.md §6, Werkbank P5.5, Plan E10): „▶ Worker starten" an einer

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <!-- Der Kern des Extractors als Bibliothek: Projektlage, Domänen-Extraktion, Graph, Board-Modell, Parität, Sonde, LLM-Kontexte.
-         Zwei Nutzer: die CLI (GraphExtractor, kalter Lauf) und die Werkbank (SimHost, warmer Workspace — Werkbank P7.1). -->
+         Zwei Nutzer: die CLI (GraphExtractor, kalter Lauf) und die Werkbank (Projekt Werkbank, warmer Workspace — Werkbank P7.1). -->
     <PropertyGroup>
         <TargetFramework>net9.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>

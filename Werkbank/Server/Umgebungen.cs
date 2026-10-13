@@ -4,7 +4,7 @@ using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 using Abstractions;
 
-namespace SimHost.Werkbank;
+namespace Werkbank.Server;
 
 /// <summary>
 /// Die Umgebungs-Dateien der Solution (<c>umgebungen/umgebung.&lt;name&gt;.json</c>, docs/konzept-werkbank.md §4): lesen, schreiben,

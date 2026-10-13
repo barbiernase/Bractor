@@ -13,7 +13,7 @@ using Microsoft.CodeAnalysis.MSBuild;
 //      GeneratedCommandRouting (aus der gebauten Infrastructure-Compilation).
 //    • Sagas/Prozesse aus dem Prozess-DSL (Bedingung/Sende/RückgängigDurch/Fan-out).
 //    • Projektionen, Queries, Pipelines.
-//  Emittiert: knowledge-graph.json, domain-model.json (Editor-Modell). Die Oberfläche liegt statisch in SimHost/wwwroot/editor.
+//  Emittiert: knowledge-graph.json, domain-model.json (Editor-Modell). Die Oberfläche liegt statisch in Werkbank/wwwroot/editor.
 // ════════════════════════════════════════════════════════════════════════════
 
 MSBuildLocator.RegisterDefaults();
@@ -144,7 +144,7 @@ var modellPath = Path.Combine(solutionDir, "domain-model.json");
 await File.WriteAllTextAsync(modellPath, modellJson);
 Console.WriteLine($"✅ {modellPath}  ({modell.Aggregate.Count} Aggregate, {modell.Sagas.Count} Sagas)");
 
-// --kontexte <verz>: zusätzlich zu den Modell-Dateien alle LLM-Kontexte + index.json (Quelle der LLM-Konsole im SimHost).
+// --kontexte <verz>: zusätzlich zu den Modell-Dateien alle LLM-Kontexte + index.json (Quelle der LLM-Konsole der Werkbank).
 if (args.Contains("--kontexte"))
     return KontextCli.Lauf(args, lage, dom, graph, compositionRoot, solutionDir);
 

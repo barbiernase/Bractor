@@ -2,7 +2,7 @@ using System.Diagnostics;
 using DomainEditor;
 using GraphExtractor;
 
-namespace SimHost.Werkbank;
+namespace Werkbank.Server;
 
 /// <summary>Eine gemessene Geste (Werkbank P7.2, §16): Schreiben (Patch rechnen + speichern), Lesen (warmer Workspace), Befunde, gesamt.</summary>
 public sealed record GestenMessung(DateTimeOffset Zeit, string Art, string Titel, int Dateien, long SchreibenMs, long LesenMs, long BefundeMs, long GesamtMs);

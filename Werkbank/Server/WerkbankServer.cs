@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using Abstractions;
 
-namespace SimHost.Werkbank;
+namespace Werkbank.Server;
 
 /// <summary>Ein Schritt der ⟳-Kette mit Ergebnis.</summary>
 public sealed record Schritt(string Name, bool Ok, long DauerMs, IReadOnlyList<string> Meldungen);
@@ -15,7 +15,7 @@ public sealed record KreislaufErgebnis(bool Ok, string Stand, IReadOnlyList<Schr
 /// Der Werkbank-Server (docs/konzept-werkbank.md §5, Werkbank P3): ⟳ = Bauen (Codegen-Prepass, Proto, Generatoren, Analyzer) → Python-Basen
 /// → Board neu lesen → Daten prüfen (Sim-DB) → Infrastruktur → Host ersetzen. Je ein Weg; ein Fehler steht an der Karte, die ihn hat.
 /// </summary>
-public sealed class Werkbank
+public sealed class WerkbankServer
 {
     private readonly string _root;
     private readonly SemaphoreSlim _einLauf = new(1, 1);
@@ -37,7 +37,7 @@ public sealed class Werkbank
     /// <summary>Läuft gerade ⟳ (bzw. eine Sim-DB-Aktion) — und welcher Schritt.</summary>
     public string? Laeuft { get; private set; }
 
-    public Werkbank(string slnRoot)
+    public WerkbankServer(string slnRoot)
     {
         _root = slnRoot;
         Umgebungen = new Umgebungen(slnRoot);
@@ -176,9 +176,9 @@ public sealed class Werkbank
                 var pr = await Prozesse.LaufeAsync("bash", [skript], _root, new Dictionary<string, string> { ["PATH"] = python + ":" + Environment.GetEnvironmentVariable("PATH") }, TimeSpan.FromMinutes(3), ct);
                 // Neue Client-Implementierungen (Python) entstehen aus der GENERIERTEN Basis — also erst nach dem Bauen (früher „C# schreiben“).
                 var modell = DomainEditor.BoardLeseseite.AusBoard(vorher.BoardJson);
-                var (angelegt, _) = SimHost.PythonSync.ImplementierungenAnlegen(modell, _root, trocken: false);
+                var (angelegt, _) = Werkbank.PythonSync.ImplementierungenAnlegen(modell, _root, trocken: false);
                 // … ebenso die Python-Implementierungen der Funktionen, die die aktive Umgebung extern rechnen lässt (Plan E13).
-                var (fAngelegt, fNicht) = SimHost.PythonSync.FunktionenAnlegen(modell, Umgebungen.Aufgeloest(Aktiv), _root);
+                var (fAngelegt, fNicht) = Werkbank.PythonSync.FunktionenAnlegen(modell, Umgebungen.Aufgeloest(Aktiv), _root);
                 Schritt(schritte, new Schritt("Python-Basen", pr.Ok, (long)pr.Dauer.TotalMilliseconds,
                     [.. pr.Zeilen.TakeLast(3), .. angelegt.Concat(fAngelegt).Select(a => "＋ " + a), .. fNicht.Select(a => "⚠ " + a)]));
                 if (!pr.Ok) return Ende(false, diagnosen);

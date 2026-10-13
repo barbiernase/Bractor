@@ -288,11 +288,11 @@ Regeln (alle in `HtmlPresenter.cs`, `applyPan`/`sichtFrame`/`messeWelt`/`kulle`)
 
 ---
 
-## 10 · Backend-Naht, Persistenz & Synchronität (SimHost)
+## 10 · Backend-Naht, Persistenz & Synchronität (Werkbank)
 
 **Grundsatz: der C#-Code ist die einzige Wahrheit.** Das Board ist eine Projektion des Codes.
 
-### 10.1 Endpunkte (`SimHost/Program.cs`)
+### 10.1 Endpunkte (`Werkbank/Program.cs`)
 
 | Endpunkt | Wirkung | UI |
 |---|---|---|

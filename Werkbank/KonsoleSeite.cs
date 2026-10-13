@@ -1,4 +1,4 @@
-namespace SimHost;
+namespace Werkbank;
 
 /// <summary>
 /// Die LLM-Konsole (Route /konsole): Code-Block wählen → Auftrag → Füllen (zustandslose Runden, geprüft) →

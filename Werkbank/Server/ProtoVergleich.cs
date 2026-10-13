@@ -1,6 +1,6 @@
 using System.Text.RegularExpressions;
 
-namespace SimHost.Werkbank;
+namespace Werkbank.Server;
 
 /// <summary>
 /// Passen die Daten der Sim-DB noch zum Code? (docs/konzept-werkbank.md §4.6) — Vergleich des generierten <c>domain.proto</c> des

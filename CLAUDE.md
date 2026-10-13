@@ -92,7 +92,7 @@ Fertig-Erkennung, Kennung, Laufmodus); `GeneratedQuellen` + `AddQuellen(configur
 Umsetzungsplan der Werkbank: `docs/plan-werkbank-umsetzung.md`.
 
 **Werkbank-Server + Kopfzeile (2026-10-12, Werkbank P3):** ⟳ im Editor = bauen → Python-Basen → neu lesen → Daten prüfen → Infra → Host
-(`Host.Grpc --umgebung`, Prozess der Werkbank, nur Sim) — `SimHost/Werkbank/`, Endpunkte `/api/werkbank/*`, Fortschritt per SSE. Fehler stehen an
+(`Host.Grpc --umgebung`, Prozess der Werkbank, nur Sim) — `Werkbank/Server/`, Endpunkte `/api/werkbank/*`, Fortschritt per SSE. Fehler stehen an
 der Karte (Compiler: Typ/Member; Boot: `CQRS-BOOT {json}` mit Karte). 🖥 Host-Rahmen = Umgebungs-Datei, gezeichnet von EINEM generischen
 Formular-Renderer aus dem Schema; 📸 = Sim-DB-Stände (`<schema>.stand` trägt Proto-Stand und Projektions-Hashes). Code-Hashes (E9): Snapshot-
 Version enthält State + Applier, Projektionen bauen in Sim nach Code-Änderung beim Start neu auf (`ProjektionsStandDienst`).
@@ -112,12 +112,12 @@ externer Worker braucht einen Akteur mit `IDarf<F>` (`Bildrechner`), gestartet a
 
 **Visualisierung (2026-10-12, Werkbank P6):** vierter Spur-Header `ueber` = Absender (Fluss-Knoten/Regel/Reaktion/Akteur, der den Command bzw.
 Auftrag abschickte; Aggregat aus dem Envelope, Funktion aus `AuftragAnbieten.Wirker`). Der Weg eines Eintrags über die Karten ist EINE reine
-Funktion (`Abstractions/Spur/SpurWeg.Aus`). Die Werkbank spiegelt die Spur (`SimHost/Werkbank/SpurSpiegel.cs`, SSE + Cursor) und liefert fertig:
+Funktion (`Abstractions/Spur/SpurWeg.Aus`). Die Werkbank spiegelt die Spur (`Werkbank/Server/SpurSpiegel.cs`, SSE + Cursor) und liefert fertig:
 `/api/werkbank/spur/puls|vorgaenge|vorgang/{k}`. Editor: Leiste ☰ Vorgänge · ⏱ Zeitleiste · ⚠ Meldungen · 〰 Puls; Spur-Überlagerung (①②③ mit +Δt,
 ✕/⏳ rot, alt grau), Schritt-Panel mit ↤/↦; EIN Fokus (Chip in der Ansichts-Leiste, ersetzt Slice/◎/⤢; die statische Kette kommt seit P7.3 vom Server).
 
 **Warmer Workspace (2026-10-12, Werkbank P7.1):** der Extractor ist Bibliothek (`GraphExtractor.Kern`) + CLI (`GraphExtractor`); EIN Lesepfad
-`Lesen.LiesAsync` → `Lesung`. SimHost hält den Workspace warm (`SimHost/Werkbank/Arbeitsbereich.cs`: einmal kalt laden, Dateiwächter →
+`Lesen.LiesAsync` → `Lesung`. Die Werkbank hält den Workspace warm (`Werkbank/Server/Arbeitsbereich.cs`: einmal kalt laden, Dateiwächter →
 `WithDocumentText` nur im Speicher, warm gelesen nur aus den Compilations unterhalb der Laufzeit, E7 — Routing aus den Decide-Signaturen, Gegenprobe
 in `--check`). Text-Änderung → Übersetzen + Lesen p50 224 ms; ⟳ „Neu lesen“ und `/api/editor/model` kommen daraus. Kein statischer Zustand mehr
 (`Quelltexte` je Solution-Stand). Code mit Fehlern wird gelesen: unaufgelöster Basistyp → Code-Karte ⚠ (`codeKarten`, `code:T`) bzw. Befund an der

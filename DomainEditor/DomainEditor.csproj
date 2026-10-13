@@ -5,7 +5,7 @@
     Ein REINES Datenmodell der Domäne (Aggregate, Felder, Commands, Events, Sagas) plus ein
     DETERMINISTISCHER Scaffold-Generator (Modell → C#). Bewusst OHNE Roslyn, ohne Marten, ohne
     Proto.Actor — nur System.Text.Json (in-box). So kann der Prüfstand (store-frei) die
-    Generierung dogfooden, und SimHost/GraphExtractor können ihn leichtgewichtig referenzieren.
+    Generierung dogfooden, und Werkbank/GraphExtractor können ihn leichtgewichtig referenzieren.
   -->
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>

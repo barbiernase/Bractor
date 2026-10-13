@@ -6,7 +6,7 @@ namespace Codeformen;
 
 /// <summary>
 /// Die SYNTAX-REGELN, was im Code als Modell-Feld gilt — EINE Quelle für den Extractor (Code → Modell) und den DateiSchreiber
-/// (Modell → Code, Abgleich bestehender Deklarationen). SimHost referenziert den Kern, damit beide nie auseinanderlaufen.
+/// (Modell → Code, Abgleich bestehender Deklarationen). Die Werkbank referenziert den Kern, damit beide nie auseinanderlaufen.
 /// </summary>
 public static class Feldregeln
 {

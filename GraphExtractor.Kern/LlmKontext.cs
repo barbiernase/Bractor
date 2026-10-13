@@ -33,7 +33,7 @@ public sealed class SlotKontext
 
 public sealed class KontextBauer
 {
-    public const string PromptMarke = "// 🤖 Prompt:";   // Spiegel von SimHost.CodeSync.PromptMarke
+    public const string PromptMarke = "// 🤖 Prompt:";   // Spiegel von Werkbank.CodeSync.PromptMarke
 
     private static readonly SymbolDisplayFormat Kurz = new(
         globalNamespaceStyle: SymbolDisplayGlobalNamespaceStyle.Omitted,
@@ -1081,7 +1081,7 @@ public static class KontextCli
         }
         File.WriteAllText(Path.Combine(verz, "übersicht.md"), md.ToString());
 
-        // index.json — was die LLM-Konsole (SimHost) je Slot braucht: Anker zum Schreiben, Slot-Teil-Datei,
+        // index.json — was die LLM-Konsole (Werkbank) je Slot braucht: Anker zum Schreiben, Slot-Teil-Datei,
         // und den Auftrag, falls einer im Code/Board steht.
         var index = alle.Select(k =>
         {

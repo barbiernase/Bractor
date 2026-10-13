@@ -8,7 +8,7 @@ using Microsoft.CodeAnalysis.Diagnostics;
 using Microsoft.CodeAnalysis.MSBuild;
 using Microsoft.CodeAnalysis.Text;
 
-namespace SimHost.Werkbank;
+namespace Werkbank.Server;
 
 /// <summary>Eine Messung des Lesens: kalt (ganze Solution) oder warm (nach Datei-Änderungen, nur Domänen-Compilations).</summary>
 public sealed record LeseMessung(DateTimeOffset Zeit, string Art, int Dateien, long UebersetzenMs, long LesenMs, IReadOnlyDictionary<string, long> Phasen);

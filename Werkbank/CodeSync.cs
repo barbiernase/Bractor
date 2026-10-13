@@ -4,7 +4,7 @@ using System.Text;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 
-namespace SimHost;
+namespace Werkbank;
 
 /// <summary>Anker eines füllbaren Rumpfs — aus dem Modell (das der Extractor aus dem Code liest), nicht aus einer Konvention.</summary>
 /// <param name="Kind">"decider" | "applier" (nur für Meldungen).</param>

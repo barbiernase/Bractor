@@ -2,7 +2,7 @@
 
 > **Gekürzt 2026-10-12** auf das mit dem Zielbild `docs/konzept-werkbank.md` Vereinbare.
 
-> **Stand:** 2026-09-27 · **Status:** GEBAUT — Kontext-Erzeugung für alle Slot-Arten (§9) und die LLM-Konsole im SimHost: Füllen → Prüfen → Anpassen → Übernehmen (§12). Offen: Kartenwand, Vergleichstest auf der Zielhardware.
+> **Stand:** 2026-09-27 · **Status:** GEBAUT — Kontext-Erzeugung für alle Slot-Arten (§9) und die LLM-Konsole der Werkbank: Füllen → Prüfen → Anpassen → Übernehmen (§12). Offen: Kartenwand, Vergleichstest auf der Zielhardware.
 > **Ziel:** Ein lokales LLM (Zielhardware: RTX 4080 Super, 16 GB; Modell: Qwen3.8-27B) schreibt **nur den Rumpf** eines
 > Code-Blocks. Alles, was es dafür wissen muss, wird **regelbasiert aus dem Domänen-Code und dem Graphen** abgeleitet —
 > nichts ist ausgedacht, nichts semantisch geraten. Die **einzige** menschliche Eingabe ist der Auftrag (🤖 füllen).
@@ -264,7 +264,7 @@ Projektion 2.613/2.949 · Reader 2.939/4.715 · Store-Impl 2.650/5.679. Größte
 
 ---
 
-## 12 · LLM-Code-Blöcke: im Editor ausführen, testen, übernehmen (SimHost)
+## 12 · LLM-Code-Blöcke: im Editor ausführen, testen, übernehmen (Werkbank)
 
 ### 12.1 · Im Editor: der ganze Weg mit 🤖 füllen am Rumpf-Port (Hauptweg, EIN Klick)
 
@@ -278,7 +278,7 @@ Projektion 2.613/2.949 · Reader 2.939/4.715 · Store-Impl 2.650/5.679. Größte
 
 - **🤖 füllen ist ein Chat:** Eingabe + **▶ Senden** (Cmd/Ctrl+Enter). Die 1. Nachricht ist der Auftrag, jede weitere passt den
   aktuellen Rumpf an (Anpassung). Jede Nachricht ist ein vollständiger Durchlauf. In der Datei steht immer genau EINE Prompt-Zeile.
-- **Senden** = `POST /api/llm/ausfuehren`. Ein geprüfter Rumpf landet **sofort** in der Datei; danach baut der SimHost das **Laufzeit-Projekt**
+- **Senden** = `POST /api/llm/ausfuehren`. Ein geprüfter Rumpf landet **sofort** in der Datei; danach baut die Werkbank das **Laufzeit-Projekt**
   (`index.json` → `laufzeitProjekt`, vom Extractor abgeleitet: das Projekt mit der generierten Routing-Tabelle). Sein Build
   zieht die ganze Kette: Domain-Generatoren, Codegen-Prepass (ProtoRepo), Projektions-DI, Infrastructure-Generatoren.
 - Nach dem Schreiben **ein** GraphExtractor-Lauf (`/api/editor/extract` = `--kontexte`); solange sind ▶/✓ gesperrt.
@@ -293,7 +293,7 @@ Projektion 2.613/2.949 · Reader 2.939/4.715 · Store-Impl 2.650/5.679. Größte
 |---|---|---|
 | Rumpf am Rumpf-Port | `.cs` | Spiegel für **jede** Slot-Art: Decide/Apply über den Code-Anker, alle übrigen über `GET /api/llm/rumpf?id=` (Slot-Schlüssel → Datei · Klasse · Methode). Ein Hash-Wechsel (auch aus VS Code) aktualisiert die Anzeige. |
 | Auftrag | `// 🤖 Prompt:` in der Datei | Decide/Apply sofort beim Tippen, alle Arten beim Übernehmen. |
-| Kontexte + `domain-model.json` | Code | ein gemeinsamer Lauf nach jedem Schreiben; fehlen sie beim Start, erzeugt SimHost sie selbst im Hintergrund. |
+| Kontexte + `domain-model.json` | Code | ein gemeinsamer Lauf nach jedem Schreiben; fehlen sie beim Start, erzeugt die Werkbank sie selbst im Hintergrund. |
 
 **Geprüft (Fake-Anbieter, ohne API-Kosten, im echten Editor per Playwright):** Übernehmen: geschrieben + Build grün (13 s),
 Neu-Einlesen ≈ 1 min; Rückgängig stellt die Datei wörtlich her.
@@ -302,29 +302,27 @@ Neu-Einlesen ≈ 1 min; Rückgängig stellt die Datei wörtlich her.
 
 
 ```bash
-dotnet run --project GraphExtractor   # domain-model.json (Oberfläche: SimHost/wwwroot/editor/) (die Kontexte erzeugt SimHost bei Bedarf selbst)
-dotnet run --project SimHost          # → http://localhost:5178/editor  (Details: /konsole)
+dotnet run --project GraphExtractor   # domain-model.json (Oberfläche: Werkbank/wwwroot/editor/) (die Kontexte erzeugt die Werkbank bei Bedarf selbst)
+dotnet run --project Werkbank         # → http://localhost:5178/editor  (Details: /konsole)
 ```
 
-**Anbieter: ausschließlich Claude Code** (`SimHost/LlmKonsole.cs`, `ClaudeCliAnbieter`) — `claude -p --output-format json`
+**Anbieter: ausschließlich Claude Code** (`Werkbank/LlmKonsole.cs`, `ClaudeCliAnbieter`) — `claude -p --output-format json`
 im leeren Temp-Verzeichnis, feste Anweisung + Kontext über stdin (nur Schalter, die jede CLI-Version kennt). Abgerechnet wird
 über die **Anmeldung dieses Rechners (Abo), nie über die API**: `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN` werden dem
 Kindprozess entzogen, ein gesetzter `ANTHROPIC_API_KEY` blockiert den Aufruf. Umgebung: `BRACTOR_CLAUDE` = Pfad der CLI
 (Standard `claude` aus dem PATH), `BRACTOR_LLM_MODELL` = optional das Modell. Einmalig nötig: die CLI im Terminal starten
 und `/login` (Abo) ausführen — sonst meldet der Aufruf „Not logged in“.
 
-**Ablauf je Code-Block** (`SimHost/LlmKonsole.cs`, Seite `SimHost/KonsoleSeite.cs`):
+**Ablauf je Code-Block** (`Werkbank/LlmKonsole.cs`, Seite `Werkbank/KonsoleSeite.cs`):
 
 1. **Füllen** — jede Runde ein neuer, zustandsloser Aufruf. Prompt stabil → veränderlich: feste Anweisung · Graph-Skelett
    (eigene Guards entfernt) · Slot-Teil (ohne Auftrags-Abschnitt) · Auftrag · [aktueller Rumpf · Befund bzw. Anpassung].
    Nie ein Verlauf; nur der letzte Rumpf reist mit.
 2. **Antwort** — ein ```csharp-Block (Rumpf ohne äußere Klammern) oder `AUSSERHALB: braucht …` (→ Editor-Struktur).
-3. **Prüfen** — Syntax für alle Slot-Arten; dann gegen das **echte Projekt**
-   (`SimHost/ProjektPruefung.cs`: Rumpf im Speicher eingesetzt, Referenzen wie im Build aus `project.assets.json`, mit den
-   Store-Regeln CQRS066/067 — ein Schreibweg am Puffer vorbei wird so Befund, bevor er in die Datei geht). Heute für
-   Store-Funktionen, Ziel für alle Slot-Arten (§11); übrige: Compile beim Bauen nach dem Übernehmen. Bei Befund automatisch
-   nächste Runde (max. 3). Ohne LLM prüfbar:
-   `POST /api/llm/pruefen {id, rumpf}` bzw. `dotnet run --project SimHost -- --pruefe-rumpf <Slot-Id> <Datei>`.
+3. **Prüfen** — Syntax für alle Slot-Arten; C# dann probeweise im **warmen Workspace** (`Werkbank/Server/Arbeitsbereich.cs`,
+   `PruefeProbeweiseAsync`: die Datei mit dem Kandidaten, Compiler + Analyzer des Projekts, nur neue Fehler — damit auch die
+   Store-Regeln CQRS066/067), Python über den Parser. Bei Befund automatisch nächste Runde (max. 3). Ohne LLM prüfbar:
+   `POST /api/llm/pruefen {id, rumpf}` bzw. `dotnet run --project Werkbank -- --pruefe-rumpf <Slot-Id> <Datei>`.
 4. **Anpassen** — Wunschtext → neue Runde mit Kontext + Auftrag + aktuellem Rumpf + Anpassung.
 5. **Übernehmen** — in der Konsole auf Klick (im Editor automatisch nach bestandener Prüfung): `CodeSync.SetzeRumpf` schreibt Rumpf + `// 🤖 Prompt: <Auftrag>` (Ausdrucks-Rumpf → Block),
    Hash-Sperre gegen Zwischenänderungen, Sicherung in `.llm-kontext/sicherung/`. Danach **Generatoren bauen**
