@@ -84,6 +84,8 @@ public static partial class UmgebungLader
             u.Funktionen[f.Key] = f.Get<FunktionsKonfig>(o => o.ErrorOnUnknownConfiguration = true) ?? new FunktionsKonfig();
         foreach (var d in konfig.GetSection(UmgebungsAbschnitte.Dienste).GetChildren())
             u.Dienste[d.Key] = d.Get<DienstKonfig>(o => o.ErrorOnUnknownConfiguration = true) ?? new DienstKonfig();
+        foreach (var c in konfig.GetSection(UmgebungsAbschnitte.Clients).GetChildren())
+            u.Clients[c.Key] = c.Get<ClientKonfig>(o => o.ErrorOnUnknownConfiguration = true) ?? new ClientKonfig();
         return u;
     }
 
@@ -103,6 +105,4 @@ public static partial class UmgebungLader
         }
     }
 
-    /// <summary>Die vollständige Verbindung zum Event-Store (Verbindung + Datenbank).</summary>
-    public static string Verbindung(EventStoreKonfig e) => new Npgsql.NpgsqlConnectionStringBuilder(e.Verbindung) { Database = e.Datenbank }.ConnectionString;
 }

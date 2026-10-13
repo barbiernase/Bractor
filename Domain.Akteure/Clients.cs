@@ -36,10 +36,10 @@ public interface ITrainingsWorker : IClientVertrag,
 { }
 
 /// <summary>
-/// Blazor-Arbeitsplatz (<c>Host.Blazor</c> + <c>Domain.Client.Modules.Blazor</c>): ein Client, vier Akteure. Gemessen am Client-Code
-/// (IntentHandler, RefreshHandler, Effects, Stores) am 2026-10-06 — bewusst NICHT im Vertrag, weil kein Akteur des Arbeitsplatzes es darf:
-/// <c>NimmRangeAuf</c> (Kuratieren, Mehrfach-Auswahl; laut Domäne nur aus dem Resolver) und <c>HoleDatensatzSamples</c> (Komposition;
-/// nur das TrainingsSystem). Mit Tor würden beide abgelehnt — offene Domänen-Entscheidung, keine Vertrags-Frage.
+/// Blazor-Arbeitsplatz (<c>Host.Blazor</c> + <c>Domain.Client.Modules.Blazor</c>, <c>[assembly: IstClient&lt;IArbeitsplatz&gt;]</c>): ein Client,
+/// vier Akteure. Der Client-Code wird im Build dagegen gehalten (CQRS095–097): was er erzeugt, muss hier gesendet bzw. gefragt sein, worauf
+/// ein Handler hört, muss hier Kenntnis sein. <c>NimmRangeAuf</c> steht bewusst nicht hier (laut Domäne nur aus dem Resolver) — die
+/// Mehrfach-Auswahl beim Kuratieren schickt je Paar <c>NimmPaarAuf</c>.
 /// </summary>
 public interface IArbeitsplatz : IClientVertrag,
     // ── Inspekteur: Bilder befunden ──
@@ -52,7 +52,7 @@ public interface IArbeitsplatz : IClientVertrag,
     ISendet<ErstelleDatensatz>, ISendet<FuegeRangeHinzu>, ISendet<NimmPaarAuf>, ISendet<EntfernePaar>, ISendet<SetzeSplit>,
     ISendet<FriereEin>, ISendet<StarteTraining>, ISendet<BricheTrainingAb>, ISendet<RegistriereModell>,
     IFragt<HoleDatensaetze>, IFragt<HoleDatensatz>, IFragt<HoleDatensatzPaare>, IFragt<HoleDatensaetzeFuerPaar>,
-    IFragt<HoleTrainingslaeufe>, IFragt<HoleTrainingslauf>, IFragt<HoleModelle>,
+    IFragt<HoleTrainingslaeufe>, IFragt<HoleTrainingslauf>, IFragt<HoleModelle>, IFragt<HoleDatensatzSamples>,
     // ── Modellfreigeber ──
     ISendet<SetzeModellAktiv>, ISendet<ArchiviereModell>
 {
@@ -69,4 +69,19 @@ public interface IArbeitsplatz : IClientVertrag,
     void Auf(PaarAufgenommen e);
     void Auf(PaareAufgenommen e);
     void Auf(PaarEntfernt e);
+    // Kenntnis: Datensätze (Liste, Komposition) und Modelle.
+    void Auf(DatensatzErstellt e);
+    void Auf(SplitGesetzt e);
+    void Auf(DatensatzEingefroren e);
+    void Auf(ModellRegistriert e);
+    void Auf(ModellAktiviert e);
+    void Auf(ModellArchiviert e);
+    // Kenntnis: Trainingsläufe (Liste, Dashboard mit Live-Kurve aus TrainingFortschritt).
+    void Auf(TrainingAngefordert e);
+    void Auf(TrainingBegonnen e);
+    void Auf(TrainingFortschritt e);
+    void Auf(TrainingAbgeschlossen e);
+    void Auf(TrainingGescheitert e);
+    void Auf(TrainingAbgebrochen e);
+    void Auf(TrainingHaengengeblieben e);
 }

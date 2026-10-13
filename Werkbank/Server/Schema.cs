@@ -51,6 +51,15 @@ public static class Schema
             ["art"] = "je", ["schluessel"] = "Dienst", ["wert"] = Klasse(typeof(DienstKonfig)), ["eintraege"] = dienste,
             ["hilfe"] = "je Dienst (IDienst) die Implementierung — nötig, wenn es mehrere gibt",
         };
+        // Clients (docs/konzept-akteure.md §4): je Client-Vertrag (Handshake-Name) Token, Adresse, URLs und Datei-Verzeichnisse.
+        var clients = new JsonObject();
+        foreach (var c in Liste(board?["clients"]))
+            clients[Abstractions.Akteurvertrag.ClientName((string?)c["name"] ?? "?")] = Klasse(typeof(ClientKonfig));
+        aus[UmgebungsAbschnitte.Clients] = new JsonObject
+        {
+            ["art"] = "je", ["schluessel"] = "Client", ["wert"] = Klasse(typeof(ClientKonfig)), ["eintraege"] = clients,
+            ["hilfe"] = "je Client (IClientVertrag) sein Token (Identitaeten), die gRPC-Adresse (leer = localhost:Transport.GrpcPort), URLs, Datei-Verzeichnisse",
+        };
         // Konfig-Records (Plan E11): je Record ein Abschnitt mit seinen Feldern (Typen aus dem Code).
         var konfigs = new JsonObject();
         var enums = Liste(board?["enums"]).ToDictionary(e => (string?)e["name"] ?? "", e => e, StringComparer.Ordinal);

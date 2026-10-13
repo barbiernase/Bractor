@@ -84,13 +84,11 @@ case "${1:-start}" in
     echo ""
     echo "═══ 4. Host.Blazor starten ═══"
 
-    # Nur die Werte die abweichen:
-    #   - Blazor__Urls: 0.0.0.0 statt localhost (von außen erreichbar)
-    #   - WatchPath: für den File-Endpunkt
+    # Die Umgebung "linux" trägt Clients:Arbeitsplatz (Adresse, URLs, Dateien); hier nur, was je Maschine abweicht:
+    #   - das erste Datei-Verzeichnis = der WatchPath dieser Maschine (für den File-Endpunkt)
     cd "$SCRIPT_DIR/blazor"
-    Blazor__Urls="http://0.0.0.0:5010" \
-    Pipeline__WatchPath="$WATCH_PATH" \
-      ./host-blazor > "$SCRIPT_DIR/logs/blazor.log" 2>&1 &
+    Clients__Arbeitsplatz__Dateien__0="$WATCH_PATH" \
+      ./host-blazor --umgebung linux > "$SCRIPT_DIR/logs/blazor.log" 2>&1 &
     echo $! > "$SCRIPT_DIR/blazor.pid"
     echo "  PID: $(cat "$SCRIPT_DIR/blazor.pid")"
     cd "$SCRIPT_DIR"

@@ -21,6 +21,8 @@
     <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
     <ProjectReference Include="..\Client.Infrastructure\Client.Infrastructure.csproj" />
     <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
+    <!-- Der Client-Vertrag IArbeitsplatz (Domain.Clients) — der Rand dieses Clients. -->
+    <ProjectReference Include="..\Domain.Akteure\Domain.Akteure.csproj" />
     <ProjectReference Include="..\Client.SourceGeneration\Client.SourceGeneration.csproj"
                       OutputItemType="Analyzer"
                       ReferenceOutputAssembly="false" />

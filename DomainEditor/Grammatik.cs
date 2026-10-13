@@ -219,6 +219,14 @@ public static class Grammatik
         new("GR-CLIENT-BEFUGT", "Client sendet nur, was ein Akteur darf", "Was ein Client sendet (ISendet) oder fragt (IFragt), muss ein "
             + "Akteur per IDarf<T> dürfen — der Client-Vertrag schneidet aus der Befugnis, er erweitert sie nie.", "error",
             [An("CQRS064", "Domain.SourceGeneration/AkteurAnalyzer.cs"), new("laufzeit", null, "Infrastructure/Akteure/ClientVertrag.cs (Rechte = Vertrag ∩ IDarf ∩ Token)")]),
+        new("GR-CLIENT-CODE", "Client-Code = Vertrag", "Eine Client-Assembly nennt ihren Vertrag ([assembly: IstClient<IX>]); was ihr Code an "
+            + "Commands erzeugt, sendet der Vertrag (ISendet), was er an Queries stellt, fragt er (IFragt), worauf ein Handler hört, kennt er "
+            + "(void Auf) — abonniert, gesendet und gefragt wird nur, was im Vertrag steht. Zusagen über eine C#-Leitung gibt es nicht (Python).", "error",
+            [Gen("CQRS093", "Client.SourceGeneration/WiringGenerator.cs (Client ohne Vertrag)"),
+             Gen("CQRS094", "Client.SourceGeneration/WiringGenerator.cs (Vertrags-Teile im C#-Client)"),
+             An("CQRS095", "Client.SourceGeneration/ClientVertrag.cs (Command nicht gesendet)"),
+             An("CQRS096", "Client.SourceGeneration/ClientVertrag.cs (Query nicht gefragt)"),
+             An("CQRS097", "Client.SourceGeneration/ClientVertrag.cs (Server-Event nicht Kenntnis)")]),
         new("GR-GETRAGEN", "Jede Zusage hat einen Client", "Eine Zusage mit Ausgabe (Auf(E) → Command) im Vertrag eines Akteurs wird von "
             + "mindestens einem Client getragen — sonst bricht die Kette an dieser Stelle (das Event erreicht niemanden, der antwortet).", "warning",
             [An("CQRS087", "Infrastructure.SourceGeneration/GesamtbildAnalyzer.cs (Warnung — ein Akteur-Vertrag ohne Client ist ein Entwurf)")]),

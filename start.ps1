@@ -136,8 +136,9 @@ Write-Host " OK" -ForegroundColor Green
 Write-Host ""
 Write-Host "[3] Starte Host.Grpc..." -ForegroundColor Yellow
 
-$env:Pipeline__WatchPath = $WatchPath
+$env:Quellen__DateiErkannt__Pfad = $WatchPath
 $grpcProcess = Start-Process -FilePath ".\grpc\Host.Grpc.exe" `
+    -ArgumentList "--umgebung", "linux" `
     -WorkingDirectory ".\grpc" `
     -PassThru `
     -RedirectStandardOutput ".\grpc.log" `
@@ -160,9 +161,10 @@ Write-Host " OK" -ForegroundColor Green
 Write-Host ""
 Write-Host "[4] Starte Host.Blazor..." -ForegroundColor Yellow
 
-$env:Pipeline__WatchPath = $WatchPath
-$env:Blazor__Urls = "http://0.0.0.0:$BlazorPort"
+# Die Umgebung "linux" trägt Clients:Arbeitsplatz (Adresse, URLs, Dateien); hier nur der WatchPath dieser Maschine.
+$env:Clients__Arbeitsplatz__Dateien__0 = $WatchPath
 $blazorProcess = Start-Process -FilePath ".\blazor\Host.Blazor.exe" `
+    -ArgumentList "--umgebung", "linux" `
     -WorkingDirectory ".\blazor" `
     -PassThru `
     -RedirectStandardOutput ".\blazor.log" `

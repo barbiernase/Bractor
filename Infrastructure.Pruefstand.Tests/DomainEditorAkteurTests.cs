@@ -204,12 +204,12 @@ public sealed class DomainEditorAkteurTests
 
     // ── Clients (docs/konzept-akteure.md §4): ein Vertrag je Client, n:m zu Akteuren ──
 
-    private static Client Laden => new()
+    private static DomainEditor.Client Laden => new()
     {
         Name = "ILaden", Namespace = "Shop.Clients", Traegt = ["IKasse"], Sendet = ["Bestelle"], Fragt = ["Bestellungen"], Kenntnis = ["Bestellt2"],
     };
 
-    private static EditorModell MitClients(params Client[] clients) =>
+    private static EditorModell MitClients(params DomainEditor.Client[] clients) =>
         Shop(Kunde, Kasse with { Vertrag = [Kasse.Vertrag[0]] }) with { Clients = clients };
 
     [Fact]

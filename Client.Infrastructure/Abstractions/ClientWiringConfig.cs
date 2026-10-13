@@ -21,5 +21,8 @@ public record ClientWiringConfig(
     IReadOnlyList<Type> ServerEventTypes,
     IReadOnlyList<Type> CommandTypes,
     IReadOnlyDictionary<Type, string> CommandAggregateTypes,
-    IReadOnlyList<Type> HydrationStores
+    IReadOnlyList<Type> HydrationStores,
+    // Der Client-Vertrag (docs/konzept-akteure.md §4): Handshake-Name + Hash — der Server nimmt Fähigkeiten und Abos aus SEINER Tabelle.
+    string Vertrag,
+    string VertragHash
 );

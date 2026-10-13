@@ -19,8 +19,9 @@
 // Weitere generierte Members (auf derselben Klasse):
 //   - SubscribeAll(IServiceProvider, IBus)
 //   - UnsubscribeAll(IServiceProvider)
-//   - ServerEventTypes, CommandTypes, CommandAggregateTypes
-//   - RegisterQueries(QueryBridge, ClientBus)
+//   - Vertrag, VertragHash (aus [assembly: IstClient<IVertrag>], docs/konzept-akteure.md §4)
+//   - ServerEventTypes (= Eingänge des Vertrags), CommandTypes (= ISendet), CommandAggregateTypes
+//   - RegisterQueries(QueryBridge, ClientBus) (= IFragt)
 //
 // Kritische Subscription-Reihenfolge:
 //   1. Store-Baum depth-first (Eltern vor Kindern)
@@ -69,20 +70,26 @@ public class WiringGenerator : IIncrementalGenerator
         var assemblyName = context.CompilationProvider
             .Select(static (c, _) => c.AssemblyName ?? "Unknown");
 
+        // 5. Der Client-Vertrag dieser Assembly ([assembly: IstClient<IVertrag>]) — dieselbe Lesart wie der Server-Generator.
+        var vertrag = context.CompilationProvider
+            .Select(static (c, _) => ClientVertragInfo.Aus(c));
+
         var combined = handleClasses.Collect()
             .Combine(viewModels.Collect())
             .Combine(domainTypes)
-            .Combine(assemblyName);
+            .Combine(assemblyName)
+            .Combine(vertrag);
 
         context.RegisterSourceOutput(combined, static (spc, data) =>
         {
-            var (source, asmName) = data;
+            var (rest, vertragInfo) = data;
+            var (source, asmName) = rest;
             var (leftPair, types) = source;
             var (handleArr, vmArr) = leftPair;
 
             var handles = handleArr.Where(x => x != null).Select(x => x!).ToList();
             var vms = vmArr.Where(x => x != null).Select(x => x!).ToList();
-            Execute(spc, handles, vms, types.ToList(), asmName);
+            Execute(spc, handles, vms, types.ToList(), asmName, vertragInfo);
         });
     }
 
@@ -308,9 +315,20 @@ public class WiringGenerator : IIncrementalGenerator
         List<WiringHandleClassInfo> handleClasses,
         List<WiringViewModelInfo> viewModels,
         List<WiringDomainTypeInfo> domainTypes,
-        string assemblyName)
+        string assemblyName,
+        ClientVertragInfo? vertrag)
     {
         if (handleClasses.Count == 0 && viewModels.Count == 0 && domainTypes.Count == 0) return;
+        // Ein Client ohne Vertrag hätte keinen Rand: was er sendet, fragt und hört, steht nirgends (docs/konzept-akteure.md §4).
+        if (vertrag == null)
+        {
+            if (handleClasses.Count > 0)
+                context.ReportDiagnostic(Diagnostic.Create(ClientVertragDiagnosen.OhneVertrag, Location.None, assemblyName));
+            vertrag = ClientVertragInfo.Leer;
+        }
+        else if (vertrag.Teile.Count > 0)
+            context.ReportDiagnostic(Diagnostic.Create(ClientVertragDiagnosen.TeileImCSharpClient, Location.None, vertrag.Name,
+                string.Join(", ", vertrag.Teile)));
 
         var suffix = Sanitize(assemblyName);
         var className = $"GeneratedWiring_{suffix}";
@@ -325,9 +343,10 @@ public class WiringGenerator : IIncrementalGenerator
         var syncHandlers = handleClasses.Where(h => !h.IsStore && h.HasSyncHandlers).ToList();
         var asyncHandlers = handleClasses.Where(h => !h.IsStore && h.HasAsyncHandlers).ToList();
 
-        var commands = domainTypes.Where(d => d.Kind == DomainTypeKind.Command).ToList();
-        var serverEvents = domainTypes.Where(d => d.Kind == DomainTypeKind.ServerEvent).ToList();
-        var queries = domainTypes.Where(d => d.Kind == DomainTypeKind.Query).ToList();
+        // Der Rand ist der Vertrag: gesendet wird nur ISendet, gefragt nur IFragt, abonniert nur Kenntnis + Zusage-Eingänge.
+        var commands = vertrag.Sendet.Select(f => new WiringDomainTypeInfo(f, DomainTypeKind.Command)).ToList();
+        var serverEvents = vertrag.Eingaenge.Select(f => new WiringDomainTypeInfo(f, DomainTypeKind.ServerEvent)).ToList();
+        var queries = vertrag.Fragt.Select(f => new WiringDomainTypeInfo(f, DomainTypeKind.Query)).ToList();
         var states = domainTypes.Where(d => d.Kind == DomainTypeKind.State).ToList();
 
         var commandAggregateMap = BuildCommandAggregateTypeMap(commands, states);
@@ -376,6 +395,11 @@ public class WiringGenerator : IIncrementalGenerator
         sb.AppendLine($"public static class {className}");
         sb.AppendLine("{");
 
+        sb.AppendLine($"    /// <summary>Handshake-Name des Client-Vertrags ({vertrag.Typ}).</summary>");
+        sb.AppendLine($"    public const string Vertrag = \"{vertrag.Name}\";");
+        sb.AppendLine("    /// <summary>Vertrags-Hash (Abstractions.Akteurvertrag.ClientKanon) — derselbe wie am Server.</summary>");
+        sb.AppendLine($"    public const string VertragHash = \"{vertrag.Hash}\";");
+        sb.AppendLine();
         GenerateAddClient(sb, stores, syncHandlers, asyncHandlers, viewModels, className, methodName);
         GenerateSubscribeAll(sb, stores, syncHandlers, asyncHandlers, rootStores, childrenOf);
         GenerateUnsubscribeAll(sb, stores, rootStores, childrenOf);
@@ -482,7 +506,9 @@ public class WiringGenerator : IIncrementalGenerator
         sb.AppendLine($"            ServerEventTypes: {className}.ServerEventTypes,");
         sb.AppendLine($"            CommandTypes: {className}.CommandTypes,");
         sb.AppendLine($"            CommandAggregateTypes: {className}.CommandAggregateTypes,");
-        sb.AppendLine($"            HydrationStores: {className}.HydrationStores));");
+        sb.AppendLine($"            HydrationStores: {className}.HydrationStores,");
+        sb.AppendLine($"            Vertrag: {className}.Vertrag,");
+        sb.AppendLine($"            VertragHash: {className}.VertragHash));");
         sb.AppendLine();
         sb.AppendLine("        return services;");
         sb.AppendLine("    }");

@@ -191,10 +191,11 @@ Funktion „🧩 braucht“ (⊕), „＋ C#-Implementierung anlegen“, Host-Ra
 
 **Akteure, Verträge, Clients (2026-10-06):** Akteure mit Befugnis und Kette bis in den Event-Header; Akteur-Verträge (Zusagen
 draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer CommandId; Clients (`IClientVertrag`, n:m zu Akteuren) mit
-Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an
-Clients (`docs/konzept-akteure.md` §9).
+Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Seit 2026-10-13 auch der Blazor-
+Arbeitsplatz als Client mit Vertrag (Handshake, Abos, Commands/Queries aus `IArbeitsplatz`, Build-Regeln CQRS093–097, Token `sim-arbeitsplatz`).
+Offen: durable Zustellung an Clients, Zusagen über C#, Anmeldung je Person (`docs/konzept-akteure.md` §9).
 
-**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471; P7.3: Prüfstand 476/476; P7.4: Prüfstand 484/484, Integration 39/39; P7.5.1: Prüfstand 507/507, Integration 39/39; P7.5.2: Prüfstand 509/509, Integration 39/39; P7.5.3: Prüfstand 513/513, Integration 39/39, Python Worker 20/20; P7.5-Abnahme: Prüfstand 515/515, Integration 39/39; P8: Prüfstand 515/515, Integration 39/39; P7.4.5-/P7.5-Rest: Prüfstand 521/521, Integration 39/39): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
+**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471; P7.3: Prüfstand 476/476; P7.4: Prüfstand 484/484, Integration 39/39; P7.5.1: Prüfstand 507/507, Integration 39/39; P7.5.2: Prüfstand 509/509, Integration 39/39; P7.5.3: Prüfstand 513/513, Integration 39/39, Python Worker 20/20; P7.5-Abnahme: Prüfstand 515/515, Integration 39/39; P8: Prüfstand 515/515, Integration 39/39; P7.4.5-/P7.5-Rest: Prüfstand 521/521, Integration 39/39; Blazor-Client mit Vertrag: Prüfstand 526/526, Integration 39/39, Python Worker 20/20, SDK 28/28): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
 Marten/Consul/Redis, sequentiell: 33/33 (inkl. 4 Fluss-E2E; TwoNodeCommandDispatch an die Inbox-Marke seit T2b angepasst).**
 
 **Bewusst offen (Priorität):**
@@ -249,8 +250,12 @@ integriert; `CqrsFrameworkOptions` toter `[Obsolete]`-Typ.
     ist nur der Backend-Baustein (`ISubscriber`) — nie für Zusagen verwenden.**
   - **Client** = die Software an EINER Leitung: `interface IX : IClientVertrag, ITeil…, ISendet<C>, IFragt<Q> { void Auf(E e); }` — trägt
     Vertrags-Teile (auch mehrerer Akteure), sendet/fragt nur, was ein Akteur darf, eigene Methoden nur Kenntnis (CQRS063–065). Verkörpert
-    ist abgeleitet; wirksam am Handshake = Vertrag ∩ Token.
-  - Generiert: `GeneratedAkteurRechte`, `GeneratedClientVertraege`, Python-Basen (`./codegen.sh`). Editor: Rahmen je Domäne × Akteur,
+    ist abgeleitet (EINE Regel: `Abstractions.Akteurvertrag.Verkoerpert`); wirksam am Handshake = Vertrag ∩ Token. Akteure + Clients liegen
+    im leichten Projekt `Domain.Akteure` (ein Client referenziert seinen Vertrag, nicht die Verarbeitung).
+  - **C#-Client = Vertrag:** `[assembly: IstClient<IArbeitsplatz>]`; der Client-Generator nimmt Name, Hash (gleiche Lesart wie der Server,
+    `Clientvertragslesart`), Abos (Kenntnis), Commands (ISendet) und Queries (IFragt) aus dem Vertrag, der Analyzer hält den Code dagegen
+    (CQRS093–097). Keine Selbstauskunft am Handshake. Verbindung aus `Clients:<Name>` der Umgebung (Token, Adresse, Urls, Dateien).
+  - Generiert: `GeneratedAkteurRechte`, `GeneratedClientVertraege`, `GeneratedWiring_<Client>` (Vertrag/Hash), Python-Basen (`./codegen.sh`). Editor: Rahmen je Domäne × Akteur,
     📜-Vertrags-Rahmen mit Zusage-Karten, 🔌-Client-Rahmen mit Anschlussleiste und Bündeln; Einzelkanten nur per Klick, Zoom ändert nichts.
 - **Kein `InMemoryEventStore`:** Store-Semantik nur gegen echtes Marten (Integration). Der
   Prüfstand testet nur store-freie Logik. Nie faken, was man nicht besitzt.
@@ -278,4 +283,4 @@ NICHT Timeout-tunebar; xUnit schluckt App-Logs (Cluster-Diagnose → Last-Harnes
 - Last/Durchsatz: `LoadHarness` ist entfernt (Commit fb07f5e); historische Messwerte in `docs/12`.
 - Infra hochfahren: `docker compose -f deploy-linux/docker-compose.infrastructure.yml up -d`
 - Multi-Node (3 Nodes + 1 Consul, echt containerisiert): `docker compose -f deploy-multinode/docker-compose.yml up -d --build` (Anleitung + Ergebnis: `docs/06-transport-multinode-betrieb.md`)
-- Hosts: `Host_Blazor`, `Host_Grpc` (siehe deploy.sh). Host.Grpc startet mit einer Umgebung: `dotnet run --project Host.Grpc -- --umgebung sim-main` (`umgebungen/umgebung.<name>.json`; Sim-DB je Branch `cqrs_sim_<branch>` über `CQRS_BRANCH`, Siegel/Uhr/Redis-Präfix/Einzelknoten — docs/06 §6.1).
+- Hosts: `Host_Blazor`, `Host_Grpc` (siehe deploy.sh). Beide starten mit einer Umgebung: `dotnet run --project Host.Grpc -- --umgebung sim-main` bzw. `dotnet run --project Host.Blazor -- --umgebung sim-main` (liest `Clients:Arbeitsplatz`; mit `CQRS_BRANCH` für die Datei-Pfade; in `.claude/launch.json` als „Blazor (sim-main)“) (`umgebungen/umgebung.<name>.json`; Sim-DB je Branch `cqrs_sim_<branch>` über `CQRS_BRANCH`, Siegel/Uhr/Redis-Präfix/Einzelknoten — docs/06 §6.1).

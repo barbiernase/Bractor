@@ -17,7 +17,7 @@ MSBuildLocator.RegisterDefaults();
 // ============================================================================
 
 // Projekte die analysiert werden sollen (nach Name)
-var targetProjects = new[] { "Domain", "Domain.Projections", "Domain.Pipeline" };
+var targetProjects = new[] { "Domain", "Domain.Projections", "Domain.Akteure", "Domain.Pipeline" };
 
 const string OutputFileName = "domain.proto";
 const string OutputProjectDir = "ProtoRepo";

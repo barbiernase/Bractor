@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <!-- Akteure, Akteur-Verträge und Client-Verträge (docs/konzept-akteure.md): der RAND der Domäne. Eigenes, leichtes Projekt — es sieht
+         Commands, Queries und Quell-Nachrichten (Domain, Domain.Projections), und ein Client (Blazor) kann seinen Vertrag referenzieren,
+         ohne die Verarbeitung (Domain.Pipeline: Marten, OpenCv) mitzuziehen. -->
+    <PropertyGroup>
+        <TargetFramework>net9.0</TargetFramework>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <Nullable>enable</Nullable>
+        <RootNamespace>Domain.Akteure</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
+        <ProjectReference Include="..\Domain\Domain.csproj" />
+        <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
+        <ProjectReference Include="..\Domain.SourceGeneration\Domain.SourceGeneration.csproj"
+                          OutputItemType="Analyzer"
+                          ReferenceOutputAssembly="false" />
+    </ItemGroup>
+
+</Project>

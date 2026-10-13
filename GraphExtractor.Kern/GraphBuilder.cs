@@ -266,13 +266,8 @@ public sealed class GraphBuilder
         foreach (var c in _dom.Clients)
         {
             var cid = $"client:{c.Name}";
-            var basis = c.Traegt.Select(TeilAkteur).OfType<string>().ToHashSet(StringComparer.Ordinal);
-            var verk = new SortedSet<string>(basis, StringComparer.Ordinal);
-            foreach (var t in c.Sendet.Concat(c.Fragt))
-            {
-                var halter = _dom.Akteure.Where(a => a.Darf.Contains(t)).Select(a => a.Name).ToList();
-                if (!halter.Any(basis.Contains)) verk.UnionWith(halter);
-            }
+            var verk = Abstractions.Akteurvertrag.Verkoerpert(c.Traegt.Select(TeilAkteur).OfType<string>(),
+                c.Sendet.Concat(c.Fragt).Select(t => _dom.Akteure.Where(a => a.Darf.Contains(t)).Select(a => a.Name)));
             Add(new Node
             {
                 Id = cid, Kind = NodeKind.client, Name = c.Name, FullName = c.Full, Namespace = c.Namespace,

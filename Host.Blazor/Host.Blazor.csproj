@@ -25,4 +25,10 @@
     <Folder Include="Shell\" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Derselbe Umgebungs-Lader wie der Host (Datei suchen, ${env:}/${branch}, strikte Bindung) — per Link; den Npgsql-Teil
+         (UmgebungLader.Verbindung.cs) braucht ein Client nicht. -->
+    <Compile Include="..\Infrastructure\Umgebung\UmgebungLader.cs" Link="Umgebung\UmgebungLader.cs" />
+  </ItemGroup>
+
 </Project>

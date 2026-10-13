@@ -4,9 +4,24 @@
     {
       "name": "Werkbank",
       "runtimeExecutable": "dotnet",
-      "runtimeArgs": ["run", "--project", "Werkbank/Werkbank.csproj", "-c", "Debug"],
+      "runtimeArgs": [
+        "run",
+        "--project",
+        "Werkbank/Werkbank.csproj",
+        "-c",
+        "Debug"
+      ],
       "port": 5178,
       "autoPort": true
+    },
+    {
+      "name": "Blazor (sim-main)",
+      "runtimeExecutable": "/bin/sh",
+      "runtimeArgs": [
+        "-c",
+        "CQRS_BRANCH=$(git branch --show-current) exec dotnet run --project Host.Blazor/Host.Blazor.csproj -c Debug -- --umgebung sim-main"
+      ],
+      "port": 5110
     }
   ]
 }

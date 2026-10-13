@@ -60,6 +60,16 @@ public interface IAkteurVertrag<TAkteur> where TAkteur : IAkteur { }
 public interface IClientVertrag { }
 
 /// <summary>
+/// Diese Client-Assembly IST der Client <typeparamref name="TVertrag"/> (<c>[assembly: IstClient&lt;IArbeitsplatz&gt;]</c>, docs/konzept-akteure.md §4):
+/// der Client-Generator nimmt Handshake-Name, Vertrags-Hash und die abonnierten Events aus dem Vertrag (Kenntnis + Eingänge der getragenen
+/// Zusagen), leitet nur die Commands seines <see cref="ISendet{T}"/> weiter und stellt nur die Queries seines <see cref="IFragt{T}"/>. Der
+/// Analyzer hält den Client-Code dagegen: ein erzeugter Command/eine Query ohne Vertrag, ein Handle auf ein Server-Event ohne Kenntnis ist
+/// ein Build-Fehler (CQRS093–097).
+/// </summary>
+[AttributeUsage(AttributeTargets.Assembly, AllowMultiple = false)]
+public sealed class IstClientAttribute<TVertrag> : Attribute where TVertrag : IClientVertrag { }
+
+/// <summary>
 /// Am Client-Vertrag (<see cref="IClientVertrag"/>): der Client gibt <typeparamref name="T"/> von sich aus hinein — ein Command, ein
 /// Trigger oder ein Transient-Event. Ein verkörperter Akteur muss <c>IDarf&lt;T&gt;</c> haben (CQRS064): der Client-Vertrag schneidet aus
 /// der Befugnis, er erweitert sie nie.

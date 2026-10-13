@@ -32,7 +32,7 @@ ARTEFAKTE=(
 
 # Der Output hängt allein an den Domain-Quellen der gescannten Projekte.
 compute_hash() {
-  find Domain Domain.Projections Domain.Pipeline -name '*.cs' \
+  find Domain Domain.Projections Domain.Akteure Domain.Pipeline -name '*.cs' \
        -not -path '*/obj/*' -not -path '*/bin/*' \
     | sort | xargs shasum -a 256 | shasum -a 256 | cut -d' ' -f1
 }

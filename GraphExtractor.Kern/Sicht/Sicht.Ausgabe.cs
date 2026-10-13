@@ -83,18 +83,10 @@ public sealed partial class Sicht
     private JsonObject? TeilAkteur(string teil) =>
         _akteure.FirstOrDefault(a => Alle(a["vertrag"]).Any() && (VertragsTyp(a) == teil || Alle(a["vertrag"]).Any(r => S(r, "teil") == teil)));
     private List<string> DarfHalter(string nm) => _akteure.Where(a => L(a, "darf").Contains(nm)).Select(a => S(a, "name")).ToList();
-    /// <summary>Verkörpert (wie der AkteurRechteGenerator): Akteure der getragenen Teile, dazu je Sendet/Fragt die IDarf-Halter, falls keiner der Teil-Akteure den Typ darf.</summary>
-    public List<string> ClientAkteure(JsonObject c)
-    {
-        var basis = L(c, "traegt").Select(TeilAkteur).Where(a => a != null).Select(a => S(a, "name")).ToHashSet(StringComparer.Ordinal);
-        var s = new HashSet<string>(basis, StringComparer.Ordinal);
-        foreach (var nm in L(c, "sendet").Concat(L(c, "fragt")))
-        {
-            var hs = DarfHalter(nm);
-            if (!hs.Any(basis.Contains)) s.UnionWith(hs);
-        }
-        return s.OrderBy(x => x, StringComparer.Ordinal).ToList();
-    }
+    /// <summary>Verkörpert — dieselbe Regel wie der AkteurRechteGenerator (<c>Abstractions.Akteurvertrag.Verkoerpert</c>).</summary>
+    public List<string> ClientAkteure(JsonObject c) =>
+        Abstractions.Akteurvertrag.Verkoerpert(L(c, "traegt").Select(TeilAkteur).Where(a => a != null).Select(a => S(a, "name")),
+            L(c, "sendet").Concat(L(c, "fragt")).Select(DarfHalter));
     /// <summary>Die Ports der Anschlussleiste: Richtung, Nachricht, in wessen Namen (Akteur), Ziel-Karte.</summary>
     public JsonArray ClientPorts(JsonObject c)
     {

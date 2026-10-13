@@ -77,8 +77,9 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
     /// Verbindet zum Server und führt Capabilities-Handshake durch.
     /// </summary>
     public async Task<ClientCapabilities> ConnectAsync(
-        string serverAddress, 
-        IEnumerable<string> eventTypes,
+        string serverAddress,
+        string vertrag,
+        string vertragHash,
         CancellationToken ct = default)
     {
         if (_currentState == ConnectionState.Connected)
@@ -102,7 +103,8 @@ public class GrpcProxy : IGrpcProxy, IAsyncDisposable
             {
                 Capabilities = new CapabilitiesRequest
                 {
-                    EventTypes = { eventTypes }
+                    Vertrag = vertrag,
+                    VertragHash = vertragHash,
                 }
             };
             

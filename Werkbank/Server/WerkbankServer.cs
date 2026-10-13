@@ -80,7 +80,7 @@ public sealed class WerkbankServer
     public string Stand()
     {
         using var sha = SHA256.Create();
-        foreach (var projekt in new[] { "Domain", "Domain.Pipeline", "Domain.Projections", "Domain.Infrastructure" })
+        foreach (var projekt in new[] { "Domain", "Domain.Akteure", "Domain.Pipeline", "Domain.Projections", "Domain.Infrastructure" })
         {
             var verz = Path.Combine(_root, projekt);
             if (!Directory.Exists(verz)) continue;

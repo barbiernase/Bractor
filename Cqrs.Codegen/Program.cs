@@ -26,14 +26,14 @@ using Cqrs.Codegen;
 // cross-platform, als schlankes MSBuild-Pre-Build-Target lauffähig.
 //
 // AUFRUF:  Cqrs.Codegen [<Assembly-Ordner>] [<Config>]
-//   arg0 (optional): Ordner mit Domain.dll/Domain.Projections.dll/Domain.Pipeline.dll SAMT ihrer
+//   arg0 (optional): Ordner mit Domain.dll/Domain.Projections.dll/Domain.Akteure.dll/Domain.Pipeline.dll SAMT ihrer
 //                    Abhängigkeits-Closure. Default: der eigene Ausgabeordner des Prepass
 //                    (AppContext.BaseDirectory) — dort liegt als Exe-Consumer die volle Closure.
 //   arg1 (optional): Build-Config (Debug|Release) — rein informativ fürs Log.
 // ============================================================================
 
 const string ProtoNamespace = "CqrsSolution";
-var targetProjects = new[] { "Domain", "Domain.Projections", "Domain.Pipeline" };
+var targetProjects = new[] { "Domain", "Domain.Projections", "Domain.Akteure", "Domain.Pipeline" };
 
 Console.WriteLine();
 Console.WriteLine("╔═══════════════════════════════════════════════════════════╗");

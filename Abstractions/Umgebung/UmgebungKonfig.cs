@@ -123,6 +123,19 @@ public sealed class DienstKonfig
     public string? Implementierung { get; set; }
 }
 
+/// <summary>
+/// Wie sich ein Client (<c>IClientVertrag</c>, Handshake-Name) in dieser Umgebung verbindet (Abschnitt <c>Clients:&lt;Name&gt;</c>): das Akteur-Token
+/// (Abschnitt <c>Identitaeten</c>; sein Akteur-Satz muss die Akteure des Vertrags verkörpern), die Adresse des gRPC-Servers (leer =
+/// <c>http://localhost:&lt;Transport:GrpcPort&gt;</c>), die eigenen URLs (Blazor) und die Verzeichnisse, aus denen er Dateien zeigen darf.
+/// </summary>
+public sealed class ClientKonfig
+{
+    public string Token { get; set; } = "";
+    public string Adresse { get; set; } = "";
+    public string Urls { get; set; } = "http://localhost:5010";
+    public string[] Dateien { get; set; } = [];
+}
+
 /// <summary>Die gebundene Umgebung (ohne Quellen, Identitäten, Konfig-Records — die binden ihre eigenen Abschnitte).</summary>
 public sealed class UmgebungKonfig
 {
@@ -134,6 +147,10 @@ public sealed class UmgebungKonfig
     public TransportKonfig Transport { get; set; } = new();
     public Dictionary<string, FunktionsKonfig> Funktionen { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, DienstKonfig> Dienste { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, ClientKonfig> Clients { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>Die gRPC-Adresse, unter der sich ein Client verbindet: seine eigene Angabe, sonst der lokale gRPC-Port der Umgebung.</summary>
+    public string GrpcAdresse(ClientKonfig c) => c.Adresse is { Length: > 0 } a ? a : $"http://localhost:{Transport.GrpcPort}";
 }
 
 /// <summary>Die Abschnitte einer Umgebungs-Datei — ein anderer Abschnitt ist ein Start-Fehler.</summary>
@@ -141,8 +158,8 @@ public static class UmgebungsAbschnitte
 {
     public const string Umgebung = "Umgebung", EventStore = "EventStore", VersionIndex = "VersionIndex", Cluster = "Cluster",
         Schreibpfad = "Schreibpfad", Transport = "Transport", Identitaeten = "Identitaeten", Quellen = "Quellen",
-        Funktionen = "Funktionen", Dienste = "Dienste", Konfig = "Konfig", Logging = "Logging";
+        Funktionen = "Funktionen", Dienste = "Dienste", Clients = "Clients", Konfig = "Konfig", Logging = "Logging";
 
     public static readonly IReadOnlyList<string> Alle =
-        [Umgebung, EventStore, VersionIndex, Cluster, Schreibpfad, Transport, Identitaeten, Quellen, Funktionen, Dienste, Konfig, Logging];
+        [Umgebung, EventStore, VersionIndex, Cluster, Schreibpfad, Transport, Identitaeten, Quellen, Funktionen, Dienste, Clients, Konfig, Logging];
 }

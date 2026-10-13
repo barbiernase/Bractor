@@ -162,10 +162,21 @@ cat > "$OUTPUT/grpc/umgebungen/umgebung.linux.json" << EOF
     "IRangeSuche": { "Laufort": "Host", "Slots": 2 },
     "IMitgliederEinfrieren": { "Laufort": "Host", "Slots": 2 }
   },
+  "Clients": {
+    "Arbeitsplatz": {
+      "Adresse": "${GRPC_SERVER_ADDRESS}",
+      "Urls": "http://0.0.0.0:${BLAZOR_PORT}",
+      "Dateien": [ "${GRPC_WATCH_PATH}", "${GRPC_PREPROCESSED_PATH}" ]
+    }
+  },
   "Konfig": { "PreprocessingConfig": { "OutputPath": "${GRPC_PREPROCESSED_PATH}" } }
 }
 EOF
 echo "  ✓ grpc/umgebungen/umgebung.linux.json (Host startet mit --umgebung linux)"
+# Derselbe Stand für den Client: Host.Blazor liest Clients:Arbeitsplatz (Adresse, Token, URLs, Dateien) aus derselben Umgebung.
+mkdir -p "$OUTPUT/blazor/umgebungen"
+cp "$OUTPUT/grpc/umgebungen/umgebung.linux.json" "$OUTPUT/blazor/umgebungen/"
+echo "  ✓ blazor/umgebungen/umgebung.linux.json (Host.Blazor startet mit --umgebung linux)"
 
 cat > "$OUTPUT/blazor/appsettings.json" << EOF
 {
@@ -175,17 +186,7 @@ cat > "$OUTPUT/blazor/appsettings.json" << EOF
       "Microsoft.AspNetCore": "Warning"
     }
   },
-  "AllowedHosts": "*",
-  "Blazor": {
-    "Urls": "http://0.0.0.0:${BLAZOR_PORT}"
-  },
-  "GrpcServer": {
-    "Address": "${GRPC_SERVER_ADDRESS}"
-  },
-  "Pipeline": {
-    "WatchPath": "${GRPC_WATCH_PATH}",
-    "PreprocessedPath": "${GRPC_PREPROCESSED_PATH}"
-  }
+  "AllowedHosts": "*"
 }
 EOF
 echo "  ✓ blazor/appsettings.json"

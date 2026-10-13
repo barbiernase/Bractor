@@ -70,21 +70,16 @@ public static class PythonVertragsEmitter
                 .Where(i => i.IsGenericType && i.GetGenericTypeDefinition().FullName == meta).Select(i => i.GetGenericArguments()[0]).Distinct().ToList();
             var sendet = Generisch(SendetName);
             var fragt = Generisch(FragtName);
-            // verkörpert: Akteure der Teile ∪ je Sendet/Fragt die IDarf-Halter, wenn keiner der Teil-Akteure den Typ schon darf (wie der Server).
-            var basis = jeAkteur.Select(x => x.Akteur).ToHashSet(StringComparer.Ordinal);
-            var akteure = new SortedSet<string>(basis, StringComparer.Ordinal);
+            // verkörpert: EINE Regel mit dem Server (Akteurvertrag.Verkoerpert).
             var alleAkteure = assemblies.SelectMany(TypenVon).Where(t => !t.IsInterface && !t.IsAbstract).ToList();
-            foreach (var t in sendet.Concat(fragt))
-            {
-                var halter = alleAkteure.Where(a => a.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition().FullName == DarfName
-                                                                             && i.GetGenericArguments()[0] == t)).Select(a => a.Name).ToList();
-                if (!halter.Any(basis.Contains)) akteure.UnionWith(halter);
-            }
+            var akteure = Akteurvertrag.Verkoerpert(jeAkteur.Select(x => x.Akteur), sendet.Concat(fragt).Select(t =>
+                alleAkteure.Where(a => a.GetInterfaces().Any(i => i.IsGenericType && i.GetGenericTypeDefinition().FullName == DarfName
+                                                                 && i.GetGenericArguments()[0] == t)).Select(a => a.Name)));
             var kanon = Akteurvertrag.ClientKanon(name,
                 jeAkteur.Select(x => new KeyValuePair<string, IEnumerable<Akteurvertrag.Zusage>>(x.Akteur,
                     x.Zusagen.Select(r => new Akteurvertrag.Zusage(r.Eingang, r.Ausgaenge, r.Strom)))),
                 sendet.Select(t => t.Name), fragt.Select(t => t.Name), kenntnis.Select(r => r.Eingang));
-            clients.Add(new ClientInfo(c, name, akteure.ToList(), jeAkteur.SelectMany(x => x.Zusagen).Concat(kenntnis).ToList(),
+            clients.Add(new ClientInfo(c, name, akteure, jeAkteur.SelectMany(x => x.Zusagen).Concat(kenntnis).ToList(),
                 sendet.Select(t => t.Name).ToList(), fragt.Select(t => t.Name).ToList(), Akteurvertrag.Hash(kanon)));
         }
         return (Python(vertraege, clients), vertraege.Count + clients.Count);

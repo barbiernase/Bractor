@@ -102,6 +102,11 @@ Alle `Error` (der Build bricht), sofern nicht anders vermerkt.
 | **CQRS046** | Split (1:N) nicht produktionsreif | **jeder** 1:N-Upcaster bricht bewusst den Build, bis die Consumer-Fabric steht |
 | **CQRS068** | Funktion außer Form (`FunktionsGenerator`) | `IFunktion`: genau eine Methode `Task<OneOf<Events>> RufeAsync(TAuftrag, IAusfuehrung)`, `TAuftrag : IAuftrag<F>`, Ergebnisse persistente Events |
 | **CQRS069** | Auftrag für mehrere Funktionen (`FunktionsGenerator`) | Ein Auftrag ist Eingang genau einer Funktion (sonst wäre der generierte Dispatch mehrdeutig) |
+| **CQRS093** | Client ohne Vertrag (`WiringGenerator`) | Eine Client-Assembly mit Handlern nennt `[assembly: IstClient<IX>]` — sonst wüsste niemand, was sie sendet, fragt und hört |
+| **CQRS094** | C#-Client trägt Vertrags-Teile (`WiringGenerator`) | Zusagen (Antwort auf ein Event mit Kausalität) beantworten nur die Python-Basen; ein C#-Client nennt ISendet/IFragt und Kenntnis |
+| **CQRS095** | Command nicht im Client-Vertrag (`ClientVertragAnalyzer`) | Jeder im Client-Code erzeugte Command steht als `ISendet<T>` im Vertrag |
+| **CQRS096** | Query nicht im Client-Vertrag (`ClientVertragAnalyzer`) | Jede gestellte Query steht als `IFragt<T>` im Vertrag |
+| **CQRS097** | Server-Event nicht im Client-Vertrag (`ClientVertragAnalyzer`) | Jeder `Handle(E, MessageContext)` auf ein Server-Event hat `void Auf(E e)` im Vertrag (abonniert wird nur, was dort steht) |
 
 Einziger echter `DiagnosticAnalyzer` ist `CommandEmitAnalyzer` (syntaktischer Vorfilter
 `RequestAsync<T>` + semantische Bestätigung `T == CommandResult`). Alle anderen Diagnostics

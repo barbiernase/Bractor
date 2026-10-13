@@ -1,6 +1,6 @@
 # Akteure, Verträge, Clients
 
-> **Status 2026-10-06: umgesetzt** bis auf §9 (offen). Kanonische Referenz für *wer* etwas hineingibt (Akteur), *was er draußen
+> **Status 2026-10-13: umgesetzt** bis auf §9 (offen); seit 2026-10-13 auch der Blazor-Arbeitsplatz als Client mit Vertrag (§4.6). Kanonische Referenz für *wer* etwas hineingibt (Akteur), *was er draußen
 > zusagt* (Akteur-Vertrag) und *welche Software es über welche Leitung tut* (Client). Ersetzt die früheren Fassungen dieses Dokuments
 > und `konzept-client-vertraege.md` (Historie in git). Editor-Darstellung: `docs/konzept-domaenen-editor.md` §12.
 
@@ -54,7 +54,7 @@ public sealed record Inspekteur     : IMensch,   IDarf<LabelBildPaar>, IDarf<Mar
 - Was ein Fluss oder Prozess daraus erzeugt, wird **nicht** deklariert — es trägt den Akteur der Kette (§2.3). Ein
   Command, den niemand per `IDarf` darf, kommt am Tor nie durch („nie von der GUI" ist damit ein Typ-Fakt).
 
-### 2.2 Katalog (`Domain.Pipeline/Akteure.cs`)
+### 2.2 Katalog (`Domain.Akteure/Akteure.cs`)
 
 | Akteur | Art | gibt selbst hinein (`IDarf`) | Vertrag |
 |---|---|---|---|
@@ -136,7 +136,7 @@ public interface IKlassifizierer : IPaarKlassifikation { void Auf(BildVerfuegbar
 ### 4.1 Form
 
 ```csharp
-namespace Domain.Clients;   // Domain.Pipeline/Clients.cs
+namespace Domain.Clients;   // Domain.Akteure/Clients.cs — eigenes, leichtes Projekt: ein Client referenziert seinen Vertrag, nicht die Verarbeitung
 
 public interface IKlassifikationsWorker : IClientVertrag,
     IKlassifizierer,                                 // trägt den Akteur-Vertrag (Zusagen im Namen des Klassifizierers)
@@ -162,9 +162,10 @@ public interface IArbeitsplatz : IClientVertrag,
 
 ### 4.2 Verkörpert (abgeleitet)
 
-Die Akteure der getragenen Teile; dazu je `ISendet`/`IFragt` die `IDarf`-Halter — **nur, wenn keiner der Teil-Akteure den Typ schon darf**
-(sonst wäre der KlassifikationsWorker über `HoleAktivesModell` auch Modellfreigeber). Generator, Python-Prepass, Wissensgraph und Editor
-rechnen gleich.
+Die Akteure der getragenen Teile; dazu je `ISendet`/`IFragt` sein **einziger** `IDarf`-Halter (Pflicht); darf ein Typ **mehrere**, kommt nur
+dann jemand hinzu, wenn noch **keiner** seiner Halter verkörpert ist (sonst wäre der KlassifikationsWorker über `HoleAktivesModell` auch
+Modellfreigeber und der Arbeitsplatz über `HoleDatensatzSamples` auch das TrainingsSystem). EINE Funktion für Generator, Python-Prepass,
+Wissensgraph und Editor: `Abstractions.Akteurvertrag.Verkoerpert`.
 
 ### 4.3 Rechte und Stempel
 
@@ -185,11 +186,27 @@ die Leitung; client-interne Typen stehen nie im Vertrag.
 |---|---|---|---|
 | `KlassifikationsWorker` (`classifier.py`, `run_stub.py`) | Klassifizierer | `IKlassifizierer` | `KlassifiziereEinzelBildDurchKi` / `HoleAktivesModell` |
 | `TrainingsWorker` (`training_worker.py`) | TrainingsSystem | `ITrainingsSystem` | — / `HoleDatensatzSamples` |
-| `Arbeitsplatz` (Blazor) | Inspekteur, KIOperator, Modellfreigeber, Produktpruefer | — | 14 Commands / 12 Queries, 12 Kenntnis-Events |
+| `Arbeitsplatz` (Blazor) | Inspekteur, KIOperator, Modellfreigeber, Produktpruefer | — | 14 Commands / 13 Queries, 25 Kenntnis-Events |
 
-**Befund (offen, Domänen-Entscheidung):** Der Blazor-Code schickt `NimmRangeAuf` (Kuratieren) und fragt `HoleDatensatzSamples`
-(Komposition) — beides darf kein Akteur des Arbeitsplatzes. Es steht deshalb nicht im Vertrag; mit Tor würde es abgelehnt. Entweder `IDarf`
-ergänzen oder den Client-Code ändern.
+**Befund §4.5 (2026-10-13 aufgelöst):** `NimmRangeAuf` bleibt dem Resolver (laut Domäne „nie von der GUI“) — die Mehrfach-Auswahl beim
+Kuratieren schickt je Paar `NimmPaarAuf`. `HoleDatensatzSamples` darf jetzt auch der KIOperator (er liest die Balance der eingefrorenen
+Version); der Arbeitsplatz fragt es. Dazu standen 13 Events, auf die Handler des Arbeitsplatzes hören (Datensätze, Modelle, Trainingsläufe,
+`TrainingFortschritt`), nicht als Kenntnis im Vertrag — der Analyzer (§4.6) fand sie, jetzt stehen sie dort.
+
+### 4.6 C#-Client (Blazor): Code = Vertrag
+
+- Die Client-Assembly nennt ihren Vertrag: `[assembly: IstClient<IArbeitsplatz>]` (`Domain.Client.Modules.Blazor/Arbeitsplatz.cs`).
+- Der Client-Generator (`Client.SourceGeneration/WiringGenerator.cs`) liest ihn mit **derselben** Lesart wie der Server
+  (`Infrastructure.SourceGeneration/Clientvertragslesart.cs`, per Link) und erzeugt `Vertrag` + `VertragHash` (gleicher Hash wie
+  `GeneratedClientVertraege`), `ServerEventTypes` = Kenntnis + Zusage-Eingänge, `CommandTypes` = `ISendet`, die Query-Registrierung = `IFragt`.
+  Keine Selbstauskunft mehr („alle Events, alle Commands“).
+- Der Handshake nennt nur `vertrag` + `vertrag_hash`; nimmt der Server den Vertrag nicht an, startet der Client nicht, ein abweichender Hash
+  wird gemeldet (im strengen Modus lehnt der Server ab).
+- Build-Regeln (GR-CLIENT-CODE): **CQRS093** Client ohne Vertrag, **CQRS094** C#-Client trägt Vertrags-Teile (Zusagen beantworten heute nur
+  die Python-Basen), **CQRS095** erzeugter Command ohne `ISendet`, **CQRS096** gestellte Query ohne `IFragt`, **CQRS097** `Handle(E, MessageContext)`
+  auf ein Server-Event ohne Kenntnis (`Client.SourceGeneration/ClientVertrag.cs`).
+- Verbindung aus der **Umgebung**: `Host.Blazor --umgebung <name>` liest `Clients:<Vertrag>` (`Token`, `Adresse` — leer = localhost:`Transport:GrpcPort`,
+  `Urls`, `Dateien` für den File-Endpunkt). In `sim-main` verkörpert das Token `sim-arbeitsplatz` die vier Akteure.
 
 ---
 
@@ -211,7 +228,8 @@ ergänzen oder den Client-Code ändern.
 
 - Der Client nennt im `CapabilitiesRequest` **`vertrag`** (Client-Name; als Übergang auch ein Akteur-Name mit Vertrag) und
   **`vertrag_hash`**. Der Server nimmt die Fähigkeiten aus **seiner** Tabelle, nicht aus der Selbstauskunft, und abonniert genau die
-  Eingänge (Zusagen + Kenntnis) (`AkteurVertragsPruefung`).
+  Eingänge (Zusagen + Kenntnis) (`AkteurVertragsPruefung`). Der C#-Client schickt gar keine Selbstauskunft mehr (§4.6); die Python-Basen
+  schicken sie noch mit, der Server vergleicht dann nur.
 - Mit Tor muss das Token einen Akteur des Clients verkörpern (sonst `PermissionDenied`). Hash ≠ Server → Warnung, im strengen Modus
   (`"Akteure": { "VertragStreng": true }`) Ablehnung.
 
@@ -238,6 +256,7 @@ dieselbe Zusage tragen, erzeugen für dieselbe Antwort dieselbe Id.
 |---|---|---|
 | `GeneratedAkteurRechte` | `Infrastructure.SourceGeneration/AkteurRechteGenerator.cs` | je Akteur: Art, Commands (IDarf ∪ Zusage-Ausgaben), Queries, Trigger, Transient, Hört, Vertrag (Event → Ausgaben über alle Teile), Ströme, Hash |
 | `GeneratedClientVertraege` | dito | je Client: getragene Zusagen je Akteur, Sendet, Fragt, Kenntnis, Verkörpert, Client-Hash |
+| `GeneratedWiring_<Assembly>` (C#-Client) | `Client.SourceGeneration/WiringGenerator.cs` | `Vertrag`, `VertragHash`, `ServerEventTypes` (Eingänge), `CommandTypes` (ISendet), `RegisterQueries` (IFragt) — aus `[assembly: IstClient<IX>]` |
 | `domain_client/generated/vertraege.py` | `Cqrs.Codegen/PythonVertragsEmitter.cs` (`./codegen.sh`) | je Akteur-Vertrag `<Akteur>Basis`, je Client `<Client>Basis` (`CLIENT`, `AKTEURE`, `ZUSAGEN` mit Akteur je Eintrag, `SPONTAN`, `FRAGT`, abstrakte `auf_<event>`) |
 
 - **Kanon und Hash** an einer Stelle (`Abstractions/Akteurvertrag.cs`: `Kanon`, `ClientKanon`, `Hash` = 16 Hex von SHA-256): Server,
@@ -259,6 +278,7 @@ dieselbe Zusage tragen, erzeugen für dieselbe Antwort dieselbe Id.
 | CQRS063 | GR-CLIENT | Client: Interface; erbt nur Teile/ISendet/IFragt/Client-Verträge; eigene Methoden nur Kenntnis |
 | CQRS064 | GR-CLIENT-BEFUGT | Sendet/Fragt: ein Akteur hat `IDarf<T>`; Sendet = Command/Trigger/Transient (Quell-Nachricht offen, Zielbild §12.2), Fragt = Query |
 | CQRS065 | GR-CLIENT | je Event höchstens eine Methode im Client (getragen oder eigen) |
+| CQRS093–097 | GR-CLIENT-CODE | C#-Client: Vertrag genannt, keine Teile, erzeugte Commands/Queries im Vertrag, gehörte Server-Events Kenntnis (§4.6) |
 | — (Laufzeit-Tor) | GR-HERKUNFT | jeder Command/Query/Quell-Nachricht kommt von einem Akteur (direkt oder Kette) |
 | — | GR-INGRESS-EINDEUTIG | eine Quell-Nachricht ohne Kette hat genau einen `IDarf`-Halter |
 | — | GR-GETRAGEN | sobald es Clients gibt: jede Zusage mit Ausgabe trägt mindestens ein Client (sonst bricht die Kette) |
@@ -286,11 +306,17 @@ grün gegen echte Infra; `--check` (8 Akteure, 2 Verträge, 3 Clients / 43 Rand-
 Clients, gezeichnetes Mahnportal) grün. Live: `run_stub.py` meldet sich als `KlassifikationsWorker`, der Server nimmt den Vertrag an und
 abonniert genau die 3 Vertrags-Events.
 
+**Gemessen 2026-10-13 (Blazor als Client, §4.6):** Prüfstand 526/526 (+5 `ClientCodeVertragTests`: Code im Vertrag ohne Befund,
+CQRS093–097, gleicher Hash wie der Server); Integration 39/39; Python Worker 20/20, SDK 28/28; `--check`/`--sonde` grün. Live: `Host.Blazor
+--umgebung sim-main` meldet sich als `Arbeitsplatz` an (Token `sim-arbeitsplatz`), der Host nimmt den Vertrag an („verkörpert Inspekteur,
+KIOperator, Modellfreigeber, Produktpruefer“; 14 Commands, 25 Events, 13 Queries); der Arbeitsplatz hydriert, „Inspiziert“ landet als
+Inspekteur, „R“ (OK) als `LabelPhysischesProdukt` des Produktprüfers in der Spur.
+
 **Offen:**
 1. **Durable Zustellung + Zuteilung** an Clients (§5.4).
 2. **`als` im CommandEnvelope** für spontane Commands, die mehrere Akteure eines Clients dürfen (heute: der erste).
-3. **Blazor:** `IArbeitsplatz` gegen den Client-Code prüfen (typisierte IntentHandler, Capabilities aus dem Vertrag).
-4. **Befund §4.5** (`NimmRangeAuf`, `HoleDatensatzSamples` am Arbeitsplatz).
-5. Python-Worker melden sich noch ohne Token an; `Host.Grpc` hat das Tor nicht konfiguriert (opt-in).
+3. **Zusagen über eine C#-Leitung** (CQRS094 verbietet sie heute; die Python-Basen beantworten sie mit Kausalität).
+4. **Anmeldung je Person** am Arbeitsplatz: heute ein Token je Umgebung (`Clients:Arbeitsplatz:Token`), das die vier Akteure verkörpert.
+5. In `prod`/`multinode` gibt es noch keine Identitäten — das Tor ist dort offen (der Vertrag gilt trotzdem).
 6. Der Abgleich schreibt eine geänderte Client-Basisliste einzeilig; weitere Vertrags-Teile eines Akteurs liest der Editor, schreibt sie
    aber nicht.

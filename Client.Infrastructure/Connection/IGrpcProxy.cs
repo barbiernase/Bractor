@@ -28,10 +28,14 @@ public interface IGrpcProxy
     /// <summary>Channel für Verbindungszustandsänderungen.</summary>
     ChannelReader<ConnectionState> StateChanges { get; }
 
-    /// <summary>Verbindet zum Server und führt Capabilities-Handshake durch.</summary>
+    /// <summary>
+    /// Verbindet zum Server und führt den Capabilities-Handshake durch: der Client nennt seinen Vertrag (Name + Hash, docs/konzept-akteure.md
+    /// §5.2) — Fähigkeiten und Abos nimmt der Server aus seiner Tabelle, nicht aus einer Selbstauskunft.
+    /// </summary>
     Task<ClientCapabilities> ConnectAsync(
         string serverAddress,
-        IEnumerable<string> eventTypes,
+        string vertrag,
+        string vertragHash,
         CancellationToken ct = default);
 
     /// <summary>Sendet einen Command (Fire-and-Forget).</summary>

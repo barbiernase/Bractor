@@ -92,7 +92,8 @@ public class ConnectionModule : IAsyncDisposable
 
     public async Task ConnectAsync(
         string serverAddress,
-        IReadOnlyList<string> serverEventTypes,
+        string vertrag,
+        string vertragHash,
         CancellationToken ct = default)
     {
         if (_bus == null)
@@ -102,8 +103,13 @@ public class ConnectionModule : IAsyncDisposable
 
         try
         {
-            var capabilities = await _proxy.ConnectAsync(
-                serverAddress, serverEventTypes, _cts.Token);
+            var capabilities = await _proxy.ConnectAsync(serverAddress, vertrag, vertragHash, _cts.Token);
+            // Der Server nennt den angenommenen Vertrag mit SEINEM Hash: ohne Annahme läuft die Leitung nicht als dieser Client.
+            if (capabilities.Vertrag != vertrag)
+                throw new InvalidOperationException($"Der Server hat den Vertrag '{vertrag}' nicht angenommen (Antwort: '{capabilities.Vertrag}').");
+            if (capabilities.VertragHash != vertragHash)
+                Console.Error.WriteLine($"[Client] Vertrag {vertrag}: Hash {vertragHash} ≠ Server {capabilities.VertragHash} — Client und Server "
+                    + "sind gegen verschiedene Stände gebaut.");
 
             _eventReadTask = EventReadLoopAsync(_cts.Token);
             _stateReadTask = StateChangeLoopAsync(_cts.Token);

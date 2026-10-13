@@ -3,7 +3,6 @@ using Domain.Bildaufbereitung;
 using Domain.Datensatz;
 using Domain.ImagePair;
 using Domain.Modell;
-using Domain.Pipeline.ImageProcessing;
 using Domain.Projections;
 using Domain.Sammelvorgang;
 using Domain.Teilauftrag;
@@ -84,7 +83,7 @@ public sealed record KIOperator : IMensch,
     IDarf<ErstelleDatensatz>, IDarf<FuegeRangeHinzu>, IDarf<NimmPaarAuf>, IDarf<EntfernePaar>, IDarf<SetzeSplit>, IDarf<FriereEin>,
     IDarf<StarteTraining>, IDarf<BricheTrainingAb>, IDarf<RegistriereModell>,
     IDarf<HoleDatensaetze>, IDarf<HoleDatensatz>, IDarf<HoleDatensatzPaare>, IDarf<HoleDatensaetzeFuerPaar>,
-    IDarf<HoleTrainingslaeufe>, IDarf<HoleTrainingslauf>,
+    IDarf<HoleTrainingslaeufe>, IDarf<HoleTrainingslauf>, IDarf<HoleDatensatzSamples>,
     IDarf<HoleModelle>, IDarf<SucheImagePairs>, IDarf<GetImagePair>;
 
 /// <summary>Schaltet ein Modell für die Produktions-Inferenz scharf oder zieht es zurück (Freigabe ≠ Training).</summary>

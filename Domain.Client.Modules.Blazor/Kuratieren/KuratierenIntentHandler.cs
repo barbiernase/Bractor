@@ -32,18 +32,16 @@ public partial class KuratierenIntentHandler
             yield return new NimmPaarAuf(ziel.Id, id);
     }
 
-    // Dedizierte Mehrfach-Auswahl → EIN NimmRangeAuf (Herkunft „manuelle Auswahl"),
-    // danach Markierung leeren. Wiederverwendung des Range-Aufnahme-Wegs (Handoff §4.1 /
-    // Konzept §7): keine neuen Commands. Nur Nicht-Mitglieder aufnehmen (idempotent, aber
-    // hält die Provenienz-Zahl ehrlich).
+    // Dedizierte Mehrfach-Auswahl → je markiertem Nicht-Mitglied ein NimmPaarAuf (das manuelle Delta, das der KIOperator
+    // darf), danach Markierung leeren. NimmRangeAuf bleibt dem server-seitigen Resolver (laut Domäne „nie von der GUI";
+    // der Vertrag IArbeitsplatz nennt es nicht, CQRS095).
     IEnumerable<object> Handle(AuswahlAufgenommenAngefordert evt, MessageContext ctx)
     {
         if (_store.SammelZiel is not { } ziel) yield break;
         if (ziel.IstEingefroren) yield break;
 
-        var neue = _store.Markierung.Where(id => !ziel.MitgliederIds.Contains(id)).ToList();
-        if (neue.Count > 0)
-            yield return new NimmRangeAuf(ziel.Id, neue, new RangeHerkunft(new RangeKriterien(), neue.Count));
+        foreach (var id in _store.Markierung.Where(id => !ziel.MitgliederIds.Contains(id)))
+            yield return new NimmPaarAuf(ziel.Id, id);
 
         yield return new MarkierungGeleert();
     }

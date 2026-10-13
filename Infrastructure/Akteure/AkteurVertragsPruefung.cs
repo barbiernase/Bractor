@@ -76,8 +76,12 @@ public static class AkteurVertragsPruefung
     {
         var soll = vertrag.Vertrag.Keys.Select(t => t.Name).OrderBy(n => n, StringComparer.Ordinal).ToList();
         var abweichung = new List<string>();
-        abweichung.AddRange(ergebnis.SubscribedEvents.Where(n => n != nameof(CommandFailed) && !soll.Contains(n)).Select(n => $"hört laut Vertrag nicht: {n}"));
-        abweichung.AddRange(soll.Where(n => !ergebnis.SubscribedEvents.Contains(n)).Select(n => $"Selbstauskunft ohne Vertrags-Eingang: {n}"));
+        // Nur verglichen, wenn der Client überhaupt eine Selbstauskunft schickt — ein generierter C#-Client nennt nur den Vertrag.
+        if (ergebnis.SubscribedEvents.Count > 0)
+        {
+            abweichung.AddRange(ergebnis.SubscribedEvents.Where(n => n != nameof(CommandFailed) && !soll.Contains(n)).Select(n => $"hört laut Vertrag nicht: {n}"));
+            abweichung.AddRange(soll.Where(n => !ergebnis.SubscribedEvents.Contains(n)).Select(n => $"Selbstauskunft ohne Vertrags-Eingang: {n}"));
+        }
         abweichung.AddRange(AkteurTor.Wende(ergebnis, vertrag, loese, internBedient, schonVergeben).Where(v => !v.StartsWith("hören:", StringComparison.Ordinal)));
         ergebnis.SubscribedEvents.Clear();
         ergebnis.SubscribedEvents.AddRange(soll);

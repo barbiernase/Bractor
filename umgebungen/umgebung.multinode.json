@@ -19,6 +19,15 @@
     "IRangeSuche": { "Laufort": "Host", "Slots": 2 },
     "IMitgliederEinfrieren": { "Laufort": "Host", "Slots": 2 }
   },
+  "Clients": {
+    "Arbeitsplatz": {
+      "Urls": "http://localhost:5010",
+      "Dateien": [
+        "/data/input",
+        "/data/preprocessed"
+      ]
+    }
+  },
   "Konfig": {
     "PreprocessingConfig": { "OutputPath": "/data/preprocessed" }
   }

@@ -20,12 +20,7 @@ public class CircuitHandlerBase : CircuitHandler
 
     public override async Task OnCircuitOpenedAsync(Circuit circuit, CancellationToken ct)
     {
-        await _startup.StartAsync(
-            _config.SubscribeAll, _config.RegisterQueries,
-            _config.ServerEventTypes, _config.CommandTypes,
-            _serverAddress, _config.HydrationStores,
-            _config.CommandAggregateTypes,
-            _config.UnsubscribeAll, ct);
+        await _startup.StartAsync(_config, _serverAddress, ct);
     }
 
     public override async Task OnCircuitClosedAsync(Circuit circuit, CancellationToken ct)

@@ -34,6 +34,7 @@
       "sim-klassifizierer": "Klassifizierer",
       "sim-modellfreigeber": "Modellfreigeber",
       "sim-produktpruefer": "Produktpruefer",
+      "sim-arbeitsplatz": "Inspekteur,KIOperator,Modellfreigeber,Produktpruefer",
       "sim-trainingssystem": "TrainingsSystem"
     }
   },
@@ -92,6 +93,16 @@
     "IMitgliederEinfrieren": {
       "Laufort": "Host",
       "Slots": 2
+    }
+  },
+  "Clients": {
+    "Arbeitsplatz": {
+      "Token": "sim-arbeitsplatz",
+      "Urls": "http://localhost:5110",
+      "Dateien": [
+        "${env:HOME}/cqrs-sim/${branch}/DateiErkannt",
+        "${env:HOME}/cqrs-sim/${branch}/preprocessed"
+      ]
     }
   },
   "Konfig": {

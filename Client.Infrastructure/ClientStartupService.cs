@@ -93,39 +93,30 @@ public class ClientStartupService
     // START
     // ═══════════════════════════════════════════════════
 
-    public async Task StartAsync(
-        Action<IServiceProvider, IBus> subscribeAll,
-        Action<QueryBridge, ClientBus> registerQueries,
-        IReadOnlyList<Type> serverEventTypes,
-        IReadOnlyList<Type> commandTypes,
-        string serverAddress,
-        IReadOnlyList<Type> hydrationStores,
-        IReadOnlyDictionary<Type, string>? commandAggregateTypes = null,
-        Action<IServiceProvider>? unsubscribeAll = null,
-        CancellationToken ct = default)
+    /// <summary>Startet den Client mit seinem generierten Wiring (<see cref="ClientWiringConfig"/>: Vertrag, Typ-Listen, Delegates).</summary>
+    public async Task StartAsync(ClientWiringConfig config, string serverAddress, CancellationToken ct = default)
     {
-        _unsubscribeAll = unsubscribeAll;
-        _hydrationStoreTypes = hydrationStores;
+        _unsubscribeAll = config.UnsubscribeAll;
+        _hydrationStoreTypes = config.HydrationStores;
 
         // 1. Stores + Handler subscriben (Stores vor Handlern; AttachToBus je Store)
-        subscribeAll(_serviceProvider, _bus);
+        config.SubscribeAll(_serviceProvider, _bus);
 
-        // 2. Query→Response-Mappings registrieren
-        registerQueries(_queryBridge, _bus);
+        // 2. Query→Response-Mappings registrieren (nur die Queries des Vertrags: IFragt)
+        config.RegisterQueries(_queryBridge, _bus);
 
-        // 3. Module aktivieren
-        _connectionModule.Activate(_bus, commandTypes, commandAggregateTypes);
-        _versioningModule.Activate(_bus, serverEventTypes);
+        // 3. Module aktivieren (gesendet wird nur, was der Vertrag sendet: ISendet; versioniert, was er hört)
+        _connectionModule.Activate(_bus, config.CommandTypes, config.CommandAggregateTypes);
+        _versioningModule.Activate(_bus, config.ServerEventTypes);
         _fileBridge.Activate(_bus);
 
-        // 4. Verbinden. Bei ConnectionEstablished dispatchen die RefreshHandler
+        // 4. Verbinden als dieser Client-Vertrag. Bei ConnectionEstablished dispatchen die RefreshHandler
         //    die Start-Queries (SucheImagePairs, GetProduktionsTage, …).
         SetState(BootstrapState.Connecting);
-        var eventTypeNames = serverEventTypes.Select(t => t.Name).ToList();
 
         try
         {
-            await _connectionModule.ConnectAsync(serverAddress, eventTypeNames, ct);
+            await _connectionModule.ConnectAsync(serverAddress, config.Vertrag, config.VertragHash, ct);
         }
         catch
         {
@@ -136,7 +127,7 @@ public class ClientStartupService
         // 5. Auf Hydration warten: alle markierten Stores müssen ihre
         //    Start-Daten erhalten haben (IsHydrated). Timeout-geschützt.
         SetState(BootstrapState.Hydrating);
-        await AwaitHydrationAsync(hydrationStores, ct);
+        await AwaitHydrationAsync(config.HydrationStores, ct);
 
         // 6. Fertig — Shell mountet jetzt die Module.
         SetState(BootstrapState.Ready);

@@ -19,6 +19,8 @@ from . import (
     BildPaarGelabeltDto,
     BildVerfuegbarDto,
     BricheTrainingAbDto,
+    DatensatzEingefrorenDto,
+    DatensatzErstelltDto,
     EinzelBildDurchKiKlassifiziertDto,
     EinzelBildGelabeltDto,
     EntfernePaarDto,
@@ -51,6 +53,8 @@ from . import (
     MeldeTrainingBegonnenDto,
     MeldeTrainingGescheitertDto,
     ModellAktiviertDto,
+    ModellArchiviertDto,
+    ModellRegistriertDto,
     NimmPaarAufDto,
     PaarAufgenommenDto,
     PaarEntferntDto,
@@ -59,10 +63,16 @@ from . import (
     RegistriereModellDto,
     SetzeModellAktivDto,
     SetzeSplitDto,
+    SplitGesetztDto,
     StarteTrainingDto,
     SucheImagePairsDto,
     TrainingAbgebrochenDto,
+    TrainingAbgeschlossenDto,
     TrainingAngefordertDto,
+    TrainingBegonnenDto,
+    TrainingFortschrittDto,
+    TrainingGescheitertDto,
+    TrainingHaengengebliebenDto,
 )
 
 S = TypeVar("S")
@@ -126,7 +136,7 @@ class ArbeitsplatzBasis(AkteurVertragBasis[S]):
     CLIENT: ClassVar[str] = "Arbeitsplatz"
     AKTEURE: ClassVar[tuple] = ("Inspekteur", "KIOperator", "Modellfreigeber", "Produktpruefer")
     VERTRAG: ClassVar[str] = "IArbeitsplatz"
-    VERTRAG_HASH: ClassVar[str] = "01c4adc2db9af3b8"
+    VERTRAG_HASH: ClassVar[str] = "aec1231c1997f35f"
     ZUSAGEN: ClassVar[dict] = {
         ImagePairErstelltDto: Zusage("auf_image_pair_erstellt", ()),
         BildVerfuegbarDto: Zusage("auf_bild_verfuegbar", ()),
@@ -140,9 +150,22 @@ class ArbeitsplatzBasis(AkteurVertragBasis[S]):
         PaarAufgenommenDto: Zusage("auf_paar_aufgenommen", ()),
         PaareAufgenommenDto: Zusage("auf_paare_aufgenommen", ()),
         PaarEntferntDto: Zusage("auf_paar_entfernt", ()),
+        DatensatzErstelltDto: Zusage("auf_datensatz_erstellt", ()),
+        SplitGesetztDto: Zusage("auf_split_gesetzt", ()),
+        DatensatzEingefrorenDto: Zusage("auf_datensatz_eingefroren", ()),
+        ModellRegistriertDto: Zusage("auf_modell_registriert", ()),
+        ModellAktiviertDto: Zusage("auf_modell_aktiviert", ()),
+        ModellArchiviertDto: Zusage("auf_modell_archiviert", ()),
+        TrainingAngefordertDto: Zusage("auf_training_angefordert", ()),
+        TrainingBegonnenDto: Zusage("auf_training_begonnen", ()),
+        TrainingFortschrittDto: Zusage("auf_training_fortschritt", ()),
+        TrainingAbgeschlossenDto: Zusage("auf_training_abgeschlossen", ()),
+        TrainingGescheitertDto: Zusage("auf_training_gescheitert", ()),
+        TrainingAbgebrochenDto: Zusage("auf_training_abgebrochen", ()),
+        TrainingHaengengebliebenDto: Zusage("auf_training_haengengeblieben", ()),
     }
     SPONTAN: ClassVar[tuple] = (LabelBildPaarDto, MarkiereAlsInspiziertDto, LabelPhysischesProduktDto, ErstelleDatensatzDto, FuegeRangeHinzuDto, NimmPaarAufDto, EntfernePaarDto, SetzeSplitDto, FriereEinDto, StarteTrainingDto, BricheTrainingAbDto, RegistriereModellDto, SetzeModellAktivDto, ArchiviereModellDto,)   # ISendet: von sich aus
-    FRAGT: ClassVar[tuple] = (SucheImagePairsDto, GetImagePairHistorieDto, GetImagePairStatistikDto, GetProduktionsTageDto, GetProduktionsStripDto, HoleDatensaetzeDto, HoleDatensatzDto, HoleDatensatzPaareDto, HoleDatensaetzeFuerPaarDto, HoleTrainingslaeufeDto, HoleTrainingslaufDto, HoleModelleDto,)   # IFragt: die Queries des Clients
+    FRAGT: ClassVar[tuple] = (SucheImagePairsDto, GetImagePairHistorieDto, GetImagePairStatistikDto, GetProduktionsTageDto, GetProduktionsStripDto, HoleDatensaetzeDto, HoleDatensatzDto, HoleDatensatzPaareDto, HoleDatensaetzeFuerPaarDto, HoleTrainingslaeufeDto, HoleTrainingslaufDto, HoleModelleDto, HoleDatensatzSamplesDto,)   # IFragt: die Queries des Clients
 
     @abstractmethod
     async def auf_image_pair_erstellt(self, e: ImagePairErstelltDto, ctx: MessageContext, state: S) -> None:
@@ -202,6 +225,71 @@ class ArbeitsplatzBasis(AkteurVertragBasis[S]):
     @abstractmethod
     async def auf_paar_entfernt(self, e: PaarEntferntDto, ctx: MessageContext, state: S) -> None:
         """void Auf(PaarEntfernt e) — nur zur Kenntnis"""
+        ...
+
+    @abstractmethod
+    async def auf_datensatz_erstellt(self, e: DatensatzErstelltDto, ctx: MessageContext, state: S) -> None:
+        """void Auf(DatensatzErstellt e) — nur zur Kenntnis"""
+        ...
+
+    @abstractmethod
+    async def auf_split_gesetzt(self, e: SplitGesetztDto, ctx: MessageContext, state: S) -> None:
+        """void Auf(SplitGesetzt e) — nur zur Kenntnis"""
+        ...
+
+    @abstractmethod
+    async def auf_datensatz_eingefroren(self, e: DatensatzEingefrorenDto, ctx: MessageContext, state: S) -> None:
+        """void Auf(DatensatzEingefroren e) — nur zur Kenntnis"""
+        ...
+
+    @abstractmethod
+    async def auf_modell_registriert(self, e: ModellRegistriertDto, ctx: MessageContext, state: S) -> None:
+        """void Auf(ModellRegistriert e) — nur zur Kenntnis"""
+        ...
+
+    @abstractmethod
+    async def auf_modell_aktiviert(self, e: ModellAktiviertDto, ctx: MessageContext, state: S) -> None:
+        """void Auf(ModellAktiviert e) — nur zur Kenntnis"""
+        ...
+
+    @abstractmethod
+    async def auf_modell_archiviert(self, e: ModellArchiviertDto, ctx: MessageContext, state: S) -> None:
+        """void Auf(ModellArchiviert e) — nur zur Kenntnis"""
+        ...
+
+    @abstractmethod
+    async def auf_training_angefordert(self, e: TrainingAngefordertDto, ctx: MessageContext, state: S) -> None:
+        """void Auf(TrainingAngefordert e) — nur zur Kenntnis"""
+        ...
+
+    @abstractmethod
+    async def auf_training_begonnen(self, e: TrainingBegonnenDto, ctx: MessageContext, state: S) -> None:
+        """void Auf(TrainingBegonnen e) — nur zur Kenntnis"""
+        ...
+
+    @abstractmethod
+    async def auf_training_fortschritt(self, e: TrainingFortschrittDto, ctx: MessageContext, state: S) -> None:
+        """void Auf(TrainingFortschritt e) — nur zur Kenntnis"""
+        ...
+
+    @abstractmethod
+    async def auf_training_abgeschlossen(self, e: TrainingAbgeschlossenDto, ctx: MessageContext, state: S) -> None:
+        """void Auf(TrainingAbgeschlossen e) — nur zur Kenntnis"""
+        ...
+
+    @abstractmethod
+    async def auf_training_gescheitert(self, e: TrainingGescheitertDto, ctx: MessageContext, state: S) -> None:
+        """void Auf(TrainingGescheitert e) — nur zur Kenntnis"""
+        ...
+
+    @abstractmethod
+    async def auf_training_abgebrochen(self, e: TrainingAbgebrochenDto, ctx: MessageContext, state: S) -> None:
+        """void Auf(TrainingAbgebrochen e) — nur zur Kenntnis"""
+        ...
+
+    @abstractmethod
+    async def auf_training_haengengeblieben(self, e: TrainingHaengengebliebenDto, ctx: MessageContext, state: S) -> None:
+        """void Auf(TrainingHaengengeblieben e) — nur zur Kenntnis"""
         ...
 
 

@@ -6,7 +6,15 @@
         <Nullable>enable</Nullable>
         <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
         <RootNamespace>Client.SourceGeneration</RootNamespace>
+        <!-- RS2008 (Analyzer-Release-Tracking) ist für die internen CQRS-Diagnostiken nicht nötig. -->
+        <NoWarn>$(NoWarn);RS2008</NoWarn>
     </PropertyGroup>
+
+    <ItemGroup>
+        <!-- EINE Lesart des Client-Vertrags mit dem Server-Generator (Name, Hash, Sendet/Fragt/Kenntnis) — per Link, in beiden internal. -->
+        <Compile Include="..\Abstractions\Akteurvertrag.cs" Link="Vertrag\Akteurvertrag.cs" />
+        <Compile Include="..\Infrastructure.SourceGeneration\Clientvertragslesart.cs" Link="Vertrag\Clientvertragslesart.cs" />
+    </ItemGroup>
 
     <ItemGroup>
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="4.8.0" PrivateAssets="all" />

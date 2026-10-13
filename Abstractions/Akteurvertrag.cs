@@ -78,6 +78,23 @@ static class Akteurvertrag
         return sb.ToString();
     }
 
+    /// <summary>
+    /// Welche Akteure ein Client VERKÖRPERT (docs/konzept-akteure.md §4.2) — EINE Regel für Server-Generator, Python-Prepass, Wissensgraph und
+    /// Editor: die Akteure der getragenen Teile; dazu je Sendet/Fragt sein einziger <c>IDarf</c>-Halter (Pflicht); darf ein Typ mehrere, kommt
+    /// nur dann jemand hinzu, wenn noch keiner seiner Halter verkörpert ist (dann alle — der Vertrag sagt nicht, welcher). So wird der
+    /// Arbeitsplatz über <c>HoleDatensatzSamples</c> nicht auch das TrainingsSystem, und der KlassifikationsWorker über <c>HoleAktivesModell</c>
+    /// nicht auch der Modellfreigeber. Mehrdeutige Typen in fester Reihenfolge (sortierte Halter-Liste), damit überall dasselbe herauskommt.
+    /// </summary>
+    public static List<string> Verkoerpert(IEnumerable<string> teilAkteure, IEnumerable<IEnumerable<string>> halterJeTyp)
+    {
+        var verk = new SortedSet<string>(teilAkteure, System.StringComparer.Ordinal);
+        var listen = halterJeTyp.Select(h => h.Distinct().OrderBy(x => x, System.StringComparer.Ordinal).ToList()).Where(h => h.Count > 0).ToList();
+        foreach (var h in listen.Where(h => h.Count == 1)) verk.Add(h[0]);
+        foreach (var h in listen.Where(h => h.Count > 1).OrderBy(h => string.Join(",", h), System.StringComparer.Ordinal))
+            if (!h.Any(verk.Contains)) verk.UnionWith(h);
+        return verk.ToList();
+    }
+
     /// <summary>Eine Zusage: Eingang (Event-Name), erlaubte Ausgaben (Command-Namen), Strom ja/nein.</summary>
     public sealed class Zusage
     {
