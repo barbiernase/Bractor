@@ -149,6 +149,27 @@ public class DateiTreiberTests
         k.Laufmodus.Should().Be(QuellLaufmodus.JederKnoten);
     }
 
+    // ── Webhook als Konfig (Plan E12) ──
+
+    [Fact]
+    public void Konfig_Webhook_ist_eine_Route()
+    {
+        Binde(new() { ["Quellen:DateiErkannt:Pfad"] = "/x", ["Quellen:DateiErkannt:Webhook"] = "/webhook/datei" })
+            .BuildServiceProvider().GetRequiredService<KonfigurierteQuelle>().Konfig.Webhook.Should().Be("/webhook/datei");
+        FluentActions.Invoking(() => Binde(new() { ["Quellen:DateiErkannt:Pfad"] = "/x", ["Quellen:DateiErkannt:Webhook"] = "webhook/datei" }))
+            .Should().Throw<Infrastructure.Umgebung.BootFehler>().Where(e => e.Karte == "quelle:DateiErkannt").WithMessage("*keine Route*");
+    }
+
+    [Fact]
+    public void Webhook_ohne_Einblick_Port_bricht_den_Start()
+    {
+        var b = Microsoft.AspNetCore.Builder.WebApplication.CreateBuilder();
+        b.Services.AddSingleton(new KonfigurierteQuelle(Typ, new DateiQuellKonfig { Pfad = "/x", Webhook = "/webhook/datei" }));
+        using var app = b.Build();
+        FluentActions.Invoking(() => app.MapQuellWebhooks(new UmgebungKonfig { Transport = new TransportKonfig { EinblickPort = 0 } }))
+            .Should().Throw<Infrastructure.Umgebung.BootFehler>().WithMessage("*braucht einen Einblick-Port*");
+    }
+
     [Fact]
     public void Konfig_unbekanntes_Feld_ist_ein_Fehler()
         => FluentActions.Invoking(() => Binde(new() { ["Quellen:DateiErkannt:Pfad"] = "/x", ["Quellen:DateiErkannt:Pfaad"] = "/y" }))

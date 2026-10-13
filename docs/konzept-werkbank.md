@@ -191,7 +191,7 @@ Die Vorgangs-Id ist `MD5("quelle:" + Typ.FullName + ":" + Kennung)` (`QuellVorga
 | `Domain/ImagePair/Bildeingang.cs`: `record DateiErkannt(Pfad, Dateiname, DateigroesseBytes, ErkanntAm) : IQuellNachricht` | `sealed record DateiErkannt : DateiGemeldet;` (Felder `Name`, `Groesse`, `ErkanntAm` …); Fluss-Lambdas angepasst |
 | `Domain.Pipeline/ImageProcessing/DateiQuelle.cs`, `FileWatchConfig.cs` | gelöscht; die Mechanik ist im Datei-Treiber |
 | `Domain.Pipeline/Infrastructure/DomainPipelineExtensions.cs` (FileWatch-Teil) | gelöscht |
-| `Host.Grpc/Program.cs`: `AddQuelle<DateiErkannt, DateiQuelle>()` | entfällt; `MapQuellWebhook<DateiErkannt>` bleibt vorerst |
+| `Host.Grpc/Program.cs`: `AddQuelle<DateiErkannt, DateiQuelle>()` | entfällt; der Webhook ist seit P7.5.2 Konfig (`Quellen:<Typ>:Webhook`) |
 | `WatchPath` aus appsettings/Env | `Quellen:DateiErkannt:Pfad` in der Umgebungs-Datei |
 
 ---
@@ -494,10 +494,10 @@ flüchtige Quellen gibt (§12.2). Der Editor zeigt die Trigger-Welt ab P0 nicht 
 - Flüchtige Quellen für Telemetrie (`ITransientEvent`, Konflation; Inv. 6), danach Rückbau der Trigger-Welt.
 - Client meldet Quell-Nachrichten (`ISendet<T>` mit `T : IQuellNachricht` → `QuellEingang`).
 - Pfade für entfernte Ausführer (Python-Worker sehen ein Share anders gemountet): `RelativerPfad` ist vorbereitet.
-- Tor am Webhook (`MapQuellWebhook` mit Token → Akteur).
+- Tor am Webhook der Quelle (Token → Akteur).
 - Wer `IAkteurDienst<A>` trägt, wenn es keine Handle-Pipelines mehr gibt (heute nur als Handle-Parameter erlaubt, CQRS060).
 - `Selbst<T>`, `Frist<TCmd>`, `FristStorno<TCmd>` gehören zur Handle-Welt und fallen mit ihrem Rückbau; im Fluss gilt `Warte(…).Zeitlimit(…)`.
-- `MapQuellWebhook<T>` bleibt vorerst ein Code-Fakt mit `[Ingress(Webhook)]`; ob die Route Konfig der Umgebung wird, entscheidet sich mit dem Tor.
+- ~~`MapQuellWebhook<T>` bleibt vorerst ein Code-Fakt~~ — entschieden mit Plan E12 (P7.5.2): die Route ist Konfig der Umgebung (`Quellen:<Typ>:Webhook`).
 
 ---
 

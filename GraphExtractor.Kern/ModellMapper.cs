@@ -519,18 +519,20 @@ public static class ModellMapper
             }).ToArray(),
         }).ToList();
 
-        // Pipeline als Fluss (§14): die Ingress-Bindung einer QUELL-NACHRICHT (MapQuellWebhook<T>) gehört an die Quelle des Flusses —
-        //   keine eigene Trigger-Karte (das wäre der Handle-Baustein). Reine Board-Sicht: das Modell (FlussSchritt) kennt das Feld nicht.
-        var quellen = records.OfType<JsonObject>().Where(r => r["basen"] is JsonArray b && b.Any(x => (string?)x == Grammatik.QuellBasis))
-            .Select(r => (string?)r["name"]).ToHashSet(StringComparer.Ordinal);
-        foreach (var tb in cr.Triggers.Where(tb => quellen.Contains(tb.MsgName)))
-            foreach (var k in (root["fluesse"] as JsonArray ?? new()).OfType<JsonObject>()
-                         .SelectMany(f => (f["knoten"] as JsonArray ?? new()).OfType<JsonObject>())
-                         .Where(k => (string?)k["art"] == FlussArt.Quelle && (string?)k["typ"] == tb.MsgName))
+        // Pipeline als Fluss (§14): der Webhook einer Quelle (Plan E12) ist Konfig — Quellen:<Typ>:Webhook je Umgebung. Er gehört an die
+        //   Quelle des Flusses (keine eigene Karte); bearbeitet wird er im Host-Rahmen. Reine Board-Sicht: das Modell kennt das Feld nicht.
+        foreach (var (umgebung, u) in (umgebungen ?? new JsonObject()).Where(x => x.Value is JsonObject).Select(x => (x.Key, (JsonObject)x.Value!)))
+            foreach (var (typ, q) in (u["Quellen"] as JsonObject ?? new JsonObject()).Where(x => x.Value is JsonObject).Select(x => (x.Key, (JsonObject)x.Value!)))
             {
-                var liste = k["bindungen"] as JsonArray ?? new JsonArray();
-                liste.Add(Knoten(new { modus = tb.Modus, ort = tb.Route ?? tb.Interval ?? tb.Path, datei = Relativ(dom.Wurzel, tb.Datei) }));
-                k["bindungen"] = liste;
+                if ((string?)q["Webhook"] is not { Length: > 0 } route) continue;
+                foreach (var k in (root["fluesse"] as JsonArray ?? new()).OfType<JsonObject>()
+                             .SelectMany(f => (f["knoten"] as JsonArray ?? new()).OfType<JsonObject>())
+                             .Where(k => (string?)k["art"] == FlussArt.Quelle && (string?)k["typ"] == typ))
+                {
+                    var liste = k["bindungen"] as JsonArray ?? new JsonArray();
+                    liste.Add(Knoten(new { modus = "webhook", ort = route, umgebung, datei = $"umgebungen/umgebung.{umgebung}.json" }));
+                    k["bindungen"] = liste;
+                }
             }
         root["readModels"] = Knoten(readModels);
         root["projektionen"] = Knoten(projektionen);

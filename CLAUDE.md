@@ -80,8 +80,8 @@ Knoten — Quelle (`p.Quelle<IQuellNachricht>()`/`p.Auf<E>()`) → Katalog-Funkt
 Dirigenten (Prozess-Manager) mit Knoten-Herkunft im Token; Funktionen per Vermittler-Actor + Pull (C# im Host, Python-Worker über
 gRPC). Im Editor ein ⛓-Rahmen, entwerfbar auf leerem Board (Sonde beweist gezeichnet → Code → gelesen). Dazu (2026-10-09):
 `quelle.Strom()` (Aggregat-Id der Quelle als Draht), `strom.Warte<A, B>().Zeitlimit(t)` (Frist/Storno als Rennen), Katalog-Funktionen
-mit **Lese-Fähigkeit** als Parameter (nur Host), Akteur-Tor `IDarf<IFunktion>` für angebotene Funktionen, `MapQuellWebhook` mit
-`[Ingress]`. **Alle Domänen-Pipelines sind Flüsse** (Bildeingang, DatensatzRangeAufloesung, DatensatzEinfrieren, TrainingWaechter,
+mit **Lese-Fähigkeit** als Parameter (nur Host), Akteur-Tor `IDarf<IFunktion>` für angebotene Funktionen, der Webhook einer Quelle als Konfig
+(`Quellen:<Typ>:Webhook`, seit P7.5.2). **Alle Domänen-Pipelines sind Flüsse** (Bildeingang, DatensatzRangeAufloesung, DatensatzEinfrieren, TrainingWaechter,
 Benchmark) — `IPipelineHandler` entfällt als Domänen-Baustein, Rückbau der Maschinerie offen (§14.10). Simulation: SimHost spielt Flüsse
 durch (`FlussLaufwerk`, derselbe Belegungs-Kern `FlussBelegung` wie der Dirigent; je Funktion/Warten der Ausgangsfall wählbar). LLM-Slots
 `funktion` + `fluss` (Konsole füllt Lambdas). Integration `PipelineFlussE2ETests` inkl. Python-Worker über gRPC grün.
@@ -156,6 +156,12 @@ geänderten Text, Prompt-Zeile bleibt; Python über `PythonSync`, `.py` lässt d
 Offen (Empfehlung im Plan §17 P7.4.5): `partnerVon`, `flussSlice`, Fluss-Helfer und `VB_SORTE` leiten im JS noch ab → in `board.sicht`; Geste p50 unter
 Fremdlast 346–470 ms (Ziel 300 ms).
 
+**Webhook als Konfig (2026-10-13, Werkbank P7.5.2):** der zweite Weg in eine Quelle ist `Quellen:<Typ>:Webhook` (Route) der Umgebung —
+`LaufeAsync` mappt jede Quelle mit Route generisch (`MapQuellWebhooks`, Einblick-Port, JSON über den Wire-Kontext, 202 + Vorgangs-Id, gleiche
+Nachricht = derselbe Vorgang); `MapQuellWebhook<T>` gibt es nicht mehr. **Host.Grpc/Program.cs = `AddCqrs(args)` + `LaufeAsync`.** Der Extractor
+liest die Route aus den Umgebungs-Dateien (Bindung „⇥ Webhook /… (Umgebung)“ an der Quelle), bearbeitet im Host-Rahmen; der warme Workspace liest
+das Board auch nach Änderungen an `umgebungen/*.json` neu.
+
 **Dienst-Bindung (2026-10-13, Werkbank P7.5.1):** Technik hinter einer Funktion ist ein Domänen-Dienst — `interface IX : IDienst`, jede öffentliche Klasse,
 die es implementiert, ist eine Implementierung; die Funktions-/Dienst-Implementierung nimmt ihn im Konstruktor (dazu Konfig-Records und `ILogger<T>`).
 `DienstGenerator` → `GeneratedDienste` (Fabriken ohne Reflection, Bedarf je Konstruktor, Konfig-Records Feld für Feld aus `Konfig:<Record>`); `AddCqrs`
@@ -168,7 +174,7 @@ draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer Comm
 Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an
 Clients (`docs/konzept-akteure.md` §9).
 
-**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471; P7.3: Prüfstand 476/476; P7.4: Prüfstand 484/484, Integration 39/39; P7.5.1: Prüfstand 507/507, Integration 39/39): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
+**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471; P7.3: Prüfstand 476/476; P7.4: Prüfstand 484/484, Integration 39/39; P7.5.1: Prüfstand 507/507, Integration 39/39; P7.5.2: Prüfstand 509/509, Integration 39/39): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
 Marten/Consul/Redis, sequentiell: 33/33 (inkl. 4 Fluss-E2E; TwoNodeCommandDispatch an die Inbox-Marke seit T2b angepasst).**
 
 **Bewusst offen (Priorität):**

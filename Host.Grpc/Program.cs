@@ -4,14 +4,9 @@
 // liefern die generierten Tabellen, was aktiv ist und mit welchen Werten, sagt die Umgebung. Sim und Prod unterscheiden sich nur dort.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
-using Infrastructure.Quellen;
 using Infrastructure.Umgebung;
 
 var builder = WebApplication.CreateBuilder(args);
 var umgebung = builder.AddCqrs(args);
 var app = builder.Build();
-
-// Ein zweiter Weg in die Datei-Quelle: POST /webhook/datei mit der Nachricht als JSON startet (genau einmal) den Bildeingang.
-app.MapQuellWebhook<Domain.ImagePair.DateiErkannt>("/webhook/datei");
-
 await app.LaufeAsync(umgebung);

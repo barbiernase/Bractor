@@ -216,8 +216,8 @@ public sealed class Fluss
             {
                 Grammatik.Command or Grammatik.Query => !erzeugt,
                 Grammatik.Trigger => !erzeugt || ingress.Contains(n.Name),
-                // Eine Quell-Nachricht mit Ingress-Bindung (MapQuellWebhook<T>) kommt von außen — ohne Bindung von einer Katalog-Quelle im Host.
-                Grammatik.Quelle => ingress.Contains(n.Name),
+                // Eine Quell-Nachricht kommt immer von außen: vom Treiber oder vom Webhook der Umgebung (Quellen:<Typ>, Plan E12).
+                Grammatik.Quelle => true,
                 _ => false,
             };
             if (!aussen) continue;

@@ -121,19 +121,34 @@ public sealed class QuellEingang
 public static partial class QuellenExtensions
 {
     /// <summary>
-    /// Ein zweiter Weg in dieselbe Quelle: <c>POST {route}</c> mit der Nachricht als JSON → genau einmal ins Log, Vorgang gestartet.
-    /// Antwortet <c>202 Accepted</c> mit der Vorgangs-Id (dieselbe Nachricht zweimal → derselbe Vorgang).
-    /// <c>[Ingress]</c>: der Editor liest die Bindung (Nachricht = Typ-Argument, Route = <paramref name="route"/>) aus dem Aufruf.
+    /// Die Webhooks der Quellen (Plan E12) — aus der Konfig, nicht aus dem Programm: je Quelle mit <c>Quellen:&lt;Typ&gt;:Webhook</c> ein
+    /// <c>POST {route}</c> auf dem Einblick-Port (HTTP/1.1) mit der Nachricht als JSON (gelesen über den generierten Wire-Kontext, keine
+    /// Reflection) → genau einmal ins Log, Vorgang gestartet. Antwortet <c>202 Accepted</c> mit der Vorgangs-Id (dieselbe Nachricht zweimal →
+    /// derselbe Vorgang), <c>400</c> bei einem Body, der nicht die Quell-Nachricht ist.
     /// </summary>
-    [Ingress(IngressArt.Webhook, Ort = nameof(route))]
-    public static IEndpointRouteBuilder MapQuellWebhook<TNachricht>(this IEndpointRouteBuilder app, string route)
-        where TNachricht : class, IQuellNachricht
+    public static void MapQuellWebhooks(this WebApplication app, UmgebungKonfig u)
     {
-        app.MapPost(route, async (TNachricht nachricht, HttpContext http) =>
+        var quellen = app.Services.GetServices<KonfigurierteQuelle>().Where(q => !string.IsNullOrWhiteSpace(q.Konfig.Webhook)).ToList();
+        if (quellen.Count == 0) return;
+        if (u.Transport.EinblickPort <= 0)
+            throw new Infrastructure.Umgebung.BootFehler($"{Treibervertrag.KonfigAbschnitt}:{quellen[0].Typ.Abschnitt}:Webhook braucht einen Einblick-Port "
+                + "(Transport:EinblickPort, HTTP/1.1) — er ist 0.", "quelle:" + quellen[0].Typ.Abschnitt);
+        foreach (var g in quellen.GroupBy(q => q.Konfig.Webhook!.Trim(), StringComparer.Ordinal).Where(g => g.Count() > 1))
+            throw new Infrastructure.Umgebung.BootFehler($"Webhook {g.Key} ist mehrfach vergeben ({string.Join(", ", g.Select(q => q.Typ.Abschnitt))}).",
+                "quelle:" + g.First().Typ.Abschnitt);
+        foreach (var q in quellen)
         {
-            var vorgang = await QuellEingang.Live(http.RequestServices).NimmAufAsync(nachricht, http.RequestAborted);
-            return Results.Accepted(value: new { vorgang });
-        });
-        return app;
+            var typ = q.Typ.Typ;
+            app.MapPost(q.Konfig.Webhook!.Trim(), async (HttpContext http, System.Text.Json.JsonElement body) =>
+            {
+                IQuellNachricht nachricht;
+                try { nachricht = (IQuellNachricht)Infrastructure.Eingang.EingangJson.Lies(body, typ); }
+                catch (Exception e) when (e is System.Text.Json.JsonException or InvalidOperationException or NotSupportedException or InvalidCastException)
+                { return Results.BadRequest(new { fehler = $"{typ.Name} nicht lesbar: {e.Message}" }); }
+                var vorgang = await QuellEingang.Live(http.RequestServices).NimmAufAsync(nachricht, http.RequestAborted);
+                return Results.Accepted(value: new { vorgang });
+            }).RequireHost($"*:{u.Transport.EinblickPort}");
+            Console.WriteLine($"  ⛲ Quelle {q.Typ.Abschnitt}: Webhook POST :{u.Transport.EinblickPort}{q.Konfig.Webhook!.Trim()}");
+        }
     }
 }

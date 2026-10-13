@@ -10,7 +10,7 @@
   "Cluster": { "Art": "Consul", "Name": "cqrs-multinode", "Consul": "consul:8500", "AdvertisedHost": "localhost" },
   "Transport": { "GrpcPort": 5001, "EinblickPort": 5002 },
   "Quellen": {
-    "DateiErkannt": { "Pfad": "/data/input", "Kennung": "PfadGroesseZeit", "Laufmodus": "EinmalImCluster" }
+    "DateiErkannt": { "Pfad": "/data/input", "Kennung": "PfadGroesseZeit", "Laufmodus": "EinmalImCluster", "Webhook": "/webhook/datei" }
   },
   "Funktionen": {
     "IBildVerkleinerung": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 },

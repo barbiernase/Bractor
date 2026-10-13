@@ -15,7 +15,8 @@
       "Intervall": "00:00:01",
       "Fertig": { "Art": "Stabil", "Fenster": "00:00:01" },
       "Kennung": "NameGroesse",
-      "Laufmodus": "EinmalImCluster"
+      "Laufmodus": "EinmalImCluster",
+      "Webhook": "/webhook/datei"
     }
   },
   "Funktionen": {

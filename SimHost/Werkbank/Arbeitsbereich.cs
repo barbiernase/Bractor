@@ -99,8 +99,9 @@ public sealed class Arbeitsbereich : IDisposable
             var uhr = Stopwatch.StartNew();
             var stand = _solution!;
             foreach (var p in pfade.Where(p => p.EndsWith(".cs", StringComparison.Ordinal))) stand = await UebernimmAsync(stand, p);
-            // Nur Dateien außerhalb der Projekte — außer Python: die Rümpfe der Client-Implementierungen gehören zum Board (P7.4).
-            if (ReferenceEquals(stand, _solution) && !pfade.Any(p => p.EndsWith(".py", StringComparison.Ordinal))) return _letzte;
+            // Nur Dateien außerhalb der Projekte — außer Python (die Rümpfe der Client-Implementierungen gehören zum Board, P7.4) und den
+            //   Umgebungs-Dateien (Werte je Umgebung, z. B. der Webhook einer Quelle, Plan E12): sie lesen das Board neu.
+            if (ReferenceEquals(stand, _solution) && !pfade.Any(p => p.EndsWith(".py", StringComparison.Ordinal) || IstUmgebung(p))) return _letzte;
             var lage = await _kalt!.NurDomänenAsync(stand, ct);
             var lesung = await Lesen.LiesAsync(stand, lage, _root, _zusammensetzung, uhr.Elapsed);
             _solution = stand;
@@ -341,7 +342,7 @@ public sealed class Arbeitsbereich : IDisposable
         void Melde(string? pfad)
         {
             if (pfad == null || Ignoriert(pfad)) return;
-            if (pfad.EndsWith(".cs", StringComparison.Ordinal) || pfad.EndsWith(".py", StringComparison.Ordinal)) _geaendert[pfad] = 0;
+            if (pfad.EndsWith(".cs", StringComparison.Ordinal) || pfad.EndsWith(".py", StringComparison.Ordinal) || IstUmgebung(pfad)) _geaendert[pfad] = 0;
             else if (pfad.EndsWith(".csproj", StringComparison.Ordinal) || pfad.EndsWith(".props", StringComparison.Ordinal)
                      || pfad.EndsWith(".targets", StringComparison.Ordinal) || pfad.EndsWith(".sln", StringComparison.Ordinal)) _kaltNeu = true;
         }
@@ -351,6 +352,11 @@ public sealed class Arbeitsbereich : IDisposable
         _waechter.Renamed += (_, e) => { Melde(e.OldFullPath); Melde(e.FullPath); };
         _waechter.EnableRaisingEvents = true;
     }
+
+    /// <summary>Eine Umgebungs-Datei (<c>umgebungen/umgebung.&lt;name&gt;.json</c>) — kein Workspace-Dokument, aber Teil des Boards.</summary>
+    private bool IstUmgebung(string pfad) =>
+        pfad.EndsWith(".json", StringComparison.Ordinal)
+        && Path.GetFullPath(Path.GetDirectoryName(pfad) ?? "") == Path.GetFullPath(Path.Combine(_root, "umgebungen"));
 
     /// <summary>Build-Ausgaben, Git und Werkzeug-Ordner gehören nicht zum Code.</summary>
     private static bool Ignoriert(string pfad)

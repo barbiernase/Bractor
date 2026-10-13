@@ -20,6 +20,10 @@ set -euo pipefail
 # ─── Ports ───
 GRPC_PORT=5001
 BLAZOR_PORT=5010
+# Einblick-Port (HTTP/1.1: /health, Webhooks der Quellen) — 0 = aus
+GRPC_EINBLICK_PORT=0
+# Webhook der Datei-Quelle (POST mit der Nachricht als JSON, nur mit Einblick-Port) — leer = keiner
+GRPC_WEBHOOK=""
 
 # ─── Pfade ───
 # Ordner in dem der FileWatcher neue Dateien erkennt (kann Netzwerk-Mount sein)
@@ -134,6 +138,8 @@ echo "  ✓ Host.Blazor"
 echo "▶ Schreibe appsettings..."
 
 mkdir -p "$OUTPUT/grpc/umgebungen"
+GRPC_WEBHOOK_JSON=""
+if [ -n "$GRPC_WEBHOOK" ]; then GRPC_WEBHOOK_JSON=", \"Webhook\": \"${GRPC_WEBHOOK}\""; fi
 cat > "$OUTPUT/grpc/umgebungen/umgebung.linux.json" << EOF
 {
   "Umgebung": { "Name": "linux", "Art": "Prod" },
@@ -145,9 +151,9 @@ cat > "$OUTPUT/grpc/umgebungen/umgebung.linux.json" << EOF
   },
   "VersionIndex": { "Betrieb": "Vorhanden", "Endpunkt": "${REDIS_ENDPOINT}", "Datenbank": ${REDIS_DATABASE}, "Praefix": "prod:" },
   "Cluster": { "Art": "Consul", "Name": "${CLUSTER_NAME}", "Consul": "${CONSUL_ADDRESS}", "AdvertisedHost": "${CLUSTER_ADVERTISED_HOST}" },
-  "Transport": { "GrpcPort": ${GRPC_PORT}, "EinblickPort": 0 },
+  "Transport": { "GrpcPort": ${GRPC_PORT}, "EinblickPort": ${GRPC_EINBLICK_PORT} },
   "Quellen": {
-    "DateiErkannt": { "Pfad": "${GRPC_WATCH_PATH}", "Kennung": "NameGroesse", "Laufmodus": "EinmalImCluster" }
+    "DateiErkannt": { "Pfad": "${GRPC_WATCH_PATH}", "Kennung": "NameGroesse", "Laufmodus": "EinmalImCluster"${GRPC_WEBHOOK_JSON} }
   },
   "Funktionen": {
     "IBildVerkleinerung": { "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 },

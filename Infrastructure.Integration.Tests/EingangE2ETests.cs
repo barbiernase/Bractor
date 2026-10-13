@@ -55,6 +55,8 @@ public class EingangE2ETests
         {
             ["Quellen:DateiErkannt:Pfad"] = Path.Combine(verz, "eingang"),
             ["Konfig:PreprocessingConfig:OutputPath"] = Path.Combine(verz, ".preprocessed"),
+            // Plan E12: der Webhook der Quelle ist Konfig — kein MapQuellWebhook im Programm.
+            ["Quellen:DateiErkannt:Webhook"] = "/webhook/datei",
             ["Identitaeten:Tokens:t-ki"] = "KIOperator",
             ["Identitaeten:Tokens:t-inspekteur"] = "Inspekteur",
         });
@@ -62,6 +64,7 @@ public class EingangE2ETests
         await using var app = builder.Build();
         app.MapEinblick(u);
         app.MapEingang(u);
+        app.MapQuellWebhooks(u);
         using var http = new HttpClient { BaseAddress = new Uri($"http://localhost:{u.Transport.EinblickPort}") };
         Task<HttpResponseMessage> Sende(string pfad, object inhalt, string? token)
         {
@@ -157,6 +160,27 @@ public class EingangE2ETests
             ergebnis.Wirker.Should().Be("funktion:IDateinameDeutung", "das Ergebnis schreibt die Funktion — wo gerechnet wurde, ist eine Bindung");
             (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("auftraege").GetArrayLength().Should().Be(0);
             vorgang.Should().NotBe(Guid.Empty);
+
+            // ── Webhook aus der Konfig (Plan E12): POST auf die Route startet genau einen Vorgang — zweimal gesendet, derselbe Vorgang ──
+            var t2 = t.AddMinutes(7);
+            var datei2 = $"{t2:yyyy_MM_dd_HH_mm_ss_fff}_DC0.tiff";
+            var body = new { Name = datei2, Pfad = Path.Combine(verz, datei2), RelativerPfad = datei2, Groesse = 1, GeaendertAm = t2, ErkanntAm = t2, Kennung = datei2 + "|1" };
+            var w1 = await http.PostAsJsonAsync("/webhook/datei", body);
+            var w2 = await http.PostAsJsonAsync("/webhook/datei", body);
+            w1.StatusCode.Should().Be(HttpStatusCode.Accepted, await w1.Content.ReadAsStringAsync());
+            w2.StatusCode.Should().Be(HttpStatusCode.Accepted);
+            var v1 = (await Lies(w1)).GetProperty("vorgang").GetGuid();
+            (await Lies(w2)).GetProperty("vorgang").GetGuid().Should().Be(v1, "dieselbe Nachricht ist derselbe Vorgang (Kennung)");
+            var wurzel = await es.ReadStreamAsync(v1, 0, default);
+            wurzel.Should().ContainSingle().Which.Payload.Should().BeOfType<DateiErkannt>().Which.Name.Should().Be(datei2);
+            wurzel.Single().Wirker.Should().Be("quelle:DateiErkannt");
+            await Warte(async () => (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("auftraege").GetArrayLength() > 0,
+                TimeSpan.FromSeconds(30), "Der Webhook hat den Bildeingang nicht gestartet (kein Auftrag an die Deutung).");
+            await Task.Delay(1500);
+            (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("auftraege").EnumerateArray()
+                .Should().ContainSingle("genau ein Vorgang, also genau ein Auftrag").Which.GetProperty("auftrag").GetProperty("daten").GetProperty("Dateiname").GetString()
+                .Should().Be(datei2);
+            (await http.PostAsJsonAsync("/webhook/datei", new { Unsinn = 1 })).StatusCode.Should().Be(HttpStatusCode.BadRequest);
         }
         finally
         {

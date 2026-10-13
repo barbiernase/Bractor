@@ -46,7 +46,8 @@
         "Fenster": "00:00:01"
       },
       "Kennung": "PfadGroesseZeit",
-      "Laufmodus": "EinmalImCluster"
+      "Laufmodus": "EinmalImCluster",
+      "Webhook": "/webhook/datei"
     }
   },
   "Funktionen": {

@@ -91,6 +91,7 @@ services:
       Cluster__AdvertisedHost: grpc1
     ports:
       - "127.0.0.1:5001:5001"   # nur grpc1 nach außen (h2c) — für optionale externe Checks
+      - "127.0.0.1:5002:5002"   # Einblick-Port (HTTP/1.1): /health und der Webhook der Datei-Quelle (Quellen:DateiErkannt:Webhook)
     depends_on:
       <<: *infra-deps
       migrate:

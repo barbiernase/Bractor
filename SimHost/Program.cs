@@ -254,6 +254,8 @@ app.MapPost("/api/werkbank/umgebung/{name}", (string name, System.Text.Json.Node
 {
     werkbank.Umgebungen.Schreibe(name, inhalt);
     werkbank.Fortschritt.Melde("umgebung", new { name });
+    // Die Werte gehören zum Board (Quellkarte, Webhook, Wahl der Dienste) — sofort neu lesen, nicht erst, wenn der Wächter meldet.
+    _ = werkbank.Arbeitsbereich.UebernimmAsync([Path.GetRelativePath(slnRoot, werkbank.Umgebungen.Datei(name))]);
     return Results.Json(new { geschrieben = werkbank.Umgebungen.Datei(name) });
 });
 app.MapPost("/api/werkbank/aktiv/{name}", (string name) => { werkbank.Aktiv = name; return Results.Json(werkbank.Zustand(), werkbankJson); });

@@ -105,8 +105,8 @@ public static class CqrsUmgebungExtensions
     }
 
     /// <summary>
-    /// Startet den Host: als Migrator nur das Schema anlegen und enden (Multi-Node-Kaltstart), sonst gRPC, Monitoring und Lauf.
-    /// Was die Domäne an Wegen hinein selbst bindet (z. B. <c>MapQuellWebhook&lt;T&gt;</c>), steht vorher im Programm.
+    /// Startet den Host: als Migrator nur das Schema anlegen und enden (Multi-Node-Kaltstart), sonst gRPC, Monitoring, Einblick, JSON-Eingang,
+    /// die Webhooks der Quellen (aus der Konfig) und Lauf.
     /// </summary>
     public static async Task LaufeAsync(this WebApplication app, UmgebungKonfig u)
     {
@@ -117,10 +117,15 @@ public static class CqrsUmgebungExtensions
             Console.WriteLine("[CQRS] Schema vollständig migriert — Ende.");
             return;
         }
-        app.MapCqrsGrpcService();
-        app.MapBackendMonitoring();
-        app.MapEinblick(u);
-        app.MapEingang(u);
+        try
+        {
+            app.MapCqrsGrpcService();
+            app.MapBackendMonitoring();
+            app.MapEinblick(u);
+            app.MapEingang(u);
+            app.MapQuellWebhooks(u);   // Wege hinein aus der Konfig (Quellen:<Typ>:Webhook) — keine Zeile im Programm
+        }
+        catch (Exception e) { CqrsBoot.Melde(e); throw; }
         Console.WriteLine();
         Console.WriteLine($"  CQRS/ES Host · Umgebung {u.Umgebung.Name} ({u.Umgebung.Art}) · gRPC :{u.Transport.GrpcPort}"
             + (u.Transport.EinblickPort > 0 ? $" · Einblick :{u.Transport.EinblickPort}" + (u.Transport.JsonEingang ? " (+ JSON-Eingang)" : "") : "") + $" · DB {u.EventStore.Datenbank} · Cluster {u.Cluster.Name} ({u.Cluster.Art})");

@@ -38,6 +38,11 @@ public sealed class DateiQuellKonfig
     public DateiFertig Fertig { get; set; } = new();
     public DateiKennungArt Kennung { get; set; } = DateiKennungArt.PfadGroesseZeit;
     public QuellLaufmodus Laufmodus { get; set; } = QuellLaufmodus.EinmalImCluster;
+    /// <summary>
+    /// Ein zweiter Weg in dieselbe Quelle (Plan E12): <c>POST {Webhook}</c> auf dem Einblick-Port mit der Nachricht als JSON — genau einmal ins
+    /// Log, Vorgang gestartet (dieselbe Nachricht zweimal → derselbe Vorgang). Leer = kein Webhook. Die Route ist Betrieb, nicht Domäne.
+    /// </summary>
+    public string? Webhook { get; set; }
 
     /// <summary>Die wirksamen Muster (leer → alle).</summary>
     public IReadOnlyList<string> WirksameMuster => Muster is { Length: > 0 } ? Muster : ["*"];

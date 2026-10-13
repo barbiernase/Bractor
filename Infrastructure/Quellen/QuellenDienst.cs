@@ -131,6 +131,8 @@ public static partial class QuellenExtensions
             try { k = abschnitt.GetSection(t.Abschnitt).Get<DateiQuellKonfig>(o => o.ErrorOnUnknownConfiguration = true); }
             catch (InvalidOperationException e) { throw new Infrastructure.Umgebung.BootFehler($"Konfig {Treibervertrag.KonfigAbschnitt}:{t.Abschnitt}: {e.Message}", "quelle:" + t.Abschnitt); }
             if (k == null) throw new Infrastructure.Umgebung.BootFehler($"Konfig {Treibervertrag.KonfigAbschnitt}:{t.Abschnitt} ist leer.", "quelle:" + t.Abschnitt);
+            if (k.Webhook is { Length: > 0 } w && !w.Trim().StartsWith('/'))
+                throw new Infrastructure.Umgebung.BootFehler($"Konfig {Treibervertrag.KonfigAbschnitt}:{t.Abschnitt}:Webhook = '{w}' ist keine Route (beginnt mit /).", "quelle:" + t.Abschnitt);
             if (string.IsNullOrWhiteSpace(k.Pfad))
                 throw new Infrastructure.Umgebung.BootFehler($"Konfig {Treibervertrag.KonfigAbschnitt}:{t.Abschnitt}:Pfad fehlt.", "quelle:" + t.Abschnitt);
             if (!Directory.Exists(k.Pfad))

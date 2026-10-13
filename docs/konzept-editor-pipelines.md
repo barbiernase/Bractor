@@ -231,8 +231,8 @@ Veröffentlichen und „weiter an Pipeline“ als Knoten; flüchtige (nicht pers
   CQRS068); der generierte Dispatch öffnet je Aufruf einen Fähigkeits-Bereich (`IFaehigkeitsFabrik`), `GeneratedFunktionen.Faehigkeiten`;
   Boot-Guard: eine solche Funktion nie `AddExterneFunktion` (läuft nur im Host); keine Python-Basis.
 - Quellen (`Infrastructure/Quellen/Quellen.cs`): `QuellEingang`, `QuellenDienst`, `AddQuelle<T, Q>()` (entfällt mit dem
-  Datei-Treiber, Zielbild §3.4), **`MapQuellWebhook<T>()` mit `[Ingress(Webhook)]`** (bleibt vorerst; der Editor liest die Bindung:
-  Nachricht = Typ-Argument, Route = Argument).
+  Datei-Treiber, Zielbild §3.4), der Webhook einer Quelle als Konfig `Quellen:<Typ>:Webhook` (seit Werkbank P7.5.2; `MapQuellWebhooks` in `LaufeAsync`, der
+  Editor liest die Route aus den Umgebungs-Dateien).
 - Vermittlung (`FunktionsVermittlung.cs`, `FunktionsVermittlerActor.cs`, `FunktionsAbholer`, `AddExterneFunktion<F>()`). **Akteur-Tor für
   angebotene Funktionen**: `IDarf<IFunktion-Typ>` = „der Akteur darf diese Funktion rechnen“ (CQRS058 lässt es zu, `AkteurRechte.Funktionen`
   generiert); mit angemeldetem Akteur nimmt `FunktionsAnbieterSitzung.Biete` nur befugte Funktionen an (Fehler `FUNKTION_NICHT_BEFUGT`),
@@ -276,7 +276,7 @@ Rückbau des Handle-Modells (§14.10).
 
 Nach dem Umzug hat keine Domänen-Pipeline mehr einen Handle. Alles, was die Handles taten, ist jetzt ein Fluss-Knoten oder eine Quelle:
 Verarbeitung = Katalog-Funktion (auch mit Lese-Fähigkeit), Frist/Storno = `Warte` gegen ein Zeitlimit, Datei = Treiber (Zielbild §3) /
-Webhook = `MapQuellWebhook`, Event→Command = `p.Auf<E>()` → `Sende`. Eine „Quell-Implementierung“ als Handle braucht es nicht: eine Quelle
+Webhook = `Quellen:<Typ>:Webhook` (Konfig), Event→Command = `p.Auf<E>()` → `Sende`. Eine „Quell-Implementierung“ als Handle braucht es nicht: eine Quelle
 ist ein Treiber (kein Log, kein Fluss, nur Nachrichten liefern) — der Rest ist Fluss.
 
 **Daher:** neue Pipelines werden als Fluss gebaut („+ ⛓ Pipeline (Fluss)“); der Handle-Baustein („+ Pipeline“) entfällt im Editor

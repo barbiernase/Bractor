@@ -404,6 +404,10 @@
     body.append(h("div",{class:"gsec",title:"public sealed record "+r.name+" : "+((r.basen||[])[0]||"DateiGemeldet")+";"},"📁 "+r.treiber+"-Treiber"));
     if(INSP)dsQuelle(body,r);
     const umg=Object.entries((MODEL.rahmen||{}).umgebungen||{}),werte=umg.filter(([,u])=>u&&u.Quellen&&u.Quellen[r.name]).map(([n,u])=>[n,u.Quellen]);
+    // Der Webhook ist Konfig (Plan E12): je Umgebung die Route, bearbeitet im 🖥 Host-Rahmen (Quellen).
+    {const wh=werte.filter(([,q])=>q[r.name]&&q[r.name].Webhook).map(([n,q])=>[n,q[r.name].Webhook]);
+      body.append(h("div",{class:"gsec",title:"Quellen:"+r.name+":Webhook — POST mit der Nachricht als JSON auf dem Einblick-Port; bearbeitet im 🖥 Host-Rahmen"},
+        wh.length?wh.map(([n,w])=>"⇥ Webhook "+w+" ("+n+")").join(" · "):"⇥ kein Webhook (Quellen:"+r.name+":Webhook im 🖥 Host-Rahmen)"));}
     umg.filter(([,u])=>!(u&&u.Quellen&&u.Quellen[r.name])).forEach(([n])=>body.append(h("div",{class:"llmmeld err",title:"Start-Prüfung: jede Quelle braucht einen Abschnitt"},"⚠ Umgebung "+n+": kein Abschnitt Quellen:"+r.name+" — der Host startet dort nicht")));
     werte.forEach(([host,q])=>{body.append(h("div",{class:"gsec"},"Werte in Umgebung "+host));
       const zeile=(k,v)=>body.append(h("div",{class:"frow"},h("span",{class:"slotlbl",style:"min-width:110px"},k),h("span",{style:"flex:1;font-family:ui-monospace,monospace;font-size:11.5px;overflow-wrap:anywhere"},v)));
@@ -1691,9 +1695,9 @@
         removeTitel:"Nachricht lösen (der Typ bleibt)",onRemove:()=>{k.typ="";render();},
         extra:k.art==="quelle"&&!k.typ?[neuKnopf("Neue Quelle (Datei-Treiber) als eigene Karte anlegen und verbinden",()=>{const q=flNeueQuellNachricht(f);
           verbindeInfo({type:"evtUse",dir:"out",rec:q},{type:"evtUse",dir:"in",flk:k._id,role:"quelle"});deFlash("＋ "+q+" als eigene Karte angelegt und verbunden — Felder an seiner Karte",true);})]:[]}));
-      // Ingress-Bindungen aus dem Host (MapQuellWebhook<T>(route) …) — Code-Fakt der Composition Root, hier nur angezeigt.
-      (k.bindungen||[]).forEach(b=>body.append(h("div",{class:"gsec",style:"opacity:.8",title:"Bindung im Host"+(b.datei?" · "+b.datei:"")},
-        (b.modus==="webhook"?"🔗 Webhook POST ":b.modus==="timer"?"⏱ Timer ":"📁 Datei ")+(b.ort||"")+"  →  "+(k.typ||"Nachricht"))));
+      // Webhooks der Quelle (Plan E12) — Konfig je Umgebung (Quellen:<Typ>:Webhook), hier nur angezeigt; bearbeitet im 🖥 Host-Rahmen.
+      (k.bindungen||[]).forEach(b=>body.append(h("div",{class:"gsec",style:"opacity:.8",title:"Konfig der Umgebung"+(b.datei?" · "+b.datei:"")},
+        (b.modus==="webhook"?"⇥ Webhook POST ":b.modus==="timer"?"⏱ Timer ":"📁 Datei ")+(b.ort||"")+(b.umgebung?" ("+b.umgebung+")":"")+"  →  "+(k.typ||"Nachricht"))));
       body.append(h("div",{class:"gsec",style:"opacity:.6"},k.art==="quelle"?"Jede Nachricht startet einen Vorgang (genau einmal, Kennung). Der Treiber folgt aus dem Basistyp der Quelle, seine Werte aus der Konfig (Quellen:"+(k.typ||"Typ")+").":"Jedes Vorkommen dieses Events im Log startet einen Vorgang."));}
     else if(k.art==="funktion"){const fk=MODEL.funktionen.find(x=>x.name===k.typ);
       // Die Funktion ist eine eigene Karte (Auftrag, Ergebnisse, Fähigkeiten, Rumpf) — hier nur die Verbindung „ruft".
@@ -1913,7 +1917,7 @@
     box.append(h("button",{class:"add",onclick:e=>{e.stopPropagation();zoOeffne(mk());}},"🔀 Zuordnung im Knoten-Editor"));
     body.append(box);}
   function flussKurz(n){const k=n.ref,f=n.own.ref;
-    if(flQuelleArt(k))return (k.art==="quelle"?"Quelle · meldet ":"Auf ")+(k.typ||"?")+(k.bindungen||[]).map(b=>(b.modus==="webhook"?" · 🔗 ":" · ")+(b.ort||"")).join("");
+    if(flQuelleArt(k))return (k.art==="quelle"?"Quelle · meldet ":"Auf ")+(k.typ||"?")+[...new Set((k.bindungen||[]).map(b=>(b.modus==="webhook"?" · ⇥ ":" · ")+(b.ort||"")))].join("");
     if(k.art==="je")return "je Element · "+(k.liste||"Liste?");
     if(k.art==="warte")return "wartet auf "+(flWarteAuf(k).join(" | ")||"?")+(k.zeitlimit?" · ⏳ "+k.zeitlimit:" · ⏳ fehlt");
     const ein=(k.eingaenge||[]).map(e=>e.je?(e.sammle?"sammle "+e.je:"je "+e.je):(e.draehte||[]).map(d=>d.von).join(" ∧ ")).join(" ∨ ");

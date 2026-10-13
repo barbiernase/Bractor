@@ -226,7 +226,11 @@ Eine Quelle ist ein fest codierter **Treiber** plus Konfig (docs/konzept-werkban
 `Quellen:<Typ>` (Pfad, Muster, Unterordner, Erkennung `Abfrage|EreignisUndAbfrage`, Intervall, Fertig `Stabil|Marker`, Kennung
 `PfadGroesseZeit|NameGroesse`, Laufmodus `EinmalImCluster|JederKnoten`); unbekannte Felder und Abschnitte ohne Typ sind Start-Fehler. Der
 Treiber liest nur, gleicht beim Start gebündelt mit dem Log ab und meldet nacheinander (Rückstau); ein unlesbares Verzeichnis macht `/health`
-„degraded". Ein `IQuellNachricht` ohne Treiber-Basis bleibt für Webhook-/Test-Quellen erlaubt (`app.MapQuellWebhook<T>(route)`).
+„degraded". Ein zweiter Weg in dieselbe Quelle ist der **Webhook als Konfig** (Plan E12): `"Quellen": { "DateiErkannt": { …, "Webhook": "/webhook/datei" } }`
+— `LaufeAsync` mappt ihn auf dem Einblick-Port (`Transport:EinblickPort`, HTTP/1.1; ohne Port ist ein Webhook ein Boot-Fehler): `POST` mit der
+Nachricht als JSON (Feldnamen wie der Typ, gelesen über den Wire-Kontext) → `202 Accepted` mit der Vorgangs-Id, dieselbe Nachricht zweimal = derselbe
+Vorgang, ein falscher Body = `400`. Im Programm steht dafür nichts. Ein `IQuellNachricht` ohne Treiber-Basis bleibt erlaubt (Test-Quellen, die
+Tests direkt über `QuellEingang` melden); einen Webhook hat nur eine Quelle mit Konfig-Abschnitt.
 Jede Nachricht wird genau einmal je Kennung ins Log geschrieben und startet je Pipeline einen Vorgang. Funktionen bindet der Host wie
 in §10.5a; eine Funktion, die ein Python-Worker rechnet, mit `AddExterneFunktion<F>()` (der Worker erbt die generierte
 `<Funktion>Basis` aus `domain_client/generated/funktionen.py`, bietet sie am Handshake an und holt Aufträge per Pull). Pipelines
