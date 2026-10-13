@@ -6,7 +6,7 @@ using E = Infrastructure.Aggregate.ActorSystem.CommandVorpruefung.Ergebnis;
 namespace Infrastructure.Pruefstand.Dispatcher;
 
 /// <summary>
-/// T2b — die tragende Reihenfolge „Inbox-Dedup VOR OCC" (reine Entscheidung, Ebene-1).
+/// Zustellgarantie (docs/08 §8.4; früher T2b, docs/13 §13.6) — die tragende Reihenfolge „Inbox-Dedup VOR OCC" (reine Entscheidung, Ebene-1).
 /// Der Kern-Beweis: ein bereits verarbeiteter Command an STALE Version → idempotenter Erfolg,
 /// NICHT ein Concurrency-Konflikt. Ein frischer Command an stale Version → Konflikt.
 /// </summary>
@@ -27,7 +27,7 @@ public class CommandVorpruefungTests
     [Fact]
     public void Bereits_verarbeitet_an_stale_Version_ist_idempotenter_Erfolg_NICHT_Konflikt()
     {
-        // Der T2b-Kern: der Client-Retry seines bereits erfolgreichen Commands (Version rückte auf 6)
+        // Der Kern: der Client-Retry seines bereits erfolgreichen Commands (Version rückte auf 6)
         // darf NICHT als Konflikt lesen, sondern als Erfolg — weil die Inbox-Prüfung VOR OCC greift.
         CommandVorpruefung.Prüfe(istIdempotent: true, bereitsVerarbeitet: true, bereitsAbgelehnt: false,
                                  stateVersion: 6, expectedVersion: 5)

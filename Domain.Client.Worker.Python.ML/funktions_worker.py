@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # REPO-PFAD: Domain.Client.Worker.Python.ML/funktions_worker.py
 """
-Der GENERISCHE Funktions-Worker (Plan E13): bietet Katalog-Funktionen mit Laufort Extern über gRPC an. Er kennt keine Domäne — welche
+Der GENERISCHE Funktions-Worker (konzept-werkbank §12.3 E13): bietet Katalog-Funktionen mit Laufort Extern über gRPC an. Er kennt keine Domäne — welche
 Funktionen es gibt und wo ihre Implementierung liegt, sagt die generierte Tabelle (domain_client/generated/funktions_tabelle.py:
 Funktion → Basis, Modul, Klasse); die Implementierungen stehen in funktionen/<modul>.py (Klasse erbt die generierte Basis, füllt `rufe`).
 Gestartet von der Werkbank („▶ Worker starten" an der Funktions-Karte, Umgebung: Funktionen:<F>:Worker) oder von Hand:

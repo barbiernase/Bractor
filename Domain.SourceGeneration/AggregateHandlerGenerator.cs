@@ -14,7 +14,7 @@ namespace Domain.SourceGeneration
         public string ApplierName { get; }
         public List<DecideMethodInfo> DecideMethods { get; }
         public List<string> EventTypes { get; }
-        /// <summary>Code-Hash der Daten-Seite (State + Applier, ohne Decider) — Snapshot-Version (Plan E9).</summary>
+        /// <summary>Code-Hash der Daten-Seite (State + Applier, ohne Decider) — Snapshot-Version (konzept-werkbank §12.3 E9).</summary>
         public string CodeHash { get; }
 
         public HandlerGeneratorModel(

@@ -1,5 +1,5 @@
 """
-M7 — die Ask-Seite: eine Query STELLEN und die typisierte Antwort ENTPACKEN (Konzept §7).
+Die Ask-Seite: eine Query STELLEN und die typisierte Antwort ENTPACKEN (docs/09 §9.4).
 
 Beweist die zwei neuen Mapper-Bausteine:
   - wrap_query            → setzt das oneof-Feld im QueryPayloadDto (Spiegel zu wrap_command)

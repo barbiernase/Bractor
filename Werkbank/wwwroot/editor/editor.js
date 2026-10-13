@@ -31,7 +31,7 @@
     // Client (docs/konzept-akteure.md §4): die Software an der Leitung — traegt[] = Akteur-Vertrags-Teile, sendet/fragt/kenntnis = der Rand.
     // Katalog-Funktion (IFunktion): Auftrag → Ergebnis-Events; ein Prozess ruft sie mit Rufe<F> (Dann ƒ an der Regel).
     m.funktionen=m.funktionen||[];m.funktionen.forEach(f=>{if(!f._id)f._id="fk"+(NID++);f.ergebnisse=f.ergebnisse||[];f.konstruktor=f.konstruktor||[];});
-    // Domänen-Dienst (IDienst, Plan E11): Signatur (Methoden) + Implementierungen mit Konstruktor; eine Funktions-Implementierung nimmt ihn im Konstruktor.
+    // Domänen-Dienst (IDienst, konzept-werkbank §12.3 E11): Signatur (Methoden) + Implementierungen mit Konstruktor; eine Funktions-Implementierung nimmt ihn im Konstruktor.
     m.dienste=m.dienste||[];m.dienste.forEach(d=>{if(!d._id)d._id="dn"+(NID++);d.methoden=d.methoden||[];d.methoden.forEach(x=>{x.parameter=x.parameter||[];});
       d.implementierungen=d.implementierungen||[];d.implementierungen.forEach(i=>{i.konstruktor=i.konstruktor||[];});});
     // Pipeline als Fluss (§14): Knoten (Name = Identität) mit Eingängen aus Drähten; _ids nur fürs Board.
@@ -293,7 +293,7 @@
       direkt:[...m.direkt],kette:[...m.kette]});});return r;};
   window.deHandles=()=>{const r=[];Object.entries(HANDLE_ART).forEach(([k,[coll,pre]])=>(MODEL[coll]||[]).forEach(o=>{const ids=handleIds(o,pre+":"+o._id);
     (o.handles||[]).forEach((hd,hi)=>r.push({art:k,owner:o.name,eingang:hd.event||hd.query||"",kind:hd.inputKind||"",akteure:((SICHT().karten[ids[hi]]||{}).akteure||[])}));}));return r;};
-  // „Wer?" (§12.8 D): von welchem Akteur kommt die Nachricht — direkt (IDarf, oben unter „kommt aus") und über die Kette
+  // „Wer?" (docs/konzept-akteure.md §2.3): von welchem Akteur kommt die Nachricht — direkt (IDarf, oben unter „kommt aus") und über die Kette
   //   (abgeleitet, read-only, mit Pfad). Ein Eingang ohne beides ist eine Lücke (GR-HERKUNFT).
   function wer(sek,nm){if(!MODEL.akteure.length)return;const m=akteurMenge(nm),kette=[...m.kette].filter(a=>!m.direkt.has(a)).sort();
     if(kette.length){sek.append(h("div",{class:"gsec",title:"abgeleitet: ein Fluss, ein Prozess, ein Reader oder Decide erzeugt sie aus einer Nachricht dieses Akteurs — kein IDarf nötig"},"👤 über die Kette"));
@@ -334,7 +334,7 @@
     if(r.kind==="command"||r.kind==="event"||r.kind==="rejection"){const ag=(SICHT().karten["rec:"+r.name]||{}).aggregat;
       body.append(h("div",{class:"gsec",title:"abgeleitet aus Decider/Applier"},"Aggregat: "+(ag||"— keinem (Decider/Applier verdrahten)")));}
     if(r.kind==="command")body.append(h("label",{class:"cbx"},h("input",{type:"checkbox",onchange:e=>r.istErzeugung=e.target.checked||undefined,...(r.istErzeugung?{checked:"checked"}:{})}),"Erzeugung (ICreationCommand)"));
-    // Zwei Seiten je Nachricht (§12): ◀ kommt aus (⊕ Erzeuger) · geht an ▶ (⊕ Konsument). Auf der Fläche nur die Ports (Kanten),
+    // Zwei Seiten je Nachricht (konzept-editor-pipelines §12): ◀ kommt aus (⊕ Erzeuger) · geht an ▶ (⊕ Konsument). Auf der Fläche nur die Ports (Kanten),
     //   im Panel dazu die Partner-Listen. Ein transientes Event (Ablehnung) hat jetzt auch einen Ausgang (→ Projektion/Reaktion/Pipeline).
     {let ein=null,aus=null;
      if(r.kind==="command"){ein=slotRow("sagacmd","+ Erzeuger ⊕ (Prozess · Reaktion · Pipeline)","l",{type:"sagaCmd",dir:"in",rec:r.name},"cmd:in:"+r.name);
@@ -360,7 +360,7 @@
     body.append(h("div",{class:"gsec",title:"public sealed record "+r.name+" : "+((r.basen||[])[0]||"DateiGemeldet")+";"},"📁 "+r.treiber+"-Treiber"));
     if(INSP)dsQuelle(body,r);
     const umg=Object.entries((MODEL.rahmen||{}).umgebungen||{}),werte=umg.filter(([,u])=>u&&u.Quellen&&u.Quellen[r.name]).map(([n,u])=>[n,u.Quellen]);
-    // Der Webhook ist Konfig (Plan E12): je Umgebung die Route, bearbeitet im 🖥 Host-Rahmen (Quellen).
+    // Der Webhook ist Konfig (konzept-werkbank §12.3 E12): je Umgebung die Route, bearbeitet im 🖥 Host-Rahmen (Quellen).
     {const wh=werte.filter(([,q])=>q[r.name]&&q[r.name].Webhook).map(([n,q])=>[n,q[r.name].Webhook]);
       body.append(h("div",{class:"gsec",title:"Quellen:"+r.name+":Webhook — POST mit der Nachricht als JSON auf dem Einblick-Port; bearbeitet im 🖥 Host-Rahmen"},
         wh.length?wh.map(([n,w])=>"⇥ Webhook "+w+" ("+n+")").join(" · "):"⇥ kein Webhook (Quellen:"+r.name+":Webhook im 🖥 Host-Rahmen)"));}
@@ -458,7 +458,7 @@
         return [T(o.kind==="reader"?"Reader-Logik":"Handle-Logik",r.rumpf,r._ort,k,true,{kachel:"Handle "+(r.query||r.event||"")})];}
       case "fn":return [T("Impl-Logik",r.rumpf,r._rumpf,"store|"+n.own.ref.name+"|"+r.name,true,{kachel:r.name||"Store-Fn"})];
       case "funktion":{const t=[T("RufeAsync",r.rumpf,r._rumpf,r.auftrag?"funktion|"+r.name+"|"+r.auftrag:null,true,{kachel:(r.implementierung||r.name||"Funktion")+".RufeAsync"})];
-        // Die Python-Implementierung (Laufort Extern, Plan E13): `rufe` in funktionen/<modul>.py — ✎ über PythonSync, 🤖 als Slot funktionpy.
+        // Die Python-Implementierung (Laufort Extern, konzept-werkbank §12.3 E13): `rufe` in funktionen/<modul>.py — ✎ über PythonSync, 🤖 als Slot funktionpy.
         if(r.python)t.push(T("rufe · Python",r.python.rumpf,null,"funktionpy|"+r.name+"@"+r.python.klasse,true,
           {kachel:r.python.klasse+".rufe (Python)",python:{datei:r.python.datei,klasse:r.python.klasse,methode:r.python.methode||"rufe",signatur:r.python.signatur||null}}));
         return t;}
@@ -811,7 +811,7 @@
     body.append(h("div",{class:"gsec",title:f.implementierung?"public sealed class "+f.implementierung+" : "+f.name:"noch keine C#-Implementierung im Code"},
       "Rumpf · RufeAsync"+(f.implementierung?" · "+f.implementierung:" (neu)")));
     body.append(codePort("fk:impl:"+f._id,{k:"funktion",fk:f._id},null,"RufeAsync"));
-    // Python (Laufort Extern, Plan E13): die Implementierung in funktionen/<modul>.py — ⟳ legt sie an, sobald eine Umgebung die Funktion extern rechnet.
+    // Python (Laufort Extern, konzept-werkbank §12.3 E13): die Implementierung in funktionen/<modul>.py — ⟳ legt sie an, sobald eine Umgebung die Funktion extern rechnet.
     {const ext=Object.entries((MODEL.rahmen||{}).umgebungen||{}).filter(([,u])=>(((u||{}).Funktionen||{})[f.name]||{}).Laufort==="Extern").map(([n])=>n);
       if(f.python){body.append(h("div",{class:"gsec",title:f.python.datei+" — class "+f.python.klasse+"("+(f.python.basis||"…Basis")+")"},
           "Rumpf · rufe (Python) · "+f.python.klasse+(ext.length?" · Laufort Extern in "+ext.join(", "):" · (Laufort Host — läuft nur mit Extern)")));
@@ -867,7 +867,7 @@
       if(lo.length)body.append(h("div",{class:"gsec",style:"opacity:.8"},"Laufort je Umgebung: "+lo.map(([n,k])=>n+" = "+(k?(k.Laufort||"Host")+(k.Slots?" ×"+k.Slots:""):"⚠ nicht gebunden")).join(" · ")));}
   }
 
-  // ══ LOGIK-ELEMENT „Domänen-Dienst" (IDienst, Plan E11): Signatur (Methoden) · Implementierungen (je ihr Konstruktor, ⊕ weitere Dienste) ·
+  // ══ LOGIK-ELEMENT „Domänen-Dienst" (IDienst, konzept-werkbank §12.3 E11): Signatur (Methoden) · Implementierungen (je ihr Konstruktor, ⊕ weitere Dienste) ·
   //   Rümpfe aus der Datei. Ein Dienst steht nur im Konstruktor einer Funktions- bzw. Dienst-Implementierung (CQRS089) — ⊕ an der Funktion
   //   „🧩 braucht". Welche Implementierung läuft, sagt die Umgebung (🖥 Host-Rahmen → Dienste); gebunden wird generiert (GeneratedDienste).
   const dienstByName=nm=>MODEL.dienste.find(d=>d.name===String(nm||"").replace(/\?$/,"").trim());
@@ -939,7 +939,7 @@
         :einzig?einzig+" (die einzige)":"⚠ wählen")).join(" · ")+" — eingestellt im 🖥 Host-Rahmen (Dienste)"));}
   }
 
-  // ══ AKTEURE: von wem kommt was? (docs/konzept-akteure.md §2, docs/konzept-domaenen-editor.md §12) ══
+  // ══ AKTEURE: von wem kommt was? (docs/konzept-akteure.md §2 und §8) ══
   //   Deklariert ist nur IDarf (direkt); alles Abgeleitete (Kette, Akteur-Menge je Karte, Akteur-Rahmen, Reihenfolge, Pfade) rechnet der Server
   //   (DomainEditor/AkteurAnteile.cs → rahmen.akteurMengen, GraphExtractor/Sicht → board.sicht). Hier wird nur nachgeschlagen.
   const ART_SYM={Mensch:"👤 ",Maschine:"⚙ ",Ki:"🤖 "};
@@ -955,7 +955,7 @@
   const akteurDomaenen=name=>(SICHT().akteurDomaenen||{})[name]||[];
   // Die Akteure einer Karte (Domäne × Akteur-Rahmen).
   function akteurSet(n){const k=sk(n);return new Set(k?k.akteure:n.kind==="akteur"?[n.ref.name]:[]);}
-  // Reihenfolge der Akteur-Rahmen einer Domäne (§12.3) — die Ansicht kann sie umsortieren (VIEW.akteurOrdnung[dom]).
+  // Reihenfolge der Akteur-Rahmen einer Domäne (docs/konzept-akteure.md §8, konzept-werkbank §8.1) — die Ansicht kann sie umsortieren (VIEW.akteurOrdnung[dom]).
   function akteurOrdnung(dom){const aus=SICHT().akteurOrdnung[dom]||[],wunsch=((VIEW.akteurOrdnung||{})[dom]||[]).filter(x=>aus.includes(x));
     return [...wunsch,...aus.filter(x=>!wunsch.includes(x))];}
   // Akteur-Rahmen einer Karte: der ERSTE Akteur der Domäne (Reihenfolge), zu dem sie gehört; eine neue, noch leere Karte bleibt im Rahmen,
@@ -1650,7 +1650,7 @@
         removeTitel:"Nachricht lösen (der Typ bleibt)",onRemove:()=>{k.typ="";render();},
         extra:k.art==="quelle"&&!k.typ?[neuKnopf("Neue Quelle (Datei-Treiber) als eigene Karte anlegen und verbinden",()=>{const q=flNeueQuellNachricht(f);
           verbindeInfo({type:"evtUse",dir:"out",rec:q},{type:"evtUse",dir:"in",flk:k._id,role:"quelle"});deFlash("＋ "+q+" als eigene Karte angelegt und verbunden — Felder an seiner Karte",true);})]:[]}));
-      // Webhooks der Quelle (Plan E12) — Konfig je Umgebung (Quellen:<Typ>:Webhook), hier nur angezeigt; bearbeitet im 🖥 Host-Rahmen.
+      // Webhooks der Quelle (konzept-werkbank §12.3 E12) — Konfig je Umgebung (Quellen:<Typ>:Webhook), hier nur angezeigt; bearbeitet im 🖥 Host-Rahmen.
       (k.bindungen||[]).forEach(b=>body.append(h("div",{class:"gsec",style:"opacity:.8",title:"Konfig der Umgebung"+(b.datei?" · "+b.datei:"")},
         (b.modus==="webhook"?"⇥ Webhook POST ":b.modus==="timer"?"⏱ Timer ":"📁 Datei ")+(b.ort||"")+(b.umgebung?" ("+b.umgebung+")":"")+"  →  "+(k.typ||"Nachricht"))));
       body.append(h("div",{class:"gsec",style:"opacity:.6"},k.art==="quelle"?"Jede Nachricht startet einen Vorgang (genau einmal, Kennung). Der Treiber folgt aus dem Basistyp der Quelle, seine Werte aus der Konfig (Quellen:"+(k.typ||"Typ")+").":"Jedes Vorkommen dieses Events im Log startet einen Vorgang."));}
@@ -2140,7 +2140,7 @@
       const ord0=akteurOrdnung(ns);
       flk.forEach(x=>{if(x.ziel==null||!ord0.length)setzeFl(x.ziel);});
       const insel=eigen.filter(istInselLage),haupt=eigen.filter(n=>!istInselLage(n));
-      // Domäne × Akteur (§12): je Akteur (Reihenfolge der Domäne) ein eigener Rahmen mit dem bewährten Block-Layout darin,
+      // Domäne × Akteur (docs/konzept-akteure.md §8): je Akteur (Reihenfolge der Domäne) ein eigener Rahmen mit dem bewährten Block-Layout darin,
       //   untereinander; „ohne Akteur" zuletzt. Eine Domäne ohne Akteure bleibt, wie sie war (ein Block-Layout).
       const ord=akteurOrdnung(ns);
       if(haupt.length&&!ord.length){const c=layoutComp(haupt);c.placed.forEach(p=>placed.push({n:p.n,rx:RP+p.rx,ry:y+p.ry}));y+=c.h;w=c.w;}
@@ -2630,7 +2630,7 @@
   function basisZaehl(alle,zahl){graphNodes().forEach(n=>{if(["handle","fn","rumpf","state","decider","applier","transition"].includes(n.kind)||!ausCodeVon(n))return;
       const x=nsVon(n),d=domKey(n);alle.forEach(m=>{if((x&&drinNs(m,x))||(d!==OHNE_DOM&&drinNs(m,d)))zahl.set(m,(zahl.get(m)||0)+1);});});}
 
-  // ══ VERBINDEN-MODUS (Hybrid, docs/konzept-editor-panel-bearbeitung.md §3.3): Port im Panel anklicken → alle PASSENDEN
+  // ══ VERBINDEN-MODUS (Hybrid, docs/konzept-werkbank.md §8.5 + A.3 „⊕-Modus“): Port im Panel anklicken → alle PASSENDEN
   //   Knoten leuchten auf dem Graphen (Ablauf-Ansicht, Rest abgeblendet) → Karte anklicken = verbinden, ✓-Karte = lösen.
   //   Einfache Ports enden nach einem Klick, Listen-Ports bleiben offen bis Esc/Fertig. Was passt, sagt der Server (vbKandidaten).
   let VB=null;   // {key, label, einzel, filter}
@@ -3034,7 +3034,7 @@
     KONTRAKT=VIEW.details?[]:(SICHT().kontrakt||[]).filter(([u,v])=>VIS.has(u)&&VIS.has(v));
   }
 
-  // ══ EIN FOKUS (docs/konzept-werkbank.md §8.5, Plan P6.4): ersetzt Slice, Ketten-Fokus, ◎ und ⤢ — ohne Vorgang die statische Kette der
+  // ══ EIN FOKUS (docs/konzept-werkbank.md §8.5, Werkbank P6.4): ersetzt Slice, Ketten-Fokus, ◎ und ⤢ — ohne Vorgang die statische Kette der
   //   gewählten Karte (bzw. eine markierte Menge: Rahmen, Spalte, Vertrag, aufgefächerter Client), mit Vorgang die echte Spur. Angezeigt und
   //   gelöst wird er an EINER Stelle (Ansichts-Leiste: ◎ Fokus · ⤢ · ✕). FOKUS = {art: kette|menge|vorgang, titel, ids?}; FOCUS = die Karten.
   //   Die statische Kette (Nachrichtenfluss vorwärts/rückwärts bzw. der gerichtete Schnitt einer Leseseite, eines Aggregats, Akteurs oder
@@ -3195,7 +3195,7 @@
   //   Der Rahmen folgt den ECHTEN Kartenpositionen (GEO) — zieht man Karten, wächst er mit. Kopf = kleine Menüleiste.
   //   Leere neue Domänen (VIEW.domNeu) und die Heimat namespace-loser Knoten (VIEW.heim) leben nur in der Ansicht.
   const RP=36, RK=46, SPK=34, SPAD=8;   // Domänen-Rand/-Kopf, Spalten-Kopf/-Rand (Welt-px) — packLayout reserviert RP/RK je Region, SPK je Spalte
-  const AP=22, AK=40, AGAP=28, AKLEER_W=560;   // Akteur-Rahmen (Domäne × Akteur, §12): Rand, Kopf, Abstand, Breite eines leeren
+  const AP=22, AK=40, AGAP=28, AKLEER_W=560;   // Akteur-Rahmen (Domäne × Akteur, docs/konzept-akteure.md §8): Rand, Kopf, Abstand, Breite eines leeren
   const OHNE_DOM="§ohne";
   // Domäne einer Karte (Rahmen) — vom Server (board.sicht): das Aggregat, zu dem sie laut Graph gehört (Projektion über ihre Events,
   //   Reader/Store/ReadModel über ihre Projektion, Ablauf-Einheiten dort, wo sie wirken, Datentypen bei ihren Nachbarn), sonst ihr Namespace;
@@ -3246,7 +3246,7 @@
     const spalten=new Map(),codes=[];
     const sp=(key,init)=>{let c=spalten.get(key);if(!c)spalten.set(key,c={...init,x1:1e9,y1:1e9,x2:-1e9,y2:-1e9,ids:[],kinds:new Set()});return c;};
     const nimm=(c,id,g,k)=>{c.x1=Math.min(c.x1,g.x);c.y1=Math.min(c.y1,g.y);c.x2=Math.max(c.x2,g.x+g.w);c.y2=Math.max(c.y2,g.y+g.h);c.ids.push(id);if(k)c.kinds.add(k);};
-    // Akteur-Rahmen (Domäne × Akteur, §12): nur in Domänen mit Akteuren; sonst null (ein Block-Layout wie bisher).
+    // Akteur-Rahmen (Domäne × Akteur, docs/konzept-akteure.md §8): nur in Domänen mit Akteuren; sonst null (ein Block-Layout wie bisher).
     const aktVon=n=>akteurOrdnung(domKey(n)).length?akteurVon(n):null;
     GEO.forEach((g,id)=>{const n=NODEBY.get(id);if(!n)return;const d=domKey(n);
       if(n.kind==="client"||istFlussDom(d)||istHostDom(d))return;   // Client = Anschlussleiste; Pipeline-Knoten + ihre Karten liegen im Pipeline-Rahmen, nicht in Spalten
@@ -3339,7 +3339,7 @@
       h("button",{title:"Vertrag einpassen",onclick:e=>{e.stopPropagation();einpassenRahmen(r);}},"⤢"));
     k.ondblclick=e=>{e.stopPropagation();einpassenRahmen(r);};
     el.append(k);return el;}
-  // Ein Akteur-Rahmen (Domäne × Akteur, §12.5): Kopf = Akteur (Klick → sein Panel) · Domäne · Zahl · „↥ auch“ (Doppelungen,
+  // Ein Akteur-Rahmen (Domäne × Akteur, docs/konzept-akteure.md §8): Kopf = Akteur (Klick → sein Panel) · Domäne · Zahl · „↥ auch“ (Doppelungen,
   //   die in einem früheren Akteur-Rahmen stehen) · ＋ (für diesen Akteur entwerfen) · ◎ · ⤢ · ⋯ (Reihenfolge).
   function akteurRahmen(a,stecker){const ohne=a.akt===OHNE_AKT,ak=!ohne&&MODEL.akteure.find(x=>x.name===a.akt),
     r={x1:a.x1,y1:a.y1,x2:a.x2,y2:a.y2};
@@ -3673,7 +3673,7 @@
     MODEL=uebernimm(live,null);GSTAND=schnappschuss();render();
   };
 
-  // ══ GESTEN (Werkbank P7.2, docs/plan-werkbank-umsetzung.md §13): jede Bearbeitung ist ein Patch am Code. ══
+  // ══ GESTEN (Werkbank P7.2, docs/konzept-werkbank.md §8.2 + A.2): jede Bearbeitung ist ein Patch am Code. ══
   //   Nach einer Änderung (render → autosave) rechnet der Editor den Unterschied seiner Karten zum zuletzt gelesenen Code-Stand (GSTAND) —
   //   geänderte/neue Karten ganz, entfernte als Schlüssel — und schickt ihn als Geste. Der Server schreibt den Patch (Schreiber, Löschen am
   //   Ort), liest warm neu und schickt das Board zurück: das ist der neue Stand. Umbenennen ist eine eigene Geste (Roslyn-Renamer), ↶ nimmt
@@ -3793,7 +3793,7 @@
       .observe(out,{childList:true});})();
 
 
-  // ══ WERKBANK (docs/konzept-werkbank.md §5 + §8.1, Plan P3.6) ═════════════════════════════════════════════════════════════
+  // ══ WERKBANK (docs/konzept-werkbank.md §5 + §8.1, Werkbank P3.6) ═════════════════════════════════════════════════════════════
   //   Kopfzeile: Umgebung ▾ · Build (Stand) · Lauf · Postgres/Redis/Consul · ⟳ · 📸. Der 🖥 Host-Rahmen zeigt die Abschnitte der
   //   gewählten Umgebung als Karten; ihr Panel zeichnet EIN generischer Formular-Renderer aus dem Schema (/api/werkbank/schema) —
   //   keine handgebauten Formulare je Karte. Befunde des letzten ⟳ (Compiler/Analyzer mit Typ + Member) und Boot-Fehler (mit Karte)
@@ -4021,7 +4021,7 @@
     setInterval(()=>{if(!document.hidden)wbZustand();},5000);}
   {const boot=window.deBoot;window.deBoot=async function(){await boot();wbStart();};}
 
-  // ══ DURCHSPIELEN (docs/konzept-werkbank.md §6, Plan P5) ════════════════════════════════════════════════════════════════════
+  // ══ DURCHSPIELEN (docs/konzept-werkbank.md §6, Werkbank P5) ════════════════════════════════════════════════════════════════════
   //   Nur echte Eingänge: als Akteur (Konsole → JSON-Eingang des Hosts hinter dem Akteur-Tor), Hand-Funktionen beantworten (⧗ an der
   //   Funktions-Karte), Dateien auf die Quellkarte (der echte Treiber meldet sie), ⏩ Uhr vor, ▶ externe Worker. Die Formulare zeichnet der
   //   generische Renderer aus dem Schema, das der Server aus dem gelesenen Code baut (/api/werkbank/formular) — kein Modell-Wissen im JS.
@@ -4225,7 +4225,7 @@
     setTimeout(()=>dsTakt(true),800);setInterval(()=>{if(!document.hidden)dsTakt();},3000);}
   {const boot=window.deBoot;window.deBoot=async function(){await boot();dsStart();};}
 
-  // ══ SPUR (docs/konzept-werkbank.md §7.3, Plan P6) ═══════════════════════════════════════════════════════════════════════════════
+  // ══ SPUR (docs/konzept-werkbank.md §7.3, Werkbank P6) ═══════════════════════════════════════════════════════════════════════════════
   //   Nur View auf Einblick-Daten: der Werkbank-Server spiegelt die Spur des laufenden Hosts (SSE „neu bis seq" + Cursor) und liefert
   //   Vorgänge (gefiltert), nummerierte Wege (je Schritt die Karten, die gegangenen Kanten, Payload, Stand, ↤/↦), Zeitleisten-Bahnen und
   //   den Live-Puls fertig aus. Das JS schlägt nur Karten-Ids nach (Wirker-Id bzw. rec:Typ → Karte) und setzt Klassen, Nummern, Dicken.

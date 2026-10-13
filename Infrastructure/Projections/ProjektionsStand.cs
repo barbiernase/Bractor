@@ -13,7 +13,7 @@ namespace Infrastructure.Projections;
 public sealed record ProjektionsStand(string KindName, string ProjektionsId, string KlassenHash, IReadOnlyList<Type> Stores);
 
 /// <summary>
-/// „Passt die Leseseite noch zum Code?" (docs/konzept-werkbank.md §4.6, Plan E9). Läuft beim Start nach dem Siegel und VOR dem
+/// „Passt die Leseseite noch zum Code?" (docs/konzept-werkbank.md §4.6, §12.3 E9). Läuft beim Start nach dem Siegel und VOR dem
 /// Pull-Pfad: der Code-Hash jeder Projektion (Klasse + Store) wird mit dem in <c>&lt;schema&gt;.stand</c> gespeicherten verglichen.
 /// <list type="bullet">
 ///   <item><b>Sim</b>, mindestens eine Projektion geändert (oder ohne gespeicherten Stand): die ganze Leseseite wird geleert (alle

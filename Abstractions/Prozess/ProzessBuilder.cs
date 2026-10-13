@@ -5,7 +5,7 @@ using System.Linq;
 namespace Abstractions;
 
 /// <summary>
-/// Einstiegspunkt der Regel-Notation (Spec §3):
+/// Einstiegspunkt der Regel-Notation (docs/10 §10.5):
 /// <code>
 /// public ProzessRegeln Regeln => Prozess&lt;UeberweisungBeauftragt&gt;.Definiere(p =>
 /// {
@@ -71,7 +71,7 @@ public sealed class RegelBauer<TE1> where TE1 : IEvent
     private readonly Type[] _bedingung;
     internal RegelBauer(RegelBauer bauer, Type[] bedingung) { _bauer = bauer; _bedingung = bedingung; }
 
-    /// <summary>Join (Konjunktion, Spec §3): feuert erst, wenn AUCH <typeparamref name="TE2"/> da ist.</summary>
+    /// <summary>Join (Konjunktion): feuert erst, wenn AUCH <typeparamref name="TE2"/> da ist.</summary>
     public RegelBauer<TE1, TE2> Und<TE2>() where TE2 : IEvent
         => new(_bauer, _bedingung.Append(typeof(TE2)).ToArray());
 
@@ -177,7 +177,7 @@ public sealed class RegelBauerSammel<TE1, TE2, TSammel>
 
 // ── Arität 2: Auf<E1>().Und<E2> ──
 
-/// <summary>Ein Join zweier Bedingungs-Events (hält Diamanten/maximale Parallelität offen, Spec §3).</summary>
+/// <summary>Ein Join zweier Bedingungs-Events (hält Diamanten/maximale Parallelität offen).</summary>
 public sealed class RegelBauer<TE1, TE2>
     where TE1 : IEvent
     where TE2 : IEvent

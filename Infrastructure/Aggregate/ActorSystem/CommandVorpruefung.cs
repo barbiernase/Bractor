@@ -2,11 +2,11 @@ namespace Infrastructure.Aggregate.ActorSystem;
 
 /// <summary>
 /// Reine Vorab-Entscheidung eines Commands im Aggregat-Actor — store-/cluster-frei und damit
-/// Ebene-1-testbar (P12). Kapselt die für T2b tragende Reihenfolge: <b>Inbox-Dedup VOR der
+/// Ebene-1-testbar (P12). Kapselt die für die Zustellgarantie (docs/08 §8.4) tragende Reihenfolge: <b>Inbox-Dedup VOR der
 /// OCC-Prüfung</b>.
 ///
 /// Warum die Reihenfolge zählt: ein wiederholt zugestellter Command (at-least-once — Emittiert
-/// immer, Client seit T2b bei Retry nach verlorenem Ack) muss idempotent DASSELBE Ergebnis liefern,
+/// immer, Client bei Retry nach verlorenem Ack) muss idempotent DASSELBE Ergebnis liefern,
 /// auch wenn die Version inzwischen weitergerückt ist. Läge die OCC-Prüfung davor, läse ein
 /// Client-Retry seines bereits erfolgreichen Commands fälschlich einen „Concurrency conflict" statt
 /// des tatsächlichen Erfolgs. Die Dedup greift NUR bei wiederholter CommandId; ein frischer Command
@@ -28,7 +28,7 @@ public static class CommandVorpruefung
 
     /// <summary>
     /// Entscheidet den Vorab-Ausgang. Inbox-Dedup (nur auf dem idempotenten Pfad) hat Vorrang vor der
-    /// OCC-Prüfung — das ist die T2b-Semantik.
+    /// OCC-Prüfung — das ist die Semantik der Zustellgarantie (docs/08 §8.4).
     /// </summary>
     public static Ergebnis Prüfe(
         bool istIdempotent,

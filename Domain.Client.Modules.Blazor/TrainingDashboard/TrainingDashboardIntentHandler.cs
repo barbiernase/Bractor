@@ -5,7 +5,7 @@ namespace Domain.Client.Modules.TrainingDashboard;
 
 /// <summary>
 /// Übersetzt die Dashboard-Intents in Trainingslauf-Commands. <c>StarteTraining</c> ist ein
-/// ICreationCommand → neue AggregateId hier erzeugt. Der Python-TrainingWorker (M8) abonniert
+/// ICreationCommand → neue AggregateId hier erzeugt. Der Python-TrainingWorker abonniert
 /// das resultierende <c>TrainingAngefordert</c>-Event und fährt den Lauf.
 /// </summary>
 public partial class TrainingDashboardIntentHandler

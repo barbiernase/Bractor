@@ -6,7 +6,7 @@ using Microsoft.CodeAnalysis;
 namespace Domain.SourceGeneration
 {
     /// <summary>
-    /// Die normalisierte Syntax eines Typs für den Code-Hash (<c>Abstractions/Kodehash.cs</c>, Plan E9): die Token-Folge aller
+    /// Die normalisierte Syntax eines Typs für den Code-Hash (<c>Abstractions/Kodehash.cs</c>, konzept-werkbank §12.3 E9): die Token-Folge aller
     /// Deklarationsteile — ohne Leerraum und Kommentare, also unempfindlich gegen Formatierung. <paramref name="auslassen"/> schneidet
     /// Teilbäume heraus (z. B. den Decider aus dem Aggregat: er ändert die Daten nicht). Auch in Projections.SourceGeneration verlinkt.
     /// </summary>

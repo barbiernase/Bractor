@@ -4,7 +4,7 @@ using Domain.Client.Modules.Blazor.Kuratieren;
 namespace Domain.Client.Modules.Kuratieren;
 
 /// <summary>
-/// Footer-Modul „Tag-Geste" (Konzept datensatz-kuratierung §4.2): Taste <c>A</c> nimmt das
+/// Footer-Modul „Tag-Geste": Taste <c>A</c> nimmt das
 /// betrachtete Cursor-Paar ins aktive Sammel-Ziel auf bzw. wieder heraus — dieselbe
 /// Muskelgedächtnis-Logik wie das Labeln (R/Q/F). Der kleine Footer-View zeigt den
 /// Toggle-Zustand („✓ in <Name>") des aktuellen Paars.

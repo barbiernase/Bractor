@@ -3,7 +3,7 @@ using System.Text;
 namespace Abstractions;
 
 /// <summary>
-/// Der Code-Hash (docs/plan-werkbank-umsetzung.md E9): die Generatoren hashen die normalisierte Syntax eines Bausteins — die
+/// Der Code-Hash (docs/konzept-werkbank.md §12.3 E9): die Generatoren hashen die normalisierte Syntax eines Bausteins — die
 /// Token-Folge ohne Leerraum und Kommentare —, damit „passen die Daten noch zum Code?" ohne Laufzeit-Reflection beantwortbar ist
 /// (Aggregat = State + Applier → Snapshot verwerfen; Projektion = Klasse + Store → neu aufbauen). Eine Stelle für Generatoren
 /// (per Link, netstandard2.0, dort <c>internal</c>) und Laufzeit (Zusammensetzen mehrerer Teil-Hashes).

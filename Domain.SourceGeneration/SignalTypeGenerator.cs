@@ -4,7 +4,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace Domain.SourceGeneration
 {
     /// <summary>
-    /// Generiert pro PERSISTIERTEM Event-Typ ein Signal `StateChangeVia{Event}` (Spec 4.3 / 5.1).
+    /// Generiert pro PERSISTIERTEM Event-Typ ein Signal `StateChangeVia{Event}` (docs/03 §3.6).
     ///
     /// Ein Signal trägt nur `(StreamId, Version)` — ein Weckruf, keine Nutzlast. Es
     /// implementiert IStateChangeSignal (→ IMessagePayload), läuft also durch dasselbe
@@ -17,7 +17,7 @@ namespace Domain.SourceGeneration
     /// denselben Signal-Typ in mehreren Assemblies erzeugen (Konflikt).
     ///
     /// AUSGESCHLOSSEN: ITransientEvent — die stehen nicht im Log, es gibt nichts
-    /// nachzulesen, also kein Signal (Spec: „pro persistiertem Event-Typ").
+    /// nachzulesen, also kein Signal (ein Signal nur „pro persistiertem Event-Typ").
     /// </summary>
     [Generator]
     public class SignalTypeGenerator : IIncrementalGenerator
@@ -77,7 +77,7 @@ namespace Domain.SourceGeneration
 
                 /// <summary>
                 /// Signal (Weckruf) für {{model.EventName}} — trägt nur (StreamId, Version).
-                /// Generiert vom SignalTypeGenerator (Spec 5.1). Keine Nutzlast.
+                /// Generiert vom SignalTypeGenerator (docs/03 §3.6). Keine Nutzlast.
                 /// ★ P1b (TG-1): implementiert IStateChangeSignal&lt;{{model.EventName}}&gt; → die Event→Signal-Kante
                 /// steckt im Typ-Argument, nicht im Namen (der SignalFactoryGenerator liest sie typ-getrieben).
                 /// </summary>

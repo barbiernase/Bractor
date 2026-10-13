@@ -4,7 +4,7 @@ namespace Abstractions;
 /// Implementiert vom Store/Ziel einer Projektion. Erlaubt dem Rebuild-Koordinator,
 /// das Ziel vor dem Neuaufbau zu leeren.
 ///
-/// Per Spec 7.7 ist das Zurücksetzen/Leeren eine STORE-Operation, kein neues
+/// Per docs/04 §4.3 (Neuaufbau) ist das Zurücksetzen/Leeren eine STORE-Operation, kein neues
 /// Framework-Konzept. Dieses Interface benennt sie nur, damit der Koordinator sie
 /// einheitlich auslösen kann — es schreibt nicht vor, WIE geleert wird.
 ///

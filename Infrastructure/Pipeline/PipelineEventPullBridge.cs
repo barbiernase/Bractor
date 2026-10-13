@@ -12,7 +12,7 @@ namespace Infrastructure.Pipeline;
 /// emittiert Commands (idempotent am Empfänger). Diese Brücke übersetzt den Pull-Dispatch
 /// (<c>Func&lt;EventEnvelope, ProjectionWriter, Task&gt;</c>) auf die generierte
 /// <c>DispatchEventAsync</c> der Pipeline — der Entwickler-Code (<c>Handle(evt, ctx)</c>) bleibt
-/// unverändert, nur der TRANSPORT darunter wechselt (Zielbild §4.5).
+/// unverändert, nur der TRANSPORT darunter wechselt (docs/04 §4.6).
 ///
 /// Rein (kein Cluster/Proto): die drei Ausgabe-Nähte werden injiziert →
 ///   - <paramref name="emitFactory"/> baut je Auslöse-Event die Command-/Event-Route

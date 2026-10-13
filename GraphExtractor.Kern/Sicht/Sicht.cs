@@ -373,7 +373,7 @@ public sealed partial class Sicht
             if (IstRec(S(f, "auftrag"))) P(Rec(S(f, "auftrag")), fid);
             foreach (var r in L(f, "ergebnisse")) if (IstRec(r)) P(fid, Rec(r));
             foreach (var p in Alle(f["faehigkeiten"])) if (LeseFnZu(S(p, "typ")) is { } z) P(fid, "fn:" + S(z.Fn, "_id"));
-            // Plan E11: ein Dienst im Konstruktor der Implementierung (Kante Funktion → Dienst).
+            // konzept-werkbank §12.3 E11: ein Dienst im Konstruktor der Implementierung (Kante Funktion → Dienst).
             foreach (var p in Alle(f["konstruktor"])) if (DienstZu(S(p, "typ")) is { } dz) P(fid, "dn:" + S(dz, "_id"));
         }
         // … und Dienst → Dienst, wenn eine Implementierung einen anderen im Konstruktor nimmt.

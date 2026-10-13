@@ -7,7 +7,7 @@ namespace Infrastructure.Pruefstand.Phase1;
 
 /// <summary>
 /// Phase 1 (1b) — Signal-Typ-Generator: pro persistiertem Event ein
-/// `StateChangeVia{Event}`-Weckruf (Spec 4.3 / 5.1), im Type-Registry.
+/// `StateChangeVia{Event}`-Weckruf (docs/03 §3.6), im Type-Registry.
 /// </summary>
 public class SignalTypeGeneratorTests
 {

@@ -131,7 +131,7 @@ public static class PythonSync
     }
 
     /// <summary>
-    /// Neue Python-Implementierungen der Katalog-Funktionen anlegen (Plan E13), wenn die Umgebung eine Funktion EXTERN rechnen lässt
+    /// Neue Python-Implementierungen der Katalog-Funktionen anlegen (konzept-werkbank §12.3 E13), wenn die Umgebung eine Funktion EXTERN rechnen lässt
     /// (<c>Funktionen:&lt;F&gt;:Laufort = Extern</c>) und es noch keine gibt: <c>funktionen/&lt;modul&gt;.py</c> im Worker-Projekt mit einer Klasse, die die
     /// GENERIERTE Basis erbt (<c>generated/funktionen.py</c>), und <c>rufe</c> als Platzhalter (✎/🤖 füllt ihn). Datei und Klasse nach derselben Regel
     /// wie die generierte Tabelle des Workers (<see cref="Abstractions.Funktionsvertrag"/>). Fehlt die Basis (noch nicht gebaut): melden statt raten.

@@ -8,7 +8,7 @@ using Proto.Cluster;
 namespace Infrastructure.Deadlines;
 
 /// <summary>
-/// Der DB-Uhr-getriebene Deadline-Scheduler (Feature-Strom, Zielbild §12). Er pollt periodisch die fälligen
+/// Der DB-Uhr-getriebene Deadline-Scheduler (Feature-Strom; docs/04 §4.6, offen: docs/13 W11-2). Er pollt periodisch die fälligen
 /// Fristen — Fälligkeit IMMER gegen die <see cref="IDbClock"/>, nie gegen Node-Zeit — und feuert je Frist den
 /// konfigurierten Command über das EINE Emit-Primitiv (<see cref="CommandEmitter"/>): deterministische
 /// CommandId (<see cref="FristId.FürZustellung"/>) → der Empfänger dedupliziert (exactly-once wirksam), auch

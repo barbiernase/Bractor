@@ -4,7 +4,7 @@ using Domain.Client.Modules.Blazor.Modelle;
 namespace Domain.Client.Modules.Modelle;
 
 /// <summary>
-/// Bühne „Modelle" (Konzept konzept-training-und-datensatz §5): registrierte Modell-Artefakte,
+/// Bühne „Modelle": registrierte Modell-Artefakte,
 /// Metrik-Vergleich, „aktiv setzen" → schließt den Kreis Datensatz → Training → Modell → Inferenz.
 /// Auto-entdeckt als <see cref="IStageModule"/>.
 /// </summary>

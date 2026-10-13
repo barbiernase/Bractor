@@ -6,7 +6,7 @@ using Abstractions;
 namespace Infrastructure.Prozess;
 
 /// <summary>
-/// Macht das Feuern einer Transition AUS SICHT DES MANAGER-TURNS nicht-blockierend (Spec §4, der
+/// Macht das Feuern einer Transition AUS SICHT DES MANAGER-TURNS nicht-blockierend (docs/04 §4.5, der
 /// strukturelle (A)-Hang-Fix). Der Manager ist ein virtueller Cluster-Actor: ein im Turn awaiteter
 /// Ziel-Send verklemmte den Cluster (die alte (A)-Klasse). Hier wird der Ziel-Send DETACHED angestoßen
 /// und der Wrapper kehrt SOFORT zurück — der Manager feuert und vergisst.

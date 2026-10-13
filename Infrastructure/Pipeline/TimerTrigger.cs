@@ -7,7 +7,7 @@ using Proto.Cluster;
 namespace Infrastructure.Pipeline;
 
 /// <summary>
-/// Zeit-gesteuerter Trigger-Ingress (Zielbild §6): ein Intervall feuert einen konfigurierten
+/// Zeit-gesteuerter Trigger-Ingress (docs/04 §4.6): ein Intervall feuert einen konfigurierten
 /// <see cref="IPipelineTrigger"/> an die Ziel-Pipeline. Bewusst PUSH — ein Tick ist KEIN Log-Event
 /// (kein Cursor, kein Fold, verlierbar per Invariante 2/6). Ein verlorener Tick heilt der nächste.
 ///

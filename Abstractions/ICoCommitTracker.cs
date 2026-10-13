@@ -19,7 +19,7 @@ namespace Abstractions;
 /// <b>Grenze (bewusst):</b> Das Interface ist ein VERSPRECHEN, kein statischer Beweis — Atomarität
 /// ist eine Laufzeiteigenschaft der Store-Transaktion. Es verengt nur die Vertrauensgrenze auf
 /// „diese eine markierte Implementierung", die ein Store-Crash-Test einlöst (siehe
-/// <c>CoCommitPostgresTests</c>). Konzept: <c>docs/konzept-exactly-once-naht.md</c>.
+/// <c>CoCommitPostgresTests</c>). Konzept: <c>docs/04-konsum-und-prozess-maschine.md</c> §4.3.
 /// </summary>
 public interface ICoCommitTracker : IProjectionTracker
 {

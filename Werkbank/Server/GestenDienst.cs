@@ -4,7 +4,7 @@ using GraphExtractor;
 
 namespace Werkbank.Server;
 
-/// <summary>Eine gemessene Geste (Werkbank P7.2, §16): Schreiben (Patch rechnen + speichern), Lesen (warmer Workspace), Befunde, gesamt.</summary>
+/// <summary>Eine gemessene Geste (Werkbank P7.2, Messwerte docs/12 §12.5): Schreiben (Patch rechnen + speichern), Lesen (warmer Workspace), Befunde, gesamt.</summary>
 public sealed record GestenMessung(DateTimeOffset Zeit, string Art, string Titel, int Dateien, long SchreibenMs, long LesenMs, long BefundeMs, long GesamtMs);
 
 /// <summary>Die Antwort auf eine Geste: was geschrieben wurde, was nicht (mit Grund), Compiler-Befunde der berührten Dateien, Zeit.</summary>
@@ -12,7 +12,7 @@ public sealed record GestenAntwort(bool Ok, string? Fehler, string Titel, IReadO
     IReadOnlyList<Diagnose> Befunde, long Ms);
 
 /// <summary>
-/// Geste → Patch → Workspace → Board (docs/plan-werkbank-umsetzung.md P7.2). Jede Geste ist ein Patch am Code: Karten ändern/anlegen/löschen
+/// Geste → Patch → Workspace → Board (Werkbank P7.2, docs/konzept-werkbank.md §8.2). Jede Geste ist ein Patch am Code: Karten ändern/anlegen/löschen
 /// über den Schreiber (<see cref="GraphExtractor.Gesten"/>), Umbenennen über den Roslyn-Renamer, ↶ über den <see cref="Verlauf"/>. Danach liest
 /// der warme Workspace neu; die Antwort trägt die Compiler-Befunde der berührten Dateien. Eine Geste nach der anderen; nie auf <c>main</c>.
 /// </summary>

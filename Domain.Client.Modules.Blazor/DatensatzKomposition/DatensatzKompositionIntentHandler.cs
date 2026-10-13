@@ -5,11 +5,11 @@ using Domain.Datensatz;
 namespace Domain.Client.Modules.DatensatzKomposition;
 
 /// <summary>
-/// Übersetzt die View-Intents in Datensatz-Commands (Konzept §8.1 / Handoff §3.1). Die
+/// Übersetzt die View-Intents in Datensatz-Commands. Die
 /// GUI sendet nur die „Anstoß"-Commands — <c>FuegeRangeHinzu</c>/<c>FriereEin</c> —; das
 /// zweiphasige Auflösen (Range → IDs, Freeze → Snapshot) macht der server-seitige Resolver.
 ///
-/// Wiederverwendung des vorhandenen Suchfilters (Weg 1, Handoff §4): der große Paarliste-
+/// Wiederverwendung des vorhandenen Suchfilters: der große Paarliste-
 /// <see cref="Store"/> hält die <see cref="SuchKriterien"/> als einzige Wahrheit; hier werden
 /// sie 1:1 auf <see cref="RangeKriterien"/> gemappt.
 /// </summary>

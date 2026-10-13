@@ -55,7 +55,7 @@ public record EinfrierenAngefordert(
 /// <summary>
 /// Der Datensatz ist eingefroren: Mitgliedschaft + Label-Stand + Split festgeschrieben,
 /// Version vergeben. Danach immutabel. Der immutable Snapshot liegt hiermit im
-/// Postgres-Event-Store — kein File-Dump (Konzept §3.1).
+/// Postgres-Event-Store — kein File-Dump.
 /// </summary>
 public record DatensatzEingefroren(
     int Version,

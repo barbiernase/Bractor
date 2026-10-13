@@ -15,7 +15,7 @@ using Proto;
 namespace Infrastructure.Eingang;
 
 /// <summary>
-/// Der JSON-Eingang des Hosts (docs/konzept-werkbank.md §6, Werkbank P5, Plan E5) — der Weg der Werkbank ins ECHTE System, nur auf dem
+/// Der JSON-Eingang des Hosts (docs/konzept-werkbank.md §6, Werkbank P5, §12.3 E5) — der Weg der Werkbank ins ECHTE System, nur auf dem
 /// Einblick-Port und nur mit <c>Transport:JsonEingang</c> (Sim an, Prod aus):
 /// <list type="bullet">
 /// <item><c>POST /eingang/command</c>, <c>/eingang/query</c> — als Akteur: Token im Header <c>akteur-token</c> → <see cref="AkteurTor"/> →

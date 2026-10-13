@@ -1,5 +1,5 @@
 """
-Der generische Funktions-Worker (Plan E13) gegen das ECHTE Generat: die Tabelle (domain_client/generated/funktions_tabelle.py) nennt je
+Der generische Funktions-Worker (konzept-werkbank §12.3 E13) gegen das ECHTE Generat: die Tabelle (domain_client/generated/funktions_tabelle.py) nennt je
 Funktion mit Python-Basis Basis, Modul und Klasse; der Worker lädt die Implementierung daraus — ohne Domänenwissen — und gibt ihr Slots und
 Konfig. Dazu die Implementierungen der Bildaufbereitung mit einem echten Bild.
 """

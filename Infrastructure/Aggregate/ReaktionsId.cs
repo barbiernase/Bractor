@@ -6,7 +6,7 @@ namespace Infrastructure.Aggregate;
 /// <summary>
 /// Deterministische Reaktions-/CommandId aus `(StreamId, AggregateVersion)` des
 /// auslösenden Events plus einem Diskriminator (i. d. R. der Command-Typname) —
-/// Spec 9.3 / 11.3.
+/// docs/04 §4.4.
 ///
 /// Gleiche Auslöse-Position + gleicher Command-Typ → gleiche Id. Damit ist ein
 /// wiederholt gesendeter Reaktions-Command beim Empfänger ALS DUPLIKAT erkennbar

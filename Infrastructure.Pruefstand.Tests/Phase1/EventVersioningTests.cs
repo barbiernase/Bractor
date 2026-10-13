@@ -6,7 +6,7 @@ using Infrastructure.Aggregate;
 namespace Infrastructure.Pruefstand.Phase1;
 
 /// <summary>
-/// Phase 1 (1a-i) — Version PRO Event im Publish-Pfad (Spec 4.2).
+/// Phase 1 (1a-i) — Version PRO Event im Publish-Pfad (docs/03 §3.6).
 ///
 /// Belegt den Fix der Phase-1-Lücke: früher trug jedes Event eines Batches den
 /// Batch-Endwert (<c>_state.Version</c>); jetzt trägt jedes Event seine eigene,

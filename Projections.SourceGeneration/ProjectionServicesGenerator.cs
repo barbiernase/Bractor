@@ -163,7 +163,7 @@ namespace Projections.SourceGeneration
                 sb.AppendLine($"        services.AddSingleton<{projectionQueryService.ToDisplayString(full)}>();");
             }
 
-            // Stand der Leseseite (Plan E9): Code-Hash je Store-Klasse (normalisierte Syntax aller Teile) und die Read-Model-Typen —
+            // Stand der Leseseite (konzept-werkbank §12.3 E9): Code-Hash je Store-Klasse (normalisierte Syntax aller Teile) und die Read-Model-Typen —
             // daraus entscheidet der Host einer Sim-Umgebung beim Start, ob die Projektionen neu aufgebaut werden.
             sb.AppendLine();
             foreach (var store in stores)

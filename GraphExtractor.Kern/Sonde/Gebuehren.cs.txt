@@ -3,7 +3,7 @@ using Leihwesen.Ausleihe;
 
 // SONDE — ZWEI Aggregate im SELBEN Namespace + Saga mit expliziter Interface-Implementierung und Block-Lambda,
 //         dazu eine KATALOG-FUNKTION (IFunktion) mit eigenem Auftrag, die die Saga per Rufe<F> mit Zeitlimit ruft — ihre C#-Implementierung
-//         nimmt einen DOMÄNEN-DIENST (IDienst) im Konstruktor, dessen Implementierung einen Konfig-Record nimmt (Plan E11).
+//         nimmt einen DOMÄNEN-DIENST (IDienst) im Konstruktor, dessen Implementierung einen Konfig-Record nimmt (konzept-werkbank §12.3 E11).
 
 namespace Leihwesen.Gebuehren;
 

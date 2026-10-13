@@ -11,7 +11,7 @@ using Proto.Cluster;
 namespace Infrastructure.Prozess;
 
 /// <summary>
-/// Der GENERISCHE Prozess-Manager als virtueller Cluster-Actor (Spec §4): EIN Kind für ALLE Prozess-Typen,
+/// Der GENERISCHE Prozess-Manager als virtueller Cluster-Actor (docs/04 §4.5): EIN Kind für ALLE Prozess-Typen,
 /// eine Instanz pro Korrelation (Identität = Korrelations-Guid). Verschmilzt das alte Prozess-Aggregat +
 /// den Treiber. Er hält im Speicher NICHTS außer der Korrelation — das Marking faltet der
 /// <see cref="ProzessManager"/> bei jeder Weckung aus dem Log.

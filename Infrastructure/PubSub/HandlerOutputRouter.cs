@@ -8,11 +8,11 @@ using Proto.Cluster;
 namespace Infrastructure.PubSub;
 
 /// <summary>
-/// Das Ausgabe-Routing eines Handlers (Spec 4.6) — herausgezogen aus dem Push-Actor, sodass
+/// Das Ausgabe-Routing eines Handlers (docs/04 §4.4) — herausgezogen aus dem Push-Actor, sodass
 /// BEIDE Transporte (Push-Subscriber und Pull-Adapter) dieselbe Logik nutzen:
 ///   <c>IEvent</c>   → reaktives Event re-publishen (Broker),
 ///   <c>ICommand</c> → Reaktion an ein Fremd-Aggregat (deterministische CommandId + OCC-Retry;
-///                     die Wirksamkeit sichert der Noop-Decider des Empfängers, Spec 9.3).
+///                     die Wirksamkeit sichert der Noop-Decider des Empfängers, docs/04 §4.4).
 ///
 /// Context-frei: der <see cref="Cluster"/> kommt aus dem <c>ActorSystem</c>, nicht aus einem
 /// per-Message-Context — deshalb aus dem Pull-Adapter (der keinen Message-Context hat) nutzbar.
@@ -86,7 +86,7 @@ public sealed class HandlerOutputRouter
         // ★ P3: über das EINE Emit-Primitiv (EM-1). Deterministische CommandId (W1-Dedup am Empfänger)
         //   + bounded Token (W2) stecken jetzt im Primitiv — kein eigener Retry/Envelope/RequestAsync mehr.
         //   Die Auslöse-Position (Stream + Version) reist in die Kausalität → stabile Id über Re-Wakes;
-        //   die Wirksamkeit sichert der Noop-Decider/Inbox des Empfängers (Spec 9.3).
+        //   die Wirksamkeit sichert der Noop-Decider/Inbox des Empfängers (docs/04 §4.4).
         var triggerVersion = (trigger as IEventEnvelope)?.AggregateVersion ?? 0;
         // ★ Upcasting-Split: bei einem Split teilen sich Geschwister dieselbe AggregateVersion; der SubIndex
         //   disambiguiert die Auslöse-Position, damit ihre deterministischen Emit-Ids nicht kollidieren.

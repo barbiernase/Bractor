@@ -9,7 +9,7 @@ namespace Domain.SourceGeneration;
 /// <summary>
 /// <b>CQRS050 — geschlossener Ausgabe-Vertrag.</b> WAS ein Decider oder Handler erzeugen kann, steht in seiner
 /// SIGNATUR — als konkreter Typ oder als <c>OneOf&lt;A, B, …&gt;</c> konkreter Typen. Der Compiler garantiert dann, dass
-/// der Rumpf nichts anderes liefern kann; Generatoren (Command→Event-Map, Azyklizitäts-Guard), Graph, Editor, Simulation
+/// der Rumpf nichts anderes liefern kann; Generatoren (Command→Event-Map, Azyklizitäts-Guard), Graph, Editor
 /// und LLM-Kontext lesen die Menge aus dem Typ — ohne Rumpf-Analyse, die grundsätzlich unvollständig bleibt
 /// (Variablen mit Interface-Typ, Hilfsmethoden, Schleifen über Listen, Fabriken … sind syntaktisch nicht zu erschöpfen).
 ///

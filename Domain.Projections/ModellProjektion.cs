@@ -6,7 +6,7 @@ using ModellAgg = Domain.Modell.Modell;
 namespace Domain.Projections;
 
 /// <summary>
-/// Materialisiert den Modell-Zustand (Konzept konzept-training-und-datensatz §5): ein
+/// Materialisiert den Modell-Zustand: ein
 /// <see cref="ModellReadModel"/> pro Modell (Upsert) + den Singleton-Zeiger
 /// <see cref="AktivesModellReadModel"/> auf das aktive Modell.
 ///

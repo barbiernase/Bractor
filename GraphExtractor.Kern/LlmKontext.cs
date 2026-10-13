@@ -343,7 +343,7 @@ public sealed class KontextBauer
     }
 
     /// <summary>
-    /// Katalog-Funktionen mit Python-Implementierung (Laufort Extern, Plan E13): je Funktion ein Slot für den <c>rufe</c>-Rumpf — Signatur aus der
+    /// Katalog-Funktionen mit Python-Implementierung (Laufort Extern, konzept-werkbank §12.3 E13): je Funktion ein Slot für den <c>rufe</c>-Rumpf — Signatur aus der
     /// generierten Basis, Vertrag (genau ein Ergebnis aus dem OneOf), erreichbar (Auftrag-DTO, Ausfuehrung, self.konfig), Typen, Nachbar-Code.
     /// Id <c>funktionpy|&lt;F&gt;@&lt;Klasse&gt;</c>.
     /// </summary>
@@ -1126,7 +1126,7 @@ public static class KontextCli
                 rumpf = py.Fehlt ? "fehlt" : "geschrieben", auftrag = py.Auftrag, slotDatei = py.SlotDatei, tokenSlot = Token(py.Text),
             });
         }
-        // Python-Rümpfe der Katalog-Funktionen (Laufort Extern, Plan E13): derselbe Anker (Datei + Klasse + Methode), Art „funktionpy“.
+        // Python-Rümpfe der Katalog-Funktionen (Laufort Extern, konzept-werkbank §12.3 E13): derselbe Anker (Datei + Klasse + Methode), Art „funktionpy“.
         foreach (var py in bauer.PythonFunktionsSlots(solutionDir))
         {
             File.WriteAllText(Path.Combine(verz, py.SlotDatei), py.Text);

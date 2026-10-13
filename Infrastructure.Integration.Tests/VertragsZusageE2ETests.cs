@@ -10,7 +10,7 @@ using Microsoft.Extensions.Hosting;
 namespace Infrastructure.Integration.Tests;
 
 /// <summary>
-/// Akteur-Vertrag §9.7 — „doppelt zugestellt ≠ doppelt wirksam" für eine Zusage von AUSSEN, gegen echtes Marten/Consul/Redis.
+/// Akteur-Vertrag (docs/konzept-akteure.md §5.3) — „doppelt zugestellt ≠ doppelt wirksam" für eine Zusage von AUSSEN, gegen echtes Marten/Consul/Redis.
 ///
 /// Der Python-Klassifizierer antwortet auf <see cref="ImagePairKomplett"/> mit <see cref="KlassifiziereBildPaarDurchKi"/> und nennt dabei
 /// das Event (Stream + Version + Typ) und den Index seiner Ausgabe. Der gRPC-Service leitet daraus die CommandId ab

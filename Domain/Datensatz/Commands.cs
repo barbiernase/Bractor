@@ -12,7 +12,7 @@ public record ErstelleDatensatz(
 ) : ICreationCommand;
 
 // ═══════════════════════════════════════════════════
-// RANGE — Variante A (zweiphasig, Konzept §3.2)
+// RANGE — Variante A (zweiphasig)
 //   GUI ──FuegeRangeHinzu(kriterien)──► RangeAngefordert
 //        └─► server-seitiger Resolver löst auf ──NimmRangeAuf(ids, herkunft)──► PaareAufgenommen
 // Der Nutzer fasst nie IDs an — er denkt in Suchen.
@@ -61,7 +61,7 @@ public record SetzeSplit(
 ) : ICommand;
 
 // ═══════════════════════════════════════════════════
-// EINFRIEREN — zweiphasig (Konzept §3.1)
+// EINFRIEREN — zweiphasig
 //   GUI ──FriereEin──► EinfrierenAngefordert
 //        └─► Resolver snapshottet Label-Stand + Split ──SchliesseEinfrierenAb(mitglieder)──► DatensatzEingefroren
 // ═══════════════════════════════════════════════════

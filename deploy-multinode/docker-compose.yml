@@ -69,7 +69,7 @@ services:
       timeout: 3s
       retries: 10
 
-  # ★ Dedizierter Schema-Migrator (Multi-Node-Cold-Start, docs/multi-node-deployment.md): dasselbe Image,
+  # ★ Dedizierter Schema-Migrator (Multi-Node-Cold-Start, docs/06-transport-multinode-betrieb.md §6.3): dasselbe Image,
   #   Cluster__Rolle=Migrator → legt ALLE Marten-Objekte (inkl. der sonst LAZY erzeugten Snapshot-Tabellen)
   #   eager + advisory-lock-gesichert an, dann exit 0 (kein Cluster-/Consul-Start, berührt nur Postgres).
   #   grpc1/2/3 (alle Role=member, AutoCreate.None) warten per service_completed_successfully → kein Cold-

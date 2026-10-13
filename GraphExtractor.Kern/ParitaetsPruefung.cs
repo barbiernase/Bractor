@@ -31,7 +31,7 @@ public static class ParitaetsPruefung
         Solution solution, Projektlage lage, Analyse ist, string boardJson, IReadOnlyList<IngressBindung>? ingress = null)
     {
         var befunde = new List<ParitaetsBefund>();
-        // Die Server-Kartenliste (Werkbank P7.3, L20): was der Editor zeigt — Karten, Kanten, Ableitungen. Gegen SIE prüft das Inventar.
+        // Die Server-Kartenliste (Werkbank P7.3): was der Editor zeigt — Karten, Kanten, Ableitungen. Gegen SIE prüft das Inventar.
         var sicht = Sicht.Aus(JsonNode.Parse(boardJson)!.AsObject());
         Inventar(ist, lage, sicht, befunde);
         await BoardModell(solution, ist, boardJson, befunde);
@@ -333,7 +333,7 @@ public static class ParitaetsPruefung
                         {
                             // Katalog-Funktion (IFunktion): ein eigener Baustein — nur ihre Signatur.
                             if (iFunktion != null && Sym.Implements(t, iFunktion)) { inv.Funktionen.Add(full); continue; }
-                            // Domänen-Dienst (IDienst, Plan E11): ein eigener Baustein — Signatur + Implementierungen.
+                            // Domänen-Dienst (IDienst, konzept-werkbank §12.3 E11): ein eigener Baustein — Signatur + Implementierungen.
                             if (iDienst != null && Sym.Implements(t, iDienst)) { inv.Dienste.Add(full); continue; }
                             // Client-Vertrag (IClientVertrag): sein Rand aus der Basisliste (direkt) und den eigenen Auf-Methoden. Er erbt
                             //   Vertrags-Teile, ist aber selbst keiner (darum vor dem Akteur-Vertrag).
@@ -398,7 +398,7 @@ public static class ParitaetsPruefung
                         if (Sym.Implements(t, iPipe)) inv.Pipelines.Add(full);
                         // Konsument (Pipeline/Subscriber/Reader/Store-Impl): Records im öffentlichen Ctor = Konfiguration.
                         var istStoreImpl = t.TypeKind != TypeKind.Interface && (Sym.Implements(t, iWStore) || Sym.Implements(t, iRStore));
-                        // … ebenso Funktions- und Dienst-Implementierungen (Plan E11: ihre Records kommen aus Konfig:<Record>).
+                        // … ebenso Funktions- und Dienst-Implementierungen (konzept-werkbank §12.3 E11: ihre Records kommen aus Konfig:<Record>).
                         var istImpl = t.TypeKind == TypeKind.Class && ((iFunktion != null && Sym.Implements(t, iFunktion)) || (iDienst != null && Sym.Implements(t, iDienst)));
                         if (Sym.Implements(t, iPipe) || Sym.Implements(t, iSub) || istStoreImpl || istImpl
                             || t.AllInterfaces.Any(i => iReader != null && i.OriginalDefinition.Fq() == iReader.Fq()))

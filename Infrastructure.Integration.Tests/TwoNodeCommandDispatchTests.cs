@@ -58,7 +58,7 @@ public class TwoNodeCommandDispatchTests
 
                 result.Should().NotBeNull($"Command für {pairId} muss (ggf. cross-node) zugestellt werden.");
                 result!.Success.Should().BeTrue($"Aggregat muss {pairId} erfolgreich anlegen.");
-                // Version 2: das Fakt (ImagePairErstellt) + die co-committete Inbox-Marke KommandoVerarbeitet — seit T2b ist
+                // Version 2: das Fakt (ImagePairErstellt) + die co-committete Inbox-Marke KommandoVerarbeitet — seit T2b (docs/08 §8.4) ist
                 //   auch der Client-Pfad idempotent (AggregateActorBase.HandleClientCommand).
                 result.NewVersion.Should().Be(2);
                 result.Events.Should().ContainSingle()

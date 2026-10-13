@@ -1,9 +1,9 @@
 """
-M8 — der TrainingWorker offline: kein Server, kein Torch. Der Proxy-Query wird gefaked
+Der TrainingWorker offline: kein Server, kein Torch. Der Proxy-Query wird gefaked
 (liefert DatensatzSamples), dann wird auf_training_angefordert als Async-Generator getrieben
 und die zurückgemeldeten Commands gesammelt.
 
-Beweist die Akzeptanz (§5 M7/M8): „der TrainingWorker zieht Samples per query() und meldet
+Beweist die Akzeptanz: „der TrainingWorker zieht Samples per query() und meldet
 Fortschritt zurück."
 """
 

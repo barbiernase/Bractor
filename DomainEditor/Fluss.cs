@@ -195,7 +195,7 @@ public sealed class Fluss
         }
 
         // Akteure: Akteur → was er darf (IDarf<T>). Sie ersetzen für diese Nachrichten die anonyme Außenwelt.
-        //   Vertrag (§9): Event → Akteur → Commands, Handle = das Event (eine Zusage draußen, wie ein Handle drinnen).
+        //   Vertrag (docs/konzept-akteure.md §3): Event → Akteur → Commands, Handle = das Event (eine Zusage draußen, wie ein Handle drinnen).
         foreach (var a in m.Akteure)
         {
             var aid = B("akt", Grammatik.Akteur, a.Name, a.Namespace);
@@ -216,7 +216,7 @@ public sealed class Fluss
             {
                 Grammatik.Command or Grammatik.Query => !erzeugt,
                 Grammatik.Trigger => !erzeugt || ingress.Contains(n.Name),
-                // Eine Quell-Nachricht kommt immer von außen: vom Treiber oder vom Webhook der Umgebung (Quellen:<Typ>, Plan E12).
+                // Eine Quell-Nachricht kommt immer von außen: vom Treiber oder vom Webhook der Umgebung (Quellen:<Typ>, konzept-werkbank §12.3 E12).
                 Grammatik.Quelle => true,
                 _ => false,
             };

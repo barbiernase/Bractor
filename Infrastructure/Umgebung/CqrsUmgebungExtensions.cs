@@ -88,7 +88,7 @@ public static class CqrsUmgebungExtensions
         // Die Uhr der Umgebung (Versatz nur in Sim) ersetzt die nackte DB-Uhr — die letzte Registrierung gewinnt.
         s.AddSingleton<IDbClock>(_ => new UmgebungsDbClock(u));
 
-        // Passt die Leseseite zum Code (Plan E9)? Vor dem Pull-Pfad (Hosted Services starten in Registrierungs-Reihenfolge).
+        // Passt die Leseseite zum Code (konzept-werkbank §12.3 E9)? Vor dem Pull-Pfad (Hosted Services starten in Registrierungs-Reihenfolge).
         if (u.Cluster.Rolle != KnotenRolle.Mitglied) s.AddHostedService<Infrastructure.Projections.ProjektionsStandDienst>();
         s.AddGeneratedPullPaths();
         s.AddGeneratedProzesse();

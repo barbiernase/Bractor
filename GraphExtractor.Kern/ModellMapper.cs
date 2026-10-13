@@ -521,7 +521,7 @@ public static class ModellMapper
             }).ToArray(),
         }).ToList();
 
-        // Pipeline als Fluss (§14): der Webhook einer Quelle (Plan E12) ist Konfig — Quellen:<Typ>:Webhook je Umgebung. Er gehört an die
+        // Pipeline als Fluss (§14): der Webhook einer Quelle (konzept-werkbank §12.3 E12) ist Konfig — Quellen:<Typ>:Webhook je Umgebung. Er gehört an die
         //   Quelle des Flusses (keine eigene Karte); bearbeitet wird er im Host-Rahmen. Reine Board-Sicht: das Modell kennt das Feld nicht.
         foreach (var (umgebung, u) in (umgebungen ?? new JsonObject()).Where(x => x.Value is JsonObject).Select(x => (x.Key, (JsonObject)x.Value!)))
             foreach (var (typ, q) in (u["Quellen"] as JsonObject ?? new JsonObject()).Where(x => x.Value is JsonObject).Select(x => (x.Key, (JsonObject)x.Value!)))

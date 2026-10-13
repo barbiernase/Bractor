@@ -1,11 +1,10 @@
-# Konzept: Der Editor als Kompositions-Sprache
+# Der Editor als Kompositions-Sprache
 
-> **Gekürzt 2026-10-12** auf das mit dem Zielbild `docs/konzept-werkbank.md` Vereinbare.
-
-> Stand 2026-09-30 · Konzept; **Grammatik umgesetzt, Kapselung nur im Modell** (§11) — die Ebenen-Ansicht im Editor
-> ist auf Wunsch zurückgenommen (kommt später, bewusst nicht automatisch). Übergeordnet zu `docs/konzept-editor-pipelines.md` (Pipelines sind eine
-> Anwendung dieser Sprache) und zu `docs/konzept-domaenen-editor.md` (Palette, Bedienung). Programmiermodell:
-> `docs/konzept-handle-ausgaenge.md` §10–§13.
+> Detail-Referenz zu `docs/konzept-werkbank.md`; bei Widerspruch gilt das Zielbild. Stand 2026-10-13, gegen den Code geprüft.
+>
+> Die Sprache des Editors: Alphabet, Grammatik, Operatoren, Kapselung, Muster. Eine Anwendung dieser Sprache ist der Fluss
+> (`docs/konzept-editor-pipelines.md` §14); Bedienung und Oberfläche: konzept-werkbank §8. Die Regeln selbst stehen als Daten in
+> `DomainEditor/Grammatik.cs` und werden im Build geprüft (konzept-werkbank A.4); diese Datei erklärt, warum sie so sind.
 
 ## 1 · Anspruch
 
@@ -24,8 +23,8 @@ Das geht nicht mit mehr Knoten auf einer Fläche. Es geht wie bei jeder Sprache 
 | **Muster** | Wie verwendet man Bewährtes wieder? | §6 |
 
 Leitsatz: **Wenn es sich verbinden lässt, kompiliert es. Wenn es kompiliert, lässt es sich einlesen.** Der Editor erlaubt nur
-Verbindungen, die ein Analyzer oder der Compiler ohnehin erzwingt, und der Extractor liest alles aus Signaturen zurück
-(Fixpunkt, `--sonde`).
+Verbindungen, die ein Analyzer oder der Compiler ohnehin erzwingt (⊕ fragt `POST /api/werkbank/passt`), und der Extractor liest alles aus
+Signaturen zurück (Fixpunkt, `--sonde`).
 
 ## 2 · Alphabet
 
@@ -51,7 +50,7 @@ Jeder Baustein ist **eine Funktion mit typisierten Ein- und Ausgängen**. Das Mu
 | Baustein | Eingang | Ausgänge | Zustand |
 |---|---|---|---|
 | **Aggregat** (Decide/Apply) | Command | OneOf Events (inkl. Ablehnung) | **ja**, die einzige Zustandsstelle |
-| **Prozess** (Regel) | Event-Join (UND, Zählen) | Command (+ Kompensation) | vom Framework (Marking) |
+| **Prozess** (Regel) | Event-Join (UND, Zählen) | Command oder Auftrag (`Sende`/`Rufe`, + Kompensation) | vom Framework (Marking) |
 | **Projektion** | Event | Schreib-Fähigkeiten, transiente Events | im Store (co-committet) |
 | **Reaktion** | Event | Commands, transiente Events | keiner |
 | **Reader** | Query | OneOf Responses, Lese-Fähigkeiten | keiner |
@@ -77,12 +76,12 @@ Katalog-Funktion. Ein Event darf an beliebig viele Konsumenten gehen.
 Zusätzliche Regeln, jede mit ihrem Gegenstück im Build:
 
 - **Geschlossener Ausgang:** Ausgänge sind konkrete Typen im OneOf (CQRS050). Zeichnen heißt Typ wählen.
-- **Handle-Form folgt dem Inhalt:** keine Ausgabe ⇒ `Task`, sonst Strom mit OneOf (CQRS057, §13 dort).
+- **Handle-Form folgt dem Inhalt:** keine Ausgabe ⇒ `Task`, sonst Strom mit OneOf (CQRS057; `docs/10`).
 - **Garantie-Regel:** Führt ein verlierbarer Pfad in einen Schritt, der Durabilität braucht, wird die Kante markiert
-  (gestrichelt) und ein Analyzer warnt (offen, §11.1).
+  (gestrichelt); sendet ein Konsument ab einem transienten Eingang einen Command, warnt der Build (CQRS082, GR-GARANTIE).
 - **Zyklus-Regel:** Ein Kreis Command → Event → … → Command ist erlaubt, wenn er durch einen **Zustandsschritt** läuft
-  (Aggregat); sonst verbietet ihn der Azyklizitäts-Guard (für Prozesse aktiv, für Reaktionen offen). Ein Fluss ist per
-  Konstruktion azyklisch.
+  (Aggregat oder Prozess, die beide Zustand im Log falten); sonst nicht (GR-ZYKLUS: Azyklizitäts-Boot-Guard für Prozesse, CQRS088 für
+  Projektionen/Reaktionen über transiente Events). Ein Fluss ist per Konstruktion azyklisch.
 
 ## 4 · Operatoren: wie man Verhalten komponiert
 
@@ -93,7 +92,7 @@ Geste anbietet und der Scaffolder in die bekannten Code-Formen schreibt.
 |---|---|---|
 | **Folge** | A, dann B | Kante: Command → Aggregat → Event → Konsument; im Fluss ein Draht (`knoten.Bei<Fall>()`) |
 | **Verzweigung** | A führt zu B *oder* C | OneOf-Ausgänge; die Wahl trifft der Rumpf; im Fluss führt ∨ `.Oder(…)` die Wege wieder zusammen |
-| **Auffächern** | A führt zu B *und* C *und* … | ein Event an mehrere Konsumenten; `SendeJe` für Laufzeit-Mengen; im Fluss `p.Je(draht, x => x.Liste)` |
+| **Auffächern** | A führt zu B *und* C *und* … | ein Event an mehrere Konsumenten; `SendeJe` für Laufzeit-Mengen; im Fluss `draht.Je(x => x.Liste)` |
 | **Zusammenführen (UND)** | erst wenn A *und* B | Prozess-Join (`Auf<A>().Und<B>()`); im Fluss ∧ `p.Alle(…)` |
 | **Zusammenführen (N)** | erst wenn alle N | Barriere-Aggregat (Zähler, N als Laufzeitwert), nicht als Collection; im Fluss `je.Sammle(…)` |
 | **Schleife** | wiederhole | nur über ein Aggregat: dessen Event ist die Quelle des nächsten Vorgangs (`p.Auf<E>()`); ein Fluss selbst ist azyklisch |
@@ -104,15 +103,16 @@ Geste anbietet und der Scaffolder in die bekannten Code-Formen schreibt.
 
 **Regel Z (Zustand):** Zustand lebt **nur** in Aggregaten (und in Lesemodellen). Reaktionen, Funktionen und Handles sind
 zustandslose Übersetzer; ein Fluss kennt nur seinen Vorgang. Das macht beliebig große Kompositionen analysierbar, denn jede
-Schleife und jedes Gedächtnis ist eine sichtbare Kante durch ein Aggregat.
+Schleife und jedes Gedächtnis ist eine sichtbare Kante durch ein Aggregat. Im Build: Warnung CQRS083 (GR-ZUSTAND) für Instanzfelder
+eines Konsumenten, die Zustand halten (ausgenommen injizierte Konfig, Dienste, Logger).
 
 ## 5 · Kapselung: warum beliebige Komplexität lesbar bleibt
 
 **Jeder Teilgraph kann zu einem Baustein zusammengeklappt werden, und das beliebig tief.** Pro Ebene sieht man wenige Knoten.
 Tiefe ersetzt Breite.
 
-- **Modul = Namespace.** Das ist ein Code-Fakt: Der Scaffolder schreibt schon je Namespace, der Extractor kennt ihn. Ein Modul
-  kann Aggregate, Prozesse, Pipelines, Projektionen und Untermodule enthalten. Verschachtelung = Namespace-Hierarchie.
+- **Modul = Namespace.** Das ist ein Code-Fakt: Der Scaffolder schreibt je Namespace, der Extractor kennt ihn. Ein Modul
+  kann Aggregate, Prozesse, Flüsse, Projektionen und Untermodule enthalten. Verschachtelung = Namespace-Hierarchie.
 - **Die Schnittstelle wird abgeleitet, nicht deklariert.** Eingangs-Ports eines Moduls sind die Nachrichtensorten, die von außen
   hineinlaufen (Commands an seine Aggregate, Events, die seine Konsumenten hören, Queries). Ausgangs-Ports sind die, die
   hinauslaufen. Eingeklappt ist ein Modul also wieder ein Baustein mit typisierten Ports, und die Grammatik aus §3 gilt für
@@ -123,7 +123,8 @@ Tiefe ersetzt Breite.
   sind `internal`. Dann ist die Schnittstelle nicht nur abgeleitet, sondern auch erzwungen (vom Compiler).
 - **Entwerfen von oben nach unten:** Man zeichnet ein eingeklapptes Modul mit Ports (z. B. „nimmt Auftrag an, meldet
   erledigt“), klappt es auf und füllt es. Die Ports werden zu den Typen, die innen erzeugt oder konsumiert werden müssen.
-  Offene Ports („Eingang ohne Konsument“, „Ausgang ohne Erzeuger“) meldet der Build (Analyzer, offen, §11.1).
+  Offene Ports („Eingang ohne Konsument“, „Ausgang ohne Erzeuger“) meldet der Build (CQRS086 GR-MODUL-EINGANG-OFFEN, CQRS085
+  GR-MODUL-AUSGANG-OFFEN).
 
 ## 6 · Muster: Wiederverwendung
 
@@ -144,62 +145,16 @@ Ein Muster ist ein **parametrisierter Teilgraph** mit Schnittstelle, z. B.:
 - **Stufe 2, Muster als Code-Fakt:** z. B. ein Attribut `[Muster(typeof(Watchdog))]` auf dem erzeugten Modul oder ein generischer
   Framework-Baustein. Damit steht die Klammer im Code, und ein geändertes Muster kann neu expandiert werden.
 
-## 10 · Offene Entscheidungen (mit Empfehlung)
+## 7 · Stand im Code
 
-1. **Modulgrenze = Namespace?** Empfehlung: ja (Code-Fakt, heute schon Ordnungseinheit). Alternative: eigenes Attribut.
-2. **Schnittstelle nur abgeleitet oder auch erzwungen (`public`/`internal`)?** Empfehlung: erst abgeleitet, erzwingen als Option
-   je Modul.
-3. **Regel Z verbindlich (kein Zustand außerhalb von Aggregaten/Lesemodellen)?** Empfehlung: ja, als Analyzer auf Felder in
-   Projektionen/Reaktionen (ausgenommen Konfig/Dienst/Logger).
-4. **Muster: Makro oder Code-Fakt?** Empfehlung: Makro zuerst, Code-Fakt, sobald ein Muster geändert und neu expandiert werden soll.
-
-**Entschieden in der Umsetzung (2026-09-30), je der Default:** (1) Modulgrenze = Namespace — ja. (2) Schnittstelle nur
-abgeleitet; `public`/`internal` als Erzwingung bleibt offen. (3) Regel Z vorerst **nur als Hinweis** (`GR-ZUSTAND`, Schwere
-info); als Analyzer offen. (4) Muster nicht Teil dieser Runde.
-
-## 11 · Umgesetzt (2026-09-30)
-
-### 11.1 Grammatik als EINE Quelle
-
-**Was.** Die Tabelle aus §3 (Sorte × Baustein-Eingang mit Kardinalität), die Erzeugungs-Spalte aus §2.2 (wer darf welche Sorte
-erzeugen) und die Zusatzregeln liegen **einmal** im Code: `DomainEditor/Grammatik.cs` (Roslyn-frei). Jede Regel hat eine Id, einen
-Namen, einen Satz und ihr **Build-Gegenstück** (Analyzer-/Generator-ID, Compiler, Boot-Guard oder „offen"). Daraus gespeist:
-
-| Stelle | Wie |
-|---|---|
-| **Editor** | GraphExtractor legt die Grammatik als `rahmen.grammatik` ins Board (`ModellMapper.ZuBoardJson`), samt der Abbildung Editor-Port → Sorte/Baustein (`portSorte`, `portBaustein`, `recordSorte`, `ausgangSorte`). Das JS kodiert keine Regel: `grPruefe(O, I)` prüft jede Verbindung (Nachricht → Eingang: Sorte + Kardinalität; Ausgang → Nachricht: Erzeugung). Im Verbinden-Modus leuchten nur erlaubte Ziele; typgleiche, aber verbotene Ziele sind rot „✕ Regel" und nennen beim Klick die Regel beim Namen (Modus bleibt, nichts wird verbunden). **📐 Grammatik** zeigt die Tabelle und „Regel → Build-Gegenstück". |
-| **Analyzer (Backlog)** | Prüfen = Bauen: jede Regel wird Analyzer oder Boot-Guard und meldet unter ihrer Regel-Id mit dem Satz „Regel »Name« (Id; Build: …)". Zu prüfen auf dem **Nachrichtenfluss** (Erzeuger → Nachricht → Konsument aus Decide-OneOf, Apply, Prozess-Regeln, Handle-Eingang/-Ausgängen/-Fähigkeiten): Sorte × Eingang, Kardinalität (`GR-COMMAND`, `GR-QUERY`, `GR-FALTUNG`), Erzeugung (`GR-AUS-*`), **Garantie** (Command ab transientem Event), **Zyklus ohne Zustandsschritt**, **Regel Z** (Hinweis), offene Modul-Ports. |
-| **Build-Gegenstück** | `dotnet run --project GraphExtractor -- --grammatik` druckt die Liste. Ein Test/Build-Gate prüft, dass jede genannte ID als Diagnose-Literal im Code existiert, und listet die Regeln ohne Gegenstück. |
-
-**Regel Z als Code-Fakt.** Der Extractor liest je Projektion/Reaktion die **Zustandsfelder** aus dem Symbol (kein Rumpf):
-Instanzfeld, das nicht `readonly` ist, oder `readonly` mit einem Referenztyp, der weder Konstruktor-Parametertyp (injiziert: Konfig,
-Dienst, Logger) noch `string` ist. Träger: `Konsument.Zustand` (nur gelesen, nie geschrieben; die Felder stehen verbatim im `Zusatz`).
-
-**Offen (bewusst, nur gelistet):** die Analyzer für `GR-QUERY`, `GR-GARANTIE`, `GR-ZUSTAND`, `GR-FALTUNG`,
-`GR-MODUL-AUSGANG-OFFEN` und die Erweiterung des Azyklizitäts-Guards auf Reaktionen. Transiente Events haben im Editor noch keinen
-Konsum-Port (die Grammatik erlaubt sie, die Oberfläche bietet sie nicht an).
-
-### 11.2 Kapselung
-
-**Was.** Jeder Namespace ist ein Modul; die Hierarchie ist die Namespace-Hierarchie. `DomainEditor/Module.cs` leitet aus dem
-Nachrichtenfluss die Ports ab: eine Kante Erzeuger → Nachricht bzw. Nachricht → Konsument, deren Enden auf verschiedenen Seiten der
-Modulgrenze liegen, ist ein **Eingang** (Ziel drinnen) bzw. **Ausgang** (Quelle drinnen); die Außenwelt liegt außerhalb jedes Moduls.
-Dazu die **offenen** Ports: eine Nachricht im Modul, die einen Konsumenten braucht und keinen hat (Command, Query →
-„Eingang ohne Konsument", `GR-MODUL-EINGANG-OFFEN`), bzw. einen Erzeuger braucht und keinen hat (Event, Ablehnung, Response →
-„Ausgang ohne Erzeuger", `GR-MODUL-AUSGANG-OFFEN`). Die Grammatik gilt für Modul-Knoten wie für jeden Baustein (dieselbe
-Kardinalitäts-Prüfung beim Verbinden, auch wenn das Ziel eingeklappt ist).
-
-**Editor: zurückgenommen (2026-10-01).** Eine erste Ebenen-Ansicht (Module eingeklappt als Karten mit Ports, aufklappen =
-hineingehen) war gebaut und im Browser geprüft, wurde aber auf Wunsch wieder entfernt: die bisherige Oberfläche bleibt; die
-Aufklapp-Semantik kommt später und nicht automatisch. Im Code geblieben sind nur die Ableitung in C# (`DomainEditor/Module.cs`,
-Befunde „Eingang ohne Konsument"/„Ausgang ohne Erzeuger", `/api/editor/module`). Der Stand der zurückgenommenen
-Ansicht liegt nicht im Repo.
-
-**Blank-Start (Domänen laden).** Der Editor startet leer; ein Start-Dialog wählt, welche Domänen (Namespaces) geladen werden
-(leer, einzelne, alle). Nur Sicht (die Wahl liegt in der Ansichts-Datei): Nicht-Geladenes ist unsichtbar und kein Verbindungsziel;
-der Code bleibt vollständig. Bedienung: `konzept-editor-panel-bearbeitung.md` §11.
-
-### 11.4 Bewusst offen
-
-- **Ebenen-/Aufklapp-Ansicht im Editor** — zurückgenommen, kommt später (bewusst nicht automatisch).
-- Die Analyzer der offenen Regeln (§11.1), `public`/`internal` als erzwungene Schnittstelle, Muster/Operator-Gesten.
+- **Regeln = Analyzer, Grammatik als Daten** (konzept-werkbank A.4): `DomainEditor/Grammatik.cs` hält die Tabelle aus §3 (Sorte × Eingang,
+  Kardinalität), die Erzeugungen aus §2.2 und die Zusatzregeln, je Regel mit Id, Satz und Build-Gegenstück. Der Extractor legt sie als
+  `rahmen.grammatik` ins Board; ⊕ fragt den Server (`Sicht.Passt`), `--grammatik` druckt „Regel → Build-Gegenstück“, im Editor zeigt
+  **📐 Grammatik** dieselbe Liste. Geprüft wird im Build (Analyzer, Generator-Diagnosen, Boot-Guards); welche Regeln noch kein
+  Gegenstück haben, sagt `--grammatik` (Lücken des Gates: `docs/13` WZ-1).
+- **Kapselung nur im Modell:** `DomainEditor/Module.cs` leitet je Namespace die Ports aus dem Nachrichtenfluss ab (eine Kante über die
+  Modulgrenze ist Ein- bzw. Ausgang; offene Ports wie oben). Eine Ebenen-/Aufklapp-Ansicht gibt es im Editor bewusst nicht
+  (konzept-werkbank §14: Oberfläche nur nach Rückfrage); `public`/`internal` als erzwungene Schnittstelle ist nicht umgesetzt.
+- **Domänen laden:** der Editor startet leer; ein Start-Dialog wählt, welche Domänen (Namespaces) geladen werden. Das ist nur Sicht (die
+  Wahl liegt in der Ansichts-Datei); Nicht-Geladenes ist kein Verbindungsziel, ein Partner „↗ außerhalb“ lädt seine Domäne dazu.
+- **Muster** (§6) und Operator-Gesten (§4) sind nicht umgesetzt.

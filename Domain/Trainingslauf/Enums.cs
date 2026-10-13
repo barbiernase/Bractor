@@ -1,7 +1,7 @@
 namespace Domain.Trainingslauf;
 
 /// <summary>
-/// Lebenszyklus eines Trainingslaufs (Konzept §4.1).
+/// Lebenszyklus eines Trainingslaufs.
 ///
 ///   Angefordert → Laeuft → (Fortschritt je Epoche) → Abgeschlossen
 ///        └────────► Gescheitert / Abgebrochen / Haengengeblieben

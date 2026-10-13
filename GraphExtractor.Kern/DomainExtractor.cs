@@ -41,7 +41,7 @@ public sealed class DomainModel
     public List<FunktionRaw> Funktionen { get; } = new();
     /// <summary>Aufträge (<c>IAuftrag&lt;F&gt;</c>): der eine Eingang je Katalog-Funktion.</summary>
     public List<RecordRaw> Auftraege { get; } = new();
-    /// <summary>Domänen-Dienste (<c>interface IX : IDienst</c>, Plan E11): Signatur + Implementierungen.</summary>
+    /// <summary>Domänen-Dienste (<c>interface IX : IDienst</c>, konzept-werkbank §12.3 E11): Signatur + Implementierungen.</summary>
     public List<DienstRaw> Dienste { get; } = new();
     /// <summary>
     /// Konfigurations-Records: Records ohne Nachrichten-Rolle, die per DI in den KONSTRUKTOR eines Konsumenten
@@ -767,7 +767,7 @@ public sealed partial class DomainExtractor
             }
             // Katalog-Funktion: ein Interface mit IFunktion — nur seine Signatur (Auftrag → Ergebnisse) zählt.
             if (t.TypeKind == TypeKind.Interface && _iFunktion != null && Sym.Implements(t, _iFunktion)) { if (ReadFunktion(t) is { } f) m.Funktionen.Add(f); continue; }
-            // Domänen-Dienst (Plan E11): ein Interface mit IDienst — Signatur; die Implementierungen hängt LinkDienstImpls an.
+            // Domänen-Dienst (konzept-werkbank §12.3 E11): ein Interface mit IDienst — Signatur; die Implementierungen hängt LinkDienstImpls an.
             if (t.TypeKind == TypeKind.Interface && _iDienst != null && Sym.Implements(t, _iDienst)) { m.Dienste.Add(ReadDienst(t)); continue; }
             // Akteur-Dienst: ein Vertrag (Interface) mit IAkteurDienst<A> — kein Akteur, er gehört A (wird unten zugeordnet).
             if (t.TypeKind == TypeKind.Interface && AkteurVonDienst(t) is { } dienstVon) { dienstZu.Add((t.Name, dienstVon.Fq())); continue; }
@@ -971,7 +971,7 @@ public sealed partial class DomainExtractor
     {
         var voByFull = m.ValueObjects.GroupBy(v => v.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var storeImpls = m.Stores.SelectMany(s => s.ImplsFull).ToHashSet(StringComparer.Ordinal);
-        // Funktions- und Dienst-Implementierungen (Plan E11): ihre Konstruktor-Records sind Konfig aus Konfig:<Record>.
+        // Funktions- und Dienst-Implementierungen (konzept-werkbank §12.3 E11): ihre Konstruktor-Records sind Konfig aus Konfig:<Record>.
         storeImpls.UnionWith(m.Funktionen.Where(f => f.ImplFull != null).Select(f => f.ImplFull!));
         storeImpls.UnionWith(m.Dienste.SelectMany(d => d.Impls).Select(i => i.Full));
         var injiziert = new HashSet<string>(StringComparer.Ordinal);

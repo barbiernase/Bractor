@@ -1,5 +1,5 @@
 """
-T3 — Grundgerüst für die Python-SDK-Tests.
+Grundgerüst für die Python-SDK-Tests.
 
 Beweist die geschlossene Query-Antwort-Lücke: PayloadMapper.wrap_query_response setzt das
 richtige oneof-Feld im QueryResponsePayloadDto (vorher: leerer Payload, oneof nie gesetzt).

@@ -5,7 +5,7 @@ using System.Linq;
 namespace Abstractions;
 
 /// <summary>
-/// Der Azyklizitäts-Check über den Regel-Graph (Spec §3, offene Entscheidung 3). Baut aus den Regeln die
+/// Der Azyklizitäts-Check über den Regel-Graph (docs/04 §4.5, Boot-Guards). Baut aus den Regeln die
 /// Kanten <c>Bedingungs-Event → Command</c> (die Regel triggert) und <c>Command → produziertes Event</c>
 /// (aus den Decidern, via <paramref name="produziert"/>) und meldet jeden Zyklus. Das ersetzt die
 /// „rückwärts-only"-Compile-Regel der alten Schrittliste durch eine echte Graph-Analyse.
@@ -45,7 +45,7 @@ public static class ProzessAzyklizität
         if (zyklus.Count > 0)
             throw new InvalidOperationException(
                 $"Prozess '{prozessName}' ist NICHT azyklisch: {string.Join(" → ", zyklus)}. " +
-                "Der Regel-Graph (Command → Event → Command) muss ein DAG sein (Spec §3).");
+                "Der Regel-Graph (Command → Event → Command) muss ein DAG sein (docs/04 §4.5).");
     }
 
     /// <summary>Prüft alle Prozesse einer Registry.</summary>

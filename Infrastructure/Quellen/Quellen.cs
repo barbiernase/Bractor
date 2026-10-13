@@ -121,7 +121,7 @@ public sealed class QuellEingang
 public static partial class QuellenExtensions
 {
     /// <summary>
-    /// Die Webhooks der Quellen (Plan E12) — aus der Konfig, nicht aus dem Programm: je Quelle mit <c>Quellen:&lt;Typ&gt;:Webhook</c> ein
+    /// Die Webhooks der Quellen (konzept-werkbank §12.3 E12) — aus der Konfig, nicht aus dem Programm: je Quelle mit <c>Quellen:&lt;Typ&gt;:Webhook</c> ein
     /// <c>POST {route}</c> auf dem Einblick-Port (HTTP/1.1) mit der Nachricht als JSON (gelesen über den generierten Wire-Kontext, keine
     /// Reflection) → genau einmal ins Log, Vorgang gestartet. Antwortet <c>202 Accepted</c> mit der Vorgangs-Id (dieselbe Nachricht zweimal →
     /// derselbe Vorgang), <c>400</c> bei einem Body, der nicht die Quell-Nachricht ist.

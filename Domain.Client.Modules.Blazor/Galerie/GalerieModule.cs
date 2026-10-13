@@ -4,7 +4,7 @@ using Domain.Client.Modules.Blazor.Galerie;
 namespace Domain.Client.Modules.Galerie;
 
 /// <summary>
-/// Bühne „Galerie" (Konzept galerie-datensatz-komposition §3, Phase 1). Ein Thumbnail-Grid
+/// Bühne „Galerie". Ein Thumbnail-Grid
 /// über demselben <c>VirtualImagePairs</c>-Fenster wie die Paarliste — die Galerie ERGÄNZT die
 /// dichte Text-Liste als Sicht-/Kuratier-Fläche (nicht ersetzen). Als IStageModule automatisch
 /// ein Tab in der Shell; kein Handwiring.

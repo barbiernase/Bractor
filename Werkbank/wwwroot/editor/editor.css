@@ -210,7 +210,7 @@
 #de .ghl{display:block;cursor:pointer;color:#9fb6d6;font-size:11.5px;padding:1px 0;text-decoration:none}#de .ghl:hover{color:#dbe6f5;text-decoration:underline}
 #de .gaus{font-size:10.5px;color:#8f9bb0;margin:-2px 0 4px 18px;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #de .gaus.tot{color:#d08a6a}#de .gaus.offen{color:#d0b35a}
-/* Nachricht mit zwei Seiten (§12): ◀ kommt aus · geht an ▶ — Partner-Zeilen, „↗ außerhalb" = Domäne nicht geladen */
+/* Nachricht mit zwei Seiten (konzept-editor-pipelines §12): ◀ kommt aus · geht an ▶ — Partner-Zeilen, „↗ außerhalb" = Domäne nicht geladen */
 #de .gp-row{display:flex;align-items:center;gap:6px;font-size:11.5px;color:#c9d4e4;padding:2px 2px 2px 6px;border-radius:5px;cursor:pointer}
 #de .gp-row:hover{background:#ffffff10}#de .gp-row .rm{margin-left:auto}
 #de .gp-t{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}#de .gp-abg{color:#8f9bb0;font-style:italic}
@@ -494,7 +494,7 @@
 #de .gcanvas .gnode2.n-client .gsum.gleiste{display:block}
 #de .gcanvas.ablauf .gnode2.n-client .ghead .gtitle.hatname .gk{display:inline}
 
-/* ══ WERKBANK (Plan P3.6): Kopfzeile, 🖥 Host-Rahmen, Befunde an der Karte ══ */
+/* ══ WERKBANK (Werkbank P3.6): Kopfzeile, 🖥 Host-Rahmen, Befunde an der Karte ══ */
 #de header{flex-wrap:wrap;row-gap:6px}
 #de .wb-kopf{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;margin-left:6px}
 #de .wb-kopf .wb-l{font-size:11px;color:#8b93a7}
@@ -562,7 +562,7 @@
 #de .wb-mit{display:flex;gap:4px;flex:1;min-width:0}
 #de .wb-mit input{flex:1;min-width:0}
 #de button.act.klein{padding:2px 7px}
-/* ══ SPUR (docs/konzept-werkbank.md §7.3, Plan P6): Überlagerung, Live-Puls, Fokus, Vorgänge/Zeitleiste/Meldungen ══ */
+/* ══ SPUR (docs/konzept-werkbank.md §7.3, Werkbank P6): Überlagerung, Live-Puls, Fokus, Vorgänge/Zeitleiste/Meldungen ══ */
 #de .gfokus{display:inline-flex;align-items:center;gap:4px;margin-left:6px;padding:2px 4px 2px 10px;border:1px solid #a8743a;border-radius:14px;background:#2a2114;color:#ffd9a8;font:600 11px system-ui}
 #de .gfokus .gf-t{max-width:340px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 #de .gfokus .gf-z{color:#c9a477;font-weight:400}

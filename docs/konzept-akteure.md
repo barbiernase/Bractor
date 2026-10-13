@@ -1,8 +1,11 @@
 # Akteure, Verträge, Clients
 
-> **Status 2026-10-13: umgesetzt** bis auf §9 (offen); seit 2026-10-13 auch der Blazor-Arbeitsplatz als Client mit Vertrag (§4.6). Kanonische Referenz für *wer* etwas hineingibt (Akteur), *was er draußen
-> zusagt* (Akteur-Vertrag) und *welche Software es über welche Leitung tut* (Client). Ersetzt die früheren Fassungen dieses Dokuments
-> und `konzept-client-vertraege.md` (Historie in git). Editor-Darstellung: `docs/konzept-domaenen-editor.md` §12.
+> Detail-Referenz zu `docs/konzept-werkbank.md`; bei Widerspruch gilt das Zielbild. Stand 2026-10-13, gegen den Code geprüft.
+>
+> Referenz für *wer* etwas hineingibt (Akteur), *was er draußen zusagt* (Akteur-Vertrag) und *welche Software es über welche Leitung tut*
+> (Client); Editor-Darstellung in §8. Abschnittsnummern sind stabil, weil Code-Kommentare darauf verweisen. Die Beispiele (Klassifizierer,
+> Arbeitsplatz …) stammen aus der **Beispieldomäne** im Repo — sie ist Prüfling, nicht Architektur (konzept-werkbank W11). Offenes:
+> `docs/13` AK-1; Zahlen: `docs/12`.
 
 ---
 
@@ -15,7 +18,7 @@
 | **Kenntnis** | Welches Event nimmt er nur zur Kenntnis? | `void Auf(TEvent e)` | Klassifizierer lädt bei `ModellAktiviert` das neue Modell |
 | **Akteur-Vertrag** | Alle Zusagen und Kenntnisse eines Akteurs | `interface IX : IAkteurVertrag<X>` (auch in Teilen) | `IKlassifizierer` |
 | **Client** | *Welche Software* hängt an der Leitung, was geht über sie? | `interface IX : IClientVertrag, …` | `IKlassifikationsWorker` (Python), `IArbeitsplatz` (Blazor) |
-| **Identität** | Wer meldet sich an? | Token → Akteur-Menge (Composition Root) | Token `anna` → {Inspekteur, KIOperator} |
+| **Identität** | Wer meldet sich an? | Token → Akteur-Menge (Umgebung, `Identitaeten:Tokens`) | Token `anna` → {Inspekteur, KIOperator} |
 
 **Abgrenzung:** *Reaktion* ist im Projekt der **Backend-Baustein** (`ISubscriber`, ein interner Konsument, der auf Events hin Commands
 ausgibt). Eine **Zusage** ist dasselbe Muster *draußen*, im Namen eines Akteurs, implementiert von einem Client. Die beiden Wörter werden
@@ -54,11 +57,12 @@ public sealed record Inspekteur     : IMensch,   IDarf<LabelBildPaar>, IDarf<Mar
 - Was ein Fluss oder Prozess daraus erzeugt, wird **nicht** deklariert — es trägt den Akteur der Kette (§2.3). Ein
   Command, den niemand per `IDarf` darf, kommt am Tor nie durch („nie von der GUI" ist damit ein Typ-Fakt).
 
-### 2.2 Katalog (`Domain.Akteure/Akteure.cs`)
+### 2.2 Katalog der Beispieldomäne (`Domain.Akteure/Akteure.cs`)
 
 | Akteur | Art | gibt selbst hinein (`IDarf`) | Vertrag |
 |---|---|---|---|
 | KameraSystem | Maschine | `DateiErkannt` (Quell-Nachricht über den Datei-Treiber) | — |
+| Bildrechner | Maschine | `IBildVerkleinerung`, `IHistogrammAusgleich` (darf diese Funktionen rechnen; Python-Worker, Laufort `Extern`) | — |
 | TrainingsSystem | Maschine | `HoleDatensatzSamples` | `ITrainingsSystem` |
 | Klassifizierer | KI | `KlassifiziereEinzelBildDurchKi`, `HoleAktivesModell` | `IKlassifizierer` |
 | Inspekteur | Mensch | Labeln, `MarkiereAlsInspiziert`, Lese-Queries der Bildpaare | — |
@@ -80,16 +84,17 @@ Jede Kette beginnt bei einem Akteur (Fall 1 oder 3) und trägt ihn weiter (Fall 
 
 ### 2.4 Dienst eines Akteurs
 
-Entscheidet ein Akteur *drinnen* über einen Dienst, gehört der Dienst ihm: `interface IGutachten : IAkteurDienst<Gutachter>`. Ein
-Pipeline-Handle, der ihn als **Parameter** nimmt, entscheidet im Auftrag dieses Akteurs (der einzige Akteur-Wechsel mitten in einer Kette);
-seine Ausgaben muss der Akteur dürfen, im Konstruktor/Feld ist der Dienst verboten (CQRS060). Damit steht fest, wer den Dienst benutzt.
-Im Bestand ungenutzt (klassifiziert wird nur draußen), als Sprachmittel aber erhalten. Mit dem Wegfall der Handle-Pipelines ist offen,
-wer `IAkteurDienst` trägt (Zielbild `docs/konzept-werkbank.md` §12.2).
+**Altlast.** `interface IGutachten : IAkteurDienst<Gutachter>` macht einen Dienst zum Dienst eines Akteurs: ein Handle der Handle-Pipeline,
+der ihn als **Parameter** nimmt, entscheidet im Auftrag dieses Akteurs (Akteur-Wechsel mitten in einer Kette); seine Ausgaben muss der Akteur
+dürfen, im Konstruktor/Feld ist der Dienst verboten (CQRS060). `IAkteurDienst<A>` ist nur an der Handle-Pipeline verdrahtet und hat keinen
+Domänen-Nutzer; Rückbau offen (`docs/13` W11-1). Sein Zweck ist vermutlich durch eine Katalog-Funktion mit `IDarf<F>` gedeckt
+(konzept-werkbank §12.2).
 
 ### 2.5 Person, Rolle und fachliches „Wer"
 
-- **Eine Person kann mehrere Akteure verkörpern:** Token → Akteur-*Menge* (`AkteurOptionen.Token<Inspekteur, KIOperator>(…)` bzw. Konfig
-  `"Akteure:Tokens"`). Das Tor ist opt-in (ohne Sektion `Akteure` bleibt der gRPC-Pfad offen).
+- **Eine Person kann mehrere Akteure verkörpern:** Token → Akteur-*Menge*, in der Umgebungs-Datei unter `Identitaeten:Tokens`
+  (`"sim-arbeitsplatz": "Inspekteur,KIOperator,Modellfreigeber,Produktpruefer"`; `AddCqrs` liest den Abschnitt über `AddAkteure`). Das Tor ist
+  opt-in: ohne Abschnitt `Identitaeten` bleibt der gRPC-Pfad offen. Die typisierte Form `AkteurOptionen.Token<TA, TB>(…)` benutzen nur Tests.
 - **Ist das „Wer" selbst fachlich** (Vier-Augen: Freigeber ≠ Antragsteller), steht es als Feld in Command und Event — normale Modellierung.
 
 ---
@@ -164,8 +169,8 @@ public interface IArbeitsplatz : IClientVertrag,
 
 Die Akteure der getragenen Teile; dazu je `ISendet`/`IFragt` sein **einziger** `IDarf`-Halter (Pflicht); darf ein Typ **mehrere**, kommt nur
 dann jemand hinzu, wenn noch **keiner** seiner Halter verkörpert ist (sonst wäre der KlassifikationsWorker über `HoleAktivesModell` auch
-Modellfreigeber und der Arbeitsplatz über `HoleDatensatzSamples` auch das TrainingsSystem). EINE Funktion für Generator, Python-Prepass,
-Wissensgraph und Editor: `Abstractions.Akteurvertrag.Verkoerpert`.
+Modellfreigeber und der Arbeitsplatz über `HoleDatensatzSamples` auch das TrainingsSystem). EINE Funktion für Generator, Codegen (Python-Basen),
+Wissensgraph und Editor-Sicht: `Abstractions.Akteurvertrag.Verkoerpert`.
 
 ### 4.3 Rechte und Stempel
 
@@ -180,18 +185,16 @@ Wissensgraph und Editor: `Abstractions.Akteurvertrag.Verkoerpert`.
 Ein Client hat eine Innenseite (Blazor: Intents, ClientEvents, Stores; Python: State) und einen Rand (den Vertrag). Nur der Rand geht über
 die Leitung; client-interne Typen stehen nie im Vertrag.
 
-### 4.5 Bestand und Befund
+### 4.5 Clients der Beispieldomäne (`Domain.Akteure/Clients.cs`)
 
 | Client | verkörpert | trägt | sendet / fragt |
 |---|---|---|---|
 | `KlassifikationsWorker` (`classifier.py`, `run_stub.py`) | Klassifizierer | `IKlassifizierer` | `KlassifiziereEinzelBildDurchKi` / `HoleAktivesModell` |
 | `TrainingsWorker` (`training_worker.py`) | TrainingsSystem | `ITrainingsSystem` | — / `HoleDatensatzSamples` |
-| `Arbeitsplatz` (Blazor) | Inspekteur, KIOperator, Modellfreigeber, Produktpruefer | — | 14 Commands / 13 Queries, 25 Kenntnis-Events |
+| `Arbeitsplatz` (Blazor) | Inspekteur, KIOperator, Modellfreigeber, Produktpruefer | — | Commands und Queries der vier Akteure; Kenntnis der Events, auf die seine Handler hören |
 
-**Befund §4.5 (2026-10-13 aufgelöst):** `NimmRangeAuf` bleibt dem Resolver (laut Domäne „nie von der GUI“) — die Mehrfach-Auswahl beim
-Kuratieren schickt je Paar `NimmPaarAuf`. `HoleDatensatzSamples` darf jetzt auch der KIOperator (er liest die Balance der eingefrorenen
-Version); der Arbeitsplatz fragt es. Dazu standen 13 Events, auf die Handler des Arbeitsplatzes hören (Datensätze, Modelle, Trainingsläufe,
-`TrainingFortschritt`), nicht als Kenntnis im Vertrag — der Analyzer (§4.6) fand sie, jetzt stehen sie dort.
+Ein Ketten-Command wie `NimmRangeAuf` (nur aus dem Fluss) steht in keinem Client-Vertrag; die Mehrfach-Auswahl beim Kuratieren schickt je Paar
+`NimmPaarAuf`.
 
 ### 4.6 C#-Client (Blazor): Code = Vertrag
 
@@ -216,13 +219,16 @@ Version); der Arbeitsplatz fragt es. Dazu standen 13 Events, auf die Handler des
 
 - Der Akteur reist als Event-Header **`akteur`** (`ImAuftrag.Header`): `MartenEventBatchWriter` schreibt ihn, `MartenEventStore` liest ihn
   in den Envelope (`UserId`), `AggregateActorBase` gibt ihn weiter.
-- Der generierte Dispatch (Prozess/Fluss, Konsument; im Ist auch die Handle-Pipeline) setzt `ImAuftrag.Von(envelope.Akteur)` um den Handle — bzw. den Dienst-Akteur bei
-  `IAkteurDienst<A>`. `CommandEmitter` stempelt `ImAuftrag.Akteur`; ist er leer, gilt Fall 3 (§2.3).
-- Ein **Prozess** (auch ein Fluss) trägt den Akteur des Events, das ihn startete. (`MarkiereAlsHaengengeblieben` sendet heute der
-  `TrainingWaechter` am ⏳-Port eines `Warte` statt einer Frist.) Im Ist speichert eine **Frist** der Handle-Pipelines den Akteur beim
-  Planen (`Frist.Akteur`) und feuert in seinem Namen.
-- Quell-Nachrichten (und im Ist die Trigger der Handle-Pipelines) reisen ohne Envelope: ihr Akteur ist der eindeutige `IDarf`-Halter
-  (`AkteurHerkunft.EindeutigerHalter`, auch im `QuellEingang`).
+- Wer einen Command aus einem Event erzeugt, setzt den Akteur dieses Events als `ImAuftrag.Von(…)`: der Prozess-Manager (Prozess und
+  Fluss) und der `HandlerOutputRouter` (Commands einer Reaktion, `AkteurHerkunft.Aus(trigger.UserId)`). `CommandEmitter` stempelt
+  `ImAuftrag.Akteur`; ist er leer, gilt Fall 3 (§2.3).
+- Ein **Prozess** (auch ein Fluss) trägt den Akteur des Events, das ihn startete — auch über ein Zeitlimit (Beispieldomäne:
+  `MarkiereAlsHaengengeblieben` sendet der `TrainingWaechter` am ⏳-Port eines `Warte`).
+- Quell-Nachrichten reisen ohne Envelope: ihr Akteur ist der eindeutige `IDarf`-Halter (`AkteurHerkunft.EindeutigerHalter`, an `Quellen`
+  übergeben).
+- **Altlast** (Handle-Welt, ohne Domänen-Nutzer, Rückbau offen `docs/13` W11-1): die Handle-Pipeline setzt bei einem
+  `IAkteurDienst<A>`-Parameter den Dienst-Akteur, ihre Trigger nehmen den eindeutigen Halter, eine **Frist** speichert den Akteur beim Planen
+  (`Frist.Akteur`) und feuert in seinem Namen.
 
 ### 5.2 Handshake
 
@@ -231,7 +237,7 @@ Version); der Arbeitsplatz fragt es. Dazu standen 13 Events, auf die Handler des
   Eingänge (Zusagen + Kenntnis) (`AkteurVertragsPruefung`). Der C#-Client schickt gar keine Selbstauskunft mehr (§4.6); die Python-Basen
   schicken sie noch mit, der Server vergleicht dann nur.
 - Mit Tor muss das Token einen Akteur des Clients verkörpern (sonst `PermissionDenied`). Hash ≠ Server → Warnung, im strengen Modus
-  (`"Akteure": { "VertragStreng": true }`) Ablehnung.
+  (`Identitaeten:VertragStreng` = `true` in der Umgebung) Ablehnung.
 
 ### 5.3 Kausalität und deterministische CommandId
 
@@ -244,7 +250,7 @@ dieselbe Zusage tragen, erzeugen für dieselbe Antwort dieselbe Id.
 ### 5.4 Zustellung an Clients — heute und Ziel
 
 - **Heute:** verlierbarer Push (Inv. 6) an **jede** abonnierte Sitzung (Broadcast); `SubscriptionTracker` heilt nur das Abo.
-- **Ziel (offen, §9):** Kenntnis bleibt verlierbar. Eine **Zusage mit Ausgabe** ist eine durable Abhängigkeit der Kette → je getragenem
+- **Ziel (offen, `docs/13` AK-1):** Kenntnis bleibt verlierbar. Eine **Zusage mit Ausgabe** ist eine durable Abhängigkeit der Kette → je getragenem
   Vertrags-Teil ein Emittenten-Cursor (dieselbe Konsum-Maschine), nachholend beim Reconnect; tragen mehrere Clients denselben Teil, je
   StreamId genau einer (Zuteilung, Übernahme bei Abbruch). Die deterministische CommandId (§5.3) deckt den Übergabemoment ab.
 
@@ -254,10 +260,10 @@ dieselbe Zusage tragen, erzeugen für dieselbe Antwort dieselbe Id.
 
 | Generat | Ort | Inhalt |
 |---|---|---|
-| `GeneratedAkteurRechte` | `Infrastructure.SourceGeneration/AkteurRechteGenerator.cs` | je Akteur: Art, Commands (IDarf ∪ Zusage-Ausgaben), Queries, Trigger, Transient, Hört, Vertrag (Event → Ausgaben über alle Teile), Ströme, Hash |
+| `GeneratedAkteurRechte` | `Infrastructure.SourceGeneration/AkteurRechteGenerator.cs` | je Akteur: Art, Commands (IDarf ∪ Zusage-Ausgaben), Queries, Trigger (Altlast), Transient, Hört, Vertrag (Event → Ausgaben über alle Teile), Ströme, Hash |
 | `GeneratedClientVertraege` | dito | je Client: getragene Zusagen je Akteur, Sendet, Fragt, Kenntnis, Verkörpert, Client-Hash |
 | `GeneratedWiring_<Assembly>` (C#-Client) | `Client.SourceGeneration/WiringGenerator.cs` | `Vertrag`, `VertragHash`, `ServerEventTypes` (Eingänge), `CommandTypes` (ISendet), `RegisterQueries` (IFragt) — aus `[assembly: IstClient<IX>]` |
-| `domain_client/generated/vertraege.py` | `Cqrs.Codegen/PythonVertragsEmitter.cs` (`./codegen.sh`) | je Akteur-Vertrag `<Akteur>Basis`, je Client `<Client>Basis` (`CLIENT`, `AKTEURE`, `ZUSAGEN` mit Akteur je Eintrag, `SPONTAN`, `FRAGT`, abstrakte `auf_<event>`) |
+| `domain_client/generated/vertraege.py` | `Cqrs.Codegen/PythonVertragsEmitter.cs` (Codegen-Schritt im Build) | je Akteur-Vertrag `<Akteur>Basis`, je Client `<Client>Basis` (`CLIENT`, `AKTEURE`, `ZUSAGEN` mit Akteur je Eintrag, `SPONTAN`, `FRAGT`, abstrakte `auf_<event>`) |
 
 - **Kanon und Hash** an einer Stelle (`Abstractions/Akteurvertrag.cs`: `Kanon`, `ClientKanon`, `Hash` = 16 Hex von SHA-256): Server,
   Python und Wissensgraph ergeben denselben Hash; ein Client gegen einen anderen Stand fällt am Handshake auf.
@@ -272,51 +278,60 @@ dieselbe Zusage tragen, erzeugen für dieselbe Antwort dieselbe Id.
 |---|---|---|
 | CQRS058 | GR-AKTEUR | `IDarf<T>` nur für Hineingehendes, nur an einem `IAkteur` |
 | CQRS059 | — | Akteur- und Client-Namen eindeutig |
-| CQRS060 | GR-AUFTRAG, GR-VERKOERPERUNG | Dienst nur als Handle-Parameter; Ausgaben ⊆ Befugnis; dieselbe Entscheidung nicht drinnen *und* als Zusage |
+| CQRS060 | GR-AUFTRAG, GR-VERKOERPERUNG | `IAkteurDienst` (Altlast, §2.4) nur als Handle-Parameter; Ausgaben ⊆ Befugnis; dieselbe Entscheidung nicht drinnen *und* als Zusage |
 | CQRS061 | GR-VERTRAG | Vertrag ist Interface, nur `Auf(Event)`, je Event einmal über alle Teile des Akteurs |
 | CQRS062 | GR-VERTRAG | Ausgabe einer Zusage: nur konkrete Commands (void / T / OneOf / Strom) |
 | CQRS063 | GR-CLIENT | Client: Interface; erbt nur Teile/ISendet/IFragt/Client-Verträge; eigene Methoden nur Kenntnis |
-| CQRS064 | GR-CLIENT-BEFUGT | Sendet/Fragt: ein Akteur hat `IDarf<T>`; Sendet = Command/Trigger/Transient (Quell-Nachricht offen, Zielbild §12.2), Fragt = Query |
+| CQRS064 | GR-CLIENT-BEFUGT | Sendet/Fragt: ein Akteur hat `IDarf<T>`; Sendet = Command, Transient-Event oder Trigger (Altlast, `docs/13` W11-1); „Client meldet Quell-Nachricht“ ist noch kein Laufzeitweg (konzept-werkbank §12.2); Fragt = Query |
 | CQRS065 | GR-CLIENT | je Event höchstens eine Methode im Client (getragen oder eigen) |
 | CQRS093–097 | GR-CLIENT-CODE | C#-Client: Vertrag genannt, keine Teile, erzeugte Commands/Queries im Vertrag, gehörte Server-Events Kenntnis (§4.6) |
 | — (Laufzeit-Tor) | GR-HERKUNFT | jeder Command/Query/Quell-Nachricht kommt von einem Akteur (direkt oder Kette) |
 | — | GR-INGRESS-EINDEUTIG | eine Quell-Nachricht ohne Kette hat genau einen `IDarf`-Halter |
 | — | GR-GETRAGEN | sobald es Clients gibt: jede Zusage mit Ausgabe trägt mindestens ein Client (sonst bricht die Kette) |
 
-Die Grammatik ist eine Quelle (`DomainEditor/Grammatik.cs`); ein Build-/Test-Gate prüft, dass jede genannte Build-ID im Code existiert.
+Die Grammatik ist eine Quelle (`DomainEditor/Grammatik.cs`, konzept-werkbank A.4); `--check` prüft, dass jede genannte Build-ID im Code
+vorkommt (Lücken dieses Gates: `docs/13` WZ-1).
 
 ---
 
-## 8. Editor (Kurzfassung — Volltext `docs/konzept-domaenen-editor.md` §12)
+## 8. Editor
 
-- **Rahmen je Domäne × Akteur**; Doppelungen stehen beim ersten Akteur in Ablauf-Reihenfolge, „↥ auch" verweist.
-- **📜 Vertrags-Rahmen** neben der Akteur-Karte, darin je `Auf` eine Karte **Zusage** (◀ Event · Ausgänge ▶).
-- **🔌 Client-Rahmen** rechts neben den Domänen; die Karte ist die **Anschlussleiste** (trägt / sendet als … / fragt als … / hört). Je
-  Client × Ziel-Rahmen **ein Bündel**, in Worten beschriftet (durchgezogen = trägt eine Zusage mit Ausgabe). Der Zoom ändert nichts;
-  Einzelkanten nur durch einen Klick (Leisten-Zeile, Bündel, 🔌 in der Stecker-Zeile eines Akteur-Rahmens).
-- Bearbeiten im Panel über ⊕: Akteur „darf ⊕", „+ Zusage ⊕ (Event)"; Client „trägt ⊕", „sendet/fragt ⊕", „hört ⊕". Jede Geste
-  schreibt sofort Akteur-Record, Vertrags-Interface bzw. Client-Interface (Zielbild §8.2).
+Bedienung allgemein: konzept-werkbank §8. Jede Geste schreibt sofort Akteur-Record, Vertrags-Interface bzw. Client-Interface (konzept-werkbank
+§8.2); die Rahmen, Akteur-Mengen und Anschlussleisten rechnet der Server (`board.sicht`, konzept-werkbank §8.3).
+
+### 8.1 Akteur-Rahmen
+
+**Rahmen je Domäne × Akteur**; Doppelungen stehen beim ersten Akteur in Ablauf-Reihenfolge, „↥ auch" verweist. Was keinem Akteur zugeordnet
+werden kann, steht im Rahmen „ohne Akteur“ (GR-HERKUNFT).
+
+### 8.2 Vertrags-Rahmen
+
+**📜 Vertrags-Rahmen** neben der Akteur-Karte, darin je `Auf` eine Karte **Zusage** (◀ Event · Ausgänge ▶) mit dem Python-Rumpf der
+Client-Implementierung als Rumpf (konzept-werkbank §8.4).
+
+### 8.3 Client-Rahmen
+
+**🔌 Client-Rahmen** rechts neben den Domänen; die Karte ist die **Anschlussleiste** (trägt / sendet als … / fragt als … / hört). Je
+Client × Ziel-Rahmen **ein Bündel**, in Worten beschriftet (durchgezogen = trägt eine Zusage mit Ausgabe). Der Zoom ändert nichts;
+Einzelkanten nur durch einen Klick (Leisten-Zeile, Bündel, 🔌 in der Stecker-Zeile eines Akteur-Rahmens).
+
+### 8.4 Was abgeleitet wird: von welchem Akteur kommt was?
+
+Statisch hat jede Nachricht eine Akteur-*Menge*, als Fixpunkt über den Graphen (`DomainEditor/AkteurAnteile.cs`): **direkt** über `IDarf<T>`,
+**über die Kette** aus dem Eingang des Bausteins, der sie erzeugt (Decide, Handle, Prozess-Regel, Fluss-Knoten), und aus der Ausgabe einer
+Zusage im Vertrag eines Akteurs. Das Board trägt die Mengen als `rahmen.akteurMengen`; Akteure je Karte, Akteur-Rahmen und Pfade liefert
+`board.sicht`. Zur Laufzeit trägt ein Command genau einen Akteur (§2.3, §5.1; `Infrastructure/Akteure/AkteurHerkunft.cs`).
+
+### 8.5 Bearbeiten
+
+Im Panel über ⊕: Akteur „+ darf ⊕", „+ Zusage ⊕ (Event)"; Client „+ trägt ⊕", sendet/fragt, „hört ⊕". „＋“ am Port legt eine neue Karte an
+und verbindet sie (konzept-werkbank A.3). Weitere Vertrags-Teile eines Akteurs (§3.2) liest der Editor, er schreibt nur den Haupt-Vertrag
+(`DomainEditor/Scaffolder.cs`); eine geänderte Client-Basisliste schreibt der Abgleich einzeilig.
 
 ---
 
-## 9. Stand und offen
+## 9. Offen
 
-**Gemessen 2026-10-06:** Prüfstand 280/280; Python SDK 19/19, Worker 11/11; Integration `VertragsZusageE2ETests` + `MetadataPostgresTests`
-grün gegen echte Infra; `--check` (8 Akteure, 2 Verträge, 3 Clients / 43 Rand-Ports) und `--sonde` (Lesesaal = 2 Akteure, Archiv über 2
-Clients, gezeichnetes Mahnportal) grün. Live: `run_stub.py` meldet sich als `KlassifikationsWorker`, der Server nimmt den Vertrag an und
-abonniert genau die 3 Vertrags-Events.
-
-**Gemessen 2026-10-13 (Blazor als Client, §4.6):** Prüfstand 526/526 (+5 `ClientCodeVertragTests`: Code im Vertrag ohne Befund,
-CQRS093–097, gleicher Hash wie der Server); Integration 39/39; Python Worker 20/20, SDK 28/28; `--check`/`--sonde` grün. Live: `Host.Blazor
---umgebung sim-main` meldet sich als `Arbeitsplatz` an (Token `sim-arbeitsplatz`), der Host nimmt den Vertrag an („verkörpert Inspekteur,
-KIOperator, Modellfreigeber, Produktpruefer“; 14 Commands, 25 Events, 13 Queries); der Arbeitsplatz hydriert, „Inspiziert“ landet als
-Inspekteur, „R“ (OK) als `LabelPhysischesProdukt` des Produktprüfers in der Spur.
-
-**Offen:**
-1. **Durable Zustellung + Zuteilung** an Clients (§5.4).
-2. **`als` im CommandEnvelope** für spontane Commands, die mehrere Akteure eines Clients dürfen (heute: der erste).
-3. **Zusagen über eine C#-Leitung** (CQRS094 verbietet sie heute; die Python-Basen beantworten sie mit Kausalität).
-4. **Anmeldung je Person** am Arbeitsplatz: heute ein Token je Umgebung (`Clients:Arbeitsplatz:Token`), das die vier Akteure verkörpert.
-5. In `prod`/`multinode` gibt es noch keine Identitäten — das Tor ist dort offen (der Vertrag gilt trotzdem).
-6. Der Abgleich schreibt eine geänderte Client-Basisliste einzeilig; weitere Vertrags-Teile eines Akteurs liest der Editor, schreibt sie
-   aber nicht.
+Durable Zustellung und Zuteilung an Clients (§5.4), `als` im CommandEnvelope bei mehreren verkörperten Akteuren (heute: der erste), Zusagen
+über eine C#-Leitung (CQRS094), Anmeldung je Person am Arbeitsplatz (heute ein Token je Umgebung) und Identitäten für Prod (in `prod`/`multinode`
+gibt es keinen Abschnitt `Identitaeten`, das Tor ist dort offen): `docs/13` AK-1 und P1-2. Messungen und Testzahlen: `docs/12`.

@@ -14,7 +14,7 @@ namespace Infrastructure.Aggregate.ActorSystem;
 /// - Erfolg: Domain-Events (Broadcast)
 /// - Fehler: CommandFailed Event (Targeted) — technische Actor-Fehler publiziert der Actor
 ///   selbst; ERREICHT der Command nach erschöpfter Platzierung nie einen Actor, publiziert
-///   HIER der Dispatcher das CommandFailed (T2a), damit der auslösende Client nicht still hängt.
+///   HIER der Dispatcher das CommandFailed (docs/08 §8.4), damit der auslösende Client nicht still hängt.
 ///
 /// ★ Härtung: der eigentliche Send läuft mit BESCHRÄNKTEM Token + bounded Retry. Ein
 /// <c>CancellationToken.None</c> ließ <c>RequestAsync</c> bei noch nicht konvergierter Cluster-
@@ -28,7 +28,7 @@ public class ProtoActorAggregateDispatcher : IAggregateDispatcher
     private readonly Proto.ActorSystem _actorSystem;
     private readonly ILogger _logger;
     private readonly IDeadLetterSink? _deadLetters;   // ★ Audit-Fix #1: nicht-zustellbaren Command durabel machen
-    private readonly BrokerPublisher? _publisher;     // ★ T2a: CommandFailed an den Client bei erschöpfter Platzierung
+    private readonly BrokerPublisher? _publisher;     // ★ CommandFailed an den Client bei erschöpfter Platzierung
 
     /// <summary>Timeout pro Sende-Versuch (begrenzt die interne Placement-Retry-Schleife von Proto.Cluster).</summary>
     private static readonly TimeSpan AttemptTimeout = TimeSpan.FromSeconds(10);
@@ -135,7 +135,7 @@ public class ProtoActorAggregateDispatcher : IAggregateDispatcher
         //   doppelt wirken (§5). Best-effort; WriteAsync wirft laut Vertrag nie in den Aufrufer zurück.
         await SchreibeDeadLetterAsync(envelope, grund);
 
-        // ★ T2a: Zusätzlich den auslösenden Client benachrichtigen. Der Command hat nie einen Actor
+        // ★ Zusätzlich den auslösenden Client benachrichtigen. Der Command hat nie einen Actor
         //   erreicht → NIEMAND publiziert sonst ein CommandFailed (das tut normal der Actor). Ohne dies
         //   hinge der Client still (kein Ack, kein Nack). Targeted über OriginSessionId, wie der Actor.
         await TryPublishCommandFailedAsync(envelope, grund);

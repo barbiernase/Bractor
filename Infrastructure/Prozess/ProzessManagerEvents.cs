@@ -4,7 +4,7 @@ using Abstractions;
 namespace Infrastructure.Prozess;
 
 /// <summary>
-/// Das GENERISCHE Prozess-Manager-Log (Spec §4/§5.3). Der Manager ist EIN Aggregat für ALLE Prozess-Typen —
+/// Das GENERISCHE Prozess-Manager-Log (docs/04 §4.5). Der Manager ist EIN Aggregat für ALLE Prozess-Typen —
 /// die Struktur (Regeln) ist Daten, nicht Code pro Prozess. Sein Log speichert bewusst nur ENTSCHEIDUNGEN,
 /// die sich NICHT aus den Ziel-Streams rekonstruieren lassen:
 ///   - <see cref="ProzessGestartet"/>: welcher Prozess-Typ + wo der Auslöser liegt (Marking-Wurzel).

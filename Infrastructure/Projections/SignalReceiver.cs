@@ -4,7 +4,7 @@ using Infrastructure.Mapping;
 namespace Infrastructure.Projections;
 
 /// <summary>
-/// Der zustandslose Receiver (Spec 4.4 / 5.6) — der Kern, ohne Proto-Mantel.
+/// Der zustandslose Receiver (docs/04 §4.1) — der Kern, ohne Proto-Mantel.
 ///
 /// Er nimmt ein `StateChangeVia{Event}`-Signal entgegen und weckt den Adapter für
 /// dessen Stream: <c>Wake(signal.StreamId)</c>. Mehr trifft er nicht — Verlust,

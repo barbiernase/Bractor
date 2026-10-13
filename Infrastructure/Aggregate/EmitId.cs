@@ -10,7 +10,7 @@ namespace Infrastructure.Aggregate;
 ///
 /// Aus <see cref="EmitKausalität"/> + Ziel-Aggregat: gleiche Ursache → gleiche Id → der Empfänger
 /// dedupliziert über die Framework-Inbox (Noop). Das ist die Grundlage für „at-least-once gesendet,
-/// exactly-once wirksam durch den Empfänger" (Spec 9.3). Das Ziel-Aggregat ist Teil des Hashes →
+/// exactly-once wirksam durch den Empfänger" (docs/04 §4.4). Das Ziel-Aggregat ist Teil des Hashes →
 /// Fan-out an verschiedene Ziele kollidiert nicht (Härtung gegen Befund 8).
 ///
 /// MD5 dient nur als stabile, gut streuende Ableitung — keine kryptografische Eigenschaft nötig.

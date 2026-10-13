@@ -39,7 +39,7 @@ public sealed class DateiQuellKonfig
     public DateiKennungArt Kennung { get; set; } = DateiKennungArt.PfadGroesseZeit;
     public QuellLaufmodus Laufmodus { get; set; } = QuellLaufmodus.EinmalImCluster;
     /// <summary>
-    /// Ein zweiter Weg in dieselbe Quelle (Plan E12): <c>POST {Webhook}</c> auf dem Einblick-Port mit der Nachricht als JSON — genau einmal ins
+    /// Ein zweiter Weg in dieselbe Quelle (konzept-werkbank §12.3 E12): <c>POST {Webhook}</c> auf dem Einblick-Port mit der Nachricht als JSON — genau einmal ins
     /// Log, Vorgang gestartet (dieselbe Nachricht zweimal → derselbe Vorgang). Leer = kein Webhook. Die Route ist Betrieb, nicht Domäne.
     /// </summary>
     public string? Webhook { get; set; }

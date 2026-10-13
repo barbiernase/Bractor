@@ -15,7 +15,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Eingang;
 
 /// <summary>
-/// Der JSON-Eingang der Werkbank (Werkbank P5, Plan E5), store-frei: Name → Typ über die generierte Registry, Felder über den generierten
+/// Der JSON-Eingang der Werkbank (Werkbank P5, konzept-werkbank §12.3 E5), store-frei: Name → Typ über die generierte Registry, Felder über den generierten
 /// Wire-Kontext (keine Reflection), Enums als Namen — für Commands, Queries, Antworten und die Ergebnisse von Hand-Funktionen.
 /// </summary>
 public class EingangJsonTests

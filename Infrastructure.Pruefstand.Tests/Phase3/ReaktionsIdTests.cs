@@ -4,7 +4,7 @@ using Infrastructure.Aggregate;
 namespace Infrastructure.Pruefstand.Phase3;
 
 /// <summary>
-/// Phase 3 — deterministische Reaktions-Id (Spec 9.3): gleiche Auslöse-Position +
+/// Phase 3 — deterministische Reaktions-Id (docs/04 §4.4): gleiche Auslöse-Position +
 /// gleicher Command-Typ ergeben dieselbe Id, sonst eine andere. Fundament dafür,
 /// dass ein wiederholter Reaktions-Command beim Empfänger als Duplikat erkennbar ist.
 /// </summary>

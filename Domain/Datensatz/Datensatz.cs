@@ -21,7 +21,7 @@ public partial class Datensatz : IState
     /// <summary>Der Entwurfs-Korb: konkrete Bildpaar-Referenzen, dedupliziert.</summary>
     public HashSet<Guid> DraftMitglieder { get; } = new();
 
-    /// <summary>Herkunft der aufgenommenen Ranges (Provenienz, Konzept §10).</summary>
+    /// <summary>Herkunft der aufgenommenen Ranges (Provenienz).</summary>
     public List<RangeHerkunft> Ranges { get; } = new();
 
     /// <summary>Split-Konfiguration (Default 70/15/15, optional überschrieben).</summary>

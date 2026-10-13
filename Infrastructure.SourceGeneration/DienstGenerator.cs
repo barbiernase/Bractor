@@ -10,7 +10,7 @@ using System.Text;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Domänen-Dienste (<c>Abstractions.IDienst</c>, Plan E11): erzeugt <c>GeneratedDienste</c> — die Tabelle Dienst → Implementierungen (Code-Fakt:
+    /// Domänen-Dienste (<c>Abstractions.IDienst</c>, konzept-werkbank §12.3 E11): erzeugt <c>GeneratedDienste</c> — die Tabelle Dienst → Implementierungen (Code-Fakt:
     /// jede öffentliche Klasse, die das Interface implementiert) mit generierter Fabrik je Implementierung, dazu was jeder Konstruktor einer
     /// Funktions- bzw. Dienst-Implementierung braucht (Dienste, Konfig-Records) und je Konfig-Record die Bindung aus <c>Konfig:&lt;Record&gt;</c>.
     /// Welche Implementierung läuft, wählt die Umgebung (<c>Dienste:&lt;IDienst&gt;</c>); gebunden und geprüft wird beim Start (BindeDienste).

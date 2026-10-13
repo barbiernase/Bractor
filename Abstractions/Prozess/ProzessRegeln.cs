@@ -5,14 +5,14 @@ using System.Linq;
 namespace Abstractions;
 
 /// <summary>
-/// Eine <b>Transition</b> des Prozess-Petri-Netzes (Spec §2/§3): ihre <see cref="Bedingung"/> ist eine
+/// Eine <b>Transition</b> des Prozess-Petri-Netzes (docs/04 §4.5): ihre <see cref="Bedingung"/> ist eine
 /// KONJUNKTION von Event-Typen (Tokens) — sind alle für eine Korrelation eingetroffen, ist die Transition
 /// aktiviert und feuert die von <see cref="Sende"/> gebauten Commands. <see cref="RückgängigDurch"/> ist
 /// ihr Gegenzug in der Kompensation (läuft, wenn das Erfolgs-Event dieses Schritts beobachtet wurde).
 ///
 /// Der <see cref="Sende"/>-Rückgabewert ist eine LISTE — so ist Fan-out gratis: eine Transition darf aus
 /// einem Match mehrere Commands erzeugen (N <c>SchreibeGut</c> an N Ziele). Jedes bekommt beim Feuern eine
-/// deterministische, EINDEUTIGE Vorgang-Id aus der Kausalität (Spec §6, <see cref="ProzessId.FürTransition"/>).
+/// deterministische, EINDEUTIGE Vorgang-Id aus der Kausalität (docs/04 §4.5, <see cref="ProzessId.FürTransition"/>).
 /// </summary>
 public sealed class Regel
 {
@@ -167,7 +167,7 @@ public sealed class SammelBedingung
 }
 
 /// <summary>
-/// Die Regeln eines Prozess-Typs (der DAG-Deskriptor, Spec §4). STRUKTUR aus Code, pure Funktion — sie wird
+/// Die Regeln eines Prozess-Typs (der DAG-Deskriptor, docs/04 §4.5). STRUKTUR aus Code, pure Funktion — sie wird
 /// nie pro Instanz gespeichert. Der generische Manager kombiniert sie bei jeder Weckung mit dem aus dem Log
 /// gefalteten Marking, um die aktivierten Transitionen zu feuern.
 /// </summary>
@@ -259,7 +259,7 @@ public sealed class ProzessRegeln
 }
 
 /// <summary>
-/// Was der Anwender schreibt (Spec §3): ein Typ, der die <see cref="Regeln"/> eines Prozesses liefert.
+/// Was der Anwender schreibt (docs/10 §10.5): ein Typ, der die <see cref="Regeln"/> eines Prozesses liefert.
 /// Ersetzt <c>IProzessPlan</c> (Schrittliste) durch die typisierten Event→Command-Regeln. Der
 /// <c>ProzessRegelnGenerator</c> liest alle <see cref="IProzessDefinition"/> und emittiert daraus die
 /// Regel-Registry; der generische Manager führt sie aus.

@@ -7,7 +7,7 @@ using Xunit;
 namespace Client.Infrastructure.CollectionTests;
 
 /// <summary>
-/// T2b — der PendingCommandTracker trägt die „warte auf korrelierte Antwort oder Timeout"-Logik des
+/// Zustellgarantie (docs/08 §8.4) — der PendingCommandTracker trägt die „warte auf korrelierte Antwort oder Timeout"-Logik des
 /// Client-Retry-Loops. Getestet ohne echten Server (reine Warte-/Ack-Semantik).
 /// </summary>
 public class PendingCommandTrackerTests

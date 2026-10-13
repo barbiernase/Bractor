@@ -1,7 +1,7 @@
 namespace Abstractions;
 
 /// <summary>
-/// Marker eines DOMÄNEN-DIENSTES (docs/plan-werkbank-umsetzung.md E11): eine Schnittstelle, hinter der Technik steckt, die eine
+/// Marker eines DOMÄNEN-DIENSTES (docs/konzept-werkbank.md §12.3 E11): eine Schnittstelle, hinter der Technik steckt, die eine
 /// Katalog-Funktion benutzt (Bild skalieren, Histogramm ausgleichen, ein Modell laden …). Jede öffentliche Klasse, die sie implementiert,
 /// ist eine Implementierung (Code-Fakt); welche läuft, wählt die Umgebung (<c>Dienste:&lt;IDienst&gt;:Implementierung</c>, Default: die
 /// einzige). Gebunden wird generiert (<c>GeneratedDienste</c>), ohne Reflection.

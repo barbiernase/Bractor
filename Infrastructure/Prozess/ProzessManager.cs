@@ -8,12 +8,12 @@ using Abstractions;
 namespace Infrastructure.Prozess;
 
 /// <summary>
-/// Der GENERISCHE Prozess-Manager (Spec §4) — ein Petri-Netz-Interpreter, EINMAL geschrieben, für JEDEN
+/// Der GENERISCHE Prozess-Manager (docs/04 §4.5) — ein Petri-Netz-Interpreter, EINMAL geschrieben, für JEDEN
 /// Prozess-Typ gültig. Verschmilzt das frühere Prozess-Aggregat + den Treiber: er hält ein eigenes Log
 /// (Entscheidungen) UND treibt die Ziel-Commands. Kern-Invariante: <b>Struktur aus Code (die Regeln),
 /// Marking aus dem Log</b> — bei jeder Weckung frisch gefaltet, nie in einem Feld gehalten.
 ///
-/// Eine Weckung = EIN Schritt (Spec §8, sequenziell zuerst): das Marking falten, die aktivierten,
+/// Eine Weckung = EIN Schritt (docs/04 §4.5, sequenziell zuerst): das Marking falten, die aktivierten,
 /// noch-nicht-erledigten Transitionen rechnen, die erste feuern (FIRE-AND-FORGET über <see cref="_dispatch"/>
 /// — kein <c>await</c> auf eine Quittung im Turn, die (A)-Hang-Klasse ist strukturell weg). Der Ausgang
 /// kommt DURABEL vom Ziel-Stream und wird bei der nächsten Weckung gefaltet (Treiber-Fold/EM-1): eine
@@ -54,7 +54,7 @@ public sealed class ProzessManager
     //   alle Kandidaten-Streams neu zu lesen → DB-Roundtrips von O(N²) auf ~O(1) pro Weckung. Kaltstart
     //   (Hot-Miss) liest voll (die Wahrheit rekonstruieren) — Invariante 1 gewahrt.
     private readonly Dictionary<Guid, HashSet<Guid>> _dirty = new();
-    // ★ P5b (Konzept §5, ProzessMarkingThreshold): das Marking wird NICHT bei jeder Weckung durabel geschrieben.
+    // ★ P5b (docs/04 §4.5, ProzessMarkingThreshold): das Marking wird NICHT bei jeder Weckung durabel geschrieben.
     //   Der HOT-Cache trägt die Korrektheit über die Weckungen EINER Aktivierung; der durable Write ist nur der
     //   Kaltstart-Beschleuniger (Passivierung/Crash). Jede Weckung zu schreiben tauschte O(N²) Event-Reads gegen
     //   O(N²) Marking-Writes (die §4-Falle). Alle K Weckungen zu schreiben amortisiert das auf ~O(N²/K) — ein
@@ -166,7 +166,7 @@ public sealed class ProzessManager
             foreach (var k in offen.Where(k => k.Auftrag is not null))
                 await BeauftrageAsync(korrelation, k.Auftrag!, k.Vorgang, SpurVon(k, regeln), ct);
 
-            // ── Commands: die erste noch nicht erledigte Transition feuern (sequenziell, Spec §8, unverändert) ──
+            // ── Commands: die erste noch nicht erledigte Transition feuern (sequenziell) ──
             var pending = offen.FirstOrDefault(k => k.Cmd is not null);
             if (pending != null)
             {
@@ -589,7 +589,7 @@ public sealed class ProzessManager
         catch (Exception ex) { Console.WriteLine($"[Prozess-Marking] Löschen fehlgeschlagen ({korrelation}): {ex.Message}"); }
     }
 
-    // Belegungen (Herkunft, Je-Teile, Sammeln) liegen im reinen Kern Abstractions.FlussBelegung — geteilt mit der Simulation.
+    // Belegungen (Herkunft, Je-Teile, Sammeln) liegen im reinen Kern Abstractions.FlussBelegung — geteilt mit dem Prüfstand-Laufwerk (FlussLaufwerk, Cqrs.Testing).
 
     // ── Kompensation: reverse Regel-Reihenfolge über Erfolgs-Transitionen mit Gegenzug ──
     private sealed record Kompensation(ICommand Cmd, Guid Vorgang, Kandidat Von);

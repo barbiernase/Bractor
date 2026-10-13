@@ -4,9 +4,9 @@ namespace Client.Infrastructure.Connection;
 
 /// <summary>
 /// Verfolgt gesendete Client-Commands, bis eine korrelierte Server-Antwort (ein Event oder ein
-/// CommandFailed mit derselben CorrelationId) eintrifft — die Grundlage des T2b-Retry-Loops.
+/// CommandFailed mit derselben CorrelationId) eintrifft — die Grundlage des Retry-Loops (docs/08 §8.4).
 ///
-/// Der Loop sendet bei Stille erneut; weil der Client seit T2b eine DETERMINISTISCHE CommandId
+/// Der Loop sendet bei Stille erneut; weil der Client eine DETERMINISTISCHE CommandId
 /// wiederverwendet, dedupliziert das Aggregat einen Doppel-Send idempotent (kein Doppel-Effekt).
 /// Trifft nichts ein, meldet der Loop bewusst „unbestätigt" (Ausgang unbekannt, sicher wiederholbar),
 /// NICHT „fehlgeschlagen".

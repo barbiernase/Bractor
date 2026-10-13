@@ -1,7 +1,7 @@
 namespace DomainEditor;
 
 /// <summary>
-/// Von welchem Akteur kommt was? (<c>docs/konzept-akteure.md</c> §2.3/§8.4) — abgeleitet aus dem <see cref="Fluss"/>, kein
+/// Von welchem Akteur kommt was? (<c>docs/konzept-akteure.md</c> §2.3/§8) — abgeleitet aus dem <see cref="Fluss"/>, kein
 /// weiteres Wort im Code:
 /// <list type="bullet">
 /// <item><b>direkt</b>: der Akteur darf die Nachricht selbst hineingeben (<c>IDarf&lt;T&gt;</c>, Kante <c>akt:</c> → Nachricht);</item>

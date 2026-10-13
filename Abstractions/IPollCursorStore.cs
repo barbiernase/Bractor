@@ -1,7 +1,7 @@
 namespace Abstractions;
 
 /// <summary>
-/// Durabler Cursor des Poll-Backstops pro Pull-Pfad (Spec 4.8 / 19.1). Er hält die zuletzt
+/// Durabler Cursor des Poll-Backstops pro Pull-Pfad (docs/04 §4.1). Er hält die zuletzt
 /// gescannte globale High-Water-Mark fest, damit der Poller nach einem Neustart DORT
 /// wieder aufsetzt, statt beim Boot die GESAMTE Historie erneut zu scannen.
 ///

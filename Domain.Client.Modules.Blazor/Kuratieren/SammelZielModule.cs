@@ -4,7 +4,7 @@ using Domain.Client.Modules.Blazor.Kuratieren;
 namespace Domain.Client.Modules.Kuratieren;
 
 /// <summary>
-/// Header-Leiste „Sammle in: …" (Konzept datensatz-kuratierung §4.1) — der persistente,
+/// Header-Leiste „Sammle in: …" — der persistente,
 /// erststellige Aufnahme-Modus (wie der Aufnahme-Knopf einer Kamera). Zeigt das aktive
 /// Sammel-Ziel mit Größe + Live-Balance, erlaubt Wechsel (Dropdown), Neuanlage und Einfrieren.
 ///

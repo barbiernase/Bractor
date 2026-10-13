@@ -199,6 +199,25 @@ jede Regel nennt ihr Build-Gegenstück. Die Werkbank holt die Befunde aus den An
 
 ---
 
+## P16 — Clients lesen über typisierte Queries; Nachrichten tragen Pfade, keine Blobs
+
+**Warum:** Ein externer Client (Python-Worker, Blazor) liest nie direkt die Datenbank und keine exportierte Datei, sondern stellt eine
+typisierte Query über denselben Kanal wie jeder andere Client. Direktzugriff auf Postgres würde ihn an die physische Marten-Form
+(`rm.mt_doc_…`, JSONB) koppeln — eine Schemaänderung bräche ihn still — und bräuchte Datenbank-Zugang auf seiner Maschine; eine Datei wäre
+ein zweites Artefakt, das veraltet. So behält der Server die Schema-Hoheit, und der Client bleibt reiner Client. Große Mengen werden
+paginiert (Seite/Seitengröße in der Query); echtes Server-Streaming liegt außerhalb des Query-Vertrags und wäre eine eigene Entscheidung.
+Events und Queries tragen **Pfade**, keine Binärdaten; die Bytes kommen über einen Datei-Endpunkt. Die Python-Seite fragt mit `query()`
+(`Client.Infrastructure.Python/cqrs_client/client.py`), siehe [09](09-python-sdk.md).
+
+## P17 — Reproduzierbarkeit als Event: einfrieren statt verweisen
+
+**Warum:** Was ein späterer Vorgang reproduzierbar nutzen soll, wird als unveränderlicher Stand **ins Log** eingefroren (ein Event, das die
+Mitgliedschaft bzw. Eingaben festhält), nicht als Datei daneben abgelegt und nicht über Live-Daten referenziert. Der Auslöser hält die
+Version des eingefrorenen Stands und alle Parameter fest; Provenienz ist damit abfragbar wie jedes andere Event, und der Audit-Trail folgt
+aus dem Log (Inv. 1). Beispieldomäne: ein Datensatz wird eingefroren, ein Trainingslauf nennt Datensatz und Version.
+
+---
+
 ## Wo die Prinzipien (noch) nicht eingelöst sind
 
 Abweichungen vom Anspruch stehen nicht hier, sondern in einer Quelle: [13 §13.0](13-reifegrad-schulden-bewertung.md). Die wichtigsten

@@ -7,7 +7,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Dispatcher;
 
 /// <summary>
-/// T2a — der Dispatcher benachrichtigt den auslösenden Client, wenn ein Command nach erschöpfter
+/// Zustellgarantie (docs/08 §8.4; früher T2a, docs/13 §13.6) — der Dispatcher benachrichtigt den auslösenden Client, wenn ein Command nach erschöpfter
 /// Platzierung NIE einen Actor erreicht (sonst still, weil das CommandFailed sonst der Actor publiziert).
 /// Getestet wird die reine Envelope-Konstruktion (<see cref="ProtoActorAggregateDispatcher.BaueCommandFailed"/>),
 /// store-/cluster-frei. Der eigentliche Cluster-Send ist wie der Dead-Letter-Pfad nur integrationsweise prüfbar.

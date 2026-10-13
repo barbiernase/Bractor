@@ -142,7 +142,7 @@ public interface IAggregateRepository
             string? akteur = null);
 
         /// <summary>
-        /// Globales Leseprimitiv für den Poll-Backstop (Spec 19.1): liefert die Streams,
+        /// Globales Leseprimitiv für den Poll-Backstop (docs/04 §4.1): liefert die Streams,
         /// die seit <paramref name="afterGlobalSequence"/> neue Events bekommen haben, plus
         /// die neue globale High-Water-Mark. Der Poller weckt daraufhin die betroffenen
         /// Adapter — so heilt er das eine, das Coalescing NICHT auffängt: das letzte
@@ -167,7 +167,7 @@ public interface IAggregateRepository
         /// Liest die Events eines Streams ab <paramref name="fromVersion"/>, geordnet,
         /// jeweils mit ihrer Version im EventEnvelope.
         ///
-        /// Das eine tragende neue Leseprimitiv des Pull-Ansatzes (Spec 5.2):
+        /// Das eine tragende neue Leseprimitiv des Pull-Ansatzes (docs/04 §4.1):
         /// <paramref name="fromVersion"/> = angewandte Marke + 1. Genutzt von
         /// Adaptern, (späteren) Treibern und dem Rebuilder.
         /// </summary>

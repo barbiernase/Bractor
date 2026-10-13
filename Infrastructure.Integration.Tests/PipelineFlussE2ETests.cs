@@ -163,7 +163,7 @@ public class PipelineFlussE2ETests
     {
         var python = Environment.GetEnvironmentVariable("CQRS_PYTHON") ?? "/opt/miniconda3/envs/gpu_env/bin/python";
         File.Exists(python).Should().BeTrue($"Python für den Worker fehlt ({python}) — CQRS_PYTHON setzen");
-        // Der GENERISCHE Worker (Plan E13) mit der Tabelle aus dem Codegen; die Test-Implementierung (funktionen/bild_verkleinerung.py,
+        // Der GENERISCHE Worker (konzept-werkbank §12.3 E13) mit der Tabelle aus dem Codegen; die Test-Implementierung (funktionen/bild_verkleinerung.py,
         //   hängt „_py" an) liegt per --pfad vor der des Projekts.
         var skript = Path.Combine(RepoWurzel(), "Domain.Client.Worker.Python.ML", "funktions_worker.py");
         var testImpls = Path.Combine(RepoWurzel(), "Infrastructure.Integration.Tests", "Python");

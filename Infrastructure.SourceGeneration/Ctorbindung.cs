@@ -8,7 +8,7 @@ using System.Linq;
 namespace Infrastructure.SourceGeneration
 {
     /// <summary>
-    /// Was der Konstruktor einer Funktions- oder Dienst-Implementierung nimmt (Plan E11) — die EINE Lesart für <c>FunktionsGenerator</c> und
+    /// Was der Konstruktor einer Funktions- oder Dienst-Implementierung nimmt (konzept-werkbank §12.3 E11) — die EINE Lesart für <c>FunktionsGenerator</c> und
     /// <c>DienstGenerator</c>: Dienste (<c>IDienst</c>), Konfig-Records (Werte aus <c>Konfig:&lt;Record&gt;</c>) und <c>ILogger&lt;T&gt;</c>.
     /// Gebaut wird die Implementierung per generierter Fabrik (<c>sp =&gt; new Impl(sp.GetRequiredService&lt;P&gt;(), …)</c>) — ohne
     /// reflektierten Aktivator. Was nicht passt, meldet der Analyzer (CQRS090); hier wird es trotzdem aus dem Container geholt.

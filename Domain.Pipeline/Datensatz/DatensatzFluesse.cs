@@ -5,7 +5,7 @@ using Domain.Projections;    // ISearchImagePairs/IFindImagePair (Lese-Fähigkei
 namespace Domain.Pipeline.Datensatz;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// DATENSATZ-RESOLVER als Pipeline-Flüsse (docs/konzept-editor-pipelines.md §14, Konzept Datensatz §3.2/§11, Variante A).
+// DATENSATZ-RESOLVER als Pipeline-Flüsse (docs/konzept-editor-pipelines.md §14, Variante A).
 // Der reine Decider löst die zwei I/O-behafteten Halbschritte nicht selbst — sie sind Katalog-Funktionen mit LESE-Fähigkeit:
 //
 //   RangeAngefordert ──ƒ Range suchen (ISearchImagePairs) ──▶ NimmRangeAuf

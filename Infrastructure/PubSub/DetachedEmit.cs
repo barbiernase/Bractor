@@ -3,12 +3,12 @@ using Abstractions;
 namespace Infrastructure.PubSub;
 
 /// <summary>
-/// Macht ein <c>emit</c> AUS SICHT DES AUFRUFERS nicht-blockierend (Schritt A / Spec 8).
+/// Macht ein <c>emit</c> AUS SICHT DES AUFRUFERS nicht-blockierend (docs/04 §4.4).
 ///
 /// Der Pull-Adapter ist ein virtueller Cluster-Actor: ein im Message-Turn awaiteter
 /// <c>cluster.RequestAsync</c> an ein Fremd-Aggregat (der Reaktions-Command) verklemmt den
 /// Cluster. Der Reaktions-Send ist aber <b>at-least-once</b> (Empfänger dedupliziert, Re-Wake
-/// heilt, Spec 9.3) — er darf den Turn NICHT blockieren. Dieser Wrapper stößt das innere
+/// heilt) — er darf den Turn NICHT blockieren. Dieser Wrapper stößt das innere
 /// <c>emit</c> detached an und kehrt sofort zurück; der Send begrenzt sich intern selbst.
 ///
 /// Transport-agnostisch: kennt weder Cluster noch Router — nur „feuere und vergiss, aber

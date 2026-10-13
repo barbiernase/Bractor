@@ -6,7 +6,7 @@ namespace Abstractions;
 /// <summary>
 /// Eine durable DEADLINE (Frist): „stelle zum Zeitpunkt <see cref="Fällig"/> den Command
 /// <c>FristFällig(<see cref="ZielAggregatId"/>, <see cref="Kontext"/>)</c> zu." Das eigenständige Zeit-Primitiv
-/// (Zielbild §12, Weg „Zeit-Event/-Command"): der Scheduler vergleicht <see cref="Fällig"/> gegen die DB-Uhr
+/// (Weg „Zeit-Event/-Command", offen: docs/13 W11-2): der Scheduler vergleicht <see cref="Fällig"/> gegen die DB-Uhr
 /// (<see cref="IDbClock"/>) und feuert überfällige Fristen über das bestehende Emit-Primitiv (deterministische
 /// CommandId → Empfänger-Inbox dedupliziert → exactly-once wirksam). Bewusst KEIN beliebiger serialisierter
 /// Command (die DLQ speichert auch keinen) — nur die primitiven Felder + der feste <c>FristFällig</c>-Typ.

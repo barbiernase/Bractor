@@ -1,12 +1,12 @@
 # REPO-PFAD: Domain.Client.Worker.Python.ML/domain_client/training_worker.py
 """
-TrainingWorker — der out-of-process Trainings-Job (Konzept §4.2).
+TrainingWorker — der out-of-process Trainings-Job.
 
 Derselbe Event→Command-Reaktor wie der Classifier, nur LANGLAUFEND mit Fortschritt — der Akteur
 TrainingsSystem, programmiert gegen seinen Vertrag (ITrainingsSystem: die Zusage auf TrainingAngefordert
 ist ein Strom, docs/konzept-akteure.md §3):
 subscribed `TrainingAngefordert`, zieht die eingefrorene Sample-Liste über den typisierten
-Query-Kanal (`self.query(HoleDatensatzSamples…)`, M7), fährt das Training in
+Query-Kanal (`self.query(HoleDatensatzSamples…)`), fährt das Training in
 `asyncio.to_thread` (Event-Loop bleibt frei) und **yieldet über die Zeit mehrfach** Commands
 zurück:
 
@@ -86,7 +86,7 @@ class TrainingWorker(TrainingsWorkerBasis[TrainingState]):
             event.datensatz_version, event.hyperparameter.epochen,
         )
 
-        # ── 1. Samples über den Query-Kanal ziehen (paginiert, M7) ──
+        # ── 1. Samples über den Query-Kanal ziehen (paginiert) ──
         try:
             samples = await self._hole_alle_samples(
                 event.datensatz_id, event.datensatz_version
@@ -152,7 +152,7 @@ class TrainingWorker(TrainingsWorkerBasis[TrainingState]):
             await train_task
 
     # ═══════════════════════════════════════════════════
-    # ABBRUCH — kooperativ (Konzept §4.3)
+    # ABBRUCH — kooperativ
     # ═══════════════════════════════════════════════════
 
     async def auf_training_abgebrochen(
@@ -163,7 +163,7 @@ class TrainingWorker(TrainingsWorkerBasis[TrainingState]):
             ev.set()   # der Trainings-Thread prüft das zwischen Epochen
 
     # ═══════════════════════════════════════════════════
-    # SAMPLES ZIEHEN — der Query-Kanal (M7), paginiert
+    # SAMPLES ZIEHEN — der Query-Kanal, paginiert
     # ═══════════════════════════════════════════════════
 
     async def _hole_alle_samples(

@@ -31,7 +31,7 @@ public record RangeKriterien(
 /// <summary>
 /// Herkunft einer aufgenommenen Range — welche Suche, wie viele Treffer.
 /// „Diese Range kam aus <em>dieser</em> Suche." Ermöglicht die elegante Vereinigung
-/// mehrerer Ranges in einem Datensatz und den Audit-Trail (Konzept §10).
+/// mehrerer Ranges in einem Datensatz und den Audit-Trail.
 /// </summary>
 public record RangeHerkunft(
     RangeKriterien Kriterien,
@@ -40,7 +40,7 @@ public record RangeHerkunft(
 
 /// <summary>
 /// Aufteilung train/val/test in Prozent + fester Seed.
-/// Default 70/15/15 (Konzept §3.3): im Normalfall null Knöpfe.
+/// Default 70/15/15: im Normalfall null Knöpfe.
 /// </summary>
 public record SplitKonfig(
     int TrainProzent,

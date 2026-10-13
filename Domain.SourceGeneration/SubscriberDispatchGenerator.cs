@@ -341,7 +341,7 @@ internal class SubscriberGeneratorModel
     public string SubscriberName { get; }
     public List<HandlerInfo> Handlers { get; }
     public List<string> EventNamespaces { get; }
-    /// <summary>Code-Hash der Projektions-Klasse (alle Teile) — Teil des Projektions-Stands (Plan E9).</summary>
+    /// <summary>Code-Hash der Projektions-Klasse (alle Teile) — Teil des Projektions-Stands (konzept-werkbank §12.3 E9).</summary>
     public string CodeHash { get; }
 
     public SubscriberGeneratorModel(

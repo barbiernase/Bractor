@@ -10,7 +10,7 @@ namespace Domain.Datensatz;
 /// innerhalb einer Klasse kommt aus einem <em>stabilen</em> Hash von (Seed, ImagePairId) —
 /// nicht aus <c>Guid.GetHashCode</c> (prozess-instabil). So liefert dieselbe Mitglieder-Menge
 /// mit demselben Seed <em>bit-genau</em> denselben Split — zwei Trainings auf v1 sind
-/// vergleichbar (Konzept §3.3, §10).
+/// vergleichbar.
 ///
 /// Keinerlei I/O — der Resolver (Meilenstein 5) reicht die aus dem Read-Model gelesenen
 /// (Id, Label)-Paare herein.

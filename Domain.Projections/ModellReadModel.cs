@@ -8,7 +8,7 @@ namespace Domain.Projections;
 // ═══════════════════════════════════════════════════════════════
 
 /// <summary>
-/// Materialisierter Zustand eines registrierten Modells (Konzept konzept-training-und-datensatz §5).
+/// Materialisierter Zustand eines registrierten Modells.
 /// Provenienz (aus welchem Lauf / welcher eingefrorenen Datensatz-Version), Pfad, Metriken, Status.
 /// „Welches Modell aktiv ist" hält der Singleton <see cref="AktivesModellReadModel"/>.
 /// </summary>
@@ -34,7 +34,7 @@ public record ModellReadModel : IReadModel
 // ═══════════════════════════════════════════════════════════════
 
 /// <summary>
-/// Der Singleton-Zeiger auf das aktuell aktive Modell (Konzept §5: „genau ein aktives Modell").
+/// Der Singleton-Zeiger auf das aktuell aktive Modell („genau ein aktives Modell").
 /// Wird bei jedem <c>ModellAktiviert</c> überschrieben (die jüngste Aktivierung gewinnt). Der
 /// Inferenz-Worker/Klassifikator liest hier, welches Modell er nutzen soll.
 ///

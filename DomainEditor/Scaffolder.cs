@@ -176,7 +176,7 @@ public static class Scaffolder
             dateien.Add(Platziert(null, Verzeichnis(modell, f.Namespace), $"{k}.cs", FunktionsImplDatei(f, k, modell), DateiArt.Typen));
         }
 
-        // ── Domänen-Dienste (Plan E11) → je Dienst seine Schnittstelle; je NEUE Implementierung (ohne Datei) ihre Klasse mit throw-Stubs ──
+        // ── Domänen-Dienste (konzept-werkbank §12.3 E11) → je Dienst seine Schnittstelle; je NEUE Implementierung (ohne Datei) ihre Klasse mit throw-Stubs ──
         foreach (var d in modell.Dienste)
         {
             dateien.Add(Platziert(d.Datei, Verzeichnis(modell, d.Namespace), $"{d.Name}.cs", DienstDatei(d, modell), DateiArt.Typen));
@@ -507,7 +507,7 @@ public static class Scaffolder
         return b.ToString();
     }
 
-    // ── Domänen-Dienst (Plan E11): Schnittstelle + Implementierungs-Stub ─────────────────────────
+    // ── Domänen-Dienst (konzept-werkbank §12.3 E11): Schnittstelle + Implementierungs-Stub ─────────────────────────
     private static readonly string IDienst = nameof(Abstractions.IDienst);
 
     private static IEnumerable<string> DienstTypen(Dienst d) =>

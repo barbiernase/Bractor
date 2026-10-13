@@ -31,7 +31,7 @@ public static class Schema
                 ["VertragStreng"] = new JsonObject { ["typ"] = "bool", ["standard"] = "false" },
             },
         };
-        // Dienste (Plan E11): je Dienst die gewählte Implementierung — die Auswahl kommt aus dem Code (Implementierungen der Dienst-Karte).
+        // Dienste (konzept-werkbank §12.3 E11): je Dienst die gewählte Implementierung — die Auswahl kommt aus dem Code (Implementierungen der Dienst-Karte).
         var dienste = new JsonObject();
         foreach (var d in Liste(board?["dienste"]))
             dienste[(string?)d["name"] ?? "?"] = new JsonObject
@@ -60,7 +60,7 @@ public static class Schema
             ["art"] = "je", ["schluessel"] = "Client", ["wert"] = Klasse(typeof(ClientKonfig)), ["eintraege"] = clients,
             ["hilfe"] = "je Client (IClientVertrag) sein Token (Identitaeten), die gRPC-Adresse (leer = localhost:Transport.GrpcPort), URLs, Datei-Verzeichnisse",
         };
-        // Konfig-Records (Plan E11): je Record ein Abschnitt mit seinen Feldern (Typen aus dem Code).
+        // Konfig-Records (konzept-werkbank §12.3 E11): je Record ein Abschnitt mit seinen Feldern (Typen aus dem Code).
         var konfigs = new JsonObject();
         var enums = Liste(board?["enums"]).ToDictionary(e => (string?)e["name"] ?? "", e => e, StringComparer.Ordinal);
         foreach (var r in Liste(board?["records"]).Where(r => (string?)r["kind"] == "konfig"))

@@ -7,7 +7,7 @@ namespace Abstractions;
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 // DER REINE KERN DES DIRIGENTEN (docs/konzept-editor-pipelines.md §14.5): welche Tokens eine Regel belegen. Herkunft (ein Draht
 // kommt von genau einem Knoten), Je-Teile (ein ∧ verbindet nur Tokens desselben Elements) und Sammeln (ein Token je Element,
-// geordnet). Store-frei und ohne Zeit — der Prozess-Manager faltet seine Tokens aus dem Log, die Simulation (Cqrs.Testing) hält sie
+// geordnet). Store-frei und ohne Zeit — der Prozess-Manager faltet seine Tokens aus dem Log, das Prüfstand-Laufwerk (FlussLaufwerk, Cqrs.Testing) hält sie
 // im Speicher; beide entscheiden hier, mit DERSELBEN Semantik, was feuert.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 

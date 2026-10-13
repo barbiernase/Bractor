@@ -33,8 +33,7 @@ Statisch gezählt (2026-10-13):
 | Infrastructure.Integration.Tests | 39 | 0 | 19 |
 | Client.Infrastructure.CollectionTests | 31 | 0 | 2 |
 
-Die Differenz zwischen 510 Methoden und 526 Läufen im Prüfstand kommt von den expandierten `[Theory]`-Fällen. Verlauf je Werkbank-Phase:
-`docs/plan-werkbank-umsetzung.md` §16.
+Die Differenz zwischen 510 Methoden und 526 Läufen im Prüfstand kommt von den expandierten `[Theory]`-Fällen.
 
 ## 12.3 Was getestet ist
 

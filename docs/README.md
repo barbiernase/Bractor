@@ -58,27 +58,9 @@ entworfen, als Code erzeugt, gebaut, im echten Host durchgespielt und über die 
 | [konzept-editor-pipelines.md](konzept-editor-pipelines.md) | Pipeline als Fluss (§12–§14) | Detail-Referenz Fluss, umgesetzt |
 | [konzept-llm-minimalkontext.md](konzept-llm-minimalkontext.md) | LLM-Füllung von Rümpfen, Kontext nur aus Code und Graph | Detail-Referenz |
 | [konzept-editor-komposition.md](konzept-editor-komposition.md) | Editor als Kompositions-Sprache (Grammatik, Kapselung, Muster) | Sprache, Detail-Referenz |
-| [konzept-domaenen-editor.md](konzept-domaenen-editor.md) | früherer Editor-Kanon | wird archiviert (Inhalt aufgegangen in konzept-werkbank §8 und konzept-akteure) |
-| [konzept-editor-panel-bearbeitung.md](konzept-editor-panel-bearbeitung.md) | Bearbeiten im Panel, ⊕ | wird archiviert (Inhalt aufgegangen in konzept-werkbank §8) |
-| [konzept-handle-ausgaenge.md](konzept-handle-ausgaenge.md) | Ausgaben aus der Signatur (CQRS050) | wird archiviert (Inhalt aufgegangen in 05 und 10) |
-| [plan-werkbank-umsetzung.md](plan-werkbank-umsetzung.md) | Umsetzungsplan der Werkbank, Phasen P0–P8 | wird archiviert (Inhalt aufgegangen in konzept-werkbank §12–§13 und 13) |
-| [konzept-exactly-once-naht.md](konzept-exactly-once-naht.md) | Verträge eines Co-Commit-Stores | wird archiviert (Inhalt aufgegangen in 04 und 13) |
-| [konzept-client-haertung.md](konzept-client-haertung.md) | Zustellgarantie, Python-SDK, Transport-Sicherheit | wird archiviert (Inhalt aufgegangen in 09 und 13) |
-| [entscheidungs-debugger-und-test-dsl.md](entscheidungs-debugger-und-test-dsl.md) | Test-DSL (Gegeben/Wenn/Dann) | wird archiviert (Inhalt aufgegangen in 10 und 12) |
 
-### Beispieldomäne (nicht Framework)
-
-Die Beispieldomäne ist Prüfling, nicht Architektur (konzept-werkbank W11).
-
-| Datei | Thema | Status |
-|---|---|---|
-| [konzept-training-und-datensatz.md](konzept-training-und-datensatz.md) | Datensätze und Training | wird entfernt |
-| [konzept-datensatz-kuratierung.md](konzept-datensatz-kuratierung.md) | Datensatz als Tag, Kuratieren beim Betrachten | wird entfernt |
-| [konzept-galerie-datensatz-komposition.md](konzept-galerie-datensatz-komposition.md) | Galerie ↔ Einbild ↔ Datensatz | wird entfernt |
-| [imageoair-frontend-nachweis/](imageoair-frontend-nachweis/) | Bildnachweis der Blazor-Oberfläche | wird entfernt |
-| [ddd-muster-showcase.md](ddd-muster-showcase.md) | taktische DDD-Bausteine an einer Beispieldomäne | wird entfernt |
-
-**Archive:** [`_archiv-2026-08-12/`](_archiv-2026-08-12/), [`_archiv-2026-10-06/`](_archiv-2026-10-06/) — nur Historie, wird gelöscht.
+Die Beispieldomäne im Repo ist Prüfling, nicht Architektur (konzept-werkbank W11); sie hat keine eigenen Dokumente.
+Frühere Konzepte, Pläne und Archive sind gelöscht; ihre Historie liegt im Git-Verlauf.
 
 ## Konventionen dieser Doku
 

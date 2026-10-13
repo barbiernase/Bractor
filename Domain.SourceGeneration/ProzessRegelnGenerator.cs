@@ -8,7 +8,7 @@ using System.Text;
 namespace Domain.SourceGeneration
 {
     /// <summary>
-    /// Der EINE Prozess-Generator im neuen Modell (Spec §4): er emittiert aus jeder
+    /// Der EINE Prozess-Generator im neuen Modell (docs/04 §4.5): er emittiert aus jeder
     /// <c>IProzessDefinition</c> den DAG-DESKRIPTOR — die Regeln als Daten — in eine Registry
     /// <c>GeneratedProzessRegeln.Alle</c> (Prozess-Name → <c>ProzessRegeln</c>). KEIN per-Prozess-Aggregat
     /// mehr: der Manager ist generisch, die Regeln parameterisieren ihn. Der Prozess-Name ist der

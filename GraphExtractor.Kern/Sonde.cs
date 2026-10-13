@@ -20,7 +20,7 @@ namespace GraphExtractor;
 /// Dazu Bausteine, die im Editor GEZEICHNET werden (<c>Sonde/Gezeichnet.gesten.json</c>: neuer Store mit einer im Panel benannten
 /// und einer abgeleiteten Fähigkeit, Projektion, Reaktion, Reader, Query/Response/ReadModel, Akteur mit Vertrag, Client, zwei Flüsse): ein
 /// Gesten-Skript — je Geste ein Karten-Delta wie aus dem Browser, geschrieben vom Gesten-Motor (<see cref="Gesten"/>) in den Fork, danach neu
-/// gelesen (Werkbank P7.3, L20). Das Soll beschreibt, was der Extractor daraus wieder lesen MUSS.
+/// gelesen (Werkbank P7.3). Das Soll beschreibt, was der Extractor daraus wieder lesen MUSS.
 ///
 /// Ablauf: Sonde im SPEICHER in ein Aggregat-Projekt der Solution legen (Fork, nichts auf Platte), die ECHTE Pipeline
 /// fahren (Projektlage → Extraktion → Board-Modell), das Inventar der Sonde mit dem VON HAND geschriebenen Soll
@@ -43,7 +43,7 @@ public static class Sonde
                 filePath: Path.Combine(Path.GetDirectoryName(ziel.FilePath)!, "__sonde", name));
         Console.WriteLine($"   Sonde „{Wurzel}\" ({Quellen().Count()} Dateien) im Speicher in {ziel.Name} gelegt.");
 
-        // ── GEZEICHNET = Gesten (Werkbank P7.3, L20): je Geste ein Karten-Delta wie aus dem Browser, geschrieben vom Gesten-Motor in den Fork
+        // ── GEZEICHNET = Gesten (Werkbank P7.3): je Geste ein Karten-Delta wie aus dem Browser, geschrieben vom Gesten-Motor in den Fork
         //    (Scaffolder für Neues, Abgleich für Geändertes), danach neu gelesen — die nächste Geste sieht den neuen Code-Stand wie in der Werkbank. ──
         CompositionRoot? cr1 = null;
         var gezeichnet = new HashSet<string>(StringComparer.Ordinal);
@@ -182,7 +182,7 @@ public static class Sonde
             z.Add($"funktion {S(f, "namespace")}.{S(f, "name")} | {S(f, "auftrag")} -> {string.Join("; ", A(f, "ergebnisse").Select(x => (string?)x))}"
                 + (A(f, "faehigkeiten").Any() ? " liest " + string.Join(", ", A(f, "faehigkeiten").Select(p => $"{S(p, "typ")} {S(p, "name")}")) : "")
                 + (f["implementierung"] is { } im ? $" impl {im}{Konstruktor(f)}" : ""));
-        // Domänen-Dienste (Plan E11): Signatur (Methoden) und Implementierungen mit Konstruktor.
+        // Domänen-Dienste (konzept-werkbank §12.3 E11): Signatur (Methoden) und Implementierungen mit Konstruktor.
         foreach (var d in A(b, "dienste").Where(Sonde))
             z.Add($"dienst {S(d, "namespace")}.{S(d, "name")} | "
                   + string.Join("; ", A(d, "methoden").Select(m => $"{S(m, "name")}({string.Join(", ", A(m, "parameter").Select(p => $"{S(p, "name")}:{S(p, "typ")}"))}):{S(m, "rueckgabe")}"))

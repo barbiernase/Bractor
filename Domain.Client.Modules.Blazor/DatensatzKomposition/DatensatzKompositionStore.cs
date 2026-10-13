@@ -10,8 +10,8 @@ namespace Domain.Client.Modules.DatensatzKomposition;
 /// <summary>
 /// Der Datensatz-Korb (rechte Spalte). Hält Kopf-Daten des aktiven Datensatzes
 /// (<see cref="DatensatzAntwort"/>) und — nach dem Einfrieren — die aus den Samples
-/// live gerechnete Klassenbalance / Split-Verteilung (pragmatische Alternative zu
-/// §5.6: Balance erst nach Freeze aus <see cref="DatensatzSamples"/>).
+/// live gerechnete Klassenbalance / Split-Verteilung (pragmatisch:
+/// Balance erst nach Freeze aus <see cref="DatensatzSamples"/>).
 ///
 /// Der aktive Datensatz kommt aus der Sidebar-Auswahl (<see cref="DatensatzAusgewaehlt"/>)
 /// oder direkt nach dem Anlegen (der IntentHandler dispatcht die Auswahl mit).

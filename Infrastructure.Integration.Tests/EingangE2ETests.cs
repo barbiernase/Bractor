@@ -55,7 +55,7 @@ public class EingangE2ETests
         {
             ["Quellen:DateiErkannt:Pfad"] = Path.Combine(verz, "eingang"),
             ["Konfig:PreprocessingConfig:OutputPath"] = Path.Combine(verz, ".preprocessed"),
-            // Plan E12: der Webhook der Quelle ist Konfig — kein MapQuellWebhook im Programm.
+            // konzept-werkbank §12.3 E12: der Webhook der Quelle ist Konfig — kein MapQuellWebhook im Programm.
             ["Quellen:DateiErkannt:Webhook"] = "/webhook/datei",
             ["Identitaeten:Tokens:t-ki"] = "KIOperator",
             ["Identitaeten:Tokens:t-inspekteur"] = "Inspekteur",
@@ -161,7 +161,7 @@ public class EingangE2ETests
             (await Lies(await http.GetAsync("/eingang/auftraege"))).GetProperty("auftraege").GetArrayLength().Should().Be(0);
             vorgang.Should().NotBe(Guid.Empty);
 
-            // ── Webhook aus der Konfig (Plan E12): POST auf die Route startet genau einen Vorgang — zweimal gesendet, derselbe Vorgang ──
+            // ── Webhook aus der Konfig (konzept-werkbank §12.3 E12): POST auf die Route startet genau einen Vorgang — zweimal gesendet, derselbe Vorgang ──
             var t2 = t.AddMinutes(7);
             var datei2 = $"{t2:yyyy_MM_dd_HH_mm_ss_fff}_DC0.tiff";
             var body = new { Name = datei2, Pfad = Path.Combine(verz, datei2), RelativerPfad = datei2, Groesse = 1, GeaendertAm = t2, ErkanntAm = t2, Kennung = datei2 + "|1" };

@@ -5,7 +5,7 @@ namespace Abstractions;
 /// vom Poll geheilt) statt über den verlustbehafteten Push-Broker.
 ///
 /// Er wählt den <b>Transport</b>, nicht die Garantie. Was ein Handler <i>ist</i> (Projektion,
-/// Reaktion, gemischt), ergibt sich weiterhin allein aus seinen Handle-Rückgabetypen (Spec 8);
+/// Reaktion, gemischt), ergibt sich weiterhin allein aus seinen Handle-Rückgabetypen (docs/04 §4.2);
 /// die <b>Effekt-Garantie</b> sagt das Store-Interface (<see cref="IProjectionTracker"/> →
 /// exactly-once; sonst at-least-once). Zwei getrennte Achsen, zwei getrennte Interfaces.
 ///

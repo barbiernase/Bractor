@@ -5,7 +5,7 @@ using System.Linq;
 namespace Abstractions;
 
 /// <summary>
-/// Zyklus-Erkennung auf dem Regel-Graph (Spec §3, letzter Absatz): <c>Command → produziert → Event →
+/// Zyklus-Erkennung auf dem Regel-Graph (docs/04 §4.5, Boot-Guards): <c>Command → produziert → Event →
 /// triggert → Command</c> muss AZYKLISCH sein — das ersetzt die „rückwärts-only"-Compile-Regel der alten
 /// Schrittliste durch eine statische Analyse (der eine Preis der höheren Ausdruckskraft).
 ///

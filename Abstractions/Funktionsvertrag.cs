@@ -13,7 +13,7 @@ public static class Funktionsvertrag
 {
     public const string Methode = "RufeAsync";
 
-    // ── Python (Laufort Extern, Plan E13): die generierte Basis und wo die Implementierung liegt ──
+    // ── Python (Laufort Extern, konzept-werkbank §12.3 E13): die generierte Basis und wo die Implementierung liegt ──
 
     /// <summary>Die Methode, die eine Python-Implementierung füllt (<c>async def rufe(self, auftrag, x)</c>).</summary>
     public const string PythonMethode = "rufe";

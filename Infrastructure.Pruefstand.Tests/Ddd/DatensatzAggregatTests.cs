@@ -10,8 +10,8 @@ namespace Infrastructure.Pruefstand.Ddd;
 /// <summary>
 /// Das Aggregat <see cref="DatensatzAgg"/> (Meilenstein 1 des Trainings-/Datensatz-Kontexts)
 /// durch die ECHTE generierte <see cref="AggregateHandlerFactory"/> (Decider + Applier),
-/// store-frei — genau wie <see cref="VerkaufAggregatTests"/>. Deckt die Invarianten aus dem
-/// Konzept §3.4 ab: Range-Union/Dedup, „keine Änderung nach Einfrieren", „Einfrieren ohne
+/// store-frei — genau wie <see cref="VerkaufAggregatTests"/>. Deckt die Invarianten ab:
+/// Range-Union/Dedup, „keine Änderung nach Einfrieren", „Einfrieren ohne
 /// Mitglieder", deterministischer Split.
 /// </summary>
 public class DatensatzAggregatTests
@@ -75,7 +75,7 @@ public class DatensatzAggregatTests
     }
 
     // ═══════════════════════════════════════════════════
-    // RANGE — Union & Dedup (Konzept §3.2)
+    // RANGE — Union & Dedup
     // ═══════════════════════════════════════════════════
 
     [Fact]
@@ -145,7 +145,7 @@ public class DatensatzAggregatTests
     }
 
     // ═══════════════════════════════════════════════════
-    // EINFRIEREN (Konzept §3.1)
+    // EINFRIEREN
     // ═══════════════════════════════════════════════════
 
     [Fact]
@@ -245,7 +245,7 @@ public class DatensatzAggregatTests
     }
 
     // ═══════════════════════════════════════════════════
-    // SPLIT-ZUTEILER — deterministisch & stratifiziert (Konzept §3.3)
+    // SPLIT-ZUTEILER — deterministisch & stratifiziert
     // ═══════════════════════════════════════════════════
 
     [Fact]

@@ -9,13 +9,13 @@ namespace Domain.Projections;
 // ═══════════════════════════════════════════════════════════════
 
 /// <summary>
-/// Materialisierter Zustand eines Datensatzes (Konzept §3.5).
+/// Materialisierter Zustand eines Datensatzes.
 ///
 /// Die Projektion pflegt die Felder, die sie <em>selbst</em> kennt: Name, Status,
 /// Mitglieder-Korb (deduplizierte Union), Ranges (Provenienz), Split und die
 /// eingefrorene Version. <see cref="Mitglieder"/> hält die konkreten Bildpaar-Referenzen
 /// des Entwurfs — Grundlage der live berechneten Klassenbalance / Menschlabel-Quote,
-/// die der Reader (M4) durch einen Join gegen die ImagePair-Read-Models bildet (sie
+/// die der Reader durch einen Join gegen die ImagePair-Read-Models bildet (sie
 /// sind dynamisch und werden deshalb bewusst NICHT hier materialisiert).
 /// </summary>
 public record DatensatzReadModel : IReadModel
@@ -29,7 +29,7 @@ public record DatensatzReadModel : IReadModel
 
     /// <summary>
     /// Beim Kuratieren aussortierte Bildpaare (aus einer Range/dem Korb entfernt) — die
-    /// „Ausgeschlossen"-Sicht (Konzept datensatz-kuratierung: eigene Galerie der rausgeworfenen
+    /// „Ausgeschlossen"-Sicht (eigene Galerie der rausgeworfenen
     /// Bilder, in der Galerie ansehbar/wieder-aufnehmbar). Read-Model-Sicht, kein Domänenzustand.
     /// </summary>
     public List<Guid> Ausgeschlossen { get; init; } = new();
@@ -56,9 +56,9 @@ public record DatensatzReadModel : IReadModel
 // ═══════════════════════════════════════════════════════════════
 
 /// <summary>
-/// Die queryierbare Trainings-Wahrheit (Konzept §3.5, §6): je eingefrorenem Mitglied eine
+/// Die queryierbare Trainings-Wahrheit: je eingefrorenem Mitglied eine
 /// Zeile mit Label-Stand + Split + Bildpfaden <em>zum Einfrier-Zeitpunkt</em>. Immutabel —
-/// bespielt aus <c>DatensatzEingefroren</c>. Grundlage von <c>HoleDatensatzSamples</c> (M4).
+/// bespielt aus <c>DatensatzEingefroren</c>. Grundlage von <c>HoleDatensatzSamples</c>.
 ///
 /// Zusammengesetzte Id <c>{DatensatzId}:{Version}:{ImagePairId}</c> — macht das Bespielen
 /// idempotent (Doppelverarbeitung upsertet dieselbe Zeile) und erlaubt Paginierung im DB
@@ -84,7 +84,7 @@ public record DatensatzSampleReadModel : IReadModel
 // ═══════════════════════════════════════════════════════════════
 
 /// <summary>
-/// Der serverseitige Rückwärts-Index (Konzept datensatz-kuratierung §4.3): je (Datensatz, Bildpaar) eine Zeile, solange
+/// Der serverseitige Rückwärts-Index: je (Datensatz, Bildpaar) eine Zeile, solange
 /// das Paar Entwurfs-Mitglied des Datensatzes ist. Grundlage der „in Datensätzen: …"-Chips im Einbild — Lookup über
 /// <see cref="ImagePairId"/> statt Voll-Scan aller Datensätze.
 ///

@@ -6,7 +6,7 @@ using TrainingslaufAgg = Domain.Trainingslauf.Trainingslauf;
 namespace Domain.Projections;
 
 /// <summary>
-/// Materialisiert den Trainingslauf-Zustand (Konzept §4.5): ein <see cref="TrainingslaufReadModel"/>
+/// Materialisiert den Trainingslauf-Zustand: ein <see cref="TrainingslaufReadModel"/>
 /// pro Lauf, die MetrikHistorie wächst je Epoche → Live-Kurve fürs Dashboard.
 ///
 /// APPEND-ARTIG (<see cref="IAppendProjektion"/>): TrainingFortschritt hängt einen Metrik-Punkt an —

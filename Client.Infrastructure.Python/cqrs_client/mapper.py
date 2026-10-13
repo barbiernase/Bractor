@@ -124,7 +124,7 @@ class PayloadMapper:
     def extract_query_response(self, query_response) -> betterproto.Message:
         """
         Entpackt die TYPISIERTE Antwort aus einem QueryResponse (Server → Client) — die Ask-Seite
-        (Konzept §7.2). QueryResponse.payload ist ein QueryResponsePayloadDto-oneof; das ist das
+        (docs/09 §9.4). QueryResponse.payload ist ein QueryResponsePayloadDto-oneof; das ist das
         fehlende Gegenstück zu wrap_query_response. Nutzt den generischen extract_oneof_payload.
 
         Beispiel: QueryResponse(payload=QueryResponsePayloadDto(datensatz_samples=...))
@@ -234,7 +234,7 @@ class PayloadMapper:
     def wrap_query(self, query: betterproto.Message):
         """
         Verpackt eine Query in einen QueryPayloadDto (setzt das oneof-Feld) — die Ask-Seite
-        (Konzept §7). Spiegelbild zu wrap_command; dieselbe type→oneof-Feld-Logik, abgeleitet
+        (docs/09 §9.4). Spiegelbild zu wrap_command; dieselbe type→oneof-Feld-Logik, abgeleitet
         aus QueryPayloadDto. Der Proxy hängt Korrelation + 30s-Timeout drum.
         """
         payload_cls = getattr(self._gen, "QueryPayloadDto")

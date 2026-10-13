@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 namespace Infrastructure.Umgebung;
 
 /// <summary>
-/// Ein Boot-Fehler mit Ort (docs/konzept-werkbank.md §5 Schritt 5): die Karte im Editor, an der er erscheint — im Wirker-Format
+/// Ein Boot-Fehler mit Ort (docs/konzept-werkbank.md §5 Schritt 6): die Karte im Editor, an der er erscheint — im Wirker-Format
 /// (<c>funktion:IBildVerkleinerung</c>, <c>quelle:DateiErkannt</c>) bzw. <c>host:&lt;Abschnitt&gt;</c> für den Host-Rahmen.
 /// </summary>
 public sealed class BootFehler(string text, string? karte) : InvalidOperationException(text)

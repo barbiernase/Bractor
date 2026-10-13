@@ -5,10 +5,10 @@ namespace Domain.Projections;
 /// <summary>
 /// Reader der Datensatz-Projektion (analog <see cref="ImagePairReader"/>). Beantwortet die
 /// Datensatz-Queries über Lese-Fähigkeiten des <see cref="IDatensatzStore"/> — derselbe Kanal für Blazor
-/// und Python (Konzept §6/§7).
+/// und Python.
 ///
-/// Die Samples sind ein <em>immutabler</em> Snapshot → kein Deps-Tracking nötig (read-only,
-/// Konzept §7.2). Beim Kopf-Read wird die Datensatz-Id getrackt (Stale-Detection wie ImagePair).
+/// Die Samples sind ein <em>immutabler</em> Snapshot → kein Deps-Tracking nötig
+/// (read-only). Beim Kopf-Read wird die Datensatz-Id getrackt (Stale-Detection wie ImagePair).
 /// </summary>
 [ProjectionReader(TrackDeps = true)]
 public partial class DatensatzReader : IReader<DatensatzProjektion>

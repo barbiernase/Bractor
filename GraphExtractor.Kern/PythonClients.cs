@@ -51,7 +51,7 @@ public static class PythonClients
     }
 
     /// <summary>
-    /// Die PYTHON-Implementierungen der Katalog-Funktionen (Laufort Extern, Plan E13) — Code-Fakt wie bei den Clients: die generierte
+    /// Die PYTHON-Implementierungen der Katalog-Funktionen (Laufort Extern, konzept-werkbank §12.3 E13) — Code-Fakt wie bei den Clients: die generierte
     /// <c>…/generated/funktionen.py</c> nennt je Funktion ihre Basis; jede Klasse im Python-Projekt, die sie erbt, ist eine Implementierung
     /// (die erste nach Datei), ihr <c>rufe</c>-Rumpf ist der Python-Rumpf der Funktion. Funktion (Interface-Name) → Implementierung.
     /// </summary>

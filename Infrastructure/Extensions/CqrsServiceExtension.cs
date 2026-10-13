@@ -494,7 +494,7 @@ public static class CqrsServiceExtensions
             var system = provider.GetRequiredService<ActorSystem>();
             var logger = provider.GetService<ILogger<ProtoActorAggregateDispatcher>>();
             var deadLetters = provider.GetService<IDeadLetterSink>();   // ★ #1: nicht-zustellbare Commands durabel
-            var publisher = provider.GetService<BrokerPublisher>();     // ★ T2a: CommandFailed an den Client bei Erschöpfung
+            var publisher = provider.GetService<BrokerPublisher>();     // ★ CommandFailed an den Client bei Erschöpfung
             return new ProtoActorAggregateDispatcher(system, logger, deadLetters, publisher);
         });
         Console.WriteLine("  + IAggregateDispatcher");

@@ -4,7 +4,7 @@ using Infrastructure.Projections;
 
 namespace Infrastructure.Pruefstand.Tests.Umgebung;
 
-/// <summary>Der Projektions-Stand (Plan E9): Hash = Klasse + Store, geändert = anderer oder fehlender gespeicherter Stand.</summary>
+/// <summary>Der Projektions-Stand (konzept-werkbank §12.3 E9): Hash = Klasse + Store, geändert = anderer oder fehlender gespeicherter Stand.</summary>
 public class ProjektionsStandTests
 {
     private sealed class StoreA;

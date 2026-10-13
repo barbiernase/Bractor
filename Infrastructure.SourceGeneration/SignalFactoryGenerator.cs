@@ -9,7 +9,7 @@ namespace Infrastructure.SourceGeneration
     /// Generiert <c>GeneratedSignalFactory.Create(IEvent, streamId, version)</c> — die
     /// reflection-freie Zuordnung Event → Signal (Invariante 4). Der Aggregat-Actor ruft
     /// sie nach dem Commit auf, um zusätzlich zum rohen Event das passende
-    /// `StateChangeVia{Event}`-Signal zu veröffentlichen (Spec 4.3, Emit-Wiring).
+    /// `StateChangeVia{Event}`-Signal zu veröffentlichen (docs/03 §3.6, Emit-Wiring).
     ///
     /// Zuordnung per Konvention: zu einem Signal `{ns}.StateChangeVia{X}` gehört das
     /// Event `{ns}.{X}`. Läuft auf Infrastructure und sieht Domain.dll über die

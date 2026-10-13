@@ -22,7 +22,7 @@ public interface IFaehigkeitsFabrik
 }
 
 /// <summary>
-/// Fähigkeiten aus fertigen Instanzen (Tests, Simulation): <c>Hole&lt;T&gt;</c> nimmt die erste Instanz,
+/// Fähigkeiten aus fertigen Instanzen (Tests): <c>Hole&lt;T&gt;</c> nimmt die erste Instanz,
 /// die <typeparamref name="T"/> implementiert — ein Typtest, keine Reflection.
 /// </summary>
 public sealed class FaehigkeitenAus : IFaehigkeitsBereich

@@ -12,7 +12,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Extractor;
 
 /// <summary>
-/// Werkbank P7.1 (L12): der Extractor liest Code MIT Fehlern — nichts verschwindet still, nichts wirft. Ein unaufgelöster Basistyp wird eine
+/// Werkbank P7.1 (konzept-werkbank §8.2): der Extractor liest Code MIT Fehlern — nichts verschwindet still, nichts wirft. Ein unaufgelöster Basistyp wird eine
 /// Code-Karte (bzw. ein Befund an der Karte), eine Fluss-Anweisung ohne Knoten ein Befund am Fluss, ein doppelter Name ein Befund statt einer
 /// Ausnahme. Dazu: jede Karte trägt Datei + Spanne. In-Memory-Workspace (kein MSBuild), Vertrag als Metadaten.
 /// </summary>

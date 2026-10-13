@@ -300,7 +300,7 @@ class MessageRouter:
                 return
 
             # Aus einem Event-Handler gelieferte Commands sind ZUSAGEN, keine Client-Commands
-            # mit behaupteter Version: sie werden im Emittiert-Modus (§4.2) gesendet — keine OCC,
+            # mit behaupteter Version: sie werden im Emittiert-Modus (docs/03 §3.1) gesendet — keine OCC,
             # die Empfaenger-Inbox dedupliziert. Sonst scheitern sie am co-committeten
             # KommandoVerarbeitet-Marker (der Stream steht eine Version hoeher als das Event, auf
             # das reagiert wurde). Sentinel: expected_version < 0 -> der Server mappt auf Emittiert.

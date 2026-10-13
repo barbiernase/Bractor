@@ -4,7 +4,7 @@ using Domain.Trainingslauf;
 namespace Domain.Projections;
 
 /// <summary>
-/// Materialisierter Zustand eines Trainingslaufs (Konzept §4.5). Ein Doc pro Lauf; die
+/// Materialisierter Zustand eines Trainingslaufs. Ein Doc pro Lauf; die
 /// <see cref="MetrikHistorie"/> wächst je Epoche (Live-Kurve) — append-artig, deshalb
 /// braucht die Projektion einen Co-Commit-Store (exactly-once).
 /// </summary>

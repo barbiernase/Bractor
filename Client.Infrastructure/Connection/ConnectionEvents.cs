@@ -29,7 +29,7 @@ public record CommandSendFailed(
     string ErrorMessage) : IClientEvent;
 
 /// <summary>
-/// ★ T2b: Ein Command wurde gesendet, aber nach mehreren Versuchen kam KEINE korrelierte Antwort
+/// ★ Ein Command wurde gesendet, aber nach mehreren Versuchen kam KEINE korrelierte Antwort
 /// (weder Event noch CommandFailed). Der Ausgang ist UNBEKANNT — der Command könnte angewandt und nur
 /// das Event verloren sein. Bewusst KEIN „Fehlgeschlagen": ein erneutes Senden ist dank deterministischer
 /// CommandId server-seitig idempotent (kein Doppel-Effekt). Die UI kann den Nutzer um Rückversicherung

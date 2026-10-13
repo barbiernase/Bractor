@@ -10,7 +10,7 @@ using Proto.Cluster;
 namespace Infrastructure.Pipeline;
 
 /// <summary>
-/// Webhook-Trigger-Ingress (Zielbild §6): ein HTTP-POST feuert einen konfigurierten
+/// Webhook-Trigger-Ingress (docs/04 §4.6): ein HTTP-POST feuert einen konfigurierten
 /// <see cref="IPipelineTrigger"/> an die Ziel-Pipeline. Wie der Timer bewusst PUSH — ein Webhook ist KEIN
 /// Log-Event (kein Cursor/Fold, verlierbar per Invariante 2/6); ein verpasster POST heilt der nächste.
 ///

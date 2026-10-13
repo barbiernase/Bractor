@@ -206,7 +206,7 @@ public static class PythonQuelle
         return b.ToString().TrimEnd() + "\n";
     }
 
-    // ── Die GENERIERTE Basis der Katalog-Funktionen (funktionen.py, Cqrs.Codegen): je Basis FUNKTION und die rufe-Signatur (Plan E13) ──
+    // ── Die GENERIERTE Basis der Katalog-Funktionen (funktionen.py, Cqrs.Codegen): je Basis FUNKTION und die rufe-Signatur (konzept-werkbank §12.3 E13) ──
     private static readonly Regex FunktionWert = new(@"^\s+FUNKTION\s*:\s*ClassVar\[str\]\s*=\s*""(\w+)""", RegexOptions.Compiled);
 
     /// <summary>Eine Funktions-Basis der generierten <c>funktionen.py</c>: Funktion (Interface-Name), Basis-Klasse und die <c>def rufe</c>-Zeile.</summary>

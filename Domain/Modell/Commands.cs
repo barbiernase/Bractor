@@ -3,14 +3,14 @@ using Abstractions;
 namespace Domain.Modell;
 
 // ═══════════════════════════════════════════════════
-// MODELL — Lebenszyklus (Konzept konzept-training-und-datensatz §5)
+// MODELL — Lebenszyklus
 //   RegistriereModell ──► ModellRegistriert   (aus einem abgeschlossenen Trainingslauf)
 //   SetzeModellAktiv  ──► ModellAktiviert      (der Inferenz-Worker lädt das aktive Modell)
 //   ArchiviereModell  ──► ModellArchiviert
 // ═══════════════════════════════════════════════════
 
 /// <summary>
-/// Registriert ein trainiertes Modell-Artefakt als erststelligen Baustein (Konzept §5).
+/// Registriert ein trainiertes Modell-Artefakt als erststelligen Baustein.
 /// Trägt die Provenienz mit: aus welchem Trainingslauf / welcher eingefrorenen Datensatz-Version
 /// es stammt, plus Pfad zum Artefakt und Endmetriken.
 /// </summary>
@@ -25,7 +25,7 @@ public record RegistriereModell(
 ) : ICreationCommand;
 
 /// <summary>
-/// Setzt dieses Modell aktiv (Konzept §5: „genau ein aktives Modell je Zweck"). Der Inferenz-
+/// Setzt dieses Modell aktiv („genau ein aktives Modell je Zweck"). Der Inferenz-
 /// Worker abonniert das resultierende <see cref="ModellAktiviert"/> und lädt das neue Modell.
 /// </summary>
 public record SetzeModellAktiv(

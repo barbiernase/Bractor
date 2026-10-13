@@ -1,7 +1,7 @@
 namespace Abstractions;
 
 /// <summary>
-/// Marker für generierte Signal-Typen `StateChangeVia{Event}` (Spec 5.1).
+/// Marker für generierte Signal-Typen `StateChangeVia{Event}` (docs/03 §3.6).
 ///
 /// Ein Signal ist NUR ein Weckruf: es trägt ausschließlich `(StreamId, Version)`,
 /// keine Nutzlast. Reihenfolge und Exactly-once entstehen aus dem Log-Read des

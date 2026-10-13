@@ -4,7 +4,7 @@ using Domain.Client.Modules.Blazor.TrainingDashboard;
 namespace Domain.Client.Modules.TrainingDashboard;
 
 /// <summary>
-/// Zentrale Bühne „Training-Dashboard" (Konzept §8.2). Als IStageModule automatisch ein Tab.
+/// Zentrale Bühne „Training-Dashboard". Als IStageModule automatisch ein Tab.
 /// „Neues Training"-Formular (eingefrorener Datensatz + Hyperparameter) und je Lauf eine
 /// Live-Kurve (loss/accuracy) über ApexCharts, gespeist vom TrainingFortschritt-Event-Stream.
 /// </summary>

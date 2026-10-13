@@ -37,7 +37,7 @@ public sealed record EditorModell
     /// </summary>
     public IReadOnlyList<Funktion> Funktionen { get; init; } = [];
     /// <summary>
-    /// Domänen-Dienste (<c>interface IX : IDienst</c>, Plan E11): die Technik hinter einer Funktion — Signatur (Methoden) und Implementierungen
+    /// Domänen-Dienste (<c>interface IX : IDienst</c>, konzept-werkbank §12.3 E11): die Technik hinter einer Funktion — Signatur (Methoden) und Implementierungen
     /// (Klassen, die das Interface implementieren). Eine Funktions-Implementierung nimmt sie im Konstruktor (<see cref="Funktion.Konstruktor"/>);
     /// welche Implementierung läuft, wählt die Umgebung (<c>Dienste:&lt;IX&gt;</c>).
     /// </summary>
@@ -366,7 +366,7 @@ public sealed record Funktion
     /// </summary>
     public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
     /// <summary>
-    /// Die Python-Implementierung (Laufort Extern, Plan E13) — eine Klasse im Worker-Projekt, die die generierte Basis erbt; null = keine.
+    /// Die Python-Implementierung (Laufort Extern, konzept-werkbank §12.3 E13) — eine Klasse im Worker-Projekt, die die generierte Basis erbt; null = keine.
     /// Nur Spiegel der Datei (✎/🤖 am Rumpf über PythonSync), nie Teil der Signatur.
     /// </summary>
     public FunktionPython? Python { get; init; }
@@ -385,7 +385,7 @@ public sealed record FunktionPython
 }
 
 /// <summary>
-/// Ein Domänen-Dienst (Plan E11): <c>public interface {Name} : IDienst { {Rückgabe} {Methode}({Parameter}); … }</c> und seine Implementierungen
+/// Ein Domänen-Dienst (konzept-werkbank §12.3 E11): <c>public interface {Name} : IDienst { {Rückgabe} {Methode}({Parameter}); … }</c> und seine Implementierungen
 /// (<c>public sealed class X({Konstruktor}) : {Name} { … }</c>). Deklariert wird er nur an seiner Karte; eine Funktion nimmt ihn per ⊕.
 /// </summary>
 public sealed record Dienst

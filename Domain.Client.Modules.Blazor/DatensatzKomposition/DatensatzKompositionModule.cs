@@ -4,7 +4,7 @@ using Domain.Client.Modules.Blazor.DatensatzKomposition;
 namespace Domain.Client.Modules.DatensatzKomposition;
 
 /// <summary>
-/// Bühne „Verwalten" (Konzept datensatz-kuratierung §9): die frühere Korb-/Kompositions-Bühne,
+/// Bühne „Verwalten": die frühere Korb-/Kompositions-Bühne,
 /// auf eine <em>Verwalten</em>-Sicht zurückgestuft — Mitglieder sehen + einzeln aussortieren,
 /// Provenienz/Ranges, Split, Klassenbalance, Einfrieren. Kuratiert (getaggt) wird jetzt in
 /// Galerie/Einbild (Sammel-Ziel + Taste A / Badge-Klick); der filter-getriebene

@@ -284,7 +284,7 @@ public sealed partial class Sicht
 
     private readonly Dictionary<string, List<string>> _akteurOrdnung = new(StringComparer.Ordinal);
     /// <summary>
-    /// Die Akteur-Rahmen einer Domäne in ihrer Reihenfolge (§12.3): wer das Ding erschafft, dann wer worauf antwortet (Zusage), dann Art
+    /// Die Akteur-Rahmen einer Domäne in ihrer Reihenfolge (docs/konzept-akteure.md §8, konzept-werkbank §8.1): wer das Ding erschafft, dann wer worauf antwortet (Zusage), dann Art
     /// (Maschine → KI → Mensch), dann Name. Gezählt werden die sichtbaren fachlichen Karten der Domäne (keine Inseln, keine eingeklappten Details).
     /// Eine gewünschte Reihenfolge (Ansicht) legt der Editor darüber.
     /// </summary>

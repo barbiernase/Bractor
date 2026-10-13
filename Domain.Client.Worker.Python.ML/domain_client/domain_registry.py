@@ -13,7 +13,7 @@ from domain_client.generated import (
     BildPaarDurchKiKlassifiziertDto,
     PaarNichtKomplettDto,
     KlassifiziereBildPaarDurchKiDto,
-    # ── Trainingslauf (Konzept §4) ──
+    # ── Trainingslauf ──
     TrainingAngefordertDto,
     TrainingAbgebrochenDto,
     MeldeTrainingBegonnenDto,

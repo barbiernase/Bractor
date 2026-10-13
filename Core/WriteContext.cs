@@ -27,7 +27,7 @@ public class WriteContext
 
     /// <summary>
     /// Kausale Position im Log (= AggregateVersion des auslösenden Events).
-    /// Dieselbe Zahl, aus der die Fortschrittsmarke fällt (Spec 5.3, monoton pro Stream).
+    /// Dieselbe Zahl, aus der die Fortschrittsmarke fällt (monoton pro Stream).
     /// -1, wenn ohne Positions-Kontext erzeugt (Push-Pfad / Alt-Aufrufer).
     /// </summary>
     public int Version { get; }

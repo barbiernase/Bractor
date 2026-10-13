@@ -8,8 +8,8 @@ using Domain.Projections;                   // DatensatzAntwort
 namespace Domain.Client.Modules;
 
 /// <summary>
-/// Das aktive Sammel-Ziel — ein Datensatz als „Aufnahme-Knopf" (Konzept
-/// datensatz-kuratierung §4.1). Rein clientseitige Sicht: die Mitgliedschaft ist
+/// Das aktive Sammel-Ziel — ein Datensatz als „Aufnahme-Knopf".
+/// Rein clientseitige Sicht: die Mitgliedschaft ist
 /// ein <em>Tag</em> an den Bildern, kein Domänenzustand (Invariante 5). Die
 /// Mitglieder-Menge speist O(1)-Mitgliedschaft für Galerie-Badges und Einbild-Toggle.
 /// </summary>
@@ -40,10 +40,10 @@ public partial class Store
 {
     [ObservableProperty] private SammelZielKontext? _sammelZiel;
 
-    /// <summary>Dedizierte Mehrfach-Auswahl in der Galerie (Kachel-Häkchen) — Konzept §5.</summary>
+    /// <summary>Dedizierte Mehrfach-Auswahl in der Galerie (Kachel-Häkchen).</summary>
     [ObservableProperty] private IReadOnlySet<Guid> _markierung = new HashSet<Guid>();
 
-    /// <summary>Rückwärts-Tags des betrachteten Paars: „in Datensätzen: …" (Konzept §4.3).</summary>
+    /// <summary>Rückwärts-Tags des betrachteten Paars: „in Datensätzen: …".</summary>
     [ObservableProperty] private IReadOnlyList<DatensatzTag> _paarTags = System.Array.Empty<DatensatzTag>();
 
     /// <summary>Galerie-Fokus auf das Sammel-Ziel (Aus/Mitglieder/Ausgeschlossen).</summary>

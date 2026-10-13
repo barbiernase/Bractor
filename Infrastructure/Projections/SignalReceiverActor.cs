@@ -6,7 +6,7 @@ using Proto.Cluster;
 namespace Infrastructure.Projections;
 
 /// <summary>
-/// Proto-Mantel um den <see cref="SignalReceiver"/> (Spec 4.4 / 5.6) — ein lokaler,
+/// Proto-Mantel um den <see cref="SignalReceiver"/> (docs/04 §4.1) — ein lokaler,
 /// zustandsloser Actor pro Handler-Klasse und Node.
 ///
 /// Auf <see cref="Started"/> abonniert er über die bestehende <see cref="BrokerSubscription"/>

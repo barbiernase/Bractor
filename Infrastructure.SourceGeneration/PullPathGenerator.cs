@@ -84,7 +84,7 @@ namespace Infrastructure.SourceGeneration
                         string.Join(", ", stores.Select(k => k.Name))));
             }
 
-            // Die Store-Klasse(n) hinter den Schreib-Fähigkeiten — Teil des Projektions-Stands (Plan E9). Nur replaybare Konsumenten
+            // Die Store-Klasse(n) hinter den Schreib-Fähigkeiten — Teil des Projektions-Stands (konzept-werkbank §12.3 E9). Nur replaybare Konsumenten
             // (mit Store) bekommen einen Stand; emittierende werden nie neu aufgebaut.
             var storesJe = projections.ToDictionary(p => p, p => faehigkeiten[p]
                 .SelectMany(f => klassen.Where(k => k.AllInterfaces.Contains(f, SymbolEqualityComparer.Default)))
@@ -212,7 +212,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine($"                var candidates = new object[] {{ {string.Join(", ", holen)} }};");
             sb.AppendLine("                var trackers = candidates.OfType<IProjectionTracker>().Distinct().ToList();");
             sb.AppendLine("                if (trackers.Count > 1)");
-            sb.AppendLine($"                    throw new InvalidOperationException(\"{p.Name}: Schreib-Fähigkeiten aus mehreren IProjectionTracker-Stores — höchstens einer erlaubt (Spec 7.6).\");");
+            sb.AppendLine($"                    throw new InvalidOperationException(\"{p.Name}: Schreib-Fähigkeiten aus mehreren IProjectionTracker-Stores — höchstens einer erlaubt (docs/04 §4.2, CQRS052).\");");
             sb.AppendLine();
             sb.AppendLine("                // Achse-B-Schnitt (P4): lösen die Schreib-Fähigkeiten der Handles einen (co-committbaren)");
             sb.AppendLine("                //   IProjectionTracker-Store auf, ist der Konsument REPLAYBAR (Projektion). Sonst ist er EMITTIEREND");
@@ -227,7 +227,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("                    ? provider.GetService<IEmittentenCursor>()");
             sb.AppendLine("                    : null;");
             sb.AppendLine();
-            sb.AppendLine("                // Schritt A / Spec 8: DIESELBE Ausgabe-Route wie der Push-Actor (HandlerOutputRouter):");
+            sb.AppendLine("                // DIESELBE Ausgabe-Route wie der Push-Actor (HandlerOutputRouter):");
             sb.AppendLine("                //   IEvent → re-publish, ICommand → Reaktion. system.Cluster() hier zur SPAWN-Zeit");
             sb.AppendLine("                //   (die Factory läuft im Actor-Started, Cluster ist fertig — NICHT bei Kind-Registrierung).");
             sb.AppendLine("                //   DetachedEmit hält den virtuellen Adapter-Turn frei (at-least-once, Empfänger dedupliziert).");

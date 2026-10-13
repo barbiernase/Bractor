@@ -7,7 +7,7 @@ namespace Domain.Client.Modules.Kuratieren;
 /// <summary>
 /// Übersetzt die Tag-Geste (Einbild-Taste A / Galerie-Klick) in das manuelle Delta des
 /// aktiven Sammel-Ziels: <see cref="NimmPaarAuf"/> bzw. <see cref="EntfernePaar"/> — je
-/// nach aktueller Mitgliedschaft. Wiederverwendung der vorhandenen Commands (Handoff §4.1):
+/// nach aktueller Mitgliedschaft. Wiederverwendung der vorhandenen Commands:
 /// keine neuen Commands, keine Handverdrahtung.
 ///
 /// Muster identisch zum <c>LabelingIntentHandler</c>: View dispatcht einen client-lokalen

@@ -9,7 +9,7 @@ using Infrastructure.Projections;   // SignalReceiver.SignalTypesFor
 namespace Infrastructure.Prozess;
 
 /// <summary>
-/// Die EINE echte neue Infrastruktur (Spec §5.1): der Korrelations-Router. Wo der alte
+/// Die EINE echte neue Infrastruktur (docs/04 §4.5): der Korrelations-Router. Wo der alte
 /// <c>SignalReceiver</c> <c>(kind, streamId)</c> weckt, weckt dieser <c>(prozess-manager, Korrelation)</c>.
 /// Aus einem Signal <c>(StreamId, Version)</c> liest er das Event und leitet die Korrelation ab:
 ///   - ist das Event ein registrierter AUSLÖSER-Typ → Start: Korrelation = <see cref="ProzessId.Für"/>

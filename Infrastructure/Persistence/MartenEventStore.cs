@@ -191,7 +191,7 @@ public class MartenEventStore : IEventStoreRepository
 
     /// <summary>
     /// Liest die echten Events eines Streams ab <paramref name="fromVersion"/> und
-    /// materialisiert sie als EventEnvelope (Spec 4.5 / 5.2). Das eine tragende
+    /// materialisiert sie als EventEnvelope (docs/04 §4.1). Das eine tragende
     /// Leseprimitiv des Pull-Ansatzes.
     ///
     /// ★ Phase 1: CorrelationId/CausationId/AggregateType werden jetzt aus den
@@ -250,7 +250,7 @@ public class MartenEventStore : IEventStoreRepository
     }
 
     /// <summary>
-    /// Globales Leseprimitiv für den Poll-Backstop (Spec 19.1): scannt die Events
+    /// Globales Leseprimitiv für den Poll-Backstop (docs/04 §4.1): scannt die Events
     /// jenseits der globalen Sequenz und liefert die betroffenen Streams + neue
     /// High-Water-Mark. Marten führt die globale Sequenz (mt_events.seq_id) nativ.
     ///

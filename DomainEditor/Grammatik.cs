@@ -62,7 +62,7 @@ public static class Grammatik
         new(Akteur, "Akteur", false), new(Client, "Client", false), new(Funktion, "Funktion", false),
         // Pipeline als Fluss (§14): der Dirigent faltet seinen Vorgang im Log — ein Zustandsschritt wie der Prozess.
         new(Fluss, "Pipeline (Fluss)", true),
-        // Domänen-Dienst (Plan E11): seine Implementierung nimmt selbst Dienste im Konstruktor.
+        // Domänen-Dienst (konzept-werkbank §12.3 E11): seine Implementierung nimmt selbst Dienste im Konstruktor.
         new(DienstImpl, "Dienst-Implementierung", false),
     ];
 
@@ -118,7 +118,7 @@ public static class Grammatik
              new("boot", null, "Infrastructure/Funktionen/FunktionsExtensions.cs (PrüfeBindungen: nicht AddExterneFunktion)")]),
         new("GR-FUNKTION-GEBUNDEN", "Gerufene Funktion ist gebunden", "Jede Funktion, die ein Prozess ruft, braucht im Host eine Bindung (AddFunktion<F, Impl>) — sonst bricht der Start.", "error",
             [new("boot", null, "Infrastructure/Funktionen/FunktionsExtensions.cs (PrüfeBindungen)")]),
-        // Domänen-Dienste (Plan E11): Abhängigkeiten der Implementierungen, gebunden nach der Umgebung.
+        // Domänen-Dienste (konzept-werkbank §12.3 E11): Abhängigkeiten der Implementierungen, gebunden nach der Umgebung.
         new("GR-DIENST", "Dienst nur im Konstruktor einer Implementierung", "Ein Dienst (interface IX : IDienst) steht nur im Konstruktor einer "
             + "Funktions- oder Dienst-Implementierung — nie als Parameter, Feld oder Eigenschaft im Fachcode (Aggregat, Projektion, Reaktion, Reader): "
             + "dort sind es Fähigkeiten als Parameter. Ein IAkteurDienst<A> ist etwas anderes (GR-AUFTRAG).", "error",
@@ -209,7 +209,7 @@ public static class Grammatik
              Offen("Editor-Sicht: Rahmen „ohne Akteur“ (board.sicht); Fixpunkt im Generator (docs/konzept-akteure.md §2.3)")]),
         new("GR-INGRESS-EINDEUTIG", "Ingress-Trigger: genau ein Akteur", "Entsteht ein Trigger ohne Kette (Datei, Timer, Selbst-Tick), ist sein "
             + "Akteur der eine, der ihn per IDarf darf — mehrere machen offen, wer ihn liefert.", "warning",
-            [Offen("Generator-Diagnose (docs/konzept-akteure.md §7, Regel 2)")]),
+            [Offen("Generator-Diagnose (docs/konzept-akteure.md §7, GR-INGRESS-EINDEUTIG)")]),
         new("GR-CLIENT", "Client-Vertrag: nur der Rand", "Ein Client (interface IX : IClientVertrag) stellt zusammen, was über SEINE "
             + "Leitung geht: getragene Akteur-Vertrags-Teile (Zusagen im Namen des jeweiligen Akteurs), ISendet<T>/IFragt<T> und eigene "
             + "Kenntnis (void Auf(E)) — keine eigene Ausgabe, keine client-internen Typen, je Event höchstens eine Methode.", "error",

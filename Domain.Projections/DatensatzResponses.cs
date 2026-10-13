@@ -41,7 +41,7 @@ public record DatensatzAntwort(
     SplitKonfig Split,
     IReadOnlyList<RangeHerkunft> Ranges,
     // Die konkreten Entwurfs-Mitglieder (Bildpaar-Ids). Grundlage für die
-    // „Datensatz-als-Tag"-Sicht (Konzept datensatz-kuratierung §4.3, §6): der Client
+    // „Datensatz-als-Tag"-Sicht: der Client
     // baut daraus O(1)-Mitgliedschaft (Badges in Galerie/Einbild) für das Sammel-Ziel.
     IReadOnlyList<Guid> Mitglieder,
     // Beim Kuratieren aussortierte Paare — für die „Ausgeschlossen"-Galerie + Zähler.

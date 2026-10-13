@@ -3,7 +3,7 @@ using Abstractions;
 namespace Domain.Projections;
 
 /// <summary>
-/// Die eingefrorenen Samples einer Datensatz-Version — paginiert (Konzept §6).
+/// Die eingefrorenen Samples einer Datensatz-Version — paginiert.
 /// Derselbe typisierte Query-Kanal für Python (TrainingWorker) und Blazor (Vorschau):
 /// eine Deklaration hier, per Proto-Regen sehen sie beide Clients.
 /// Liest den <em>immutablen</em> Snapshot → reproduzierbar.
@@ -22,7 +22,7 @@ public record HoleDatensatz(Guid DatensatzId) : IQuery;
 public record HoleDatensaetze() : IQuery;
 
 /// <summary>
-/// Rückwärts-Frage (Konzept datensatz-kuratierung §4.3): in welchen Datensätzen liegt dieses
+/// Rückwärts-Frage: in welchen Datensätzen liegt dieses
 /// Bildpaar? Speist die „in Datensätzen: …"-Chips im Einbild. Liest den Rückwärts-Index.
 /// </summary>
 public record HoleDatensaetzeFuerPaar(Guid ImagePairId) : IQuery;
@@ -37,7 +37,7 @@ public enum DatensatzPaarModus
 
 /// <summary>
 /// Die Bildpaare eines Datensatzes (Mitglieder ODER Ausgeschlossene), paginiert — speist die
-/// Datensatz-gescopte Galerie (Konzept datensatz-kuratierung: „in der Galerie ansehen").
+/// Datensatz-gescopte Galerie („in der Galerie ansehen").
 /// Antwortet mit <see cref="ImagePairSuchergebnis"/> (wiederverwendet), damit dasselbe
 /// virtuelle Fenster wie die normale Suche absorbiert — kein neuer Lade-/Merge-Pfad.
 /// </summary>

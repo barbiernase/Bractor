@@ -5,7 +5,7 @@ using Microsoft.CodeAnalysis.CSharp.Syntax;
 namespace GraphExtractor;
 
 // ════════════════════════════════════════════════════════════════════════════
-//  Slot-Inventar (docs/konzept-llm-minimalkontext.md §13)
+//  Slot-Inventar (docs/konzept-llm-minimalkontext.md §7)
 //
 //  Alle Stellen, an denen ein Code-Block hängt (H-Slots), über ihre Marker gefunden — Decide, Apply, Projektion,
 //  Reaktion, Reader, Pipeline, Store-Implementierung, Saga-Lambda, Katalog-Funktion (Implementierung von RufeAsync) und

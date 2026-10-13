@@ -149,7 +149,7 @@ public class DateiTreiberTests
         k.Laufmodus.Should().Be(QuellLaufmodus.JederKnoten);
     }
 
-    // ── Webhook als Konfig (Plan E12) ──
+    // ── Webhook als Konfig (konzept-werkbank §12.3 E12) ──
 
     [Fact]
     public void Konfig_Webhook_ist_eine_Route()

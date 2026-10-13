@@ -1,7 +1,7 @@
 namespace Domain.Trainingslauf;
 
 /// <summary>
-/// Hyperparameter eines Trainingslaufs — Teil des reproduzierbaren Inputs (Konzept §4.1, §10).
+/// Hyperparameter eines Trainingslaufs — Teil des reproduzierbaren Inputs.
 /// </summary>
 public record Hyperparameter(
     int Epochen,
@@ -12,7 +12,7 @@ public record Hyperparameter(
 );
 
 /// <summary>
-/// Ein Fortschritts-Punkt je Epoche (Live-Kurve, Konzept §4.5 / §8.1). Loss + Genauigkeit
+/// Ein Fortschritts-Punkt je Epoche (Live-Kurve). Loss + Genauigkeit
 /// sind die Standard-Metriken; die Historie dieser Punkte streamt event-sourced ins Dashboard.
 /// </summary>
 public record EpochenMetrik(

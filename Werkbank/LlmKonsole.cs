@@ -17,7 +17,7 @@ namespace Werkbank;
 //  • Jede Runde ist ein NEUER, zustandsloser Aufruf. Reihenfolge stabil → veränderlich:
 //      Anweisung · Graph-Skelett · Slot-Teil · Auftrag · [aktueller Rumpf · Befund/Anpassung]
 //    Nie ein Gesprächsverlauf — nur der letzte Rumpf reist mit.
-//  • Prüfen = Bauen (Werkbank P7.4, L18): Syntax, dann der Kandidat probeweise im warmen Workspace — die Datei mit dem neuen Rumpf bzw.
+//  • Prüfen = Bauen (Werkbank P7.4, konzept-werkbank A.5): Syntax, dann der Kandidat probeweise im warmen Workspace — die Datei mit dem neuen Rumpf bzw.
 //    Lambda, ihr Projekt mit seinen echten Generatoren und Analyzern (CQRS050, CQRS066/067, CQRS073 ff. …); Python über den Parser.
 //    Nur NEUE Fehler gegenüber dem Unveränderten zählen. Nichts wird geschrieben, der Fork wird verworfen.
 //  • Ausführen (Editor, ▶ am 🤖-Knoten): ein GEPRÜFTER Rumpf geht sofort in die echte Datei, danach laufen die Generatoren
@@ -201,7 +201,7 @@ public sealed class LlmKonsole
         new(S(slot, "datei"), S(slot, "klasse"), slot["anweisung"]?.GetValue<int>() ?? -1, slot["lambda"]?.GetValue<int>() ?? -1);
     // Zusage/Kenntnis eines Akteurs draußen: der Python-Rumpf in der Client-Implementierung (eigener Anker: Datei + Klasse + Methode).
     private static bool IstPython(JsonObject slot) => S(slot, "art") is "zusage" or "funktionpy";
-    // Der Python-Rumpf einer Katalog-Funktion (Laufort Extern, Plan E13): `rufe` liefert genau ein Ergebnis per return.
+    // Der Python-Rumpf einer Katalog-Funktion (Laufort Extern, konzept-werkbank §12.3 E13): `rufe` liefert genau ein Ergebnis per return.
     private static bool IstPythonFunktion(JsonObject slot) => S(slot, "art") == "funktionpy";
     private static PythonAnker PAnker(JsonObject slot) => new(S(slot, "datei"), S(slot, "klasse"), S(slot, "methode"), SN(slot, "signatur"));
     private object Lese(JsonObject slot) => IstPython(slot) ? PythonSync.Lese(PAnker(slot), _sln)

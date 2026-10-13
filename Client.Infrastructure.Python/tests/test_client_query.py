@@ -1,5 +1,5 @@
 """
-M7 — die öffentliche Ask-API: CqrsClient.query() (Konzept §7.3).
+Die öffentliche Ask-API: CqrsClient.query() (docs/09 §9.4).
 
 Beweist die Komposition wrap_query → proxy.send_query → extract_query_response, ohne echten
 Server: der Proxy-Send wird durch einen Fake ersetzt, der einen QueryResponse zurückgibt.

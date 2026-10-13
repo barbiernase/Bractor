@@ -5,7 +5,7 @@ namespace Infrastructure.Projections;
 
 /// <summary>
 /// Der Projektions-Rebuild-Runner (Feature-Strom): „Replay IST der Adapter-Pfad mit Fortschritt = -1"
-/// (Spec 7.7 / IProjectionRebuilder). EINE Schleife, die den bestehenden <see cref="ProjectionAdapter"/>
+/// (docs/04 §4.3 / IProjectionRebuilder). EINE Schleife, die den bestehenden <see cref="ProjectionAdapter"/>
 /// wiederverwendet — kein zweiter Codepfad:
 ///   1. Ziel leeren (<see cref="IRebuildableProjection.ClearAsync(System.Threading.CancellationToken)"/>),
 ///   2. Marken auf -1 (<see cref="IProjectionTracker.ResetAllAsync"/>),

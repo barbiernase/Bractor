@@ -41,10 +41,10 @@ public interface IProjectionTracker
     //
     // Reset ist die Umkehrung von Mark — eine semantische Operation, KEIN
     // Transaktions- oder Scope-Konzept. Deshalb gehört es auf dieses Interface
-    // und nicht in eine separate Begin/Commit-Mechanik (vgl. Spec 7.2: der
+    // und nicht in eine separate Begin/Commit-Mechanik (vgl. docs/04 §4.3: der
     // Vertrag drückt nur aus, was das Framework semantisch braucht).
     //
-    // Grundsatz (Spec 7.7): Abgeleitetes darf zurückgespult werden, weil es aus
+    // Grundsatz (docs/04 §4.3, Neuaufbau): Abgeleitetes darf zurückgespult werden, weil es aus
     // der Wahrheit neu berechenbar ist; der Log selbst spult nie zurück. Ein
     // Rebuild ist derselbe Codepfad mit Fortschritt = -1 und geleertem Ziel
     // (das Ziel-Löschen gehört dem Store, siehe IRebuildableProjection).

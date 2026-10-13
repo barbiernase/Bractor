@@ -47,7 +47,7 @@ public sealed class ProzessMarking
 }
 
 /// <summary>
-/// Die verdichtete Marking-Faltung (docs/…-konzept.md §2/§4). NICHT „alle rohen Tokens" (das brächte das O(N²)
+/// Die verdichtete Marking-Faltung (docs/04-konsum-und-prozess-maschine.md §4.5, Marking-Cursor). NICHT „alle rohen Tokens" (das brächte das O(N²)
 /// zurück), sondern je Ziel-Stream ein Cursor plus je aufgelöstem Vorgang eine kompakte Marke mit den DREI
 /// Achsen, die der Manager liest (aufgelöst/Wirkung/abgelehnt) und dem von einer Wirkung erzeugten Downstream-
 /// Token (kompakt: Stream+Version+Payload), das einen Join scharf schalten kann.
@@ -90,7 +90,7 @@ public sealed class MarkingKompakt
 }
 
 /// <summary>
-/// Die kompakte Marke EINES aufgelösten Vorgangs. Erhält die DREI Achsen (Backend-Handoff §4-Falle 2), an denen
+/// Die kompakte Marke EINES aufgelösten Vorgangs. Erhält die DREI Achsen (docs/04 §4.5, Fold), an denen
 /// <c>WakeAsync</c> Vorwärts/Kompensation/Terminal entscheidet:
 ///   • Aufgelöst (Schlüssel-Präsenz im <see cref="MarkingKompakt.Vorgänge"/>-Dict): irgendein Ziel-Event lag vor.
 ///   • <see cref="Wirkung"/>: ein DOMÄNEN-Event (kein <see cref="IProzessIntern"/>) — kompensierbar, aktiviert Joins.

@@ -35,7 +35,7 @@ public class ConnectionModule : IAsyncDisposable
     private Task? _stateReadTask;
     private readonly List<IDisposable> _subscriptions = new();
 
-    // ★ T2b: Retry-on-Silence. Der Loop sendet mit DERSELBEN (deterministischen) CommandId erneut,
+    // ★ Retry-on-Silence (docs/08 §8.4). Der Loop sendet mit DERSELBEN (deterministischen) CommandId erneut,
     //   bis eine korrelierte Antwort kommt — server-seitig idempotent (Inbox vor OCC).
     private readonly PendingCommandTracker _pending = new();
     private static readonly TimeSpan AckTimeout = TimeSpan.FromSeconds(5);
@@ -177,7 +177,7 @@ public class ConnectionModule : IAsyncDisposable
 
             var envelope = new CommandEnvelope
             {
-                // ★ T2b: deterministische CommandId — EINMAL erzeugt, über Retries wiederverwendet →
+                // ★ deterministische CommandId — EINMAL erzeugt, über Retries wiederverwendet →
                 //   der Server dedupliziert einen Doppel-Send idempotent (Inbox vor OCC).
                 CommandId = Guid.NewGuid(),
                 AggregateId = command.AggregateId,
@@ -204,7 +204,7 @@ public class ConnectionModule : IAsyncDisposable
 
     /// <summary>
     /// Sendet den Command und wiederholt bei STILLE (keine korrelierte Antwort binnen <see cref="AckTimeout"/>)
-    /// mit DERSELBEN Hülle (gleiche CommandId → server-seitig idempotent, T2b). Kam eine Antwort (ein Event
+    /// mit DERSELBEN Hülle (gleiche CommandId → server-seitig idempotent, docs/08 §8.4). Kam eine Antwort (ein Event
     /// ODER ein CommandFailed mit dieser CorrelationId), ist der Ausgang bekannt → fertig. Bleibt es nach allen
     /// Versuchen still, meldet der Loop <see cref="CommandUnbestaetigt"/> (Ausgang unbekannt, sicher
     /// wiederholbar) — NICHT „fehlgeschlagen".
@@ -258,7 +258,7 @@ public class ConnectionModule : IAsyncDisposable
         {
             await foreach (var envelope in _proxy.Events.ReadAllAsync(ct))
             {
-                // ★ T2b: eine korrelierte Antwort (Domänen-Event ODER CommandFailed) beendet den Retry-Loop
+                // ★ eine korrelierte Antwort (Domänen-Event ODER CommandFailed) beendet den Retry-Loop
                 //   des zugehörigen Commands. CommandFailed reist als normales Event über denselben Kanal.
                 if (!string.IsNullOrEmpty(envelope.CorrelationId))
                     _pending.Ack(envelope.CorrelationId);

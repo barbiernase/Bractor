@@ -99,7 +99,7 @@ public sealed class FunktionsKonfig
 }
 
 /// <summary>
-/// Ein externer Funktions-Worker als Prozess (Werkbank, Plan E10): <c>Python Skript Argumente…</c>. Die Werkbank setzt <c>CQRS_GRPC_HOST</c>,
+/// Ein externer Funktions-Worker als Prozess (Werkbank, konzept-werkbank §12.3 E10): <c>Python Skript Argumente…</c>. Die Werkbank setzt <c>CQRS_GRPC_HOST</c>,
 /// <c>CQRS_GRPC_PORT</c> und <c>CQRS_AKTEUR_TOKEN</c> (aus <see cref="Token"/>) — der Worker meldet sich damit am gRPC-Port an.
 /// </summary>
 public sealed class WorkerKonfig
@@ -114,7 +114,7 @@ public sealed class WorkerKonfig
 }
 
 /// <summary>
-/// Welche Implementierung ein Domänen-Dienst (<c>IDienst</c>) in dieser Umgebung hat (Abschnitt <c>Dienste:&lt;IDienst&gt;</c>, Plan E11). Ohne
+/// Welche Implementierung ein Domänen-Dienst (<c>IDienst</c>) in dieser Umgebung hat (Abschnitt <c>Dienste:&lt;IDienst&gt;</c>, konzept-werkbank §12.3 E11). Ohne
 /// Eintrag gilt die einzige Implementierung; gibt es mehrere, muss sie hier stehen.
 /// </summary>
 public sealed class DienstKonfig

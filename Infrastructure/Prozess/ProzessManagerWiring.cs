@@ -103,7 +103,7 @@ public sealed class ProzessManagerStartupService : IHostedService
             return;
         }
 
-        // ★ Audit-Fix (fail-fast): Azyklizitäts-Boot-Guard (Spec §3). Jetzt AKTIV — er speist sich aus der
+        // ★ Audit-Fix (fail-fast): Azyklizitäts-Boot-Guard (docs/04 §4.5). Jetzt AKTIV — er speist sich aus der
         //   PRÄZISEN Command→Event-Map (GeneratedCommandRouting.CommandToEvents, aus den Decide-OneOf-Rückgaben),
         //   nicht mehr aus der aggregat-groben Map, die Falsch-Zyklen erzeugte. Ein tatsächlich zyklischer
         //   Regelsatz (Command → Event → Command → …) bricht damit am Start statt zur Laufzeit endlos zu feuern.

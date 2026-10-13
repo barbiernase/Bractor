@@ -2,7 +2,7 @@
 
 > **Kanonisches Dokument** für Werkbank, Editor und den Weg „Entwurf → Code → Lauf → Spur“. Es beschreibt den Stand des Codes
 > (Gegenwart) und die Leitsätze, an denen jede Änderung gemessen wird. Wo andere Dokumente widersprechen, gilt dieses; für Fakten gilt der Code.
-> Entstanden als Zielbild 2026-10-12, umgesetzt in den Phasen P0–P8 bis 2026-10-13 (Historie: `docs/plan-werkbank-umsetzung.md`),
+> Entstanden als Zielbild 2026-10-12, umgesetzt in den Phasen P0–P8 bis 2026-10-13 (Historie im Git-Verlauf, gelöschtes `docs/plan-werkbank-umsetzung.md`),
 > neu gefasst 2026-10-13. Abschnittsnummern sind stabil, weil Code-Kommentare darauf verweisen.
 >
 > Offenes und Schulden stehen in `docs/13-reifegrad-schulden-bewertung.md` §13.0, Zahlen in `docs/12-tests-und-vermessung.md` §12.2.
@@ -556,7 +556,7 @@ Nummern wie im Umsetzungsplan, weil Code-Kommentare sie zitieren.
 Das Zielbild wurde am 2026-10-12 beschlossen und in neun Phasen umgesetzt: P0 Aufräumen, P1 Datei-Treiber, P2 Umgebungen, P3 Werkbank-Server, P4 Spur,
 P5 Durchspielen, P6 Visualisierung, P7 Eine Wahrheit (warmer Workspace, Geste → Patch, Ableitungen auf dem Server, Prüfen = Bauen, alles außer
 Treibern im Editor), P8 Simulation raus — abgeschlossen am 2026-10-13 mit der Abnahme an einer neuen Domäne, die nur über Gesten und ⟳ entstand.
-Ist-Befund, Arbeitspakete, Messwerte und Fallen je Phase: `docs/plan-werkbank-umsetzung.md`.
+Historie im Git-Verlauf (gelöschtes `docs/plan-werkbank-umsetzung.md`).
 
 ---
 
@@ -582,8 +582,6 @@ Ist-Befund, Arbeitspakete, Messwerte und Fallen je Phase: `docs/plan-werkbank-um
 | `konzept-akteure.md` | Detail-Referenz Akteure, Verträge, Clients |
 | `konzept-llm-minimalkontext.md` | Detail-Referenz LLM-Kontext und Slots |
 | `konzept-editor-komposition.md` | Sprache des Editors (Alphabet, Operatoren, Kapselung) |
-| `konzept-domaenen-editor.md`, `konzept-editor-panel-bearbeitung.md`, `konzept-handle-ausgaenge.md` | ältere Editor-Konzepte; ihr gültiger Inhalt steht hier (§8, Anhang A); werden archiviert |
-| `plan-werkbank-umsetzung.md` | Historie der Umsetzung; wird archiviert |
 
 Bei Widerspruch gilt dieses Dokument.
 

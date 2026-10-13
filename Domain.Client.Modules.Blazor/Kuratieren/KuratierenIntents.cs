@@ -6,13 +6,13 @@ namespace Domain.Client.Modules.Kuratieren;
 // Der KuratierenIntentHandler übersetzt sie in Datensatz-Commands.
 
 /// <summary>
-/// Mitgliedschaft eines Bildpaars im aktiven Sammel-Ziel umschalten (Konzept §5).
+/// Mitgliedschaft eines Bildpaars im aktiven Sammel-Ziel umschalten.
 /// <paramref name="PairId"/> == null → das aktuelle Cursor-Paar (Einbild-Geste, Taste A);
 /// gesetzt → ein konkretes Paar (Galerie-Badge-Klick).
 /// </summary>
 public record DatensatzTagGetoggelt(Guid? PairId = null) : IClientEvent;
 
-// ── Dedizierte Mehrfach-Auswahl (Rubber-Band), Konzept §5 ──
+// ── Dedizierte Mehrfach-Auswahl (Rubber-Band) ──
 // Die Markierung ist ein eigener, sichtbarer Zustand (Häkchen auf den Kacheln),
 // unabhängig von der Mitgliedschaft.
 

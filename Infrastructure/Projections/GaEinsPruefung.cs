@@ -12,7 +12,7 @@ namespace Infrastructure.Projections;
 /// existiert". Ein bloßer <see cref="IProjectionTracker"/> (z. B. der bewusst dual-writing
 /// Fallback, oder ein write-through-Effekt neben einem separaten Tracker) ist gerade NICHT
 /// co-committend → er würde still at-least-once laufen (false-green). Nur die Atomaritäts-Zusage
-/// <see cref="ICoCommitTracker"/> besteht den Check. Analyse: docs/konzept-exactly-once-naht.md.
+/// <see cref="ICoCommitTracker"/> besteht den Check. Analyse: docs/04-konsum-und-prozess-maschine.md §4.3.
 ///
 /// Trennung der Achsen (bewusst): der GA-1-Check betrifft NUR replaybare Append-Projektionen. Ein
 /// EMITTIERENDER Konsument (Reaktion/Pipeline-Event) trägt den Marker nie — seine Wirkung ist das

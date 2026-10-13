@@ -1,6 +1,6 @@
 namespace Abstractions;
 
-// Der Stand der Leseseite (docs/plan-werkbank-umsetzung.md E9) — vom ProjectionServicesGenerator je Store bzw. Read-Model in die DI
+// Der Stand der Leseseite (docs/konzept-werkbank.md §12.3 E9) — vom ProjectionServicesGenerator je Store bzw. Read-Model in die DI
 // geschrieben. Daraus entscheidet der Host einer Sim-Umgebung beim Start, ob die Projektionen neu aufgebaut werden (Werkbank §4.6).
 
 /// <summary>Code-Hash einer Store-Klasse (normalisierte Syntax aller Teile).</summary>

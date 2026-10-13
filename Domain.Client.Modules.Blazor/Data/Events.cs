@@ -5,7 +5,7 @@ namespace Domain.Client.Modules;
 public enum ArbeitsModus { Live, Inspekt, Tag }
 
 /// <summary>
-/// Galerie-Fokus auf den aktiven Datensatz (Konzept datensatz-kuratierung): das geteilte
+/// Galerie-Fokus auf den aktiven Datensatz: das geteilte
 /// Bild-Fenster zeigt entweder alles (Aus), nur die Mitglieder oder nur die Ausgeschlossenen
 /// des Sammel-Ziels. Rein clientseitig; steuert nur, welche Query das Fenster speist.
 /// </summary>

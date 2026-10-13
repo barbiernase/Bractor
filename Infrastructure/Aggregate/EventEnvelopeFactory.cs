@@ -3,7 +3,7 @@ using Abstractions;
 namespace Infrastructure.Aggregate;
 
 /// <summary>
-/// Baut die EventEnvelopes für den Publish-Pfad — mit Version PRO Event (Spec 4.2).
+/// Baut die EventEnvelopes für den Publish-Pfad — mit Version PRO Event.
 ///
 /// WARUM pur/statisch: Die Versions-Arithmetik ist der Anker für Reihenfolge, Dedup
 /// und (später) deterministische Prozess-Identitäten. Als reine Funktion ist sie
@@ -33,7 +33,7 @@ public static class EventEnvelopeFactory
             result.Add(new EventEnvelope
             {
                 AggregateId      = aggregateId,
-                AggregateVersion = baseVersion + i + 1,   // Version PRO Event (Spec 4.2)
+                AggregateVersion = baseVersion + i + 1,   // Version PRO Event
                 // Stream-Head nach dem ganzen Batch (inkl. Marke) — für die Client-OCC. Jedes Event
                 // des Batches trägt denselben Head; 0 (ungesetzt) → Client nutzt AggregateVersion.
                 StreamHeadVersion = streamHeadVersion,

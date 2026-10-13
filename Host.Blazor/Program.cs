@@ -28,7 +28,7 @@ builder.WebHost.UseUrls(client.Urls);
 builder.Services.AddRazorPages();
 builder.Services.AddServerSideBlazor();
 builder.Services.AddMudServices();
-builder.Services.AddApexCharts();   // Live-Trainingskurven im Training-Dashboard (M9)
+builder.Services.AddApexCharts();   // Live-Trainingskurven im Training-Dashboard
 
 // ── Infrastruktur ──
 builder.Services.AddSingleton(new GrpcServerConfig(grpcAddress));

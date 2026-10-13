@@ -3,7 +3,7 @@ using Abstractions;
 namespace Infrastructure.Projections;
 
 /// <summary>
-/// Poll-Backstop (Spec 4.8 / 14): scannt periodisch das globale Event-Log jenseits
+/// Poll-Backstop (docs/04 §4.1): scannt periodisch das globale Event-Log jenseits
 /// seiner High-Water-Mark und weckt die Adapter der geänderten Streams.
 ///
 /// Er heilt den einen Fall, den das Coalescing NICHT auffängt — das letzte verlorene

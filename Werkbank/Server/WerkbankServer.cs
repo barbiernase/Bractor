@@ -177,7 +177,7 @@ public sealed class WerkbankServer
                 // Neue Client-Implementierungen (Python) entstehen aus der GENERIERTEN Basis — also erst nach dem Bauen (früher „C# schreiben“).
                 var modell = DomainEditor.BoardLeseseite.AusBoard(vorher.BoardJson);
                 var (angelegt, _) = Werkbank.PythonSync.ImplementierungenAnlegen(modell, _root, trocken: false);
-                // … ebenso die Python-Implementierungen der Funktionen, die die aktive Umgebung extern rechnen lässt (Plan E13).
+                // … ebenso die Python-Implementierungen der Funktionen, die die aktive Umgebung extern rechnen lässt (konzept-werkbank §12.3 E13).
                 var (fAngelegt, fNicht) = Werkbank.PythonSync.FunktionenAnlegen(modell, Umgebungen.Aufgeloest(Aktiv), _root);
                 Schritt(schritte, new Schritt("Python-Basen", pr.Ok, (long)pr.Dauer.TotalMilliseconds,
                     [.. pr.Zeilen.TakeLast(3), .. angelegt.Concat(fAngelegt).Select(a => "＋ " + a), .. fNicht.Select(a => "⚠ " + a)]));

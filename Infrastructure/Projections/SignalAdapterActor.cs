@@ -6,7 +6,7 @@ using Proto.Cluster;
 namespace Infrastructure.Projections;
 
 /// <summary>
-/// Phase 4a — der Adapter als VIRTUELLER CLUSTER-ACTOR pro Stream (Spec 6).
+/// Phase 4a — der Adapter als VIRTUELLER CLUSTER-ACTOR pro Stream (docs/04 §4.1).
 ///
 /// Identität: (AdapterKind, StreamId). Der Cluster garantiert genau EINE Instanz pro
 /// Stream im ganzen Cluster → Single-Writer je Stream; verschiedene Streams laufen
@@ -19,7 +19,7 @@ namespace Infrastructure.Projections;
 ///
 /// Projektions-agnostisch: Tracker + Dispatch kommen per Factory (eine frische,
 /// actor-eigene Instanz je Stream), damit parallele Stream-Actors sich keinen Puffer
-/// bzw. keine Session teilen. Der Tracker ist optional (null → ab 0 lesen, Spec 7.4).
+/// bzw. keine Session teilen. Der Tracker ist optional (null → ab 0 lesen).
 /// </summary>
 public sealed class SignalAdapterActor : IActor
 {

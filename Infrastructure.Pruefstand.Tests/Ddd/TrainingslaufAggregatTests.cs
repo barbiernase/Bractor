@@ -10,7 +10,7 @@ namespace Infrastructure.Pruefstand.Ddd;
 /// Das Aggregat <see cref="TrainingslaufAgg"/> (Meilenstein 6) durch die ECHTE generierte
 /// <see cref="AggregateHandlerFactory"/> (Decider + Applier), store-frei. Deckt den
 /// Lebenszyklus + den Fortschritts-Fold (mehrere MeldeFortschritt → MetrikHistorie) und die
-/// terminalen Übergänge ab (Konzept §4).
+/// terminalen Übergänge ab.
 /// </summary>
 public class TrainingslaufAggregatTests
 {
@@ -90,7 +90,7 @@ public class TrainingslaufAggregatTests
     }
 
     // ═══════════════════════════════════════════════════
-    // FORTSCHRITT — der Fold (Akzeptanz §5)
+    // FORTSCHRITT — der Fold
     // ═══════════════════════════════════════════════════
 
     [Fact]

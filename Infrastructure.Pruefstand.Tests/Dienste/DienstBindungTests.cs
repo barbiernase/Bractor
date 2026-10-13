@@ -19,7 +19,7 @@ using Xunit;
 namespace Infrastructure.Pruefstand.Dienste;
 
 /// <summary>
-/// Die Dienst-Bindung (Plan E11): der <c>DienstGenerator</c> liest Dienste, Implementierungen und Konfig-Records nur aus Code-Fakten; die
+/// Die Dienst-Bindung (konzept-werkbank §12.3 E11): der <c>DienstGenerator</c> liest Dienste, Implementierungen und Konfig-Records nur aus Code-Fakten; die
 /// Bindung beim Start wählt nach der Umgebung und bricht laut bei fehlender, mehrdeutiger oder zyklischer Implementierung bzw. fehlender
 /// Konfig; der Analyzer (CQRS089–CQRS092) hält die Form im Build.
 /// </summary>

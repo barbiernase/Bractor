@@ -109,7 +109,7 @@ public class PythonQuelleTests
         neu.Should().Contain("state: KasseState)").And.NotContain("state: S)");
     }
 
-    // ── Katalog-Funktionen in Python (Plan E13): Basis aus funktionen.py, neue Implementierung, Lesen über die Basis ──
+    // ── Katalog-Funktionen in Python (konzept-werkbank §12.3 E13): Basis aus funktionen.py, neue Implementierung, Lesen über die Basis ──
 
     private const string FunktionsGenerat = """
         class BildVerkleinerungBasis(FunktionsBasis):

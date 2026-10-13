@@ -4,9 +4,9 @@ using Core;
 namespace Infrastructure.Projections;
 
 /// <summary>
-/// Die eine, store-agnostische Verarbeitungsschleife (Spec 7.3). Sie besitzt die
+/// Die eine, store-agnostische Verarbeitungsschleife (docs/04 §4.1). Sie besitzt die
 /// <b>Policy</b> — Marke lesen, ab Marke+1 geordnet lesen, Pre-Dispatch-Guard,
-/// dispatchen, Marke vorrücken — und <b>keine Transaktion</b> (Spec 7.1).
+/// dispatchen, Marke vorrücken — und <b>keine Transaktion</b> (docs/04 §4.1).
 ///
 /// Der <see cref="IProjectionTracker"/> ist optional:
 /// <list type="bullet">

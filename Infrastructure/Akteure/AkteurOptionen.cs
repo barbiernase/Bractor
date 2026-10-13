@@ -10,7 +10,7 @@ namespace Infrastructure.Akteure;
 /// bleibt der gRPC-Pfad unverändert offen (opt-in).
 ///
 /// Identität ist hier ein Token im gRPC-Header <see cref="TokenHeader"/>. Das ist bewusst KEINE vollständige
-/// Authentifizierung (TLS/OIDC/mTLS: <c>docs/konzept-client-haertung.md</c> T1) — nur die Naht, an der sie andockt.
+/// Authentifizierung (TLS/OIDC/mTLS: offen, docs/13 P1-2) — nur die Naht, an der sie andockt.
 /// </summary>
 public sealed class AkteurOptionen
 {

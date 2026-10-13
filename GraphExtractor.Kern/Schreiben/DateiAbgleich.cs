@@ -116,7 +116,7 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyLis
                 Datei(f.ImplDatei, was, t => Konstruktor(t, f.Implementierung, f.Konstruktor));
             }
         }
-        // Domänen-Dienst (Plan E11): die Methoden am Interface und an jeder Implementierung (fehlende als throw-Stub); je Implementierung ihr
+        // Domänen-Dienst (konzept-werkbank §12.3 E11): die Methoden am Interface und an jeder Implementierung (fehlende als throw-Stub); je Implementierung ihr
         //   Konstruktor. Rümpfe gehören dem Code (✎ am Rumpf); der Name ist die Identität (Umbenennen ist ein Refactoring).
         foreach (var d in modell.Dienste.Where(d => d.Datei != null && Herkunft.Geaendert(d.Herkunft, Herkunft.Von(d))))
         {

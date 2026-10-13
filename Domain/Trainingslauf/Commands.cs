@@ -8,7 +8,7 @@ namespace Domain.Trainingslauf;
 
 /// <summary>
 /// Startet einen Trainingslauf gegen eine EINGEFRORENE Datensatz-Version (reproduzierbarer
-/// Input, Konzept §4.1). Der Python-TrainingWorker abonniert das resultierende Event.
+/// Input). Der Python-TrainingWorker abonniert das resultierende Event.
 /// </summary>
 public record StarteTraining(
     Guid AggregateId,
@@ -23,7 +23,7 @@ public record BricheTrainingAb(
 ) : ICommand;
 
 // ═══════════════════════════════════════════════════
-// PYTHON — Fortschritt zurückmelden (Event→Command-Reaktor, Konzept §4.2)
+// PYTHON — Fortschritt zurückmelden (Event→Command-Reaktor)
 // ═══════════════════════════════════════════════════
 
 public record MeldeTrainingBegonnen(
@@ -47,7 +47,7 @@ public record MeldeTrainingGescheitert(
 ) : ICommand;
 
 // ═══════════════════════════════════════════════════
-// FRIST — Timeout (Konzept §4.3)
+// FRIST — Timeout
 // ═══════════════════════════════════════════════════
 
 /// <summary>

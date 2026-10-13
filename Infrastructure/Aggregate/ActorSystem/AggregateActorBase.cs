@@ -141,7 +141,7 @@ public abstract class AggregateActorBase<TState> : IActor
     {
         _id = aggregateId;
 
-        // ★ EIN Tail-Fold statt zwei Voll-Reads (Snapshot-Konzept §6): State UND Inbox aus einem
+        // ★ EIN Tail-Fold statt zwei Voll-Reads (docs/04 §4.7): State UND Inbox aus einem
         //   Durchlauf; mit Snapshot seedet der Fold und liest nur den Rest ab snapshot.Version+1.
         RehydrationResult<TState> rehydrated;
         try
@@ -194,7 +194,7 @@ public abstract class AggregateActorBase<TState> : IActor
     }
 
     /// <summary>
-    /// Externer Client-Command: OCC gegen die behauptete Version. ★ T2b: jetzt AUCH idempotent —
+    /// Externer Client-Command: OCC gegen die behauptete Version. ★ Jetzt AUCH idempotent (docs/08 §8.4) —
     /// der Client darf nach verlorenem Ack denselben Command (deterministische CommandId) erneut senden;
     /// die Framework-Inbox erkennt die Wiederholung VOR der OCC-Prüfung und liefert idempotent denselben
     /// Ausgang (Erfolg/Ablehnung), statt eines mehrdeutigen „Concurrency conflict". Ein frischer Command
@@ -228,9 +228,9 @@ public abstract class AggregateActorBase<TState> : IActor
                 return;
             }
 
-            // ★ T2b/EM-1: Vorab-Entscheidung — Inbox-Dedup VOR der OCC-Prüfung (Reihenfolge in der reinen,
+            // ★ Vorab-Entscheidung (docs/08 §8.4) — Inbox-Dedup VOR der OCC-Prüfung (Reihenfolge in der reinen,
             //   Ebene-1-getesteten CommandVorpruefung.Prüfe gekapselt). Ein wiederholt zugestellter Command
-            //   (at-least-once — Emittiert IMMER, Client seit T2b bei Retry nach verlorenem Ack) liefert
+            //   (at-least-once — Emittiert IMMER, Client bei Retry nach verlorenem Ack) liefert
             //   idempotent DASSELBE Ergebnis; ein frischer Command fällt durch zur OCC-Assertion.
             switch (CommandVorpruefung.Prüfe(
                         istIdempotent,
@@ -623,7 +623,7 @@ public abstract class AggregateActorBase<TState> : IActor
 
     private Task PublishEventsAsync(List<IEvent> events, CommandEnvelope cmdEnvelope, int baseVersion)
     {
-        // ★ Phase 1: Version PRO Event (Spec 4.2) — der Stream stand vor dem Batch auf
+        // ★ Phase 1: Version PRO Event — der Stream stand vor dem Batch auf
         //   baseVersion (aufgelöst: bei Sentinel = aktuelle Actor-Version); jedes Event trägt
         //   seine eigene Position, nie den Batch-Endwert.
         var envelopes = EventEnvelopeFactory.BuildPerEvent(
@@ -648,7 +648,7 @@ public abstract class AggregateActorBase<TState> : IActor
         {
             _publisher!.PublishFireAndForget(eventEnvelope);
 
-            // ★ Phase 1 (1c): zusätzlich das typisierte Signal veröffentlichen (Spec 4.3).
+            // ★ Phase 1 (1c): zusätzlich das typisierte Signal veröffentlichen (docs/03 §3.6).
             //   Best-effort — ein Signal ist nur ein Weckruf und DARF verloren gehen
             //   (Invariante 2); der Poll-Backstop holt es nach.
             var signal = GeneratedSignalFactory.Create(

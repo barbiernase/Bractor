@@ -3,7 +3,7 @@ using Abstractions;
 namespace Domain.Trainingslauf;
 
 /// <summary>
-/// Aggregat <see cref="Trainingslauf"/> — ein Trainings-Job (Konzept §4): angefordert → läuft →
+/// Aggregat <see cref="Trainingslauf"/> — ein Trainings-Job: angefordert → läuft →
 /// (Fortschritt je Epoche) → abgeschlossen/gescheitert/abgebrochen/hängengeblieben.
 ///
 /// Referenziert eine EINGEFRORENE Datensatz-Version (immutabler Input → reproduzierbar). Der

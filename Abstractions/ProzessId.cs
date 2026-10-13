@@ -4,7 +4,7 @@ using System.Text;
 namespace Abstractions;
 
 /// <summary>
-/// Deterministische Identitäten der Prozess-Maschinerie (Spec 11.3). Determinismus TRÄGT die
+/// Deterministische Identitäten der Prozess-Maschinerie (docs/04 §4.5). Determinismus TRÄGT die
 /// Korrektheit: keine Zufalls-Ids, sodass Wiederholungen (doppeltes Signal, Poll, Crash-nach-Send)
 /// als Duplikate erkennbar sind und verpuffen.
 ///
@@ -23,7 +23,7 @@ public static class ProzessId
         => Hash($"prozess:{planTyp}:{ausloeserStreamId:N}:{ausloeserVersion}");
 
     /// <summary>
-    /// Vorgang-Id einer gefeuerten TRANSITION im Event-Regel-Modell (Spec §6): deterministisch aus der
+    /// Vorgang-Id einer gefeuerten TRANSITION im Event-Regel-Modell (docs/04 §4.5): deterministisch aus der
     /// Kausalität <c>(Korrelation, auslösender Token-Stream, dessen Version, Command-Typ, Diskriminator)</c>.
     /// Deterministisch UND eindeutig pro Auslöser — so löst sich Fan-out ohne Zähler: N Commands desselben
     /// Typs aus DEMSELBEN Match bekommen über den Diskriminator (das Ziel-Aggregat) verschiedene Vorgänge,

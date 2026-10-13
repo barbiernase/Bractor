@@ -6,7 +6,7 @@ using DatensatzAgg = Domain.Datensatz.Datensatz;
 namespace Domain.Projections;
 
 /// <summary>
-/// Materialisiert den Datensatz-Zustand (Konzept §3.5): ein <see cref="DatensatzReadModel"/>
+/// Materialisiert den Datensatz-Zustand: ein <see cref="DatensatzReadModel"/>
 /// pro Datensatz (Upsert) und beim Einfrieren je Mitglied eine <see cref="DatensatzSampleReadModel"/>
 /// (die queryierbare Trainings-Wahrheit).
 ///

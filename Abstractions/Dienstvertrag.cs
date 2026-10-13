@@ -2,7 +2,7 @@
 namespace Abstractions;
 
 /// <summary>
-/// Die Regeln der Dienst-Bindung (Plan E11) als EINE Quelle: Marker, Konfig-Abschnitte und was ein Implementierungs-Konstruktor nehmen
+/// Die Regeln der Dienst-Bindung (konzept-werkbank §12.3 E11) als EINE Quelle: Marker, Konfig-Abschnitte und was ein Implementierungs-Konstruktor nehmen
 /// darf. Der <c>DienstGenerator</c>, der Analyzer (CQRS089–CQRS092) und der Extractor lesen sie von hier (per Link, netstandard2.0).
 /// </summary>
 #if VERTRAG_INTERN

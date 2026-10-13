@@ -25,13 +25,13 @@ public static class PythonFunktionsEmitter
     }
 
     /// <summary>
-    /// Die Tabelle des generischen Funktions-Workers (Plan E13): je Funktion mit Python-Basis die Basis, das Modul und die Klasse ihrer
+    /// Die Tabelle des generischen Funktions-Workers (konzept-werkbank §12.3 E13): je Funktion mit Python-Basis die Basis, das Modul und die Klasse ihrer
     /// Implementierung (<c>funktionen/&lt;modul&gt;.py</c>, Regel in <c>Abstractions.Funktionsvertrag</c>) — der Runner kennt keine Domäne.
     /// </summary>
     public static string Tabelle(IEnumerable<Assembly> assemblies)
     {
         var b = new StringBuilder();
-        b.AppendLine("# GENERIERT von Cqrs.Codegen aus den Katalog-Funktionen der Domäne (IFunktion, Plan E13). Nicht von Hand ändern.");
+        b.AppendLine("# GENERIERT von Cqrs.Codegen aus den Katalog-Funktionen der Domäne (IFunktion, konzept-werkbank §12.3 E13). Nicht von Hand ändern.");
         b.AppendLine("#");
         b.AppendLine("# Die Tabelle des generischen Funktions-Workers (funktions_worker.py): je Funktion mit Python-Basis die Basis (generated/funktionen.py),");
         b.AppendLine($"# das Modul und die Klasse ihrer Implementierung ({Abstractions.Funktionsvertrag.PythonOrdner}/<modul>.py, die Klasse erbt die Basis und füllt `rufe`).");
