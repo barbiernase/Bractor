@@ -2,6 +2,8 @@ using Client.Infrastructure.Abstractions;
 using Client.Infrastructure.Collections;
 using Domain.ImagePair;
 using Domain.Projections;
+using Domain.Projections.Datensatz;
+using Domain.Projections.ImagePair;
 namespace Domain.Client.Modules;
 
 public partial class Store : StoreBase, IHydrationStore

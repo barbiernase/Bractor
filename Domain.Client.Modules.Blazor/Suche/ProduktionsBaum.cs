@@ -1,4 +1,5 @@
 using Domain.Projections;
+using Domain.Projections.ImagePair;
 namespace Domain.Client.Modules.Suche;
 
 // Abgeleitete Baum-Struktur (Anzeige-Modell, kein State). Neueste zuerst.

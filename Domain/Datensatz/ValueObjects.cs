@@ -5,7 +5,7 @@ namespace Domain.Datensatz;
 // ═══════════════════════════════════════════════════
 // RANGE-KRITERIEN — Provenienz einer Such-Range
 //
-// Spiegelt bewusst die Felder von Domain.Projections.ImagePairFilter, ohne den
+// Spiegelt bewusst die Felder von Domain.Projections.ImagePair.ImagePairFilter, ohne den
 // Projektpfad Domain → Domain.Projections zu drehen (das wäre ein Zyklus). Der
 // server-seitige Resolver (Meilenstein 5) übersetzt RangeKriterien 1:1 in einen
 // ImagePairFilter und ruft SearchAsync auf. So bleibt das Aggregat rein (kein I/O)

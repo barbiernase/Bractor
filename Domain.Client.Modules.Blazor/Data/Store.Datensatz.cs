@@ -4,6 +4,7 @@ using Domain.Client.Modules.Datensaetze;   // DatensatzAusgewaehlt
 using Domain.Client.Modules.Kuratieren;    // Markierungs-Intents
 using Domain.Datensatz;                     // DatensatzStatus, Paar-Events
 using Domain.Projections;                   // DatensatzAntwort
+using Domain.Projections.Datensatz;
 
 namespace Domain.Client.Modules;
 

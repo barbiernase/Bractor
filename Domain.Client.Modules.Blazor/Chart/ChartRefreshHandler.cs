@@ -1,6 +1,7 @@
 using Client.Infrastructure.Abstractions;
 using Client.Infrastructure.Connection;
 using Domain.Projections;
+using Domain.Projections.ImagePair;
 namespace Domain.Client.Modules.Chart;
 
 public partial class ChartRefreshHandler

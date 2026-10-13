@@ -3,6 +3,7 @@ using Client.Infrastructure.Connection;
 using Domain.ImagePair;
 using Domain.Projections;
 using Domain.Client.Modules.Suche;
+using Domain.Projections.ImagePair;
 namespace Domain.Client.Modules.Paarliste;
 
 /// <summary>

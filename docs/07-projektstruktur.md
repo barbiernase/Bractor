@@ -76,6 +76,7 @@ Primitive ist, liegt im Bereichs-Ordner seines Projekts und erscheint im Editor 
 
 - Im Code fehlt noch die Tabelle als eine Quelle; heute stehen Projektnamen verstreut (docs/13 W2-1).
 - Die Beispieldomäne folgt der Struktur noch nicht überall: Flüsse und Funktions-Schnittstellen liegen teils in `Domain`
-  (`Domain/ImagePair/Bildeingang.cs`, `Domain/Trainingslauf/TrainingWaechter.cs`, `Domain/Bildaufbereitung/Funktionen.cs`), `Domain.Projections` und
-  `Domain.Infrastructure` haben keine Bereichs-Ordner, Decider/Applier heißen im Bestand `Decider.cs`/`Applier.cs`, Dateinamen mischen
-  `Projektion`/`Projection`.
+  (`Domain/ImagePair/Bildeingang.cs`, `Domain/Trainingslauf/TrainingWaechter.cs`, `Domain/Bildaufbereitung/Funktionen.cs`), Decider/Applier heißen im
+  Bestand `Decider.cs`/`Applier.cs`, Klassennamen mischen `Projektion`/`Projection`. `Domain.Projections` und `Domain.Infrastructure` folgen der
+  Struktur seit 2026-10-14 (Bereichs-Ordner, Namespace = Projekt + Ordner, Sammeldateien); `MartenCoCommitStoreBase` liegt noch oben in
+  `Domain.Infrastructure` (gehört ins Framework, docs/13 W2-1).

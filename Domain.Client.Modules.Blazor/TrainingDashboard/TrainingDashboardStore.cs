@@ -3,6 +3,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Domain.Client.Modules.Trainingslaeufe;
 using Domain.Datensatz;
 using Domain.Projections;
+using Domain.Projections.Datensatz;
+using Domain.Projections.Trainingslauf;
 
 namespace Domain.Client.Modules.TrainingDashboard;
 

@@ -52,7 +52,7 @@ public class AkteurDienstTests
     public async Task Ohne_Kette_stempelt_der_eine_Akteur_mit_IDarf()
     {
         AkteurHerkunft.EindeutigerHalter(typeof(DateiErkannt)).Should().Be("KameraSystem");
-        AkteurHerkunft.EindeutigerHalter(typeof(Domain.Projections.GetImagePair)).Should().BeNull("mehrere Akteure dürfen die Query");
+        AkteurHerkunft.EindeutigerHalter(typeof(Domain.Projections.ImagePair.GetImagePair)).Should().BeNull("mehrere Akteure dürfen die Query");
         AkteurHerkunft.EindeutigerHalter(typeof(NimmRangeAuf)).Should().BeNull("Ketten-Commands darf niemand direkt");
 
         var (emitter, umschlaege) = Emitter();

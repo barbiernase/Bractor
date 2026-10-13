@@ -12,6 +12,10 @@ using Marten;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
+using Domain.Infrastructure.Datensatz;
+using Domain.Infrastructure.Modell;
+using Domain.Projections.Datensatz;
+using Domain.Projections.Modell;
 
 namespace Infrastructure.Integration.Tests;
 

@@ -2,6 +2,7 @@ using Client.Infrastructure.Abstractions;
 using Client.Infrastructure.Connection;
 using Domain.Projections;
 using Domain.Trainingslauf;
+using Domain.Projections.Trainingslauf;
 
 namespace Domain.Client.Modules.Trainingslaeufe;
 

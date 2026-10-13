@@ -14,6 +14,7 @@ using Proto.Cluster;
 using Proto.Cluster.Consul;
 using Proto.Cluster.Partition;
 using Proto.Remote.GrpcNet;
+using Domain.Projections.ImagePair;
 
 namespace Infrastructure.Integration.Tests;
 
@@ -54,7 +55,7 @@ public class SignalDeliveryClusterTests : IClassFixture<PostgresFixture>
             var projId = "it-recv-" + Guid.NewGuid().ToString("N");
 
             var es = EventStoreMit(streamId, count: 1);
-            var store = new Domain.Infrastructure.ImagePairHistorieStore(_fx.Store);
+            var store = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
             var adapter = new ProjectionAdapter(es, store, null, projId, Dispatch(store));
             var receiver = new SignalReceiver((sid, ct) => adapter.WakeAsync(sid, ct));
             var signalTypes = SignalReceiver.SignalTypesFor(new[] { typeof(ImagePairInspiziert) });

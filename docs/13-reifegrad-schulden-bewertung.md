@@ -29,6 +29,7 @@ hierher. Stand: 2026-10-13, Commit-Basis `1b1751a`. Maßstab sind die sechs Inva
 | P2-9 | Toter Lesepfad `LoadStateAsync`, Identitäts-Vertrag nur per Kommentar | P2 |
 | P2-10 | Monitoring schmal, Default-Credentials, kein OTel, Logging per `Console.WriteLine` | P2 |
 | P2-11 | Python: Registry von Hand gepflegt (`generate_registry.py` ist ein Stub) | P2 |
+| P2-12 | Proto-Feldnummern im `oneof` folgen der Sortierung voller Typnamen — ein Umzug ändert die Leitung | P2 |
 | P3-1 | Mojibake in drei Dateien | P3 |
 | P3-2 | Toter Code und Kleinkram | P3 |
 | P3-3 | Saga-DSL in `Cqrs.Testing` kennt `Rufe` nicht | P3 |
@@ -181,6 +182,12 @@ Kommentar abgestimmt.
 
 **P2-10 · Monitoring und Logging.** Nur `/health` + Kennzahlen; Default-Credentials `postgres/postgres`; kein OpenTelemetry; `GrpcProxy` (C#-Client)
 loggt per `Console.WriteLine`.
+
+**P2-12 · Proto-Feldnummern nicht stabil.** Der Codegen vergibt die Feldnummern der `oneof`-Umschläge (`QueryPayloadDto` u. a.) nach der Sortierung
+der vollen Typnamen. Wandert ein Typ in einen anderen Namespace (so geschehen beim Umzug von `Domain.Projections` in Bereichs-Ordner,
+2026-10-14), ändern sich die Nummern auf der Leitung; C# bleibt stimmig, weil Proto und Mapper im selben Build entstehen, Python-Clients brauchen
+neu erzeugte DTOs (`build_python.sh`). Für Prod-Clients mit eigenem Stand ist das ein Bruch. *Empfehlung:* Feldnummern aus einer stabilen Quelle
+(z. B. Hash des einfachen Typnamens oder eine gepflegte Nummerntabelle, geprüft durch `codegen.sh --check`).
 
 **P2-11 · Python-Kleinschulden.** `generate_registry.py` erzeugt nichts (die Datei wird nie geschrieben), `domain_client/domain_registry.py` ist
 handgepflegt; `VersionTracker.reset()` wird nie aufgerufen; `proxy._detect_route()` ist faktisch eine Konstante; die Köpfe der generierten

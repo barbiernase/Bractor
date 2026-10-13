@@ -1,6 +1,7 @@
 using System.Collections.Immutable;
 using Domain.ImagePair;
 using Domain.Projections;
+using Domain.Projections.ImagePair;
 
 namespace Domain.Client.Modules;
 

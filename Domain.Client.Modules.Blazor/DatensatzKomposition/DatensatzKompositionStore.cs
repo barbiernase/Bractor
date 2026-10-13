@@ -4,6 +4,7 @@ using Domain.Client.Modules.Datensaetze;
 using Domain.Datensatz;
 using Domain.ImagePair;
 using Domain.Projections;
+using Domain.Projections.Datensatz;
 
 namespace Domain.Client.Modules.DatensatzKomposition;
 

@@ -1,6 +1,7 @@
 using Client.Infrastructure.Abstractions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Domain.Projections;
+using Domain.Projections.Modell;
 
 namespace Domain.Client.Modules.Modelle;
 

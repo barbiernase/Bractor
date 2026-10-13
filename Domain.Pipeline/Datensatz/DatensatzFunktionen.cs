@@ -3,6 +3,7 @@ using Domain.Datensatz;
 using Domain.ImagePair;      // Klassifikation
 using Domain.Projections;    // ImagePairFilter, ImagePairReadModel
 using Microsoft.Extensions.Logging;
+using Domain.Projections.ImagePair;
 
 namespace Domain.Pipeline.Datensatz;
 

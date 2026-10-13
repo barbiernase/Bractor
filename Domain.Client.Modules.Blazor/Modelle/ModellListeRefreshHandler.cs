@@ -2,6 +2,7 @@ using Client.Infrastructure.Abstractions;
 using Client.Infrastructure.Connection;
 using Domain.Modell;
 using Domain.Projections;
+using Domain.Projections.Modell;
 
 namespace Domain.Client.Modules.Modelle;
 

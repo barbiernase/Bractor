@@ -2,6 +2,7 @@ using Client.Infrastructure.Abstractions;
 using Domain.Client.Modules.Datensaetze;
 using Domain.Datensatz;
 using Domain.Projections;
+using Domain.Projections.Datensatz;
 
 namespace Domain.Client.Modules.DatensatzKomposition;
 

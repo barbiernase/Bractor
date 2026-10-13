@@ -1,6 +1,7 @@
 using Client.Infrastructure.Abstractions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Domain.Projections;
+using Domain.Projections.Datensatz;
 
 namespace Domain.Client.Modules.Datensaetze;
 

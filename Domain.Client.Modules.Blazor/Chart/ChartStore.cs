@@ -1,6 +1,7 @@
 using Client.Infrastructure.Abstractions;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Domain.Projections;
+using Domain.Projections.ImagePair;
 namespace Domain.Client.Modules.Chart;
 
 public partial class ChartStore : StoreBase, IHydrationStore

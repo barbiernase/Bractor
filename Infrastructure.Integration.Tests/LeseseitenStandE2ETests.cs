@@ -11,6 +11,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
+using Domain.Projections.ImagePair;
 
 namespace Infrastructure.Integration.Tests;
 

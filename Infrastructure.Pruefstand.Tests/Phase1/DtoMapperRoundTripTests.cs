@@ -7,6 +7,7 @@ using Google.Protobuf;
 using Infrastructure.Serialization;
 using ProtoRepo;
 using Xunit;
+using Domain.Projections.ImagePair;
 
 namespace Infrastructure.Pruefstand.Phase1;
 

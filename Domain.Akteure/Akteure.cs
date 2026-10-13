@@ -7,6 +7,10 @@ using Domain.Projections;
 using Domain.Sammelvorgang;
 using Domain.Teilauftrag;
 using Domain.Trainingslauf;
+using Domain.Projections.Datensatz;
+using Domain.Projections.ImagePair;
+using Domain.Projections.Modell;
+using Domain.Projections.Trainingslauf;
 
 namespace Domain.Akteure;
 

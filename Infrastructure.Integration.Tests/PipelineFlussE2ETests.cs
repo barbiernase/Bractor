@@ -292,7 +292,7 @@ public class PipelineFlussE2ETests
             Sende(paar, "ImagePair", new ErstelleImagePair(paar, "PAIR-RANGE-" + paar.ToString("N")[..6], DateTimeOffset.UtcNow, DateTimeOffset.UtcNow, "/range"));
             using (var bereich = host.Services.CreateScope())
             {
-                var finde = bereich.ServiceProvider.GetRequiredService<Domain.Projections.IFindImagePair>();
+                var finde = bereich.ServiceProvider.GetRequiredService<Domain.Projections.ImagePair.IFindImagePair>();
                 await Warte(async () => await finde.FindByIdAsync(paar) is not null, TimeSpan.FromSeconds(30), "Read-Model des Paars fehlt");
             }
 

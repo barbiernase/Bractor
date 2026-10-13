@@ -7,6 +7,7 @@ using Infrastructure.Persistence;
 using Infrastructure.Projections;
 using Marten;
 using Microsoft.Extensions.Logging.Abstractions;
+using Domain.Projections.ImagePair;
 
 namespace Infrastructure.Integration.Tests;
 
@@ -31,7 +32,7 @@ public class CoCommitPostgresTests : IClassFixture<PostgresFixture>
     {
         var (streamId, projId) = FreshIds();
         var es = EventStoreMit(streamId, count: 1);
-        var store = new Domain.Infrastructure.ImagePairHistorieStore(_fx.Store);
+        var store = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
         var adapter = new ProjectionAdapter(es, store, null, projId, Dispatch(store));
 
         await adapter.WakeAsync(streamId);
@@ -47,7 +48,7 @@ public class CoCommitPostgresTests : IClassFixture<PostgresFixture>
         // in EINEM Batch dürfen sich nicht gegenseitig überschreiben.
         var (streamId, projId) = FreshIds();
         var es = EventStoreMit(streamId, count: 3);
-        var store = new Domain.Infrastructure.ImagePairHistorieStore(_fx.Store);
+        var store = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
         var adapter = new ProjectionAdapter(es, store, null, projId, Dispatch(store));
 
         await adapter.WakeAsync(streamId);
@@ -61,7 +62,7 @@ public class CoCommitPostgresTests : IClassFixture<PostgresFixture>
     {
         var (streamId, projId) = FreshIds();
         var es = EventStoreMit(streamId, count: 1);
-        var store = new Domain.Infrastructure.ImagePairHistorieStore(_fx.Store);
+        var store = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
 
         // Absturz nach dem Effekt, vor der Marke — genau einmal.
         var armed = true;

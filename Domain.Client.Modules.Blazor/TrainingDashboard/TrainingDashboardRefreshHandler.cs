@@ -3,6 +3,8 @@ using Client.Infrastructure.Connection;
 using Domain.Datensatz;
 using Domain.Projections;
 using Domain.Trainingslauf;
+using Domain.Projections.Datensatz;
+using Domain.Projections.Trainingslauf;
 
 namespace Domain.Client.Modules.TrainingDashboard;
 

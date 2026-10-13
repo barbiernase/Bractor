@@ -12,6 +12,8 @@ using FluentAssertions;
 using Infrastructure.Akteure;
 using Infrastructure.GrpcClient;
 using Xunit;
+using Domain.Projections.Datensatz;
+using Domain.Projections.Modell;
 
 namespace Infrastructure.Pruefstand.Akteure;
 

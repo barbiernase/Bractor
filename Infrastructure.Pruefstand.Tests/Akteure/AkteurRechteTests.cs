@@ -10,6 +10,8 @@ using Domain.Trainingslauf;
 using FluentAssertions;
 using Infrastructure.Akteure;
 using Xunit;
+using Domain.Projections.ImagePair;
+using Domain.Projections.Modell;
 
 namespace Infrastructure.Pruefstand.Akteure;
 

@@ -11,6 +11,7 @@ using Infrastructure.Eingang;
 using Infrastructure.Funktionen;
 using Infrastructure.Mapping;
 using Xunit;
+using Domain.Projections.Datensatz;
 
 namespace Infrastructure.Pruefstand.Eingang;
 

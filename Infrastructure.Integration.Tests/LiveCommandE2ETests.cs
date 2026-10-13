@@ -8,6 +8,7 @@ using Infrastructure.Projections;
 using Infrastructure.Projections.Generated;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Domain.Projections.ImagePair;
 
 namespace Infrastructure.Integration.Tests;
 

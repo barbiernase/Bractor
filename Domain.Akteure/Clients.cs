@@ -5,6 +5,10 @@ using Domain.ImagePair;
 using Domain.Modell;
 using Domain.Projections;
 using Domain.Trainingslauf;
+using Domain.Projections.Datensatz;
+using Domain.Projections.ImagePair;
+using Domain.Projections.Modell;
+using Domain.Projections.Trainingslauf;
 
 namespace Domain.Clients;
 
