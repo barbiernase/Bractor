@@ -231,10 +231,12 @@ public sealed class WerkbankServer
             }
             else Schritt(schritte, new Schritt("Daten prüfen", true, 0, [altProto == null ? "kein gespeicherter Stand (neue oder übernommene Sim-DB) — der neue gilt ab dem Start" : "kein domain.proto"]));
 
-            // 5 Infrastruktur.
+            // 5 Infrastruktur — dazu die Verzeichnisse der Datei-Quellen: der Treiber sähe ein fehlendes erst nach seinem Backoff (bis ≈ 30 s).
             Beginne("Infrastruktur");
             var infra = await Infra.StarteAsync(name, u, ct);
-            Schritt(schritte, new Schritt("Infrastruktur", infra.Ok, 0, infra.Meldungen));
+            var verzeichnisse = QuellVerzeichnisseAnlegen(name);
+            Schritt(schritte, new Schritt("Infrastruktur", infra.Ok, 0,
+                verzeichnisse.Count > 0 ? [.. infra.Meldungen, $"Quell-Verzeichnis(se) angelegt: {string.Join(", ", verzeichnisse)}"] : infra.Meldungen));
             if (!infra.Ok) return Ende(false, diagnosen);
 
             // 6 Host ersetzen. Den Proto-Stand der Daten schreibt der Host beim Start selbst (UmgebungsSiegel, jede Umgebung).
@@ -303,5 +305,23 @@ public sealed class WerkbankServer
             Fortschritt.Melde("ende", new { aktion });
             _einLauf.Release();
         }
+    }
+
+    /// <summary>
+    /// Legt je Quelle mit <c>Quellen:&lt;Typ&gt;:Pfad</c> der Sim-Umgebung das Verzeichnis an, falls es fehlt (nur Sim; der Datei-Treiber bleibt, wie er
+    /// ist). Gibt die angelegten Quellen zurück.
+    /// </summary>
+    public List<string> QuellVerzeichnisseAnlegen(string umgebung)
+    {
+        var angelegt = new List<string>();
+        if (Umgebungen.AufgeloestRoh(umgebung)["Quellen"] is not System.Text.Json.Nodes.JsonObject quellen) return angelegt;
+        foreach (var (typ, q) in quellen)
+        {
+            if (q?["Pfad"] is not System.Text.Json.Nodes.JsonValue v || !v.TryGetValue<string>(out var pfad) || string.IsNullOrWhiteSpace(pfad)) continue;
+            if (Directory.Exists(pfad)) continue;
+            Directory.CreateDirectory(pfad);
+            angelegt.Add(typ);
+        }
+        return angelegt;
     }
 }
