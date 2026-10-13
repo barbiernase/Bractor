@@ -41,7 +41,7 @@ entworfen, als Code erzeugt, gebaut, im echten Host durchgespielt und über die 
 | 04 | [04-konsum-und-prozess-maschine.md](04-konsum-und-prozess-maschine.md) | vier Konsumenten, eine Pull-/Signal-Schleife; Prozess-Manager als Dirigent; Marking-Cursor |
 | 05 | [05-generatoren-analyzer-proto.md](05-generatoren-analyzer-proto.md) | Generatoren, Analyzer, Boot-Guards, Codegen im Build (Proto, STJ-Kontexte, Python-Basen) |
 | 06 | [06-transport-multinode-betrieb.md](06-transport-multinode-betrieb.md) | Wire-Serializer, Cluster, Multi-Node, Deploy, Monitoring |
-| 07 | — | entfallen (2026-10-12): in [konzept-werkbank.md](konzept-werkbank.md) aufgegangen |
+| 07 | [07-projektstruktur.md](07-projektstruktur.md) | feste Projekt- und Ordnerstruktur einer Anwendung: wo liegt was, wie heißt es (Entwurf) |
 | 08 | [08-frontend-blazor-client.md](08-frontend-blazor-client.md) | Blazor-Client: Bus/Store-Stack, Modul-System, Client mit Vertrag |
 | 09 | [09-python-sdk.md](09-python-sdk.md) | Python-SDK `cqrs_client` und Python-Worker |
 | 10 | [10-entwickler-api.md](10-entwickler-api.md) | „Wie schreibe ich X?“ für alle Bausteine |

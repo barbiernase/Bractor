@@ -25,8 +25,8 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 ## Werkbank-Leitsätze (Kurzform von `docs/konzept-werkbank.md`)
 
 - **W1** Code ist die einzige Wahrheit; gespeichert wird nur die Ansicht (`.werkbank/ansicht.json`). Unfertiges = Code, der nicht baut.
-- **W2** Der Graph kommt aus dem Code über Roslyn, nur aus Code-Fakten (Marker, Attribute, Symbole, Signaturen). Keine Namenskonventionen,
-  keine festen Projekt- oder Domänennamen in Framework und Werkzeugen.
+- **W2** Der Graph kommt aus dem Code über Roslyn: WAS etwas ist, sagen nur Code-Fakten (Marker, Attribute, Symbole, Signaturen), keine Domänen-Namen
+  in Framework und Werkzeugen. WO etwas liegt, legt die feste Projekt- und Ordnerstruktur fest (`docs/07-projektstruktur.md`, eine Quelle, geprüft).
 - **W3** Alles läuft im Backend: Ableitungen rechnet der Server (`GraphExtractor.Kern/Sicht`), der Editor ist eine dumme View.
 - **W4** Jede Geste ist sofort ein Patch am Code; ↶ nimmt den Patch zurück.
 - **W5** Prüfen = Bauen (Analyzer, Generatoren, Boot-Guards). `DomainEditor/Grammatik.cs` ist nur Daten (⊕, `--grammatik`).

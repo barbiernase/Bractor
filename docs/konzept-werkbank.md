@@ -53,7 +53,7 @@ Die Werkbank ist **eine** Oberfläche, auf der eine Anwendung entworfen, als Cod
 | # | Leitsatz | Bedeutung |
 |---|---|---|
 | **W1** | **Code ist die einzige Wahrheit.** | Kein gespeichertes Board-Modell; gespeichert wird nur die Ansicht (`.werkbank/ansicht.json`). Unfertiges ist Code, der nicht baut. Jeder Typ der Domänen-Projekte gehört zu einer Karte (§9). |
-| **W2** | **Der Graph kommt aus dem Code, über Roslyn, nur aus Code-Fakten.** | Marker-Interfaces, Attribute, Symbole, Signaturen. Keine Namenskonventionen, kein Namespace-Raten, keine festen Projekt- oder Domänennamen in Framework und Werkzeugen. |
+| **W2** | **Der Graph kommt aus dem Code, über Roslyn, nur aus Code-Fakten.** | WAS etwas ist, sagen Marker-Interfaces, Attribute, Symbole, Signaturen — nie Namen oder Ordner. Keine Domänen-Namen in Framework und Werkzeugen. WO etwas liegt, legt die feste Projekt- und Ordnerstruktur fest (`docs/07-projektstruktur.md`): eine Framework-Konvention, an einer Stelle definiert und geprüft, die Werkzeuge kennen dürfen. |
 | **W3** | **Alles läuft im Backend.** | Ableitungen (Karten, Kanten, Akteur-Mengen, Zugehörigkeit, Kette, „was passt an diesen Port?“) rechnet der Server. Der Editor ist eine dumme View. |
 | **W4** | **Jede Geste ist ein Patch am Code.** | Ausgeführt über den warmen Roslyn-Workspace; ↶ nimmt den Patch zurück. Kein „C# schreiben“, kein Zusammenführen, keine Entwürfe im Board. |
 | **W5** | **Prüfen = Bauen.** | Regeln sind Analyzer, Generator-Diagnosen und Boot-Guards. Die Grammatik (`DomainEditor/Grammatik.cs`) ist Daten für ⊕ und `--grammatik`, kein zweiter Prüfer. |

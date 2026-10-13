@@ -10,7 +10,7 @@ hierher. Stand: 2026-10-13, Commit-Basis `1b1751a`. Maßstab sind die sechs Inva
 |---|---|:--:|
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
 | W10-2 | Reflektive Serialisierung zur Laufzeit (Marten-Default, Marking-Store, Snapshot-`Clone`, HTTP-Antworten); kein Reflection-Verbot im Build | P1 |
-| W2-1 | Feste Projekt- und Namespace-Namen in Komposition, Codegen und Werkbank | P1 |
+| W2-1 | Projektstruktur nicht als eine Quelle: Projektnamen verstreut und ungeprüft in Komposition, Codegen und Werkbank (Ziel: docs/07) | P1 |
 | T-1 | Testlücke seit `fb07f5e`: keine Saga-E2E-, Snapshot- und Marking-Äquivalenz-Tests | P1 |
 | P1-1 | Multi-Node nur container-erprobt, Consul im `-dev`-Modus | P1 |
 | P1-2 | Transport-Sicherheit: kein TLS; Identitäten für Prod fehlen | P1 |
@@ -91,7 +91,8 @@ DtoMapper, `Clientvertragslesart`, Lesart des `FunktionsGenerator`); Wirte: warm
 *Empfehlung:* generierter Kontext als Standard (plus Dokument-Kontext), `Kopie()` vom State-Generator, benannte Records + Kontext für HTTP,
 `EnableRequestDelegateGenerator`, `JsonSerializerIsReflectionEnabledByDefault=false` in den Hosts als Sperre.
 
-**W2-1 · Feste Projekt- und Namespace-Namen.**
+**W2-1 · Projektstruktur nicht als eine Quelle.** Eine feste Projekt- und Ordnerstruktur ist gewollt (`docs/07-projektstruktur.md`); die Schuld ist,
+dass sie heute an vielen Stellen getippt, nicht geprüft und teils inkonsistent ist:
 - `Infrastructure.csproj` referenziert Domänen-Projekte; `Infrastructure` ist damit zugleich Framework und Komposition.
 - `ProzessManagerWiring.AlleRegeln` vereinigt fest `Domain.Prozess` + `Domain.Pipeline.Prozess`; `ProzessRegelnGenerator` prüft
   `AssemblyName != "Domain"` — Prozesse in einer dritten Assembly würden still nie registriert.
@@ -106,8 +107,9 @@ DtoMapper, `Clientvertragslesart`, Lesart des `FunktionsGenerator`); Wirte: warm
 - Namespace-Ausschlusslisten statt Fakt (`Ctorbindung.cs` mit `OpenCvSharp`, `FunktionsGenerator`, `QuellenGenerator`, `WiringGenerator`).
 - Identitäten aus einfachen Typnamen (`BrokerIdentity`, `GeneratedAkteurRechte`); der Client darf das Cluster-Kind eines Commands
   (`AggregateType`) selbst setzen (`CqrsClientService.cs`, `AggregateDispatcher.cs:75`).
-*Empfehlung:* ein Laufzeit-/App-Projekt als Komposition; Registrierung über generierte Assembly-Attribute; `GraphExtractor.Kern/Projektlage.cs`
-als einzige Quelle der Projekt-Rollen; `AggregateType` serverseitig aus `GeneratedCommandRouting`.
+*Empfehlung:* die Struktur aus docs/07 als eine Tabelle im Code (`Abstractions/Projektstruktur.cs`, per Link auch in Generatoren); alle Stellen oben
+lesen sie; `--check` bzw. ein Analyzer prüft die Lage jedes Typs; fehlende Registrierung ist ein Fehler, nicht still; die Beispieldomäne wird auf die
+Struktur umgezogen. Unabhängig davon: `AggregateType` serverseitig aus `GeneratedCommandRouting`, Identitäten aus vollen Typnamen.
 
 **T-1 · Testlücke seit Commit `fb07f5e` (2026-08-18).** Mit den Beispiel-Domänen Konto/Überweisung/Reise/Lager wurden die Saga-E2E-Tests,
 `SnapshotStorePostgresTests`/`SnapshotLiveE2ETests`, die Upcasting-Tests und die Marking-Cursor-Äquivalenz gelöscht. Prozess-Kompensation,
