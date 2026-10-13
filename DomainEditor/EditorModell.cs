@@ -37,6 +37,12 @@ public sealed record EditorModell
     /// </summary>
     public IReadOnlyList<Funktion> Funktionen { get; init; } = [];
     /// <summary>
+    /// Domänen-Dienste (<c>interface IX : IDienst</c>, Plan E11): die Technik hinter einer Funktion — Signatur (Methoden) und Implementierungen
+    /// (Klassen, die das Interface implementieren). Eine Funktions-Implementierung nimmt sie im Konstruktor (<see cref="Funktion.Konstruktor"/>);
+    /// welche Implementierung läuft, wählt die Umgebung (<c>Dienste:&lt;IX&gt;</c>).
+    /// </summary>
+    public IReadOnlyList<Dienst> Dienste { get; init; } = [];
+    /// <summary>
     /// Pipelines als FLUSS (docs/konzept-editor-pipelines.md §14): eine Quelle, Katalog-Funktionen und Commands, frei verdrahtet
     /// (<c>class X : IPipeline { PipelineFluss Fluss =&gt; PipelineFluss.Definiere(p =&gt; { var a = …; }) }</c>). Jede Geste im
     /// Editor ist genau ein Code-Fakt dieser Form — entwerfbar auf leerem Board, 1:1 zurückgelesen.
@@ -354,6 +360,55 @@ public sealed record Funktion
     /// an (<c>""</c> = Block noch leer → throw-Platzhalter). null = kein Code-Block (Implementierung extern, z. B. Python).
     /// </summary>
     public string? Entwurf { get; init; }
+    /// <summary>
+    /// Der Konstruktor der Implementierung (Typ wie geschrieben + Name): Dienste (<c>IDienst</c>), Konfig-Records, <c>ILogger&lt;T&gt;</c>. Ein Dienst
+    /// hier ist die Kante Funktion → Dienst; ⊕ fügt einen Parameter an bzw. entfernt ihn (Geste am Konstruktor).
+    /// </summary>
+    public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
+}
+
+/// <summary>
+/// Ein Domänen-Dienst (Plan E11): <c>public interface {Name} : IDienst { {Rückgabe} {Methode}({Parameter}); … }</c> und seine Implementierungen
+/// (<c>public sealed class X({Konstruktor}) : {Name} { … }</c>). Deklariert wird er nur an seiner Karte; eine Funktion nimmt ihn per ⊕.
+/// </summary>
+public sealed record Dienst
+{
+    public required string Name { get; init; }
+    public required string Namespace { get; init; }
+    /// <summary>Die Methoden des Interfaces (Signatur, Deklarations-Reihenfolge).</summary>
+    public IReadOnlyList<DienstMethode> Methoden { get; init; } = [];
+    /// <summary>Die Implementierungen aus dem Code (Klassen, die das Interface implementieren).</summary>
+    public IReadOnlyList<DienstImpl> Implementierungen { get; init; } = [];
+    public string? Doku { get; init; }
+    public string? Datei { get; init; }
+    /// <summary>Herkunfts-Stempel (<see cref="DomainEditor.Herkunft"/>): Abweichung = im Editor geändert; null = neu.</summary>
+    public string? Herkunft { get; init; }
+}
+
+/// <summary>Eine Methode eines Dienstes: <c>{Rueckgabe} {Name}({Parameter});</c> — Typen wie geschrieben.</summary>
+public sealed record DienstMethode
+{
+    public required string Name { get; init; }
+    public string Rueckgabe { get; init; } = "void";
+    public IReadOnlyList<Parameter> Parameter { get; init; } = [];
+    public string? Doku { get; init; }
+}
+
+/// <summary>Eine Implementierung eines Dienstes: Klasse, Datei, Konstruktor (Dienste, Konfig-Records, Logger) und je Methode ihr Rumpf.</summary>
+public sealed record DienstImpl
+{
+    public required string Name { get; init; }
+    public string? Datei { get; init; }
+    public IReadOnlyList<Parameter> Konstruktor { get; init; } = [];
+    /// <summary>Je Methode des Dienstes der Rumpf der Implementierung (Spiegel der Datei; geändert wird er mit ✎ am Rumpf).</summary>
+    public IReadOnlyList<DienstRumpf> Rumpfe { get; init; } = [];
+}
+
+/// <summary>Der Rumpf einer Dienst-Methode in einer Implementierung.</summary>
+public sealed record DienstRumpf
+{
+    public required string Methode { get; init; }
+    public string? Rumpf { get; init; }
 }
 
 /// <summary>

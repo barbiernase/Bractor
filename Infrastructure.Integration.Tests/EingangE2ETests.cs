@@ -5,7 +5,6 @@ using System.Net.Sockets;
 using System.Text.Json;
 using Abstractions;
 using Domain.ImagePair;
-using Domain.Pipeline.Infrastructure;
 using FluentAssertions;
 using Infrastructure.Eingang;
 using Infrastructure.Einblick;
@@ -55,11 +54,11 @@ public class EingangE2ETests
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["Quellen:DateiErkannt:Pfad"] = Path.Combine(verz, "eingang"),
+            ["Konfig:PreprocessingConfig:OutputPath"] = Path.Combine(verz, ".preprocessed"),
             ["Identitaeten:Tokens:t-ki"] = "KIOperator",
             ["Identitaeten:Tokens:t-inspekteur"] = "Inspekteur",
         });
         builder.AddCqrs(u);
-        builder.Services.AddDomainPipelineServices(Path.Combine(verz, ".preprocessed"));
         await using var app = builder.Build();
         app.MapEinblick(u);
         app.MapEingang(u);

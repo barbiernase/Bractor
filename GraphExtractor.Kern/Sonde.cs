@@ -177,9 +177,16 @@ public static class Sonde
                 + (A(k, "eingaenge").Any() ? " <- " + string.Join(" ∨ ", A(k, "eingaenge").Select(Eingang)) : "")
                 + (k["zeitlimit"] is { } zl ? $" ⏳{zl}" : "") + (k["liste"] is { } li ? $" je{{{li}}}" : ""))));
         // Katalog-Funktionen: Auftrag → Ergebnisse (nur die Signatur).
+        string Konstruktor(JsonNode? n) => "(" + string.Join(", ", A(n, "konstruktor").Select(p => $"{S(p, "name")}:{S(p, "typ")}")) + ")";
         foreach (var f in A(b, "funktionen").Where(Sonde))
             z.Add($"funktion {S(f, "namespace")}.{S(f, "name")} | {S(f, "auftrag")} -> {string.Join("; ", A(f, "ergebnisse").Select(x => (string?)x))}"
-                + (A(f, "faehigkeiten").Any() ? " liest " + string.Join(", ", A(f, "faehigkeiten").Select(p => $"{S(p, "typ")} {S(p, "name")}")) : ""));
+                + (A(f, "faehigkeiten").Any() ? " liest " + string.Join(", ", A(f, "faehigkeiten").Select(p => $"{S(p, "typ")} {S(p, "name")}")) : "")
+                + (f["implementierung"] is { } im ? $" impl {im}{Konstruktor(f)}" : ""));
+        // Domänen-Dienste (Plan E11): Signatur (Methoden) und Implementierungen mit Konstruktor.
+        foreach (var d in A(b, "dienste").Where(Sonde))
+            z.Add($"dienst {S(d, "namespace")}.{S(d, "name")} | "
+                  + string.Join("; ", A(d, "methoden").Select(m => $"{S(m, "name")}({string.Join(", ", A(m, "parameter").Select(p => $"{S(p, "name")}:{S(p, "typ")}"))}):{S(m, "rueckgabe")}"))
+                  + " | " + string.Join("; ", A(d, "implementierungen").Select(i => $"impl {S(i, "name")}{Konstruktor(i)}")));
 
         // Leseseite: Store-Fn-Ids → „Store.Fn" auflösen.
         var fnName = new Dictionary<string, string>();
@@ -244,7 +251,7 @@ public static class Sonde
         // Die Sicht (Werkbank P7.3): Domäne und Block je Karte, wie sie der Editor vom Server bekommt — aus dem Graphen, nie aus dem Namespace.
         var sicht = Sicht.Aus(b);
         foreach (var k in sicht.Karten.Where(k => k.Art is "valueobject" or "enum" or "query" or "queryresponse" or "readmodel" or "store" or "projektion"
-                                                       or "reader" or "reaktion" or "saga" or "akteur" && Sonde(k.Ref)))
+                                                       or "reader" or "reaktion" or "saga" or "akteur" or "dienst" && Sonde(k.Ref)))
             z.Add($"sicht {S(k.Ref, "namespace")}.{k.Name} {k.Art} domaene={sicht.Domaene(k)} block={sicht.Block(k)}"
                   + (sicht.Inseln.Contains(k.Id) ? " insel" : ""));
 

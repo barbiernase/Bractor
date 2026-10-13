@@ -19,7 +19,14 @@ public static class Herkunft
     public static string Von(Akteur a) => Hash(new { a.Name, a.Darf, a.Art, Vertrag = a.Vertrag.Count == 0 ? null : a.Vertrag, VertragName = a.Vertrag.Count == 0 ? null : a.VertragTyp });
     public static string Von(Client c) => Hash(new { c.Name, c.Traegt, c.Sendet, c.Fragt, c.Kenntnis });
     // Die Lese-Fähigkeiten gehören zur Signatur (Parameter nach IAusfuehrung) — sonst ging eine Änderung daran still verloren.
-    public static string Von(Funktion f) => Hash(new { f.Name, f.Auftrag, f.Ergebnisse, f.Faehigkeiten });
+    // Der Konstruktor der Implementierung gehört dazu (⊕ Dienst = ein Parameter mehr).
+    public static string Von(Funktion f) => Hash(new { f.Name, f.Auftrag, f.Ergebnisse, f.Faehigkeiten, f.Konstruktor });
+    // Ein Dienst: seine Methoden-Signaturen und je Implementierung ihr Konstruktor (Rümpfe gehören dem Code).
+    public static string Von(Dienst d) => Hash(new
+    {
+        d.Name, Methoden = d.Methoden.Select(m => new { m.Name, m.Rueckgabe, m.Parameter }).ToList(),
+        Impls = d.Implementierungen.Select(i => new { i.Name, i.Konstruktor }).ToList(),
+    });
     public static string Von(Saga s) => Hash(new { s.TriggerEvent, Schritte = s.Schritte.Select(Wirksam).ToList() });
 
     /// <summary>
@@ -78,6 +85,7 @@ public static class Herkunft
             Decider = m.Decider.Select(d => d with { Herkunft = Von(d) }).ToList(),
             Sagas = m.Sagas.Select(s => s with { Herkunft = Von(s) }).ToList(),
             Funktionen = m.Funktionen.Select(f => f with { Herkunft = Von(f) }).ToList(),
+            Dienste = m.Dienste.Select(d => d with { Herkunft = Von(d) }).ToList(),
             Fluesse = m.Fluesse.Select(f => f with { Herkunft = Von(f) }).ToList(),
             Akteure = m.Akteure.Select(a => a with { Herkunft = Von(a) }).ToList(),
             Clients = m.Clients.Select(c => c with { Herkunft = Von(c) }).ToList(),
@@ -103,6 +111,7 @@ public static class Herkunft
         foreach (var s in m.Sagas) Pruefe(s.Herkunft, Von(s), $"prozess {s.Namespace}.{s.Name}");
         foreach (var f in m.Funktionen) Pruefe(f.Herkunft, Von(f), $"funktion {f.Namespace}.{f.Name}");
         foreach (var f in m.Fluesse) Pruefe(f.Herkunft, Von(f), $"pipeline {f.Namespace}.{f.Name}");
+        foreach (var d in m.Dienste) Pruefe(d.Herkunft, Von(d), $"dienst {d.Namespace}.{d.Name}");
         foreach (var a in m.Akteure) Pruefe(a.Herkunft, Von(a), $"akteur {a.Namespace}.{a.Name}");
         foreach (var c in m.Clients) Pruefe(c.Herkunft, Von(c), $"client {c.Namespace}.{c.Name}");
         var l = m.Lesen;

@@ -37,7 +37,7 @@ public static class KartenSchluessel
     /// <summary>Die Sammlungen, die aus dem Code kommen und von Gesten geändert werden.</summary>
     public static readonly string[] Sammlungen =
     [
-        "records", "enums", "aggregate", "decider", "applier", "sagas", "fluesse", "funktionen", "akteure", "clients",
+        "records", "enums", "aggregate", "decider", "applier", "sagas", "fluesse", "funktionen", "dienste", "akteure", "clients",
         "readModels", "stores", "projektionen", "reaktionen", "reader",
     ];
 
@@ -120,6 +120,7 @@ public static class Gesten
         var sag = Nach(code.Sagas, s => s.Namespace + "|" + s.Name);
         var flu = Nach(code.Fluesse, f => f.Namespace + "|" + f.Name);
         var fkt = Nach(code.Funktionen, f => f.Namespace + "|" + f.Name);
+        var dst = Nach(code.Dienste, d => d.Namespace + "|" + d.Name);
         var akt = Nach(code.Akteure, a => a.Namespace + "|" + a.Name);
         var cli = Nach(code.Clients, c => c.Namespace + "|" + c.Name);
         var lesen = code.Lesen ?? new Leseseite();
@@ -143,6 +144,7 @@ public static class Gesten
             Sagas = soll.Sagas.Select(s => s with { Herkunft = sag.GetValueOrDefault(s.Namespace + "|" + s.Name)?.Herkunft }).ToList(),
             Fluesse = soll.Fluesse.Select(f => f with { Herkunft = flu.GetValueOrDefault(f.Namespace + "|" + f.Name)?.Herkunft }).ToList(),
             Funktionen = soll.Funktionen.Select(f => f with { Herkunft = fkt.GetValueOrDefault(f.Namespace + "|" + f.Name)?.Herkunft }).ToList(),
+            Dienste = soll.Dienste.Select(d => d with { Herkunft = dst.GetValueOrDefault(d.Namespace + "|" + d.Name)?.Herkunft }).ToList(),
             Akteure = soll.Akteure.Select(a => a with { Herkunft = akt.GetValueOrDefault(a.Namespace + "|" + a.Name)?.Herkunft }).ToList(),
             Clients = soll.Clients.Select(c => c with { Herkunft = cli.GetValueOrDefault(c.Namespace + "|" + c.Name)?.Herkunft }).ToList(),
             Lesen = l == null ? null : l with

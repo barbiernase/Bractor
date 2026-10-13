@@ -17,12 +17,13 @@ public static class Grammatik
 {
     // ── Alphabet: Nachrichtensorten (die Kanten) ──────────────────────────────────────────────────────────────────────
     public const string Command = "command", Event = "event", Transient = "transient", Trigger = "trigger", Selbst = "selbst",
-        Frist = "frist", Query = "query", Response = "response", Faehigkeit = "faehigkeit", Auftrag = "auftrag", Quelle = "quelle";
+        Frist = "frist", Query = "query", Response = "response", Faehigkeit = "faehigkeit", Auftrag = "auftrag", Quelle = "quelle",
+        Dienst = "dienst";
 
     // ── Alphabet: Bausteine (die Knoten) ─────────────────────────────────────────────────────────────────────────────
     public const string Aggregat = "aggregat", Prozess = "prozess", Projektion = "projektion", Reaktion = "reaktion", Reader = "reader",
         Pipeline = "pipeline", Ingress = "ingress", Store = "store", Aussenwelt = "aussenwelt", Akteur = "akteur", Client = "client",
-        Funktion = "funktion", Fluss = "fluss";
+        Funktion = "funktion", Fluss = "fluss", DienstImpl = "dienstimpl";
 
     /// <summary>Kardinalität eines Konsum-Eingangs.</summary>
     public const string GenauEins = "eins", Beliebig = "beliebig", Dieselbe = "dieselbe";
@@ -50,6 +51,7 @@ public static class Grammatik
         new(Faehigkeit, "Fähigkeit", "⚙", "im Handle-Aufruf", "Store-Funktion (Lesen/Schreiben)"),
         new(Auftrag, "Auftrag", "ƒ", "durabel (Ergebnis im Log, Ausführungs-Id)", "Aufruf einer Katalog-Funktion (Rufe<F>)"),
         new(Quelle, "Quell-Nachricht", "⛲", "durabel (genau einmal je Kennung)", "Anstoß von außen (Datei, Webhook …) — startet einen Vorgang einer Pipeline"),
+        new(Dienst, "Dienst", "🧩", "im Konstruktor (gebunden nach der Umgebung)", "Technik hinter einer Funktion (IDienst) — keine Nachricht, eine Abhängigkeit"),
     ];
 
     public static readonly IReadOnlyList<BausteinInfo> Bausteine =
@@ -60,6 +62,8 @@ public static class Grammatik
         new(Akteur, "Akteur", false), new(Client, "Client", false), new(Funktion, "Funktion", false),
         // Pipeline als Fluss (§14): der Dirigent faltet seinen Vorgang im Log — ein Zustandsschritt wie der Prozess.
         new(Fluss, "Pipeline (Fluss)", true),
+        // Domänen-Dienst (Plan E11): seine Implementierung nimmt selbst Dienste im Konstruktor.
+        new(DienstImpl, "Dienst-Implementierung", false),
     ];
 
     // ── Regeln (Id = der Name, unter dem Build-Diagnosen und Editor sie nennen) ──────────────────────────────────────────────
@@ -114,6 +118,21 @@ public static class Grammatik
              new("boot", null, "Infrastructure/Funktionen/FunktionsExtensions.cs (PrüfeBindungen: nicht AddExterneFunktion)")]),
         new("GR-FUNKTION-GEBUNDEN", "Gerufene Funktion ist gebunden", "Jede Funktion, die ein Prozess ruft, braucht im Host eine Bindung (AddFunktion<F, Impl>) — sonst bricht der Start.", "error",
             [new("boot", null, "Infrastructure/Funktionen/FunktionsExtensions.cs (PrüfeBindungen)")]),
+        // Domänen-Dienste (Plan E11): Abhängigkeiten der Implementierungen, gebunden nach der Umgebung.
+        new("GR-DIENST", "Dienst nur im Konstruktor einer Implementierung", "Ein Dienst (interface IX : IDienst) steht nur im Konstruktor einer "
+            + "Funktions- oder Dienst-Implementierung — nie als Parameter, Feld oder Eigenschaft im Fachcode (Aggregat, Projektion, Reaktion, Reader): "
+            + "dort sind es Fähigkeiten als Parameter. Ein IAkteurDienst<A> ist etwas anderes (GR-AUFTRAG).", "error",
+            [An("CQRS089", "Domain.SourceGeneration/DienstAnalyzer.cs")]),
+        new("GR-DIENST-BINDBAR", "Implementierung baubar, Konstruktor bindbar", "Eine Funktions- oder Dienst-Implementierung ist öffentlich und "
+            + "nicht generisch; ihr Konstruktor nimmt nur Dienste, Konfig-Records (Felder: Text, Zahl, Wahrheitswert, Dauer, Guid, Enum, Text-Liste) "
+            + "und ILogger<T> — gebaut wird sie per generierter Fabrik, ohne Reflection.", "error",
+            [An("CQRS090", "Domain.SourceGeneration/DienstAnalyzer.cs (Konstruktor-Parameter)"), An("CQRS091", "Domain.SourceGeneration/DienstAnalyzer.cs (Konfig-Feld)"),
+             An("CQRS092", "Domain.SourceGeneration/DienstAnalyzer.cs (öffentlich, nicht generisch)"),
+             new("generator", null, "Infrastructure.SourceGeneration/DienstGenerator.cs (GeneratedDienste: Implementierungen, Bedarf, Konfig-Bindung)")]),
+        new("GR-DIENST-GEBUNDEN", "Gebrauchter Dienst ist gebunden", "Was eine gebundene Funktions-Implementierung (transitiv) braucht, ist in der "
+            + "Umgebung eindeutig: je Dienst genau eine Implementierung (sonst Dienste:<IX>:Implementierung), je Konfig-Record ein Abschnitt Konfig:<Record>, "
+            + "kein Kreis über Dienste — sonst bricht der Start.", "error",
+            [new("boot", null, "Infrastructure/Dienste/Dienste.cs (BindeDienste: fehlend, mehrdeutig, Kreis, Konfig)")]),
         new("GR-AUS-FLUSS", "Pipeline (Fluss) erzeugt Commands und Aufträge", "Ein Fluss ruft Katalog-Funktionen (Auftrag) und sendet "
             + "Commands an Aggregate — sonst nichts; Ergebnisse und Antworten der Aggregate laufen als Drähte weiter.", "error",
             [Comp("Draht<T>.Rufe<F>(…) : IAuftrag<F>, Draht<T>.Sende<C>(…) where C : ICommand")]),
@@ -225,6 +244,7 @@ public static class Grammatik
         new(Faehigkeit, Projektion, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Reader, Beliebig, "GR-FAEHIGKEIT"), new(Faehigkeit, Pipeline, Beliebig, "GR-FAEHIGKEIT"),
         new(Faehigkeit, Funktion, Beliebig, "GR-FUNKTION-FAEHIGKEIT"),
         new(Auftrag, Funktion, GenauEins, "GR-FUNKTION-AUFTRAG"),
+        new(Dienst, Funktion, Beliebig, "GR-DIENST"), new(Dienst, DienstImpl, Beliebig, "GR-DIENST"),
         new(Quelle, Fluss, Beliebig, "GR-QUELLE"),
         new(Event, Akteur, Beliebig, "GR-VERTRAG"), new(Transient, Akteur, Beliebig, "GR-VERTRAG"),
         new(Event, Client, Beliebig, "GR-CLIENT"), new(Transient, Client, Beliebig, "GR-CLIENT"),
@@ -244,6 +264,7 @@ public static class Grammatik
         new(Pipeline, Selbst, "GR-AUS-PIPELINE"), new(Pipeline, Frist, "GR-AUS-PIPELINE"),
         new(Ingress, Trigger, "GR-AUS-INGRESS"),
         new(Store, Faehigkeit, "GR-FAEHIGKEIT"),
+        new(DienstImpl, Dienst, "GR-DIENST"),
         new(Aussenwelt, Command, "GR-COMMAND"), new(Aussenwelt, Query, "GR-QUERY"), new(Aussenwelt, Trigger, "GR-AUS-INGRESS"),
         new(Akteur, Command, "GR-AKTEUR"), new(Akteur, Query, "GR-AKTEUR"), new(Akteur, Trigger, "GR-AKTEUR"), new(Akteur, Transient, "GR-AKTEUR"),
         new(Akteur, Quelle, "GR-AKTEUR"), new(Aussenwelt, Quelle, "GR-QUELLE"),
@@ -283,19 +304,19 @@ public static class Grammatik
     /// </summary>
     public static readonly IReadOnlyDictionary<string, string> EditorPortSorte = new Dictionary<string, string>
     {
-        ["trigmsg"] = Trigger, ["self"] = Selbst, ["wcall"] = Faehigkeit, ["rcall"] = Faehigkeit,
+        ["trigmsg"] = Trigger, ["self"] = Selbst, ["wcall"] = Faehigkeit, ["rcall"] = Faehigkeit, ["dienst"] = Dienst,
     };
     public static readonly IReadOnlyList<(string Schluessel, string Baustein)> EditorPortBaustein =
     [
         ("dec", Aggregat), ("app", Aggregat), ("trans", Prozess), ("saga", Prozess), ("proj", Projektion), ("reaktion", Reaktion),
         ("pipeline", Pipeline), ("reader", Reader), ("trigId", Ingress), ("frist", Pipeline), ("akt", Akteur), ("client", Client),
-        ("fk", Funktion), ("flk", Fluss),
+        ("fk", Funktion), ("flk", Fluss), ("dn", DienstImpl),
     ];
     /// <summary>
     /// Editor-Ports, an denen der Baustein des AUSGANGS die Sorte GEBRAUCHT statt sie zu erzeugen: Handle → Store-Fähigkeit (der Port
     /// sitzt am Handle, die Fähigkeit selbst erzeugt der Store). Geprüft wird dort der Konsum (Sorte × Baustein des Ausgangs).
     /// </summary>
-    public static readonly IReadOnlyList<string> EditorPortGebrauch = ["wcall", "rcall"];
+    public static readonly IReadOnlyList<string> EditorPortGebrauch = ["wcall", "rcall", "dienst"];
     /// <summary>Editor-Port-Schlüssel, deren Ausgang eine andere Sorte trägt als die Ziel-Karte (Frist-Knoten → Command = Sorte Frist).</summary>
     public static readonly IReadOnlyDictionary<string, string> EditorAusgangSorte = new Dictionary<string, string> { ["frist"] = Frist };
 

@@ -3,7 +3,6 @@ using System.Net;
 using System.Net.Sockets;
 using Abstractions;
 using Domain.ImagePair;
-using Domain.Pipeline.Infrastructure;
 using Domain.Projections;
 using FluentAssertions;
 using Infrastructure.Umgebung;
@@ -47,9 +46,8 @@ public class LeseseitenStandE2ETests
         WebApplication Baue()
         {
             var builder = WebApplication.CreateBuilder();
-            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["Quellen:DateiErkannt:Pfad"] = verz });
+            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["Quellen:DateiErkannt:Pfad"] = verz, ["Konfig:PreprocessingConfig:OutputPath"] = Path.Combine(verz, ".preprocessed") });
             builder.AddCqrs(u);
-            builder.Services.AddDomainPipelineServices(Path.Combine(verz, ".preprocessed"));
             return builder.Build();
         }
         var paar = Guid.NewGuid();

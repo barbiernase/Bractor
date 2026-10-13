@@ -1,5 +1,4 @@
 using Abstractions;
-using Domain.Pipeline.Infrastructure;
 using FluentAssertions;
 using Infrastructure.Extensions;
 using Infrastructure.Pipeline;
@@ -97,7 +96,6 @@ public class RemotePidDeliverySmokeTests
             opts.EnableGrpc = false;
             opts.ClusterName = clusterName;
         });
-        builder.Services.AddDomainPipelineServices(Path.Combine(watchDir, ".preprocessed"));
         GeneratedPipelines.RegisterAllPipelines(builder.Services);
         builder.Services.AddGeneratedPullPaths();
 

@@ -1,6 +1,5 @@
 using Abstractions;
 using Domain.ImagePair;
-using Domain.Pipeline.Infrastructure;
 using Domain.Projections;
 using FluentAssertions;
 using Infrastructure.Extensions;
@@ -43,8 +42,6 @@ public class LiveCommandE2ETests
             // Connection-Defaults zeigen bereits auf localhost (Postgres/Redis/Consul laufen).
         });
 
-        // Der ActorSystem-Build registriert Pipeline-Kinds → Pipeline-Services müssen da sein.
-        builder.Services.AddDomainPipelineServices(Path.Combine(watchDir, ".preprocessed"));
         GeneratedPipelines.RegisterAllPipelines(builder.Services);
 
         // Der zu prüfende Pull-Pfad (koppelt zugleich den Push-Subscriber ab).

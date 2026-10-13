@@ -149,8 +149,10 @@ public interface ISchadensSchaetzung : IFunktion
 p.Auf<SchadenGemeldet>().Rufe<ISchadensSchaetzung>(s => new SchaetzeSchaden(s.LeserId, 25m)).Zeitlimit(TimeSpan.FromMinutes(5));
 p.Auf<SchadenGeschaetzt>().Sende<EroeffneMahnung>(g => new EroeffneMahnung(Guid.NewGuid(), g.Betrag));
 ```
-Im Host bindet man die Implementierung (Laufort ist Bindung, nicht Teil der Funktion):
-`services.AddFunktion<ISchadensSchaetzung, Schaetzer>(slots: 2, wiederholungen: 1);`
+Die Implementierung ist eine Klasse, die das Interface implementiert (Code-Fakt); den Laufort wählt die Umgebung
+(`Funktionen:ISchadensSchaetzung` = `{ "Laufort": "Host", "Slots": 2, "Wiederholungen": 1 }`, bei mehreren Implementierungen mit
+`"Implementierung"`). Gebaut wird sie über eine generierte Fabrik (`GeneratedFunktionen.Implementierungen`, Konstruktor direkt, ohne
+Reflection) — was ihr Konstruktor braucht (Dienste, Konfig-Records), bindet die Dienst-Bindung (§10.5b).
 
 Was passiert: Der Prozess-Manager übergibt **alle** offenen Aufträge (parallel, auch bei jeder weiteren Weckung — der Ausführer
 dedupliziert über die Ausführungs-Id = Vorgang) an den `FunktionsAusfuehrer`. Der rechnet im Slot und schreibt **genau ein**
@@ -163,6 +165,39 @@ Regeln: CQRS068 (feste Form), CQRS069 (ein Auftrag je Funktion), CQRS003 (`Rufe`
 „jede gerufene Funktion ist gebunden", Azyklizitäts-Guard (Funktion → Ergebnisse aus der Signatur). Kein `Zeitlimit` hinter
 `UndAlle`, kein `Rufe` mit Fan-out (Validator). Ergebnis-Events sind normale Domänen-Typen: Proto regenerieren wie bei jedem
 neuen Event. Beispiel: Sonde `GraphExtractor.Kern/Sonde/Gebuehren.cs.txt`; Laufzeit-Beweis `Infrastructure.Pruefstand.Tests/Funktionen/`.
+
+## 10.5b Ein Domänen-Dienst (`IDienst`) hinter einer Funktion
+
+Technik, die eine Funktions-Implementierung benutzt (Bild skalieren, ein Modell laden …), ist ein **Domänen-Dienst**: ein Interface mit dem
+Marker `IDienst`, jede öffentliche Klasse, die es implementiert, ist eine Implementierung. Die Funktions-Implementierung nimmt ihn **im
+Konstruktor** — zusammen mit Konfig-Records (Werte aus der Umgebung) und `ILogger<T>`:
+```csharp
+public interface IImageResizer : IDienst { Mat Resize(Mat input, int targetHeight); }
+public sealed class ImageResizer : IImageResizer { public Mat Resize(Mat input, int targetHeight) { … } }
+
+public record PreprocessingConfig(string OutputPath);                       // Konfig-Record: Werte aus Konfig:PreprocessingConfig
+
+public sealed class OpenCvBildVerkleinerung(IImageResizer resizer, PreprocessingConfig config) : IBildVerkleinerung { … }
+```
+Umgebung (`umgebungen/umgebung.<name>.json`) — keine Zeile im Programm:
+```json
+"Dienste": { "IImageResizer": { "Implementierung": "ImageResizer" } },     // nur nötig, wenn es mehrere gibt
+"Konfig":  { "PreprocessingConfig": { "OutputPath": "${env:HOME}/cqrs-sim/${branch}/preprocessed" } }
+```
+Generiert (`DienstGenerator` → `GeneratedDienste`): je Dienst seine Implementierungen mit Fabrik, je Implementierung (Funktion oder Dienst) was
+ihr Konstruktor braucht, je Konfig-Record die Bindung Feld für Feld (Text, Zahl, Wahrheitswert, Dauer, Guid, Enum, Text-Liste; ein Default im
+Record gilt, wenn das Feld fehlt; unbekannte Felder sind ein Fehler). `AddCqrs` bindet nach den Funktionen genau das, was die gebundenen
+Funktions-Implementierungen transitiv brauchen. Boot-Fehler (mit Karte `dienst:<IX>` bzw. `host:Konfig`): keine Implementierung, mehrere
+ohne Wahl, unbekannter Name, Kreis über Dienste, fehlender oder fremder Konfig-Abschnitt.
+
+Regeln im Build (`Domain.SourceGeneration/DienstAnalyzer.cs`): CQRS089 ein Dienst nur im Konstruktor einer Funktions-/Dienst-Implementierung
+(nie als Handle-/Decide-Parameter, Feld oder Eigenschaft im Fachcode — dort sind es Fähigkeiten), CQRS090 der Konstruktor nimmt nur Dienste,
+Konfig-Records und `ILogger<T>`, CQRS091 Konfig-Felder sind bindbar, CQRS092 die Implementierung ist öffentlich und nicht generisch.
+Abgrenzung: `IAkteurDienst<A>` gehört einem Akteur und ist nur Handle-Parameter (CQRS060) — etwas anderes.
+
+Im Editor: Dienst-Karte 🧩 (Signatur = Methoden, Implementierungen mit Konstruktor, Rümpfe aus der Datei mit ✎), an der Funktion „🧩 braucht
+(Konstruktor)" mit ⊕ bzw. „＋" (neuer Dienst als eigene Karte); „＋ C#-Implementierung anlegen" an einer Funktion ohne Implementierung; die Wahl
+je Umgebung im 🖥 Host-Rahmen („🧩 Dienste", „⚙ Konfig" mit den Feldern aus dem Code). Beispiel: Sonde `Gebuehren.cs.txt` (`IWertTabelle`).
 
 ## 10.6 Eine Pipeline als Fluss (Quelle → Funktionen → Commands)
 

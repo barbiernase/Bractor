@@ -11,7 +11,7 @@ namespace Domain.Pipeline.ImageProcessing;
 ///
 /// Bei Graustufenbildern: direkter Histogrammausgleich.
 /// </summary>
-internal class HistogramEqualizer : IHistogramEqualizer
+public sealed class HistogramEqualizer : IHistogramEqualizer
 {
     public Mat Equalize(Mat input)
     {

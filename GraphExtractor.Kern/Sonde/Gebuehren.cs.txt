@@ -2,7 +2,8 @@ using Abstractions;
 using Leihwesen.Ausleihe;
 
 // SONDE — ZWEI Aggregate im SELBEN Namespace + Saga mit expliziter Interface-Implementierung und Block-Lambda,
-//         dazu eine KATALOG-FUNKTION (IFunktion) mit eigenem Auftrag, die die Saga per Rufe<F> mit Zeitlimit ruft.
+//         dazu eine KATALOG-FUNKTION (IFunktion) mit eigenem Auftrag, die die Saga per Rufe<F> mit Zeitlimit ruft — ihre C#-Implementierung
+//         nimmt einen DOMÄNEN-DIENST (IDienst) im Konstruktor, dessen Implementierung einen Konfig-Record nimmt (Plan E11).
 
 namespace Leihwesen.Gebuehren;
 
@@ -22,6 +23,35 @@ public record NichtSchaetzbar(string Grund) : IEvent;
 public interface ISchadensSchaetzung : IFunktion
 {
     Task<OneOf<SchadenGeschaetzt, NichtSchaetzbar>> RufeAsync(SchaetzeSchaden auftrag, IAusfuehrung x);
+}
+
+// Domänen-Dienst: die Technik hinter der Funktion — ein Interface mit IDienst, eine Implementierung mit Konfig-Record (Werte aus Konfig:<Record>).
+public interface IWertTabelle : IDienst
+{
+    /// <summary>Der Restwert nach linearer Abschreibung.</summary>
+    decimal Restwert(decimal neuwert, int alterJahre);
+    Task<bool> IstSchaetzbarAsync(Guid leserId);
+}
+
+public record WertTabellenKonfig(decimal Mindestwert, int Abschreibungsjahre = 5);
+
+public sealed class LineareWertTabelle(WertTabellenKonfig konfig) : IWertTabelle
+{
+    public decimal Restwert(decimal neuwert, int alterJahre) => Math.Max(konfig.Mindestwert, neuwert * (1 - alterJahre / (decimal)konfig.Abschreibungsjahre));
+
+    public Task<bool> IstSchaetzbarAsync(Guid leserId)
+    {
+        return Task.FromResult(leserId != Guid.Empty);
+    }
+}
+
+public sealed class Schadensschaetzer(IWertTabelle tabelle) : ISchadensSchaetzung
+{
+    public async Task<OneOf<SchadenGeschaetzt, NichtSchaetzbar>> RufeAsync(SchaetzeSchaden auftrag, IAusfuehrung x)
+    {
+        if (!await tabelle.IstSchaetzbarAsync(auftrag.LeserId)) return new NichtSchaetzbar("unbekannter Leser");
+        return new SchadenGeschaetzt(tabelle.Restwert(auftrag.Neuwert, 2));
+    }
 }
 
 public partial class Schadensfall : IState

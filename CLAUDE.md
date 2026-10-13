@@ -156,12 +156,19 @@ geänderten Text, Prompt-Zeile bleibt; Python über `PythonSync`, `.py` lässt d
 Offen (Empfehlung im Plan §17 P7.4.5): `partnerVon`, `flussSlice`, Fluss-Helfer und `VB_SORTE` leiten im JS noch ab → in `board.sicht`; Geste p50 unter
 Fremdlast 346–470 ms (Ziel 300 ms).
 
+**Dienst-Bindung (2026-10-13, Werkbank P7.5.1):** Technik hinter einer Funktion ist ein Domänen-Dienst — `interface IX : IDienst`, jede öffentliche Klasse,
+die es implementiert, ist eine Implementierung; die Funktions-/Dienst-Implementierung nimmt ihn im Konstruktor (dazu Konfig-Records und `ILogger<T>`).
+`DienstGenerator` → `GeneratedDienste` (Fabriken ohne Reflection, Bedarf je Konstruktor, Konfig-Records Feld für Feld aus `Konfig:<Record>`); `AddCqrs`
+bindet nach den Funktionen transitiv aus `Dienste:<I>:Implementierung` (Default: die einzige) — Boot-Fehler bei fehlend/mehrdeutig/Kreis/Konfig.
+Analyzer CQRS089–092 (`Domain.SourceGeneration/DienstAnalyzer.cs`). Host.Grpc/Program.cs hat keine Domänen-DI mehr. Editor: Dienst-Karte 🧩, an der
+Funktion „🧩 braucht“ (⊕), „＋ C#-Implementierung anlegen“, Host-Rahmen „🧩 Dienste“/„⚙ Konfig“ aus dem Code. Doku `docs/10-entwickler-api.md` §10.5b.
+
 **Akteure, Verträge, Clients (2026-10-06):** Akteure mit Befugnis und Kette bis in den Event-Header; Akteur-Verträge (Zusagen
 draußen) mit generierter Python-Basis, Handshake + Hash, deterministischer CommandId; Clients (`IClientVertrag`, n:m zu Akteuren) mit
 Rechten = Vertrag ∩ Token; alles im Editor (Rahmen je Domäne × Akteur, Client-Rahmen mit Leitungen). Offen: durable Zustellung an
 Clients (`docs/konzept-akteure.md` §9).
 
-**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471; P7.3: Prüfstand 476/476; P7.4: Prüfstand 484/484, Integration 39/39): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
+**Tests (echt gemessen 2026-10-09; P6 2026-10-12: Prüfstand 448/448, Integration 39/39; P7.1: Prüfstand 453/453; P7.2: Prüfstand 471/471; P7.3: Prüfstand 476/476; P7.4: Prüfstand 484/484, Integration 39/39; P7.5.1: Prüfstand 507/507, Integration 39/39): Prüfstand 381/381 (in-memory, store-frei); Python SDK 28/28, Worker 15/15; Integration gegen echtes
 Marten/Consul/Redis, sequentiell: 33/33 (inkl. 4 Fluss-E2E; TwoNodeCommandDispatch an die Inbox-Marke seit T2b angepasst).**
 
 **Bewusst offen (Priorität):**

@@ -110,8 +110,8 @@ public class UmgebungLaderTests
         var namen = new Dictionary<string, Type> { ["IA"] = typeof(IA), ["IB"] = typeof(IB) };
         var impls = new[]
         {
-            new FunktionsImplementierung(typeof(IA), "A1", (_, s, w) => protokoll.Add($"A1 {s}/{w}")),
-            new FunktionsImplementierung(typeof(IA), "A2", (_, s, w) => protokoll.Add($"A2 {s}/{w}")),
+            new FunktionsImplementierung(typeof(IA), "A1", typeof(object), (_, s, w) => protokoll.Add($"A1 {s}/{w}")),
+            new FunktionsImplementierung(typeof(IA), "A2", typeof(object), (_, s, w) => protokoll.Add($"A2 {s}/{w}")),
         };
         var ext = new Dictionary<Type, Action<IServiceCollection>> { [typeof(IA)] = _ => protokoll.Add("IA extern"), [typeof(IB)] = _ => protokoll.Add("IB extern") };
         var faeh = new Dictionary<Type, Type[]> { [typeof(IB)] = [typeof(object)] };

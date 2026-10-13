@@ -173,6 +173,7 @@ public static class ParitaetsPruefung
         Vergleiche("Value Object", soll.ValueObjects, BoardRecords(RecordArt.ValueObject), befunde);
         Vergleiche("Auftrag", soll.Auftraege, BoardRecords(RecordArt.Auftrag), befunde);
         Vergleiche("Funktion", soll.Funktionen, BoardListe("funktion"), befunde);
+        Vergleiche("Dienst", soll.Dienste, BoardListe("dienst"), befunde);
         Vergleiche("Konfiguration", soll.Konfigs, BoardRecords("konfig"), befunde);
         Vergleiche("Store", soll.Stores, BoardListe("store"), befunde);
         Vergleiche("Query", soll.Queries, BoardRecords("query"), befunde);
@@ -272,7 +273,7 @@ public static class ParitaetsPruefung
         public HashSet<string> Commands = new(), Events = new(), Ablehnungen = new(), ValueObjects = new(),
             Queries = new(), Responses = new(), Enums = new(), ReadModels = new(), Readers = new(),
             Pipelines = new(), Subscriber = new(), Konfigs = new(), Stores = new(), Akteure = new(), Funktionen = new(), Auftraege = new(),
-            Fluesse = new();
+            Fluesse = new(), Dienste = new();
         /// <summary>Akteur → seine IDarf-Ziele (einfache Namen) — aus der Basisliste, unabhängig vom DomainExtractor.</summary>
         public Dictionary<string, HashSet<string>> AkteurRechte = new(StringComparer.Ordinal);
         /// <summary>Akteur → seine Zusagen „Event&gt;Ausgabe,…[*]" aus den Vertrags-Interfaces (IAkteurVertrag&lt;A&gt;, alle Teile).</summary>
@@ -304,7 +305,7 @@ public static class ParitaetsPruefung
             var iWert = Get(Vertrag.IWertobjekt); var iEnv = Get(Vertrag.IAggregateEnvelope);
             var iAkteur = Get(Vertrag.IAkteur); var iDarf = Get(Vertrag.IDarf); var iVertrag = Get(Vertrag.IAkteurVertrag);
             var iClient = Get(Vertrag.IClientVertrag); var iSendet = Get(Vertrag.ISendet); var iFragt = Get(Vertrag.IFragt);
-            var iFunktion = Get(Vertrag.IFunktion); var iAuftrag = Get(Vertrag.IAuftrag);
+            var iFunktion = Get(Vertrag.IFunktion); var iAuftrag = Get(Vertrag.IAuftrag); var iDienst = Get(Abstractions.Dienstvertrag.Marker);
             var iFluss = Get(Vertrag.IPipeline);
             bool Innen(INamedTypeSymbol t, INamedTypeSymbol? g) => g != null && t.AllInterfaces.Any(i => i.OriginalDefinition.ToDisplayString() == g.ToDisplayString());
             bool Domäne(IAssemblySymbol? a) => a != null && domänen.Contains(a.Name);
@@ -332,6 +333,8 @@ public static class ParitaetsPruefung
                         {
                             // Katalog-Funktion (IFunktion): ein eigener Baustein — nur ihre Signatur.
                             if (iFunktion != null && Sym.Implements(t, iFunktion)) { inv.Funktionen.Add(full); continue; }
+                            // Domänen-Dienst (IDienst, Plan E11): ein eigener Baustein — Signatur + Implementierungen.
+                            if (iDienst != null && Sym.Implements(t, iDienst)) { inv.Dienste.Add(full); continue; }
                             // Client-Vertrag (IClientVertrag): sein Rand aus der Basisliste (direkt) und den eigenen Auf-Methoden. Er erbt
                             //   Vertrags-Teile, ist aber selbst keiner (darum vor dem Akteur-Vertrag).
                             if (iClient != null && Sym.Implements(t, iClient))
@@ -395,7 +398,9 @@ public static class ParitaetsPruefung
                         if (Sym.Implements(t, iPipe)) inv.Pipelines.Add(full);
                         // Konsument (Pipeline/Subscriber/Reader/Store-Impl): Records im öffentlichen Ctor = Konfiguration.
                         var istStoreImpl = t.TypeKind != TypeKind.Interface && (Sym.Implements(t, iWStore) || Sym.Implements(t, iRStore));
-                        if (Sym.Implements(t, iPipe) || Sym.Implements(t, iSub) || istStoreImpl
+                        // … ebenso Funktions- und Dienst-Implementierungen (Plan E11: ihre Records kommen aus Konfig:<Record>).
+                        var istImpl = t.TypeKind == TypeKind.Class && ((iFunktion != null && Sym.Implements(t, iFunktion)) || (iDienst != null && Sym.Implements(t, iDienst)));
+                        if (Sym.Implements(t, iPipe) || Sym.Implements(t, iSub) || istStoreImpl || istImpl
                             || t.AllInterfaces.Any(i => iReader != null && i.OriginalDefinition.Fq() == iReader.Fq()))
                             foreach (var c in t.InstanceConstructors.Where(c => c.DeclaredAccessibility == Accessibility.Public))
                                 foreach (var prm in c.Parameters)

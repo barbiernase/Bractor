@@ -4,7 +4,7 @@
   // Vertrags-Fakten aus dem Rahmen (vom Extractor aus dem Code gelesen).
   const ID_FELD=()=>((MODEL.rahmen&&MODEL.rahmen.aggregatIdFeld)||"");
   const KINDINFO={command:["Command","cmd"],event:["Event","evt"],rejection:["Ablehnung","rej"],valueobject:["Value Object","vo"],konfig:["Konfiguration","vo"],query:["Query","qry"],queryresponse:["Response","qrsp"],auftrag:["Auftrag","cmd"]};
-  let MODEL={schemaVersion:"2",akteure:[],clients:[],records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],reaktionen:[],fluesse:[],codeKarten:[]};
+  let MODEL={schemaVersion:"2",akteure:[],clients:[],records:[],enums:[],aggregate:[],decider:[],applier:[],sagas:[],states:[],transitions:[],readModels:[],stores:[],projektionen:[],reader:[],reaktionen:[],fluesse:[],codeKarten:[],dienste:[]};
   let NID=1;
   // Die ANSICHT (Werkbank P7.2): Positionen, Domänen-Filter, Akteur-Reihenfolge und die 🤖-Knoten — eine Datei auf dem Server
   //   (.werkbank/ansicht.json, Schlüssel = Karten-Id). Sie gehört weder zum Code noch zum Board; der Code ist die einzige Wahrheit.
@@ -30,7 +30,10 @@
     m.akteure=m.akteure||[];m.akteure.forEach(a=>{if(!a._id)a._id="ak"+(NID++);a.darf=a.darf||[];});   /* art bewusst nicht vorbelegen (Herkunfts-Hash) */
     // Client (docs/konzept-akteure.md §4): die Software an der Leitung — traegt[] = Akteur-Vertrags-Teile, sendet/fragt/kenntnis = der Rand.
     // Katalog-Funktion (IFunktion): Auftrag → Ergebnis-Events; ein Prozess ruft sie mit Rufe<F> (Dann ƒ an der Regel).
-    m.funktionen=m.funktionen||[];m.funktionen.forEach(f=>{if(!f._id)f._id="fk"+(NID++);f.ergebnisse=f.ergebnisse||[];});
+    m.funktionen=m.funktionen||[];m.funktionen.forEach(f=>{if(!f._id)f._id="fk"+(NID++);f.ergebnisse=f.ergebnisse||[];f.konstruktor=f.konstruktor||[];});
+    // Domänen-Dienst (IDienst, Plan E11): Signatur (Methoden) + Implementierungen mit Konstruktor; eine Funktions-Implementierung nimmt ihn im Konstruktor.
+    m.dienste=m.dienste||[];m.dienste.forEach(d=>{if(!d._id)d._id="dn"+(NID++);d.methoden=d.methoden||[];d.methoden.forEach(x=>{x.parameter=x.parameter||[];});
+      d.implementierungen=d.implementierungen||[];d.implementierungen.forEach(i=>{i.konstruktor=i.konstruktor||[];});});
     // Pipeline als Fluss (§14): Knoten (Name = Identität) mit Eingängen aus Drähten; _ids nur fürs Board.
     m.fluesse=m.fluesse||[];m.fluesse.forEach(f=>{if(!f._id)f._id="fl"+(NID++);f.knoten=f.knoten||[];f.knoten.forEach(k=>{if(!k._id)k._id="fs"+(NID++);k.eingaenge=k.eingaenge||[];k.eingaenge.forEach(e=>{e.draehte=e.draehte||[];});});});
     m.clients=m.clients||[];m.clients.forEach(c=>{if(!c._id)c._id="cl"+(NID++);c.traegt=c.traegt||[];c.sendet=c.sendet||[];c.fragt=c.fragt||[];c.kenntnis=c.kenntnis||[];});
@@ -125,7 +128,8 @@
   function imModus(ids,aendern){TEIL={gerufen:false};try{aendern();}finally{const g=TEIL.gerufen;TEIL=null;if(g)teilNeu(ids.filter(Boolean));}}
 
   // Eindeutiger Name — Namen sind der Referenzschlüssel für Kanten/Decider/Applier.
-  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.reaktionen.map(x=>x.name),...MODEL.akteure.map(x=>x.name),...MODEL.clients.map(x=>x.name),...MODEL.funktionen.map(x=>x.name),...MODEL.fluesse.map(x=>x.name)]);
+  function uniq(base){const all=new Set([...MODEL.records.map(r=>r.name),...MODEL.aggregate.map(a=>a.name),...MODEL.enums.map(e=>e.name),...MODEL.sagas.map(s=>s.name),...MODEL.readModels.map(x=>x.name),...MODEL.stores.map(x=>x.name),...MODEL.projektionen.map(x=>x.name),...MODEL.reader.map(x=>x.name),...MODEL.reaktionen.map(x=>x.name),...MODEL.akteure.map(x=>x.name),...MODEL.clients.map(x=>x.name),...MODEL.funktionen.map(x=>x.name),...MODEL.fluesse.map(x=>x.name),
+    ...MODEL.dienste.flatMap(x=>[x.name,...(x.implementierungen||[]).map(i=>i.name)]),...MODEL.funktionen.map(x=>x.implementierung).filter(Boolean)]);
     if(!all.has(base))return base;let i=2;while(all.has(base+i))i++;return base+i;}
 
   function enumCard(e,ei){const c=h("div",{class:"card"});
@@ -175,6 +179,7 @@
     else if(kind==="reader")MODEL.reader.push({_id:"rd"+(NID++),name:uniq("NeuReader"),namespace:defaultNs(),stores:[],trackDeps:true,handles:[],...pos});
     else if(kind==="reaktion")MODEL.reaktionen.push({_id:"rk"+(NID++),name:uniq("NeueReaktion"),namespace:defaultNs(),pull:true,handles:[],...pos});
     else if(kind==="funktion")neueFunktion(defaultNs(),pos);
+    else if(kind==="dienst")neuerDienst(defaultNs(),pos);
     else if(kind==="quelle")neueQuelle(defaultNs(),"NeueQuelle",pos);
     else if(kind==="akteur")MODEL.akteure.push({_id:"ak"+(NID++),name:uniq("NeuerAkteur"),namespace:haeufigsterNs(MODEL.akteure)||defaultNs(),darf:[],...pos});
     else if(kind==="client")MODEL.clients.push({_id:"cl"+(NID++),name:uniq("INeuerClient"),namespace:haeufigsterNs(MODEL.clients)||defaultNs(),traegt:[],sendet:[],fragt:[],kenntnis:[],...pos});
@@ -493,6 +498,9 @@
         return [T(o.kind==="reader"?"Reader-Logik":"Handle-Logik",r.rumpf,r._ort,k,true,{kachel:"Handle "+(r.query||r.event||"")})];}
       case "fn":return [T("Impl-Logik",r.rumpf,r._rumpf,"store|"+n.own.ref.name+"|"+r.name,true,{kachel:r.name||"Store-Fn"})];
       case "funktion":return [T("RufeAsync",r.rumpf,r._rumpf,r.auftrag?"funktion|"+r.name+"|"+r.auftrag:null,true,{kachel:(r.implementierung||r.name||"Funktion")+".RufeAsync"})];
+      // Dienst: je Implementierung je Methode ihr Rumpf (aus der Datei); ✎ als Geste an der Methode.
+      case "dienst":return (r.implementierungen||[]).flatMap((im,ii)=>(im.rumpfe||[]).map(x=>T(im.name+"."+x.methode,x.rumpf,x._rumpf,null,true,
+        {kachel:im.name+"."+x.methode,impl:ii,methode:x.methode})));
       case "client":return (r.implementierungen||[]).length?(r.implementierungen||[]).flatMap(im=>(im.rumpfe||[]).map(x=>T(im.klasse+"."+x.methode,x.rumpf,null,
         "zusage|"+clientAnzeige(r)+"|"+x.event+"@"+im.klasse,im.klasse+"."+x.methode,{python:{datei:im.datei,klasse:im.klasse,methode:x.methode,signatur:x.signatur||null},event:x.event,impl:im}))):null;
       case "transition":{const sg=MODEL.sagas.find(x=>x.name===r.prozess),folge=sg?regelFolge(sg,MODEL.transitions):[];
@@ -520,6 +528,7 @@
       i=c?(c.implementierungen||[]).flatMap((im,ii)=>(im.rumpfe||[]).map(x=>[ii,x.event])).findIndex(([ii,e])=>ii===t.impl&&e===t.event):-1;}
     else if(t.k==="regelLambda"){id="tr:"+t.trans;const tr=MODEL.transitions.find(x=>x._id===t.trans),d=tr&&(tr.dann||[])[t.dannIdx];
       i=(rumpfTeile(NODEBY.get(id))||[]).findIndex(x=>x.dann===d&&(x.teil||"sende")===(t.teil||"sende"));}
+    else if(t.k==="dienst"){id="dn:"+t.dn;i=(rumpfTeile(NODEBY.get(id))||[]).findIndex(x=>x.impl===t.impl&&x.methode===t.methode);}
     else if(t.k==="flussLambda"){const f=MODEL.fluesse.find(x=>x._id===t.fluss),k=f&&(f.knoten||[]).find(z=>z._id===t.knoten);if(k)id="fs:"+k._id;i=t.ei==null?0:t.ei;}
     const n=id&&NODEBY.get(id),teile=n&&rumpfTeile(n);return teile&&i>=0&&teile[i]?{n,i,teil:teile[i]}:null;}
   function codePort(key,target,_alt,label){const s=port("code");s.classList.add("i");reg(key,s,{type:"code",dir:"in",target});
@@ -831,11 +840,15 @@
           stamm+((f.ergebnisse||[]).length?"Fall":"Erledigt"),f.namespace,r=>verbindeInfo({type:"evtOut",dir:"out",fk:f._id},{type:"evtOut",dir:"in",rec:r.name}))),
         h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"+ Ergebnis ⊕ (Event) ▶"),op));}
     funktionFaehigkeiten(body,f);
+    funktionDienste(body,f);
     // Rumpf = RufeAsync der Implementierung: Code-Eingang wie am Decider (📝 Code-Block, 🤖 LLM füllt ihn). Ohne Block läuft die
     //   Funktion extern (Python-Worker über gRPC) — der Laufort steht in der Umgebung (Funktionen:<F>:Laufort = Extern).
     body.append(h("div",{class:"gsec",title:f.implementierung?"public sealed class "+f.implementierung+" : "+f.name:"noch keine C#-Implementierung im Code"},
       "Rumpf · RufeAsync"+(f.implementierung?" · "+f.implementierung:" (neu)")));
-    body.append(codePort("fk:impl:"+f._id,{k:"funktion",fk:f._id},null,"RufeAsync"));}
+    body.append(codePort("fk:impl:"+f._id,{k:"funktion",fk:f._id},null,"RufeAsync"));
+    // Noch keine C#-Implementierung: eine Geste legt sie an (Klasse mit RufeAsync als throw-Stub, Konstruktor wie oben) — danach ✎/🤖.
+    if(!f.implementierung&&f.entwurf==null)body.append(h("div",{class:"slotrow"},h("button",{class:"add",title:"public sealed class "+f.name.replace(/^I(?=[A-ZÄÖÜ])/,"")+" : "+f.name+" — als Geste in den Code",
+      onclick:()=>{f.entwurf="";gTitel("ƒ "+f.name+": C#-Implementierung anlegen");render();}},"＋ C#-Implementierung anlegen")));}
   function funktionCard(body,f){
     // Wer ruft (Prozess-Regel „Dann rufe", Pipeline-Knoten ƒ, Ablauf „dann …") — ⊕ verbindet von hier aus.
     body.append(topSlot("auftrag","◀ gerufen von ⊕ (Prozess-Regel · Pipeline-Knoten)",{type:"rufe",dir:"in",fk:f._id},"fk:in:"+f.name));
@@ -881,6 +894,74 @@
       : "Laufort = Konfig der Umgebung (Funktionen:"+(f.name||"F")+":Laufort): Host (C#-Rumpf unten als Code-Block) oder Extern (Python-Worker, dann kein Code-Block)."));
     {const lo=Object.entries((MODEL.rahmen||{}).umgebungen||{}).map(([n,u])=>[n,((u||{}).Funktionen||{})[f.name]]);
       if(lo.length)body.append(h("div",{class:"gsec",style:"opacity:.8"},"Laufort je Umgebung: "+lo.map(([n,k])=>n+" = "+(k?(k.Laufort||"Host")+(k.Slots?" ×"+k.Slots:""):"⚠ nicht gebunden")).join(" · ")));}
+  }
+
+  // ══ LOGIK-ELEMENT „Domänen-Dienst" (IDienst, Plan E11): Signatur (Methoden) · Implementierungen (je ihr Konstruktor, ⊕ weitere Dienste) ·
+  //   Rümpfe aus der Datei. Ein Dienst steht nur im Konstruktor einer Funktions- bzw. Dienst-Implementierung (CQRS089) — ⊕ an der Funktion
+  //   „🧩 braucht". Welche Implementierung läuft, sagt die Umgebung (🖥 Host-Rahmen → Dienste); gebunden wird generiert (GeneratedDienste).
+  const dienstByName=nm=>MODEL.dienste.find(d=>d.name===String(nm||"").replace(/\?$/,"").trim());
+  const paramName=(t,belegt)=>{let n=String(t||"x").replace(/^I(?=[A-ZÄÖÜ])/,"");n=n.charAt(0).toLowerCase()+n.slice(1);
+    const b=new Set(belegt||[]);if(!b.has(n))return n;let i=2;while(b.has(n+i))i++;return n+i;};
+  // „Typ name, Typ name" → Parameter (Kommas in <…> gehören zum Typ).
+  function parseParams(text){const teile=[];let tiefe=0,akt="";for(const ch of String(text||"")){if(ch==="<")tiefe++;if(ch===">")tiefe--;
+      if(ch===","&&tiefe===0){teile.push(akt);akt="";}else akt+=ch;}if(akt.trim())teile.push(akt);
+    return teile.map(x=>x.trim()).filter(Boolean).map(x=>{const i=x.lastIndexOf(" ");return i<0?{typ:x,name:paramName(x)}:{typ:x.slice(0,i).trim(),name:x.slice(i+1).trim()};});}
+  // Ein neuer Dienst — EIN Weg (Funktion „＋", Domänen-Menü): I<Stamm> mit einer Methode und einer Implementierung <Stamm>.
+  function neuerDienst(ns,pos){const nm=uniq("INeuerDienst"),impl=uniq(nm.replace(/^I(?=[A-ZÄÖÜ])/,""));
+    const d={_id:"dn"+(NID++),name:nm,namespace:ns,methoden:[{name:"Fuehre",rueckgabe:"string",parameter:[{typ:"string",name:"eingabe"}]}],
+      implementierungen:[{name:impl,konstruktor:[]}],...(pos||{})};
+    MODEL.dienste.push(d);return d;}
+  // Eine Konstruktor-Zeile: Dienst (🧩, ✕ löst), Konfig-Record (⚙ Konfig:<Record>) oder Rahmen (ILogger) — Klick öffnet die Karte.
+  function konstruktorZeile(p,key,info,loese){const d=dienstByName(p.typ),rec=!d&&recByName(p.typ),s=d?port("dienst"):null;
+    if(s){s.classList.add("o");reg(key,s,info);}
+    return h("div",{class:"slotrow o"},d?h("button",{class:"rm",title:"Dienst lösen (der Dienst bleibt)",onclick:loese},"✕"):null,
+      h("span",{class:"slotlbl",style:"flex:1;text-align:right"+(d||rec?";cursor:pointer":""),title:d?"Klick: "+d.name+" öffnen":rec?"Werte aus Konfig:"+rec.name+" der Umgebung":"",
+        onclick:d?()=>zeigeLadend("dn:"+d._id):rec?()=>zeigeLadend("rec:"+rec.name):null},(d?"🧩 ":rec?"⚙ ":"· ")+p.typ+" "+p.name+(rec?" (Konfig)":"")),s);}
+  function funktionDienste(body,f){
+    body.append(h("div",{class:"gsec",title:"Konstruktor der C#-Implementierung: Dienste (IDienst), Konfig-Records (Konfig:<Record>), ILogger<T>"},"🧩 braucht (Konstruktor)"));
+    (f.konstruktor||[]).forEach((p,i)=>body.append(konstruktorZeile(p,"dn:out:fk:"+f._id+":"+i,{type:"dienst",dir:"out",fk:f._id},
+      ()=>{f.konstruktor.splice(i,1);gTitel("🧩 "+p.typ+" lösen");render();})));
+    const op=port("dienst");op.classList.add("o");reg("dn:out:fk:"+f._id+":open",op,{type:"dienst",dir:"out",fk:f._id});
+    body.append(h("div",{class:"slotrow o"},neuKnopf("Neuen Dienst als eigene Karte anlegen und verbinden",()=>{const d=neuerDienst(f.namespace);
+        verbindeInfo({type:"dienst",dir:"out",fk:f._id},{type:"dienst",dir:"in",dn:d._id});
+        deFlash("＋ "+d.name+" angelegt und verbunden — Methoden und Implementierung an seiner Karte",true);}),
+      h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"+ Dienst ⊕ (🧩) ▶"),op));}
+  function dienstCard(body,d){
+    body.append(topSlot("dienst","◀ genutzt von ⊕ (Funktion · Dienst-Implementierung)",{type:"dienst",dir:"in",dn:d._id},"dn:in:"+d._id));
+    const nutzer=[...MODEL.funktionen.filter(f=>(f.konstruktor||[]).some(p=>dienstByName(p.typ)===d)).map(f=>["fk:"+f._id,"ƒ "+f.name]),
+      ...MODEL.dienste.filter(q=>q!==d&&(q.implementierungen||[]).some(im=>(im.konstruktor||[]).some(p=>dienstByName(p.typ)===d))).map(q=>["dn:"+q._id,"🧩 "+q.name])];
+    if(nutzer.length)body.append(h("div",{class:"gp-row",style:"display:flex;flex-wrap:wrap;gap:4px;cursor:default"},
+      ...nutzer.map(([id,t])=>h("button",{class:"akt-dom",onclick:()=>waehle(id)},t))));
+    body.append(h("div",{class:"gsec"},"Name · Namespace"));
+    if(d.datei)body.append(h("div",{class:"gp-row gp-leer",style:"cursor:default"},d.name+" — aus dem Code (Umbenennen ist ein Refactoring)"));
+    else body.append(nameInp(d,"name","Dienst","dienst"));
+    body.append(h("input",{value:d.namespace??"",oninput:e=>d.namespace=e.target.value,onchange:()=>render(),placeholder:"Namespace"}));
+    body.append(h("div",{class:"gsec",title:"public interface "+d.name+" : IDienst { Rückgabe Methode(Typ name, …); … }"},"Signatur (Methoden)"));
+    (d.methoden||[]).forEach((m,mi)=>body.append(h("div",{class:"frow"},
+      h("input",{value:m.rueckgabe??"",list:"de-typen",placeholder:"Rückgabe",style:"max-width:90px",onchange:e=>{m.rueckgabe=e.target.value.trim()||"void";render();}}),
+      h("input",{value:m.name??"",placeholder:"Methode",style:"max-width:110px",onchange:e=>{const v=e.target.value.trim();if(v)m.name=v;render();}}),
+      h("input",{value:(m.parameter||[]).map(p=>p.typ+" "+p.name).join(", "),placeholder:"Typ name, …",title:"Parameter: Typ name, Typ name",
+        onchange:e=>{m.parameter=parseParams(e.target.value);render();}}),
+      h("button",{class:"rm",title:"Methode entfernen (am Interface; die Implementierungen behalten ihren Code)",onclick:()=>{d.methoden.splice(mi,1);render();}},"✕"))));
+    body.append(h("button",{class:"add",onclick:()=>{const da=new Set((d.methoden||[]).map(x=>x.name));let n="Neu",i=2;while(da.has(n))n="Neu"+(i++);
+      (d.methoden=d.methoden||[]).push({name:n,rueckgabe:"void",parameter:[]});render();}},"+ Methode"));
+    body.append(h("div",{class:"gsec",title:"Klassen, die "+d.name+" implementieren — welche läuft, wählt die Umgebung (Dienste:"+d.name+":Implementierung)"},"Implementierungen"));
+    if(!(d.implementierungen||[]).length)body.append(h("div",{class:"gsec",style:"opacity:.7"},"⚠ keine — ohne Implementierung bricht der Start, sobald eine Funktion den Dienst braucht."));
+    (d.implementierungen||[]).forEach((im,ii)=>{
+      body.append(h("div",{class:"gsec",style:"opacity:.9",title:"public sealed class "+im.name+"(…) : "+d.name},"▸ "+im.name+(im.datei?"":" (neu)")));
+      (im.konstruktor||[]).forEach((p,pi)=>body.append(konstruktorZeile(p,"dn:out:dn:"+d._id+":"+ii+":"+pi,{type:"dienst",dir:"out",dn:d._id,impl:ii},
+        ()=>{im.konstruktor.splice(pi,1);render();})));
+      const op=port("dienst");op.classList.add("o");reg("dn:out:dn:"+d._id+":"+ii+":open",op,{type:"dienst",dir:"out",dn:d._id,impl:ii});
+      body.append(h("div",{class:"slotrow o"},h("span",{class:"slotlbl",style:"flex:1;text-align:right"},"+ braucht Dienst ⊕ (🧩) ▶"),op));
+      (d.methoden||[]).forEach(m=>body.append(codePort("dn:impl:"+d._id+":"+ii+":"+m.name,{k:"dienst",dn:d._id,impl:ii,methode:m.name},null,im.name+"."+m.name)));});
+    {const ein=h("input",{placeholder:"Klassenname …"});
+      body.append(h("div",{class:"frow"},ein,h("button",{class:"act",title:"Eine weitere Implementierung (Klasse mit throw-Stubs) — z. B. ein Fake für die Sim-Umgebung",
+        onclick:()=>{const n=ein.value.trim();if(!n||uniq(n)!==n){deFlash("⚠ Name fehlt oder ist vergeben",false);return;}
+          (d.implementierungen=d.implementierungen||[]).push({name:n,konstruktor:[]});render();}},"＋ Implementierung")));}
+    {const lo=Object.entries((MODEL.rahmen||{}).umgebungen||{}).map(([n,u])=>[n,((u||{}).Dienste||{})[d.name]]);
+      const einzig=(d.implementierungen||[]).length===1?d.implementierungen[0].name:null;
+      if(lo.length)body.append(h("div",{class:"gsec",style:"opacity:.8"},"Implementierung je Umgebung: "+lo.map(([n,k])=>n+" = "+(k&&k.Implementierung?k.Implementierung
+        :einzig?einzig+" (die einzige)":"⚠ wählen")).join(" · ")+" — eingestellt im 🖥 Host-Rahmen (Dienste)"));}
   }
 
   // ══ AKTEURE: von wem kommt was? (docs/konzept-akteure.md §2, docs/konzept-domaenen-editor.md §12) ══
@@ -1181,7 +1262,7 @@
   //    Applier→Aggregat(rechts) · Applier→State-Feld(oben, optionale Zuweisungs-Markierung).
   const SVGNS="http://www.w3.org/2000/svg";
   const GRID=20;
-  const NODELABEL={host:"Host",akteur:"Akteur",client:"Client",auf:"Zusage",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",quelle:"Quelle",fluss:"Fluss",rumpf:"Code",code:"Code",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn",funktion:"Funktion",auftrag:"Auftrag",flussknoten:"Pipeline"};
+  const NODELABEL={host:"Host",akteur:"Akteur",client:"Client",auf:"Zusage",command:"Command",event:"Event",rejection:"Ablehnung",valueobject:"Value Object",enum:"Enum",aggregate:"Aggregat",decider:"Decider",applier:"Applier",saga:"Prozess",transition:"Regel",query:"Query",queryresponse:"Response",readmodel:"Read Model",store:"Store",projektion:"Projektion",reader:"Reader",reaktion:"Reaktion",quelle:"Quelle",fluss:"Fluss",rumpf:"Code",code:"Code",state:"State",konfig:"Konfiguration",handle:"Handle",fn:"Store-Fn",funktion:"Funktion",dienst:"Dienst",auftrag:"Auftrag",flussknoten:"Pipeline"};
   let PAN={x:40,y:30,s:1}, canvas=null, world=null, svg=null, svgTop=null, SLOTS={};
   // Typ-Navigation: HLKIND = aktuell hervorgehobener Node-Typ (Board+Minimap); JUMPIX = Sprung-Cursor je Typ.
   let HLKIND=null; const JUMPIX={};
@@ -1338,6 +1419,9 @@
     if(kind==="funktion"){MODEL.transitions.forEach(t=>(t.dann||[]).forEach(d=>{if(d.rufe===old)d.rufe=nv;}));
       MODEL.akteure.forEach(a=>{a.darf=(a.darf||[]).map(x=>x===old?nv:x);});
       MODEL.records.forEach(r=>{if(r.kind==="auftrag"&&r.funktion===old)r.funktion=nv;});}
+    // Ein noch nicht geschriebener Dienst: die Konstruktoren, die ihn nehmen, ziehen mit (aus dem Code: Roslyn-Renamer).
+    if(kind==="dienst"){const um=p=>{if(String(p.typ||"").replace(/\?$/,"").trim()===old)p.typ=nv;};
+      MODEL.funktionen.forEach(f=>(f.konstruktor||[]).forEach(um));MODEL.dienste.forEach(q=>(q.implementierungen||[]).forEach(im=>(im.konstruktor||[]).forEach(um)));}
     if(kind==="akteur"){
       // Ein Vertrag ohne eigenen Namen heißt I+Akteur — Clients, die ihn tragen, ziehen mit.
       if(!obj.vertragName)MODEL.clients.forEach(c=>{c.traegt=(c.traegt||[]).map(t=>t==="I"+old?"I"+nv:t);});}
@@ -1901,6 +1985,7 @@
             ...MODEL.sagas.map(s=>({id:"saga:"+s.name,name:s.name,kind:"saga",ref:s})),
             ...MODEL.transitions.map(t=>({id:"tr:"+t._id,name:((t.dann||[]).map(d=>d.rufe||d.sende).filter(Boolean).join(", ")),kind:"transition",ref:t})),
             ...MODEL.funktionen.map(f=>({id:"fk:"+f._id,name:f.name,kind:"funktion",ref:f})),
+            ...MODEL.dienste.map(d=>({id:"dn:"+d._id,name:d.name,kind:"dienst",ref:d})),
             ...MODEL.readModels.map(rm=>({id:"rm:"+rm._id,name:rm.name,kind:"readmodel",ref:rm})),
             ...MODEL.stores.map(s=>({id:"sto:"+s._id,name:s.name,kind:"store",ref:s})),
             ...MODEL.projektionen.map(p=>({id:"prj:"+p._id,name:p.name,kind:"projektion",ref:p})),
@@ -1922,10 +2007,10 @@
   //   Nach dem Event der Prozess (Regel → Auftrag → ƒ → Ergebnis),
   //   der in die Command-Spalte zurück sendet — so liest sich ein Ablauf in EINEM Block.
   const ROLE_AGG={command:3,decider:4,aggregate:5,state:5,event:6,rejection:6,applier:7,
-    saga:8,transition:9,auftrag:10,funktion:11,ergebnis:12,valueobject:13,enum:13,projektion:14,"handle:projektion":15,"handle:reaktion":15,
+    saga:8,transition:9,auftrag:10,funktion:11,ergebnis:12,dienst:12.5,valueobject:13,enum:13,projektion:14,"handle:projektion":15,"handle:reaktion":15,
     fn:16,store:17,readmodel:17,query:18,"handle:reader":19,queryresponse:20,reader:21};
   // Rollen-Spalten im Geteilt-Band.
-  const ROLE_SHARED={saga:0,transition:1,auftrag:2,funktion:3,ergebnis:3.5,reaktion:2,"handle:reaktion":3,konfig:7,valueobject:8,enum:8,command:9,event:9,rejection:9,
+  const ROLE_SHARED={saga:0,transition:1,auftrag:2,funktion:3,ergebnis:3.5,dienst:4,reaktion:2,"handle:reaktion":3,konfig:7,valueobject:8,enum:8,command:9,event:9,rejection:9,
     fn:10,store:11,readmodel:11,"handle:projektion":12,projektion:13,"handle:reader":14,reader:15,query:14,queryresponse:16,rumpf:17,code:17};
   // Rolle eines Knotens (vom Server): Handles je Besitzer-Art (Projektions- vs. Reader-Handle liegen in verschiedenen Spalten), Ergebnis-Events
   //   einer Funktion hinter ihr (Spalte „ergebnis“), sonst die Art. Funktionen einer Kette: je Tiefe eine eigene Spalte (11.01, 11.02 …).
@@ -2173,6 +2258,7 @@
     else if(n.kind==="reader")readerCard(body,n.ref);
     else if(n.kind==="reaktion")reaktionCard(body,n.ref);
     else if(n.kind==="funktion")funktionCard(body,n.ref);
+    else if(n.kind==="dienst")dienstCard(body,n.ref);
     else if(n.kind==="akteur")akteurCard(body,n.ref);
     else if(n.kind==="client")clientCard(body,n.ref);
     else if(n.kind==="auf")aufCard(body,n);
@@ -2211,6 +2297,10 @@
     else if(k==="reader")MODEL.reader.splice(MODEL.reader.indexOf(ref),1);
     else if(k==="reaktion")MODEL.reaktionen.splice(MODEL.reaktionen.indexOf(ref),1);
     else if(k==="funktion"){MODEL.funktionen.splice(MODEL.funktionen.indexOf(ref),1);MODEL.akteure.forEach(a=>{a.darf=ohneX(a.darf,ref.name);});}
+    // Ein gelöschter Dienst fällt aus jedem Konstruktor (Funktions- und Dienst-Implementierungen) — dieselbe Geste.
+    else if(k==="dienst"){MODEL.dienste.splice(MODEL.dienste.indexOf(ref),1);
+      MODEL.funktionen.forEach(f=>{if((f.konstruktor||[]).some(p=>dienstByName(p.typ)===ref))f.konstruktor=f.konstruktor.filter(p=>dienstByName(p.typ)!==ref);});
+      MODEL.dienste.forEach(q=>(q.implementierungen||[]).forEach(im=>{im.konstruktor=(im.konstruktor||[]).filter(p=>p.typ.replace(/\?$/,"").trim()!==ref.name);}));}
     else if(k==="akteur")MODEL.akteure.splice(MODEL.akteure.indexOf(ref),1);
     else if(k==="client"){MODEL.clients.splice(MODEL.clients.indexOf(ref),1);AUF=null;}
     else if(k==="auf"){const v=n.own.ref.vertrag||[];v.splice(v.indexOf(ref),1);}
@@ -2416,6 +2506,12 @@
     else if(O.type==="wcall"){const p=MODEL.projektionen.find(x=>x._id===O.proj);const hd=p&&p.handles[O.handleIdx];if(hd){hd.fns=hd.fns||[];if(!hd.fns.includes(I.fn))hd.fns.push(I.fn);}}
     // Reader-Handle ruft eine Read-Fn (auch über mehrere Stores) — anhängen, dedup.
     // Funktion liest über eine Store-Fähigkeit: ihr Interface wird ein Parameter (nur Read-Fns mit Fähigkeits-Interface).
+    // 🧩 Dienst in den Konstruktor einer Funktions- bzw. Dienst-Implementierung (fehlt die C#-Implementierung der Funktion: sie entsteht mit).
+    else if(O.type==="dienst"){const d=MODEL.dienste.find(x=>x._id===I.dn);
+      if(d&&O.fk){const f=MODEL.funktionen.find(x=>x._id===O.fk);if(f&&!(f.konstruktor=f.konstruktor||[]).some(p=>dienstByName(p.typ)===d)){
+        f.konstruktor.push({typ:d.name,name:paramName(d.name,f.konstruktor.map(p=>p.name))});if(!f.implementierung&&f.entwurf==null)f.entwurf="";}}
+      else if(d&&O.dn){const q=MODEL.dienste.find(x=>x._id===O.dn),im=q&&(q.implementierungen||[])[O.impl];
+        if(im&&q!==d&&!(im.konstruktor=im.konstruktor||[]).some(p=>dienstByName(p.typ)===d))im.konstruktor.push({typ:d.name,name:paramName(d.name,im.konstruktor.map(p=>p.name))});}}
     else if(O.type==="rcall"&&O.fk){const f=MODEL.funktionen.find(x=>x._id===O.fk),z=fnById(I.fn);if(f&&z){
       const t=z.fn.faehigkeit||(z.fn.sig?null:faehigkeitVorschlag(z.store,z.fn));
       if(!t)deFlash("⚠ "+z.store.name+"."+z.fn.name+" hat kein Fähigkeits-Interface (CQRS051) — als Parameter nicht nutzbar",false);
@@ -2484,6 +2580,9 @@
     else if(O.type==="wcall"){const hd=handle(MODEL.projektionen,O.proj,O.handleIdx);if(hd)hd.fns=ohne(hd.fns,I.fn);}
     else if(O.type==="rcall"&&O.fk){const f=MODEL.funktionen.find(x=>x._id===O.fk),z=fnById(I.fn);
       if(f&&z)f.faehigkeiten=(f.faehigkeiten||[]).filter(p=>p.typ!==z.fn.faehigkeit);}
+    else if(O.type==="dienst"){const d=MODEL.dienste.find(x=>x._id===I.dn);
+      if(d&&O.fk){const f=MODEL.funktionen.find(x=>x._id===O.fk);if(f)f.konstruktor=(f.konstruktor||[]).filter(p=>dienstByName(p.typ)!==d);}
+      else if(d&&O.dn){const q=MODEL.dienste.find(x=>x._id===O.dn),im=q&&(q.implementierungen||[])[O.impl];if(im)im.konstruktor=(im.konstruktor||[]).filter(p=>dienstByName(p.typ)!==d);}}
     else if(O.type==="rcall"){const hd=handle(MODEL.reader,O.reader,O.handleIdx);if(hd)hd.fns=ohne(hd.fns,I.fn);}
     else if(O.type==="projref"){const r=MODEL.reader.find(x=>x._id===O.reader);if(r)r.projektion="";}
     else if(O.type==="query"){const r=MODEL.reader.find(x=>x._id===I.reader);if(r)r.handles=(r.handles||[]).filter(h=>h.query!==O.rec);}
@@ -2781,7 +2880,11 @@
     MODEL.funktionen.forEach(f=>{if(f.auftrag)add("auf:out:"+f.auftrag,"fk:auftrag:"+f._id,"#c08a2e",true);
       (f.ergebnisse||[]).forEach(e=>{if(e)add("fk:out:"+f._id+":"+e,"evt:in:"+e,"#4fb06a");});
       // ⚙ Lese-Fähigkeit (Parameter) → die Read-Fn, deren Interface sie ist.
-      (f.faehigkeiten||[]).forEach((p,i)=>{const z=leseFnZu(p.typ);if(z)add("rcall:out:fk:"+f._id+":"+i,"rcall:in:"+z.store._id+":"+z.fn._id,"#c08a3e");});});
+      (f.faehigkeiten||[]).forEach((p,i)=>{const z=leseFnZu(p.typ);if(z)add("rcall:out:fk:"+f._id+":"+i,"rcall:in:"+z.store._id+":"+z.fn._id,"#c08a3e");});
+      // 🧩 Dienst im Konstruktor → der Dienst.
+      (f.konstruktor||[]).forEach((p,i)=>{const d=dienstByName(p.typ);if(d)add("dn:out:fk:"+f._id+":"+i,"dn:in:"+d._id,"#7d9b55",true);});});
+    MODEL.dienste.forEach(q=>(q.implementierungen||[]).forEach((im,ii)=>(im.konstruktor||[]).forEach((p,i)=>{const d=dienstByName(p.typ);
+      if(d&&d!==q)add("dn:out:dn:"+q._id+":"+ii+":"+i,"dn:in:"+d._id,"#7d9b55",true);})));
     // Verbindungen, die schon anders gezeichnet werden (Fluss-Kanten, Ablauf-Kette) — hier nur als Port-Paar für ✓/Lösen im Verbinden-Modus.
     const nurPaar=(k1,k2)=>{if(SLOTS[k1]&&SLOTS[k2])KANTEN.push([k1,k2]);};
     MODEL.fluesse.forEach(f=>(f.knoten||[]).forEach(z=>{
@@ -3089,6 +3192,7 @@
     else if(k==="funktion"){const dn=KETTE.filter(x=>x.art==="dann"&&x.von==="fk:"+r._id).map(x=>x.d.rufe?"ƒ "+x.d.rufe:x.d.sende);
       t=(r.auftrag||"?")+" → "+((r.ergebnisse||[]).length?kurz(r.ergebnisse):"(kein Ergebnis)")+(dn.length?" · dann "+kurz(dn):"");}
     else if(k==="auftrag")t="Eingang von ƒ "+(r.funktion||"—");
+    else if(k==="dienst")t=((r.methoden||[]).length?kurz(r.methoden.map(m=>m.name)):"keine Methode")+" · "+((r.implementierungen||[]).length?"⚙ "+kurz(r.implementierungen.map(i=>i.name)):"⚠ keine Implementierung");
     else if(k==="store")t=(r.writeFns||[]).length+" schreibend · "+(r.readFns||[]).length+" lesend";
     else if(k==="readmodel"&&r.geteilt)t="⇄ geteilt";
     else if(k==="auf")t="◀ "+(r.eingang||"?")+" → "+((r.ausgaenge||[]).length?kurz(r.ausgaenge)+(r.strom?" (Strom)":""):"zur Kenntnis");
@@ -3392,7 +3496,7 @@
         deFlash("＋ Domäne "+ns,true);return null;});}
   // ＋ in der Menüleiste: Baustein IN dieser Domäne (Namespace; Decider/Applier/State ans Aggregat, Regel an den Prozess der Domäne).
   const BAU_GRUPPEN=[["Außen",["akteur","client"]],["Schreibseite",["command","event","rejection","aggregate","state","decider","applier"]],
-    ["Typen",["valueobject","enum","konfig"]],["Abläufe",["saga","transition","funktion","reaktion","quelle"]],
+    ["Typen",["valueobject","enum","konfig"]],["Abläufe",["saga","transition","funktion","dienst","reaktion","quelle"]],
     ["Leseseite",["readmodel","store","projektion","query","queryresponse","reader"]]];
   function bausteinMenue(cx,cy,ns){const agg=MODEL.aggregate.find(a=>a.namespace===ns),sg=MODEL.sagas.find(s=>s.namespace===ns);
     const it=[];BAU_GRUPPEN.forEach(([g,ks])=>{it.push({kopf:g});ks.forEach(k=>it.push({t:"＋ "+(NODELABEL[k]||k),
@@ -3615,7 +3719,7 @@
   //   geänderte/neue Karten ganz, entfernte als Schlüssel — und schickt ihn als Geste. Der Server schreibt den Patch (Schreiber, Löschen am
   //   Ort), liest warm neu und schickt das Board zurück: das ist der neue Stand. Umbenennen ist eine eigene Geste (Roslyn-Renamer), ↶ nimmt
   //   den letzten Patch zurück. Solange ein Eingabefeld den Fokus hat, wartet die Geste (sonst ein Patch je Tastendruck).
-  const GSAMMLUNGEN=["records","enums","aggregate","decider","applier","sagas","fluesse","funktionen","akteure","clients","readModels","stores","projektionen","reaktionen","reader"];
+  const GSAMMLUNGEN=["records","enums","aggregate","decider","applier","sagas","fluesse","funktionen","dienste","akteure","clients","readModels","stores","projektionen","reaktionen","reader"];
   // Natürliche Schlüssel — dieselbe Regel wie der Server (GraphExtractor.KartenSchluessel).
   const GKEY=c=>c==="decider"?(d=>(d.aggregat||"")+"|"+(d.command||"")):c==="applier"?(a=>(a.aggregat||"")+"|"+(a.event||""))
     :["readModels","stores","projektionen","reaktionen","reader"].includes(c)?(x=>x.name||""):(x=>(x.namespace||"")+"|"+(x.name||""));
@@ -4009,8 +4113,8 @@
   //   stehen an der Karte, die sie betreffen. Alle Daten kommen fertig vom Server (Frontend-Bauregel P3): das JS kennt kein
   //   Umgebungs-Modell, nur das Schema und die Datei, wie sie ist.
   const WB={zustand:null,schema:null,umg:null,umgName:null,dirty:false,uhr:null,diag:[],boot:[],letzter:null,refs:{},ver:0,es:null};
-  const HOST_ORDNUNG=["Umgebung","EventStore","VersionIndex","Cluster","Schreibpfad","Transport","Identitaeten","Quellen","Funktionen","Konfig"];
-  const HOST_SYM={Umgebung:"🏷",EventStore:"🗄",VersionIndex:"⚡",Cluster:"🕸",Schreibpfad:"✍",Transport:"🔗",Identitaeten:"🪪",Quellen:"📁",Funktionen:"ƒ",Konfig:"⚙",Uhr:"🕰"};
+  const HOST_ORDNUNG=["Umgebung","EventStore","VersionIndex","Cluster","Schreibpfad","Transport","Identitaeten","Quellen","Funktionen","Dienste","Konfig"];
+  const HOST_SYM={Umgebung:"🏷",EventStore:"🗄",VersionIndex:"⚡",Cluster:"🕸",Schreibpfad:"✍",Transport:"🔗",Identitaeten:"🪪",Quellen:"📁",Funktionen:"ƒ",Dienste:"🧩",Konfig:"⚙",Uhr:"🕰"};
   function hostKnoten(){if(!WB.schema)return [];
     const ab=[...HOST_ORDNUNG.filter(k=>WB.schema[k]),...Object.keys(WB.schema).filter(k=>!HOST_ORDNUNG.includes(k)),"Uhr"];
     return ab.map(k=>({id:"host:"+k,name:(HOST_SYM[k]||"")+" "+k,kind:"host",ref:WB.refs[k]||(WB.refs[k]={abschnitt:k})}));}
@@ -4065,12 +4169,17 @@
     return box;}
   function wbJe(sch,obj,setze){const box=h("div",{class:"wb-je"});
     const neu=v=>{obj=v;setze(Object.keys(v).length?v:undefined);};
+    // Schlüssel aus dem Code (eintraege: je Dienst/Konfig-Record sein eigenes Schema) — das Formular kommt fertig vom Server.
+    const eig=sch.eintraege||{};
     Object.keys(obj).forEach(name=>{
-      const zeile=h("details",{class:"wb-eintrag",open:""},h("summary",{},name,
+      const zeile=h("details",{class:"wb-eintrag",open:""},h("summary",{},name,eig[name]||!sch.eintraege?null:h("span",{class:"gp-mark",title:"Im Code gibt es keinen "+(sch.schluessel||"Eintrag")+" dieses Namens"}," ⚠ unbekannt"),
         h("button",{class:"rm",title:sch.schluessel+" "+name+" entfernen",onclick:e=>{e.preventDefault();const x={...obj};delete x[name];neu(x);zeigeInspector();}},"✕")),
-        wbKlasse(sch.wert,obj[name]||{},v=>{neu({...obj,[name]:v||{}});}));
+        wbKlasse(eig[name]||sch.wert,obj[name]||{},v=>{neu({...obj,[name]:v||{}});}));
       box.append(zeile);});
-    const ein=h("input",{placeholder:(sch.schluessel||"Name")+" …"});
+    const frei=Object.keys(eig).filter(k=>!(k in obj));
+    if(frei.length)box.append(h("div",{class:"gsec",style:"opacity:.7"},"aus dem Code, noch ohne Eintrag (Standard): "+frei.join(", ")));
+    const ein=h("input",{placeholder:(sch.schluessel||"Name")+" …",list:frei.length?"wb-je-"+(sch.schluessel||"x"):null});
+    if(frei.length)box.append(h("datalist",{id:"wb-je-"+(sch.schluessel||"x")},...frei.map(k=>h("option",{value:k}))));
     box.append(h("div",{class:"frow"},ein,h("button",{class:"act",onclick:()=>{const n=ein.value.trim();if(!n||obj[n])return;neu({...obj,[n]:{}});zeigeInspector();}},"＋ "+(sch.schluessel||"Eintrag"))));
     return box;}
   function wbMap(obj,setze){const box=h("div",{class:"wb-je"});

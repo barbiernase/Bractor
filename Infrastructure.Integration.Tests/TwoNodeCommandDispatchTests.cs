@@ -1,6 +1,5 @@
 using Abstractions;
 using Domain.ImagePair;
-using Domain.Pipeline.Infrastructure;
 using Infrastructure.Extensions;
 using Infrastructure.Pipeline;
 using Infrastructure.Projections;
@@ -118,7 +117,6 @@ public class TwoNodeCommandDispatchTests
             opts.EnableGrpc = false;
             opts.ClusterName = clusterName;   // GLEICHER Name → ein Cluster, zwei Member
         });
-        builder.Services.AddDomainPipelineServices(Path.Combine(watchDir, ".preprocessed"));
         GeneratedPipelines.RegisterAllPipelines(builder.Services);
         builder.Services.AddGeneratedPullPaths();
 

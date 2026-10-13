@@ -9,6 +9,9 @@ namespace GraphExtractor;
 /// </summary>
 public static class KartenIds
 {
+    /// <summary>Präfix der Dienst-Karten (<c>dienst:IX</c>) — dieselbe Id nennt ein Boot-Fehler der Dienst-Bindung.</summary>
+    public const string Dienst = "dienst:";
+
     public static string? Zu(string? typ, string? member, JsonObject board)
     {
         if (string.IsNullOrEmpty(typ)) return null;
@@ -27,6 +30,7 @@ public static class KartenIds
             return "agg:" + typ;
         }
         return Id("funktionen", f => S(f, "name") == typ || S(f, "implementierung") == typ)
+            ?? Id("dienste", d => S(d, "name") == typ || (d["implementierungen"] as JsonArray ?? []).OfType<JsonObject>().Any(i => S(i, "name") == typ))
             ?? Id("projektionen", p => S(p, "name") == typ)
             ?? Id("reaktionen", p => S(p, "name") == typ)
             ?? Id("reader", p => S(p, "name") == typ)

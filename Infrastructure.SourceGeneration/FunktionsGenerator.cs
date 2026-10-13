@@ -135,8 +135,7 @@ namespace Infrastructure.SourceGeneration
             // Laufort ist Konfig (docs/konzept-werkbank.md §4.2): je Funktion ihre öffentlichen, konkreten Implementierungen (Code-Fakt),
             //   gebunden wird erst nach der Umgebung — die Bindung selbst ist generisch instanziert, also ohne Reflection.
             var impls = eindeutig.ToDictionary<(INamedTypeSymbol Funktion, INamedTypeSymbol Auftrag, List<INamedTypeSymbol> Ergebnisse, List<INamedTypeSymbol> Faehigkeiten), INamedTypeSymbol, List<INamedTypeSymbol>>(x => x.Funktion, x => klassen
-                .Where(k => k.TypeKind == TypeKind.Class && !k.IsAbstract && !k.IsGenericType && k.DeclaredAccessibility == Accessibility.Public
-                            && k.AllInterfaces.Contains(x.Funktion, SymbolEqualityComparer.Default))
+                .Where(k => Ctorbindung.Baubar(k) && k.AllInterfaces.Contains(x.Funktion, SymbolEqualityComparer.Default))
                 .OrderBy(k => k.ToDisplayString(), System.StringComparer.Ordinal).ToList(), (IEqualityComparer<INamedTypeSymbol>)SymbolEqualityComparer.Default);
             context.AddSource("GeneratedFunktionen.g.cs", Emit(eindeutig, impls, fq));
         }
@@ -203,8 +202,9 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("        {");
             foreach (var x in fs)
                 foreach (var k in impls[x.Funktion])
-                    sb.AppendLine($"            new FunktionsImplementierung(typeof({x.Funktion.ToDisplayString(fq)}), \"{k.Name}\", "
-                        + $"(s, slots, wiederholungen) => s.AddFunktion<{x.Funktion.ToDisplayString(fq)}, {k.ToDisplayString(fq)}>(slots, wiederholungen)),");
+                    sb.AppendLine($"            new FunktionsImplementierung(typeof({x.Funktion.ToDisplayString(fq)}), \"{k.Name}\", typeof({k.ToDisplayString(fq)}), "
+                        + $"(s, slots, wiederholungen) => s.AddFunktion<{x.Funktion.ToDisplayString(fq)}, {k.ToDisplayString(fq)}>(slots, wiederholungen, "
+                        + $"sp => new {k.ToDisplayString(fq)}({Ctorbindung.Argumente(Ctorbindung.Konstruktor(k), fq)}))),");
             sb.AppendLine("        };");
             sb.AppendLine();
             sb.AppendLine("        /// <summary>Bindung als externe Funktion (Laufort Extern: ein Worker holt die Aufträge per Pull).</summary>");

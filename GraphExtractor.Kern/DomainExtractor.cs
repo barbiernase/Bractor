@@ -41,6 +41,8 @@ public sealed class DomainModel
     public List<FunktionRaw> Funktionen { get; } = new();
     /// <summary>Aufträge (<c>IAuftrag&lt;F&gt;</c>): der eine Eingang je Katalog-Funktion.</summary>
     public List<RecordRaw> Auftraege { get; } = new();
+    /// <summary>Domänen-Dienste (<c>interface IX : IDienst</c>, Plan E11): Signatur + Implementierungen.</summary>
+    public List<DienstRaw> Dienste { get; } = new();
     /// <summary>
     /// Konfigurations-Records: Records ohne Nachrichten-Rolle, die per DI in den KONSTRUKTOR eines Konsumenten
     /// (Pipeline, Projektion/Reaktion, Reader, Store-Impl) injiziert werden — keine Value Objects der Domäne.
@@ -168,11 +170,41 @@ public sealed class FunktionRaw
     public Ort? ImplOrt;
     /// <summary>Die Datei, in der <c>RufeAsync</c> der Implementierung steht (bei partial: die Teil-Datei der Methode).</summary>
     public string? ImplDatei;
+    /// <summary>Der Konstruktor der Implementierung (Typ wie geschrieben, Name) — Dienste, Konfig-Records, Logger.</summary>
+    public List<(string Typ, string Name)> ImplKonstruktor = new();
     public string AuftragFull = "";
     public List<string> ErgebnisseFull = new();
     /// <summary>Lese-Fähigkeiten nach IAusfuehrung (Typ wie geschrieben, Name).</summary>
     public List<(string Typ, string Name)> Faehigkeiten = new();
     public string? Doku, Datei;
+}
+
+/// <summary>
+/// Ein Domänen-Dienst (<c>interface IX : IDienst</c>) — Signatur (Methoden, Typen wie geschrieben) und seine Implementierungen: jede Klasse der
+/// Domänen-Quellen, die das Interface implementiert (Code-Fakt über das Interface, nie über Namen).
+/// </summary>
+public sealed class DienstRaw
+{
+    public string Name = "", Full = "", Namespace = "";
+    public string? Doku, Datei;
+    public List<DienstMethodeRaw> Methoden = new();
+    public List<DienstImplRaw> Impls = new();
+}
+
+public sealed class DienstMethodeRaw
+{
+    public string Name = "", Rueckgabe = "";
+    public List<(string Typ, string Name)> Parameter = new();
+    public string? Doku;
+}
+
+public sealed class DienstImplRaw
+{
+    public string Name = "", Full = "";
+    public string? Datei;
+    public List<(string Typ, string Name)> Konstruktor = new();
+    /// <summary>Je Methode des Dienstes: der Rumpf der Implementierung und der Ort ihrer Methode (Rumpf-Edit).</summary>
+    public List<(string Methode, string? Rumpf, Ort? Ort)> Rumpfe = new();
 }
 
 public sealed class EnumRaw
@@ -476,7 +508,7 @@ public sealed partial class DomainExtractor
     private readonly HashSet<string> _impliziteUsings;
     private readonly INamedTypeSymbol? _iDecider, _iApplier, _iAggEnvelope, _pipelineContext,
         _iWriteStore, _iReadStore, _iStore, _iWertobjekt, _prozessTyp, _iAkteur, _iDarf, _iAkteurDienst, _iAkteurVertrag,
-        _iClient, _iSendet, _iFragt, _iFunktion, _iAuftrag;
+        _iClient, _iSendet, _iFragt, _iFunktion, _iAuftrag, _iDienst;
     /// <summary>State-FullName → die Typen, die <c>IDecider&lt;State&gt;</c> bzw. <c>IApplier&lt;State&gt;</c> implementieren (egal wo deklariert).</summary>
     private readonly Dictionary<string, List<INamedTypeSymbol>> _deciderJeState = new(StringComparer.Ordinal), _applierJeState = new(StringComparer.Ordinal);
 
@@ -527,6 +559,7 @@ public sealed partial class DomainExtractor
         _iWertobjekt = Get(Vertrag.IWertobjekt);
         _iFunktion = Get(Vertrag.IFunktion);
         _iAuftrag = Get(Vertrag.IAuftrag);
+        _iDienst = Get(Abstractions.Dienstvertrag.Marker);
         _prozessTyp = Get(Vertrag.ProzessMetadatenName);
         _iPipeline = Get(Vertrag.IPipeline);
 
@@ -598,6 +631,7 @@ public sealed partial class DomainExtractor
 
         CatalogDomainTypes(m);
         LinkFunktionsImpls(m);
+        LinkDienstImpls(m);
         SeparateKonfigs(m);
         LinkReadModelStores(m);
 
@@ -729,6 +763,8 @@ public sealed partial class DomainExtractor
             }
             // Katalog-Funktion: ein Interface mit IFunktion — nur seine Signatur (Auftrag → Ergebnisse) zählt.
             if (t.TypeKind == TypeKind.Interface && _iFunktion != null && Sym.Implements(t, _iFunktion)) { if (ReadFunktion(t) is { } f) m.Funktionen.Add(f); continue; }
+            // Domänen-Dienst (Plan E11): ein Interface mit IDienst — Signatur; die Implementierungen hängt LinkDienstImpls an.
+            if (t.TypeKind == TypeKind.Interface && _iDienst != null && Sym.Implements(t, _iDienst)) { m.Dienste.Add(ReadDienst(t)); continue; }
             // Akteur-Dienst: ein Vertrag (Interface) mit IAkteurDienst<A> — kein Akteur, er gehört A (wird unten zugeordnet).
             if (t.TypeKind == TypeKind.Interface && AkteurVonDienst(t) is { } dienstVon) { dienstZu.Add((t.Name, dienstVon.Fq())); continue; }
             // Client-Vertrag (IClientVertrag): die Software an der Leitung — vor dem Akteur-Vertrag, denn er ERBT Vertrags-Teile.
@@ -779,6 +815,7 @@ public sealed partial class DomainExtractor
         m.Triggers.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Funktionen.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
         m.Auftraege.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
+        m.Dienste.Sort((a, b) => string.CompareOrdinal(a.Full, b.Full));
     }
 
     /// <summary>
@@ -802,7 +839,70 @@ public sealed partial class DomainExtractor
             f.ImplRumpf = im is null ? null : MethodBody(im);
             f.ImplOrt = im?.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() is MethodDeclarationSyntax imd ? Ort.Von(imd) : null;
             f.ImplDatei = (im?.DeclaringSyntaxReferences ?? impl.DeclaringSyntaxReferences).FirstOrDefault()?.SyntaxTree.FilePath;
+            f.ImplKonstruktor = Konstruktor(impl);
         }
+    }
+
+    /// <summary>
+    /// Je Domänen-Dienst seine Implementierungen: jede konkrete Klasse der Domänen-Quellen, die das Interface implementiert — mit Konstruktor und
+    /// je Interface-Methode dem Rumpf der Implementierung (Ort für den Rumpf-Edit).
+    /// </summary>
+    private void LinkDienstImpls(DomainModel m)
+    {
+        if (m.Dienste.Count == 0) return;
+        var klassen = DomainQuellTypen().Where(t => t.TypeKind == TypeKind.Class && !t.IsAbstract).OrderBy(t => t.Fq(), StringComparer.Ordinal).ToList();
+        foreach (var d in m.Dienste)
+            foreach (var impl in klassen.Where(k => k.AllInterfaces.Any(i => i.Fq() == d.Full)))
+            {
+                var iface = impl.AllInterfaces.First(i => i.Fq() == d.Full);
+                var raw = new DienstImplRaw
+                {
+                    Name = impl.Name, Full = impl.Fq(), Konstruktor = Konstruktor(impl),
+                    Datei = QuellDeklarationen(impl).FirstOrDefault()?.SyntaxTree.FilePath,
+                };
+                foreach (var me in iface.GetMembers().OfType<IMethodSymbol>().Where(x => x.MethodKind == MethodKind.Ordinary))
+                {
+                    var im = Sym.Implementierung(impl, me) as IMethodSymbol;
+                    var syn = im?.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() as MethodDeclarationSyntax;
+                    raw.Rumpfe.Add((me.Name, im == null ? null : MethodBody(im), syn == null ? null : Ort.Von(syn)));
+                }
+                d.Impls.Add(raw);
+            }
+    }
+
+    /// <summary>
+    /// Der Konstruktor einer Implementierung, wie die generierte Bindung ihn ruft (der öffentliche mit den meisten Parametern; Primär-Konstruktor
+    /// eingeschlossen) — Typ so, wie er im Code steht.
+    /// </summary>
+    private static List<(string Typ, string Name)> Konstruktor(INamedTypeSymbol t)
+    {
+        var ctor = t.InstanceConstructors.Where(c => c.DeclaredAccessibility == Accessibility.Public).OrderByDescending(c => c.Parameters.Length).FirstOrDefault();
+        if (ctor == null) return new();
+        return ctor.Parameters.Select(p => (
+            (p.DeclaringSyntaxReferences.FirstOrDefault()?.GetSyntax() as ParameterSyntax)?.Type?.ToString() ?? ShortType(p.Type), p.Name)).ToList();
+    }
+
+    /// <summary>Die Signatur eines Dienstes: seine Methoden (Deklarations-Reihenfolge), Typen wie geschrieben.</summary>
+    private DienstRaw ReadDienst(INamedTypeSymbol t)
+    {
+        var decl = QuellDeklarationen(t).FirstOrDefault();
+        var d = new DienstRaw
+        {
+            Name = t.Name, Full = t.Fq(), Namespace = t.ContainingNamespace.Fq(),
+            Doku = decl == null ? null : Summary(decl), Datei = decl?.SyntaxTree.FilePath,
+        };
+        foreach (var me in t.GetMembers().OfType<IMethodSymbol>().Where(x => x.MethodKind == MethodKind.Ordinary)
+                     .OrderBy(x => x.Locations.FirstOrDefault()?.SourceSpan.Start ?? 0))
+        {
+            var syn = me.DeclaringSyntaxReferences.Select(r => r.GetSyntax()).OfType<MethodDeclarationSyntax>().FirstOrDefault();
+            d.Methoden.Add(new DienstMethodeRaw
+            {
+                Name = me.Name, Rueckgabe = syn?.ReturnType.ToString() ?? ShortType(me.ReturnType),
+                Parameter = me.Parameters.Select((p, i) => (syn?.ParameterList.Parameters.ElementAtOrDefault(i)?.Type?.ToString() ?? ShortType(p.Type), p.Name)).ToList(),
+                Doku = syn == null ? null : Summary(syn),
+            });
+        }
+        return d;
     }
 
     /// <summary>Ein Auftrag (<c>record X : IAuftrag&lt;F&gt;</c>) → F; sonst null.</summary>
@@ -866,6 +966,9 @@ public sealed partial class DomainExtractor
     {
         var voByFull = m.ValueObjects.GroupBy(v => v.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var storeImpls = m.Stores.SelectMany(s => s.ImplsFull).ToHashSet(StringComparer.Ordinal);
+        // Funktions- und Dienst-Implementierungen (Plan E11): ihre Konstruktor-Records sind Konfig aus Konfig:<Record>.
+        storeImpls.UnionWith(m.Funktionen.Where(f => f.ImplFull != null).Select(f => f.ImplFull!));
+        storeImpls.UnionWith(m.Dienste.SelectMany(d => d.Impls).Select(i => i.Full));
         var injiziert = new HashSet<string>(StringComparer.Ordinal);
         foreach (var t in _types)
         {

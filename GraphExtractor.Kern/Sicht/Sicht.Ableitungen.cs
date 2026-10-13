@@ -122,6 +122,8 @@ public sealed partial class Sicht
             case "transition":
                 return _sagas.FirstOrDefault(x => S(x, "name") == S(r, "prozess")) is { } sg ? Oder(SagaAgg(sg)) : Geteilt;
             case "funktion": return Oder(FunktionAgg(r));
+            // Ein Dienst steht im Block der Funktionen, die ihn nehmen (eindeutig), sonst geteilt.
+            case "dienst": return Oder(Eindeutig(DienstNutzer(r).Select(FunktionAgg).Where(x => x.Length > 0)));
             case "auftrag":
                 return _funktionen.FirstOrDefault(x => S(x, "auftrag") == name) is { } f ? Oder(FunktionAgg(f)) : Geteilt;
         }
@@ -220,6 +222,9 @@ public sealed partial class Sicht
                 Add(MengeListe(S(r, "auftrag")));
                 if (s.Count == 0)
                     foreach (var t in _transitions.Where(t => Alle(t["dann"]).Any(d => S(d, "rufe") == name))) Add(AkteureId("tr:" + S(t, "_id")));
+                break;
+            case "dienst":
+                foreach (var f in DienstNutzer(r)) Add(AkteureId("fk:" + S(f, "_id")));
                 break;
             case "auftrag":
                 if (_funktionen.FirstOrDefault(x => S(x, "auftrag") == name) is { } fa) Add(AkteureId("fk:" + S(fa, "_id")));

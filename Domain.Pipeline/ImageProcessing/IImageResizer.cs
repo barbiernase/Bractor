@@ -1,3 +1,4 @@
+using Abstractions;
 using OpenCvSharp;
 
 namespace Domain.Pipeline.ImageProcessing;
@@ -6,7 +7,7 @@ namespace Domain.Pipeline.ImageProcessing;
 /// Skaliert ein Bild auf eine Zielhöhe (Breite proportional).
 /// Arbeitet auf OpenCV Mat — kein Disk-I/O, reine Speicher-Operation.
 /// </summary>
-public interface IImageResizer
+public interface IImageResizer : IDienst
 {
     /// <summary>
     /// Skaliert das Bild so, dass die Höhe targetHeight Pixel beträgt.

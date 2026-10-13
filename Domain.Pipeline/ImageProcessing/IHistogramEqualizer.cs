@@ -1,3 +1,4 @@
+using Abstractions;
 using OpenCvSharp;
 
 namespace Domain.Pipeline.ImageProcessing;
@@ -7,7 +8,7 @@ namespace Domain.Pipeline.ImageProcessing;
 /// Verbessert den Kontrast — besonders bei schlecht belichteten Aufnahmen.
 /// Arbeitet auf OpenCV Mat — kein Disk-I/O, reine Speicher-Operation.
 /// </summary>
-public interface IHistogramEqualizer
+public interface IHistogramEqualizer : IDienst
 {
     /// <summary>
     /// Histogrammausgleich. Bei Farbbildern wird nur der

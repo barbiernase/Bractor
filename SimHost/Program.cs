@@ -242,7 +242,13 @@ app.MapGet("/api/llm/protokoll", (string? id, int? max) => Results.Json(konsole.
 app.Lifetime.ApplicationStopping.Register(() => werkbank.Host.StoppeAsync().GetAwaiter().GetResult());
 var werkbankJson = new JsonSerializerOptions(JsonSerializerDefaults.Web) { Converters = { new System.Text.Json.Serialization.JsonStringEnumConverter() } };
 app.MapGet("/api/werkbank/zustand", () => Results.Json(werkbank.Zustand(), werkbankJson));
-app.MapGet("/api/werkbank/schema", () => Results.Content(SimHost.Werkbank.Schema.Umgebung().ToJsonString(), "application/json"));
+app.MapGet("/api/werkbank/schema", async (CancellationToken ct) =>
+{
+    // Dienste und Konfig-Records kommen aus dem Code (warmer Workspace) — ohne gelesenes Board bleiben sie freie Abschnitte.
+    try { await werkbank.Arbeitsbereich.LiesAsync(ct); } catch (Exception) { }
+    var board = werkbank.Arbeitsbereich.BoardJson is { } b ? System.Text.Json.Nodes.JsonNode.Parse(b) as System.Text.Json.Nodes.JsonObject : null;
+    return Results.Content(SimHost.Werkbank.Schema.Umgebung(board).ToJsonString(), "application/json");
+});
 app.MapGet("/api/werkbank/umgebung/{name}", (string name) => Results.Content(werkbank.Umgebungen.Roh(name).ToJsonString(), "application/json"));
 app.MapPost("/api/werkbank/umgebung/{name}", (string name, System.Text.Json.Nodes.JsonObject inhalt) =>
 {

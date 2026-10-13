@@ -113,6 +113,16 @@ public sealed class WorkerKonfig
     public string Token { get; set; } = "";
 }
 
+/// <summary>
+/// Welche Implementierung ein Domänen-Dienst (<c>IDienst</c>) in dieser Umgebung hat (Abschnitt <c>Dienste:&lt;IDienst&gt;</c>, Plan E11). Ohne
+/// Eintrag gilt die einzige Implementierung; gibt es mehrere, muss sie hier stehen.
+/// </summary>
+public sealed class DienstKonfig
+{
+    /// <summary>Der Klassenname der Implementierung.</summary>
+    public string? Implementierung { get; set; }
+}
+
 /// <summary>Die gebundene Umgebung (ohne Quellen, Identitäten, Konfig-Records — die binden ihre eigenen Abschnitte).</summary>
 public sealed class UmgebungKonfig
 {
@@ -123,6 +133,7 @@ public sealed class UmgebungKonfig
     public SchreibpfadKonfig Schreibpfad { get; set; } = new();
     public TransportKonfig Transport { get; set; } = new();
     public Dictionary<string, FunktionsKonfig> Funktionen { get; set; } = new(StringComparer.Ordinal);
+    public Dictionary<string, DienstKonfig> Dienste { get; set; } = new(StringComparer.Ordinal);
 }
 
 /// <summary>Die Abschnitte einer Umgebungs-Datei — ein anderer Abschnitt ist ein Start-Fehler.</summary>
@@ -130,8 +141,8 @@ public static class UmgebungsAbschnitte
 {
     public const string Umgebung = "Umgebung", EventStore = "EventStore", VersionIndex = "VersionIndex", Cluster = "Cluster",
         Schreibpfad = "Schreibpfad", Transport = "Transport", Identitaeten = "Identitaeten", Quellen = "Quellen",
-        Funktionen = "Funktionen", Konfig = "Konfig", Logging = "Logging";
+        Funktionen = "Funktionen", Dienste = "Dienste", Konfig = "Konfig", Logging = "Logging";
 
     public static readonly IReadOnlyList<string> Alle =
-        [Umgebung, EventStore, VersionIndex, Cluster, Schreibpfad, Transport, Identitaeten, Quellen, Funktionen, Konfig, Logging];
+        [Umgebung, EventStore, VersionIndex, Cluster, Schreibpfad, Transport, Identitaeten, Quellen, Funktionen, Dienste, Konfig, Logging];
 }

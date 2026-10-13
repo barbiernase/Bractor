@@ -390,4 +390,88 @@ public sealed class GestenTests : IDisposable
         ort.Datei.Should().Be("Leihwesen/Lesen.cs");
         Rumpf.Lies(Text("Lesen.cs"), ort).Should().Be((string?)fn["rumpf"]);
     }
+
+    // ══ Dienste (Plan E11): ⊕ am Konstruktor der Implementierung, Methoden und Implementierungen als Geste ══
+
+    private static JsonObject Param(string typ, string name) => new() { ["typ"] = typ, ["name"] = name };
+
+    [Fact]
+    public async Task Neuer_Dienst_per_Plus_an_die_Funktion_legt_Interface_und_Implementierung_an_und_erweitert_den_Konstruktor()
+    {
+        var board = await BoardAsync();
+        var funktion = Karte(board, "funktionen", f => (string?)f["name"] == "ISchadensSchaetzung");
+        funktion["konstruktor"]!.AsArray().Add(Param("ILeuchte", "licht"));
+        var dienst = new JsonObject
+        {
+            ["name"] = "ILeuchte", ["namespace"] = "Leihwesen.Gebuehren",
+            ["methoden"] = new JsonArray(new JsonObject { ["name"] = "Hell", ["rueckgabe"] = "bool", ["parameter"] = new JsonArray(Param("int", "stufe")) }),
+            ["implementierungen"] = new JsonArray(new JsonObject { ["name"] = "Leuchte" }),
+        };
+
+        var bericht = await GesteAsync(new KartenDelta { Karten = new() { ["funktionen"] = [funktion], ["dienste"] = [dienst] } });
+
+        bericht.Patch.Select(p => p.Datei).Should().BeEquivalentTo("Leihwesen/Gebuehren.cs", "Leihwesen/ILeuchte.cs", "Leihwesen/Leuchte.cs");
+        Text("Gebuehren.cs").Should().Contain("public sealed class Schadensschaetzer(IWertTabelle tabelle, ILeuchte licht) : ISchadensSchaetzung");
+        Text("ILeuchte.cs").Should().Contain("public interface ILeuchte : IDienst").And.Contain("    bool Hell(int stufe);");
+        Text("Leuchte.cs").Should().Contain("public sealed class Leuchte : ILeuchte").And.Contain("public bool Hell(int stufe)")
+            .And.Contain("throw new NotImplementedException(\"TODO: Leuchte.Hell\");");
+        var neu = await BoardAsync();
+        Karte(neu, "funktionen", f => (string?)f["name"] == "ISchadensSchaetzung")["konstruktor"]!.AsArray().Select(p => (string?)p!["typ"])
+            .Should().Equal("IWertTabelle", "ILeuchte");
+        neu["sicht"]!["kanten"]!.AsArray().Select(k => k!.ToJsonString()).Should().Contain("[\"fk:funktion:ISchadensSchaetzung\",\"dn:dienst:ILeuchte\"]");
+    }
+
+    [Fact]
+    public async Task Dienst_loesen_entfernt_nur_den_Konstruktor_Parameter()
+    {
+        var funktion = Karte(await BoardAsync(), "funktionen", f => (string?)f["name"] == "ISchadensSchaetzung");
+        funktion["konstruktor"] = new JsonArray();
+
+        await GesteAsync(Geaendert("funktionen", funktion));
+
+        Text("Gebuehren.cs").Should().Contain("public sealed class Schadensschaetzer : ISchadensSchaetzung")
+            .And.Contain("if (!await tabelle.IstSchaetzbarAsync(auftrag.LeserId))", "der Rumpf bleibt — der Compiler meldet ihn an der Karte");
+    }
+
+    [Fact]
+    public async Task Methode_am_Dienst_kommt_ans_Interface_und_als_Stub_an_jede_Implementierung()
+    {
+        var dienst = Karte(await BoardAsync(), "dienste", d => (string?)d["name"] == "IWertTabelle");
+        dienst["methoden"]!.AsArray().Add(new JsonObject { ["name"] = "Runde", ["rueckgabe"] = "decimal", ["parameter"] = new JsonArray(Param("decimal", "betrag")) });
+
+        await GesteAsync(Geaendert("dienste", dienst));
+
+        Text("Gebuehren.cs").Should().Contain("    Task<bool> IstSchaetzbarAsync(Guid leserId);\n    decimal Runde(decimal betrag);\n}")
+            .And.Contain("    public decimal Runde(decimal betrag)\n    {\n        throw new NotImplementedException(\"TODO: LineareWertTabelle.Runde\");");
+    }
+
+    [Fact]
+    public async Task Zweite_Implementierung_eines_Dienstes_ist_eine_neue_Klasse_mit_Stubs()
+    {
+        var dienst = Karte(await BoardAsync(), "dienste", d => (string?)d["name"] == "IWertTabelle");
+        dienst["implementierungen"]!.AsArray().Add(new JsonObject { ["name"] = "FesteWertTabelle" });
+
+        var bericht = await GesteAsync(Geaendert("dienste", dienst));
+
+        bericht.Patch.Select(p => p.Datei).Should().Equal("Leihwesen/FesteWertTabelle.cs");
+        Text("FesteWertTabelle.cs").Should().Contain("public sealed class FesteWertTabelle : IWertTabelle")
+            .And.Contain("public decimal Restwert(decimal neuwert, int alterJahre)").And.Contain("public Task<bool> IstSchaetzbarAsync(Guid leserId)");
+    }
+
+    [Fact]
+    public async Task C_Sharp_Implementierung_einer_Funktion_anlegen_mit_Dienst_im_Konstruktor()
+    {
+        var funktion = Karte(await BoardAsync(), "funktionen", f => (string?)f["name"] == "ISeitenPruefung");
+        funktion["entwurf"] = "";
+        funktion["konstruktor"] = new JsonArray(Param("IWertTabelle", "tabelle"));
+
+        var bericht = await GesteAsync(Geaendert("funktionen", funktion));
+
+        bericht.Patch.Select(p => p.Datei).Should().Equal("Leihwesen/SeitenPruefung.cs");
+        Text("SeitenPruefung.cs").Should().Contain("using Leihwesen.Gebuehren;")
+            .And.Contain("public sealed class SeitenPruefung(IWertTabelle tabelle) : ISeitenPruefung")
+            .And.Contain("public async Task<OneOf<SeiteGeprueft>> RufeAsync(PruefeSeite auftrag, IAusfuehrung x)");
+        var neu = Karte(await BoardAsync(), "funktionen", f => (string?)f["name"] == "ISeitenPruefung");
+        ((string?)neu["implementierung"]).Should().Be("SeitenPruefung");
+    }
 }

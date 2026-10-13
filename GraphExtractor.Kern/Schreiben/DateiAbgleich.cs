@@ -110,7 +110,23 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyLis
             var was = $"funktion {f.Namespace}.{f.Name}";
             Datei(f.Datei!, was, t => FunktionsSignatur(t, f.Name, f, schnittstelle: true));
             if (f.ImplDatei != null && f.Implementierung != null)
+            {
                 Datei(f.ImplDatei, was, t => FunktionsSignatur(t, f.Implementierung, f, schnittstelle: false));
+                // Der Konstruktor der Implementierung (Dienste per ⊕, Konfig-Records) — nur die Parameterliste, der Rest bleibt.
+                Datei(f.ImplDatei, was, t => Konstruktor(t, f.Implementierung, f.Konstruktor));
+            }
+        }
+        // Domänen-Dienst (Plan E11): die Methoden am Interface und an jeder Implementierung (fehlende als throw-Stub); je Implementierung ihr
+        //   Konstruktor. Rümpfe gehören dem Code (✎ am Rumpf); der Name ist die Identität (Umbenennen ist ein Refactoring).
+        foreach (var d in modell.Dienste.Where(d => d.Datei != null && Herkunft.Geaendert(d.Herkunft, Herkunft.Von(d))))
+        {
+            var was = $"dienst {d.Namespace}.{d.Name}";
+            Datei(d.Datei!, was, t => DienstMethoden(t, d.Name, d, null));
+            foreach (var i in d.Implementierungen.Where(i => i.Datei != null))
+            {
+                Datei(i.Datei!, was, t => DienstMethoden(t, i.Name, d, i));
+                Datei(i.Datei!, was, t => Konstruktor(t, i.Name, i.Konstruktor));
+            }
         }
         foreach (var a in modell.Akteure.Where(a => a.Datei != null && Herkunft.Geaendert(a.Herkunft, Herkunft.Von(a))))
         {
@@ -419,6 +435,70 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyLis
         var alt = m.ReturnType.ToString();
         var huelle = Wrapper(alt) is "Task" or "ValueTask" ? Wrapper(alt) : "Task";
         return Signatur(text, m, $"{huelle}<{OneOf}<{string.Join(", ", f.Ergebnisse)}>>", soll);
+    }
+
+    // ── Dienst: Methoden-Signaturen (Abgleich je Name), fehlende Methoden anhängen; am Interface fallen entfernte weg ──
+    private (string, string)? DienstMethoden(string text, string klasse, Dienst d, DienstImpl? impl)
+    {
+        var notiz = new List<string>();
+        foreach (var m in d.Methoden)
+        {
+            var root = Parse(text);
+            if (root.DescendantNodes().OfType<TypeDeclarationSyntax>().FirstOrDefault(t => t.Identifier.Text == klasse) is not { } typ)
+                return (text, $"{klasse} nicht gefunden");
+            if (typ.Members.OfType<MethodDeclarationSyntax>().FirstOrDefault(x => x.Identifier.Text == m.Name) is { } decl)
+            {
+                if (Signatur(text, decl, m.Rueckgabe, m.Parameter) is { } neu) { text = neu.Item1; notiz.Add(m.Name); }
+                continue;
+            }
+            var einzug = "    ";
+            var zeile = impl == null ? $"{einzug}{Scaffolder.DienstMethodeKopf(m)};\n" : Scaffolder.DienstMethodeStub(d, impl, m, einzug);
+            var vor = typ.CloseBraceToken.SpanStart;
+            var leer = typ.Members.Count > 0 && impl != null ? "\n" : "";
+            text = MitNamespaces(text[..vor] + leer + zeile + text[vor..], m.Parameter.Select(p => p.Typ).Append(m.Rueckgabe));
+            notiz.Add("+" + m.Name);
+        }
+        if (impl == null)
+        {
+            var root = Parse(text);
+            var typ = root.DescendantNodes().OfType<InterfaceDeclarationSyntax>().FirstOrDefault(t => t.Identifier.Text == klasse);
+            var weg = typ?.Members.OfType<MethodDeclarationSyntax>().Where(x => d.Methoden.All(m => m.Name != x.Identifier.Text)).ToList() ?? [];
+            foreach (var x in weg.OrderByDescending(x => x.SpanStart))
+            {
+                var von = x.GetLeadingTrivia().FirstOrDefault(t => t.IsKind(SyntaxKind.SingleLineDocumentationCommentTrivia)) is { } doku && doku != default
+                    ? doku.SpanStart : x.SpanStart;
+                while (von > 0 && text[von - 1] is ' ' or '\t') von--;
+                var bis = x.Span.End;
+                if (bis < text.Length && text[bis] == '\n') bis++;
+                text = text[..von] + text[bis..];
+                notiz.Add("−" + x.Identifier.Text);
+            }
+        }
+        return notiz.Count == 0 ? null : (text, "Methoden " + string.Join(", ", notiz));
+    }
+
+    // ── Konstruktor einer Implementierung (Funktion/Dienst): nur die Parameterliste — Primär-Konstruktor bzw. der öffentliche Konstruktor ──
+    private (string, string)? Konstruktor(string text, string klasse, IReadOnlyList<Parameter> soll)
+    {
+        var root = Parse(text);
+        if (root.DescendantNodes().OfType<ClassDeclarationSyntax>().FirstOrDefault(c => c.Identifier.Text == klasse) is not { } cls)
+            return (text, $"{klasse} nicht gefunden");
+        ParameterListSyntax? liste = cls.ParameterList
+            ?? cls.Members.OfType<ConstructorDeclarationSyntax>().Where(c => c.Modifiers.Any(m => m.IsKind(SyntaxKind.PublicKeyword)))
+                .OrderByDescending(c => c.ParameterList.Parameters.Count).FirstOrDefault()?.ParameterList;
+        var ist = liste?.Parameters.ToList() ?? [];
+        bool Gleich(ParameterSyntax p, Parameter q) => p.Identifier.Text == q.Name && N(p.Type?.ToString()) == N(q.Typ);
+        if (ist.Count == soll.Count && ist.Zip(soll).All(z => Gleich(z.First, z.Second))) return null;
+        var teile = soll.Select(q => ist.FirstOrDefault(p => Gleich(p, q))?.ToString() ?? $"{q.Typ} {q.Name}").ToList();
+        string neu;
+        if (liste != null && (liste != cls.ParameterList || soll.Count > 0)) neu = Anwenden(text, [(liste.SpanStart, liste.Span.End, Liste(liste, teile))]);
+        else if (liste != null) neu = Anwenden(text, [(liste.SpanStart, liste.Span.End, "")]);   // Primär-Konstruktor ohne Parameter: weg
+        else
+        {
+            var nach = cls.TypeParameterList?.Span.End ?? cls.Identifier.Span.End;
+            neu = Anwenden(text, [(nach, nach, "(" + string.Join(", ", teile) + ")")]);
+        }
+        return (MitNamespaces(neu, soll.Select(p => p.Typ)), "Konstruktor");
     }
 
     private static MethodDeclarationSyntax? Methode(SyntaxNode root, string klasse, string? methode) =>
@@ -779,6 +859,8 @@ internal sealed class Abgleich(EditorModell modell, Dateipuffer ws, IReadOnlyLis
             .Concat(modell.Akteure.SelectMany(a => a.Vertrag.Select(r => (Name: r.Teil ?? a.VertragTyp, a.Namespace))))
             // Katalog-Funktionen: ein Akteur, der eine anbietet (IDarf<IFunktion>), braucht ihren Namespace.
             .Concat(modell.Funktionen.Select(f => (f.Name, f.Namespace)))
+            // Domänen-Dienste: eine Implementierung, die einen nimmt, braucht seinen Namespace.
+            .Concat(modell.Dienste.Select(d => (d.Name, d.Namespace)))
             .GroupBy(x => x.Name).ToDictionary(g => g.Key, g => g.First().Item2, StringComparer.Ordinal);
         var root = Parse(text);
         var dateiNs = root.DescendantNodes().OfType<BaseNamespaceDeclarationSyntax>().FirstOrDefault()?.Name.ToString();

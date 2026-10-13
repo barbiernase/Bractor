@@ -5,9 +5,9 @@ using OpenCvSharp;
 namespace Domain.Pipeline.ImageProcessing;
 
 // ═══════════════════════════════════════════════════
-// OpenCV-Implementierungen der Katalog-Funktionen (Domain.Bildaufbereitung). Gebunden im Host:
-//   services.AddFunktion<IBildVerkleinerung, OpenCvBildVerkleinerung>(slots: 2);
-//   services.AddFunktion<IHistogrammAusgleich, OpenCvHistogrammAusgleich>(slots: 2);
+// OpenCV-Implementierungen der Katalog-Funktionen (Domain.Bildaufbereitung). Gebunden nach der Umgebung (Funktionen:<F>:Laufort = Host);
+// ihre Dienste (IImageResizer, IHistogramEqualizer) und der Konfig-Record PreprocessingConfig (Konfig:PreprocessingConfig) kommen aus
+// der generierten Dienst-Bindung (GeneratedDienste).
 // Jede schreibt eine Datei in PreprocessingConfig.OutputPath. Der Zielname folgt nur aus der Quelle — eine Wiederholung
 // derselben Ausführung überschreibt dieselbe Datei, statt eine zweite anzulegen. Mehrere Slots ⇒ zustandslos.
 // ═══════════════════════════════════════════════════

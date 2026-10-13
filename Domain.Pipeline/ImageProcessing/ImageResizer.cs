@@ -6,7 +6,7 @@ namespace Domain.Pipeline.ImageProcessing;
 /// Skaliert Bilder auf eine Zielhöhe mit proportionaler Breite.
 /// Nutzt INTER_AREA für Downscaling — schärfste Ergebnisse bei Verkleinerung.
 /// </summary>
-internal class ImageResizer : IImageResizer
+public sealed class ImageResizer : IImageResizer
 {
     public Mat Resize(Mat input, int targetHeight)
     {

@@ -156,6 +156,22 @@ public static class ModellMapper
                 Name = f.Name, Namespace = f.Namespace, Auftrag = Kurz(f.AuftragFull), Ergebnisse = f.ErgebnisseFull.Select(Evt).ToList(),
                 Faehigkeiten = f.Faehigkeiten.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
                 Doku = f.Doku, Datei = Rel(f.Datei), Implementierung = f.ImplKlasse, ImplDatei = Rel(f.ImplDatei), Rumpf = f.ImplRumpf,
+                Konstruktor = f.ImplKonstruktor.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
+            }).ToList(),
+            Dienste = dom.Dienste.Select(d => new Dienst
+            {
+                Name = d.Name, Namespace = d.Namespace, Doku = d.Doku, Datei = Rel(d.Datei),
+                Methoden = d.Methoden.Select(me => new DienstMethode
+                {
+                    Name = me.Name, Rueckgabe = me.Rueckgabe, Doku = me.Doku,
+                    Parameter = me.Parameter.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
+                }).ToList(),
+                Implementierungen = d.Impls.Select(i => new DienstImpl
+                {
+                    Name = i.Name, Datei = Rel(i.Datei),
+                    Konstruktor = i.Konstruktor.Select(p => new Parameter { Typ = p.Typ, Name = p.Name }).ToList(),
+                    Rumpfe = i.Rumpfe.Select(r => new DienstRumpf { Methode = r.Methode, Rumpf = r.Rumpf }).ToList(),
+                }).ToList(),
             }).ToList(),
             Fluesse = dom.Fluesse.Select(f => new FlussPipeline
             {
@@ -647,7 +663,8 @@ public static class ModellMapper
         var storeVon = dom.Stores.GroupBy(x => x.Namespace + "." + x.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var funktionVon = dom.Funktionen.GroupBy(f => f.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
         var akteurVon = dom.Akteure.GroupBy(a => a.Namespace + "." + a.Name, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
-        foreach (var sammlung in new[] { "records", "enums", "sagas", "fluesse", "funktionen", "akteure", "clients", "readModels", "projektionen", "reaktionen", "reader", "stores" })
+        var dienstVon = dom.Dienste.GroupBy(d => d.Full, StringComparer.Ordinal).ToDictionary(g => g.Key, g => g.First(), StringComparer.Ordinal);
+        foreach (var sammlung in new[] { "records", "enums", "sagas", "fluesse", "funktionen", "dienste", "akteure", "clients", "readModels", "projektionen", "reaktionen", "reader", "stores" })
             foreach (var k in Alle(root[sammlung]))
             {
                 var full = S(k, "namespace") + "." + S(k, "name");
@@ -661,6 +678,14 @@ public static class ModellMapper
                     if (OrtJson(dom, fraw.ImplOrt) is { } ro) k["_rumpf"] = ro;
                 }
                 if (sammlung == "akteure" && akteurVon.TryGetValue(full, out var ak)) weitere.AddRange(ak.VertragTypen);
+                // Ein Dienst: seine Implementierungen gehören zur Karte; je Methode steht der Rumpf in der Implementierung.
+                if (sammlung == "dienste" && dienstVon.GetValueOrDefault(full) is { } draw)
+                    foreach (var (dimpl, iraw) in Alle(k["implementierungen"]).Zip(draw.Impls))
+                    {
+                        weitere.Add(iraw.Full);
+                        foreach (var (r, rraw) in Alle(dimpl["rumpfe"]).Zip(iraw.Rumpfe))
+                            if (OrtJson(dom, rraw.Ort) is { } ro) r["_rumpf"] = ro;
+                    }
                 // Die Implementierung eines Stores gehört zu seiner Karte (wie bei Funktionen).
                 if (sammlung == "stores" && storeVon.GetValueOrDefault(full) is { } st)
                 {
@@ -727,6 +752,7 @@ public static class ModellMapper
         foreach (var d in Alle(root["decider"])) d["_id"] = Abstractions.WirkerId.FuerDecide(S(d, "aggregat"), S(d, "command"));
         foreach (var a in Alle(root["applier"])) a["_id"] = "apply:" + S(a, "aggregat") + "/" + S(a, "event");
         foreach (var f in Alle(root["funktionen"])) f["_id"] = Abstractions.WirkerId.FuerFunktion(S(f, "name"));
+        foreach (var d in Alle(root["dienste"])) d["_id"] = KartenIds.Dienst + S(d, "name");
         foreach (var a in Alle(root["akteure"])) a["_id"] = Abstractions.WirkerId.FuerAkteur(S(a, "name"));
         foreach (var c in Alle(root["clients"])) c["_id"] = "client:" + S(c, "name");
         foreach (var f in Alle(root["fluesse"]))

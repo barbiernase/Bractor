@@ -26,7 +26,7 @@ public sealed partial class Sicht
     public const string FlussPraefix = "§fluss:";
 
     private readonly JsonObject _board;
-    private readonly List<JsonObject> _records, _enums, _aggregate, _decider, _applier, _sagas, _states, _transitions, _funktionen, _fluesse,
+    private readonly List<JsonObject> _records, _enums, _aggregate, _decider, _applier, _sagas, _states, _transitions, _funktionen, _dienste, _fluesse,
         _akteure, _clients, _readModels, _stores, _projektionen, _reader, _reaktionen, _codeKarten;
     private readonly Dictionary<string, (HashSet<string> Direkt, HashSet<string> Kette)> _mengen = new(StringComparer.Ordinal);
 
@@ -40,7 +40,7 @@ public sealed partial class Sicht
         _board = board;
         List<JsonObject> Liste(string k) => Alle(board[k]).ToList();
         _records = Liste("records"); _enums = Liste("enums"); _aggregate = Liste("aggregate"); _decider = Liste("decider");
-        _applier = Liste("applier"); _sagas = Liste("sagas"); _funktionen = Liste("funktionen"); _fluesse = Liste("fluesse");
+        _applier = Liste("applier"); _sagas = Liste("sagas"); _funktionen = Liste("funktionen"); _dienste = Liste("dienste"); _fluesse = Liste("fluesse");
         _akteure = Liste("akteure"); _clients = Liste("clients"); _readModels = Liste("readModels"); _stores = Liste("stores");
         _projektionen = Liste("projektionen"); _reader = Liste("reader"); _reaktionen = Liste("reaktionen"); _codeKarten = Liste("codeKarten");
         // Wie der Editor das Board liest: je Prozess-Regel eine Transition (Prozess, Wenn, ein Dann), je Aggregat mit State eine State-Karte.
@@ -170,6 +170,7 @@ public sealed partial class Sicht
             k.Add(new("tr:" + S(t, "_id"), "transition",
                 string.Join(", ", Alle(t["dann"]).Select(d => S(d, "rufe") is { Length: > 0 } r ? r : S(d, "sende")).Where(x => x.Length > 0)), t));
         foreach (var f in _funktionen) k.Add(new("fk:" + S(f, "_id"), "funktion", S(f, "name"), f));
+        foreach (var d in _dienste) k.Add(new("dn:" + S(d, "_id"), "dienst", S(d, "name"), d));
         foreach (var rm in _readModels) k.Add(new("rm:" + S(rm, "_id"), "readmodel", S(rm, "name"), rm));
         foreach (var s in _stores) k.Add(new("sto:" + S(s, "_id"), "store", S(s, "name"), s));
         foreach (var p in _projektionen) k.Add(new("prj:" + S(p, "_id"), "projektion", S(p, "name"), p));
@@ -228,6 +229,15 @@ public sealed partial class Sicht
         if (belegt.Contains(v)) v = "I" + kern + OhneI(S(st, "name"));
         return v;
     }
+    /// <summary>Der Dienst zu einem Konstruktor-Parametertyp (einfacher Name, ohne <c>?</c>) — oder null (Konfig-Record, Logger …).</summary>
+    internal JsonObject? DienstZu(string typ)
+    {
+        var t = typ.Trim().TrimEnd('?');
+        return _dienste.FirstOrDefault(d => S(d, "name") == t);
+    }
+    /// <summary>Die Funktionen, deren Implementierung den Dienst im Konstruktor nimmt.</summary>
+    internal IEnumerable<JsonObject> DienstNutzer(JsonObject d) =>
+        _funktionen.Where(f => Alle(f["konstruktor"]).Any(p => ReferenceEquals(DienstZu(S(p, "typ")), d)));
     private (JsonObject Store, JsonObject Fn)? LeseFnZu(string typ)
     {
         foreach (var st in _stores)
@@ -363,7 +373,14 @@ public sealed partial class Sicht
             if (IstRec(S(f, "auftrag"))) P(Rec(S(f, "auftrag")), fid);
             foreach (var r in L(f, "ergebnisse")) if (IstRec(r)) P(fid, Rec(r));
             foreach (var p in Alle(f["faehigkeiten"])) if (LeseFnZu(S(p, "typ")) is { } z) P(fid, "fn:" + S(z.Fn, "_id"));
+            // Plan E11: ein Dienst im Konstruktor der Implementierung (Kante Funktion → Dienst).
+            foreach (var p in Alle(f["konstruktor"])) if (DienstZu(S(p, "typ")) is { } dz) P(fid, "dn:" + S(dz, "_id"));
         }
+        // … und Dienst → Dienst, wenn eine Implementierung einen anderen im Konstruktor nimmt.
+        foreach (var d in _dienste)
+            foreach (var i in Alle(d["implementierungen"]))
+                foreach (var p in Alle(i["konstruktor"]))
+                    if (DienstZu(S(p, "typ")) is { } dz && !ReferenceEquals(dz, d)) P("dn:" + S(d, "_id"), "dn:" + S(dz, "_id"));
         foreach (var rm in _readModels)
             if (_stores.FirstOrDefault(s => S(s, "name") == S(rm, "store")) is { } st) P("rm:" + S(rm, "_id"), "sto:" + S(st, "_id"));
         foreach (var st in _stores)

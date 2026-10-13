@@ -9,7 +9,7 @@ namespace Infrastructure.Funktionen;
 /// <paramref name="Extern"/> = die Funktion rechnet außerhalb (Python-Worker über gRPC) — der Knoten holt sie nicht selbst ab.
 /// <paramref name="Hand"/> = ein Mensch beantwortet die Aufträge (Werkbank, Laufort <c>Hand</c>) — der <see cref="HandAusfuehrer"/> holt sie ab.
 /// </summary>
-public sealed record FunktionsBindung(Type Funktion, int Slots = 1, int Wiederholungen = 0, bool Extern = false, bool Hand = false);
+public sealed record FunktionsBindung(Type Funktion, int Slots = 1, int Wiederholungen = 0, bool Extern = false, bool Hand = false, Type? Impl = null);
 
 /// <summary>Was jede Ausführung mitbekommt (siehe <see cref="IAusfuehrung"/>).</summary>
 internal sealed record Ausfuehrung(Guid AusfuehrungsId, Guid Korrelation, CancellationToken Abbruch) : IAusfuehrung;

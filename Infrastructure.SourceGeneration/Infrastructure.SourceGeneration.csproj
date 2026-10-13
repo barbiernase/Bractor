@@ -15,6 +15,7 @@
     <!-- Die Aggregat-Namensregel aus dem Vertrag (eine Quelle mit dem Domänen-Extractor). -->
     <Compile Include="..\Abstractions\Aggregatvertrag.cs" Link="Vertrag\Aggregatvertrag.cs" />
     <Compile Include="..\Abstractions\Funktionsvertrag.cs" Link="Vertrag\Funktionsvertrag.cs" />
+    <Compile Include="..\Abstractions\Dienstvertrag.cs" Link="Vertrag\Dienstvertrag.cs" />
     <Compile Include="..\Abstractions\Akteurvertrag.cs" Link="Vertrag\Akteurvertrag.cs" />
     <Compile Include="..\Abstractions\Quellen\Treibervertrag.cs" Link="Vertrag\Treibervertrag.cs" />
   </ItemGroup>

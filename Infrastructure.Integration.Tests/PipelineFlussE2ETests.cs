@@ -4,7 +4,6 @@ using System.Net.Sockets;
 using Abstractions;
 using Domain.Bildaufbereitung;
 using Domain.ImagePair;
-using Domain.Pipeline.Infrastructure;
 using FluentAssertions;
 using Infrastructure.Extensions;
 using Infrastructure.Funktionen;
@@ -56,7 +55,6 @@ public class PipelineFlussE2ETests
     private static void Verdrahte(IServiceCollection s, string watchDir, string cluster, bool grpc, bool verkleinerungExtern)
     {
         s.AddCqrsFramework(opts => { opts.EnableGrpc = grpc; opts.ClusterName = cluster; });
-        s.AddDomainPipelineServices(Path.Combine(watchDir, ".preprocessed"));
         GeneratedPipelines.RegisterAllPipelines(s);
         s.AddGeneratedProzesse();
         if (verkleinerungExtern) s.AddExterneFunktion<IBildVerkleinerung>();

@@ -3,7 +3,6 @@ using System.Net;
 using System.Net.Sockets;
 using Abstractions;
 using Domain.ImagePair;
-using Domain.Pipeline.Infrastructure;
 using FluentAssertions;
 using Infrastructure.Persistence;
 using Infrastructure.Umgebung;
@@ -92,9 +91,9 @@ public class UmgebungE2ETests
             builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Quellen:DateiErkannt:Pfad"] = Path.Combine(verz, u.Umgebung.Name),
+                ["Konfig:PreprocessingConfig:OutputPath"] = Path.Combine(verz, u.Umgebung.Name, ".preprocessed"),
             });
             builder.AddCqrs(u);
-            builder.Services.AddDomainPipelineServices(Path.Combine(verz, u.Umgebung.Name, ".preprocessed"));
             return builder.Build();
         }
         await using var hostA = Baue(a);

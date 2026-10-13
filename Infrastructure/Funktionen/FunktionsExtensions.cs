@@ -25,7 +25,20 @@ public static class FunktionsExtensions
         where TImpl : class, TFunktion
     {
         services.AddSingleton<TFunktion, TImpl>();
-        services.AddSingleton(new FunktionsBindung(typeof(TFunktion), slots, wiederholungen));
+        services.AddSingleton(new FunktionsBindung(typeof(TFunktion), slots, wiederholungen, Impl: typeof(TImpl)));
+        return services;
+    }
+
+    /// <summary>
+    /// Wie oben, gebaut über die generierte <paramref name="fabrik"/> (<c>GeneratedFunktionen.Implementierungen</c>: der Konstruktor direkt, mit
+    /// Diensten und Konfig-Records aus der Umgebung — ohne reflektierten Aktivator). Was der Konstruktor braucht, bindet <c>BindeDienste</c>.
+    /// </summary>
+    public static IServiceCollection AddFunktion<TFunktion, TImpl>(this IServiceCollection services, int slots, int wiederholungen, Func<IServiceProvider, TImpl> fabrik)
+        where TFunktion : class, IFunktion
+        where TImpl : class, TFunktion
+    {
+        services.AddSingleton<TFunktion>(fabrik);
+        services.AddSingleton(new FunktionsBindung(typeof(TFunktion), slots, wiederholungen, Impl: typeof(TImpl)));
         return services;
     }
 
@@ -95,8 +108,8 @@ public static class FunktionsExtensions
             : Infrastructure.Mapping.GeneratedCommandRouting.Produziert(ziel);
 }
 
-/// <summary>Eine Implementierung einer Katalog-Funktion (aus <c>GeneratedFunktionen.Implementierungen</c>): Name + generische Bindung.</summary>
-public sealed record FunktionsImplementierung(Type Funktion, string Name, Action<IServiceCollection, int, int> Binde);
+/// <summary>Eine Implementierung einer Katalog-Funktion (aus <c>GeneratedFunktionen.Implementierungen</c>): Name, Typ + generische Bindung.</summary>
+public sealed record FunktionsImplementierung(Type Funktion, string Name, Type Impl, Action<IServiceCollection, int, int> Binde);
 
 public static class FunktionsLaufortExtensions
 {

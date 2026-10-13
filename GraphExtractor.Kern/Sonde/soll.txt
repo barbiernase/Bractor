@@ -34,7 +34,18 @@ saga Leihwesen.Gebuehren.SchadenBeiRueckgabe auslöser=Zurueckgegeben | wenn Zur
 record Leihwesen.Gebuehren.SchaetzeSchaden auftrag typart=public sealed record funktion=ISchadensSchaetzung | LeserId:Guid, Neuwert:decimal
 record Leihwesen.Gebuehren.SchadenGeschaetzt event | Betrag:decimal
 record Leihwesen.Gebuehren.NichtSchaetzbar event | Grund:string
-funktion Leihwesen.Gebuehren.ISchadensSchaetzung | SchaetzeSchaden -> SchadenGeschaetzt; NichtSchaetzbar
+funktion Leihwesen.Gebuehren.ISchadensSchaetzung | SchaetzeSchaden -> SchadenGeschaetzt; NichtSchaetzbar impl Schadensschaetzer(tabelle:IWertTabelle)
+# Domänen-Dienst (Plan E11): Interface mit IDienst (Methoden, Typen wie geschrieben) + Implementierung mit Konstruktor; der Record im Konstruktor ist
+#    Konfig (Werte aus Konfig:<Record>), kein Value Object; die Funktions-Implementierung nimmt den Dienst im Konstruktor (Kante Funktion → Dienst)
+dienst Leihwesen.Gebuehren.IWertTabelle | Restwert(neuwert:decimal, alterJahre:int):decimal; IstSchaetzbarAsync(leserId:Guid):Task<bool> | impl LineareWertTabelle(konfig:WertTabellenKonfig)
+record Leihwesen.Gebuehren.WertTabellenKonfig konfig | Mindestwert:decimal, Abschreibungsjahre:int=5
+sicht Leihwesen.Gebuehren.IWertTabelle dienst domaene=Leihwesen.Gebuehren block=§geteilt
+# Gezeichnet: eine neue Funktion mit C#-Implementierung, die einen neuen Dienst nimmt (Interface + Implementierungs-Stub vom Scaffolder)
+record Leihwesen.Pruefung.PruefeGeraet auftrag funktion=IGeraetePruefung | Seriennummer:string
+record Leihwesen.Pruefung.GeraetGeprueft event | Ok:bool
+funktion Leihwesen.Pruefung.IGeraetePruefung | PruefeGeraet -> GeraetGeprueft impl GeraetePruefung(geraet:IPruefgeraet)
+dienst Leihwesen.Pruefung.IPruefgeraet | Messe(seriennummer:string):bool | impl Pruefgeraet()
+sicht Leihwesen.Pruefung.IPruefgeraet dienst domaene=Leihwesen.Pruefung block=§geteilt
 
 # ── Pipeline als Fluss (Sonde/Fluss.cs.txt): eigene Quelle (IQuellNachricht), Je + Sammle, dieselbe Funktion als zwei Knoten,
 #    ∧ mit Kontext, ∨ über den ⏳-Port, ✕-Port am Command, zwei Knoten ohne Variable (Name = Typ klein, durchnummeriert), Bauer „scan" ──
