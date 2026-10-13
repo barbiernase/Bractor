@@ -9,9 +9,8 @@ namespace Cqrs.Testing;
 /// (z.B. <c>Verfuegbar</c>), weil die gerade beim Debuggen die interessanten sind.
 ///
 /// Nutzt Reflection: das ist bewusst NUR im Werkzeug erlaubt (Anzeige/Inspektion, kein
-/// Dispatch, nicht im Produktionspfad, nicht in der Domäne) — dieselbe pragmatische Linie
-/// wie die Editor-Simulation (SimHost/ModellSimulation). Invariante 4 (keine Runtime-Reflection) gilt der DISPATCH-Logik, nicht
-/// einem Zustands-Spiegel für die Ausgabe.
+/// Dispatch, nicht im Produktionspfad, nicht in der Domäne). Invariante 4 (keine Runtime-Reflection) gilt der DISPATCH-Logik,
+/// nicht einem Zustands-Spiegel für die Ausgabe der Test-DSL.
 /// </summary>
 internal static class Zustandsspiegel
 {

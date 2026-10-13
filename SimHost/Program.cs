@@ -136,46 +136,6 @@ app.MapPost("/api/editor/module", (JsonElement body) =>
     return Results.Json(new { module, zeilen = Module.AlsZeilen(module) }, EditorModell.JsonOptionen);
 });
 
-// ── SIMULATION: EINE Laufzeit — Modell → Scaffolder → In-Memory-Kompilat (echte Generatoren) → SagaLaufwerk. ──
-var simulation = new ModellSimulation();
-
-// Nur übersetzen: der „wird das kompiliert?"-Beweis + Self-Repair-Signal. Body = EditorModell-JSON.
-app.MapPost("/api/editor/compile", (JsonElement body) =>
-    Results.Json(simulation.Kompiliere(EditorModell.AusJson(body.GetRawText())), EditorModell.JsonOptionen));
-
-// Einen Command mit Werten in die Session schicken → Frames (Kaskade inkl. Sagas), Instanzen, Saga-Markings,
-// Abdeckung. Geändertes Modell ⇒ Hot-Reload (neu übersetzen + Geschichte nachspielen).
-// Body = { model, sessionId, command, values }.
-app.MapPost("/api/editor/sim/step", (JsonElement body) =>
-{
-    var modell = EditorModell.AusJson(body.GetProperty("model").GetRawText());
-    var sid = body.TryGetProperty("sessionId", out var s) ? s.GetString() ?? "editor" : "editor";
-    var command = body.GetProperty("command").GetString() ?? "";
-    var werte = body.TryGetProperty("values", out var v) ? v : default;
-    JsonElement? wahl = body.TryGetProperty("wahl", out var w) ? w : null;
-    return Results.Json(simulation.Schritt(modell, sid, command, werte, wahl), EditorModell.JsonOptionen);
-});
-// Pipeline als Fluss durchspielen (§14): Quell-Nachricht einspeisen, je Funktionsknoten der gewählte Ausgang (Ergebnis / ⏳ / ✕),
-// Commands laufen in dieselbe Aggregat-Kaskade. Body = { model, sessionId, pipeline, values, wahl, strom? } (strom = Aggregat bei p.Auf<E>()).
-app.MapPost("/api/editor/sim/fluss", (JsonElement body) =>
-{
-    var modell = EditorModell.AusJson(body.GetProperty("model").GetRawText());
-    var sid = body.TryGetProperty("sessionId", out var s) ? s.GetString() ?? "editor" : "editor";
-    var pipeline = body.GetProperty("pipeline").GetString() ?? "";
-    var werte = body.TryGetProperty("values", out var v) ? v : default;
-    JsonElement? wahl = body.TryGetProperty("wahl", out var w) ? w : null;
-    Guid? strom = body.TryGetProperty("strom", out var st) && Guid.TryParse(st.GetString(), out var g) ? g : null;
-    return Results.Json(simulation.StarteFluss(modell, sid, pipeline, werte, wahl, strom), EditorModell.JsonOptionen);
-});
-app.MapPost("/api/editor/sim/reset", (JsonElement body) =>
-{
-    simulation.Reset(body.TryGetProperty("sessionId", out var s) ? s.GetString() ?? "editor" : "editor");
-    return Results.Ok();
-});
-app.MapGet("/api/editor/sim/state", (string? sessionId) => Results.Json(simulation.Stand(sessionId ?? "editor"), EditorModell.JsonOptionen));
-// Session → Regressionstest in der Test-DSL (Szenario.Für…Vorab…Wenn…Dann).
-app.MapGet("/api/editor/sim/dsl", (string? sessionId) => Results.Text(simulation.Dsl(sessionId ?? "editor"), "text/plain"));
-
 // ── CODE-SYNC: Board ⇄ echte .cs-Datei (Decider/Applier-Rümpfe). Anker = aus dem Graphen abgeleitet. ──
 // LLM-Code-Blöcke (docs/konzept-llm-minimalkontext.md): Kontexte + Füllen + Übernehmen. Fehlen die Kontexte, erzeugt
 // SimHost sie beim Start im Hintergrund selbst (kein CLI-Schritt nötig).

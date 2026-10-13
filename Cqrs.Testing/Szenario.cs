@@ -6,8 +6,8 @@ namespace Cqrs.Testing;
 /// Einstieg in die Test-/Debug-DSL für die Schreibseite: <c>Gegeben → Wenn → Dann</c>.
 ///
 /// Die DSL treibt die ECHTE generierte Domänenlogik store-frei (über
-/// <see cref="IAggregateHandlerFactory"/> → <see cref="IAggregateHandler"/>) — dieselbe
-/// Maschine wie SimHost, nur mit Assertions statt HTTP. Jedes Szenario liefert eine
+/// <see cref="IAggregateHandlerFactory"/> → <see cref="IAggregateHandler"/>) — mit
+/// Assertions. Jedes Szenario liefert eine
 /// inspizierbare <see cref="SzenarioTrace"/>; die Assertions lesen daraus ab, und bei
 /// Fehlschlag zeigt die Ausnahme die getroffene Entscheidung (Zustand-vorher → Zweig).
 /// </summary>
@@ -52,7 +52,7 @@ public sealed class SzenarioBauer<TState> where TState : class, IState, new()
 
     /// <summary>
     /// Seedet die Historie als COMMANDS (Arrange, das der echte Decider+Applier durchläuft).
-    /// Bequem, board-nah — genau, was beim „Board-Session als Test exportieren" herausfällt.
+    /// Bequem: der Test beschreibt die Vorgeschichte so, wie sie entstanden ist.
     /// Eine Ablehnung hier ist fast immer ein Setup-Fehler und wird deshalb laut.
     /// </summary>
     public SzenarioBauer<TState> Vorab(params ICommand[] commands)

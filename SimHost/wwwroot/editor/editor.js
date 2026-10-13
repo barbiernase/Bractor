@@ -110,7 +110,7 @@
   //    Record/Enum sein → so komponieren sich Records.
   // NUR der Node-Editor, DESIGN-IN-PLACE: jeder Knoten wird direkt auf der Fläche bestückt.
   let TEIL=null;   // Verbinden-Modus: statt Voll-Render nur die betroffenen Karten neu (Set der Knoten-Ids)
-  function render(){ if(TEIL){TEIL.gerufen=true;return;} ELEM=null; renderGraph(); autosave(); if(window.simNachRender)simNachRender(); }
+  function render(){ if(TEIL){TEIL.gerufen=true;return;} ELEM=null; renderGraph(); autosave(); }
   // Teil-Neuaufbau: betroffene Karten ersetzen, Kurzfassungen/Kanten/Panel auffrischen — Fläche, Zoom und Layout bleiben stehen.
   function teilNeu(ids){if(!world||!canvas){render();return;}
     ELEM=null;ISLE=inselMenge();berechneSicht();
@@ -123,7 +123,7 @@
     world.querySelectorAll(".gnode2").forEach(el=>{const n=NODEBY.get(el.dataset.id),alt=el.querySelector(".gsum");if(!n||!alt)return;
       const neu=kurzfassung(n);if(neu.innerHTML!==alt.innerHTML)alt.replaceWith(neu);});   // nur wo sich wirklich etwas ändert
     const altI=canvas.querySelector(".ginsp");INSP_SCROLL=altI?{id:altI.dataset.sel,top:altI.scrollTop}:null;
-    fokusNeu();drawEdges();zeigeInspector();autosave();if(window.simNachRender)simNachRender();}
+    fokusNeu();drawEdges();zeigeInspector();autosave();}
   // Eine Modell-Änderung aus dem Verbinden-Modus ausführen: ohne Voll-Render, danach nur die betroffenen Karten.
   function imModus(ids,aendern){TEIL={gerufen:false};try{aendern();}finally{const g=TEIL.gerufen;TEIL=null;if(g)teilNeu(ids.filter(Boolean));}}
 
@@ -1189,8 +1189,8 @@
     body.append(h("div",{class:"blab",style:"opacity:.75"},(c.art||"Typ")+" · "+(o.datei||c.datei||"")+(o.zeile?":"+o.zeile:"")));
     body.append(h("pre",{class:"gcodeprev",style:"cursor:default;white-space:pre-wrap"},c.code||""));}
   // ══ 🤖 LLM-CODE-BLÖCKE — der ganze Weg am 🤖-Knoten, EIN Klick (▶):
-  //   claude -p (Abo, keine API) füllt den Rumpf → Prüfung (Syntax; Decide/Apply: In-Memory-Kompilat mit den echten
-  //   Generatoren, bis zu 3 Reparaturrunden) → GEPRÜFT: sofort in die echte .cs → Build des Laufzeit-Projekts (alle Code-
+  //   claude -p (Abo, keine API) füllt den Rumpf → Prüfung (Syntax; C#: probeweise im warmen Workspace, Compiler + Analyzer,
+  //   bis zu 3 Reparaturrunden) → GEPRÜFT: sofort in die echte .cs → Build des Laufzeit-Projekts (alle Code-
   //   Generatoren inkl. Proto-Prepass) → Code + Kontexte neu eingelesen. Hat der Block noch keine Methode (Decide/Apply),
   //   wird sie vorher als Platzhalter geschrieben (Geste). Nur ein UNGEPRÜFTER Kandidat bleibt Vorschlag (✓ am Block).
   //   Wahrheit ist die Datei; ein Vorschlag hängt am SLOT-Schlüssel (stabil über Neu-Einlesen) und ist lokal gesichert.
@@ -1199,7 +1199,6 @@
   const saveVor=()=>{try{localStorage.setItem(LLM_VKEY,JSON.stringify(VOR));}catch(e){}};
   const LAUF={}, MELD={}, ZULETZT={};   // Slot → läuft seit / letzte Meldung / gerade übernommen (Rückgängig anbieten)
   let EINLESEN=false, LLM_STATUS=null;
-  const istSimulierbar=kid=>/^(decide|apply)\|/.test(kid);
   const neuZeichnen=()=>{try{render();}catch(e){}};
   async function llmStatus(){try{LLM_STATUS=await fetch("/api/llm/status").then(r=>r.json());}catch(e){LLM_STATUS=null;}return LLM_STATUS;}
   // Kontexte fehlen / werden erzeugt → nachfragen, bis sie da sind (danach Ruhe).
@@ -1243,8 +1242,7 @@
     else if(!ende.rumpf)MELD[kid]={k:"err",t:"⚠ Antwort ohne Code ("+info+") — Details ↗"};
     else{
       VOR[kid]={rumpf:ende.rumpf,basisHash:r.basisHash,ok:!!ende.ok,befunde:ende.befunde||[],auftrag,zeit:new Date().toISOString()};saveVor();
-      MELD[kid]={k:"warn",t:"Nicht geschrieben — Vorschlag mit "+(ende.befunde||[]).length+" Befund(en) nach "+info+": "+(ende.befunde||[])[0]+" · ↻ Anpassen oder ✓ trotzdem übernehmen"};
-      if(istSimulierbar(kid))deCompile();}
+      MELD[kid]={k:"warn",t:"Nicht geschrieben — Vorschlag mit "+(ende.befunde||[]).length+" Befund(en) nach "+info+": "+(ende.befunde||[])[0]+" · ↻ Anpassen oder ✓ trotzdem übernehmen"};}
     neuZeichnen();}
 
   async function llmUebernehmen(kid){const v=VOR[kid];if(!v||LAUF[kid])return;
@@ -1264,9 +1262,9 @@
     if(!r.ok){MELD[kid]={k:"err",t:"⚠ "+r.grund};neuZeichnen();return;}
     delete ZULETZT[kid];MELD[kid]={k:"",t:"↶ alter Rumpf wiederhergestellt"+(r.bau&&!r.bau.ok?" · Build rot":"")};await neuEinlesen();}
 
-  function llmVerwerfen(kid){delete VOR[kid];saveVor();MELD[kid]={k:"",t:"Vorschlag verworfen — der Datei-Rumpf gilt."};neuZeichnen();if(istSimulierbar(kid))deCompile();}
+  function llmVerwerfen(kid){delete VOR[kid];saveVor();MELD[kid]={k:"",t:"Vorschlag verworfen — der Datei-Rumpf gilt."};neuZeichnen();}
 
-  // Nach jedem Schreiben: EIN GraphExtractor-Lauf liest Modell + Kontexte neu → Spiegel, Nachbar-Kontexte und Simulation
+  // Nach jedem Schreiben: EIN GraphExtractor-Lauf liest Modell + Kontexte neu → Spiegel und Nachbar-Kontexte
   //   stehen auf dem neuen Code; solange sind ▶/✓ gesperrt (sonst sähe der nächste Block veraltete Nachbarn).
   async function neuEinlesen(){EINLESEN=true;neuZeichnen();try{await deReload();}finally{EINLESEN=false;await llmStatus();neuZeichnen();}}
 
@@ -3748,7 +3746,7 @@
   const gVergleich=o=>JSON.stringify(o,(k,v)=>(GOHNE.has(k)||k.startsWith("_"))?undefined:v);
   // var: render() fragt den Stand ab, ehe dieser Abschnitt durchlaufen ist (let wäre dort noch nicht initialisiert).
   var GSTAND=null,G_TIMER=null,G_LAEUFT=false,G_AENDERUNG=0,G_TITEL=null,G_BOARD=null;
-  function schnappschuss(){const m=payload(false),s={};
+  function schnappschuss(){const m=payload(),s={};
     GSAMMLUNGEN.forEach(c=>{const x=new Map(),k=GKEY(c);(m[c]||[]).forEach(o=>x.set(k(o),{karte:o,vgl:gVergleich(o)}));s[c]=x;});return s;}
   function gDelta(neu,alt){const karten={},entfernt={},neueNs=new Set();let n=0;
     GSAMMLUNGEN.forEach(c=>{const a=alt[c]||new Map(),b=neu[c]||new Map();
@@ -3842,289 +3840,17 @@
     return neu;}
   window.deDownload=function(){prepareSaga();const blob=new Blob([JSON.stringify(MODEL,null,2)],{type:"application/json"});
     const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="domain-model.json";a.click();};
-  // Server-Payload für Kompilieren + Simulation (bis P8): das MODEL mit den Rümpfen aus dem Code; mitVorschlag: ein offener 🤖-Vorschlag
-  //   ersetzt den Datei-Rumpf (in-memory, nie in die Datei — dorthin nur über ✓ Übernehmen).
-  function payload(mitVorschlag){prepareSaga();MODEL.fluesse.forEach(flOrdne);const m=JSON.parse(JSON.stringify(MODEL));
-    if(mitVorschlag){const v=k=>VOR[k]&&VOR[k].rumpf;
-      m.decider.forEach(d=>{const r=v("decide|"+d.aggregat+"|"+d.command);if(r)d.rumpf=r;});
-      m.applier.forEach(a=>{const r=v("apply|"+a.aggregat+"|"+a.event);if(r)a.rumpf=r;});}
+  // Das MODEL als Gesten-Stand (Schnappschuss): Rümpfe aus dem Code, ein leerer Rumpf bleibt leer.
+  function payload(){prepareSaga();MODEL.fluesse.forEach(flOrdne);const m=JSON.parse(JSON.stringify(MODEL));
     [...m.decider,...m.applier].forEach(n=>{if(n.leer)n.rumpf="";});
     return m;}
-  // Kompilieren/Simulation: das Modell samt offener 🤖-Vorschläge (in-memory, nie in die Datei).
-  async function post(path){const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(payload(true))});
-    if(!r.ok)throw new Error("HTTP "+r.status);return r;}
-  // Ausgabe-Panel: sobald Prüfen/Kompilieren/Testen hineinschreiben, einblenden (mit ✕ zum Schließen).
+  // Ausgabe-Panel: sobald Prüfen/Grammatik/Meldungen hineinschreiben, einblenden (mit ✕ zum Schließen).
   (function(){const out=document.getElementById("de-out");if(!out||!window.MutationObserver)return;
     new MutationObserver(()=>{if(out.querySelector(".outzu"))return;out.classList.add("zeigen");
       const zu=h("button",{class:"outzu",title:"Ausgabe schließen",onclick:()=>out.classList.remove("zeigen")},"✕");out.prepend(zu);})
       .observe(out,{childList:true});})();
-  const unreach='<div class="find error">SimHost nicht erreichbar. Starte ihn: <b>dotnet run --project SimHost</b>.</div>';
-  async function postJson(path,obj){prepareSaga();const r=await fetch(path,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(obj)});if(!r.ok)throw new Error("HTTP "+r.status);return r;}
-  const alleCommands=()=>MODEL.records.filter(r=>r.kind==="command");
 
-  // ⚙ Kompilieren: das Modell IN-MEMORY mit den echten Domain-Generatoren übersetzen.
-  window.deCompile=async function(){const out=document.getElementById("de-out");
-    try{const r=await post("/api/editor/compile");const res=await r.json();badge(true);out.innerHTML="";
-      if(res.ok){out.append(h("div",{class:"find",style:"background:#1f3a2a;color:#9be3bf"},"✓ Kompiliert (in-memory, echte Generatoren): "+res.aggregate+" Aggregate, "+res.sagas+" Sagas. Keine Fehler — bereit zum Testen."));}
-      else{out.append(h("div",{class:"find warning"},res.fehler.length+" Compiler-Fehler — zurück in die Körper (Self-Repair-Schleife):"));
-        res.fehler.forEach(f=>out.append(h("div",{class:"find error"},"["+f.code+"] "+(f.datei?f.datei+": ":"")+f.meldung)));}
-    }catch(e){badge(false);out.innerHTML=unreach;}};
 
-  // ══ SIMULATION (die EINE Laufzeit): Command mit Werten → Kaskade über das In-Memory-Kompilat des MODELLS ══
-  //   (echte Generatoren + SagaLaufwerk). Die Kaskade läuft Knoten für Knoten über das Board:
-  //   (Saga-Regel →) Command → Decider/Aggregat → Events/Ablehnungen → Applier/State. Ändert man das Modell,
-  //   spielt der Server die bisherige Geschichte gegen die neue Logik nach (Hot-Reload).
-  const SIM={an:false,sid:"editor-"+Math.random().toString(36).slice(2,10),frames:[],instanzen:[],sagas:[],abd:new Set(),
-    abdAn:false,folgen:true,tempo:420,laeuft:false,cmd:null,werte:{},hinweis:null,fehler:[],cmdSig:"",
-    // Pipeline als Fluss (§14): Modus, gewählte Pipeline, Quell-Werte je Pipeline, Wahl je Funktionsknoten, Verlauf, Vorgänge.
-    modus:"cmd",pipe:null,quellWerte:{},wahl:{},verlauf:[],vorgaenge:[]};
-  const uuid=()=>crypto.randomUUID?crypto.randomUUID():"xxxxxxxx-xxxx-4xxx-8xxx-xxxxxxxxxxxx".replace(/x/g,()=>(Math.random()*16|0).toString(16));
-  const simCommands=()=>MODEL.records.filter(r=>r.kind==="command");
-  const simZiel=c=>{const d=MODEL.decider.find(x=>x.command===c);return d?d.aggregat:null;};
-  window.deSimSession=()=>SIM.sid;
-  window.deSim=function(){SIM.an=!SIM.an;document.getElementById("de").classList.toggle("simon",SIM.an);
-    document.getElementById("de-simbtn").textContent=SIM.an?"■ Simulation":"▶ Simulation";
-    if(SIM.an){simPanel();simStand();}else simLeeren(true);render();};
-
-  function simPanel(){const box=document.getElementById("de-sim");if(!box)return;box.innerHTML="";
-    const kopf=h("div",{class:"row"},
-      h("button",{class:"act",title:"Session verwerfen (alle Instanzen/Sagas)",onclick:simReset},"↺ Reset"),
-      h("button",{class:"act",title:"Letztes Command als Regressionstest (Test-DSL)",onclick:simDsl},"📋 Als Test"),
-      h("label",{class:"cbx",title:"Welche Zweige wurden in dieser Session gefahren?"},h("input",{type:"checkbox",...(SIM.abdAn?{checked:"checked"}:{}),onchange:e=>{SIM.abdAn=e.target.checked;simOverlay();}})," Abdeckung"),
-      h("label",{class:"cbx",title:"Kamera folgt der Animation"},h("input",{type:"checkbox",...(SIM.folgen?{checked:"checked"}:{}),onchange:e=>SIM.folgen=e.target.checked})," Folgen"));
-    const tempo=h("select",{title:"Animations-Tempo",onchange:e=>SIM.tempo=+e.target.value});
-    [["700","langsam"],["420","normal"],["150","schnell"],["0","sofort"]].forEach(([v,l])=>{const o=h("option",{value:v},l);if(+v===SIM.tempo)o.selected=true;tempo.append(o);});
-    kopf.append(tempo);
-    box.append(kopf,h("h4",{},"Einspeisen"),h("div",{id:"sim-form"}),h("div",{id:"sim-meld"}),
-      h("h4",{},"Verlauf"),h("div",{id:"sim-verlauf"}),h("h4",{},"Instanzen"),h("div",{id:"sim-inst"}),
-      h("h4",{},"Laufende Sagas"),h("div",{id:"sim-sagas"}),
-      MODEL.fluesse.length?h("h4",{},"Pipeline-Vorgänge"):null,MODEL.fluesse.length?h("div",{id:"sim-vorg"}):null);
-    simForm();simListen();}
-
-  // ── Formular: Command wählen (nach Ziel-Aggregat gruppiert) + Felder typgerecht ──
-  function simForm(){const box=document.getElementById("sim-form");if(!box)return;box.innerHTML="";
-    // Zwei Wege hinein: ein Command von außen oder eine Quell-Nachricht in eine Pipeline (Fluss).
-    if(MODEL.fluesse.length){const tab=(m,l)=>h("button",{class:"act"+(SIM.modus===m?" an":""),onclick:()=>{SIM.modus=m;simForm();}},l);
-      box.append(h("div",{class:"tabs"},tab("cmd","▶ Command"),tab("fluss","⛓ Pipeline")));
-      if(SIM.modus==="fluss"){simFlussForm(box);return;}}
-    const cmds=simCommands();SIM.cmdSig=cmds.map(c=>c.name+":"+(c.felder||[]).map(f=>f.name+"/"+f.typ).join(",")).join("|");
-    if(!cmds.length){box.append(h("div",{class:"hint"},"Kein Command im Modell."));return;}
-    if(!SIM.cmd||!cmds.some(c=>c.name===SIM.cmd))SIM.cmd=cmds[0].name;
-    const sel=h("select",{style:"width:100%",onchange:e=>{SIM.cmd=e.target.value;simForm();}});
-    const gruppen={};cmds.forEach(c=>{const g=simZiel(c.name)||"(kein Decider)";(gruppen[g]=gruppen[g]||[]).push(c);});
-    Object.keys(gruppen).sort().forEach(g=>{const og=h("optgroup",{label:g});
-      gruppen[g].sort((a,b)=>a.name.localeCompare(b.name)).forEach(c=>{const o=h("option",{value:c.name},c.name+(c.istErzeugung?" ✚":""));if(c.name===SIM.cmd)o.selected=true;og.append(o);});sel.append(og);});
-    box.append(sel);
-    const c=cmds.find(x=>x.name===SIM.cmd);const w=SIM.werte[c.name]=SIM.werte[c.name]||{};const ziel=simZiel(c.name);
-    (c.felder||[]).forEach(f=>box.append(h("div",{class:"fld"},h("label",{title:f.typ},f.name+" : "+f.typ),simInput(f,w,ziel))));
-    box.append(h("div",{class:"row",style:"margin-top:6px"},
-      h("button",{class:"act run",onclick:simSenden},"▶ Senden"),
-      ziel?null:h("span",{class:"hint"},"⚠ kein Aggregat entscheidet dieses Command")));}
-
-  const enumWerte=t=>{const e=MODEL.enums.find(x=>x.name===t);return e?(e.werte||[]).map((v,i)=>{const m=/^(\w+)\s*=\s*(-?\d+)/.exec(v);return m?{n:m[1],v:+m[2]}:{n:v.trim(),v:i};}):null;};
-  function simInput(f,w,ziel){const typ=(f.typ||"").trim(),basis=typ.replace(/\?$/,""),nullbar=typ.endsWith("?");
-    const set=v=>{w[f.name]=v;};
-    if(basis==="Guid"){ // Instanz wählen (Ziel-Aggregat zuerst) oder neue Id
-      const s=h("select",{onchange:e=>set(e.target.value==="__neu"?uuid():e.target.value)});
-      const eigene=SIM.instanzen.filter(i=>f.name===ID_FELD()?i.aggregat===ziel:true);
-      if(w[f.name]===undefined)w[f.name]=(f.name===ID_FELD()&&eigene.length&&!(simCommands().find(c=>c.name===SIM.cmd)||{}).istErzeugung)?eigene[eigene.length-1].id:uuid();
-      const bekannt=eigene.some(i=>i.id===w[f.name]);
-      s.append(h("option",{value:w[f.name]},bekannt?"":"neu · "+String(w[f.name]).slice(0,8)));
-      eigene.forEach(i=>{const o=h("option",{value:i.id},i.label+" · "+i.id.slice(0,8));if(i.id===w[f.name])o.selected=true;s.append(o);});
-      s.append(h("option",{value:"__neu"},"＋ neue Id"));if(bekannt)s.firstChild.remove();return s;}
-    if(basis==="bool"){const i=h("input",{type:"checkbox",onchange:e=>set(e.target.checked)});if(w[f.name])i.checked=true;if(w[f.name]===undefined)set(false);return i;}
-    if(/^(int|long|decimal|double|float|short)$/.test(basis)){if(w[f.name]===undefined)set(nullbar?null:0);
-      return h("input",{type:"number",value:w[f.name]??"",oninput:e=>set(e.target.value===""?(nullbar?null:0):Number(e.target.value))});}
-    const ew=enumWerte(basis);
-    if(ew){const s=h("select",{onchange:e=>set(e.target.value===""?null:+e.target.value)});
-      if(nullbar)s.append(h("option",{value:""},"null"));
-      ew.forEach(x=>{const o=h("option",{value:x.v},x.n);if(w[f.name]===x.v)o.selected=true;s.append(o);});
-      if(w[f.name]===undefined)set(nullbar?null:(ew[0]||{}).v);return s;}
-    if(basis==="DateTimeOffset"||basis==="DateTime"){if(w[f.name]===undefined)set(nullbar?null:new Date().toISOString());
-      return h("input",{value:w[f.name]??"",placeholder:"ISO-Zeit",oninput:e=>set(e.target.value===""&&nullbar?null:e.target.value)});}
-    if(basis==="string"){if(w[f.name]===undefined)set(nullbar?null:"");
-      return h("input",{value:w[f.name]??"",placeholder:nullbar?"null":"",oninput:e=>set(e.target.value===""&&nullbar?null:e.target.value)});}
-    // Komplex (Value Object, Collection): JSON.
-    if(w[f.name]===undefined)set(/^(List|IReadOnlyList|IEnumerable|HashSet|.*\[\])/.test(basis)?[]:null);
-    const t=h("textarea",{rows:2,placeholder:"JSON",oninput:e=>{try{set(e.target.value.trim()===""?null:JSON.parse(e.target.value));t.style.borderColor="";}catch(_){t.style.borderColor="#ff6b81";}}});
-    t.value=JSON.stringify(w[f.name]);return t;}
-
-  // ── Pipeline durchspielen (docs/konzept-editor-pipelines.md §14): Quell-Nachricht + je Funktionsknoten der Ausgangsfall ──
-  //   Ohne Implementierung (Entwurf zuerst): die Funktion „liefert“ den gewählten Fall mit Musterwerten (gleichnamige Felder aus
-  //   Auftrag/Drähten, sonst Platzhalter; optional JSON). Commands laufen in die Aggregat-Kaskade, Events starten p.Auf<E>()-Flüsse.
-  function simFlussForm(box){const fl=MODEL.fluesse.filter(f=>(f.knoten||[]).some(flQuelleArt));
-    if(!fl.length){box.append(h("div",{class:"hint"},"Keine Pipeline mit Quelle."));return;}
-    if(!SIM.pipe||!fl.some(f=>f.name===SIM.pipe))SIM.pipe=fl[0].name;
-    const sel=h("select",{style:"width:100%",onchange:e=>{SIM.pipe=e.target.value;simForm();}});
-    fl.forEach(f=>{const o=h("option",{value:f.name},"⛓ "+f.name);if(f.name===SIM.pipe)o.selected=true;sel.append(o);});box.append(sel);
-    const f=fl.find(x=>x.name===SIM.pipe),q=(f.knoten||[]).find(flQuelleArt),rec=recByName(q.typ);
-    box.append(h("div",{class:"sub"},(q.art==="auf"?"◆ Event ":"⛲ Quelle ")+q.typ));
-    const w=SIM.quellWerte[f.name]=SIM.quellWerte[f.name]||{};
-    (rec?rec.felder||[]:[]).forEach(fd=>box.append(h("div",{class:"fld"},h("label",{title:fd.typ},fd.name+" : "+fd.typ),simInput(fd,w,null))));
-    // Der Strom der Quelle (quelle.Strom()): bei einem Event aus dem Log das Aggregat, aus dem es stammt.
-    if(q.art==="auf"){const ss=SIM.strom||(SIM.strom={});const s=h("select",{title:"Aus welchem Aggregat stammt das Event? (quelle.Strom().Id)",onchange:e=>{ss[f.name]=e.target.value||undefined;}});
-      s.append(h("option",{value:""},"neuer Strom (Id automatisch)"));SIM.instanzen.forEach(i=>{const o=h("option",{value:i.id},i.label+" · "+i.id.slice(0,8));if(ss[f.name]===i.id)o.selected=true;s.append(o);});
-      box.append(h("div",{class:"fld"},h("label",{},"⇢ Strom"),s));}
-    const wf=SIM.wahl[f.name]=SIM.wahl[f.name]||{};
-    const fk=(f.knoten||[]).filter(k=>k.art==="funktion"||k.art==="warte");
-    if(fk.length){box.append(h("h4",{},"Ausgang je Funktion / Warten"));const g=h("div",{class:"wahl"});
-      fk.forEach(k=>{const fn=k.art==="funktion"?MODEL.funktionen.find(x=>x.name===k.typ):null;
-        const faelle=(k.art==="warte"?flWarteAuf(k):(fn?fn.ergebnisse||[]:[])).map(e=>[e,e]);
-        if(k.zeitlimit)faelle.push(["zeitlimit","⏳ Zeitlimit"]);if(k.art!=="warte")faelle.push(["abgelehnt","✕ abgelehnt"]);
-        const cur=wf[k.name]=wf[k.name]||{fall:faelle[0][0]};if(!faelle.some(x=>x[0]===cur.fall))cur.fall=faelle[0][0];
-        const s=h("select",{onchange:e=>{cur.fall=e.target.value;}});
-        faelle.forEach(([v,l])=>{const o=h("option",{value:v},l);if(v===cur.fall)o.selected=true;s.append(o);});
-        const t=h("input",{placeholder:"Werte automatisch — JSON überschreibt, z. B. {\"Pfad\":\"/x\"}",title:"Werte des Ergebnisses (optional)",
-          value:cur.werte?JSON.stringify(cur.werte):"",oninput:e=>{const v=e.target.value.trim();
-            try{cur.werte=v===""?undefined:JSON.parse(v);t.style.borderColor="";}catch(_){t.style.borderColor="#ff6b81";}}});
-        g.append(h("label",{title:k.typ+(k.zeitlimit?" · ⏳ "+k.zeitlimit:"")},(FL_SYM[k.art]||"ƒ")+" "+k.name),s,t);});
-      box.append(g);}
-    box.append(h("div",{class:"row",style:"margin-top:6px"},h("button",{class:"act run",onclick:simEinspeisen},"▶ Einspeisen"),
-      h("span",{class:"hint"},"Commands laufen in die Aggregate")));}
-
-  async function simEinspeisen(){if(SIM.laeuft||!SIM.pipe)return;SIM.laeuft=true;
-    try{const r=await postJson("/api/editor/sim/fluss",{model:payload(true),sessionId:SIM.sid,pipeline:SIM.pipe,values:SIM.quellWerte[SIM.pipe]||{},wahl:SIM.wahl,
-        strom:(SIM.strom||{})[SIM.pipe]});
-      await simAntwort(await r.json());}
-    catch(e){badge(false);SIM.fehler=[{code:"OFFLINE",meldung:"SimHost nicht erreichbar (dotnet run --project SimHost)."}];simListen();}
-    finally{SIM.laeuft=false;}}
-
-  // ── Senden → Server-Kaskade → Animation ──
-  async function simSenden(){if(SIM.laeuft)return;const c=SIM.cmd;const werte=SIM.werte[c]||{};SIM.laeuft=true;
-    try{const r=await postJson("/api/editor/sim/step",{model:payload(true),sessionId:SIM.sid,command:c,values:werte,wahl:SIM.wahl});
-      await simAntwort(await r.json());}
-    catch(e){badge(false);SIM.fehler=[{code:"OFFLINE",meldung:"SimHost nicht erreichbar (dotnet run --project SimHost)."}];simListen();}
-    finally{SIM.laeuft=false;}}
-  // Antwort des Servers: Frames (Aggregat-Kaskade) + Fluss-Schritte. Der Verlauf hält beides in Reihenfolge; ein Command-Knoten des
-  //   Flusses trägt seine Frames selbst (sie stehen nicht noch einmal einzeln im Verlauf).
-  async function simAntwort(res){badge(true);
-    SIM.fehler=res.ok?[]:(res.fehler||[]);SIM.hinweis=res.hinweis||null;
-    // Bei Übersetzungs-/Wertefehlern bleibt der letzte gute Stand (Instanzen, Abdeckung) stehen.
-    if(!res.ok){simListen();simOverlay();return;}
-    SIM.instanzen=res.instanzen||[];SIM.abd=new Set(res.abdeckung||[]);SIM.sagas=res.sagas||[];
-    const frames=res.frames||[],fluss=res.fluss||[];res.frames.forEach(f=>SIM.frames.push(f));
-    const imFluss=new Set(fluss.flatMap(s=>s.frames||[]));
-    const ablauf=[];frames.forEach((f,i)=>{if(!imFluss.has(i))ablauf.push({art:"frame",f});});
-    fluss.forEach(st=>ablauf.push({art:"fluss",s:st,frames:(st.frames||[]).map(i=>frames[i]).filter(Boolean)}));
-    ablauf.forEach(a=>SIM.verlauf.push(a));
-    if(res.vorgaenge)res.vorgaenge.forEach(v=>SIM.vorgaenge.push(v));
-    simListen();simOverlay();await simAblauf(ablauf);simForm();}
-  async function simReset(){try{await postJson("/api/editor/sim/reset",{sessionId:SIM.sid});}catch(e){}
-    SIM.frames=[];SIM.instanzen=[];SIM.sagas=[];SIM.abd=new Set();SIM.werte={};SIM.hinweis=null;SIM.fehler=[];SIM.verlauf=[];SIM.vorgaenge=[];
-    simLeeren(true);simForm();simListen();simOverlay();}
-  async function simStand(){try{const r=await fetch("/api/editor/sim/state?sessionId="+SIM.sid);const res=await r.json();
-    SIM.instanzen=res.instanzen||[];SIM.abd=new Set(res.abdeckung||[]);simListen();simOverlay();}catch(e){}}
-  async function simDsl(){const out=document.getElementById("de-out");
-    try{const t=await (await fetch("/api/editor/sim/dsl?sessionId="+SIM.sid)).text();out.innerHTML="";
-      out.append(h("div",{class:"sub"},"Regressionstest (Test-DSL) — in Infrastructure.Pruefstand.Tests einfügen"),h("pre",{style:"white-space:pre-wrap"},t));
-      try{await navigator.clipboard.writeText(t);deFlash("📋 Test in die Zwischenablage kopiert",true);}catch(_){}}
-    catch(e){out.innerHTML=unreach;}}
-
-  // ── Listen: Meldungen, Verlauf (klickbar = erneut abspielen), Instanzen, Sagas ──
-  function simListen(){
-    const meld=document.getElementById("sim-meld");if(meld){meld.innerHTML="";
-      if(SIM.hinweis)meld.append(h("div",{class:"hinweis"},"↻ "+SIM.hinweis));
-      SIM.fehler.forEach(f=>meld.append(h("div",{class:"fehler"},"["+f.code+"] "+(f.datei?f.datei+": ":"")+f.meldung)));}
-    const v=document.getElementById("sim-verlauf");if(v){v.innerHTML="";
-      if(!SIM.verlauf.length)v.append(h("div",{class:"hint"},"Noch nichts gesendet."));
-      SIM.verlauf.slice().reverse().forEach(a=>{
-        if(a.art==="fluss"){v.append(simFlussZeile(a));return;}
-        const f=a.f;const rej=f.events.length&&f.events.every(e=>!e.persistent);
-        const el=h("div",{class:"frame"+(f.herkunft==="saga"?" saga":"")+(rej||f.unrouted?" rej":""),title:"erneut abspielen",onclick:()=>simAnimiere([f])},
-          h("b",{},(f.herkunft==="saga"?"⤷ "+f.saga+": ":"")+f.command),h("span",{style:"opacity:.6"}," → "+f.label+(f.werte?" ("+f.werte+")":"")));
-        if(f.unrouted)el.append(h("span",{class:"ev rej"},"⚠ von keinem Aggregat behandelt (im Cluster ein Hang)"));
-        f.events.forEach(e=>el.append(h("span",{class:"ev"+(e.persistent?"":" rej")},(e.persistent?"● ":"✗ ")+e.typ+(e.werte?" ("+e.werte+")":""),
-          null)));
-        v.append(el);});}
-    const vg=document.getElementById("sim-vorg");if(vg){vg.innerHTML="";
-      if(!SIM.vorgaenge.length)vg.append(h("div",{class:"hint"},"Noch keine Quell-Nachricht eingespeist."));
-      SIM.vorgaenge.slice(-8).reverse().forEach(x=>{const el=h("div",{class:"inst"},h("b",{},(x.erfolg?"✓ ":"✗ ")+"⛓ "+x.pipeline+" #"+x.nummer));
-        if(x.grund)el.append(h("span",{class:"f"+(x.erfolg?"":" neu")},"gescheitert: "+x.grund));
-        (x.wartend||[]).forEach(w=>el.append(h("span",{class:"f"},w)));vg.append(el);});}
-    const ib=document.getElementById("sim-inst");if(ib){ib.innerHTML="";
-      if(!SIM.instanzen.length)ib.append(h("div",{class:"hint"},"Keine Instanz angelegt."));
-      SIM.instanzen.forEach(i=>{const el=h("div",{class:"inst",title:"als Ziel wählen",onclick:()=>{const c=simCommands().find(x=>x.name===SIM.cmd);
-          if(c&&simZiel(c.name)===i.aggregat){(SIM.werte[c.name]=SIM.werte[c.name]||{})[ID_FELD()]=i.id;simForm();}
-          const n=graphNodes().find(x=>x.id==="agg:"+i.aggregat);if(n){centerOn(n);pulseNode(n);}}},h("b",{},i.label),h("span",{style:"opacity:.5"}," "+i.id.slice(0,8)));
-        i.felder.forEach(f=>el.append(h("span",{class:"f"+(f.geaendert?" neu":"")},f.name+" = "+f.wert)));ib.append(el);});}
-    const sb=document.getElementById("sim-sagas");if(sb){sb.innerHTML="";
-      const offen=SIM.sagas.filter(x=>x.wartend.length);
-      if(!offen.length)sb.append(h("div",{class:"hint"},SIM.sagas.length?"Alle Saga-Instanzen abgeschlossen.":"Keine Saga gestartet."));
-      offen.forEach(x=>{const el=h("div",{class:"inst"},h("b",{},x.prozess),h("span",{style:"opacity:.5"}," "+x.korrelation.slice(0,8)));
-        el.append(h("span",{class:"f"},"angekommen: "+(x.angekommen.join(", ")||"—")));
-        x.wartend.forEach(w=>el.append(h("span",{class:"f neu"},"wartet: "+w.bedingung.join(" ∧ ")+(w.fehlt.length?" — fehlt "+w.fehlt.join(", "):""))));sb.append(el);});}}
-
-  // ── Animation: Frame → Stufen von Knoten-Ids ──
-  const knotenId={
-    rec:n=>MODEL.records.some(r=>r.name===n)?"rec:"+n:null,
-    dec:(agg,cmd)=>{const d=MODEL.decider.find(x=>x.aggregat===agg&&x.command===cmd)||MODEL.decider.find(x=>x.command===cmd);return d?"dec:"+d._id:null;},
-    app:(agg,evt)=>{const a=MODEL.applier.find(x=>x.aggregat===agg&&x.event===evt);return a?"app:"+a._id:null;},
-    state:agg=>{const s=MODEL.states.find(x=>x.aggregat===agg);return s?"st:"+s._id:null;},
-    regel:(saga,ri)=>{const sg=MODEL.sagas.find(x=>x.name===saga);if(!sg||ri==null)return null;
-      const liste=transOf(sg).filter(t=>(t.wenn||[]).length).flatMap(t=>(t.dann||[]).filter(d=>d.sende).map(()=>t));const t=liste[ri];return t?"tr:"+t._id:null;}};
-  function simStufen(f){const st=[];const rej=new Set();
-    if(f.herkunft==="saga")st.push(["saga:"+f.saga,knotenId.regel(f.saga,f.regel)]);
-    st.push([knotenId.rec(f.command)]);if(f.unrouted){rej.add(knotenId.rec(f.command));return {st,rej};}
-    st.push([knotenId.dec(f.aggregat,f.command),"agg:"+f.aggregat]);
-    st.push(f.events.map(e=>{const id=knotenId.rec(e.typ);if(!e.persistent&&id)rej.add(id);return id;}));
-    const pers=f.events.filter(e=>e.persistent);
-    if(pers.length)st.push([...pers.map(e=>knotenId.app(f.aggregat,e.typ)),knotenId.state(f.aggregat)]);
-    return {st:st.map(x=>x.filter(Boolean)).filter(x=>x.length),rej};}
-  const simEl=id=>world&&world.querySelector('[data-id="'+vertreterId(id)+'"]');   // eingeklappte Details → Besitzer
-  function simLeeren(ganz){if(!world)return;world.querySelectorAll(".gnode2.simhot").forEach(e=>e.classList.remove("simhot"));
-    if(ganz){world.querySelectorAll(".gnode2.simspur,.gnode2.simrej").forEach(e=>e.classList.remove("simspur","simrej"));
-      document.querySelectorAll("#de .glink.simdraht").forEach(e=>e.classList.remove("simdraht","simrej"));}}
-  const warte=ms=>new Promise(r=>setTimeout(r,ms));
-  // ── Fluss-Schritt: Knoten und die Drähte, über die er bedient wurde, leuchten; ein Command-Knoten spielt danach seine Kaskade ──
-  const flId=(pipe,name)=>{const f=MODEL.fluesse.find(x=>x.name===pipe);const k=f&&flKnoten(f,name);return k?"fs:"+k._id:null;};
-  const FL_AUS={zeitlimit:"⏳ Zeitlimit",abgelehnt:"✕ abgelehnt",noop:"∅ Noop",gescheitert:"✗ gescheitert"};
-  function simFlussZeile(a){const st=a.s,gesch=st.ausgang==="gescheitert";
-    const el=h("div",{class:"frame fluss"+(gesch?" gesch":""),title:"erneut abspielen",onclick:()=>simAblauf([a])},
-      h("b",{},"⛓ "+st.pipeline+" #"+st.vorgang+" · "+(FL_SYM[st.art==="funktion"?"funktion":st.art]||"")+" "+st.knoten),
-      h("span",{style:"opacity:.6"}," "+st.typ+(st.element!=null?" [je "+st.element+"]":"")+(st.werte&&st.art!=="quelle"&&st.art!=="auf"?" ("+st.werte+")":"")));
-    if(st.art!=="quelle"&&st.art!=="auf")el.append(h("span",{class:"ev"+(st.ausgang==="fall"?"":" rej")},
-      "→ "+(st.ausgang==="fall"?"● "+st.fall:FL_AUS[st.ausgang]||st.ausgang)+(st.ergebnisWerte&&st.art==="funktion"?" ("+st.ergebnisWerte+")":"")+(st.grund?" — "+st.grund:"")));
-    (a.frames||[]).forEach(f=>f.events.forEach(e=>el.append(h("span",{class:"ev"+(e.persistent?"":" rej")},"  "+f.label+": "+(e.persistent?"● ":"✗ ")+e.typ))));
-    return el;}
-  async function simAblauf(ablauf){simLeeren(true);
-    for(const a of ablauf){
-      if(a.art==="frame"){await simAnimiere([a.f],true);continue;}
-      const st=a.s,z=flId(st.pipeline,st.knoten),rej=st.ausgang!=="fall"&&st.ausgang!=="noop";simLeeren(false);
-      (st.ein||[]).forEach(d=>{const v=flId(st.pipeline,d.von);if(!v||!z)return;
-        document.querySelectorAll('#de .glink[data-a="'+v+'"][data-b="'+z+'"]').forEach(p=>{p.classList.add("simdraht");p.classList.toggle("simrej",d.port!=="fall");});});
-      const el=z&&simEl(z);if(el){el.classList.add("simhot","simspur");if(rej)el.classList.add("simrej");}
-      if(SIM.folgen&&SIM.tempo>0&&z){const n=graphNodes().find(x=>x.id===z);if(n)centerOn(n);}
-      if(SIM.tempo>0)await warte(SIM.tempo);
-      if(a.frames&&a.frames.length)await simAnimiere(a.frames,true);}
-    simLeeren(false);}
-  async function simAnimiere(frames,behalten){if(!behalten)simLeeren(true);
-    for(const f of frames){const {st,rej}=simStufen(f);
-      for(const ids of st){simLeeren(false);
-        ids.forEach(id=>{const el=simEl(id);if(!el)return;el.classList.add("simhot","simspur");if(rej.has(id))el.classList.add("simrej");});
-        if(SIM.folgen&&SIM.tempo>0){const n=graphNodes().find(x=>x.id===ids[0]);if(n)centerOn(n);}
-        if(SIM.tempo>0)await warte(SIM.tempo);}}
-    simLeeren(false);}
-
-  // ── Abdeckung: welche Zweige diese Session gefahren hat (Decider: Ausgänge x/y, Applier, Regeln) ──
-  function simOverlay(){if(!world)return;
-    world.querySelectorAll(".gnode2").forEach(el=>{el.classList.remove("abd-voll","abd-teil","abd-kalt");const b=el.querySelector(".simabd");if(b)b.remove();});
-    if(!SIM.an||!SIM.abdAn)return;
-    const mark=(id,klasse,text)=>{const el=simEl(id);if(!el)return;el.classList.add(klasse);
-      if(text){const hd=el.querySelector(".ghead");if(hd)hd.append(h("span",{class:"simabd"},text));}};
-    MODEL.decider.forEach(d=>{const aus=d.ergibt||[];const n=aus.filter(o=>SIM.abd.has("out:"+d.command+">"+o.event)).length;
-      mark("dec:"+d._id,n===0?"abd-kalt":(n===aus.length?"abd-voll":"abd-teil"),n+"/"+aus.length+" Zweige");});
-    MODEL.applier.forEach(a=>mark("app:"+a._id,SIM.abd.has("app:"+a.aggregat+"|"+a.event)?"abd-voll":"abd-kalt"));
-    MODEL.sagas.forEach(sg=>{const liste=transOf(sg).filter(t=>(t.wenn||[]).length).flatMap(t=>(t.dann||[]).filter(d=>d.sende).map(()=>t));
-      liste.forEach((t,ri)=>mark("tr:"+t._id,SIM.abd.has("regel:"+sg.name+"#"+ri)?"abd-voll":"abd-kalt"));});
-    // Fluss-Knoten: welche Ausgänge (Fälle) im Durchspielen gefeuert haben.
-    MODEL.fluesse.forEach(f=>(f.knoten||[]).forEach(k=>{if(k.art==="je")return;const pre="fl:"+f.name+"|"+k.name+">";
-      const hit=[...SIM.abd].filter(x=>x.startsWith(pre)).map(x=>x.slice(pre.length));
-      const aus=flAusgaenge(k).filter(a=>a.port==="fall").map(a=>a.fall||k.typ);const n=aus.filter(a=>hit.includes(a)).length;
-      mark("fs:"+k._id,hit.length===0?"abd-kalt":(n>=aus.length?"abd-voll":"abd-teil"),aus.length>1?n+"/"+aus.length+" Fälle":null);}));}
-
-  // Nach jedem Board-Render: Overlay neu anbringen; Formular nur neu bauen, wenn sich die Commands geändert haben.
-  window.simNachRender=function(){if(!SIM.an)return;simOverlay();
-    const sig=simCommands().map(c=>c.name+":"+(c.felder||[]).map(f=>f.name+"/"+f.typ).join(",")).join("|");if(sig!==SIM.cmdSig)simForm();};
   // ══ WERKBANK (docs/konzept-werkbank.md §5 + §8.1, Plan P3.6) ═════════════════════════════════════════════════════════════
   //   Kopfzeile: Umgebung ▾ · Build (Stand) · Lauf · Postgres/Redis/Consul · ⟳ · 📸. Der 🖥 Host-Rahmen zeigt die Abschnitte der
   //   gewählten Umgebung als Karten; ihr Panel zeichnet EIN generischer Formular-Renderer aus dem Schema (/api/werkbank/schema) —

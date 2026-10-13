@@ -19,14 +19,12 @@
     <button class="act" onclick="deReflow()">▦ Neu anordnen</button>
     <button class="act" onclick="deLaden()" title="Domänen laden: wählen, welche Domänen auf dem Board erscheinen (leer, einzelne, alle)">🗂 Domänen laden</button>
     <button class="act" onclick="deGrammatik()" title="Die Grammatik: was sich womit verbinden lässt, und je Regel ihr Gegenstück im Build">📐 Grammatik</button>
-    <button class="act run" id="de-simbtn" onclick="deSim()">▶ Simulation</button>
     <button class="act" onclick="deRueckgaengig()" title="Den letzten Patch am Code zurücknehmen (Geste oder 🤖-Übernahme) — nur, solange die Dateien seither unverändert sind">↶ Rückgängig</button>
     <button class="act" onclick="deDownload()">⬇ Modell</button>
     <button class="act" id="de-close" onclick="deClose()">✕ Schließen</button>
   </header>
   <div class="cols">
     <div class="col left" id="de-form"></div>
-    <aside class="sim" id="de-sim"></aside>
     <div class="col right out" id="de-out"><div class="hint">⟳ baut den Laufzeit-Host, liest den Code neu und startet ihn in der gewählten Umgebung — Fehler stehen an der Karte.</div></div>
   </div>
   <div id="ds-leiste" class="ds-leiste"></div>

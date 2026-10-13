@@ -58,9 +58,8 @@ public sealed record SagaTrace
 /// Erwarte (Feuerungen/Endzustände/offene Joins)</c>.
 ///
 /// Treibt die ECHTEN Prozess-Regeln (<see cref="ProzessRegeln"/>) über denselben store-freien Kern
-/// wie die Aggregat-DSL — eine headless Variante der Editor-Simulations-Kaskade, nur mit Assertions statt
-/// HTTP-Frames. Command→Aggregat-Routing wird aus den Decider-Signaturen der Fabrik-Assembly
-/// gelesen (Tooling-Reflection, wie die Editor-Simulation).
+/// wie die Aggregat-DSL, mit Assertions. Command→Aggregat-Routing wird aus den Decider-Signaturen der Fabrik-Assembly
+/// gelesen (Tooling-Reflection, nur im Test).
 /// </summary>
 public static class SagaSzenario
 {
@@ -185,11 +184,9 @@ public sealed class SagaErgebnis
 
 /// <summary>
 /// Der store-freie Saga-Motor — Command→Aggregat-Routing, gehaltene Aggregat-Zustände und die
-/// Marking-Faltung. DER GETEILTE KERN: sowohl die Test-DSL (<see cref="SagaSzenario"/>) als auch
-/// der SimHost/Board treiben ihre Kaskade hierüber — eine Wahrheit statt zweier Spiegel.
+/// Marking-Faltung, auf dem die Test-DSL (<see cref="SagaSzenario"/>) ihre Kaskade treibt.
 /// Ein <see cref="SagaLaufwerk"/> ist zustandsbehaftet: mehrere <see cref="Fahre"/>-Aufrufe
-/// akkumulieren Aggregat-Zustände und Markings (so kann eine Board-Session Schritt für Schritt
-/// wachsen).
+/// akkumulieren Aggregat-Zustände und Markings.
 /// </summary>
 public sealed class SagaLaufwerk
 {

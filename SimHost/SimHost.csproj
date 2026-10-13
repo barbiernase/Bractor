@@ -4,31 +4,19 @@
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
-    <!-- Der Wissensgraph liegt neben der .sln; wir lesen ihn zur Laufzeit. -->
   </PropertyGroup>
 
   <ItemGroup>
-    <!-- KEINE Domain-Referenz: simuliert wird ausschließlich das Editor-Modell (In-Memory-Kompilat mit den
-         echten Domain-Generatoren) — sonst gäbe es zwei Wahrheiten (verlinkte Domain.dll vs. Modell). -->
-    <!-- Core: Framework-Basis der generierten Handler (AggregateHandlerBase) — Laufzeit-Referenz des Kompilats. -->
-    <ProjectReference Include="../Core/Core.csproj" />
-    <!-- Der DSL-Schreiber (nur Abstractions-Ref): Board-Session → Test-Quelltext. -->
-    <ProjectReference Include="../Cqrs.Testing/Cqrs.Testing.csproj" />
-    <!-- Der Editor-Modus: reiner Scaffolder/Validator (keine Roslyn/Infra) — Modell → C#, live. -->
+    <!-- KEINE Domain-Referenz: die Werkbank liest den Code im warmen Workspace (GraphExtractor.Kern) und startet den echten Host
+         als eigenen Prozess (Umgebung sim) — keine Simulationsschicht, keine zweite Laufzeit (Werkbank P8). -->
+    <!-- Der Editor-Modus: Modell, Grammatik, Scaffolder (Modell → C#). -->
     <ProjectReference Include="../DomainEditor/DomainEditor.csproj" />
-    <!-- Live-Kompilat: das getippte Modell IN-MEMORY mit den ECHTEN Domain-Generatoren übersetzen
-         und über den store-freien Kern ausführen — kein Proto, keine Platte, kein Neustart. -->
-    <ProjectReference Include="../Domain.SourceGeneration/Domain.SourceGeneration.csproj"
-                      OutputItemType="none" ReferenceOutputAssembly="true" />
-    <!-- Store-Regeln (CQRS066/067) für die Prüfung eines Store-Rumpfs vor dem Schreiben (ProjektPruefung). -->
-    <ProjectReference Include="../Projections.SourceGeneration/Projections.SourceGeneration.csproj"
-                      OutputItemType="none" ReferenceOutputAssembly="true" />
   </ItemGroup>
 
   <ItemGroup>
     <!-- Dieselbe Roslyn-Version wie der Extractor-Kern (warmer Workspace). -->
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp" Version="5.3.0" />
-    <!-- Marten (über Core) zieht Roslyn 4.14 für seinen Laufzeit-Compiler — in SimHost läuft er nie; dieselbe Version für alles (sonst NU1608). -->
+    <!-- Dieselbe Version für alle Roslyn-Pakete (sonst NU1608, der Workspace meldet das als Fehler). -->
     <PackageReference Include="Microsoft.CodeAnalysis" Version="5.3.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Scripting" Version="5.3.0" />
     <PackageReference Include="Microsoft.CodeAnalysis.Scripting" Version="5.3.0" />

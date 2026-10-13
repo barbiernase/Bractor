@@ -15,56 +15,10 @@
 #de button.act.go:hover{background:#369268}
 #de button.act.run{background:#4a3a7a;border-color:#7c5cff;color:#e0d4ff}
 #de button.act.run:hover{background:#5a4892}
-#de .test .trow{display:flex;align-items:center;gap:8px;margin:3px 0}
-#de .test .trow label{min-width:180px;color:#9aa3b7;font-size:12px}
-#de .test .trow input{flex:1}
-#de .test .tframe{padding:4px 8px;border-radius:5px;background:#12261c;color:#9be3bf;margin:3px 0;font:12px ui-monospace,monospace}
-#de .test .tframe.rej{background:#3a1f28;color:#ffb3c1}
-#de .test .tstate{padding:4px 8px;border-radius:5px;background:#141926;color:#cfe;margin:3px 0;font:12px ui-monospace,monospace}
 #de .cols{flex:1;display:grid;grid-template-columns:1fr;overflow:hidden}
-#de.simon .cols{grid-template-columns:1fr minmax(320px,400px)}
-#de .sim{display:none}
-@media (max-width:1100px){#de .cols{position:relative}#de.simon .cols{grid-template-columns:1fr}
-  #de.simon .sim{position:absolute;top:0;right:0;bottom:0;width:min(360px,88vw);z-index:40;box-shadow:-8px 0 24px rgba(0,0,0,.5)}}
-#de.simon .sim{display:flex;flex-direction:column;gap:10px;overflow:auto;border-left:1px solid #232a38;background:#10141d;padding:12px;font-size:12px}
-#de .sim h4{margin:6px 0 2px;font-size:11px;letter-spacing:.06em;text-transform:uppercase;opacity:.7}
-#de .sim .row{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
-#de .sim select,#de .sim input,#de .sim textarea{background:#0a0d13;color:#dfe4ee;border:1px solid #2a3344;border-radius:5px;padding:4px 6px;font:12px ui-monospace,monospace;min-width:0}
-#de .sim .fld{display:grid;grid-template-columns:120px 1fr;gap:6px;align-items:center;margin:3px 0}
-#de .sim .fld label{opacity:.8;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-#de .sim .fld select,#de .sim .fld input,#de .sim .fld textarea{width:100%;box-sizing:border-box}
-#de .sim .frame{border-left:3px solid #ffb86b;background:#151b27;border-radius:4px;padding:5px 8px;margin:4px 0;cursor:pointer}
-#de .sim .frame.saga{border-left-color:#b48cff}
-#de .sim .frame.fluss{border-left-color:#c08a2e}
-#de .sim .frame.fluss.gesch{border-left-color:#ff6b81}
-#de .sim .tabs{display:flex;gap:4px;margin-bottom:6px}
-#de .sim .tabs button{flex:1}
-#de .sim .tabs button.an{background:#2a3344;outline:1px solid #c08a2e}
-#de .sim .wahl{display:grid;grid-template-columns:110px 1fr;gap:4px 6px;align-items:center}
-#de .sim .wahl label{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;opacity:.85}
-#de .sim .wahl input{grid-column:1/-1}
-#de .glink.simdraht{stroke:#ffb86b!important;stroke-width:4px!important;opacity:1!important}
-#de .glink.simdraht.simrej{stroke:#ff6b81!important}
-#de .sim .frame.rej{border-left-color:#ff6b81}
-#de .sim .frame .ev{display:block;margin-left:10px;opacity:.9}
-#de .sim .frame .ev.rej{color:#ff9aa9}
-#de .sim .frame .warum{opacity:.6}
-#de .sim .inst{background:#151b27;border-radius:4px;padding:5px 8px;margin:4px 0;cursor:pointer}
-#de .sim .inst .f{display:block;margin-left:8px;opacity:.85}
-#de .sim .inst .f.neu{color:#ffd76a;opacity:1}
-#de .sim .hinweis{background:#2a2410;color:#ffd76a;border-radius:4px;padding:4px 8px}
-#de .sim .fehler{background:#3a1a20;color:#ffb3c1;border-radius:4px;padding:4px 8px;margin:2px 0}
-#de .gnode2.simhot{outline:3px solid #ffb86b;outline-offset:2px;box-shadow:0 0 28px #ffb86bcc;z-index:9}
-#de .gnode2.simhot.simrej{outline-color:#ff6b81;box-shadow:0 0 28px #ff6b81cc}
-#de .gnode2.simspur{outline:2px solid #ffb86b88;outline-offset:2px}
-#de .gnode2.simspur.simrej{outline-color:#ff6b8188}
-#de .gnode2.abd-voll{box-shadow:0 0 0 3px #3fb950}
-#de .gnode2.abd-teil{box-shadow:0 0 0 3px #d29922}
-#de .gnode2.abd-kalt{opacity:.4}
-#de .ghead .simabd{font-size:9px;background:#0d1017;color:#dfe4ee;border-radius:3px;padding:0 4px;margin-left:auto}
 #de .col{overflow:auto;padding:14px}
 #de .col.left{border-right:1px solid #232a38}
-#de .col.right{display:none}  /* Ausgabe als schwebendes Panel — erscheint, sobald Prüfen/Kompilieren/Testen etwas melden */
+#de .col.right{display:none}  /* Ausgabe als schwebendes Panel — erscheint, sobald Prüfen/Grammatik/Meldungen etwas schreiben */
 #de .col.right.zeigen{display:block;position:fixed;right:16px;bottom:16px;width:min(560px,calc(100vw - 32px));max-height:55vh;z-index:60;box-shadow:0 8px 32px rgba(0,0,0,.55)}
 #de .col.right .outzu{position:sticky;top:0;float:right;background:#232a38;color:#cfd6e4;border:0;border-radius:4px;cursor:pointer;padding:2px 8px}
 #de .card{background:#141926;border:1px solid #232a38;border-radius:8px;padding:10px 12px;margin:0 0 12px}
