@@ -27,8 +27,7 @@ es nur für nicht-autoritative Randstores (Inv. 6).
 
 **Aktuell (2026-10-15, gemessen auf Commit-Basis `b2e33b9` + W11-1/WB-1):** Prüfstand **540/540**, Integration **39/39** sequentiell (100 s), Prüfdomäne **16/16**
 sequentiell, Werkbank-Abnahme **1/1** sequentiell (≈ 130 s), `Client.Infrastructure.CollectionTests` **30/30**, Python SDK **34/34**, Worker **21/21**;
-`--check` grün (alle Bereiche inkl. „Lage“), `--sonde` grün (111 Soll-Fakten, Lage-Soll 56 Typen); Gate `./pruefe-checkout.sh` rot nur durch
-`Domain.Client.Modules.Blazor/Debug/` (docs/13 P3-2).
+`--check` grün (alle Bereiche inkl. „Lage“), `--sonde` grün (111 Soll-Fakten, Lage-Soll 56 Typen); Gate `./pruefe-checkout.sh` grün.
 
 Statisch gezählt (2026-10-15):
 

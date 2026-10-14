@@ -209,9 +209,7 @@ Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
 
 - **P3-1 · Mojibake** in `Domain.SourceGeneration/AggregateHandlerGenerator.cs`, `Infrastructure/Projections/ReadModelDepsReader.cs`,
   `Infrastructure/Serialization/ProtoMapper.cs`.
-- **P3-2 · Toter Code und Kleinkram:** der Quellordner `Domain.Client.Modules.Blazor/Debug/` (`DebugModule`, `DebugStage.razor`) wird von der
-  Build-Regel `[Dd]ebug/` in `.gitignore` geschluckt und war nie im Repo (lokal vorhanden, im Checkout fehlt das Modul — umbenennen oder bewusst
-  entfernen; **Entscheidung Tobi**, bis dahin ist `./pruefe-checkout.sh` rot); `MartenProjectionTracker` (nirgends registriert) samt dem leeren Marker `IReplaybarerTracker`, `CqrsFrameworkOptions`, `IViewModel` + `ViewModelGenerator`,
+- **P3-2 · Toter Code und Kleinkram:** `MartenProjectionTracker` (nirgends registriert) samt dem leeren Marker `IReplaybarerTracker`, `CqrsFrameworkOptions`, `IViewModel` + `ViewModelGenerator`,
   auskommentierte Reflection-Scans (`EventTypeResolver`, `MartenEventTypeRegistration`), nicht gemappte
   Proto-Endpunkte in Host.Blazor (das Python-SDK ruft sie trotzdem), `BenchPing` ohne Treiber-Basis; Dateiname ≠ Klassenname bei einigen
   Generatoren; veraltete Kommentare und Meldungen (z. B. „drei Header“ in `Spur.cs`, „geteilt mit der Simulation“ in `ProzessManager.cs`, „Client-/OCC-Pfad
@@ -288,7 +286,8 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 - **Gate „frischer Checkout baut“ (früher WB-3, 2026-10-15):** `./pruefe-checkout.sh` meldet lokal vorhandene Quellen, die eine Ignore-Regel
   schluckt (`git check-ignore -v`), baut den Commit `HEAD` in einem temporären `git worktree`, fährt dort `./codegen.sh --check` und den Prüfstand
   und verlangt einen unveränderten Checkout nach dem Build (docs/12 §12.6). Erster Lauf auf `2876a53`: Build, Drift und Prüfstand im frischen
-  Checkout grün; rot nur durch `Domain.Client.Modules.Blazor/Debug/` (P3-2, Entscheidung offen). Dabei gefunden: `CLAUDE.md`, docs/06 und docs/12
+  Checkout grün; rot nur durch den nie versionierten Quellordner `Domain.Client.Modules.Blazor/Debug/` (`[Dd]ebug/` schluckte ihn) — auf
+  Entscheidung entfernt (2026-10-15, war ohne Verweise), seitdem ist das Gate grün. Dabei gefunden: `CLAUDE.md`, docs/06 und docs/12
   nannten `deploy-linux/docker-compose.infrastructure.yml` — das ist eine Ausgabe von `build.sh` und fehlt im Checkout; die Vorlage liegt im
   Wurzelverzeichnis (`docker-compose.infrastructure.yml`).
 
