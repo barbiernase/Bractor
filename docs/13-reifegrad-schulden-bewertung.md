@@ -16,10 +16,10 @@ hierher. Stand: 2026-10-15, Commit-Basis `ea463c6`. Maßstab sind die sechs Inva
 | P1-6 | `CancellationToken.None` im generierten Pull-Emit-Pfad | P1 |
 | P1-7 | Deploy-Skripte veraltet (starten die Hosts ohne Umgebung, alte Konfig-Schlüssel) | P1 |
 | W2-1 | Rest der Projektstruktur: Client-Framework hängt am Server-Framework, Generat-Namespaces, Identitäten aus einfachen Namen | P2 |
-| W11-1 | Doppelte Wege: Handle-Pipeline/Trigger/`[Ingress]` ohne Nutzer, Prozess- vs. Fluss-DSL, zwei Rumpf-Schreibwege | P2 |
+| W11-1 | Doppelte Wege: Handle-Pipeline/Trigger/`[Ingress]` ohne Nutzer, Prozess- vs. Fluss-DSL | P2 |
 | W11-2 | Zeitlimits nur über den 15-s-Backstop entdeckt; Fristplaner hängt an der Handle-Welt | P2 |
 | W3-1 | Ableitungen im Editor-JS (Karten-Ids, Hör-Menge, Lambda-Parameter, Auto-Zuordnung, Kardinalität) | P2 |
-| WB-1 | Werkbank: Geste p50 unter Fremdlast 346–470 ms (Ziel 300 ms), tote Endpunkte, Formular/Spiegel lesen `domain-model.json` | P2 |
+| WB-1 | Werkbank: Geste p50 unter Fremdlast 346–470 ms (Ziel 300 ms), LLM-Kontexte kalt, CLI `--schreiben`, Renamer ohne String-Literale | P2 |
 | WB-4 | Die Werkbank kennt genau eine Anwendung (`StandardWurzel`, `ServerHost`); eine Anwendung anlegen ist nicht beschrieben — Entscheidung offen | P2 |
 | WZ-1 | Prüf-Lücken der Werkzeuge: Grammatik-Gate bestätigt sich selbst, Fixpunkt ohne Akteure/Verträge/Clients/Funktionen/Dienste, Sonde ohne `SendeJe`/Count-Join/Kompensation/`IMensch`/`IstClient` | P2 |
 | AK-1 | Akteure/Clients: durable Zustellung an Clients, `als` im Envelope, Zusagen über C#, Anmeldung je Person | P2 |
@@ -153,9 +153,9 @@ eine Umgebung als Heredoc neben `umgebungen/*.json`. *Empfehlung:* Deploy auf `u
 `PipelineDispatchGenerator`, `GeneratedPipelines`), die Trigger-Welt (`IPipelineTrigger`, `ITriggerRegistration`, `TimerTrigger`, `WebhookTrigger`,
 gRPC-Trigger-Pfad, Proto `Trigger*`), `[Ingress]` mit `GraphExtractor.Kern/CompositionRoot.cs`, `Selbst<T>`/`Frist<TCmd>`/`FristStorno<TCmd>` als
 Handle-Ausgang, `IAkteurDienst<A>` (nur dort verdrahtet). Prozess-DSL und Fluss-DSL sind zwei Schreibweisen auf demselben Dirigenten
-(Kompensation, Count-Join und `SendeJe` nur im Prozess; Quelle, Strom, Warte, `Je`/`Sammle` nur im Fluss). 🤖 schreibt über `CodeSync.SetzeRumpf`
-mit eigener Sicherung neben der ✎-Geste. *Empfehlung:* Rückbau der Handle-/Trigger-Welt, sobald Takt-Treiber und flüchtige Quellen da sind
-(`konzept-werkbank.md` §12.2); die DSL-Frage entscheiden; einen Rumpf-Schreibweg.
+(Kompensation, Count-Join und `SendeJe` nur im Prozess; Quelle, Strom, Warte, `Je`/`Sammle` nur im Fluss). *Empfehlung:* Rückbau der
+Handle-/Trigger-Welt, sobald Takt-Treiber und flüchtige Quellen da sind (`konzept-werkbank.md` §12.2); die DSL-Frage entscheiden. (Der zweite
+Rumpf-Schreibweg ist seit 2026-10-15 weg, §13.6.)
 
 **W11-2 · Zeitlimits.** Ein Zeitlimit im Dirigenten wird nur entdeckt, wenn der Backstop alle offenen Vorgänge weckt (alle 15 s) — Genauigkeit
 15 s, Aufwand O(offene Vorgänge). Der durable Fristplaner mit Fälligkeits-Index (`FristScheduler`, `MartenFristplan`) existiert, hängt aber an der
@@ -166,11 +166,10 @@ Handle-Welt. *Empfehlung:* Fristplaner als Weck-Quelle der Zeitlimits in den Dir
 `flAutoArgs` mit zwei verschiedenen Namens-Heuristiken), Port-Kardinalität, Laufort aus dem rohen Umgebungs-Modell.
 *Empfehlung:* alles über `board.sicht` bzw. `/api/werkbank/*`.
 
-**WB-1 · Werkbank.** Geste p50 unter Fremdlast 346–470 ms (Ziel 300 ms). Tote Endpunkte: `/api/werkbank/verlauf|gesten|lesen|host/stopp|infra/*`,
-`GET /kreislauf`, `/api/editor/module|build`, `/api/llm/pruefen|rumpf`; CLI `--schreiben` (Rest von „C# schreiben“). Formular und Spur-Spiegel lesen
-`domain-model.json` vom Datenträger statt aus dem warmen Board. Umgebungs-Werte werden ohne Verlauf und ohne Branch-Sperre geschrieben; die Werkbank
-löst Umgebungs-Dateien anders auf als der Host (fehlendes `${env:X}` wird still leer) und liest `Identitaeten.Tokens` mit einem dritten Parser.
-LLM-Kontexte entstehen kalt (~1 min). Der Renamer ändert keine String-Literale.
+**WB-1 · Werkbank.** Geste p50 unter Fremdlast 346–470 ms (Ziel 300 ms; gemessen wird nur noch im Konsolen-Log `[Geste]`, der Endpunkt
+`/api/werkbank/gesten` ist entfallen). CLI `--schreiben` (Rest von „C# schreiben“). LLM-Kontexte entstehen kalt (~1 min, `GraphExtractor --kontexte`
+im selben Baum — läuft er beim ersten Start gleichzeitig mit ⟳, bauen zwei Prozesse dieselben Projekte); ihr Slot-Index kommt nicht aus dem warmen
+Board, und `GraphExtractor` schreibt dabei weiter `domain-model.json` (liest in der Werkbank niemand mehr). Der Renamer ändert keine String-Literale.
 
 **WB-4 · Eine Anwendung je Werkbank.** Werkbank, Scaffolder und Extractor arbeiten auf `Projektstruktur.StandardWurzel` (11 Stellen) und bauen
 `ServerHost`; die Prüfdomäne (zweite Anwendung) lässt sich nicht öffnen, und das Anlegen einer neuen Anwendung (Rollen-Projekte, Komposition, Host)
@@ -242,9 +241,7 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 - **Tor am Webhook** einer Quelle (Token → Akteur) und Identitäten für Prod (P1-2).
 
 1. ~~WB-2/WB-3~~ Sicherheitsnetz steht (2026-10-15): ⟳-Abnahmetest inkl. „▶ Worker“ und Gate „frischer Checkout baut“ (§13.6).
-2. **W11-1 (Schreibwege)/WB-1** je Absicht ein Weg: 🤖 schreibt über die Rumpf-Geste (nicht `CodeSync.SetzeRumpf`), Umgebungs-Werte mit Verlauf, ↶
-   und Branch-Sperre, Werkbank löst Umgebungen wie der Host auf (ein Token-Parser, fehlendes `${env:X}` = Fehler); tote Endpunkte weg; Durchspielen,
-   Spur-Spiegel und LLM-Konsole lesen das warme Board statt `domain-model.json`.
+2. ~~W11-1 (Schreibwege)/WB-1~~ je Absicht ein Weg (2026-10-15, §13.6).
 3. **LLM-1** 🤖 fachlich prüfen: neue Rolle `<Wurzel>.Beispiele` (Strukturtabelle, Lageart, CQRS098), Beispiele an der Karte (Gegeben/Wenn/Dann)
    als Testcode, unabhängige Herkunft der Beispiele, 🤖-Schleife „baut → regelkonform → Beispiele grün“, `Cqrs.Testing` vervollständigen (P3-3,
    generierte Helfer für Projektion/Reaktion/Reader, pytest-Vorlagen), Kartenwand (`konzept-llm-minimalkontext.md` §11).
@@ -260,6 +257,23 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **Je Absicht ein Weg in der Werkbank (früher Teil von W11-1 und WB-1, 2026-10-15):**
+  - 🤖 schreibt über die Rumpf-Geste wie ✎ (`GestenDienst.RumpfAsync` bzw. `PythonRumpfAsync` mit Prompt-Zeile; Ort aus dem Slot-Anker über
+    `CodeSync.Ort`). Geprüft wird mit derselben Einsetzung (`Rumpf.MitRumpf`), der Patch steht im Verlauf, ↶ der Werkbank nimmt ihn zurück, auf
+    `main` ist er gesperrt. `CodeSync.SetzeRumpf/SetzeLambda/…Zurueck`, `PythonSync.SetzeRumpf/Zurueck`, die Sicherung in `.llm-kontext/sicherung/`
+    und `/api/llm/rueckgaengig` sind entfallen; Editor und Konsole nutzen das eine ↶.
+  - Umgebungs-Werte sind eine Geste (`GestenDienst.UmgebungAsync`: Verlauf, ↶, Branch-Sperre).
+  - Die Werkbank löst Umgebungen wie der Host auf: `UmgebungLader.LadeDatei` per Link (wie in `Host.Blazor`), Binder-Generator statt Reflection,
+    fehlendes `${env:X}` = Fehler, strenge Bindung. Tokens über eine Regel `Abstractions.AkteurTokens` (Host-Tor, Konsole, Worker-Token).
+  - Tote Endpunkte entfernt: `/api/werkbank/verlauf|gesten|lesen|host/stopp|infra/*`, `GET /api/werkbank/kreislauf`, `/api/editor/module|build`,
+    `/api/llm/pruefen|rumpf|rueckgaengig` (vorher geprüft: kein Aufrufer in Editor, Konsole, Tests).
+  - Durchspielen (Formulare) und Spur-Spiegel (Quell-Knoten) lesen das warme Board; der Arbeitsbereich schreibt kein `domain-model.json` mehr,
+    `/api/editor/model` fällt nicht mehr auf die Datei zurück.
+  - Die LLM-Konsole las `domain-model.json` nie direkt; offen bleibt, dass ihr Slot-Index kalt entsteht (WB-1).
+  - Ein Prozess-Weg auch für den Build nach einer Übernahme und das Erzeugen der Kontexte (`Prozesse.LaufeAsync`, sonst dieselbe
+    Pipe-Falle wie bei ⟳).
+  - Der Abnahmetest prüft Umgebungs-Geste + ↶, 🤖-Übernahme (Methode und Fluss-Lambda) + ↶, Formular, Tokens und den Quell-Knoten der Spur.
 
 - **⟳-Abnahmetest (früher WB-2, 2026-10-15):** `Werkbank.Abnahme.Tests` fährt eine echte Werkbank als Prozess auf einer Kopie des Arbeitsbaums
   (eigener Branch, eigene Umgebung `abnahme`, eigene Sim-DB) und geht nur über HTTP: ⟳ (alle Schritte grün, Board-Stand = Lauf-Stand = Stand im

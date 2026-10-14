@@ -519,12 +519,9 @@ Allgemeine Schulden stehen in `docs/13` §13.0. Für die Werkbank im Besonderen:
 - **Leitsatz-Verletzungen im Code:**
   - W10: der Codegen liest per `MetadataLoadContext`; `Werkbank/Server/Schema.cs` liest die Konfig-Typen per Reflection aus der eigenen DLL
     (statt aus dem warmen Workspace).
-  - W1/W3: Durchspielen, Spur-Spiegel und LLM-Konsole lesen `domain-model.json` vom Datenträger statt aus dem warmen Board.
   - W3: `editor.js` baut Karten-Ids (`graphNodes`) und rechnet Hör-Menge, Lambda-Parameter, Auto-Zuordnung und Port-Kardinalität selbst.
-  - W4/W11: neben dem Gesten-Weg gibt es eigene Schreibwege — 🤖 schreibt über `CodeSync.SetzeRumpf` mit eigener Sicherung und eigenem Rückgängig,
-    Umgebungs-Werte gehen ohne Verlauf und ohne Branch-Sperre; die CLI `--schreiben <board.json>` ist ein Rest von „C# schreiben“.
-  - Tote Endpunkte: `/api/werkbank/verlauf`, `/gesten`, `/lesen`, `/host/stopp`, `/infra/*`, `GET /kreislauf`, `/api/editor/module`,
-    `/api/editor/build`, `/api/llm/pruefen`, `/api/llm/rumpf`.
+  - W1: die LLM-Kontexte (Slot-Index) entstehen kalt aus `GraphExtractor --kontexte`, nicht aus dem warmen Board; die CLI `--schreiben <board.json>`
+    ist ein Rest von „C# schreiben“. (🤖 und Umgebungs-Werte schreiben seit 2026-10-15 als Geste; tote Endpunkte entfernt — docs/13 §13.6.)
 - **Geste p50 unter Fremdlast 346–470 ms** (Ziel 300 ms). Der Renamer ändert keine String-Literale.
 - **Pfade für entfernte Ausführer** (Python-Worker sehen ein Share anders gemountet): `RelativerPfad` ist vorbereitet.
 - ~~Kein automatischer ⟳-Abnahmetest~~: `Werkbank.Abnahme.Tests` nimmt ⟳ → Host → Durchspielen → Spur → „▶ Worker“ → Geste/↶ → Daten-Prüfung
@@ -667,8 +664,8 @@ Slots, Kontexte und Konsole: `konzept-llm-minimalkontext.md`. Es gilt `claude -p
 Durchgang (`POST /api/llm/ausfuehren`): Prompt aus Graph-Skelett + Slot-Teil + Auftrag, bis zu drei Runden; Prüfung im warmen Workspace
 (`Arbeitsbereich.PruefeProbeweiseAsync`: Datei mit Kandidat, Compiler + Analyzer des Projekts, nur neue Fehler; Lambdas eigens, Python per Parser);
 geprüft → schreiben → Laufzeit-Projekt bauen → neu lesen. Slot-Arten: `decide`, `apply`, `projektion`, `reaktion`, `reader`, `pipeline`, `store`,
-`funktion`, `funktionpy`, `fluss`, `saga`, `zusage`. Die Kontexte entstehen noch kalt (`GraphExtractor --kontexte`, ~1 min). Der Schreibweg der
-Übernahme ist noch ein eigener (§12.2). Fachlich geprüft wird ein 🤖-Rumpf noch nicht — Plan: Beispiele je Slot als Testcode, die Schleife
+`funktion`, `funktionpy`, `fluss`, `saga`, `zusage`. Die Kontexte entstehen noch kalt (`GraphExtractor --kontexte`, ~1 min). Die Übernahme ist eine
+Rumpf-Geste wie ✎ (§8.4: Verlauf, ↶, Branch-Sperre). Fachlich geprüft wird ein 🤖-Rumpf noch nicht — Plan: Beispiele je Slot als Testcode, die Schleife
 „baut → regelkonform → Beispiele grün“ (`konzept-llm-minimalkontext.md` §11, `docs/13` LLM-1).
 
 ### A.6 Code-Fakt je Primitive

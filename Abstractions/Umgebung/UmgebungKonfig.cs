@@ -178,3 +178,13 @@ public static class UmgebungsAbschnitte
     public static readonly IReadOnlyList<string> Alle =
         [Umgebung, EventStore, VersionIndex, Cluster, Schreibpfad, Transport, Identitaeten, Quellen, Funktionen, Dienste, Clients, Konfig, Logging];
 }
+
+/// <summary>
+/// Abschnitt <c>Identitaeten:Tokens</c>: Token → Akteur(e). Ein Wert nennt einen Akteur oder mehrere (<c>"Inspekteur,KIOperator"</c>, auch mit
+/// <c>+</c>), alternativ steht eine Liste. EINE Regel für den Host (Akteur-Tor) und die Werkbank (Konsole, Worker-Token).
+/// </summary>
+public static class AkteurTokens
+{
+    public static IReadOnlyList<string> Akteure(string wert)
+        => wert.Split(',', '+').Select(x => x.Trim()).Where(x => x.Length > 0).ToList();
+}

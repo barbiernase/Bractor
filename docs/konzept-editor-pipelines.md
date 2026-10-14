@@ -264,8 +264,7 @@ gegen ein Zeitlimit statt `Frist` + `FristStorno`), `Benchmark` (Benchmark). Kei
 - **LLM-Slots** (`docs/konzept-llm-minimalkontext.md`): `funktion` (Implementierung von `RufeAsync`; `GraphExtractor.Kern/SlotInventar.cs`),
   `funktionpy` (Python-Rumpf einer externen Funktion; `GraphExtractor.Kern/LlmKontext.cs`) und `fluss` (jeder Bau-Lambda, Anker = Klasse + Anweisung + Lambda-Index). Die
   LLM-Konsole füllt Fluss-Lambdas (genau ein Lambda, Zuordnungsform), prüft Stelligkeit und den Kandidaten im warmen Workspace
-  (`Arbeitsbereich.PruefeProbeweiseAsync`) und schreibt den Lambda zurück (`CodeSync.SetzeLambda` — ein eigener Schreibweg neben der Geste,
-  `docs/13` W11-1).
+  (`Arbeitsbereich.PruefeProbeweiseAsync`) und schreibt den Lambda als Rumpf-Geste zurück (derselbe Weg wie ✎, Verlauf und ↶).
 
 ### 14.10 Entscheidung: das Handle-Modell (`IPipelineHandler`) entfällt als Domänen-Baustein
 

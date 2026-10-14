@@ -57,7 +57,7 @@ public sealed class AkteurOptionen
     {
         if (string.IsNullOrWhiteSpace(token)) throw new ArgumentException("Leeres Akteur-Token.", nameof(token));
         if (!_tokens.TryGetValue(token, out var liste)) _tokens[token] = liste = new List<string>();
-        foreach (var a in akteur.Split(',', '+').Select(x => x.Trim()).Where(x => x.Length > 0))
+        foreach (var a in AkteurTokens.Akteure(akteur))
             if (!liste.Contains(a)) liste.Add(a);
         return this;
     }

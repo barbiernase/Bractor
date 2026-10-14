@@ -45,8 +45,9 @@
   vollständiger Durchgang; nie ein Verlauf, nur der letzte Rumpf reist mit. Prompt stabil → veränderlich (feste Anweisung · Skelett ·
   Slot-Teil · Auftrag · Rumpf/Befund), damit der Präfix-Cache greift.
 - **Nicht geprüft** → nichts wird geschrieben; der Kandidat kommt als Vorschlag zurück (↻ Anpassen · ✓ trotzdem übernehmen · ✗ Verwerfen).
-- **Schreibweg:** C#-Rümpfe über `CodeSync.SetzeRumpf`, Fluss-/Regel-Lambdas über `CodeSync.SetzeLambda`, Python über `PythonSync` —
-  ein eigener Schreibweg neben der ✎-Geste (`GraphExtractor.Kern/Schreiben/Rumpf.cs`); Schuld `docs/13` W11-1.
+- **Schreibweg:** die Übernahme IST eine Rumpf-Geste wie ✎ — der Ort kommt aus dem Slot-Anker (`CodeSync.Ort`), geschrieben wird über
+  `GestenDienst.RumpfAsync` (`GraphExtractor.Kern/Schreiben/Rumpf.cs`, C# und Lambdas) bzw. `PythonRumpfAsync` (`PythonSync`); Verlauf und ↶ der
+  Werkbank, auf `main` gesperrt. Geprüft wird mit derselben Einsetzung (`Rumpf.MitRumpf`).
 - Ohne LLM prüfbar: `dotnet run --project Werkbank -- --pruefe-rumpf <Slot-Id> <Datei>` (schreibt nichts).
 
 ---
@@ -286,7 +287,6 @@ Store-Fähigkeiten als Parameter (CQRS051/054). Der Weg:
 
 - **Kartenwand:** der Rumpf darf nur Symbole benutzen, die der Kontext deklariert (Semantic Model) — nicht umgesetzt.
 - Die Kontexte entstehen kalt (`GraphExtractor --kontexte`, ~1 min; `docs/13` WB-1); bis dahin sind sie nach einer Übernahme veraltet.
-- Ein Rumpf-Schreibweg statt `CodeSync`/`PythonSync` neben der ✎-Geste (`docs/13` W11-1).
 
 ---
 
@@ -296,7 +296,7 @@ Store-Fähigkeiten als Parameter (CQRS051/054). Der Weg:
 dotnet run --project Werkbank         # → http://localhost:5178/editor  (Details: /konsole)
 ```
 
-Die Werkbank hält den Code im warmen Workspace, schreibt `domain-model.json` und erzeugt fehlende LLM-Kontexte beim Start im Hintergrund.
+Die Werkbank hält den Code im warmen Workspace und erzeugt fehlende LLM-Kontexte beim Start im Hintergrund.
 
 **Anbieter: ausschließlich Claude Code** (`Werkbank/LlmKonsole.cs`, `ClaudeCliAnbieter`) — `claude -p --output-format json`
 im leeren Temp-Verzeichnis, feste Anweisung + Kontext über stdin. Abgerechnet wird über die **Anmeldung dieses Rechners (Abo), nie über die
@@ -313,8 +313,8 @@ Workspace ihn liest (konzept-werkbank §8.4); eine Übernahme ist ein Eintrag im
 ### 12.2 · Die Konsole (`/konsole`)
 
 Dieselben Schritte wie §2, einzeln bedienbar (`Werkbank/KonsoleSeite.cs`): **Füllen** (bis zu drei geprüfte Runden), **Anpassen**
-(Wunschtext → neue Runde mit aktuellem Rumpf), **Übernehmen** (Hash-Sperre, Sicherung in `.llm-kontext/sicherung/`, danach Bauen) und
-**Rückgängig** (stellt den alten Rumpf wörtlich her).
+(Wunschtext → neue Runde mit aktuellem Rumpf), **Übernehmen** (Hash-Sperre, Rumpf-Geste, danach Bauen) und **Rückgängig** (das ↶ der
+Werkbank: nimmt den letzten Patch zurück).
 
 **Protokoll:** jede Runde mit Token (Eingabe, aus Cache, Ausgabe) in `.llm-kontext/protokoll.jsonl`. Im Browser zeigt **Protokoll** (bzw.
 `/konsole#protokoll`) alle Aufrufe, neueste zuerst, mit Summen, Auftrag, Befunden und aufklappbarem Inhalt; je Slot zeigt „Verlauf dieses

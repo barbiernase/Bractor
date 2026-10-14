@@ -19,8 +19,8 @@ public sealed record LeseMessung(DateTimeOffset Zeit, string Art, int Dateien, l
 /// Speicher, der Workspace schreibt nie auf die Platte). Neu gelesen wird nur aus den Compilations unterhalb der Laufzeit (E7): Roslyn übersetzt
 /// dabei nur die geänderten Projekte und ihre Abhängigen; das Routing kommt aus den Decide-Signaturen, die Composition Root aus dem kalten Lesen.
 /// Ändert sich eine Projektdatei (<c>.csproj</c>, <c>.props</c>, <c>.sln</c>), wird beim nächsten Lesen kalt neu geladen.
-/// <para>Das gelesene Board ist die Quelle für <c>/api/editor/model</c>, die Karten-Zuordnung der Befunde und ⟳ „Neu lesen“; es wird zusätzlich
-/// nach <c>domain-model.json</c> geschrieben (Spur, Durchspielen und LLM-Konsole lesen die Datei).</para>
+/// <para>Das gelesene Board ist die Quelle für <c>/api/editor/model</c>, die Karten-Zuordnung der Befunde, ⟳ „Neu lesen“, Durchspielen (Formulare)
+/// und den Spur-Spiegel (Quell-Knoten) — im Speicher, nie als Datei (W1).</para>
 /// </summary>
 public sealed class Arbeitsbereich : IDisposable
 {
@@ -244,16 +244,6 @@ public sealed class Arbeitsbereich : IDisposable
         (string?)b["datei"] ?? "", (int?)b["zeile"] ?? 0, 0, (string?)b["code"] ?? "LESEN", (string?)b["text"] ?? "", "warning", null, null,
         (string?)b["karte"])).ToList();
 
-    public object Zustand() => new
-    {
-        geladen = Geladen, laedt = _laden is { IsCompleted: false }, fehler = Fehler, offen = _geaendert.Count, kaltNeu = _kaltNeu,
-        routing = _letzte?.Routing.Source,
-        karten = _letzte == null ? 0 : _letzte.Board.Where(kv => kv.Value is JsonArray && !kv.Key.StartsWith("lese", StringComparison.Ordinal) && kv.Key != "diagnosen")
-            .Sum(kv => ((JsonArray)kv.Value!).Count),
-        befunde = _letzte?.Befunde.Count() ?? 0,
-        messungen = Messungen.TakeLast(20),
-    };
-
     private async Task LadeKaltAsync()
     {
         await _sperre.WaitAsync();
@@ -285,12 +275,7 @@ public sealed class Arbeitsbereich : IDisposable
     {
         _letzte = lesung;
         var json = lesung.BoardJson;
-        if (json != _boardJson)
-        {
-            _boardJson = json;
-            try { File.WriteAllText(Path.Combine(_root, "domain-model.json"), json); }
-            catch (IOException e) { Console.WriteLine($"[Arbeitsbereich] domain-model.json nicht geschrieben: {e.Message}"); }
-        }
+        if (json != _boardJson) _boardJson = json;
         var m = new LeseMessung(DateTimeOffset.Now, art, dateien, (long)lesung.Uebersetzen.TotalMilliseconds, (long)lesung.Extrahieren.TotalMilliseconds,
             lesung.Phasen.ToDictionary(p => p.Phase, p => (long)p.Dauer.TotalMilliseconds));
         lock (_messungen)

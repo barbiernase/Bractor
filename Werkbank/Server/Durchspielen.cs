@@ -8,7 +8,7 @@ namespace Werkbank.Server;
 /// hinter dem Akteur-Tor), Ausführer von Hand-Funktionen, legt Dateien dorthin, wo der echte Treiber sie findet, und stellt die Uhr der
 /// Sim-DB vor. Was der Editor dafür braucht (Formular-Schema eines Records, Tokens, Sandbox-Pfad), kommt fertig von hier (Frontend-Bauregel).
 /// </summary>
-public sealed partial class Durchspielen(WerkbankServer werkbank, Func<string?> modellDatei)
+public sealed partial class Durchspielen(WerkbankServer werkbank)
 {
     private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(30) };
 
@@ -32,29 +32,18 @@ public sealed partial class Durchspielen(WerkbankServer werkbank, Func<string?> 
         catch (HttpRequestException e) { return (502, new JsonObject { ["ok"] = false, ["fehler"] = "Host nicht erreichbar: " + e.Message }.ToJsonString()); }
     }
 
-    /// <summary>Die Sim-Tokens der gewählten Umgebung (Abschnitt <c>Identitaeten</c>): Token → Akteur(e).</summary>
-    public object Identitaeten()
+    /// <summary>Die Sim-Tokens der gewählten Umgebung (Abschnitt <c>Identitaeten</c>): Token → Akteur(e), gelesen wie im Host.</summary>
+    public object Identitaeten() => new
     {
-        var roh = werkbank.Umgebungen.AufgeloestRoh(werkbank.Aktiv);
-        var tokens = roh["Identitaeten"]?["Tokens"] as JsonObject;
-        return new
-        {
-            umgebung = werkbank.Aktiv,
-            tokens = tokens?.Select(t => new
-            {
-                token = t.Key,
-                akteure = t.Value is JsonArray a
-                    ? a.Select(x => x?.GetValue<string>() ?? "").Where(x => x.Length > 0).ToList()
-                    : (t.Value?.GetValue<string>() ?? "").Split(',', '+').Select(x => x.Trim()).Where(x => x.Length > 0).ToList(),
-            }).ToList() ?? [],
-        };
-    }
+        umgebung = werkbank.Aktiv,
+        tokens = werkbank.Umgebungen.Tokens(werkbank.Aktiv).Select(t => new { token = t.Key, akteure = t.Value }).ToList(),
+    };
 
     // ── Datei-Drop auf die Quellkarte ──
 
     /// <summary>Der Pfad, den der Treiber der Quelle <paramref name="quelle"/> in der gewählten Umgebung beobachtet.</summary>
     public string? QuellPfad(string quelle)
-        => werkbank.Umgebungen.AufgeloestRoh(werkbank.Aktiv)["Quellen"]?[quelle]?["Pfad"]?.GetValue<string>();
+        => werkbank.Umgebungen.QuellPfade(werkbank.Aktiv).GetValueOrDefault(quelle);
 
     /// <summary>
     /// Legt eine Datei in den Pfad der Quelle — fertig geschrieben (erst daneben, dann umbenannt), damit der Treiber nie eine halbe sieht.
@@ -94,12 +83,11 @@ public sealed partial class Durchspielen(WerkbankServer werkbank, Func<string?> 
     /// <summary>
     /// Das Formular für einen Record des Boards (Command, Query, Ergebnis-Event …) — im selben Format wie das Umgebungs-Schema, damit der
     /// EINE generische Formular-Renderer es zeichnet: Klasse → Felder, Enum → Auswahl, Werte-Objekt → Unterformular, Sammlung → Liste.
+    /// Gelesen aus dem warmen Board (W1) — keine Datei vom Datenträger.
     /// </summary>
     public JsonObject Formular(string typ)
     {
-        var p = modellDatei();
-        if (p is null || !File.Exists(p)) throw new FileNotFoundException("domain-model.json fehlt — ⟳ liest den Code.");
-        var m = JsonNode.Parse(File.ReadAllText(p))!.AsObject();
+        var m = werkbank.Arbeitsbereich.Board ?? throw new InvalidOperationException("Der Code ist noch nicht gelesen.");
         var records = (m["records"] as JsonArray ?? []).OfType<JsonObject>().GroupBy(r => r["name"]!.GetValue<string>()).ToDictionary(g => g.Key, g => g.First());
         var enums = (m["enums"] as JsonArray ?? []).OfType<JsonObject>().GroupBy(e => e["name"]!.GetValue<string>())
             .ToDictionary(g => g.Key, g => (g.First()["werte"] as JsonArray ?? []).Select(w => w!.GetValue<string>()).ToList());

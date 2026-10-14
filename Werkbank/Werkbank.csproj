@@ -4,7 +4,15 @@
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Konfig-Bindung ohne Reflection (Inv. 4) — für den eingebundenen UmgebungLader (wie in Infrastructure). -->
+    <EnableConfigurationBindingGenerator>true</EnableConfigurationBindingGenerator>
   </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Umgebungen lösen Host und Werkbank mit DERSELBEN Regel auf (Platzhalter, fehlende Variable = Fehler, strenge Bindung) — per Link,
+         ohne das Server-Framework (Marten, Proto.Actor) zu referenzieren. -->
+    <Compile Include="..\Infrastructure\Umgebung\UmgebungLader.cs" Link="Server\UmgebungLader.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <!-- KEINE Domain-Referenz: die Werkbank liest den Code im warmen Workspace (GraphExtractor.Kern) und startet den echten Host

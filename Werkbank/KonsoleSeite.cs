@@ -243,7 +243,7 @@ async function uebernehmen(){
     <div class="zeile"><button class="b" id="bauen" type="button">Projekt bauen</button><button class="b" id="zurueck" type="button">Rückgängig</button></div><pre id="bauaus" class="leer">—</pre>`;
   $('#bauen').onclick = async () => { $('#bauaus').textContent = 'baut …'; const b = await api('/api/llm/bauen', { id: AKT });
     $('#bauaus').textContent = b.ok ? `✓ ${b.projekt} baut` : `✗ ${b.projekt ?? ''}\n` + (b.fehler||[]).join('\n'); };
-  $('#zurueck').onclick = async () => { const z = await api('/api/llm/rueckgaengig', { id: AKT }); $('#bauaus').textContent = z.ok ? '↶ alter Rumpf wiederhergestellt' : z.grund; verlauf(); };
+  $('#zurueck').onclick = async () => { const z = await api('/api/werkbank/rueckgaengig', {}); $('#bauaus').textContent = z.ok ? z.titel : '✗ ' + (z.fehler || 'nichts zurückgenommen'); verlauf(); };
   verlauf();
 }
 $('#suche').oninput = zeichneListe;

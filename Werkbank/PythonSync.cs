@@ -10,8 +10,9 @@ public sealed record PythonAnker(string Datei, string Klasse, string Methode, st
 
 /// <summary>
 /// Die Synchronisations-Naht für PYTHON-Rümpfe (docs/konzept-akteure.md §4) — Spiegel von <see cref="CodeSync"/>: lesen (Rumpf, Prompt,
-/// Hash), ersetzen mit optimistischer Sperre, eine fehlende Methode mit der Signatur der Basis anlegen, zurücknehmen. Die Datei ist die
-/// Wahrheit; die Prompt-Zeile <c># 🤖 Prompt:</c> steht als erste Rumpfzeile.
+/// Hash) und den Dateitext mit einem Kandidaten bilden (eine fehlende Methode mit der Signatur der Basis angelegt). Geschrieben wird nur als
+/// Rumpf-Geste (✎ wie 🤖, Verlauf und ↶ der Werkbank). Die Datei ist die Wahrheit; die Prompt-Zeile <c># 🤖 Prompt:</c> steht als erste
+/// Rumpfzeile.
 /// </summary>
 public static class PythonSync
 {
@@ -59,30 +60,12 @@ public static class PythonSync
         return (true, "", neu);
     }
 
-    public static (bool Ok, string Grund, string? AlterInhalt, string? NeuerHash, int Zeile) SetzeRumpf(
-        PythonAnker a, string rumpf, string? prompt, string? baseHash, string sln)
-    {
-        var p = Voll(a.Datei, sln);
-        if (!File.Exists(p)) return (false, $"Datei fehlt: {a.Datei}", null, null, 0);
-        var alt = File.ReadAllText(p);
-        if (baseHash != null && Hash(PythonQuelle.Rumpf(alt, a.Klasse, a.Methode) ?? "") != baseHash)
-            return (false, "Die Datei wurde seit dem Füllen geändert (Hash passt nicht) — neu laden.", null, null, 0);
-        var (ok, grund, neu) = MitRumpf(a, rumpf, prompt, sln);
-        if (!ok) return (false, grund, null, null, 0);
-        File.WriteAllText(p, neu!);
-        var m = PythonQuelle.FindeMethode(neu!, a.Klasse, a.Methode);
-        return (true, "", alt, Hash(PythonQuelle.Rumpf(neu!, a.Klasse, a.Methode) ?? ""), (m?.DefZeile ?? 0) + 1);
-    }
 
-    /// <summary>Rückgängig: die ganze alte Datei zurück — nur, wenn der Rumpf seitdem unverändert ist.</summary>
-    public static (bool Ok, string Grund) Zurueck(PythonAnker a, string alteDatei, string erwarteterHash, string sln)
+    /// <summary>Die Zeile der <c>def</c> der Methode (1-basiert, 0 = fehlt).</summary>
+    public static int Zeile(PythonAnker a, string sln)
     {
         var p = Voll(a.Datei, sln);
-        if (!File.Exists(p)) return (false, $"Datei fehlt: {a.Datei}");
-        if (Hash(PythonQuelle.Rumpf(File.ReadAllText(p), a.Klasse, a.Methode) ?? "") != erwarteterHash)
-            return (false, "Die Datei wurde nach dem Übernehmen weiter geändert — Rückgängig verweigert.");
-        File.WriteAllText(p, alteDatei);
-        return (true, "");
+        return File.Exists(p) && PythonQuelle.FindeMethode(File.ReadAllText(p), a.Klasse, a.Methode) is { } m ? m.DefZeile + 1 : 0;
     }
 
     /// <summary>Syntax-Prüfung mit Pythons eigenem Parser (<c>ast.parse</c>) über den ganzen Dateitext.</summary>

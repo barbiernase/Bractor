@@ -82,11 +82,4 @@ public sealed class Infra(string slnRoot)
         var noch = Dienste(u).Where(d => !d.Erreichbar).Select(d => d.Name).ToList();
         return (noch.Count == 0, noch.Count == 0 ? [$"gestartet: {string.Join(", ", fehlend.Select(d => d.Name))}"] : [$"nicht bereit: {string.Join(", ", noch)}"]);
     }
-
-    public async Task<Prozesse.Ergebnis> StoppeAsync(string name, CancellationToken ct)
-    {
-        var datei = Path.Combine(slnRoot, ".werkbank", name, "docker-compose.yml");
-        if (!File.Exists(datei)) return new Prozesse.Ergebnis(0, ["nichts verwaltet"], TimeSpan.Zero);
-        return await Prozesse.LaufeAsync("docker", ["compose", "-p", "cqrs-" + name, "-f", datei, "down"], slnRoot, ct: ct);
-    }
 }

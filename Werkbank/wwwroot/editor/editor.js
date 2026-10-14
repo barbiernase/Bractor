@@ -523,7 +523,7 @@
       const weg=h("button",{class:"codeadd",title:"Vorschlag verwerfen — der Datei-Rumpf gilt",onclick:()=>llmVerwerfen(kid)},"✗ Verwerfen");
       if(LAUF[kid]||EINLESEN){ok.disabled=true;weg.disabled=true;}box.append(h("div",{class:"llmrow"},ok,weg));}
     else if(kid&&ZULETZT[kid])box.append(h("div",{class:"llmrow"},h("span",{class:"llmmeld ok",style:"flex:1"},"🤖 übernommen"),
-      h("button",{class:"codeadd",title:"Den alten Rumpf wörtlich wiederherstellen (nur solange die Datei seitdem unverändert ist)",onclick:()=>llmRueckgaengig(kid)},"↶ Rückgängig")));
+      h("button",{class:"codeadd",title:"Die Übernahme ist eine Geste — ↶ nimmt sie zurück (der letzte Patch, solange die Datei seitdem unverändert ist)",onclick:()=>llmRueckgaengig(kid)},"↶ Rückgängig")));
     if(kid&&RUMPF_LLM[key]){const ta=h("textarea",{class:"code",rows:2,placeholder:leer?"Auftrag, z. B. „Bestätige nur, wenn Betrag > 0.“":"Anpassung, z. B. „lehne auch ab, wenn Betrag > 1000“"});
       const ohneKontext=!LLM_STATUS||!LLM_STATUS.index;
       const senden=async()=>{const text=ta.value.trim();if(!text||LAUF[kid]||EINLESEN)return;ta.value="";
@@ -1212,11 +1212,12 @@
       :{k:"err",t:"⚠ geschrieben, aber Build rot: "+(((r.bau&&r.bau.fehler)||[])[0]||"")+" — ↶ Rückgängig am Block"};
     await neuEinlesen();}
 
-  async function llmRueckgaengig(kid){if(LAUF[kid])return;LAUF[kid]={seit:Date.now(),was:"stellt wieder her + baut"};neuZeichnen();
-    let r;try{r=await postLlm("/api/llm/rueckgaengig",{id:kid,bauen:true});}catch(e){r={ok:false,grund:"Werkbank offline"};}
+  // Eine 🤖-Übernahme ist eine Rumpf-Geste — zurück geht sie über das EINE ↶ der Werkbank (Verlauf), nicht über eine eigene Sicherung.
+  async function llmRueckgaengig(kid){if(LAUF[kid])return;LAUF[kid]={seit:Date.now(),was:"nimmt die Geste zurück"};neuZeichnen();
+    let r;try{r=await fetch("/api/werkbank/rueckgaengig",{method:"POST"}).then(x=>x.json());}catch(e){r={ok:false,fehler:"Werkbank offline"};}
     delete LAUF[kid];
-    if(!r.ok){MELD[kid]={k:"err",t:"⚠ "+r.grund};neuZeichnen();return;}
-    delete ZULETZT[kid];MELD[kid]={k:"",t:"↶ alter Rumpf wiederhergestellt"+(r.bau&&!r.bau.ok?" · Build rot":"")};await neuEinlesen();}
+    if(!r.ok){MELD[kid]={k:"err",t:"⚠ "+(r.fehler||"nichts zurückgenommen")};neuZeichnen();return;}
+    delete ZULETZT[kid];MELD[kid]={k:"",t:r.titel};await neuEinlesen();}
 
   function llmVerwerfen(kid){delete VOR[kid];saveVor();MELD[kid]={k:"",t:"Vorschlag verworfen — der Datei-Rumpf gilt."};neuZeichnen();}
 
@@ -3897,8 +3898,10 @@
     body.append(h("div",{class:"frow"},ein,h("button",{class:"act",onclick:()=>setze(ein.value.trim())},"Setzen")),
       h("div",{class:"frow"},...[["+1 h","01:00:00"],["+1 Tag","1.00:00:00"],["+7 Tage","7.00:00:00"],["0","00:00:00"]].map(([t,v])=>
         h("button",{class:"act",onclick:()=>setze(v)},t))));}
-  async function wbSpeichern(){try{await wbJson("/api/werkbank/umgebung/"+encodeURIComponent(WB.umgName),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(WB.umg)});
-      WB.dirty=false;deFlash("💾 umgebung."+WB.umgName+".json geschrieben — wirksam nach ⟳",true);await wbZustand();render();}
+  // Umgebungs-Werte sind eine Geste (Verlauf, ↶, auf main gesperrt).
+  async function wbSpeichern(){try{const a=await wbJson("/api/werkbank/umgebung/"+encodeURIComponent(WB.umgName),{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify(WB.umg)});
+      if(!a.ok){deFlash("⚠ nicht geschrieben: "+(a.fehler||"?"),false);return;}
+      WB.dirty=false;deFlash("💾 umgebung."+WB.umgName+".json geschrieben (↶ nimmt es zurück) — wirksam nach ⟳",true);await wbZustand();render();}
     catch(e){deFlash("⚠ nicht geschrieben: "+e.message,false);}}
 
   // ── Befunde an der Karte: Compiler/Analyzer (Typ + Member aus dem Syntaxbaum) und Boot-Fehler (Karte im Wirker-Format) ──

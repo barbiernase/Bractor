@@ -22,13 +22,10 @@ public sealed record MethodenAnker(string Datei, string Klasse, string Methode, 
 public sealed record LambdaAnker(string Datei, string Klasse, int Anweisung, int Lambda);
 
 /// <summary>
-/// Die SYNCHRONISATIONS-NAHT zwischen Board (Browser) und echter <c>.cs</c>-Datei. Der Browser schreibt
-/// bewusst NUR eine Sache: die <c>// 🤖 Prompt:</c>-Kommentarzeile im Methoden-Rumpf; echten Code editiert
-/// der Mensch im richtigen Editor. Die Datei ist die Wahrheit; der Anker wird aus dem Graphen abgeleitet
-/// (Typ + Methode), NICHT als Marker in der Datei abgelegt — Roslyn findet die Methode über ihre Signatur.
-///
-/// Heute nur die Schreibseite (Decider/Applier) — genau das, was der Scaffolder als füllbare Rümpfe
-/// (throw-Platzhalter) erzeugt. Leseseite-Rümpfe folgen, sobald der Scaffolder sie in Dateien schreibt.
+/// Die LLM-Slots (<c>GraphExtractor --kontexte</c>) im Code finden: Anker (Datei + Klasse + Methode bzw. Anweisung + Lambda) → aktueller Rumpf,
+/// Hash (Sperre gegen Zwischenänderungen) und <see cref="GraphExtractor.RumpfOrt"/>. Geschrieben wird hier NICHTS — eine 🤖-Übernahme ist eine
+/// Rumpf-Geste (<see cref="GraphExtractor.Rumpf"/>, Verlauf und ↶ der Werkbank), derselbe Weg wie ✎ (docs/13 W11-1). Dazu der Build des
+/// Laufzeit-Projekts nach einer Übernahme.
 /// </summary>
 public static class CodeSync
 {
@@ -36,7 +33,6 @@ public static class CodeSync
 
     // ════════════════════════════════════════════════════════════════════════════════════════
     //  ALLE Slot-Arten (LLM-Konsole): Anker = Datei + Klasse + Methode (+ Typ des 1. Parameters).
-    //  Schreibt den KOMPLETTEN Rumpf (mit „// 🤖 Prompt:“-Zeile) — nur auf ausdrückliches Übernehmen.
     // ════════════════════════════════════════════════════════════════════════════════════════
 
     private sealed record MethodenTreffer(bool Ok, string Pfad, string Text, MethodDeclarationSyntax? M, string Grund);
@@ -85,58 +81,14 @@ public static class CodeSync
         return t.Ok ? Hash(RumpfInhalt(t)) : null;
     }
 
-    /// <summary>
-    /// Den Rumpf ersetzen: <paramref name="rumpf"/> = Anweisungen OHNE äußere Klammern (dedentet); davor die Prompt-Zeile.
-    /// Ein Ausdrucks-Rumpf („=&gt; …;“) wird zum Block. Sperre: <paramref name="baseHash"/> muss zum Dateistand passen.
-    /// Liefert den alten Rumpf-Inhalt zurück (für Rückgängig).
-    /// </summary>
-    public static (bool Ok, string Grund, string? AlterInhalt, string? NeuerHash, int Zeile) SetzeRumpf(
-        MethodenAnker a, string rumpf, string? prompt, string? baseHash, string slnRoot)
+    /// <summary>Der Ort der Methode in der Board-Form (<c>_ort</c>) — darüber setzt und schreibt die Rumpf-Geste (✎ wie 🤖).</summary>
+    public static (GraphExtractor.RumpfOrt? Ort, string Grund, int Zeile) Ort(MethodenAnker a, string slnRoot)
     {
         var t = Finde(a, slnRoot);
-        if (!t.Ok) return (false, t.Grund, null, null, 0);
-        var alt = RumpfInhalt(t);
-        if (baseHash != null && Hash(alt) != baseHash) return (false, "Die Datei wurde seit dem Füllen geändert (Hash passt nicht) — neu laden.", null, null, 0);
-
-        var neuText = NeuerText(t, rumpf, prompt);
-        File.WriteAllText(t.Pfad, neuText);
-        var neu = Finde(a, slnRoot);
-        return (true, "", alt, neu.Ok ? Hash(RumpfInhalt(neu)) : null, t.M!.GetLocation().GetLineSpan().StartLinePosition.Line + 1);
+        return t.Ok ? (new GraphExtractor.RumpfOrt(Rel(t.Pfad, slnRoot), t.M!.Span.Start, t.M.Span.End), "", t.M.GetLocation().GetLineSpan().StartLinePosition.Line + 1)
+            : (null, t.Grund, 0);
     }
 
-    /// <summary>
-    /// Der Dateitext MIT dem Kandidaten-Rumpf, ohne zu schreiben — für die Prüfung vor dem Übernehmen (dieselbe Einsetzung wie
-    /// <see cref="SetzeRumpf"/>, damit geprüft wird, was später in der Datei steht).
-    /// </summary>
-    public static (bool Ok, string Grund, string? Pfad, string? NeuText) MitRumpf(MethodenAnker a, string rumpf, string slnRoot)
-    {
-        var t = Finde(a, slnRoot);
-        return t.Ok ? (true, "", t.Pfad, NeuerText(t, rumpf, null)) : (false, t.Grund, null, null);
-    }
-
-    /// <summary>Dieselbe Einsetzung wie der Rumpf-Edit der Werkbank (<see cref="GraphExtractor.Rumpf"/>) — eine Regel für ✎ und 🤖.</summary>
-    private static string NeuerText(MethodenTreffer t, string rumpf, string? prompt) => GraphExtractor.Rumpf.MitMethodenRumpf(t.Text, t.M!, rumpf, prompt);
-
-    /// <summary>Rückgängig: den gesicherten alten Rumpf-Inhalt wörtlich zurückschreiben (nur wenn seitdem unverändert).</summary>
-    public static (bool Ok, string Grund) SetzeInhaltZurueck(MethodenAnker a, string alterInhalt, string erwarteterHash, string slnRoot)
-    {
-        var t = Finde(a, slnRoot);
-        if (!t.Ok) return (false, t.Grund);
-        if (Hash(RumpfInhalt(t)) != erwarteterHash) return (false, "Die Datei wurde nach dem Übernehmen weiter geändert — Rückgängig verweigert.");
-        var nl = t.Text.Contains("\r\n") ? "\r\n" : "\n";
-        var b = t.M!.Body!;   // nach dem Übernehmen ist es immer ein Block
-        string neuText;
-        if (alterInhalt.StartsWith("=> "))
-        {
-            // war Ausdrucks-Rumpf: Block wieder durch „=> …;“ ersetzen
-            var vorher = t.Text[..b.Span.Start].TrimEnd();
-            neuText = vorher + " " + alterInhalt + t.Text[b.Span.End..];
-        }
-        else
-            neuText = t.Text[..b.OpenBraceToken.Span.End] + alterInhalt.Replace("\n", nl) + t.Text[b.CloseBraceToken.Span.Start..];
-        File.WriteAllText(t.Pfad, neuText);
-        return (true, "");
-    }
 
     /// <summary>Nur das Projekt bauen, zu dem die Datei gehört (nächste .csproj aufwärts) — schneller als die ganze Solution.</summary>
     public static object BaueProjektVon(string relDatei, string slnRoot)
@@ -157,42 +109,19 @@ public static class CodeSync
     {
         var proj = Path.GetFullPath(Path.Combine(slnRoot, relProjekt));
         if (!File.Exists(proj)) return new { ok = false, projekt = (string?)relProjekt, fehler = new List<string> { $"Projekt fehlt: {relProjekt}" } };
-        var psi = new ProcessStartInfo("dotnet", $"build \"{proj}\" -v q --nologo")
-        {
-            WorkingDirectory = slnRoot, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false,
-        };
-        using var p = Process.Start(psi)!;
-        var o = p.StandardOutput.ReadToEndAsync(); var e = p.StandardError.ReadToEndAsync();
-        p.WaitForExit();
-        var fehler = (o.Result + "\n" + e.Result).Replace("\r\n", "\n").Split('\n')
-            .Where(l => l.Contains(": error")).Select(l => l.Trim()).Distinct().Take(50).ToList();
-        return new { ok = p.ExitCode == 0, projekt = Rel(proj, slnRoot), fehler };
+        // Derselbe Prozess-Weg wie ⟳ (wartet auf das Prozessende, nicht auf die von MSBuild-Knoten geerbte Pipe).
+        var r = Werkbank.Server.Prozesse.LaufeAsync("dotnet", ["build", proj, "-v", "q", "--nologo"], slnRoot).GetAwaiter().GetResult();
+        var fehler = r.Zeilen.Where(l => l.Contains(": error")).Select(l => l.Trim()).Distinct().Take(50).ToList();
+        return new { ok = r.Ok, projekt = Rel(proj, slnRoot), fehler };
     }
 
     // ── Bauen: die Generatoren + Proto-Prepass laufen bei dotnet build automatisch mit (siehe Domain.Leitung.csproj). ──
-    public static object Baue(string slnRoot)
-    {
-        var psi = new ProcessStartInfo("dotnet", "build -v q --nologo")
-        {
-            WorkingDirectory = slnRoot,
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-        };
-        using var p = Process.Start(psi)!;
-        var aus = p.StandardOutput.ReadToEnd() + "\n" + p.StandardError.ReadToEnd();
-        p.WaitForExit();
-        var fehler = aus.Replace("\r\n", "\n").Split('\n')
-            .Where(l => l.Contains(": error"))
-            .Select(l => l.Trim()).Distinct().Take(50).ToList();
-        return new { ok = p.ExitCode == 0, fehler };
-    }
 
     // ════════════════════════════════════════════════════════════════════════════════════════
     //  FLUSS-LAMBDAS: Anker = Klasse + Anweisung + Lambda-Index. Der „Rumpf“ ist der ganze Lambda-Ausdruck.
     // ════════════════════════════════════════════════════════════════════════════════════════
 
-    private sealed record LambdaTreffer(bool Ok, string Pfad, string Text, LambdaExpressionSyntax? L, string Grund);
+    private sealed record LambdaTreffer(bool Ok, string Pfad, string Text, LambdaExpressionSyntax? L, string Grund, Microsoft.CodeAnalysis.SyntaxNode? Anweisung = null);
 
     private static LambdaTreffer FindeLambda(LambdaAnker a, string slnRoot)
     {
@@ -214,7 +143,7 @@ public static class CodeSync
         var lambdas = st.DescendantNodesAndSelf().OfType<LambdaExpressionSyntax>()
             .Where(l => l.Parent is ArgumentSyntax && !l.Ancestors().TakeWhile(x => x != st).OfType<LambdaExpressionSyntax>().Any()).ToList();
         return a.Lambda >= 0 && a.Lambda < lambdas.Count
-            ? new(true, pfad, text, lambdas[a.Lambda], "")
+            ? new(true, pfad, text, lambdas[a.Lambda], "", st)
             : new(false, pfad, text, null, $"{a.Klasse}: Anweisung {a.Anweisung} hat keinen Lambda {a.Lambda}.");
     }
 
@@ -233,36 +162,15 @@ public static class CodeSync
         return t.Ok ? Hash(t.L!.ToString().Replace("\r\n", "\n")) : null;
     }
 
-    /// <summary>Den Lambda-Ausdruck ersetzen (wörtlich). Sperre wie bei Methoden: <paramref name="baseHash"/> muss zum Dateistand passen.</summary>
-    public static (bool Ok, string Grund, string? AlterInhalt, string? NeuerHash, int Zeile) SetzeLambda(
-        LambdaAnker a, string ausdruck, string? baseHash, string slnRoot)
+    /// <summary>Der Ort des Lambdas in der Board-Form (Spanne der Anweisung + Lambda-Index, wie <c>_ort</c> eines Fluss-Knotens).</summary>
+    public static (GraphExtractor.RumpfOrt? Ort, string Grund, int Zeile) Ort(LambdaAnker a, string slnRoot)
     {
         var t = FindeLambda(a, slnRoot);
-        if (!t.Ok) return (false, t.Grund, null, null, 0);
-        var alt = t.L!.ToString();
-        if (baseHash != null && Hash(alt.Replace("\r\n", "\n")) != baseHash)
-            return (false, "Die Datei wurde seit dem Füllen geändert (Hash passt nicht) — neu laden.", null, null, 0);
-        File.WriteAllText(t.Pfad, t.Text[..t.L.Span.Start] + ausdruck.Trim() + t.Text[t.L.Span.End..]);
-        var neu = FindeLambda(a, slnRoot);
-        return (true, "", alt, neu.Ok ? Hash(neu.L!.ToString().Replace("\r\n", "\n")) : null, t.L.GetLocation().GetLineSpan().StartLinePosition.Line + 1);
+        return t.Ok ? (new GraphExtractor.RumpfOrt(Rel(t.Pfad, slnRoot), t.Anweisung!.Span.Start, t.Anweisung.Span.End, a.Lambda), "",
+                t.L!.GetLocation().GetLineSpan().StartLinePosition.Line + 1)
+            : (null, t.Grund, 0);
     }
 
-    /// <summary>Der Dateitext MIT dem Kandidaten-Lambda, ohne zu schreiben — für die Prüfung vor dem Übernehmen (dieselbe Einsetzung wie <see cref="SetzeLambda"/>).</summary>
-    public static (bool Ok, string Grund, string? Pfad, string? NeuText) MitLambda(LambdaAnker a, string ausdruck, string slnRoot)
-    {
-        var t = FindeLambda(a, slnRoot);
-        return t.Ok ? (true, "", t.Pfad, t.Text[..t.L!.Span.Start] + ausdruck.Trim() + t.Text[t.L.Span.End..]) : (false, t.Grund, null, null);
-    }
-
-    /// <summary>Rückgängig: den alten Lambda wörtlich zurück (nur wenn seitdem unverändert).</summary>
-    public static (bool Ok, string Grund) SetzeLambdaZurueck(LambdaAnker a, string alterInhalt, string erwarteterHash, string slnRoot)
-    {
-        var t = FindeLambda(a, slnRoot);
-        if (!t.Ok) return (false, t.Grund);
-        if (Hash(t.L!.ToString().Replace("\r\n", "\n")) != erwarteterHash) return (false, "Die Datei wurde nach dem Übernehmen weiter geändert — Rückgängig verweigert.");
-        File.WriteAllText(t.Pfad, t.Text[..t.L.Span.Start] + alterInhalt + t.Text[t.L.Span.End..]);
-        return (true, "");
-    }
 
     private static string? LiesPrompt(string inner)
     {
@@ -270,11 +178,7 @@ public static class CodeSync
         return l?.TrimStart()[PromptMarke.Length..].Trim();
     }
 
-    private static int OffeneSpalte(MethodDeclarationSyntax m) =>
-        m.Body!.OpenBraceToken.GetLocation().GetLineSpan().StartLinePosition.Character;
 
-    private static string Einzug(string zeile) => zeile[..(zeile.Length - zeile.TrimStart().Length)];
-    private static string EinZeile(string s) => s.Replace("\r", " ").Replace("\n", " ").Trim();
     private static string Rel(string pfad, string root) => Path.GetRelativePath(root, pfad).Replace('\\', '/');
 
     // Gemeinsamen Mindest-Einzug abziehen → hübsche Vorschau im Board.

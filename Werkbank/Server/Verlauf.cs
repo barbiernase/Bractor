@@ -42,14 +42,6 @@ public sealed class Verlauf(string slnRoot, Func<string> branch)
         }
     }
 
-    /// <summary>Die letzten Einträge (neueste zuerst), ohne Dateiinhalte.</summary>
-    public IReadOnlyList<object> Liste(int max = 30)
-    {
-        lock (_sperre)
-            return Lies().AsEnumerable().Reverse().Take(max)
-                .Select(e => (object)new { e.Zeit, e.Art, e.Titel, dateien = e.Patch.Select(p => p.Datei).ToList() }).ToList();
-    }
-
     /// <summary>
     /// Den letzten Eintrag zurücknehmen: jede Datei muss noch genau den Stand „nachher“ haben (sonst wurde seither geändert — dann nichts),
     /// dann wird „vorher“ wiederhergestellt (eine angelegte Datei entfällt, eine gelöschte kommt zurück). Liefert den zurückgenommenen Eintrag.

@@ -320,10 +320,8 @@ public sealed class WerkbankServer
     public List<string> QuellVerzeichnisseAnlegen(string umgebung)
     {
         var angelegt = new List<string>();
-        if (Umgebungen.AufgeloestRoh(umgebung)["Quellen"] is not System.Text.Json.Nodes.JsonObject quellen) return angelegt;
-        foreach (var (typ, q) in quellen)
+        foreach (var (typ, pfad) in Umgebungen.QuellPfade(umgebung))
         {
-            if (q?["Pfad"] is not System.Text.Json.Nodes.JsonValue v || !v.TryGetValue<string>(out var pfad) || string.IsNullOrWhiteSpace(pfad)) continue;
             if (Directory.Exists(pfad)) continue;
             Directory.CreateDirectory(pfad);
             angelegt.Add(typ);

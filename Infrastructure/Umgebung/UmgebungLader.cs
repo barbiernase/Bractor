@@ -42,8 +42,14 @@ public static partial class UmgebungLader
     /// Abschnitte und bindet die Umgebung. <paramref name="branch"/> ersetzt <c>${branch}</c> (Default: <c>CQRS_BRANCH</c> bzw. „main").
     /// </summary>
     public static UmgebungKonfig Lade(IConfigurationManager konfig, string name, string[] args, string? branch = null)
+        => LadeDatei(konfig, Datei(name), name, args, branch);
+
+    /// <summary>
+    /// Wie <see cref="Lade"/>, aber mit fester Datei — die Werkbank löst die Umgebungen ihrer Solution damit genauso auf wie der Host
+    /// (dieselben Platzhalter, fehlende Variable = Fehler, strenge Bindung; per Link in die Werkbank übersetzt, docs/13 WB-1).
+    /// </summary>
+    public static UmgebungKonfig LadeDatei(IConfigurationManager konfig, string datei, string name, string[] args, string? branch = null)
     {
-        var datei = Datei(name);
         PruefeAbschnitte(datei);
         konfig.AddJsonFile(datei, optional: false, reloadOnChange: false);
         konfig.AddEnvironmentVariables();

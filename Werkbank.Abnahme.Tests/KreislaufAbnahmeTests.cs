@@ -10,7 +10,9 @@ namespace Werkbank.Abnahme.Tests;
 /// <list type="number">
 /// <item>⟳: alle Schritte grün, Board-Stand = Lauf-Stand = Stand, den der Host an die Spur stempelt;</item>
 /// <item>als Akteur über den JSON-Eingang ein Command, die Projektion antwortet auf die Query; Vorgang und Spur über die Spur-API;</item>
-/// <item>„▶ Worker“: die Verkleinerung rechnet ein Python-Worker (Laufort Extern), eine Datei in der Quelle läuft durch bis zum Fakt;</item>
+/// <item>„▶ Worker“: die Verkleinerung rechnet ein Python-Worker (Laufort Extern), eine Datei in der Quelle läuft durch bis zum Fakt; der erste Draht
+///   des Flusses kommt aus dem warmen Board;</item>
+/// <item>Formular und Tokens aus Board bzw. Umgebung; Umgebungs-Werte und 🤖-Übernahmen sind Gesten mit ↶ (docs/13 W11-1, WB-1);</item>
 /// <item>Geste (Feld mit Standardwert an einem Event) → ⟳ grün (verträglich, der Host siegelt das neue Proto) → ↶ (Code byte-gleich) →
 ///   ⟳ „Daten prüfen“ meldet das entfernte Feld → ⟳ mit Zurücksetzen startet wieder.</item>
 /// </list>
@@ -110,8 +112,55 @@ public class KreislaufAbnahmeTests
         (bildweg["schritte"] as JsonArray)!.Select(s => (string?)s?["name"]).Should().Contain("BildVerfuegbar");
         (await WorkerLog()).Should().Contain("[BildVerkleinerung]").And.Contain(dateiname, "genau diesen Auftrag hat der Python-Worker gerechnet");
 
-        // ── 4. Geste → ⟳ → ↶ → ⟳ meldet das entfernte Feld ──
+        // Der erste Draht des Flusses (Quelle → erster Knoten) ist ein gegangener Weg — der Quell-Knoten kommt aus dem warmen Board, nicht aus einer Datei.
         var board = JsonNode.Parse(await w.Http.GetStringAsync("/api/editor/model"))!.AsObject();
+        var quellKnoten = (board["fluesse"] as JsonArray)!.OfType<JsonObject>().Single(f => (string?)f["name"] == "Bildeingang")["knoten"]!.AsArray()
+            .OfType<JsonObject>().Single(k => (string?)k["art"] == "quelle")["_id"]!.GetValue<string>();
+        (bildweg["schritte"] as JsonArray)!.SelectMany(s => s?["paare"] as JsonArray ?? []).Select(p => (string?)p?[0])
+            .Should().Contain(quellKnoten, "der Spur-Spiegel liest den Quell-Knoten aus dem warmen Board");
+
+        // ── 4. Durchspielen liest das warme Board; Tokens wie im Host ──
+        var formular = await w.HoleAsync("/api/werkbank/formular?typ=ErstelleDatensatz");
+        (formular["felder"] as JsonObject).Should().NotBeNull(formular.ToJsonString()).And.Subject.As<JsonObject>().ContainsKey("Name").Should().BeTrue();
+        var tokens = (await w.HoleAsync("/api/werkbank/identitaeten"))["tokens"]!.AsArray().OfType<JsonObject>()
+            .ToDictionary(t => (string)t["token"]!, t => t["akteure"]!.AsArray().Select(a => (string)a!).ToList());
+        tokens["sim-arbeitsplatz"].Should().Equal("Inspekteur", "KIOperator", "Modellfreigeber", "Produktpruefer");
+
+        // ── 5. Umgebungs-Werte sind eine Geste: Verlauf und ↶ ──
+        var umgDatei = Path.Combine(w.Kopie, "umgebungen", $"umgebung.{Werkbanklauf.Umgebung}.json");
+        var umgVorher = await File.ReadAllBytesAsync(umgDatei);
+        var umg = await w.HoleAsync($"/api/werkbank/umgebung/{Werkbanklauf.Umgebung}");
+        umg["Funktionen"]!["IRangeSuche"]!["Slots"] = 3;
+        var (_, umgGeste) = await w.SendeAsync($"/api/werkbank/umgebung/{Werkbanklauf.Umgebung}", umg);
+        ((bool?)umgGeste["ok"]).Should().BeTrue(umgGeste.ToJsonString());
+        (await File.ReadAllTextAsync(umgDatei)).Should().Contain("\"Slots\": 3");
+        ((bool?)(await w.HoleAsync("/api/werkbank/zustand"))["umgebungGeaendert"]).Should().BeTrue("der laufende Host kennt den neuen Wert erst nach ⟳");
+        var (_, umgZurueck) = await w.SendeAsync("/api/werkbank/rueckgaengig");
+        ((bool?)umgZurueck["ok"]).Should().BeTrue(umgZurueck.ToJsonString());
+        (await File.ReadAllBytesAsync(umgDatei)).Should().Equal(umgVorher, "↶ nimmt auch Umgebungs-Werte zurück");
+
+        // ── 6. 🤖-Übernahme = Rumpf-Geste (derselbe Weg wie ✎): Methode und Fluss-Lambda, je mit ↶ ──
+        var slots = JsonNode.Parse(await w.Http.GetStringAsync("/api/llm/slots"))!.AsArray().OfType<JsonObject>().ToList();
+        foreach (var (art, teil) in new[] { ("decide", "ErstelleDatensatz"), ("fluss", "Bildeingang") })
+        {
+            var id = (string)slots.First(x => (string?)x["art"] == art && ((string?)x["id"])!.Contains(teil, StringComparison.Ordinal))["id"]!;
+            var aktuell = (await w.HoleAsync($"/api/llm/slot?id={Uri.EscapeDataString(id)}"))["aktuell"]!;
+            var rumpf = (string)aktuell["body"]!;
+            var datei = Path.Combine(w.Kopie, (string)aktuell["pfad"]!);
+            var vorher = await File.ReadAllBytesAsync(datei);
+            // Ein Lambda bekommt einen anderen, gleichwertigen Text (sonst wäre der Patch leer); eine Methode die Prompt-Zeile.
+            var neu = art == "fluss" ? rumpf.Replace("=>", "=>  ") : rumpf;
+            var (_, ueb) = await w.SendeAsync("/api/llm/uebernehmen", new { id, rumpf = neu, auftrag = "Abnahme", basisHash = (string?)aktuell["hash"] });
+            ((bool?)ueb["ok"]).Should().BeTrue($"{id}: {ueb.ToJsonString()}");
+            var text = await File.ReadAllTextAsync(datei);
+            if (art == "decide") text.Should().Contain("// 🤖 Prompt: Abnahme");
+            else text.Should().Contain(neu.Trim());
+            var (_, llmZurueck) = await w.SendeAsync("/api/werkbank/rueckgaengig");
+            ((string?)llmZurueck["titel"]).Should().Be($"↶ 🤖 {id}", "die Übernahme steht im Verlauf der Werkbank");
+            (await File.ReadAllBytesAsync(datei)).Should().Equal(vorher, $"{id}: ↶ stellt die Datei byte-gleich wieder her");
+        }
+
+        // ── 7. Geste → ⟳ → ↶ → ⟳ meldet das entfernte Feld ──
         var karte = (JsonObject)(board["records"] as JsonArray)!.OfType<JsonObject>().First(r => (string?)r["name"] == "DatensatzErstellt").DeepClone();
         karte["felder"]!.AsArray().Add(new JsonObject { ["name"] = "Notiz", ["typ"] = "string?", ["standard"] = "null" });
         var (_, geste) = await w.SendeAsync("/api/werkbank/geste",

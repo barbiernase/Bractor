@@ -35,37 +35,26 @@ public sealed class SpurSpiegel
         ["KommandoAbgelehnt"] = "abgelehnt", ["SchrittGescheitert"] = "gescheitert", ["SchrittUmgeleitet"] = "umgeleitet",
     };
 
-    private readonly Func<string?> _modellDatei;
-    private (DateTime Stand, Dictionary<(string Pipeline, string Typ), string> Quellknoten)? _modell;
+    private (JsonObject Board, Dictionary<(string Pipeline, string Typ), string> Quellknoten)? _modell;
 
-    public SpurSpiegel(WerkbankServer werkbank, Func<string?> modellDatei)
-    {
-        _werkbank = werkbank;
-        _modellDatei = modellDatei;
-    }
+    public SpurSpiegel(WerkbankServer werkbank) => _werkbank = werkbank;
 
     /// <summary>
     /// Der Quell-Knoten eines Flusses (<c>fluss:P#datei</c>) für eine Quell-Nachricht — er steht nicht im Log (die Quelle schreibt als
-    /// <c>quelle:T</c>), wohl aber im gelesenen Code. So ist auch der erste Draht des Flusses ein gegangener Weg.
+    /// <c>quelle:T</c>), wohl aber im gelesenen Code — im warmen Board (W1), gemerkt je gelesenem Board. So ist auch der erste Draht des Flusses
+    /// ein gegangener Weg.
     /// </summary>
     private string? QuellKnoten(string pipeline, string typ)
     {
-        var datei = _modellDatei();
-        if (datei is null || !File.Exists(datei)) return null;
-        var stand = File.GetLastWriteTimeUtc(datei);
-        if (_modell?.Stand != stand)
+        if (_werkbank.Arbeitsbereich.Board is not { } board) return null;
+        if (!ReferenceEquals(_modell?.Board, board))
         {
             var tabelle = new Dictionary<(string, string), string>();
-            try
-            {
-                var m = JsonNode.Parse(File.ReadAllText(datei)) as JsonObject;
-                foreach (var f in (m?["fluesse"] as JsonArray ?? []).OfType<JsonObject>())
-                    foreach (var k in (f["knoten"] as JsonArray ?? []).OfType<JsonObject>())
-                        if ((string?)k["art"] == "quelle" && (string?)k["typ"] is { } t && (string?)k["_id"] is { } id)
-                            tabelle.TryAdd(((string?)f["name"] ?? "", t), id);
-            }
-            catch (JsonException) { }
-            _modell = (stand, tabelle);
+            foreach (var f in (board["fluesse"] as JsonArray ?? []).OfType<JsonObject>())
+                foreach (var k in (f["knoten"] as JsonArray ?? []).OfType<JsonObject>())
+                    if ((string?)k["art"] == "quelle" && (string?)k["typ"] is { } t && (string?)k["_id"] is { } id)
+                        tabelle.TryAdd(((string?)f["name"] ?? "", t), id);
+            _modell = (board, tabelle);
         }
         return _modell.Value.Quellknoten.GetValueOrDefault((pipeline, typ));
     }

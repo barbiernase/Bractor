@@ -55,16 +55,14 @@ _ = werkbank.Arbeitsbereich.StarteAsync();
 app.Lifetime.ApplicationStopping.Register(werkbank.Arbeitsbereich.Dispose);
 
 // ── EDITOR-MODUS: Modell → C# (der EINE Scaffolder) + Struktur-Prüfung. Umkehrung C# → Board. ──
-// Das aktuelle Domänen-Modell (aus dem Round-trip, neben der .sln) — Startpunkt zum Weiterbauen.
-// Aus dem warmen Workspace (P7.1): geänderte Dateien werden übernommen und warm neu gelesen; lädt er nicht, die letzte Datei.
+// Das Board aus dem warmen Workspace (P7.1, W1): geänderte Dateien werden übernommen und warm neu gelesen. Lädt der Workspace (noch) nicht,
+//   ein leeres Board mit dem Grund — eine Datei vom Datenträger gibt es nicht (Code = einzige Wahrheit).
 app.MapGet("/api/editor/model", async (CancellationToken ct) =>
 {
+    string? grund = null;
     try { await werkbank.Arbeitsbereich.LiesAsync(ct); if (werkbank.Arbeitsbereich.BoardJson is { } board) return Results.Content(board, "application/json"); }
-    catch (InvalidOperationException) { }
-    var p = FindNeben("domain-model.json");
-    return p != null && File.Exists(p)
-        ? Results.Content(File.ReadAllText(p), "application/json")
-        : Results.Content("""{"schemaVersion":"1","aggregate":[],"sagas":[]}""", "application/json");
+    catch (InvalidOperationException e) { grund = e.Message; }
+    return Results.Json(new { schemaVersion = "1", aggregate = Array.Empty<object>(), sagas = Array.Empty<object>(), fehler = grund ?? "Der Code ist noch nicht gelesen." });
 });
 
 // ── GESTEN (Werkbank P7.2): jede Bearbeitung im Editor ist ein Patch am Code — Karten ändern/anlegen/löschen, Umbenennen (Renamer), ↶.
@@ -95,8 +93,6 @@ app.MapPost("/api/werkbank/rumpf", async (System.Text.Json.Nodes.JsonObject b, C
         (int?)o?["ende"] ?? -1, (int?)o?["lambda"]), text, alt, ct));
 });
 app.MapPost("/api/werkbank/rueckgaengig", async (CancellationToken ct) => GestenErgebnis(await werkbank.Gesten.RueckgaengigAsync(ct)));
-app.MapGet("/api/werkbank/verlauf", () => Results.Json(werkbank.Gesten.Verlauf.Liste(), gestenJson));
-app.MapGet("/api/werkbank/gesten", () => Results.Json(werkbank.Gesten.Messungen(), gestenJson));
 // ── ABLEITUNGEN (Werkbank P7.3): was das Board nicht schon trägt (board.sicht), fragt der Editor hier — gerechnet nur auf dem Server.
 // ⊕: welche Kandidaten-Ports zu einem Port passen (Anschluss-Regel + DomainEditor.Grammatik); Ports sind gezeichnete Anschlüsse, darum schickt
 //   der Editor Port und Kandidaten (Schlüssel + Beschreibung), der Server urteilt.
@@ -127,21 +123,12 @@ app.MapPost("/api/werkbank/ansicht", (System.Text.Json.Nodes.JsonObject inhalt) 
     return Results.Json(new { ok = true });
 });
 
-// Kapselung: die Module (Namespaces) mit ihren abgeleiteten Ports — dieselbe Ableitung, die der Editor live rechnet
-// (Parität: der Editor vergleicht seine Ports mit diesen Zeilen). Body = das volle Board-MODEL.
-app.MapPost("/api/editor/module", (JsonElement body) =>
-{
-    var modell = BoardLeseseite.AusBoard(body.GetRawText());
-    var module = Module.Ableiten(modell);
-    return Results.Json(new { module, zeilen = Module.AlsZeilen(module) }, EditorModell.JsonOptionen);
-});
 
 // ── CODE-SYNC: Board ⇄ echte .cs-Datei (Decider/Applier-Rümpfe). Anker = aus dem Graphen abgeleitet. ──
 // LLM-Code-Blöcke (docs/konzept-llm-minimalkontext.md): Kontexte + Füllen + Übernehmen. Fehlen die Kontexte, erzeugt
 // die Werkbank sie beim Start im Hintergrund selbst (kein CLI-Schritt nötig).
-var konsole = new LlmKonsole(slnRoot, werkbank.Arbeitsbereich);
-// Eine 🤖-Übernahme ist ein Patch wie jede Geste — derselbe ↶-Stapel.
-konsole.Gesichert = (titel, patch) => werkbank.Gesten.Verlauf.Merke("llm", titel, patch);
+// Eine 🤖-Übernahme IST eine Rumpf-Geste (derselbe Schreibweg wie ✎: Verlauf, ↶, Branch-Sperre).
+var konsole = new LlmKonsole(slnRoot, werkbank.Arbeitsbereich, werkbank.Gesten);
 konsole.ErzeugeKontexteFallsFehlend();
 // Neu einlesen: der warme Workspace liest den aktuellen Code (Code = Wahrheit; der Browser merged). Die LLM-Kontexte zieht die Konsole
 //   danach im Hintergrund nach (GraphExtractor --kontexte, kalt).
@@ -155,9 +142,6 @@ app.MapPost("/api/editor/extract", async (CancellationToken ct) =>
     }
     catch (InvalidOperationException e) { return Results.Json(new { ok = false, grund = e.Message }); }
 });
-
-// Bauen (entprellt vom Browser aufgerufen): Generatoren + Proto-Prepass laufen bei dotnet build mit.
-app.MapPost("/api/editor/build", () => Results.Json(CodeSync.Baue(slnRoot)));
 
 // ── LLM-KONSOLE: einen Code-Block füllen → prüfen → anpassen → übernehmen (docs/konzept-llm-minimalkontext.md). ──
 // Anbieter: ausschließlich Claude Code (`claude -p`) mit der Anmeldung dieses Rechners — Abo, keine API-Kosten
@@ -180,19 +164,13 @@ app.MapPost("/api/llm/ausfuehren", async (JsonElement b, CancellationToken ct) =
     b.TryGetProperty("rumpf", out var r) && r.ValueKind == JsonValueKind.String ? r.GetString() : null,
     b.TryGetProperty("anpassung", out var an) && an.ValueKind == JsonValueKind.String ? an.GetString() : null,
     true, b.TryGetProperty("maxRunden", out var mr) && mr.TryGetInt32(out var m) ? m : 3), ct)));
-app.MapPost("/api/llm/pruefen", async (JsonElement b, CancellationToken ct) => Results.Json(await konsole.PruefePerIdAsync(
-    b.GetProperty("id").GetString()!, b.GetProperty("rumpf").GetString()!, ct)));
-app.MapPost("/api/llm/uebernehmen", (JsonElement b) => Results.Json(konsole.Uebernehmen(
+app.MapPost("/api/llm/uebernehmen", async (JsonElement b, CancellationToken ct) => Results.Json(await konsole.UebernehmenAsync(
     b.GetProperty("id").GetString()!, b.GetProperty("rumpf").GetString()!,
     b.TryGetProperty("auftrag", out var a) ? a.GetString() : null,
     b.TryGetProperty("basisHash", out var h) && h.ValueKind == JsonValueKind.String ? h.GetString() : null,
-    b.TryGetProperty("bauen", out var bau) && bau.ValueKind == JsonValueKind.True)));
-app.MapPost("/api/llm/rueckgaengig", (JsonElement b) => Results.Json(konsole.Rueckgaengig(b.GetProperty("id").GetString()!,
-    b.TryGetProperty("bauen", out var bau) && bau.ValueKind == JsonValueKind.True)));
+    b.TryGetProperty("bauen", out var bau) && bau.ValueKind == JsonValueKind.True, ct)));
 app.MapPost("/api/llm/bauen", (JsonElement b) => Results.Json(konsole.Bauen(b.GetProperty("id").GetString()!)));
 app.MapPost("/api/llm/aktualisieren", () => Results.Json(konsole.Aktualisieren()));
-// Datei-Spiegel für JEDE Slot-Art (Projektion, Reader, Pipeline, Store …): aktueller Rumpf + Prompt + Hash.
-app.MapGet("/api/llm/rumpf", (string id) => Results.Json(konsole.Rumpf(id)));
 app.MapGet("/api/llm/protokoll", (string? id, int? max) => Results.Json(konsole.Protokoll(string.IsNullOrEmpty(id) ? null : id, max ?? 300)));
 
 // Der Laufzeit-Host ist ein Kind der Werkbank: endet die Werkbank, endet er mit (sonst hielte ein verwaister Host Ports und Sim-DB).
@@ -207,13 +185,13 @@ app.MapGet("/api/werkbank/schema", async (CancellationToken ct) =>
     return Results.Content(Werkbank.Server.Schema.Umgebung(board).ToJsonString(), "application/json");
 });
 app.MapGet("/api/werkbank/umgebung/{name}", (string name) => Results.Content(werkbank.Umgebungen.Roh(name).ToJsonString(), "application/json"));
-app.MapPost("/api/werkbank/umgebung/{name}", (string name, System.Text.Json.Nodes.JsonObject inhalt) =>
+// Umgebungs-Werte sind eine Geste (Verlauf, ↶, Branch-Sperre); die Werte gehören zum Board (Quellkarte, Webhook, Wahl der Dienste) — die Geste
+//   liest sofort neu.
+app.MapPost("/api/werkbank/umgebung/{name}", async (string name, System.Text.Json.Nodes.JsonObject inhalt, CancellationToken ct) =>
 {
-    werkbank.Umgebungen.Schreibe(name, inhalt);
-    werkbank.Fortschritt.Melde("umgebung", new { name });
-    // Die Werte gehören zum Board (Quellkarte, Webhook, Wahl der Dienste) — sofort neu lesen, nicht erst, wenn der Wächter meldet.
-    _ = werkbank.Arbeitsbereich.UebernimmAsync([Path.GetRelativePath(slnRoot, werkbank.Umgebungen.Datei(name))]);
-    return Results.Json(new { geschrieben = werkbank.Umgebungen.Datei(name) });
+    var a = await werkbank.Gesten.UmgebungAsync($"Umgebung {name}", werkbank.Umgebungen.RelativeDatei(name), Werkbank.Server.Umgebungen.Text(inhalt), ct);
+    if (a.Ok) werkbank.Fortschritt.Melde("umgebung", new { name });
+    return GestenErgebnis(a);
 });
 app.MapPost("/api/werkbank/aktiv/{name}", (string name) => { werkbank.Aktiv = name; return Results.Json(werkbank.Zustand(), werkbankJson); });
 app.MapPost("/api/werkbank/kreislauf", async (bool? zuruecksetzen, CancellationToken ct) =>
@@ -221,7 +199,6 @@ app.MapPost("/api/werkbank/kreislauf", async (bool? zuruecksetzen, CancellationT
     try { return Results.Json(await werkbank.KreislaufAsync(zuruecksetzen == true, ct), werkbankJson); }
     catch (Exception e) when (e is not OperationCanceledException) { return Results.Json(new { ok = false, fehler = e.Message }, werkbankJson); }
 });
-app.MapGet("/api/werkbank/kreislauf", () => Results.Json(werkbank.Letzter, werkbankJson));
 // Befunde des letzten ⟳ (Compiler/Analyzer mit Typ + Member) und Boot-Fehler (mit Karte) — der Editor zeigt sie an der Karte.
 // Dazu die Lese-Befunde des aktuellen Boards (warmer Workspace): was das Lesen nicht fassen konnte, steht an seiner Karte.
 app.MapGet("/api/werkbank/diagnosen", () => Results.Json(new
@@ -230,13 +207,6 @@ app.MapGet("/api/werkbank/diagnosen", () => Results.Json(new
     diagnosen = GestenUndBau(),
     boot = werkbank.Host.Laeuft || werkbank.Letzter == null ? werkbank.Host.Boot() : werkbank.Letzter.Boot,
 }, werkbankJson));
-// Der warme Workspace (P7.1): Zustand und Messungen; POST liest geänderte Dateien jetzt ein.
-app.MapGet("/api/werkbank/lesen", () => Results.Json(werkbank.Arbeitsbereich.Zustand(), werkbankJson));
-app.MapPost("/api/werkbank/lesen", async (CancellationToken ct) =>
-{
-    try { await werkbank.Arbeitsbereich.LiesAsync(ct); return Results.Json(werkbank.Arbeitsbereich.Zustand(), werkbankJson); }
-    catch (InvalidOperationException e) { return Results.Json(new { ok = false, fehler = e.Message }, werkbankJson); }
-});
 IEnumerable<Werkbank.Server.Diagnose> GestenUndBau()
 {
     var (beruehrt, gesten) = werkbank.Gesten.Befunde();
@@ -245,7 +215,6 @@ IEnumerable<Werkbank.Server.Diagnose> GestenUndBau()
 }
 // Fortschritt als Server-Sent Events (verlierbar; die Wahrheit bleibt /api/werkbank/zustand).
 app.MapGet("/api/werkbank/ereignisse", (HttpContext ctx) => werkbank.Fortschritt.SendeAsync(ctx.Response, ctx.RequestAborted));
-app.MapPost("/api/werkbank/host/stopp", async () => { await werkbank.Host.StoppeAsync(); return Results.Json(werkbank.Host.Zustand(), werkbankJson); });
 app.MapGet("/api/werkbank/host/log", (int? max) => Results.Json(werkbank.Host.Log(max ?? 300)));
 app.MapGet("/api/werkbank/simdb/staende", async () =>
 {
@@ -279,14 +248,14 @@ app.MapPost("/api/werkbank/uhr", async (string versatz) =>
 });
 // ── DURCHSPIELEN (docs/konzept-werkbank.md §6, P5): nur echte Eingänge — als Akteur (JSON-Eingang des Hosts), Hand-Funktionen beantworten,
 //   Datei in den Pfad der Quelle legen, Uhr vorstellen, externe Worker starten. Die Formulare kommen aus dem gelesenen Code.
-var durchspielen = new Werkbank.Server.Durchspielen(werkbank, () => FindNeben("domain-model.json"));
+var durchspielen = new Werkbank.Server.Durchspielen(werkbank);
 var worker = new Werkbank.Server.Worker(slnRoot);
 app.Lifetime.ApplicationStopping.Register(() => worker.StoppeAlleAsync().GetAwaiter().GetResult());
 app.MapGet("/api/werkbank/identitaeten", () => Results.Json(durchspielen.Identitaeten()));
-app.MapGet("/api/werkbank/formular", (string typ) =>
+app.MapGet("/api/werkbank/formular", async (string typ, CancellationToken ct) =>
 {
-    try { return Results.Content(durchspielen.Formular(typ).ToJsonString(), "application/json"); }
-    catch (Exception e) when (e is KeyNotFoundException or FileNotFoundException) { return Results.Json(new { fehler = e.Message }, statusCode: 404); }
+    try { await werkbank.Arbeitsbereich.LiesAsync(ct); return Results.Content(durchspielen.Formular(typ).ToJsonString(), "application/json"); }
+    catch (Exception e) when (e is KeyNotFoundException or InvalidOperationException) { return Results.Json(new { fehler = e.Message }, statusCode: 404); }
 });
 app.MapMethods("/api/werkbank/eingang/{**pfad}", ["GET", "POST"], async (HttpContext ctx, string pfad, CancellationToken ct) =>
 {
@@ -323,8 +292,8 @@ app.MapPost("/api/werkbank/worker/{funktion}/start", async (string funktion) =>
             var board = werkbank.Arbeitsbereich.BoardJson is { } bj ? System.Text.Json.Nodes.JsonNode.Parse(bj) : null;
             var duerfen = (board?["akteure"] as System.Text.Json.Nodes.JsonArray ?? []).OfType<System.Text.Json.Nodes.JsonObject>()
                 .Where(a => (a["darf"] as System.Text.Json.Nodes.JsonArray ?? []).Any(x => (string?)x == f)).Select(a => (string?)a["name"]).ToHashSet();
-            var tokens = werkbank.Umgebungen.Roh(werkbank.Aktiv)["Identitaeten"]?["Tokens"] as System.Text.Json.Nodes.JsonObject;
-            return tokens?.Where(kv => ((string?)kv.Value ?? "").Split(',').Any(a => duerfen.Contains(a.Trim()))).Select(kv => kv.Key).Order(StringComparer.Ordinal).FirstOrDefault();
+            return werkbank.Umgebungen.Tokens(werkbank.Aktiv).Where(kv => kv.Value.Any(duerfen.Contains)).Select(kv => kv.Key)
+                .Order(StringComparer.Ordinal).FirstOrDefault();
         }
         var aus = await worker.StarteAsync(funktion, werkbank.Umgebungen.Aufgeloest(werkbank.Aktiv), werkbank.Host.Laeuft, StandardToken);
         werkbank.Fortschritt.Melde("worker", new { funktion });
@@ -339,13 +308,10 @@ app.MapPost("/api/werkbank/worker/{funktion}/stopp", async (string funktion) =>
     return Results.Json(new { ok = true, funktion });
 });
 app.MapGet("/api/werkbank/worker/{funktion}/log", (string funktion, int? max) => Results.Json(worker.Log(funktion, max ?? 200)));
-app.MapPost("/api/werkbank/infra/start", async (CancellationToken ct) =>
-    Results.Json(await werkbank.Infra.StarteAsync(werkbank.Aktiv, werkbank.Umgebungen.Aufgeloest(werkbank.Aktiv), ct), werkbankJson));
-app.MapPost("/api/werkbank/infra/stopp", async (CancellationToken ct) => Results.Json(await werkbank.Infra.StoppeAsync(werkbank.Aktiv, ct), werkbankJson));
 
 // ── SPUR (docs/konzept-werkbank.md §7, P6): der Spiegel folgt dem laufenden Host (SSE + Cursor) und liefert Vorgänge, nummerierte Wege
 //   und den Live-Puls fertig aus — der Editor schlägt nur Karten-Ids nach.
-var spur = new Werkbank.Server.SpurSpiegel(werkbank, () => FindNeben("domain-model.json"));
+var spur = new Werkbank.Server.SpurSpiegel(werkbank);
 _ = Task.Run(() => spur.LaufeAsync(app.Lifetime.ApplicationStopping));
 app.MapGet("/api/werkbank/spur/puls", async (CancellationToken ct) => Results.Json(await spur.PulsAsync(ct), werkbankJson));
 app.MapGet("/api/werkbank/spur/vorgaenge", async (string? quelle, string? akteur, string? aggregat, string? zustand, CancellationToken ct) =>
@@ -374,17 +340,4 @@ static string SlnRoot()
         dir = Path.GetDirectoryName(dir);
     }
     return Directory.GetCurrentDirectory();
-}
-
-// Eine Datei neben der .sln finden (bis zu 10 Ebenen aufwärts vom CWD).
-static string? FindNeben(string name)
-{
-    var dir = Directory.GetCurrentDirectory();
-    for (var i = 0; i < 10 && dir != null; i++)
-    {
-        var p = Path.Combine(dir, name);
-        if (File.Exists(p)) return p;
-        dir = Path.GetDirectoryName(dir);
-    }
-    return null;
 }

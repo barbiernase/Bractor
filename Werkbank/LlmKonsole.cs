@@ -21,8 +21,8 @@ namespace Werkbank;
 //    Lambda, ihr Projekt mit seinen echten Generatoren und Analyzern (CQRS050, CQRS066/067, CQRS073 ff. …); Python über den Parser.
 //    Nur NEUE Fehler gegenüber dem Unveränderten zählen. Nichts wird geschrieben, der Fork wird verworfen.
 //  • Ausführen (Editor, ▶ am 🤖-Knoten): ein GEPRÜFTER Rumpf geht sofort in die echte Datei, danach laufen die Generatoren
-//    (Build des Laufzeit-Projekts). Übernehmen (Konsole bzw. ungeprüfter Vorschlag) schreibt auf Klick. Beides mit
-//    Hash-Sperre, Sicherung, Rückgängig.
+//    (Build des Laufzeit-Projekts). Übernehmen (Konsole bzw. ungeprüfter Vorschlag) schreibt auf Klick. Beides ist eine Rumpf-Geste
+//    (derselbe Weg wie ✎: Hash-Sperre, Verlauf, ↶ der Werkbank, Branch-Sperre) — keine eigene Sicherung.
 // ════════════════════════════════════════════════════════════════════════════
 
 /// <summary>Ein LLM-Aufruf: Anweisung (System) + Prompt. Liefert Text und – falls gemeldet – Token-Zahlen.</summary>
@@ -168,11 +168,13 @@ public sealed class LlmKonsole
 
     private readonly string _sln, _verz;
     private readonly Werkbank.Server.Arbeitsbereich _arbeit;
+    private readonly Werkbank.Server.GestenDienst? _gesten;
     private readonly Func<ILlmAnbieter> _anbieter;
 
-    public LlmKonsole(string slnRoot, Werkbank.Server.Arbeitsbereich arbeitsbereich)
+    /// <param name="gesten">Der Schreibweg: eine Übernahme ist eine Rumpf-Geste (Verlauf, ↶, Branch-Sperre); ohne (Kommandozeile) wird nichts geschrieben.</param>
+    public LlmKonsole(string slnRoot, Werkbank.Server.Arbeitsbereich arbeitsbereich, Werkbank.Server.GestenDienst? gesten = null)
     {
-        _sln = slnRoot; _arbeit = arbeitsbereich;
+        _sln = slnRoot; _arbeit = arbeitsbereich; _gesten = gesten;
         _verz = Path.Combine(slnRoot, ".llm-kontext");
         // Ausschließlich Claude Code über die Anmeldung dieses Rechners (Abo, keine API-Kosten); BRACTOR_LLM_MODELL wählt optional das Modell.
         _anbieter = () => new ClaudeCliAnbieter(Environment.GetEnvironmentVariable("BRACTOR_LLM_MODELL"));
@@ -190,9 +192,6 @@ public sealed class LlmKonsole
         return slots?.FirstOrDefault(s => s["id"]?.GetValue<string>() == id)
             ?? slots?.FirstOrDefault(s => s["id"]?.GetValue<string>().StartsWith(id + "@", StringComparison.Ordinal) == true);
     }
-
-    /// <summary>Datei-Spiegel eines Slots (jede Art): aktueller Rumpf, Prompt, Hash.</summary>
-    public object Rumpf(string id) => Slot(id) is { } slot ? Lese(slot) : new { ok = false, grund = "Unbekannter Slot." };
 
     // ── Fluss-Lambda: eigener Anker (Klasse + Anweisung + Lambda), der „Rumpf“ ist der ganze Lambda-Ausdruck ──
     // Lambda-Slots (Fluss-Knoten und Prozess-Regeln) teilen den Anker: Klasse + Anweisung des Definiere-Lambdas + Lambda-Index.
@@ -371,8 +370,21 @@ public sealed class LlmKonsole
         var aktuell = JsonSerializer.SerializeToNode(CodeSync.LeseLambda(LAnker(slot), _sln))?["body"]?.GetValue<string>();
         if (aktuell != null && SyntaxFactory.ParseExpression(aktuell) is LambdaExpressionSyntax alt && Stelligkeit(alt) != Stelligkeit(neu))
             return new List<string> { $"Der Lambda hat {Stelligkeit(neu)} Parameter, der Knoten liefert {Stelligkeit(alt)} (Drähte)." };
-        var (ok, grund, pfad, text) = CodeSync.MitLambda(LAnker(slot), ausdruck, _sln);
+        var (ok, grund, pfad, text) = MitKandidat(slot, ausdruck);
         return ok ? (await _arbeit.PruefeProbeweiseAsync(pfad!, text!, ct)).ToList() : new List<string> { grund };
+    }
+
+    /// <summary>
+    /// Der Dateitext mit dem Kandidaten am Ort des Slots, ohne zu schreiben — dieselbe Einsetzung wie die Rumpf-Geste
+    /// (<see cref="GraphExtractor.Rumpf.MitRumpf"/>), damit geprüft wird, was später in der Datei steht.
+    /// </summary>
+    private (bool Ok, string Grund, string? Pfad, string? Text) MitKandidat(JsonObject slot, string rumpf)
+    {
+        var (ort, grund, _) = IstFluss(slot) ? CodeSync.Ort(LAnker(slot), _sln) : CodeSync.Ort(Anker(slot), _sln);
+        if (ort is null) return (false, grund, null, null);
+        var pfad = Path.GetFullPath(Path.Combine(_sln, ort.Datei));
+        try { return (true, "", pfad, GraphExtractor.Rumpf.MitRumpf(File.ReadAllText(pfad), ort, rumpf, null)); }
+        catch (InvalidOperationException e) { return (false, e.Message, null, null); }
     }
 
     private static int Stelligkeit(LambdaExpressionSyntax l) => l switch
@@ -392,7 +404,7 @@ public sealed class LlmKonsole
             .Where(d => d.Severity == DiagnosticSeverity.Error)
             .Select(d => $"Syntax {d.Id} Zeile {d.Location.GetLineSpan().StartLinePosition.Line}: {d.GetMessage()}").ToList();
         if (befunde.Count > 0) return befunde;
-        var (ok, grund, pfad, text) = CodeSync.MitRumpf(Anker(slot), rumpf, _sln);
+        var (ok, grund, pfad, text) = MitKandidat(slot, rumpf);
         return ok ? (await _arbeit.PruefeProbeweiseAsync(pfad!, text!, ct)).ToList() : new List<string> { grund };
     }
 
@@ -424,7 +436,7 @@ public sealed class LlmKonsole
         var rumpf = ende?["rumpf"]?.GetValue<string>();
         if (!geprueft || rumpf == null)
             return new { ok = true, geschrieben = false, basisHash = f["basisHash"]?.GetValue<string>(), runden = f["runden"] };
-        var ueb = JsonSerializer.SerializeToNode(Uebernehmen(a.Id, rumpf, a.Auftrag, f["basisHash"]?.GetValue<string>(), bauen: true))!;
+        var ueb = JsonSerializer.SerializeToNode(await UebernehmenAsync(a.Id, rumpf, a.Auftrag, f["basisHash"]?.GetValue<string>(), bauen: true, ct))!;
         return new
         {
             ok = ueb["ok"]?.GetValue<bool>() == true, geschrieben = ueb["ok"]?.GetValue<bool>() == true,
@@ -433,87 +445,45 @@ public sealed class LlmKonsole
         };
     }
 
-    // ── Übernehmen / Rückgängig / Bauen ──
+    // ── Übernehmen / Bauen ──
 
-    /// <param name="bauen">danach das Projekt bauen — der echte Build, die Code-Generatoren laufen mit.</param>
-    /// <summary>Jede Übernahme kommt in den Verlauf der Werkbank (↶, Werkbank P7.2): Titel und Patch der geänderten Datei.</summary>
-    public Action<string, IReadOnlyList<GraphExtractor.DateiPatch>>? Gesichert { get; set; }
-
-    public object Uebernehmen(string id, string rumpf, string? auftrag, string? basisHash, bool bauen = false)
+    /// <summary>
+    /// Einen Rumpf übernehmen = eine Rumpf-Geste (derselbe Weg wie ✎, docs/konzept-werkbank.md §8.4): C# über den Ort des Slots
+    /// (<see cref="GraphExtractor.Rumpf"/>, mit Prompt-Zeile), Python über <see cref="PythonSync"/>; der Patch steht im Verlauf der Werkbank,
+    /// ↶ nimmt ihn zurück, auf <c>main</c> ist er gesperrt. <paramref name="basisHash"/> sperrt gegen eine seit dem Füllen geänderte Datei.
+    /// </summary>
+    /// <param name="bauen">danach das Laufzeit-Projekt bauen — der echte Build, die Code-Generatoren laufen mit.</param>
+    public async Task<object> UebernehmenAsync(string id, string rumpf, string? auftrag, string? basisHash, bool bauen = false, CancellationToken ct = default)
     {
         var slot = Slot(id);
         if (slot == null) return new { ok = false, grund = "Unbekannter Slot." };
-        // Die Datei vor und nach dem Schreiben — ihr Unterschied ist der Patch im Verlauf (derselbe Stapel wie die Gesten).
-        var rel = IstPython(slot) ? PAnker(slot).Datei : IstFluss(slot) ? LAnker(slot).Datei : Anker(slot).Datei;
-        var voll = Path.IsPathRooted(rel) ? rel : Path.Combine(_sln, rel);
-        var vorher = File.Exists(voll) ? File.ReadAllText(voll) : null;
-        var ergebnis = UebernehmeIntern(id, slot, rumpf, auftrag, basisHash, bauen);
-        var nachher = File.Exists(voll) ? File.ReadAllText(voll) : null;
-        if (nachher != vorher)
-            Gesichert?.Invoke($"🤖 {id}", [new GraphExtractor.DateiPatch(Path.GetRelativePath(_sln, voll).Replace('\\', '/'), vorher, nachher)]);
-        return ergebnis;
-    }
-
-    private object UebernehmeIntern(string id, JsonObject slot, string rumpf, string? auftrag, string? basisHash, bool bauen)
-    {
-        if (IstPython(slot)) return UebernehmePython(id, slot, rumpf, auftrag, basisHash);
-        if (IstFluss(slot)) return UebernehmeLambda(id, slot, rumpf, basisHash, bauen);
-        var anker = Anker(slot);
-        var (ok, grund, alt, neuHash, zeile) = CodeSync.SetzeRumpf(anker, rumpf, auftrag, basisHash, _sln);
-        if (!ok) return new { ok, grund };
-        var sicherung = Path.Combine(_verz, "sicherung");
-        Directory.CreateDirectory(sicherung);
-        var datei = Path.Combine(sicherung, $"{DateTime.Now:yyyyMMdd-HHmmss}-{Regex.Replace(id, @"[^\w.@-]", "_")}.json");
-        File.WriteAllText(datei, JsonSerializer.Serialize(new { id, anker, alterInhalt = alt, neuerHash = neuHash }));
-        Protokolliere(id, new { aktion = "uebernommen", datei = anker.Datei, zeile });
-        return new { ok = true, datei = anker.Datei, zeile, sicherung = Path.GetFileName(datei), bau = bauen ? Bauen(id) : null,
+        if (_gesten is null) return new { ok = false, grund = "Übernehmen nur im Werkbank-Server (Geste mit Verlauf)." };
+        if (basisHash != null && BasisHash(slot) != basisHash)
+            return new { ok = false, grund = "Die Datei wurde seit dem Füllen geändert (Hash passt nicht) — neu laden." };
+        var titel = $"🤖 {id}";
+        Werkbank.Server.GestenAntwort antwort;
+        string datei;
+        int zeile;
+        if (IstPython(slot))
+        {
+            var anker = PAnker(slot);
+            antwort = await _gesten.PythonRumpfAsync(titel, anker, rumpf, null, ct, prompt: auftrag);
+            (datei, zeile) = (anker.Datei, PythonSync.Zeile(anker, _sln));
+        }
+        else
+        {
+            var (ort, grund, z) = IstFluss(slot) ? CodeSync.Ort(LAnker(slot), _sln) : CodeSync.Ort(Anker(slot), _sln);
+            if (ort is null) return new { ok = false, grund };
+            // Die Prompt-Zeile reist im Text; die Einsetzung setzt genau eine (ein Lambda trägt keine).
+            var text = !IstFluss(slot) && !string.IsNullOrWhiteSpace(auftrag)
+                ? $"{GraphExtractor.Rumpf.PromptMarke} {auftrag.Replace("\r", " ").Replace("\n", " ").Trim()}\n{rumpf}" : rumpf;
+            antwort = await _gesten.RumpfAsync(titel, ort, text, null, ct);
+            (datei, zeile) = (ort.Datei, z);
+        }
+        if (!antwort.Ok) return new { ok = false, grund = antwort.Fehler };
+        Protokolliere(id, new { aktion = "uebernommen", datei, zeile });
+        return new { ok = true, datei, zeile, bau = bauen && !IstPython(slot) ? Bauen(id) : null,
             hinweis = "Kontexte sind jetzt veraltet — neu erzeugen, bevor der nächste Slot gefüllt wird." };
-    }
-
-    private object UebernehmeLambda(string id, JsonObject slot, string ausdruck, string? basisHash, bool bauen)
-    {
-        var anker = LAnker(slot);
-        var (ok, grund, alt, neuHash, zeile) = CodeSync.SetzeLambda(anker, ausdruck, basisHash, _sln);
-        if (!ok) return new { ok, grund };
-        var sicherung = Path.Combine(_verz, "sicherung");
-        Directory.CreateDirectory(sicherung);
-        var datei = Path.Combine(sicherung, $"{DateTime.Now:yyyyMMdd-HHmmss}-{Regex.Replace(id, @"[^\w.@-]", "_")}.json");
-        File.WriteAllText(datei, JsonSerializer.Serialize(new { id, lambdaAnker = anker, alterInhalt = alt, neuerHash = neuHash }));
-        Protokolliere(id, new { aktion = "uebernommen", datei = anker.Datei, zeile });
-        return new { ok = true, datei = anker.Datei, zeile, sicherung = Path.GetFileName(datei), bau = bauen ? Bauen(id) : null,
-            hinweis = "Kontexte sind jetzt veraltet — neu erzeugen, bevor der nächste Slot gefüllt wird." };
-    }
-
-    // Python: kein Build (kein Generator dahinter) — die Datei IST der Client; Sicherung = der ganze alte Dateitext.
-    private object UebernehmePython(string id, JsonObject slot, string rumpf, string? auftrag, string? basisHash)
-    {
-        var anker = PAnker(slot);
-        var (ok, grund, alt, neuHash, zeile) = PythonSync.SetzeRumpf(anker, rumpf, auftrag, basisHash, _sln);
-        if (!ok) return new { ok, grund };
-        var sicherung = Path.Combine(_verz, "sicherung");
-        Directory.CreateDirectory(sicherung);
-        var datei = Path.Combine(sicherung, $"{DateTime.Now:yyyyMMdd-HHmmss}-{Regex.Replace(id, @"[^\w.@-]", "_")}.json");
-        File.WriteAllText(datei, JsonSerializer.Serialize(new { id, pythonAnker = anker, alterInhalt = alt, neuerHash = neuHash }));
-        Protokolliere(id, new { aktion = "uebernommen", datei = anker.Datei, zeile });
-        return new { ok = true, datei = anker.Datei, zeile, sicherung = Path.GetFileName(datei), bau = (object?)null,
-            hinweis = "Kontexte sind jetzt veraltet — neu erzeugen, bevor der nächste Slot gefüllt wird." };
-    }
-
-    public object Rueckgaengig(string id, bool bauen = false)
-    {
-        var sicherung = Path.Combine(_verz, "sicherung");
-        var muster = Regex.Replace(id, @"[^\w.@-]", "_");
-        var letzte = Directory.Exists(sicherung)
-            ? Directory.GetFiles(sicherung, $"*-{muster}.json").OrderByDescending(f => f).FirstOrDefault() : null;
-        if (letzte == null) return new { ok = false, grund = "Keine Sicherung für diesen Slot." };
-        var o = JsonNode.Parse(File.ReadAllText(letzte))!;
-        var (ok, grund) = o["pythonAnker"] is { } pa
-            ? PythonSync.Zurueck(pa.Deserialize<PythonAnker>()!, S(o, "alterInhalt"), S(o, "neuerHash"), _sln)
-            : o["lambdaAnker"] is { } la
-            ? CodeSync.SetzeLambdaZurueck(la.Deserialize<LambdaAnker>()!, S(o, "alterInhalt"), S(o, "neuerHash"), _sln)
-            : CodeSync.SetzeInhaltZurueck(o["anker"].Deserialize<MethodenAnker>()!, S(o, "alterInhalt"), S(o, "neuerHash"), _sln);
-        if (ok) { File.Move(letzte, letzte + ".zurueckgenommen"); Protokolliere(id, new { aktion = "rueckgaengig" }); }
-        return new { ok, grund, bau = ok && bauen ? Bauen(id) : null };
     }
 
     /// <summary>
@@ -547,14 +517,12 @@ public sealed class LlmKonsole
 
     private object AktualisierenIntern()
     {
-        var psi = new ProcessStartInfo("dotnet", "run --project GraphExtractor -- --kontexte .llm-kontext")
-        { WorkingDirectory = _sln, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
-        using var p = Process.Start(psi)!;
-        var o = p.StandardOutput.ReadToEndAsync(); var e = p.StandardError.ReadToEndAsync();
-        if (!p.WaitForExit(TimeSpan.FromMinutes(5))) { try { p.Kill(true); } catch { } return new { ok = false, grund = "Zeitüberschreitung (5 min)." }; }
-        var zeilen = (o.Result + "\n" + e.Result).Split('\n');
-        var meldung = zeilen.Where(l => l.Contains('✅') || l.Contains('❌') || l.Contains("error")).Select(l => l.Trim()).Take(10).ToList();
-        return new { ok = p.ExitCode == 0, meldung, grund = p.ExitCode == 0 ? null : string.Join(" · ", meldung.Take(3)) };
+        // Derselbe Prozess-Weg wie ⟳ (wartet auf das Prozessende, nicht auf die von MSBuild-Knoten geerbte Pipe).
+        var r = Werkbank.Server.Prozesse.LaufeAsync("dotnet", ["run", "--project", "GraphExtractor", "--", "--kontexte", ".llm-kontext"], _sln,
+            zeitlimit: TimeSpan.FromMinutes(5)).GetAwaiter().GetResult();
+        if (r.Code == -1) return new { ok = false, grund = "Zeitüberschreitung (5 min)." };
+        var meldung = r.Zeilen.Where(l => l.Contains('✅') || l.Contains('❌') || l.Contains("error")).Select(l => l.Trim()).Take(10).ToList();
+        return new { ok = r.Ok, meldung, grund = r.Ok ? null : string.Join(" · ", meldung.Take(3)) };
     }
 
     private void Protokolliere(string id, object eintrag, string? auftrag = null)
