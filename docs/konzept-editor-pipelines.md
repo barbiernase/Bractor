@@ -235,9 +235,9 @@ Takt-Treiber und „Client meldet Quell-Nachricht“ (konzept-werkbank §12.2); 
 - Dirigent (`Infrastructure/Prozess/ProzessManager.cs`): Tokens tragen Herkunft und Je-Teile, dazu der `QuellStrom`-Token der Quelle; ein
   **Warte-Knoten** liest den Strom der Quelle bei jeder Weckung nach (kein Cursor; geweckt vom §3-Backstop), ein Event nach dem Zeitlimit
   zählt nicht. Fehler an verdrahteten Ports werden `SchrittUmgeleitet` und dann `ZeitlimitAbgelaufen`/`SchrittAbgelehnt`-Tokens.
-- Registry je Assembly: `ProzessRegelnGenerator` emittiert `{Assembly}.Prozess.GeneratedProzessRegeln`; `GeneratedProzesse.AlleRegeln()`
-  (`Infrastructure/Prozess/ProzessManagerWiring.cs`) vereinigt die Registries von `Domain` und `Domain.Pipeline` — mit festen Projektnamen
-  (`docs/13` W2-1).
+- Registry je Assembly: `ProzessRegelnGenerator` emittiert `{Assembly}.Prozess.GeneratedProzessRegeln`; der `ProzessVerbundGenerator` vereinigt
+  in der Komposition die Registries aller referenzierten Rollen-Projekte zu `GeneratedProzessVerbund.Alle` (CQRS012 über Assemblies, CQRS099
+  Prozesse ohne Registry); das Framework liest ihn über `Anwendung.Prozesse` (`GeneratedProzesse.AlleRegeln()`).
 - **Katalog-Funktionen mit Lese-Fähigkeit**: `RufeAsync(Auftrag, IAusfuehrung, ISucheX suche, …)` — nur `IReadStore`-Interfaces (sonst
   CQRS068); der generierte Dispatch öffnet je Aufruf einen Fähigkeits-Bereich (`IFaehigkeitsFabrik`), `GeneratedFunktionen.Faehigkeiten`;
   Boot-Guard: eine solche Funktion läuft nur im Host (nie `AddExterneFunktion`, also nie Laufort `Extern`); keine Python-Basis.

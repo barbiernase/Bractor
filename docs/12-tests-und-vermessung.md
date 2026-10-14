@@ -1,7 +1,7 @@
 # 12 — Tests & Vermessung
 
 **Die eine Quelle für Zahlen und Messwerte.** Andere Dokumente verweisen hierher. Offene Testlücken stehen als Befund in
-`docs/13-reifegrad-schulden-bewertung.md` (T-1, P2-5). Stand: 2026-10-13.
+`docs/13-reifegrad-schulden-bewertung.md` (T-1, P2-5). Stand: 2026-10-14.
 
 ## 12.1 Die Test-Ebenen
 
@@ -22,18 +22,19 @@ es nur für nicht-autoritative Randstores (Inv. 6).
 
 ## 12.2 Zahlen
 
-**Aktuell (2026-10-13, gemessen nach Commit `c7c6608`):** Prüfstand **526/526**, Integration **39/39** sequentiell, Python SDK **28/28**,
-Worker **20/20**; `--check` grün (Code ohne Karte 0, Code-Karten 4 = 1,0 %), `--sonde` grün (111 Soll-Fakten).
+**Aktuell (2026-10-14, gemessen auf Commit-Basis `dcda9b8` + Aufräumen):** Prüfstand **534/534**, Integration **39/39** sequentiell,
+`Client.Infrastructure.CollectionTests` **30/30**, Python SDK **31/31**, Worker **20/20**; `--check` grün (alle Bereiche inkl. „Lage“),
+`--sonde` grün (111 Soll-Fakten, Lage-Soll 56 Typen).
 
-Statisch gezählt (2026-10-13):
+Statisch gezählt (2026-10-14):
 
 | Projekt | `[Fact]` | `[Theory]` | Dateien |
 |---|---:|---:|---:|
-| Infrastructure.Pruefstand.Tests | 504 | 6 | 71 |
+| Infrastructure.Pruefstand.Tests | 512 | 6 | 73 |
 | Infrastructure.Integration.Tests | 39 | 0 | 19 |
-| Client.Infrastructure.CollectionTests | 31 | 0 | 2 |
+| Client.Infrastructure.CollectionTests | 30 | 0 | 2 |
 
-Die Differenz zwischen 510 Methoden und 526 Läufen im Prüfstand kommt von den expandierten `[Theory]`-Fällen.
+Die Differenz zwischen 518 Methoden und 534 Läufen im Prüfstand kommt von den expandierten `[Theory]`-Fällen.
 
 ## 12.3 Was getestet ist
 

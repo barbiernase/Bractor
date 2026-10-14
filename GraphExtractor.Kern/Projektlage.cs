@@ -3,15 +3,17 @@ using Microsoft.CodeAnalysis;
 namespace GraphExtractor;
 
 /// <summary>
-/// Die Lage der Projekte — vollständig aus der Solution ABGELEITET, ohne einen Projekt-, Pfad- oder Präfix-Namen:
+/// Die Lage der Projekte — aus der Solution ABGELEITET, ohne einen getippten Projekt-, Pfad- oder Präfix-Namen. Die einzige Namensregel ist die
+/// der Projektstruktur (docs/07, <c>Abstractions/Projektstruktur.cs</c>): die Wurzel der Anwendung kommt aus dem Namen der Komposition
+/// (<c>&lt;Wurzel&gt;.Laufzeit</c>), ihre Rollen-Projekte sind Wurzel + Suffix.
 /// <list type="bullet">
 /// <item><b>Vertrag</b>: das Projekt, das die Marker-Interfaces baut (Assembly von <see cref="Vertrag.IState"/>).</item>
 /// <item><b>Laufzeit</b>: das Projekt, in dem der Framework-Generator die Command→Aggregat-Routing-Tabelle erzeugt hat
 ///   (strukturell erkannt, <see cref="RoutingTruth"/>) — dort werden die Domänen zusammengeführt.</item>
 /// <item><b>Analyse</b>: die Laufzeit + ihre transitive Referenz-Hülle (alles, was das Produkt fährt).</item>
-/// <item><b>Domäne</b>: Analyse-Projekte (außer Vertrag und Laufzeit), die im HANDGESCHRIEBENEN Quelltext mindestens einen
-///   Typ mit einer Domänen-Rolle des Vertrags deklarieren (Command, Event, State, Decider, Query, ReadModel, Store,
-///   Konsument, Pipeline, Prozess, Wertobjekt …). Framework-Projekte (Kern) deklarieren keine solche Rolle.</item>
+/// <item><b>Domäne</b>: Analyse-Projekte (außer Vertrag und Laufzeit), die zur Wurzel gehören (Rollen-Projekt oder darauf aufbauend) und im
+///   HANDGESCHRIEBENEN Quelltext mindestens einen Typ mit einer Domänen-Rolle des Vertrags deklarieren (Command, Event, State, Decider, Query,
+///   ReadModel, Store, Konsument, Pipeline, Prozess, Wertobjekt …). Das Framework baut auf kein Rollen-Projekt auf.</item>
 /// <item><b>Hosts</b>: Programme mit HANDGESCHRIEBENEM Einstiegspunkt, die die Laufzeit einbinden — dort lebt die
 ///   Composition Root. Testprojekte haben einen generierten Einstiegspunkt und fallen so heraus.</item>
 /// </list>

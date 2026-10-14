@@ -82,7 +82,8 @@ Anwendung per `[ModuleInitializer]` an (`AnwendungAnmelden.cs`). Ein Prozess fä
 | `ProzessVerbundGenerator` | `{Assembly}.Prozess.GeneratedProzessRegeln` der referenzierten Domänen-Assemblies | `GeneratedProzessVerbund` | alle Prozesse und Flüsse für den Dirigenten (CQRS012 über Assemblies, CQRS099 Prozesse ohne Registry) |
 | `AkteurRechteGenerator` | `IAkteur` + `IDarf<T>`, `IAkteurVertrag<A>`, `IClientVertrag` | `GeneratedAkteurRechte`, `GeneratedClientVertraege` | Befugnisse, abgeleitete Hör-Menge, Verträge + Hash (CQRS059) |
 | `EventUpcastingGenerator` | `IUpcast<…>` | `GeneratedEventUpcasting` | Backend-Primitive für Schema-Evolution in Prod, kein Editor-Konzept (CQRS040–046; 1:N bricht bewusst den Build) |
-| `DtoMapperSourceGenerator` | Domänen-Graph (`DomainGraphAnalyzer`) | `ProtoMessageMapper.Generated` | Domain ↔ Proto-DTO an der gRPC-Grenze (CQRS030) |
+| `DtoMapperSourceGenerator` | Domänen-Graph (`DomainGraphAnalyzer`); läuft nur im Leitungs-Projekt (`<Wurzel>.Leitung`) | `GeneratedNutzlast : Cqrs.Leitung.INutzlastTabelle` (Datei `ProtoMessageMapper.Generated.cs`) | Domain ↔ `{Typ}Dto` ↔ `Nutzlast { typ, daten }` an der gRPC-Grenze (CQRS030) |
+| `AnwendungGenerator` | die Tabellen der übrigen Laufzeit-Generatoren derselben Compilation; Leseseite, Speicher und Leitung über die Projektstruktur | `GeneratedAnwendung : IAnwendung`, `AddCqrs(args)` | die Anwendung für das Framework (`Anwendung.Setze`); nur in der Komposition (§5.1) |
 | `TypeRegistryGenerator` | `IEvent`, `ICommand`, `IQuery`, `IQueryResponse`, `IPipelineTrigger` … | `GeneratedTypeRegistry` | Name ↔ Typ |
 | `PipelineActorGenerator` | `IPipelineHandler` | `PipelineActors`, `GeneratedPipelines`, `GeneratedFristen` | **Altlast** (Handle-Pipeline, Trigger, `Frist<TCmd>`, CQRS056; docs/13 W11-1). `GeneratedPipelines.CommandAggregateTypes` ist nur noch ein Durchreicher auf `GeneratedCommandRouting`, über den u. a. der `CommandEmitter` routet |
 

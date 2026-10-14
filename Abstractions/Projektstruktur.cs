@@ -78,16 +78,20 @@ static class Projektstruktur
 
     // ── Rollen-Projekte ──────────────────────────────────────────────────────────────────────────────────────────────────
 
-    /// <summary>Ein Rollen-Projekt: Suffix zur Wurzel, ob es Bereichs-Ordner hat, welche Rollen es referenziert, seine Sammeldateien.</summary>
+    /// <summary>
+    /// Ein Rollen-Projekt: Suffix zur Wurzel, ob es Bereichs-Ordner hat, welche Rollen es referenziert, seine Sammeldateien und ob es nur
+    /// Generiertes trägt (Leitung, Komposition: nichts Handgeschriebenes, docs/07 §7.2).
+    /// </summary>
     public sealed class Eintrag
     {
-        public Eintrag(Rolle rolle, string suffix, bool mitBereich, Rolle[] referenziert, string[] sammeldateien)
-        { Rolle = rolle; Suffix = suffix; MitBereich = mitBereich; Referenziert = referenziert; Sammeldateien = sammeldateien; }
+        public Eintrag(Rolle rolle, string suffix, bool mitBereich, Rolle[] referenziert, string[] sammeldateien, bool nurGeneriert = false)
+        { Rolle = rolle; Suffix = suffix; MitBereich = mitBereich; Referenziert = referenziert; Sammeldateien = sammeldateien; NurGeneriert = nurGeneriert; }
         public Rolle Rolle { get; }
         public string Suffix { get; }
         public bool MitBereich { get; }
         public IReadOnlyList<Rolle> Referenziert { get; }
         public IReadOnlyList<string> Sammeldateien { get; }
+        public bool NurGeneriert { get; }
     }
 
     /// <summary>Die Rollen in Referenz-Reihenfolge (unten → oben, docs/07 §7.2).</summary>
@@ -104,10 +108,10 @@ static class Projektstruktur
         new Eintrag(Rolle.Speicher, ".Infrastructure", true, new[] { Rolle.Schreibseite, Rolle.Leseseite },
             new string[0]),
         new Eintrag(Rolle.Leitung, ".Leitung", false, new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Ablaeufe },
-            new string[0]),
+            new string[0], nurGeneriert: true),
         new Eintrag(Rolle.Komposition, ".Laufzeit", false,
             new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Ablaeufe, Rolle.Akteure, Rolle.Speicher, Rolle.Leitung },
-            new string[0]),
+            new string[0], nurGeneriert: true),
     };
 
     public static Eintrag Von(Rolle r) => Rollen.First(e => e.Rolle == r);
@@ -117,6 +121,13 @@ static class Projektstruktur
 
     /// <summary>Alle Rollen-Projekte einer Anwendung (Referenz-Reihenfolge).</summary>
     public static IEnumerable<string> Projekte(string wurzel) => Rollen.Select(e => wurzel + e.Suffix);
+
+    /// <summary>
+    /// Die Rollen-Projekte mit handgeschriebenem Code (ohne Leitung und Komposition): über sie läuft der Stand der Werkbank. Was der Build
+    /// selbst erzeugt (Proto, STJ-Kontexte), darf den Stand nicht verschieben — sonst wechselte er durch das Bauen (Spur-Stand ≠ Board-Stand).
+    /// </summary>
+    public static IEnumerable<string> HandgeschriebeneProjekte(string wurzel) =>
+        Rollen.Where(e => !e.NurGeneriert).Select(e => wurzel + e.Suffix);
 
     /// <summary>Die Projekte, aus denen der Codegen Proto, STJ-Kontexte und Python-Basen erzeugt (alles außer den Store-Implementierungen).</summary>
     public static IEnumerable<string> CodegenProjekte(string wurzel) =>

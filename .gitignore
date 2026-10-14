@@ -112,7 +112,6 @@ __pycache__/
 *.pyc
 .venv/
 .pytest_cache/
-.codegen_hash
 
 # LLM-Konsole: erzeugte Kontexte, Protokoll, Sicherungen (docs/konzept-llm-minimalkontext.md)
 .llm-kontext/

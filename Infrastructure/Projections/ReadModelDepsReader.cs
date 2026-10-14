@@ -43,7 +43,7 @@ public class ReadModelDepsReader : IReadModelDepsReader
     /// Ein Pipeline-Roundtrip fÃ¼r alle IDs.
     /// Ergebnis: Deduplizierte AggregateMeta-Liste (hÃ¶chste Version gewinnt).
     /// </summary>
-    /// <param name="subscriberId">Der Subscriber/Projektion-Name (z.B. "lagerbestand-projection")</param>
+    /// <param name="subscriberId">Der Subscriber/Projektion-Name (der Name des Konsumenten)</param>
     /// <param name="readModelIds">Die getrackten ReadModel-IDs aus dem ReadContext</param>
     /// <returns>Deduplizierte Deps oder null bei Fehler/leerem Ergebnis</returns>
     public async Task<IReadOnlyList<AggregateMeta>?> ReadAsync(

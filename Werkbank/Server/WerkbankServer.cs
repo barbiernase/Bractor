@@ -76,11 +76,14 @@ public sealed class WerkbankServer
         }
     }
 
-    /// <summary>Der Stand: Hash über den Code der Editor-Projekte — Board, Build und Lauf tragen denselben (Spur, P4).</summary>
+    /// <summary>
+    /// Der Stand: Hash über den handgeschriebenen Code der Rollen-Projekte (ohne Leitung und Komposition, deren Generate der Build selbst
+    /// schreibt) — Board, Build und Lauf tragen denselben (Spur, P4).
+    /// </summary>
     public string Stand()
     {
         using var sha = SHA256.Create();
-        foreach (var projekt in Abstractions.Projektstruktur.Projekte(Abstractions.Projektstruktur.StandardWurzel))   // die Rollen-Projekte (docs/07)
+        foreach (var projekt in Abstractions.Projektstruktur.HandgeschriebeneProjekte(Abstractions.Projektstruktur.StandardWurzel))   // docs/07 §7.2
         {
             var verz = Path.Combine(_root, projekt);
             if (!Directory.Exists(verz)) continue;

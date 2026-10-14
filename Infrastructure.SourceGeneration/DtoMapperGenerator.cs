@@ -74,7 +74,7 @@ namespace Infrastructure.SourceGeneration
                 var selfMessageNames = new HashSet<string>(selfMessageGraphs.Select(g => g.FullName));
                 triggerGraphs = triggerGraphs.Where(g => !selfMessageNames.Contains(g.FullName)).ToList();
                 
-                // Aufträge der Katalog-Funktionen (IAuftrag<F>) — reisen zu externen Ausführern (AuftragPayloadDto)
+                // Aufträge der Katalog-Funktionen (IAuftrag<F>) — reisen zu externen Ausführern (als Nutzlast in ArbeitsAuftrag.auftrag, Cqrs.Leitung/cqrs.proto)
                 var auftragGraphs = analyzer.AnalyzeTypesImplementing("Abstractions.IAuftrag");
 
                 // Alle Graphen kombinieren

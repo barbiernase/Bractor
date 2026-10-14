@@ -175,8 +175,10 @@ In der Beispieldomäne ist `Domain/Sammelvorgang/TeilFertigProzess.cs` der klein
 
 Der `ProzessRegelnGenerator` (Domain.SourceGeneration) legt jede Definition als Daten in `GeneratedProzessRegeln.Alle` (Name = Klassenname,
 CQRS012; Regel-Namen `<Auslöser>[+<Und>]→<Ziel>`, CQRS072). Der `ProzessRegelDiagnosticGenerator` prüft CQRS001–003 (doppelter Auslöser,
-Command ohne Decider, Command-Typ explizit). `GeneratedProzesse.AlleRegeln` vereinigt die Registries fest aus `Domain` und `Domain.Pipeline`
-(docs/13 W2-1).
+Command ohne Decider, Command-Typ explizit). Jede Assembly mit Prozessen oder Flüssen hat ihre eigene Registry
+`{Assembly}.Prozess.GeneratedProzessRegeln`; in der Komposition vereinigt der `ProzessVerbundGenerator` die Registries aller referenzierten
+Rollen-Projekte zu `GeneratedProzessVerbund.Alle` (CQRS012: derselbe Name in zwei Assemblies; CQRS099: Prozesse ohne Registry), ohne eine getippte
+Liste von Projekten. Das Framework liest den Verbund über `Anwendung.Prozesse` (`GeneratedProzesse.AlleRegeln`).
 
 **Kern-Invariante: Struktur aus Code, Marking aus dem Log.** Der generische `ProzessManager` (`Infrastructure/Prozess/ProzessManager.cs`)
 ist ein einmal geschriebener Petri-Netz-Interpreter; je Vorgang (Korrelation) ein virtueller `ProzessManagerActor`. Sein eigenes Log ist der
