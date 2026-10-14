@@ -534,6 +534,8 @@ Allgemeine Schulden stehen in `docs/13` §13.0. Für die Werkbank im Besonderen:
 - **Daten-Prüfung (§4.6, ⟳ Schritt 4)** vergleicht das generierte Proto; gespeichert sind die Events als JSON (Marten/STJ). Zu entscheiden, ob
   die Prüfung gegen die JSON-Form laufen soll.
 
+- **🤖-Rümpfe fachlich ungeprüft** (docs/13 LLM-1): geprüft wird nur „baut und regelkonform“; Plan in `konzept-llm-minimalkontext.md` §11.
+
 Reihenfolge der Umsetzung: `docs/13` §13.5.
 
 ### 12.3 Entscheidungen aus der Umsetzung (E1–E13)
@@ -666,7 +668,8 @@ Durchgang (`POST /api/llm/ausfuehren`): Prompt aus Graph-Skelett + Slot-Teil + A
 (`Arbeitsbereich.PruefeProbeweiseAsync`: Datei mit Kandidat, Compiler + Analyzer des Projekts, nur neue Fehler; Lambdas eigens, Python per Parser);
 geprüft → schreiben → Laufzeit-Projekt bauen → neu lesen. Slot-Arten: `decide`, `apply`, `projektion`, `reaktion`, `reader`, `pipeline`, `store`,
 `funktion`, `funktionpy`, `fluss`, `saga`, `zusage`. Die Kontexte entstehen noch kalt (`GraphExtractor --kontexte`, ~1 min). Der Schreibweg der
-Übernahme ist noch ein eigener (§12.2).
+Übernahme ist noch ein eigener (§12.2). Fachlich geprüft wird ein 🤖-Rumpf noch nicht — Plan: Beispiele je Slot als Testcode, die Schleife
+„baut → regelkonform → Beispiele grün“ (`konzept-llm-minimalkontext.md` §11, `docs/13` LLM-1).
 
 ### A.6 Code-Fakt je Primitive
 

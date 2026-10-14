@@ -261,6 +261,29 @@ wird aber nicht ausgelesen). Domänen-Helfer ohne Kante (Beispieldomäne: `Split
 
 ## 11 · Offen
 
+**Fachlich prüfen (Plan, `docs/13` LLM-1).** Heute ist ein 🤖-Rumpf geprüft, wenn er baut und die Analyzer schweigen (§2, Schritt 4) — ob er tut,
+was der Auftrag sagt, prüft nichts. Die Slots sind dafür gemacht, isoliert getestet zu werden: Decide und Apply sind reine Funktionen, Regeln und
+Fluss-Lambdas sind Daten, Katalog-Funktionen haben genau einen Auftrag und ein OneOf-Ergebnis, Projektion/Reaktion/Reader bekommen ihre
+Store-Fähigkeiten als Parameter (CQRS051/054). Der Weg:
+
+| Slot | isolierter Test |
+|---|---|
+| `decide`, `apply` | `Cqrs.Testing.Szenario`: Gegeben(Events) → Wenn(Command) → Dann(Events \| Ablehnung) bzw. erwarteter State |
+| `saga` (Prozess-Regel), `fluss`, `pipeline` | `SagaSzenario` (lernt `Rufe`, `docs/13` P3-3), `FlussLaufwerk` mit gewähltem Ausgangsfall je Funktion |
+| `funktion` | Auftrag → genau ein OneOf-Ergebnis; Lese-Fähigkeiten als kleine Testfunktion |
+| `projektion`, `reaktion`, `reader` | aufzeichnende Fähigkeiten (aus den Signaturen generiert, keine Reflection) → Aufrufe bzw. Ausgaben prüfen |
+| `funktionpy`, `zusage` | pytest gegen die generierte Basis (`rufe` bzw. `auf_<event>`) |
+| `store` | **nicht isoliert**: nur gegen echtes Marten (Integration, Vorlage `Pruefdomaene.Integration.Tests`) |
+
+1. **Beispiele sind Code.** An der Karte eine Tabelle Gegeben/Wenn/Dann je Slot; gespeichert als Testcode in der neuen Rolle `<Wurzel>.Beispiele`
+   (`Abstractions/Projektstruktur.cs`, docs/07) — Code ist die Wahrheit (W1), ↶ nimmt auch ein Beispiel zurück.
+2. **Beispiele sind unabhängig vom Rumpf.** Sie kommen vom Menschen, aus einem getrennten LLM-Aufruf, der nur Signatur und Auftrag sieht (nie den
+   Rumpf), oder aus der Spur eines echten Sim-Laufs (Event-Folge + Command + beobachtete Events → Regressions-Szenario). Sonst bestätigt sich das LLM
+   selbst.
+3. **Die 🤖-Schleife wird „baut → regelkonform → Beispiele grün“.** Rote Beispiele gehen als Befund in die nächste Runde. Ausgeführt wird in einem
+   eigenen Prozess (`dotnet test --filter` auf das Beispiel-Projekt bzw. pytest) — die Werkbank lädt keine Assemblies (W10).
+4. **Ohne Beispiel** zeigt die Karte „ungeprüft“; ⟳ meldet die Zahl ungeprüfter 🤖-Rümpfe.
+
 - **Kartenwand:** der Rumpf darf nur Symbole benutzen, die der Kontext deklariert (Semantic Model) — nicht umgesetzt.
 - Die Kontexte entstehen kalt (`GraphExtractor --kontexte`, ~1 min; `docs/13` WB-1); bis dahin sind sie nach einer Übernahme veraltet.
 - Ein Rumpf-Schreibweg statt `CodeSync`/`PythonSync` neben der ✎-Geste (`docs/13` W11-1).

@@ -12,6 +12,7 @@ hierher. Stand: 2026-10-15, Commit-Basis `ea463c6`. Maßstab sind die sechs Inva
 | W10-2 | Reflektive Serialisierung zur Laufzeit (Marten-Default, Marking-Store, Snapshot-`Clone`, HTTP-Antworten); kein Reflection-Verbot im Build | P1 |
 | WB-2 | Werkbank ohne automatischen ⟳-Abnahmetest (Bauen → Host → Durchspielen → Spur → Geste/↶; Python-Worker live) | P1 |
 | WB-3 | Kein Gate „frischer Checkout baut“ (Ignore-Regeln schlucken Quellen) | P1 |
+| LLM-1 | 🤖-Rümpfe sind nur „baut und regelkonform“ geprüft, nicht fachlich: keine Beispiele je Slot, `Cqrs.Testing` nicht an Editor/🤖 angebunden | P1 |
 | P1-1 | Multi-Node nur container-erprobt, Consul im `-dev`-Modus | P1 |
 | P1-2 | Transport-Sicherheit: kein TLS; Identitäten für Prod fehlen | P1 |
 | P1-6 | `CancellationToken.None` im generierten Pull-Emit-Pfad | P1 |
@@ -53,7 +54,7 @@ Werkzeuge lesen teils per Reflection, und neben den neuen Wegen (Fluss, Quelle, 
 | Konsum-/Prozess-Maschine | 🟢 |
 | Generatoren & Analyzer | 🟢 / 🟡 (W10-1, W2-1) |
 | Multi-Node / Transport | 🟢 / 🟡 (P1-1, P1-2) |
-| Werkbank (Extractor, Editor, Server) | 🟢 / 🟡 (WB-2, WB-3, W3-1, WB-1, WB-4, WZ-1) |
+| Werkbank (Extractor, Editor, Server) | 🟢 / 🟡 (WB-2, WB-3, LLM-1, W3-1, WB-1, WB-4, WZ-1) |
 | Clients (Blazor, Python) | 🟢 / 🟡 (AK-1, P1-2) |
 | Tests & Vermessung | 🟢 |
 
@@ -132,6 +133,15 @@ Worker einer externen Funktion starten und ein Ergebnis abholen; dazu ein Test, 
 **WB-3 · Kein Gate „frischer Checkout baut“.** `Cqrs.Leitung/cqrs.proto` fehlte einen Tag lang im Repo (globale Ignore-Regel `cqrs.proto`), der
 Quellordner `Domain.Client.Modules.Blazor/Debug/` fehlt bis heute (`[Dd]ebug/`, P3-2) — lokal fiel beides nicht auf. *Empfehlung:* ein Skript, das
 den Stand in einem temporären `git worktree` baut, `codegen.sh --check` und den Prüfstand fährt; vor jedem Push.
+
+**LLM-1 · 🤖-Rümpfe fachlich ungeprüft.** 🤖 füllen prüft einen Kandidaten nur probeweise im warmen Workspace (Compiler + Analyzer, bis drei
+Runden, `konzept-llm-minimalkontext.md` §2) — ob der Rumpf tut, was der Auftrag sagt, prüft nichts. Die Test-DSL `Cqrs.Testing` (`Szenario`,
+`SagaSzenario`, `FlussLaufwerk`) gibt es, sie wird aber nur von Hand im Prüfstand benutzt. Dabei sind die meisten Slots reine Funktionen
+(`--slots`: Decide/Apply 100 % isoliert, Projektion 90 %) und die Store-Fähigkeiten kommen als Parameter — sie sind isoliert testbar, ohne einen
+Event-Store zu faken. *Plan:* `konzept-llm-minimalkontext.md` §11 („Fachlich prüfen“): Beispiele je Slot als Testcode in einer neuen Rolle
+`<Wurzel>.Beispiele`, Beispiele unabhängig vom Rumpf (Mensch, getrennter LLM-Aufruf ohne Rumpf, aus der Spur eines Sim-Laufs), 🤖-Schleife um
+„Beispiele grün“ erweitert (eigener Prozess, keine Reflection in der Werkbank), Lücken in `Cqrs.Testing` (P3-3, Helfer für Projektion/Reaktion/
+Reader aus den Signaturen generiert, pytest-Vorlage je Python-Basis), Kartenwand. Store-Implementierungen bleiben beim Marten-Test.
 
 **P1-1 · Multi-Node nur container-erprobt.** Cross-Node ist über alle Planes verdrahtet und bewiesen (`TwoNodeCommandDispatchTests`,
 `RemotePidDeliverySmokeTests`, 3-Node-Compose), der Regelbetrieb ist aber Single-Node; Consul läuft im `-dev`-Modus (kein Quorum).
@@ -223,11 +233,12 @@ Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
   Wiederholungen gleich; `CqrsServiceExtension.cs` nennt noch `Cluster__Role`/`migrator|member` statt `Cluster__Rolle`/Allein|Migrator|Mitglied;
   `ProzessManager.cs` sagt „nie in einem Feld gehalten“ trotz HOT-Cache; `Cqrs.Codegen/Program.cs` nennt sich „reflexionsfrei“, liest aber per
   `MetadataLoadContext`; `deploy-multinode/Dockerfile` und `docker-compose.yml` erwähnen noch den entfernten LoadHarness).
-- **P3-3 · Saga-DSL** in `Cqrs.Testing` kennt `Rufe` nicht.
+- **P3-3 · Saga-DSL** in `Cqrs.Testing` kennt `Rufe` nicht (Voraussetzung für LLM-1).
 
 ## 13.4 Korrektheit vs. Reifegrad
 
-Kein Befund ist ein bekannter aktiver Korrektheits-Bug. Korrektheitsnah sind: **WB-2/WB-3** (Werkbank-Kreislauf und frischer Checkout ohne automatischen Beweis), **W10-1** (möglicher Hash-Unterschied zwischen Python-Basis und Server beim Handshake), **W2-1** (vom Client gesetztes Cluster-Kind) und **WZ-1** (Prüfungen, die grün sind, ohne es zu beweisen). Alles andere ist Reifegrad,
+Kein Befund ist ein bekannter aktiver Korrektheits-Bug. Korrektheitsnah sind: **WB-2/WB-3** (Werkbank-Kreislauf und frischer Checkout ohne automatischen Beweis), **LLM-1** (vom LLM
+geschriebene Logik nur auf „baut“ geprüft), **W10-1** (möglicher Hash-Unterschied zwischen Python-Basis und Server beim Handshake), **W2-1** (vom Client gesetztes Cluster-Kind) und **WZ-1** (Prüfungen, die grün sind, ohne es zu beweisen). Alles andere ist Reifegrad,
 Allgemeingültigkeit oder Hygiene.
 
 ## 13.5 Empfohlene Reihenfolge
@@ -246,16 +257,19 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 2. **W11-1 (Schreibwege)/WB-1** je Absicht ein Weg: 🤖 schreibt über die Rumpf-Geste (nicht `CodeSync.SetzeRumpf`), Umgebungs-Werte mit Verlauf, ↶
    und Branch-Sperre, Werkbank löst Umgebungen wie der Host auf (ein Token-Parser, fehlendes `${env:X}` = Fehler); tote Endpunkte weg; Durchspielen,
    Spur-Spiegel und LLM-Konsole lesen das warme Board statt `domain-model.json`.
-3. **W3-1** Ableitungen auf den Server: Karten-Ids, Hör-Menge, Lambda-Parameter, Auto-Zuordnung, Port-Kardinalität aus `board.sicht`/`/api/werkbank/*`.
-4. **W10-1** Formular-Schema aus dem warmen Workspace (statt `Schema.cs` per Reflection), Codegen auf Roslyn; danach **W10-2** Laufzeit-Serialisierung
+3. **LLM-1** 🤖 fachlich prüfen: neue Rolle `<Wurzel>.Beispiele` (Strukturtabelle, Lageart, CQRS098), Beispiele an der Karte (Gegeben/Wenn/Dann)
+   als Testcode, unabhängige Herkunft der Beispiele, 🤖-Schleife „baut → regelkonform → Beispiele grün“, `Cqrs.Testing` vervollständigen (P3-3,
+   generierte Helfer für Projektion/Reaktion/Reader, pytest-Vorlagen), Kartenwand (`konzept-llm-minimalkontext.md` §11).
+4. **W3-1** Ableitungen auf den Server: Karten-Ids, Hör-Menge, Lambda-Parameter, Auto-Zuordnung, Port-Kardinalität aus `board.sicht`/`/api/werkbank/*`.
+5. **W10-1** Formular-Schema aus dem warmen Workspace (statt `Schema.cs` per Reflection), Codegen auf Roslyn; danach **W10-2** Laufzeit-Serialisierung
    generiert und Reflection-Sperre.
-5. **WZ-1** Prüfungen schärfen: Grammatik-Gate prüft Ort und Gegenstück, Fixpunkt über Akteure/Verträge/Clients/Funktionen/Dienste, Sonde für alle
+6. **WZ-1** Prüfungen schärfen: Grammatik-Gate prüft Ort und Gegenstück, Fixpunkt über Akteure/Verträge/Clients/Funktionen/Dienste, Sonde für alle
    allgemeinen Primitive (`SendeJe`, Count-Join, Kompensation, `IMensch`, `IstClient`, Laufort, Webhook).
-6. **W11-1/W11-2** Treiber (Takt, flüchtige Quellen, Client meldet Quell-Nachricht), danach Rückbau der Handle-/Trigger-Welt samt Grammatik-Regeln;
+7. **W11-1/W11-2** Treiber (Takt, flüchtige Quellen, Client meldet Quell-Nachricht), danach Rückbau der Handle-/Trigger-Welt samt Grammatik-Regeln;
    Zeitlimits über den Fristplaner; DSL nach Entscheidung.
-7. **W2-1** Rest (Leitungs-Framework = `Cqrs.Leitung`, Generat-Namespaces = Komposition, Identitäten aus vollen Typnamen).
-8. **WB-1** Geste p50 unter Fremdlast auf 300 ms; Renamer für String-Literale; LLM-Kontexte warm.
-9. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
+8. **W2-1** Rest (Leitungs-Framework = `Cqrs.Leitung`, Generat-Namespaces = Komposition, Identitäten aus vollen Typnamen).
+9. **WB-1** Geste p50 unter Fremdlast auf 300 ms; Renamer für String-Literale; LLM-Kontexte warm.
+10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
 
