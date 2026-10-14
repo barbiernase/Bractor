@@ -28,9 +28,8 @@ fi
 echo "Generiere → $GENERATED_DIR/"
 mkdir -p "$GENERATED_DIR"
 
-# Proto ohne Package-Deklaration generieren.
-# betterproto erzeugt sonst ein Unterverzeichnis (CqrsSolution/)
-# mit kaputten Cross-References. Ohne package → alles flach in __init__.py.
+# Proto ohne Package-Deklaration generieren: betterproto legte sonst je Paket ein Unterverzeichnis an (mit kaputten
+# Querverweisen). Ohne package → alles flach in __init__.py.
 TEMP_DIR=$(mktemp -d)
 trap "rm -rf $TEMP_DIR" EXIT
 
@@ -42,11 +41,6 @@ python3 -m grpc_tools.protoc \
     "$TEMP_DIR/domain.proto"
 
 [ -f "$GENERATED_DIR/__init__.py" ] || { echo "ERROR: Generierung fehlgeschlagen"; exit 1; }
-
-# Aufräumen: betterproto legt manchmal trotzdem Unterordner an
-if [ -d "$GENERATED_DIR/CqrsSolution" ]; then
-    rm -rf "$GENERATED_DIR/CqrsSolution"
-fi
 
 echo "$CURRENT_HASH" > "$HASH_FILE"
 TYPES=$(grep -c "^class " "$GENERATED_DIR/__init__.py" || echo "?")

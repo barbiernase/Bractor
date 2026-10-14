@@ -13,7 +13,7 @@ namespace Werkbank.Server;
 /// </summary>
 public sealed partial class Umgebungen(string slnRoot)
 {
-    public string Verzeichnis => Path.Combine(slnRoot, "umgebungen");
+    public string Verzeichnis => Path.Combine(slnRoot, Abstractions.Projektstruktur.UmgebungsOrdner);
 
     public IReadOnlyList<string> Namen() => Directory.Exists(Verzeichnis)
         ? Directory.GetFiles(Verzeichnis, "umgebung.*.json").Select(d => Path.GetFileNameWithoutExtension(d)["umgebung.".Length..])

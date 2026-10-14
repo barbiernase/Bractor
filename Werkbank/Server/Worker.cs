@@ -55,9 +55,7 @@ public sealed class Worker(string slnRoot)
         if (!hostLaeuft) throw new InvalidOperationException("Der Host läuft nicht — ⟳ startet ihn; der Worker meldet sich an seinem gRPC-Port an.");
         await StoppeAsync(funktion);
 
-        var python = w.Python is { Length: > 0 } p ? p
-            : Environment.GetEnvironmentVariable("CQRS_PYTHON") is { Length: > 0 } cp ? cp
-            : File.Exists("/opt/miniconda3/envs/gpu_env/bin/python") ? "/opt/miniconda3/envs/gpu_env/bin/python" : "python3";
+        var python = u.Python(w);
         var skript = Path.IsPathRooted(w.Skript) ? w.Skript : Path.Combine(slnRoot, w.Skript);
         if (!File.Exists(skript)) throw new FileNotFoundException($"Worker-Skript fehlt: {skript}");
         var psi = new ProcessStartInfo(python) { WorkingDirectory = Path.GetDirectoryName(skript)!, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };

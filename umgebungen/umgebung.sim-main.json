@@ -1,7 +1,8 @@
 {
   "Umgebung": {
     "Name": "sim-main",
-    "Art": "Sim"
+    "Art": "Sim",
+    "Python": "/opt/miniconda3/envs/gpu_env/bin/python"
   },
   "EventStore": {
     "Betrieb": "Verwaltet",

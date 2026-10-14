@@ -25,11 +25,14 @@
   <Target Name="CqrsCodegenPrepass"
           AfterTargets="ResolveProjectReferences"
           Condition="'$(DesignTimeBuild)' != 'true' And '$(BuildingProject)' == 'true'">
+    <!-- Der Build-Ausgang des Werkzeugs (TargetPath) — gefragt beim Projekt, nicht geraten (Konfiguration, Zielframework, Ausgabeordner). -->
+    <MSBuild Projects="$(MSBuildThisFileDirectory)Cqrs.Codegen.csproj" Targets="GetTargetPath" Properties="Configuration=$(Configuration)">
+      <Output TaskParameter="TargetOutputs" PropertyName="_CqrsCodegenDll" />
+    </MSBuild>
     <PropertyGroup>
-      <!-- Forward-Slashes: plattformneutral (macOS/Linux/Windows) im Exec-Kommandostring. -->
-      <_CqrsCodegenDir>$(MSBuildThisFileDirectory)bin/$(Configuration)/net9.0</_CqrsCodegenDir>
+      <_CqrsCodegenDir>$([System.IO.Path]::GetDirectoryName('$(_CqrsCodegenDll)'))</_CqrsCodegenDir>
     </PropertyGroup>
-    <Exec Command="dotnet exec &quot;$(_CqrsCodegenDir)/Cqrs.Codegen.dll&quot; &quot;$(_CqrsCodegenDir)&quot; &quot;$(Configuration)&quot; --projekt=$(MSBuildProjectName) --wenn-geaendert"
+    <Exec Command="dotnet exec &quot;$(_CqrsCodegenDll)&quot; &quot;$(_CqrsCodegenDir)&quot; &quot;$(Configuration)&quot; --projekt=$(MSBuildProjectName) --wenn-geaendert"
           WorkingDirectory="$(MSBuildThisFileDirectory).." />
   </Target>
 

@@ -56,6 +56,9 @@ static class Projektstruktur
     /// <summary>Die Wurzel der Anwendung, die Codegen und Werkbank bearbeiten (die Beispielanwendung; eine Test-Anwendung hat eine eigene).</summary>
     public const string StandardWurzel = "Domain";
 
+    /// <summary>Der Ordner der Umgebungs-Dateien <c>umgebung.&lt;name&gt;.json</c> (relativ zur Solution, docs/07 §7.2, Leitsatz W7).</summary>
+    public const string UmgebungsOrdner = "umgebungen";
+
     /// <summary>Das Projekt, dessen Host die Werkbank baut und startet (⟳).</summary>
     public const string ServerHost = "Host.Grpc";
 

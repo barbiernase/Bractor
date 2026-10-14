@@ -25,20 +25,19 @@ public class FileGenerator
     /// </summary>
     private HashSet<string> _enumTypeNames = new();
 
+    /// <param name="paket">Das Proto-Paket der Leitung der Anwendung (der Aufrufer leitet es aus der Projektstruktur ab).</param>
+    /// <param name="csharpNamespace">Der C#-Namespace der DTOs = das Leitungs-Projekt der Anwendung (docs/07, Rolle Leitung).</param>
     public string GenerateProtoFile(
-    string solutionName,
+    string paket,
     List<(string TypeName, int Depth, TypeNode Node)> objectTypes,
     List<(string TypeName, int Depth, TypeNode Node)> commandTypes,
     List<(string TypeName, int Depth, TypeNode Node)> eventTypes,
     List<(string TypeName, int Depth, TypeNode Node)> queryTypes,
     List<(string TypeName, int Depth, TypeNode Node)> queryResponseTypes,
-    List<(string TypeName, int Depth, TypeNode Node)> triggerTypes = null,
-    List<(string TypeName, int Depth, TypeNode Node)> auftragTypes = null,
-    string csharpNamespace = "Domain.Leitung")
+    List<(string TypeName, int Depth, TypeNode Node)> triggerTypes,
+    List<(string TypeName, int Depth, TypeNode Node)> auftragTypes,
+    string csharpNamespace)
 {
-    // Trigger-/Auftrag-Liste: null-safe für Abwärtskompatibilität
-    triggerTypes = triggerTypes ?? new List<(string, int, TypeNode)>();
-    auftragTypes = auftragTypes ?? new List<(string, int, TypeNode)>();
 
     // ═══════════════════════════════════════════════════
     // Payload-Kategorien — neue Kategorie = ein Eintrag
@@ -79,7 +78,7 @@ public class FileGenerator
 
              option csharp_namespace = "{{csharpNamespace}}";
 
-             package {{solutionName}};
+             package {{paket}};
 
              // ============================================================================
              // DIE DOMÄNEN-NACHRICHTEN DER ANWENDUNG (generiert von Cqrs.Codegen — nicht editieren)

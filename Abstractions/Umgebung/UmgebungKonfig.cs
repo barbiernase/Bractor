@@ -29,6 +29,11 @@ public sealed class UmgebungKopf
 {
     public string Name { get; set; } = "";
     public UmgebungsArt Art { get; set; } = UmgebungsArt.Sim;
+    /// <summary>
+    /// Der Python-Interpreter dieser Umgebung (externe Worker, Python-Build der Werkbank) — einer mit betterproto und den Worker-Paketen.
+    /// Leer = <c>CQRS_PYTHON</c> bzw. <c>python3</c> (<see cref="UmgebungKonfig.Python"/>).
+    /// </summary>
+    public string Python { get; set; } = "";
 }
 
 /// <summary>Der Event-Store (Postgres/Marten) — die Wahrheit.</summary>
@@ -104,7 +109,7 @@ public sealed class FunktionsKonfig
 /// </summary>
 public sealed class WorkerKonfig
 {
-    /// <summary>Der Interpreter (leer = <c>CQRS_PYTHON</c> bzw. <c>python3</c>).</summary>
+    /// <summary>Der Interpreter dieses Workers (leer = der der Umgebung, <see cref="UmgebungKonfig.Python"/>).</summary>
     public string Python { get; set; } = "";
     /// <summary>Das Skript, relativ zur Solution.</summary>
     public string Skript { get; set; } = "";
@@ -148,6 +153,16 @@ public sealed class UmgebungKonfig
     public Dictionary<string, FunktionsKonfig> Funktionen { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, DienstKonfig> Dienste { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, ClientKonfig> Clients { get; set; } = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Der Python-Interpreter — eine Regel für alle Aufrufer: der des Workers, sonst der der Umgebung (<c>Umgebung:Python</c>), sonst
+    /// <c>CQRS_PYTHON</c>, sonst <c>python3</c> vom PATH.
+    /// </summary>
+    public string Python(WorkerKonfig? worker = null) =>
+        worker?.Python is { Length: > 0 } w ? w
+        : Umgebung.Python is { Length: > 0 } u ? u
+        : Environment.GetEnvironmentVariable("CQRS_PYTHON") is { Length: > 0 } e ? e
+        : "python3";
 
     /// <summary>Die gRPC-Adresse, unter der sich ein Client verbindet: seine eigene Angabe, sonst der lokale gRPC-Port der Umgebung.</summary>
     public string GrpcAdresse(ClientKonfig c) => c.Adresse is { Length: > 0 } a ? a : $"http://localhost:{Transport.GrpcPort}";

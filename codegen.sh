@@ -26,7 +26,8 @@ case "${1:-}" in
   --check)
     echo "CI-Gate: generiere frisch und prüfe auf Drift..."
     run >/dev/null
-    ARTEFAKTE=($(dotnet exec Cqrs.Codegen/bin/Debug/net9.0/Cqrs.Codegen.dll --alle --artefakte))
+    WERKZEUG="$(dotnet msbuild "$PROJECT" -getProperty:TargetPath -p:Configuration=Debug -nologo)"   # Build-Ausgang, nicht geraten
+    ARTEFAKTE=($(dotnet exec "$WERKZEUG" --alle --artefakte))
     if ! git diff --quiet -- "${ARTEFAKTE[@]}"; then
       echo "❌ DRIFT: generierte Artefakte sind nicht aktuell. './codegen.sh --force' ausführen und committen." >&2
       git --no-pager diff --stat -- "${ARTEFAKTE[@]}" >&2

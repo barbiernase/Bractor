@@ -227,17 +227,9 @@ public class WiringGenerator : IIncrementalGenerator
 
         var results = ImmutableArray.CreateBuilder<WiringDomainTypeInfo>();
 
-        WalkNamespace(compilation.Assembly.GlobalNamespace,
-            iCommand, iEvent, iClientEvent, iQuery, iState, results);
-
-        foreach (var reference in compilation.References)
-        {
-            if (compilation.GetAssemblyOrModuleSymbol(reference) is IAssemblySymbol assembly)
-            {
-                WalkNamespace(assembly.GlobalNamespace,
-                    iCommand, iEvent, iClientEvent, iQuery, iState, results);
-            }
-        }
+        // Nur der Vertrag und seine Nutzer (Code-Fakt, Vertragsassemblies) — keine Liste fremder Namespaces.
+        foreach (var assembly in Infrastructure.SourceGeneration.Vertragsassemblies.MitVertrag(compilation))
+            WalkNamespace(assembly.GlobalNamespace, iCommand, iEvent, iClientEvent, iQuery, iState, results);
 
         return results.ToImmutable();
     }
@@ -248,15 +240,6 @@ public class WiringGenerator : IIncrementalGenerator
         INamedTypeSymbol? iClientEvent, INamedTypeSymbol? iQuery, INamedTypeSymbol? iState,
         ImmutableArray<WiringDomainTypeInfo>.Builder results)
     {
-        var name = ns.Name;
-        if (name is "System" or "Microsoft" or "Google" or "Grpc" or "Proto" or
-            "Marten" or "Npgsql" or "StackExchange" or "Serilog" or
-            "JasperFx" or "Weasel" or "Newtonsoft" or "NodaTime" or "Polly" or
-            "Proto.Cluster" or "Internal" or "Runtime" or "Reflection" or
-            "CodeAnalysis" or "Diagnostics" or "Collections" or "Linq" or
-            "Threading" or "Globalization" or "Resources" or "Buffers")
-            return;
-
         foreach (var member in ns.GetMembers())
         {
             if (member is INamespaceSymbol childNs)

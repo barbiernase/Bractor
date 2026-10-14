@@ -27,10 +27,8 @@ namespace Infrastructure.SourceGeneration
             var dateiBasis = c.GetTypeByMetadataName(Abstractions.Treibervertrag.DateiBasis);
             if (dateiBasis == null) return;
 
-            var alle = new List<INamedTypeSymbol>();
-            Sammle(c.GlobalNamespace, alle);
-            var quellen = alle
-                .Where(t => t.TypeKind == TypeKind.Class && !t.IsAbstract && ErbtVon(t, dateiBasis))
+            var quellen = Vertragsassemblies.Typen(c)
+                .Where(t => t.TypeKind == TypeKind.Class && t.ContainingType == null && !t.IsAbstract && ErbtVon(t, dateiBasis))
                 .OrderBy(t => t.ToDisplayString(), System.StringComparer.Ordinal)
                 .ToList();
 
@@ -64,16 +62,5 @@ namespace Infrastructure.SourceGeneration
             return false;
         }
 
-        private static void Sammle(INamespaceSymbol ns, List<INamedTypeSymbol> aus)
-        {
-            foreach (var t in ns.GetTypeMembers()) aus.Add(t);
-            foreach (var sub in ns.GetNamespaceMembers())
-            {
-                var n = sub.Name;
-                if (ns.IsGlobalNamespace && (n == "System" || n == "Microsoft" || n == "Marten" || n == "Proto" || n == "Npgsql"
-                        || n == "JasperFx" || n == "Google" || n == "Grpc" || n == "StackExchange" || n == "Weasel")) continue;
-                Sammle(sub, aus);
-            }
-        }
     }
 }

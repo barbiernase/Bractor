@@ -356,7 +356,7 @@ public sealed class Arbeitsbereich : IDisposable
     /// <summary>Eine Umgebungs-Datei (<c>umgebungen/umgebung.&lt;name&gt;.json</c>) — kein Workspace-Dokument, aber Teil des Boards.</summary>
     private bool IstUmgebung(string pfad) =>
         pfad.EndsWith(".json", StringComparison.Ordinal)
-        && Path.GetFullPath(Path.GetDirectoryName(pfad) ?? "") == Path.GetFullPath(Path.Combine(_root, "umgebungen"));
+        && Path.GetFullPath(Path.GetDirectoryName(pfad) ?? "") == Path.GetFullPath(Path.Combine(_root, Abstractions.Projektstruktur.UmgebungsOrdner));
 
     /// <summary>Build-Ausgaben, Git und Werkzeug-Ordner gehören nicht zum Code.</summary>
     private static bool Ignoriert(string pfad)

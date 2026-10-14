@@ -41,7 +41,6 @@ using Struktur = Abstractions.Projektstruktur;
 //   --artefakte:     nur die erzeugten Dateien auflisten (relativ zur Solution; für codegen.sh --check).
 // ============================================================================
 
-const string ProtoNamespace = "CqrsSolution";
 var flags = args.Where(a => a.StartsWith("--", StringComparison.Ordinal) && !a.Contains('=')).ToHashSet(StringComparer.Ordinal);
 var werte = args.Where(a => a.StartsWith("--", StringComparison.Ordinal) && a.Contains('='))
     .ToDictionary(a => a[..a.IndexOf('=')], a => a[(a.IndexOf('=') + 1)..], StringComparer.Ordinal);
@@ -207,10 +206,11 @@ int Erzeuge(string wurzel)
 
     if (Hat(Art.Proto))
     {
+        // Paket und C#-Namespace aus dem Leitungs-Projekt (docs/07): Namespace = Projekt, Paket = Projekt in Kleinbuchstaben (Proto-Konvention).
+        var leitung = Struktur.Projekt(wurzel, Struktur.Rolle.Leitung);
         var protoContent = new FileGenerator().GenerateProtoFile(
-            ProtoNamespace, objectTypes, commandTypes, eventTypes,
-            queryTypes, queryResponseTypes, triggerTypes, auftragTypes,
-            csharpNamespace: Struktur.Projekt(wurzel, Struktur.Rolle.Leitung));
+            leitung.ToLowerInvariant(), objectTypes, commandTypes, eventTypes,
+            queryTypes, queryResponseTypes, triggerTypes, auftragTypes, csharpNamespace: leitung);
         WriteIfChanged(Pfad(Art.Proto), protoContent);
         Console.WriteLine($"✅ {Pfad(Art.Proto)}");
     }

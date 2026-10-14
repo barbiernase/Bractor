@@ -12,7 +12,7 @@ public static class Umgebungen
     public static JsonObject Lies(string solutionDir)
     {
         var aus = new JsonObject();
-        var verz = Path.Combine(solutionDir, "umgebungen");
+        var verz = Path.Combine(solutionDir, Abstractions.Projektstruktur.UmgebungsOrdner);
         if (!Directory.Exists(verz)) return aus;
         foreach (var datei in Directory.GetFiles(verz, "umgebung.*.json").OrderBy(d => d, StringComparer.Ordinal))
         {

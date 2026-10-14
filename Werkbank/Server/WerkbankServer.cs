@@ -172,12 +172,14 @@ public sealed class WerkbankServer
             if (!bau.Ok) return Ende(false, diagnosen);
 
             // 2 Python-DTOs (betterproto) — sonst verstehen externe Worker die geänderten Nachrichten nicht.
-            var python = Environment.GetEnvironmentVariable("CQRS_PYTHON") is { Length: > 0 } py ? Path.GetDirectoryName(py)! : "/opt/miniconda3/envs/gpu_env/bin";
+            // Der Interpreter der Umgebung (Umgebung:Python, sonst CQRS_PYTHON/python3) steht vorn im PATH des Build-Skripts.
+            var interpreter = Umgebungen.Aufgeloest(Aktiv).Python();
+            var python = Path.GetDirectoryName(interpreter) is { Length: > 0 } verz ? verz : "";
             var skript = Path.Combine(_root, Abstractions.Projektstruktur.PythonWorker(Abstractions.Projektstruktur.StandardWurzel), "build_python.sh");
             if (File.Exists(skript))
             {
                 Beginne("Python-Basen");
-                var pr = await Prozesse.LaufeAsync("bash", [skript], _root, new Dictionary<string, string> { ["PATH"] = python + ":" + Environment.GetEnvironmentVariable("PATH") }, TimeSpan.FromMinutes(3), ct);
+                var pr = await Prozesse.LaufeAsync("bash", [skript], _root, new Dictionary<string, string> { ["PATH"] = (python.Length > 0 ? python + ":" : "") + Environment.GetEnvironmentVariable("PATH") }, TimeSpan.FromMinutes(3), ct);
                 // Neue Client-Implementierungen (Python) entstehen aus der GENERIERTEN Basis — also erst nach dem Bauen (früher „C# schreiben“).
                 var modell = DomainEditor.BoardLeseseite.AusBoard(vorher.BoardJson);
                 var (angelegt, _) = Werkbank.PythonSync.ImplementierungenAnlegen(modell, _root, trocken: false);

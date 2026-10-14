@@ -31,6 +31,7 @@
       <!-- WAS ein Typ für die Lage-Prüfung ist (docs/07): dieselbe Lesart wie der Analyzer CQRS098. -->
       <Compile Include="../Domain.SourceGeneration/Lageart.cs" Link="Vertrag/Lageart.cs" />
       <Compile Include="../Infrastructure.SourceGeneration/Ctorbindung.cs" Link="Vertrag/Ctorbindung.cs" />
+      <Compile Include="../Infrastructure.SourceGeneration/Vertragsassemblies.cs" Link="Vertrag/Vertragsassemblies.cs" />
     </ItemGroup>
 
     <ItemGroup>

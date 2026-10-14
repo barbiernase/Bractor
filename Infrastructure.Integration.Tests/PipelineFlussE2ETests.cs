@@ -163,11 +163,12 @@ public class PipelineFlussE2ETests
     [Fact]
     public async Task Bildeingang_mit_Python_Worker_der_die_Verkleinerung_ueber_gRPC_anbietet()
     {
-        var python = Environment.GetEnvironmentVariable("CQRS_PYTHON") ?? "/opt/miniconda3/envs/gpu_env/bin/python";
-        File.Exists(python).Should().BeTrue($"Python für den Worker fehlt ({python}) — CQRS_PYTHON setzen");
+        // Der Interpreter der Sim-Umgebung (Umgebung:Python, sonst CQRS_PYTHON/python3) — dieselbe Regel wie die Werkbank.
+        var python = Infrastructure.Umgebung.UmgebungLader.Lade(new ConfigurationManager(), "sim-main", []).Python();
+        (python == "python3" || File.Exists(python)).Should().BeTrue($"Python für den Worker fehlt ({python}) — Umgebung:Python oder CQRS_PYTHON setzen");
         // Der GENERISCHE Worker (konzept-werkbank §12.3 E13) mit der Tabelle aus dem Codegen; die Test-Implementierung (funktionen/bild_verkleinerung.py,
         //   hängt „_py" an) liegt per --pfad vor der des Projekts.
-        var skript = Path.Combine(RepoWurzel(), "Domain.Client.Worker.Python.ML", "funktions_worker.py");
+        var skript = Path.Combine(RepoWurzel(), Projektstruktur.PythonWorker(Projektstruktur.StandardWurzel), "funktions_worker.py");
         var testImpls = Path.Combine(RepoWurzel(), "Infrastructure.Integration.Tests", "Python");
 
         var watchDir = Path.Combine(Path.GetTempPath(), "fluss-py-" + Guid.NewGuid().ToString("N"));
@@ -393,8 +394,8 @@ public class PipelineFlussE2ETests
     private static string RepoWurzel()
     {
         var d = new DirectoryInfo(AppContext.BaseDirectory);
-        while (d != null && !File.Exists(Path.Combine(d.FullName, "CqrsSolution.sln"))) d = d.Parent;
-        return d?.FullName ?? throw new InvalidOperationException("CqrsSolution.sln nicht gefunden");
+        while (d != null && d.GetFiles("*.sln").Length == 0) d = d.Parent;
+        return d?.FullName ?? throw new InvalidOperationException("Solution nicht gefunden");
     }
 
     private static async Task Warte(Func<Task<bool>> bedingung, TimeSpan timeout, string meldung)

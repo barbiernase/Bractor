@@ -2,7 +2,7 @@ syntax = "proto3";
 
 option csharp_namespace = "Domain.Leitung";
 
-package CqrsSolution;
+package domain.leitung;
 
 // ============================================================================
 // DIE DOMÄNEN-NACHRICHTEN DER ANWENDUNG (generiert von Cqrs.Codegen — nicht editieren)

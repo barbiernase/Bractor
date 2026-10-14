@@ -96,7 +96,8 @@ ReactiveState.Tests/
 #  Projekt-spezifisch: Einzeldateien die NICHT ins Repo sollen
 # ──────────────────────────────────────────────────────────────
 
-# Altdatei aus der Zeit vor der getrennten Leitung (Domain/cqrs.proto) — NICHT das Framework-Proto Cqrs.Leitung/cqrs.proto (gehört ins Repo).
+# Altdateien aus der Zeit vor der getrennten Leitung (Februar) — NICHT das Framework-Proto Cqrs.Leitung/cqrs.proto (gehört ins Repo).
+/cqrs.proto
 /Domain/cqrs.proto
 deploy-windows.zip
 knowledge-graph.json

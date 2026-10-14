@@ -36,14 +36,29 @@ public sealed class HostProzess(string slnRoot)
 
     public IReadOnlyList<string> Log(int max = 300) => _log.Reverse().Take(max).Reverse().ToList();
 
+    private string? _ziel;
+
+    /// <summary>
+    /// Der Build-Ausgang des Hosts (<c>TargetPath</c>), gefragt beim Build-System statt geraten (Konfiguration, Zielframework, Ausgabeordner
+    /// stehen im Projekt) — einmal je Werkbank-Lauf.
+    /// </summary>
+    private async Task<string?> ZielAsync(string host, CancellationToken ct)
+    {
+        if (_ziel != null) return _ziel;
+        var r = await Prozesse.LaufeAsync("dotnet", ["msbuild", Path.Combine(host, host + ".csproj"), "-getProperty:TargetPath", "-nologo"], slnRoot,
+            zeitlimit: TimeSpan.FromMinutes(1), ct: ct);
+        var pfad = r.Ok ? r.Zeilen.Select(z => z.Trim()).LastOrDefault(z => z.EndsWith(".dll", StringComparison.Ordinal)) : null;
+        return _ziel = pfad;
+    }
+
     public async Task<(bool Ok, IReadOnlyList<BootMeldung> Boot)> StarteAsync(string umgebung, int einblickPort, string branch, CancellationToken ct)
     {
         await StoppeAsync();
         lock (_boot) _boot.Clear();
         _log.Clear();
         var host = Abstractions.Projektstruktur.ServerHost;
-        var dll = Path.Combine(slnRoot, host, "bin", "Debug", "net9.0", host + ".dll");
-        if (!File.Exists(dll)) { lock (_boot) _boot.Add(new BootMeldung($"{host} ist nicht gebaut (⟳ baut ihn).", null)); return (false, Boot()); }
+        var dll = await ZielAsync(host, ct);
+        if (dll == null || !File.Exists(dll)) { lock (_boot) _boot.Add(new BootMeldung($"{host} ist nicht gebaut (⟳ baut ihn).", null)); return (false, Boot()); }
         var psi = new ProcessStartInfo("dotnet") { WorkingDirectory = Path.GetDirectoryName(dll)!, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
         psi.ArgumentList.Add(dll);
         psi.ArgumentList.Add("--umgebung");

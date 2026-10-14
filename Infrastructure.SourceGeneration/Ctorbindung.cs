@@ -28,15 +28,8 @@ namespace Infrastructure.SourceGeneration
                 && i.AllInterfaces.Contains(iDienst, SymbolEqualityComparer.Default)) return Art.Dienst;
             if (p is INamedTypeSymbol { IsGenericType: true } g && g.OriginalDefinition.ToDisplayString() == "Microsoft.Extensions.Logging.ILogger<TCategoryName>")
                 return Art.Logger;
-            if (p is INamedTypeSymbol { TypeKind: TypeKind.Class, IsRecord: true, IsAbstract: false } r && !IstRahmen(r)) return Art.Konfig;
+            if (p is INamedTypeSymbol { TypeKind: TypeKind.Class, IsRecord: true, IsAbstract: false } r && Vertragsassemblies.NutztVertrag(r.ContainingAssembly)) return Art.Konfig;
             return Art.Fremd;
-        }
-
-        /// <summary>Typen aus System/Microsoft/Abstractions sind nie Konfig-Records der Domäne.</summary>
-        private static bool IstRahmen(INamedTypeSymbol t)
-        {
-            var ns = t.ContainingNamespace?.ToDisplayString() ?? "";
-            return ns == "System" || ns.StartsWith("System.") || ns == "Microsoft" || ns.StartsWith("Microsoft.") || ns == "Abstractions" || ns.StartsWith("Abstractions.");
         }
 
         /// <summary>Ein Feld-Typ eines Konfig-Records, den die generierte Bindung lesen kann (<c>Abstractions.Dienstvertrag.Feldtypen</c>, Enum, string[]).</summary>
@@ -54,29 +47,13 @@ namespace Infrastructure.SourceGeneration
             ? Enumerable.Empty<INamedTypeSymbol>()
             : ctor.Parameters.Select(p => p.Type).OfType<INamedTypeSymbol>().Where(t => ArtVon(t, iDienst) is Art.Dienst or Art.Konfig);
 
-        public static void SammleKlassen(INamespaceSymbol ns, List<INamedTypeSymbol> aus)
-        {
-            foreach (var t in ns.GetTypeMembers()) if (t.TypeKind == TypeKind.Class) aus.Add(t);
-            foreach (var sub in ns.GetNamespaceMembers())
-            {
-                var n = sub.Name;
-                if (ns.IsGlobalNamespace && (n == "System" || n == "Microsoft" || n == "Marten" || n == "Proto" || n == "Npgsql" || n == "JasperFx"
-                        || n == "Google" || n == "Grpc" || n == "StackExchange" || n == "Weasel" || n == "Abstractions" || n == "OpenCvSharp")) continue;
-                SammleKlassen(sub, aus);
-            }
-        }
+        /// <summary>Die Klassen (oberste Ebene) der Vertrags-Assemblies (<see cref="Vertragsassemblies"/>) — Implementierungs-Kandidaten.</summary>
+        public static List<INamedTypeSymbol> Klassen(Compilation c) =>
+            Vertragsassemblies.Typen(c).Where(t => t.TypeKind == TypeKind.Class && t.ContainingType == null).ToList();
 
-        public static void SammleInterfaces(INamespaceSymbol ns, List<INamedTypeSymbol> aus)
-        {
-            foreach (var t in ns.GetTypeMembers()) SammleGeschachtelt(t, aus);
-            foreach (var sub in ns.GetNamespaceMembers()) SammleInterfaces(sub, aus);
-        }
-
-        private static void SammleGeschachtelt(INamedTypeSymbol t, List<INamedTypeSymbol> aus)
-        {
-            if (t.TypeKind == TypeKind.Interface && t.ContainingNamespace?.ToDisplayString() != "Abstractions") aus.Add(t);
-            foreach (var n in t.GetTypeMembers()) SammleGeschachtelt(n, aus);
-        }
+        /// <summary>Die Schnittstellen (auch geschachtelte) der Vertrags-Assemblies — Funktionen und Dienste der Anwendung.</summary>
+        public static List<INamedTypeSymbol> Interfaces(Compilation c) =>
+            Vertragsassemblies.Typen(c).Where(t => t.TypeKind == TypeKind.Interface).ToList();
 
         /// <summary>Öffentlich, konkret, nicht generisch — nur so kann generierter Code sie bauen.</summary>
         public static bool Baubar(INamedTypeSymbol k) =>

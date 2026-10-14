@@ -30,15 +30,12 @@ namespace Infrastructure.SourceGeneration
             if (iDienst == null || iFunktion == null) return;
             var fq = SymbolDisplayFormat.FullyQualifiedFormat;
 
-            var schnitt = new List<INamedTypeSymbol>();
-            Ctorbindung.SammleInterfaces(c.GlobalNamespace, schnitt);
+            var schnitt = Ctorbindung.Interfaces(c);
             var dienste = schnitt.Where(t => t.AllInterfaces.Contains(iDienst, SymbolEqualityComparer.Default))
                 .OrderBy(t => t.ToDisplayString(), System.StringComparer.Ordinal).ToList();
             var funktionen = schnitt.Where(t => t.AllInterfaces.Contains(iFunktion, SymbolEqualityComparer.Default)).ToList();
 
-            var klassen = new List<INamedTypeSymbol>();
-            Ctorbindung.SammleKlassen(c.GlobalNamespace, klassen);
-            klassen = klassen.Where(Ctorbindung.Baubar).OrderBy(k => k.ToDisplayString(), System.StringComparer.Ordinal).ToList();
+            var klassen = Ctorbindung.Klassen(c).Where(Ctorbindung.Baubar).OrderBy(k => k.ToDisplayString(), System.StringComparer.Ordinal).ToList();
 
             bool Implementiert(INamedTypeSymbol k, INamedTypeSymbol i) => k.AllInterfaces.Contains(i, SymbolEqualityComparer.Default);
             var dienstImpls = dienste.Select(d => (Dienst: d, Impls: klassen.Where(k => Implementiert(k, d)).ToList())).ToList();

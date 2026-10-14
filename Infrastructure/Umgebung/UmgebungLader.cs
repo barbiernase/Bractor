@@ -30,9 +30,9 @@ public static partial class UmgebungLader
         var datei = $"umgebung.{name}.json";
         var kandidaten = new List<string>();
         if (Environment.GetEnvironmentVariable("CQRS_UMGEBUNGEN") is { Length: > 0 } verz) kandidaten.Add(Path.Combine(verz, datei));
-        kandidaten.Add(Path.Combine(AppContext.BaseDirectory, "umgebungen", datei));
+        kandidaten.Add(Path.Combine(AppContext.BaseDirectory, Abstractions.Projektstruktur.UmgebungsOrdner, datei));
         for (var d = new DirectoryInfo(Directory.GetCurrentDirectory()); d != null; d = d.Parent)
-            kandidaten.Add(Path.Combine(d.FullName, "umgebungen", datei));
+            kandidaten.Add(Path.Combine(d.FullName, Abstractions.Projektstruktur.UmgebungsOrdner, datei));
         return kandidaten.FirstOrDefault(File.Exists)
                ?? throw new FileNotFoundException($"Umgebung '{name}' nicht gefunden (gesucht: {string.Join(", ", kandidaten.Take(3))} …).");
     }

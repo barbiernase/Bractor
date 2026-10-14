@@ -60,15 +60,13 @@ namespace Infrastructure.SourceGeneration
                 return;
             var fq = SymbolDisplayFormat.FullyQualifiedFormat;
 
-            var schnitt = new List<INamedTypeSymbol>();
-            CollectInterfaces(c.GlobalNamespace, schnitt);
+            var schnitt = Ctorbindung.Interfaces(c);
             var funktionen = schnitt
                 .Where(t => t.AllInterfaces.Contains(iFunktion, SymbolEqualityComparer.Default))
                 .OrderBy(t => t.ToDisplayString(), System.StringComparer.Ordinal)
                 .ToList();
 
-            var klassen = new List<INamedTypeSymbol>();
-            SammleKlassen(c.GlobalNamespace, klassen);
+            var klassen = Ctorbindung.Klassen(c);
             var gut = new List<(INamedTypeSymbol Funktion, INamedTypeSymbol Auftrag, List<INamedTypeSymbol> Ergebnisse, List<INamedTypeSymbol> Faehigkeiten)>();
             foreach (var f in funktionen)
             {
@@ -141,17 +139,6 @@ namespace Infrastructure.SourceGeneration
             context.AddSource("GeneratedFunktionen.g.cs", Emit(eindeutig, impls, fq));
         }
 
-        private static void SammleKlassen(INamespaceSymbol ns, List<INamedTypeSymbol> aus)
-        {
-            foreach (var t in ns.GetTypeMembers()) if (t.TypeKind == TypeKind.Class) aus.Add(t);
-            foreach (var sub in ns.GetNamespaceMembers())
-            {
-                var n = sub.Name;
-                if (ns.IsGlobalNamespace && (n == "System" || n == "Microsoft" || n == "Marten" || n == "Proto" || n == "Npgsql" || n == "JasperFx"
-                        || n == "Google" || n == "Grpc" || n == "StackExchange" || n == "Weasel" || n == "Abstractions")) continue;
-                SammleKlassen(sub, aus);
-            }
-        }
 
         private static string Emit(List<(INamedTypeSymbol Funktion, INamedTypeSymbol Auftrag, List<INamedTypeSymbol> Ergebnisse, List<INamedTypeSymbol> Faehigkeiten)> fs,
             Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>> impls, SymbolDisplayFormat fq)
@@ -246,20 +233,5 @@ namespace Infrastructure.SourceGeneration
             return sb.ToString();
         }
 
-        private static void CollectInterfaces(INamespaceSymbol ns, List<INamedTypeSymbol> results)
-        {
-            foreach (var type in ns.GetTypeMembers())
-                CollectNested(type, results);
-            foreach (var sub in ns.GetNamespaceMembers())
-                CollectInterfaces(sub, results);
-        }
-
-        private static void CollectNested(INamedTypeSymbol type, List<INamedTypeSymbol> results)
-        {
-            if (type.TypeKind == TypeKind.Interface && type.ContainingNamespace?.ToDisplayString() != "Abstractions")
-                results.Add(type);
-            foreach (var nested in type.GetTypeMembers())
-                CollectNested(nested, results);
-        }
     }
 }

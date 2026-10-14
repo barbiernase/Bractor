@@ -8,7 +8,8 @@ Zwei Teile, streng getrennt (W11):
 - **Beispieldomäne:** `Domain.Client.Worker.Python.ML/` — Bildklassifikation und Training der Bildinspektion, dazu die Python-Implementierungen
   externer Funktionen.
 
-Python läuft nur mit dem Interpreter aus `CQRS_PYTHON` (lokal `gpu_env`); die Werkbank nimmt ihn für Worker und `build_python.sh`.
+Python läuft nur mit dem Interpreter der Umgebung: `Umgebung:Python` (je Worker überschreibbar: `Funktionen:<F>:Worker:Python`), sonst
+`CQRS_PYTHON`, sonst `python3` (eine Regel: `UmgebungKonfig.Python`); die Werkbank nimmt ihn für Worker und `build_python.sh`.
 
 ## 9.1 Gesamtbild
 
