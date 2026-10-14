@@ -1,0 +1,34 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" Version="8.8.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+    <!-- Aufräumen der eigenen Sim-DB und der eigenen Schlüssel im Versions-Index. -->
+    <PackageReference Include="Npgsql" Version="9.0.4" />
+    <PackageReference Include="StackExchange.Redis" Version="2.10.14" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Ein Abnahmelauf fährt eine ganze Werkbank samt Host hoch; nie zwei gleichzeitig. -->
+    <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Nur die Build-Reihenfolge: der Test startet die gebaute Werkbank als eigenen Prozess (Black-Box über HTTP), lädt sie nicht. -->
+    <ProjectReference Include="..\Werkbank\Werkbank.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

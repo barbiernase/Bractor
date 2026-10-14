@@ -10,7 +10,6 @@ hierher. Stand: 2026-10-15, Commit-Basis `ea463c6`. Maßstab sind die sechs Inva
 |---|---|:--:|
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
 | W10-2 | Reflektive Serialisierung zur Laufzeit (Marten-Default, Marking-Store, Snapshot-`Clone`, HTTP-Antworten); kein Reflection-Verbot im Build | P1 |
-| WB-2 | Werkbank ohne automatischen ⟳-Abnahmetest (Bauen → Host → Durchspielen → Spur → Geste/↶; Python-Worker live) | P1 |
 | LLM-1 | 🤖-Rümpfe sind nur „baut und regelkonform“ geprüft, nicht fachlich: keine Beispiele je Slot, `Cqrs.Testing` nicht an Editor/🤖 angebunden | P1 |
 | P1-1 | Multi-Node nur container-erprobt, Consul im `-dev`-Modus | P1 |
 | P1-2 | Transport-Sicherheit: kein TLS; Identitäten für Prod fehlen | P1 |
@@ -53,7 +52,7 @@ Werkzeuge lesen teils per Reflection, und neben den neuen Wegen (Fluss, Quelle, 
 | Konsum-/Prozess-Maschine | 🟢 |
 | Generatoren & Analyzer | 🟢 / 🟡 (W10-1, W2-1) |
 | Multi-Node / Transport | 🟢 / 🟡 (P1-1, P1-2) |
-| Werkbank (Extractor, Editor, Server) | 🟢 / 🟡 (WB-2, LLM-1, W3-1, WB-1, WB-4, WZ-1) |
+| Werkbank (Extractor, Editor, Server) | 🟢 / 🟡 (LLM-1, W3-1, WB-1, WB-4, WZ-1) |
 | Clients (Blazor, Python) | 🟢 / 🟡 (AK-1, P1-2) |
 | Tests & Vermessung | 🟢 |
 
@@ -122,12 +121,6 @@ DtoMapper, `Clientvertragslesart`, Lesart des `FunktionsGenerator`); Wirte: warm
    `GeneratedAkteurRechte`, `BrokerIdentity`) auf den vollen Typnamen bzw. eine generierte, eindeutige Id je Typ umstellen; CQRS-Diagnose
    für gleichnamige Typen in verschiedenen Namespaces, solange einfache Namen noch irgendwo als Schlüssel dienen (Umgebungs-Dateien nennen
    Akteure beim Namen — dort bleibt der einfache Name als Anzeigename, geprüft auf Eindeutigkeit).
-
-**WB-2 · Kein automatischer ⟳-Abnahmetest.** Die Werkbank wird nur von Hand im Browser abgenommen (docs/12 §12.1). So blieb die Daten-Prüfung von
-⟳ von `0bc84a7` bis 2026-10-15 wirkungslos, ohne dass ein Test rot wurde (§13.6). Auch der Live-Weg „▶ Worker“ (Laufort `Extern`, Interpreter aus
-`Umgebung:Python`) ist ungetestet. *Empfehlung:* ein Integrationstest gegen den Werkbank-Server ohne Browser in einer eigenen Sim-DB: ⟳ (alle
-Schritte grün, Board-Stand = Lauf-Stand) → Command über den JSON-Eingang als Akteur → Vorgang und Spur über die Einblick-API → eine Geste und ↶ →
-Worker einer externen Funktion starten und ein Ergebnis abholen; dazu ein Test, dass die Daten-Prüfung ein entferntes Event-Feld meldet.
 
 **LLM-1 · 🤖-Rümpfe fachlich ungeprüft.** 🤖 füllen prüft einen Kandidaten nur probeweise im warmen Workspace (Compiler + Analyzer, bis drei
 Runden, `konzept-llm-minimalkontext.md` §2) — ob der Rumpf tut, was der Auftrag sagt, prüft nichts. Die Test-DSL `Cqrs.Testing` (`Szenario`,
@@ -232,7 +225,7 @@ Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
 
 ## 13.4 Korrektheit vs. Reifegrad
 
-Kein Befund ist ein bekannter aktiver Korrektheits-Bug. Korrektheitsnah sind: **WB-2** (Werkbank-Kreislauf ohne automatischen Beweis), **LLM-1** (vom LLM
+Kein Befund ist ein bekannter aktiver Korrektheits-Bug. Korrektheitsnah sind: **LLM-1** (vom LLM
 geschriebene Logik nur auf „baut“ geprüft), **W10-1** (möglicher Hash-Unterschied zwischen Python-Basis und Server beim Handshake), **W2-1** (vom Client gesetztes Cluster-Kind) und **WZ-1** (Prüfungen, die grün sind, ohne es zu beweisen). Alles andere ist Reifegrad,
 Allgemeingültigkeit oder Hygiene.
 
@@ -248,7 +241,7 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 - **Daten-Prüfung von ⟳** gegen das Proto (heute) oder gegen die gespeicherte JSON-Form der Events (Marten/STJ, die eigentliche Wahrheit);
 - **Tor am Webhook** einer Quelle (Token → Akteur) und Identitäten für Prod (P1-2).
 
-1. **WB-2** Sicherheitsnetz: automatischer ⟳-Abnahmetest (inkl. „▶ Worker“); das Gate „frischer Checkout baut“ (früher WB-3) steht.
+1. ~~WB-2/WB-3~~ Sicherheitsnetz steht (2026-10-15): ⟳-Abnahmetest inkl. „▶ Worker“ und Gate „frischer Checkout baut“ (§13.6).
 2. **W11-1 (Schreibwege)/WB-1** je Absicht ein Weg: 🤖 schreibt über die Rumpf-Geste (nicht `CodeSync.SetzeRumpf`), Umgebungs-Werte mit Verlauf, ↶
    und Branch-Sperre, Werkbank löst Umgebungen wie der Host auf (ein Token-Parser, fehlendes `${env:X}` = Fehler); tote Endpunkte weg; Durchspielen,
    Spur-Spiegel und LLM-Konsole lesen das warme Board statt `domain-model.json`.
@@ -267,6 +260,16 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **⟳-Abnahmetest (früher WB-2, 2026-10-15):** `Werkbank.Abnahme.Tests` fährt eine echte Werkbank als Prozess auf einer Kopie des Arbeitsbaums
+  (eigener Branch, eigene Umgebung `abnahme`, eigene Sim-DB) und geht nur über HTTP: ⟳ (alle Schritte grün, Board-Stand = Lauf-Stand = Stand im
+  Einblick), `ErstelleDatensatz` als Akteur über den JSON-Eingang (Tor verweigert einen fremden Akteur), Query an die Projektion, Vorgang und Spur
+  (Wirker, Absender, Stand), „▶ Worker“ (Python-Verkleinerung, Laufort `Extern`) mit einem TIFF in der Quelle bis `BildVerfuegbar`, Geste (Feld mit
+  Standardwert) → ⟳ grün → ↶ (Stand und Datei byte-gleich) → ⟳ „Daten prüfen“ meldet `DatensatzErstellt.notiz entfällt` → ⟳ mit Zurücksetzen
+  (docs/12 §12.6). **Dabei gefunden:** ⟳ „Bauen“ hing bis zum 10-min-Zeitlimit und wurde rot, sobald der Build MSBuild-Knoten bzw. den
+  Compiler-Server neu startete (sie erben die Ausgabe-Pipe; `WaitForExitAsync` wartet auf deren Ende) — lokal fiel das nie auf, weil schon Knoten
+  liefen. `Prozesse.LaufeAsync` wartet jetzt auf das Prozessende. Außerdem hielt sich die Werkbank in einem `git worktree` für `main` (`.git` ist
+  dort eine Datei) und sperrte alle Gesten — `GitKopf` folgt dem `gitdir:`-Zeiger (Prüfstand `GitKopfTests`).
 
 - **Gate „frischer Checkout baut“ (früher WB-3, 2026-10-15):** `./pruefe-checkout.sh` meldet lokal vorhandene Quellen, die eine Ignore-Regel
   schluckt (`git check-ignore -v`), baut den Commit `HEAD` in einem temporären `git worktree`, fährt dort `./codegen.sh --check` und den Prüfstand

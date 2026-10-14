@@ -98,6 +98,8 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 - Prüfdomäne (Framework domänenneutral, echtes Marten, sequentiell, nie parallel zur anderen Integrations-Suite):
   `dotnet test Pruefdomaene.Integration.Tests/Pruefdomaene.Integration.Tests.csproj`
 - Infra hochfahren: `docker compose -f docker-compose.infrastructure.yml up -d`
+- Werkbank-Abnahme (echte Werkbank auf einer Kopie, eigene Sim-DB, sequentiell, nach `dotnet build`):
+  `dotnet test Werkbank.Abnahme.Tests/Werkbank.Abnahme.Tests.csproj`
 - Werkbank: `dotnet run --project Werkbank` → http://localhost:5178/editor/ (in `.claude/launch.json` als „Werkbank“). ⟳ baut und startet den echten
   Host in der gewählten Umgebung; Bedienung (Palette, ⊕, ✎, 🤖, ↶, Spur): `docs/konzept-werkbank.md` §6–§8.
 - Hosts: `dotnet run --project Host.Grpc -- --umgebung sim-main` bzw. `Host.Blazor -- --umgebung sim-main` (Sim-DB `cqrs_sim_<branch>` über `CQRS_BRANCH`).

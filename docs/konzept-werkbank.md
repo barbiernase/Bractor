@@ -527,8 +527,8 @@ Allgemeine Schulden stehen in `docs/13` §13.0. Für die Werkbank im Besonderen:
     `/api/editor/build`, `/api/llm/pruefen`, `/api/llm/rumpf`.
 - **Geste p50 unter Fremdlast 346–470 ms** (Ziel 300 ms). Der Renamer ändert keine String-Literale.
 - **Pfade für entfernte Ausführer** (Python-Worker sehen ein Share anders gemountet): `RelativerPfad` ist vorbereitet.
-- **Kein automatischer ⟳-Abnahmetest** (docs/13 WB-2): Bauen → Host → Durchspielen → Spur → Geste/↶ und „▶ Worker“ werden nur von Hand im Browser
-  abgenommen; ein Fehler in „Daten prüfen“ blieb deshalb unbemerkt (behoben 2026-10-15). Das Gate „frischer Checkout baut“ steht (`./pruefe-checkout.sh`).
+- ~~Kein automatischer ⟳-Abnahmetest~~: `Werkbank.Abnahme.Tests` nimmt ⟳ → Host → Durchspielen → Spur → „▶ Worker“ → Geste/↶ → Daten-Prüfung
+  ohne Browser ab (2026-10-15, docs/12 §12.6). Das Gate „frischer Checkout baut“ steht (`./pruefe-checkout.sh`).
 - **Eine Anwendung je Werkbank?** (WB-4): Werkbank, Scaffolder und Extractor arbeiten auf `Projektstruktur.StandardWurzel` und bauen `ServerHost`; das
   Anlegen einer neuen Anwendung ist nicht beschrieben. Zu entscheiden: festschreiben oder Wurzel wählbar machen.
 - **Daten-Prüfung (§4.6, ⟳ Schritt 4)** vergleicht das generierte Proto; gespeichert sind die Events als JSON (Marten/STJ). Zu entscheiden, ob

@@ -29,16 +29,8 @@ public sealed partial class Umgebungen(string slnRoot)
     public void Schreibe(string name, JsonObject inhalt)
         => File.WriteAllText(Datei(name), inhalt.ToJsonString(new JsonSerializerOptions { WriteIndented = true, Encoder = System.Text.Encodings.Web.JavaScriptEncoder.UnsafeRelaxedJsonEscaping }) + "\n");
 
-    /// <summary>Der Git-Branch der Werkbank (eine Sim-DB je Branch).</summary>
-    public string Branch()
-    {
-        try
-        {
-            var head = File.ReadAllText(Path.Combine(slnRoot, ".git", "HEAD")).Trim();
-            return head.StartsWith("ref: refs/heads/", StringComparison.Ordinal) ? head["ref: refs/heads/".Length..] : "detached";
-        }
-        catch { return "main"; }
-    }
+    /// <summary>Der Git-Branch der Werkbank (eine Sim-DB je Branch) — auch in einem <c>git worktree</c>.</summary>
+    public string Branch() => GitKopf.Branch(slnRoot);
 
     public static string BranchSicher(string branch) => Regex.Replace(branch.ToLowerInvariant(), "[^a-z0-9_]", "_");
 

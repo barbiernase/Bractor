@@ -1,7 +1,7 @@
 # 12 — Tests & Vermessung
 
 **Die eine Quelle für Zahlen und Messwerte.** Andere Dokumente verweisen hierher. Offene Testlücken stehen als Befund in
-`docs/13-reifegrad-schulden-bewertung.md` (T-1, P2-5). Stand: 2026-10-14.
+`docs/13-reifegrad-schulden-bewertung.md` (T-1, P2-5). Stand: 2026-10-15.
 
 ## 12.1 Die Test-Ebenen
 
@@ -14,7 +14,8 @@ Die Teststrategie folgt den Invarianten „die Wahrheit ist der Log“ und „ni
 | 2 — Prüfdomäne | `Pruefdomaene.Integration.Tests` | **echtes** Marten/Postgres, Consul, Redis; eigene Schemata `pruef_*` | Framework-Verhalten domänenneutral an der zweiten Anwendung `Pruefdomaene`: Prozess-Diamant, Kompensation, Fan-out + Count-Join, Snapshot, Upcasting, Marking-Cursor-Äquivalenz | **nein** (sequentiell erzwungen; nie gleichzeitig mit der anderen Integrations-Suite) |
 | Client (C#) | `Client.Infrastructure.CollectionTests` | in-memory | `VirtualCollection`, `PendingCommandTracker` | ja |
 | Client (Python) | `Client.Infrastructure.Python/tests`, `Domain.Client.Worker.Python.ML/tests` | pytest | SDK (Vertrag, Funktion, Query, Reconnect, Mapper), Worker (Verträge, Funktionen, generischer Worker) | ja |
-| Werkbank | `Werkbank` + `Host.Grpc --umgebung sim-main` | echter Host gegen die Sim-DB | Abnahme im Browser (⟳ grün, Vorgang durchspielen, Spur, Geste + ↶) — kein automatischer Test, kein Ersatz für Ebene 1/2 | n/a |
+| Werkbank-Abnahme | `Werkbank.Abnahme.Tests` | **echte** Werkbank (Prozess) auf einer Kopie des Arbeitsbaums, echter Host in `sim`, eigene Sim-DB, Python-Worker | ⟳ (alle Schritte, Stände), JSON-Eingang als Akteur, Projektion, Spur, „▶ Worker“ bis zum Fakt, Geste/↶ byte-gleich, Daten-Prüfung meldet ein entferntes Feld | **nein** (sequentiell; nie gleichzeitig mit den anderen Integrations-Suiten) |
+| Werkbank (Oberfläche) | `Werkbank` + Browser | echter Host gegen die Sim-DB | Sichtprüfung im Browser (Board, Panels, Spur-Überlagerung) — die Abläufe prüft die Abnahme oben | n/a |
 | Werkzeug-Gates | `GraphExtractor -- --check`, `-- --sonde` | Solution bzw. fremde Domäne im Speicher | Code ⇄ Karten, Fixpunkt, Wirker, Routing; Agnostik | n/a |
 | Gate frischer Checkout | `./pruefe-checkout.sh` | der Commit `HEAD` in einem temporären `git worktree` | ignorierte Quellen, Build, Codegen-Drift, Prüfstand, Build verändert den Checkout nicht | n/a |
 
@@ -24,20 +25,22 @@ es nur für nicht-autoritative Randstores (Inv. 6).
 
 ## 12.2 Zahlen
 
-**Aktuell (2026-10-14, gemessen auf Commit-Basis `dcda9b8` + Aufräumen):** Prüfstand **537/537**, Integration **39/39** sequentiell, Prüfdomäne **16/16** sequentiell,
-`Client.Infrastructure.CollectionTests` **30/30**, Python SDK **34/34**, Worker **21/21**; `--check` grün (alle Bereiche inkl. „Lage“),
-`--sonde` grün (111 Soll-Fakten, Lage-Soll 56 Typen).
+**Aktuell (2026-10-15, gemessen auf Commit-Basis `e26bc15` + WB-2):** Prüfstand **540/540**, Integration **39/39** sequentiell (100 s), Prüfdomäne **16/16**
+sequentiell, Werkbank-Abnahme **1/1** sequentiell (81–88 s), `Client.Infrastructure.CollectionTests` **30/30**, Python SDK **34/34**, Worker **21/21**;
+`--check` grün (alle Bereiche inkl. „Lage“), `--sonde` grün (111 Soll-Fakten, Lage-Soll 56 Typen); Gate `./pruefe-checkout.sh` rot nur durch
+`Domain.Client.Modules.Blazor/Debug/` (docs/13 P3-2).
 
-Statisch gezählt (2026-10-14):
+Statisch gezählt (2026-10-15):
 
 | Projekt | `[Fact]` | `[Theory]` | Dateien |
 |---|---:|---:|---:|
-| Infrastructure.Pruefstand.Tests | 515 | 6 | 74 |
+| Infrastructure.Pruefstand.Tests | 518 | 6 | 75 |
 | Infrastructure.Integration.Tests | 39 | 0 | 19 |
 | Pruefdomaene.Integration.Tests | 16 | 0 | 4 |
 | Client.Infrastructure.CollectionTests | 30 | 0 | 2 |
+| Werkbank.Abnahme.Tests | 1 | 0 | 2 |
 
-Die Differenz zwischen 521 Methoden und 537 Läufen im Prüfstand kommt von den expandierten `[Theory]`-Fällen.
+Die Differenz zwischen 524 Methoden und 540 Läufen im Prüfstand kommt von den expandierten `[Theory]`-Fällen.
 
 ## 12.3 Was getestet ist
 
@@ -135,7 +138,13 @@ Signal→Wake-Mapping; Kompensations-Dedup und Count-Join ohne verfrühtes Feuer
 Es meldet zuerst lokal vorhandene Dateien, die eine Ignore-Regel schluckt (mit der greifenden Regel aus `git check-ignore -v`; Build- und
 Cache-Ausgaben, `deploy-*/` aus `build.sh` und die bewusst ignorierten Altdateien sind ausgenommen), baut dann den Commit `HEAD` in einem
 temporären `git worktree` (nur committete Dateien — nicht committete Änderungen prüft es nicht), fährt dort `./codegen.sh --check` und den
-Prüfstand und verlangt, dass der Build den Checkout nicht verändert. Der Worktree wird immer entfernt; Exit-Code 0 = grün. Dauer ≈ 4 min.
+Prüfstand und verlangt, dass der Build den Checkout nicht verändert. Der Worktree wird immer entfernt; Exit-Code 0 = grün. Dauer ≈ 2½ min (144 s auf `e26bc15`).
+
+**Werkbank-Abnahme (Ebene 2, `Werkbank.Abnahme.Tests`):** braucht vorher `dotnet build` (startet die gebaute Werkbank-DLL als Prozess, Black-Box über
+HTTP). `Werkbanklauf` kopiert alle Quell-Dateien (`git ls-files -co --exclude-standard`, also auch nicht committete Änderungen) in ein Temp-Verzeichnis,
+legt dort `git init -b abnahme-<id>` an (Branch → Sim-DB `cqrs_sim_abnahme_<id>`, Redis-Präfix, Cluster) und schreibt `umgebung.abnahme.json` aus
+`sim-main` mit freien Ports, Daten-Pfaden im Temp-Verzeichnis und `IBildVerkleinerung` auf Laufort `Extern`. Arbeitsbaum, `.werkbank/` und Sim-DB des
+Entwicklers bleiben unberührt; am Ende SIGTERM an die Werkbank (sie hält Host und Worker an), eigene DB und Redis-Schlüssel löschen, Kopie löschen.
 
 ## 12.7 Fallstricke
 
@@ -145,6 +154,8 @@ Prüfstand und verlangt, dass der Build den Checkout nicht verändert. Der Workt
   hintereinander degradieren die lokale Infra (zwischendurch neu starten).
 - **`SequenceGapPostgresTests`** flaken im Gesamtlauf gelegentlich, einzeln grün.
 - Es gibt keine `[Skip]`/`[Trait]`-Attribute; Flake-Handling ist Konvention.
+- **Kindprozesse mit umgeleiteter Ausgabe:** `dotnet build/restore/run` startet MSBuild-Knoten und den Compiler-Server, die die Pipe erben —
+  wer auf das Ende der Ausgabe wartet (`WaitForExitAsync`, `ReadToEnd`), hängt bis zum Zeitlimit. Auf das Prozessende warten (`Werkbank/Server/Prozesse.cs`).
 
 ## 12.8 Prinzipien
 

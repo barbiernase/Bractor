@@ -52,6 +52,8 @@
   <ItemGroup>
     <!-- Die Daten-Prüfung der Werkbank (⟳ „Daten prüfen“) ist reine Text-Logik — per Link getestet, ohne die Web-App zu referenzieren. -->
     <Compile Include="..\Werkbank\Server\ProtoVergleich.cs" Link="Werkbank\ProtoVergleich.cs" />
+    <!-- Ebenso der Branch aus .git/HEAD (auch in einem git worktree, wo .git eine Datei ist). -->
+    <Compile Include="..\Werkbank\Server\GitKopf.cs" Link="Werkbank\GitKopf.cs" />
   </ItemGroup>
 
 </Project>
