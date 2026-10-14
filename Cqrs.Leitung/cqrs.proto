@@ -5,7 +5,7 @@ syntax = "proto3";
 //
 // Hülle, Dienst und Protokoll-Nachrichten. Die Domänen-Nachricht (Command, Event, Query, Antwort, Trigger, Auftrag)
 // reist als Nutzlast: ihr Typname + ihre Bytes, kodiert mit dem Proto DER ANWENDUNG (vom Codegen erzeugt, z. B.
-// ProtoRepo/domain.proto: nur die Domänen-DTOs). So kennt das Framework keinen Domänen-Typ, und jede Anwendung
+// Domain.Leitung/domain.proto: nur die Domänen-DTOs). So kennt das Framework keinen Domänen-Typ, und jede Anwendung
 // bringt ihre eigenen Nachrichten mit (docs/06, docs/07).
 // ============================================================================
 
