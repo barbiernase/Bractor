@@ -1,6 +1,6 @@
 syntax = "proto3";
 
-option csharp_namespace = "ProtoRepo";
+option csharp_namespace = "Domain.Leitung";
 
 package CqrsSolution;
 

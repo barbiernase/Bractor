@@ -169,7 +169,7 @@ public static class CodeSync
         return new { ok = p.ExitCode == 0, projekt = Rel(proj, slnRoot), fehler };
     }
 
-    // ── Bauen: die Generatoren + Proto-Prepass laufen bei dotnet build automatisch mit (siehe ProtoRepo.csproj). ──
+    // ── Bauen: die Generatoren + Proto-Prepass laufen bei dotnet build automatisch mit (siehe Domain.Leitung.csproj). ──
     public static object Baue(string slnRoot)
     {
         var psi = new ProcessStartInfo("dotnet", "build -v q --nologo")

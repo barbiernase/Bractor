@@ -33,7 +33,8 @@ public class FileGenerator
     List<(string TypeName, int Depth, TypeNode Node)> queryTypes,
     List<(string TypeName, int Depth, TypeNode Node)> queryResponseTypes,
     List<(string TypeName, int Depth, TypeNode Node)> triggerTypes = null,
-    List<(string TypeName, int Depth, TypeNode Node)> auftragTypes = null)
+    List<(string TypeName, int Depth, TypeNode Node)> auftragTypes = null,
+    string csharpNamespace = "Domain.Leitung")
 {
     // Trigger-/Auftrag-Liste: null-safe für Abwärtskompatibilität
     triggerTypes = triggerTypes ?? new List<(string, int, TypeNode)>();
@@ -76,7 +77,7 @@ public class FileGenerator
     return $$"""
              syntax = "proto3";
 
-             option csharp_namespace = "ProtoRepo";
+             option csharp_namespace = "{{csharpNamespace}}";
 
              package {{solutionName}};
 

@@ -13,7 +13,7 @@ using Cqrs.Codegen;
 //
 // Erzeugt ALLE Artefakte, die ein NACHGELAGERTES Werkzeug braucht und die ein
 // In-Compilation-Roslyn-Generator daher NICHT liefern kann:
-//   1. ProtoRepo/domain.proto                     (für protoc / gRPC)
+//   1. <Wurzel>.Leitung/domain.proto               (Domänen-DTOs der Leitung, für protoc)
 //   2. EventJsonSerializerContext.g.cs             (für den STJ-Source-Generator, Marten-Storage)
 //   3. CqrsWireJsonContext.g.cs                    (für den STJ-Source-Generator, Cross-Node-Wire)
 //   4. domain_client/generated/vertraege.py        (Akteur-Verträge → Python-Basisklassen, docs/konzept-akteure.md §3)
@@ -44,7 +44,7 @@ var posArgs = args.Where(a => !a.StartsWith("--", StringComparison.Ordinal)).ToA
 var pythonGeneriert = Path.Combine(Abstractions.Projektstruktur.PythonWorker(wurzel), Abstractions.Projektstruktur.PythonGeneriert);
 var artefakte = new[]
 {
-    Path.Combine(Abstractions.Projektstruktur.ProtoProjekt, Abstractions.Projektstruktur.ProtoDatei),
+    Path.Combine(Abstractions.Projektstruktur.Projekt(wurzel, Abstractions.Projektstruktur.Rolle.Leitung), Abstractions.Projektstruktur.ProtoDatei),
     Path.Combine(Abstractions.Projektstruktur.SerialisierungsOrdner, "EventJsonSerializerContext.g.cs"),
     Path.Combine(Abstractions.Projektstruktur.SerialisierungsOrdner, "CqrsWireJsonContext.g.cs"),
     Path.Combine(pythonGeneriert, "vertraege.py"),
@@ -191,12 +191,13 @@ var auftragTypes = aggregator.GetTypesSortedByDepth(domainTypeFilter: "Auftrag")
 
 var protoContent = new FileGenerator().GenerateProtoFile(
     ProtoNamespace, objectTypes, commandTypes, eventTypes,
-    queryTypes, queryResponseTypes, triggerTypes, auftragTypes);
+    queryTypes, queryResponseTypes, triggerTypes, auftragTypes,
+    csharpNamespace: Abstractions.Projektstruktur.Projekt(wurzel, Abstractions.Projektstruktur.Rolle.Leitung));
 
 var protoPath = Path.Combine(solutionDir, artefakte[0]);
 if (!Directory.Exists(Path.GetDirectoryName(protoPath)!))
 {
-    Console.Error.WriteLine($"❌ ProtoRepo-Verzeichnis fehlt: {Path.GetDirectoryName(protoPath)}");
+    Console.Error.WriteLine($"❌ Leitungs-Verzeichnis fehlt: {Path.GetDirectoryName(protoPath)}");
     return 1;
 }
 WriteIfChanged(protoPath, protoContent);

@@ -4,7 +4,7 @@ cqrs_client — Python First-Citizen Framework für CQRS/ES.
 
 Verbindet sich über denselben gRPC-Service wie der Blazor-Client und nutzt dieselbe Leitung
 (Cqrs.Leitung/cqrs.proto → cqrs_client.leitung, erzeugt von build_leitung.sh). Domänen-DTOs (Proto der Anwendung,
-z. B. ProtoRepo/domain.proto) reisen darin als Nutzlast(typ, daten) — PayloadMapper/NutzlastTabelle packen und entpacken.
+z. B. Domain.Leitung/domain.proto) reisen darin als Nutzlast(typ, daten) — PayloadMapper/NutzlastTabelle packen und entpacken.
 
 Öffentliche API:
     - CqrsClient[S]: Basisklasse für Clients

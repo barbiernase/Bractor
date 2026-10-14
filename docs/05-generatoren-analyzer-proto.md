@@ -162,16 +162,16 @@ Build-Verbot gegen `System.Reflection` fehlt (docs/13 W10-2).
 ```
 Domain · Domain.Projections · Domain.Akteure · Domain.Pipeline     (bauen)
         ▼
-Cqrs.Codegen                     (gebaut über eine reine Build-Reihenfolge-Referenz aus ProtoRepo)
+Cqrs.Codegen                     (gebaut über eine reine Build-Reihenfolge-Referenz aus Domain.Leitung)
         ▼
-ProtoRepo: Target CqrsCodegenPrepass  (AfterTargets=ResolveProjectReferences, `dotnet exec Cqrs.Codegen.dll`)
+Domain.Leitung: Target CqrsCodegenPrepass  (AfterTargets=ResolveProjectReferences, `dotnet exec Cqrs.Codegen.dll`)
   liest die gebauten Domänen-DLLs per MetadataLoadContext und schreibt nur bei geändertem Inhalt:
-    ProtoRepo/domain.proto
+    Domain.Leitung/domain.proto
     Infrastructure/Serialization/EventJsonSerializerContext.g.cs
     Infrastructure/Serialization/CqrsWireJsonContext.g.cs
     Domain.Client.Worker.Python.ML/domain_client/generated/vertraege.py · funktionen.py · funktions_tabelle.py
         ▼
-ProtoRepo: Grpc.Tools kompiliert domain.proto → {Typ}Dto        (nur Domänen-DTOs)
+Domain.Leitung: Grpc.Tools kompiliert domain.proto → {Typ}Dto        (nur Domänen-DTOs)
         ▼
 Infrastructure: STJ-Generator über beide Kontexte; DtoMapperSourceGenerator mappt Domain ↔ {Typ}Dto ↔ Nutzlast
 ```

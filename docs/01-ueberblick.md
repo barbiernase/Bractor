@@ -47,10 +47,10 @@ Die Solution (`CqrsSolution.sln`) umfasst 30 Projekte; dazu kommen zwei Python-P
 | `Infrastructure.SourceGeneration` | Generatoren und Analyzer der Laufzeit-Compilation (Routing, Actors, Pull-Pfad, Wire, Funktionen, Dienste, Quellen, Akteur-Rechte, Gesamtbild-Analyzer) |
 | `Projections.SourceGeneration` | DI-Verdrahtung der Leseseite (`AddGeneratedProjectionServices`), Store-Zugriffs-Analyzer |
 | `Client.SourceGeneration` | Blazor-Client-Generatoren (Wiring aus dem Client-Vertrag, ViewModels, Module) |
-| `Cqrs.Codegen` | Codegen-Schritt im Build (Target `CqrsCodegenPrepass` in `ProtoRepo/ProtoRepo.csproj`): `domain.proto`, STJ-Kontexte, Python-Basen; liest heute per `MetadataLoadContext` (docs/13 W10-1) |
+| `Cqrs.Codegen` | Codegen-Schritt im Build (Target `CqrsCodegenPrepass` in `Domain.Leitung/Domain.Leitung.csproj`): `domain.proto`, STJ-Kontexte, Python-Basen; liest heute per `MetadataLoadContext` (docs/13 W10-1) |
 | `Proto.SourceGeneration` | Roslyn-Leser für `domain.proto` (`FileGenerator`), von `Cqrs.Codegen` als Bibliothek genutzt |
 | `Cqrs.Leitung` | die Leitung des Frameworks (`cqrs.proto`, handgeschrieben): gRPC-Dienst, Hüllen, Protokoll-Nachrichten; Domänen-Nachrichten reisen als `Nutzlast` (Typname + Bytes) |
-| `ProtoRepo` | aus `domain.proto` (vom Codegen, nur die Domänen-DTOs) per Grpc.Tools erzeugte DTOs |
+| `Domain.Leitung` | Leitung der Anwendung (Rolle `.Leitung`): aus `domain.proto` (vom Codegen, nur die Domänen-DTOs) per Grpc.Tools erzeugte DTOs |
 
 Was welche Generatoren und Analyzer tun: [05](05-generatoren-analyzer-proto.md).
 

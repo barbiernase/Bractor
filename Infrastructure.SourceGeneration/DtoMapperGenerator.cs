@@ -148,7 +148,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("using System.Collections.Generic;");
             sb.AppendLine("using System.Globalization;");
             sb.AppendLine("using System.Linq;");
-            sb.AppendLine("using ProtoRepo;");
+            sb.AppendLine($"using {Abstractions.Projektstruktur.Projekt(Abstractions.Projektstruktur.StandardWurzel, Abstractions.Projektstruktur.Rolle.Leitung)};");
             sb.AppendLine("using Abstractions;");
             
             // Collect all namespaces
@@ -164,7 +164,7 @@ namespace Infrastructure.SourceGeneration
             foreach (var type in allTypes)
             {
                 var ns = GetNamespace(type.Node.FullName);
-                if (!string.IsNullOrEmpty(ns) && ns != "System" && ns != "ProtoRepo" && ns != "Abstractions")
+                if (!string.IsNullOrEmpty(ns) && ns != "System" &&  ns != "Abstractions")
                     namespaces.Add(ns);
             }
             

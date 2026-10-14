@@ -50,7 +50,7 @@ Klassennamen entkoppeln; Kollision = CQRS011 bzw. CQRS012), `[ProjectionReader(T
 (C#-Client, §10.8), `[RoutingTabelle]` (markiert das Routing-Generat, nicht für Fachcode) und `[Ingress]` (Altlast, §10.13).
 
 **Proto, STJ-Kontexte, Python-Basen entstehen automatisch.** Im Build läuft vor dem Compile der Codegen (Target `CqrsCodegenPrepass` in
-`ProtoRepo/ProtoRepo.csproj` → `Cqrs.Codegen`): `domain.proto`, `CqrsWireJsonContext.g.cs`, `EventJsonSerializerContext.g.cs`,
+`Domain.Leitung/Domain.Leitung.csproj` → `Cqrs.Codegen`): `domain.proto`, `CqrsWireJsonContext.g.cs`, `EventJsonSerializerContext.g.cs`,
 `generated/vertraege.py`, `funktionen.py`, `funktions_tabelle.py`. Ein neuer Command, ein Event, eine Query braucht keinen Handgriff; scheitert
 der DTO-Mapper, meldet es CQRS030. (Der Codegen liest heute per `MetadataLoadContext` — Schuld, docs/13 W10-1.)
 

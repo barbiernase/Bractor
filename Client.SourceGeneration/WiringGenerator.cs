@@ -250,7 +250,7 @@ public class WiringGenerator : IIncrementalGenerator
     {
         var name = ns.Name;
         if (name is "System" or "Microsoft" or "Google" or "Grpc" or "Proto" or
-            "ProtoRepo" or "Marten" or "Npgsql" or "StackExchange" or "Serilog" or
+            "Marten" or "Npgsql" or "StackExchange" or "Serilog" or
             "JasperFx" or "Weasel" or "Newtonsoft" or "NodaTime" or "Polly" or
             "Proto.Cluster" or "Internal" or "Runtime" or "Reflection" or
             "CodeAnalysis" or "Diagnostics" or "Collections" or "Linq" or

@@ -74,7 +74,7 @@ Primitive ist, liegt im Bereichs-Ordner seines Projekts und erscheint im Editor 
 |---|---|---|
 | Prozess-Registry | je Assembly `{Assembly}.Prozess.GeneratedProzessRegeln`, in der Laufzeit vereinigt; Prozesse ohne Registry = CQRS099 | `ProzessRegelnGenerator`, `ProzessVerbundGenerator` |
 | Leseseiten-Generate | Namespace = Projekt (`ProjectionQueryService`, `{Projekt}.Generated`), Leseseite der Wurzel | `ProjectionQueryServiceGenerator`, `ProjectionServicesGenerator` |
-| Codegen-Schritt (Proto, STJ, Python-Basen) | Eingaben (`CodegenProjekte`) und Ausgabeorte; erzeugt nur bei geänderten DLLs (Hash) | `Cqrs.Codegen`, `ProtoRepo.csproj`, `codegen.sh` |
+| Codegen-Schritt (Proto, STJ, Python-Basen) | Eingaben (`CodegenProjekte`) und Ausgabeorte; erzeugt nur bei geänderten DLLs (Hash) | `Cqrs.Codegen`, `Domain.Leitung.csproj`, `codegen.sh` |
 | Scaffolder / Gesten | Zielprojekt (Rolle), -ordner (Bereich aus dem Namespace der Karte) und -datei einer neuen Karte; Umbenennen zieht `<Typ>.<Teil>.cs` mit | `DomainEditor/Strukturort.cs`, `Schreiben/Umbenennen.cs` |
 | Werkbank (Stand-Hash, ⟳) | was zum Stand gehört, welches Projekt der Host ist, wo der Python-Worker liegt | `Werkbank/Server/WerkbankServer.cs`, `HostProzess.cs`, `Worker.cs` |
 | Analyzer CQRS098 | jede Primitive im Projekt ihrer Rolle (im Build, an der Karte) | `Domain.SourceGeneration/LageAnalyzer.cs` |

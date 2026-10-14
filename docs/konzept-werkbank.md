@@ -266,7 +266,7 @@ Wenn sich Code ändert, während Daten in der Sim-DB liegen:
 | Schritt | Was passiert (`Werkbank/Server/WerkbankServer.cs`) | Wo ein Fehler erscheint |
 |---|---|---|
 | 0 Schreiben | Jede Geste hat schon Code bzw. Umgebungs-Datei geschrieben (§8.2) | — |
-| 1 Bauen | `dotnet build Host.Grpc -p:CqrsStand=<stand>`. Im Build läuft vor dem Compile der Codegen (Target `CqrsCodegenPrepass` in `ProtoRepo`): `domain.proto`, STJ-Kontexte, Python-Basen (`vertraege.py`, `funktionen.py`, `funktions_tabelle.py`); danach alle Generatoren und Analyzer | **an der Karte** (innerste `_ort`-Spanne, sonst Typ/Member) |
+| 1 Bauen | `dotnet build Host.Grpc -p:CqrsStand=<stand>`. Im Build läuft vor dem Compile der Codegen (Target `CqrsCodegenPrepass` in `Domain.Leitung`): `domain.proto`, STJ-Kontexte, Python-Basen (`vertraege.py`, `funktionen.py`, `funktions_tabelle.py`); danach alle Generatoren und Analyzer | **an der Karte** (innerste `_ort`-Spanne, sonst Typ/Member) |
 | 2 Python | betterproto-DTOs (`build_python.sh`); fehlende Python-Implementierungen von Clients und externen Funktionen werden angelegt (`PythonSync`) | Schritt rot |
 | 3 Lesen | warmer Workspace liest neu; die eigenen Regeln (CQRS…) holt die Werkbank direkt aus den Analyzern der warmen Compilations (`RegelBefundeAsync`) | an der Karte |
 | 4 Daten prüfen | Proto-Vergleich mit der Sim-DB (§4.6); bei Unverträglichkeit Rückfrage „zurücksetzen?“ | Dialog |

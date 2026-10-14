@@ -98,7 +98,7 @@ public sealed class WerkbankServer
         return Convert.ToHexString(sha.Hash!)[..8].ToLowerInvariant();
     }
 
-    private string NeuesProto => Path.Combine(_root, "ProtoRepo", "domain.proto");
+    private string NeuesProto => Path.Combine(_root, Abstractions.Projektstruktur.Projekt(Abstractions.Projektstruktur.StandardWurzel, Abstractions.Projektstruktur.Rolle.Leitung), Abstractions.Projektstruktur.ProtoDatei);
 
     private void Schritt(List<Schritt> schritte, Schritt s)
     {

@@ -17,7 +17,7 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Infrastructure.SourceGenera
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Proto.SourceGeneration", "Proto.SourceGeneration\Proto.SourceGeneration.csproj", "{7FD6BD75-E035-4690-AAAD-5EFEFF66BF6D}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ProtoRepo", "ProtoRepo\ProtoRepo.csproj", "{37658938-25E7-4677-A098-63A3623C311B}"
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Domain.Leitung", "Domain.Leitung\Domain.Leitung.csproj", "{37658938-25E7-4677-A098-63A3623C311B}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Abstractions.SourceGeneration", "Abstractions.SourceGeneration\Abstractions.SourceGeneration.csproj", "{55550EEF-B1D7-411C-9EAA-E87C49BC20DF}"
 EndProject

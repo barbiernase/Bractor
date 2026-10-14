@@ -40,6 +40,6 @@
   <ItemGroup>
     <!-- Der Proto-Stand dieses Builds — der Host schreibt ihn beim Start in <schema>.stand (jede Umgebung), damit ein übernommener
          Prod-Stand seine Herkunft kennt (Werkbank „Daten prüfen“). -->
-    <EmbeddedResource Include="..\ProtoRepo\domain.proto" LogicalName="cqrs/domain.proto" />
+    <EmbeddedResource Include="..\Domain.Leitung\domain.proto" LogicalName="cqrs/domain.proto" />
   </ItemGroup>
 </Project>

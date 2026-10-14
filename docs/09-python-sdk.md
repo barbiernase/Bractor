@@ -35,13 +35,13 @@ Methoden.
 
 | Datei | Erzeugt von | Inhalt |
 |---|---|---|
-| `domain_client/generated/__init__.py` | `build_python.sh` (`protoc --python_betterproto_out` aus `ProtoRepo/domain.proto`) | betterproto-DTOs (`…Dto`) der Anwendung |
+| `domain_client/generated/__init__.py` | `build_python.sh` (`protoc --python_betterproto_out` aus `Domain.Leitung/domain.proto`) | betterproto-DTOs (`…Dto`) der Anwendung |
 | `cqrs_client/leitung/__init__.py` (SDK) | `Client.Infrastructure.Python/build_leitung.sh` (aus `Cqrs.Leitung/cqrs.proto`) | die Leitung des Frameworks: `ClientMessage`/`ServerMessage`, Hüllen, `Nutzlast` |
 | `domain_client/generated/vertraege.py` | `Cqrs.Codegen` | je Akteur-Vertrag (`IAkteurVertrag<A>`) bzw. Client-Vertrag (`IClientVertrag`) eine abstrakte Basis `<Name>Basis` mit `auf_<event>`, Vertrag, Hash, Zusagen, `FRAGT` |
 | `domain_client/generated/funktionen.py` | `Cqrs.Codegen` | je Katalog-Funktion ohne Lese-Fähigkeit eine Basis `<Funktion>Basis` mit `FUNKTION`, `AUFTRAG`, `ERGEBNISSE`, abstrakt `rufe(auftrag, x)` |
 | `domain_client/generated/funktions_tabelle.py` | `Cqrs.Codegen` | `TABELLE`: Funktion → (Basis, Modul, Klasse der Implementierung) für den generischen Worker |
 
-`Cqrs.Codegen` läuft **automatisch** im Codegen-Schritt jedes Builds (Target `CqrsCodegenPrepass` in `ProtoRepo/ProtoRepo.csproj`), zusammen mit
+`Cqrs.Codegen` läuft **automatisch** im Codegen-Schritt jedes Builds (Target `CqrsCodegenPrepass` in `Domain.Leitung/Domain.Leitung.csproj`), zusammen mit
 `domain.proto` und den STJ-Kontexten; `./codegen.sh --check` prüft auf Drift. Die betterproto-DTOs erzeugt `build_python.sh` (Schritt 2 von ⟳ in
 der Werkbank, `konzept-werkbank.md` §5); es hasht `domain.proto` (`generated/.proto_hash`) und entfernt vor `protoc` die `package`-Zeile. Die Leitung
 erzeugt `build_leitung.sh` ebenso (committet); `GrpcProxy` nutzt die Route `/cqrs.CqrsClientService/Connect` (Paket `cqrs`). `Cqrs.Codegen` liest die gebauten Domänen-DLLs per

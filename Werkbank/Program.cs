@@ -251,7 +251,7 @@ app.MapGet("/api/werkbank/simdb/staende", async () =>
 {
     var u = werkbank.Umgebungen.Aufgeloest(werkbank.Aktiv);
     if (u.Umgebung.Art != Abstractions.UmgebungsArt.Sim) return Results.Json(Array.Empty<object>());
-    var proto = Path.Combine(slnRoot, "ProtoRepo", "domain.proto");
+    var proto = Path.Combine(slnRoot, Abstractions.Projektstruktur.Projekt(Abstractions.Projektstruktur.StandardWurzel, Abstractions.Projektstruktur.Rolle.Leitung), Abstractions.Projektstruktur.ProtoDatei);
     try { return Results.Json(await werkbank.Db.StaendeAsync(u, File.Exists(proto) ? await File.ReadAllTextAsync(proto) : null), werkbankJson); }
     catch (Exception e) { return Results.Json(new { fehler = e.Message }, werkbankJson); }
 });

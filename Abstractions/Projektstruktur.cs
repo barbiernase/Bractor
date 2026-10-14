@@ -35,6 +35,10 @@ static class Projektstruktur
         Akteure,
         /// <summary><c>&lt;Wurzel&gt;.Infrastructure</c>: Store-Implementierungen.</summary>
         Speicher,
+        /// <summary><c>&lt;Wurzel&gt;.Leitung</c>: die Domänen-DTOs der Leitung (<c>domain.proto</c>, vom Codegen) und ihr generierter Nutzlast-Mapper.</summary>
+        Leitung,
+        /// <summary><c>&lt;Wurzel&gt;.Laufzeit</c>: die Komposition — Framework + Rollen-Projekte, die generierten Laufzeit-Tabellen.</summary>
+        Komposition,
     }
 
     /// <summary>Was ein Typ ist — bestimmt aus Code-Fakten (Lageart), nie aus Name oder Ordner.</summary>
@@ -61,8 +65,7 @@ static class Projektstruktur
     /// <summary>Das Werkzeug-Projekt des Codegen-Prepass: es muss alle <see cref="CodegenProjekte"/> referenzieren (Build-Reihenfolge).</summary>
     public const string CodegenWerkzeug = "Cqrs.Codegen";
 
-    /// <summary>Wohin der Codegen das Proto der Leitung schreibt (Projekt und Datei, relativ zur Solution).</summary>
-    public const string ProtoProjekt = "ProtoRepo";
+    /// <summary>Die Datei der Domänen-DTOs im Leitungs-Projekt der Anwendung (<see cref="Rolle.Leitung"/>), vom Codegen geschrieben.</summary>
     public const string ProtoDatei = "domain.proto";
 
     /// <summary>Das Python-Worker-Projekt der Anwendung (Zusagen, externe Funktionen) und darin der Ordner der generierten Basen.</summary>
@@ -100,6 +103,11 @@ static class Projektstruktur
             new[] { "Akteure.cs", "Clients.cs" }),
         new Eintrag(Rolle.Speicher, ".Infrastructure", true, new[] { Rolle.Schreibseite, Rolle.Leseseite },
             new string[0]),
+        new Eintrag(Rolle.Leitung, ".Leitung", false, new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Ablaeufe },
+            new string[0]),
+        new Eintrag(Rolle.Komposition, ".Laufzeit", false,
+            new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Ablaeufe, Rolle.Akteure, Rolle.Speicher, Rolle.Leitung },
+            new string[0]),
     };
 
     public static Eintrag Von(Rolle r) => Rollen.First(e => e.Rolle == r);
@@ -111,7 +119,8 @@ static class Projektstruktur
     public static IEnumerable<string> Projekte(string wurzel) => Rollen.Select(e => wurzel + e.Suffix);
 
     /// <summary>Die Projekte, aus denen der Codegen Proto, STJ-Kontexte und Python-Basen erzeugt (alles außer den Store-Implementierungen).</summary>
-    public static IEnumerable<string> CodegenProjekte(string wurzel) => Rollen.Where(e => e.Rolle != Rolle.Speicher).Select(e => wurzel + e.Suffix);
+    public static IEnumerable<string> CodegenProjekte(string wurzel) =>
+        new[] { Rolle.Schreibseite, Rolle.Leseseite, Rolle.Ablaeufe, Rolle.Akteure }.Select(r => Projekt(wurzel, r));
 
     /// <summary>
     /// Zerlegt einen Assembly-/Projektnamen in Wurzel und Rolle über das längste passende Suffix; ohne Suffix ist es die Schreibseite der

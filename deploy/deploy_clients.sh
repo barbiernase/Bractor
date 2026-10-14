@@ -40,7 +40,7 @@ echo "Building Host.Blazor..."
 # --- Proto-Distribution (NEU) ---
 echo "Proto-Distribution..."
 mkdir -p "$PROTO_DIR"
-PROTO_SOURCE=$(find "$REPO_DIR" -path "*/ProtoRepo/*" -name "domain.proto" -type f | head -1)
+PROTO_SOURCE=$(find "$REPO_DIR" -path "*/Domain.Leitung/*" -name "domain.proto" -type f | head -1)
 if [ -n "$PROTO_SOURCE" ]; then
     cp "$PROTO_SOURCE" "$PROTO_DIR/domain.proto"
     HASH=$(sha256sum "$PROTO_DIR/domain.proto" | cut -d' ' -f1)

@@ -1,7 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <!-- Die Leitung des Frameworks: Dienst, Hülle und Protokoll-Nachrichten (cqrs.proto, handgeschrieben). Die Domänen-Nachrichten
-       reisen als Nutzlast (Typname + Bytes) und kommen aus dem Proto der Anwendung (ProtoRepo/domain.proto, vom Codegen). -->
+       reisen als Nutzlast (Typname + Bytes) und kommen aus dem Proto der Anwendung (<Wurzel>.Leitung/domain.proto, vom Codegen). -->
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>

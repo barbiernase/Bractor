@@ -265,7 +265,7 @@ public class FunktionsAnbieterSitzungTests
             Payload = new Cqrs.Leitung.Nutzlast
             {
                 Typ = "BildVerkleinert",
-                Daten = new ProtoRepo.BildVerkleinertDto { Pfad = "/v/a.png", BreitePixel = 640, HoehePixel = 512 }.ToByteString(),
+                Daten = new Domain.Leitung.BildVerkleinertDto { Pfad = "/v/a.png", BreitePixel = 640, HoehePixel = 512 }.ToByteString(),
             },
         };
         mapper.MapErgebnis(Cqrs.Leitung.EventEnvelopeDto.Parser.ParseFrom(ergebnis.ToByteArray()))

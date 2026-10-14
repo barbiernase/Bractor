@@ -6,7 +6,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
-PROTO_FILE="$REPO_DIR/ProtoRepo/domain.proto"
+PROTO_FILE="$REPO_DIR/Domain.Leitung/domain.proto"
 GENERATED_DIR="$SCRIPT_DIR/domain_client/generated"
 HASH_FILE="$GENERATED_DIR/.proto_hash"
 

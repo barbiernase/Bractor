@@ -12,7 +12,7 @@ namespace Infrastructure.Pruefstand.Phase1;
 
 /// <summary>
 /// Store-freier Byte-Level-Round-trip des Proto-Query-Mappers (<see cref="ProtoMessageMapper"/> +
-/// generierte <c>ProtoRepo</c>-DTOs) für den nullable-Skalar-lastigen Query
+/// generierte DTOs der Leitung (<c>Domain.Leitung</c>)) für den nullable-Skalar-lastigen Query
 /// <c>SucheImagePairs(ImagePairFilter)</c>. Deckt die vom DtoMapper-Umbau berührte
 /// C#↔Proto-Skalarabbildung ab — inkl. der (in Phase A noch verlustbehafteten) Nullable-Encodings.
 /// Kein Docker/Marten/gRPC nötig: der Round-trip läuft über echte Protobuf-Bytes

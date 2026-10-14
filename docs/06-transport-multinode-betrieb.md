@@ -57,7 +57,7 @@ Ohne Serializer wären die internen Actor-Nachrichten rohe CLR-Records → de fa
 Diskriminator = Typname, identisch zu `GeneratedTypeRegistry`. Signale serialisiert der Generator selbst (uniform `(StreamId, Version)`).
 
 **STJ-Manifest** — `CqrsWireJsonContext` (`Infrastructure/Serialization/CqrsWireJsonContext.g.cs`, `Metadata`-Mode) ist **generiert**: der
-Codegen-Schritt im Build (Target `CqrsCodegenPrepass` in `ProtoRepo/ProtoRepo.csproj` → `Cqrs.Codegen`, `JsonContextEmitter`) schreibt
+Codegen-Schritt im Build (Target `CqrsCodegenPrepass` in `Domain.Leitung/Domain.Leitung.csproj` → `Cqrs.Codegen`, `JsonContextEmitter`) schreibt
 Framework-Kopf (alle Wire-Hüllen) plus alle Commands/Events/Trigger der Domäne. Eingebacken sind die Converter aus `WirePolyConverters.cs`
 (`IEvent`, `ICommand`, `IAuftrag`, `IStateChangeSignal`, `IMessageEnvelope`, `PID`, `CommandModus`). `Cqrs.Codegen` liest die gebauten
 Domänen-DLLs heute per `MetadataLoadContext` — das ist Reflection in einem Werkzeug (docs/13 W10-1).

@@ -4,7 +4,7 @@
     <TargetFramework>net9.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <RootNamespace>ProtoRepo</RootNamespace>
+    <RootNamespace>Domain.Leitung</RootNamespace>
   </PropertyGroup>
 
   <ItemGroup>
@@ -26,15 +26,15 @@
 
        Erzeugt VOR protoc/STJ die Artefakte aus den GEBAUTEN Domain-DLLs per Reflection
        (Cqrs.Codegen, kein MSBuildWorkspace; die Liste gibt das Werkzeug mit der Option „artefakte“ aus):
-         - ProtoRepo/domain.proto
+         - Domain.Leitung/domain.proto
          - Infrastructure/Serialization/EventJsonSerializerContext.g.cs, CqrsWireJsonContext.g.cs
          - die Python-Basen (vertraege.py, funktionen.py, funktions_tabelle.py)
 
-       WARUM HIER (ProtoRepo): ProtoRepo ist der erste Consumer (domain.proto) und darf — anders
+       WARUM HIER (Leitung der Anwendung): dieses Projekt ist der erste Consumer (domain.proto) und darf — anders
        als die Domain-Projekte selbst — Cqrs.Codegen referenzieren (kein Zyklus, Cqrs.Codegen
-       referenziert Domain, nicht ProtoRepo). Der Projektgraph erzwingt die Reihenfolge:
+       referenziert Domain, nicht Domain.Leitung). Der Projektgraph erzwingt die Reihenfolge:
          Codegen-Projekte der Domäne (Projektstruktur)  →  Cqrs.Codegen (baut deren DLLs)
-         →  ProtoRepo (dieser Prepass, dann protoc)  →  Infrastructure (STJ-Kontexte).
+         →  Domain.Leitung (dieser Prepass, dann protoc)  →  Infrastructure (STJ-Kontexte).
 
        ROBUSTHEIT: Die build-order-only ProjectReference (ReferenceOutputAssembly=false) stellt
        sicher, dass Cqrs.Codegen.dll SAMT der Domain-DLLs gebaut ist, bevor der Prepass läuft.
