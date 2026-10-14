@@ -140,7 +140,7 @@ Intern übersetzt `AddCqrs` die Umgebung in den `CqrsFrameworkBuilder` (`AddCqrs
 Host.Blazor 5010 (`Clients:<Name>:Urls`); Postgres 5432, Redis 6379, Consul 8500. Ohne Angabe ist der Einblick-Port 0 (aus).
 
 ### Betriebs-Kommandos
-- Infra: `docker compose -f deploy-linux/docker-compose.infrastructure.yml up -d` (bzw. in Sim: ⟳ der Werkbank startet fehlende Container,
+- Infra: `docker compose -f docker-compose.infrastructure.yml up -d` (bzw. in Sim: ⟳ der Werkbank startet fehlende Container,
   `konzept-werkbank.md` §4.5)
 - Host lokal: `dotnet run --project Host.Grpc -- --umgebung sim-main`
 - Single-Node nativ: `./start-server.sh {start|stop|status}` bzw. systemd (siehe „Veraltet“ in §6.4)
