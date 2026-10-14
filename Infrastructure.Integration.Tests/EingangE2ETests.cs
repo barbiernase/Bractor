@@ -54,7 +54,7 @@ public class EingangE2ETests
         builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
         {
             ["Quellen:DateiErkannt:Pfad"] = Path.Combine(verz, "eingang"),
-            ["Konfig:PreprocessingConfig:OutputPath"] = Path.Combine(verz, ".preprocessed"),
+            ["Konfig:BildaufbereitungKonfig:AusgabePfad"] = Path.Combine(verz, ".preprocessed"),
             // konzept-werkbank §12.3 E12: der Webhook der Quelle ist Konfig — kein MapQuellWebhook im Programm.
             ["Quellen:DateiErkannt:Webhook"] = "/webhook/datei",
             ["Identitaeten:Tokens:t-ki"] = "KIOperator",

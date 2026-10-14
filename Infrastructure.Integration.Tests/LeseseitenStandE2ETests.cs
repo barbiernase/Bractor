@@ -47,7 +47,7 @@ public class LeseseitenStandE2ETests
         WebApplication Baue()
         {
             var builder = WebApplication.CreateBuilder();
-            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["Quellen:DateiErkannt:Pfad"] = verz, ["Konfig:PreprocessingConfig:OutputPath"] = Path.Combine(verz, ".preprocessed") });
+            builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?> { ["Quellen:DateiErkannt:Pfad"] = verz, ["Konfig:BildaufbereitungKonfig:AusgabePfad"] = Path.Combine(verz, ".preprocessed") });
             builder.AddCqrs(u);
             return builder.Build();
         }

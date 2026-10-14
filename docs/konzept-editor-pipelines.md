@@ -251,9 +251,9 @@ Takt-Treiber und „Client meldet Quell-Nachricht“ (konzept-werkbank §12.2); 
 - Python: `FunktionsBasis` (`cqrs_client/funktion.py`), Angebot am Handshake, Slots + Lebenszeichen; je Verbindung eine Sitzung, nach einem
   Abbruch Reconnect und neue Sitzung.
 
-**Beispieldomäne:** alle Domänen-Pipelines sind Flüsse — `Bildeingang` (Domain/ImagePair), `DatensatzRangeAufloesung` und
-`DatensatzEinfrieren` (Domain.Pipeline/Datensatz, Funktionen mit Lese-Fähigkeit), `TrainingWaechter` (Domain/Trainingslauf: `Warte` gegen
-ein Zeitlimit statt `Frist` + `FristStorno`), `Benchmark` (Domain.Pipeline/Benchmark). Keine nutzt `IPipelineHandler`.
+**Beispieldomäne:** alle Domänen-Pipelines sind Flüsse und liegen in `Domain.Pipeline/<Bereich>/` (docs/07) — `Bildeingang` (ImagePair),
+`DatensatzRangeAufloesung` und `DatensatzEinfrieren` (Datensatz, Funktionen mit Lese-Fähigkeit), `TrainingWaechter` (Trainingslauf: `Warte`
+gegen ein Zeitlimit statt `Frist` + `FristStorno`), `Benchmark` (Benchmark). Keine nutzt `IPipelineHandler`.
 
 **Editor und Werkzeuge**
 - Modell `EditorModell.Fluesse` (`FlussArt.Warte`, `FlussSchritt.WarteAuf`, `FlussPort.Strom`), `Funktion.Faehigkeiten`; Extractor

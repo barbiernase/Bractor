@@ -27,6 +27,7 @@
          (Domain-Projekte VOR dem Prepass). -->
     <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
     <ProjectReference Include="..\Domain.Pipeline\Domain.Pipeline.csproj" />
+    <ProjectReference Include="..\Domain.Akteure\Domain.Akteure.csproj" />
   </ItemGroup>
 
   <ItemGroup>

@@ -24,7 +24,7 @@ from . import (
 
 
 class BildVerkleinerungBasis(FunktionsBasis):
-    """Funktion Domain.Bildaufbereitung.IBildVerkleinerung: VerkleinereBild → BildVerkleinert | BildNichtLesbar."""
+    """Funktion Domain.Pipeline.Bildaufbereitung.IBildVerkleinerung: VerkleinereBild → BildVerkleinert | BildNichtLesbar."""
 
     FUNKTION: ClassVar[str] = "IBildVerkleinerung"
     AUFTRAG: ClassVar[type] = VerkleinereBildDto
@@ -37,7 +37,7 @@ class BildVerkleinerungBasis(FunktionsBasis):
 
 
 class HistogrammAusgleichBasis(FunktionsBasis):
-    """Funktion Domain.Bildaufbereitung.IHistogrammAusgleich: GleicheHistogrammAus → HistogrammAusgeglichen | BildNichtLesbar."""
+    """Funktion Domain.Pipeline.Bildaufbereitung.IHistogrammAusgleich: GleicheHistogrammAus → HistogrammAusgeglichen | BildNichtLesbar."""
 
     FUNKTION: ClassVar[str] = "IHistogrammAusgleich"
     AUFTRAG: ClassVar[type] = GleicheHistogrammAusDto
@@ -50,7 +50,7 @@ class HistogrammAusgleichBasis(FunktionsBasis):
 
 
 class DateinameDeutungBasis(FunktionsBasis):
-    """Funktion Domain.ImagePair.IDateinameDeutung: DeuteDateiname → ImagePairDateiGedeutet | DateinameUnbekannt."""
+    """Funktion Domain.Pipeline.ImagePair.IDateinameDeutung: DeuteDateiname → ImagePairDateiGedeutet | DateinameUnbekannt."""
 
     FUNKTION: ClassVar[str] = "IDateinameDeutung"
     AUFTRAG: ClassVar[type] = DeuteDateinameDto

@@ -29,9 +29,9 @@ def test_tabelle_nennt_je_funktion_eine_generierte_basis():
 
 
 def test_worker_laedt_die_implementierung_aus_der_tabelle_mit_slots_und_konfig(tmp_path):
-    f = worker.lade("IBildVerkleinerung", 3, {"OutputPath": str(tmp_path)})
+    f = worker.lade("IBildVerkleinerung", 3, {"AusgabePfad": str(tmp_path)})
     assert isinstance(f, basen.BildVerkleinerungBasis)
-    assert (f.FUNKTION, f.slots, f.konfig) == ("IBildVerkleinerung", 3, {"OutputPath": str(tmp_path)})
+    assert (f.FUNKTION, f.slots, f.konfig) == ("IBildVerkleinerung", 3, {"AusgabePfad": str(tmp_path)})
 
 
 def test_unbekannte_funktion_und_fehlende_implementierung_brechen_den_start():
@@ -44,7 +44,7 @@ def test_unbekannte_funktion_und_fehlende_implementierung_brechen_den_start():
 
 
 def test_konfig_paare():
-    assert worker.werte(["OutputPath=/x", "Modus=schnell"]) == {"OutputPath": "/x", "Modus": "schnell"}
+    assert worker.werte(["AusgabePfad=/x", "Modus=schnell"]) == {"AusgabePfad": "/x", "Modus": "schnell"}
     with pytest.raises(SystemExit):
         worker.werte(["kaputt"])
 
@@ -54,16 +54,16 @@ def test_bild_verkleinerung_und_histogramm_ausgleich_rechnen_ein_echtes_bild(tmp
     cv2.imwrite(str(quelle), (np.random.default_rng(1).random((400, 600, 3)) * 255).astype(np.uint8))
     ausgabe = tmp_path / "aus"
 
-    klein = asyncio.run(worker.lade("IBildVerkleinerung", 1, {"OutputPath": str(ausgabe)})
+    klein = asyncio.run(worker.lade("IBildVerkleinerung", 1, {"AusgabePfad": str(ausgabe)})
                         .rufe(g.VerkleinereBildDto(quell_pfad=str(quelle), hoehe=100), X))
     assert isinstance(klein, g.BildVerkleinertDto)
     assert (klein.breite_pixel, klein.hoehe_pixel) == (150, 100)
     assert Path(klein.pfad).name == quelle.stem + "_klein.png" and Path(klein.pfad).exists()
 
-    aus = asyncio.run(worker.lade("IHistogrammAusgleich", 1, {"OutputPath": str(ausgabe)})
+    aus = asyncio.run(worker.lade("IHistogrammAusgleich", 1, {"AusgabePfad": str(ausgabe)})
                       .rufe(g.GleicheHistogrammAusDto(quell_pfad=str(quelle)), X))
     assert isinstance(aus, g.HistogrammAusgeglichenDto) and Path(aus.pfad).exists()
 
-    nicht = asyncio.run(worker.lade("IBildVerkleinerung", 1, {"OutputPath": str(ausgabe)})
+    nicht = asyncio.run(worker.lade("IBildVerkleinerung", 1, {"AusgabePfad": str(ausgabe)})
                         .rufe(g.VerkleinereBildDto(quell_pfad=str(tmp_path / "fehlt.png"), hoehe=100), X))
     assert isinstance(nicht, g.BildNichtLesbarDto)

@@ -2,10 +2,11 @@ using System;
 using System.Linq;
 using Abstractions;
 using Cqrs.Testing;
-using Domain.Bildaufbereitung;
+using Domain.Pipeline.Bildaufbereitung;
 using Domain.ImagePair;
 using FluentAssertions;
 using Xunit;
+using Domain.Pipeline.ImagePair;
 
 namespace Infrastructure.Pruefstand.Funktionen;
 

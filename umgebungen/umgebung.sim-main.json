@@ -62,7 +62,7 @@
           "--funktionen",
           "IBildVerkleinerung",
           "--konfig",
-          "OutputPath=${env:HOME}/cqrs-sim/${branch}/preprocessed"
+          "AusgabePfad=${env:HOME}/cqrs-sim/${branch}/preprocessed"
         ],
         "Token": "sim-bildrechner"
       }
@@ -77,7 +77,7 @@
           "--funktionen",
           "IHistogrammAusgleich",
           "--konfig",
-          "OutputPath=${env:HOME}/cqrs-sim/${branch}/preprocessed"
+          "AusgabePfad=${env:HOME}/cqrs-sim/${branch}/preprocessed"
         ],
         "Token": "sim-bildrechner"
       }
@@ -106,8 +106,8 @@
     }
   },
   "Konfig": {
-    "PreprocessingConfig": {
-      "OutputPath": "${env:HOME}/cqrs-sim/${branch}/preprocessed"
+    "BildaufbereitungKonfig": {
+      "AusgabePfad": "${env:HOME}/cqrs-sim/${branch}/preprocessed"
     }
   }
 }

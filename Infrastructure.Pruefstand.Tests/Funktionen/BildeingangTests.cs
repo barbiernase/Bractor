@@ -5,7 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Abstractions;
-using Domain.Bildaufbereitung;
+using Domain.Pipeline.Bildaufbereitung;
 using Domain.ImagePair;
 using FluentAssertions;
 using Infrastructure.Aggregate;     // KommandoVerarbeitet / KommandoAbgelehnt
@@ -13,6 +13,7 @@ using Infrastructure.Funktionen;
 using Infrastructure.Prozess;
 using Infrastructure.Quellen;
 using Xunit;
+using Domain.Pipeline.ImagePair;
 
 namespace Infrastructure.Pruefstand.Funktionen;
 

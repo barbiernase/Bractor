@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Net;
 using System.Net.Sockets;
 using Abstractions;
-using Domain.Bildaufbereitung;
+using Domain.Pipeline.Bildaufbereitung;
 using Domain.ImagePair;
 using FluentAssertions;
 using Infrastructure.Extensions;
@@ -20,6 +20,8 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
+using Domain.Pipeline.ImagePair;
+using Domain.Pipeline.Trainingslauf;
 
 namespace Infrastructure.Integration.Tests;
 
@@ -60,7 +62,7 @@ public class PipelineFlussE2ETests
         if (verkleinerungExtern) s.AddExterneFunktion<IBildVerkleinerung>();
         else s.AddFunktion<IBildVerkleinerung, Verkleinerung>(slots: 2);
         s.AddFunktion<IHistogrammAusgleich, Ausgleich>(slots: 2);
-        s.AddFunktion<IDateinameDeutung, Domain.Pipeline.ImageProcessing.ImagePairDateinameDeutung>(slots: 4);
+        s.AddFunktion<IDateinameDeutung, ImagePairDateinameDeutung>(slots: 4);
         s.AddFunktion<Domain.Pipeline.Datensatz.IRangeSuche, Domain.Pipeline.Datensatz.RangeSuche>();
         s.AddFunktion<Domain.Pipeline.Datensatz.IMitgliederEinfrieren, Domain.Pipeline.Datensatz.MitgliederEinfrieren>();
     }
@@ -248,7 +250,7 @@ public class PipelineFlussE2ETests
             await Warte(async () => (await es.ReadStreamAsync(lauf, 0, default)).Any(e => e.Payload is Domain.Trainingslauf.TrainingBegonnen),
                 TimeSpan.FromSeconds(30), "TrainingBegonnen fehlt");
             var begonnen = (await es.ReadStreamAsync(lauf, 0, default)).First(e => e.Payload is Domain.Trainingslauf.TrainingBegonnen);
-            var korrelation = ProzessId.Für(nameof(Domain.Trainingslauf.TrainingWaechter), lauf, begonnen.AggregateVersion);
+            var korrelation = ProzessId.Für(nameof(TrainingWaechter), lauf, begonnen.AggregateVersion);
             await Warte(async () => (await es.ReadStreamAsync(korrelation, 0, default)).Any(e => e.Payload is ProzessGestartet),
                 TimeSpan.FromSeconds(60), "Der Wächter-Fluss ist nicht gestartet (Auf<TrainingBegonnen>).");
 

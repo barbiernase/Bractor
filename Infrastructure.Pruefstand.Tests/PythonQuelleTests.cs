@@ -1,6 +1,7 @@
 using System.Linq;
 using DomainEditor;
 using FluentAssertions;
+using Domain.Pipeline.Bildaufbereitung;
 
 namespace Infrastructure.Pruefstand.Tests;
 

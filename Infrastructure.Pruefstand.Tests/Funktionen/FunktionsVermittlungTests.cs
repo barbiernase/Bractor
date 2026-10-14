@@ -2,7 +2,7 @@ using System;
 using System.Linq;
 using System.Threading.Tasks;
 using Abstractions;
-using Domain.Bildaufbereitung;
+using Domain.Pipeline.Bildaufbereitung;
 using FluentAssertions;
 using Infrastructure.Funktionen;
 using Infrastructure.Serialization;

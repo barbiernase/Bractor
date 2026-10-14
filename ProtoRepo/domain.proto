@@ -281,54 +281,54 @@ message EventEnvelopeDto {
 
     oneof payload {
         CommandFailedDto command_failed = 20;
-        BildNichtLesbarDto bild_nicht_lesbar = 21;
-        BildVerkleinertDto bild_verkleinert = 22;
-        HistogrammAusgeglichenDto histogramm_ausgeglichen = 23;
-        DatensatzBereitsEingefrorenDto datensatz_bereits_eingefroren = 24;
-        DatensatzEingefrorenDto datensatz_eingefroren = 25;
-        DatensatzErstelltDto datensatz_erstellt = 26;
-        DatensatzExistiertBereitsDto datensatz_existiert_bereits = 27;
-        DatensatzLeerDto datensatz_leer = 28;
-        EinfrierenAngefordertDto einfrieren_angefordert = 29;
-        PaarAufgenommenDto paar_aufgenommen = 30;
-        PaareAufgenommenDto paare_aufgenommen = 31;
-        PaarEntferntDto paar_entfernt = 32;
-        RangeAngefordertDto range_angefordert = 33;
-        RangeLeerDto range_leer = 34;
-        SplitGesetztDto split_gesetzt = 35;
-        SplitUngueltigDto split_ungueltig = 36;
-        BildNichtVerfuegbarDto bild_nicht_verfuegbar = 37;
-        BildPaarDurchKiKlassifiziertDto bild_paar_durch_ki_klassifiziert = 38;
-        BildPaarGelabeltDto bild_paar_gelabelt = 39;
-        BildRegionGelabeltDto bild_region_gelabelt = 40;
-        BildVerfuegbarDto bild_verfuegbar = 41;
-        BildVersionBereitsVerfuegbarDto bild_version_bereits_verfuegbar = 42;
-        DateiErkanntDto datei_erkannt = 43;
-        DateinameUnbekanntDto dateiname_unbekannt = 44;
-        EinzelBildDurchKiKlassifiziertDto einzel_bild_durch_ki_klassifiziert = 45;
-        EinzelBildGelabeltDto einzel_bild_gelabelt = 46;
-        ImagePairDateiGedeutetDto image_pair_datei_gedeutet = 47;
-        ImagePairEingabeUngueltigDto image_pair_eingabe_ungueltig = 48;
-        ImagePairErstelltDto image_pair_erstellt = 49;
-        ImagePairExistiertBereitsDto image_pair_existiert_bereits = 50;
-        ImagePairInspiziertDto image_pair_inspiziert = 51;
-        ImagePairKomplettDto image_pair_komplett = 52;
-        ImagePairNichtGefundenDto image_pair_nicht_gefunden = 53;
-        PaarNichtKomplettDto paar_nicht_komplett = 54;
-        PhysischesProduktGelabeltDto physisches_produkt_gelabelt = 55;
-        RegionIndexUngueltigDto region_index_ungueltig = 56;
-        RegionLabelsUngueltigDto region_labels_ungueltig = 57;
-        ModellAktiviertDto modell_aktiviert = 58;
-        ModellArchiviertDto modell_archiviert = 59;
-        ModellBereitsArchiviertDto modell_bereits_archiviert = 60;
-        ModellExistiertBereitsDto modell_existiert_bereits = 61;
-        ModellNichtGefundenDto modell_nicht_gefunden = 62;
-        ModellRegistriertDto modell_registriert = 63;
-        BenchPingDto bench_ping = 64;
-        KeinMitgliedAuffindbarDto kein_mitglied_auffindbar = 65;
-        MitgliederEingefrorenDto mitglieder_eingefroren = 66;
-        RangeGefundenDto range_gefunden = 67;
-        RangeOhneTrefferDto range_ohne_treffer = 68;
+        BenchPingDto bench_ping = 21;
+        DatensatzBereitsEingefrorenDto datensatz_bereits_eingefroren = 22;
+        DatensatzEingefrorenDto datensatz_eingefroren = 23;
+        DatensatzErstelltDto datensatz_erstellt = 24;
+        DatensatzExistiertBereitsDto datensatz_existiert_bereits = 25;
+        DatensatzLeerDto datensatz_leer = 26;
+        EinfrierenAngefordertDto einfrieren_angefordert = 27;
+        PaarAufgenommenDto paar_aufgenommen = 28;
+        PaareAufgenommenDto paare_aufgenommen = 29;
+        PaarEntferntDto paar_entfernt = 30;
+        RangeAngefordertDto range_angefordert = 31;
+        RangeLeerDto range_leer = 32;
+        SplitGesetztDto split_gesetzt = 33;
+        SplitUngueltigDto split_ungueltig = 34;
+        BildNichtVerfuegbarDto bild_nicht_verfuegbar = 35;
+        BildPaarDurchKiKlassifiziertDto bild_paar_durch_ki_klassifiziert = 36;
+        BildPaarGelabeltDto bild_paar_gelabelt = 37;
+        BildRegionGelabeltDto bild_region_gelabelt = 38;
+        BildVerfuegbarDto bild_verfuegbar = 39;
+        BildVersionBereitsVerfuegbarDto bild_version_bereits_verfuegbar = 40;
+        DateiErkanntDto datei_erkannt = 41;
+        EinzelBildDurchKiKlassifiziertDto einzel_bild_durch_ki_klassifiziert = 42;
+        EinzelBildGelabeltDto einzel_bild_gelabelt = 43;
+        ImagePairEingabeUngueltigDto image_pair_eingabe_ungueltig = 44;
+        ImagePairErstelltDto image_pair_erstellt = 45;
+        ImagePairExistiertBereitsDto image_pair_existiert_bereits = 46;
+        ImagePairInspiziertDto image_pair_inspiziert = 47;
+        ImagePairKomplettDto image_pair_komplett = 48;
+        ImagePairNichtGefundenDto image_pair_nicht_gefunden = 49;
+        PaarNichtKomplettDto paar_nicht_komplett = 50;
+        PhysischesProduktGelabeltDto physisches_produkt_gelabelt = 51;
+        RegionIndexUngueltigDto region_index_ungueltig = 52;
+        RegionLabelsUngueltigDto region_labels_ungueltig = 53;
+        ModellAktiviertDto modell_aktiviert = 54;
+        ModellArchiviertDto modell_archiviert = 55;
+        ModellBereitsArchiviertDto modell_bereits_archiviert = 56;
+        ModellExistiertBereitsDto modell_existiert_bereits = 57;
+        ModellNichtGefundenDto modell_nicht_gefunden = 58;
+        ModellRegistriertDto modell_registriert = 59;
+        BildNichtLesbarDto bild_nicht_lesbar = 60;
+        BildVerkleinertDto bild_verkleinert = 61;
+        HistogrammAusgeglichenDto histogramm_ausgeglichen = 62;
+        KeinMitgliedAuffindbarDto kein_mitglied_auffindbar = 63;
+        MitgliederEingefrorenDto mitglieder_eingefroren = 64;
+        RangeGefundenDto range_gefunden = 65;
+        RangeOhneTrefferDto range_ohne_treffer = 66;
+        DateinameUnbekanntDto dateiname_unbekannt = 67;
+        ImagePairDateiGedeutetDto image_pair_datei_gedeutet = 68;
         SammelvorgangAbgeschlossenDto sammelvorgang_abgeschlossen = 69;
         SammelvorgangBereitsAbgeschlossenDto sammelvorgang_bereits_abgeschlossen = 70;
         SammelvorgangExistiertBereitsDto sammelvorgang_existiert_bereits = 71;
@@ -413,9 +413,9 @@ message AuftragPayloadDto {
     oneof payload {
         GleicheHistogrammAusDto gleiche_histogramm_aus = 20;
         VerkleinereBildDto verkleinere_bild = 21;
-        DeuteDateinameDto deute_dateiname = 22;
-        FriereMitgliederEinDto friere_mitglieder_ein = 23;
-        SucheRangeDto suche_range = 24;
+        FriereMitgliederEinDto friere_mitglieder_ein = 22;
+        SucheRangeDto suche_range = 23;
+        DeuteDateinameDto deute_dateiname = 24;
 
     }
 }
@@ -563,17 +563,7 @@ message ImagePairFilterDto {
     int32 seiten_groesse = 11;
 }
 
-message StateChangeViaBildNichtLesbarDto {
-    string stream_id = 1;
-    int32 version = 2;
-}
-
-message StateChangeViaBildVerkleinertDto {
-    string stream_id = 1;
-    int32 version = 2;
-}
-
-message StateChangeViaHistogrammAusgeglichenDto {
+message StateChangeViaBenchPingDto {
     string stream_id = 1;
     int32 version = 2;
 }
@@ -643,22 +633,12 @@ message StateChangeViaDateiErkanntDto {
     int32 version = 2;
 }
 
-message StateChangeViaDateinameUnbekanntDto {
-    string stream_id = 1;
-    int32 version = 2;
-}
-
 message StateChangeViaEinzelBildDurchKiKlassifiziertDto {
     string stream_id = 1;
     int32 version = 2;
 }
 
 message StateChangeViaEinzelBildGelabeltDto {
-    string stream_id = 1;
-    int32 version = 2;
-}
-
-message StateChangeViaImagePairDateiGedeutetDto {
     string stream_id = 1;
     int32 version = 2;
 }
@@ -698,7 +678,17 @@ message StateChangeViaModellRegistriertDto {
     int32 version = 2;
 }
 
-message StateChangeViaBenchPingDto {
+message StateChangeViaBildNichtLesbarDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaBildVerkleinertDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaHistogrammAusgeglichenDto {
     string stream_id = 1;
     int32 version = 2;
 }
@@ -719,6 +709,16 @@ message StateChangeViaRangeGefundenDto {
 }
 
 message StateChangeViaRangeOhneTrefferDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaDateinameUnbekanntDto {
+    string stream_id = 1;
+    int32 version = 2;
+}
+
+message StateChangeViaImagePairDateiGedeutetDto {
     string stream_id = 1;
     int32 version = 2;
 }
@@ -963,22 +963,8 @@ message CommandFailedDto {
     string aggregate_id = 3;
 }
 
-message BildNichtLesbarDto {
-    string pfad = 1;
-    string grund = 2;
-}
-
-message BildVerkleinertDto {
-    string pfad = 1;
-    int32 breite_pixel = 2;
-    int32 hoehe_pixel = 3;
-}
-
-message HistogrammAusgeglichenDto {
-    string pfad = 1;
-    int32 breite_pixel = 2;
-    int32 hoehe_pixel = 3;
-    int64 erstellt_am = 4;
+message BenchPingDto {
+    int32 seq = 1;
 }
 
 message DatensatzBereitsEingefrorenDto {
@@ -1080,10 +1066,6 @@ message DateiErkanntDto {
     string kennung = 7;
 }
 
-message DateinameUnbekanntDto {
-    string dateiname = 1;
-}
-
 message EinzelBildDurchKiKlassifiziertDto {
     int32 version = 1;
     int32 bild_label = 2;
@@ -1093,14 +1075,6 @@ message EinzelBildDurchKiKlassifiziertDto {
 message EinzelBildGelabeltDto {
     int32 version = 1;
     int32 label = 2;
-}
-
-message ImagePairDateiGedeutetDto {
-    string paar_id = 1;
-    string pair_key = 2;
-    int32 version = 3;
-    int64 produziert_am = 4;
-    string pfad = 5;
 }
 
 message ImagePairEingabeUngueltigDto {
@@ -1178,8 +1152,22 @@ message ModellRegistriertDto {
     ModellMetrikenDto metriken = 6;
 }
 
-message BenchPingDto {
-    int32 seq = 1;
+message BildNichtLesbarDto {
+    string pfad = 1;
+    string grund = 2;
+}
+
+message BildVerkleinertDto {
+    string pfad = 1;
+    int32 breite_pixel = 2;
+    int32 hoehe_pixel = 3;
+}
+
+message HistogrammAusgeglichenDto {
+    string pfad = 1;
+    int32 breite_pixel = 2;
+    int32 hoehe_pixel = 3;
+    int64 erstellt_am = 4;
 }
 
 message KeinMitgliedAuffindbarDto {
@@ -1197,6 +1185,18 @@ message RangeGefundenDto {
 
 message RangeOhneTrefferDto {
     RangeKriterienDto kriterien = 1;
+}
+
+message DateinameUnbekanntDto {
+    string dateiname = 1;
+}
+
+message ImagePairDateiGedeutetDto {
+    string paar_id = 1;
+    string pair_key = 2;
+    int32 version = 3;
+    int64 produziert_am = 4;
+    string pfad = 5;
 }
 
 message SammelvorgangAbgeschlossenDto {
@@ -1538,11 +1538,6 @@ message VerkleinereBildDto {
     int32 hoehe = 2;
 }
 
-message DeuteDateinameDto {
-    string dateiname = 1;
-    string pfad = 2;
-}
-
 message FriereMitgliederEinDto {
     repeated string mitglieder = 1;
     SplitKonfigDto split = 2;
@@ -1550,5 +1545,10 @@ message FriereMitgliederEinDto {
 
 message SucheRangeDto {
     RangeKriterienDto kriterien = 1;
+}
+
+message DeuteDateinameDto {
+    string dateiname = 1;
+    string pfad = 2;
 }
 

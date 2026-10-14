@@ -6,7 +6,7 @@ Funktionen es gibt und wo ihre Implementierung liegt, sagt die generierte Tabell
 Funktion → Basis, Modul, Klasse); die Implementierungen stehen in funktionen/<modul>.py (Klasse erbt die generierte Basis, füllt `rufe`).
 Gestartet von der Werkbank („▶ Worker starten" an der Funktions-Karte, Umgebung: Funktionen:<F>:Worker) oder von Hand:
 
-    python funktions_worker.py --funktionen IBildVerkleinerung,IHistogrammAusgleich [--slots 2] [--konfig OutputPath=<verz> …] [--pfad <verz>]
+    python funktions_worker.py --funktionen IBildVerkleinerung,IHistogrammAusgleich [--slots 2] [--konfig AusgabePfad=<verz> …] [--pfad <verz>]
 
 Adresse und Akteur kommen aus CQRS_GRPC_HOST / CQRS_GRPC_PORT / CQRS_AKTEUR_TOKEN (die Werkbank setzt sie). Der Akteur des Tokens braucht
 IDarf<F> für jede angebotene Funktion. `--konfig NAME=WERT` sind die Werte der Implementierungen (self.konfig), `--pfad` legt ein Verzeichnis

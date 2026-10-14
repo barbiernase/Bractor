@@ -22,15 +22,17 @@
 |---|---|---|
 | `Domain` | Aggregate (State, Decider, Applier), Commands, Events, Ablehnungen, Wertobjekte, Enums, Quellen-Typen, Prozesse | Abstractions, Core |
 | `Domain.Projections` | ReadModels, Queries, Antworten, Store-Fähigkeiten und -Bündel, Projektionen, Reaktionen, Reader | Domain |
-| `Domain.Akteure` | Akteure, Akteur-Verträge, Client-Verträge | Domain, Domain.Projections |
-| `Domain.Pipeline` | Flüsse, Katalog-Funktionen (Schnittstelle, Auftrag, Implementierung), Domänen-Dienste (Schnittstelle, Implementierung), Konfig-Records | Domain, Domain.Projections, Domain.Akteure |
+| `Domain.Pipeline` | Flüsse, Katalog-Funktionen (Schnittstelle, Auftrag, Ergebnis-Events, Implementierung), Domänen-Dienste (Schnittstelle, Implementierung), Konfig-Records | Domain, Domain.Projections |
+| `Domain.Akteure` | Akteure, Akteur-Verträge, Client-Verträge | Domain, Domain.Projections, Domain.Pipeline |
 | `Domain.Infrastructure` | Store-Implementierungen | Domain, Domain.Projections |
 | `Domain.Client.Worker.Python.*` | Python-Implementierungen von Zusagen und externen Funktionen (`funktionen/<modul>.py`), generierte Basen unter `domain_client/generated/` | — |
 | `Domain.Client.Modules.*` | GUI-Clients (außerhalb des Editors, W12) | Client.Infrastructure |
 | `umgebungen/` | `umgebung.<name>.json` je Umgebung | — |
 
-Die Referenzrichtung ist fest: `Domain` ← `Domain.Projections` ← `Domain.Akteure` ← `Domain.Pipeline`; `Domain.Projections` ← `Domain.Infrastructure`.
-Deshalb gehören Funktionen mit Lese-Fähigkeit (brauchen Leseseiten-Typen) und Akteure mit `IDarf<Query>` nicht nach `Domain`.
+Die Referenzrichtung ist fest: `Domain` ← `Domain.Projections` ← `Domain.Pipeline` ← `Domain.Akteure`; `Domain.Projections` ← `Domain.Infrastructure`.
+Deshalb gehören Funktionen mit Lese-Fähigkeit (brauchen Leseseiten-Typen) und Akteure mit `IDarf<Query>` nicht nach `Domain`. Die Akteure sind der
+äußerste Ring: ein Akteur darf jede Eingangsart haben — Command, Query, Quelle, Funktion (`IDarf<IFunktion>`, er bietet sie an) — und sein
+Vertrag hört auf beliebige Events, auch auf Ergebnis-Events von Funktionen.
 
 ## 7.3 Bereichs-Ordner und Namespaces
 
@@ -75,8 +77,7 @@ Primitive ist, liegt im Bereichs-Ordner seines Projekts und erscheint im Editor 
 ## 7.6 Offen bis zur Umsetzung
 
 - Im Code fehlt noch die Tabelle als eine Quelle; heute stehen Projektnamen verstreut (docs/13 W2-1).
-- Die Beispieldomäne folgt der Struktur noch nicht überall: Flüsse und Funktions-Schnittstellen liegen teils in `Domain`
-  (`Domain/ImagePair/Bildeingang.cs`, `Domain/Trainingslauf/TrainingWaechter.cs`, `Domain/Bildaufbereitung/Funktionen.cs`), Decider/Applier heißen im
-  Bestand `Decider.cs`/`Applier.cs`, Klassennamen mischen `Projektion`/`Projection`. `Domain.Projections` und `Domain.Infrastructure` folgen der
-  Struktur seit 2026-10-14 (Bereichs-Ordner, Namespace = Projekt + Ordner, Sammeldateien); `MartenCoCommitStoreBase` liegt noch oben in
-  `Domain.Infrastructure` (gehört ins Framework, docs/13 W2-1).
+- Die Beispieldomäne: Flüsse, Funktionen (Schnittstellen, Aufträge, Ergebnis-Events, Implementierungen), Dienste und Konfig-Records liegen
+  seit 2026-10-14 in `Domain.Pipeline/<Bereich>/`, Quellen-Typen in `Domain/<Bereich>/Quellen.cs`; `Domain.Projections` und
+  `Domain.Infrastructure` folgen der Struktur ebenfalls. Offen: Decider/Applier heißen im Bestand `Decider.cs`/`Applier.cs`, Klassennamen mischen
+  `Projektion`/`Projection`; `MartenCoCommitStoreBase` liegt noch oben in `Domain.Infrastructure` (gehört ins Framework, docs/13 W2-1).

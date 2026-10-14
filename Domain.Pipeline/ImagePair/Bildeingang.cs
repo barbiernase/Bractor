@@ -1,7 +1,8 @@
 using Abstractions;
-using Domain.Bildaufbereitung;
+using Domain.ImagePair;
+using Domain.Pipeline.Bildaufbereitung;
 
-namespace Domain.ImagePair;
+namespace Domain.Pipeline.ImagePair;
 
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 // BILDEINGANG als Pipeline-Fluss (docs/konzept-editor-pipelines.md §14): eine Datei kommt an → der Name wird gedeutet → das Paar
@@ -9,27 +10,6 @@ namespace Domain.ImagePair;
 // Kein Umweg mehr über das Aggregat, um die Datei „ins Log zu bringen": die Quelle schreibt sie selbst (genau einmal je Datei),
 // und erst die Commands führen in die Aggregat-Welt.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-
-/// <summary>
-/// Eine fertig geschriebene Datei auf dem Share — die Quelle des Bildeingangs. Der Datei-Treiber befüllt alle Felder (Name, Pfad,
-/// Größe, Kennung …); welches Verzeichnis, welche Muster und wann eine Datei fertig ist, sagt die Konfig (<c>Quellen:DateiErkannt</c>).
-/// Kein Domänenwissen: die Deutung des Namens ist ein eigener Schritt im Fluss.
-/// </summary>
-public sealed record DateiErkannt : DateiGemeldet;
-
-/// <summary>Den Dateinamen nach der Aufnahme-Konvention deuten ({Zeitstempel}_{Version}.tiff → Paar + Version).</summary>
-public sealed record DeuteDateiname(string Dateiname, string Pfad) : IAuftrag<IDateinameDeutung>;
-
-/// <summary>Der Name passt zur Konvention: Paar-Id (deterministisch aus dem PairKey), Version und Aufnahmezeit.</summary>
-public record ImagePairDateiGedeutet(Guid PaarId, string PairKey, BildVersion Version, DateTimeOffset ProduziertAm, string Pfad) : IEvent;
-
-/// <summary>Der Name passt nicht zur Konvention — die Datei gehört zu keinem Paar.</summary>
-public record DateinameUnbekannt(string Dateiname) : IEvent;
-
-public interface IDateinameDeutung : IFunktion
-{
-    Task<OneOf<ImagePairDateiGedeutet, DateinameUnbekannt>> RufeAsync(DeuteDateiname auftrag, IAusfuehrung x);
-}
 
 /// <summary>
 /// Der Bildeingang des Kamerasystems. Die zweite Datei eines Paars findet das Paar schon vor: <c>ErstelleImagePair</c> wird dann

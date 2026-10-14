@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.Linq;
 using DomainEditor;
 using FluentAssertions;
+using Domain.Pipeline.ImagePair;
 using Record = DomainEditor.Record;
 
 namespace Infrastructure.Pruefstand.Tests;

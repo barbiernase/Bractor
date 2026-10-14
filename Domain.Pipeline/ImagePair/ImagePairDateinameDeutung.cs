@@ -1,7 +1,7 @@
 using Abstractions;
 using Domain.ImagePair;
 
-namespace Domain.Pipeline.ImageProcessing;
+namespace Domain.Pipeline.ImagePair;
 
 /// <summary>
 /// Implementierung der Katalog-Funktion <see cref="IDateinameDeutung"/>: die Aufnahme-Konvention ({Zeitstempel}_{Version}.ext) über

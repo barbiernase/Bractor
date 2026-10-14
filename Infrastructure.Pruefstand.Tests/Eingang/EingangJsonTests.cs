@@ -2,7 +2,7 @@ using System;
 using System.Linq;
 using System.Text.Json;
 using Abstractions;
-using Domain.Bildaufbereitung;
+using Domain.Pipeline.Bildaufbereitung;
 using Domain.Datensatz;
 using Domain.ImagePair;
 using Domain.Projections;

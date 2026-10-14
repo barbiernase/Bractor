@@ -20,8 +20,8 @@ class BildVerkleinerung(BildVerkleinerungBasis):
         hoehe = max(1, auftrag.hoehe)
         breite = max(1, round(w * hoehe / h))
         klein = await asyncio.to_thread(cv2.resize, bild, (breite, hoehe), interpolation=cv2.INTER_AREA)
-        # Wie Zielpfad.In im Host: {OutputPath}/{Quelle ohne Endung}_klein.png — eine Wiederholung überschreibt dieselbe Datei.
-        ausgabe = Path(self.konfig.get("OutputPath", ".")).expanduser()
+        # Wie Zielpfad.In im Host: {AusgabePfad}/{Quelle ohne Endung}_klein.png — eine Wiederholung überschreibt dieselbe Datei.
+        ausgabe = Path(self.konfig.get("AusgabePfad", ".")).expanduser()
         ausgabe.mkdir(parents=True, exist_ok=True)
         ziel = ausgabe / f"{Path(auftrag.quell_pfad).stem}_klein.png"
         await asyncio.to_thread(cv2.imwrite, str(ziel), klein)

@@ -29,6 +29,6 @@
     }
   },
   "Konfig": {
-    "PreprocessingConfig": { "OutputPath": "/data/preprocessed" }
+    "BildaufbereitungKonfig": { "AusgabePfad": "/data/preprocessed" }
   }
 }

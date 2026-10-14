@@ -36,6 +36,6 @@
     }
   },
   "Konfig": {
-    "PreprocessingConfig": { "OutputPath": "/home/wirksam/cqrs-data/preprocessed" }
+    "BildaufbereitungKonfig": { "AusgabePfad": "/home/wirksam/cqrs-data/preprocessed" }
   }
 }

@@ -1,6 +1,6 @@
 using OpenCvSharp;
 
-namespace Domain.Pipeline.ImageProcessing;
+namespace Domain.Pipeline.Bildaufbereitung;
 
 /// <summary>
 /// Skaliert Bilder auf eine Zielhöhe mit proportionaler Breite.

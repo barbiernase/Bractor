@@ -20,7 +20,7 @@ class HistogrammAusgleich(HistogrammAusgleichBasis):
         ycrcb = cv2.cvtColor(bild, cv2.COLOR_BGR2YCrCb)
         ycrcb[:, :, 0] = cv2.equalizeHist(ycrcb[:, :, 0])
         aus = cv2.cvtColor(ycrcb, cv2.COLOR_YCrCb2BGR)
-        ausgabe = Path(self.konfig.get("OutputPath", ".")).expanduser()
+        ausgabe = Path(self.konfig.get("AusgabePfad", ".")).expanduser()
         ausgabe.mkdir(parents=True, exist_ok=True)
         ziel = ausgabe / f"{Path(auftrag.quell_pfad).stem}_ausgeglichen.png"
         await asyncio.to_thread(cv2.imwrite, str(ziel), aus)

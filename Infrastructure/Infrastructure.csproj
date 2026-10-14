@@ -4,6 +4,7 @@
     <ProjectReference Include="..\Core.SourceGeneration\Core.SourceGeneration.csproj" />
     <ProjectReference Include="..\Domain.Infrastructure\Domain.Infrastructure.csproj" />
     <ProjectReference Include="..\Domain.Pipeline\Domain.Pipeline.csproj" />
+    <ProjectReference Include="..\Domain.Akteure\Domain.Akteure.csproj" />
     <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
     <ProjectReference Include="..\Infrastructure.SourceGeneration\Infrastructure.SourceGeneration.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\Abstractions\Abstractions.csproj" />

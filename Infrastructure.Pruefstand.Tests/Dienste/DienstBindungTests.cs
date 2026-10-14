@@ -179,11 +179,11 @@ public class DienstBindungTests
     }
 
     [Fact]
-    public void Der_Bestand_hat_zwei_Bild_Dienste_und_den_Konfig_Record_PreprocessingConfig()
+    public void Der_Bestand_hat_zwei_Bild_Dienste_und_den_Konfig_Record_BildaufbereitungKonfig()
     {
         GeneratedDienste.Namen.Keys.Should().BeEquivalentTo("IImageResizer", "IHistogramEqualizer");
         GeneratedDienste.Implementierungen.Select(i => i.Name).Should().BeEquivalentTo("ImageResizer", "HistogramEqualizer");
-        GeneratedDienste.Konfigs.Select(k => k.Name).Should().Equal("PreprocessingConfig");
+        GeneratedDienste.Konfigs.Select(k => k.Name).Should().Equal("BildaufbereitungKonfig");
         GeneratedFunktionen.Implementierungen.Should().OnlyContain(i => i.Impl.Name == i.Name);
     }
 

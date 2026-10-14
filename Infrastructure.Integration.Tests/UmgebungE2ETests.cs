@@ -91,7 +91,7 @@ public class UmgebungE2ETests
             builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
             {
                 ["Quellen:DateiErkannt:Pfad"] = Path.Combine(verz, u.Umgebung.Name),
-                ["Konfig:PreprocessingConfig:OutputPath"] = Path.Combine(verz, u.Umgebung.Name, ".preprocessed"),
+                ["Konfig:BildaufbereitungKonfig:AusgabePfad"] = Path.Combine(verz, u.Umgebung.Name, ".preprocessed"),
             });
             builder.AddCqrs(u);
             return builder.Build();

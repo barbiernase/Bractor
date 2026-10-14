@@ -11,6 +11,7 @@ using Infrastructure.Funktionen;
 using Infrastructure.Prozess;
 using Infrastructure.Quellen;
 using Xunit;
+using Domain.Pipeline.ImagePair;
 
 namespace Infrastructure.Pruefstand.Funktionen.Fluss;
 

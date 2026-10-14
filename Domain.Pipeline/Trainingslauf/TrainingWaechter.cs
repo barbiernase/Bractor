@@ -1,6 +1,7 @@
 using Abstractions;
+using Domain.Trainingslauf;
 
-namespace Domain.Trainingslauf;
+namespace Domain.Pipeline.Trainingslauf;
 
 /// <summary>
 /// Timeout-Wächter für Trainingsläufe als Pipeline-Fluss (docs/konzept-editor-pipelines.md §14): ein RENNEN statt

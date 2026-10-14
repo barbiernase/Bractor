@@ -1,7 +1,7 @@
 using Abstractions;
 using OpenCvSharp;
 
-namespace Domain.Pipeline.ImageProcessing;
+namespace Domain.Pipeline.Bildaufbereitung;
 
 /// <summary>
 /// Führt einen Histogrammausgleich auf einem Bild durch.

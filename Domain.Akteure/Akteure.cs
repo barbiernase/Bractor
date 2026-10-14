@@ -1,5 +1,5 @@
 using Abstractions;
-using Domain.Bildaufbereitung;
+using Domain.Pipeline.Bildaufbereitung;
 using Domain.Datensatz;
 using Domain.ImagePair;
 using Domain.Modell;

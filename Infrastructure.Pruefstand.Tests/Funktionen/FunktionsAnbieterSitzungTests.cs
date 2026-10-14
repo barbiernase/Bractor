@@ -5,7 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Abstractions;
-using Domain.Bildaufbereitung;
+using Domain.Pipeline.Bildaufbereitung;
 using FluentAssertions;
 using Google.Protobuf;
 using Infrastructure.Aggregate;   // KommandoAbgelehnt
@@ -168,7 +168,7 @@ public class FunktionsAnbieterSitzungTests
         var w = new Welt();
         await using var s = w.Sitzung();
         var a = w.Biete("a"); var b = w.Biete("b");
-        s.Biete(new[] { ("Domain.Bildaufbereitung.IBildVerkleinerung", 2) });   // auch der volle Name gilt
+        s.Biete(new[] { ("Domain.Pipeline.Bildaufbereitung.IBildVerkleinerung", 2) });   // auch der volle Name gilt
         await Bis(() => w.Gesendet.Count == 2, "zwei Slots");
 
         (await s.ErgebnisAsync(a.Vorgang, null, "Datei gesperrt", CancellationToken.None)).Should().Be(ErgebnisAusgang.Abgelehnt);

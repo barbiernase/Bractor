@@ -9,7 +9,6 @@ using Domain.Datensatz;
 using Domain.ImagePair;
 using Domain.Modell;
 using Core;
-using Domain.Pipeline.ImageProcessing;
 using FluentAssertions;
 using Infrastructure.Akteure;
 using Infrastructure.Pipeline;

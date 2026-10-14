@@ -7,6 +7,7 @@ using Domain.Pipeline.Datensatz;
 using Domain.Trainingslauf;
 using FluentAssertions;
 using Xunit;
+using Domain.Pipeline.Trainingslauf;
 
 namespace Infrastructure.Pruefstand.Funktionen;
 

@@ -48,7 +48,7 @@ public class WirkerIdTests
     [Fact]
     public void Die_Laufzeit_kennt_die_Namen_der_Domaene()
     {
-        var bild = Domain.Prozess.GeneratedProzessRegeln.Alle["Bildeingang"];
+        var bild = Domain.Pipeline.Prozess.GeneratedProzessRegeln.Alle["Bildeingang"];
         bild.KnotenNamen.Should().Equal("datei", "deuten", "paar", "vorschau", "kontrast", "melden");
         bild.Wirker(0).Should().StartWith("fluss:Bildeingang#");
         var teil = Domain.Prozess.GeneratedProzessRegeln.Alle["TeilFertigProzess"];

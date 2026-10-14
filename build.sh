@@ -169,7 +169,7 @@ cat > "$OUTPUT/grpc/umgebungen/umgebung.linux.json" << EOF
       "Dateien": [ "${GRPC_WATCH_PATH}", "${GRPC_PREPROCESSED_PATH}" ]
     }
   },
-  "Konfig": { "PreprocessingConfig": { "OutputPath": "${GRPC_PREPROCESSED_PATH}" } }
+  "Konfig": { "BildaufbereitungKonfig": { "AusgabePfad": "${GRPC_PREPROCESSED_PATH}" } }
 }
 EOF
 echo "  ✓ grpc/umgebungen/umgebung.linux.json (Host startet mit --umgebung linux)"

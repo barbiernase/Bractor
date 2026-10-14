@@ -10,6 +10,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
 using Xunit;
+using Domain.Pipeline.ImagePair;
 using Record = DomainEditor.Record;
 
 namespace Infrastructure.Pruefstand.Analyzers;
