@@ -14,6 +14,9 @@
 # Exit-Code 0 = grün; sonst rot (die Meldungen nennen den Grund). Gedacht vor jedem Push.
 set -euo pipefail
 
+# Keine wiederverwendeten MSBuild-Knoten: sie erben die Ausgabe und hielten eine Pipe (z. B. `| tail`) bis zu ihrem Leerlauf-Ende offen.
+export MSBUILDDISABLENODEREUSE=1
+
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
