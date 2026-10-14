@@ -1,7 +1,7 @@
 # 13 — Reifegrad, Schulden & Bewertung
 
 **Die eine Quelle für „offen“.** Andere Dokumente (`CLAUDE.md`, Kapitel 01–12, Konzepte) nennen Schulden höchstens kurz und verweisen
-hierher. Stand: 2026-10-14, Commit-Basis `dcda9b8`. Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
+hierher. Stand: 2026-10-15, Commit-Basis `ea463c6`. Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
 (`docs/konzept-werkbank.md` §2). Zahlen und Messwerte stehen in `docs/12-tests-und-vermessung.md`.
 
 ## 13.0 Offen auf einen Blick
@@ -10,6 +10,8 @@ hierher. Stand: 2026-10-14, Commit-Basis `dcda9b8`. Maßstab sind die sechs Inva
 |---|---|:--:|
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
 | W10-2 | Reflektive Serialisierung zur Laufzeit (Marten-Default, Marking-Store, Snapshot-`Clone`, HTTP-Antworten); kein Reflection-Verbot im Build | P1 |
+| WB-2 | Werkbank ohne automatischen ⟳-Abnahmetest (Bauen → Host → Durchspielen → Spur → Geste/↶; Python-Worker live) | P1 |
+| WB-3 | Kein Gate „frischer Checkout baut“ (Ignore-Regeln schlucken Quellen) | P1 |
 | P1-1 | Multi-Node nur container-erprobt, Consul im `-dev`-Modus | P1 |
 | P1-2 | Transport-Sicherheit: kein TLS; Identitäten für Prod fehlen | P1 |
 | P1-6 | `CancellationToken.None` im generierten Pull-Emit-Pfad | P1 |
@@ -19,6 +21,7 @@ hierher. Stand: 2026-10-14, Commit-Basis `dcda9b8`. Maßstab sind die sechs Inva
 | W11-2 | Zeitlimits nur über den 15-s-Backstop entdeckt; Fristplaner hängt an der Handle-Welt | P2 |
 | W3-1 | Ableitungen im Editor-JS (Karten-Ids, Hör-Menge, Lambda-Parameter, Auto-Zuordnung, Kardinalität) | P2 |
 | WB-1 | Werkbank: Geste p50 unter Fremdlast 346–470 ms (Ziel 300 ms), tote Endpunkte, Formular/Spiegel lesen `domain-model.json` | P2 |
+| WB-4 | Die Werkbank kennt genau eine Anwendung (`StandardWurzel`, `ServerHost`); eine Anwendung anlegen ist nicht beschrieben — Entscheidung offen | P2 |
 | WZ-1 | Prüf-Lücken der Werkzeuge: Grammatik-Gate bestätigt sich selbst, Fixpunkt ohne Akteure/Verträge/Clients/Funktionen/Dienste, Sonde ohne `SendeJe`/Count-Join/Kompensation/`IMensch`/`IstClient` | P2 |
 | AK-1 | Akteure/Clients: durable Zustellung an Clients, `als` im Envelope, Zusagen über C#, Anmeldung je Person | P2 |
 | P2-4 | `BoundedInbox` nicht airtight (FIFO ab 10 000) | P2 |
@@ -50,7 +53,7 @@ Werkzeuge lesen teils per Reflection, und neben den neuen Wegen (Fluss, Quelle, 
 | Konsum-/Prozess-Maschine | 🟢 |
 | Generatoren & Analyzer | 🟢 / 🟡 (W10-1, W2-1) |
 | Multi-Node / Transport | 🟢 / 🟡 (P1-1, P1-2) |
-| Werkbank (Extractor, Editor, Server) | 🟢 / 🟡 (W3-1, WB-1, WZ-1) |
+| Werkbank (Extractor, Editor, Server) | 🟢 / 🟡 (WB-2, WB-3, W3-1, WB-1, WB-4, WZ-1) |
 | Clients (Blazor, Python) | 🟢 / 🟡 (AK-1, P1-2) |
 | Tests & Vermessung | 🟢 |
 
@@ -120,6 +123,16 @@ DtoMapper, `Clientvertragslesart`, Lesart des `FunktionsGenerator`); Wirte: warm
    für gleichnamige Typen in verschiedenen Namespaces, solange einfache Namen noch irgendwo als Schlüssel dienen (Umgebungs-Dateien nennen
    Akteure beim Namen — dort bleibt der einfache Name als Anzeigename, geprüft auf Eindeutigkeit).
 
+**WB-2 · Kein automatischer ⟳-Abnahmetest.** Die Werkbank wird nur von Hand im Browser abgenommen (docs/12 §12.1). So blieb die Daten-Prüfung von
+⟳ von `0bc84a7` bis 2026-10-15 wirkungslos, ohne dass ein Test rot wurde (§13.6). Auch der Live-Weg „▶ Worker“ (Laufort `Extern`, Interpreter aus
+`Umgebung:Python`) ist ungetestet. *Empfehlung:* ein Integrationstest gegen den Werkbank-Server ohne Browser in einer eigenen Sim-DB: ⟳ (alle
+Schritte grün, Board-Stand = Lauf-Stand) → Command über den JSON-Eingang als Akteur → Vorgang und Spur über die Einblick-API → eine Geste und ↶ →
+Worker einer externen Funktion starten und ein Ergebnis abholen; dazu ein Test, dass die Daten-Prüfung ein entferntes Event-Feld meldet.
+
+**WB-3 · Kein Gate „frischer Checkout baut“.** `Cqrs.Leitung/cqrs.proto` fehlte einen Tag lang im Repo (globale Ignore-Regel `cqrs.proto`), der
+Quellordner `Domain.Client.Modules.Blazor/Debug/` fehlt bis heute (`[Dd]ebug/`, P3-2) — lokal fiel beides nicht auf. *Empfehlung:* ein Skript, das
+den Stand in einem temporären `git worktree` baut, `codegen.sh --check` und den Prüfstand fährt; vor jedem Push.
+
 **P1-1 · Multi-Node nur container-erprobt.** Cross-Node ist über alle Planes verdrahtet und bewiesen (`TwoNodeCommandDispatchTests`,
 `RemotePidDeliverySmokeTests`, 3-Node-Compose), der Regelbetrieb ist aber Single-Node; Consul läuft im `-dev`-Modus (kein Quorum).
 *Empfehlung:* Consul mit Quorum/Persistenz, Betriebsrezept.
@@ -160,6 +173,11 @@ Handle-Welt. *Empfehlung:* Fristplaner als Weck-Quelle der Zeitlimits in den Dir
 `domain-model.json` vom Datenträger statt aus dem warmen Board. Umgebungs-Werte werden ohne Verlauf und ohne Branch-Sperre geschrieben; die Werkbank
 löst Umgebungs-Dateien anders auf als der Host (fehlendes `${env:X}` wird still leer) und liest `Identitaeten.Tokens` mit einem dritten Parser.
 LLM-Kontexte entstehen kalt (~1 min). Der Renamer ändert keine String-Literale.
+
+**WB-4 · Eine Anwendung je Werkbank.** Werkbank, Scaffolder und Extractor arbeiten auf `Projektstruktur.StandardWurzel` (11 Stellen) und bauen
+`ServerHost`; die Prüfdomäne (zweite Anwendung) lässt sich nicht öffnen, und das Anlegen einer neuen Anwendung (Rollen-Projekte, Komposition, Host)
+beschreibt das Zielbild nicht. *Entscheidung offen:* „eine Werkbank = eine Anwendung je Solution“ festschreiben oder die Wurzel wählbar machen
+(Projektlage, Stand, Scaffolder, Host, Codegen-Prepass kennen sie bereits als Parameter).
 
 **WZ-1 · Prüf-Lücken der Werkzeuge.** Das Grammatik-Gate in `--check` sucht die IDs als Text in der Solution und findet sie auch in `Grammatik.cs`
 selbst; die Ortsangaben prüft es nicht (CQRS056 steht dort falsch als Analyzer in Domain.SourceGeneration). 18 Diagnose-IDs haben keine
@@ -209,17 +227,35 @@ Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
 
 ## 13.4 Korrektheit vs. Reifegrad
 
-Kein Befund ist ein bekannter aktiver Korrektheits-Bug. Korrektheitsnah sind: **W10-1** (möglicher Hash-Unterschied zwischen Python-Basis und Server beim Handshake), **W2-1** (vom Client gesetztes Cluster-Kind) und **WZ-1** (Prüfungen, die grün sind, ohne es zu beweisen). Alles andere ist Reifegrad,
+Kein Befund ist ein bekannter aktiver Korrektheits-Bug. Korrektheitsnah sind: **WB-2/WB-3** (Werkbank-Kreislauf und frischer Checkout ohne automatischen Beweis), **W10-1** (möglicher Hash-Unterschied zwischen Python-Basis und Server beim Handshake), **W2-1** (vom Client gesetztes Cluster-Kind) und **WZ-1** (Prüfungen, die grün sind, ohne es zu beweisen). Alles andere ist Reifegrad,
 Allgemeingültigkeit oder Hygiene.
 
 ## 13.5 Empfohlene Reihenfolge
 
-1. **Wissen aufräumen** (Doku, Gedächtnis — läuft, 2026-10-13).
-2. **W2-1** Rest (Leitungs-Framework für Client und Server, Generat-Namespaces); **WZ-1** Prüfungen schärfen (Sonde für alle allgemeinen Primitive).
-3. **W10-1/W10-2** Codegen auf Roslyn, Laufzeit-Serialisierung generiert, Reflection-Sperre.
-4. **W11-1/W11-2** Rückbau der Handle-/Trigger-Welt nach Takt-Treiber und flüchtigen Quellen; Fristplaner im Dirigenten; DSL-Frage.
-5. **W3-1/WB-1** Werkbank: letzte Ableitungen auf den Server, ein Rumpf-Schreibweg, tote Endpunkte weg.
-6. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
+Ziel ist die vollständige Werkbank nach `docs/konzept-werkbank.md` (W1–W12). Zuerst das Sicherheitsnetz, dann je Absicht ein Weg, dann die
+Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zuletzt Treiber, Rückbau und Produktion.
+
+**Vorab zu entscheiden** (blockiert die genannten Schritte nicht, ändert aber ihren Umfang):
+- **WB-4** eine Anwendung je Werkbank oder Wurzel wählbar;
+- **W11-1** Prozess- und Fluss-DSL: eine Schreibweise oder beide;
+- **`IAkteurDienst<A>`** behalten oder durch Funktion + `IDarf<F>` ersetzen;
+- **Daten-Prüfung von ⟳** gegen das Proto (heute) oder gegen die gespeicherte JSON-Form der Events (Marten/STJ, die eigentliche Wahrheit);
+- **Tor am Webhook** einer Quelle (Token → Akteur) und Identitäten für Prod (P1-2).
+
+1. **WB-2/WB-3** Sicherheitsnetz: automatischer ⟳-Abnahmetest (inkl. „▶ Worker“) und Gate „frischer Checkout baut“.
+2. **W11-1 (Schreibwege)/WB-1** je Absicht ein Weg: 🤖 schreibt über die Rumpf-Geste (nicht `CodeSync.SetzeRumpf`), Umgebungs-Werte mit Verlauf, ↶
+   und Branch-Sperre, Werkbank löst Umgebungen wie der Host auf (ein Token-Parser, fehlendes `${env:X}` = Fehler); tote Endpunkte weg; Durchspielen,
+   Spur-Spiegel und LLM-Konsole lesen das warme Board statt `domain-model.json`.
+3. **W3-1** Ableitungen auf den Server: Karten-Ids, Hör-Menge, Lambda-Parameter, Auto-Zuordnung, Port-Kardinalität aus `board.sicht`/`/api/werkbank/*`.
+4. **W10-1** Formular-Schema aus dem warmen Workspace (statt `Schema.cs` per Reflection), Codegen auf Roslyn; danach **W10-2** Laufzeit-Serialisierung
+   generiert und Reflection-Sperre.
+5. **WZ-1** Prüfungen schärfen: Grammatik-Gate prüft Ort und Gegenstück, Fixpunkt über Akteure/Verträge/Clients/Funktionen/Dienste, Sonde für alle
+   allgemeinen Primitive (`SendeJe`, Count-Join, Kompensation, `IMensch`, `IstClient`, Laufort, Webhook).
+6. **W11-1/W11-2** Treiber (Takt, flüchtige Quellen, Client meldet Quell-Nachricht), danach Rückbau der Handle-/Trigger-Welt samt Grammatik-Regeln;
+   Zeitlimits über den Fristplaner; DSL nach Entscheidung.
+7. **W2-1** Rest (Leitungs-Framework = `Cqrs.Leitung`, Generat-Namespaces = Komposition, Identitäten aus vollen Typnamen).
+8. **WB-1** Geste p50 unter Fremdlast auf 300 ms; Renamer für String-Literale; LLM-Kontexte warm.
+9. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
 

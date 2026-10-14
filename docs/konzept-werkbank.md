@@ -519,8 +519,7 @@ Allgemeine Schulden stehen in `docs/13` §13.0. Für die Werkbank im Besonderen:
 - **Leitsatz-Verletzungen im Code:**
   - W10: der Codegen liest per `MetadataLoadContext`; `Werkbank/Server/Schema.cs` liest die Konfig-Typen per Reflection aus der eigenen DLL
     (statt aus dem warmen Workspace).
-  - W2: der Stand-Hash und der Codegen nutzen feste Projektnamen; Formular, Spiegel und Durchspielen lesen `domain-model.json` vom Datenträger
-    statt aus dem warmen Board.
+  - W1/W3: Durchspielen, Spur-Spiegel und LLM-Konsole lesen `domain-model.json` vom Datenträger statt aus dem warmen Board.
   - W3: `editor.js` baut Karten-Ids (`graphNodes`) und rechnet Hör-Menge, Lambda-Parameter, Auto-Zuordnung und Port-Kardinalität selbst.
   - W4/W11: neben dem Gesten-Weg gibt es eigene Schreibwege — 🤖 schreibt über `CodeSync.SetzeRumpf` mit eigener Sicherung und eigenem Rückgängig,
     Umgebungs-Werte gehen ohne Verlauf und ohne Branch-Sperre; die CLI `--schreiben <board.json>` ist ein Rest von „C# schreiben“.
@@ -528,6 +527,14 @@ Allgemeine Schulden stehen in `docs/13` §13.0. Für die Werkbank im Besonderen:
     `/api/editor/build`, `/api/llm/pruefen`, `/api/llm/rumpf`.
 - **Geste p50 unter Fremdlast 346–470 ms** (Ziel 300 ms). Der Renamer ändert keine String-Literale.
 - **Pfade für entfernte Ausführer** (Python-Worker sehen ein Share anders gemountet): `RelativerPfad` ist vorbereitet.
+- **Kein automatischer ⟳-Abnahmetest** (docs/13 WB-2): Bauen → Host → Durchspielen → Spur → Geste/↶ und „▶ Worker“ werden nur von Hand im Browser
+  abgenommen; ein Fehler in „Daten prüfen“ blieb deshalb unbemerkt (behoben 2026-10-15). **Kein Gate „frischer Checkout baut“** (WB-3).
+- **Eine Anwendung je Werkbank?** (WB-4): Werkbank, Scaffolder und Extractor arbeiten auf `Projektstruktur.StandardWurzel` und bauen `ServerHost`; das
+  Anlegen einer neuen Anwendung ist nicht beschrieben. Zu entscheiden: festschreiben oder Wurzel wählbar machen.
+- **Daten-Prüfung (§4.6, ⟳ Schritt 4)** vergleicht das generierte Proto; gespeichert sind die Events als JSON (Marten/STJ). Zu entscheiden, ob
+  die Prüfung gegen die JSON-Form laufen soll.
+
+Reihenfolge der Umsetzung: `docs/13` §13.5.
 
 ### 12.3 Entscheidungen aus der Umsetzung (E1–E13)
 
