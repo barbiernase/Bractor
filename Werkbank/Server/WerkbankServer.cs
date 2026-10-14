@@ -80,7 +80,7 @@ public sealed class WerkbankServer
     public string Stand()
     {
         using var sha = SHA256.Create();
-        foreach (var projekt in new[] { "Domain", "Domain.Akteure", "Domain.Pipeline", "Domain.Projections", "Domain.Infrastructure" })
+        foreach (var projekt in Abstractions.Projektstruktur.Projekte(Abstractions.Projektstruktur.StandardWurzel))   // die Rollen-Projekte (docs/07)
         {
             var verz = Path.Combine(_root, projekt);
             if (!Directory.Exists(verz)) continue;
@@ -161,7 +161,8 @@ public sealed class WerkbankServer
             // 1 Bauen: dotnet build des Laufzeit-Hosts — der Codegen-Prepass (Proto, STJ-Kontexte, Python-Basen) läuft im Build mit.
             Beginne("Bauen");
             // -p:CqrsStand: der Host stempelt diesen Stand an jedes Event (Spur) — Board, Build und Lauf tragen denselben.
-            var bau = await Prozesse.LaufeAsync("dotnet", ["build", "Host.Grpc/Host.Grpc.csproj", "-v", "q", "-nologo", "-clp:NoSummary", $"-p:CqrsStand={stand}"], _root, ct: ct);
+            var host = Abstractions.Projektstruktur.ServerHost;
+            var bau = await Prozesse.LaufeAsync("dotnet", ["build", $"{host}/{host}.csproj", "-v", "q", "-nologo", "-clp:NoSummary", $"-p:CqrsStand={stand}"], _root, ct: ct);
             var diagnosen = Karten.Zuordnen(Diagnosen.Lies(bau.Zeilen, _root), vorher.Board);
             Schritt(schritte, new Schritt("Bauen", bau.Ok, (long)bau.Dauer.TotalMilliseconds,
                 bau.Ok ? ["0 Fehler"] : diagnosen.Count > 0 ? diagnosen.Select(x => $"{x.Datei}:{x.Zeile} {x.Code} {x.Text}").Take(20).ToList() : bau.Zeilen.TakeLast(15).ToList()));
@@ -169,7 +170,7 @@ public sealed class WerkbankServer
 
             // 2 Python-DTOs (betterproto) — sonst verstehen externe Worker die geänderten Nachrichten nicht.
             var python = Environment.GetEnvironmentVariable("CQRS_PYTHON") is { Length: > 0 } py ? Path.GetDirectoryName(py)! : "/opt/miniconda3/envs/gpu_env/bin";
-            var skript = Path.Combine(_root, "Domain.Client.Worker.Python.ML", "build_python.sh");
+            var skript = Path.Combine(_root, Abstractions.Projektstruktur.PythonWorker(Abstractions.Projektstruktur.StandardWurzel), "build_python.sh");
             if (File.Exists(skript))
             {
                 Beginne("Python-Basen");

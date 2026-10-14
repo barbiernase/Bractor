@@ -38,12 +38,14 @@ public static class Umbenennen
                 if (patch.Any(p => p.Datei == rel)) continue;   // dieselbe Datei in mehreren Projekten (verlinkt)
                 patch.Add(new DateiPatch(rel, (await alt.GetTextAsync(ct)).ToString(), (await nachher.GetTextAsync(ct)).ToString()));
             }
-        // Ein Typ in einer Datei seines Namens (<alt>.cs): die Datei zieht mit (entfernt + neu angelegt) — sonst hieße INeuerDienst.cs bald IGrenzwerte.
+        // Ein Typ in Dateien seines Namens (<alt>.cs, Teile <alt>.<Teil>.cs wie <A>.Decider.cs/<Store>.Lesen.cs, docs/07 §7.4): die Dateien
+        //   ziehen mit (entfernt + neu angelegt) — sonst hieße INeuerDienst.cs bald IGrenzwerte.
+        static bool Eigene(string datei, string name) => datei == name + ".cs" || (datei.StartsWith(name + ".", StringComparison.Ordinal) && datei.EndsWith(".cs", StringComparison.Ordinal));
         if (symbol is INamedTypeSymbol)
-            foreach (var r in symbol.DeclaringSyntaxReferences.Where(r => Path.GetFileName(r.SyntaxTree.FilePath) == symbol.Name + ".cs"))
+            foreach (var r in symbol.DeclaringSyntaxReferences.Where(r => Eigene(Path.GetFileName(r.SyntaxTree.FilePath), symbol.Name)))
             {
                 var rel = Path.GetRelativePath(wurzel, r.SyntaxTree.FilePath).Replace('\\', '/');
-                var neuRel = Path.Combine(Path.GetDirectoryName(rel) ?? "", neu + ".cs").Replace('\\', '/');
+                var neuRel = Path.Combine(Path.GetDirectoryName(rel) ?? "", neu + Path.GetFileName(rel)[symbol.Name.Length..]).Replace('\\', '/');
                 if (File.Exists(Path.Combine(wurzel, neuRel)) || patch.Any(p => p.Datei == neuRel)) continue;
                 var i = patch.FindIndex(p => p.Datei == rel);
                 var text = i >= 0 ? patch[i].Nachher : r.SyntaxTree.GetText(ct).ToString();

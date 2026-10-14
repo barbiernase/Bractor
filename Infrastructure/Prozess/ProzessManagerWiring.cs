@@ -241,22 +241,15 @@ public sealed class ProzessManagerStartupService : IHostedService
 /// <summary>
 /// Der EINE Aufruf für den Host: registriert die generierte Regel-Registry, das generische Manager-Kind
 /// und die Korrelations-Zustellung. Kein per-Prozess-Glue — die Prozesse stecken nur in den
-/// <c>IProzessDefinition</c> (Domain) → <c>GeneratedProzessRegeln.Alle</c>.
+/// <c>IProzessDefinition</c>/<c>IPipeline</c> der Domäne → <c>GeneratedProzessVerbund.Alle</c>.
 /// </summary>
 public static class GeneratedProzesse
 {
     /// <summary>
-    /// Die Registry aller Prozesse und Flüsse: je Domänen-Assembly eine generierte (Domain; Domain.Pipeline für Flüsse, deren
-    /// Funktionen Fähigkeiten der Leseseite nehmen). Ein Name zweimal → laut (wie CQRS012 innerhalb einer Assembly).
+    /// Die Registry aller Prozesse und Flüsse: der generierte Verbund der Registries jeder Domänen-Assembly (ProzessVerbundGenerator;
+    /// ein Name zweimal = CQRS012, Prozesse ohne Registry = CQRS099 — beides im Build).
     /// </summary>
-    public static IReadOnlyDictionary<string, ProzessRegeln> AlleRegeln()
-    {
-        var alle = new Dictionary<string, ProzessRegeln>(Domain.Prozess.GeneratedProzessRegeln.Alle);
-        foreach (var (name, regeln) in Domain.Pipeline.Prozess.GeneratedProzessRegeln.Alle)
-            if (!alle.TryAdd(name, regeln))
-                throw new InvalidOperationException($"Der Prozess-/Pipeline-Name '{name}' ist in Domain und Domain.Pipeline doppelt vergeben.");
-        return alle;
-    }
+    public static IReadOnlyDictionary<string, ProzessRegeln> AlleRegeln() => GeneratedProzessVerbund.Alle;
 
     public static IServiceCollection AddGeneratedProzesse(this IServiceCollection services)
     {

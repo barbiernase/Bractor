@@ -228,6 +228,8 @@ public sealed class DomainEditorLeseseiteTests
 
         var analyzer = typeof(Domain.SourceGeneration.FaehigkeitAnalyzer).Assembly.GetTypes()
             .Where(t => typeof(DiagnosticAnalyzer).IsAssignableFrom(t) && !t.IsAbstract)
+            // Die Lage (CQRS098) prüft die Verteilung auf Rollen-Projekte — hier steht alles bewusst in EINER Probe-Assembly.
+            .Where(t => t != typeof(Domain.SourceGeneration.LageAnalyzer))
             .Select(t => (DiagnosticAnalyzer)Activator.CreateInstance(t)!).ToImmutableArray();
         analyzer.Select(a => a.GetType().Name).Should().Contain(["FaehigkeitAnalyzer", "AusgabeVertragAnalyzer", "HandlerFormAnalyzer"]);
         var befunde = await comp.WithAnalyzers(analyzer).GetAnalyzerDiagnosticsAsync();

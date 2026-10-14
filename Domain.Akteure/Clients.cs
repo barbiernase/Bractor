@@ -1,5 +1,4 @@
 using Abstractions;
-using Domain.Akteure;
 using Domain.Datensatz;
 using Domain.ImagePair;
 using Domain.Modell;
@@ -10,7 +9,7 @@ using Domain.Projections.ImagePair;
 using Domain.Projections.Modell;
 using Domain.Projections.Trainingslauf;
 
-namespace Domain.Clients;
+namespace Domain.Akteure;
 
 // Die CLIENTS — die Software an der Leitung (docs/konzept-akteure.md §4). Ein Client ist nicht ein Akteur: er kann mehrere
 // Akteure verkörpern (der Arbeitsplatz: Inspekteur, Produktprüfer, KIOperator, Modellfreigeber), und ein Akteur kann über mehrere

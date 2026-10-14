@@ -25,15 +25,37 @@ using Cqrs.Codegen;
 // Domain-Assemblies über System.Reflection.MetadataLoadContext — reflexionsfrei zur Laufzeit,
 // cross-platform, als schlankes MSBuild-Pre-Build-Target lauffähig.
 //
-// AUFRUF:  Cqrs.Codegen [<Assembly-Ordner>] [<Config>]
-//   arg0 (optional): Ordner mit Domain.dll/Domain.Projections.dll/Domain.Akteure.dll/Domain.Pipeline.dll SAMT ihrer
+// AUFRUF:  Cqrs.Codegen [<Assembly-Ordner>] [<Config>] [--wenn-geaendert] [--artefakte]
+//   arg0 (optional): Ordner mit den DLLs der Codegen-Projekte (Abstractions.Projektstruktur.CodegenProjekte) SAMT ihrer
 //                    Abhängigkeits-Closure. Default: der eigene Ausgabeordner des Prepass
 //                    (AppContext.BaseDirectory) — dort liegt als Exe-Consumer die volle Closure.
 //   arg1 (optional): Build-Config (Debug|Release) — rein informativ fürs Log.
+//   --wenn-geaendert: nur erzeugen, wenn sich die gebauten Domänen-DLLs oder das Werkzeug geändert haben (Hash; der Build-Prepass
+//                    und codegen.sh) — so braucht kein Build-Skript eine eigene Liste der Domänen-Quellen.
+//   --artefakte:     nur die erzeugten Dateien auflisten (relativ zur Solution; für codegen.sh --check).
 // ============================================================================
 
 const string ProtoNamespace = "CqrsSolution";
-var targetProjects = new[] { "Domain", "Domain.Projections", "Domain.Akteure", "Domain.Pipeline" };
+// Welche Projekte die Domäne bilden und wohin die Artefakte gehen: eine Quelle (Abstractions.Projektstruktur, docs/07).
+var wurzel = Abstractions.Projektstruktur.StandardWurzel;
+var targetProjects = Abstractions.Projektstruktur.CodegenProjekte(wurzel).ToArray();
+var flags = args.Where(a => a.StartsWith("--", StringComparison.Ordinal)).ToHashSet(StringComparer.Ordinal);
+var posArgs = args.Where(a => !a.StartsWith("--", StringComparison.Ordinal)).ToArray();
+var pythonGeneriert = Path.Combine(Abstractions.Projektstruktur.PythonWorker(wurzel), Abstractions.Projektstruktur.PythonGeneriert);
+var artefakte = new[]
+{
+    Path.Combine(Abstractions.Projektstruktur.ProtoProjekt, Abstractions.Projektstruktur.ProtoDatei),
+    Path.Combine(Abstractions.Projektstruktur.SerialisierungsOrdner, "EventJsonSerializerContext.g.cs"),
+    Path.Combine(Abstractions.Projektstruktur.SerialisierungsOrdner, "CqrsWireJsonContext.g.cs"),
+    Path.Combine(pythonGeneriert, "vertraege.py"),
+    Path.Combine(pythonGeneriert, "funktionen.py"),
+    Path.Combine(pythonGeneriert, "funktions_tabelle.py"),
+};
+if (flags.Contains("--artefakte"))
+{
+    foreach (var a in artefakte) Console.WriteLine(a.Replace('\\', '/'));
+    return 0;
+}
 
 Console.WriteLine();
 Console.WriteLine("╔═══════════════════════════════════════════════════════════╗");
@@ -50,15 +72,25 @@ if (solutionPath == null)
 var solutionDir = Path.GetDirectoryName(solutionPath) ?? ".";
 
 // ── Argumente: Assembly-Ordner (mit voller Closure) + Config-Label ───────
-var assemblyDir = args.Length > 0 && !string.IsNullOrWhiteSpace(args[0])
-    ? Path.GetFullPath(args[0])
+var assemblyDir = posArgs.Length > 0 && !string.IsNullOrWhiteSpace(posArgs[0])
+    ? Path.GetFullPath(posArgs[0])
     : AppContext.BaseDirectory;
-var configLabel = args.Length > 1 && !string.IsNullOrWhiteSpace(args[1]) ? args[1] : "-";
+var configLabel = posArgs.Length > 1 && !string.IsNullOrWhiteSpace(posArgs[1]) ? posArgs[1] : "-";
 
 if (!Directory.Exists(assemblyDir))
 {
     Console.Error.WriteLine($"❌ Assembly-Ordner fehlt: {assemblyDir}");
     return 1;
+}
+
+// ── Inkrementell: die Artefakte hängen allein an den gebauten Domänen-DLLs und am Werkzeug (deterministischer Build) ──
+var hashDatei = Path.Combine(assemblyDir, "cqrs-codegen.hash");
+var standHash = Stand(assemblyDir, targetProjects.Concat(new[] { "Abstractions", "Cqrs.Codegen", "Proto.SourceGeneration", "Core.SourceGeneration", "Abstractions.SourceGeneration" }));
+if (flags.Contains("--wenn-geaendert") && File.Exists(hashDatei) && File.ReadAllText(hashDatei) == standHash
+    && artefakte.All(a => File.Exists(Path.Combine(solutionDir, a))))
+{
+    Console.WriteLine($"Codegen aktuell ({standHash[..16]}…) — übersprungen.");
+    return 0;
 }
 
 Console.WriteLine($"📁 Solution:  {solutionPath}");
@@ -161,7 +193,7 @@ var protoContent = new FileGenerator().GenerateProtoFile(
     ProtoNamespace, objectTypes, commandTypes, eventTypes,
     queryTypes, queryResponseTypes, triggerTypes, auftragTypes);
 
-var protoPath = Path.Combine(solutionDir, "ProtoRepo", "domain.proto");
+var protoPath = Path.Combine(solutionDir, artefakte[0]);
 if (!Directory.Exists(Path.GetDirectoryName(protoPath)!))
 {
     Console.Error.WriteLine($"❌ ProtoRepo-Verzeichnis fehlt: {Path.GetDirectoryName(protoPath)}");
@@ -177,14 +209,14 @@ Console.WriteLine();
 Console.WriteLine("Scanne Marker (STJ-Kontexte)...");
 var (eventContext, wireContext, stats) = JsonContextEmitter.Emit(assemblies);
 
-var serializationDir = Path.Combine(solutionDir, "Infrastructure", "Serialization");
+var serializationDir = Path.Combine(solutionDir, Abstractions.Projektstruktur.SerialisierungsOrdner);
 if (!Directory.Exists(serializationDir))
 {
     Console.Error.WriteLine($"❌ Serialization-Verzeichnis fehlt: {serializationDir}");
     return 1;
 }
-var eventCtxPath = Path.Combine(serializationDir, "EventJsonSerializerContext.g.cs");
-var wireCtxPath = Path.Combine(serializationDir, "CqrsWireJsonContext.g.cs");
+var eventCtxPath = Path.Combine(solutionDir, artefakte[1]);
+var wireCtxPath = Path.Combine(solutionDir, artefakte[2]);
 WriteIfChanged(eventCtxPath, eventContext);
 WriteIfChanged(wireCtxPath, wireContext);
 Console.WriteLine($"✅ {eventCtxPath}");
@@ -194,7 +226,7 @@ Console.WriteLine($"✅ {wireCtxPath}");
 // 4. Akteur-Verträge → Python (die Worker programmieren gegen die generierte Basis)
 // ────────────────────────────────────────────────────────────────────────
 var (vertraegePy, vertragAnzahl) = PythonVertragsEmitter.Emit(assemblies);
-var vertraegePfad = Path.Combine(solutionDir, "Domain.Client.Worker.Python.ML", "domain_client", "generated", "vertraege.py");
+var vertraegePfad = Path.Combine(solutionDir, artefakte[3]);
 if (Directory.Exists(Path.GetDirectoryName(vertraegePfad)!))
 {
     WriteIfChanged(vertraegePfad, vertraegePy);
@@ -206,13 +238,13 @@ else Console.WriteLine($"⚠️  Python-Generat-Ordner fehlt — Verträge nicht
 // 5. Katalog-Funktionen → Python (ein Worker bietet sie an: <Funktion>Basis mit rufe(auftrag, x))
 // ────────────────────────────────────────────────────────────────────────
 var (funktionenPy, funktionAnzahl) = PythonFunktionsEmitter.Emit(assemblies);
-var funktionenPfad = Path.Combine(solutionDir, "Domain.Client.Worker.Python.ML", "domain_client", "generated", "funktionen.py");
+var funktionenPfad = Path.Combine(solutionDir, artefakte[4]);
 if (Directory.Exists(Path.GetDirectoryName(funktionenPfad)!))
 {
     WriteIfChanged(funktionenPfad, funktionenPy);
     Console.WriteLine($"✅ {funktionenPfad} ({funktionAnzahl} Funktionen)");
     // … und die Tabelle des generischen Workers (Funktion → Basis, Modul, Klasse der Implementierung, konzept-werkbank §12.3 E13).
-    var tabellePfad = Path.Combine(Path.GetDirectoryName(funktionenPfad)!, "funktions_tabelle.py");
+    var tabellePfad = Path.Combine(solutionDir, artefakte[5]);
     WriteIfChanged(tabellePfad, PythonFunktionsEmitter.Tabelle(assemblies));
     Console.WriteLine($"✅ {tabellePfad}");
 }
@@ -221,6 +253,7 @@ else Console.WriteLine($"⚠️  Python-Generat-Ordner fehlt — Funktionen nich
 Console.WriteLine();
 Console.WriteLine($"📊 {stats}");
 Console.WriteLine();
+File.WriteAllText(hashDatei, standHash);
 Console.WriteLine("Fertig. (Signale werden bewusst NICHT registriert — der WireSerializerGenerator");
 Console.WriteLine(" serialisiert sie uniform (StreamId, Version) selbst, ohne STJ.)");
 Console.WriteLine();
@@ -234,6 +267,21 @@ static void WriteIfChanged(string path, string content)
     if (File.Exists(path) && File.ReadAllText(path) == content)
         return;
     File.WriteAllText(path, content);
+}
+
+// Hash über die DLLs, aus denen die Artefakte entstehen (Name + Inhalt, sortiert).
+static string Stand(string verzeichnis, IEnumerable<string> namen)
+{
+    using var sha = System.Security.Cryptography.SHA256.Create();
+    foreach (var n in namen.Distinct(StringComparer.Ordinal).OrderBy(n => n, StringComparer.Ordinal))
+    {
+        var pfad = Path.Combine(verzeichnis, n + ".dll");
+        var kopf = System.Text.Encoding.UTF8.GetBytes(n + "\0");
+        sha.TransformBlock(kopf, 0, kopf.Length, null, 0);
+        if (File.Exists(pfad)) { var b = File.ReadAllBytes(pfad); sha.TransformBlock(b, 0, b.Length, null, 0); }
+    }
+    sha.TransformFinalBlock(Array.Empty<byte>(), 0, 0);
+    return Convert.ToHexString(sha.Hash!);
 }
 
 static string? FindSolutionFile()

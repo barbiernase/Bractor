@@ -54,6 +54,8 @@ public static partial class DateiSchreiber
     /// <summary>Wie <see cref="Schreibe(EditorModell, string, bool)"/>, aber in einen Puffer (die Geste speichert selbst und merkt sich den Patch).</summary>
     public static SchreibBericht Schreibe(EditorModell modell, Dateipuffer ws)
     {
+        // Neue Karten in das Projekt ihrer Rolle (docs/07) — derselbe Namespace für Scaffolder UND Abgleich (usings in bestehenden Dateien).
+        modell = Strukturort.Normalisiere(modell);
         var geschrieben = new List<string>();
         var ergaenzt = new List<string>();
         var uebersprungen = new List<string>();

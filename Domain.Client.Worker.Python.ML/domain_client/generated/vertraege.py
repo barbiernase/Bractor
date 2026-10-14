@@ -131,7 +131,7 @@ class TrainingsSystemBasis(AkteurVertragBasis[S]):
 
 
 class ArbeitsplatzBasis(AkteurVertragBasis[S]):
-    """Client-Vertrag Domain.Clients.IArbeitsplatz — verkörpert Inspekteur, KIOperator, Modellfreigeber, Produktpruefer."""
+    """Client-Vertrag Domain.Akteure.IArbeitsplatz — verkörpert Inspekteur, KIOperator, Modellfreigeber, Produktpruefer."""
 
     CLIENT: ClassVar[str] = "Arbeitsplatz"
     AKTEURE: ClassVar[tuple] = ("Inspekteur", "KIOperator", "Modellfreigeber", "Produktpruefer")
@@ -294,7 +294,7 @@ class ArbeitsplatzBasis(AkteurVertragBasis[S]):
 
 
 class KlassifikationsWorkerBasis(AkteurVertragBasis[S]):
-    """Client-Vertrag Domain.Clients.IKlassifikationsWorker — verkörpert Klassifizierer."""
+    """Client-Vertrag Domain.Akteure.IKlassifikationsWorker — verkörpert Klassifizierer."""
 
     CLIENT: ClassVar[str] = "KlassifikationsWorker"
     AKTEURE: ClassVar[tuple] = ("Klassifizierer",)
@@ -325,7 +325,7 @@ class KlassifikationsWorkerBasis(AkteurVertragBasis[S]):
 
 
 class TrainingsWorkerBasis(AkteurVertragBasis[S]):
-    """Client-Vertrag Domain.Clients.ITrainingsWorker — verkörpert TrainingsSystem."""
+    """Client-Vertrag Domain.Akteure.ITrainingsWorker — verkörpert TrainingsSystem."""
 
     CLIENT: ClassVar[str] = "TrainingsWorker"
     AKTEURE: ClassVar[tuple] = ("TrainingsSystem",)

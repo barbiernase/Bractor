@@ -98,9 +98,9 @@ public static class Sonde
         if (zeigeIst) { Console.WriteLine("\n── Ist-Inventar der Sonde ──"); foreach (var z in ist) Console.WriteLine(z); }
         var soll = Ressource("soll.txt").Replace("\r\n", "\n").Split('\n')
             .Select(z => z.TrimEnd()).Where(z => z.Length > 0 && !z.StartsWith('#')).ToList();
-        foreach (var z in soll.Except(ist)) { Console.WriteLine($"   ✗ fehlt/abweichend:  {z}"); fehler++; }
+        foreach (var z in soll.Where(z => !z.StartsWith("lage ", StringComparison.Ordinal)).Except(ist)) { Console.WriteLine($"   ✗ fehlt/abweichend:  {z}"); fehler++; }
         foreach (var z in ist.Except(soll)) { Console.WriteLine($"   ✗ unerwartet:        {z}"); fehler++; }
-        if (fehler == 0) Console.WriteLine($"   ✓ Inventar: {soll.Count} Soll-Fakten erkannt, nichts Unerwartetes.");
+        if (fehler == 0) Console.WriteLine($"   ✓ Inventar: {soll.Count(z => !z.StartsWith("lage ", StringComparison.Ordinal))} Soll-Fakten erkannt, nichts Unerwartetes.");
 
         // Graph-Diagnosen, die Sonden-Typen nennen (Namen aus dem Ist-Inventar).
         var sondenNamen = ist.Select(x => x.Split(' ')).Where(t => t.Length > 1).Select(t => Kurz(t[1])).ToHashSet(StringComparer.Ordinal);
@@ -109,11 +109,24 @@ public static class Sonde
 
         // ── Volle Parität auf dem Fork (Inventar + Fixpunkt: zurückschreiben, neu kompilieren, neu extrahieren) ──
         var befunde = await ParitaetsPruefung.PruefeAsync(fork, lage2, analyse, board, ModellMapper.Ingress(cr));
-        foreach (var b in befunde.Where(b => b.Schweregrad == "error"))
+        foreach (var b in befunde.Where(b => b.Schweregrad == "error" && b.Bereich != "Lage"))
         {
             Console.WriteLine($"   ✗ [{b.Bereich}] {b.Meldung}");
             fehler++;
         }
+
+        // ── Lage (docs/07): die Sonde liegt absichtlich falsch — die Prüfung muss genau ihre Typen in ihre Rollen-Projekte weisen
+        //    (Soll-Zeilen „lage Typ -> Projekt“) und darf nichts außerhalb der Sonde melden. So beweist sie, dass sie anschlägt. ──
+        var lageBefunde = befunde.Where(b => b.Bereich == "Lage" && b.Schweregrad == "error").Select(b => b.Meldung).ToList();
+        var rolle = new System.Text.RegularExpressions.Regex(@"^'(?<typ>[^']+)' ist .+ und gehört nach (?<ziel>\S+), nicht nach");
+        var lageIst = lageBefunde.Select(m => rolle.Match(m)).Where(m => m.Success).Select(m => $"lage {m.Groups["typ"].Value} -> {m.Groups["ziel"].Value}").ToList();
+        var lageSoll = soll.Where(z => z.StartsWith("lage ", StringComparison.Ordinal)).ToList();
+        foreach (var z in lageSoll.Except(lageIst)) { Console.WriteLine($"   ✗ Lage fehlt:      {z}"); fehler++; }
+        foreach (var z in lageIst.Except(lageSoll)) { Console.WriteLine($"   ✗ Lage unerwartet: {z}"); fehler++; }
+        // Ohne Sonde ist die Lage der Solution sauber — dann stammt jeder Befund auf dem Fork aus der Sonde.
+        foreach (var m in Lagepruefung.Pruefe(solution, lage)) { Console.WriteLine($"   ✗ Lage außerhalb der Sonde: {m}"); fehler++; }
+        if (lageSoll.Count > 0 && lageIst.Count == lageSoll.Count && fehler == 0)
+            Console.WriteLine($"   ✓ Lage: {lageIst.Count} Sonden-Typen ins Projekt ihrer Rolle gewiesen ({lageBefunde.Count} Befunde, alle in der Sonde).");
         Console.WriteLine(fehler == 0
             ? "\n✅ Sonde: die unbekannte Domäne wird vollständig aus dem Code erkannt und verlustfrei zurückgeschrieben."
             : $"\n❌ Sonde: {fehler} Abweichung(en).");

@@ -151,3 +151,62 @@ sicht Leihwesen.Lesen.Theke akteur domaene=Leihwesen.Ausleihe block=§akteure
 sicht Leihwesen.Gebuehren.Mahnstelle akteur domaene=Leihwesen.Ausleihe block=§akteure
 sicht Leihwesen.Lesen.Gutachterin akteur domaene=Leihwesen.Gebuehren block=§akteure
 sicht Leihwesen.Lesen.Archiv akteur domaene=Leihwesen.Ausleihe block=§akteure
+
+# ── Lage (docs/07): die Sonde liegt ABSICHTLICH in einem Projekt (der Schreibseite) — die Lage-Prüfung muss jede Primitive in ihr
+#    Rollen-Projekt weisen (Typ -> Zielprojekt). Wurzel der Tabelle ist die der Solution; Ordner/Namespace/Datei prüft LageAnalyzerTests. ──
+lage Archiv -> Domain.Akteure
+lage Ausleihfrist -> Domain.Pipeline
+lage Ausleihzaehler -> Domain.Projections
+lage GeraetGeprueft -> Domain.Pipeline
+lage GeraetePruefung -> Domain.Pipeline
+lage Gutachterin -> Domain.Akteure
+lage IDepot -> Domain.Akteure
+lage IGeraetePruefung -> Domain.Pipeline
+lage ILeihBuch -> Domain.Projections
+lage ILesesaal -> Domain.Akteure
+lage IMahnportal -> Domain.Akteure
+lage IMahnstelle -> Domain.Akteure
+lage INotiereAusleihe -> Domain.Projections
+lage INotiereVormerkung -> Domain.Projections
+lage IOffenZaehlung -> Domain.Pipeline
+lage IPruefgeraet -> Domain.Pipeline
+lage IRegal -> Domain.Akteure
+lage ISchadensSchaetzung -> Domain.Pipeline
+lage ISchliesseAusleihe -> Domain.Projections
+lage ISeitenPruefung -> Domain.Pipeline
+lage IVormerkbuch -> Domain.Projections
+lage IWertTabelle -> Domain.Pipeline
+lage IZaehle -> Domain.Projections
+lage IZaehleOffene -> Domain.Projections
+lage KeineAusleihen -> Domain.Projections
+lage LeihAuskunftLeser -> Domain.Projections
+lage LeihBuchSpeicher -> Domain.Infrastructure
+lage LeihEintrag -> Domain.Projections
+lage Leihliste -> Domain.Projections
+lage LineareWertTabelle -> Domain.Pipeline
+lage Mahnstelle -> Domain.Akteure
+lage MahnungBeiRueckgabe -> Domain.Pipeline
+lage MahnungBeiSchaden -> Domain.Projections
+lage NichtSchaetzbar -> Domain.Pipeline
+lage OffeneAusleihen -> Domain.Projections
+lage OffeneAusleihenAntwort -> Domain.Projections
+lage OffeneGezaehlt -> Domain.Pipeline
+lage PruefeGeraet -> Domain.Pipeline
+lage PruefeSeite -> Domain.Pipeline
+lage Pruefgeraet -> Domain.Pipeline
+lage RueckgabePruefung -> Domain.Pipeline
+lage Rueckgabefrist -> Domain.Pipeline
+lage SchadenGeschaetzt -> Domain.Pipeline
+lage Schadenpruefung -> Domain.Projections
+lage Schadensschaetzer -> Domain.Pipeline
+lage SchaetzeSchaden -> Domain.Pipeline
+lage SeiteGeprueft -> Domain.Pipeline
+lage Theke -> Domain.Akteure
+lage VormerkAuskunft -> Domain.Projections
+lage Vormerkbuch -> Domain.Infrastructure
+lage Vormerkliste -> Domain.Projections
+lage Vormerkung -> Domain.Projections
+lage Vormerkungen -> Domain.Projections
+lage VormerkungenAntwort -> Domain.Projections
+lage WertTabellenKonfig -> Domain.Pipeline
+lage ZaehleOffene -> Domain.Pipeline

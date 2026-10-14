@@ -30,10 +30,12 @@ public class ProjectionQueryServiceGenerator : IIncrementalGenerator
                 transform: static (ctx, _) => GetProjectionInfo(ctx))
             .Where(static m => m is not null);
 
-        var collectedProjections = projectionsProvider.Collect();
+        // Der Namespace des Generats ist das Projekt selbst (die Leseseite, docs/07: Namespace = Projekt + Ordner).
+        var collectedProjections = projectionsProvider.Collect()
+            .Combine(context.CompilationProvider.Select(static (c, _) => c.AssemblyName ?? ""));
 
         context.RegisterSourceOutput(collectedProjections,
-            static (spc, projections) => Execute(spc, projections!));
+            static (spc, x) => Execute(spc, x.Left!, x.Right));
     }
 
     private static QueryServiceProjectionInfo? GetProjectionInfo(GeneratorSyntaxContext context)
@@ -123,7 +125,7 @@ public class ProjectionQueryServiceGenerator : IIncrementalGenerator
         return true;
     }
 
-    private static void Execute(SourceProductionContext context, ImmutableArray<QueryServiceProjectionInfo?> projections)
+    private static void Execute(SourceProductionContext context, ImmutableArray<QueryServiceProjectionInfo?> projections, string projekt)
     {
         var validProjections = projections
             .Where(p => p != null)
@@ -136,11 +138,11 @@ public class ProjectionQueryServiceGenerator : IIncrementalGenerator
         if (validProjections.Count == 0)
             return;
 
-        var source = GenerateQueryService(validProjections);
+        var source = GenerateQueryService(validProjections, projekt);
         context.AddSource("ProjectionQueryService.g.cs", source);
     }
 
-    private static string GenerateQueryService(List<QueryServiceProjectionInfo> projections)
+    private static string GenerateQueryService(List<QueryServiceProjectionInfo> projections, string projekt)
     {
         var sb = new StringBuilder();
 
@@ -163,7 +165,7 @@ public class ProjectionQueryServiceGenerator : IIncrementalGenerator
         }
 
         sb.AppendLine();
-        sb.AppendLine("namespace Domain.Projections;");
+        sb.AppendLine($"namespace {Abstractions.Projektstruktur.Namespace(projekt, null)};");
         sb.AppendLine();
         sb.AppendLine("/// <summary>");
         sb.AppendLine("/// Zentraler Service für Query-Ausführung.");

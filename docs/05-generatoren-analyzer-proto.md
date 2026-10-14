@@ -21,12 +21,13 @@ Alles Dispatchende wird zur Compile-Zeit erzeugt, ohne Runtime-Reflection (Invar
 | `Projections.SourceGeneration` | netstandard2.0 | DI-Verdrahtung der Leseseite und ein Analyzer |
 | `Client.SourceGeneration` | netstandard2.0 | Generatoren des Blazor-Clients und ein Analyzer |
 | `Cqrs.Codegen` | net9.0 (Exe) | Werkzeug: der Codegen-Schritt im Build (§5.7) |
-| `Proto.SourceGeneration` | net9.0 (Exe) | liefert den `FileGenerator` (domain.proto), den `Cqrs.Codegen` nutzt; sein eigenes `Program` ist ein zweiter, Roslyn-basierter Leseweg (docs/13 W10-1) |
+| `Proto.SourceGeneration` | net9.0 (Bibliothek) | liefert den `FileGenerator` (domain.proto), den `Cqrs.Codegen` nutzt |
 
 `Core.SourceGeneration` und `Abstractions.SourceGeneration` werden in `Infrastructure.SourceGeneration` per Link mitkompiliert. Ebenso
 hängen die **Verträge** als verlinkte Quelle in Generator und Laufzeit — eine Regel, eine Datei: `Abstractions/Aggregatvertrag.cs`,
-`Akteurvertrag.cs`, `Dienstvertrag.cs`, `Quellen/Treibervertrag.cs`, `Kodehash.cs`, `Spur/WirkerId.cs`, dazu
-`Infrastructure.SourceGeneration/Clientvertragslesart.cs` (dieselbe Lesart für Server und C#-Client) und `Ctorbindung.cs`.
+`Akteurvertrag.cs`, `Dienstvertrag.cs`, `Quellen/Treibervertrag.cs`, `Kodehash.cs`, `Spur/WirkerId.cs`, `Projektstruktur.cs` (docs/07), dazu
+`Infrastructure.SourceGeneration/Clientvertragslesart.cs` (dieselbe Lesart für Server und C#-Client), `Ctorbindung.cs` und
+`Domain.SourceGeneration/Lageart.cs` (WAS ein Typ für die Lage-Prüfung ist; dieselbe Lesart für CQRS098 und `--check`).
 
 **Analyzer-Verdrahtung** (bestimmt die Sichtbarkeit, §5.6):
 
@@ -56,8 +57,9 @@ Komposition — eine offene Kopplung (docs/13 W2-1).
 | `SignalTypeGenerator` | `IEvent` & nicht transient | `StateChangeVia{Event}` | Weckruf-Signal je persistiertem Event (bewusst syntax-lokal) |
 | `SubscriberDispatchGenerator` | `ISubscriber` + `Handle(…)` | `{Sub}.Dispatch.g.cs` | `SubscribedTypes` + `DispatchAsync` mit Fähigkeits-Parametern |
 | `ProjectionReaderDispatchGenerator` | `IReader<T>` + `Handle(TQuery,…)` | `{Reader}.Dispatch.g.cs` | Query-Routing |
-| `ProjectionQueryServiceGenerator` | `IReader<T>` | `ProjectionQueryService` (ns `Domain.Projections`) | zentraler Query-Service |
-| `ProzessRegelnGenerator` | `IProzessDefinition`, `IPipeline` | `GeneratedProzessRegeln` | Registry Name → Regeln, Regel- und Knoten-Namen (CQRS012, CQRS072) |
+| `ProjectionQueryServiceGenerator` | `IReader<T>` | `ProjectionQueryService` (ns = Leseseiten-Projekt) | zentraler Query-Service |
+| `ProzessRegelnGenerator` | `IProzessDefinition`, `IPipeline` | `{Assembly}.Prozess.GeneratedProzessRegeln` | Registry Name → Regeln, Regel- und Knoten-Namen (CQRS012, CQRS072) |
+| `LageAnalyzer` | Rollen-Marker (`Lageart`) | — (nur Diagnosen) | CQRS098: Primitive im Projekt ihrer Rolle (docs/07 §7.2) |
 | `ProzessRegelDiagnosticGenerator` | `IProzessDefinition` + `IDecider` | — (nur Diagnosen) | CQRS001–003 |
 | `PipelineDispatchGenerator` | `IPipelineHandler` | `{Pipe}.Dispatch.g.cs` | **Altlast** (Handle-Pipeline, ohne Domänen-Nutzer, docs/13 W11-1) |
 
@@ -74,6 +76,7 @@ Komposition — eine offene Kopplung (docs/13 W2-1).
 | `FunktionsGenerator` | `IFunktion` + `IAuftrag<F>` | `GeneratedFunktionen` | Dispatch Auftrag → Funktion → Ergebnis, Implementierungen je Funktion (CQRS068/069) |
 | `DienstGenerator` | `IDienst` + Konstruktoren der Implementierungen | `GeneratedDienste` | Fabriken ohne Reflection, Bedarf je Konstruktor, Konfig-Records Feld für Feld |
 | `QuellenGenerator` | Record, der von einer Treiber-Basis erbt (`DateiGemeldet`) | `GeneratedQuellen` | je Quelle Treiber, Konfig-Abschnitt, Wirker-Id, Fabrik |
+| `ProzessVerbundGenerator` | `{Assembly}.Prozess.GeneratedProzessRegeln` der referenzierten Domänen-Assemblies | `GeneratedProzessVerbund` | alle Prozesse und Flüsse für den Dirigenten (CQRS012 über Assemblies, CQRS099 Prozesse ohne Registry) |
 | `AkteurRechteGenerator` | `IAkteur` + `IDarf<T>`, `IAkteurVertrag<A>`, `IClientVertrag` | `GeneratedAkteurRechte`, `GeneratedClientVertraege` | Befugnisse, abgeleitete Hör-Menge, Verträge + Hash (CQRS059) |
 | `EventUpcastingGenerator` | `IUpcast<…>` | `GeneratedEventUpcasting` | Backend-Primitive für Schema-Evolution in Prod, kein Editor-Konzept (CQRS040–046; 1:N bricht bewusst den Build) |
 | `DtoMapperSourceGenerator` | Domänen-Graph (`DomainGraphAnalyzer`) | `ProtoMessageMapper.Generated` | Domain ↔ Proto-DTO an der gRPC-Grenze (CQRS030) |
@@ -103,7 +106,8 @@ aus den Analyzern der warmen Compilations und hängt sie an die Karte (`Werkbank
 | Bereich | IDs | Ort |
 |---|---|---|
 | Schreibseite & Routing | CQRS010/011 · CQRS020/021 · CQRS050 · CQRS057 · CQRS079–083 | `CommandAggregateMapGenerator` · `CommandEmitAnalyzer` · `AusgabeVertragAnalyzer` · `HandlerFormAnalyzer` · `ModellAnalyzer` (Apply fehlt, Faltung, Enum-Wert 0, Command ab verlierbarem Eingang, Konsument mit Zustand) |
-| Prozess & Fluss | CQRS001–003 · CQRS012, 072 · CQRS073–078 | `ProzessRegelDiagnosticGenerator` · `ProzessRegelnGenerator` · `FlussAnalyzer` |
+| Prozess & Fluss | CQRS001–003 · CQRS012, 072 · CQRS073–078 · CQRS099 | `ProzessRegelDiagnosticGenerator` · `ProzessRegelnGenerator` · `FlussAnalyzer` · `ProzessVerbundGenerator` |
+| Projektstruktur | CQRS098 | `LageAnalyzer` (Ordner, Namespace, Datei prüft `--check`, docs/07) |
 | Leseseite & Store | CQRS051, 054, 055 · CQRS052 · CQRS053 · CQRS066/067 | `FaehigkeitAnalyzer` · `PullPathGenerator` · `ProjectionServicesGenerator` · `StoreZugriffAnalyzer` |
 | Funktionen, Dienste, Quellen | CQRS068/069 · CQRS089–092 · CQRS070 | `FunktionsGenerator` · `DienstAnalyzer` · `QuellenTypAnalyzer` |
 | Akteure, Verträge, Clients | CQRS058, 060–065 · CQRS059 · CQRS093/094 · CQRS095–097 | `AkteurAnalyzer` · `AkteurRechteGenerator` · `WiringGenerator` · `ClientVertragAnalyzer` |
@@ -112,7 +116,7 @@ aus den Analyzern der warmen Compilations und hängt sie an die Karte (`Werkbank
 | Upcasting | CQRS040–046 | `EventUpcastingGenerator` |
 | Altlast | CQRS056 | `PipelineActorGenerator` (`Frist<TCmd>`) |
 
-Die acht Analyzer von `Domain.SourceGeneration` laufen in jedem Domänen-Projekt; der `GesamtbildAnalyzer` läuft in der
+Die neun Analyzer von `Domain.SourceGeneration` laufen in jedem Domänen-Projekt; der `GesamtbildAnalyzer` läuft in der
 `Infrastructure`-Compilation, sieht alle Domänen-Projekte und meldet ohne Quell-Ort (die Meldung beginnt mit `'Typ'`). Die Domänen-
 Dispatch-Generatoren melden selbst nichts; ein nicht erkannter Fall wird zum generierten Laufzeit-`throw` — dass Handler und Modelle die
 erkannte Form haben, sichern die Analyzer davor.
@@ -146,7 +150,8 @@ Build-Verbot gegen `System.Reflection` fehlt (docs/13 W10-2).
 **Ein Domain-Generator sieht fremdes Generat NICHT (Syntax); ein Infrastructure-Generator schon (Symbol).**
 - **Domain-Seite:** sieht nur im aktuellen Projekt deklarierte Typen. Deshalb bleibt `SignalTypeGenerator` syntax-lokal (sonst doppelte
   Signale in mehreren Assemblies), und Aggregat-Generat muss **selbst-enthalten** sein. Die Prozess-Registry entsteht je Assembly
-  (`GeneratedProzessRegeln` in `Domain` und `Domain.Pipeline`) und wird zur Laufzeit fest vereinigt (docs/13 W2-1).
+  (`{Assembly}.Prozess.GeneratedProzessRegeln`, nur wo es Prozesse/Flüsse gibt); die Laufzeit vereinigt alle, die sie sieht
+  (`ProzessVerbundGenerator` → `GeneratedProzessVerbund`, CQRS099 bei Prozessen ohne Registry, CQRS012 bei doppeltem Namen).
 - **Infrastructure-Seite:** sieht die kompilierten Domänen-Symbole. Deshalb liegt das *aggregatübergreifende* Routing hier, ebenso die
   Regeln über alle Domänen-Projekte (`GesamtbildAnalyzer`).
 - **Client-Seite:** syntax-lokal, außer `WiringGenerator`, der per `CompilationProvider` referenzierte Assemblies (den Vertrag in
@@ -171,9 +176,9 @@ ProtoRepo: Grpc.Tools kompiliert domain.proto → {Typ}Dto
 Infrastructure: STJ-Generator über beide Kontexte; DtoMapperSourceGenerator mappt Domain ↔ {Typ}Dto
 ```
 
-Kein manueller Schritt: jedes `dotnet build` führt die Kette aus. Inkrementell ist das Target über die `.cs`-Dateien von `Domain`,
-`Domain.Projections` und `Domain.Pipeline` (Stempel in `obj/`); `Domain.Akteure` fehlt in diesen Inputs — eine reine Vertragsänderung
-überspringt den Schritt, bis `./codegen.sh --force` läuft (docs/13 W2-1). Die Artefakte sind committet; `./codegen.sh --check` generiert
+Kein manueller Schritt: jedes `dotnet build` führt die Kette aus. Welche Projekte die Domäne bilden und wohin die Artefakte gehen, liest das
+Werkzeug aus `Abstractions/Projektstruktur.cs` (docs/07); ob es erzeugen muss, entscheidet es selbst über einen Hash der gebauten
+Domänen-DLLs und des Werkzeugs (`--wenn-geaendert`) — keine Quellen-Liste im Target. Die Artefakte sind committet; `./codegen.sh --check` generiert
 frisch und prüft per `git diff` auf Drift (CI-Gate).
 
 Innen: `ReflectionTypeAnalyzer` liest die Typen, `FileGenerator` (aus `Proto.SourceGeneration`) schreibt das Proto über die eine
@@ -181,16 +186,14 @@ Skalar-Tabelle `Core.SourceGeneration/ProtoScalarSpec.cs` (dieselbe, die der `Dt
 beiden STJ-Kontexte, `PythonVertragsEmitter`/`PythonFunktionsEmitter` die Python-Basen. Ausgenommen sind Signale (nie über die Proto-Grenze,
 vom Wire-Generator selbst serialisiert) und `IProzessIntern`-Typen (Maschinerie des Dirigenten).
 
-Schuld: das Werkzeug liest per Reflection (`MetadataLoadContext`), der Python-Vertrags-Emitter liest Verträge anders als
-`Clientvertragslesart` (der Handshake-Hash kann abweichen), und `Proto.SourceGeneration` hat daneben noch einen eigenen Leseweg
-(docs/13 W10-1).
+Schuld: das Werkzeug liest per Reflection (`MetadataLoadContext`), und der Python-Vertrags-Emitter liest Verträge anders als
+`Clientvertragslesart` (der Handshake-Hash kann abweichen, docs/13 W10-1).
 
 **Proto an der gRPC-Grenze:** `Guid` und `decimal` reisen als `string`, `DateTimeOffset` als `int64` (Unix-Millisekunden); nullable
 Werttypen als proto3 `optional`. Die interne Actor-Ebene nutzt dagegen den Wire-/Event-JSON-Pfad.
 
 ## 5.8 Offen
 
-Offene Punkte stehen nur in [13](13-reifegrad-schulden-bewertung.md): Reflection im Codegen und zweiter Leseweg W10-1, reflektive
-Laufzeit-Serialisierung und fehlende Reflection-Sperre W10-2, Projektlage (Infrastructure referenziert Domänen-Projekte, feste
-Namespaces der Generate, Codegen-Inputs ohne `Domain.Akteure`) W2-1, Handle-Pipeline-Generatoren W11-1, Identitäts-Vertrag nur per
+Offene Punkte stehen nur in [13](13-reifegrad-schulden-bewertung.md): Reflection im Codegen W10-1, reflektive
+Laufzeit-Serialisierung und fehlende Reflection-Sperre W10-2, Komposition (Infrastructure referenziert Domänen-Projekte) W2-1, Handle-Pipeline-Generatoren W11-1, Identitäts-Vertrag nur per
 Kommentar P2-9, Prüf-Lücken des Grammatik-Gates WZ-1, Mojibake P3-1, toter `ViewModelGenerator` P3-2.

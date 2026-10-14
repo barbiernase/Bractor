@@ -18,6 +18,8 @@
     <Compile Include="..\Abstractions\StoreZugriff.cs" Link="Vertrag\StoreZugriff.cs" />
     <Compile Include="..\Abstractions\Kodehash.cs" Link="Vertrag\Kodehash.cs" />
     <Compile Include="..\Domain.SourceGeneration\Kodeform.cs" Link="Vertrag\Kodeform.cs" />
+    <Compile Include="..\Abstractions\Projektstruktur.cs" Link="Vertrag\Projektstruktur.cs" />
+    <Compile Include="..\Abstractions\Aggregatvertrag.cs" Link="Vertrag\Aggregatvertrag.cs" />
   </ItemGroup>
 
 </Project>

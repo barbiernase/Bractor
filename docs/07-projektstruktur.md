@@ -1,9 +1,9 @@
 # 07 — Projektstruktur: wo liegt was, wie heißt es
 
-> **Entwurf zur Freigabe (2026-10-14).** Die Projekt- und Ordnerstruktur einer Anwendung ist eine **feste Konvention des Frameworks** — bewusst gesetzt,
-> damit Generatoren, Extractor und Werkbank wissen, wo etwas liegt, und damit ein Entwickler (und später ein geführter Entwicklungsprozess) weiß,
-> wohin etwas gehört. Dieses Kapitel ist die eine Quelle; im Code spiegelt sie eine Tabelle (geplant: `Abstractions/Projektstruktur.cs`), die alle
-> Werkzeuge lesen. Maßstab: `docs/konzept-werkbank.md` (Leitsatz W2).
+> Die Projekt- und Ordnerstruktur einer Anwendung ist eine **feste Konvention des Frameworks** — bewusst gesetzt, damit Generatoren, Extractor
+> und Werkbank wissen, wo etwas liegt, und damit ein Entwickler (und später ein geführter Entwicklungsprozess) weiß, wohin etwas gehört. Dieses
+> Kapitel beschreibt sie; im Code steht sie genau einmal: `Abstractions/Projektstruktur.cs` (per Link auch in den Generatoren), geprüft von
+> CQRS098 und `--check`. Maßstab: `docs/konzept-werkbank.md` (Leitsatz W2).
 
 ## 7.1 Grundsatz: Ort ist Konvention, Bedeutung ist Code-Fakt
 
@@ -28,6 +28,10 @@
 | `Domain.Client.Worker.Python.*` | Python-Implementierungen von Zusagen und externen Funktionen (`funktionen/<modul>.py`), generierte Basen unter `domain_client/generated/` | — |
 | `Domain.Client.Modules.*` | GUI-Clients (außerhalb des Editors, W12) | Client.Infrastructure |
 | `umgebungen/` | `umgebung.<name>.json` je Umgebung | — |
+
+**Rollen als Suffix zur Wurzel.** Die Projektnamen sind Suffixe zu einer Anwendungs-Wurzel (`""`, `.Projections`, `.Pipeline`, `.Akteure`,
+`.Infrastructure`); die Beispielanwendung hat die Wurzel `Domain`, eine zweite Anwendung (z. B. eine Test-Domäne) eine eigene. Nicht jede Rolle muss
+existieren. Die Rolle eines Projekts folgt aus seinem Namen (`Projektstruktur.Zerlege`).
 
 Die Referenzrichtung ist fest: `Domain` ← `Domain.Projections` ← `Domain.Pipeline` ← `Domain.Akteure`; `Domain.Projections` ← `Domain.Infrastructure`.
 Deshalb gehören Funktionen mit Lese-Fähigkeit (brauchen Leseseiten-Typen) und Akteure mit `IDarf<Query>` nicht nach `Domain`. Die Akteure sind der
@@ -66,18 +70,23 @@ Primitive ist, liegt im Bereichs-Ordner seines Projekts und erscheint im Editor 
 
 ## 7.5 Was die Werkzeuge damit tun
 
-| Werkzeug | nutzt die Struktur für |
-|---|---|
-| Laufzeit-Generatoren, Prozess-Registry | welche Projekte die Domäne bilden (statt fester Listen an mehreren Stellen) |
-| Codegen-Schritt (Proto, STJ, Python-Basen) | Eingaben und Ausgabeorte |
-| Scaffolder / Gesten | Zielprojekt, -ordner und -datei einer neuen Karte |
-| Werkbank (Stand-Hash, ⟳) | was zum Stand gehört, welches Projekt der Host ist |
-| `--check` | Lage-Prüfung: jeder Typ im Projekt und Ordner seiner Rolle |
+| Werkzeug | nutzt die Struktur für | Ort |
+|---|---|---|
+| Prozess-Registry | je Assembly `{Assembly}.Prozess.GeneratedProzessRegeln`, in der Laufzeit vereinigt; Prozesse ohne Registry = CQRS099 | `ProzessRegelnGenerator`, `ProzessVerbundGenerator` |
+| Leseseiten-Generate | Namespace = Projekt (`ProjectionQueryService`, `{Projekt}.Generated`), Leseseite der Wurzel | `ProjectionQueryServiceGenerator`, `ProjectionServicesGenerator` |
+| Codegen-Schritt (Proto, STJ, Python-Basen) | Eingaben (`CodegenProjekte`) und Ausgabeorte; erzeugt nur bei geänderten DLLs (Hash) | `Cqrs.Codegen`, `ProtoRepo.csproj`, `codegen.sh` |
+| Scaffolder / Gesten | Zielprojekt (Rolle), -ordner (Bereich aus dem Namespace der Karte) und -datei einer neuen Karte; Umbenennen zieht `<Typ>.<Teil>.cs` mit | `DomainEditor/Strukturort.cs`, `Schreiben/Umbenennen.cs` |
+| Werkbank (Stand-Hash, ⟳) | was zum Stand gehört, welches Projekt der Host ist, wo der Python-Worker liegt | `Werkbank/Server/WerkbankServer.cs`, `HostProzess.cs`, `Worker.cs` |
+| Analyzer CQRS098 | jede Primitive im Projekt ihrer Rolle (im Build, an der Karte) | `Domain.SourceGeneration/LageAnalyzer.cs` |
+| `--check` (Bereich „Lage“) | Rollen-Projekte, Referenzrichtung, Codegen-Referenzen, je Typ Projekt, Ordner, Namespace und Datei | `GraphExtractor.Kern/Lagepruefung.cs` |
+| `--sonde` | die fremde Sonden-Domäne liegt absichtlich in einem Projekt: die Lage-Prüfung muss jeden ihrer Typen ins Projekt seiner Rolle weisen (`soll.txt`, `lage …`) | `GraphExtractor.Kern/Sonde.cs` |
 
-## 7.6 Offen bis zur Umsetzung
+WAS ein Typ ist (die Primitive), bestimmt `Domain.SourceGeneration/Lageart.cs` nur aus Markern und Signaturen (Ergebnis-Events aus der
+Funktions-Signatur, Konfig-Records aus dem Implementierungs-Konstruktor, Fähigkeiten aus dem Bündel) — dieselbe Lesart für Analyzer und `--check`.
 
-- Im Code fehlt noch die Tabelle als eine Quelle; heute stehen Projektnamen verstreut (docs/13 W2-1).
-- Die Beispieldomäne: Flüsse, Funktionen (Schnittstellen, Aufträge, Ergebnis-Events, Implementierungen), Dienste und Konfig-Records liegen
-  seit 2026-10-14 in `Domain.Pipeline/<Bereich>/`, Quellen-Typen in `Domain/<Bereich>/Quellen.cs`; `Domain.Projections` und
-  `Domain.Infrastructure` folgen der Struktur ebenfalls, Aggregat-Dateien heißen `<Aggregat>.Decider.cs`/`<Aggregat>.Applier.cs`, Projektionen
-  `…Projektion`. Offen: `MartenCoCommitStoreBase` liegt noch oben in `Domain.Infrastructure` (gehört ins Framework, docs/13 W2-1).
+## 7.6 Offen
+
+- `Infrastructure` ist zugleich Framework und Komposition (referenziert die Domänen-Projekte; nur dort laufen die Laufzeit-Generatoren) —
+  docs/13 W2-1. Die Wurzel der Werkzeuge ist bis dahin `Projektstruktur.StandardWurzel`.
+- Fremde Namespaces (außerhalb der Rollen-Projekte der Wurzel) platziert der Scaffolder wie bisher nach Namespace → Verzeichnis; die Lage-Prüfung
+  meldet sie.

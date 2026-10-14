@@ -7,7 +7,7 @@ using Abstractions.SourceGeneration;
 namespace Cqrs.Codegen;
 
 /// <summary>
-/// Reflexions-Pendant zum Roslyn-<c>MultiCompilationAnalyzer</c>. Baut dieselben
+/// Reflexions-Pendant zum früheren Roslyn-Leser (<c>MultiCompilationAnalyzer</c>, gelöscht). Baut dieselben
 /// <see cref="TypeNode"/>-Graphen — aber aus den GEBAUTEN Domain-DLLs (via
 /// <c>System.Reflection.MetadataLoadContext</c>), NICHT aus einer Roslyn-<c>Compilation</c>.
 ///

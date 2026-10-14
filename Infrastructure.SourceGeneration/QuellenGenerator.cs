@@ -23,7 +23,7 @@ namespace Infrastructure.SourceGeneration
         {
             var c = context.Compilation;
             // Nur die Laufzeit (sie kennt QuellEingang/DateiDaten) bekommt die Tabelle.
-            if (c.GetTypeByMetadataName("Infrastructure.Quellen.QuellEingang") == null) return;
+            if (!Laufzeitprojekt.Ist(c)) return;
             var dateiBasis = c.GetTypeByMetadataName(Abstractions.Treibervertrag.DateiBasis);
             if (dateiBasis == null) return;
 

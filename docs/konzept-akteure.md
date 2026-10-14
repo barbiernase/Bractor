@@ -141,7 +141,7 @@ public interface IKlassifizierer : IPaarKlassifikation { void Auf(BildVerfuegbar
 ### 4.1 Form
 
 ```csharp
-namespace Domain.Clients;   // Domain.Akteure/Clients.cs — eigenes, leichtes Projekt: ein Client referenziert seinen Vertrag, nicht die Verarbeitung
+namespace Domain.Akteure;   // Domain.Akteure/Clients.cs — eigenes, leichtes Projekt: ein Client referenziert seinen Vertrag, nicht die Verarbeitung
 
 public interface IKlassifikationsWorker : IClientVertrag,
     IKlassifizierer,                                 // trägt den Akteur-Vertrag (Zusagen im Namen des Klassifizierers)

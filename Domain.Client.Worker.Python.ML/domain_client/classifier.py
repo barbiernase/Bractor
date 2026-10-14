@@ -2,7 +2,7 @@
 """
 KI-Classifier für industrielle Bildinspektion — der Client KlassifikationsWorker (verkörpert den Akteur Klassifizierer).
 
-Programmiert gegen seinen Client-Vertrag (Domain.Clients.IKlassifikationsWorker, docs/konzept-akteure.md §4), der den
+Programmiert gegen seinen Client-Vertrag (Domain.Akteure.IKlassifikationsWorker, docs/konzept-akteure.md §4), der den
 Akteur-Vertrag IKlassifizierer trägt: die generierte Basis `KlassifikationsWorkerBasis` verdrahtet den Dispatch, prüft jede
 Ausgabe gegen den Vertrag und meldet Client + Hash am Handshake. Fehlt eine `auf_…`-Methode, startet der Worker nicht.
 """

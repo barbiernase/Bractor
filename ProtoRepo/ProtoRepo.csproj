@@ -24,16 +24,16 @@
   <!-- ══════════════════════════════════════════════════════════════════════════════════════
        CODEGEN-PREPASS (automatisch bei jedem `dotnet build`/Rider-Build, Debug UND Release).
 
-       Erzeugt VOR protoc/STJ die drei Artefakte aus den GEBAUTEN Domain-DLLs per Reflection
-       (Cqrs.Codegen, kein MSBuildWorkspace):
+       Erzeugt VOR protoc/STJ die Artefakte aus den GEBAUTEN Domain-DLLs per Reflection
+       (Cqrs.Codegen, kein MSBuildWorkspace; die Liste gibt das Werkzeug mit der Option „artefakte“ aus):
          - ProtoRepo/domain.proto
-         - Infrastructure/Serialization/EventJsonSerializerContext.g.cs
-         - Infrastructure/Serialization/CqrsWireJsonContext.g.cs
+         - Infrastructure/Serialization/EventJsonSerializerContext.g.cs, CqrsWireJsonContext.g.cs
+         - die Python-Basen (vertraege.py, funktionen.py, funktions_tabelle.py)
 
        WARUM HIER (ProtoRepo): ProtoRepo ist der erste Consumer (domain.proto) und darf — anders
        als die Domain-Projekte selbst — Cqrs.Codegen referenzieren (kein Zyklus, Cqrs.Codegen
        referenziert Domain, nicht ProtoRepo). Der Projektgraph erzwingt die Reihenfolge:
-         Domain / Domain.Projections / Domain.Pipeline  →  Cqrs.Codegen (baut deren DLLs)
+         Codegen-Projekte der Domäne (Projektstruktur)  →  Cqrs.Codegen (baut deren DLLs)
          →  ProtoRepo (dieser Prepass, dann protoc)  →  Infrastructure (STJ-Kontexte).
 
        ROBUSTHEIT: Die build-order-only ProjectReference (ReferenceOutputAssembly=false) stellt
@@ -42,39 +42,25 @@
        im Build — deutlich vor protoc/CoreCompile. `dotnet exec` (statt `dotnet run`) vermeidet
        ein geschachteltes MSBuild.
 
-       INKREMENTALITÄT: Inputs = alle Domain-.cs, Outputs = die 3 Artefakte ⇒ MSBuild überspringt
-       das Target, solange die Domäne unverändert ist (null Overhead im Normalfall). Der Prepass
-       schreibt zudem nur bei echtem Inhaltswechsel (stabile Timestamps).
+       INKREMENTALITÄT: Das Target läuft bei jedem Build; das Werkzeug selbst entscheidet (Option „wenn-geaendert“) über einen Hash
+       der gebauten Domänen-DLLs und des Werkzeugs, ob es erzeugt — keine Liste der Domänen-Quellen hier (welche Projekte die
+       Domäne bilden, steht nur in Abstractions/Projektstruktur.cs, docs/07). Es schreibt nur bei echtem Inhaltswechsel
+       (stabile Timestamps → protoc/STJ laufen nur bei ECHTER Proto-/Kontext-Änderung nach).
 
-       Die 3 Artefakte bleiben committet (frischer Checkout kompiliert auch ohne Tool-Lauf). -->
+       Die Artefakte bleiben committet (frischer Checkout kompiliert auch ohne Tool-Lauf). -->
   <ItemGroup>
     <ProjectReference Include="..\Cqrs.Codegen\Cqrs.Codegen.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
-  <ItemGroup>
-    <_CqrsDomainSource Include="$(MSBuildThisFileDirectory)..\Domain\**\*.cs;$(MSBuildThisFileDirectory)..\Domain.Projections\**\*.cs;$(MSBuildThisFileDirectory)..\Domain.Pipeline\**\*.cs"
-                       Exclude="$(MSBuildThisFileDirectory)..\Domain\obj\**\*.cs;$(MSBuildThisFileDirectory)..\Domain\bin\**\*.cs;$(MSBuildThisFileDirectory)..\Domain.Projections\obj\**\*.cs;$(MSBuildThisFileDirectory)..\Domain.Projections\bin\**\*.cs;$(MSBuildThisFileDirectory)..\Domain.Pipeline\obj\**\*.cs;$(MSBuildThisFileDirectory)..\Domain.Pipeline\bin\**\*.cs" />
-  </ItemGroup>
-
-  <!-- Up-to-date-Sentinel: der Prepass schreibt die 3 Artefakte nur bei echtem Inhaltswechsel
-       (stabile Timestamps → protoc/STJ laufen nur bei ECHTER Proto-/Kontext-Änderung nach). Als
-       Inputs/Outputs-Marke für MSBuilds Skip-Logik dient daher ein Stamp in obj/, der bei jedem
-       Lauf berührt wird. So bleibt das Target selbst inkrementell (Skip solange Domäne stabil)
-       UND die nachgelagerten Consumer werden nicht durch inhaltsgleiche Rewrites getriggert. -->
   <Target Name="CqrsCodegenPrepass"
           AfterTargets="ResolveProjectReferences"
-          Condition="'$(DesignTimeBuild)' != 'true' And '$(BuildingProject)' == 'true'"
-          Inputs="@(_CqrsDomainSource)"
-          Outputs="$(IntermediateOutputPath)cqrs-codegen.stamp">
+          Condition="'$(DesignTimeBuild)' != 'true' And '$(BuildingProject)' == 'true'">
     <PropertyGroup>
       <!-- Forward-Slashes: plattformneutral (macOS/Linux/Windows) im Exec-Kommandostring. -->
       <_CqrsCodegenDir>$(MSBuildThisFileDirectory)../Cqrs.Codegen/bin/$(Configuration)/net9.0</_CqrsCodegenDir>
     </PropertyGroup>
-    <Message Importance="high" Text="Cqrs.Codegen-Prepass: erzeuge domain.proto + STJ-Kontexte ($(Configuration))..." />
-    <Exec Command="dotnet exec &quot;$(_CqrsCodegenDir)/Cqrs.Codegen.dll&quot; &quot;$(_CqrsCodegenDir)&quot; &quot;$(Configuration)&quot;"
+    <Exec Command="dotnet exec &quot;$(_CqrsCodegenDir)/Cqrs.Codegen.dll&quot; &quot;$(_CqrsCodegenDir)&quot; &quot;$(Configuration)&quot; --wenn-geaendert"
           WorkingDirectory="$(MSBuildThisFileDirectory).." />
-    <MakeDir Directories="$(IntermediateOutputPath)" />
-    <Touch Files="$(IntermediateOutputPath)cqrs-codegen.stamp" AlwaysCreate="true" />
   </Target>
 
 </Project>

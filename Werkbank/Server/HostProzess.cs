@@ -41,8 +41,9 @@ public sealed class HostProzess(string slnRoot)
         await StoppeAsync();
         lock (_boot) _boot.Clear();
         _log.Clear();
-        var dll = Path.Combine(slnRoot, "Host.Grpc", "bin", "Debug", "net9.0", "Host.Grpc.dll");
-        if (!File.Exists(dll)) { lock (_boot) _boot.Add(new BootMeldung("Host.Grpc ist nicht gebaut (⟳ baut ihn).", null)); return (false, Boot()); }
+        var host = Abstractions.Projektstruktur.ServerHost;
+        var dll = Path.Combine(slnRoot, host, "bin", "Debug", "net9.0", host + ".dll");
+        if (!File.Exists(dll)) { lock (_boot) _boot.Add(new BootMeldung($"{host} ist nicht gebaut (⟳ baut ihn).", null)); return (false, Boot()); }
         var psi = new ProcessStartInfo("dotnet") { WorkingDirectory = Path.GetDirectoryName(dll)!, RedirectStandardOutput = true, RedirectStandardError = true, UseShellExecute = false };
         psi.ArgumentList.Add(dll);
         psi.ArgumentList.Add("--umgebung");

@@ -38,8 +38,17 @@ public static class ParitaetsPruefung
         GrammatikUndModule(solution, ist, boardJson, ingress, befunde);
         Wirker(ist, sicht, befunde);
         Routing(ist, befunde);
+        Lage(solution, lage, befunde);
         await Fixpunkt(solution, lage, ist, befunde);
         return befunde;
+    }
+
+    /// <summary>Die Projekt- und Ordnerstruktur (docs/07): jede Abweichung von der Tabelle ist ein Befund.</summary>
+    private static void Lage(Solution solution, Projektlage lage, List<ParitaetsBefund> befunde)
+    {
+        foreach (var b in Lagepruefung.Pruefe(solution, lage)) befunde.Add(new ParitaetsBefund("Lage", "error", b));
+        befunde.Add(new ParitaetsBefund("Lage", "info", $"Projektstruktur (docs/07): {lage.DomänenAssemblies.Count} Domänen-Projekte gegen die Tabelle "
+            + "geprüft — Rollen-Projekt, Referenzrichtung, Codegen-Referenzen, je Typ Projekt, Ordner, Namespace und Datei."));
     }
 
     /// <summary>

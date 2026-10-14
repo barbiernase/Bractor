@@ -18,6 +18,7 @@
     <Compile Include="..\Abstractions\Dienstvertrag.cs" Link="Vertrag\Dienstvertrag.cs" />
     <Compile Include="..\Abstractions\Akteurvertrag.cs" Link="Vertrag\Akteurvertrag.cs" />
     <Compile Include="..\Abstractions\Quellen\Treibervertrag.cs" Link="Vertrag\Treibervertrag.cs" />
+    <Compile Include="..\Abstractions\Projektstruktur.cs" Link="Vertrag\Projektstruktur.cs" />
   </ItemGroup>
 
   <ItemGroup>

@@ -2,7 +2,7 @@ using Abstractions;
 using Marten;
 using Marten.Exceptions;
 
-namespace Domain.Infrastructure;
+namespace Core;
 
 /// <summary>
 /// Marten-Implementierung der Co-Commit-Naht (<see cref="ICoCommitTracker"/>) — die

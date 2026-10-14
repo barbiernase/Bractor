@@ -34,9 +34,9 @@ namespace Infrastructure.SourceGeneration
         {
             var pipelineSymbols = FindIPipelineHandlerImplementations(context.Compilation);
 
-            // Infrastructure liest GeneratedPipelines/GeneratedFristen immer — auch wenn die Domäne keinen Handle-Baustein mehr hat
+            // Die Laufzeit liest GeneratedPipelines/GeneratedFristen immer — auch wenn die Domäne keinen Handle-Baustein mehr hat
             // (alle Pipelines sind Flüsse, docs/konzept-editor-pipelines.md §14): dann leer emittieren.
-            if (pipelineSymbols.Count == 0 && context.Compilation.AssemblyName != "Infrastructure")
+            if (pipelineSymbols.Count == 0 && !Laufzeitprojekt.Ist(context.Compilation))
                 return;
 
             var sorted = pipelineSymbols.OrderBy(s => s.Name).ToList();

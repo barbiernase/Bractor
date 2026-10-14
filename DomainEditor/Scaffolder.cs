@@ -117,6 +117,9 @@ public static class Scaffolder
 
     public static IReadOnlyList<GenerierteDatei> Generiere(EditorModell modell)
     {
+        // Neue Karten in das Projekt ihrer Rolle (docs/07): Namespace = Projekt + Bereich, Datei nach der Tabelle.
+        modell = Strukturort.Normalisiere(modell);
+        var ergebnisse = modell.Funktionen.SelectMany(f => f.Ergebnisse).ToHashSet(StringComparer.Ordinal);
         var dateien = new List<GenerierteDatei>();
         var rahmen = modell.Rahmen;
 
@@ -129,7 +132,8 @@ public static class Scaffolder
             return g;
         }
         foreach (var rec in modell.Records.Where(x => RecordArt.Alle.Contains(x.Kind)))
-            Gruppe(rec.Datei ?? TypZiel(modell, rec.Namespace, Sorte(rec.Kind), rec.Name), rec.Namespace).Records.Add(rec);
+            Gruppe(rec.Datei ?? StrukturZiel(modell, rec.Namespace, Strukturort.Primitive(rec, ergebnisse), rec.Name)
+                   ?? TypZiel(modell, rec.Namespace, Sorte(rec.Kind), rec.Name), rec.Namespace).Records.Add(rec);
         foreach (var e in modell.Enums)
             Gruppe(e.Datei ?? TypZiel(modell, e.Namespace, "enum", e.Name), e.Namespace).Enums.Add(e);
         foreach (var ((pfad, _), g) in gruppen)
@@ -168,7 +172,9 @@ public static class Scaffolder
 
         // ── Katalog-Funktionen → je Funktion ihre Schnittstelle (nur die Signatur; die Implementierung ist Bindung) ──
         foreach (var f in modell.Funktionen)
-            dateien.Add(Platziert(f.Datei, Verzeichnis(modell, f.Namespace), $"{f.Name}.cs", FunktionsDatei(f, modell), DateiArt.Typen));
+            dateien.Add(Platziert(f.Datei, Verzeichnis(modell, f.Namespace),
+                Strukturort.InStruktur(f.Namespace) ? Abstractions.Projektstruktur.Datei(Abstractions.Projektstruktur.Primitive.Funktion, f.Name) : $"{f.Name}.cs",
+                FunktionsDatei(f, modell), DateiArt.Typen));
         // … und ihre C#-Implementierung, wenn der Editor einen Code-Block trägt und der Code noch keine hat (neu: Rumpf aus 📝/🤖).
         foreach (var f in modell.Funktionen.Where(f => f.Implementierung == null && f.Entwurf != null))
         {
@@ -201,7 +207,14 @@ public static class Scaffolder
         : new($"{Unplatziert}{name}", inhalt, art, Platzierbar: false);
 
     /// <summary>
-    /// Zieldatei eines NEUEN Typs (ohne eigene Datei) — feste Regel, keine Mehrheits-Statistik: stehen ALLE gleichartigen
+    /// Zieldatei eines NEUEN Typs in einem Rollen-Projekt: Verzeichnis seines Namespace + Dateiname der Tabelle (docs/07 §7.4,
+    /// <see cref="Abstractions.Projektstruktur.Datei"/>). <c>null</c> = Namespace außerhalb der Struktur oder Art ohne Tabellen-Eintrag.
+    /// </summary>
+    private static string? StrukturZiel(EditorModell m, string ns, Abstractions.Projektstruktur.Primitive? p, string typName) =>
+        p is { } prim && Strukturort.InStruktur(ns) && Verzeichnis(m, ns) is { } v ? $"{v}/{Abstractions.Projektstruktur.Datei(prim, typName)}" : null;
+
+    /// <summary>
+    /// Zieldatei eines NEUEN Typs (ohne eigene Datei) außerhalb der Rollen-Projekte — feste Regel, keine Mehrheits-Statistik: stehen ALLE gleichartigen
     /// Typen seines Namespace in genau EINER Datei, dorthin (das ist ein Fakt des Codes); sonst die kanonische Datei der
     /// Sorte (<c>Commands.cs</c> …) bzw. bei schon verteilten Typen eine eigene. Kein Verzeichnis bekannt: unplatziert.
     /// </summary>

@@ -102,7 +102,9 @@ namespace Projections.SourceGeneration
                 .OrderBy(c => c.Name, System.StringComparer.Ordinal)
                 .ToList();
 
-            var projectionQueryService = comp.GetTypeByMetadataName("Domain.Projections.ProjectionQueryService");
+            // Der QueryService steht in der Leseseite derselben Anwendung (Wurzel aus dem eigenen Projektnamen, docs/07).
+            var leseseite = Abstractions.Projektstruktur.Projekt(Abstractions.Projektstruktur.Zerlege(comp.AssemblyName ?? "").Wurzel, Abstractions.Projektstruktur.Rolle.Leseseite);
+            var projectionQueryService = comp.GetTypeByMetadataName(leseseite + ".ProjectionQueryService");
 
             // ── Emit ──
             var sb = new StringBuilder();
@@ -111,7 +113,7 @@ namespace Projections.SourceGeneration
             sb.AppendLine("using Marten;");
             sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
             sb.AppendLine();
-            sb.AppendLine("namespace Domain.Infrastructure.Generated;");
+            sb.AppendLine($"namespace {comp.AssemblyName}.Generated;");
             sb.AppendLine();
             sb.AppendLine("/// <summary>Generierte DI-Verdrahtung aller Projektions-Komponenten (Stores/Reader/Projektionen + Marten-Schema).</summary>");
             sb.AppendLine("public static class GeneratedProjectionServices");

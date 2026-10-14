@@ -1,6 +1,6 @@
 using Abstractions;
 using Domain.ImagePair;
-using Domain.Infrastructure;
+using Core;
 using FluentAssertions;
 using Infrastructure.Persistence;
 using Infrastructure.Projections;

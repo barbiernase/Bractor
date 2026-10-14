@@ -82,7 +82,7 @@ Die Beispieldomäne prüft das Framework; sie ist nicht Architektur (konzept-wer
 | `Domain` | Aggregate, Commands, Events, Decide/Apply, Prozesse und Flüsse der Beispieldomäne |
 | `Domain.Projections` | Projektionen, Reader, Queries, Store-Fähigkeiten |
 | `Domain.Pipeline` | Flüsse und Funktions-Implementierungen samt Diensten |
-| `Domain.Infrastructure` | Store-Implementierungen (Marten), dazu die Basisklasse `MartenCoCommitStoreBase` |
+| `Domain.Infrastructure` | Store-Implementierungen (Marten); ihre Basisklasse `MartenCoCommitStoreBase` liegt im Framework (`Core`) |
 | `Domain.Akteure` | Akteure und Client-Verträge |
 | `Domain.Client.Modules.Blazor` | die Blazor-Module des Arbeitsplatz-Clients |
 | `Domain.Client.Worker.Python.ML` (außerhalb der `.sln`) | Python-Worker: Funktions-Implementierungen und Zusagen der Akteure |

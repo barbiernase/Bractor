@@ -28,6 +28,9 @@
       <EmbeddedResource Include="Sonde/Gezeichnet.gesten.json" />
       <!-- Die Skalar-Wahrheit des Wires (eine Quelle mit Proto-Prepass und DtoMapper). -->
       <Compile Include="../Core.SourceGeneration/ProtoScalarSpec.cs" Link="Vertrag/ProtoScalarSpec.cs" />
+      <!-- WAS ein Typ für die Lage-Prüfung ist (docs/07): dieselbe Lesart wie der Analyzer CQRS098. -->
+      <Compile Include="../Domain.SourceGeneration/Lageart.cs" Link="Vertrag/Lageart.cs" />
+      <Compile Include="../Infrastructure.SourceGeneration/Ctorbindung.cs" Link="Vertrag/Ctorbindung.cs" />
     </ItemGroup>
 
     <ItemGroup>

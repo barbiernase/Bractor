@@ -102,17 +102,3 @@ public interface IImagePairStore : IStore,
     IFindImagePair, ILadeVieleImagePairs, ISearchImagePairs, IGetImagePairStatistik,
     IGetUnklassifizierte, IGetVerlauf, IGetProduktionsTage, IGetProduktionsStrip
 { }
-
-/// <summary>
-/// Statistik-Daten — internes Transfer-Objekt zwischen Store und Reader.
-/// </summary>
-public record ImagePairStatistik(
-    int Gesamt,
-    int Komplett,
-    int MitKiKlassifikation,
-    int MitMenschLabel,
-    int MitProduktLabel,
-    int OhneKlassifikation,
-    int AnzahlAnomalienKi,
-    int AnzahlAnomalienMensch
-);

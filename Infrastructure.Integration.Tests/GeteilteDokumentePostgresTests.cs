@@ -1,7 +1,7 @@
 using Abstractions;
 using Core;
 using Domain.Datensatz;
-using Domain.Infrastructure;
+using Core;
 using Domain.Infrastructure.Generated;
 using Domain.Modell;
 using Domain.Projections;

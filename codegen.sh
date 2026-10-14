@@ -2,16 +2,10 @@
 # REPO-PFAD: codegen.sh
 # Vereinter Codegen-Prepass: erzeugt VOR dem Compile die Artefakte, die ein nachgelagertes
 # Werkzeug (protoc / STJ-Source-Generator) braucht und die ein In-Compilation-Roslyn-Generator
-# daher nicht liefern kann:
-#   - ProtoRepo/domain.proto
-#   - Infrastructure/Serialization/EventJsonSerializerContext.g.cs
-#   - Infrastructure/Serialization/CqrsWireJsonContext.g.cs
-#   - Domain.Client.Worker.Python.ML/domain_client/generated/vertraege.py  (Akteur-Verträge → Python)
-#   - Domain.Client.Worker.Python.ML/domain_client/generated/funktionen.py (Katalog-Funktionen → Python)
-#   - Domain.Client.Worker.Python.ML/domain_client/generated/funktions_tabelle.py (Tabelle des generischen Funktions-Workers)
+# daher nicht liefern kann: domain.proto, die STJ-Kontexte und die Python-Basen (Liste: Cqrs.Codegen --artefakte).
 #
 # Nutzung:
-#   ./codegen.sh           # hash-getriggert: nur generieren, wenn sich Domain-Quellen änderten
+#   ./codegen.sh           # hash-getriggert: nur generieren, wenn sich die gebauten Domänen-DLLs änderten
 #   ./codegen.sh --force   # immer generieren
 #   ./codegen.sh --check   # CI-Gate: frisch generieren, dann auf Drift prüfen (git diff)
 set -euo pipefail
@@ -19,32 +13,19 @@ set -euo pipefail
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 cd "$SCRIPT_DIR"
 
-HASH_FILE=".codegen_hash"
 PROJECT="Cqrs.Codegen/Cqrs.Codegen.csproj"
-ARTEFAKTE=(
-  "ProtoRepo/domain.proto"
-  "Infrastructure/Serialization/EventJsonSerializerContext.g.cs"
-  "Infrastructure/Serialization/CqrsWireJsonContext.g.cs"
-  "Domain.Client.Worker.Python.ML/domain_client/generated/vertraege.py"
-  "Domain.Client.Worker.Python.ML/domain_client/generated/funktionen.py"
-  "Domain.Client.Worker.Python.ML/domain_client/generated/funktions_tabelle.py"
-)
 
-# Der Output hängt allein an den Domain-Quellen der gescannten Projekte.
-compute_hash() {
-  find Domain Domain.Projections Domain.Akteure Domain.Pipeline -name '*.cs' \
-       -not -path '*/obj/*' -not -path '*/bin/*' \
-    | sort | xargs shasum -a 256 | shasum -a 256 | cut -d' ' -f1
-}
-
+# Welche Projekte die Domäne bilden und welche Dateien entstehen, weiß nur das Werkzeug (Abstractions/Projektstruktur.cs, docs/07);
+# ob sich etwas geändert hat, entscheidet es über einen Hash der gebauten Domänen-DLLs (--wenn-geaendert).
 run() {
-  dotnet run --project "$PROJECT" -c Debug
+  dotnet run --project "$PROJECT" -c Debug -- "" Debug "$@"
 }
 
 case "${1:-}" in
   --check)
     echo "CI-Gate: generiere frisch und prüfe auf Drift..."
     run >/dev/null
+    ARTEFAKTE=($(dotnet exec Cqrs.Codegen/bin/Debug/net9.0/Cqrs.Codegen.dll --artefakte))
     if ! git diff --quiet -- "${ARTEFAKTE[@]}"; then
       echo "❌ DRIFT: generierte Artefakte sind nicht aktuell. './codegen.sh --force' ausführen und committen." >&2
       git --no-pager diff --stat -- "${ARTEFAKTE[@]}" >&2
@@ -54,17 +35,8 @@ case "${1:-}" in
     ;;
   --force)
     run
-    compute_hash > "$HASH_FILE"
     ;;
   *)
-    CUR="$(compute_hash)"
-    STORED=""; [ -f "$HASH_FILE" ] && STORED="$(cat "$HASH_FILE")"
-    if [ "$CUR" = "$STORED" ]; then
-      echo "Codegen aktuell (${CUR:0:16}...) — übersprungen."
-    else
-      echo "Domain-Quellen geändert → generiere..."
-      run
-      echo "$CUR" > "$HASH_FILE"
-    fi
+    run --wenn-geaendert
     ;;
 esac

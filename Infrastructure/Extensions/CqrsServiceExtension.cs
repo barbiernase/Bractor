@@ -1,5 +1,4 @@
 using Abstractions;
-using Domain.Infrastructure;
 using Domain.Infrastructure.Generated;
 using Infrastructure.Aggregate.ActorSystem;
 using Infrastructure.GrpcClient;

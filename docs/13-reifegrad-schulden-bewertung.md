@@ -10,7 +10,7 @@ hierher. Stand: 2026-10-13, Commit-Basis `1b1751a`. Maßstab sind die sechs Inva
 |---|---|:--:|
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
 | W10-2 | Reflektive Serialisierung zur Laufzeit (Marten-Default, Marking-Store, Snapshot-`Clone`, HTTP-Antworten); kein Reflection-Verbot im Build | P1 |
-| W2-1 | Projektstruktur nicht als eine Quelle: Projektnamen verstreut und ungeprüft in Komposition, Codegen und Werkbank (Ziel: docs/07) | P1 |
+| W2-1 | Komposition nicht getrennt: `Infrastructure` ist Framework und Komposition zugleich (Projektstruktur selbst: eine Quelle + geprüft, docs/07) | P1 |
 | T-1 | Testlücke seit `fb07f5e`: keine Saga-E2E-, Snapshot- und Marking-Äquivalenz-Tests | P1 |
 | P1-1 | Multi-Node nur container-erprobt, Consul im `-dev`-Modus | P1 |
 | P1-2 | Transport-Sicherheit: kein TLS; Identitäten für Prod fehlen | P1 |
@@ -92,26 +92,21 @@ DtoMapper, `Clientvertragslesart`, Lesart des `FunktionsGenerator`); Wirte: warm
 *Empfehlung:* generierter Kontext als Standard (plus Dokument-Kontext), `Kopie()` vom State-Generator, benannte Records + Kontext für HTTP,
 `EnableRequestDelegateGenerator`, `JsonSerializerIsReflectionEnabledByDefault=false` in den Hosts als Sperre.
 
-**W2-1 · Projektstruktur nicht als eine Quelle.** Eine feste Projekt- und Ordnerstruktur ist gewollt (`docs/07-projektstruktur.md`); die Schuld ist,
-dass sie heute an vielen Stellen getippt, nicht geprüft und teils inkonsistent ist:
-- `Infrastructure.csproj` referenziert Domänen-Projekte; `Infrastructure` ist damit zugleich Framework und Komposition.
-- `ProzessManagerWiring.AlleRegeln` vereinigt fest `Domain.Prozess` + `Domain.Pipeline.Prozess`; `ProzessRegelnGenerator` prüft
-  `AssemblyName != "Domain"` — Prozesse in einer dritten Assembly würden still nie registriert.
-- Generate in festen Namespaces: `ProjectionQueryServiceGenerator` (`Domain.Projections`), `ProjectionServicesGenerator`
-  (`Domain.Infrastructure.Generated`), `FactoryGenerator` (`Infrastructure.AggregateHandlerFactory` je Domänen-Assembly).
-- Projektlisten: `Cqrs.Codegen/Program.cs`, `Proto.SourceGeneration/Program.cs`, `codegen.sh`, `ProtoRepo.csproj` (Inputs **ohne**
-  `Domain.Akteure` → eine reine Vertragsänderung überspringt den Codegen), `Werkbank/Server/WerkbankServer.cs` (Stand-Hash, Host-Projekt,
-  Debug-Pfad, Python-Projekt), `Werkbank/Server/Worker.cs` (generischer Worker im Domänen-Projekt).
-- Das Client-Framework `Client.Infrastructure` referenziert `Domain` und `Infrastructure` (`Client.Infrastructure.csproj`).
-- Framework-Code im Domänen-Projekt: `MartenCoCommitStoreBase` (die Co-Commit-Basis aller Stores) liegt in `Domain.Infrastructure`, der generische
-  `funktions_worker.py` in `Domain.Client.Worker.Python.ML`.
+**W2-1 · Komposition nicht getrennt (Rest der Projektstruktur).** Die feste Projekt- und Ordnerstruktur (`docs/07`) steht seit 2026-10-14 als
+eine Tabelle im Code (`Abstractions/Projektstruktur.cs`) und wird geprüft (CQRS098, `--check` Bereich „Lage“, Sonde); Codegen, Prozess-Registry,
+Leseseiten-Generate, Scaffolder und Werkbank lesen sie, die Beispieldomäne folgt ihr. Offen bleibt:
+- `Infrastructure.csproj` referenziert die Domänen-Projekte; `Infrastructure` ist damit zugleich Framework und Komposition, nur dort laufen die
+  Laufzeit-Generatoren, und handgeschriebener Framework-Code ruft deren Generate statisch auf (`GeneratedWire`, `GeneratedAkteurRechte` …,
+  ~40 Dateien). `FactoryGenerator` emittiert `Infrastructure.AggregateHandlerFactory` in die Domänen-Assembly; die STJ-Kontexte liegen in
+  `Infrastructure/Serialization`; `domain.proto` mischt Framework-Dienst und Domänen-Nachrichten.
+- Das Client-Framework `Client.Infrastructure` referenziert `Domain` (ungenutzt) und `Infrastructure` (nur für `ProtoMessageMapper`).
+- Framework-Code im Domänen-Projekt: der generische `funktions_worker.py` in `Domain.Client.Worker.Python.ML`.
 - Namespace-Ausschlusslisten statt Fakt (`Ctorbindung.cs` mit `OpenCvSharp`, `FunktionsGenerator`, `QuellenGenerator`, `WiringGenerator`).
 - Identitäten aus einfachen Typnamen (`BrokerIdentity`, `GeneratedAkteurRechte`); der Client darf das Cluster-Kind eines Commands
   (`AggregateType`) selbst setzen (`CqrsClientService.cs`, `AggregateDispatcher.cs:75`).
-*Empfehlung:* die Struktur aus docs/07 als eine Tabelle im Code (`Abstractions/Projektstruktur.cs`, per Link auch in Generatoren); alle Stellen oben
-lesen sie; `--check` bzw. ein Analyzer prüft die Lage jedes Typs; fehlende Registrierung ist ein Fehler, nicht still. Die Beispieldomäne folgt der
-Struktur seit 2026-10-14 (Flüsse/Funktionen in `Domain.Pipeline`, Referenzrichtung `Domain.Pipeline` ← `Domain.Akteure`, Dateinamen nach docs/07 §7.4).
-Unabhängig davon: `AggregateType` serverseitig aus `GeneratedCommandRouting`, Identitäten aus vollen Typnamen.
+*Empfehlung:* ein Laufzeit-Projekt je Anwendung (`<Wurzel>.Laufzeit`) als Komposition, `Infrastructure` als reines Framework, das die Tabellen über
+eine generierte Anwendung bezieht; dann kann eine Test-Domäne (T-1) als zweite Anwendung verdrahtet werden. Unabhängig davon: `AggregateType`
+serverseitig aus `GeneratedCommandRouting`, Identitäten aus vollen Typnamen.
 
 **T-1 · Testlücke seit Commit `fb07f5e` (2026-08-18).** Mit den Beispiel-Domänen Konto/Überweisung/Reise/Lager wurden die Saga-E2E-Tests,
 `SnapshotStorePostgresTests`/`SnapshotLiveE2ETests`, die Upcasting-Tests und die Marking-Cursor-Äquivalenz gelöscht. Prozess-Kompensation,
@@ -212,8 +207,7 @@ Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
 ## 13.4 Korrektheit vs. Reifegrad
 
 Kein Befund ist ein bekannter aktiver Korrektheits-Bug. Korrektheitsnah sind: **T-1** (nicht mehr getestete Prozess-/Snapshot-Pfade),
-**W10-1** (möglicher Hash-Unterschied zwischen Python-Basis und Server beim Handshake), **W2-1** (still nicht registrierte Prozesse in einer
-weiteren Assembly; vom Client gesetztes Cluster-Kind) und **WZ-1** (Prüfungen, die grün sind, ohne es zu beweisen). Alles andere ist Reifegrad,
+**W10-1** (möglicher Hash-Unterschied zwischen Python-Basis und Server beim Handshake), **W2-1** (vom Client gesetztes Cluster-Kind) und **WZ-1** (Prüfungen, die grün sind, ohne es zu beweisen). Alles andere ist Reifegrad,
 Allgemeingültigkeit oder Hygiene.
 
 ## 13.5 Empfohlene Reihenfolge
@@ -228,6 +222,11 @@ Allgemeingültigkeit oder Hygiene.
 
 ## 13.6 Erledigt (früher hier offen)
 
+- **Projektstruktur als eine Quelle (früher W2-1, 2026-10-14):** `Abstractions/Projektstruktur.cs` (Rollen als Suffix zur Wurzel, Primitive → Rolle
+  und Datei), CQRS098 (`LageAnalyzer`), `--check` „Lage“, Sonde mit Soll-Lage; Prozess-Registry je Assembly + generierter Verbund (CQRS099 statt
+  still nicht registrierter Prozesse); Codegen ohne Projektlisten (Hash über die gebauten DLLs, `Domain.Akteure` inklusive);
+  `Proto.SourceGeneration/Program.cs` (zweiter Leseweg) gelöscht; Werkbank und Scaffolder lesen die Tabelle; `MartenCoCommitStoreBase` liegt in
+  `Core`; Beispieldomäne umgezogen (Flüsse/Funktionen in `Domain.Pipeline`, Referenzrichtung `Domain.Pipeline` ← `Domain.Akteure`).
 - **Co-Commit (früher P0-1):** implementiert und gegen echtes Postgres bewiesen (`MartenCoCommitStoreBase`, `CoCommitPostgresTests`); der
   Atomaritäts-Guard (`ICoCommitTracker`, GA-1) schließt das frühere false-green. Optional bleibt eine framework-getriebene Unit-of-Work.
 - **Frontend-Build (früher P0-2)** und das Löschen der Legacy-Projekte `Domain.Client`/`Domain.Client.Ui.Blazor`.

@@ -63,11 +63,10 @@ namespace Domain.SourceGeneration
                 .OrderBy(t => t.Name)
                 .ToList();
 
-            // Die Registry je Assembly in ihrem EIGENEN Namespace ({Assembly}.Prozess) — so kollidieren Domain und Domain.Pipeline
-            // (Flüsse, deren Funktionen Fähigkeiten der Leseseite brauchen) nicht (CS0433); Infrastructure vereinigt sie.
-            // Domain emittiert immer — auch leer, wenn es gar keine Prozesse gibt.
-            if (defs.Count == 0 && context.Compilation.AssemblyName != "Domain") return;
-            var ns = (context.Compilation.AssemblyName ?? "Domain") + ".Prozess";
+            // Die Registry je Assembly in ihrem EIGENEN Namespace ({Assembly}.Prozess, Projektstruktur) — so kollidieren Schreibseite und
+            // Abläufe nicht (CS0433); die Laufzeit vereinigt alle Registries, die es gibt (ProzessVerbundGenerator, CQRS099 bei Lücken).
+            if (defs.Count == 0) return;
+            var ns = Projektstruktur.ProzessNamespace(context.Compilation.AssemblyName ?? "");
 
             // ★ P1c (TG-3): Name aus [ProzessName] (falls gesetzt), sonst Klassenname. Kollisionen → Build-Fehler.
             var benannt = defs.Select(d => (Name: ProzessIdentität(d), Def: d)).ToList();
@@ -213,7 +212,7 @@ namespace Domain.SourceGeneration
             sb.AppendLine();
             sb.AppendLine($"namespace {ns}");
             sb.AppendLine("{");
-            sb.AppendLine("    public static class GeneratedProzessRegeln");
+            sb.AppendLine($"    public static class {Projektstruktur.ProzessRegistry}");
             sb.AppendLine("    {");
             sb.AppendLine("        // Prozess-Name (= Definitions-Klassenname) → seine Regeln (der DAG-Deskriptor).");
             sb.AppendLine("        public static readonly IReadOnlyDictionary<string, ProzessRegeln> Alle =");

@@ -159,7 +159,7 @@ Store-Instanz je Bereich, damit Effekt und Marke in einer Transaktion landen.
 **Zweck:** das Bündel ist die Transaktionsgrenze aller seiner Fähigkeiten; die Implementierung puffert die Effekte und committet sie mit der Marke.
 **Werkbank:** Baustein-Menü „Store"; die Implementierung gehört zur Store-Karte, jede Store-Fn steht mit ihrem Rumpf an ihrer Fähigkeit (✎).
 **Code:** `public interface ILeihBuch : IStore, INotiereAusleihe, ISchliesseAusleihe, IZaehleOffene { }` und genau eine Klasse, die es
-implementiert. Produktiv erbt sie von `MartenCoCommitStoreBase` (`Domain.Infrastructure/`) und ist damit `IProjectionTracker` mit Co-Commit:
+implementiert. Produktiv erbt sie von `MartenCoCommitStoreBase` (`Core/`) und ist damit `IProjectionTracker` mit Co-Commit:
 ```csharp
 public sealed partial class ModellStore : MartenCoCommitStoreBase, IModellStore        // Beispieldomäne, Domain.Infrastructure/ModellStore.cs
 {

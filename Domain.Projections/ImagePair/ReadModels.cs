@@ -54,22 +54,6 @@ public record ImagePairReadModel : IReadModel
 // ═══════════════════════════════════════════════════════════════
 
 /// <summary>
-/// Kategorien für farbliche Gruppierung in der UI.
-///
-///   Lifecycle → grau   (Erstellt, BildVerfuegbar, Komplett)
-///   Ki        → blau   (KI-Klassifikationen)
-///   Mensch    → grün   (Mensch-Labels)
-///   Inspektion → gelb  (Inspiziert)
-/// </summary>
-public enum HistorieKategorie
-{
-    Lifecycle,
-    Ki,
-    Mensch,
-    Inspektion
-}
-
-/// <summary>
 /// Ein einzelner Eintrag in der ImagePair-Timeline.
 ///
 /// Wird von der Projektion aus jedem Event erzeugt.
@@ -110,3 +94,17 @@ public record ImagePairHistorieReadModel : IReadModel
     public Guid Id { get; init; }
     public List<HistorieEintrag> Eintraege { get; init; } = new();
 }
+
+/// <summary>
+/// Statistik-Daten — internes Transfer-Objekt zwischen Store und Reader.
+/// </summary>
+public record ImagePairStatistik(
+    int Gesamt,
+    int Komplett,
+    int MitKiKlassifikation,
+    int MitMenschLabel,
+    int MitProduktLabel,
+    int OhneKlassifikation,
+    int AnzahlAnomalienKi,
+    int AnzahlAnomalienMensch
+);

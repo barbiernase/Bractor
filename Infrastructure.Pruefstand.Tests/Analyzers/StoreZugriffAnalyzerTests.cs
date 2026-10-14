@@ -23,7 +23,7 @@ public class StoreZugriffAnalyzerTests
         // Marten samt seinen Abhängigkeiten, die echte Basis und LINQ auf IQueryable ausdrücklich (nicht nur über die geladenen Assemblies).
         var marten = typeof(Marten.IDocumentStore).Assembly;
         var noetig = new[] { typeof(Abstractions.ICoCommitTracker).Assembly, marten,
-                             typeof(Domain.Infrastructure.MartenCoCommitStoreBase).Assembly, typeof(System.Linq.Queryable).Assembly }
+                             typeof(Core.MartenCoCommitStoreBase).Assembly, typeof(System.Linq.Queryable).Assembly }
             .Concat(marten.GetReferencedAssemblies().Select(n => { try { return System.Reflection.Assembly.Load(n); } catch { return null; } })
                 .Where(a => a != null).Select(a => a!));
         var refs = AppDomain.CurrentDomain.GetAssemblies().Concat(noetig)
@@ -40,7 +40,7 @@ public class StoreZugriffAnalyzerTests
 
     private const string Vorspann = @"
 using System; using System.Collections.Generic; using System.Linq; using System.Threading.Tasks;
-using Abstractions; using Marten; using Domain.Infrastructure;
+using Abstractions; using Marten; using Core;
 namespace Probe {
 public record Zeile : IReadModel { public Guid Id { get; init; } public int Wert { get; init; } }
 public interface ISchreibe : IWriteStore { Task SchreibeAsync(Zeile z); }

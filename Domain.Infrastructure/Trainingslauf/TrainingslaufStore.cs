@@ -1,3 +1,4 @@
+using Core;
 using Domain.Projections;
 using Domain.Trainingslauf;
 using Marten;

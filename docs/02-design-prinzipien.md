@@ -103,7 +103,7 @@ nicht aus einem zweiten Marker:
 
 Dass ein Emittent nicht zurückgesetzt werden kann, ist compile-zeit-wahr: der Reset liegt auf `IReplaybarerTracker`, den
 `IEmittentenCursor` nicht implementiert — blindes Replay geld-bewegender Emittenten ist unmöglich. Der Co-Commit replaybarer Projektionen
-(Effekt + Marke in einer Transaktion) liegt in `Domain.Infrastructure/MartenCoCommitStoreBase.cs`; der GA-1-Check bricht, wenn eine
+(Effekt + Marke in einer Transaktion) liegt in `Core/MartenCoCommitStoreBase.cs`; der GA-1-Check bricht, wenn eine
 append-artige Projektion keinen Co-Commit-Tracker hat.
 
 ## P8 — Genau ein Weg, per Analyzer erzwungen (W11)

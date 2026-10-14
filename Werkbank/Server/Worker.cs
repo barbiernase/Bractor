@@ -39,7 +39,7 @@ public sealed class Worker(string slnRoot)
         => _laeufe.TryGetValue(funktion, out var l) ? l.Log.Reverse().Take(max).Reverse().ToList() : [];
 
     /// <summary>Der generische Funktions-Worker (konzept-werkbank §12.3 E13) — der Standard, wenn die Umgebung keinen eigenen nennt.</summary>
-    public const string GenerischesSkript = "Domain.Client.Worker.Python.ML/funktions_worker.py";
+    public static readonly string GenerischesSkript = Abstractions.Projektstruktur.PythonWorker(Abstractions.Projektstruktur.StandardWurzel) + "/funktions_worker.py";
 
     /// <param name="standardToken">Ohne Token in der Umgebung: ein Token, dessen Akteur die Funktion anbieten darf (IDarf&lt;F&gt;), oder null.</param>
     public async Task<object> StarteAsync(string funktion, UmgebungKonfig u, bool hostLaeuft, Func<string, string?>? standardToken = null)

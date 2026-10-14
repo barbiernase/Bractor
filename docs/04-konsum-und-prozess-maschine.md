@@ -100,7 +100,7 @@ dieselbe Instanz, Effekte werden gepuffert statt durchgeschrieben, die Unit-of-W
 committet nie. Statisch beweisbar ist Atomarität nicht — sie bleibt eine Laufzeiteigenschaft der Store-Transaktion und wird per Crash-Test
 gezeigt (`CoCommitPostgresTests`, docs/12).
 
-**Umsetzung.** Diese Bedingungen erfüllt die eine Basisklasse `MartenCoCommitStoreBase` (`Domain.Infrastructure/MartenCoCommitStoreBase.cs`),
+**Umsetzung.** Diese Bedingungen erfüllt die eine Basisklasse `MartenCoCommitStoreBase` (`Core/MartenCoCommitStoreBase.cs`),
 von der alle Projektions-Stores erben: Effekte werden nur gepuffert, `MarkProcessedAsync` spielt sie zusammen mit dem `ProjectionCheckpoint`
 in **einer** Marten-`IdentitySession` ab, ein `SaveChangesAsync`. Die Fähigkeits-Bereiche (§4.2) liefern „Store == Tracker“ per
 Konstruktion. Dazu die Schreib-Regel je Dokument: eigenes Dokument (Schlüssel = Stream), Zeile dieses Streams, oder geteiltes Dokument
