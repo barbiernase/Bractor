@@ -61,6 +61,7 @@ public sealed class GesamtbildAnalyzer : DiagnosticAnalyzer
     private static void Pruefe(CompilationAnalysisContext ctx)
     {
         var c = ctx.Compilation;
+        if (!Laufzeitprojekt.Ist(c)) return;   // das Gesamtbild sieht nur die Komposition (alle Rollen-Projekte, docs/07)
         INamedTypeSymbol? G(string n) => c.GetTypeByMetadataName("Abstractions." + n);
         var (iEvent, iTransient, iCommand, iQuery, iResponse) = (G("IEvent"), G("ITransientEvent"), G("ICommand"), G("IQuery"), G("IQueryResponse"));
         var (iDecider, iReader, iSubscriber, iFunktion, iAkteur, iDarf) = (G("IDecider`1"), G("IReader`1"), G("ISubscriber"), G("IFunktion"), G("IAkteur"), G("IDarf`1"));

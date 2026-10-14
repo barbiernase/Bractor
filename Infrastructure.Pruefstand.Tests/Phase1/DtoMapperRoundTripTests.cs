@@ -22,7 +22,7 @@ public class DtoMapperRoundTripTests
 {
     private static ImagePairFilter RoundTrip(ImagePairFilter filter)
     {
-        var mapper = new ProtoMessageMapper();
+        var mapper = new ProtoMessageMapper(Domain.Leitung.GeneratedNutzlast.Instanz);
         var dto = mapper.MapToDto((IQuery)new SucheImagePairs(filter));
         var wire = Cqrs.Leitung.Nutzlast.Parser.ParseFrom(dto.ToByteArray());
         return ((SucheImagePairs)mapper.QueryAus(wire)).Filter;

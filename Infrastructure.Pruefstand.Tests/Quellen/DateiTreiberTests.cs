@@ -277,7 +277,7 @@ public class DateiTreiberTests
             Name = "a.tiff", Pfad = "/in/sub/a.tiff", RelativerPfad = "sub/a.tiff", Groesse = 4711,
             GeaendertAm = T0, ErkanntAm = T0.AddSeconds(2), Kennung = "sub/a.tiff|4711|x",
         };
-        var mapper = new ProtoMessageMapper();
+        var mapper = new ProtoMessageMapper(Domain.Leitung.GeneratedNutzlast.Instanz);
         var dto = mapper.MapToDto(new EventEnvelope { AggregateId = Guid.NewGuid(), Payload = datei, AggregateType = "Quelle:DateiErkannt" });
         var wire = Cqrs.Leitung.EventEnvelopeDto.Parser.ParseFrom(dto.ToByteArray());
         mapper.MapToDomain(wire).Payload.Should().Be(datei);

@@ -13,6 +13,8 @@
     <!-- GUI-Struktur + Domain-Sicht: das modulare Frontend (löste die alten
          Domain.Client / Domain.Client.Ui.Blazor ab, 2026-08-12). -->
     <ProjectReference Include="..\Domain.Client.Modules.Blazor\Domain.Client.Modules.Blazor.csproj" />
+    <!-- Die Leitung der Anwendung: Domänen-DTOs + Nutzlast-Tabelle (GeneratedNutzlast) für den GrpcProxy. -->
+    <ProjectReference Include="..\Domain.Leitung\Domain.Leitung.csproj" />
   </ItemGroup>
 
   <ItemGroup>

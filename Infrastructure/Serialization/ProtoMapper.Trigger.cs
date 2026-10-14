@@ -1,5 +1,4 @@
 using Abstractions;
-using Infrastructure.Mappers;
 using Cqrs.Leitung;
 
 namespace Infrastructure.Serialization;
@@ -16,11 +15,11 @@ public partial class ProtoMessageMapper
 
     public IPipelineTrigger TriggerAus(Nutzlast n)
     {
-        return ProtoTriggerMappingHelpers.MapToDomain(n);
+        return _tabelle.Trigger(n);
     }
 
     public Nutzlast MapToDto(IPipelineTrigger trigger)
     {
-        return ProtoTriggerMappingHelpers.MapToDto(trigger);
+        return _tabelle.PackeTrigger(trigger);
     }
 }

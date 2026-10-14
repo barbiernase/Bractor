@@ -47,6 +47,7 @@ namespace Infrastructure.SourceGeneration
 
         public void Execute(GeneratorExecutionContext context)
         {
+            if (!Laufzeitprojekt.Ist(context.Compilation)) return;   // nur in der Komposition (docs/07)
             var c = context.Compilation;
             var iFunktion = c.GetTypeByMetadataName("Abstractions.IFunktion");
             var iAuftragT = c.GetTypeByMetadataName("Abstractions.IAuftrag`1");

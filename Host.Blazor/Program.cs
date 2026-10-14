@@ -36,7 +36,7 @@ builder.Services.AddScoped<ClientBus>(_ => new ClientBus(null));
 builder.Services.AddScoped<IBus>(sp => sp.GetRequiredService<ClientBus>());
 // Akteur-Token aus Clients:<Vertrag>:Token der Umgebung (Abschnitt Identitaeten: sein Akteur-Satz verkörpert die Akteure des Vertrags);
 //   leer = kein Header (Umgebung ohne Identitäten: das Tor ist offen, der Vertrag gilt trotzdem).
-builder.Services.AddScoped<GrpcProxy>(_ => new GrpcProxy { AkteurToken = client.Token is { Length: > 0 } t ? t : null });
+builder.Services.AddScoped<GrpcProxy>(_ => new GrpcProxy(Domain.Leitung.GeneratedNutzlast.Instanz) { AkteurToken = client.Token is { Length: > 0 } t ? t : null });
 builder.Services.AddScoped<IGrpcProxy>(sp => sp.GetRequiredService<GrpcProxy>());
 builder.Services.AddScoped<VersioningModule>();
 builder.Services.AddScoped<IVersioningModule>(sp => sp.GetRequiredService<VersioningModule>());

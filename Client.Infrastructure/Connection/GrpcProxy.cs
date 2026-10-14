@@ -16,7 +16,10 @@ namespace Client.Infrastructure.Connection;
 /// </summary>
 public class GrpcProxy : IGrpcProxy, IAsyncDisposable
 {
-    private readonly ProtoMessageMapper _mapper = new();
+    private readonly ProtoMessageMapper _mapper;
+
+    /// <param name="tabelle">Die Nutzlast-Tabelle der Anwendung (generiert im Leitungs-Projekt, <c>GeneratedNutzlast</c>).</param>
+    public GrpcProxy(INutzlastTabelle tabelle) => _mapper = new ProtoMessageMapper(tabelle);
     
     private GrpcChannel? _channel;
     private CqrsClientService.CqrsClientServiceClient? _client;

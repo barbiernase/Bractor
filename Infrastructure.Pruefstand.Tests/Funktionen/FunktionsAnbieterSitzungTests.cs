@@ -250,7 +250,7 @@ public class FunktionsAnbieterSitzungTests
     [Fact]
     public void Auftrag_und_Ergebnis_reisen_ueber_Proto_ohne_Reflexion()
     {
-        var mapper = new ProtoMessageMapper();
+        var mapper = new ProtoMessageMapper(Domain.Leitung.GeneratedNutzlast.Instanz);
         var auftrag = new VerkleinereBild("/roh/a.tiff", 512);
 
         var dto = mapper.MapToDto(auftrag);

@@ -1,5 +1,4 @@
 using Abstractions;
-using Infrastructure.Mappers;
 using Cqrs.Leitung;
 
 namespace Infrastructure.Serialization;
@@ -16,12 +15,12 @@ public partial class ProtoMessageMapper
 
     public IAuftrag AuftragAus(Nutzlast n)
     {
-        return ProtoAuftragMappingHelpers.MapToDomain(n);
+        return _tabelle.Auftrag(n);
     }
 
     public Nutzlast MapToDto(IAuftrag auftrag)
     {
-        return ProtoAuftragMappingHelpers.MapToDto(auftrag);
+        return _tabelle.PackeAuftrag(auftrag);
     }
 
     /// <summary>
@@ -30,6 +29,6 @@ public partial class ProtoMessageMapper
     /// </summary>
     public IEvent MapErgebnis(EventEnvelopeDto dto)
     {
-        return ProtoEventMappingHelpers.MapPayload(dto);
+        return _tabelle.Event(dto.Payload);
     }
 }

@@ -1,5 +1,4 @@
 using Abstractions;
-using Infrastructure.Mappers;
 using Microsoft.Extensions.Logging;
 using Cqrs.Leitung;
 
@@ -11,10 +10,13 @@ namespace Infrastructure.Serialization;
 /// </summary>
 public partial class ProtoMessageMapper
 {
+    private readonly INutzlastTabelle _tabelle;
     private readonly ILogger<ProtoMessageMapper>? _logger;
 
-    public ProtoMessageMapper(ILogger<ProtoMessageMapper>? logger = null)
+    /// <param name="tabelle">Die Nutzlast-Tabelle der Anwendung (generiert im Leitungs-Projekt, <c>GeneratedNutzlast</c>).</param>
+    public ProtoMessageMapper(INutzlastTabelle tabelle, ILogger<ProtoMessageMapper>? logger = null)
     {
+        _tabelle = tabelle;
         _logger = logger;
     }
 
@@ -33,7 +35,7 @@ public partial class ProtoMessageMapper
         try
         {
             _logger?.LogDebug("Mapping CommandEnvelopeDto to CommandEnvelope");
-            return ProtoCommandMappingHelpers.MapToDomain(dto);
+            return CommandAusHuelle(dto);
         }
         catch (Exception ex)
         {
@@ -53,7 +55,7 @@ public partial class ProtoMessageMapper
         try
         {
             _logger?.LogDebug("Mapping CommandEnvelope to CommandEnvelopeDto");
-            return ProtoCommandMappingHelpers.MapToDto(envelope);
+            return CommandHuelle(envelope);
         }
         catch (Exception ex)
         {
@@ -89,7 +91,7 @@ public partial class ProtoMessageMapper
         {
             _logger?.LogDebug("Mapping EventEnvelopeDto to EventEnvelope");
             // KORRIGIERT: Keine verschachtelte Klasse!
-            return ProtoEventMappingHelpers.MapToDomain(dto);
+            return EventAusHuelle(dto);
         }
         catch (Exception ex)
         {
@@ -110,7 +112,7 @@ public partial class ProtoMessageMapper
         {
             _logger?.LogDebug("Mapping EventEnvelope to EventEnvelopeDto");
             // KORRIGIERT: Keine verschachtelte Klasse!
-            return ProtoEventMappingHelpers.MapToDto(envelope);
+            return EventHuelle(envelope);
         }
         catch (Exception ex)
         {
@@ -135,7 +137,7 @@ public partial class ProtoMessageMapper
     public IQuery QueryAus(Nutzlast n)
     {
         ArgumentNullException.ThrowIfNull(n);
-        try { return ProtoQueryMappingHelpers.MapToDomain(n); }
+        try { return _tabelle.Query(n); }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Failed to map query payload {Typ} to domain", n.Typ);
@@ -147,7 +149,7 @@ public partial class ProtoMessageMapper
     public Nutzlast MapToDto(IQuery query)
     {
         ArgumentNullException.ThrowIfNull(query);
-        try { return ProtoQueryMappingHelpers.MapToDto(query); }
+        try { return _tabelle.PackeQuery(query); }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Failed to map IQuery to Nutzlast");
@@ -174,7 +176,7 @@ public partial class ProtoMessageMapper
     public IQueryResponse AntwortAus(Nutzlast n)
     {
         ArgumentNullException.ThrowIfNull(n);
-        try { return ProtoQueryResponseMappingHelpers.MapToDomain(n); }
+        try { return _tabelle.Antwort(n); }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Failed to map query response {Typ} to domain", n.Typ);
@@ -186,7 +188,7 @@ public partial class ProtoMessageMapper
     public Nutzlast MapToDto(IQueryResponse response)
     {
         ArgumentNullException.ThrowIfNull(response);
-        try { return ProtoQueryResponseMappingHelpers.MapToDto(response); }
+        try { return _tabelle.PackeAntwort(response); }
         catch (Exception ex)
         {
             _logger?.LogError(ex, "Failed to map IQueryResponse to Nutzlast");
@@ -241,6 +243,68 @@ public partial class ProtoMessageMapper
     }
 
     // =========================================================================
+    // HÜLLEN (Framework): Metadaten-Felder kopieren, die Nutzlast packt/entpackt die Tabelle
+    // =========================================================================
+
+    private CommandEnvelope CommandAusHuelle(CommandEnvelopeDto dto) => new()
+    {
+        CommandId = Guid.Parse(dto.CommandId),
+        AggregateId = Guid.Parse(dto.AggregateId),
+        AggregateType = dto.AggregateType,
+        // Über gRPC reisen NUR Client-Commands (OCC) — der interne Emittiert-Pfad kreuzt nie den Draht.
+        Modus = new CommandModus.Client(dto.ExpectedVersion),
+        CreatedAtUtc = DateTimeOffset.FromUnixTimeMilliseconds(dto.CreatedAtUtc),
+        CorrelationId = dto.CorrelationId,
+        UserId = dto.UserId,
+        OriginSessionId = string.IsNullOrEmpty(dto.OriginSessionId) ? null : dto.OriginSessionId,
+        Payload = _tabelle.Command(dto.Payload),
+    };
+
+    private CommandEnvelopeDto CommandHuelle(CommandEnvelope envelope) => new()
+    {
+        CommandId = envelope.CommandId.ToString(),
+        AggregateId = envelope.AggregateId.ToString(),
+        AggregateType = envelope.AggregateType ?? string.Empty,
+        ExpectedVersion = envelope.Modus is CommandModus.Client c ? c.ExpectedVersion
+            : throw new NotSupportedException("Nur Client-Commands passieren gRPC; Emittiert ist intern."),
+        CreatedAtUtc = envelope.CreatedAtUtc.ToUnixTimeMilliseconds(),
+        CorrelationId = envelope.CorrelationId,
+        UserId = envelope.UserId,
+        OriginSessionId = envelope.OriginSessionId ?? string.Empty,
+        Payload = _tabelle.PackeCommand(envelope.Payload),
+    };
+
+    private EventEnvelope EventAusHuelle(EventEnvelopeDto dto) => new()
+    {
+        EventId = Guid.Parse(dto.EventId),
+        AggregateId = Guid.Parse(dto.AggregateId),
+        AggregateType = dto.AggregateType,
+        AggregateVersion = dto.AggregateVersion,
+        StreamHeadVersion = dto.StreamHeadVersion,
+        CreatedAtUtc = DateTimeOffset.FromUnixTimeMilliseconds(dto.CreatedAtUtc),
+        CausationId = dto.CausationId,
+        CorrelationId = dto.CorrelationId,
+        UserId = dto.UserId,
+        TargetSubscriberId = string.IsNullOrEmpty(dto.TargetSubscriberId) ? null : dto.TargetSubscriberId,
+        Payload = _tabelle.Event(dto.Payload),
+    };
+
+    private EventEnvelopeDto EventHuelle(EventEnvelope envelope) => new()
+    {
+        EventId = envelope.EventId.ToString(),
+        AggregateId = envelope.AggregateId.ToString(),
+        AggregateType = envelope.AggregateType ?? string.Empty,
+        AggregateVersion = envelope.AggregateVersion,
+        StreamHeadVersion = envelope.StreamHeadVersion,
+        CreatedAtUtc = envelope.CreatedAtUtc.ToUnixTimeMilliseconds(),
+        CausationId = envelope.CausationId,
+        CorrelationId = envelope.CorrelationId,
+        UserId = envelope.UserId,
+        TargetSubscriberId = envelope.TargetSubscriberId ?? string.Empty,
+        Payload = _tabelle.PackeEvent(envelope.Payload),
+    };
+
+    // =========================================================================
     // PAYLOAD MAPPING (ohne Envelope)
     // =========================================================================
 
@@ -252,8 +316,7 @@ public partial class ProtoMessageMapper
         try
         {
             _logger?.LogDebug("Mapping Command payload to domain");
-            var envelope = ProtoCommandMappingHelpers.MapToDomain(dto);
-            return envelope.Payload;
+            return _tabelle.Command(dto.Payload);
         }
         catch (Exception ex)
         {
@@ -271,8 +334,7 @@ public partial class ProtoMessageMapper
         {
             _logger?.LogDebug("Mapping Event payload to domain");
             // KORRIGIERT: Keine verschachtelte Klasse!
-            var envelope = ProtoEventMappingHelpers.MapToDomain(dto);
-            return envelope.Payload;
+            return _tabelle.Event(dto.Payload);
         }
         catch (Exception ex)
         {

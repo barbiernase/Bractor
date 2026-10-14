@@ -61,6 +61,7 @@ namespace Infrastructure.SourceGeneration
 
         public void Execute(GeneratorExecutionContext context)
         {
+            if (!Laufzeitprojekt.Ist(context.Compilation)) return;   // nur in der Komposition (docs/07)
             var compilation = context.Compilation;
             var iDecider = compilation.GetTypeByMetadataName(IDeciderMetadataName);
             var iCommand = compilation.GetTypeByMetadataName(ICommandFullName);

@@ -23,6 +23,7 @@ namespace Infrastructure.SourceGeneration
 
         public void Execute(GeneratorExecutionContext context)
         {
+            if (!Laufzeitprojekt.Ist(context.Compilation)) return;   // nur in der Komposition (docs/07)
             var c = context.Compilation;
             var iDienst = c.GetTypeByMetadataName(Abstractions.Dienstvertrag.Marker);
             var iFunktion = c.GetTypeByMetadataName("Abstractions.IFunktion");

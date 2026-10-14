@@ -37,6 +37,8 @@ namespace Infrastructure.SourceGeneration
 
         public void Execute(GeneratorExecutionContext context)
         {
+            // Nur im Leitungs-Projekt der Anwendung (docs/07, Rolle Leitung): dort liegen die Domänen-DTOs, hier entsteht ihr Nutzlast-Mapper.
+            if (Abstractions.Projektstruktur.Zerlege(context.Compilation.AssemblyName ?? "").Rolle != Abstractions.Projektstruktur.Rolle.Leitung) return;
             var debugInfo = new List<string>();
             debugInfo.Add($"DtoMapperSourceGenerator läuft in Assembly: {context.Compilation.AssemblyName}");
             debugInfo.Add($"Timestamp: {DateTime.Now:yyyy-MM-dd HH:mm:ss}");
@@ -148,8 +150,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("using System.Collections.Generic;");
             sb.AppendLine("using System.Globalization;");
             sb.AppendLine("using System.Linq;");
-            sb.AppendLine($"using {Abstractions.Projektstruktur.Projekt(Abstractions.Projektstruktur.StandardWurzel, Abstractions.Projektstruktur.Rolle.Leitung)};");
-            sb.AppendLine("using Abstractions;");
+                        sb.AppendLine("using Abstractions;");
             
             // Collect all namespaces
             var namespaces = new HashSet<string>();
@@ -174,7 +175,7 @@ namespace Infrastructure.SourceGeneration
             }
             
             sb.AppendLine();
-            sb.AppendLine("namespace Infrastructure.Mappers");
+            sb.AppendLine($"namespace {context.Compilation.AssemblyName}");
             sb.AppendLine("{");
             
             // Build type lookup for determining helper classes
@@ -188,13 +189,13 @@ namespace Infrastructure.SourceGeneration
                 _enumTypeNames.Add(obj.Node.FullName);
             }
             
-            // 1. Partial class ProtoMessageMapper
-            GeneratePartialMapperClass(sb);
-            
-            // 2. Static Helper Classes
+            // 1. Die Nutzlast-Tabelle der Anwendung (Cqrs.Leitung.INutzlastTabelle) — das Framework kennt nur sie.
+            GenerateNutzlastKlasse(sb);
+
+            // 2. Static Helper Classes — jede Kategorie Typname ↔ Domänen-Typ über die Nutzlast
             GenerateValueObjectHelpers(sb, objectTypes, typeLookup);
-            GenerateCommandHelpers(sb, commandTypes, objectTypes, typeLookup);
-            GenerateEventHelpers(sb, eventTypes, objectTypes, typeLookup);
+            GenerateStandaloneHelpers(sb, commandTypes, objectTypes, "Command", "ICommand", "ProtoCommandMappingHelpers", typeLookup);
+            GenerateStandaloneHelpers(sb, eventTypes, objectTypes, "Event", "IEvent", "ProtoEventMappingHelpers", typeLookup);
             
             // 3. Standalone-Kategorien — generisch (neue Kategorie = ein Eintrag)
             GenerateStandaloneHelpers(sb, queryTypes ?? new List<TypeAggregationResult>(), objectTypes,
@@ -214,12 +215,20 @@ namespace Infrastructure.SourceGeneration
             context.AddSource("ProtoMessageMapper.Generated.cs", sb.ToString());
         }
 
-        private void GeneratePartialMapperClass(StringBuilder sb)
+        private void GenerateNutzlastKlasse(StringBuilder sb)
         {
-            sb.AppendLine("    public partial class ProtoMessageMapper");
+            const string N = "global::Cqrs.Leitung.Nutzlast";
+            sb.AppendLine("    /// <summary>Die Nutzlast-Tabelle dieser Anwendung: Domänen-Nachricht ↔ Nutzlast (Typname + Bytes der {Typ}Dto-Message).</summary>");
+            sb.AppendLine("    public sealed class GeneratedNutzlast : global::Cqrs.Leitung.INutzlastTabelle");
             sb.AppendLine("    {");
-            sb.AppendLine("        // Partial class - erweitert die handgeschriebene Implementierung");
-            sb.AppendLine("        // Die eigentliche Mapping-Logik ist in den statischen Helper-Klassen");
+            sb.AppendLine("        public static readonly GeneratedNutzlast Instanz = new GeneratedNutzlast();");
+            foreach (var (art, iface, helper) in new[] { ("Command", "ICommand", "ProtoCommandMappingHelpers"), ("Event", "IEvent", "ProtoEventMappingHelpers"),
+                         ("Query", "IQuery", "ProtoQueryMappingHelpers"), ("Antwort", "IQueryResponse", "ProtoQueryResponseMappingHelpers"),
+                         ("Trigger", "IPipelineTrigger", "ProtoTriggerMappingHelpers"), ("Auftrag", "IAuftrag", "ProtoAuftragMappingHelpers") })
+            {
+                sb.AppendLine($"        public {iface} {art}({N} n) => {helper}.MapToDomain(n);");
+                sb.AppendLine($"        public {N} Packe{art}({iface} x) => {helper}.MapToDto(x);");
+            }
             sb.AppendLine("    }");
             sb.AppendLine();
         }
@@ -265,147 +274,6 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine();
             }
 
-            sb.AppendLine("    }");
-            sb.AppendLine();
-        }
-
-        private void GenerateCommandHelpers(StringBuilder sb, List<TypeAggregationResult> commandTypes, List<TypeAggregationResult> objectTypes, Dictionary<string, DomainType> typeLookup)
-        {
-            if (!commandTypes.Any()) return;
-            
-            sb.AppendLine("    internal static class ProtoCommandMappingHelpers");
-            sb.AppendLine("    {");
-            
-            // Generate lookup dictionaries
-            GenerateLookupDictionaries(sb, commandTypes, "Command");
-            
-            // MapToDomain for envelope
-            sb.AppendLine("        public static CommandEnvelope MapToDomain(global::Cqrs.Leitung.CommandEnvelopeDto dto)");
-            sb.AppendLine("        {");
-            sb.AppendLine("            if (!CommandMappers.TryGetValue(dto.Payload?.Typ ?? \"\", out var mapper))");
-            sb.AppendLine("                throw new NotSupportedException($\"Unknown command type: {dto.Payload?.Typ}\");");
-            sb.AppendLine();
-            sb.AppendLine("            var payload = mapper(dto.Payload!);");
-            sb.AppendLine();
-            sb.AppendLine("            return new CommandEnvelope");
-            sb.AppendLine("            {");
-            sb.AppendLine("                CommandId = Guid.Parse(dto.CommandId),");
-            sb.AppendLine("                AggregateId = Guid.Parse(dto.AggregateId),");
-            sb.AppendLine("                AggregateType = dto.AggregateType,");
-            // Über gRPC reisen NUR Client-Commands (OCC) — der interne Emittiert-Pfad kreuzt nie den Draht.
-            sb.AppendLine("                Modus = new CommandModus.Client(dto.ExpectedVersion),");
-            sb.AppendLine("                CreatedAtUtc = DateTimeOffset.FromUnixTimeMilliseconds(dto.CreatedAtUtc),");
-            sb.AppendLine("                CorrelationId = dto.CorrelationId,");
-            sb.AppendLine("                UserId = dto.UserId,");
-            sb.AppendLine("                OriginSessionId = string.IsNullOrEmpty(dto.OriginSessionId) ? null : dto.OriginSessionId,");
-            sb.AppendLine("                Payload = payload");
-            sb.AppendLine("            };");
-            sb.AppendLine("        }");
-            sb.AppendLine();
-            
-            // MapToDto for envelope
-            sb.AppendLine("        public static global::Cqrs.Leitung.CommandEnvelopeDto MapToDto(CommandEnvelope envelope)");
-            sb.AppendLine("        {");
-            sb.AppendLine("            var dto = new global::Cqrs.Leitung.CommandEnvelopeDto");
-            sb.AppendLine("            {");
-            sb.AppendLine("                CommandId = envelope.CommandId.ToString(),");
-            sb.AppendLine("                AggregateId = envelope.AggregateId.ToString(),");
-            sb.AppendLine("                AggregateType = envelope.AggregateType ?? string.Empty,");
-            sb.AppendLine("                ExpectedVersion = envelope.Modus is CommandModus.Client __c ? __c.ExpectedVersion : throw new global::System.NotSupportedException(\"Nur Client-Commands passieren gRPC; Emittiert ist intern.\"),");
-            sb.AppendLine("                CreatedAtUtc = envelope.CreatedAtUtc.ToUnixTimeMilliseconds(),");
-            sb.AppendLine("                CorrelationId = envelope.CorrelationId,");
-            sb.AppendLine("                UserId = envelope.UserId,");
-            sb.AppendLine("                OriginSessionId = envelope.OriginSessionId ?? string.Empty");
-            sb.AppendLine("            };");
-            sb.AppendLine();
-            sb.AppendLine("            if (!CommandReverseMappers.TryGetValue(envelope.Payload.GetType(), out var mapper))");
-            sb.AppendLine("                throw new NotSupportedException($\"Unknown command type: {envelope.Payload.GetType().Name}\");");
-            sb.AppendLine();
-            sb.AppendLine("            dto.Payload = mapper(envelope.Payload);");
-            sb.AppendLine("            return dto;");
-            sb.AppendLine("        }");
-            sb.AppendLine();
-            
-            // Individual mappers
-            GenerateIndividualMappers(sb, commandTypes, objectTypes, "Command", typeLookup);
-            
-            sb.AppendLine("    }");
-            sb.AppendLine();
-        }
-
-        private void GenerateEventHelpers(StringBuilder sb, List<TypeAggregationResult> eventTypes, List<TypeAggregationResult> objectTypes, Dictionary<string, DomainType> typeLookup)
-        {
-            if (!eventTypes.Any()) return;
-            
-            sb.AppendLine("    internal static class ProtoEventMappingHelpers");
-            sb.AppendLine("    {");
-            
-            // Generate lookup dictionaries
-            GenerateLookupDictionaries(sb, eventTypes, "Event");
-            
-            // MapToDomain for envelope
-            sb.AppendLine("        public static EventEnvelope MapToDomain(global::Cqrs.Leitung.EventEnvelopeDto dto)");
-            sb.AppendLine("        {");
-            sb.AppendLine("            if (!EventMappers.TryGetValue(dto.Payload?.Typ ?? \"\", out var mapper))");
-            sb.AppendLine("                throw new NotSupportedException($\"Unknown event type: {dto.Payload?.Typ}\");");
-            sb.AppendLine();
-            sb.AppendLine("            var payload = mapper(dto.Payload!);");
-            sb.AppendLine();
-            sb.AppendLine("            return new EventEnvelope");
-            sb.AppendLine("            {");
-            sb.AppendLine("                EventId = Guid.Parse(dto.EventId),");
-            sb.AppendLine("                AggregateId = Guid.Parse(dto.AggregateId),");
-            sb.AppendLine("                AggregateType = dto.AggregateType,");
-            sb.AppendLine("                AggregateVersion = dto.AggregateVersion,");
-            sb.AppendLine("                StreamHeadVersion = dto.StreamHeadVersion,");
-            sb.AppendLine("                CreatedAtUtc = DateTimeOffset.FromUnixTimeMilliseconds(dto.CreatedAtUtc),");
-            sb.AppendLine("                CausationId = dto.CausationId,");
-            sb.AppendLine("                CorrelationId = dto.CorrelationId,");
-            sb.AppendLine("                UserId = dto.UserId,");
-            sb.AppendLine("                TargetSubscriberId = string.IsNullOrEmpty(dto.TargetSubscriberId) ? null : dto.TargetSubscriberId,");
-            sb.AppendLine("                Payload = payload");
-            sb.AppendLine("            };");
-            sb.AppendLine("        }");
-            sb.AppendLine();
-
-            // Nur die Nutzlast (ohne Envelope-Metadaten): für Ergebnisse externer Funktions-Ausführer, deren Envelope der
-            // Server selbst stempelt (Ausführungs-Stream, Korrelation, Akteur).
-            sb.AppendLine("        public static IEvent MapPayload(global::Cqrs.Leitung.EventEnvelopeDto dto)");
-            sb.AppendLine("        {");
-            sb.AppendLine("            if (!EventMappers.TryGetValue(dto.Payload?.Typ ?? \"\", out var mapper))");
-            sb.AppendLine("                throw new NotSupportedException($\"Unknown event type: {dto.Payload?.Typ}\");");
-            sb.AppendLine("            return mapper(dto.Payload!);");
-            sb.AppendLine("        }");
-            sb.AppendLine();
-            
-            // MapToDto for envelope
-            sb.AppendLine("        public static global::Cqrs.Leitung.EventEnvelopeDto MapToDto(EventEnvelope envelope)");
-            sb.AppendLine("        {");
-            sb.AppendLine("            var dto = new global::Cqrs.Leitung.EventEnvelopeDto");
-            sb.AppendLine("            {");
-            sb.AppendLine("                EventId = envelope.EventId.ToString(),");
-            sb.AppendLine("                AggregateId = envelope.AggregateId.ToString(),");
-            sb.AppendLine("                AggregateType = envelope.AggregateType ?? string.Empty,");
-            sb.AppendLine("                AggregateVersion = envelope.AggregateVersion,");
-            sb.AppendLine("                StreamHeadVersion = envelope.StreamHeadVersion,");
-            sb.AppendLine("                CreatedAtUtc = envelope.CreatedAtUtc.ToUnixTimeMilliseconds(),");
-            sb.AppendLine("                CausationId = envelope.CausationId,");
-            sb.AppendLine("                CorrelationId = envelope.CorrelationId,");
-            sb.AppendLine("                UserId = envelope.UserId,");
-            sb.AppendLine("                TargetSubscriberId = envelope.TargetSubscriberId ?? string.Empty");
-            sb.AppendLine("            };");
-            sb.AppendLine();
-            sb.AppendLine("            if (!EventReverseMappers.TryGetValue(envelope.Payload.GetType(), out var mapper))");
-            sb.AppendLine("                throw new NotSupportedException($\"Unknown event type: {envelope.Payload.GetType().Name}\");");
-            sb.AppendLine();
-            sb.AppendLine("            dto.Payload = mapper(envelope.Payload);");
-            sb.AppendLine("            return dto;");
-            sb.AppendLine("        }");
-            sb.AppendLine();
-            
-            // Individual mappers
-            GenerateIndividualMappers(sb, eventTypes, objectTypes, "Event", typeLookup);
-            
             sb.AppendLine("    }");
             sb.AppendLine();
         }

@@ -39,6 +39,7 @@ namespace Infrastructure.SourceGeneration
 
         public void Execute(GeneratorExecutionContext context)
         {
+            if (!Laufzeitprojekt.Ist(context.Compilation)) return;   // nur in der Komposition (docs/07)
             var iSubscriber = context.Compilation.GetTypeByMetadataName(ISubscriberFullName);
             var iExactlyOnce = context.Compilation.GetTypeByMetadataName(IExactlyOnceFullName);
             if (iSubscriber == null || iExactlyOnce == null)

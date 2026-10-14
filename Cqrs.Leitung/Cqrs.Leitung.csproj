@@ -23,4 +23,8 @@
     <Protobuf Include="cqrs.proto" GrpcServices="Both" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
+  </ItemGroup>
+
 </Project>

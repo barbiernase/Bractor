@@ -40,7 +40,7 @@ public static class ClientInfrastructureExtensions
         services.AddSingleton<IBus>(sp => sp.GetRequiredService<ClientBus>());
 
         // gRPC Proxy — über Interface für Testbarkeit
-        services.AddSingleton<GrpcProxy>();
+        services.AddSingleton<GrpcProxy>();   // braucht die INutzlastTabelle der Anwendung (GeneratedNutzlast, Leitungs-Projekt)
         services.AddSingleton<IGrpcProxy>(sp => sp.GetRequiredService<GrpcProxy>());
 
         // Infrastruktur-Module

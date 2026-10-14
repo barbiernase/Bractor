@@ -20,6 +20,7 @@ namespace Infrastructure.SourceGeneration
 
         public void Execute(GeneratorExecutionContext context)
         {
+            if (!Laufzeitprojekt.Ist(context.Compilation)) return;   // nur in der Komposition (docs/07)
             List<INamedTypeSymbol> aggregateSymbols = FindIStateImplementations(context.Compilation);
 
             if (aggregateSymbols.Count == 0)

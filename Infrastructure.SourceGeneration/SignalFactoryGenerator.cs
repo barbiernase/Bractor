@@ -25,6 +25,7 @@ namespace Infrastructure.SourceGeneration
 
         public void Execute(GeneratorExecutionContext context)
         {
+            if (!Laufzeitprojekt.Ist(context.Compilation)) return;   // nur in der Komposition (docs/07)
             var compilation = context.Compilation;
 
             // ★ P1b (TG-1): die Event→Signal-Kante wird TYP-getrieben aus dem generischen Marker
