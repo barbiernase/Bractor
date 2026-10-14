@@ -23,7 +23,7 @@ es nur für nicht-autoritative Randstores (Inv. 6).
 
 ## 12.2 Zahlen
 
-**Aktuell (2026-10-14, gemessen auf Commit-Basis `dcda9b8` + Aufräumen):** Prüfstand **535/535**, Integration **39/39** sequentiell, Prüfdomäne **16/16** sequentiell,
+**Aktuell (2026-10-14, gemessen auf Commit-Basis `dcda9b8` + Aufräumen):** Prüfstand **537/537**, Integration **39/39** sequentiell, Prüfdomäne **16/16** sequentiell,
 `Client.Infrastructure.CollectionTests` **30/30**, Python SDK **34/34**, Worker **21/21**; `--check` grün (alle Bereiche inkl. „Lage“),
 `--sonde` grün (111 Soll-Fakten, Lage-Soll 56 Typen).
 
@@ -31,12 +31,12 @@ Statisch gezählt (2026-10-14):
 
 | Projekt | `[Fact]` | `[Theory]` | Dateien |
 |---|---:|---:|---:|
-| Infrastructure.Pruefstand.Tests | 513 | 6 | 73 |
+| Infrastructure.Pruefstand.Tests | 515 | 6 | 74 |
 | Infrastructure.Integration.Tests | 39 | 0 | 19 |
 | Pruefdomaene.Integration.Tests | 16 | 0 | 4 |
 | Client.Infrastructure.CollectionTests | 30 | 0 | 2 |
 
-Die Differenz zwischen 519 Methoden und 535 Läufen im Prüfstand kommt von den expandierten `[Theory]`-Fällen.
+Die Differenz zwischen 521 Methoden und 537 Läufen im Prüfstand kommt von den expandierten `[Theory]`-Fällen.
 
 ## 12.3 Was getestet ist
 

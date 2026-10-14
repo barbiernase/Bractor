@@ -18,13 +18,26 @@ public static partial class ProtoVergleich
     [GeneratedRegex(@"message\s+EventEnvelopeDto\s*\{.*?oneof\s+payload\s*\{(?<liste>[^}]*)\}", RegexOptions.Singleline)]
     private static partial Regex EventListe();
 
-    /// <summary>Die Event-Nachrichten (Payload-Fälle des Event-Umschlags) mit ihren Feldern (Name → Typ).</summary>
+    /// <summary>
+    /// Der Abschnitt der Events im Anwendungs-Proto, wie ihn <c>Proto.SourceGeneration/FileGenerator.cs</c> schreibt (Kategorie „EVENT PAYLOADS“) —
+    /// bis zum nächsten Abschnitt. Seit der getrennten Leitung (Cqrs.Leitung/cqrs.proto) gibt es dort keinen Event-Umschlag mehr.
+    /// </summary>
+    [GeneratedRegex(@"^// EVENT PAYLOADS\s*$(?<abschnitt>.*?)(?=^// =+\s*$\s*^// [A-Z]|\z)", RegexOptions.Singleline | RegexOptions.Multiline)]
+    private static partial Regex EventAbschnitt();
+
+    /// <summary>
+    /// Die Event-Nachrichten mit ihren Feldern (Name → Typ): aus dem Abschnitt „EVENT PAYLOADS“ des Anwendungs-Protos, bei einem gespeicherten
+    /// Stand von vor der getrennten Leitung aus den Payload-Fällen des damaligen Event-Umschlags.
+    /// </summary>
     public static IReadOnlyDictionary<string, IReadOnlyDictionary<string, string>> Events(string proto)
     {
+        var events = new HashSet<string>(StringComparer.Ordinal);
         var liste = EventListe().Match(proto);
-        var events = liste.Success
-            ? Feld().Matches(liste.Groups["liste"].Value).Select(m => m.Groups["typ"].Value.Trim()).ToHashSet(StringComparer.Ordinal)
-            : new HashSet<string>(StringComparer.Ordinal);
+        if (liste.Success)
+            events.UnionWith(Feld().Matches(liste.Groups["liste"].Value).Select(m => m.Groups["typ"].Value.Trim()));
+        var abschnitt = EventAbschnitt().Match(proto);
+        if (abschnitt.Success)
+            events.UnionWith(Nachricht().Matches(abschnitt.Groups["abschnitt"].Value).Select(m => m.Groups["name"].Value));
         var aus = new Dictionary<string, IReadOnlyDictionary<string, string>>(StringComparer.Ordinal);
         foreach (Match m in Nachricht().Matches(proto))
             if (events.Contains(m.Groups["name"].Value))

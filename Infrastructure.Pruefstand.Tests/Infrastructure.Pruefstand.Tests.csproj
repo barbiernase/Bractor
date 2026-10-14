@@ -49,4 +49,9 @@
     <ProjectReference Include="..\GraphExtractor.Kern\GraphExtractor.Kern.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Die Daten-Prüfung der Werkbank (⟳ „Daten prüfen“) ist reine Text-Logik — per Link getestet, ohne die Web-App zu referenzieren. -->
+    <Compile Include="..\Werkbank\Server\ProtoVergleich.cs" Link="Werkbank\ProtoVergleich.cs" />
+  </ItemGroup>
+
 </Project>
