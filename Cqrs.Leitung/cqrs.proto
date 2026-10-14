@@ -1,0 +1,273 @@
+syntax = "proto3";
+
+// ============================================================================
+// DIE LEITUNG DES FRAMEWORKS (handgeschrieben, für jede Anwendung gleich)
+//
+// Hülle, Dienst und Protokoll-Nachrichten. Die Domänen-Nachricht (Command, Event, Query, Antwort, Trigger, Auftrag)
+// reist als Nutzlast: ihr Typname + ihre Bytes, kodiert mit dem Proto DER ANWENDUNG (vom Codegen erzeugt, z. B.
+// ProtoRepo/domain.proto: nur die Domänen-DTOs). So kennt das Framework keinen Domänen-Typ, und jede Anwendung
+// bringt ihre eigenen Nachrichten mit (docs/06, docs/07).
+// ============================================================================
+
+
+option csharp_namespace = "Cqrs.Leitung";
+
+package cqrs;
+
+// ============================================================================
+// gRPC SERVICE
+// ============================================================================
+
+service CqrsClientService {
+    rpc Connect(stream ClientMessage) returns (stream ServerMessage);
+}
+
+// ============================================================================
+// CLIENT → SERVER (Upstream)
+// ============================================================================
+
+message ClientMessage {
+    oneof message {
+        CommandRequest command = 1;
+        SubscribeRequest subscribe = 2;
+        UnsubscribeRequest unsubscribe = 3;
+        CapabilitiesRequest capabilities = 4;
+        QueryRequest query = 5;
+        TriggerRequest trigger = 6;
+        TransientEventRequest transient_event = 7;
+        QueryResponseFromClient query_answer = 8;
+        TriggerResult trigger_result = 9;
+        FunktionenAnbieten funktionen_anbieten = 10;
+        ArbeitsErgebnis arbeits_ergebnis = 11;
+        ArbeitLebtMeldung arbeit_lebt = 12;
+    }
+}
+
+message CommandRequest {
+    CommandEnvelopeDto envelope = 1;
+}
+
+message SubscribeRequest {
+    string event_type = 1;
+    string aggregate_id = 2;
+}
+
+message UnsubscribeRequest {
+    string event_type = 1;
+    string aggregate_id = 2;
+}
+
+message CapabilitiesRequest {
+    repeated string event_types = 1;
+    repeated string message_types = 2;
+    repeated string handle_triggers = 3;
+    repeated string handle_queries = 4;
+    // Akteur-Vertrag (docs/konzept-akteure.md §3): "ich bin Vertrag X" — der Server nimmt die Fähigkeiten aus der
+    // generierten Tabelle statt aus der Selbstauskunft; der Hash erkennt einen Client, der gegen einen anderen Stand gebaut ist.
+    string vertrag = 5;
+    string vertrag_hash = 6;
+}
+
+message QueryRequest {
+    string correlation_id = 1;
+    Nutzlast payload = 2;
+    // Read-Your-Writes: Aggregat-IDs, die der Client zuletzt beschrieben hat. Die
+    // Leseseite trackt sie als Deps, damit das bounded RYW so lange nachfasst, bis die
+    // (asynchrone) Projektion die eigenen Writes eingeholt hat — auch wenn ein frisch
+    // geschriebenes Objekt (noch) nicht ins gefilterte Ergebnis fällt.
+    repeated string expected_fresh_ids = 3;
+}
+
+message TriggerRequest {
+    Nutzlast payload = 1;
+    string correlation_id = 2;
+}
+
+// ============================================================================
+// SERVER → CLIENT (Downstream)
+// ============================================================================
+
+message ServerMessage {
+    oneof message {
+        EventNotification event = 1;
+        SubscriptionConfirmed subscription_confirmed = 2;
+        UnsubscriptionConfirmed unsubscription_confirmed = 3;
+        CommandAccepted command_accepted = 4;
+        ErrorResponse error = 5;
+        CapabilitiesResponse capabilities_response = 6;
+        QueryResponse query_response = 7;
+        TriggerAck trigger_ack = 8;
+        TriggerForward trigger_forward = 9;
+        QueryForward query_forward = 10;
+        ArbeitsAuftrag arbeits_auftrag = 11;
+    }
+}
+
+message EventNotification {
+    EventEnvelopeDto envelope = 1;
+}
+
+message SubscriptionConfirmed {
+    string event_type = 1;
+    string aggregate_id = 2;
+}
+
+message UnsubscriptionConfirmed {
+    string event_type = 1;
+    string aggregate_id = 2;
+}
+
+message CommandAccepted {
+    string command_id = 1;
+    string correlation_id = 2;
+}
+
+message CapabilitiesResponse {
+    string session_id = 1;
+    repeated string allowed_commands = 2;
+    repeated string subscribed_events = 3;
+    repeated string supported_queries = 4;
+    repeated string allowed_triggers = 5;
+    repeated string unknown_types = 6;
+    repeated string handling_triggers = 7;
+    repeated string handling_queries = 8;
+    // Der angenommene Akteur-Vertrag (leer = keiner bzw. abgelehnt) und — bei abweichendem Hash — der Server-Hash.
+    string vertrag = 9;
+    string vertrag_hash = 10;
+}
+
+message QueryResponse {
+    string correlation_id = 1;
+    Nutzlast payload = 2;
+    repeated AggregateMetaDto deps = 3;
+}
+
+message AggregateMetaDto {
+    string id = 1;
+    string aggregate_type = 2;
+    int32 version = 3;
+}
+
+message TriggerAck {
+    bool accepted = 1;
+    string correlation_id = 2;
+    string error_message = 3;
+}
+
+message TriggerForward {
+    Nutzlast payload = 1;
+    string correlation_id = 2;
+}
+
+message QueryForward {
+    string correlation_id = 1;
+    Nutzlast payload = 2;
+}
+
+message TransientEventRequest {
+    EventEnvelopeDto envelope = 1;
+}
+
+message QueryResponseFromClient {
+    string correlation_id = 1;
+    Nutzlast payload = 2;
+    string error_code = 3;
+    string error_message = 4;
+}
+
+message TriggerResult {
+    string correlation_id = 1;
+    bool accepted = 2;
+    string error_message = 3;
+}
+
+// Katalog-Funktionen extern ausführen (docs/konzept-editor-pipelines.md §14.5): ein Worker bietet Funktionen an,
+// der Server holt für ihn Aufträge beim Vermittler (Pull, Slots = Gleichzeitigkeit), reicht sie weiter und schreibt
+// das Ergebnis genau einmal in den Ausführungs-Stream.
+message FunktionenAnbieten {
+    repeated FunktionsAngebot angebote = 1;
+}
+
+message FunktionsAngebot {
+    // Einfacher Name der Funktions-Schnittstelle, z. B. "IBildVerkleinerung".
+    string funktion = 1;
+    int32 slots = 2;
+}
+
+message ArbeitsAuftrag {
+    // Ausführungs-Id (deterministisch je Prozess-Transition) — Schlüssel für Ergebnis und Lebenszeichen.
+    string vorgang = 1;
+    string korrelation = 2;
+    string funktion = 3;
+    Nutzlast auftrag = 4;
+    string akteur = 5;
+}
+
+message ArbeitsErgebnis {
+    string vorgang = 1;
+    // Der gewählte OneOf-Fall der Funktion als Event (nur die Nutzlast zählt).
+    EventEnvelopeDto ergebnis = 2;
+    // Nicht leer = die Funktion ist gescheitert → durable Fehlschlag-Marke statt Ergebnis.
+    string fehler = 3;
+}
+
+message ArbeitLebtMeldung {
+    string vorgang = 1;
+}
+
+message ErrorResponse {
+    string code = 1;
+    string message = 2;
+    string correlation_id = 3;
+}
+
+// ============================================================================
+// NUTZLAST
+// ============================================================================
+
+// Eine Domänen-Nachricht auf der Leitung: typ = Proto-Name des DTO ohne „Dto“ (= einfacher Typname, z. B. "ErstelleDatensatz"),
+// daten = die {typ}Dto-Message des Anwendungs-Protos, protobuf-kodiert.
+message Nutzlast {
+    string typ = 1;
+    bytes daten = 2;
+}
+
+// ============================================================================
+// ENVELOPE TYPES
+// ============================================================================
+
+message CommandEnvelopeDto {
+    string command_id = 1;
+    string aggregate_id = 2;
+    string aggregate_type = 3;
+    int32 expected_version = 4;
+    int64 created_at_utc = 5;
+    string correlation_id = 6;
+    string user_id = 7;
+    string origin_session_id = 8;
+    // Kausalität einer Zusage von außen (Akteur-Konzept §5.3): auf welches Event (Stream + Version + Typ) und als wievielte Ausgabe
+    // der Reaktion — daraus leitet der Server eine deterministische CommandId ab (doppelt zugestellt ≠ doppelt wirksam).
+    string causation_stream_id = 9;
+    int32 causation_version = 10;
+    string causation_type = 11;
+    int32 causation_index = 12;
+
+    // Die Domänen-Nachricht: Typname + Bytes (Proto der Anwendung, docs/06).
+    Nutzlast payload = 20;
+}
+
+message EventEnvelopeDto {
+    string event_id = 1;
+    string aggregate_id = 2;
+    string aggregate_type = 3;
+    int32 aggregate_version = 4;
+    int64 created_at_utc = 5;
+    string causation_id = 6;
+    string correlation_id = 7;
+    string user_id = 8;
+    string target_subscriber_id = 9;
+    int32 stream_head_version = 10;
+
+    // Die Domänen-Nachricht: Typname + Bytes (Proto der Anwendung, docs/06).
+    Nutzlast payload = 20;
+}
