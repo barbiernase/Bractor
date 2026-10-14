@@ -52,8 +52,8 @@ class ClassifierState:
 
 class ImageClassifier(KlassifikationsWorkerBasis[ClassifierState]):
 
-    def __init__(self, registry, generated_module, config: dict):
-        super().__init__(registry, generated_module, config)
+    def __init__(self, registry, nutzlast, config: dict):
+        super().__init__(registry, nutzlast, config)
         self._file_base_url = config["file_base_url"]
         self._device = torch.device(
             config.get("device", "cuda" if torch.cuda.is_available() else "cpu")

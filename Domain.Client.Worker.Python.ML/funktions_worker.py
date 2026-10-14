@@ -26,12 +26,12 @@ PROJEKT = Path(__file__).resolve().parent
 sys.path.insert(0, str(PROJEKT.parent / "Client.Infrastructure.Python"))
 sys.path.insert(0, str(PROJEKT))
 
-import domain_client.generated as gen  # noqa: E402
 from cqrs_client import CqrsClient  # noqa: E402
 from cqrs_client.funktion import FunktionsBasis  # noqa: E402
 from domain_client.domain_registry import create_registry  # noqa: E402
 from domain_client.generated import funktionen as basen  # noqa: E402
 from domain_client.generated.funktions_tabelle import TABELLE  # noqa: E402
+from domain_client.generated.nutzlast_tabelle import TABELLE as NUTZLAST  # noqa: E402
 
 
 def lade(funktion: str, slots: int, konfig: dict[str, str]) -> FunktionsBasis:
@@ -85,7 +85,7 @@ def main(argv: list[str] | None = None) -> None:
     host = os.environ.get("CQRS_GRPC_HOST", "127.0.0.1")
     port = int(os.environ.get("CQRS_GRPC_PORT", "5101"))
     print(f"START {host}:{port} · {', '.join(gewaehlt)} · Slots {args.slots}", flush=True)
-    FunktionsWorker(create_registry(), gen, funktionen=funktionen).run(host, port)
+    FunktionsWorker(create_registry(), NUTZLAST, funktionen=funktionen).run(host, port)
 
 
 if __name__ == "__main__":

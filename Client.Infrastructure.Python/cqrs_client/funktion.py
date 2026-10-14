@@ -18,7 +18,7 @@ Eine Funktion ist ein Vertrag (C#, eine Quelle), der Laufort eine Bindung:
             ...
             return BildVerkleinertDto(pfad=ziel, breite_pixel=w, hoehe_pixel=h)
 
-    client = MeinClient(registry, generated, funktionen=[Verkleinerer()])
+    client = MeinClient(registry, TABELLE, funktionen=[Verkleinerer()])   # TABELLE: generated/nutzlast_tabelle.py
 
 Was das SDK übernimmt — der Worker schreibt nichts davon von Hand:
   - Anmelden: nach dem Handshake (und nach jedem Reconnect) `FunktionenAnbieten` (Funktion + Slots);

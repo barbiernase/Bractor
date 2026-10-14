@@ -41,8 +41,8 @@ class FremdDto(betterproto.Message):
     x: int = betterproto.int32_field(1)
 
 
-# Das „generierte Domänen-Modul“: nur DTOs. Hüllen und ServerMessage kommen aus der echten Leitung.
-GEN = SimpleNamespace(SkaliereDto=SkaliereDto, SkaliertDto=SkaliertDto, UnlesbarDto=UnlesbarDto, FremdDto=FremdDto)
+# Die „generierte Nutzlast-Tabelle“ (domain_client/generated/nutzlast_tabelle.py). Hüllen und ServerMessage kommen aus der echten Leitung.
+GEN = {"Skaliere": SkaliereDto, "Skaliert": SkaliertDto, "Unlesbar": UnlesbarDto, "Fremd": FremdDto}
 
 
 class SkalierungBasis(FunktionsBasis):
@@ -195,7 +195,7 @@ def test_nur_generierte_basen_und_keine_doppelten():
 @sync
 async def test_read_loop_und_verarbeitungsschleife_reichen_den_auftrag_an_den_laeufer():
     f = Skalierer()
-    client = CqrsClient(registry=SimpleNamespace(), generated_module=GEN, funktionen=[f])
+    client = CqrsClient(registry=SimpleNamespace(), nutzlast=GEN, funktionen=[f])
     proxy = client._proxy
     client._funktionen._proxy = fake = FakeProxy()
     assert client.funktionen.angebote == [("ISkalierung", 2)]

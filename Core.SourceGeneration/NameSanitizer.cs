@@ -4,6 +4,24 @@ namespace Core.SourceGeneration
 {
     public static class NameSanitizer
     {
+        /// <summary>Die Endung der Proto-Message eines Domänen-Typs: <c>{Typ}Dto</c>.</summary>
+        public const string DtoSuffix = "Dto";
+
+        /// <summary>
+        /// Die Namensregel der Leitung (Cqrs.Leitung/cqrs.proto, <c>Nutzlast.typ</c>) — EINE Quelle für den C#-Nutzlast-Mapper
+        /// (<c>DtoMapperGenerator</c>), das Anwendungs-Proto (<c>FileGenerator</c>) und die Python-Tabelle (<c>Cqrs.Codegen</c>):
+        /// der einfache Typname (ohne Namespace und Generika), bereinigt. Die Proto-Message heißt <see cref="DtoName"/>.
+        /// </summary>
+        public static string NutzlastTyp(string typName)
+        {
+            if (string.IsNullOrEmpty(typName)) return typName;
+            var teile = typName.Split('<')[0].Split('.');
+            return SanitizeName(teile[teile.Length - 1]);
+        }
+
+        /// <summary>Der Name der Proto-Message eines Domänen-Typs: <see cref="NutzlastTyp"/> + <see cref="DtoSuffix"/>.</summary>
+        public static string DtoName(string typName) => NutzlastTyp(typName) + DtoSuffix;
+
         public static string SanitizeName(string name)
         {
             if (string.IsNullOrEmpty(name))

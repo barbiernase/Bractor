@@ -43,8 +43,8 @@ class StorniereDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
 
 
-# Das „generierte Domänen-Modul“: nur DTOs. CapabilitiesRequest und Hüllen kommen aus der echten Leitung.
-GEN = SimpleNamespace(GebuchtDto=GebuchtDto, HinweisDto=HinweisDto, BucheDto=BucheDto, StorniereDto=StorniereDto)
+# Die „generierte Nutzlast-Tabelle“. CapabilitiesRequest und Hüllen kommen aus der echten Leitung.
+GEN = {"Gebucht": GebuchtDto, "Hinweis": HinweisDto, "Buche": BucheDto, "Storniere": StorniereDto}
 
 S = TypeVar("S")
 
@@ -87,7 +87,7 @@ class Kasse(KassiererBasis[KassenState]):
 
 
 def _kasse():
-    return Kasse(registry=CategoryRegistry(), generated_module=GEN)
+    return Kasse(registry=CategoryRegistry(), nutzlast=GEN)
 
 
 async def _sammle(k, payload):
@@ -111,7 +111,7 @@ def test_fehlende_zusage_verhindert_den_start():
             return None
 
     with pytest.raises(TypeError, match="auf_hinweis"):
-        Halb(registry=CategoryRegistry(), generated_module=GEN)
+        Halb(registry=CategoryRegistry(), nutzlast=GEN)
 
 
 def test_falscher_typ_ist_eine_vertragsverletzung():
@@ -201,7 +201,7 @@ class Kassenplatz(KassenplatzBasis[KassenState]):
 
 
 def test_ein_client_traegt_zwei_akteure_ueber_eine_verbindung():
-    k = Kassenplatz(registry=CategoryRegistry(), generated_module=GEN)
+    k = Kassenplatz(registry=CategoryRegistry(), nutzlast=GEN)
     req = k._build_capabilities_request()
     assert req.vertrag == "Kassenplatz", "am Handshake steht der Client — der Server leitet seine Akteure ab"
     assert req.vertrag_hash == "def456"
@@ -212,6 +212,6 @@ def test_ein_client_traegt_zwei_akteure_ueber_eine_verbindung():
 
 
 def test_ein_client_fragt_nur_was_sein_vertrag_nennt():
-    k = Kassenplatz(registry=CategoryRegistry(), generated_module=GEN)
+    k = Kassenplatz(registry=CategoryRegistry(), nutzlast=GEN)
     with pytest.raises(VertragsVerletzung, match="fragt HinweisDto"):
         asyncio.run(k.query(HinweisDto()))

@@ -51,7 +51,7 @@ Klassennamen entkoppeln; Kollision = CQRS011 bzw. CQRS012), `[ProjectionReader(T
 
 **Proto, STJ-Kontexte, Python-Basen entstehen automatisch.** Im Build läuft vor dem Compile der Codegen (Target `CqrsCodegenPrepass` in
 `Domain.Leitung/Domain.Leitung.csproj` → `Cqrs.Codegen`): `domain.proto`, `CqrsWireJsonContext.g.cs`, `EventJsonSerializerContext.g.cs`,
-`generated/vertraege.py`, `funktionen.py`, `funktions_tabelle.py`. Ein neuer Command, ein Event, eine Query braucht keinen Handgriff; scheitert
+`generated/vertraege.py`, `funktionen.py`, `funktions_tabelle.py`, `nutzlast_tabelle.py`. Ein neuer Command, ein Event, eine Query braucht keinen Handgriff; scheitert
 der DTO-Mapper, meldet es CQRS030. (Der Codegen liest heute per `MetadataLoadContext` — Schuld, docs/13 W10-1.)
 
 ## 10.2 Schreibseite

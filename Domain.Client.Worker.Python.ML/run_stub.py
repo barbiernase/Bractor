@@ -82,11 +82,11 @@ if __name__ == "__main__":
     host = grpc.get("Host", "localhost")
     port = grpc.get("Port", 5001)
 
-    generated = importlib.import_module("domain_client.generated")
+    nutzlast = importlib.import_module("domain_client.generated.nutzlast_tabelle").TABELLE
     registry = create_registry()
 
     print(f"\n  Stub-Classifier: {host}:{port}")
     print(f"  Kein Modell, kein Bildladen — nur Nachrichtenfluss testen\n")
 
-    client = StubClassifier(registry=registry, generated_module=generated)
+    client = StubClassifier(registry=registry, nutzlast=nutzlast)
     client.run(host, port)

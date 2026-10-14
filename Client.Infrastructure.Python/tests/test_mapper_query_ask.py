@@ -12,7 +12,6 @@ Ausführen:  pip install -r requirements-dev.txt && pytest   (aus Client.Infrast
 """
 
 from dataclasses import dataclass
-from types import SimpleNamespace
 
 import betterproto
 import pytest
@@ -33,7 +32,7 @@ class FakeAntwortDto(betterproto.Message):
 
 @pytest.fixture
 def gen():
-    return SimpleNamespace(FakeQueryDto=FakeQueryDto, FakeAntwortDto=FakeAntwortDto)
+    return {"FakeQuery": FakeQueryDto, "FakeAntwort": FakeAntwortDto}
 
 
 # ═══════════════════════════════════════════════════

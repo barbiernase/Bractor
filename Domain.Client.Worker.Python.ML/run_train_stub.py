@@ -39,7 +39,7 @@ if __name__ == "__main__":
     host = grpc.get("Host", "localhost")
     port = grpc.get("Port", 5001)
 
-    generated = importlib.import_module("domain_client.generated")
+    nutzlast = importlib.import_module("domain_client.generated.nutzlast_tabelle").TABELLE
     registry = create_registry()
 
     print(f"\n  TrainingWorker (Stub): {host}:{port}")
@@ -47,7 +47,7 @@ if __name__ == "__main__":
 
     worker = TrainingWorker(
         registry=registry,
-        generated_module=generated,
+        nutzlast=nutzlast,
         config={"epoch_seconds": 0.3},
     )
     worker.run(host, port)

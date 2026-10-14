@@ -58,4 +58,24 @@ public class DtoMapperRoundTripTests
         // Und null bleibt null (nicht in die Epoche verwechselt):
         RoundTrip(new ImagePairFilter(Von: null)).Von.Should().BeNull();
     }
+
+    /// <summary>
+    /// Dieselbe Namensregel in beiden Sprachen (docs/13 P2-11): den Typ, den der C#-Mapper (<c>GeneratedNutzlast</c>) in die Nutzlast schreibt,
+    /// führt die generierte Python-Tabelle (<c>nutzlast_tabelle.py</c>, Cqrs.Codegen) mit seiner DTO-Klasse — beide aus
+    /// <c>NameSanitizer.NutzlastTyp</c>.
+    /// </summary>
+    [Fact]
+    public void Python_Nutzlast_Tabelle_kennt_den_Typ_des_CSharp_Mappers()
+    {
+        var mapper = new ProtoMessageMapper(Domain.Leitung.GeneratedNutzlast.Instanz);
+        var typ = mapper.MapToDto((IQuery)new SucheImagePairs(new ImagePairFilter())).Typ;
+        string? wurzel = null;
+        for (var d = new System.IO.DirectoryInfo(AppContext.BaseDirectory); d != null && wurzel == null; d = d.Parent)
+            if (d.GetFiles("*.sln").Length > 0) wurzel = d.FullName;
+        var datei = System.IO.Path.Combine(wurzel!, Abstractions.Projektstruktur.PythonWorker(Abstractions.Projektstruktur.StandardWurzel),
+            Abstractions.Projektstruktur.PythonGeneriert, "nutzlast_tabelle.py");
+
+        typ.Should().Be("SucheImagePairs");
+        System.IO.File.ReadAllText(datei).Should().Contain($"\"{typ}\": {typ}Dto,", "nutzlast_tabelle.py ist veraltet → dotnet build");
+    }
 }

@@ -14,8 +14,6 @@ from __future__ import annotations
 
 from enum import Enum, auto
 
-from .mapper import typ_von
-
 
 class MessageCategory(Enum):
     EVENT = auto()
@@ -84,16 +82,6 @@ class CategoryRegistry:
 
     def is_query_response(self, t: type) -> bool:
         return t in self._query_responses
-
-    @staticmethod
-    def capabilities_name(t: type) -> str:
-        """
-        BildVerfuegbarDto → 'BildVerfuegbar'
-
-        Derselbe Name wie Nutzlast.typ (mapper.typ_von): der Proto-Message-Name ohne „Dto“.
-        Der C#-CapabilitiesHandler erwartet den Namen ohne Suffix.
-        """
-        return typ_von(t)
 
     def ergaenzt(
         self,

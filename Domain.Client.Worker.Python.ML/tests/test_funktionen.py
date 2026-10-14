@@ -14,6 +14,7 @@ import betterproto
 import pytest
 
 import domain_client.generated as g
+from domain_client.generated.nutzlast_tabelle import TABELLE as NUTZLAST
 from cqrs_client import Ausfuehrung, FunktionsBasis, FunktionsLaeufer
 from cqrs_client import leitung as L
 from cqrs_client.mapper import PayloadMapper
@@ -72,7 +73,7 @@ def test_generat_bindet_auftrag_und_ergebnisse_an_die_betterproto_typen():
 
 def test_anbieten_ueber_den_echten_draht():
     proxy, strom = _verbunden()
-    laeufer = FunktionsLaeufer([Verkleinerer()], proxy, PayloadMapper(g))
+    laeufer = FunktionsLaeufer([Verkleinerer()], proxy, PayloadMapper(NUTZLAST))
 
     asyncio.run(laeufer.biete_an())
 
@@ -83,7 +84,7 @@ def test_anbieten_ueber_den_echten_draht():
 
 def test_auftrag_rein_ergebnis_raus_ueber_den_echten_draht():
     proxy, strom = _verbunden()
-    laeufer = FunktionsLaeufer([Verkleinerer()], proxy, PayloadMapper(g))
+    laeufer = FunktionsLaeufer([Verkleinerer()], proxy, PayloadMapper(NUTZLAST))
 
     async def lauf():
         await asyncio.gather(laeufer.nimm(_auftrag_vom_server("v-1", "/roh/a.tiff")),
@@ -96,7 +97,7 @@ def test_auftrag_rein_ergebnis_raus_ueber_den_echten_draht():
         assert feld == "arbeits_ergebnis"
         ergebnisse[e.vorgang] = e
     a, b = ergebnisse["v-1"], ergebnisse["v-2"]
-    mapper = PayloadMapper(g)
+    mapper = PayloadMapper(NUTZLAST)
     assert a.fehler == "" and a.ergebnis.payload.typ == "BildVerkleinert"
     assert mapper.entpacke(a.ergebnis.payload) == g.BildVerkleinertDto(
         pfad="/roh/a.tiff.klein.png", breite_pixel=640, hoehe_pixel=512)
@@ -112,7 +113,7 @@ def test_falsches_ergebnis_wird_zum_fehler_und_lebenszeichen_reisen_ueber_den_dr
             return g.HistogrammAusgeglichenDto(pfad="x")   # Ergebnis einer ANDEREN Funktion
 
     proxy, strom = _verbunden()
-    laeufer = FunktionsLaeufer([Frech()], proxy, PayloadMapper(g), lebenszeichen_s=0.015)
+    laeufer = FunktionsLaeufer([Frech()], proxy, PayloadMapper(NUTZLAST), lebenszeichen_s=0.015)
     async def lauf():
         await laeufer.nimm(_auftrag_vom_server("v-3", "/roh/c.tiff"))
     asyncio.run(lauf())

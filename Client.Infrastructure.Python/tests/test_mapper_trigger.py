@@ -5,13 +5,12 @@ Struktur wie test_mapper_query_response (minimale betterproto-Fakes, domänenfre
 """
 
 from dataclasses import dataclass
-from types import SimpleNamespace
 
 import betterproto
 import pytest
 
 from cqrs_client.leitung import TriggerForward
-from cqrs_client.mapper import PayloadMapper
+from cqrs_client.mapper import NutzlastTabelle, PayloadMapper
 
 
 @dataclass
@@ -21,7 +20,7 @@ class FakeTriggerDto(betterproto.Message):
 
 @pytest.fixture
 def gen():
-    return SimpleNamespace(FakeTriggerDto=FakeTriggerDto)
+    return {"FakeTrigger": FakeTriggerDto}
 
 
 def test_wrap_trigger_verpackt_typ_und_bytes(gen):
@@ -49,3 +48,23 @@ def test_wrap_trigger_unbekannter_typ_wirft(gen):
 
     with pytest.raises(TypeError):
         mapper.wrap_trigger(UnbekanntDto(x=1))
+
+
+# ═══════════════════════════════════════════════════
+# Die Tabelle ist das Generat — nichts wird aus Klassen-Namen abgeleitet
+# ═══════════════════════════════════════════════════
+
+def test_typ_kommt_nur_aus_der_tabelle():
+    tabelle = NutzlastTabelle({"AnderesWort": FakeTriggerDto})   # der Name der Klasse spielt keine Rolle
+    assert tabelle.typ(FakeTriggerDto) == "AnderesWort"
+    assert tabelle.packe(FakeTriggerDto(ref="x")).typ == "AnderesWort"
+
+
+def test_klasse_ausserhalb_der_tabelle_ist_nicht_verpackbar():
+    with pytest.raises(TypeError):
+        NutzlastTabelle({}).packe(FakeTriggerDto(ref="x"))
+
+
+def test_eine_klasse_unter_zwei_typen_ist_ein_fehler():
+    with pytest.raises(ValueError):
+        NutzlastTabelle({"A": FakeTriggerDto, "B": FakeTriggerDto})

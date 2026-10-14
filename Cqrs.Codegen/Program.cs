@@ -19,6 +19,7 @@ using Cqrs.Codegen;
 //   4. domain_client/generated/vertraege.py        (Akteur-Verträge → Python-Basisklassen, docs/konzept-akteure.md §3)
 //   5. domain_client/generated/funktionen.py       (Katalog-Funktionen → Python-Basisklassen, konzept-editor-pipelines §14.5)
 //      + funktions_tabelle.py                   (Funktion → Basis, Modul, Klasse der Implementierung — der generische Worker, konzept-werkbank §12.3 E13)
+//   6. domain_client/generated/nutzlast_tabelle.py (Nutzlast.typ → DTO-Klasse, Gegenstück zu GeneratedNutzlast, dieselbe Namensregel)
 //
 // Früher öffnete dieser Prepass die ganze Solution über MSBuildWorkspace (geschachteltes
 // MSBuild, fragil, plattformabhängig). Jetzt liest er nur die Metadaten der drei gebauten
@@ -50,6 +51,7 @@ var artefakte = new[]
     Path.Combine(pythonGeneriert, "vertraege.py"),
     Path.Combine(pythonGeneriert, "funktionen.py"),
     Path.Combine(pythonGeneriert, "funktions_tabelle.py"),
+    Path.Combine(pythonGeneriert, "nutzlast_tabelle.py"),
 };
 if (flags.Contains("--artefakte"))
 {
@@ -250,6 +252,18 @@ if (Directory.Exists(Path.GetDirectoryName(funktionenPfad)!))
     Console.WriteLine($"✅ {tabellePfad}");
 }
 else Console.WriteLine($"⚠️  Python-Generat-Ordner fehlt — Funktionen nicht geschrieben: {Path.GetDirectoryName(funktionenPfad)}");
+
+// ────────────────────────────────────────────────────────────────────────
+// 6. Nutzlast-Tabelle → Python (typ → DTO-Klasse; dieselben Kategorien und dieselbe Namensregel wie GeneratedNutzlast in C#)
+// ────────────────────────────────────────────────────────────────────────
+var (nutzlastPy, nutzlastAnzahl) = PythonNutzlastEmitter.Emit(commandTypes, eventTypes, queryTypes, queryResponseTypes, triggerTypes, auftragTypes);
+var nutzlastPfad = Path.Combine(solutionDir, artefakte[6]);
+if (Directory.Exists(Path.GetDirectoryName(nutzlastPfad)!))
+{
+    WriteIfChanged(nutzlastPfad, nutzlastPy);
+    Console.WriteLine($"✅ {nutzlastPfad} ({nutzlastAnzahl} Nutzlast-Typen)");
+}
+else Console.WriteLine($"⚠️  Python-Generat-Ordner fehlt — Nutzlast-Tabelle nicht geschrieben: {Path.GetDirectoryName(nutzlastPfad)}");
 
 Console.WriteLine();
 Console.WriteLine($"📊 {stats}");

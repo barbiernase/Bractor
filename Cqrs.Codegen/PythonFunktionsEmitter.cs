@@ -14,7 +14,7 @@ namespace Cqrs.Codegen;
 public static class PythonFunktionsEmitter
 {
     private const string FunktionName = "Abstractions.IFunktion";
-    private const string Dto = "Dto";
+    private const string Dto = Core.SourceGeneration.NameSanitizer.DtoSuffix;   // die Namensregel der Leitung
 
     private sealed record FunktionInfo(Type Funktion, string Auftrag, List<string> Ergebnisse);
 

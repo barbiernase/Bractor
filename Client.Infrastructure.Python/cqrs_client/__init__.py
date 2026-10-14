@@ -11,7 +11,8 @@ z. B. Domain.Leitung/domain.proto) reisen darin als Nutzlast(typ, daten) — Pay
     - handle: Dispatch-Deskriptor (@handle.register)
     - CategoryRegistry: Typ-Klassifizierung
     - MessageContext: Handler-Kontext
-    - NutzlastTabelle: typ → DTO-Klasse, packe(dto) → Nutzlast, entpacke(nutzlast) → DTO
+    - NutzlastTabelle: typ → DTO-Klasse (generiert: domain_client/generated/nutzlast_tabelle.py), packe(dto) → Nutzlast,
+      entpacke(nutzlast) → DTO
 """
 
 from .client import CqrsClient
@@ -19,7 +20,7 @@ from .vertrag import AkteurVertragBasis, Zusage, VertragsVerletzung
 from .funktion import Ausfuehrung, FunktionsBasis, FunktionsLaeufer, FunktionsVerletzung
 from .dispatch import HandleDescriptor, HandlerBase, handle
 from .leitung import Nutzlast
-from .mapper import NutzlastTabelle, PayloadMapper, UnbekannteNutzlast, typ_von
+from .mapper import NutzlastTabelle, PayloadMapper, UnbekannteNutzlast
 from .registry import CategoryRegistry, MessageCategory
 from .router import MessageContext
 from .versioning import VersionTracker
@@ -44,5 +45,4 @@ __all__ = [
     "UnbekannteNutzlast",
     "VersionTracker",
     "handle",
-    "typ_von",
 ]

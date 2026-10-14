@@ -14,6 +14,7 @@ from uuid import uuid4
 import pytest
 
 import domain_client.generated as g
+from domain_client.generated.nutzlast_tabelle import TABELLE as NUTZLAST
 from cqrs_client import VertragsVerletzung
 from cqrs_client.router import MessageContext
 from domain_client.domain_registry import create_registry
@@ -27,12 +28,12 @@ from domain_client.training_worker import TrainingWorker
 
 
 def _training():
-    return TrainingWorker(registry=create_registry(), generated_module=g, config={"epoch_seconds": 0})
+    return TrainingWorker(registry=create_registry(), nutzlast=NUTZLAST, config={"epoch_seconds": 0})
 
 
 def _stub():
     from run_stub import StubClassifier
-    return StubClassifier(registry=create_registry(), generated_module=g)
+    return StubClassifier(registry=create_registry(), nutzlast=NUTZLAST)
 
 
 async def _reagiere(worker, payload, ctx):
@@ -81,7 +82,7 @@ def test_was_der_vertrag_nicht_erlaubt_geht_nicht_hinaus():
         async def auf_bild_verfuegbar(self, event, ctx, state):
             yield g.KlassifiziereBildPaarDurchKiDto(aggregate_id=str(ctx.aggregate_id), label=2)   # Kenntnis-Zusage
 
-    f = Frech(registry=create_registry(), generated_module=g)
+    f = Frech(registry=create_registry(), nutzlast=NUTZLAST)
     with pytest.raises(VertragsVerletzung, match="nur zur Kenntnis"):
         asyncio.run(_reagiere(f, g.BildVerfuegbarDto(version=0, pfad="a.png"), MessageContext(aggregate_id=uuid4())))
 
@@ -92,7 +93,7 @@ def test_ohne_alle_zusagen_startet_kein_worker():
             return None
 
     with pytest.raises(TypeError, match="auf_bild_verfuegbar"):
-        Unvollstaendig(registry=create_registry(), generated_module=g)
+        Unvollstaendig(registry=create_registry(), nutzlast=NUTZLAST)
 
 
 def test_client_generat_nennt_client_akteure_und_akteur_je_zusage():
@@ -110,3 +111,28 @@ def test_fragen_nur_was_der_client_vertrag_nennt():
     w = _training()
     with pytest.raises(VertragsVerletzung, match="fragt HoleAktivesModellDto"):
         asyncio.run(w.query(g.HoleAktivesModellDto()))
+
+
+def test_die_generierte_nutzlast_tabelle_traegt_jeden_vertragstyp():
+    """
+    Die Nutzlast-Tabelle (generated/nutzlast_tabelle.py) ist ein Generat derselben Codegen-Lesart wie die Verträge und Funktions-Basen:
+    alles, was ein Worker empfängt oder sendet, steht darin — sonst ginge es nicht über die Leitung.
+    """
+    from domain_client.generated import funktionen, vertraege
+    import inspect
+
+    klassen = set(NUTZLAST.values())
+    assert len(klassen) == len(NUTZLAST), "jede DTO-Klasse unter genau einem Typ"
+    noetig: set[type] = set()
+    def eigene(modul):   # nur die generierten Basen, nicht die importierten SDK-Klassen
+        return [k for _, k in inspect.getmembers(modul, inspect.isclass) if k.__module__ == modul.__name__]
+
+    for basis in eigene(vertraege):
+        for eingang, zusage in basis.__dict__.get("ZUSAGEN", {}).items():
+            noetig |= {eingang, *zusage.ausgaenge}
+        noetig |= set(basis.__dict__.get("SPONTAN", ())) | set(basis.__dict__.get("FRAGT", ()))
+    for basis in eigene(funktionen):
+        if "AUFTRAG" in basis.__dict__:
+            noetig |= {basis.AUFTRAG, *basis.ERGEBNISSE}
+    assert noetig, "die Beispielanwendung hat Verträge und Funktionen"
+    assert not {t.__name__ for t in noetig - klassen}

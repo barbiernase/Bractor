@@ -173,7 +173,7 @@ Domain.Leitung: Target CqrsCodegenPrepass  (AfterTargets=ResolveProjectReference
     Domain.Leitung/domain.proto
     Domain.Laufzeit/Serialization/EventJsonSerializerContext.g.cs
     Domain.Laufzeit/Serialization/CqrsWireJsonContext.g.cs
-    Domain.Client.Worker.Python.ML/domain_client/generated/vertraege.py · funktionen.py · funktions_tabelle.py
+    Domain.Client.Worker.Python.ML/domain_client/generated/vertraege.py · funktionen.py · funktions_tabelle.py · nutzlast_tabelle.py
         ▼
 Domain.Leitung: Grpc.Tools kompiliert domain.proto → {Typ}Dto        (nur Domänen-DTOs)
         ▼

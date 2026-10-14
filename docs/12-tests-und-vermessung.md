@@ -22,19 +22,19 @@ es nur für nicht-autoritative Randstores (Inv. 6).
 
 ## 12.2 Zahlen
 
-**Aktuell (2026-10-14, gemessen auf Commit-Basis `dcda9b8` + Aufräumen):** Prüfstand **534/534**, Integration **39/39** sequentiell,
-`Client.Infrastructure.CollectionTests` **30/30**, Python SDK **31/31**, Worker **20/20**; `--check` grün (alle Bereiche inkl. „Lage“),
+**Aktuell (2026-10-14, gemessen auf Commit-Basis `dcda9b8` + Aufräumen):** Prüfstand **535/535**, Integration **39/39** sequentiell,
+`Client.Infrastructure.CollectionTests` **30/30**, Python SDK **34/34**, Worker **21/21**; `--check` grün (alle Bereiche inkl. „Lage“),
 `--sonde` grün (111 Soll-Fakten, Lage-Soll 56 Typen).
 
 Statisch gezählt (2026-10-14):
 
 | Projekt | `[Fact]` | `[Theory]` | Dateien |
 |---|---:|---:|---:|
-| Infrastructure.Pruefstand.Tests | 512 | 6 | 73 |
+| Infrastructure.Pruefstand.Tests | 513 | 6 | 73 |
 | Infrastructure.Integration.Tests | 39 | 0 | 19 |
 | Client.Infrastructure.CollectionTests | 30 | 0 | 2 |
 
-Die Differenz zwischen 518 Methoden und 534 Läufen im Prüfstand kommt von den expandierten `[Theory]`-Fällen.
+Die Differenz zwischen 519 Methoden und 535 Läufen im Prüfstand kommt von den expandierten `[Theory]`-Fällen.
 
 ## 12.3 Was getestet ist
 
@@ -72,7 +72,7 @@ Die Differenz zwischen 518 Methoden und 534 Läufen im Prüfstand kommt von den 
 | Handle-Welt: `PipelineWebhookHttpTests`, `TimerTriggerSchedulingTests` | 2 | Trigger-Pfade ohne Domänen-Nutzer (`docs/13` W11-1) |
 
 **Client:** `VirtualCollectionTests` (26), `PendingCommandTrackerTests` (5). **Python:** SDK `test_vertrag`, `test_funktion`, `test_client_query`,
-`test_client_reconnect`, `test_mapper_*`; Worker `test_vertraege`, `test_funktionen`, `test_funktions_worker`, `test_training_worker`.
+`test_client_reconnect`, `test_mapper_*` (inkl. Nutzlast-Tabelle); Worker `test_vertraege`, `test_funktionen`, `test_funktions_worker`, `test_training_worker`.
 
 ## 12.4 Was nicht getestet ist
 

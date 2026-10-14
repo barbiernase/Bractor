@@ -40,6 +40,7 @@ Methoden.
 | `domain_client/generated/vertraege.py` | `Cqrs.Codegen` | je Akteur-Vertrag (`IAkteurVertrag<A>`) bzw. Client-Vertrag (`IClientVertrag`) eine abstrakte Basis `<Name>Basis` mit `auf_<event>`, Vertrag, Hash, Zusagen, `FRAGT` |
 | `domain_client/generated/funktionen.py` | `Cqrs.Codegen` | je Katalog-Funktion ohne Lese-Fähigkeit eine Basis `<Funktion>Basis` mit `FUNKTION`, `AUFTRAG`, `ERGEBNISSE`, abstrakt `rufe(auftrag, x)` |
 | `domain_client/generated/funktions_tabelle.py` | `Cqrs.Codegen` | `TABELLE`: Funktion → (Basis, Modul, Klasse der Implementierung) für den generischen Worker |
+| `domain_client/generated/nutzlast_tabelle.py` | `Cqrs.Codegen` | `TABELLE`: `Nutzlast.typ` → DTO-Klasse (Command, Event, Query, Antwort, Trigger, Auftrag) — Gegenstück zu `GeneratedNutzlast`, dieselbe Namensregel (`NameSanitizer.NutzlastTyp`); der Client bekommt sie als `nutzlast=` |
 
 `Cqrs.Codegen` läuft **automatisch** im Codegen-Schritt jedes Builds (Target `CqrsCodegenPrepass` in `Domain.Leitung/Domain.Leitung.csproj`), zusammen mit
 `domain.proto` und den STJ-Kontexten; `./codegen.sh --check` prüft auf Drift. Die betterproto-DTOs erzeugt `build_python.sh` (Schritt 2 von ⟳ in
@@ -57,7 +58,7 @@ erzeugt `build_leitung.sh` ebenso (committet); `GrpcProxy` nutzt die Route `/cqr
 | **dispatch** | Typ-Dispatch: Eingangs-Typ → Methode (`HandleDescriptor`, Metaklasse `HandlerMeta`); die Vertrags-Basis registriert ihre `auf_<event>`-Methoden darüber |
 | **registry** | `CategoryRegistry`: ordnet betterproto-Typen EVENT/COMMAND/TRIGGER/QUERY/QUERY_RESPONSE zu |
 | **router** | Verarbeitungsschleife: Event-Queue → Payload → Dispatch → jede Ausgabe nach Kategorie zurück; beantwortet Query- und Trigger-Weiterleitungen, nimmt Funktions-Aufträge an |
-| **mapper** | Nutzlast: `NutzlastTabelle` (typ → DTO-Klasse aus dem Domänen-Modul), `packe`/`entpacke`; Hüllen bauen und lesen (`wrap_command`, `wrap_query`, `wrap_query_response`, `wrap_trigger`, `wrap_ergebnis`, `extract_*`) |
+| **mapper** | Nutzlast: `NutzlastTabelle` (typ → DTO-Klasse, generiert vom Codegen: `domain_client/generated/nutzlast_tabelle.py`, dieselbe Namensregel wie `GeneratedNutzlast` in C#), `packe`/`entpacke`/`typ`; Hüllen bauen und lesen (`wrap_command`, `wrap_query`, `wrap_query_response`, `wrap_trigger`, `wrap_ergebnis`, `extract_*`) |
 | **proxy** | bidirektionaler gRPC-Transport über grpclib-Lowlevel (`STREAM_STREAM`, unabhängiges Senden/Empfangen); Akteur-Token im Header `akteur-token`; Korrelation von Queries/Triggern über Futures (30 s) |
 | **connection** | Reconnect mit exponentiellem Backoff (1 s → 30 s), Handshake erneut |
 | **versioning** | `dict[UUID → höchste gesehene Version]` |
@@ -97,7 +98,8 @@ class StubClassifier(KlassifikationsWorkerBasis[StubState]):
         yield KlassifiziereBildPaarDurchKiDto(aggregate_id=str(ctx.aggregate_id), label=0)
     # … je weiterem Eingang des Vertrags eine auf_<event>-Methode
 
-client = StubClassifier(registry=create_registry(), generated_module=generated)
+from domain_client.generated.nutzlast_tabelle import TABELLE   # generiert: Nutzlast.typ → DTO-Klasse
+client = StubClassifier(registry=create_registry(), nutzlast=TABELLE)
 client.run(host, port)
 ```
 

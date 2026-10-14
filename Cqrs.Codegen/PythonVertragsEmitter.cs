@@ -20,7 +20,7 @@ public static class PythonVertragsEmitter
     private const string FragtName = "Abstractions.IFragt`1";
     private const string DarfName = "Abstractions.IDarf`1";
     private const string CommandName = "Abstractions.ICommand";
-    private const string Dto = "Dto";
+    private const string Dto = Core.SourceGeneration.NameSanitizer.DtoSuffix;   // die Namensregel der Leitung
 
     private sealed record ZusageInfo(string Eingang, List<string> Ausgaenge, bool Strom, string Akteur = "");
     private sealed record VertragInfo(Type Vertrag, Type Akteur, string Art, List<ZusageInfo> Zusagen, List<string> Spontan);

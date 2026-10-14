@@ -174,7 +174,7 @@ getestet. Prinzip: nie faken, was man nicht besitzt. Ebenen und Zahlen: [12](12-
 
 **Warum:** Die Invarianten sind die Systemsprache, nicht backend-lokal. Jeder Client folgt denselben Regeln:
 - **Python:** dasselbe Typ-Dispatch-Muster, dieselbe Reinheit; die Verträge kommen als generierte Basen (`generated/vertraege.py`,
-  `generated/funktionen.py`, `generated/funktions_tabelle.py`, erzeugt vom Codegen-Schritt im Build). Der Handshake nennt Vertrag + Hash,
+  `generated/funktionen.py`, `generated/funktions_tabelle.py`, `generated/nutzlast_tabelle.py`, erzeugt vom Codegen-Schritt im Build). Der Handshake nennt Vertrag + Hash,
   der Server nimmt die Fähigkeiten aus seiner eigenen Tabelle; `proto_sync.py` ist das Laufzeit-Netz gegen Proto-Drift.
 - **Blazor:** der Arbeitsplatz ist ein Client mit Vertrag (`[assembly: IstClient<IArbeitsplatz>]`); der Client-Generator liest den Vertrag
   mit derselben Lesart wie der Server (`Clientvertragslesart`, gleicher Hash), die Analyzer CQRS093–097 halten den Code dagegen.

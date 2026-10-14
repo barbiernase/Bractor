@@ -64,8 +64,8 @@ class TrainingWorker(TrainingsWorkerBasis[TrainingState]):
     # Seiten-Größe beim Ziehen der Samples (paginiert, wie SucheImagePairs).
     SEITEN_GROESSE = 500
 
-    def __init__(self, registry, generated_module, config: dict | None = None):
-        super().__init__(registry, generated_module, config)
+    def __init__(self, registry, nutzlast, config: dict | None = None):
+        super().__init__(registry, nutzlast, config)
         cfg = config or {}
         # Stub-Trainer: Sekunden je Epoche (0 in Tests → sofort).
         self._epoch_seconds: float = float(cfg.get("epoch_seconds", 0.3))

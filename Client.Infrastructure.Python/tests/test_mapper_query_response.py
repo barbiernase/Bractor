@@ -11,7 +11,6 @@ Ausführen:  pip install -r requirements-dev.txt && pytest   (aus Client.Infrast
 """
 
 from dataclasses import dataclass
-from types import SimpleNamespace
 
 import betterproto
 import pytest
@@ -27,8 +26,8 @@ class FakeAntwortDto(betterproto.Message):
 
 @pytest.fixture
 def gen():
-    # Minimales "generiertes Domänen-Modul": nur die DTOs.
-    return SimpleNamespace(FakeAntwortDto=FakeAntwortDto)
+    # Minimale „generierte Nutzlast-Tabelle“.
+    return {"FakeAntwort": FakeAntwortDto}
 
 
 def test_wrap_query_response_verpackt_typ_und_bytes(gen):

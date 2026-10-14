@@ -8,14 +8,14 @@ Die Leitung (Cqrs.Leitung/cqrs.proto → cqrs_client.leitung) kennt keinen Domä
     typ   = Proto-Name des DTO ohne „Dto“ (z. B. "ErstelleDatensatz")
     daten = die {typ}Dto-Message des Anwendungs-Protos, protobuf-kodiert (betterproto: bytes(dto))
 
-Die Tabelle typ → DTO-Klasse entsteht EINMAL aus dem generierten Domänen-Modul (domain.proto der Anwendung:
-nur die DTOs). Gegenstück zum Nutzlast-Mapping auf der C#-Seite.
+Die Tabelle typ → DTO-Klasse ist ein Generat des Codegens (domain_client/generated/nutzlast_tabelle.py: TABELLE) — dieselben
+Kategorien und dieselbe Namensregel wie GeneratedNutzlast auf der C#-Seite; hier wird nichts aus dem Modul abgeleitet.
 """
 
 from __future__ import annotations
 
 import time
-from typing import Any
+from collections.abc import Mapping
 from uuid import UUID, uuid4
 
 import betterproto
@@ -23,35 +23,23 @@ import betterproto
 from . import leitung
 from .leitung import CommandEnvelopeDto, EventEnvelopeDto, Nutzlast
 
-DTO_SUFFIX = "Dto"
-
-
-def typ_von(klasse: type) -> str:
-    """Der Nutzlast-Typ einer DTO-Klasse: ihr Proto-Name ohne „Dto“ (BildVerfuegbarDto → "BildVerfuegbar")."""
-    name = klasse.__name__
-    return name[: -len(DTO_SUFFIX)] if name.endswith(DTO_SUFFIX) else name
-
-
 class UnbekannteNutzlast(ValueError):
-    """Eine Nutzlast, deren Typ das Domänen-Modul nicht kennt (oder die leer ist)."""
+    """Eine Nutzlast, deren Typ die Tabelle nicht kennt (oder die leer ist)."""
 
 
 class NutzlastTabelle:
     """
-    typ → DTO-Klasse, einmal aus dem generierten Domänen-Modul gebaut: jede betterproto-Message, deren Name auf „Dto“
-    endet. `packe` und `entpacke` sind die beiden einzigen Wege zwischen DTO und Leitung.
+    typ → DTO-Klasse, wie sie der Codegen erzeugt (domain_client/generated/nutzlast_tabelle.py: TABELLE). `packe` und `entpacke`
+    sind die beiden einzigen Wege zwischen DTO und Leitung; `typ` ist der Nutzlast-Typ einer DTO-Klasse (Capabilities, Kausalität).
     """
 
-    def __init__(self, generated_module: Any):
-        self._klassen: dict[str, type] = {}
-        for wert in vars(generated_module).values():
-            if (isinstance(wert, type) and issubclass(wert, betterproto.Message)
-                    and wert.__name__.endswith(DTO_SUFFIX)):
-                typ = typ_von(wert)
-                vorhanden = self._klassen.get(typ)
-                if vorhanden is not None and vorhanden is not wert:
-                    raise ValueError(f"Nutzlast-Typ {typ} doppelt: {vorhanden!r} und {wert!r}")
-                self._klassen[typ] = wert
+    def __init__(self, tabelle: Mapping[str, type]):
+        self._klassen: dict[str, type] = dict(tabelle)
+        self._typen: dict[type, str] = {}
+        for typ, klasse in self._klassen.items():
+            if klasse in self._typen:
+                raise ValueError(f"{klasse.__name__} steht unter zwei Nutzlast-Typen: {self._typen[klasse]} und {typ}")
+            self._typen[klasse] = typ
 
     def __contains__(self, typ: str) -> bool:
         return typ in self._klassen
@@ -66,17 +54,20 @@ class NutzlastTabelle:
         klasse = self._klassen.get(typ)
         if klasse is None:
             raise UnbekannteNutzlast(
-                f"Unbekannter Nutzlast-Typ '{typ}' — nicht im Domänen-Modul ({len(self._klassen)} DTO-Typen); "
-                f"Generat veraltet? (build_python.sh)")
+                f"Unbekannter Nutzlast-Typ '{typ}' — nicht in der Nutzlast-Tabelle ({len(self._klassen)} Typen); "
+                f"Generat veraltet? (dotnet build, dann build_python.sh)")
         return klasse
 
+    def typ(self, klasse: type) -> str:
+        """Der Nutzlast-Typ einer DTO-Klasse (BildVerfuegbarDto → "BildVerfuegbar") — nur Klassen der Tabelle, sonst TypeError."""
+        typ = self._typen.get(klasse)
+        if typ is None:
+            raise TypeError(f"{klasse.__name__} ist keine Nachricht der Nutzlast-Tabelle — als Nutzlast nicht verpackbar")
+        return typ
+
     def packe(self, dto: betterproto.Message) -> Nutzlast:
-        """DTO → Nutzlast(typ, daten). Nur Typen des Domänen-Moduls — sonst TypeError."""
-        typ = typ_von(type(dto))
-        if self._klassen.get(typ) is not type(dto):
-            raise TypeError(
-                f"{type(dto).__name__} ist kein DTO des Domänen-Moduls — als Nutzlast nicht verpackbar")
-        return Nutzlast(typ=typ, daten=bytes(dto))
+        """DTO → Nutzlast(typ, daten). Nur Klassen der Tabelle — sonst TypeError."""
+        return Nutzlast(typ=self.typ(type(dto)), daten=bytes(dto))
 
     def entpacke(self, nutzlast: Nutzlast | None) -> betterproto.Message:
         """Nutzlast → DTO-Instanz (Klasse nach `typ`, Inhalt aus `daten`)."""
@@ -94,12 +85,12 @@ class PayloadMapper:
     Query, Query-Antwort, Trigger → Nutzlast.
     """
 
-    def __init__(self, generated_module):
+    def __init__(self, nutzlast: Mapping[str, type]):
         """
         Args:
-            generated_module: Das betterproto-generierte Domänen-Modul (nur DTOs, z. B. domain_client.generated)
+            nutzlast: Die generierte Nutzlast-Tabelle typ → DTO-Klasse (z. B. domain_client.generated.nutzlast_tabelle.TABELLE)
         """
-        self.tabelle = NutzlastTabelle(generated_module)
+        self.tabelle = NutzlastTabelle(nutzlast)
 
     def packe(self, dto: betterproto.Message) -> Nutzlast:
         return self.tabelle.packe(dto)
@@ -210,4 +201,4 @@ class PayloadMapper:
         return self.packe(trigger)
 
 
-__all__ = ["DTO_SUFFIX", "NutzlastTabelle", "PayloadMapper", "UnbekannteNutzlast", "typ_von"]
+__all__ = ["NutzlastTabelle", "PayloadMapper", "UnbekannteNutzlast"]

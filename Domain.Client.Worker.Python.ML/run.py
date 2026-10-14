@@ -50,7 +50,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     file_base_url = f"http://{file_host}:{file_port}"
-    generated_module = importlib.import_module("domain_client.generated")
+    nutzlast = importlib.import_module("domain_client.generated.nutzlast_tabelle").TABELLE
     registry = create_registry()
 
     print(f"\n  gRPC:   {grpc_host}:{grpc_port}")
@@ -60,7 +60,7 @@ if __name__ == "__main__":
 
     client = ImageClassifier(
         registry=registry,
-        generated_module=generated_module,
+        nutzlast=nutzlast,
         config={
             "file_base_url": file_base_url,
             "model_path": model_path,

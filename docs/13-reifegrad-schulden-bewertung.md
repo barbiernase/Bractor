@@ -28,7 +28,7 @@ hierher. Stand: 2026-10-14, Commit-Basis `dcda9b8`. Maßstab sind die sechs Inva
 | P2-8 | Hartkodierte Poll-Intervalle und Test-Verbindungsdaten | P2 |
 | P2-9 | Toter Lesepfad `LoadStateAsync`, Identitäts-Vertrag nur per Kommentar | P2 |
 | P2-10 | Monitoring schmal, Default-Credentials, kein OTel, Logging per `Console.WriteLine` | P2 |
-| P2-11 | Python: Registry von Hand gepflegt, Nutzlast-Tabelle zur Laufzeit aus dem Modul statt generiert | P2 |
+| P2-11 | Python: Registry von Hand gepflegt, Kleinkram im SDK | P2 |
 | P3-1 | Mojibake in drei Dateien | P3 |
 | P3-2 | Toter Code und Kleinkram | P3 |
 | P3-3 | Saga-DSL in `Cqrs.Testing` kennt `Rufe` nicht | P3 |
@@ -74,7 +74,7 @@ Aktuell gibt es keinen P0 (kein bekannter aktiver Korrektheits-Bug).
 ### P1
 
 **W10-1 · Reflection in Werkzeugen.** `Cqrs.Codegen` liest die gebauten Domänen-DLLs per `MetadataLoadContext` und erzeugt daraus `domain.proto`,
-die STJ-Kontexte und die Python-Basen (`vertraege.py`, `funktionen.py`, `funktions_tabelle.py`). Daneben existiert mit `Proto.SourceGeneration` ein
+die STJ-Kontexte und die Python-Generate (`vertraege.py`, `funktionen.py`, `funktions_tabelle.py`, `nutzlast_tabelle.py`). Daneben existiert mit `Proto.SourceGeneration` ein
 zweiter, Roslyn-basierter Leseweg, der schon abweicht (Filter `IProzessIntern`). Der Python-Vertrags-Emitter liest Verträge anders als
 `Infrastructure.SourceGeneration/Clientvertragslesart.cs` (Ausgaben nicht auf `ICommand` gefiltert, Kenntnis nicht auf Events), der
 Handshake-Hash kann also abweichen. `Werkbank/Server/Schema.cs` liest die Konfig-Typen per `GetProperties`/`Activator` aus der eigenen DLL
@@ -175,8 +175,8 @@ Kommentar abgestimmt.
 **P2-10 · Monitoring und Logging.** Nur `/health` + Kennzahlen; Default-Credentials `postgres/postgres`; kein OpenTelemetry; `GrpcProxy` (C#-Client)
 loggt per `Console.WriteLine`.
 
-**P2-11 · Python-Kleinschulden.** `domain_client/domain_registry.py` ist handgepflegt; die Nutzlast-Tabelle (typ → DTO-Klasse,
-`cqrs_client/mapper.py`) entsteht zur Laufzeit aus dem generierten Modul statt als Generat des Codegens; `VersionTracker.reset()` wird nie aufgerufen; `proxy._detect_route()` ist faktisch eine Konstante; die Köpfe der generierten
+**P2-11 · Python-Kleinschulden.** `domain_client/domain_registry.py` ist handgepflegt (die Kategorie je DTO ließe sich wie die Nutzlast-Tabelle
+generieren); `VersionTracker.reset()` wird nie aufgerufen; `proxy._detect_route()` ist faktisch eine Konstante; die Köpfe der generierten
 Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
 
 ### P3
@@ -212,6 +212,11 @@ Allgemeingültigkeit oder Hygiene.
 7. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **Python-Nutzlast-Tabelle generiert (früher P2-11, 2026-10-14):** `Cqrs.Codegen` erzeugt `domain_client/generated/nutzlast_tabelle.py`
+  (`TABELLE`: typ → DTO-Klasse, feste Importe, dieselben Kategorien wie `GeneratedNutzlast`); die Namensregel steht einmal in
+  `Core.SourceGeneration/NameSanitizer.NutzlastTyp`/`DtoName` (C#-Mapper, Proto, Python-Emitter). `NutzlastTabelle`/`PayloadMapper`/`CqrsClient`
+  nehmen nur noch diese Tabelle (`nutzlast=`); `typ_von` und `CategoryRegistry.capabilities_name` sind entfallen (Kausalität: `payload.typ`).
 
 - **Werkbank-Stand ohne Generate (2026-10-14):** `Stand()` hasht nur noch die Rollen-Projekte mit handgeschriebenem Code
   (`Projektstruktur.HandgeschriebeneProjekte`: ohne Leitung und Komposition). Vorher verschob ein Build, der die STJ-Kontexte in

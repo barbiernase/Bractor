@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import domain_client.generated as g
+from domain_client.generated.nutzlast_tabelle import TABELLE as NUTZLAST
 from cqrs_client.leitung import Nutzlast, QueryResponse
 from domain_client.domain_registry import create_registry
 from domain_client.training_worker import TrainingWorker, TrainingState
@@ -20,7 +21,7 @@ from domain_client.training_worker import TrainingWorker, TrainingState
 def _worker():
     return TrainingWorker(
         registry=create_registry(),
-        generated_module=g,
+        nutzlast=NUTZLAST,
         config={"epoch_seconds": 0},   # Test: keine echte Wartezeit
     )
 

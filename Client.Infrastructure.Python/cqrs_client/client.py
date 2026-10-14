@@ -74,27 +74,26 @@ class CqrsClient(HandlerBase, Generic[S]):
     def __init__(
         self,
         registry: CategoryRegistry,
-        generated_module,
+        nutzlast,
         config: dict[str, Any] | None = None,
         funktionen: list[FunktionsBasis] | None = None,
     ):
         """
         Args:
             registry: CategoryRegistry mit allen Domain-Typen
-            generated_module: Das betterproto-generierte Domänen-Modul (nur die DTOs des Anwendungs-Protos) — daraus
-                              entsteht die Nutzlast-Tabelle typ → DTO-Klasse; die Leitung kommt aus cqrs_client.leitung
+            nutzlast: Die generierte Nutzlast-Tabelle typ → DTO-Klasse (domain_client.generated.nutzlast_tabelle.TABELLE);
+                      die Leitung kommt aus cqrs_client.leitung
             config: Optionale Konfiguration für die Subklasse
             funktionen: Katalog-Funktionen, die dieser Client ANBIETET (generierte <Funktion>Basis-Unterklassen);
                         nach jedem Handshake meldet er sie an, der Server holt für ihn Aufträge (§14.5)
         """
         self._registry = registry
-        self._gen = generated_module
         self._config = config or {}
 
         self._proxy = GrpcProxy(
             akteur_token=self._config.get("akteur_token") or os.environ.get("CQRS_AKTEUR_TOKEN"),
         )
-        self._mapper = PayloadMapper(generated_module)
+        self._mapper = PayloadMapper(nutzlast)
         self._router = MessageRouter()
         self._connection = ConnectionManager(self._proxy)
         self._funktionen = FunktionsLaeufer(funktionen or [], self._proxy, self._mapper)
@@ -248,12 +247,12 @@ class CqrsClient(HandlerBase, Generic[S]):
         handle_queries: list[str] = []
 
         for registered_type in self.handle.registered_types:
-            name = CategoryRegistry.capabilities_name(registered_type)
             try:
                 category = self._registry.classify(registered_type)
             except TypeError:
                 log.warning("Registered type %s not in CategoryRegistry", registered_type.__name__)
                 continue
+            name = self._mapper.tabelle.typ(registered_type)   # nicht auf der Leitung → TypeError (laut, nie still)
 
             if category == MessageCategory.EVENT:
                 subscribe_events.append(name)
@@ -265,7 +264,7 @@ class CqrsClient(HandlerBase, Generic[S]):
         # Deklarierte Command-Typen
         send_commands: list[str] = []
         for cmd_type in self._declared_command_types:
-            send_commands.append(CategoryRegistry.capabilities_name(cmd_type))
+            send_commands.append(self._mapper.tabelle.typ(cmd_type))
 
         # CapabilitiesRequest bauen
         request = leitung.CapabilitiesRequest(

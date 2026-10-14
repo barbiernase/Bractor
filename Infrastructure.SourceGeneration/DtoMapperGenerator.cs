@@ -351,7 +351,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("            {");
             foreach (var type in types)
             {
-                var sanitizedName = NameSanitizer.SanitizeName(GetSimpleTypeName(type.Node.FullName));
+                var sanitizedName = NameSanitizer.NutzlastTyp(type.Node.FullName);
                 sb.AppendLine($"                [\"{sanitizedName}\"] = n => Map{sanitizedName}({sanitizedName}Dto.Parser.ParseFrom(n.Daten)),");
             }
             sb.AppendLine("            };");
@@ -363,7 +363,7 @@ namespace Infrastructure.SourceGeneration
             foreach (var type in types)
             {
                 var simpleName = GetSimpleTypeName(type.Node.FullName);
-                var sanitizedName = NameSanitizer.SanitizeName(simpleName);
+                var sanitizedName = NameSanitizer.NutzlastTyp(type.Node.FullName);
                 sb.AppendLine($"                [typeof({simpleName})] = p => new global::Cqrs.Leitung.Nutzlast {{ Typ = \"{sanitizedName}\", Daten = global::Google.Protobuf.MessageExtensions.ToByteString(MapToDto(({simpleName})p)) }},");
             }
             sb.AppendLine("            };");

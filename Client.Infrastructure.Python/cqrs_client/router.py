@@ -172,7 +172,7 @@ class MessageRouter:
                                      causation=Kausalitaet(
                                          stream_id=envelope.aggregate_id,
                                          version=envelope.aggregate_version,
-                                         typ=CategoryRegistry.capabilities_name(type(payload)),
+                                         typ=envelope.payload.typ,
                                          index=index))
             index += 1
 

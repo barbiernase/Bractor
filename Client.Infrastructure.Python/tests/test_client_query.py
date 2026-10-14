@@ -30,11 +30,11 @@ class FakeClient(CqrsClient):   # kein [State] → State bleibt None
 
 
 def _gen():
-    return SimpleNamespace(FakeQueryDto=FakeQueryDto, FakeAntwortDto=FakeAntwortDto)
+    return {"FakeQuery": FakeQueryDto, "FakeAntwort": FakeAntwortDto}
 
 
 def test_query_liefert_typisierte_antwort():
-    client = FakeClient(registry=SimpleNamespace(), generated_module=_gen())
+    client = FakeClient(registry=SimpleNamespace(), nutzlast=_gen())
 
     empfangen = {}
 

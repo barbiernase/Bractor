@@ -110,7 +110,7 @@ public class FileGenerator
             
             var typeNameParts = node.FullName.Split('.');
             var simpleTypeName = typeNameParts.Last();
-            var sanitizedNodeName = SanitizeName(simpleTypeName) + "Dto";
+            var sanitizedNodeName = NameSanitizer.DtoName(simpleTypeName);   // die Namensregel der Leitung (eine Quelle)
 
             sb.AppendLine($"message {sanitizedNodeName} {{");
             
@@ -178,7 +178,7 @@ public class FileGenerator
         var typeNameParts = paramNode.FullName.Split('.');
         var simpleTypeName = typeNameParts.Last();
 
-        return SanitizeName(simpleTypeName) + "Dto";
+        return NameSanitizer.DtoName(simpleTypeName);
     }
 
     private string GetProtoTypeForName(string typeName)
@@ -218,7 +218,7 @@ public class FileGenerator
             return "int32";
         
         var parts = typeName.Split('.');
-        return SanitizeName(parts.Last()) + "Dto";
+        return NameSanitizer.DtoName(parts.Last());
     }
 
     /// <summary>
