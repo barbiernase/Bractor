@@ -1,13 +1,25 @@
 # 13 — Reifegrad, Schulden & Bewertung
 
 **Die eine Quelle für „offen“.** Andere Dokumente (`CLAUDE.md`, Kapitel 01–12, Konzepte) nennen Schulden höchstens kurz und verweisen
-hierher. Stand: 2026-10-15, Commit-Basis `ea463c6`. Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
+hierher. Stand: 2026-10-15, Commit-Basis `84e40a1`. Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
 (`docs/konzept-werkbank.md` §2). Zahlen und Messwerte stehen in `docs/12-tests-und-vermessung.md`.
 
 ## 13.0 Offen auf einen Blick
 
 | ID | Kurz | Prio |
 |---|---|:--:|
+| G-1 | Fristverlust: ein Timeout oder Fehlschlag des Emits zählt als gefeuert, die Frist wird entfernt | P0 |
+| G-2 | Inbox-Fenster (10 000) zusammen mit dem Emittenten-Poll ab Version 0: ein älterer Command kann erneut wirken (früher P2-4) | P1 |
+| G-3 | Append-Konflikt: Actor bleibt mit veraltetem Stand stehen; mehrdeutiger Commit wird als Fehler gemeldet | P1 |
+| G-4 | Projektions-Checkpoint ohne Versionsprüfung: zwei Aktivierungen können einen Effekt doppelt anwenden | P1 |
+| G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
+| PF-1 | Konsum je (Projektion, Stream) mit eigener Transaktion und eigenem Actor; kein Batch-Co-Commit | P1 |
+| PF-2 | Heil-Poll je Projektion ohne LIMIT, weckt jeden geänderten Stream nacheinander; Rebuild lädt den Log als Liste | P1 |
+| PF-4 | Prozess-Poll liest geänderte Streams ab 0 und verwirft geladene Events; Backstop weckt alle offenen Vorgänge | P1 |
+| PF-5 | Keine Passivierung: Aggregat-, Adapter- und Prozess-Actors bleiben bis zum Shutdown | P1 |
+| PF-3 | Inbox-Marke je Command im Stream (auch ohne Event), Inbox im Snapshot | P2 |
+| PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
+| PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
 | W10-2 | Reflektive Serialisierung zur Laufzeit (Marten-Default, Marking-Store, Snapshot-`Clone`, HTTP-Antworten); kein Reflection-Verbot im Build | P1 |
 | LLM-1 | 🤖-Rümpfe sind nur „baut und regelkonform“ geprüft, nicht fachlich: keine Beispiele je Slot, `Cqrs.Testing` nicht an Editor/🤖 angebunden | P1 |
@@ -23,7 +35,6 @@ hierher. Stand: 2026-10-15, Commit-Basis `ea463c6`. Maßstab sind die sechs Inva
 | WB-4 | Die Werkbank kennt genau eine Anwendung (`StandardWurzel`, `ServerHost`); eine Anwendung anlegen ist nicht beschrieben — Entscheidung offen | P2 |
 | WZ-1 | Prüf-Lücken der Werkzeuge: Grammatik-Gate bestätigt sich selbst, Fixpunkt ohne Akteure/Verträge/Clients/Funktionen/Dienste, Sonde ohne `SendeJe`/Count-Join/Kompensation/`IMensch`/`IstClient` | P2 |
 | AK-1 | Akteure/Clients: durable Zustellung an Clients, `als` im Envelope, Zusagen über C#, Anmeldung je Person | P2 |
-| P2-4 | `BoundedInbox` nicht airtight (FIFO ab 10 000) | P2 |
 | P2-5 | Marking-/Kompensations-Feinschliff, `KlärungNötig` ohne Test | P2 |
 | P2-6 | Schreibpfad: paralleler Drain skaliert sublinear | P2 |
 | P2-8 | Hartkodierte Poll-Intervalle und Test-Verbindungsdaten | P2 |
@@ -48,8 +59,8 @@ Werkzeuge lesen teils per Reflection, und neben den neuen Wegen (Fluss, Quelle, 
 
 | Subsystem | Reife |
 |---|:--:|
-| Schreibseite | 🟢 |
-| Konsum-/Prozess-Maschine | 🟢 |
+| Schreibseite | 🟢 / 🟡 (G-3, G-5) |
+| Konsum-/Prozess-Maschine | 🟡 (G-1, G-2, G-4) |
 | Generatoren & Analyzer | 🟢 / 🟡 (W10-1, W2-1) |
 | Multi-Node / Transport | 🟢 / 🟡 (P1-1, P1-2) |
 | Werkbank (Extractor, Editor, Server) | 🟢 / 🟡 (LLM-1, W3-1, WB-1, WB-4, WZ-1) |
@@ -69,10 +80,54 @@ Werkzeuge lesen teils per Reflection, und neben den neuen Wegen (Fluss, Quelle, 
 
 ## 13.3 Befunde
 
-Schweregrade: **P1** = wichtig, produktions- oder allgemeingültigkeitsrelevant · **P2** = Wartbarkeit/Hygiene · **P3** = kosmetisch.
-Aktuell gibt es keinen P0 (kein bekannter aktiver Korrektheits-Bug).
+Schweregrade: **P0** = bekannter aktiver Korrektheits-Bug · **P1** = wichtig, produktions- oder allgemeingültigkeitsrelevant ·
+**P2** = Wartbarkeit/Hygiene · **P3** = kosmetisch. Die Reihe **G** sind Lücken in den Garantien aus [11](11-garantien.md).
+
+### P0
+
+**G-1 · Fristverlust.** `FristScheduler.TickAsync` entfernt eine Frist, sobald `feuere` nicht wirft. `CommandEmitter.EmitAsync` verschluckt aber
+den Timeout (`OperationCanceledException`) und wertet das `CommandResult` nicht aus; ein Emit, der nicht ankam oder technisch scheiterte, gilt
+damit als gefeuert, und die Frist ist verloren. Der Kommentar an `TickAsync` sagt das Gegenteil. *Empfehlung:* `feuere` meldet den Ausgang
+(zugestellt ja/nein), entfernt wird nur nach bestätigter Zustellung; Prüfstand-Test mit Timeout- und Fehler-Seam.
 
 ### P1
+
+**G-2 · Inbox-Fenster und Emittenten-Poll** (früher P2-4). Die Inbox je Aggregat merkt sich die letzten `Schreibpfad.InboxGrenze` (Standard
+10 000) CommandIds, FIFO (`BoundedInbox`, auch im Snapshot). Der Poll-Pfad eines Emittenten liest bewusst ab Version 0 (`ProjectionAdapter`)
+und gibt alle Commands erneut aus. Ist ein Ziel-Aggregat so heiß, dass eine alte CommandId aus dem Fenster gefallen ist, wirkt der alte
+Command erneut. *Empfehlung:* Emittenten-Poll ab dem Cursor statt ab 0; Inbox als durable Seitentabelle statt Fenster im Stream.
+
+**G-3 · Append-Konflikt im Aggregat-Actor.** Wirft der Append (Versionskonflikt durch eine zweite Aktivierung, oder ein Commit, dessen
+Quittung verloren ging und dessen Einzel-Wiederholung im `BatchingEventAppender` dann kollidiert), landet das im äußeren `catch` von
+`AggregateActorBase`; `_initialized` bleibt gesetzt, der Stand veraltet, jeder weitere Append scheitert, bis der Actor stoppt (es gibt keine
+Passivierung). Der mehrdeutige Commit wird außerdem als Fehler quittiert, obwohl er gewirkt hat (gegen P10). *Empfehlung:* bei einem
+Append-Fehler frisch rehydrieren; liegt die CommandId danach in der Inbox, Erfolg quittieren.
+
+**G-4 · Projektions-Checkpoint ohne Versionsprüfung.** `MartenCoCommitStoreBase.MarkProcessedAsync` schreibt den `ProjectionCheckpoint` per
+`Store` (letzter Schreiber gewinnt). Zwei Aktivierungen desselben (Projektion, Stream) — im Cluster bei einer Netzstörung möglich — können
+einen nicht-idempotenten Effekt doppelt anwenden. Single-Node betrifft es nicht. *Empfehlung:* Checkpoint mit erwarteter Version schreiben;
+ein Konflikt verwirft den Stapel wie bei geteilten Dokumenten.
+
+Die Reihe **PF** sind Kosten der Garantien ([11](11-garantien.md) §11.12): die Garantie bleibt, der Mechanismus ist teurer als nötig.
+
+**PF-1 · Konsum je Stream.** Der `ProjectionAdapter` arbeitet je (Projektion, Stream) in einem eigenen virtuellen Actor: Tracker lesen,
+Tail lesen, eine Transaktion. Bei vielen Streams mit je wenigen Events wachsen die Transaktionen mit Events × Projektionen — die Decke für
+„viele Anlagen, viele Events“. *Empfehlung:* Batch-Co-Commit (globaler Sequenzbereich, je Stream geordnet angewendet, Effekte und Checkpoints
+vieler Streams in einer Transaktion), partitioniert nach `Hash(Stream) mod P`; dabei G-4 mitlösen.
+
+**PF-2 · Heil-Poll.** Jede Projektion liest alle 30 s selbst alle Events seit ihrer Hochwassermarke ohne LIMIT, samt Payload
+(`MartenEventStore.ReadChangedStreamsAsync`), und weckt jeden geänderten Stream nacheinander mit 10 s Grenze (`PullPath`), auch wenn das
+Signal ihn längst erledigt hat. `ProjectionRebuilder` lädt den ganzen Log in eine Liste. *Empfehlung:* eine Abfrage „Stream-Kopf >
+Checkpoint“ und nur nachhängende Streams wecken; ein gemeinsamer, seitenweiser Change-Feed für alle Konsumenten; Rebuild als Strom.
+
+**PF-4 · Prozess-Poll und Backstop.** `ProzessManagerWiring` liest jeden geänderten Stream ab Version 0 und routet jedes passende historische
+Event erneut, obwohl `ReadChangedStreamsAsync` die neuen Events schon geladen hat; der Backstop weckt alle 15 s alle offenen Vorgänge, auf jedem
+Knoten. *Empfehlung:* die geladenen Events direkt routen; Fälligkeits-Index für Zeitlimits (zusammen mit W11-2); Lease im Cluster.
+
+**PF-5 · Keine Passivierung.** Kein Actor stoppt bei Leerlauf (kein `ReceiveTimeout`): Aggregate, Adapter je (Projektion, Stream) und
+Prozess-Manager bleiben bis zum Shutdown im Speicher; im Dauerbetrieb wächst der Speicher mit allem, was je aktiviert wurde. Verschärft G-3.
+*Empfehlung:* Idle-Timeout je Actor-Art, Snapshot beim Stoppen bleibt.
+
 
 **W10-1 · Reflection in Werkzeugen.** `Cqrs.Codegen` liest die gebauten Domänen-DLLs per `MetadataLoadContext` und erzeugt daraus `domain.proto`,
 die STJ-Kontexte und die Python-Generate (`vertraege.py`, `funktionen.py`, `funktions_tabelle.py`, `nutzlast_tabelle.py`). Daneben existiert mit `Proto.SourceGeneration` ein
@@ -185,7 +240,20 @@ Namen verglichen. Die Sonde deckt `SendeJe`, Count-Join, Kompensation, `IMensch`
 aber verlierbar zugestellt), `als` im Envelope bei mehreren verkörperten Akteuren, Zusagen über C#-Clients (CQRS094), Anmeldung je Person; kein
 Boot-Check, ob `Clients:<Name>:Token` die Akteure des Vertrags verkörpert.
 
-**P2-4 · `BoundedInbox` nicht airtight** (FIFO ab 10 000). Akzeptierter Tradeoff; ggf. persistente Inbox-Marke als Rückfall.
+**PF-3 · Inbox-Marke im Stream.** Jeder Command hinterlässt `KommandoVerarbeitet`, auch wenn er Events erzeugt, die die CommandId schon als
+`causationId` tragen; Streams werden etwa doppelt so lang, Snapshots tragen bis `InboxGrenze` Ids. *Empfehlung:* Marke nur bei Noop und
+Ablehnung, oder Inbox als Tabelle mit eindeutigem Schlüssel in derselben Transaktion (löst G-2 mit).
+
+**PF-6 · Read-your-writes-Index.** `ReadModelDepsWriter` schreibt je Event und Projektion nach Redis, für eine Garantie, die nur best-effort ist.
+*Empfehlung:* je Projektion abschaltbar, an nur für Projektionen, auf die Clients warten.
+
+**PF-7 · Quelle als Stream je Nachricht.** Genau einmal je Kennung entsteht über einen eigenen Stream und Vorgang je Quell-Nachricht. Für
+hochfrequente Quellen (Maschinendaten) ist das teuer. *Entscheidung offen:* Dedup-Tabelle je Kennung und Sammel-Streams gegen „ein Vorgang je
+Meldung“; zusammen mit den flüchtigen Quellen (W11-2/§13.5 Schritt 7).
+
+**G-5 · Versionszählung bei Split-Upcasts.** `AggregateRehydrator` zählt `Version++` je materialisiertem Event; ein Split-Upcast liefert aus
+einer gespeicherten Position mehrere Events (`MartenEventStore`, `SubIndex`), die Version läuft dem Log davon, und jeder Append scheitert.
+Latent: heute gibt es keinen Split-Upcast. *Empfehlung:* je gespeicherter Position zählen (`AggregateVersion`), Prüfstand-Test mit Split.
 
 **P2-5 · Marking-/Kompensations-Feinschliff.** `MarkingKompakt` ist bei extremem Fan-out O(N) (Payloads je Vorgang); `NächsteKompensationAsync`
 liest ab 0; der `KlärungNötig`-Pfad ist korrekt per Konstruktion, aber ohne Test.
@@ -222,7 +290,8 @@ Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
 
 ## 13.4 Korrektheit vs. Reifegrad
 
-Kein Befund ist ein bekannter aktiver Korrektheits-Bug. Korrektheitsnah sind: **LLM-1** (vom LLM
+Bekannte aktive Korrektheits-Bugs: **G-1** (Fristverlust); **G-2** bis **G-4** brechen eine Garantie unter Last bzw. im Cluster, **G-5** ist latent.
+Korrektheitsnah sind außerdem: **LLM-1** (vom LLM
 geschriebene Logik nur auf „baut“ geprüft), **W10-1** (möglicher Hash-Unterschied zwischen Python-Basis und Server beim Handshake), **W2-1** (vom Client gesetztes Cluster-Kind) und **WZ-1** (Prüfungen, die grün sind, ohne es zu beweisen). Alles andere ist Reifegrad,
 Allgemeingültigkeit oder Hygiene.
 
@@ -238,6 +307,10 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 - **Daten-Prüfung von ⟳** gegen das Proto (heute) oder gegen die gespeicherte JSON-Form der Events (Marten/STJ, die eigentliche Wahrheit);
 - **Tor am Webhook** einer Quelle (Token → Akteur) und Identitäten für Prod (P1-2).
 
+0. **G und PF** (Garantie-Lücken und ihre Kosten) laufen als eigener Strang nach [plan-garantien-und-durchsatz.md](plan-garantien-und-durchsatz.md):
+   Phase 0 Lastprüfstand, 1 Emit-Ausgang und Emittenten-Cursor (G-1, G-2, P1-6), 2 Actor-Lebenszyklus (G-3, PF-5), 3 Batch-Konsum (PF-1, PF-2,
+   G-4), 4 Inbox als Tabelle (G-2, PF-3), 5 Prozess-Poll (PF-4), 6 Rest. Start erst, wenn der laufende Werkbank-Schritt committet ist; Abstimmung
+   der Berührungen (W11-1, W11-2) im Plan §5.
 1. ~~WB-2/WB-3~~ Sicherheitsnetz steht (2026-10-15): ⟳-Abnahmetest inkl. „▶ Worker“ und Gate „frischer Checkout baut“ (§13.6).
 2. ~~W11-1 (Schreibwege)/WB-1~~ je Absicht ein Weg (2026-10-15, §13.6).
 3. **LLM-1** 🤖 fachlich prüfen: neue Rolle `<Wurzel>.Beispiele` (Strukturtabelle, Lageart, CQRS098), Beispiele an der Karte (Gegeben/Wenn/Dann)

@@ -118,6 +118,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 | Zielbild, Leitsätze, Bedienung der Werkbank | `docs/konzept-werkbank.md` |
 | Wie schreibe ich X? | `docs/10-entwickler-api.md` |
 | Warum? | `docs/02-design-prinzipien.md` |
+| Was ist garantiert (Wirkung, Ordnung, Zustellung)? | `docs/11-garantien.md` |
 | Akteure, Verträge, Clients | `docs/konzept-akteure.md` |
 | Fluss (Pipeline) im Detail | `docs/konzept-editor-pipelines.md` §14 |
 | Offen, Schulden | `docs/13-reifegrad-schulden-bewertung.md` §13.0 |

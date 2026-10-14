@@ -192,5 +192,5 @@ aus der Zeit vor dem Generator (docs/13 P3-2).
 ## 3.8 Schulden im Schreibpfad
 
 Offenes steht in einer Quelle, [13 §13.0](13-reifegrad-schulden-bewertung.md): der parallele Drain skaliert sublinear (P2-6), die
-`BoundedInbox` verdrängt ab `Schreibpfad.InboxGrenze` FIFO (P2-4), der Snapshot-`Clone` ist ein JSON-Round-Trip (W10-2), der tote
+`BoundedInbox` verdrängt ab `Schreibpfad.InboxGrenze` FIFO (G-2), ein Append-Konflikt lässt den Actor veraltet stehen (G-3), Split-Upcasts verschieben die Version (G-5), der Snapshot-`Clone` ist ein JSON-Round-Trip (W10-2), der tote
 Lesepfad `LoadStateAsync` neben `AggregateRehydrator` (P2-9), der Client darf den `AggregateType` selbst setzen (W2-1).

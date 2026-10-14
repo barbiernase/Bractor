@@ -16,7 +16,7 @@ entworfen, als Code erzeugt, gebaut, im echten Host durchgespielt und über die 
 
 **Einstieg (30 Min.):** [01](01-ueberblick.md) → [konzept-werkbank.md](konzept-werkbank.md) §0–§2 → [02](02-design-prinzipien.md).
 
-**Bewertung:** [01](01-ueberblick.md) → [02](02-design-prinzipien.md) → [13](13-reifegrad-schulden-bewertung.md) →
+**Bewertung:** [01](01-ueberblick.md) → [02](02-design-prinzipien.md) → [11](11-garantien.md) → [13](13-reifegrad-schulden-bewertung.md) →
 [12](12-tests-und-vermessung.md).
 
 **Architektur:** [01](01-ueberblick.md) → [03](03-schreibseite.md) → [04](04-konsum-und-prozess-maschine.md) →
@@ -45,7 +45,7 @@ entworfen, als Code erzeugt, gebaut, im echten Host durchgespielt und über die 
 | 08 | [08-frontend-blazor-client.md](08-frontend-blazor-client.md) | Blazor-Client: Bus/Store-Stack, Modul-System, Client mit Vertrag |
 | 09 | [09-python-sdk.md](09-python-sdk.md) | Python-SDK `cqrs_client` und Python-Worker |
 | 10 | [10-entwickler-api.md](10-entwickler-api.md) | „Wie schreibe ich X?“ für alle Bausteine |
-| 11 | — | entfallen (2026-10-13): Status und Schulden stehen in [13](13-reifegrad-schulden-bewertung.md) |
+| 11 | [11-garantien.md](11-garantien.md) | Garantien je Weg: Wirkung, Zustellung, Ordnung, Bedingungen; Lücken als Reihe G in 13 |
 | 12 | [12-tests-und-vermessung.md](12-tests-und-vermessung.md) | Test-Ebenen, Zahlen, Messwerte, Fallstricke |
 | 13 | [13-reifegrad-schulden-bewertung.md](13-reifegrad-schulden-bewertung.md) | Reifegrad, Stärken, offene Befunde mit IDs, Erledigtes |
 
@@ -58,6 +58,7 @@ entworfen, als Code erzeugt, gebaut, im echten Host durchgespielt und über die 
 | [konzept-editor-pipelines.md](konzept-editor-pipelines.md) | Pipeline als Fluss (§12–§14) | Detail-Referenz Fluss, umgesetzt |
 | [konzept-llm-minimalkontext.md](konzept-llm-minimalkontext.md) | LLM-Füllung von Rümpfen, Kontext nur aus Code und Graph | Detail-Referenz |
 | [konzept-editor-komposition.md](konzept-editor-komposition.md) | Editor als Kompositions-Sprache (Grammatik, Kapselung, Muster) | Sprache, Detail-Referenz |
+| [plan-garantien-und-durchsatz.md](plan-garantien-und-durchsatz.md) | Garantie-Lücken (G) und Durchsatz (PF) in Phasen: Lastprüfstand, Emittenten-Cursor, Passivierung, Batch-Konsum, Inbox-Tabelle | **Plan**, wird nach Umsetzung gelöscht |
 
 Die Beispieldomäne im Repo ist Prüfling, nicht Architektur (konzept-werkbank W11); sie hat keine eigenen Dokumente.
 Frühere Konzepte, Pläne und Archive sind gelöscht; ihre Historie liegt im Git-Verlauf.
@@ -71,6 +72,7 @@ Frühere Konzepte, Pläne und Archive sind gelöscht; ihre Historie liegt im Git
   | Invarianten | [01](01-ueberblick.md) §1.2 |
   | Werkbank, Editor, Umgebungen, Spur | [konzept-werkbank.md](konzept-werkbank.md) |
   | Konsum-Maschine | [04](04-konsum-und-prozess-maschine.md) |
+  | Garantien | [11](11-garantien.md) |
   | Offenes und Schulden | [13](13-reifegrad-schulden-bewertung.md) (§13.0) |
   | Zahlen und Messwerte | [12](12-tests-und-vermessung.md) |
   | Regeln (was womit verbunden werden darf) | der Code (Analyzer, Generator-Diagnosen, Boot-Guards) und `dotnet run --project GraphExtractor -- --grammatik` |

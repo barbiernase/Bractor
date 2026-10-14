@@ -144,7 +144,7 @@ Jeder Command geht durch das **eine** Emit-Primitiv `CommandEmitter.EmitAsync` (
 **Dedup macht die Framework-Inbox, nicht der Fachcode.** Der Aggregat-Actor co-committet mit den Domänen-Events eine
 `KommandoVerarbeitet(CommandId)`-Marke (`Infrastructure/Aggregate/KommandoVerarbeitet.cs`, `IProzessIntern`: der Applier sieht sie nie);
 eine fachliche Ablehnung eines emittierten Commands wird zur durablen `KommandoAbgelehnt`-Marke. Aus beiden faltet `AggregateActorBase` zwei
-Inbox-Mengen (`BoundedInbox`) und erkennt eine Wiederholung **vor** der OCC-Prüfung → Noop. Die Inbox ist gedeckelt (docs/13 P2-4).
+Inbox-Mengen (`BoundedInbox`) und erkennt eine Wiederholung **vor** der OCC-Prüfung → Noop. Die Inbox ist gedeckelt (docs/13 G-2). Was daraus garantiert ist: [11](11-garantien.md).
 
 **Analyzer-Zwang** (`CommandEmitAnalyzer`): **CQRS020** (rohes `RequestAsync<CommandResult>` außerhalb von Emitter/Dispatcher),
 **CQRS021** (Command-Send mit `CancellationToken.None`/`default`). Im generierten Pull-Emit-Pfad steht noch `CancellationToken.None`
@@ -320,6 +320,6 @@ Format, Lesen und Ansichten: `docs/konzept-werkbank.md` §7.
 ## 4.9 Offen
 
 Offene Punkte stehen nur in [13](13-reifegrad-schulden-bewertung.md): Testlücke T-1, `CancellationToken.None` im Pull-Emit-Pfad P1-6,
-Handle-Pipeline/Trigger-Welt und doppelte DSL W11-1, Zeitlimits über den Backstop W11-2, `BoundedInbox` P2-4, Marking/Kompensation/
+Handle-Pipeline/Trigger-Welt und doppelte DSL W11-1, Zeitlimits über den Backstop W11-2, Garantie-Lücken G-1 (Fristverlust), G-2 (Inbox-Fenster), G-4 (Checkpoint), Marking/Kompensation/
 `KlärungNötig` P2-5, hartkodierte Intervalle P2-8, reflektive Serialisierung (Marking-Store, Snapshot-Kopie) W10-2, Projektlage W2-1,
 toter `MartenProjectionTracker` P3-2.
