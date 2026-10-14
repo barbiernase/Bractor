@@ -1,6 +1,7 @@
 using Abstractions;
 using Microsoft.Extensions.Logging;
 using Proto.Cluster;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Pipeline;
 
@@ -25,7 +26,7 @@ public static class PipelineTriggerSender
     {
         var triggerType = trigger.GetType();
 
-        if (!GeneratedPipelines.TriggerToPipelineId.TryGetValue(triggerType, out var targetPipelineId))
+        if (!Anwendung.Pipelines.TriggerToPipelineId.TryGetValue(triggerType, out var targetPipelineId))
         {
             logger?.LogError("[PipelineTrigger] Keine TriggerToPipelineId-Zuordnung für {TriggerType}", triggerType.Name);
             return;

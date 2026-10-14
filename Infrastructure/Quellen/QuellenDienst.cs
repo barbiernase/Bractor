@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Proto;
 using Proto.Cluster;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Quellen;
 
@@ -111,7 +112,7 @@ public static partial class QuellenExtensions
     /// Felder sind Fehler; ein beim Start nicht erreichbares Verzeichnis ist nur eine Warnung (der Treiber versucht es weiter).
     /// </summary>
     public static IServiceCollection AddQuellen(this IServiceCollection services, IConfiguration konfig)
-        => services.AddQuellen(konfig, GeneratedQuellen.Alle);
+        => services.AddQuellen(konfig, Anwendung.Quellen);
 
     public static IServiceCollection AddQuellen(this IServiceCollection services, IConfiguration konfig, IReadOnlyList<QuellTyp> typen)
     {

@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using Abstractions;
 using Infrastructure.Mapping;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.GrpcClient;
 
@@ -33,10 +34,10 @@ public static class EventTypeResolver
             if (_initialized) return;
 
             // ★ Aus generiertem Registry befüllen — keine Reflection!
-            foreach (var (name, type) in GeneratedTypeRegistry.Events)
+            foreach (var (name, type) in Anwendung.Typen.Events)
                 _eventTypes[name] = type;
 
-            foreach (var (name, type) in GeneratedTypeRegistry.Commands)
+            foreach (var (name, type) in Anwendung.Typen.Commands)
                 _commandTypes[name] = type;
 
             _initialized = true;

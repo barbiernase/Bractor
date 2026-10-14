@@ -1,6 +1,7 @@
 using System;
 using Google.Protobuf;
 using Proto.Remote;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Serialization;
 
@@ -34,12 +35,12 @@ public sealed class CqrsWireSerializer : ISerializer
     /// <summary>Zwischen Default-Protobuf (0) und Default-JSON (-1000).</summary>
     public const int Priority = -100;
 
-    public bool CanSerialize(object obj) => GeneratedWire.CanSerialize(obj.GetType());
+    public bool CanSerialize(object obj) => Anwendung.Wire.CanSerialize(obj.GetType());
 
-    public string GetTypeName(object message) => GeneratedWire.TypeName(message);
+    public string GetTypeName(object message) => Anwendung.Wire.TypeName(message);
 
-    public ByteString Serialize(object obj) => ByteString.CopyFrom(GeneratedWire.Serialize(obj));
+    public ByteString Serialize(object obj) => ByteString.CopyFrom(Anwendung.Wire.Serialize(obj));
 
     public object Deserialize(ByteString bytes, string typeName)
-        => GeneratedWire.Deserialize(bytes.ToByteArray(), typeName);
+        => Anwendung.Wire.Deserialize(bytes.ToByteArray(), typeName);
 }

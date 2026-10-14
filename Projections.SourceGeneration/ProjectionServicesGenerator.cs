@@ -163,6 +163,8 @@ namespace Projections.SourceGeneration
             {
                 sb.AppendLine();
                 sb.AppendLine($"        services.AddSingleton<{projectionQueryService.ToDisplayString(full)}>();");
+                // Das Framework kennt nur die Schnittstelle (Abstractions.IQueryDienst).
+                sb.AppendLine($"        services.AddSingleton<global::Abstractions.IQueryDienst>(sp => sp.GetRequiredService<{projectionQueryService.ToDisplayString(full)}>());");
             }
 
             // Stand der Leseseite (konzept-werkbank §12.3 E9): Code-Hash je Store-Klasse (normalisierte Syntax aller Teile) und die Read-Model-Typen —

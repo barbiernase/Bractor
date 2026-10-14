@@ -10,6 +10,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Proto;
 using Proto.Cluster;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Prozess;
 
@@ -249,7 +250,7 @@ public static class GeneratedProzesse
     /// Die Registry aller Prozesse und Flüsse: der generierte Verbund der Registries jeder Domänen-Assembly (ProzessVerbundGenerator;
     /// ein Name zweimal = CQRS012, Prozesse ohne Registry = CQRS099 — beides im Build).
     /// </summary>
-    public static IReadOnlyDictionary<string, ProzessRegeln> AlleRegeln() => GeneratedProzessVerbund.Alle;
+    public static IReadOnlyDictionary<string, ProzessRegeln> AlleRegeln() => Anwendung.Prozesse;
 
     public static IServiceCollection AddGeneratedProzesse(this IServiceCollection services)
     {

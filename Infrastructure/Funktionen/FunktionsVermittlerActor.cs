@@ -5,6 +5,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Proto;
 using Proto.Cluster;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Funktionen;
 
@@ -135,7 +136,7 @@ public static class FunktionsAnbieter
 
     public static async Task BieteAnAsync(ActorSystem system, Guid korrelation, IAuftrag auftrag, Guid vorgang, string? akteur, CancellationToken ct)
     {
-        if (!GeneratedFunktionen.AuftragZuFunktion.TryGetValue(auftrag.GetType(), out var funktion))
+        if (!Anwendung.Funktionen.AuftragZuFunktion.TryGetValue(auftrag.GetType(), out var funktion))
             throw new InvalidOperationException($"Der Auftrag {auftrag.GetType().Name} gehört zu keiner Funktion (IAuftrag<F>).");
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(5));

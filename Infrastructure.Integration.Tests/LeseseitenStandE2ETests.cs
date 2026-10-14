@@ -12,6 +12,7 @@ using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Npgsql;
 using Domain.Projections.ImagePair;
+using Domain.Laufzeit;
 
 namespace Infrastructure.Integration.Tests;
 

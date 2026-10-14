@@ -25,15 +25,19 @@
 | `Domain.Pipeline` | Flüsse, Katalog-Funktionen (Schnittstelle, Auftrag, Ergebnis-Events, Implementierung), Domänen-Dienste (Schnittstelle, Implementierung), Konfig-Records | Domain, Domain.Projections |
 | `Domain.Akteure` | Akteure, Akteur-Verträge, Client-Verträge | Domain, Domain.Projections, Domain.Pipeline |
 | `Domain.Infrastructure` | Store-Implementierungen | Domain, Domain.Projections |
+| `Domain.Leitung` | die Domänen-DTOs der Leitung (`domain.proto`, vom Codegen) und ihr Nutzlast-Mapper (`GeneratedNutzlast`) — nichts Handgeschriebenes | Domain, Domain.Projections, Domain.Pipeline |
+| `Domain.Laufzeit` | die Komposition: alle Laufzeit-Generate, `GeneratedAnwendung`, `AddCqrs` der Hosts, die STJ-Kontexte — nichts Handgeschriebenes | alle Rollen-Projekte + Infrastructure |
 | `Domain.Client.Worker.Python.*` | Python-Implementierungen von Zusagen und externen Funktionen (`funktionen/<modul>.py`), generierte Basen unter `domain_client/generated/` | — |
 | `Domain.Client.Modules.*` | GUI-Clients (außerhalb des Editors, W12) | Client.Infrastructure |
 | `umgebungen/` | `umgebung.<name>.json` je Umgebung | — |
 
 **Rollen als Suffix zur Wurzel.** Die Projektnamen sind Suffixe zu einer Anwendungs-Wurzel (`""`, `.Projections`, `.Pipeline`, `.Akteure`,
-`.Infrastructure`); die Beispielanwendung hat die Wurzel `Domain`, eine zweite Anwendung (z. B. eine Test-Domäne) eine eigene. Nicht jede Rolle muss
+`.Infrastructure`, `.Leitung`, `.Laufzeit`); die Beispielanwendung hat die Wurzel `Domain`, eine zweite Anwendung (z. B. eine Test-Domäne) eine eigene. Nicht jede Rolle muss
 existieren. Die Rolle eines Projekts folgt aus seinem Namen (`Projektstruktur.Zerlege`).
 
-Die Referenzrichtung ist fest: `Domain` ← `Domain.Projections` ← `Domain.Pipeline` ← `Domain.Akteure`; `Domain.Projections` ← `Domain.Infrastructure`.
+Die Referenzrichtung ist fest: `Domain` ← `Domain.Projections` ← `Domain.Pipeline` ← `Domain.Akteure`; `Domain.Projections` ← `Domain.Infrastructure`;
+alle ← `Domain.Laufzeit` (die Komposition, die die Hosts referenzieren). Das Framework (`Infrastructure`, `Core`, `Cqrs.Leitung`) referenziert kein
+Rollen-Projekt; es liest die Anwendung über `IAnwendung`, die die Komposition generiert und anmeldet.
 Deshalb gehören Funktionen mit Lese-Fähigkeit (brauchen Leseseiten-Typen) und Akteure mit `IDarf<Query>` nicht nach `Domain`. Die Akteure sind der
 äußerste Ring: ein Akteur darf jede Eingangsart haben — Command, Query, Quelle, Funktion (`IDarf<IFunktion>`, er bietet sie an) — und sein
 Vertrag hört auf beliebige Events, auch auf Ergebnis-Events von Funktionen.
@@ -86,7 +90,7 @@ Funktions-Signatur, Konfig-Records aus dem Implementierungs-Konstruktor, Fähigk
 
 ## 7.6 Offen
 
-- `Infrastructure` ist zugleich Framework und Komposition (referenziert die Domänen-Projekte; nur dort laufen die Laufzeit-Generatoren) —
-  docs/13 W2-1. Die Wurzel der Werkzeuge ist bis dahin `Projektstruktur.StandardWurzel`.
+- Die Wurzel der Werkzeuge (Codegen, Werkbank, Scaffolder) ist `Projektstruktur.StandardWurzel`; Generatoren und Projektlage leiten sie aus dem
+  Projektnamen ab. Eine zweite Anwendung (Test-Domäne, docs/13 T-1) braucht für den Codegen noch einen Wurzel-Parameter.
 - Fremde Namespaces (außerhalb der Rollen-Projekte der Wurzel) platziert der Scaffolder wie bisher nach Namespace → Verzeichnis; die Lage-Prüfung
   meldet sie.

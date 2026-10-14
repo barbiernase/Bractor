@@ -29,6 +29,7 @@
     <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
     <ProjectReference Include="..\Core\Core.csproj" />
     <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
+    <ProjectReference Include="..\Domain.Laufzeit\Domain.Laufzeit.csproj" />
     <!-- Normaler Assembly-Ref (KEIN OutputItemType=Analyzer) → nur um CommandEmitAnalyzer zu instanziieren. -->
     <ProjectReference Include="..\Infrastructure.SourceGeneration\Infrastructure.SourceGeneration.csproj" ReferenceOutputAssembly="true" />
     <!-- Ebenso Domain.SourceGeneration → nur um den AusgabeVertragAnalyzer (CQRS050) zu instanziieren. -->

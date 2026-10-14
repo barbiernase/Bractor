@@ -1,7 +1,7 @@
 using Abstractions;
 using Domain.Trainingslauf;
 using FluentAssertions;
-using Infrastructure;     // generierte AggregateHandlerFactory
+using Domain;     // generierte AggregateHandlerFactory (Assembly der Aggregate)
 using TrainingslaufAgg = Domain.Trainingslauf.Trainingslauf;
 
 namespace Infrastructure.Pruefstand.Ddd;

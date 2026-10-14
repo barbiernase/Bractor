@@ -171,7 +171,7 @@ public class ProjectionQueryServiceGenerator : IIncrementalGenerator
         sb.AppendLine("/// Zentraler Service für Query-Ausführung.");
         sb.AppendLine("/// Reader kommen via DI (mit ihrem ReadStore), Projektionen liefern SubscriberId.");
         sb.AppendLine("/// </summary>");
-        sb.AppendLine("public class ProjectionQueryService");
+        sb.AppendLine("public class ProjectionQueryService : IQueryDienst");
         sb.AppendLine("{");
 
         // ── Felder ──
@@ -272,6 +272,8 @@ public class ProjectionQueryServiceGenerator : IIncrementalGenerator
         sb.AppendLine();
 
         // ── SupportedQueryTypes ──
+        sb.AppendLine("    IReadOnlyList<Type> IQueryDienst.QueryTypen => SupportedQueryTypes;");
+        sb.AppendLine();
         sb.AppendLine("    public static IReadOnlyList<Type> SupportedQueryTypes { get; } = new[]");
         sb.AppendLine("    {");
         foreach (var proj in projections)

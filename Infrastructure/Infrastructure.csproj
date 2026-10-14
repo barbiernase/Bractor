@@ -1,16 +1,10 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
+  <!-- Das Framework: referenziert KEIN Domänen-Projekt. Was es über eine Anwendung wissen muss, bezieht es über IAnwendung
+       (Komposition/Anwendung.cs), die die Komposition der Anwendung (<Wurzel>.Laufzeit) generiert und anmeldet (docs/07). -->
   <ItemGroup>
-    <ProjectReference Include="..\Core.SourceGeneration\Core.SourceGeneration.csproj" />
-    <ProjectReference Include="..\Domain.Infrastructure\Domain.Infrastructure.csproj" />
-    <ProjectReference Include="..\Domain.Pipeline\Domain.Pipeline.csproj" />
-    <ProjectReference Include="..\Domain.Akteure\Domain.Akteure.csproj" />
-    <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
-    <ProjectReference Include="..\Infrastructure.SourceGeneration\Infrastructure.SourceGeneration.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
     <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
-    <ProjectReference Include="..\Domain\Domain.csproj" />
     <ProjectReference Include="..\Core\Core.csproj" />
-    <ProjectReference Include="..\Domain.Leitung\Domain.Leitung.csproj" />
     <ProjectReference Include="..\Cqrs.Leitung\Cqrs.Leitung.csproj" />
   </ItemGroup>
 

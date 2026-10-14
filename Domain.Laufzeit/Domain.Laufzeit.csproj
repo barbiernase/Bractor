@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Die KOMPOSITION der Anwendung (docs/07, Rolle Komposition): Framework + alle Rollen-Projekte. Hier laufen die Laufzeit-Generatoren
+       (Infrastructure.SourceGeneration) und erzeugen die Tabellen, die das Framework über IAnwendung liest (GeneratedAnwendung), dazu das
+       AddCqrs der Hosts. Die STJ-Kontexte (Serialization/*.g.cs) schreibt der Codegen-Prepass hierher. -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Domain.Laufzeit</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
+    <ProjectReference Include="..\Domain\Domain.csproj" />
+    <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
+    <ProjectReference Include="..\Domain.Pipeline\Domain.Pipeline.csproj" />
+    <ProjectReference Include="..\Domain.Akteure\Domain.Akteure.csproj" />
+    <ProjectReference Include="..\Domain.Infrastructure\Domain.Infrastructure.csproj" />
+    <ProjectReference Include="..\Domain.Leitung\Domain.Leitung.csproj" />
+    <ProjectReference Include="..\Infrastructure.SourceGeneration\Infrastructure.SourceGeneration.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+</Project>

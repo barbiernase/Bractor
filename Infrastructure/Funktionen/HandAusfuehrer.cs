@@ -6,6 +6,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Proto;
 using Proto.Cluster;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Funktionen;
 
@@ -68,7 +69,7 @@ public sealed class HandAusfuehrer : BackgroundService
         _sitzung = new FunktionsAnbieterSitzung(
             $"{_system.Address}/hand",
             name => FunktionsAnbieterSitzung.LoeseImKatalog(name, _funktionen),
-            f => GeneratedFunktionen.Ergebnisse.TryGetValue(f, out var e) ? e : Array.Empty<Type>(),
+            f => Anwendung.Funktionen.Ergebnisse.TryGetValue(f, out var e) ? e : Array.Empty<Type>(),
             (f, anfrage, ct) => cluster.RequestAsync<ArbeitZugeteilt>(FunktionsVermittlerActor.Identitaet(f), anfrage, ct),
             async (f, nachricht) =>
             {

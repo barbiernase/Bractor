@@ -1,7 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
 
   <ItemGroup>
-    <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
+    <!-- Die Komposition der Anwendung (Framework + Rollen-Projekte, docs/07). -->
+    <ProjectReference Include="..\Domain.Laufzeit\Domain.Laufzeit.csproj" />
   </ItemGroup>
 
   <ItemGroup>

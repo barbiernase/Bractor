@@ -59,8 +59,8 @@ static class Projektstruktur
     /// <summary>Das Projekt, dessen Host die Werkbank baut und startet (⟳).</summary>
     public const string ServerHost = "Host.Grpc";
 
-    /// <summary>Wohin der Codegen die STJ-Kontexte schreibt (Verzeichnis relativ zur Solution).</summary>
-    public const string SerialisierungsOrdner = "Infrastructure/Serialization";
+    /// <summary>Wohin der Codegen die STJ-Kontexte schreibt: der Ordner Serialization der Komposition (relativ zur Solution).</summary>
+    public static string SerialisierungsOrdner(string wurzel) => Projekt(wurzel, Rolle.Komposition) + "/Serialization";
 
     /// <summary>Das Werkzeug-Projekt des Codegen-Prepass: es muss alle <see cref="CodegenProjekte"/> referenzieren (Build-Reihenfolge).</summary>
     public const string CodegenWerkzeug = "Cqrs.Codegen";

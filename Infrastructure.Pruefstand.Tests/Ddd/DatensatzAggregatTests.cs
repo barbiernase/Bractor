@@ -2,7 +2,7 @@ using Abstractions;
 using Domain.Datensatz;
 using Domain.ImagePair;   // Klassifikation
 using FluentAssertions;
-using Infrastructure;     // generierte AggregateHandlerFactory
+using Domain;     // generierte AggregateHandlerFactory (Assembly der Aggregate)
 using DatensatzAgg = Domain.Datensatz.Datensatz;
 
 namespace Infrastructure.Pruefstand.Ddd;

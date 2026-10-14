@@ -10,13 +10,13 @@ using Infrastructure.GrpcClient;
 using Infrastructure.Monitoring;
 using Infrastructure.Persistence;
 using Infrastructure.Pipeline;
-using Infrastructure.Projections.Generated;
 using Infrastructure.Prozess;
 using Infrastructure.Quellen;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Server.Kestrel.Core;
 using Microsoft.Extensions.DependencyInjection;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Umgebung;
 
@@ -27,23 +27,29 @@ namespace Infrastructure.Umgebung;
 /// </summary>
 public static class CqrsUmgebungExtensions
 {
-    /// <summary>Lädt die Umgebung aus <c>--umgebung &lt;name&gt;</c> (bzw. <c>CQRS_UMGEBUNG</c>) und verdrahtet den Host danach.</summary>
-    public static UmgebungKonfig AddCqrs(this WebApplicationBuilder builder, string[] args)
+    /// <summary>
+    /// Lädt die Umgebung aus <c>--umgebung &lt;name&gt;</c> (bzw. <c>CQRS_UMGEBUNG</c>) und verdrahtet den Host danach. Die Hosts rufen das
+    /// generierte <c>AddCqrs(args)</c> ihrer Komposition (<c>&lt;Wurzel&gt;.Laufzeit</c>), das die Anwendung mitgibt.
+    /// </summary>
+    public static UmgebungKonfig AddCqrs(WebApplicationBuilder builder, string[] args, IAnwendung anwendung)
     {
         try
         {
             var name = UmgebungLader.NameAus(args)
                        ?? throw new BootFehler($"Keine Umgebung angegeben: {UmgebungLader.Argument} <name> oder {UmgebungLader.Variable}.", "host:Umgebung");
             var umgebung = UmgebungLader.Lade(builder.Configuration, name, args);
-            builder.AddCqrs(umgebung);
+            AddCqrs(builder, umgebung, anwendung);
             return umgebung;
         }
         catch (Exception e) { CqrsBoot.Melde(e); throw; }
     }
 
-    public static WebApplicationBuilder AddCqrs(this WebApplicationBuilder builder, UmgebungKonfig u)
+    public static WebApplicationBuilder AddCqrs(WebApplicationBuilder builder, UmgebungKonfig u, IAnwendung anwendung)
     {
+        // Die Anwendung zuerst: alles Weitere liest ihre Tabellen (docs/07, Rolle Komposition).
+        Anwendung.Setze(anwendung);
         var s = builder.Services;
+        s.AddSingleton(anwendung);
         s.AddSingleton(u);
 
         // Ports: gRPC (HTTP/2) für Clients und Worker; Einblick (HTTP/1.1 + 2) für Werkbank, Webhook, /health.
@@ -90,12 +96,12 @@ public static class CqrsUmgebungExtensions
 
         // Passt die Leseseite zum Code (konzept-werkbank §12.3 E9)? Vor dem Pull-Pfad (Hosted Services starten in Registrierungs-Reihenfolge).
         if (u.Cluster.Rolle != KnotenRolle.Mitglied) s.AddHostedService<Infrastructure.Projections.ProjektionsStandDienst>();
-        s.AddGeneratedPullPaths();
+        Anwendung.Aktuell.RegistrierePullPfade(s);
         s.AddGeneratedProzesse();
-        GeneratedPipelines.RegisterAllPipelines(s);
-        s.AddGeneratedPipelineEventPulls();
+        Anwendung.Pipelines.RegisterAllPipelines(s);
+        Anwendung.Pipelines.AddGeneratedPipelineEventPulls(s);
         s.AddBackendMonitoring();
-        s.AddDeadlines(Infrastructure.Pipeline.Generated.GeneratedFristen.Baue);
+        s.AddDeadlines(Anwendung.Pipelines.BaueFrist);
         s.AddAkteure(builder.Configuration.GetSection(UmgebungsAbschnitte.Identitaeten));
         s.AddQuellen(builder.Configuration);
         s.BindeFunktionen(u.Funktionen);

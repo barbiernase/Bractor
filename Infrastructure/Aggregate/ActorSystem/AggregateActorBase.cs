@@ -5,6 +5,7 @@ using Infrastructure.PubSub;
 using Microsoft.Extensions.Logging;
 using Proto;
 using Proto.Cluster;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Aggregate.ActorSystem;
 
@@ -651,7 +652,7 @@ public abstract class AggregateActorBase<TState> : IActor
             // ★ Phase 1 (1c): zusätzlich das typisierte Signal veröffentlichen (docs/03 §3.6).
             //   Best-effort — ein Signal ist nur ein Weckruf und DARF verloren gehen
             //   (Invariante 2); der Poll-Backstop holt es nach.
-            var signal = GeneratedSignalFactory.Create(
+            var signal = Anwendung.Signale.Create(
                 eventEnvelope.Payload, eventEnvelope.AggregateId, eventEnvelope.AggregateVersion);
             if (signal != null)
             {

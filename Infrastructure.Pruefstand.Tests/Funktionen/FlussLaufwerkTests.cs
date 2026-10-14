@@ -21,7 +21,7 @@ public class FlussLaufwerkTests
     private static readonly Guid Paar = Guid.Parse("00000000-0000-0000-0000-0000000000b7");
 
     private static FlussLaufwerk Laufwerk()
-        => new(new SagaLaufwerk(new Infrastructure.AggregateHandlerFactory(), Array.Empty<(string, ProzessRegeln)>()),
+        => new(new SagaLaufwerk(new Domain.AggregateHandlerFactory(), Array.Empty<(string, ProzessRegeln)>()),
             new[] { (nameof(Bildeingang), new Bildeingang().Fluss) });
 
     private static FlussAntwort Gedeutet(FlussAufruf a) => a.Auftrag switch

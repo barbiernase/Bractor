@@ -1,6 +1,5 @@
 using System.Text.Json;
 using Abstractions;
-using Domain.Projections;
 using Infrastructure.Aggregate.ActorSystem;
 using Infrastructure.Akteure;
 using Infrastructure.Extensions;
@@ -11,6 +10,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Proto;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Eingang;
 
@@ -44,8 +44,8 @@ public static class JsonEingang
             {
                 akteur = akteur?.Name,
                 offen = akteur is null,
-                commands = (akteur?.Commands ?? GeneratedTypeRegistry.Commands.Values).Select(t => t.Name).Order(StringComparer.Ordinal),
-                queries = (akteur?.Queries ?? GeneratedTypeRegistry.Queries.Values).Where(ProjectionQueryService.SupportedQueryTypes.Contains)
+                commands = (akteur?.Commands ?? Anwendung.Typen.Commands.Values).Select(t => t.Name).Order(StringComparer.Ordinal),
+                queries = (akteur?.Queries ?? Anwendung.Typen.Queries.Values).Where(Anwendung.QueryTypen.Contains)
                     .Select(t => t.Name).Order(StringComparer.Ordinal),
             }, Json);
         });
@@ -99,11 +99,11 @@ public static class JsonEingang
             if (!Lies(body, MessageCategory.Query, out var typ, out var nachricht, out var fehler)) return fehler!;
             if (!AkteurTor.Darf(akteur, typ!))
                 return Results.Json(new { ok = false, abgelehnt = $"Akteur '{akteur!.Name}' darf {typ!.Name} nicht (kein IDarf<{typ.Name}>)" }, Json, statusCode: 403);
-            if (!ProjectionQueryService.SupportedQueryTypes.Contains(typ!))
+            if (!Anwendung.QueryTypen.Contains(typ!))
                 return Results.Json(new { ok = false, fehler = $"{typ!.Name} beantwortet kein Reader des Systems" }, Json, statusCode: 400);
             try
             {
-                var antwort = await sp.GetRequiredService<ProjectionQueryService>().ExecuteAsync((IQuery)nachricht!);
+                var antwort = await sp.GetRequiredService<IQueryDienst>().ExecuteAsync((IQuery)nachricht!);
                 return Results.Json(new { ok = true, antwort = Darstellung(antwort.Data) }, Json);
             }
             catch (Exception e) { return Results.Json(new { ok = false, fehler = e.Message }, Json, statusCode: 500); }
@@ -158,7 +158,7 @@ public static class JsonEingang
     }
 
     private static IReadOnlyCollection<Type> Ergebnisse(Type funktion)
-        => GeneratedFunktionen.Ergebnisse.TryGetValue(funktion, out var e) ? e : Array.Empty<Type>();
+        => Anwendung.Funktionen.Ergebnisse.TryGetValue(funktion, out var e) ? e : Array.Empty<Type>();
 
     /// <summary>Das Token → Akteur (Tor). Ohne konfigurierte Identitäten ist das Tor offen (<paramref name="akteur"/> = null).</summary>
     private static bool Erkenne(HttpContext http, IServiceProvider sp, out AkteurRechte? akteur, out IResult? abgewiesen)
@@ -206,7 +206,7 @@ public static class EingangJson
 {
     // Die Optionen des generierten Kontexts (Resolver, Converter, Enums als Namen), nur Feldnamen ohne Groß/Klein-Unterschied —
     //   ein Client schreibt sie gern camelCase. Der Resolver bleibt der Source-Generator.
-    private static readonly JsonSerializerOptions Optionen = new(CqrsWireJsonContext.Default.Options) { PropertyNameCaseInsensitive = true };
+    private static readonly JsonSerializerOptions Optionen = new(Anwendung.WireJson.Options) { PropertyNameCaseInsensitive = true };
 
     private static System.Text.Json.Serialization.Metadata.JsonTypeInfo Info(Type typ)
         => Optionen.TryGetTypeInfo(typ, out var info) ? info

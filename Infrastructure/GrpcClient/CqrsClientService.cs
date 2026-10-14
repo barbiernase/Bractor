@@ -2,7 +2,6 @@
 using System.Collections.Concurrent;
 using Abstractions;
 using Infrastructure.Akteure;
-using Domain.Projections;
 using Grpc.Core;
 using Infrastructure.Extensions;
 using Infrastructure.Funktionen;
@@ -15,6 +14,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Proto;
 using Proto.Cluster;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.GrpcClient;
 
@@ -41,7 +41,7 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
     private readonly ProtoMessageMapper _mapper;
     private readonly IAggregateDispatcher _dispatcher;
     private readonly CapabilitiesHandler _capabilitiesHandler;
-    private readonly ProjectionQueryService _queryService;
+    private readonly IQueryDienst _queryService;
     private readonly TriggerHandlerRegistry _triggerHandlerRegistry;
     private readonly QueryHandlerRegistry _queryHandlerRegistry;
     private readonly BrokerPublisher _publisher;
@@ -86,7 +86,7 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         ActorSystem actorSystem,
         ProtoMessageMapper mapper,
         IAggregateDispatcher dispatcher,
-        ProjectionQueryService queryService,
+        IQueryDienst queryService,
         TriggerHandlerRegistry triggerHandlerRegistry,
         QueryHandlerRegistry queryHandlerRegistry,
         BrokerPublisher publisher,
@@ -370,8 +370,8 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         // 0. Akteur-Vertrag (docs/konzept-akteure.md §5.2): „ich bin Vertrag X" — geprüft gegen die generierte Tabelle (mit Tor:
         //    das Token muss ihn verkörpern; abweichender Hash = Warnung bzw. im strengen Modus Ablehnung). Ohne Tor sagt der Vertrag,
         //    wer da ist: die Session bekommt seine Befugnisse.
-        var vp = AkteurVertragsPruefung.Pruefe(request.Vertrag, request.VertragHash, sitzung.Akteur, GeneratedAkteurRechte.Alle,
-            _akteurTor?.VertragStreng ?? false, GeneratedClientVertraege.Alle);
+        var vp = AkteurVertragsPruefung.Pruefe(request.Vertrag, request.VertragHash, sitzung.Akteur, Anwendung.Akteure.Rechte,
+            _akteurTor?.VertragStreng ?? false, Anwendung.Akteure.ClientVertraege);
         if (vp.Ablehnung is { } ablehnung)
         {
             _logger.LogWarning("{Session} Vertrag {Vertrag} abgelehnt: {Grund}", sessionId, request.Vertrag, ablehnung);
@@ -410,8 +410,8 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
             //     Zuständigkeit nur für Lücken (das System bedient den Typ nicht selbst) und nur einmal. Mit Vertrag: abonniert wird
             //     genau, worauf er reagiert.
             Func<string, Type?> loese = n => MessageTypeMapping.Resolve(n).Type;
-            Func<Type, bool> internBedient = t => ProjectionQueryService.SupportedQueryTypes.Contains(t)
-                                                  || GeneratedPipelines.TriggerToPipelineId.ContainsKey(t);
+            Func<Type, bool> internBedient = t => Anwendung.QueryTypen.Contains(t)
+                                                  || Anwendung.Pipelines.TriggerToPipelineId.ContainsKey(t);
             Func<string, bool> schonVergeben = n => _queryHandlerRegistry.GetHandler(n) is { } q && !q.Equals(proxyPid)
                                                     || _triggerHandlerRegistry.GetHandler(n) is { } t && !t.Equals(proxyPid);
             if (sitzung.Vertrag is { } v)
@@ -679,7 +679,7 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
 
             // Fallback: Pipeline-Routing (bestehend)
             var triggerType = trigger.GetType();
-            if (!GeneratedPipelines.TriggerToPipelineId.TryGetValue(triggerType, out var pipelineId))
+            if (!Anwendung.Pipelines.TriggerToPipelineId.TryGetValue(triggerType, out var pipelineId))
             {
                 _logger.LogWarning("{Session} no handler for trigger {Trigger}", sessionId, triggerType.Name);
                 
@@ -1062,8 +1062,8 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
         var cluster = _actorSystem.Cluster();
         return new FunktionsAnbieterSitzung(
             $"{_actorSystem.Address}/{sessionId}",   // Arbeiter-Name am Vermittler: eindeutig über Knoten hinweg
-            name => FunktionsAnbieterSitzung.LoeseImKatalog(name, GeneratedFunktionen.Ergebnisse.Keys),
-            f => GeneratedFunktionen.Ergebnisse.TryGetValue(f, out var e) ? e : Array.Empty<Type>(),
+            name => FunktionsAnbieterSitzung.LoeseImKatalog(name, Anwendung.Funktionen.Ergebnisse.Keys),
+            f => Anwendung.Funktionen.Ergebnisse.TryGetValue(f, out var e) ? e : Array.Empty<Type>(),
             (f, anfrage, ct) => cluster.RequestAsync<ArbeitZugeteilt>(FunktionsVermittlerActor.Identitaet(f), anfrage, ct),
             async (f, nachricht) =>
             {

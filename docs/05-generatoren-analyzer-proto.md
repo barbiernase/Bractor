@@ -35,12 +35,15 @@ hängen die **Verträge** als verlinkte Quelle in Generator und Laufzeit — ein
 |---|---|
 | `Domain.SourceGeneration` | `Domain`, `Domain.Projections`, `Domain.Pipeline`, `Domain.Akteure` |
 | `Projections.SourceGeneration` | `Domain.Infrastructure` |
-| `Infrastructure.SourceGeneration` | `Infrastructure` |
+| `Infrastructure.SourceGeneration` | `Domain.Laufzeit` (Komposition: alle Laufzeit-Generatoren) und `Domain.Leitung` (nur der Nutzlast-Mapper) |
 | `Client.SourceGeneration` | `Domain.Client.Modules.Blazor` |
 
-Die Symbol-Generatoren und der `GesamtbildAnalyzer` sehen die Domäne nur, weil `Infrastructure.csproj` die Domänen-Projekte (`Domain`,
-`Domain.Projections`, `Domain.Pipeline`, `Domain.Infrastructure`) referenziert. `Infrastructure` ist damit zugleich Framework und
-Komposition — eine offene Kopplung (docs/13 W2-1).
+**Framework und Komposition sind getrennt** (docs/07, Rolle Komposition). `Infrastructure` ist reines Framework und referenziert kein
+Domänen-Projekt. Die Komposition der Anwendung (`<Wurzel>.Laufzeit`, hier `Domain.Laufzeit`) referenziert Framework und alle Rollen-Projekte;
+nur dort laufen die Laufzeit-Generatoren (Gate `Laufzeitprojekt.Ist`: Rolle Komposition). Der `AnwendungGenerator` fasst ihre Tabellen zu
+`GeneratedAnwendung : Infrastructure.Komposition.IAnwendung` zusammen und erzeugt das `AddCqrs(args)` der Hosts, das die Anwendung anmeldet
+(`Anwendung.Setze`); das Framework liest die Tabellen nur über `Anwendung.Typen`, `Anwendung.Wire`, `Anwendung.Pipelines` … Tests melden die
+Anwendung per `[ModuleInitializer]` an (`AnwendungAnmelden.cs`). Ein Prozess fährt eine Anwendung.
 
 ## 5.2 Die Generatoren
 
@@ -53,7 +56,7 @@ Komposition — eine offene Kopplung (docs/13 W2-1).
 | `Generator` | `IDecider<T>`/`IApplier<T>` | `{State}.{Klasse}.State.g.cs` | injiziert `State`-Property + Ctor in Decider/Applier |
 | `StatePropertyGenerator` | `IState` | `{State}.State.g.cs` | `Guid Id` + `int Version` |
 | `AggregateHandlerGenerator` | `IState` + nested Decider/Applier | `{State}AggregateHandler` | `HandleCommand`/`ApplyEvent`-Switch, entpackt `OneOf`; `CodeHash` (State + Applier) für Snapshots |
-| `HandlerFactoryGenerator` | `IState` | `AggregateHandlerFactory` (ns `Infrastructure`) | State-Typ → Handler |
+| `HandlerFactoryGenerator` | `IState` | `AggregateHandlerFactory` (ns = Projekt der Aggregate) | State-Typ → Handler |
 | `SignalTypeGenerator` | `IEvent` & nicht transient | `StateChangeVia{Event}` | Weckruf-Signal je persistiertem Event (bewusst syntax-lokal) |
 | `SubscriberDispatchGenerator` | `ISubscriber` + `Handle(…)` | `{Sub}.Dispatch.g.cs` | `SubscribedTypes` + `DispatchAsync` mit Fähigkeits-Parametern |
 | `ProjectionReaderDispatchGenerator` | `IReader<T>` + `Handle(TQuery,…)` | `{Reader}.Dispatch.g.cs` | Query-Routing |
@@ -86,7 +89,7 @@ Komposition — eine offene Kopplung (docs/13 W2-1).
 ### Projections.SourceGeneration
 | Generator | Input | Output | Zweck |
 |---|---|---|---|
-| `ProjectionServicesGenerator` | `IReadModel`, Store-Klassen mit Fähigkeiten, `IReader<T>` | `GeneratedProjectionServices` (ns `Domain.Infrastructure.Generated`) | Marten-Schema je Read-Model, Stores Scoped unter jeder Fähigkeit + Bündel, Reader, Read-Model-Typen für den Neuaufbau (CQRS053) |
+| `ProjectionServicesGenerator` | `IReadModel`, Store-Klassen mit Fähigkeiten, `IReader<T>` | `GeneratedProjectionServices` (ns `{Projekt}.Generated`) + `IQueryDienst` | Marten-Schema je Read-Model, Stores Scoped unter jeder Fähigkeit + Bündel, Reader, Read-Model-Typen für den Neuaufbau (CQRS053) |
 
 ### Client.SourceGeneration (Syntax, außer `WiringGenerator`)
 | Generator | Input | Zweck |
@@ -167,13 +170,15 @@ Cqrs.Codegen                     (gebaut über eine reine Build-Reihenfolge-Refe
 Domain.Leitung: Target CqrsCodegenPrepass  (AfterTargets=ResolveProjectReferences, `dotnet exec Cqrs.Codegen.dll`)
   liest die gebauten Domänen-DLLs per MetadataLoadContext und schreibt nur bei geändertem Inhalt:
     Domain.Leitung/domain.proto
-    Infrastructure/Serialization/EventJsonSerializerContext.g.cs
-    Infrastructure/Serialization/CqrsWireJsonContext.g.cs
+    Domain.Laufzeit/Serialization/EventJsonSerializerContext.g.cs
+    Domain.Laufzeit/Serialization/CqrsWireJsonContext.g.cs
     Domain.Client.Worker.Python.ML/domain_client/generated/vertraege.py · funktionen.py · funktions_tabelle.py
         ▼
 Domain.Leitung: Grpc.Tools kompiliert domain.proto → {Typ}Dto        (nur Domänen-DTOs)
         ▼
-Infrastructure: STJ-Generator über beide Kontexte; DtoMapperSourceGenerator mappt Domain ↔ {Typ}Dto ↔ Nutzlast
+Domain.Leitung: DtoMapperSourceGenerator → GeneratedNutzlast (Domain ↔ {Typ}Dto ↔ Nutzlast)
+        ▼
+Domain.Laufzeit: STJ-Generator über beide Kontexte; Laufzeit-Generatoren; GeneratedAnwendung
 ```
 
 **Die Leitung.** Dienst, Hüllen (`CommandEnvelopeDto`, `EventEnvelopeDto`) und Protokoll-Nachrichten stehen handgeschrieben im Framework

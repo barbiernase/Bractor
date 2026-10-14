@@ -1,5 +1,6 @@
 using Abstractions;
 using Infrastructure.Mapping;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Projections;
 
@@ -32,8 +33,8 @@ public sealed class SignalReceiver
     /// </summary>
     public static IReadOnlyList<Type> SignalTypesFor(IEnumerable<Type> eventTypes)
         => eventTypes
-            .Where(t => GeneratedSignalRoutes.EventToSignal.ContainsKey(t))
-            .Select(t => GeneratedSignalRoutes.EventToSignal[t])
+            .Where(t => Anwendung.Signale.EventToSignal.ContainsKey(t))
+            .Select(t => Anwendung.Signale.EventToSignal[t])
             .Distinct()
             .ToList();
 }

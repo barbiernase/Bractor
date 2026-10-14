@@ -15,7 +15,8 @@ Abschnittsnummern sind stabil, weil Code-Kommentare und `CLAUDE.md` auf dieses K
 
 ### Host.Grpc-Bootstrap (`Host.Grpc/Program.cs`)
 
-`Program.cs` ist nur `var umgebung = builder.AddCqrs(args); … await app.LaufeAsync(umgebung);` — ohne Domänen-Zeile (`konzept-werkbank.md` §4.2).
+`Program.cs` ist nur `var umgebung = builder.AddCqrs(args); … await app.LaufeAsync(umgebung);` — ohne Domänen-Zeile (`konzept-werkbank.md` §4.2);
+`AddCqrs(args)` generiert die Komposition (`Domain.Laufzeit`, `GeneratedAnwendung`), die der Host referenziert.
 
 - **Umgebung:** `--umgebung <name>` bzw. `CQRS_UMGEBUNG` → `umgebungen/umgebung.<name>.json` (mit dem Host veröffentlicht). Umgebungsvariablen
   und Argumente überschreiben (`Quellen__DateiErkannt__Pfad=…`), `${env:NAME}` und `${branch}` (aus `CQRS_BRANCH`) werden ersetzt; ein
@@ -56,7 +57,7 @@ Ohne Serializer wären die internen Actor-Nachrichten rohe CLR-Records → de fa
 `Serialize/Deserialize/TypeName/CanSerialize`) und `GeneratedWirePoly` (polymorpher Payload-Dispatch je Wurzel Event, Command, Signal, Auftrag).
 Diskriminator = Typname, identisch zu `GeneratedTypeRegistry`. Signale serialisiert der Generator selbst (uniform `(StreamId, Version)`).
 
-**STJ-Manifest** — `CqrsWireJsonContext` (`Infrastructure/Serialization/CqrsWireJsonContext.g.cs`, `Metadata`-Mode) ist **generiert**: der
+**STJ-Manifest** — `CqrsWireJsonContext` (`Domain.Laufzeit/Serialization/CqrsWireJsonContext.g.cs`, `Metadata`-Mode) ist **generiert**: der
 Codegen-Schritt im Build (Target `CqrsCodegenPrepass` in `Domain.Leitung/Domain.Leitung.csproj` → `Cqrs.Codegen`, `JsonContextEmitter`) schreibt
 Framework-Kopf (alle Wire-Hüllen) plus alle Commands/Events/Trigger der Domäne. Eingebacken sind die Converter aus `WirePolyConverters.cs`
 (`IEvent`, `ICommand`, `IAuftrag`, `IStateChangeSignal`, `IMessageEnvelope`, `PID`, `CommandModus`). `Cqrs.Codegen` liest die gebauten

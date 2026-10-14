@@ -15,7 +15,7 @@ namespace Infrastructure.Pruefstand.Aggregate;
 /// </summary>
 public class SammelvorgangBarriereTests
 {
-    private static readonly IAggregateHandlerFactory Fabrik = new Infrastructure.AggregateHandlerFactory();
+    private static readonly IAggregateHandlerFactory Fabrik = new Domain.AggregateHandlerFactory();
 
     [Fact]
     public void Barriere_feuert_erst_beim_letzten_Teil_N_zur_Laufzeit()

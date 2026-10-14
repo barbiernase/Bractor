@@ -19,7 +19,7 @@ namespace Infrastructure.Pruefstand.Funktionen;
 public class UmgezogeneFluesseTests
 {
     private static FlussLaufwerk Laufwerk()
-        => new(new SagaLaufwerk(new Infrastructure.AggregateHandlerFactory(), Array.Empty<(string, ProzessRegeln)>()),
+        => new(new SagaLaufwerk(new Domain.AggregateHandlerFactory(), Array.Empty<(string, ProzessRegeln)>()),
             new (string, PipelineFluss)[]
             {
                 (nameof(DatensatzRangeAufloesung), new DatensatzRangeAufloesung().Fluss),

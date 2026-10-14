@@ -4,7 +4,8 @@
 // liefern die generierten Tabellen, was aktiv ist und mit welchen Werten, sagt die Umgebung. Sim und Prod unterscheiden sich nur dort.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 
-using Infrastructure.Umgebung;
+using Domain.Laufzeit;            // AddCqrs der Komposition (meldet die Anwendung an)
+using Infrastructure.Umgebung;    // LaufeAsync
 
 var builder = WebApplication.CreateBuilder(args);
 var umgebung = builder.AddCqrs(args);

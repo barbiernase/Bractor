@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using Infrastructure.Mapping;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Serialization;
 
@@ -23,17 +24,17 @@ public static class WireSerializerBootCheck
     public static void Verify()
     {
         // (a) Top-Level-Hüllen serialisierbar
-        foreach (var t in GeneratedWire.WireMessageTypes)
-            if (!GeneratedWire.CanSerialize(t))
+        foreach (var t in Anwendung.Wire.WireMessageTypes)
+            if (!Anwendung.Wire.CanSerialize(t))
                 throw new InvalidOperationException(
                     $"[Wire] Top-Level-Nachricht {t.FullName} ist nicht serialisierbar — Wire-Serializer unvollständig.");
 
         // (b) STJ-Payloads (Commands/Events/Triggers) haben eine JsonTypeInfo im Context.
-        var stjPayloads = GeneratedTypeRegistry.Commands.Values
-            .Concat(GeneratedTypeRegistry.Events.Values)
-            .Concat(GeneratedTypeRegistry.Triggers.Values);
+        var stjPayloads = Anwendung.Typen.Commands.Values
+            .Concat(Anwendung.Typen.Events.Values)
+            .Concat(Anwendung.Typen.Triggers.Values);
         foreach (var t in stjPayloads)
-            if (CqrsWireJsonContext.Default.GetTypeInfo(t) is null)
+            if (Anwendung.WireJson.GetTypeInfo(t) is null)
                 throw new InvalidOperationException(
                     $"[Wire] Kein Wire-JsonTypeInfo für Payload-Typ {t.FullName}. " +
                     $"Fehlt eine [JsonSerializable]-Zeile in CqrsWireJsonContext?");
@@ -41,8 +42,8 @@ public static class WireSerializerBootCheck
         // (c) Signale sind BEWUSST nicht STJ-backed (uniform (StreamId,Version), self-serialized über
         //     GeneratedWirePoly.WriteSignal/ReadSignal). Backstop hier: jeder Registry-Signaltyp ist im
         //     generierten Signal-Dispatch enthalten (sonst Registry↔Generator-Drift).
-        var signalDispatch = GeneratedWirePoly.SignalTypes.ToHashSet();
-        foreach (var t in GeneratedTypeRegistry.Signals.Values)
+        var signalDispatch = Anwendung.WirePoly.SignalTypes.ToHashSet();
+        foreach (var t in Anwendung.Typen.Signals.Values)
             if (!signalDispatch.Contains(t))
                 throw new InvalidOperationException(
                     $"[Wire] Signal {t.FullName} fehlt im generierten Signal-Dispatch (GeneratedWirePoly). " +

@@ -1,5 +1,4 @@
 using Abstractions;
-using Domain.Infrastructure.Generated;
 using Infrastructure.Aggregate.ActorSystem;
 using Infrastructure.GrpcClient;
 using Infrastructure.Persistence;
@@ -23,6 +22,7 @@ using Proto.Remote;
 using Proto.Remote.GrpcNet;
 using StackExchange.Redis;
 using Weasel.Core;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Extensions;
 
@@ -93,7 +93,7 @@ public static class CqrsServiceExtensions
         
         // 2. Domain-Stores + Reader (generiert vom ProjectionServicesGenerator in Domain.Infrastructure).
         //    Stores sind SCOPED; Handles bekommen ihre Fähigkeiten über einen Bereich der Fabrik.
-        services.AddGeneratedProjectionServices();
+        Anwendung.Aktuell.RegistriereLeseseite(services);
         services.AddSingleton<Abstractions.IFaehigkeitsFabrik, Infrastructure.Projections.DiFaehigkeitsFabrik>();
         
         // 3. Aggregate-Components -- GENERIERT
@@ -170,7 +170,7 @@ public static class CqrsServiceExtensions
                 // (Dictionary<string,object>). Ohne den Fallback wirft jeder Append auf den Headers.
                 options.UseSystemTextJsonForSerialization(configure: o =>
                     o.TypeInfoResolver = System.Text.Json.Serialization.Metadata.JsonTypeInfoResolver.Combine(
-                        Serialization.EventJsonSerializerContext.Default,
+                        Anwendung.EventJson,
                         new System.Text.Json.Serialization.Metadata.DefaultJsonTypeInfoResolver()));
                 Console.WriteLine("  + STJ Source-Gen Serializer für Events aktiv (UseGeneratedJsonSerializer)");
             }
@@ -207,7 +207,7 @@ public static class CqrsServiceExtensions
 
             // ★ Snapshots (docs/03-schreibseite.md): ein jsonb-Dokument je Aggregat-Typ
             //   (Snapshot<Konto> → es.mt_doc_snapshot_konto). Registrierung generiert, reflection-frei.
-            Persistence.RegisteredSnapshotTypes.Register(options);
+            Anwendung.Aktuell.RegistriereSnapshots(options);
 
             // ★ P5b: der Prozess-Marking-Cursor (docs/04-konsum-und-prozess-maschine.md §4.5): ein jsonb-Dokument je
             //   Korrelation, abgeleiteter Cache des gefalteten Markings → Tail-Fold statt Voll-Fold (O(N²)→O(N)).
@@ -330,7 +330,7 @@ public static class CqrsServiceExtensions
     public static IServiceCollection AddCqrsAggregates(this IServiceCollection services)
     {
         Console.WriteLine("[CQRS] Registriere Aggregates...");
-        GeneratedAggregates.RegisterAllAggregateComponents(services);
+        Anwendung.Aggregate.RegisterAllAggregateComponents(services);
         Console.WriteLine("  + Aggregate-Components (generiert)");
         Console.WriteLine();
         return services;
@@ -438,7 +438,7 @@ public static class CqrsServiceExtensions
                     identityLookup: new PartitionIdentityLookup())
                 .WithBrokerKinds(loggerFactory);
         
-            var aggregateKinds = GeneratedAggregates.GetAllKinds(system);
+            var aggregateKinds = Anwendung.Aggregate.GetAllKinds(system);
             foreach (var kind in aggregateKinds)
             {
                 clusterConfig = clusterConfig.WithClusterKind(kind);
@@ -446,7 +446,7 @@ public static class CqrsServiceExtensions
         
             Console.WriteLine($"  + {aggregateKinds.Length} Aggregate-Kinds registriert");
         
-            var pipelineKinds = Infrastructure.Pipeline.GeneratedPipelines.GetPipelineKinds(provider, system);
+            var pipelineKinds = Anwendung.Pipelines.GetPipelineKinds(provider, system);
             foreach (var kind in pipelineKinds)
             {
                 clusterConfig = clusterConfig.WithClusterKind(kind);

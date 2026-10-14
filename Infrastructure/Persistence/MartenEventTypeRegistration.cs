@@ -4,6 +4,7 @@ using System.Linq;
 using Abstractions;
 using Infrastructure.Mapping;
 using Marten;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Persistence;
 
@@ -35,13 +36,13 @@ public static class MartenEventTypeRegistration
         //   Für NICHT-evolvierte Events ist das exakt identisch zu GeneratedTypeRegistry.PersistableEvents
         //   (Basis-snake_case). So deserialisiert Marten alte Bytes getreu in den früheren Typ; das
         //   Aufwerten auf die aktuelle Gestalt macht danach GeneratedEventUpcasting.Aufwerten (Read-Pfad).
-        foreach (var (eventType, diskriminator) in Serialization.GeneratedEventUpcasting.Registrierungen)
+        foreach (var (eventType, diskriminator) in Anwendung.Upcasting.Registrierungen)
         {
             options.Events.MapEventType(eventType, diskriminator);
         }
 
-        Console.WriteLine($"[Marten] {Serialization.GeneratedEventUpcasting.Registrierungen.Count} Event-Typen registriert (from GeneratedEventUpcasting, inkl. früherer Versionen):");
-        foreach (var (eventType, diskriminator) in Serialization.GeneratedEventUpcasting.Registrierungen)
+        Console.WriteLine($"[Marten] {Anwendung.Upcasting.Registrierungen.Count} Event-Typen registriert (from GeneratedEventUpcasting, inkl. früherer Versionen):");
+        foreach (var (eventType, diskriminator) in Anwendung.Upcasting.Registrierungen)
         {
             Console.WriteLine($"  → {eventType.Name} → {diskriminator}");
         }
@@ -53,7 +54,7 @@ public static class MartenEventTypeRegistration
     /// </summary>
     public static IReadOnlyList<Type> DiscoverEventTypes()
     {
-        return GeneratedTypeRegistry.PersistableEventTypes;
+        return Anwendung.Typen.PersistableEventTypes;
     }
 }
 

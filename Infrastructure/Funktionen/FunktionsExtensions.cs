@@ -4,6 +4,7 @@ using Infrastructure.Prozess;       // ProzessManagerActor, ProzessWake
 using Microsoft.Extensions.DependencyInjection;
 using Proto;
 using Proto.Cluster;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Funktionen;
 
@@ -60,10 +61,10 @@ public static class FunktionsExtensions
         var bindungen = sp.GetServices<FunktionsBindung>().GroupBy(b => b.Funktion).ToDictionary(g => g.Key, g => g.Last());
         return new FunktionsAusfuehrer(
             sp.GetRequiredService<IEventStoreRepository>(),
-            (auftrag, x) => GeneratedFunktionen.RufeAsync(sp, auftrag, x),
+            (auftrag, x) => Anwendung.Funktionen.RufeAsync(sp, auftrag, x),
             // Der Cluster wird erst beim Wecken aufgelöst (er ist bei der Registrierung noch nicht fertig — die (A)-Lektion).
             (korrelation, ct) => WeckeProzessAsync(sp.GetRequiredService<ActorSystem>(), korrelation, ct),
-            auftrag => GeneratedFunktionen.AuftragZuFunktion.TryGetValue(auftrag.GetType(), out var f) &&
+            auftrag => Anwendung.Funktionen.AuftragZuFunktion.TryGetValue(auftrag.GetType(), out var f) &&
                        bindungen.TryGetValue(f, out var b) ? b : null);
     }
 
@@ -86,9 +87,9 @@ public static class FunktionsExtensions
         var liste = bindungen.ToList();
         var gebunden = new HashSet<Type>(liste.Select(b => b.Funktion));
         // Eine Funktion mit Lese-Fähigkeiten braucht die Stores des Hosts — draußen (Python, GPU-Rechner) gibt es sie nicht.
-        foreach (var b in liste.Where(b => b.Extern && GeneratedFunktionen.Faehigkeiten.ContainsKey(b.Funktion)))
+        foreach (var b in liste.Where(b => b.Extern && Anwendung.Funktionen.Faehigkeiten.ContainsKey(b.Funktion)))
             throw new Infrastructure.Umgebung.BootFehler(
-                $"Die Funktion '{b.Funktion.Name}' liest Fähigkeiten ({string.Join(", ", GeneratedFunktionen.Faehigkeiten[b.Funktion].Select(t => t.Name))}) " +
+                $"Die Funktion '{b.Funktion.Name}' liest Fähigkeiten ({string.Join(", ", Anwendung.Funktionen.Faehigkeiten[b.Funktion].Select(t => t.Name))}) " +
                 "und läuft deshalb nur im Host (Funktionen:" + b.Funktion.Name + ":Laufort = Host).", "funktion:" + b.Funktion.Name);
         foreach (var (name, regeln) in registry)
             foreach (var f in regeln.Regeln.SelectMany(r => r.GerufeneFunktionen).Distinct())
@@ -103,9 +104,9 @@ public static class FunktionsExtensions
     /// Command die Events seines Decide (OneOf).
     /// </summary>
     public static IEnumerable<Type> Produziert(Type ziel)
-        => GeneratedFunktionen.Ergebnisse.TryGetValue(ziel, out var ergebnisse)
+        => Anwendung.Funktionen.Ergebnisse.TryGetValue(ziel, out var ergebnisse)
             ? ergebnisse
-            : Infrastructure.Mapping.GeneratedCommandRouting.Produziert(ziel);
+            : Anwendung.Routing.Produziert(ziel);
 }
 
 /// <summary>Eine Implementierung einer Katalog-Funktion (aus <c>GeneratedFunktionen.Implementierungen</c>): Name, Typ + generische Bindung.</summary>
@@ -119,8 +120,8 @@ public static class FunktionsLaufortExtensions
     /// eine Funktion mit Lese-Fähigkeit läuft nie extern. Eine gerufene, aber nicht gebundene Funktion meldet der Boot-Guard.
     /// </summary>
     public static IServiceCollection BindeFunktionen(this IServiceCollection services, IReadOnlyDictionary<string, Abstractions.FunktionsKonfig> konfig)
-        => services.BindeFunktionen(konfig, GeneratedFunktionen.Namen, GeneratedFunktionen.Implementierungen, GeneratedFunktionen.Extern,
-            GeneratedFunktionen.Faehigkeiten);
+        => services.BindeFunktionen(konfig, Anwendung.Funktionen.Namen, Anwendung.Funktionen.Implementierungen, Anwendung.Funktionen.Extern,
+            Anwendung.Funktionen.Faehigkeiten);
 
     public static IServiceCollection BindeFunktionen(this IServiceCollection services, IReadOnlyDictionary<string, Abstractions.FunktionsKonfig> konfig,
         IReadOnlyDictionary<string, Type> namen, IReadOnlyList<FunktionsImplementierung> implementierungen,

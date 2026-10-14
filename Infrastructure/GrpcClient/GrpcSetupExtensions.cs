@@ -1,4 +1,5 @@
 // REPO-PFAD: Infrastructure/GrpcClient/GrpcSetupExtensions.cs  (MODIFIZIERT)
+using Infrastructure.Komposition;
 using Infrastructure.Mapping;
 using Infrastructure.Serialization;
 using Microsoft.AspNetCore.Builder;
@@ -20,7 +21,7 @@ public static class GrpcSetupExtensions
         Console.WriteLine("[Setup] Registriere gRPC Client Services...");
 
         // ProtoMessageMapper über der Nutzlast-Tabelle der Anwendung (Leitungs-Projekt)
-        services.AddSingleton<Cqrs.Leitung.INutzlastTabelle>(Domain.Leitung.GeneratedNutzlast.Instanz);
+        services.AddSingleton(Anwendung.Aktuell.Nutzlast);
         services.AddSingleton<ProtoMessageMapper>();
         Console.WriteLine("  ✓ ProtoMessageMapper");
 

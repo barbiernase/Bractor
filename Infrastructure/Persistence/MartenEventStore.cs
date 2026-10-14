@@ -4,6 +4,7 @@ using JasperFx.Events;
 using Marten;
 using Marten.Exceptions;
 using Microsoft.Extensions.Logging;
+using Infrastructure.Komposition;
 using IEvent = Abstractions.IEvent;
 
 namespace Infrastructure.Persistence;
@@ -172,7 +173,7 @@ public class MartenEventStore : IEventStoreRepository
             //   unverändert durch. Ein unbekannter Typ WIRFT (statt still übersprungen zu werden).
             //   Die Version zählt pro GESPEICHERTEM Event (nicht pro materialisiertem) — Split-invariant:
             //   auch wenn ein Stored-Event später zu mehreren wird, rückt die Stream-Position um 1.
-            foreach (var domainEvent in GeneratedEventUpcasting.Aufwerten(@event.Data))
+            foreach (var domainEvent in Anwendung.Upcasting.Aufwerten(@event.Data))
             {
                 // Interne Inbox-/Prozess-Marken: in der Version mitzählen, aber nicht auf den State anwenden
                 // (der Applier kennt sie nicht) — Framework-Naht (Exactly-once-Inbox).
@@ -224,7 +225,7 @@ public class MartenEventStore : IEventStoreRepository
             //   aber aufsteigende SubIndex 0,1,… → der Dedup-/Exactly-once-Schlüssel append-artiger
             //   Projektionen (AggregateId, AggregateVersion, SubIndex) bleibt eindeutig. Für 1:1 ist
             //   SubIndex immer 0 und das Verhalten identisch zu vorher.
-            var materialisiert = GeneratedEventUpcasting.Aufwerten(e.Data);
+            var materialisiert = Anwendung.Upcasting.Aufwerten(e.Data);
             for (int si = 0; si < materialisiert.Count; si++)
             {
                 result.Add(new EventEnvelope

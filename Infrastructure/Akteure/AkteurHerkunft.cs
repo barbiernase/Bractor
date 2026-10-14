@@ -1,4 +1,5 @@
 using Abstractions;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Akteure;
 
@@ -18,7 +19,7 @@ public static class AkteurHerkunft
     private static readonly Lazy<Dictionary<Type, string?>> Halter = new(() =>
     {
         var d = new Dictionary<Type, string?>();
-        foreach (var a in GeneratedAkteurRechte.Alle.Values)
+        foreach (var a in Anwendung.Akteure.Rechte.Values)
             foreach (var t in a.Commands.Concat(a.Queries).Concat(a.Trigger).Concat(a.TransientEvents))
                 d[t] = d.ContainsKey(t) ? null : a.Name;   // zweiter Halter → mehrdeutig
         return d;

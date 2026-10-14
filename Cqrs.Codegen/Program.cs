@@ -45,8 +45,8 @@ var pythonGeneriert = Path.Combine(Abstractions.Projektstruktur.PythonWorker(wur
 var artefakte = new[]
 {
     Path.Combine(Abstractions.Projektstruktur.Projekt(wurzel, Abstractions.Projektstruktur.Rolle.Leitung), Abstractions.Projektstruktur.ProtoDatei),
-    Path.Combine(Abstractions.Projektstruktur.SerialisierungsOrdner, "EventJsonSerializerContext.g.cs"),
-    Path.Combine(Abstractions.Projektstruktur.SerialisierungsOrdner, "CqrsWireJsonContext.g.cs"),
+    Path.Combine(Abstractions.Projektstruktur.SerialisierungsOrdner(wurzel), "EventJsonSerializerContext.g.cs"),
+    Path.Combine(Abstractions.Projektstruktur.SerialisierungsOrdner(wurzel), "CqrsWireJsonContext.g.cs"),
     Path.Combine(pythonGeneriert, "vertraege.py"),
     Path.Combine(pythonGeneriert, "funktionen.py"),
     Path.Combine(pythonGeneriert, "funktions_tabelle.py"),
@@ -210,7 +210,7 @@ Console.WriteLine();
 Console.WriteLine("Scanne Marker (STJ-Kontexte)...");
 var (eventContext, wireContext, stats) = JsonContextEmitter.Emit(assemblies);
 
-var serializationDir = Path.Combine(solutionDir, Abstractions.Projektstruktur.SerialisierungsOrdner);
+var serializationDir = Path.Combine(solutionDir, Abstractions.Projektstruktur.SerialisierungsOrdner(wurzel));
 if (!Directory.Exists(serializationDir))
 {
     Console.Error.WriteLine($"❌ Serialization-Verzeichnis fehlt: {serializationDir}");

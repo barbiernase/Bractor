@@ -17,7 +17,7 @@ namespace Infrastructure.Pruefstand.Aggregate;
 /// </summary>
 public class SammelvorgangKaskadeTests
 {
-    private static readonly IAggregateHandlerFactory Fabrik = new Infrastructure.AggregateHandlerFactory();
+    private static readonly IAggregateHandlerFactory Fabrik = new Domain.AggregateHandlerFactory();
 
     [Fact]
     public void Fanout_dann_Fanin_Barriere_feuert_erst_beim_letzten_Teil()

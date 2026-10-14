@@ -125,8 +125,9 @@ namespace Domain.SourceGeneration
 
             if (!distinctAggregates.Any()) return;
             
+            // Die Fabrik liegt in der Assembly ihrer Aggregate, im Namespace des Projekts (docs/07: Namespace = Projekt).
             var model = new FactoryGeneratorModel(
-                factoryNamespace: "Infrastructure",
+                factoryNamespace: aggregates.OfType<INamedTypeSymbol>().First().ContainingAssembly.Name,
                 factoryClassName: "AggregateHandlerFactory",
                 aggregates: distinctAggregates
             );

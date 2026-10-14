@@ -1,6 +1,7 @@
 using Abstractions;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Akteure;
 
@@ -92,8 +93,8 @@ public static class AkteurExtensions
     {
         var optionen = new AkteurOptionen();
         konfiguriere(optionen);
-        optionen.Pruefe(GeneratedAkteurRechte.Alle);
-        services.AddSingleton(new AkteurTor(optionen, GeneratedAkteurRechte.Alle));
+        optionen.Pruefe(Anwendung.Akteure.Rechte);
+        services.AddSingleton(new AkteurTor(optionen, Anwendung.Akteure.Rechte));
         return services;
     }
 

@@ -66,7 +66,8 @@ Was welche Generatoren und Analyzer tun: [05](05-generatoren-analyzer-proto.md).
 ### Hosts
 | Projekt | Rolle |
 |---|---|
-| `Host.Grpc` | der Cluster-Knoten: `builder.AddCqrs(args)` + `app.LaufeAsync(umgebung)`, Konfiguration aus `umgebungen/umgebung.<name>.json` |
+| `Domain.Laufzeit` | die Komposition der Anwendung (Rolle `.Laufzeit`): Framework + Rollen-Projekte, alle Laufzeit-Generate, `GeneratedAnwendung` und das `AddCqrs` der Hosts; die STJ-Kontexte |
+| `Host.Grpc` | der Cluster-Knoten: `builder.AddCqrs(args)` (aus `Domain.Laufzeit`) + `app.LaufeAsync(umgebung)`, Konfiguration aus `umgebungen/umgebung.<name>.json` |
 | `Host.Blazor` | Blazor-Server-Host des Arbeitsplatz-Clients (kein Cluster-Member, gRPC zu `Host.Grpc`), ebenfalls mit `--umgebung` |
 
 ### Clients

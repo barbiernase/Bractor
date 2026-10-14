@@ -3,6 +3,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Proto;
 using Proto.Cluster;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Pipeline;
 
@@ -47,7 +48,7 @@ public class PipelineStartupService : IHostedService
 
     public Task StartAsync(CancellationToken ct)
     {
-        var pipelines = GeneratedPipelines.GetPipelineIds(_serviceProvider).ToList();
+        var pipelines = Anwendung.Pipelines.GetPipelineIds(_serviceProvider).ToList();
 
         Console.WriteLine();
         Console.WriteLine("=== Pipeline Startup ===");

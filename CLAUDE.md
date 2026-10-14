@@ -55,12 +55,14 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 | Bereich | Ort |
 |---|---|
 | Verträge, Marker, geteilte Regeln (eine Quelle) | `Abstractions/` (z. B. `Akteurvertrag.cs`, `Funktionsvertrag.cs`, `Dienstvertrag.cs`, `Projektstruktur.cs`, `Spur/WirkerId.cs`, `Spur/SpurWeg.cs`, `StoreZugriff.cs`, `Umgebung/UmgebungKonfig.cs`) |
-| Laufzeit | `Infrastructure/` (Prozess, Projections, Quellen/Treiber, Funktionen, Dienste, Umgebung, Einblick, Eingang, Akteure) |
+| Laufzeit (Framework) | `Infrastructure/` (Prozess, Projections, Quellen/Treiber, Funktionen, Dienste, Umgebung, Einblick, Eingang, Akteure); referenziert keine Domäne, liest sie über `Komposition/Anwendung.cs` (`IAnwendung`) |
+| Leitung | `Cqrs.Leitung/cqrs.proto` (Framework: Dienst, Hüllen, `Nutzlast`); je Anwendung `<Wurzel>.Leitung` (Domänen-DTOs + `GeneratedNutzlast`) |
+| Komposition | `<Wurzel>.Laufzeit` (hier `Domain.Laufzeit`): Laufzeit-Generate, `GeneratedAnwendung`, `AddCqrs(args)` der Hosts |
 | Generatoren und Analyzer | `*.SourceGeneration/`; Codegen vor dem Build (Proto, STJ-Kontexte, Python-Basen): `Cqrs.Codegen` über das Target in `Domain.Leitung` |
 | Lesen, Sicht, Schreiben, Prüfen | `GraphExtractor.Kern/` (`Lesen`, `Sicht/`, `Schreiben/`, `Sonde/`, `ParitaetsPruefung`), CLI `GraphExtractor/` |
 | Grammatik, Scaffolder | `DomainEditor/` |
 | Werkbank | `Werkbank/` (Server `Werkbank/Server/`, Oberfläche `Werkbank/wwwroot/editor/`) |
-| Hosts | `Host.Grpc` (`AddCqrs(args)` + `LaufeAsync`), `Host.Blazor` — beide mit `--umgebung <name>` |
+| Hosts | `Host.Grpc` (`AddCqrs(args)` der Komposition + `LaufeAsync`), `Host.Blazor` (Client) — beide mit `--umgebung <name>` |
 | Beispieldomäne (Prüfling) | `Domain*`, `Domain.Akteure`, `Domain.Client.*` |
 
 ## Konventionen

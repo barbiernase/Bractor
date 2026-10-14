@@ -4,6 +4,7 @@ using Infrastructure.Funktionen;
 using Infrastructure.Umgebung;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Dienste;
 
@@ -77,7 +78,7 @@ public static class DienstExtensions
     /// </summary>
     public static IServiceCollection BindeDienste(this IServiceCollection services, UmgebungKonfig u, IConfiguration konfig)
         => services.BindeDienste(u.Dienste, konfig.GetSection(Dienstvertrag.KonfigAbschnitt),
-            GeneratedDienste.Namen, GeneratedDienste.Implementierungen, GeneratedDienste.Braucht, GeneratedDienste.Konfigs);
+            Anwendung.Dienste.Namen, Anwendung.Dienste.Implementierungen, Anwendung.Dienste.Braucht, Anwendung.Dienste.Konfigs);
 
     public static IServiceCollection BindeDienste(this IServiceCollection services, IReadOnlyDictionary<string, DienstKonfig> wahl,
         IConfigurationSection konfigAbschnitt, IReadOnlyDictionary<string, Type> namen, IReadOnlyList<DienstImplementierung> implementierungen,

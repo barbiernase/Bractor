@@ -10,12 +10,12 @@ hierher. Stand: 2026-10-13, Commit-Basis `1b1751a`. Maßstab sind die sechs Inva
 |---|---|:--:|
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
 | W10-2 | Reflektive Serialisierung zur Laufzeit (Marten-Default, Marking-Store, Snapshot-`Clone`, HTTP-Antworten); kein Reflection-Verbot im Build | P1 |
-| W2-1 | Komposition nicht getrennt: `Infrastructure` ist Framework und Komposition zugleich (Projektstruktur selbst: eine Quelle + geprüft, docs/07) | P1 |
 | T-1 | Testlücke seit `fb07f5e`: keine Saga-E2E-, Snapshot- und Marking-Äquivalenz-Tests | P1 |
 | P1-1 | Multi-Node nur container-erprobt, Consul im `-dev`-Modus | P1 |
 | P1-2 | Transport-Sicherheit: kein TLS; Identitäten für Prod fehlen | P1 |
 | P1-6 | `CancellationToken.None` im generierten Pull-Emit-Pfad | P1 |
 | P1-7 | Deploy-Skripte veraltet (starten die Hosts ohne Umgebung, alte Konfig-Schlüssel) | P1 |
+| W2-1 | Rest der Projektstruktur: Client-Framework hängt am Server-Framework, Codegen ohne Wurzel-Parameter, Generat-Namespaces, Identitäten aus einfachen Namen | P2 |
 | W11-1 | Doppelte Wege: Handle-Pipeline/Trigger/`[Ingress]` ohne Nutzer, Prozess- vs. Fluss-DSL, zwei Rumpf-Schreibwege | P2 |
 | W11-2 | Zeitlimits nur über den 15-s-Backstop entdeckt; Fristplaner hängt an der Handle-Welt | P2 |
 | W3-1 | Ableitungen im Editor-JS (Karten-Ids, Hör-Menge, Lambda-Parameter, Auto-Zuordnung, Kardinalität) | P2 |
@@ -91,21 +91,18 @@ DtoMapper, `Clientvertragslesart`, Lesart des `FunktionsGenerator`); Wirte: warm
 *Empfehlung:* generierter Kontext als Standard (plus Dokument-Kontext), `Kopie()` vom State-Generator, benannte Records + Kontext für HTTP,
 `EnableRequestDelegateGenerator`, `JsonSerializerIsReflectionEnabledByDefault=false` in den Hosts als Sperre.
 
-**W2-1 · Komposition nicht getrennt (Rest der Projektstruktur).** Die feste Projekt- und Ordnerstruktur (`docs/07`) steht seit 2026-10-14 als
-eine Tabelle im Code (`Abstractions/Projektstruktur.cs`) und wird geprüft (CQRS098, `--check` Bereich „Lage“, Sonde); Codegen, Prozess-Registry,
-Leseseiten-Generate, Scaffolder und Werkbank lesen sie, die Beispieldomäne folgt ihr. Offen bleibt:
-- `Infrastructure.csproj` referenziert die Domänen-Projekte; `Infrastructure` ist damit zugleich Framework und Komposition, nur dort laufen die
-  Laufzeit-Generatoren, und handgeschriebener Framework-Code ruft deren Generate statisch auf (`GeneratedWire`, `GeneratedAkteurRechte` …,
-  ~40 Dateien). `FactoryGenerator` emittiert `Infrastructure.AggregateHandlerFactory` in die Domänen-Assembly; die STJ-Kontexte liegen in
-  `Infrastructure/Serialization`.
-- Das Client-Framework `Client.Infrastructure` referenziert `Domain` (ungenutzt) und `Infrastructure` (nur für `ProtoMessageMapper`).
+**W2-1 · Rest der Projektstruktur.** Struktur (eine Tabelle, geprüft), Leitung (Framework-Proto + Nutzlast) und Komposition (`Domain.Laufzeit`,
+`IAnwendung`) sind seit 2026-10-14 umgesetzt (§13.6). Offen bleibt:
+- Das Client-Framework `Client.Infrastructure` referenziert `Infrastructure` (Server-Framework) nur für `ProtoMessageMapper`; der Mapper gehört in
+  ein schlankes Leitungs-Framework.
 - Framework-Code im Domänen-Projekt: der generische `funktions_worker.py` in `Domain.Client.Worker.Python.ML`.
+- Der Codegen kennt nur `Projektstruktur.StandardWurzel`; eine zweite Anwendung (T-1) braucht einen Wurzel-Parameter.
 - Namespace-Ausschlusslisten statt Fakt (`Ctorbindung.cs` mit `OpenCvSharp`, `FunktionsGenerator`, `QuellenGenerator`, `WiringGenerator`).
+- Generate der Komposition tragen noch Framework-Namespaces (`Infrastructure.Mapping.GeneratedTypeRegistry` u. a. in `Domain.Laufzeit`).
 - Identitäten aus einfachen Typnamen (`BrokerIdentity`, `GeneratedAkteurRechte`); der Client darf das Cluster-Kind eines Commands
   (`AggregateType`) selbst setzen (`CqrsClientService.cs`, `AggregateDispatcher.cs:75`).
-*Empfehlung:* ein Laufzeit-Projekt je Anwendung (`<Wurzel>.Laufzeit`) als Komposition, `Infrastructure` als reines Framework, das die Tabellen über
-eine generierte Anwendung bezieht; dann kann eine Test-Domäne (T-1) als zweite Anwendung verdrahtet werden. Unabhängig davon: `AggregateType`
-serverseitig aus `GeneratedCommandRouting`, Identitäten aus vollen Typnamen.
+*Empfehlung:* Leitungs-Framework für Client und Server, Wurzel-Parameter im Codegen, Generat-Namespaces = Komposition; unabhängig davon
+`AggregateType` serverseitig aus der Routing-Tabelle, Identitäten aus vollen Typnamen.
 
 **T-1 · Testlücke seit Commit `fb07f5e` (2026-08-18).** Mit den Beispiel-Domänen Konto/Überweisung/Reise/Lager wurden die Saga-E2E-Tests,
 `SnapshotStorePostgresTests`/`SnapshotLiveE2ETests`, die Upcasting-Tests und die Marking-Cursor-Äquivalenz gelöscht. Prozess-Kompensation,
@@ -206,8 +203,9 @@ Allgemeingültigkeit oder Hygiene.
 ## 13.5 Empfohlene Reihenfolge
 
 1. **Wissen aufräumen** (Doku, Gedächtnis — läuft, 2026-10-13).
-2. **T-1** Tests domänenneutral wiederherstellen — Sicherheitsnetz vor jedem Umbau.
-3. **W2-1** Komposition und Projekt-Rollen aus Code-Fakten; **WZ-1** Prüfungen schärfen (Sonde für alle allgemeinen Primitive).
+2. **T-1** Tests domänenneutral wiederherstellen — Sicherheitsnetz vor jedem Umbau; seit der getrennten Komposition als eigene Test-Anwendung
+   (`<Wurzel>`, `<Wurzel>.Laufzeit`) in einem eigenen Testprojekt möglich (ein Prozess fährt eine Anwendung).
+3. **W2-1** Rest (Leitungs-Framework für Client und Server, Wurzel-Parameter im Codegen); **WZ-1** Prüfungen schärfen (Sonde für alle allgemeinen Primitive).
 4. **W10-1/W10-2** Codegen auf Roslyn, Laufzeit-Serialisierung generiert, Reflection-Sperre.
 5. **W11-1/W11-2** Rückbau der Handle-/Trigger-Welt nach Takt-Treiber und flüchtigen Quellen; Fristplaner im Dirigenten; DSL-Frage.
 6. **W3-1/WB-1** Werkbank: letzte Ableitungen auf den Server, ein Rumpf-Schreibweg, tote Endpunkte weg.
@@ -215,6 +213,10 @@ Allgemeingültigkeit oder Hygiene.
 
 ## 13.6 Erledigt (früher hier offen)
 
+- **Komposition getrennt (früher W2-1, 2026-10-14):** `Infrastructure` ist reines Framework ohne Domänen-Referenz; die Komposition
+  `Domain.Laufzeit` trägt alle Laufzeit-Generate, `GeneratedAnwendung : IAnwendung` (AnwendungGenerator) und das `AddCqrs` der Hosts; die Leitung
+  der Anwendung `Domain.Leitung` (vormals `ProtoRepo`) trägt Domänen-DTOs und `GeneratedNutzlast : INutzlastTabelle`; `AggregateHandlerFactory`
+  im Namespace ihrer Assembly; der Query-Dienst der Leseseite hinter `Abstractions.IQueryDienst`.
 - **Leitung getrennt (früher P2-12, 2026-10-14):** Framework-Proto `Cqrs.Leitung/cqrs.proto` (Dienst, Hüllen) mit `Nutzlast { typ, daten }`;
   `domain.proto` enthält nur noch die Domänen-DTOs. Kein `oneof` über Domänen-Typen mehr — ein Umzug ändert die Leitung nicht.
 - **Projektstruktur als eine Quelle (früher W2-1, 2026-10-14):** `Abstractions/Projektstruktur.cs` (Rollen als Suffix zur Wurzel, Primitive → Rolle

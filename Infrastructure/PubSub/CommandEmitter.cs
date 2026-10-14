@@ -1,9 +1,10 @@
 using Abstractions;
 using Infrastructure.Aggregate;
-using Infrastructure.Pipeline;   // GeneratedPipelines.CommandAggregateTypes
+using Infrastructure.Pipeline;   // Anwendung.Pipelines.CommandAggregateTypes
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Proto.Cluster;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.PubSub;
 
@@ -67,7 +68,7 @@ public sealed class CommandEmitter : ICommandEmitter
 
     private async Task SendeAsync(ICommand cmd, Guid commandId, Guid korrelation, CancellationToken ct)
     {
-        if (!GeneratedPipelines.CommandAggregateTypes.TryGetValue(cmd.GetType(), out var aggregateType))
+        if (!Anwendung.Pipelines.CommandAggregateTypes.TryGetValue(cmd.GetType(), out var aggregateType))
         {
             _logger.LogError("[Emit] keine AggregateType-Zuordnung für {Command} — nicht routbar", cmd.GetType().Name);
             return;

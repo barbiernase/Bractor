@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.Extensions.DependencyInjection;
 using Proto;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Einblick;
 
@@ -42,7 +43,7 @@ public static class EinblickEndpunkte
 
         // Offene Aufträge je Funktion (Vermittler, nicht maßgeblich) — Stau an der Funktions-Karte.
         g.MapGet("/auftraege", async (ActorSystem system, CancellationToken ct)
-            => Results.Json(new { auftraege = await FunktionsAnbieter.ListeOffeneAsync(system, GeneratedFunktionen.Namen.Values, ct) }, Json));
+            => Results.Json(new { auftraege = await FunktionsAnbieter.ListeOffeneAsync(system, Anwendung.Funktionen.Namen.Values, ct) }, Json));
 
         // Verlierbares (Ablehnungen, transiente Events) — nur in Sim geschrieben.
         g.MapGet("/hinweise", async (long? ab, int? n, CancellationToken ct)

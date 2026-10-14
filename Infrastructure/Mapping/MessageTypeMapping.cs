@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using Abstractions;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Mapping;
 
@@ -52,19 +53,19 @@ public static class MessageTypeMapping
         {
             if (_initialized) return;
 
-            foreach (var (name, type) in GeneratedTypeRegistry.Events)
+            foreach (var (name, type) in Anwendung.Typen.Events)
                 _eventTypes[name] = type;
 
-            foreach (var (name, type) in GeneratedTypeRegistry.Commands)
+            foreach (var (name, type) in Anwendung.Typen.Commands)
                 _commandTypes[name] = type;
 
-            foreach (var (name, type) in GeneratedTypeRegistry.Queries)
+            foreach (var (name, type) in Anwendung.Typen.Queries)
                 _queryTypes[name] = type;
 
-            foreach (var (name, type) in GeneratedTypeRegistry.QueryResponses)
+            foreach (var (name, type) in Anwendung.Typen.QueryResponses)
                 _queryResponseTypes[name] = type;
 
-            foreach (var (name, type) in GeneratedTypeRegistry.Triggers)
+            foreach (var (name, type) in Anwendung.Typen.Triggers)
                 _triggerTypes[name] = type;
 
             // ★ P1a (TG-1): event → Commands DESSELBEN Aggregats — präzise aus den Decider-Signaturen
@@ -73,15 +74,15 @@ public static class MessageTypeMapping
             //   Erzeuger-Commands; die „erlaubten Commands" des Alt-Capability-Pfads (Blazor-Client) sind die
             //   Geschwister-Commands dieses Aggregats.
             var aggregatCommands = new Dictionary<string, HashSet<string>>();
-            foreach (var (cmd, agg) in GeneratedCommandRouting.CommandToAggregate)
+            foreach (var (cmd, agg) in Anwendung.Routing.CommandToAggregate)
             {
                 if (!aggregatCommands.TryGetValue(agg, out var set))
                     aggregatCommands[agg] = set = new HashSet<string>();
                 set.Add(cmd.Name);
             }
-            foreach (var (cmd, evts) in GeneratedCommandRouting.CommandToEvents)
+            foreach (var (cmd, evts) in Anwendung.Routing.CommandToEvents)
             {
-                if (!GeneratedCommandRouting.CommandToAggregate.TryGetValue(cmd, out var agg)) continue;
+                if (!Anwendung.Routing.CommandToAggregate.TryGetValue(cmd, out var agg)) continue;
                 if (!aggregatCommands.TryGetValue(agg, out var geschwister)) continue;
                 foreach (var evt in evts)
                 {

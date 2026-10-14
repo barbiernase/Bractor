@@ -93,7 +93,14 @@ public sealed class Projektlage
 
         // Aggregat-Projekte: deklarieren im Quelltext einen Typ, der IDecider<T> implementiert.
         var aggregatProjekte2 = analyse.Where(a => Deklariert(a.Item2, new[] { Vertrag.IDecider }, quelltexte)).Select(a => a.Item1).ToList();
-        var domäne = analyse.Where(a => a.Item1.Id != laufzeit.Id && a.Item1.Id != vertrag.Id && Deklariert(a.Item2, DomänenRollen, quelltexte))
+        // Die Wurzel der Anwendung aus dem Namen der Komposition (docs/07, Rolle Komposition). Domäne sind ihre Rollen-Projekte und, was auf
+        //   eines aufbaut (ein fremdes Projekt mit Domänen-Typen meldet dann die Lage-Prüfung); das Framework (Infrastructure, Core …) deklariert
+        //   zwar Nachrichten mit Rollen-Markern, baut aber auf kein Rollen-Projekt auf.
+        var (wurzel, rolle) = Abstractions.Projektstruktur.Zerlege(laufzeit.AssemblyName);
+        bool Anwendung(Project p) => rolle != Abstractions.Projektstruktur.Rolle.Komposition
+            || Abstractions.Projektstruktur.IstProjekt(wurzel, p.AssemblyName)
+            || graph.GetProjectsThatThisProjectTransitivelyDependsOn(p.Id).Any(id => Abstractions.Projektstruktur.IstProjekt(wurzel, solution.GetProject(id)!.AssemblyName));
+        var domäne = analyse.Where(a => a.Item1.Id != laufzeit.Id && a.Item1.Id != vertrag.Id && Anwendung(a.Item1) && Deklariert(a.Item2, DomänenRollen, quelltexte))
             .Select(a => a.Item2.AssemblyName ?? "").ToHashSet(StringComparer.Ordinal);
 
         // Hosts: Einstiegspunkt im handgeschriebenen Quelltext + Laufzeit in der Hülle.

@@ -3,6 +3,7 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Abstractions;
 using Proto;
+using Infrastructure.Komposition;
 
 namespace Infrastructure.Serialization;
 
@@ -19,13 +20,13 @@ namespace Infrastructure.Serialization;
 /// Diese Converter sind über <c>[JsonSourceGenerationOptions(Converters=…)]</c> in den Context
 /// eingebacken — so gelten sie auch für die geschachtelten Member der Hüllen-<c>JsonTypeInfo</c>.
 /// </summary>
-internal sealed class IEventJsonConverter : JsonConverter<IEvent>
+public sealed class IEventJsonConverter : JsonConverter<IEvent>
 {
     public override void Write(Utf8JsonWriter writer, IEvent value, JsonSerializerOptions options)
     {
         writer.WriteStartArray();
-        writer.WriteStringValue(GeneratedWirePoly.EventDiskriminator(value));
-        GeneratedWirePoly.WriteEvent(writer, value);
+        writer.WriteStringValue(Anwendung.WirePoly.EventDiskriminator(value));
+        Anwendung.WirePoly.WriteEvent(writer, value);
         writer.WriteEndArray();
     }
 
@@ -35,19 +36,19 @@ internal sealed class IEventJsonConverter : JsonConverter<IEvent>
         reader.Read();
         var disc = reader.GetString() ?? throw new JsonException("Erwartet: Event-Diskriminator (string).");
         reader.Read();
-        var evt = GeneratedWirePoly.ReadEvent(disc, ref reader);
+        var evt = Anwendung.WirePoly.ReadEvent(disc, ref reader);
         reader.Read(); // EndArray
         return evt;
     }
 }
 
-internal sealed class ICommandJsonConverter : JsonConverter<ICommand>
+public sealed class ICommandJsonConverter : JsonConverter<ICommand>
 {
     public override void Write(Utf8JsonWriter writer, ICommand value, JsonSerializerOptions options)
     {
         writer.WriteStartArray();
-        writer.WriteStringValue(GeneratedWirePoly.CommandDiskriminator(value));
-        GeneratedWirePoly.WriteCommand(writer, value);
+        writer.WriteStringValue(Anwendung.WirePoly.CommandDiskriminator(value));
+        Anwendung.WirePoly.WriteCommand(writer, value);
         writer.WriteEndArray();
     }
 
@@ -57,20 +58,20 @@ internal sealed class ICommandJsonConverter : JsonConverter<ICommand>
         reader.Read();
         var disc = reader.GetString() ?? throw new JsonException("Erwartet: Command-Diskriminator (string).");
         reader.Read();
-        var cmd = GeneratedWirePoly.ReadCommand(disc, ref reader);
+        var cmd = Anwendung.WirePoly.ReadCommand(disc, ref reader);
         reader.Read(); // EndArray
         return cmd;
     }
 }
 
 /// <summary>Auftrag an eine Katalog-Funktion in <c>AuftragAnbieten</c> (Vermittler, docs/konzept-editor-pipelines.md §14.5).</summary>
-internal sealed class IAuftragJsonConverter : JsonConverter<IAuftrag>
+public sealed class IAuftragJsonConverter : JsonConverter<IAuftrag>
 {
     public override void Write(Utf8JsonWriter writer, IAuftrag value, JsonSerializerOptions options)
     {
         writer.WriteStartArray();
-        writer.WriteStringValue(GeneratedWirePoly.AuftragDiskriminator(value));
-        GeneratedWirePoly.WriteAuftrag(writer, value);
+        writer.WriteStringValue(Anwendung.WirePoly.AuftragDiskriminator(value));
+        Anwendung.WirePoly.WriteAuftrag(writer, value);
         writer.WriteEndArray();
     }
 
@@ -80,20 +81,20 @@ internal sealed class IAuftragJsonConverter : JsonConverter<IAuftrag>
         reader.Read();
         var disc = reader.GetString() ?? throw new JsonException("Erwartet: Auftrag-Diskriminator (string).");
         reader.Read();
-        var auftrag = GeneratedWirePoly.ReadAuftrag(disc, ref reader);
+        var auftrag = Anwendung.WirePoly.ReadAuftrag(disc, ref reader);
         reader.Read(); // EndArray
         return auftrag;
     }
 }
 
 /// <summary>Signal-Payload einer <see cref="SignalEnvelope"/> (StateChangeVia{Event}). Iteration 2.</summary>
-internal sealed class IStateChangeSignalJsonConverter : JsonConverter<IStateChangeSignal>
+public sealed class IStateChangeSignalJsonConverter : JsonConverter<IStateChangeSignal>
 {
     public override void Write(Utf8JsonWriter writer, IStateChangeSignal value, JsonSerializerOptions options)
     {
         writer.WriteStartArray();
-        writer.WriteStringValue(GeneratedWirePoly.SignalDiskriminator(value));
-        GeneratedWirePoly.WriteSignal(writer, value);
+        writer.WriteStringValue(Anwendung.WirePoly.SignalDiskriminator(value));
+        Anwendung.WirePoly.WriteSignal(writer, value);
         writer.WriteEndArray();
     }
 
@@ -103,7 +104,7 @@ internal sealed class IStateChangeSignalJsonConverter : JsonConverter<IStateChan
         reader.Read();
         var disc = reader.GetString() ?? throw new JsonException("Erwartet: Signal-Diskriminator (string).");
         reader.Read();
-        var sig = GeneratedWirePoly.ReadSignal(disc, ref reader);
+        var sig = Anwendung.WirePoly.ReadSignal(disc, ref reader);
         reader.Read(); // EndArray
         return sig;
     }
@@ -116,7 +117,7 @@ internal sealed class IStateChangeSignalJsonConverter : JsonConverter<IStateChan
 /// <c>IMessageEnvelope</c>-Implementierer (<c>CommandEnvelope</c>/<c>QueryEnvelope</c>) gehen NICHT durch
 /// <c>Publish</c> und werfen hier bewusst. Hand-Converter (fixe, kleine Menge, kein Generat nötig).
 /// </summary>
-internal sealed class IMessageEnvelopeJsonConverter : JsonConverter<IMessageEnvelope>
+public sealed class IMessageEnvelopeJsonConverter : JsonConverter<IMessageEnvelope>
 {
     public override void Write(Utf8JsonWriter writer, IMessageEnvelope value, JsonSerializerOptions options)
     {
@@ -125,11 +126,11 @@ internal sealed class IMessageEnvelopeJsonConverter : JsonConverter<IMessageEnve
         {
             case EventEnvelope ee:
                 writer.WriteStringValue("EventEnvelope");
-                JsonSerializer.Serialize(writer, ee, CqrsWireJsonContext.Default.EventEnvelope);
+                JsonSerializer.Serialize(writer, ee, ((System.Text.Json.Serialization.Metadata.JsonTypeInfo<EventEnvelope>)Anwendung.WireJson.GetTypeInfo(typeof(EventEnvelope))!));
                 break;
             case SignalEnvelope se:
                 writer.WriteStringValue("SignalEnvelope");
-                JsonSerializer.Serialize(writer, se, CqrsWireJsonContext.Default.SignalEnvelope);
+                JsonSerializer.Serialize(writer, se, ((System.Text.Json.Serialization.Metadata.JsonTypeInfo<SignalEnvelope>)Anwendung.WireJson.GetTypeInfo(typeof(SignalEnvelope))!));
                 break;
             default:
                 throw new JsonException(
@@ -146,8 +147,8 @@ internal sealed class IMessageEnvelopeJsonConverter : JsonConverter<IMessageEnve
         reader.Read();
         IMessageEnvelope env = disc switch
         {
-            "EventEnvelope"  => JsonSerializer.Deserialize(ref reader, CqrsWireJsonContext.Default.EventEnvelope)!,
-            "SignalEnvelope" => JsonSerializer.Deserialize(ref reader, CqrsWireJsonContext.Default.SignalEnvelope)!,
+            "EventEnvelope"  => JsonSerializer.Deserialize(ref reader, ((System.Text.Json.Serialization.Metadata.JsonTypeInfo<EventEnvelope>)Anwendung.WireJson.GetTypeInfo(typeof(EventEnvelope))!))!,
+            "SignalEnvelope" => JsonSerializer.Deserialize(ref reader, ((System.Text.Json.Serialization.Metadata.JsonTypeInfo<SignalEnvelope>)Anwendung.WireJson.GetTypeInfo(typeof(SignalEnvelope))!))!,
             _ => throw new JsonException($"Unbekannter IMessageEnvelope-Diskriminator: {disc}"),
         };
         reader.Read(); // EndArray
@@ -162,7 +163,7 @@ internal sealed class IMessageEnvelopeJsonConverter : JsonConverter<IMessageEnve
 /// <c>context.Send(pid, …)</c> — die Location-Transparency routet über die Adresse (bewiesen im
 /// RemotePidDeliverySmokeTest). RequestId u. a. sind für ein gespeichertes Subscriber-Ziel irrelevant.
 /// </summary>
-internal sealed class PidJsonConverter : JsonConverter<PID>
+public sealed class PidJsonConverter : JsonConverter<PID>
 {
     public override void Write(Utf8JsonWriter writer, PID value, JsonSerializerOptions options)
     {
@@ -188,7 +189,7 @@ internal sealed class PidJsonConverter : JsonConverter<PID>
 /// Hand-Converter für den geschlossenen Summentyp <see cref="CommandModus"/> (privater ctor,
 /// kein parameterloser ctor → STJ kann ihn nicht default-konstruieren). Fixe 2-Fall-Form, driftfrei.
 /// </summary>
-internal sealed class CommandModusJsonConverter : JsonConverter<CommandModus>
+public sealed class CommandModusJsonConverter : JsonConverter<CommandModus>
 {
     public override void Write(Utf8JsonWriter writer, CommandModus value, JsonSerializerOptions options)
     {
