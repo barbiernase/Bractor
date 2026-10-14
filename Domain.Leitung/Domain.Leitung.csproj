@@ -32,47 +32,11 @@
     <ProjectReference Include="..\Infrastructure.SourceGeneration\Infrastructure.SourceGeneration.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
   </ItemGroup>
 
-  <!-- ══════════════════════════════════════════════════════════════════════════════════════
-       CODEGEN-PREPASS (automatisch bei jedem `dotnet build`/Rider-Build, Debug UND Release).
-
-       Erzeugt VOR protoc/STJ die Artefakte aus den GEBAUTEN Domain-DLLs per Reflection
-       (Cqrs.Codegen, kein MSBuildWorkspace; die Liste gibt das Werkzeug mit der Option „artefakte“ aus):
-         - Domain.Leitung/domain.proto
-         - Domain.Laufzeit/Serialization/EventJsonSerializerContext.g.cs, CqrsWireJsonContext.g.cs (die Komposition)
-         - die Python-Basen (vertraege.py, funktionen.py, funktions_tabelle.py)
-
-       WARUM HIER (Leitung der Anwendung): dieses Projekt ist der erste Consumer (domain.proto) und darf — anders
-       als die Domain-Projekte selbst — Cqrs.Codegen referenzieren (kein Zyklus, Cqrs.Codegen
-       referenziert Domain, nicht Domain.Leitung). Der Projektgraph erzwingt die Reihenfolge:
-         Codegen-Projekte der Domäne (Projektstruktur)  →  Cqrs.Codegen (baut deren DLLs)
-         →  Domain.Leitung (dieser Prepass, dann protoc)  →  Domain.Laufzeit (STJ-Kontexte).
-
-       ROBUSTHEIT: Die build-order-only ProjectReference (ReferenceOutputAssembly=false) stellt
-       sicher, dass Cqrs.Codegen.dll SAMT der Domain-DLLs gebaut ist, bevor der Prepass läuft.
-       Das Target hängt an ResolveProjectReferences (danach ist die DLL da) und läuft damit früh
-       im Build — deutlich vor protoc/CoreCompile. `dotnet exec` (statt `dotnet run`) vermeidet
-       ein geschachteltes MSBuild.
-
-       INKREMENTALITÄT: Das Target läuft bei jedem Build; das Werkzeug selbst entscheidet (Option „wenn-geaendert“) über einen Hash
-       der gebauten Domänen-DLLs und des Werkzeugs, ob es erzeugt — keine Liste der Domänen-Quellen hier (welche Projekte die
-       Domäne bilden, steht nur in Abstractions/Projektstruktur.cs, docs/07). Es schreibt nur bei echtem Inhaltswechsel
-       (stabile Timestamps → protoc/STJ laufen nur bei ECHTER Proto-/Kontext-Änderung nach).
-
-       Die Artefakte bleiben committet (frischer Checkout kompiliert auch ohne Tool-Lauf). -->
-  <ItemGroup>
-    <ProjectReference Include="..\Cqrs.Codegen\Cqrs.Codegen.csproj" ReferenceOutputAssembly="false" />
-  </ItemGroup>
-
-  <Target Name="CqrsCodegenPrepass"
-          AfterTargets="ResolveProjectReferences"
-          Condition="'$(DesignTimeBuild)' != 'true' And '$(BuildingProject)' == 'true'">
-    <PropertyGroup>
-      <!-- Forward-Slashes: plattformneutral (macOS/Linux/Windows) im Exec-Kommandostring. -->
-      <_CqrsCodegenDir>$(MSBuildThisFileDirectory)../Cqrs.Codegen/bin/$(Configuration)/net9.0</_CqrsCodegenDir>
-    </PropertyGroup>
-    <Exec Command="dotnet exec &quot;$(_CqrsCodegenDir)/Cqrs.Codegen.dll&quot; &quot;$(_CqrsCodegenDir)&quot; &quot;$(Configuration)&quot; --wenn-geaendert"
-          WorkingDirectory="$(MSBuildThisFileDirectory).." />
-  </Target>
+  <!-- CODEGEN-PREPASS der Anwendung (Cqrs.Codegen/CqrsCodegen.targets): hier, weil dieses Projekt der erste Consumer ist (domain.proto
+       vor protoc) und — anders als die Domain-Projekte selbst — Cqrs.Codegen referenzieren darf (kein Zyklus: Cqrs.Codegen referenziert
+       Domain, nicht Domain.Leitung). Reihenfolge: Codegen-Projekte (Projektstruktur) → Cqrs.Codegen → Domain.Leitung (Prepass, protoc)
+       → Domain.Laufzeit (STJ-Kontexte). -->
+  <Import Project="..\Cqrs.Codegen\CqrsCodegen.targets" />
 
 </Project>
        

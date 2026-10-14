@@ -1,0 +1,39 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Ebene 2 für die PRÜFDOMÄNE (docs/13 T-1, docs/12): Framework-Verhalten domänenneutral gegen ECHTES Marten/Consul/Redis —
+       Prozess-Diamant mit Kompensation, Fan-out mit Count-Join, Snapshot, Upcasting, Marking-Cursor-Äquivalenz. Ein Prozess fährt eine
+       Anwendung: dieses Testprojekt meldet nur Pruefdomaene.Laufzeit an (AnwendungAnmelden.cs). Sequentiell (xunit.runner.json). -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="FluentAssertions" Version="8.8.0" />
+    <PackageReference Include="Marten" Version="8.20.0" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="9.0.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.12.0" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Using Include="Xunit" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Je Klasse ein echter Cluster bzw. ein eigenes Schema; parallel konkurrierten sie um Postgres/Consul/Redis. -->
+    <None Include="xunit.runner.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
+    <ProjectReference Include="..\Core\Core.csproj" />
+    <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
+    <ProjectReference Include="..\Pruefdomaene\Pruefdomaene.csproj" />
+    <ProjectReference Include="..\Pruefdomaene.Laufzeit\Pruefdomaene.Laufzeit.csproj" />
+  </ItemGroup>
+
+</Project>

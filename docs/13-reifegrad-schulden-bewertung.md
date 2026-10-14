@@ -10,12 +10,11 @@ hierher. Stand: 2026-10-14, Commit-Basis `dcda9b8`. Maßstab sind die sechs Inva
 |---|---|:--:|
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
 | W10-2 | Reflektive Serialisierung zur Laufzeit (Marten-Default, Marking-Store, Snapshot-`Clone`, HTTP-Antworten); kein Reflection-Verbot im Build | P1 |
-| T-1 | Testlücke seit `fb07f5e`: keine Saga-E2E-, Snapshot- und Marking-Äquivalenz-Tests | P1 |
 | P1-1 | Multi-Node nur container-erprobt, Consul im `-dev`-Modus | P1 |
 | P1-2 | Transport-Sicherheit: kein TLS; Identitäten für Prod fehlen | P1 |
 | P1-6 | `CancellationToken.None` im generierten Pull-Emit-Pfad | P1 |
 | P1-7 | Deploy-Skripte veraltet (starten die Hosts ohne Umgebung, alte Konfig-Schlüssel) | P1 |
-| W2-1 | Rest der Projektstruktur: Client-Framework hängt am Server-Framework, Codegen ohne Wurzel-Parameter, Generat-Namespaces, Identitäten aus einfachen Namen | P2 |
+| W2-1 | Rest der Projektstruktur: Client-Framework hängt am Server-Framework, Generat-Namespaces, Identitäten aus einfachen Namen | P2 |
 | W11-1 | Doppelte Wege: Handle-Pipeline/Trigger/`[Ingress]` ohne Nutzer, Prozess- vs. Fluss-DSL, zwei Rumpf-Schreibwege | P2 |
 | W11-2 | Zeitlimits nur über den 15-s-Backstop entdeckt; Fristplaner hängt an der Handle-Welt | P2 |
 | W3-1 | Ableitungen im Editor-JS (Karten-Ids, Hör-Menge, Lambda-Parameter, Auto-Zuordnung, Kardinalität) | P2 |
@@ -48,12 +47,12 @@ Werkzeuge lesen teils per Reflection, und neben den neuen Wegen (Fluss, Quelle, 
 | Subsystem | Reife |
 |---|:--:|
 | Schreibseite | 🟢 |
-| Konsum-/Prozess-Maschine | 🟢 (Testlücke T-1) |
+| Konsum-/Prozess-Maschine | 🟢 |
 | Generatoren & Analyzer | 🟢 / 🟡 (W10-1, W2-1) |
 | Multi-Node / Transport | 🟢 / 🟡 (P1-1, P1-2) |
 | Werkbank (Extractor, Editor, Server) | 🟢 / 🟡 (W3-1, WB-1, WZ-1) |
 | Clients (Blazor, Python) | 🟢 / 🟡 (AK-1, P1-2) |
-| Tests & Vermessung | 🟢 / 🟡 (T-1) |
+| Tests & Vermessung | 🟢 |
 
 ## 13.2 Stärken
 
@@ -96,18 +95,12 @@ DtoMapper, `Clientvertragslesart`, Lesart des `FunktionsGenerator`); Wirte: warm
 - Das Client-Framework `Client.Infrastructure` referenziert `Infrastructure` (Server-Framework) nur für `ProtoMessageMapper`; der Mapper gehört in
   ein schlankes Leitungs-Framework.
 - Framework-Code im Domänen-Projekt: der generische `funktions_worker.py` in `Domain.Client.Worker.Python.ML`.
-- Der Codegen kennt nur `Projektstruktur.StandardWurzel`; eine zweite Anwendung (T-1) braucht einen Wurzel-Parameter.
 - Namespace-Ausschlusslisten statt Fakt (`Ctorbindung.cs` mit `OpenCvSharp`, `FunktionsGenerator`, `QuellenGenerator`, `WiringGenerator`).
 - Generate der Komposition tragen noch Framework-Namespaces (`Infrastructure.Mapping.GeneratedTypeRegistry` u. a. in `Domain.Laufzeit`).
 - Identitäten aus einfachen Typnamen (`BrokerIdentity`, `GeneratedAkteurRechte`); der Client darf das Cluster-Kind eines Commands
   (`AggregateType`) selbst setzen (`CqrsClientService.cs`, `AggregateDispatcher.cs:75`).
-*Empfehlung:* Leitungs-Framework für Client und Server, Wurzel-Parameter im Codegen, Generat-Namespaces = Komposition; unabhängig davon
+*Empfehlung:* Leitungs-Framework für Client und Server, Generat-Namespaces = Komposition; unabhängig davon
 `AggregateType` serverseitig aus der Routing-Tabelle, Identitäten aus vollen Typnamen.
-
-**T-1 · Testlücke seit Commit `fb07f5e` (2026-08-18).** Mit den Beispiel-Domänen Konto/Überweisung/Reise/Lager wurden die Saga-E2E-Tests,
-`SnapshotStorePostgresTests`/`SnapshotLiveE2ETests`, die Upcasting-Tests und die Marking-Cursor-Äquivalenz gelöscht. Prozess-Kompensation,
-Diamant-Sagas, Snapshot-Roundtrip und die Gleichheit Tail-Cursor-Fold == Voll-Fold sind heute ungetestet.
-*Empfehlung:* domänenneutral wiederherstellen (Test-Domäne im Testprojekt, nicht in der Beispieldomäne).
 
 **P1-1 · Multi-Node nur container-erprobt.** Cross-Node ist über alle Planes verdrahtet und bewiesen (`TwoNodeCommandDispatchTests`,
 `RemotePidDeliverySmokeTests`, 3-Node-Compose), der Regelbetrieb ist aber Single-Node; Consul läuft im `-dev`-Modus (kein Quorum).
@@ -196,22 +189,27 @@ Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
 
 ## 13.4 Korrektheit vs. Reifegrad
 
-Kein Befund ist ein bekannter aktiver Korrektheits-Bug. Korrektheitsnah sind: **T-1** (nicht mehr getestete Prozess-/Snapshot-Pfade),
-**W10-1** (möglicher Hash-Unterschied zwischen Python-Basis und Server beim Handshake), **W2-1** (vom Client gesetztes Cluster-Kind) und **WZ-1** (Prüfungen, die grün sind, ohne es zu beweisen). Alles andere ist Reifegrad,
+Kein Befund ist ein bekannter aktiver Korrektheits-Bug. Korrektheitsnah sind: **W10-1** (möglicher Hash-Unterschied zwischen Python-Basis und Server beim Handshake), **W2-1** (vom Client gesetztes Cluster-Kind) und **WZ-1** (Prüfungen, die grün sind, ohne es zu beweisen). Alles andere ist Reifegrad,
 Allgemeingültigkeit oder Hygiene.
 
 ## 13.5 Empfohlene Reihenfolge
 
 1. **Wissen aufräumen** (Doku, Gedächtnis — läuft, 2026-10-13).
-2. **T-1** Tests domänenneutral wiederherstellen — Sicherheitsnetz vor jedem Umbau; seit der getrennten Komposition als eigene Test-Anwendung
-   (`<Wurzel>`, `<Wurzel>.Laufzeit`) in einem eigenen Testprojekt möglich (ein Prozess fährt eine Anwendung).
-3. **W2-1** Rest (Leitungs-Framework für Client und Server, Wurzel-Parameter im Codegen); **WZ-1** Prüfungen schärfen (Sonde für alle allgemeinen Primitive).
-4. **W10-1/W10-2** Codegen auf Roslyn, Laufzeit-Serialisierung generiert, Reflection-Sperre.
-5. **W11-1/W11-2** Rückbau der Handle-/Trigger-Welt nach Takt-Treiber und flüchtigen Quellen; Fristplaner im Dirigenten; DSL-Frage.
-6. **W3-1/WB-1** Werkbank: letzte Ableitungen auf den Server, ein Rumpf-Schreibweg, tote Endpunkte weg.
-7. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
+2. **W2-1** Rest (Leitungs-Framework für Client und Server, Generat-Namespaces); **WZ-1** Prüfungen schärfen (Sonde für alle allgemeinen Primitive).
+3. **W10-1/W10-2** Codegen auf Roslyn, Laufzeit-Serialisierung generiert, Reflection-Sperre.
+4. **W11-1/W11-2** Rückbau der Handle-/Trigger-Welt nach Takt-Treiber und flüchtigen Quellen; Fristplaner im Dirigenten; DSL-Frage.
+5. **W3-1/WB-1** Werkbank: letzte Ableitungen auf den Server, ein Rumpf-Schreibweg, tote Endpunkte weg.
+6. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **Testlücke T-1 geschlossen (2026-10-14):** domänenneutral als zweite Anwendung `Pruefdomaene` (nur Schreibseite) mit Komposition
+  `Pruefdomaene.Laufzeit` und Testprojekt `Pruefdomaene.Integration.Tests` (16 Tests gegen echtes Marten/Consul/Redis, eigene Schemata):
+  Prozess-Diamant, Kompensation, Nebenläufigkeit, `SendeJe` + Count-Join, Snapshot (Store + Live), Upcasting (Tabelle + Seam),
+  Marking-Cursor-Äquivalenz. Dafür: Codegen mit Wurzel-Parameter (`--wurzel`/`--projekt`/`--alle`, früher W2-1; Artefakte je vorhandener Rolle,
+  Hash je Wurzel, Proto-Scan nur über die Referenz-Hülle der Anwendung), gemeinsamer Prepass `Cqrs.Codegen/CqrsCodegen.targets`, `Projektlage`
+  bevorzugt die Komposition der `StandardWurzel`. Gefundener Fehler: der STJ-Kontext registrierte die früheren Gestalten einer
+  `IUpcast`-Kante nicht (Komposition mit Upcasting baute nicht) — `JsonContextEmitter` nimmt jetzt alle Typ-Argumente der Kante.
 
 - **Python-Nutzlast-Tabelle generiert (früher P2-11, 2026-10-14):** `Cqrs.Codegen` erzeugt `domain_client/generated/nutzlast_tabelle.py`
   (`TABELLE`: typ → DTO-Klasse, feste Importe, dieselben Kategorien wie `GeneratedNutzlast`); die Namensregel steht einmal in

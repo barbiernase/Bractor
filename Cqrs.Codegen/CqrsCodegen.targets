@@ -1,0 +1,36 @@
+<Project>
+
+  <!-- ══════════════════════════════════════════════════════════════════════════════════════
+       CODEGEN-PREPASS einer Anwendung (automatisch bei jedem `dotnet build`/Rider-Build, Debug UND Release).
+       Importiert vom ersten Projekt der Anwendung, das die Artefakte braucht: mit Leitung deren Projekt (domain.proto vor protoc),
+       ohne Leitung die Komposition (STJ-Kontexte). Die Anwendung (Wurzel) folgt aus dem Projektnamen (Projektstruktur, docs/07).
+
+       Erzeugt VOR protoc/STJ die Artefakte aus den GEBAUTEN Domain-DLLs (Cqrs.Codegen; die Liste gibt das Werkzeug mit
+       „artefakte“ aus): <Wurzel>.Leitung/domain.proto, <Wurzel>.Laufzeit/Serialization/*.g.cs, die Python-Generate des Workers —
+       je Rolle nur, wenn ihr Projekt existiert.
+
+       ROBUSTHEIT: Die build-order-only ProjectReference (ReferenceOutputAssembly=false) stellt sicher, dass Cqrs.Codegen.dll SAMT der
+       Domain-DLLs gebaut ist (Cqrs.Codegen referenziert die Codegen-Projekte jeder Anwendung), bevor der Prepass läuft. Das Target
+       hängt an ResolveProjectReferences und läuft damit früh im Build — vor protoc/CoreCompile. `dotnet exec` (statt `dotnet run`)
+       vermeidet ein geschachteltes MSBuild.
+
+       INKREMENTALITÄT: Das Target läuft bei jedem Build; das Werkzeug entscheidet („wenn-geaendert“) über einen Hash je Anwendung
+       aus den gebauten Domänen-DLLs und dem Werkzeug, ob es erzeugt — keine Liste der Domänen-Quellen hier. Es schreibt nur bei
+       echtem Inhaltswechsel (stabile Timestamps → protoc/STJ laufen nur bei ECHTER Änderung nach). Die Artefakte bleiben committet
+       (frischer Checkout kompiliert auch ohne Tool-Lauf); codegen.sh mit „check“ prüft Drift. -->
+  <ItemGroup>
+    <ProjectReference Include="$(MSBuildThisFileDirectory)Cqrs.Codegen.csproj" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <Target Name="CqrsCodegenPrepass"
+          AfterTargets="ResolveProjectReferences"
+          Condition="'$(DesignTimeBuild)' != 'true' And '$(BuildingProject)' == 'true'">
+    <PropertyGroup>
+      <!-- Forward-Slashes: plattformneutral (macOS/Linux/Windows) im Exec-Kommandostring. -->
+      <_CqrsCodegenDir>$(MSBuildThisFileDirectory)bin/$(Configuration)/net9.0</_CqrsCodegenDir>
+    </PropertyGroup>
+    <Exec Command="dotnet exec &quot;$(_CqrsCodegenDir)/Cqrs.Codegen.dll&quot; &quot;$(_CqrsCodegenDir)&quot; &quot;$(Configuration)&quot; --projekt=$(MSBuildProjectName) --wenn-geaendert"
+          WorkingDirectory="$(MSBuildThisFileDirectory).." />
+  </Target>
+
+</Project>

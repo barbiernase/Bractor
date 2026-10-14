@@ -64,6 +64,7 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 | Werkbank | `Werkbank/` (Server `Werkbank/Server/`, Oberfläche `Werkbank/wwwroot/editor/`) |
 | Hosts | `Host.Grpc` (`AddCqrs(args)` der Komposition + `LaufeAsync`), `Host.Blazor` (Client) — beide mit `--umgebung <name>` |
 | Beispieldomäne (Prüfling) | `Domain*`, `Domain.Akteure`, `Domain.Client.*` |
+| Prüfdomäne (zweite Anwendung, Framework-Tests) | `Pruefdomaene`, `Pruefdomaene.Laufzeit`, `Pruefdomaene.Integration.Tests` |
 
 ## Konventionen
 
@@ -83,7 +84,8 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   Client = Software an einer Leitung, wirksam = Vertrag ∩ Token, C#-Client per `[assembly: IstClient<IX>]`.
 - **Kein `InMemoryEventStore`:** Store-Semantik nur gegen echtes Marten (Integration); der Prüfstand testet nur store-freie Logik.
 - **Proto und STJ-Kontexte entstehen automatisch** beim Build (Target `CqrsCodegenPrepass` in `Domain.Leitung/Domain.Leitung.csproj`, auch bei ⟳);
-  `./codegen.sh --check` prüft Drift. Kein manueller Schritt.
+  `./codegen.sh --check` prüft Drift (alle Anwendungen). Kein manueller Schritt. Der Prepass (`Cqrs.Codegen/CqrsCodegen.targets`) hängt an der
+  Leitung bzw. ohne Leitung an der Komposition; die Wurzel folgt aus dem Projektnamen.
 - **Werkbank:** Gesten nie auf `main`; „🤖 füllen“ nur über `claude -p` (Abo, nie API).
 
 ## Build / Test / Werkzeuge
@@ -93,6 +95,8 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 - Build: `dotnet build`
 - Prüfstand (store-frei, immer grün): `dotnet test Infrastructure.Pruefstand.Tests/Infrastructure.Pruefstand.Tests.csproj`
 - Integration (Postgres/Consul/Redis, sequentiell): `dotnet test Infrastructure.Integration.Tests/Infrastructure.Integration.Tests.csproj`
+- Prüfdomäne (Framework domänenneutral, echtes Marten, sequentiell, nie parallel zur anderen Integrations-Suite):
+  `dotnet test Pruefdomaene.Integration.Tests/Pruefdomaene.Integration.Tests.csproj`
 - Infra hochfahren: `docker compose -f deploy-linux/docker-compose.infrastructure.yml up -d`
 - Werkbank: `dotnet run --project Werkbank` → http://localhost:5178/editor/ (in `.claude/launch.json` als „Werkbank“). ⟳ baut und startet den echten
   Host in der gewählten Umgebung; Bedienung (Palette, ⊕, ✎, 🤖, ↶, Spur): `docs/konzept-werkbank.md` §6–§8.

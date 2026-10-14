@@ -168,7 +168,8 @@ Domain · Domain.Projections · Domain.Akteure · Domain.Pipeline     (bauen)
         ▼
 Cqrs.Codegen                     (gebaut über eine reine Build-Reihenfolge-Referenz aus Domain.Leitung)
         ▼
-Domain.Leitung: Target CqrsCodegenPrepass  (AfterTargets=ResolveProjectReferences, `dotnet exec Cqrs.Codegen.dll`)
+Domain.Leitung: Target CqrsCodegenPrepass  (Cqrs.Codegen/CqrsCodegen.targets, AfterTargets=ResolveProjectReferences,
+                `dotnet exec Cqrs.Codegen.dll --projekt=Domain.Leitung` → Wurzel Domain)
   liest die gebauten Domänen-DLLs per MetadataLoadContext und schreibt nur bei geändertem Inhalt:
     Domain.Leitung/domain.proto
     Domain.Laufzeit/Serialization/EventJsonSerializerContext.g.cs
@@ -181,6 +182,10 @@ Domain.Leitung: DtoMapperSourceGenerator → GeneratedNutzlast (Domain ↔ {Typ}
         ▼
 Domain.Laufzeit: STJ-Generator über beide Kontexte; Laufzeit-Generatoren; GeneratedAnwendung
 ```
+Eine Anwendung ohne Leitung (die Prüfdomäne) importiert das Target in ihre Komposition (`Pruefdomaene.Laufzeit`); dann entstehen nur die
+STJ-Kontexte. Je Anwendung ein Hash (`cqrs-codegen.<Wurzel>.hash`), der Proto-Scan läuft nur über die Referenz-Hülle der Anwendung;
+`./codegen.sh` arbeitet mit `--alle` (je Komposition `<Wurzel>.Laufzeit` eine Anwendung).
+
 
 **Die Leitung.** Dienst, Hüllen (`CommandEnvelopeDto`, `EventEnvelopeDto`) und Protokoll-Nachrichten stehen handgeschrieben im Framework
 (`Cqrs.Leitung/cqrs.proto`, Paket `cqrs`, Route `/cqrs.CqrsClientService/Connect`). Eine Domänen-Nachricht reist dort als

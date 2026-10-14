@@ -28,6 +28,10 @@
     <ProjectReference Include="..\Domain.Projections\Domain.Projections.csproj" />
     <ProjectReference Include="..\Domain.Pipeline\Domain.Pipeline.csproj" />
     <ProjectReference Include="..\Domain.Akteure\Domain.Akteure.csproj" />
+
+    <!-- Die Codegen-Projekte der Prüfdomäne (zweite Anwendung, docs/13 T-1): ihr Prepass hängt an Pruefdomaene.Laufzeit. Welche DLLs
+         zu welcher Anwendung gehören, entscheidet das Werkzeug über die Wurzel (Projektstruktur) und die Referenz-Hülle. -->
+    <ProjectReference Include="..\Pruefdomaene\Pruefdomaene.csproj" />
   </ItemGroup>
 
   <ItemGroup>

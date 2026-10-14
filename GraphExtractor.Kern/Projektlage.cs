@@ -61,7 +61,12 @@ public sealed class Projektlage
             .ThenBy(p => p.Name, StringComparer.Ordinal)
             .ToList();
 
-        // Laufzeit = das niedrigste Projekt mit generierter Routing-Tabelle.
+        // Laufzeit = die Komposition der Anwendung, die die Werkzeuge bearbeiten (Projektstruktur.StandardWurzel, docs/07) — eine zweite
+        //   Anwendung derselben Solution (Test-Anwendung) bleibt außen vor; ohne sie (Sonde, fremde Solution) das niedrigste Projekt mit
+        //   generierter Routing-Tabelle.
+        var komposition = Abstractions.Projektstruktur.Projekt(Abstractions.Projektstruktur.StandardWurzel, Abstractions.Projektstruktur.Rolle.Komposition);
+        if (nutzer.Any(p => p.AssemblyName == komposition))
+            nutzer = nutzer.Where(p => p.AssemblyName == komposition).Concat(nutzer.Where(p => p.AssemblyName != komposition)).ToList();
         Project? laufzeit = null; Compilation? laufzeitComp = null;
         foreach (var p in nutzer)
         {
@@ -76,8 +81,9 @@ public sealed class Projektlage
             var aggregatProjekte = new List<ProjectId>();
             foreach (var p in nutzer)
                 if (await p.GetCompilationAsync() is { } c && Deklariert(c, new[] { Vertrag.IDecider }, quelltexte)) aggregatProjekte.Add(p.Id);
-            laufzeit = aggregatProjekte.Count == 0 ? vertrag : nutzer.FirstOrDefault(p =>
-                aggregatProjekte.All(a => a == p.Id || graph.GetProjectsThatThisProjectTransitivelyDependsOn(p.Id).Contains(a))) ?? vertrag;
+            laufzeit = nutzer.FirstOrDefault(p => p.AssemblyName == komposition)
+                ?? (aggregatProjekte.Count == 0 ? vertrag : nutzer.FirstOrDefault(p =>
+                    aggregatProjekte.All(a => a == p.Id || graph.GetProjectsThatThisProjectTransitivelyDependsOn(p.Id).Contains(a))) ?? vertrag);
             laufzeitComp = await laufzeit.GetCompilationAsync();
             log($"   ⚠ Keine generierte Routing-Tabelle — Laufzeit abgeleitet ({laufzeit.Name}), Routing aus den Decide-Signaturen.");
         }

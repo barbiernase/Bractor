@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- Die KOMPOSITION der Prüfdomäne (docs/07, Rolle Komposition): Framework + ihr einziges Rollen-Projekt (Schreibseite). Hier laufen
+       die Laufzeit-Generatoren (Infrastructure.SourceGeneration) — ohne Leseseite, Akteure, Funktionen und Leitung emittieren sie leer,
+       aber kompilierbar. Die STJ-Kontexte (Serialization/*.g.cs) schreibt der Codegen-Prepass hierher; ohne Leitungs-Projekt hängt der
+       Prepass an der Komposition. -->
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <RootNamespace>Pruefdomaene.Laufzeit</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
+    <ProjectReference Include="..\Pruefdomaene\Pruefdomaene.csproj" />
+    <ProjectReference Include="..\Infrastructure.SourceGeneration\Infrastructure.SourceGeneration.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+  </ItemGroup>
+
+  <Import Project="..\Cqrs.Codegen\CqrsCodegen.targets" />
+
+</Project>

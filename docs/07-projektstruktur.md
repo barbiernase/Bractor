@@ -78,7 +78,8 @@ Primitive ist, liegt im Bereichs-Ordner seines Projekts und erscheint im Editor 
 |---|---|---|
 | Prozess-Registry | je Assembly `{Assembly}.Prozess.GeneratedProzessRegeln`, in der Laufzeit vereinigt; Prozesse ohne Registry = CQRS099 | `ProzessRegelnGenerator`, `ProzessVerbundGenerator` |
 | Leseseiten-Generate | Namespace = Projekt (`ProjectionQueryService`, `{Projekt}.Generated`), Leseseite der Wurzel | `ProjectionQueryServiceGenerator`, `ProjectionServicesGenerator` |
-| Codegen-Schritt (Proto, STJ, Python-Basen) | Eingaben (`CodegenProjekte`) und Ausgabeorte; erzeugt nur bei geänderten DLLs (Hash) | `Cqrs.Codegen`, `Domain.Leitung.csproj`, `codegen.sh` |
+| Codegen-Schritt (Proto, STJ, Python-Generate) | je Anwendung (`--wurzel`, `--projekt`, `--alle` = je Komposition eine) Eingaben (`CodegenProjekte`, nur vorhandene) und Ausgabeorte (Proto nur mit Leitung, Python nur mit Worker); erzeugt nur bei geänderten DLLs (Hash je Wurzel) | `Cqrs.Codegen`, `Cqrs.Codegen/CqrsCodegen.targets` (importiert von der Leitung bzw. ohne Leitung von der Komposition), `codegen.sh` |
+| Projektlage (`--check`, Werkbank) | die Komposition der `StandardWurzel` ist die Laufzeit der Werkzeuge; eine zweite Anwendung derselben Solution bleibt außen vor | `GraphExtractor.Kern/Projektlage.cs` |
 | Scaffolder / Gesten | Zielprojekt (Rolle), -ordner (Bereich aus dem Namespace der Karte) und -datei einer neuen Karte; Umbenennen zieht `<Typ>.<Teil>.cs` mit | `DomainEditor/Strukturort.cs`, `Schreiben/Umbenennen.cs` |
 | Werkbank (Stand-Hash, ⟳) | was zum Stand gehört, welches Projekt der Host ist, wo der Python-Worker liegt | `Werkbank/Server/WerkbankServer.cs`, `HostProzess.cs`, `Worker.cs` |
 | Analyzer CQRS098 | jede Primitive im Projekt ihrer Rolle (im Build, an der Karte) | `Domain.SourceGeneration/LageAnalyzer.cs` |
@@ -90,7 +91,8 @@ Funktions-Signatur, Konfig-Records aus dem Implementierungs-Konstruktor, Fähigk
 
 ## 7.6 Offen
 
-- Die Wurzel der Werkzeuge (Codegen, Werkbank, Scaffolder) ist `Projektstruktur.StandardWurzel`; Generatoren und Projektlage leiten sie aus dem
-  Projektnamen ab. Eine zweite Anwendung (Test-Domäne, docs/13 T-1) braucht für den Codegen noch einen Wurzel-Parameter.
+- Die Wurzel der Werkzeuge (Werkbank, Scaffolder, `--check`) ist `Projektstruktur.StandardWurzel`; Generatoren leiten sie aus dem Projektnamen
+  ab, der Codegen aus dem Projekt, das ihn auslöst (`--projekt`). Die zweite Anwendung der Solution ist die Prüfdomäne (`Pruefdomaene`,
+  `Pruefdomaene.Laufzeit`, Tests in `Pruefdomaene.Integration.Tests`); damit das Werkzeug ihre DLLs hat, referenziert `Cqrs.Codegen` auch sie.
 - Fremde Namespaces (außerhalb der Rollen-Projekte der Wurzel) platziert der Scaffolder wie bisher nach Namespace → Verzeichnis; die Lage-Prüfung
   meldet sie.

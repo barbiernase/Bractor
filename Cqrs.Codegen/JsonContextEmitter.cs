@@ -164,6 +164,13 @@ public static class JsonContextEmitter
 
                 if (isEvent && !isTransient) persistableEvents.Add(name);
                 if (isEvent || isCommand || isTrigger || isWire || isAuftrag || isQuery) wire.Add(name);
+
+                // Schema-Evolution (IUpcast<TAlt, …>): die früheren Gestalten liegen als alte Bytes im Store — Marten liest sie über
+                // denselben Kontext (GeneratedEventUpcasting koppelt Default.{TAlt} zur Compile-Zeit). Alle Typ-Argumente der Kante.
+                foreach (var kante in t.GetInterfaces().Where(i => i.IsGenericType
+                             && (i.GetGenericTypeDefinition().FullName ?? "").StartsWith("Abstractions.IUpcast`", StringComparison.Ordinal)))
+                    foreach (var arg in kante.GetGenericArguments())
+                        persistableEvents.Add("global::" + FullyQualified(arg));
             }
         }
 

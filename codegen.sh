@@ -15,17 +15,18 @@ cd "$SCRIPT_DIR"
 
 PROJECT="Cqrs.Codegen/Cqrs.Codegen.csproj"
 
-# Welche Projekte die Domäne bilden und welche Dateien entstehen, weiß nur das Werkzeug (Abstractions/Projektstruktur.cs, docs/07);
-# ob sich etwas geändert hat, entscheidet es über einen Hash der gebauten Domänen-DLLs (--wenn-geaendert).
+# Welche Anwendungen es gibt (je Komposition <Wurzel>.Laufzeit eine), welche Projekte sie bilden und welche Dateien entstehen, weiß nur
+# das Werkzeug (Abstractions/Projektstruktur.cs, docs/07); ob sich etwas geändert hat, entscheidet es je Anwendung über einen Hash der
+# gebauten Domänen-DLLs (--wenn-geaendert).
 run() {
-  dotnet run --project "$PROJECT" -c Debug -- "" Debug "$@"
+  dotnet run --project "$PROJECT" -c Debug -- "" Debug --alle "$@"
 }
 
 case "${1:-}" in
   --check)
     echo "CI-Gate: generiere frisch und prüfe auf Drift..."
     run >/dev/null
-    ARTEFAKTE=($(dotnet exec Cqrs.Codegen/bin/Debug/net9.0/Cqrs.Codegen.dll --artefakte))
+    ARTEFAKTE=($(dotnet exec Cqrs.Codegen/bin/Debug/net9.0/Cqrs.Codegen.dll --alle --artefakte))
     if ! git diff --quiet -- "${ARTEFAKTE[@]}"; then
       echo "❌ DRIFT: generierte Artefakte sind nicht aktuell. './codegen.sh --force' ausführen und committen." >&2
       git --no-pager diff --stat -- "${ARTEFAKTE[@]}" >&2
