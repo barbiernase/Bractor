@@ -18,7 +18,7 @@ namespace Domain.Projections.Datensatz;
 /// </summary>
 public partial class DatensatzProjektion : ISubscriber, IPullSubscriber, IAppendProjektion
 {
-    public string SubscriberId => "datensatz-projection";
+    public string SubscriberId => "datensatz-projektion";
 
     // ═══════════════════════════════════════════════════════════
     // LIFECYCLE

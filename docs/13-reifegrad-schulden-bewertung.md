@@ -109,8 +109,9 @@ dass sie heute an vielen Stellen getippt, nicht geprüft und teils inkonsistent 
 - Identitäten aus einfachen Typnamen (`BrokerIdentity`, `GeneratedAkteurRechte`); der Client darf das Cluster-Kind eines Commands
   (`AggregateType`) selbst setzen (`CqrsClientService.cs`, `AggregateDispatcher.cs:75`).
 *Empfehlung:* die Struktur aus docs/07 als eine Tabelle im Code (`Abstractions/Projektstruktur.cs`, per Link auch in Generatoren); alle Stellen oben
-lesen sie; `--check` bzw. ein Analyzer prüft die Lage jedes Typs; fehlende Registrierung ist ein Fehler, nicht still; die Beispieldomäne wird auf die
-Struktur umgezogen. Unabhängig davon: `AggregateType` serverseitig aus `GeneratedCommandRouting`, Identitäten aus vollen Typnamen.
+lesen sie; `--check` bzw. ein Analyzer prüft die Lage jedes Typs; fehlende Registrierung ist ein Fehler, nicht still. Die Beispieldomäne folgt der
+Struktur seit 2026-10-14 (Flüsse/Funktionen in `Domain.Pipeline`, Referenzrichtung `Domain.Pipeline` ← `Domain.Akteure`, Dateinamen nach docs/07 §7.4).
+Unabhängig davon: `AggregateType` serverseitig aus `GeneratedCommandRouting`, Identitäten aus vollen Typnamen.
 
 **T-1 · Testlücke seit Commit `fb07f5e` (2026-08-18).** Mit den Beispiel-Domänen Konto/Überweisung/Reise/Lager wurden die Saga-E2E-Tests,
 `SnapshotStorePostgresTests`/`SnapshotLiveE2ETests`, die Upcasting-Tests und die Marking-Cursor-Äquivalenz gelöscht. Prozess-Kompensation,

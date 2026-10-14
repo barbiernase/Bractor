@@ -20,7 +20,7 @@ namespace Domain.Projections.ImagePair;
 /// ist sichtbar/korrumpierend. Der GA-1-Check erzwingt daher den Co-Commit-Store (unten: der
 /// ImagePairHistorieStore ist zugleich IProjectionTracker → Effekt + Marke in EINER Transaktion).
 /// </summary>
-public partial class ImagePairHistorieProjection : ISubscriber, IPullSubscriber, IAppendProjektion
+public partial class ImagePairHistorieProjektion : ISubscriber, IPullSubscriber, IAppendProjektion
 {
     public string SubscriberId => "imagepair-historie";
 

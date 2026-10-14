@@ -8,7 +8,7 @@ namespace Domain.Projections.ImagePair;
 // Ein Handle nimmt als Parameter genau die Fähigkeiten, die er benutzen darf.
 // ═══════════════════════════════════════════════════════════
 
-// ── Schreiben (ImagePairProjection) ──
+// ── Schreiben (ImagePairProjektion) ──
 public interface IUpsertImagePair : IWriteStore { Task UpsertAsync(ImagePairReadModel model); }
 
 public interface ISetBildVerfuegbar : IWriteStore

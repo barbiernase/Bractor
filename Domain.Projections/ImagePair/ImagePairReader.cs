@@ -4,7 +4,7 @@ using Domain.ImagePair;
 namespace Domain.Projections.ImagePair;
 
 [ProjectionReader(TrackDeps = true)]
-public partial class ImagePairReader : IReader<ImagePairProjection>
+public partial class ImagePairReader : IReader<ImagePairProjektion>
 {
     public async Task<OneOf<ImagePairAntwort, ImagePairNichtGefundenAntwort>>
         Handle(GetImagePair query, IMessageEnvelope envelope, ReadContext ctx, IFindImagePair findImagePair)

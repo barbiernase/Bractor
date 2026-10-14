@@ -79,5 +79,5 @@ Primitive ist, liegt im Bereichs-Ordner seines Projekts und erscheint im Editor 
 - Im Code fehlt noch die Tabelle als eine Quelle; heute stehen Projektnamen verstreut (docs/13 W2-1).
 - Die Beispieldomäne: Flüsse, Funktionen (Schnittstellen, Aufträge, Ergebnis-Events, Implementierungen), Dienste und Konfig-Records liegen
   seit 2026-10-14 in `Domain.Pipeline/<Bereich>/`, Quellen-Typen in `Domain/<Bereich>/Quellen.cs`; `Domain.Projections` und
-  `Domain.Infrastructure` folgen der Struktur ebenfalls. Offen: Decider/Applier heißen im Bestand `Decider.cs`/`Applier.cs`, Klassennamen mischen
-  `Projektion`/`Projection`; `MartenCoCommitStoreBase` liegt noch oben in `Domain.Infrastructure` (gehört ins Framework, docs/13 W2-1).
+  `Domain.Infrastructure` folgen der Struktur ebenfalls, Aggregat-Dateien heißen `<Aggregat>.Decider.cs`/`<Aggregat>.Applier.cs`, Projektionen
+  `…Projektion`. Offen: `MartenCoCommitStoreBase` liegt noch oben in `Domain.Infrastructure` (gehört ins Framework, docs/13 W2-1).

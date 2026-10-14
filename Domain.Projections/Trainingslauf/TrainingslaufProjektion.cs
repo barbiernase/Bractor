@@ -15,7 +15,7 @@ namespace Domain.Projections.Trainingslauf;
 /// </summary>
 public partial class TrainingslaufProjektion : ISubscriber, IPullSubscriber, IAppendProjektion
 {
-    public string SubscriberId => "trainingslauf-projection";
+    public string SubscriberId => "trainingslauf-projektion";
 
     public async Task Handle(TrainingAngefordert evt, IAggregateEnvelope envelope, ProjectionWriter writer, IUpsertTrainingslauf upsertTrainingslauf)
     {

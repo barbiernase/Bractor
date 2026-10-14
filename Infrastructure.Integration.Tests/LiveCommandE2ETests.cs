@@ -86,12 +86,12 @@ public class LiveCommandE2ETests
             historie.Should().NotBeNull();
             historie!.Eintraege.Should().Contain(e => e.EreignisTyp == nameof(ImagePairErstellt));
 
-            // (B0) Auch die ImagePairProjection läuft jetzt über den Pull-Pfad (neuer Co-Commit-Store):
+            // (B0) Auch die ImagePairProjektion läuft jetzt über den Pull-Pfad (neuer Co-Commit-Store):
             //   dasselbe Event materialisiert ihr Read-Model in "rm" mit dem richtigen PairKey.
             await WaitAsync(
                 async () => (await imagePairRead.FindByIdAsync(pairId)) is { PairKey: "PAIR-LIVE" },
                 TimeSpan.FromSeconds(30),
-                "ImagePairProjection ist nach dem Command nicht über den Pull-Co-Commit-Pfad materialisiert.");
+                "ImagePairProjektion ist nach dem Command nicht über den Pull-Co-Commit-Pfad materialisiert.");
 
             // Phase 5: der Deps-Index (rm:) wird auch auf dem PULL-Pfad geführt (früher fiel er weg).
             var redis = host.Services.GetRequiredService<StackExchange.Redis.IConnectionMultiplexer>();

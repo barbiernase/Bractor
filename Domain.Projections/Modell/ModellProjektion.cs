@@ -16,7 +16,7 @@ namespace Domain.Projections.Modell;
 /// </summary>
 public partial class ModellProjektion : ISubscriber, IPullSubscriber
 {
-    public string SubscriberId => "modell-projection";
+    public string SubscriberId => "modell-projektion";
 
     public async Task Handle(
         ModellRegistriert evt, IAggregateEnvelope envelope, ProjectionWriter writer, IUpsertModell upsertModell)

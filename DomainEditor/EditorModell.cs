@@ -14,7 +14,7 @@ namespace DomainEditor;
 /// Aus den getaggten Records KOMPONIERT man dann die Aggregate: State (Felder) + Decider
 /// (Command → OneOf-Events) + Applier (Event → State). Der <see cref="Scaffolder"/> erzeugt daraus
 /// deterministisch C# in kanonischer Gestalt (Commands.cs / Events.cs / ValueObjects.cs / Enums.cs
-/// / {Aggregat}.cs / Decider.cs / Applier.cs).
+/// / {Aggregat}.cs / {Aggregat}.Decider.cs / {Aggregat}.Applier.cs, docs/07 §7.4).
 /// </summary>
 public sealed record EditorModell
 {

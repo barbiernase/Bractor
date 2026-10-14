@@ -16,7 +16,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Marten" Version="8.20.0" />
         <!-- OpenCvSharp: unterschiedliche Versionen für Mac (Entwicklung) und Linux (Server) -->
         <!-- Mac: 4.8.x (hat ARM-Support) -->
         <PackageReference Include="OpenCvSharp4" Version="4.8.*"
@@ -31,11 +30,6 @@
                           Condition="'$(RuntimeIdentifier)' == 'linux-x64'" />
         
         
-        <PackageReference Include="Proto.Actor" Version="1.7.0" />
-        <PackageReference Include="Proto.Cluster" Version="1.7.0" />
-        <PackageReference Include="Proto.Cluster.Consul" Version="1.7.0" />
-        <PackageReference Include="Proto.Cluster.TestProvider" Version="1.7.0" />
-        <PackageReference Include="StackExchange.Redis" Version="2.10.14" />
     </ItemGroup>
 
     <Target Name="CopyOpenCvNative" AfterTargets="Publish" Condition="'$(RuntimeIdentifier)' == 'linux-x64'">

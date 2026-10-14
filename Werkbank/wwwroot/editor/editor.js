@@ -2594,7 +2594,7 @@
     if(k==="transition"){const sg=MODEL.sagas.find(x=>x.name===r.prozess);return sg?!!sg.ausCode:r.ausCode===true;}
     if(k==="rumpf")return ausCodeVon(n.own);
     return r.ausCode===true;}
-  // Geladen, wenn seine DOMÄNE (Graph-Zuordnung, domKey — z. B. ImagePairProjection → ImagePair) ODER sein eigener Namespace
+  // Geladen, wenn seine DOMÄNE (Graph-Zuordnung, domKey — z. B. ImagePairProjektion → ImagePair) ODER sein eigener Namespace
   //   (z. B. „Projections“ ausdrücklich gewählt) in der Auswahl liegt. Die Domänen-Gehörigkeit steht über dem Namespace.
   function geladen(n){if(n.kind==="client")return LADEN===null||clientPorts(n.ref).some(p=>{const m=p.node&&NODEBY.get(p.node);return m&&m.kind!=="client"&&geladen(m);});
     if(LADEN===null||!ausCodeVon(n))return true;const x=nsVon(n),d=domKey(n);

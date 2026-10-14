@@ -10,7 +10,7 @@ namespace Domain.Projections.ImagePair;
 /// Stale Detection bekommt.
 /// </summary>
 [ProjectionReader(TrackDeps = true)]
-public partial class ImagePairHistorieReader : IReader<ImagePairHistorieProjection>
+public partial class ImagePairHistorieReader : IReader<ImagePairHistorieProjektion>
 {
     public async Task<OneOf<ImagePairHistorieAntwort, ImagePairHistorieNichtGefunden>>
         Handle(GetImagePairHistorie query, IMessageEnvelope envelope, ReadContext ctx, IGetHistorie getHistorie)

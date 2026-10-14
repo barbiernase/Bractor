@@ -4,9 +4,9 @@ using Domain.ImagePair;
 
 namespace Domain.Projections.ImagePair;
 
-public partial class ImagePairProjection : ISubscriber, IPullSubscriber
+public partial class ImagePairProjektion : ISubscriber, IPullSubscriber
 {
-    public string SubscriberId => "imagepair-projection";
+    public string SubscriberId => "imagepair-projektion";
 
     // =========================================================================
     // LIFECYCLE

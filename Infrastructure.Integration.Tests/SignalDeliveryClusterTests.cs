@@ -127,7 +127,7 @@ public class SignalDeliveryClusterTests : IClassFixture<PostgresFixture>
 
     private static Func<EventEnvelope, ProjectionWriter, Task> Dispatch(IAppendHistorieEintrag effektStore)
     {
-        var projection = new ImagePairHistorieProjection();
+        var projection = new ImagePairHistorieProjektion();
         var faehigkeiten = new FaehigkeitenAus(effektStore);
         return (e, writer) => projection.DispatchAsync(e, writer, _ => Task.CompletedTask, faehigkeiten);
     }
