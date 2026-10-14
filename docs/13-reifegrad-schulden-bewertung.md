@@ -28,8 +28,7 @@ hierher. Stand: 2026-10-13, Commit-Basis `1b1751a`. Maßstab sind die sechs Inva
 | P2-8 | Hartkodierte Poll-Intervalle und Test-Verbindungsdaten | P2 |
 | P2-9 | Toter Lesepfad `LoadStateAsync`, Identitäts-Vertrag nur per Kommentar | P2 |
 | P2-10 | Monitoring schmal, Default-Credentials, kein OTel, Logging per `Console.WriteLine` | P2 |
-| P2-11 | Python: Registry von Hand gepflegt (`generate_registry.py` ist ein Stub) | P2 |
-| P2-12 | Proto-Feldnummern im `oneof` folgen der Sortierung voller Typnamen — ein Umzug ändert die Leitung | P2 |
+| P2-11 | Python: Registry von Hand gepflegt, Nutzlast-Tabelle zur Laufzeit aus dem Modul statt generiert | P2 |
 | P3-1 | Mojibake in drei Dateien | P3 |
 | P3-2 | Toter Code und Kleinkram | P3 |
 | P3-3 | Saga-DSL in `Cqrs.Testing` kennt `Rufe` nicht | P3 |
@@ -98,7 +97,7 @@ Leseseiten-Generate, Scaffolder und Werkbank lesen sie, die Beispieldomäne folg
 - `Infrastructure.csproj` referenziert die Domänen-Projekte; `Infrastructure` ist damit zugleich Framework und Komposition, nur dort laufen die
   Laufzeit-Generatoren, und handgeschriebener Framework-Code ruft deren Generate statisch auf (`GeneratedWire`, `GeneratedAkteurRechte` …,
   ~40 Dateien). `FactoryGenerator` emittiert `Infrastructure.AggregateHandlerFactory` in die Domänen-Assembly; die STJ-Kontexte liegen in
-  `Infrastructure/Serialization`; `domain.proto` mischt Framework-Dienst und Domänen-Nachrichten.
+  `Infrastructure/Serialization`.
 - Das Client-Framework `Client.Infrastructure` referenziert `Domain` (ungenutzt) und `Infrastructure` (nur für `ProtoMessageMapper`).
 - Framework-Code im Domänen-Projekt: der generische `funktions_worker.py` in `Domain.Client.Worker.Python.ML`.
 - Namespace-Ausschlusslisten statt Fakt (`Ctorbindung.cs` mit `OpenCvSharp`, `FunktionsGenerator`, `QuellenGenerator`, `WiringGenerator`).
@@ -179,14 +178,8 @@ Kommentar abgestimmt.
 **P2-10 · Monitoring und Logging.** Nur `/health` + Kennzahlen; Default-Credentials `postgres/postgres`; kein OpenTelemetry; `GrpcProxy` (C#-Client)
 loggt per `Console.WriteLine`.
 
-**P2-12 · Proto-Feldnummern nicht stabil.** Der Codegen vergibt die Feldnummern der `oneof`-Umschläge (`QueryPayloadDto` u. a.) nach der Sortierung
-der vollen Typnamen. Wandert ein Typ in einen anderen Namespace (so geschehen beim Umzug von `Domain.Projections` in Bereichs-Ordner,
-2026-10-14), ändern sich die Nummern auf der Leitung; C# bleibt stimmig, weil Proto und Mapper im selben Build entstehen, Python-Clients brauchen
-neu erzeugte DTOs (`build_python.sh`). Für Prod-Clients mit eigenem Stand ist das ein Bruch. *Empfehlung:* Feldnummern aus einer stabilen Quelle
-(z. B. Hash des einfachen Typnamens oder eine gepflegte Nummerntabelle, geprüft durch `codegen.sh --check`).
-
-**P2-11 · Python-Kleinschulden.** `generate_registry.py` erzeugt nichts (die Datei wird nie geschrieben), `domain_client/domain_registry.py` ist
-handgepflegt; `VersionTracker.reset()` wird nie aufgerufen; `proxy._detect_route()` ist faktisch eine Konstante; die Köpfe der generierten
+**P2-11 · Python-Kleinschulden.** `domain_client/domain_registry.py` ist handgepflegt; die Nutzlast-Tabelle (typ → DTO-Klasse,
+`cqrs_client/mapper.py`) entsteht zur Laufzeit aus dem generierten Modul statt als Generat des Codegens; `VersionTracker.reset()` wird nie aufgerufen; `proxy._detect_route()` ist faktisch eine Konstante; die Köpfe der generierten
 Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
 
 ### P3
@@ -222,6 +215,8 @@ Allgemeingültigkeit oder Hygiene.
 
 ## 13.6 Erledigt (früher hier offen)
 
+- **Leitung getrennt (früher P2-12, 2026-10-14):** Framework-Proto `Cqrs.Leitung/cqrs.proto` (Dienst, Hüllen) mit `Nutzlast { typ, daten }`;
+  `domain.proto` enthält nur noch die Domänen-DTOs. Kein `oneof` über Domänen-Typen mehr — ein Umzug ändert die Leitung nicht.
 - **Projektstruktur als eine Quelle (früher W2-1, 2026-10-14):** `Abstractions/Projektstruktur.cs` (Rollen als Suffix zur Wurzel, Primitive → Rolle
   und Datei), CQRS098 (`LageAnalyzer`), `--check` „Lage“, Sonde mit Soll-Lage; Prozess-Registry je Assembly + generierter Verbund (CQRS099 statt
   still nicht registrierter Prozesse); Codegen ohne Projektlisten (Hash über die gebauten DLLs, `Domain.Akteure` inklusive);

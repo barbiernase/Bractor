@@ -1,28 +1,20 @@
 # REPO-PFAD: Client.Infrastructure.Python/cqrs_client/registry.py
 """
-Kategorisiert betterproto-generierte Typen nach ihrer Nachrichtenkategorie.
+Kategorisiert betterproto-generierte Domänen-DTOs nach ihrer Nachrichtenkategorie
+(EVENT, COMMAND, TRIGGER, QUERY, QUERY_RESPONSE).
 
-Die Klassifizierung ergibt sich aus der oneof-Zugehörigkeit im Proto:
-  - EventEnvelopeDto.payload.oneof  → EVENT
-  - CommandEnvelopeDto.payload.oneof → COMMAND
-  - TriggerPayloadDto.payload.oneof  → TRIGGER
-  - QueryPayloadDto.payload.oneof    → QUERY
-  - QueryResponsePayloadDto.payload.oneof → QUERY_RESPONSE
+Auf der Leitung trägt eine Nutzlast nur ihren Typnamen — die Kategorie steht nicht im Proto. Sie kommt aus
+den generierten Verträgen (vertraege.py: Zusagen, Ausgänge, Spontan, Fragt — die Vertragsbasis ergänzt die
+Registry selbst) bzw. aus einer handgepflegten Aufzählung (domain_registry.py).
 
-Zwei Befüllungsoptionen:
-  1. Manuell: frozensets mit den generierten Typen (einfache Auflistung)
-  2. Automatisch: generate_registry.py liest Proto-Deskriptoren
-
-Beide Varianten liefern dasselbe Ergebnis: type → category Zuordnung.
+Danach nur noch O(1)-Lookups: type → category.
 """
 
 from __future__ import annotations
 
 from enum import Enum, auto
-from typing import TYPE_CHECKING
 
-if TYPE_CHECKING:
-    pass
+from .mapper import typ_von
 
 
 class MessageCategory(Enum):
@@ -98,13 +90,10 @@ class CategoryRegistry:
         """
         BildVerfuegbarDto → 'BildVerfuegbar'
 
-        Entfernt das 'Dto'-Suffix das betterproto aus dem Proto-Message-Namen
-        generiert. Der C#-CapabilitiesHandler erwartet den Namen ohne Suffix.
+        Derselbe Name wie Nutzlast.typ (mapper.typ_von): der Proto-Message-Name ohne „Dto“.
+        Der C#-CapabilitiesHandler erwartet den Namen ohne Suffix.
         """
-        name = t.__name__
-        if name.endswith("Dto"):
-            return name[:-3]
-        return name
+        return typ_von(t)
 
     def ergaenzt(
         self,

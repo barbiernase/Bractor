@@ -16,7 +16,7 @@ public record ClientCapabilities
     public string Vertrag { get; init; } = "";
     public string VertragHash { get; init; } = "";
     
-    public static ClientCapabilities FromResponse(ProtoRepo.CapabilitiesResponse response)
+    public static ClientCapabilities FromResponse(Cqrs.Leitung.CapabilitiesResponse response)
     {
         return new ClientCapabilities
         {

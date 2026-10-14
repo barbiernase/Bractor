@@ -1,6 +1,6 @@
 using Abstractions;
 using Infrastructure.Mappers;
-using ProtoRepo;
+using Cqrs.Leitung;
 
 namespace Infrastructure.Serialization;
 
@@ -14,12 +14,12 @@ public partial class ProtoMessageMapper
     // TRIGGER MAPPING
     // =========================================================================
 
-    public IPipelineTrigger MapToDomain(TriggerPayloadDto dto)
+    public IPipelineTrigger TriggerAus(Nutzlast n)
     {
-        return ProtoTriggerMappingHelpers.MapToDomain(dto);
+        return ProtoTriggerMappingHelpers.MapToDomain(n);
     }
 
-    public TriggerPayloadDto MapToDto(IPipelineTrigger trigger)
+    public Nutzlast MapToDto(IPipelineTrigger trigger)
     {
         return ProtoTriggerMappingHelpers.MapToDto(trigger);
     }

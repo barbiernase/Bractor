@@ -53,7 +53,7 @@ class FakeProxy:
 
 
 def test_nach_reconnect_wird_weiter_verarbeitet_und_neu_angeboten():
-    client = FakeClient(registry=SimpleNamespace(), generated_module=SimpleNamespace(ClientMessage=object, ServerMessage=object))
+    client = FakeClient(registry=SimpleNamespace(), generated_module=SimpleNamespace())
     proxy = FakeProxy(sitzungen=3)
     client._proxy = proxy
     client._connection._proxy = proxy

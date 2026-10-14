@@ -1,6 +1,6 @@
 # REPO-PFAD: Client.Infrastructure.Python/cqrs_client/router.py
 """
-Verbindet PayloadMapper, Dispatch und GrpcProxy.
+Verbindet PayloadMapper (Nutzlast ↔ DTO), Dispatch und GrpcProxy.
 
 Routet eingehende Nachrichten an Handler und
 ausgehende Yields zurück über den gRPC-Stream.
@@ -246,10 +246,8 @@ class MessageRouter:
                     await self._route_output(output, ctx, proxy, mapper, registry)
 
             if response is not None:
-                # Response-Payload in QueryResponsePayloadDto verpacken — das oneof-Feld wird über
-                # die aus QueryResponsePayloadDto abgeleitete type→Feld-Map gesetzt (wie wrap_command).
-                resp_payload = mapper.wrap_query_response(response)
-                await proxy.send_query_response(correlation_id, resp_payload)
+                # Die Antwort reist als Nutzlast (typ + Bytes) in QueryResponseFromClient.payload.
+                await proxy.send_query_response(correlation_id, mapper.wrap_query_response(response))
             else:
                 await proxy.send_query_response(
                     correlation_id, None,
@@ -281,9 +279,9 @@ class MessageRouter:
         """
         Routet einen yielded Output basierend auf CategoryRegistry.
 
-        Command   → CommandEnvelope → GrpcProxy.send_command
-        Trigger   → TriggerPayload → GrpcProxy.send_trigger
-        Event     → EventEnvelope → GrpcProxy.publish_transient (TransientEvent)
+        Command   → CommandEnvelopeDto (Nutzlast) → GrpcProxy.send_command
+        Trigger   → Nutzlast → GrpcProxy.send_trigger
+        Event     → EventEnvelopeDto (Nutzlast) → GrpcProxy.publish_transient (TransientEvent)
         """
         category = registry.classify(type(output))
 
@@ -328,8 +326,7 @@ class MessageRouter:
         elif category == MessageCategory.TRIGGER:
             # Client→Client-Trigger: der Server forwarded ihn an den registrierten Client-Handler
             # (TriggerHandlerRegistry) und quittiert per TriggerAck. Fire-and-forget aus Router-Sicht.
-            payload = mapper.wrap_trigger(output)
-            await proxy.send_trigger(payload, correlation_id=ctx.correlation_id)
+            await proxy.send_trigger(mapper.wrap_trigger(output), correlation_id=ctx.correlation_id)
             log.info("→ Trigger: %s", type(output).__name__)
 
         elif category == MessageCategory.QUERY_RESPONSE:

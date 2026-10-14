@@ -3,8 +3,9 @@ Katalog-Funktionen in Python anbieten (docs/konzept-editor-pipelines.md §14.5) 
 
 `domain_client/generated/funktionen.py` (Cqrs.Codegen) bindet je Funktion Auftrag und Ergebnisse an die betterproto-Typen;
 ein Worker erbt die Basis und implementiert nur `rufe`. Bewiesen wird der ganze Draht des Workers ohne Server: der echte
-GrpcProxy baut die ClientMessages (FunktionenAnbieten, ArbeitsErgebnis, ArbeitLebtMeldung) aus dem Generat, sie überstehen
-den Byte-Round-trip, und ein ArbeitsAuftrag vom Server kommt als typisierter Auftrag in `rufe` an.
+GrpcProxy baut die ClientMessages (FunktionenAnbieten, ArbeitsErgebnis, ArbeitLebtMeldung) aus der Leitung (cqrs_client.leitung),
+sie überstehen den Byte-Round-trip, und ein ArbeitsAuftrag vom Server (Auftrag als Nutzlast: typ + Bytes des Domänen-DTO) kommt
+als typisierter Auftrag in `rufe` an.
 """
 
 import asyncio
@@ -14,6 +15,7 @@ import pytest
 
 import domain_client.generated as g
 from cqrs_client import Ausfuehrung, FunktionsBasis, FunktionsLaeufer
+from cqrs_client import leitung as L
 from cqrs_client.mapper import PayloadMapper
 from cqrs_client.proxy import GrpcProxy
 from domain_client.generated.funktionen import BildVerkleinerungBasis, HistogrammAusgleichBasis
@@ -38,11 +40,11 @@ class MitschreibenderStrom:
         self.gesendet.append(bytes(msg))
 
     def nachrichten(self):
-        return [g.ClientMessage().parse(b) for b in self.gesendet]
+        return [L.ClientMessage().parse(b) for b in self.gesendet]
 
 
 def _verbunden():
-    proxy = GrpcProxy(g)
+    proxy = GrpcProxy()
     proxy._stream = strom = MitschreibenderStrom()
     proxy._connected = True
     return proxy, strom
@@ -50,10 +52,10 @@ def _verbunden():
 
 def _auftrag_vom_server(vorgang, pfad):
     """So kommt er an: ServerMessage-Bytes → betterproto (wie im Read-Loop)."""
-    msg = g.ServerMessage(arbeits_auftrag=g.ArbeitsAuftrag(
+    msg = L.ServerMessage(arbeits_auftrag=L.ArbeitsAuftrag(
         vorgang=vorgang, korrelation="k-1", funktion="IBildVerkleinerung", akteur="KameraSystem",
-        auftrag=g.AuftragPayloadDto(verkleinere_bild=g.VerkleinereBildDto(quell_pfad=pfad, hoehe=512))))
-    feld, auftrag = betterproto.which_one_of(g.ServerMessage().parse(bytes(msg)), "message")
+        auftrag=L.Nutzlast(typ="VerkleinereBild", daten=bytes(g.VerkleinereBildDto(quell_pfad=pfad, hoehe=512)))))
+    feld, auftrag = betterproto.which_one_of(L.ServerMessage().parse(bytes(msg)), "message")
     assert feld == "arbeits_auftrag"
     return auftrag
 
@@ -94,10 +96,13 @@ def test_auftrag_rein_ergebnis_raus_ueber_den_echten_draht():
         assert feld == "arbeits_ergebnis"
         ergebnisse[e.vorgang] = e
     a, b = ergebnisse["v-1"], ergebnisse["v-2"]
-    assert a.fehler == "" and betterproto.which_one_of(a.ergebnis, "payload") == (
-        "bild_verkleinert", g.BildVerkleinertDto(pfad="/roh/a.tiff.klein.png", breite_pixel=640, hoehe_pixel=512))
+    mapper = PayloadMapper(g)
+    assert a.fehler == "" and a.ergebnis.payload.typ == "BildVerkleinert"
+    assert mapper.entpacke(a.ergebnis.payload) == g.BildVerkleinertDto(
+        pfad="/roh/a.tiff.klein.png", breite_pixel=640, hoehe_pixel=512)
     assert a.ergebnis.aggregate_id == "v-1" and a.ergebnis.correlation_id == "k-1"
-    assert betterproto.which_one_of(b.ergebnis, "payload")[0] == "bild_nicht_lesbar", "auch der zweite OneOf-Fall ist ein Ergebnis"
+    assert b.ergebnis.payload.typ == "BildNichtLesbar", "auch der zweite OneOf-Fall ist ein Ergebnis"
+    assert isinstance(mapper.entpacke(b.ergebnis.payload), g.BildNichtLesbarDto)
 
 
 def test_falsches_ergebnis_wird_zum_fehler_und_lebenszeichen_reisen_ueber_den_draht():

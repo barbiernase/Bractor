@@ -171,10 +171,17 @@ ProtoRepo: Target CqrsCodegenPrepass  (AfterTargets=ResolveProjectReferences, `d
     Infrastructure/Serialization/CqrsWireJsonContext.g.cs
     Domain.Client.Worker.Python.ML/domain_client/generated/vertraege.py · funktionen.py · funktions_tabelle.py
         ▼
-ProtoRepo: Grpc.Tools kompiliert domain.proto → {Typ}Dto
+ProtoRepo: Grpc.Tools kompiliert domain.proto → {Typ}Dto        (nur Domänen-DTOs)
         ▼
-Infrastructure: STJ-Generator über beide Kontexte; DtoMapperSourceGenerator mappt Domain ↔ {Typ}Dto
+Infrastructure: STJ-Generator über beide Kontexte; DtoMapperSourceGenerator mappt Domain ↔ {Typ}Dto ↔ Nutzlast
 ```
+
+**Die Leitung.** Dienst, Hüllen (`CommandEnvelopeDto`, `EventEnvelopeDto`) und Protokoll-Nachrichten stehen handgeschrieben im Framework
+(`Cqrs.Leitung/cqrs.proto`, Paket `cqrs`, Route `/cqrs.CqrsClientService/Connect`). Eine Domänen-Nachricht reist dort als
+`Nutzlast { typ, daten }`: `typ` ist der einfache Typname (= Name des DTO ohne „Dto“), `daten` die `{typ}Dto`-Message aus `domain.proto`,
+protobuf-kodiert. Der `DtoMapperSourceGenerator` erzeugt je Kategorie die Tabellen Typname → Domänen-Typ und Domänen-Typ → Nutzlast; das
+Python-SDK packt und entpackt über dieselbe Regel (`cqrs_client/mapper.py`). Weil kein `oneof` über Domänen-Typen mehr existiert, ändert ein
+Namespace-Umzug die Leitung nicht.
 
 Kein manueller Schritt: jedes `dotnet build` führt die Kette aus. Welche Projekte die Domäne bilden und wohin die Artefakte gehen, liest das
 Werkzeug aus `Abstractions/Projektstruktur.cs` (docs/07); ob es erzeugen muss, entscheidet es selbst über einen Hash der gebauten

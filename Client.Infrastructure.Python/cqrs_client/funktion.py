@@ -93,7 +93,7 @@ class FunktionsLaeufer:
     """
     Führt die angebotenen Funktionen eines Clients aus — transport-frei: gesendet wird über `proxy`
     (`send_funktionen_anbieten`, `send_arbeits_ergebnis`, `send_arbeit_lebt`), verpackt über `mapper`
-    (`extract_auftrag_payload`, `wrap_ergebnis`).
+    (`extract_auftrag_payload`: Nutzlast → Auftrag-DTO, `wrap_ergebnis`: Ergebnis-DTO → EventEnvelopeDto mit Nutzlast).
     """
 
     def __init__(self, funktionen, proxy, mapper, lebenszeichen_s: float = LEBENSZEICHEN_S):

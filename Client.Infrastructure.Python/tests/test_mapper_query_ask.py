@@ -1,12 +1,12 @@
 """
 Die Ask-Seite: eine Query STELLEN und die typisierte Antwort ENTPACKEN (docs/09 §9.4).
 
-Beweist die zwei neuen Mapper-Bausteine:
-  - wrap_query            → setzt das oneof-Feld im QueryPayloadDto (Spiegel zu wrap_command)
-  - extract_query_response → entpackt die konkrete Antwort aus QueryResponse.payload
+Beweist die zwei Mapper-Bausteine:
+  - wrap_query            → Nutzlast(typ, daten) für QueryRequest.payload (Spiegel zu wrap_command)
+  - extract_query_response → entpackt die konkrete Antwort aus QueryResponse.payload (Nutzlast → DTO nach typ)
 
-Wie test_mapper_query_response.py: minimale betterproto-Fakes statt des vollen Generats — der
-Mapper ist domänenfrei und leitet die type→oneof-Feld-Map allein aus der Envelope-Struktur ab.
+Wie test_mapper_query_response.py: minimale betterproto-Fakes statt des vollen Generats — die Leitung
+(QueryResponse, Nutzlast) ist die echte aus cqrs_client.leitung.
 
 Ausführen:  pip install -r requirements-dev.txt && pytest   (aus Client.Infrastructure.Python/)
 """
@@ -17,11 +17,9 @@ from types import SimpleNamespace
 import betterproto
 import pytest
 
-from cqrs_client.mapper import PayloadMapper
+from cqrs_client.leitung import Nutzlast, QueryResponse
+from cqrs_client.mapper import PayloadMapper, UnbekannteNutzlast
 
-
-# ── Minimale betterproto-Fakes (unquoted Annotations → f.type ist der echte Typ) ──
-# Reihenfolge wichtig: referenzierte Typen zuerst definieren.
 
 @dataclass
 class FakeQueryDto(betterproto.Message):
@@ -33,44 +31,22 @@ class FakeAntwortDto(betterproto.Message):
     text: str = betterproto.string_field(1)
 
 
-@dataclass
-class FakeQueryPayloadDto(betterproto.Message):
-    fake_query: FakeQueryDto = betterproto.message_field(1, group="payload")
-
-
-@dataclass
-class FakeQueryResponsePayloadDto(betterproto.Message):
-    fake_antwort: FakeAntwortDto = betterproto.message_field(1, group="payload")
-
-
-@dataclass
-class FakeQueryResponse(betterproto.Message):
-    correlation_id: str = betterproto.string_field(1)
-    payload: FakeQueryResponsePayloadDto = betterproto.message_field(2)
-
-
 @pytest.fixture
 def gen():
-    return SimpleNamespace(
-        QueryPayloadDto=FakeQueryPayloadDto,
-        QueryResponsePayloadDto=FakeQueryResponsePayloadDto,
-        FakeQueryDto=FakeQueryDto,
-        FakeAntwortDto=FakeAntwortDto,
-    )
+    return SimpleNamespace(FakeQueryDto=FakeQueryDto, FakeAntwortDto=FakeAntwortDto)
 
 
 # ═══════════════════════════════════════════════════
 # wrap_query — die Query verpacken
 # ═══════════════════════════════════════════════════
 
-def test_wrap_query_setzt_das_oneof_feld(gen):
+def test_wrap_query_verpackt_typ_und_bytes(gen):
     mapper = PayloadMapper(gen)
 
     result = mapper.wrap_query(FakeQueryDto(q="hallo"))
 
-    field_name, payload = betterproto.which_one_of(result, "payload")
-    assert field_name == "fake_query"     # oneof IST gesetzt (die Ask-Seite)
-    assert payload.q == "hallo"
+    assert result.typ == "FakeQuery"
+    assert FakeQueryDto().parse(result.daten).q == "hallo"
 
 
 def test_wrap_query_unbekannter_typ_wirft(gen):
@@ -90,9 +66,9 @@ def test_wrap_query_unbekannter_typ_wirft(gen):
 def test_extract_query_response_entpackt_die_typisierte_antwort(gen):
     mapper = PayloadMapper(gen)
 
-    qr = FakeQueryResponse(
+    qr = QueryResponse(
         correlation_id="abc",
-        payload=FakeQueryResponsePayloadDto(fake_antwort=FakeAntwortDto(text="welt")),
+        payload=Nutzlast(typ="FakeAntwort", daten=bytes(FakeAntwortDto(text="welt"))),
     )
 
     antwort = mapper.extract_query_response(qr)
@@ -101,10 +77,17 @@ def test_extract_query_response_entpackt_die_typisierte_antwort(gen):
     assert antwort.text == "welt"
 
 
-def test_extract_query_response_ohne_oneof_wirft(gen):
+def test_extract_query_response_ohne_nutzlast_wirft(gen):
     mapper = PayloadMapper(gen)
-    qr = FakeQueryResponse(correlation_id="abc", payload=FakeQueryResponsePayloadDto())
+    qr = QueryResponse(correlation_id="abc")
     with pytest.raises(ValueError):
+        mapper.extract_query_response(qr)
+
+
+def test_extract_query_response_unbekannter_typ_wirft_klar(gen):
+    mapper = PayloadMapper(gen)
+    qr = QueryResponse(correlation_id="abc", payload=Nutzlast(typ="GibtEsNicht", daten=b""))
+    with pytest.raises(UnbekannteNutzlast, match="GibtEsNicht"):
         mapper.extract_query_response(qr)
 
 
@@ -115,8 +98,8 @@ def test_extract_query_response_ohne_oneof_wirft(gen):
 def test_roundtrip_response_symmetrie(gen):
     mapper = PayloadMapper(gen)
 
-    payload = mapper.wrap_query_response(FakeAntwortDto(text="rund"))
-    qr = FakeQueryResponse(correlation_id="x", payload=payload)
+    nutzlast = mapper.wrap_query_response(FakeAntwortDto(text="rund"))
+    qr = QueryResponse().parse(bytes(QueryResponse(correlation_id="x", payload=nutzlast)))   # über den Draht
 
     zurueck = mapper.extract_query_response(qr)
     assert isinstance(zurueck, FakeAntwortDto)

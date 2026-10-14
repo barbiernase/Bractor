@@ -14,7 +14,6 @@ using Infrastructure.Quellen.Treiber.Datei;
 using Infrastructure.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
-using ProtoRepo;
 using Xunit;
 
 namespace Infrastructure.Pruefstand.Quellen;
@@ -246,6 +245,8 @@ public class DateiTreiberTests
             Directory.CreateDirectory(dir);
             File.WriteAllText(Path.Combine(dir, "a.tiff"), "x");
             await Warte(() => gemeldet.Count == 1, sekunden: 10);
+            // Der Treiber meldet im selben Durchlauf, in dem er die Störung aufhebt — erst warten, dann prüfen (kein Wettlauf).
+            await Warte(() => !zustand.Alle["DateiErkannt"].Gestoert);
             zustand.Alle["DateiErkannt"].Gestoert.Should().BeFalse();
         }
         finally
@@ -278,7 +279,7 @@ public class DateiTreiberTests
         };
         var mapper = new ProtoMessageMapper();
         var dto = mapper.MapToDto(new EventEnvelope { AggregateId = Guid.NewGuid(), Payload = datei, AggregateType = "Quelle:DateiErkannt" });
-        var wire = EventEnvelopeDto.Parser.ParseFrom(dto.ToByteArray());
+        var wire = Cqrs.Leitung.EventEnvelopeDto.Parser.ParseFrom(dto.ToByteArray());
         mapper.MapToDomain(wire).Payload.Should().Be(datei);
     }
 }

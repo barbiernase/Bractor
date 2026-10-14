@@ -16,11 +16,12 @@ import betterproto
 import pytest
 
 from cqrs_client import AkteurVertragBasis, Zusage, VertragsVerletzung
+from cqrs_client.leitung import EventEnvelopeDto, Nutzlast
 from cqrs_client.registry import CategoryRegistry
 from cqrs_client.router import MessageContext, MessageRouter
 
 
-# ── Fake-Generat (wie betterproto es aus domain.proto erzeugt) ──
+# ── Fake-Generat (wie betterproto es aus dem Domänen-Proto erzeugt: nur DTOs) ──
 
 @dataclass(eq=False, repr=False)
 class GebuchtDto(betterproto.Message):
@@ -42,47 +43,8 @@ class StorniereDto(betterproto.Message):
     aggregate_id: str = betterproto.string_field(1)
 
 
-@dataclass(eq=False, repr=False)
-class CapabilitiesRequest(betterproto.Message):
-    event_types: list = betterproto.string_field(1)
-    message_types: list = betterproto.string_field(2)
-    handle_triggers: list = betterproto.string_field(3)
-    handle_queries: list = betterproto.string_field(4)
-    vertrag: str = betterproto.string_field(5)
-    vertrag_hash: str = betterproto.string_field(6)
-
-
-@dataclass(eq=False, repr=False)
-class CommandEnvelopeDto(betterproto.Message):
-    command_id: str = betterproto.string_field(1)
-    aggregate_id: str = betterproto.string_field(2)
-    aggregate_type: str = betterproto.string_field(3)
-    expected_version: int = betterproto.int32_field(4)
-    created_at_utc: int = betterproto.int64_field(5)
-    correlation_id: str = betterproto.string_field(6)
-    user_id: str = betterproto.string_field(7)
-    origin_session_id: str = betterproto.string_field(8)
-    causation_stream_id: str = betterproto.string_field(9)
-    causation_version: int = betterproto.int32_field(10)
-    causation_type: str = betterproto.string_field(11)
-    causation_index: int = betterproto.int32_field(12)
-    buche: BucheDto = betterproto.message_field(20, group="payload")
-    storniere: StorniereDto = betterproto.message_field(21, group="payload")
-
-
-@dataclass(eq=False, repr=False)
-class EventEnvelopeDto(betterproto.Message):
-    event_id: str = betterproto.string_field(1)
-    aggregate_id: str = betterproto.string_field(2)
-    aggregate_type: str = betterproto.string_field(3)
-    aggregate_version: int = betterproto.int32_field(4)
-    correlation_id: str = betterproto.string_field(7)
-    gebucht: GebuchtDto = betterproto.message_field(20, group="payload")
-    hinweis: HinweisDto = betterproto.message_field(21, group="payload")
-
-
-GEN = SimpleNamespace(ClientMessage=object, ServerMessage=object, CapabilitiesRequest=CapabilitiesRequest,
-                      CommandEnvelopeDto=CommandEnvelopeDto, EventEnvelopeDto=EventEnvelopeDto)
+# Das „generierte Domänen-Modul“: nur DTOs. CapabilitiesRequest und Hüllen kommen aus der echten Leitung.
+GEN = SimpleNamespace(GebuchtDto=GebuchtDto, HinweisDto=HinweisDto, BucheDto=BucheDto, StorniereDto=StorniereDto)
 
 S = TypeVar("S")
 
@@ -195,7 +157,8 @@ def test_jede_ausgabe_traegt_ihre_kausalitaet():
             gesendet.append(env)
 
     env = EventEnvelopeDto(aggregate_id="11111111-1111-1111-1111-111111111111", aggregate_version=7,
-                           correlation_id="22222222-2222-2222-2222-222222222222", hinweis=HinweisDto(text="x"))
+                           correlation_id="22222222-2222-2222-2222-222222222222",
+                           payload=Nutzlast(typ="Hinweis", daten=bytes(HinweisDto(text="x"))))
     asyncio.run(MessageRouter()._handle_event(SimpleNamespace(envelope=env), FakeProxy(), k.handle, k, k.state,
                                               k._mapper, k._registry, k._version_tracker))
     assert [e.causation_index for e in gesendet] == [0, 1, 2]
@@ -203,6 +166,8 @@ def test_jede_ausgabe_traegt_ihre_kausalitaet():
         {("11111111-1111-1111-1111-111111111111", 7, "Hinweis")}
     assert all(e.correlation_id == "22222222-2222-2222-2222-222222222222" for e in gesendet), "die Korrelation reist mit"
     assert all(e.expected_version == -1 for e in gesendet), "Zusagen gehen im Emittiert-Modus"
+    assert all(e.payload.typ == "Storniere" for e in gesendet), "der Command reist als Nutzlast"
+    assert StorniereDto().parse(gesendet[2].payload.daten).aggregate_id == "00000000-0000-0000-0000-000000000002"
 
 
 # ── Client-Vertrag (docs/konzept-akteure.md §4): EIN Client, ZWEI Akteure, eine Verbindung ──

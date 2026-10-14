@@ -4,7 +4,7 @@ using Abstractions;
 using Grpc.Core;
 using Grpc.Net.Client;
 using Infrastructure.Serialization;
-using ProtoRepo;
+using Cqrs.Leitung;
 
 namespace Client.Infrastructure.Connection;
 

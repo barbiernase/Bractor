@@ -5,7 +5,6 @@ using Domain.Projections;
 using FluentAssertions;
 using Google.Protobuf;
 using Infrastructure.Serialization;
-using ProtoRepo;
 using Xunit;
 using Domain.Projections.ImagePair;
 
@@ -25,8 +24,8 @@ public class DtoMapperRoundTripTests
     {
         var mapper = new ProtoMessageMapper();
         var dto = mapper.MapToDto((IQuery)new SucheImagePairs(filter));
-        var wire = QueryPayloadDto.Parser.ParseFrom(dto.ToByteArray());
-        return ((SucheImagePairs)mapper.MapToDomain(wire)).Filter;
+        var wire = Cqrs.Leitung.Nutzlast.Parser.ParseFrom(dto.ToByteArray());
+        return ((SucheImagePairs)mapper.QueryAus(wire)).Filter;
     }
 
     [Fact]

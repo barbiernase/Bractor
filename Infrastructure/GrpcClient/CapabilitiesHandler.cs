@@ -15,7 +15,7 @@ public class CapabilitiesHandler
     /// Abwärtskompatibel: Wenn message_types leer, fällt auf event_types zurück
     /// und leitet Commands daraus ab (altes Verhalten für Blazor-Client).
     /// </summary>
-    public CapabilitiesResult Handle(ProtoRepo.CapabilitiesRequest request, string sessionId)
+    public CapabilitiesResult Handle(Cqrs.Leitung.CapabilitiesRequest request, string sessionId)
     {
         var result = new CapabilitiesResult { SessionId = sessionId };
 
@@ -88,9 +88,9 @@ public class CapabilitiesHandler
     /// <summary>
     /// Baut die Proto-Response aus dem Result.
     /// </summary>
-    public ProtoRepo.CapabilitiesResponse BuildResponse(CapabilitiesResult result)
+    public Cqrs.Leitung.CapabilitiesResponse BuildResponse(CapabilitiesResult result)
     {
-        var response = new ProtoRepo.CapabilitiesResponse
+        var response = new Cqrs.Leitung.CapabilitiesResponse
         {
             SessionId = result.SessionId
         };

@@ -198,16 +198,16 @@ namespace Infrastructure.SourceGeneration
             
             // 3. Standalone-Kategorien — generisch (neue Kategorie = ein Eintrag)
             GenerateStandaloneHelpers(sb, queryTypes ?? new List<TypeAggregationResult>(), objectTypes,
-                "Query", "IQuery", "QueryPayloadDto", "ProtoQueryMappingHelpers", typeLookup);
+                "Query", "IQuery", "ProtoQueryMappingHelpers", typeLookup);
             
             GenerateStandaloneHelpers(sb, queryResponseTypes ?? new List<TypeAggregationResult>(), objectTypes,
-                "QueryResponse", "IQueryResponse", "QueryResponsePayloadDto", "ProtoQueryResponseMappingHelpers", typeLookup);
+                "QueryResponse", "IQueryResponse", "ProtoQueryResponseMappingHelpers", typeLookup);
             
             GenerateStandaloneHelpers(sb, triggerTypes ?? new List<TypeAggregationResult>(), objectTypes,
-                "Trigger", "IPipelineTrigger", "TriggerPayloadDto", "ProtoTriggerMappingHelpers", typeLookup);
+                "Trigger", "IPipelineTrigger", "ProtoTriggerMappingHelpers", typeLookup);
 
             GenerateStandaloneHelpers(sb, auftragTypes ?? new List<TypeAggregationResult>(), objectTypes,
-                "Auftrag", "IAuftrag", "AuftragPayloadDto", "ProtoAuftragMappingHelpers", typeLookup);
+                "Auftrag", "IAuftrag", "ProtoAuftragMappingHelpers", typeLookup);
             
             sb.AppendLine("}");
             
@@ -277,15 +277,15 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("    {");
             
             // Generate lookup dictionaries
-            GenerateLookupDictionaries(sb, commandTypes, "Command", "CommandEnvelopeDto");
+            GenerateLookupDictionaries(sb, commandTypes, "Command");
             
             // MapToDomain for envelope
-            sb.AppendLine("        public static CommandEnvelope MapToDomain(CommandEnvelopeDto dto)");
+            sb.AppendLine("        public static CommandEnvelope MapToDomain(global::Cqrs.Leitung.CommandEnvelopeDto dto)");
             sb.AppendLine("        {");
-            sb.AppendLine("            if (!CommandMappers.TryGetValue(dto.PayloadCase, out var mapper))");
-            sb.AppendLine("                throw new NotSupportedException($\"Unknown command type: {dto.PayloadCase}\");");
+            sb.AppendLine("            if (!CommandMappers.TryGetValue(dto.Payload?.Typ ?? \"\", out var mapper))");
+            sb.AppendLine("                throw new NotSupportedException($\"Unknown command type: {dto.Payload?.Typ}\");");
             sb.AppendLine();
-            sb.AppendLine("            var payload = mapper(dto);");
+            sb.AppendLine("            var payload = mapper(dto.Payload!);");
             sb.AppendLine();
             sb.AppendLine("            return new CommandEnvelope");
             sb.AppendLine("            {");
@@ -304,9 +304,9 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine();
             
             // MapToDto for envelope
-            sb.AppendLine("        public static CommandEnvelopeDto MapToDto(CommandEnvelope envelope)");
+            sb.AppendLine("        public static global::Cqrs.Leitung.CommandEnvelopeDto MapToDto(CommandEnvelope envelope)");
             sb.AppendLine("        {");
-            sb.AppendLine("            var dto = new CommandEnvelopeDto");
+            sb.AppendLine("            var dto = new global::Cqrs.Leitung.CommandEnvelopeDto");
             sb.AppendLine("            {");
             sb.AppendLine("                CommandId = envelope.CommandId.ToString(),");
             sb.AppendLine("                AggregateId = envelope.AggregateId.ToString(),");
@@ -321,7 +321,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("            if (!CommandReverseMappers.TryGetValue(envelope.Payload.GetType(), out var mapper))");
             sb.AppendLine("                throw new NotSupportedException($\"Unknown command type: {envelope.Payload.GetType().Name}\");");
             sb.AppendLine();
-            sb.AppendLine("            mapper(envelope.Payload, dto);");
+            sb.AppendLine("            dto.Payload = mapper(envelope.Payload);");
             sb.AppendLine("            return dto;");
             sb.AppendLine("        }");
             sb.AppendLine();
@@ -341,15 +341,15 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("    {");
             
             // Generate lookup dictionaries
-            GenerateLookupDictionaries(sb, eventTypes, "Event", "EventEnvelopeDto");
+            GenerateLookupDictionaries(sb, eventTypes, "Event");
             
             // MapToDomain for envelope
-            sb.AppendLine("        public static EventEnvelope MapToDomain(EventEnvelopeDto dto)");
+            sb.AppendLine("        public static EventEnvelope MapToDomain(global::Cqrs.Leitung.EventEnvelopeDto dto)");
             sb.AppendLine("        {");
-            sb.AppendLine("            if (!EventMappers.TryGetValue(dto.PayloadCase, out var mapper))");
-            sb.AppendLine("                throw new NotSupportedException($\"Unknown event type: {dto.PayloadCase}\");");
+            sb.AppendLine("            if (!EventMappers.TryGetValue(dto.Payload?.Typ ?? \"\", out var mapper))");
+            sb.AppendLine("                throw new NotSupportedException($\"Unknown event type: {dto.Payload?.Typ}\");");
             sb.AppendLine();
-            sb.AppendLine("            var payload = mapper(dto);");
+            sb.AppendLine("            var payload = mapper(dto.Payload!);");
             sb.AppendLine();
             sb.AppendLine("            return new EventEnvelope");
             sb.AppendLine("            {");
@@ -370,18 +370,18 @@ namespace Infrastructure.SourceGeneration
 
             // Nur die Nutzlast (ohne Envelope-Metadaten): für Ergebnisse externer Funktions-Ausführer, deren Envelope der
             // Server selbst stempelt (Ausführungs-Stream, Korrelation, Akteur).
-            sb.AppendLine("        public static IEvent MapPayload(EventEnvelopeDto dto)");
+            sb.AppendLine("        public static IEvent MapPayload(global::Cqrs.Leitung.EventEnvelopeDto dto)");
             sb.AppendLine("        {");
-            sb.AppendLine("            if (!EventMappers.TryGetValue(dto.PayloadCase, out var mapper))");
-            sb.AppendLine("                throw new NotSupportedException($\"Unknown event type: {dto.PayloadCase}\");");
-            sb.AppendLine("            return mapper(dto);");
+            sb.AppendLine("            if (!EventMappers.TryGetValue(dto.Payload?.Typ ?? \"\", out var mapper))");
+            sb.AppendLine("                throw new NotSupportedException($\"Unknown event type: {dto.Payload?.Typ}\");");
+            sb.AppendLine("            return mapper(dto.Payload!);");
             sb.AppendLine("        }");
             sb.AppendLine();
             
             // MapToDto for envelope
-            sb.AppendLine("        public static EventEnvelopeDto MapToDto(EventEnvelope envelope)");
+            sb.AppendLine("        public static global::Cqrs.Leitung.EventEnvelopeDto MapToDto(EventEnvelope envelope)");
             sb.AppendLine("        {");
-            sb.AppendLine("            var dto = new EventEnvelopeDto");
+            sb.AppendLine("            var dto = new global::Cqrs.Leitung.EventEnvelopeDto");
             sb.AppendLine("            {");
             sb.AppendLine("                EventId = envelope.EventId.ToString(),");
             sb.AppendLine("                AggregateId = envelope.AggregateId.ToString(),");
@@ -398,7 +398,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("            if (!EventReverseMappers.TryGetValue(envelope.Payload.GetType(), out var mapper))");
             sb.AppendLine("                throw new NotSupportedException($\"Unknown event type: {envelope.Payload.GetType().Name}\");");
             sb.AppendLine();
-            sb.AppendLine("            mapper(envelope.Payload, dto);");
+            sb.AppendLine("            dto.Payload = mapper(envelope.Payload);");
             sb.AppendLine("            return dto;");
             sb.AppendLine("        }");
             sb.AppendLine();
@@ -419,62 +419,55 @@ namespace Infrastructure.SourceGeneration
             StringBuilder sb,
             List<TypeAggregationResult> types,
             List<TypeAggregationResult> objectTypes,
-            string categoryName,       // "Query", "QueryResponse", "Trigger"
-            string interfaceName,      // "IQuery", "IQueryResponse", "IPipelineTrigger"
-            string payloadDtoName,     // "QueryPayloadDto", "QueryResponsePayloadDto", "TriggerPayloadDto"
+            string categoryName,       // "Query", "QueryResponse", "Trigger", "Auftrag"
+            string interfaceName,      // "IQuery", "IQueryResponse", "IPipelineTrigger", "IAuftrag"
             string helperClassName,    // "ProtoQueryMappingHelpers", etc.
             Dictionary<string, DomainType> typeLookup)
         {
+            // Die Leitung trägt jede Kategorie als Nutzlast (Typname + Bytes, Cqrs.Leitung/cqrs.proto); ohne Typen kennt der Mapper keinen.
             if (!types.Any())
             {
-                // Trigger/Auftrag: die Protokoll-Message existiert immer (leer, ohne oneof) — der Mapper auch, er kennt nur keinen Typ.
-                if (categoryName is not ("Trigger" or "Auftrag")) return;
                 sb.AppendLine($"    internal static class {helperClassName}");
                 sb.AppendLine("    {");
-                sb.AppendLine($"        public static {interfaceName} MapToDomain({payloadDtoName} dto) => throw new NotSupportedException(\"Keine {categoryName}-Typen in der Domäne.\");");
-                sb.AppendLine($"        public static {payloadDtoName} MapToDto({interfaceName} payload) => throw new NotSupportedException($\"Unknown {categoryName.ToLower()} type: {{payload.GetType().Name}}\");");
+                sb.AppendLine($"        public static {interfaceName} MapToDomain(global::Cqrs.Leitung.Nutzlast n) => throw new NotSupportedException($\"Unknown {categoryName.ToLower()} type: {{n.Typ}}\");");
+                sb.AppendLine($"        public static global::Cqrs.Leitung.Nutzlast MapToDto({interfaceName} payload) => throw new NotSupportedException($\"Unknown {categoryName.ToLower()} type: {{payload.GetType().Name}}\");");
                 sb.AppendLine("    }");
                 sb.AppendLine();
                 return;
             }
-            
+
             sb.AppendLine($"    internal static class {helperClassName}");
             sb.AppendLine("    {");
-            
-            GenerateLookupDictionaries(sb, types, categoryName, payloadDtoName);
-            
-            // MapToDomain
-            sb.AppendLine($"        public static {interfaceName} MapToDomain({payloadDtoName} dto)");
+
+            GenerateLookupDictionaries(sb, types, categoryName);
+
+            sb.AppendLine($"        public static {interfaceName} MapToDomain(global::Cqrs.Leitung.Nutzlast n)");
             sb.AppendLine("        {");
-            sb.AppendLine($"            if (!{categoryName}Mappers.TryGetValue(dto.PayloadCase, out var mapper))");
-            sb.AppendLine($"                throw new NotSupportedException($\"Unknown {categoryName.ToLower()} type: {{dto.PayloadCase}}\");");
-            sb.AppendLine();
-            sb.AppendLine("            return mapper(dto);");
+            sb.AppendLine($"            if (!{categoryName}Mappers.TryGetValue(n.Typ, out var mapper))");
+            sb.AppendLine($"                throw new NotSupportedException($\"Unknown {categoryName.ToLower()} type: {{n.Typ}}\");");
+            sb.AppendLine("            return mapper(n);");
             sb.AppendLine("        }");
             sb.AppendLine();
-            
-            // MapToDto
-            sb.AppendLine($"        public static {payloadDtoName} MapToDto({interfaceName} payload)");
+            sb.AppendLine($"        public static global::Cqrs.Leitung.Nutzlast MapToDto({interfaceName} payload)");
             sb.AppendLine("        {");
-            sb.AppendLine($"            var dto = new {payloadDtoName}();");
-            sb.AppendLine();
             sb.AppendLine($"            if (!{categoryName}ReverseMappers.TryGetValue(payload.GetType(), out var mapper))");
             sb.AppendLine($"                throw new NotSupportedException($\"Unknown {categoryName.ToLower()} type: {{payload.GetType().Name}}\");");
-            sb.AppendLine();
-            sb.AppendLine("            mapper(payload, dto);");
-            sb.AppendLine("            return dto;");
+            sb.AppendLine("            return mapper(payload);");
             sb.AppendLine("        }");
             sb.AppendLine();
-            
+
             GenerateIndividualMappers(sb, types, objectTypes, categoryName, typeLookup);
-            
+
             sb.AppendLine("    }");
             sb.AppendLine();
         }
 
-        private void GenerateLookupDictionaries(StringBuilder sb, List<TypeAggregationResult> types, string typeName, string envelopeDtoName)
+        /// <summary>
+        /// Die Nutzlast-Tabellen einer Kategorie: Typname → (Bytes → Domänen-Typ) und Domänen-Typ → Nutzlast. Der Typname ist der Name des DTO
+        /// ohne „Dto“ (Cqrs.Leitung/cqrs.proto, <c>Nutzlast.typ</c>); die Bytes sind die {Typ}Dto-Message des Anwendungs-Protos.
+        /// </summary>
+        private void GenerateLookupDictionaries(StringBuilder sb, List<TypeAggregationResult> types, string typeName)
         {
-            // Interface-Name ableiten
             var interfaceName = typeName switch
             {
                 "Command" => "ICommand",
@@ -484,35 +477,27 @@ namespace Infrastructure.SourceGeneration
                 "Trigger" => "IPipelineTrigger",
                 _ => $"I{typeName}"
             };
-            
-            // Forward mapping dictionary
-            sb.AppendLine($"        private static readonly Dictionary<{envelopeDtoName}.PayloadOneofCase, Func<{envelopeDtoName}, {interfaceName}>> {typeName}Mappers =");
-            sb.AppendLine($"            new Dictionary<{envelopeDtoName}.PayloadOneofCase, Func<{envelopeDtoName}, {interfaceName}>>");
+
+            sb.AppendLine($"        private static readonly Dictionary<string, Func<global::Cqrs.Leitung.Nutzlast, {interfaceName}>> {typeName}Mappers =");
+            sb.AppendLine($"            new Dictionary<string, Func<global::Cqrs.Leitung.Nutzlast, {interfaceName}>>");
             sb.AppendLine("            {");
-            
+            foreach (var type in types)
+            {
+                var sanitizedName = NameSanitizer.SanitizeName(GetSimpleTypeName(type.Node.FullName));
+                sb.AppendLine($"                [\"{sanitizedName}\"] = n => Map{sanitizedName}({sanitizedName}Dto.Parser.ParseFrom(n.Daten)),");
+            }
+            sb.AppendLine("            };");
+            sb.AppendLine();
+
+            sb.AppendLine($"        private static readonly Dictionary<Type, Func<{interfaceName}, global::Cqrs.Leitung.Nutzlast>> {typeName}ReverseMappers =");
+            sb.AppendLine($"            new Dictionary<Type, Func<{interfaceName}, global::Cqrs.Leitung.Nutzlast>>");
+            sb.AppendLine("            {");
             foreach (var type in types)
             {
                 var simpleName = GetSimpleTypeName(type.Node.FullName);
                 var sanitizedName = NameSanitizer.SanitizeName(simpleName);
-                var fieldName = NameSanitizer.ToPascalCase(NameSanitizer.ToSnakeCase(simpleName));
-                sb.AppendLine($"                [{envelopeDtoName}.PayloadOneofCase.{fieldName}] = dto => Map{sanitizedName}(dto.{fieldName}),");
+                sb.AppendLine($"                [typeof({simpleName})] = p => new global::Cqrs.Leitung.Nutzlast {{ Typ = \"{sanitizedName}\", Daten = global::Google.Protobuf.MessageExtensions.ToByteString(MapToDto(({simpleName})p)) }},");
             }
-            
-            sb.AppendLine("            };");
-            sb.AppendLine();
-            
-            // Reverse mapping dictionary
-            sb.AppendLine($"        private static readonly Dictionary<Type, Action<{interfaceName}, {envelopeDtoName}>> {typeName}ReverseMappers =");
-            sb.AppendLine($"            new Dictionary<Type, Action<{interfaceName}, {envelopeDtoName}>>");
-            sb.AppendLine("            {");
-            
-            foreach (var type in types)
-            {
-                var simpleName = GetSimpleTypeName(type.Node.FullName);
-                var fieldName = NameSanitizer.ToPascalCase(NameSanitizer.ToSnakeCase(simpleName));
-                sb.AppendLine($"                [typeof({simpleName})] = (payload, dto) => dto.{fieldName} = MapToDto(({simpleName})payload),");
-            }
-            
             sb.AppendLine("            };");
             sb.AppendLine();
         }

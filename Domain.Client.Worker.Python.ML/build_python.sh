@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # REPO-PFAD: Domain.Client.Worker.Python.ML/build_python.sh
-# Generiert betterproto-Typen nach domain_client/generated/
+# Generiert die betterproto-Typen der Domänen-DTOs (ProtoRepo/domain.proto, nur DTOs) nach domain_client/generated/.
+# Die Leitung (Hüllen, Dienst, Nutzlast) liegt dem SDK bei: Client.Infrastructure.Python/build_leitung.sh.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"

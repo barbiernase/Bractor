@@ -1,140 +1,138 @@
 # REPO-PFAD: Client.Infrastructure.Python/cqrs_client/mapper.py
 """
-Extrahiert konkrete Payloads aus Envelope/Wrapper-Messages
-und verpackt ausgehende Payloads in Envelopes.
+Nutzlast und Hüllen: packt Domänen-DTOs in die Leitung des Frameworks und wieder aus.
 
-Deutlich vereinfacht durch betterproto:
-  - Kein Konverter-Code (betterproto-Objekte SIND die Payloads)
-  - Kein Feld-Mapping (betterproto macht das nativ)
-  - Nur oneof-Extraktion und Envelope-Konstruktion
+Die Leitung (Cqrs.Leitung/cqrs.proto → cqrs_client.leitung) kennt keinen Domänen-Typ. Jede Domänen-Nachricht
+(Command, Event, Query, Antwort, Trigger, Auftrag) reist als `Nutzlast`:
 
-Gegenstück zu ProtoMessageMapper in C# — aber wesentlich schlanker,
-weil betterproto die Serialisierung übernimmt.
+    typ   = Proto-Name des DTO ohne „Dto“ (z. B. "ErstelleDatensatz")
+    daten = die {typ}Dto-Message des Anwendungs-Protos, protobuf-kodiert (betterproto: bytes(dto))
+
+Die Tabelle typ → DTO-Klasse entsteht EINMAL aus dem generierten Domänen-Modul (domain.proto der Anwendung:
+nur die DTOs). Gegenstück zum Nutzlast-Mapping auf der C#-Seite.
 """
 
 from __future__ import annotations
 
 import time
-from dataclasses import fields
 from typing import Any
 from uuid import UUID, uuid4
 
 import betterproto
 
+from . import leitung
+from .leitung import CommandEnvelopeDto, EventEnvelopeDto, Nutzlast
 
-def extract_oneof_payload(
-    message: betterproto.Message,
-    group_name: str = "payload",
-) -> tuple[str, betterproto.Message]:
+DTO_SUFFIX = "Dto"
+
+
+def typ_von(klasse: type) -> str:
+    """Der Nutzlast-Typ einer DTO-Klasse: ihr Proto-Name ohne „Dto“ (BildVerfuegbarDto → "BildVerfuegbar")."""
+    name = klasse.__name__
+    return name[: -len(DTO_SUFFIX)] if name.endswith(DTO_SUFFIX) else name
+
+
+class UnbekannteNutzlast(ValueError):
+    """Eine Nutzlast, deren Typ das Domänen-Modul nicht kennt (oder die leer ist)."""
+
+
+class NutzlastTabelle:
     """
-    Extrahiert den konkreten Typ aus einem betterproto-oneof.
-
-    Returns:
-        (field_name, payload) — z.B. ("bild_verfuegbar", BildVerfuegbarDto(...))
-
-    Raises:
-        ValueError: Wenn kein oneof-Feld gesetzt ist.
+    typ → DTO-Klasse, einmal aus dem generierten Domänen-Modul gebaut: jede betterproto-Message, deren Name auf „Dto“
+    endet. `packe` und `entpacke` sind die beiden einzigen Wege zwischen DTO und Leitung.
     """
-    field_name, payload = betterproto.which_one_of(message, group_name)
-    if not field_name:
-        raise ValueError(
-            f"Kein {group_name}-oneof gesetzt in {type(message).__name__}"
-        )
-    return field_name, payload
+
+    def __init__(self, generated_module: Any):
+        self._klassen: dict[str, type] = {}
+        for wert in vars(generated_module).values():
+            if (isinstance(wert, type) and issubclass(wert, betterproto.Message)
+                    and wert.__name__.endswith(DTO_SUFFIX)):
+                typ = typ_von(wert)
+                vorhanden = self._klassen.get(typ)
+                if vorhanden is not None and vorhanden is not wert:
+                    raise ValueError(f"Nutzlast-Typ {typ} doppelt: {vorhanden!r} und {wert!r}")
+                self._klassen[typ] = wert
+
+    def __contains__(self, typ: str) -> bool:
+        return typ in self._klassen
+
+    def __len__(self) -> int:
+        return len(self._klassen)
+
+    def klasse(self, typ: str) -> type:
+        """Die DTO-Klasse zu einem Nutzlast-Typ — unbekannt → UnbekannteNutzlast."""
+        if not typ:
+            raise UnbekannteNutzlast("Leere Nutzlast (kein Typ gesetzt)")
+        klasse = self._klassen.get(typ)
+        if klasse is None:
+            raise UnbekannteNutzlast(
+                f"Unbekannter Nutzlast-Typ '{typ}' — nicht im Domänen-Modul ({len(self._klassen)} DTO-Typen); "
+                f"Generat veraltet? (build_python.sh)")
+        return klasse
+
+    def packe(self, dto: betterproto.Message) -> Nutzlast:
+        """DTO → Nutzlast(typ, daten). Nur Typen des Domänen-Moduls — sonst TypeError."""
+        typ = typ_von(type(dto))
+        if self._klassen.get(typ) is not type(dto):
+            raise TypeError(
+                f"{type(dto).__name__} ist kein DTO des Domänen-Moduls — als Nutzlast nicht verpackbar")
+        return Nutzlast(typ=typ, daten=bytes(dto))
+
+    def entpacke(self, nutzlast: Nutzlast | None) -> betterproto.Message:
+        """Nutzlast → DTO-Instanz (Klasse nach `typ`, Inhalt aus `daten`)."""
+        if nutzlast is None:
+            raise UnbekannteNutzlast("Keine Nutzlast")
+        return self.klasse(nutzlast.typ)().parse(nutzlast.daten)
 
 
 class PayloadMapper:
     """
-    Mapper zwischen betterproto-Messages und dem Framework.
+    Zwischen Domänen-DTOs und der Leitung.
 
-    Extraktion (Server → Client):
-      - EventEnvelopeDto → konkreter Event-Typ
-      - TriggerPayloadDto → konkreter Trigger-Typ
-      - QueryPayloadDto → konkreter Query-Typ
-
-    Verpackung (Client → Server):
-      - Command → CommandEnvelopeDto
-      - Event → EventEnvelopeDto (für TransientEvents)
+    Auspacken (Server → Client): Event-Hülle, TriggerForward, QueryForward, ArbeitsAuftrag, QueryResponse → DTO.
+    Verpacken (Client → Server): Command → CommandEnvelopeDto, Event → EventEnvelopeDto (Transient / Funktions-Ergebnis),
+    Query, Query-Antwort, Trigger → Nutzlast.
     """
 
     def __init__(self, generated_module):
         """
         Args:
-            generated_module: Das betterproto-generierte Modul
-                (enthält CommandEnvelopeDto, EventEnvelopeDto, etc.)
+            generated_module: Das betterproto-generierte Domänen-Modul (nur DTOs, z. B. domain_client.generated)
         """
-        self._gen = generated_module
-        self._command_field_map = self._build_type_to_field_map("CommandEnvelopeDto")
-        self._event_field_map = self._build_type_to_field_map("EventEnvelopeDto")
-        self._query_field_map = self._build_type_to_field_map("QueryPayloadDto")
-        self._query_response_field_map = self._build_type_to_field_map("QueryResponsePayloadDto")
-        self._trigger_field_map = self._build_type_to_field_map("TriggerPayloadDto")
-        self._auftrag_field_map = self._build_type_to_field_map("AuftragPayloadDto")
+        self.tabelle = NutzlastTabelle(generated_module)
 
-    def _build_type_to_field_map(self, envelope_class_name: str) -> dict[type, str]:
-        """
-        Baut eine Zuordnung: payload-Typ → oneof-Feldname im Envelope.
+    def packe(self, dto: betterproto.Message) -> Nutzlast:
+        return self.tabelle.packe(dto)
 
-        Beispiel: KlassifiziereBildPaarDurchKiDto → "klassifiziere_bild_paar_durch_ki"
-
-        Nutzt betterproto's Dataclass-Fields um die Zuordnung zu ermitteln.
-        """
-        envelope_class = getattr(self._gen, envelope_class_name, None)
-        if envelope_class is None:
-            return {}
-
-        type_to_field: dict[type, str] = {}
-        for f in fields(envelope_class):
-            # betterproto oneof-Felder haben den Typ der Message als Annotation
-            field_type = f.type
-            if isinstance(field_type, str):
-                # Forward reference — resolve from module
-                resolved = getattr(self._gen, field_type, None)
-                if resolved is not None:
-                    type_to_field[resolved] = f.name
-            elif isinstance(field_type, type) and issubclass(field_type, betterproto.Message):
-                type_to_field[field_type] = f.name
-
-        return type_to_field
+    def entpacke(self, nutzlast: Nutzlast | None) -> betterproto.Message:
+        return self.tabelle.entpacke(nutzlast)
 
     # ═══════════════════════════════════════════════════
-    # EXTRAKTION (eingehend)
+    # AUSPACKEN (eingehend)
     # ═══════════════════════════════════════════════════
 
-    def extract_event_payload(self, envelope) -> betterproto.Message:
-        """Extrahiert den konkreten Event-Typ aus EventEnvelopeDto."""
-        _, payload = extract_oneof_payload(envelope, "payload")
-        return payload
+    def extract_event_payload(self, envelope: EventEnvelopeDto) -> betterproto.Message:
+        """Das Event aus der Hülle (EventEnvelopeDto.payload)."""
+        return self.entpacke(envelope.payload)
 
-    def extract_trigger_payload(self, wrapper) -> betterproto.Message:
-        """Extrahiert den konkreten Trigger-Typ aus TriggerPayloadDto."""
-        _, payload = extract_oneof_payload(wrapper, "payload")
-        return payload
+    def extract_trigger_payload(self, nutzlast: Nutzlast) -> betterproto.Message:
+        """Der Trigger aus TriggerForward.payload."""
+        return self.entpacke(nutzlast)
 
-    def extract_query_payload(self, wrapper) -> betterproto.Message:
-        """Extrahiert den konkreten Query-Typ aus QueryPayloadDto."""
-        _, payload = extract_oneof_payload(wrapper, "payload")
-        return payload
+    def extract_query_payload(self, nutzlast: Nutzlast) -> betterproto.Message:
+        """Die Query aus QueryForward.payload."""
+        return self.entpacke(nutzlast)
 
-    def extract_auftrag_payload(self, wrapper) -> betterproto.Message:
-        """Extrahiert den konkreten Auftrag aus AuftragPayloadDto (Katalog-Funktion, ArbeitsAuftrag.auftrag)."""
-        _, payload = extract_oneof_payload(wrapper, "payload")
-        return payload
+    def extract_auftrag_payload(self, nutzlast: Nutzlast) -> betterproto.Message:
+        """Der Auftrag einer Katalog-Funktion aus ArbeitsAuftrag.auftrag."""
+        return self.entpacke(nutzlast)
 
-    def extract_query_response(self, query_response) -> betterproto.Message:
-        """
-        Entpackt die TYPISIERTE Antwort aus einem QueryResponse (Server → Client) — die Ask-Seite
-        (docs/09 §9.4). QueryResponse.payload ist ein QueryResponsePayloadDto-oneof; das ist das
-        fehlende Gegenstück zu wrap_query_response. Nutzt den generischen extract_oneof_payload.
-
-        Beispiel: QueryResponse(payload=QueryResponsePayloadDto(datensatz_samples=...))
-                  → DatensatzSamplesDto(...)
-        """
-        _, payload = extract_oneof_payload(query_response.payload, "payload")
-        return payload
+    def extract_query_response(self, query_response: leitung.QueryResponse) -> betterproto.Message:
+        """Die TYPISIERTE Antwort aus einem QueryResponse (Server → Client) — die Ask-Seite (docs/09 §9.4)."""
+        return self.entpacke(query_response.payload)
 
     # ═══════════════════════════════════════════════════
-    # VERPACKUNG (ausgehend)
+    # VERPACKEN (ausgehend)
     # ═══════════════════════════════════════════════════
 
     def wrap_command(
@@ -146,40 +144,27 @@ class PayloadMapper:
         correlation_id: str = "",
         session_id: str = "",
         causation=None,
-    ):
+    ) -> CommandEnvelopeDto:
         """
-        Verpackt einen Command in einen CommandEnvelopeDto.
-
-        Setzt das richtige oneof-Feld basierend auf dem Typ. `causation` (router.Kausalitaet): die Zusage
-        antwortet auf ein Event — Stream + Version + Typ + Index reisen mit, der Server leitet daraus die
-        CommandId deterministisch ab (doppelt zugestellt ≠ doppelt wirksam, docs/konzept-akteure.md §5.3).
+        Ein Command in einer CommandEnvelopeDto-Hülle. `causation` (router.Kausalitaet): die Zusage antwortet auf ein
+        Event — Stream + Version + Typ + Index reisen mit, der Server leitet daraus die CommandId deterministisch ab
+        (doppelt zugestellt ≠ doppelt wirksam, docs/konzept-akteure.md §5.3).
         """
-        envelope_cls = getattr(self._gen, "CommandEnvelopeDto")
-        envelope = envelope_cls(
+        envelope = CommandEnvelopeDto(
             command_id=str(uuid4()),
             aggregate_id=str(aggregate_id),
             aggregate_type=aggregate_type,
             expected_version=expected_version,
-            created_at_utc=int(time.time() * 1_000),  # Milliseconds (C# erwartet FromUnixTimeMilliseconds)
+            created_at_utc=int(time.time() * 1_000),  # Millisekunden (C# erwartet FromUnixTimeMilliseconds)
             correlation_id=correlation_id or str(uuid4()),
             origin_session_id=session_id,
+            payload=self.packe(command),
         )
-        if causation is not None and "causation_stream_id" in getattr(envelope, "__dataclass_fields__", {}):
+        if causation is not None:
             envelope.causation_stream_id = causation.stream_id
             envelope.causation_version = causation.version
             envelope.causation_type = causation.typ
             envelope.causation_index = causation.index
-
-        # Oneof-Feld setzen
-        field_name = self._get_oneof_field_name(command, self._command_field_map)
-        if field_name:
-            setattr(envelope, field_name, command)
-        else:
-            raise TypeError(
-                f"Kein oneof-Feld für {type(command).__name__} "
-                f"in CommandEnvelopeDto gefunden"
-            )
-
         return envelope
 
     def wrap_transient_event(
@@ -187,116 +172,42 @@ class PayloadMapper:
         event: betterproto.Message,
         aggregate_id: UUID | None = None,
         correlation_id: str = "",
-    ):
-        """
-        Verpackt ein TransientEvent in einen EventEnvelopeDto.
-
-        TransientEvents werden über den TransientEventRequest-Kanal
-        an den Server gesendet und dort via BrokerPublisher verteilt.
-        """
-        envelope_cls = getattr(self._gen, "EventEnvelopeDto")
-        envelope = envelope_cls(
+    ) -> EventEnvelopeDto:
+        """Ein TransientEvent in einer EventEnvelopeDto-Hülle (TransientEventRequest → BrokerPublisher)."""
+        return EventEnvelopeDto(
             event_id=str(uuid4()),
             aggregate_id=str(aggregate_id) if aggregate_id else "",
             created_at_utc=int(time.time() * 1_000),
             correlation_id=correlation_id or str(uuid4()),
+            payload=self.packe(event),
         )
 
-        field_name = self._get_oneof_field_name(event, self._event_field_map)
-        if field_name:
-            setattr(envelope, field_name, event)
-
-        return envelope
-
-    def wrap_ergebnis(self, ergebnis: betterproto.Message, vorgang: str, korrelation: str = ""):
+    def wrap_ergebnis(self, ergebnis: betterproto.Message, vorgang: str, korrelation: str = "") -> EventEnvelopeDto:
         """
-        Verpackt das Ergebnis einer Katalog-Funktion (einer ihrer OneOf-Fälle, ein Event) in einen EventEnvelopeDto für
-        ArbeitsErgebnis.ergebnis. Der Server liest nur die Nutzlast und stempelt Stream/Korrelation/Akteur selbst; Stream =
-        Vorgang (Ausführungs-Stream) steht nur zur Lesbarkeit drin.
+        Das Ergebnis einer Katalog-Funktion (einer ihrer OneOf-Fälle, ein Event) als EventEnvelopeDto für
+        ArbeitsErgebnis.ergebnis. Der Server liest nur die Nutzlast und stempelt Stream/Korrelation/Akteur selbst;
+        Stream = Vorgang (Ausführungs-Stream) steht nur zur Lesbarkeit drin.
         """
-        envelope_cls = getattr(self._gen, "EventEnvelopeDto")
-        envelope = envelope_cls(
+        return EventEnvelopeDto(
             event_id=str(uuid4()),
             aggregate_id=vorgang,
             created_at_utc=int(time.time() * 1_000),
             causation_id=vorgang,
             correlation_id=korrelation,
+            payload=self.packe(ergebnis),
         )
-        field_name = self._get_oneof_field_name(ergebnis, self._event_field_map)
-        if not field_name:
-            raise TypeError(
-                f"Kein oneof-Feld für {type(ergebnis).__name__} "
-                f"in EventEnvelopeDto gefunden"
-            )
-        setattr(envelope, field_name, ergebnis)
-        return envelope
 
-    def wrap_query(self, query: betterproto.Message):
-        """
-        Verpackt eine Query in einen QueryPayloadDto (setzt das oneof-Feld) — die Ask-Seite
-        (docs/09 §9.4). Spiegelbild zu wrap_command; dieselbe type→oneof-Feld-Logik, abgeleitet
-        aus QueryPayloadDto. Der Proxy hängt Korrelation + 30s-Timeout drum.
-        """
-        payload_cls = getattr(self._gen, "QueryPayloadDto")
-        payload = payload_cls()
+    def wrap_query(self, query: betterproto.Message) -> Nutzlast:
+        """Eine Query als Nutzlast für QueryRequest.payload — der Proxy hängt Korrelation + 30 s Timeout drum."""
+        return self.packe(query)
 
-        field_name = self._get_oneof_field_name(query, self._query_field_map)
-        if not field_name:
-            raise TypeError(
-                f"Kein oneof-Feld für {type(query).__name__} "
-                f"in QueryPayloadDto gefunden"
-            )
-        setattr(payload, field_name, query)
+    def wrap_query_response(self, response: betterproto.Message) -> Nutzlast:
+        """Eine Query-Antwort als Nutzlast für QueryResponseFromClient.payload."""
+        return self.packe(response)
 
-        return payload
+    def wrap_trigger(self, trigger: betterproto.Message) -> Nutzlast:
+        """Ein Trigger als Nutzlast für TriggerRequest.payload (Client→Client, der Server forwarded ihn)."""
+        return self.packe(trigger)
 
-    def wrap_query_response(self, response: betterproto.Message):
-        """
-        Verpackt eine Query-Response in einen QueryResponsePayloadDto.
 
-        Setzt das richtige oneof-Feld basierend auf dem Response-Typ — dieselbe Logik wie
-        wrap_command/wrap_transient_event (nutzt die aus QueryResponsePayloadDto abgeleitete
-        type→oneof-Feld-Map). Damit kann ein Python-Client Queries VOLLSTÄNDIG beantworten
-        (vorher: leerer Payload, oneof nie gesetzt).
-        """
-        payload_cls = getattr(self._gen, "QueryResponsePayloadDto")
-        payload = payload_cls()
-
-        field_name = self._get_oneof_field_name(response, self._query_response_field_map)
-        if not field_name:
-            raise TypeError(
-                f"Kein oneof-Feld für {type(response).__name__} "
-                f"in QueryResponsePayloadDto gefunden"
-            )
-        setattr(payload, field_name, response)
-
-        return payload
-
-    def wrap_trigger(self, trigger: betterproto.Message):
-        """
-        Verpackt einen Trigger in einen TriggerPayloadDto (setzt das oneof-Feld).
-
-        Für Client→Client-Trigger: yieldet ein Handler einen Trigger, verpackt der Router ihn hiermit
-        und sendet ihn via GrpcProxy.send_trigger — der Server forwarded ihn an den registrierten
-        Client-Handler (TriggerHandlerRegistry). Gegenstück zu extract_trigger_payload.
-        """
-        payload_cls = getattr(self._gen, "TriggerPayloadDto")
-        payload = payload_cls()
-
-        field_name = self._get_oneof_field_name(trigger, self._trigger_field_map)
-        if not field_name:
-            raise TypeError(
-                f"Kein oneof-Feld für {type(trigger).__name__} "
-                f"in TriggerPayloadDto gefunden"
-            )
-        setattr(payload, field_name, trigger)
-
-        return payload
-
-    def _get_oneof_field_name(
-        self,
-        payload: betterproto.Message,
-        field_map: dict[type, str],
-    ) -> str | None:
-        """Findet den oneof-Feldnamen für einen Payload-Typ."""
-        return field_map.get(type(payload))
+__all__ = ["DTO_SUFFIX", "NutzlastTabelle", "PayloadMapper", "UnbekannteNutzlast", "typ_von"]

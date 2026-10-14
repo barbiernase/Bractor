@@ -11,6 +11,7 @@
     <ProjectReference Include="..\Domain\Domain.csproj" />
     <ProjectReference Include="..\Core\Core.csproj" />
     <ProjectReference Include="..\ProtoRepo\ProtoRepo.csproj" />
+    <ProjectReference Include="..\Cqrs.Leitung\Cqrs.Leitung.csproj" />
   </ItemGroup>
 
   <ItemGroup>

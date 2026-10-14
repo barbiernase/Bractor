@@ -24,7 +24,13 @@ import betterproto
 from grpclib.client import Channel
 from grpclib.const import Cardinality
 
+from . import leitung as L
+
 log = logging.getLogger(__name__)
+
+# gRPC-Route aus der Leitung (Cqrs.Leitung/cqrs.proto: package cqrs; service CqrsClientService; rpc Connect).
+# Das Python-Generat entsteht ohne package (flach, build_leitung.sh) — die Route steht deshalb hier.
+ROUTE = "/cqrs.CqrsClientService/Connect"
 
 
 class GrpcProxy:
@@ -34,10 +40,10 @@ class GrpcProxy:
     Verwendet grpclib.client.Channel.request() für den
     STREAM_STREAM-RPC — das gibt uns ein Stream-Objekt
     auf dem wir unabhängig senden und empfangen können.
+    Alle Nachrichten sind Typen der Leitung (cqrs_client.leitung); Domänen-DTOs reisen darin als Nutzlast.
     """
 
-    def __init__(self, generated_module, akteur_token: str | None = None):
-        self._gen = generated_module
+    def __init__(self, akteur_token: str | None = None):
         # Akteur (docs/konzept-akteure.md): Token im gRPC-Header "akteur-token" — der Server ordnet es einem
         # IAkteur zu und lässt nur dessen IDarf<…> durch. None = kein Header (Server ohne Akteure: alles offen).
         self._akteur_token = akteur_token
@@ -58,28 +64,6 @@ class GrpcProxy:
 
         # Signal für Verbindungsstatus
         self._disconnected = asyncio.Event()
-
-        # Proto-Metadaten für den Stream
-        self._client_msg_cls = getattr(generated_module, "ClientMessage")
-        self._server_msg_cls = getattr(generated_module, "ServerMessage")
-
-        # gRPC Route (package.service/method aus dem Proto)
-        # CqrsSolution ist der package-Name aus domain.proto
-        self._route = self._detect_route()
-
-    def _detect_route(self) -> str:
-        """Erkennt die gRPC-Route aus dem generierten Modul."""
-        # betterproto generiert den Stub mit der Route
-        stub_cls = getattr(self._gen, "CqrsClientServiceStub", None)
-        if stub_cls:
-            # Versuche Route aus dem Stub zu extrahieren
-            for attr in dir(stub_cls):
-                if attr == "connect":
-                    # Die Route folgt dem Pattern /{package}.{service}/{method}
-                    pass
-        # Fallback: aus dem Proto-Package ableiten
-        # domain.proto hat: package CqrsSolution; service CqrsClientService
-        return "/CqrsSolution.CqrsClientService/Connect"
 
     @property
     def session_id(self) -> str:
@@ -116,17 +100,17 @@ class GrpcProxy:
 
         # grpclib Lowlevel: Bidirektionalen Stream öffnen
         self._stream = self._channel.request(
-            self._route,
+            ROUTE,
             Cardinality.STREAM_STREAM,
-            self._client_msg_cls,
-            self._server_msg_cls,
+            L.ClientMessage,
+            L.ServerMessage,
             metadata={"akteur-token": self._akteur_token} if self._akteur_token else None,
         )
         # Context betreten (öffnet den HTTP/2-Stream)
         await self._stream.__aenter__()
 
         # Capabilities-Handshake
-        cap_msg = self._client_msg_cls(capabilities=capabilities_request)
+        cap_msg = L.ClientMessage(capabilities=capabilities_request)
         await self._stream.send_message(cap_msg)
         log.info("CapabilitiesRequest sent, waiting for response...")
 
@@ -203,28 +187,26 @@ class GrpcProxy:
 
     async def send_command(self, envelope_dto) -> None:
         """Fire-and-forget Command."""
-        cmd_req_cls = getattr(self._gen, "CommandRequest")
-        msg = self._client_msg_cls(
-            command=cmd_req_cls(envelope=envelope_dto)
+        msg = L.ClientMessage(
+            command=L.CommandRequest(envelope=envelope_dto)
         )
         await self._send(msg)
         log.debug("Command sent")
 
     async def send_trigger(
-        self, trigger_payload_dto, correlation_id: str | None = None
+        self, nutzlast: L.Nutzlast, correlation_id: str | None = None
     ):
-        """Trigger senden, auf TriggerAck warten."""
+        """Trigger (als Nutzlast) senden, auf TriggerAck warten."""
         cid = correlation_id or str(uuid4())
-        trigger_req_cls = getattr(self._gen, "TriggerRequest")
 
         loop = asyncio.get_event_loop()
         future: asyncio.Future = loop.create_future()
         self._pending_triggers[cid] = future
 
         try:
-            msg = self._client_msg_cls(
-                trigger=trigger_req_cls(
-                    payload=trigger_payload_dto,
+            msg = L.ClientMessage(
+                trigger=L.TriggerRequest(
+                    payload=nutzlast,
                     correlation_id=cid,
                 )
             )
@@ -234,21 +216,20 @@ class GrpcProxy:
             self._pending_triggers.pop(cid, None)
 
     async def send_query(
-        self, query_payload_dto, correlation_id: str | None = None
+        self, nutzlast: L.Nutzlast, correlation_id: str | None = None
     ):
-        """Query senden, auf QueryResponse warten."""
+        """Query (als Nutzlast) senden, auf QueryResponse warten."""
         cid = correlation_id or str(uuid4())
-        query_req_cls = getattr(self._gen, "QueryRequest")
 
         loop = asyncio.get_event_loop()
         future: asyncio.Future = loop.create_future()
         self._pending_queries[cid] = future
 
         try:
-            msg = self._client_msg_cls(
-                query=query_req_cls(
+            msg = L.ClientMessage(
+                query=L.QueryRequest(
                     correlation_id=cid,
-                    payload=query_payload_dto,
+                    payload=nutzlast,
                 )
             )
             await self._send(msg)
@@ -258,9 +239,8 @@ class GrpcProxy:
 
     async def publish_transient(self, envelope_dto) -> None:
         """TransientEvent publishen."""
-        te_req_cls = getattr(self._gen, "TransientEventRequest")
-        msg = self._client_msg_cls(
-            transient_event=te_req_cls(envelope=envelope_dto)
+        msg = L.ClientMessage(
+            transient_event=L.TransientEventRequest(envelope=envelope_dto)
         )
         await self._send(msg)
 
@@ -268,9 +248,8 @@ class GrpcProxy:
         self, correlation_id: str, accepted: bool, error_message: str = ""
     ) -> None:
         """Antwort auf empfangenen TriggerForward."""
-        result_cls = getattr(self._gen, "TriggerResult")
-        msg = self._client_msg_cls(
-            trigger_result=result_cls(
+        msg = L.ClientMessage(
+            trigger_result=L.TriggerResult(
                 correlation_id=correlation_id,
                 accepted=accepted,
                 error_message=error_message,
@@ -279,19 +258,14 @@ class GrpcProxy:
         await self._send(msg)
 
     async def send_query_response(
-        self, correlation_id: str, response_payload_dto,
+        self, correlation_id: str, nutzlast: L.Nutzlast | None,
         error_code: str = "", error_message: str = ""
     ) -> None:
-        """Antwort auf empfangene QueryForward."""
-        answer_cls = getattr(self._gen, "QueryResponseFromClient")
-        msg = self._client_msg_cls(
-            query_answer=answer_cls(
-                correlation_id=correlation_id,
-                payload=response_payload_dto,
-                error_code=error_code,
-                error_message=error_message,
-            )
-        )
+        """Antwort auf empfangene QueryForward: die Antwort als Nutzlast ODER ein Fehler (dann ohne Nutzlast)."""
+        felder = {"correlation_id": correlation_id, "error_code": error_code, "error_message": error_message}
+        if nutzlast is not None:   # bei Fehler bleibt das Feld leer (nicht None)
+            felder["payload"] = nutzlast
+        msg = L.ClientMessage(query_answer=L.QueryResponseFromClient(**felder))
         await self._send(msg)
 
     # ═══════════════════════════════════════════════════
@@ -300,28 +274,24 @@ class GrpcProxy:
 
     async def send_funktionen_anbieten(self, angebote: list[tuple[str, int]]) -> None:
         """„Ich biete Funktion F mit n Slots“ — der Server holt dann für diese Session Aufträge beim Vermittler."""
-        anbieten_cls = getattr(self._gen, "FunktionenAnbieten")
-        angebot_cls = getattr(self._gen, "FunktionsAngebot")
-        msg = self._client_msg_cls(
-            funktionen_anbieten=anbieten_cls(
-                angebote=[angebot_cls(funktion=f, slots=s) for f, s in angebote]
+        msg = L.ClientMessage(
+            funktionen_anbieten=L.FunktionenAnbieten(
+                angebote=[L.FunktionsAngebot(funktion=f, slots=s) for f, s in angebote]
             )
         )
         await self._send(msg)
 
     async def send_arbeits_ergebnis(self, vorgang: str, ergebnis_envelope=None, fehler: str = "") -> None:
         """Ergebnis eines ArbeitsAuftrags: der Event-Envelope ODER ein Fehler (nicht leer = gescheitert)."""
-        ergebnis_cls = getattr(self._gen, "ArbeitsErgebnis")
         felder = {"vorgang": vorgang, "fehler": fehler}
         if ergebnis_envelope is not None:   # bei Fehler bleibt das Feld leer (nicht None — betterproto serialisiert das nicht)
             felder["ergebnis"] = ergebnis_envelope
-        msg = self._client_msg_cls(arbeits_ergebnis=ergebnis_cls(**felder))
+        msg = L.ClientMessage(arbeits_ergebnis=L.ArbeitsErgebnis(**felder))
         await self._send(msg)
 
     async def send_arbeit_lebt(self, vorgang: str) -> None:
         """Lebenszeichen eines laufenden Auftrags — verlängert seine Lease beim Vermittler."""
-        lebt_cls = getattr(self._gen, "ArbeitLebtMeldung")
-        msg = self._client_msg_cls(arbeit_lebt=lebt_cls(vorgang=vorgang))
+        msg = L.ClientMessage(arbeit_lebt=L.ArbeitLebtMeldung(vorgang=vorgang))
         await self._send(msg)
 
     # ═══════════════════════════════════════════════════

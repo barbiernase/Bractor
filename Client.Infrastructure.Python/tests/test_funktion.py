@@ -3,7 +3,7 @@ Katalog-Funktionen in Python anbieten (docs/konzept-editor-pipelines.md §14.5) 
 
 Bewiesen wird der FunktionsLaeufer des SDK: Anmelden (Funktion + Slots), Auftrag auspacken, `rufe` höchstens SLOTS-mal
 gleichzeitig, Lebenszeichen während langer Läufe, Ergebnis-Vertrag (falscher Typ oder Ausnahme → Fehler statt Ergebnis),
-Ergebnis als EventEnvelopeDto mit gesetztem oneof — und der Weg vom Read-Loop über die Verarbeitungsschleife zum Läufer.
+Ergebnis als EventEnvelopeDto mit Nutzlast (typ + Bytes) — und der Weg vom Read-Loop über die Verarbeitungsschleife zum Läufer.
 """
 
 import asyncio
@@ -15,6 +15,7 @@ import pytest
 
 from cqrs_client import Ausfuehrung, FunktionsBasis, FunktionsLaeufer
 from cqrs_client.client import CqrsClient
+from cqrs_client.leitung import ArbeitsAuftrag, Nutzlast, ServerMessage
 from cqrs_client.mapper import PayloadMapper
 from cqrs_client.router import MessageRouter
 
@@ -40,43 +41,8 @@ class FremdDto(betterproto.Message):
     x: int = betterproto.int32_field(1)
 
 
-@dataclass
-class AuftragPayloadDto(betterproto.Message):
-    skaliere: SkaliereDto = betterproto.message_field(20, group="payload")
-
-
-@dataclass
-class EventEnvelopeDto(betterproto.Message):
-    event_id: str = betterproto.string_field(1)
-    aggregate_id: str = betterproto.string_field(2)
-    created_at_utc: int = betterproto.int64_field(5)
-    causation_id: str = betterproto.string_field(6)
-    correlation_id: str = betterproto.string_field(7)
-    skaliert: SkaliertDto = betterproto.message_field(20, group="payload")
-    unlesbar: UnlesbarDto = betterproto.message_field(21, group="payload")
-    fremd: FremdDto = betterproto.message_field(22, group="payload")
-
-
-@dataclass
-class ArbeitsAuftrag(betterproto.Message):
-    vorgang: str = betterproto.string_field(1)
-    korrelation: str = betterproto.string_field(2)
-    funktion: str = betterproto.string_field(3)
-    auftrag: AuftragPayloadDto = betterproto.message_field(4)
-    akteur: str = betterproto.string_field(5)
-
-
-@dataclass
-class ServerMessage(betterproto.Message):
-    arbeits_auftrag: ArbeitsAuftrag = betterproto.message_field(11, group="message")
-
-
-GEN = SimpleNamespace(
-    AuftragPayloadDto=AuftragPayloadDto,
-    EventEnvelopeDto=EventEnvelopeDto,
-    ClientMessage=object,
-    ServerMessage=ServerMessage,
-)
+# Das „generierte Domänen-Modul“: nur DTOs. Hüllen und ServerMessage kommen aus der echten Leitung.
+GEN = SimpleNamespace(SkaliereDto=SkaliereDto, SkaliertDto=SkaliertDto, UnlesbarDto=UnlesbarDto, FremdDto=FremdDto)
 
 
 class SkalierungBasis(FunktionsBasis):
@@ -128,7 +94,7 @@ class FakeProxy:
 
 def _auftrag(vorgang="v1", funktion="ISkalierung", pfad="/roh/a.tiff"):
     return ArbeitsAuftrag(vorgang=vorgang, korrelation="k1", funktion=funktion,
-                          auftrag=AuftragPayloadDto(skaliere=SkaliereDto(pfad=pfad, hoehe=512)), akteur="KameraSystem")
+                          auftrag=Nutzlast(typ="Skaliere", daten=bytes(SkaliereDto(pfad=pfad, hoehe=512))), akteur="KameraSystem")
 
 
 def sync(fn):
@@ -164,7 +130,8 @@ async def test_auftrag_wird_gerufen_und_das_ergebnis_geht_als_event_envelope_zur
     assert x == Ausfuehrung(ausfuehrungs_id="v1", korrelation="k1", akteur="KameraSystem")
     vorgang, envelope, fehler = proxy.ergebnisse[0]
     assert (vorgang, fehler) == ("v1", "")
-    assert betterproto.which_one_of(envelope, "payload") == ("skaliert", SkaliertDto(pfad="/roh/a.tiff.klein"))
+    assert envelope.payload.typ == "Skaliert"
+    assert SkaliertDto().parse(envelope.payload.daten) == SkaliertDto(pfad="/roh/a.tiff.klein")
     assert envelope.aggregate_id == "v1" and envelope.correlation_id == "k1"
     assert laeufer.laufend == 0
 

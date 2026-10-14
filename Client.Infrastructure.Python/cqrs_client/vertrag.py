@@ -151,13 +151,9 @@ class AkteurVertragBasis(CqrsClient[S], metaclass=VertragsMeta):
 
     def _build_capabilities_request(self):
         request = super()._build_capabilities_request()
-        felder = getattr(request, "__dataclass_fields__", {})
-        if "vertrag" in felder:
-            # Client-Vertrag: der Client-Name (der Server leitet die Akteure ab); sonst der Akteur des Akteur-Vertrags.
-            request.vertrag = self.CLIENT or self.AKTEUR
-            request.vertrag_hash = self.VERTRAG_HASH
-        else:
-            log.warning("CapabilitiesRequest ohne Feld 'vertrag' — Generat veraltet (build_python.sh)")
+        # Client-Vertrag: der Client-Name (der Server leitet die Akteure ab); sonst der Akteur des Akteur-Vertrags.
+        request.vertrag = self.CLIENT or self.AKTEUR
+        request.vertrag_hash = self.VERTRAG_HASH
         if self.CLIENT:
             log.info("Client %s (Vertrag %s, verkörpert %s, Hash %s)", self.CLIENT, self.VERTRAG, ", ".join(self.AKTEURE), self.VERTRAG_HASH)
         else:

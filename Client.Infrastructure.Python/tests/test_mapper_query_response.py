@@ -1,11 +1,11 @@
 """
 Grundgerüst für die Python-SDK-Tests.
 
-Beweist die geschlossene Query-Antwort-Lücke: PayloadMapper.wrap_query_response setzt das
-richtige oneof-Feld im QueryResponsePayloadDto (vorher: leerer Payload, oneof nie gesetzt).
+Beweist die Query-Antwort: PayloadMapper.wrap_query_response verpackt die Antwort als Nutzlast (typ = Proto-Name
+ohne „Dto“, daten = protobuf-Bytes) für QueryResponseFromClient.payload.
 
-Nutzt minimale betterproto-Fake-Typen statt des vollen Generats — der Mapper ist domänenfrei
-und leitet die type→oneof-Feld-Map allein aus der Struktur des Envelope-Typs ab.
+Nutzt minimale betterproto-Fake-Typen statt des vollen Generats — der Mapper ist domänenfrei und baut die Tabelle
+typ → DTO-Klasse allein aus dem übergebenen Modul (jede betterproto-Message, deren Name auf „Dto“ endet).
 
 Ausführen:  pip install -r requirements-dev.txt && pytest   (aus Client.Infrastructure.Python/)
 """
@@ -16,39 +16,35 @@ from types import SimpleNamespace
 import betterproto
 import pytest
 
+from cqrs_client.leitung import Nutzlast
 from cqrs_client.mapper import PayloadMapper
 
-
-# ── Minimale betterproto-Fakes (unquoted Annotations → f.type ist der echte Typ) ──
 
 @dataclass
 class FakeAntwortDto(betterproto.Message):
     text: str = betterproto.string_field(1)
 
 
-@dataclass
-class FakeQueryResponsePayloadDto(betterproto.Message):
-    fake_antwort: FakeAntwortDto = betterproto.message_field(1, group="payload")
-
-
 @pytest.fixture
 def gen():
-    # Minimales "generiertes Modul": nur die für die Query-Response nötigen Typen.
-    # Command-/Event-Envelope fehlen bewusst → der Mapper degradiert dort zu {} (getattr-None).
-    return SimpleNamespace(
-        QueryResponsePayloadDto=FakeQueryResponsePayloadDto,
-        FakeAntwortDto=FakeAntwortDto,
-    )
+    # Minimales "generiertes Domänen-Modul": nur die DTOs.
+    return SimpleNamespace(FakeAntwortDto=FakeAntwortDto)
 
 
-def test_wrap_query_response_setzt_das_oneof_feld(gen):
+def test_wrap_query_response_verpackt_typ_und_bytes(gen):
     mapper = PayloadMapper(gen)
 
     result = mapper.wrap_query_response(FakeAntwortDto(text="hallo"))
 
-    field_name, payload = betterproto.which_one_of(result, "payload")
-    assert field_name == "fake_antwort"      # oneof IST gesetzt (die geschlossene Lücke)
-    assert payload.text == "hallo"           # und trägt die echte Response
+    assert isinstance(result, Nutzlast)
+    assert result.typ == "FakeAntwort"                       # Proto-Name ohne „Dto“
+    assert FakeAntwortDto().parse(result.daten).text == "hallo"   # und trägt die echte Response
+
+
+def test_nutzlast_uebersteht_den_draht(gen):
+    mapper = PayloadMapper(gen)
+    gesendet = bytes(mapper.wrap_query_response(FakeAntwortDto(text="draht")))
+    assert mapper.entpacke(Nutzlast().parse(gesendet)) == FakeAntwortDto(text="draht")
 
 
 def test_wrap_query_response_unbekannter_typ_wirft(gen):
@@ -58,5 +54,5 @@ def test_wrap_query_response_unbekannter_typ_wirft(gen):
 
     mapper = PayloadMapper(gen)
 
-    with pytest.raises(TypeError):
+    with pytest.raises(TypeError, match="UnbekanntDto"):
         mapper.wrap_query_response(UnbekanntDto(x=1))

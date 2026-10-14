@@ -1,15 +1,13 @@
 using Abstractions;
 using Infrastructure.Mappers;
 using Microsoft.Extensions.Logging;
-using ProtoRepo;
+using Cqrs.Leitung;
 
 namespace Infrastructure.Serialization;
 
 /// <summary>
-/// Mapper zwischen ProtoRepo DTOs und Domain Envelopes.
-/// 
-/// Arbeitet direkt mit CommandEnvelopeDto/EventEnvelopeDto.
-/// Die alten CommandStream/EventStream Wrapper existieren nicht mehr.
+/// Mapper zwischen der Leitung (Cqrs.Leitung: Hülle + Nutzlast) und den Domain Envelopes. Die Domänen-Nachricht reist als Nutzlast
+/// (Typname + Bytes des Anwendungs-Protos); die Tabellen dafür generiert der DtoMapperSourceGenerator.
 /// </summary>
 public partial class ProtoMessageMapper
 {
@@ -133,45 +131,27 @@ public partial class ProtoMessageMapper
     // QUERY MAPPING
     // =========================================================================
 
-    /// <summary>
-    /// Mappt QueryPayloadDto zu IQuery
-    /// </summary>
-    public IQuery MapToDomain(QueryPayloadDto dto)
+    /// <summary>Die Query aus einer Nutzlast.</summary>
+    public IQuery QueryAus(Nutzlast n)
     {
-        if (dto == null)
-            throw new ArgumentNullException(nameof(dto), "QueryPayloadDto cannot be null");
-
-        try
-        {
-            _logger?.LogDebug("Mapping QueryPayloadDto to domain");
-            // KORRIGIERT: Keine verschachtelte Klasse!
-            return ProtoQueryMappingHelpers.MapToDomain(dto);
-        }
+        ArgumentNullException.ThrowIfNull(n);
+        try { return ProtoQueryMappingHelpers.MapToDomain(n); }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Failed to map QueryPayloadDto to domain");
-            throw new MappingException("Failed to map QueryPayloadDto to domain", ex);
+            _logger?.LogError(ex, "Failed to map query payload {Typ} to domain", n.Typ);
+            throw new MappingException($"Failed to map query payload {n.Typ} to domain", ex);
         }
     }
 
-    /// <summary>
-    /// Mappt IQuery zu QueryPayloadDto
-    /// </summary>
-    public QueryPayloadDto MapToDto(IQuery query)
+    /// <summary>Eine Query als Nutzlast.</summary>
+    public Nutzlast MapToDto(IQuery query)
     {
-        if (query == null)
-            throw new ArgumentNullException(nameof(query));
-
-        try
-        {
-            _logger?.LogDebug("Mapping IQuery to QueryPayloadDto");
-            // KORRIGIERT: Keine verschachtelte Klasse!
-            return ProtoQueryMappingHelpers.MapToDto(query);
-        }
+        ArgumentNullException.ThrowIfNull(query);
+        try { return ProtoQueryMappingHelpers.MapToDto(query); }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Failed to map IQuery to DTO");
-            throw new MappingException("Failed to map IQuery to DTO", ex);
+            _logger?.LogError(ex, "Failed to map IQuery to Nutzlast");
+            throw new MappingException("Failed to map IQuery to Nutzlast", ex);
         }
     }
 
@@ -183,52 +163,34 @@ public partial class ProtoMessageMapper
         if (request?.Payload == null)
             throw new ArgumentNullException(nameof(request), "QueryRequest or Payload cannot be null");
 
-        return MapToDomain(request.Payload);
+        return QueryAus(request.Payload);
     }
 
     // =========================================================================
     // QUERY RESPONSE MAPPING
     // =========================================================================
 
-    /// <summary>
-    /// Mappt QueryResponsePayloadDto zu IQueryResponse
-    /// </summary>
-    public IQueryResponse MapToDomain(QueryResponsePayloadDto dto)
+    /// <summary>Die Antwort aus einer Nutzlast.</summary>
+    public IQueryResponse AntwortAus(Nutzlast n)
     {
-        if (dto == null)
-            throw new ArgumentNullException(nameof(dto), "QueryResponsePayloadDto cannot be null");
-
-        try
-        {
-            _logger?.LogDebug("Mapping QueryResponsePayloadDto to domain");
-            // KORRIGIERT: Keine verschachtelte Klasse!
-            return ProtoQueryResponseMappingHelpers.MapToDomain(dto);
-        }
+        ArgumentNullException.ThrowIfNull(n);
+        try { return ProtoQueryResponseMappingHelpers.MapToDomain(n); }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Failed to map QueryResponsePayloadDto to domain");
-            throw new MappingException("Failed to map QueryResponsePayloadDto to domain", ex);
+            _logger?.LogError(ex, "Failed to map query response {Typ} to domain", n.Typ);
+            throw new MappingException($"Failed to map query response {n.Typ} to domain", ex);
         }
     }
 
-    /// <summary>
-    /// Mappt IQueryResponse zu QueryResponsePayloadDto
-    /// </summary>
-    public QueryResponsePayloadDto MapToDto(IQueryResponse response)
+    /// <summary>Eine Antwort als Nutzlast.</summary>
+    public Nutzlast MapToDto(IQueryResponse response)
     {
-        if (response == null)
-            throw new ArgumentNullException(nameof(response));
-
-        try
-        {
-            _logger?.LogDebug("Mapping IQueryResponse to QueryResponsePayloadDto");
-            // KORRIGIERT: Keine verschachtelte Klasse!
-            return ProtoQueryResponseMappingHelpers.MapToDto(response);
-        }
+        ArgumentNullException.ThrowIfNull(response);
+        try { return ProtoQueryResponseMappingHelpers.MapToDto(response); }
         catch (Exception ex)
         {
-            _logger?.LogError(ex, "Failed to map IQueryResponse to DTO");
-            throw new MappingException("Failed to map IQueryResponse to DTO", ex);
+            _logger?.LogError(ex, "Failed to map IQueryResponse to Nutzlast");
+            throw new MappingException("Failed to map IQueryResponse to Nutzlast", ex);
         }
     }
 
@@ -265,7 +227,7 @@ public partial class ProtoMessageMapper
     public Abstractions.QueryResponse<TResponse> MapToQueryResponse<TResponse>(QueryResponse proto)
         where TResponse : IQueryResponse
     {
-        var data = (TResponse)MapToDomain(proto.Payload);
+        var data = (TResponse)AntwortAus(proto.Payload);
 
         IReadOnlyList<AggregateMeta>? deps = null;
         if (proto.Deps.Count > 0)
@@ -321,7 +283,7 @@ public partial class ProtoMessageMapper
 }
 
 /// <summary>
-/// Exception fÃ¼r Mapping-Fehler
+/// Exception für Mapping-Fehler
 /// </summary>
 public class MappingException : Exception
 {

@@ -12,6 +12,7 @@ from types import SimpleNamespace
 from uuid import uuid4
 
 import domain_client.generated as g
+from cqrs_client.leitung import Nutzlast, QueryResponse
 from domain_client.domain_registry import create_registry
 from domain_client.training_worker import TrainingWorker, TrainingState
 
@@ -36,20 +37,16 @@ def _angefordert(epochen: int = 3):
 
 def _samples_response(n: int, seite: int = 1, gesamt: int | None = None):
     gesamt = n if gesamt is None else gesamt
-    return g.QueryResponse(
-        correlation_id="x",
-        payload=g.QueryResponsePayloadDto(
-            datensatz_samples=g.DatensatzSamplesDto(
-                samples=[
-                    g.DatensatzSampleDto(
-                        image_pair_id=str(uuid4()),
-                        dc0_pfad="dc0.png", dc2_pfad="dc2.png",
-                        label=i % 3, split=i % 3)
-                    for i in range(n)
-                ],
-                gesamt_anzahl=gesamt, seite=seite, seiten_groesse=500),
-        ),
-    )
+    antwort = g.DatensatzSamplesDto(
+        samples=[
+            g.DatensatzSampleDto(
+                image_pair_id=str(uuid4()),
+                dc0_pfad="dc0.png", dc2_pfad="dc2.png",
+                label=i % 3, split=i % 3)
+            for i in range(n)
+        ],
+        gesamt_anzahl=gesamt, seite=seite, seiten_groesse=500)
+    return QueryResponse(correlation_id="x", payload=Nutzlast(typ="DatensatzSamples", daten=bytes(antwort)))
 
 
 async def _treibe(worker, event, patch_send_query):
@@ -68,10 +65,10 @@ async def _treibe(worker, event, patch_send_query):
 def test_voller_lauf_meldet_begonnen_fortschritt_abgeschlossen():
     worker = _worker()
 
-    async def fake_send_query(payload, correlation_id=None):
-        # Query korrekt ins oneof verpackt?
-        field_name, inner = __import__("betterproto").which_one_of(payload, "payload")
-        assert field_name == "hole_datensatz_samples"
+    async def fake_send_query(nutzlast, correlation_id=None):
+        # Query korrekt als Nutzlast verpackt?
+        assert nutzlast.typ == "HoleDatensatzSamples"
+        assert isinstance(g.HoleDatensatzSamplesDto().parse(nutzlast.daten), g.HoleDatensatzSamplesDto)
         return _samples_response(n=4)
 
     outputs = asyncio.run(_treibe(worker, _angefordert(epochen=3), fake_send_query))
@@ -94,7 +91,7 @@ def test_voller_lauf_meldet_begonnen_fortschritt_abgeschlossen():
 def test_leerer_datensatz_scheitert():
     worker = _worker()
 
-    async def fake_send_query(payload, correlation_id=None):
+    async def fake_send_query(nutzlast, correlation_id=None):
         return _samples_response(n=0)
 
     outputs = asyncio.run(_treibe(worker, _angefordert(), fake_send_query))
@@ -112,8 +109,8 @@ def test_samples_werden_durchpaginiert():
     worker = _worker()
     gesehene_seiten = []
 
-    async def fake_send_query(payload, correlation_id=None):
-        _, inner = __import__("betterproto").which_one_of(payload, "payload")
+    async def fake_send_query(nutzlast, correlation_id=None):
+        inner = g.HoleDatensatzSamplesDto().parse(nutzlast.daten)
         gesehene_seiten.append(inner.seite)
         # Seite 1 → 2 von insgesamt 3; Seite 2 → 1 (Rest)
         if inner.seite == 1:

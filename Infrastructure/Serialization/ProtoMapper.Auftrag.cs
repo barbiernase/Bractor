@@ -1,6 +1,6 @@
 using Abstractions;
 using Infrastructure.Mappers;
-using ProtoRepo;
+using Cqrs.Leitung;
 
 namespace Infrastructure.Serialization;
 
@@ -14,12 +14,12 @@ public partial class ProtoMessageMapper
     // AUFTRAG MAPPING (Katalog-Funktionen)
     // =========================================================================
 
-    public IAuftrag MapToDomain(AuftragPayloadDto dto)
+    public IAuftrag AuftragAus(Nutzlast n)
     {
-        return ProtoAuftragMappingHelpers.MapToDomain(dto);
+        return ProtoAuftragMappingHelpers.MapToDomain(n);
     }
 
-    public AuftragPayloadDto MapToDto(IAuftrag auftrag)
+    public Nutzlast MapToDto(IAuftrag auftrag)
     {
         return ProtoAuftragMappingHelpers.MapToDto(auftrag);
     }

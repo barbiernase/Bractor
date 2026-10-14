@@ -2,20 +2,24 @@
 """
 cqrs_client — Python First-Citizen Framework für CQRS/ES.
 
-Verbindet sich über denselben gRPC-Service wie der Blazor-Client
-und nutzt dasselbe Protokoll (domain.proto).
+Verbindet sich über denselben gRPC-Service wie der Blazor-Client und nutzt dieselbe Leitung
+(Cqrs.Leitung/cqrs.proto → cqrs_client.leitung, erzeugt von build_leitung.sh). Domänen-DTOs (Proto der Anwendung,
+z. B. ProtoRepo/domain.proto) reisen darin als Nutzlast(typ, daten) — PayloadMapper/NutzlastTabelle packen und entpacken.
 
 Öffentliche API:
     - CqrsClient[S]: Basisklasse für Clients
     - handle: Dispatch-Deskriptor (@handle.register)
     - CategoryRegistry: Typ-Klassifizierung
     - MessageContext: Handler-Kontext
+    - NutzlastTabelle: typ → DTO-Klasse, packe(dto) → Nutzlast, entpacke(nutzlast) → DTO
 """
 
 from .client import CqrsClient
 from .vertrag import AkteurVertragBasis, Zusage, VertragsVerletzung
 from .funktion import Ausfuehrung, FunktionsBasis, FunktionsLaeufer, FunktionsVerletzung
 from .dispatch import HandleDescriptor, HandlerBase, handle
+from .leitung import Nutzlast
+from .mapper import NutzlastTabelle, PayloadMapper, UnbekannteNutzlast, typ_von
 from .registry import CategoryRegistry, MessageCategory
 from .router import MessageContext
 from .versioning import VersionTracker
@@ -34,6 +38,11 @@ __all__ = [
     "HandlerBase",
     "MessageCategory",
     "MessageContext",
+    "Nutzlast",
+    "NutzlastTabelle",
+    "PayloadMapper",
+    "UnbekannteNutzlast",
     "VersionTracker",
     "handle",
+    "typ_von",
 ]

@@ -49,7 +49,8 @@ Die Solution (`CqrsSolution.sln`) umfasst 30 Projekte; dazu kommen zwei Python-P
 | `Client.SourceGeneration` | Blazor-Client-Generatoren (Wiring aus dem Client-Vertrag, ViewModels, Module) |
 | `Cqrs.Codegen` | Codegen-Schritt im Build (Target `CqrsCodegenPrepass` in `ProtoRepo/ProtoRepo.csproj`): `domain.proto`, STJ-Kontexte, Python-Basen; liest heute per `MetadataLoadContext` (docs/13 W10-1) |
 | `Proto.SourceGeneration` | Roslyn-Leser für `domain.proto` (`FileGenerator`), von `Cqrs.Codegen` als Bibliothek genutzt |
-| `ProtoRepo` | aus `domain.proto` per Grpc.Tools erzeugte DTOs |
+| `Cqrs.Leitung` | die Leitung des Frameworks (`cqrs.proto`, handgeschrieben): gRPC-Dienst, Hüllen, Protokoll-Nachrichten; Domänen-Nachrichten reisen als `Nutzlast` (Typname + Bytes) |
+| `ProtoRepo` | aus `domain.proto` (vom Codegen, nur die Domänen-DTOs) per Grpc.Tools erzeugte DTOs |
 
 Was welche Generatoren und Analyzer tun: [05](05-generatoren-analyzer-proto.md).
 

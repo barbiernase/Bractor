@@ -10,6 +10,7 @@
       <ProjectReference Include="..\Abstractions\Abstractions.csproj" />
       <ProjectReference Include="..\Domain\Domain.csproj" />
       <ProjectReference Include="..\Infrastructure\Infrastructure.csproj" />
+    <ProjectReference Include="..\Cqrs.Leitung\Cqrs.Leitung.csproj" />
     </ItemGroup>
 
     <ItemGroup>

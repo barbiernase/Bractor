@@ -28,7 +28,7 @@ internal record QueryForwardMsg(IQuery Query, string CorrelationId);
 /// Server → Client: eine fertige ServerMessage über DIESEN Actor schreiben — so laufen Schreibvorgänge aus Hintergrund-Schleifen
 /// (z. B. ArbeitsAufträge der Funktions-Anbieter-Sitzung) durch dieselbe Mailbox wie Events und Forwards (ein Schreiber).
 /// </summary>
-internal record ServerNachrichtMsg(ProtoRepo.ServerMessage Nachricht);
+internal record ServerNachrichtMsg(Cqrs.Leitung.ServerMessage Nachricht);
 
 /// <summary>
 /// Minimaler Actor pro gRPC-Verbindung.
@@ -53,13 +53,13 @@ internal record ServerNachrichtMsg(ProtoRepo.ServerMessage Nachricht);
 /// </summary>
 public class EventProxyActor : IActor
 {
-    private readonly IServerStreamWriter<ProtoRepo.ServerMessage> _responseStream;
+    private readonly IServerStreamWriter<Cqrs.Leitung.ServerMessage> _responseStream;
     private readonly ProtoMessageMapper _mapper;
     private readonly string _sessionId;
     private readonly ILogger _logger;
 
     public EventProxyActor(
-        IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        IServerStreamWriter<Cqrs.Leitung.ServerMessage> responseStream,
         ProtoMessageMapper mapper,
         string sessionId,
         ILogger? logger = null)
@@ -114,9 +114,9 @@ public class EventProxyActor : IActor
         {
             var eventDto = _mapper.MapToDto(envelope);
             
-            var serverMessage = new ProtoRepo.ServerMessage
+            var serverMessage = new Cqrs.Leitung.ServerMessage
             {
-                Event = new ProtoRepo.EventNotification
+                Event = new Cqrs.Leitung.EventNotification
                 {
                     Envelope = eventDto
                 }
@@ -144,9 +144,9 @@ public class EventProxyActor : IActor
         {
             var triggerDto = _mapper.MapToDto(msg.Trigger);
 
-            var serverMessage = new ProtoRepo.ServerMessage
+            var serverMessage = new Cqrs.Leitung.ServerMessage
             {
-                TriggerForward = new ProtoRepo.TriggerForward
+                TriggerForward = new Cqrs.Leitung.TriggerForward
                 {
                     Payload = triggerDto,
                     CorrelationId = msg.CorrelationId
@@ -198,9 +198,9 @@ public class EventProxyActor : IActor
         {
             var queryDto = _mapper.MapToDto(msg.Query);
 
-            var serverMessage = new ProtoRepo.ServerMessage
+            var serverMessage = new Cqrs.Leitung.ServerMessage
             {
-                QueryForward = new ProtoRepo.QueryForward
+                QueryForward = new Cqrs.Leitung.QueryForward
                 {
                     CorrelationId = msg.CorrelationId,
                     Payload = queryDto

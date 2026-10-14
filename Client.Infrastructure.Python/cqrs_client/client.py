@@ -41,6 +41,7 @@ import os
 import logging
 from typing import Any, ClassVar, Generic, TypeVar, get_args
 
+from . import leitung
 from .connection import ConnectionManager
 from .dispatch import HandlerBase, handle
 from .funktion import FunktionsBasis, FunktionsLaeufer
@@ -80,7 +81,8 @@ class CqrsClient(HandlerBase, Generic[S]):
         """
         Args:
             registry: CategoryRegistry mit allen Domain-Typen
-            generated_module: Das betterproto-generierte Modul
+            generated_module: Das betterproto-generierte Domänen-Modul (nur die DTOs des Anwendungs-Protos) — daraus
+                              entsteht die Nutzlast-Tabelle typ → DTO-Klasse; die Leitung kommt aus cqrs_client.leitung
             config: Optionale Konfiguration für die Subklasse
             funktionen: Katalog-Funktionen, die dieser Client ANBIETET (generierte <Funktion>Basis-Unterklassen);
                         nach jedem Handshake meldet er sie an, der Server holt für ihn Aufträge (§14.5)
@@ -90,7 +92,6 @@ class CqrsClient(HandlerBase, Generic[S]):
         self._config = config or {}
 
         self._proxy = GrpcProxy(
-            generated_module,
             akteur_token=self._config.get("akteur_token") or os.environ.get("CQRS_AKTEUR_TOKEN"),
         )
         self._mapper = PayloadMapper(generated_module)
@@ -129,9 +130,9 @@ class CqrsClient(HandlerBase, Generic[S]):
         Stellt eine Query und liefert die TYPISIERTE Antwort — die öffentliche Ask-API, die
         bisher fehlte (docs/09 §9.4). Spiegelbild zum send_command-Pfad:
 
-          1. wrap_query      → QueryPayloadDto (oneof-Feld nach Typ)
+          1. wrap_query      → Nutzlast(typ, daten)
           2. proxy.send_query → Korrelation via Future, 30s Timeout
-          3. extract_query_response → konkrete Antwort aus dem Response-oneof
+          3. extract_query_response → konkrete Antwort aus QueryResponse.payload (Nutzlast)
 
         Fehler vom Server (QueryFailed) kommen als proxy.ServerError-Exception (Korrelation im
         Read-Loop). Für read-only Datensatz-/Trainings-Queries ist KEIN Deps/Versions-Tracking
@@ -141,8 +142,8 @@ class CqrsClient(HandlerBase, Generic[S]):
             antwort = await self.query(
                 HoleDatensatzSamplesDto(datensatz_id=str(ds_id), version=1, seite=1))
         """
-        payload = self._mapper.wrap_query(query_dto)
-        raw = await self._proxy.send_query(payload)
+        nutzlast = self._mapper.wrap_query(query_dto)
+        raw = await self._proxy.send_query(nutzlast)
         return self._mapper.extract_query_response(raw)
 
     # ═══════════════════════════════════════════════════
@@ -267,8 +268,7 @@ class CqrsClient(HandlerBase, Generic[S]):
             send_commands.append(CategoryRegistry.capabilities_name(cmd_type))
 
         # CapabilitiesRequest bauen
-        cap_cls = getattr(self._gen, "CapabilitiesRequest")
-        request = cap_cls(
+        request = leitung.CapabilitiesRequest(
             message_types=subscribe_events + send_commands,
             handle_triggers=handle_triggers,
             handle_queries=handle_queries,

@@ -255,12 +255,20 @@ public class FunktionsAnbieterSitzungTests
 
         var dto = mapper.MapToDto(auftrag);
         var bytes = dto.ToByteArray();
-        var zurueck = mapper.MapToDomain(ProtoRepo.AuftragPayloadDto.Parser.ParseFrom(bytes));
+        var zurueck = mapper.AuftragAus(Cqrs.Leitung.Nutzlast.Parser.ParseFrom(bytes));
         zurueck.Should().Be(auftrag);
+        dto.Typ.Should().Be("VerkleinereBild", "die Nutzlast trägt den Typnamen, die Bytes kommen aus dem Proto der Anwendung");
 
         // Das Ergebnis kommt als EventEnvelopeDto — nur die Nutzlast zählt (keine Ids nötig, der Server stempelt selbst).
-        var ergebnis = new ProtoRepo.EventEnvelopeDto { BildVerkleinert = new ProtoRepo.BildVerkleinertDto { Pfad = "/v/a.png", BreitePixel = 640, HoehePixel = 512 } };
-        mapper.MapErgebnis(ProtoRepo.EventEnvelopeDto.Parser.ParseFrom(ergebnis.ToByteArray()))
+        var ergebnis = new Cqrs.Leitung.EventEnvelopeDto
+        {
+            Payload = new Cqrs.Leitung.Nutzlast
+            {
+                Typ = "BildVerkleinert",
+                Daten = new ProtoRepo.BildVerkleinertDto { Pfad = "/v/a.png", BreitePixel = 640, HoehePixel = 512 }.ToByteString(),
+            },
+        };
+        mapper.MapErgebnis(Cqrs.Leitung.EventEnvelopeDto.Parser.ParseFrom(ergebnis.ToByteArray()))
             .Should().Be(new BildVerkleinert("/v/a.png", 640, 512));
     }
 }

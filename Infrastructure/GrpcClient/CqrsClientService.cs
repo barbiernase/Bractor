@@ -35,7 +35,7 @@ namespace Infrastructure.GrpcClient;
 /// 5. Read-Loop verarbeitet ClientMessages
 /// 6. finally-Block: Subscriptions beenden, Registrierungen entfernen, Actor stoppen
 /// </summary>
-public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServiceBase
+public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientServiceBase
 {
     private readonly ActorSystem _actorSystem;
     private readonly ProtoMessageMapper _mapper;
@@ -63,14 +63,14 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     /// Cross-Connection: HandleQueryAsync (Session A) registriert TCS,
     /// HandleQueryAnswer (Session B des Handler-Clients) vervollständigt ihn.
     /// </summary>
-    private readonly ConcurrentDictionary<string, TaskCompletionSource<ProtoRepo.QueryResponseFromClient>>
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<Cqrs.Leitung.QueryResponseFromClient>>
         _pendingQueryForwards = new();
 
     /// <summary>
     /// Pending Trigger-Forwards über alle Verbindungen hinweg.
     /// Selbes Pattern wie Query-Forwards.
     /// </summary>
-    private readonly ConcurrentDictionary<string, TaskCompletionSource<ProtoRepo.TriggerResult>>
+    private readonly ConcurrentDictionary<string, TaskCompletionSource<Cqrs.Leitung.TriggerResult>>
         _pendingTriggerForwards = new();
     
     private static int _sessionCounter = 0;
@@ -108,8 +108,8 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     }
 
     public override async Task Connect(
-        IAsyncStreamReader<ProtoRepo.ClientMessage> requestStream,
-        IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        IAsyncStreamReader<Cqrs.Leitung.ClientMessage> requestStream,
+        IServerStreamWriter<Cqrs.Leitung.ServerMessage> responseStream,
         ServerCallContext context)
     {
         var sessionId = $"session-{Interlocked.Increment(ref _sessionCounter):D4}";
@@ -267,8 +267,8 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     // =========================================================================
 
     private async Task ProcessMessageAsync(
-        ProtoRepo.ClientMessage message,
-        IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        Cqrs.Leitung.ClientMessage message,
+        IServerStreamWriter<Cqrs.Leitung.ServerMessage> responseStream,
         SubscriptionTracker subscriptionTracker,
         PID proxyPid,
         AkteurSitzung sitzung,
@@ -281,27 +281,27 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         {
             switch (message.MessageCase)
             {
-                case ProtoRepo.ClientMessage.MessageOneofCase.Command:
+                case Cqrs.Leitung.ClientMessage.MessageOneofCase.Command:
                     await HandleCommandAsync(message.Command, responseStream, sitzung, sessionId, ct);
                     break;
 
-                case ProtoRepo.ClientMessage.MessageOneofCase.Subscribe:
+                case Cqrs.Leitung.ClientMessage.MessageOneofCase.Subscribe:
                     await HandleSubscribeAsync(message.Subscribe, responseStream, subscriptionTracker, akteur, sessionId, ct);
                     break;
 
-                case ProtoRepo.ClientMessage.MessageOneofCase.Unsubscribe:
+                case Cqrs.Leitung.ClientMessage.MessageOneofCase.Unsubscribe:
                     await HandleUnsubscribeAsync(message.Unsubscribe, responseStream, subscriptionTracker, sessionId, ct);
                     break;
 
-                case ProtoRepo.ClientMessage.MessageOneofCase.Capabilities:
+                case Cqrs.Leitung.ClientMessage.MessageOneofCase.Capabilities:
                     await HandleCapabilitiesAsync(message.Capabilities, responseStream, subscriptionTracker, proxyPid, sitzung, sessionId, ct);
                     break;
 
-                case ProtoRepo.ClientMessage.MessageOneofCase.Query:
+                case Cqrs.Leitung.ClientMessage.MessageOneofCase.Query:
                     await HandleQueryAsync(message.Query, responseStream, proxyPid, akteur, sessionId, ct);
                     break;
 
-                case ProtoRepo.ClientMessage.MessageOneofCase.Trigger:
+                case Cqrs.Leitung.ClientMessage.MessageOneofCase.Trigger:
                     await HandleTriggerAsync(message.Trigger, responseStream, proxyPid, akteur, sessionId, ct);
                     break;
 
@@ -309,15 +309,15 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 // NEU: First-Citizen Messages
                 // ═════════════════════════════════════════
 
-                case ProtoRepo.ClientMessage.MessageOneofCase.TransientEvent:
+                case Cqrs.Leitung.ClientMessage.MessageOneofCase.TransientEvent:
                     await HandleTransientEventAsync(message.TransientEvent, responseStream, akteur, sessionId, ct);
                     break;
 
-                case ProtoRepo.ClientMessage.MessageOneofCase.QueryAnswer:
+                case Cqrs.Leitung.ClientMessage.MessageOneofCase.QueryAnswer:
                     HandleQueryAnswer(message.QueryAnswer, sessionId);
                     break;
 
-                case ProtoRepo.ClientMessage.MessageOneofCase.TriggerResult:
+                case Cqrs.Leitung.ClientMessage.MessageOneofCase.TriggerResult:
                     HandleTriggerResult(message.TriggerResult, sessionId);
                     break;
 
@@ -325,15 +325,15 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 // Katalog-Funktionen extern (§14.5)
                 // ═════════════════════════════════════════
 
-                case ProtoRepo.ClientMessage.MessageOneofCase.FunktionenAnbieten:
+                case Cqrs.Leitung.ClientMessage.MessageOneofCase.FunktionenAnbieten:
                     await HandleFunktionenAnbietenAsync(message.FunktionenAnbieten, responseStream, anbieter, sitzung, sessionId, ct);
                     break;
 
-                case ProtoRepo.ClientMessage.MessageOneofCase.ArbeitsErgebnis:
+                case Cqrs.Leitung.ClientMessage.MessageOneofCase.ArbeitsErgebnis:
                     await HandleArbeitsErgebnisAsync(message.ArbeitsErgebnis, responseStream, anbieter, sessionId, ct);
                     break;
 
-                case ProtoRepo.ClientMessage.MessageOneofCase.ArbeitLebt:
+                case Cqrs.Leitung.ClientMessage.MessageOneofCase.ArbeitLebt:
                     if (anbieter != null && Guid.TryParse(message.ArbeitLebt.Vorgang, out var lebt))
                         await anbieter.LebtAsync(lebt);
                     break;
@@ -359,8 +359,8 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     // =========================================================================
 
     private async Task HandleCapabilitiesAsync(
-        ProtoRepo.CapabilitiesRequest request,
-        IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        Cqrs.Leitung.CapabilitiesRequest request,
+        IServerStreamWriter<Cqrs.Leitung.ServerMessage> responseStream,
         SubscriptionTracker subscriptionTracker,
         PID proxyPid,
         AkteurSitzung sitzung,
@@ -471,7 +471,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 response.Vertrag = angenommen.Name;
                 response.VertragHash = angenommen.VertragHash;
             }
-            var serverMessage = new ProtoRepo.ServerMessage
+            var serverMessage = new Cqrs.Leitung.ServerMessage
             {
                 CapabilitiesResponse = response
             };
@@ -496,8 +496,8 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     // =========================================================================
 
     private async Task HandleCommandAsync(
-        ProtoRepo.CommandRequest request,
-        IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        Cqrs.Leitung.CommandRequest request,
+        IServerStreamWriter<Cqrs.Leitung.ServerMessage> responseStream,
         AkteurSitzung sitzung,
         string sessionId,
         CancellationToken ct)
@@ -607,8 +607,8 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     // =========================================================================
 
     private async Task HandleTriggerAsync(
-        ProtoRepo.TriggerRequest request,
-        IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        Cqrs.Leitung.TriggerRequest request,
+        IServerStreamWriter<Cqrs.Leitung.ServerMessage> responseStream,
         PID proxyPid,
         AkteurRechte? akteur,
         string sessionId,
@@ -618,7 +618,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
 
         try
         {
-            var trigger = _mapper.MapToDomain(request.Payload);
+            var trigger = _mapper.TriggerAus(request.Payload);
             var triggerTypeName = trigger.GetType().Name;
 
             _logger.LogDebug("{Session} Trigger type: {Trigger}", sessionId, triggerTypeName);
@@ -637,7 +637,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 _logger.LogDebug("{Session} forwarding trigger to client handler {Pid}", sessionId, handlerPid);
                 
                 var correlationId = request.CorrelationId ?? Guid.NewGuid().ToString();
-                var tcs = new TaskCompletionSource<ProtoRepo.TriggerResult>(
+                var tcs = new TaskCompletionSource<Cqrs.Leitung.TriggerResult>(
                     TaskCreationOptions.RunContinuationsAsynchronously);
 
                 if (!_pendingTriggerForwards.TryAdd(correlationId, tcs))
@@ -714,8 +714,8 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     // =========================================================================
 
     private async Task HandleQueryAsync(
-        ProtoRepo.QueryRequest request,
-        IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        Cqrs.Leitung.QueryRequest request,
+        IServerStreamWriter<Cqrs.Leitung.ServerMessage> responseStream,
         PID proxyPid,
         AkteurRechte? akteur,
         string sessionId,
@@ -725,7 +725,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
 
         try
         {
-            var query = _mapper.MapToDomain(request.Payload);
+            var query = _mapper.QueryAus(request.Payload);
             var queryTypeName = query.GetType().Name;
 
             _logger.LogDebug("{Session} Query type: {Query}", sessionId, queryTypeName);
@@ -744,7 +744,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 _logger.LogDebug("{Session} forwarding query to client handler {Pid}", sessionId, handlerPid);
 
                 var correlationId = request.CorrelationId ?? Guid.NewGuid().ToString();
-                var tcs = new TaskCompletionSource<ProtoRepo.QueryResponseFromClient>(
+                var tcs = new TaskCompletionSource<Cqrs.Leitung.QueryResponseFromClient>(
                     TaskCreationOptions.RunContinuationsAsynchronously);
 
                 if (!_pendingQueryForwards.TryAdd(correlationId, tcs))
@@ -778,9 +778,9 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                     }
 
                     // Antwort an den anfragenden Client weiterleiten
-                    var serverMessage = new ProtoRepo.ServerMessage
+                    var serverMessage = new Cqrs.Leitung.ServerMessage
                     {
-                        QueryResponse = new ProtoRepo.QueryResponse
+                        QueryResponse = new Cqrs.Leitung.QueryResponse
                         {
                             CorrelationId = request.CorrelationId,
                             Payload = clientResponse.Payload
@@ -807,7 +807,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             // "zuletzt geschrieben"-IDs werden als zusätzliche Deps getrackt (Read-Your-Writes).
             var response = await _queryService.ExecuteAsync(query, request.ExpectedFreshIds);
             var responseDto = _mapper.ToQueryResponse(response, request.CorrelationId);
-            var serverMsg = new ProtoRepo.ServerMessage { QueryResponse = responseDto };
+            var serverMsg = new Cqrs.Leitung.ServerMessage { QueryResponse = responseDto };
             
             await responseStream.WriteAsync(serverMsg, ct);
             
@@ -830,8 +830,8 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     // =========================================================================
 
     private async Task HandleTransientEventAsync(
-        ProtoRepo.TransientEventRequest request,
-        IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        Cqrs.Leitung.TransientEventRequest request,
+        IServerStreamWriter<Cqrs.Leitung.ServerMessage> responseStream,
         AkteurRechte? akteur,
         string sessionId,
         CancellationToken ct)
@@ -878,7 +878,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     // =========================================================================
 
     private void HandleQueryAnswer(
-        ProtoRepo.QueryResponseFromClient answer,
+        Cqrs.Leitung.QueryResponseFromClient answer,
         string sessionId)
     {
         _logger.LogDebug("{Session} ← QueryAnswer, CorrelationId {CorrelationId}", sessionId, answer.CorrelationId);
@@ -898,7 +898,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     // =========================================================================
 
     private void HandleTriggerResult(
-        ProtoRepo.TriggerResult result,
+        Cqrs.Leitung.TriggerResult result,
         string sessionId)
     {
         _logger.LogDebug("{Session} ← TriggerResult, CorrelationId {CorrelationId}", sessionId, result.CorrelationId);
@@ -918,8 +918,8 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     // =========================================================================
 
     private async Task HandleSubscribeAsync(
-        ProtoRepo.SubscribeRequest request,
-        IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        Cqrs.Leitung.SubscribeRequest request,
+        IServerStreamWriter<Cqrs.Leitung.ServerMessage> responseStream,
         SubscriptionTracker subscriptionTracker,
         AkteurRechte? akteur,
         string sessionId,
@@ -949,9 +949,9 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
                 return;
             }
 
-            var confirmed = new ProtoRepo.ServerMessage
+            var confirmed = new Cqrs.Leitung.ServerMessage
             {
-                SubscriptionConfirmed = new ProtoRepo.SubscriptionConfirmed
+                SubscriptionConfirmed = new Cqrs.Leitung.SubscriptionConfirmed
                 {
                     EventType = request.EventType,
                     AggregateId = request.AggregateId
@@ -980,8 +980,8 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     // =========================================================================
 
     private async Task HandleUnsubscribeAsync(
-        ProtoRepo.UnsubscribeRequest request,
-        IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        Cqrs.Leitung.UnsubscribeRequest request,
+        IServerStreamWriter<Cqrs.Leitung.ServerMessage> responseStream,
         SubscriptionTracker subscriptionTracker,
         string sessionId,
         CancellationToken ct)
@@ -992,9 +992,9 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
         {
             await subscriptionTracker.UnsubscribeAsync(request.EventType, ct);
 
-            var confirmed = new ProtoRepo.ServerMessage
+            var confirmed = new Cqrs.Leitung.ServerMessage
             {
-                UnsubscriptionConfirmed = new ProtoRepo.UnsubscriptionConfirmed
+                UnsubscriptionConfirmed = new Cqrs.Leitung.UnsubscriptionConfirmed
                 {
                     EventType = request.EventType,
                     AggregateId = request.AggregateId
@@ -1023,7 +1023,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     // =========================================================================
 
     private static async Task SendTriggerAckAsync(
-        IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        IServerStreamWriter<Cqrs.Leitung.ServerMessage> responseStream,
         bool accepted,
         string correlationId,
         string? errorMessage,
@@ -1031,9 +1031,9 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     {
         try
         {
-            var ack = new ProtoRepo.ServerMessage
+            var ack = new Cqrs.Leitung.ServerMessage
             {
-                TriggerAck = new ProtoRepo.TriggerAck
+                TriggerAck = new Cqrs.Leitung.TriggerAck
                 {
                     Accepted = accepted,
                     CorrelationId = correlationId ?? "",
@@ -1072,9 +1072,9 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
             },
             (a, f) =>
             {
-                _actorSystem.Root.Send(proxyPid, new ServerNachrichtMsg(new ProtoRepo.ServerMessage
+                _actorSystem.Root.Send(proxyPid, new ServerNachrichtMsg(new Cqrs.Leitung.ServerMessage
                 {
-                    ArbeitsAuftrag = new ProtoRepo.ArbeitsAuftrag
+                    ArbeitsAuftrag = new Cqrs.Leitung.ArbeitsAuftrag
                     {
                         Vorgang = a.Vorgang.ToString(),
                         Korrelation = a.Korrelation.ToString(),
@@ -1090,8 +1090,8 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     }
 
     private async Task HandleFunktionenAnbietenAsync(
-        ProtoRepo.FunktionenAnbieten request,
-        IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        Cqrs.Leitung.FunktionenAnbieten request,
+        IServerStreamWriter<Cqrs.Leitung.ServerMessage> responseStream,
         FunktionsAnbieterSitzung? anbieter,
         AkteurSitzung sitzung,
         string sessionId,
@@ -1119,8 +1119,8 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     }
 
     private async Task HandleArbeitsErgebnisAsync(
-        ProtoRepo.ArbeitsErgebnis request,
-        IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        Cqrs.Leitung.ArbeitsErgebnis request,
+        IServerStreamWriter<Cqrs.Leitung.ServerMessage> responseStream,
         FunktionsAnbieterSitzung? anbieter,
         string sessionId,
         CancellationToken ct)
@@ -1148,7 +1148,7 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     }
 
     private static async Task SendErrorAsync(
-        IServerStreamWriter<ProtoRepo.ServerMessage> responseStream,
+        IServerStreamWriter<Cqrs.Leitung.ServerMessage> responseStream,
         string code,
         string message,
         string correlationId,
@@ -1156,9 +1156,9 @@ public class CqrsClientServiceImpl : ProtoRepo.CqrsClientService.CqrsClientServi
     {
         try
         {
-            var error = new ProtoRepo.ServerMessage
+            var error = new Cqrs.Leitung.ServerMessage
             {
-                Error = new ProtoRepo.ErrorResponse
+                Error = new Cqrs.Leitung.ErrorResponse
                 {
                     Code = code,
                     Message = message,
