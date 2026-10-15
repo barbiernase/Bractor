@@ -8,16 +8,14 @@ namespace Abstractions;
 /// Korrelations-Router und der Poll routen die auslösenden Ergebnis-Events NICHT (sie sind Auslöser keiner
 /// Regel), können den Manager also nicht neu wecken.
 ///
-/// HINWEIS, keine Wahrheit: die Wahrheit bleibt das Manager-Log (Gestartet ohne Beendet). Der Index ist eine OBERMENGE der offenen
-/// Vorgänge: der Eintrag entsteht vor dem <c>ProzessGestartet</c> (scheitert er, scheitert der Start) und verschwindet nach dem
-/// <c>ProzessBeendet</c> (best-effort). Ein Eintrag ohne laufenden Vorgang ist folgenlos — der Backstop weckt ihn, der Manager räumt ihn ab;
-/// ein gestarteter Vorgang ohne Eintrag kann nicht entstehen. Reines Vertragsinterface; die Ablage ist Store-Sache.
+/// HINWEIS, keine Wahrheit: die Wahrheit bleibt das Manager-Log (Gestartet ohne Beendet). Eintrag und Ende schreibt der Manager als
+/// Beilage im Append des <c>ProzessGestartet</c> bzw. <c>ProzessBeendet</c> (<see cref="VorgangOffen"/>, <see cref="VorgangBeendet"/>) — in
+/// derselben Transaktion, ein gestarteter Vorgang ohne Eintrag kann nicht entstehen. Ein Eintrag ohne laufenden Vorgang (ein Ende, dessen
+/// Beilage fehlte, etwa ohne Index verdrahtet) ist folgenlos — der Backstop weckt ihn, der Manager räumt ihn mit
+/// <see cref="MarkiereBeendetAsync"/> ab. Reines Vertragsinterface; die Ablage ist Store-Sache.
 /// </summary>
 public interface IProzessOffenIndex
 {
-    /// <summary>Vermerkt eine Korrelation als offen (beim <c>ProzessGestartet</c>).</summary>
-    Task MarkiereOffenAsync(Guid korrelation, string prozessName, CancellationToken ct);
-
     /// <summary>Entfernt eine Korrelation aus dem Index (beim <c>ProzessBeendet</c>).</summary>
     Task MarkiereBeendetAsync(Guid korrelation, CancellationToken ct);
 

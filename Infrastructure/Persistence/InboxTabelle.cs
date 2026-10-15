@@ -62,12 +62,7 @@ public static class InboxTabelle
 
     private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IDocumentStore, object> Da = new();
 
-    /// <summary>Eine Quittung in die Session (eine Anweisung, sie läuft nach den Events in derselben Transaktion).</summary>
-    public static void Quittiere(IDocumentSession session, string name, Guid streamId, Quittung q)
-        => session.QueueSqlCommand($"insert into {name} (command_id, stream_id, abgelehnt) values (?, ?, ?)",
-            q.CommandId, streamId, q.Ausgang == KommandoAusgang.Abgelehnt);
-
-    /// <summary>Alle Quittungen eines Group-Commits in EINE Anweisung.</summary>
+    /// <summary>Alle Quittungen eines Appends bzw. Group-Commits in EINE Anweisung (sie läuft nach den Events in derselben Transaktion).</summary>
     public static void Quittiere(IDocumentSession session, string name, List<Guid> commands, List<Guid> streams, List<bool> abgelehnt)
         => session.QueueSqlCommand(
             $"insert into {name} (command_id, stream_id, abgelehnt) select * from unnest(?::uuid[], ?::uuid[], ?::boolean[])",

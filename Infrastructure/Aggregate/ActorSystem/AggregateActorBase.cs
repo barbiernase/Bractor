@@ -246,7 +246,7 @@ public abstract class AggregateActorBase<TState> : IActor
                 causationId: cmdEnvelope.CommandId.ToString(),
                 aggregateType: typeof(TState).Name,
                 akteur: cmdEnvelope.UserId,   // Kausalkette: der Akteur reist mit den Events zu Pipelines/Prozessen/Fristen
-                quittung: new Quittung(cmdEnvelope.CommandId, ausgang));
+                beilagen: [new Quittung(cmdEnvelope.CommandId, ausgang)]);
             return AppendErgebnis.Geschrieben;
         }
         catch (KommandoSchonEntschiedenException)

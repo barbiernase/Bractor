@@ -65,22 +65,16 @@ public sealed class MartenEventBatchWriter : IEventBatchWriter
         await using var session = _store.LightweightSession();
 
         var eventCount = 0;
-        List<Guid>? commands = null, streams = null;
-        List<bool>? abgelehnt = null;
+        var beilagen = new BeilagenSchreiber();
         foreach (var item in batch)
         {
             Stage(session, item);
             eventCount += item.Events.Count;
-            if (item.Quittung is { } q)
-            {
-                (commands ??= new(batch.Count)).Add(q.CommandId);
-                (streams ??= new(batch.Count)).Add(item.StreamId);
-                (abgelehnt ??= new(batch.Count)).Add(q.Ausgang == KommandoAusgang.Abgelehnt);
-            }
+            beilagen.Lege(session, item.StreamId, item.Beilagen);
         }
-        // Die Quittungen aller Commands in EINER Anweisung derselben Transaktion (Inbox, docs/04 §4.4). Kennt die Inbox einen schon, scheitert
-        //   der ganze Batch am Schlüssel; der Appender isoliert dann einzeln, und nur der Wiederholte fällt.
-        if (commands != null) InboxTabelle.Quittiere(session, InboxTabelle.Name(_store), commands, streams!, abgelehnt!);
+        // Die Beilagen aller Appends in derselben Transaktion, die Quittungen in EINER Anweisung (Inbox, docs/04 §4.4). Kennt die Inbox eine
+        //   schon, scheitert der ganze Batch am Schlüssel; der Appender isoliert dann einzeln, und nur der Wiederholte fällt.
+        beilagen.Abschliessen(session, _store);
 
         var sw = Stopwatch.StartNew();
         await session.SaveChangesAsync(ct);

@@ -68,6 +68,11 @@ internal sealed class LogImSpeicher : IEventStoreRepository
 {
     private readonly Dictionary<Guid, List<EventEnvelope>> _streams = new();
     private readonly object _lock = new();
+
+    /// <summary>Wie der echte Store die Vorgangs-Beilagen anwendet (unter derselben Sperre wie die Events, also gemeinsam sichtbar).</summary>
+    public IProzessOffenIndex? Buchhaltung { get; set; }
+    /// <summary>Jeder Append mit seinen Beilagen, in Reihenfolge — die Tests prüfen, was gemeinsam geschrieben wurde.</summary>
+    public List<(Guid Stream, IReadOnlyList<IEvent> Events, IReadOnlyList<Beilage> Beilagen)> Appends { get; } = new();
     public DateTimeOffset Jetzt { get; set; } = new(2026, 10, 7, 12, 0, 0, TimeSpan.Zero);
 
     public Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(Guid streamId, int fromVersion, CancellationToken ct)
@@ -82,13 +87,19 @@ internal sealed class LogImSpeicher : IEventStoreRepository
     }
 
     public Task AppendEventsAsync(Guid aggregateId, int expectedVersion, IReadOnlyList<IEvent> events,
-        string? correlationId = null, string? causationId = null, string? aggregateType = null, string? akteur = null, Quittung? quittung = null)
+        string? correlationId = null, string? causationId = null, string? aggregateType = null, string? akteur = null, IReadOnlyList<Beilage>? beilagen = null)
     {
         lock (_lock)
         {
             if (!_streams.TryGetValue(aggregateId, out var stream)) { stream = new List<EventEnvelope>(); _streams[aggregateId] = stream; }
             if (expectedVersion != stream.Count)
                 throw new ConcurrencyException($"OCC: erwartet {expectedVersion}, ist {stream.Count} (Stream {aggregateId}).");
+            Appends.Add((aggregateId, events, beilagen ?? Array.Empty<Beilage>()));
+            foreach (var b in beilagen ?? Array.Empty<Beilage>())
+            {
+                if (b is VorgangOffen o && Buchhaltung is OffenIndexImSpeicher im) im.MarkiereOffenAsync(o.Korrelation, o.ProzessName, default);
+                if (b is VorgangBeendet e) Buchhaltung?.MarkiereBeendetAsync(e.Korrelation, default);
+            }
             foreach (var e in events)
                 stream.Add(new EventEnvelope
                 {
@@ -198,6 +209,7 @@ internal sealed class FunktionsWelt
             },
             DispatchAsync, offenIndex: offenIndex, markingStore: mitCursor ? new MarkingImSpeicher() : null, markingSchreibIntervall: 1,
             rufe: rufe, jetzt: _ => Task.FromResult(Log.Jetzt));
+        Log.Buchhaltung = offenIndex;
     }
 
     /// <summary>Das Ziel-Aggregat: Command → Event (die Quittung steht in der Inbox, nicht im Stream) bzw. Ablehnungs-Marke, CausationId = Vorgang.</summary>

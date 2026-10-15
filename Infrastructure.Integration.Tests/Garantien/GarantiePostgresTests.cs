@@ -51,18 +51,44 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
         var es = EventStore(schnell: schnell);
         var id = Guid.NewGuid();
         var erster = Guid.NewGuid();
-        await es.AppendEventsAsync(id, 0, new IEvent[] { new ImagePairInspiziert() }, quittung: new Quittung(erster, KommandoAusgang.Gewirkt));
+        await es.AppendEventsAsync(id, 0, new IEvent[] { new ImagePairInspiziert() }, beilagen: [new Quittung(erster, KommandoAusgang.Gewirkt)]);
         (await es.AusgangAsync(erster, default)).Should().Be(KommandoAusgang.Gewirkt);
 
         var veraltet = Guid.NewGuid();
-        var konflikt = () => es.AppendEventsAsync(id, 0, new IEvent[] { new ImagePairInspiziert() }, quittung: new Quittung(veraltet, KommandoAusgang.Gewirkt));
+        var konflikt = () => es.AppendEventsAsync(id, 0, new IEvent[] { new ImagePairInspiziert() }, beilagen: [new Quittung(veraltet, KommandoAusgang.Gewirkt)]);
         await konflikt.Should().ThrowAsync<ConcurrencyException>();
         (await es.AusgangAsync(veraltet, default)).Should().BeNull("ohne Events keine Quittung");
 
-        var wiederholung = () => es.AppendEventsAsync(id, 1, new IEvent[] { new ImagePairInspiziert() }, quittung: new Quittung(erster, KommandoAusgang.Abgelehnt));
+        var wiederholung = () => es.AppendEventsAsync(id, 1, new IEvent[] { new ImagePairInspiziert() }, beilagen: [new Quittung(erster, KommandoAusgang.Abgelehnt)]);
         (await wiederholung.Should().ThrowAsync<KommandoSchonEntschiedenException>()).Which.CommandId.Should().Be(erster);
         (await es.ReadStreamAsync(id, 0, default)).Should().HaveCount(1, "ohne neue Quittung keine Events");
         (await es.AusgangAsync(erster, default)).Should().Be(KommandoAusgang.Gewirkt, "der erste Ausgang bleibt");
+    }
+
+    [Theory, InlineData(false), InlineData(true)]
+    public async Task Vorgangs_Beilagen_werden_mit_den_Events_gueltig_oder_gar_nicht(bool schnell)
+    {
+        // Der Offen-Index-Eintrag reist im Append des ProzessGestartet, sein Ende im Append des ProzessBeendet (docs/03 §3.3): scheitert der
+        //   Append an der Version, gibt es auch keinen Eintrag bzw. kein Ende.
+        var es = EventStore(schnell: schnell);
+        var store = schnell ? _fx.Schnell : _fx.Store;
+        var k = Guid.NewGuid();
+        async Task<bool> Offen() { await using var q = store.QuerySession(); return await q.LoadAsync<ProzessOffen>(k) is not null; }
+
+        await es.AppendEventsAsync(k, 0, new IEvent[] { new ImagePairInspiziert() });
+        var konflikt = () => es.AppendEventsAsync(k, 0, new IEvent[] { new ImagePairInspiziert() }, beilagen: [new VorgangOffen(k, "P")]);
+        await konflikt.Should().ThrowAsync<ConcurrencyException>();
+        (await Offen()).Should().BeFalse("ohne Events kein Eintrag");
+
+        await es.AppendEventsAsync(k, 1, new IEvent[] { new ImagePairInspiziert() }, beilagen: [new VorgangOffen(k, "P")]);
+        (await Offen()).Should().BeTrue();
+
+        var endeKonflikt = () => es.AppendEventsAsync(k, 1, new IEvent[] { new ImagePairInspiziert() }, beilagen: [new VorgangBeendet(k)]);
+        await endeKonflikt.Should().ThrowAsync<ConcurrencyException>();
+        (await Offen()).Should().BeTrue("ohne Events kein Ende");
+
+        await es.AppendEventsAsync(k, 2, new IEvent[] { new ImagePairInspiziert() }, beilagen: [new VorgangBeendet(k)]);
+        (await Offen()).Should().BeFalse();
     }
 
     [Theory, InlineData(false), InlineData(true)]   // Martens Anhänge-Modus: Standard (Rich) und schnell (Quick, so läuft der Host)

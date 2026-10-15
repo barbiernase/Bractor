@@ -132,8 +132,9 @@ public interface IAggregateRepository
         /// <param name="aggregateType">Optional: Aggregat-Typname, wird als Log-Header gestempelt.</param>
         /// <param name="akteur">Optional: der Akteur des auslösenden Commands (Header <c>akteur</c>) — reist so durch die Kette
         /// zu Pipelines/Prozessen/Fristen, die daraus Commands erzeugen (docs/konzept-akteure.md §5.1).</param>
-        /// <param name="quittung">Optional: der Inbox-Eintrag des Commands, in derselben Transaktion geschrieben. Kennt die Inbox die
-        /// CommandId schon, ist nichts geschrieben und es fliegt <see cref="KommandoSchonEntschiedenException"/>.</param>
+        /// <param name="beilagen">Optional: Framework-Buchhaltung in derselben Transaktion (<see cref="Beilage"/>) — die Quittung des Commands
+        /// für die Inbox, Eintrag und Ende eines Vorgangs. Kennt die Inbox die CommandId einer Quittung schon, ist nichts geschrieben und es fliegt
+        /// <see cref="KommandoSchonEntschiedenException"/>.</param>
         Task AppendEventsAsync(
             Guid aggregateId,
             int expectedVersion,
@@ -142,7 +143,7 @@ public interface IAggregateRepository
             string? causationId = null,
             string? aggregateType = null,
             string? akteur = null,
-            Quittung? quittung = null);
+            IReadOnlyList<Beilage>? beilagen = null);
 
         /// <summary>
         /// Der Ausgang eines Commands laut Inbox, oder null, wenn sie ihn nicht kennt (nie entschieden oder älter als der Horizont). Der

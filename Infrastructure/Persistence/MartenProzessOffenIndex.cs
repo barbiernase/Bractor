@@ -6,7 +6,8 @@ namespace Infrastructure.Persistence;
 
 /// <summary>
 /// Marten-basierter <see cref="IProzessOffenIndex"/>: ein durables <see cref="ProzessOffen"/>-Dokument je
-/// offener Prozess-Korrelation. Beim <c>ProzessGestartet</c> gesetzt, beim <c>ProzessBeendet</c> gelöscht;
+/// offener Prozess-Korrelation. Mit dem <c>ProzessGestartet</c> gesetzt, mit dem <c>ProzessBeendet</c> gelöscht (Beilagen des Appends,
+/// <see cref="BeilagenSchreiber"/>);
 /// der Backstop-Scan liest die (kleine) Menge der offenen Einträge — O(offen), nicht O(Historie).
 ///
 /// Eigene, kurze Session je Zugriff (der Index ist unkritisch — siehe Vertrags-Doku am Interface: fehlt/lügt
@@ -21,18 +22,6 @@ public sealed class MartenProzessOffenIndex : IProzessOffenIndex
 
     public MartenProzessOffenIndex(IDocumentStore store)
         => _store = store ?? throw new ArgumentNullException(nameof(store));
-
-    public async Task MarkiereOffenAsync(Guid korrelation, string prozessName, CancellationToken ct)
-    {
-        await using var session = _store.LightweightSession();
-        session.Store(new ProzessOffen
-        {
-            Id = korrelation,
-            ProzessName = prozessName,
-            SeitUtc = DateTimeOffset.UtcNow
-        });
-        await session.SaveChangesAsync(ct);
-    }
 
     public async Task MarkiereBeendetAsync(Guid korrelation, CancellationToken ct)
     {

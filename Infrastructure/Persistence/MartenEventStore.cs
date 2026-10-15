@@ -66,7 +66,7 @@ public class MartenEventStore : IEventStoreRepository
         string? causationId = null,
         string? aggregateType = null,
         string? akteur = null,
-        Quittung? quittung = null)
+        IReadOnlyList<Beilage>? beilagen = null)
     {
         // Guard: expectedVersion muss >= 0 sein.
         // Der Actor prüft bereits gegen seinen State, aber falls
@@ -108,9 +108,11 @@ public class MartenEventStore : IEventStoreRepository
                 events.ToArray());
         }
 
-        // Die Quittung des Commands in DERSELBEN Transaktion (Inbox, docs/04 §4.4): kennt die Inbox ihn schon, scheitert der Commit am
-        //   Schlüssel und nichts ist geschrieben.
-        if (quittung is { } q) InboxTabelle.Quittiere(session, InboxTabelle.Name(_store), aggregateId, q);
+        // Die Beilagen in DERSELBEN Transaktion (docs/03 §3.3): kennt die Inbox die Quittung schon, scheitert der Commit am Schlüssel und
+        //   nichts ist geschrieben.
+        var schreiber = new BeilagenSchreiber();
+        schreiber.Lege(session, aggregateId, beilagen);
+        schreiber.Abschliessen(session, _store);
 
         try
         {
@@ -146,9 +148,9 @@ public class MartenEventStore : IEventStoreRepository
                 $"Cannot create aggregate that already has events.",
                 ex);
         }
-        catch (Exception ex) when (quittung is { } q2 && InboxTabelle.IstDuplikat(ex))
+        catch (Exception ex) when (BeilagenSchreiber.QuittungIn(beilagen) is { } commandId && InboxTabelle.IstDuplikat(ex))
         {
-            throw new KommandoSchonEntschiedenException(q2.CommandId, ex);
+            throw new KommandoSchonEntschiedenException(commandId, ex);
         }
     }
 

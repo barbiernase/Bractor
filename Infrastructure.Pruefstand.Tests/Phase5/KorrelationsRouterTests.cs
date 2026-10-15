@@ -23,7 +23,7 @@ public class KorrelationsRouterTests
         }
         public Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(Guid s, int v, CancellationToken ct)
             => throw new InvalidOperationException("PF-12: der Router liest keinen Stream-Rest");
-        public Task AppendEventsAsync(Guid a, int v, IReadOnlyList<IEvent> e, string? c = null, string? ca = null, string? at = null, string? ak = null, Quittung? q = null)
+        public Task AppendEventsAsync(Guid a, int v, IReadOnlyList<IEvent> e, string? c = null, string? ca = null, string? at = null, string? ak = null, IReadOnlyList<Beilage>? b = null)
             => throw new NotSupportedException();
         public Task<StreamChanges> ReadChangedStreamsAsync(long a, IReadOnlyCollection<string>? t, int l, CancellationToken ct) => throw new NotSupportedException();
         public Task<PartitionsSeite> ReadPartitionAsync(long n, int p, int ps, IReadOnlyCollection<string>? t, IReadOnlyCollection<long> a, int l, CancellationToken ct)

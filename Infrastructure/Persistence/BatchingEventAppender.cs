@@ -40,7 +40,7 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
         public string? AggType;
         public string? Akteur;
         public Spur.Kopf? SpurKopf;
-        public Quittung? Quittung;
+        public IReadOnlyList<Beilage>? Beilagen;
         // RunContinuationsAsynchronously: die Actor-Fortsetzung darf NICHT inline auf dem Flush-Loop-Thread
         // laufen (sonst serialisiert der Loop hinter Actor-Arbeit und der Group-Commit verpufft).
         public readonly TaskCompletionSource Tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -90,7 +90,7 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
         string? causationId = null,
         string? aggregateType = null,
         string? akteur = null,
-        Quittung? quittung = null)
+        IReadOnlyList<Beilage>? beilagen = null)
     {
         if (expectedVersion < 0)
             throw new ArgumentException($"ExpectedVersion must be >= 0, was {expectedVersion}.", nameof(expectedVersion));
@@ -106,7 +106,7 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
             Caus = causationId,
             AggType = aggregateType,
             Akteur = akteur,
-            Quittung = quittung,
+            Beilagen = beilagen,
             // Die Spur des Aufrufers jetzt festhalten — geschrieben wird in der Drain-Schleife (anderer Fluss).
             SpurKopf = Spur.Aktuell
         };
@@ -183,7 +183,7 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
         for (var i = 0; i < batch.Count; i++)
         {
             var p = batch[i];
-            appends[i] = new BatchAppend(p.StreamId, p.ExpectedVersion, p.Events, p.Corr, p.Caus, p.AggType, p.Akteur, p.SpurKopf, p.Quittung);
+            appends[i] = new BatchAppend(p.StreamId, p.ExpectedVersion, p.Events, p.Corr, p.Caus, p.AggType, p.Akteur, p.SpurKopf, p.Beilagen);
         }
 
         try
@@ -209,7 +209,7 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
             try
             {
                 using (Spur.Von(p.SpurKopf?.Ursache, p.SpurKopf?.Wirker, p.SpurKopf?.Ueber))
-                    await _inner.AppendEventsAsync(p.StreamId, p.ExpectedVersion, p.Events, p.Corr, p.Caus, p.AggType, p.Akteur, p.Quittung)
+                    await _inner.AppendEventsAsync(p.StreamId, p.ExpectedVersion, p.Events, p.Corr, p.Caus, p.AggType, p.Akteur, p.Beilagen)
                         .ConfigureAwait(false);
                 p.Tcs.TrySetResult();
             }

@@ -6,8 +6,8 @@ namespace Infrastructure.Persistence;
 /// Ein einzelner Append-Auftrag, wie ihn der <see cref="BatchingEventAppender"/> sammelt.
 /// Trägt exakt die Argumente von <see cref="IEventStoreRepository.AppendEventsAsync"/> — inkl. der
 /// PRO-COMMAND-Metadaten (Correlation/Causation/Type), die pro Event gestempelt werden müssen, weil
-/// die Prozess-Maschine über <c>CausationId == Vorgang</c> faltet und über <c>CorrelationId</c> routet — und die Quittung des
-/// Commands für die Inbox (docs/04 §4.4), die in derselben Transaktion landet.
+/// die Prozess-Maschine über <c>CausationId == Vorgang</c> faltet und über <c>CorrelationId</c> routet — und die Beilagen (Quittung
+/// des Commands für die Inbox, Eintrag und Ende eines Vorgangs, docs/03 §3.3), die in derselben Transaktion landen.
 /// </summary>
 public readonly record struct BatchAppend(
     Guid StreamId,
@@ -18,7 +18,7 @@ public readonly record struct BatchAppend(
     string? AggregateType,
     string? Akteur = null,
     Spur.Kopf? SpurKopf = null,
-    Quittung? Quittung = null);
+    IReadOnlyList<Beilage>? Beilagen = null);
 
 /// <summary>
 /// Schreibt eine ganze Menge von Append-Aufträgen ALL-ODER-NICHTS in EINER nativen Transaktion

@@ -19,7 +19,9 @@ namespace Pruefdomaene.Integration.Tests;
 /// Count-Join. Der echte <see cref="ProzessManager"/> wird DIREKT getrieben (kein Cluster → deterministische Reihenfolge), einmal ohne
 /// Marking-Store (Voll-Fold) und einmal mit <see cref="MartenProzessMarkingStore"/> (Cursor), je in einem eigenen, geleerten Schema.
 /// Alle Guids sind über beide Läufe gleich, damit die deterministischen Vorgänge exakt vergleichbar sind. Dazu die Sicherheits-Probe:
-/// ein Marking mit falschem RegelHash wird verworfen (Voll-Fold, gleiches Ergebnis), und der Cursor liest beim Fan-out weniger.
+/// ein Marking mit falschem RegelHash wird verworfen (Voll-Fold, gleiches Ergebnis), und der Cursor liest beim Fan-out weniger. Varianten:
+/// <c>kalt</c> — nach dem Start übernimmt eine neue Aktivierung (Store-Load statt frischem Vorgang); <c>mitRouter</c> — vor jeder
+/// Selbst-Weckung weckt der Router mit dem geschriebenen Event als Quelle (gezielte Weckung, docs/04 §4.5).
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequivalenzTests.Fixture>
@@ -27,11 +29,12 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
     private readonly Fixture _fx;
     public MarkingCursorAequivalenzTests(Fixture fx) => _fx = fx;
 
-    private sealed record Lauf(IReadOnlyList<(string Cmd, Guid Ziel, Guid Vorgang)> Feuerungen, bool Beendet, bool Erfolg, long GeleseneEvents);
+    private sealed record Lauf(IReadOnlyList<(string Cmd, Guid Ziel, Guid Vorgang)> Feuerungen, bool Beendet, bool Erfolg, long GeleseneEvents,
+        long Abfragen);
 
     /// <summary>Treibt einen Vorgang sequentiell (Starte + Wake bis Terminal) gegen den echten Marten-Store.</summary>
     private static async Task<Lauf> TreibeAsync(IDocumentStore marten, string prozess, Guid auslöserStream, Func<Welt, Task> seed,
-        IProzessMarkingStore? marking)
+        IProzessMarkingStore? marking, bool kalt = false, bool mitRouter = false)
     {
         var store = new ZählenderStore(new MartenEventStore(marten, new Pruefdomaene.AggregateHandlerFactory(), NullLogger<MartenEventStore>.Instance));
         var welt = new Welt(store);
@@ -40,23 +43,29 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         await seed(welt);
 
         var registry = new Dictionary<string, ProzessRegeln> { [prozess] = Anwendung.Prozesse[prozess] };
-        var mgr = new ProzessManager(store, registry, welt.DispatchAsync, markingStore: marking, markingSchreibIntervall: 1);
+        ProzessManager Neu() => new(store, registry, welt.DispatchAsync, markingStore: marking, markingSchreibIntervall: 1);
+        var mgr = Neu();
         store.Gelesen = 0;
+        store.Abfragen = 0;
         await mgr.StarteAsync(korrelation, prozess, auslöserStream, 1, default);
+        if (kalt) mgr = Neu();   // eine neue Aktivierung: lädt das Marking aus dem Store, faltet einmal voll
         var schutz = 0;
         while (!(await mgr.LadeStatusAsync(korrelation, default)).Beendet)
         {
+            if (mitRouter)
+                while (welt.Routen.TryDequeue(out var r)) await mgr.WakeAsync(korrelation, default, quelle: r.Stream, quellVersion: r.Version);
             await mgr.WakeAsync(korrelation, default);
             if (++schutz > 10_000) throw new InvalidOperationException("Der Vorgang erreichte kein Terminal (Livelock?).");
         }
         var st = await mgr.LadeStatusAsync(korrelation, default);
-        return new Lauf(welt.Feuerungen.ToList(), st.Beendet, st.Erfolg, store.Gelesen);
+        return new Lauf(welt.Feuerungen.ToList(), st.Beendet, st.Erfolg, store.Gelesen, store.Abfragen);
     }
 
-    private async Task<(Lauf Aus, Lauf An)> BeideAsync(string prozess, Guid auslöser, Func<Welt, Task> seed, IProzessMarkingStore? an = null)
+    private async Task<(Lauf Aus, Lauf An)> BeideAsync(string prozess, Guid auslöser, Func<Welt, Task> seed, IProzessMarkingStore? an = null,
+        bool kalt = false, bool mitRouter = false)
     {
         var aus = await TreibeAsync(_fx.Aus, prozess, auslöser, seed, marking: null);
-        var mit = await TreibeAsync(_fx.An, prozess, auslöser, seed, an ?? new MartenProzessMarkingStore(_fx.An));
+        var mit = await TreibeAsync(_fx.An, prozess, auslöser, seed, an ?? new MartenProzessMarkingStore(_fx.An), kalt, mitRouter);
         mit.Feuerungen.Should().Equal(aus.Feuerungen,
             "der Cursor-Fold muss bei jeder Weckung dieselbe (Command, Ziel, Vorgang)-Entscheidung treffen wie der Voll-Fold");
         mit.Beendet.Should().Be(aus.Beendet);
@@ -78,6 +87,34 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         });
         aus.Erfolg.Should().BeTrue();
         aus.Feuerungen.Select(f => f.Cmd).Should().BeEquivalentTo(nameof(ReservierePosten), nameof(BelegeKontingent), nameof(BestaetigeAuftrag));
+    }
+
+    [Theory, InlineData(false, true), InlineData(true, false), InlineData(true, true)]
+    public async Task Diamant_kalt_oder_mit_Router_gleich_Cursor_aus(bool kalt, bool mitRouter)
+    {
+        var n = (kalt ? 1 : 0) + (mitRouter ? 2 : 0);
+        Guid posten = G("e5e5e5e5", 10 * n + 1), kontingent = G("e5e5e5e5", 10 * n + 2), auftrag = G("e5e5e5e5", 10 * n + 3);
+        var (aus, an) = await BeideAsync(nameof(AuftragsProzess), auftrag, async w =>
+        {
+            await w.AnlegenAsync(new EroeffnePosten(posten, 10));
+            await w.AnlegenAsync(new RichteKontingentEin(kontingent, 5));
+            await w.AnlegenAsync(new StarteAuftrag(auftrag, posten, kontingent, 3));
+        }, kalt: kalt, mitRouter: mitRouter);
+        aus.Erfolg.Should().BeTrue();
+        an.Abfragen.Should().BeLessThan(aus.Abfragen);
+    }
+
+    [Theory, InlineData(false), InlineData(true)]
+    public async Task Kompensation_kalt_oder_mit_Router_gleich_Cursor_aus(bool kalt)
+    {
+        Guid posten = G("f6f6f6f6", kalt ? 11 : 1), kontingent = G("f6f6f6f6", kalt ? 12 : 2), auftrag = G("f6f6f6f6", kalt ? 13 : 3);
+        var (aus, _) = await BeideAsync(nameof(AuftragsProzess), auftrag, async w =>
+        {
+            await w.AnlegenAsync(new EroeffnePosten(posten, 10));
+            await w.AnlegenAsync(new RichteKontingentEin(kontingent, 1));
+            await w.AnlegenAsync(new StarteAuftrag(auftrag, posten, kontingent, 3));
+        }, kalt: kalt, mitRouter: !kalt);
+        aus.Erfolg.Should().BeFalse();
     }
 
     [Fact]
@@ -111,6 +148,9 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         aus.Feuerungen.Count(f => f.Cmd == nameof(SchliesseVerteilungAb)).Should().Be(1, "der Count-Join feuert einmal nach allen");
         an.GeleseneEvents.Should().BeLessThan(aus.GeleseneEvents,
             $"der Cursor liest nur den Tail (Cursor {an.GeleseneEvents}, Voll-Fold {aus.GeleseneEvents} Events)");
+        // Ein frischer Vorgang liest einen Ziel-Stream nur nach einem Feuern dorthin — nie „auf Verdacht“: höchstens eine Abfrage je
+        //   Feuerung, dazu je Weckung das Manager-Log, das die Test-Schleife selbst liest (LadeStatusAsync).
+        an.Abfragen.Should().BeLessThan(aus.Abfragen / 2, $"Cursor {an.Abfragen} Abfragen, Voll-Fold {aus.Abfragen}");
     }
 
     /// <summary>Ein Store, der ein Marking mit falschem RegelHash und absichtlich kaputtem Inhalt liefert — der Manager MUSS es verwerfen.</summary>
@@ -140,7 +180,7 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
             await w.AnlegenAsync(new EroeffnePosten(posten, 10));
             await w.AnlegenAsync(new RichteKontingentEin(kontingent, 5));
             await w.AnlegenAsync(new StarteAuftrag(auftrag, posten, kontingent, 3));
-        }, an: new FalscherHashStore());
+        }, an: new FalscherHashStore(), kalt: true);   // kalt: nur eine neue Aktivierung lädt das Marking aus dem Store
         an.Erfolg.Should().BeTrue("trotz korruptem Fremd-Marking läuft der Vorgang korrekt (Hash-Mismatch → Voll-Fold)");
     }
 
@@ -153,6 +193,8 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         private readonly Dictionary<Guid, (IState State, IAggregateHandler Handler, HashSet<Guid> Erledigt)> _aggregate = new();
         public List<(string Cmd, Guid Ziel, Guid Vorgang)> Feuerungen { get; } = new();
         public Guid Korrelation { get; set; }
+        /// <summary>Was der Router wecken würde: je geschriebenes Domänen-Event (Marken erzeugen kein Signal) Stream und Version.</summary>
+        public Queue<(Guid Stream, int Version)> Routen { get; } = new();
 
         public Welt(IEventStoreRepository store) => _store = store;
 
@@ -192,7 +234,12 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
                 ? new IEvent[] { new KommandoAbgelehnt(vorgang, ablehnungen[0].GetType().Name) }
                 : persistent.Count > 0 ? persistent : new IEvent[] { new KommandoVerarbeitet(vorgang) };   // Noop: nur die Marke
             await _store.AppendEventsAsync(cmd.AggregateId, s.Version, schreibe, korr.ToString(), vorgang.ToString(), Typ(cmd));
-            foreach (var e in schreibe) { if (e is not IProzessIntern) h.ApplyEvent(e); s.Version++; }
+            foreach (var e in schreibe)
+            {
+                if (e is not IProzessIntern) h.ApplyEvent(e);
+                s.Version++;
+                if (e is not IProzessIntern) Routen.Enqueue((cmd.AggregateId, s.Version));
+            }
         }
     }
 
@@ -201,11 +248,12 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
     {
         private readonly IEventStoreRepository _innen;
         public long Gelesen;
+        public long Abfragen;
         public ZählenderStore(IEventStoreRepository innen) => _innen = innen;
 
         public Task AppendEventsAsync(Guid aggregateId, int expectedVersion, IReadOnlyList<IEvent> events, string? correlationId = null,
-            string? causationId = null, string? aggregateType = null, string? akteur = null, Quittung? quittung = null)
-            => _innen.AppendEventsAsync(aggregateId, expectedVersion, events, correlationId, causationId, aggregateType, akteur, quittung);
+            string? causationId = null, string? aggregateType = null, string? akteur = null, IReadOnlyList<Beilage>? beilagen = null)
+            => _innen.AppendEventsAsync(aggregateId, expectedVersion, events, correlationId, causationId, aggregateType, akteur, beilagen);
         public Task<KommandoAusgang?> AusgangAsync(Guid commandId, CancellationToken ct) => _innen.AusgangAsync(commandId, ct);
         public Task<StreamChanges> ReadChangedStreamsAsync(long afterGlobalSequence, IReadOnlyCollection<string>? typen, int limit, CancellationToken ct) => _innen.ReadChangedStreamsAsync(afterGlobalSequence, typen, limit, ct);
         public Task<PartitionsSeite> ReadPartitionAsync(long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit, CancellationToken ct)
@@ -215,6 +263,7 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         {
             var r = await _innen.ReadStreamAsync(streamId, fromVersion, ct);
             Interlocked.Add(ref Gelesen, r.Count);
+            Interlocked.Increment(ref Abfragen);
             return r;
         }
     }

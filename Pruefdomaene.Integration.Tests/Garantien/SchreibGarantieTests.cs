@@ -219,9 +219,9 @@ public class SchreibGarantieTests
         private sealed class Laeufer(MehrdeutigerCommit s, IEventStoreRepository innen) : IEventStoreRepository
         {
             public async Task AppendEventsAsync(Guid aggregateId, int expectedVersion, IReadOnlyList<IEvent> events, string? correlationId = null,
-                string? causationId = null, string? aggregateType = null, string? akteur = null, Quittung? quittung = null)
+                string? causationId = null, string? aggregateType = null, string? akteur = null, IReadOnlyList<Beilage>? beilagen = null)
             {
-                await innen.AppendEventsAsync(aggregateId, expectedVersion, events, correlationId, causationId, aggregateType, akteur, quittung);
+                await innen.AppendEventsAsync(aggregateId, expectedVersion, events, correlationId, causationId, aggregateType, akteur, beilagen);
                 if (s.Scharf == aggregateId && !s.Ausgeloest)
                 {
                     s.Ausgeloest = true;

@@ -12,33 +12,28 @@ namespace Infrastructure.Pruefstand.Garantien;
 
 /// <summary>
 /// Der Offen-Index ist eine Obermenge der offenen Vorgänge (Störungslauf PF-12: ein harter Abbruch zwischen <c>ProzessGestartet</c> und dem
-/// Index-Eintrag ließ 51 Vorgänge ohne Eintrag liegen — weder Backstop noch Poll weckten sie): der Eintrag steht, bevor der Vorgang im Log
-/// gestartet ist, und ein Eintrag ohne Vorgang räumt die Backstop-Weckung ab.
+/// Index-Eintrag ließ 51 Vorgänge ohne Eintrag liegen — weder Backstop noch Poll weckten sie): Eintrag und Ende reisen als Beilagen im Append
+/// des <c>ProzessGestartet</c> bzw. <c>ProzessBeendet</c> (eine Transaktion, docs/03 §3.3), und ein Eintrag ohne Vorgang räumt die
+/// Backstop-Weckung ab.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class ProzessStartGarantieTests
 {
-    /// <summary>Notiert beim Eintrag, ob der Vorgang im Log schon gestartet war.</summary>
-    private sealed class PruefenderIndex(Func<Guid, bool> gestartet) : IProzessOffenIndex
-    {
-        public readonly List<(Guid Korrelation, bool SchonGestartet)> Eintraege = new();
-        public readonly HashSet<Guid> Offen = new();
-        public Task MarkiereOffenAsync(Guid k, string name, CancellationToken ct) { Eintraege.Add((k, gestartet(k))); Offen.Add(k); return Task.CompletedTask; }
-        public Task MarkiereBeendetAsync(Guid k, CancellationToken ct) { Offen.Remove(k); return Task.CompletedTask; }
-        public Task<IReadOnlyList<Guid>> ListeOffeneAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<Guid>>(Offen.ToList());
-    }
-
     [Fact]
-    public async Task Der_Eintrag_steht_bevor_der_Vorgang_im_Log_gestartet_ist()
+    public async Task Eintrag_und_Ende_reisen_im_Append_von_Start_und_Ende()
     {
-        FunktionsWelt? w = null;
-        var index = new PruefenderIndex(k => w!.Log.Stream(k).Any(e => e.Payload is ProzessGestartet));
-        w = new FunktionsWelt(offenIndex: index);
+        var index = new OffenIndexImSpeicher();
+        var w = new FunktionsWelt(offenIndex: index);
 
         await w.StarteAsync();
 
-        index.Eintraege.Should().Equal((w.Korrelation, false));
+        var start = w.Log.Appends.Single(a => a.Events.Any(e => e is ProzessGestartet));
+        start.Beilagen.Should().Equal(new VorgangOffen(w.Korrelation, "BildAufbereitung"));
+        index.Offen.Should().ContainKey(w.Korrelation);
+
         (await w.TreibeAsync()).Beendet.Should().BeTrue();
+        var ende = w.Log.Appends.Single(a => a.Events.Any(e => e is ProzessBeendet));
+        ende.Beilagen.Should().Equal(new VorgangBeendet(w.Korrelation));
         index.Offen.Should().BeEmpty();
     }
 
