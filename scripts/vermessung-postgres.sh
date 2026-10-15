@@ -3,12 +3,35 @@
 # Misst mit pgbench IM Postgres-Container, rohes SQL ohne Marten und ohne Netzwerk — die absoluten Werte sind eine Obergrenze,
 # belastbar sind die Verhältnisse. Legt eine eigene Datenbank an und löscht sie am Ende wieder; andere Datenbanken bleiben unberührt.
 #
-#   scripts/vermessung-postgres.sh [container] [sekunden]     (Standard: cqrs-postgres, 15)
+#   scripts/vermessung-postgres.sh [container] [sekunden] [anlass]     (Standard: cqrs-postgres, 15, postgres-grundgroessen)
+# Ergebnis: vermessung/ergebnisse/<datum>_<commit>_<anlass>/ (ergebnis.json, ausgabe.txt) — mit committen.
 set -euo pipefail
 
 CONTAINER="${1:-cqrs-postgres}"
 DAUER="${2:-15}"
+ANLASS="${3:-postgres-grundgroessen}"
 DB="cqrs_vermessung_tmp"
+
+# Ablage (docs/plan-garantien-und-durchsatz.md §0.1): jeder Lauf bekommt einen eigenen Ordner, nur anhängen, nie überschreiben.
+WURZEL="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
+COMMIT="$(git -C "$WURZEL" rev-parse --short HEAD)"
+ORDNER="$WURZEL/vermessung/ergebnisse/$(date +%Y-%m-%d_%H%M)_${COMMIT}_${ANLASS}"
+mkdir -p "$ORDNER"
+cat > "$ORDNER/ergebnis.json" <<JSON
+{
+  "anlass": "$ANLASS",
+  "skript": "scripts/vermessung-postgres.sh",
+  "zeit": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "commit": "$COMMIT",
+  "branch": "$(git -C "$WURZEL" rev-parse --abbrev-ref HEAD)",
+  "rechner": "$(uname -sm), $(sysctl -n hw.ncpu 2>/dev/null || nproc) Kerne",
+  "container": "$CONTAINER",
+  "postgres": "$(docker exec "$CONTAINER" postgres --version | sed 's/"//g')",
+  "dauer_je_lauf_s": $DAUER,
+  "hinweis": "rohes SQL im Container, ohne Marten und Netzwerk; Verhaeltnisse belastbar, absolute Werte Obergrenze. Ausgabe: ausgabe.txt"
+}
+JSON
+exec > >(tee "$ORDNER/ausgabe.txt") 2>&1
 PSQL=(docker exec -i "$CONTAINER" psql -U postgres -v ON_ERROR_STOP=1 -q)
 
 aufraeumen() {

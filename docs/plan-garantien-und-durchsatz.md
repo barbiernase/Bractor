@@ -14,7 +14,9 @@
 2. **Durchsatz:** Die Decke der Konsumseite steigt um eine Größenordnung (PF-1); die Grundlast im Leerlauf geht gegen null (PF-2, PF-4);
    der Speicher bleibt im Dauerbetrieb flach (PF-5).
 3. **Nachweis:** Jede Phase endet mit einer klaren Messung **Ende-zu-Ende an realen Domänen im echten Host** (§0.1), nicht nur mit grünen
-   Tests und nie mit synthetischen Abkürzungen.
+   Tests und nie mit synthetischen Abkürzungen. Die Ergebnisse werden **gespeichert** (§0.1) und sind jederzeit nachrechenbar.
+4. **Garantien geprüft:** Jede Garantie aus [11](11-garantien.md) hat einen Test, der sie unter Störung beweist; die Garantie-Suite und die
+   Exactly-once-Prüfung der E2E-Läufe laufen **immer** (§0.2).
 
 ### 0.1 · Messprinzip (bindend für jede Phase)
 
@@ -42,6 +44,39 @@
   Fremdlast und Abweichungen stehen im Ergebnis. Vor der Phase wird gemessen (bzw. die letzte Messung gilt), nach der Phase dieselbe Messung
   auf demselben Rechner. Die Ergebnisse stehen als **eine fortlaufende Tabelle** in docs/12 §12.5 (Zeilen: Szenario × Kennzahl, Spalten:
   Baseline, Phase 1, Phase 2 …); verglichen werden Verhältnisse.
+- **Gespeichert:** jeder Lauf schreibt sein Ergebnis selbst nach `vermessung/ergebnisse/<JJJJ-MM-TT_HHMM>_<commit>_<anlass>/` und wird mit
+  der Phase committet — nur anhängen, nie überschreiben oder löschen. Inhalt:
+  - `ergebnis.json`: Metadaten (Rechner, CPU, Commit-Hash, Branch, Umgebung, Parameter, Fremdlast, Anlass „Baseline“/„Phase n“), je Szenario
+    alle drei Wiederholungen und der Median jeder Kennzahl, das Ergebnis der Exactly-once-Prüfung (§0.2);
+  - `latenzen/<szenario>.csv` (Rohwerte, gzip-komprimiert, wenn größer als 1 MB), `pg_stat_statements.csv`, `host.csv` (RSS/CPU über die Zeit);
+  - `zusammenfassung.md`: die Tabelle, wie sie in §12.5 landet.
+
+  Die Tabelle in §12.5 wird aus diesen Dateien erzeugt (`scripts/vermessung-tabelle.sh`), nicht von Hand abgeschrieben; jede Spalte verweist
+  auf ihren Ergebnis-Ordner. Auch `scripts/vermessung-postgres.sh` legt seine Ausgabe dort ab.
+
+### 0.2 · Garantie-Nachweis (bindend, läuft immer)
+
+- **Garantie-Matrix:** in [11](11-garantien.md) bekommt jede Zeile von §11.2–§11.8 und §11.10 eine Spalte „Nachweis“ mit dem Test bzw. dem
+  Analyzer, der sie beweist. Eine Garantie ohne Nachweis gilt als Lücke und steht in docs/13.
+- **Garantie-Suite:** Tests mit `[Trait("Kategorie", "Garantie")]` — im Prüfstand für Logik über Seams, in den Integrations-Suiten gegen echtes
+  Marten für Store-Semantik. Jede Garantie wird **unter Störung** geprüft, mindestens: doppelte und ungeordnete Zustellung, verlorenes Signal,
+  Absturz zwischen Effekt und Checkpoint, Absturz zwischen Emit und Cursor, Timeout und Fehlschlag beim Emit, Versionskonflikt, mehrdeutiger
+  Commit, Wiederholung einer alten CommandId (Fenster bzw. Horizont), zwei Aktivierungen (zwei Knoten), Poison-Stream, Neustart des Hosts.
+- **Lücken zuerst als Test:** jede offene G-Lücke bekommt in Phase 0 einen Test, der sie zeigt, markiert mit
+  `Skip = "G-n offen (docs/13)"`. Die Phase, die die Lücke schließt, entfernt das Skip; eine Lücke gilt erst als geschlossen, wenn ihr Test grün ist.
+- **Exactly-once-Prüfung jedes E2E-Laufs:** nach jedem Lauf zählt der Treiber über Queries und den Log nach, dass jede Wirkung genau einmal
+  eingetreten ist:
+  - S1/S2: je Datei genau ein Vorgang, je Paar genau ein `ImagePair`, `BildVerfuegbar` genau einmal je Paar, Read-Model-Zählung = Log-Zählung;
+  - S3: `Fertig = N` exakt, Barriere genau einmal erreicht;
+  - S4: Mitglieder des eingefrorenen Datensatzes = aufgenommene Paare, genau ein `DatensatzEingefroren`;
+  - S5: je Vorgang genau ein `ProzessBeendet`, jede Kompensation genau einmal, je Reaktions-Command genau eine Wirkung (Ziel-Events je
+    `causationId` = 1).
+
+  Schlägt eine Prüfung fehl, ist der Lauf ungültig und die Phase nicht abgenommen.
+- **Störungslauf:** je Phase mindestens ein E2E-Lauf mit Störungen — Host mitten im Lauf hart beenden und neu starten, Redis zeitweise
+  stoppen, Signale verlieren (Broker-Shard neu starten) — mit derselben Exactly-once-Prüfung. Ergebnis im Ergebnis-Ordner.
+- **Immer:** die Garantie-Suite läuft vor jedem Commit (`dotnet test … --filter Kategorie=Garantie` auf Prüfstand und Integration, die
+  Integration nacheinander); die Exactly-once-Prüfung läuft in jedem E2E-Lauf, auch bei reinen Performance-Messungen.
 
 Ausgangslage aus der Messung (§12.5): eine Weckung je (Projektion, Stream) schafft etwa 8 200/s, ein Batch etwa 175 000 Effekte/s (Faktor
 ~20); die Inbox-Marke kostet 35–40 % im Group-Commit; ein Stream ab 0 statt ab Cursor kostet bei 100 000 Events Faktor > 2 000. Hochgerechnet
@@ -51,14 +86,14 @@ trägt die Konsumseite heute etwa 8 200 / K Events/s (K = replaybare Projektione
 
 | Phase | Inhalt | IDs | Aufwand | setzt voraus | Abnahme (Kurz) |
 |---|---|---|---|---|---|
-| 0 | Abgleich und E2E-Messung | – | 4–6 PT | – | Baseline S1–S5 in §12.5 |
+| 0 | Abgleich, E2E-Messung, Garantie-Nachweis | – | 7–9 PT | – | Baseline S1–S5 gespeichert; Garantie-Suite grün, Lücken als Skip-Tests |
 | 1 | Emit-Ausgang und Emittenten-Cursor | G-1, G-2 (Emittent), P1-6 | 5–7 PT | 0 | S5: Kosten der Reaktion unabhängig von der Stream-Länge |
 | 2 | Actor-Lebenszyklus | G-3, PF-5 | 3–5 PT | 0 | Dauerlauf 24 h S1 + S3: Speicher flach |
 | 3 | Batch-Konsum | PF-1, PF-2, G-4 | 15–25 PT | 1, 2 | Sättigung S1/S5 deutlich über Baseline (Ziel nach E5) |
 | 4 | Inbox als Tabelle | G-2 (Inbox), PF-3 | 6–9 PT | 2, E1 | S3 mit N = 10 000+: genau einmal; Sättigung S1 höher als nach Phase 3 |
 | 5 | Prozess-Poll und Backstop | PF-4 (W11-2-Anteil) | 3–5 PT | 1 | S3/S5: Zeit je Teil konstant über N; Leerlauf mit offenen Vorgängen nahe 0 Queries/s |
 | 6 | Rest | PF-6, G-5, PF-7 (Entscheidung) | 2–3 PT | – | – |
-| | **Summe** | | **38–60 PT** | | etwa 8–12 Wochen für eine Person |
+| | **Summe** | | **41–63 PT** | | etwa 9–13 Wochen für eine Person |
 
 Reihenfolge: erst Korrektheit und das wachsende Leck (1), dann Stabilität im Dauerbetrieb (2), dann die Decke (3), dann die nächste Decke —
 den Schreibpfad (4), zuletzt Grundlast und Rest (5, 6). Nach Phase 1 ist der Auslöser von G-2 (Emittent sendet ab 0 erneut) weg; deshalb darf
@@ -78,7 +113,7 @@ die Inbox-Tabelle (4) nach dem Batch-Konsum kommen.
 
 ## 3 · Phasen im Detail
 
-### Phase 0 · Abgleich und E2E-Messung (4–6 PT)
+### Phase 0 · Abgleich, E2E-Messung, Garantie-Nachweis (7–9 PT)
 
 1. **Abgleich:** `git log` und docs/13 §13.0 prüfen — ist ein G- oder PF-Befund inzwischen berührt? Plan nachführen; Entscheidungen E1–E7
    gebündelt mit Tobi klären (ohne Antwort gelten die Vorschläge).
@@ -86,9 +121,16 @@ die Inbox-Tabelle (4) nach dem Batch-Konsum kommen.
    ein Treiber für die Szenarien S1–S5, der nur echte Eingänge benutzt (Dateien erzeugen wie `PipelineFlussE2ETests`, Commands und Queries
    über die Leitung mit Akteur-Token), `pg_stat_statements` an, RSS/CPU des Host-Prozesses mitschreiben. Fehlt einem Szenario ein realer
    Baustein (heute: eine Reaktion in S5), bekommt die Prüfdomäne einen fachlich sinnvollen, an der richtigen Rolle (CQRS098).
-3. **Baseline:** S1–S5 mit Sättigung, Latenz, Last und Speicher, ein Dauerlauf von 8 h und die Aufholzeit; Tabelle in §12.5.
+3. **Ablage nach §0.1:** `vermessung/ergebnisse/` mit Ergebnis-Ordnern, `scripts/vermessung-tabelle.sh` erzeugt die Tabelle für §12.5. Die
+   zwei Läufe von `scripts/vermessung-postgres.sh` vom 2026-10-15 als erste Einträge nachtragen.
+4. **Garantie-Nachweis nach §0.2:** Garantie-Matrix in docs/11, Garantie-Suite (Trait `Garantie`) mit den Störfällen, je offene G-Lücke ein
+   Skip-Test, Exactly-once-Prüfung und Störungslauf im E2E-Treiber.
+5. **Baseline:** S1–S5 mit Sättigung, Latenz, Last und Speicher, ein Dauerlauf von 8 h, die Aufholzeit und ein Störungslauf — gespeichert,
+   Tabelle in §12.5.
 
-*Abnahme:* `scripts/vermessung-e2e.sh` misst S1–S5 mit einem Befehl reproduzierbar; Baseline eingetragen; E5-Zielwerte festgelegt.
+*Abnahme:* `scripts/vermessung-e2e.sh` misst S1–S5 mit einem Befehl reproduzierbar und speichert das Ergebnis; Exactly-once-Prüfung grün auch
+im Störungslauf (sonst ist das ein neuer G-Befund); Garantie-Suite grün bis auf die markierten Lücken; Baseline eingetragen; E5-Zielwerte
+festgelegt.
 
 ### Phase 1 · Emit-Ausgang und Emittenten-Cursor (5–7 PT)
 
@@ -165,8 +207,11 @@ die Inbox-Tabelle (4) nach dem Batch-Konsum kommen.
 
 ## 4 · Arbeitsweise je Phase
 
-- Ein Commit (oder wenige) je Phase; Prüfstand und die Integrations-Suiten **nacheinander** grün; `GraphExtractor -- --check`; E2E-Messung nach §0.1.
-- Doku im selben Commit: erledigte IDs von §13.0 nach §13.6, Garantien in [11](11-garantien.md) nachführen, Messwerte in §12.5.
+- Ein Commit (oder wenige) je Phase; Prüfstand und die Integrations-Suiten **nacheinander** grün; **Garantie-Suite grün** (§0.2);
+  `GraphExtractor -- --check`; E2E-Messung mit Exactly-once-Prüfung und ein Störungslauf nach §0.1/§0.2.
+- Jede Phase entfernt das Skip der Lücken-Tests, die sie schließt; neue Garantien oder Mechanismen bekommen ihren Garantie-Test im selben Commit.
+- Im selben Commit: Ergebnis-Ordner unter `vermessung/ergebnisse/`, Tabelle in §12.5, erledigte IDs von §13.0 nach §13.6, Garantien und
+  Nachweis-Spalte in [11](11-garantien.md).
 - Kein `InMemoryEventStore`: Store-Semantik nur gegen echtes Marten.
 
 ## 5 · Verhältnis zum Werkbank-Strang (§13.5)
