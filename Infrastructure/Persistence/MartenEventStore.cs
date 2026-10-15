@@ -266,8 +266,8 @@ public class MartenEventStore : IEventStoreRepository
     /// <summary>
     /// Rohes SQL löst Martens AutoCreate nicht aus: auf einer frischen Datenbank legt der erste rohe Leser die Event-Tabellen an; mit
     /// <c>AutoCreate.None</c> (Multi-Node-Member, das Schema legt der Migrator an) folgenlos. Früher legte sie zufällig der Prozess-Poll an
-    /// (er las über LINQ) — rohe Leser vor ihm scheiterten bis dahin. Einmal je Store: Martens Prüfung selbst kostet je Aufruf spürbar CPU
-    /// (gemessen: S3-8 −28 % Durchsatz, als sie vor jeder Seite lief).
+    /// (er las über LINQ) — rohe Leser vor ihm scheiterten bis dahin. Einmal je Store gemerkt, damit die Seiten des Batch-Konsums nicht jedes
+    /// Mal Martens Prüfung durchlaufen.
     /// </summary>
     internal static async ValueTask EventTabellenAsync(IDocumentStore store, CancellationToken ct)
     {

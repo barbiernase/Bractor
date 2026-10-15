@@ -1,7 +1,7 @@
 # 13 — Reifegrad, Schulden & Bewertung
 
 **Die eine Quelle für „offen“.** Andere Dokumente (`CLAUDE.md`, Kapitel 01–12, Konzepte) nennen Schulden höchstens kurz und verweisen
-hierher. Stand: 2026-10-15, Phase 3 des Plans Garantien und Durchsatz. Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
+hierher. Stand: 2026-10-15, Phase 5 des Plans Garantien und Durchsatz. Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
 (`docs/konzept-werkbank.md` §2). Zahlen und Messwerte stehen in `docs/12-tests-und-vermessung.md`.
 
 ## 13.0 Offen auf einen Blick
@@ -11,8 +11,9 @@ hierher. Stand: 2026-10-15, Phase 3 des Plans Garantien und Durchsatz. Maßstab 
 | G-2 | Inbox-Fenster (10 000): eine CommandId, die jenseits der Grenze erneut kommt, wirkt erneut; der Emittenten-Anteil ist seit Phase 1 geschlossen | P1 |
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
 | G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
-| G-8 | Prozess-Poll rückt seine Hochwassermarke vor, ohne die Start-Weckung zu bestätigen: geht sie verloren, startet ein Vorgang nie | P1 |
-| PF-4 | Prozess-Poll liest geänderte Streams ab 0 und verwirft geladene Events; Backstop weckt alle offenen Vorgänge; nach einem Neustart dauert der erste Durchlauf unter Last Minuten | P1 |
+| PF-11 | Emittenten-Poll (`ReadChangedStreamsAsync`) lädt alle Events seit seiner Marke samt Daten in einer Abfrage, ungeseitet | P2 |
+| PF-12 | Die Reaktion hängt nach Höchstlast nach: im Leerlauf L5 holt sie noch auf (≈ 380 Cursor-Schritte/s, je Schritt ≈ 4 Stream-Reads) — L5 ist deshalb nicht leer | P2 |
+| PF-4b | Rest von PF-4: keine Lease für den Prozess-Backstop im Cluster (jeder Knoten heilt alle offenen Vorgänge); Abnahme „S3 Zeit je Teil konstant über N“ und „10 000 offene Vorgänge im Leerlauf“ ohne Szenario im Treiber | P3 |
 | PF-10 | Datei-Treiber meldet eine Datei nach der anderen ins Log (Rückstau): das Melde-Tempo ist die Decke von S1 — Entscheidung offen | P2 |
 | VM-1 | Vermessungs-Treiber zählt Soll und Ist der Exactly-once-Prüfung in getrennten Abfragen, während der Host noch abbaut | P3 |
 | PF-3 | Inbox-Marke je Command im Stream (auch ohne Event), Inbox im Snapshot | P2 |
@@ -26,7 +27,7 @@ hierher. Stand: 2026-10-15, Phase 3 des Plans Garantien und Durchsatz. Maßstab 
 | P1-7 | Deploy-Skripte veraltet (starten die Hosts ohne Umgebung, alte Konfig-Schlüssel) | P1 |
 | W2-1 | Rest der Projektstruktur: Client-Framework hängt am Server-Framework, Generat-Namespaces, Identitäten aus einfachen Namen | P2 |
 | W11-1 | Doppelte Wege: Handle-Pipeline/Trigger/`[Ingress]` ohne Nutzer, Prozess- vs. Fluss-DSL | P2 |
-| W11-2 | Zeitlimits nur über den 15-s-Backstop entdeckt; Fristplaner hängt an der Handle-Welt | P2 |
+| W11-2 | Fristplaner hängt an der Handle-Welt (die Zeitlimits des Dirigenten laufen seit PF-4 über die Frist im Offen-Index) | P2 |
 | W3-1 | Ableitungen im Editor-JS (Karten-Ids, Hör-Menge, Lambda-Parameter, Auto-Zuordnung, Kardinalität) | P2 |
 | WB-1 | Werkbank: Geste p50 unter Fremdlast 346–470 ms (Ziel 300 ms), LLM-Kontexte kalt, CLI `--schreiben`, Renamer ohne String-Literale | P2 |
 | WB-4 | Die Werkbank kennt genau eine Anwendung (`StandardWurzel`, `ServerHost`); eine Anwendung anlegen ist nicht beschrieben — Entscheidung offen | P2 |
@@ -57,7 +58,7 @@ Werkzeuge lesen teils per Reflection, und neben den neuen Wegen (Fluss, Quelle, 
 | Subsystem | Reife |
 |---|:--:|
 | Schreibseite | 🟢 / 🟡 (G-5) |
-| Konsum-/Prozess-Maschine | 🟡 (G-2 Inbox, PF-4) |
+| Konsum-/Prozess-Maschine | 🟡 (G-2 Inbox, PF-12) |
 | Generatoren & Analyzer | 🟢 / 🟡 (W10-1, W2-1) |
 | Multi-Node / Transport | 🟢 / 🟡 (P1-1, P1-2) |
 | Werkbank (Extractor, Editor, Server) | 🟢 / 🟡 (LLM-1, W3-1, WB-1, WB-4, WZ-1) |
@@ -95,20 +96,16 @@ statt Fenster im Stream (Plan Phase 4).
 
 Die Reihe **PF** sind Kosten der Garantien ([11](11-garantien.md) §11.12): die Garantie bleibt, der Mechanismus ist teurer als nötig.
 
-**PF-4 · Prozess-Poll und Backstop.** `ProzessManagerWiring` liest jeden geänderten Stream ab Version 0 und routet jedes passende historische
-Event erneut, obwohl `ReadChangedStreamsAsync` die neuen Events schon geladen hat; der Backstop weckt alle 15 s alle offenen Vorgänge, auf jedem
-Knoten. *Empfehlung:* die geladenen Events direkt routen; Fälligkeits-Index für Zeitlimits (zusammen mit W11-2); Lease im Cluster.
-*Gemessen (Phase 3, Störungslauf `…_1333_0b02802_phase-3-stoerung`):* wird ein Host hart beendet, bevor der Prozess-Poll seinen Cursor je
-geschrieben hat, beginnt er nach dem Neustart bei 0 und liest jeden der ≈ 25 000 geänderten Streams ab Version 0; unter Last 82 kam dieser
-Durchlauf in 10 min nicht durch, und zwei Vorgänge, deren Start-Signal mit dem Host verloren ging, blieben so lange liegen.
+**PF-11 · Emittenten-Poll lädt ungeseitet.** Der `Poller` der Emittenten (`PullPath`) ruft alle 30 s `ReadChangedStreamsAsync`: eine
+LINQ-Abfrage über alle Events jenseits der Marke, samt Daten, ohne Limit — nur um die Stream-Ids zu bestimmen. Unter Dauerlast sind das je Poll
+und Emittent die Events von 30 s; nach einem langen Stillstand das ganze Log in einem Zug. *Empfehlung:* Stream-Ids und Karenz-Marke in SQL
+(`select distinct stream_id …`, ohne Daten) und seitenweise wie der Prozess-Poll. Gefunden bei PF-4 (der Prozess-Poll nutzt die Methode nicht mehr).
 
-**G-8 · Prozess-Poll ohne bestätigte Weckung.** `ProzessManagerWiring.PollLoopAsync` routet die Start- und Teilnehmer-Events über
-`KorrelationsRouter` an `wecke` — fire-and-forget (`ProzessWakeBeobachtetAsync`) — und schreibt danach die Hochwassermarke fort, unabhängig davon,
-ob die Weckung ankam. Scheitert sie (Cluster nach Neustart noch nicht bereit, Zeitüberschreitung unter Last), ist ein Vorgang, dessen Signal auch
-verloren ging, für immer ungestartet; der Backstop kennt ihn nicht (kein Eintrag im Offen-Index). Beim Emittenten-Poll ist das seit Befund 1
-gelöst (`WakeAck.Aufgeholt`, die Marke rückt nur nach bestätigter Weckung). Gefunden bei der Analyse des Störungslaufs von Phase 3 (dort nicht die
-Ursache). Test fehlt noch (Skip-Test nach §0.2 des Plans). *Empfehlung:* mit PF-4 in Plan-Phase 5 — die Start-Weckung abwarten (bounded) und die
-Marke nur nach Bestätigung vorrücken, wie beim `Poller`.
+**PF-12 · Reaktion hängt nach Höchstlast nach.** Im Leerlauf L5 nach S5-64 laufen auf dem Messserver ≈ 380 Transaktionen/s und ≈ 2 000 Queries/s:
+5 700 Cursor-Upserts von `NachschubBeiMindestbestand` in 15 s, also echter Fortschritt (der Adapter schreibt nur, wenn er vorankommt), dazu
+≈ 23 000 Stream-Reads — etwa vier je Cursor-Schritt (Weckungen je Signal, die denselben Stream nachlesen). Der Prozess-Manager ist dort still
+(eine Abfrage des Offen-Index). *Empfehlung:* zuerst messen, wie lange der Rückstand der Reaktion nach S5-64 braucht (Kennzahl „Reaktion bis
+aufgeholt“ im Treiber), dann Weckungen je Stream bündeln (E8 hält Emittenten bewusst je Stream).
 
 **PF-10 · Datei-Treiber meldet seriell.** Der Datei-Treiber meldet die nächste Datei erst, wenn die vorige im Log steht (Rückstau, docs/11 §11.8).
 In S1 ist genau das die Decke: je Sekunde werden halb so viele Paare komplett, wie Dateien gemeldet werden (Phase-2- und Phase-3-Code gleich);
@@ -326,6 +323,16 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 
 ## 13.6 Erledigt (früher hier offen)
 
+- **Prozess-Poll und Backstop (früher PF-4, G-8; Plan Garantien und Durchsatz, Phase 5, vor Phase 4 auf Tobis Wort, 2026-10-15; docs/04 §4.5):**
+  - **PF-4:** der Prozess-Poll (`ProzessPoll`) liest das Log seitenweise ab seiner Marke (`ReadPartitionAsync`, 500 Events) und routet die
+    geladenen Events direkt — keine Stream-Reads ab Version 0 mehr; Starts nur für Vorgänge, die es noch nicht gibt oder die offen sind
+    (`StreamsVorhandenAsync`, eine Abfrage je Seite); Marke je Seite gespeichert. Backstop: fällige **Fristen** (Zeitlimit, Warte-Knoten) im
+    Sekundentakt aus dem Offen-Index (`ProzessOffen.Frist`, geschrieben erst, wenn der Vorgang still wird), Heil-Weckung nach 15 s Stille mit
+    Backoff je Vorgang bis 1 h (`Heilplan`) statt alle 15 s alle. Gemessen: Leerlauf L1 351 → 2,5 Queries/s, 24 → 3 % CPU (E5-Ziel L1 erreicht).
+  - **G-8:** die Poll-Weckungen sind bestätigt (WakeAck), die Marke rückt nur bis vor die erste unbestätigte — P `ProzessPollGarantieTests`
+    (ohne die Regel rot gesehen).
+  - Nebenbei: rohes SQL legte die Event-Tabellen nie an; auf einer frischen DB tat das zufällig der alte Prozess-Poll (LINQ). Jetzt legt
+    der erste rohe Leser sie an (`MartenEventStore.EventTabellenAsync`).
 - **Batch-Konsum der Projektionen (früher PF-1, PF-2, G-4; Plan Garantien und Durchsatz, Phase 3, 2026-10-15; docs/04 §4.1.1, §4.3):**
   - **PF-1:** replaybare Projektionen laufen je (Projektion, Partition) in einem `BatchLeser` (virtueller Actor `batch-<Typ>`, 8 Partitionen nach
     dem letzten UUID-Byte, Umgebung `Konsum`): eine Seite (bis 500 Events, Typfilter samt Upcasting-Herkunft) → Guards in einer Abfrage → je

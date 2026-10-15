@@ -1,0 +1,200 @@
+         at Marten.Internal.Sessions.QuerySession.QueryAsync[T](Char placeholder, String sql, CancellationToken token, Object[] parameters) in /_/src/Marten/Internal/Sessions/QuerySession.Querying.cs:line 51
+         at Infrastructure.Projections.KonsumRueckstand.ErfasseAsync(CancellationToken ct) in /opt/bractor/Infrastructure/Projections/BatchKonsum.cs:line 168
+         at Infrastructure.Projections.KonsumRueckstand.ErfasseAsync(CancellationToken ct) in /opt/bractor/Infrastructure/Projections/BatchKonsum.cs:line 171
+         at Infrastructure.Monitoring.BackendMetrics.ErfasseAsync(CancellationToken ct) in /opt/bractor/Infrastructure/Monitoring/BackendMetrics.cs:line 48
+         at Infrastructure.Monitoring.BackendHealthCheck.CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken) in /opt/bractor/Infrastructure/Monitoring/BackendHealthCheck.cs:line 25
+fail: Microsoft.Extensions.Diagnostics.HealthChecks.DefaultHealthCheckService[103]
+      Health check backend with status Unhealthy completed after 359.0657ms with message 'Backend-Stores nicht erreichbar'
+      Marten.Exceptions.MartenCommandException: Marten Command Failure:$
+      $
+      $
+      42P01: relation "es.mt_events" does not exist
+      
+      POSITION: 22
+       ---> Npgsql.PostgresException (0x80004005): 42P01: relation "es.mt_events" does not exist
+      
+      POSITION: 22
+         at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+         at System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder`1.StateMachineBox`1.System.Threading.Tasks.Sources.IValueTaskSource<TResult>.GetResult(Int16 token)
+         at Npgsql.NpgsqlDataReader.NextResult(Boolean async, Boolean isConsuming, CancellationToken cancellationToken)
+         at Npgsql.NpgsqlDataReader.NextResult(Boolean async, Boolean isConsuming, CancellationToken cancellationToken)
+         at Npgsql.NpgsqlCommand.ExecuteReader(Boolean async, CommandBehavior behavior, CancellationToken cancellationToken)
+         at Npgsql.NpgsqlCommand.ExecuteReader(Boolean async, CommandBehavior behavior, CancellationToken cancellationToken)
+         at Marten.Internal.Sessions.AutoClosingLifetime.ExecuteReaderAsync(NpgsqlBatch batch, CancellationToken token) in /_/src/Marten/Internal/Sessions/AutoClosingLifetime.cs:line 187
+         at Marten.Internal.Sessions.AutoClosingLifetime.ExecuteReaderAsync(NpgsqlBatch batch, CancellationToken token) in /_/src/Marten/Internal/Sessions/AutoClosingLifetime.cs:line 196
+         at Polly.ResiliencePipeline.<>c__9`2.<<ExecuteAsync>b__9_0>d.MoveNext()
+      --- End of stack trace from previous location ---
+         at Polly.ResiliencePipeline.ExecuteAsync[TResult,TState](Func`3 callback, TState state, CancellationToken cancellationToken)
+         at Marten.Linq.MartenLinqQueryProvider.ExecuteHandlerAsync[T](IQueryHandler`1 handler, CancellationToken token) in /_/src/Marten/Linq/MartenLinqQueryProvider.cs:line 136
+        Exception data:
+          Severity: ERROR
+          SqlState: 42P01
+          MessageText: relation "es.mt_events" does not exist
+          Position: 22
+          File: parse_relation.c
+          Line: 1428
+          Routine: parserOpenTable
+         --- End of inner exception stack trace ---
+         at JasperFx.Core.Exceptions.ExceptionTransformExtensions.TransformAndThrow(IEnumerable`1 transforms, Exception ex) in /_/src/JasperFx/Core/Exceptions/IExceptionTransform.cs:line 170
+         at Marten.Linq.MartenLinqQueryProvider.ExecuteHandlerAsync[T](IQueryHandler`1 handler, CancellationToken token) in /_/src/Marten/Linq/MartenLinqQueryProvider.cs:line 141
+         at Marten.Internal.Sessions.QuerySession.QueryAsync[T](Char placeholder, String sql, CancellationToken token, Object[] parameters) in /_/src/Marten/Internal/Sessions/QuerySession.Querying.cs:line 51
+         at Infrastructure.Projections.KonsumRueckstand.ErfasseAsync(CancellationToken ct) in /opt/bractor/Infrastructure/Projections/BatchKonsum.cs:line 168
+         at Infrastructure.Projections.KonsumRueckstand.ErfasseAsync(CancellationToken ct) in /opt/bractor/Infrastructure/Projections/BatchKonsum.cs:line 171
+         at Infrastructure.Monitoring.BackendMetrics.ErfasseAsync(CancellationToken ct) in /opt/bractor/Infrastructure/Monitoring/BackendMetrics.cs:line 48
+         at Infrastructure.Monitoring.BackendHealthCheck.CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken) in /opt/bractor/Infrastructure/Monitoring/BackendHealthCheck.cs:line 25
+fail: Microsoft.Extensions.Diagnostics.HealthChecks.DefaultHealthCheckService[103]
+      Health check backend with status Unhealthy completed after 359.8205ms with message 'Backend-Stores nicht erreichbar'
+      Marten.Exceptions.MartenCommandException: Marten Command Failure:$
+      $
+      $
+      42P01: relation "es.mt_events" does not exist
+      
+      POSITION: 22
+       ---> Npgsql.PostgresException (0x80004005): 42P01: relation "es.mt_events" does not exist
+      
+      POSITION: 22
+         at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+         at System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder`1.StateMachineBox`1.System.Threading.Tasks.Sources.IValueTaskSource<TResult>.GetResult(Int16 token)
+         at Npgsql.NpgsqlDataReader.NextResult(Boolean async, Boolean isConsuming, CancellationToken cancellationToken)
+         at Npgsql.NpgsqlDataReader.NextResult(Boolean async, Boolean isConsuming, CancellationToken cancellationToken)
+         at Npgsql.NpgsqlCommand.ExecuteReader(Boolean async, CommandBehavior behavior, CancellationToken cancellationToken)
+         at Npgsql.NpgsqlCommand.ExecuteReader(Boolean async, CommandBehavior behavior, CancellationToken cancellationToken)
+         at Marten.Internal.Sessions.AutoClosingLifetime.ExecuteReaderAsync(NpgsqlBatch batch, CancellationToken token) in /_/src/Marten/Internal/Sessions/AutoClosingLifetime.cs:line 187
+         at Marten.Internal.Sessions.AutoClosingLifetime.ExecuteReaderAsync(NpgsqlBatch batch, CancellationToken token) in /_/src/Marten/Internal/Sessions/AutoClosingLifetime.cs:line 196
+         at Polly.ResiliencePipeline.<>c__9`2.<<ExecuteAsync>b__9_0>d.MoveNext()
+      --- End of stack trace from previous location ---
+         at Polly.ResiliencePipeline.ExecuteAsync[TResult,TState](Func`3 callback, TState state, CancellationToken cancellationToken)
+         at Marten.Linq.MartenLinqQueryProvider.ExecuteHandlerAsync[T](IQueryHandler`1 handler, CancellationToken token) in /_/src/Marten/Linq/MartenLinqQueryProvider.cs:line 136
+        Exception data:
+          Severity: ERROR
+          SqlState: 42P01
+          MessageText: relation "es.mt_events" does not exist
+          Position: 22
+          File: parse_relation.c
+          Line: 1428
+          Routine: parserOpenTable
+         --- End of inner exception stack trace ---
+         at JasperFx.Core.Exceptions.ExceptionTransformExtensions.TransformAndThrow(IEnumerable`1 transforms, Exception ex) in /_/src/JasperFx/Core/Exceptions/IExceptionTransform.cs:line 170
+         at Marten.Linq.MartenLinqQueryProvider.ExecuteHandlerAsync[T](IQueryHandler`1 handler, CancellationToken token) in /_/src/Marten/Linq/MartenLinqQueryProvider.cs:line 141
+         at Marten.Internal.Sessions.QuerySession.QueryAsync[T](Char placeholder, String sql, CancellationToken token, Object[] parameters) in /_/src/Marten/Internal/Sessions/QuerySession.Querying.cs:line 51
+         at Infrastructure.Projections.KonsumRueckstand.ErfasseAsync(CancellationToken ct) in /opt/bractor/Infrastructure/Projections/BatchKonsum.cs:line 168
+         at Infrastructure.Projections.KonsumRueckstand.ErfasseAsync(CancellationToken ct) in /opt/bractor/Infrastructure/Projections/BatchKonsum.cs:line 171
+         at Infrastructure.Monitoring.BackendMetrics.ErfasseAsync(CancellationToken ct) in /opt/bractor/Infrastructure/Monitoring/BackendMetrics.cs:line 48
+         at Infrastructure.Monitoring.BackendHealthCheck.CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken) in /opt/bractor/Infrastructure/Monitoring/BackendHealthCheck.cs:line 25
+fail: Microsoft.Extensions.Diagnostics.HealthChecks.DefaultHealthCheckService[103]
+      Health check backend with status Unhealthy completed after 358.0503ms with message 'Backend-Stores nicht erreichbar'
+      Marten.Exceptions.MartenCommandException: Marten Command Failure:$
+      $
+      $
+      42P01: relation "es.mt_events" does not exist
+      
+      POSITION: 22
+       ---> Npgsql.PostgresException (0x80004005): 42P01: relation "es.mt_events" does not exist
+      
+      POSITION: 22
+         at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+         at System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder`1.StateMachineBox`1.System.Threading.Tasks.Sources.IValueTaskSource<TResult>.GetResult(Int16 token)
+         at Npgsql.NpgsqlDataReader.NextResult(Boolean async, Boolean isConsuming, CancellationToken cancellationToken)
+         at Npgsql.NpgsqlDataReader.NextResult(Boolean async, Boolean isConsuming, CancellationToken cancellationToken)
+         at Npgsql.NpgsqlCommand.ExecuteReader(Boolean async, CommandBehavior behavior, CancellationToken cancellationToken)
+         at Npgsql.NpgsqlCommand.ExecuteReader(Boolean async, CommandBehavior behavior, CancellationToken cancellationToken)
+         at Marten.Internal.Sessions.AutoClosingLifetime.ExecuteReaderAsync(NpgsqlBatch batch, CancellationToken token) in /_/src/Marten/Internal/Sessions/AutoClosingLifetime.cs:line 187
+         at Marten.Internal.Sessions.AutoClosingLifetime.ExecuteReaderAsync(NpgsqlBatch batch, CancellationToken token) in /_/src/Marten/Internal/Sessions/AutoClosingLifetime.cs:line 196
+         at Polly.ResiliencePipeline.<>c__9`2.<<ExecuteAsync>b__9_0>d.MoveNext()
+      --- End of stack trace from previous location ---
+         at Polly.ResiliencePipeline.ExecuteAsync[TResult,TState](Func`3 callback, TState state, CancellationToken cancellationToken)
+         at Marten.Linq.MartenLinqQueryProvider.ExecuteHandlerAsync[T](IQueryHandler`1 handler, CancellationToken token) in /_/src/Marten/Linq/MartenLinqQueryProvider.cs:line 136
+        Exception data:
+          Severity: ERROR
+          SqlState: 42P01
+          MessageText: relation "es.mt_events" does not exist
+          Position: 22
+          File: parse_relation.c
+          Line: 1428
+          Routine: parserOpenTable
+         --- End of inner exception stack trace ---
+         at JasperFx.Core.Exceptions.ExceptionTransformExtensions.TransformAndThrow(IEnumerable`1 transforms, Exception ex) in /_/src/JasperFx/Core/Exceptions/IExceptionTransform.cs:line 170
+         at Marten.Linq.MartenLinqQueryProvider.ExecuteHandlerAsync[T](IQueryHandler`1 handler, CancellationToken token) in /_/src/Marten/Linq/MartenLinqQueryProvider.cs:line 141
+         at Marten.Internal.Sessions.QuerySession.QueryAsync[T](Char placeholder, String sql, CancellationToken token, Object[] parameters) in /_/src/Marten/Internal/Sessions/QuerySession.Querying.cs:line 51
+         at Infrastructure.Projections.KonsumRueckstand.ErfasseAsync(CancellationToken ct) in /opt/bractor/Infrastructure/Projections/BatchKonsum.cs:line 168
+         at Infrastructure.Projections.KonsumRueckstand.ErfasseAsync(CancellationToken ct) in /opt/bractor/Infrastructure/Projections/BatchKonsum.cs:line 171
+         at Infrastructure.Monitoring.BackendMetrics.ErfasseAsync(CancellationToken ct) in /opt/bractor/Infrastructure/Monitoring/BackendMetrics.cs:line 48
+         at Infrastructure.Monitoring.BackendHealthCheck.CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken) in /opt/bractor/Infrastructure/Monitoring/BackendHealthCheck.cs:line 25
+fail: Microsoft.Extensions.Diagnostics.HealthChecks.DefaultHealthCheckService[103]
+      Health check backend with status Unhealthy completed after 357.3615ms with message 'Backend-Stores nicht erreichbar'
+      Marten.Exceptions.MartenCommandException: Marten Command Failure:$
+      $
+      $
+      42P01: relation "es.mt_events" does not exist
+      
+      POSITION: 22
+       ---> Npgsql.PostgresException (0x80004005): 42P01: relation "es.mt_events" does not exist
+      
+      POSITION: 22
+         at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+         at System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder`1.StateMachineBox`1.System.Threading.Tasks.Sources.IValueTaskSource<TResult>.GetResult(Int16 token)
+         at Npgsql.NpgsqlDataReader.NextResult(Boolean async, Boolean isConsuming, CancellationToken cancellationToken)
+         at Npgsql.NpgsqlDataReader.NextResult(Boolean async, Boolean isConsuming, CancellationToken cancellationToken)
+         at Npgsql.NpgsqlCommand.ExecuteReader(Boolean async, CommandBehavior behavior, CancellationToken cancellationToken)
+         at Npgsql.NpgsqlCommand.ExecuteReader(Boolean async, CommandBehavior behavior, CancellationToken cancellationToken)
+         at Marten.Internal.Sessions.AutoClosingLifetime.ExecuteReaderAsync(NpgsqlBatch batch, CancellationToken token) in /_/src/Marten/Internal/Sessions/AutoClosingLifetime.cs:line 187
+         at Marten.Internal.Sessions.AutoClosingLifetime.ExecuteReaderAsync(NpgsqlBatch batch, CancellationToken token) in /_/src/Marten/Internal/Sessions/AutoClosingLifetime.cs:line 196
+         at Polly.ResiliencePipeline.<>c__9`2.<<ExecuteAsync>b__9_0>d.MoveNext()
+      --- End of stack trace from previous location ---
+         at Polly.ResiliencePipeline.ExecuteAsync[TResult,TState](Func`3 callback, TState state, CancellationToken cancellationToken)
+         at Marten.Linq.MartenLinqQueryProvider.ExecuteHandlerAsync[T](IQueryHandler`1 handler, CancellationToken token) in /_/src/Marten/Linq/MartenLinqQueryProvider.cs:line 136
+        Exception data:
+          Severity: ERROR
+          SqlState: 42P01
+          MessageText: relation "es.mt_events" does not exist
+          Position: 22
+          File: parse_relation.c
+          Line: 1428
+          Routine: parserOpenTable
+         --- End of inner exception stack trace ---
+         at JasperFx.Core.Exceptions.ExceptionTransformExtensions.TransformAndThrow(IEnumerable`1 transforms, Exception ex) in /_/src/JasperFx/Core/Exceptions/IExceptionTransform.cs:line 170
+         at Marten.Linq.MartenLinqQueryProvider.ExecuteHandlerAsync[T](IQueryHandler`1 handler, CancellationToken token) in /_/src/Marten/Linq/MartenLinqQueryProvider.cs:line 141
+         at Marten.Internal.Sessions.QuerySession.QueryAsync[T](Char placeholder, String sql, CancellationToken token, Object[] parameters) in /_/src/Marten/Internal/Sessions/QuerySession.Querying.cs:line 51
+         at Infrastructure.Projections.KonsumRueckstand.ErfasseAsync(CancellationToken ct) in /opt/bractor/Infrastructure/Projections/BatchKonsum.cs:line 168
+         at Infrastructure.Projections.KonsumRueckstand.ErfasseAsync(CancellationToken ct) in /opt/bractor/Infrastructure/Projections/BatchKonsum.cs:line 171
+         at Infrastructure.Monitoring.BackendMetrics.ErfasseAsync(CancellationToken ct) in /opt/bractor/Infrastructure/Monitoring/BackendMetrics.cs:line 48
+         at Infrastructure.Monitoring.BackendHealthCheck.CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken) in /opt/bractor/Infrastructure/Monitoring/BackendHealthCheck.cs:line 25
+fail: Microsoft.Extensions.Diagnostics.HealthChecks.DefaultHealthCheckService[103]
+      Health check backend with status Unhealthy completed after 358.736ms with message 'Backend-Stores nicht erreichbar'
+      Marten.Exceptions.MartenCommandException: Marten Command Failure:$
+      $
+      $
+      42P01: relation "es.mt_events" does not exist
+      
+      POSITION: 22
+       ---> Npgsql.PostgresException (0x80004005): 42P01: relation "es.mt_events" does not exist
+      
+      POSITION: 22
+         at Npgsql.Internal.NpgsqlConnector.ReadMessageLong(Boolean async, DataRowLoadingMode dataRowLoadingMode, Boolean readingNotifications, Boolean isReadingPrependedMessage)
+         at System.Runtime.CompilerServices.PoolingAsyncValueTaskMethodBuilder`1.StateMachineBox`1.System.Threading.Tasks.Sources.IValueTaskSource<TResult>.GetResult(Int16 token)
+         at Npgsql.NpgsqlDataReader.NextResult(Boolean async, Boolean isConsuming, CancellationToken cancellationToken)
+         at Npgsql.NpgsqlDataReader.NextResult(Boolean async, Boolean isConsuming, CancellationToken cancellationToken)
+         at Npgsql.NpgsqlCommand.ExecuteReader(Boolean async, CommandBehavior behavior, CancellationToken cancellationToken)
+         at Npgsql.NpgsqlCommand.ExecuteReader(Boolean async, CommandBehavior behavior, CancellationToken cancellationToken)
+         at Marten.Internal.Sessions.AutoClosingLifetime.ExecuteReaderAsync(NpgsqlBatch batch, CancellationToken token) in /_/src/Marten/Internal/Sessions/AutoClosingLifetime.cs:line 187
+         at Marten.Internal.Sessions.AutoClosingLifetime.ExecuteReaderAsync(NpgsqlBatch batch, CancellationToken token) in /_/src/Marten/Internal/Sessions/AutoClosingLifetime.cs:line 196
+         at Polly.ResiliencePipeline.<>c__9`2.<<ExecuteAsync>b__9_0>d.MoveNext()
+      --- End of stack trace from previous location ---
+         at Polly.ResiliencePipeline.ExecuteAsync[TResult,TState](Func`3 callback, TState state, CancellationToken cancellationToken)
+         at Marten.Linq.MartenLinqQueryProvider.ExecuteHandlerAsync[T](IQueryHandler`1 handler, CancellationToken token) in /_/src/Marten/Linq/MartenLinqQueryProvider.cs:line 136
+        Exception data:
+          Severity: ERROR
+          SqlState: 42P01
+          MessageText: relation "es.mt_events" does not exist
+          Position: 22
+          File: parse_relation.c
+          Line: 1428
+          Routine: parserOpenTable
+         --- End of inner exception stack trace ---
+         at JasperFx.Core.Exceptions.ExceptionTransformExtensions.TransformAndThrow(IEnumerable`1 transforms, Exception ex) in /_/src/JasperFx/Core/Exceptions/IExceptionTransform.cs:line 170
+         at Marten.Linq.MartenLinqQueryProvider.ExecuteHandlerAsync[T](IQueryHandler`1 handler, CancellationToken token) in /_/src/Marten/Linq/MartenLinqQueryProvider.cs:line 141
+         at Marten.Internal.Sessions.QuerySession.QueryAsync[T](Char placeholder, String sql, CancellationToken token, Object[] parameters) in /_/src/Marten/Internal/Sessions/QuerySession.Querying.cs:line 51
+         at Infrastructure.Projections.KonsumRueckstand.ErfasseAsync(CancellationToken ct) in /opt/bractor/Infrastructure/Projections/BatchKonsum.cs:line 168
+         at Infrastructure.Projections.KonsumRueckstand.ErfasseAsync(CancellationToken ct) in /opt/bractor/Infrastructure/Projections/BatchKonsum.cs:line 171
+         at Infrastructure.Monitoring.BackendMetrics.ErfasseAsync(CancellationToken ct) in /opt/bractor/Infrastructure/Monitoring/BackendMetrics.cs:line 48
+         at Infrastructure.Monitoring.BackendHealthCheck.CheckHealthAsync(HealthCheckContext context, CancellationToken cancellationToken) in /opt/bractor/Infrastructure/Monitoring/BackendHealthCheck.cs:line 25

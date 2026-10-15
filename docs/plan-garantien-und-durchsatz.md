@@ -97,7 +97,7 @@ trägt die Konsumseite heute etwa 8 200 / K Events/s (K = replaybare Projektione
 | 2 | Actor-Lebenszyklus ✅ | G-3, PF-5 | 3–5 PT | 0 | RSS nach den Höchstlast-Blöcken fällt im Leerlauf zurück (Passivierung) |
 | 3 | Batch-Konsum (umgesetzt, nicht abgenommen: S1-Ziel, §8) | PF-1, PF-2, G-4 | 15–25 PT | 1, 2 | Durchsatz bis „alles sichtbar“ S1 ≥ 3 × Baseline, S5 ohne Regression (E5, E9) |
 | 4 | Inbox als Tabelle | G-2 (Inbox), PF-3 | 6–9 PT | 2, E1 | S3 heiß: genau einmal, mehr Teile/s als nach Phase 3 |
-| 5 | Prozess-Poll und Backstop | PF-4 (W11-2-Anteil) | 3–5 PT | 1 | S3/S5: Zeit je Teil konstant über N; Leerlauf mit offenen Vorgängen nahe 0 Queries/s |
+| 5 | Prozess-Poll und Backstop (umgesetzt vor Phase 4, §8) | PF-4 (W11-2-Anteil), G-8 | 3–5 PT | 1 | S3/S5: Zeit je Teil konstant über N; Leerlauf mit offenen Vorgängen nahe 0 Queries/s |
 | 6 | Rest | PF-6, G-5, PF-7 (Entscheidung) | 2–3 PT | – | – |
 | | **Summe** | | **41–63 PT** | | etwa 9–13 Wochen für eine Person |
 
@@ -336,6 +336,27 @@ anstehen.
   erreicht, für L5 knapp (0,5). **Die Phase ist nicht abgenommen**: das S1-Ziel setzt voraus, dass der Konsum die Decke von S1 ist — gemessen ist
   es der Datei-Treiber (PF-10).
 
+**Phase 5** (umgesetzt, 2026-10-15, auf Tobis Wort vor Phase 4; Code `22632bc`…`ffaeaea`, gemessen auf dem Messserver, docs/12 §12.6):
+- *Umgesetzt:* PF-4 — `ProzessPoll` liest seitenweise (`ReadPartitionAsync`) und routet die geladenen Events, Starts nur für neue oder offene
+  Vorgänge (`StreamsVorhandenAsync`), Marke je Seite; Backstop mit Fristen im Offen-Index (`ProzessOffen.Frist`, Sekundentakt, geschrieben erst
+  bei Stille) und `Heilplan` (Heilung nach 15 s Stille, Backoff bis 1 h). G-8 — bestätigte Poll-Weckungen. Nebenbei: rohes SQL legte die
+  Event-Tabellen nie an (der alte Poll tat es zufällig über LINQ) → `MartenEventStore.EventTabellenAsync`; der Treiber hat seitdem 30 s
+  Warmlauf nach dem ersten Host-Start (ohne ihn maß der erste Block kalten JIT-Code: S3-8 −28 %, per Bisektion gefunden).
+- *Lücken-Tests ohne Skip, grün:* P `ProzessPollGarantieTests.Eine_unbestaetigte_Start_Weckung…` (G-8, ohne die Regel rot gesehen). Neu: P
+  `ProzessPollGarantieTests`, `ProzessFristGarantieTests`, `HeilplanTests`, `ProzessPollFilterTests` (neu gefasst).
+- *Messung (Server-Tabelle §12.5):* `vermessung/ergebnisse/2026-10-15_1821_ffaeaea_server-pf-4` (gültig, grün) und
+  `…_1825_ffaeaea_server-pf-4-stoerung` (gültig, grün, 51 027 Vorgänge, Abbau 316 s). Gegen die Server-Baseline: Leerlauf L1 351 → 2,5
+  Queries/s, CPU 24 → 3,7 %; S5-1/S5-64 1,17/1,16 ×, S5-64 Queries je Vorgang 0,84 ×, Latenz p50 0,78 ×; S1–S4 0,98–1,11 ×, Kosten je Vorgang
+  gleich. A-B-B-A gegen `365a3b0` (Ordner `…_server-pf-4-ab-*`, noch ohne Warmlauf): S5-64 1,10 ×, L1-CPU 0,17 ×; die dort gemessenen S1/S3-8-Verluste
+  waren der kalte Start (mit Warmlauf S3-8 374 gegen 380 Teile/s). Nicht gewertet: `…_1713_…`/`…_1715_…` (Host nicht bereit: Tabellen fehlten),
+  `…_1721_…`/`…_1723_…` (kalter Start).
+- *Abnahme:* E5-Ziel Leerlauf **L1 ja** (2,5 Queries/s, 3,7 % CPU), **L5 nein** (1 930 Queries/s, 140 % CPU) — dort holt die Reaktion ihren
+  Rückstand aus S5-64 auf, der Dirigent ist still (PF-12, neu). Nicht gemessen, weil der Treiber kein Szenario hat: „S3 Zeit je Teil konstant
+  über N“ und „10 000 offene Vorgänge im Leerlauf < 10 Queries/s“ (rechnerisch: eine Abfrage je Sekunde für die Fristen, eine je 15 s für den
+  Abgleich, Heilungen ≈ 10 000 / 1 h ≈ 3 Weckungen/s nach dem Backoff) — PF-4b. Zeitlimit-Genauigkeit < 1 s: im Prüfstand (Frist = Ablauf),
+  Takt 1 s. **Abnahme: teilweise** (L5 hängt an PF-12).
+- *Neue Befunde:* PF-11 (Emittenten-Poll ungeseitet), PF-12 (Reaktion hängt nach Höchstlast nach), PF-4b (Lease, fehlende Szenarien).
+
 **Plan-Änderungen aus Phase 3:**
 0. *Vorschlag an Tobi (offen):* E5 für Phase 3 neu fassen — S1 misst den seriellen Datei-Treiber (PF-10), nicht den Konsum. Entweder das
    S1-Ziel an PF-10 hängen (Melden in Bündeln, eigene Entscheidung) oder Phase 3 an dem messen, was sie ändert: Leerlauf (erreicht), Kosten je
@@ -386,12 +407,13 @@ anstehen.
 ## 9 · Übergabe an den nächsten Agenten (Stand 2026-10-15, nach Phase 3)
 
 - **Wo es steht:** Phase 0, 1, 2 fertig und abgenommen; Phase 3 umgesetzt und gemessen, **nicht abgenommen** (S1-Ziel verfehlt, die Decke von S1 ist
-  der Datei-Treiber, PF-10). **Haltepunkt:** Tobi entscheidet über den Vorschlag in §8 („Plan-Änderungen aus Phase 3“, Punkt 0), bevor Phase 4 beginnt.
-  Offen am Rand: das E5-RSS-Ziel für L5 nach Phase 5 prüfen (L5 enthält noch den Prozess-Poll, PF-4).
+  der Datei-Treiber, PF-10); Phase 5 (PF-4, G-8) umgesetzt und gemessen, **teilweise abgenommen** (L1 erreicht, L5 hängt an PF-12). Gemessen wird
+  seit 2026-10-15 auf dem Messserver (`scripts/server.sh`, docs/12 §12.6) mit eigener Tabelle; die Mac-Tabelle endet mit Phase 3.
+  **Haltepunkt:** Tobi entscheidet über den Vorschlag in §8 („Plan-Änderungen aus Phase 3“, Punkt 0) und über PF-12, bevor Phase 4 beginnt.
 - **Danach:** Phase 4 (Inbox als Tabelle, G-2, PF-3) nach §3; E1–E3 stehen in §2 als Vorschlag — vor dem Bau gebündelt fragen. Lücken-Test der
-  Phase: PD `SchreibGarantieTests.Eine_alte_CommandId_jenseits_der_Inbox_Grenze…` (Skip G-2). G-8 bekommt seinen Skip-Test spätestens mit Phase 5.
-- **Messen je Phase:** `vermessung/README.md` (Abschnitt „Wiederholen“) — Höchstlast ≈ 5 min, Störungslauf ≈ 3–6 min, Spalte „Phase n“, Tabelle
-  per Skript. Code committen, dann messen, dann Ergebnis committen. Nicht auf Abkühlung oder Fremdlast warten (Tobi), Fremdlast im Bericht nennen.
+  Phase: PD `SchreibGarantieTests.Eine_alte_CommandId_jenseits_der_Inbox_Grenze…` (Skip G-2).
+- **Messen je Phase:** auf dem Messserver (`scripts/server.sh lauf scripts/vermessung-e2e.sh --anlass server-<phase> --spalte "<Phase>"`),
+  Höchstlast ≈ 4 min, Störungslauf ≈ 5–8 min, Tabelle per Skript (Tabelle „messserver“). A-B-B-A über einen Worktree des alten Stands auf dem Server. Code committen, dann messen, dann Ergebnis committen. Nicht auf Abkühlung oder Fremdlast warten (Tobi), Fremdlast im Bericht nennen.
 - **Vor jedem Commit:** `dotnet build`; Prüfstand; Garantie-Suite (Prüfstand, dann nacheinander Integration und Prüfdomäne); die vollen
   Integrations-Suiten; `GraphExtractor -- --check`; `./codegen.sh --check`; bei Generator-Änderungen das Generat inspizieren; bei Umgebungs- oder
   Editor-Änderungen die Werkbank-Abnahme. Commits ohne Co-Authored-By; nicht pushen ohne Tobis Wort.
