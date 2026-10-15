@@ -272,7 +272,8 @@ weckte). Der `ProzessManagerStartupService` betreibt dazu:
   verlorene Weckungen ohne Ziel-Event (unbekannter Emit-Ausgang, Absturz). Je Vorgang läuft höchstens eine Backstop-Weckung zugleich (bounded
   10 s). Im Cluster betreibt jeder Knoten seinen Backstop (eine Lease fehlt noch, docs/13 PF-4).
 
-**Fold.** Je Ziel-Stream ab `StreamCursor[s]+1` lesen, in `MarkingKompakt` einarbeiten, ein Fixpunkt zieht die Kandidaten. Drei getrennte
+**Fold.** Je Ziel-Stream ab `StreamCursor[s]+1` nur die Events der eigenen Korrelation lesen (`ReadKorreliertAsync`: jede Wirkung, Noop- und
+Ablehnungs-Marke eines Befehls und jedes Funktionsergebnis trägt sie; in viel beschriebenen Streams waren sonst fast alle gelesenen Events fremd), in `MarkingKompakt` einarbeiten, ein Fixpunkt zieht die Kandidaten. Drei getrennte
 Ergebnis-Achsen je Vorgang:
 - **ErgebnisDa** = aufgelöst (irgendein Ziel-Event, auch Noop-Marke) → nicht mehr feuern;
 - **WirkungDa** = ein Domänen-Event (kein `IProzessIntern`) → kompensierbar, aktiviert Joins;

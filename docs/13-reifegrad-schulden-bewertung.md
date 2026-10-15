@@ -11,7 +11,7 @@ hierher. Stand: 2026-10-15, Phase 5 des Plans Garantien und Durchsatz. Maßstab 
 | G-2 | Inbox-Fenster (10 000): eine CommandId, die jenseits der Grenze erneut kommt, wirkt erneut; der Emittenten-Anteil ist seit Phase 1 geschlossen | P1 |
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
 | G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
-| PF-13 | Nach PF-12 unter S5-64: Reaktion p99 2 s (p50 5 ms) — ihr Nachschub wartet am heißen Posten hinter den Reservierungen; S3-64 0,9 × Baseline (Latenz 0,81 ×) — mehr parallele Sends an den einen heißen Sammelvorgang | P3 |
+| PF-13 | Unter S5-64: Reaktion p99 2–3,5 s (p50 5 ms) — ihr Nachschub wartet am heißen Posten hinter den Reservierungen (der S3-64-Rückgang ist mit „korreliert lesen“ erledigt: 1,85 × Baseline) | P3 |
 | PF-4b | Rest von PF-4: keine Lease für den Prozess-Backstop im Cluster (jeder Knoten heilt alle offenen Vorgänge); Abnahme „S3 Zeit je Teil konstant über N“ und „10 000 offene Vorgänge im Leerlauf“ ohne Szenario im Treiber | P3 |
 | PF-10 | Datei-Treiber meldet eine Datei nach der anderen ins Log (Rückstau): das Melde-Tempo ist die Decke von S1 — Entscheidung offen | P2 |
 | VM-1 | Vermessungs-Treiber zählt Soll und Ist der Exactly-once-Prüfung in getrennten Abfragen, während der Host noch abbaut | P3 |
