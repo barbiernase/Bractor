@@ -14,7 +14,7 @@ hierher. Stand: 2026-10-15, Phase 4 des Plans Garantien und Durchsatz. Maßstab 
 | PF-4b | Rest von PF-4: keine Lease für den Prozess-Backstop im Cluster (jeder Knoten heilt alle offenen Vorgänge); Abnahme „S3 Zeit je Teil konstant über N“ und „10 000 offene Vorgänge im Leerlauf“ ohne Szenario im Treiber | P3 |
 | PF-10 | Datei-Treiber meldet eine Datei nach der anderen ins Log (Rückstau): das Melde-Tempo ist die Decke von S1 — Entscheidung offen | P2 |
 | VM-1 | Vermessungs-Treiber zählt Soll und Ist der Exactly-once-Prüfung in getrennten Abfragen, während der Host noch abbaut | P3 |
-| PF-14 | Leerlauf L1/L5 seit „Korreliert lesen“ wieder über dem E5-Ziel (L1 29, L5 86 Queries/s): Nachlesen von Prozess-Poll und Batch-Lesern (L1) bzw. Nachlauf der Reaktion aus S5-64 (L5, PF-13) im 15-s-Fenster | P3 |
+| PF-14 | Leerlauf L1/L5 seit „Korreliert lesen“ wieder über dem E5-Ziel (L1 29, L5 110 Queries/s): Nachlesen von Prozess-Poll und Batch-Lesern (L1) bzw. Nachlauf der Reaktion aus S5-64 (L5, PF-13) im 15-s-Fenster | P3 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
@@ -297,6 +297,17 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **Prozess-Manager liest nur, was er nicht schon weiß (2026-10-16, Messserver; docs/04 §4.5, docs/03 §3.3):** die Datenbankarbeit je Vorgang
+  lag zur Hälfte im Lesen des Managers, die meisten Ziel-Stream-Reads kamen leer zurück (0,4 Zeilen je Abfrage). Jetzt: Router-Weckungen
+  mit Event lesen nur dessen Stream (nichts, wenn schon gefaltet), Weckungen nach Send bzw. Funktions-Ergebnis tragen Ziel und Vorgang, ein
+  leer gelesener Ziel-Stream gilt als gesehen, ein frischer Vorgang lädt nichts aus dem Store und liest nie gefeuerte Ziele nicht, der
+  Kopf-Zustand des eigenen Logs bleibt im Speicher. Der Offen-Index ist eine Beilage im Append von `ProzessGestartet`/`ProzessBeendet` (eine
+  Transaktion; `IProzessOffenIndex.MarkiereOffenAsync` entfällt), der Marking-Stand wird nur gelöscht, wo er liegen kann. Gemessen: S5-64
+  2,7 ×, S5-8 2,3 ×, S1 1,40 × (A-B-B-A), Transaktionen je Vorgang S5-64 4,4 → 1,1, zwei Störungsläufe grün. Nachweis: PD
+  `MarkingCursorAequivalenzTests` (kalt, mit Router-Weckungen, verzögert, Abfragen-Zählung), I `GarantiePostgresTests.Vorgangs_Beilagen…`
+  (Gegenprobe rot), P `ProzessStartGarantieTests`. Eine rote Gegenprobe für das sparsame Lesen fehlt: zwei Sabotagen hält das erneute Feuern
+  des offenen Commands auf, die dritte (Cursor springt zu weit) lief ohne Ergebnis zu lange und wurde abgebrochen.
 
 - **Inbox als Tabelle (früher G-2, PF-3; Plan Garantien und Durchsatz, Phase 4, 2026-10-15, Messserver; docs/03 §3.1/§3.3, docs/04 §4.4):**
   - **E1 = A** (Tobi): die Inbox ist eine Tabelle `cqrs_inbox` (CommandId eindeutig, Stream, abgelehnt, Zeit), je Command eine Quittung in der

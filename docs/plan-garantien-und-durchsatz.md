@@ -363,6 +363,12 @@ Messserver; E1 = A, E2 = 30 Tage, E3 = zurücksetzen):
   Transaktionen je Vorgang bleiben, und die Decke liegt in Konsum und Dirigent. **Abnahme: Vorschlag ja** (Tobi).
 - *Neuer Befund:* PF-14 (Leerlauf L1/L5 wieder über dem E5-Ziel, seit „Korreliert lesen“; L5 86 Queries/s = Nachlauf der Reaktion, PF-13).
 
+**Nachtrag Prozess-Manager** (2026-10-16, auf Tobis Wort, Code `c450a3e`…`6a437ba`, Messserver): der Manager liest nur, was er nicht schon
+weiß (gezielte Weckungen, „gelesen, nichts da“, frischer Vorgang, Kopf-Zustand im Speicher), Offen-Index als Beilage im Append (docs/13 §13.6).
+Messung `…_0026_6a437ba_server-prozess-manager` (gültig, grün), Störungsläufe `…_0030_…`/`…_0033_…` (grün), A-B-B-A `…_server-pm-ab-*`:
+S5-64 457 → 1 246 Vorgänge/s, S5-8 451 → 1 030, S1 1,40 ×, S3/S4 unverändert; gegen die Server-Baseline S5-64 6,0 ×, S5-8 2,8 ×, S1 1,54 ×.
+Damit ist das alte E5-Ziel „S5-8 ≥ 3 × Baseline“ fast erreicht (2,85 ×); S1 bleibt am Datei-Treiber (PF-10).
+
 **Phase 5** (umgesetzt, 2026-10-15, auf Tobis Wort vor Phase 4; Code `22632bc`…`ffaeaea`, gemessen auf dem Messserver, docs/12 §12.6):
 - *Umgesetzt:* PF-4 — `ProzessPoll` liest seitenweise (`ReadPartitionAsync`) und routet die geladenen Events, Starts nur für neue oder offene
   Vorgänge (`StreamsVorhandenAsync`), Marke je Seite; Backstop mit Fristen im Offen-Index (`ProzessOffen.Frist`, Sekundentakt, geschrieben erst
