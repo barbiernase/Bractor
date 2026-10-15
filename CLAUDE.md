@@ -41,9 +41,10 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 ## Das tragende Bild
 
 - **Schreibseite:** Command → Aggregat-Actor (Single-Writer, Inbox-Dedup) → `Decide` → Events → Group-Commit → Signal.
-- **Vier durable Konsumenten, eine Maschine:** Projektion, Reaktion, Prozess, Fluss. Projektion und Reaktion laufen über die Pull-/Signal-Schleife
-  `ProjectionAdapter` (Signal schnell + Poll 30 s). Ob replaybar (`IProjectionTracker`, Co-Commit) oder emittierend (`IEmittentenCursor`, kein Reset),
-  folgt aus den **Schreib-Fähigkeiten der Handles** und dem Rückgabetyp — kein zweiter Marker.
+- **Vier durable Konsumenten, eine Maschine:** Projektion, Reaktion, Prozess, Fluss. Projektionen laufen im **Batch-Konsum** (`BatchLeser` je
+  Projektion und Partition: Seite lesen, je Stream anwenden, Effekte + Guards + Partitions-Checkpoint in einer Transaktion), Reaktionen je Stream
+  (`EmittentenAdapter`); beide Signal schnell + Poll 30 s. Ob replaybar (`IProjectionTracker`, Batch-Naht, Co-Commit) oder emittierend
+  (`IEmittentenCursor`, kein Reset), folgt aus den **Schreib-Fähigkeiten der Handles** und dem Rückgabetyp — kein zweiter Marker.
 - **Dirigent:** Prozesse (`IProzessDefinition`) und Flüsse (`IPipeline`, `PipelineFluss.Definiere`) laufen auf demselben `ProzessManager`
   (Event-Regeln, Marking-Cursor, Backstop). Verarbeitung ist immer eine **Katalog-Funktion** (`IFunktion`, `Rufe<F>`); Laufort Host/Extern/Hand
   steht in der Umgebung. Technik hinter einer Funktion ist ein **Domänen-Dienst** (`IDienst`), gebunden nach der Umgebung.

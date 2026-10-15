@@ -7,8 +7,8 @@ namespace Abstractions;
 ///   <item>Jede Weckung (Signal wie Poll) liest ab dem Cursor; es wird nie erneut ab 0 ausgegeben.</item>
 ///   <item>Der Cursor rückt erst vor, wenn jeder Command des Tails zugestellt oder abgelehnt ist. Er steht also nie hinter einem
 ///     unbestätigten Command; geht das Schreiben verloren, gibt die nächste Weckung den Tail mit denselben CommandIds erneut aus.</item>
-///   <item>Kein <c>Reset</c>: Replay eines Emittenten bewegt echtes Geld. Der Compile-Zeit-Schnitt gegen <see cref="IReplaybarerTracker"/>
-///     macht blindes Replayen unmöglich (Achse B).</item>
+///   <item>Kein <c>Reset</c>: Replay eines Emittenten bewegt echtes Geld. Der Emittenten-Pfad nimmt keinen <see cref="IProjectionTracker"/> —
+///     blindes Replayen ist strukturell unmöglich (Achse B).</item>
 /// </list>
 /// <paramref name="partition"/> = die Konsumenten-Instanz (<c>{SubscriberId}:{StreamId}</c>); geschrieben nur vom Single-Writer-Adapter dieses Streams.
 /// </summary>

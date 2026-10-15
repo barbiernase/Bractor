@@ -23,12 +23,11 @@ namespace Infrastructure.Integration.Tests;
 ///
 /// Fährt einen Single-Node-Cluster hoch (Consul + BindToLocalhost + BrokerKinds),
 /// abonniert per <see cref="SignalReceiverActor"/> das Signal, publiziert es über den
-/// <see cref="BrokerPublisher"/> und prüft, dass der Adapter die Projektion faltet und
-/// das Ergebnis per Co-Commit in Postgres landet.
+/// <see cref="BrokerPublisher"/> und prüft, dass der Batch-Leser der Partition des Streams die Projektion
+/// faltet und das Ergebnis per Co-Commit in Postgres landet.
 ///
-/// Damit ist der gesamte Pull-Pfad end-to-end belegt: Signal → Broker → Receiver →
-/// Adapter → Log-Read → Effekt+Marke gemeinsam gültig. Einziger simulierter Teil ist
-/// die Event-Quelle (InMemory) — der Aggregat-Emit selbst kommt in der Host-Verdrahtung.
+/// Damit ist der Weg end-to-end belegt: Signal → Broker → Receiver → Partition → Seite lesen →
+/// Effekt, Guard und Partition gemeinsam gültig. Der Aggregat-Emit selbst kommt in der Host-Verdrahtung.
 ///
 /// Braucht laufendes Consul (localhost:8500) und Postgres (localhost:5432).
 /// </summary>
@@ -53,11 +52,13 @@ public class SignalDeliveryClusterTests : IClassFixture<PostgresFixture>
         {
             var streamId = Guid.NewGuid();
             var projId = "it-recv-" + Guid.NewGuid().ToString("N");
+            var konsum = new Konsum(1, 500);
+            await BatchHilfe.StarteAmKopfAsync(_fx.Store, projId, konsum);
 
             var es = EventStoreMit(streamId, count: 1);
             var store = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
-            var adapter = new ProjectionAdapter(es, store, null, projId, Dispatch(store));
-            var receiver = new SignalReceiver((sid, ct) => adapter.WakeAsync(sid, ct));
+            var leser = BatchHilfe.HistorieLeser(es, store, projId, Partitionierung.Von(streamId, konsum.Partitionen), konsum);
+            var receiver = new SignalReceiver((sid, ct) => leser.LaufAsync(ct));
             var signalTypes = SignalReceiver.SignalTypesFor(new[] { typeof(ImagePairInspiziert) });
 
             system.Root.Spawn(Props.FromProducer(() =>
@@ -84,7 +85,7 @@ public class SignalDeliveryClusterTests : IClassFixture<PostgresFixture>
                 "Projektion wurde nach dem Signal nicht gefaltet.");
 
             (await store.GetByPairIdAsync(streamId))!.Eintraege.Should().HaveCount(1);
-            (await store.LastProcessedVersionAsync(projId, streamId, default)).Should().Be(1);
+            (await BatchHilfe.GuardAsync(_fx.Store, projId, streamId)).Should().Be(1);
         }
         finally
         {
@@ -123,13 +124,6 @@ public class SignalDeliveryClusterTests : IClassFixture<PostgresFixture>
             Enumerable.Range(0, count).Select(_ => (IEvent)new ImagePairInspiziert()).ToList())
           .GetAwaiter().GetResult();
         return es;
-    }
-
-    private static Func<EventEnvelope, ProjectionWriter, Infrastructure.PubSub.EmitAusgaenge, Task> Dispatch(IAppendHistorieEintrag effektStore)
-    {
-        var projection = new ImagePairHistorieProjektion();
-        var faehigkeiten = new FaehigkeitenAus(effektStore);
-        return (e, writer, _) => projection.DispatchAsync(e, writer, _ => Task.CompletedTask, faehigkeiten);
     }
 
     private sealed class NoopFactory : IAggregateHandlerFactory

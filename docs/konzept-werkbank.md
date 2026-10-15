@@ -191,6 +191,7 @@ unbekanntes Feld ist ein Startfehler.
 | `Cluster` | Art `Einzelknoten` \| `Consul`, Name, Consul, AdvertisedHost, Rolle `Allein` \| `Migrator` \| `Mitglied` |
 | `Schreibpfad` | generiertes JSON, Group-Commit, Batch-Größe, Linger, Drain, Snapshot-Schwelle, Inbox-Grenze |
 | `Lebenszyklus` | Leerlauf bis zur Passivierung in Sekunden: Aggregat (600), Adapter (120), Prozess-Manager (600); 0 = nie |
+| `Konsum` | Batch-Konsum der Projektionen: Partitionen je Projektion (8; ein Wechsel ist ein Neuaufbau), Events je Seite (500) |
 | `Transport` | gRPC-Port, Einblick-Port (0 = aus), JSON-Eingang an/aus |
 | `Identitaeten` | Token → Akteur-Menge (`"A,B"`, `"A+B"` oder Liste), Standard, VertragStreng; ohne Abschnitt ist das Akteur-Tor offen |
 | `Quellen` | je Quelle die Treiber-Konfig (§3.4) |

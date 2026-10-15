@@ -105,7 +105,7 @@ namespace Infrastructure.SourceGeneration
                 "IStateChangeSignal ReadSignal(string diskriminator, ref Utf8JsonReader reader) => {0}.ReadSignal(diskriminator, ref reader)",
             });
             Tabelle(sb, "UpcastingTabelle", "IUpcastingTabelle", "global::Infrastructure.Serialization.GeneratedEventUpcasting",
-                new[] { "IReadOnlyList<(Type Typ, string Diskriminator)> Registrierungen" }, new[]
+                new[] { "IReadOnlyList<(Type Typ, string Diskriminator)> Registrierungen", "IReadOnlyDictionary<Type, string[]> Herkunft" }, new[]
                 {
                     "IReadOnlyList<IEvent> Materialisiere(string diskriminator, string json) => {0}.Materialisiere(diskriminator, json)",
                     "IReadOnlyList<IEvent> Aufwerten(object data) => {0}.Aufwerten(data)",

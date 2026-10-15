@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Infrastructure.Integration.Tests;
 
 /// <summary>
-/// Ebene 2 (Store-Semantik, echtes Marten, KEIN Cluster) — Befund 1 des Backend-Audits.
+/// Ebene 2 (Store-Semantik, echtes Marten, KEIN Cluster) — Befund 1 des Backend-Audits, für den Emittenten-Poll und den Batch-Konsum.
 ///
 /// Der Poll-Backstop ist die letzte Rettung für ein verlorenes Signal vor Stille. Sein Cursor
 /// (High-Water-Mark) darf NUR vorrücken, wenn die Verarbeitung des geweckten Streams BESTÄTIGT
@@ -75,6 +75,38 @@ public class PollerBackstopPostgresTests : IClassFixture<PollerBackstopPostgresT
             "ein unbestätigt gebliebener Stream muss beim nächsten Poll erneut geweckt werden");
     }
 
+    /// <summary>
+    /// Batch-Konsum: ein Event, dessen Signal verloren geht, holt die nächste Weckung der Partition nach (der Poll weckt jede Partition alle
+    /// 30 s) — der Leser liest ab seiner durablen Position, ohne Hinweis auf den Stream. Auch ein Event, das während eines Durchlaufs nach dem
+    /// Lesen der Seite committet wird, überspringt die Position nicht: die gesetzte Sequenz wird VOR der Seite bestimmt.
+    /// </summary>
+    [Fact]
+    public async Task Batch_Leser_holt_ein_Event_mit_verlorenem_Signal_beim_naechsten_Poll_nach()
+    {
+        var es = new MartenEventStore(_fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.Zero);
+        var konsum = new Konsum(1, 500);
+        var proj = "it-poll-" + Guid.NewGuid().ToString("N");
+        await BatchHilfe.StarteAmKopfAsync(_fx.Store, proj, konsum);
+        var (erster, waehrend) = (Guid.NewGuid(), Guid.NewGuid());
+        await es.AppendEventsAsync(erster, 0, new IEvent[] { new ImagePairInspiziert() });
+
+        // Während des ersten Durchlaufs (Seite gelesen, Commit ausstehend) kommt ein Event dazu; sein Signal geht verloren.
+        var store = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
+        var einmal = true;
+        var leser = BatchHilfe.HistorieLeser(es, store, proj, 0, konsum, absturz: async () =>
+        {
+            if (!einmal) return;
+            einmal = false;
+            await es.AppendEventsAsync(waehrend, 0, new IEvent[] { new ImagePairInspiziert() });
+        });
+        await leser.LaufAsync();
+        (await store.GetByPairIdAsync(waehrend)).Should().BeNull("die Seite war schon gelesen");
+
+        await leser.LaufAsync();                                     // der Poll weckt die Partition
+        (await store.GetByPairIdAsync(erster))!.Eintraege.Should().HaveCount(1);
+        (await store.GetByPairIdAsync(waehrend))!.Eintraege.Should().HaveCount(1, "die Position hat das Event nicht übersprungen");
+    }
+
     /// <summary>Der Store wird im Test nur für Append/ReadChangedStreams genutzt — kein Replay.</summary>
     private sealed class NoopFactory : IAggregateHandlerFactory
     {
@@ -98,6 +130,7 @@ public class PollerBackstopPostgresTests : IClassFixture<PollerBackstopPostgresT
                 opts.DatabaseSchemaName = "audit_befund1_it";
                 opts.Events.DatabaseSchemaName = "audit_befund1_it";
                 opts.AutoCreateSchemaObjects = JasperFx.AutoCreate.All;
+                Core.KonsumSchema.Registriere(opts);
             });
         }
 

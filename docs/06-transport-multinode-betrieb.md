@@ -124,7 +124,7 @@ Abschnitts-Tabelle steht in `konzept-werkbank.md` §4.1; hier nur der Überblick
 
 - **Backend:** `Umgebung` (Name, Art `Sim`/`Prod`), `EventStore`, `VersionIndex` (Redis, `Aus` = Betrieb ohne Redis), `Cluster`
   (Art, Name, Consul, AdvertisedHost, Rolle), `Schreibpfad` (generiertes JSON, Group-Commit, Batch, Linger, Drain, Snapshot-Schwelle,
-  Inbox-Grenze), `Lebenszyklus` (Leerlauf bis zur Passivierung je Actor-Art), `Transport` (gRPC-Port, Einblick-Port, JSON-Eingang).
+  Inbox-Grenze), `Lebenszyklus` (Leerlauf bis zur Passivierung je Actor-Art), `Konsum` (Partitionen und Seitengröße des Batch-Konsums), `Transport` (gRPC-Port, Einblick-Port, JSON-Eingang).
 - **Was aktiv ist:** `Identitaeten` (Token → Akteure; ohne Abschnitt ist das Akteur-Tor offen), `Quellen` (Treiber-Konfig inkl. Webhook),
   `Funktionen` (Laufort `Host`/`Extern`/`Hand`, Implementierung, Slots, Wiederholungen, `Worker`), `Dienste` (Implementierung je
   Dienst-Interface), `Konfig` (Konfig-Records der Domäne, Feld für Feld), `Clients` (Token, Adresse, Urls, Dateien je Client-Vertrag),

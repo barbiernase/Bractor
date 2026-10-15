@@ -5,35 +5,33 @@ using Marten.Exceptions;
 namespace Core;
 
 /// <summary>
-/// Marten-Implementierung der Co-Commit-Naht (<see cref="ICoCommitTracker"/>) — die
-/// technik­spezifische, in ALLEN Projektions-Stores identische Exactly-once-Maschinerie an EINER
-/// auditierten Stelle. Write-Effekte werden nur GEPUFFERT; <see cref="MarkProcessedAsync"/> spielt
-/// sie + den <see cref="ProjectionCheckpoint"/> in EINER Marten-<c>IdentitySession</c> ab und
-/// committet mit EINEM <c>SaveChangesAsync</c> → Effekt und Marke werden gemeinsam durabel
-/// (exactly-once, auch für nicht-idempotente Append-Effekte).
+/// Marten-Implementierung der Co-Commit-Naht (<see cref="ICoCommitTracker"/>) — die technik­spezifische, in ALLEN Projektions-Stores
+/// identische Exactly-once-Maschinerie an EINER auditierten Stelle. Write-Effekte werden nur GEPUFFERT; <see cref="CommitAsync"/> spielt die
+/// Effekte eines Batches (viele Streams einer Partition), die Guards seiner Streams und den <see cref="PartitionsCheckpoint"/> mit erwarteter
+/// Version in EINER Marten-<c>IdentitySession</c> ab und committet mit EINEM <c>SaveChangesAsync</c> → Effekte und Fortschritt werden gemeinsam
+/// durabel (exactly-once, auch für nicht-idempotente Append-Effekte), und eine zweite Aktivierung derselben Partition verliert (G-4).
 ///
-/// <b>Schreib-Regel (Single-Writer je Dokument).</b> Die Konsum-Maschine garantiert genau EINEN Schreiber je
-/// (Projektion, Stream). Das Co-Commit macht einen Stapel atomar, isoliert aber nicht zwei Stapel verschiedener
-/// Streams gegeneinander. Darum gibt es drei Arten von Effekten, und jede wird beim Puffern geprüft:
+/// <b>Schreib-Regel (Single-Writer je Dokument).</b> Die Konsum-Maschine garantiert genau EINEN Schreiber je (Projektion, Partition) und damit je
+/// (Projektion, Stream). Das Co-Commit macht einen Batch atomar, isoliert aber nicht die Batches zweier Partitionen gegeneinander. Darum gibt es
+/// drei Arten von Effekten, und jede wird beim Puffern gegen den Stream des laufenden Events (<see cref="Stream"/>) geprüft:
 /// <list type="bullet">
-///   <item><b>Eigenes Dokument</b> (Schlüssel = Stream des Stapels): <see cref="EnqueueStore{T}"/>,
+///   <item><b>Eigenes Dokument</b> (Schlüssel = Stream des Events): <see cref="EnqueueStore{T}"/>,
 ///     <see cref="EnqueueTransform{T}"/>, <see cref="EnqueueAnlegenOderAendern{T}"/> — sicher per Konstruktion.</item>
 ///   <item><b>Zeile dieses Streams</b> (zusammengesetzte Id, z. B. „Datensatz × Paar“): <see cref="EnqueueZeile{T}"/>,
 ///     <see cref="EnqueueZeileEntfernen{T}"/> — zwei Streams berühren nie dieselbe Zeile.</item>
 ///   <item><b>Geteiltes Dokument</b> (<see cref="IGeteiltesReadModel"/>, aus mehreren Streams beschrieben):
-///     <see cref="EnqueueGeteilt{T}(string, Func{T, T})"/> — Lesen → Ändern → Schreiben mit Versionsprüfung.
-///     Ein Konflikt verwirft den ganzen Stapel samt Marke (<see cref="SchreibKonfliktException"/>), der Adapter
-///     wiederholt ihn.</item>
+///     <see cref="EnqueueGeteilt{T}(string, Func{T, T})"/> — Lesen → Ändern → Schreiben mit Versionsprüfung. Innerhalb eines Batches sehen
+///     sich zwei Streams über die Identity-Map (read-your-writes); ein Konflikt mit einer anderen Partition verwirft den ganzen Batch
+///     (<see cref="SchreibKonfliktException"/>), der Leser halbiert und wiederholt.</item>
 /// </list>
 /// Ein Schreibzugriff auf das Dokument eines FREMDEN Streams über die ersten beiden Wege wirft sofort — statt still
-/// ein Update eines parallel laufenden Stapels zu überschreiben.
+/// ein Update eines parallel laufenden Batches zu überschreiben.
 ///
 /// Jeder Effekt schreibt ein <see cref="IReadModel"/> — die Leseseite ist damit genau die Menge der Read-Model-Typen, die ein
 /// Neuaufbau leert (<c>GeneratedProjectionServices.ReadModelTypen</c>, Werkbank §4.6).
 ///
 /// Konkrete Stores erben und schreiben nur noch ihre FACHLICHEN Write-Methoden. Kein Domänenwissen hier, kein
-/// Generat — reiner Marten-Adapter. SCOPED registriert: eine Instanz je Fähigkeits-Bereich (je Stream-Actor →
-/// isolierter Puffer).
+/// Generat — reiner Marten-Adapter. SCOPED registriert: eine Instanz je Fähigkeits-Bereich (je Partitions-Leser → isolierter Puffer).
 /// </summary>
 public abstract class MartenCoCommitStoreBase : ICoCommitTracker
 {
@@ -42,7 +40,7 @@ public abstract class MartenCoCommitStoreBase : ICoCommitTracker
 
     private readonly List<Func<IDocumentSession, Task>> _pending = new();
 
-    /// <summary>Der Stream des offenen Stapels (gesetzt in <see cref="LastProcessedVersionAsync"/>); null = kein Stapel.</summary>
+    /// <summary>Der Stream des laufenden Events (gesetzt in <see cref="Stream"/>); null = kein Batch offen.</summary>
     private Guid? _stapelStream;
 
     protected MartenCoCommitStoreBase(IDocumentStore store) => Store = store;
@@ -149,75 +147,111 @@ public abstract class MartenCoCommitStoreBase : ICoCommitTracker
     {
         if (_stapelStream is not { } stream)
             throw new InvalidOperationException(
-                $"{GetType().Name}: Schreib-Effekt auf {dokument.Name} außerhalb eines Stapels — Stores schreiben nur aus einer Projektion.");
+                $"{GetType().Name}: Schreib-Effekt auf {dokument.Name} außerhalb eines Batches — Stores schreiben nur aus einer Projektion.");
         if (id != stream)
             throw new InvalidOperationException(
-                $"{GetType().Name}: {dokument.Name} {id} gehört nicht dem Stream des Stapels ({stream}). Ein Dokument, das " +
+                $"{GetType().Name}: {dokument.Name} {id} gehört nicht dem Stream des Events ({stream}). Ein Dokument, das " +
                 "mehrere Streams beschreiben, als Zeilen je Stream ablegen (EnqueueZeile) oder als IGeteiltesReadModel " +
-                "über EnqueueGeteilt — sonst überschreiben sich parallele Stapel.");
+                "über EnqueueGeteilt — sonst überschreiben sich parallele Batches.");
     }
 
-    // ── Marke lesen: reiner Read, klammert den Batch-Beginn ──
-    public async Task<int> LastProcessedVersionAsync(string projectionId, Guid streamId, CancellationToken ct)
+    // ─────────────────────────────────────────────────────────────
+    // Batch-Naht (IProjectionTracker)
+    // ─────────────────────────────────────────────────────────────
+
+    public async Task<PartitionsCheckpoint> LadePartitionAsync(string projektionsId, int partition, CancellationToken ct)
     {
-        _pending.Clear();   // neuer Batch → alten Vorlauf verwerfen
-        _stapelStream = streamId;
         await using var s = Store.QuerySession();
-        var doc = await s.LoadAsync<ProjectionCheckpoint>(
-            ProjectionCheckpoint.MakeId(projectionId, streamId), ct);
-        return doc?.Version ?? -1;
+        return await s.LoadAsync<PartitionsCheckpoint>(PartitionsCheckpoint.MakeId(projektionsId, partition), ct)
+               ?? PartitionsCheckpoint.Neu(projektionsId, partition);
     }
 
-    // ── Commit-Punkt: Effekt(e) + Marke in EINER Session, ein SaveChanges ──
-    public async Task MarkProcessedAsync(string projectionId, Guid streamId, int version, CancellationToken ct)
+    public async Task<IReadOnlyDictionary<Guid, int>> LadeGuardsAsync(string projektionsId, IReadOnlyCollection<Guid> streams, CancellationToken ct)
     {
-        await using var s = Store.IdentitySession();   // read-your-writes im Batch; Versionen der Loads für die OCC-Prüfung
-        foreach (var op in _pending)
-            await op(s);
+        var guards = streams.ToDictionary(s => s, _ => -1);
+        if (guards.Count == 0) return guards;
+        await using var s = Store.QuerySession();
+        foreach (var cp in await s.LoadManyAsync<ProjectionCheckpoint>(ct, streams.Select(id => ProjectionCheckpoint.MakeId(projektionsId, id))))
+            guards[cp.StreamId] = cp.Version;
+        return guards;
+    }
 
-        s.Store(new ProjectionCheckpoint
-        {
-            Id = ProjectionCheckpoint.MakeId(projectionId, streamId),
-            ProjectionId = projectionId,
-            StreamId = streamId,
-            Version = version,
-            UpdatedAt = DateTimeOffset.UtcNow
-        });
+    public void BeginneBatch()
+    {
+        _pending.Clear();   // neuer Batch → Vorlauf eines verworfenen Batches weg
+        _stapelStream = null;
+    }
 
+    public void Stream(Guid streamId) => _stapelStream = streamId;
+
+    // ── Commit-Punkt: Effekte + Guards + Partitions-Checkpoint in EINER Session, ein SaveChanges ──
+    public async Task<int> CommitAsync(PartitionsCheckpoint stand, IReadOnlyDictionary<Guid, int> guards, CancellationToken ct)
+    {
         try
         {
-            await s.SaveChangesAsync(ct);   // EIN Commit → Effekt(e) + Marke gemeinsam gültig
+            await using var s = Store.IdentitySession();   // read-your-writes über alle Streams des Batches; Versionen der Loads für die OCC-Prüfung
+            foreach (var op in _pending)
+                await op(s);
+
+            var jetzt = DateTimeOffset.UtcNow;
+            foreach (var (stream, version) in guards)
+                s.Store(new ProjectionCheckpoint
+                {
+                    Id = ProjectionCheckpoint.MakeId(stand.ProjektionsId, stream),
+                    ProjectionId = stand.ProjektionsId,
+                    StreamId = stream,
+                    Version = version,
+                    UpdatedAt = jetzt
+                });
+
+            // Der Partitions-Checkpoint mit erwarteter Version (G-4): noch nie geschrieben → Insert (ein zweiter Erster scheitert am Schlüssel),
+            //   sonst UpdateRevision auf Version + 1 (eine zweite Aktivierung oder ein Neuaufbau dazwischen → Versionskonflikt).
+            var neu = new PartitionsCheckpoint
+            {
+                Id = stand.Id, ProjektionsId = stand.ProjektionsId, Partition = stand.Partition,
+                Position = stand.Position, Geparkt = stand.Geparkt, UpdatedAt = jetzt, Version = stand.Version + 1
+            };
+            if (stand.Version == 0) s.Insert(neu);
+            else s.UpdateRevision(neu, stand.Version + 1);
+
+            await s.SaveChangesAsync(ct);   // EIN Commit → Effekte, Guards und Partition gemeinsam gültig
+            return neu.Version;
         }
-        catch (Exception ex) when (IstKonflikt(ex))
+        catch (Exception ex) when (Konflikt(ex) is { } doku)
+        {
+            if (IstPartition(doku))
+                throw new PartitionsKonfliktException(
+                    $"{GetType().Name}: Partition {stand.Id} zwischenzeitlich geschrieben (erwartet v{stand.Version}) — Batch verworfen.", ex);
+            throw new SchreibKonfliktException(
+                $"{GetType().Name}: geteiltes Dokument {doku} zwischenzeitlich geändert (Partition {stand.Id}) — Batch verworfen.", ex);
+        }
+        finally
         {
             _pending.Clear();
-            throw new SchreibKonfliktException(
-                $"{GetType().Name}: geteiltes Dokument zwischenzeitlich geändert (Stream {streamId}, bis v{version}) — Stapel verworfen.", ex);
+            _stapelStream = null;
         }
-        _pending.Clear();
     }
 
     // Marten 8 meldet die Versionsprüfung als JasperFx.ConcurrencyException (nicht Marten.Exceptions.ConcurrencyException),
-    // ein gleichzeitiges Insert als DocumentAlreadyExistsException — beide gegen echtes Postgres gemessen (SchreibRegelPostgresTests).
-    private static bool IstKonflikt(Exception ex) => ex switch
+    // ein gleichzeitiges Insert als DocumentAlreadyExistsException — beide gegen echtes Postgres gemessen (SchreibRegelPostgresTests), beide mit
+    // dem Dokumenttyp (einmal als Name, einmal als Typ). Liefert den Namen des Dokuments im Konflikt (der Partitions-Checkpoint geht vor), sonst null.
+    private static string? Konflikt(Exception ex) => ex switch
     {
-        JasperFx.ConcurrencyException or DocumentAlreadyExistsException => true,
-        AggregateException agg => agg.InnerExceptions.Count > 0 && agg.InnerExceptions.All(IstKonflikt),
-        _ => false
+        JasperFx.ConcurrencyException c => c.DocType ?? "?",
+        DocumentAlreadyExistsException d => d.DocType?.FullName ?? "?",
+        AggregateException agg when agg.InnerExceptions.Count > 0 && agg.InnerExceptions.All(i => Konflikt(i) != null)
+            => agg.InnerExceptions.Select(Konflikt).FirstOrDefault(n => IstPartition(n!)) ?? Konflikt(agg.InnerExceptions[0]),
+        _ => null
     };
 
-    // ── Replay / Rebuild ──
-    public async Task ResetAsync(string projectionId, Guid streamId, CancellationToken ct)
-    {
-        await using var s = Store.LightweightSession();
-        s.Delete<ProjectionCheckpoint>(ProjectionCheckpoint.MakeId(projectionId, streamId));
-        await s.SaveChangesAsync(ct);
-    }
+    private static bool IstPartition(string dokument)
+        => dokument == typeof(PartitionsCheckpoint).FullName || dokument == nameof(PartitionsCheckpoint);
 
-    public async Task ResetAllAsync(string projectionId, CancellationToken ct)
+    // ── Neuaufbau ──
+    public async Task ResetAllAsync(string projektionsId, CancellationToken ct)
     {
         await using var s = Store.LightweightSession();
-        s.DeleteWhere<ProjectionCheckpoint>(c => c.ProjectionId == projectionId);
+        await KonsumZuruecksetzen.PartitionenUndGuardsAsync(s, projektionsId, ct);
         await s.SaveChangesAsync(ct);
     }
 }

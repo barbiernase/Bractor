@@ -10,7 +10,7 @@ namespace Infrastructure.Integration.Tests;
 
 /// <summary>
 /// Die Schreib-Regel von <see cref="MartenCoCommitStoreBase"/> gegen echtes Postgres, mit einer Sonde, die den
-/// Konflikt ERZWINGT: zwei Stapel laden dasselbe geteilte Dokument, treffen sich an einer Barriere (beide haben jetzt
+/// Konflikt ERZWINGT: zwei Batches zweier Partitionen laden dasselbe geteilte Dokument, treffen sich an einer Barriere (beide haben jetzt
 /// denselben Stand gelesen) und schreiben dann. Ohne Versionsprüfung gewönne still der letzte Commit.
 /// </summary>
 [Collection(GeteiltCollection.Name)]
@@ -29,11 +29,13 @@ public class SchreibRegelPostgresTests
         => await ZweiStapelGleichzeitig(vorhandenerStand: 5, erwarteterStand: 6);
 
     [Fact]
-    public async Task Adapter_wiederholt_nach_Konflikt_beide_Beitraege_bleiben_erhalten()
+    public async Task Zwei_Partitions_Leser_nach_Konflikt_beide_Beitraege_bleiben_erhalten()
     {
         var zaehler = "z-" + Guid.NewGuid().ToString("N");
         var proj = "it-sonde-" + Guid.NewGuid().ToString("N");
-        var (sa, sb) = (Guid.NewGuid(), Guid.NewGuid());
+        var konsum = new Konsum(2, 500);
+        await BatchHilfe.StarteAmKopfAsync(_fx.Store, proj, konsum);
+        var (sa, sb) = (BatchHilfe.StreamIn(0, 2), BatchHilfe.StreamIn(1, 2));
         var es = _fx.EventStore();
         await es.AppendEventsAsync(sa, 0, new IEvent[] { new ImagePairInspiziert() });
         await es.AppendEventsAsync(sb, 0, new IEvent[] { new ImagePairInspiziert() });
@@ -41,15 +43,15 @@ public class SchreibRegelPostgresTests
         using var treffpunkt = new Barrier(2);
         var a = new SondenStore(_fx.Store, treffpunkt);
         var b = new SondenStore(_fx.Store, treffpunkt);
-        var adapterA = new ProjectionAdapter(es, a, null, proj, (_, _, _) => a.Erhoehe(zaehler));
-        var adapterB = new ProjectionAdapter(es, b, null, proj, (_, _, _) => b.Erhoehe(zaehler));
+        var leserA = new BatchLeser(es, a, proj, 0, konsum, null, (_, _) => a.Erhoehe(zaehler));
+        var leserB = new BatchLeser(es, b, proj, 1, konsum, null, (_, _) => b.Erhoehe(zaehler));
 
-        // Der erste Versuch kollidiert (Barriere), der Verlierer wiederholt ohne Barriere — keine Ausnahme nach außen.
-        await Task.WhenAll(Task.Run(() => adapterA.WakeAsync(sa)), Task.Run(() => adapterB.WakeAsync(sb)));
+        // Der erste Versuch kollidiert (Barriere), der Verlierer wiederholt seinen Stream einzeln — keine Ausnahme nach außen.
+        await Task.WhenAll(Task.Run(() => leserA.LaufAsync()), Task.Run(() => leserB.LaufAsync()));
 
         (await Lies(zaehler))!.Stand.Should().Be(2, "beide Beiträge, keiner überschrieben");
-        (await a.LastProcessedVersionAsync(proj, sa, default)).Should().Be(1);
-        (await b.LastProcessedVersionAsync(proj, sb, default)).Should().Be(1);
+        (await BatchHilfe.GuardAsync(_fx.Store, proj, sa)).Should().Be(1);
+        (await BatchHilfe.GuardAsync(_fx.Store, proj, sb)).Should().Be(1);
     }
 
     [Fact]
@@ -57,19 +59,20 @@ public class SchreibRegelPostgresTests
     {
         var store = new SondenStore(_fx.Store);
         var stream = Guid.NewGuid();
-        await store.LastProcessedVersionAsync("it-sonde-fremd", stream, default);
+        store.BeginneBatch();
+        store.Stream(stream);
 
         await store.Invoking(s => s.AendereEigen(stream)).Should().NotThrowAsync();
         await store.Invoking(s => s.AendereEigen(Guid.NewGuid()))
-            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*gehört nicht dem Stream des Stapels*");
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*gehört nicht dem Stream des Events*");
         await store.Invoking(s => s.SchreibeZeile(Guid.NewGuid()))
-            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*gehört nicht dem Stream des Stapels*");
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*gehört nicht dem Stream des Events*");
     }
 
     [Fact]
     public async Task Schreiben_ausserhalb_eines_Stapels_wirft()
         => await new SondenStore(_fx.Store).Invoking(s => s.AendereEigen(Guid.NewGuid()))
-            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*außerhalb eines Stapels*");
+            .Should().ThrowAsync<InvalidOperationException>().WithMessage("*außerhalb eines Batches*");
 
     // ─── Helfer ───
 
@@ -88,27 +91,28 @@ public class SchreibRegelPostgresTests
         var (sa, sb) = (Guid.NewGuid(), Guid.NewGuid());
         var a = new SondenStore(_fx.Store, treffpunkt);
         var b = new SondenStore(_fx.Store, treffpunkt);
-        await a.LastProcessedVersionAsync(proj, sa, default);
-        await b.LastProcessedVersionAsync(proj, sb, default);
-        await a.Erhoehe(zaehler);
-        await b.Erhoehe(zaehler);
+        a.BeginneBatch(); a.Stream(sa); await a.Erhoehe(zaehler);
+        b.BeginneBatch(); b.Stream(sb); await b.Erhoehe(zaehler);
 
+        // Zwei Partitionen derselben Projektion, je ein Batch — sie teilen nur das geteilte Dokument.
         var ergebnisse = await Task.WhenAll(
-            Task.Run(() => Commit(a, proj, sa)),
-            Task.Run(() => Commit(b, proj, sb)));
+            Task.Run(() => Commit(a, PartitionsCheckpoint.Neu(proj, 0), sa)),
+            Task.Run(() => Commit(b, PartitionsCheckpoint.Neu(proj, 1), sb)));
 
-        ergebnisse.Count(e => e is null).Should().Be(1, "genau ein Stapel committet");
+        ergebnisse.Count(e => e is null).Should().Be(1, "genau ein Batch committet");
         ergebnisse.Count(e => e is SchreibKonfliktException).Should().Be(1, "der andere meldet den Konflikt");
         (await Lies(zaehler))!.Stand.Should().Be(erwarteterStand, "nur der Gewinner hat geschrieben");
 
-        // Der Verlierer hat auch seine Marke NICHT gesetzt — sein Stapel ist ganz zurückgefallen und wiederholbar.
-        var marken = new[] { await a.LastProcessedVersionAsync(proj, sa, default), await b.LastProcessedVersionAsync(proj, sb, default) };
-        marken.Should().BeEquivalentTo(new[] { 1, -1 });
+        // Der Verlierer hat auch Guard und Partition NICHT gesetzt — sein Batch ist ganz zurückgefallen und wiederholbar.
+        var guards = new[] { await BatchHilfe.GuardAsync(_fx.Store, proj, sa), await BatchHilfe.GuardAsync(_fx.Store, proj, sb) };
+        guards.Should().BeEquivalentTo(new[] { 1, -1 });
+        var partitionen = new[] { await BatchHilfe.PartitionAsync(_fx.Store, proj, 0), await BatchHilfe.PartitionAsync(_fx.Store, proj, 1) };
+        partitionen.Count(p => p is not null).Should().Be(1);
     }
 
-    private static async Task<Exception?> Commit(SondenStore store, string proj, Guid stream)
+    private static async Task<Exception?> Commit(SondenStore store, PartitionsCheckpoint stand, Guid stream)
     {
-        try { await store.MarkProcessedAsync(proj, stream, 1, default); return null; }
+        try { await store.CommitAsync(stand, new Dictionary<Guid, int> { [stream] = 1 }, default); return null; }
         catch (Exception ex) { return ex; }
     }
 

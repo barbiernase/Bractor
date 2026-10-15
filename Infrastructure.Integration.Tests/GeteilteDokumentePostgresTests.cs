@@ -1,7 +1,6 @@
 using Abstractions;
 using Core;
 using Domain.Datensatz;
-using Core;
 using Domain.Infrastructure.Generated;
 using Domain.Modell;
 using Domain.Projections;
@@ -23,11 +22,11 @@ namespace Infrastructure.Integration.Tests;
 /// Dokumente, in die MEHRERE Streams schreiben, gegen echtes Postgres mit der echten Domäne und dem GENERIERTEN
 /// Marten-Schema (<c>AddGeneratedProjectionServices</c>).
 ///
-/// Die Konsum-Maschine garantiert einen Schreiber je (Projektion, Stream). Zwei Datensätze sind zwei Streams, ihre
-/// Adapter laufen parallel. Früher pflegten beide dieselbe Liste „Datensätze dieses Bildpaares“ per Lesen → Ändern →
+/// Die Konsum-Maschine garantiert einen Schreiber je (Projektion, Partition) und damit je Stream. Zwei Datensätze in zwei Partitionen
+/// laufen in zwei Batch-Lesern parallel. Früher pflegten beide dieselbe Liste „Datensätze dieses Bildpaares“ per Lesen → Ändern →
 /// Schreiben — der spätere Commit überschrieb den früheren still (Lost Update). Jetzt: Zeilen je (Datensatz, Paar).
 /// Ebenso der Singleton „aktives Modell“: jedes Modell ist ein eigener Stream; „die jüngste Aktivierung gewinnt“ muss
-/// nach Event-Zeit gelten, nicht nach der zufälligen Verarbeitungsreihenfolge der Streams.
+/// nach Event-Zeit gelten, nicht nach der zufälligen Verarbeitungsreihenfolge der Partitionen.
 /// </summary>
 [Collection(GeteiltCollection.Name)]
 [Trait("Kategorie", "Garantie")]
@@ -36,21 +35,24 @@ public class GeteilteDokumentePostgresTests
     private readonly GeteiltFixture _fx;
     public GeteilteDokumentePostgresTests(GeteiltFixture fx) => _fx = fx;
 
+    private static readonly Konsum VierPartitionen = new(4, 500);
+
     [Fact]
     public async Task Zwei_Datensaetze_nehmen_dieselben_Paare_gleichzeitig_auf_beide_stehen_im_Rueckwaerts_Index()
     {
         var paare = Enumerable.Range(0, 40).Select(_ => Guid.NewGuid()).ToList();
-        var (a, b) = (Guid.NewGuid(), Guid.NewGuid());
+        var (a, b) = (BatchHilfe.StreamIn(0, 4), BatchHilfe.StreamIn(1, 4));
+        var proj = await Frisch("datensatz");
         var es = _fx.EventStore();
         foreach (var ds in new[] { a, b })
             await es.AppendEventsAsync(ds, 0,
                 new IEvent[] { new DatensatzErstellt("ds-" + ds.ToString("N")[..6]) }
                     .Concat(paare.Select(p => (IEvent)new PaarAufgenommen(p))).ToList());
 
-        // Zwei Streams, zwei Adapter, zwei Store-Instanzen (je ein Fähigkeits-Bereich) — gleichzeitig.
+        // Zwei Partitionen, zwei Batch-Leser, zwei Store-Instanzen (je ein Fähigkeits-Bereich) — gleichzeitig.
         await Task.WhenAll(
-            Task.Run(() => DatensatzAdapter(es).WakeAsync(a)),
-            Task.Run(() => DatensatzAdapter(es).WakeAsync(b)));
+            Task.Run(() => DatensatzLeser(es, proj, 0).LaufAsync()),
+            Task.Run(() => DatensatzLeser(es, proj, 1).LaufAsync()));
 
         var leser = new DatensatzStore(_fx.Store);
         foreach (var p in paare)
@@ -62,13 +64,14 @@ public class GeteilteDokumentePostgresTests
     public async Task Paar_entfernen_nimmt_nur_die_Zeile_dieses_Datensatzes_heraus()
     {
         var p = Guid.NewGuid();
-        var (a, b) = (Guid.NewGuid(), Guid.NewGuid());
+        var (a, b) = (BatchHilfe.StreamIn(0, 4), BatchHilfe.StreamIn(1, 4));
+        var proj = await Frisch("datensatz");
         var es = _fx.EventStore();
         await es.AppendEventsAsync(a, 0, new IEvent[] { new DatensatzErstellt("a"), new PaarAufgenommen(p), new PaarEntfernt(p) });
         await es.AppendEventsAsync(b, 0, new IEvent[] { new DatensatzErstellt("b"), new PaarAufgenommen(p) });
 
-        await DatensatzAdapter(es).WakeAsync(a);
-        await DatensatzAdapter(es).WakeAsync(b);
+        await DatensatzLeser(es, proj, 0).LaufAsync();
+        await DatensatzLeser(es, proj, 1).LaufAsync();
 
         (await new DatensatzStore(_fx.Store).HoleDatensaetzeFuerPaarAsync(p)).Select(d => d.Id)
             .Should().BeEquivalentTo(new[] { b });
@@ -78,12 +81,13 @@ public class GeteilteDokumentePostgresTests
     public async Task Aktives_Modell_juengere_Aktivierung_gewinnt_auch_wenn_ihr_Stream_zuerst_verarbeitet_wird()
     {
         var es = _fx.EventStore();
-        var alt = await ModellMitAktivierung(es);
-        var neu = await ModellMitAktivierung(es);   // später angehängt → jüngere Event-Zeit
+        var proj = await Frisch("modell");
+        var alt = await ModellMitAktivierung(es, BatchHilfe.StreamIn(0, 4));
+        var neu = await ModellMitAktivierung(es, BatchHilfe.StreamIn(1, 4));   // später angehängt → jüngere Event-Zeit
 
-        // Umgekehrte Verarbeitungsreihenfolge: der Stream des NEUEN Modells zuerst, der des alten danach.
-        await ModellAdapter(es).WakeAsync(neu);
-        await ModellAdapter(es).WakeAsync(alt);
+        // Umgekehrte Verarbeitungsreihenfolge: die Partition des NEUEN Modells zuerst, die des alten danach.
+        await ModellLeser(es, proj, 1).LaufAsync();
+        await ModellLeser(es, proj, 0).LaufAsync();
 
         (await new ModellStore(_fx.Store).GetAktivesAsync())!.ModellId.Should().Be(neu);
     }
@@ -92,13 +96,14 @@ public class GeteilteDokumentePostgresTests
     public async Task Aktives_Modell_gleichzeitig_aktiviert_ergibt_immer_die_juengste_Aktivierung()
     {
         var es = _fx.EventStore();
+        var proj = await Frisch("modell");
         for (var runde = 0; runde < 5; runde++)
         {
             var modelle = new List<Guid>();
-            for (var i = 0; i < 4; i++) modelle.Add(await ModellMitAktivierung(es));
+            for (var i = 0; i < 4; i++) modelle.Add(await ModellMitAktivierung(es, BatchHilfe.StreamIn(i, 4)));
 
-            // Vier Streams schreiben gleichzeitig in DASSELBE Dokument → Versionsprüfung + Wiederholung im Adapter.
-            await Task.WhenAll(modelle.Select(m => Task.Run(() => ModellAdapter(es).WakeAsync(m))));
+            // Vier Partitions-Leser schreiben gleichzeitig in DASSELBE Dokument → Versionsprüfung, Trennen und Wiederholung im Leser.
+            await Task.WhenAll(Enumerable.Range(0, 4).Select(p => Task.Run(() => ModellLeser(es, proj, p).LaufAsync())));
 
             (await new ModellStore(_fx.Store).GetAktivesAsync())!.ModellId
                 .Should().Be(modelle[^1], $"Runde {runde}: das zuletzt aktivierte Modell");
@@ -107,27 +112,34 @@ public class GeteilteDokumentePostgresTests
 
     // ─── Helfer ───
 
-    private ProjectionAdapter DatensatzAdapter(MartenEventStore es)
+    /// <summary>Ein frischer Projektions-Schlüssel am Kopf des Logs (die Datenbank lebt über viele Läufe).</summary>
+    private async Task<string> Frisch(string projektion)
+    {
+        var proj = $"{projektion}-it-{Guid.NewGuid():N}";
+        await BatchHilfe.StarteAmKopfAsync(_fx.Store, proj, VierPartitionen);
+        return proj;
+    }
+
+    private BatchLeser DatensatzLeser(MartenEventStore es, string proj, int partition)
     {
         var store = new DatensatzStore(_fx.Store);
         var projektion = new DatensatzProjektion();
         var faehigkeiten = new FaehigkeitenAus(store);
-        return new ProjectionAdapter(es, store, null, projektion.SubscriberId,
-            (e, w, _) => projektion.DispatchAsync(e, w, _ => Task.CompletedTask, faehigkeiten));
+        return new BatchLeser(es, store, proj, partition, VierPartitionen, BatchLeser.TypenAus(DatensatzProjektion.SubscribedTypes),
+            (e, w) => projektion.DispatchAsync(e, w, BatchLeser.KeineAusgabe, faehigkeiten));
     }
 
-    private ProjectionAdapter ModellAdapter(MartenEventStore es)
+    private BatchLeser ModellLeser(MartenEventStore es, string proj, int partition)
     {
         var store = new ModellStore(_fx.Store);
         var projektion = new ModellProjektion();
         var faehigkeiten = new FaehigkeitenAus(store);
-        return new ProjectionAdapter(es, store, null, projektion.SubscriberId,
-            (e, w, _) => projektion.DispatchAsync(e, w, _ => Task.CompletedTask, faehigkeiten));
+        return new BatchLeser(es, store, proj, partition, VierPartitionen, BatchLeser.TypenAus(ModellProjektion.SubscribedTypes),
+            (e, w) => projektion.DispatchAsync(e, w, BatchLeser.KeineAusgabe, faehigkeiten));
     }
 
-    private static async Task<Guid> ModellMitAktivierung(MartenEventStore es)
+    private static async Task<Guid> ModellMitAktivierung(MartenEventStore es, Guid id)
     {
-        var id = Guid.NewGuid();
         await es.AppendEventsAsync(id, 0, new IEvent[]
         {
             new ModellRegistriert(Guid.NewGuid(), Guid.NewGuid(), 1, "m", "/m.pt", new ModellMetriken(0.1, 0.9)),
@@ -173,7 +185,7 @@ public sealed class GeteiltFixture : IAsyncLifetime
             opts.Connection(Server + ";Database=" + Datenbank);
             opts.DatabaseSchemaName = "it_geteilt";
             opts.AutoCreateSchemaObjects = JasperFx.AutoCreate.All;
-            opts.Schema.For<ProjectionCheckpoint>().Identity(x => x.Id);
+            KonsumSchema.Registriere(opts);
             opts.Schema.For<SondenZaehler>().Identity(x => x.Id).UseOptimisticConcurrency(true);
             opts.Schema.For<SondenEigen>().Identity(x => x.Id);
         });

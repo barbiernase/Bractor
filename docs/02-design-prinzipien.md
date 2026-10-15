@@ -93,17 +93,18 @@ Kanal. Der heutige Musterfall ist die Grenze zwischen Quell-Nachricht und Ablehn
 ## P7 — Eine Maschine, keine Taxonomie
 
 **Warum:** Vier Konsumenten-Arten mit eigener Maschinerie wären vier Stellen für dieselben Ordnungs- und Exactly-once-Fehler. Projektion,
-Reaktion, Prozess und Fluss teilen deshalb `ProjectionAdapter` + `SignalAdapterActor`. Der Unterschied fällt aus zwei orthogonalen Achsen,
-nicht aus einem zweiten Marker:
+Reaktion, Prozess und Fluss teilen deshalb dasselbe Muster (Signal weckt, Poll heilt, geordnet aus dem Log, Fortschritt durabel) auf wenigen
+Schleifen: Projektionen im Batch-Konsum (`BatchLeser` je Partition), Emittenten je Stream (`EmittentenAdapter` + `SignalAdapterActor`),
+Prozesse und Flüsse im Dirigenten. Der Unterschied fällt aus zwei orthogonalen Achsen, nicht aus einem zweiten Marker:
 - **Transport:** `IPullSubscriber` wählt Pull statt Push-Broker.
-- **Garantie (Achse B):** `IProjectionTracker` (replaybar, Co-Commit + Reset) **vs.** `IEmittentenCursor` (emittierend, best-effort,
-  **kein** Reset). Welche Achse gilt, folgt aus den **Schreib-Fähigkeiten der Handles**: lösen sie einen Store auf, der zugleich
-  `IProjectionTracker` ist, ist der Konsument replaybar, sonst emittierend (`PullPathGenerator`). Ein Store im Konstruktor ist verboten
-  (CQRS054); Schreib-Fähigkeiten aus mehreren Stores sind CQRS052. Beide Achsen gesetzt → der `ProjectionAdapter`-Konstruktor wirft.
+- **Garantie (Achse B):** `IProjectionTracker` (replaybar, Batch-Co-Commit + Reset) **vs.** `IEmittentenCursor` (emittierend, durabel ab
+  Cursor, **kein** Reset). Welche Achse gilt, folgt aus den **Schreib-Fähigkeiten der Handles**: lösen sie einen Store auf, der zugleich
+  `IProjectionTracker` ist, ist der Konsument replaybar und läuft im Batch-Konsum, sonst emittierend je Stream (`PullPathGenerator`). Ein Store
+  im Konstruktor ist verboten (CQRS054); Schreib-Fähigkeiten aus mehreren Stores sind CQRS052.
 
-Dass ein Emittent nicht zurückgesetzt werden kann, ist compile-zeit-wahr: der Reset liegt auf `IReplaybarerTracker`, den
-`IEmittentenCursor` nicht implementiert — blindes Replay geld-bewegender Emittenten ist unmöglich. Der Co-Commit replaybarer Projektionen
-(Effekt + Marke in einer Transaktion) liegt in `Core/MartenCoCommitStoreBase.cs`; der GA-1-Check bricht, wenn eine
+Dass ein Emittent nicht zurückgesetzt werden kann, ist compile-zeit-wahr: der Emittenten-Pfad nimmt keinen Tracker, und `IEmittentenCursor`
+hat kein Reset — blindes Replay geld-bewegender Emittenten ist unmöglich. Der Co-Commit replaybarer Projektionen (Effekte vieler Streams,
+Guards und Partitions-Checkpoint in einer Transaktion) liegt in `Core/MartenCoCommitStoreBase.cs`; der GA-1-Check bricht, wenn eine
 append-artige Projektion keinen Co-Commit-Tracker hat.
 
 ## P8 — Genau ein Weg, per Analyzer erzwungen (W11)

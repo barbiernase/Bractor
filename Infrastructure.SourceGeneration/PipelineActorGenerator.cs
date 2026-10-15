@@ -470,7 +470,7 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine("                var dispatch = PipelineEventPullBridge.Wrap(");
                 sb.AppendLine("                    (env, ctx, sc, st, bt, pl) => handler.DispatchEventAsync(env, ctx, sc, st, bt, pl, faehigkeiten),");
                 sb.AppendLine("                    emitFactory, sendTrigger, fristPlaner == null ? null : new Func<FristAuftrag, Task>(f => fristPlaner.PlaneAsync(f)));");
-                sb.AppendLine("                return (handler.PipelineId, (IProjectionTracker?)null, emittentenCursor, dispatch);");
+                sb.AppendLine("                return (handler.PipelineId, emittentenCursor, dispatch);");
                 sb.AppendLine("            }, depsSink, provider.GetService<global::Infrastructure.Lebenszyklus.Passivierung>())));");
                 sb.AppendLine("    }");
                 sb.AppendLine("}");

@@ -107,6 +107,8 @@ public interface IUpcastingTabelle
     IReadOnlyList<IEvent> Aufwerten(object data);
     string Diskriminator(IEvent evt);
     IReadOnlyList<(Type Typ, string Diskriminator)> Registrierungen { get; }
+    /// <summary>Je aktuellem Event die Speicher-Diskriminatoren, die beim Lesen zu ihm werden (es selbst und seine früheren Versionen).</summary>
+    IReadOnlyDictionary<Type, string[]> Herkunft { get; }
 }
 
 public interface ISignalTabelle

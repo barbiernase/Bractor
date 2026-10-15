@@ -14,10 +14,10 @@ using Infrastructure.Testing;
 namespace Infrastructure.Pruefstand.Garantien;
 
 /// <summary>
-/// Garantien der Konsum-Schleife (docs/11 §11.4–§11.6) unter Störung, store-frei über die Seams des <see cref="ProjectionAdapter"/>: doppelte
-/// und ungeordnete Weckungen, Absturz zwischen Emit und Cursor, ein Emit, der nicht ankommt (G-2), parallele Emits eines Tails. Der Lese-Seam liefert den Log so, wie Marten
-/// ihn liefert (geordnet ab Version); Marke und Cursor sind Fakes — ob Effekt und Marke gemeinsam gültig werden, prüft die Integration
-/// (<c>CoCommitPostgresTests</c>).
+/// Garantien der Emittenten-Schleife (docs/11 §11.4, §11.6) unter Störung, store-frei über die Seams des <see cref="EmittentenAdapter"/>:
+/// doppelte und ungeordnete Weckungen, Absturz zwischen Emit und Cursor, ein Emit, der nicht ankommt (G-2), parallele Emits eines Tails. Der
+/// Lese-Seam liefert den Log so, wie Marten ihn liefert (geordnet ab Version); der Cursor ist ein Fake. Den Batch-Konsum der Projektionen prüft
+/// <see cref="BatchKonsumGarantieTests"/>.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class KonsumGarantieTests
@@ -33,17 +33,9 @@ public class KonsumGarantieTests
         public Task AppendEventsAsync(Guid a, int v, IReadOnlyList<IEvent> e, string? c = null, string? ca = null, string? at = null, string? ak = null)
             => throw new NotSupportedException();
         public Task<StreamChanges> ReadChangedStreamsAsync(long after, CancellationToken ct) => throw new NotSupportedException();
+        public Task<PartitionsSeite> ReadPartitionAsync(long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit, CancellationToken ct)
+            => throw new NotSupportedException();
         public Task<TState?> LoadStateAsync<TState>(Guid id) where TState : class, IState, new() => throw new NotSupportedException();
-    }
-
-    /// <summary>Eine Marke wie die des Co-Commit-Stores: Stapel-Beginn lesen, am Ende vorrücken.</summary>
-    private sealed class Marke : IProjectionTracker
-    {
-        private readonly Dictionary<(string, Guid), int> _stand = new();
-        public Task<int> LastProcessedVersionAsync(string p, Guid s, CancellationToken ct) => Task.FromResult(_stand.TryGetValue((p, s), out var v) ? v : -1);
-        public Task MarkProcessedAsync(string p, Guid s, int v, CancellationToken ct) { _stand[(p, s)] = v; return Task.CompletedTask; }
-        public Task ResetAsync(string p, Guid s, CancellationToken ct) { _stand.Remove((p, s)); return Task.CompletedTask; }
-        public Task ResetAllAsync(string p, CancellationToken ct) { _stand.Clear(); return Task.CompletedTask; }
     }
 
     /// <summary>Ein Cursor, der beim ersten Schreiben „abstürzt“ — der Prozess endet zwischen Emit und Cursor.</summary>
@@ -68,7 +60,7 @@ public class KonsumGarantieTests
         var stream = Guid.NewGuid();
         var log = new List<EventEnvelope> { Evt(stream, 1), Evt(stream, 2) };
         var angewandt = new List<int>();
-        var adapter = new ProjectionAdapter(new LeseSeam(log), new Marke(), null, "projektion",
+        var adapter = new EmittentenAdapter(new LeseSeam(log), new InMemoryEmittentenCursor(), "reaktion",
             (e, _, _) => { angewandt.Add(e.AggregateVersion); return Task.CompletedTask; });
 
         await adapter.WakeAsync(stream, Ct);                     // Signal v1
@@ -92,7 +84,7 @@ public class KonsumGarantieTests
         var emitter = new CommandEmitter((_, env, _) => { lock (ids) ids.Add(env.CommandId); return Task.FromResult<CommandResult?>(new CommandResult { Success = true }); });
         var router = new HandlerOutputRouter(emitter, null, "reaktion");
         var cursor = new AbsturzCursor();
-        var adapter = new ProjectionAdapter(new LeseSeam(log), null, cursor, "reaktion",
+        var adapter = new EmittentenAdapter(new LeseSeam(log), cursor, "reaktion",
             (e, _, a) => router.EmitFor(e, a)(new MeldeTeilFertig(Guid.Parse("00000000-0000-0000-0000-0000000000aa"))));
 
         var erster = () => adapter.WakeAsync(stream, Ct);
@@ -125,7 +117,7 @@ public class KonsumGarantieTests
         }, sendeFrist: TimeSpan.FromMilliseconds(50));
         var router = new HandlerOutputRouter(emitter, null, "reaktion");
         var cursor = new InMemoryEmittentenCursor();
-        var adapter = new ProjectionAdapter(new LeseSeam(log), null, cursor, "reaktion",
+        var adapter = new EmittentenAdapter(new LeseSeam(log), cursor, "reaktion",
             (e, _, a) => router.EmitFor(e, a)(new MeldeTeilFertig(Guid.Parse("00000000-0000-0000-0000-0000000000bb"))));
 
         (await adapter.WakeAsync(stream, Ct)).Should().BeFalse("ein unbekannter Ausgang ist kein Aufholen");
@@ -146,7 +138,7 @@ public class KonsumGarantieTests
         var emitter = new CommandEmitter((_, _, _) => Task.FromResult<CommandResult?>(new CommandResult { Success = false, Abgelehnt = true }));
         var router = new HandlerOutputRouter(emitter, null, "reaktion");
         var cursor = new InMemoryEmittentenCursor();
-        var adapter = new ProjectionAdapter(new LeseSeam(log), null, cursor, "reaktion",
+        var adapter = new EmittentenAdapter(new LeseSeam(log), cursor, "reaktion",
             (e, _, a) => router.EmitFor(e, a)(new MeldeTeilFertig(Guid.Parse("00000000-0000-0000-0000-0000000000cc"))));
 
         (await adapter.WakeAsync(stream, Ct)).Should().BeTrue();
@@ -170,7 +162,7 @@ public class KonsumGarantieTests
         }, sendeFrist: TimeSpan.FromSeconds(2));
         var router = new HandlerOutputRouter(emitter, null, "reaktion");
         var cursor = new InMemoryEmittentenCursor();
-        var adapter = new ProjectionAdapter(new LeseSeam(log), null, cursor, "reaktion",
+        var adapter = new EmittentenAdapter(new LeseSeam(log), cursor, "reaktion",
             (e, _, a) => router.EmitFor(e, a)(new MeldeTeilFertig(Guid.NewGuid())));
 
         (await adapter.WakeAsync(stream, Ct)).Should().BeTrue();

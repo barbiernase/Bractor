@@ -50,8 +50,8 @@ Nachweis ist eine Lücke in [13](13-reifegrad-schulden-bewertung.md).
 
 | Garantie | Gilt | Mechanismus / Folge | Nachweis |
 |---|---|---|---|
-| Events eines Streams werden in jedem Konsumenten in Versionsreihenfolge angewendet | **ja** | ein Actor je (Konsument, Stream), Vorab-Prüfung der Version im `ProjectionAdapter` | P `KonsumGarantieTests.Doppelte_und_ungeordnete_Weckungen…` |
-| globale Ordnung über Streams | **nein** | die globale Sequenz von Marten ist nur Lese-Cursor des Polls, kein Versprechen | – |
+| Events eines Streams werden in jedem Konsumenten in Versionsreihenfolge angewendet | **ja** | Projektion: ein Stream liegt in genau einer Partition, ein Leser je Partition liest nach globaler Sequenz (je Stream = Versionsreihenfolge), Guard je Stream; Emittent: ein Actor je (Konsument, Stream), Vorab-Prüfung der Version | P `BatchKonsumGarantieTests.Doppelte_und_ungeordnete_Seiten_und_Nachzuegler…`, `KonsumGarantieTests.Doppelte_und_ungeordnete_Weckungen…`; I `SequenceGapPostgresTests.Batch_Leser_ueberholt_einen_Nachzuegler_nicht…` |
+| globale Ordnung über Streams | **nein** | die globale Sequenz von Marten ist nur Lese-Cursor (Poll, Partitions-Leser), kein Versprechen; Partitionen laufen parallel | – |
 | kausale Ordnung über Streams (Ursache vor Wirkung) | **nein** | eine Projektion über X und Y kann die Wirkung in Y vor der Ursache in X sehen | – |
 | Prozesse und Flüsse | ordnungsunabhängig | der Dirigent faltet eine Markierung (Petri-Netz); welche Bedingung zuerst eintrifft, ändert das Ergebnis nicht | PD `ProzessE2ETests.Diamant…`, `MarkingCursorAequivalenzTests` |
 
@@ -59,12 +59,14 @@ Nachweis ist eine Lücke in [13](13-reifegrad-schulden-bewertung.md).
 
 | Garantie | Mechanismus | Bedingung / Lücke | Nachweis |
 |---|---|---|---|
-| **Wirkung genau einmal je Event** | Co-Commit: Effekt und `ProjectionCheckpoint` in einer Transaktion (`MartenCoCommitStoreBase`); der GA-1-Check erzwingt den Co-Commit für append-artige Projektionen | genau eine Aktivierung je (Projektion, Stream). Der Checkpoint wird ohne Versionsprüfung geschrieben; zwei Aktivierungen (Netzstörung im Cluster) können einen Effekt doppelt anwenden (G-4) | I `CoCommitPostgresTests.Absturz_zwischen_Effekt_und_Marke…`; P `GaEinsPruefungTests`; E2E „Read-Model = Log“ (S1, S4); zwei Aktivierungen: I `GarantiePostgresTests.Zwei_Aktivierungen…` (Skip G-4) |
-| **geteilte Dokumente** ohne verlorene Updates | Versionsprüfung, bis zu 5 Wiederholungen, sonst `SchreibKonfliktException` und Stapel verworfen | – | I `SchreibRegelPostgresTests`, `GeteilteDokumentePostgresTests` |
-| **Vollständigkeit:** jedes committete Event kommt an | Signal (schnell) plus Poll (30 s) über die Hochwassermarke; der Poll rückt nur vor, wenn jede Weckung bestätigt aufgeholt ist (`Poller`, `WakeAck.Aufgeholt`). Tombstones eines gescheiterten Appends liest niemand (`MartenEventStore`) | Ein Stream, dessen Dispatch dauerhaft wirft, hält die Hochwassermarke fest: nichts geht verloren, aber das Fenster wächst; ein scheiternder Poll-Durchlauf wird als Warnung gemeldet. Grenzfall: eine Transaktion, die länger als die Karenz (3 s) offen ist, kann der Poll überspringen; dann trägt nur das Signal. | I `PollerBackstopPostgresTests` (verlorenes Signal), `SequenceGapPostgresTests`, `GarantiePostgresTests.Ein_Poison_Stream…`, `GarantiePostgresTests.Ein_gescheiterter_Append_blockiert_den_Poll_nicht`; E2E Störungslauf |
+| **Wirkung genau einmal je Event** | Batch-Co-Commit: die Effekte aller Streams eines Batches, ihre Guards (`ProjectionCheckpoint`) und der `PartitionsCheckpoint` in einer Transaktion (`MartenCoCommitStoreBase`); der GA-1-Check erzwingt den Co-Commit für append-artige Projektionen | – | I `CoCommitPostgresTests.Absturz_mitten_im_Batch…`, `…Viele_Streams_eines_Batches…`; P `BatchKonsumGarantieTests.Absturz_mitten_im_Batch…`, `GaEinsPruefungTests`; E2E „Read-Model = Log“ (S1, S4) |
+| **Zwei Aktivierungen** derselben Partition (Netzstörung im Cluster) wenden keinen Effekt doppelt an | der Partitions-Checkpoint wird mit erwarteter Version geschrieben (`Insert` bzw. `UpdateRevision`); die verlierende Aktivierung lädt neu, der Guard überspringt das schon Angewandte (G-4 geschlossen) | – | I `GarantiePostgresTests.Zwei_Aktivierungen_derselben_Projektion…`; P `BatchKonsumGarantieTests.Zwei_Aktivierungen…` |
+| **geteilte Dokumente** ohne verlorene Updates | Versionsprüfung; ein Konflikt verwirft den Batch, der Leser halbiert ihn nach Streams und wiederholt einen einzelnen bis zu fünfmal, danach bleibt er bis zum nächsten Durchlauf stehen (die Position hält vor ihm); im selben Batch sehen sich zwei Streams über die Identity-Map | – | I `SchreibRegelPostgresTests` (zwei Partitions-Leser), `GeteilteDokumentePostgresTests` (vier Partitions-Leser auf einem Singleton); P `BatchKonsumGarantieTests.Ein_Konflikt…`, `…Ein_dauerhafter_Konflikt…` |
+| **Vollständigkeit:** jedes committete Event kommt an | Signal weckt die Partition (schnell), der Poll weckt alle 30 s jede Partition; der Leser liest ab seiner durablen Position, die nur bis zur gesetzten Sequenz (älter als die Karenz) vorrückt — bestimmt vor dem Lesen der Seite. Tombstones eines gescheiterten Appends liest niemand (`MartenEventStore`) | Grenzfall: eine Transaktion, die länger als die Karenz (3 s) offen ist, kann die Position überholen; dann trägt nur das Signal. Die Karenz misst den Event-Zeitstempel (Client-Uhr) gegen die DB-Uhr. | I `PollerBackstopPostgresTests.Batch_Leser_holt_ein_Event_mit_verlorenem_Signal…`, `SequenceGapPostgresTests.Batch_Leser_ueberholt_einen_Nachzuegler_nicht…`; P `BatchKonsumGarantieTests.Eine_volle_Seite…`; E2E Störungslauf |
+| **Ein Poison-Stream hält niemanden auf** | der Stream des werfenden Events wird abgetrennt, ein werfender Commit halbiert; wirft er allein, wird er geparkt (im Partitions-Checkpoint, Dead-Letter einmal), je Poll-Intervall einzeln versucht und nach der Heilung ab seinem Guard nachgeholt | sichtbar in `/health` (`geparkteStreams`) und als Dead-Letter | I `GarantiePostgresTests.Ein_Poison_Stream_wird_im_Batch_geparkt…`; P `BatchKonsumGarantieTests.Ein_Poison_Stream…` |
 | **Aktualität** | Signal | eventual: typisch Millisekunden, schlimmstenfalls ein Poll-Intervall | I `LiveCommandE2ETests`; E2E Latenz ([12](12-tests-und-vermessung.md) §12.5) |
 | **Read-your-writes** | Redis-Versionsindex (`ctx.Track`) | **nur best-effort**; fällt Redis aus, verlängert sich nur die Wartezeit | E2E Störungslauf (Redis 30 s weg, Exactly-once bleibt) |
-| **Neuaufbau** | Reset über `IReplaybarerTracker`, dann der normale Adapter-Pfad ab 0 (`ProjectionRebuilder`) | deterministisch nur bei deterministischen Handlern; der alte Stand wird vorher geleert | P `ProjectionRebuilderTests` |
+| **Neuaufbau** | Ziel leeren, Partitionen (neue Version, Position 0) und Guards zurücksetzen, dann je Partition der Batch-Leser ab 0, seitenweise (`ProjectionRebuilder`; in Sim `ProjektionsStandDienst` bei geändertem Code oder geänderter Partitionszahl); ein noch laufender Leser verliert seinen Commit | deterministisch nur bei deterministischen Handlern; der alte Stand wird vorher geleert | P `ProjectionRebuilderTests`, `ProjektionsStandTests`; I `GarantiePostgresTests.Ein_Neuaufbau_nimmt_einem_laufenden_Leser_den_Commit`, `LeseseitenStandE2ETests` |
 
 ## 11.6 Reaktionen (emittierend)
 
@@ -72,7 +74,7 @@ Nachweis ist eine Lücke in [13](13-reifegrad-schulden-bewertung.md).
 |---|---|---|
 | der Handler läuft **mindestens einmal** je Event; Signal und Poll lesen ab dem Cursor, der erst vorrückt, wenn jeder ausgegebene Command zugestellt oder abgelehnt ist (die Commands eines Tails gehen parallel hinaus) | – | P `EmittentenPfadAdapterTests`, `KonsumGarantieTests.Absturz_zwischen_Emit_und_Cursor…`, `…Ein_nicht_zugestellter_Emit…`, `…Die_Commands_eines_Tails_gehen_parallel_hinaus`; PD `AblaufGarantieTests.Absturz_zwischen_Emit_und_Cursor…` |
 | ausgegebene Commands wirken **genau einmal** | Inbox-Fenster des Ziels (§11.3, G-2) | PD `AblaufGarantieTests.Reaktion_wirkt_genau_einmal…`, `…Absturz_zwischen_Emit_und_Cursor…`; P `ReaktionsIdTests`; E2E S5 „je Reaktions-Command genau eine Wirkung“ |
-| **kein** Reset und kein Replay | zur Compile-Zeit wahr: `IEmittentenCursor` implementiert `IReplaybarerTracker` nicht | Typ (Compile-Zeit); P `EmittentenPfadAdapterTests.Tracker_und_Cursor_zugleich…` |
+| **kein** Reset und kein Replay | zur Compile-Zeit wahr: der Emittenten-Pfad (`EmittentenAdapter`) nimmt keinen Tracker, `IEmittentenCursor` hat kein Reset | Typ (Compile-Zeit); P `EmittentenPfadAdapterTests.Jede_Weckung_faltet_ab_dem_Cursor` |
 | ausgegebene Events (`IEvent` aus einem Handle) | verlierbar re-publiziert, nicht im Log | – |
 | Seiteneffekte **außerhalb** von Commands | **nur at-least-once**, keine Deduplizierung | – |
 
@@ -138,9 +140,9 @@ die Kosten wachsen.
 
 | Garantie | Mechanismus heute | Kosten wachsen mit | Hebel bei gleicher Garantie |
 |---|---|---|---|
-| Projektion wirkt genau einmal (§11.5) | je (Projektion, Stream, Weckung) Tracker lesen, Tail lesen, eine Transaktion (`ProjectionAdapter`, `MartenCoCommitStoreBase`) | Events × Projektionen, sobald viele Streams je wenige Events haben | Batch-Co-Commit: viele Streams, ihre Effekte und Checkpoints in einer Transaktion (PF-1) |
-| Ordnung je Stream (§11.4) | ein virtueller Actor je (Konsument, Stream), passiviert nach Leerlauf (PF-5) | Projektionen × aktive Streams Actors | partitionierte Konsumenten (`Hash(Stream) mod P`) in globaler Sequenz (PF-1) |
-| Vollständigkeit trotz verlierbarem Signal (§11.5) | jede Projektion scannt alle 30 s selbst alle neuen Events ohne LIMIT und weckt jeden geänderten Stream nacheinander (`Poller`, `PullPath`, `MartenEventStore.ReadChangedStreamsAsync`) | Events × Projektionen × Knoten; nach Stillstand das ganze Rückstandsfenster im Speicher | eine Abfrage „Stream-Kopf > Checkpoint“, nur nachhängende Streams wecken; ein gemeinsamer, seitenweiser Change-Feed (PF-2) |
+| Projektion wirkt genau einmal (§11.5) | Batch-Co-Commit: je Seite (bis 500 Events einer Partition) eine Abfrage für die Guards und eine Transaktion für Effekte, Guards und Partition (`BatchLeser`, `MartenCoCommitStoreBase`) | Seiten, nicht mehr Events × Projektionen; unter Last je Weckung eine kleine Seite | – (umgesetzt, PF-1) |
+| Ordnung je Stream (§11.4) | Projektion: ein Leser je (Projektion, Partition), P fest (Standard 8); Emittent: ein virtueller Actor je (Konsument, Stream), passiviert nach Leerlauf (PF-5) | Projektionen × P Leser; Emittenten × aktive Streams Actors | – (umgesetzt, PF-1) |
+| Vollständigkeit trotz verlierbarem Signal (§11.5) | Projektion: der Poll weckt alle 30 s jede Partition, der Leser liest seitenweise ab seiner Position (eine Abfrage, im Leerlauf leer); Emittent: Poll über `ReadChangedStreamsAsync`, weckt jeden geänderten Stream (`Poller`, `PullPath`) | Projektionen × P Abfragen je 30 s; beim Emittenten Events × Emittenten | Emittenten wie Projektionen über einen seitenweisen Feed (offen, nicht gebraucht: es gibt wenige Reaktionen) |
 | Emittierter Command wirkt genau einmal (§11.3, §11.6) | durabler Emittenten-Cursor, vorgerückt nach bestätigtem Emit; die Commands eines Tails werden gemeinsam abgewartet | Tail-Länge je Weckung (nicht mehr die Stream-Länge) | – (umgesetzt) |
 | Command wirkt genau einmal (§11.3) | Marke `KommandoVerarbeitet` je Command im Stream, auch ohne Event; Inbox im Snapshot | Streams etwa doppelt so lang (Append, Rehydration, Prozess-Reads); Snapshot bis `InboxGrenze` Ids | Events tragen die CommandId schon als `causationId`; Marke nur bei Noop und Ablehnung, oder Inbox als Tabelle mit eindeutigem Schlüssel in derselben Transaktion (PF-3, G-2) |
 | kein Vorgang bleibt liegen (§11.7) | Prozess-Poll liest jeden geänderten Stream ab 0 und verwirft die schon geladenen Events; Backstop weckt alle 15 s alle offenen Vorgänge (`ProzessManagerWiring`) | Vorgangslänge² bzw. Zahl offener Vorgänge, auch im Leerlauf | geladene Events direkt routen; Fälligkeits-Index für Zeitlimits statt Weckung aller (PF-4) |
@@ -152,10 +154,10 @@ Kostenlos zur Laufzeit sind die Garantien aus §11.10 (Build und Start) sowie Si
 
 ## 11.13 Lücken
 
-Stehen nur in [13](13-reifegrad-schulden-bewertung.md) §13.0: **G-2** Inbox-Fenster, **G-4** Projektions-Checkpoint ohne Versionsprüfung,
-**G-5** Versionszählung bei Split-Upcasts, **G-6** Garantien ohne eigenen Nachweis-Test. Jede offene Lücke G-2, G-4, G-5 hat einen Test, der sie
-zeigt (Skip `G-n offen (docs/13)`); geschlossen ist sie erst, wenn ihr Test grün ist. Geschlossen: **G-1** Fristverlust, **G-7** Tombstones legen
-den Poll still, der Emittenten-Anteil von **G-2** (Phase 1); **G-3** Actor nach Append-Konflikt (Phase 2).
+Stehen nur in [13](13-reifegrad-schulden-bewertung.md) §13.0: **G-2** Inbox-Fenster, **G-5** Versionszählung bei Split-Upcasts, **G-6** Garantien
+ohne eigenen Nachweis-Test. Jede offene Lücke G-2, G-5 hat einen Test, der sie zeigt (Skip `G-n offen (docs/13)`); geschlossen ist sie erst, wenn
+ihr Test grün ist. Geschlossen: **G-1** Fristverlust, **G-7** Tombstones legen den Poll still, der Emittenten-Anteil von **G-2** (Phase 1); **G-3**
+Actor nach Append-Konflikt (Phase 2); **G-4** Projektions-Checkpoint ohne Versionsprüfung (Phase 3, Batch-Konsum).
 
 ## 11.14 Wie die Garantien geprüft werden
 
@@ -163,13 +165,15 @@ den Poll still, der Emittenten-Anteil von **G-2** (Phase 1); **G-3** Actor nach 
   Store-Semantik gegen echtes Marten. Sie läuft vor jedem Commit:
   `dotnet test Infrastructure.Pruefstand.Tests/… --filter Kategorie=Garantie`, danach nacheinander dieselbe Filterung auf
   `Infrastructure.Integration.Tests` und `Pruefdomaene.Integration.Tests`. Grün heißt: alles grün bis auf die übersprungenen Lücken-Tests.
-- **Unter Störung** geprüft sind: doppelte und ungeordnete Zustellung (`KonsumGarantieTests`, `SchreibGarantieTests`), verlorenes Signal
-  (`PollerBackstopPostgresTests`), Absturz zwischen Effekt und Checkpoint (`CoCommitPostgresTests`), Absturz zwischen Emit und Cursor
-  (`KonsumGarantieTests`, `AblaufGarantieTests`), Timeout und Fehlschlag beim Emit (`EmitGarantieTests`, `FristGarantieTests`,
-  `KonsumGarantieTests`), Überlast eines Ziels (`EmitGarantieTests`: Drossel, Backoff), Versionskonflikt und mehrdeutiger Commit
-  (`SchreibGarantieTests`), Passivierung und Reaktivierung (`LebenszyklusGarantieTests`), alte CommandId jenseits der Inbox-Grenze (Skip G-2), zwei Aktivierungen (`GarantiePostgresTests`,
-  Skip G-4), Poison-Stream und gescheiterter Append (`GarantiePostgresTests`), Neustart des Hosts (`AblaufGarantieTests`,
-  `RehydrationGarantieTests`).
+- **Unter Störung** geprüft sind: doppelte und ungeordnete Zustellung bzw. Seiten und Nachzügler (`KonsumGarantieTests`,
+  `BatchKonsumGarantieTests`, `SequenceGapPostgresTests`, `SchreibGarantieTests`), verlorenes Signal (`PollerBackstopPostgresTests`), Absturz
+  mitten im Batch (`CoCommitPostgresTests`, `BatchKonsumGarantieTests`), Absturz zwischen Emit und Cursor (`KonsumGarantieTests`,
+  `AblaufGarantieTests`), Timeout und Fehlschlag beim Emit (`EmitGarantieTests`, `FristGarantieTests`, `KonsumGarantieTests`), Überlast eines
+  Ziels (`EmitGarantieTests`: Drossel, Backoff), Versionskonflikt und mehrdeutiger Commit (`SchreibGarantieTests`), Konflikt an geteilten
+  Dokumenten zwischen Partitionen (`SchreibRegelPostgresTests`, `GeteilteDokumentePostgresTests`), Passivierung und Reaktivierung
+  (`LebenszyklusGarantieTests`), alte CommandId jenseits der Inbox-Grenze (Skip G-2), zwei Aktivierungen und Neuaufbau gegen einen laufenden
+  Leser (`GarantiePostgresTests`, `BatchKonsumGarantieTests`), Poison-Stream und gescheiterter Append (`GarantiePostgresTests`,
+  `BatchKonsumGarantieTests`), Neustart des Hosts (`AblaufGarantieTests`, `RehydrationGarantieTests`).
 - **Ende zu Ende:** jeder Lauf von `scripts/vermessung-e2e.sh` zählt nach dem Lauf über Queries und den Log nach, dass jede Wirkung genau
   einmal eingetreten ist (je Szenario, dazu global: keine CommandId zweimal gewirkt, keine Version doppelt; mit offenem Rückstand „höchstens
   einmal“); der **Störungslauf** tut das nach harten Host-Abbrüchen und einem Redis-Ausfall ([12](12-tests-und-vermessung.md) §12.5). Ein Fehlschlag macht den Lauf ungültig.

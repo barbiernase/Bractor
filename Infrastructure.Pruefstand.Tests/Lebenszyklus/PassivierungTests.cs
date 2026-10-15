@@ -10,8 +10,9 @@ namespace Infrastructure.Pruefstand.Lebenszyklus;
 /// <summary>
 /// Die eine Passivierungs-Regel (PF-5): ein Actor ohne Nachricht stoppt nach dem Leerlauf; jede Nachricht schiebt den Leerlauf hinaus; 0 heißt nie.
 /// Lokales <see cref="ActorSystem"/> ohne Cluster — dass Aggregat und Adapter nach der Reaktivierung denselben Stand haben, prüft die Prüfdomäne
-/// (<c>LebenszyklusGarantieTests</c>).
+/// (<c>LebenszyklusGarantieTests</c>). Zeitkritisch (echte Leerlauf-Uhr): läuft nicht parallel zu den übrigen Tests.
 /// </summary>
+[Collection(Zeitkritisch.Name)]
 public class PassivierungTests
 {
     private sealed class Probe(TimeSpan leerlauf, TaskCompletionSource gestoppt) : IActor
@@ -43,13 +44,14 @@ public class PassivierungTests
     [Fact]
     public async Task Jede_Nachricht_schiebt_den_Leerlauf_hinaus()
     {
-        var (system, pid, gestoppt) = Starte(TimeSpan.FromMilliseconds(400));
-        for (var i = 0; i < 6; i++)
+        // 1,8 s lang alle 150 ms eine Nachricht — dreimal so lang wie der Leerlauf; Spielraum 450 ms Verzug je Weckruf (paralleler Testlauf).
+        var (system, pid, gestoppt) = Starte(TimeSpan.FromMilliseconds(600));
+        for (var i = 0; i < 12; i++)
         {
             await Task.Delay(150);
             system.Root.Send(pid, "Weckruf");
         }
-        gestoppt.Task.IsCompleted.Should().BeFalse("900 ms lang kam alle 150 ms eine Nachricht");
+        gestoppt.Task.IsCompleted.Should().BeFalse("1,8 s lang kam alle 150 ms eine Nachricht, der Leerlauf ist 600 ms");
         await gestoppt.Task.WaitAsync(TimeSpan.FromSeconds(5));
         await system.ShutdownAsync();
     }
@@ -74,4 +76,12 @@ public class PassivierungTests
         gestoppt.Task.IsCompleted.Should().BeFalse();
         await system.ShutdownAsync();
     }
+}
+
+/// <summary>Tests mit echter Uhr (Leerlauf, Fristen im Millisekunden-Bereich): nie parallel zu anderen — ein CPU-hungriger Nachbar (Analyzer-
+/// Kompilate) verschiebt sonst ihre Takte.</summary>
+[CollectionDefinition(Name, DisableParallelization = true)]
+public sealed class Zeitkritisch
+{
+    public const string Name = "Zeitkritisch (echte Uhr)";
 }

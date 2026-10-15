@@ -27,7 +27,7 @@ namespace Infrastructure.Projections;
 public class ReadModelDepsWriter : IReadModelDepsSink
 {
     /// <summary>
-    /// <see cref="IReadModelDepsSink"/> — der Pull-Pfad (ProjectionAdapter) führt denselben
+    /// <see cref="IReadModelDepsSink"/> — der Batch-Konsum (BatchLeser) und der Emittenten-Pfad (EmittentenAdapter) führen denselben
     /// Deps-Versions-Index wie der Push-Pfad. Delegiert an <see cref="WriteAsync"/>.
     /// </summary>
     public Task PublishAsync(

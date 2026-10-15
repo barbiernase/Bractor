@@ -123,9 +123,9 @@ Zahlen: [12](12-tests-und-vermessung.md).
            + Poll (30 s)                                               
              ┌─────────┴───────────────────────────┐
              ▼                                     ▼
-   ProjectionAdapter (Pull-/Signal-Schleife)    Prozess-Manager = Dirigent
-     Projektion (replaybar, Co-Commit)            Prozesse (Event-Regeln) und Flüsse (Quelle → Funktionen → Commands)
-     Reaktion (emittierend)                         │                      │
+   BatchLeser / EmittentenAdapter               Prozess-Manager = Dirigent
+     Projektion (replaybar, Batch-Co-Commit)      Prozesse (Event-Regeln) und Flüsse (Quelle → Funktionen → Commands)
+     Reaktion (emittierend, je Stream)              │                      │
              │                                      │ Sende<Cmd>           │ Rufe<F>
              └──────────────► CommandEmitter ◄──────┘                      ▼
                          (der eine Emit-Weg)                     Funktions-Vermittler (Actor je Funktion)

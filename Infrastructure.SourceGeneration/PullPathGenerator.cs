@@ -7,13 +7,13 @@ namespace Infrastructure.SourceGeneration
 {
     /// <summary>
     /// Verdrahtungs-Generator für den PULL-Pfad. Findet jede <c>ISubscriber</c>, die zusätzlich
-    /// <c>Abstractions.IPullSubscriber</c> implementiert, und emittiert in
-    /// <c>Infrastructure</c> (wie GeneratedSubscribers) die komplette, sonst handgeschriebene
-    /// Verdrahtung:
-    ///   - je Projektion einen per-Stream-Adapter-Kind (<c>IClusterKindContributor</c>),
-    ///     der Tracker + Dispatch über einen Fähigkeits-Bereich auflöst (Store-Impl-Typ wird NIE genannt;
-    ///     Achse B aus den Schreib-Fähigkeiten der Handles, CQRS052 bei mehreren Stores),
-    ///   - eine <c>PullPathRegistration</c> (Receiver + Poller, generisch),
+    /// <c>Abstractions.IPullSubscriber</c> implementiert, und emittiert die komplette, sonst handgeschriebene
+    /// Verdrahtung. Achse B folgt aus den Schreib-Fähigkeiten der Handles (CQRS052 bei mehreren Stores):
+    ///   - REPLAYBAR (Projektion, Schreib-Fähigkeiten): ein Batch-Kind <c>batch-&lt;Typ&gt;</c> je Projektion — ein Leser je
+    ///     Partition, der Store aus einem Fähigkeits-Bereich ist die Batch-Naht (Store-Impl-Typ wird NIE genannt), dazu eine
+    ///     <c>BatchRegistrierung</c> (Signal → Partition, Poll je Partition) und der <c>ProjektionsStand</c>;
+    ///   - EMITTIEREND (Reaktion, keine Schreib-Fähigkeit): ein Adapter-Kind <c>pull-&lt;Typ&gt;</c> je Stream mit Emittenten-Cursor
+    ///     und eine <c>PullPathRegistration</c> (Receiver + Poller);
     ///   - <c>PushSubscriberExclusions</c> (koppelt den Push-Subscriber ab),
     ///   - <c>AddGeneratedPullPaths()</c>, das der Host als EINZIGEN Aufruf nutzt.
     ///
@@ -107,6 +107,8 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("using Infrastructure.PubSub;");
             sb.AppendLine("using Infrastructure.PubSub.Startup;");
             sb.AppendLine("using Microsoft.Extensions.DependencyInjection;");
+            sb.AppendLine("using Microsoft.Extensions.DependencyInjection.Extensions;");
+            sb.AppendLine("using Microsoft.Extensions.Logging;");
             sb.AppendLine("using Proto;");
             sb.AppendLine("using Proto.Cluster;");
             sb.AppendLine("using System;");
@@ -118,7 +120,10 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine();
 
             foreach (var p in projections)
-                EmitKind(sb, p, faehigkeiten[p]);
+            {
+                if (storesJe[p].Count > 0) EmitBatchKind(sb, p, faehigkeiten[p]);
+                else EmitKind(sb, p);
+            }
 
             sb.AppendLine("public static class GeneratedPullPaths");
             sb.AppendLine("{");
@@ -133,22 +138,38 @@ namespace Infrastructure.SourceGeneration
                 var names = string.Join(", ", projections.Select(p => "\"" + p.Name + "\""));
                 sb.AppendLine($"        services.AddSingleton(new PushSubscriberExclusions(new[] {{ {names} }}));");
                 sb.AppendLine();
+                var batch = false;
+                var proStream = false;
                 foreach (var p in projections)
                 {
-                    sb.AppendLine($"        services.AddSingleton<IClusterKindContributor, {p.Name}PullAdapterKind>();");
-                    sb.AppendLine($"        services.AddSingleton(new PullPathRegistration(");
-                    sb.AppendLine($"            {p.Name}PullAdapterKind.KindName, {p.Name}PullAdapterKind.KindName, {p.ToDisplayString()}.SubscribedTypes));");
                     var stores = storesJe[p];
                     if (stores.Count > 0)
                     {
+                        batch = true;
                         var hash = p.GetMembers("CodeHash").OfType<IFieldSymbol>().Any(f => f.IsConst) ? $"{p.ToDisplayString()}.CodeHash" : "\"\"";
                         var typen = string.Join(", ", stores.Select(k => $"typeof({k.ToDisplayString()})"));
-                        sb.AppendLine($"        services.AddSingleton(sp => new ProjektionsStand({p.Name}PullAdapterKind.KindName,");
+                        sb.AppendLine($"        services.AddSingleton<IClusterKindContributor, {p.Name}BatchKind>();");
+                        sb.AppendLine($"        services.AddSingleton(sp => new BatchRegistrierung({p.Name}BatchKind.KindName,");
+                        sb.AppendLine($"            sp.GetRequiredService<{p.ToDisplayString()}>().SubscriberId, {p.ToDisplayString()}.SubscribedTypes));");
+                        sb.AppendLine($"        services.AddSingleton(sp => new ProjektionsStand({p.Name}BatchKind.KindName,");
                         sb.AppendLine($"            sp.GetRequiredService<{p.ToDisplayString()}>().SubscriberId, {hash}, new Type[] {{ {typen} }}));");
+                    }
+                    else
+                    {
+                        proStream = true;
+                        sb.AppendLine($"        services.AddSingleton<IClusterKindContributor, {p.Name}PullAdapterKind>();");
+                        sb.AppendLine($"        services.AddSingleton(new PullPathRegistration(");
+                        sb.AppendLine($"            {p.Name}PullAdapterKind.KindName, {p.Name}PullAdapterKind.KindName, {p.ToDisplayString()}.SubscribedTypes));");
                     }
                 }
                 sb.AppendLine();
-                sb.AppendLine("        services.AddHostedService<GenericPullStartupService>();");
+                if (batch)
+                {
+                    sb.AppendLine("        services.AddHostedService<BatchKonsumStartupService>();");
+                    sb.AppendLine("        services.TryAddSingleton<IKonsumRueckstand, KonsumRueckstand>();");
+                }
+                if (proStream)
+                    sb.AppendLine("        services.AddHostedService<GenericPullStartupService>();");
             }
             sb.AppendLine("        return services;");
             sb.AppendLine("    }");
@@ -174,15 +195,72 @@ namespace Infrastructure.SourceGeneration
             return result;
         }
 
-        private static void EmitKind(StringBuilder sb, INamedTypeSymbol p, List<INamedTypeSymbol> schreibFaehigkeiten)
+        /// <summary>Die Konstruktion der Projektion bzw. Reaktion aus dem Container (Konstruktor-Parameter als Dienste).</summary>
+        private static void EmitKonstruktion(StringBuilder sb, INamedTypeSymbol p, string einzug)
         {
-            var fqProjection = p.ToDisplayString();
             var ctor = p.InstanceConstructors
                 .Where(c => c.DeclaredAccessibility == Accessibility.Public && !c.IsStatic)
                 .OrderByDescending(c => c.Parameters.Length)
                 .FirstOrDefault();
             var ctorParams = ctor?.Parameters ?? default;
+            var argNames = new List<string>();
+            if (!ctorParams.IsDefault)
+            {
+                for (int i = 0; i < ctorParams.Length; i++)
+                {
+                    sb.AppendLine($"{einzug}var d{i} = provider.GetRequiredService<{ctorParams[i].Type.ToDisplayString()}>();");
+                    argNames.Add("d" + i);
+                }
+            }
+            sb.AppendLine($"{einzug}var projection = new {p.ToDisplayString()}({string.Join(", ", argNames)});");
+        }
 
+        /// <summary>Replaybar: ein Batch-Leser je Partition (docs/04 §4.1); der Store der Schreib-Fähigkeiten ist die Batch-Naht.</summary>
+        private static void EmitBatchKind(StringBuilder sb, INamedTypeSymbol p, List<INamedTypeSymbol> schreibFaehigkeiten)
+        {
+            sb.AppendLine($"internal sealed class {p.Name}BatchKind : IClusterKindContributor");
+            sb.AppendLine("{");
+            sb.AppendLine($"    public const string KindName = \"batch-{p.Name}\";");
+            sb.AppendLine();
+            sb.AppendLine("    public ClusterKind CreateKind(ActorSystem system, IServiceProvider provider)");
+            sb.AppendLine("    {");
+            sb.AppendLine("        var eventStore = provider.GetRequiredService<IEventStoreRepository>();");
+            sb.AppendLine("        var depsSink = provider.GetService<IReadModelDepsSink>();");
+            sb.AppendLine("        var deadLetter = provider.GetService<IDeadLetterSink>();");
+            sb.AppendLine("        var konsum = provider.GetService<Konsum>() ?? Konsum.Standard;");
+            sb.AppendLine($"        var logger = provider.GetService<ILoggerFactory>()?.CreateLogger(\"Konsum.{p.Name}\");");
+            sb.AppendLine("        // Typfilter der Seiten: die Speicher-Diskriminatoren der abonnierten Typen samt Upcasting-Vorgängern.");
+            sb.AppendLine($"        var typen = BatchLeser.TypenAus({p.ToDisplayString()}.SubscribedTypes);");
+            sb.AppendLine("        return new ClusterKind(KindName, Props.FromProducer(() =>");
+            sb.AppendLine("            new BatchLeserActor(partition =>");
+            sb.AppendLine("            {");
+            sb.AppendLine("                // Ein Fähigkeits-Bereich je Partitions-Leser: jede Fähigkeit eines Stores liefert DIESELBE Instanz");
+            sb.AppendLine("                //   (Co-Commit: Effekte, Guards und Partition in einer Transaktion).");
+            sb.AppendLine("                var faehigkeiten = provider.GetRequiredService<IFaehigkeitsFabrik>().Oeffne();");
+            EmitKonstruktion(sb, p, "                ");
+            var holen = schreibFaehigkeiten.Select(f => $"faehigkeiten.Hole<{f.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}>()");
+            sb.AppendLine($"                var trackers = new object[] {{ {string.Join(", ", holen)} }}.OfType<IProjectionTracker>().Distinct().ToList();");
+            sb.AppendLine("                if (trackers.Count != 1)");
+            sb.AppendLine($"                    throw new InvalidOperationException(\"{p.Name}: die Schreib-Fähigkeiten müssen genau einen IProjectionTracker-Store auflösen (gefunden: \" + trackers.Count + \") — docs/04 §4.2, CQRS052.\");");
+            sb.AppendLine();
+            sb.AppendLine("                // GA-1-Check (P4): eine append-artige Projektion OHNE Co-Commit-Tracker bricht hier");
+            sb.AppendLine("                //   (statt still at-least-once doppelte Appends zu schreiben).");
+            sb.AppendLine("                GaEinsPruefung.PrüfeCoCommit(projection, trackers[0], projection.SubscriberId);");
+            sb.AppendLine();
+            sb.AppendLine("                Func<EventEnvelope, ProjectionWriter, Task> dispatch =");
+            sb.AppendLine("                    (e, writer) => projection.DispatchAsync(e, writer, BatchLeser.KeineAusgabe, faehigkeiten);");
+            sb.AppendLine("                var leser = new BatchLeser(eventStore, trackers[0], projection.SubscriberId, partition, konsum, typen, dispatch,");
+            sb.AppendLine("                    depsSink, deadLetter, logger);");
+            sb.AppendLine("                return (leser, (IDisposable?)faehigkeiten);");
+            sb.AppendLine("            }, logger)));");
+            sb.AppendLine("    }");
+            sb.AppendLine("}");
+            sb.AppendLine();
+        }
+
+        /// <summary>Emittierend: ein Adapter je Stream mit Emittenten-Cursor (durabel, ab Cursor, kein Reset; E8).</summary>
+        private static void EmitKind(StringBuilder sb, INamedTypeSymbol p)
+        {
             sb.AppendLine($"internal sealed class {p.Name}PullAdapterKind : IClusterKindContributor");
             sb.AppendLine("{");
             sb.AppendLine($"    public const string KindName = \"pull-{p.Name}\";");
@@ -190,43 +268,15 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("    public ClusterKind CreateKind(ActorSystem system, IServiceProvider provider)");
             sb.AppendLine("    {");
             sb.AppendLine("        var eventStore = provider.GetRequiredService<IEventStoreRepository>();");
-            sb.AppendLine("        var depsSink = provider.GetService<IReadModelDepsSink>();");
             sb.AppendLine("        return new ClusterKind(KindName, Props.FromProducer(() =>");
             sb.AppendLine("            new SignalAdapterActor(eventStore, () =>");
             sb.AppendLine("            {");
-            sb.AppendLine("                // Ein Fähigkeits-Bereich je Adapter-Actor: jede Fähigkeit eines Stores liefert DIESELBE");
-            sb.AppendLine("                //   Instanz (Co-Commit: Effekte + Marke in einer Transaktion).");
             sb.AppendLine("                var faehigkeiten = provider.GetRequiredService<IFaehigkeitsFabrik>().Oeffne();");
-
-            var argNames = new List<string>();
-            if (!ctorParams.IsDefault)
-            {
-                for (int i = 0; i < ctorParams.Length; i++)
-                {
-                    var t = ctorParams[i].Type.ToDisplayString();
-                    sb.AppendLine($"                var d{i} = provider.GetRequiredService<{t}>();");
-                    argNames.Add("d" + i);
-                }
-            }
-            sb.AppendLine($"                var projection = new {fqProjection}({string.Join(", ", argNames)});");
-            var holen = schreibFaehigkeiten.Select(f => $"faehigkeiten.Hole<{f.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat)}>()");
-            sb.AppendLine($"                var candidates = new object[] {{ {string.Join(", ", holen)} }};");
-            sb.AppendLine("                var trackers = candidates.OfType<IProjectionTracker>().Distinct().ToList();");
-            sb.AppendLine("                if (trackers.Count > 1)");
-            sb.AppendLine($"                    throw new InvalidOperationException(\"{p.Name}: Schreib-Fähigkeiten aus mehreren IProjectionTracker-Stores — höchstens einer erlaubt (docs/04 §4.2, CQRS052).\");");
+            EmitKonstruktion(sb, p, "                ");
             sb.AppendLine();
-            sb.AppendLine("                // Achse-B-Schnitt (P4): lösen die Schreib-Fähigkeiten der Handles einen (co-committbaren)");
-            sb.AppendLine("                //   IProjectionTracker-Store auf, ist der Konsument REPLAYBAR (Projektion). Sonst ist er EMITTIEREND");
-            sb.AppendLine("                //   (Reaktion/Pipeline-Event) und bekommt den IEmittentenCursor (durabel, ab Cursor, kein Reset).");
-            sb.AppendLine("                var tracker = trackers.FirstOrDefault();");
-            sb.AppendLine();
-            sb.AppendLine("                // GA-1-Check (P4): eine append-artige Projektion OHNE Co-Commit-Tracker bricht hier");
-            sb.AppendLine("                //   (statt still at-least-once doppelte Appends zu schreiben).");
-            sb.AppendLine("                GaEinsPruefung.PrüfeCoCommit(projection, tracker, projection.SubscriberId);");
-            sb.AppendLine();
-            sb.AppendLine("                IEmittentenCursor? emittentenCursor = tracker is null");
-            sb.AppendLine("                    ? provider.GetService<IEmittentenCursor>()");
-            sb.AppendLine("                    : null;");
+            sb.AppendLine("                // Achse B (P4): ohne Schreib-Fähigkeit ist der Konsument EMITTIEREND (Reaktion) und bekommt den");
+            sb.AppendLine("                //   IEmittentenCursor (durabel, ab Cursor, kein Reset).");
+            sb.AppendLine("                var emittentenCursor = provider.GetService<IEmittentenCursor>();");
             sb.AppendLine();
             sb.AppendLine("                // DIESELBE Ausgabe-Route wie der Push-Actor (HandlerOutputRouter):");
             sb.AppendLine("                //   IEvent → re-publish, ICommand → Reaktion. system.Cluster() hier zur SPAWN-Zeit");
@@ -237,8 +287,8 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine($"                    system.Cluster(), provider.GetService<BrokerPublisher>(), projection.SubscriberId, wirker: global::Abstractions.WirkerId.FuerReaktion(\"{p.Name}\"));");
             sb.AppendLine("                Func<EventEnvelope, ProjectionWriter, EmitAusgaenge, Task> dispatch =");
             sb.AppendLine("                    (e, writer, ausgaenge) => projection.DispatchAsync(e, writer, router.EmitFor(e, ausgaenge), faehigkeiten);");
-            sb.AppendLine("                return (projection.SubscriberId, tracker, emittentenCursor, dispatch);");
-            sb.AppendLine("            }, depsSink, provider.GetService<global::Infrastructure.Lebenszyklus.Passivierung>())));");
+            sb.AppendLine("                return (projection.SubscriberId, emittentenCursor, dispatch);");
+            sb.AppendLine("            }, provider.GetService<IReadModelDepsSink>(), provider.GetService<global::Infrastructure.Lebenszyklus.Passivierung>())));");
             sb.AppendLine("    }");
             sb.AppendLine("}");
             sb.AppendLine();

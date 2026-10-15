@@ -12,10 +12,11 @@ using Microsoft.Extensions.Logging.Abstractions;
 namespace Infrastructure.Integration.Tests.Garantien;
 
 /// <summary>
-/// Garantien der Store-Semantik unter Störung, gegen ECHTES Postgres (docs/11 §11.2, §11.5): ein Append ist atomar, ein zweiter Schreiber
-/// mit veralteter Version verliert kein Update, ein Poison-Stream hält die Hochwassermarke des Polls fest, ohne andere Streams zu
-/// blockieren, ein gescheiterter Append (Tombstones) legt den Poll nicht still (G-7), und zwei Aktivierungen derselben Projektion wenden einen
-/// Effekt nicht doppelt an (G-4).
+/// Garantien der Store-Semantik unter Störung, gegen ECHTES Postgres (docs/11 §11.2, §11.5, §11.6): ein Append ist atomar, ein zweiter
+/// Schreiber mit veralteter Version verliert kein Update, ein Poison-Stream hält die Hochwassermarke des Emittenten-Polls fest, ohne andere
+/// Streams zu blockieren, ein gescheiterter Append (Tombstones) legt den Poll nicht still (G-7); im Batch-Konsum wenden zwei Aktivierungen
+/// derselben Partition einen Effekt nicht doppelt an (G-4), ein Poison-Stream wird geparkt und holt nach der Heilung nach, und ein Neuaufbau
+/// nimmt einem noch laufenden Leser den Commit.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture>
@@ -102,44 +103,112 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
         await es.AppendEventsAsync(danach, 0, new IEvent[] { new ImagePairInspiziert() });
 
         var poller = new Poller(es, async (s, ct) => { await es.ReadStreamAsync(s, 0, ct); return true; }, startHighWater: basis);
+        await BatchHilfe.UhrenversatzAbwartenAsync();   // Karenz 0: das letzte Event soll schon gesetzt sein
         await poller.PollOnceAsync();
 
         var kopf = (await es.ReadChangedStreamsAsync(basis, default)).HighWaterMark;
         poller.HighWater.Should().Be(kopf, "ein gescheiterter Append hinterlässt keinen Stream, an dem jeder Poll für immer hängen bleibt");
     }
 
-    [Fact(Skip = "G-4 offen (docs/13)")]
+    private static readonly Konsum EinePartition = new(1, 500);
+
+    [Fact]
     public async Task Zwei_Aktivierungen_derselben_Projektion_wenden_einen_Effekt_nicht_doppelt_an()
     {
-        // Zwei Aktivierungen desselben (Projektion, Stream) — im Cluster nach einer Netzstörung möglich. Die erste liest die Marke und puffert
+        // Zwei Aktivierungen desselben (Projektion, Partition) — im Cluster nach einer Netzstörung möglich. Die erste liest die Seite und puffert
         // ihren Effekt, hält dann an; die zweite läuft ganz durch; danach committet die erste. Der Effekt ist ein Append (nicht idempotent).
         var es = EventStore();
-        var stream = Guid.NewGuid();
         var proj = "it-zwei-aktivierungen-" + Guid.NewGuid().ToString("N");
+        await BatchHilfe.StarteAmKopfAsync(_fx.Store, proj, EinePartition);
+        var stream = Guid.NewGuid();
         await es.AppendEventsAsync(stream, 0, new IEvent[] { new ImagePairInspiziert() });
 
         var halt = new TaskCompletionSource();
         var angehalten = new TaskCompletionSource();
         var store1 = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
         var store2 = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
-        var erste = new ProjectionAdapter(es, store1, null, proj, Dispatch(store1),
-            crashAfterEffectBeforeMark: async () => { angehalten.TrySetResult(); await halt.Task; });
-        var zweite = new ProjectionAdapter(es, store2, null, proj, Dispatch(store2));
+        var erste = BatchHilfe.HistorieLeser(es, store1, proj, 0, EinePartition,
+            absturz: async () => { angehalten.TrySetResult(); await halt.Task; });
+        var zweite = BatchHilfe.HistorieLeser(es, store2, proj, 0, EinePartition);
 
-        var ersteLaeuft = Task.Run(() => erste.WakeAsync(stream));
+        var ersteLaeuft = Task.Run(() => erste.LaufAsync());
         await angehalten.Task;
-        await zweite.WakeAsync(stream);
+        await zweite.LaufAsync();
         halt.SetResult();
-        try { await ersteLaeuft; } catch { /* ein Konflikt der ersten Aktivierung ist die erwartete Antwort */ }
+        await ersteLaeuft;   // ihr Commit verliert an der Version der Partition, sie lädt neu — der Guard überspringt das Event
 
         (await store1.GetByPairIdAsync(stream))!.Eintraege.Should().HaveCount(1, "der Effekt des Events gilt genau einmal");
     }
 
-    private static Func<EventEnvelope, ProjectionWriter, Infrastructure.PubSub.EmitAusgaenge, Task> Dispatch(IAppendHistorieEintrag effektStore)
+    [Fact]
+    public async Task Ein_Poison_Stream_wird_im_Batch_geparkt_der_Rest_committet_nach_der_Heilung_holt_er_nach()
     {
-        var projection = new ImagePairHistorieProjektion();
-        var faehigkeiten = new FaehigkeitenAus(effektStore);
-        return (e, writer, _) => projection.DispatchAsync(e, writer, _ => Task.CompletedTask, faehigkeiten);
+        var es = EventStore();
+        var proj = "it-poison-" + Guid.NewGuid().ToString("N");
+        await BatchHilfe.StarteAmKopfAsync(_fx.Store, proj, EinePartition);
+        Guid gift = Guid.NewGuid(), gesund = Guid.NewGuid();
+        await es.AppendEventsAsync(gift, 0, new IEvent[] { new ImagePairInspiziert() });
+        await es.AppendEventsAsync(gesund, 0, new IEvent[] { new ImagePairInspiziert(), new ImagePairInspiziert() });
+
+        var heilt = false;
+        var uhr = DateTimeOffset.UnixEpoch;
+        var store = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
+        var leser = BatchHilfe.HistorieLeser(es, store, proj, 0, EinePartition, jetzt: () => uhr,
+            vorher: e => e.AggregateId == gift && !heilt ? throw new InvalidOperationException("Dispatch wirft dauerhaft") : Task.CompletedTask);
+
+        await BatchHilfe.UhrenversatzAbwartenAsync();
+        await leser.LaufAsync();
+        (await store.GetByPairIdAsync(gesund))!.Eintraege.Should().HaveCount(2, "ein vergifteter Stream hält die anderen nicht auf");
+        (await store.GetByPairIdAsync(gift)).Should().BeNull();
+        var stand = (await BatchHilfe.PartitionAsync(_fx.Store, proj, 0))!;
+        stand.Geparkt.Should().ContainSingle(g => g.StreamId == gift, "der Stand ist sichtbar: durabel geparkt");
+        stand.Position.Should().Be(await BatchHilfe.KopfAsync(_fx.Store), "nichts hält die Partition fest");
+
+        await es.AppendEventsAsync(gift, 1, new IEvent[] { new ImagePairInspiziert() });
+        heilt = true;                                       // der Fehler ist behoben (neuer Code, Daten korrigiert)
+        uhr += Konsum.PollIntervall;                        // der nächste Poll versucht geparkte Streams einzeln
+        await leser.LaufAsync();
+
+        (await store.GetByPairIdAsync(gift))!.Eintraege.Should().HaveCount(2, "nichts geht verloren: beide Events, je genau einmal");
+        (await BatchHilfe.PartitionAsync(_fx.Store, proj, 0))!.Geparkt.Should().BeEmpty();
+        (await BatchHilfe.GuardAsync(_fx.Store, proj, gift)).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Ein_Neuaufbau_nimmt_einem_laufenden_Leser_den_Commit()
+    {
+        // Ein Leser puffert seinen Batch; dazwischen setzt ein Neuaufbau die Partition zurück (neue Version, nicht gelöscht). Der Commit des
+        // Lesers darf weder seinen alten Stand wieder anlegen noch seine Effekte schreiben. Eigenes, frisches Schema: nach dem Zurücksetzen liest
+        // der Leser ab Sequenz 0.
+        using var frisch = Fixture.Neu("garantie_neuaufbau_" + Guid.NewGuid().ToString("N")[..8]);
+        try
+        {
+            var es = new MartenEventStore(frisch, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.Zero);
+            var proj = "it-neuaufbau";
+            var stream = Guid.NewGuid();
+            await es.AppendEventsAsync(stream, 0, new IEvent[] { new ImagePairInspiziert() });
+            await new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(frisch).CommitAsync(PartitionsCheckpoint.Neu(proj, 0),
+                new Dictionary<Guid, int>(), default);   // die Partition existiert (Version 1, Position 0)
+
+            var store = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(frisch);
+            var zuruecksetzen = true;
+            var leser = BatchHilfe.HistorieLeser(es, store, proj, 0, EinePartition, absturz: async () =>
+            {
+                if (!zuruecksetzen) return;
+                zuruecksetzen = false;
+                await new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(frisch).ResetAllAsync(proj, default);
+            });
+
+            await leser.LaufAsync();   // der erste Commit verliert, der Leser lädt den zurückgesetzten Stand und liest neu
+
+            var stand = (await BatchHilfe.PartitionAsync(frisch, proj, 0))!;
+            stand.Version.Should().Be(3, "angelegt (1), zurückgesetzt (2), der Commit nach dem Neuladen (3) — der verlorene zählt nicht");
+            (await store.GetByPairIdAsync(stream))!.Eintraege.Should().HaveCount(1, "genau einmal — der verlorene Commit hinterließ nichts");
+        }
+        finally
+        {
+            await frisch.Advanced.Clean.CompletelyRemoveAllAsync();
+        }
     }
 
     private sealed class NoopFactory : IAggregateHandlerFactory
@@ -150,13 +219,15 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
     /// <summary>Eigenes Marten-Schema (Isolation gegen andere Tests und die Sim-Daten).</summary>
     public sealed class Fixture : IDisposable
     {
-        public IDocumentStore Store { get; } = DocumentStore.For(opts =>
+        public IDocumentStore Store { get; } = Neu("garantie_it");
+
+        public static DocumentStore Neu(string schema) => DocumentStore.For(opts =>
         {
             opts.Connection("Host=localhost;Port=5432;Database=cqrs_events;Username=postgres;Password=postgres");
-            opts.DatabaseSchemaName = "garantie_it";
-            opts.Events.DatabaseSchemaName = "garantie_it";
+            opts.DatabaseSchemaName = schema;
+            opts.Events.DatabaseSchemaName = schema;
             opts.AutoCreateSchemaObjects = JasperFx.AutoCreate.All;
-            opts.Schema.For<ProjectionCheckpoint>().Identity(x => x.Id);
+            KonsumSchema.Registriere(opts);
         });
 
         public void Dispose() => Store.Dispose();

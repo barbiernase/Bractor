@@ -75,7 +75,8 @@ sind in [04 §4.7](04-konsum-und-prozess-maschine.md) beschrieben.
 
 **Passivierung** (PF-5): hört ein Aggregat-Actor `Lebenszyklus.AggregatLeerlaufSekunden` lang nichts (Standard 600), stoppt er sich
 (`Infrastructure/Lebenszyklus/Passivierung.cs`, Proto-`ReceiveTimeout`); beim Stoppen schreibt er seinen Snapshot, die nächste Nachricht
-aktiviert ihn frisch (Snapshot + Tail, Inbox inklusive). Adapter und Prozess-Manager passivieren genauso ([04](04-konsum-und-prozess-maschine.md)).
+aktiviert ihn frisch (Snapshot + Tail, Inbox inklusive). Emittenten-Adapter und Prozess-Manager passivieren genauso; die Batch-Leser der
+Projektionen (je Projektion und Partition) nicht ([04](04-konsum-und-prozess-maschine.md) §4.1).
 
 ## 3.2 Das Aggregat-Modell (reiner Fachcode)
 
@@ -137,9 +138,14 @@ nicht aus Namespaces (`CommandAggregateMapGenerator`).
 - **Read** (`ReadStreamAsync`): `Where(StreamId == && Version >= from).OrderBy(Version)`, materialisiert `EventEnvelope` (Akteur aus dem
   Header als `UserId`). Dabei läuft jedes Event durch die Upcasting-Naht `GeneratedEventUpcasting.Aufwerten` (1:1 oder 1:N mit
   `SubIndex`) — eine Backend-Primitive für Prod (`IUpcast`), die heute keine Domäne nutzt; ohne Upcast ist sie ein Durchreichen.
-- **Poll-Backstop** (`ReadChangedStreamsAsync`): globale Marten-Sequenz `seq_id` mit **Straggler-Karenz** (Default 3 s): die
-  High-Water-Mark rückt nur bis zur höchsten Sequenz vor, deren Event älter als die Karenz ist — schützt gegen nebenläufig in umgekehrter
-  Seq-Reihenfolge sichtbare Commits. Referenzzeit ist die DB-Uhr (`select now()`), kein App/DB-Versatz.
+- **Poll-Backstop** (`ReadChangedStreamsAsync`, Emittenten und Dirigent): globale Marten-Sequenz `seq_id` mit **Straggler-Karenz** (Default
+  3 s): die High-Water-Mark rückt nur bis zur höchsten Sequenz vor, deren Event älter als die Karenz ist — schützt gegen nebenläufig in
+  umgekehrter Seq-Reihenfolge sichtbare Commits. Referenzzeit ist die DB-Uhr (`select now()`); den Event-Zeitstempel setzt Marten mit der Uhr
+  des Hosts (Versatz gemessen unter 1 ms).
+- **Partitions-Seite** (`ReadPartitionAsync`, Batch-Konsum der Projektionen): erst die gesetzte Sequenz (dieselbe Karenz-Regel, rückwärts über
+  den Primärschlüssel), dann die Events einer Partition (`get_byte(uuid_send(stream_id), 15) % P`) jenseits der Position, nur die abonnierten
+  Typen samt Upcasting-Herkunft, ohne schon Erledigtes, `order by seq_id limit N`; materialisiert wie `ReadStreamAsync`
+  ([04](04-konsum-und-prozess-maschine.md) §4.1.1).
 
 ## 3.4 Group-Commit-Batching + paralleler Drain
 

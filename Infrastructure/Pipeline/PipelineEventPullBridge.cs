@@ -6,7 +6,7 @@ namespace Infrastructure.Pipeline;
 
 /// <summary>
 /// P6.2 — die Brücke, die den EVENT-Pfad einer Pipeline (Kanal 2: Event rein → Command raus) an die
-/// geordnete Pull-/Signal-Maschine (<see cref="Infrastructure.Projections.ProjectionAdapter"/>) hängt,
+/// geordnete Pull-/Signal-Maschine (<see cref="Infrastructure.Projections.EmittentenAdapter"/>) hängt,
 /// statt an den verlustbehafteten Push-Broker (<c>BrokerSubscription</c> in <c>PipelineActorBase</c>).
 ///
 /// Der Event-Pfad IST eine Reaktion (Ein-Strom/Emittierend, Achse B): er faltet nicht, sondern

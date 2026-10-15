@@ -27,23 +27,24 @@ es nur für nicht-autoritative Randstores (Inv. 6).
 
 ## 12.2 Zahlen
 
-**Aktuell (2026-10-15, Phase 2 des Plans Garantien und Durchsatz):** Prüfstand **570 grün + 1 übersprungen** (Lücke G-5),
-Integration **44 + 1** (G-4) sequentiell (≈ 105 s), Prüfdomäne **23 + 1** (G-2) sequentiell (≈ 100 s); Garantie-Suite: Prüfstand 154 + 1,
-Integration 26 + 1, Prüfdomäne 18 + 1;
-Werkbank-Abnahme **1/1** sequentiell (≈ 130 s), `Client.Infrastructure.CollectionTests` **30/30**, Python SDK **34/34**, Worker **21/21**;
+**Aktuell (2026-10-15, Phase 3 des Plans Garantien und Durchsatz):** Prüfstand **582 grün + 1 übersprungen** (Lücke G-5),
+Integration **49 + 0** sequentiell (≈ 105 s), Prüfdomäne **23 + 1** (G-2) sequentiell (≈ 100 s); Garantie-Suite: Prüfstand 159 + 1,
+Integration 31 + 0, Prüfdomäne 18 + 1;
+Werkbank-Abnahme **1/1** sequentiell (≈ 110 s), `Client.Infrastructure.CollectionTests` **30/30**, Python SDK **34/34**, Worker **21/21**;
 `--check` grün (alle Bereiche inkl. „Lage“), `--sonde` grün (111 Soll-Fakten, Lage-Soll 56 Typen); Gate `./pruefe-checkout.sh` grün.
 
 Statisch gezählt (2026-10-15):
 
 | Projekt | `[Fact]` | `[Theory]` | Dateien |
 |---|---:|---:|---:|
-| Infrastructure.Pruefstand.Tests | 533 | 6 | 81 |
-| Infrastructure.Integration.Tests | 45 | 0 | 21 |
-| Pruefdomaene.Integration.Tests | 22 | 0 | 8 |
-| Client.Infrastructure.CollectionTests | 30 | 0 | 2 |
+| Infrastructure.Pruefstand.Tests | 551 | 8 | 86 |
+| Infrastructure.Integration.Tests | 49 | 0 | 22 |
+| Pruefdomaene.Integration.Tests | 24 | 0 | 9 |
+| Client.Infrastructure.CollectionTests | 31 | 0 | 2 |
 | Werkbank.Abnahme.Tests | 1 | 0 | 2 |
 
-Die Differenz zwischen 539 Methoden und 555 Läufen im Prüfstand kommt von den expandierten `[Theory]`-Fällen.
+Gezählt: Zeilen `[Fact]`/`[Fact(` bzw. `[Theory]`, Dateien = alle `.cs` des Projekts. Die Differenz zwischen 559 Methoden und 583 Läufen im
+Prüfstand kommt von den expandierten `[Theory]`-Fällen.
 
 ## 12.3 Was getestet ist
 
@@ -58,28 +59,28 @@ Die Differenz zwischen 539 Methoden und 555 Läufen im Prüfstand kommt von den 
 | Extractor, Gesten, Sicht | 47 | `GestenTests` (30), `SichtTests`, `LesenToleranzTests`, `UsingsTests` |
 | Schreibpfad, Signale, Serialisierung | 24 | `SignalTypeGeneratorTests`, `SignalEmitTests`, `SignalWireRoundTripTests`, `EventJsonSerializationTests`, `EventVersioningTests`, `AppendBatchingTests`, `DtoMapperRoundTripTests` |
 | Beispiel-Aggregate | 39 | `DatensatzAggregatTests`, `TrainingslaufAggregatTests`, `SammelvorgangBarriereTests`, `SammelvorgangKaskadeTests`, `BoundedInboxTests` |
-| Quellen, Umgebung, Spur, Dienste | 64 | `DateiTreiberTests` (17), `UmgebungLaderTests`, `ProjektionsStandTests`, `SpurTests`, `WirkerIdTests`, `SpurWegTests`, `DienstBindungTests` (15) |
-| Konsum-Maschine, Prozess | 37 | `EmittentenCursorTests`, `ProjectionRebuilderTests`, `EmittentenPfadAdapterTests`, `GaEinsPruefungTests`, `ProzessPollFilterTests`, `AblehnungsMarkeTests`, `ReaktionsIdTests`, `CommandVorpruefungTests`, `DispatcherCommandFailedTests`, `TransientPersistiertSplitTests`, `DeadLetterReadStoreTests` |
-| Übrige | 26 | `PassivierungTests` (Leerlauf stoppt, Nachricht schiebt hinaus, 0 = nie), `FristSchedulerTests`, `FristPlanerTests`, `BackendMonitoringTests`, `EingangJsonTests`, `BrokerIdentityTests`, Handle-Welt: `PipelineEventPullBridgeTests`, `TimerTriggerTests`, `WebhookTriggerTests` |
-| Garantien (Störung über Seams, `Garantien/`) | 26 + 1 übersprungen | `EmitGarantieTests` (Emit-Ausgang je Antwort, Drossel je Ziel, volle Drossel meldet unbekannt, Dirigent: Backoff nach unbekanntem Ausgang, kein Doppel-Send, sofortige Weckung nach entschiedenem), `FristGarantieTests` (zugestellt, abgelehnt, Emit-Timeout und -Fehlschlag lassen die Frist liegen, doppeltes Feuern), `KonsumGarantieTests` (doppelte/ungeordnete Weckungen, Absturz zwischen Emit und Cursor, nicht zugestellter Emit hält den Cursor, Ablehnung ist entschieden, Commands eines Tails parallel), `RehydrationGarantieTests` (Neustart stellt die Inbox her, Split-Upcast Skip G-5), `BuildGarantieTests` (CQRS010/011/052/053, Wire-Boot-Check) |
+| Quellen, Umgebung, Spur, Dienste | 65 | `DateiTreiberTests` (17), `UmgebungLaderTests`, `ProjektionsStandTests`, `SpurTests`, `WirkerIdTests`, `SpurWegTests`, `DienstBindungTests` (15) |
+| Konsum-Maschine, Prozess | 37 | `EmittentenCursorTests`, `ProjectionRebuilderTests` (Neuaufbau über Partitionen als Strom), `BatchLeserTests` (Position über fremde Events, Typfilter), `EmittentenPfadAdapterTests`, `GaEinsPruefungTests`, `ProzessPollFilterTests`, `AblehnungsMarkeTests`, `ReaktionsIdTests`, `CommandVorpruefungTests`, `DispatcherCommandFailedTests`, `TransientPersistiertSplitTests`, `DeadLetterReadStoreTests` |
+| Übrige | 26 | `PassivierungTests` (Leerlauf stoppt, Nachricht schiebt hinaus, 0 = nie; Sammlung „Zeitkritisch“, nie parallel), `FristSchedulerTests`, `FristPlanerTests`, `BackendMonitoringTests`, `EingangJsonTests`, `BrokerIdentityTests`, Handle-Welt: `PipelineEventPullBridgeTests`, `TimerTriggerTests`, `WebhookTriggerTests` |
+| Garantien (Störung über Seams, `Garantien/`) | 33 + 1 übersprungen | `BatchKonsumGarantieTests` (doppelte/ungeordnete Seiten und Nachzügler, volle Seiten, Absturz mitten im Batch, zwei Aktivierungen, Poison parken und nachholen, Konflikt trennen, dauerhafter Konflikt hält die Position; Seams `PartitionsLog`, `SpeicherTracker` in `BatchKonsum/`), `EmitGarantieTests` (Emit-Ausgang je Antwort, Drossel je Ziel, volle Drossel meldet unbekannt, Dirigent: Backoff nach unbekanntem Ausgang, kein Doppel-Send, sofortige Weckung nach entschiedenem), `FristGarantieTests` (zugestellt, abgelehnt, Emit-Timeout und -Fehlschlag lassen die Frist liegen, doppeltes Feuern), `KonsumGarantieTests` (doppelte/ungeordnete Weckungen, Absturz zwischen Emit und Cursor, nicht zugestellter Emit hält den Cursor, Ablehnung ist entschieden, Commands eines Tails parallel), `RehydrationGarantieTests` (Neustart stellt die Inbox her, Split-Upcast Skip G-5), `BuildGarantieTests` (CQRS010/011/052/053, Wire-Boot-Check) |
 
 **Integration (Ebene 2):**
 
 | Klasse | Tests | Beweisgegenstand |
 |---|---:|---|
-| `CoCommitPostgresTests` | 3 | Effekt + Checkpoint atomar in einer Marten-Session; Absturz dazwischen → genau ein Eintrag |
-| `GeteilteDokumentePostgresTests`, `SchreibRegelPostgresTests` | 4 + 5 | Single-Writer je Dokument, OCC bei geteilten Dokumenten, Wiederholung |
-| `SequenceGapPostgresTests` | 2 | `seq_id`-Lücke + Straggler-Grace |
+| `CoCommitPostgresTests` | 3 | Batch-Co-Commit: Effekte vieler Streams, Guards und Partitions-Checkpoint in einer Marten-Session (ein Commit je Batch); Absturz mitten im Batch → nichts gültig, Wiederholung genau einmal |
+| `GeteilteDokumentePostgresTests`, `SchreibRegelPostgresTests` | 4 + 5 | Single-Writer je Dokument, OCC bei geteilten Dokumenten zwischen zwei bzw. vier Partitions-Lesern, Trennen und Wiederholung |
+| `SequenceGapPostgresTests` | 3 | `seq_id`-Lücke + Straggler-Grace; der Batch-Leser überholt einen Nachzügler nicht und wendet jedes Event genau einmal an |
 | `MetadataPostgresTests` | 3 | Header-Readback |
 | `DeadlineStorePostgresTests` | 2 | durabler Fristplan |
-| `PollerBackstopPostgresTests` | 1 | Poll-Cursor heilt verlorene Signale |
+| `PollerBackstopPostgresTests` | 2 | Poll-Cursor der Emittenten heilt verlorene Signale; der Batch-Leser holt ein Event mit verlorenem Signal beim nächsten Poll nach (auch eines, das während des Durchlaufs kam) |
 | `LiveCommandE2ETests` | 1 | Command → Event → Projektion im Cluster |
 | `TwoNodeCommandDispatchTests`, `RemotePidDeliverySmokeTests`, `SignalDeliveryClusterTests` | 3 | Cross-Node-Serialisierung, Remote-PID, Signal-Zustellung |
 | `PipelineFlussE2ETests` | 5 | Fluss gegen den echten Cluster: Quelle → Dirigent → Vermittler → Abholer → Fakt, auch mit Python-Worker über gRPC; Warten + Backstop; Lese-Fähigkeit |
 | `VertragsZusageE2ETests` | 1 | doppelt zugestellte Zusage wirkt genau einmal |
 | `UmgebungE2ETests`, `LeseseitenStandE2ETests`, `EingangE2ETests` | 3 + 1 + 1 | Siegel, Projektions-Stand nach Code-Änderung, JSON-Eingang/Webhook |
 | `MonitoringHttpTests` | 2 | `/health`, Kennzahlen |
-| `Garantien/GarantiePostgresTests` | 4 + 1 übersprungen | ein Append ganz oder gar nicht, zwei Schreiber ohne verlorenes Update, Poison-Stream hält die HWM ohne andere zu blockieren, ein gescheiterter Append (Tombstones) legt den Poll nicht still; zwei Aktivierungen einer Projektion (Skip G-4) |
+| `Garantien/GarantiePostgresTests` | 7 | ein Append ganz oder gar nicht, zwei Schreiber ohne verlorenes Update, Poison-Stream hält die HWM des Emittenten-Polls ohne andere zu blockieren, ein gescheiterter Append (Tombstones) legt den Poll nicht still; Batch-Konsum: zwei Aktivierungen einer Partition wenden nichts doppelt an (G-4), ein Poison-Stream wird geparkt und holt nach, ein Neuaufbau nimmt einem laufenden Leser den Commit |
 | `EingangE2ETests.Client_wiederholt_mit_derselben_CommandId…` | 1 | Client-Wiederholung über den JSON-Eingang wirkt genau einmal |
 | Handle-Welt: `PipelineWebhookHttpTests`, `TimerTriggerSchedulingTests` | 2 | Trigger-Pfade ohne Domänen-Nutzer (`docs/13` W11-1) |
 
@@ -131,7 +132,7 @@ Netzwerk und Proto.Actor kommen im echten Host dazu); **belastbar sind die Verh�
 
 | Operation (bildet nach) | Lauf 1 | Lauf 2 |
 |---|---|---|
-| Weckung je (Projektion, Stream): Tracker lesen, Tail lesen, Effekt + Checkpoint in einer Transaktion (`ProjectionAdapter`) | 8 200/s (16 Verb.), 3 300/s (4) | 4 100/s, 1 700/s |
+| Weckung je (Projektion, Stream): Tracker lesen, Tail lesen, Effekt + Checkpoint in einer Transaktion (bis Phase 2 der Pfad der Projektionen) | 8 200/s (16 Verb.), 3 300/s (4) | 4 100/s, 1 700/s |
 | leere Weckung (Poll-Heilung, nichts zu tun): zwei Lese-Queries | 37 000/s (16), 13 400/s (4) | 16 700/s, 8 200/s |
 | Batch: 500 Effekte + 500 Checkpoints in einer Transaktion (4 Verb.) | 350 Tx/s = 175 000 Effekte/s | 182 Tx/s = 91 000 Effekte/s |
 | Group-Commit, 256 Appends je Tx, ohne Inbox-Marke (4 Verb.) | 510–780 Tx/s | 554 Tx/s |
@@ -364,7 +365,7 @@ weckte alle 15 s jeden gerade passivierten Vorgang kalt) — seitdem verlangt ei
 (`…_phase-2-stoerung` mit Abbau nach Fortschritt): 29 609 Vorgänge und 181 Bildpaare, alles genau einmal, Abbau 310 s.
 
 **Als korrekt verifiziert (Backend-Audit 2026-08, nicht erneut jagen):** Versionsarithmetik inkl. Inbox-Marken; OCC-Skip auf dem
-`AnyVersion`-Pfad; Append vor State-Mutation; Shard-Hash-Konsistenz Subscribe ↔ gezieltes Publish; Pre-Dispatch-Guard des `ProjectionAdapter`;
+`AnyVersion`-Pfad; Append vor State-Mutation; Shard-Hash-Konsistenz Subscribe ↔ gezieltes Publish; Pre-Dispatch-Guard des Adapters je Stream (heute `EmittentenAdapter`);
 Signal→Wake-Mapping; Kompensations-Dedup und Count-Join ohne verfrühtes Feuern; Snapshot-Schema-Gating; Metadaten-Readback.
 
 ## 12.6 Wie man einen Test schreibt
@@ -412,7 +413,12 @@ Entwicklers bleiben unberührt; am Ende SIGTERM an die Werkbank (sie hält Host 
   Zustell-Selektion), Cluster-Diagnose mit einem eigenständigen Programm mit sichtbaren Logs.
 - **Cluster-Cold-Boot:** Konvergiert die Identitäts-Platzierung beim ersten Start nicht, hilft kein längerer Timeout; viele Cluster-Boot-Läufe
   hintereinander degradieren die lokale Infra (zwischendurch neu starten).
-- **`SequenceGapPostgresTests`** flaken im Gesamtlauf gelegentlich, einzeln grün.
+- **Event-Zeitstempel kommen vom Client:** Marten setzt `timestamp` beim Append mit der Uhr des Hosts, die Karenz (Poll, Batch-Leser) vergleicht
+  ihn mit der DB-Uhr. Direkt nach dem Append liegt er manchmal bis 0,2 ms „in der Zukunft“ — Tests mit Karenz 0, die eine Position bzw.
+  Hochwassermarke prüfen, warten vorher kurz (`BatchHilfe.UhrenversatzAbwartenAsync`). Das war die Ursache der früher gelegentlich flackernden
+  `SequenceGapPostgresTests` und `GarantiePostgresTests.Ein_gescheiterter_Append…`.
+- **Zeit-Tests nie parallel:** Prüfstand-Tests mit echter Uhr (Leerlauf, Takte im Millisekunden-Bereich) gehören in die Sammlung
+  `Zeitkritisch` (`DisableParallelization`); im parallelen Lauf verschieben CPU-hungrige Nachbarn (Analyzer-Kompilate) ihre Takte um Hunderte ms.
 - `[Trait("Kategorie", "Garantie")]` markiert die Garantie-Suite; `Skip` gibt es nur für offene G-Lücken (`G-n offen (docs/13)`). Flake-Handling
   bleibt Konvention.
 - **Messung:** `pg_stat_database` schreibt seine Zähler verzögert fort (Sekunden) — für Messfenster taugt nur `pg_stat_statements`; mit

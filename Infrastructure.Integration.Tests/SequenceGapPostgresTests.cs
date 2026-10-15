@@ -2,6 +2,7 @@ using Abstractions;
 using Domain.ImagePair;
 using FluentAssertions;
 using Infrastructure.Persistence;
+using Infrastructure.Projections;
 using JasperFx.Events;
 using Marten;
 using Marten.Services;
@@ -68,6 +69,7 @@ public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.F
         // B committet ZUERST → nur B sichtbar.
         await txB.CommitAsync();
 
+        await BatchHilfe.UhrenversatzAbwartenAsync();
         var scanNurB = await reader.ReadChangedStreamsAsync(baseHwm, default);
         scanNurB.StreamIds.Should().Contain(streamB);
         scanNurB.StreamIds.Should().NotContain(streamA, "A ist noch uncommitted");
@@ -115,9 +117,58 @@ public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.F
         mit.HighWaterMark.Should().Be(trueMax,
             "die Straggler-Karenz rückt die HWM NICHT über das zu junge Event hinaus (schützt in-flight Nachzügler)");
 
-        // Ohne Karenz: die HWM rückt sofort über das Event (die alte, für Befund 3 unsichere Logik).
+        // Ohne Karenz: die HWM rückt sofort über das Event (die alte, für Befund 3 unsichere Logik). Kurz warten: den Event-Zeitstempel setzt
+        //   der Client, er liegt manchmal Bruchteile einer Millisekunde vor der DB-Uhr (BatchHilfe.UhrenversatzAbwartenAsync).
+        await BatchHilfe.UhrenversatzAbwartenAsync();
         var ohne = await ohneKarenz.ReadChangedStreamsAsync(trueMax, default);
         ohne.HighWaterMark.Should().BeGreaterThan(trueMax, "ohne Karenz rückt die HWM sofort vor");
+    }
+
+    /// <summary>
+    /// Derselbe Nachzügler im Batch-Konsum: der Leser wendet die höhere, früher committete Sequenz sofort an, rückt seine Position aber nicht
+    /// über die Karenz hinaus — die niedrigere Sequenz, die erst danach sichtbar wird, liest der nächste Durchlauf. Jedes Event genau einmal,
+    /// auch nach einer Neuaktivierung (der Guard fängt die Wiederholung ab).
+    /// </summary>
+    [Fact]
+    public async Task Batch_Leser_ueberholt_einen_Nachzuegler_nicht_und_wendet_jedes_Event_genau_einmal_an()
+    {
+        var es = new MartenEventStore(_fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.FromMinutes(5));
+        var konsum = new Konsum(1, 500);
+        var proj = "it-nachzuegler-" + Guid.NewGuid().ToString("N");
+        await BatchHilfe.StarteAmKopfAsync(_fx.Store, proj, konsum);
+        var kopf = await BatchHilfe.KopfAsync(_fx.Store);
+        var (streamA, streamB) = (Guid.NewGuid(), Guid.NewGuid());
+
+        await using var connA = new NpgsqlConnection(Fixture.ConnString);
+        await using var connB = new NpgsqlConnection(Fixture.ConnString);
+        await connA.OpenAsync();
+        await connB.OpenAsync();
+        var txA = await connA.BeginTransactionAsync();
+        var txB = await connB.BeginTransactionAsync();
+        await using (var sA = _fx.Store.LightweightSession(SessionOptions.ForTransaction(txA)))
+        {
+            sA.Events.StartStream(streamA, new ImagePairInspiziert());
+            await sA.SaveChangesAsync();
+        }
+        await using (var sB = _fx.Store.LightweightSession(SessionOptions.ForTransaction(txB)))
+        {
+            sB.Events.StartStream(streamB, new ImagePairInspiziert());
+            await sB.SaveChangesAsync();
+        }
+        await txB.CommitAsync();                                     // die höhere Sequenz wird zuerst sichtbar
+
+        var store = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
+        var leser = BatchHilfe.HistorieLeser(es, store, proj, 0, konsum);
+        await leser.LaufAsync();
+        (await store.GetByPairIdAsync(streamB))!.Eintraege.Should().HaveCount(1, "jung, aber angewandt (Latenz)");
+        leser.Position.Should().Be(kopf, "die Position überholt die noch unsichtbare kleinere Sequenz nicht");
+
+        await txA.CommitAsync();                                     // erst jetzt wird die kleinere Sequenz sichtbar
+        await leser.LaufAsync();
+        await BatchHilfe.HistorieLeser(es, new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store), proj, 0, konsum).LaufAsync();
+
+        (await store.GetByPairIdAsync(streamA))!.Eintraege.Should().HaveCount(1);
+        (await store.GetByPairIdAsync(streamB))!.Eintraege.Should().HaveCount(1, "die Neuaktivierung liest es erneut, der Guard überspringt es");
     }
 
     private async Task<long> SeqOf(Guid streamId)
@@ -148,6 +199,7 @@ public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.F
                 opts.DatabaseSchemaName = "audit_befund3_it";
                 opts.Events.DatabaseSchemaName = "audit_befund3_it";
                 opts.AutoCreateSchemaObjects = JasperFx.AutoCreate.All;
+                Core.KonsumSchema.Registriere(opts);
             });
         }
 

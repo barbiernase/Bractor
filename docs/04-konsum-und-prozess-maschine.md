@@ -1,83 +1,131 @@
 # 04 — Konsum- & Prozess-Maschine (vier Konsumenten, eine Maschine)
 
-Stand 2026-10-13, gegen den Code geprüft. Maßstab: docs/konzept-werkbank.md.
+Stand 2026-10-15 (Batch-Konsum, Plan Garantien und Durchsatz Phase 3), gegen den Code geprüft. Maßstab: docs/konzept-werkbank.md.
 
 Projektion, Reaktion, Prozess und Fluss sind **vier durable Konsumenten des Logs**. Sie folgen demselben Muster: ein Signal weckt
 schnell, ein Poll heilt verlorene Signale, gelesen wird geordnet aus dem Event-Store (Invariante 1), der Fortschritt liegt durabel im
 Store bzw. im Log. Es gibt keinen zweiten Marker und keine Taxonomie: was ein Konsument ist, folgt aus seiner Code-Form (Marker-Interface,
-Fähigkeits-Parameter, Rückgabetyp). Konkret laufen zwei Schleifen:
+Fähigkeits-Parameter, Rückgabetyp). Konkret laufen drei Schleifen:
 
 | Konsument | Code-Form | Schleife | Fortschritt | Achse B |
 |---|---|---|---|---|
-| Projektion | `ISubscriber, IPullSubscriber`; `Handle` mit Schreib-Fähigkeit | `ProjectionAdapter` je (Konsument, Stream) | Marke im Store, co-committet | replaybar |
-| Reaktion | `ISubscriber, IPullSubscriber`; `Handle` ohne Schreib-Fähigkeit, gibt Commands aus | `ProjectionAdapter` je (Konsument, Stream) | `IEmittentenCursor`, vorgerückt nach bestätigtem Emit | emittierend |
+| Projektion | `ISubscriber, IPullSubscriber`; `Handle` mit Schreib-Fähigkeit | `BatchLeser` je (Projektion, Partition) | Partitions-Checkpoint (Position, Version) und Guard je Stream, co-committet | replaybar |
+| Reaktion | `ISubscriber, IPullSubscriber`; `Handle` ohne Schreib-Fähigkeit, gibt Commands aus | `EmittentenAdapter` je (Konsument, Stream) | `IEmittentenCursor`, vorgerückt nach bestätigtem Emit | emittierend |
 | Prozess | `IProzessDefinition`, `Prozess<T>.Definiere(…)` | Dirigent (`ProzessManager`) je Vorgang | Fold aus dem Log (+ Marking-Cursor) | emittierend |
 | Fluss | `IPipeline`, `PipelineFluss.Definiere(…)` | derselbe Dirigent | wie Prozess | emittierend |
 
 Ein Fluss wird in Prozess-Regeln übersetzt; Prozess und Fluss sind damit zwei Schreibweisen auf einem Dirigenten (§4.6). Wie man die
 Bausteine schreibt: [10](10-entwickler-api.md).
 
-## 4.1 Die gemeinsame Pull-/Signal-Schleife
+## 4.1 Die Pull-/Signal-Schleifen
 
-Herzstück für Projektion und Reaktion ist `ProjectionAdapter` (`Infrastructure/Projections/ProjectionAdapter.cs`). Die store-agnostische
-Schleife trägt die *Policy* (Marke lesen → ab Marke+1 geordnet lesen → Guard → dispatchen → Marke vorrücken), aber **keine Transaktion**.
+Projektionen lesen **im Batch** (eine Transaktion für die Effekte vieler Streams), Emittenten **je Stream** (ihr Cursor rückt erst nach
+bestätigtem Emit vor). Beide sind store-agnostisch: die Schleife trägt die *Policy*, die Transaktion trägt der Store (§4.3).
 
-`WakeAsync(streamId, ct)` → `bool` (bestätigt aufgeholt), für Signal und Poll gleich:
-1. **Startposition:** mit Tracker → `LastProcessedVersionAsync`; mit Emittenten-Cursor → `LadeAsync − 1`; ohne beides bewusst `−1` (ab 0,
-   at-least-once, nur für idempotente Effekte gültig).
-2. **Geordnet lesen** ab `applied+1` über `IEventStoreRepository.ReadStreamAsync` — das tragende Pull-Leseprimitiv.
+### 4.1.1 Batch-Konsum der Projektionen
+
+**Partition.** Jede replaybare Projektion hat `P` Partitionen (Umgebung `Konsum.Partitionen`, Standard 8). Ein Stream gehört genau einer:
+letztes Byte der UUID in RFC-Reihenfolge modulo P — in SQL `get_byte(uuid_send(stream_id), 15) % P`, in .NET
+`id.ToByteArray(bigEndian: true)[15] % P` (`Abstractions/PartitionsCheckpoint.cs`, `Partitionierung`). Beide Seiten rechnen dasselbe, ohne Index
+und ohne Hash-Abhängigkeit von Laufzeit oder PG-Version; für zufällige und gehashte Ids gleichverteilt. `P` ≤ 256; ein Wechsel von `P` ist ein
+Neuaufbau (er gehört zum Stand der Leseseite, §4.3).
+
+**Partitions-Leser** (`Infrastructure/Projections/BatchLeser.cs`, als `BatchLeserActor` ein virtueller Cluster-Actor, Kind
+`batch-<Projektion>`, Identität = Partition). Der Cluster hält eine Aktivierung je Partition; fällt das bei einer Netzstörung kurz aus, schützt
+die Versionsprüfung des Partitions-Checkpoints (G-4, unten). Ein Durchlauf:
+1. **Stand laden:** `PartitionsCheckpoint { Id = "<projektion>:<p>", Position (globale Sequenz), Version, Geparkt }` über den Store
+   (`IProjectionTracker.LadePartitionAsync`).
+2. **Seite lesen:** `IEventStoreRepository.ReadPartitionAsync` — Events mit `seq_id` jenseits der Position, nur Partition `p`, nur die
+   **abonnierten Typen samt aller früheren Versionen, die per Upcasting in sie münden** (generierte Tabelle `GeneratedEventUpcasting.Herkunft`;
+   ohne verlässliche Liste ohne Typfilter), ohne schon Erledigtes, `order by seq_id limit N` (`Konsum.BatchGroesse`, Standard 500).
+   Materialisiert wird wie in `ReadStreamAsync` (Upcasting, Tombstones überspringen).
+3. **Guard je Stream:** die `ProjectionCheckpoint`s der Streams der Seite in **einer** Abfrage (`LadeGuardsAsync`); Events mit
+   `AggregateVersion <= Guard` überspringen (Wiederholung nach Neuaktivierung oder verlorenem Commit).
+4. **Anwenden:** je Stream in Versionsreihenfolge über den generierten `DispatchAsync` (unverändert). Der Store puffert die Effekte aller
+   Streams; vor jedem Event setzt der Leser den Stream des Events (`Stream(id)`), die Schreib-Regel je Dokument (§4.3) prüft gegen ihn.
+5. **Commit (eine Transaktion):** alle Effekte, die Guards der berührten Streams und der Partitions-Checkpoint mit erwarteter Version
+   (`CommitAsync`). Hat dazwischen eine zweite Aktivierung oder ein Neuaufbau geschrieben, fällt der ganze Batch zurück
+   (`PartitionsKonfliktException`), der Leser lädt den Stand neu und liest von dort (G-4).
+6. **Danach** der Versions-Index (Redis) für die Events des Batches best-effort, parallel — nie über Uncommittetes.
+7. **Weiter**, solange die Seite voll war.
+
+**Position und Nachzügler.** Vor jeder Seite bestimmt `ReadPartitionAsync` die *gesetzte* Sequenz: die höchste, deren Event älter als die Karenz
+ist (3 s, DB-Uhr; dieselbe Regel wie beim Poll der Emittenten). Die Position rückt nie darüber hinaus, bei voller Seite nie über deren Ende und
+nie über das erste Event eines hängenden Streams (unten). Jüngere Events werden trotzdem angewandt (Latenz); welche schon erledigt sind, merkt
+sich die Aktivierung und schließt sie beim nächsten Lesen aus, nach einer Neuaktivierung fängt der Guard sie ab. So überholt die Position keine
+noch unsichtbare kleinere Sequenz. Gelesen wird ab einer Lese-Position im Speicher: durabel wird sie mit jedem Commit eines Batches; über fremde
+Events hinweg (leere Seite) höchstens einmal je Poll-Intervall — sonst committete unter Last jede Weckung nur eine Zahl. Grenzfall wie beim
+Poll: eine Transaktion, die länger als die Karenz offen ist, kann überholt werden. Den Event-Zeitstempel setzt Marten beim Append mit der Uhr des
+Clients; ein Versatz zur DB-Uhr verschiebt die Karenz um diesen Betrag (gemessen unter 1 ms).
+
+**Poison und Konflikt halten niemanden auf.**
+- Wirft der Dispatch, ist der Batch verworfen; der Stream des werfenden Events wird abgetrennt und allein versucht, der Rest läuft ohne ihn.
+  Wirft ein Commit (ohne Konflikt), wird der Batch nach Streams **halbiert**, bis der schuldige Stream allein steht. Wirft ein Stream allein,
+  wird er **geparkt** (`Geparkt` im Partitions-Checkpoint, im selben Commit wie der Rest; Dead-Letter einmal je Parken). Seine weiteren Events
+  überspringt der Leser; je Poll-Intervall versucht er ihn einzeln ab seinem Guard (`ReadStreamAsync`) und nimmt ihn heraus, sobald er
+  durchläuft. Nichts geht verloren, die übrigen Streams laufen weiter, der Stand ist sichtbar (`/health`).
+- Ein Konflikt an einem geteilten Dokument (`SchreibKonfliktException`) wird ebenso halbiert; ein einzelner Stream wird bis zu fünfmal gestreut
+  wiederholt und bleibt danach bis zum nächsten Durchlauf stehen (nicht geparkt — ein Konflikt ist vorübergehend; die Position hält vor ihm).
+  Innerhalb eines Batches sehen sich zwei Streams auf demselben geteilten Dokument über die Identity-Map (read-your-writes) — kein Konflikt.
+- Wirft etwas anderes (Datenbank weg), endet der Durchlauf; der nächste beginnt beim durablen Stand.
+
+**Weckung** (`Infrastructure/Projections/BatchKonsum.cs`, `BatchKonsumStartupService`). Ein `SignalReceiverActor` je Projektion abonniert die
+`StateChangeVia…`-Signale ihrer Event-Typen und weckt die Partition des Streams (`Wake` an `batch-<Projektion>/<p>`). Je Partition ist höchstens
+eine Weckung unterwegs, was währenddessen kommt, wird zu genau einer weiteren; der Actor quittiert sofort und merkt sich während eines
+Durchlaufs „noch einmal“ (der Durchlauf läuft neben der Mailbox, `ReenterAfter`). Der **Poll** weckt alle 30 s jede Partition — das Netz für
+verlorene Signale; einen Heil-Poll je Stream gibt es für Projektionen nicht mehr. Die Batch-Leser passivieren nicht (es gibt nur Projektionen ×
+Partitionen davon, der Poll weckt sie ohnehin).
+
+**Rückstand.** `/health` und `/monitoring/metrics` melden über alle Projektionen die relevanten Events jenseits der Positionen
+(`KonsumRueckstand`, eine Abfrage je Projektion) und die geparkten Streams.
+
+### 4.1.2 Emittenten je Stream
+
+Reaktionen (und der Fluss-Event-Pfad der Handle-Welt) laufen je (Konsument, Stream) im `EmittentenAdapter`
+(`Infrastructure/Projections/EmittentenAdapter.cs`): ihr Effekt ist ein Command, ihr Cursor rückt erst nach bestätigtem Emit vor — ein Cursor
+je Partition ließe einen unbekannten Emit die ganze Partition halten (E8). `WakeAsync(streamId, ct)` → `bool` (bestätigt aufgeholt), für Signal
+und Poll gleich:
+1. **Startposition:** `IEmittentenCursor.LadeAsync − 1`; ohne Cursor bewusst `−1` (ab 0, at-least-once, nur für idempotente Effekte gültig).
+2. **Geordnet lesen** ab `applied+1` über `IEventStoreRepository.ReadStreamAsync`.
 3. **Pre-Dispatch-Guard:** `if (e.AggregateVersion <= applied) continue;`.
-4. **Dispatch** je Event mit einem frischen `ProjectionWriter` (`Core/ProjectionWriter.cs`), der nur sammelt, und den `EmitAusgaenge` der
-   Weckung (`Infrastructure/PubSub/EmitAusgaenge.cs`, trägt das Token): ein ausgegebener Command wird sofort gesendet, sein Ausgang erfasst —
-   die Commands eines Tails laufen parallel.
-5. **Ausgänge abwarten:** bleibt ein Command „unbekannt“, endet die Weckung mit `false` — Marke bzw. Cursor bleiben stehen, die nächste
-   Weckung sendet den Tail mit denselben CommandIds erneut (die Inbox des Ziels verwirft, was schon gewirkt hat; G-2).
-6. **Marke vorrücken:** Tracker → `MarkProcessedAsync` (durabler Commit-Punkt); Emittenten-Cursor → `SchreibeAsync` (erst nach bestätigtem
-   Emit; scheitert das Schreiben, sendet die nächste Weckung erneut).
-7. **Versions-Index erst danach:** der verlierbare Index (`IReadModelDepsSink`) wird erst nach dem Marken-Commit publiziert — nie über
-   Uncommittetes.
+4. **Dispatch** je Event mit einem frischen `ProjectionWriter` und den `EmitAusgaenge` der Weckung (`Infrastructure/PubSub/EmitAusgaenge.cs`,
+   trägt das Token): ein ausgegebener Command wird sofort gesendet, sein Ausgang erfasst — die Commands eines Tails laufen parallel.
+5. **Ausgänge abwarten:** bleibt ein Command „unbekannt“, endet die Weckung mit `false` — der Cursor bleibt stehen, die nächste Weckung sendet den
+   Tail mit denselben CommandIds erneut (die Inbox des Ziels verwirft, was schon gewirkt hat; G-2).
+6. **Cursor vorrücken:** `SchreibeAsync` erst nach bestätigtem Emit; scheitert das Schreiben, sendet die nächste Weckung erneut.
 
-Wirft der Store eine `SchreibKonfliktException` (geteiltes Dokument, §4.3), wiederholt der Adapter den ganzen Stapel ab der Marke (bis zu
-fünfmal, gestreut verzögert); danach übernimmt der Poll.
+**Transport** (`Infrastructure/Projections/PullPath.cs`): ein `SignalReceiverActor` weckt die Cluster-Identität `(pull-<Typ>, StreamId)`; der
+**Poll** (`Poller`, 30 s) scannt über `ReadChangedStreamsAsync` jenseits der Hochwassermarke und rückt sie **nur** vor, wenn jede Weckung als
+`WakeAck(Aufgeholt: true)` zurückkommt (bounded 10 s) — kein terminaler, unverarbeiteter Stream wird still übersprungen. Der
+`SignalAdapterActor` je Stream serialisiert beide Quellen über seine Mailbox (Single-Writer je Stream) und passiviert nach
+`Lebenszyklus.AdapterLeerlaufSekunden` (Standard 120; PF-5) — der Cursor liegt durabel im Store.
 
-**Transport** (`Infrastructure/Projections/PullPath.cs`):
-- **Signal** (schnell): `SignalReceiverActor` abonniert die `StateChangeVia…`-Signale der Eingangs-Event-Typen und weckt die
-  per-Stream-Cluster-Identität.
-- **Poll** (Sicherheit, 30 s): `Poller.PollOnceAsync` scannt über `ReadChangedStreamsAsync` jenseits der High-Water-Mark. Die HWM rückt
-  **nur** vor, wenn jede Weckung als `WakeAck(Aufgeholt: true)` zurückkommt (bounded 10 s); sonst re-scannt der nächste Durchlauf dasselbe
-  Fenster — kein terminaler, unverarbeiteter Stream wird still übersprungen. Ein scheiternder Durchlauf wird als Warnung gemeldet.
-- **Tombstones:** scheitert ein Append, füllt Marten die reservierten Sequenzen mit `Tombstone`-Events in einem eigenen Stream.
-  `MartenEventStore` meldet diesen Stream nicht als geändert und liest keine Tombstones (G-7, erledigt); die HWM läuft über sie hinweg.
-
-Beide wecken **dieselbe** Cluster-Identität `(Kind, StreamId)`; der per-Stream `SignalAdapterActor` serialisiert sie über seine Mailbox
-(Single-Writer je Stream). Aller durable Zustand liegt im Store → die Passivierung ist folgenlos: nach `Lebenszyklus.AdapterLeerlaufSekunden`
-(Standard 120) ohne Weckung stoppt der Adapter (PF-5, `Passivierung`), die nächste Weckung aktiviert ihn ab Marke bzw. Cursor.
+**Tombstones:** scheitert ein Append, füllt Marten die reservierten Sequenzen mit `Tombstone`-Events in einem eigenen Stream.
+`MartenEventStore` meldet diesen Stream nicht als geändert und liest keine Tombstones (G-7, erledigt); Poll und Partitions-Leser laufen über sie
+hinweg.
 
 ## 4.2 Die zwei Achsen
 
 **Achse „Transport“:** `IPullSubscriber : ISubscriber` wählt den Pull-Pfad. Der `PullPathGenerator`
 (`Infrastructure.SourceGeneration/PullPathGenerator.cs`) findet jede Klasse mit `ISubscriber` **und** `IPullSubscriber` und erzeugt je
-Konsument ein Cluster-Kind (`pull-<Typ>`) samt Registrierung (`GeneratedPullPaths`).
+Konsument die Verdrahtung (`GeneratedPullPaths`): für eine replaybare Projektion ein Batch-Kind `batch-<Typ>` samt `BatchRegistrierung` und
+`ProjektionsStand`, für einen Emittenten ein Adapter-Kind `pull-<Typ>` samt `PullPathRegistration`. Die Handle-Signaturen im Fachcode sind
+dieselben.
 
-**Achse B — replaybar vs. emittierend** — im `ProjectionAdapter`-Konstruktor als sich ausschließendes Paar:
-```csharp
-IProjectionTracker? tracker,          // replaybar: Co-Commit + Reset
-IEmittentenCursor?  emittentenCursor  // emittierend: durabel, ab Cursor, KEIN Reset
-// beide gesetzt → throw
-```
-- `IProjectionTracker`: `LastProcessedVersionAsync`/`MarkProcessedAsync` **+ `ResetAsync`/`ResetAllAsync`** (Reset = Umkehrung der Marke →
-  Neuaufbau).
-- `IEmittentenCursor` (`MartenEmittentenCursor`): nur `LadeAsync`/`SchreibeAsync`, **bewusst ohne Reset** — ein Emittent wird nie blind
-  neu abgespielt.
+**Achse B — replaybar vs. emittierend** — zwei getrennte Pfade mit getrennten Typen, kein gemeinsamer Konstruktor:
+- `IProjectionTracker` (Batch-Naht, nur Projektionen): `LadePartitionAsync`, `LadeGuardsAsync`, `BeginneBatch`, `Stream(id)`, `CommitAsync(stand,
+  guards)` **+ `ResetAllAsync`** (Neuaufbau).
+- `IEmittentenCursor` (`MartenEmittentenCursor`, nur Emittenten): nur `LadeAsync`/`SchreibeAsync`, **bewusst ohne Reset** — ein Emittent wird nie
+  blind neu abgespielt; der Emittenten-Pfad nimmt keinen Tracker.
 
 **Woraus die Achse folgt: aus den Schreib-Fähigkeiten der Handles.** Ein Handle bekommt die Store-Funktionen, die er benutzen darf, als
 Parameter (`Handle(evt, env, writer, INotiereAusleihe f)`; Fähigkeit = Interface `: IWriteStore` mit genau einer Funktion, CQRS051). Der
-Generator sammelt die Schreib-Fähigkeiten aller Handles einer Klasse. Zur Laufzeit öffnet die generierte Kind-Fabrik je Adapter-Actor einen
-**Fähigkeits-Bereich** (`IFaehigkeitsFabrik.Oeffne()`, `Infrastructure/Projections/DiFaehigkeitsFabrik.cs`): Stores sind Scoped, jede
-Fähigkeit eines Stores liefert in diesem Bereich **dieselbe Instanz**. Ist diese Instanz ein `IProjectionTracker`, ist der Konsument
-replaybar; hat er keine Schreib-Fähigkeit, bekommt er den `IEmittentenCursor`. Gehören die Schreib-Fähigkeiten zu mehreren Stores, bricht der
-Build (**CQRS052**). Ein Store in Konstruktor, Feld oder Eigenschaft eines Konsumenten ist verboten (**CQRS054**), `new …Store()` ebenso
-(**CQRS055**).
+Generator sammelt die Schreib-Fähigkeiten aller Handles einer Klasse: hat sie welche, ist sie replaybar und bekommt das Batch-Kind; die
+generierte Fabrik öffnet je Partitions-Leser einen **Fähigkeits-Bereich** (`IFaehigkeitsFabrik.Oeffne()`,
+`Infrastructure/Projections/DiFaehigkeitsFabrik.cs`): Stores sind Scoped, jede Fähigkeit eines Stores liefert in diesem Bereich **dieselbe
+Instanz**, und diese Instanz muss ein `IProjectionTracker` sein (sonst bricht der Start laut). Ohne Schreib-Fähigkeit ist der Konsument
+emittierend und bekommt den `IEmittentenCursor`. Gehören die Schreib-Fähigkeiten zu mehreren Stores, bricht der Build (**CQRS052**). Ein Store
+in Konstruktor, Feld oder Eigenschaft eines Konsumenten ist verboten (**CQRS054**), `new …Store()` ebenso (**CQRS055**).
 
 | Konsument | Schreib-Fähigkeiten der Handles | Rückgabe `Handle` | Achse B |
 |---|---|---|---|
@@ -97,36 +145,39 @@ koppeln); erreichbar ist exactly-once-*Wirksamkeit*, und dafür gibt es genau zw
 
 | Mechanismus | Voraussetzung | kostet |
 |---|---|---|
-| **A — atomarer Co-Commit:** Effekt + Marke in einer Transaktion | Effekt und Marke in derselben transaktionalen Ressource | den Store |
+| **A — atomarer Co-Commit:** Effekt + Fortschritt in einer Transaktion | Effekt und Fortschritt in derselben transaktionalen Ressource | den Store |
 | **B — idempotenter Effekt** + at-least-once | jeder Effekt wiederholungsfest (Upsert) | den Entwickler |
 
 B entkommt der Atomarität bei Append-Effekten nicht (ein „schon gesehen?“ müsste selbst atomar mit dem Append geschrieben werden). Die Naht
-`IProjectionTracker` ist deshalb bewusst minimal und store-agnostisch: der Adapter ruft Effekt und Marke als zwei Schritte; ob sie gemeinsam
+`IProjectionTracker` ist deshalb bewusst minimal und store-agnostisch: der Leser ruft Puffern und Commit als Schritte; ob sie gemeinsam
 gültig werden, entscheidet der Store. Damit ein Store aus dieser Naht A macht, muss er implizite Bedingungen erfüllen: Store und Tracker sind
-dieselbe Instanz, Effekte werden gepuffert statt durchgeschrieben, die Unit-of-Work folgt aus der Aufrufreihenfolge (`LastProcessedVersion`
-= Stapel-Beginn, `MarkProcessed` = Commit), Read-your-writes im Stapel, eine Instanz je Stream (Scoped), und ein geworfener Dispatch
+dieselbe Instanz, Effekte werden gepuffert statt durchgeschrieben, die Unit-of-Work folgt aus der Aufrufreihenfolge (`BeginneBatch` = Beginn,
+`CommitAsync` = Commit), Read-your-writes im Batch (über Streams hinweg), eine Instanz je Partitions-Leser (Scoped), und ein geworfener Dispatch
 committet nie. Statisch beweisbar ist Atomarität nicht — sie bleibt eine Laufzeiteigenschaft der Store-Transaktion und wird per Crash-Test
 gezeigt (`CoCommitPostgresTests`, docs/12).
 
-**Umsetzung.** Diese Bedingungen erfüllt die eine Basisklasse `MartenCoCommitStoreBase` (`Core/MartenCoCommitStoreBase.cs`),
-von der alle Projektions-Stores erben: Effekte werden nur gepuffert, `MarkProcessedAsync` spielt sie zusammen mit dem `ProjectionCheckpoint`
-in **einer** Marten-`IdentitySession` ab, ein `SaveChangesAsync`. Die Fähigkeits-Bereiche (§4.2) liefern „Store == Tracker“ per
-Konstruktion. Dazu die Schreib-Regel je Dokument: eigenes Dokument (Schlüssel = Stream), Zeile dieses Streams, oder geteiltes Dokument
-(`IGeteiltesReadModel`, Versionsprüfung; ein Konflikt verwirft Stapel und Marke → `SchreibKonfliktException`, §4.1). Dass ein Store nur
-über diese Puffer-Methoden schreibt und Lese- und Schreib-Fähigkeiten nicht vermischt, prüft der `StoreZugriffAnalyzer` (CQRS066/067).
+**Umsetzung.** Diese Bedingungen erfüllt die eine Basisklasse `MartenCoCommitStoreBase` (`Core/MartenCoCommitStoreBase.cs`, Framework), von der
+alle Projektions-Stores erben: Effekte werden nur gepuffert, `CommitAsync` spielt sie zusammen mit den Guards (`ProjectionCheckpoint` je Stream)
+und dem `PartitionsCheckpoint` in **einer** Marten-`IdentitySession` ab, ein `SaveChangesAsync`. Der Partitions-Checkpoint trägt eine
+numerische Revision (`Core/KonsumSchema.cs`): noch nie geschrieben → `Insert` (ein zweiter Erster scheitert am Schlüssel), sonst
+`UpdateRevision` auf Version + 1 (eine zweite Aktivierung scheitert an der Version) — **G-4 geschlossen**. Die Fähigkeits-Bereiche (§4.2)
+liefern „Store == Tracker“ per Konstruktion. Dazu die Schreib-Regel je Dokument, geprüft gegen den Stream des laufenden Events: eigenes Dokument
+(Schlüssel = Stream), Zeile dieses Streams, oder geteiltes Dokument (`IGeteiltesReadModel`, Versionsprüfung; ein Konflikt verwirft den Batch →
+`SchreibKonfliktException`, §4.1.1). Dass ein Store nur über diese Puffer-Methoden schreibt und Lese- und Schreib-Fähigkeiten nicht vermischt,
+prüft der `StoreZugriffAnalyzer` (CQRS066/067).
 - **Hebel 1 (umgesetzt):** Atomarität als eigener Typ. `ICoCommitTracker : IProjectionTracker` tragen nur co-committende Stores; der
-  GA-1-Check (`Infrastructure/Projections/GaEinsPruefung.cs`, beim ersten Spawn) bricht, wenn eine `IAppendProjektion` keinen
-  `ICoCommitTracker` hat.
-- **Hebel 2 (offen):** eine framework-getriebene Unit-of-Work (der Adapter holt eine Einheit vom Store und routet Effekt und Marke
+  GA-1-Check (`Infrastructure/Projections/GaEinsPruefung.cs`, beim ersten Spawn eines Partitions-Lesers) bricht, wenn eine `IAppendProjektion`
+  keinen `ICoCommitTracker` hat.
+- **Hebel 2 (offen):** eine framework-getriebene Unit-of-Work (der Leser holt eine Einheit vom Store und routet Effekt und Fortschritt
   hindurch), die Fehlverdrahtung strukturell unbaubar machte.
 
-Der generische `MartenProjectionTracker` (eigene Session, Dual-Write) ist nirgends registriert — toter Code (docs/13 P3-2). Dass die
-Basisklasse im Domänen-Projekt `Domain.Infrastructure` liegt statt im Framework, ist eine Schuld der Projektlage (docs/13 W2-1).
-
-**Neuaufbau:** `ProjectionRebuilder` leert das Ziel, setzt die Marken zurück (`ResetAllAsync`) und lässt den normalen Adapter-Pfad ab 0
-laufen — Emittenten haben kein Reset und liegen nie auf diesem Pfad. In Sim vergleicht `ProjektionsStandDienst`
-beim Start den Code-Hash jeder Projektion (Klasse + Stores) mit `<schema>.stand` und baut bei Abweichung die ganze Leseseite neu auf; in Prod
-meldet er nur (`docs/konzept-werkbank.md` §4.6).
+**Neuaufbau:** `ProjectionRebuilder` leert das Ziel, setzt Partitionen und Guards zurück (`ResetAllAsync`, `Core/KonsumZuruecksetzen.cs`) und
+lässt je Partition einen Batch-Leser ab 0 laufen — seitenweise, als Strom, nie der ganze Log als Liste. Zurückgesetzt wird nicht durch Löschen,
+sondern mit neuer Revision (Position 0, nichts geparkt): ein noch laufender Leser verliert seinen nächsten Commit, statt seinen alten Stand wieder
+anzulegen. Emittenten haben kein Reset und liegen nie auf diesem Pfad. In Sim vergleicht `ProjektionsStandDienst` beim Start den Stand jeder
+Projektion (Code-Hash der Klasse + Stores + die Form des Konsums mit der Partitionszahl) mit `<schema>.stand` und baut bei Abweichung die ganze
+Leseseite neu auf (leeren, Partitionen und Guards zurücksetzen; der erste Poll weckt jede Partition); in Prod meldet er nur
+(`docs/konzept-werkbank.md` §4.6).
 
 ## 4.4 Reaktionen & das Emit-Primitiv
 
@@ -341,109 +392,5 @@ Format, Lesen und Ansichten: `docs/konzept-werkbank.md` §7.
 ## 4.9 Offen
 
 Offene Punkte stehen nur in [13](13-reifegrad-schulden-bewertung.md): Testlücke T-1,
-Handle-Pipeline/Trigger-Welt und doppelte DSL W11-1, Zeitlimits über den Backstop W11-2, Garantie-Lücken G-2 (Inbox-Fenster), G-4 (Checkpoint), Marking/Kompensation/
-`KlärungNötig` P2-5, hartkodierte Intervalle P2-8, reflektive Serialisierung (Marking-Store, Snapshot-Kopie) W10-2, Projektlage W2-1,
-toter `MartenProjectionTracker` P3-2.
-
-## 4.10 Entwurf: Batch-Konsum der Projektionen (Phase 3, noch nicht umgesetzt)
-
-> **Entwurf** für Phase 3 des Plans Garantien und Durchsatz (Haltepunkt (b): erst nach Tobis Freigabe bauen). Er ersetzt für **replaybare
-> Projektionen** den Adapter je (Projektion, Stream) und den Heil-Poll je Stream (PF-1, PF-2) und schließt G-4. Handle-Signaturen und Fachcode
-> bleiben unverändert (Inv. 5); neue Dispatch-Logik nur im Generator. Nach dem Bau wird dieser Abschnitt in §4.1–§4.3 eingearbeitet.
-
-### 4.10.1 Warum, gemessen
-
-Phase 2 (`vermessung/ergebnisse/2026-10-15_0745_4caa176_phase-2`, `pg_stat_statements.csv`):
-- **S1** (5 replaybare Projektionen): je Weckung (Projektion, Stream) drei Sessions — Marke lesen, Tail lesen, Commit. Im Block 18 000
-  Transaktionen, 114 000 Session-Öffnungen (`DISCARD ALL`), 36 000 Stream-Reads, 6 250 Checkpoint-Reads, 5 000 Checkpoint-Upserts für 600 Paare.
-  Dazu weckt der Heil-Poll jeden geänderten Stream für jede Projektion, auch fremde (L1: 24 000 Erstweckungen, PF-2).
-- **S5** (Prüfdomäne): **keine** replaybare Projektion. Die 79 000 Stream-Reads je Block kommen vom Dirigenten (Folds, Prozess-Poll ab 0,
-  Rehydration; PF-4). Batch-Konsum hebt S5 kaum — siehe E9.
-- Postgres-Grundgröße (§12.5): ein Batch von 500 Effekten + Checkpoints in einer Transaktion ≈ 20 × so viele Effekte/s wie eine Weckung je Stream.
-
-### 4.10.2 Bausteine
-
-**Partition.** Jede replaybare Projektion hat `P` Partitionen (E4: 8, Umgebung `Konsum.Partitionen`). Ein Stream gehört genau einer:
-`partition = letztes Byte der UUID (RFC-Reihenfolge) mod P` — in SQL `get_byte(uuid_send(stream_id), 15) % P`, in .NET
-`id.ToByteArray(bigEndian: true)[15] % P`. Beide Seiten rechnen dasselbe, ohne Index und ohne Hash-Abhängigkeit von Laufzeit oder PG-Version;
-für zufällige und abgeleitete (gehashte) Ids gleichverteilt. `P` ≤ 256; ein Wechsel von `P` ist ein Neuaufbau.
-
-**Partitions-Leser** (`BatchLeser`, virtueller Cluster-Actor, Kind `batch-<Projektion>`, Identität = Partition). Single-Activation im Cluster;
-zusätzlich Fencing über die Version des Partitions-Checkpoints (G-4, unten). Ein Durchlauf:
-1. **Stand laden:** `PartitionsCheckpoint { Id = "<projektion>:<p>", Position (globale Sequenz), Version (OCC), Geparkt (Stream → Version) }`.
-2. **Seite lesen:** Events mit `seq_id > Position`, Partition `p`, **Typ ∈ abonnierte Typen der Projektion**, `order by seq_id limit N`
-   (N = `Konsum.BatchGroesse`, Vorschlag 500). Der Typfilter nimmt die Marten-Diskriminatoren der `SubscribedTypes` **und aller früheren
-   Versionen, die per Upcasting in sie münden** (aus der generierten Upcasting-Tabelle); ohne verlässliche Liste: ohne Typfilter lesen (richtig,
-   nur langsamer). Neues Leseprimitiv `IEventStoreRepository.ReadPartitionAsync(nach, p, P, typen, limit)` — Marten-LINQ mit `MatchesSql` für den
-   Partitionsfilter, Materialisierung wie `ReadStreamAsync` (Upcasting, Tombstones überspringen).
-3. **Guard je Stream:** die `ProjectionCheckpoint`s der Streams der Seite in **einer** Abfrage laden (`id = any(@ids)`); Events mit
-   `AggregateVersion <= Guard` überspringen (Nachzügler-Wiederholung, Übergang aus dem alten Pfad).
-4. **Anwenden:** je Stream in Versionsreihenfolge, über den generierten `DispatchAsync` (unverändert). Der Store puffert Effekte vieler Streams;
-   vor jedem Event setzt der Leser den Stream des Events (`Stream(streamId)`), die Schreib-Regel je Dokument (§4.3) prüft weiter gegen diesen.
-5. **Commit (eine Transaktion):** alle Effekte, die Guards aller berührten Streams (Bulk-Upsert) und der Partitions-Checkpoint mit erwarteter
-   Version. Konflikt am Partitions-Checkpoint ⇒ ein zweiter Leser oder ein Neuaufbau war schneller ⇒ Batch verwerfen, Stand neu laden (G-4).
-6. **Danach:** Versions-Index (Redis) für alle Events des Batches best-effort (Pipeline), wie heute erst nach dem Commit.
-7. **Weiter**, solange die Seite voll war; sonst ruhen bis zum nächsten Signal oder Poll.
-
-**Position und Nachzügler.** Die Position rückt nur bis zur höchsten Sequenz vor, deren Event älter als die Karenz ist (DB-Uhr, 3 s — dieselbe
-Regel wie heute im `Poller`). Jüngere Events werden trotzdem angewandt (Latenz), der nächste Durchlauf liest sie erneut, der Guard überspringt
-sie. So überholt die Position keine noch unsichtbare kleinere Sequenz.
-
-**Weckung.** Das Signal weckt die Partition des Streams (`Wake` an `batch-<Projektion>/<p>`), coalesced: läuft ein Durchlauf, merkt sich der Leser
-„noch einmal“. Der Poll weckt alle 30 s jede Partition (Backstop für verlorene Signale) — kein Heil-Poll je Stream mehr (PF-2 erledigt).
-
-**Neuaufbau.** Partitions-Checkpoints und Guards einer Projektion löschen; die Leser lesen ab 0 seitenweise (Strom statt Liste,
-`ProjectionRebuilder` und `ProjektionsStandDienst` setzen die Partitions-Checkpoints zurück).
-
-**Rückstand.** `/health` und `/monitoring/metrics` melden je Projektion die Summe über die Partitionen: relevante Events jenseits der Position, und
-die geparkten Streams.
-
-### 4.10.3 Die drei Risiken und ihre Lösung
-
-1. **Poison-Event darf keine Partition anhalten.** Wirft der Dispatch: Batch verwerfen, **halbieren** (nach Streams) und die Hälften einzeln
-   versuchen, bis der schuldige Stream allein steht. Dieser wird **geparkt** (`Geparkt[stream] = Version vor dem Event`, im selben Commit wie der
-   Rest); seine weiteren Events überspringt der Leser. Ein geparkter Stream wird bei jedem Poll einzeln versucht und fällt aus `Geparkt`, sobald er
-   durchläuft. Garantie wie heute: nichts geht verloren, andere Streams laufen weiter; neu: der Stand ist sichtbar (`/health`, Dead-Letter einmal je
-   Parken).
-2. **Konflikt an geteilten Dokumenten** (`SchreibKonfliktException`): wie Poison halbieren; ein einzelner Stream wird bis zu 5-mal gestreut
-   wiederholt (heutige Regel), dann bleibt er für den nächsten Durchlauf stehen (nicht geparkt — ein Konflikt ist vorübergehend). Innerhalb eines
-   Batches sehen sich zwei Streams auf demselben geteilten Dokument über die Identity-Map (read-your-writes) — kein Konflikt.
-3. **Emittenten (Reaktionen) bleiben auf dem Pfad je Stream** (E8): ihr Effekt ist ein Command, ihr Cursor rückt je Stream nach bestätigtem Emit
-   vor (Phase 1). Ein Cursor je Partition ließe einen unbekannten Emit die ganze Partition halten. Gemessen ist ihr Anteil klein (S5-8: 3 600
-   Cursor-Operationen gegen 79 000 Stream-Reads). Der Batch-Leser gilt nur für Konsumenten mit `IProjectionTracker`.
-
-### 4.10.4 Garantien (docs/11) und ihr Nachweis
-
-| Garantie | trägt im Batch-Konsum | Nachweis (neu bzw. umgebaut) |
-|---|---|---|
-| Wirkung genau einmal je Event (§11.5) | Effekte + Guards + Partitions-Checkpoint in einer Transaktion | I `CoCommitPostgresTests`: Absturz mitten im Batch (nach Effekten, vor Commit) → nichts gültig, Wiederholung genau einmal |
-| zwei Aktivierungen (G-4) | Partitions-Checkpoint mit erwarteter Version | I `GarantiePostgresTests.Zwei_Aktivierungen…` ohne Skip (auf den Batch-Leser umgestellt) |
-| Ordnung je Stream (§11.4) | ein Stream in genau einer Partition, Versionsreihenfolge, Guard | P: doppelte/ungeordnete Seiten, Nachzügler hinter der Karenz → Reihenfolge 1…n genau einmal |
-| Vollständigkeit (§11.5) | Position mit Karenz, Signal + Poll je Partition | I `PollerBackstopPostgresTests` (verlorenes Signal), `SequenceGapPostgresTests` (Nachzügler) auf den Batch-Leser |
-| Poison hält niemanden auf | Halbieren + Parken | I: ein Stream wirft dauerhaft → Rest der Partition committet, Stream geparkt, nach Heilung nachgeholt |
-| geteilte Dokumente (§11.5) | Versionsprüfung, Halbieren | I `SchreibRegelPostgresTests`, `GeteilteDokumentePostgresTests` gegen zwei Partitions-Leser |
-| Neuaufbau (§11.5) | Reset der Partitions-Checkpoints + Guards, Strom | P/I `ProjectionRebuilderTests` |
-| Read-your-writes (best-effort) | Index nach dem Commit | E2E Störungslauf |
-| Exactly-once Ende zu Ende | — | E2E Höchstlast und Störungslauf |
-
-### 4.10.5 Umbau (Reihenfolge)
-
-1. Abstractions: `PartitionsCheckpoint`; `IProjectionTracker` wird zur Batch-Naht (`BeginneBatch(projektion, partition)`, `Stream(id)`,
-   `CommitAsync(position, guards, erwarteteVersion)`), `ICoCommitTracker` bleibt der Typ-Schnitt für GA-1 — je Absicht ein Weg, kein zweiter Tracker.
-2. `MartenCoCommitStoreBase`: Puffer für viele Streams, Commit mit Guards (Bulk) und Partitions-Checkpoint (Optimistic Concurrency); Reset auf
-   Partitionen.
-3. `MartenEventStore.ReadPartitionAsync`; Typ-Diskriminatoren je Projektion (Generator, inkl. Upcasting-Vorgänger).
-4. `BatchLeser` (Actor) + Halbieren/Parken; Weckung (Signal → Partition, Poll je Partition); Rückstand für `/health`.
-5. Generator `PullPathGenerator`: für replaybare Projektionen `batch-<Typ>`-Kind mit Partitionen statt `pull-<Typ>`; Emittenten unverändert.
-6. Rückbau: `SignalAdapterActor`/`ProjectionAdapter`-Pfad und `Poller` für Projektionen; `ProjectionRebuilder`, `ProjektionsStandDienst` umstellen.
-7. Umgebung `Konsum` (`Partitionen`, `BatchGroesse`), Doku 03/04/11/12/13.
-
-### 4.10.6 Offene Entscheidungen (vor dem Bau)
-
-| # | Frage | Vorschlag |
-|---|---|---|
-| E4 | Partitionen je Projektion | 8, Umgebung `Konsum.Partitionen`; Wechsel = Neuaufbau |
-| E8 | Reaktionen (Emittenten) im Batch-Leser? | nein, sie bleiben je Stream (§4.10.3 Punkt 3); Plan §3 Schritt 4 entfällt |
-| E9 | E5-Ziel S5 ≥ 3 × in Phase 3? | nein: S5 hat keine Projektion, seine Decke ist der Dirigent (PF-4) — das S5-Ziel gilt nach Phase 5; Phase 3 misst S1 ≥ 3 × und S5 ohne Regression |
-| E10 | Partitions-Funktion | letztes UUID-Byte mod P (SQL und .NET gleich, ohne Index) |
-| E11 | Batch-Größe | 500 Events, Umgebung `Konsum.BatchGroesse` |
+Handle-Pipeline/Trigger-Welt und doppelte DSL W11-1, Zeitlimits über den Backstop W11-2, Garantie-Lücke G-2 (Inbox-Fenster), Marking/Kompensation/
+`KlärungNötig` P2-5, hartkodierte Intervalle P2-8, reflektive Serialisierung (Marking-Store, Snapshot-Kopie) W10-2, Projektlage W2-1.

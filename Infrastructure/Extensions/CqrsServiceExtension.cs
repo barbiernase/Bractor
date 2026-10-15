@@ -182,11 +182,11 @@ public static class CqrsServiceExtensions
             options.Events.MetadataConfig.CausationIdEnabled = true;
             options.Events.MetadataConfig.HeadersEnabled = true;
 
-            // Fortschrittsmarke der Projektionen (Phase 0 / Phase 2):
-            // durables Checkpoint-Dokument pro (Projektion, Stream).
-            options.Schema.For<ProjectionCheckpoint>().Identity(x => x.Id);
+            // Batch-Konsum der Projektionen (docs/04 §4.1): der Guard je (Projektion, Stream) und der Stand je (Projektion, Partition) mit
+            // numerischer Revision — jeder Commit erwartet die geladene Version (G-4: zwei Aktivierungen, Neuaufbau).
+            Core.KonsumSchema.Registriere(options);
 
-            // Durabler Poll-Backstop-Cursor pro Pull-Pfad (Phase 4b): der Poller setzt nach
+            // Durabler Poll-Backstop-Cursor pro Pull-Pfad der Emittenten: der Poller setzt nach
             // einem Neustart hier wieder auf, statt beim Boot die ganze Historie zu re-scannen.
             options.Schema.For<PollCursor>().Identity(x => x.Id);
 
@@ -295,6 +295,8 @@ public static class CqrsServiceExtensions
         services.AddSingleton(new SnapshotOptions(builder.SnapshotThreshold, builder.InboxCap));
         // Passivierung der virtuellen Actors (PF-5) — Aggregat, Adapter und Prozess-Manager lesen sie beim Erzeugen.
         services.AddSingleton(builder.Passivierung);
+        // Batch-Konsum der Projektionen (docs/04 §4.1): Partitionen und Seitengröße — die Batch-Leser lesen sie beim Erzeugen.
+        services.AddSingleton(builder.Konsum);
         
         // Redis (VersionTracker)
         services.AddSingleton<IConnectionMultiplexer>(provider =>
@@ -598,6 +600,9 @@ public class CqrsFrameworkBuilder
 
     /// <summary>Leerlauf bis zur Passivierung je Actor-Art (PF-5, Umgebung <c>Lebenszyklus</c>); Standard 10/2/10 min.</summary>
     public Infrastructure.Lebenszyklus.Passivierung Passivierung { get; set; } = Infrastructure.Lebenszyklus.Passivierung.Standard;
+
+    /// <summary>Batch-Konsum der Projektionen (Umgebung <c>Konsum</c>): Partitionen je Projektion und Events je Seite; Standard 8/500.</summary>
+    public Infrastructure.Projections.Konsum Konsum { get; set; } = Infrastructure.Projections.Konsum.Standard;
 
     /// <summary>
     /// Node-lokaler Group-Commit für Aggregat-Appends (Batching): bündelt die Appends der auf diesem Node

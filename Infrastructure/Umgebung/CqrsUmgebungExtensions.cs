@@ -90,6 +90,7 @@ public static class CqrsUmgebungExtensions
             o.SnapshotThreshold = u.Schreibpfad.SnapshotSchwelle;
             o.InboxCap = u.Schreibpfad.InboxGrenze;
             o.Passivierung = Infrastructure.Lebenszyklus.Passivierung.Aus(u.Lebenszyklus);
+            o.Konsum = Infrastructure.Projections.Konsum.Aus(u.Konsum);
             o.EnableGrpc = anwendung.Nutzlast != null;   // gRPC nur mit Leitung; ohne bleiben JSON-Eingang und Quellen
         });
         // Die Uhr der Umgebung (Versatz nur in Sim) ersetzt die nackte DB-Uhr — die letzte Registrierung gewinnt.

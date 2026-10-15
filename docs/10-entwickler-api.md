@@ -167,14 +167,14 @@ public sealed partial class ModellStore : MartenCoCommitStoreBase, IModellStore 
     public Task UpsertAsync(ModellReadModel model) => EnqueueStore(model.Id, model);
 }
 ```
-**Schreib-Regel.** Die Maschine garantiert einen Schreiber je (Projektion, Stream); das Co-Commit macht einen Stapel atomar, isoliert aber nicht zwei
-parallele Stapel verschiedener Streams. Deshalb schreibt eine Store-Methode auf genau einem von drei Wegen, und die Basis prüft das beim Puffern:
+**Schreib-Regel.** Die Maschine garantiert einen Schreiber je (Projektion, Partition) und damit je Stream; das Co-Commit macht einen Batch atomar,
+isoliert aber nicht die parallelen Batches zweier Partitionen. Deshalb schreibt eine Store-Methode auf genau einem von drei Wegen, und die Basis prüft das beim Puffern:
 
 | Dokument | Weg | Beispiel (Beispieldomäne) |
 |---|---|---|
-| eigenes (Schlüssel = Stream des Stapels) | `EnqueueStore(id, doc)`, `EnqueueTransform`, `EnqueueAnlegenOderAendern` | `TrainingslaufReadModel` |
+| eigenes (Schlüssel = Stream des Events) | `EnqueueStore(id, doc)`, `EnqueueTransform`, `EnqueueAnlegenOderAendern` | `TrainingslaufReadModel` |
 | Zeile dieses Streams (Id enthält den Besitzer) | `EnqueueZeile(besitzer, zeile)`, `EnqueueZeileEntfernen` | `DatensatzMitgliedschaftZeile` `{Datensatz}:{Paar}` |
-| geteilt (Marker `IGeteiltesReadModel`) | `EnqueueGeteilt(id, alt => neu)` — Versionsprüfung; ein Konflikt verwirft den Stapel samt Marke, der Adapter wiederholt | `AktivesModellReadModel` |
+| geteilt (Marker `IGeteiltesReadModel`) | `EnqueueGeteilt(id, alt => neu)` — Versionsprüfung; ein Konflikt verwirft den Batch samt Fortschritt, der Leser trennt und wiederholt | `AktivesModellReadModel` |
 
 Ein fremdes Dokument über den ersten Weg wirft sofort (statt eines stillen Lost Updates). „Neuer gewinnt" in einem geteilten Dokument nach
 Event-Zeit, nie nach Ankunft. Am Puffer vorbei zu schreiben ist ein Build-Fehler: **CQRS066** erlaubt in einem Co-Commit-Store von der
@@ -206,8 +206,9 @@ Handle-Form: `Handle(TEvent, IAggregateEnvelope, ProjectionWriter, Fähigkeit…
 Warnung), CQRS088 (Kreis über transiente Events); GR-AUS-PROJEKTION, GR-ZUSTAND. Der Opt-in-Marker `IAppendProjektion` (für nicht-idempotente
 Effekte) lässt den Start brechen, wenn kein Co-Commit-Tracker dahintersteht (GA-1). **Generiert / Laufzeit:** Subscriber-Dispatch und Pull-Pfad
 (`PullPathGenerator`). **Achse B folgt aus den Schreib-Fähigkeiten der Handles:** lösen sie einen Store auf, der `IProjectionTracker` ist, ist der
-Konsument replaybar (Projektion); ohne Schreib-Fähigkeit ist er emittierend (§10.4). Der `ProjectionAdapter` liest ab Marke + 1 aus dem Store,
-dispatcht und committet Effekt + Marke; geweckt über Signal und Poll. **Mehr:** [04 §4.1–§4.3](04-konsum-und-prozess-maschine.md).
+Konsument replaybar (Projektion); ohne Schreib-Fähigkeit ist er emittierend (§10.4). Der Batch-Leser einer Partition liest seitenweise ab seiner
+Position aus dem Log, wendet je Stream in Versionsreihenfolge an und committet Effekte, Guards und Partition gemeinsam; geweckt über Signal und
+Poll; Partitionen und Seitengröße stehen in der Umgebung (`Konsum`). **Mehr:** [04 §4.1–§4.3](04-konsum-und-prozess-maschine.md).
 
 ### 10.3.5 Query und Query-Antwort
 
@@ -499,7 +500,7 @@ Quellen, Funktionen und Dienste bindet `AddCqrs` aus den generierten Tabellen; e
 ```
 | Abschnitt | Inhalt |
 |---|---|
-| `Umgebung`, `EventStore`, `VersionIndex`, `Cluster`, `Schreibpfad`, `Lebenszyklus`, `Transport` | Betrieb: Art `Sim`/`Prod`, Datenbank, Redis, Einzelknoten/Consul, Group-Commit, Passivierung, Ports, JSON-Eingang |
+| `Umgebung`, `EventStore`, `VersionIndex`, `Cluster`, `Schreibpfad`, `Lebenszyklus`, `Konsum`, `Transport` | Betrieb: Art `Sim`/`Prod`, Datenbank, Redis, Einzelknoten/Consul, Group-Commit, Passivierung, Partitionen und Seitengröße des Batch-Konsums, Ports, JSON-Eingang |
 | `Identitaeten` | `Tokens` (Token → Akteur-Menge), `Standard`, `VertragStreng` — §10.7 |
 | `Quellen` | je Quelle die Treiber-Konfig, optional `Webhook` — §10.6a |
 | `Funktionen` | je Funktion Laufort, Implementierung, Slots, Wiederholungen, Worker — §10.5a |

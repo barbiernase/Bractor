@@ -92,6 +92,17 @@ public sealed class LebenszyklusKonfig
     public int ProzessManagerLeerlaufSekunden { get; set; } = 600;
 }
 
+/// <summary>
+/// Der Batch-Konsum der replaybaren Projektionen (Tuning, nie Semantik; docs/04 §4.1): jede Projektion liest in <see cref="Partitionen"/>
+/// Partitionen (E4; ein Stream gehört genau einer, letztes UUID-Byte mod P), je Seite höchstens <see cref="BatchGroesse"/> Events (E11). Ein
+/// Wechsel der Partitionen ist ein Neuaufbau der Leseseite.
+/// </summary>
+public sealed class KonsumKonfig
+{
+    public int Partitionen { get; set; } = 8;
+    public int BatchGroesse { get; set; } = 500;
+}
+
 /// <summary>Ports: gRPC (HTTP/2) für Clients/Worker, Einblick (HTTP/1.1 + 2) für Werkbank, Webhook und /health; 0 = aus.</summary>
 public sealed class TransportKonfig
 {
@@ -161,6 +172,7 @@ public sealed class UmgebungKonfig
     public ClusterKonfig Cluster { get; set; } = new();
     public SchreibpfadKonfig Schreibpfad { get; set; } = new();
     public LebenszyklusKonfig Lebenszyklus { get; set; } = new();
+    public KonsumKonfig Konsum { get; set; } = new();
     public TransportKonfig Transport { get; set; } = new();
     public Dictionary<string, FunktionsKonfig> Funktionen { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, DienstKonfig> Dienste { get; set; } = new(StringComparer.Ordinal);
@@ -184,11 +196,11 @@ public sealed class UmgebungKonfig
 public static class UmgebungsAbschnitte
 {
     public const string Umgebung = "Umgebung", EventStore = "EventStore", VersionIndex = "VersionIndex", Cluster = "Cluster",
-        Schreibpfad = "Schreibpfad", Lebenszyklus = "Lebenszyklus", Transport = "Transport", Identitaeten = "Identitaeten", Quellen = "Quellen",
+        Schreibpfad = "Schreibpfad", Lebenszyklus = "Lebenszyklus", Konsum = "Konsum", Transport = "Transport", Identitaeten = "Identitaeten", Quellen = "Quellen",
         Funktionen = "Funktionen", Dienste = "Dienste", Clients = "Clients", Konfig = "Konfig", Logging = "Logging";
 
     public static readonly IReadOnlyList<string> Alle =
-        [Umgebung, EventStore, VersionIndex, Cluster, Schreibpfad, Lebenszyklus, Transport, Identitaeten, Quellen, Funktionen, Dienste, Clients, Konfig, Logging];
+        [Umgebung, EventStore, VersionIndex, Cluster, Schreibpfad, Lebenszyklus, Konsum, Transport, Identitaeten, Quellen, Funktionen, Dienste, Clients, Konfig, Logging];
 }
 
 /// <summary>

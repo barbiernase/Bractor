@@ -6,19 +6,20 @@ using Npgsql;
 namespace Infrastructure.Projections;
 
 /// <summary>
-/// Der Code-Stand einer replaybaren Projektion (vom PullPathGenerator registriert): Cluster-Kind und Poll-Cursor (<paramref name="KindName"/>),
-/// Marken-Schlüssel (<paramref name="ProjektionsId"/> = <c>SubscriberId</c>), Hash der Klasse und die Store-Klassen hinter ihren
-/// Schreib-Fähigkeiten. Emittierende Konsumenten haben keinen Stand — sie werden nie neu aufgebaut.
+/// Der Code-Stand einer replaybaren Projektion (vom PullPathGenerator registriert): Batch-Kind (<paramref name="KindName"/>),
+/// Schlüssel der Partitionen und Guards (<paramref name="ProjektionsId"/> = <c>SubscriberId</c>), Hash der Klasse und die Store-Klassen hinter
+/// ihren Schreib-Fähigkeiten. Emittierende Konsumenten haben keinen Stand — sie werden nie neu aufgebaut.
 /// </summary>
 public sealed record ProjektionsStand(string KindName, string ProjektionsId, string KlassenHash, IReadOnlyList<Type> Stores);
 
 /// <summary>
 /// „Passt die Leseseite noch zum Code?" (docs/konzept-werkbank.md §4.6, §12.3 E9). Läuft beim Start nach dem Siegel und VOR dem
 /// Pull-Pfad: der Code-Hash jeder Projektion (Klasse + Store) wird mit dem in <c>&lt;schema&gt;.stand</c> gespeicherten verglichen.
+/// Zum Stand gehört auch die Form des Konsums (<see cref="KonsumForm"/>, Partitionen): ein Wechsel der Partitionszahl ist ein Neuaufbau.
 /// <list type="bullet">
 ///   <item><b>Sim</b>, mindestens eine Projektion geändert (oder ohne gespeicherten Stand): die ganze Leseseite wird geleert (alle
-///     Read-Model-Typen), die Marken und Poll-Cursor aller Projektionen auf Anfang gesetzt. Der erste Poll weckt danach jeden Stream,
-///     der Adapter liest ab -1 — Neuaufbau IST der normale Pull-Pfad (wie <see cref="ProjectionRebuilder"/>). Geleert wird alles, weil
+///     Read-Model-Typen), die Partitionen und Guards aller Projektionen auf Anfang gesetzt. Der erste Poll weckt danach jede Partition, die
+///     Leser lesen ab 0 seitenweise — Neuaufbau IST der normale Batch-Konsum (wie <see cref="ProjectionRebuilder"/>). Geleert wird alles, weil
 ///     Read-Models nicht einer Projektion gehören müssen; in Sim ist das billig und immer richtig.</item>
 ///   <item><b>Prod</b>: nur eine Meldung (ein Neuaufbau ist eine bewusste Betriebsentscheidung), der gespeicherte Stand bleibt.</item>
 /// </list>
@@ -29,16 +30,19 @@ public sealed class ProjektionsStandDienst(
     IEnumerable<StoreStand> stores,
     IEnumerable<ReadModelTyp> readModels,
     IDocumentStore marten,
-    IPollCursorStore pollCursor) : IHostedService
+    Konsum konsum) : IHostedService
 {
     public const string Praefix = "projektion:";
 
-    /// <summary>Der Hash je Projektions-Id: Klasse + Stores (Reihenfolge der Store-Typen wie generiert).</summary>
-    public static IReadOnlyDictionary<string, string> Hashes(IEnumerable<ProjektionsStand> projektionen, IEnumerable<StoreStand> stores)
+    /// <summary>Die Form des Konsums, die der gespeicherte Stand voraussetzt: Batch-Konsum mit P Partitionen.</summary>
+    public static string KonsumForm(Konsum konsum) => $"batch/{konsum.Partitionen}";
+
+    /// <summary>Der Hash je Projektions-Id: Klasse + Stores (Reihenfolge der Store-Typen wie generiert) + Form des Konsums.</summary>
+    public static IReadOnlyDictionary<string, string> Hashes(IEnumerable<ProjektionsStand> projektionen, IEnumerable<StoreStand> stores, Konsum konsum)
     {
         var je = stores.ToDictionary(s => s.Store, s => s.CodeHash);
         return projektionen.ToDictionary(p => p.ProjektionsId,
-            p => Kodehash.Kombiniere([p.KlassenHash, .. p.Stores.Select(t => je.TryGetValue(t, out var h) ? h : t.FullName ?? t.Name)]),
+            p => Kodehash.Kombiniere([p.KlassenHash, .. p.Stores.Select(t => je.TryGetValue(t, out var h) ? h : t.FullName ?? t.Name), KonsumForm(konsum)]),
             StringComparer.Ordinal);
     }
 
@@ -50,7 +54,7 @@ public sealed class ProjektionsStandDienst(
     {
         var liste = projektionen.ToList();
         if (liste.Count == 0) return;
-        var aktuell = Hashes(liste, stores);
+        var aktuell = Hashes(liste, stores, konsum);
         var schema = umgebung.EventStore.Schema;
         await using var conn = new NpgsqlConnection(Umgebung.UmgebungLader.Verbindung(umgebung.EventStore));
         await conn.OpenAsync(ct);
@@ -74,17 +78,15 @@ public sealed class ProjektionsStandDienst(
             return;
         }
 
-        // Leseseite leeren, Marken + Poll-Cursor aller Projektionen auf Anfang.
+        // Leseseite leeren, Partitionen und Guards aller Projektionen auf Anfang.
         foreach (var t in readModels.Select(r => r.Typ).Distinct())
             await marten.Advanced.Clean.DeleteDocumentsByTypeAsync(t, ct);
         await using (var s = marten.LightweightSession())
         {
             foreach (var p in liste)
-                s.DeleteWhere<ProjectionCheckpoint>(c => c.ProjectionId == p.ProjektionsId);
+                await Core.KonsumZuruecksetzen.PartitionenUndGuardsAsync(s, p.ProjektionsId, ct);
             await s.SaveChangesAsync(ct);
         }
-        foreach (var p in liste)
-            await pollCursor.SetAsync(p.KindName, 0, ct);
 
         await using (var cmd = conn.CreateCommand())
         {

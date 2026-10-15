@@ -269,6 +269,35 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("    };");
             sb.AppendLine();
 
+            // ── Herkunft: je aktuellem Event die Speicher-Diskriminatoren, deren Bytes (über die Kette, allen Zielen folgend) zu ihm werden —
+            //    der Typfilter des Batch-Konsums (docs/04 §4.1) liest damit auch alte Bytes, die erst beim Lesen aufgewertet werden. ──
+            var herkunft = new Dictionary<INamedTypeSymbol, SortedSet<string>>(cmp);
+            foreach (var e in currentEvents)
+                if (disc.TryGetValue(e, out var eigen)) herkunft[e] = new SortedSet<string>(System.StringComparer.Ordinal) { eigen };
+            foreach (var p in edges.Keys)
+            {
+                if (!disc.TryGetValue(p, out var pd)) continue;
+                var seen = new HashSet<INamedTypeSymbol>(cmp);
+                var stack = new Stack<INamedTypeSymbol>();
+                stack.Push(p);
+                var guard = 0;
+                while (stack.Count > 0 && guard++ < 8192)
+                {
+                    var cur = stack.Pop();
+                    if (herkunft.TryGetValue(cur, out var menge)) { menge.Add(pd); continue; }
+                    if (!edges.TryGetValue(cur, out var e2)) continue;
+                    foreach (var tg in e2.targets)
+                        if (seen.Add(tg)) stack.Push(tg);
+                }
+            }
+            sb.AppendLine("    /// <summary>Je aktuellem Event die Speicher-Diskriminatoren, die beim Lesen zu ihm werden (es selbst und seine früheren Versionen).</summary>");
+            sb.AppendLine("    public static readonly IReadOnlyDictionary<Type, string[]> Herkunft = new Dictionary<Type, string[]>");
+            sb.AppendLine("    {");
+            foreach (var kvp in herkunft.OrderBy(x => disc[x.Key], System.StringComparer.Ordinal))
+                sb.AppendLine($"        [typeof({kvp.Key.ToDisplayString(full)})] = new[] {{ {string.Join(", ", kvp.Value.Select(d => "\"" + d + "\""))} }},");
+            sb.AppendLine("    };");
+            sb.AppendLine();
+
             // ── Ketten-Hilfsmethoden (rekursiv; Split flacht die Ausgaben) ──
             foreach (var p in edges.Keys.OrderBy(x => x.Name, System.StringComparer.Ordinal))
             {

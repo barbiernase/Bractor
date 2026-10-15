@@ -95,7 +95,7 @@ trägt die Konsumseite heute etwa 8 200 / K Events/s (K = replaybare Projektione
 | 0 | Abgleich, E2E-Messung, Garantie-Nachweis | – | 7–9 PT | – | Baseline S1–S5 gespeichert; Garantie-Suite grün, Lücken als Skip-Tests |
 | 1 | Emit-Ausgang und Emittenten-Cursor ✅ | G-1, G-2 (Emittent), G-7, P1-6, PF-9 | 5–7 PT | 0 | S5: Kosten der Reaktion unabhängig von der Stream-Länge |
 | 2 | Actor-Lebenszyklus ✅ | G-3, PF-5 | 3–5 PT | 0 | RSS nach den Höchstlast-Blöcken fällt im Leerlauf zurück (Passivierung) |
-| 3 | Batch-Konsum | PF-1, PF-2, G-4 | 15–25 PT | 1, 2 | Durchsatz bis „alles sichtbar“ S1/S5 deutlich über Baseline (Ziel nach E5) |
+| 3 | Batch-Konsum (umgesetzt, Messung §8) | PF-1, PF-2, G-4 | 15–25 PT | 1, 2 | Durchsatz bis „alles sichtbar“ S1 ≥ 3 × Baseline, S5 ohne Regression (E5, E9) |
 | 4 | Inbox als Tabelle | G-2 (Inbox), PF-3 | 6–9 PT | 2, E1 | S3 heiß: genau einmal, mehr Teile/s als nach Phase 3 |
 | 5 | Prozess-Poll und Backstop | PF-4 (W11-2-Anteil) | 3–5 PT | 1 | S3/S5: Zeit je Teil konstant über N; Leerlauf mit offenen Vorgängen nahe 0 Queries/s |
 | 6 | Rest | PF-6, G-5, PF-7 (Entscheidung) | 2–3 PT | – | – |
@@ -112,14 +112,14 @@ die Inbox-Tabelle (4) nach dem Batch-Konsum kommen.
 | E1 | Inbox: **A** Tabelle als Dedup, Marke nur bei Noop/Ablehnung — oder **B** Tabelle als „Ausgang je Command“, keine Marken im Stream (Prozess-Manager, Clients, Spur ändern sich; W9 berührt) | **A** | Phase 4 |
 | E2 | Aufbewahrungs-Horizont der Inbox (Exactly-once gilt innerhalb dieses Horizonts) | 30 Tage, Umgebung `Schreibpfad.InboxHorizont` | Phase 4 |
 | E3 | Bestandsdaten | Sim-DBs zurücksetzen; Backfill-SQL aus Marken und `causationId` nur, falls Prod-Daten bestehen | Phase 4 |
-| E4 | Partitionen je Projektion im Batch-Konsum | fest 8, Umgebung; Lease je Partition im Cluster | Phase 3 |
+| E4 | Partitionen je Projektion im Batch-Konsum | **entschieden** (Tobi, 2026-10-15): 8, Umgebung `Konsum.Partitionen`; ein Wechsel ist ein Neuaufbau; Single-Activation des Clusters + Versionsprüfung des Partitions-Checkpoints statt Lease | Phase 3 |
 | E5 | Abnahme-Zielwerte je Szenario | **entschieden** (Tobi, 2026-10-15): die Werte aus §8 (Phase 3: Durchsatz S1/S5 ≥ 3 ×, Queries je Vorgang ≤ ⅓) | nach Phase 0 |
 | E6 | Handle-/Trigger-Welt (W11-1) in Phase 1 zurückbauen oder nur anpassen? | nur minimal anpassen; der Rückbau bleibt W11-1 | Phase 1 |
 | E7 | Leerlaufzeit der Passivierung | Aggregat 10 min, Adapter 2 min, Prozess-Manager 10 min; Umgebung | Phase 2 |
-| E8 | Reaktionen (Emittenten) im Batch-Leser? | nein, sie bleiben je Stream ([04 §4.10.3](04-konsum-und-prozess-maschine.md)) | Phase 3 |
-| E9 | E5-Ziel S5 in Phase 3? | nein: S5 hat keine Projektion, seine Decke ist der Dirigent (PF-4) — S5-Ziel nach Phase 5; Phase 3: S1 ≥ 3 ×, S5 ohne Regression | Phase 3 |
-| E10 | Partitions-Funktion | letztes UUID-Byte mod P (SQL und .NET gleich) | Phase 3 |
-| E11 | Batch-Größe | 500 Events, Umgebung `Konsum.BatchGroesse` | Phase 3 |
+| E8 | Reaktionen (Emittenten) im Batch-Leser? | **entschieden** (Tobi, 2026-10-15): nein, sie bleiben je Stream ([04 §4.1.2](04-konsum-und-prozess-maschine.md)) | Phase 3 |
+| E9 | E5-Ziel S5 in Phase 3? | **entschieden** (Tobi, 2026-10-15): nein — S5 hat keine Projektion, seine Decke ist der Dirigent (PF-4); S5-Ziel nach Phase 5; Phase 3: S1 ≥ 3 ×, S5 ohne Regression | Phase 3 |
+| E10 | Partitions-Funktion | **entschieden** (Tobi, 2026-10-15): letztes UUID-Byte mod P (SQL und .NET gleich) | Phase 3 |
+| E11 | Batch-Größe | **entschieden** (Tobi, 2026-10-15): 500 Events, Umgebung `Konsum.BatchGroesse` | Phase 3 |
 
 ## 3 · Phasen im Detail
 
@@ -171,8 +171,8 @@ unter dem Höchststand (Passivierung).
 
 ### Phase 3 · Batch-Konsum (15–25 PT)
 
-1. **Entwurf (2–3 PT), festgehalten in docs/04** — steht in [04 §4.10](04-konsum-und-prozess-maschine.md) (2026-10-15, wartet auf
-   Tobis Freigabe, offene Entscheidungen E4, E8–E11 dort): ein Batch-Leser je (Projektion, Partition) liest den globalen Sequenzbereich seitenweise
+1. **Entwurf (2–3 PT), festgehalten in docs/04** — von Tobi freigegeben (Haltepunkt (b), 2026-10-15, E4, E8–E11 entschieden), umgesetzt und in
+   [04 §4.1.1, §4.3](04-konsum-und-prozess-maschine.md) eingearbeitet: ein Batch-Leser je (Projektion, Partition) liest den globalen Sequenzbereich seitenweise
    (z. B. 500), gruppiert je Stream, wendet je Stream in Versionsreihenfolge an und committet Effekte und Checkpoints **aller** Streams des
    Batches in einer Transaktion. Zu klären und festzuhalten: Checkpoint je Partition (globale Position) und je Stream (Guard), Rolle des Signals
    (weckt die Partition), Konflikt bei geteilten Dokumenten (Batch verwerfen, halbieren, einzeln wiederholen), Rebuild als Strom, Lease je
@@ -180,7 +180,7 @@ unter dem Höchststand (Passivierung).
 2. Infrastruktur: Batch-Leser; `MartenCoCommitStoreBase` für mehrere Streams (Bereich je Batch statt je Stream); der Batch-Leser ersetzt den
    Heil-Poll der Projektionen (**PF-2**); eine Rückstands-Abfrage für `/health`.
 3. Generator: `PullPathGenerator` erzeugt den Batch-Dispatch. Die Handle-Signaturen im Fachcode bleiben unverändert (Inv. 5).
-4. Emittenten laufen über denselben Leser mit Cursor je Partition (setzt Phase 1 voraus).
+4. ~~Emittenten laufen über denselben Leser mit Cursor je Partition~~ — entfällt (E8): Emittenten bleiben je Stream.
 5. Rückbau: Adapter-Actor je (Projektion, Stream) und `SignalAdapterActor`-Pfad für Projektionen.
 6. Tests: Absturz mitten im Batch (`CoCommitPostgresTests`), Ordnung je Stream innerhalb einer Partition, geteilte Dokumente, Rebuild, zwei
    Knoten mit Lease.
@@ -301,6 +301,34 @@ anstehen.
   nichts, und die Leerlauf-Blöcke sind bis Phase 3/5 nicht leer (PF-2, PF-4). Neu bewerten nach Phase 3 und 5. **Abnahme: ja** (Tests,
   Garantien, E2E ohne Regression); das RSS-Ziel ist auf Phase 3/5 verschoben (Vorschlag, Tobi bestätigt).
 
+**Phase 3** (Code umgesetzt, 2026-10-15; Messung im Mess-Commit danach):
+- *Umgesetzt:* `PartitionsCheckpoint` (Position, Version als Marten-Revision, Geparkt) und `Partitionierung` (letztes UUID-Byte mod P);
+  `IProjectionTracker` ist die Batch-Naht (`LadePartitionAsync`, `LadeGuardsAsync`, `BeginneBatch`, `Stream`, `CommitAsync`, `ResetAllAsync`),
+  `ICoCommitTracker` bleibt der Typ-Schnitt für GA-1; `MartenCoCommitStoreBase.CommitAsync` (Effekte, Guards als Bulk-Store, Partition per
+  `Insert`/`UpdateRevision` in einem SaveChanges); `MartenEventStore.ReadPartitionAsync` (gesetzte Sequenz vor der Seite, Partitionsfilter,
+  Typfilter aus der neuen generierten Tabelle `GeneratedEventUpcasting.Herkunft`); `BatchLeser`/`BatchLeserActor` (Position mit Karenz,
+  Lese-Position im Speicher, Guard je Stream, Abtrennen/Halbieren, Parken, Konflikt-Wiederholung, Weckung coalesced) und
+  `BatchKonsumStartupService` (Signal → Partition, Poll je Partition), Rückstand in `/health`; `PullPathGenerator`: `batch-<Typ>` für
+  Projektionen, `pull-<Typ>` für Emittenten; Rückbau: `ProjectionAdapter` → `EmittentenAdapter` (nur Emittenten), `MartenProjectionTracker`
+  und `IReplaybarerTracker` entfernt; `ProjectionRebuilder` und `ProjektionsStandDienst` auf Partitionen (Partitionszahl gehört zum Stand);
+  Umgebung `Konsum` (Partitionen 8, BatchGroesse 500) in `UmgebungKonfig`, Lader, Editor, docs/konzept-werkbank.md.
+- *Lücken-Tests ohne Skip, grün:* I `GarantiePostgresTests.Zwei_Aktivierungen…` (G-4, auf den Batch-Leser umgestellt). Neu: P
+  `BatchKonsumGarantieTests` (7), `BatchLeserTests` (2); I `…Ein_Poison_Stream_wird_im_Batch_geparkt…`, `…Ein_Neuaufbau_nimmt…`,
+  `SequenceGapPostgresTests.Batch_Leser…`, `PollerBackstopPostgresTests.Batch_Leser…`; umgebaut: `CoCommitPostgresTests` (Absturz mitten im
+  Batch), `SchreibRegelPostgresTests`/`GeteilteDokumentePostgresTests` (zwei bzw. vier Partitions-Leser), `ProjectionRebuilderTests` (Strom).
+- *Probe vor dem Commit* (`--probe`, nicht abgelegt): Exactly-once in allen Blöcken grün; Leerlauf L1 0,4 Queries/s und 2 % CPU (Phase 2:
+  5 182 Queries/s, 337 %).
+
+**Plan-Änderungen aus Phase 3:**
+1. Der Code des Entwurfs weicht in drei Punkten ab (Entwurf in docs/04 korrigiert und eingearbeitet): (a) wirft der Dispatch, ist der Stream
+   des werfenden Events bekannt — er wird abgetrennt und allein versucht, halbiert wird nur bei Commit-Fehlern; (b) die Lese-Position läuft im
+   Speicher, durabel wird sie mit jedem Batch und über fremde Events höchstens je Poll-Intervall (die Probe zeigte sonst einen Commit je Weckung);
+   (c) ein Neuaufbau setzt die Partitionen mit neuer Revision zurück statt sie zu löschen — Martens `UpdateRevision` legt ein gelöschtes Dokument
+   sonst neu an (gegen echtes Postgres geprüft).
+2. Den Event-Zeitstempel setzt Marten mit der Uhr des Hosts, nicht der DB (Kommentare im `MartenEventStore` korrigiert): Ursache der Flakes
+   von `SequenceGapPostgresTests` und `GarantiePostgresTests.Ein_gescheiterter_Append…` (Karenz 0, bis 0,2 ms Versatz) — die Tests warten jetzt kurz.
+3. Die Basisklasse `MartenCoCommitStoreBase` liegt längst im Framework (`Core/`), nicht in `Domain.Infrastructure` (docs/04 korrigiert).
+
 **Plan-Änderungen aus Phase 2:**
 1. Die Leerlauf-Blöcke messen zusätzlich RSS am Fensterende, RSS-Höchststand des Laufs und aktive Actors; das E5-Ziel „RSS < 50 %“ wird nach
    Phase 3/5 geprüft (dann ist der Leerlauf leer); die Vermessung bleibt bei den E7-Standardwerten.
@@ -333,15 +361,18 @@ anstehen.
 7. `--probe` (verkürzter Funktionstest des Treibers) schreibt nicht nach `vermessung/ergebnisse/` — Probeläufe während der Entwicklung des
    Treibers sind keine Messläufe.
 
-## 9 · Übergabe an den nächsten Agenten (Stand 2026-10-15, nach Phase 2)
+## 9 · Übergabe an den nächsten Agenten (Stand 2026-10-15, nach Phase 3)
 
-- **Wo es steht:** Phase 0, 1 und 2 sind fertig und abgenommen (§8). Offen am Rand: Tobi bestätigt, das E5-RSS-Ziel nach Phase 3/5 zu prüfen.
-- **Danach:** Phase 3 nach §3 — **Haltepunkt (b):** zuerst den Entwurf des Batch-Konsums (Phase 3.1) in docs/04 schreiben und Tobi zeigen,
-  bevor er gebaut wird. Lücken-Test der Phase: I `GarantiePostgresTests.Zwei_Aktivierungen…` (Skip G-4).
+- **Wo es steht:** Phase 0, 1, 2 fertig und abgenommen; Phase 3 umgesetzt, Messung und Abnahme in §8. Offen am Rand: das E5-RSS-Ziel nach Phase 5
+  prüfen (der Leerlauf L1 ist seit Phase 3 leer, L5 enthält noch den Prozess-Poll, PF-4).
+- **Danach:** Phase 4 (Inbox als Tabelle, G-2, PF-3) nach §3; E1–E3 stehen in §2 als Vorschlag — vor dem Bau gebündelt fragen. Lücken-Test der
+  Phase: PD `SchreibGarantieTests.Eine_alte_CommandId_jenseits_der_Inbox_Grenze…` (Skip G-2).
 - **Messen je Phase:** `vermessung/README.md` (Abschnitt „Wiederholen“) — Höchstlast ≈ 5 min, Störungslauf ≈ 3–6 min, Spalte „Phase n“, Tabelle
   per Skript. Code committen, dann messen, dann Ergebnis committen. Nicht auf Abkühlung oder Fremdlast warten (Tobi), Fremdlast im Bericht nennen.
-- **Vor jedem Commit:** `dotnet build`; Prüfstand; Garantie-Suite (Prüfstand, dann nacheinander Integration und Prüfdomäne); betroffene
+- **Vor jedem Commit:** `dotnet build`; Prüfstand; Garantie-Suite (Prüfstand, dann nacheinander Integration und Prüfdomäne); die vollen
   Integrations-Suiten; `GraphExtractor -- --check`; `./codegen.sh --check`; bei Generator-Änderungen das Generat inspizieren; bei Umgebungs- oder
   Editor-Änderungen die Werkbank-Abnahme. Commits ohne Co-Authored-By; nicht pushen ohne Tobis Wort.
 - **Fallen:** Nach einer Gegenprobe mit sabotiertem Fix alle Testprojekte neu bauen. Läufe direkt hintereinander verlieren auf dem MacBook Air
-  Durchsatz (Wärme) — Vergleiche lieber A-B-B-A. Die Leerlauf-Blöcke enthalten die Heil-Poll- und Prozess-Poll-Arbeit (PF-2, PF-4).
+  Durchsatz (Wärme) — Vergleiche lieber A-B-B-A. Integrations-Tests gegen langlebige Schemata: ein frischer Projektions-Schlüssel beginnt am Kopf
+  des Logs (`BatchHilfe.StarteAmKopfAsync`); Karenz-0-Tests warten den Uhrenversatz ab. `git stash` nimmt neue Dateien nicht mit — nicht zum
+  Zählen „vorher“ benutzen.

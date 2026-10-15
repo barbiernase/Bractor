@@ -173,7 +173,29 @@ public interface IAggregateRepository
         /// </summary>
         Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(
             Guid streamId, int fromVersion, CancellationToken ct);
+
+        /// <summary>
+        /// Leseprimitiv des Batch-Konsums (docs/04 §4.1): eine Seite der Partition <paramref name="partition"/> von
+        /// <paramref name="partitionen"/> jenseits der globalen Sequenz <paramref name="nach"/>, geordnet nach Sequenz, höchstens
+        /// <paramref name="limit"/> Events. <paramref name="typen"/> = die Speicher-Diskriminatoren der abonnierten Typen samt ihrer
+        /// Upcasting-Vorgänger (null = ohne Typfilter); <paramref name="ausser"/> = Sequenzen, die der Leser schon erledigt hat.
+        /// Tombstones liest es nicht; materialisiert wird wie in <see cref="ReadStreamAsync"/>.
+        /// Vor der Seite bestimmt es die <b>gesetzte</b> Sequenz: die höchste, deren Event älter als die Karenz ist — bis dorthin ist
+        /// jede kleinere Sequenz sichtbar (Nachzügler-Regel wie beim Poll).
+        /// </summary>
+        Task<PartitionsSeite> ReadPartitionAsync(
+            long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit,
+            CancellationToken ct);
     }
+
+    /// <summary>Ein Event einer Partitions-Seite mit seiner globalen Sequenz.</summary>
+    public sealed record PartitionsEvent(long Sequenz, EventEnvelope Event);
+
+    /// <summary>
+    /// Eine Seite des Batch-Konsums: die Events (nach Sequenz geordnet; ein Split-Upcast liefert mehrere mit derselben Sequenz) und die
+    /// gesetzte Sequenz — bis dorthin darf die Position vorrücken. <paramref name="Voll"/>: das Limit war erreicht, es kann mehr geben.
+    /// </summary>
+    public sealed record PartitionsSeite(IReadOnlyList<PartitionsEvent> Events, long Gesetzt, bool Voll);
 
 
     /// <summary>

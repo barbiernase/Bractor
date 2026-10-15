@@ -1,14 +1,14 @@
 namespace Abstractions;
 
 /// <summary>
-/// Marker-Profil: „dieser Store macht ECHTEN Co-Commit" — Effekt und Fortschrittsmarke werden in
-/// EINER Transaktion gemeinsam durabel (bei Marten: dieselbe Session, ein SaveChangesAsync) → die
+/// Marker-Profil: „dieser Store macht ECHTEN Co-Commit" — die Effekte eines Batches, die Guards seiner Streams und der
+/// Partitions-Checkpoint werden in EINER Transaktion gemeinsam durabel (bei Marten: dieselbe Session, ein SaveChangesAsync) → die
 /// Verarbeitung ist exactly-once-wirksam, auch für nicht-idempotente (append-artige) Effekte.
 ///
 /// Der Sinn ist der <b>fail-fast-Guard</b> (P9): <see cref="IProjectionTracker"/> allein trägt
 /// KEINEN Beweis der Atomarität — ihn implementieren sowohl co-committende Stores (z. B. der
-/// puffernde Marten-Store, der im Mark-Punkt ein SaveChanges macht) ALS AUCH bewusst
-/// dual-writing Fallbacks (eigene Session je Mark, at-least-once). Ohne Unterscheidung könnte eine
+/// puffernde Marten-Store, der im Commit ein SaveChanges macht) ALS AUCH denkbare dual-writing
+/// Stores (Effekt durchgeschrieben, Fortschritt getrennt, at-least-once). Ohne Unterscheidung könnte eine
 /// append-artige Projektion (<see cref="IAppendProjektion"/>) still mit einem Dual-Write-Tracker
 /// laufen → doppelte Appends, und der Boot-Check (<c>tracker != null</c>) bliebe grün (false-green).
 ///

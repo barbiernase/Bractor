@@ -1,7 +1,7 @@
 # 13 — Reifegrad, Schulden & Bewertung
 
 **Die eine Quelle für „offen“.** Andere Dokumente (`CLAUDE.md`, Kapitel 01–12, Konzepte) nennen Schulden höchstens kurz und verweisen
-hierher. Stand: 2026-10-15, Phase 2 des Plans Garantien und Durchsatz. Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
+hierher. Stand: 2026-10-15, Phase 3 des Plans Garantien und Durchsatz. Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
 (`docs/konzept-werkbank.md` §2). Zahlen und Messwerte stehen in `docs/12-tests-und-vermessung.md`.
 
 ## 13.0 Offen auf einen Blick
@@ -9,11 +9,8 @@ hierher. Stand: 2026-10-15, Phase 2 des Plans Garantien und Durchsatz. Maßstab 
 | ID | Kurz | Prio |
 |---|---|:--:|
 | G-2 | Inbox-Fenster (10 000): eine CommandId, die jenseits der Grenze erneut kommt, wirkt erneut; der Emittenten-Anteil ist seit Phase 1 geschlossen | P1 |
-| G-4 | Projektions-Checkpoint ohne Versionsprüfung: zwei Aktivierungen können einen Effekt doppelt anwenden | P1 |
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
 | G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
-| PF-1 | Konsum je (Projektion, Stream) mit eigener Transaktion und eigenem Actor; kein Batch-Co-Commit | P1 |
-| PF-2 | Heil-Poll je Projektion ohne LIMIT, weckt jeden geänderten Stream nacheinander; Rebuild lädt den Log als Liste | P1 |
 | PF-4 | Prozess-Poll liest geänderte Streams ab 0 und verwirft geladene Events; Backstop weckt alle offenen Vorgänge | P1 |
 | PF-3 | Inbox-Marke je Command im Stream (auch ohne Event), Inbox im Snapshot | P2 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
@@ -57,7 +54,7 @@ Werkzeuge lesen teils per Reflection, und neben den neuen Wegen (Fluss, Quelle, 
 | Subsystem | Reife |
 |---|:--:|
 | Schreibseite | 🟢 / 🟡 (G-5) |
-| Konsum-/Prozess-Maschine | 🟡 (G-2 Inbox, G-4) |
+| Konsum-/Prozess-Maschine | 🟡 (G-2 Inbox, PF-4) |
 | Generatoren & Analyzer | 🟢 / 🟡 (W10-1, W2-1) |
 | Multi-Node / Transport | 🟢 / 🟡 (P1-1, P1-2) |
 | Werkbank (Extractor, Editor, Server) | 🟢 / 🟡 (LLM-1, W3-1, WB-1, WB-4, WZ-1) |
@@ -93,22 +90,7 @@ offen bleibt das Fenster selbst (Wiederholung eines Clients oder eines Dirigente
 Test: PD `SchreibGarantieTests.Eine_alte_CommandId_jenseits_der_Inbox_Grenze…` (Skip G-2). *Empfehlung:* Inbox als durable Seitentabelle
 statt Fenster im Stream (Plan Phase 4).
 
-**G-4 · Projektions-Checkpoint ohne Versionsprüfung.** `MartenCoCommitStoreBase.MarkProcessedAsync` schreibt den `ProjectionCheckpoint` per
-`Store` (letzter Schreiber gewinnt). Zwei Aktivierungen desselben (Projektion, Stream) — im Cluster bei einer Netzstörung möglich — können
-einen nicht-idempotenten Effekt doppelt anwenden. Single-Node betrifft es nicht. *Empfehlung:* Checkpoint mit erwarteter Version schreiben;
-ein Konflikt verwirft den Stapel wie bei geteilten Dokumenten.
-
 Die Reihe **PF** sind Kosten der Garantien ([11](11-garantien.md) §11.12): die Garantie bleibt, der Mechanismus ist teurer als nötig.
-
-**PF-1 · Konsum je Stream.** Der `ProjectionAdapter` arbeitet je (Projektion, Stream) in einem eigenen virtuellen Actor: Tracker lesen,
-Tail lesen, eine Transaktion. Bei vielen Streams mit je wenigen Events wachsen die Transaktionen mit Events × Projektionen — die Decke für
-„viele Anlagen, viele Events“. *Empfehlung:* Batch-Co-Commit (globaler Sequenzbereich, je Stream geordnet angewendet, Effekte und Checkpoints
-vieler Streams in einer Transaktion), partitioniert nach `Hash(Stream) mod P`; dabei G-4 mitlösen.
-
-**PF-2 · Heil-Poll.** Jede Projektion liest alle 30 s selbst alle Events seit ihrer Hochwassermarke ohne LIMIT, samt Payload
-(`MartenEventStore.ReadChangedStreamsAsync`), und weckt jeden geänderten Stream nacheinander mit 10 s Grenze (`PullPath`), auch wenn das
-Signal ihn längst erledigt hat. `ProjectionRebuilder` lädt den ganzen Log in eine Liste. *Empfehlung:* eine Abfrage „Stream-Kopf >
-Checkpoint“ und nur nachhängende Streams wecken; ein gemeinsamer, seitenweiser Change-Feed für alle Konsumenten; Rebuild als Strom.
 
 **PF-4 · Prozess-Poll und Backstop.** `ProzessManagerWiring` liest jeden geänderten Stream ab Version 0 und routet jedes passende historische
 Event erneut, obwohl `ReadChangedStreamsAsync` die neuen Events schon geladen hat; der Backstop weckt alle 15 s alle offenen Vorgänge, auf jedem
@@ -267,7 +249,7 @@ Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
 
 - **P3-1 · Mojibake** in `Domain.SourceGeneration/AggregateHandlerGenerator.cs`, `Infrastructure/Projections/ReadModelDepsReader.cs`,
   `Infrastructure/Serialization/ProtoMapper.cs`.
-- **P3-2 · Toter Code und Kleinkram:** `MartenProjectionTracker` (nirgends registriert) samt dem leeren Marker `IReplaybarerTracker`, `CqrsFrameworkOptions`, `IViewModel` + `ViewModelGenerator`,
+- **P3-2 · Toter Code und Kleinkram:** `CqrsFrameworkOptions`, `IViewModel` + `ViewModelGenerator`,
   auskommentierte Reflection-Scans (`EventTypeResolver`, `MartenEventTypeRegistration`), nicht gemappte
   Proto-Endpunkte in Host.Blazor (das Python-SDK ruft sie trotzdem), `BenchPing` ohne Treiber-Basis; Dateiname ≠ Klassenname bei einigen
   Generatoren; veraltete Kommentare und Meldungen (z. B. „drei Header“ in `Spur.cs`, „geteilt mit der Simulation“ in `ProzessManager.cs`, „Client-/OCC-Pfad
@@ -280,8 +262,8 @@ Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
 
 ## 13.4 Korrektheit vs. Reifegrad
 
-Keine bekannten aktiven Korrektheits-Bugs mehr (G-1, G-7, G-3 erledigt, §13.6). **G-2** (Inbox-Fenster) und **G-4** brechen eine Garantie
-unter Last bzw. im Cluster, **G-5** ist latent. Jede offene G-Lücke hat einen Test, der sie zeigt (Skip `G-n offen`, [11](11-garantien.md) §11.13).
+Keine bekannten aktiven Korrektheits-Bugs mehr (G-1, G-7, G-3, G-4 erledigt, §13.6). **G-2** (Inbox-Fenster) bricht eine Garantie
+unter Last, **G-5** ist latent. Jede offene G-Lücke hat einen Test, der sie zeigt (Skip `G-n offen`, [11](11-garantien.md) §11.13).
 Korrektheitsnah sind außerdem: **LLM-1** (vom LLM
 geschriebene Logik nur auf „baut“ geprüft), **W10-1** (möglicher Hash-Unterschied zwischen Python-Basis und Server beim Handshake), **W2-1** (vom Client gesetztes Cluster-Kind) und **WZ-1** (Prüfungen, die grün sind, ohne es zu beweisen). Alles andere ist Reifegrad,
 Allgemeingültigkeit oder Hygiene.
@@ -302,7 +284,7 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
    Phase 0 Abgleich und E2E-Messung, 1 Emit-Ausgang und Emittenten-Cursor (G-1, G-2 Emittent, G-7, P1-6, PF-9), 2 Actor-Lebenszyklus (G-3, PF-5), 3 Batch-Konsum (PF-1, PF-2,
    G-4), 4 Inbox als Tabelle (G-2, PF-3), 5 Prozess-Poll (PF-4), 6 Rest. Ein Agent setzt ihn allein um; die Schritte 1–10 unten ruhen so lange.
    Gemessen wird nach jeder Phase Ende-zu-Ende an den realen Domänen (Plan §0.1). Stand: Phase 0, 1 (Emit-Ausgang, Emittenten-Cursor,
-   G-1, G-7, P1-6, PF-9) und 2 (Actor-Lebenszyklus, G-3, PF-5) fertig; Stand und Messung im Plan §8.
+   G-1, G-7, P1-6, PF-9), 2 (Actor-Lebenszyklus, G-3, PF-5) und 3 (Batch-Konsum, PF-1, PF-2, G-4) umgesetzt; Stand und Messung im Plan §8.
 1. ~~WB-2/WB-3~~ Sicherheitsnetz steht (2026-10-15): ⟳-Abnahmetest inkl. „▶ Worker“ und Gate „frischer Checkout baut“ (§13.6).
 2. ~~W11-1 (Schreibwege)/WB-1~~ je Absicht ein Weg (2026-10-15, §13.6).
 3. **LLM-1** 🤖 fachlich prüfen: neue Rolle `<Wurzel>.Beispiele` (Strukturtabelle, Lageart, CQRS098), Beispiele an der Karte (Gegeben/Wenn/Dann)
@@ -320,6 +302,22 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **Batch-Konsum der Projektionen (früher PF-1, PF-2, G-4; Plan Garantien und Durchsatz, Phase 3, 2026-10-15; docs/04 §4.1.1, §4.3):**
+  - **PF-1:** replaybare Projektionen laufen je (Projektion, Partition) in einem `BatchLeser` (virtueller Actor `batch-<Typ>`, 8 Partitionen nach
+    dem letzten UUID-Byte, Umgebung `Konsum`): eine Seite (bis 500 Events, Typfilter samt Upcasting-Herkunft) → Guards in einer Abfrage → je
+    Stream in Versionsreihenfolge anwenden → Effekte, Guards und Partitions-Checkpoint in **einer** Transaktion. Poison-Streams werden geparkt
+    (der Rest läuft weiter, `/health` zeigt sie), Konflikte an geteilten Dokumenten halbieren den Batch. Der Adapter je Stream bleibt nur für
+    Emittenten (`EmittentenAdapter`, E8).
+  - **PF-2:** kein Heil-Poll je Stream mehr für Projektionen — der Poll weckt alle 30 s jede Partition, der Leser liest ab seiner Position
+    (leer im Leerlauf); die Position läuft über fremde Events im Speicher und wird höchstens einmal je Poll-Intervall durabel. Der Neuaufbau
+    (`ProjectionRebuilder`, `ProjektionsStandDienst`) liest je Partition seitenweise statt den Log als Liste.
+  - **G-4:** der Partitions-Checkpoint trägt eine numerische Revision; jeder Commit erwartet die geladene Version, eine zweite Aktivierung oder
+    ein Neuaufbau dazwischen verwirft den Batch (der Neuaufbau setzt mit neuer Revision zurück, statt zu löschen). I
+    `GarantiePostgresTests.Zwei_Aktivierungen…` ohne Skip; neu I `…Ein_Poison_Stream_wird_im_Batch_geparkt…`,
+    `…Ein_Neuaufbau_nimmt_einem_laufenden_Leser_den_Commit`, `SequenceGapPostgresTests.Batch_Leser…`,
+    `PollerBackstopPostgresTests.Batch_Leser…`; P `BatchKonsumGarantieTests`, `BatchLeserTests`.
+  - Mit erledigt aus P3-2: der tote `MartenProjectionTracker` und der leere Marker `IReplaybarerTracker` sind entfernt.
 
 - **Actor-Lebenszyklus (früher G-3, PF-5; Plan Garantien und Durchsatz, Phase 2, 2026-10-15):**
   - **G-3:** jeder Append des Aggregat-Actors (Effekt, Noop- und Ablehnungs-Marke) läuft über `AppendeAsync`. Scheitert er, rehydriert der Actor

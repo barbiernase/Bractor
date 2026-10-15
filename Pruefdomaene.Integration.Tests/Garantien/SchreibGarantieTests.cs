@@ -135,6 +135,8 @@ public class SchreibGarantieTests
 
             public Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(Guid streamId, int fromVersion, CancellationToken ct) => innen.ReadStreamAsync(streamId, fromVersion, ct);
             public Task<StreamChanges> ReadChangedStreamsAsync(long after, CancellationToken ct) => innen.ReadChangedStreamsAsync(after, ct);
+            public Task<PartitionsSeite> ReadPartitionAsync(long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit, CancellationToken ct)
+                => innen.ReadPartitionAsync(nach, partition, partitionen, typen, ausser, limit, ct);
             public Task<TState?> LoadStateAsync<TState>(Guid id) where TState : class, IState, new() => innen.LoadStateAsync<TState>(id);
         }
     }

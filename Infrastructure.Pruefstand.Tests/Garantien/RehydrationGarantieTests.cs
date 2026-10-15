@@ -28,6 +28,8 @@ public class RehydrationGarantieTests
         public Task AppendEventsAsync(Guid a, int v, IReadOnlyList<IEvent> e, string? c = null, string? ca = null, string? at = null, string? ak = null)
             => throw new NotSupportedException();
         public Task<StreamChanges> ReadChangedStreamsAsync(long after, CancellationToken ct) => throw new NotSupportedException();
+        public Task<PartitionsSeite> ReadPartitionAsync(long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit, CancellationToken ct)
+            => throw new NotSupportedException();
         public Task<TState?> LoadStateAsync<TState>(Guid id) where TState : class, IState, new() => throw new NotSupportedException();
     }
 

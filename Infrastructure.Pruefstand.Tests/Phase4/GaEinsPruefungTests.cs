@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using Abstractions;
@@ -23,23 +24,19 @@ public class GaEinsPruefungTests
     private sealed class AppendProjektionOhneStore : IAppendProjektion { }
     private sealed class GewoehnlicheReaktion { }
 
-    /// <summary>Trägt nur IProjectionTracker — dual-write-artig, KEINE Atomaritäts-Zusage.</summary>
-    private sealed class NurTrackerStub : IProjectionTracker
+    /// <summary>Trägt nur IProjectionTracker — KEINE Atomaritäts-Zusage (die Methoden ruft der Check nie).</summary>
+    private class NurTrackerStub : IProjectionTracker
     {
-        public Task<int> LastProcessedVersionAsync(string p, Guid s, CancellationToken ct) => Task.FromResult(-1);
-        public Task MarkProcessedAsync(string p, Guid s, int v, CancellationToken ct) => Task.CompletedTask;
-        public Task ResetAsync(string p, Guid s, CancellationToken ct) => Task.CompletedTask;
+        public Task<PartitionsCheckpoint> LadePartitionAsync(string p, int partition, CancellationToken ct) => throw new NotSupportedException();
+        public Task<IReadOnlyDictionary<Guid, int>> LadeGuardsAsync(string p, IReadOnlyCollection<Guid> s, CancellationToken ct) => throw new NotSupportedException();
+        public void BeginneBatch() { }
+        public void Stream(Guid streamId) { }
+        public Task<int> CommitAsync(PartitionsCheckpoint stand, IReadOnlyDictionary<Guid, int> guards, CancellationToken ct) => throw new NotSupportedException();
         public Task ResetAllAsync(string p, CancellationToken ct) => Task.CompletedTask;
     }
 
-    /// <summary>Trägt ICoCommitTracker — die Atomaritäts-Zusage (Effekt + Marke in EINER Transaktion).</summary>
-    private sealed class CoCommitTrackerStub : ICoCommitTracker
-    {
-        public Task<int> LastProcessedVersionAsync(string p, Guid s, CancellationToken ct) => Task.FromResult(-1);
-        public Task MarkProcessedAsync(string p, Guid s, int v, CancellationToken ct) => Task.CompletedTask;
-        public Task ResetAsync(string p, Guid s, CancellationToken ct) => Task.CompletedTask;
-        public Task ResetAllAsync(string p, CancellationToken ct) => Task.CompletedTask;
-    }
+    /// <summary>Trägt ICoCommitTracker — die Atomaritäts-Zusage (Effekte + Fortschritt in EINER Transaktion).</summary>
+    private sealed class CoCommitTrackerStub : NurTrackerStub, ICoCommitTracker { }
 
     [Fact]
     public void Append_ohne_Tracker_bricht()

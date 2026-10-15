@@ -121,6 +121,10 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
     public Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(Guid streamId, int fromVersion, CancellationToken ct)
         => _inner.ReadStreamAsync(streamId, fromVersion, ct);
 
+    public Task<PartitionsSeite> ReadPartitionAsync(
+        long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit, CancellationToken ct)
+        => _inner.ReadPartitionAsync(nach, partition, partitionen, typen, ausser, limit, ct);
+
     public Task<TState?> LoadStateAsync<TState>(Guid aggregateId) where TState : class, IState, new()
         => _inner.LoadStateAsync<TState>(aggregateId);
 
