@@ -357,6 +357,13 @@ anstehen.
   Takt 1 s. **Abnahme: teilweise** (L5 hängt an PF-12).
 - *Neue Befunde:* PF-11 (Emittenten-Poll ungeseitet), PF-12 (Reaktion hängt nach Höchstlast nach), PF-4b (Lease, fehlende Szenarien).
 
+**Nachtrag PF-12** (2026-10-15, Code `562e793`…`5bda1bb`, Messserver): der L5-Rest war nicht die Reaktion, sondern der Emittenten-Poll (jeder
+geänderte Stream bekam einen Cursor), der serielle Korrelations-Router (Read des Stream-Rests je Signal) und nicht zusammengefasste
+Emittenten-Weckungen; dazu der Offen-Index nach statt vor dem `ProzessGestartet` (Störungslauf rot, behoben). Messung
+`…_1940_5bda1bb_server-pf-12` (Spalte „PF-12“) und `…_1944_…`/`…_1947_…-stoerung-1/2` (gültig, grün): L5 2,5 Queries/s, 3,4 % CPU — **E5-Ziel
+Phase 5 damit erreicht (L1 und L5)**; S5-64 1,69 × Baseline. Offen: PF-13, PF-4b. Abgelegt, nicht gewertet: `…_1912_…` (vor der Bündelung),
+`…_1929_…-stoerung` (rot, 51 Vorgänge ohne Index-Eintrag — der Befund).
+
 **Plan-Änderungen aus Phase 3:**
 0. *Vorschlag an Tobi (offen):* E5 für Phase 3 neu fassen — S1 misst den seriellen Datei-Treiber (PF-10), nicht den Konsum. Entweder das
    S1-Ziel an PF-10 hängen (Melden in Bündeln, eigene Entscheidung) oder Phase 3 an dem messen, was sie ändert: Leerlauf (erreicht), Kosten je
@@ -407,9 +414,9 @@ anstehen.
 ## 9 · Übergabe an den nächsten Agenten (Stand 2026-10-15, nach Phase 3)
 
 - **Wo es steht:** Phase 0, 1, 2 fertig und abgenommen; Phase 3 umgesetzt und gemessen, **nicht abgenommen** (S1-Ziel verfehlt, die Decke von S1 ist
-  der Datei-Treiber, PF-10); Phase 5 (PF-4, G-8) umgesetzt und gemessen, **teilweise abgenommen** (L1 erreicht, L5 hängt an PF-12). Gemessen wird
+  der Datei-Treiber, PF-10); Phase 5 (PF-4, G-8) umgesetzt und gemessen, mit dem Nachtrag PF-12 E5-Ziel erreicht (L1 und L5 unter 10 Queries/s und 5 % CPU); offen PF-4b, PF-13. Gemessen wird
   seit 2026-10-15 auf dem Messserver (`scripts/server.sh`, docs/12 §12.6) mit eigener Tabelle; die Mac-Tabelle endet mit Phase 3.
-  **Haltepunkt:** Tobi entscheidet über den Vorschlag in §8 („Plan-Änderungen aus Phase 3“, Punkt 0) und über PF-12, bevor Phase 4 beginnt.
+  **Haltepunkt:** Tobi entscheidet über den Vorschlag in §8 („Plan-Änderungen aus Phase 3“, Punkt 0) bevor Phase 4 beginnt.
 - **Danach:** Phase 4 (Inbox als Tabelle, G-2, PF-3) nach §3; E1–E3 stehen in §2 als Vorschlag — vor dem Bau gebündelt fragen. Lücken-Test der
   Phase: PD `SchreibGarantieTests.Eine_alte_CommandId_jenseits_der_Inbox_Grenze…` (Skip G-2).
 - **Messen je Phase:** auf dem Messserver (`scripts/server.sh lauf scripts/vermessung-e2e.sh --anlass server-<phase> --spalte "<Phase>"`),

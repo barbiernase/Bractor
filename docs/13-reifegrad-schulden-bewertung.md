@@ -11,8 +11,7 @@ hierher. Stand: 2026-10-15, Phase 5 des Plans Garantien und Durchsatz. Maßstab 
 | G-2 | Inbox-Fenster (10 000): eine CommandId, die jenseits der Grenze erneut kommt, wirkt erneut; der Emittenten-Anteil ist seit Phase 1 geschlossen | P1 |
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
 | G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
-| PF-11 | Emittenten-Poll (`ReadChangedStreamsAsync`) lädt alle Events seit seiner Marke samt Daten in einer Abfrage, ungeseitet | P2 |
-| PF-12 | Die Reaktion hängt nach Höchstlast nach: im Leerlauf L5 holt sie noch auf (≈ 380 Cursor-Schritte/s, je Schritt ≈ 4 Stream-Reads) — L5 ist deshalb nicht leer | P2 |
+| PF-13 | Nach PF-12 unter S5-64: Reaktion p99 2 s (p50 5 ms) — ihr Nachschub wartet am heißen Posten hinter den Reservierungen; S3-64 0,9 × Baseline (Latenz 0,81 ×) — mehr parallele Sends an den einen heißen Sammelvorgang | P3 |
 | PF-4b | Rest von PF-4: keine Lease für den Prozess-Backstop im Cluster (jeder Knoten heilt alle offenen Vorgänge); Abnahme „S3 Zeit je Teil konstant über N“ und „10 000 offene Vorgänge im Leerlauf“ ohne Szenario im Treiber | P3 |
 | PF-10 | Datei-Treiber meldet eine Datei nach der anderen ins Log (Rückstau): das Melde-Tempo ist die Decke von S1 — Entscheidung offen | P2 |
 | VM-1 | Vermessungs-Treiber zählt Soll und Ist der Exactly-once-Prüfung in getrennten Abfragen, während der Host noch abbaut | P3 |
@@ -58,7 +57,7 @@ Werkzeuge lesen teils per Reflection, und neben den neuen Wegen (Fluss, Quelle, 
 | Subsystem | Reife |
 |---|:--:|
 | Schreibseite | 🟢 / 🟡 (G-5) |
-| Konsum-/Prozess-Maschine | 🟡 (G-2 Inbox, PF-12) |
+| Konsum-/Prozess-Maschine | 🟡 (G-2 Inbox) |
 | Generatoren & Analyzer | 🟢 / 🟡 (W10-1, W2-1) |
 | Multi-Node / Transport | 🟢 / 🟡 (P1-1, P1-2) |
 | Werkbank (Extractor, Editor, Server) | 🟢 / 🟡 (LLM-1, W3-1, WB-1, WB-4, WZ-1) |
@@ -95,17 +94,6 @@ Test: PD `SchreibGarantieTests.Eine_alte_CommandId_jenseits_der_Inbox_Grenze…`
 statt Fenster im Stream (Plan Phase 4).
 
 Die Reihe **PF** sind Kosten der Garantien ([11](11-garantien.md) §11.12): die Garantie bleibt, der Mechanismus ist teurer als nötig.
-
-**PF-11 · Emittenten-Poll lädt ungeseitet.** Der `Poller` der Emittenten (`PullPath`) ruft alle 30 s `ReadChangedStreamsAsync`: eine
-LINQ-Abfrage über alle Events jenseits der Marke, samt Daten, ohne Limit — nur um die Stream-Ids zu bestimmen. Unter Dauerlast sind das je Poll
-und Emittent die Events von 30 s; nach einem langen Stillstand das ganze Log in einem Zug. *Empfehlung:* Stream-Ids und Karenz-Marke in SQL
-(`select distinct stream_id …`, ohne Daten) und seitenweise wie der Prozess-Poll. Gefunden bei PF-4 (der Prozess-Poll nutzt die Methode nicht mehr).
-
-**PF-12 · Reaktion hängt nach Höchstlast nach.** Im Leerlauf L5 nach S5-64 laufen auf dem Messserver ≈ 380 Transaktionen/s und ≈ 2 000 Queries/s:
-5 700 Cursor-Upserts von `NachschubBeiMindestbestand` in 15 s, also echter Fortschritt (der Adapter schreibt nur, wenn er vorankommt), dazu
-≈ 23 000 Stream-Reads — etwa vier je Cursor-Schritt (Weckungen je Signal, die denselben Stream nachlesen). Der Prozess-Manager ist dort still
-(eine Abfrage des Offen-Index). *Empfehlung:* zuerst messen, wie lange der Rückstand der Reaktion nach S5-64 braucht (Kennzahl „Reaktion bis
-aufgeholt“ im Treiber), dann Weckungen je Stream bündeln (E8 hält Emittenten bewusst je Stream).
 
 **PF-10 · Datei-Treiber meldet seriell.** Der Datei-Treiber meldet die nächste Datei erst, wenn die vorige im Log steht (Rückstau, docs/11 §11.8).
 In S1 ist genau das die Decke: je Sekunde werden halb so viele Paare komplett, wie Dateien gemeldet werden (Phase-2- und Phase-3-Code gleich);
@@ -323,6 +311,19 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 
 ## 13.6 Erledigt (früher hier offen)
 
+- **Leerlauf der Prüfdomäne (früher PF-11, PF-12; 2026-10-15, Messserver; docs/04 §4.1, §4.5):** die Annahme „die Reaktion hängt nach“
+  war falsch (sie antwortet in Echtzeit, p99 37 ms). L5 war nicht leer wegen dreier Schichten, die nacheinander sichtbar wurden:
+  - **Emittenten-Poll weckte jeden geänderten Stream des Logs:** der Adapter las ihn ab 0 und legte einen Cursor an (9 274 Cursor statt 50).
+    Jetzt liest der Poll seitenweise nur Streams mit abonniertem Event, ohne Daten (`ReadChangedStreamsAsync` mit Typfilter, PF-11).
+  - **Korrelations-Router seriell:** je Signal ein Read des ganzen Stream-Rests (S5-64: 63 000 Reads, 3,9 Mio. Zeilen), die Mailbox staute
+    sich bis in den Leerlauf. Jetzt parallel (32), Auslöser ohne Read, sonst genau ein Event (`ReadEventAsync`, auch für den Auslöser im Manager).
+  - **Signale der Emittenten nicht zusammengefasst:** je Signal eine Weckung und ein Read (48 000 in L5). Jetzt `Weckungen<TKey>` (eine
+    unterwegs, eine hinterher), dieselbe Klasse wie im Batch-Konsum.
+  - Dabei gefunden (Störungslauf rot, 51 Vorgänge liegen geblieben): der Offen-Index entstand *nach* dem `ProzessGestartet`; ein Abbruch
+    dazwischen ließ gestartete Vorgänge ohne Eintrag zurück, die weder Backstop noch der Poll (seit PF-4 startet er nur offene oder neue)
+    weckten. Jetzt Eintrag vor dem Start (`ProzessStartGarantieTests`, ohne die Reihenfolge rot gesehen).
+  - Gemessen (`…_1940_5bda1bb_server-pf-12`, zwei Störungsläufe grün): L5 2 292 → 2,5 Queries/s, 145 → 3,4 % CPU (E5-Ziel L5 erreicht);
+    S5-64 1,69 × Baseline, Latenz p50 0,26 ×, Queries je Vorgang 0,78 ×; S5-8 Latenz 0,38 ×. Rest: PF-13.
 - **Prozess-Poll und Backstop (früher PF-4, G-8; Plan Garantien und Durchsatz, Phase 5, vor Phase 4 auf Tobis Wort, 2026-10-15; docs/04 §4.5):**
   - **PF-4:** der Prozess-Poll (`ProzessPoll`) liest das Log seitenweise ab seiner Marke (`ReadPartitionAsync`, 500 Events) und routet die
     geladenen Events direkt — keine Stream-Reads ab Version 0 mehr; Starts nur für Vorgänge, die es noch nicht gibt oder die offen sind

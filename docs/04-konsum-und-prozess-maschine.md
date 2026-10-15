@@ -100,6 +100,8 @@ Event der **abonnierten Typen** bekommen haben (Diskriminatoren samt Upcasting-H
 Daten), und rückt sie je Seite **nur** vor, wenn jede Weckung als `WakeAck(Aufgeholt: true)` zurückkommt (bounded 10 s) — kein terminaler,
 unverarbeiteter Stream wird still übersprungen. Ein Stream ohne abonniertes Event weckt keinen Adapter (PF-12: früher bekam jeder geänderte
 Stream des Logs einen Cursor). Der
+Signal-Weckungen sind je Stream zusammengefasst (`Weckungen<TKey>`: höchstens eine unterwegs, eine hinterher; dieselbe Klasse weckt die
+Partitionen des Batch-Konsums) — ohne das wurde unter Last jedes Signal ein eigener Read des Adapters (PF-12). Der
 `SignalAdapterActor` je Stream serialisiert beide Quellen über seine Mailbox (Single-Writer je Stream) und passiviert nach
 `Lebenszyklus.AdapterLeerlaufSekunden` (Standard 120; PF-5) — der Cursor liegt durabel im Store.
 
@@ -252,9 +254,13 @@ Liste von Projekten. Das Framework liest den Verbund über `Anwendung.Prozesse` 
 ist ein einmal geschriebener Petri-Netz-Interpreter; je Vorgang (Korrelation) ein virtueller `ProzessManagerActor`. Sein eigenes Log ist der
 Stream der Korrelation (`ProzessGestartet`, `SchrittGescheitert`, `SchrittUmgeleitet`, `ProzessBeendet`).
 
-**Start und Zustellung** (`KorrelationsRouter`, `ProzessManagerWiring.cs`): der Router abonniert die Signale aller beteiligten Events. Ein
-Auslöser-Event startet einen Vorgang mit deterministischer Korrelation `ProzessId.Für(Name, Stream, Version)`; ein Ziel-Event trägt die
-Korrelation in seinen Metadaten (vom Manager beim Feuern gesetzt) und weckt daraus. Der `ProzessManagerStartupService` betreibt dazu:
+**Start und Zustellung** (`KorrelationsRouter`, `ProzessManagerWiring.cs`): der Router abonniert die Signale aller beteiligten Events und
+routet sie parallel (bis 32, `KorrelationsRouterActor`; zustandslos, Weckungen idempotent — PF-12). Ein Auslöser-Signal startet einen Vorgang mit
+deterministischer Korrelation `ProzessId.Für(Name, Stream, Version)`, ohne Read (der Signal-Typ nennt das Event, generierte Tabelle
+`Signale.EventToSignal`); ein Ziel-Event trägt die Korrelation in seinen Metadaten (vom Manager beim Feuern gesetzt) — der Router liest genau dieses
+Event (`ReadEventAsync`) und weckt daraus. Den **Offen-Index** schreibt der Manager vor dem `ProzessGestartet` und räumt ihn nach dem
+`ProzessBeendet` ab: er ist eine Obermenge der offenen Vorgänge (ein Abbruch zwischen Start und Eintrag ließ sonst Vorgänge liegen, die niemand
+weckte). Der `ProzessManagerStartupService` betreibt dazu:
 - den **Prozess-Poll** (`ProzessPoll`, 30 s, PF-4): er liest das Log seitenweise ab seiner Hochwassermarke (`ReadPartitionAsync`, eine
   Partition, 500 Events) und routet die geladenen Events direkt (`ProzessPollFilter`) — ein Auslöser startet seinen Vorgang nur, wenn es ihn
   noch nicht gibt oder er offen ist (`StreamsVorhandenAsync`, eine Abfrage je Seite), jedes andere Event weckt nur über die Korrelation eines
