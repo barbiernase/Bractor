@@ -41,7 +41,7 @@ public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.F
         var reader = new MartenEventStore(
             _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.Zero);
 
-        var baseHwm = (await reader.ReadChangedStreamsAsync(0, default)).HighWaterMark;
+        var baseHwm = (await reader.ReadChangedStreamsAsync(0, null, int.MaxValue, default)).HighWaterMark;
 
         var streamA = Guid.NewGuid(); // zieht die NIEDRIGERE Seq (INSERT zuerst)
         var streamB = Guid.NewGuid(); // zieht die HÖHERE Seq (INSERT danach), committet aber ZUERST
@@ -70,7 +70,7 @@ public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.F
         await txB.CommitAsync();
 
         await BatchHilfe.UhrenversatzAbwartenAsync();
-        var scanNurB = await reader.ReadChangedStreamsAsync(baseHwm, default);
+        var scanNurB = await reader.ReadChangedStreamsAsync(baseHwm, null, int.MaxValue, default);
         scanNurB.StreamIds.Should().Contain(streamB);
         scanNurB.StreamIds.Should().NotContain(streamA, "A ist noch uncommitted");
         var naiveHwm = scanNurB.HighWaterMark; // = B's (höhere) Sequenz
@@ -87,7 +87,7 @@ public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.F
             "(Sequence > naiveHwm) überspringt A für immer");
 
         // Der Beweis, dass der naive Read A wirklich verliert:
-        var scanAbNaiv = await reader.ReadChangedStreamsAsync(naiveHwm, default);
+        var scanAbNaiv = await reader.ReadChangedStreamsAsync(naiveHwm, null, int.MaxValue, default);
         scanAbNaiv.StreamIds.Should().NotContain(streamA, "A wird ab der naiven HWM nie wieder gescannt");
     }
 
@@ -106,13 +106,13 @@ public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.F
             _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.FromMinutes(5));
 
         // Referenzpunkt: alles bis hier ist "alt genug" (max seq ohne Karenz).
-        var trueMax = (await ohneKarenz.ReadChangedStreamsAsync(0, default)).HighWaterMark;
+        var trueMax = (await ohneKarenz.ReadChangedStreamsAsync(0, null, int.MaxValue, default)).HighWaterMark;
 
         var stream = Guid.NewGuid();
         await ohneKarenz.AppendEventsAsync(stream, 0, new Abstractions.IEvent[] { new ImagePairInspiziert() });
 
         // Mit Karenz: der Stream wird geweckt, aber die HWM bleibt bei trueMax (Event zu jung).
-        var mit = await mitKarenz.ReadChangedStreamsAsync(trueMax, default);
+        var mit = await mitKarenz.ReadChangedStreamsAsync(trueMax, null, int.MaxValue, default);
         mit.StreamIds.Should().Contain(stream, "der geänderte Stream wird trotz Karenz geweckt (Heilung)");
         mit.HighWaterMark.Should().Be(trueMax,
             "die Straggler-Karenz rückt die HWM NICHT über das zu junge Event hinaus (schützt in-flight Nachzügler)");
@@ -120,7 +120,7 @@ public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.F
         // Ohne Karenz: die HWM rückt sofort über das Event (die alte, für Befund 3 unsichere Logik). Kurz warten: den Event-Zeitstempel setzt
         //   der Client, er liegt manchmal Bruchteile einer Millisekunde vor der DB-Uhr (BatchHilfe.UhrenversatzAbwartenAsync).
         await BatchHilfe.UhrenversatzAbwartenAsync();
-        var ohne = await ohneKarenz.ReadChangedStreamsAsync(trueMax, default);
+        var ohne = await ohneKarenz.ReadChangedStreamsAsync(trueMax, null, int.MaxValue, default);
         ohne.HighWaterMark.Should().BeGreaterThan(trueMax, "ohne Karenz rückt die HWM sofort vor");
     }
 

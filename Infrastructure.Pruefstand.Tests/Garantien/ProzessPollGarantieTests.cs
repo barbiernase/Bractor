@@ -53,7 +53,7 @@ public class ProzessPollGarantieTests
             => throw new InvalidOperationException("PF-4: der Poll liest keine Streams nach");
         public Task AppendEventsAsync(Guid a, int v, IReadOnlyList<IEvent> e, string? c = null, string? ca = null, string? at = null, string? ak = null)
             => throw new NotSupportedException();
-        public Task<StreamChanges> ReadChangedStreamsAsync(long after, CancellationToken ct) => throw new NotSupportedException();
+        public Task<StreamChanges> ReadChangedStreamsAsync(long after, IReadOnlyCollection<string>? typen, int limit, CancellationToken ct) => throw new NotSupportedException();
         public Task<TState?> LoadStateAsync<TState>(Guid id) where TState : class, IState, new() => throw new NotSupportedException();
     }
 

@@ -64,7 +64,7 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
     public async Task Ein_Poison_Stream_haelt_die_Hochwassermarke_und_blockiert_keine_anderen_Streams()
     {
         var es = EventStore();
-        var basis = (await es.ReadChangedStreamsAsync(0, default)).HighWaterMark;
+        var basis = (await es.ReadChangedStreamsAsync(0, null, int.MaxValue, default)).HighWaterMark;
         Guid gift = Guid.NewGuid(), gesund = Guid.NewGuid();
         await es.AppendEventsAsync(gift, 0, new IEvent[] { new ImagePairInspiziert() });
         await es.AppendEventsAsync(gesund, 0, new IEvent[] { new ImagePairInspiziert() });
@@ -95,7 +95,7 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
         // Ein Versionskonflikt beim Append lässt Marten die reservierten Sequenzen mit Tombstones füllen (eigener Stream). Der Poll weckt jeden
         // geänderten Stream — auch diesen —, und der Adapter liest ihn wie jeden anderen: das darf die Hochwassermarke nicht festhalten.
         var es = EventStore();
-        var basis = (await es.ReadChangedStreamsAsync(0, default)).HighWaterMark;
+        var basis = (await es.ReadChangedStreamsAsync(0, null, int.MaxValue, default)).HighWaterMark;
         var konflikt = Guid.NewGuid();
         await es.AppendEventsAsync(konflikt, 0, new IEvent[] { new ImagePairInspiziert() });
         try { await es.AppendEventsAsync(konflikt, 0, new IEvent[] { new ImagePairInspiziert(), new ImagePairInspiziert() }); } catch (ConcurrencyException) { }
@@ -106,7 +106,7 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
         await BatchHilfe.UhrenversatzAbwartenAsync();   // Karenz 0: das letzte Event soll schon gesetzt sein
         await poller.PollOnceAsync();
 
-        var kopf = (await es.ReadChangedStreamsAsync(basis, default)).HighWaterMark;
+        var kopf = (await es.ReadChangedStreamsAsync(basis, null, int.MaxValue, default)).HighWaterMark;
         poller.HighWater.Should().Be(kopf, "ein gescheiterter Append hinterlässt keinen Stream, an dem jeder Poll für immer hängen bleibt");
     }
 

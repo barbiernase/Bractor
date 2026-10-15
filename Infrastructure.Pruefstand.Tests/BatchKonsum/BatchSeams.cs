@@ -69,7 +69,7 @@ public sealed class PartitionsLog : IEventStoreRepository
 
     public Task AppendEventsAsync(Guid a, int v, IReadOnlyList<IEvent> e, string? c = null, string? ca = null, string? at = null, string? ak = null)
         => throw new NotSupportedException();
-    public Task<StreamChanges> ReadChangedStreamsAsync(long after, CancellationToken ct) => throw new NotSupportedException();
+    public Task<StreamChanges> ReadChangedStreamsAsync(long after, IReadOnlyCollection<string>? typen, int limit, CancellationToken ct) => throw new NotSupportedException();
     public Task<TState?> LoadStateAsync<TState>(Guid id) where TState : class, IState, new() => throw new NotSupportedException();
 
     /// <summary>Eine Stream-Id, die in Partition <paramref name="partition"/> von <paramref name="partitionen"/> fällt.</summary>

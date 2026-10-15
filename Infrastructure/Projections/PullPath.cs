@@ -123,7 +123,7 @@ public sealed class GenericPullStartupService : IHostedService
             // Durabler Start: bei der zuletzt gescannten HWM aufsetzen, NICHT bei 0 — sonst würde
             // jeder Boot die ganze Historie re-scannen (und tracker-lose Handler alles re-emittieren).
             var startHighWater = await _pollCursors.GetAsync(reg.SubscriberId, ct);
-            var poller = new Poller(_eventStore, pollWake, startHighWater);
+            var poller = new Poller(_eventStore, pollWake, startHighWater, BatchLeser.TypenAus(reg.EventTypes));
             _pollLoops.Add(PollLoopAsync(reg.SubscriberId, poller, _pollCts.Token));
 
             Console.WriteLine($"  ✓ {reg.SubscriberId}: Receiver auf {signalTypes.Count} Signal-Typen → Kind '{kindName}' (+ Poll {PollInterval.TotalSeconds:0}s, ab HWM {startHighWater})");

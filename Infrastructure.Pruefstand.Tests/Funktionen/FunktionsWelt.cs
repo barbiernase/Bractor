@@ -106,7 +106,7 @@ internal sealed class LogImSpeicher : IEventStoreRepository
 
     public IReadOnlyList<EventEnvelope> Stream(Guid id) { lock (_lock) return _streams.TryGetValue(id, out var s) ? s.ToList() : new List<EventEnvelope>(); }
 
-    public Task<StreamChanges> ReadChangedStreamsAsync(long after, CancellationToken ct) => throw new NotSupportedException();
+    public Task<StreamChanges> ReadChangedStreamsAsync(long after, IReadOnlyCollection<string>? typen, int limit, CancellationToken ct) => throw new NotSupportedException();
     public Task<PartitionsSeite> ReadPartitionAsync(long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit, CancellationToken ct)
         => throw new NotSupportedException();
     public Task<TState?> LoadStateAsync<TState>(Guid id) where TState : class, IState, new() => throw new NotSupportedException();

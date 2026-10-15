@@ -51,7 +51,7 @@ public class AppendBatchingTests
             => throw new NotSupportedException();
         public Task<PartitionsSeite> ReadPartitionAsync(long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit, CancellationToken ct)
             => throw new NotSupportedException();
-        public Task<StreamChanges> ReadChangedStreamsAsync(long a, CancellationToken ct)
+        public Task<StreamChanges> ReadChangedStreamsAsync(long a, IReadOnlyCollection<string>? typen, int limit, CancellationToken ct)
             => throw new NotSupportedException();
         public Task<TState?> LoadStateAsync<TState>(Guid id) where TState : class, IState, new()
             => throw new NotSupportedException();

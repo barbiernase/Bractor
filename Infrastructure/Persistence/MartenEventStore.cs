@@ -321,49 +321,53 @@ public class MartenEventStore : IEventStoreRepository
     }
 
     /// <summary>
-    /// Globales Leseprimitiv für den Poll-Backstop (docs/04 §4.1): scannt die Events
-    /// jenseits der globalen Sequenz und liefert die betroffenen Streams + neue
-    /// High-Water-Mark. Marten führt die globale Sequenz (mt_events.seq_id) nativ.
+    /// Globales Leseprimitiv für den Poll der Emittenten (docs/04 §4.1, PF-11/PF-12): eine Seite der Streams mit einem Event der abonnierten
+    /// Typen jenseits der Marke — reines SQL über Sequenz, Stream und Typ, ohne Daten. Früher lud es jedes Event jenseits der Marke samt
+    /// Daten in einer Abfrage, und der Poller weckte jeden geänderten Stream, auch ohne abonniertes Event (der Adapter las ihn ab 0 und legte
+    /// einen Cursor an — je Stream des Logs einer).
     ///
-    /// ★ Befund 3: Die HWM rückt NICHT naiv auf <c>max(seq)</c> vor, sondern nur bis zur höchsten
-    ///   Sequenz, deren Event bereits älter als die Straggler-Karenz (<see cref="_stragglerGrace"/>)
-    ///   ist. Zu junge Events werden zwar GEWECKT (Heilung, niedrige Latenz), schieben die HWM aber
-    ///   noch nicht vor — so bekommen in-flight, niedriger-nummerierte Nachzügler Zeit, sichtbar zu
-    ///   werden, bevor der Cursor sie überholt. Ohne Karenz (Grace = 0) ist das Verhalten identisch
-    ///   zur alten <c>max(seq)</c>-Logik.
+    /// ★ Befund 3: die Marke rückt nur bis zur gesetzten Sequenz — der höchsten, deren Event älter als die Straggler-Karenz
+    /// (<see cref="_stragglerGrace"/>) ist, gegen die DB-Uhr. Jüngere Events werden geweckt (Latenz), schieben die Marke aber nicht vor: so
+    /// werden in-flight, niedriger-nummerierte Nachzügler noch sichtbar, bevor der Cursor sie überholt. Tombstones (G-7) belegen nur Sequenzen
+    /// eines gescheiterten Appends und wecken niemanden.
     /// </summary>
     public async Task<StreamChanges> ReadChangedStreamsAsync(
-        long afterGlobalSequence, CancellationToken ct)
+        long afterGlobalSequence, IReadOnlyCollection<string>? typen, int limit, CancellationToken ct)
     {
-        await using var session = _store.LightweightSession();
+        await EventTabellenAsync(_store, ct);
+        await using var session = _store.QuerySession();
+        var schema = _store.Options.Events.DatabaseSchemaName;
 
-        var raw = await session.Events
-            .QueryAllRawEvents()
-            .Where(e => e.Sequence > afterGlobalSequence)
-            .OrderBy(e => e.Sequence)
-            .ToListAsync(ct);
+        var juengste = await session.QueryAsync<long>(
+            $"select seq_id from {schema}.mt_events where seq_id > ? and timestamp <= now() - ? order by seq_id desc limit 1",
+            ct, afterGlobalSequence, _stragglerGrace);
+        var gesetzt = juengste.Count > 0 ? juengste[0] : afterGlobalSequence;
 
-        // Alle geänderten Streams wecken (Heilung) — unabhängig von der Karenz. Tombstones (G-7) belegen nur Sequenzen eines
-        //   gescheiterten Appends: ihr Stream ist kein Aggregat und weckt niemanden; die Hochwassermarke läuft über sie hinweg
-        //   (Zeitstempel -infinity, also immer jenseits der Karenz).
-        var streams = raw.Where(e => !IstTombstone(e)).Select(e => e.StreamId).Distinct().ToList();
+        var conn = (Npgsql.NpgsqlConnection)session.Connection!;
+        if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync(ct);
+        await using var cmd = conn.CreateCommand();
+        cmd.CommandText = $"select seq_id, stream_id from {schema}.mt_events where seq_id > @nach and "
+                          + (typen is null ? "type <> 'tombstone'" : "type = any(@typen)") + " order by seq_id limit @limit";
+        cmd.Parameters.AddWithValue("nach", afterGlobalSequence);
+        cmd.Parameters.AddWithValue("limit", limit);
+        if (typen is not null) cmd.Parameters.AddWithValue("typen", typen.ToArray());
 
-        if (raw.Count == 0)
-            return new StreamChanges(streams, afterGlobalSequence);
+        var streams = new List<Guid>();
+        var gesehen = new HashSet<Guid>();
+        long letzte = afterGlobalSequence;
+        var zeilen = 0;
+        await using (var r = await cmd.ExecuteReaderAsync(ct))
+            while (await r.ReadAsync(ct))
+            {
+                zeilen++;
+                letzte = r.GetInt64(0);
+                var s = r.GetGuid(1);
+                if (gesehen.Add(s)) streams.Add(s);
+            }
 
-        // Die HWM nur bis zur höchsten Sequenz vorrücken, deren Event die Karenzzeit überstanden hat.
-        // Die DB-Uhr als Referenz. Den Event-Zeitstempel setzt Marten beim Append mit der Uhr des Clients (Parameter des INSERT); ein Versatz
-        //   zwischen beiden verschiebt die Karenz um diesen Betrag (gemessen unter 1 ms zwischen Mac und Docker-VM).
-        var cutoff = await DbNowAsync(session, ct) - _stragglerGrace;
-
-        long highWater = afterGlobalSequence;
-        foreach (var e in raw) // aufsteigend nach Sequenz; Timestamp läuft monoton mit
-        {
-            if (e.Timestamp <= cutoff && e.Sequence > highWater)
-                highWater = e.Sequence;
-        }
-
-        return new StreamChanges(streams, highWater);
+        var voll = zeilen >= limit;
+        var hochwasser = voll ? Math.Min(gesetzt, letzte) : gesetzt;
+        return new StreamChanges(streams, Math.Max(afterGlobalSequence, hochwasser), voll);
     }
 
     /// <summary>
@@ -372,25 +376,4 @@ public class MartenEventStore : IEventStoreRepository
     /// und dürfen keinen Leser wecken oder anhalten.
     /// </summary>
     private static bool IstTombstone(JasperFx.Events.IEvent e) => e.Data is Tombstone;
-
-    /// <summary>Die aktuelle DB-Uhr (timestamptz) über die Session-Verbindung — als Referenz für die
-    /// Straggler-Karenz (die Event-Zeitstempel setzt der Client, siehe oben).</summary>
-    private static async Task<DateTimeOffset> DbNowAsync(IQuerySession session, CancellationToken ct)
-    {
-        var conn = session.Connection;
-        if (conn is null)
-            return DateTimeOffset.UtcNow; // defensiv — sollte nach dem Query offen sein
-        if (conn.State != System.Data.ConnectionState.Open)
-            await conn.OpenAsync(ct);
-
-        await using var cmd = conn.CreateCommand();
-        cmd.CommandText = "select now()";
-        var value = await cmd.ExecuteScalarAsync(ct);
-        return value switch
-        {
-            DateTimeOffset dto => dto,
-            DateTime dt => new DateTimeOffset(DateTime.SpecifyKind(dt, DateTimeKind.Utc)),
-            _ => DateTimeOffset.UtcNow
-        };
-    }
 }

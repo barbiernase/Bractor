@@ -115,8 +115,8 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
     }
 
     // ── Lesezugriffe unverändert an den inneren Store durchreichen ──
-    public Task<StreamChanges> ReadChangedStreamsAsync(long afterGlobalSequence, CancellationToken ct)
-        => _inner.ReadChangedStreamsAsync(afterGlobalSequence, ct);
+    public Task<StreamChanges> ReadChangedStreamsAsync(long afterGlobalSequence, IReadOnlyCollection<string>? typen, int limit, CancellationToken ct)
+        => _inner.ReadChangedStreamsAsync(afterGlobalSequence, typen, limit, ct);
 
     public Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(Guid streamId, int fromVersion, CancellationToken ct)
         => _inner.ReadStreamAsync(streamId, fromVersion, ct);

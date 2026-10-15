@@ -37,7 +37,7 @@ public class PollerBackstopPostgresTests : IClassFixture<PollerBackstopPostgresT
 
         // Isolation gegen früher in DIESEM Schema angehängte Events: ab der aktuellen globalen
         // HWM aufsetzen. Ebene-2-Tests laufen sequentiell (xunit.runner.json) → kein Interleave.
-        var baseHwm = (await store.ReadChangedStreamsAsync(0, default)).HighWaterMark;
+        var baseHwm = (await store.ReadChangedStreamsAsync(0, null, int.MaxValue, default)).HighWaterMark;
 
         // Ein terminaler Stream: ein Event, danach STILLE. Sein Signal geht verloren (kein Wake) —
         // der Poll ist die einzige verbleibende Rettung.
@@ -73,6 +73,43 @@ public class PollerBackstopPostgresTests : IClassFixture<PollerBackstopPostgresT
 
         verarbeitet.Should().ContainSingle().Which.Should().Be(streamId,
             "ein unbestätigt gebliebener Stream muss beim nächsten Poll erneut geweckt werden");
+    }
+
+    /// <summary>
+    /// PF-12: der Poll der Emittenten weckt nur Streams mit einem abonnierten Event — früher jeden geänderten Stream des Logs, und der
+    /// Adapter legte für jeden einen Cursor an — und liest seitenweise über alle Seiten (nur Sequenz und Stream, keine Daten).
+    /// </summary>
+    [Fact]
+    public async Task Der_Poll_weckt_nur_Streams_mit_abonniertem_Event_und_liest_ueber_alle_Seiten()
+    {
+        var store = new MartenEventStore(
+            _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.Zero);
+        var baseHwm = (await store.ReadChangedStreamsAsync(0, null, int.MaxValue, default)).HighWaterMark;
+        var typen = BatchLeser.TypenAus(new[] { typeof(ImagePairInspiziert) });
+
+        var abonniert = Enumerable.Range(0, 5).Select(_ => Guid.NewGuid()).ToList();
+        var fremd = Guid.NewGuid();
+        foreach (var s in abonniert.Take(3)) await store.AppendEventsAsync(s, 0, new IEvent[] { new ImagePairInspiziert() });
+        await store.AppendEventsAsync(fremd, 0, new IEvent[] { new ImagePairKomplett() });
+        foreach (var s in abonniert.Skip(3)) await store.AppendEventsAsync(s, 0, new IEvent[] { new ImagePairInspiziert() });
+
+        // Seiten zu zwei Events: 2 + 2 + 1, die fremde Sequenz dazwischen zählt nicht.
+        var seiten = new List<StreamChanges>();
+        for (var hwm = baseHwm; ;)
+        {
+            var seite = await store.ReadChangedStreamsAsync(hwm, typen, 2, default);
+            seiten.Add(seite);
+            hwm = seite.HighWaterMark;
+            if (!seite.Voll) break;
+        }
+        seiten.Select(x => x.StreamIds.Count).Should().Equal(2, 2, 1);
+        seiten.SelectMany(x => x.StreamIds).Should().Equal(abonniert);
+
+        var geweckt = new List<Guid>();
+        var poller = new Poller(store, (sid, _) => { geweckt.Add(sid); return Task.FromResult(true); }, baseHwm, typen);
+        await poller.PollOnceAsync();
+        geweckt.Should().Equal(abonniert, "der fremde Stream hat kein abonniertes Event");
+        poller.HighWater.Should().Be((await store.ReadChangedStreamsAsync(baseHwm, null, int.MaxValue, default)).HighWaterMark);
     }
 
     /// <summary>

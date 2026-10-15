@@ -206,7 +206,7 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         public Task AppendEventsAsync(Guid aggregateId, int expectedVersion, IReadOnlyList<IEvent> events, string? correlationId = null,
             string? causationId = null, string? aggregateType = null, string? akteur = null)
             => _innen.AppendEventsAsync(aggregateId, expectedVersion, events, correlationId, causationId, aggregateType, akteur);
-        public Task<StreamChanges> ReadChangedStreamsAsync(long afterGlobalSequence, CancellationToken ct) => _innen.ReadChangedStreamsAsync(afterGlobalSequence, ct);
+        public Task<StreamChanges> ReadChangedStreamsAsync(long afterGlobalSequence, IReadOnlyCollection<string>? typen, int limit, CancellationToken ct) => _innen.ReadChangedStreamsAsync(afterGlobalSequence, typen, limit, ct);
         public Task<PartitionsSeite> ReadPartitionAsync(long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit, CancellationToken ct)
             => _innen.ReadPartitionAsync(nach, partition, partitionen, typen, ausser, limit, ct);
         public Task<TState?> LoadStateAsync<TState>(Guid aggregateId) where TState : class, IState, new() => _innen.LoadStateAsync<TState>(aggregateId);

@@ -142,14 +142,14 @@ public interface IAggregateRepository
             string? akteur = null);
 
         /// <summary>
-        /// Globales Leseprimitiv für den Poll-Backstop (docs/04 §4.1): liefert die Streams,
-        /// die seit <paramref name="afterGlobalSequence"/> neue Events bekommen haben, plus
-        /// die neue globale High-Water-Mark. Der Poller weckt daraufhin die betroffenen
-        /// Adapter — so heilt er das eine, das Coalescing NICHT auffängt: das letzte
-        /// verlorene Signal vor Stille.
+        /// Globales Leseprimitiv für den Poll der Emittenten (docs/04 §4.1): eine Seite der Streams, die jenseits von
+        /// <paramref name="afterGlobalSequence"/> ein Event eines der <paramref name="typen"/> bekommen haben (Speicher-Diskriminatoren samt
+        /// Upcasting-Vorgängern wie bei <see cref="ReadPartitionAsync"/>; null = jeder Typ), höchstens <paramref name="limit"/> solche Events
+        /// weit, und die Marke, bis zu der die Seite reicht — nie über die gesetzte Sequenz (Karenz). Liest nur Sequenz und Stream, keine
+        /// Daten; Tombstones zählen nicht. Der Poller weckt die Adapter der Streams — so heilt er das letzte verlorene Signal vor Stille.
         /// </summary>
         Task<StreamChanges> ReadChangedStreamsAsync(
-            long afterGlobalSequence, CancellationToken ct);
+            long afterGlobalSequence, IReadOnlyCollection<string>? typen, int limit, CancellationToken ct);
 
         /// <summary>
         /// Rekonstruiert den aktuellen Zustand eines Aggregats, indem alle zugehörigen
@@ -206,10 +206,10 @@ public interface IAggregateRepository
 
 
     /// <summary>
-    /// Ergebnis eines Poll-Scans: die seit der letzten High-Water-Mark geänderten Streams
-    /// und die neue High-Water-Mark (globale Event-Sequenz).
+    /// Eine Seite eines Poll-Scans: die seit der letzten High-Water-Mark geänderten Streams und die neue High-Water-Mark (globale
+    /// Event-Sequenz). <paramref name="Voll"/>: das Limit war erreicht, jenseits der Marke kann es mehr geben.
     /// </summary>
-    public record StreamChanges(IReadOnlyList<Guid> StreamIds, long HighWaterMark);
+    public record StreamChanges(IReadOnlyList<Guid> StreamIds, long HighWaterMark, bool Voll = false);
 
     public interface IAggregateDispatcher
     {

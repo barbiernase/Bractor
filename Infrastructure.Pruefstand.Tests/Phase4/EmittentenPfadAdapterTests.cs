@@ -34,7 +34,7 @@ public class EmittentenPfadAdapterTests
 
         public Task AppendEventsAsync(Guid a, int v, IReadOnlyList<IEvent> e, string? c = null, string? ca = null, string? at = null, string? ak = null)
             => throw new NotSupportedException();
-        public Task<StreamChanges> ReadChangedStreamsAsync(long after, CancellationToken ct)
+        public Task<StreamChanges> ReadChangedStreamsAsync(long after, IReadOnlyCollection<string>? typen, int limit, CancellationToken ct)
             => throw new NotSupportedException();
         public Task<PartitionsSeite> ReadPartitionAsync(long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit, CancellationToken ct)
             => throw new NotSupportedException();
