@@ -93,7 +93,7 @@ trägt die Konsumseite heute etwa 8 200 / K Events/s (K = replaybare Projektione
 | Phase | Inhalt | IDs | Aufwand | setzt voraus | Abnahme (Kurz) |
 |---|---|---|---|---|---|
 | 0 | Abgleich, E2E-Messung, Garantie-Nachweis | – | 7–9 PT | – | Baseline S1–S5 gespeichert; Garantie-Suite grün, Lücken als Skip-Tests |
-| 1 | Emit-Ausgang und Emittenten-Cursor | G-1, G-2 (Emittent), P1-6 | 5–7 PT | 0 | S5: Kosten der Reaktion unabhängig von der Stream-Länge |
+| 1 | Emit-Ausgang und Emittenten-Cursor ✅ | G-1, G-2 (Emittent), G-7, P1-6, PF-9 | 5–7 PT | 0 | S5: Kosten der Reaktion unabhängig von der Stream-Länge |
 | 2 | Actor-Lebenszyklus | G-3, PF-5 | 3–5 PT | 0 | RSS nach den Höchstlast-Blöcken fällt im Leerlauf zurück (Passivierung) |
 | 3 | Batch-Konsum | PF-1, PF-2, G-4 | 15–25 PT | 1, 2 | Durchsatz bis „alles sichtbar“ S1/S5 deutlich über Baseline (Ziel nach E5) |
 | 4 | Inbox als Tabelle | G-2 (Inbox), PF-3 | 6–9 PT | 2, E1 | S3 heiß: genau einmal, mehr Teile/s als nach Phase 3 |
@@ -113,7 +113,7 @@ die Inbox-Tabelle (4) nach dem Batch-Konsum kommen.
 | E2 | Aufbewahrungs-Horizont der Inbox (Exactly-once gilt innerhalb dieses Horizonts) | 30 Tage, Umgebung `Schreibpfad.InboxHorizont` | Phase 4 |
 | E3 | Bestandsdaten | Sim-DBs zurücksetzen; Backfill-SQL aus Marken und `causationId` nur, falls Prod-Daten bestehen | Phase 4 |
 | E4 | Partitionen je Projektion im Batch-Konsum | fest 8, Umgebung; Lease je Partition im Cluster | Phase 3 |
-| E5 | Abnahme-Zielwerte je Szenario | Vorschlag nach der Baseline in §8 (Phase 3: Durchsatz S1/S5 ≥ 3 ×, Queries je Vorgang ≤ ⅓) | nach Phase 0 |
+| E5 | Abnahme-Zielwerte je Szenario | **entschieden** (Tobi, 2026-10-15): die Werte aus §8 (Phase 3: Durchsatz S1/S5 ≥ 3 ×, Queries je Vorgang ≤ ⅓) | nach Phase 0 |
 | E6 | Handle-/Trigger-Welt (W11-1) in Phase 1 zurückbauen oder nur anpassen? | nur minimal anpassen; der Rückbau bleibt W11-1 | Phase 1 |
 | E7 | Leerlaufzeit der Passivierung | Aggregat 10 min, Adapter 2 min, Prozess-Manager 10 min; Umgebung | Phase 2 |
 
@@ -261,10 +261,33 @@ anstehen.
 
 - *Baseline:* `vermessung/ergebnisse/2026-10-15_0429_3cfec32_baseline` (gültig, Exactly-once grün) und
   `…_0433_3cfec32_baseline-stoerung` (gültig, Exactly-once grün); Tabelle in docs/12 §12.5.
-- *E5-Zielwerte (Vorschlag, von Tobi am Haltepunkt (a) zu bestätigen):* Phase 3 — Durchsatz bis „alles sichtbar“ S1 ≥ 60 Paare/s (3 ×) und S5-8
+- *E5-Zielwerte (von Tobi am Haltepunkt (a) bestätigt, 2026-10-15):* Phase 3 — Durchsatz bis „alles sichtbar“ S1 ≥ 60 Paare/s (3 ×) und S5-8
   ≥ 400 Vorgänge/s (3 ×), Queries je Vorgang S1/S5 höchstens ein Drittel; Phase 5 — Leerlauf L1/L5 unter 10 Queries/s und 5 % CPU; Phase 2 —
   RSS im Leerlauf nach den Blöcken unter 50 % des Höchststands; Phase 4 — S3 heiß Durchsatz ≥ 1,5 × des Stands nach Phase 3. Dreifach statt
   fünffach, weil der Host schon bei 300–370 % CPU auf einem MacBook Air misst und Postgres auf demselben Rechner läuft.
+
+**Haltepunkt (a)** (2026-10-15): Tobi bestätigt die E5-Zielwerte und nimmt G-7 und PF-9 **ganz** in Phase 1.
+
+**Phase 1** (abgeschlossen, 2026-10-15, Commit `b955d40` und der Mess-Commit danach):
+- *Umgesetzt:* `EmitAusgang` (zugestellt, abgelehnt, unbekannt) und `CommandResult.Abgelehnt`; G-1 im `FristScheduler`; G-2 (Emittent):
+  Signal und Poll ab Cursor, Commands eines Tails parallel (`EmitAusgaenge`), Cursor nur nach bestätigtem Emit, `WakeAck.Aufgeholt`; P1-6 in
+  beiden Generatoren; G-7 in `MartenEventStore` und `SpurLeser`; PF-9 über `DetachedProzessSend` (Sperre je Vorgang, Backoff 1–30 s) und
+  `EmitDrossel` (8 je Ziel und Knoten). Entfallen: `DetachedEmit`, `Wake.VomPoll`.
+- *Lücken-Tests ohne Skip, grün:* P `FristGarantieTests.Emit_Timeout…`, `…Technischer_Fehlschlag…` (G-1), P `KonsumGarantieTests.Ein_nicht_zugestellter_Emit…`
+  (G-2 Emittent), I `GarantiePostgresTests.Ein_gescheiterter_Append…` (G-7, ohne den Filter rot gesehen). Neu: P `EmitGarantieTests`, zwei
+  Konsum-Garantien, PD `AblaufGarantieTests.Absturz_zwischen_Emit_und_Cursor…`.
+- *Messung:* `vermessung/ergebnisse/2026-10-15_0539_b955d40_phase-1` (gültig, Exactly-once grün) und `…_0542_b955d40_phase-1-stoerung`
+  (gültig, grün). Gegen die Baseline: S1 1,57 ×, S2 1,45 ×, S3-8 1,92 ×, S3-64 1,95 ×, S4 1,67 ×, S5-1/8/64 1,37/1,23/1,14 × (Durchsatz bis alles
+  sichtbar); Reaktion S5-64 p50 0,63 ×; Queries je Vorgang 0,88–1,05 ×. Keine Regression in S1–S4. Leerlauf L1 schlechter (Erstweckungen der
+  S3-Streams durch den Heil-Poll, PF-2; docs/12 §12.5). **Abnahme: ja.**
+
+**Plan-Änderungen aus Phase 1:**
+1. G-7 und PF-9 gehören zu Phase 1 (Tobi); Phase 5 bleibt nur PF-4. Die Drossel je Ziel sitzt im Emitter (ein Weg für alle Aufrufer), der Backoff
+   im Sende-Takt des Dirigenten (`DetachedProzessSend`), nicht im `ProzessManager` — dessen Dispatch-Naht und alle Prüfstand-Fakes blieben gleich.
+2. G-2 ist geteilt: der Emittenten-Anteil ist geschlossen; der Test PD `SchreibGarantieTests.Eine_alte_CommandId_jenseits_der_Inbox_Grenze…`
+   bleibt bis Phase 4 übersprungen (das Fenster selbst).
+3. Der Leerlauf L1 ist bis Phase 3 kein sauberer Vergleich: er enthält die Erstweckungen der neuen Streams durch den Heil-Poll (PF-2), deren
+   Lage im Messfenster vom Tempo der Blöcke davor abhängt.
 
 **Plan-Änderungen aus Phase 0:**
 1. Die Prüfdomäne bekam eine Leseseite (`Pruefdomaene.Projections`: Reaktion `NachschubBeiMindestbestand`, Felder `Mindestbestand`/`Fehlmenge`
@@ -282,19 +305,19 @@ anstehen.
 7. `--probe` (verkürzter Funktionstest des Treibers) schreibt nicht nach `vermessung/ergebnisse/` — Probeläufe während der Entwicklung des
    Treibers sind keine Messläufe.
 
-## 9 · Übergabe an den nächsten Agenten (Stand 2026-10-15, Commit nach `7b09d83`)
+## 9 · Übergabe an den nächsten Agenten (Stand 2026-10-15, nach Phase 1)
 
-- **Wo es steht:** Phase 0 ist fertig. **Haltepunkt (a) ist offen:** Tobi hat die Baseline gesehen, aber noch nicht bestätigt — (1) die
-  E5-Zielwerte aus §8, (2) G-7 (und PF-9, soweit es dort hingehört) in Phase 1 mitzuschließen. Ohne seine Antwort nicht mit Phase 1 anfangen;
-  die zwei Fragen kurz stellen.
-- **Danach:** Phase 1 nach §3 (Emit-Ausgang, G-1, G-2 Emittent, P1-6), mit G-7, falls bestätigt. Die Lücken-Tests der Phase entfernen ihr Skip
-  (`Skip = "G-n offen (docs/13)"`, Liste in docs/11 §11.13/§11.14); geschlossen ist eine Lücke erst, wenn ihr Test grün ist.
+- **Wo es steht:** Phase 0 und Phase 1 sind fertig und abgenommen (§8). Haltepunkt (a) ist erledigt (E5 bestätigt, G-7 und PF-9 in Phase 1).
+- **Danach:** Phase 2 nach §3 (G-3 Actor-Lebenszyklus, PF-5 Passivierung, E7 mit den Vorschlagswerten). Lücken-Tests der Phase: PD
+  `SchreibGarantieTests.Nach_einem_Versionskonflikt…`, `…Ein_mehrdeutiger_Commit…` (Skip G-3). Dann Phase 3 — **Haltepunkt (b):** den Entwurf
+  des Batch-Konsums (Phase 3.1, in docs/04) Tobi zeigen, bevor er gebaut wird.
 - **Messen je Phase:** `vermessung/README.md` (Abschnitt „Wiederholen“) — Höchstlast in ≈ 5 min und Störungslauf in ≈ 3 min, Spalte „Phase n“,
-  Tabelle per Skript. Keine Langläufe; jeden Lauf über 15 min vorher mit Dauer ankündigen und fragen.
+  Tabelle per Skript. Auf einem sauberen, committeten Arbeitsbaum messen (erst Code committen, dann messen, dann Ergebnis committen). Keine
+  Langläufe; jeden Lauf über 15 min vorher mit Dauer ankündigen und fragen.
 - **Vor jedem Commit:** `dotnet build`; Prüfstand; Garantie-Suite (`--filter Kategorie=Garantie` auf Prüfstand, dann nacheinander Integration
   und Prüfdomäne); die betroffenen Integrations-Suiten; `dotnet run --project GraphExtractor -- --check`; `./codegen.sh --check`; bei
   Generator-Änderungen das Generat inspizieren (Memory „Generatoren-Fallen“). Commits ohne Co-Authored-By; nicht pushen ohne Tobis Wort.
-- **Fallen aus Phase 0:** das geteilte Test-Schema `pruef_e2e` enthält Tombstones (G-7) — sein Poll steht still, Tests, die den Poll brauchen,
-  nehmen ein eigenes Schema (Muster `AblaufGarantieTests`); die Sim-DB der Werkbank hat ebenfalls Tombstones. `pg_stat_database` zählt verzögert,
-  gemessen wird über `pg_stat_statements` (`track = top`). Unter Dauerüberlast kippt ein heißes Aggregat in den Retry-Sturm (PF-9).
-
+- **Fallen:** Nach einer Gegenprobe („Fix kurz raus, Test rot sehen“) jedes Testprojekt neu bauen — `--no-build` nimmt sonst das sabotierte
+  `Infrastructure.dll` aus dem eigenen `bin`. `pg_stat_database` zählt verzögert, gemessen wird über `pg_stat_statements` (`track = top`). Der
+  Leerlauf L1 enthält die Heil-Poll-Erstweckungen (§8, Phase 1). Die Sim-DB der Werkbank und `pruef_e2e` enthalten alte Tombstones — seit G-7
+  harmlos.

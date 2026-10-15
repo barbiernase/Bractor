@@ -49,4 +49,5 @@ scripts/vermessung-tabelle.sh --schreibe                               # Tabelle
 - Fremdlast steht im Ergebnis; Läufe auf dem MacBook Air vergleichen **Verhältnisse** zur Baseline, nicht absolute Zahlen. Bei starker Fremdlast
   lieber wiederholen.
 - Baseline: `ergebnisse/2026-10-15_0429_3cfec32_baseline` und `…_0433_3cfec32_baseline-stoerung` (Commit `3cfec32`).
+- Phase 1: `ergebnisse/2026-10-15_0539_b955d40_phase-1` und `…_0542_b955d40_phase-1-stoerung` (Commit `b955d40`).
 
