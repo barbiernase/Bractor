@@ -1,0 +1,237 @@
+{
+  "art": "stoerung",
+  "anlass": "phase-3-stoerung",
+  "spalte": null,
+  "skript": "scripts/vermessung-e2e.sh --art stoerung --anlass phase-3-stoerung",
+  "zeit": "2026-10-15T11:33:19.4774050+00:00",
+  "commit": "0b02802",
+  "branch": "claude/werkbank-zielbild",
+  "arbeitsbaum": "sauber",
+  "rechner": "MacBook-Air-von-Tobias-2, Darwin 24.5.0 Darwin Kernel Version 24.5.0: Tue Apr 22 19:54:43 PDT 2025; root:xnu-11417.121.6~2/RELEASE_ARM64_T8132, Apple M4, 10 Kerne, 16 GiB",
+  "umgebungen": [
+    "vermessung",
+    "vermessung-pruefdomaene"
+  ],
+  "parameter": {
+    "szenarien": [
+      "S1",
+      "S2",
+      "S3",
+      "S4",
+      "S5"
+    ],
+    "wiederholungen": 1,
+    "probe": false,
+    "fenster_s": 15,
+    "abbau_frist_s": 120,
+    "s1_stoss_paare": 600,
+    "s2_stoss_paare": 200,
+    "s3_sender": [
+      8,
+      64
+    ],
+    "s3": "je Block ein Sammelvorgang (N = 1 000 000, die Barriere wird nicht erreicht); je Teil StarteTeilauftrag + SchließeTeilauftragAb",
+    "s5_sender": [
+      1,
+      8,
+      64
+    ],
+    "s3_hoechstens_teile_je_block": 2000,
+    "s5_hoechstens_vorgaenge_je_block": 3000,
+    "s5_muster": "je 10 Vorgänge: 8 Aufträge ok, 1 Auftrag gegen volles Kontingent (Kompensation), 1 Verteilung auf 4 Ziele; 50 Posten, 20 Ziele",
+    "leerlauf_s": 15,
+    "sichtbar": "S1/S2: Query GetImagePair je offenem Paar (komplett), alle 100 ms; S3: TeilVerbucht im Log; S4: Query HoleDatensatz; S5: ProzessBeendet im Log",
+    "transaktionen": "COMMITs aus pg_stat_statements (track = top); Queries = übrige Statements ohne BEGIN/COMMIT/ROLLBACK/DISCARD/SET/SHOW; ohne die Lese-Rolle des Treibers"
+  },
+  "fremdlast_vorher": "Last 11.30 21.56 19.17 · CPU-stärkste: 33.2 dotnet; 26.3 /Users/tobi/Library/Application Support/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.app/Contents/MacOS/Slay the Spire 2; 7.4 /usr/sbin/coreaudiod; 6.3 /Applications/Firefox.app/Contents/MacOS/plugin-container.app/Contents/MacOS/plugin-container; 6.2 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine",
+  "fremdlast_nachher": "Last 82.63 70.46 47.78 · CPU-stärkste: 317.2 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine; 89.3 /Applications/Docker.app/Contents/MacOS/com.docker.backend; 20.6 /Users/tobi/Library/Application Support/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.app/Contents/MacOS/Slay the Spire 2; 5.2 /usr/sbin/coreaudiod; 2.9 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer",
+  "stoerungen": [
+    {
+      "zeit_s": 18,
+      "stoerung": "Host Beispieldomäne hart beendet (SIGKILL), Neustart nach 3 s"
+    },
+    {
+      "zeit_s": 40,
+      "stoerung": "Redis (Versions-Index) 10 s gestoppt"
+    },
+    {
+      "zeit_s": 63,
+      "stoerung": "Host Prüfdomäne hart beendet (SIGKILL), Neustart nach 3 s"
+    }
+  ],
+  "kennzahlen": {
+    "vorgaenge_s1": 181,
+    "vorgaenge_s5": 24642,
+    "s1_p99_ms": 7504.371,
+    "s5_p99_ms": null
+  },
+  "exactly_once": [
+    {
+      "name": "S1: alle Paare nach den Störungen sichtbar",
+      "ok": true,
+      "soll": "ja",
+      "ist": "ja"
+    },
+    {
+      "name": "S5: alle Vorgänge nach den Störungen beendet",
+      "ok": false,
+      "soll": "ja",
+      "ist": "397 offen"
+    },
+    {
+      "name": "S5: kein Eingang endgültig gescheitert",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "je Datei genau eine Quell-Nachricht im Log",
+      "ok": true,
+      "soll": "362",
+      "ist": "362"
+    },
+    {
+      "name": "keine Datei zweimal gemeldet",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "je Paar genau ein ImagePairErstellt",
+      "ok": true,
+      "soll": "181",
+      "ist": "181"
+    },
+    {
+      "name": "BildVerfuegbar genau einmal je Bild (2 je Paar)",
+      "ok": true,
+      "soll": "362",
+      "ist": "362"
+    },
+    {
+      "name": "kein Paar mit mehr als 2 BildVerfuegbar",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "je Paar genau ein ImagePairKomplett",
+      "ok": true,
+      "soll": "181",
+      "ist": "181"
+    },
+    {
+      "name": "Read-Model: komplette Paare = ImagePairKomplett im Log",
+      "ok": true,
+      "soll": "181",
+      "ist": "181"
+    },
+    {
+      "name": "Read-Model: Paare = ImagePairErstellt im Log",
+      "ok": true,
+      "soll": "181",
+      "ist": "181"
+    },
+    {
+      "name": "je Vorgang genau ein ProzessBeendet",
+      "ok": false,
+      "soll": "24642",
+      "ist": "24277"
+    },
+    {
+      "name": "kein Vorgang mit mehr als einem ProzessBeendet",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "gelingende Vorgänge enden mit Erfolg",
+      "ok": false,
+      "soll": "22178",
+      "ist": "21868"
+    },
+    {
+      "name": "abgelehnte Aufträge enden ohne Erfolg",
+      "ok": false,
+      "soll": "2464",
+      "ist": "2423"
+    },
+    {
+      "name": "jede Kompensation genau einmal (PostenFreigegeben je abgelehntem Auftrag)",
+      "ok": false,
+      "soll": "2464",
+      "ist": "2429"
+    },
+    {
+      "name": "je gelingendem Auftrag genau ein AuftragBestaetigt",
+      "ok": false,
+      "soll": "19714",
+      "ist": "19458"
+    },
+    {
+      "name": "je Verteilung jedes Ziel genau einmal zugebucht",
+      "ok": false,
+      "soll": "9856",
+      "ist": "9713"
+    },
+    {
+      "name": "je Verteilung genau ein VerteilungAbgeschlossen",
+      "ok": false,
+      "soll": "2464",
+      "ist": "2426"
+    },
+    {
+      "name": "Reaktion: je Reservierung unter dem Mindestbestand genau ein Nachschub",
+      "ok": false,
+      "soll": "21646",
+      "ist": "21648"
+    },
+    {
+      "name": "Reaktion: je Reaktions-Command genau eine Wirkung (Ziel-Events je Ursache = 1)",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "Beispieldomäne: keine CommandId zweimal gewirkt (KommandoVerarbeitet je CommandId ≤ 1)",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "Beispieldomäne: keine CommandId zweimal abgelehnt-markiert",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "Beispieldomäne: kein Stream mit doppelter Version",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "Prüfdomäne: keine CommandId zweimal gewirkt (KommandoVerarbeitet je CommandId ≤ 1)",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "Prüfdomäne: keine CommandId zweimal abgelehnt-markiert",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    },
+    {
+      "name": "Prüfdomäne: kein Stream mit doppelter Version",
+      "ok": true,
+      "soll": "0",
+      "ist": "0"
+    }
+  ],
+  "exactly_once_ok": false,
+  "gueltig": false,
+  "begruendung": [
+    "Exactly-once-Prüfung fehlgeschlagen"
+  ]
+}

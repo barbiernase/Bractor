@@ -95,7 +95,7 @@ trägt die Konsumseite heute etwa 8 200 / K Events/s (K = replaybare Projektione
 | 0 | Abgleich, E2E-Messung, Garantie-Nachweis | – | 7–9 PT | – | Baseline S1–S5 gespeichert; Garantie-Suite grün, Lücken als Skip-Tests |
 | 1 | Emit-Ausgang und Emittenten-Cursor ✅ | G-1, G-2 (Emittent), G-7, P1-6, PF-9 | 5–7 PT | 0 | S5: Kosten der Reaktion unabhängig von der Stream-Länge |
 | 2 | Actor-Lebenszyklus ✅ | G-3, PF-5 | 3–5 PT | 0 | RSS nach den Höchstlast-Blöcken fällt im Leerlauf zurück (Passivierung) |
-| 3 | Batch-Konsum (umgesetzt, Messung §8) | PF-1, PF-2, G-4 | 15–25 PT | 1, 2 | Durchsatz bis „alles sichtbar“ S1 ≥ 3 × Baseline, S5 ohne Regression (E5, E9) |
+| 3 | Batch-Konsum (umgesetzt, nicht abgenommen: S1-Ziel, §8) | PF-1, PF-2, G-4 | 15–25 PT | 1, 2 | Durchsatz bis „alles sichtbar“ S1 ≥ 3 × Baseline, S5 ohne Regression (E5, E9) |
 | 4 | Inbox als Tabelle | G-2 (Inbox), PF-3 | 6–9 PT | 2, E1 | S3 heiß: genau einmal, mehr Teile/s als nach Phase 3 |
 | 5 | Prozess-Poll und Backstop | PF-4 (W11-2-Anteil) | 3–5 PT | 1 | S3/S5: Zeit je Teil konstant über N; Leerlauf mit offenen Vorgängen nahe 0 Queries/s |
 | 6 | Rest | PF-6, G-5, PF-7 (Entscheidung) | 2–3 PT | – | – |
@@ -301,7 +301,7 @@ anstehen.
   nichts, und die Leerlauf-Blöcke sind bis Phase 3/5 nicht leer (PF-2, PF-4). Neu bewerten nach Phase 3 und 5. **Abnahme: ja** (Tests,
   Garantien, E2E ohne Regression); das RSS-Ziel ist auf Phase 3/5 verschoben (Vorschlag, Tobi bestätigt).
 
-**Phase 3** (Code umgesetzt, 2026-10-15; Messung im Mess-Commit danach):
+**Phase 3** (umgesetzt, 2026-10-15, Code `0b02802` und der Mess-Commit danach; **Abnahme: nein** — S1-Ziel verfehlt, s. u.):
 - *Umgesetzt:* `PartitionsCheckpoint` (Position, Version als Marten-Revision, Geparkt) und `Partitionierung` (letztes UUID-Byte mod P);
   `IProjectionTracker` ist die Batch-Naht (`LadePartitionAsync`, `LadeGuardsAsync`, `BeginneBatch`, `Stream`, `CommitAsync`, `ResetAllAsync`),
   `ICoCommitTracker` bleibt der Typ-Schnitt für GA-1; `MartenCoCommitStoreBase.CommitAsync` (Effekte, Guards als Bulk-Store, Partition per
@@ -318,8 +318,30 @@ anstehen.
   Batch), `SchreibRegelPostgresTests`/`GeteilteDokumentePostgresTests` (zwei bzw. vier Partitions-Leser), `ProjectionRebuilderTests` (Strom).
 - *Probe vor dem Commit* (`--probe`, nicht abgelegt): Exactly-once in allen Blöcken grün; Leerlauf L1 0,4 Queries/s und 2 % CPU (Phase 2:
   5 182 Queries/s, 337 %).
+- *Messung* (starke Fremdlast: ein Spiel lief, Last 10 → 27, im ersten Störungslauf bis 82): `vermessung/ergebnisse/2026-10-15_1312_0b02802_phase-3`
+  (gültig, Exactly-once grün). Gegen Baseline / Phase 2: S1 1,32 × / 0,79 × (26,2 Paare/s), S2 1,28 × / 0,90 ×, S3-8 1,54 × / 0,84 ×, S3-64
+  1,28 × / 0,71 ×, S4 1,28 × / 0,76 ×, S5-1/8/64 0,79/0,80/0,24 × Baseline. Je Vorgang: S2 Transaktionen 0,59 × Phase 2, S3 0,48–0,73 ×, S1
+  0,91 × (Queries 1,05 ×, davon 64 von 239 das Treiber-Polling). Leerlauf L1 0,1 Transaktionen/s (1 536), 602 Queries/s (5 182), 33 % CPU (337 %),
+  RSS am Ende 0,1 des Höchststands. A-B-B-A S1/S5 gegen Phase-2-Code (`…phase-3-ab-s1s5-*`, A aus einem Worktree auf `ee401da`): S1 28,6 / 23,0 /
+  22,2 / 11,3 Paare/s (Rauschen der Fremdlast), S5-8 125 / 146 / 154 / 76, S5-64 97 / 120 / 122 / 130 Vorgänge/s — Phase 3 kostet S5 nichts; der
+  S5-Einbruch im Gesamtlauf ist Fremdlast.
+- *Störungslauf:* `…_1333_0b02802_phase-3-stoerung` **ungültig** (Exactly-once rot) — Ursache geklärt: nicht doppelt gewirkt (DB im Ruhezustand: keine
+  CommandId zweimal, keine doppelte Version, Reaktion 21 927 = 21 927), sondern nicht abgebaut: zwei Vorgänge mit beim Host-Abbruch verlorenem
+  Start-Signal startet nur der Prozess-Poll, und dessen erster Durchlauf nach dem Neustart (Cursor 0, jeder Stream ab Version 0, PF-4) kam unter
+  Last 82 in 10 min nicht durch; dazu ein Zählfehler des Treibers (VM-1). Wiederholung `…_phase-3-stoerung-2` **gültig, Exactly-once grün**
+  (24 699 Vorgänge, 182 Bildpaare, Abbau 371 s).
+- *Abnahme (E5, E9):* S1 ≥ 3 × Baseline **nein** (1,32 ×), Queries je Vorgang S1 ≤ ⅓ **nein** (0,93 ×); S2–S5 ohne Regression gegen Phase 2: nach
+  A-B-B-A für S5 ja, für S2–S4 unter dieser Fremdlast nicht belastbar (0,71–0,90 ×, ohne A-B-B-A); Exactly-once im Störungslauf ja (zweiter
+  Lauf). Leerlauf L1 und RSS-Ziel (E5): L1 ist leer bis auf den Prozess-Poll (PF-4), RSS am Ende 0,1 des Höchststands — das E5-RSS-Ziel ist für L1
+  erreicht, für L5 knapp (0,5). **Die Phase ist nicht abgenommen**: das S1-Ziel setzt voraus, dass der Konsum die Decke von S1 ist — gemessen ist
+  es der Datei-Treiber (PF-10).
 
 **Plan-Änderungen aus Phase 3:**
+0. *Vorschlag an Tobi (offen):* E5 für Phase 3 neu fassen — S1 misst den seriellen Datei-Treiber (PF-10), nicht den Konsum. Entweder das
+   S1-Ziel an PF-10 hängen (Melden in Bündeln, eigene Entscheidung) oder Phase 3 an dem messen, was sie ändert: Leerlauf (erreicht), Kosten je
+   Vorgang mit Projektionen (S2, S3 erreicht), Aufholen nach Stillstand bzw. Neuaufbau (Szenario fehlt noch — Vorschlag S6 „Aufholen“: Host
+   anhalten, Last schreiben, Host starten, Zeit bis kein Rückstand in `/health`). Neue Befunde: **G-8** (Prozess-Poll ohne bestätigte Weckung,
+   Vorschlag: mit PF-4 in Phase 5), **PF-10**, **VM-1** (docs/13).
 1. Der Code des Entwurfs weicht in drei Punkten ab (Entwurf in docs/04 korrigiert und eingearbeitet): (a) wirft der Dispatch, ist der Stream
    des werfenden Events bekannt — er wird abgetrennt und allein versucht, halbiert wird nur bei Commit-Fehlern; (b) die Lese-Position läuft im
    Speicher, durabel wird sie mit jedem Batch und über fremde Events höchstens je Poll-Intervall (die Probe zeigte sonst einen Commit je Weckung);
@@ -363,10 +385,11 @@ anstehen.
 
 ## 9 · Übergabe an den nächsten Agenten (Stand 2026-10-15, nach Phase 3)
 
-- **Wo es steht:** Phase 0, 1, 2 fertig und abgenommen; Phase 3 umgesetzt, Messung und Abnahme in §8. Offen am Rand: das E5-RSS-Ziel nach Phase 5
-  prüfen (der Leerlauf L1 ist seit Phase 3 leer, L5 enthält noch den Prozess-Poll, PF-4).
+- **Wo es steht:** Phase 0, 1, 2 fertig und abgenommen; Phase 3 umgesetzt und gemessen, **nicht abgenommen** (S1-Ziel verfehlt, die Decke von S1 ist
+  der Datei-Treiber, PF-10). **Haltepunkt:** Tobi entscheidet über den Vorschlag in §8 („Plan-Änderungen aus Phase 3“, Punkt 0), bevor Phase 4 beginnt.
+  Offen am Rand: das E5-RSS-Ziel für L5 nach Phase 5 prüfen (L5 enthält noch den Prozess-Poll, PF-4).
 - **Danach:** Phase 4 (Inbox als Tabelle, G-2, PF-3) nach §3; E1–E3 stehen in §2 als Vorschlag — vor dem Bau gebündelt fragen. Lücken-Test der
-  Phase: PD `SchreibGarantieTests.Eine_alte_CommandId_jenseits_der_Inbox_Grenze…` (Skip G-2).
+  Phase: PD `SchreibGarantieTests.Eine_alte_CommandId_jenseits_der_Inbox_Grenze…` (Skip G-2). G-8 bekommt seinen Skip-Test spätestens mit Phase 5.
 - **Messen je Phase:** `vermessung/README.md` (Abschnitt „Wiederholen“) — Höchstlast ≈ 5 min, Störungslauf ≈ 3–6 min, Spalte „Phase n“, Tabelle
   per Skript. Code committen, dann messen, dann Ergebnis committen. Nicht auf Abkühlung oder Fremdlast warten (Tobi), Fremdlast im Bericht nennen.
 - **Vor jedem Commit:** `dotnet build`; Prüfstand; Garantie-Suite (Prüfstand, dann nacheinander Integration und Prüfdomäne); die vollen

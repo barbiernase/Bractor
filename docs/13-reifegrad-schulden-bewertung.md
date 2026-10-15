@@ -11,7 +11,10 @@ hierher. Stand: 2026-10-15, Phase 3 des Plans Garantien und Durchsatz. Maßstab 
 | G-2 | Inbox-Fenster (10 000): eine CommandId, die jenseits der Grenze erneut kommt, wirkt erneut; der Emittenten-Anteil ist seit Phase 1 geschlossen | P1 |
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
 | G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
-| PF-4 | Prozess-Poll liest geänderte Streams ab 0 und verwirft geladene Events; Backstop weckt alle offenen Vorgänge | P1 |
+| G-8 | Prozess-Poll rückt seine Hochwassermarke vor, ohne die Start-Weckung zu bestätigen: geht sie verloren, startet ein Vorgang nie | P1 |
+| PF-4 | Prozess-Poll liest geänderte Streams ab 0 und verwirft geladene Events; Backstop weckt alle offenen Vorgänge; nach einem Neustart dauert der erste Durchlauf unter Last Minuten | P1 |
+| PF-10 | Datei-Treiber meldet eine Datei nach der anderen ins Log (Rückstau): das Melde-Tempo ist die Decke von S1 — Entscheidung offen | P2 |
+| VM-1 | Vermessungs-Treiber zählt Soll und Ist der Exactly-once-Prüfung in getrennten Abfragen, während der Host noch abbaut | P3 |
 | PF-3 | Inbox-Marke je Command im Stream (auch ohne Event), Inbox im Snapshot | P2 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
@@ -95,6 +98,26 @@ Die Reihe **PF** sind Kosten der Garantien ([11](11-garantien.md) §11.12): die 
 **PF-4 · Prozess-Poll und Backstop.** `ProzessManagerWiring` liest jeden geänderten Stream ab Version 0 und routet jedes passende historische
 Event erneut, obwohl `ReadChangedStreamsAsync` die neuen Events schon geladen hat; der Backstop weckt alle 15 s alle offenen Vorgänge, auf jedem
 Knoten. *Empfehlung:* die geladenen Events direkt routen; Fälligkeits-Index für Zeitlimits (zusammen mit W11-2); Lease im Cluster.
+*Gemessen (Phase 3, Störungslauf `…_1333_0b02802_phase-3-stoerung`):* wird ein Host hart beendet, bevor der Prozess-Poll seinen Cursor je
+geschrieben hat, beginnt er nach dem Neustart bei 0 und liest jeden der ≈ 25 000 geänderten Streams ab Version 0; unter Last 82 kam dieser
+Durchlauf in 10 min nicht durch, und zwei Vorgänge, deren Start-Signal mit dem Host verloren ging, blieben so lange liegen.
+
+**G-8 · Prozess-Poll ohne bestätigte Weckung.** `ProzessManagerWiring.PollLoopAsync` routet die Start- und Teilnehmer-Events über
+`KorrelationsRouter` an `wecke` — fire-and-forget (`ProzessWakeBeobachtetAsync`) — und schreibt danach die Hochwassermarke fort, unabhängig davon,
+ob die Weckung ankam. Scheitert sie (Cluster nach Neustart noch nicht bereit, Zeitüberschreitung unter Last), ist ein Vorgang, dessen Signal auch
+verloren ging, für immer ungestartet; der Backstop kennt ihn nicht (kein Eintrag im Offen-Index). Beim Emittenten-Poll ist das seit Befund 1
+gelöst (`WakeAck.Aufgeholt`, die Marke rückt nur nach bestätigter Weckung). Gefunden bei der Analyse des Störungslaufs von Phase 3 (dort nicht die
+Ursache). Test fehlt noch (Skip-Test nach §0.2 des Plans). *Empfehlung:* mit PF-4 in Plan-Phase 5 — die Start-Weckung abwarten (bounded) und die
+Marke nur nach Bestätigung vorrücken, wie beim `Poller`.
+
+**PF-10 · Datei-Treiber meldet seriell.** Der Datei-Treiber meldet die nächste Datei erst, wenn die vorige im Log steht (Rückstau, docs/11 §11.8).
+In S1 ist genau das die Decke: je Sekunde werden halb so viele Paare komplett, wie Dateien gemeldet werden (Phase-2- und Phase-3-Code gleich);
+die Leseseite hält in Echtzeit mit. Das Ziel „S1 ≥ 3 × Baseline“ (Plan E5) ist deshalb mit dem Konsum nicht zu erreichen. *Optionen (Tobi):* in
+Bündeln melden (mehrere `StartStream` in einer Transaktion, Rückstau je Bündel; „genau einmal je Kennung“ bleibt) oder das S1-Ziel neu fassen.
+
+**VM-1 · Zählung im Treiber.** `Cqrs.Vermessung/Pruefdomaene.cs` zählt etwa „je Reservierung unter dem Mindestbestand genau ein Nachschub“ als
+zwei Abfragen; baut der Host noch ab (Rückstand bei Fristende), kann Ist Soll überholen (Phase 3: 21 648 gegen 21 646, im Ruhezustand 21 927 =
+21 927). *Empfehlung:* die Prüfungen erst nach dem Anhalten der Hosts zählen oder Soll und Ist in einer Abfrage.
 
 
 **W10-1 · Reflection in Werkzeugen.** `Cqrs.Codegen` liest die gebauten Domänen-DLLs per `MetadataLoadContext` und erzeugt daraus `domain.proto`,

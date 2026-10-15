@@ -173,169 +173,172 @@ offenem Rückstand prüft sie „höchstens einmal, nichts doppelt“. Ablage: `
 Tabelle unten erzeugt `scripts/vermessung-tabelle.sh --schreibe` aus diesen Ordnern — nie von Hand.
 
 <!-- vermessung-tabelle:anfang -->
-| Szenario | Kennzahl | Baseline ([2026-10-15_0429_3cfec32_baseline](../vermessung/ergebnisse/2026-10-15_0429_3cfec32_baseline/)) | Phase 1 ([2026-10-15_0539_b955d40_phase-1](../vermessung/ergebnisse/2026-10-15_0539_b955d40_phase-1/)) | Phase 2 ([2026-10-15_0745_4caa176_phase-2](../vermessung/ergebnisse/2026-10-15_0745_4caa176_phase-2/)) | Phase 2 / Baseline |
-|---|---|---:|---:|---:|---:|
-| L1 Leerlauf Beispieldomäne | Transaktionen (/s) | 258 | 1600 | 1536 | 5.96× |
-| L1 Leerlauf Beispieldomäne | Queries (/s) | 777 | 5472 | 5182 | 6.67× |
-| L1 Leerlauf Beispieldomäne | CPU Host (% eines Kerns) | 87.2 | 324 | 337 | 3.86× |
-| L1 Leerlauf Beispieldomäne | RSS Host (max.) (MB) | 1743 | 2120 | 1875 | 1.08× |
-| L5 Leerlauf Prüfdomäne | Transaktionen (/s) | 162 | 305 | 226 | 1.39× |
-| L5 Leerlauf Prüfdomäne | Queries (/s) | 3739 | 3588 | 4215 | 1.13× |
-| L5 Leerlauf Prüfdomäne | CPU Host (% eines Kerns) | 203 | 158 | 244 | 1.2× |
-| L5 Leerlauf Prüfdomäne | RSS Host (max.) (MB) | 976 | 775 | 991 | 1.02× |
-| S1 Bildeingang Host, Stoß | angenommen (Paare/s) | 1474 | 1583 | 1819 | 1.23× |
-| S1 Bildeingang Host, Stoß | sichtbar im Fenster (Paare/s) | 4.9 | 13.2 | 3 | 0.62× |
-| S1 Bildeingang Host, Stoß | Durchsatz bis alles sichtbar (Paare/s) | 19.9 | 31.2 | 33.3 | 1.68× |
-| S1 Bildeingang Host, Stoß | Rückstand am Fensterende (Vorgänge) | 598 | 595 | 599 | 1× |
-| S1 Bildeingang Host, Stoß | Abbauzeit (s) | 29.8 | 18.8 | 17.7 | 0.59× |
-| S1 Bildeingang Host, Stoß | Latenz p50 (ms) | 17286 | 11296 | 10354 | 0.6× |
-| S1 Bildeingang Host, Stoß | Latenz p99 (ms) | 29476 | 18725 | 17565 | 0.6× |
-| S1 Bildeingang Host, Stoß | Transaktionen je Vorgang (1) | 29.8 | 30.2 | 30.6 | 1.03× |
-| S1 Bildeingang Host, Stoß | Queries je Vorgang (1) | 258 | 228 | 227 | 0.88× |
-| S1 Bildeingang Host, Stoß | Transaktionen (/s) | 591 | 937 | 1016 | 1.72× |
-| S1 Bildeingang Host, Stoß | Queries (/s) | 5104 | 7074 | 7532 | 1.48× |
-| S1 Bildeingang Host, Stoß | CPU Host (% eines Kerns) | 360 | 370 | 393 | 1.09× |
-| S1 Bildeingang Host, Stoß | RSS Host (max.) (MB) | 1061 | 1287 | 1184 | 1.12× |
-| S2 Bildeingang mit Python-Worker, Stoß | angenommen (Paare/s) | 2424 | 1564 | 1517 | 0.63× |
-| S2 Bildeingang mit Python-Worker, Stoß | sichtbar im Fenster (Paare/s) | 0 | 0 | 0 | – |
-| S2 Bildeingang mit Python-Worker, Stoß | Durchsatz bis alles sichtbar (Paare/s) | 16 | 23.3 | 22.8 | 1.42× |
-| S2 Bildeingang mit Python-Worker, Stoß | Rückstand am Fensterende (Vorgänge) | 200 | 200 | 200 | 1× |
-| S2 Bildeingang mit Python-Worker, Stoß | Abbauzeit (s) | 12.4 | 8.5 | 8.7 | 0.7× |
-| S2 Bildeingang mit Python-Worker, Stoß | Latenz p50 (ms) | 6154 | 4301 | 4777 | 0.78× |
-| S2 Bildeingang mit Python-Worker, Stoß | Latenz p99 (ms) | 12279 | 8464 | 8549 | 0.7× |
-| S2 Bildeingang mit Python-Worker, Stoß | Transaktionen je Vorgang (1) | 55.1 | 43.5 | 48 | 0.87× |
-| S2 Bildeingang mit Python-Worker, Stoß | Queries je Vorgang (1) | 314 | 306 | 305 | 0.97× |
-| S2 Bildeingang mit Python-Worker, Stoß | Transaktionen (/s) | 879 | 1002 | 1081 | 1.23× |
-| S2 Bildeingang mit Python-Worker, Stoß | Queries (/s) | 5007 | 7046 | 6860 | 1.37× |
-| S2 Bildeingang mit Python-Worker, Stoß | CPU Host (% eines Kerns) | 281 | 289 | 284 | 1.01× |
-| S2 Bildeingang mit Python-Worker, Stoß | CPU Worker (% eines Kerns) | 69.8 | 79.2 | 77.7 | 1.11× |
-| S2 Bildeingang mit Python-Worker, Stoß | RSS Host (max.) (MB) | 1341 | 1776 | 1220 | 0.91× |
-| S3-64 Sammelvorgang heiß, 64 Sender | angenommen (Teile/s) | 505 | 1137 | 1010 | 2× |
-| S3-64 Sammelvorgang heiß, 64 Sender | sichtbar im Fenster (Teile/s) | 21.2 | 40.4 | 39.4 | 1.86× |
-| S3-64 Sammelvorgang heiß, 64 Sender | Durchsatz bis alles sichtbar (Teile/s) | 50.3 | 98 | 90.3 | 1.8× |
-| S3-64 Sammelvorgang heiß, 64 Sender | Rückstand am Fensterende (Vorgänge) | 1916 | 1929 | 1922 | 1× |
-| S3-64 Sammelvorgang heiß, 64 Sender | Abbauzeit (s) | 35.8 | 18.6 | 20.2 | 0.56× |
-| S3-64 Sammelvorgang heiß, 64 Sender | Prozess-Ende nach dem Abbau (s) | 0.6 | 0 | 0 | 0.06× |
-| S3-64 Sammelvorgang heiß, 64 Sender | Latenz p50 (ms) | 22828 | 11269 | 11941 | 0.52× |
-| S3-64 Sammelvorgang heiß, 64 Sender | Latenz p99 (ms) | 35756 | 18819 | 20330 | 0.57× |
-| S3-64 Sammelvorgang heiß, 64 Sender | Transaktionen je Vorgang (1) | 10.9 | 11.8 | 11.8 | 1.09× |
-| S3-64 Sammelvorgang heiß, 64 Sender | Queries je Vorgang (1) | 67.3 | 59 | 60.7 | 0.9× |
-| S3-64 Sammelvorgang heiß, 64 Sender | Transaktionen (/s) | 544 | 1144 | 1057 | 1.94× |
-| S3-64 Sammelvorgang heiß, 64 Sender | Queries (/s) | 3365 | 5740 | 5428 | 1.61× |
-| S3-64 Sammelvorgang heiß, 64 Sender | CPU Host (% eines Kerns) | 369 | 416 | 428 | 1.16× |
-| S3-64 Sammelvorgang heiß, 64 Sender | RSS Host (max.) (MB) | 2725 | 2549 | 2388 | 0.88× |
-| S3-8 Sammelvorgang heiß, 8 Sender | angenommen (Teile/s) | 119 | 195 | 265 | 2.23× |
-| S3-8 Sammelvorgang heiß, 8 Sender | sichtbar im Fenster (Teile/s) | 39.3 | 65.6 | 88 | 2.24× |
-| S3-8 Sammelvorgang heiß, 8 Sender | Durchsatz bis alles sichtbar (Teile/s) | 54.4 | 105 | 100 | 1.84× |
-| S3-8 Sammelvorgang heiß, 8 Sender | Rückstand am Fensterende (Vorgänge) | 1207 | 1326 | 1335 | 1.11× |
-| S3-8 Sammelvorgang heiß, 8 Sender | Abbauzeit (s) | 17.9 | 8.9 | 12.4 | 0.69× |
-| S3-8 Sammelvorgang heiß, 8 Sender | Prozess-Ende nach dem Abbau (s) | 2.7 | 0 | 0 | 0.01× |
-| S3-8 Sammelvorgang heiß, 8 Sender | Latenz p50 (ms) | 11111 | 5148 | 5222 | 0.47× |
-| S3-8 Sammelvorgang heiß, 8 Sender | Latenz p99 (ms) | 21101 | 14858 | 15096 | 0.72× |
-| S3-8 Sammelvorgang heiß, 8 Sender | Transaktionen je Vorgang (1) | 10.5 | 8.3 | 8.5 | 0.81× |
-| S3-8 Sammelvorgang heiß, 8 Sender | Queries je Vorgang (1) | 57.6 | 50.6 | 50.4 | 0.88× |
-| S3-8 Sammelvorgang heiß, 8 Sender | Transaktionen (/s) | 563 | 854 | 844 | 1.5× |
-| S3-8 Sammelvorgang heiß, 8 Sender | Queries (/s) | 3097 | 5227 | 4998 | 1.61× |
-| S3-8 Sammelvorgang heiß, 8 Sender | CPU Host (% eines Kerns) | 307 | 441 | 443 | 1.44× |
-| S3-8 Sammelvorgang heiß, 8 Sender | RSS Host (max.) (MB) | 1843 | 2636 | 2407 | 1.31× |
-| S4 Datensatz einfrieren | Durchsatz bis alles sichtbar (Paare/s) | 1091 | 1826 | 1828 | 1.68× |
-| S4 Datensatz einfrieren | Dauer Range aufnehmen (s) | 0.1 | 0.1 | 0.1 | 0.94× |
-| S4 Datensatz einfrieren | Dauer Einfrieren (s) | 0.4 | 0.2 | 0.2 | 0.49× |
-| S4 Datensatz einfrieren | Transaktionen je Vorgang (1) | 0 | 0 | 0 | 1× |
-| S4 Datensatz einfrieren | Queries je Vorgang (1) | 6.4 | 3.2 | 3.2 | 0.5× |
-| S4 Datensatz einfrieren | Transaktionen (/s) | 28.5 | 41.1 | 42.4 | 1.49× |
-| S4 Datensatz einfrieren | Queries (/s) | 5564 | 4002 | 4134 | 0.74× |
-| S4 Datensatz einfrieren | CPU Host (% eines Kerns) | 258 | 216 | – | – |
-| S4 Datensatz einfrieren | RSS Host (max.) (MB) | 774 | 1307 | – | – |
-| S5-1 Prüfdomäne verteilt, 1 Sender | angenommen (Vorgänge/s) | 108 | 149 | 131 | 1.21× |
-| S5-1 Prüfdomäne verteilt, 1 Sender | sichtbar im Fenster (Vorgänge/s) | 107 | 147 | 130 | 1.21× |
-| S5-1 Prüfdomäne verteilt, 1 Sender | Durchsatz bis alles sichtbar (Vorgänge/s) | 108 | 149 | 131 | 1.21× |
-| S5-1 Prüfdomäne verteilt, 1 Sender | Rückstand am Fensterende (Vorgänge) | 21 | 27 | 17 | 0.81× |
-| S5-1 Prüfdomäne verteilt, 1 Sender | Abbauzeit (s) | 0 | 0 | 0 | 1.08× |
-| S5-1 Prüfdomäne verteilt, 1 Sender | Latenz p50 (ms) | 57.4 | 42.6 | 47.2 | 0.82× |
-| S5-1 Prüfdomäne verteilt, 1 Sender | Latenz p99 (ms) | 105 | 74.7 | 92 | 0.88× |
-| S5-1 Prüfdomäne verteilt, 1 Sender | Transaktionen je Vorgang (1) | 10.6 | 10.5 | 10.5 | 0.99× |
-| S5-1 Prüfdomäne verteilt, 1 Sender | Queries je Vorgang (1) | 66.4 | 63.9 | 63.7 | 0.96× |
-| S5-1 Prüfdomäne verteilt, 1 Sender | Transaktionen (/s) | 1136 | 1556 | 1355 | 1.19× |
-| S5-1 Prüfdomäne verteilt, 1 Sender | Queries (/s) | 7099 | 9449 | 8217 | 1.16× |
-| S5-1 Prüfdomäne verteilt, 1 Sender | CPU Host (% eines Kerns) | 365 | 368 | 377 | 1.03× |
-| S5-1 Prüfdomäne verteilt, 1 Sender | RSS Host (max.) (MB) | 987 | 1329 | 997 | 1.01× |
-| S5-64 Prüfdomäne verteilt, 64 Sender | angenommen (Vorgänge/s) | 2181 | 2956 | 2356 | 1.08× |
-| S5-64 Prüfdomäne verteilt, 64 Sender | sichtbar im Fenster (Vorgänge/s) | 0 | 0 | 0 | – |
-| S5-64 Prüfdomäne verteilt, 64 Sender | Durchsatz bis alles sichtbar (Vorgänge/s) | 126 | 144 | 128 | 1.02× |
-| S5-64 Prüfdomäne verteilt, 64 Sender | Rückstand am Fensterende (Vorgänge) | 3000 | 3000 | 3000 | 1× |
-| S5-64 Prüfdomäne verteilt, 64 Sender | Abbauzeit (s) | 22.4 | 19.9 | 22.1 | 0.99× |
-| S5-64 Prüfdomäne verteilt, 64 Sender | Prozess-Ende nach dem Abbau (s) | 0 | 0 | 0 | 0.89× |
-| S5-64 Prüfdomäne verteilt, 64 Sender | Latenz p50 (ms) | 14771 | 12782 | 13996 | 0.95× |
-| S5-64 Prüfdomäne verteilt, 64 Sender | Latenz p99 (ms) | 22324 | 19822 | 21980 | 0.98× |
-| S5-64 Prüfdomäne verteilt, 64 Sender | Reaktion p50 (ms) | 27.4 | 17.4 | 21 | 0.76× |
-| S5-64 Prüfdomäne verteilt, 64 Sender | Reaktion p99 (ms) | 190 | 127 | 145 | 0.76× |
-| S5-64 Prüfdomäne verteilt, 64 Sender | Transaktionen je Vorgang (1) | 6.1 | 6 | 6.3 | 1.03× |
-| S5-64 Prüfdomäne verteilt, 64 Sender | Queries je Vorgang (1) | 59.1 | 62.1 | 61.2 | 1.04× |
-| S5-64 Prüfdomäne verteilt, 64 Sender | Transaktionen (/s) | 766 | 860 | 799 | 1.04× |
-| S5-64 Prüfdomäne verteilt, 64 Sender | Queries (/s) | 7380 | 8854 | 7752 | 1.05× |
-| S5-64 Prüfdomäne verteilt, 64 Sender | CPU Host (% eines Kerns) | 350 | 343 | 376 | 1.08× |
-| S5-64 Prüfdomäne verteilt, 64 Sender | RSS Host (max.) (MB) | 1063 | 1112 | 1024 | 0.96× |
-| S5-8 Prüfdomäne verteilt, 8 Sender | angenommen (Vorgänge/s) | 333 | 423 | 399 | 1.2× |
-| S5-8 Prüfdomäne verteilt, 8 Sender | sichtbar im Fenster (Vorgänge/s) | 163 | 183 | 174 | 1.07× |
-| S5-8 Prüfdomäne verteilt, 8 Sender | Durchsatz bis alles sichtbar (Vorgänge/s) | 138 | 171 | 138 | 1× |
-| S5-8 Prüfdomäne verteilt, 8 Sender | Rückstand am Fensterende (Vorgänge) | 1535 | 1699 | 1692 | 1.1× |
-| S5-8 Prüfdomäne verteilt, 8 Sender | Abbauzeit (s) | 12.7 | 10.5 | 14.3 | 1.12× |
-| S5-8 Prüfdomäne verteilt, 8 Sender | Latenz p50 (ms) | 5179 | 4700 | 4702 | 0.91× |
-| S5-8 Prüfdomäne verteilt, 8 Sender | Latenz p99 (ms) | 12607 | 10458 | 14210 | 1.13× |
-| S5-8 Prüfdomäne verteilt, 8 Sender | Transaktionen je Vorgang (1) | 6.8 | 7 | 7.2 | 1.05× |
-| S5-8 Prüfdomäne verteilt, 8 Sender | Queries je Vorgang (1) | 61.8 | 61.4 | 62.1 | 1.01× |
-| S5-8 Prüfdomäne verteilt, 8 Sender | Transaktionen (/s) | 931 | 1181 | 975 | 1.05× |
-| S5-8 Prüfdomäne verteilt, 8 Sender | Queries (/s) | 8440 | 10307 | 8426 | 1× |
-| S5-8 Prüfdomäne verteilt, 8 Sender | CPU Host (% eines Kerns) | 325 | 304 | 292 | 0.9× |
-| S5-8 Prüfdomäne verteilt, 8 Sender | RSS Host (max.) (MB) | 1064 | 1116 | 1048 | 0.98× |
-| L1 Leerlauf Beispieldomäne | RSS Host am Fensterende (MB) | – | – | 1175 | – |
-| L1 Leerlauf Beispieldomäne | RSS Host Höchststand des Laufs (MB) | – | – | 2407 | – |
-| L1 Leerlauf Beispieldomäne | RSS am Ende / Höchststand (1) | – | – | 0.5 | – |
-| L1 Leerlauf Beispieldomäne | Aktive Actors am Fensterende (1) | – | – | 63827 | – |
-| L1 Leerlauf Beispieldomäne | Aktive Actors, Höchststand der Fensterenden (1) | – | – | 63827 | – |
-| L5 Leerlauf Prüfdomäne | RSS Host am Fensterende (MB) | – | – | 980 | – |
-| L5 Leerlauf Prüfdomäne | RSS Host Höchststand des Laufs (MB) | – | – | 1048 | – |
-| L5 Leerlauf Prüfdomäne | RSS am Ende / Höchststand (1) | – | – | 0.9 | – |
-| L5 Leerlauf Prüfdomäne | Aktive Actors am Fensterende (1) | – | – | 25622 | – |
-| L5 Leerlauf Prüfdomäne | Aktive Actors, Höchststand der Fensterenden (1) | – | – | 25622 | – |
-| S1 Bildeingang Host, Stoß | RSS Host am Fensterende (MB) | – | – | 1068 | – |
-| S1 Bildeingang Host, Stoß | RSS Host Höchststand des Laufs (MB) | – | – | 1184 | – |
-| S1 Bildeingang Host, Stoß | RSS am Ende / Höchststand (1) | – | – | 0.9 | – |
-| S1 Bildeingang Host, Stoß | Aktive Actors am Fensterende (1) | – | – | 4840 | – |
-| S1 Bildeingang Host, Stoß | Aktive Actors, Höchststand der Fensterenden (1) | – | – | 4840 | – |
-| S2 Bildeingang mit Python-Worker, Stoß | RSS Host am Fensterende (MB) | – | – | 1044 | – |
-| S2 Bildeingang mit Python-Worker, Stoß | RSS Host Höchststand des Laufs (MB) | – | – | 1220 | – |
-| S2 Bildeingang mit Python-Worker, Stoß | RSS am Ende / Höchststand (1) | – | – | 0.9 | – |
-| S2 Bildeingang mit Python-Worker, Stoß | Aktive Actors am Fensterende (1) | – | – | 10661 | – |
-| S2 Bildeingang mit Python-Worker, Stoß | Aktive Actors, Höchststand der Fensterenden (1) | – | – | 10661 | – |
-| S3-64 Sammelvorgang heiß, 64 Sender | RSS Host am Fensterende (MB) | – | – | 2027 | – |
-| S3-64 Sammelvorgang heiß, 64 Sender | RSS Host Höchststand des Laufs (MB) | – | – | 2407 | – |
-| S3-64 Sammelvorgang heiß, 64 Sender | RSS am Ende / Höchststand (1) | – | – | 0.8 | – |
-| S3-64 Sammelvorgang heiß, 64 Sender | Aktive Actors am Fensterende (1) | – | – | 30235 | – |
-| S3-64 Sammelvorgang heiß, 64 Sender | Aktive Actors, Höchststand der Fensterenden (1) | – | – | 30235 | – |
-| S3-8 Sammelvorgang heiß, 8 Sender | RSS Host am Fensterende (MB) | – | – | 1667 | – |
-| S3-8 Sammelvorgang heiß, 8 Sender | RSS Host Höchststand des Laufs (MB) | – | – | 2407 | – |
-| S3-8 Sammelvorgang heiß, 8 Sender | RSS am Ende / Höchststand (1) | – | – | 0.7 | – |
-| S3-8 Sammelvorgang heiß, 8 Sender | Aktive Actors am Fensterende (1) | – | – | 13490 | – |
-| S3-8 Sammelvorgang heiß, 8 Sender | Aktive Actors, Höchststand der Fensterenden (1) | – | – | 13490 | – |
-| S4 Datensatz einfrieren | Aktive Actors am Fensterende (1) | – | – | 4854 | – |
-| S4 Datensatz einfrieren | Aktive Actors, Höchststand der Fensterenden (1) | – | – | 4854 | – |
-| S5-1 Prüfdomäne verteilt, 1 Sender | RSS Host am Fensterende (MB) | – | – | 915 | – |
-| S5-1 Prüfdomäne verteilt, 1 Sender | RSS Host Höchststand des Laufs (MB) | – | – | 1013 | – |
-| S5-1 Prüfdomäne verteilt, 1 Sender | RSS am Ende / Höchststand (1) | – | – | 0.9 | – |
-| S5-1 Prüfdomäne verteilt, 1 Sender | Aktive Actors am Fensterende (1) | – | – | 4527 | – |
-| S5-1 Prüfdomäne verteilt, 1 Sender | Aktive Actors, Höchststand der Fensterenden (1) | – | – | 4527 | – |
-| S5-64 Prüfdomäne verteilt, 64 Sender | RSS Host am Fensterende (MB) | – | – | 930 | – |
-| S5-64 Prüfdomäne verteilt, 64 Sender | RSS Host Höchststand des Laufs (MB) | – | – | 1048 | – |
-| S5-64 Prüfdomäne verteilt, 64 Sender | RSS am Ende / Höchststand (1) | – | – | 0.9 | – |
-| S5-64 Prüfdomäne verteilt, 64 Sender | Aktive Actors am Fensterende (1) | – | – | 19972 | – |
-| S5-64 Prüfdomäne verteilt, 64 Sender | Aktive Actors, Höchststand der Fensterenden (1) | – | – | 19972 | – |
-| S5-8 Prüfdomäne verteilt, 8 Sender | RSS Host am Fensterende (MB) | – | – | 1024 | – |
-| S5-8 Prüfdomäne verteilt, 8 Sender | RSS Host Höchststand des Laufs (MB) | – | – | 1048 | – |
-| S5-8 Prüfdomäne verteilt, 8 Sender | RSS am Ende / Höchststand (1) | – | – | 1 | – |
-| S5-8 Prüfdomäne verteilt, 8 Sender | Aktive Actors am Fensterende (1) | – | – | 10993 | – |
-| S5-8 Prüfdomäne verteilt, 8 Sender | Aktive Actors, Höchststand der Fensterenden (1) | – | – | 10993 | – |
+| Szenario | Kennzahl | Baseline ([2026-10-15_0429_3cfec32_baseline](../vermessung/ergebnisse/2026-10-15_0429_3cfec32_baseline/)) | Phase 1 ([2026-10-15_0539_b955d40_phase-1](../vermessung/ergebnisse/2026-10-15_0539_b955d40_phase-1/)) | Phase 2 ([2026-10-15_0745_4caa176_phase-2](../vermessung/ergebnisse/2026-10-15_0745_4caa176_phase-2/)) | Phase 3 ([2026-10-15_1312_0b02802_phase-3](../vermessung/ergebnisse/2026-10-15_1312_0b02802_phase-3/)) | Phase 3 / Baseline |
+|---|---|---:|---:|---:|---:|---:|
+| L1 Leerlauf Beispieldomäne | Transaktionen (/s) | 258 | 1600 | 1536 | 0.1 | 0× |
+| L1 Leerlauf Beispieldomäne | Queries (/s) | 777 | 5472 | 5182 | 602 | 0.77× |
+| L1 Leerlauf Beispieldomäne | CPU Host (% eines Kerns) | 87.2 | 324 | 337 | 33.3 | 0.38× |
+| L1 Leerlauf Beispieldomäne | RSS Host (max.) (MB) | 1743 | 2120 | 1875 | 617 | 0.35× |
+| L5 Leerlauf Prüfdomäne | Transaktionen (/s) | 162 | 305 | 226 | 93.1 | 0.57× |
+| L5 Leerlauf Prüfdomäne | Queries (/s) | 3739 | 3588 | 4215 | 955 | 0.26× |
+| L5 Leerlauf Prüfdomäne | CPU Host (% eines Kerns) | 203 | 158 | 244 | 160 | 0.79× |
+| L5 Leerlauf Prüfdomäne | RSS Host (max.) (MB) | 976 | 775 | 991 | 591 | 0.61× |
+| S1 Bildeingang Host, Stoß | angenommen (Paare/s) | 1474 | 1583 | 1819 | 1360 | 0.92× |
+| S1 Bildeingang Host, Stoß | sichtbar im Fenster (Paare/s) | 4.9 | 13.2 | 3 | 13.6 | 2.77× |
+| S1 Bildeingang Host, Stoß | Durchsatz bis alles sichtbar (Paare/s) | 19.9 | 31.2 | 33.3 | 26.2 | 1.32× |
+| S1 Bildeingang Host, Stoß | Rückstand am Fensterende (Vorgänge) | 598 | 595 | 599 | 594 | 0.99× |
+| S1 Bildeingang Host, Stoß | Abbauzeit (s) | 29.8 | 18.8 | 17.7 | 22.4 | 0.75× |
+| S1 Bildeingang Host, Stoß | Latenz p50 (ms) | 17286 | 11296 | 10354 | 11223 | 0.65× |
+| S1 Bildeingang Host, Stoß | Latenz p99 (ms) | 29476 | 18725 | 17565 | 22243 | 0.75× |
+| S1 Bildeingang Host, Stoß | Transaktionen je Vorgang (1) | 29.8 | 30.2 | 30.6 | 27.8 | 0.93× |
+| S1 Bildeingang Host, Stoß | Queries je Vorgang (1) | 258 | 228 | 227 | 239 | 0.93× |
+| S1 Bildeingang Host, Stoß | Transaktionen (/s) | 591 | 937 | 1016 | 728 | 1.23× |
+| S1 Bildeingang Host, Stoß | Queries (/s) | 5104 | 7074 | 7532 | 6244 | 1.22× |
+| S1 Bildeingang Host, Stoß | CPU Host (% eines Kerns) | 360 | 370 | 393 | 278 | 0.77× |
+| S1 Bildeingang Host, Stoß | RSS Host (max.) (MB) | 1061 | 1287 | 1184 | 1061 | 1× |
+| S2 Bildeingang mit Python-Worker, Stoß | angenommen (Paare/s) | 2424 | 1564 | 1517 | 1749 | 0.72× |
+| S2 Bildeingang mit Python-Worker, Stoß | sichtbar im Fenster (Paare/s) | 0 | 0 | 0 | 0 | – |
+| S2 Bildeingang mit Python-Worker, Stoß | Durchsatz bis alles sichtbar (Paare/s) | 16 | 23.3 | 22.8 | 20.6 | 1.28× |
+| S2 Bildeingang mit Python-Worker, Stoß | Rückstand am Fensterende (Vorgänge) | 200 | 200 | 200 | 200 | 1× |
+| S2 Bildeingang mit Python-Worker, Stoß | Abbauzeit (s) | 12.4 | 8.5 | 8.7 | 9.6 | 0.77× |
+| S2 Bildeingang mit Python-Worker, Stoß | Latenz p50 (ms) | 6154 | 4301 | 4777 | 5245 | 0.85× |
+| S2 Bildeingang mit Python-Worker, Stoß | Latenz p99 (ms) | 12279 | 8464 | 8549 | 9498 | 0.77× |
+| S2 Bildeingang mit Python-Worker, Stoß | Transaktionen je Vorgang (1) | 55.1 | 43.5 | 48 | 28.5 | 0.52× |
+| S2 Bildeingang mit Python-Worker, Stoß | Queries je Vorgang (1) | 314 | 306 | 305 | 209 | 0.67× |
+| S2 Bildeingang mit Python-Worker, Stoß | Transaktionen (/s) | 879 | 1002 | 1081 | 583 | 0.66× |
+| S2 Bildeingang mit Python-Worker, Stoß | Queries (/s) | 5007 | 7046 | 6860 | 4286 | 0.86× |
+| S2 Bildeingang mit Python-Worker, Stoß | CPU Host (% eines Kerns) | 281 | 289 | 284 | 259 | 0.92× |
+| S2 Bildeingang mit Python-Worker, Stoß | CPU Worker (% eines Kerns) | 69.8 | 79.2 | 77.7 | 105 | 1.5× |
+| S2 Bildeingang mit Python-Worker, Stoß | RSS Host (max.) (MB) | 1341 | 1776 | 1220 | 1459 | 1.09× |
+| S3-64 Sammelvorgang heiß, 64 Sender | angenommen (Teile/s) | 505 | 1137 | 1010 | 951 | 1.88× |
+| S3-64 Sammelvorgang heiß, 64 Sender | sichtbar im Fenster (Teile/s) | 21.2 | 40.4 | 39.4 | 39.9 | 1.88× |
+| S3-64 Sammelvorgang heiß, 64 Sender | Durchsatz bis alles sichtbar (Teile/s) | 50.3 | 98 | 90.3 | 64.3 | 1.28× |
+| S3-64 Sammelvorgang heiß, 64 Sender | Rückstand am Fensterende (Vorgänge) | 1916 | 1929 | 1922 | 1916 | 1× |
+| S3-64 Sammelvorgang heiß, 64 Sender | Abbauzeit (s) | 35.8 | 18.6 | 20.2 | 29 | 0.81× |
+| S3-64 Sammelvorgang heiß, 64 Sender | Prozess-Ende nach dem Abbau (s) | 0.6 | 0 | 0 | 0 | 0.04× |
+| S3-64 Sammelvorgang heiß, 64 Sender | Latenz p50 (ms) | 22828 | 11269 | 11941 | 14648 | 0.64× |
+| S3-64 Sammelvorgang heiß, 64 Sender | Latenz p99 (ms) | 35756 | 18819 | 20330 | 28669 | 0.8× |
+| S3-64 Sammelvorgang heiß, 64 Sender | Transaktionen je Vorgang (1) | 10.9 | 11.8 | 11.8 | 5.7 | 0.52× |
+| S3-64 Sammelvorgang heiß, 64 Sender | Queries je Vorgang (1) | 67.3 | 59 | 60.7 | 39.3 | 0.58× |
+| S3-64 Sammelvorgang heiß, 64 Sender | Transaktionen (/s) | 544 | 1144 | 1057 | 363 | 0.67× |
+| S3-64 Sammelvorgang heiß, 64 Sender | Queries (/s) | 3365 | 5740 | 5428 | 2509 | 0.75× |
+| S3-64 Sammelvorgang heiß, 64 Sender | CPU Host (% eines Kerns) | 369 | 416 | 428 | 317 | 0.86× |
+| S3-64 Sammelvorgang heiß, 64 Sender | RSS Host (max.) (MB) | 2725 | 2549 | 2388 | 2363 | 0.87× |
+| S3-8 Sammelvorgang heiß, 8 Sender | angenommen (Teile/s) | 119 | 195 | 265 | 164 | 1.38× |
+| S3-8 Sammelvorgang heiß, 8 Sender | sichtbar im Fenster (Teile/s) | 39.3 | 65.6 | 88 | 63.6 | 1.62× |
+| S3-8 Sammelvorgang heiß, 8 Sender | Durchsatz bis alles sichtbar (Teile/s) | 54.4 | 105 | 100 | 83.8 | 1.54× |
+| S3-8 Sammelvorgang heiß, 8 Sender | Rückstand am Fensterende (Vorgänge) | 1207 | 1326 | 1335 | 1225 | 1.01× |
+| S3-8 Sammelvorgang heiß, 8 Sender | Abbauzeit (s) | 17.9 | 8.9 | 12.4 | 11.7 | 0.65× |
+| S3-8 Sammelvorgang heiß, 8 Sender | Prozess-Ende nach dem Abbau (s) | 2.7 | 0 | 0 | 0 | 0.02× |
+| S3-8 Sammelvorgang heiß, 8 Sender | Latenz p50 (ms) | 11111 | 5148 | 5222 | 10401 | 0.94× |
+| S3-8 Sammelvorgang heiß, 8 Sender | Latenz p99 (ms) | 21101 | 14858 | 15096 | 18085 | 0.86× |
+| S3-8 Sammelvorgang heiß, 8 Sender | Transaktionen je Vorgang (1) | 10.5 | 8.3 | 8.5 | 6.2 | 0.6× |
+| S3-8 Sammelvorgang heiß, 8 Sender | Queries je Vorgang (1) | 57.6 | 50.6 | 50.4 | 43.8 | 0.76× |
+| S3-8 Sammelvorgang heiß, 8 Sender | Transaktionen (/s) | 563 | 854 | 844 | 517 | 0.92× |
+| S3-8 Sammelvorgang heiß, 8 Sender | Queries (/s) | 3097 | 5227 | 4998 | 3632 | 1.17× |
+| S3-8 Sammelvorgang heiß, 8 Sender | CPU Host (% eines Kerns) | 307 | 441 | 443 | 332 | 1.08× |
+| S3-8 Sammelvorgang heiß, 8 Sender | RSS Host (max.) (MB) | 1843 | 2636 | 2407 | 1870 | 1.01× |
+| S4 Datensatz einfrieren | Durchsatz bis alles sichtbar (Paare/s) | 1091 | 1826 | 1828 | 1397 | 1.28× |
+| S4 Datensatz einfrieren | Dauer Range aufnehmen (s) | 0.1 | 0.1 | 0.1 | 0.1 | 0.91× |
+| S4 Datensatz einfrieren | Dauer Einfrieren (s) | 0.4 | 0.2 | 0.2 | 0.3 | 0.74× |
+| S4 Datensatz einfrieren | Transaktionen je Vorgang (1) | 0 | 0 | 0 | 0 | 1× |
+| S4 Datensatz einfrieren | Queries je Vorgang (1) | 6.4 | 3.2 | 3.2 | 3.2 | 0.5× |
+| S4 Datensatz einfrieren | Transaktionen (/s) | 28.5 | 41.1 | 42.4 | 37.1 | 1.3× |
+| S4 Datensatz einfrieren | Queries (/s) | 5564 | 4002 | 4134 | 3629 | 0.65× |
+| S4 Datensatz einfrieren | CPU Host (% eines Kerns) | 258 | 216 | – | 195 | 0.76× |
+| S4 Datensatz einfrieren | RSS Host (max.) (MB) | 774 | 1307 | – | 823 | 1.06× |
+| S5-1 Prüfdomäne verteilt, 1 Sender | angenommen (Vorgänge/s) | 108 | 149 | 131 | 85.5 | 0.79× |
+| S5-1 Prüfdomäne verteilt, 1 Sender | sichtbar im Fenster (Vorgänge/s) | 107 | 147 | 130 | 84.2 | 0.79× |
+| S5-1 Prüfdomäne verteilt, 1 Sender | Durchsatz bis alles sichtbar (Vorgänge/s) | 108 | 149 | 131 | 85.2 | 0.79× |
+| S5-1 Prüfdomäne verteilt, 1 Sender | Rückstand am Fensterende (Vorgänge) | 21 | 27 | 17 | 20 | 0.95× |
+| S5-1 Prüfdomäne verteilt, 1 Sender | Abbauzeit (s) | 0 | 0 | 0 | 0.1 | 1.47× |
+| S5-1 Prüfdomäne verteilt, 1 Sender | Latenz p50 (ms) | 57.4 | 42.6 | 47.2 | 70.7 | 1.23× |
+| S5-1 Prüfdomäne verteilt, 1 Sender | Latenz p99 (ms) | 105 | 74.7 | 92 | 183 | 1.74× |
+| S5-1 Prüfdomäne verteilt, 1 Sender | Transaktionen je Vorgang (1) | 10.6 | 10.5 | 10.5 | 10.6 | 1× |
+| S5-1 Prüfdomäne verteilt, 1 Sender | Queries je Vorgang (1) | 66.4 | 63.9 | 63.7 | 63.9 | 0.96× |
+| S5-1 Prüfdomäne verteilt, 1 Sender | Transaktionen (/s) | 1136 | 1556 | 1355 | 887 | 0.78× |
+| S5-1 Prüfdomäne verteilt, 1 Sender | Queries (/s) | 7099 | 9449 | 8217 | 5355 | 0.75× |
+| S5-1 Prüfdomäne verteilt, 1 Sender | CPU Host (% eines Kerns) | 365 | 368 | 377 | 320 | 0.88× |
+| S5-1 Prüfdomäne verteilt, 1 Sender | RSS Host (max.) (MB) | 987 | 1329 | 997 | 959 | 0.97× |
+| S5-64 Prüfdomäne verteilt, 64 Sender | angenommen (Vorgänge/s) | 2181 | 2956 | 2356 | 2125 | 0.97× |
+| S5-64 Prüfdomäne verteilt, 64 Sender | sichtbar im Fenster (Vorgänge/s) | 0 | 0 | 0 | 0 | – |
+| S5-64 Prüfdomäne verteilt, 64 Sender | Durchsatz bis alles sichtbar (Vorgänge/s) | 126 | 144 | 128 | 30.4 | 0.24× |
+| S5-64 Prüfdomäne verteilt, 64 Sender | Rückstand am Fensterende (Vorgänge) | 3000 | 3000 | 3000 | 3000 | 1× |
+| S5-64 Prüfdomäne verteilt, 64 Sender | Abbauzeit (s) | 22.4 | 19.9 | 22.1 | 97.2 | 4.35× |
+| S5-64 Prüfdomäne verteilt, 64 Sender | Prozess-Ende nach dem Abbau (s) | 0 | 0 | 0 | 0.1 | 2.63× |
+| S5-64 Prüfdomäne verteilt, 64 Sender | Latenz p50 (ms) | 14771 | 12782 | 13996 | 46274 | 3.13× |
+| S5-64 Prüfdomäne verteilt, 64 Sender | Latenz p99 (ms) | 22324 | 19822 | 21980 | 96761 | 4.33× |
+| S5-64 Prüfdomäne verteilt, 64 Sender | Reaktion p50 (ms) | 27.4 | 17.4 | 21 | 42.7 | 1.56× |
+| S5-64 Prüfdomäne verteilt, 64 Sender | Reaktion p99 (ms) | 190 | 127 | 145 | 451 | 2.37× |
+| S5-64 Prüfdomäne verteilt, 64 Sender | Transaktionen je Vorgang (1) | 6.1 | 6 | 6.3 | 6.7 | 1.1× |
+| S5-64 Prüfdomäne verteilt, 64 Sender | Queries je Vorgang (1) | 59.1 | 62.1 | 61.2 | 66.6 | 1.13× |
+| S5-64 Prüfdomäne verteilt, 64 Sender | Transaktionen (/s) | 766 | 860 | 799 | 203 | 0.27× |
+| S5-64 Prüfdomäne verteilt, 64 Sender | Queries (/s) | 7380 | 8854 | 7752 | 2015 | 0.27× |
+| S5-64 Prüfdomäne verteilt, 64 Sender | CPU Host (% eines Kerns) | 350 | 343 | 376 | 162 | 0.46× |
+| S5-64 Prüfdomäne verteilt, 64 Sender | RSS Host (max.) (MB) | 1063 | 1112 | 1024 | 919 | 0.86× |
+| S5-8 Prüfdomäne verteilt, 8 Sender | angenommen (Vorgänge/s) | 333 | 423 | 399 | 248 | 0.75× |
+| S5-8 Prüfdomäne verteilt, 8 Sender | sichtbar im Fenster (Vorgänge/s) | 163 | 183 | 174 | 103 | 0.64× |
+| S5-8 Prüfdomäne verteilt, 8 Sender | Durchsatz bis alles sichtbar (Vorgänge/s) | 138 | 171 | 138 | 111 | 0.8× |
+| S5-8 Prüfdomäne verteilt, 8 Sender | Rückstand am Fensterende (Vorgänge) | 1535 | 1699 | 1692 | 1751 | 1.14× |
+| S5-8 Prüfdomäne verteilt, 8 Sender | Abbauzeit (s) | 12.7 | 10.5 | 14.3 | 15 | 1.18× |
+| S5-8 Prüfdomäne verteilt, 8 Sender | Latenz p50 (ms) | 5179 | 4700 | 4702 | 9227 | 1.78× |
+| S5-8 Prüfdomäne verteilt, 8 Sender | Latenz p99 (ms) | 12607 | 10458 | 14210 | 14924 | 1.18× |
+| S5-8 Prüfdomäne verteilt, 8 Sender | Transaktionen je Vorgang (1) | 6.8 | 7 | 7.2 | 6.7 | 0.98× |
+| S5-8 Prüfdomäne verteilt, 8 Sender | Queries je Vorgang (1) | 61.8 | 61.4 | 62.1 | 61.5 | 1× |
+| S5-8 Prüfdomäne verteilt, 8 Sender | Transaktionen (/s) | 931 | 1181 | 975 | 731 | 0.79× |
+| S5-8 Prüfdomäne verteilt, 8 Sender | Queries (/s) | 8440 | 10307 | 8426 | 6735 | 0.8× |
+| S5-8 Prüfdomäne verteilt, 8 Sender | CPU Host (% eines Kerns) | 325 | 304 | 292 | 283 | 0.87× |
+| S5-8 Prüfdomäne verteilt, 8 Sender | RSS Host (max.) (MB) | 1064 | 1116 | 1048 | 934 | 0.88× |
+| L1 Leerlauf Beispieldomäne | RSS Host am Fensterende (MB) | – | – | 1175 | 152 | – |
+| L1 Leerlauf Beispieldomäne | RSS Host Höchststand des Laufs (MB) | – | – | 2407 | 2363 | – |
+| L1 Leerlauf Beispieldomäne | RSS am Ende / Höchststand (1) | – | – | 0.5 | 0.1 | – |
+| L1 Leerlauf Beispieldomäne | Aktive Actors am Fensterende (1) | – | – | 63827 | 10280 | – |
+| L1 Leerlauf Beispieldomäne | Aktive Actors, Höchststand der Fensterenden (1) | – | – | 63827 | 10280 | – |
+| L5 Leerlauf Prüfdomäne | RSS Host am Fensterende (MB) | – | – | 980 | 434 | – |
+| L5 Leerlauf Prüfdomäne | RSS Host Höchststand des Laufs (MB) | – | – | 1048 | 959 | – |
+| L5 Leerlauf Prüfdomäne | RSS am Ende / Höchststand (1) | – | – | 0.9 | 0.5 | – |
+| L5 Leerlauf Prüfdomäne | Aktive Actors am Fensterende (1) | – | – | 25622 | 19745 | – |
+| L5 Leerlauf Prüfdomäne | Aktive Actors, Höchststand der Fensterenden (1) | – | – | 25622 | 19745 | – |
+| S1 Bildeingang Host, Stoß | RSS Host am Fensterende (MB) | – | – | 1068 | 585 | – |
+| S1 Bildeingang Host, Stoß | RSS Host Höchststand des Laufs (MB) | – | – | 1184 | 1061 | – |
+| S1 Bildeingang Host, Stoß | RSS am Ende / Höchststand (1) | – | – | 0.9 | 0.6 | – |
+| S1 Bildeingang Host, Stoß | Aktive Actors am Fensterende (1) | – | – | 4840 | 2254 | – |
+| S1 Bildeingang Host, Stoß | Aktive Actors, Höchststand der Fensterenden (1) | – | – | 4840 | 2254 | – |
+| S2 Bildeingang mit Python-Worker, Stoß | RSS Host am Fensterende (MB) | – | – | 1044 | 1113 | – |
+| S2 Bildeingang mit Python-Worker, Stoß | RSS Host Höchststand des Laufs (MB) | – | – | 1220 | 1459 | – |
+| S2 Bildeingang mit Python-Worker, Stoß | RSS am Ende / Höchststand (1) | – | – | 0.9 | 0.8 | – |
+| S2 Bildeingang mit Python-Worker, Stoß | Aktive Actors am Fensterende (1) | – | – | 10661 | 1056 | – |
+| S2 Bildeingang mit Python-Worker, Stoß | Aktive Actors, Höchststand der Fensterenden (1) | – | – | 10661 | 1056 | – |
+| S3-64 Sammelvorgang heiß, 64 Sender | RSS Host am Fensterende (MB) | – | – | 2027 | 1467 | – |
+| S3-64 Sammelvorgang heiß, 64 Sender | RSS Host Höchststand des Laufs (MB) | – | – | 2407 | 2363 | – |
+| S3-64 Sammelvorgang heiß, 64 Sender | RSS am Ende / Höchststand (1) | – | – | 0.8 | 0.6 | – |
+| S3-64 Sammelvorgang heiß, 64 Sender | Aktive Actors am Fensterende (1) | – | – | 30235 | 10280 | – |
+| S3-64 Sammelvorgang heiß, 64 Sender | Aktive Actors, Höchststand der Fensterenden (1) | – | – | 30235 | 10280 | – |
+| S3-8 Sammelvorgang heiß, 8 Sender | RSS Host am Fensterende (MB) | – | – | 1667 | 1781 | – |
+| S3-8 Sammelvorgang heiß, 8 Sender | RSS Host Höchststand des Laufs (MB) | – | – | 2407 | 1870 | – |
+| S3-8 Sammelvorgang heiß, 8 Sender | RSS am Ende / Höchststand (1) | – | – | 0.7 | 1 | – |
+| S3-8 Sammelvorgang heiß, 8 Sender | Aktive Actors am Fensterende (1) | – | – | 13490 | 6279 | – |
+| S3-8 Sammelvorgang heiß, 8 Sender | Aktive Actors, Höchststand der Fensterenden (1) | – | – | 13490 | 6279 | – |
+| S4 Datensatz einfrieren | Aktive Actors am Fensterende (1) | – | – | 4854 | 2267 | – |
+| S4 Datensatz einfrieren | Aktive Actors, Höchststand der Fensterenden (1) | – | – | 4854 | 2267 | – |
+| S5-1 Prüfdomäne verteilt, 1 Sender | RSS Host am Fensterende (MB) | – | – | 915 | 765 | – |
+| S5-1 Prüfdomäne verteilt, 1 Sender | RSS Host Höchststand des Laufs (MB) | – | – | 1013 | 959 | – |
+| S5-1 Prüfdomäne verteilt, 1 Sender | RSS am Ende / Höchststand (1) | – | – | 0.9 | 0.8 | – |
+| S5-1 Prüfdomäne verteilt, 1 Sender | Aktive Actors am Fensterende (1) | – | – | 4527 | 3218 | – |
+| S5-1 Prüfdomäne verteilt, 1 Sender | Aktive Actors, Höchststand der Fensterenden (1) | – | – | 4527 | 3218 | – |
+| S5-64 Prüfdomäne verteilt, 64 Sender | RSS Host am Fensterende (MB) | – | – | 930 | 512 | – |
+| S5-64 Prüfdomäne verteilt, 64 Sender | RSS Host Höchststand des Laufs (MB) | – | – | 1048 | 959 | – |
+| S5-64 Prüfdomäne verteilt, 64 Sender | RSS am Ende / Höchststand (1) | – | – | 0.9 | 0.5 | – |
+| S5-64 Prüfdomäne verteilt, 64 Sender | Aktive Actors am Fensterende (1) | – | – | 19972 | 18782 | – |
+| S5-64 Prüfdomäne verteilt, 64 Sender | Aktive Actors, Höchststand der Fensterenden (1) | – | – | 19972 | 18782 | – |
+| S5-8 Prüfdomäne verteilt, 8 Sender | RSS Host am Fensterende (MB) | – | – | 1024 | 363 | – |
+| S5-8 Prüfdomäne verteilt, 8 Sender | RSS Host Höchststand des Laufs (MB) | – | – | 1048 | 959 | – |
+| S5-8 Prüfdomäne verteilt, 8 Sender | RSS am Ende / Höchststand (1) | – | – | 1 | 0.4 | – |
+| S5-8 Prüfdomäne verteilt, 8 Sender | Aktive Actors am Fensterende (1) | – | – | 10993 | 9885 | – |
+| S5-8 Prüfdomäne verteilt, 8 Sender | Aktive Actors, Höchststand der Fensterenden (1) | – | – | 10993 | 9885 | – |
+| S4 Datensatz einfrieren | RSS Host am Fensterende (MB) | – | – | – | 823 | – |
+| S4 Datensatz einfrieren | RSS Host Höchststand des Laufs (MB) | – | – | – | 1061 | – |
+| S4 Datensatz einfrieren | RSS am Ende / Höchststand (1) | – | – | – | 0.8 | – |
 <!-- vermessung-tabelle:ende -->
 
 Baseline (2026-10-15, `3cfec32`, MacBook Air M4 unter Fremdlast — ein Spiel lief, Last 20–25) in Verhältnissen: die Schreibseite nimmt bis
@@ -363,6 +366,31 @@ passiviert im 15-s-Fenster nichts, und L1/L5 sind ohnehin nicht leer (Heil-Poll 
 „RSS im Leerlauf < 50 %“ ist erst nach Phase 3 und 5 sinnvoll messbar. Ein Lauf mit 10 s Passivierung zeigte eine Todesspirale (der Backstop
 weckte alle 15 s jeden gerade passivierten Vorgang kalt) — seitdem verlangt ein Boot-Guard ≥ 60 s für den Prozess-Manager. Störungslauf
 (`…_phase-2-stoerung` mit Abbau nach Fortschritt): 29 609 Vorgänge und 181 Bildpaare, alles genau einmal, Abbau 310 s.
+
+Phase 3 (2026-10-15, `0b02802`; Batch-Konsum der Projektionen), gemessen unter starker Fremdlast (ein Spiel lief, Last 10 → 27 im
+Höchstlast-Lauf, bis 82 im ersten Störungslauf; die Docker-VM zuletzt bei 330 % CPU) — die absoluten Zahlen sind deshalb schlechter als in
+Phase 2, auch dort, wo Phase 3 nichts geändert hat (S5 hat keine Projektion, S5-64 0,24 × Phase 2). Was der Lauf trotzdem klar zeigt:
+- **Leerlauf L1 ist leer:** 0,1 Transaktionen/s (Phase 2: 1 536), 602 Queries/s (5 182; der Rest sind Stream-Reads des Prozess-Polls, PF-4),
+  33 % CPU (337 %), 10 280 aktive Actors (63 827), RSS am Fensterende 0,1 des Höchststands. Der Heil-Poll je Stream jeder Projektion ist weg
+  (PF-2); im L1-Fenster liefen genau 40 Seiten-Abfragen (5 Projektionen × 8 Partitionen, ein Poll).
+- **Weniger Arbeit je Vorgang dort, wo Projektionen oder ihr Heil-Poll mitliefen:** S2 Transaktionen je Paar 0,59 × Phase 2 (28,5 statt 48),
+  Queries 0,69 ×; S3 Transaktionen je Teil 0,48 × (64 Sender) bzw. 0,73 × (8 Sender) — die Erstweckungen jedes neuen S3-Streams durch jede
+  Projektion entfallen.
+- **S1 ist durch die Quelle begrenzt, nicht durch den Konsum:** je Sekunde werden genau halb so viele Paare komplett, wie der Datei-Treiber
+  Dateien ins Log meldet (Zeitachse des Logs, gleich für Phase-2- und Phase-3-Code) — er meldet eine Datei nach der anderen (Rückstau,
+  [11](11-garantien.md) §11.8), und die Leseseite hält in Echtzeit mit. Die Seiten der Partitions-Leser bleiben unter diesem Tröpfeln klein
+  (≈ 3,5 Events je Commit; je Paar 7,6 Seiten und 5,8 Partitions-Commits). Von 239 Queries je Paar sind 64 das 100-ms-Polling des Treibers auf
+  `GetImagePair` (wächst mit der Latenz) und 50 Stream-Reads des Dirigenten (PF-4).
+- **A-B-B-A** (nur S1 und S5, A = Phase-2-Code `ee401da` aus einem Worktree, B = `0b02802`; Ordner `…phase-3-ab-s1s5-*`): S1 28,6 / 23,0 / 22,2 /
+  11,3 Paare/s — im Rauschen der Fremdlast (A2 lief bei Last 31); S5-8 125 / 146 / 154 / 76, S5-64 97 / 120 / 122 / 130 Vorgänge/s — Phase 3 kostet
+  S5 nichts.
+- **Störungslauf:** der erste (`…_1333_0b02802_phase-3-stoerung`, Last bis 82) ist **ungültig** — nicht doppelt gewirkt (die Datenbank danach im
+  Ruhezustand: jede CommandId höchstens einmal, keine doppelte Version, Reaktion 21 927 = 21 927), sondern nicht abgebaut: zwei Aufträge, deren
+  Start-Signal beim harten Abbruch des Prüfdomäne-Hosts verloren ging, kann nur der Prozess-Poll starten; dessen Cursor war vor dem Abbruch noch
+  nie geschrieben, also begann er nach dem Neustart bei 0 und liest jeden geänderten Stream ab Version 0 (PF-4) — unter dieser Last kam er in
+  10 min nicht durch. Die Abweichung der Reaktions-Zeile (21 648 statt 21 646) ist ein Zählfehler des Treibers: Soll und Ist werden in zwei
+  Abfragen gezählt, während der Host noch abbaut. Der zweite (`…_phase-3-stoerung-2`, Last 8 → 68) ist gültig: 24 699 Vorgänge und 182 Bildpaare
+  mit zwei harten Abbrüchen und Redis-Ausfall, alles genau einmal, Abbau 371 s.
 
 **Als korrekt verifiziert (Backend-Audit 2026-08, nicht erneut jagen):** Versionsarithmetik inkl. Inbox-Marken; OCC-Skip auf dem
 `AnyVersion`-Pfad; Append vor State-Mutation; Shard-Hash-Konsistenz Subscribe ↔ gezieltes Publish; Pre-Dispatch-Guard des Adapters je Stream (heute `EmittentenAdapter`);

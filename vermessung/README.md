@@ -50,4 +50,8 @@ scripts/vermessung-tabelle.sh --schreibe                               # Tabelle
   lieber wiederholen.
 - Baseline: `ergebnisse/2026-10-15_0429_3cfec32_baseline` und `…_0433_3cfec32_baseline-stoerung` (Commit `3cfec32`).
 - Phase 1: `ergebnisse/2026-10-15_0539_b955d40_phase-1` und `…_0542_b955d40_phase-1-stoerung` (Commit `b955d40`).
+- Phase 2: `ergebnisse/2026-10-15_0745_4caa176_phase-2` und `…_1119_860cb7a_phase-2-stoerung`.
+- Phase 3: `ergebnisse/2026-10-15_1312_0b02802_phase-3`, Störungsläufe `…_1333_0b02802_phase-3-stoerung` (ungültig: nicht abgebaut, PF-4) und
+  `…_phase-3-stoerung-2` (gültig); A-B-B-A S1/S5 gegen Phase 2 `…phase-3-ab-s1s5-{a1,b1,b2,a2}` — A wurde in einem `git worktree` auf `ee401da`
+  gemessen und hierher kopiert (so misst man einen älteren Code-Stand).
 

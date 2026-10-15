@@ -84,7 +84,7 @@ Nachweis ist eine Lücke in [13](13-reifegrad-schulden-bewertung.md).
 |---|---|---|---|
 | jede Transition feuert mindestens einmal und wirkt genau einmal | deterministische CommandId, Inbox des Ziels, Marke `KommandoVerarbeitet` macht auch einen Noop als „erledigt“ sichtbar | Inbox-Fenster (G-2) | PD `ProzessE2ETests`, `MarkingCursorAequivalenzTests`; E2E S3, S5 |
 | der Dirigent bleibt unter Überlast lebendig: ein unbekannter Send wird erst nach Backoff je Vorgang (1 s … 30 s) wiederholt, nie zweimal gleichzeitig; höchstens 8 Sends je Ziel-Aggregat unterwegs | `DetachedProzessSend`, `EmitDrossel` | – | P `EmitGarantieTests.Nach_unbekanntem_Ausgang…`, `…Die_Drossel_begrenzt…`; E2E S3 (heißes Aggregat) |
-| kein Vorgang bleibt still liegen | Prozess-Poll plus Backstop über den durablen Offen-Index (15 s) | ein Vorgang, dessen Start-Signal verloren ging, startet nur über den Poll; Tombstones halten ihn nicht mehr an (G-7 erledigt) | PD `AblaufGarantieTests.Ein_Neustart_des_Hosts…`; I `GarantiePostgresTests.Ein_gescheiterter_Append_blockiert_den_Poll_nicht`; E2E Störungslauf (harter Abbruch) |
+| kein Vorgang bleibt still liegen | Prozess-Poll plus Backstop über den durablen Offen-Index (15 s) | ein Vorgang, dessen Start-Signal verloren ging, startet nur über den Poll — der rückt seine Marke auch nach einer verlorenen Weckung vor (G-8) und braucht nach einem Neustart unter Last Minuten (PF-4); Tombstones halten ihn nicht mehr an (G-7 erledigt) | PD `AblaufGarantieTests.Ein_Neustart_des_Hosts…`; I `GarantiePostgresTests.Ein_gescheiterter_Append_blockiert_den_Poll_nicht`; E2E Störungslauf (harter Abbruch) |
 | Kompensation in umgekehrter Reihenfolge | `ProzessManager` | scheitert sie, endet der Vorgang als `KlärungNötig` mit Dead-Letter; der Dead-Letter ist nur Beobachtung, kein Retry | PD `ProzessE2ETests.Scheitert_ein_Zweig…`; E2E S5 „jede Kompensation genau einmal“; `KlärungNötig` ohne Test (P2-5) |
 | Prozess-Regeln sind azyklisch | Boot-Guard (`ProzessAzyklizität`) | – | P `FunktionsAufrufTests.Der_Azyklizitaets_Guard…` |
 | Zeitlimits im Dirigenten feuern | Backstop | Auflösung etwa 15 s (W11-2) | P `FunktionsAufrufTests.Ein_Zeitlimit_laesst_einen_haengenden_Aufruf_scheitern…`, `PipelineFlussTests.Bestellung_Zeitlimit_Port…` |
@@ -155,7 +155,7 @@ Kostenlos zur Laufzeit sind die Garantien aus §11.10 (Build und Start) sowie Si
 ## 11.13 Lücken
 
 Stehen nur in [13](13-reifegrad-schulden-bewertung.md) §13.0: **G-2** Inbox-Fenster, **G-5** Versionszählung bei Split-Upcasts, **G-6** Garantien
-ohne eigenen Nachweis-Test. Jede offene Lücke G-2, G-5 hat einen Test, der sie zeigt (Skip `G-n offen (docs/13)`); geschlossen ist sie erst, wenn
+ohne eigenen Nachweis-Test, **G-8** Prozess-Poll ohne bestätigte Weckung (gefunden in Phase 3, noch ohne Test). Jede offene Lücke G-2, G-5 hat einen Test, der sie zeigt (Skip `G-n offen (docs/13)`); geschlossen ist sie erst, wenn
 ihr Test grün ist. Geschlossen: **G-1** Fristverlust, **G-7** Tombstones legen den Poll still, der Emittenten-Anteil von **G-2** (Phase 1); **G-3**
 Actor nach Append-Konflikt (Phase 2); **G-4** Projektions-Checkpoint ohne Versionsprüfung (Phase 3, Batch-Konsum).
 
