@@ -25,7 +25,7 @@ public class RehydrationGarantieTests
     {
         public Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(Guid streamId, int fromVersion, CancellationToken ct)
             => Task.FromResult<IReadOnlyList<EventEnvelope>>(log.Where(e => e.AggregateVersion >= fromVersion).ToList());
-        public Task AppendEventsAsync(Guid a, int v, IReadOnlyList<IEvent> e, string? c = null, string? ca = null, string? at = null, string? ak = null)
+        public Task AppendEventsAsync(Guid a, int v, IReadOnlyList<IEvent> e, string? c = null, string? ca = null, string? at = null, string? ak = null, Quittung? q = null)
             => throw new NotSupportedException();
         public Task<StreamChanges> ReadChangedStreamsAsync(long after, IReadOnlyCollection<string>? typen, int limit, CancellationToken ct) => throw new NotSupportedException();
         public Task<PartitionsSeite> ReadPartitionAsync(long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit, CancellationToken ct)
@@ -37,26 +37,23 @@ public class RehydrationGarantieTests
         => new() { AggregateId = id, AggregateVersion = version, SubIndex = subIndex, Payload = payload };
 
     [Fact]
-    public async Task Neustart_stellt_die_Inbox_aus_dem_Log_wieder_her()
+    public async Task Neustart_zaehlt_die_Marken_in_der_Version_und_wendet_sie_nicht_an()
     {
-        // Ein Command, der vor dem Neustart gewirkt hat (Event + Marke), und einer, der abgelehnt wurde (nur Marke):
-        // nach der Rehydration erkennt der Actor beide Wiederholungen, bevor er entscheidet.
+        // Ein Command, der als Noop gewirkt hat (nur die Marke), und einer, der abgelehnt wurde (nur die Marke): beide Hüllen zählen die
+        // Version hoch (die nächste OCC passt), der Zustand sieht sie nie. Dass eine Wiederholung nach dem Neustart nicht erneut wirkt,
+        // trägt die Inbox-Tabelle (Prüfdomäne, SchreibGarantieTests).
         var id = Guid.NewGuid();
-        var verarbeitet = Guid.NewGuid();
-        var abgelehnt = Guid.NewGuid();
         var log = new[]
         {
             Env(id, 1, new SammelvorgangGestartet(2)),
-            Env(id, 2, new KommandoVerarbeitet(verarbeitet)),
-            Env(id, 3, new KommandoAbgelehnt(abgelehnt, "SammelvorgangExistiertBereits")),
+            Env(id, 2, new KommandoVerarbeitet(Guid.NewGuid())),
+            Env(id, 3, new KommandoAbgelehnt(Guid.NewGuid(), "SammelvorgangExistiertBereits")),
         };
 
         var r = await AggregateRehydrator.LoadAsync<Sammelvorgang>(id, null, new LeseSeam(log), Fabrik, null, default);
 
         r.State.Version.Should().Be(3, "jede Hülle zählt, auch die Marken");
         r.State.Erwartet.Should().Be(2);
-        r.ProcessedCommandIds.Contains(verarbeitet).Should().BeTrue();
-        r.RejectedCommandIds.Contains(abgelehnt).Should().BeTrue();
     }
 
     [Fact(Skip = "G-5 offen (docs/13)")]

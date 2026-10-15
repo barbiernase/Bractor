@@ -25,10 +25,9 @@ public record MessageContext
     public int AggregateVersion { get; init; }
 
     /// <summary>
-    /// Der Stream-Head nach dem Commit dieses Events — inklusive der co-committeten
-    /// <c>KommandoVerarbeitet</c>-Inbox-Marke. Das VersioningModule zieht diese (wenn gesetzt)
-    /// der <see cref="AggregateVersion"/> vor, damit die nächste <c>ExpectedVersion</c> den Marker
-    /// mitzählt und nicht am OCC scheitert. 0 = ungesetzt → Fallback auf AggregateVersion.
+    /// Der Stream-Head nach dem Commit dieses Events — inklusive der Noop- und Ablehnungs-Marken
+    /// im Stream. Das VersioningModule zieht diese (wenn gesetzt) der <see cref="AggregateVersion"/>
+    /// vor, damit die nächste <c>ExpectedVersion</c> die Marken mitzählt und nicht am OCC scheitert. 0 = ungesetzt → Fallback auf AggregateVersion.
     /// </summary>
     public int StreamHeadVersion { get; init; }
 

@@ -169,8 +169,8 @@ public class ConnectionModule : IAsyncDisposable
             //   Sonst (Aggregat nur per Query geladen, noch KEIN Event-Push in dieser Sitzung)
             //     → Sentinel -1: der Server mappt negativ auf CommandModus.Emittiert (kein OCC,
             //     Inbox-Dedup). Sonst schlüge der erste Command fehl, weil die einzige dem Client
-            //     bekannte Version die Domain-Version (aus Query-Deps) ohne die co-committeten
-            //     KommandoVerarbeitet-Marken wäre — also zu niedrig für die OCC gegen den Head.
+            //     bekannte Version die Domain-Version (aus Query-Deps) ohne die Noop- und
+            //     Ablehnungs-Marken im Stream wäre — also zu niedrig für die OCC gegen den Head.
             var expectedVersion = command is ICreationCommand
                 ? 0
                 : _versioning.GetVersion(command.AggregateId) ?? -1;

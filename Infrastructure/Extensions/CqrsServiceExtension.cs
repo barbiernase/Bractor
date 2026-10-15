@@ -190,6 +190,10 @@ public static class CqrsServiceExtensions
             // numerischer Revision — jeder Commit erwartet die geladene Version (G-4: zwei Aktivierungen, Neuaufbau).
             Core.KonsumSchema.Registriere(options);
 
+            // Die Inbox der Schreibseite (docs/04 §4.4): je Command eine Quittung, eindeutig je CommandId, in derselben Transaktion wie
+            // seine Events — Exactly-once innerhalb des Horizonts (InboxAufraeumer).
+            InboxTabelle.Registriere(options);
+
             // Durabler Poll-Backstop-Cursor pro Pull-Pfad der Emittenten: der Poller setzt nach
             // einem Neustart hier wieder auf, statt beim Boot die ganze Historie zu re-scannen.
             options.Schema.For<PollCursor>().Identity(x => x.Id);
@@ -248,6 +252,10 @@ public static class CqrsServiceExtensions
             + (builder.AppendBatching ? $" + Group-Commit-Batching (max {builder.AppendBatchMaxSize})" : ""));
         Console.WriteLine($"    Schema: {builder.EventStoreSchema}");
 
+        // Horizont der Inbox (E2): ältere Quittungen räumt ein Dienst je Knoten ab (Lease über einen Advisory-Lock).
+        services.AddHostedService(provider => new InboxAufraeumer(
+            provider.GetRequiredService<IDocumentStore>(), builder.InboxHorizont, provider.GetService<ILogger<InboxAufraeumer>>()));
+
         // Durabler Poll-Cursor (Backstop): setzt nach Neustart bei der letzten HWM auf.
         services.AddSingleton<IPollCursorStore>(provider =>
             new MartenPollCursorStore(provider.GetRequiredService<IDocumentStore>()));
@@ -296,7 +304,7 @@ public static class CqrsServiceExtensions
                 provider.GetService<ILogger<MartenSnapshotStore>>()));
 
         // ★ Snapshot-Schwellwert in DI → der generierte Actor injiziert ihn (Default 200, Tests klein).
-        services.AddSingleton(new SnapshotOptions(builder.SnapshotThreshold, builder.InboxCap));
+        services.AddSingleton(new SnapshotOptions(builder.SnapshotThreshold, builder.InboxCache));
         // Passivierung der virtuellen Actors (PF-5) — Aggregat, Adapter und Prozess-Manager lesen sie beim Erzeugen.
         services.AddSingleton(builder.Passivierung);
         // Batch-Konsum der Projektionen (docs/04 §4.1): Partitionen und Seitengröße — die Batch-Leser lesen sie beim Erzeugen.
@@ -595,12 +603,16 @@ public class CqrsFrameworkBuilder
     public int SnapshotThreshold { get; set; } = 200;
 
     /// <summary>
-    /// ★ Audit-Fix #4/H3: harte Obergrenze der Framework-Inbox (verarbeitete CommandIds des idempotenten
-    /// Reaktions-/Prozess-Pfads). Nur die letzten so vielen Ids bleiben in Speicher + Snapshot, statt monoton
-    /// zu wachsen. Default 10 000 — weit über dem kurzen Re-Delivery-Fenster (Poll ~30s / Prozess feuert einen
-    /// Vorgang nur bis zur ersten Marke), also praktisch dedup-sicher; höher = sicherer, größerer Snapshot.
+    /// Cache der Inbox im Aggregat-Actor (CommandIds je Ausgang, die eine Aktivierung kennt) — nie Semantik, die Wahrheit ist die
+    /// Inbox-Tabelle (docs/04 §4.4). Tests setzen ihn klein, damit der Weg über den Schlüssel der Tabelle läuft.
     /// </summary>
-    public int InboxCap { get; set; } = 10_000;
+    public int InboxCache { get; set; } = SnapshotOptions.StandardInboxCache;
+
+    /// <summary>
+    /// Aufbewahrungs-Horizont der Inbox (E2, Umgebung <c>Schreibpfad.InboxHorizontTage</c>, Standard 30 Tage): so lange wirkt eine
+    /// wiederholte CommandId garantiert nicht erneut; ältere Quittungen räumt der <see cref="Persistence.InboxAufraeumer"/> ab.
+    /// </summary>
+    public TimeSpan InboxHorizont { get; set; } = TimeSpan.FromDays(30);
 
     /// <summary>Leerlauf bis zur Passivierung je Actor-Art (PF-5, Umgebung <c>Lebenszyklus</c>); Standard 10/2/10 min.</summary>
     public Infrastructure.Lebenszyklus.Passivierung Passivierung { get; set; } = Infrastructure.Lebenszyklus.Passivierung.Standard;

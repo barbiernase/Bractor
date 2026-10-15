@@ -81,8 +81,8 @@ public class RedisVersionTracker : IVersionTracker
             // Sekundärer Index „alle Aggregate vom Typ X".
             // ★ Audit-Fix #6: bei JEDEM Track befüllen, nicht nur bei Version 1. Die alte Annahme
             //   „erstes Event → Version 1" verfehlte Aggregate, deren erstes Command mehrere Events erzeugt
-            //   (Version ≥2) ODER die per Reaktion/Prozess erstellt werden (Domänen-Event + KommandoVerarbeitet-
-            //   Marke → Version 2) — sie tauchten NIE im Index auf (stiller Vollständigkeitsfehler).
+            //   (Version ≥2) ODER deren erstes Command nur eine Noop-/Ablehnungs-Marke hinterließ — sie tauchten NIE im Index auf
+            //   (stiller Vollständigkeitsfehler).
             //   SetAddAsync ist idempotent → ein Re-Add ist folgenlos, also schlicht immer indexen (O(1)-SADD
             //   im selben Batch). Der Index bleibt abgeleitet/nicht-autoritativ (Wahrheit ist der Log).
             var indexKey = IndexKey(aggregateType);

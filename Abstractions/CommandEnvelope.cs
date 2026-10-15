@@ -54,11 +54,10 @@ public record EventEnvelope : IEventEnvelope, IWireMessage
     public int AggregateVersion { get; init; } = 0;
 
     /// <summary>
-    /// Der Stream-Head NACH dem Commit dieses Batches — inklusive der co-committeten
-    /// <c>KommandoVerarbeitet</c>-Inbox-Marke. Anders als <see cref="AggregateVersion"/> (die
-    /// unveränderliche Position dieses Events) sagt dies dem Client, welche
-    /// <c>ExpectedVersion</c> sein nächster Command tragen muss — sonst scheitert er am Marker
-    /// (Head = Event-Version + 1). 0 = nicht gesetzt → Client fällt auf AggregateVersion zurück.
+    /// Der Stream-Head NACH dem Commit dieses Batches — inklusive der Noop- und Ablehnungs-Marken
+    /// im Stream. Anders als <see cref="AggregateVersion"/> (die unveränderliche Position dieses
+    /// Events) sagt dies dem Client, welche <c>ExpectedVersion</c> sein nächster Command tragen
+    /// muss — sonst scheitert er an einer Marke, die nach dem Event kam. 0 = nicht gesetzt → Client fällt auf AggregateVersion zurück.
     /// </summary>
     public int StreamHeadVersion { get; init; } = 0;
 

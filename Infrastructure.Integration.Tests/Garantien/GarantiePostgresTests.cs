@@ -34,13 +34,35 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
         var id = Guid.NewGuid();
         await es.AppendEventsAsync(id, 0, new IEvent[] { new ImagePairInspiziert() });
 
-        // Zwei Events (Effekt + Marke) gegen eine veraltete Version: keines darf gültig werden.
+        // Zwei Events gegen eine veraltete Version: keines darf gültig werden.
         var akt = () => es.AppendEventsAsync(id, 0, new IEvent[] { new ImagePairInspiziert(), new ImagePairInspiziert() });
         await akt.Should().ThrowAsync<Exception>();
         (await es.ReadStreamAsync(id, 0, default)).Should().HaveCount(1);
 
         await es.AppendEventsAsync(id, 1, new IEvent[] { new ImagePairInspiziert(), new ImagePairInspiziert() });
         (await es.ReadStreamAsync(id, 0, default)).Select(e => e.AggregateVersion).Should().Equal(1, 2, 3);
+    }
+
+    [Fact]
+    public async Task Effekt_und_Quittung_werden_gemeinsam_gueltig_oder_gar_nicht()
+    {
+        // Die Inbox (docs/04 §4.4): die Quittung reist in der Transaktion der Events. Scheitert der Append an der Version, steht auch keine
+        //   Quittung; kennt die Inbox die CommandId schon, steht auch kein Event — und der Aufrufer erfährt es an der Ausnahme.
+        var es = EventStore();
+        var id = Guid.NewGuid();
+        var erster = Guid.NewGuid();
+        await es.AppendEventsAsync(id, 0, new IEvent[] { new ImagePairInspiziert() }, quittung: new Quittung(erster, KommandoAusgang.Gewirkt));
+        (await es.AusgangAsync(erster, default)).Should().Be(KommandoAusgang.Gewirkt);
+
+        var veraltet = Guid.NewGuid();
+        var konflikt = () => es.AppendEventsAsync(id, 0, new IEvent[] { new ImagePairInspiziert() }, quittung: new Quittung(veraltet, KommandoAusgang.Gewirkt));
+        await konflikt.Should().ThrowAsync<ConcurrencyException>();
+        (await es.AusgangAsync(veraltet, default)).Should().BeNull("ohne Events keine Quittung");
+
+        var wiederholung = () => es.AppendEventsAsync(id, 1, new IEvent[] { new ImagePairInspiziert() }, quittung: new Quittung(erster, KommandoAusgang.Abgelehnt));
+        (await wiederholung.Should().ThrowAsync<KommandoSchonEntschiedenException>()).Which.CommandId.Should().Be(erster);
+        (await es.ReadStreamAsync(id, 0, default)).Should().HaveCount(1, "ohne neue Quittung keine Events");
+        (await es.AusgangAsync(erster, default)).Should().Be(KommandoAusgang.Gewirkt, "der erste Ausgang bleibt");
     }
 
     [Fact]
@@ -228,6 +250,7 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
             opts.Events.DatabaseSchemaName = schema;
             opts.AutoCreateSchemaObjects = JasperFx.AutoCreate.All;
             KonsumSchema.Registriere(opts);
+            InboxTabelle.Registriere(opts);
         });
 
         public void Dispose() => Store.Dispose();

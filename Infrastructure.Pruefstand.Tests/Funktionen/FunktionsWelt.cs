@@ -5,7 +5,7 @@ using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Abstractions;
-using Infrastructure.Aggregate;     // KommandoVerarbeitet / KommandoAbgelehnt
+using Infrastructure.Aggregate;     // KommandoAbgelehnt
 using Infrastructure.Funktionen;
 using Infrastructure.Prozess;
 
@@ -82,7 +82,7 @@ internal sealed class LogImSpeicher : IEventStoreRepository
     }
 
     public Task AppendEventsAsync(Guid aggregateId, int expectedVersion, IReadOnlyList<IEvent> events,
-        string? correlationId = null, string? causationId = null, string? aggregateType = null, string? akteur = null)
+        string? correlationId = null, string? causationId = null, string? aggregateType = null, string? akteur = null, Quittung? quittung = null)
     {
         lock (_lock)
         {
@@ -124,7 +124,7 @@ internal sealed class MarkingImSpeicher : IProzessMarkingStore
 /// <summary>
 /// Die Welt eines Laufs: echter <see cref="ProzessManager"/>, echter <see cref="FunktionsAusfuehrer"/>, ein Log im Speicher.
 /// Die Funktionen sind Fakes (Delegaten je Auftrag); das Ziel-Aggregat beantwortet Commands wie der emittierte Pfad des
-/// AggregateActorBase (Event + KommandoVerarbeitet mit CausationId = Vorgang, oder die Ablehnungs-Marke).
+/// AggregateActorBase (Event mit CausationId = Vorgang, oder die Ablehnungs-Marke).
 /// </summary>
 /// <summary>Offen-Index im Speicher: zählt die geschriebenen Fristen (PF-4).</summary>
 internal sealed class OffenIndexImSpeicher : IProzessOffenIndex
@@ -200,7 +200,7 @@ internal sealed class FunktionsWelt
             rufe: rufe, jetzt: _ => Task.FromResult(Log.Jetzt));
     }
 
-    /// <summary>Das Ziel-Aggregat: Command → Event (+ KommandoVerarbeitet) bzw. Ablehnungs-Marke, CausationId = Vorgang.</summary>
+    /// <summary>Das Ziel-Aggregat: Command → Event (die Quittung steht in der Inbox, nicht im Stream) bzw. Ablehnungs-Marke, CausationId = Vorgang.</summary>
     private async Task DispatchAsync(Guid korrelation, ICommand cmd, Guid vorgang, CancellationToken ct)
     {
         Gesendet.Add(cmd);
@@ -210,9 +210,9 @@ internal sealed class FunktionsWelt
             ? new IEvent[] { new KommandoAbgelehnt(vorgang, cmd.GetType().Name + " abgelehnt") }
             : cmd switch
             {
-                MeldeFertig f => new IEvent[] { new Fertig(f.Vorschau, f.Kamera), new KommandoVerarbeitet(vorgang) },
-                MeldeUnbrauchbar u => new IEvent[] { new Unbrauchbar(u.Grund), new KommandoVerarbeitet(vorgang) },
-                RaeumeVorschauAuf r => new IEvent[] { new VorschauAufgeraeumt(r.Vorschau), new KommandoVerarbeitet(vorgang) },
+                MeldeFertig f => new IEvent[] { new Fertig(f.Vorschau, f.Kamera) },
+                MeldeUnbrauchbar u => new IEvent[] { new Unbrauchbar(u.Grund) },
+                RaeumeVorschauAuf r => new IEvent[] { new VorschauAufgeraeumt(r.Vorschau) },
                 _ => throw new NotSupportedException(cmd.GetType().Name),
             };
         // Wie AggregateActorBase: die Events schreibt decide:<Aggregat>/<Command>, Ursache und Absender (ueber) kommen vom Absender

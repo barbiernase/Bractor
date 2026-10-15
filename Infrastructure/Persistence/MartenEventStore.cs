@@ -65,7 +65,8 @@ public class MartenEventStore : IEventStoreRepository
         string? correlationId = null,
         string? causationId = null,
         string? aggregateType = null,
-        string? akteur = null)
+        string? akteur = null,
+        Quittung? quittung = null)
     {
         // Guard: expectedVersion muss >= 0 sein.
         // Der Actor prüft bereits gegen seinen State, aber falls
@@ -107,6 +108,10 @@ public class MartenEventStore : IEventStoreRepository
                 events.ToArray());
         }
 
+        // Die Quittung des Commands in DERSELBEN Transaktion (Inbox, docs/04 §4.4): kennt die Inbox ihn schon, scheitert der Commit am
+        //   Schlüssel und nichts ist geschrieben.
+        if (quittung is { } q) InboxTabelle.Quittiere(session, InboxTabelle.Name(_store), aggregateId, q);
+
         try
         {
             await session.SaveChangesAsync();
@@ -141,7 +146,13 @@ public class MartenEventStore : IEventStoreRepository
                 $"Cannot create aggregate that already has events.",
                 ex);
         }
+        catch (Exception ex) when (quittung is { } q2 && InboxTabelle.IstDuplikat(ex))
+        {
+            throw new KommandoSchonEntschiedenException(q2.CommandId, ex);
+        }
     }
+
+    public Task<KommandoAusgang?> AusgangAsync(Guid commandId, CancellationToken ct) => InboxTabelle.AusgangAsync(_store, commandId, ct);
 
     /// <summary>
     /// Rekonstruiert den State eines Aggregats durch Event-Replay aus PostgreSQL.

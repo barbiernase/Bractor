@@ -132,6 +132,8 @@ public interface IAggregateRepository
         /// <param name="aggregateType">Optional: Aggregat-Typname, wird als Log-Header gestempelt.</param>
         /// <param name="akteur">Optional: der Akteur des auslösenden Commands (Header <c>akteur</c>) — reist so durch die Kette
         /// zu Pipelines/Prozessen/Fristen, die daraus Commands erzeugen (docs/konzept-akteure.md §5.1).</param>
+        /// <param name="quittung">Optional: der Inbox-Eintrag des Commands, in derselben Transaktion geschrieben. Kennt die Inbox die
+        /// CommandId schon, ist nichts geschrieben und es fliegt <see cref="KommandoSchonEntschiedenException"/>.</param>
         Task AppendEventsAsync(
             Guid aggregateId,
             int expectedVersion,
@@ -139,7 +141,16 @@ public interface IAggregateRepository
             string? correlationId = null,
             string? causationId = null,
             string? aggregateType = null,
-            string? akteur = null);
+            string? akteur = null,
+            Quittung? quittung = null);
+
+        /// <summary>
+        /// Der Ausgang eines Commands laut Inbox, oder null, wenn sie ihn nicht kennt (nie entschieden oder älter als der Horizont). Der
+        /// Aggregat-Actor fragt nur, wenn sein Cache nichts weiß und der Weg ohne die Antwort falsch würde: nach einem gescheiterten Append und
+        /// vor einem Versionskonflikt. Ohne Ablage (Prüfstand): unbekannt.
+        /// </summary>
+        Task<KommandoAusgang?> AusgangAsync(Guid commandId, CancellationToken ct)
+            => Task.FromResult<KommandoAusgang?>(null);
 
         /// <summary>
         /// Globales Leseprimitiv für den Poll der Emittenten (docs/04 §4.1): eine Seite der Streams, die jenseits von

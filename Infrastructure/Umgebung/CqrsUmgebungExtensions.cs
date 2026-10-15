@@ -88,7 +88,7 @@ public static class CqrsUmgebungExtensions
             o.AppendBatchLingerMs = u.Schreibpfad.LingerMs;
             o.AppendDrainParallelism = u.Schreibpfad.Drain;
             o.SnapshotThreshold = u.Schreibpfad.SnapshotSchwelle;
-            o.InboxCap = u.Schreibpfad.InboxGrenze;
+            o.InboxHorizont = TimeSpan.FromDays(u.Schreibpfad.InboxHorizontTage);
             o.Passivierung = Infrastructure.Lebenszyklus.Passivierung.Aus(u.Lebenszyklus);
             o.Konsum = Infrastructure.Projections.Konsum.Aus(u.Konsum);
             o.EnableGrpc = anwendung.Nutzlast != null;   // gRPC nur mit Leitung; ohne bleiben JSON-Eingang und Quellen

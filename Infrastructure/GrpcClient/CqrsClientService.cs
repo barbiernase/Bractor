@@ -541,9 +541,8 @@ public class CqrsClientServiceImpl : Cqrs.Leitung.CqrsClientService.CqrsClientSe
 
             // Emittiert-Modus über die gRPC-Grenze (§4.2): ein externer Zusage-Treiber — der
             // Python-Worker reagiert auf TrainingAngefordert und emittiert Melde*-Commands — ist
-            // semantisch wie der Backend-Baustein Reaktion (emittierend), kein Client mit behaupteter Version. OCC würde ihn am
-            // co-committeten KommandoVerarbeitet-Marker scheitern lassen (Stream steht auf v2, das
-            // Event war v1). Der Wire kennt nur expected_version; negativ = Sentinel für Emittiert
+            // semantisch wie der Backend-Baustein Reaktion (emittierend), kein Client mit behaupteter Version. OCC würde ihn an jeder
+            // Version scheitern lassen, die ein anderer Schreiber inzwischen gesetzt hat. Der Wire kennt nur expected_version; negativ = Sentinel für Emittiert
             // (keine Version, Empfänger-Inbox dedupliziert) — dieselbe Semantik wie der interne
             // CommandEmitter. Positive Versionen bleiben strikt Client (OCC), z. B. die Blazor-GUI.
             if (request.Envelope.ExpectedVersion < 0)

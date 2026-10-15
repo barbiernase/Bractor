@@ -8,7 +8,7 @@ using Abstractions;
 using Domain.Pipeline.Bildaufbereitung;
 using Domain.ImagePair;
 using FluentAssertions;
-using Infrastructure.Aggregate;     // KommandoVerarbeitet / KommandoAbgelehnt
+using Infrastructure.Aggregate;     // KommandoAbgelehnt
 using Infrastructure.Funktionen;
 using Infrastructure.Prozess;
 using Infrastructure.Quellen;
@@ -75,8 +75,8 @@ public class BildeingangTests
             {
                 ErstelleImagePair c when stream.Any(e => e.Payload is ImagePairErstellt) =>
                     [new KommandoAbgelehnt(vorgang, nameof(ImagePairExistiertBereits))],
-                ErstelleImagePair c => [new ImagePairErstellt(c.AggregateId, c.PairKey, c.ProduziertAm, c.AufgenommenAm, c.UrsprungsPfad), new KommandoVerarbeitet(vorgang)],
-                MeldeBildVerfuegbar m => [new BildVerfuegbar(m.Version, m.Meta, m.Pfad, []), new KommandoVerarbeitet(vorgang)],
+                ErstelleImagePair c => [new ImagePairErstellt(c.AggregateId, c.PairKey, c.ProduziertAm, c.AufgenommenAm, c.UrsprungsPfad)],
+                MeldeBildVerfuegbar m => [new BildVerfuegbar(m.Version, m.Meta, m.Pfad, [])],
                 _ => throw new NotSupportedException(cmd.GetType().Name),
             };
             await Log.AppendEventsAsync(cmd.AggregateId, stream.Count, evs, korrelation.ToString(), vorgang.ToString(), "ImagePair");

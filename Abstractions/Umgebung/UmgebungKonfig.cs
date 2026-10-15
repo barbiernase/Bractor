@@ -78,7 +78,8 @@ public sealed class SchreibpfadKonfig
     public int LingerMs { get; set; }
     public int Drain { get; set; } = 4;
     public int SnapshotSchwelle { get; set; } = 200;
-    public int InboxGrenze { get; set; } = 10_000;
+    /// <summary>Aufbewahrung der Inbox (E2): so lange wirkt eine wiederholte CommandId garantiert nicht erneut (Exactly-once-Horizont).</summary>
+    public int InboxHorizontTage { get; set; } = 30;
 }
 
 /// <summary>

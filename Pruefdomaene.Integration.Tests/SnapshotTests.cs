@@ -23,17 +23,16 @@ public class SnapshotTests : IClassFixture<SnapshotTests.Fixture>
     public SnapshotTests(Fixture fx) => _fx = fx;
 
     [Fact]
-    public async Task Save_dann_Load_liefert_State_Inboxen_und_Version_verlustfrei()
+    public async Task Save_dann_Load_liefert_State_und_Version_verlustfrei()
     {
         var store = new MartenSnapshotStore(_fx.Store);
         var id = Guid.NewGuid();
-        Guid verarbeitet = Guid.NewGuid(), abgelehnt = Guid.NewGuid();
 
         await store.SaveAsync(new Snapshot<PostenState>
         {
             Id = id, Version = 5, SchemaVersion = GeneratedSnapshotSchema.VersionOf<PostenState>(),
             State = new PostenState { Id = id, Version = 5, Bestand = 100, Reserviert = 30 },
-            ProcessedCommandIds = new[] { verarbeitet }, RejectedCommandIds = new[] { abgelehnt }, UpdatedAt = DateTimeOffset.UtcNow,
+            UpdatedAt = DateTimeOffset.UtcNow,
         }, default);
 
         var geladen = await store.TryLoadAsync<PostenState>(id, default);
@@ -43,8 +42,6 @@ public class SnapshotTests : IClassFixture<SnapshotTests.Fixture>
         geladen.SchemaVersion.Should().Be(GeneratedSnapshotSchema.VersionOf<PostenState>());
         geladen.State.Bestand.Should().Be(100);
         geladen.State.Verfuegbar.Should().Be(70, "aus dem State neu berechnet");
-        geladen.ProcessedCommandIds.Should().Equal(verarbeitet);
-        geladen.RejectedCommandIds.Should().Equal(abgelehnt);
     }
 
     [Fact]

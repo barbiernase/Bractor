@@ -144,7 +144,7 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         an.Erfolg.Should().BeTrue("trotz korruptem Fremd-Marking läuft der Vorgang korrekt (Hash-Mismatch → Voll-Fold)");
     }
 
-    // ── Die Welt: führt Commands wie der Aggregat-Actor aus (Decide → Events + Inbox-Marke, Ablehnung → KommandoAbgelehnt) ──
+    // ── Die Welt: führt Commands wie der Aggregat-Actor aus (Decide → Events, Noop → KommandoVerarbeitet, Ablehnung → KommandoAbgelehnt) ──
 
     private sealed class Welt
     {
@@ -190,7 +190,7 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
             var ablehnungen = alle.Where(e => e is ITransientEvent).ToList();
             IReadOnlyList<IEvent> schreibe = ablehnungen.Count > 0 && persistent.Count == 0
                 ? new IEvent[] { new KommandoAbgelehnt(vorgang, ablehnungen[0].GetType().Name) }
-                : persistent.Append(new KommandoVerarbeitet(vorgang)).ToList();
+                : persistent.Count > 0 ? persistent : new IEvent[] { new KommandoVerarbeitet(vorgang) };   // Noop: nur die Marke
             await _store.AppendEventsAsync(cmd.AggregateId, s.Version, schreibe, korr.ToString(), vorgang.ToString(), Typ(cmd));
             foreach (var e in schreibe) { if (e is not IProzessIntern) h.ApplyEvent(e); s.Version++; }
         }
@@ -204,8 +204,9 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         public ZählenderStore(IEventStoreRepository innen) => _innen = innen;
 
         public Task AppendEventsAsync(Guid aggregateId, int expectedVersion, IReadOnlyList<IEvent> events, string? correlationId = null,
-            string? causationId = null, string? aggregateType = null, string? akteur = null)
-            => _innen.AppendEventsAsync(aggregateId, expectedVersion, events, correlationId, causationId, aggregateType, akteur);
+            string? causationId = null, string? aggregateType = null, string? akteur = null, Quittung? quittung = null)
+            => _innen.AppendEventsAsync(aggregateId, expectedVersion, events, correlationId, causationId, aggregateType, akteur, quittung);
+        public Task<KommandoAusgang?> AusgangAsync(Guid commandId, CancellationToken ct) => _innen.AusgangAsync(commandId, ct);
         public Task<StreamChanges> ReadChangedStreamsAsync(long afterGlobalSequence, IReadOnlyCollection<string>? typen, int limit, CancellationToken ct) => _innen.ReadChangedStreamsAsync(afterGlobalSequence, typen, limit, ct);
         public Task<PartitionsSeite> ReadPartitionAsync(long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit, CancellationToken ct)
             => _innen.ReadPartitionAsync(nach, partition, partitionen, typen, ausser, limit, ct);

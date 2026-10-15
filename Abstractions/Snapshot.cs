@@ -13,11 +13,8 @@ namespace Abstractions;
 /// Voll-Replay, nie ein Fehler. Ein Dokument pro Aggregat (Id = AggregateId), abgelegt als jsonb pro
 /// State-Typ (<c>Snapshot&lt;Konto&gt;</c> → <c>mt_doc_snapshot_konto</c>).
 ///
-/// WICHTIG — zwei nicht-offensichtliche Felder (sonst wäre der Snapshot falsch):
-/// - <see cref="ProcessedCommandIds"/>: die Framework-Inbox (verarbeitete CommandIds des idempotenten
-///   Reaktions-/Prozess-Pfads). Ohne sie ginge die Dedup vor <see cref="Version"/> verloren → Doppeleffekt.
-/// - <see cref="Version"/>: zählt ALLE Events inkl. der internen Marken (<see cref="IProzessIntern"/>),
-///   damit der Tail-Read bündig aufsetzt und die OCC-Assertion beim nächsten Append passt.
+/// WICHTIG: <see cref="Version"/> zählt ALLE Events inkl. der internen Marken (<see cref="IProzessIntern"/>), damit der Tail-Read bündig
+/// aufsetzt und die OCC-Assertion beim nächsten Append passt. Die Inbox reist nicht mit — sie ist eine eigene Tabelle des Stores (docs/04 §4.4).
 /// </summary>
 public sealed class Snapshot<TState> where TState : class, IState
 {
@@ -36,18 +33,6 @@ public sealed class Snapshot<TState> where TState : class, IState
     /// <summary>Der gefaltete Domänen-Zustand.</summary>
     public TState State { get; set; } = default!;
 
-    /// <summary>Die Framework-Inbox (verarbeitete Vorgänge) zum Zeitpunkt des Snapshots (idempotenter Pfad, Dedup per CommandId).</summary>
-    public Guid[] ProcessedCommandIds { get; set; } = Array.Empty<Guid>();
-
-    /// <summary>
-    /// Die Ablehnungs-Inbox (fachlich abgelehnte Vorgänge, Treiber-Fold/EM-1) zum Zeitpunkt des Snapshots. Ohne sie
-    /// ginge die Ablehnungs-Dedup vor <see cref="Version"/> über eine Snapshot-Grenze verloren: eine Re-Delivery
-    /// eines abgelehnten Commands würde neu entschieden und könnte — bei zwischenzeitlich geändertem State —
-    /// fälschlich Erfolg liefern (der Manager kompensiert dann einen Schritt, den das Ziel gerade doch ausführte).
-    /// Analog <see cref="ProcessedCommandIds"/> gedeckelt (letzte cap, ältestes zuerst).
-    /// </summary>
-    public Guid[] RejectedCommandIds { get; set; } = Array.Empty<Guid>();
-
     /// <summary>Zeitpunkt des Snapshots (Diagnose/Betrieb).</summary>
     public DateTimeOffset UpdatedAt { get; set; }
 }
@@ -56,12 +41,13 @@ public sealed class Snapshot<TState> where TState : class, IState
 /// Actor-Tuning, in DI registriert und in den Aggregat-Actor injiziert.
 /// <see cref="Threshold"/> = Events zwischen zwei Snapshots; der Actor schreibt best-effort nach je so vielen
 /// Events. 0 schaltet das Schwellwert-Schreiben ab (nur der Stopping-Hook bleibt).
-/// <see cref="InboxCap"/> (Audit-Fix #4/H3) = harte Obergrenze der Framework-Inbox (verarbeitete CommandIds
-/// des idempotenten Pfads): nur die letzten so vielen Ids bleiben in Speicher UND Snapshot, statt monoton zu
-/// wachsen. Praktisch sicher wegen des kurzen Re-Delivery-Fensters (siehe <c>BoundedInbox</c>).
-/// Nicht registriert → der Actor nutzt seine Defaults.
+/// <see cref="InboxCache"/> = so viele CommandIds je Ausgang merkt sich ein aktiver Actor (Cache vor der Inbox-Tabelle, nie Semantik:
+/// was er vergisst, fängt der eindeutige Schlüssel der Tabelle). Nicht registriert → der Actor nutzt seine Defaults.
 /// </summary>
-public sealed record SnapshotOptions(int Threshold = 200, int InboxCap = 10_000);
+public sealed record SnapshotOptions(int Threshold = 200, int InboxCache = SnapshotOptions.StandardInboxCache)
+{
+    public const int StandardInboxCache = 1_000;
+}
 
 /// <summary>
 /// Ablage-Naht für Aggregat-Snapshots. Reines Vertragsinterface — die konkrete Ablage (Marten-jsonb,

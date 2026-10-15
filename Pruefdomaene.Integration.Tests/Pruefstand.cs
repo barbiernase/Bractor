@@ -20,10 +20,10 @@ internal static class Pruefstand
     public const string Verbindung = "Host=localhost;Port=5432;Database=cqrs_events;Username=postgres;Password=postgres";
 
     /// <summary>
-    /// Ein In-Process-Host mit der Verdrahtung von Host.Grpc (ohne gRPC): Framework, Pull-Pfade, Prozesse. <paramref name="inboxGrenze"/> ist
-    /// <c>Schreibpfad.InboxGrenze</c>; <paramref name="dienste"/> greift nach der Verdrahtung ein (Störungs-Seams der Garantie-Tests).
+    /// Ein In-Process-Host mit der Verdrahtung von Host.Grpc (ohne gRPC): Framework, Pull-Pfade, Prozesse. <paramref name="inboxCache"/> ist
+    /// der Inbox-Cache des Actors (klein = der Weg über den Schlüssel der Inbox-Tabelle); <paramref name="dienste"/> greift nach der Verdrahtung ein (Störungs-Seams der Garantie-Tests).
     /// </summary>
-    public static IHost Cluster(string name, int snapshotSchwelle = 200, int inboxGrenze = 10_000, Action<IServiceCollection>? dienste = null,
+    public static IHost Cluster(string name, int snapshotSchwelle = 200, int inboxCache = SnapshotOptions.StandardInboxCache, Action<IServiceCollection>? dienste = null,
         string schema = "pruef_e2e")
     {
         var builder = Host.CreateApplicationBuilder();
@@ -35,7 +35,7 @@ internal static class Pruefstand
             opts.EventStoreSchema = schema;
             opts.RedisDatabase = 2;
             opts.SnapshotThreshold = snapshotSchwelle;
-            opts.InboxCap = inboxGrenze;
+            opts.InboxCache = inboxCache;
         });
         GeneratedPipelines.RegisterAllPipelines(builder.Services);
         builder.Services.AddGeneratedPullPaths();

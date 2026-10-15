@@ -40,6 +40,7 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
         public string? AggType;
         public string? Akteur;
         public Spur.Kopf? SpurKopf;
+        public Quittung? Quittung;
         // RunContinuationsAsynchronously: die Actor-Fortsetzung darf NICHT inline auf dem Flush-Loop-Thread
         // laufen (sonst serialisiert der Loop hinter Actor-Arbeit und der Group-Commit verpufft).
         public readonly TaskCompletionSource Tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -88,7 +89,8 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
         string? correlationId = null,
         string? causationId = null,
         string? aggregateType = null,
-        string? akteur = null)
+        string? akteur = null,
+        Quittung? quittung = null)
     {
         if (expectedVersion < 0)
             throw new ArgumentException($"ExpectedVersion must be >= 0, was {expectedVersion}.", nameof(expectedVersion));
@@ -104,6 +106,7 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
             Caus = causationId,
             AggType = aggregateType,
             Akteur = akteur,
+            Quittung = quittung,
             // Die Spur des Aufrufers jetzt festhalten — geschrieben wird in der Drain-Schleife (anderer Fluss).
             SpurKopf = Spur.Aktuell
         };
@@ -136,6 +139,9 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
 
     public Task<TState?> LoadStateAsync<TState>(Guid aggregateId) where TState : class, IState, new()
         => _inner.LoadStateAsync<TState>(aggregateId);
+
+    public Task<KommandoAusgang?> AusgangAsync(Guid commandId, CancellationToken ct)
+        => _inner.AusgangAsync(commandId, ct);
 
     // ── Der eine Hintergrund-Reader: drainen → bündeln → committen ──
     private async Task RunAsync()
@@ -177,7 +183,7 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
         for (var i = 0; i < batch.Count; i++)
         {
             var p = batch[i];
-            appends[i] = new BatchAppend(p.StreamId, p.ExpectedVersion, p.Events, p.Corr, p.Caus, p.AggType, p.Akteur, p.SpurKopf);
+            appends[i] = new BatchAppend(p.StreamId, p.ExpectedVersion, p.Events, p.Corr, p.Caus, p.AggType, p.Akteur, p.SpurKopf, p.Quittung);
         }
 
         try
@@ -188,7 +194,8 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
         catch (Exception ex)
         {
             // Der Group-Commit rollte atomar zurück (nichts angehängt) → jeden Auftrag EINZELN über den
-            // inneren Store. Der Schuldige (OCC/technischer Fehler) fällt allein, die Unschuldigen committen.
+            // inneren Store. Der Schuldige (OCC, eine Quittung, die die Inbox schon kennt, technischer Fehler) fällt allein, die
+            // Unschuldigen committen; der innere Store unterscheidet Konflikt und Duplikat an der Ausnahme.
             _logger.LogWarning(ex,
                 "Group-Commit ({Count} Appends) fehlgeschlagen — Isolations-Retry einzeln.", batch.Count);
             await IsolateAsync(batch).ConfigureAwait(false);
@@ -202,7 +209,7 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
             try
             {
                 using (Spur.Von(p.SpurKopf?.Ursache, p.SpurKopf?.Wirker, p.SpurKopf?.Ueber))
-                    await _inner.AppendEventsAsync(p.StreamId, p.ExpectedVersion, p.Events, p.Corr, p.Caus, p.AggType, p.Akteur)
+                    await _inner.AppendEventsAsync(p.StreamId, p.ExpectedVersion, p.Events, p.Corr, p.Caus, p.AggType, p.Akteur, p.Quittung)
                         .ConfigureAwait(false);
                 p.Tcs.TrySetResult();
             }

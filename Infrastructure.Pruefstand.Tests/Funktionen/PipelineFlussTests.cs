@@ -6,7 +6,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Abstractions;
 using FluentAssertions;
-using Infrastructure.Aggregate;     // KommandoVerarbeitet / KommandoAbgelehnt
+using Infrastructure.Aggregate;     // KommandoAbgelehnt
 using Infrastructure.Funktionen;
 using Infrastructure.Prozess;
 using Infrastructure.Quellen;
@@ -193,7 +193,7 @@ internal sealed class FlussWelt
             jetzt: _ => Task.FromResult(Log.Jetzt));
     }
 
-    /// <summary>Das Aggregat: Command → Event (Name + „t“) samt Inbox-Marke, oder die Ablehnungs-Marke.</summary>
+    /// <summary>Das Aggregat: Command → Event (Name + „t“), oder die Ablehnungs-Marke.</summary>
     private async Task DispatchAsync(Guid korrelation, ICommand cmd, Guid vorgang, CancellationToken ct)
     {
         lock (Gesendet) Gesendet.Add(cmd);
@@ -201,7 +201,7 @@ internal sealed class FlussWelt
         if (stream.Any(e => e.CausationId == vorgang.ToString())) return;
         IEvent[] evs = LehneAb.Contains(cmd.GetType())
             ? new IEvent[] { new KommandoAbgelehnt(vorgang, cmd.GetType().Name + " abgelehnt") }
-            : new[] { Antwort(cmd), new KommandoVerarbeitet(vorgang) };
+            : new[] { Antwort(cmd) };
         await Log.AppendEventsAsync(cmd.AggregateId, stream.Count, evs, korrelation.ToString(), vorgang.ToString(), "Akte");
     }
 

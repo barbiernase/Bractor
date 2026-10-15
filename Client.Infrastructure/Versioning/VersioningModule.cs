@@ -7,11 +7,11 @@ namespace Client.Infrastructure.Versioning;
 /// Versionen brauchen:
 ///
 ///   • <b>OCC-Version</b> (<see cref="GetVersion"/>): der Stream-Head NACH dem Commit, inklusive
-///     der co-committeten <c>KommandoVerarbeitet</c>-Marke (aus <see cref="MessageContext.StreamHeadVersion"/>).
+///     der Noop- und Ablehnungs-Marken im Stream (aus <see cref="MessageContext.StreamHeadVersion"/>).
 ///     Das ist die <c>ExpectedVersion</c>, die der nächste Command tragen muss.
 ///
 ///   • <b>Read-Ziel</b> (<see cref="GetReadTarget"/>): die höchste DOMAIN-Event-Version
-///     (<see cref="MessageContext.AggregateVersion"/>). Die Marke materialisiert nichts, also
+///     (<see cref="MessageContext.AggregateVersion"/>). Marken materialisieren nichts, also
 ///     erreicht die Projektion (asynchroner Pull-Consumer) genau die Domain-Version — bis dorthin
 ///     muss ein Read aufgeschlossen haben, um „read your writes" zu erfüllen.
 ///
@@ -78,7 +78,7 @@ public class VersioningModule : IVersioningModule
     {
         // BEWUSST KEIN OCC-Tracking aus Query-Deps: die Deps tragen die DOMAIN-Event-Version des
         // Read-Models, NICHT die marker-inklusive Stream-Head-Version. Als OCC-ExpectedVersion wäre
-        // sie zu niedrig (es fehlen die co-committeten KommandoVerarbeitet-Marken) → der erste
+        // sie zu niedrig (es fehlen die Noop- und Ablehnungs-Marken im Stream) → der erste
         // Command auf einem nur per Query geladenen Aggregat schlüge an der OCC fehl ("erster Klick
         // verpufft"). Die OCC-Version kommt AUSSCHLIESSLICH aus Event-Pushes (StreamHeadVersion,
         // siehe TrackFromContext). Kennt der Client noch keine Head-Version, sendet ConnectionModule

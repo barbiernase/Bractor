@@ -46,8 +46,8 @@ public static class BatchWriterStats
 ///   Marten zurückgegebenen Event-Hüllen gesetzt. Damit dürfen im selben Batch Commands verschiedener
 ///   Korrelation/Kausalität stehen — Voraussetzung fürs Bündeln überhaupt. (Session-weite Metadaten
 ///   könnten das nicht, weil Causation = CommandId je Command verschieden ist.)
-/// - Atomarität: ein <c>SaveChanges</c> → alles-oder-nichts. Wirft es (z.B. OCC-Konflikt EINES Streams),
-///   rollt die ganze Transaktion zurück und die Exception propagiert → der Appender isoliert einzeln.
+/// - Atomarität: ein <c>SaveChanges</c> → alles-oder-nichts. Wirft es (z.B. OCC-Konflikt EINES Streams, eine Quittung, die die Inbox
+///   schon kennt), rollt die ganze Transaktion zurück und die Exception propagiert → der Appender isoliert einzeln.
 /// </summary>
 public sealed class MartenEventBatchWriter : IEventBatchWriter
 {
@@ -65,11 +65,22 @@ public sealed class MartenEventBatchWriter : IEventBatchWriter
         await using var session = _store.LightweightSession();
 
         var eventCount = 0;
+        List<Guid>? commands = null, streams = null;
+        List<bool>? abgelehnt = null;
         foreach (var item in batch)
         {
             Stage(session, item);
             eventCount += item.Events.Count;
+            if (item.Quittung is { } q)
+            {
+                (commands ??= new(batch.Count)).Add(q.CommandId);
+                (streams ??= new(batch.Count)).Add(item.StreamId);
+                (abgelehnt ??= new(batch.Count)).Add(q.Ausgang == KommandoAusgang.Abgelehnt);
+            }
         }
+        // Die Quittungen aller Commands in EINER Anweisung derselben Transaktion (Inbox, docs/04 §4.4). Kennt die Inbox einen schon, scheitert
+        //   der ganze Batch am Schlüssel; der Appender isoliert dann einzeln, und nur der Wiederholte fällt.
+        if (commands != null) InboxTabelle.Quittiere(session, InboxTabelle.Name(_store), commands, streams!, abgelehnt!);
 
         var sw = Stopwatch.StartNew();
         await session.SaveChangesAsync(ct);

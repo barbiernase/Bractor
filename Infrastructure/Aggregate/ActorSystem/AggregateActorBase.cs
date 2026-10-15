@@ -55,16 +55,13 @@ public abstract class AggregateActorBase<TState> : IActor
     private Guid _id;
     private bool _initialized = false;
 
-    // Framework-Inbox (Exactly-once): bereits verarbeitete CommandIds des idempotenten Pfads (Emittiert).
-    // Aus den co-committeten KommandoVerarbeitet-Marken des Streams gefaltet — der Fachcode kennt das nie.
-    // ★ Audit-Fix #4/H3: HART gedeckelt (letzte K) statt monoton wachsend — siehe BoundedInbox.
-    // ★ Treiber-Fold (EM-1): eine ZWEITE Menge der fachlich ABGELEHNTEN Vorgänge (co-committete
-    //   KommandoAbgelehnt-Marken). Sie hält die Re-Delivery eines abgelehnten Commands konsistent auf
-    //   Ablehnung (NIE Success:true) — nötig, weil der Ablehnungs-Pfad jetzt eine durable Marke schreibt,
-    //   die der Prozess-Manager als Fehlschlag faltet (§4-Kopplung: Marke + Zwei-Mengen-Inbox + Fold-Achse).
-    private readonly int _inboxCap;
-    private BoundedInbox _verarbeiteteCommandIds;
-    private BoundedInbox _abgelehnteCommandIds;
+    // Framework-Inbox (Exactly-once, docs/04 §4.4): die Wahrheit ist die Inbox-Tabelle des Stores — je Command eine Quittung in derselben
+    //   Transaktion wie seine Events, eindeutig je CommandId. Hier nur ihr Cache: die CommandIds, die diese Aktivierung schon entschieden oder
+    //   nachgeschlagen hat (gedeckelt, BoundedInbox), getrennt nach gewirkt und abgelehnt. Er erspart der häufigen Wiederholung kurz nach dem
+    //   ersten Mal den Weg in die Datenbank; was er nicht kennt, fängt der eindeutige Schlüssel. Durable Fakten — er überlebt eine
+    //   Rehydration, nur nicht die Passivierung.
+    private readonly BoundedInbox _verarbeiteteCommandIds;
+    private readonly BoundedInbox _abgelehnteCommandIds;
 
     protected AggregateActorBase(
         IAggregateHandlerFactory handlerFactory,
@@ -87,9 +84,9 @@ public abstract class AggregateActorBase<TState> : IActor
         _snapshots = snapshots;
         _snapshotSchemaVersion = snapshotSchemaVersion;
         _snapshotThreshold = snapshotOptions?.Threshold ?? 200;
-        _inboxCap = snapshotOptions?.InboxCap ?? 10_000;
-        _verarbeiteteCommandIds = new BoundedInbox(_inboxCap);
-        _abgelehnteCommandIds = new BoundedInbox(_inboxCap);
+        var inboxCache = snapshotOptions?.InboxCache ?? SnapshotOptions.StandardInboxCache;
+        _verarbeiteteCommandIds = new BoundedInbox(inboxCache);
+        _abgelehnteCommandIds = new BoundedInbox(inboxCache);
         _deadLetters = deadLetters;
     }
 
@@ -148,13 +145,12 @@ public abstract class AggregateActorBase<TState> : IActor
     {
         _id = aggregateId;
 
-        // ★ EIN Tail-Fold statt zwei Voll-Reads (docs/04 §4.7): State UND Inbox aus einem
-        //   Durchlauf; mit Snapshot seedet der Fold und liest nur den Rest ab snapshot.Version+1.
+        // ★ EIN Tail-Fold (docs/04 §4.7): mit Snapshot seedet der Fold und liest nur den Rest ab snapshot.Version+1.
         RehydrationResult<TState> rehydrated;
         try
         {
             rehydrated = await Infrastructure.Aggregate.AggregateRehydrator.LoadAsync<TState>(
-                _id, _snapshots, _eventStore, _handlerFactory, _snapshotSchemaVersion, default, _inboxCap);
+                _id, _snapshots, _eventStore, _handlerFactory, _snapshotSchemaVersion, default);
         }
         catch (Exception ex)
         {
@@ -170,8 +166,6 @@ public abstract class AggregateActorBase<TState> : IActor
         }
 
         _state = rehydrated.State;
-        _verarbeiteteCommandIds = rehydrated.ProcessedCommandIds;
-        _abgelehnteCommandIds = rehydrated.RejectedCommandIds;
         _lastSnapshotVersion = rehydrated.SnapshotVersion;
 
         // Handler zeigt auf denselben geseedeten State (Decider/Applier mutieren _state).
@@ -221,20 +215,26 @@ public abstract class AggregateActorBase<TState> : IActor
         }
     }
 
-    /// <summary>Was ein Append nach einem Fehler über den Command weiß (G-3, docs/11 §11.2).</summary>
-    private enum AppendErgebnis { Geschrieben, SchonGewirkt, SchonAbgelehnt }
+    /// <summary>
+    /// Was ein Append über den Command weiß (G-3, docs/11 §11.2): geschrieben; nach einem mehrdeutigen Commit schon gewirkt (die Events
+    /// dieses Versuchs stehen im Log) bzw. abgelehnt; oder früher gewirkt — eine Wiederholung, deren Events dieses Versuchs NICHT im Log stehen.
+    /// </summary>
+    private enum AppendErgebnis { Geschrieben, SchonGewirkt, SchonAbgelehnt, FrueherGewirkt }
 
     /// <summary>Ein Append ist sicher nicht geschrieben; der Actor ist frisch rehydriert.</summary>
     private sealed class AppendGescheitertException(Exception innen) : Exception("Append gescheitert", innen);
 
     /// <summary>
-    /// Der eine Append-Weg des Actors (Effekt mit Marke, Noop-Marke, Ablehnungs-Marke). Scheitert er — Versionskonflikt durch einen zweiten
-    /// Schreiber, ein Commit, dessen Quittung verloren ging, ein DB-Fehler —, ist der In-Memory-Stand nicht mehr verlässlich: der Actor
-    /// rehydriert frisch aus dem Log (G-3). Steht die CommandId danach in der Inbox (die Marke reist in derselben Transaktion wie die Events),
-    /// hat der Command gewirkt bzw. ist abgelehnt — der mehrdeutige Commit wird kein falsches Negativ (P10). Sonst ist sicher nichts geschrieben:
-    /// <see cref="AppendGescheitertException"/>, der Aufrufer entscheidet einmal neu.
+    /// Der eine Append-Weg des Actors (Effekt, Noop-Marke, Ablehnungs-Marke — jeweils mit der Quittung des Commands in derselben
+    /// Transaktion). Kennt die Inbox die CommandId schon (eine Wiederholung, die der Cache nicht kannte), ist nichts geschrieben und der Stand
+    /// bleibt gültig: der Ausgang des ersten Mals wird quittiert. Scheitert der Append sonst — Versionskonflikt durch einen zweiten Schreiber,
+    /// ein Commit, dessen Quittung verloren ging, ein DB-Fehler —, ist der In-Memory-Stand nicht mehr verlässlich: der Actor rehydriert frisch
+    /// aus dem Log (G-3) und schlägt in der Inbox nach. Steht die CommandId dort, hat der Command gewirkt bzw. ist abgelehnt — der mehrdeutige
+    /// Commit wird kein falsches Negativ (P10). Sonst ist sicher nichts geschrieben: <see cref="AppendGescheitertException"/>, der Aufrufer
+    /// entscheidet einmal neu.
     /// </summary>
-    private async Task<AppendErgebnis> AppendeAsync(CommandEnvelope cmdEnvelope, int expectedVersion, IReadOnlyList<IEvent> events)
+    private async Task<AppendErgebnis> AppendeAsync(CommandEnvelope cmdEnvelope, int expectedVersion, IReadOnlyList<IEvent> events,
+        KommandoAusgang ausgang)
     {
         try
         {
@@ -245,18 +245,41 @@ public abstract class AggregateActorBase<TState> : IActor
                 correlationId: cmdEnvelope.CorrelationId,
                 causationId: cmdEnvelope.CommandId.ToString(),
                 aggregateType: typeof(TState).Name,
-                akteur: cmdEnvelope.UserId);   // Kausalkette: der Akteur reist mit den Events zu Pipelines/Prozessen/Fristen
+                akteur: cmdEnvelope.UserId,   // Kausalkette: der Akteur reist mit den Events zu Pipelines/Prozessen/Fristen
+                quittung: new Quittung(cmdEnvelope.CommandId, ausgang));
             return AppendErgebnis.Geschrieben;
+        }
+        catch (KommandoSchonEntschiedenException)
+        {
+            return await NachgeschlagenAsync(cmdEnvelope.CommandId, wiederholung: true)
+                ?? throw new InvalidOperationException($"Inbox meldet {cmdEnvelope.CommandId} als entschieden, kennt aber keinen Ausgang");
         }
         catch (Exception ex)
         {
-            _logger?.LogWarning(ex, "[Actor] Append für {Command} an {Type}/{Id} gescheitert — rehydriere frisch und sehe im Log nach",
+            _logger?.LogWarning(ex, "[Actor] Append für {Command} an {Type}/{Id} gescheitert — rehydriere frisch und sehe in der Inbox nach",
                 cmdEnvelope.Payload.GetType().Name, typeof(TState).Name, _id);
             _initialized = false;
             await InitializeAsync(_id);   // wirft sie, bleibt _initialized false: die nächste Nachricht initialisiert neu
-            if (_verarbeiteteCommandIds.Contains(cmdEnvelope.CommandId)) return AppendErgebnis.SchonGewirkt;
-            if (_abgelehnteCommandIds.Contains(cmdEnvelope.CommandId)) return AppendErgebnis.SchonAbgelehnt;
-            throw new AppendGescheitertException(ex);
+            return await NachgeschlagenAsync(cmdEnvelope.CommandId, wiederholung: false) ?? throw new AppendGescheitertException(ex);
+        }
+    }
+
+    /// <summary>
+    /// Der Ausgang eines Commands laut Inbox-Tabelle (und danach im Cache), oder null, wenn sie ihn nicht kennt. <paramref name="wiederholung"/>:
+    /// sicher nicht dieser Versuch hat gewirkt, sondern ein früherer.
+    /// </summary>
+    private async Task<AppendErgebnis?> NachgeschlagenAsync(Guid commandId, bool wiederholung)
+    {
+        switch (await _eventStore.AusgangAsync(commandId, default))
+        {
+            case KommandoAusgang.Gewirkt:
+                _verarbeiteteCommandIds.Add(commandId);
+                return wiederholung ? AppendErgebnis.FrueherGewirkt : AppendErgebnis.SchonGewirkt;
+            case KommandoAusgang.Abgelehnt:
+                _abgelehnteCommandIds.Add(commandId);
+                return AppendErgebnis.SchonAbgelehnt;
+            default:
+                return null;
         }
     }
 
@@ -328,6 +351,13 @@ public abstract class AggregateActorBase<TState> : IActor
                     return;
 
                 case CommandVorpruefung.Ergebnis.VersionsKonflikt:
+                    // Eine Client-Wiederholung, die der Cache nicht (mehr) kennt, sieht hier eine weitergerückte Version — ob sie schon
+                    //   entschieden ist, weiß nur die Inbox. Nur auf diesem Weg und nach einem gescheiterten Append fragt der Actor sie.
+                    if (await NachgeschlagenAsync(cmdEnvelope.CommandId, wiederholung: true) is { } schon)
+                    {
+                        QuittiereEntschieden(context, schon);
+                        return;
+                    }
                     var errorMsg = $"Concurrency conflict: expected version {expectedVersion}, actual {_state.Version}";
                     _logger?.LogDebug("[Actor] {ErrorMsg}", errorMsg);
                     await TryPublishCommandFailedAsync(cmdEnvelope, errorMsg);
@@ -435,13 +465,9 @@ public abstract class AggregateActorBase<TState> : IActor
 
             // 5. Erfolg — persistente Events verarbeiten.
             //    ★ Phase 1: Metadaten mit ins Log stempeln (nach Log-Read verfügbar).
-            //    ★ Inbox: auf dem idempotenten Pfad die KommandoVerarbeitet-Marke CO-COMMITTEN (EINE
-            //      Transaktion mit dem Effekt) → exactly-once-wirksam, crash-fest (Effekt + Marke atomar).
-            var zuSchreiben = istIdempotent
-                ? persistentEvents.Append((IEvent)new Infrastructure.Aggregate.KommandoVerarbeitet(cmdEnvelope.CommandId)).ToList()
-                : persistentEvents;
-
-            var append = await AppendeAsync(cmdEnvelope, expectedVersion, zuSchreiben);
+            //    ★ Inbox: die Quittung reist in DERSELBEN Transaktion wie der Effekt (Inbox-Tabelle) → exactly-once-wirksam, crash-fest.
+            //      Eine Marke im Stream braucht die Wirkung nicht: ihr erstes Event trägt causation_id = CommandId, das liest der Prozess-Fold.
+            var append = await AppendeAsync(cmdEnvelope, expectedVersion, persistentEvents, KommandoAusgang.Gewirkt);
             if (append != AppendErgebnis.Geschrieben)
             {
                 // Mehrdeutiger Commit (G-3): die Events stehen im Log, der Actor hat sie beim Rehydrieren schon gefaltet. Die Signale
@@ -465,8 +491,7 @@ public abstract class AggregateActorBase<TState> : IActor
             //   rehydriert den State frisch aus dem (nun aktuellen) Log und quittiert WAHR (Erfolg).
             try
             {
-                // 6. Events applyen (Applier) — mutiert _state. Die Marke wird NICHT angewandt (der Applier
-                //    kennt sie nicht), aber in der Version mitgezählt (Stream-Position konsistent).
+                // 6. Events applyen (Applier) — mutiert _state.
                 // ★ Audit-Fix #5 (Symmetrie Live == Rehydration): ein IProzessIntern-Persistent-Event wird
                 //   NICHT angewandt (nur die Version mitgezählt) — exakt wie die Rehydration (AggregateRehydrator).
                 foreach (var evt in persistentEvents)
@@ -474,11 +499,7 @@ public abstract class AggregateActorBase<TState> : IActor
                     if (evt is not IProzessIntern) _handler.ApplyEvent(evt);
                     _state.Version++;
                 }
-                if (istIdempotent)
-                {
-                    _state.Version++;                                   // die co-committete Marke
-                    _verarbeiteteCommandIds.Add(cmdEnvelope.CommandId);
-                }
+                _verarbeiteteCommandIds.Add(cmdEnvelope.CommandId);
 
                 // 7. ★ Version-Tracking in Redis (nicht-kritisch)
                 await TryTrackVersionAsync();
@@ -524,7 +545,7 @@ public abstract class AggregateActorBase<TState> : IActor
                 {
                     Success = true,
                     AggregateId = _id,
-                    NewVersion = _state?.Version ?? (expectedVersion + zuSchreiben.Count)
+                    NewVersion = _state?.Version ?? (expectedVersion + persistentEvents.Count)
                 });
             }
         }
@@ -546,16 +567,16 @@ public abstract class AggregateActorBase<TState> : IActor
     }
 
     /// <summary>
-    /// Co-committet AUSSCHLIESSLICH die Framework-Inbox-Marke (idempotenter Pfad, Noop/Ablehnung) — ein
-    /// durabler Beleg „dieser Vorgang wurde verarbeitet", ohne Domänen-Effekt. Gleiche native Transaktion
-    /// wie ein normaler Append; die Marke ist <see cref="IProzessIntern"/> → beim Domänen-Falten übersprungen,
-    /// in der Version aber mitgezählt (Stream-Position bündig). Basis ist die aufgelöste aktuelle Version
-    /// (Single-Writer), sodass die Marten-OCC eine echte Doppelaktivierung weiterhin abweist.
+    /// Co-committet AUSSCHLIESSLICH die Noop-Marke mit der Quittung (idempotenter Pfad) — ein durabler Beleg „dieser Vorgang wurde
+    /// verarbeitet", ohne Domänen-Effekt. Die Quittung allein dedupliziert; die Marke im Stream braucht der Prozess-Fold, der den Ausgang
+    /// über die Kausalität im Ziel-Stream erkennt (eine Wirkung hat dort ihr Event, ein Noop nur diese Marke). Die Marke ist
+    /// <see cref="IProzessIntern"/> → beim Domänen-Falten übersprungen, in der Version aber mitgezählt (Stream-Position bündig). Basis ist die
+    /// aufgelöste aktuelle Version (Single-Writer), sodass die Marten-OCC eine echte Doppelaktivierung weiterhin abweist.
     /// </summary>
     private async Task<AppendErgebnis> CoCommitInboxMarkeAsync(CommandEnvelope cmdEnvelope, int expectedVersion)
     {
         var ergebnis = await AppendeAsync(cmdEnvelope, expectedVersion,
-            new IEvent[] { new Infrastructure.Aggregate.KommandoVerarbeitet(cmdEnvelope.CommandId) });
+            new IEvent[] { new Infrastructure.Aggregate.KommandoVerarbeitet(cmdEnvelope.CommandId) }, KommandoAusgang.Gewirkt);
         if (ergebnis != AppendErgebnis.Geschrieben) return ergebnis;   // schon im frisch rehydrierten Stand
 
         _state!.Version++;
@@ -573,7 +594,7 @@ public abstract class AggregateActorBase<TState> : IActor
     private async Task<AppendErgebnis> CoCommitAblehnungsMarkeAsync(CommandEnvelope cmdEnvelope, int expectedVersion, string grund)
     {
         var ergebnis = await AppendeAsync(cmdEnvelope, expectedVersion,
-            new IEvent[] { new Infrastructure.Aggregate.KommandoAbgelehnt(cmdEnvelope.CommandId, grund) });
+            new IEvent[] { new Infrastructure.Aggregate.KommandoAbgelehnt(cmdEnvelope.CommandId, grund) }, KommandoAusgang.Abgelehnt);
         if (ergebnis != AppendErgebnis.Geschrieben) return ergebnis;   // schon im frisch rehydrierten Stand
 
         _state!.Version++;
@@ -635,7 +656,7 @@ public abstract class AggregateActorBase<TState> : IActor
     }
 
     /// <summary>
-    /// Friert den State (Deep-Copy) und die Inbox IN-TURN ein — der spätere detached DB-Write kann das
+    /// Friert den State (Deep-Copy) IN-TURN ein — der spätere detached DB-Write kann das
     /// weiter mutierende <c>_state</c> nicht mehr korrumpieren (Single-Writer-Turn, Capture-Race-Probe).
     /// Dann fire-and-forget: der Command-Turn wartet nicht auf den DB-Write.
     /// </summary>
@@ -647,8 +668,6 @@ public abstract class AggregateActorBase<TState> : IActor
             Version = _state!.Version,
             SchemaVersion = _snapshotSchemaVersion ?? "",
             State = Clone(_state),
-            ProcessedCommandIds = _verarbeiteteCommandIds.ToArray(),
-            RejectedCommandIds = _abgelehnteCommandIds.ToArray(),
             UpdatedAt = DateTimeOffset.UtcNow
         };
         _lastSnapshotVersion = _state.Version;
