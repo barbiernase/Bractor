@@ -186,6 +186,13 @@ public static class CqrsServiceExtensions
             options.Events.MetadataConfig.CausationIdEnabled = true;
             options.Events.MetadataConfig.HeadersEnabled = true;
 
+            // Schneller Anhänge-Modus: der Group-Commit hängt nur mit erwarteter Version an (StartStream bzw. Append(id, Ziel-Version)) —
+            //   Marten vergibt die Versionen dann selbst und schreibt in EINER Runde: Stream-Kopf per „update … where version = erwartet“
+            //   (die OCC, auch gegen gleichzeitige Transaktionen), Events mit nextval im Insert. Der Standard (Rich) las vorher außerhalb der
+            //   Transaktion je Stream die Version und holte die Sequenzen ab, und hinterließ bei einem gescheiterten Commit Tombstones (G-7).
+            //   Metadaten (Kausalität, Korrelation, Header) und der Zeitstempel (Client-Uhr, wie bisher) bleiben gleich.
+            options.Events.AppendMode = JasperFx.Events.EventAppendMode.Quick;
+
             // Batch-Konsum der Projektionen (docs/04 §4.1): der Guard je (Projektion, Stream) und der Stand je (Projektion, Partition) mit
             // numerischer Revision — jeder Commit erwartet die geladene Version (G-4: zwei Aktivierungen, Neuaufbau).
             Core.KonsumSchema.Registriere(options);

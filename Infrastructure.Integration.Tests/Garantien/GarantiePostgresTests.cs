@@ -24,13 +24,13 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
     private readonly Fixture _fx;
     public GarantiePostgresTests(Fixture fx) => _fx = fx;
 
-    private MartenEventStore EventStore(TimeSpan? karenz = null)
-        => new(_fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: karenz ?? TimeSpan.Zero);
+    private MartenEventStore EventStore(TimeSpan? karenz = null, bool schnell = false)
+        => new(schnell ? _fx.Schnell : _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: karenz ?? TimeSpan.Zero);
 
-    [Fact]
-    public async Task Ein_Append_wird_ganz_oder_gar_nicht_gueltig()
+    [Theory, InlineData(false), InlineData(true)]   // Martens Anhänge-Modus: Standard (Rich) und schnell (Quick, so läuft der Host)
+    public async Task Ein_Append_wird_ganz_oder_gar_nicht_gueltig(bool schnell)
     {
-        var es = EventStore();
+        var es = EventStore(schnell: schnell);
         var id = Guid.NewGuid();
         await es.AppendEventsAsync(id, 0, new IEvent[] { new ImagePairInspiziert() });
 
@@ -43,12 +43,12 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
         (await es.ReadStreamAsync(id, 0, default)).Select(e => e.AggregateVersion).Should().Equal(1, 2, 3);
     }
 
-    [Fact]
-    public async Task Effekt_und_Quittung_werden_gemeinsam_gueltig_oder_gar_nicht()
+    [Theory, InlineData(false), InlineData(true)]   // Martens Anhänge-Modus: Standard (Rich) und schnell (Quick, so läuft der Host)
+    public async Task Effekt_und_Quittung_werden_gemeinsam_gueltig_oder_gar_nicht(bool schnell)
     {
         // Die Inbox (docs/04 §4.4): die Quittung reist in der Transaktion der Events. Scheitert der Append an der Version, steht auch keine
         //   Quittung; kennt die Inbox die CommandId schon, steht auch kein Event — und der Aufrufer erfährt es an der Ausnahme.
-        var es = EventStore();
+        var es = EventStore(schnell: schnell);
         var id = Guid.NewGuid();
         var erster = Guid.NewGuid();
         await es.AppendEventsAsync(id, 0, new IEvent[] { new ImagePairInspiziert() }, quittung: new Quittung(erster, KommandoAusgang.Gewirkt));
@@ -65,10 +65,10 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
         (await es.AusgangAsync(erster, default)).Should().Be(KommandoAusgang.Gewirkt, "der erste Ausgang bleibt");
     }
 
-    [Fact]
-    public async Task Zwei_Schreiber_mit_derselben_Version_genau_einer_gewinnt_kein_Update_geht_still_verloren()
+    [Theory, InlineData(false), InlineData(true)]   // Martens Anhänge-Modus: Standard (Rich) und schnell (Quick, so läuft der Host)
+    public async Task Zwei_Schreiber_mit_derselben_Version_genau_einer_gewinnt_kein_Update_geht_still_verloren(bool schnell)
     {
-        var es = EventStore();
+        var es = EventStore(schnell: schnell);
         var id = Guid.NewGuid();
         await es.AppendEventsAsync(id, 0, new IEvent[] { new ImagePairInspiziert() });
 
@@ -242,9 +242,12 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
     public sealed class Fixture : IDisposable
     {
         public IDocumentStore Store { get; } = Neu("garantie_it");
+        /// <summary>Derselbe Store im schnellen Anhänge-Modus des Hosts (eigenes Schema).</summary>
+        public IDocumentStore Schnell { get; } = Neu("garantie_it_schnell", schnell: true);
 
-        public static DocumentStore Neu(string schema) => DocumentStore.For(opts =>
+        public static DocumentStore Neu(string schema, bool schnell = false) => DocumentStore.For(opts =>
         {
+            if (schnell) opts.Events.AppendMode = JasperFx.Events.EventAppendMode.Quick;
             opts.Connection("Host=localhost;Port=5432;Database=cqrs_events;Username=postgres;Password=postgres");
             opts.DatabaseSchemaName = schema;
             opts.Events.DatabaseSchemaName = schema;
@@ -253,6 +256,6 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
             InboxTabelle.Registriere(opts);
         });
 
-        public void Dispose() => Store.Dispose();
+        public void Dispose() { Store.Dispose(); Schnell.Dispose(); }
     }
 }
