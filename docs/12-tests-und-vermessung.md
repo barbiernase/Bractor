@@ -170,9 +170,12 @@ Rückstand am Fensterende und Abbauzeit (ein nicht abgebauter Rückstand ist ein
 Sekunde und je Vorgang (`pg_stat_statements`, `track = top`, Transaktionen = COMMITs, ohne die Lese-Rolle des Treibers), CPU und RSS des Hosts.
 Eine Aufwärmrunde vor S1 und S5 zählt nicht. Jeder Lauf auf frischen DBs; danach die Exactly-once-Prüfung ([11](11-garantien.md) §11.14) — mit
 offenem Rückstand prüft sie „höchstens einmal, nichts doppelt“. Ablage: `vermessung/ergebnisse/<datum>_<commit>_<anlass>/` (nur anhängen); die
-Tabelle unten erzeugt `scripts/vermessung-tabelle.sh --schreibe` aus diesen Ordnern — nie von Hand.
+Tabellen erzeugt `scripts/vermessung-tabelle.sh --schreibe` aus diesen Ordnern — nie von Hand, je Rechner eine mit eigener Baseline
+(MacBook Air M4 hier, der Messserver weiter unten; Werte verschiedener Rechner sind nicht vergleichbar).
 
-<!-- vermessung-tabelle:anfang -->
+**Tabelle MacBook Air M4** (bis Phase 3, unter Fremdlast):
+
+<!-- vermessung-tabelle:mac:anfang -->
 | Szenario | Kennzahl | Baseline ([2026-10-15_0429_3cfec32_baseline](../vermessung/ergebnisse/2026-10-15_0429_3cfec32_baseline/)) | Phase 1 ([2026-10-15_0539_b955d40_phase-1](../vermessung/ergebnisse/2026-10-15_0539_b955d40_phase-1/)) | Phase 2 ([2026-10-15_0745_4caa176_phase-2](../vermessung/ergebnisse/2026-10-15_0745_4caa176_phase-2/)) | Phase 3 ([2026-10-15_1312_0b02802_phase-3](../vermessung/ergebnisse/2026-10-15_1312_0b02802_phase-3/)) | Phase 3 / Baseline |
 |---|---|---:|---:|---:|---:|---:|
 | L1 Leerlauf Beispieldomäne | Transaktionen (/s) | 258 | 1600 | 1536 | 0.1 | 0× |
@@ -339,7 +342,7 @@ Tabelle unten erzeugt `scripts/vermessung-tabelle.sh --schreibe` aus diesen Ordn
 | S4 Datensatz einfrieren | RSS Host am Fensterende (MB) | – | – | – | 823 | – |
 | S4 Datensatz einfrieren | RSS Host Höchststand des Laufs (MB) | – | – | – | 1061 | – |
 | S4 Datensatz einfrieren | RSS am Ende / Höchststand (1) | – | – | – | 0.8 | – |
-<!-- vermessung-tabelle:ende -->
+<!-- vermessung-tabelle:mac:ende -->
 
 Baseline (2026-10-15, `3cfec32`, MacBook Air M4 unter Fremdlast — ein Spiel lief, Last 20–25) in Verhältnissen: die Schreibseite nimmt bis
 etwa 2 200 Commands/s an (S5, 64 Sender), Ende zu Ende kommen 110–140 Vorgänge/s durch (S5), 20 Bildpaare/s (S1), etwa 50 Teile/s an einem
@@ -391,6 +394,13 @@ Phase 2, auch dort, wo Phase 3 nichts geändert hat (S5 hat keine Projektion, S5
   10 min nicht durch. Die Abweichung der Reaktions-Zeile (21 648 statt 21 646) ist ein Zählfehler des Treibers: Soll und Ist werden in zwei
   Abfragen gezählt, während der Host noch abbaut. Der zweite (`…_phase-3-stoerung-2`, Last 8 → 68) ist gültig: 24 699 Vorgänge und 182 Bildpaare
   mit zwei harten Abbrüchen und Redis-Ausfall, alles genau einmal, Abbau 371 s.
+
+**Tabelle Messserver** (Hetzner, §12.6; ohne Fremdlast, Postgres und Redis im Host-Netzwerk — die Läufe vor der Baseline-Spalte liefen
+noch über docker-proxy):
+
+<!-- vermessung-tabelle:messserver:anfang -->
+(noch keine Spalte)
+<!-- vermessung-tabelle:messserver:ende -->
 
 **Messserver, erste Läufe (2026-10-15, `a600166` = Phase-3-Code; Ordner `…_server-baseline`, `…_server-baseline-stoerung`; nicht in der
 Tabelle oben, weil der Rechner ein anderer ist):** ohne Fremdlast, gegen Phase 3 auf dem MacBook (unter Fremdlast). Die **Arbeit je Vorgang ist
