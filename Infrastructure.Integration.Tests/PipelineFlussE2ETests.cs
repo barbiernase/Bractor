@@ -321,6 +321,7 @@ public class PipelineFlussE2ETests
     /// (bis BildVerfuegbar); nach einem Neustart (neuer Host, derselbe Log) gleicht der Treiber gebündelt mit dem Log ab und meldet
     /// nichts erneut. Läuft im Default-Laufmodus EinmalImCluster (Lease über die Cluster-Identität quelle/DateiErkannt).
     /// </summary>
+    [Trait("Kategorie", "Garantie")]
     [Fact]
     public async Task Datei_Treiber_meldet_eine_Datei_genau_einmal_auch_nach_Neustart()
     {

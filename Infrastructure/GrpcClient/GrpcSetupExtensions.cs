@@ -21,7 +21,8 @@ public static class GrpcSetupExtensions
         Console.WriteLine("[Setup] Registriere gRPC Client Services...");
 
         // ProtoMessageMapper über der Nutzlast-Tabelle der Anwendung (Leitungs-Projekt)
-        services.AddSingleton(Anwendung.Aktuell.Nutzlast);
+        services.AddSingleton(Anwendung.Aktuell.Nutzlast
+            ?? throw new InvalidOperationException("gRPC ohne Leitungs-Projekt der Anwendung (docs/07, Rolle Leitung)."));
         services.AddSingleton<ProtoMessageMapper>();
         Console.WriteLine("  ✓ ProtoMessageMapper");
 

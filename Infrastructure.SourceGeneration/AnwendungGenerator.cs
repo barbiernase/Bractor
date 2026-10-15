@@ -63,9 +63,9 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("        public IReadOnlyDictionary<string, ProzessRegeln> Prozesse => global::Infrastructure.Prozess.GeneratedProzessVerbund.Alle;");
             sb.AppendLine("        public IReadOnlyList<Type> QueryTypen => " + (queryDienst != null
                 ? $"global::{queryDienst.ToDisplayString()}.SupportedQueryTypes;" : "Array.Empty<Type>();"));
-            sb.AppendLine("        public global::Cqrs.Leitung.INutzlastTabelle Nutzlast => " + (nutzlast != null
+            sb.AppendLine("        public global::Cqrs.Leitung.INutzlastTabelle? Nutzlast => " + (nutzlast != null
                 ? $"global::{nutzlast.ToDisplayString()}.Instanz;"
-                : "throw new NotSupportedException(\"Die Anwendung hat kein Leitungs-Projekt (docs/07, Rolle Leitung).\");"));
+                : "null;   // ohne Leitungs-Projekt kein gRPC-Dienst (docs/07, Rolle Leitung)"));
             sb.AppendLine("        public global::System.Text.Json.Serialization.JsonSerializerContext WireJson => global::Infrastructure.Serialization.CqrsWireJsonContext.Default;");
             sb.AppendLine("        public global::System.Text.Json.Serialization.JsonSerializerContext EventJson => global::Infrastructure.Serialization.EventJsonSerializerContext.Default;");
             sb.AppendLine("        public void RegistriereLeseseite(IServiceCollection services)" + (leseseite != null

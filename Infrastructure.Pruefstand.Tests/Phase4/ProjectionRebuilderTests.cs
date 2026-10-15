@@ -17,6 +17,7 @@ namespace Infrastructure.Pruefstand.Phase4;
 /// neu auf — NICHT verdoppelt (das Leeren trägt), Marken werden neu fortgeschrieben, und ein zweiter
 /// Rebuild ist idempotent. Gegenprobe: ohne das Leeren würde ein append-artiges Ziel verdoppeln.
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class ProjectionRebuilderTests
 {
     private const string ProjId = "test-projektion";

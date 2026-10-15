@@ -30,6 +30,7 @@ namespace Infrastructure.Integration.Tests;
 /// nach Event-Zeit gelten, nicht nach der zufälligen Verarbeitungsreihenfolge der Streams.
 /// </summary>
 [Collection(GeteiltCollection.Name)]
+[Trait("Kategorie", "Garantie")]
 public class GeteilteDokumentePostgresTests
 {
     private readonly GeteiltFixture _fx;

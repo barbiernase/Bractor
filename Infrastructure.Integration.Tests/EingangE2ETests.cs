@@ -197,6 +197,77 @@ public class EingangE2ETests
         }
     }
 
+    /// <summary>
+    /// Garantie (docs/11 §11.3): ein Client, der nach verlorener Antwort mit DERSELBEN CommandId wiederholt, wirkt genau einmal — auch bei einem
+    /// Command, der fachlich nicht idempotent ist (jede Range ist ein neues Event).
+    /// </summary>
+    [Fact]
+    [Trait("Kategorie", "Garantie")]
+    public async Task Client_wiederholt_mit_derselben_CommandId_und_wirkt_genau_einmal()
+    {
+        var name = "sim-wiederholung-" + Guid.NewGuid().ToString("N")[..6];
+        var u = new UmgebungKonfig
+        {
+            Umgebung = new UmgebungKopf { Name = name, Art = UmgebungsArt.Sim },
+            EventStore = new EventStoreKonfig { Verbindung = Verbindung, Datenbank = "cqrs_it_wiederholung_" + Guid.NewGuid().ToString("N")[..8], Schema = "es" },
+            VersionIndex = new VersionIndexKonfig { Praefix = name + ":" },
+            Cluster = new ClusterKonfig { Art = ClusterArt.Einzelknoten, Name = "cqrs-" + name },
+            Transport = new TransportKonfig { GrpcPort = FreierPort(), EinblickPort = FreierPort(), JsonEingang = true },
+            Funktionen = new(StringComparer.Ordinal)
+            {
+                ["IDateinameDeutung"] = new() { Slots = 1 }, ["IBildVerkleinerung"] = new() { Slots = 1 }, ["IHistogrammAusgleich"] = new() { Slots = 1 },
+                ["IRangeSuche"] = new() { Slots = 1 }, ["IMitgliederEinfrieren"] = new() { Slots = 1 },
+            },
+        };
+        var verz = Directory.CreateTempSubdirectory("wiederholung-it-").FullName;
+        var builder = WebApplication.CreateBuilder();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Quellen:DateiErkannt:Pfad"] = Path.Combine(verz, "eingang"),
+            ["Konfig:BildaufbereitungKonfig:AusgabePfad"] = Path.Combine(verz, ".preprocessed"),
+            ["Identitaeten:Tokens:t-ki"] = "KIOperator",
+        });
+        builder.AddCqrs(u);
+        await using var app = builder.Build();
+        app.MapEingang(u);
+        using var http = new HttpClient { BaseAddress = new Uri($"http://localhost:{u.Transport.EinblickPort}") };
+        async Task<JsonElement> Sende(object inhalt)
+        {
+            var req = new HttpRequestMessage(HttpMethod.Post, "/eingang/command") { Content = JsonContent.Create(inhalt) };
+            req.Headers.Add("akteur-token", "t-ki");
+            return JsonDocument.Parse(await (await http.SendAsync(req)).Content.ReadAsStringAsync()).RootElement;
+        }
+
+        await app.StartAsync();
+        try
+        {
+            var ds = Guid.NewGuid();
+            (await Sende(new { typ = "ErstelleDatensatz", daten = new { AggregateId = ds, Name = "Wiederholung" } })).GetProperty("ok").GetBoolean().Should().BeTrue();
+            var commandId = Guid.NewGuid();
+            var range = new { typ = "FuegeRangeHinzu", commandId, daten = new { AggregateId = ds, Kriterien = new { } } };
+
+            var erste = await Sende(range);
+            var wiederholt = await Task.WhenAll(Enumerable.Range(0, 3).Select(_ => Sende(range)));
+
+            erste.GetProperty("ok").GetBoolean().Should().BeTrue(erste.ToString());
+            wiederholt.Should().OnlyContain(w => w.GetProperty("ok").GetBoolean(), "die Wiederholung bekommt idempotent dasselbe Ergebnis");
+            var log = await app.Services.GetRequiredService<IEventStoreRepository>().ReadStreamAsync(ds, 0, default);
+            log.Count(e => e.Payload is Domain.Datensatz.RangeAngefordert).Should().Be(1, "dieselbe CommandId wirkt genau einmal");
+        }
+        finally
+        {
+            await app.StopAsync();
+            await using (var conn = new NpgsqlConnection(Verbindung + ";Database=postgres"))
+            {
+                await conn.OpenAsync();
+                await using var cmd = conn.CreateCommand();
+                cmd.CommandText = $"drop database if exists \"{u.EventStore.Datenbank}\" with (force)";
+                await cmd.ExecuteNonQueryAsync();
+            }
+            try { Directory.Delete(verz, true); } catch { /* egal */ }
+        }
+    }
+
     private static int FreierPort()
     {
         var l = new TcpListener(IPAddress.Loopback, 0);

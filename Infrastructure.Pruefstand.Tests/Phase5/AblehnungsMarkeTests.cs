@@ -20,6 +20,7 @@ namespace Infrastructure.Pruefstand.Phase5;
 ///   (Aggregat kaputt) UND der DtoMapper verlangte einen Proto-DTO.
 /// - trägt <c>CommandId</c> (== Vorgang, Fold-Match über CausationId) + <c>Grund</c> (fließt in SchrittGescheitert).
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class AblehnungsMarkeTests
 {
     [Fact]

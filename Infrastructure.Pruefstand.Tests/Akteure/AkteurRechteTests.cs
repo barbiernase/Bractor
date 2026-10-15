@@ -19,6 +19,7 @@ namespace Infrastructure.Pruefstand.Akteure;
 /// Akteure (docs/konzept-akteure.md): die generierte Befugnis-Tabelle (deklariert aus <c>IDarf&lt;T&gt;</c>, Hören
 /// aus dem Graphen abgeleitet) und das Tor am Handshake — rein, ohne gRPC/Cluster.
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class AkteurRechteTests
 {
     private static AkteurRechte R(string name) => GeneratedAkteurRechte.Alle[name];

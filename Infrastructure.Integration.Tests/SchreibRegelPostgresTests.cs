@@ -14,6 +14,7 @@ namespace Infrastructure.Integration.Tests;
 /// denselben Stand gelesen) und schreiben dann. Ohne Versionsprüfung gewönne still der letzte Commit.
 /// </summary>
 [Collection(GeteiltCollection.Name)]
+[Trait("Kategorie", "Garantie")]
 public class SchreibRegelPostgresTests
 {
     private readonly GeteiltFixture _fx;

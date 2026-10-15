@@ -11,6 +11,7 @@ namespace Infrastructure.Integration.Tests;
 /// <see cref="MartenFristplan"/> legt Fristen an, gibt genau die gegen die DB-Uhr fälligen zurück und entfernt
 /// sie wieder. Braucht Postgres (localhost:5432); schnell, kein Cold-Boot.
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public sealed class DeadlineStorePostgresTests : IDisposable
 {
     private readonly IDocumentStore _store;

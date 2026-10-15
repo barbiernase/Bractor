@@ -17,6 +17,7 @@ namespace Infrastructure.Pruefstand.Phase4;
 ///   (3) IAppendProjektion mit ICoCommitTracker → folgenlos (der Normalfall der ImagePairHistorie).
 ///   (4) NICHT markiert (z. B. eine Reaktion/emittierender Konsument) → folgenlos, auch ohne Tracker.
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class GaEinsPruefungTests
 {
     private sealed class AppendProjektionOhneStore : IAppendProjektion { }

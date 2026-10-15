@@ -9,7 +9,7 @@ public partial class Posten
         public IEnumerable<OneOf<PostenEroeffnet, PostenExistiertBereits>> Decide(EroeffnePosten cmd)
         {
             if (this.State.Existiert) { yield return new PostenExistiertBereits(cmd.AggregateId); yield break; }
-            yield return new PostenEroeffnet(cmd.Bestand);
+            yield return new PostenEroeffnet(cmd.Bestand, cmd.Mindestbestand);
         }
 
         public IEnumerable<OneOf<PostenReserviert, PostenNichtGefunden, PostenReichtNicht>> Decide(ReservierePosten cmd)
@@ -20,7 +20,7 @@ public partial class Posten
                 yield return new PostenReichtNicht(cmd.AggregateId, this.State.Verfuegbar, cmd.Menge);
                 yield break;
             }
-            yield return new PostenReserviert(cmd.Menge);
+            yield return new PostenReserviert(cmd.Menge, Math.Max(0, this.State.Mindestbestand - (this.State.Verfuegbar - cmd.Menge)));
         }
 
         public IEnumerable<OneOf<PostenFreigegeben, PostenNichtGefunden>> Decide(GibPostenFrei cmd)

@@ -22,6 +22,7 @@ namespace Infrastructure.Integration.Tests;
 /// Braucht laufendes Postgres auf localhost:5432 (cqrs_events / postgres / postgres) —
 /// im Dev-Setup über docker-compose.infrastructure.yml.
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class CoCommitPostgresTests : IClassFixture<PostgresFixture>
 {
     private readonly PostgresFixture _fx;

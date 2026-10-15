@@ -1,0 +1,27 @@
+{
+  "Umgebung": {
+    "Name": "vermessung-pruefdomaene",
+    "Art": "Sim"
+  },
+  "EventStore": {
+    "Betrieb": "Vorhanden",
+    "Verbindung": "Host=localhost;Port=5432;Username=postgres;Password=postgres",
+    "Datenbank": "cqrs_vermessung_pruefdomaene",
+    "Schema": "es"
+  },
+  "VersionIndex": {
+    "Betrieb": "Vorhanden",
+    "Endpunkt": "localhost:6390",
+    "Datenbank": 1,
+    "Praefix": "vermessung-pruefdomaene:"
+  },
+  "Cluster": {
+    "Art": "Einzelknoten",
+    "Name": "cqrs-vermessung-pruefdomaene"
+  },
+  "Transport": {
+    "GrpcPort": 5211,
+    "EinblickPort": 5212,
+    "JsonEingang": true
+  }
+}

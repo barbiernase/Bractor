@@ -1,7 +1,7 @@
 # 13 — Reifegrad, Schulden & Bewertung
 
 **Die eine Quelle für „offen“.** Andere Dokumente (`CLAUDE.md`, Kapitel 01–12, Konzepte) nennen Schulden höchstens kurz und verweisen
-hierher. Stand: 2026-10-15, Commit-Basis `84e40a1`. Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
+hierher. Stand: 2026-10-15, Commit-Basis `f4b32f5` (Phase 0 des Plans Garantien und Durchsatz). Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
 (`docs/konzept-werkbank.md` §2). Zahlen und Messwerte stehen in `docs/12-tests-und-vermessung.md`.
 
 ## 13.0 Offen auf einen Blick
@@ -9,14 +9,17 @@ hierher. Stand: 2026-10-15, Commit-Basis `84e40a1`. Maßstab sind die sechs Inva
 | ID | Kurz | Prio |
 |---|---|:--:|
 | G-1 | Fristverlust: ein Timeout oder Fehlschlag des Emits zählt als gefeuert, die Frist wird entfernt | P0 |
+| G-7 | Ein gescheiterter Append hinterlässt Marten-Tombstones; ihr Stream ist für jeden Poll ein dauerhafter Poison-Stream — Heilung verlorener Signale und Start verlorener Vorgänge stehen still | P0 |
 | G-2 | Inbox-Fenster (10 000) zusammen mit dem Emittenten-Poll ab Version 0: ein älterer Command kann erneut wirken (früher P2-4) | P1 |
 | G-3 | Append-Konflikt: Actor bleibt mit veraltetem Stand stehen; mehrdeutiger Commit wird als Fehler gemeldet | P1 |
 | G-4 | Projektions-Checkpoint ohne Versionsprüfung: zwei Aktivierungen können einen Effekt doppelt anwenden | P1 |
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
+| G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
 | PF-1 | Konsum je (Projektion, Stream) mit eigener Transaktion und eigenem Actor; kein Batch-Co-Commit | P1 |
 | PF-2 | Heil-Poll je Projektion ohne LIMIT, weckt jeden geänderten Stream nacheinander; Rebuild lädt den Log als Liste | P1 |
 | PF-4 | Prozess-Poll liest geänderte Streams ab 0 und verwirft geladene Events; Backstop weckt alle offenen Vorgänge | P1 |
 | PF-5 | Keine Passivierung: Aggregat-, Adapter- und Prozess-Actors bleiben bis zum Shutdown | P1 |
+| PF-9 | Retry-Sturm unter Überlast: der Dirigent feuert nach jedem Send-Timeout sofort erneut, ohne Backoff — Kollaps statt Rückstau | P1 |
 | PF-3 | Inbox-Marke je Command im Stream (auch ohne Event), Inbox im Snapshot | P2 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
@@ -90,6 +93,17 @@ den Timeout (`OperationCanceledException`) und wertet das `CommandResult` nicht 
 damit als gefeuert, und die Frist ist verloren. Der Kommentar an `TickAsync` sagt das Gegenteil. *Empfehlung:* `feuere` meldet den Ausgang
 (zugestellt ja/nein), entfernt wird nur nach bestätigter Zustellung; Prüfstand-Test mit Timeout- und Fehler-Seam.
 
+**G-7 · Tombstones legen den Poll still** (gefunden mit der Garantie-Suite, 2026-10-15). Scheitert ein Append (Versionskonflikt, ein Batch,
+der isoliert wiederholt wird, ein DB-Fehler im `SaveChanges`), füllt Marten die schon reservierten Sequenzen mit `JasperFx.Events.Tombstone`
+in einem eigenen Stream (Zeitstempel `-infinity`). `ReadChangedStreamsAsync` meldet diesen Stream als geändert; jeder Leser ruft für ihn
+`ReadStreamAsync`, und der Upcasting-Seam wirft „Kein Upcasting-Pfad für JasperFx.Events.Tombstone“. Folgen: der Prozess-Poll bricht jeden
+Durchlauf ab, bevor er die Hochwassermarke setzt (ein Vorgang, dessen Start-Signal verloren ging, startet nie — §11.7); der Projektions- und
+Reaktions-Poll bekommt für den Stream nie ein `WakeAck` und hält seine Marke für immer (verlorene Signale heilen nie mehr — §11.5; jeder
+Durchlauf liest das wachsende Fenster neu). Gesehen im Schema der Prüfdomänen-Tests (Router-Marke stand bei 826, Tombstones ab 860) und
+vorhanden in der Sim-DB der Werkbank (12 Tombstones). Test: I `GarantiePostgresTests.Ein_gescheiterter_Append_blockiert_den_Poll_nicht`
+(Skip G-7). *Empfehlung:* Tombstones (und jedes Framework-fremde Event ohne Upcasting-Pfad) beim Lesen des Logs überspringen —
+`ReadChangedStreamsAsync` ohne Tombstone-Streams, `ReadStreamAsync` ohne Tombstones; dazu ein Boot-Hinweis, wenn ein Poll-Durchlauf scheitert.
+
 ### P1
 
 **G-2 · Inbox-Fenster und Emittenten-Poll** (früher P2-4). Die Inbox je Aggregat merkt sich die letzten `Schreibpfad.InboxGrenze` (Standard
@@ -123,6 +137,16 @@ Checkpoint“ und nur nachhängende Streams wecken; ein gemeinsamer, seitenweise
 **PF-4 · Prozess-Poll und Backstop.** `ProzessManagerWiring` liest jeden geänderten Stream ab Version 0 und routet jedes passende historische
 Event erneut, obwohl `ReadChangedStreamsAsync` die neuen Events schon geladen hat; der Backstop weckt alle 15 s alle offenen Vorgänge, auf jedem
 Knoten. *Empfehlung:* die geladenen Events direkt routen; Fälligkeits-Index für Zeitlimits (zusammen mit W11-2); Lease im Cluster.
+
+**PF-9 · Retry-Sturm unter Überlast** (gefunden mit dem E2E-Treiber, 2026-10-15). Nach jedem Send weckt sich der Prozess-Manager selbst
+(`DetachedProzessSend`), auch nach einem Timeout (5 s); der Fold sieht den Schritt offen und feuert denselben Command erneut — ohne Backoff;
+der Backstop weckt alle 15 s zusätzlich alle offenen Vorgänge. Staut sich ein heißes Ziel-Aggregat, vervielfachen die Wiederholungen die
+Last, statt sie abzubauen: ein Probelauf von S3 (500 Teile auf einen Sammelvorgang, 64 Abschlüsse gleichzeitig) erzeugte in wenigen Minuten
+34 550 Timeouts von `MeldeTeilFertig` und je Vorgang Hunderte gescheiterte Selbst-Weckungen, der Sammelvorgang kam nicht zu Ende. Die
+Wirkung blieb dabei genau einmal (die Inbox verwirft die Wiederholungen) — verletzt ist die Lebendigkeit unter Überlast. Die Messung fährt
+deshalb offene Last mit Abbruch bei p99 > 2 s (§0.1 des Plans) und erreicht diesen Zustand nicht. *Empfehlung:* nach einem Timeout keine
+sofortige Selbst-Weckung, sondern Wiederholung mit Backoff je Vorgang; offene Sends je Ziel-Aggregat begrenzen. Phase 1 (abgewartete Emits mit
+Ausgang) und Phase 5 (Backstop nur für Fällige) berühren den Mechanismus; dort mitlösen.
 
 **PF-5 · Keine Passivierung.** Kein Actor stoppt bei Leerlauf (kein `ReceiveTimeout`): Aggregate, Adapter je (Projektion, Stream) und
 Prozess-Manager bleiben bis zum Shutdown im Speicher; im Dauerbetrieb wächst der Speicher mit allem, was je aktiviert wurde. Verschärft G-3.
@@ -251,6 +275,11 @@ Ablehnung, oder Inbox als Tabelle mit eindeutigem Schlüssel in derselben Transa
 hochfrequente Quellen (Maschinendaten) ist das teuer. *Entscheidung offen:* Dedup-Tabelle je Kennung und Sammel-Streams gegen „ein Vorgang je
 Meldung“; zusammen mit den flüchtigen Quellen (W11-2/§13.5 Schritt 7).
 
+**G-6 · Garantie ohne eigenen Nachweis-Test** (Garantie-Matrix, [11](11-garantien.md)). Für „durabel nach Erfolg“ (P10) prüft nur der
+mehrdeutige Commit (G-3) den Pfad; dass ein Fehler **nach** dem Append im Actor (Apply, Publish) frisch rehydriert und Erfolg quittiert, hat
+keinen Test — ein Seam für einen werfenden Post-Append-Schritt fehlt. *Empfehlung:* zusammen mit G-3 (Phase 2) einen Störungs-Seam nach dem
+Append und einen Test der Prüfdomäne.
+
 **G-5 · Versionszählung bei Split-Upcasts.** `AggregateRehydrator` zählt `Version++` je materialisiertem Event; ein Split-Upcast liefert aus
 einer gespeicherten Position mehrere Events (`MartenEventStore`, `SubIndex`), die Version läuft dem Log davon, und jeder Append scheitert.
 Latent: heute gibt es keinen Split-Upcast. *Empfehlung:* je gespeicherter Position zählen (`AggregateVersion`), Prüfstand-Test mit Split.
@@ -290,7 +319,9 @@ Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
 
 ## 13.4 Korrektheit vs. Reifegrad
 
-Bekannte aktive Korrektheits-Bugs: **G-1** (Fristverlust); **G-2** bis **G-4** brechen eine Garantie unter Last bzw. im Cluster, **G-5** ist latent.
+Bekannte aktive Korrektheits-Bugs: **G-1** (Fristverlust), **G-7** (ein gescheiterter Append legt den Poll still); **G-2** bis **G-4** brechen eine Garantie unter Last bzw. im Cluster, **G-5** ist latent;
+**PF-9** verletzt die Lebendigkeit unter Überlast (die Wirkung bleibt genau einmal). Jede G-Lücke hat seit Phase 0 einen Test, der sie zeigt
+(Skip `G-n offen`, [11](11-garantien.md) §11.13).
 Korrektheitsnah sind außerdem: **LLM-1** (vom LLM
 geschriebene Logik nur auf „baut“ geprüft), **W10-1** (möglicher Hash-Unterschied zwischen Python-Basis und Server beim Handshake), **W2-1** (vom Client gesetztes Cluster-Kind) und **WZ-1** (Prüfungen, die grün sind, ohne es zu beweisen). Alles andere ist Reifegrad,
 Allgemeingültigkeit oder Hygiene.
@@ -310,7 +341,8 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 0. **G und PF** (Garantie-Lücken und ihre Kosten) laufen als eigener Strang nach [plan-garantien-und-durchsatz.md](plan-garantien-und-durchsatz.md):
    Phase 0 Abgleich und E2E-Messung, 1 Emit-Ausgang und Emittenten-Cursor (G-1, G-2, P1-6), 2 Actor-Lebenszyklus (G-3, PF-5), 3 Batch-Konsum (PF-1, PF-2,
    G-4), 4 Inbox als Tabelle (G-2, PF-3), 5 Prozess-Poll (PF-4), 6 Rest. Ein Agent setzt ihn allein um; die Schritte 1–10 unten ruhen so lange.
-   Gemessen wird nach jeder Phase Ende-zu-Ende an den realen Domänen (Plan §0.1).
+   Gemessen wird nach jeder Phase Ende-zu-Ende an den realen Domänen (Plan §0.1). Stand: Phase 0 (Messaufbau `scripts/vermessung-e2e.sh`,
+   Garantie-Matrix und Garantie-Suite, Lücken als Skip-Tests) — Baseline und Haltepunkt (a) stehen aus.
 1. ~~WB-2/WB-3~~ Sicherheitsnetz steht (2026-10-15): ⟳-Abnahmetest inkl. „▶ Worker“ und Gate „frischer Checkout baut“ (§13.6).
 2. ~~W11-1 (Schreibwege)/WB-1~~ je Absicht ein Weg (2026-10-15, §13.6).
 3. **LLM-1** 🤖 fachlich prüfen: neue Rolle `<Wurzel>.Beispiele` (Strukturtabelle, Lageart, CQRS098), Beispiele an der Karte (Gegeben/Wenn/Dann)

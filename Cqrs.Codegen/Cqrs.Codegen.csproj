@@ -32,6 +32,7 @@
     <!-- Die Codegen-Projekte der Prüfdomäne (zweite Anwendung, docs/13 T-1): ihr Prepass hängt an Pruefdomaene.Laufzeit. Welche DLLs
          zu welcher Anwendung gehören, entscheidet das Werkzeug über die Wurzel (Projektstruktur) und die Referenz-Hülle. -->
     <ProjectReference Include="..\Pruefdomaene\Pruefdomaene.csproj" />
+    <ProjectReference Include="..\Pruefdomaene.Projections\Pruefdomaene.Projections.csproj" />
   </ItemGroup>
 
   <ItemGroup>

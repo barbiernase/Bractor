@@ -18,6 +18,8 @@ Die Teststrategie folgt den Invarianten „die Wahrheit ist der Log“ und „ni
 | Werkbank (Oberfläche) | `Werkbank` + Browser | echter Host gegen die Sim-DB | Sichtprüfung im Browser (Board, Panels, Spur-Überlagerung) — die Abläufe prüft die Abnahme oben | n/a |
 | Werkzeug-Gates | `GraphExtractor -- --check`, `-- --sonde` | Solution bzw. fremde Domäne im Speicher | Code ⇄ Karten, Fixpunkt, Wirker, Routing; Agnostik | n/a |
 | Gate frischer Checkout | `./pruefe-checkout.sh` | der Commit `HEAD` in einem temporären `git worktree` | ignorierte Quellen, Build, Codegen-Drift, Prüfstand, Build verändert den Checkout nicht | n/a |
+| Garantie-Suite | `--filter Kategorie=Garantie` auf Prüfstand, Integration, Prüfdomäne | wie die jeweilige Ebene | jede Garantie aus [11](11-garantien.md) unter Störung; offene Lücken als Skip-Tests (`G-n offen (docs/13)`) | je Ebene wie oben |
+| E2E-Vermessung | `scripts/vermessung-e2e.sh` (Treiber `Cqrs.Vermessung`) | echte Hosts (`Host.Grpc`, `Host.Pruefdomaene`, Release) in den Umgebungen `vermessung` bzw. `vermessung-pruefdomaene`, eigene DBs, Python-Worker | Durchsatz, Latenz, Last je Vorgang, Exactly-once nach jedem Lauf, Dauer-, Aufhol- und Störungslauf (§12.5) | **nein** (nie gleichzeitig mit einer Integrations-Suite oder der Werkbank-Abnahme) |
 
 **Prinzip:** Ebene 1 testet nur, was ohne Store deterministisch entscheidbar ist. Store-Semantik (Co-Commit-Atomarität, `seq_id`-Lücken, geteilte
 Dokumente, Metadaten) wird **ausschließlich** gegen echtes Marten geprüft. Es gibt bewusst **keinen `InMemoryEventStore`**; In-Memory-Doubles gibt
@@ -25,21 +27,22 @@ es nur für nicht-autoritative Randstores (Inv. 6).
 
 ## 12.2 Zahlen
 
-**Aktuell (2026-10-15, gemessen auf Commit-Basis `b2e33b9` + W11-1/WB-1):** Prüfstand **540/540**, Integration **39/39** sequentiell (100 s), Prüfdomäne **16/16**
-sequentiell, Werkbank-Abnahme **1/1** sequentiell (≈ 130 s), `Client.Infrastructure.CollectionTests` **30/30**, Python SDK **34/34**, Worker **21/21**;
+**Aktuell (2026-10-15, Phase 0 des Plans Garantien und Durchsatz):** Prüfstand **551 grün + 4 übersprungen** (Lücken G-1 ×2, G-2, G-5),
+Integration **43 + 2** (G-4, G-7) sequentiell (≈ 110 s), Prüfdomäne **19 + 3** (G-2, G-3 ×2) sequentiell (≈ 90 s); Garantie-Suite im Prüfstand 138 grün + 4;
+Werkbank-Abnahme **1/1** sequentiell (≈ 130 s), `Client.Infrastructure.CollectionTests` **30/30**, Python SDK **34/34**, Worker **21/21**;
 `--check` grün (alle Bereiche inkl. „Lage“), `--sonde` grün (111 Soll-Fakten, Lage-Soll 56 Typen); Gate `./pruefe-checkout.sh` grün.
 
 Statisch gezählt (2026-10-15):
 
 | Projekt | `[Fact]` | `[Theory]` | Dateien |
 |---|---:|---:|---:|
-| Infrastructure.Pruefstand.Tests | 518 | 6 | 75 |
-| Infrastructure.Integration.Tests | 39 | 0 | 19 |
-| Pruefdomaene.Integration.Tests | 16 | 0 | 4 |
+| Infrastructure.Pruefstand.Tests | 533 | 6 | 81 |
+| Infrastructure.Integration.Tests | 45 | 0 | 21 |
+| Pruefdomaene.Integration.Tests | 22 | 0 | 8 |
 | Client.Infrastructure.CollectionTests | 30 | 0 | 2 |
 | Werkbank.Abnahme.Tests | 1 | 0 | 2 |
 
-Die Differenz zwischen 524 Methoden und 540 Läufen im Prüfstand kommt von den expandierten `[Theory]`-Fällen.
+Die Differenz zwischen 539 Methoden und 555 Läufen im Prüfstand kommt von den expandierten `[Theory]`-Fällen.
 
 ## 12.3 Was getestet ist
 
@@ -57,6 +60,7 @@ Die Differenz zwischen 524 Methoden und 540 Läufen im Prüfstand kommt von den 
 | Quellen, Umgebung, Spur, Dienste | 64 | `DateiTreiberTests` (17), `UmgebungLaderTests`, `ProjektionsStandTests`, `SpurTests`, `WirkerIdTests`, `SpurWegTests`, `DienstBindungTests` (15) |
 | Konsum-Maschine, Prozess | 37 | `EmittentenCursorTests`, `ProjectionRebuilderTests`, `EmittentenPfadAdapterTests`, `GaEinsPruefungTests`, `ProzessPollFilterTests`, `AblehnungsMarkeTests`, `ReaktionsIdTests`, `CommandVorpruefungTests`, `DispatcherCommandFailedTests`, `TransientPersistiertSplitTests`, `DeadLetterReadStoreTests` |
 | Übrige | 23 | `FristSchedulerTests`, `FristPlanerTests`, `BackendMonitoringTests`, `EingangJsonTests`, `BrokerIdentityTests`, Handle-Welt: `PipelineEventPullBridgeTests`, `TimerTriggerTests`, `WebhookTriggerTests` |
+| Garantien (Störung über Seams, `Garantien/`) | 16 + 4 übersprungen | `FristGarantieTests` (Emit-Timeout und -Fehlschlag, Skip G-1), `KonsumGarantieTests` (doppelte/ungeordnete Weckungen, Absturz zwischen Emit und Cursor, nicht zugestellter Emit Skip G-2), `RehydrationGarantieTests` (Neustart stellt die Inbox her, Split-Upcast Skip G-5), `BuildGarantieTests` (CQRS010/011/052/053, Wire-Boot-Check) |
 
 **Integration (Ebene 2):**
 
@@ -74,6 +78,8 @@ Die Differenz zwischen 524 Methoden und 540 Läufen im Prüfstand kommt von den 
 | `VertragsZusageE2ETests` | 1 | doppelt zugestellte Zusage wirkt genau einmal |
 | `UmgebungE2ETests`, `LeseseitenStandE2ETests`, `EingangE2ETests` | 3 + 1 + 1 | Siegel, Projektions-Stand nach Code-Änderung, JSON-Eingang/Webhook |
 | `MonitoringHttpTests` | 2 | `/health`, Kennzahlen |
+| `Garantien/GarantiePostgresTests` | 3 + 2 übersprungen | ein Append ganz oder gar nicht, zwei Schreiber ohne verlorenes Update, Poison-Stream hält die HWM ohne andere zu blockieren; gescheiterter Append legt den Poll still (Skip G-7), zwei Aktivierungen einer Projektion (Skip G-4) |
+| `EingangE2ETests.Client_wiederholt_mit_derselben_CommandId…` | 1 | Client-Wiederholung über den JSON-Eingang wirkt genau einmal |
 | Handle-Welt: `PipelineWebhookHttpTests`, `TimerTriggerSchedulingTests` | 2 | Trigger-Pfade ohne Domänen-Nutzer (`docs/13` W11-1) |
 
 **Prüfdomäne (Ebene 2, `Pruefdomaene.Integration.Tests`):**
@@ -84,6 +90,8 @@ Die Differenz zwischen 524 Methoden und 540 Läufen im Prüfstand kommt von den 
 | `SnapshotTests` | 3 | `MartenSnapshotStore` über die generierte Registrierung (Roundtrip samt Inboxen, Überschreiben, Löschen); Actor über der Schwelle → Snapshot, Rehydration seedet daraus (Snapshot + Tail == Voll-Fold), fremde Schema-Version → Voll-Replay |
 | `UpcastingTests` | 5 | generierte Tabelle (Diskriminator `_v2`, Kette, unbekannt → laut); echter Seam: alte Bytes werden beim Lesen aufgewertet, neue Writes tragen `_v2` |
 | `MarkingCursorAequivalenzTests` | 4 | `ProzessManager` direkt gegen Marten, Cursor aus vs. an (`MartenProzessMarkingStore`): identische Feuerungen für Diamant, Kompensation, Fan-out + Count-Join (Cursor liest weniger); falscher RegelHash → Voll-Fold |
+| `Garantien/SchreibGarantieTests` | 1 + 3 übersprungen | doppelt und gleichzeitig zugestellter Command wirkt genau einmal; alte CommandId jenseits der Inbox-Grenze (Skip G-2), Heilung nach Versionskonflikt und mehrdeutiger Commit (Skip G-3) |
+| `Garantien/AblaufGarantieTests` | 2 | die Reaktion `NachschubBeiMindestbestand` wirkt genau einmal, obwohl ihr Poll alles erneut ausgibt; Neustart des Hosts mitten im Vorgang führt ihn zu Ende (eigenes Schema — im geteilten Schema `pruef_e2e` steht der Poll nach den Tombstones der G-3-Tests still, G-7) |
 
 **Client:** `VirtualCollectionTests` (26), `PendingCommandTrackerTests` (5). **Python:** SDK `test_vertrag`, `test_funktion`, `test_client_query`,
 `test_client_reconnect`, `test_mapper_*` (inkl. Nutzlast-Tabelle); Worker `test_vertraege`, `test_funktionen`, `test_funktions_worker`, `test_training_worker`.
@@ -138,7 +146,30 @@ Folgerungen (Verhältnisse):
 - Der Poll-Scan selbst ist billig (9 ms je 30 000 Events); teuer sind die Weckungen je Stream danach (PF-2).
 - Hochgerechnet auf Weckung je Event trägt die Konsumseite heute etwa 8 200 / K Events/s (K = replaybare Projektionen): bei K = 5 rund 1 600,
   bei K = 20 rund 400 — vor dem Overhead von Marten und Netzwerk. Der Schreibpfad ist nicht die Decke. Gegen den echten Host gemessen ist das
-  noch nicht (Lasttest fehlt, `docs/plan-garantien-und-durchsatz.md` Phase 0).
+  noch nicht — das tut die E2E-Messung unten.
+
+**Ende zu Ende an den realen Domänen (seit 2026-10-15, `scripts/vermessung-e2e.sh`, Plan Garantien und Durchsatz §0.1).** Gemessen wird der
+echte Host im Release-Build (`Host.Grpc` in `umgebungen/umgebung.vermessung.json`, `Host.Pruefdomaene` in `umgebung.vermessung-pruefdomaene.json`,
+je eigene DB, eigener Redis `cqrs-vermessung-redis`), Last nur über die echten Eingänge, gezählt bis zum fachlich sichtbaren Ergebnis:
+
+| Szenario | Eingang | sichtbar, wenn |
+|---|---|---|
+| S1 Bildeingang Host | TIFF-Paar (96 × 64) ins Quell-Verzeichnis, verschoben, dann Fertig-Marke | `GetImagePair` liefert das Paar komplett (je offenes Paar alle 100 ms) |
+| S2 wie S1, Bild-Funktionen im Python-Worker (`Laufort Extern`, zwei Worker) | wie S1 | wie S1 |
+| S3 Sammelvorgang | als Disponent `StarteTeilauftrag` + `SchließeTeilauftragAb` je Teil (JSON-Eingang); Rampe mit Sammelvorgängen à 200, dann N = 1 000 und 10 000 Teile auf einen Sammelvorgang bei 50 % | `TeilVerbucht` des Teils im Log (keine Query vorhanden) |
+| S4 Datensatz | als KI-Operator `ErstelleDatensatz`, `FuegeRangeHinzu` (alle Paare aus S1), `FriereEin` | `HoleDatensatz`: alle Paare Mitglied, dann `Eingefroren` |
+| S5 Prüfdomäne | je zehn Vorgänge 8 Aufträge (Diamant), 1 Auftrag gegen ein volles Kontingent (Kompensation), 1 Verteilung (Fan-out 4, Count-Join); jede Reservierung unter dem Mindestbestand weckt die Reaktion | `ProzessBeendet` im Log; die Reaktion gesondert (Reservierung → Nachschub) |
+| L1, L5 Leerlauf | 60 s ohne Eingang nach den Szenarien | Grundlast (PF-2, PF-4) |
+
+Kennzahlen je Szenario: Sättigung (Rate stufenweise ×1,5 ab 2/s bzw. 5/s, je Stufe 20 s, bis p99 > 2 s oder Rückstand; eine Aufwärmstufe
+zählt nicht), Latenz p50/p95/p99 bei 50 % der Sättigung (60 s bzw. N Teile), Transaktionen und Queries je Sekunde und je Vorgang
+(`pg_stat_statements`, `track = top`, Transaktionen = COMMITs, ohne die Lese-Rolle des Treibers), CPU und RSS des Hosts. Drei Wiederholungen,
+Median; jede Wiederholung auf frischen DBs. Nach jedem Lauf die Exactly-once-Prüfung ([11](11-garantien.md) §11.14). Ablage:
+`vermessung/ergebnisse/<datum>_<commit>_<anlass>/` (nur anhängen); die Tabelle unten erzeugt `scripts/vermessung-tabelle.sh --schreibe` aus
+diesen Ordnern — nie von Hand.
+
+<!-- vermessung-tabelle:anfang -->
+<!-- vermessung-tabelle:ende -->
 
 **Als korrekt verifiziert (Backend-Audit 2026-08, nicht erneut jagen):** Versionsarithmetik inkl. Inbox-Marken; OCC-Skip auf dem
 `AnyVersion`-Pfad; Append vor State-Mutation; Shard-Hash-Konsistenz Subscribe ↔ gezieltes Publish; Pre-Dispatch-Guard des `ProjectionAdapter`;
@@ -160,6 +191,17 @@ Signal→Wake-Mapping; Kompensations-Dedup und Count-Join ohne verfrühtes Feuer
 - **Python:** nur mit dem Interpreter der Umgebung (`Umgebung:Python` in `umgebung.<name>.json`, sonst `CQRS_PYTHON`, sonst `python3`; lokal
   `gpu_env`), weil betterproto/pytest dort installiert sind. Der Fluss-E2E-Test mit Python-Worker liest ihn aus `umgebung.sim-main.json`.
 
+**Garantie-Test:** in den Ordner `Garantien/` der passenden Ebene (Prüfstand über Seams, sonst gegen echtes Marten), Klasse oder Methode mit
+`[Trait("Kategorie", "Garantie")]`, und die Zeile in der Nachweis-Spalte von [11](11-garantien.md) nachtragen. Zeigt der Test eine offene Lücke:
+`[Fact(Skip = "G-n offen (docs/13)")]` — und einmal ohne Skip laufen lassen, er muss rot sein. Die Phase, die die Lücke schließt, entfernt das Skip.
+Störungs-Seams der Prüfdomäne: `Pruefstand.Cluster(…, inboxGrenze, dienste)`, `Pruefstand.Dekoriere<T>`, `Pruefstand.FrageAsync` (Command mit
+vorgegebener CommandId, Modus `Emittiert`).
+
+**E2E-Messung:** `scripts/vermessung-e2e.sh --anlass <phase> --spalte "<Spalte>"` (Messung, ≈ 2–3 h), `--art dauerlauf --dauer 8:00:00`,
+`--art aufholzeit --stillstand 1:00:00`, `--art stoerung`; `--probe` ist ein verkürzter Funktionstest des Treibers und schreibt nicht ins Repo.
+Danach `scripts/vermessung-tabelle.sh --schreibe` und den Ordner mitcommitten. Das Skript schaltet `pg_stat_statements` und `max_connections = 300`
+am Postgres-Container ein (einmaliger Neustart) und startet den Redis der Vermessung.
+
 **Gate „frischer Checkout baut“ (vor jedem Push):** `./pruefe-checkout.sh` (Optionen `--verz <dir>` für den Ort des Worktrees, `--ohne-tests`).
 Es meldet zuerst lokal vorhandene Dateien, die eine Ignore-Regel schluckt (mit der greifenden Regel aus `git check-ignore -v`; Build- und
 Cache-Ausgaben, `deploy-*/` aus `build.sh` und die bewusst ignorierten Altdateien sind ausgenommen), baut dann den Commit `HEAD` in einem
@@ -179,7 +221,12 @@ Entwicklers bleiben unberührt; am Ende SIGTERM an die Werkbank (sie hält Host 
 - **Cluster-Cold-Boot:** Konvergiert die Identitäts-Platzierung beim ersten Start nicht, hilft kein längerer Timeout; viele Cluster-Boot-Läufe
   hintereinander degradieren die lokale Infra (zwischendurch neu starten).
 - **`SequenceGapPostgresTests`** flaken im Gesamtlauf gelegentlich, einzeln grün.
-- Es gibt keine `[Skip]`/`[Trait]`-Attribute; Flake-Handling ist Konvention.
+- `[Trait("Kategorie", "Garantie")]` markiert die Garantie-Suite; `Skip` gibt es nur für offene G-Lücken (`G-n offen (docs/13)`). Flake-Handling
+  bleibt Konvention.
+- **Messung:** `pg_stat_database` schreibt seine Zähler verzögert fort (Sekunden) — für Messfenster taugt nur `pg_stat_statements`; mit
+  `track = all` zählte es auch Statements innerhalb von Funktionen (Martens `mt_immutable_timestamptz` je Zeile) mit. Fremdlast auf dem Rechner
+  (ein Spiel, ein Build) verschiebt die Sättigung um den Faktor 2 und mehr — sie steht je Szenario im Ergebnis; Läufe darunter vergleichen nur
+  Verhältnisse. E2E-Läufe nie gleichzeitig mit einer Integrations-Suite.
 - **Kindprozesse mit umgeleiteter Ausgabe:** `dotnet build/restore/run` startet MSBuild-Knoten und den Compiler-Server, die die Pipe erben —
   wer auf das Ende der Ausgabe wartet (`WaitForExitAsync`, `ReadToEnd`), hängt bis zum Zeitlimit. Auf das Prozessende warten (`Werkbank/Server/Prozesse.cs`).
 

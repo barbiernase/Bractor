@@ -10,6 +10,7 @@ namespace Infrastructure.Pruefstand.Dispatcher;
 /// Der Kern-Beweis: ein bereits verarbeiteter Command an STALE Version → idempotenter Erfolg,
 /// NICHT ein Concurrency-Konflikt. Ein frischer Command an stale Version → Konflikt.
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class CommandVorpruefungTests
 {
     [Fact]

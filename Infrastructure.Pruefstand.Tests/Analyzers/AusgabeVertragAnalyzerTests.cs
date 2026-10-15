@@ -15,6 +15,7 @@ namespace Infrastructure.Pruefstand.Analyzers;
 /// oder OneOf konkreter Typen); eine offene Signatur (Interface, Typ-Parameter, object, abstrakte Klasse) ist ein
 /// Build-Fehler. Reine Effekt-Handler (Task/void) bleiben erlaubt.
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class AusgabeVertragAnalyzerTests
 {
     private static async Task<ImmutableArray<Diagnostic>> Analysiere(string code)

@@ -28,10 +28,14 @@ public sealed class HandlerOutputRouter
     private readonly string? _wirker;
 
     public HandlerOutputRouter(Cluster cluster, BrokerPublisher? publisher, string subscriberId, ILogger? logger = null, string? wirker = null)
+        : this(new CommandEmitter(cluster, logger), publisher, subscriberId, logger, wirker) { }   // ★ P3: das EINE Emit-Primitiv (EM-1)
+
+    /// <summary>Naht/Test: das Emit-Primitiv mit injiziertem Send (Prüfstand, ohne Cluster).</summary>
+    public HandlerOutputRouter(ICommandEmitter emitter, BrokerPublisher? publisher, string subscriberId, ILogger? logger = null, string? wirker = null)
     {
         _wirker = wirker;
         _logger = logger ?? NullLogger.Instance;
-        _emitter = new CommandEmitter(cluster, _logger);   // ★ P3: das EINE Emit-Primitiv (EM-1)
+        _emitter = emitter;
         _publisher = publisher;
         _subscriberId = subscriberId;
     }

@@ -32,13 +32,15 @@
   |---|---|---|---|
   | S1 | Beispieldomäne, Bildeingang | TIFF-Paare ins Quell-Verzeichnis → Fluss (Deutung, Paar, Verkleinerung, Kontrast) → `ImagePair` → Projektionen → Query „Bild verfügbar“ | Quelle, Dirigent, Funktionen, Konsum |
   | S2 | Beispieldomäne, Bildeingang mit Python-Worker (`Laufort = Extern`) | wie S1, Funktionen im Worker über die Leitung | Funktions-Vermittlung, Lease |
-  | S3 | Beispieldomäne, Sammelvorgang | `StarteSammelvorgang(N)` + N Teilaufträge abschließen → `TeilFertigProzess` → Barriere erreicht; N = 1 000 und 10 000 | langlebiger Stream, Prozess-Poll, Inbox |
+  | S3 | Beispieldomäne, Sammelvorgang | je Teil `StarteTeilauftrag` + `SchließeTeilauftragAb` → `TeilFertigProzess` → `TeilVerbucht` am Sammelvorgang; Sättigung über Sammelvorgänge à 200, dann N = 1 000 und 10 000 Teile auf einen Sammelvorgang bei 50 % der Sättigung | langlebiger Stream, Prozess-Poll, Inbox |
   | S4 | Beispieldomäne, Datensatz | Range über alle Bildpaare aus S1 aufnehmen, einfrieren → Datensatz eingefroren | Flüsse mit Lese-Fähigkeit, große Events |
-  | S5 | Prüfdomäne | M parallele Auftrags-Vorgänge (Diamant, Kompensation) und Verteilungen (Fan-out, Count-Join), dazu eine Reaktion | Prozess-Maschine, Emittenten |
+  | S5 | Prüfdomäne (`Host.Pruefdomaene`) | je zehn Vorgänge 8 Aufträge (Diamant), 1 Auftrag gegen ein volles Kontingent (Kompensation), 1 Verteilung (Fan-out, Count-Join); jede Reservierung unter dem Mindestbestand weckt die Reaktion `NachschubBeiMindestbestand` | Prozess-Maschine, Emittenten |
+  | L1, L5 | beide | 60 s Leerlauf nach den Szenarien | Grundlast (PF-2, PF-4) |
 
 - **Kennzahlen je Szenario:** Sättigungsdurchsatz (Rate steigern, bis die p99-Latenz über 2 s steigt oder der Rückstand wächst), Latenz
-  Eingang → sichtbar p50/p95/p99 bei 50 % der Sättigung, Transaktionen und Queries je Sekunde (`pg_stat_statements`), CPU und Speicher (RSS)
-  des Hosts. Dazu einmal je Phase ein **Dauerlauf** (S1 + S3 bei 50 % Sättigung, mindestens 8 h, in Phase 2 24 h) und die **Aufholzeit** nach
+  Eingang → sichtbar p50/p95/p99 bei 50 % der Sättigung, Transaktionen und Queries je Sekunde und je Vorgang (`pg_stat_statements`,
+  `track = top`; Transaktionen = COMMITs, weil `pg_stat_database` verzögert zählt), CPU und Speicher (RSS) des Hosts. Was „sichtbar“ je Szenario
+  heißt, steht in [12](12-tests-und-vermessung.md) §12.5. Dazu einmal je Phase ein **Dauerlauf** (S1 + S3 bei 50 % Sättigung, mindestens 8 h, in Phase 2 24 h) und die **Aufholzeit** nach
   1 h Host-Stillstand.
 - **Klar:** ein Befehl startet die Messung (`scripts/vermessung-e2e.sh`), feste Parameter, drei Wiederholungen, Median; Rechner, Commit-Hash,
   Fremdlast und Abweichungen stehen im Ergebnis. Vor der Phase wird gemessen (bzw. die letzte Messung gilt), nach der Phase dieselbe Messung
@@ -74,7 +76,9 @@
 
   Schlägt eine Prüfung fehl, ist der Lauf ungültig und die Phase nicht abgenommen.
 - **Störungslauf:** je Phase mindestens ein E2E-Lauf mit Störungen — Host mitten im Lauf hart beenden und neu starten, Redis zeitweise
-  stoppen, Signale verlieren (Broker-Shard neu starten) — mit derselben Exactly-once-Prüfung. Ergebnis im Ergebnis-Ordner.
+  stoppen, Signale verlieren — mit derselben Exactly-once-Prüfung. Ergebnis im Ergebnis-Ordner. (Der Broker läuft im Host; einen einzelnen
+  Broker-Shard kann man von außen nicht neu starten — Signale gehen mit jedem harten Abbruch verloren, und `PollerBackstopPostgresTests` prüft
+  den verlorenen Weckruf gezielt.)
 - **Immer:** die Garantie-Suite läuft vor jedem Commit (`dotnet test … --filter Kategorie=Garantie` auf Prüfstand und Integration, die
   Integration nacheinander); die Exactly-once-Prüfung läuft in jedem E2E-Lauf, auch bei reinen Performance-Messungen.
 
@@ -239,3 +243,31 @@ Der Werkbank-Strang ruht während dieses Plans; es arbeitet kein zweiter Agent. 
 Zellen und Föderation über Anlagen, Store-Sharding, flüchtige Quellen und Telemetrie, OT-Treiber (OPC UA, MQTT), Transport-Sicherheit
 (P1-2), Multi-Node-Betrieb (P1-1), Observability (P2-10). Sie bauen auf diesem Plan auf und bekommen eigene Einträge in §13.0, wenn sie
 anstehen.
+
+## 8 · Stand der Umsetzung
+
+**Phase 0** (in Arbeit, 2026-10-15):
+- *Abgleich:* seit `e6e08ee` (Befunde G/PF eingetragen) hat kein Commit G- oder PF-Code berührt; G-1 bis G-5 sind im Code bestätigt
+  (`CommandEmitter` verschluckt Timeout und `CommandResult`, `ProjectionAdapter` liest beim Poll eines Emittenten ab 0, `AggregateActorBase` ohne
+  Rehydration nach Append-Fehler, `MarkProcessedAsync` per `Store`, `AggregateRehydrator` zählt je Event).
+- *Entscheidungen E1–E7:* gebündelt an Tobi gegeben (2026-10-15); ohne Antwort gelten die Vorschläge der Tabelle §2.
+- *Messaufbau:* `scripts/vermessung-e2e.sh` mit dem Treiber `Cqrs.Vermessung` (Messung, Dauerlauf, Aufholzeit, Störungslauf), Ablage und
+  `scripts/vermessung-tabelle.sh`, Umgebungen `vermessung` und `vermessung-pruefdomaene`.
+- *Garantie-Nachweis:* Garantie-Matrix ([11](11-garantien.md), Nachweis-Spalte, §11.14), Garantie-Suite (`Kategorie=Garantie`), je Lücke G-1 bis
+  G-5 ein Test mit Skip — jeder einmal ohne Skip rot gesehen.
+
+**Plan-Änderungen aus Phase 0:**
+1. Die Prüfdomäne bekam eine Leseseite (`Pruefdomaene.Projections`: Reaktion `NachschubBeiMindestbestand`, Felder `Mindestbestand`/`Fehlmenge`
+   am Posten) und einen Host (`Host.Pruefdomaene`, derselbe Laufzeit-Host mit ihrer Komposition). Damit eine Anwendung ohne Leitung booten
+   kann, startet `AddCqrs` gRPC nur noch mit Leitung (`IAnwendung.Nutzlast` nullable).
+2. Der JSON-Eingang nimmt eine optionale `commandId` (Client-Wiederholung mit derselben CommandId, §11.3; Störungslauf).
+3. S3 misst nicht im geschlossenen Kreis (64 gleichzeitige Abschlüsse überfluten den heißen Sammelvorgang und kippen in den Retry-Sturm PF-9),
+   sondern mit der Rampe; N = 1 000/10 000 als Latenzlauf bei 50 %.
+4. Neuer Befund **G-7** (P0, docs/13): ein gescheiterter Append hinterlässt Marten-Tombstones, an deren Stream jeder Poll hängen bleibt — der
+   Neustart-Test der Prüfdomäne fand es. Er gehört in keine Phase; Vorschlag: mit Phase 1 schließen (gleiche Stelle, der Lesepfad der Polls).
+5. Neuer Befund **PF-9** (P1): Retry-Sturm des Dirigenten unter Überlast; Vorschlag: mit Phase 1 (Emit-Ausgang) bzw. Phase 5 (Backstop).
+6. Die Garantie-Matrix fand Garantien ohne eigenen Test; ergänzt wurden CQRS010/011/052/053, der Wire-Boot-Check, Rückstau der Quelle und
+   Zeitlimit; offen bleibt der Post-Append-Pfad (G-6).
+7. `--probe` (verkürzter Funktionstest des Treibers) schreibt nicht nach `vermessung/ergebnisse/` — Probeläufe während der Entwicklung des
+   Treibers sind keine Messläufe.
+

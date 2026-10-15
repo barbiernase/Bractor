@@ -14,6 +14,7 @@ namespace Infrastructure.Pruefstand.Phase4;
 /// Der Cursor ist bewusst best-effort: er trägt NIE die Korrektheit (das tut die Empfänger-Inbox),
 /// nur die O(N²)→O(Tail)-Ersparnis.
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class EmittentenCursorTests
 {
     private static readonly CancellationToken Ct = CancellationToken.None;

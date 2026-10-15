@@ -11,6 +11,7 @@ namespace Infrastructure.Pruefstand.Aggregate;
 /// store-freie Logik wird hier direkt bewiesen: unter der Grenze verlustfrei, über der Grenze FIFO-Verdrängung
 /// (ältestes zuerst), Einfüge-Reihenfolge erhalten (Snapshot-Roundtrip), Doppel-Add folgenlos.
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class BoundedInboxTests
 {
     [Fact]

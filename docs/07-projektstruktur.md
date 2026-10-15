@@ -93,6 +93,9 @@ Funktions-Signatur, Konfig-Records aus dem Implementierungs-Konstruktor, Fähigk
 
 - Die Wurzel der Werkzeuge (Werkbank, Scaffolder, `--check`) ist `Projektstruktur.StandardWurzel`; Generatoren leiten sie aus dem Projektnamen
   ab, der Codegen aus dem Projekt, das ihn auslöst (`--projekt`). Die zweite Anwendung der Solution ist die Prüfdomäne (`Pruefdomaene`,
-  `Pruefdomaene.Laufzeit`, Tests in `Pruefdomaene.Integration.Tests`); damit das Werkzeug ihre DLLs hat, referenziert `Cqrs.Codegen` auch sie.
+  `Pruefdomaene.Projections` mit der Reaktion `NachschubBeiMindestbestand`, Komposition `Pruefdomaene.Laufzeit`, Host `Host.Pruefdomaene` für die
+  E2E-Messung, Tests in `Pruefdomaene.Integration.Tests`); damit das Werkzeug ihre DLLs hat, referenziert `Cqrs.Codegen` auch sie. Sie hat keine
+  Leitung — eine Anwendung ohne Leitung startet keinen gRPC-Dienst (`IAnwendung.Nutzlast` ist dann `null`); hinein geht es über den JSON-Eingang
+  und die Quellen.
 - Fremde Namespaces (außerhalb der Rollen-Projekte der Wurzel) platziert der Scaffolder wie bisher nach Namespace → Verzeichnis; die Lage-Prüfung
   meldet sie.

@@ -20,6 +20,7 @@ namespace Infrastructure.Integration.Tests;
 ///
 /// Braucht laufendes Postgres auf localhost:5432 (docker-compose.infrastructure.yml).
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class PollerBackstopPostgresTests : IClassFixture<PollerBackstopPostgresTests.Fixture>
 {
     private readonly Fixture _fx;

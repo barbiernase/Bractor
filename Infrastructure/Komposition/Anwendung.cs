@@ -41,8 +41,9 @@ public interface IAnwendung
     IReadOnlyDictionary<string, ProzessRegeln> Prozesse { get; }
     /// <summary>Die Query-Typen, die die Leseseite bedient (leer ohne Leseseite).</summary>
     IReadOnlyList<Type> QueryTypen { get; }
-    /// <summary>Domänen-Nachricht ↔ Nutzlast der Leitung (aus dem Leitungs-Projekt der Anwendung).</summary>
-    INutzlastTabelle Nutzlast { get; }
+    /// <summary>Domänen-Nachricht ↔ Nutzlast der Leitung (aus dem Leitungs-Projekt der Anwendung); <c>null</c> = die Anwendung hat keine
+    /// Leitung und damit keinen gRPC-Dienst — hinein geht es dann nur über JSON-Eingang und Quellen (docs/07, Rolle Leitung).</summary>
+    INutzlastTabelle? Nutzlast { get; }
     /// <summary>Der STJ-Kontext des Actor-Planes (Wire) und der Event-Speicherung (Marten).</summary>
     JsonSerializerContext WireJson { get; }
     JsonSerializerContext EventJson { get; }

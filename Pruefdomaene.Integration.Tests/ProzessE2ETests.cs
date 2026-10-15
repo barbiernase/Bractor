@@ -16,6 +16,7 @@ namespace Pruefdomaene.Integration.Tests;
 /// den Vorgang; der Dirigent treibt die Regeln über die echten Aggregat-Actors. Beweiskraft: der Endzustand der Aggregate steht im Log
 /// (Voll-Fold, keine Projektion), der Manager-Log endet mit <c>ProzessBeendet</c> und dem erwarteten Ausgang.
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class ProzessE2ETests
 {
     private static readonly TimeSpan Frist = TimeSpan.FromSeconds(60);

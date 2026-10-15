@@ -1,0 +1,104 @@
+{
+  "Umgebung": {
+    "Name": "vermessung",
+    "Art": "Sim",
+    "Python": "/opt/miniconda3/envs/gpu_env/bin/python"
+  },
+  "EventStore": {
+    "Betrieb": "Vorhanden",
+    "Verbindung": "Host=localhost;Port=5432;Username=postgres;Password=postgres",
+    "Datenbank": "cqrs_vermessung",
+    "Schema": "es"
+  },
+  "VersionIndex": {
+    "Betrieb": "Vorhanden",
+    "Endpunkt": "localhost:6390",
+    "Datenbank": 0,
+    "Praefix": "vermessung:"
+  },
+  "Cluster": {
+    "Art": "Einzelknoten",
+    "Name": "cqrs-vermessung"
+  },
+  "Transport": {
+    "GrpcPort": 5201,
+    "EinblickPort": 5202,
+    "JsonEingang": true
+  },
+  "Identitaeten": {
+    "Tokens": {
+      "vermessung-kamerasystem": "KameraSystem",
+      "vermessung-bildrechner": "Bildrechner",
+      "vermessung-disponent": "Disponent",
+      "vermessung-kioperator": "KIOperator",
+      "vermessung-inspekteur": "Inspekteur"
+    }
+  },
+  "Quellen": {
+    "DateiErkannt": {
+      "Pfad": "${env:HOME}/cqrs-vermessung/DateiErkannt",
+      "Muster": [ "*.tiff" ],
+      "Erkennung": "EreignisUndAbfrage",
+      "Intervall": "00:00:01",
+      "Fertig": {
+        "Art": "Marker",
+        "Endung": ".fertig"
+      },
+      "Kennung": "PfadGroesseZeit",
+      "Laufmodus": "EinmalImCluster"
+    }
+  },
+  "Funktionen": {
+    "IBildVerkleinerung": {
+      "Laufort": "Host",
+      "Slots": 8,
+      "Wiederholungen": 1,
+      "Worker": {
+        "Skript": "Domain.Client.Worker.Python.ML/funktions_worker.py",
+        "Argumente": [
+          "--funktionen",
+          "IBildVerkleinerung",
+          "--slots",
+          "8",
+          "--konfig",
+          "AusgabePfad=${env:HOME}/cqrs-vermessung/preprocessed"
+        ],
+        "Token": "vermessung-bildrechner"
+      }
+    },
+    "IHistogrammAusgleich": {
+      "Laufort": "Host",
+      "Slots": 8,
+      "Wiederholungen": 1,
+      "Worker": {
+        "Skript": "Domain.Client.Worker.Python.ML/funktions_worker.py",
+        "Argumente": [
+          "--funktionen",
+          "IHistogrammAusgleich",
+          "--slots",
+          "8",
+          "--konfig",
+          "AusgabePfad=${env:HOME}/cqrs-vermessung/preprocessed"
+        ],
+        "Token": "vermessung-bildrechner"
+      }
+    },
+    "IDateinameDeutung": {
+      "Laufort": "Host",
+      "Slots": 8
+    },
+    "IRangeSuche": {
+      "Laufort": "Host",
+      "Slots": 2
+    },
+    "IMitgliederEinfrieren": {
+      "Laufort": "Host",
+      "Slots": 2
+    }
+  },
+  "Konfig": {
+    "BildaufbereitungKonfig": {
+      "AusgabePfad": "${env:HOME}/cqrs-vermessung/preprocessed"
+    }
+  }
+}

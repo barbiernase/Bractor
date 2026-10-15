@@ -20,6 +20,7 @@ namespace Infrastructure.Integration.Tests;
 /// Beweiskraft: der Decider des Paars würde jede Klassifikation annehmen (kein Guard gegen Wiederholung) — dass es bei einem Fakt
 /// bleibt, kann nur die Inbox (KommandoVerarbeitet je CommandId) leisten, und die greift nur bei gleicher Id.
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class VertragsZusageE2ETests
 {
     [Fact]

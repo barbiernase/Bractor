@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <!-- Der Host der Prüfdomäne — derselbe Laufzeit-Host wie Host.Grpc (AddCqrs + LaufeAsync), nur mit der Komposition der zweiten
+       Anwendung (eine Komposition je Prozess, docs/07). Ohne Leitung startet er keinen gRPC-Dienst; hinein geht es über den JSON-Eingang.
+       Gebraucht von der E2E-Messung S5 (docs/plan-garantien-und-durchsatz.md §0.1). -->
+  <ItemGroup>
+    <ProjectReference Include="..\Pruefdomaene.Laufzeit\Pruefdomaene.Laufzeit.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Grpc.AspNetCore" Version="2.76.0" />
+    <PackageReference Include="Microsoft.Extensions.Diagnostics.HealthChecks" Version="10.0.2" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="..\umgebungen\*.json" Link="umgebungen\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

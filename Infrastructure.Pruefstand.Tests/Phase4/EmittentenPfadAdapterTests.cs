@@ -21,6 +21,7 @@ namespace Infrastructure.Pruefstand.Phase4;
 ///       ein verlorener detached-Emit wird so re-emittiert; der Empfänger dedupliziert).
 /// Ein replaybarer Tracker UND ein Emittenten-Cursor zugleich ist ein Konstruktionsfehler → Guard.
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class EmittentenPfadAdapterTests
 {
     private static readonly CancellationToken Ct = CancellationToken.None;

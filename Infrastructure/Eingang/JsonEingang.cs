@@ -65,6 +65,8 @@ public static class JsonEingang
             var wer = akteur?.AkteurFuer(typ!) ?? AkteurHerkunft.EindeutigerHalter(typ!) ?? "system";
             var envelope = new CommandEnvelope
             {
+                // Wer wiederholt, schickt dieselbe CommandId — die Inbox des Aggregats macht daraus genau eine Wirkung (docs/11 §11.3).
+                CommandId = body.TryGetProperty("commandId", out var id) && Guid.TryParse(id.GetString(), out var cid) ? cid : Guid.NewGuid(),
                 AggregateId = cmd.AggregateId,
                 AggregateType = aggregat,
                 Payload = cmd,

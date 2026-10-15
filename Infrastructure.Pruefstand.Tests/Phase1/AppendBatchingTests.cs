@@ -21,6 +21,7 @@ namespace Infrastructure.Pruefstand.Phase1;
 ///   (3) Isolation des Schuldigen: im Fehlerfall fällt NUR der Auftrag mit OCC-Konflikt; die
 ///       unschuldigen Mit-Gebündelten committen trotzdem.
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class AppendBatchingTests
 {
     private sealed record Evt(Guid AggregateId) : IEvent;

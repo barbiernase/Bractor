@@ -62,9 +62,10 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 | Lesen, Sicht, Schreiben, Prüfen | `GraphExtractor.Kern/` (`Lesen`, `Sicht/`, `Schreiben/`, `Sonde/`, `ParitaetsPruefung`), CLI `GraphExtractor/` |
 | Grammatik, Scaffolder | `DomainEditor/` |
 | Werkbank | `Werkbank/` (Server `Werkbank/Server/`, Oberfläche `Werkbank/wwwroot/editor/`) |
-| Hosts | `Host.Grpc` (`AddCqrs(args)` der Komposition + `LaufeAsync`), `Host.Blazor` (Client) — beide mit `--umgebung <name>` |
+| Hosts | `Host.Grpc` (`AddCqrs(args)` der Komposition + `LaufeAsync`), `Host.Blazor` (Client) — beide mit `--umgebung <name>`; `Host.Pruefdomaene` (Messung S5) |
 | Beispieldomäne (Prüfling) | `Domain*`, `Domain.Akteure`, `Domain.Client.*` |
-| Prüfdomäne (zweite Anwendung, Framework-Tests) | `Pruefdomaene`, `Pruefdomaene.Laufzeit`, `Pruefdomaene.Integration.Tests` |
+| Prüfdomäne (zweite Anwendung, Framework-Tests) | `Pruefdomaene`, `Pruefdomaene.Projections`, `Pruefdomaene.Laufzeit`, `Pruefdomaene.Integration.Tests` |
+| Vermessung (E2E-Treiber, Ablage) | `Cqrs.Vermessung`, `scripts/vermessung-*.sh`, `vermessung/ergebnisse/` |
 
 ## Konventionen
 
@@ -97,6 +98,10 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 - Integration (Postgres/Consul/Redis, sequentiell): `dotnet test Infrastructure.Integration.Tests/Infrastructure.Integration.Tests.csproj`
 - Prüfdomäne (Framework domänenneutral, echtes Marten, sequentiell, nie parallel zur anderen Integrations-Suite):
   `dotnet test Pruefdomaene.Integration.Tests/Pruefdomaene.Integration.Tests.csproj`
+- Garantie-Suite (vor jedem Commit, Integration nacheinander): `--filter Kategorie=Garantie` auf Prüfstand, Integration, Prüfdomäne;
+  offene Lücken sind `Skip = "G-n offen (docs/13)"` (`docs/11-garantien.md` §11.14)
+- E2E-Messung (echter Host, Exactly-once, nie parallel zu Integrations-Suiten): `scripts/vermessung-e2e.sh --anlass <a> --spalte <s>`,
+  Tabelle `scripts/vermessung-tabelle.sh --schreibe` (`docs/12-tests-und-vermessung.md` §12.5/§12.6)
 - Infra hochfahren: `docker compose -f docker-compose.infrastructure.yml up -d`
 - Werkbank-Abnahme (echte Werkbank auf einer Kopie, eigene Sim-DB, sequentiell, nach `dotnet build`):
   `dotnet test Werkbank.Abnahme.Tests/Werkbank.Abnahme.Tests.csproj`

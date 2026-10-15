@@ -37,6 +37,7 @@ public class FunktionsVermittlungTests
         v.Biete(a).Should().BeFalse("ein vergebener Auftrag wird nicht erneut aufgenommen");
     }
 
+    [Trait("Kategorie", "Garantie")]
     [Fact]
     public void Abgelaufene_Lease_geht_an_den_naechsten_Ausfuehrer_Lebenszeichen_haelt_sie()
     {
@@ -53,6 +54,7 @@ public class FunktionsVermittlungTests
         v.Hole("cpu", 5, T0.AddSeconds(56)).Should().Equal(lang);
     }
 
+    [Trait("Kategorie", "Garantie")]
     [Fact]
     public void Erledigtes_verpufft_bei_erneutem_Angebot()
     {

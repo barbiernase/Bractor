@@ -14,6 +14,7 @@ namespace Infrastructure.Pruefstand.Phase6;
 /// Dieselbe Klassifikation nutzen der generierte AddGeneratedPipelineEventPulls (persistiert-Filter) und
 /// PipelineActorBase.OnStartedAsync (transient-Filter).
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class TransientPersistiertSplitTests
 {
     private sealed record PersistiertesEvent : IEvent;

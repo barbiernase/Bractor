@@ -50,6 +50,7 @@ public class UmgebungE2ETests
         await cmd.ExecuteNonQueryAsync();
     }
 
+    [Trait("Kategorie", "Garantie")]
     [Fact]
     public async Task Sim_Host_startet_nicht_gegen_eine_Datenbank_mit_Siegel_Prod()
     {

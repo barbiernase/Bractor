@@ -4,7 +4,9 @@ namespace Pruefdomaene.Posten;
 
 // ★ SCHEMA-EVOLUTION: das Feld hieß früher `Bestand`, heute `AnfangsBestand` — ohne Upcasting fiele der Wert lautlos auf 0.
 //   Die typisierte Wandlung (PostenEroeffnet_V1 → heute) liest der EventUpcastingGenerator aus der IUpcast-Kante.
-public record PostenEroeffnet(int AnfangsBestand) : IEvent;
+/// <summary>Ein Posten ist eröffnet; unterschreitet eine Reservierung den <paramref name="Mindestbestand"/>, bestellt die Reaktion
+/// <c>NachschubBeiMindestbestand</c> die Fehlmenge nach (0 = kein Nachschub).</summary>
+public record PostenEroeffnet(int AnfangsBestand, int Mindestbestand = 0) : IEvent;
 
 /// <summary>Die erste Gestalt von <see cref="PostenEroeffnet"/> (Feld hieß <c>Bestand</c>). Schlichter Record, kein Event mehr.</summary>
 public record PostenEroeffnet_V1(int Bestand);
@@ -15,7 +17,8 @@ public sealed class PostenEroeffnet_V1_Wandlung : IUpcast<PostenEroeffnet_V1, Po
     public PostenEroeffnet Wandle(PostenEroeffnet_V1 alt) => new(alt.Bestand);
 }
 
-public record PostenReserviert(int Menge) : IEvent;
+/// <summary>Eine Menge ist reserviert; <paramref name="Fehlmenge"/> sagt, wie weit der verfügbare Bestand danach unter dem Mindestbestand liegt.</summary>
+public record PostenReserviert(int Menge, int Fehlmenge = 0) : IEvent;
 public record PostenFreigegeben(int Menge) : IEvent;
 public record PostenZugebucht(int Menge) : IEvent;
 

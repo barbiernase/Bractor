@@ -325,6 +325,7 @@ public class PipelineFlussTests
         w.Gesendete<LegeBestellungAn>().Should().BeEmpty();
     }
 
+    [Trait("Kategorie", "Garantie")]
     [Fact]
     public async Task Bestellung_Zeitlimit_Port_verdrahtet_wird_zum_eigenen_Weg_statt_zu_scheitern()
     {

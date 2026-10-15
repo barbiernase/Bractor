@@ -17,6 +17,7 @@ namespace Infrastructure.Pruefstand.Analyzers;
 /// binden). Bewiesen: CQRS020 feuert bei einem rohen Command-Send außerhalb des Primitivs, CQRS021 bei einer
 /// None-Token-Kante, und der erlaubte <c>CommandEmitter</c>-Typ mit bounded Token bleibt sauber.
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class CommandEmitAnalyzerTests
 {
     private static async Task<ImmutableArray<Diagnostic>> Analysiere(string code)

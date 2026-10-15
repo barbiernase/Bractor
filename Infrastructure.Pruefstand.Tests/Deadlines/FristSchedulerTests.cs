@@ -16,6 +16,7 @@ namespace Infrastructure.Pruefstand.Deadlines;
 /// echte DB-Uhr deckt der Integrationstest. Bewiesen wird: die Fälligkeit entscheidet die (Fake-)DB-Uhr, eine
 /// gefeuerte Frist wird entfernt, eine künftige bleibt liegen.
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class FristSchedulerTests
 {
     private sealed class FakeUhr(DateTimeOffset jetzt) : IDbClock

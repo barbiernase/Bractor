@@ -16,6 +16,7 @@ namespace Infrastructure.Pruefstand.Umgebung;
 /// Umgebungen (docs/konzept-werkbank.md §4), store-frei: Laden der Datei, Platzhalter, strikte Bindung, das Siegel als reiner
 /// Vergleich und der Funktions-Laufort als Konfig gegen die generierte Tabelle.
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class UmgebungLaderTests
 {
     private static (ConfigurationManager Konfig, string Verz) Datei(string name, string json)

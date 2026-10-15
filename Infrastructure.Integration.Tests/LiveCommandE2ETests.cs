@@ -26,6 +26,7 @@ namespace Infrastructure.Integration.Tests;
 ///
 /// Braucht Postgres (5432), Redis (6379) und Consul (8500) — das Dev-Setup.
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class LiveCommandE2ETests
 {
     [Fact]

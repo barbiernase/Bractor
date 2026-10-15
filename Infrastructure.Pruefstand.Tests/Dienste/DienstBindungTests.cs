@@ -23,6 +23,7 @@ namespace Infrastructure.Pruefstand.Dienste;
 /// Bindung beim Start wählt nach der Umgebung und bricht laut bei fehlender, mehrdeutiger oder zyklischer Implementierung bzw. fehlender
 /// Konfig; der Analyzer (CQRS089–CQRS092) hält die Form im Build.
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class DienstBindungTests
 {
     // ── Generator ───────────────────────────────────────────────────────────────────────────────────────────────────

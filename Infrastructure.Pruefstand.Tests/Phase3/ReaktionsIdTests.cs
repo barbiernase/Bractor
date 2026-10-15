@@ -8,6 +8,7 @@ namespace Infrastructure.Pruefstand.Phase3;
 /// gleicher Command-Typ ergeben dieselbe Id, sonst eine andere. Fundament dafür,
 /// dass ein wiederholter Reaktions-Command beim Empfänger als Duplikat erkennbar ist.
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class ReaktionsIdTests
 {
     [Fact]

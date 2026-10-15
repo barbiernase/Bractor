@@ -89,7 +89,7 @@ public static class CqrsUmgebungExtensions
             o.AppendDrainParallelism = u.Schreibpfad.Drain;
             o.SnapshotThreshold = u.Schreibpfad.SnapshotSchwelle;
             o.InboxCap = u.Schreibpfad.InboxGrenze;
-            o.EnableGrpc = true;
+            o.EnableGrpc = anwendung.Nutzlast != null;   // gRPC nur mit Leitung; ohne bleiben JSON-Eingang und Quellen
         });
         // Die Uhr der Umgebung (Versatz nur in Sim) ersetzt die nackte DB-Uhr — die letzte Registrierung gewinnt.
         s.AddSingleton<IDbClock>(_ => new UmgebungsDbClock(u));
@@ -125,7 +125,7 @@ public static class CqrsUmgebungExtensions
         }
         try
         {
-            app.MapCqrsGrpcService();
+            if (Anwendung.Aktuell.Nutzlast != null) app.MapCqrsGrpcService();
             app.MapBackendMonitoring();
             app.MapEinblick(u);
             app.MapEingang(u);

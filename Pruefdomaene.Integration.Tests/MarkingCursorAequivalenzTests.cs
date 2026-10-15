@@ -21,6 +21,7 @@ namespace Pruefdomaene.Integration.Tests;
 /// Alle Guids sind über beide Läufe gleich, damit die deterministischen Vorgänge exakt vergleichbar sind. Dazu die Sicherheits-Probe:
 /// ein Marking mit falschem RegelHash wird verworfen (Voll-Fold, gleiches Ergebnis), und der Cursor liest beim Fan-out weniger.
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequivalenzTests.Fixture>
 {
     private readonly Fixture _fx;

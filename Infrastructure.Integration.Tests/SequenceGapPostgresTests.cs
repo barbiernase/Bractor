@@ -21,6 +21,7 @@ namespace Infrastructure.Integration.Tests;
 ///
 /// Braucht laufendes Postgres auf localhost:5432 (docker-compose.infrastructure.yml).
 /// </summary>
+[Trait("Kategorie", "Garantie")]
 public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.Fixture>
 {
     private readonly Fixture _fx;
