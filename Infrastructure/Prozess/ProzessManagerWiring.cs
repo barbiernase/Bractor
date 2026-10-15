@@ -230,14 +230,14 @@ public sealed class ProzessManagerStartupService : IHostedService
             {
                 var bis = _uhr is null ? DateTimeOffset.UtcNow : await _uhr.JetztAsync(ct);
                 foreach (var korr in await _offenIndex.ListeFaelligeAsync(bis, ct))
-                    _ = WeckeImBackstopAsync(korr, fristFaellig: true, drossel, ct);
+                    _ = WeckeImBackstopAsync(korr, drossel, ct);
 
                 var jetzt = DateTimeOffset.UtcNow;
                 if (jetzt < naechsterAbgleich) continue;
                 naechsterAbgleich = jetzt + AbgleichTakt;
                 _heilplan.Abgleich(await _offenIndex.ListeOffeneAsync(ct), jetzt);
                 foreach (var korr in _heilplan.Faellige(jetzt))
-                    _ = WeckeImBackstopAsync(korr, fristFaellig: false, drossel, ct);
+                    _ = WeckeImBackstopAsync(korr, drossel, ct);
             }
             catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
             catch (Exception ex) { Console.WriteLine($"[Prozess-Backstop] Scan fehlgeschlagen: {ex.Message}"); }
@@ -245,7 +245,7 @@ public sealed class ProzessManagerStartupService : IHostedService
     }
 
     /// <summary>Eine bounded, fire-and-forget-Weckung eines offenen Vorgangs durch den Backstop.</summary>
-    private async Task WeckeImBackstopAsync(Guid korrelation, bool fristFaellig, SemaphoreSlim drossel, CancellationToken ct)
+    private async Task WeckeImBackstopAsync(Guid korrelation, SemaphoreSlim drossel, CancellationToken ct)
     {
         if (!_imFlug.TryAdd(korrelation, 0)) return;
         try
@@ -256,7 +256,7 @@ public sealed class ProzessManagerStartupService : IHostedService
                 var identity = ClusterIdentity.Create(korrelation.ToString(), ProzessManagerActor.KindName);
                 using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
                 cts.CancelAfter(WeckFrist);
-                await _system.Cluster().RequestAsync<WakeAck>(identity, new ProzessWake(Guid.Empty, 0, null, fristFaellig), cts.Token);
+                await _system.Cluster().RequestAsync<WakeAck>(identity, new ProzessWake(Guid.Empty, 0, null, VomBackstop: true), cts.Token);
             }
             finally { drossel.Release(); }
         }

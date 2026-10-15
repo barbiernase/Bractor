@@ -110,16 +110,16 @@ public sealed class ProzessManager
 
     /// <summary>
     /// Ein Treib-Schritt: Marking falten → aktivierte Transition feuern ODER kompensieren ODER terminal setzen.
-    /// <paramref name="fristFaellig"/>: der Backstop weckt wegen der abgelaufenen Frist (<see cref="PflegeFristAsync"/>).
+    /// <paramref name="vomBackstop"/>: der Backstop weckt (fällige Frist oder Heilung nach Stille, <see cref="PflegeFristAsync"/>).
     /// </summary>
-    public async Task WakeAsync(Guid korrelation, CancellationToken ct = default, bool fristFaellig = false)
+    public async Task WakeAsync(Guid korrelation, CancellationToken ct = default, bool vomBackstop = false)
     {
         var mz = await LadeStatusAsync(korrelation, ct);
         if (!mz.Gestartet || mz.Beendet || !_registry.TryGetValue(mz.ProzessName, out var regeln))
         {
-            // Eine fällige Frist zu einem Vorgang, der nichts mehr tut (beendet, das Löschen aus dem Index ging verloren; oder sein Prozess
-            //   ist aus dem Code verschwunden): den Eintrag jetzt aufräumen — sonst weckte ihn der Backstop jede Sekunde.
-            if (fristFaellig && _offenIndex is not null)
+            // Der Backstop weckt einen Vorgang, der nichts mehr tut (beendet, das Löschen aus dem Index ging verloren; oder sein Prozess ist
+            //   aus dem Code verschwunden): den Eintrag jetzt aufräumen — sonst weckte ihn eine liegengebliebene Frist jede Sekunde.
+            if (vomBackstop && _offenIndex is not null)
             {
                 try
                 {
@@ -133,7 +133,7 @@ public sealed class ProzessManager
         _akteurVon[korrelation] = mz.Akteur;
 
         var kandidaten = await FaltMarkingMitCursorAsync(korrelation, mz, regeln, ct);
-        await PflegeFristAsync(korrelation, mz, kandidaten, fristFaellig, ct);
+        await PflegeFristAsync(korrelation, mz, kandidaten, vomBackstop, ct);
 
         // ── Treiber-Fold (EM-1, §4/§7.3): einen im Fold gesehenen Fehlschlag DURABEL machen. Eine
         //   KommandoAbgelehnt-Marke auf dem Ziel-Stream (AbgelehntDa) wird zu SchrittGescheitert im Manager-Log —
@@ -173,9 +173,8 @@ public sealed class ProzessManager
                         umleiten ? new SchrittUmgeleitet(k.Vorgang, art, grundA) : new SchrittGescheitert(k.Vorgang, grundA), ct);
                 v++;
             }
-            // Frisch falten: mz.Gescheitert (bzw. die Umleitung) trägt den Fehlschlag jetzt. Die Frist danach immer schreiben — die eben
-            //   abgelaufene darf nicht stehen bleiben.
-            await WakeAsync(korrelation, ct, fristFaellig: true);
+            // Frisch falten: mz.Gescheitert (bzw. die Umleitung) trägt den Fehlschlag jetzt.
+            await WakeAsync(korrelation, ct, vomBackstop);
             return;
         }
 
@@ -237,26 +236,27 @@ public sealed class ProzessManager
 
     /// <summary>
     /// PF-4: die Frist im Offen-Index — bis wann der Backstop diesen Vorgang wecken muss, auch wenn kein Event kommt: das früheste
-    /// Zeitlimit eines offenen Aufrufs bzw. Warte-Knotens, und für einen offenen Warte-Knoten spätestens <see cref="WarteTakt"/> (er liest
-    /// seinen Strom nur bei einer Weckung). Geschrieben wird nur, wenn die Frist früher liegt als die zuletzt geschriebene (oder die erste
-    /// ist) — eine spätere bleibt liegen, die frühere weckt dann einmal umsonst und schreibt die richtige. Weckt der Backstop wegen der Frist
-    /// (<paramref name="fristFaellig"/>), wird immer geschrieben, auch <c>null</c>: so bleibt keine abgelaufene Frist stehen. Ein Zeitlimit
-    /// kostet so einen Write, nicht einen je Schritt. Best-effort wie der Index.
+    /// Zeitlimit eines offenen Aufrufs bzw. Warte-Knotens, für einen offenen Warte-Knoten spätestens <see cref="WarteTakt"/> (er liest seinen
+    /// Strom nur bei einer Weckung). Geschrieben wird sie erst, wenn der Vorgang still wird: bei einer Weckung durch den Backstop
+    /// (<paramref name="vomBackstop"/>: fällige Frist oder Heilung nach <see cref="Heilplan.Anfang"/> Stille) — ein Vorgang, der vorher fertig
+    /// wird, schreibt nie eine. Sofort geschrieben wird nur, was kürzer ist als diese Stille (ein kurzes Zeitlimit, ein Warte-Knoten), sonst
+    /// litte die Genauigkeit. Je Aktivierung wird nur ein geänderter Wert geschrieben (auch <c>null</c>: keine abgelaufene Frist bleibt stehen).
+    /// Best-effort wie der Index.
     /// </summary>
     private async Task PflegeFristAsync(
-        Guid korrelation, ManagerStatus mz, List<Kandidat> kandidaten, bool fristFaellig, CancellationToken ct)
+        Guid korrelation, ManagerStatus mz, List<Kandidat> kandidaten, bool vomBackstop, CancellationToken ct)
     {
         if (_offenIndex is null) return;
         var offen = mz.Gescheitert.Count == 0 ? kandidaten.Where(k => !k.ErgebnisDa && k.Bereit != default).ToList() : new List<Kandidat>();
+        var kurz = offen.Any(k => k.Regel.WartetAuf.Count > 0 || k.Regel.Zeitlimit < Heilplan.Anfang);
+        if (!vomBackstop && !kurz) return;
+
         DateTimeOffset? frist = null;
         foreach (var k in offen.Where(k => k.Regel.Zeitlimit is not null))
             frist = Früher(frist, k.Bereit + k.Regel.Zeitlimit!.Value);
         if (offen.Any(k => k.Regel.WartetAuf.Count > 0))
             frist = Früher(frist, (_jetzt is null ? DateTimeOffset.UtcNow : await _jetzt(ct)) + WarteTakt);
-
-        var bekannt = _frist.TryGetValue(korrelation, out var alt);
-        var schreiben = fristFaellig || (frist is not null && (!bekannt || alt is null || frist < alt));
-        if (!schreiben) return;
+        if (_frist.TryGetValue(korrelation, out var alt) && alt == frist) return;
         try
         {
             await _offenIndex.SetzeFristAsync(korrelation, frist, ct);
