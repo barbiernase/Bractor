@@ -53,16 +53,27 @@ internal static class Werkzeuge
     public static string Rechner()
     {
         var kerne = Environment.ProcessorCount;
-        var modell = OperatingSystem.IsMacOS() ? Laufe("sysctl", "-n machdep.cpu.brand_string") : "";
-        var speicher = OperatingSystem.IsMacOS() && long.TryParse(Laufe("sysctl", "-n hw.memsize"), out var b) ? $"{b / (1L << 30)} GiB" : "";
+        var modell = OperatingSystem.IsMacOS() ? Laufe("sysctl", "-n machdep.cpu.brand_string") : ProcFeld("/proc/cpuinfo", "model name");
+        var bytes = OperatingSystem.IsMacOS()
+            ? long.TryParse(Laufe("sysctl", "-n hw.memsize"), out var b) ? b : 0
+            : long.TryParse(ProcFeld("/proc/meminfo", "MemTotal").Split(' ')[0], out var kb) ? kb * 1024 : 0;
+        var speicher = bytes > 0 ? $"{bytes / (1L << 30)} GiB" : "";
         return $"{Environment.MachineName}, {System.Runtime.InteropServices.RuntimeInformation.OSDescription}, {modell}, {kerne} Kerne, {speicher}";
     }
+
+    /// <summary>Der Wert der ersten Zeile <c>schluessel: wert</c> einer Datei unter /proc (Linux), sonst leer.</summary>
+    private static string ProcFeld(string datei, string schluessel)
+        => File.Exists(datei)
+            ? File.ReadLines(datei).FirstOrDefault(z => z.StartsWith(schluessel))?.Split(':', 2)[1].Trim() ?? ""
+            : "";
 
     /// <summary>Fremdlast: Lastdurchschnitt und die fünf CPU-stärksten fremden Prozesse.</summary>
     public static string Fremdlast()
     {
         var last = OperatingSystem.IsMacOS() ? Laufe("sysctl", "-n vm.loadavg") : File.Exists("/proc/loadavg") ? File.ReadAllText("/proc/loadavg") : "";
-        var top = Laufe("sh", "-c \"ps -Ao pcpu,comm -r | head -6 | tail -5\"").Replace('\n', ';');
+        // BSD-ps (macOS) sortiert mit -r nach CPU, procps (Linux) mit --sort.
+        var sortierung = OperatingSystem.IsMacOS() ? "-r" : "--sort=-pcpu";
+        var top = Laufe("sh", $"-c \"ps -Ao pcpu,comm {sortierung} | head -6 | tail -5\"").Replace('\n', ';');
         return $"Last {last.Trim('{', '}', ' ')} · CPU-stärkste: {System.Text.RegularExpressions.Regex.Replace(top, @"\s+", " ")}";
     }
 }
