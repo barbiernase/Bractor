@@ -8,11 +8,10 @@ namespace Abstractions;
 /// Korrelations-Router und der Poll routen die auslösenden Ergebnis-Events NICHT (sie sind Auslöser keiner
 /// Regel), können den Manager also nicht neu wecken.
 ///
-/// Best-effort-HINWEIS, keine Wahrheit: die Wahrheit bleibt das Manager-Log (Gestartet ohne Beendet). Bleibt
-/// ein Eintrag fälschlich „offen" (Remove verloren), weckt der Backstop einen bereits terminalen Prozess —
-/// dessen <c>WakeAsync</c> faltet <c>Beendet</c> und kehrt sofort folgenlos zurück. Fehlt ein Eintrag (Add
-/// verloren), fällt der Prozess auf den normalen Signal-/Selbst-Weckungs-Pfad zurück (wie vor dem Backstop) —
-/// nie schlechter als der Status quo. Reines Vertragsinterface; die Ablage ist Store-Sache.
+/// HINWEIS, keine Wahrheit: die Wahrheit bleibt das Manager-Log (Gestartet ohne Beendet). Der Index ist eine OBERMENGE der offenen
+/// Vorgänge: der Eintrag entsteht vor dem <c>ProzessGestartet</c> (scheitert er, scheitert der Start) und verschwindet nach dem
+/// <c>ProzessBeendet</c> (best-effort). Ein Eintrag ohne laufenden Vorgang ist folgenlos — der Backstop weckt ihn, der Manager räumt ihn ab;
+/// ein gestarteter Vorgang ohne Eintrag kann nicht entstehen. Reines Vertragsinterface; die Ablage ist Store-Sache.
 /// </summary>
 public interface IProzessOffenIndex
 {

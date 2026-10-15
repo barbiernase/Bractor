@@ -102,6 +102,10 @@ public sealed class ProzessManager
             // Kausalkette (docs/konzept-akteure.md §5.1): der Prozess handelt im Auftrag des Akteurs, dessen Event ihn auslöste —
             //   einmal beim Start gelesen und mit ProzessGestartet ins Manager-Log gestempelt (Header), danach aus dem Log gefaltet.
             var auslöser = await _store.ReadEventAsync(auslöserStream, auslöserVersion, ct);
+            // Offen-Index VOR dem ProzessGestartet: bricht der Host dazwischen ab, steht ein Eintrag ohne Vorgang (der Backstop räumt ihn ab,
+            //   der Poll startet über den Auslöser) — umgekehrt stünde ein gestarteter Vorgang ohne Eintrag, den weder Backstop noch Poll
+            //   wecken (so im Störungslauf gesehen: 51 Vorgänge). Scheitert der Eintrag, scheitert der Start und wird wiederholt.
+            if (_offenIndex is not null) await _offenIndex.MarkiereOffenAsync(korrelation, prozessName, ct);
             await AppendAsync(korrelation, mz.Version, new ProzessGestartet(prozessName, auslöserStream, auslöserVersion), ct, auslöser?.UserId);
         }
         await WakeAsync(korrelation, ct);
@@ -764,16 +768,14 @@ public sealed class ProzessManager
     {
         await _store.AppendEventsAsync(korrelation, erwarteteVersion, new[] { ereignis }, aggregateType: "ProzessManager", akteur: akteur);
 
-        // Offen-Index NACH dem durablen Log-Append pflegen — das Log ist die Wahrheit, der Index nur ein
-        // best-effort-Hinweis für den §3-Backstop. Ein Fehler hier ist folgenlos (siehe IProzessOffenIndex):
-        // ein fehlender Eintrag fällt auf den Signal-/Selbst-Weckungs-Pfad zurück, ein stale Eintrag weckt
-        // einen bereits terminalen Prozess (dessen WakeAsync sofort folgenlos zurückkehrt).
-        if (_offenIndex is not null)
+        // Den Eintrag des Offen-Index NACH dem durablen ProzessBeendet entfernen (der Eintrag entsteht vor dem ProzessGestartet, siehe
+        // StarteAsync): der Index ist so eine Obermenge der offenen Vorgänge. Ein Fehler hier ist folgenlos — ein liegengebliebener Eintrag
+        // weckt einen terminalen Vorgang, der ihn bei der Backstop-Weckung abräumt.
+        if (_offenIndex is not null && ereignis is ProzessBeendet)
         {
             try
             {
-                if (ereignis is ProzessGestartet g) await _offenIndex.MarkiereOffenAsync(korrelation, g.ProzessName, ct);
-                else if (ereignis is ProzessBeendet) await _offenIndex.MarkiereBeendetAsync(korrelation, ct);
+                await _offenIndex.MarkiereBeendetAsync(korrelation, ct);
             }
             catch (Exception ex)
             {
