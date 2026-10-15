@@ -183,6 +183,15 @@ public interface IAggregateRepository
             => (await ReadStreamAsync(streamId, version, ct)).FirstOrDefault(e => e.AggregateVersion == version);
 
         /// <summary>
+        /// Die Events eines Streams ab <paramref name="fromVersion"/>, aber nur die mit der Korrelation <paramref name="korrelation"/> — für den
+        /// Prozess-Manager, der in einem viel beschriebenen Ziel-Stream nur die Wirkungen seiner eigenen Befehle braucht. Die Datenbank liest den
+        /// Rest weiter über den Stream-Index, liefert aber nur die eigenen Zeilen (keine fremden Daten über die Leitung, nichts auszupacken).
+        /// Ohne eigene Ablage (Prüfstand) über <see cref="ReadStreamAsync"/>.
+        /// </summary>
+        async Task<IReadOnlyList<EventEnvelope>> ReadKorreliertAsync(Guid streamId, int fromVersion, string korrelation, CancellationToken ct)
+            => (await ReadStreamAsync(streamId, fromVersion, ct)).Where(e => e.CorrelationId == korrelation).ToList();
+
+        /// <summary>
         /// Leseprimitiv des Batch-Konsums (docs/04 §4.1): eine Seite der Partition <paramref name="partition"/> von
         /// <paramref name="partitionen"/> jenseits der globalen Sequenz <paramref name="nach"/>, geordnet nach Sequenz, höchstens
         /// <paramref name="limit"/> Events. <paramref name="typen"/> = die Speicher-Diskriminatoren der abonnierten Typen samt ihrer

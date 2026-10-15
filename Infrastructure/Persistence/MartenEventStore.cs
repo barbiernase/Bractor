@@ -219,6 +219,16 @@ public class MartenEventStore : IEventStoreRepository
         return result;
     }
 
+    public async Task<IReadOnlyList<EventEnvelope>> ReadKorreliertAsync(Guid streamId, int fromVersion, string korrelation, CancellationToken ct)
+    {
+        await using var session = _store.LightweightSession();
+        var raw = await session.Events.QueryAllRawEvents()
+            .Where(e => e.StreamId == streamId && e.Version >= fromVersion && e.MatchesSql("d.correlation_id = ?", korrelation))
+            .OrderBy(e => e.Version)
+            .ToListAsync(ct);
+        return raw.Where(e => !IstTombstone(e)).SelectMany(Materialisiere).ToList();
+    }
+
     public async Task<EventEnvelope?> ReadEventAsync(Guid streamId, int version, CancellationToken ct)
     {
         await using var session = _store.LightweightSession();

@@ -413,11 +413,16 @@ public sealed class ProzessManager
     {
         // In DIESER Weckung schon bis Head integrierte Streams (ein Read je Stream pro Weckung, wie das alte Lies).
         var integriert = new HashSet<Guid>();
+        var eigeneKorrelation = korrelation.ToString();
         async Task Integriere(Guid s)
         {
             if (!integriert.Add(s)) return;
             var von = marking.StreamCursor.TryGetValue(s, out var c) ? c + 1 : 0;
-            var evs = await _store.ReadStreamAsync(s, von, ct);
+            // Nur die eigenen Events: jede Wirkung, Noop- und Ablehnungs-Marke eines Befehls dieses Vorgangs trägt seine Korrelation (der
+            //   Manager setzt sie beim Feuern, der Ausführer bei Funktionsergebnissen). In einem viel beschriebenen Ziel-Stream (ein Posten,
+            //   auf den Hunderte Vorgänge reservieren) waren die meisten gelesenen Events fremd — gelesen, ausgepackt, verworfen. Der Cursor
+            //   rückt bis zum letzten eigenen Event; fremde danach liest die Datenbank erneut, liefert sie aber nicht.
+            var evs = await _store.ReadKorreliertAsync(s, von, eigeneKorrelation, ct);
             var maxV = marking.StreamCursor.TryGetValue(s, out var alt) ? alt : -1;
             foreach (var e in evs)   // aufsteigend (Vertrag: geordnet) → „erste Wirkung" = niedrigste Version
             {
