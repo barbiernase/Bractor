@@ -28,11 +28,14 @@ export DOTNET_NOLOGO=1
 export PATH="$DOTNET_ROOT:$PATH"
 EOF
 
-# ── Python der Funktions-Worker (S2, Fluss-E2E mit Worker, pytest des SDK) ──
-if ! command -v jq >/dev/null || ! dpkg -s python3.12-venv >/dev/null 2>&1; then
-  echo "== jq, python3-venv installieren"
-  apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq jq python3.12-venv >/dev/null
+# ── System-Pakete: jq (vermessung-tabelle.sh), venv; GTK3 und libatomic braucht die native OpenCvSharp-Runtime (Domain.Pipeline.csproj) — nur Bibliotheken.
+PAKETE="jq python3.12-venv libgtk-3-0t64 libatomic1"
+if ! dpkg -s $PAKETE >/dev/null 2>&1; then
+  echo "== Pakete installieren: $PAKETE"
+  apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends $PAKETE >/dev/null
 fi
+
+# ── Python der Funktions-Worker (S2, Fluss-E2E mit Worker, pytest des SDK) ──
 if [ ! -x "$PY/bin/python" ]; then
   echo "== Python-Umgebung $PY anlegen"
   python3 -m venv "$PY"

@@ -25,7 +25,7 @@ WORKDIR /app
 
 # netcat für den TCP-Healthcheck (gRPC-Port offen == Node hochgefahren + Marten-Schema migriert).
 RUN apt-get update \
-    && apt-get install -y --no-install-recommends netcat-openbsd \
+    && apt-get install -y --no-install-recommends netcat-openbsd libgtk-3-0 libatomic1 \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=build /app .

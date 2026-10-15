@@ -26,9 +26,9 @@
         <PackageReference Include="OpenCvSharp4" Version="4.8.*" Condition="'$(OpenCvLinux)' != 'true'" />
         <PackageReference Include="OpenCvSharp4.runtime.osx_arm64" Version="4.8.1-rc" Condition="'$(OpenCvLinux)' != 'true'" />
 
-        <!-- Linux: die offizielle, weitgehend statisch gelinkte Runtime (läuft auf Ubuntu 24.04 ohne GTK/ffmpeg); publish legt die .so selbst ab -->
-        <PackageReference Include="OpenCvSharp4" Version="4.11.0.20250507" Condition="'$(OpenCvLinux)' == 'true'" />
-        <PackageReference Include="OpenCvSharp4.official.runtime.linux-x64" Version="4.11.0.20250507" Condition="'$(OpenCvLinux)' == 'true'" />
+        <!-- Linux: die offizielle portable Runtime (braucht GTK3 und libatomic, scripts/server-einrichten.sh); publish legt die .so selbst ab -->
+        <PackageReference Include="OpenCvSharp4" Version="4.13.0.20260627" Condition="'$(OpenCvLinux)' == 'true'" />
+        <PackageReference Include="OpenCvSharp4.official.runtime.linux-x64" Version="4.13.0.20260627" Condition="'$(OpenCvLinux)' == 'true'" />
     </ItemGroup>
 
 </Project>
