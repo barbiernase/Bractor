@@ -44,6 +44,7 @@ internal sealed class Anwendungslauf : IAsyncDisposable
         }
         var host = new HostLauf(k.HostDll(hostProjekt), u.Name, u.EinblickPort, k.LogDatei(logName), variablen);
         await host.StarteAsync();
+        await Task.Delay(k.Optionen.Warmlauf);   // erst der warme Host wird gemessen
         k.Ressourcen.Beobachte(rolle, () => host.Prozess);
         var log = new LogStrom(db, mitDaten);
         log.Starte();

@@ -32,6 +32,12 @@ internal sealed class Optionen
     public int MaxS3 => Probe ? 500 : 2000;
     public int MaxS5 => Probe ? 1000 : 3000;
     public TimeSpan Leerlauf => Probe ? TimeSpan.FromSeconds(5) : TimeSpan.FromSeconds(15);
+    /// <summary>
+    /// Ruhe nach dem ersten Start eines Hosts, bevor gemessen wird (nicht nach einem Neustart im Störungslauf): der JIT stuft heiße Methoden
+    /// erst nach und nach hoch. Ohne sie misst der erste Block kalten Code — gemessen S3-8 −28 % Durchsatz. Früher bekam der Host diese Zeit
+    /// zufällig: auf einer frischen DB meldete <c>/health</c> erst gesund, wenn der Prozess-Poll nach 30 s die Event-Tabellen angelegt hatte.
+    /// </summary>
+    public TimeSpan Warmlauf => Probe ? TimeSpan.FromSeconds(5) : TimeSpan.FromSeconds(30);
 
     public static Optionen Lies(string[] args)
     {
@@ -61,6 +67,7 @@ internal sealed class Optionen
         ["probe"] = Probe,
         ["fenster_s"] = Fenster.TotalSeconds,
         ["abbau_frist_s"] = AbbauFrist.TotalSeconds,
+        ["warmlauf_s"] = Warmlauf.TotalSeconds,
         ["s1_stoss_paare"] = StossS1,
         ["s2_stoss_paare"] = StossS2,
         ["s3_sender"] = new JsonArray(SenderS3.Select(n => (JsonNode)n).ToArray()),
