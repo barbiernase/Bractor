@@ -36,7 +36,9 @@ internal static class Stoerungslauf
                 await bild.StarteAsync(v, default);
             }
         });
-        var last5 = Volllast.LaufeAsync(pd, "stoerung", 8, dauer, TimeSpan.FromMinutes(3));
+        // Abbau nach Fortschritt (höchstens 10 min, Hänger = 60 s ohne fertigen Vorgang): geprüft wird Lebendigkeit, nicht Tempo — in Phase 1
+        //   brauchte der langsamste Vorgang schon 201 s, eine feste Frist von 3 min machte einen schnelleren Eingang (mehr Rückstand) rot.
+        var last5 = Volllast.LaufeAsync(pd, "stoerung", 8, dauer, TimeSpan.FromMinutes(10), ohneFortschritt: TimeSpan.FromSeconds(60));
 
         var protokoll = new JsonArray();
         var uhr = Stopwatch.StartNew();
@@ -62,7 +64,7 @@ internal static class Stoerungslauf
         });
         await kamera;
         var (b5, v5) = await last5;
-        var ok1 = await Volllast.LeerlaufenAsync(s1, TimeSpan.FromMinutes(3));
+        var ok1 = await Volllast.LeerlaufenAsync(s1, TimeSpan.FromMinutes(5));
         await Messung.WarteAufReaktionAsync(pruef);
         foreach (var v in s1) k.Ablage.Latenz("S1-stoerung", 1, v);
         foreach (var v in v5) k.Ablage.Latenz("S5-stoerung", 1, v);

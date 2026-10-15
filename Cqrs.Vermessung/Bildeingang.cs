@@ -112,11 +112,13 @@ internal sealed class Bildeingang : ILast, IAsyncDisposable
             P("je Paar genau ein ImagePairKomplett", ids.Length,
                 await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'image_pair_komplett' and stream_id = any(@ids)", ("ids", ids))),
         };
+        // Erst das Read-Model, dann der Log: der Log wächst nur, also gilt Read-Model ≤ Log auch bei offenem Rückstand; gleich erst nach dem Abbau.
         var stat = await _eingang.QueryAsync("GetImagePairStatistik", new JsonObject(), TokenInspekteur);
-        p.Add(Pruefung.Gleich("Read-Model: komplette Paare = ImagePairKomplett im Log",
-            await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'image_pair_komplett'"), (long?)stat?["daten"]?["Komplett"] ?? -1));
-        p.Add(Pruefung.Gleich("Read-Model: Paare = ImagePairErstellt im Log",
-            await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'image_pair_erstellt'"), (long?)stat?["daten"]?["Gesamt"] ?? -1));
+        long rmKomplett = (long?)stat?["daten"]?["Komplett"] ?? -1, rmGesamt = (long?)stat?["daten"]?["Gesamt"] ?? -1;
+        p.Add(P("Read-Model: komplette Paare = ImagePairKomplett im Log",
+            await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'image_pair_komplett'"), rmKomplett));
+        p.Add(P("Read-Model: Paare = ImagePairErstellt im Log",
+            await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'image_pair_erstellt'"), rmGesamt));
         return p;
     }
 

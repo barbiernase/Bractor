@@ -49,8 +49,11 @@ internal sealed class Datensatz
     }
 
     /// <summary>Exactly-once (§0.2): Mitglieder des eingefrorenen Datensatzes = aufgenommene Paare, genau ein DatensatzEingefroren.</summary>
+    /// <param name="paareImLog">Paare im Log beim Start von S4; läuft der Rückstand aus S1 noch, kommen während der Aufnahme weitere hinzu —
+    /// dann liegt die Zahl der aufgenommenen Paare zwischen diesem Stand und dem Stand bei der Prüfung.</param>
     public async Task<List<Pruefung>> PruefeAsync(Datenbank db, int paareImLog)
     {
+        var paareJetzt = await db.ZahlAsync($"select count(*) from {db.Schema}.mt_events where type = 'image_pair_erstellt'");
         var s = db.Schema;
         var aufgenommen = await db.ZahlAsync(
             $"select coalesce(sum(jsonb_array_length(data->'ImagePairIds')), 0) from {s}.mt_events where stream_id = @d and type = 'paare_aufgenommen'", ("d", Id));
@@ -60,7 +63,10 @@ internal sealed class Datensatz
         var antwort = await _eingang.QueryAsync("HoleDatensatz", new JsonObject { ["DatensatzId"] = Id.ToString() }, TokenKiOperator);
         return new List<Pruefung>
         {
-            Pruefung.Gleich("aufgenommene Paare = Paare im Log", paareImLog, aufgenommen),
+            paareJetzt == paareImLog
+                ? Pruefung.Gleich("aufgenommene Paare = Paare im Log", paareImLog, aufgenommen)
+                : new Pruefung("aufgenommene Paare = Paare im Log (Rückstand offen: zwischen Start und Prüfung)",
+                    aufgenommen >= paareImLog && aufgenommen <= paareJetzt, $"{paareImLog}…{paareJetzt}", aufgenommen.ToString()),
             Pruefung.Gleich("genau ein DatensatzEingefroren", 1, eingefroren),
             Pruefung.Gleich("Mitglieder des eingefrorenen Datensatzes = aufgenommene Paare", aufgenommen, mitglieder),
             Pruefung.Gleich("Read-Model: Mitglieder = aufgenommene Paare", aufgenommen, (long?)antwort?["daten"]?["AnzahlMitglieder"] ?? -1),

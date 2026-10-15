@@ -46,8 +46,13 @@ internal sealed record Block(string Phase, int Sender, int Angenommen, int Fehle
 /// </summary>
 internal static class Volllast
 {
+    /// <param name="ohneFortschritt">
+    /// Gesetzt (Störungslauf): der Abbau wartet, solange in dieser Zeit noch ein Vorgang sichtbar wurde — höchstens <paramref name="abbauFrist"/>.
+    /// Geprüft wird dort Exactly-once und Lebendigkeit nach den Störungen, nicht eine feste Abbauzeit; ein Rückstand ohne Fortschritt ist ein Hänger.
+    /// Ohne (Höchstlast): feste Frist, damit die Spalten vergleichbar bleiben.
+    /// </param>
     public static async Task<(Block Block, List<Vorgang> Vorgaenge)> LaufeAsync(ILast last, string phase, int sender, TimeSpan fenster,
-        TimeSpan abbauFrist, int maxAnzahl = int.MaxValue)
+        TimeSpan abbauFrist, int maxAnzahl = int.MaxValue, TimeSpan? ohneFortschritt = null)
     {
         var vorgaenge = new List<Vorgang>();
         var von = DateTimeOffset.UtcNow;
@@ -69,8 +74,18 @@ internal static class Volllast
         var imFenster = vorgaenge.Count(v => v.Sichtbar is { } s && s <= fensterEnde);
 
         var abbau = Stopwatch.StartNew();
+        var zuletztSichtbar = -1;
+        var fortschritt = Stopwatch.StartNew();
         while (abbau.Elapsed < abbauFrist && vorgaenge.Any(v => v.Fehler == null && v.Sichtbar == null))
+        {
+            if (ohneFortschritt is { } still)
+            {
+                var sichtbar = vorgaenge.Count(v => v.Sichtbar != null);
+                if (sichtbar != zuletztSichtbar) { zuletztSichtbar = sichtbar; fortschritt.Restart(); }
+                else if (fortschritt.Elapsed > still) break;   // kein Vorgang mehr fertig geworden — ein Hänger
+            }
             await Task.Delay(100);
+        }
         var abgebaut = vorgaenge.All(v => v.Fehler != null || v.Sichtbar != null);
         var letztes = vorgaenge.Where(v => v.Sichtbar != null).Select(v => v.Sichtbar!.Value).DefaultIfEmpty(fensterEnde).Max();
         var abbauS = Math.Max(0, (letztes - fensterEnde).TotalSeconds);
