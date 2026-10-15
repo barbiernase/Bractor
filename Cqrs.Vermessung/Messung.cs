@@ -59,6 +59,7 @@ internal static class Messung
                             sv.NeueGroesse(1_000_000);
                             var vorher = sv.Laeufe.Count;
                             var wert = await BlockAsync(k, lauf, $"S3-{sender}", sv, sender, o.MaxS3, w);
+                            wert.Kennzahlen["prozessende_nachlauf_s"] = await WarteAufProzessendeAsync(lauf, TimeSpan.FromSeconds(60));
                             wert.Pruefungen.AddRange(await sv.PruefeAsync(lauf.Db, sv.Laeufe.Skip(vorher).ToList(), $"S3 ×{sender}", wert.Kennzahlen["abgebaut"] > 0));
                             Merke($"S3-{sender}", wert);
                         }
@@ -94,6 +95,7 @@ internal static class Messung
                     alleAbgebaut &= letzter.Kennzahlen["abgebaut"] > 0;
                     Merke($"S5-{sender}", letzter);
                 }
+                letzter!.Kennzahlen["prozessende_nachlauf_s"] = await WarteAufProzessendeAsync(lauf, TimeSpan.FromSeconds(60));
                 await WarteAufReaktionAsync(lauf);
                 var reaktion = pd.ReaktionMs.ToList();
                 letzter!.Kennzahlen["reaktion_p50_ms"] = Statistik.Perzentil(reaktion, 50);
@@ -238,6 +240,24 @@ internal static class Messung
         wert.Details["mit_rueckstand"] = !ohneRueckstand;
         Console.WriteLine($"    {kz["tx_je_s"]:F1} Tx/s · {kz["queries_je_s"]:F1} Q/s · CPU {kz["cpu_prozent"]:F1} % · RSS {kz["rss_mb"]:F0} MB");
         return wert;
+    }
+
+    /// <summary>
+    /// Das Prozess-Ende kommt dem sichtbaren Ergebnis nach (der Vorgang schreibt <c>ProzessBeendet</c> erst bei der nächsten Weckung, unter Last
+    /// über den Backstop, PF-9): warten, bis kein Vorgang mehr offen ist, und die Zeit dafür liefern (NaN = nicht in der Frist).
+    /// </summary>
+    private static async Task<double> WarteAufProzessendeAsync(Anwendungslauf lauf, TimeSpan frist)
+    {
+        var s = lauf.Db.Schema;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        while (sw.Elapsed < frist)
+        {
+            var offen = await lauf.Db.ZahlAsync($"select count(*) from {s}.mt_events g where g.type = 'prozess_gestartet' " +
+                $"and not exists (select 1 from {s}.mt_events b where b.stream_id = g.stream_id and b.type = 'prozess_beendet')");
+            if (offen == 0) return sw.Elapsed.TotalSeconds;
+            await Task.Delay(500);
+        }
+        return double.NaN;
     }
 
     /// <summary>Die Reaktion läuft dem Prozess nach (eigener Konsument): warten, bis jede auslösende Reservierung ihren Nachschub hat.</summary>

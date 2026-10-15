@@ -17,6 +17,7 @@ internal static class Zusammenfassung
         ("durchsatz_je_s", "Durchsatz bis alles sichtbar", "{V}/s"),
         ("rueckstand", "Rückstand am Fensterende", "Vorgänge"),
         ("abbau_s", "Abbauzeit", "s"),
+        ("prozessende_nachlauf_s", "Prozess-Ende nach dem Abbau", "s"),
         ("latenz_p50_ms", "Latenz p50", "ms"),
         ("latenz_p99_ms", "Latenz p99", "ms"),
         ("dauer_aufnahme_s", "Dauer Range aufnehmen", "s"),
