@@ -21,9 +21,13 @@ public static class BatchHilfe
     /// </summary>
     public static Task UhrenversatzAbwartenAsync() => Task.Delay(20);
 
-    /// <summary>Die höchste Sequenz des Logs im Schema des Stores.</summary>
+    /// <summary>
+    /// Die höchste Sequenz des Logs im Schema des Stores. Rohes SQL löst Martens AutoCreate nicht aus — auf einer frischen Datenbank (vor dem
+    /// ersten Append) legt der Helfer die Event-Tabellen deshalb selbst an.
+    /// </summary>
     public static async Task<long> KopfAsync(IDocumentStore store)
     {
+        await store.Storage.Database.EnsureStorageExistsAsync(typeof(Marten.Events.IEvent));
         await using var s = store.QuerySession();
         var r = await s.QueryAsync<long>($"select coalesce(max(seq_id), 0) from {store.Options.Events.DatabaseSchemaName}.mt_events");
         return r.Count > 0 ? r[0] : 0;

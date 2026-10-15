@@ -44,8 +44,10 @@ if ! "$PY/bin/python" -c "import torch, cv2, betterproto, grpclib, PIL, tifffile
   "$PY/bin/pip" install -q "betterproto[compiler]==2.0.0b7" grpclib grpcio-tools numpy opencv-python-headless pillow tifffile pytest pytest-asyncio
 fi
 # Die Umgebungen (umgebungen/umgebung.{sim-main,vermessung}.json) nennen den Interpreter des Macs; derselbe Pfad zeigt hier auf $PY.
-mkdir -p /opt/miniconda3/envs/gpu_env/bin
-ln -sfn "$PY/bin/python" /opt/miniconda3/envs/gpu_env/bin/python
+# Der Link gilt dem Verzeichnis, nicht der Datei: Python erkennt ein venv an pyvenv.cfg neben dem aufgerufenen Pfad.
+mkdir -p /opt/miniconda3/envs
+[ -L /opt/miniconda3/envs/gpu_env ] || rm -rf /opt/miniconda3/envs/gpu_env
+ln -sfn "$PY" /opt/miniconda3/envs/gpu_env
 
 # ── Infrastruktur (Postgres, Redis, Consul) ──
 echo "== Infrastruktur-Container"
