@@ -402,6 +402,12 @@ durch (Konsum, PF-4). Leerlauf L5 zeigt 377 Transaktionen/s und 2 100 Queries/s 
 der Ports auf 127.0.0.1) bis 30 % CPU — jede DB-Verbindung läuft durch ihn. Störungslauf: 56 847 Vorgänge mit zwei harten Abbrüchen und
 Redis-Ausfall, alles genau einmal, Abbau 419 s.
 
+**Host-Netzwerk statt docker-proxy (2026-10-15, `ab58b0e`, A-B-B-A, Ordner `…_server-netz-{proxy,host}-{1,2}`):** seitdem laufen Postgres und die
+Redis des Messservers im Host-Netzwerk (`docker-compose.messserver.yml`). Gegen den Proxy, Mittel der beiden B- gegen die beiden A-Läufe: Durchsatz
+Ende zu Ende 1,01–1,10 × (Median ≈ 1,06 ×; S5-1 1,10 ×, S5-64 1,07 ×, S3-64 1,06 ×), Latenz p50 0,90–0,94 × (S3-8 1,04 ×, im Rauschen), Arbeit je
+Vorgang unverändert. Ein kleiner, gleichgerichteter Effekt — die Decke im Konsum (PF-4) bleibt. Die Server-Läufe vorher (`…_server-baseline`)
+liefen noch über den Proxy.
+
 **Als korrekt verifiziert (Backend-Audit 2026-08, nicht erneut jagen):** Versionsarithmetik inkl. Inbox-Marken; OCC-Skip auf dem
 `AnyVersion`-Pfad; Append vor State-Mutation; Shard-Hash-Konsistenz Subscribe ↔ gezieltes Publish; Pre-Dispatch-Guard des Adapters je Stream (heute `EmittentenAdapter`);
 Signal→Wake-Mapping; Kompensations-Dedup und Count-Join ohne verfrühtes Feuern; Snapshot-Schema-Gating; Metadaten-Readback.
@@ -439,8 +445,8 @@ dorthin: `scripts/server.sh lauf <befehl …>` verlangt einen gepushten `HEAD`, 
 Befehl in tmux aus (übersteht SSH-Abbrüche), liest die Ausgabe mit und holt neue Ordner aus `vermessung/ergebnisse/` per rsync zurück; `--los`
 startet ohne zu warten, `warte`/`status`/`log` holen später ab. Ein Lauf zur Zeit. `scripts/server.sh einrichten` (idempotent,
 `scripts/server-einrichten.sh`) installiert das .NET-SDK in der Version des Macs, die Python-Umgebung der Worker (torch nur CPU, verlinkt unter dem
-Pfad aus `Umgebung:Python`), die Bibliotheken der nativen OpenCvSharp-Runtime und startet die Infrastruktur-Container (Projekt `cqrs`, Ports nur auf
-127.0.0.1). Nach außen ist nichts offen; die übrigen Dienste des Servers (Caddy, andere Apps) bleiben unberührt. Messwerte des Servers sind nicht mit
+Pfad aus `Umgebung:Python`), die Bibliotheken der nativen OpenCvSharp-Runtime und startet die Infrastruktur-Container (Projekt `cqrs`; Postgres und
+Redis im Host-Netzwerk ohne docker-proxy, `docker-compose.messserver.yml`, `--netz proxy` für Vergleiche; alles nur auf 127.0.0.1, die Einrichtung prüft das). Nach außen ist nichts offen; die übrigen Dienste des Servers (Caddy, andere Apps) bleiben unberührt. Messwerte des Servers sind nicht mit
 denen des MacBooks vergleichbar — Läufe dort tragen ein eigenes Anlass-Präfix (`server-…`) und erst eine eigene Baseline-Spalte, wenn die
 Tabelle nach Rechner getrennt ist.
 
