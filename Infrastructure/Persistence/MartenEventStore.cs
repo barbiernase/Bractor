@@ -295,6 +295,14 @@ public class MartenEventStore : IEventStoreRepository
         return new PartitionsSeite(events, gesetzt, raw.Count >= limit);
     }
 
+    public async Task<IReadOnlyCollection<Guid>> StreamsVorhandenAsync(IReadOnlyCollection<Guid> streams, CancellationToken ct)
+    {
+        if (streams.Count == 0) return Array.Empty<Guid>();
+        await using var session = _store.QuerySession();
+        return await session.QueryAsync<Guid>(
+            $"select id from {_store.Options.Events.DatabaseSchemaName}.mt_streams where id = any(?)", ct, streams.ToArray());
+    }
+
     /// <summary>
     /// Globales Leseprimitiv für den Poll-Backstop (docs/04 §4.1): scannt die Events
     /// jenseits der globalen Sequenz und liefert die betroffenen Streams + neue

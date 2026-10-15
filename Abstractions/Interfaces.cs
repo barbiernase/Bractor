@@ -186,6 +186,13 @@ public interface IAggregateRepository
         Task<PartitionsSeite> ReadPartitionAsync(
             long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit,
             CancellationToken ct);
+
+        /// <summary>
+        /// Welche der <paramref name="streams"/> es schon gibt (eine Abfrage). Der Prozess-Poll fragt so je Seite, welche Vorgänge schon
+        /// gestartet sind, statt jeden zu wecken. Ohne Ablage (Prüfstand): keiner — der Aufrufer weckt dann jeden, wie ohne die Frage.
+        /// </summary>
+        Task<IReadOnlyCollection<Guid>> StreamsVorhandenAsync(IReadOnlyCollection<Guid> streams, CancellationToken ct)
+            => Task.FromResult<IReadOnlyCollection<Guid>>(Array.Empty<Guid>());
     }
 
     /// <summary>Ein Event einer Partitions-Seite mit seiner globalen Sequenz.</summary>

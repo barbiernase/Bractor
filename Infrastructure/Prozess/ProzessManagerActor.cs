@@ -89,7 +89,7 @@ public sealed class ProzessManagerActor : IActor
                     if (w.ProzessNameFürStart is string name)
                         await _manager.StarteAsync(_korrelation, name, w.QuellStream, w.QuellVersion, context.CancellationToken);
                     else
-                        await _manager.WakeAsync(_korrelation, context.CancellationToken);
+                        await _manager.WakeAsync(_korrelation, context.CancellationToken, w.FristFaellig);
                 }
                 context.Respond(new WakeAck());
                 break;

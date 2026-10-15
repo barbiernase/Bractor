@@ -47,9 +47,12 @@ internal sealed class ProzessManagerKind : IClusterKindContributor
 public sealed class ProzessManagerStartupService : IHostedService
 {
     private static readonly TimeSpan PollInterval = TimeSpan.FromSeconds(30);
-    // Der §3-Backstop ist das KORREKTHEITS-Netz (er heilt hängende Prozesse); der Poll oben ist danach nur
-    // noch Latenz-Optimierung. Etwas kürzeres Intervall → geringere Hang-Latenz im verlorene-Selbst-Weckung-Fall.
-    private static readonly TimeSpan BackstopInterval = TimeSpan.FromSeconds(15);
+    // Der §3-Backstop (PF-4): jede Sekunde die fälligen Fristen (Zeitlimit, Warte-Knoten) aus dem Offen-Index, alle 15 s der Abgleich
+    //   des Heil-Plans (Heil-Weckung nach Stille, mit Backoff je Vorgang).
+    private static readonly TimeSpan FristTakt = TimeSpan.FromSeconds(1);
+    private static readonly TimeSpan AbgleichTakt = TimeSpan.FromSeconds(15);
+    private static readonly TimeSpan WeckFrist = TimeSpan.FromSeconds(10);
+    private const int BackstopParallel = 32;
     private const string RouterId = "prozess-manager-router";
 
     private readonly ActorSystem _system;
@@ -58,7 +61,11 @@ public sealed class ProzessManagerStartupService : IHostedService
     private readonly IPollCursorStore _pollCursors;
     private readonly IProzessOffenIndex _offenIndex;
     private readonly IEnumerable<Infrastructure.Funktionen.FunktionsBindung> _bindungen;
+    private readonly IDbClock? _uhr;
     private readonly ILogger<ProzessManagerStartupService>? _logger;
+    private readonly Heilplan _heilplan = new();
+    // Vorgänge, deren Backstop-Weckung gerade läuft (keine zweite daneben, wenn eine hängt).
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<Guid, byte> _imFlug = new();
 
     private PID? _routerPid;
     private CancellationTokenSource? _pollCts;
@@ -72,9 +79,11 @@ public sealed class ProzessManagerStartupService : IHostedService
         IPollCursorStore pollCursors,
         IProzessOffenIndex offenIndex,
         IEnumerable<Infrastructure.Funktionen.FunktionsBindung> bindungen,
+        IDbClock? uhr = null,
         ILogger<ProzessManagerStartupService>? logger = null)
     {
         _bindungen = bindungen;
+        _uhr = uhr;
         _system = system;
         _store = store;
         _registry = registry;
@@ -133,10 +142,11 @@ public sealed class ProzessManagerStartupService : IHostedService
         }
         var signalTypes = KorrelationsRouter.SignalTypesFor(alleTeilnehmende);
 
-        // Weckung → ProzessWake an (prozess-manager, Korrelation), fire-and-forget.
+        // Signal → ProzessWake an (prozess-manager, Korrelation), fire-and-forget (ein Signal darf verloren gehen, der Poll heilt).
         Func<Guid, Guid, int, string?, CancellationToken, Task> wecke =
             (korr, quellStream, quellVersion, prozessNameFürStart, c) =>
             {
+                _heilplan.Aktiv(korr, DateTimeOffset.UtcNow);
                 var identity = ClusterIdentity.Create(korr.ToString(), ProzessManagerActor.KindName);
                 // ★ Härtung (Multi-Node): fire-and-forget, Send-Fehler beobachtet (nicht still verschluckt).
                 _ = ProzessWakeBeobachtetAsync(
@@ -148,93 +158,111 @@ public sealed class ProzessManagerStartupService : IHostedService
         _routerPid = _system.Root.Spawn(Props.FromProducer(() =>
             new KorrelationsRouterActor(RouterId, signalTypes, router)));
 
-        // Poll-Backstop nach Korrelation: geänderte Streams scannen, relevante Events erneut routen.
+        // Poll nach Korrelation (PF-4, G-8): das Log seitenweise ab der Marke, die geladenen Events direkt routen, bestätigt wecken.
         _pollCts = new CancellationTokenSource();
         var startHwm = await _pollCursors.GetAsync(RouterId, ct);
-        _pollLoop = PollLoopAsync(router, alleTeilnehmende, startHwm, _pollCts.Token);
+        var poll = new ProzessPoll(_store, _offenIndex, auslöserZuProzess, WeckeBestaetigtAsync,
+            (hwm, c) => _pollCursors.SetAsync(RouterId, hwm, c), startHwm);
+        _pollLoop = PollLoopAsync(poll, _pollCts.Token);
 
-        // §3-Backstop: den durablen Offen-Index periodisch scannen und jeden noch offenen Prozess direkt
-        // wecken. Das ist das Liveness-Netz für den einen Fall, den weder Signal-Router noch Poll fangen:
-        // ein Prozess, dessen terminale/kompensierende Selbst-Weckung verloren ging (das auslösende
-        // Ergebnis-Event ist Auslöser keiner Regel → wird nirgends geroutet). Der geweckte Manager faltet
-        // neu und schreibt ProzessBeendet bzw. treibt die Kompensation zu Ende.
+        // §3-Backstop: das Liveness-Netz für das, was weder Signal noch Poll sehen — fällige Fristen (Zeitlimit, Warte-Knoten) und die
+        //   Heil-Weckung eines still gewordenen Vorgangs (verlorene Selbst-Weckung ohne Ziel-Event, Absturz). Der geweckte Manager faltet
+        //   neu und treibt weiter bzw. schreibt ProzessBeendet.
         _backstopLoop = BackstopLoopAsync(_pollCts.Token);
 
         Console.WriteLine();
-        Console.WriteLine($"=== Prozess-Manager (generisch): {_registry.Count} Prozess(e), Router auf {signalTypes.Count} Signal-Typen (+ Poll {PollInterval.TotalSeconds:0}s, ab HWM {startHwm}, + Backstop {BackstopInterval.TotalSeconds:0}s) ===");
+        Console.WriteLine($"=== Prozess-Manager (generisch): {_registry.Count} Prozess(e), Router auf {signalTypes.Count} Signal-Typen (+ Poll {PollInterval.TotalSeconds:0}s, ab HWM {startHwm}, + Backstop: Fristen {FristTakt.TotalSeconds:0}s, Heilung ab {Heilplan.Anfang.TotalSeconds:0}s Stille) ===");
         foreach (var kv in _registry)
             Console.WriteLine($"  ✓ {kv.Key} (Auslöser {kv.Value.AuslöserTyp.Name}, {kv.Value.Regeln.Count} Regeln)");
         Console.WriteLine();
     }
 
-    private async Task PollLoopAsync(
-        KorrelationsRouter router, HashSet<Type> relevanteTypen, long hwm, CancellationToken ct)
+    private async Task PollLoopAsync(ProzessPoll poll, CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
         {
             try { await Task.Delay(PollInterval, ct); }
             catch (OperationCanceledException) { break; }
 
-            try
-            {
-                // ★ P5(a): die offenen Korrelationen EINMAL je Poll-Zyklus laden (billig) → der Filter routet
-                //   zusätzlich das terminale/teilnehmende Ergebnis-Event eines OFFENEN Prozesses per
-                //   CorrelationId (event-getrieben, präzise), statt es allein dem Brute-Force-Backstop zu
-                //   überlassen. Der ProzessOffenIndex-Backstop BLEIBT (Auflage A2): er heilt den fully-stalled
-                //   Prozess OHNE Stream-Änderung, den dieses Poll-Routing strukturell nicht sieht.
-                var offene = new HashSet<Guid>(await _offenIndex.ListeOffeneAsync(ct));
-                var changes = await _store.ReadChangedStreamsAsync(hwm, ct);
-                foreach (var streamId in changes.StreamIds)
-                {
-                    var events = await _store.ReadStreamAsync(streamId, 0, ct);
-                    foreach (var env in events)
-                        if (ProzessPollFilter.SollRouten(env.Payload.GetType(), env.CorrelationId, relevanteTypen, offene))
-                            await router.RouteAsync(streamId, env.AggregateVersion, env.Payload, env.CorrelationId, ct);
-                }
-                hwm = changes.HighWaterMark;
-                await _pollCursors.SetAsync(RouterId, hwm, ct);
-            }
+            try { await poll.DurchlaufAsync(ct); }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
             catch (Exception ex)
             {
                 // Ein Durchlauf, der scheitert, rückt die Hochwassermarke nicht vor — scheitert jeder, startet ein Vorgang mit verlorenem
                 //   Start-Signal nie (so sah G-7 aus). Deshalb laut, nicht nur auf der Konsole.
                 if (_logger is null) Console.WriteLine($"[Prozess-Poll] fehlgeschlagen: {ex.Message}");
-                else _logger.LogWarning(ex, "[Prozess-Poll] Durchlauf ab HWM {Hwm} fehlgeschlagen — die Marke steht", hwm);
+                else _logger.LogWarning(ex, "[Prozess-Poll] Durchlauf ab HWM {Hwm} fehlgeschlagen — die Marke steht", poll.Hochwasser);
             }
         }
     }
 
+    /// <summary>Eine bestätigte Weckung des Polls (G-8): wartet bounded auf das WakeAck; kein Ack = unbestätigt.</summary>
+    private async Task<bool> WeckeBestaetigtAsync(ProzessPollWeckung w, CancellationToken ct)
+    {
+        var identity = ClusterIdentity.Create(w.Korrelation.ToString(), ProzessManagerActor.KindName);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+        cts.CancelAfter(WeckFrist);
+        try
+        {
+            var ack = await _system.Cluster().RequestAsync<WakeAck>(identity, new ProzessWake(w.Stream, w.Version, w.ProzessNameFürStart), cts.Token);
+            if (ack is null) return false;
+            _heilplan.Aktiv(w.Korrelation, DateTimeOffset.UtcNow);
+            return true;
+        }
+        catch (OperationCanceledException) when (!ct.IsCancellationRequested) { return false; }
+    }
+
     /// <summary>
-    /// §3-Backstop: alle offenen Prozesse aus dem durablen Index holen und je Korrelation den Manager wecken.
-    /// Fire-and-forget je Weckung, aber mit BOUNDED Token (kein <c>None</c>-Infinit-Retry, die (A)-Lektion);
-    /// die Weckung ist idempotent (WakeAsync faltet frisch), also ist ein Doppel-/Extra-Wecken folgenlos.
+    /// §3-Backstop (PF-4): jede Sekunde die Vorgänge mit fälliger Frist wecken (Zeitlimit genau auf die Sekunde, durabel über Neustarts),
+    /// alle 15 s den Heil-Plan mit dem Offen-Index abgleichen und die still gewordenen wecken. Je Vorgang höchstens eine Weckung zugleich;
+    /// sie ist idempotent (der Manager faltet frisch).
     /// </summary>
     private async Task BackstopLoopAsync(CancellationToken ct)
     {
+        var naechsterAbgleich = DateTimeOffset.UtcNow + AbgleichTakt;
+        using var drossel = new SemaphoreSlim(BackstopParallel);
         while (!ct.IsCancellationRequested)
         {
-            try { await Task.Delay(BackstopInterval, ct); }
+            try { await Task.Delay(FristTakt, ct); }
             catch (OperationCanceledException) { break; }
 
             try
             {
-                var offene = await _offenIndex.ListeOffeneAsync(ct);
-                foreach (var korr in offene)
-                    _ = WeckeOffenenProzessAsync(korr, ct);
+                var bis = _uhr is null ? DateTimeOffset.UtcNow : await _uhr.JetztAsync(ct);
+                foreach (var korr in await _offenIndex.ListeFaelligeAsync(bis, ct))
+                    _ = WeckeImBackstopAsync(korr, fristFaellig: true, drossel, ct);
+
+                var jetzt = DateTimeOffset.UtcNow;
+                if (jetzt < naechsterAbgleich) continue;
+                naechsterAbgleich = jetzt + AbgleichTakt;
+                _heilplan.Abgleich(await _offenIndex.ListeOffeneAsync(ct), jetzt);
+                foreach (var korr in _heilplan.Faellige(jetzt))
+                    _ = WeckeImBackstopAsync(korr, fristFaellig: false, drossel, ct);
             }
+            catch (OperationCanceledException) when (ct.IsCancellationRequested) { break; }
             catch (Exception ex) { Console.WriteLine($"[Prozess-Backstop] Scan fehlgeschlagen: {ex.Message}"); }
         }
     }
 
-    /// <summary>Eine bounded, fire-and-forget-Weckung eines offenen Prozess-Managers (Terminal/Fortschritt prüfen).</summary>
-    private async Task WeckeOffenenProzessAsync(Guid korrelation, CancellationToken ct)
+    /// <summary>Eine bounded, fire-and-forget-Weckung eines offenen Vorgangs durch den Backstop.</summary>
+    private async Task WeckeImBackstopAsync(Guid korrelation, bool fristFaellig, SemaphoreSlim drossel, CancellationToken ct)
     {
-        var identity = ClusterIdentity.Create(korrelation.ToString(), ProzessManagerActor.KindName);
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
-        cts.CancelAfter(TimeSpan.FromSeconds(10));
-        try { await _system.Cluster().RequestAsync<WakeAck>(identity, new ProzessWake(Guid.Empty, 0, null), cts.Token); }
-        catch (OperationCanceledException) { /* nächster Backstop-Scan wiederholt */ }
+        if (!_imFlug.TryAdd(korrelation, 0)) return;
+        try
+        {
+            await drossel.WaitAsync(ct);
+            try
+            {
+                var identity = ClusterIdentity.Create(korrelation.ToString(), ProzessManagerActor.KindName);
+                using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
+                cts.CancelAfter(WeckFrist);
+                await _system.Cluster().RequestAsync<WakeAck>(identity, new ProzessWake(Guid.Empty, 0, null, fristFaellig), cts.Token);
+            }
+            finally { drossel.Release(); }
+        }
+        catch (OperationCanceledException) { /* der nächste Takt wiederholt */ }
         catch (Exception ex) { Console.WriteLine($"[Prozess-Backstop] Weckung {korrelation} fehlgeschlagen: {ex.Message}"); }
+        finally { _imFlug.TryRemove(korrelation, out _); }
     }
 
     public async Task StopAsync(CancellationToken ct)

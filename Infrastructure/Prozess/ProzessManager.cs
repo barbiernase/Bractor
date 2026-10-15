@@ -63,6 +63,11 @@ public sealed class ProzessManager
     private readonly int _markingSchreibIntervall;
     private bool CursorAktiv => _markingStore is not null;
 
+    // PF-4: die zuletzt in den Offen-Index geschriebene Frist je Korrelation (Drossel, siehe PflegeFristAsync).
+    private readonly Dictionary<Guid, DateTimeOffset?> _frist = new();
+    /// <summary>Wie oft ein offener Warte-Knoten seinen Strom nachliest (über die Frist des Backstops).</summary>
+    public static readonly TimeSpan WarteTakt = TimeSpan.FromSeconds(15);
+
     public ProzessManager(
         IEventStoreRepository store,
         IReadOnlyDictionary<string, ProzessRegeln> registry,
@@ -103,15 +108,32 @@ public sealed class ProzessManager
         await WakeAsync(korrelation, ct);
     }
 
-    /// <summary>Ein Treib-Schritt: Marking falten → aktivierte Transition feuern ODER kompensieren ODER terminal setzen.</summary>
-    public async Task WakeAsync(Guid korrelation, CancellationToken ct = default)
+    /// <summary>
+    /// Ein Treib-Schritt: Marking falten → aktivierte Transition feuern ODER kompensieren ODER terminal setzen.
+    /// <paramref name="fristFaellig"/>: der Backstop weckt wegen der abgelaufenen Frist (<see cref="PflegeFristAsync"/>).
+    /// </summary>
+    public async Task WakeAsync(Guid korrelation, CancellationToken ct = default, bool fristFaellig = false)
     {
         var mz = await LadeStatusAsync(korrelation, ct);
-        if (!mz.Gestartet || mz.Beendet) return;
+        if (!mz.Gestartet || mz.Beendet || !_registry.TryGetValue(mz.ProzessName, out var regeln))
+        {
+            // Eine fällige Frist zu einem Vorgang, der nichts mehr tut (beendet, das Löschen aus dem Index ging verloren; oder sein Prozess
+            //   ist aus dem Code verschwunden): den Eintrag jetzt aufräumen — sonst weckte ihn der Backstop jede Sekunde.
+            if (fristFaellig && _offenIndex is not null)
+            {
+                try
+                {
+                    if (mz.Gestartet && !mz.Beendet) await _offenIndex.SetzeFristAsync(korrelation, null, ct);
+                    else await _offenIndex.MarkiereBeendetAsync(korrelation, ct);
+                }
+                catch (Exception ex) { Console.WriteLine($"[Prozess-Frist] Aufräumen fehlgeschlagen ({korrelation}): {ex.Message}"); }
+            }
+            return;
+        }
         _akteurVon[korrelation] = mz.Akteur;
-        if (!_registry.TryGetValue(mz.ProzessName, out var regeln)) return;
 
         var kandidaten = await FaltMarkingMitCursorAsync(korrelation, mz, regeln, ct);
+        await PflegeFristAsync(korrelation, mz, kandidaten, fristFaellig, ct);
 
         // ── Treiber-Fold (EM-1, §4/§7.3): einen im Fold gesehenen Fehlschlag DURABEL machen. Eine
         //   KommandoAbgelehnt-Marke auf dem Ziel-Stream (AbgelehntDa) wird zu SchrittGescheitert im Manager-Log —
@@ -151,8 +173,9 @@ public sealed class ProzessManager
                         umleiten ? new SchrittUmgeleitet(k.Vorgang, art, grundA) : new SchrittGescheitert(k.Vorgang, grundA), ct);
                 v++;
             }
-            // Frisch falten: mz.Gescheitert (bzw. die Umleitung) trägt den Fehlschlag jetzt.
-            await WakeAsync(korrelation, ct);
+            // Frisch falten: mz.Gescheitert (bzw. die Umleitung) trägt den Fehlschlag jetzt. Die Frist danach immer schreiben — die eben
+            //   abgelaufene darf nicht stehen bleiben.
+            await WakeAsync(korrelation, ct, fristFaellig: true);
             return;
         }
 
@@ -210,6 +233,38 @@ public sealed class ProzessManager
         // Nichts mehr auszugleichen (alle Gegenzüge sauber erledigt) → fehlgeschlagen terminal.
         var grund = mz.Gescheitert.Values.FirstOrDefault() ?? "abgelehnt";
         await AppendAsync(korrelation, mz.Version, new ProzessBeendet(false, grund), ct);
+    }
+
+    /// <summary>
+    /// PF-4: die Frist im Offen-Index — bis wann der Backstop diesen Vorgang wecken muss, auch wenn kein Event kommt: das früheste
+    /// Zeitlimit eines offenen Aufrufs bzw. Warte-Knotens, und für einen offenen Warte-Knoten spätestens <see cref="WarteTakt"/> (er liest
+    /// seinen Strom nur bei einer Weckung). Geschrieben wird nur, wenn die Frist früher liegt als die zuletzt geschriebene (oder die erste
+    /// ist) — eine spätere bleibt liegen, die frühere weckt dann einmal umsonst und schreibt die richtige. Weckt der Backstop wegen der Frist
+    /// (<paramref name="fristFaellig"/>), wird immer geschrieben, auch <c>null</c>: so bleibt keine abgelaufene Frist stehen. Ein Zeitlimit
+    /// kostet so einen Write, nicht einen je Schritt. Best-effort wie der Index.
+    /// </summary>
+    private async Task PflegeFristAsync(
+        Guid korrelation, ManagerStatus mz, List<Kandidat> kandidaten, bool fristFaellig, CancellationToken ct)
+    {
+        if (_offenIndex is null) return;
+        var offen = mz.Gescheitert.Count == 0 ? kandidaten.Where(k => !k.ErgebnisDa && k.Bereit != default).ToList() : new List<Kandidat>();
+        DateTimeOffset? frist = null;
+        foreach (var k in offen.Where(k => k.Regel.Zeitlimit is not null))
+            frist = Früher(frist, k.Bereit + k.Regel.Zeitlimit!.Value);
+        if (offen.Any(k => k.Regel.WartetAuf.Count > 0))
+            frist = Früher(frist, (_jetzt is null ? DateTimeOffset.UtcNow : await _jetzt(ct)) + WarteTakt);
+
+        var bekannt = _frist.TryGetValue(korrelation, out var alt);
+        var schreiben = fristFaellig || (frist is not null && (!bekannt || alt is null || frist < alt));
+        if (!schreiben) return;
+        try
+        {
+            await _offenIndex.SetzeFristAsync(korrelation, frist, ct);
+            _frist[korrelation] = frist;
+        }
+        catch (Exception ex) { Console.WriteLine($"[Prozess-Frist] Schreiben fehlgeschlagen ({korrelation}): {ex.Message}"); }
+
+        static DateTimeOffset? Früher(DateTimeOffset? a, DateTimeOffset b) => a is null || b < a ? b : a;
     }
 
     /// <summary>

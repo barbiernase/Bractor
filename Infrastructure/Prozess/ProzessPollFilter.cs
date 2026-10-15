@@ -1,33 +1,35 @@
 using System;
 using System.Collections.Generic;
+using Abstractions;
 
 namespace Infrastructure.Prozess;
 
+/// <summary>Eine Weckung aus dem Prozess-Poll: der Manager der Korrelation, beim Start mit dem Prozess-Namen (wie <see cref="ProzessWake"/>).</summary>
+public sealed record ProzessPollWeckung(Guid Korrelation, Guid Stream, int Version, string? ProzessNameFürStart);
+
 /// <summary>
-/// P5(a) — die Entscheidung des Prozess-Poll-Backstops, ob ein geändertes Stream-Event an den
-/// Korrelations-Router geht. Reine Funktion → Ebene-1-beweisbar.
+/// Die Entscheidung des Prozess-Polls (PF-4), welches Event welchen Manager weckt. Reine Funktion → Ebene-1-beweisbar.
 ///
-/// Früher: NUR teilnehmende Event-Typen (Typ-Filter). Das terminale Ergebnis-Event der letzten Transition
-/// ist aber Auslöser KEINER Regel und daher KEIN teilnehmender Typ → es fiel durch den Filter → der Poll
-/// konnte den Terminal-/Fan-out-Fall nicht heilen (Befund 2). Bislang fing das nur der Brute-Force-
-/// <c>ProzessOffenIndex</c>-Backstop (weckt periodisch ALLE offenen Prozesse).
-///
-/// Jetzt ADDITIV: route ein Event auch dann, wenn seine <c>CorrelationId</c> zu einem OFFENEN Prozess
-/// gehört (der Manager stempelt beim Feuern die Prozess-Korrelation ins Ziel-Event-Metadatum). Damit wird
-/// die Terminal-Erkennung <b>event-getrieben und präzise</b> — nur Prozesse mit tatsächlich geändertem
-/// Stream werden geweckt, statt periodisch alle. Der <c>ProzessOffenIndex</c>-Backstop <b>bleibt</b> als
-/// Sicherheitsnetz für den fully-stalled Prozess OHNE Stream-Änderung (Auflage A2).
-///
-/// Kein Über-Wecken: ein fremdes Event (Client-Korrelation, nicht in <paramref name="offene"/>) wird NICHT
-/// geroutet.
+/// Ein Event eines Auslöser-Typs startet seinen Vorgang (Korrelation deterministisch aus Prozess, Stream, Version) — aber nur, wenn es den
+/// Vorgang noch nicht gibt oder er offen ist: ein beendeter braucht keine Weckung (nach einem Neustart ab 0 sonst eine Weckung je Vorgang
+/// der Historie). Jedes andere Event weckt nur, wenn seine <c>CorrelationId</c> zu einem OFFENEN Vorgang gehört — der Manager stempelt sie
+/// beim Feuern in die Ziel-Events, so auch in das terminale Ergebnis, das Auslöser keiner Regel ist (Befund 2). Ein fremdes Event
+/// (Client-Korrelation, beendeter Vorgang) weckt niemanden. Was der Poll so übersieht (ein Vorgang, der während der Seite erst offen wurde),
+/// heilt der Backstop.
 /// </summary>
 public static class ProzessPollFilter
 {
-    public static bool SollRouten(
-        Type eventTyp,
-        string correlationId,
-        IReadOnlySet<Type> teilnehmend,
-        IReadOnlySet<Guid> offene)
-        => teilnehmend.Contains(eventTyp)
-           || (Guid.TryParse(correlationId, out var korr) && offene.Contains(korr));
+    public static ProzessPollWeckung? Weckung(
+        EventEnvelope env, IReadOnlyDictionary<Type, string> auslöserZuProzess, IReadOnlySet<Guid> offene)
+    {
+        if (auslöserZuProzess.TryGetValue(env.Payload.GetType(), out var prozess))
+            return new ProzessPollWeckung(ProzessId.Für(prozess, env.AggregateId, env.AggregateVersion), env.AggregateId, env.AggregateVersion, prozess);
+        return Guid.TryParse(env.CorrelationId, out var korr) && offene.Contains(korr)
+            ? new ProzessPollWeckung(korr, env.AggregateId, env.AggregateVersion, null)
+            : null;
+    }
+
+    /// <summary>Ein Start weckt, wenn der Vorgang offen ist oder es seinen Stream noch nicht gibt.</summary>
+    public static bool StartNoetig(Guid korrelation, IReadOnlySet<Guid> offene, IReadOnlySet<Guid> vorhanden)
+        => offene.Contains(korrelation) || !vorhanden.Contains(korrelation);
 }

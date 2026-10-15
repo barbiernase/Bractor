@@ -24,6 +24,17 @@ public interface IProzessOffenIndex
 
     /// <summary>Alle aktuell offenen Korrelationen — die Arbeitsliste des Backstop-Scans (O(offen)).</summary>
     Task<IReadOnlyList<Guid>> ListeOffeneAsync(CancellationToken ct);
+
+    /// <summary>
+    /// Die Frist eines offenen Prozesses: bis wann ihn der Backstop wecken muss, auch wenn kein Event kommt (ein Zeitlimit läuft ab, ein
+    /// Warte-Knoten liest seinen Strom nach). <c>null</c> = keine. Gleicher Status wie der Index: ein verlorener Eintrag kostet höchstens
+    /// die Genauigkeit des Zeitlimits bis zur nächsten Heil-Weckung, nie Korrektheit. Ohne Ablage (Prüfstand) folgenlos.
+    /// </summary>
+    Task SetzeFristAsync(Guid korrelation, DateTimeOffset? frist, CancellationToken ct) => Task.CompletedTask;
+
+    /// <summary>Die offenen Korrelationen, deren Frist bis <paramref name="bis"/> (DB-Zeit) fällig ist.</summary>
+    Task<IReadOnlyList<Guid>> ListeFaelligeAsync(DateTimeOffset bis, CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<Guid>>(Array.Empty<Guid>());
 }
 
 /// <summary>
@@ -35,4 +46,6 @@ public class ProzessOffen
     public Guid Id { get; set; }
     public string ProzessName { get; set; } = default!;
     public DateTimeOffset SeitUtc { get; set; }
+    /// <summary>Bis wann der Backstop den Prozess wecken muss (<see cref="IProzessOffenIndex.SetzeFristAsync"/>); null = keine.</summary>
+    public DateTimeOffset? Frist { get; set; }
 }

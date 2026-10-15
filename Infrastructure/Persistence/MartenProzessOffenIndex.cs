@@ -1,5 +1,6 @@
 using Abstractions;
 using Marten;
+using Marten.Patching;
 
 namespace Infrastructure.Persistence;
 
@@ -44,5 +45,19 @@ public sealed class MartenProzessOffenIndex : IProzessOffenIndex
     {
         await using var session = _store.QuerySession();
         return await session.Query<ProzessOffen>().Select(x => x.Id).ToListAsync(ct);
+    }
+
+    /// <summary>Patch statt Store: ein inzwischen beendeter (gelöschter) Eintrag entsteht nicht neu.</summary>
+    public async Task SetzeFristAsync(Guid korrelation, DateTimeOffset? frist, CancellationToken ct)
+    {
+        await using var session = _store.LightweightSession();
+        session.Patch<ProzessOffen>(korrelation).Set(x => x.Frist, frist);
+        await session.SaveChangesAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<Guid>> ListeFaelligeAsync(DateTimeOffset bis, CancellationToken ct)
+    {
+        await using var session = _store.QuerySession();
+        return await session.Query<ProzessOffen>().Where(x => x.Frist != null && x.Frist <= bis).Select(x => x.Id).ToListAsync(ct);
     }
 }

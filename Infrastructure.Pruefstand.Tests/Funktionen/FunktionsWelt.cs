@@ -126,6 +126,25 @@ internal sealed class MarkingImSpeicher : IProzessMarkingStore
 /// Die Funktionen sind Fakes (Delegaten je Auftrag); das Ziel-Aggregat beantwortet Commands wie der emittierte Pfad des
 /// AggregateActorBase (Event + KommandoVerarbeitet mit CausationId = Vorgang, oder die Ablehnungs-Marke).
 /// </summary>
+/// <summary>Offen-Index im Speicher: zählt die geschriebenen Fristen (PF-4).</summary>
+internal sealed class OffenIndexImSpeicher : IProzessOffenIndex
+{
+    public ConcurrentDictionary<Guid, DateTimeOffset?> Offen { get; } = new();
+    public List<(Guid Korrelation, DateTimeOffset? Frist)> Fristen { get; } = new();
+
+    public Task MarkiereOffenAsync(Guid k, string name, CancellationToken ct) { Offen[k] = null; return Task.CompletedTask; }
+    public Task MarkiereBeendetAsync(Guid k, CancellationToken ct) { Offen.TryRemove(k, out _); return Task.CompletedTask; }
+    public Task<IReadOnlyList<Guid>> ListeOffeneAsync(CancellationToken ct) => Task.FromResult<IReadOnlyList<Guid>>(Offen.Keys.ToList());
+    public Task SetzeFristAsync(Guid k, DateTimeOffset? frist, CancellationToken ct)
+    {
+        lock (Fristen) Fristen.Add((k, frist));
+        if (Offen.ContainsKey(k)) Offen[k] = frist;
+        return Task.CompletedTask;
+    }
+    public Task<IReadOnlyList<Guid>> ListeFaelligeAsync(DateTimeOffset bis, CancellationToken ct)
+        => Task.FromResult<IReadOnlyList<Guid>>(Offen.Where(kv => kv.Value is { } f && f <= bis).Select(kv => kv.Key).ToList());
+}
+
 internal sealed class FunktionsWelt
 {
     public LogImSpeicher Log { get; } = new();
@@ -144,7 +163,8 @@ internal sealed class FunktionsWelt
     private readonly Guid _auslöserStream = Guid.NewGuid();
 
     public FunktionsWelt(int wiederholungen = 0, bool mitCursor = false, TimeSpan? limit = null, bool mitKompensation = false,
-        Func<Func<Guid, IAuftrag, Guid, string?, CancellationToken, Task>, Func<Guid, IAuftrag, Guid, string?, CancellationToken, Task>>? umRufe = null)
+        Func<Func<Guid, IAuftrag, Guid, string?, CancellationToken, Task>, Func<Guid, IAuftrag, Guid, string?, CancellationToken, Task>>? umRufe = null,
+        IProzessOffenIndex? offenIndex = null)
     {
         var bindungen = new Dictionary<Type, FunktionsBindung>
         {
@@ -176,7 +196,7 @@ internal sealed class FunktionsWelt
                 [nameof(BildAufbereitung)] = new BildAufbereitung(limit, mitKompensation).Regeln.Benannt(nameof(BildAufbereitung),
                     "BildEingegangen→IVorverarbeitung", "BildEingegangen→IMetadaten", "Vorverarbeitet+MetaGelesen→MeldeFertig", "Unlesbar→MeldeUnbrauchbar"),
             },
-            DispatchAsync, markingStore: mitCursor ? new MarkingImSpeicher() : null, markingSchreibIntervall: 1,
+            DispatchAsync, offenIndex: offenIndex, markingStore: mitCursor ? new MarkingImSpeicher() : null, markingSchreibIntervall: 1,
             rufe: rufe, jetzt: _ => Task.FromResult(Log.Jetzt));
     }
 
