@@ -144,9 +144,13 @@ public static class CqrsServiceExtensions
             //   Store-weite, gefahrlose Grenze für einen DB-Stall im Actor-Turn (keine per-Call-Write-Abbrüche →
             //   kein mehrdeutiger-Commit-Hazard). Aufrufer-Seite zusätzlich über #1 (Dispatcher-Dead-Letter) gedeckt.
             //   Über den Npgsql-Connection-String gesetzt (version-unabhängig) — CommandTimeout in Sekunden.
+            // Kein DISCARD ALL bei der Rückgabe einer Verbindung an den Pool: es war ein Drittel aller Anweisungen und verwarf jedes Mal die
+            //   vorbereiteten Pläne. Gefahrlos, weil nichts im System Sitzungszustand setzt (keine SET-, LISTEN- oder Sitzungs-Locks, die
+            //   offen bleiben; Martens Migrations-Lock gibt sich selbst frei).
             var eventStoreConn = new Npgsql.NpgsqlConnectionStringBuilder(builder.EventStoreConnectionString)
             {
-                CommandTimeout = builder.CommandTimeoutSeconds
+                CommandTimeout = builder.CommandTimeoutSeconds,
+                NoResetOnClose = true,
             };
             options.Connection(eventStoreConn.ConnectionString);
             options.Events.DatabaseSchemaName = builder.EventStoreSchema;
