@@ -58,7 +58,7 @@ entworfen, als Code erzeugt, gebaut, im echten Host durchgespielt und über die 
 | [konzept-editor-pipelines.md](konzept-editor-pipelines.md) | Pipeline als Fluss (§12–§14) | Detail-Referenz Fluss, umgesetzt |
 | [konzept-llm-minimalkontext.md](konzept-llm-minimalkontext.md) | LLM-Füllung von Rümpfen, Kontext nur aus Code und Graph | Detail-Referenz |
 | [konzept-editor-komposition.md](konzept-editor-komposition.md) | Editor als Kompositions-Sprache (Grammatik, Kapselung, Muster) | Sprache, Detail-Referenz |
-| [plan-garantien-und-durchsatz.md](plan-garantien-und-durchsatz.md) | Garantie-Lücken (G) und Durchsatz (PF) in Phasen: Lastprüfstand, Emittenten-Cursor, Passivierung, Batch-Konsum, Inbox-Tabelle | **Plan**, wird nach Umsetzung gelöscht |
+| [plan-garantien-und-durchsatz.md](plan-garantien-und-durchsatz.md) | Garantie-Lücken (G) und Durchsatz (PF) in Phasen, gemessen Ende-zu-Ende an den realen Domänen: Emittenten-Cursor, Passivierung, Batch-Konsum, Inbox-Tabelle | **Plan**, wird nach Umsetzung gelöscht |
 
 Die Beispieldomäne im Repo ist Prüfling, nicht Architektur (konzept-werkbank W11); sie hat keine eigenen Dokumente.
 Frühere Konzepte, Pläne und Archive sind gelöscht; ihre Historie liegt im Git-Verlauf.
