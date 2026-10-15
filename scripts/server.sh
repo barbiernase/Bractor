@@ -52,7 +52,7 @@ ergebnisse_holen() {
   mkdir -p "$WURZEL/vermessung/ergebnisse"
   local neu
   neu=$(rsync -a --ignore-existing --out-format='%n' -e "ssh ${SSH_OPT[*]}" "$ZIEL:$LAEUFE/ergebnisse/" "$WURZEL/vermessung/ergebnisse/" \
-    | grep -E '^[^/]+/$' || true)
+    | grep -v '/$' | cut -d/ -f1 | sort -u || true)
   [ -n "$neu" ] && echo "Ergebnisse geholt: $(echo "$neu" | tr '\n' ' ')"
   return 0
 }
@@ -87,7 +87,7 @@ case "${1:-}" in
     frei_pruefen; commit_pruefen; auschecken
     ID="$(date +%Y%m%d-%H%M%S)-${SHA:0:7}"
     BEFEHL="$(printf '%q ' "$@")"
-    # Das Lauf-Skript: Befehl ausführen, neue Ergebnis-Ordner ins Archiv kopieren (der nächste Lauf säubert den Checkout), Exit-Code ablegen.
+    # Das Lauf-Skript: Befehl ausführen, neue (nicht committete) Ergebnis-Ordner ins Archiv kopieren (der nächste Lauf säubert den Checkout), Exit-Code ablegen.
     fern "mkdir -p $LAEUFE/ergebnisse && cat > $LAEUFE/$ID.sh && echo $ID > $LAEUFE/letzter" <<EOF
 #!/usr/bin/env bash
 set +e
@@ -97,7 +97,7 @@ cd $CO && . /etc/profile.d/bractor.sh
   echo "\$ $BEFEHL"
   $BEFEHL
   rc=\$?
-  [ -d vermessung/ergebnisse ] && cp -rn vermessung/ergebnisse/. $LAEUFE/ergebnisse/
+  for d in \$(git ls-files --others --exclude-standard vermessung/ergebnisse | cut -d/ -f3 | sort -u); do cp -r vermessung/ergebnisse/\$d $LAEUFE/ergebnisse/; done
   echo "== \$(date -Is) · Exit \$rc"
 } > $LAEUFE/$ID.log 2>&1
 echo \$rc > $LAEUFE/$ID.exit
