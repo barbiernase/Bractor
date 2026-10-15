@@ -104,19 +104,7 @@ dotnet publish Host.Grpc/Host.Grpc.csproj \
     --self-contained \
     -o "$OUTPUT/grpc"
 
-# OpenCvSharp: native Library manuell kopieren.
-# dotnet publish erkennt ubuntu-spezifische RIDs nicht als kompatibel
-# mit linux-x64 und lässt die .so liegen.
-if [[ "$TARGET" == "linux" ]]; then
-    echo "  Suche OpenCvSharp native library..."
-    OPENCV_SO=$(find ~/.nuget/packages -path "*ubuntu*" -name "libOpenCvSharpExtern.so" 2>/dev/null | head -1)
-    if [[ -n "$OPENCV_SO" ]]; then
-        cp "$OPENCV_SO" "$OUTPUT/grpc/"
-        echo "  ✓ libOpenCvSharpExtern.so kopiert"
-    else
-        echo "  ⚠ libOpenCvSharpExtern.so nicht gefunden! OpenCvSharp wird auf dem Server nicht funktionieren."
-    fi
-fi
+# OpenCvSharp: die Linux-Runtime (OpenCvSharp4.official.runtime.linux-x64) legt publish selbst ab (Domain.Pipeline.csproj).
 
 echo "  ✓ Host.Grpc"
 
