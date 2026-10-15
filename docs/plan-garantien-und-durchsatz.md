@@ -116,6 +116,10 @@ die Inbox-Tabelle (4) nach dem Batch-Konsum kommen.
 | E5 | Abnahme-Zielwerte je Szenario | **entschieden** (Tobi, 2026-10-15): die Werte aus §8 (Phase 3: Durchsatz S1/S5 ≥ 3 ×, Queries je Vorgang ≤ ⅓) | nach Phase 0 |
 | E6 | Handle-/Trigger-Welt (W11-1) in Phase 1 zurückbauen oder nur anpassen? | nur minimal anpassen; der Rückbau bleibt W11-1 | Phase 1 |
 | E7 | Leerlaufzeit der Passivierung | Aggregat 10 min, Adapter 2 min, Prozess-Manager 10 min; Umgebung | Phase 2 |
+| E8 | Reaktionen (Emittenten) im Batch-Leser? | nein, sie bleiben je Stream ([04 §4.10.3](04-konsum-und-prozess-maschine.md)) | Phase 3 |
+| E9 | E5-Ziel S5 in Phase 3? | nein: S5 hat keine Projektion, seine Decke ist der Dirigent (PF-4) — S5-Ziel nach Phase 5; Phase 3: S1 ≥ 3 ×, S5 ohne Regression | Phase 3 |
+| E10 | Partitions-Funktion | letztes UUID-Byte mod P (SQL und .NET gleich) | Phase 3 |
+| E11 | Batch-Größe | 500 Events, Umgebung `Konsum.BatchGroesse` | Phase 3 |
 
 ## 3 · Phasen im Detail
 
@@ -167,7 +171,8 @@ unter dem Höchststand (Passivierung).
 
 ### Phase 3 · Batch-Konsum (15–25 PT)
 
-1. **Entwurf (2–3 PT), festgehalten in docs/04:** ein Batch-Leser je (Projektion, Partition) liest den globalen Sequenzbereich seitenweise
+1. **Entwurf (2–3 PT), festgehalten in docs/04** — steht in [04 §4.10](04-konsum-und-prozess-maschine.md) (2026-10-15, wartet auf
+   Tobis Freigabe, offene Entscheidungen E4, E8–E11 dort): ein Batch-Leser je (Projektion, Partition) liest den globalen Sequenzbereich seitenweise
    (z. B. 500), gruppiert je Stream, wendet je Stream in Versionsreihenfolge an und committet Effekte und Checkpoints **aller** Streams des
    Batches in einer Transaktion. Zu klären und festzuhalten: Checkpoint je Partition (globale Position) und je Stream (Guard), Rolle des Signals
    (weckt die Partition), Konflikt bei geteilten Dokumenten (Batch verwerfen, halbieren, einzeln wiederholen), Rebuild als Strom, Lease je

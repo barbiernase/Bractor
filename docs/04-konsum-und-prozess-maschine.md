@@ -344,3 +344,106 @@ Offene Punkte stehen nur in [13](13-reifegrad-schulden-bewertung.md): Testlücke
 Handle-Pipeline/Trigger-Welt und doppelte DSL W11-1, Zeitlimits über den Backstop W11-2, Garantie-Lücken G-2 (Inbox-Fenster), G-4 (Checkpoint), Marking/Kompensation/
 `KlärungNötig` P2-5, hartkodierte Intervalle P2-8, reflektive Serialisierung (Marking-Store, Snapshot-Kopie) W10-2, Projektlage W2-1,
 toter `MartenProjectionTracker` P3-2.
+
+## 4.10 Entwurf: Batch-Konsum der Projektionen (Phase 3, noch nicht umgesetzt)
+
+> **Entwurf** für Phase 3 des Plans Garantien und Durchsatz (Haltepunkt (b): erst nach Tobis Freigabe bauen). Er ersetzt für **replaybare
+> Projektionen** den Adapter je (Projektion, Stream) und den Heil-Poll je Stream (PF-1, PF-2) und schließt G-4. Handle-Signaturen und Fachcode
+> bleiben unverändert (Inv. 5); neue Dispatch-Logik nur im Generator. Nach dem Bau wird dieser Abschnitt in §4.1–§4.3 eingearbeitet.
+
+### 4.10.1 Warum, gemessen
+
+Phase 2 (`vermessung/ergebnisse/2026-10-15_0745_4caa176_phase-2`, `pg_stat_statements.csv`):
+- **S1** (5 replaybare Projektionen): je Weckung (Projektion, Stream) drei Sessions — Marke lesen, Tail lesen, Commit. Im Block 18 000
+  Transaktionen, 114 000 Session-Öffnungen (`DISCARD ALL`), 36 000 Stream-Reads, 6 250 Checkpoint-Reads, 5 000 Checkpoint-Upserts für 600 Paare.
+  Dazu weckt der Heil-Poll jeden geänderten Stream für jede Projektion, auch fremde (L1: 24 000 Erstweckungen, PF-2).
+- **S5** (Prüfdomäne): **keine** replaybare Projektion. Die 79 000 Stream-Reads je Block kommen vom Dirigenten (Folds, Prozess-Poll ab 0,
+  Rehydration; PF-4). Batch-Konsum hebt S5 kaum — siehe E9.
+- Postgres-Grundgröße (§12.5): ein Batch von 500 Effekten + Checkpoints in einer Transaktion ≈ 20 × so viele Effekte/s wie eine Weckung je Stream.
+
+### 4.10.2 Bausteine
+
+**Partition.** Jede replaybare Projektion hat `P` Partitionen (E4: 8, Umgebung `Konsum.Partitionen`). Ein Stream gehört genau einer:
+`partition = letztes Byte der UUID (RFC-Reihenfolge) mod P` — in SQL `get_byte(uuid_send(stream_id), 15) % P`, in .NET
+`id.ToByteArray(bigEndian: true)[15] % P`. Beide Seiten rechnen dasselbe, ohne Index und ohne Hash-Abhängigkeit von Laufzeit oder PG-Version;
+für zufällige und abgeleitete (gehashte) Ids gleichverteilt. `P` ≤ 256; ein Wechsel von `P` ist ein Neuaufbau.
+
+**Partitions-Leser** (`BatchLeser`, virtueller Cluster-Actor, Kind `batch-<Projektion>`, Identität = Partition). Single-Activation im Cluster;
+zusätzlich Fencing über die Version des Partitions-Checkpoints (G-4, unten). Ein Durchlauf:
+1. **Stand laden:** `PartitionsCheckpoint { Id = "<projektion>:<p>", Position (globale Sequenz), Version (OCC), Geparkt (Stream → Version) }`.
+2. **Seite lesen:** Events mit `seq_id > Position`, Partition `p`, **Typ ∈ abonnierte Typen der Projektion**, `order by seq_id limit N`
+   (N = `Konsum.BatchGroesse`, Vorschlag 500). Der Typfilter nimmt die Marten-Diskriminatoren der `SubscribedTypes` **und aller früheren
+   Versionen, die per Upcasting in sie münden** (aus der generierten Upcasting-Tabelle); ohne verlässliche Liste: ohne Typfilter lesen (richtig,
+   nur langsamer). Neues Leseprimitiv `IEventStoreRepository.ReadPartitionAsync(nach, p, P, typen, limit)` — Marten-LINQ mit `MatchesSql` für den
+   Partitionsfilter, Materialisierung wie `ReadStreamAsync` (Upcasting, Tombstones überspringen).
+3. **Guard je Stream:** die `ProjectionCheckpoint`s der Streams der Seite in **einer** Abfrage laden (`id = any(@ids)`); Events mit
+   `AggregateVersion <= Guard` überspringen (Nachzügler-Wiederholung, Übergang aus dem alten Pfad).
+4. **Anwenden:** je Stream in Versionsreihenfolge, über den generierten `DispatchAsync` (unverändert). Der Store puffert Effekte vieler Streams;
+   vor jedem Event setzt der Leser den Stream des Events (`Stream(streamId)`), die Schreib-Regel je Dokument (§4.3) prüft weiter gegen diesen.
+5. **Commit (eine Transaktion):** alle Effekte, die Guards aller berührten Streams (Bulk-Upsert) und der Partitions-Checkpoint mit erwarteter
+   Version. Konflikt am Partitions-Checkpoint ⇒ ein zweiter Leser oder ein Neuaufbau war schneller ⇒ Batch verwerfen, Stand neu laden (G-4).
+6. **Danach:** Versions-Index (Redis) für alle Events des Batches best-effort (Pipeline), wie heute erst nach dem Commit.
+7. **Weiter**, solange die Seite voll war; sonst ruhen bis zum nächsten Signal oder Poll.
+
+**Position und Nachzügler.** Die Position rückt nur bis zur höchsten Sequenz vor, deren Event älter als die Karenz ist (DB-Uhr, 3 s — dieselbe
+Regel wie heute im `Poller`). Jüngere Events werden trotzdem angewandt (Latenz), der nächste Durchlauf liest sie erneut, der Guard überspringt
+sie. So überholt die Position keine noch unsichtbare kleinere Sequenz.
+
+**Weckung.** Das Signal weckt die Partition des Streams (`Wake` an `batch-<Projektion>/<p>`), coalesced: läuft ein Durchlauf, merkt sich der Leser
+„noch einmal“. Der Poll weckt alle 30 s jede Partition (Backstop für verlorene Signale) — kein Heil-Poll je Stream mehr (PF-2 erledigt).
+
+**Neuaufbau.** Partitions-Checkpoints und Guards einer Projektion löschen; die Leser lesen ab 0 seitenweise (Strom statt Liste,
+`ProjectionRebuilder` und `ProjektionsStandDienst` setzen die Partitions-Checkpoints zurück).
+
+**Rückstand.** `/health` und `/monitoring/metrics` melden je Projektion die Summe über die Partitionen: relevante Events jenseits der Position, und
+die geparkten Streams.
+
+### 4.10.3 Die drei Risiken und ihre Lösung
+
+1. **Poison-Event darf keine Partition anhalten.** Wirft der Dispatch: Batch verwerfen, **halbieren** (nach Streams) und die Hälften einzeln
+   versuchen, bis der schuldige Stream allein steht. Dieser wird **geparkt** (`Geparkt[stream] = Version vor dem Event`, im selben Commit wie der
+   Rest); seine weiteren Events überspringt der Leser. Ein geparkter Stream wird bei jedem Poll einzeln versucht und fällt aus `Geparkt`, sobald er
+   durchläuft. Garantie wie heute: nichts geht verloren, andere Streams laufen weiter; neu: der Stand ist sichtbar (`/health`, Dead-Letter einmal je
+   Parken).
+2. **Konflikt an geteilten Dokumenten** (`SchreibKonfliktException`): wie Poison halbieren; ein einzelner Stream wird bis zu 5-mal gestreut
+   wiederholt (heutige Regel), dann bleibt er für den nächsten Durchlauf stehen (nicht geparkt — ein Konflikt ist vorübergehend). Innerhalb eines
+   Batches sehen sich zwei Streams auf demselben geteilten Dokument über die Identity-Map (read-your-writes) — kein Konflikt.
+3. **Emittenten (Reaktionen) bleiben auf dem Pfad je Stream** (E8): ihr Effekt ist ein Command, ihr Cursor rückt je Stream nach bestätigtem Emit
+   vor (Phase 1). Ein Cursor je Partition ließe einen unbekannten Emit die ganze Partition halten. Gemessen ist ihr Anteil klein (S5-8: 3 600
+   Cursor-Operationen gegen 79 000 Stream-Reads). Der Batch-Leser gilt nur für Konsumenten mit `IProjectionTracker`.
+
+### 4.10.4 Garantien (docs/11) und ihr Nachweis
+
+| Garantie | trägt im Batch-Konsum | Nachweis (neu bzw. umgebaut) |
+|---|---|---|
+| Wirkung genau einmal je Event (§11.5) | Effekte + Guards + Partitions-Checkpoint in einer Transaktion | I `CoCommitPostgresTests`: Absturz mitten im Batch (nach Effekten, vor Commit) → nichts gültig, Wiederholung genau einmal |
+| zwei Aktivierungen (G-4) | Partitions-Checkpoint mit erwarteter Version | I `GarantiePostgresTests.Zwei_Aktivierungen…` ohne Skip (auf den Batch-Leser umgestellt) |
+| Ordnung je Stream (§11.4) | ein Stream in genau einer Partition, Versionsreihenfolge, Guard | P: doppelte/ungeordnete Seiten, Nachzügler hinter der Karenz → Reihenfolge 1…n genau einmal |
+| Vollständigkeit (§11.5) | Position mit Karenz, Signal + Poll je Partition | I `PollerBackstopPostgresTests` (verlorenes Signal), `SequenceGapPostgresTests` (Nachzügler) auf den Batch-Leser |
+| Poison hält niemanden auf | Halbieren + Parken | I: ein Stream wirft dauerhaft → Rest der Partition committet, Stream geparkt, nach Heilung nachgeholt |
+| geteilte Dokumente (§11.5) | Versionsprüfung, Halbieren | I `SchreibRegelPostgresTests`, `GeteilteDokumentePostgresTests` gegen zwei Partitions-Leser |
+| Neuaufbau (§11.5) | Reset der Partitions-Checkpoints + Guards, Strom | P/I `ProjectionRebuilderTests` |
+| Read-your-writes (best-effort) | Index nach dem Commit | E2E Störungslauf |
+| Exactly-once Ende zu Ende | — | E2E Höchstlast und Störungslauf |
+
+### 4.10.5 Umbau (Reihenfolge)
+
+1. Abstractions: `PartitionsCheckpoint`; `IProjectionTracker` wird zur Batch-Naht (`BeginneBatch(projektion, partition)`, `Stream(id)`,
+   `CommitAsync(position, guards, erwarteteVersion)`), `ICoCommitTracker` bleibt der Typ-Schnitt für GA-1 — je Absicht ein Weg, kein zweiter Tracker.
+2. `MartenCoCommitStoreBase`: Puffer für viele Streams, Commit mit Guards (Bulk) und Partitions-Checkpoint (Optimistic Concurrency); Reset auf
+   Partitionen.
+3. `MartenEventStore.ReadPartitionAsync`; Typ-Diskriminatoren je Projektion (Generator, inkl. Upcasting-Vorgänger).
+4. `BatchLeser` (Actor) + Halbieren/Parken; Weckung (Signal → Partition, Poll je Partition); Rückstand für `/health`.
+5. Generator `PullPathGenerator`: für replaybare Projektionen `batch-<Typ>`-Kind mit Partitionen statt `pull-<Typ>`; Emittenten unverändert.
+6. Rückbau: `SignalAdapterActor`/`ProjectionAdapter`-Pfad und `Poller` für Projektionen; `ProjectionRebuilder`, `ProjektionsStandDienst` umstellen.
+7. Umgebung `Konsum` (`Partitionen`, `BatchGroesse`), Doku 03/04/11/12/13.
+
+### 4.10.6 Offene Entscheidungen (vor dem Bau)
+
+| # | Frage | Vorschlag |
+|---|---|---|
+| E4 | Partitionen je Projektion | 8, Umgebung `Konsum.Partitionen`; Wechsel = Neuaufbau |
+| E8 | Reaktionen (Emittenten) im Batch-Leser? | nein, sie bleiben je Stream (§4.10.3 Punkt 3); Plan §3 Schritt 4 entfällt |
+| E9 | E5-Ziel S5 ≥ 3 × in Phase 3? | nein: S5 hat keine Projektion, seine Decke ist der Dirigent (PF-4) — das S5-Ziel gilt nach Phase 5; Phase 3 misst S1 ≥ 3 × und S5 ohne Regression |
+| E10 | Partitions-Funktion | letztes UUID-Byte mod P (SQL und .NET gleich, ohne Index) |
+| E11 | Batch-Größe | 500 Events, Umgebung `Konsum.BatchGroesse` |
