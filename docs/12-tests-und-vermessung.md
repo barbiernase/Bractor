@@ -392,6 +392,16 @@ Phase 2, auch dort, wo Phase 3 nichts geändert hat (S5 hat keine Projektion, S5
   Abfragen gezählt, während der Host noch abbaut. Der zweite (`…_phase-3-stoerung-2`, Last 8 → 68) ist gültig: 24 699 Vorgänge und 182 Bildpaare
   mit zwei harten Abbrüchen und Redis-Ausfall, alles genau einmal, Abbau 371 s.
 
+**Messserver, erste Läufe (2026-10-15, `a600166` = Phase-3-Code; Ordner `…_server-baseline`, `…_server-baseline-stoerung`; nicht in der
+Tabelle oben, weil der Rechner ein anderer ist):** ohne Fremdlast, gegen Phase 3 auf dem MacBook (unter Fremdlast). Die **Arbeit je Vorgang ist
+gleich** (Transaktionen je Vorgang 0,95–1,07 ×, Queries 0,77–1,0 ×), die Verhältnisse der Phasen bleiben also gültig. Ende zu Ende 2–3 × schneller
+(S1 52 Paare/s, S2 47, S3 218–228 Teile/s, S5 192–307 Vorgänge/s), S5-64 6,3 × (191 statt 30; der Mac-Lauf litt besonders unter der Fremdlast),
+Latenzen p50 0,23–0,51 ×; der Host nutzt dabei 7–10 Kerne statt 3. S4 ist 0,7–0,9 × (1 282 Paare/s; einzelne kurze Abfragen, hier zählt der
+schnellere Einzelkern des M4). Die Decke bleibt dieselbe: die Schreibseite nimmt in S5-64 5 675 Commands/s an, Ende zu Ende kommen 191 Vorgänge/s
+durch (Konsum, PF-4). Leerlauf L5 zeigt 377 Transaktionen/s und 2 100 Queries/s (Prozess-Poll, PF-4). Unter Last steht `docker-proxy` (Userland-Proxy
+der Ports auf 127.0.0.1) bis 30 % CPU — jede DB-Verbindung läuft durch ihn. Störungslauf: 56 847 Vorgänge mit zwei harten Abbrüchen und
+Redis-Ausfall, alles genau einmal, Abbau 419 s.
+
 **Als korrekt verifiziert (Backend-Audit 2026-08, nicht erneut jagen):** Versionsarithmetik inkl. Inbox-Marken; OCC-Skip auf dem
 `AnyVersion`-Pfad; Append vor State-Mutation; Shard-Hash-Konsistenz Subscribe ↔ gezieltes Publish; Pre-Dispatch-Guard des Adapters je Stream (heute `EmittentenAdapter`);
 Signal→Wake-Mapping; Kompensations-Dedup und Count-Join ohne verfrühtes Feuern; Snapshot-Schema-Gating; Metadaten-Readback.
@@ -422,6 +432,17 @@ vorgegebener CommandId, Modus `Emittiert`).
 (≈ 3 min); `--probe` ist ein verkürzter Funktionstest des Treibers und schreibt nicht ins Repo.
 Danach `scripts/vermessung-tabelle.sh --schreibe` und den Ordner mitcommitten. Das Skript schaltet `pg_stat_statements` und `max_connections = 300`
 am Postgres-Container ein (einmaliger Neustart) und startet den Redis der Vermessung.
+
+**Messserver (seit 2026-10-15):** Messungen, Integrations-Suiten und das Gate laufen auf einem eigenen Rechner (Hetzner, bare metal, Intel
+i5-13500 mit 6 P- und 8 E-Kernen/20 Threads, 62 GiB, NVMe-RAID1, Ubuntu 24.04, keine GPU) statt auf dem MacBook. Der Code kommt nur über GitHub
+dorthin: `scripts/server.sh lauf <befehl …>` verlangt einen gepushten `HEAD`, checkt ihn auf dem Server aus (`/opt/bractor`, detached), führt den
+Befehl in tmux aus (übersteht SSH-Abbrüche), liest die Ausgabe mit und holt neue Ordner aus `vermessung/ergebnisse/` per rsync zurück; `--los`
+startet ohne zu warten, `warte`/`status`/`log` holen später ab. Ein Lauf zur Zeit. `scripts/server.sh einrichten` (idempotent,
+`scripts/server-einrichten.sh`) installiert das .NET-SDK in der Version des Macs, die Python-Umgebung der Worker (torch nur CPU, verlinkt unter dem
+Pfad aus `Umgebung:Python`), die Bibliotheken der nativen OpenCvSharp-Runtime und startet die Infrastruktur-Container (Projekt `cqrs`, Ports nur auf
+127.0.0.1). Nach außen ist nichts offen; die übrigen Dienste des Servers (Caddy, andere Apps) bleiben unberührt. Messwerte des Servers sind nicht mit
+denen des MacBooks vergleichbar — Läufe dort tragen ein eigenes Anlass-Präfix (`server-…`) und erst eine eigene Baseline-Spalte, wenn die
+Tabelle nach Rechner getrennt ist.
 
 **Gate „frischer Checkout baut“ (vor jedem Push):** `./pruefe-checkout.sh` (Optionen `--verz <dir>` für den Ort des Worktrees, `--ohne-tests`).
 Es meldet zuerst lokal vorhandene Dateien, die eine Ignore-Regel schluckt (mit der greifenden Regel aus `git check-ignore -v`; Build- und

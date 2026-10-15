@@ -103,6 +103,8 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
   offene Lücken sind `Skip = "G-n offen (docs/13)"` (`docs/11-garantien.md` §11.14)
 - E2E-Messung (echter Host, Exactly-once, nie parallel zu Integrations-Suiten): `scripts/vermessung-e2e.sh --anlass <a> --spalte <s>`,
   Tabelle `scripts/vermessung-tabelle.sh --schreibe` (`docs/12-tests-und-vermessung.md` §12.5/§12.6)
+- **Messserver** (Messungen, Integration, Gate — statt auf dem MacBook): `scripts/server.sh lauf <befehl …>` führt den gepushten `HEAD` dort aus
+  und holt `vermessung/ergebnisse/` zurück; `einrichten`, `status`, `warte`, `log` (docs/12 §12.6)
 - Infra hochfahren: `docker compose -f docker-compose.infrastructure.yml up -d`
 - Werkbank-Abnahme (echte Werkbank auf einer Kopie, eigene Sim-DB, sequentiell, nach `dotnet build`):
   `dotnet test Werkbank.Abnahme.Tests/Werkbank.Abnahme.Tests.csproj`
