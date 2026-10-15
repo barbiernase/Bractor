@@ -78,6 +78,8 @@ public sealed class SchreibpfadKonfig
     public int LingerMs { get; set; }
     public int Drain { get; set; } = 4;
     public int SnapshotSchwelle { get; set; } = 200;
+    /// <summary>Höchstens so viele wartende Commands entscheidet ein Aggregat gemeinsam und hängt sie in einem Append an; 1 = jeder einzeln.</summary>
+    public int BuendelGroesse { get; set; } = 64;
     /// <summary>Aufbewahrung der Inbox (E2): so lange wirkt eine wiederholte CommandId garantiert nicht erneut (Exactly-once-Horizont).</summary>
     public int InboxHorizontTage { get; set; } = 30;
 }

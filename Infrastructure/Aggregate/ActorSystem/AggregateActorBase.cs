@@ -63,6 +63,16 @@ public abstract class AggregateActorBase<TState> : IActor
     private readonly BoundedInbox _verarbeiteteCommandIds;
     private readonly BoundedInbox _abgelehnteCommandIds;
 
+    // ★ Bündel (docs/03 §3.1): während ein Commit läuft, nimmt der Actor weitere Commands an (ReenterAfter) und sammelt sie; nach dem Commit
+    //   entscheidet er sie nacheinander im Speicher — jeden auf dem Stand nach dem vorigen — und hängt sie als Teile EINES Appends an (je Teil
+    //   die Metadaten und die Quittung seines Commands). Geantwortet wird jedem erst nach diesem Commit. Scheitert er, lädt der Actor frisch und
+    //   behandelt jeden Command des Bündels einzeln (der Einzel-Pfad mit Nachschlagen in der Inbox).
+    private readonly int _buendelGroesse;
+    private readonly Queue<(CommandEnvelope Env, PID? An)> _wartend = new();
+    private bool _imCommit;
+    // Wem der Einzel-Pfad antwortet (der Absender des Commands, den er gerade behandelt — nicht unbedingt die aktuelle Nachricht).
+    private PID? _antwortAn;
+
     protected AggregateActorBase(
         IAggregateHandlerFactory handlerFactory,
         IEventStoreRepository eventStore,
@@ -85,6 +95,7 @@ public abstract class AggregateActorBase<TState> : IActor
         _snapshotSchemaVersion = snapshotSchemaVersion;
         _snapshotThreshold = snapshotOptions?.Threshold ?? 200;
         var inboxCache = snapshotOptions?.InboxCache ?? SnapshotOptions.StandardInboxCache;
+        _buendelGroesse = Math.Max(1, snapshotOptions?.BuendelGroesse ?? SnapshotOptions.StandardBuendelGroesse);
         _verarbeiteteCommandIds = new BoundedInbox(inboxCache);
         _abgelehnteCommandIds = new BoundedInbox(inboxCache);
         _deadLetters = deadLetters;
@@ -92,6 +103,8 @@ public abstract class AggregateActorBase<TState> : IActor
 
     public async Task ReceiveAsync(IContext context)
     {
+        // Kein Passivieren, solange ein Commit läuft oder Commands warten — sie bekämen sonst nie eine Antwort.
+        if (context.Message is ReceiveTimeout && (_imCommit || _wartend.Count > 0)) return;
         if (Infrastructure.Lebenszyklus.Passivierung.Behandle(context, _leerlauf)) return;
         try
         {
@@ -106,18 +119,16 @@ public abstract class AggregateActorBase<TState> : IActor
                     {
                         await InitializeAsync(envelope.AggregateId);
                     }
-                    // Spur (docs/konzept-werkbank.md §7.1): die Events dieses Commands schreibt decide:<Aggregat>/<Command>, ausgelöst
-                    //   von dem Log-Eintrag, den der Absender in den Envelope gelegt hat; der Absender selbst (Fluss-Knoten, Regel, Reaktion,
-                    //   Akteur) steht als „ueber" daneben — der Weg über die Karten zwischen Ursache und Decider.
-                    using (Spur.Von(envelope.Ursache, WirkerId.FuerDecide(typeof(TState).Name, envelope.Payload.GetType().Name), envelope.Wirker))
-                        await HandleCommandAsync(context, envelope);
+                    _wartend.Enqueue((envelope, context.Sender));
+                    if (!_imCommit) await StarteBuendelAsync(context);
                     break;
 
                 case Stopping:
                     _logger?.LogDebug("[Actor] Stopping for ID: {Id}", _id);
                     // ★ Snapshot bei Deaktivierung (best-effort): wenn seit dem letzten Snapshot Events
-                    //   kamen, den aktuellen State festhalten. Fire-and-forget — Stopping darf nicht blocken.
-                    TryWriteSnapshot();
+                    //   kamen, den aktuellen State festhalten. Fire-and-forget — Stopping darf nicht blocken. Nie mitten in einem Bündel:
+                    //   dann trüge der State noch nicht committete Entscheidungen.
+                    if (!_imCommit) TryWriteSnapshot();
                     break;
             }
         }
@@ -209,7 +220,7 @@ public abstract class AggregateActorBase<TState> : IActor
             catch (AppendGescheitertException ex)
             {
                 await TryPublishCommandFailedAsync(cmdEnvelope, ex.InnerException?.Message ?? ex.Message);
-                context.Respond(new CommandResult { Success = false, ErrorMessage = ex.InnerException?.Message ?? ex.Message, AggregateId = _id });
+                Antworte(context, new CommandResult { Success = false, ErrorMessage = ex.InnerException?.Message ?? ex.Message, AggregateId = _id });
                 return;
             }
         }
@@ -285,9 +296,331 @@ public abstract class AggregateActorBase<TState> : IActor
 
     /// <summary>Die Quittung für einen Command, der laut Log schon entschieden ist (nach einem mehrdeutigen Commit).</summary>
     private void QuittiereEntschieden(IContext context, AppendErgebnis ergebnis)
-        => context.Respond(ergebnis == AppendErgebnis.SchonAbgelehnt
+        => Antworte(context, ergebnis == AppendErgebnis.SchonAbgelehnt
             ? new CommandResult { Success = false, Abgelehnt = true, AggregateId = _id, ErrorMessage = "Vorgang bereits abgelehnt (Framework-Inbox)", NewVersion = _state!.Version }
             : new CommandResult { Success = true, AggregateId = _id, NewVersion = _state!.Version });
+
+    /// <summary>Antwortet dem Absender des Commands, den der Einzel-Pfad gerade behandelt.</summary>
+    private void Antworte(IContext context, CommandResult ergebnis)
+    {
+        if (_antwortAn is { } an) context.Send(an, ergebnis);
+    }
+
+    private static IDisposable SpurVon(CommandEnvelope env)
+        // Spur (docs/konzept-werkbank.md §7.1): die Events dieses Commands schreibt decide:<Aggregat>/<Command>, ausgelöst von dem Log-Eintrag,
+        //   den der Absender in den Envelope gelegt hat; der Absender selbst (Fluss-Knoten, Regel, Reaktion, Akteur) steht als „ueber" daneben.
+        => Spur.Von(env.Ursache, WirkerId.FuerDecide(typeof(TState).Name, env.Payload.GetType().Name), env.Wirker);
+
+    // ─── Bündel (docs/03 §3.1) ───
+
+    /// <summary>Was der Actor für einen Command eines Bündels entschieden hat — geantwortet wird erst nach dem Commit des Bündels.</summary>
+    private sealed class Entscheidung(CommandEnvelope env, PID? an)
+    {
+        public CommandEnvelope Env { get; } = env;
+        public PID? An { get; } = an;
+        public Spur.Kopf? Spur { get; set; }
+        /// <summary>Ohne Schreiben entschieden (Cache, Versionskonflikt, falsches Aggregat, technischer Fehler).</summary>
+        public CommandResult? Sofort { get; set; }
+        /// <summary>Technischer Fehler — dazu geht <c>CommandFailed</c> an die Sitzung.</summary>
+        public string? Fehler { get; set; }
+        /// <summary>Dieselbe CommandId stand weiter vorn im Bündel: dieselbe Antwort.</summary>
+        public int? WieVorgaenger { get; set; }
+        public AppendTeil? Teil { get; set; }
+        public KommandoAusgang Ausgang { get; set; }
+        public List<IEvent> Persistent { get; } = new();
+        public IEvent? Ablehnung { get; set; }
+        public int VersionVorher { get; set; }
+        public int VersionNachher { get; set; }
+        public CommandResult? Ergebnis { get; set; }
+        public bool Beantwortet { get; set; }
+    }
+
+    /// <summary>
+    /// Bildet Bündel aus den wartenden Commands und bringt sie auf den Weg: entscheiden (im Speicher, jeder auf dem Stand nach dem vorigen),
+    /// EIN Append mit einem Teil je schreibendem Command, die Fortsetzung nach dem Commit läuft wieder im Actor (<c>ReenterAfter</c>) — dazwischen
+    /// nimmt er weitere Commands an. Ohne Schreiben (nur Cache-Treffer und Konflikte) antwortet er sofort und nimmt das nächste Bündel.
+    /// </summary>
+    private async Task StarteBuendelAsync(IContext context)
+    {
+        while (_wartend.Count > 0 && !_imCommit)
+        {
+            var buendel = new List<(CommandEnvelope Env, PID? An)>();
+            while (buendel.Count < _buendelGroesse && _wartend.TryDequeue(out var w)) buendel.Add(w);
+            try
+            {
+                if (!_initialized) await InitializeAsync(_id);
+            }
+            catch (Exception ex)
+            {
+                // Nicht rehydrierbar (vergiftet): jeder Command bekommt den Fehler, die nächste Nachricht versucht es erneut.
+                foreach (var (env, an) in buendel)
+                {
+                    await TryPublishCommandFailedAsync(env, ex.Message);
+                    if (an is not null) context.Send(an, new CommandResult { Success = false, ErrorMessage = ex.Message, AggregateId = _id });
+                }
+                continue;
+            }
+            var basis = _state!.Version;
+
+            List<Entscheidung> entscheidungen;
+            try
+            {
+                entscheidungen = await EntscheideAsync(buendel);
+            }
+            catch (Exception ex)
+            {
+                // Unerwartet (ein Applier wirft beim Anwenden vor dem Commit): der State im Speicher ist nicht mehr verlässlich.
+                _logger?.LogWarning(ex, "[Actor] Bündel von {Anzahl} Commands an {Type}/{Id} nicht entscheidbar — einzeln", buendel.Count,
+                    typeof(TState).Name, _id);
+                await EinzelnAsync(context, buendel);
+                continue;
+            }
+
+            var teile = entscheidungen.Where(e => e.Teil is not null).Select(e => e.Teil!).ToList();
+            if (teile.Count == 0)
+            {
+                await AbschliessenAsync(context, entscheidungen);
+                continue;
+            }
+
+            _imCommit = true;
+            var commit = _eventStore.AppendTeileAsync(_id, basis, teile, typeof(TState).Name);
+            context.ReenterAfter(commit, async t =>
+            {
+                _imCommit = false;
+                if (t.IsCompletedSuccessfully)
+                {
+                    try
+                    {
+                        await AbschliessenAsync(context, entscheidungen);
+                    }
+                    catch (Exception ex)
+                    {
+                        // Der Commit ist durch (P10): nichts davon darf ein Fehler werden. Den State frisch laden; wer noch keine Antwort hat, bekommt
+                        //   den durablen Ausgang über eine Wiederholung (Inbox).
+                        _logger?.LogError(ex, "[Actor] Fehler NACH dem Commit eines Bündels an {Type}/{Id} — rehydriere", typeof(TState).Name, _id);
+                        _initialized = false;
+                        foreach (var e in entscheidungen.Where(e => !e.Beantwortet && e.An is not null))
+                            context.Send(e.An!, e.Ergebnis ?? e.Sofort ?? new CommandResult
+                            {
+                                Success = e.Ausgang == KommandoAusgang.Gewirkt, Abgelehnt = e.Ausgang == KommandoAusgang.Abgelehnt, AggregateId = _id,
+                                NewVersion = e.VersionNachher,
+                            });
+                    }
+                }
+                else
+                {
+                    // Versionskonflikt durch einen zweiten Schreiber, eine Wiederholung, die der Cache nicht kannte, ein mehrdeutiger Commit,
+                    //   ein DB-Fehler: alles im Bündel ist hinfällig — frisch laden, jeden Command einzeln (mit Nachschlagen in der Inbox).
+                    _logger?.LogInformation(t.Exception?.GetBaseException(), "[Actor] Bündel-Append ({Anzahl} Commands) an {Type}/{Id} gescheitert — einzeln",
+                        buendel.Count, typeof(TState).Name, _id);
+                    await EinzelnAsync(context, buendel);
+                }
+                await StarteBuendelAsync(context);
+            });
+            return;
+        }
+    }
+
+    /// <summary>Entscheidet die Commands eines Bündels nacheinander; ein schreibender Command wendet seine Events gleich an (spekulativ bis zum Commit).</summary>
+    private async Task<List<Entscheidung>> EntscheideAsync(List<(CommandEnvelope Env, PID? An)> buendel)
+    {
+        var ergebnis = new List<Entscheidung>(buendel.Count);
+        var imBuendel = new Dictionary<Guid, int>();
+        foreach (var (env, an) in buendel)
+        {
+            var e = new Entscheidung(env, an);
+            using (SpurVon(env))
+            {
+                e.Spur = Spur.Aktuell;
+                if (imBuendel.TryGetValue(env.CommandId, out var vor)) e.WieVorgaenger = vor;
+                else
+                {
+                    imBuendel[env.CommandId] = ergebnis.Count;
+                    await EntscheideAsync(e);
+                }
+            }
+            ergebnis.Add(e);
+        }
+        return ergebnis;
+    }
+
+    /// <summary>Dieselbe Entscheidung wie der Einzel-Pfad (<see cref="HandleCommandCoreAsync"/>), ohne Append: Vorprüfung, Decide, Teil.</summary>
+    private async Task EntscheideAsync(Entscheidung e)
+    {
+        var env = e.Env;
+        if (env.AggregateId != _id)
+        {
+            e.Fehler = "Command sent to wrong aggregate";
+            e.Sofort = new CommandResult { Success = false, ErrorMessage = e.Fehler, AggregateId = _id };
+            return;
+        }
+
+        var expectedVersion = env.Modus is CommandModus.Client c ? c.ExpectedVersion : _state!.Version;
+        switch (CommandVorpruefung.Prüfe(true, _verarbeiteteCommandIds.Contains(env.CommandId), _abgelehnteCommandIds.Contains(env.CommandId),
+                    _state!.Version, expectedVersion))
+        {
+            case CommandVorpruefung.Ergebnis.IdempotenterErfolg:
+                e.Sofort = new CommandResult { Success = true, AggregateId = _id, NewVersion = _state.Version };
+                return;
+            case CommandVorpruefung.Ergebnis.IdempotenteAblehnung:
+                e.Sofort = new CommandResult
+                {
+                    Success = false, Abgelehnt = true, AggregateId = _id, ErrorMessage = "Vorgang bereits abgelehnt (Framework-Inbox)", NewVersion = _state.Version,
+                };
+                return;
+            case CommandVorpruefung.Ergebnis.VersionsKonflikt:
+                if (await NachgeschlagenAsync(env.CommandId, wiederholung: true) is { } schon)
+                {
+                    e.Sofort = schon == AppendErgebnis.SchonAbgelehnt
+                        ? new CommandResult { Success = false, Abgelehnt = true, AggregateId = _id, ErrorMessage = "Vorgang bereits abgelehnt (Framework-Inbox)", NewVersion = _state.Version }
+                        : new CommandResult { Success = true, AggregateId = _id, NewVersion = _state.Version };
+                    return;
+                }
+                e.Fehler = $"Concurrency conflict: expected version {expectedVersion}, actual {_state.Version}";
+                e.Sofort = new CommandResult { Success = false, ErrorMessage = e.Fehler, AggregateId = _id, NewVersion = _state.Version };
+                return;
+        }
+
+        List<IEvent> alle;
+        try
+        {
+            alle = _handler!.HandleCommand(env.Payload).ToList();
+        }
+        catch (Exception ex)
+        {
+            e.Fehler = ex.Message;
+            e.Sofort = new CommandResult { Success = false, ErrorMessage = ex.Message, AggregateId = _id };
+            return;
+        }
+        var persistent = alle.Where(x => x is not ITransientEvent).ToList();
+        var ablehnungen = alle.Where(x => x is ITransientEvent).ToList();
+
+        if (ablehnungen.Count > 0 && (persistent.Count > 0 || ablehnungen.Count > 1))
+        {
+            e.Fehler = $"Decider für {env.Payload.GetType().Name} lieferte ein ungültiges gemischtes Ergebnis: {persistent.Count} persistente(s) " +
+                       $"Event(s) + {ablehnungen.Count} Ablehnung(en). Eine Ablehnung (ITransientEvent) muss das einzige zurückgegebene Event sein.";
+            e.Sofort = new CommandResult { Success = false, ErrorMessage = e.Fehler, AggregateId = _id };
+            return;
+        }
+
+        IReadOnlyList<IEvent> schreibe;
+        e.VersionVorher = _state.Version;
+        if (alle.Count == 0)
+        {
+            // Noop: die Marke macht „getan" für den Prozess-Fold beobachtbar (Audit-Fix K2).
+            e.Ausgang = KommandoAusgang.Gewirkt;
+            schreibe = new IEvent[] { new KommandoVerarbeitet(env.CommandId) };
+            _state.Version++;
+        }
+        else if (ablehnungen.Count == 1)
+        {
+            e.Ausgang = KommandoAusgang.Abgelehnt;
+            e.Ablehnung = ablehnungen[0];
+            schreibe = new IEvent[] { new KommandoAbgelehnt(env.CommandId, e.Ablehnung.GetType().Name) };
+            _state.Version++;
+        }
+        else
+        {
+            e.Ausgang = KommandoAusgang.Gewirkt;
+            e.Persistent.AddRange(persistent);
+            schreibe = persistent;
+            foreach (var evt in persistent)
+            {
+                if (evt is not IProzessIntern) _handler.ApplyEvent(evt);
+                _state.Version++;
+            }
+        }
+        e.VersionNachher = _state.Version;
+        e.Teil = new AppendTeil(schreibe, env.CorrelationId, env.CommandId.ToString(), env.UserId, e.Spur,
+            [new Quittung(env.CommandId, e.Ausgang)]);
+    }
+
+    /// <summary>
+    /// Nach dem Commit des Bündels (oder ohne Schreiben): Cache, Signale, Ablehnungen an die Sitzung, Antworten — in der Reihenfolge der Commands.
+    /// Alles hier ist abgeleitet bzw. best-effort; der Commit ist durch.
+    /// </summary>
+    private async Task AbschliessenAsync(IContext context, List<Entscheidung> entscheidungen)
+    {
+        var geschrieben = false;
+        foreach (var e in entscheidungen)
+        {
+            using (Spur.Von(e.Spur?.Ursache, e.Spur?.Wirker, e.Spur?.Ueber))
+            {
+                if (e.WieVorgaenger is int vor)
+                {
+                    e.Ergebnis = entscheidungen[vor].Ergebnis;
+                }
+                else if (e.Sofort is { } sofort)
+                {
+                    if (e.Fehler is { } fehler) await TryPublishCommandFailedAsync(e.Env, fehler);
+                    e.Ergebnis = sofort;
+                }
+                else if (e.Ausgang == KommandoAusgang.Abgelehnt)
+                {
+                    geschrieben = true;
+                    _abgelehnteCommandIds.Add(e.Env.CommandId);
+                    // Spur: eine Ablehnung als verlierbarer Hinweis an die Werkbank.
+                    Infrastructure.Einblick.SpurHinweise.Melde(Infrastructure.Einblick.SpurHinweise.Ablehnung, e.Spur?.Wirker, e.Env.Ursache,
+                        e.Env.CorrelationId, $"{e.Env.Payload.GetType().Name} abgelehnt: {e.Ablehnung!.GetType().Name}");
+                    await TryPublishRejectionAsync(e.Env, e.Ablehnung);
+                    e.Ergebnis = new CommandResult
+                    {
+                        Success = false, Abgelehnt = true, AggregateId = _id, RejectionEvent = e.Ablehnung, ErrorMessage = e.Ablehnung.ToString(),
+                        NewVersion = e.VersionNachher,
+                    };
+                }
+                else
+                {
+                    geschrieben = true;
+                    _verarbeiteteCommandIds.Add(e.Env.CommandId);
+                    if (e.Persistent.Count > 0 && _publisher != null)
+                    {
+                        try { await PublishEventsAsync(e.Persistent, e.Env, e.VersionVorher); }
+                        catch (Exception ex) { _logger?.LogWarning(ex, "[Actor] Signale nach dem Commit nicht veröffentlicht"); }
+                    }
+                    e.Ergebnis = new CommandResult { Success = true, AggregateId = _id, Events = e.Persistent, NewVersion = e.VersionNachher };
+                }
+            }
+            if (e.An is { } an) context.Send(an, e.Ergebnis!);
+            e.Beantwortet = true;
+        }
+        if (geschrieben)
+        {
+            await TryTrackVersionAsync();
+            TrySnapshotOnThreshold();
+        }
+    }
+
+    /// <summary>
+    /// Der Rückfall nach einem gescheiterten Bündel: frisch laden, dann jeden Command einzeln über den Einzel-Pfad (Vorprüfung, Decide, Append,
+    /// Nachschlagen in der Inbox nach einem gescheiterten Append — G-3). Ein Command, den das Bündel schon geschrieben hatte (mehrdeutiger
+    /// Commit), scheitert dort an seiner Quittung und bekommt den Ausgang des ersten Mals.
+    /// </summary>
+    private async Task EinzelnAsync(IContext context, List<(CommandEnvelope Env, PID? An)> buendel)
+    {
+        _initialized = false;
+        foreach (var (env, an) in buendel)
+        {
+            _antwortAn = an;
+            try
+            {
+                if (!_initialized) await InitializeAsync(_id);
+                using (SpurVon(env))
+                    await HandleCommandAsync(context, env);
+            }
+            catch (Exception ex)
+            {
+                _logger?.LogError(ex, "[Actor] Einzel-Pfad für {Command} gescheitert", env.Payload.GetType().Name);
+                await TryPublishCommandFailedAsync(env, ex.Message);
+                Antworte(context, new CommandResult { Success = false, ErrorMessage = ex.Message, AggregateId = _id });
+            }
+            finally
+            {
+                _antwortAn = null;
+            }
+        }
+    }
 
     /// <summary>
     /// Externer Client-Command: OCC gegen die behauptete Version. ★ Jetzt AUCH idempotent (docs/08 §8.4) —
@@ -315,7 +648,7 @@ public abstract class AggregateActorBase<TState> : IActor
             {
                 _logger?.LogWarning("[Actor] Command for wrong aggregate (id {Id})", _id);
                 await TryPublishCommandFailedAsync(cmdEnvelope, "Command sent to wrong aggregate");
-                context.Respond(new CommandResult 
+                Antworte(context, new CommandResult 
                 { 
                     Success = false, 
                     ErrorMessage = "Command sent to wrong aggregate",
@@ -336,11 +669,11 @@ public abstract class AggregateActorBase<TState> : IActor
                         expectedVersion))
             {
                 case CommandVorpruefung.Ergebnis.IdempotenterErfolg:
-                    context.Respond(new CommandResult { Success = true, AggregateId = _id, NewVersion = _state.Version });
+                    Antworte(context, new CommandResult { Success = true, AggregateId = _id, NewVersion = _state.Version });
                     return;
 
                 case CommandVorpruefung.Ergebnis.IdempotenteAblehnung:
-                    context.Respond(new CommandResult
+                    Antworte(context, new CommandResult
                     {
                         Success = false,
                         Abgelehnt = true,
@@ -361,7 +694,7 @@ public abstract class AggregateActorBase<TState> : IActor
                     var errorMsg = $"Concurrency conflict: expected version {expectedVersion}, actual {_state.Version}";
                     _logger?.LogDebug("[Actor] {ErrorMsg}", errorMsg);
                     await TryPublishCommandFailedAsync(cmdEnvelope, errorMsg);
-                    context.Respond(new CommandResult
+                    Antworte(context, new CommandResult
                     {
                         Success = false,
                         ErrorMessage = errorMsg,
@@ -391,7 +724,7 @@ public abstract class AggregateActorBase<TState> : IActor
                     return;
                 }
 
-                context.Respond(new CommandResult
+                Antworte(context, new CommandResult
                 {
                     Success = true,
                     AggregateId = _id,
@@ -453,7 +786,7 @@ public abstract class AggregateActorBase<TState> : IActor
                 // Targeted Delivery — nur an den Aufrufer
                 await TryPublishRejectionAsync(cmdEnvelope, rejection);
 
-                context.Respond(new CommandResult
+                Antworte(context, new CommandResult
                 {
                     Success = false,
                     Abgelehnt = true,
@@ -517,7 +850,7 @@ public abstract class AggregateActorBase<TState> : IActor
                 _logger?.LogDebug("[Actor] ✔ Processed. New version: {Version}", _state.Version);
 
                 // 9. WICHTIG: Erfolg antworten mit NewVersion!
-                context.Respond(new CommandResult
+                Antworte(context, new CommandResult
                 {
                     Success = true,
                     AggregateId = _id,
@@ -542,7 +875,7 @@ public abstract class AggregateActorBase<TState> : IActor
                         "[Actor] Re-Rehydration nach Post-Append-Fehler fehlgeschlagen — die nächste Nachricht initialisiert neu.");
                 }
 
-                context.Respond(new CommandResult
+                Antworte(context, new CommandResult
                 {
                     Success = true,
                     AggregateId = _id,
@@ -558,7 +891,7 @@ public abstract class AggregateActorBase<TState> : IActor
 
             await TryPublishCommandFailedAsync(cmdEnvelope, ex.Message);
             
-            context.Respond(new CommandResult 
+            Antworte(context, new CommandResult 
             { 
                 Success = false, 
                 ErrorMessage = ex.Message,

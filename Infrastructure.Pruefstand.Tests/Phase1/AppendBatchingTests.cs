@@ -47,6 +47,9 @@ public class AppendBatchingTests
             return Task.CompletedTask;
         }
 
+        public Task AppendTeileAsync(Guid id, int expV, IReadOnlyList<AppendTeil> teile, string? at)
+            => AppendEventsAsync(id, expV, teile.SelectMany(t => t.Events).ToList());
+
         public Task<IReadOnlyList<EventEnvelope>> ReadStreamAsync(Guid s, int f, CancellationToken ct)
             => throw new NotSupportedException();
         public Task<PartitionsSeite> ReadPartitionAsync(long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit, CancellationToken ct)
@@ -84,7 +87,7 @@ public class AppendBatchingTests
                     throw new InvalidOperationException("Batch-OCC-Konflikt");
             }
             foreach (var b in batch)
-                await _inner.AppendEventsAsync(b.StreamId, b.ExpectedVersion, b.Events, b.CorrelationId, b.CausationId, b.AggregateType);
+                await _inner.AppendTeileAsync(b.StreamId, b.ExpectedVersion, b.Teile, b.AggregateType);
         }
     }
 

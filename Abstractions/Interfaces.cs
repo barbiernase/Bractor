@@ -146,6 +146,15 @@ public interface IAggregateRepository
             IReadOnlyList<Beilage>? beilagen = null);
 
         /// <summary>
+        /// Hängt die <paramref name="teile"/> mehrerer Commands an EINEN Stream an — atomar in einer Transaktion, mit Versionsprüfung gegen
+        /// <paramref name="expectedVersion"/>, Metadaten und Beilagen je Teil (das Bündel eines Aggregat-Actors, docs/03 §3.1). Kennt die Inbox
+        /// die CommandId einer der Quittungen schon, ist nichts geschrieben (<see cref="KommandoSchonEntschiedenException"/>). Ohne eigene Ablage
+        /// (Prüfstand-Seams): nicht unterstützt — ein Dekorator muss ihn ausdrücklich weiterreichen.
+        /// </summary>
+        Task AppendTeileAsync(Guid aggregateId, int expectedVersion, IReadOnlyList<AppendTeil> teile, string? aggregateType)
+            => throw new NotSupportedException($"{GetType().Name} hängt keine Bündel an");
+
+        /// <summary>
         /// Der Ausgang eines Commands laut Inbox, oder null, wenn sie ihn nicht kennt (nie entschieden oder älter als der Horizont). Der
         /// Aggregat-Actor fragt nur, wenn sein Cache nichts weiß und der Weg ohne die Antwort falsch würde: nach einem gescheiterten Append und
         /// vor einem Versionskonflikt. Ohne Ablage (Prüfstand): unbekannt.

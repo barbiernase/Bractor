@@ -311,7 +311,7 @@ public static class CqrsServiceExtensions
                 provider.GetService<ILogger<MartenSnapshotStore>>()));
 
         // ★ Snapshot-Schwellwert in DI → der generierte Actor injiziert ihn (Default 200, Tests klein).
-        services.AddSingleton(new SnapshotOptions(builder.SnapshotThreshold, builder.InboxCache));
+        services.AddSingleton(new SnapshotOptions(builder.SnapshotThreshold, builder.InboxCache, builder.BuendelGroesse));
         // Passivierung der virtuellen Actors (PF-5) — Aggregat, Adapter und Prozess-Manager lesen sie beim Erzeugen.
         services.AddSingleton(builder.Passivierung);
         // Batch-Konsum der Projektionen (docs/04 §4.1): Partitionen und Seitengröße — die Batch-Leser lesen sie beim Erzeugen.
@@ -614,6 +614,12 @@ public class CqrsFrameworkBuilder
     /// Inbox-Tabelle (docs/04 §4.4). Tests setzen ihn klein, damit der Weg über den Schlüssel der Tabelle läuft.
     /// </summary>
     public int InboxCache { get; set; } = SnapshotOptions.StandardInboxCache;
+
+    /// <summary>
+    /// Höchstens so viele wartende Commands entscheidet ein Aggregat-Actor gemeinsam und hängt sie in einem Append an (Umgebung
+    /// <c>Schreibpfad.BuendelGroesse</c>, Standard 64; 1 = jeder einzeln, docs/03 §3.1).
+    /// </summary>
+    public int BuendelGroesse { get; set; } = SnapshotOptions.StandardBuendelGroesse;
 
     /// <summary>
     /// Aufbewahrungs-Horizont der Inbox (E2, Umgebung <c>Schreibpfad.InboxHorizontTage</c>, Standard 30 Tage): so lange wirkt eine

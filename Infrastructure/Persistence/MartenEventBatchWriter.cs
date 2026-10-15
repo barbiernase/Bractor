@@ -69,8 +69,8 @@ public sealed class MartenEventBatchWriter : IEventBatchWriter
         foreach (var item in batch)
         {
             Stage(session, item);
-            eventCount += item.Events.Count;
-            beilagen.Lege(session, item.StreamId, item.Beilagen);
+            eventCount += item.EventAnzahl;
+            foreach (var teil in item.Teile) beilagen.Lege(session, item.StreamId, teil.Beilagen);
         }
         // Die Beilagen aller Appends in derselben Transaktion, die Quittungen in EINER Anweisung (Inbox, docs/04 §4.4). Kennt die Inbox eine
         //   schon, scheitert der ganze Batch am Schlüssel; der Appender isoliert dann einzeln, und nur der Wiederholte fällt.
@@ -87,27 +87,34 @@ public sealed class MartenEventBatchWriter : IEventBatchWriter
     }
 
     /// <summary>
-    /// Legt EINEN Append in die Session (noch kein Commit) und stempelt die Metadaten PRO EVENT.
-    /// Gleiche Versions-Arithmetik wie <see cref="MartenEventStore.AppendEventsAsync"/>.
+    /// Legt EINEN Append (alle Teile, ein Stream) in die Session (noch kein Commit) und stempelt die Metadaten PRO EVENT aus seinem Teil.
+    /// Gleiche Versions-Arithmetik wie <see cref="MartenEventStore.AppendTeileAsync"/>: Version 0 → StartStream, sonst Ziel-Version.
     /// </summary>
     internal static void Stage(IDocumentSession session, in BatchAppend item)
     {
-        var events = new object[item.Events.Count];
-        for (var i = 0; i < item.Events.Count; i++) events[i] = item.Events[i];
+        var events = new object[item.EventAnzahl];
+        var n = 0;
+        foreach (var teil in item.Teile)
+            foreach (var e in teil.Events) events[n++] = e;
 
         var action = item.ExpectedVersion == 0
             ? session.Events.StartStream(item.StreamId, events)
             : session.Events.Append(item.StreamId, item.ExpectedVersion + events.Length, events);
 
-        // Per-Event-Metadaten auf die von Marten erzeugten Hüllen setzen (verifiziert: persistiert
-        // pro Event, überlebt den Readback in ReadStreamAsync).
-        foreach (var ev in action.Events)
+        // Per-Event-Metadaten auf die von Marten erzeugten Hüllen setzen (verifiziert: persistiert pro Event, überlebt den Readback in
+        //   ReadStreamAsync) — Teil für Teil in der Reihenfolge der Events.
+        var i = 0;
+        foreach (var teil in item.Teile)
         {
-            if (item.CausationId != null) ev.CausationId = item.CausationId;
-            if (item.CorrelationId != null) ev.CorrelationId = item.CorrelationId;
-            if (!string.IsNullOrEmpty(item.AggregateType)) ev.SetHeader("aggregate_type", item.AggregateType);
-            if (ImAuftrag.IstAkteur(item.Akteur)) ev.SetHeader(ImAuftrag.Header, item.Akteur!);
-            SpurHeader.Setze(ev, item.SpurKopf);
+            for (var k = 0; k < teil.Events.Count; k++, i++)
+            {
+                var ev = action.Events[i];
+                if (teil.CausationId != null) ev.CausationId = teil.CausationId;
+                if (teil.CorrelationId != null) ev.CorrelationId = teil.CorrelationId;
+                if (!string.IsNullOrEmpty(item.AggregateType)) ev.SetHeader("aggregate_type", item.AggregateType);
+                if (ImAuftrag.IstAkteur(teil.Akteur)) ev.SetHeader(ImAuftrag.Header, teil.Akteur!);
+                SpurHeader.Setze(ev, teil.SpurKopf);
+            }
         }
     }
 }

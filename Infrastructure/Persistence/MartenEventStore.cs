@@ -58,7 +58,7 @@ public class MartenEventStore : IEventStoreRepository
     /// expectedVersion > 0:  Append mit Zielversion (expectedVersion + events.Count)
     /// expectedVersion < 0:  Ungültig (Guard gegen CommandEnvelope-Default von -1)
     /// </summary>
-    public async Task AppendEventsAsync(
+    public Task AppendEventsAsync(
         Guid aggregateId,
         int expectedVersion,
         IReadOnlyList<IEvent> events,
@@ -67,51 +67,32 @@ public class MartenEventStore : IEventStoreRepository
         string? aggregateType = null,
         string? akteur = null,
         IReadOnlyList<Beilage>? beilagen = null)
-    {
-        // Guard: expectedVersion muss >= 0 sein.
-        // Der Actor prüft bereits gegen seinen State, aber falls
-        // AppendEventsAsync ohne Actor-Kontext aufgerufen wird,
-        // fangen wir ungültige Werte defensiv ab.
-        if (expectedVersion < 0)
-            throw new ArgumentException(
-                $"ExpectedVersion must be >= 0, was {expectedVersion}.",
-                nameof(expectedVersion));
+        => events.Count == 0 && expectedVersion >= 0
+            ? Task.CompletedTask
+            : AppendTeileAsync(aggregateId, expectedVersion,
+                [new AppendTeil(events, correlationId, causationId, akteur, Spur.Aktuell, beilagen)], aggregateType);
 
-        if (events.Count == 0)
+    /// <summary>
+    /// Ein Append an einen Stream mit einem oder mehreren Teilen (dem Bündel eines Aggregat-Actors) — eine Transaktion, Metadaten je Event aus
+    /// seinem Teil (<see cref="MartenEventBatchWriter.Stage"/>, derselbe Weg wie der Group-Commit), Beilagen aller Teile in derselben Transaktion.
+    /// Version 0 → <c>StartStream</c> (wirft, wenn es den Stream gibt), sonst Append mit Ziel-Version (erwartet + Anzahl Events).
+    /// </summary>
+    public async Task AppendTeileAsync(Guid aggregateId, int expectedVersion, IReadOnlyList<AppendTeil> teile, string? aggregateType)
+    {
+        // Guard: der Actor prüft bereits gegen seinen State; ohne Actor-Kontext (CommandEnvelope-Default −1) defensiv abfangen.
+        if (expectedVersion < 0)
+            throw new ArgumentException($"ExpectedVersion must be >= 0, was {expectedVersion}.", nameof(expectedVersion));
+        if (teile.All(t => t.Events.Count == 0))
             return;
 
         await using var session = _store.LightweightSession();
+        var item = new BatchAppend(aggregateId, expectedVersion, teile, aggregateType);
+        MartenEventBatchWriter.Stage(session, item);
 
-        // ★ Phase 1: Metadaten in DIESELBE Marten-Transaktion, damit sie nach dem
-        //   Log-Read (ReadStreamAsync) verfügbar sind. Setzt die MetadataConfig-Flags
-        //   voraus (CorrelationId/CausationId/Headers enabled — in der StoreOptions-Config).
-        if (correlationId != null) session.CorrelationId = correlationId;
-        if (causationId != null) session.CausationId = causationId;
-        if (!string.IsNullOrEmpty(aggregateType)) session.SetHeader("aggregate_type", aggregateType);
-        if (ImAuftrag.IstAkteur(akteur)) session.SetHeader(ImAuftrag.Header, akteur!);
-        SpurHeader.Setze(session, Spur.Aktuell);
-
-        if (expectedVersion == 0)
-        {
-            // Neuer Stream: StartStream garantiert, dass der Stream
-            // noch nicht existiert. Schärfer als Append mit Version 0.
-            session.Events.StartStream(aggregateId, events.ToArray());
-        }
-        else
-        {
-            // Bestehender Stream: Append mit Versionsprüfung.
-            // Marten erwartet die Ziel-Version NACH dem Append.
-            // Bei Version 5 mit 2 Events → Zielversion 7.
-            session.Events.Append(
-                aggregateId,
-                expectedVersion + events.Count,
-                events.ToArray());
-        }
-
-        // Die Beilagen in DERSELBEN Transaktion (docs/03 §3.3): kennt die Inbox die Quittung schon, scheitert der Commit am Schlüssel und
+        // Die Beilagen in DERSELBEN Transaktion (docs/03 §3.3): kennt die Inbox eine Quittung schon, scheitert der Commit am Schlüssel und
         //   nichts ist geschrieben.
         var schreiber = new BeilagenSchreiber();
-        schreiber.Lege(session, aggregateId, beilagen);
+        foreach (var teil in teile) schreiber.Lege(session, aggregateId, teil.Beilagen);
         schreiber.Abschliessen(session, _store);
 
         try
@@ -119,37 +100,27 @@ public class MartenEventStore : IEventStoreRepository
             await session.SaveChangesAsync();
             Infrastructure.Einblick.SpurSignal.Melde();
 
-            _logger.LogDebug(
-                "Appended {EventCount} events to stream {AggregateId}, " +
-                "expected version {ExpectedVersion}",
-                events.Count, aggregateId, expectedVersion);
+            _logger.LogDebug("Appended {EventCount} events to stream {AggregateId}, expected version {ExpectedVersion}",
+                item.EventAnzahl, aggregateId, expectedVersion);
         }
         catch (EventStreamUnexpectedMaxEventIdException ex)
         {
-            _logger.LogWarning(
-                "Concurrency conflict for aggregate {AggregateId}. " +
-                "Expected version {ExpectedVersion}, but stream has diverged.",
+            _logger.LogWarning("Concurrency conflict for aggregate {AggregateId}. Expected version {ExpectedVersion}, but stream has diverged.",
                 aggregateId, expectedVersion);
-
             throw new ConcurrencyException(
-                $"Concurrency conflict for aggregate {aggregateId}. " +
-                $"Expected version {expectedVersion}, but stream has diverged.",
-                ex);
+                $"Concurrency conflict for aggregate {aggregateId}. Expected version {expectedVersion}, but stream has diverged.", ex);
         }
         catch (ExistingStreamIdCollisionException ex)
         {
-            // StartStream wirft dies wenn der Stream bereits existiert
-            _logger.LogWarning(
-                "Stream {AggregateId} already exists. Duplicate creation attempt.",
-                aggregateId);
-
+            // StartStream wirft dies, wenn der Stream bereits existiert
+            _logger.LogWarning("Stream {AggregateId} already exists. Duplicate creation attempt.", aggregateId);
             throw new ConcurrencyException(
-                $"Stream {aggregateId} already exists. " +
-                $"Cannot create aggregate that already has events.",
-                ex);
+                $"Stream {aggregateId} already exists. Cannot create aggregate that already has events.", ex);
         }
-        catch (Exception ex) when (BeilagenSchreiber.QuittungIn(beilagen) is { } commandId && InboxTabelle.IstDuplikat(ex))
+        catch (Exception ex) when (teile.Select(t => BeilagenSchreiber.QuittungIn(t.Beilagen)).FirstOrDefault(q => q is not null) is { } commandId
+                                   && InboxTabelle.IstDuplikat(ex))
         {
+            // Bei mehreren Quittungen nennt die Ausnahme eine von ihnen — der Aufrufer eines Bündels entscheidet ohnehin einzeln neu.
             throw new KommandoSchonEntschiedenException(commandId, ex);
         }
     }

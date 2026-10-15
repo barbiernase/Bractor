@@ -74,7 +74,7 @@ public class MetadataPostgresTests : IClassFixture<MetadataPostgresTests.Fixture
 
         var gebuendelt = Guid.NewGuid();
         await new MartenEventBatchWriter(_fx.Store, NullLogger<MartenEventBatchWriter>.Instance).WriteBatchAsync(
-            new[] { new BatchAppend(gebuendelt, 0, new IEvent[] { new ImagePairInspiziert() }, null, null, "ImagePair", "KameraSystem") }, default);
+            new[] { new BatchAppend(gebuendelt, 0, [new AppendTeil(new IEvent[] { new ImagePairInspiziert() }, null, null, "KameraSystem", null)], "ImagePair") }, default);
 
         var ohne = Guid.NewGuid();
         await es.AppendEventsAsync(ohne, 0, new IEvent[] { new ImagePairInspiziert() }, akteur: ImAuftrag.Ohne);

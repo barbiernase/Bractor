@@ -34,13 +34,8 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
     {
         public Guid StreamId;
         public int ExpectedVersion;
-        public IReadOnlyList<IEvent> Events = Array.Empty<IEvent>();
-        public string? Corr;
-        public string? Caus;
+        public IReadOnlyList<AppendTeil> Teile = Array.Empty<AppendTeil>();
         public string? AggType;
-        public string? Akteur;
-        public Spur.Kopf? SpurKopf;
-        public IReadOnlyList<Beilage>? Beilagen;
         // RunContinuationsAsynchronously: die Actor-Fortsetzung darf NICHT inline auf dem Flush-Loop-Thread
         // laufen (sonst serialisiert der Loop hinter Actor-Arbeit und der Group-Commit verpufft).
         public readonly TaskCompletionSource Tcs = new(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -92,25 +87,21 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
         string? akteur = null,
         IReadOnlyList<Beilage>? beilagen = null)
     {
-        if (expectedVersion < 0)
-            throw new ArgumentException($"ExpectedVersion must be >= 0, was {expectedVersion}.", nameof(expectedVersion));
         if (events.Count == 0)
             return Task.CompletedTask;
+        // Die Spur des Aufrufers jetzt festhalten — geschrieben wird in der Drain-Schleife (anderer Fluss).
+        return AppendTeileAsync(aggregateId, expectedVersion,
+            [new AppendTeil(events, correlationId, causationId, akteur, Spur.Aktuell, beilagen)], aggregateType);
+    }
 
-        var p = new Pending
-        {
-            StreamId = aggregateId,
-            ExpectedVersion = expectedVersion,
-            Events = events,
-            Corr = correlationId,
-            Caus = causationId,
-            AggType = aggregateType,
-            Akteur = akteur,
-            Beilagen = beilagen,
-            // Die Spur des Aufrufers jetzt festhalten — geschrieben wird in der Drain-Schleife (anderer Fluss).
-            SpurKopf = Spur.Aktuell
-        };
+    public Task AppendTeileAsync(Guid aggregateId, int expectedVersion, IReadOnlyList<AppendTeil> teile, string? aggregateType)
+    {
+        if (expectedVersion < 0)
+            throw new ArgumentException($"ExpectedVersion must be >= 0, was {expectedVersion}.", nameof(expectedVersion));
+        if (teile.All(t => t.Events.Count == 0))
+            return Task.CompletedTask;
 
+        var p = new Pending { StreamId = aggregateId, ExpectedVersion = expectedVersion, Teile = teile, AggType = aggregateType };
         if (!_channel.Writer.TryWrite(p))
             return Task.FromException(new ObjectDisposedException(nameof(BatchingEventAppender)));
 
@@ -183,7 +174,7 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
         for (var i = 0; i < batch.Count; i++)
         {
             var p = batch[i];
-            appends[i] = new BatchAppend(p.StreamId, p.ExpectedVersion, p.Events, p.Corr, p.Caus, p.AggType, p.Akteur, p.SpurKopf, p.Beilagen);
+            appends[i] = new BatchAppend(p.StreamId, p.ExpectedVersion, p.Teile, p.AggType);
         }
 
         try
@@ -208,9 +199,7 @@ public sealed class BatchingEventAppender : IEventStoreRepository, IAsyncDisposa
         {
             try
             {
-                using (Spur.Von(p.SpurKopf?.Ursache, p.SpurKopf?.Wirker, p.SpurKopf?.Ueber))
-                    await _inner.AppendEventsAsync(p.StreamId, p.ExpectedVersion, p.Events, p.Corr, p.Caus, p.AggType, p.Akteur, p.Beilagen)
-                        .ConfigureAwait(false);
+                await _inner.AppendTeileAsync(p.StreamId, p.ExpectedVersion, p.Teile, p.AggType).ConfigureAwait(false);
                 p.Tcs.TrySetResult();
             }
             catch (Exception ex)

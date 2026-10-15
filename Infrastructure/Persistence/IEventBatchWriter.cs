@@ -3,22 +3,15 @@ using Abstractions;
 namespace Infrastructure.Persistence;
 
 /// <summary>
-/// Ein einzelner Append-Auftrag, wie ihn der <see cref="BatchingEventAppender"/> sammelt.
-/// Trägt exakt die Argumente von <see cref="IEventStoreRepository.AppendEventsAsync"/> — inkl. der
-/// PRO-COMMAND-Metadaten (Correlation/Causation/Type), die pro Event gestempelt werden müssen, weil
-/// die Prozess-Maschine über <c>CausationId == Vorgang</c> faltet und über <c>CorrelationId</c> routet — und die Beilagen (Quittung
+/// Ein Append-Auftrag an einen Stream, wie ihn der <see cref="BatchingEventAppender"/> sammelt: die Teile eines oder mehrerer Commands
+/// (<see cref="AppendTeil"/>) mit ihren PRO-COMMAND-Metadaten (Correlation/Causation/Akteur/Spur), die pro Event gestempelt werden müssen,
+/// weil die Prozess-Maschine über <c>CausationId == Vorgang</c> faltet und über <c>CorrelationId</c> routet — und ihren Beilagen (Quittung
 /// des Commands für die Inbox, Eintrag und Ende eines Vorgangs, docs/03 §3.3), die in derselben Transaktion landen.
 /// </summary>
-public readonly record struct BatchAppend(
-    Guid StreamId,
-    int ExpectedVersion,
-    IReadOnlyList<IEvent> Events,
-    string? CorrelationId,
-    string? CausationId,
-    string? AggregateType,
-    string? Akteur = null,
-    Spur.Kopf? SpurKopf = null,
-    IReadOnlyList<Beilage>? Beilagen = null);
+public readonly record struct BatchAppend(Guid StreamId, int ExpectedVersion, IReadOnlyList<AppendTeil> Teile, string? AggregateType)
+{
+    public int EventAnzahl => Teile.Sum(t => t.Events.Count);
+}
 
 /// <summary>
 /// Schreibt eine ganze Menge von Append-Aufträgen ALL-ODER-NICHTS in EINER nativen Transaktion

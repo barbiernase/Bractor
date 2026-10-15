@@ -42,11 +42,14 @@ public sealed class Snapshot<TState> where TState : class, IState
 /// <see cref="Threshold"/> = Events zwischen zwei Snapshots; der Actor schreibt best-effort nach je so vielen
 /// Events. 0 schaltet das Schwellwert-Schreiben ab (nur der Stopping-Hook bleibt).
 /// <see cref="InboxCache"/> = so viele CommandIds je Ausgang merkt sich ein aktiver Actor (Cache vor der Inbox-Tabelle, nie Semantik:
-/// was er vergisst, fängt der eindeutige Schlüssel der Tabelle). Nicht registriert → der Actor nutzt seine Defaults.
+/// was er vergisst, fängt der eindeutige Schlüssel der Tabelle). <see cref="BuendelGroesse"/> = so viele wartende Commands entscheidet der Actor
+/// höchstens gemeinsam und hängt sie in einem Append an (docs/03 §3.1); 1 = jeder einzeln. Nicht registriert → der Actor nutzt seine Defaults.
 /// </summary>
-public sealed record SnapshotOptions(int Threshold = 200, int InboxCache = SnapshotOptions.StandardInboxCache)
+public sealed record SnapshotOptions(
+    int Threshold = 200, int InboxCache = SnapshotOptions.StandardInboxCache, int BuendelGroesse = SnapshotOptions.StandardBuendelGroesse)
 {
     public const int StandardInboxCache = 1_000;
+    public const int StandardBuendelGroesse = 64;
 }
 
 /// <summary>

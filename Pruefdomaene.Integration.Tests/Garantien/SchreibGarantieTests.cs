@@ -162,6 +162,86 @@ public class SchreibGarantieTests
         finally { await host.StopAsync(); }
     }
 
+    /// <summary>Wie viele Transaktionen die Events eines Streams geschrieben haben (xmin) — weniger als Commands heißt: gebündelt.</summary>
+    private static async Task<int> TransaktionenImStream(IHost host, Guid stream)
+    {
+        var marten = host.Services.GetRequiredService<Marten.IDocumentStore>();
+        await using var q = marten.QuerySession();
+        var r = await q.QueryAsync<int>(
+            $"select count(distinct xmin::text)::int from {marten.Options.Events.DatabaseSchemaName}.mt_events where stream_id = ?", CancellationToken.None, stream);
+        return r[0];
+    }
+
+    [Fact]
+    public async Task Ein_heisser_Posten_buendelt_und_jeder_Command_wirkt_genau_einmal()
+    {
+        // Bündel (docs/03 §3.1): während ein Commit läuft, sammelt der Actor; danach entscheidet er die gesammelten nacheinander und hängt sie
+        //   in einem Append an. Gleichzeitig kommen Wiederholungen derselben CommandIds (vor, in und nach ihrem Bündel).
+        using var host = Cluster("garantie-buendel");
+        await host.StartAsync();
+        try
+        {
+            var p = await PostenAsync(host, bestand: 10_000);
+            var ids = Enumerable.Range(0, 200).Select(_ => Guid.NewGuid()).ToList();
+            var sends = ids.Select(id => FrageAsync(host, new ReservierePosten(p, 1), id))
+                .Concat(ids.Where((_, i) => i % 4 == 0).Select(id => FrageAsync(host, new ReservierePosten(p, 1), id)));
+            var ergebnisse = await Task.WhenAll(sends);
+
+            ergebnisse.Should().OnlyContain(r => r != null && r.Success);
+            (await ReserviertImLog(host, p)).Should().Be(200, "jede CommandId genau einmal");
+            (await Zustand<PostenState>(host.Services, p)).Reserviert.Should().Be(200);
+            (await TransaktionenImStream(host, p)).Should().BeLessThan(150, "gleichzeitige Commands an ein Aggregat teilen sich Commits");
+        }
+        finally { await host.StopAsync(); }
+    }
+
+    [Fact]
+    public async Task Im_Buendel_entscheidet_jeder_Command_auf_dem_Stand_nach_dem_vorigen()
+    {
+        // Der Bestand reicht für die Hälfte: genau die Hälfte wirkt, der Rest wird abgelehnt — auch wenn alle im selben Bündel liegen.
+        using var host = Cluster("garantie-buendel-stand");
+        await host.StartAsync();
+        try
+        {
+            var p = await PostenAsync(host, bestand: 40);
+            var ergebnisse = await Task.WhenAll(Enumerable.Range(0, 80).Select(_ => FrageAsync(host, new ReservierePosten(p, 1), Guid.NewGuid())));
+
+            ergebnisse.Count(r => r!.Success).Should().Be(40);
+            ergebnisse.Count(r => !r!.Success && r.Abgelehnt).Should().Be(40);
+            (await ReserviertImLog(host, p)).Should().Be(40);
+            var zustand = await Zustand<PostenState>(host.Services, p);
+            zustand.Reserviert.Should().Be(40);
+            zustand.Verfuegbar.Should().Be(0);
+        }
+        finally { await host.StopAsync(); }
+    }
+
+    [Fact]
+    public async Task Ein_zweiter_Schreiber_mitten_im_Ansturm_laesst_kein_Buendel_doppelt_oder_gar_nicht_wirken()
+    {
+        // Ein Versionskonflikt lässt das laufende Bündel scheitern: der Actor lädt frisch und behandelt jeden Command einzeln.
+        using var host = Cluster("garantie-buendel-konflikt");
+        await host.StartAsync();
+        try
+        {
+            var p = await PostenAsync(host, bestand: 1_000);
+            var store = host.Services.GetRequiredService<IEventStoreRepository>();
+            var ansturm = Enumerable.Range(0, 100).Select(_ => FrageAsync(host, new ReservierePosten(p, 1), Guid.NewGuid())).ToList();
+            var version = (await store.ReadStreamAsync(p, 0, default)).Max(e => e.AggregateVersion);
+            try { await store.AppendEventsAsync(p, version, new IEvent[] { new PostenZugebucht(10) }); }
+            catch (ConcurrencyException) { /* das Bündel war schneller — dann schreibt der zweite Schreiber eben nicht */ }
+            var ergebnisse = await Task.WhenAll(ansturm);
+
+            var gewirkt = ergebnisse.Count(r => r != null && r.Success);
+            (await ReserviertImLog(host, p)).Should().Be(gewirkt, "was als Erfolg quittiert wurde, steht genau einmal im Log");
+            (await Zustand<PostenState>(host.Services, p)).Reserviert.Should().Be(gewirkt);
+            // Wer keinen Erfolg bekam (der Einzel-Pfad scheitert nach einem Konflikt höchstens einmal), wirkt mit derselben CommandId beim
+            //   zweiten Versuch — und keiner doppelt.
+            gewirkt.Should().BeGreaterThan(90);
+        }
+        finally { await host.StopAsync(); }
+    }
+
     [Fact]
     public async Task Nach_einem_Versionskonflikt_durch_einen_zweiten_Schreiber_heilt_der_Actor_ohne_Neustart()
     {
@@ -222,6 +302,17 @@ public class SchreibGarantieTests
                 string? causationId = null, string? aggregateType = null, string? akteur = null, IReadOnlyList<Beilage>? beilagen = null)
             {
                 await innen.AppendEventsAsync(aggregateId, expectedVersion, events, correlationId, causationId, aggregateType, akteur, beilagen);
+                Stoere(aggregateId);
+            }
+
+            public async Task AppendTeileAsync(Guid aggregateId, int expectedVersion, IReadOnlyList<AppendTeil> teile, string? aggregateType)
+            {
+                await innen.AppendTeileAsync(aggregateId, expectedVersion, teile, aggregateType);
+                Stoere(aggregateId);
+            }
+
+            private void Stoere(Guid aggregateId)
+            {
                 if (s.Scharf == aggregateId && !s.Ausgeloest)
                 {
                     s.Ausgeloest = true;
