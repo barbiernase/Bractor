@@ -95,8 +95,11 @@ und Poll gleich:
 6. **Cursor vorrücken:** `SchreibeAsync` erst nach bestätigtem Emit; scheitert das Schreiben, sendet die nächste Weckung erneut.
 
 **Transport** (`Infrastructure/Projections/PullPath.cs`): ein `SignalReceiverActor` weckt die Cluster-Identität `(pull-<Typ>, StreamId)`; der
-**Poll** (`Poller`, 30 s) scannt über `ReadChangedStreamsAsync` jenseits der Hochwassermarke und rückt sie **nur** vor, wenn jede Weckung als
-`WakeAck(Aufgeholt: true)` zurückkommt (bounded 10 s) — kein terminaler, unverarbeiteter Stream wird still übersprungen. Der
+**Poll** (`Poller`, 30 s) liest über `ReadChangedStreamsAsync` seitenweise (1 000 Events) die Streams, die jenseits der Hochwassermarke ein
+Event der **abonnierten Typen** bekommen haben (Diskriminatoren samt Upcasting-Herkunft, `BatchLeser.TypenAus`; nur Sequenz und Stream, keine
+Daten), und rückt sie je Seite **nur** vor, wenn jede Weckung als `WakeAck(Aufgeholt: true)` zurückkommt (bounded 10 s) — kein terminaler,
+unverarbeiteter Stream wird still übersprungen. Ein Stream ohne abonniertes Event weckt keinen Adapter (PF-12: früher bekam jeder geänderte
+Stream des Logs einen Cursor). Der
 `SignalAdapterActor` je Stream serialisiert beide Quellen über seine Mailbox (Single-Writer je Stream) und passiviert nach
 `Lebenszyklus.AdapterLeerlaufSekunden` (Standard 120; PF-5) — der Cursor liegt durabel im Store.
 

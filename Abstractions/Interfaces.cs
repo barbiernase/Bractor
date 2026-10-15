@@ -175,6 +175,14 @@ public interface IAggregateRepository
             Guid streamId, int fromVersion, CancellationToken ct);
 
         /// <summary>
+        /// Genau das Event an <paramref name="version"/> eines Streams (bei einem Split-Upcast das erste), oder null. Für Leser, die ein
+        /// bekanntes Event brauchen (Auslöser eines Vorgangs, das Event zu einem Signal) — statt den Rest des Streams ab dieser Version zu
+        /// lesen. Ohne eigene Ablage (Prüfstand) über <see cref="ReadStreamAsync"/>.
+        /// </summary>
+        async Task<EventEnvelope?> ReadEventAsync(Guid streamId, int version, CancellationToken ct)
+            => (await ReadStreamAsync(streamId, version, ct)).FirstOrDefault(e => e.AggregateVersion == version);
+
+        /// <summary>
         /// Leseprimitiv des Batch-Konsums (docs/04 §4.1): eine Seite der Partition <paramref name="partition"/> von
         /// <paramref name="partitionen"/> jenseits der globalen Sequenz <paramref name="nach"/>, geordnet nach Sequenz, höchstens
         /// <paramref name="limit"/> Events. <paramref name="typen"/> = die Speicher-Diskriminatoren der abonnierten Typen samt ihrer

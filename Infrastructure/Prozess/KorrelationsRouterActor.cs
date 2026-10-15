@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Threading;
 using System.Threading.Tasks;
 using Abstractions;
 using Infrastructure.Projections;   // SignalEnvelope kommt aus Abstractions; BrokerSubscription aus PubSub
@@ -21,6 +22,11 @@ public sealed class KorrelationsRouterActor : IActor
     private readonly IReadOnlyList<Type> _signalTypes;
     private readonly KorrelationsRouter _router;
     private BrokerSubscription? _subscription;
+    // PF-12: Signale parallel (begrenzt) — der Router ist zustandslos, eine Weckung idempotent, die Reihenfolge der Signale zählt nicht.
+    //   Nacheinander hielt der Read je Signal die Mailbox an: unter Last staute sie sich bis in den Leerlauf.
+    private const int Gleichzeitig = 32;
+    private readonly SemaphoreSlim _plaetze = new(Gleichzeitig);
+    private readonly CancellationTokenSource _ende = new();
 
     public KorrelationsRouterActor(string subscriberId, IReadOnlyList<Type> signalTypes, KorrelationsRouter router)
     {
@@ -39,13 +45,30 @@ public sealed class KorrelationsRouterActor : IActor
                 break;
 
             case SignalEnvelope env:
-                await _router.OnSignalAsync(env.Signal, context.CancellationToken);
+                _ = RouteAsync(env.Signal);
                 break;
 
             case Stopping:
+                _ende.Cancel();
                 if (_subscription != null)
                     await _subscription.UnsubscribeAllAsync();
                 break;
+        }
+    }
+
+    private async Task RouteAsync(IStateChangeSignal signal)
+    {
+        try
+        {
+            await _plaetze.WaitAsync(_ende.Token);
+            try { await _router.OnSignalAsync(signal, _ende.Token); }
+            finally { _plaetze.Release(); }
+        }
+        catch (OperationCanceledException) { /* Stopp */ }
+        catch (Exception ex)
+        {
+            // Ein Signal darf verloren gehen (Invariante 2): der Prozess-Poll heilt.
+            Console.WriteLine($"[Korrelations-Router] Signal {signal.StreamId}@{signal.Version} nicht geroutet: {ex.Message}");
         }
     }
 }

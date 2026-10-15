@@ -219,6 +219,15 @@ public class MartenEventStore : IEventStoreRepository
         return result;
     }
 
+    public async Task<EventEnvelope?> ReadEventAsync(Guid streamId, int version, CancellationToken ct)
+    {
+        await using var session = _store.LightweightSession();
+        var raw = await session.Events.QueryAllRawEvents()
+            .Where(e => e.StreamId == streamId && e.Version == version)
+            .ToListAsync(ct);
+        return raw.Where(e => !IstTombstone(e)).SelectMany(Materialisiere).FirstOrDefault();
+    }
+
     /// <summary>
     /// Ein gespeichertes Event als EventEnvelope(s). Upcasting-Seam: eine Stored-Position wird zu einem (1:1) oder — bei einem künftigen
     /// Split — mehreren materialisierten Events. Alle teilen dieselbe AggregateVersion, tragen aber aufsteigende SubIndex 0,1,… → der

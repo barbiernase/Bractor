@@ -26,24 +26,38 @@ public sealed class KorrelationsRouter
     private readonly IEventStoreRepository _store;
     private readonly IReadOnlyDictionary<Type, string> _auslöserZuProzess;
     private readonly Func<Guid, Guid, int, string?, CancellationToken, Task> _wecke;
+    private readonly Dictionary<Type, string> _startJeSignal = new();
 
     /// <param name="auslöserZuProzess">Auslöser-Event-Typ → Prozess-Name (der Start bindet den Typ).</param>
     /// <param name="wecke">Weckt den Manager: (Korrelation, QuellStream, QuellVersion, ProzessNameFürStart|null).</param>
+    /// <param name="eventZuSignal">Event-Typ → sein <c>StateChangeVia</c>-Signal-Typ (generierte Tabelle). Damit startet ein Auslöser-Signal
+    /// seinen Vorgang ohne Read; ohne Tabelle liest der Router jedes Event.</param>
     public KorrelationsRouter(
         IEventStoreRepository store,
         IReadOnlyDictionary<Type, string> auslöserZuProzess,
-        Func<Guid, Guid, int, string?, CancellationToken, Task> wecke)
+        Func<Guid, Guid, int, string?, CancellationToken, Task> wecke,
+        IReadOnlyDictionary<Type, Type>? eventZuSignal = null)
     {
         _store = store;
         _auslöserZuProzess = auslöserZuProzess;
         _wecke = wecke;
+        if (eventZuSignal is not null)
+            foreach (var (typ, prozess) in auslöserZuProzess)
+                if (eventZuSignal.TryGetValue(typ, out var signalTyp)) _startJeSignal[signalTyp] = prozess;
     }
 
-    /// <summary>Signal-Pfad: das Event zum Signal lesen und routen.</summary>
+    /// <summary>
+    /// Signal-Pfad (PF-12): ein Auslöser-Signal startet seinen Vorgang ohne Read — der Signal-Typ nennt das Event, die Korrelation folgt aus
+    /// Stream und Version. Jedes andere Signal liest genau sein Event (die Korrelation steht in den Metadaten), nicht den Rest des Streams.
+    /// </summary>
     public async Task OnSignalAsync(IStateChangeSignal signal, CancellationToken ct = default)
     {
-        var events = await _store.ReadStreamAsync(signal.StreamId, signal.Version, ct);
-        var env = events.FirstOrDefault(e => e.AggregateVersion == signal.Version);
+        if (_startJeSignal.TryGetValue(signal.GetType(), out var prozess))
+        {
+            await _wecke(ProzessId.Für(prozess, signal.StreamId, signal.Version), signal.StreamId, signal.Version, prozess, ct);
+            return;
+        }
+        var env = await _store.ReadEventAsync(signal.StreamId, signal.Version, ct);
         if (env is null) return;
         await RouteAsync(signal.StreamId, env.AggregateVersion, env.Payload, env.CorrelationId, ct);
     }

@@ -154,7 +154,7 @@ public sealed class ProzessManagerStartupService : IHostedService
                 return Task.CompletedTask;
             };
 
-        var router = new KorrelationsRouter(_store, auslöserZuProzess, wecke);
+        var router = new KorrelationsRouter(_store, auslöserZuProzess, wecke, Anwendung.Signale.EventToSignal);
         _routerPid = _system.Root.Spawn(Props.FromProducer(() =>
             new KorrelationsRouterActor(RouterId, signalTypes, router)));
 

@@ -101,8 +101,7 @@ public sealed class ProzessManager
         {
             // Kausalkette (docs/konzept-akteure.md §5.1): der Prozess handelt im Auftrag des Akteurs, dessen Event ihn auslöste —
             //   einmal beim Start gelesen und mit ProzessGestartet ins Manager-Log gestempelt (Header), danach aus dem Log gefaltet.
-            var auslöser = (await _store.ReadStreamAsync(auslöserStream, auslöserVersion, ct))
-                .FirstOrDefault(e => e.AggregateVersion == auslöserVersion);
+            var auslöser = await _store.ReadEventAsync(auslöserStream, auslöserVersion, ct);
             await AppendAsync(korrelation, mz.Version, new ProzessGestartet(prozessName, auslöserStream, auslöserVersion), ct, auslöser?.UserId);
         }
         await WakeAsync(korrelation, ct);
@@ -437,8 +436,7 @@ public sealed class ProzessManager
         // Wurzel-Token: das Auslöse-Event. Einmalig gelesen und im Marking zwischengehalten (unveränderlich).
         if (marking.AuslöserPayload is null)
         {
-            var auslöserEvents = await _store.ReadStreamAsync(mz.AuslöserStream, 0, ct);
-            var auslöserEnv = auslöserEvents.FirstOrDefault(e => e.AggregateVersion == mz.AuslöserVersion);
+            var auslöserEnv = await _store.ReadEventAsync(mz.AuslöserStream, mz.AuslöserVersion, ct);
             marking.AuslöserPayload = auslöserEnv?.Payload;
             marking.AuslöserZeit = auslöserEnv?.CreatedAtUtc ?? default;
         }
