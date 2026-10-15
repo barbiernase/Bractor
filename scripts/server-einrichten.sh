@@ -1,14 +1,20 @@
 #!/usr/bin/env bash
 # Richtet den Messserver ein (Ubuntu 24.04, als root, idempotent). Aufruf nur über `scripts/server.sh einrichten`, nie auf dem Mac.
 #
-#   scripts/server-einrichten.sh <dotnet-sdk-version>
+#   scripts/server-einrichten.sh <dotnet-sdk-version> [--netz host|proxy]
+#
+# --netz host (Standard): Postgres, Redis und der Redis der Vermessung im Host-Netzwerk (docker-compose.messserver.yml), ohne docker-proxy;
+# --netz proxy: wie auf dem Mac über veröffentlichte Ports — nur für Vergleichsmessungen.
 #
 # Was es tut: .NET-SDK in genau der Version des lokalen Rechners (/usr/local/share/dotnet), Python-Umgebung der Funktions-Worker
-# (/opt/bractor-python, torch nur CPU), Infrastruktur-Container aus docker-compose.infrastructure.yml (Projekt `cqrs`, Ports nur 127.0.0.1).
+# (/opt/bractor-python, torch nur CPU), Infrastruktur-Container (Projekt `cqrs`, erreichbar nur über 127.0.0.1).
 # Was es nicht tut: Firewall, SSH, Caddy und die übrigen Container des Servers — die bleiben unberührt.
 set -euo pipefail
 
-SDK="${1:?Aufruf: server-einrichten.sh <dotnet-sdk-version>}"
+SDK="${1:?Aufruf: server-einrichten.sh <dotnet-sdk-version> [--netz host|proxy]}"
+NETZ=host
+[ "${2:-}" = --netz ] && NETZ="${3:?--netz host|proxy}"
+case "$NETZ" in host|proxy) ;; *) echo "--netz host|proxy, nicht $NETZ" >&2; exit 2 ;; esac
 WURZEL="$(git -C "$(dirname "$0")" rev-parse --show-toplevel)"
 PY=/opt/bractor-python
 LAEUFE=/opt/bractor-laeufe
@@ -52,9 +58,23 @@ mkdir -p /opt/miniconda3/envs
 [ -L /opt/miniconda3/envs/gpu_env ] || rm -rf /opt/miniconda3/envs/gpu_env
 ln -sfn "$PY" /opt/miniconda3/envs/gpu_env
 
-# ── Infrastruktur (Postgres, Redis, Consul) ──
-echo "== Infrastruktur-Container"
-docker compose -f "$WURZEL/docker-compose.infrastructure.yml" -p cqrs up -d --wait
+# ── Infrastruktur (Postgres, Redis, Consul; der Redis der Vermessung, den vermessung-e2e.sh sonst mit -p anlegt) ──
+echo "== Infrastruktur-Container (Netz: $NETZ)"
+DATEIEN=(-f "$WURZEL/docker-compose.infrastructure.yml")
+[ "$NETZ" = host ] && DATEIEN+=(-f "$WURZEL/docker-compose.messserver.yml")
+docker compose "${DATEIEN[@]}" -p cqrs up -d --wait
+if [ "$(docker inspect -f '{{.HostConfig.NetworkMode}}' cqrs-vermessung-redis 2>/dev/null)" != "$([ "$NETZ" = host ] && echo host || echo bridge)" ]; then
+  docker rm -f cqrs-vermessung-redis >/dev/null 2>&1 || true
+  if [ "$NETZ" = host ]; then
+    docker run -d --name cqrs-vermessung-redis --network host --restart unless-stopped redis:7-alpine redis-server --bind 127.0.0.1 --port 6390 >/dev/null
+  else
+    docker run -d --name cqrs-vermessung-redis -p 127.0.0.1:6390:6379 --restart unless-stopped redis:7-alpine >/dev/null
+  fi
+fi
+# Nichts davon darf außerhalb von 127.0.0.1 lauschen.
+if ss -tlnH | awk '{print $4}' | grep -E ':(5432|6379|6390|8500)$' | grep -vE '^(127\.0\.0\.1|\[::1\]):'; then
+  echo "FEHLER: ein Infrastruktur-Port lauscht nicht nur auf 127.0.0.1 (siehe oben)." >&2; exit 1
+fi
 
 mkdir -p "$LAEUFE/ergebnisse"
 echo "== Fertig: $(dotnet --version) · $("$PY/bin/python" -c 'import torch; print("torch", torch.__version__)') · $(docker ps --filter name=cqrs- --format '{{.Names}}' | tr '\n' ' ')"

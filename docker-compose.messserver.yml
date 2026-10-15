@@ -1,0 +1,22 @@
+# ═══════════════════════════════════════════════════════════════════
+# Zusatz für den Messserver (scripts/server-einrichten.sh, docs/12 §12.6) — nicht auf dem Mac.
+#
+#   docker compose -f docker-compose.infrastructure.yml -f docker-compose.messserver.yml -p cqrs up -d
+#
+# Postgres und Redis im Host-Netzwerk: ohne den Weiterleiter docker-proxy, durch den sonst jede Verbindung
+# läuft (bis 30 % eines Kerns unter Last, docs/12 §12.5). Die Port-Angaben gelten im Host-Netzwerk nicht —
+# deshalb binden Postgres und Redis selbst nur an 127.0.0.1 (die Firewall des Servers ist aus).
+# Consul bleibt im Container-Netz (wenig Verkehr, nur die Integrations-Suite).
+# ═══════════════════════════════════════════════════════════════════
+
+services:
+
+  postgres:
+    network_mode: host
+    ports: !reset []
+    command: postgres -c listen_addresses=127.0.0.1 -c shared_preload_libraries=pg_stat_statements -c max_connections=300
+
+  redis:
+    network_mode: host
+    ports: !reset []
+    command: redis-server --bind 127.0.0.1 --port 6379

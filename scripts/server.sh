@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Steuert den Messserver über SSH. Der Code kommt nur über GitHub dorthin (der Commit muss gepusht sein), Ergebnisse kommen per rsync zurück.
 #
-#   scripts/server.sh einrichten              Server einrichten (idempotent, scripts/server-einrichten.sh): Checkout, .NET-SDK wie lokal,
-#                                             Python der Worker, Infrastruktur-Container
+#   scripts/server.sh einrichten [--netz proxy]  Server einrichten (idempotent, scripts/server-einrichten.sh): Checkout, .NET-SDK wie lokal,
+#                                             Python der Worker, Infrastruktur-Container (Standard im Host-Netzwerk, ohne docker-proxy)
 #   scripts/server.sh lauf <befehl …>         HEAD auf dem Server auschecken, <befehl> dort in tmux ausführen (übersteht SSH-Abbrüche), die
 #                                             Ausgabe mitlesen, neue Ordner aus vermessung/ergebnisse/ zurückholen; Exit-Code = der des Befehls
 #   scripts/server.sh lauf --los <befehl …>   dasselbe, ohne zu warten (später: warte)
@@ -78,7 +78,7 @@ warte() {
 case "${1:-}" in
   einrichten)
     frei_pruefen; commit_pruefen; auschecken
-    fern "bash $CO/scripts/server-einrichten.sh $(dotnet --version)"
+    fern "bash $CO/scripts/server-einrichten.sh $(dotnet --version) ${2:-} ${3:-}"
     ;;
   lauf)
     shift
