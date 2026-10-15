@@ -20,6 +20,11 @@
     "Art": "Einzelknoten",
     "Name": "cqrs-vermessung"
   },
+  "Lebenszyklus": {
+    "AggregatLeerlaufSekunden": 10,
+    "AdapterLeerlaufSekunden": 10,
+    "ProzessManagerLeerlaufSekunden": 10
+  },
   "Transport": {
     "GrpcPort": 5201,
     "EinblickPort": 5202,

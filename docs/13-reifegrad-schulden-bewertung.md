@@ -1,7 +1,7 @@
 # 13 — Reifegrad, Schulden & Bewertung
 
 **Die eine Quelle für „offen“.** Andere Dokumente (`CLAUDE.md`, Kapitel 01–12, Konzepte) nennen Schulden höchstens kurz und verweisen
-hierher. Stand: 2026-10-15, Phase 1 des Plans Garantien und Durchsatz. Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
+hierher. Stand: 2026-10-15, Phase 2 des Plans Garantien und Durchsatz. Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
 (`docs/konzept-werkbank.md` §2). Zahlen und Messwerte stehen in `docs/12-tests-und-vermessung.md`.
 
 ## 13.0 Offen auf einen Blick
@@ -9,14 +9,12 @@ hierher. Stand: 2026-10-15, Phase 1 des Plans Garantien und Durchsatz. Maßstab 
 | ID | Kurz | Prio |
 |---|---|:--:|
 | G-2 | Inbox-Fenster (10 000): eine CommandId, die jenseits der Grenze erneut kommt, wirkt erneut; der Emittenten-Anteil ist seit Phase 1 geschlossen | P1 |
-| G-3 | Append-Konflikt: Actor bleibt mit veraltetem Stand stehen; mehrdeutiger Commit wird als Fehler gemeldet | P1 |
 | G-4 | Projektions-Checkpoint ohne Versionsprüfung: zwei Aktivierungen können einen Effekt doppelt anwenden | P1 |
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
 | G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
 | PF-1 | Konsum je (Projektion, Stream) mit eigener Transaktion und eigenem Actor; kein Batch-Co-Commit | P1 |
 | PF-2 | Heil-Poll je Projektion ohne LIMIT, weckt jeden geänderten Stream nacheinander; Rebuild lädt den Log als Liste | P1 |
 | PF-4 | Prozess-Poll liest geänderte Streams ab 0 und verwirft geladene Events; Backstop weckt alle offenen Vorgänge | P1 |
-| PF-5 | Keine Passivierung: Aggregat-, Adapter- und Prozess-Actors bleiben bis zum Shutdown | P1 |
 | PF-3 | Inbox-Marke je Command im Stream (auch ohne Event), Inbox im Snapshot | P2 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
@@ -58,7 +56,7 @@ Werkzeuge lesen teils per Reflection, und neben den neuen Wegen (Fluss, Quelle, 
 
 | Subsystem | Reife |
 |---|:--:|
-| Schreibseite | 🟢 / 🟡 (G-3, G-5) |
+| Schreibseite | 🟢 / 🟡 (G-5) |
 | Konsum-/Prozess-Maschine | 🟡 (G-2 Inbox, G-4) |
 | Generatoren & Analyzer | 🟢 / 🟡 (W10-1, W2-1) |
 | Multi-Node / Transport | 🟢 / 🟡 (P1-1, P1-2) |
@@ -95,12 +93,6 @@ offen bleibt das Fenster selbst (Wiederholung eines Clients oder eines Dirigente
 Test: PD `SchreibGarantieTests.Eine_alte_CommandId_jenseits_der_Inbox_Grenze…` (Skip G-2). *Empfehlung:* Inbox als durable Seitentabelle
 statt Fenster im Stream (Plan Phase 4).
 
-**G-3 · Append-Konflikt im Aggregat-Actor.** Wirft der Append (Versionskonflikt durch eine zweite Aktivierung, oder ein Commit, dessen
-Quittung verloren ging und dessen Einzel-Wiederholung im `BatchingEventAppender` dann kollidiert), landet das im äußeren `catch` von
-`AggregateActorBase`; `_initialized` bleibt gesetzt, der Stand veraltet, jeder weitere Append scheitert, bis der Actor stoppt (es gibt keine
-Passivierung). Der mehrdeutige Commit wird außerdem als Fehler quittiert, obwohl er gewirkt hat (gegen P10). *Empfehlung:* bei einem
-Append-Fehler frisch rehydrieren; liegt die CommandId danach in der Inbox, Erfolg quittieren.
-
 **G-4 · Projektions-Checkpoint ohne Versionsprüfung.** `MartenCoCommitStoreBase.MarkProcessedAsync` schreibt den `ProjectionCheckpoint` per
 `Store` (letzter Schreiber gewinnt). Zwei Aktivierungen desselben (Projektion, Stream) — im Cluster bei einer Netzstörung möglich — können
 einen nicht-idempotenten Effekt doppelt anwenden. Single-Node betrifft es nicht. *Empfehlung:* Checkpoint mit erwarteter Version schreiben;
@@ -121,10 +113,6 @@ Checkpoint“ und nur nachhängende Streams wecken; ein gemeinsamer, seitenweise
 **PF-4 · Prozess-Poll und Backstop.** `ProzessManagerWiring` liest jeden geänderten Stream ab Version 0 und routet jedes passende historische
 Event erneut, obwohl `ReadChangedStreamsAsync` die neuen Events schon geladen hat; der Backstop weckt alle 15 s alle offenen Vorgänge, auf jedem
 Knoten. *Empfehlung:* die geladenen Events direkt routen; Fälligkeits-Index für Zeitlimits (zusammen mit W11-2); Lease im Cluster.
-
-**PF-5 · Keine Passivierung.** Kein Actor stoppt bei Leerlauf (kein `ReceiveTimeout`): Aggregate, Adapter je (Projektion, Stream) und
-Prozess-Manager bleiben bis zum Shutdown im Speicher; im Dauerbetrieb wächst der Speicher mit allem, was je aktiviert wurde. Verschärft G-3.
-*Empfehlung:* Idle-Timeout je Actor-Art, Snapshot beim Stoppen bleibt.
 
 
 **W10-1 · Reflection in Werkzeugen.** `Cqrs.Codegen` liest die gebauten Domänen-DLLs per `MetadataLoadContext` und erzeugt daraus `domain.proto`,
@@ -246,10 +234,12 @@ Ablehnung, oder Inbox als Tabelle mit eindeutigem Schlüssel in derselben Transa
 hochfrequente Quellen (Maschinendaten) ist das teuer. *Entscheidung offen:* Dedup-Tabelle je Kennung und Sammel-Streams gegen „ein Vorgang je
 Meldung“; zusammen mit den flüchtigen Quellen (W11-2/§13.5 Schritt 7).
 
-**G-6 · Garantie ohne eigenen Nachweis-Test** (Garantie-Matrix, [11](11-garantien.md)). Für „durabel nach Erfolg“ (P10) prüft nur der
-mehrdeutige Commit (G-3) den Pfad; dass ein Fehler **nach** dem Append im Actor (Apply, Publish) frisch rehydriert und Erfolg quittiert, hat
-keinen Test — ein Seam für einen werfenden Post-Append-Schritt fehlt. *Empfehlung:* zusammen mit G-3 (Phase 2) einen Störungs-Seam nach dem
-Append und einen Test der Prüfdomäne.
+**G-6 · Garantie ohne eigenen Nachweis-Test** (Garantie-Matrix, [11](11-garantien.md)). Für „durabel nach Erfolg“ (P10) prüft der
+mehrdeutige Commit den Append selbst (PD `SchreibGarantieTests`, seit Phase 2 grün); dass ein Fehler **nach** dem Append im Actor frisch
+rehydriert und Erfolg quittiert, hat keinen Test. Abgleich Phase 2: die Schritte nach dem Append (Version-Index, Snapshot, Publish) fangen ihre
+Fehler selbst; erreichbar ist der Pfad nur über einen werfenden Applier — der bricht dann auch die Rehydration (vergiftetes Aggregat,
+Dead-Letter). *Empfehlung:* entweder den Pfad auf den Applier-Fall zurückschneiden oder einen Prüfstand-Test mit einem Actor über eine
+werfende Applier-Naht.
 
 **G-5 · Versionszählung bei Split-Upcasts.** `AggregateRehydrator` zählt `Version++` je materialisiertem Event; ein Split-Upcast liefert aus
 einer gespeicherten Position mehrere Events (`MartenEventStore`, `SubIndex`), die Version läuft dem Log davon, und jeder Append scheitert.
@@ -290,8 +280,8 @@ Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
 
 ## 13.4 Korrektheit vs. Reifegrad
 
-Keine bekannten aktiven Korrektheits-Bugs mehr (G-1 und G-7 erledigt, §13.6). **G-2** (Inbox-Fenster) bis **G-4** brechen eine Garantie unter
-Last bzw. im Cluster, **G-5** ist latent. Jede offene G-Lücke hat einen Test, der sie zeigt (Skip `G-n offen`, [11](11-garantien.md) §11.13).
+Keine bekannten aktiven Korrektheits-Bugs mehr (G-1, G-7, G-3 erledigt, §13.6). **G-2** (Inbox-Fenster) und **G-4** brechen eine Garantie
+unter Last bzw. im Cluster, **G-5** ist latent. Jede offene G-Lücke hat einen Test, der sie zeigt (Skip `G-n offen`, [11](11-garantien.md) §11.13).
 Korrektheitsnah sind außerdem: **LLM-1** (vom LLM
 geschriebene Logik nur auf „baut“ geprüft), **W10-1** (möglicher Hash-Unterschied zwischen Python-Basis und Server beim Handshake), **W2-1** (vom Client gesetztes Cluster-Kind) und **WZ-1** (Prüfungen, die grün sind, ohne es zu beweisen). Alles andere ist Reifegrad,
 Allgemeingültigkeit oder Hygiene.
@@ -311,8 +301,8 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 0. **G und PF** (Garantie-Lücken und ihre Kosten) laufen als eigener Strang nach [plan-garantien-und-durchsatz.md](plan-garantien-und-durchsatz.md):
    Phase 0 Abgleich und E2E-Messung, 1 Emit-Ausgang und Emittenten-Cursor (G-1, G-2 Emittent, G-7, P1-6, PF-9), 2 Actor-Lebenszyklus (G-3, PF-5), 3 Batch-Konsum (PF-1, PF-2,
    G-4), 4 Inbox als Tabelle (G-2, PF-3), 5 Prozess-Poll (PF-4), 6 Rest. Ein Agent setzt ihn allein um; die Schritte 1–10 unten ruhen so lange.
-   Gemessen wird nach jeder Phase Ende-zu-Ende an den realen Domänen (Plan §0.1). Stand: Phase 0 und Phase 1 (Emit-Ausgang, Emittenten-Cursor,
-   G-1, G-7, P1-6, PF-9) fertig; Stand und Messung im Plan §8.
+   Gemessen wird nach jeder Phase Ende-zu-Ende an den realen Domänen (Plan §0.1). Stand: Phase 0, 1 (Emit-Ausgang, Emittenten-Cursor,
+   G-1, G-7, P1-6, PF-9) und 2 (Actor-Lebenszyklus, G-3, PF-5) fertig; Stand und Messung im Plan §8.
 1. ~~WB-2/WB-3~~ Sicherheitsnetz steht (2026-10-15): ⟳-Abnahmetest inkl. „▶ Worker“ und Gate „frischer Checkout baut“ (§13.6).
 2. ~~W11-1 (Schreibwege)/WB-1~~ je Absicht ein Weg (2026-10-15, §13.6).
 3. **LLM-1** 🤖 fachlich prüfen: neue Rolle `<Wurzel>.Beispiele` (Strukturtabelle, Lageart, CQRS098), Beispiele an der Karte (Gegeben/Wenn/Dann)
@@ -330,6 +320,14 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **Actor-Lebenszyklus (früher G-3, PF-5; Plan Garantien und Durchsatz, Phase 2, 2026-10-15):**
+  - **G-3:** jeder Append des Aggregat-Actors (Effekt, Noop- und Ablehnungs-Marke) läuft über `AppendeAsync`. Scheitert er, rehydriert der Actor
+    frisch; steht die CommandId danach in der Inbox, wird der durable Ausgang quittiert (mehrdeutiger Commit, P10), sonst einmal auf dem frischen
+    Stand neu entschieden. PD `SchreibGarantieTests.Nach_einem_Versionskonflikt…` und `…Ein_mehrdeutiger_Commit…` ohne Skip.
+  - **PF-5:** Passivierung über Proto-`ReceiveTimeout` für Aggregat, Adapter und Prozess-Manager (`Infrastructure/Lebenszyklus/Passivierung.cs`),
+    Leerlauf aus der Umgebung (`Lebenszyklus`, E7: 600/120/600 s); der Snapshot beim Stoppen bleibt. `/monitoring/metrics` und `/health` melden
+    die aktiven Actors. PD `LebenszyklusGarantieTests`, P `PassivierungTests`.
 
 - **Emit-Ausgang und Emittenten-Cursor (früher G-1, G-7, P1-6, PF-9 und der Emittenten-Anteil von G-2; Plan Garantien und Durchsatz,
   Phase 1, 2026-10-15):**

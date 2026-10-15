@@ -29,11 +29,12 @@ internal sealed class ProzessManagerKind : IClusterKindContributor
         var deadLetters = provider.GetService<IDeadLetterSink>();   // ★ #12: optional, best-effort Ops-Sicht
         var markingStore = provider.GetService<IProzessMarkingStore>();   // ★ P5b: optional, best-effort Cursor
         var uhr = provider.GetService<IDbClock>();   // Zeitlimit gegen die DB-Uhr (Event-Zeitstempel sind DB-generiert)
+        var passivierung = provider.GetService<Infrastructure.Lebenszyklus.Passivierung>();   // PF-5
         // Rufe<F>/Fluss-Funktionen: der Auftrag geht an den VERMITTLER seiner Funktion (Pull durch die Ausführer, §14.5).
         Func<Guid, IAuftrag, Guid, string?, CancellationToken, Task> rufe =
             (k, a, v, akteur, ct) => Infrastructure.Funktionen.FunktionsAnbieter.BieteAnAsync(system, k, a, v, akteur, ct);
         return new ClusterKind(ProzessManagerActor.KindName, Props.FromProducer(() =>
-            new ProzessManagerActor(eventStore, registry, system.Cluster(), offenIndex, deadLetters, markingStore, rufe, uhr)));
+            new ProzessManagerActor(eventStore, registry, system.Cluster(), offenIndex, deadLetters, markingStore, rufe, uhr, passivierung)));
     }
 }
 

@@ -81,6 +81,17 @@ public sealed class SchreibpfadKonfig
     public int InboxGrenze { get; set; } = 10_000;
 }
 
+/// <summary>
+/// Lebenszyklus der virtuellen Actors (Tuning, nie Semantik): nach so vielen Sekunden ohne Nachricht passiviert ein Actor — er stoppt, der
+/// Cluster vergisst ihn, die nächste Nachricht aktiviert ihn frisch aus dem Log (bzw. Snapshot, Marke, Marking-Cursor). 0 = nie.
+/// </summary>
+public sealed class LebenszyklusKonfig
+{
+    public int AggregatLeerlaufSekunden { get; set; } = 600;
+    public int AdapterLeerlaufSekunden { get; set; } = 120;
+    public int ProzessManagerLeerlaufSekunden { get; set; } = 600;
+}
+
 /// <summary>Ports: gRPC (HTTP/2) für Clients/Worker, Einblick (HTTP/1.1 + 2) für Werkbank, Webhook und /health; 0 = aus.</summary>
 public sealed class TransportKonfig
 {
@@ -149,6 +160,7 @@ public sealed class UmgebungKonfig
     public VersionIndexKonfig VersionIndex { get; set; } = new();
     public ClusterKonfig Cluster { get; set; } = new();
     public SchreibpfadKonfig Schreibpfad { get; set; } = new();
+    public LebenszyklusKonfig Lebenszyklus { get; set; } = new();
     public TransportKonfig Transport { get; set; } = new();
     public Dictionary<string, FunktionsKonfig> Funktionen { get; set; } = new(StringComparer.Ordinal);
     public Dictionary<string, DienstKonfig> Dienste { get; set; } = new(StringComparer.Ordinal);
@@ -172,11 +184,11 @@ public sealed class UmgebungKonfig
 public static class UmgebungsAbschnitte
 {
     public const string Umgebung = "Umgebung", EventStore = "EventStore", VersionIndex = "VersionIndex", Cluster = "Cluster",
-        Schreibpfad = "Schreibpfad", Transport = "Transport", Identitaeten = "Identitaeten", Quellen = "Quellen",
+        Schreibpfad = "Schreibpfad", Lebenszyklus = "Lebenszyklus", Transport = "Transport", Identitaeten = "Identitaeten", Quellen = "Quellen",
         Funktionen = "Funktionen", Dienste = "Dienste", Clients = "Clients", Konfig = "Konfig", Logging = "Logging";
 
     public static readonly IReadOnlyList<string> Alle =
-        [Umgebung, EventStore, VersionIndex, Cluster, Schreibpfad, Transport, Identitaeten, Quellen, Funktionen, Dienste, Clients, Konfig, Logging];
+        [Umgebung, EventStore, VersionIndex, Cluster, Schreibpfad, Lebenszyklus, Transport, Identitaeten, Quellen, Funktionen, Dienste, Clients, Konfig, Logging];
 }
 
 /// <summary>

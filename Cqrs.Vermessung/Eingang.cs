@@ -43,6 +43,17 @@ internal sealed class Eingang : IDisposable
         }
     }
 
+    /// <summary>Lokal aktive Actors des Hosts (<c>/monitoring/metrics</c>, PF-5); NaN, wenn der Host nicht antwortet.</summary>
+    public async Task<double> AktiveActorsAsync()
+    {
+        try
+        {
+            var m = JsonNode.Parse(await _http.GetStringAsync("/monitoring/metrics"));
+            return m?["aktiveActors"]?.GetValue<int>() ?? double.NaN;
+        }
+        catch (Exception e) when (e is HttpRequestException or TaskCanceledException or System.Text.Json.JsonException) { return double.NaN; }
+    }
+
     /// <summary>Stellt eine Query; liefert <c>antwort</c> (<c>{typ, daten}</c>) oder null.</summary>
     public async Task<JsonNode?> QueryAsync(string typ, JsonObject daten, string? token, CancellationToken ct = default)
     {

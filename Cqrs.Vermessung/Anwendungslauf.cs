@@ -15,6 +15,17 @@ internal sealed class Anwendungslauf : IAsyncDisposable
     public required Kontext Kontext { get; init; }
     public List<WorkerLauf> Worker { get; } = new();
 
+    /// <summary>Höchste Zahl aktiver Actors an einem Fensterende dieses Laufs (Maßstab der Passivierung, PF-5).</summary>
+    public double HoechstActors { get; private set; } = double.NaN;
+
+    /// <summary>Aktive Actors jetzt; führt den Höchststand nach.</summary>
+    public async Task<double> AktiveActorsAsync()
+    {
+        var n = await Eingang.AktiveActorsAsync();
+        if (!double.IsNaN(n) && (double.IsNaN(HoechstActors) || n > HoechstActors)) HoechstActors = n;
+        return n;
+    }
+
     public static async Task<Anwendungslauf> StarteAsync(Kontext k, Umgebungsdatei u, string hostProjekt, string rolle, string logName,
         bool zuruecksetzen, IReadOnlyDictionary<string, string>? variablen = null, params string[] mitDaten)
     {

@@ -84,6 +84,7 @@ public static partial class UmgebungLader
             VersionIndex = Abschnitt<VersionIndexKonfig>(konfig, UmgebungsAbschnitte.VersionIndex),
             Cluster = Abschnitt<ClusterKonfig>(konfig, UmgebungsAbschnitte.Cluster),
             Schreibpfad = Abschnitt<SchreibpfadKonfig>(konfig, UmgebungsAbschnitte.Schreibpfad),
+            Lebenszyklus = Abschnitt<LebenszyklusKonfig>(konfig, UmgebungsAbschnitte.Lebenszyklus),
             Transport = Abschnitt<TransportKonfig>(konfig, UmgebungsAbschnitte.Transport),
         };
         foreach (var f in konfig.GetSection(UmgebungsAbschnitte.Funktionen).GetChildren())

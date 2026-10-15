@@ -19,11 +19,12 @@ internal sealed class Messfenster
     private readonly Datenbank _db;
     private readonly Ressourcen _res;
     private readonly string _rolle;
+    private readonly Anwendungslauf? _lauf;
     private Datenbank.PgStand? _a;
     private long _leserVorher;
     public DateTimeOffset Von { get; private set; }
 
-    public Messfenster(Datenbank db, Ressourcen res, string rolle) { _db = db; _res = res; _rolle = rolle; }
+    public Messfenster(Datenbank db, Ressourcen res, string rolle, Anwendungslauf? lauf = null) { _db = db; _res = res; _rolle = rolle; _lauf = lauf; }
 
     public async Task StarteAsync()
     {
@@ -39,12 +40,16 @@ internal sealed class Messfenster
         var bis = DateTimeOffset.UtcNow;
         var (txs, qs, tx, q, xact, st) = Datenbank.Differenz(_a!, b, _db.LeserStatements - _leserVorher);
         var (cpu, rss) = _res.Fenster(_rolle, Von, bis);
+        var (rssEnde, rssHoechst) = _res.Speicher(_rolle, Von, bis);
+        var actors = _lauf is null ? double.NaN : await _lauf.AktiveActorsAsync();
         var werte = new Dictionary<string, double>
         {
             ["tx_je_s"] = txs, ["queries_je_s"] = qs,
             ["tx_je_vorgang"] = vorgaenge > 0 ? (double)tx / vorgaenge : double.NaN,
             ["queries_je_vorgang"] = vorgaenge > 0 ? (double)q / vorgaenge : double.NaN,
             ["cpu_prozent"] = cpu, ["rss_mb"] = rss, ["xact_je_s_info"] = xact,
+            ["rss_ende_mb"] = rssEnde, ["rss_lauf_max_mb"] = rssHoechst, ["rss_ende_anteil"] = rssEnde / rssHoechst,
+            ["aktive_actors"] = actors, ["aktive_actors_hoechst"] = _lauf?.HoechstActors ?? double.NaN,
         };
         ablage.Statements(szenario, wiederholung, st);
         return (werte, st);

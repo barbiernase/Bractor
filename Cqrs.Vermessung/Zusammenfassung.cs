@@ -31,6 +31,11 @@ internal static class Zusammenfassung
         ("cpu_prozent", "CPU Host", "% eines Kerns"),
         ("worker_cpu_prozent", "CPU Worker", "% eines Kerns"),
         ("rss_mb", "RSS Host (max.)", "MB"),
+        ("rss_ende_mb", "RSS Host am Fensterende", "MB"),
+        ("rss_lauf_max_mb", "RSS Host Höchststand des Laufs", "MB"),
+        ("rss_ende_anteil", "RSS am Ende / Höchststand", "1"),
+        ("aktive_actors", "Aktive Actors am Fensterende", "1"),
+        ("aktive_actors_hoechst", "Aktive Actors, Höchststand der Fensterenden", "1"),
     ];
 
     public static JsonArray Zeilen(JsonObject szenarien)

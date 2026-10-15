@@ -163,7 +163,7 @@ internal sealed class WorkerLauf : IAsyncDisposable
 /// </summary>
 internal sealed class Ressourcen : IAsyncDisposable
 {
-    public sealed record Probe(DateTimeOffset Zeit, string Rolle, double RssMb, double CpuProzent);
+    public sealed record Probe(DateTimeOffset Zeit, string Rolle, int Pid, double RssMb, double CpuProzent);
 
     private readonly StreamWriter _csv;
     private readonly List<Probe> _proben = new();
@@ -205,7 +205,7 @@ internal sealed class Ressourcen : IAsyncDisposable
                         prozent = (cpu - v.Cpu).TotalSeconds / (jetzt - v.Zeit).TotalSeconds * 100;
                     _vorher[p.Id] = (jetzt, cpu);
                     if (double.IsNaN(prozent)) continue;
-                    var probe = new Probe(jetzt, rolle, rss, prozent);
+                    var probe = new Probe(jetzt, rolle, p.Id, rss, prozent);
                     lock (_proben) _proben.Add(probe);
                     _csv.WriteLine(FormattableString.Invariant($"{jetzt:O},{_abschnitt},{rolle},{p.Id},{rss:F1},{prozent:F1}"));
                 }
@@ -221,6 +221,20 @@ internal sealed class Ressourcen : IAsyncDisposable
         List<Probe> p;
         lock (_proben) p = _proben.Where(x => x.Rolle == rolle && x.Zeit >= von && x.Zeit <= bis).ToList();
         return p.Count == 0 ? (double.NaN, double.NaN) : (p.Average(x => x.CpuProzent), p.Max(x => x.RssMb));
+    }
+
+    /// <summary>
+    /// Speicher am Fensterende (letzte Probe) und der Höchststand desselben Prozesses seit seinem Start — der Maßstab der Passivierung (PF-5):
+    /// nach den Blöcken soll der RSS deutlich unter den Höchststand fallen.
+    /// </summary>
+    public (double EndeMb, double HoechstMb) Speicher(string rolle, DateTimeOffset von, DateTimeOffset bis)
+    {
+        lock (_proben)
+        {
+            var letzte = _proben.LastOrDefault(x => x.Rolle == rolle && x.Zeit >= von && x.Zeit <= bis);
+            if (letzte is null) return (double.NaN, double.NaN);
+            return (letzte.RssMb, _proben.Where(x => x.Pid == letzte.Pid && x.Zeit <= bis).Max(x => x.RssMb));
+        }
     }
 
     /// <summary>Summe der mittleren CPU aller Rollen mit dem Präfix (z. B. die Worker) im Fenster; NaN ohne Proben.</summary>

@@ -39,6 +39,7 @@ public sealed class ProzessManagerActor : IActor
     private readonly IProzessMarkingStore? _markingStore;   // ★ P5b: nicht-autoritativer Marking-Cursor (optional)
     private readonly Func<Guid, IAuftrag, Guid, string?, CancellationToken, Task>? _rufe;   // Rufe<F>: Auftrag an den Vermittler
     private readonly IDbClock? _uhr;                                                // Zeitlimit gegen die DB-Uhr
+    private readonly TimeSpan _leerlauf;                                            // PF-5: Passivierung (Marking-Cursor bleibt durabel)
     private Guid _korrelation;
     private ProzessManager? _manager;
     private CommandEmitter? _emitter;
@@ -51,8 +52,10 @@ public sealed class ProzessManagerActor : IActor
         IDeadLetterSink? deadLetters = null,
         IProzessMarkingStore? markingStore = null,
         Func<Guid, IAuftrag, Guid, string?, CancellationToken, Task>? rufe = null,
-        IDbClock? uhr = null)
+        IDbClock? uhr = null,
+        Infrastructure.Lebenszyklus.Passivierung? passivierung = null)
     {
+        _leerlauf = (passivierung ?? Infrastructure.Lebenszyklus.Passivierung.Standard).ProzessManager;
         _rufe = rufe;
         _uhr = uhr;
         _eventStore = eventStore;
@@ -65,6 +68,8 @@ public sealed class ProzessManagerActor : IActor
 
     public async Task ReceiveAsync(IContext context)
     {
+        // PF-5: ein Vorgang ohne Nachricht passiviert; offene Vorgänge weckt der Backstop ohnehin regelmäßig (sie bleiben aktiv).
+        if (Infrastructure.Lebenszyklus.Passivierung.Behandle(context, _leerlauf)) return;
         switch (context.Message)
         {
             case Started:

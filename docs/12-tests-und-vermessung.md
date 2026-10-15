@@ -27,9 +27,9 @@ es nur für nicht-autoritative Randstores (Inv. 6).
 
 ## 12.2 Zahlen
 
-**Aktuell (2026-10-15, Phase 1 des Plans Garantien und Durchsatz):** Prüfstand **567 grün + 1 übersprungen** (Lücke G-5),
-Integration **44 + 1** (G-4) sequentiell (≈ 105 s), Prüfdomäne **20 + 3** (G-2, G-3 ×2) sequentiell (≈ 90 s); Garantie-Suite: Prüfstand 154 + 1,
-Integration 26 + 1, Prüfdomäne 15 + 3;
+**Aktuell (2026-10-15, Phase 2 des Plans Garantien und Durchsatz):** Prüfstand **570 grün + 1 übersprungen** (Lücke G-5),
+Integration **44 + 1** (G-4) sequentiell (≈ 105 s), Prüfdomäne **23 + 1** (G-2) sequentiell (≈ 100 s); Garantie-Suite: Prüfstand 154 + 1,
+Integration 26 + 1, Prüfdomäne 18 + 1;
 Werkbank-Abnahme **1/1** sequentiell (≈ 130 s), `Client.Infrastructure.CollectionTests` **30/30**, Python SDK **34/34**, Worker **21/21**;
 `--check` grün (alle Bereiche inkl. „Lage“), `--sonde` grün (111 Soll-Fakten, Lage-Soll 56 Typen); Gate `./pruefe-checkout.sh` grün.
 
@@ -60,7 +60,7 @@ Die Differenz zwischen 539 Methoden und 555 Läufen im Prüfstand kommt von den 
 | Beispiel-Aggregate | 39 | `DatensatzAggregatTests`, `TrainingslaufAggregatTests`, `SammelvorgangBarriereTests`, `SammelvorgangKaskadeTests`, `BoundedInboxTests` |
 | Quellen, Umgebung, Spur, Dienste | 64 | `DateiTreiberTests` (17), `UmgebungLaderTests`, `ProjektionsStandTests`, `SpurTests`, `WirkerIdTests`, `SpurWegTests`, `DienstBindungTests` (15) |
 | Konsum-Maschine, Prozess | 37 | `EmittentenCursorTests`, `ProjectionRebuilderTests`, `EmittentenPfadAdapterTests`, `GaEinsPruefungTests`, `ProzessPollFilterTests`, `AblehnungsMarkeTests`, `ReaktionsIdTests`, `CommandVorpruefungTests`, `DispatcherCommandFailedTests`, `TransientPersistiertSplitTests`, `DeadLetterReadStoreTests` |
-| Übrige | 23 | `FristSchedulerTests`, `FristPlanerTests`, `BackendMonitoringTests`, `EingangJsonTests`, `BrokerIdentityTests`, Handle-Welt: `PipelineEventPullBridgeTests`, `TimerTriggerTests`, `WebhookTriggerTests` |
+| Übrige | 26 | `PassivierungTests` (Leerlauf stoppt, Nachricht schiebt hinaus, 0 = nie), `FristSchedulerTests`, `FristPlanerTests`, `BackendMonitoringTests`, `EingangJsonTests`, `BrokerIdentityTests`, Handle-Welt: `PipelineEventPullBridgeTests`, `TimerTriggerTests`, `WebhookTriggerTests` |
 | Garantien (Störung über Seams, `Garantien/`) | 26 + 1 übersprungen | `EmitGarantieTests` (Emit-Ausgang je Antwort, Drossel je Ziel, volle Drossel meldet unbekannt, Dirigent: Backoff nach unbekanntem Ausgang, kein Doppel-Send, sofortige Weckung nach entschiedenem), `FristGarantieTests` (zugestellt, abgelehnt, Emit-Timeout und -Fehlschlag lassen die Frist liegen, doppeltes Feuern), `KonsumGarantieTests` (doppelte/ungeordnete Weckungen, Absturz zwischen Emit und Cursor, nicht zugestellter Emit hält den Cursor, Ablehnung ist entschieden, Commands eines Tails parallel), `RehydrationGarantieTests` (Neustart stellt die Inbox her, Split-Upcast Skip G-5), `BuildGarantieTests` (CQRS010/011/052/053, Wire-Boot-Check) |
 
 **Integration (Ebene 2):**
@@ -91,7 +91,8 @@ Die Differenz zwischen 539 Methoden und 555 Läufen im Prüfstand kommt von den 
 | `SnapshotTests` | 3 | `MartenSnapshotStore` über die generierte Registrierung (Roundtrip samt Inboxen, Überschreiben, Löschen); Actor über der Schwelle → Snapshot, Rehydration seedet daraus (Snapshot + Tail == Voll-Fold), fremde Schema-Version → Voll-Replay |
 | `UpcastingTests` | 5 | generierte Tabelle (Diskriminator `_v2`, Kette, unbekannt → laut); echter Seam: alte Bytes werden beim Lesen aufgewertet, neue Writes tragen `_v2` |
 | `MarkingCursorAequivalenzTests` | 4 | `ProzessManager` direkt gegen Marten, Cursor aus vs. an (`MartenProzessMarkingStore`): identische Feuerungen für Diamant, Kompensation, Fan-out + Count-Join (Cursor liest weniger); falscher RegelHash → Voll-Fold |
-| `Garantien/SchreibGarantieTests` | 1 + 3 übersprungen | doppelt und gleichzeitig zugestellter Command wirkt genau einmal; alte CommandId jenseits der Inbox-Grenze (Skip G-2), Heilung nach Versionskonflikt und mehrdeutiger Commit (Skip G-3) |
+| `Garantien/SchreibGarantieTests` | 3 + 1 übersprungen | doppelt und gleichzeitig zugestellter Command wirkt genau einmal; Heilung nach Versionskonflikt durch einen zweiten Schreiber, mehrdeutiger Commit wird als Erfolg quittiert und wirkt genau einmal; alte CommandId jenseits der Inbox-Grenze (Skip G-2) |
+| `Garantien/LebenszyklusGarantieTests` | 1 | Passivierung (1 s Leerlauf, Snapshot beim Stoppen) und Reaktivierung: derselbe Stand, dieselbe Inbox, derselbe Cursor der Reaktion |
 | `Garantien/AblaufGarantieTests` | 3 | die Reaktion `NachschubBeiMindestbestand` wirkt genau einmal über Signal und Poll (beide ab Cursor) und nach einem Absturz zwischen Emit und Cursor (Cursor-Dekorator, erneutes Senden wird verworfen); Neustart des Hosts mitten im Vorgang führt ihn zu Ende (eigenes Schema) |
 
 **Client:** `VirtualCollectionTests` (26), `PendingCommandTrackerTests` (5). **Python:** SDK `test_vertrag`, `test_funktion`, `test_client_query`,

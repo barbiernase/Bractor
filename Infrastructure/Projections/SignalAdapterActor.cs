@@ -27,6 +27,7 @@ public sealed class SignalAdapterActor : IActor
     private readonly IEventStoreRepository _eventStore;
     private readonly Func<(string ProjectionId, IProjectionTracker? Tracker, IEmittentenCursor? EmittentenCursor, Func<EventEnvelope, ProjectionWriter, EmitAusgaenge, Task> Dispatch)> _perActorFactory;
     private readonly IReadModelDepsSink? _depsSink;
+    private readonly TimeSpan _leerlauf;
 
     private ProjectionAdapter? _adapter;
     private Guid _streamId;
@@ -40,8 +41,10 @@ public sealed class SignalAdapterActor : IActor
     public SignalAdapterActor(
         IEventStoreRepository eventStore,
         Func<(string, IProjectionTracker?, IEmittentenCursor?, Func<EventEnvelope, ProjectionWriter, EmitAusgaenge, Task>)> perActorFactory,
-        IReadModelDepsSink? depsSink = null)
+        IReadModelDepsSink? depsSink = null,
+        Infrastructure.Lebenszyklus.Passivierung? passivierung = null)
     {
+        _leerlauf = (passivierung ?? Infrastructure.Lebenszyklus.Passivierung.Standard).Adapter;
         _eventStore = eventStore;
         _perActorFactory = perActorFactory;
         _depsSink = depsSink;
@@ -49,6 +52,8 @@ public sealed class SignalAdapterActor : IActor
 
     public async Task ReceiveAsync(IContext context)
     {
+        // PF-5: nach dem Leerlauf passivieren — Marke bzw. Cursor liegen durabel im Store.
+        if (Infrastructure.Lebenszyklus.Passivierung.Behandle(context, _leerlauf)) return;
         switch (context.Message)
         {
             case Started:

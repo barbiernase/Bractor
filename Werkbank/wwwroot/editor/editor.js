@@ -3801,8 +3801,8 @@
   //   stehen an der Karte, die sie betreffen. Alle Daten kommen fertig vom Server (Frontend-Bauregel P3): das JS kennt kein
   //   Umgebungs-Modell, nur das Schema und die Datei, wie sie ist.
   const WB={zustand:null,schema:null,umg:null,umgName:null,dirty:false,uhr:null,diag:[],boot:[],letzter:null,refs:{},ver:0,es:null};
-  const HOST_ORDNUNG=["Umgebung","EventStore","VersionIndex","Cluster","Schreibpfad","Transport","Identitaeten","Quellen","Funktionen","Dienste","Konfig"];
-  const HOST_SYM={Umgebung:"🏷",EventStore:"🗄",VersionIndex:"⚡",Cluster:"🕸",Schreibpfad:"✍",Transport:"🔗",Identitaeten:"🪪",Quellen:"📁",Funktionen:"ƒ",Dienste:"🧩",Konfig:"⚙",Uhr:"🕰"};
+  const HOST_ORDNUNG=["Umgebung","EventStore","VersionIndex","Cluster","Schreibpfad","Lebenszyklus","Transport","Identitaeten","Quellen","Funktionen","Dienste","Konfig"];
+  const HOST_SYM={Umgebung:"🏷",EventStore:"🗄",VersionIndex:"⚡",Cluster:"🕸",Schreibpfad:"✍",Lebenszyklus:"⏳",Transport:"🔗",Identitaeten:"🪪",Quellen:"📁",Funktionen:"ƒ",Dienste:"🧩",Konfig:"⚙",Uhr:"🕰"};
   function hostKnoten(){if(!WB.schema)return [];
     const ab=[...HOST_ORDNUNG.filter(k=>WB.schema[k]),...Object.keys(WB.schema).filter(k=>!HOST_ORDNUNG.includes(k)),"Uhr"];
     return ab.map(k=>({id:"host:"+k,name:(HOST_SYM[k]||"")+" "+k,kind:"host",ref:WB.refs[k]||(WB.refs[k]={abschnitt:k})}));}

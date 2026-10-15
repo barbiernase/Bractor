@@ -293,6 +293,8 @@ public static class CqrsServiceExtensions
 
         // ★ Snapshot-Schwellwert in DI → der generierte Actor injiziert ihn (Default 200, Tests klein).
         services.AddSingleton(new SnapshotOptions(builder.SnapshotThreshold, builder.InboxCap));
+        // Passivierung der virtuellen Actors (PF-5) — Aggregat, Adapter und Prozess-Manager lesen sie beim Erzeugen.
+        services.AddSingleton(builder.Passivierung);
         
         // Redis (VersionTracker)
         services.AddSingleton<IConnectionMultiplexer>(provider =>
@@ -593,6 +595,9 @@ public class CqrsFrameworkBuilder
     /// Vorgang nur bis zur ersten Marke), also praktisch dedup-sicher; höher = sicherer, größerer Snapshot.
     /// </summary>
     public int InboxCap { get; set; } = 10_000;
+
+    /// <summary>Leerlauf bis zur Passivierung je Actor-Art (PF-5, Umgebung <c>Lebenszyklus</c>); Standard 10/2/10 min.</summary>
+    public Infrastructure.Lebenszyklus.Passivierung Passivierung { get; set; } = Infrastructure.Lebenszyklus.Passivierung.Standard;
 
     /// <summary>
     /// Node-lokaler Group-Commit für Aggregat-Appends (Batching): bündelt die Appends der auf diesem Node

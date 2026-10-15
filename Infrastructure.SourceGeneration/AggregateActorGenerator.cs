@@ -138,9 +138,10 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine($"        ILogger<{aggregateName}Actor>? logger = null,");
                 sb.AppendLine($"        ISnapshotStore? snapshots = null,");
                 sb.AppendLine($"        SnapshotOptions? snapshotOptions = null,");
-                sb.AppendLine($"        IDeadLetterSink? deadLetters = null)");
+                sb.AppendLine($"        IDeadLetterSink? deadLetters = null,");
+                sb.AppendLine($"        global::Infrastructure.Lebenszyklus.Passivierung? passivierung = null)");
                 sb.AppendLine($"        : base(handlerFactory, eventStore, versionTracker, publisher, logger,");
-                sb.AppendLine($"               snapshots, GeneratedSnapshotSchema.VersionOf<{aggregateName}>(), snapshotOptions, deadLetters)");
+                sb.AppendLine($"               snapshots, GeneratedSnapshotSchema.VersionOf<{aggregateName}>(), snapshotOptions, deadLetters, passivierung)");
                 sb.AppendLine("    {");
                 sb.AppendLine("    }");
                 sb.AppendLine("}");

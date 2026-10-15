@@ -499,7 +499,7 @@ Quellen, Funktionen und Dienste bindet `AddCqrs` aus den generierten Tabellen; e
 ```
 | Abschnitt | Inhalt |
 |---|---|
-| `Umgebung`, `EventStore`, `VersionIndex`, `Cluster`, `Schreibpfad`, `Transport` | Betrieb: Art `Sim`/`Prod`, Datenbank, Redis, Einzelknoten/Consul, Group-Commit, Ports, JSON-Eingang |
+| `Umgebung`, `EventStore`, `VersionIndex`, `Cluster`, `Schreibpfad`, `Lebenszyklus`, `Transport` | Betrieb: Art `Sim`/`Prod`, Datenbank, Redis, Einzelknoten/Consul, Group-Commit, Passivierung, Ports, JSON-Eingang |
 | `Identitaeten` | `Tokens` (Token → Akteur-Menge), `Standard`, `VertragStreng` — §10.7 |
 | `Quellen` | je Quelle die Treiber-Konfig, optional `Webhook` — §10.6a |
 | `Funktionen` | je Funktion Laufort, Implementierung, Slots, Wiederholungen, Worker — §10.5a |

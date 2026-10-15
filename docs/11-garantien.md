@@ -29,8 +29,9 @@ Nachweis ist eine Lücke in [13](13-reifegrad-schulden-bewertung.md).
 | Garantie | Mechanismus | Bedingung / Lücke | Nachweis |
 |---|---|---|---|
 | **Atomar:** alle Events eines Commands und seine Inbox-Marke werden gemeinsam gültig oder keines | ein Append, eine Transaktion (`AggregateActorBase`, `BatchingEventAppender`) | – | I `GarantiePostgresTests.Ein_Append_wird_ganz_oder_gar_nicht_gueltig`; P `AppendBatchingTests` (Batch-Fehler isoliert den Schuldigen) |
-| **Durabel nach Erfolg:** nach dem Append wird nie ein Fehler gemeldet ([02](02-design-prinzipien.md) P10) | ein Fehler nach dem Append rehydriert den Actor und quittiert Erfolg | so durabel wie Postgres (fsync, Platte, Replikation). Ein mehrdeutiger Commit (committet, Quittung verloren) wird heute als Fehler gemeldet (G-3) | PD `SchreibGarantieTests.Ein_mehrdeutiger_Commit_wird_als_Erfolg_quittiert…` (Skip G-3); der Pfad „Fehler nach dem Append im Actor“ ohne eigenen Test (G-6) |
-| **Serialisierbar je Aggregat:** jede Entscheidung sieht den aktuellen Stand | Single-Writer-Actor je Stream (virtuelle Cluster-Identität) plus Versionsprüfung beim Append | nach einem Append-Konflikt bleibt der Actor mit veraltetem Stand stehen (G-3): die Sicherheit bleibt, die Verfügbarkeit des Aggregats nicht | I `GarantiePostgresTests.Zwei_Schreiber_mit_derselben_Version…`; PD `ProzessE2ETests.Nebenlaeufige_Vorgaenge…`; Verfügbarkeit: PD `SchreibGarantieTests.Nach_einem_Versionskonflikt…` (Skip G-3) |
+| **Durabel nach Erfolg:** nach dem Append wird nie ein Fehler gemeldet ([02](02-design-prinzipien.md) P10) | ein Fehler nach dem Append rehydriert den Actor und quittiert Erfolg; scheitert der Append selbst, rehydriert der Actor und quittiert, was laut Log entschieden ist (die Inbox-Marke reist in derselben Transaktion) | so durabel wie Postgres (fsync, Platte, Replikation) | PD `SchreibGarantieTests.Ein_mehrdeutiger_Commit_wird_als_Erfolg_quittiert…`; der Pfad „Fehler nach dem Append im Actor“ ohne eigenen Test (G-6) |
+| **Serialisierbar je Aggregat:** jede Entscheidung sieht den aktuellen Stand | Single-Writer-Actor je Stream (virtuelle Cluster-Identität) plus Versionsprüfung beim Append; nach einem Append-Konflikt rehydriert der Actor frisch und entscheidet einmal neu | – | I `GarantiePostgresTests.Zwei_Schreiber_mit_derselben_Version…`; PD `ProzessE2ETests.Nebenlaeufige_Vorgaenge…`; Verfügbarkeit: PD `SchreibGarantieTests.Nach_einem_Versionskonflikt…` |
+| **Passivierung ist folgenlos:** ein Actor, der nach Leerlauf stoppt, wird mit demselben Stand, derselben Inbox und demselben Cursor reaktiviert | durabler Zustand nur im Log, Snapshot, Marke und Cursor; Snapshot beim Stoppen (PF-5) | – | PD `LebenszyklusGarantieTests.Passivierung_und_Reaktivierung…`; P `PassivierungTests` |
 | **Client-OCC:** ein Client-Command mit behaupteter Version (≥ 0) scheitert, wenn das Aggregat sich seitdem geändert hat | Vorprüfung (`CommandVorpruefung`), Versionsprüfung beim Append | – | P `CommandVorpruefungTests` |
 | **Emittierte Commands** (Reaktion, Prozess, Fluss, Zusage mit Kausalität, Client mit Version < 0) entscheiden auf dem **aktuellen** Stand | `CommandModus.Emittiert`: keine erwartete Version | gewollt: der Sender behauptet keinen Stand | P `CommandVorpruefungTests`; PD `ProzessE2ETests.Nebenlaeufige_Vorgaenge…` |
 | **Ablehnungen** stehen nicht im Log; durabel ist nur die Marke `KommandoAbgelehnt` | `ITransientEvent` | – | P `TransientPersistiertSplitTests`, `AblehnungsMarkeTests`; PD `ProzessE2ETests.Scheitert_ein_Zweig…` |
@@ -138,7 +139,7 @@ die Kosten wachsen.
 | Garantie | Mechanismus heute | Kosten wachsen mit | Hebel bei gleicher Garantie |
 |---|---|---|---|
 | Projektion wirkt genau einmal (§11.5) | je (Projektion, Stream, Weckung) Tracker lesen, Tail lesen, eine Transaktion (`ProjectionAdapter`, `MartenCoCommitStoreBase`) | Events × Projektionen, sobald viele Streams je wenige Events haben | Batch-Co-Commit: viele Streams, ihre Effekte und Checkpoints in einer Transaktion (PF-1) |
-| Ordnung je Stream (§11.4) | ein virtueller Actor je (Konsument, Stream) | Projektionen × Streams Actors; ohne Passivierung bis zum Shutdown im Speicher | partitionierte Konsumenten (`Hash(Stream) mod P`) in globaler Sequenz (PF-1); Passivierung (PF-5) |
+| Ordnung je Stream (§11.4) | ein virtueller Actor je (Konsument, Stream), passiviert nach Leerlauf (PF-5) | Projektionen × aktive Streams Actors | partitionierte Konsumenten (`Hash(Stream) mod P`) in globaler Sequenz (PF-1) |
 | Vollständigkeit trotz verlierbarem Signal (§11.5) | jede Projektion scannt alle 30 s selbst alle neuen Events ohne LIMIT und weckt jeden geänderten Stream nacheinander (`Poller`, `PullPath`, `MartenEventStore.ReadChangedStreamsAsync`) | Events × Projektionen × Knoten; nach Stillstand das ganze Rückstandsfenster im Speicher | eine Abfrage „Stream-Kopf > Checkpoint“, nur nachhängende Streams wecken; ein gemeinsamer, seitenweiser Change-Feed (PF-2) |
 | Emittierter Command wirkt genau einmal (§11.3, §11.6) | durabler Emittenten-Cursor, vorgerückt nach bestätigtem Emit; die Commands eines Tails werden gemeinsam abgewartet | Tail-Länge je Weckung (nicht mehr die Stream-Länge) | – (umgesetzt) |
 | Command wirkt genau einmal (§11.3) | Marke `KommandoVerarbeitet` je Command im Stream, auch ohne Event; Inbox im Snapshot | Streams etwa doppelt so lang (Append, Rehydration, Prozess-Reads); Snapshot bis `InboxGrenze` Ids | Events tragen die CommandId schon als `causationId`; Marke nur bei Noop und Ablehnung, oder Inbox als Tabelle mit eindeutigem Schlüssel in derselben Transaktion (PF-3, G-2) |
@@ -151,10 +152,10 @@ Kostenlos zur Laufzeit sind die Garantien aus §11.10 (Build und Start) sowie Si
 
 ## 11.13 Lücken
 
-Stehen nur in [13](13-reifegrad-schulden-bewertung.md) §13.0: **G-2** Inbox-Fenster, **G-3** Actor nach Append-Konflikt, **G-4**
-Projektions-Checkpoint ohne Versionsprüfung, **G-5** Versionszählung bei Split-Upcasts, **G-6** Garantien ohne eigenen Nachweis-Test. Jede offene
-Lücke G-2 bis G-5 hat einen Test, der sie zeigt (Skip `G-n offen (docs/13)`); geschlossen ist sie erst, wenn ihr Test grün ist. Geschlossen
-(Phase 1): **G-1** Fristverlust, **G-7** Tombstones legen den Poll still, der Emittenten-Anteil von **G-2** (Poll ab Version 0).
+Stehen nur in [13](13-reifegrad-schulden-bewertung.md) §13.0: **G-2** Inbox-Fenster, **G-4** Projektions-Checkpoint ohne Versionsprüfung,
+**G-5** Versionszählung bei Split-Upcasts, **G-6** Garantien ohne eigenen Nachweis-Test. Jede offene Lücke G-2, G-4, G-5 hat einen Test, der sie
+zeigt (Skip `G-n offen (docs/13)`); geschlossen ist sie erst, wenn ihr Test grün ist. Geschlossen: **G-1** Fristverlust, **G-7** Tombstones legen
+den Poll still, der Emittenten-Anteil von **G-2** (Phase 1); **G-3** Actor nach Append-Konflikt (Phase 2).
 
 ## 11.14 Wie die Garantien geprüft werden
 
@@ -166,7 +167,7 @@ Lücke G-2 bis G-5 hat einen Test, der sie zeigt (Skip `G-n offen (docs/13)`); g
   (`PollerBackstopPostgresTests`), Absturz zwischen Effekt und Checkpoint (`CoCommitPostgresTests`), Absturz zwischen Emit und Cursor
   (`KonsumGarantieTests`, `AblaufGarantieTests`), Timeout und Fehlschlag beim Emit (`EmitGarantieTests`, `FristGarantieTests`,
   `KonsumGarantieTests`), Überlast eines Ziels (`EmitGarantieTests`: Drossel, Backoff), Versionskonflikt und mehrdeutiger Commit
-  (`SchreibGarantieTests`, Skip G-3), alte CommandId jenseits der Inbox-Grenze (Skip G-2), zwei Aktivierungen (`GarantiePostgresTests`,
+  (`SchreibGarantieTests`), Passivierung und Reaktivierung (`LebenszyklusGarantieTests`), alte CommandId jenseits der Inbox-Grenze (Skip G-2), zwei Aktivierungen (`GarantiePostgresTests`,
   Skip G-4), Poison-Stream und gescheiterter Append (`GarantiePostgresTests`), Neustart des Hosts (`AblaufGarantieTests`,
   `RehydrationGarantieTests`).
 - **Ende zu Ende:** jeder Lauf von `scripts/vermessung-e2e.sh` zählt nach dem Lauf über Queries und den Log nach, dass jede Wirkung genau

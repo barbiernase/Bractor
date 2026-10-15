@@ -50,7 +50,8 @@ fünfmal, gestreut verzögert); danach übernimmt der Poll.
   `MartenEventStore` meldet diesen Stream nicht als geändert und liest keine Tombstones (G-7, erledigt); die HWM läuft über sie hinweg.
 
 Beide wecken **dieselbe** Cluster-Identität `(Kind, StreamId)`; der per-Stream `SignalAdapterActor` serialisiert sie über seine Mailbox
-(Single-Writer je Stream). Aller durable Zustand liegt im Store → Passivierung bei Idle ist folgenlos.
+(Single-Writer je Stream). Aller durable Zustand liegt im Store → die Passivierung ist folgenlos: nach `Lebenszyklus.AdapterLeerlaufSekunden`
+(Standard 120) ohne Weckung stoppt der Adapter (PF-5, `Passivierung`), die nächste Weckung aktiviert ihn ab Marke bzw. Cursor.
 
 ## 4.2 Die zwei Achsen
 
@@ -224,6 +225,9 @@ Emit-Ausgang entscheidet nur über das Wecken (PF-9): nach „zugestellt“ oder
 Ausgang sieht (das Ergebnis der letzten Regel ist Auslöser keiner Regel); nach „unbekannt“ erst nach einem Backoff je Vorgang (1 s, 2 s, 4 s …
 höchstens 30 s, gestreut). Solange der Send eines Vorgangs läuft oder sein Backoff wartet, sendet keine andere Weckung (Signal, Poll, Backstop)
 ihn erneut. Mit der Drossel je Ziel (§4.4) baut ein überlastetes Aggregat seinen Rückstau ab, statt dass Wiederholungen ihn vervielfachen.
+
+**Passivierung** (PF-5): ein Manager ohne Nachricht stoppt nach `Lebenszyklus.ProzessManagerLeerlaufSekunden` (Standard 600). Offene Vorgänge
+weckt der Backstop alle 15 s und hält sie damit aktiv; beendete fallen heraus. Der Kaltstart liest den Marking-Cursor bzw. faltet voll.
 
 **Marking-Cursor (P5b).** `MarkingKompakt` (`Abstractions/Prozess/ProzessMarking.cs`) hält je Ziel-Stream einen `StreamCursor` und verdichtete
 Vorgangs-Marken statt roher Tokens:

@@ -155,7 +155,7 @@ internal static class Messung
     {
         Console.WriteLine($"  {name} {Titel(name)}");
         k.Ressourcen.Abschnitt($"{name}-w{w}");
-        var fenster = new Messfenster(lauf.Db, k.Ressourcen, lauf.Rolle);
+        var fenster = new Messfenster(lauf.Db, k.Ressourcen, lauf.Rolle, lauf);
         await fenster.StarteAsync();
         var (b, vorgaenge) = await Volllast.LaufeAsync(last, name, sender, k.Optionen.Fenster, k.Optionen.AbbauFrist, maxAnzahl);
         var (kz, _) = await fenster.EndeAsync(b.Angenommen, k.Ablage, name, w);
@@ -208,7 +208,7 @@ internal static class Messung
         k.Ressourcen.Abschnitt($"S4-w{w}");
         var paare = (int)await lauf.Db.ZahlAsync($"select count(*) from {lauf.Db.Schema}.mt_events where type = 'image_pair_erstellt'");
         var ds = new Datensatz(lauf.Eingang);
-        var fenster = new Messfenster(lauf.Db, k.Ressourcen, lauf.Rolle);
+        var fenster = new Messfenster(lauf.Db, k.Ressourcen, lauf.Rolle, lauf);
         await fenster.StarteAsync();
         var z = await ds.LaufeAsync(paare, TimeSpan.FromMinutes(5));
         var (kz, _) = await fenster.EndeAsync(paare, k.Ablage, "S4", w);
@@ -231,14 +231,18 @@ internal static class Messung
         Console.WriteLine($"  {name} {Titel(name)}");
         k.Ressourcen.Abschnitt($"{name}-w{w}");
         await Task.Delay(TimeSpan.FromSeconds(5));   // Nachlauf der Blöcke abklingen lassen
-        var fenster = new Messfenster(lauf.Db, k.Ressourcen, lauf.Rolle);
+        var fenster = new Messfenster(lauf.Db, k.Ressourcen, lauf.Rolle, lauf);
         await fenster.StarteAsync();
         await Task.Delay(k.Optionen.Leerlauf);
         var (kz, _) = await fenster.EndeAsync(0, k.Ablage, name, w);
         var wert = new SzenarioWert();
-        foreach (var key in new[] { "tx_je_s", "queries_je_s", "cpu_prozent", "rss_mb" }) wert.Kennzahlen[key] = kz[key];
+        foreach (var key in new[] { "tx_je_s", "queries_je_s", "cpu_prozent", "rss_mb", "rss_ende_mb", "rss_lauf_max_mb", "rss_ende_anteil",
+                     "aktive_actors", "aktive_actors_hoechst" })
+            wert.Kennzahlen[key] = kz[key];
         wert.Details["mit_rueckstand"] = !ohneRueckstand;
-        Console.WriteLine($"    {kz["tx_je_s"]:F1} Tx/s · {kz["queries_je_s"]:F1} Q/s · CPU {kz["cpu_prozent"]:F1} % · RSS {kz["rss_mb"]:F0} MB");
+        Console.WriteLine($"    {kz["tx_je_s"]:F1} Tx/s · {kz["queries_je_s"]:F1} Q/s · CPU {kz["cpu_prozent"]:F1} % · RSS {kz["rss_mb"]:F0} MB, "
+            + $"am Ende {kz["rss_ende_mb"]:F0} MB = {kz["rss_ende_anteil"]:P0} des Höchststands {kz["rss_lauf_max_mb"]:F0} MB · "
+            + $"aktive Actors {kz["aktive_actors"]:F0} (Höchststand {kz["aktive_actors_hoechst"]:F0})");
         return wert;
     }
 

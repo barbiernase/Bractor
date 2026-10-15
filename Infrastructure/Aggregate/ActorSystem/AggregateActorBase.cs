@@ -47,6 +47,9 @@ public abstract class AggregateActorBase<TState> : IActor
     private readonly IDeadLetterSink? _deadLetters;
     private bool _vergiftetGemeldet;
 
+    // PF-5: Leerlauf bis zur Passivierung (Snapshot beim Stoppen, die nächste Nachricht rehydriert).
+    private readonly TimeSpan _leerlauf;
+
     private IAggregateHandler? _handler;  // Wird nach State-Load erstellt!
     private TState? _state;
     private Guid _id;
@@ -72,8 +75,10 @@ public abstract class AggregateActorBase<TState> : IActor
         ISnapshotStore? snapshots = null,
         string? snapshotSchemaVersion = null,
         SnapshotOptions? snapshotOptions = null,
-        IDeadLetterSink? deadLetters = null)
+        IDeadLetterSink? deadLetters = null,
+        Infrastructure.Lebenszyklus.Passivierung? passivierung = null)
     {
+        _leerlauf = (passivierung ?? Infrastructure.Lebenszyklus.Passivierung.Standard).Aggregat;
         _handlerFactory = handlerFactory;
         _eventStore = eventStore;
         _versionTracker = versionTracker;
@@ -90,6 +95,7 @@ public abstract class AggregateActorBase<TState> : IActor
 
     public async Task ReceiveAsync(IContext context)
     {
+        if (Infrastructure.Lebenszyklus.Passivierung.Behandle(context, _leerlauf)) return;
         try
         {
             switch (context.Message)
@@ -183,16 +189,82 @@ public abstract class AggregateActorBase<TState> : IActor
     /// </summary>
     private async Task HandleCommandAsync(IContext context, CommandEnvelope cmdEnvelope)
     {
-        switch (cmdEnvelope.Modus)
+        for (var versuch = 1; ; versuch++)
         {
-            case CommandModus.Client c:
-                await HandleClientCommand(context, cmdEnvelope, c.ExpectedVersion);
-                break;
-            case CommandModus.Emittiert:
-                await HandleEmittedCommand(context, cmdEnvelope);
-                break;
+            try
+            {
+                switch (cmdEnvelope.Modus)
+                {
+                    case CommandModus.Client c:
+                        await HandleClientCommand(context, cmdEnvelope, c.ExpectedVersion);
+                        break;
+                    case CommandModus.Emittiert:
+                        await HandleEmittedCommand(context, cmdEnvelope);
+                        break;
+                }
+                return;
+            }
+            catch (AppendGescheitertException ex) when (versuch == 1)
+            {
+                // G-3: der Append ist sicher NICHT geschrieben, der Actor hat frisch rehydriert (etwa nach einem Versionskonflikt durch einen
+                //   zweiten Schreiber). Einmal neu entscheiden — auf dem aktuellen Stand; ein Client-Command mit veralteter Version scheitert
+                //   dabei regulär an der Vorprüfung.
+                _logger?.LogInformation(ex.InnerException, "[Actor] {Command} nach gescheitertem Append auf frischem Stand neu entschieden",
+                    cmdEnvelope.Payload.GetType().Name);
+            }
+            catch (AppendGescheitertException ex)
+            {
+                await TryPublishCommandFailedAsync(cmdEnvelope, ex.InnerException?.Message ?? ex.Message);
+                context.Respond(new CommandResult { Success = false, ErrorMessage = ex.InnerException?.Message ?? ex.Message, AggregateId = _id });
+                return;
+            }
         }
     }
+
+    /// <summary>Was ein Append nach einem Fehler über den Command weiß (G-3, docs/11 §11.2).</summary>
+    private enum AppendErgebnis { Geschrieben, SchonGewirkt, SchonAbgelehnt }
+
+    /// <summary>Ein Append ist sicher nicht geschrieben; der Actor ist frisch rehydriert.</summary>
+    private sealed class AppendGescheitertException(Exception innen) : Exception("Append gescheitert", innen);
+
+    /// <summary>
+    /// Der eine Append-Weg des Actors (Effekt mit Marke, Noop-Marke, Ablehnungs-Marke). Scheitert er — Versionskonflikt durch einen zweiten
+    /// Schreiber, ein Commit, dessen Quittung verloren ging, ein DB-Fehler —, ist der In-Memory-Stand nicht mehr verlässlich: der Actor
+    /// rehydriert frisch aus dem Log (G-3). Steht die CommandId danach in der Inbox (die Marke reist in derselben Transaktion wie die Events),
+    /// hat der Command gewirkt bzw. ist abgelehnt — der mehrdeutige Commit wird kein falsches Negativ (P10). Sonst ist sicher nichts geschrieben:
+    /// <see cref="AppendGescheitertException"/>, der Aufrufer entscheidet einmal neu.
+    /// </summary>
+    private async Task<AppendErgebnis> AppendeAsync(CommandEnvelope cmdEnvelope, int expectedVersion, IReadOnlyList<IEvent> events)
+    {
+        try
+        {
+            await _eventStore.AppendEventsAsync(
+                _id,
+                expectedVersion,
+                events,
+                correlationId: cmdEnvelope.CorrelationId,
+                causationId: cmdEnvelope.CommandId.ToString(),
+                aggregateType: typeof(TState).Name,
+                akteur: cmdEnvelope.UserId);   // Kausalkette: der Akteur reist mit den Events zu Pipelines/Prozessen/Fristen
+            return AppendErgebnis.Geschrieben;
+        }
+        catch (Exception ex)
+        {
+            _logger?.LogWarning(ex, "[Actor] Append für {Command} an {Type}/{Id} gescheitert — rehydriere frisch und sehe im Log nach",
+                cmdEnvelope.Payload.GetType().Name, typeof(TState).Name, _id);
+            _initialized = false;
+            await InitializeAsync(_id);   // wirft sie, bleibt _initialized false: die nächste Nachricht initialisiert neu
+            if (_verarbeiteteCommandIds.Contains(cmdEnvelope.CommandId)) return AppendErgebnis.SchonGewirkt;
+            if (_abgelehnteCommandIds.Contains(cmdEnvelope.CommandId)) return AppendErgebnis.SchonAbgelehnt;
+            throw new AppendGescheitertException(ex);
+        }
+    }
+
+    /// <summary>Die Quittung für einen Command, der laut Log schon entschieden ist (nach einem mehrdeutigen Commit).</summary>
+    private void QuittiereEntschieden(IContext context, AppendErgebnis ergebnis)
+        => context.Respond(ergebnis == AppendErgebnis.SchonAbgelehnt
+            ? new CommandResult { Success = false, Abgelehnt = true, AggregateId = _id, ErrorMessage = "Vorgang bereits abgelehnt (Framework-Inbox)", NewVersion = _state!.Version }
+            : new CommandResult { Success = true, AggregateId = _id, NewVersion = _state!.Version });
 
     /// <summary>
     /// Externer Client-Command: OCC gegen die behauptete Version. ★ Jetzt AUCH idempotent (docs/08 §8.4) —
@@ -283,8 +355,11 @@ public abstract class AggregateActorBase<TState> : IActor
                 //   erledigt" NUR über ein Ziel-Event mit CausationId == vorgang; ohne Marke bliebe ein Noop-Ziel
                 //   ewig „pending" → der Manager (und der §3-Backstop) feuerten endlos re-firing → Livelock, nie
                 //   ProzessBeendet. Die Marke macht „getan" beobachtbar. Der OCC-Client-Pfad bleibt unberührt.
-                if (istIdempotent)
-                    await CoCommitInboxMarkeAsync(cmdEnvelope, expectedVersion);
+                if (istIdempotent && await CoCommitInboxMarkeAsync(cmdEnvelope, expectedVersion) is var noop and not AppendErgebnis.Geschrieben)
+                {
+                    QuittiereEntschieden(context, noop);
+                    return;
+                }
 
                 context.Respond(new CommandResult
                 {
@@ -337,8 +412,12 @@ public abstract class AggregateActorBase<TState> : IActor
                 //   die ZWEITE Inbox-Menge geschlossen: ein abgelehnter Vorgang bleibt bei Re-Delivery auf
                 //   Success:false (siehe Dedup-Zweig oben). Marke + Zwei-Mengen-Inbox + Fold-Achse zusammen (§4).
                 //   Der Client-/OCC-Pfad bleibt marken-frei (Targeted Delivery, kein Prozess dahinter).
-                if (istIdempotent)
-                    await CoCommitAblehnungsMarkeAsync(cmdEnvelope, expectedVersion, rejection.GetType().Name);
+                if (istIdempotent && await CoCommitAblehnungsMarkeAsync(cmdEnvelope, expectedVersion, rejection.GetType().Name) is var marke
+                    and not AppendErgebnis.Geschrieben)
+                {
+                    QuittiereEntschieden(context, marke);
+                    return;
+                }
 
                 // Targeted Delivery — nur an den Aufrufer
                 await TryPublishRejectionAsync(cmdEnvelope, rejection);
@@ -362,14 +441,19 @@ public abstract class AggregateActorBase<TState> : IActor
                 ? persistentEvents.Append((IEvent)new Infrastructure.Aggregate.KommandoVerarbeitet(cmdEnvelope.CommandId)).ToList()
                 : persistentEvents;
 
-            await _eventStore.AppendEventsAsync(
-                _id,
-                expectedVersion,
-                zuSchreiben,
-                correlationId: cmdEnvelope.CorrelationId,
-                causationId: cmdEnvelope.CommandId.ToString(),
-                aggregateType: typeof(TState).Name,
-                akteur: cmdEnvelope.UserId);   // Kausalkette: der Akteur reist mit den Events zu Pipelines/Prozessen/Fristen
+            var append = await AppendeAsync(cmdEnvelope, expectedVersion, zuSchreiben);
+            if (append != AppendErgebnis.Geschrieben)
+            {
+                // Mehrdeutiger Commit (G-3): die Events stehen im Log, der Actor hat sie beim Rehydrieren schon gefaltet. Die Signale
+                //   gehen trotzdem hinaus (verlierbar, der Poll trüge sie sonst nach); quittiert wird der durable Ausgang.
+                if (append == AppendErgebnis.SchonGewirkt && _publisher != null)
+                {
+                    try { await PublishEventsAsync(persistentEvents, cmdEnvelope, expectedVersion); }
+                    catch (Exception ex) { _logger?.LogWarning(ex, "[Actor] Signale nach mehrdeutigem Commit nicht veröffentlicht"); }
+                }
+                QuittiereEntschieden(context, append);
+                return;
+            }
 
             // ★ Audit-Fix H1: Ab HIER ist der Command DURABEL (der Append hat committet). Alles Folgende
             //   (Applier auf den In-Memory-State, Redis, Snapshot, Publish) ist nur die abgeleitete
@@ -444,7 +528,7 @@ public abstract class AggregateActorBase<TState> : IActor
                 });
             }
         }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not AppendGescheitertException)
         {
             // Catch-Block ist jetzt nur noch für technische Fehler
             // (DB-Timeout, Null-Referenz, etc. — nicht für Domänen-Ablehnungen)
@@ -468,19 +552,15 @@ public abstract class AggregateActorBase<TState> : IActor
     /// in der Version aber mitgezählt (Stream-Position bündig). Basis ist die aufgelöste aktuelle Version
     /// (Single-Writer), sodass die Marten-OCC eine echte Doppelaktivierung weiterhin abweist.
     /// </summary>
-    private async Task CoCommitInboxMarkeAsync(CommandEnvelope cmdEnvelope, int expectedVersion)
+    private async Task<AppendErgebnis> CoCommitInboxMarkeAsync(CommandEnvelope cmdEnvelope, int expectedVersion)
     {
-        await _eventStore.AppendEventsAsync(
-            _id,
-            expectedVersion,
-            new IEvent[] { new Infrastructure.Aggregate.KommandoVerarbeitet(cmdEnvelope.CommandId) },
-            correlationId: cmdEnvelope.CorrelationId,
-            causationId: cmdEnvelope.CommandId.ToString(),
-            aggregateType: typeof(TState).Name,
-            akteur: cmdEnvelope.UserId);
+        var ergebnis = await AppendeAsync(cmdEnvelope, expectedVersion,
+            new IEvent[] { new Infrastructure.Aggregate.KommandoVerarbeitet(cmdEnvelope.CommandId) });
+        if (ergebnis != AppendErgebnis.Geschrieben) return ergebnis;   // schon im frisch rehydrierten Stand
 
         _state!.Version++;
         _verarbeiteteCommandIds.Add(cmdEnvelope.CommandId);
+        return ergebnis;
     }
 
     /// <summary>
@@ -490,19 +570,15 @@ public abstract class AggregateActorBase<TState> : IActor
     /// übersprungen, in der Version aber mitgezählt (Stream-Position bündig). Der Prozess-Manager faltet sie zu
     /// <c>SchrittGescheitert</c> (Treiber-Fold/EM-1). Basis ist die aufgelöste aktuelle Version (Single-Writer).
     /// </summary>
-    private async Task CoCommitAblehnungsMarkeAsync(CommandEnvelope cmdEnvelope, int expectedVersion, string grund)
+    private async Task<AppendErgebnis> CoCommitAblehnungsMarkeAsync(CommandEnvelope cmdEnvelope, int expectedVersion, string grund)
     {
-        await _eventStore.AppendEventsAsync(
-            _id,
-            expectedVersion,
-            new IEvent[] { new Infrastructure.Aggregate.KommandoAbgelehnt(cmdEnvelope.CommandId, grund) },
-            correlationId: cmdEnvelope.CorrelationId,
-            causationId: cmdEnvelope.CommandId.ToString(),
-            aggregateType: typeof(TState).Name,
-            akteur: cmdEnvelope.UserId);
+        var ergebnis = await AppendeAsync(cmdEnvelope, expectedVersion,
+            new IEvent[] { new Infrastructure.Aggregate.KommandoAbgelehnt(cmdEnvelope.CommandId, grund) });
+        if (ergebnis != AppendErgebnis.Geschrieben) return ergebnis;   // schon im frisch rehydrierten Stand
 
         _state!.Version++;
         _abgelehnteCommandIds.Add(cmdEnvelope.CommandId);
+        return ergebnis;
     }
 
     /// <summary>

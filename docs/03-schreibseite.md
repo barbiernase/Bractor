@@ -60,14 +60,22 @@ Der gemeinsame Kern `HandleCommandCoreAsync`:
 5. Trennung persistenter Events von Ablehnungen (`ITransientEvent`); ein *gemischtes* Ergebnis oder mehrere Ablehnungen werfen laut.
 6. **Reine Ablehnung** → kein Append der Ablehnung, kein Apply; eine `KommandoAbgelehnt`-Marke wird co-committet, die Ablehnung geht
    targeted an den Aufrufer und als verlierbarer Hinweis an die Spur.
-7. **Erfolg**: die `KommandoVerarbeitet`-Marke wird an die Events angehängt, dann `_eventStore.AppendEventsAsync(...)` — Effekt und Marke
-   in einer Transaktion.
+7. **Erfolg**: die `KommandoVerarbeitet`-Marke wird an die Events angehängt, dann `AppendeAsync` — Effekt und Marke in einer Transaktion.
+   **Scheitert ein Append** (Effekt, Noop- oder Ablehnungs-Marke; Versionskonflikt durch einen zweiten Schreiber, verlorene Quittung, DB-Fehler),
+   rehydriert der Actor frisch aus dem Log (G-3). Steht die `CommandId` danach in der Inbox, hat der Command gewirkt bzw. ist abgelehnt — das
+   wird quittiert (mehrdeutiger Commit, kein falsches Negativ, P10), die Signale gehen nachträglich hinaus. Sonst ist sicher nichts geschrieben:
+   der Command wird **einmal** auf dem frischen Stand neu entschieden (ein Client-Command mit veralteter Version scheitert dabei regulär an der
+   Vorprüfung); scheitert auch das, kommt ein technischer Fehler zurück.
 8. **Post-Append-Grenze**: ab dem Commit ist der Command durabel. Applier mutiert `_state` in-memory (Marken werden nur in der Version
    mitgezählt), Redis-Track, Snapshot ab Schwelle, Publish. Wirft etwas davon, rehydriert der `catch` frisch aus dem Log und quittiert
    trotzdem **Erfolg** (kein falsches Negativ).
 
 Snapshots (best-effort, ab `Schreibpfad.SnapshotSchwelle` und bei Deaktivierung, Version = Struktur-Hash + Code-Hash von State + Applier)
 sind in [04 §4.7](04-konsum-und-prozess-maschine.md) beschrieben.
+
+**Passivierung** (PF-5): hört ein Aggregat-Actor `Lebenszyklus.AggregatLeerlaufSekunden` lang nichts (Standard 600), stoppt er sich
+(`Infrastructure/Lebenszyklus/Passivierung.cs`, Proto-`ReceiveTimeout`); beim Stoppen schreibt er seinen Snapshot, die nächste Nachricht
+aktiviert ihn frisch (Snapshot + Tail, Inbox inklusive). Adapter und Prozess-Manager passivieren genauso ([04](04-konsum-und-prozess-maschine.md)).
 
 ## 3.2 Das Aggregat-Modell (reiner Fachcode)
 
@@ -192,5 +200,5 @@ aus der Zeit vor dem Generator (docs/13 P3-2).
 ## 3.8 Schulden im Schreibpfad
 
 Offenes steht in einer Quelle, [13 §13.0](13-reifegrad-schulden-bewertung.md): der parallele Drain skaliert sublinear (P2-6), die
-`BoundedInbox` verdrängt ab `Schreibpfad.InboxGrenze` FIFO (G-2), ein Append-Konflikt lässt den Actor veraltet stehen (G-3), Split-Upcasts verschieben die Version (G-5), der Snapshot-`Clone` ist ein JSON-Round-Trip (W10-2), der tote
+`BoundedInbox` verdrängt ab `Schreibpfad.InboxGrenze` FIFO (G-2), Split-Upcasts verschieben die Version (G-5), der Snapshot-`Clone` ist ein JSON-Round-Trip (W10-2), der tote
 Lesepfad `LoadStateAsync` neben `AggregateRehydrator` (P2-9), der Client darf den `AggregateType` selbst setzen (W2-1).

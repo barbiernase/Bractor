@@ -8,7 +8,9 @@ namespace Infrastructure.Monitoring;
 /// DLQ. Beide kommen aus der uniformen Maschine (durabler Offen-Index + DLQ-Read-Store), nicht aus einem
 /// separaten Zähler-Zustand.
 /// </summary>
-public sealed record BackendMetrik(int OffeneProzesse, long DlqEinträge);
+/// <param name="AktiveActors">Lokal aktive Actors dieses Knotens (Aggregate, Adapter, Prozess-Manager, Infrastruktur) — fällt nach der
+/// Passivierung (PF-5) zurück.</param>
+public sealed record BackendMetrik(int OffeneProzesse, long DlqEinträge, int AktiveActors = 0);
 
 /// <summary>Liest die aktuellen Backend-Kennzahlen (für HealthCheck + Monitoring-Endpoint).</summary>
 public interface IBackendMetrics
@@ -25,17 +27,19 @@ public sealed class BackendMetrics : IBackendMetrics
 {
     private readonly IProzessOffenIndex _offen;
     private readonly IDeadLetterReadStore _dlq;
+    private readonly Proto.ActorSystem? _system;
 
-    public BackendMetrics(IProzessOffenIndex offen, IDeadLetterReadStore dlq)
+    public BackendMetrics(IProzessOffenIndex offen, IDeadLetterReadStore dlq, Proto.ActorSystem? system = null)
     {
         _offen = offen;
         _dlq = dlq;
+        _system = system;
     }
 
     public async Task<BackendMetrik> ErfasseAsync(CancellationToken ct = default)
     {
         var offene = await _offen.ListeOffeneAsync(ct);
         var dlq = await _dlq.CountAsync(ct);
-        return new BackendMetrik(offene.Count, dlq);
+        return new BackendMetrik(offene.Count, dlq, _system?.ProcessRegistry.ProcessCount ?? 0);
     }
 }

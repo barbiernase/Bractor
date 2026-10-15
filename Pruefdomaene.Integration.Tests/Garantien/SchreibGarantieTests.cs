@@ -66,7 +66,7 @@ public class SchreibGarantieTests
         finally { await host.StopAsync(); }
     }
 
-    [Fact(Skip = "G-3 offen (docs/13)")]
+    [Fact]
     public async Task Nach_einem_Versionskonflikt_durch_einen_zweiten_Schreiber_heilt_der_Actor_ohne_Neustart()
     {
         using var host = Cluster("garantie-konflikt");
@@ -90,7 +90,7 @@ public class SchreibGarantieTests
         finally { await host.StopAsync(); }
     }
 
-    [Fact(Skip = "G-3 offen (docs/13)")]
+    [Fact]
     public async Task Ein_mehrdeutiger_Commit_wird_als_Erfolg_quittiert_und_wirkt_genau_einmal()
     {
         var störung = new MehrdeutigerCommit();

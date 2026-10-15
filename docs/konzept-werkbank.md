@@ -190,6 +190,7 @@ unbekanntes Feld ist ein Startfehler.
 | `VersionIndex` | Redis: Betrieb, Endpunkt, Datenbank, Präfix |
 | `Cluster` | Art `Einzelknoten` \| `Consul`, Name, Consul, AdvertisedHost, Rolle `Allein` \| `Migrator` \| `Mitglied` |
 | `Schreibpfad` | generiertes JSON, Group-Commit, Batch-Größe, Linger, Drain, Snapshot-Schwelle, Inbox-Grenze |
+| `Lebenszyklus` | Leerlauf bis zur Passivierung in Sekunden: Aggregat (600), Adapter (120), Prozess-Manager (600); 0 = nie |
 | `Transport` | gRPC-Port, Einblick-Port (0 = aus), JSON-Eingang an/aus |
 | `Identitaeten` | Token → Akteur-Menge (`"A,B"`, `"A+B"` oder Liste), Standard, VertragStreng; ohne Abschnitt ist das Akteur-Tor offen |
 | `Quellen` | je Quelle die Treiber-Konfig (§3.4) |

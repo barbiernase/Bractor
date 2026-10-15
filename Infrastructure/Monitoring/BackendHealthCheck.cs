@@ -27,6 +27,7 @@ public sealed class BackendHealthCheck : IHealthCheck
             {
                 ["offeneProzesse"] = m.OffeneProzesse,
                 ["dlq"] = m.DlqEinträge,
+                ["aktiveActors"] = m.AktiveActors,
             };
 
             return m.DlqEinträge > 0

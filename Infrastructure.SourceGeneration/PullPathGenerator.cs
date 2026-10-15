@@ -238,7 +238,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("                Func<EventEnvelope, ProjectionWriter, EmitAusgaenge, Task> dispatch =");
             sb.AppendLine("                    (e, writer, ausgaenge) => projection.DispatchAsync(e, writer, router.EmitFor(e, ausgaenge), faehigkeiten);");
             sb.AppendLine("                return (projection.SubscriberId, tracker, emittentenCursor, dispatch);");
-            sb.AppendLine("            }, depsSink)));");
+            sb.AppendLine("            }, depsSink, provider.GetService<global::Infrastructure.Lebenszyklus.Passivierung>())));");
             sb.AppendLine("    }");
             sb.AppendLine("}");
             sb.AppendLine();
