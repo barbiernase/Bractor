@@ -92,7 +92,7 @@ Nachweis ist eine Lücke in [13](13-reifegrad-schulden-bewertung.md).
 | Garantie | Mechanismus | Nachweis |
 |---|---|---|
 | **genau einmal je Kennung im Log** | `StartStream` mit deterministischer Id auf Version 0 (`Quellen`); ein zweites Melden ist idempotent, auch über den Webhook | P `DateiTreiberTests.Vorgangs_Id_folgt_aus_Typ_und_Kennung`, `…Treiber_meldet_neue_Dateien_genau_einmal…`; I `PipelineFlussE2ETests.Datei_Treiber_meldet_eine_Datei_genau_einmal_auch_nach_Neustart`; E2E S1/S2 „je Datei genau eine Quell-Nachricht“ |
-| kein eigener Treiber-Stand, Neustart idempotent | beim Start fragt der Treiber den Log (`IStreamBestand`) | P `DateiTreiberTests.Schon_im_Log_bekannte_Dateien…`; I `PipelineFlussE2ETests.Datei_Treiber…_Neustart`; E2E Aufholzeit |
+| kein eigener Treiber-Stand, Neustart idempotent | beim Start fragt der Treiber den Log (`IStreamBestand`) | P `DateiTreiberTests.Schon_im_Log_bekannte_Dateien…`; I `PipelineFlussE2ETests.Datei_Treiber…_Neustart`; E2E Störungslauf |
 | Rückstau | die nächste Meldung erst, wenn die vorige im Log steht | P `DateiTreiberTests.Rueckstau_die_naechste_Datei_erst…` |
 | einmal im Cluster | Lease bei der Cluster-Identität `quelle/<Typ>` (`EinmalImCluster`) | P `DateiTreiberTests.Lease_hat_genau_einen_Halter…` |
 
@@ -169,5 +169,5 @@ ist sie erst, wenn ihr Test grün ist.
   (`GarantiePostgresTests`, Skip G-4), Poison-Stream und gescheiterter Append (`GarantiePostgresTests`, Skip G-7), Neustart des Hosts
   (`AblaufGarantieTests`, `RehydrationGarantieTests`).
 - **Ende zu Ende:** jeder Lauf von `scripts/vermessung-e2e.sh` zählt nach dem Lauf über Queries und den Log nach, dass jede Wirkung genau
-  einmal eingetreten ist (je Szenario, dazu global: keine CommandId zweimal gewirkt, keine Version doppelt); der **Störungslauf** tut das nach
-  harten Host-Abbrüchen und einem Redis-Ausfall ([12](12-tests-und-vermessung.md) §12.5). Ein Fehlschlag macht den Lauf ungültig.
+  einmal eingetreten ist (je Szenario, dazu global: keine CommandId zweimal gewirkt, keine Version doppelt; mit offenem Rückstand „höchstens
+  einmal“); der **Störungslauf** tut das nach harten Host-Abbrüchen und einem Redis-Ausfall ([12](12-tests-und-vermessung.md) §12.5). Ein Fehlschlag macht den Lauf ungültig.

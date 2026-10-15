@@ -89,26 +89,27 @@ internal sealed class Bildeingang : ILast, IAsyncDisposable
     }
 
     /// <summary>Exactly-once (§0.2): je Datei genau ein Vorgang, je Paar genau ein ImagePair, BildVerfuegbar genau einmal je Bild, Read-Model = Log.</summary>
-    public async Task<List<Pruefung>> PruefeAsync(Datenbank db, int dateien)
+    public async Task<List<Pruefung>> PruefeAsync(Datenbank db, int dateien, bool vollstaendig = true)
     {
+        Pruefung P(string name, long soll, long ist) => Pruefung.Erwartet(name, soll, ist, vollstaendig);
         var ids = _paare.ToArray();
         var s = db.Schema;
         var praefix = Jahr + "%";
         var p = new List<Pruefung>
         {
-            Pruefung.Gleich("je Datei genau eine Quell-Nachricht im Log", dateien,
+            P("je Datei genau eine Quell-Nachricht im Log", dateien,
                 await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'datei_erkannt' and data->>'Name' like @p", ("p", praefix))),
             Pruefung.Gleich("keine Datei zweimal gemeldet", 0, await db.ZahlAsync(
                 $"select count(*) from (select data->>'Name' from {s}.mt_events where type = 'datei_erkannt' and data->>'Name' like @p group by 1 having count(*) > 1) x",
                 ("p", praefix))),
-            Pruefung.Gleich("je Paar genau ein ImagePairErstellt", ids.Length,
+            P("je Paar genau ein ImagePairErstellt", ids.Length,
                 await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'image_pair_erstellt' and stream_id = any(@ids)", ("ids", ids))),
-            Pruefung.Gleich("BildVerfuegbar genau einmal je Bild (2 je Paar)", 2L * ids.Length,
+            P("BildVerfuegbar genau einmal je Bild (2 je Paar)", 2L * ids.Length,
                 await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'bild_verfuegbar' and stream_id = any(@ids)", ("ids", ids))),
-            Pruefung.Gleich("kein Paar mit ≠ 2 BildVerfuegbar", 0, await db.ZahlAsync(
-                $"select count(*) from (select stream_id from {s}.mt_events where type = 'bild_verfuegbar' and stream_id = any(@ids) group by 1 having count(*) <> 2) x",
+            Pruefung.Gleich("kein Paar mit mehr als 2 BildVerfuegbar", 0, await db.ZahlAsync(
+                $"select count(*) from (select stream_id from {s}.mt_events where type = 'bild_verfuegbar' and stream_id = any(@ids) group by 1 having count(*) > 2) x",
                 ("ids", ids))),
-            Pruefung.Gleich("je Paar genau ein ImagePairKomplett", ids.Length,
+            P("je Paar genau ein ImagePairKomplett", ids.Length,
                 await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'image_pair_komplett' and stream_id = any(@ids)", ("ids", ids))),
         };
         var stat = await _eingang.QueryAsync("GetImagePairStatistik", new JsonObject(), TokenInspekteur);

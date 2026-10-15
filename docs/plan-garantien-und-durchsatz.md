@@ -30,26 +30,28 @@
 
   | # | Anwendung | Eingang → Ergebnis | prüft vor allem |
   |---|---|---|---|
-  | S1 | Beispieldomäne, Bildeingang | TIFF-Paare ins Quell-Verzeichnis → Fluss (Deutung, Paar, Verkleinerung, Kontrast) → `ImagePair` → Projektionen → Query „Bild verfügbar“ | Quelle, Dirigent, Funktionen, Konsum |
-  | S2 | Beispieldomäne, Bildeingang mit Python-Worker (`Laufort = Extern`) | wie S1, Funktionen im Worker über die Leitung | Funktions-Vermittlung, Lease |
-  | S3 | Beispieldomäne, Sammelvorgang | je Teil `StarteTeilauftrag` + `SchließeTeilauftragAb` → `TeilFertigProzess` → `TeilVerbucht` am Sammelvorgang; Sättigung über Sammelvorgänge à 200, dann N = 1 000 und 10 000 Teile auf einen Sammelvorgang bei 50 % der Sättigung | langlebiger Stream, Prozess-Poll, Inbox |
+  | S1 | Beispieldomäne, Bildeingang | Stoß von 600 TIFF-Paaren ins Quell-Verzeichnis → Fluss (Deutung, Paar, Verkleinerung, Kontrast) → `ImagePair` → Projektionen → Query „Bild verfügbar“ | Quelle, Dirigent, Funktionen, Konsum |
+  | S2 | Beispieldomäne, Bildeingang mit Python-Worker (`Laufort = Extern`) | wie S1 (200 Paare), Funktionen im Worker über die Leitung | Funktions-Vermittlung, Lease |
+  | S3 | Beispieldomäne, Sammelvorgang heiß | 8 bzw. 64 Sender je Teil `StarteTeilauftrag` + `SchließeTeilauftragAb` an EINEN Sammelvorgang → `TeilFertigProzess` → `TeilVerbucht` | Single-Writer-Decke, Prozess-Poll, Inbox, Retry-Sturm (PF-9) |
   | S4 | Beispieldomäne, Datensatz | Range über alle Bildpaare aus S1 aufnehmen, einfrieren → Datensatz eingefroren | Flüsse mit Lese-Fähigkeit, große Events |
-  | S5 | Prüfdomäne (`Host.Pruefdomaene`) | je zehn Vorgänge 8 Aufträge (Diamant), 1 Auftrag gegen ein volles Kontingent (Kompensation), 1 Verteilung (Fan-out, Count-Join); jede Reservierung unter dem Mindestbestand weckt die Reaktion `NachschubBeiMindestbestand` | Prozess-Maschine, Emittenten |
-  | L1, L5 | beide | 60 s Leerlauf nach den Szenarien | Grundlast (PF-2, PF-4) |
+  | S5 | Prüfdomäne (`Host.Pruefdomaene`) | 1, 8 bzw. 64 Sender, je zehn Vorgänge 8 Aufträge (Diamant), 1 Auftrag gegen ein volles Kontingent (Kompensation), 1 Verteilung (Fan-out, Count-Join); jede Reservierung unter dem Mindestbestand weckt die Reaktion `NachschubBeiMindestbestand` | Schreibdurchsatz verteilt, Prozess-Maschine, Emittenten |
+  | L1, L5 | beide | 15 s Leerlauf nach den Szenarien | Grundlast (PF-2, PF-4) |
 
-- **Kennzahlen je Szenario:** Sättigungsdurchsatz (Rate steigern, bis die p99-Latenz über 2 s steigt oder der Rückstand wächst), Latenz
-  Eingang → sichtbar p50/p95/p99 bei 50 % der Sättigung, Transaktionen und Queries je Sekunde und je Vorgang (`pg_stat_statements`,
-  `track = top`; Transaktionen = COMMITs, weil `pg_stat_database` verzögert zählt), CPU und Speicher (RSS) des Hosts. Was „sichtbar“ je Szenario
-  heißt, steht in [12](12-tests-und-vermessung.md) §12.5. Dazu einmal je Phase ein **Dauerlauf** (S1 + S3 bei 50 % Sättigung, mindestens 8 h, in Phase 2 24 h) und die **Aufholzeit** nach
-  1 h Host-Stillstand.
-- **Klar:** ein Befehl startet die Messung (`scripts/vermessung-e2e.sh`), feste Parameter, drei Wiederholungen, Median; Rechner, Commit-Hash,
+- **Höchstlast statt Hochtasten (seit 2026-10-15, auf Tobis Vorgabe: ein Lauf in Minuten, nicht in Stunden):** jeder Block sendet höchstens
+  15 s so schnell, wie der Eingang annimmt (S3 höchstens 2 000 Teile, S5 höchstens 3 000 Vorgänge je Block), danach endet die Last und der
+  Rückstand baut ab (höchstens 120 s). Kennzahlen je Block: angenommen je Sekunde (Schreibseite), sichtbar je Sekunde im Fenster und Durchsatz
+  bis „alles sichtbar“ (Ende zu Ende), Rückstand am Fensterende und Abbauzeit, Latenz p50/p95/p99, Transaktionen und Queries je Sekunde und je
+  Vorgang (`pg_stat_statements`, `track = top`; Transaktionen = COMMITs, weil `pg_stat_database` verzögert zählt), CPU und Speicher (RSS) des
+  Hosts. Ein nicht abgebauter Rückstand ist ein Ergebnis, kein Messfehler. Was „sichtbar“ je Szenario heißt, steht in
+  [12](12-tests-und-vermessung.md) §12.5. Kein Dauer- und kein Aufhollauf; der Störungslauf dauert etwa drei Minuten.
+- **Klar:** ein Befehl startet die Messung (`scripts/vermessung-e2e.sh`, ≈ 5 min), feste Parameter, eine Wiederholung; Rechner, Commit-Hash,
   Fremdlast und Abweichungen stehen im Ergebnis. Vor der Phase wird gemessen (bzw. die letzte Messung gilt), nach der Phase dieselbe Messung
   auf demselben Rechner. Die Ergebnisse stehen als **eine fortlaufende Tabelle** in docs/12 §12.5 (Zeilen: Szenario × Kennzahl, Spalten:
   Baseline, Phase 1, Phase 2 …); verglichen werden Verhältnisse.
 - **Gespeichert:** jeder Lauf schreibt sein Ergebnis selbst nach `vermessung/ergebnisse/<JJJJ-MM-TT_HHMM>_<commit>_<anlass>/` und wird mit
   der Phase committet — nur anhängen, nie überschreiben oder löschen. Inhalt:
-  - `ergebnis.json`: Metadaten (Rechner, CPU, Commit-Hash, Branch, Umgebung, Parameter, Fremdlast, Anlass „Baseline“/„Phase n“), je Szenario
-    alle drei Wiederholungen und der Median jeder Kennzahl, das Ergebnis der Exactly-once-Prüfung (§0.2);
+  - `ergebnis.json`: Metadaten (Rechner, CPU, Commit-Hash, Branch, Umgebung, Parameter, Fremdlast, Anlass „Baseline“/„Phase n“), je Block
+    alle Kennzahlen, das Ergebnis der Exactly-once-Prüfung (§0.2);
   - `latenzen/<szenario>.csv` (Rohwerte, gzip-komprimiert, wenn größer als 1 MB), `pg_stat_statements.csv`, `host.csv` (RSS/CPU über die Zeit);
   - `zusammenfassung.md`: die Tabelle, wie sie in §12.5 landet.
 
@@ -92,9 +94,9 @@ trägt die Konsumseite heute etwa 8 200 / K Events/s (K = replaybare Projektione
 |---|---|---|---|---|---|
 | 0 | Abgleich, E2E-Messung, Garantie-Nachweis | – | 7–9 PT | – | Baseline S1–S5 gespeichert; Garantie-Suite grün, Lücken als Skip-Tests |
 | 1 | Emit-Ausgang und Emittenten-Cursor | G-1, G-2 (Emittent), P1-6 | 5–7 PT | 0 | S5: Kosten der Reaktion unabhängig von der Stream-Länge |
-| 2 | Actor-Lebenszyklus | G-3, PF-5 | 3–5 PT | 0 | Dauerlauf 24 h S1 + S3: Speicher flach |
-| 3 | Batch-Konsum | PF-1, PF-2, G-4 | 15–25 PT | 1, 2 | Sättigung S1/S5 deutlich über Baseline (Ziel nach E5) |
-| 4 | Inbox als Tabelle | G-2 (Inbox), PF-3 | 6–9 PT | 2, E1 | S3 mit N = 10 000+: genau einmal; Sättigung S1 höher als nach Phase 3 |
+| 2 | Actor-Lebenszyklus | G-3, PF-5 | 3–5 PT | 0 | RSS nach den Höchstlast-Blöcken fällt im Leerlauf zurück (Passivierung) |
+| 3 | Batch-Konsum | PF-1, PF-2, G-4 | 15–25 PT | 1, 2 | Durchsatz bis „alles sichtbar“ S1/S5 deutlich über Baseline (Ziel nach E5) |
+| 4 | Inbox als Tabelle | G-2 (Inbox), PF-3 | 6–9 PT | 2, E1 | S3 heiß: genau einmal, mehr Teile/s als nach Phase 3 |
 | 5 | Prozess-Poll und Backstop | PF-4 (W11-2-Anteil) | 3–5 PT | 1 | S3/S5: Zeit je Teil konstant über N; Leerlauf mit offenen Vorgängen nahe 0 Queries/s |
 | 6 | Rest | PF-6, G-5, PF-7 (Entscheidung) | 2–3 PT | – | – |
 | | **Summe** | | **41–63 PT** | | etwa 9–13 Wochen für eine Person |
@@ -111,7 +113,7 @@ die Inbox-Tabelle (4) nach dem Batch-Konsum kommen.
 | E2 | Aufbewahrungs-Horizont der Inbox (Exactly-once gilt innerhalb dieses Horizonts) | 30 Tage, Umgebung `Schreibpfad.InboxHorizont` | Phase 4 |
 | E3 | Bestandsdaten | Sim-DBs zurücksetzen; Backfill-SQL aus Marken und `causationId` nur, falls Prod-Daten bestehen | Phase 4 |
 | E4 | Partitionen je Projektion im Batch-Konsum | fest 8, Umgebung; Lease je Partition im Cluster | Phase 3 |
-| E5 | Abnahme-Zielwerte je Szenario | nach der Baseline festlegen; Richtwert Phase 3: Sättigung S1/S5 ≥ 5 × Baseline, Latenz p99 < 1 s bei 50 % | nach Phase 0 |
+| E5 | Abnahme-Zielwerte je Szenario | nach der Baseline festlegen; Richtwert Phase 3: Durchsatz bis „alles sichtbar“ S1/S5 ≥ 5 × Baseline | nach Phase 0 |
 | E6 | Handle-/Trigger-Welt (W11-1) in Phase 1 zurückbauen oder nur anpassen? | nur minimal anpassen; der Rückbau bleibt W11-1 | Phase 1 |
 | E7 | Leerlaufzeit der Passivierung | Aggregat 10 min, Adapter 2 min, Prozess-Manager 10 min; Umgebung | Phase 2 |
 
@@ -129,7 +131,7 @@ die Inbox-Tabelle (4) nach dem Batch-Konsum kommen.
    zwei Läufe von `scripts/vermessung-postgres.sh` vom 2026-10-15 als erste Einträge nachtragen.
 4. **Garantie-Nachweis nach §0.2:** Garantie-Matrix in docs/11, Garantie-Suite (Trait `Garantie`) mit den Störfällen, je offene G-Lücke ein
    Skip-Test, Exactly-once-Prüfung und Störungslauf im E2E-Treiber.
-5. **Baseline:** S1–S5 mit Sättigung, Latenz, Last und Speicher, ein Dauerlauf von 8 h, die Aufholzeit und ein Störungslauf — gespeichert,
+5. **Baseline:** S1–S5 unter Höchstlast (Durchsatz, Rückstand, Latenz, Last und Speicher) und ein Störungslauf — gespeichert,
    Tabelle in §12.5.
 
 *Abnahme:* `scripts/vermessung-e2e.sh` misst S1–S5 mit einem Befehl reproduzierbar und speichert das Ergebnis; Exactly-once-Prüfung grün auch
@@ -160,7 +162,8 @@ festgelegt.
 3. Tests: Integration — Versionskonflikt durch einen zweiten Schreiber, mehrdeutiger Commit über einen Fehler-Seam im Appender; Prüfstand —
    Passivierung und Reaktivierung ergeben denselben Stand.
 
-*Abnahme:* Tests grün (Konflikt und mehrdeutiger Commit heilen ohne Neustart); E2E-Messung S1–S5; Dauerlauf 24 h S1 + S3 mit Speicher ±10 %.
+*Abnahme:* Tests grün (Konflikt und mehrdeutiger Commit heilen ohne Neustart); E2E-Messung S1–S5; RSS im Leerlauf nach den Blöcken deutlich
+unter dem Höchststand (Passivierung).
 
 ### Phase 3 · Batch-Konsum (15–25 PT)
 
@@ -178,7 +181,7 @@ festgelegt.
    Knoten mit Lease.
 7. Doku: 03, 04, 11, 12, 13.
 
-*Abnahme:* E2E-Messung S1–S5 erreicht die E5-Zielwerte (Richtwert: Sättigung S1/S5 ≥ 5 × Baseline, Latenz p99 < 1 s bei 50 %); Aufholzeit nach 1 h Stillstand gemessen.
+*Abnahme:* E2E-Messung S1–S5 erreicht die E5-Zielwerte (Richtwert: Durchsatz bis „alles sichtbar“ S1/S5 ≥ 5 × Baseline).
 
 ### Phase 4 · Inbox als Tabelle (6–9 PT, Variante nach E1)
 
@@ -193,7 +196,7 @@ festgelegt.
    `AblehnungsMarkeTests`).
 6. Doku: 03, 04, 11 (§11.3: Fenster → Horizont), 12, 13.
 
-*Abnahme:* Exactly-once über den Horizont nachgewiesen (Integration); E2E S3 mit N = 10 000+ zählt genau einmal; Sättigung S1 über dem Stand nach Phase 3.
+*Abnahme:* Exactly-once über den Horizont nachgewiesen (Integration); E2E S3 heiß zählt genau einmal; Durchsatz S1 über dem Stand nach Phase 3.
 
 ### Phase 5 · Prozess-Poll und Backstop (3–5 PT)
 
@@ -235,8 +238,8 @@ Der Werkbank-Strang ruht während dieses Plans; es arbeitet kein zweiter Agent. 
 2. **Marten:** Insert per SQL in derselben Session wie der Append (Phase 4) und Co-Commit über viele Streams (Phase 3) sind vorgesehen, hier
    aber noch nicht genutzt — der erste Integrationstest der Phase klärt es.
 3. **Abgewartete Emits** verlängern den Turn eines Emittenten; paralleles Senden je Tail dämpft es (Phase 1).
-4. **Messung auf dem Entwickler-Rechner** schwankt unter Fremdlast (§12.5: Faktor 2 zwischen zwei Läufen); deshalb drei Wiederholungen mit
-   Median, Fremdlast vermerken, und Abnahmen vergleichen Verhältnisse zur Baseline auf demselben Rechner.
+4. **Messung auf dem Entwickler-Rechner** schwankt unter Fremdlast (§12.5: Faktor 2 zwischen zwei Läufen); deshalb kurze Läufe, die man bei
+   Bedarf wiederholt, Fremdlast vermerken, und Abnahmen vergleichen Verhältnisse zur Baseline auf demselben Rechner.
 
 ## 7 · Nicht in diesem Plan
 
@@ -251,7 +254,7 @@ anstehen.
   (`CommandEmitter` verschluckt Timeout und `CommandResult`, `ProjectionAdapter` liest beim Poll eines Emittenten ab 0, `AggregateActorBase` ohne
   Rehydration nach Append-Fehler, `MarkProcessedAsync` per `Store`, `AggregateRehydrator` zählt je Event).
 - *Entscheidungen E1–E7:* gebündelt an Tobi gegeben (2026-10-15); ohne Antwort gelten die Vorschläge der Tabelle §2.
-- *Messaufbau:* `scripts/vermessung-e2e.sh` mit dem Treiber `Cqrs.Vermessung` (Messung, Dauerlauf, Aufholzeit, Störungslauf), Ablage und
+- *Messaufbau:* `scripts/vermessung-e2e.sh` mit dem Treiber `Cqrs.Vermessung` (Messung unter Höchstlast, Störungslauf), Ablage und
   `scripts/vermessung-tabelle.sh`, Umgebungen `vermessung` und `vermessung-pruefdomaene`.
 - *Garantie-Nachweis:* Garantie-Matrix ([11](11-garantien.md), Nachweis-Spalte, §11.14), Garantie-Suite (`Kategorie=Garantie`), je Lücke G-1 bis
   G-5 ein Test mit Skip — jeder einmal ohne Skip rot gesehen.
@@ -261,8 +264,9 @@ anstehen.
    am Posten) und einen Host (`Host.Pruefdomaene`, derselbe Laufzeit-Host mit ihrer Komposition). Damit eine Anwendung ohne Leitung booten
    kann, startet `AddCqrs` gRPC nur noch mit Leitung (`IAnwendung.Nutzlast` nullable).
 2. Der JSON-Eingang nimmt eine optionale `commandId` (Client-Wiederholung mit derselben CommandId, §11.3; Störungslauf).
-3. S3 misst nicht im geschlossenen Kreis (64 gleichzeitige Abschlüsse überfluten den heißen Sammelvorgang und kippen in den Retry-Sturm PF-9),
-   sondern mit der Rampe; N = 1 000/10 000 als Latenzlauf bei 50 %.
+3. Gemessen wird unter Höchstlast in Minuten (Tobi, 2026-10-15): die erste Fassung (Rampe bis zur Sättigung, drei Wiederholungen, 8-h-Dauerlauf,
+   1 h Stillstand, ≈ 12 h) war auf einem MacBook Air unverhältnismäßig und wurde nach 27 min abgebrochen (Ordner `…_baseline`, ungültig: S3 mit
+   N = 10 000 baute sich bei 14 Teilen/s nicht ab). Jetzt je Block höchstens 15 s Volllast mit 1/8/64 Sendern, dann Abbau.
 4. Neuer Befund **G-7** (P0, docs/13): ein gescheiterter Append hinterlässt Marten-Tombstones, an deren Stream jeder Poll hängen bleibt — der
    Neustart-Test der Prüfdomäne fand es. Er gehört in keine Phase; Vorschlag: mit Phase 1 schließen (gleiche Stelle, der Lesepfad der Polls).
 5. Neuer Befund **PF-9** (P1): Retry-Sturm des Dirigenten unter Überlast; Vorschlag: mit Phase 1 (Emit-Ausgang) bzw. Phase 5 (Backstop).

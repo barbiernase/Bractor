@@ -6,6 +6,10 @@ namespace Cqrs.Vermessung;
 internal sealed record Pruefung(string Name, bool Ok, string Soll, string Ist)
 {
     public static Pruefung Gleich(string name, long soll, long ist) => new(name, soll == ist, soll.ToString(), ist.ToString());
+    /// <summary>Höchstens <paramref name="soll"/> — nichts doppelt; ein Rückstand (weniger) ist kein Verstoß gegen Exactly-once.</summary>
+    public static Pruefung Hoechstens(string name, long soll, long ist) => new(name + " (höchstens — Rückstand offen)", ist <= soll, "≤ " + soll, ist.ToString());
+    /// <summary>Genau <paramref name="soll"/>, wenn alles abgebaut ist; sonst höchstens.</summary>
+    public static Pruefung Erwartet(string name, long soll, long ist, bool vollstaendig) => vollstaendig ? Gleich(name, soll, ist) : Hoechstens(name, soll, ist);
     public JsonObject Json() => new() { ["name"] = Name, ["ok"] = Ok, ["soll"] = Soll, ["ist"] = Ist };
 }
 

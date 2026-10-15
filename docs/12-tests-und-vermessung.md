@@ -19,7 +19,7 @@ Die Teststrategie folgt den Invarianten „die Wahrheit ist der Log“ und „ni
 | Werkzeug-Gates | `GraphExtractor -- --check`, `-- --sonde` | Solution bzw. fremde Domäne im Speicher | Code ⇄ Karten, Fixpunkt, Wirker, Routing; Agnostik | n/a |
 | Gate frischer Checkout | `./pruefe-checkout.sh` | der Commit `HEAD` in einem temporären `git worktree` | ignorierte Quellen, Build, Codegen-Drift, Prüfstand, Build verändert den Checkout nicht | n/a |
 | Garantie-Suite | `--filter Kategorie=Garantie` auf Prüfstand, Integration, Prüfdomäne | wie die jeweilige Ebene | jede Garantie aus [11](11-garantien.md) unter Störung; offene Lücken als Skip-Tests (`G-n offen (docs/13)`) | je Ebene wie oben |
-| E2E-Vermessung | `scripts/vermessung-e2e.sh` (Treiber `Cqrs.Vermessung`) | echte Hosts (`Host.Grpc`, `Host.Pruefdomaene`, Release) in den Umgebungen `vermessung` bzw. `vermessung-pruefdomaene`, eigene DBs, Python-Worker | Durchsatz, Latenz, Last je Vorgang, Exactly-once nach jedem Lauf, Dauer-, Aufhol- und Störungslauf (§12.5) | **nein** (nie gleichzeitig mit einer Integrations-Suite oder der Werkbank-Abnahme) |
+| E2E-Vermessung | `scripts/vermessung-e2e.sh` (Treiber `Cqrs.Vermessung`) | echte Hosts (`Host.Grpc`, `Host.Pruefdomaene`, Release) in den Umgebungen `vermessung` bzw. `vermessung-pruefdomaene`, eigene DBs, Python-Worker | Höchstlast mit 1/8/64 Sendern: Durchsatz, Rückstand, Latenz, Last je Vorgang; Exactly-once nach jedem Lauf; Störungslauf (§12.5) | **nein** (nie gleichzeitig mit einer Integrations-Suite oder der Werkbank-Abnahme) |
 
 **Prinzip:** Ebene 1 testet nur, was ohne Store deterministisch entscheidbar ist. Store-Semantik (Co-Commit-Atomarität, `seq_id`-Lücken, geteilte
 Dokumente, Metadaten) wird **ausschließlich** gegen echtes Marten geprüft. Es gibt bewusst **keinen `InMemoryEventStore`**; In-Memory-Doubles gibt
@@ -148,25 +148,26 @@ Folgerungen (Verhältnisse):
   bei K = 20 rund 400 — vor dem Overhead von Marten und Netzwerk. Der Schreibpfad ist nicht die Decke. Gegen den echten Host gemessen ist das
   noch nicht — das tut die E2E-Messung unten.
 
-**Ende zu Ende an den realen Domänen (seit 2026-10-15, `scripts/vermessung-e2e.sh`, Plan Garantien und Durchsatz §0.1).** Gemessen wird der
-echte Host im Release-Build (`Host.Grpc` in `umgebungen/umgebung.vermessung.json`, `Host.Pruefdomaene` in `umgebung.vermessung-pruefdomaene.json`,
-je eigene DB, eigener Redis `cqrs-vermessung-redis`), Last nur über die echten Eingänge, gezählt bis zum fachlich sichtbaren Ergebnis:
+**Ende zu Ende an den realen Domänen, unter Höchstlast (seit 2026-10-15, `scripts/vermessung-e2e.sh`, ≈ 5 min, Plan Garantien und Durchsatz
+§0.1).** Gemessen wird der echte Host im Release-Build (`Host.Grpc` in `umgebungen/umgebung.vermessung.json`, `Host.Pruefdomaene` in
+`umgebung.vermessung-pruefdomaene.json`, je eigene DB, eigener Redis `cqrs-vermessung-redis`), Last nur über die echten Eingänge, gezählt bis zum
+fachlich sichtbaren Ergebnis. Jeder Block sendet höchstens 15 s so schnell, wie der Eingang annimmt, dann baut der Rückstand ab:
 
-| Szenario | Eingang | sichtbar, wenn |
+| Block | Eingang | sichtbar, wenn |
 |---|---|---|
-| S1 Bildeingang Host | TIFF-Paar (96 × 64) ins Quell-Verzeichnis, verschoben, dann Fertig-Marke | `GetImagePair` liefert das Paar komplett (je offenes Paar alle 100 ms) |
-| S2 wie S1, Bild-Funktionen im Python-Worker (`Laufort Extern`, zwei Worker) | wie S1 | wie S1 |
-| S3 Sammelvorgang | als Disponent `StarteTeilauftrag` + `SchließeTeilauftragAb` je Teil (JSON-Eingang); Rampe mit Sammelvorgängen à 200, dann N = 1 000 und 10 000 Teile auf einen Sammelvorgang bei 50 % | `TeilVerbucht` des Teils im Log (keine Query vorhanden) |
+| S1 Bildeingang Host | Stoß von 600 TIFF-Paaren (96 × 64) ins Quell-Verzeichnis, verschoben, dann Fertig-Marke | `GetImagePair` liefert das Paar komplett (je offenes Paar alle 100 ms) |
+| S2 wie S1, Bild-Funktionen im Python-Worker (`Laufort Extern`, zwei Worker) | Stoß von 200 Paaren | wie S1 |
+| S3-8, S3-64 Sammelvorgang heiß | 8 bzw. 64 Sender, je Teil `StarteTeilauftrag` + `SchließeTeilauftragAb` an EINEN Sammelvorgang (höchstens 2 000 Teile) | `TeilVerbucht` des Teils im Log (keine Query vorhanden) |
 | S4 Datensatz | als KI-Operator `ErstelleDatensatz`, `FuegeRangeHinzu` (alle Paare aus S1), `FriereEin` | `HoleDatensatz`: alle Paare Mitglied, dann `Eingefroren` |
-| S5 Prüfdomäne | je zehn Vorgänge 8 Aufträge (Diamant), 1 Auftrag gegen ein volles Kontingent (Kompensation), 1 Verteilung (Fan-out 4, Count-Join); jede Reservierung unter dem Mindestbestand weckt die Reaktion | `ProzessBeendet` im Log; die Reaktion gesondert (Reservierung → Nachschub) |
-| L1, L5 Leerlauf | 60 s ohne Eingang nach den Szenarien | Grundlast (PF-2, PF-4) |
+| S5-1, S5-8, S5-64 Prüfdomäne verteilt | 1, 8 bzw. 64 Sender, je zehn Vorgänge 8 Aufträge (Diamant), 1 Auftrag gegen ein volles Kontingent (Kompensation), 1 Verteilung (Fan-out 4, Count-Join), höchstens 3 000 je Block; jede Reservierung unter dem Mindestbestand weckt die Reaktion | `ProzessBeendet` im Log; die Reaktion gesondert (Reservierung → Nachschub) |
+| L1, L5 Leerlauf | 15 s ohne Eingang nach den Blöcken | Grundlast (PF-2, PF-4) |
 
-Kennzahlen je Szenario: Sättigung (Rate stufenweise ×1,5 ab 2/s bzw. 5/s, je Stufe 20 s, bis p99 > 2 s oder Rückstand; eine Aufwärmstufe
-zählt nicht), Latenz p50/p95/p99 bei 50 % der Sättigung (60 s bzw. N Teile), Transaktionen und Queries je Sekunde und je Vorgang
-(`pg_stat_statements`, `track = top`, Transaktionen = COMMITs, ohne die Lese-Rolle des Treibers), CPU und RSS des Hosts. Drei Wiederholungen,
-Median; jede Wiederholung auf frischen DBs. Nach jedem Lauf die Exactly-once-Prüfung ([11](11-garantien.md) §11.14). Ablage:
-`vermessung/ergebnisse/<datum>_<commit>_<anlass>/` (nur anhängen); die Tabelle unten erzeugt `scripts/vermessung-tabelle.sh --schreibe` aus
-diesen Ordnern — nie von Hand.
+Kennzahlen je Block: angenommen je Sekunde (Schreibseite), sichtbar je Sekunde im Fenster und Durchsatz bis „alles sichtbar“ (Ende zu Ende),
+Rückstand am Fensterende und Abbauzeit (ein nicht abgebauter Rückstand ist ein Ergebnis), Latenz p50/p95/p99, Transaktionen und Queries je
+Sekunde und je Vorgang (`pg_stat_statements`, `track = top`, Transaktionen = COMMITs, ohne die Lese-Rolle des Treibers), CPU und RSS des Hosts.
+Eine Aufwärmrunde vor S1 und S5 zählt nicht. Jeder Lauf auf frischen DBs; danach die Exactly-once-Prüfung ([11](11-garantien.md) §11.14) — mit
+offenem Rückstand prüft sie „höchstens einmal, nichts doppelt“. Ablage: `vermessung/ergebnisse/<datum>_<commit>_<anlass>/` (nur anhängen); die
+Tabelle unten erzeugt `scripts/vermessung-tabelle.sh --schreibe` aus diesen Ordnern — nie von Hand.
 
 <!-- vermessung-tabelle:anfang -->
 <!-- vermessung-tabelle:ende -->
@@ -197,8 +198,8 @@ Signal→Wake-Mapping; Kompensations-Dedup und Count-Join ohne verfrühtes Feuer
 Störungs-Seams der Prüfdomäne: `Pruefstand.Cluster(…, inboxGrenze, dienste)`, `Pruefstand.Dekoriere<T>`, `Pruefstand.FrageAsync` (Command mit
 vorgegebener CommandId, Modus `Emittiert`).
 
-**E2E-Messung:** `scripts/vermessung-e2e.sh --anlass <phase> --spalte "<Spalte>"` (Messung, ≈ 2–3 h), `--art dauerlauf --dauer 8:00:00`,
-`--art aufholzeit --stillstand 1:00:00`, `--art stoerung`; `--probe` ist ein verkürzter Funktionstest des Treibers und schreibt nicht ins Repo.
+**E2E-Messung:** `scripts/vermessung-e2e.sh --anlass <phase> --spalte "<Spalte>"` (Höchstlast, ≈ 5 min), `--art stoerung --anlass <phase>-stoerung`
+(≈ 3 min); `--probe` ist ein verkürzter Funktionstest des Treibers und schreibt nicht ins Repo.
 Danach `scripts/vermessung-tabelle.sh --schreibe` und den Ordner mitcommitten. Das Skript schaltet `pg_stat_statements` und `max_connections = 300`
 am Postgres-Container ein (einmaliger Neustart) und startet den Redis der Vermessung.
 
@@ -225,7 +226,7 @@ Entwicklers bleiben unberührt; am Ende SIGTERM an die Werkbank (sie hält Host 
   bleibt Konvention.
 - **Messung:** `pg_stat_database` schreibt seine Zähler verzögert fort (Sekunden) — für Messfenster taugt nur `pg_stat_statements`; mit
   `track = all` zählte es auch Statements innerhalb von Funktionen (Martens `mt_immutable_timestamptz` je Zeile) mit. Fremdlast auf dem Rechner
-  (ein Spiel, ein Build) verschiebt die Sättigung um den Faktor 2 und mehr — sie steht je Szenario im Ergebnis; Läufe darunter vergleichen nur
+  (ein Spiel, ein Build) verschiebt den Durchsatz um den Faktor 2 und mehr — sie steht je Szenario im Ergebnis; Läufe darunter vergleichen nur
   Verhältnisse. E2E-Läufe nie gleichzeitig mit einer Integrations-Suite.
 - **Kindprozesse mit umgeleiteter Ausgabe:** `dotnet build/restore/run` startet MSBuild-Knoten und den Compiler-Server, die die Pipe erben —
   wer auf das Ende der Ausgabe wartet (`WaitForExitAsync`, `ReadToEnd`), hängt bis zum Zeitlimit. Auf das Prozessende warten (`Werkbank/Server/Prozesse.cs`).

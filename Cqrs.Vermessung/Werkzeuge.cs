@@ -77,6 +77,8 @@ internal static class Statistik
         var rang = p / 100.0 * (s.Length - 1);
         var u = (int)Math.Floor(rang);
         var o = (int)Math.Ceiling(rang);
+        if (u == o || s[u] == s[o]) return s[u];
+        if (double.IsInfinity(s[o])) return s[o];   // ein nicht sichtbarer Vorgang (∞) bleibt ∞ statt NaN
         return s[u] + (s[o] - s[u]) * (rang - u);
     }
 

@@ -12,20 +12,21 @@ internal static class Zusammenfassung
 {
     private static readonly (string Key, string Kennzahl, string Einheit)[] Spalten =
     [
-        ("saettigung_je_s", "Sättigung", "/s"),
-        ("latenz_p50_ms", "Latenz p50 bei 50 %", "ms"),
-        ("latenz_p95_ms", "Latenz p95 bei 50 %", "ms"),
-        ("latenz_p99_ms", "Latenz p99 bei 50 %", "ms"),
+        ("angenommen_je_s", "angenommen", "{V}/s"),
+        ("sichtbar_je_s", "sichtbar im Fenster", "{V}/s"),
+        ("durchsatz_je_s", "Durchsatz bis alles sichtbar", "{V}/s"),
+        ("rueckstand", "Rückstand am Fensterende", "Vorgänge"),
+        ("abbau_s", "Abbauzeit", "s"),
+        ("latenz_p50_ms", "Latenz p50", "ms"),
+        ("latenz_p99_ms", "Latenz p99", "ms"),
         ("dauer_aufnahme_s", "Dauer Range aufnehmen", "s"),
         ("dauer_einfrieren_s", "Dauer Einfrieren", "s"),
-        ("zeit_je_teil_erstes_zehntel_ms", "Zeit je Teil, erstes Zehntel", "ms"),
-        ("zeit_je_teil_letztes_zehntel_ms", "Zeit je Teil, letztes Zehntel", "ms"),
         ("reaktion_p50_ms", "Reaktion p50", "ms"),
         ("reaktion_p99_ms", "Reaktion p99", "ms"),
-        ("tx_je_s", "Transaktionen", "/s"),
-        ("queries_je_s", "Queries", "/s"),
         ("tx_je_vorgang", "Transaktionen je Vorgang", "1"),
         ("queries_je_vorgang", "Queries je Vorgang", "1"),
+        ("tx_je_s", "Transaktionen", "/s"),
+        ("queries_je_s", "Queries", "/s"),
         ("cpu_prozent", "CPU Host", "% eines Kerns"),
         ("worker_cpu_prozent", "CPU Worker", "% eines Kerns"),
         ("rss_mb", "RSS Host (max.)", "MB"),
@@ -42,15 +43,15 @@ internal static class Zusammenfassung
                     zeilen.Add(new JsonObject
                     {
                         ["szenario"] = $"{name} {Messung.Titel(name)}", ["kennzahl"] = kennzahl,
-                        ["einheit"] = key == "saettigung_je_s" ? EinheitSaettigung(name) : einheit, ["wert"] = wert.DeepClone(),
+                        ["einheit"] = einheit.Replace("{V}", Vorgaenge(name)), ["wert"] = wert.DeepClone(),
                     });
         }
         return zeilen;
     }
 
-    private static string EinheitSaettigung(string s) => s switch
+    private static string Vorgaenge(string s) => s switch
     {
-        "S1" or "S2" => "Paare/s", "S4" => "Paare/s", "S5" => "Vorgänge/s", _ when s.StartsWith("S3") => "Teile/s", _ => "/s",
+        "S1" or "S2" or "S4" => "Paare", _ when s.StartsWith("S3") => "Teile", _ when s.StartsWith("S5") => "Vorgänge", _ => "",
     };
 
     public static string Markdown(JsonObject e)

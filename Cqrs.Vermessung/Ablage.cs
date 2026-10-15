@@ -41,11 +41,11 @@ internal sealed class Ablage
         if (!_latenzen.TryGetValue(szenario, out var w))
         {
             w = new StreamWriter(Path.Combine(Ordner, "latenzen", szenario + ".csv"), false, Encoding.UTF8);
-            w.WriteLine("wiederholung,phase,rate_je_s,vorgang,start_utc,latenz_ms,fehler" + (zusatz != null ? ",zusatz" : ""));
+            w.WriteLine("wiederholung,phase,vorgang,start_utc,latenz_ms,fehler" + (zusatz != null ? ",zusatz" : ""));
             _latenzen[szenario] = w;
         }
         lock (w)
-            w.WriteLine(string.Join(',', wiederholung, v.Phase, v.Rate.ToString("F2", CultureInfo.InvariantCulture), v.Schluessel,
+            w.WriteLine(string.Join(',', wiederholung, v.Phase, v.Schluessel,
                 v.Start.ToString("O"), double.IsNaN(v.LatenzMs) ? "" : v.LatenzMs.ToString("F1", CultureInfo.InvariantCulture),
                 Csv(v.Fehler)) + (zusatz != null ? "," + Csv(zusatz) : ""));
     }

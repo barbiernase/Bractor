@@ -1,0 +1,70 @@
+{
+  "art": "e2e",
+  "anlass": "baseline",
+  "spalte": "Baseline",
+  "skript": "scripts/vermessung-e2e.sh --anlass baseline --spalte Baseline",
+  "zeit": "2026-10-15T01:35:46.5528220+00:00",
+  "commit": "4ca22f5",
+  "branch": "claude/werkbank-zielbild",
+  "arbeitsbaum": "sauber",
+  "rechner": "MacBook-Air-von-Tobias-2, Darwin 24.5.0 Darwin Kernel Version 24.5.0: Tue Apr 22 19:54:43 PDT 2025; root:xnu-11417.121.6~2/RELEASE_ARM64_T8132, Apple M4, 10 Kerne, 16 GiB",
+  "umgebungen": [
+    "vermessung",
+    "vermessung-pruefdomaene"
+  ],
+  "parameter": {
+    "szenarien": [
+      "S1",
+      "S2",
+      "S3",
+      "S4",
+      "S5"
+    ],
+    "wiederholungen": 3,
+    "probe": false,
+    "rampe_s1_s2": {
+      "start_rate_je_s": 2,
+      "faktor": 1.5,
+      "stufen_dauer_s": 20,
+      "nachlauf_s": 10,
+      "p99_grenze_ms": 2000,
+      "latenzlauf_dauer_s": 60,
+      "latenzlauf_rate": "50 % der Sättigung"
+    },
+    "rampe_s5": {
+      "start_rate_je_s": 5,
+      "faktor": 1.5,
+      "stufen_dauer_s": 20,
+      "nachlauf_s": 10,
+      "p99_grenze_ms": 2000,
+      "latenzlauf_dauer_s": 60,
+      "latenzlauf_rate": "50 % der Sättigung"
+    },
+    "rampe_s3": {
+      "start_rate_je_s": 2,
+      "faktor": 1.5,
+      "stufen_dauer_s": 20,
+      "nachlauf_s": 10,
+      "p99_grenze_ms": 2000,
+      "latenzlauf_dauer_s": 60,
+      "latenzlauf_rate": "50 % der Sättigung"
+    },
+    "s3_rampe_sammelvorgang": "je 200 Teile",
+    "s3_n": [
+      1000,
+      10000
+    ],
+    "s3_n_rate": "50 % der Sättigung aus der Rampe, ein Sammelvorgang mit N Teilen",
+    "s5_muster": "je 10 Vorgänge: 8 Aufträge ok, 1 Auftrag gegen volles Kontingent (Kompensation), 1 Verteilung auf 4 Ziele; 50 Posten, 20 Ziele",
+    "dauer": "08:00:00",
+    "stillstand": "01:00:00",
+    "transaktionen": "COMMITs aus pg_stat_statements (track = top); Queries = übrige Statements ohne BEGIN/COMMIT/ROLLBACK/DISCARD/SET/SHOW; ohne die Lese-Rolle des Treibers",
+    "sichtbar": "S1/S2: Query GetImagePair je offenem Paar (komplett), alle 100 ms; S3: TeilVerbucht im Log; S4: Query HoleDatensatz; S5: ProzessBeendet im Log"
+  },
+  "fremdlast_vorher": "Last 7.24 5.82 7.42 · CPU-stärkste: 62.2 /Users/tobi/Library/Application Support/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.app/Contents/MacOS/Slay the Spire 2; 57.1 /Users/tobi/.dotnet/dotnet; 18.6 dotnet; 15.8 /Applications/Google Chrome.app/Contents/Frameworks/Google Chrome Framework.framework/Versions/153.0.8010.50/Helpers/Google Chrome Helper (Renderer).app/Contents/MacOS/Google Chrome Helper (Renderer); 9.1 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer",
+  "fremdlast_nachher": "Last 47.90 49.84 39.77 · CPU-stärkste: 148.5 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine; 71.2 /Users/tobi/Library/Application Support/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.app/Contents/MacOS/Slay the Spire 2; 49.2 dotnet; 45.8 dotnet; 40.0 /Users/tobi/Library/Application Support/Steam/Steam.AppBundle/Steam/Contents/MacOS/steam_osx",
+  "gueltig": false,
+  "begruendung": [
+    "RampenFehler: S3-10000: baut sich nicht ab"
+  ]
+}

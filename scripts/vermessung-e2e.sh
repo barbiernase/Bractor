@@ -1,11 +1,9 @@
 #!/usr/bin/env bash
 # E2E-Messung (docs/plan-garantien-und-durchsatz.md §0.1/§0.2): ein Befehl, feste Parameter, echte Hosts, echte Eingänge, Exactly-once-Prüfung.
 #
-#   scripts/vermessung-e2e.sh --anlass baseline --spalte Baseline                     Messung S1–S5, drei Wiederholungen
+#   scripts/vermessung-e2e.sh --anlass baseline --spalte Baseline                     Höchstlast S1–S5 (≈ 5 min)
 #   scripts/vermessung-e2e.sh --anlass phase-1 --spalte "Phase 1"                     dieselbe Messung nach einer Phase
-#   scripts/vermessung-e2e.sh --art dauerlauf --dauer 8:00:00 --anlass baseline-dauerlauf
-#   scripts/vermessung-e2e.sh --art aufholzeit --stillstand 1:00:00 --anlass baseline-aufholzeit
-#   scripts/vermessung-e2e.sh --art stoerung --anlass baseline-stoerung
+#   scripts/vermessung-e2e.sh --art stoerung --anlass baseline-stoerung               Störungslauf (≈ 3 min)
 #   scripts/vermessung-e2e.sh --anlass probe --probe                                   Funktionstest des Treibers: verkürzt, kein
 #                                                                                      Messlauf — Ergebnis im Temp-Verzeichnis, nicht im Repo
 #

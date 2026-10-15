@@ -1,9 +1,7 @@
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
 // E2E-MESSUNG (docs/plan-garantien-und-durchsatz.md §0.1, §0.2) — der echte Host, die realen Anwendungen, nur echte Eingänge.
-//   scripts/vermessung-e2e.sh --anlass baseline --spalte Baseline        (Messung S1–S5, drei Wiederholungen)
-//   scripts/vermessung-e2e.sh --art dauerlauf --dauer 8:00:00 --anlass baseline-dauerlauf
-//   scripts/vermessung-e2e.sh --art aufholzeit --stillstand 1:00:00 --anlass baseline-aufholzeit
-//   scripts/vermessung-e2e.sh --art stoerung --anlass baseline-stoerung
+//   scripts/vermessung-e2e.sh --anlass baseline --spalte Baseline        (Höchstlast S1–S5, wenige Minuten)
+//   scripts/vermessung-e2e.sh --art stoerung --anlass baseline-stoerung   (Störungslauf, etwa drei Minuten)
 // Jeder Lauf legt seinen Ordner unter vermessung/ergebnisse/ an (nur anhängen) und prüft Exactly-once; schlägt eine Prüfung fehl, ist
 // der Lauf ungültig.
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
@@ -48,10 +46,8 @@ try
     laufErgebnis = opt.Art switch
     {
         "messung" => await Messung.LaufeAsync(k),
-        "dauerlauf" => await Dauerlauf.LaufeAsync(k),
-        "aufholzeit" => await Aufholzeit.LaufeAsync(k),
         "stoerung" => await Stoerungslauf.LaufeAsync(k),
-        _ => throw new ArgumentException($"--art {opt.Art} unbekannt (messung, dauerlauf, aufholzeit, stoerung)"),
+        _ => throw new ArgumentException($"--art {opt.Art} unbekannt (messung, stoerung)"),
     };
 }
 catch (Exception ex)

@@ -123,14 +123,15 @@ internal sealed class Pruefdomaene : ILast
     /// Ziel genau einmal, je Reaktions-Command genau eine Wirkung (Ziel-Events je Ursache = 1) und keine Reservierung unter dem Mindestbestand
     /// ohne Nachschub.
     /// </summary>
-    public async Task<List<Pruefung>> PruefeAsync(Datenbank db)
+    public async Task<List<Pruefung>> PruefeAsync(Datenbank db, bool vollstaendig = true)
     {
         var s = db.Schema;
+        Pruefung P(string name, long soll, long ist) => Pruefung.Erwartet(name, soll, ist, vollstaendig);
         var alle = Vorgaenge.ToArray();
         var korr = alle.Select(v => v.Korrelation).ToArray();
         var p = new List<Pruefung>
         {
-            Pruefung.Gleich("je Vorgang genau ein ProzessBeendet", alle.Length,
+            P("je Vorgang genau ein ProzessBeendet", alle.Length,
                 await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'prozess_beendet' and stream_id = any(@k)", ("k", korr))),
             Pruefung.Gleich("kein Vorgang mit mehr als einem ProzessBeendet", 0, await db.ZahlAsync(
                 $"select count(*) from (select stream_id from {s}.mt_events where type = 'prozess_beendet' and stream_id = any(@k) group by 1 having count(*) > 1) x",
@@ -138,23 +139,23 @@ internal sealed class Pruefdomaene : ILast
         };
         var ok = alle.Where(v => v.Art != Art.AuftragAbgelehnt).Select(v => v.Korrelation).ToArray();
         var abgelehnt = alle.Where(v => v.Art == Art.AuftragAbgelehnt).Select(v => v.Korrelation).ToArray();
-        p.Add(Pruefung.Gleich("gelingende Vorgänge enden mit Erfolg", ok.Length, await db.ZahlAsync(
+        p.Add(P("gelingende Vorgänge enden mit Erfolg", ok.Length, await db.ZahlAsync(
             $"select count(*) from {s}.mt_events where type = 'prozess_beendet' and stream_id = any(@k) and (data->>'Erfolg')::boolean", ("k", ok))));
-        p.Add(Pruefung.Gleich("abgelehnte Aufträge enden ohne Erfolg", abgelehnt.Length, await db.ZahlAsync(
+        p.Add(P("abgelehnte Aufträge enden ohne Erfolg", abgelehnt.Length, await db.ZahlAsync(
             $"select count(*) from {s}.mt_events where type = 'prozess_beendet' and stream_id = any(@k) and not (data->>'Erfolg')::boolean", ("k", abgelehnt))));
-        p.Add(Pruefung.Gleich("jede Kompensation genau einmal (PostenFreigegeben je abgelehntem Auftrag)", abgelehnt.Length, await db.ZahlAsync(
+        p.Add(P("jede Kompensation genau einmal (PostenFreigegeben je abgelehntem Auftrag)", abgelehnt.Length, await db.ZahlAsync(
             $"select count(*) from {s}.mt_events where type = 'posten_freigegeben' and correlation_id = any(@k)", ("k", abgelehnt.Select(k => k.ToString()).ToArray()))));
         var auftraegeOk = alle.Where(v => v.Art == Art.AuftragOk).Select(v => v.Id).ToArray();
-        p.Add(Pruefung.Gleich("je gelingendem Auftrag genau ein AuftragBestaetigt", auftraegeOk.Length, await db.ZahlAsync(
+        p.Add(P("je gelingendem Auftrag genau ein AuftragBestaetigt", auftraegeOk.Length, await db.ZahlAsync(
             $"select count(*) from {s}.mt_events where type = 'auftrag_bestaetigt' and stream_id = any(@a)", ("a", auftraegeOk))));
         var verteilungen = alle.Where(v => v.Art == Art.Verteilung).ToArray();
-        p.Add(Pruefung.Gleich("je Verteilung jedes Ziel genau einmal zugebucht", verteilungen.Sum(v => v.Ziele.Length), await db.ZahlAsync(
+        p.Add(P("je Verteilung jedes Ziel genau einmal zugebucht", verteilungen.Sum(v => v.Ziele.Length), await db.ZahlAsync(
             $"select count(*) from {s}.mt_events where type = 'posten_zugebucht' and correlation_id = any(@k) and headers->>'ueber' like 'prozess:VerteilProzess%'",
             ("k", verteilungen.Select(v => v.Korrelation.ToString()).ToArray()))));
-        p.Add(Pruefung.Gleich("je Verteilung genau ein VerteilungAbgeschlossen", verteilungen.Length, await db.ZahlAsync(
+        p.Add(P("je Verteilung genau ein VerteilungAbgeschlossen", verteilungen.Length, await db.ZahlAsync(
             $"select count(*) from {s}.mt_events where type = 'verteilung_abgeschlossen' and stream_id = any(@v)", ("v", verteilungen.Select(v => v.Id).ToArray()))));
         var ausloeser = await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'posten_reserviert' and (data->>'Fehlmenge')::int > 0");
-        p.Add(Pruefung.Gleich("Reaktion: je Reservierung unter dem Mindestbestand genau ein Nachschub", ausloeser, await db.ZahlAsync($"""
+        p.Add(P("Reaktion: je Reservierung unter dem Mindestbestand genau ein Nachschub", ausloeser, await db.ZahlAsync($"""
             select count(distinct headers->>'ursache') from {s}.mt_events
             where type = 'posten_zugebucht' and headers->>'ueber' = 'reaktion:NachschubBeiMindestbestand'
             """)));
