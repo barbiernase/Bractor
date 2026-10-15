@@ -282,3 +282,19 @@ anstehen.
 7. `--probe` (verkürzter Funktionstest des Treibers) schreibt nicht nach `vermessung/ergebnisse/` — Probeläufe während der Entwicklung des
    Treibers sind keine Messläufe.
 
+## 9 · Übergabe an den nächsten Agenten (Stand 2026-10-15, Commit nach `7b09d83`)
+
+- **Wo es steht:** Phase 0 ist fertig. **Haltepunkt (a) ist offen:** Tobi hat die Baseline gesehen, aber noch nicht bestätigt — (1) die
+  E5-Zielwerte aus §8, (2) G-7 (und PF-9, soweit es dort hingehört) in Phase 1 mitzuschließen. Ohne seine Antwort nicht mit Phase 1 anfangen;
+  die zwei Fragen kurz stellen.
+- **Danach:** Phase 1 nach §3 (Emit-Ausgang, G-1, G-2 Emittent, P1-6), mit G-7, falls bestätigt. Die Lücken-Tests der Phase entfernen ihr Skip
+  (`Skip = "G-n offen (docs/13)"`, Liste in docs/11 §11.13/§11.14); geschlossen ist eine Lücke erst, wenn ihr Test grün ist.
+- **Messen je Phase:** `vermessung/README.md` (Abschnitt „Wiederholen“) — Höchstlast in ≈ 5 min und Störungslauf in ≈ 3 min, Spalte „Phase n“,
+  Tabelle per Skript. Keine Langläufe; jeden Lauf über 15 min vorher mit Dauer ankündigen und fragen.
+- **Vor jedem Commit:** `dotnet build`; Prüfstand; Garantie-Suite (`--filter Kategorie=Garantie` auf Prüfstand, dann nacheinander Integration
+  und Prüfdomäne); die betroffenen Integrations-Suiten; `dotnet run --project GraphExtractor -- --check`; `./codegen.sh --check`; bei
+  Generator-Änderungen das Generat inspizieren (Memory „Generatoren-Fallen“). Commits ohne Co-Authored-By; nicht pushen ohne Tobis Wort.
+- **Fallen aus Phase 0:** das geteilte Test-Schema `pruef_e2e` enthält Tombstones (G-7) — sein Poll steht still, Tests, die den Poll brauchen,
+  nehmen ein eigenes Schema (Muster `AblaufGarantieTests`); die Sim-DB der Werkbank hat ebenfalls Tombstones. `pg_stat_database` zählt verzögert,
+  gemessen wird über `pg_stat_statements` (`track = top`). Unter Dauerüberlast kippt ein heißes Aggregat in den Retry-Sturm (PF-9).
+
