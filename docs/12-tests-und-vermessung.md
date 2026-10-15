@@ -27,8 +27,9 @@ es nur für nicht-autoritative Randstores (Inv. 6).
 
 ## 12.2 Zahlen
 
-**Aktuell (2026-10-15, Phase 0 des Plans Garantien und Durchsatz):** Prüfstand **551 grün + 4 übersprungen** (Lücken G-1 ×2, G-2, G-5),
-Integration **43 + 2** (G-4, G-7) sequentiell (≈ 110 s), Prüfdomäne **19 + 3** (G-2, G-3 ×2) sequentiell (≈ 90 s); Garantie-Suite im Prüfstand 138 grün + 4;
+**Aktuell (2026-10-15, Phase 1 des Plans Garantien und Durchsatz):** Prüfstand **567 grün + 1 übersprungen** (Lücke G-5),
+Integration **44 + 1** (G-4) sequentiell (≈ 105 s), Prüfdomäne **20 + 3** (G-2, G-3 ×2) sequentiell (≈ 90 s); Garantie-Suite: Prüfstand 154 + 1,
+Integration 26 + 1, Prüfdomäne 15 + 3;
 Werkbank-Abnahme **1/1** sequentiell (≈ 130 s), `Client.Infrastructure.CollectionTests` **30/30**, Python SDK **34/34**, Worker **21/21**;
 `--check` grün (alle Bereiche inkl. „Lage“), `--sonde` grün (111 Soll-Fakten, Lage-Soll 56 Typen); Gate `./pruefe-checkout.sh` grün.
 
@@ -60,7 +61,7 @@ Die Differenz zwischen 539 Methoden und 555 Läufen im Prüfstand kommt von den 
 | Quellen, Umgebung, Spur, Dienste | 64 | `DateiTreiberTests` (17), `UmgebungLaderTests`, `ProjektionsStandTests`, `SpurTests`, `WirkerIdTests`, `SpurWegTests`, `DienstBindungTests` (15) |
 | Konsum-Maschine, Prozess | 37 | `EmittentenCursorTests`, `ProjectionRebuilderTests`, `EmittentenPfadAdapterTests`, `GaEinsPruefungTests`, `ProzessPollFilterTests`, `AblehnungsMarkeTests`, `ReaktionsIdTests`, `CommandVorpruefungTests`, `DispatcherCommandFailedTests`, `TransientPersistiertSplitTests`, `DeadLetterReadStoreTests` |
 | Übrige | 23 | `FristSchedulerTests`, `FristPlanerTests`, `BackendMonitoringTests`, `EingangJsonTests`, `BrokerIdentityTests`, Handle-Welt: `PipelineEventPullBridgeTests`, `TimerTriggerTests`, `WebhookTriggerTests` |
-| Garantien (Störung über Seams, `Garantien/`) | 16 + 4 übersprungen | `FristGarantieTests` (Emit-Timeout und -Fehlschlag, Skip G-1), `KonsumGarantieTests` (doppelte/ungeordnete Weckungen, Absturz zwischen Emit und Cursor, nicht zugestellter Emit Skip G-2), `RehydrationGarantieTests` (Neustart stellt die Inbox her, Split-Upcast Skip G-5), `BuildGarantieTests` (CQRS010/011/052/053, Wire-Boot-Check) |
+| Garantien (Störung über Seams, `Garantien/`) | 26 + 1 übersprungen | `EmitGarantieTests` (Emit-Ausgang je Antwort, Drossel je Ziel, volle Drossel meldet unbekannt, Dirigent: Backoff nach unbekanntem Ausgang, kein Doppel-Send, sofortige Weckung nach entschiedenem), `FristGarantieTests` (zugestellt, abgelehnt, Emit-Timeout und -Fehlschlag lassen die Frist liegen, doppeltes Feuern), `KonsumGarantieTests` (doppelte/ungeordnete Weckungen, Absturz zwischen Emit und Cursor, nicht zugestellter Emit hält den Cursor, Ablehnung ist entschieden, Commands eines Tails parallel), `RehydrationGarantieTests` (Neustart stellt die Inbox her, Split-Upcast Skip G-5), `BuildGarantieTests` (CQRS010/011/052/053, Wire-Boot-Check) |
 
 **Integration (Ebene 2):**
 
@@ -78,7 +79,7 @@ Die Differenz zwischen 539 Methoden und 555 Läufen im Prüfstand kommt von den 
 | `VertragsZusageE2ETests` | 1 | doppelt zugestellte Zusage wirkt genau einmal |
 | `UmgebungE2ETests`, `LeseseitenStandE2ETests`, `EingangE2ETests` | 3 + 1 + 1 | Siegel, Projektions-Stand nach Code-Änderung, JSON-Eingang/Webhook |
 | `MonitoringHttpTests` | 2 | `/health`, Kennzahlen |
-| `Garantien/GarantiePostgresTests` | 3 + 2 übersprungen | ein Append ganz oder gar nicht, zwei Schreiber ohne verlorenes Update, Poison-Stream hält die HWM ohne andere zu blockieren; gescheiterter Append legt den Poll still (Skip G-7), zwei Aktivierungen einer Projektion (Skip G-4) |
+| `Garantien/GarantiePostgresTests` | 4 + 1 übersprungen | ein Append ganz oder gar nicht, zwei Schreiber ohne verlorenes Update, Poison-Stream hält die HWM ohne andere zu blockieren, ein gescheiterter Append (Tombstones) legt den Poll nicht still; zwei Aktivierungen einer Projektion (Skip G-4) |
 | `EingangE2ETests.Client_wiederholt_mit_derselben_CommandId…` | 1 | Client-Wiederholung über den JSON-Eingang wirkt genau einmal |
 | Handle-Welt: `PipelineWebhookHttpTests`, `TimerTriggerSchedulingTests` | 2 | Trigger-Pfade ohne Domänen-Nutzer (`docs/13` W11-1) |
 
@@ -91,7 +92,7 @@ Die Differenz zwischen 539 Methoden und 555 Läufen im Prüfstand kommt von den 
 | `UpcastingTests` | 5 | generierte Tabelle (Diskriminator `_v2`, Kette, unbekannt → laut); echter Seam: alte Bytes werden beim Lesen aufgewertet, neue Writes tragen `_v2` |
 | `MarkingCursorAequivalenzTests` | 4 | `ProzessManager` direkt gegen Marten, Cursor aus vs. an (`MartenProzessMarkingStore`): identische Feuerungen für Diamant, Kompensation, Fan-out + Count-Join (Cursor liest weniger); falscher RegelHash → Voll-Fold |
 | `Garantien/SchreibGarantieTests` | 1 + 3 übersprungen | doppelt und gleichzeitig zugestellter Command wirkt genau einmal; alte CommandId jenseits der Inbox-Grenze (Skip G-2), Heilung nach Versionskonflikt und mehrdeutiger Commit (Skip G-3) |
-| `Garantien/AblaufGarantieTests` | 2 | die Reaktion `NachschubBeiMindestbestand` wirkt genau einmal, obwohl ihr Poll alles erneut ausgibt; Neustart des Hosts mitten im Vorgang führt ihn zu Ende (eigenes Schema — im geteilten Schema `pruef_e2e` steht der Poll nach den Tombstones der G-3-Tests still, G-7) |
+| `Garantien/AblaufGarantieTests` | 3 | die Reaktion `NachschubBeiMindestbestand` wirkt genau einmal über Signal und Poll (beide ab Cursor) und nach einem Absturz zwischen Emit und Cursor (Cursor-Dekorator, erneutes Senden wird verworfen); Neustart des Hosts mitten im Vorgang führt ihn zu Ende (eigenes Schema) |
 
 **Client:** `VirtualCollectionTests` (26), `PendingCommandTrackerTests` (5). **Python:** SDK `test_vertrag`, `test_funktion`, `test_client_query`,
 `test_client_reconnect`, `test_mapper_*` (inkl. Nutzlast-Tabelle); Worker `test_vertraege`, `test_funktionen`, `test_funktions_worker`, `test_training_worker`.

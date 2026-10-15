@@ -10,7 +10,7 @@ Fähigkeits-Parameter, Rückgabetyp). Konkret laufen zwei Schleifen:
 | Konsument | Code-Form | Schleife | Fortschritt | Achse B |
 |---|---|---|---|---|
 | Projektion | `ISubscriber, IPullSubscriber`; `Handle` mit Schreib-Fähigkeit | `ProjectionAdapter` je (Konsument, Stream) | Marke im Store, co-committet | replaybar |
-| Reaktion | `ISubscriber, IPullSubscriber`; `Handle` ohne Schreib-Fähigkeit, gibt Commands aus | `ProjectionAdapter` je (Konsument, Stream) | `IEmittentenCursor` (best-effort) | emittierend |
+| Reaktion | `ISubscriber, IPullSubscriber`; `Handle` ohne Schreib-Fähigkeit, gibt Commands aus | `ProjectionAdapter` je (Konsument, Stream) | `IEmittentenCursor`, vorgerückt nach bestätigtem Emit | emittierend |
 | Prozess | `IProzessDefinition`, `Prozess<T>.Definiere(…)` | Dirigent (`ProzessManager`) je Vorgang | Fold aus dem Log (+ Marking-Cursor) | emittierend |
 | Fluss | `IPipeline`, `PipelineFluss.Definiere(…)` | derselbe Dirigent | wie Prozess | emittierend |
 
@@ -22,14 +22,19 @@ Bausteine schreibt: [10](10-entwickler-api.md).
 Herzstück für Projektion und Reaktion ist `ProjectionAdapter` (`Infrastructure/Projections/ProjectionAdapter.cs`). Die store-agnostische
 Schleife trägt die *Policy* (Marke lesen → ab Marke+1 geordnet lesen → Guard → dispatchen → Marke vorrücken), aber **keine Transaktion**.
 
-`WakeAsync(streamId, vomPoll, ct)`:
-1. **Startposition:** mit Tracker → `LastProcessedVersionAsync`; mit Emittenten-Cursor auf dem Signalpfad → `LadeAsync − 1`; ohne Tracker
-   oder bei Poll-Heilung eines Emittenten bewusst `−1` (ab 0, at-least-once).
+`WakeAsync(streamId, ct)` → `bool` (bestätigt aufgeholt), für Signal und Poll gleich:
+1. **Startposition:** mit Tracker → `LastProcessedVersionAsync`; mit Emittenten-Cursor → `LadeAsync − 1`; ohne beides bewusst `−1` (ab 0,
+   at-least-once, nur für idempotente Effekte gültig).
 2. **Geordnet lesen** ab `applied+1` über `IEventStoreRepository.ReadStreamAsync` — das tragende Pull-Leseprimitiv.
 3. **Pre-Dispatch-Guard:** `if (e.AggregateVersion <= applied) continue;`.
-4. **Dispatch** je Event mit einem frischen `ProjectionWriter` (`Core/ProjectionWriter.cs`), der nur sammelt.
-5. **Marke vorrücken:** Tracker → `MarkProcessedAsync` (durabler Commit-Punkt); Emittenten-Cursor → `SchreibeAsync` (best-effort).
-6. **Versions-Index erst danach:** der verlierbare Index (`IReadModelDepsSink`) wird erst nach dem Marken-Commit publiziert — nie über
+4. **Dispatch** je Event mit einem frischen `ProjectionWriter` (`Core/ProjectionWriter.cs`), der nur sammelt, und den `EmitAusgaenge` der
+   Weckung (`Infrastructure/PubSub/EmitAusgaenge.cs`, trägt das Token): ein ausgegebener Command wird sofort gesendet, sein Ausgang erfasst —
+   die Commands eines Tails laufen parallel.
+5. **Ausgänge abwarten:** bleibt ein Command „unbekannt“, endet die Weckung mit `false` — Marke bzw. Cursor bleiben stehen, die nächste
+   Weckung sendet den Tail mit denselben CommandIds erneut (die Inbox des Ziels verwirft, was schon gewirkt hat; G-2).
+6. **Marke vorrücken:** Tracker → `MarkProcessedAsync` (durabler Commit-Punkt); Emittenten-Cursor → `SchreibeAsync` (erst nach bestätigtem
+   Emit; scheitert das Schreiben, sendet die nächste Weckung erneut).
+7. **Versions-Index erst danach:** der verlierbare Index (`IReadModelDepsSink`) wird erst nach dem Marken-Commit publiziert — nie über
    Uncommittetes.
 
 Wirft der Store eine `SchreibKonfliktException` (geteiltes Dokument, §4.3), wiederholt der Adapter den ganzen Stapel ab der Marke (bis zu
@@ -39,8 +44,10 @@ fünfmal, gestreut verzögert); danach übernimmt der Poll.
 - **Signal** (schnell): `SignalReceiverActor` abonniert die `StateChangeVia…`-Signale der Eingangs-Event-Typen und weckt die
   per-Stream-Cluster-Identität.
 - **Poll** (Sicherheit, 30 s): `Poller.PollOnceAsync` scannt über `ReadChangedStreamsAsync` jenseits der High-Water-Mark. Die HWM rückt
-  **nur** vor, wenn jede Weckung als `WakeAck` bestätigt zurückkommt (bounded 10 s); sonst re-scannt der nächste Durchlauf dasselbe
-  Fenster — kein terminaler, unverarbeiteter Stream wird still übersprungen.
+  **nur** vor, wenn jede Weckung als `WakeAck(Aufgeholt: true)` zurückkommt (bounded 10 s); sonst re-scannt der nächste Durchlauf dasselbe
+  Fenster — kein terminaler, unverarbeiteter Stream wird still übersprungen. Ein scheiternder Durchlauf wird als Warnung gemeldet.
+- **Tombstones:** scheitert ein Append, füllt Marten die reservierten Sequenzen mit `Tombstone`-Events in einem eigenen Stream.
+  `MartenEventStore` meldet diesen Stream nicht als geändert und liest keine Tombstones (G-7, erledigt); die HWM läuft über sie hinweg.
 
 Beide wecken **dieselbe** Cluster-Identität `(Kind, StreamId)`; der per-Stream `SignalAdapterActor` serialisiert sie über seine Mailbox
 (Single-Writer je Stream). Aller durable Zustand liegt im Store → Passivierung bei Idle ist folgenlos.
@@ -54,7 +61,7 @@ Konsument ein Cluster-Kind (`pull-<Typ>`) samt Registrierung (`GeneratedPullPath
 **Achse B — replaybar vs. emittierend** — im `ProjectionAdapter`-Konstruktor als sich ausschließendes Paar:
 ```csharp
 IProjectionTracker? tracker,          // replaybar: Co-Commit + Reset
-IEmittentenCursor?  emittentenCursor  // emittierend: best-effort, KEIN Reset
+IEmittentenCursor?  emittentenCursor  // emittierend: durabel, ab Cursor, KEIN Reset
 // beide gesetzt → throw
 ```
 - `IProjectionTracker`: `LastProcessedVersionAsync`/`MarkProcessedAsync` **+ `ResetAsync`/`ResetAllAsync`** (Reset = Umkehrung der Marke →
@@ -139,7 +146,13 @@ Der **Rückgabetyp** (konkret oder `OneOf<…>`, CQRS050) sagt, was entstehen ka
 Jeder Command geht durch das **eine** Emit-Primitiv `CommandEmitter.EmitAsync` (`Infrastructure/PubSub/CommandEmitter.cs`):
 - deterministische `CommandId` aus `EmitKausalität` (Korrelation + auslösender Stream + Position/Command-Typ) → stabil über Re-Wakes,
 - `CommandModus.Emittiert()` = **keine erwartete Version**,
-- **bounded** (`_sendeFrist`, Standard 5 s), fire-and-forget, at-least-once; einen Timeout heilt der nächste Re-Wake bzw. Poll.
+- **bounded** (`_sendeFrist`, Standard 5 s), at-least-once, ohne eigenen Retry;
+- liefert den **Ausgang** (`EmitAusgang`): `Zugestellt` (Erfolg, auch als erkannte Wiederholung), `Abgelehnt` (fachlich, durabel als Marke —
+  `CommandResult.Abgelehnt`), `Unbekannt` (Frist abgelaufen, technischer Fehler, Transportfehler). Keine Ausnahme verlässt den Emitter. Wer
+  „unbekannt“ bekommt, wiederholt an seinem durablen Punkt mit derselben CommandId: der Emittenten-Cursor bleibt stehen (§4.1), die Frist liegt
+  weiter (§4.6), der Dirigent wiederholt nach Backoff (§4.5);
+- **Drossel je Ziel** (`EmitDrossel`): höchstens 8 Sends je Ziel-Aggregat gleichzeitig unterwegs (je Knoten); der Rückstau eines heißen
+  Aggregats liegt vor dem Send statt in seiner Mailbox, sodass die Sends in ihrer Frist bleiben (PF-9).
 
 **Dedup macht die Framework-Inbox, nicht der Fachcode.** Der Aggregat-Actor co-committet mit den Domänen-Events eine
 `KommandoVerarbeitet(CommandId)`-Marke (`Infrastructure/Aggregate/KommandoVerarbeitet.cs`, `IProzessIntern`: der Applier sieht sie nie);
@@ -147,8 +160,8 @@ eine fachliche Ablehnung eines emittierten Commands wird zur durablen `KommandoA
 Inbox-Mengen (`BoundedInbox`) und erkennt eine Wiederholung **vor** der OCC-Prüfung → Noop. Die Inbox ist gedeckelt (docs/13 G-2). Was daraus garantiert ist: [11](11-garantien.md).
 
 **Analyzer-Zwang** (`CommandEmitAnalyzer`): **CQRS020** (rohes `RequestAsync<CommandResult>` außerhalb von Emitter/Dispatcher),
-**CQRS021** (Command-Send mit `CancellationToken.None`/`default`). Im generierten Pull-Emit-Pfad steht noch `CancellationToken.None`
-(nur durch die Emitter-Frist gebunden, docs/13 P1-6).
+**CQRS021** (Command-Send mit `CancellationToken.None`/`default`). Der generierte Pull-Emit-Pfad reicht das Token der Weckung durch
+(`EmitAusgaenge.Token`).
 
 ## 4.5 Prozess-Maschine (der Dirigent)
 
@@ -205,9 +218,12 @@ offen: `ProzessBeendet(true)` → mit Fehlschlag: **Kompensation** rückwärts �
 abgelehnt, endet der Vorgang als `ProzessBeendet(false, KlärungNötig: true)` mit einem best-effort Dead-Letter-Eintrag (kein endloses
 Neufeuern) — sonst `ProzessBeendet(false)`.
 
-**Feuern** geht über `ProzessManagerActor` → `DetachedProzessSend.Wrap` → `CommandEmitter.EmitAsync` mit vorgegebener CommandId: der
-deterministische **Vorgang ist die CommandId**. Der Fold matcht den durablen Ausgang über `CausationId == vorgang`, **ohne Quittung**. Nach
-jedem Send weckt sich der Manager selbst, damit der Fold den Ausgang sieht (das Ergebnis der letzten Regel ist Auslöser keiner Regel).
+**Feuern** geht über `ProzessManagerActor` → `DetachedProzessSend` (eine Instanz je Manager) → `CommandEmitter.EmitAsync` mit vorgegebener
+CommandId: der deterministische **Vorgang ist die CommandId**. Der Fold matcht den durablen Ausgang über `CausationId == vorgang`; der
+Emit-Ausgang entscheidet nur über das Wecken (PF-9): nach „zugestellt“ oder „abgelehnt“ weckt sich der Manager sofort selbst, damit der Fold den
+Ausgang sieht (das Ergebnis der letzten Regel ist Auslöser keiner Regel); nach „unbekannt“ erst nach einem Backoff je Vorgang (1 s, 2 s, 4 s …
+höchstens 30 s, gestreut). Solange der Send eines Vorgangs läuft oder sein Backoff wartet, sendet keine andere Weckung (Signal, Poll, Backstop)
+ihn erneut. Mit der Drossel je Ziel (§4.4) baut ein überlastetes Aggregat seinen Rückstau ab, statt dass Wiederholungen ihn vervielfachen.
 
 **Marking-Cursor (P5b).** `MarkingKompakt` (`Abstractions/Prozess/ProzessMarking.cs`) hält je Ziel-Stream einen `StreamCursor` und verdichtete
 Vorgangs-Marken statt roher Tokens:
@@ -290,7 +306,8 @@ Eine Funktion mit Lese-Fähigkeit läuft nur im Host. Details: `docs/konzept-edi
 **Altlast: die Handle-Pipeline.** Daneben ist noch die frühere Pipeline-Maschinerie verdrahtet, ohne Domänen-Nutzer: `IPipelineHandler` mit
 `PipelineActorBase`, `PipelineEventPullBridge` (persistierte Events über den Pull-Pfad, emittierend), `PipelineStartupService`, die
 Trigger-Welt (`IPipelineTrigger`, `ITriggerRegistration`, `TimerTrigger`, `WebhookTrigger`) und `Selbst<T>`/`Frist<TCmd>`/`FristStorno<TCmd>` als
-Handle-Ausgang (durabler Fristplaner `FristScheduler`/`MartenFristplan`). Sie ist kein Weg für neuen Code; Rückbau offen (docs/13 W11-1).
+Handle-Ausgang (durabler Fristplaner `FristScheduler`/`MartenFristplan`; er entfernt eine Frist erst bei entschiedenem Emit-Ausgang, ein
+unbekannter lässt sie für den nächsten Tick liegen). Sie ist kein Weg für neuen Code; Rückbau offen (docs/13 W11-1).
 
 ## 4.7 Dead-Letter & Snapshots
 
@@ -319,7 +336,7 @@ Format, Lesen und Ansichten: `docs/konzept-werkbank.md` §7.
 
 ## 4.9 Offen
 
-Offene Punkte stehen nur in [13](13-reifegrad-schulden-bewertung.md): Testlücke T-1, `CancellationToken.None` im Pull-Emit-Pfad P1-6,
-Handle-Pipeline/Trigger-Welt und doppelte DSL W11-1, Zeitlimits über den Backstop W11-2, Garantie-Lücken G-1 (Fristverlust), G-2 (Inbox-Fenster), G-4 (Checkpoint), Marking/Kompensation/
+Offene Punkte stehen nur in [13](13-reifegrad-schulden-bewertung.md): Testlücke T-1,
+Handle-Pipeline/Trigger-Welt und doppelte DSL W11-1, Zeitlimits über den Backstop W11-2, Garantie-Lücken G-2 (Inbox-Fenster), G-4 (Checkpoint), Marking/Kompensation/
 `KlärungNötig` P2-5, hartkodierte Intervalle P2-8, reflektive Serialisierung (Marking-Store, Snapshot-Kopie) W10-2, Projektlage W2-1,
 toter `MartenProjectionTracker` P3-2.

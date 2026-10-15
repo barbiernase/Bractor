@@ -212,6 +212,7 @@ public class MartenEventStore : IEventStoreRepository
         var result = new List<EventEnvelope>(raw.Count);
         foreach (var e in raw)
         {
+            if (IstTombstone(e)) continue;                  // G-7: Platzhalter eines gescheiterten Appends, kein Fakt
             var aggregateType = e.Headers != null
                 && e.Headers.TryGetValue("aggregate_type", out var at)
                     ? at?.ToString() ?? string.Empty
@@ -273,8 +274,10 @@ public class MartenEventStore : IEventStoreRepository
             .OrderBy(e => e.Sequence)
             .ToListAsync(ct);
 
-        // Alle geänderten Streams wecken (Heilung) — unabhängig von der Karenz.
-        var streams = raw.Select(e => e.StreamId).Distinct().ToList();
+        // Alle geänderten Streams wecken (Heilung) — unabhängig von der Karenz. Tombstones (G-7) belegen nur Sequenzen eines
+        //   gescheiterten Appends: ihr Stream ist kein Aggregat und weckt niemanden; die Hochwassermarke läuft über sie hinweg
+        //   (Zeitstempel -infinity, also immer jenseits der Karenz).
+        var streams = raw.Where(e => !IstTombstone(e)).Select(e => e.StreamId).Distinct().ToList();
 
         if (raw.Count == 0)
             return new StreamChanges(streams, afterGlobalSequence);
@@ -292,6 +295,13 @@ public class MartenEventStore : IEventStoreRepository
 
         return new StreamChanges(streams, highWater);
     }
+
+    /// <summary>
+    /// G-7: scheitert ein Append (Versionskonflikt, isolierte Wiederholung im Batch, DB-Fehler im <c>SaveChanges</c>), füllt Marten die schon
+    /// reservierten Sequenzen mit <see cref="Tombstone"/>-Events in einem eigenen Stream. Sie sind keine Fakten, haben keinen Upcasting-Pfad
+    /// und dürfen keinen Leser wecken oder anhalten.
+    /// </summary>
+    private static bool IstTombstone(JasperFx.Events.IEvent e) => e.Data is Tombstone;
 
     /// <summary>Die aktuelle DB-Uhr (timestamptz) über die Session-Verbindung — als Referenz für die
     /// Straggler-Karenz, konsistent mit den DB-generierten Event-Timestamps.</summary>

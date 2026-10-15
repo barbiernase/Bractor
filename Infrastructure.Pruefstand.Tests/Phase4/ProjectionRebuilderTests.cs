@@ -75,8 +75,8 @@ public class ProjectionRebuilderTests
         var log = new List<EventEnvelope> { Evt(s1, 1), Evt(s1, 2), Evt(s2, 1) };
         var store = new FakeEventStore(log);
         var target = new InMemoryAppendTarget();
-        Func<EventEnvelope, ProjectionWriter, Task> dispatch =
-            (e, _) => { target.Append(e.AggregateId, e.AggregateVersion); return Task.CompletedTask; };
+        Func<EventEnvelope, ProjectionWriter, Infrastructure.PubSub.EmitAusgaenge, Task> dispatch =
+            (e, _, _) => { target.Append(e.AggregateId, e.AggregateVersion); return Task.CompletedTask; };
 
         // Initiale Materialisierung über den normalen Adapter-Pfad.
         var adapter = new ProjectionAdapter(store, target, null, ProjId, dispatch);
@@ -102,8 +102,8 @@ public class ProjectionRebuilderTests
         var s1 = Guid.NewGuid();
         var store = new FakeEventStore(new List<EventEnvelope> { Evt(s1, 1), Evt(s1, 2) });
         var target = new InMemoryAppendTarget();
-        Func<EventEnvelope, ProjectionWriter, Task> dispatch =
-            (e, _) => { target.Append(e.AggregateId, e.AggregateVersion); return Task.CompletedTask; };
+        Func<EventEnvelope, ProjectionWriter, Infrastructure.PubSub.EmitAusgaenge, Task> dispatch =
+            (e, _, _) => { target.Append(e.AggregateId, e.AggregateVersion); return Task.CompletedTask; };
 
         // Materialisieren, dann NUR die Marken zurücksetzen (ohne Clear) und erneut ab 0 dispatchen.
         var adapter = new ProjectionAdapter(store, target, null, ProjId, dispatch);
@@ -122,8 +122,8 @@ public class ProjectionRebuilderTests
         var s2 = Guid.NewGuid();
         var store = new FakeEventStore(new List<EventEnvelope> { Evt(s1, 1), Evt(s2, 1), Evt(s2, 2) });
         var target = new InMemoryAppendTarget();
-        Func<EventEnvelope, ProjectionWriter, Task> dispatch =
-            (e, _) => { target.Append(e.AggregateId, e.AggregateVersion); return Task.CompletedTask; };
+        Func<EventEnvelope, ProjectionWriter, Infrastructure.PubSub.EmitAusgaenge, Task> dispatch =
+            (e, _, _) => { target.Append(e.AggregateId, e.AggregateVersion); return Task.CompletedTask; };
 
         var adapter = new ProjectionAdapter(store, target, null, ProjId, dispatch);
         await adapter.WakeAsync(s1, Ct);

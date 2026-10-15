@@ -1,5 +1,6 @@
 using Abstractions;
 using Core;
+using Infrastructure.PubSub;
 
 namespace Infrastructure.Pipeline;
 
@@ -10,13 +11,13 @@ namespace Infrastructure.Pipeline;
 ///
 /// Der Event-Pfad IST eine Reaktion (Ein-Strom/Emittierend, Achse B): er faltet nicht, sondern
 /// emittiert Commands (idempotent am Empfänger). Diese Brücke übersetzt den Pull-Dispatch
-/// (<c>Func&lt;EventEnvelope, ProjectionWriter, Task&gt;</c>) auf die generierte
+/// (<c>Func&lt;EventEnvelope, ProjectionWriter, EmitAusgaenge, Task&gt;</c>) auf die generierte
 /// <c>DispatchEventAsync</c> der Pipeline — der Entwickler-Code (<c>Handle(evt, ctx)</c>) bleibt
 /// unverändert, nur der TRANSPORT darunter wechselt (docs/04 §4.6).
 ///
 /// Rein (kein Cluster/Proto): die drei Ausgabe-Nähte werden injiziert →
 ///   - <paramref name="emitFactory"/> baut je Auslöse-Event die Command-/Event-Route
-///     (live: <c>DetachedEmit.Wrap(HandlerOutputRouter.EmitFor(e))</c> — bounded, deterministische Id),
+///     (live: <c>HandlerOutputRouter.EmitFor(e, ausgaenge)</c> — bounded, deterministische Id, Ausgang je Weckung),
 ///   - <c>sendTrigger</c> die pipeline→pipeline-Route.
 /// So ist der Fold in-memory mit Fakes prüfbar (ohne echten Cluster/OpenCV).
 /// </summary>
@@ -37,9 +38,9 @@ public static class PipelineEventPullBridge
     /// die deterministische Emit-Id) und verdrahtet die drei Ausgabe-Nähte. Der <c>ProjectionWriter</c>
     /// wird nicht genutzt: ein Emittent hat keinen co-committeten Read-Model-Effekt (Achse B).
     /// </summary>
-    public static Func<EventEnvelope, ProjectionWriter, Task> Wrap(
+    public static Func<EventEnvelope, ProjectionWriter, EmitAusgaenge, Task> Wrap(
         EventDispatch dispatchEvent,
-        Func<EventEnvelope, Func<IPipelineOutput, Task>> emitFactory,
+        Func<EventEnvelope, EmitAusgaenge, Func<IPipelineOutput, Task>> emitFactory,
         Func<IPipelineTrigger, string, Task> sendTrigger,
         Func<FristAuftrag, Task>? planeFrist = null)
     {
@@ -47,7 +48,7 @@ public static class PipelineEventPullBridge
         if (emitFactory is null) throw new ArgumentNullException(nameof(emitFactory));
         if (sendTrigger is null) throw new ArgumentNullException(nameof(sendTrigger));
 
-        return async (e, _writer) =>
+        return async (e, _writer, ausgaenge) =>
         {
             // Kausalkette: der Handle handelt im Auftrag des Akteurs, von dem das Event stammt (Header im Log).
             using var imAuftrag = Infrastructure.Akteure.AkteurHerkunft.Aus(e.UserId);
@@ -60,7 +61,7 @@ public static class PipelineEventPullBridge
                 SourceEventZeit = e.CreatedAtUtc,   // aus dem Log gelesen = DB-Zeitstempel (Basis einer Frist)
             };
 
-            var emit = emitFactory(e);   // Func<IPipelineOutput,Task> — ICommand→Emit, IEvent→Publish (Router)
+            var emit = emitFactory(e, ausgaenge);   // Func<IPipelineOutput,Task> — ICommand→Emit, IEvent→Publish (Router)
 
             await dispatchEvent(
                 e, ctx,

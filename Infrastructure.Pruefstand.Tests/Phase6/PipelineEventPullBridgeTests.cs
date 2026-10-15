@@ -20,6 +20,7 @@ namespace Infrastructure.Pruefstand.Phase6;
 /// </summary>
 public class PipelineEventPullBridgeTests
 {
+    private static readonly Infrastructure.PubSub.EmitAusgaenge Ausgaenge = new(CancellationToken.None);
     private sealed record FakeEvent(Guid AggregateId) : IEvent;
     private sealed record FakeCommand(Guid AggregateId) : ICommand;
     private sealed record FakeTrigger : IPipelineTrigger;
@@ -50,13 +51,13 @@ public class PipelineEventPullBridgeTests
             await sendCommand(new FakeCommand(env.AggregateId));
         };
 
-        Func<EventEnvelope, Func<IPipelineOutput, Task>> emitFactory =
-            _ => payload => { emittiert.Add(payload); return Task.CompletedTask; };
+        Func<EventEnvelope, Infrastructure.PubSub.EmitAusgaenge, Func<IPipelineOutput, Task>> emitFactory =
+            (_, _) => payload => { emittiert.Add(payload); return Task.CompletedTask; };
         Func<IPipelineTrigger, string, Task> sendTrigger = (_, _) => Task.CompletedTask;
 
         var pullDispatch = PipelineEventPullBridge.Wrap(dispatch, emitFactory, sendTrigger);
 
-        await pullDispatch(Env(stream, 7, corr), new ProjectionWriter(stream, 7));
+        await pullDispatch(Env(stream, 7, corr), new ProjectionWriter(stream, 7), Ausgaenge);
 
         emittiert.Should().ContainSingle().Which.Should().BeOfType<FakeCommand>();
         gesehenerCtx.Should().NotBeNull();
@@ -73,14 +74,14 @@ public class PipelineEventPullBridgeTests
         PipelineEventPullBridge.EventDispatch dispatch = async (_, _, _, sendTrigger, _, _) =>
             await sendTrigger(new FakeTrigger());
 
-        Func<EventEnvelope, Func<IPipelineOutput, Task>> emitFactory =
-            _ => _ => Task.CompletedTask;
+        Func<EventEnvelope, Infrastructure.PubSub.EmitAusgaenge, Func<IPipelineOutput, Task>> emitFactory =
+            (_, _) => _ => Task.CompletedTask;
         Func<IPipelineTrigger, string, Task> sendTrigger =
             (t, _) => { triggerGesendet.Add(t); return Task.CompletedTask; };
 
         var pullDispatch = PipelineEventPullBridge.Wrap(dispatch, emitFactory, sendTrigger);
 
-        await pullDispatch(Env(Guid.NewGuid(), 1, ""), new ProjectionWriter(Guid.NewGuid(), 1));
+        await pullDispatch(Env(Guid.NewGuid(), 1, ""), new ProjectionWriter(Guid.NewGuid(), 1), Ausgaenge);
 
         triggerGesendet.Should().ContainSingle().Which.Should().BeOfType<FakeTrigger>();
     }
@@ -96,10 +97,10 @@ public class PipelineEventPullBridgeTests
 
         var pullDispatch = PipelineEventPullBridge.Wrap(
             dispatch,
-            _ => p => { emittiert.Add(p); return Task.CompletedTask; },
+            (_, _) => p => { emittiert.Add(p); return Task.CompletedTask; },
             (_, _) => Task.CompletedTask);
 
-        await pullDispatch(Env(stream, 3, ""), new ProjectionWriter(stream, 3));
+        await pullDispatch(Env(stream, 3, ""), new ProjectionWriter(stream, 3), Ausgaenge);
 
         emittiert.Should().ContainSingle().Which.Should().BeOfType<FakeTransient>();
     }
@@ -113,11 +114,11 @@ public class PipelineEventPullBridgeTests
         PipelineEventPullBridge.EventDispatch dispatch = async (env, ctx, _, _, _, plane) =>
             await plane(new FristAuftrag("Probe.Cmd", env.AggregateId, TimeSpan.FromMinutes(5), ctx.SourceEventZeit));
 
-        var pullDispatch = PipelineEventPullBridge.Wrap(dispatch, _ => _ => Task.CompletedTask, (_, _) => Task.CompletedTask,
+        var pullDispatch = PipelineEventPullBridge.Wrap(dispatch, (_, _) => _ => Task.CompletedTask, (_, _) => Task.CompletedTask,
             f => { geplant.Add(f); return Task.CompletedTask; });
 
         var env = Env(stream, 2, "");
-        await pullDispatch(env, new ProjectionWriter(stream, 2));
+        await pullDispatch(env, new ProjectionWriter(stream, 2), Ausgaenge);
 
         geplant.Should().ContainSingle().Which.ZielAggregatId.Should().Be(stream);
         geplant[0].Ab.Should().Be(env.CreatedAtUtc, "die Basis der Frist ist die Log-Zeit des auslösenden Events, nicht „jetzt“");
@@ -130,9 +131,9 @@ public class PipelineEventPullBridgeTests
         PipelineEventPullBridge.EventDispatch dispatch = async (_, _, _, _, _, plane) =>
             await plane(Selbst.In(new FakeTick(), TimeSpan.FromSeconds(1)));
 
-        var pullDispatch = PipelineEventPullBridge.Wrap(dispatch, _ => _ => Task.CompletedTask, (_, _) => Task.CompletedTask);
+        var pullDispatch = PipelineEventPullBridge.Wrap(dispatch, (_, _) => _ => Task.CompletedTask, (_, _) => Task.CompletedTask);
 
-        var akt = () => pullDispatch(Env(Guid.NewGuid(), 1, ""), new ProjectionWriter(Guid.NewGuid(), 1));
+        var akt = () => pullDispatch(Env(Guid.NewGuid(), 1, ""), new ProjectionWriter(Guid.NewGuid(), 1), Ausgaenge);
         await akt.Should().ThrowAsync<NotSupportedException>("der Pull-Pfad hat keine Actor-Mailbox für Selbst-Nachrichten");
     }
 

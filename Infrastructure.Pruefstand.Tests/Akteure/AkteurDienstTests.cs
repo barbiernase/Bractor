@@ -69,16 +69,17 @@ public class AkteurDienstTests
             gesehen = ImAuftrag.Akteur;
             await sendCommand(new SchliesseEinfrierenAb(env.AggregateId, new List<DatensatzMitglied>()));
         };
-        var pull = PipelineEventPullBridge.Wrap(dispatch, _ => _ => Task.CompletedTask, (_, _) => Task.CompletedTask);
+        var pull = PipelineEventPullBridge.Wrap(dispatch, (_, _) => _ => Task.CompletedTask, (_, _) => Task.CompletedTask);
         var stream = Guid.NewGuid();
 
         await pull(new EventEnvelope { AggregateId = stream, AggregateVersion = 3, UserId = "KIOperator", Payload = new ImagePairInspiziert() },
-            new ProjectionWriter(stream, 3));
+            new ProjectionWriter(stream, 3), new Infrastructure.PubSub.EmitAusgaenge(CancellationToken.None));
 
         gesehen.Should().Be("KIOperator");
         ImAuftrag.Akteur.Should().BeNull("der Auftrag endet mit dem Handle");
 
-        await pull(new EventEnvelope { AggregateId = stream, AggregateVersion = 4, Payload = new ImagePairInspiziert() }, new ProjectionWriter(stream, 4));
+        await pull(new EventEnvelope { AggregateId = stream, AggregateVersion = 4, Payload = new ImagePairInspiziert() }, new ProjectionWriter(stream, 4),
+            new Infrastructure.PubSub.EmitAusgaenge(CancellationToken.None));
         gesehen.Should().BeNull("ein Event ohne Akteur (Alt-Event, Automation) setzt keinen Auftrag");
     }
 

@@ -193,7 +193,13 @@ public sealed class ProzessManagerStartupService : IHostedService
                 hwm = changes.HighWaterMark;
                 await _pollCursors.SetAsync(RouterId, hwm, ct);
             }
-            catch (Exception ex) { Console.WriteLine($"[Prozess-Poll] fehlgeschlagen: {ex.Message}"); }
+            catch (Exception ex)
+            {
+                // Ein Durchlauf, der scheitert, rückt die Hochwassermarke nicht vor — scheitert jeder, startet ein Vorgang mit verlorenem
+                //   Start-Signal nie (so sah G-7 aus). Deshalb laut, nicht nur auf der Konsole.
+                if (_logger is null) Console.WriteLine($"[Prozess-Poll] fehlgeschlagen: {ex.Message}");
+                else _logger.LogWarning(ex, "[Prozess-Poll] Durchlauf ab HWM {Hwm} fehlgeschlagen — die Marke steht", hwm);
+            }
         }
     }
 

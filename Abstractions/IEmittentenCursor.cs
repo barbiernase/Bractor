@@ -1,21 +1,22 @@
 namespace Abstractions;
 
 /// <summary>
-/// Marken-Interface für EMITTIERENDE Konsumenten (Reaktion / Pipeline-Event / Prozess): der durable
-/// Effekt ist das emittierte Command (idempotent am Empfänger), NICHT ein co-committetes Read-Model.
-/// Trägt daher NUR den Cursor-Fortschritt und bewusst KEIN <c>Reset</c> — Replay eines Emittenten
-/// bewegt echtes Geld. Der Compile-Zeit-Schnitt gegen <see cref="IReplaybarerTracker"/> (P4) macht
-/// blindes Replayen unmöglich (Achse B).
-///
-/// Charakter: best-effort/Cache (v. a. beim Prozess — außerhalb der Entscheidungs-Transaktion;
-/// Verlust/Inkonsistenz heilt der Voll-Fold). <paramref name="partition"/> = die Konsumenten-Instanz
-/// (Ein-Strom: <c>StreamId</c>; Prozess: <c>Korrelation</c>).
+/// Fortschritt eines EMITTIERENDEN Konsumenten (Reaktion, Fluss-Event-Pfad): der durable Effekt ist das ausgegebene Command (idempotent
+/// am Empfänger), NICHT ein co-committetes Read-Model. Vertrag: <b>durabel, at-least-once ab Cursor, kein Reset.</b>
+/// <list type="bullet">
+///   <item>Jede Weckung (Signal wie Poll) liest ab dem Cursor; es wird nie erneut ab 0 ausgegeben.</item>
+///   <item>Der Cursor rückt erst vor, wenn jeder Command des Tails zugestellt oder abgelehnt ist. Er steht also nie hinter einem
+///     unbestätigten Command; geht das Schreiben verloren, gibt die nächste Weckung den Tail mit denselben CommandIds erneut aus.</item>
+///   <item>Kein <c>Reset</c>: Replay eines Emittenten bewegt echtes Geld. Der Compile-Zeit-Schnitt gegen <see cref="IReplaybarerTracker"/>
+///     macht blindes Replayen unmöglich (Achse B).</item>
+/// </list>
+/// <paramref name="partition"/> = die Konsumenten-Instanz (<c>{SubscriberId}:{StreamId}</c>); geschrieben nur vom Single-Writer-Adapter dieses Streams.
 /// </summary>
 public interface IEmittentenCursor
 {
     /// <summary>Zuletzt fortgeschriebene Position dieser Partition, oder 0 wenn noch nichts.</summary>
     Task<long> LadeAsync(string partition, CancellationToken ct);
 
-    /// <summary>Schreibt die Position <paramref name="bis"/> für diese Partition fort (best-effort).</summary>
+    /// <summary>Schreibt die Position <paramref name="bis"/> für diese Partition fort — erst nach bestätigtem Emit.</summary>
     Task SchreibeAsync(string partition, long bis, CancellationToken ct);
 }

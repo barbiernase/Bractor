@@ -14,11 +14,8 @@ namespace Infrastructure.Pruefstand.Phase4;
 
 /// <summary>
 /// P4.2 — der Achse-B-Schnitt in der Konsumenten-Maschine. Bewiesen wird das Emittenten-Profil des
-/// <see cref="ProjectionAdapter"/> (best-effort <see cref="IEmittentenCursor"/> statt co-committem Tracker):
-///   (1) Signal-Weckung faltet ab dem Cursor → beim zweiten Signal wird NICHT erneut ab 0 emittiert,
-///       nur der neue Tail; der Cursor rückt vor.
-///   (2) Poll-Weckung (<c>VomPoll: true</c>) heilt bewusst AB 0 → alle Events erneut (at-least-once,
-///       ein verlorener detached-Emit wird so re-emittiert; der Empfänger dedupliziert).
+/// <see cref="ProjectionAdapter"/> (<see cref="IEmittentenCursor"/> statt co-committem Tracker): jede Weckung — Signal wie Poll — faltet
+/// ab dem Cursor; es wird nie erneut ab 0 emittiert, nur der neue Tail; der Cursor rückt nach bestätigtem Emit vor (G-2).
 /// Ein replaybarer Tracker UND ein Emittenten-Cursor zugleich ist ein Konstruktionsfehler → Guard.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
@@ -50,7 +47,7 @@ public class EmittentenPfadAdapterTests
         => new() { AggregateId = stream, AggregateVersion = version, Payload = new DummyEvent(stream) };
 
     [Fact]
-    public async Task Signal_faltet_ab_Cursor_Poll_heilt_ab_0()
+    public async Task Jede_Weckung_faltet_ab_dem_Cursor()
     {
         var stream = Guid.NewGuid();
         var log = new List<EventEnvelope> { Evt(stream, 1), Evt(stream, 2), Evt(stream, 3) };
@@ -58,7 +55,7 @@ public class EmittentenPfadAdapterTests
         var cursor = new InMemoryEmittentenCursor();
 
         var emittiert = new List<int>();
-        Func<EventEnvelope, ProjectionWriter, Task> dispatch = (e, _) =>
+        Func<EventEnvelope, ProjectionWriter, Infrastructure.PubSub.EmitAusgaenge, Task> dispatch = (e, _, _) =>
         {
             emittiert.Add(e.AggregateVersion);
             return Task.CompletedTask;
@@ -66,30 +63,30 @@ public class EmittentenPfadAdapterTests
 
         var adapter = new ProjectionAdapter(store, tracker: null, emittentenCursor: cursor, "reaktion", dispatch);
 
-        // (1) erste Signal-Weckung: alle drei emittiert, Cursor rückt auf 3+1 vor
-        await adapter.WakeAsync(stream, vomPoll: false, Ct);
+        // (1) erste Weckung: alle drei emittiert, Cursor rückt auf 3+1 vor
+        await adapter.WakeAsync(stream, Ct);
         emittiert.Should().Equal(1, 2, 3);
         (await cursor.LadeAsync($"reaktion:{stream}", Ct)).Should().Be(4);
 
         // Tail wächst
         log.Add(Evt(stream, 4));
 
-        // (2) zweite Signal-Weckung: NUR der neue Tail (kein Re-Emit ab 0)
+        // (2) zweite Weckung: NUR der neue Tail (kein Re-Emit ab 0)
         emittiert.Clear();
-        await adapter.WakeAsync(stream, vomPoll: false, Ct);
+        await adapter.WakeAsync(stream, Ct);
         emittiert.Should().Equal(4);
 
-        // (3) Poll-Weckung heilt bewusst ab 0: alle vier erneut
+        // (3) eine weitere Weckung (etwa vom Poll) ohne neuen Tail: nichts erneut
         emittiert.Clear();
-        await adapter.WakeAsync(stream, vomPoll: true, Ct);
-        emittiert.Should().Equal(1, 2, 3, 4);
+        await adapter.WakeAsync(stream, Ct);
+        emittiert.Should().BeEmpty();
     }
 
     [Fact]
     public void Tracker_und_Cursor_zugleich_ist_ein_Konstruktionsfehler()
     {
         var store = new FakeEventStore(new List<EventEnvelope>());
-        Func<EventEnvelope, ProjectionWriter, Task> dispatch = (_, _) => Task.CompletedTask;
+        Func<EventEnvelope, ProjectionWriter, Infrastructure.PubSub.EmitAusgaenge, Task> dispatch = (_, _, _) => Task.CompletedTask;
 
         var akt = () => new ProjectionAdapter(
             store,

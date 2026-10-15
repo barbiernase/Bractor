@@ -88,7 +88,7 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
         poller.HighWater.Should().BeGreaterThan(basis);
     }
 
-    [Fact(Skip = "G-7 offen (docs/13)")]
+    [Fact]
     public async Task Ein_gescheiterter_Append_blockiert_den_Poll_nicht()
     {
         // Ein Versionskonflikt beim Append lässt Marten die reservierten Sequenzen mit Tombstones füllen (eigener Stream). Der Poll weckt jeden
@@ -135,11 +135,11 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
         (await store1.GetByPairIdAsync(stream))!.Eintraege.Should().HaveCount(1, "der Effekt des Events gilt genau einmal");
     }
 
-    private static Func<EventEnvelope, ProjectionWriter, Task> Dispatch(IAppendHistorieEintrag effektStore)
+    private static Func<EventEnvelope, ProjectionWriter, Infrastructure.PubSub.EmitAusgaenge, Task> Dispatch(IAppendHistorieEintrag effektStore)
     {
         var projection = new ImagePairHistorieProjektion();
         var faehigkeiten = new FaehigkeitenAus(effektStore);
-        return (e, writer) => projection.DispatchAsync(e, writer, _ => Task.CompletedTask, faehigkeiten);
+        return (e, writer, _) => projection.DispatchAsync(e, writer, _ => Task.CompletedTask, faehigkeiten);
     }
 
     private sealed class NoopFactory : IAggregateHandlerFactory

@@ -7,9 +7,9 @@ namespace Infrastructure.Persistence;
 /// Marten-basierter <see cref="IEmittentenCursor"/>: ein durables <see cref="EmittentenCursorDoc"/>-
 /// Dokument pro Partition. Eigene, kurze Session je Zugriff — bewusst <b>kein</b> Co-Commit mit dem
 /// Effekt (der Effekt eines Emittenten IST das idempotente Command am Empfänger, nicht ein
-/// co-committetes Read-Model). Der Cursor ist reiner Fortschritts-Cache: geht er verloren oder ist er
-/// inkonsistent, liest der Konsument wieder ab 0 und der Empfänger dedupliziert über die Inbox — kein
-/// Datenverlust, höchstens ein einmaliges Re-Emit.
+/// co-committetes Read-Model). Geschrieben wird erst nach bestätigtem Emit; geht ein Write verloren, gibt die
+/// nächste Weckung den Tail ab dem alten Stand erneut aus und der Empfänger dedupliziert über die Inbox — kein
+/// Datenverlust, höchstens ein einmaliges Re-Emit (docs/11 §11.6).
 ///
 /// Marten-Registrierung nötig (in der StoreOptions-Konfiguration):
 ///   opts.Schema.For&lt;EmittentenCursorDoc&gt;().Identity(x =&gt; x.Id);

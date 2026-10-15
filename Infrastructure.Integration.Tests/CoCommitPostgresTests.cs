@@ -107,11 +107,11 @@ public class CoCommitPostgresTests : IClassFixture<PostgresFixture>
         return es;
     }
 
-    private static Func<EventEnvelope, ProjectionWriter, Task> Dispatch(IAppendHistorieEintrag effektStore)
+    private static Func<EventEnvelope, ProjectionWriter, Infrastructure.PubSub.EmitAusgaenge, Task> Dispatch(IAppendHistorieEintrag effektStore)
     {
         var projection = new ImagePairHistorieProjektion();
         var faehigkeiten = new FaehigkeitenAus(effektStore);
-        return (e, writer) => projection.DispatchAsync(e, writer, _ => Task.CompletedTask, faehigkeiten);
+        return (e, writer, _) => projection.DispatchAsync(e, writer, _ => Task.CompletedTask, faehigkeiten);
     }
 
     private sealed class NoopFactory : IAggregateHandlerFactory

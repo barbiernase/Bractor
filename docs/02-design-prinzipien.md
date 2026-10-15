@@ -222,4 +222,4 @@ aus dem Log (Inv. 1). Beispieldomäne: ein Datensatz wird eingefroren, ein Train
 
 Abweichungen vom Anspruch stehen nicht hier, sondern in einer Quelle: [13 §13.0](13-reifegrad-schulden-bewertung.md). Die wichtigsten
 Bezüge: Reflection in Werkzeugen und zur Laufzeit (W10-1, W10-2, zu P4), feste Projekt- und Namespace-Namen (W2-1, zu P14), doppelte Wege
-(W11-1, zu P8), `CancellationToken.None` im generierten Pull-Emit-Pfad (P1-6, zu P8/P9), Ableitungen im Editor-JS (W3-1, zu P11/P14).
+(W11-1, zu P8), Ableitungen im Editor-JS (W3-1, zu P11/P14).

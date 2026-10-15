@@ -16,13 +16,11 @@ namespace Infrastructure.Prozess;
 /// den Treiber. Er hält im Speicher NICHTS außer der Korrelation — das Marking faltet der
 /// <see cref="ProzessManager"/> bei jeder Weckung aus dem Log.
 ///
-/// ★ Treiber-Fold (EM-1): Er feuert die Ziel-Commands FIRE-AND-FORGET über das EINE Emit-Primitiv
-/// (<see cref="CommandEmitter"/>) — es gibt genau EINEN Emit-Weg, KEINE Quittung mehr. Der Send läuft
-/// detached (<see cref="DetachedProzessSend"/>, der strukturelle (A)-Hang-Fix, in-memory bewiesen); der Turn
-/// kehrt sofort zurück. Nach JEDEM Send weckt sich der Manager selbst (<see cref="WeckeSelbst"/>) und faltet
-/// den durablen Ausgang der Transition — eine Wirkung, die <c>KommandoVerarbeitet</c>-Noop-Marke oder die
-/// <c>KommandoAbgelehnt</c>-Ablehnungs-Marke. Der Fold (nicht mehr eine out-of-turn-Quittung) trägt die
-/// Fehlschlag-Erkennung. Die Korrelation reist als <c>CommandEnvelope.CorrelationId</c> mit → sie landet in
+/// ★ Treiber-Fold (EM-1): Er feuert die Ziel-Commands über das EINE Emit-Primitiv (<see cref="CommandEmitter"/>) — genau EIN
+/// Emit-Weg. Der Send läuft losgelöst (<see cref="DetachedProzessSend"/>); der Turn kehrt sofort zurück. Nach einem entschiedenen Send
+/// weckt sich der Manager sofort selbst (<see cref="WeckeSelbst"/>), nach einem unbekannten erst nach einem Backoff je Vorgang (PF-9); er
+/// faltet dann den durablen Ausgang der Transition — eine Wirkung, die <c>KommandoVerarbeitet</c>-Noop-Marke oder die
+/// <c>KommandoAbgelehnt</c>-Ablehnungs-Marke. Der Fold (nicht der Emit-Ausgang) trägt die Fehlschlag-Erkennung. Die Korrelation reist als <c>CommandEnvelope.CorrelationId</c> mit → sie landet in
 /// den Ziel-Event-Metadaten, woraus der <see cref="KorrelationsRouter"/> den Manager neu weckt. Ziel-Aggregate
 /// (Konto) bleiben dadurch rein.
 ///
@@ -94,14 +92,13 @@ public sealed class ProzessManagerActor : IActor
     }
 
     /// <summary>
-    /// Der Engine-Dispatch (Treiber-Fold/EM-1): fire-and-forget Emit über das <see cref="CommandEmitter"/>-Primitiv
-    /// + Selbst-Weckung nach JEDEM Send. Keine Quittung, kein Fehlschlag-Rückkanal — der Fold liest den durablen
-    /// Ausgang (Wirkung/KommandoVerarbeitet/KommandoAbgelehnt).
+    /// Der Engine-Dispatch (Treiber-Fold/EM-1): losgelöster Emit über das <see cref="CommandEmitter"/>-Primitiv, Selbst-Weckung je nach
+    /// Ausgang sofort oder nach Backoff, kein zweiter Send eines Vorgangs, solange einer läuft (PF-9).
     /// </summary>
     private Func<Guid, ICommand, Guid, CancellationToken, Task> ErzeugeDispatch()
-        => DetachedProzessSend.Wrap(EmittiereAnZiel, WeckeSelbst);
+        => new DetachedProzessSend(EmittiereAnZiel, WeckeSelbst).SendeAsync;
 
-    /// <summary>Nach JEDEM Send: DIESE Manager-Instanz neu wecken (Fortschritt/Terminal/Fehlschlag aus dem Fold).</summary>
+    /// <summary>Nach dem Send (bzw. seinem Backoff): DIESE Manager-Instanz neu wecken (Fortschritt/Terminal/Fehlschlag aus dem Fold).</summary>
     private async Task WeckeSelbst(Guid korrelation, CancellationToken ct)
     {
         var identity = ClusterIdentity.Create(korrelation.ToString(), KindName);
@@ -116,6 +113,6 @@ public sealed class ProzessManagerActor : IActor
     /// vorgegebene CommandId → der Fold matcht den durablen Ausgang über <c>CausationId == vorgang</c>, ohne
     /// Quittung. Korrelation → Ziel-Event-Metadatum (Router weckt daraus). Bounded, at-least-once, Empfänger-Inbox.
     /// </summary>
-    private Task EmittiereAnZiel(Guid korrelation, ICommand cmd, Guid vorgang, CancellationToken ct)
+    private Task<EmitAusgang> EmittiereAnZiel(Guid korrelation, ICommand cmd, Guid vorgang, CancellationToken ct)
         => _emitter!.EmitAsync(cmd, commandId: vorgang, korrelation: korrelation, ct);
 }

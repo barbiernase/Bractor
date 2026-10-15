@@ -46,14 +46,16 @@ public sealed class FristScheduler : IHostedService
     }
 
     /// <summary>
-    /// Ein Scheduler-Durchlauf: die aktuelle DB-Zeit holen, die fälligen Fristen laden und je Frist feuern +
-    /// entfernen. Rein — <paramref name="feuere"/> ist der Send-Seam (live Emit, im Test ein Fake). Ein
-    /// Feuer-Fehler lässt die Frist stehen (nächster Tick wiederholt, dedup-sicher), stoppt aber die anderen nicht.
+    /// Ein Scheduler-Durchlauf: die aktuelle DB-Zeit holen, die fälligen Fristen laden und je Frist feuern. Rein —
+    /// <paramref name="feuere"/> ist der Send-Seam (live das Emit-Primitiv, im Test ein Fake) und meldet den <see cref="EmitAusgang"/>.
+    /// Entfernt wird eine Frist NUR, wenn ihr Command entschieden ist (zugestellt oder fachlich abgelehnt, G-1). Ein unbekannter Ausgang
+    /// (Frist abgelaufen, technischer Fehler) oder eine Ausnahme lässt sie liegen: der nächste Tick feuert erneut mit derselben CommandId
+    /// (<see cref="FristId.FürZustellung"/>), die Inbox des Ziels verwirft ein Duplikat. Eine Frist hält die anderen nicht auf.
     /// </summary>
     public static async Task TickAsync(
         IDbClock clock,
         IFristplan plan,
-        Func<Frist, Task> feuere,
+        Func<Frist, Task<EmitAusgang>> feuere,
         ILogger? logger = null,
         CancellationToken ct = default)
     {
@@ -63,8 +65,11 @@ public sealed class FristScheduler : IHostedService
         {
             try
             {
-                await feuere(frist);
-                await plan.EntferneAsync(frist.Id, ct);   // erst nach dem Feuern → at-least-once
+                var ausgang = await feuere(frist);
+                if (ausgang.IstEntschieden())
+                    await plan.EntferneAsync(frist.Id, ct);   // erst nach der Entscheidung → mindestens einmal
+                else
+                    logger?.LogInformation("[Frist] Zustellung {FristId} unbekannt — nächster Tick wiederholt", frist.Id);
             }
             catch (Exception ex)
             {
@@ -77,7 +82,7 @@ public sealed class FristScheduler : IHostedService
     {
         _cts = new CancellationTokenSource();
         var emitter = new CommandEmitter(_system.Cluster(), _logger);
-        Func<Frist, Task> feuere = frist =>
+        Func<Frist, Task<EmitAusgang>> feuere = frist =>
         {
             // Die Frist feuert im Auftrag dessen, in dessen Kette sie geplant wurde.
             using (Infrastructure.Akteure.AkteurHerkunft.Aus(frist.Akteur))
@@ -89,7 +94,7 @@ public sealed class FristScheduler : IHostedService
         return Task.CompletedTask;
     }
 
-    private async Task LoopAsync(Func<Frist, Task> feuere, CancellationToken ct)
+    private async Task LoopAsync(Func<Frist, Task<EmitAusgang>> feuere, CancellationToken ct)
     {
         while (!ct.IsCancellationRequested)
         {

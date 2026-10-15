@@ -217,7 +217,7 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine();
             sb.AppendLine("                // Achse-B-Schnitt (P4): lösen die Schreib-Fähigkeiten der Handles einen (co-committbaren)");
             sb.AppendLine("                //   IProjectionTracker-Store auf, ist der Konsument REPLAYBAR (Projektion). Sonst ist er EMITTIEREND");
-            sb.AppendLine("                //   (Reaktion/Pipeline-Event) und bekommt den best-effort IEmittentenCursor (kein Reset).");
+            sb.AppendLine("                //   (Reaktion/Pipeline-Event) und bekommt den IEmittentenCursor (durabel, ab Cursor, kein Reset).");
             sb.AppendLine("                var tracker = trackers.FirstOrDefault();");
             sb.AppendLine();
             sb.AppendLine("                // GA-1-Check (P4): eine append-artige Projektion OHNE Co-Commit-Tracker bricht hier");
@@ -231,12 +231,12 @@ namespace Infrastructure.SourceGeneration
             sb.AppendLine("                // DIESELBE Ausgabe-Route wie der Push-Actor (HandlerOutputRouter):");
             sb.AppendLine("                //   IEvent → re-publish, ICommand → Reaktion. system.Cluster() hier zur SPAWN-Zeit");
             sb.AppendLine("                //   (die Factory läuft im Actor-Started, Cluster ist fertig — NICHT bei Kind-Registrierung).");
-            sb.AppendLine("                //   DetachedEmit hält den virtuellen Adapter-Turn frei (at-least-once, Empfänger dedupliziert).");
+            sb.AppendLine("                //   Die Commands einer Weckung laufen parallel und tragen das gebundene Token der Weckung; der Adapter wartet");
+            sb.AppendLine("                //   ihre Ausgänge ab, bevor der Cursor vorrückt (G-2, P1-6).");
             sb.AppendLine("                var router = new HandlerOutputRouter(");
             sb.AppendLine($"                    system.Cluster(), provider.GetService<BrokerPublisher>(), projection.SubscriberId, wirker: global::Abstractions.WirkerId.FuerReaktion(\"{p.Name}\"));");
-            sb.AppendLine("                Func<EventEnvelope, ProjectionWriter, Task> dispatch =");
-            sb.AppendLine("                    (e, writer) => projection.DispatchAsync(e, writer,");
-            sb.AppendLine("                        DetachedEmit.Wrap(router.EmitFor(e, System.Threading.CancellationToken.None)), faehigkeiten);");
+            sb.AppendLine("                Func<EventEnvelope, ProjectionWriter, EmitAusgaenge, Task> dispatch =");
+            sb.AppendLine("                    (e, writer, ausgaenge) => projection.DispatchAsync(e, writer, router.EmitFor(e, ausgaenge), faehigkeiten);");
             sb.AppendLine("                return (projection.SubscriberId, tracker, emittentenCursor, dispatch);");
             sb.AppendLine("            }, depsSink)));");
             sb.AppendLine("    }");

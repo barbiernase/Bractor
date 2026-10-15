@@ -37,10 +37,10 @@ public class FristGarantieTests
     }
 
     /// <summary>Feuert die Frist so, wie der <see cref="FristScheduler"/> es live tut: über das eine Emit-Primitiv.</summary>
-    private static Func<Frist, Task> FeuereUeber(CommandEmitter emitter)
+    private static Func<Frist, Task<EmitAusgang>> FeuereUeber(CommandEmitter emitter)
         => f => emitter.EmitAsync(new MeldeTeilFertig(f.ZielAggregatId), FristId.FürZustellung(f.Id), f.Id, CancellationToken.None);
 
-    [Fact(Skip = "G-1 offen (docs/13)")]
+    [Fact]
     public async Task Emit_Timeout_laesst_die_Frist_liegen()
     {
         var (plan, frist) = await PlanMitFaelligerFrist();
@@ -54,7 +54,7 @@ public class FristGarantieTests
             "ein Command, dessen Zustellung unbekannt ist, ist nicht gefeuert — die Frist muss für den nächsten Tick liegen bleiben");
     }
 
-    [Fact(Skip = "G-1 offen (docs/13)")]
+    [Fact]
     public async Task Technischer_Fehlschlag_laesst_die_Frist_liegen()
     {
         var (plan, frist) = await PlanMitFaelligerFrist();
@@ -72,6 +72,18 @@ public class FristGarantieTests
     {
         var (plan, _) = await PlanMitFaelligerFrist();
         var emitter = new CommandEmitter((_, _, _) => Task.FromResult<CommandResult?>(new CommandResult { Success = true }));
+
+        await FristScheduler.TickAsync(new FakeUhr(T0), plan, FeuereUeber(emitter));
+
+        (await plan.FälligeAsync(T0)).Should().BeEmpty();
+    }
+
+    [Fact]
+    public async Task Fachlich_abgelehnte_Frist_ist_entschieden_und_wird_entfernt()
+    {
+        // Die Ablehnung ist am Ziel durabel (KommandoAbgelehnt); eine Wiederholung brächte dieselbe.
+        var (plan, _) = await PlanMitFaelligerFrist();
+        var emitter = new CommandEmitter((_, _, _) => Task.FromResult<CommandResult?>(new CommandResult { Success = false, Abgelehnt = true }));
 
         await FristScheduler.TickAsync(new FakeUhr(T0), plan, FeuereUeber(emitter));
 

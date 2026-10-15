@@ -113,7 +113,7 @@ public class GeteilteDokumentePostgresTests
         var projektion = new DatensatzProjektion();
         var faehigkeiten = new FaehigkeitenAus(store);
         return new ProjectionAdapter(es, store, null, projektion.SubscriberId,
-            (e, w) => projektion.DispatchAsync(e, w, _ => Task.CompletedTask, faehigkeiten));
+            (e, w, _) => projektion.DispatchAsync(e, w, _ => Task.CompletedTask, faehigkeiten));
     }
 
     private ProjectionAdapter ModellAdapter(MartenEventStore es)
@@ -122,7 +122,7 @@ public class GeteilteDokumentePostgresTests
         var projektion = new ModellProjektion();
         var faehigkeiten = new FaehigkeitenAus(store);
         return new ProjectionAdapter(es, store, null, projektion.SubscriberId,
-            (e, w) => projektion.DispatchAsync(e, w, _ => Task.CompletedTask, faehigkeiten));
+            (e, w, _) => projektion.DispatchAsync(e, w, _ => Task.CompletedTask, faehigkeiten));
     }
 
     private static async Task<Guid> ModellMitAktivierung(MartenEventStore es)

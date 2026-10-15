@@ -1,5 +1,6 @@
 using Abstractions;
 using Core;
+using Infrastructure.PubSub;
 using Proto;
 using Proto.Cluster;
 
@@ -24,7 +25,7 @@ namespace Infrastructure.Projections;
 public sealed class SignalAdapterActor : IActor
 {
     private readonly IEventStoreRepository _eventStore;
-    private readonly Func<(string ProjectionId, IProjectionTracker? Tracker, IEmittentenCursor? EmittentenCursor, Func<EventEnvelope, ProjectionWriter, Task> Dispatch)> _perActorFactory;
+    private readonly Func<(string ProjectionId, IProjectionTracker? Tracker, IEmittentenCursor? EmittentenCursor, Func<EventEnvelope, ProjectionWriter, EmitAusgaenge, Task> Dispatch)> _perActorFactory;
     private readonly IReadModelDepsSink? _depsSink;
 
     private ProjectionAdapter? _adapter;
@@ -38,7 +39,7 @@ public sealed class SignalAdapterActor : IActor
     /// </summary>
     public SignalAdapterActor(
         IEventStoreRepository eventStore,
-        Func<(string, IProjectionTracker?, IEmittentenCursor?, Func<EventEnvelope, ProjectionWriter, Task>)> perActorFactory,
+        Func<(string, IProjectionTracker?, IEmittentenCursor?, Func<EventEnvelope, ProjectionWriter, EmitAusgaenge, Task>)> perActorFactory,
         IReadModelDepsSink? depsSink = null)
     {
         _eventStore = eventStore;
@@ -62,10 +63,10 @@ public sealed class SignalAdapterActor : IActor
                 }
                 break;
 
-            case Wake wake:
-                if (_adapter != null)
-                    await _adapter.WakeAsync(_streamId, wake.VomPoll, context.CancellationToken);
-                context.Respond(new WakeAck());
+            case Wake:
+                // Signal und Poll gleich: ab Marke bzw. Cursor. „Nicht aufgeholt“ (ein Command blieb unbekannt) hält den Poll an.
+                var aufgeholt = _adapter is null || await _adapter.WakeAsync(_streamId, context.CancellationToken);
+                context.Respond(new WakeAck(aufgeholt));
                 break;
         }
     }

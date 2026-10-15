@@ -1,5 +1,6 @@
 using Abstractions;
 using Core;
+using Infrastructure.PubSub;
 
 namespace Infrastructure.Projections;
 
@@ -18,6 +19,11 @@ namespace Infrastructure.Projections;
 ///     ist. Das Framework verlangt das NICHT — es ist die Wahl des Entwicklers.</item>
 /// </list>
 ///
+/// Ein EMITTENT (Reaktion, Fluss-Event-Pfad) liest bei Signal UND Poll ab seinem Cursor (G-2). Seine Commands gehen je Tail parallel
+/// hinaus (<see cref="EmitAusgaenge"/>) und werden gemeinsam abgewartet; der Cursor rückt nur vor, wenn jeder zugestellt oder abgelehnt
+/// ist. Bleibt einer unbekannt, meldet die Weckung „nicht aufgeholt“ — der Poll hält seine Hochwassermarke und weckt erneut, der Tail
+/// geht mit denselben CommandIds noch einmal hinaus (die Inbox des Ziels verwirft, was schon gewirkt hat).
+///
 /// Der Adapter besitzt den Write-Scope: er erzeugt pro Event einen
 /// <see cref="ProjectionWriter"/> mit der kausalen Position und reicht die
 /// gesammelten Ergebnisse an den optionalen <see cref="IReadModelDepsSink"/> —
@@ -30,7 +36,7 @@ public sealed class ProjectionAdapter
     private readonly IProjectionTracker? _tracker;
     private readonly IEmittentenCursor? _emittentenCursor;
     private readonly string _projectionId;
-    private readonly Func<EventEnvelope, ProjectionWriter, Task> _dispatch;
+    private readonly Func<EventEnvelope, ProjectionWriter, EmitAusgaenge, Task> _dispatch;
     private readonly IReadModelDepsSink? _depsSink;
     private readonly Func<Task>? _crashAfterEffectBeforeMark;
 
@@ -38,7 +44,7 @@ public sealed class ProjectionAdapter
     /// REPLAYBARE Marke (Achse B, Projektion): co-committbar + Reset-fähig; null → tracker-los.
     /// </param>
     /// <param name="emittentenCursor">
-    /// EMITTENTEN-Cursor (Achse B, Reaktion/Pipeline-Event): best-effort Fortschritt OHNE Reset.
+    /// EMITTENTEN-Cursor (Achse B, Reaktion/Pipeline-Event): durabler Fortschritt OHNE Reset, vorgerückt nach bestätigtem Emit.
     /// Schließt <paramref name="tracker"/> aus (ein Konsument ist replaybar ODER emittierend) —
     /// das ist der Compile-Zeit-Schnitt: der Cursor-Typ trägt kein Reset, blindes Replayen eines
     /// geld-bewegenden Emittenten ist damit strukturell unmöglich.
@@ -48,7 +54,7 @@ public sealed class ProjectionAdapter
         IProjectionTracker? tracker,
         IEmittentenCursor? emittentenCursor,
         string projectionId,
-        Func<EventEnvelope, ProjectionWriter, Task> dispatch,
+        Func<EventEnvelope, ProjectionWriter, EmitAusgaenge, Task> dispatch,
         IReadModelDepsSink? depsSink = null,
         Func<Task>? crashAfterEffectBeforeMark = null)
     {
@@ -70,20 +76,20 @@ public sealed class ProjectionAdapter
     /// Konsumenten desselben Streams.</summary>
     private string Partition(Guid streamId) => $"{_projectionId}:{streamId}";
 
-    public async Task WakeAsync(Guid streamId, CancellationToken ct = default)
-        => await WakeAsync(streamId, vomPoll: false, ct);
-
     /// <summary>Wie oft ein Stapel nach einem Schreibkonflikt sofort wiederholt wird, bevor der Poll übernimmt.</summary>
     private const int KonfliktVersuche = 5;
 
-    public async Task WakeAsync(Guid streamId, bool vomPoll, CancellationToken ct = default)
+    /// <summary>
+    /// Eine Weckung (Signal oder Poll — gleich behandelt): ab der Marke bzw. dem Cursor lesen, anwenden, vorrücken. Liefert, ob der Stream
+    /// bestätigt aufgeholt ist; false heißt: ein ausgegebener Command blieb unbekannt, der Cursor steht noch vor seinem Event.
+    /// </summary>
+    public async Task<bool> WakeAsync(Guid streamId, CancellationToken ct = default)
     {
         for (var versuch = 1; ; versuch++)
         {
             try
             {
-                await WakeEinmalAsync(streamId, vomPoll, ct);
-                return;
+                return await WakeEinmalAsync(streamId, ct);
             }
             catch (SchreibKonfliktException) when (versuch < KonfliktVersuche)
             {
@@ -96,17 +102,17 @@ public sealed class ProjectionAdapter
         }
     }
 
-    private async Task WakeEinmalAsync(Guid streamId, bool vomPoll, CancellationToken ct)
+    private async Task<bool> WakeEinmalAsync(Guid streamId, CancellationToken ct)
     {
         int applied;
         if (_tracker is not null)
             applied = await _tracker.LastProcessedVersionAsync(_projectionId, streamId, ct);
-        else if (_emittentenCursor is not null && !vomPoll)
-            // Signal-Pfad: ab dem best-effort Cursor (Position = last+1 → applied = Position-1;
-            // unset 0 → applied -1 → ab 0, robust gegen die Versions-Nummerierung).
+        else if (_emittentenCursor is not null)
+            // Emittent: ab dem Cursor (Position = last+1 → applied = Position-1; unset 0 → applied -1 → ab 0). Der Cursor steht nie
+            //   hinter einem unbestätigten Command — er rückt erst nach dem bestätigten Emit vor (G-2).
             applied = (int)(await _emittentenCursor.LadeAsync(Partition(streamId), ct)) - 1;
         else
-            // Tracker-los ODER Poll-Heilung eines Emittenten: bewusst ab 0 (at-least-once).
+            // Weder Marke noch Cursor: bewusst ab 0 (at-least-once, nur für idempotente Effekte gültig).
             applied = -1;
 
         var events = await _eventStore.ReadStreamAsync(streamId, applied + 1, ct);
@@ -117,13 +123,14 @@ public sealed class ProjectionAdapter
         //   >= v" prüft, läse das leere/alte Read-Model als „konsistent".
         var pendingDeps = new List<(EventEnvelope Event, ProjectionWriter Writer)>();
 
+        var ausgaenge = new EmitAusgaenge(ct);              // die Commands dieser Weckung (nur Emittenten geben welche aus)
         var last = applied;
         foreach (var e in events)
         {
             if (e.AggregateVersion <= applied) continue;   // Pre-Dispatch-Guard
 
             var writer = new ProjectionWriter(e.AggregateId, e.AggregateVersion);
-            await _dispatch(e, writer);                     // Effekt (Store staged/schreibt)
+            await _dispatch(e, writer, ausgaenge);          // Effekt (Store staged/schreibt) bzw. Commands gestartet
 
             if (_depsSink is not null && writer.HasResults)
                 pendingDeps.Add((e, writer));               // sammeln, NICHT hier publizieren (H2)
@@ -134,10 +141,15 @@ public sealed class ProjectionAdapter
             last = e.AggregateVersion;
         }
 
+        // Die Commands des Tails gemeinsam abwarten (parallel gestartet). Eine Projektion gibt keine aus (GR-AUS-PROJEKTION) — dann sofort.
+        if (!await ausgaenge.AlleEntschiedenAsync())
+            return false;                                   // Cursor bleibt vor dem Tail; die nächste Weckung sendet ihn erneut
+
         if (_tracker is not null && last > applied)
             await _tracker.MarkProcessedAsync(_projectionId, streamId, last, ct);  // Commit-Punkt (durabel)
         else if (_emittentenCursor is not null && last > applied)
-            // Best-effort (kein Co-Commit): Position = last+1. Verlust heilt der Voll-Fold (Poll ab 0).
+            // Nach bestätigtem Emit: Position = last+1. Scheitert das Schreiben, sendet die nächste Weckung den Tail noch einmal
+            //   (dieselben CommandIds, die Inbox des Ziels verwirft sie).
             await _emittentenCursor.SchreibeAsync(Partition(streamId), last + 1, ct);
 
         // ★ H2: Deps ERST jetzt — nach dem durablen Co-Commit — best-effort veröffentlichen. Der Index rückt
@@ -145,5 +157,6 @@ public sealed class ProjectionAdapter
         if (_depsSink is not null)
             foreach (var (evt, writer) in pendingDeps)
                 await _depsSink.PublishAsync(_projectionId, evt, writer.GetResults(), ct);
+        return true;
     }
 }

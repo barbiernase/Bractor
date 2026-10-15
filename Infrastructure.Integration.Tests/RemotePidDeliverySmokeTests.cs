@@ -60,10 +60,10 @@ public class RemotePidDeliverySmokeTests
             // Leitung routen und das Wake dabei mit dem Wire-Serializer serialisieren.
             probePid.Address.Should().NotBe(systemA.Address, "die Probe lebt auf Node B, nicht A");
 
-            systemA.Root.Send(probePid, new Wake(VomPoll: true));
+            systemA.Root.Send(probePid, new Wake());
 
-            var vomPoll = await empfangen.Task.WaitAsync(TimeSpan.FromSeconds(15));
-            vomPoll.Should().BeTrue("die Probe auf Node B muss das cross-node gesendete Wake empfangen haben");
+            var erhalten = await empfangen.Task.WaitAsync(TimeSpan.FromSeconds(15));
+            erhalten.Should().BeTrue("die Probe auf Node B muss das cross-node gesendete Wake empfangen haben");
         }
         finally
         {
@@ -79,8 +79,8 @@ public class RemotePidDeliverySmokeTests
 
         public Task ReceiveAsync(IContext context)
         {
-            if (context.Message is Wake w)
-                _empfangen.TrySetResult(w.VomPoll);
+            if (context.Message is Wake)
+                _empfangen.TrySetResult(true);
             return Task.CompletedTask;
         }
     }

@@ -11,8 +11,8 @@ namespace Infrastructure.PubSub;
 /// Das Ausgabe-Routing eines Handlers (docs/04 §4.4) — herausgezogen aus dem Push-Actor, sodass
 /// BEIDE Transporte (Push-Subscriber und Pull-Adapter) dieselbe Logik nutzen:
 ///   <c>IEvent</c>   → reaktives Event re-publishen (Broker),
-///   <c>ICommand</c> → Reaktion an ein Fremd-Aggregat (deterministische CommandId + OCC-Retry;
-///                     die Wirksamkeit sichert der Noop-Decider des Empfängers, docs/04 §4.4).
+///   <c>ICommand</c> → Reaktion an ein Fremd-Aggregat über das eine Emit-Primitiv (deterministische CommandId,
+///                     Ausgang in <see cref="EmitAusgaenge"/>; die Wirksamkeit sichert die Inbox des Empfängers, docs/04 §4.4).
 ///
 /// Context-frei: der <see cref="Cluster"/> kommt aus dem <c>ActorSystem</c>, nicht aus einem
 /// per-Message-Context — deshalb aus dem Pull-Adapter (der keinen Message-Context hat) nutzbar.
@@ -40,26 +40,39 @@ public sealed class HandlerOutputRouter
         _subscriberId = subscriberId;
     }
 
-    /// <summary>Das <c>emit</c> für EIN auslösendes Event — Ausgaben erben dessen Kontext.</summary>
-    public Func<IPipelineOutput, Task> EmitFor(IAggregateEnvelope trigger, CancellationToken ct)
-        => payload => RouteAsync(payload, trigger, ct);
-
-    private async Task RouteAsync(IPipelineOutput payload, IAggregateEnvelope trigger, CancellationToken ct)
-    {
-        switch (payload)
+    /// <summary>
+    /// Das <c>emit</c> für EIN auslösendes Event — Ausgaben erben dessen Kontext. Ein Command wird sofort gesendet und sein Ausgang in
+    /// <paramref name="ausgaenge"/> eingetragen (nicht abgewartet: die Commands eines Tails laufen parallel, der Adapter wartet sie danach
+    /// gemeinsam ab). Ein reaktives Event geht verlierbar über den Broker (Inv. 6); sein Fehlschlag hält niemanden auf.
+    /// </summary>
+    public Func<IPipelineOutput, Task> EmitFor(IAggregateEnvelope trigger, EmitAusgaenge ausgaenge)
+        => payload =>
         {
-            case ICommand command:
-                await SendReaktionAsync(command, trigger, ct);
-                break;
-            case IEvent evt:
-                await PublishReactiveAsync(evt, trigger, ct);
-                break;
-        }
-        // Prozess-Start läuft NICHT mehr über eine Plan-Yield-Route: der KorrelationsRouter startet
-        // den Prozess direkt aus dem Auslöse-Event (dessen Signal abonniert er). Kein Handler-Glue nötig.
-    }
+            switch (payload)
+            {
+                case ICommand command:
+                    ausgaenge.Erfasse(SendReaktionAsync(command, trigger, ausgaenge.Token));
+                    return Task.CompletedTask;
+                case IEvent evt:
+                    return PublishReactiveAsync(evt, trigger, ausgaenge.Token);
+                default:
+                    // Prozess-Start läuft NICHT über eine Plan-Yield-Route: der KorrelationsRouter startet
+                    // den Prozess direkt aus dem Auslöse-Event (dessen Signal abonniert er). Kein Handler-Glue nötig.
+                    return Task.CompletedTask;
+            }
+        };
 
     private async Task PublishReactiveAsync(IEvent evt, IAggregateEnvelope trigger, CancellationToken ct)
+    {
+        try { await PublishAsync(evt, trigger, ct); }
+        catch (Exception ex) when (ex is not OperationCanceledException)
+        {
+            // Verlierbar (Inv. 6): ein reaktives Event ist kein durabler Ausgang, der Konsument rückt trotzdem vor.
+            _logger.LogWarning(ex, "[{Subscriber}] reaktives Event {Event} nicht veröffentlicht", _subscriberId, evt.GetType().Name);
+        }
+    }
+
+    private async Task PublishAsync(IEvent evt, IAggregateEnvelope trigger, CancellationToken ct)
     {
         if (_publisher == null)
         {
@@ -85,7 +98,7 @@ public sealed class HandlerOutputRouter
             Spur.Ursache(trigger.AggregateId, (trigger as IEventEnvelope)?.AggregateVersion ?? 0), trigger.CorrelationId, evt.GetType().Name);
     }
 
-    private Task SendReaktionAsync(ICommand command, IAggregateEnvelope trigger, CancellationToken ct)
+    private Task<EmitAusgang> SendReaktionAsync(ICommand command, IAggregateEnvelope trigger, CancellationToken ct)
     {
         // ★ P3: über das EINE Emit-Primitiv (EM-1). Deterministische CommandId (W1-Dedup am Empfänger)
         //   + bounded Token (W2) stecken jetzt im Primitiv — kein eigener Retry/Envelope/RequestAsync mehr.

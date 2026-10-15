@@ -459,10 +459,10 @@ namespace Infrastructure.SourceGeneration
                 sb.AppendLine("                var cluster = system.Cluster();");
                 sb.AppendLine("                var publisher = provider.GetService<BrokerPublisher>();");
                 sb.AppendLine("                var router = new HandlerOutputRouter(cluster, publisher, handler.PipelineId);");
-                sb.AppendLine("                // Emittierend (Achse B, P4.2): best-effort IEmittentenCursor, KEIN Reset.");
+                sb.AppendLine("                // Emittierend (Achse B, P4.2): IEmittentenCursor (durabel, ab Cursor, KEIN Reset); Ausgänge je Weckung (G-2, P1-6).");
                 sb.AppendLine("                var emittentenCursor = provider.GetService<IEmittentenCursor>();");
-                sb.AppendLine("                Func<EventEnvelope, Func<IPipelineOutput, Task>> emitFactory =");
-                sb.AppendLine("                    ev => DetachedEmit.Wrap(router.EmitFor(ev, CancellationToken.None));");
+                sb.AppendLine("                Func<EventEnvelope, EmitAusgaenge, Func<IPipelineOutput, Task>> emitFactory =");
+                sb.AppendLine("                    (ev, ausgaenge) => router.EmitFor(ev, ausgaenge);");
                 sb.AppendLine("                Func<IPipelineTrigger, string, Task> sendTrigger =");
                 sb.AppendLine("                    (trig, _) => PipelineTriggerSender.SendAsync(cluster, trig, null);");
                 sb.AppendLine("                var faehigkeiten = provider.GetRequiredService<IFaehigkeitsFabrik>().Oeffne();");

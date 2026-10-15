@@ -62,7 +62,7 @@ public sealed class GenericPullStartupService : IHostedService
     {
         try
         {
-            await _system.Cluster().RequestAsync<WakeAck>(identity, new Wake(VomPoll: false), c);
+            await _system.Cluster().RequestAsync<WakeAck>(identity, new Wake(), c);
         }
         catch (Exception ex)
         {
@@ -109,8 +109,8 @@ public sealed class GenericPullStartupService : IHostedService
                 cts.CancelAfter(TimeSpan.FromSeconds(10));
                 try
                 {
-                    var ack = await _system.Cluster().RequestAsync<WakeAck>(identity, new Wake(VomPoll: true), cts.Token);
-                    return ack is not null;
+                    var ack = await _system.Cluster().RequestAsync<WakeAck>(identity, new Wake(), cts.Token);
+                    return ack is { Aufgeholt: true };
                 }
                 catch { return false; }
             };
@@ -150,7 +150,12 @@ public sealed class GenericPullStartupService : IHostedService
                 // Events nach, re-scannt aber keine alte Historie).
                 await _pollCursors.SetAsync(pollerId, poller.HighWater, ct);
             }
-            catch (Exception ex) { Console.WriteLine($"[Pull] Poll fehlgeschlagen: {ex.Message}"); }
+            catch (Exception ex)
+            {
+                // Ein gescheiterter Durchlauf hält die Hochwassermarke; scheitert jeder, heilt kein verlorenes Signal mehr (G-7) — laut melden.
+                if (_logger is null) Console.WriteLine($"[Pull] Poll {pollerId} fehlgeschlagen: {ex.Message}");
+                else _logger.LogWarning(ex, "[Pull] Poll {PollerId} ab HWM {Hwm} fehlgeschlagen — die Marke steht", pollerId, poller.HighWater);
+            }
         }
     }
 

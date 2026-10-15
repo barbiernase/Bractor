@@ -2,8 +2,8 @@ namespace Abstractions;
 
 /// <summary>
 /// Durables Cursor-Dokument eines EMITTIERENDEN Konsumenten (Reaktion / Pipeline-Event) pro Partition.
-/// Best-effort/Cache (siehe <see cref="IEmittentenCursor"/>): außerhalb der Entscheidungs-Transaktion,
-/// Verlust heilt der Voll-Fold (Read ab 0 + Empfänger-Inbox-Dedup). Reines POCO ohne Persistenz-
+/// Vorgerückt erst nach bestätigtem Emit (siehe <see cref="IEmittentenCursor"/>); ein verlorener Write kostet nur ein erneutes Senden
+/// des Tails (Empfänger-Inbox-Dedup). Reines POCO ohne Persistenz-
 /// Abhängigkeit (analog <see cref="PollCursor"/> / <see cref="ProjectionCheckpoint"/>); die
 /// Marten-Schema-Registrierung erfolgt in der Host-/Store-Konfiguration.
 ///

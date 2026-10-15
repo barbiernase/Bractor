@@ -30,7 +30,7 @@ public sealed class ProjectionRebuilder
         string projectionId,
         IProjectionTracker tracker,
         IRebuildableProjection clearable,
-        Func<EventEnvelope, ProjectionWriter, Task> dispatch,
+        Func<EventEnvelope, ProjectionWriter, Infrastructure.PubSub.EmitAusgaenge, Task> dispatch,
         CancellationToken ct = default)
     {
         await clearable.ClearAsync(ct);                 // 1. Ziel leeren (nie in befüllten Zustand replayen)
@@ -51,7 +51,7 @@ public sealed class ProjectionRebuilder
         Guid streamId,
         IProjectionTracker tracker,
         IRebuildableProjection clearable,
-        Func<EventEnvelope, ProjectionWriter, Task> dispatch,
+        Func<EventEnvelope, ProjectionWriter, Infrastructure.PubSub.EmitAusgaenge, Task> dispatch,
         CancellationToken ct = default)
     {
         await clearable.ClearAsync(streamId, ct);

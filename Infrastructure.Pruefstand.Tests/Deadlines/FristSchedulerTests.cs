@@ -40,7 +40,7 @@ public class FristSchedulerTests
 
         var gefeuert = new List<Guid>();
         await FristScheduler.TickAsync(new FakeUhr(T0), plan,
-            feuere: f => { gefeuert.Add(f.Id); return Task.CompletedTask; });
+            feuere: f => { gefeuert.Add(f.Id); return Task.FromResult(EmitAusgang.Zugestellt); });
 
         // nur die gegen die DB-Uhr überfällige Frist feuert
         gefeuert.Should().Equal(überfällig.Id);
@@ -58,12 +58,12 @@ public class FristSchedulerTests
         // DB-Uhr steht VOR der Frist → nichts feuert (auch wenn die reale Node-Zeit längst danach liegt).
         var gefeuert = new List<Guid>();
         await FristScheduler.TickAsync(new FakeUhr(T0.AddSeconds(-1)), plan,
-            feuere: f => { gefeuert.Add(f.Id); return Task.CompletedTask; });
+            feuere: f => { gefeuert.Add(f.Id); return Task.FromResult(EmitAusgang.Zugestellt); });
         gefeuert.Should().BeEmpty("die Fake-DB-Uhr steht vor der Fälligkeit");
 
         // DB-Uhr genau auf der Frist → sie feuert (≤-Grenze inklusiv).
         await FristScheduler.TickAsync(new FakeUhr(T0), plan,
-            feuere: f => { gefeuert.Add(f.Id); return Task.CompletedTask; });
+            feuere: f => { gefeuert.Add(f.Id); return Task.FromResult(EmitAusgang.Zugestellt); });
         gefeuert.Should().Equal(frist.Id);
     }
 
@@ -80,7 +80,7 @@ public class FristSchedulerTests
         (await plan.FälligeAsync(T0)).Should().ContainSingle().Which.Id.Should().Be(frist.Id);
 
         // Zweiter Tick: Feuern klappt → jetzt entfernt.
-        await FristScheduler.TickAsync(new FakeUhr(T0), plan, feuere: _ => Task.CompletedTask);
+        await FristScheduler.TickAsync(new FakeUhr(T0), plan, feuere: _ => Task.FromResult(EmitAusgang.Zugestellt));
         (await plan.FälligeAsync(T0)).Should().BeEmpty();
     }
 }

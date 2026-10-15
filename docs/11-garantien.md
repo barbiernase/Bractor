@@ -43,7 +43,7 @@ Nachweis ist eine Lücke in [13](13-reifegrad-schulden-bewertung.md).
 | **Client** (gRPC, `CqrsClientService`) | fire-and-forget über `ProtoActorAggregateDispatcher`: bis zu 3 Versuche je 10 s, dann Dead-Letter und `CommandFailed` an die Sitzung | **genau einmal, wenn der Client mit derselben CommandId wiederholt**; die Inbox prüft vor der Version | Ein Command, der den Host vor dem Dispatch verliert (Absturz), ist weg; der Client merkt es nur am fehlenden Ack und muss selbst wiederholen. Ohne Wiederholung gilt höchstens einmal. | P `CommandVorpruefungTests.Bereits_verarbeitet_an_stale_Version…`; I `EingangE2ETests.Client_wiederholt_mit_derselben_CommandId…` (über den JSON-Eingang) |
 | **Client mit Antwort** (JSON-Eingang, `FrageAsync`; optional `commandId` im Body) | ein Versuch, gebunden | wie oben | „keine Antwort“ heißt nicht „nicht gewirkt“ | I `EingangE2ETests.Client_wiederholt_mit_derselben_CommandId…`; E2E Störungslauf (Wiederholung bei Host-Abbruch) |
 | **Ablehnung** | – | **idempotent:** eine Wiederholung liefert dieselbe Ablehnung | durable Marke `KommandoAbgelehnt` | P `CommandVorpruefungTests.Bereits_abgelehnt…`, `RehydrationGarantieTests.Neustart_stellt_die_Inbox…` |
-| **Emittiert** (`CommandEmitter`) | at-least-once, gebunden (5 s), ohne eigenen Retry; den Timeout heilt der nächste Re-Wake bzw. Poll | **genau einmal** über die deterministische CommandId und die Inbox des Ziels | nur innerhalb der letzten `Schreibpfad.InboxGrenze` (Standard 10 000) Commands je Ziel-Aggregat; zusammen mit dem Emittenten-Poll ab Version 0 kann ein älterer Command erneut wirken (G-2) | PD `SchreibGarantieTests.Doppelt_und_gleichzeitig_zugestellter_Command…`; I `VertragsZusageE2ETests`; P `KonsumGarantieTests.Absturz_zwischen_Emit_und_Cursor…`, `FristGarantieTests.Doppeltes_Feuern…`; E2E „keine CommandId zweimal gewirkt“; Fenster: PD `SchreibGarantieTests.Eine_alte_CommandId_jenseits_der_Inbox_Grenze…` (Skip G-2) |
+| **Emittiert** (`CommandEmitter`) | at-least-once, gebunden (5 s), höchstens 8 Sends je Ziel-Aggregat gleichzeitig (Drossel); der Emitter wiederholt nicht selbst, er meldet den **Ausgang** (zugestellt, abgelehnt, unbekannt). Bei „unbekannt“ wiederholt der Aufrufer mit derselben CommandId: die Frist bleibt liegen, der Emittenten-Cursor rückt nicht vor, der Dirigent wiederholt nach Backoff | **genau einmal** über die deterministische CommandId und die Inbox des Ziels | nur innerhalb der letzten `Schreibpfad.InboxGrenze` (Standard 10 000) Commands je Ziel-Aggregat (G-2, Inbox) | P `EmitGarantieTests` (Ausgang, Drossel, Backoff); PD `SchreibGarantieTests.Doppelt_und_gleichzeitig_zugestellter_Command…`; I `VertragsZusageE2ETests`; P `KonsumGarantieTests.Absturz_zwischen_Emit_und_Cursor…`, `FristGarantieTests.Doppeltes_Feuern…`; E2E „keine CommandId zweimal gewirkt“; Fenster: PD `SchreibGarantieTests.Eine_alte_CommandId_jenseits_der_Inbox_Grenze…` (Skip G-2) |
 
 ## 11.4 Ordnung
 
@@ -60,7 +60,7 @@ Nachweis ist eine Lücke in [13](13-reifegrad-schulden-bewertung.md).
 |---|---|---|---|
 | **Wirkung genau einmal je Event** | Co-Commit: Effekt und `ProjectionCheckpoint` in einer Transaktion (`MartenCoCommitStoreBase`); der GA-1-Check erzwingt den Co-Commit für append-artige Projektionen | genau eine Aktivierung je (Projektion, Stream). Der Checkpoint wird ohne Versionsprüfung geschrieben; zwei Aktivierungen (Netzstörung im Cluster) können einen Effekt doppelt anwenden (G-4) | I `CoCommitPostgresTests.Absturz_zwischen_Effekt_und_Marke…`; P `GaEinsPruefungTests`; E2E „Read-Model = Log“ (S1, S4); zwei Aktivierungen: I `GarantiePostgresTests.Zwei_Aktivierungen…` (Skip G-4) |
 | **geteilte Dokumente** ohne verlorene Updates | Versionsprüfung, bis zu 5 Wiederholungen, sonst `SchreibKonfliktException` und Stapel verworfen | – | I `SchreibRegelPostgresTests`, `GeteilteDokumentePostgresTests` |
-| **Vollständigkeit:** jedes committete Event kommt an | Signal (schnell) plus Poll (30 s) über die Hochwassermarke; der Poll rückt nur vor, wenn jede Weckung bestätigt ist (`Poller`) | Ein Stream, dessen Dispatch dauerhaft wirft, hält die Hochwassermarke fest: nichts geht verloren, aber das Fenster wächst. Grenzfall: eine Transaktion, die länger als die Karenz (3 s) offen ist, kann der Poll überspringen; dann trägt nur das Signal. | I `PollerBackstopPostgresTests` (verlorenes Signal), `SequenceGapPostgresTests`, `GarantiePostgresTests.Ein_Poison_Stream…`; E2E Störungslauf; Lücke: nach einem gescheiterten Append steht der Poll (I `GarantiePostgresTests.Ein_gescheiterter_Append_blockiert_den_Poll_nicht`, Skip G-7) |
+| **Vollständigkeit:** jedes committete Event kommt an | Signal (schnell) plus Poll (30 s) über die Hochwassermarke; der Poll rückt nur vor, wenn jede Weckung bestätigt aufgeholt ist (`Poller`, `WakeAck.Aufgeholt`). Tombstones eines gescheiterten Appends liest niemand (`MartenEventStore`) | Ein Stream, dessen Dispatch dauerhaft wirft, hält die Hochwassermarke fest: nichts geht verloren, aber das Fenster wächst; ein scheiternder Poll-Durchlauf wird als Warnung gemeldet. Grenzfall: eine Transaktion, die länger als die Karenz (3 s) offen ist, kann der Poll überspringen; dann trägt nur das Signal. | I `PollerBackstopPostgresTests` (verlorenes Signal), `SequenceGapPostgresTests`, `GarantiePostgresTests.Ein_Poison_Stream…`, `GarantiePostgresTests.Ein_gescheiterter_Append_blockiert_den_Poll_nicht`; E2E Störungslauf |
 | **Aktualität** | Signal | eventual: typisch Millisekunden, schlimmstenfalls ein Poll-Intervall | I `LiveCommandE2ETests`; E2E Latenz ([12](12-tests-und-vermessung.md) §12.5) |
 | **Read-your-writes** | Redis-Versionsindex (`ctx.Track`) | **nur best-effort**; fällt Redis aus, verlängert sich nur die Wartezeit | E2E Störungslauf (Redis 30 s weg, Exactly-once bleibt) |
 | **Neuaufbau** | Reset über `IReplaybarerTracker`, dann der normale Adapter-Pfad ab 0 (`ProjectionRebuilder`) | deterministisch nur bei deterministischen Handlern; der alte Stand wird vorher geleert | P `ProjectionRebuilderTests` |
@@ -69,8 +69,8 @@ Nachweis ist eine Lücke in [13](13-reifegrad-schulden-bewertung.md).
 
 | Garantie | Bedingung | Nachweis |
 |---|---|---|
-| der Handler läuft **mindestens einmal** je Event | – | P `EmittentenPfadAdapterTests`, `KonsumGarantieTests.Absturz_zwischen_Emit_und_Cursor…`; nicht zugestellter Emit: P `KonsumGarantieTests.Ein_nicht_zugestellter_Emit…` (Skip G-2, nötig sobald der Poll ab dem Cursor liest) |
-| ausgegebene Commands wirken **genau einmal** | Inbox-Fenster des Ziels (§11.3, G-2) | PD `AblaufGarantieTests.Reaktion_wirkt_genau_einmal…`; P `ReaktionsIdTests`; E2E S5 „je Reaktions-Command genau eine Wirkung“ |
+| der Handler läuft **mindestens einmal** je Event; Signal und Poll lesen ab dem Cursor, der erst vorrückt, wenn jeder ausgegebene Command zugestellt oder abgelehnt ist (die Commands eines Tails gehen parallel hinaus) | – | P `EmittentenPfadAdapterTests`, `KonsumGarantieTests.Absturz_zwischen_Emit_und_Cursor…`, `…Ein_nicht_zugestellter_Emit…`, `…Die_Commands_eines_Tails_gehen_parallel_hinaus`; PD `AblaufGarantieTests.Absturz_zwischen_Emit_und_Cursor…` |
+| ausgegebene Commands wirken **genau einmal** | Inbox-Fenster des Ziels (§11.3, G-2) | PD `AblaufGarantieTests.Reaktion_wirkt_genau_einmal…`, `…Absturz_zwischen_Emit_und_Cursor…`; P `ReaktionsIdTests`; E2E S5 „je Reaktions-Command genau eine Wirkung“ |
 | **kein** Reset und kein Replay | zur Compile-Zeit wahr: `IEmittentenCursor` implementiert `IReplaybarerTracker` nicht | Typ (Compile-Zeit); P `EmittentenPfadAdapterTests.Tracker_und_Cursor_zugleich…` |
 | ausgegebene Events (`IEvent` aus einem Handle) | verlierbar re-publiziert, nicht im Log | – |
 | Seiteneffekte **außerhalb** von Commands | **nur at-least-once**, keine Deduplizierung | – |
@@ -80,12 +80,13 @@ Nachweis ist eine Lücke in [13](13-reifegrad-schulden-bewertung.md).
 | Garantie | Mechanismus | Bedingung / Lücke | Nachweis |
 |---|---|---|---|
 | jede Transition feuert mindestens einmal und wirkt genau einmal | deterministische CommandId, Inbox des Ziels, Marke `KommandoVerarbeitet` macht auch einen Noop als „erledigt“ sichtbar | Inbox-Fenster (G-2) | PD `ProzessE2ETests`, `MarkingCursorAequivalenzTests`; E2E S3, S5 |
-| kein Vorgang bleibt still liegen | Prozess-Poll plus Backstop über den durablen Offen-Index (15 s) | ein Vorgang, dessen Start-Signal verloren ging, startet nur über den Poll — der steht nach einem gescheiterten Append still (G-7) | PD `AblaufGarantieTests.Ein_Neustart_des_Hosts…`; E2E Störungslauf (harter Abbruch); Lücke G-7 (I, Skip) |
+| der Dirigent bleibt unter Überlast lebendig: ein unbekannter Send wird erst nach Backoff je Vorgang (1 s … 30 s) wiederholt, nie zweimal gleichzeitig; höchstens 8 Sends je Ziel-Aggregat unterwegs | `DetachedProzessSend`, `EmitDrossel` | – | P `EmitGarantieTests.Nach_unbekanntem_Ausgang…`, `…Die_Drossel_begrenzt…`; E2E S3 (heißes Aggregat) |
+| kein Vorgang bleibt still liegen | Prozess-Poll plus Backstop über den durablen Offen-Index (15 s) | ein Vorgang, dessen Start-Signal verloren ging, startet nur über den Poll; Tombstones halten ihn nicht mehr an (G-7 erledigt) | PD `AblaufGarantieTests.Ein_Neustart_des_Hosts…`; I `GarantiePostgresTests.Ein_gescheiterter_Append_blockiert_den_Poll_nicht`; E2E Störungslauf (harter Abbruch) |
 | Kompensation in umgekehrter Reihenfolge | `ProzessManager` | scheitert sie, endet der Vorgang als `KlärungNötig` mit Dead-Letter; der Dead-Letter ist nur Beobachtung, kein Retry | PD `ProzessE2ETests.Scheitert_ein_Zweig…`; E2E S5 „jede Kompensation genau einmal“; `KlärungNötig` ohne Test (P2-5) |
 | Prozess-Regeln sind azyklisch | Boot-Guard (`ProzessAzyklizität`) | – | P `FunktionsAufrufTests.Der_Azyklizitaets_Guard…` |
 | Zeitlimits im Dirigenten feuern | Backstop | Auflösung etwa 15 s (W11-2) | P `FunktionsAufrufTests.Ein_Zeitlimit_laesst_einen_haengenden_Aufruf_scheitern…`, `PipelineFlussTests.Bestellung_Zeitlimit_Port…` |
 | eine Katalog-Funktion wird **mindestens einmal** ausgeführt | Laufort Extern: Lease 30 s beim `FunktionsVermittler`, nach Ausfall des Workers neu vergeben | **Funktionsrümpfe müssen idempotent sein**; ein Ergebnis nach Ablauf der Lease wird abgewiesen | P `FunktionsVermittlungTests.Abgelaufene_Lease…`, `…Erledigtes_verpufft…`; E2E S2 |
-| **Fristen** (`IFristplan`) feuern mindestens einmal | `FristScheduler`: erst feuern, dann entfernen | **heute verletzt:** ein Timeout oder ein Fehlschlag des Emits zählt als gefeuert, die Frist wird entfernt (G-1) | P `FristSchedulerTests`, `FristGarantieTests.Zugestellte_Frist…`; I `DeadlineStorePostgresTests`; Lücke: P `FristGarantieTests.Emit_Timeout…`, `…Technischer_Fehlschlag…` (Skip G-1) |
+| **Fristen** (`IFristplan`) feuern mindestens einmal | `FristScheduler`: erst feuern, entfernt nur bei entschiedenem Ausgang (zugestellt oder abgelehnt); ein unbekannter Ausgang lässt die Frist für den nächsten Tick liegen | – | P `FristSchedulerTests`, `FristGarantieTests` (zugestellt, abgelehnt, Timeout, technischer Fehlschlag, doppeltes Feuern); I `DeadlineStorePostgresTests` |
 
 ## 11.8 Quellen
 
@@ -113,7 +114,7 @@ Nachweis ist eine Lücke in [13](13-reifegrad-schulden-bewertung.md).
 | was ein Decide oder Handle erzeugen kann, steht vollständig in der Signatur | CQRS050 | P `AusgabeVertragAnalyzerTests` |
 | jedes entschiedene Event hat ein `Apply`, jedes `Apply` ein entscheidendes Decide | CQRS079/080 | P `ModellAnalyzerTests` |
 | ein Command gehört genau einem Aggregat, Identitäten sind eindeutig | CQRS010/011 | P `BuildGarantieTests` |
-| genau ein Emit-Weg, jeder Command-Send ist zeitlich gebunden | CQRS020/021 | P `CommandEmitAnalyzerTests` (im generierten Pull-Emit-Pfad noch `CancellationToken.None`, P1-6) |
+| genau ein Emit-Weg, jeder Command-Send ist zeitlich gebunden | CQRS020/021; der generierte Pull-Emit-Pfad reicht das Token der Weckung durch (`EmitAusgaenge`) | P `CommandEmitAnalyzerTests` |
 | Store-Zugriff nur über Fähigkeiten, Konsumenten ohne eigenen Zustand | CQRS051–055, CQRS066/067, CQRS083 | P `FaehigkeitAnalyzerTests` (051, 054, 055), `BuildGarantieTests` (052, 053), `StoreZugriffAnalyzerTests`, `ModellAnalyzerTests` (083) |
 | jeder Wire-Typ ist serialisierbar, ohne Reflection | Generatoren (namentliche Kontext-Referenz), `WireSerializerBootCheck` | P `BuildGarantieTests.Jeder_Wire_Typ_der_Anwendung_ist_serialisierbar` |
 | Akteur-Rechte, Dienst- und Funktions-Bindung, Umgebungs-Schema, Quellen-Konfig | Boot-Guards ([02](02-design-prinzipien.md) P9) | P `AkteurRechteTests`, `DienstBindungTests`, `UmgebungLaderTests`, `DateiTreiberTests.Konfig_…` |
@@ -139,7 +140,7 @@ die Kosten wachsen.
 | Projektion wirkt genau einmal (§11.5) | je (Projektion, Stream, Weckung) Tracker lesen, Tail lesen, eine Transaktion (`ProjectionAdapter`, `MartenCoCommitStoreBase`) | Events × Projektionen, sobald viele Streams je wenige Events haben | Batch-Co-Commit: viele Streams, ihre Effekte und Checkpoints in einer Transaktion (PF-1) |
 | Ordnung je Stream (§11.4) | ein virtueller Actor je (Konsument, Stream) | Projektionen × Streams Actors; ohne Passivierung bis zum Shutdown im Speicher | partitionierte Konsumenten (`Hash(Stream) mod P`) in globaler Sequenz (PF-1); Passivierung (PF-5) |
 | Vollständigkeit trotz verlierbarem Signal (§11.5) | jede Projektion scannt alle 30 s selbst alle neuen Events ohne LIMIT und weckt jeden geänderten Stream nacheinander (`Poller`, `PullPath`, `MartenEventStore.ReadChangedStreamsAsync`) | Events × Projektionen × Knoten; nach Stillstand das ganze Rückstandsfenster im Speicher | eine Abfrage „Stream-Kopf > Checkpoint“, nur nachhängende Streams wecken; ein gemeinsamer, seitenweiser Change-Feed (PF-2) |
-| Emittierter Command wirkt genau einmal (§11.3, §11.6) | der Poll eines Emittenten liest ab Version 0 und gibt alles erneut aus | Stream-Länge je Poll und geändertem Stream | durabler Cursor, vorgerückt nach bestätigtem Emit (G-2) |
+| Emittierter Command wirkt genau einmal (§11.3, §11.6) | durabler Emittenten-Cursor, vorgerückt nach bestätigtem Emit; die Commands eines Tails werden gemeinsam abgewartet | Tail-Länge je Weckung (nicht mehr die Stream-Länge) | – (umgesetzt) |
 | Command wirkt genau einmal (§11.3) | Marke `KommandoVerarbeitet` je Command im Stream, auch ohne Event; Inbox im Snapshot | Streams etwa doppelt so lang (Append, Rehydration, Prozess-Reads); Snapshot bis `InboxGrenze` Ids | Events tragen die CommandId schon als `causationId`; Marke nur bei Noop und Ablehnung, oder Inbox als Tabelle mit eindeutigem Schlüssel in derselben Transaktion (PF-3, G-2) |
 | kein Vorgang bleibt liegen (§11.7) | Prozess-Poll liest jeden geänderten Stream ab 0 und verwirft die schon geladenen Events; Backstop weckt alle 15 s alle offenen Vorgänge (`ProzessManagerWiring`) | Vorgangslänge² bzw. Zahl offener Vorgänge, auch im Leerlauf | geladene Events direkt routen; Fälligkeits-Index für Zeitlimits statt Weckung aller (PF-4) |
 | Read-your-writes, best-effort (§11.5) | ein Redis-Write je Event und Projektion (`ReadModelDepsWriter`) | Events × Projektionen | je Projektion abschaltbar (PF-6) |
@@ -150,11 +151,10 @@ Kostenlos zur Laufzeit sind die Garantien aus §11.10 (Build und Start) sowie Si
 
 ## 11.13 Lücken
 
-Stehen nur in [13](13-reifegrad-schulden-bewertung.md) §13.0: **G-1** Fristverlust, **G-2** Inbox-Fenster mit Emittenten-Poll ab 0,
-**G-3** Actor nach Append-Konflikt, **G-4** Projektions-Checkpoint ohne Versionsprüfung, **G-5** Versionszählung bei Split-Upcasts,
-**G-6** Garantien ohne eigenen Nachweis-Test, **G-7** Tombstones eines gescheiterten Appends legen den Poll still. Jede Lücke G-1 bis G-5 und G-7
-hat einen Test, der sie zeigt (Skip `G-n offen (docs/13)`); geschlossen
-ist sie erst, wenn ihr Test grün ist.
+Stehen nur in [13](13-reifegrad-schulden-bewertung.md) §13.0: **G-2** Inbox-Fenster, **G-3** Actor nach Append-Konflikt, **G-4**
+Projektions-Checkpoint ohne Versionsprüfung, **G-5** Versionszählung bei Split-Upcasts, **G-6** Garantien ohne eigenen Nachweis-Test. Jede offene
+Lücke G-2 bis G-5 hat einen Test, der sie zeigt (Skip `G-n offen (docs/13)`); geschlossen ist sie erst, wenn ihr Test grün ist. Geschlossen
+(Phase 1): **G-1** Fristverlust, **G-7** Tombstones legen den Poll still, der Emittenten-Anteil von **G-2** (Poll ab Version 0).
 
 ## 11.14 Wie die Garantien geprüft werden
 
@@ -164,10 +164,11 @@ ist sie erst, wenn ihr Test grün ist.
   `Infrastructure.Integration.Tests` und `Pruefdomaene.Integration.Tests`. Grün heißt: alles grün bis auf die übersprungenen Lücken-Tests.
 - **Unter Störung** geprüft sind: doppelte und ungeordnete Zustellung (`KonsumGarantieTests`, `SchreibGarantieTests`), verlorenes Signal
   (`PollerBackstopPostgresTests`), Absturz zwischen Effekt und Checkpoint (`CoCommitPostgresTests`), Absturz zwischen Emit und Cursor
-  (`KonsumGarantieTests`), Timeout und Fehlschlag beim Emit (`FristGarantieTests`, `KonsumGarantieTests`, Skip G-1/G-2), Versionskonflikt und
-  mehrdeutiger Commit (`SchreibGarantieTests`, Skip G-3), alte CommandId jenseits der Inbox-Grenze (Skip G-2), zwei Aktivierungen
-  (`GarantiePostgresTests`, Skip G-4), Poison-Stream und gescheiterter Append (`GarantiePostgresTests`, Skip G-7), Neustart des Hosts
-  (`AblaufGarantieTests`, `RehydrationGarantieTests`).
+  (`KonsumGarantieTests`, `AblaufGarantieTests`), Timeout und Fehlschlag beim Emit (`EmitGarantieTests`, `FristGarantieTests`,
+  `KonsumGarantieTests`), Überlast eines Ziels (`EmitGarantieTests`: Drossel, Backoff), Versionskonflikt und mehrdeutiger Commit
+  (`SchreibGarantieTests`, Skip G-3), alte CommandId jenseits der Inbox-Grenze (Skip G-2), zwei Aktivierungen (`GarantiePostgresTests`,
+  Skip G-4), Poison-Stream und gescheiterter Append (`GarantiePostgresTests`), Neustart des Hosts (`AblaufGarantieTests`,
+  `RehydrationGarantieTests`).
 - **Ende zu Ende:** jeder Lauf von `scripts/vermessung-e2e.sh` zählt nach dem Lauf über Queries und den Log nach, dass jede Wirkung genau
   einmal eingetreten ist (je Szenario, dazu global: keine CommandId zweimal gewirkt, keine Version doppelt; mit offenem Rückstand „höchstens
   einmal“); der **Störungslauf** tut das nach harten Host-Abbrüchen und einem Redis-Ausfall ([12](12-tests-und-vermessung.md) §12.5). Ein Fehlschlag macht den Lauf ungültig.

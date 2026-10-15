@@ -15,7 +15,7 @@ namespace Infrastructure.Pruefstand.Garantien;
 
 /// <summary>
 /// Garantien der Konsum-Schleife (docs/11 §11.4–§11.6) unter Störung, store-frei über die Seams des <see cref="ProjectionAdapter"/>: doppelte
-/// und ungeordnete Weckungen, Absturz zwischen Emit und Cursor, ein Emit, der nicht ankommt. Der Lese-Seam liefert den Log so, wie Marten
+/// und ungeordnete Weckungen, Absturz zwischen Emit und Cursor, ein Emit, der nicht ankommt (G-2), parallele Emits eines Tails. Der Lese-Seam liefert den Log so, wie Marten
 /// ihn liefert (geordnet ab Version); Marke und Cursor sind Fakes — ob Effekt und Marke gemeinsam gültig werden, prüft die Integration
 /// (<c>CoCommitPostgresTests</c>).
 /// </summary>
@@ -69,12 +69,12 @@ public class KonsumGarantieTests
         var log = new List<EventEnvelope> { Evt(stream, 1), Evt(stream, 2) };
         var angewandt = new List<int>();
         var adapter = new ProjectionAdapter(new LeseSeam(log), new Marke(), null, "projektion",
-            (e, _) => { angewandt.Add(e.AggregateVersion); return Task.CompletedTask; });
+            (e, _, _) => { angewandt.Add(e.AggregateVersion); return Task.CompletedTask; });
 
         await adapter.WakeAsync(stream, Ct);                     // Signal v1
         await adapter.WakeAsync(stream, Ct);                     // dasselbe Signal doppelt
         lock (log) log.AddRange(new[] { Evt(stream, 3), Evt(stream, 4), Evt(stream, 5) });
-        await adapter.WakeAsync(stream, vomPoll: true, Ct);      // Poll-Heilung vor den Signalen
+        await adapter.WakeAsync(stream, Ct);                     // Poll-Heilung vor den Signalen
         await adapter.WakeAsync(stream, Ct);                     // Signal v5 vor v3 und v4 (ungeordnet)
         await adapter.WakeAsync(stream, Ct);
         await adapter.WakeAsync(stream, Ct);
@@ -93,7 +93,7 @@ public class KonsumGarantieTests
         var router = new HandlerOutputRouter(emitter, null, "reaktion");
         var cursor = new AbsturzCursor();
         var adapter = new ProjectionAdapter(new LeseSeam(log), null, cursor, "reaktion",
-            (e, _) => router.EmitFor(e, Ct)(new MeldeTeilFertig(Guid.Parse("00000000-0000-0000-0000-0000000000aa"))));
+            (e, _, a) => router.EmitFor(e, a)(new MeldeTeilFertig(Guid.Parse("00000000-0000-0000-0000-0000000000aa"))));
 
         var erster = () => adapter.WakeAsync(stream, Ct);
         await erster.Should().ThrowAsync<InvalidOperationException>();
@@ -107,22 +107,73 @@ public class KonsumGarantieTests
         (await cursor.Innen.LadeAsync($"reaktion:{stream}", Ct)).Should().Be(3);
     }
 
-    [Fact(Skip = "G-2 offen (docs/13)")]
+    [Fact]
     public async Task Ein_nicht_zugestellter_Emit_laesst_den_Cursor_stehen()
     {
-        // Wie im generierten Pull-Pfad: Ausgabe-Routing hinter DetachedEmit. Der Empfänger antwortet nie (Sendefrist läuft ab) — der
-        // Command ist nicht zugestellt, also darf der Cursor nicht über sein Event rücken (sonst holt ihn ab Phase 1 kein Poll mehr).
+        // Wie im generierten Pull-Pfad: Ausgabe-Routing mit den Ausgängen der Weckung. Der Empfänger antwortet zuerst nie (Sendefrist läuft
+        // ab) — der Command ist nicht zugestellt, also darf der Cursor nicht über sein Event rücken, und die Weckung meldet „nicht aufgeholt“
+        // (der Poll hält seine Marke). Die nächste Weckung sendet ihn mit derselben CommandId erneut.
         var stream = Guid.NewGuid();
         var log = new List<EventEnvelope> { Evt(stream, 1) };
-        var emitter = new CommandEmitter(async (_, _, ct) => { await Task.Delay(Timeout.Infinite, ct); return null; }, sendeFrist: TimeSpan.FromMilliseconds(50));
+        var antwortet = false;
+        var ids = new List<Guid>();
+        var emitter = new CommandEmitter(async (_, env, ct) =>
+        {
+            lock (ids) ids.Add(env.CommandId);
+            if (!antwortet) await Task.Delay(Timeout.Infinite, ct);
+            return new CommandResult { Success = true };
+        }, sendeFrist: TimeSpan.FromMilliseconds(50));
         var router = new HandlerOutputRouter(emitter, null, "reaktion");
         var cursor = new InMemoryEmittentenCursor();
         var adapter = new ProjectionAdapter(new LeseSeam(log), null, cursor, "reaktion",
-            (e, _) => DetachedEmit.Wrap(router.EmitFor(e, Ct))(new MeldeTeilFertig(Guid.NewGuid())));
+            (e, _, a) => router.EmitFor(e, a)(new MeldeTeilFertig(Guid.Parse("00000000-0000-0000-0000-0000000000bb"))));
 
-        try { await adapter.WakeAsync(stream, Ct); } catch { /* ein gemeldeter Fehlschlag ist erlaubt */ }
-        await Task.Delay(200);
-
+        (await adapter.WakeAsync(stream, Ct)).Should().BeFalse("ein unbekannter Ausgang ist kein Aufholen");
         (await cursor.LadeAsync($"reaktion:{stream}", Ct)).Should().Be(0, "der Command des Events 1 ist nicht zugestellt");
+
+        antwortet = true;
+        (await adapter.WakeAsync(stream, Ct)).Should().BeTrue();
+        (await cursor.LadeAsync($"reaktion:{stream}", Ct)).Should().Be(2);
+        ids.Should().HaveCount(2).And.OnlyContain(id => id == ids[0], "die Wiederholung trägt dieselbe CommandId — die Inbox verwirft sie, falls sie schon wirkte");
+    }
+
+    [Fact]
+    public async Task Ein_abgelehnter_Command_ist_entschieden_der_Cursor_rueckt_vor()
+    {
+        // Eine fachliche Ablehnung ist durabel (Marke KommandoAbgelehnt); eine Wiederholung brächte dieselbe — nichts mehr zu tun.
+        var stream = Guid.NewGuid();
+        var log = new List<EventEnvelope> { Evt(stream, 1) };
+        var emitter = new CommandEmitter((_, _, _) => Task.FromResult<CommandResult?>(new CommandResult { Success = false, Abgelehnt = true }));
+        var router = new HandlerOutputRouter(emitter, null, "reaktion");
+        var cursor = new InMemoryEmittentenCursor();
+        var adapter = new ProjectionAdapter(new LeseSeam(log), null, cursor, "reaktion",
+            (e, _, a) => router.EmitFor(e, a)(new MeldeTeilFertig(Guid.Parse("00000000-0000-0000-0000-0000000000cc"))));
+
+        (await adapter.WakeAsync(stream, Ct)).Should().BeTrue();
+        (await cursor.LadeAsync($"reaktion:{stream}", Ct)).Should().Be(2);
+    }
+
+    [Fact]
+    public async Task Die_Commands_eines_Tails_gehen_parallel_hinaus()
+    {
+        // Drei Events, je ein Command an verschiedene Ziele. Der Empfänger antwortet erst, wenn alle drei gleichzeitig unterwegs sind — wären
+        // die Sends nacheinander abgewartet, liefe der erste in seine Frist und der Tail bliebe „nicht aufgeholt“.
+        var stream = Guid.NewGuid();
+        var log = new List<EventEnvelope> { Evt(stream, 1), Evt(stream, 2), Evt(stream, 3) };
+        var alleDa = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var unterwegs = 0;
+        var emitter = new CommandEmitter(async (_, _, ct) =>
+        {
+            if (Interlocked.Increment(ref unterwegs) == 3) alleDa.TrySetResult();
+            await alleDa.Task.WaitAsync(ct);
+            return new CommandResult { Success = true };
+        }, sendeFrist: TimeSpan.FromSeconds(2));
+        var router = new HandlerOutputRouter(emitter, null, "reaktion");
+        var cursor = new InMemoryEmittentenCursor();
+        var adapter = new ProjectionAdapter(new LeseSeam(log), null, cursor, "reaktion",
+            (e, _, a) => router.EmitFor(e, a)(new MeldeTeilFertig(Guid.NewGuid())));
+
+        (await adapter.WakeAsync(stream, Ct)).Should().BeTrue();
+        (await cursor.LadeAsync($"reaktion:{stream}", Ct)).Should().Be(4);
     }
 }

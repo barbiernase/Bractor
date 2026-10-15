@@ -1,16 +1,14 @@
 # 13 — Reifegrad, Schulden & Bewertung
 
 **Die eine Quelle für „offen“.** Andere Dokumente (`CLAUDE.md`, Kapitel 01–12, Konzepte) nennen Schulden höchstens kurz und verweisen
-hierher. Stand: 2026-10-15, Commit-Basis `f4b32f5` (Phase 0 des Plans Garantien und Durchsatz). Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
+hierher. Stand: 2026-10-15, Phase 1 des Plans Garantien und Durchsatz. Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
 (`docs/konzept-werkbank.md` §2). Zahlen und Messwerte stehen in `docs/12-tests-und-vermessung.md`.
 
 ## 13.0 Offen auf einen Blick
 
 | ID | Kurz | Prio |
 |---|---|:--:|
-| G-1 | Fristverlust: ein Timeout oder Fehlschlag des Emits zählt als gefeuert, die Frist wird entfernt | P0 |
-| G-7 | Ein gescheiterter Append hinterlässt Marten-Tombstones; ihr Stream ist für jeden Poll ein dauerhafter Poison-Stream — Heilung verlorener Signale und Start verlorener Vorgänge stehen still | P0 |
-| G-2 | Inbox-Fenster (10 000) zusammen mit dem Emittenten-Poll ab Version 0: ein älterer Command kann erneut wirken (früher P2-4) | P1 |
+| G-2 | Inbox-Fenster (10 000): eine CommandId, die jenseits der Grenze erneut kommt, wirkt erneut; der Emittenten-Anteil ist seit Phase 1 geschlossen | P1 |
 | G-3 | Append-Konflikt: Actor bleibt mit veraltetem Stand stehen; mehrdeutiger Commit wird als Fehler gemeldet | P1 |
 | G-4 | Projektions-Checkpoint ohne Versionsprüfung: zwei Aktivierungen können einen Effekt doppelt anwenden | P1 |
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
@@ -19,7 +17,6 @@ hierher. Stand: 2026-10-15, Commit-Basis `f4b32f5` (Phase 0 des Plans Garantien 
 | PF-2 | Heil-Poll je Projektion ohne LIMIT, weckt jeden geänderten Stream nacheinander; Rebuild lädt den Log als Liste | P1 |
 | PF-4 | Prozess-Poll liest geänderte Streams ab 0 und verwirft geladene Events; Backstop weckt alle offenen Vorgänge | P1 |
 | PF-5 | Keine Passivierung: Aggregat-, Adapter- und Prozess-Actors bleiben bis zum Shutdown | P1 |
-| PF-9 | Retry-Sturm unter Überlast: der Dirigent feuert nach jedem Send-Timeout sofort erneut, ohne Backoff — Kollaps statt Rückstau | P1 |
 | PF-3 | Inbox-Marke je Command im Stream (auch ohne Event), Inbox im Snapshot | P2 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
@@ -28,7 +25,6 @@ hierher. Stand: 2026-10-15, Commit-Basis `f4b32f5` (Phase 0 des Plans Garantien 
 | LLM-1 | 🤖-Rümpfe sind nur „baut und regelkonform“ geprüft, nicht fachlich: keine Beispiele je Slot, `Cqrs.Testing` nicht an Editor/🤖 angebunden | P1 |
 | P1-1 | Multi-Node nur container-erprobt, Consul im `-dev`-Modus | P1 |
 | P1-2 | Transport-Sicherheit: kein TLS; Identitäten für Prod fehlen | P1 |
-| P1-6 | `CancellationToken.None` im generierten Pull-Emit-Pfad | P1 |
 | P1-7 | Deploy-Skripte veraltet (starten die Hosts ohne Umgebung, alte Konfig-Schlüssel) | P1 |
 | W2-1 | Rest der Projektstruktur: Client-Framework hängt am Server-Framework, Generat-Namespaces, Identitäten aus einfachen Namen | P2 |
 | W11-1 | Doppelte Wege: Handle-Pipeline/Trigger/`[Ingress]` ohne Nutzer, Prozess- vs. Fluss-DSL | P2 |
@@ -63,7 +59,7 @@ Werkzeuge lesen teils per Reflection, und neben den neuen Wegen (Fluss, Quelle, 
 | Subsystem | Reife |
 |---|:--:|
 | Schreibseite | 🟢 / 🟡 (G-3, G-5) |
-| Konsum-/Prozess-Maschine | 🟡 (G-1, G-2, G-4) |
+| Konsum-/Prozess-Maschine | 🟡 (G-2 Inbox, G-4) |
 | Generatoren & Analyzer | 🟢 / 🟡 (W10-1, W2-1) |
 | Multi-Node / Transport | 🟢 / 🟡 (P1-1, P1-2) |
 | Werkbank (Extractor, Editor, Server) | 🟢 / 🟡 (LLM-1, W3-1, WB-1, WB-4, WZ-1) |
@@ -88,28 +84,16 @@ Schweregrade: **P0** = bekannter aktiver Korrektheits-Bug · **P1** = wichtig, p
 
 ### P0
 
-**G-1 · Fristverlust.** `FristScheduler.TickAsync` entfernt eine Frist, sobald `feuere` nicht wirft. `CommandEmitter.EmitAsync` verschluckt aber
-den Timeout (`OperationCanceledException`) und wertet das `CommandResult` nicht aus; ein Emit, der nicht ankam oder technisch scheiterte, gilt
-damit als gefeuert, und die Frist ist verloren. Der Kommentar an `TickAsync` sagt das Gegenteil. *Empfehlung:* `feuere` meldet den Ausgang
-(zugestellt ja/nein), entfernt wird nur nach bestätigter Zustellung; Prüfstand-Test mit Timeout- und Fehler-Seam.
-
-**G-7 · Tombstones legen den Poll still** (gefunden mit der Garantie-Suite, 2026-10-15). Scheitert ein Append (Versionskonflikt, ein Batch,
-der isoliert wiederholt wird, ein DB-Fehler im `SaveChanges`), füllt Marten die schon reservierten Sequenzen mit `JasperFx.Events.Tombstone`
-in einem eigenen Stream (Zeitstempel `-infinity`). `ReadChangedStreamsAsync` meldet diesen Stream als geändert; jeder Leser ruft für ihn
-`ReadStreamAsync`, und der Upcasting-Seam wirft „Kein Upcasting-Pfad für JasperFx.Events.Tombstone“. Folgen: der Prozess-Poll bricht jeden
-Durchlauf ab, bevor er die Hochwassermarke setzt (ein Vorgang, dessen Start-Signal verloren ging, startet nie — §11.7); der Projektions- und
-Reaktions-Poll bekommt für den Stream nie ein `WakeAck` und hält seine Marke für immer (verlorene Signale heilen nie mehr — §11.5; jeder
-Durchlauf liest das wachsende Fenster neu). Gesehen im Schema der Prüfdomänen-Tests (Router-Marke stand bei 826, Tombstones ab 860) und
-vorhanden in der Sim-DB der Werkbank (12 Tombstones). Test: I `GarantiePostgresTests.Ein_gescheiterter_Append_blockiert_den_Poll_nicht`
-(Skip G-7). *Empfehlung:* Tombstones (und jedes Framework-fremde Event ohne Upcasting-Pfad) beim Lesen des Logs überspringen —
-`ReadChangedStreamsAsync` ohne Tombstone-Streams, `ReadStreamAsync` ohne Tombstones; dazu ein Boot-Hinweis, wenn ein Poll-Durchlauf scheitert.
+Keine offenen P0-Befunde (G-1 und G-7 erledigt in Phase 1 des Plans Garantien und Durchsatz, §13.6).
 
 ### P1
 
-**G-2 · Inbox-Fenster und Emittenten-Poll** (früher P2-4). Die Inbox je Aggregat merkt sich die letzten `Schreibpfad.InboxGrenze` (Standard
-10 000) CommandIds, FIFO (`BoundedInbox`, auch im Snapshot). Der Poll-Pfad eines Emittenten liest bewusst ab Version 0 (`ProjectionAdapter`)
-und gibt alle Commands erneut aus. Ist ein Ziel-Aggregat so heiß, dass eine alte CommandId aus dem Fenster gefallen ist, wirkt der alte
-Command erneut. *Empfehlung:* Emittenten-Poll ab dem Cursor statt ab 0; Inbox als durable Seitentabelle statt Fenster im Stream.
+**G-2 · Inbox-Fenster** (früher P2-4). Die Inbox je Aggregat merkt sich die letzten `Schreibpfad.InboxGrenze` (Standard 10 000)
+CommandIds, FIFO (`BoundedInbox`, auch im Snapshot). Kommt eine CommandId erneut, nachdem sie aus dem Fenster gefallen ist, wirkt der Command
+erneut. Den häufigsten Auslöser — der Poll eines Emittenten gab ab Version 0 alles erneut aus — hat Phase 1 beseitigt (Emittenten-Cursor, §13.6);
+offen bleibt das Fenster selbst (Wiederholung eines Clients oder eines Dirigenten nach mehr als 10 000 fremden Commands am selben Aggregat).
+Test: PD `SchreibGarantieTests.Eine_alte_CommandId_jenseits_der_Inbox_Grenze…` (Skip G-2). *Empfehlung:* Inbox als durable Seitentabelle
+statt Fenster im Stream (Plan Phase 4).
 
 **G-3 · Append-Konflikt im Aggregat-Actor.** Wirft der Append (Versionskonflikt durch eine zweite Aktivierung, oder ein Commit, dessen
 Quittung verloren ging und dessen Einzel-Wiederholung im `BatchingEventAppender` dann kollidiert), landet das im äußeren `catch` von
@@ -137,16 +121,6 @@ Checkpoint“ und nur nachhängende Streams wecken; ein gemeinsamer, seitenweise
 **PF-4 · Prozess-Poll und Backstop.** `ProzessManagerWiring` liest jeden geänderten Stream ab Version 0 und routet jedes passende historische
 Event erneut, obwohl `ReadChangedStreamsAsync` die neuen Events schon geladen hat; der Backstop weckt alle 15 s alle offenen Vorgänge, auf jedem
 Knoten. *Empfehlung:* die geladenen Events direkt routen; Fälligkeits-Index für Zeitlimits (zusammen mit W11-2); Lease im Cluster.
-
-**PF-9 · Retry-Sturm unter Überlast** (gefunden mit dem E2E-Treiber, 2026-10-15). Nach jedem Send weckt sich der Prozess-Manager selbst
-(`DetachedProzessSend`), auch nach einem Timeout (5 s); der Fold sieht den Schritt offen und feuert denselben Command erneut — ohne Backoff;
-der Backstop weckt alle 15 s zusätzlich alle offenen Vorgänge. Staut sich ein heißes Ziel-Aggregat, vervielfachen die Wiederholungen die
-Last, statt sie abzubauen: ein Probelauf von S3 (500 Teile auf einen Sammelvorgang, 64 Abschlüsse gleichzeitig) erzeugte in wenigen Minuten
-34 550 Timeouts von `MeldeTeilFertig` und je Vorgang Hunderte gescheiterte Selbst-Weckungen, der Sammelvorgang kam nicht zu Ende. Die
-Wirkung blieb dabei genau einmal (die Inbox verwirft die Wiederholungen) — verletzt ist die Lebendigkeit unter Überlast. Die Messung fährt
-deshalb offene Last mit Abbruch bei p99 > 2 s (§0.1 des Plans) und erreicht diesen Zustand nicht. *Empfehlung:* nach einem Timeout keine
-sofortige Selbst-Weckung, sondern Wiederholung mit Backoff je Vorgang; offene Sends je Ziel-Aggregat begrenzen. Phase 1 (abgewartete Emits mit
-Ausgang) und Phase 5 (Backstop nur für Fällige) berühren den Mechanismus; dort mitlösen.
 
 **PF-5 · Keine Passivierung.** Kein Actor stoppt bei Leerlauf (kein `ReceiveTimeout`): Aggregate, Adapter je (Projektion, Stream) und
 Prozess-Manager bleiben bis zum Shutdown im Speicher; im Dauerbetrieb wächst der Speicher mit allem, was je aktiviert wurde. Verschärft G-3.
@@ -217,9 +191,6 @@ Reader aus den Signaturen generiert, pytest-Vorlage je Python-Basis), Kartenwand
 **P1-2 · Transport-Sicherheit.** gRPC ist h2c ohne TLS, Blazor und Python verbinden unverschlüsselt. Authentifizierung über Akteur-Token,
 Akteur-Tor und Vertrag ∩ Token ist da; die Prod-Umgebung hat aber keine `Identitaeten` (Tor offen), der Quell-Webhook hat kein Tor, eine Anmeldung
 je Person fehlt. *Empfehlung:* TLS (h2) bzw. mTLS, Identitäten für Prod, Tor am Webhook.
-
-**P1-6 · `CancellationToken.None` im generierten Pull-Emit-Pfad** (`PullPathGenerator.cs:238`). Gebunden nur durch die interne Frist des
-Emitters; CQRS021 greift im Generat nicht. *Empfehlung:* gebundenen Token durchreichen.
 
 **P1-7 · Deploy-Skripte veraltet.** `deploy-linux/start-server.sh`, `deploy/deploy.sh`, `deploy/deploy_clients.sh`, `deploy/cqrs-blazor.env` und
 `deploy-windows/start.ps1` starten die Hosts ohne `--umgebung`/`CQRS_UMGEBUNG` (Startfehler) und setzen alte Schlüssel (`Pipeline__WatchPath`,
@@ -319,9 +290,8 @@ Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
 
 ## 13.4 Korrektheit vs. Reifegrad
 
-Bekannte aktive Korrektheits-Bugs: **G-1** (Fristverlust), **G-7** (ein gescheiterter Append legt den Poll still); **G-2** bis **G-4** brechen eine Garantie unter Last bzw. im Cluster, **G-5** ist latent;
-**PF-9** verletzt die Lebendigkeit unter Überlast (die Wirkung bleibt genau einmal). Jede G-Lücke hat seit Phase 0 einen Test, der sie zeigt
-(Skip `G-n offen`, [11](11-garantien.md) §11.13).
+Keine bekannten aktiven Korrektheits-Bugs mehr (G-1 und G-7 erledigt, §13.6). **G-2** (Inbox-Fenster) bis **G-4** brechen eine Garantie unter
+Last bzw. im Cluster, **G-5** ist latent. Jede offene G-Lücke hat einen Test, der sie zeigt (Skip `G-n offen`, [11](11-garantien.md) §11.13).
 Korrektheitsnah sind außerdem: **LLM-1** (vom LLM
 geschriebene Logik nur auf „baut“ geprüft), **W10-1** (möglicher Hash-Unterschied zwischen Python-Basis und Server beim Handshake), **W2-1** (vom Client gesetztes Cluster-Kind) und **WZ-1** (Prüfungen, die grün sind, ohne es zu beweisen). Alles andere ist Reifegrad,
 Allgemeingültigkeit oder Hygiene.
@@ -339,10 +309,10 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 - **Tor am Webhook** einer Quelle (Token → Akteur) und Identitäten für Prod (P1-2).
 
 0. **G und PF** (Garantie-Lücken und ihre Kosten) laufen als eigener Strang nach [plan-garantien-und-durchsatz.md](plan-garantien-und-durchsatz.md):
-   Phase 0 Abgleich und E2E-Messung, 1 Emit-Ausgang und Emittenten-Cursor (G-1, G-2, P1-6), 2 Actor-Lebenszyklus (G-3, PF-5), 3 Batch-Konsum (PF-1, PF-2,
+   Phase 0 Abgleich und E2E-Messung, 1 Emit-Ausgang und Emittenten-Cursor (G-1, G-2 Emittent, G-7, P1-6, PF-9), 2 Actor-Lebenszyklus (G-3, PF-5), 3 Batch-Konsum (PF-1, PF-2,
    G-4), 4 Inbox als Tabelle (G-2, PF-3), 5 Prozess-Poll (PF-4), 6 Rest. Ein Agent setzt ihn allein um; die Schritte 1–10 unten ruhen so lange.
-   Gemessen wird nach jeder Phase Ende-zu-Ende an den realen Domänen (Plan §0.1). Stand: Phase 0 (Messaufbau `scripts/vermessung-e2e.sh`,
-   Garantie-Matrix und Garantie-Suite, Lücken als Skip-Tests) — Baseline und Haltepunkt (a) stehen aus.
+   Gemessen wird nach jeder Phase Ende-zu-Ende an den realen Domänen (Plan §0.1). Stand: Phase 0 und Phase 1 (Emit-Ausgang, Emittenten-Cursor,
+   G-1, G-7, P1-6, PF-9) fertig; Stand und Messung im Plan §8.
 1. ~~WB-2/WB-3~~ Sicherheitsnetz steht (2026-10-15): ⟳-Abnahmetest inkl. „▶ Worker“ und Gate „frischer Checkout baut“ (§13.6).
 2. ~~W11-1 (Schreibwege)/WB-1~~ je Absicht ein Weg (2026-10-15, §13.6).
 3. **LLM-1** 🤖 fachlich prüfen: neue Rolle `<Wurzel>.Beispiele` (Strukturtabelle, Lageart, CQRS098), Beispiele an der Karte (Gegeben/Wenn/Dann)
@@ -360,6 +330,22 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **Emit-Ausgang und Emittenten-Cursor (früher G-1, G-7, P1-6, PF-9 und der Emittenten-Anteil von G-2; Plan Garantien und Durchsatz,
+  Phase 1, 2026-10-15):**
+  - `CommandEmitter.EmitAsync` liefert einen `EmitAusgang` (zugestellt, abgelehnt, unbekannt) statt Timeouts zu verschlucken; keine Ausnahme
+    verlässt den Emitter. `CommandResult.Abgelehnt` trennt die durable fachliche Ablehnung vom technischen Fehler.
+  - **G-1:** `FristScheduler.TickAsync` entfernt eine Frist nur bei entschiedenem Ausgang. P `FristGarantieTests` ohne Skip.
+  - **G-2 (Emittent):** Signal und Poll eines Emittenten lesen ab dem Cursor; die Commands eines Tails gehen parallel hinaus
+    (`EmitAusgaenge`) und werden gemeinsam abgewartet, der Cursor rückt nur nach bestätigtem Emit vor; „nicht aufgeholt“ hält den Poll
+    (`WakeAck.Aufgeholt`). `Wake.VomPoll` und `DetachedEmit` sind entfallen. P `KonsumGarantieTests.Ein_nicht_zugestellter_Emit…` ohne Skip,
+    PD `AblaufGarantieTests.Absturz_zwischen_Emit_und_Cursor…` neu. Offen bleibt das Inbox-Fenster selbst (G-2, Phase 4).
+  - **P1-6:** der generierte Pull-Emit-Pfad (`PullPathGenerator`, `PipelineActorGenerator`) reicht das Token der Weckung durch.
+  - **G-7:** `MartenEventStore` meldet Tombstone-Streams nicht als geändert und liest keine Tombstones; die Spur zeigt sie nicht; ein
+    scheiternder Poll-Durchlauf wird als Warnung gemeldet. I `GarantiePostgresTests.Ein_gescheiterter_Append…` ohne Skip (ohne den Filter rot
+    gesehen).
+  - **PF-9:** `DetachedProzessSend` je Manager sperrt einen Vorgang, solange sein Send läuft oder sein Backoff wartet, und weckt nach
+    „unbekannt“ erst nach Backoff (1 s … 30 s); `EmitDrossel` begrenzt die Sends je Ziel-Aggregat (8 je Knoten). P `EmitGarantieTests`.
 
 - **Je Absicht ein Weg in der Werkbank (früher Teil von W11-1 und WB-1, 2026-10-15):**
   - 🤖 schreibt über die Rumpf-Geste wie ✎ (`GestenDienst.RumpfAsync` bzw. `PythonRumpfAsync` mit Prompt-Zeile; Ort aus dem Slot-Anker über

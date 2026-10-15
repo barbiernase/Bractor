@@ -248,6 +248,7 @@ public abstract class AggregateActorBase<TState> : IActor
                     context.Respond(new CommandResult
                     {
                         Success = false,
+                        Abgelehnt = true,
                         AggregateId = _id,
                         ErrorMessage = "Vorgang bereits abgelehnt (Framework-Inbox)",
                         NewVersion = _state.Version
@@ -345,6 +346,7 @@ public abstract class AggregateActorBase<TState> : IActor
                 context.Respond(new CommandResult
                 {
                     Success = false,
+                    Abgelehnt = true,
                     AggregateId = _id,
                     RejectionEvent = rejection,
                     ErrorMessage = rejection.ToString()

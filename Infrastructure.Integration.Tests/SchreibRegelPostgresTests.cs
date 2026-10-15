@@ -41,8 +41,8 @@ public class SchreibRegelPostgresTests
         using var treffpunkt = new Barrier(2);
         var a = new SondenStore(_fx.Store, treffpunkt);
         var b = new SondenStore(_fx.Store, treffpunkt);
-        var adapterA = new ProjectionAdapter(es, a, null, proj, (_, _) => a.Erhoehe(zaehler));
-        var adapterB = new ProjectionAdapter(es, b, null, proj, (_, _) => b.Erhoehe(zaehler));
+        var adapterA = new ProjectionAdapter(es, a, null, proj, (_, _, _) => a.Erhoehe(zaehler));
+        var adapterB = new ProjectionAdapter(es, b, null, proj, (_, _, _) => b.Erhoehe(zaehler));
 
         // Der erste Versuch kollidiert (Barriere), der Verlierer wiederholt ohne Barriere — keine Ausnahme nach außen.
         await Task.WhenAll(Task.Run(() => adapterA.WakeAsync(sa)), Task.Run(() => adapterB.WakeAsync(sb)));

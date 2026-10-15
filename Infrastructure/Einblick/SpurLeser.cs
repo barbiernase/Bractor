@@ -71,13 +71,15 @@ public sealed class SpurLeser(string verbindung, string schema)
     /// <summary>Alle Einträge eines Vorgangs (einer <c>CorrelationId</c>) samt Auslöser seines Prozesses (die Wurzel), aufsteigend.</summary>
     public async Task<IReadOnlyList<SpurEintrag>> VorgangAsync(string korrelation, CancellationToken ct)
         => await LiesAsync($"""
-            {Korrelation} = @k or seq_id in (
+            ({Korrelation} = @k or seq_id in (
               select a.seq_id from "{Schema}".mt_events g join "{Schema}".mt_events a
                 on a.stream_id::text = g.data->>'AuslöserStream' and a.version::text = g.data->>'AuslöserVersion'
-              where g.stream_id::text = @k and starts_with(g.mt_dotnet_type, @g))
+              where g.stream_id::text = @k and starts_with(g.mt_dotnet_type, @g)))
             order by seq_id limit 5000
             """, c => { c.Parameters.AddWithValue("k", korrelation); c.Parameters.AddWithValue("g", typeof(Prozess.ProzessGestartet).FullName + ","); }, ct);
 
+    /// <param name="wo">Bedingung samt <c>order by</c>/<c>limit</c>; ein <c>or</c> auf oberster Ebene klammert der Aufrufer (davor steht ein
+    /// <c>and</c>: Tombstones eines gescheiterten Appends sind keine Log-Einträge, G-7).</param>
     private async Task<IReadOnlyList<SpurEintrag>> LiesAsync(string wo, Action<NpgsqlCommand> parameter, CancellationToken ct)
     {
         await using var conn = await OeffneAsync(ct);
@@ -87,7 +89,7 @@ public sealed class SpurLeser(string verbindung, string schema)
                    headers->>'akteur', headers->>'{Abstractions.Spur.UrsacheHeader}', headers->>'{Abstractions.Spur.WirkerHeader}',
                    headers->>'{Abstractions.Spur.StandHeader}', headers->>'aggregate_type', mt_dotnet_type, data::text,
                    headers->>'{Abstractions.Spur.UeberHeader}'
-            from "{Schema}".mt_events where {wo}
+            from "{Schema}".mt_events where type <> 'tombstone' and {wo}
             """;
         parameter(cmd);
         var aus = new List<SpurEintrag>();

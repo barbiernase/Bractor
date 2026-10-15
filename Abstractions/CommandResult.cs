@@ -27,4 +27,11 @@ public class CommandResult : IWireMessage
     ///   case ArtikelNichtGefunden    → ShowError("Artikel existiert nicht")
     /// </summary>
     public IEvent? RejectionEvent { get; set; }
+
+    /// <summary>
+    /// Fachlich abgelehnt — auch als idempotente Wiederholung einer schon abgelehnten CommandId (dann ohne
+    /// <see cref="RejectionEvent"/>). Trennt die entschiedene Ablehnung vom technischen Fehler (<see cref="ErrorMessage"/>
+    /// ohne <see cref="Abgelehnt"/>), dessen Wirkung unbekannt ist (<c>EmitAusgang</c>).
+    /// </summary>
+    public bool Abgelehnt { get; set; }
 }
