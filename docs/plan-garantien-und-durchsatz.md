@@ -94,7 +94,7 @@ trägt die Konsumseite heute etwa 8 200 / K Events/s (K = replaybare Projektione
 |---|---|---|---|---|---|
 | 0 | Abgleich, E2E-Messung, Garantie-Nachweis | – | 7–9 PT | – | Baseline S1–S5 gespeichert; Garantie-Suite grün, Lücken als Skip-Tests |
 | 1 | Emit-Ausgang und Emittenten-Cursor ✅ | G-1, G-2 (Emittent), G-7, P1-6, PF-9 | 5–7 PT | 0 | S5: Kosten der Reaktion unabhängig von der Stream-Länge |
-| 2 | Actor-Lebenszyklus | G-3, PF-5 | 3–5 PT | 0 | RSS nach den Höchstlast-Blöcken fällt im Leerlauf zurück (Passivierung) |
+| 2 | Actor-Lebenszyklus ✅ | G-3, PF-5 | 3–5 PT | 0 | RSS nach den Höchstlast-Blöcken fällt im Leerlauf zurück (Passivierung) |
 | 3 | Batch-Konsum | PF-1, PF-2, G-4 | 15–25 PT | 1, 2 | Durchsatz bis „alles sichtbar“ S1/S5 deutlich über Baseline (Ziel nach E5) |
 | 4 | Inbox als Tabelle | G-2 (Inbox), PF-3 | 6–9 PT | 2, E1 | S3 heiß: genau einmal, mehr Teile/s als nach Phase 3 |
 | 5 | Prozess-Poll und Backstop | PF-4 (W11-2-Anteil) | 3–5 PT | 1 | S3/S5: Zeit je Teil konstant über N; Leerlauf mit offenen Vorgängen nahe 0 Queries/s |
@@ -281,6 +281,29 @@ anstehen.
   sichtbar); Reaktion S5-64 p50 0,63 ×; Queries je Vorgang 0,88–1,05 ×. Keine Regression in S1–S4. Leerlauf L1 schlechter (Erstweckungen der
   S3-Streams durch den Heil-Poll, PF-2; docs/12 §12.5). **Abnahme: ja.**
 
+**Phase 2** (abgeschlossen, 2026-10-15, Code `e47fdeb`, Boot-Guard `d7941e5`, Treiber `860cb7a`):
+- *Umgesetzt:* G-3 — `AppendeAsync` im Aggregat-Actor (frisch rehydrieren, entschiedenen Ausgang quittieren, sonst einmal neu entscheiden);
+  PF-5 — Passivierung über `ReceiveTimeout` (Aggregat, Adapter, Prozess-Manager), Umgebungs-Abschnitt `Lebenszyklus` (E7: 600/120/600 s),
+  Boot-Guard Prozess-Manager ≥ 60 s; aktive Actors in `/monitoring/metrics` und `/health`.
+- *Lücken-Tests ohne Skip, grün:* PD `SchreibGarantieTests.Nach_einem_Versionskonflikt…`, `…Ein_mehrdeutiger_Commit…` (G-3). Neu: PD
+  `LebenszyklusGarantieTests`, P `PassivierungTests`.
+- *Messung:* `vermessung/ergebnisse/2026-10-15_0745_4caa176_phase-2` (gültig, grün) und `…_1119_860cb7a_phase-2-stoerung` (gültig, grün,
+  29 609 Vorgänge). S1–S4 0,92–1,07 × Phase 1; S5 im Gesamtlauf 0,81–0,89 ×, allein gemessen (A-B-B-A mit/ohne Passivierung) auf oder über
+  Phase 1 — die Passivierung kostet keinen Durchsatz. Abgelegt, aber nicht gewertet: Läufe mit 10 s Passivierung (`…_0646_…`, Störungslauf
+  `…_0706_…` rot: Todesspirale), Kontroll-Läufe unter Wärme (`…_0650_…`, `…_0654_…`), ein Lauf unter Steam-Update (`…_0723_…`), ein
+  Störungslauf, der nur die feste Abbaufrist riss (`…_0804_…`).
+- *E5 RSS:* nicht erreicht und im 5-min-Lauf nicht messbar (L1 49–55 %, L5 84–94 % des Höchststands): mit 600 s passiviert im 15-s-Fenster
+  nichts, und die Leerlauf-Blöcke sind bis Phase 3/5 nicht leer (PF-2, PF-4). Neu bewerten nach Phase 3 und 5. **Abnahme: ja** (Tests,
+  Garantien, E2E ohne Regression); das RSS-Ziel ist auf Phase 3/5 verschoben (Vorschlag, Tobi bestätigt).
+
+**Plan-Änderungen aus Phase 2:**
+1. Die Leerlauf-Blöcke messen zusätzlich RSS am Fensterende, RSS-Höchststand des Laufs und aktive Actors; das E5-Ziel „RSS < 50 %“ wird nach
+   Phase 3/5 geprüft (dann ist der Leerlauf leer); die Vermessung bleibt bei den E7-Standardwerten.
+2. Der Störungslauf baut nach Fortschritt ab (höchstens 10 min, Hänger = 60 s ohne fertigen Vorgang) statt mit fester Frist von 3 min; die
+   Gleichheits-Prüfungen von S1 und S4 sind rückstandsfest.
+3. Boot-Guard: Leerlauf des Prozess-Managers 0 oder ≥ 60 s (4 × Backstop).
+4. G-6 nach dem Code korrigiert (docs/13): der Pfad „Fehler nach dem Append“ ist nur über einen werfenden Applier erreichbar.
+
 **Plan-Änderungen aus Phase 1:**
 1. G-7 und PF-9 gehören zu Phase 1 (Tobi); Phase 5 bleibt nur PF-4. Die Drossel je Ziel sitzt im Emitter (ein Weg für alle Aufrufer), der Backoff
    im Sende-Takt des Dirigenten (`DetachedProzessSend`), nicht im `ProzessManager` — dessen Dispatch-Naht und alle Prüfstand-Fakes blieben gleich.
@@ -305,19 +328,15 @@ anstehen.
 7. `--probe` (verkürzter Funktionstest des Treibers) schreibt nicht nach `vermessung/ergebnisse/` — Probeläufe während der Entwicklung des
    Treibers sind keine Messläufe.
 
-## 9 · Übergabe an den nächsten Agenten (Stand 2026-10-15, nach Phase 1)
+## 9 · Übergabe an den nächsten Agenten (Stand 2026-10-15, nach Phase 2)
 
-- **Wo es steht:** Phase 0 und Phase 1 sind fertig und abgenommen (§8). Haltepunkt (a) ist erledigt (E5 bestätigt, G-7 und PF-9 in Phase 1).
-- **Danach:** Phase 2 nach §3 (G-3 Actor-Lebenszyklus, PF-5 Passivierung, E7 mit den Vorschlagswerten). Lücken-Tests der Phase: PD
-  `SchreibGarantieTests.Nach_einem_Versionskonflikt…`, `…Ein_mehrdeutiger_Commit…` (Skip G-3). Dann Phase 3 — **Haltepunkt (b):** den Entwurf
-  des Batch-Konsums (Phase 3.1, in docs/04) Tobi zeigen, bevor er gebaut wird.
-- **Messen je Phase:** `vermessung/README.md` (Abschnitt „Wiederholen“) — Höchstlast in ≈ 5 min und Störungslauf in ≈ 3 min, Spalte „Phase n“,
-  Tabelle per Skript. Auf einem sauberen, committeten Arbeitsbaum messen (erst Code committen, dann messen, dann Ergebnis committen). Keine
-  Langläufe; jeden Lauf über 15 min vorher mit Dauer ankündigen und fragen.
-- **Vor jedem Commit:** `dotnet build`; Prüfstand; Garantie-Suite (`--filter Kategorie=Garantie` auf Prüfstand, dann nacheinander Integration
-  und Prüfdomäne); die betroffenen Integrations-Suiten; `dotnet run --project GraphExtractor -- --check`; `./codegen.sh --check`; bei
-  Generator-Änderungen das Generat inspizieren (Memory „Generatoren-Fallen“). Commits ohne Co-Authored-By; nicht pushen ohne Tobis Wort.
-- **Fallen:** Nach einer Gegenprobe („Fix kurz raus, Test rot sehen“) jedes Testprojekt neu bauen — `--no-build` nimmt sonst das sabotierte
-  `Infrastructure.dll` aus dem eigenen `bin`. `pg_stat_database` zählt verzögert, gemessen wird über `pg_stat_statements` (`track = top`). Der
-  Leerlauf L1 enthält die Heil-Poll-Erstweckungen (§8, Phase 1). Die Sim-DB der Werkbank und `pruef_e2e` enthalten alte Tombstones — seit G-7
-  harmlos.
+- **Wo es steht:** Phase 0, 1 und 2 sind fertig und abgenommen (§8). Offen am Rand: Tobi bestätigt, das E5-RSS-Ziel nach Phase 3/5 zu prüfen.
+- **Danach:** Phase 3 nach §3 — **Haltepunkt (b):** zuerst den Entwurf des Batch-Konsums (Phase 3.1) in docs/04 schreiben und Tobi zeigen,
+  bevor er gebaut wird. Lücken-Test der Phase: I `GarantiePostgresTests.Zwei_Aktivierungen…` (Skip G-4).
+- **Messen je Phase:** `vermessung/README.md` (Abschnitt „Wiederholen“) — Höchstlast ≈ 5 min, Störungslauf ≈ 3–6 min, Spalte „Phase n“, Tabelle
+  per Skript. Code committen, dann messen, dann Ergebnis committen. Nicht auf Abkühlung oder Fremdlast warten (Tobi), Fremdlast im Bericht nennen.
+- **Vor jedem Commit:** `dotnet build`; Prüfstand; Garantie-Suite (Prüfstand, dann nacheinander Integration und Prüfdomäne); betroffene
+  Integrations-Suiten; `GraphExtractor -- --check`; `./codegen.sh --check`; bei Generator-Änderungen das Generat inspizieren; bei Umgebungs- oder
+  Editor-Änderungen die Werkbank-Abnahme. Commits ohne Co-Authored-By; nicht pushen ohne Tobis Wort.
+- **Fallen:** Nach einer Gegenprobe mit sabotiertem Fix alle Testprojekte neu bauen. Läufe direkt hintereinander verlieren auf dem MacBook Air
+  Durchsatz (Wärme) — Vergleiche lieber A-B-B-A. Die Leerlauf-Blöcke enthalten die Heil-Poll- und Prozess-Poll-Arbeit (PF-2, PF-4).
