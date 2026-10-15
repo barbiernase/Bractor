@@ -237,7 +237,10 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
             _ => throw new InvalidOperationException($"{c.GetType().Name} legt kein Aggregat an"),
         };
 
-        /// <summary>Legt ein Aggregat an (Seed; der Auslöser trägt die Korrelation des Vorgangs wie im Cluster).</summary>
+        /// <summary>
+        /// Legt ein Aggregat an (Seed). Wie im Cluster trägt nur der Auslöser die Korrelation des Vorgangs; die übrigen Aggregate entstanden in
+        /// eigenen Vorgängen — ihre Streams enthalten vor dem ersten Feuern also nichts von diesem.
+        /// </summary>
         public async Task AnlegenAsync(ICommand anlegen)
         {
             var s = Neu(anlegen);
@@ -245,7 +248,8 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
             var h = _fabrik.CreateHandler(s);
             _aggregate[s.Id] = (s, h, new HashSet<Guid>());
             var evs = h.HandleCommand(anlegen).ToList();
-            await _store.AppendEventsAsync(s.Id, 0, evs, Korrelation.ToString(), Guid.NewGuid().ToString(), Typ(anlegen));
+            var korrelation = anlegen is StarteAuftrag or StarteVerteilung ? Korrelation : Guid.NewGuid();
+            await _store.AppendEventsAsync(s.Id, 0, evs, korrelation.ToString(), Guid.NewGuid().ToString(), Typ(anlegen));
             foreach (var e in evs) { h.ApplyEvent(e); s.Version++; }
         }
 
