@@ -27,7 +27,7 @@ public static class BatchHilfe
     /// </summary>
     public static async Task<long> KopfAsync(IDocumentStore store)
     {
-        await store.Storage.Database.EnsureStorageExistsAsync(typeof(Marten.Events.IEvent));
+        await store.Storage.Database.EnsureStorageExistsAsync(typeof(JasperFx.Events.IEvent));
         await using var s = store.QuerySession();
         var r = await s.QueryAsync<long>($"select coalesce(max(seq_id), 0) from {store.Options.Events.DatabaseSchemaName}.mt_events");
         return r.Count > 0 ? r[0] : 0;
