@@ -152,6 +152,7 @@ public sealed class KonsumRueckstand(IDocumentStore marten, IEnumerable<BatchReg
     public async Task<IReadOnlyList<KonsumStand>> ErfasseAsync(CancellationToken ct)
     {
         var ergebnis = new List<KonsumStand>();
+        await Infrastructure.Persistence.MartenEventStore.EventTabellenAsync(marten, ct);
         await using var s = marten.QuerySession();
         var schema = marten.Options.Events.DatabaseSchemaName;
         foreach (var reg in registrierungen)

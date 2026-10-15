@@ -251,9 +251,17 @@ Stream der Korrelation (`ProzessGestartet`, `SchrittGescheitert`, `SchrittUmgele
 
 **Start und Zustellung** (`KorrelationsRouter`, `ProzessManagerWiring.cs`): der Router abonniert die Signale aller beteiligten Events. Ein
 Auslöser-Event startet einen Vorgang mit deterministischer Korrelation `ProzessId.Für(Name, Stream, Version)`; ein Ziel-Event trägt die
-Korrelation in seinen Metadaten (vom Manager beim Feuern gesetzt) und weckt daraus. Der `ProzessManagerStartupService` pollt zusätzlich nach
-Korrelation (30 s) und betreibt den **§3-Backstop** (15 s): er scannt den durablen `IProzessOffenIndex` und weckt jeden offenen Vorgang
-(bounded 10 s) — das Netz für verlorene Weckungen.
+Korrelation in seinen Metadaten (vom Manager beim Feuern gesetzt) und weckt daraus. Der `ProzessManagerStartupService` betreibt dazu:
+- den **Prozess-Poll** (`ProzessPoll`, 30 s, PF-4): er liest das Log seitenweise ab seiner Hochwassermarke (`ReadPartitionAsync`, eine
+  Partition, 500 Events) und routet die geladenen Events direkt (`ProzessPollFilter`) — ein Auslöser startet seinen Vorgang nur, wenn es ihn
+  noch nicht gibt oder er offen ist (`StreamsVorhandenAsync`, eine Abfrage je Seite), jedes andere Event weckt nur über die Korrelation eines
+  offenen Vorgangs. Die Weckungen sind bestätigt (WakeAck, 10 s, parallel bis 32); die Marke rückt nur bis vor die erste unbestätigte (G-8) und
+  wird je Seite gespeichert;
+- den **§3-Backstop** über den durablen `IProzessOffenIndex`: jede Sekunde weckt er die Vorgänge mit fälliger **Frist** (Zeitlimit,
+  Warte-Knoten, s. u.), alle 15 s gleicht er den **Heil-Plan** (`Heilplan`, im Speicher des Knotens) mit den offenen Vorgängen ab: eine
+  Heil-Weckung nach 15 s Stille, danach mit verdoppeltem Abstand bis 1 h; jede Weckung durch Signal oder Poll setzt zurück. Das ist das Netz für
+  verlorene Weckungen ohne Ziel-Event (unbekannter Emit-Ausgang, Absturz). Je Vorgang läuft höchstens eine Backstop-Weckung zugleich (bounded
+  10 s). Im Cluster betreibt jeder Knoten seinen Backstop (eine Lease fehlt noch, docs/13 PF-4).
 
 **Fold.** Je Ziel-Stream ab `StreamCursor[s]+1` lesen, in `MarkingKompakt` einarbeiten, ein Fixpunkt zieht die Kandidaten. Drei getrennte
 Ergebnis-Achsen je Vorgang:
@@ -277,8 +285,9 @@ Ausgang sieht (das Ergebnis der letzten Regel ist Auslöser keiner Regel); nach 
 höchstens 30 s, gestreut). Solange der Send eines Vorgangs läuft oder sein Backoff wartet, sendet keine andere Weckung (Signal, Poll, Backstop)
 ihn erneut. Mit der Drossel je Ziel (§4.4) baut ein überlastetes Aggregat seinen Rückstau ab, statt dass Wiederholungen ihn vervielfachen.
 
-**Passivierung** (PF-5): ein Manager ohne Nachricht stoppt nach `Lebenszyklus.ProzessManagerLeerlaufSekunden` (Standard 600). Offene Vorgänge
-weckt der Backstop alle 15 s und hält sie damit aktiv; beendete fallen heraus. Der Kaltstart liest den Marking-Cursor bzw. faltet voll.
+**Passivierung** (PF-5): ein Manager ohne Nachricht stoppt nach `Lebenszyklus.ProzessManagerLeerlaufSekunden` (Standard 600). Ein still
+wartender Vorgang passiviert; ihn wecken seine Frist, ein Event oder die nächste Heil-Weckung. Der Kaltstart liest den Marking-Cursor bzw. faltet
+voll.
 
 **Marking-Cursor (P5b).** `MarkingKompakt` (`Abstractions/Prozess/ProzessMarking.cs`) hält je Ziel-Stream einen `StreamCursor` und verdichtete
 Vorgangs-Marken statt roher Tokens:
@@ -288,9 +297,13 @@ Vorgangs-Marken statt roher Tokens:
 - **Kaltstart oder geänderter `RegelHash` (`ProzessRegelHash`) → Voll-Fold ab 0** (Invariante 1). Der Cache ist nicht-autoritativ; ein
   veralteter Stand kann höchstens erneut feuern, was an der Empfänger-Inbox verpufft.
 
-**Zeitlimit.** Ein offener Aufruf, dessen Limit seit seiner Aktivierung (jüngstes gematchtes Event, DB-Zeit aus dem Log) gegen `IDbClock`
-abgelaufen ist, scheitert wie eine Ablehnung. Es gibt keinen eigenen Timer: entdeckt wird der Ablauf erst bei der nächsten Weckung, im
-Ruhezustand also durch den Backstop — Genauigkeit 15 s (docs/13 W11-2).
+**Zeitlimit und Frist.** Ein offener Aufruf, dessen Limit seit seiner Aktivierung (jüngstes gematchtes Event, DB-Zeit aus dem Log) gegen
+`IDbClock` abgelaufen ist, scheitert wie eine Ablehnung. Damit der Ablauf auch im Ruhezustand entdeckt wird, schreibt der Manager die **Frist**
+in den Offen-Index (`ProzessOffen.Frist`, PF-4): das früheste offene Zeitlimit, für einen offenen Warte-Knoten spätestens in 15 s (er liest
+seinen Strom nur bei einer Weckung). Geschrieben wird nur, wenn sie früher liegt als die zuletzt geschriebene — eine spätere bleibt liegen, die
+frühere weckt einmal umsonst und schreibt dann die richtige; weckt der Backstop wegen der Frist (`ProzessWake.FristFaellig`), schreibt der Manager
+immer neu (auch `null`), und ein beendeter Vorgang räumt dabei seinen liegengebliebenen Eintrag ab. Genauigkeit: eine Sekunde (Takt des
+Backstops), durabel über Neustarts.
 
 **Boot-Guards** (`ProzessManagerStartupService`): Azyklizität (`ProzessAzyklizität.PrüfeAlle`, gespeist aus `GeneratedCommandRouting.Produziert`
 und den Ergebnissen der Funktionen), Auslöser-Kollision zwischen Prozessen (fail-fast), jede gerufene Funktion ist gebunden

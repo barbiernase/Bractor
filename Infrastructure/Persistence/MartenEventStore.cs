@@ -263,10 +263,19 @@ public class MartenEventStore : IEventStoreRepository
     /// <c>get_byte(uuid_send(stream_id), 15) % P</c>, Typfilter über die Speicher-Diskriminatoren, ohne schon erledigte Sequenzen, geordnet
     /// nach Sequenz. In dieser Reihenfolge, damit jede Sequenz bis zur gesetzten, die je sichtbar wird, beim Lesen der Seite schon sichtbar ist.
     /// </summary>
+    /// <summary>
+    /// Rohes SQL löst Martens AutoCreate nicht aus: auf einer frischen Datenbank legt der erste rohe Leser die Event-Tabellen an. Marten merkt
+    /// sich das je Datenbank (danach ohne Abfrage); mit <c>AutoCreate.None</c> (Multi-Node-Member, das Schema legt der Migrator an) folgenlos.
+    /// Früher legte sie zufällig der Prozess-Poll an (er las über LINQ) — rohe Leser vor ihm scheiterten bis dahin.
+    /// </summary>
+    internal static ValueTask EventTabellenAsync(IDocumentStore store, CancellationToken ct)
+        => store.Storage.Database.EnsureStorageExistsAsync(typeof(JasperFx.Events.IEvent), ct);
+
     public async Task<PartitionsSeite> ReadPartitionAsync(
         long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit,
         CancellationToken ct)
     {
+        await EventTabellenAsync(_store, ct);
         await using var session = _store.LightweightSession();
 
         var juengste = await session.QueryAsync<long>(
@@ -298,6 +307,7 @@ public class MartenEventStore : IEventStoreRepository
     public async Task<IReadOnlyCollection<Guid>> StreamsVorhandenAsync(IReadOnlyCollection<Guid> streams, CancellationToken ct)
     {
         if (streams.Count == 0) return Array.Empty<Guid>();
+        await EventTabellenAsync(_store, ct);
         await using var session = _store.QuerySession();
         return await session.QueryAsync<Guid>(
             $"select id from {_store.Options.Events.DatabaseSchemaName}.mt_streams where id = any(?)", ct, streams.ToArray());
