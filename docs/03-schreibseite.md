@@ -138,6 +138,10 @@ nicht aus Namespaces (`CommandAggregateMapGenerator`).
   (die OCC, auch gegen eine gleichzeitige Transaktion: das `update` wartet auf die Zeilensperre und findet danach nichts), dann die Events
   mit `nextval` im Insert. Der Standard (`Rich`) las vorher außerhalb der Transaktion je Stream die Version, holte die Sequenzen ab und
   hinterließ bei einem gescheiterten Commit Tombstones (G-7).
+- **Beilagen** (`Abstractions/Beilage.cs`, `BeilagenSchreiber`): Framework-Buchhaltung, die ein Append in derselben Transaktion mitschreibt —
+  `Quittung` (Inbox, unten), `VorgangOffen`/`VorgangBeendet` (Eintrag des Prozess-Manager-Offen-Index, mit `ProzessGestartet` bzw.
+  `ProzessBeendet`, [04 §4.5](04-konsum-und-prozess-maschine.md)). Ein Weg für Einzel-Append und Group-Commit; die Quittungen eines Batches
+  gehen in eine Anweisung, die Dokumente als Operationen derselben Session.
 - **Inbox** (`InboxTabelle`): Tabelle `cqrs_inbox` im Event-Schema (`command_id` Primärschlüssel, `stream_id`, `abgelehnt`, `zeit` =
   `now()` der schreibenden Transaktion, BRIN-Index auf `zeit`), ein von Marten verwaltetes Schema-Objekt (`Storage.ExtendedSchemaObjects`).
   Trägt der Append eine `Quittung`, schreibt `QueueSqlCommand` sie in derselben Transaktion (Marten führt sie nach den Events aus); eine

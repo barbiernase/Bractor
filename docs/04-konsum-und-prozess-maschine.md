@@ -265,9 +265,10 @@ Stream der Korrelation (`ProzessGestartet`, `SchrittGescheitert`, `SchrittUmgele
 routet sie parallel (bis 32, `KorrelationsRouterActor`; zustandslos, Weckungen idempotent — PF-12). Ein Auslöser-Signal startet einen Vorgang mit
 deterministischer Korrelation `ProzessId.Für(Name, Stream, Version)`, ohne Read (der Signal-Typ nennt das Event, generierte Tabelle
 `Signale.EventToSignal`); ein Ziel-Event trägt die Korrelation in seinen Metadaten (vom Manager beim Feuern gesetzt) — der Router liest genau dieses
-Event (`ReadEventAsync`) und weckt daraus. Den **Offen-Index** schreibt der Manager vor dem `ProzessGestartet` und räumt ihn nach dem
-`ProzessBeendet` ab: er ist eine Obermenge der offenen Vorgänge (ein Abbruch zwischen Start und Eintrag ließ sonst Vorgänge liegen, die niemand
-weckte). Der `ProzessManagerStartupService` betreibt dazu:
+Event (`ReadEventAsync`) und weckt daraus — mit Stream und Version des Events als Quelle. Den **Offen-Index** schreibt der Manager als
+Beilage im Append des `ProzessGestartet` (`VorgangOffen`) und räumt ihn als Beilage im Append des `ProzessBeendet` ab (`VorgangBeendet`), je in
+einer Transaktion ([03 §3.3](03-schreibseite.md)): es gibt keinen gestarteten Vorgang ohne Eintrag (ein Abbruch zwischen Start und Eintrag ließ
+früher Vorgänge liegen, die niemand weckte). Der `ProzessManagerStartupService` betreibt dazu:
 - den **Prozess-Poll** (`ProzessPoll`, 30 s, PF-4): er liest das Log seitenweise ab seiner Hochwassermarke (`ReadPartitionAsync`, eine
   Partition, 500 Events) und routet die geladenen Events direkt (`ProzessPollFilter`) — ein Auslöser startet seinen Vorgang nur, wenn es ihn
   noch nicht gibt oder er offen ist (`StreamsVorhandenAsync`, eine Abfrage je Seite), jedes andere Event weckt nur über die Korrelation eines
@@ -308,11 +309,23 @@ voll.
 
 **Marking-Cursor (P5b).** `MarkingKompakt` (`Abstractions/Prozess/ProzessMarking.cs`) hält je Ziel-Stream einen `StreamCursor` und verdichtete
 Vorgangs-Marken statt roher Tokens:
-- ein HOT-Cache je Manager-Instanz trägt das Marking über die Weckungen einer Aktivierung;
-- **feuer-gerichtete Reads:** warm liest der Manager nur die seit dem letzten Fold befeuerten (und nie gesehenen) Ziel-Streams nach;
-- durabel (`IProzessMarkingStore`, Marten-Dokument `ProzessMarkingDoc`) nur gedrosselt, Standard alle 32 Weckungen;
-- **Kaltstart oder geänderter `RegelHash` (`ProzessRegelHash`) → Voll-Fold ab 0** (Invariante 1). Der Cache ist nicht-autoritativ; ein
-  veralteter Stand kann höchstens erneut feuern, was an der Empfänger-Inbox verpufft.
+- ein HOT-Cache je Manager-Instanz trägt das Marking über die Weckungen einer Aktivierung; ein Vorgang, der in ihr startet, beginnt sein Marking
+  im Start (Auslöser schon gelesen, kein Laden aus dem Store) und gilt als **frisch**: jeder Ziel-Stream, in den diese Aktivierung nie gefeuert
+  hat, ist sicher leer;
+- **gezielte Reads** (warm): weckt der Router wegen eines Events, liest der Manager nur dessen Stream — und gar nichts, wenn sein Cursor schon so
+  weit ist; nach einem Send bzw. einem Funktions-Ergebnis (`ProzessWake.Vorgang`) nur den Ziel-Stream — und gar nichts, wenn der Ausgang des
+  Vorgangs schon gefaltet ist; ohne Quelle die Streams, in die er gefeuert hat und deren Ergebnis noch aussteht (`dirty`). Ein gelesener
+  Ziel-Stream ohne eigenes Event gilt als gesehen (Cursor bis zur gelesenen Version) und wird nicht „auf Verdacht“ erneut gelesen. Dass dabei
+  nichts verloren geht, trägt das erneute Feuern: jede Weckung feuert den ersten offenen Command wieder (der Send-Takt verwirft das Duplikat) und
+  markiert damit seinen Ziel-Stream;
+- der Kopf-Zustand des eigenen Logs bleibt im Speicher und wird mit jedem eigenen Append fortgeschrieben (der Manager ist sein einziger Schreiber,
+  jeder Append trägt die erwartete Version); ein gescheiterter Append, ein `SchrittUmgeleitet` (seine Log-Zeit zählt) und jede Backstop-Weckung
+  lesen frisch;
+- durabel (`IProzessMarkingStore`, Marten-Dokument `ProzessMarkingDoc`) nur gedrosselt, Standard alle 32 Weckungen; gelöscht wird es mit dem Ende
+  nur, wenn es geschrieben oder geladen wurde;
+- **Kaltstart, Backstop oder geänderter `RegelHash` (`ProzessRegelHash`) → Voll-Fold ab 0** (Invariante 1). Der Cache ist nicht-autoritativ;
+  ein veralteter Stand kann höchstens erneut feuern, was an der Empfänger-Inbox verpufft. Den Beweis „gleiche Feuer-Entscheidung wie der
+  Voll-Fold“ führt `MarkingCursorAequivalenzTests` gegen echtes Marten, auch kalt, mit Router-Weckungen und mit verzögerter Ausführung.
 
 **Zeitlimit und Frist.** Ein offener Aufruf, dessen Limit seit seiner Aktivierung (jüngstes gematchtes Event, DB-Zeit aus dem Log) gegen
 `IDbClock` abgelaufen ist, scheitert wie eine Ablehnung. Damit der Ablauf auch im Ruhezustand entdeckt wird, schreibt der Manager die **Frist**

@@ -66,7 +66,7 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
                 foreach (var (ziel, vorgang) in ausgefuehrt) await mgr.WakeAsync(korrelation, default, quelle: ziel, vorgang: vorgang);
             else
                 await mgr.WakeAsync(korrelation, default);
-            if (++schutz > 10_000) throw new InvalidOperationException("Der Vorgang erreichte kein Terminal (Livelock?).");
+            if (++schutz > 1_000) throw new InvalidOperationException("Der Vorgang erreichte kein Terminal (Livelock?).");
         }
         var st = await mgr.LadeStatusAsync(korrelation, default);
         return new Lauf(welt.Feuerungen.ToList(), st.Beendet, st.Erfolg, store.Gelesen, store.Abfragen);
