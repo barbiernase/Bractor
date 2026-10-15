@@ -113,7 +113,7 @@ die Inbox-Tabelle (4) nach dem Batch-Konsum kommen.
 | E2 | Aufbewahrungs-Horizont der Inbox (Exactly-once gilt innerhalb dieses Horizonts) | 30 Tage, Umgebung `Schreibpfad.InboxHorizont` | Phase 4 |
 | E3 | Bestandsdaten | Sim-DBs zurücksetzen; Backfill-SQL aus Marken und `causationId` nur, falls Prod-Daten bestehen | Phase 4 |
 | E4 | Partitionen je Projektion im Batch-Konsum | fest 8, Umgebung; Lease je Partition im Cluster | Phase 3 |
-| E5 | Abnahme-Zielwerte je Szenario | nach der Baseline festlegen; Richtwert Phase 3: Durchsatz bis „alles sichtbar“ S1/S5 ≥ 5 × Baseline | nach Phase 0 |
+| E5 | Abnahme-Zielwerte je Szenario | Vorschlag nach der Baseline in §8 (Phase 3: Durchsatz S1/S5 ≥ 3 ×, Queries je Vorgang ≤ ⅓) | nach Phase 0 |
 | E6 | Handle-/Trigger-Welt (W11-1) in Phase 1 zurückbauen oder nur anpassen? | nur minimal anpassen; der Rückbau bleibt W11-1 | Phase 1 |
 | E7 | Leerlaufzeit der Passivierung | Aggregat 10 min, Adapter 2 min, Prozess-Manager 10 min; Umgebung | Phase 2 |
 
@@ -249,7 +249,7 @@ anstehen.
 
 ## 8 · Stand der Umsetzung
 
-**Phase 0** (in Arbeit, 2026-10-15):
+**Phase 0** (abgeschlossen bis auf Haltepunkt (a), 2026-10-15):
 - *Abgleich:* seit `e6e08ee` (Befunde G/PF eingetragen) hat kein Commit G- oder PF-Code berührt; G-1 bis G-5 sind im Code bestätigt
   (`CommandEmitter` verschluckt Timeout und `CommandResult`, `ProjectionAdapter` liest beim Poll eines Emittenten ab 0, `AggregateActorBase` ohne
   Rehydration nach Append-Fehler, `MarkProcessedAsync` per `Store`, `AggregateRehydrator` zählt je Event).
@@ -258,6 +258,13 @@ anstehen.
   `scripts/vermessung-tabelle.sh`, Umgebungen `vermessung` und `vermessung-pruefdomaene`.
 - *Garantie-Nachweis:* Garantie-Matrix ([11](11-garantien.md), Nachweis-Spalte, §11.14), Garantie-Suite (`Kategorie=Garantie`), je Lücke G-1 bis
   G-5 ein Test mit Skip — jeder einmal ohne Skip rot gesehen.
+
+- *Baseline:* `vermessung/ergebnisse/2026-10-15_0429_3cfec32_baseline` (gültig, Exactly-once grün) und
+  `…_0433_3cfec32_baseline-stoerung` (gültig, Exactly-once grün); Tabelle in docs/12 §12.5.
+- *E5-Zielwerte (Vorschlag, von Tobi am Haltepunkt (a) zu bestätigen):* Phase 3 — Durchsatz bis „alles sichtbar“ S1 ≥ 60 Paare/s (3 ×) und S5-8
+  ≥ 400 Vorgänge/s (3 ×), Queries je Vorgang S1/S5 höchstens ein Drittel; Phase 5 — Leerlauf L1/L5 unter 10 Queries/s und 5 % CPU; Phase 2 —
+  RSS im Leerlauf nach den Blöcken unter 50 % des Höchststands; Phase 4 — S3 heiß Durchsatz ≥ 1,5 × des Stands nach Phase 3. Dreifach statt
+  fünffach, weil der Host schon bei 300–370 % CPU auf einem MacBook Air misst und Postgres auf demselben Rechner läuft.
 
 **Plan-Änderungen aus Phase 0:**
 1. Die Prüfdomäne bekam eine Leseseite (`Pruefdomaene.Projections`: Reaktion `NachschubBeiMindestbestand`, Felder `Mindestbestand`/`Fehlmenge`
