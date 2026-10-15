@@ -63,18 +63,20 @@ public static class FunktionsExtensions
             sp.GetRequiredService<IEventStoreRepository>(),
             (auftrag, x) => Anwendung.Funktionen.RufeAsync(sp, auftrag, x),
             // Der Cluster wird erst beim Wecken aufgelöst (er ist bei der Registrierung noch nicht fertig — die (A)-Lektion).
-            (korrelation, ct) => WeckeProzessAsync(sp.GetRequiredService<ActorSystem>(), korrelation, ct),
+            (korrelation, stream, vorgang, ct) => WeckeProzessAsync(sp.GetRequiredService<ActorSystem>(), korrelation, stream, vorgang, ct),
             auftrag => Anwendung.Funktionen.AuftragZuFunktion.TryGetValue(auftrag.GetType(), out var f) &&
                        bindungen.TryGetValue(f, out var b) ? b : null);
     }
 
-    /// <summary>Weckt den Prozess-Manager der Korrelation (bounded; verloren → der §3-Backstop weckt ihn).</summary>
-    private static async Task WeckeProzessAsync(ActorSystem system, Guid korrelation, CancellationToken ct)
+    /// <summary>
+    /// Weckt den Prozess-Manager der Korrelation mit dem Ergebnis-Stream und Vorgang als Quelle (bounded; verloren → der §3-Backstop weckt ihn).
+    /// </summary>
+    private static async Task WeckeProzessAsync(ActorSystem system, Guid korrelation, Guid stream, Guid vorgang, CancellationToken ct)
     {
         var identity = ClusterIdentity.Create(korrelation.ToString(), ProzessManagerActor.KindName);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(5));
-        try { await system.Cluster().RequestAsync<WakeAck>(identity, new ProzessWake(Guid.Empty, 0, null), cts.Token); }
+        try { await system.Cluster().RequestAsync<WakeAck>(identity, new ProzessWake(stream, 0, null, Vorgang: vorgang), cts.Token); }
         catch (OperationCanceledException) { /* Backstop heilt */ }
     }
 

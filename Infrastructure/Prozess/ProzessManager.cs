@@ -126,11 +126,14 @@ public sealed class ProzessManager
     /// <summary>
     /// Ein Treib-Schritt: Marking falten → aktivierte Transition feuern ODER kompensieren ODER terminal setzen.
     /// <paramref name="vomBackstop"/>: der Backstop weckt (fällige Frist oder Heilung nach Stille, <see cref="PflegeFristAsync"/>) — dann liest
-    /// der Manager alles frisch (Log und Ziel-Streams), die Heilung verlässt sich auf keine Buchführung. <paramref name="quelle"/>/
-    /// <paramref name="quellVersion"/>: der Router weckt wegen dieses Events — gelesen wird nur sein Stream, und gar nichts, wenn der Fold ihn
-    /// schon so weit kennt. Ohne Quelle (Selbst-Weckung nach dem Send, Funktions-Ergebnis) liest er die Streams, in die er gefeuert hat.
+    /// der Manager alles frisch (Log und Ziel-Streams), die Heilung verlässt sich auf keine Buchführung. Sonst liest er nur, was sich seit dem
+    /// letzten Fold geändert haben kann: weckt der Router wegen eines Events (<paramref name="quelle"/>/<paramref name="quellVersion"/>), dessen
+    /// Stream, und nichts, wenn der Fold ihn schon so weit kennt; nach einem Send oder Funktions-Ergebnis (<paramref name="vorgang"/>) den
+    /// Ziel-Stream, und nichts, wenn der Ausgang des Vorgangs schon gefaltet ist; ohne Quelle die Streams, in die er gefeuert hat und deren
+    /// Ergebnis noch aussteht.
     /// </summary>
-    public async Task WakeAsync(Guid korrelation, CancellationToken ct = default, bool vomBackstop = false, Guid quelle = default, int quellVersion = 0)
+    public async Task WakeAsync(Guid korrelation, CancellationToken ct = default, bool vomBackstop = false, Guid quelle = default, int quellVersion = 0,
+        Guid vorgang = default)
     {
         var mz = await StatusAsync(korrelation, frisch: vomBackstop, ct);
         if (!mz.Gestartet || mz.Beendet || !_registry.TryGetValue(mz.ProzessName, out var regeln))
@@ -150,7 +153,7 @@ public sealed class ProzessManager
         }
         _akteurVon[korrelation] = mz.Akteur;
 
-        var kandidaten = await FaltMarkingMitCursorAsync(korrelation, mz, regeln, vomBackstop, quelle, quellVersion, ct);
+        var kandidaten = await FaltMarkingMitCursorAsync(korrelation, mz, regeln, vomBackstop, quelle, quellVersion, vorgang, ct);
         await PflegeFristAsync(korrelation, mz, kandidaten, vomBackstop, ct);
 
         // ── Treiber-Fold (EM-1, §4/§7.3): einen im Fold gesehenen Fehlschlag DURABEL machen. Eine
@@ -192,7 +195,7 @@ public sealed class ProzessManager
                 v++;
             }
             // Frisch falten: mz.Gescheitert (bzw. die Umleitung) trägt den Fehlschlag jetzt.
-            await WakeAsync(korrelation, ct, vomBackstop, quelle, quellVersion);
+            await WakeAsync(korrelation, ct, vomBackstop, quelle, quellVersion, vorgang);
             return;
         }
 
@@ -390,7 +393,8 @@ public sealed class ProzessManager
     /// identisch; nur die Startbedingung — leeres vs. fortgeschriebenes Marking + Cursor — unterscheidet sie).
     /// </summary>
     private async Task<List<Kandidat>> FaltMarkingMitCursorAsync(
-        Guid korrelation, ManagerStatus mz, ProzessRegeln regeln, bool vomBackstop, Guid quelle, int quellVersion, CancellationToken ct)
+        Guid korrelation, ManagerStatus mz, ProzessRegeln regeln, bool vomBackstop, Guid quelle, int quellVersion, Guid vorgang,
+        CancellationToken ct)
     {
         if (!CursorAktiv)
         {
@@ -403,16 +407,22 @@ public sealed class ProzessManager
         var (marking, warm, frisch) = await HoleMarkingAsync(korrelation, regelHash, ct);
 
         // WARM (Hot-Cache): nachfalten, was sich seit dem letzten Fold geändert haben kann —
-        //   • weckt der Router wegen eines Events, nur dessen Stream (und nichts, wenn der Cursor schon so weit ist);
-        //   • sonst die Streams, in die gefeuert wurde (dirty), und nie gesehene (in einem frischen Vorgang sind die sicher leer).
+        //   • nach einem Send/Funktions-Ergebnis den Ziel-Stream (nichts, wenn der Ausgang des Vorgangs schon gefaltet ist);
+        //   • weckt der Router wegen eines Events, dessen Stream (nichts, wenn der Cursor schon so weit ist);
+        //   • ohne Quelle die Streams, in die gefeuert wurde und deren Ergebnis aussteht (dirty), und nie gesehene (in einem frischen Vorgang
+        //     sind die sicher leer).
         // KALT (Store-Load/neu) und Backstop: voll lesen — die Wahrheit rekonstruieren (nurDirty = null).
         var dirty = _dirty.TryGetValue(korrelation, out var d) ? d : (_dirty[korrelation] = new HashSet<Guid>());
+        var nichts = new HashSet<Guid>();
         HashSet<Guid>? nurDirty = !warm || vomBackstop ? null
             : quelle == Guid.Empty ? dirty
-            : marking.StreamCursor.TryGetValue(quelle, out var c) && c >= quellVersion ? new HashSet<Guid>()
+            : vorgang != Guid.Empty ? (marking.Vorgänge.ContainsKey(vorgang.ToString()) ? nichts : new HashSet<Guid> { quelle })
+            : marking.StreamCursor.TryGetValue(quelle, out var c) && c >= quellVersion ? nichts
             : new HashSet<Guid> { quelle };
-        var (_, kandidaten, integriert) = await FalteAsync(korrelation, mz, regeln, marking, nurDirty, nieGeseheneLeer: frisch, ct);
-        dirty.ExceptWith(integriert);   // gelesen — FeuereAsync füllt für die nächste Weckung neu
+        var (_, kandidaten, mitErgebnis) = await FalteAsync(korrelation, mz, regeln, marking, nurDirty, nieGeseheneLeer: frisch, ct);
+        // Aus „dirty“ fällt nur, wessen Ergebnis jetzt gefaltet ist: ein zu früh gelesener Ziel-Stream (die Weckung eines anderen Vorgangs kam
+        //   vor dem Ergebnis) bleibt, bis es da ist — sonst fände ein Noop oder eine Ablehnung (kein Signal) nur noch der Backstop.
+        dirty.ExceptWith(mitErgebnis);
 
         await SchreibeMarkingAsync(korrelation, regelHash, mz.Version, marking, frisch, ct);
         return kandidaten;
@@ -428,12 +438,13 @@ public sealed class ProzessManager
     /// der Tail darauf ergibt dieselben akkumulierten Achsen wie ein Fold aller Events ab 0 (Monotonie) → dieselben
     /// Kandidaten, dieselbe Feuer-Entscheidung. Ein leeres <paramref name="marking"/> ist der Voll-Fold ab 0.
     /// </summary>
-    private async Task<(List<Token> Tokens, List<Kandidat> Kandidaten, HashSet<Guid> Integriert)> FalteAsync(
+    private async Task<(List<Token> Tokens, List<Kandidat> Kandidaten, HashSet<Guid> MitErgebnis)> FalteAsync(
         Guid korrelation, ManagerStatus mz, ProzessRegeln regeln, MarkingKompakt marking,
         HashSet<Guid>? nurDirty, bool nieGeseheneLeer, CancellationToken ct)
     {
         // In DIESER Weckung schon bis Head integrierte Streams (ein Read je Stream pro Weckung, wie das alte Lies).
         var integriert = new HashSet<Guid>();
+        var mitErgebnis = new HashSet<Guid>();   // Streams, in denen diese Weckung ein eigenes Event fand
         var eigeneKorrelation = korrelation.ToString();
         async Task Integriere(Guid s)
         {
@@ -445,6 +456,7 @@ public sealed class ProzessManager
             //   rückt bis zum letzten eigenen Event; fremde danach liest die Datenbank erneut, liefert sie aber nicht.
             var evs = await _store.ReadKorreliertAsync(s, von, eigeneKorrelation, ct);
             var maxV = marking.StreamCursor.TryGetValue(s, out var alt) ? alt : -1;
+            if (evs.Count > 0) mitErgebnis.Add(s);
             foreach (var e in evs)   // aufsteigend (Vertrag: geordnet) → „erste Wirkung" = niedrigste Version
             {
                 if (e.AggregateVersion > maxV) maxV = e.AggregateVersion;
@@ -577,7 +589,7 @@ public sealed class ProzessManager
                 }
             }
         }
-        return (tokens, kandidaten, integriert);
+        return (tokens, kandidaten, mitErgebnis);
     }
 
     /// <summary>

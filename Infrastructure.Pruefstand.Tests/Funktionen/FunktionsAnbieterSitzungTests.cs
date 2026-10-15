@@ -42,7 +42,7 @@ public class FunktionsAnbieterSitzungTests
         {
             Ausfuehrer = new FunktionsAusfuehrer(Log,
                 (_, _) => throw new InvalidOperationException("rechnet extern"),
-                (k, _) => { Weckungen.Enqueue(k); return Task.CompletedTask; },
+                (k, _, _, _) => { Weckungen.Enqueue(k); return Task.CompletedTask; },
                 _ => null);
         }
 

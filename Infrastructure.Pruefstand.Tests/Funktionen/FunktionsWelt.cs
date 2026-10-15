@@ -189,7 +189,7 @@ internal sealed class FunktionsWelt
                 MetaAuftrag m => (IEvent)(await Meta(m, x)).Value,
                 _ => throw new NotSupportedException(),
             },
-            (korr, _) => { Weckungen.Enqueue(korr); return Task.CompletedTask; },
+            (korr, _, _, _) => { Weckungen.Enqueue(korr); return Task.CompletedTask; },
             a => a switch { VorAuftrag => bindungen[typeof(IVorverarbeitung)], MetaAuftrag => bindungen[typeof(IMetadaten)], _ => null },
             wiederholPause: TimeSpan.FromMilliseconds(1));
 

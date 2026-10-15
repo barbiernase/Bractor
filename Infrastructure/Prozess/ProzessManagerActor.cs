@@ -89,7 +89,7 @@ public sealed class ProzessManagerActor : IActor
                     if (w.ProzessNameFürStart is string name)
                         await _manager.StarteAsync(_korrelation, name, w.QuellStream, w.QuellVersion, context.CancellationToken);
                     else
-                        await _manager.WakeAsync(_korrelation, context.CancellationToken, w.VomBackstop, w.QuellStream, w.QuellVersion);
+                        await _manager.WakeAsync(_korrelation, context.CancellationToken, w.VomBackstop, w.QuellStream, w.QuellVersion, w.Vorgang);
                 }
                 context.Respond(new WakeAck());
                 break;
@@ -103,13 +103,16 @@ public sealed class ProzessManagerActor : IActor
     private Func<Guid, ICommand, Guid, CancellationToken, Task> ErzeugeDispatch()
         => new DetachedProzessSend(EmittiereAnZiel, WeckeSelbst).SendeAsync;
 
-    /// <summary>Nach dem Send (bzw. seinem Backoff): DIESE Manager-Instanz neu wecken (Fortschritt/Terminal/Fehlschlag aus dem Fold).</summary>
-    private async Task WeckeSelbst(Guid korrelation, CancellationToken ct)
+    /// <summary>
+    /// Nach dem Send (bzw. seinem Backoff): DIESE Manager-Instanz neu wecken (Fortschritt/Terminal/Fehlschlag aus dem Fold), mit Ziel-Stream
+    /// und Vorgang als Quelle.
+    /// </summary>
+    private async Task WeckeSelbst(Guid korrelation, Guid ziel, Guid vorgang, CancellationToken ct)
     {
         var identity = ClusterIdentity.Create(korrelation.ToString(), KindName);
         using var cts = CancellationTokenSource.CreateLinkedTokenSource(ct);
         cts.CancelAfter(TimeSpan.FromSeconds(5));
-        try { await _cluster.RequestAsync<WakeAck>(identity, new ProzessWake(Guid.Empty, 0, null), cts.Token); }
+        try { await _cluster.RequestAsync<WakeAck>(identity, new ProzessWake(ziel, 0, null, Vorgang: vorgang), cts.Token); }
         catch (OperationCanceledException) { /* Poll-Backstop heilt */ }
     }
 

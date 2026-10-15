@@ -25,7 +25,7 @@ namespace Infrastructure.Prozess;
 public sealed class DetachedProzessSend
 {
     private readonly Func<Guid, ICommand, Guid, CancellationToken, Task<EmitAusgang>> _emit;
-    private readonly Func<Guid, CancellationToken, Task> _danach;
+    private readonly Func<Guid, Guid, Guid, CancellationToken, Task> _danach;
     private readonly Func<int, TimeSpan> _backoff;
     private readonly Func<TimeSpan, CancellationToken, Task> _warte;
 
@@ -36,13 +36,14 @@ public sealed class DetachedProzessSend
     /// <param name="danach">
     /// Weckt den Manager neu (out-of-turn), damit er Fortschritt, Terminal oder Fehlschlag aus dem Fold liest. Nötig, weil (a) das
     /// Ergebnis-Event der letzten Transition Auslöser keiner Regel ist — sein Signal abonniert der Router nicht — und (b) die Ablehnungs-Marke
-    /// (<see cref="IProzessIntern"/>) kein Signal erzeugt. Idempotent (WakeAsync faltet frisch).
+    /// (<see cref="IProzessIntern"/>) kein Signal erzeugt. Bekommt (Korrelation, Ziel-Stream, Vorgang): der Manager liest genau den Ziel-Stream
+    /// nach, und nichts, wenn er den Ausgang des Vorgangs schon kennt. Idempotent.
     /// </param>
     /// <param name="backoff">Wartezeit vor der n-ten Wiederholung (n ≥ 1); Standard <see cref="StandardBackoff"/>.</param>
     /// <param name="warte">Die Wartenaht (live <see cref="Task.Delay(TimeSpan, CancellationToken)"/>).</param>
     public DetachedProzessSend(
         Func<Guid, ICommand, Guid, CancellationToken, Task<EmitAusgang>> emit,
-        Func<Guid, CancellationToken, Task> danach,
+        Func<Guid, Guid, Guid, CancellationToken, Task> danach,
         Func<int, TimeSpan>? backoff = null,
         Func<TimeSpan, CancellationToken, Task>? warte = null)
     {
@@ -109,7 +110,7 @@ public sealed class DetachedProzessSend
             if (ct.IsCancellationRequested) return;
         }
 
-        try { await _danach(korrelation, ct); }
+        try { await _danach(korrelation, cmd.AggregateId, vorgang, ct); }
         catch (Exception ex)
         {
             Console.WriteLine($"[DetachedProzessSend] Selbst-Weckung fehlgeschlagen ({korrelation}): {ex.Message}");

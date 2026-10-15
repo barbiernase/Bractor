@@ -34,7 +34,8 @@ public sealed class FunktionsAusfuehrer
 {
     private readonly IEventStoreRepository _store;
     private readonly Func<IAuftrag, IAusfuehrung, Task<IEvent>> _rufe;
-    private readonly Func<Guid, CancellationToken, Task> _weckeProzess;
+    // Weckt den Prozess (Korrelation, Stream des Ergebnisses = Vorgang, Vorgang): er liest dann genau diesen Stream nach.
+    private readonly Func<Guid, Guid, Guid, CancellationToken, Task> _weckeProzess;
     private readonly Func<IAuftrag, FunktionsBindung?> _bindung;
     private readonly TimeSpan _wiederholPause;
     private readonly ConcurrentDictionary<Guid, Task> _laufend = new();
@@ -43,7 +44,7 @@ public sealed class FunktionsAusfuehrer
     public FunktionsAusfuehrer(
         IEventStoreRepository store,
         Func<IAuftrag, IAusfuehrung, Task<IEvent>> rufe,
-        Func<Guid, CancellationToken, Task> weckeProzess,
+        Func<Guid, Guid, Guid, CancellationToken, Task> weckeProzess,
         Func<IAuftrag, FunktionsBindung?> bindung,
         TimeSpan? wiederholPause = null)
     {
@@ -83,7 +84,7 @@ public sealed class FunktionsAusfuehrer
     {
         if ((await _store.ReadStreamAsync(vorgang, 0, ct)).Count > 0)
         {
-            await WeckeAsync(korrelation, ct);
+            await WeckeAsync(korrelation, vorgang, ct);
             return;
         }
 
@@ -135,7 +136,7 @@ public sealed class FunktionsAusfuehrer
             }
         }
 
-        await WeckeAsync(korrelation, ct);
+        await WeckeAsync(korrelation, vorgang, ct);
         return liegt;
     }
 
@@ -159,9 +160,9 @@ public sealed class FunktionsAusfuehrer
         }
     }
 
-    private async Task WeckeAsync(Guid korrelation, CancellationToken ct)
+    private async Task WeckeAsync(Guid korrelation, Guid vorgang, CancellationToken ct)
     {
-        try { await _weckeProzess(korrelation, ct); }
+        try { await _weckeProzess(korrelation, vorgang, vorgang, ct); }
         catch (Exception ex) { Console.WriteLine($"[Funktion] Weckung des Prozesses {korrelation} fehlgeschlagen: {ex.Message} — Backstop heilt"); }
     }
 }

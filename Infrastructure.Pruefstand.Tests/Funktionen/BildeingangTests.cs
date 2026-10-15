@@ -55,7 +55,7 @@ public class BildeingangTests
                         _ => throw new NotSupportedException(auftrag.GetType().Name),
                     });
                 },
-                (k, _) => { _weckungen.Enqueue(k); return Task.CompletedTask; },
+                (k, _, _, _) => { _weckungen.Enqueue(k); return Task.CompletedTask; },
                 _ => new FunktionsBindung(typeof(IFunktion), Slots: 4), wiederholPause: TimeSpan.FromMilliseconds(1));
             var registry = new Dictionary<string, ProzessRegeln> { [Name] = new Bildeingang().Fluss.Regeln };
             Manager = new ProzessManager(Log, registry, DispatchAsync,

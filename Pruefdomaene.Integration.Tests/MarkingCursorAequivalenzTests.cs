@@ -21,7 +21,9 @@ namespace Pruefdomaene.Integration.Tests;
 /// Alle Guids sind über beide Läufe gleich, damit die deterministischen Vorgänge exakt vergleichbar sind. Dazu die Sicherheits-Probe:
 /// ein Marking mit falschem RegelHash wird verworfen (Voll-Fold, gleiches Ergebnis), und der Cursor liest beim Fan-out weniger. Varianten:
 /// <c>kalt</c> — nach dem Start übernimmt eine neue Aktivierung (Store-Load statt frischem Vorgang); <c>mitRouter</c> — vor jeder
-/// Selbst-Weckung weckt der Router mit dem geschriebenen Event als Quelle (gezielte Weckung, docs/04 §4.5).
+/// Selbst-Weckung weckt der Router mit dem geschriebenen Event als Quelle (gezielte Weckung, docs/04 §4.5); <c>verzögert</c> — das Ziel führt
+/// den Command erst nach einer Weckung ohne Quelle aus (sie liest den Ziel-Stream zu früh), danach weckt der Send wie im Host mit Ziel und
+/// Vorgang.
 /// </summary>
 [Trait("Kategorie", "Garantie")]
 public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequivalenzTests.Fixture>
@@ -34,10 +36,10 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
 
     /// <summary>Treibt einen Vorgang sequentiell (Starte + Wake bis Terminal) gegen den echten Marten-Store.</summary>
     private static async Task<Lauf> TreibeAsync(IDocumentStore marten, string prozess, Guid auslöserStream, Func<Welt, Task> seed,
-        IProzessMarkingStore? marking, bool kalt = false, bool mitRouter = false)
+        IProzessMarkingStore? marking, bool kalt = false, bool mitRouter = false, bool verzögert = false)
     {
         var store = new ZählenderStore(new MartenEventStore(marten, new Pruefdomaene.AggregateHandlerFactory(), NullLogger<MartenEventStore>.Instance));
-        var welt = new Welt(store);
+        var welt = new Welt(store) { Verzögert = verzögert };
         var korrelation = ProzessId.Für(prozess, auslöserStream, 1);
         welt.Korrelation = korrelation;
         await seed(welt);
@@ -52,9 +54,18 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         var schutz = 0;
         while (!(await mgr.LadeStatusAsync(korrelation, default)).Beendet)
         {
+            var ausgefuehrt = new List<(Guid Ziel, Guid Vorgang)>();
+            if (verzögert)
+            {
+                await mgr.WakeAsync(korrelation, default);   // zu früh: das Ergebnis steht noch nicht im Ziel-Stream
+                while (welt.Ausstehend.TryDequeue(out var a)) ausgefuehrt.Add(await welt.FuehreAusAsync(a.Korrelation, a.Cmd, a.Vorgang));
+            }
             if (mitRouter)
                 while (welt.Routen.TryDequeue(out var r)) await mgr.WakeAsync(korrelation, default, quelle: r.Stream, quellVersion: r.Version);
-            await mgr.WakeAsync(korrelation, default);
+            if (verzögert)
+                foreach (var (ziel, vorgang) in ausgefuehrt) await mgr.WakeAsync(korrelation, default, quelle: ziel, vorgang: vorgang);
+            else
+                await mgr.WakeAsync(korrelation, default);
             if (++schutz > 10_000) throw new InvalidOperationException("Der Vorgang erreichte kein Terminal (Livelock?).");
         }
         var st = await mgr.LadeStatusAsync(korrelation, default);
@@ -62,10 +73,10 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
     }
 
     private async Task<(Lauf Aus, Lauf An)> BeideAsync(string prozess, Guid auslöser, Func<Welt, Task> seed, IProzessMarkingStore? an = null,
-        bool kalt = false, bool mitRouter = false)
+        bool kalt = false, bool mitRouter = false, bool verzögert = false)
     {
         var aus = await TreibeAsync(_fx.Aus, prozess, auslöser, seed, marking: null);
-        var mit = await TreibeAsync(_fx.An, prozess, auslöser, seed, an ?? new MartenProzessMarkingStore(_fx.An), kalt, mitRouter);
+        var mit = await TreibeAsync(_fx.An, prozess, auslöser, seed, an ?? new MartenProzessMarkingStore(_fx.An), kalt, mitRouter, verzögert);
         mit.Feuerungen.Should().Equal(aus.Feuerungen,
             "der Cursor-Fold muss bei jeder Weckung dieselbe (Command, Ziel, Vorgang)-Entscheidung treffen wie der Voll-Fold");
         mit.Beendet.Should().Be(aus.Beendet);
@@ -104,17 +115,33 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         an.Abfragen.Should().BeLessThan(aus.Abfragen);
     }
 
-    [Theory, InlineData(false), InlineData(true)]
-    public async Task Kompensation_kalt_oder_mit_Router_gleich_Cursor_aus(bool kalt)
+    [Theory, InlineData(1, true, false, false), InlineData(2, false, true, false), InlineData(3, false, false, true), InlineData(4, false, true, true)]
+    public async Task Kompensation_kalt_mit_Router_oder_verzoegert_gleich_Cursor_aus(int n, bool kalt, bool mitRouter, bool verzögert)
     {
-        Guid posten = G("f6f6f6f6", kalt ? 11 : 1), kontingent = G("f6f6f6f6", kalt ? 12 : 2), auftrag = G("f6f6f6f6", kalt ? 13 : 3);
+        // Die Ablehnung des Kontingents hinterlässt nur eine Marke (kein Signal): sie findet nur, wer den Ziel-Stream nach dem Send liest.
+        Guid posten = G("f6f6f6f6", 10 * n + 1), kontingent = G("f6f6f6f6", 10 * n + 2), auftrag = G("f6f6f6f6", 10 * n + 3);
         var (aus, _) = await BeideAsync(nameof(AuftragsProzess), auftrag, async w =>
         {
             await w.AnlegenAsync(new EroeffnePosten(posten, 10));
             await w.AnlegenAsync(new RichteKontingentEin(kontingent, 1));
             await w.AnlegenAsync(new StarteAuftrag(auftrag, posten, kontingent, 3));
-        }, kalt: kalt, mitRouter: !kalt);
+        }, kalt: kalt, mitRouter: mitRouter, verzögert: verzögert);
         aus.Erfolg.Should().BeFalse();
+    }
+
+    [Theory, InlineData(false), InlineData(true)]
+    public async Task Fan_out_verzoegert_gleich_Cursor_aus(bool mitRouter)
+    {
+        var quelle = G("a7a7a7a7", mitRouter ? 101 : 1);
+        var verteilung = G("a7a7a7a7", mitRouter ? 102 : 2);
+        var ziele = Enumerable.Range(10, 6).Select(n => G("a7a7a7a7", (mitRouter ? 100 : 0) + n)).ToList();
+        var (aus, _) = await BeideAsync(nameof(VerteilProzess), verteilung, async w =>
+        {
+            await w.AnlegenAsync(new EroeffnePosten(quelle, 1000));
+            foreach (var z in ziele) await w.AnlegenAsync(new EroeffnePosten(z, 0));
+            await w.AnlegenAsync(new StarteVerteilung(verteilung, quelle, ziele, 5));
+        }, mitRouter: mitRouter, verzögert: true);
+        aus.Erfolg.Should().BeTrue();
     }
 
     [Fact]
@@ -195,6 +222,9 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
         public Guid Korrelation { get; set; }
         /// <summary>Was der Router wecken würde: je geschriebenes Domänen-Event (Marken erzeugen kein Signal) Stream und Version.</summary>
         public Queue<(Guid Stream, int Version)> Routen { get; } = new();
+        /// <summary>Verzögert: ein Command wird erst ausgeführt, wenn der Test es sagt (<see cref="FuehreAusAsync"/>).</summary>
+        public bool Verzögert { get; init; }
+        public Queue<(Guid Korrelation, ICommand Cmd, Guid Vorgang)> Ausstehend { get; } = new();
 
         public Welt(IEventStoreRepository store) => _store = store;
 
@@ -223,8 +253,14 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
 
         public async Task DispatchAsync(Guid korr, ICommand cmd, Guid vorgang, CancellationToken ct)
         {
+            if (Verzögert) { Ausstehend.Enqueue((korr, cmd, vorgang)); return; }
+            await FuehreAusAsync(korr, cmd, vorgang);
+        }
+
+        public async Task<(Guid Ziel, Guid Vorgang)> FuehreAusAsync(Guid korr, ICommand cmd, Guid vorgang)
+        {
             var (s, h, erledigt) = _aggregate[cmd.AggregateId];
-            if (!erledigt.Add(vorgang)) return;   // Inbox-Dedup des Actors
+            if (!erledigt.Add(vorgang)) return (cmd.AggregateId, vorgang);   // Inbox-Dedup des Actors
             Feuerungen.Add((cmd.GetType().Name, cmd.AggregateId, vorgang));
 
             var alle = h.HandleCommand(cmd).ToList();
@@ -240,6 +276,7 @@ public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequival
                 s.Version++;
                 if (e is not IProzessIntern) Routen.Enqueue((cmd.AggregateId, s.Version));
             }
+            return (cmd.AggregateId, vorgang);
         }
     }
 

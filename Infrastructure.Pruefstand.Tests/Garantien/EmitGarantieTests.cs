@@ -105,7 +105,7 @@ public class EmitGarantieTests
         {
             Sender = new DetachedProzessSend(
                 (_, _, vorgang, _) => { lock (Gesendet) Gesendet.Add(vorgang); return Task.FromResult(Antwort); },
-                (korrelation, _) => { lock (Geweckt) Geweckt.Add(korrelation); return Task.CompletedTask; },
+                (korrelation, _, _, _) => { lock (Geweckt) Geweckt.Add(korrelation); return Task.CompletedTask; },
                 backoff: n => TimeSpan.FromSeconds(n),
                 warte: (t, _) => { lock (Gewartet) Gewartet.Add(t); return Warten.Task; });
         }

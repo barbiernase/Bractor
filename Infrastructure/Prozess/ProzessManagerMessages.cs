@@ -11,4 +11,7 @@ namespace Infrastructure.Prozess;
 /// <see cref="VomBackstop"/>: der Backstop weckt (fällige Frist oder Heilung nach Stille) — der Manager pflegt dann die Frist im Offen-Index
 /// (PF-4) und räumt den Eintrag eines beendeten Vorgangs ab.
 /// </summary>
-public sealed record ProzessWake(Guid QuellStream, int QuellVersion, string? ProzessNameFürStart, bool VomBackstop = false) : IWireMessage;
+/// <see cref="Vorgang"/>: die Weckung nach einem Send bzw. einem Funktions-Ergebnis — der Ausgang dieses Vorgangs liegt in
+/// <see cref="QuellStream"/> (oder kommt noch); kennt der Fold ihn schon, liest der Manager nichts.
+public sealed record ProzessWake(Guid QuellStream, int QuellVersion, string? ProzessNameFürStart, bool VomBackstop = false, Guid Vorgang = default)
+    : IWireMessage;

@@ -183,7 +183,7 @@ internal sealed class FlussWelt
         _funktionen = funktionen;
         Ausfuehrer = new FunktionsAusfuehrer(Log,
             (auftrag, _) => { Gerufen.Enqueue(auftrag); return Task.FromResult(_funktionen(auftrag)); },
-            (k, _) => { _weckungen.Enqueue(k); return Task.CompletedTask; },
+            (k, _, _, _) => { _weckungen.Enqueue(k); return Task.CompletedTask; },
             a => new FunktionsBindung(typeof(IFunktion), Slots: 8),
             wiederholPause: TimeSpan.FromMilliseconds(1));
         Manager = new ProzessManager(Log,
