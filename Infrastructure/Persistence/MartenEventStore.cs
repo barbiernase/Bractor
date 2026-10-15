@@ -264,12 +264,19 @@ public class MartenEventStore : IEventStoreRepository
     /// nach Sequenz. In dieser Reihenfolge, damit jede Sequenz bis zur gesetzten, die je sichtbar wird, beim Lesen der Seite schon sichtbar ist.
     /// </summary>
     /// <summary>
-    /// Rohes SQL löst Martens AutoCreate nicht aus: auf einer frischen Datenbank legt der erste rohe Leser die Event-Tabellen an. Marten merkt
-    /// sich das je Datenbank (danach ohne Abfrage); mit <c>AutoCreate.None</c> (Multi-Node-Member, das Schema legt der Migrator an) folgenlos.
-    /// Früher legte sie zufällig der Prozess-Poll an (er las über LINQ) — rohe Leser vor ihm scheiterten bis dahin.
+    /// Rohes SQL löst Martens AutoCreate nicht aus: auf einer frischen Datenbank legt der erste rohe Leser die Event-Tabellen an; mit
+    /// <c>AutoCreate.None</c> (Multi-Node-Member, das Schema legt der Migrator an) folgenlos. Früher legte sie zufällig der Prozess-Poll an
+    /// (er las über LINQ) — rohe Leser vor ihm scheiterten bis dahin. Einmal je Store: Martens Prüfung selbst kostet je Aufruf spürbar CPU
+    /// (gemessen: S3-8 −28 % Durchsatz, als sie vor jeder Seite lief).
     /// </summary>
-    internal static ValueTask EventTabellenAsync(IDocumentStore store, CancellationToken ct)
-        => store.Storage.Database.EnsureStorageExistsAsync(typeof(JasperFx.Events.IEvent), ct);
+    internal static async ValueTask EventTabellenAsync(IDocumentStore store, CancellationToken ct)
+    {
+        if (EventTabellenDa.TryGetValue(store, out _)) return;
+        await store.Storage.Database.EnsureStorageExistsAsync(typeof(JasperFx.Events.IEvent), ct);
+        EventTabellenDa.TryAdd(store, new object());
+    }
+
+    private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<IDocumentStore, object> EventTabellenDa = new();
 
     public async Task<PartitionsSeite> ReadPartitionAsync(
         long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit,
