@@ -441,7 +441,8 @@ public abstract class AggregateActorBase<TState> : IActor
                 //   RE-Zustellung liefert per Inbox-Dedup Success:true → Manager verzweigt auf Erfolg) ist durch
                 //   die ZWEITE Inbox-Menge geschlossen: ein abgelehnter Vorgang bleibt bei Re-Delivery auf
                 //   Success:false (siehe Dedup-Zweig oben). Marke + Zwei-Mengen-Inbox + Fold-Achse zusammen (§4).
-                //   Der Client-/OCC-Pfad bleibt marken-frei (Targeted Delivery, kein Prozess dahinter).
+                //   Auch der Client-Pfad schreibt die Marke (er ist idempotent, docs/08 §8.4); die Ablehnung geht dort zusätzlich
+                //   targeted an den Aufrufer.
                 if (istIdempotent && await CoCommitAblehnungsMarkeAsync(cmdEnvelope, expectedVersion, rejection.GetType().Name) is var marke
                     and not AppendErgebnis.Geschrieben)
                 {

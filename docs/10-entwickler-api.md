@@ -532,7 +532,7 @@ es gibt keinen `InMemoryEventStore`, nie faken, was man nicht besitzt. **Editor-
 
 ## 10.12 Die Reinheits-Grenze
 
-Bewusst unsichtbar im Fachcode (Framework oder Generat): `Id`/`Version`, OCC, Signal, Cursor, Exactly-once/Dedup (`KommandoVerarbeitet`-Marken),
+Bewusst unsichtbar im Fachcode (Framework oder Generat): `Id`/`Version`, OCC, Signal, Cursor, Exactly-once/Dedup (Inbox, Noop- und Ablehnungs-Marken),
 Sharding, Prozess-Maschinerie, Serialisierung, Proto-DTOs, ClusterKinds, DI-Wiring, Spur-Header. Taucht eines davon im Fachcode auf, ist etwas falsch
 verdrahtet (Inv. 5). Bekannte Reibung: `ProjectionWriter.Execute`/`ctx.Track` stehen heute im Projektions-Handle.
 

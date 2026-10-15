@@ -70,8 +70,9 @@ Default reflektiv, der Snapshot-`Clone` ist ein JSON-Round-Trip, HTTP-Antworten 
 **Warum:** Was der Entwickler nicht schreibt, kann er nicht falsch schreiben — und der Fachcode bleibt lesbar als Fachlogik. Alles
 Maschinelle liegt im Framework oder im Generat:
 - `Id`/`Version`, die `State`-Property und der Konstruktor von Decider/Applier werden generiert (`StateGenerator`, `Generator`).
-- Idempotenz und Dedup liegen in Framework-Marken (`KommandoVerarbeitet`, `KommandoAbgelehnt`, `Infrastructure/Aggregate/`), die
-  `IProzessIntern` sind — vom Applier übersprungen, in der Version mitgezählt. Aggregate tragen kein Dedup-Feld.
+- Idempotenz und Dedup liegen in der Framework-Inbox (eine Tabelle des Event-Stores, je Command eine Quittung in der Transaktion seiner
+  Events) und, für den Prozess-Fold, in den Marken für Noop und Ablehnung (`KommandoVerarbeitet`, `KommandoAbgelehnt`,
+  `Infrastructure/Aggregate/`), die `IProzessIntern` sind — vom Applier übersprungen, in der Version mitgezählt. Aggregate tragen kein Dedup-Feld.
 - Ein Prozess ist nur seine Regeln — kein Manager, kein Treiber, kein Korrelations-Code. Beispieldomäne: `Domain/Sammelvorgang/TeilFertigProzess.cs`
   ist ein einziges `p.Auf<…>().Sende<…>(…)`; neutral in der Agnostik-Sonde `GraphExtractor.Kern/Sonde/Gebuehren.cs.txt` (`SchadenBeiRueckgabe`).
 - Store-Implementierungen werden im Generat nie genannt; ein Handle bekommt seine Store-Fähigkeiten als Parameter aus einem DI-Bereich
@@ -86,7 +87,7 @@ Kanal. Der heutige Musterfall ist die Grenze zwischen Quell-Nachricht und Ablehn
 - Eine **Quell-Nachricht** (`IQuellNachricht`) startet einen Vorgang, auf den ein Fluss durabel wartet — sie wird genau einmal je Kennung
   das erste Event eines Vorgangs-Streams (`StartStream` mit deterministischer Id, `Infrastructure/Quellen/Quellen.cs`).
 - Eine **Ablehnung** (`ITransientEvent`) ist die Antwort an den Aufrufer und steht nie im Log; durabel wird nur die Framework-Marke
-  `KommandoAbgelehnt` (Inbox-Dedup, Prozess-Fold).
+  `KommandoAbgelehnt` (Prozess-Fold) und die Quittung „abgelehnt“ in der Inbox.
 - Die Fluss-Token `ZeitlimitAbgelaufen`, `SchrittAbgelehnt`, `QuellStrom` leben nur im Dirigenten (`Abstractions/Fluss/Pipeline.cs`).
 - Signale sind nie persistent.
 

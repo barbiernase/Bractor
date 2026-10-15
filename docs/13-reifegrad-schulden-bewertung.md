@@ -1,21 +1,20 @@
 # 13 — Reifegrad, Schulden & Bewertung
 
 **Die eine Quelle für „offen“.** Andere Dokumente (`CLAUDE.md`, Kapitel 01–12, Konzepte) nennen Schulden höchstens kurz und verweisen
-hierher. Stand: 2026-10-15, Phase 5 des Plans Garantien und Durchsatz. Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
+hierher. Stand: 2026-10-15, Phase 4 des Plans Garantien und Durchsatz. Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
 (`docs/konzept-werkbank.md` §2). Zahlen und Messwerte stehen in `docs/12-tests-und-vermessung.md`.
 
 ## 13.0 Offen auf einen Blick
 
 | ID | Kurz | Prio |
 |---|---|:--:|
-| G-2 | Inbox-Fenster (10 000): eine CommandId, die jenseits der Grenze erneut kommt, wirkt erneut; der Emittenten-Anteil ist seit Phase 1 geschlossen | P1 |
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
 | G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
 | PF-13 | Unter S5-64: Reaktion p99 2–3,5 s (p50 5 ms) — ihr Nachschub wartet am heißen Posten hinter den Reservierungen (der S3-64-Rückgang ist mit „korreliert lesen“ erledigt: 1,85 × Baseline) | P3 |
 | PF-4b | Rest von PF-4: keine Lease für den Prozess-Backstop im Cluster (jeder Knoten heilt alle offenen Vorgänge); Abnahme „S3 Zeit je Teil konstant über N“ und „10 000 offene Vorgänge im Leerlauf“ ohne Szenario im Treiber | P3 |
 | PF-10 | Datei-Treiber meldet eine Datei nach der anderen ins Log (Rückstau): das Melde-Tempo ist die Decke von S1 — Entscheidung offen | P2 |
 | VM-1 | Vermessungs-Treiber zählt Soll und Ist der Exactly-once-Prüfung in getrennten Abfragen, während der Host noch abbaut | P3 |
-| PF-3 | Inbox-Marke je Command im Stream (auch ohne Event), Inbox im Snapshot | P2 |
+| PF-14 | Leerlauf L1/L5 seit „Korreliert lesen“ wieder über dem E5-Ziel (L1 29, L5 86 Queries/s): Nachlesen von Prozess-Poll und Batch-Lesern (L1) bzw. Nachlauf der Reaktion aus S5-64 (L5, PF-13) im 15-s-Fenster | P3 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
@@ -57,7 +56,7 @@ Werkzeuge lesen teils per Reflection, und neben den neuen Wegen (Fluss, Quelle, 
 | Subsystem | Reife |
 |---|:--:|
 | Schreibseite | 🟢 / 🟡 (G-5) |
-| Konsum-/Prozess-Maschine | 🟡 (G-2 Inbox) |
+| Konsum-/Prozess-Maschine | 🟢 / 🟡 (PF-13, PF-4b) |
 | Generatoren & Analyzer | 🟢 / 🟡 (W10-1, W2-1) |
 | Multi-Node / Transport | 🟢 / 🟡 (P1-1, P1-2) |
 | Werkbank (Extractor, Editor, Server) | 🟢 / 🟡 (LLM-1, W3-1, WB-1, WB-4, WZ-1) |
@@ -85,13 +84,6 @@ Schweregrade: **P0** = bekannter aktiver Korrektheits-Bug · **P1** = wichtig, p
 Keine offenen P0-Befunde (G-1 und G-7 erledigt in Phase 1 des Plans Garantien und Durchsatz, §13.6).
 
 ### P1
-
-**G-2 · Inbox-Fenster** (früher P2-4). Die Inbox je Aggregat merkt sich die letzten `Schreibpfad.InboxGrenze` (Standard 10 000)
-CommandIds, FIFO (`BoundedInbox`, auch im Snapshot). Kommt eine CommandId erneut, nachdem sie aus dem Fenster gefallen ist, wirkt der Command
-erneut. Den häufigsten Auslöser — der Poll eines Emittenten gab ab Version 0 alles erneut aus — hat Phase 1 beseitigt (Emittenten-Cursor, §13.6);
-offen bleibt das Fenster selbst (Wiederholung eines Clients oder eines Dirigenten nach mehr als 10 000 fremden Commands am selben Aggregat).
-Test: PD `SchreibGarantieTests.Eine_alte_CommandId_jenseits_der_Inbox_Grenze…` (Skip G-2). *Empfehlung:* Inbox als durable Seitentabelle
-statt Fenster im Stream (Plan Phase 4).
 
 Die Reihe **PF** sind Kosten der Garantien ([11](11-garantien.md) §11.12): die Garantie bleibt, der Mechanismus ist teurer als nötig.
 
@@ -213,10 +205,6 @@ Namen verglichen. Die Sonde deckt `SendeJe`, Count-Join, Kompensation, `IMensch`
 aber verlierbar zugestellt), `als` im Envelope bei mehreren verkörperten Akteuren, Zusagen über C#-Clients (CQRS094), Anmeldung je Person; kein
 Boot-Check, ob `Clients:<Name>:Token` die Akteure des Vertrags verkörpert.
 
-**PF-3 · Inbox-Marke im Stream.** Jeder Command hinterlässt `KommandoVerarbeitet`, auch wenn er Events erzeugt, die die CommandId schon als
-`causationId` tragen; Streams werden etwa doppelt so lang, Snapshots tragen bis `InboxGrenze` Ids. *Empfehlung:* Marke nur bei Noop und
-Ablehnung, oder Inbox als Tabelle mit eindeutigem Schlüssel in derselben Transaktion (löst G-2 mit).
-
 **PF-6 · Read-your-writes-Index.** `ReadModelDepsWriter` schreibt je Event und Projektion nach Redis, für eine Garantie, die nur best-effort ist.
 *Empfehlung:* je Projektion abschaltbar, an nur für Projektionen, auf die Clients warten.
 
@@ -260,8 +248,7 @@ Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
 - **P3-2 · Toter Code und Kleinkram:** `CqrsFrameworkOptions`, `IViewModel` + `ViewModelGenerator`,
   auskommentierte Reflection-Scans (`EventTypeResolver`, `MartenEventTypeRegistration`), nicht gemappte
   Proto-Endpunkte in Host.Blazor (das Python-SDK ruft sie trotzdem), `BenchPing` ohne Treiber-Basis; Dateiname ≠ Klassenname bei einigen
-  Generatoren; veraltete Kommentare und Meldungen (z. B. „drei Header“ in `Spur.cs`, „geteilt mit der Simulation“ in `ProzessManager.cs`, „Client-/OCC-Pfad
-  bleibt marken-frei“ in `AggregateActorBase` — der Client-Pfad läuft mit `istIdempotent: true`; die Fehlermeldung in
+  Generatoren; veraltete Kommentare und Meldungen (z. B. „drei Header“ in `Spur.cs`, „geteilt mit der Simulation“ in `ProzessManager.cs`, die Fehlermeldung in
   `AggregateDispatcherExtensions.ResolveAggregateType` spricht noch von der Namespace-Zuordnung; `ConnectionModule.cs` nennt die CommandId „deterministisch“, sie ist aber `Guid.NewGuid()` und nur über
   Wiederholungen gleich; `CqrsServiceExtension.cs` nennt noch `Cluster__Role`/`migrator|member` statt `Cluster__Rolle`/Allein|Migrator|Mitglied;
   `ProzessManager.cs` sagt „nie in einem Feld gehalten“ trotz HOT-Cache; `Cqrs.Codegen/Program.cs` nennt sich „reflexionsfrei“, liest aber per
@@ -270,8 +257,7 @@ Python-Dateien verweisen auf `./codegen.sh --force` statt auf den Build.
 
 ## 13.4 Korrektheit vs. Reifegrad
 
-Keine bekannten aktiven Korrektheits-Bugs mehr (G-1, G-7, G-3, G-4 erledigt, §13.6). **G-2** (Inbox-Fenster) bricht eine Garantie
-unter Last, **G-5** ist latent. Jede offene G-Lücke hat einen Test, der sie zeigt (Skip `G-n offen`, [11](11-garantien.md) §11.13).
+Keine bekannten aktiven Korrektheits-Bugs mehr (G-1, G-7, G-3, G-4, G-2 erledigt, §13.6). **G-5** ist latent. Jede offene G-Lücke hat einen Test, der sie zeigt (Skip `G-n offen`, [11](11-garantien.md) §11.13).
 Korrektheitsnah sind außerdem: **LLM-1** (vom LLM
 geschriebene Logik nur auf „baut“ geprüft), **W10-1** (möglicher Hash-Unterschied zwischen Python-Basis und Server beim Handshake), **W2-1** (vom Client gesetztes Cluster-Kind) und **WZ-1** (Prüfungen, die grün sind, ohne es zu beweisen). Alles andere ist Reifegrad,
 Allgemeingültigkeit oder Hygiene.
@@ -292,7 +278,8 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
    Phase 0 Abgleich und E2E-Messung, 1 Emit-Ausgang und Emittenten-Cursor (G-1, G-2 Emittent, G-7, P1-6, PF-9), 2 Actor-Lebenszyklus (G-3, PF-5), 3 Batch-Konsum (PF-1, PF-2,
    G-4), 4 Inbox als Tabelle (G-2, PF-3), 5 Prozess-Poll (PF-4), 6 Rest. Ein Agent setzt ihn allein um; die Schritte 1–10 unten ruhen so lange.
    Gemessen wird nach jeder Phase Ende-zu-Ende an den realen Domänen (Plan §0.1). Stand: Phase 0, 1 (Emit-Ausgang, Emittenten-Cursor,
-   G-1, G-7, P1-6, PF-9), 2 (Actor-Lebenszyklus, G-3, PF-5) und 3 (Batch-Konsum, PF-1, PF-2, G-4) umgesetzt; Stand und Messung im Plan §8.
+   G-1, G-7, P1-6, PF-9), 2 (Actor-Lebenszyklus, G-3, PF-5), 3 (Batch-Konsum, PF-1, PF-2, G-4), 5 (Prozess-Poll, PF-4, G-8) und 4 (Inbox als Tabelle, G-2, PF-3)
+   umgesetzt; Stand und Messung im Plan §8.
 1. ~~WB-2/WB-3~~ Sicherheitsnetz steht (2026-10-15): ⟳-Abnahmetest inkl. „▶ Worker“ und Gate „frischer Checkout baut“ (§13.6).
 2. ~~W11-1 (Schreibwege)/WB-1~~ je Absicht ein Weg (2026-10-15, §13.6).
 3. **LLM-1** 🤖 fachlich prüfen: neue Rolle `<Wurzel>.Beispiele` (Strukturtabelle, Lageart, CQRS098), Beispiele an der Karte (Gegeben/Wenn/Dann)
@@ -310,6 +297,23 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **Inbox als Tabelle (früher G-2, PF-3; Plan Garantien und Durchsatz, Phase 4, 2026-10-15, Messserver; docs/03 §3.1/§3.3, docs/04 §4.4):**
+  - **E1 = A** (Tobi): die Inbox ist eine Tabelle `cqrs_inbox` (CommandId eindeutig, Stream, abgelehnt, Zeit), je Command eine Quittung in der
+    Transaktion seiner Events (Group-Commit: eine Anweisung je Batch). Eine Wirkung schreibt keine Marke mehr; die Marken `KommandoVerarbeitet`
+    (Noop) und `KommandoAbgelehnt` bleiben für den Prozess-Fold. Inbox nicht mehr in Rehydration und Snapshot; im Actor nur ein Cache (1 000).
+    Eine Wiederholung, die der Cache nicht kennt, scheitert am Schlüssel — der Actor quittiert den Ausgang des ersten Mals, auch wenn er jetzt
+    anders entschiede. Martens Wiederholung (Polly) nimmt Eindeutigkeitsverletzungen aus (sonst viermal Rollback des Batches).
+  - **E2:** Horizont statt Fenster — `Schreibpfad.InboxHorizontTage` (30), `InboxAufraeumer` mit Advisory-Lock als Lease. **E3:** keine
+    Bestandsdaten zu übernehmen (Sim-DBs werden neu angelegt).
+  - **Schnell anhängen:** Martens Anhänge-Modus `Quick` — eine Schreib-Runde ohne Vorab-Read der Stream-Köpfe und ohne Sequenz-Abfrage; OCC
+    über `update … where version = erwartet`, Metadaten unverändert, keine Tombstones mehr. Vereinbar mit Group-Commit und Garantien (Tests
+    in beiden Modi).
+  - Lücken-Test ohne Skip: PD `SchreibGarantieTests.Eine_alte_CommandId_jenseits_der_Inbox_Grenze…`; neu: `…Eine_Wiederholung_nach_dem_Neustart…`,
+    `…Ein_Duplikat_mitten_im_Group_Commit…`, `…Die_Inbox_vergisst_erst_jenseits_des_Horizonts`, I `GarantiePostgresTests.Effekt_und_Quittung…`
+    (je Rich und Quick). Mit sabotierter Regel (keine Quittung) fallen fünf der sieben Schreib-Garantien.
+  - Gemessen (docs/12 §12.5, A-B-B-A gegen den Stand davor): S3 1,17–1,18 ×, S5 1,06–1,08 ×, S1 1,04 ×, S4 1,01 ×; Queries je Vorgang 0,78–0,89 ×;
+    S5-8 je Vorgang Event-Inserts 11,5 → 6,9, Stream-Kopf-Reads 4,8 → 0. Zwei Störungsläufe grün. Offen daneben: PF-14 (Leerlauf).
 
 - **Leerlauf der Prüfdomäne (früher PF-11, PF-12; 2026-10-15, Messserver; docs/04 §4.1, §4.5):** die Annahme „die Reaktion hängt nach“
   war falsch (sie antwortet in Echtzeit, p99 37 ms). L5 war nicht leer wegen dreier Schichten, die nacheinander sichtbar wurden:
@@ -366,7 +370,7 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
   - **G-2 (Emittent):** Signal und Poll eines Emittenten lesen ab dem Cursor; die Commands eines Tails gehen parallel hinaus
     (`EmitAusgaenge`) und werden gemeinsam abgewartet, der Cursor rückt nur nach bestätigtem Emit vor; „nicht aufgeholt“ hält den Poll
     (`WakeAck.Aufgeholt`). `Wake.VomPoll` und `DetachedEmit` sind entfallen. P `KonsumGarantieTests.Ein_nicht_zugestellter_Emit…` ohne Skip,
-    PD `AblaufGarantieTests.Absturz_zwischen_Emit_und_Cursor…` neu. Offen bleibt das Inbox-Fenster selbst (G-2, Phase 4).
+    PD `AblaufGarantieTests.Absturz_zwischen_Emit_und_Cursor…` neu. Das Inbox-Fenster selbst schloss Phase 4 (G-2, oben).
   - **P1-6:** der generierte Pull-Emit-Pfad (`PullPathGenerator`, `PipelineActorGenerator`) reicht das Token der Weckung durch.
   - **G-7:** `MartenEventStore` meldet Tombstone-Streams nicht als geändert und liest keine Tombstones; die Spur zeigt sie nicht; ein
     scheiternder Poll-Durchlauf wird als Warnung gemeldet. I `GarantiePostgresTests.Ein_gescheiterter_Append…` ohne Skip (ohne den Filter rot

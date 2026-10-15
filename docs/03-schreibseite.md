@@ -51,19 +51,25 @@ dann läuft `HandleCommandAsync` im Spur-Rahmen `Spur.Von(Ursache, decide:<Aggre
 
 Der gemeinsame Kern `HandleCommandCoreAsync`:
 1. Guard: falsche AggregateId → Fehler.
-2. **Vorprüfung** (`CommandVorpruefung.Prüfe`): erst die Framework-Inbox — bereits verarbeitete `CommandId` → idempotenter Erfolg, bereits
-   abgelehnte → dieselbe Ablehnung —, dann OCC (`_state.Version != expectedVersion` → Versionskonflikt). Die Reihenfolge sorgt dafür, dass
-   ein wiederholt zugestellter Command (Emittiert immer, Client bei Wiederholung nach verlorenem Ack) dasselbe Ergebnis liefert statt
-   eines Versionskonflikts.
+2. **Vorprüfung** (`CommandVorpruefung.Prüfe`): erst der Inbox-Cache des Actors — bereits verarbeitete `CommandId` → idempotenter Erfolg,
+   bereits abgelehnte → dieselbe Ablehnung —, dann OCC (`_state.Version != expectedVersion` → Versionskonflikt). Vor einem Versionskonflikt
+   schlägt der Actor in der Inbox-Tabelle nach (`AusgangAsync`): eine Client-Wiederholung, die der Cache nicht mehr kennt, sieht eine
+   weitergerückte Version. Die Reihenfolge sorgt dafür, dass ein wiederholt zugestellter Command (Emittiert immer, Client bei Wiederholung nach
+   verlorenem Ack) dasselbe Ergebnis liefert statt eines Versionskonflikts.
 3. **Decider**: `_handler.HandleCommand(payload).ToList()`.
-4. **Noop** (keine Events) → trotzdem eine `KommandoVerarbeitet`-Marke co-committen (sonst bliebe ein Prozess-Schritt ewig offen).
+4. **Noop** (keine Events) → trotzdem eine `KommandoVerarbeitet`-Marke co-committen (sonst bliebe ein Prozess-Schritt ewig offen: der
+   Prozess-Fold erkennt den Ausgang an der Kausalität im Ziel-Stream).
 5. Trennung persistenter Events von Ablehnungen (`ITransientEvent`); ein *gemischtes* Ergebnis oder mehrere Ablehnungen werfen laut.
 6. **Reine Ablehnung** → kein Append der Ablehnung, kein Apply; eine `KommandoAbgelehnt`-Marke wird co-committet, die Ablehnung geht
    targeted an den Aufrufer und als verlierbarer Hinweis an die Spur.
-7. **Erfolg**: die `KommandoVerarbeitet`-Marke wird an die Events angehängt, dann `AppendeAsync` — Effekt und Marke in einer Transaktion.
-   **Scheitert ein Append** (Effekt, Noop- oder Ablehnungs-Marke; Versionskonflikt durch einen zweiten Schreiber, verlorene Quittung, DB-Fehler),
-   rehydriert der Actor frisch aus dem Log (G-3). Steht die `CommandId` danach in der Inbox, hat der Command gewirkt bzw. ist abgelehnt — das
-   wird quittiert (mehrdeutiger Commit, kein falsches Negativ, P10), die Signale gehen nachträglich hinaus. Sonst ist sicher nichts geschrieben:
+7. **Erfolg**: `AppendeAsync` schreibt die Events — ohne Marke; die Quittung des Commands (`Quittung`, Ausgang gewirkt) reist in derselben
+   Transaktion in die Inbox-Tabelle (§3.3). Jeder der drei Appends (Effekt, Noop-Marke, Ablehnungs-Marke) trägt so eine Quittung.
+   **Kennt die Inbox die `CommandId` schon** (eine Wiederholung, die der Cache nicht kannte — nach Passivierung, Neustart oder jenseits des
+   Caches), scheitert der Append am Schlüssel, nichts ist geschrieben (`KommandoSchonEntschiedenException`), und der Actor quittiert den
+   Ausgang des ersten Mals — auch wenn er jetzt anders entschieden hätte.
+   **Scheitert ein Append sonst** (Versionskonflikt durch einen zweiten Schreiber, verlorene Quittung, DB-Fehler), rehydriert der Actor
+   frisch aus dem Log (G-3) und schlägt in der Inbox nach. Steht die `CommandId` dort, hat der Command gewirkt bzw. ist abgelehnt — das wird
+   quittiert (mehrdeutiger Commit, kein falsches Negativ, P10), die Signale gehen nachträglich hinaus. Sonst ist sicher nichts geschrieben:
    der Command wird **einmal** auf dem frischen Stand neu entschieden (ein Client-Command mit veralteter Version scheitert dabei regulär an der
    Vorprüfung); scheitert auch das, kommt ein technischer Fehler zurück.
 8. **Post-Append-Grenze**: ab dem Commit ist der Command durabel. Applier mutiert `_state` in-memory (Marken werden nur in der Version
@@ -75,7 +81,7 @@ sind in [04 §4.7](04-konsum-und-prozess-maschine.md) beschrieben.
 
 **Passivierung** (PF-5): hört ein Aggregat-Actor `Lebenszyklus.AggregatLeerlaufSekunden` lang nichts (Standard 600), stoppt er sich
 (`Infrastructure/Lebenszyklus/Passivierung.cs`, Proto-`ReceiveTimeout`); beim Stoppen schreibt er seinen Snapshot, die nächste Nachricht
-aktiviert ihn frisch (Snapshot + Tail, Inbox inklusive). Emittenten-Adapter und Prozess-Manager passivieren genauso; die Batch-Leser der
+aktiviert ihn frisch (Snapshot + Tail; der Inbox-Cache ist dann leer, die Inbox-Tabelle bleibt). Emittenten-Adapter und Prozess-Manager passivieren genauso; die Batch-Leser der
 Projektionen (je Projektion und Partition) nicht ([04](04-konsum-und-prozess-maschine.md) §4.1).
 
 ## 3.2 Das Aggregat-Modell (reiner Fachcode)
@@ -119,15 +125,26 @@ public partial class Leihvorgang : IState
 
 **Wie der Fachcode rein bleibt:** `this.State` und der Konstruktor `Decider(Leihvorgang state)` (`Domain.SourceGeneration/Generator.cs`)
 sowie `Id`/`Version` (`StateGenerator`) sind generiert. OCC, Signal, Cursor, Idempotenz und Spur erscheinen ausschließlich im Framework.
-Die Dedup-Marken (`KommandoVerarbeitet`/`KommandoAbgelehnt`, `Infrastructure/Aggregate/KommandoVerarbeitet.cs`) sind `IProzessIntern`,
-werden beim Falten übersprungen (aber versionsgezählt) — der Decider sieht sie nie. Command → Aggregat folgt aus den Decide-Signaturen,
+Die Marken für Noop und Ablehnung (`KommandoVerarbeitet`/`KommandoAbgelehnt`, `Infrastructure/Aggregate/KommandoVerarbeitet.cs`) sind
+`IProzessIntern`, werden beim Falten übersprungen (aber versionsgezählt) — der Decider sieht sie nie; die Inbox ist eine Tabelle des Stores. Command → Aggregat folgt aus den Decide-Signaturen,
 nicht aus Namespaces (`CommandAggregateMapGenerator`).
 
 ## 3.3 Event-Store (Marten)
 
 `Infrastructure/Persistence/MartenEventStore.cs`:
 - **Append** (`AppendEventsAsync`): `expectedVersion == 0` → `session.Events.StartStream` (wirft bei Doppel-Erstellung); `> 0` →
-  `session.Events.Append(id, expectedVersion + count, events)`.
+  `session.Events.Append(id, expectedVersion + count, events)`. Martens Anhänge-Modus ist **`Quick`**: weil jeder Append seine erwartete
+  Version trägt, vergibt Marten die Versionen selbst und schreibt in **einer** Runde — `insert`/`update mt_streams … where version = erwartet`
+  (die OCC, auch gegen eine gleichzeitige Transaktion: das `update` wartet auf die Zeilensperre und findet danach nichts), dann die Events
+  mit `nextval` im Insert. Der Standard (`Rich`) las vorher außerhalb der Transaktion je Stream die Version, holte die Sequenzen ab und
+  hinterließ bei einem gescheiterten Commit Tombstones (G-7).
+- **Inbox** (`InboxTabelle`): Tabelle `cqrs_inbox` im Event-Schema (`command_id` Primärschlüssel, `stream_id`, `abgelehnt`, `zeit` =
+  `now()` der schreibenden Transaktion, BRIN-Index auf `zeit`), ein von Marten verwaltetes Schema-Objekt (`Storage.ExtendedSchemaObjects`).
+  Trägt der Append eine `Quittung`, schreibt `QueueSqlCommand` sie in derselben Transaktion (Marten führt sie nach den Events aus); eine
+  Schlüsselverletzung auf `cqrs_inbox` wird zu `KommandoSchonEntschiedenException`. Martens Wiederholungs-Policy (Polly) nimmt
+  Eindeutigkeitsverletzungen aus — sie sind deterministisch und liefen sonst viermal mit Rollback. `AusgangAsync` liest per Primärschlüssel.
+  Der `InboxAufraeumer` (je Knoten, alle 10 min, seitenweise, Lease über einen Transaktions-Advisory-Lock) löscht Quittungen älter als
+  `Schreibpfad.InboxHorizontTage` (Standard 30, E2): innerhalb des Horizonts wirkt ein Command genau einmal.
 - **OCC**: `EventStreamUnexpectedMaxEventIdException` und die Doppel-Erstellung werden zu `ConcurrencyException`.
 - **Metadaten** in **derselben** Transaktion: `CorrelationId`, `CausationId` und die Header
   - `aggregate_type` — der Aggregat-Typ,
@@ -159,9 +176,11 @@ Reads werden durchgereicht. Schalter in der Umgebung: `Schreibpfad.GroupCommit` 
 - **Drain**: `Drain` parallele Schleifen. Jede sammelt bis `BatchGroesse` oder ein optionales `LingerMs`-Fenster (0 = selbstregulierend:
   unter Last füllt sich die Queue, während der vorige Commit läuft), dann `FlushAsync`.
 - **Commit** (`MartenEventBatchWriter.WriteBatchAsync`): N Appends in **einer** `LightweightSession` → ein `SaveChangesAsync` = eine
-  Postgres-Transaktion. Metadaten und Spur-Header **pro Event** gesetzt (Voraussetzung fürs Bündeln verschiedener Korrelationen).
-- **Fehlermodell**: der Batch ist all-or-nothing; wirft er (z. B. OCC-Konflikt eines Streams), wiederholt `IsolateAsync` jeden Auftrag
-  **einzeln** über den inneren Store → nur der Schuldige fällt. Beim Herunterfahren werden verbliebene Aufträge isoliert geschrieben.
+  Postgres-Transaktion. Metadaten und Spur-Header **pro Event** gesetzt (Voraussetzung fürs Bündeln verschiedener Korrelationen); die
+  Quittungen aller Appends in **einer** Anweisung (`insert … select * from unnest(…)`).
+- **Fehlermodell**: der Batch ist all-or-nothing; wirft er (z. B. OCC-Konflikt eines Streams, eine Quittung, die die Inbox schon kennt),
+  wiederholt `IsolateAsync` jeden Auftrag **einzeln** über den inneren Store → nur der Schuldige fällt, der innere Store meldet Konflikt
+  (`ConcurrencyException`) und Wiederholung (`KommandoSchonEntschiedenException`) getrennt. Beim Herunterfahren werden verbliebene Aufträge isoliert geschrieben.
 - **Verteilt korrekt, weil node-lokal**: Proto.Cluster garantiert Single-Activation — ein Stream lebt auf genau einem Node, zwei Nodes
   bündeln nie denselben Stream, OCC pro Stream bleibt ohne Cross-Node-Koordination korrekt.
 
@@ -205,6 +224,5 @@ aus der Zeit vor dem Generator (docs/13 P3-2).
 
 ## 3.8 Schulden im Schreibpfad
 
-Offenes steht in einer Quelle, [13 §13.0](13-reifegrad-schulden-bewertung.md): der parallele Drain skaliert sublinear (P2-6), die
-`BoundedInbox` verdrängt ab `Schreibpfad.InboxGrenze` FIFO (G-2), Split-Upcasts verschieben die Version (G-5), der Snapshot-`Clone` ist ein JSON-Round-Trip (W10-2), der tote
+Offenes steht in einer Quelle, [13 §13.0](13-reifegrad-schulden-bewertung.md): der parallele Drain skaliert sublinear (P2-6), Split-Upcasts verschieben die Version (G-5), der Snapshot-`Clone` ist ein JSON-Round-Trip (W10-2), der tote
 Lesepfad `LoadStateAsync` neben `AggregateRehydrator` (P2-9), der Client darf den `AggregateType` selbst setzen (W2-1).

@@ -109,9 +109,9 @@ die Inbox-Tabelle (4) nach dem Batch-Konsum kommen.
 
 | # | Frage | Vorschlag | nötig bis |
 |---|---|---|---|
-| E1 | Inbox: **A** Tabelle als Dedup, Marke nur bei Noop/Ablehnung — oder **B** Tabelle als „Ausgang je Command“, keine Marken im Stream (Prozess-Manager, Clients, Spur ändern sich; W9 berührt) | **A** | Phase 4 |
-| E2 | Aufbewahrungs-Horizont der Inbox (Exactly-once gilt innerhalb dieses Horizonts) | 30 Tage, Umgebung `Schreibpfad.InboxHorizont` | Phase 4 |
-| E3 | Bestandsdaten | Sim-DBs zurücksetzen; Backfill-SQL aus Marken und `causationId` nur, falls Prod-Daten bestehen | Phase 4 |
+| E1 | Inbox: **A** Tabelle als Dedup, Marke nur bei Noop/Ablehnung — oder **B** Tabelle als „Ausgang je Command“, keine Marken im Stream (Prozess-Manager, Clients, Spur ändern sich; W9 berührt) | **entschieden** (Tobi, 2026-10-15): **A** | Phase 4 |
+| E2 | Aufbewahrungs-Horizont der Inbox (Exactly-once gilt innerhalb dieses Horizonts) | **entschieden** (Tobi, 2026-10-15): 30 Tage, Umgebung `Schreibpfad.InboxHorizontTage` | Phase 4 |
+| E3 | Bestandsdaten | **entschieden** (Tobi, 2026-10-15): Sim-DBs zurücksetzen, kein Backfill (keine Prod-Daten) | Phase 4 |
 | E4 | Partitionen je Projektion im Batch-Konsum | **entschieden** (Tobi, 2026-10-15): 8, Umgebung `Konsum.Partitionen`; ein Wechsel ist ein Neuaufbau; Single-Activation des Clusters + Versionsprüfung des Partitions-Checkpoints statt Lease | Phase 3 |
 | E5 | Abnahme-Zielwerte je Szenario | **entschieden** (Tobi, 2026-10-15): die Werte aus §8 (Phase 3: Durchsatz S1/S5 ≥ 3 ×, Queries je Vorgang ≤ ⅓) | nach Phase 0 |
 | E6 | Handle-/Trigger-Welt (W11-1) in Phase 1 zurückbauen oder nur anpassen? | nur minimal anpassen; der Rückbau bleibt W11-1 | Phase 1 |
@@ -336,6 +336,33 @@ anstehen.
   erreicht, für L5 knapp (0,5). **Die Phase ist nicht abgenommen**: das S1-Ziel setzt voraus, dass der Konsum die Decke von S1 ist — gemessen ist
   es der Datei-Treiber (PF-10).
 
+**Phase 4** (umgesetzt, 2026-10-15, nach Phase 5; Code `aef3d46` (Inbox-Tabelle), `cf30aa0` (schneller Anhänge-Modus), gemessen auf dem
+Messserver; E1 = A, E2 = 30 Tage, E3 = zurücksetzen):
+- *Umgesetzt:* Tabelle `cqrs_inbox` (`InboxTabelle`, Martens `ExtendedSchemaObjects`: `command_id` PK, `stream_id`, `abgelehnt`, `zeit`, BRIN auf
+  `zeit`); `IEventStoreRepository.AppendEventsAsync(…, Quittung?)` schreibt die Quittung in derselben Transaktion (Einzel-Append eine Zeile,
+  Group-Commit eine Anweisung für alle), `AusgangAsync` liest sie; Schlüsselverletzung → `KommandoSchonEntschiedenException`, der Appender
+  isoliert wie bei einem Konflikt. Actor: Marke nur noch bei Noop/Ablehnung, Inbox raus aus Rehydration und Snapshot, `BoundedInbox` bleibt als
+  Cache (1 000 je Ausgang); Nachschlagen nur nach einem gescheiterten Append und vor einem Versionskonflikt; eine erkannte Wiederholung
+  veröffentlicht keine Signale. Polly wiederholt keine Eindeutigkeitsverletzungen mehr. Horizont `Schreibpfad.InboxHorizontTage` (ersetzt
+  `InboxGrenze`), `InboxAufraeumer` (10 min, seitenweise, Advisory-Lock als Lease). Martens Anhänge-Modus `Quick` (Recherche im Marten-Quellcode
+  8.20: bei Appends mit erwarteter Version vergibt Marten die Versionen selbst, OCC über `update … where version = erwartet`, Metadaten und
+  Zeitstempel wie bisher, keine Tombstones). Messtreiber: „keine CommandId zweimal gewirkt“ zählt jetzt Transaktionen (`xmin`) je CommandId der
+  Inbox statt Marken.
+- *Lücken-Test ohne Skip, grün:* PD `SchreibGarantieTests.Eine_alte_CommandId_jenseits_der_Inbox_Grenze…` (G-2). Neu: PD `…Eine_Wiederholung_nach_dem_Neustart…`,
+  `…Ein_Duplikat_mitten_im_Group_Commit…`, `…Die_Inbox_vergisst_erst_jenseits_des_Horizonts`; I `GarantiePostgresTests.Effekt_und_Quittung…` und
+  die Append-/OCC-Garantien je in Rich und Quick. Gegenprobe (Actor ohne Quittung): 5 von 7 Schreib-Garantien rot. Umgebaut:
+  `RehydrationGarantieTests`, `SnapshotTests`, `TwoNodeCommandDispatchTests` (Version 1 statt 2).
+- *Messung (Server-Tabelle §12.5, Spalten „Inbox-Tabelle“, „Schnell anhängen“):* `…_2152_aef3d46_server-inbox`, `…_2207_cf30aa0_server-quick`
+  (gültig, grün), Störungsläufe `…_2156_…`, `…_2210_…` (gültig, grün, 28 004 bzw. 28 502 Vorgänge). A-B-B-A gegen `3483a31`
+  (`…_server-schreibweg-ab-*`): S3-8/S3-64 1,18/1,17 ×, S5-1/8/64 1,08/1,06/1,06 ×, S1 1,04 ×, S4 1,01 ×; Queries je Vorgang 0,78–0,89 ×; je Vorgang
+  S5-8 Event-Inserts 11,5 → 6,9, Stream-Kopf-Reads 4,8 → 0, Sequenz-Abfragen 1,4 → 0, Transaktionen gleich (≈ 10 BEGIN/COMMIT).
+- *Abnahme:* Exactly-once über den Horizont (Integration) **ja**; E2E S3 heiß genau einmal **ja** (alle Läufe); „S3 heiß ≥ 1,5 × des Stands
+  nach Phase 3“ — auf dem Messserver gibt es keine Phase-3-Spalte; gegen die Server-Baseline S3-8 2,24 ×, S3-64 2,23 ×, davon diese Phase
+  1,17–1,18 × (der Rest kam mit „Korreliert lesen“); „Durchsatz S1 über dem Stand nach Phase 3“ **ja** (62 gegen 57,8 Baseline, 1,04 × im
+  A-B-B-A — S1 misst den Datei-Treiber, PF-10). Die im Group-Commit gemessenen 35–40 % der Marke zeigen sich Ende zu Ende nicht: die
+  Transaktionen je Vorgang bleiben, und die Decke liegt in Konsum und Dirigent. **Abnahme: Vorschlag ja** (Tobi).
+- *Neuer Befund:* PF-14 (Leerlauf L1/L5 wieder über dem E5-Ziel, seit „Korreliert lesen“; L5 86 Queries/s = Nachlauf der Reaktion, PF-13).
+
 **Phase 5** (umgesetzt, 2026-10-15, auf Tobis Wort vor Phase 4; Code `22632bc`…`ffaeaea`, gemessen auf dem Messserver, docs/12 §12.6):
 - *Umgesetzt:* PF-4 — `ProzessPoll` liest seitenweise (`ReadPartitionAsync`) und routet die geladenen Events, Starts nur für neue oder offene
   Vorgänge (`StreamsVorhandenAsync`), Marke je Seite; Backstop mit Fristen im Offen-Index (`ProzessOffen.Frist`, Sekundentakt, geschrieben erst
@@ -411,14 +438,17 @@ Phase 5 damit erreicht (L1 und L5)**; S5-64 1,69 × Baseline. Offen: PF-13, PF-4
 7. `--probe` (verkürzter Funktionstest des Treibers) schreibt nicht nach `vermessung/ergebnisse/` — Probeläufe während der Entwicklung des
    Treibers sind keine Messläufe.
 
-## 9 · Übergabe an den nächsten Agenten (Stand 2026-10-15, nach Phase 3)
+## 9 · Übergabe an den nächsten Agenten (Stand 2026-10-15, nach Phase 4)
+
+- **Neu seit der letzten Übergabe:** Phase 4 (Inbox als Tabelle, schneller Anhänge-Modus) umgesetzt und gemessen, §8; G-2 und PF-3 erledigt.
+  Offen: Tobis Abnahme von Phase 4, der Haltepunkt aus Phase 3 (Punkt 0 unten, unverändert), PF-13, PF-14, PF-4b; danach Phase 6.
 
 - **Wo es steht:** Phase 0, 1, 2 fertig und abgenommen; Phase 3 umgesetzt und gemessen, **nicht abgenommen** (S1-Ziel verfehlt, die Decke von S1 ist
-  der Datei-Treiber, PF-10); Phase 5 (PF-4, G-8) umgesetzt und gemessen, mit dem Nachtrag PF-12 E5-Ziel erreicht (L1 und L5 unter 10 Queries/s und 5 % CPU); offen PF-4b, PF-13. Gemessen wird
+  der Datei-Treiber, PF-10); Phase 5 (PF-4, G-8) umgesetzt und gemessen, mit dem Nachtrag PF-12 E5-Ziel erreicht (L1 und L5 unter 10 Queries/s und 5 % CPU; seit „Korreliert
+  lesen“ wieder darüber, PF-14); Phase 4 (G-2, PF-3) umgesetzt und gemessen, Abnahme bei Tobi; offen PF-4b, PF-13, PF-14. Gemessen wird
   seit 2026-10-15 auf dem Messserver (`scripts/server.sh`, docs/12 §12.6) mit eigener Tabelle; die Mac-Tabelle endet mit Phase 3.
-  **Haltepunkt:** Tobi entscheidet über den Vorschlag in §8 („Plan-Änderungen aus Phase 3“, Punkt 0) bevor Phase 4 beginnt.
-- **Danach:** Phase 4 (Inbox als Tabelle, G-2, PF-3) nach §3; E1–E3 stehen in §2 als Vorschlag — vor dem Bau gebündelt fragen. Lücken-Test der
-  Phase: PD `SchreibGarantieTests.Eine_alte_CommandId_jenseits_der_Inbox_Grenze…` (Skip G-2).
+  **Haltepunkt (offen):** Tobi entscheidet über den Vorschlag in §8 („Plan-Änderungen aus Phase 3“, Punkt 0: E5-Ziel für S1 neu fassen).
+- **Danach:** Phase 6 (PF-6, G-5, PF-7) nach §3; daneben PF-13/PF-14 (Leerlauf und Reaktion unter S5-64) und PF-4b.
 - **Messen je Phase:** auf dem Messserver (`scripts/server.sh lauf scripts/vermessung-e2e.sh --anlass server-<phase> --spalte "<Phase>"`),
   Höchstlast ≈ 4 min, Störungslauf ≈ 5–8 min, Tabelle per Skript (Tabelle „messserver“). A-B-B-A über einen Worktree des alten Stands auf dem Server. Code committen, dann messen, dann Ergebnis committen. Nicht auf Abkühlung oder Fremdlast warten (Tobi), Fremdlast im Bericht nennen.
 - **Vor jedem Commit:** `dotnet build`; Prüfstand; Garantie-Suite (Prüfstand, dann nacheinander Integration und Prüfdomäne); die vollen

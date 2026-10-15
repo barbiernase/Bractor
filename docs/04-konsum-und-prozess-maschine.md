@@ -91,7 +91,7 @@ und Poll gleich:
 4. **Dispatch** je Event mit einem frischen `ProjectionWriter` und den `EmitAusgaenge` der Weckung (`Infrastructure/PubSub/EmitAusgaenge.cs`,
    trägt das Token): ein ausgegebener Command wird sofort gesendet, sein Ausgang erfasst — die Commands eines Tails laufen parallel.
 5. **Ausgänge abwarten:** bleibt ein Command „unbekannt“, endet die Weckung mit `false` — der Cursor bleibt stehen, die nächste Weckung sendet den
-   Tail mit denselben CommandIds erneut (die Inbox des Ziels verwirft, was schon gewirkt hat; G-2).
+   Tail mit denselben CommandIds erneut (die Inbox des Ziels verwirft, was schon gewirkt hat).
 6. **Cursor vorrücken:** `SchreibeAsync` erst nach bestätigtem Emit; scheitert das Schreiben, sendet die nächste Weckung erneut.
 
 **Transport** (`Infrastructure/Projections/PullPath.cs`): ein `SignalReceiverActor` weckt die Cluster-Identität `(pull-<Typ>, StreamId)`; der
@@ -211,10 +211,17 @@ Jeder Command geht durch das **eine** Emit-Primitiv `CommandEmitter.EmitAsync` (
 - **Drossel je Ziel** (`EmitDrossel`): höchstens 8 Sends je Ziel-Aggregat gleichzeitig unterwegs (je Knoten); der Rückstau eines heißen
   Aggregats liegt vor dem Send statt in seiner Mailbox, sodass die Sends in ihrer Frist bleiben (PF-9).
 
-**Dedup macht die Framework-Inbox, nicht der Fachcode.** Der Aggregat-Actor co-committet mit den Domänen-Events eine
-`KommandoVerarbeitet(CommandId)`-Marke (`Infrastructure/Aggregate/KommandoVerarbeitet.cs`, `IProzessIntern`: der Applier sieht sie nie);
-eine fachliche Ablehnung eines emittierten Commands wird zur durablen `KommandoAbgelehnt`-Marke. Aus beiden faltet `AggregateActorBase` zwei
-Inbox-Mengen (`BoundedInbox`) und erkennt eine Wiederholung **vor** der OCC-Prüfung → Noop. Die Inbox ist gedeckelt (docs/13 G-2). Was daraus garantiert ist: [11](11-garantien.md).
+**Dedup macht die Framework-Inbox, nicht der Fachcode.** Die Inbox ist eine Tabelle des Event-Stores (`cqrs_inbox`, `InboxTabelle`,
+[03 §3.3](03-schreibseite.md)): jeder Append des Aggregat-Actors trägt die Quittung seines Commands (gewirkt oder abgelehnt), geschrieben in
+derselben Transaktion wie die Events und eindeutig je CommandId. Eine Wiederholung scheitert am Schlüssel, nichts wird geschrieben, der Actor
+quittiert den Ausgang des ersten Mals. Vor dem Append erkennt ein kleiner Cache im Actor (`BoundedInbox`, je Ausgang 1 000 CommandIds) die
+häufige Wiederholung kurz nach dem ersten Mal schon **vor** der OCC-Prüfung. Exactly-once gilt innerhalb des Horizonts
+(`Schreibpfad.InboxHorizontTage`, Standard 30 Tage), nicht mehr innerhalb eines Fensters von CommandIds (G-2 geschlossen).
+
+**Marken im Ziel-Stream nur noch für den Prozess-Fold** (E1, Variante A): eine Wirkung hinterlässt nur ihre Events — das erste trägt
+`causation_id = CommandId`, daran erkennt der Prozess-Manager sie. Ein Noop hinterlässt die Marke `KommandoVerarbeitet(CommandId)`, eine
+fachliche Ablehnung die Marke `KommandoAbgelehnt(CommandId, Grund)` (`Infrastructure/Aggregate/KommandoVerarbeitet.cs`, `IProzessIntern`:
+der Applier sieht sie nie, die Version zählt sie). Was daraus garantiert ist: [11](11-garantien.md).
 
 **Analyzer-Zwang** (`CommandEmitAnalyzer`): **CQRS020** (rohes `RequestAsync<CommandResult>` außerhalb von Emitter/Dispatcher),
 **CQRS021** (Command-Send mit `CancellationToken.None`/`default`). Der generierte Pull-Emit-Pfad reicht das Token der Weckung durch
@@ -394,8 +401,8 @@ unbekannter lässt sie für den nächsten Tick liegen). Sie ist kein Weg für ne
 - **Snapshots:** `MartenSnapshotStore` — `Snapshot<TState>` als jsonb je Aggregat, Registrierung generiert (`SnapshotRegistrationGenerator`).
   **Nicht-autoritativ:** kein Treffer oder eine andere `SchemaVersion` → Voll-Replay (`AggregateRehydrator`). Die Schema-Version ist der
   Struktur-Hash des States plus der Code-Hash von State und Applier (`{State}AggregateHandler.CodeHash`) — eine geänderte Apply-Logik
-  invalidiert alte Snapshots. Geschrieben wird nach einer Schwelle von Events und bei Deaktivierung: State und Inbox werden im Actor-Turn
-  kopiert, der DB-Write läuft danach fire-and-forget. Die Kopie ist ein JSON-Round-Trip (docs/13 W10-2).
+  invalidiert alte Snapshots. Geschrieben wird nach einer Schwelle von Events und bei Deaktivierung: der State wird im Actor-Turn
+  kopiert (die Inbox reist nicht mit — sie ist eine Tabelle), der DB-Write läuft danach fire-and-forget. Die Kopie ist ein JSON-Round-Trip (docs/13 W10-2).
 
 ## 4.8 Spur der Konsumenten
 
@@ -415,5 +422,5 @@ Format, Lesen und Ansichten: `docs/konzept-werkbank.md` §7.
 ## 4.9 Offen
 
 Offene Punkte stehen nur in [13](13-reifegrad-schulden-bewertung.md): Testlücke T-1,
-Handle-Pipeline/Trigger-Welt und doppelte DSL W11-1, Zeitlimits über den Backstop W11-2, Garantie-Lücke G-2 (Inbox-Fenster), Marking/Kompensation/
+Handle-Pipeline/Trigger-Welt und doppelte DSL W11-1, Zeitlimits über den Backstop W11-2, Marking/Kompensation/
 `KlärungNötig` P2-5, hartkodierte Intervalle P2-8, reflektive Serialisierung (Marking-Store, Snapshot-Kopie) W10-2, Projektlage W2-1.
