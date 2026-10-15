@@ -87,21 +87,27 @@ case "${1:-}" in
     frei_pruefen; commit_pruefen; auschecken
     ID="$(date +%Y%m%d-%H%M%S)-${SHA:0:7}"
     BEFEHL="$(printf '%q ' "$@")"
-    # Das Lauf-Skript: Befehl ausführen, neue (nicht committete) Ergebnis-Ordner ins Archiv kopieren (der nächste Lauf säubert den Checkout), Exit-Code ablegen.
-    fern "mkdir -p $LAEUFE/ergebnisse && cat > $LAEUFE/$ID.sh && echo $ID > $LAEUFE/letzter" <<EOF
+    # Das Lauf-Skript: Befehl ausführen, neue (nicht committete) Ergebnis-Ordner ins Archiv kopieren (der nächste Lauf säubert den
+    # Checkout), Exit-Code ablegen. Der Befehl reist als eigene Datei (<id>.befehl) und wird dort per eval ausgeführt; die Vorlage ist
+    # wörtlich — sonst deutete die lokale Shell Anführungszeichen, ! und $ im Befehl um.
+    read -r -d '' VORLAGE <<'VORLAGE' || true
 #!/usr/bin/env bash
 set +e
-cd $CO && . /etc/profile.d/bractor.sh
+cd @CO@ && . /etc/profile.d/bractor.sh
 {
-  echo "== \$(date -Is) · Commit ${SHA:0:7} · \$(nproc) Kerne · Last \$(cut -d' ' -f1-3 /proc/loadavg)"
-  echo "\$ $BEFEHL"
-  $BEFEHL
-  rc=\$?
-  for d in \$(git ls-files --others --exclude-standard vermessung/ergebnisse | cut -d/ -f3 | sort -u); do cp -r vermessung/ergebnisse/\$d $LAEUFE/ergebnisse/; done
-  echo "== \$(date -Is) · Exit \$rc"
-} > $LAEUFE/$ID.log 2>&1
-echo \$rc > $LAEUFE/$ID.exit
-EOF
+  echo "== $(date -Is) · Commit @KURZ@ · $(nproc) Kerne · Last $(cut -d' ' -f1-3 /proc/loadavg)"
+  echo "\$ $(cat @LAEUFE@/@ID@.befehl)"
+  eval "$(cat @LAEUFE@/@ID@.befehl)"
+  rc=$?
+  for d in $(git ls-files --others --exclude-standard vermessung/ergebnisse | cut -d/ -f3 | sort -u); do cp -r vermessung/ergebnisse/$d @LAEUFE@/ergebnisse/; done
+  echo "== $(date -Is) · Exit $rc"
+} > @LAEUFE@/@ID@.log 2>&1
+echo $rc > @LAEUFE@/@ID@.exit
+VORLAGE
+    SKRIPT="${VORLAGE//@CO@/$CO}"; SKRIPT="${SKRIPT//@KURZ@/${SHA:0:7}}"; SKRIPT="${SKRIPT//@LAEUFE@/$LAEUFE}"
+    SKRIPT="${SKRIPT//@ID@/$ID}"
+    printf '%s\n' "$BEFEHL" | fern "mkdir -p $LAEUFE/ergebnisse && cat > $LAEUFE/$ID.befehl"
+    printf '%s\n' "$SKRIPT" | fern "cat > $LAEUFE/$ID.sh && echo $ID > $LAEUFE/letzter"
     fern "tmux new-session -d -s bractor 'bash $LAEUFE/$ID.sh'"
     if [ $los = 1 ]; then echo "Lauf $ID gestartet (scripts/server.sh warte)."; exit 0; fi
     warte
