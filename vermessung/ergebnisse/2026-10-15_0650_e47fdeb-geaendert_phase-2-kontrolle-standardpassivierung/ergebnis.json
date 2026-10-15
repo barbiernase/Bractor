@@ -1,0 +1,2058 @@
+{
+  "art": "e2e",
+  "anlass": "phase-2-kontrolle-standardpassivierung",
+  "spalte": null,
+  "skript": "scripts/vermessung-e2e.sh --anlass phase-2-kontrolle-standardpassivierung",
+  "zeit": "2026-10-15T04:50:42.0033530+00:00",
+  "commit": "e47fdeb",
+  "branch": "claude/werkbank-zielbild",
+  "arbeitsbaum": "3 geänderte Dateien (nicht committet)",
+  "rechner": "MacBook-Air-von-Tobias-2, Darwin 24.5.0 Darwin Kernel Version 24.5.0: Tue Apr 22 19:54:43 PDT 2025; root:xnu-11417.121.6~2/RELEASE_ARM64_T8132, Apple M4, 10 Kerne, 16 GiB",
+  "umgebungen": [
+    "vermessung",
+    "vermessung-pruefdomaene"
+  ],
+  "parameter": {
+    "szenarien": [
+      "S1",
+      "S2",
+      "S3",
+      "S4",
+      "S5"
+    ],
+    "wiederholungen": 1,
+    "probe": false,
+    "fenster_s": 15,
+    "abbau_frist_s": 120,
+    "s1_stoss_paare": 600,
+    "s2_stoss_paare": 200,
+    "s3_sender": [
+      8,
+      64
+    ],
+    "s3": "je Block ein Sammelvorgang (N = 1 000 000, die Barriere wird nicht erreicht); je Teil StarteTeilauftrag + SchließeTeilauftragAb",
+    "s5_sender": [
+      1,
+      8,
+      64
+    ],
+    "s3_hoechstens_teile_je_block": 2000,
+    "s5_hoechstens_vorgaenge_je_block": 3000,
+    "s5_muster": "je 10 Vorgänge: 8 Aufträge ok, 1 Auftrag gegen volles Kontingent (Kompensation), 1 Verteilung auf 4 Ziele; 50 Posten, 20 Ziele",
+    "leerlauf_s": 15,
+    "sichtbar": "S1/S2: Query GetImagePair je offenem Paar (komplett), alle 100 ms; S3: TeilVerbucht im Log; S4: Query HoleDatensatz; S5: ProzessBeendet im Log",
+    "transaktionen": "COMMITs aus pg_stat_statements (track = top); Queries = übrige Statements ohne BEGIN/COMMIT/ROLLBACK/DISCARD/SET/SHOW; ohne die Lese-Rolle des Treibers"
+  },
+  "fremdlast_vorher": "Last 10.13 13.54 9.03 · CPU-stärkste: 67.4 /Users/tobi/Library/Application Support/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.app/Contents/MacOS/Slay the Spire 2; 38.5 dotnet; 16.0 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer; 9.0 /System/Library/ExtensionKit/Extensions/Storage.appex/Contents/MacOS/Storage; 7.6 /usr/sbin/coreaudiod",
+  "fremdlast_nachher": "Last 27.31 23.65 14.54 · CPU-stärkste: 228.9 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine; 73.6 /Applications/Docker.app/Contents/MacOS/com.docker.backend; 65.9 /Users/tobi/Library/Application Support/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.app/Contents/MacOS/Slay the Spire 2; 28.0 /System/Library/PrivateFrameworks/CacheDelete.framework/deleted_helper; 18.5 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer",
+  "szenarien": {
+    "L1": {
+      "titel": "Leerlauf Beispieldomäne",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "tx_je_s": 1465.686,
+            "queries_je_s": 5173.687,
+            "cpu_prozent": 239.977,
+            "rss_mb": 1942.438,
+            "rss_ende_mb": 1083.359,
+            "rss_lauf_max_mb": 2452.922,
+            "rss_ende_anteil": 0.442,
+            "aktive_actors": 63573,
+            "aktive_actors_hoechst": 63573
+          },
+          "details": {
+            "mit_rueckstand": false,
+            "fremdlast_danach": "Last 29.17 20.07 12.08 · CPU-stärkste: 106.1 /System/Library/PrivateFrameworks/iCloudDriveCore.framework/Versions/A/Support/bird; 68.2 /Users/tobi/Library/Application Support/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.app/Contents/MacOS/Slay the Spire 2; 56.7 /System/Library/PrivateFrameworks/AppStoreDaemon.framework/Support/appstoreagent; 40.9 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine; 32.0 dotnet"
+          }
+        }
+      ],
+      "median": {
+        "tx_je_s": 1465.686,
+        "queries_je_s": 5173.687,
+        "cpu_prozent": 239.977,
+        "rss_mb": 1942.438,
+        "rss_ende_mb": 1083.359,
+        "rss_lauf_max_mb": 2452.922,
+        "rss_ende_anteil": 0.442,
+        "aktive_actors": 63573,
+        "aktive_actors_hoechst": 63573
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": []
+      }
+    },
+    "L5": {
+      "titel": "Leerlauf Prüfdomäne",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "tx_je_s": 222.184,
+            "queries_je_s": 4176.656,
+            "cpu_prozent": 252.861,
+            "rss_mb": 1059.062,
+            "rss_ende_mb": 1058.703,
+            "rss_lauf_max_mb": 1473.328,
+            "rss_ende_anteil": 0.719,
+            "aktive_actors": 24373,
+            "aktive_actors_hoechst": 24373
+          },
+          "details": {
+            "mit_rueckstand": false,
+            "fremdlast_danach": "Last 27.31 23.65 14.54 · CPU-stärkste: 71.9 /Users/tobi/Library/Application Support/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.app/Contents/MacOS/Slay the Spire 2; 38.4 /System/Library/PrivateFrameworks/CacheDelete.framework/deleted_helper; 26.6 /System/Library/PrivateFrameworks/SkyLight.framework/Resources/WindowServer; 22.1 dotnet; 16.2 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine"
+          }
+        }
+      ],
+      "median": {
+        "tx_je_s": 222.184,
+        "queries_je_s": 4176.656,
+        "cpu_prozent": 252.861,
+        "rss_mb": 1059.062,
+        "rss_ende_mb": 1058.703,
+        "rss_lauf_max_mb": 1473.328,
+        "rss_ende_anteil": 0.719,
+        "aktive_actors": 24373,
+        "aktive_actors_hoechst": 24373
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": []
+      }
+    },
+    "S1": {
+      "titel": "Bildeingang Host, Stoß",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "angenommen_je_s": 1926.133,
+            "sichtbar_je_s": 3.21,
+            "durchsatz_je_s": 28.963,
+            "rueckstand": 599,
+            "abbau_s": 20.405,
+            "abgebaut": 1,
+            "latenz_p50_ms": 11324.042,
+            "latenz_p95_ms": 19673.456,
+            "latenz_p99_ms": 20303.388,
+            "fehler": 0,
+            "tx_je_s": 883.127,
+            "queries_je_s": 6683.568,
+            "tx_je_vorgang": 30.545,
+            "queries_je_vorgang": 231.167,
+            "cpu_prozent": 339.595,
+            "rss_mb": 1192.641,
+            "xact_je_s_info": 11119.347,
+            "rss_ende_mb": 807.953,
+            "rss_lauf_max_mb": 1192.641,
+            "rss_ende_anteil": 0.677,
+            "aktive_actors": 4905,
+            "aktive_actors_hoechst": 4905
+          },
+          "details": {
+            "block": {
+              "sender": 1,
+              "angenommen": 600,
+              "fehler": 0,
+              "sichtbar_im_fenster": 1,
+              "sichtbar": 600,
+              "fenster_s": 0.312,
+              "abbau_s": 20.405,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 28.27 17.60 10.63 · CPU-stärkste: 149.1 dotnet;117.0 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine; 88.3 /System/Library/PrivateFrameworks/iCloudDriveCore.framework/Versions/A/Support/bird; 67.8 /Users/tobi/Library/Application Support/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.app/Contents/MacOS/Slay the Spire 2; 42.0 /Applications/Docker.app/Contents/MacOS/com.docker.backend"
+          }
+        }
+      ],
+      "median": {
+        "angenommen_je_s": 1926.133,
+        "sichtbar_je_s": 3.21,
+        "durchsatz_je_s": 28.963,
+        "rueckstand": 599,
+        "abbau_s": 20.405,
+        "abgebaut": 1,
+        "latenz_p50_ms": 11324.042,
+        "latenz_p95_ms": 19673.456,
+        "latenz_p99_ms": 20303.388,
+        "fehler": 0,
+        "tx_je_s": 883.127,
+        "queries_je_s": 6683.568,
+        "tx_je_vorgang": 30.545,
+        "queries_je_vorgang": 231.167,
+        "cpu_prozent": 339.595,
+        "rss_mb": 1192.641,
+        "xact_je_s_info": 11119.347,
+        "rss_ende_mb": 807.953,
+        "rss_lauf_max_mb": 1192.641,
+        "rss_ende_anteil": 0.677,
+        "aktive_actors": 4905,
+        "aktive_actors_hoechst": 4905
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": [
+          {
+            "name": "je Datei genau eine Quell-Nachricht im Log",
+            "ok": true,
+            "soll": "1220",
+            "ist": "1220",
+            "wiederholung": 1
+          },
+          {
+            "name": "keine Datei zweimal gemeldet",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "je Paar genau ein ImagePairErstellt",
+            "ok": true,
+            "soll": "610",
+            "ist": "610",
+            "wiederholung": 1
+          },
+          {
+            "name": "BildVerfuegbar genau einmal je Bild (2 je Paar)",
+            "ok": true,
+            "soll": "1220",
+            "ist": "1220",
+            "wiederholung": 1
+          },
+          {
+            "name": "kein Paar mit mehr als 2 BildVerfuegbar",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "je Paar genau ein ImagePairKomplett",
+            "ok": true,
+            "soll": "610",
+            "ist": "610",
+            "wiederholung": 1
+          },
+          {
+            "name": "Read-Model: komplette Paare = ImagePairKomplett im Log",
+            "ok": true,
+            "soll": "610",
+            "ist": "610",
+            "wiederholung": 1
+          },
+          {
+            "name": "Read-Model: Paare = ImagePairErstellt im Log",
+            "ok": true,
+            "soll": "610",
+            "ist": "610",
+            "wiederholung": 1
+          }
+        ]
+      }
+    },
+    "S2": {
+      "titel": "Bildeingang mit Python-Worker, Stoß",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "angenommen_je_s": 1963.325,
+            "sichtbar_je_s": 0,
+            "durchsatz_je_s": 20.711,
+            "rueckstand": 200,
+            "abbau_s": 9.555,
+            "abgebaut": 1,
+            "latenz_p50_ms": 4980.68,
+            "latenz_p95_ms": 9132.662,
+            "latenz_p99_ms": 9452.803,
+            "fehler": 0,
+            "tx_je_s": 827.855,
+            "queries_je_s": 6528.006,
+            "tx_je_vorgang": 40.2,
+            "queries_je_vorgang": 316.995,
+            "cpu_prozent": 283.358,
+            "rss_mb": 1576.609,
+            "xact_je_s_info": 11190.662,
+            "rss_ende_mb": 1360.422,
+            "rss_lauf_max_mb": 1576.609,
+            "rss_ende_anteil": 0.863,
+            "aktive_actors": 12347,
+            "aktive_actors_hoechst": 12347,
+            "worker_cpu_prozent": 75.418
+          },
+          "details": {
+            "block": {
+              "sender": 1,
+              "angenommen": 200,
+              "fehler": 0,
+              "sichtbar_im_fenster": 0,
+              "sichtbar": 200,
+              "fenster_s": 0.102,
+              "abbau_s": 9.555,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 33.03 21.33 12.67 · CPU-stärkste: 310.3 dotnet;258.1 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine;102.0 /Applications/Docker.app/Contents/MacOS/com.docker.backend; 64.4 /Users/tobi/Library/Application Support/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.app/Contents/MacOS/Slay the Spire 2; 52.1 /System/Library/PrivateFrameworks/iCloudDriveCore.framework/Versions/A/Support/bird"
+          }
+        }
+      ],
+      "median": {
+        "angenommen_je_s": 1963.325,
+        "sichtbar_je_s": 0,
+        "durchsatz_je_s": 20.711,
+        "rueckstand": 200,
+        "abbau_s": 9.555,
+        "abgebaut": 1,
+        "latenz_p50_ms": 4980.68,
+        "latenz_p95_ms": 9132.662,
+        "latenz_p99_ms": 9452.803,
+        "fehler": 0,
+        "tx_je_s": 827.855,
+        "queries_je_s": 6528.006,
+        "tx_je_vorgang": 40.2,
+        "queries_je_vorgang": 316.995,
+        "cpu_prozent": 283.358,
+        "rss_mb": 1576.609,
+        "xact_je_s_info": 11190.662,
+        "rss_ende_mb": 1360.422,
+        "rss_lauf_max_mb": 1576.609,
+        "rss_ende_anteil": 0.863,
+        "aktive_actors": 12347,
+        "aktive_actors_hoechst": 12347,
+        "worker_cpu_prozent": 75.418
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": [
+          {
+            "name": "je Datei genau eine Quell-Nachricht im Log",
+            "ok": true,
+            "soll": "420",
+            "ist": "420",
+            "wiederholung": 1
+          },
+          {
+            "name": "keine Datei zweimal gemeldet",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "je Paar genau ein ImagePairErstellt",
+            "ok": true,
+            "soll": "210",
+            "ist": "210",
+            "wiederholung": 1
+          },
+          {
+            "name": "BildVerfuegbar genau einmal je Bild (2 je Paar)",
+            "ok": true,
+            "soll": "420",
+            "ist": "420",
+            "wiederholung": 1
+          },
+          {
+            "name": "kein Paar mit mehr als 2 BildVerfuegbar",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "je Paar genau ein ImagePairKomplett",
+            "ok": true,
+            "soll": "210",
+            "ist": "210",
+            "wiederholung": 1
+          },
+          {
+            "name": "Read-Model: komplette Paare = ImagePairKomplett im Log",
+            "ok": true,
+            "soll": "820",
+            "ist": "820",
+            "wiederholung": 1
+          },
+          {
+            "name": "Read-Model: Paare = ImagePairErstellt im Log",
+            "ok": true,
+            "soll": "820",
+            "ist": "820",
+            "wiederholung": 1
+          }
+        ]
+      }
+    },
+    "S3-64": {
+      "titel": "Sammelvorgang heiß, 64 Sender",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "angenommen_je_s": 1023.658,
+            "sichtbar_je_s": 49.136,
+            "durchsatz_je_s": 95.39,
+            "rueckstand": 1904,
+            "abbau_s": 19.013,
+            "abgebaut": 1,
+            "latenz_p50_ms": 10510.554,
+            "latenz_p95_ms": 19345.2,
+            "latenz_p99_ms": 19671.514,
+            "fehler": 0,
+            "tx_je_s": 1106.859,
+            "queries_je_s": 5276.807,
+            "tx_je_vorgang": 11.701,
+            "queries_je_vorgang": 55.783,
+            "cpu_prozent": 352.766,
+            "rss_mb": 2452.922,
+            "xact_je_s_info": 8112.963,
+            "rss_ende_mb": 2065.891,
+            "rss_lauf_max_mb": 2452.922,
+            "rss_ende_anteil": 0.842,
+            "aktive_actors": 31550,
+            "aktive_actors_hoechst": 31550,
+            "prozessende_nachlauf_s": 0.041
+          },
+          "details": {
+            "block": {
+              "sender": 64,
+              "angenommen": 2000,
+              "fehler": 0,
+              "sichtbar_im_fenster": 96,
+              "sichtbar": 2000,
+              "fenster_s": 1.954,
+              "abbau_s": 19.013,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 30.00 19.58 11.72 · CPU-stärkste: 294.0 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine;183.8 dotnet;101.0 /Applications/Docker.app/Contents/MacOS/com.docker.backend; 65.5 /Users/tobi/Library/Application Support/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.app/Contents/MacOS/Slay the Spire 2; 65.2 /System/Library/PrivateFrameworks/iCloudDriveCore.framework/Versions/A/Support/bird"
+          }
+        }
+      ],
+      "median": {
+        "angenommen_je_s": 1023.658,
+        "sichtbar_je_s": 49.136,
+        "durchsatz_je_s": 95.39,
+        "rueckstand": 1904,
+        "abbau_s": 19.013,
+        "abgebaut": 1,
+        "latenz_p50_ms": 10510.554,
+        "latenz_p95_ms": 19345.2,
+        "latenz_p99_ms": 19671.514,
+        "fehler": 0,
+        "tx_je_s": 1106.859,
+        "queries_je_s": 5276.807,
+        "tx_je_vorgang": 11.701,
+        "queries_je_vorgang": 55.783,
+        "cpu_prozent": 352.766,
+        "rss_mb": 2452.922,
+        "xact_je_s_info": 8112.963,
+        "rss_ende_mb": 2065.891,
+        "rss_lauf_max_mb": 2452.922,
+        "rss_ende_anteil": 0.842,
+        "aktive_actors": 31550,
+        "aktive_actors_hoechst": 31550,
+        "prozessende_nachlauf_s": 0.041
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": [
+          {
+            "name": "S3 ×64: Fertig = Zahl der TeilVerbucht (Sammelvorgänge mit Abweichung)",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×64: TeilVerbucht = gestartete Teile",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×64: kein Sammelvorgang mit mehr TeilVerbucht als Teilen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×64: Barriere nur bei vollen Sammelvorgängen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×64: je Teil genau ein TeilauftragAbgeschlossen",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×64: kein Teil zweimal abgeschlossen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×64: je Teil ein erfolgreich beendeter Vorgang",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×64: kein Vorgang zweimal beendet",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          }
+        ]
+      }
+    },
+    "S3-8": {
+      "titel": "Sammelvorgang heiß, 8 Sender",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "angenommen_je_s": 169.692,
+            "sichtbar_je_s": 65.671,
+            "durchsatz_je_s": 84.229,
+            "rueckstand": 1226,
+            "abbau_s": 11.959,
+            "abgebaut": 1,
+            "latenz_p50_ms": 5271.823,
+            "latenz_p95_ms": 17316.73,
+            "latenz_p99_ms": 17566.811,
+            "fehler": 0,
+            "tx_je_s": 791.561,
+            "queries_je_s": 4635.447,
+            "tx_je_vorgang": 9.457,
+            "queries_je_vorgang": 55.381,
+            "cpu_prozent": 321.657,
+            "rss_mb": 2050.109,
+            "xact_je_s_info": 6925.131,
+            "rss_ende_mb": 1176.016,
+            "rss_lauf_max_mb": 2050.109,
+            "rss_ende_anteil": 0.574,
+            "aktive_actors": 15451,
+            "aktive_actors_hoechst": 15451,
+            "prozessende_nachlauf_s": 0.018
+          },
+          "details": {
+            "block": {
+              "sender": 8,
+              "angenommen": 2000,
+              "fehler": 0,
+              "sichtbar_im_fenster": 774,
+              "sichtbar": 2000,
+              "fenster_s": 11.786,
+              "abbau_s": 11.959,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 28.64 18.36 11.06 · CPU-stärkste: 265.1 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine;175.5 dotnet; 99.5 /Applications/Docker.app/Contents/MacOS/com.docker.backend; 65.6 /Users/tobi/Library/Application Support/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.app/Contents/MacOS/Slay the Spire 2; 59.3 /System/Library/PrivateFrameworks/iCloudDriveCore.framework/Versions/A/Support/bird"
+          }
+        }
+      ],
+      "median": {
+        "angenommen_je_s": 169.692,
+        "sichtbar_je_s": 65.671,
+        "durchsatz_je_s": 84.229,
+        "rueckstand": 1226,
+        "abbau_s": 11.959,
+        "abgebaut": 1,
+        "latenz_p50_ms": 5271.823,
+        "latenz_p95_ms": 17316.73,
+        "latenz_p99_ms": 17566.811,
+        "fehler": 0,
+        "tx_je_s": 791.561,
+        "queries_je_s": 4635.447,
+        "tx_je_vorgang": 9.457,
+        "queries_je_vorgang": 55.381,
+        "cpu_prozent": 321.657,
+        "rss_mb": 2050.109,
+        "xact_je_s_info": 6925.131,
+        "rss_ende_mb": 1176.016,
+        "rss_lauf_max_mb": 2050.109,
+        "rss_ende_anteil": 0.574,
+        "aktive_actors": 15451,
+        "aktive_actors_hoechst": 15451,
+        "prozessende_nachlauf_s": 0.018
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": [
+          {
+            "name": "S3 ×8: Fertig = Zahl der TeilVerbucht (Sammelvorgänge mit Abweichung)",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×8: TeilVerbucht = gestartete Teile",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×8: kein Sammelvorgang mit mehr TeilVerbucht als Teilen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×8: Barriere nur bei vollen Sammelvorgängen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×8: je Teil genau ein TeilauftragAbgeschlossen",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×8: kein Teil zweimal abgeschlossen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×8: je Teil ein erfolgreich beendeter Vorgang",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 1
+          },
+          {
+            "name": "S3 ×8: kein Vorgang zweimal beendet",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          }
+        ]
+      }
+    },
+    "S4": {
+      "titel": "Datensatz einfrieren",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "durchsatz_je_s": 1812.928,
+            "paare": 610,
+            "dauer_aufnahme_s": 0.125,
+            "dauer_einfrieren_s": 0.211,
+            "tx_je_s": 40.772,
+            "queries_je_s": 3971.231,
+            "tx_je_vorgang": 0.033,
+            "queries_je_vorgang": 3.193,
+            "cpu_prozent": 223.772,
+            "rss_mb": 820.047,
+            "xact_je_s_info": 9830.224,
+            "rss_ende_mb": 820.047,
+            "rss_lauf_max_mb": 1192.641,
+            "rss_ende_anteil": 0.688,
+            "aktive_actors": 4919,
+            "aktive_actors_hoechst": 4919
+          },
+          "details": {
+            "fremdlast_danach": "Last 28.27 17.60 10.63 · CPU-stärkste: 90.6 dotnet; 78.5 /System/Library/PrivateFrameworks/iCloudDriveCore.framework/Versions/A/Support/bird; 73.2 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine; 67.5 /Users/tobi/Library/Application Support/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.app/Contents/MacOS/Slay the Spire 2; 57.8 /System/Library/ExtensionKit/Extensions/Storage.appex/Contents/MacOS/Storage"
+          }
+        }
+      ],
+      "median": {
+        "durchsatz_je_s": 1812.928,
+        "paare": 610,
+        "dauer_aufnahme_s": 0.125,
+        "dauer_einfrieren_s": 0.211,
+        "tx_je_s": 40.772,
+        "queries_je_s": 3971.231,
+        "tx_je_vorgang": 0.033,
+        "queries_je_vorgang": 3.193,
+        "cpu_prozent": 223.772,
+        "rss_mb": 820.047,
+        "xact_je_s_info": 9830.224,
+        "rss_ende_mb": 820.047,
+        "rss_lauf_max_mb": 1192.641,
+        "rss_ende_anteil": 0.688,
+        "aktive_actors": 4919,
+        "aktive_actors_hoechst": 4919
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": [
+          {
+            "name": "aufgenommene Paare = Paare im Log",
+            "ok": true,
+            "soll": "610",
+            "ist": "610",
+            "wiederholung": 1
+          },
+          {
+            "name": "genau ein DatensatzEingefroren",
+            "ok": true,
+            "soll": "1",
+            "ist": "1",
+            "wiederholung": 1
+          },
+          {
+            "name": "Mitglieder des eingefrorenen Datensatzes = aufgenommene Paare",
+            "ok": true,
+            "soll": "610",
+            "ist": "610",
+            "wiederholung": 1
+          },
+          {
+            "name": "Read-Model: Mitglieder = aufgenommene Paare",
+            "ok": true,
+            "soll": "610",
+            "ist": "610",
+            "wiederholung": 1
+          }
+        ]
+      }
+    },
+    "S5-1": {
+      "titel": "Prüfdomäne verteilt, 1 Sender",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "angenommen_je_s": 106.812,
+            "sichtbar_je_s": 105.679,
+            "durchsatz_je_s": 106.515,
+            "rueckstand": 17,
+            "abbau_s": 0.042,
+            "abgebaut": 1,
+            "latenz_p50_ms": 56.188,
+            "latenz_p95_ms": 83.093,
+            "latenz_p99_ms": 101.665,
+            "fehler": 0,
+            "tx_je_s": 1119.427,
+            "queries_je_s": 6745.262,
+            "tx_je_vorgang": 10.633,
+            "queries_je_vorgang": 64.068,
+            "cpu_prozent": 303.578,
+            "rss_mb": 1473.328,
+            "xact_je_s_info": 9475.523,
+            "rss_ende_mb": 949.125,
+            "rss_lauf_max_mb": 1473.328,
+            "rss_ende_anteil": 0.644,
+            "aktive_actors": 3910,
+            "aktive_actors_hoechst": 3910
+          },
+          "details": {
+            "block": {
+              "sender": 1,
+              "angenommen": 1603,
+              "fehler": 0,
+              "sichtbar_im_fenster": 1586,
+              "sichtbar": 1603,
+              "fenster_s": 15.008,
+              "abbau_s": 0.042,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 37.11 23.15 13.57 · CPU-stärkste: 164.6 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine;150.6 dotnet; 69.5 /Users/tobi/Library/Application Support/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.app/Contents/MacOS/Slay the Spire 2; 62.8 /Applications/Docker.app/Contents/MacOS/com.docker.backend; 56.2 /System/Library/PrivateFrameworks/iCloudDriveCore.framework/Versions/A/Support/bird"
+          }
+        }
+      ],
+      "median": {
+        "angenommen_je_s": 106.812,
+        "sichtbar_je_s": 105.679,
+        "durchsatz_je_s": 106.515,
+        "rueckstand": 17,
+        "abbau_s": 0.042,
+        "abgebaut": 1,
+        "latenz_p50_ms": 56.188,
+        "latenz_p95_ms": 83.093,
+        "latenz_p99_ms": 101.665,
+        "fehler": 0,
+        "tx_je_s": 1119.427,
+        "queries_je_s": 6745.262,
+        "tx_je_vorgang": 10.633,
+        "queries_je_vorgang": 64.068,
+        "cpu_prozent": 303.578,
+        "rss_mb": 1473.328,
+        "xact_je_s_info": 9475.523,
+        "rss_ende_mb": 949.125,
+        "rss_lauf_max_mb": 1473.328,
+        "rss_ende_anteil": 0.644,
+        "aktive_actors": 3910,
+        "aktive_actors_hoechst": 3910
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": []
+      }
+    },
+    "S5-64": {
+      "titel": "Prüfdomäne verteilt, 64 Sender",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "angenommen_je_s": 2088.603,
+            "sichtbar_je_s": 0,
+            "durchsatz_je_s": 121.265,
+            "rueckstand": 3000,
+            "abbau_s": 23.303,
+            "abgebaut": 1,
+            "latenz_p50_ms": 14660.949,
+            "latenz_p95_ms": 22556.485,
+            "latenz_p99_ms": 23240.295,
+            "fehler": 0,
+            "tx_je_s": 708.553,
+            "queries_je_s": 7193.962,
+            "tx_je_vorgang": 5.89,
+            "queries_je_vorgang": 59.798,
+            "cpu_prozent": 337.835,
+            "rss_mb": 1038.578,
+            "xact_je_s_info": 8685.014,
+            "rss_ende_mb": 801.062,
+            "rss_lauf_max_mb": 1473.328,
+            "rss_ende_anteil": 0.544,
+            "aktive_actors": 18791,
+            "aktive_actors_hoechst": 18791,
+            "prozessende_nachlauf_s": 0.022,
+            "reaktion_p50_ms": 26.313,
+            "reaktion_p99_ms": 150.574
+          },
+          "details": {
+            "block": {
+              "sender": 64,
+              "angenommen": 3000,
+              "fehler": 0,
+              "sichtbar_im_fenster": 0,
+              "sichtbar": 3000,
+              "fenster_s": 1.436,
+              "abbau_s": 23.303,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 33.83 24.53 14.63 · CPU-stärkste: 262.3 dotnet;225.4 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine; 94.1 /Applications/Docker.app/Contents/MacOS/com.docker.backend; 63.1 /Users/tobi/Library/Application Support/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.app/Contents/MacOS/Slay the Spire 2; 57.4 /System/Library/PrivateFrameworks/iCloudDriveCore.framework/Versions/A/Support/bird"
+          }
+        }
+      ],
+      "median": {
+        "angenommen_je_s": 2088.603,
+        "sichtbar_je_s": 0,
+        "durchsatz_je_s": 121.265,
+        "rueckstand": 3000,
+        "abbau_s": 23.303,
+        "abgebaut": 1,
+        "latenz_p50_ms": 14660.949,
+        "latenz_p95_ms": 22556.485,
+        "latenz_p99_ms": 23240.295,
+        "fehler": 0,
+        "tx_je_s": 708.553,
+        "queries_je_s": 7193.962,
+        "tx_je_vorgang": 5.89,
+        "queries_je_vorgang": 59.798,
+        "cpu_prozent": 337.835,
+        "rss_mb": 1038.578,
+        "xact_je_s_info": 8685.014,
+        "rss_ende_mb": 801.062,
+        "rss_lauf_max_mb": 1473.328,
+        "rss_ende_anteil": 0.544,
+        "aktive_actors": 18791,
+        "aktive_actors_hoechst": 18791,
+        "prozessende_nachlauf_s": 0.022,
+        "reaktion_p50_ms": 26.313,
+        "reaktion_p99_ms": 150.574
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": [
+          {
+            "name": "je Vorgang genau ein ProzessBeendet",
+            "ok": true,
+            "soll": "7653",
+            "ist": "7653",
+            "wiederholung": 1
+          },
+          {
+            "name": "kein Vorgang mit mehr als einem ProzessBeendet",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "gelingende Vorgänge enden mit Erfolg",
+            "ok": true,
+            "soll": "6888",
+            "ist": "6888",
+            "wiederholung": 1
+          },
+          {
+            "name": "abgelehnte Aufträge enden ohne Erfolg",
+            "ok": true,
+            "soll": "765",
+            "ist": "765",
+            "wiederholung": 1
+          },
+          {
+            "name": "jede Kompensation genau einmal (PostenFreigegeben je abgelehntem Auftrag)",
+            "ok": true,
+            "soll": "765",
+            "ist": "765",
+            "wiederholung": 1
+          },
+          {
+            "name": "je gelingendem Auftrag genau ein AuftragBestaetigt",
+            "ok": true,
+            "soll": "6123",
+            "ist": "6123",
+            "wiederholung": 1
+          },
+          {
+            "name": "je Verteilung jedes Ziel genau einmal zugebucht",
+            "ok": true,
+            "soll": "3060",
+            "ist": "3060",
+            "wiederholung": 1
+          },
+          {
+            "name": "je Verteilung genau ein VerteilungAbgeschlossen",
+            "ok": true,
+            "soll": "765",
+            "ist": "765",
+            "wiederholung": 1
+          },
+          {
+            "name": "Reaktion: je Reservierung unter dem Mindestbestand genau ein Nachschub",
+            "ok": true,
+            "soll": "6622",
+            "ist": "6622",
+            "wiederholung": 1
+          },
+          {
+            "name": "Reaktion: je Reaktions-Command genau eine Wirkung (Ziel-Events je Ursache = 1)",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          }
+        ]
+      }
+    },
+    "S5-8": {
+      "titel": "Prüfdomäne verteilt, 8 Sender",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "angenommen_je_s": 351.494,
+            "sichtbar_je_s": 161.101,
+            "durchsatz_je_s": 135.986,
+            "rueckstand": 1625,
+            "abbau_s": 13.526,
+            "abgebaut": 1,
+            "latenz_p50_ms": 5220.569,
+            "latenz_p95_ms": 12919.542,
+            "latenz_p99_ms": 13451.225,
+            "fehler": 0,
+            "tx_je_s": 925.065,
+            "queries_je_s": 8259.774,
+            "tx_je_vorgang": 6.897,
+            "queries_je_vorgang": 61.585,
+            "cpu_prozent": 296.611,
+            "rss_mb": 1229.266,
+            "xact_je_s_info": 10575.788,
+            "rss_ende_mb": 1105.391,
+            "rss_lauf_max_mb": 1473.328,
+            "rss_ende_anteil": 0.75,
+            "aktive_actors": 10231,
+            "aktive_actors_hoechst": 10231
+          },
+          "details": {
+            "block": {
+              "sender": 8,
+              "angenommen": 3000,
+              "fehler": 0,
+              "sichtbar_im_fenster": 1375,
+              "sichtbar": 3000,
+              "fenster_s": 8.535,
+              "abbau_s": 13.526,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 36.72 24.22 14.23 · CPU-stärkste: 291.3 dotnet;288.4 /System/Library/Frameworks/Virtualization.framework/Versions/A/XPCServices/com.apple.Virtualization.VirtualMachine.xpc/Contents/MacOS/com.apple.Virtualization.VirtualMachine;113.1 /Applications/Docker.app/Contents/MacOS/com.docker.backend; 69.9 /Users/tobi/Library/Application Support/Steam/steamapps/common/Slay the Spire 2/SlayTheSpire2.app/Contents/MacOS/Slay the Spire 2; 55.7 /System/Library/PrivateFrameworks/iCloudDriveCore.framework/Versions/A/Support/bird"
+          }
+        }
+      ],
+      "median": {
+        "angenommen_je_s": 351.494,
+        "sichtbar_je_s": 161.101,
+        "durchsatz_je_s": 135.986,
+        "rueckstand": 1625,
+        "abbau_s": 13.526,
+        "abgebaut": 1,
+        "latenz_p50_ms": 5220.569,
+        "latenz_p95_ms": 12919.542,
+        "latenz_p99_ms": 13451.225,
+        "fehler": 0,
+        "tx_je_s": 925.065,
+        "queries_je_s": 8259.774,
+        "tx_je_vorgang": 6.897,
+        "queries_je_vorgang": 61.585,
+        "cpu_prozent": 296.611,
+        "rss_mb": 1229.266,
+        "xact_je_s_info": 10575.788,
+        "rss_ende_mb": 1105.391,
+        "rss_lauf_max_mb": 1473.328,
+        "rss_ende_anteil": 0.75,
+        "aktive_actors": 10231,
+        "aktive_actors_hoechst": 10231
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": []
+      }
+    }
+  },
+  "global": [
+    {
+      "wiederholung": 1,
+      "anwendung": "Beispieldomäne",
+      "pruefungen": [
+        {
+          "name": "Beispieldomäne: keine CommandId zweimal gewirkt (KommandoVerarbeitet je CommandId ≤ 1)",
+          "ok": true,
+          "soll": "0",
+          "ist": "0"
+        },
+        {
+          "name": "Beispieldomäne: keine CommandId zweimal abgelehnt-markiert",
+          "ok": true,
+          "soll": "0",
+          "ist": "0"
+        },
+        {
+          "name": "Beispieldomäne: kein Stream mit doppelter Version",
+          "ok": true,
+          "soll": "0",
+          "ist": "0"
+        }
+      ]
+    },
+    {
+      "wiederholung": 1,
+      "anwendung": "Prüfdomäne",
+      "pruefungen": [
+        {
+          "name": "Prüfdomäne: keine CommandId zweimal gewirkt (KommandoVerarbeitet je CommandId ≤ 1)",
+          "ok": true,
+          "soll": "0",
+          "ist": "0"
+        },
+        {
+          "name": "Prüfdomäne: keine CommandId zweimal abgelehnt-markiert",
+          "ok": true,
+          "soll": "0",
+          "ist": "0"
+        },
+        {
+          "name": "Prüfdomäne: kein Stream mit doppelter Version",
+          "ok": true,
+          "soll": "0",
+          "ist": "0"
+        }
+      ]
+    }
+  ],
+  "exactly_once_ok": true,
+  "nicht_abgebaut": [],
+  "zusammenfassung": [
+    {
+      "szenario": "L1 Leerlauf Beispieldomäne",
+      "kennzahl": "Transaktionen",
+      "einheit": "/s",
+      "wert": 1465.686
+    },
+    {
+      "szenario": "L1 Leerlauf Beispieldomäne",
+      "kennzahl": "Queries",
+      "einheit": "/s",
+      "wert": 5173.687
+    },
+    {
+      "szenario": "L1 Leerlauf Beispieldomäne",
+      "kennzahl": "CPU Host",
+      "einheit": "% eines Kerns",
+      "wert": 239.977
+    },
+    {
+      "szenario": "L1 Leerlauf Beispieldomäne",
+      "kennzahl": "RSS Host (max.)",
+      "einheit": "MB",
+      "wert": 1942.438
+    },
+    {
+      "szenario": "L1 Leerlauf Beispieldomäne",
+      "kennzahl": "RSS Host am Fensterende",
+      "einheit": "MB",
+      "wert": 1083.359
+    },
+    {
+      "szenario": "L1 Leerlauf Beispieldomäne",
+      "kennzahl": "RSS Host Höchststand des Laufs",
+      "einheit": "MB",
+      "wert": 2452.922
+    },
+    {
+      "szenario": "L1 Leerlauf Beispieldomäne",
+      "kennzahl": "RSS am Ende / Höchststand",
+      "einheit": "1",
+      "wert": 0.442
+    },
+    {
+      "szenario": "L1 Leerlauf Beispieldomäne",
+      "kennzahl": "Aktive Actors am Fensterende",
+      "einheit": "1",
+      "wert": 63573
+    },
+    {
+      "szenario": "L1 Leerlauf Beispieldomäne",
+      "kennzahl": "Aktive Actors, Höchststand der Fensterenden",
+      "einheit": "1",
+      "wert": 63573
+    },
+    {
+      "szenario": "L5 Leerlauf Prüfdomäne",
+      "kennzahl": "Transaktionen",
+      "einheit": "/s",
+      "wert": 222.184
+    },
+    {
+      "szenario": "L5 Leerlauf Prüfdomäne",
+      "kennzahl": "Queries",
+      "einheit": "/s",
+      "wert": 4176.656
+    },
+    {
+      "szenario": "L5 Leerlauf Prüfdomäne",
+      "kennzahl": "CPU Host",
+      "einheit": "% eines Kerns",
+      "wert": 252.861
+    },
+    {
+      "szenario": "L5 Leerlauf Prüfdomäne",
+      "kennzahl": "RSS Host (max.)",
+      "einheit": "MB",
+      "wert": 1059.062
+    },
+    {
+      "szenario": "L5 Leerlauf Prüfdomäne",
+      "kennzahl": "RSS Host am Fensterende",
+      "einheit": "MB",
+      "wert": 1058.703
+    },
+    {
+      "szenario": "L5 Leerlauf Prüfdomäne",
+      "kennzahl": "RSS Host Höchststand des Laufs",
+      "einheit": "MB",
+      "wert": 1473.328
+    },
+    {
+      "szenario": "L5 Leerlauf Prüfdomäne",
+      "kennzahl": "RSS am Ende / Höchststand",
+      "einheit": "1",
+      "wert": 0.719
+    },
+    {
+      "szenario": "L5 Leerlauf Prüfdomäne",
+      "kennzahl": "Aktive Actors am Fensterende",
+      "einheit": "1",
+      "wert": 24373
+    },
+    {
+      "szenario": "L5 Leerlauf Prüfdomäne",
+      "kennzahl": "Aktive Actors, Höchststand der Fensterenden",
+      "einheit": "1",
+      "wert": 24373
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "angenommen",
+      "einheit": "Paare/s",
+      "wert": 1926.133
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "sichtbar im Fenster",
+      "einheit": "Paare/s",
+      "wert": 3.21
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Durchsatz bis alles sichtbar",
+      "einheit": "Paare/s",
+      "wert": 28.963
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Rückstand am Fensterende",
+      "einheit": "Vorgänge",
+      "wert": 599
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Abbauzeit",
+      "einheit": "s",
+      "wert": 20.405
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Latenz p50",
+      "einheit": "ms",
+      "wert": 11324.042
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Latenz p99",
+      "einheit": "ms",
+      "wert": 20303.388
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Transaktionen je Vorgang",
+      "einheit": "1",
+      "wert": 30.545
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Queries je Vorgang",
+      "einheit": "1",
+      "wert": 231.167
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Transaktionen",
+      "einheit": "/s",
+      "wert": 883.127
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Queries",
+      "einheit": "/s",
+      "wert": 6683.568
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "CPU Host",
+      "einheit": "% eines Kerns",
+      "wert": 339.595
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "RSS Host (max.)",
+      "einheit": "MB",
+      "wert": 1192.641
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "RSS Host am Fensterende",
+      "einheit": "MB",
+      "wert": 807.953
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "RSS Host Höchststand des Laufs",
+      "einheit": "MB",
+      "wert": 1192.641
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "RSS am Ende / Höchststand",
+      "einheit": "1",
+      "wert": 0.677
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Aktive Actors am Fensterende",
+      "einheit": "1",
+      "wert": 4905
+    },
+    {
+      "szenario": "S1 Bildeingang Host, Stoß",
+      "kennzahl": "Aktive Actors, Höchststand der Fensterenden",
+      "einheit": "1",
+      "wert": 4905
+    },
+    {
+      "szenario": "S2 Bildeingang mit Python-Worker, Stoß",
+      "kennzahl": "angenommen",
+      "einheit": "Paare/s",
+      "wert": 1963.325
+    },
+    {
+      "szenario": "S2 Bildeingang mit Python-Worker, Stoß",
+      "kennzahl": "sichtbar im Fenster",
+      "einheit": "Paare/s",
+      "wert": 0
+    },
+    {
+      "szenario": "S2 Bildeingang mit Python-Worker, Stoß",
+      "kennzahl": "Durchsatz bis alles sichtbar",
+      "einheit": "Paare/s",
+      "wert": 20.711
+    },
+    {
+      "szenario": "S2 Bildeingang mit Python-Worker, Stoß",
+      "kennzahl": "Rückstand am Fensterende",
+      "einheit": "Vorgänge",
+      "wert": 200
+    },
+    {
+      "szenario": "S2 Bildeingang mit Python-Worker, Stoß",
+      "kennzahl": "Abbauzeit",
+      "einheit": "s",
+      "wert": 9.555
+    },
+    {
+      "szenario": "S2 Bildeingang mit Python-Worker, Stoß",
+      "kennzahl": "Latenz p50",
+      "einheit": "ms",
+      "wert": 4980.68
+    },
+    {
+      "szenario": "S2 Bildeingang mit Python-Worker, Stoß",
+      "kennzahl": "Latenz p99",
+      "einheit": "ms",
+      "wert": 9452.803
+    },
+    {
+      "szenario": "S2 Bildeingang mit Python-Worker, Stoß",
+      "kennzahl": "Transaktionen je Vorgang",
+      "einheit": "1",
+      "wert": 40.2
+    },
+    {
+      "szenario": "S2 Bildeingang mit Python-Worker, Stoß",
+      "kennzahl": "Queries je Vorgang",
+      "einheit": "1",
+      "wert": 316.995
+    },
+    {
+      "szenario": "S2 Bildeingang mit Python-Worker, Stoß",
+      "kennzahl": "Transaktionen",
+      "einheit": "/s",
+      "wert": 827.855
+    },
+    {
+      "szenario": "S2 Bildeingang mit Python-Worker, Stoß",
+      "kennzahl": "Queries",
+      "einheit": "/s",
+      "wert": 6528.006
+    },
+    {
+      "szenario": "S2 Bildeingang mit Python-Worker, Stoß",
+      "kennzahl": "CPU Host",
+      "einheit": "% eines Kerns",
+      "wert": 283.358
+    },
+    {
+      "szenario": "S2 Bildeingang mit Python-Worker, Stoß",
+      "kennzahl": "CPU Worker",
+      "einheit": "% eines Kerns",
+      "wert": 75.418
+    },
+    {
+      "szenario": "S2 Bildeingang mit Python-Worker, Stoß",
+      "kennzahl": "RSS Host (max.)",
+      "einheit": "MB",
+      "wert": 1576.609
+    },
+    {
+      "szenario": "S2 Bildeingang mit Python-Worker, Stoß",
+      "kennzahl": "RSS Host am Fensterende",
+      "einheit": "MB",
+      "wert": 1360.422
+    },
+    {
+      "szenario": "S2 Bildeingang mit Python-Worker, Stoß",
+      "kennzahl": "RSS Host Höchststand des Laufs",
+      "einheit": "MB",
+      "wert": 1576.609
+    },
+    {
+      "szenario": "S2 Bildeingang mit Python-Worker, Stoß",
+      "kennzahl": "RSS am Ende / Höchststand",
+      "einheit": "1",
+      "wert": 0.863
+    },
+    {
+      "szenario": "S2 Bildeingang mit Python-Worker, Stoß",
+      "kennzahl": "Aktive Actors am Fensterende",
+      "einheit": "1",
+      "wert": 12347
+    },
+    {
+      "szenario": "S2 Bildeingang mit Python-Worker, Stoß",
+      "kennzahl": "Aktive Actors, Höchststand der Fensterenden",
+      "einheit": "1",
+      "wert": 12347
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "angenommen",
+      "einheit": "Teile/s",
+      "wert": 1023.658
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "sichtbar im Fenster",
+      "einheit": "Teile/s",
+      "wert": 49.136
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Durchsatz bis alles sichtbar",
+      "einheit": "Teile/s",
+      "wert": 95.39
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Rückstand am Fensterende",
+      "einheit": "Vorgänge",
+      "wert": 1904
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Abbauzeit",
+      "einheit": "s",
+      "wert": 19.013
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Prozess-Ende nach dem Abbau",
+      "einheit": "s",
+      "wert": 0.041
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Latenz p50",
+      "einheit": "ms",
+      "wert": 10510.554
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Latenz p99",
+      "einheit": "ms",
+      "wert": 19671.514
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Transaktionen je Vorgang",
+      "einheit": "1",
+      "wert": 11.701
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Queries je Vorgang",
+      "einheit": "1",
+      "wert": 55.783
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Transaktionen",
+      "einheit": "/s",
+      "wert": 1106.859
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Queries",
+      "einheit": "/s",
+      "wert": 5276.807
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "CPU Host",
+      "einheit": "% eines Kerns",
+      "wert": 352.766
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "RSS Host (max.)",
+      "einheit": "MB",
+      "wert": 2452.922
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "RSS Host am Fensterende",
+      "einheit": "MB",
+      "wert": 2065.891
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "RSS Host Höchststand des Laufs",
+      "einheit": "MB",
+      "wert": 2452.922
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "RSS am Ende / Höchststand",
+      "einheit": "1",
+      "wert": 0.842
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Aktive Actors am Fensterende",
+      "einheit": "1",
+      "wert": 31550
+    },
+    {
+      "szenario": "S3-64 Sammelvorgang heiß, 64 Sender",
+      "kennzahl": "Aktive Actors, Höchststand der Fensterenden",
+      "einheit": "1",
+      "wert": 31550
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "angenommen",
+      "einheit": "Teile/s",
+      "wert": 169.692
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "sichtbar im Fenster",
+      "einheit": "Teile/s",
+      "wert": 65.671
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Durchsatz bis alles sichtbar",
+      "einheit": "Teile/s",
+      "wert": 84.229
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Rückstand am Fensterende",
+      "einheit": "Vorgänge",
+      "wert": 1226
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Abbauzeit",
+      "einheit": "s",
+      "wert": 11.959
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Prozess-Ende nach dem Abbau",
+      "einheit": "s",
+      "wert": 0.018
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Latenz p50",
+      "einheit": "ms",
+      "wert": 5271.823
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Latenz p99",
+      "einheit": "ms",
+      "wert": 17566.811
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Transaktionen je Vorgang",
+      "einheit": "1",
+      "wert": 9.457
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Queries je Vorgang",
+      "einheit": "1",
+      "wert": 55.381
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Transaktionen",
+      "einheit": "/s",
+      "wert": 791.561
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Queries",
+      "einheit": "/s",
+      "wert": 4635.447
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "CPU Host",
+      "einheit": "% eines Kerns",
+      "wert": 321.657
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "RSS Host (max.)",
+      "einheit": "MB",
+      "wert": 2050.109
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "RSS Host am Fensterende",
+      "einheit": "MB",
+      "wert": 1176.016
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "RSS Host Höchststand des Laufs",
+      "einheit": "MB",
+      "wert": 2050.109
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "RSS am Ende / Höchststand",
+      "einheit": "1",
+      "wert": 0.574
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Aktive Actors am Fensterende",
+      "einheit": "1",
+      "wert": 15451
+    },
+    {
+      "szenario": "S3-8 Sammelvorgang heiß, 8 Sender",
+      "kennzahl": "Aktive Actors, Höchststand der Fensterenden",
+      "einheit": "1",
+      "wert": 15451
+    },
+    {
+      "szenario": "S4 Datensatz einfrieren",
+      "kennzahl": "Durchsatz bis alles sichtbar",
+      "einheit": "Paare/s",
+      "wert": 1812.928
+    },
+    {
+      "szenario": "S4 Datensatz einfrieren",
+      "kennzahl": "Dauer Range aufnehmen",
+      "einheit": "s",
+      "wert": 0.125
+    },
+    {
+      "szenario": "S4 Datensatz einfrieren",
+      "kennzahl": "Dauer Einfrieren",
+      "einheit": "s",
+      "wert": 0.211
+    },
+    {
+      "szenario": "S4 Datensatz einfrieren",
+      "kennzahl": "Transaktionen je Vorgang",
+      "einheit": "1",
+      "wert": 0.033
+    },
+    {
+      "szenario": "S4 Datensatz einfrieren",
+      "kennzahl": "Queries je Vorgang",
+      "einheit": "1",
+      "wert": 3.193
+    },
+    {
+      "szenario": "S4 Datensatz einfrieren",
+      "kennzahl": "Transaktionen",
+      "einheit": "/s",
+      "wert": 40.772
+    },
+    {
+      "szenario": "S4 Datensatz einfrieren",
+      "kennzahl": "Queries",
+      "einheit": "/s",
+      "wert": 3971.231
+    },
+    {
+      "szenario": "S4 Datensatz einfrieren",
+      "kennzahl": "CPU Host",
+      "einheit": "% eines Kerns",
+      "wert": 223.772
+    },
+    {
+      "szenario": "S4 Datensatz einfrieren",
+      "kennzahl": "RSS Host (max.)",
+      "einheit": "MB",
+      "wert": 820.047
+    },
+    {
+      "szenario": "S4 Datensatz einfrieren",
+      "kennzahl": "RSS Host am Fensterende",
+      "einheit": "MB",
+      "wert": 820.047
+    },
+    {
+      "szenario": "S4 Datensatz einfrieren",
+      "kennzahl": "RSS Host Höchststand des Laufs",
+      "einheit": "MB",
+      "wert": 1192.641
+    },
+    {
+      "szenario": "S4 Datensatz einfrieren",
+      "kennzahl": "RSS am Ende / Höchststand",
+      "einheit": "1",
+      "wert": 0.688
+    },
+    {
+      "szenario": "S4 Datensatz einfrieren",
+      "kennzahl": "Aktive Actors am Fensterende",
+      "einheit": "1",
+      "wert": 4919
+    },
+    {
+      "szenario": "S4 Datensatz einfrieren",
+      "kennzahl": "Aktive Actors, Höchststand der Fensterenden",
+      "einheit": "1",
+      "wert": 4919
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "angenommen",
+      "einheit": "Vorgänge/s",
+      "wert": 106.812
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "sichtbar im Fenster",
+      "einheit": "Vorgänge/s",
+      "wert": 105.679
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Durchsatz bis alles sichtbar",
+      "einheit": "Vorgänge/s",
+      "wert": 106.515
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Rückstand am Fensterende",
+      "einheit": "Vorgänge",
+      "wert": 17
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Abbauzeit",
+      "einheit": "s",
+      "wert": 0.042
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Latenz p50",
+      "einheit": "ms",
+      "wert": 56.188
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Latenz p99",
+      "einheit": "ms",
+      "wert": 101.665
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Transaktionen je Vorgang",
+      "einheit": "1",
+      "wert": 10.633
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Queries je Vorgang",
+      "einheit": "1",
+      "wert": 64.068
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Transaktionen",
+      "einheit": "/s",
+      "wert": 1119.427
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Queries",
+      "einheit": "/s",
+      "wert": 6745.262
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "CPU Host",
+      "einheit": "% eines Kerns",
+      "wert": 303.578
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "RSS Host (max.)",
+      "einheit": "MB",
+      "wert": 1473.328
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "RSS Host am Fensterende",
+      "einheit": "MB",
+      "wert": 949.125
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "RSS Host Höchststand des Laufs",
+      "einheit": "MB",
+      "wert": 1473.328
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "RSS am Ende / Höchststand",
+      "einheit": "1",
+      "wert": 0.644
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Aktive Actors am Fensterende",
+      "einheit": "1",
+      "wert": 3910
+    },
+    {
+      "szenario": "S5-1 Prüfdomäne verteilt, 1 Sender",
+      "kennzahl": "Aktive Actors, Höchststand der Fensterenden",
+      "einheit": "1",
+      "wert": 3910
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "angenommen",
+      "einheit": "Vorgänge/s",
+      "wert": 2088.603
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "sichtbar im Fenster",
+      "einheit": "Vorgänge/s",
+      "wert": 0
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Durchsatz bis alles sichtbar",
+      "einheit": "Vorgänge/s",
+      "wert": 121.265
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Rückstand am Fensterende",
+      "einheit": "Vorgänge",
+      "wert": 3000
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Abbauzeit",
+      "einheit": "s",
+      "wert": 23.303
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Prozess-Ende nach dem Abbau",
+      "einheit": "s",
+      "wert": 0.022
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Latenz p50",
+      "einheit": "ms",
+      "wert": 14660.949
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Latenz p99",
+      "einheit": "ms",
+      "wert": 23240.295
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Reaktion p50",
+      "einheit": "ms",
+      "wert": 26.313
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Reaktion p99",
+      "einheit": "ms",
+      "wert": 150.574
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Transaktionen je Vorgang",
+      "einheit": "1",
+      "wert": 5.89
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Queries je Vorgang",
+      "einheit": "1",
+      "wert": 59.798
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Transaktionen",
+      "einheit": "/s",
+      "wert": 708.553
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Queries",
+      "einheit": "/s",
+      "wert": 7193.962
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "CPU Host",
+      "einheit": "% eines Kerns",
+      "wert": 337.835
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "RSS Host (max.)",
+      "einheit": "MB",
+      "wert": 1038.578
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "RSS Host am Fensterende",
+      "einheit": "MB",
+      "wert": 801.062
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "RSS Host Höchststand des Laufs",
+      "einheit": "MB",
+      "wert": 1473.328
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "RSS am Ende / Höchststand",
+      "einheit": "1",
+      "wert": 0.544
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Aktive Actors am Fensterende",
+      "einheit": "1",
+      "wert": 18791
+    },
+    {
+      "szenario": "S5-64 Prüfdomäne verteilt, 64 Sender",
+      "kennzahl": "Aktive Actors, Höchststand der Fensterenden",
+      "einheit": "1",
+      "wert": 18791
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "angenommen",
+      "einheit": "Vorgänge/s",
+      "wert": 351.494
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "sichtbar im Fenster",
+      "einheit": "Vorgänge/s",
+      "wert": 161.101
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Durchsatz bis alles sichtbar",
+      "einheit": "Vorgänge/s",
+      "wert": 135.986
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Rückstand am Fensterende",
+      "einheit": "Vorgänge",
+      "wert": 1625
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Abbauzeit",
+      "einheit": "s",
+      "wert": 13.526
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Latenz p50",
+      "einheit": "ms",
+      "wert": 5220.569
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Latenz p99",
+      "einheit": "ms",
+      "wert": 13451.225
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Transaktionen je Vorgang",
+      "einheit": "1",
+      "wert": 6.897
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Queries je Vorgang",
+      "einheit": "1",
+      "wert": 61.585
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Transaktionen",
+      "einheit": "/s",
+      "wert": 925.065
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Queries",
+      "einheit": "/s",
+      "wert": 8259.774
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "CPU Host",
+      "einheit": "% eines Kerns",
+      "wert": 296.611
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "RSS Host (max.)",
+      "einheit": "MB",
+      "wert": 1229.266
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "RSS Host am Fensterende",
+      "einheit": "MB",
+      "wert": 1105.391
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "RSS Host Höchststand des Laufs",
+      "einheit": "MB",
+      "wert": 1473.328
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "RSS am Ende / Höchststand",
+      "einheit": "1",
+      "wert": 0.75
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Aktive Actors am Fensterende",
+      "einheit": "1",
+      "wert": 10231
+    },
+    {
+      "szenario": "S5-8 Prüfdomäne verteilt, 8 Sender",
+      "kennzahl": "Aktive Actors, Höchststand der Fensterenden",
+      "einheit": "1",
+      "wert": 10231
+    }
+  ],
+  "gueltig": true,
+  "begruendung": []
+}

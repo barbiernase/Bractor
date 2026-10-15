@@ -19,11 +19,6 @@
     "Art": "Einzelknoten",
     "Name": "cqrs-vermessung-pruefdomaene"
   },
-  "Lebenszyklus": {
-    "AggregatLeerlaufSekunden": 10,
-    "AdapterLeerlaufSekunden": 10,
-    "ProzessManagerLeerlaufSekunden": 10
-  },
   "Transport": {
     "GrpcPort": 5211,
     "EinblickPort": 5212,
