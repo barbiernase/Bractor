@@ -86,14 +86,18 @@ public sealed class GenericPullStartupService : IHostedService
             // Signal → Wake an (KindName, StreamId): der per-Stream-Cluster-Actor serialisiert
             // Signal- und Poll-Quelle (kein Race). Das Signal ist NUR ein Weckruf und darf
             // verloren gehen (Invariante 2) → fire-and-forget; es läuft im Receiver-Actor-Turn
-            // und darf ihn nicht blockieren.
-            Func<Guid, CancellationToken, Task> signalWake = (streamId, c) =>
+            // und darf ihn nicht blockieren. Zusammengefasst je Stream (PF-12): ein Adapter liest
+            // bei einer Weckung alles ab seinem Cursor — viele Signale brauchen eine Weckung, nicht viele.
+            var weckungen = new Weckungen<Guid>(async streamId =>
             {
-                var identity = ClusterIdentity.Create(streamId.ToString(), kindName);
-                // ★ Härtung (Multi-Node): fire-and-forget, aber der Send-Fehler wird BEOBACHTET (nicht als
-                //   unbeobachtete Task-Exception verschluckt). Debug-Level, weil Signalverlust per Design
-                //   normal ist (Invariante 2) — der Poll-Backstop heilt.
-                _ = SignalWakeBeobachtetAsync(identity, c);
+                // ★ Härtung (Multi-Node): der Send-Fehler wird BEOBACHTET (nicht als unbeobachtete Task-Exception
+                //   verschluckt). Debug-Level, weil Signalverlust per Design normal ist — der Poll-Backstop heilt.
+                using var frist = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await SignalWakeBeobachtetAsync(ClusterIdentity.Create(streamId.ToString(), kindName), frist.Token);
+            });
+            Func<Guid, CancellationToken, Task> signalWake = (streamId, _) =>
+            {
+                weckungen.Wecke(streamId);
                 return Task.CompletedTask;
             };
 

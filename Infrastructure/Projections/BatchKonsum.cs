@@ -53,7 +53,7 @@ public sealed class BatchKonsumStartupService : IHostedService
 
         foreach (var reg in _registrierungen)
         {
-            var weckung = new Weckung(_system, reg.KindName, _konsum.Partitionen, _logger);
+            var weckung = new Weckung(_system, reg.KindName, _logger);
             var signalTypen = SignalReceiver.SignalTypesFor(reg.EventTypes);
             var receiver = new SignalReceiver((streamId, _) =>
             {
@@ -94,42 +94,25 @@ public sealed class BatchKonsumStartupService : IHostedService
     }
 
     /// <summary>
-    /// Weckt die Partitionen einer Projektion. Je Partition ist höchstens eine Weckung unterwegs; kommt währenddessen eine weitere, geht nach
-    /// der Quittung genau eine hinterher (der Leser kann die erste vor dem neuen Event begonnen haben). Verlust ist folgenlos (Inv. 2).
+    /// Weckt die Partitionen einer Projektion, zusammengefasst (<see cref="Weckungen{TKey}"/>): je Partition höchstens eine Weckung unterwegs
+    /// und eine hinterher.
     /// </summary>
-    private sealed class Weckung(ActorSystem system, string kind, int partitionen, ILogger? logger)
+    private sealed class Weckung(ActorSystem system, string kind, ILogger? logger)
     {
-        private readonly int[] _zustand = new int[partitionen];   // 0 frei, 1 unterwegs, 2 unterwegs + noch eine
-
-        public void Wecke(int partition)
+        private readonly Weckungen<int> _weckungen = new(async partition =>
         {
-            while (true)
+            try
             {
-                var alt = Volatile.Read(ref _zustand[partition]);
-                if (alt == 2) return;
-                if (Interlocked.CompareExchange(ref _zustand[partition], alt + 1, alt) != alt) continue;
-                if (alt == 0) _ = SendeAsync(partition);
-                return;
+                using var frist = new CancellationTokenSource(TimeSpan.FromSeconds(10));
+                await system.Cluster().RequestAsync<WakeAck>(ClusterIdentity.Create(partition.ToString(), kind), new Wake(), frist.Token);
             }
-        }
+            catch (Exception ex)
+            {
+                logger?.LogDebug(ex, "[Konsum] Weckung {Kind}/{Partition} verloren — der Poll heilt", kind, partition);
+            }
+        });
 
-        private async Task SendeAsync(int partition)
-        {
-            while (true)
-            {
-                try
-                {
-                    using var frist = new CancellationTokenSource(TimeSpan.FromSeconds(10));
-                    await system.Cluster().RequestAsync<WakeAck>(ClusterIdentity.Create(partition.ToString(), kind), new Wake(), frist.Token);
-                }
-                catch (Exception ex)
-                {
-                    logger?.LogDebug(ex, "[Konsum] Weckung {Kind}/{Partition} verloren — der Poll heilt", kind, partition);
-                }
-                // 2 → 1: noch eine hinterher; 1 → 0: fertig.
-                if (Interlocked.Decrement(ref _zustand[partition]) == 0) return;
-            }
-        }
+        public void Wecke(int partition) => _weckungen.Wecke(partition);
     }
 }
 
