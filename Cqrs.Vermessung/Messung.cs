@@ -234,13 +234,34 @@ internal static class Messung
     }
 
     // ── Leerlauf ───────────────────────────────────────────────────────────────────────────────────────────────────────────
-    /// <summary>Grundlast ohne Eingang (PF-2, PF-4), mit allem, was die Blöcke davor angelegt haben.</summary>
+    /// <summary>
+    /// Grundlast ohne Eingang, mit allem, was die Blöcke davor angelegt haben (PF-2, PF-4, PF-14). Zuerst der <b>Nachlauf</b>: ab dem Ende
+    /// des letzten Blocks, bis alle durablen Konsumenten am Kopf des Logs stehen (<see cref="Konsumentenstand.Eingeholt"/>) — die Polls
+    /// lesen dann einmal nach, was sie unter Last nicht bestätigt vorrücken konnten; seine Dauer und seine Queries sind eigene Kennzahlen.
+    /// Danach das Leerlauf-Fenster über ganze Poll-Perioden (<see cref="Optionen.Leerlauf"/>), damit jeder periodische Takt gleich oft
+    /// hineinfällt. Früher maß ein 15-s-Fenster 5 s nach dem letzten Block — je nach Lage traf es den Nachlauf oder nicht.
+    /// </summary>
     private static async Task<SzenarioWert> LeerlaufAsync(Kontext k, Anwendungslauf lauf, string name, int w, bool ohneRueckstand)
     {
         if (!ohneRueckstand) Console.WriteLine("    (ein Block davor wurde nicht abgebaut — der Leerlauf misst den Rückstand mit)");
         Console.WriteLine($"  {name} {Titel(name)}");
+        k.Ressourcen.Abschnitt($"{name}-nachlauf-w{w}");
+        var nachlauf = new Messfenster(lauf.Db, k.Ressourcen, lauf.Rolle);
+        await nachlauf.StarteAsync();
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var stand = await Konsumentenstand.LiesAsync(lauf.Db);
+        while (!stand.Eingeholt && sw.Elapsed < k.Optionen.NachlaufFrist)
+        {
+            await Task.Delay(1000);
+            stand = await Konsumentenstand.LiesAsync(lauf.Db);
+        }
+        var nachlaufS = stand.Eingeholt ? sw.Elapsed.TotalSeconds : double.NaN;
+        var (nkz, _) = await nachlauf.EndeAsync(0, k.Ablage, $"{name}-nachlauf", w);
+        Console.WriteLine(stand.Eingeholt
+            ? $"    Nachlauf {nachlaufS:F0} s · {nkz["queries"]:F0} Queries · CPU {nkz["cpu_prozent"]:F1} % (Kopf {stand.Kopf}, {stand.Poll}, Projektionen ab {stand.Projektion})"
+            : $"    Nachlauf nicht vorbei nach {k.Optionen.NachlaufFrist.TotalSeconds:F0} s (Kopf {stand.Kopf}, {stand.Poll}, Projektionen ab {stand.Projektion}) — der Leerlauf misst ihn mit");
+
         k.Ressourcen.Abschnitt($"{name}-w{w}");
-        await Task.Delay(TimeSpan.FromSeconds(5));   // Nachlauf der Blöcke abklingen lassen
         var fenster = new Messfenster(lauf.Db, k.Ressourcen, lauf.Rolle, lauf);
         await fenster.StarteAsync();
         await Task.Delay(k.Optionen.Leerlauf);
@@ -249,7 +270,10 @@ internal static class Messung
         foreach (var key in new[] { "tx_je_s", "queries_je_s", "cpu_prozent", "rss_mb", "rss_ende_mb", "rss_lauf_max_mb", "rss_ende_anteil",
                      "aktive_actors", "aktive_actors_hoechst" })
             wert.Kennzahlen[key] = kz[key];
+        wert.Kennzahlen["nachlauf_s"] = nachlaufS;
+        wert.Kennzahlen["nachlauf_queries"] = nkz["queries"];
         wert.Details["mit_rueckstand"] = !ohneRueckstand;
+        wert.Details["nachlauf_eingeholt"] = stand.Eingeholt;
         Console.WriteLine($"    {kz["tx_je_s"]:F1} Tx/s · {kz["queries_je_s"]:F1} Q/s · CPU {kz["cpu_prozent"]:F1} % · RSS {kz["rss_mb"]:F0} MB, "
             + $"am Ende {kz["rss_ende_mb"]:F0} MB = {kz["rss_ende_anteil"]:P0} des Höchststands {kz["rss_lauf_max_mb"]:F0} MB · "
             + $"aktive Actors {kz["aktive_actors"]:F0} (Höchststand {kz["aktive_actors_hoechst"]:F0})");

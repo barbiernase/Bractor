@@ -39,7 +39,10 @@ internal sealed class Optionen
     /// der Rückstand auf zehntausende und der Abbau dauerte Stunden.</summary>
     public int MaxS3 => Probe ? 500 : 2000;
     public int MaxS5 => Probe ? 1000 : 3000;
-    public TimeSpan Leerlauf => Probe ? TimeSpan.FromSeconds(5) : TimeSpan.FromSeconds(15);
+    /// <summary>Das Leerlauf-Fenster: zwei ganze Poll-Perioden (30 s), damit jeder periodische Takt gleich oft hineinfällt (PF-14).</summary>
+    public TimeSpan Leerlauf => Probe ? TimeSpan.FromSeconds(5) : TimeSpan.FromSeconds(60);
+    /// <summary>Wie lange der Leerlauf höchstens auf das Ende des Nachlaufs wartet (alle Konsumenten am Kopf des Logs), bevor er trotzdem misst.</summary>
+    public TimeSpan NachlaufFrist => Probe ? TimeSpan.FromSeconds(90) : TimeSpan.FromSeconds(180);
     /// <summary>
     /// Ruhe nach dem ersten Start eines Hosts, bevor gemessen wird (nicht nach einem Neustart im Störungslauf): der JIT stuft heiße Methoden
     /// erst nach und nach hoch. Ohne sie misst der erste Block kalten Code — gemessen S3-8 −28 % Durchsatz. Früher bekam der Host diese Zeit
@@ -85,6 +88,8 @@ internal sealed class Optionen
         ["s5_hoechstens_vorgaenge_je_block"] = MaxS5,
         ["s5_muster"] = "je 10 Vorgänge: 8 Aufträge ok, 1 Auftrag gegen volles Kontingent (Kompensation), 1 Verteilung auf 4 Ziele; 50 Posten, 20 Ziele",
         ["leerlauf_s"] = Leerlauf.TotalSeconds,
+        ["leerlauf"] = "erst nach dem Nachlauf (alle Poll-Cursor und Projektions-Positionen am Kopf des Logs, höchstens nachlauf_frist_s), dann das Fenster",
+        ["nachlauf_frist_s"] = NachlaufFrist.TotalSeconds,
         ["sichtbar"] = "S1/S2: Query GetImagePair je offenem Paar (komplett), alle 100 ms; S3: TeilVerbucht im Log; S4: Query HoleDatensatz; S5: ProzessBeendet im Log",
         ["transaktionen"] = "COMMITs aus pg_stat_statements (track = top); Queries = übrige Statements ohne BEGIN/COMMIT/ROLLBACK/DISCARD/SET/SHOW; ohne die Lese-Rolle des Treibers",
     };

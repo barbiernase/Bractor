@@ -26,6 +26,8 @@ internal static class Zusammenfassung
         ("reaktion_p99_ms", "Reaktion p99", "ms"),
         ("tx_je_vorgang", "Transaktionen je Vorgang", "1"),
         ("queries_je_vorgang", "Queries je Vorgang", "1"),
+        ("nachlauf_s", "Nachlauf bis alle Konsumenten am Kopf", "s"),
+        ("nachlauf_queries", "Queries im Nachlauf", "1"),
         ("tx_je_s", "Transaktionen", "/s"),
         ("queries_je_s", "Queries", "/s"),
         ("cpu_prozent", "CPU Host", "% eines Kerns"),

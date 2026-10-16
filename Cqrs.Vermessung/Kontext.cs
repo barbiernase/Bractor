@@ -44,7 +44,7 @@ internal sealed class Messfenster
         var actors = _lauf is null ? double.NaN : await _lauf.AktiveActorsAsync();
         var werte = new Dictionary<string, double>
         {
-            ["tx_je_s"] = txs, ["queries_je_s"] = qs,
+            ["tx_je_s"] = txs, ["queries_je_s"] = qs, ["queries"] = q,
             ["tx_je_vorgang"] = vorgaenge > 0 ? (double)tx / vorgaenge : double.NaN,
             ["queries_je_vorgang"] = vorgaenge > 0 ? (double)q / vorgaenge : double.NaN,
             ["cpu_prozent"] = cpu, ["rss_mb"] = rss, ["xact_je_s_info"] = xact,

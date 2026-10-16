@@ -35,7 +35,7 @@ internal static class Zeitreihe
             var (txs, qs, _, _, _, st) = Datenbank.Differenz(a, b, lauf.Db.LeserStatements - leserA);
             var (cpu, rss) = k.Ressourcen.Fenster(lauf.Rolle, a.Zeit, b.Zeit);
             leserA = lauf.Db.LeserStatements;
-            var stand = await StandAsync(lauf.Db);
+            var stand = await Konsumentenstand.LiesAsync(lauf.Db);
             var t = (b.Zeit - start).TotalSeconds;
             var top = st.Where(s => !IstSteuerung(s.Text)).Take(12).ToList();
             var zeile = string.Join(',', name, F(t), F(txs), F(qs), F(cpu), F(rss), stand.Kopf, stand.Poll, stand.Projektion, stand.Emittenten);
@@ -50,25 +50,6 @@ internal static class Zeitreihe
                 string.Join(" | ", top.Take(4).Select(s => $"{s.Aufrufe}× {Kurz(s.Text)}")));
             a = b;
         }
-    }
-
-    private sealed record Stand(long Kopf, string Poll, long Projektion, long Emittenten);
-
-    private static async Task<Stand> StandAsync(Datenbank db)
-    {
-        var s = db.Schema;
-        async Task<long> Zahl(string sql) { try { return await db.ZahlAsync(sql); } catch { return -1; } }
-        var kopf = await Zahl($"select coalesce(max(seq_id), 0) from {s}.mt_events");
-        string poll;
-        try
-        {
-            poll = string.Join('/', await db.LiesAsync($"select id, (data->>'HighWater')::bigint from {s}.mt_doc_pollcursor order by id",
-                r => $"{r.GetString(0)}={r.GetInt64(1)}"));
-        }
-        catch { poll = "-"; }
-        var projektion = await Zahl($"select min((data->>'Position')::bigint) from {s}.mt_doc_partitionscheckpoint");
-        var emittenten = await Zahl($"select count(*) from {s}.mt_doc_emittentencursordoc where mt_last_modified > now() - interval '10 seconds'");
-        return new Stand(kopf, poll.Length == 0 ? "-" : poll, projektion, emittenten);
     }
 
     private static bool IstSteuerung(string text)
