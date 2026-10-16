@@ -49,6 +49,7 @@ internal static class Messung
                 await using (var lauf = await Anwendungslauf.StarteAsync(k, k.Beispiel, "Host.Grpc", "host", $"beispiel-w{w}", zuruecksetzen: true,
                                  mitDaten: ["prozess_gestartet"]))
                 {
+                    if (o.Diagnose) await Zeitreihe.LaufeAsync(k, lauf, "L1-leer", o.ZeitreiheLeer, o.ZeitreiheTakt);
                     if (o.Szenarien.Contains("S1") || o.Szenarien.Contains("S4")) Merke("S1", await StossAsync(k, lauf, "S1", 2030, w, o.StossS1));
                     if (o.Szenarien.Contains("S4")) Merke("S4", await DatensatzAsync(k, lauf, w));
                     if (o.Szenarien.Contains("S3"))
@@ -64,8 +65,10 @@ internal static class Messung
                             Merke($"S3-{sender}", wert);
                         }
                     }
-                    Merke("L1", await LeerlaufAsync(k, lauf, "L1", w, nichtAbgebaut.Count == 0));
+                    if (o.Diagnose) await Zeitreihe.LaufeAsync(k, lauf, "L1-nach-last", o.ZeitreiheNachLast, o.ZeitreiheTakt);
+                    else Merke("L1", await LeerlaufAsync(k, lauf, "L1", w, nichtAbgebaut.Count == 0));
                 }
+                if (o.Diagnose) await NeustartZeitreiheAsync(k, k.Beispiel, "Host.Grpc", $"beispiel-neustart-w{w}", "L1-neustart");
                 if (o.Szenarien.Contains("S2"))
                 {
                     var extern_ = new Dictionary<string, string>
@@ -87,6 +90,7 @@ internal static class Messung
                 var pd = new Pruefdomaene(lauf.Eingang, lauf.Log, lauf.Uhrversatz);
                 await pd.EinrichtenAsync();
                 await AufwaermenAsync(pd);
+                if (o.Diagnose) await Zeitreihe.LaufeAsync(k, lauf, "L5-leer", o.ZeitreiheLeer, o.ZeitreiheTakt);
                 SzenarioWert? letzter = null;
                 var alleAbgebaut = true;
                 foreach (var sender in o.SenderS5)
@@ -104,8 +108,14 @@ internal static class Messung
                 letzter.Pruefungen.AddRange(pruef);
                 alleOk &= pruef.All(p => p.Ok);
                 foreach (var p in pruef.Where(p => !p.Ok)) Console.WriteLine($"  ✗ S5: {p.Name} — soll {p.Soll}, ist {p.Ist}");
-                Merke("L5", await LeerlaufAsync(k, lauf, "L5", w, alleAbgebaut));
+                if (o.Diagnose) await Zeitreihe.LaufeAsync(k, lauf, "L5-nach-last", o.ZeitreiheNachLast, o.ZeitreiheTakt);
+                else Merke("L5", await LeerlaufAsync(k, lauf, "L5", w, alleAbgebaut));
                 Global("Prüfdomäne", w, await GlobalePruefung.PruefeAsync(lauf.Db, "Prüfdomäne"));
+                if (o.Diagnose)
+                {
+                    await lauf.DisposeAsync();
+                    await NeustartZeitreiheAsync(k, k.Pruef, "Host.Pruefdomaene", $"pruefdomaene-neustart-w{w}", "L5-neustart");
+                }
             }
         }
 
@@ -244,6 +254,13 @@ internal static class Messung
             + $"am Ende {kz["rss_ende_mb"]:F0} MB = {kz["rss_ende_anteil"]:P0} des Höchststands {kz["rss_lauf_max_mb"]:F0} MB · "
             + $"aktive Actors {kz["aktive_actors"]:F0} (Höchststand {kz["aktive_actors_hoechst"]:F0})");
         return wert;
+    }
+
+    /// <summary>Diagnose: derselbe Bestand, der Host frisch gestartet, ohne Warmlauf und ohne Last — was tut er von selbst?</summary>
+    private static async Task NeustartZeitreiheAsync(Kontext k, Umgebungsdatei u, string hostProjekt, string logName, string reihe)
+    {
+        await using var lauf = await Anwendungslauf.StarteAsync(k, u, hostProjekt, "host", logName, zuruecksetzen: false, warmlauf: false);
+        await Zeitreihe.LaufeAsync(k, lauf, reihe, k.Optionen.ZeitreiheNeustart, k.Optionen.ZeitreiheTakt);
     }
 
     /// <summary>

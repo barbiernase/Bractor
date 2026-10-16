@@ -19,7 +19,8 @@ internal sealed class Ablage
     private readonly Dictionary<string, StreamWriter> _latenzen = new();
     private readonly StreamWriter _statements;
 
-    /// <param name="probe">Funktionstest des Treibers (<c>--probe</c>): kein Messlauf — der Ordner liegt im Temp-Verzeichnis, nicht im Repo.</param>
+    /// <param name="probe">Funktionstest des Treibers (<c>--probe</c>) oder Diagnose (<c>--art leerlauf</c>): kein Messlauf — der Ordner liegt
+    /// im Temp-Verzeichnis, nicht im Repo.</param>
     public Ablage(string wurzel, string anlass, string commit, bool probe)
     {
         var name = $"{DateTime.Now:yyyy-MM-dd_HHmm}_{commit}_{Bereinige(anlass)}";

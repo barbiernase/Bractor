@@ -15,6 +15,14 @@ internal sealed class Optionen
     public HashSet<string> Szenarien { get; private set; } = new() { "S1", "S2", "S3", "S4", "S5" };
     public int Wiederholungen { get; private set; } = 1;
     public bool Probe { get; private set; }
+    /// <summary><c>--art leerlauf</c>: die Messung mit Zeitreihen statt Leerlauf-Fenster (vor der Last, danach, nach einem Neustart) — eine
+    /// Diagnose (PF-14), kein Messlauf; das Ergebnis liegt wie bei <c>--probe</c> im Temp-Verzeichnis.</summary>
+    public bool Diagnose => Art == "leerlauf";
+    /// <summary>Diagnose: Länge der Zeitreihen (leer, nach der Last, nach dem Neustart) und ihr Takt.</summary>
+    public TimeSpan ZeitreiheLeer => TimeSpan.FromSeconds(60);
+    public TimeSpan ZeitreiheNachLast => TimeSpan.FromSeconds(300);
+    public TimeSpan ZeitreiheNeustart => TimeSpan.FromSeconds(150);
+    public TimeSpan ZeitreiheTakt => TimeSpan.FromSeconds(10);
 
     // ── feste Parameter (Höchstlast, Plan §0.1) ──
     /// <summary>Wie lange ein Volllast-Block sendet.</summary>
