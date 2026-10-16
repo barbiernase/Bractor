@@ -156,7 +156,9 @@ Folgerungen (Verhältnisse):
 **Ende zu Ende an den realen Domänen, unter Höchstlast (seit 2026-10-15, `scripts/vermessung-e2e.sh`, ≈ 5 min, Plan Garantien und Durchsatz
 §0.1).** Gemessen wird der echte Host im Release-Build (`Host.Grpc` in `umgebungen/umgebung.vermessung.json`, `Host.Pruefdomaene` in
 `umgebung.vermessung-pruefdomaene.json`, je eigene DB, eigener Redis `cqrs-vermessung-redis`), Last nur über die echten Eingänge, gezählt bis zum
-fachlich sichtbaren Ergebnis. Jeder Block sendet höchstens 15 s so schnell, wie der Eingang annimmt, dann baut der Rückstand ab:
+fachlich sichtbaren Ergebnis. Beide Umgebungen sind **Art Prod** — im Host läuft derselbe Code wie im Betrieb (seit 2026-10-16, Spalte „Art Prod“;
+vorher Sim: die Uhr las je Event den Versatz, und Spur-Hinweise wurden geschrieben). Anders als `umgebung.prod.json` bleiben Einzelknoten, 8 Slots je
+Bildfunktion und die Fertig-Marke der Datei-Quelle; der JSON-Eingang ist an (über ihn treibt der Treiber die Prüfdomäne an). Jeder Block sendet höchstens 15 s so schnell, wie der Eingang annimmt, dann baut der Rückstand ab:
 
 | Block | Eingang | sichtbar, wenn |
 |---|---|---|
@@ -676,10 +678,10 @@ ein Lauf): S1 1,13 ×, S5-1 1,08 ×, S2 und S3-64 0,99 ×, S5-8 und S5-64 0,93 �
 Reaktion p99 S5-64 330 → 260 ms. Je Vorgang (`pg_stat_statements`):
 - *S1:* Datenbankzeit je Paar 20,3 → 9,5 ms. Die Abfrage der gesetzten Sequenz (Rückwärts-Scan gegen die Uhr, 7,7 ms) entfällt; die
   Partitionsseite kostet 0,6 statt 7,1 ms, weil die Positionen Millisekunden statt ≥ 3 s hinter dem Kopf liegen und der Leser kein Karenz-Fenster
-  mehr durchsucht. Neu: Proben und Prüfungen des Horizonts, zusammen 3,0 ms (≈ 0,45 ms je Aufruf, mehr als erwartet — PF-16). Transaktionen je
+  mehr durchsucht. Neu: Proben und Prüfungen des Horizonts, zusammen 3,0 ms (≈ 0,45 ms je Aufruf, mehr als erwartet — PF-17). Transaktionen je
   Paar 21 → 25: die Proben sind eigene, kurze Transaktionen (ohne Warten auf die Platte) und zählen als COMMIT.
 - *Zeitstempel-Regel:* je Event-Insert ≈ 20–35 µs mehr (S5-64 0,33 → 0,48 ms je Vorgang, S3-64 0,22 → 0,38 ms). Die Vermessung läuft als Sim, die
-  Regel liest dort je Zeile den Versatz aus `uhr`; in Prod ist der Ausdruck nur die Datenbankzeit (PF-16).
+  Regel liest dort je Zeile den Versatz aus `uhr`; in Prod ist der Ausdruck nur die Datenbankzeit (PF-17).
 - *Leerlauf:* L1 3,8 → 5,2 Queries/s (eine Probe je Poll), L5 2,6 unverändert — unter dem E5-Ziel; Queries im Nachlauf L5 3 734 → 1 978.
 
 **Als korrekt verifiziert (Backend-Audit 2026-08, nicht erneut jagen):** Versionsarithmetik inkl. Noop- und Ablehnungs-Marken; OCC-Skip auf dem

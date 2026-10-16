@@ -1,7 +1,7 @@
 {
   "Umgebung": {
     "Name": "vermessung",
-    "Art": "Sim",
+    "Art": "Prod",
     "Python": "/opt/miniconda3/envs/gpu_env/bin/python"
   },
   "EventStore": {

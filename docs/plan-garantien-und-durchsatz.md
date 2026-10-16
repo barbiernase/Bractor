@@ -392,7 +392,7 @@ alten Code rot). Prüfstand, Garantie-Suite und Integration grün. Gemessen zusa
 Versatz) — Zeitlimits, Warte-Knoten und Fristen vergleichen nur noch Zeit aus einer Quelle; nebenbei behoben: nach einem Zeitsprung der Sim
 standen neue Events in der ungesprungenen Zeit (docs/13 §13.6). Prüfstand, Integration, Prüfdomäne, Werkbank-Abnahme grün.
 Messung beider Nachträge `…_1620_a78c21d_server-horizont-uhr` (gültig, grün), Störungsläufe `…_1628_…`/`…_1631_…` (grün): S1 Datenbankzeit je
-Paar 20,3 → 9,5 ms, Durchsatz im Band (S1 1,13 ×, S5 0,93–1,08 ×), Leerlauf unter dem E5-Ziel (L1 5,2, L5 2,6 Queries/s). Neu: PF-16 (Kosten der
+Paar 20,3 → 9,5 ms, Durchsatz im Band (S1 1,13 ×, S5 0,93–1,08 ×), Leerlauf unter dem E5-Ziel (L1 5,2, L5 2,6 Queries/s). Neu: PF-17 (Kosten der
 Proben und der Zeitstempel-Regel in Sim).
 
 **Phase 5** (umgesetzt, 2026-10-15, auf Tobis Wort vor Phase 4; Code `22632bc`…`ffaeaea`, gemessen auf dem Messserver, docs/12 §12.6):

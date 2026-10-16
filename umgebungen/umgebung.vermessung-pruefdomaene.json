@@ -1,7 +1,7 @@
 {
   "Umgebung": {
     "Name": "vermessung-pruefdomaene",
-    "Art": "Sim"
+    "Art": "Prod"
   },
   "EventStore": {
     "Betrieb": "Vorhanden",
