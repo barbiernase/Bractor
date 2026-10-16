@@ -53,7 +53,9 @@ die Versionsprüfung des Partitions-Checkpoints (G-4, unten). Ein Durchlauf:
 ist (3 s, DB-Uhr; dieselbe Regel wie beim Poll der Emittenten). Die Position rückt nie darüber hinaus, bei voller Seite nie über deren Ende und
 nie über das erste Event eines hängenden Streams (unten). Jüngere Events werden trotzdem angewandt (Latenz); welche schon erledigt sind, merkt
 sich die Aktivierung und schließt sie beim nächsten Lesen aus, nach einer Neuaktivierung fängt der Guard sie ab. So überholt die Position keine
-noch unsichtbare kleinere Sequenz. Gelesen wird ab einer Lese-Position im Speicher: durabel wird sie mit jedem Commit eines Batches; über fremde
+noch unsichtbare kleinere Sequenz. Gesetzte Sequenz und „steht dahinter überhaupt ein Event?“ kommen aus **einer** Abfrage; steht hinter der
+Position nichts, entfällt die Seite — eine Weckung ohne Neues kostet eine Abfrage statt zwei (PF-14; ebenso der Prozess-Poll und der Poll der
+Emittenten). Gelesen wird ab einer Lese-Position im Speicher: durabel wird sie mit jedem Commit eines Batches; über fremde
 Events hinweg (leere Seite) höchstens einmal je Poll-Intervall — sonst committete unter Last jede Weckung nur eine Zahl. Grenzfall wie beim
 Poll: eine Transaktion, die länger als die Karenz offen ist, kann überholt werden. Den Event-Zeitstempel setzt Marten beim Append mit der Uhr des
 Clients; ein Versatz zur DB-Uhr verschiebt die Karenz um diesen Betrag (gemessen unter 1 ms).
@@ -108,6 +110,20 @@ Partitionen des Batch-Konsums) — ohne das wurde unter Last jedes Signal ein ei
 **Tombstones:** scheitert ein Append, füllt Marten die reservierten Sequenzen mit `Tombstone`-Events in einem eigenen Stream.
 `MartenEventStore` meldet diesen Stream nicht als geändert und liest keine Tombstones (G-7, erledigt); Poll und Partitions-Leser laufen über sie
 hinweg.
+
+### 4.1.3 Last ohne Eingang
+
+Kommt nichts hinein, arbeiten nur die Takte (gemessen auf dem Messserver, Diagnose `--art leerlauf`, docs/12 §12.5, PF-14):
+- **Batch-Poll** alle 30 s je Projektion und Partition eine Weckung, ohne Neues eine Abfrage (Beispieldomäne: 5 Projektionen × 8 Partitionen =
+  40 Abfragen je 30 s — der größte Posten, er wächst mit Projektionen × Partitionen);
+- **Prozess-Poll** und **Poll der Emittenten** alle 30 s je eine Abfrage;
+- **Backstop** jede Sekunde die DB-Uhr und die fälligen Fristen, alle 15 s die Offen-Liste; der `FristScheduler` alle 5 s DB-Uhr und Plan.
+
+Zusammen gemessen L1 3,8 und L5 2,6 Abfragen/s bei 1,5–2,6 % CPU eines Kerns, unabhängig vom Bestand (mit dem Batch-Poll wächst es je
+Projektion, PF-15). **Nachlauf:** unter Höchstlast rücken Prozess-Poll und Poll der
+Emittenten ihre Marke oft nicht vor (eine Weckung an einen ausgelasteten Manager bzw. Adapter bleibt in 10 s unbestätigt, G-8, §4.1.2); der erste
+Poll-Takt nach der Last liest dann einmal nach, was dazwischen kam (je Event einmal, Beispieldomäne ≈ 31 000 Events in ≈ 5 s), und die Batch-Leser
+schreiben ihre Position über fremde Events einmal fest. Danach ist der Host still; die Messung wartet diesen Nachlauf ab und weist ihn eigens aus.
 
 ## 4.2 Die zwei Achsen
 

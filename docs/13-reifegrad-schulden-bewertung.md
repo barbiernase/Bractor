@@ -1,7 +1,7 @@
 # 13 — Reifegrad, Schulden & Bewertung
 
 **Die eine Quelle für „offen“.** Andere Dokumente (`CLAUDE.md`, Kapitel 01–12, Konzepte) nennen Schulden höchstens kurz und verweisen
-hierher. Stand: 2026-10-15, Phase 4 des Plans Garantien und Durchsatz. Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
+hierher. Stand: 2026-10-16, nach Phase 4 des Plans Garantien und Durchsatz und PF-14. Maßstab sind die sechs Invarianten (`CLAUDE.md`) und die Werkbank-Leitsätze W1–W12
 (`docs/konzept-werkbank.md` §2). Zahlen und Messwerte stehen in `docs/12-tests-und-vermessung.md`.
 
 ## 13.0 Offen auf einen Blick
@@ -14,7 +14,7 @@ hierher. Stand: 2026-10-15, Phase 4 des Plans Garantien und Durchsatz. Maßstab 
 | PF-4b | Rest von PF-4: keine Lease für den Prozess-Backstop im Cluster (jeder Knoten heilt alle offenen Vorgänge); Abnahme „S3 Zeit je Teil konstant über N“ und „10 000 offene Vorgänge im Leerlauf“ ohne Szenario im Treiber | P3 |
 | PF-10 | Datei-Treiber meldet eine Datei nach der anderen ins Log (Rückstau): das Melde-Tempo ist die Decke von S1 — Entscheidung offen | P2 |
 | VM-1 | Vermessungs-Treiber zählt Soll und Ist der Exactly-once-Prüfung in getrennten Abfragen, während der Host noch abbaut | P3 |
-| PF-14 | Leerlauf L1/L5 seit „Korreliert lesen“ wieder über dem E5-Ziel (L1 29, L5 110 Queries/s): Nachlesen von Prozess-Poll und Batch-Lesern (L1) bzw. Nachlauf der Reaktion aus S5-64 (L5, PF-13) im 15-s-Fenster | P3 |
+| PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16 | P3 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
@@ -298,6 +298,16 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 
 ## 13.6 Erledigt (früher hier offen)
 
+- **Leerlauf: Nachlauf statt Grundlast (früher PF-14, 2026-10-16, Messserver; docs/04 §4.1.3, docs/12 §12.5):** L1 ≈ 30 und L5 ≈ 113
+  Queries/s im Leerlauf waren keine bleibende Last, sondern der erste Poll-Takt nach der Last, den das 15-s-Fenster traf: unter Höchstlast rücken
+  Prozess-Poll und Emittenten-Poll ihre Marke nicht vor (Weckungen an ausgelastete Manager bleiben unbestätigt, G-8) und lesen danach einmal
+  nach (L1 31 000, L5 64 000 Events in ≈ 5 s), die Batch-Leser schreiben ihre Position einmal fest, in L5 arbeitet der Router noch Signale ab.
+  Belegt mit einer Zeitreihe über 5 min nach der Last und nach einem Neustart (Diagnose `--art leerlauf`): danach 2,4–5 Queries/s, 1–3 % CPU.
+  Geändert: die Messung wartet den Nachlauf ab (alle Konsumenten am Kopf) und weist Dauer und Queries eigens aus, das Fenster umfasst zwei
+  Poll-Perioden; ein Poll-Read ohne Neues kostet eine Abfrage statt zwei (`ReadPartitionAsync`, `ReadChangedStreamsAsync`). Gemessen: L1 3,8
+  Queries/s und 2,6 % CPU, L5 2,6 und 1,5 % — E5-Ziel erreicht; Nachlauf L1 48 s, L5 15 s; zwei Störungsläufe grün. Nachweis: I
+  `SequenceGapPostgresTests.Hinter_der_Marke_nichts…` (Gegenprobe: schluckt die Abkürzung junge Events, ist er rot). Rest: PF-15.
+
 - **Aggregat-Bündel (2026-10-16, Messserver; docs/03 §3.1):** ein heißes Aggregat war an „ein Command je Commit“ gebunden (Single-Writer +
   sicherer Commit ≈ 4 ms). Jetzt sammelt der Actor während des Commits (`ReenterAfter`), entscheidet die gesammelten nacheinander im Speicher
   und hängt sie als Teile eines Appends an (`AppendTeil`, `AppendTeileAsync`; Metadaten, Spur und Quittung je Command); scheitert der Append,
@@ -332,7 +342,7 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
     `…Ein_Duplikat_mitten_im_Group_Commit…`, `…Die_Inbox_vergisst_erst_jenseits_des_Horizonts`, I `GarantiePostgresTests.Effekt_und_Quittung…`
     (je Rich und Quick). Mit sabotierter Regel (keine Quittung) fallen fünf der sieben Schreib-Garantien.
   - Gemessen (docs/12 §12.5, A-B-B-A gegen den Stand davor): S3 1,17–1,18 ×, S5 1,06–1,08 ×, S1 1,04 ×, S4 1,01 ×; Queries je Vorgang 0,78–0,89 ×;
-    S5-8 je Vorgang Event-Inserts 11,5 → 6,9, Stream-Kopf-Reads 4,8 → 0. Zwei Störungsläufe grün. Offen daneben: PF-14 (Leerlauf).
+    S5-8 je Vorgang Event-Inserts 11,5 → 6,9, Stream-Kopf-Reads 4,8 → 0. Zwei Störungsläufe grün. Offen daneben war PF-14 (Leerlauf, inzwischen erledigt).
 
 - **Leerlauf der Prüfdomäne (früher PF-11, PF-12; 2026-10-15, Messserver; docs/04 §4.1, §4.5):** die Annahme „die Reaktion hängt nach“
   war falsch (sie antwortet in Echtzeit, p99 37 ms). L5 war nicht leer wegen dreier Schichten, die nacheinander sichtbar wurden:

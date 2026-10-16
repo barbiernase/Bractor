@@ -375,6 +375,15 @@ hängt die gesammelten Commands in einem Append an (docs/13 §13.6). Messung `�
 S3-8 3,7 ×, S5-64 6,2 ×, S5-8 2,6 ×, S1 1,54 × — das alte E5-Ziel „S3 heiß ≥ 1,5 × des Stands nach Phase 3“ ist auch gegen die Baseline weit
 übertroffen.
 
+**Nachtrag PF-14 Leerlauf** (2026-10-16, Code `f55494b`, Treiber `3a1355b`/`7a1f9f9`, Messserver): die Leerlauf-Last nach den Blöcken (L1 ≈ 30,
+L5 ≈ 113 Queries/s) war **Nachlauf, keine bleibende Grundlast** — belegt mit einer Zeitreihe über 5 min nach der Last und nach einem Neustart
+(Diagnose `--art leerlauf`, docs/12 §12.5): der erste Poll-Takt nach der Last liest einmal nach, was Prozess- und Emittenten-Poll unter Last nicht
+bestätigt vorrücken konnten (G-8), danach 2,4–5 Queries/s und 1–3 % CPU. Das 15-s-Fenster traf genau diesen Takt. Geändert: die Messung wartet
+den Nachlauf ab (alle Konsumenten am Kopf, Dauer und Queries als Kennzahlen) und misst 60 s; ein Poll-Read ohne Neues kostet eine Abfrage statt
+zwei. Messung `…_0309_7a1f9f9_server-nachlauf` (gültig, grün), Störungsläufe `…_0315_…`/`…_0318_…` (grün): L1 3,8 Queries/s und 2,6 % CPU, L5
+2,6 und 1,5 % — **E5-Ziel Leerlauf erreicht**; Nachlauf L1 48 s, L5 15 s; Lastblöcke im Band der Läufe davor. Neu: PF-15 (die Grundlast wächst mit
+Projektionen × Partitionen).
+
 **Phase 5** (umgesetzt, 2026-10-15, auf Tobis Wort vor Phase 4; Code `22632bc`…`ffaeaea`, gemessen auf dem Messserver, docs/12 §12.6):
 - *Umgesetzt:* PF-4 — `ProzessPoll` liest seitenweise (`ReadPartitionAsync`) und routet die geladenen Events, Starts nur für neue oder offene
   Vorgänge (`StreamsVorhandenAsync`), Marke je Seite; Backstop mit Fristen im Offen-Index (`ProzessOffen.Frist`, Sekundentakt, geschrieben erst
@@ -450,23 +459,21 @@ Phase 5 damit erreicht (L1 und L5)**; S5-64 1,69 × Baseline. Offen: PF-13, PF-4
 7. `--probe` (verkürzter Funktionstest des Treibers) schreibt nicht nach `vermessung/ergebnisse/` — Probeläufe während der Entwicklung des
    Treibers sind keine Messläufe.
 
-## 9 · Übergabe an den nächsten Agenten (Stand 2026-10-16, nach Phase 4 und zwei Nachträgen)
+## 9 · Übergabe an den nächsten Agenten (Stand 2026-10-16, nach Phase 4, zwei Nachträgen und PF-14)
 
-- **Neu seit der letzten Übergabe:** Phase 4 (Inbox als Tabelle, schneller Anhänge-Modus), Nachtrag Prozess-Manager (liest nur Nötiges,
-  Offen-Index als Beilage) und Nachtrag Aggregat-Bündel umgesetzt und gemessen, §8; G-2 und PF-3 erledigt. Server-Tabelle §12.5, letzte Spalte
-  „Bündel“ (`…_0146_2390f1e_server-buendel`).
-- **Als Nächstes (Tobi, 2026-10-16): PF-14 klären** — im Leerlauf (nach den Lastblöcken, ohne Eingang) zeigen L1 ≈ 30 und L5 ≈ 113 Queries/s
-  und 7–12 % CPU; am 2026-10-15 abends waren es 2,5 Queries/s. Ungeklärt, ob das Nachlauf der Last ist (klingt ab) oder dauerhafte Grundlast;
-  dauerhafte Last ohne Eingang ist nicht hinnehmbar. Erst messen (länger, zeitaufgelöst), dann die Ursache beheben oder das Messverfahren ehrlich
-  machen.
-- Offen daneben: Tobis Abnahme von Phase 4, der Haltepunkt aus Phase 3 (Punkt 0 in §8, unverändert), PF-13, PF-4b; danach Phase 6.
+- **Neu seit der letzten Übergabe:** PF-14 geklärt und erledigt (§8, Nachtrag PF-14 Leerlauf): Nachlauf, keine Grundlast; der Leerlauf wird erst
+  nach dem Nachlauf gemessen, ein Poll-Read ohne Neues kostet eine Abfrage. Server-Tabelle §12.5, letzte Spalte „Nachlauf“
+  (`…_0309_7a1f9f9_server-nachlauf`). Für Leerlauf-Fragen gibt es die Diagnose `scripts/vermessung-e2e.sh --art leerlauf` (Zeitreihe, kein
+  Messlauf, Ordner im Temp-Verzeichnis des Servers, per `scp` holen).
+- **Offen:** Tobis Abnahme von Phase 4, der Haltepunkt aus Phase 3 (Punkt 0 in §8, unverändert), PF-13, PF-4b, PF-15; danach Phase 6.
 
 - **Wo es steht:** Phase 0, 1, 2 fertig und abgenommen; Phase 3 umgesetzt und gemessen, **nicht abgenommen** (S1-Ziel verfehlt, die Decke von S1 ist
-  der Datei-Treiber, PF-10); Phase 5 (PF-4, G-8) umgesetzt und gemessen, mit dem Nachtrag PF-12 E5-Ziel erreicht (L1 und L5 unter 10 Queries/s und 5 % CPU; seit „Korreliert
-  lesen“ wieder darüber, PF-14); Phase 4 (G-2, PF-3) umgesetzt und gemessen, Abnahme bei Tobi; offen PF-4b, PF-13, PF-14. Gemessen wird
+  der Datei-Treiber, PF-10); Phase 5 (PF-4, G-8) umgesetzt und gemessen, mit dem Nachtrag PF-12 E5-Ziel erreicht (L1 und L5 unter 10 Queries/s und 5 % CPU; der scheinbare
+  Rückfall seit „Korreliert lesen“ war Nachlauf im Messfenster, PF-14 erledigt); Phase 4 (G-2, PF-3) umgesetzt und gemessen, Abnahme bei Tobi;
+  offen PF-4b, PF-13, PF-15. Gemessen wird
   seit 2026-10-15 auf dem Messserver (`scripts/server.sh`, docs/12 §12.6) mit eigener Tabelle; die Mac-Tabelle endet mit Phase 3.
   **Haltepunkt (offen):** Tobi entscheidet über den Vorschlag in §8 („Plan-Änderungen aus Phase 3“, Punkt 0: E5-Ziel für S1 neu fassen).
-- **Danach:** Phase 6 (PF-6, G-5, PF-7) nach §3; daneben PF-13/PF-14 (Leerlauf und Reaktion unter S5-64) und PF-4b.
+- **Danach:** Phase 6 (PF-6, G-5, PF-7) nach §3; daneben PF-13 (Reaktion unter S5-64), PF-15 (Grundlast je Projektion) und PF-4b.
 - **Messen je Phase:** auf dem Messserver (`scripts/server.sh lauf scripts/vermessung-e2e.sh --anlass server-<phase> --spalte "<Phase>"`),
   Höchstlast ≈ 4 min, Störungslauf ≈ 5–8 min, Tabelle per Skript (Tabelle „messserver“). A-B-B-A über einen Worktree des alten Stands auf dem Server. Code committen, dann messen, dann Ergebnis committen. Nicht auf Abkühlung oder Fremdlast warten (Tobi), Fremdlast im Bericht nennen.
 - **Vor jedem Commit:** `dotnet build`; Prüfstand; Garantie-Suite (Prüfstand, dann nacheinander Integration und Prüfdomäne); die vollen
