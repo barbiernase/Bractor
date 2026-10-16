@@ -64,7 +64,9 @@ var exactlyOnceOk = e["exactly_once_ok"]?.GetValue<bool>() ?? false;
 if (!exactlyOnceOk && fehler.Count == 0) fehler.Add("Exactly-once-Prüfung fehlgeschlagen");
 e["gueltig"] = fehler.Count == 0;
 e["begruendung"] = new JsonArray(fehler.Select(f => (JsonNode)f).ToArray());
-var zusammenfassung = Zusammenfassung.Markdown(e);
+string zusammenfassung;
+try { zusammenfassung = Zusammenfassung.Markdown(e); }
+catch (Exception ex) { zusammenfassung = $"(Zusammenfassung gescheitert: {ex.Message} — die Werte stehen in ergebnis.json)\n"; }   // das Ergebnis wird trotzdem geschrieben
 ablage.Schliesse(zusammenfassung);
 Console.WriteLine();
 Console.WriteLine(zusammenfassung);

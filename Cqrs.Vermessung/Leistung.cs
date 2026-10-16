@@ -213,7 +213,7 @@ internal static class Leistung
         await Task.Delay(k.Optionen.Leerlauf);
         var (kz, _) = await fenster.EndeAsync(0, k.Ablage, name, 1);
         var wert = new SzenarioWert();
-        foreach (var key in new[] { "tx_je_s", "queries_je_s", "cpu_prozent", "rss_mb", "rss_ende_mb", "rss_lauf_max_mb", "aktive_actors" })
+        foreach (var key in new[] { "tx_je_s", "queries_je_s", "cpu_prozent", "cpu_system_prozent", "rss_mb", "rss_ende_mb", "rss_lauf_max_mb", "aktive_actors" })
             wert.Kennzahlen[key] = kz[key];
         wert.Kennzahlen["nachlauf_s"] = nachlaufS;
         wert.Kennzahlen["nachlauf_queries"] = nkz["queries"];
@@ -266,6 +266,7 @@ internal static class Leistung
         wert.Kennzahlen["start_s"] = start.TotalSeconds;
         wert.Kennzahlen["bis_eingeholt_s"] = ende?.TotalSeconds ?? double.NaN;
         wert.Kennzahlen["cpu_prozent"] = kz["cpu_prozent"];
+        wert.Kennzahlen["cpu_system_prozent"] = kz["cpu_system_prozent"];
         wert.Kennzahlen["queries"] = kz["queries"];
         wert.Pruefungen.Add(new Pruefung("Neuaufbau: der Rückstand fällt auf null", ende != null && hoechst > 0, "ja",
             ende != null ? "ja" : $"Rückstand {hoechst} nach {k.Optionen.NeuaufbauFrist.TotalSeconds:0} s"));

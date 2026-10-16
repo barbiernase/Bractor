@@ -82,14 +82,15 @@ internal static class Zusammenfassung
     {
         if (median is null) return "–";
         if (min is null || max is null) return Zahl(median);
-        double m = median.GetValue<double>(), lo = min.GetValue<double>(), hi = max.GetValue<double>();
+        double Wert(JsonNode n) => double.Parse(n.ToJsonString(), CultureInfo.InvariantCulture);
+        double m = Wert(median), lo = Wert(min), hi = Wert(max);
         return hi - lo > 0.05 * Math.Abs(m) ? $"{Zahl(median)} ({Zahl(min)}–{Zahl(max)})" : Zahl(median);
     }
 
     private static string Zahl(JsonNode? n)
     {
         if (n is null) return "–";
-        var d = n.GetValue<double>();
+        var d = double.Parse(n.ToJsonString(), CultureInfo.InvariantCulture);   // ganze wie gebrochene Zahlen
         return d >= 100 ? Math.Round(d).ToString("#,0", CultureInfo.InvariantCulture).Replace(',', ' ')
             : d.ToString("0.0", CultureInfo.InvariantCulture).Replace('.', ',');
     }
