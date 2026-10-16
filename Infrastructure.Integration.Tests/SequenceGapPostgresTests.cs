@@ -125,6 +125,40 @@ public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.F
     }
 
     /// <summary>
+    /// PF-14: steht hinter der Marke nichts, liefern Partitions-Read und Emittenten-Poll eine leere Seite und halten die Marke (gesetzte
+    /// Sequenz und „dahinter?“ in einer Abfrage, die Seite entfällt); steht dahinter nur ein zu junges Event, liefern sie es (Latenz), schieben
+    /// die Marke aber nicht vor — die Abkürzung ändert die Karenz-Regel nicht.
+    /// </summary>
+    [Fact]
+    public async Task Hinter_der_Marke_nichts_heisst_leere_Seite_und_ein_junges_Event_kommt_ohne_die_Marke_zu_schieben()
+    {
+        var ohneKarenz = new MartenEventStore(
+            _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.Zero);
+        var mitKarenz = new MartenEventStore(
+            _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.FromMinutes(5));
+        await ohneKarenz.AppendEventsAsync(Guid.NewGuid(), 0, new Abstractions.IEvent[] { new ImagePairInspiziert() });
+        await BatchHilfe.UhrenversatzAbwartenAsync();
+        var kopf = (await ohneKarenz.ReadChangedStreamsAsync(0, null, int.MaxValue, default)).HighWaterMark;
+
+        var leer = await mitKarenz.ReadPartitionAsync(kopf, 0, 1, null, Array.Empty<long>(), 100, default);
+        leer.Events.Should().BeEmpty();
+        leer.Gesetzt.Should().Be(kopf);
+        leer.Voll.Should().BeFalse();
+        var leerPoll = await mitKarenz.ReadChangedStreamsAsync(kopf, null, 100, default);
+        leerPoll.StreamIds.Should().BeEmpty();
+        leerPoll.HighWaterMark.Should().Be(kopf);
+
+        var stream = Guid.NewGuid();
+        await ohneKarenz.AppendEventsAsync(stream, 0, new Abstractions.IEvent[] { new ImagePairInspiziert() });
+        var jung = await mitKarenz.ReadPartitionAsync(kopf, 0, 1, null, Array.Empty<long>(), 100, default);
+        jung.Events.Select(e => e.Event.AggregateId).Should().Contain(stream, "ein junges Event wird geliefert (Latenz)");
+        jung.Gesetzt.Should().Be(kopf, "die Karenz hält die Marke vor dem jungen Event");
+        var jungPoll = await mitKarenz.ReadChangedStreamsAsync(kopf, null, 100, default);
+        jungPoll.StreamIds.Should().Contain(stream);
+        jungPoll.HighWaterMark.Should().Be(kopf);
+    }
+
+    /// <summary>
     /// Derselbe Nachzügler im Batch-Konsum: der Leser wendet die höhere, früher committete Sequenz sofort an, rückt seine Position aber nicht
     /// über die Karenz hinaus — die niedrigere Sequenz, die erst danach sichtbar wird, liest der nächste Durchlauf. Jedes Event genau einmal,
     /// auch nach einer Neuaktivierung (der Guard fängt die Wiederholung ab).

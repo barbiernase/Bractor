@@ -288,10 +288,8 @@ public class MartenEventStore : IEventStoreRepository
         await EventTabellenAsync(_store, ct);
         await using var session = _store.LightweightSession();
 
-        var juengste = await session.QueryAsync<long>(
-            $"select seq_id from {_store.Options.Events.DatabaseSchemaName}.mt_events where seq_id > ? and timestamp <= now() - ? order by seq_id desc limit 1",
-            ct, nach, _stragglerGrace);
-        var gesetzt = juengste.Count > 0 ? juengste[0] : nach;
+        var (gesetzt, dahinter) = await GesetztAsync(session, nach, ct);
+        if (!dahinter) return new PartitionsSeite(Array.Empty<PartitionsEvent>(), gesetzt, false);
 
         var schonErledigt = ausser.ToArray();
         var anfrage = session.Events.QueryAllRawEvents()
@@ -312,6 +310,23 @@ public class MartenEventStore : IEventStoreRepository
                 events.Add(new PartitionsEvent(e.Sequence, env));
         }
         return new PartitionsSeite(events, gesetzt, raw.Count >= limit);
+    }
+
+    /// <summary>
+    /// Die gesetzte Sequenz jenseits von <paramref name="nach"/> — die höchste, deren Event älter als die Straggler-Karenz ist, gegen die
+    /// DB-Uhr — und ob dahinter überhaupt ein Event steht, in EINER Abfrage (PF-14): steht nichts dahinter, sparen die Polls ihre Seite, und
+    /// eine Weckung im Leerlauf kostet eine Abfrage statt zwei. Ein gesetztes Event heißt „dahinter“; gibt es nur jüngere, liefert die
+    /// Abfrage <paramref name="nach"/>, und ohne jedes Event −1.
+    /// </summary>
+    private async Task<(long Gesetzt, bool Dahinter)> GesetztAsync(IQuerySession session, long nach, CancellationToken ct)
+    {
+        var schema = _store.Options.Events.DatabaseSchemaName;
+        var zeilen = await session.QueryAsync<long>(
+            $"select coalesce((select seq_id from {schema}.mt_events where seq_id > ? and timestamp <= now() - ? order by seq_id desc limit 1), "
+            + $"(select ?::bigint from {schema}.mt_events where seq_id > ? limit 1), -1)",
+            ct, nach, _stragglerGrace, nach, nach);
+        var wert = zeilen.Count > 0 ? zeilen[0] : -1;
+        return wert < 0 ? (nach, false) : (wert, true);
     }
 
     public async Task<IReadOnlyCollection<Guid>> StreamsVorhandenAsync(IReadOnlyCollection<Guid> streams, CancellationToken ct)
@@ -341,10 +356,8 @@ public class MartenEventStore : IEventStoreRepository
         await using var session = _store.QuerySession();
         var schema = _store.Options.Events.DatabaseSchemaName;
 
-        var juengste = await session.QueryAsync<long>(
-            $"select seq_id from {schema}.mt_events where seq_id > ? and timestamp <= now() - ? order by seq_id desc limit 1",
-            ct, afterGlobalSequence, _stragglerGrace);
-        var gesetzt = juengste.Count > 0 ? juengste[0] : afterGlobalSequence;
+        var (gesetzt, dahinter) = await GesetztAsync(session, afterGlobalSequence, ct);
+        if (!dahinter) return new StreamChanges(Array.Empty<Guid>(), gesetzt, false);
 
         var conn = (Npgsql.NpgsqlConnection)session.Connection!;
         if (conn.State != System.Data.ConnectionState.Open) await conn.OpenAsync(ct);
