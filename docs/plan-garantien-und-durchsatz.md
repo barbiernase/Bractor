@@ -450,10 +450,16 @@ Phase 5 damit erreicht (L1 und L5)**; S5-64 1,69 × Baseline. Offen: PF-13, PF-4
 7. `--probe` (verkürzter Funktionstest des Treibers) schreibt nicht nach `vermessung/ergebnisse/` — Probeläufe während der Entwicklung des
    Treibers sind keine Messläufe.
 
-## 9 · Übergabe an den nächsten Agenten (Stand 2026-10-15, nach Phase 4)
+## 9 · Übergabe an den nächsten Agenten (Stand 2026-10-16, nach Phase 4 und zwei Nachträgen)
 
-- **Neu seit der letzten Übergabe:** Phase 4 (Inbox als Tabelle, schneller Anhänge-Modus) umgesetzt und gemessen, §8; G-2 und PF-3 erledigt.
-  Offen: Tobis Abnahme von Phase 4, der Haltepunkt aus Phase 3 (Punkt 0 unten, unverändert), PF-13, PF-14, PF-4b; danach Phase 6.
+- **Neu seit der letzten Übergabe:** Phase 4 (Inbox als Tabelle, schneller Anhänge-Modus), Nachtrag Prozess-Manager (liest nur Nötiges,
+  Offen-Index als Beilage) und Nachtrag Aggregat-Bündel umgesetzt und gemessen, §8; G-2 und PF-3 erledigt. Server-Tabelle §12.5, letzte Spalte
+  „Bündel“ (`…_0146_2390f1e_server-buendel`).
+- **Als Nächstes (Tobi, 2026-10-16): PF-14 klären** — im Leerlauf (nach den Lastblöcken, ohne Eingang) zeigen L1 ≈ 30 und L5 ≈ 113 Queries/s
+  und 7–12 % CPU; am 2026-10-15 abends waren es 2,5 Queries/s. Ungeklärt, ob das Nachlauf der Last ist (klingt ab) oder dauerhafte Grundlast;
+  dauerhafte Last ohne Eingang ist nicht hinnehmbar. Erst messen (länger, zeitaufgelöst), dann die Ursache beheben oder das Messverfahren ehrlich
+  machen.
+- Offen daneben: Tobis Abnahme von Phase 4, der Haltepunkt aus Phase 3 (Punkt 0 in §8, unverändert), PF-13, PF-4b; danach Phase 6.
 
 - **Wo es steht:** Phase 0, 1, 2 fertig und abgenommen; Phase 3 umgesetzt und gemessen, **nicht abgenommen** (S1-Ziel verfehlt, die Decke von S1 ist
   der Datei-Treiber, PF-10); Phase 5 (PF-4, G-8) umgesetzt und gemessen, mit dem Nachtrag PF-12 E5-Ziel erreicht (L1 und L5 unter 10 Queries/s und 5 % CPU; seit „Korreliert
