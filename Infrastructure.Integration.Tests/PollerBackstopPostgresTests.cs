@@ -29,11 +29,11 @@ public class PollerBackstopPostgresTests : IClassFixture<PollerBackstopPostgresT
     [Fact]
     public async Task Unbestaetigte_Weckung_darf_die_HWM_nicht_ueber_den_Stream_hinaus_schieben()
     {
-        // Grace = 0: dieser Test isoliert den Poll-Cursor-Guard (Befund 1) von der Straggler-Karenz
-        // (Befund 3) — ein frisch angehängtes Event ist sofort HWM-fähig, sodass die (buggy) naive
+        // Ohne ältere laufende Transaktion ist ein frisch angehängtes Event sofort HWM-fähig (Horizont, Befund 3) —
+        // dieser Test isoliert so den Poll-Cursor-Guard (Befund 1): sodass die (buggy) naive
         // Advance den Stream überhaupt überspringen KÖNNTE. Genau das verhindert der Fix.
         var store = new MartenEventStore(
-            _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.Zero);
+            _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance);
 
         // Isolation gegen früher in DIESEM Schema angehängte Events: ab der aktuellen globalen
         // HWM aufsetzen. Ebene-2-Tests laufen sequentiell (xunit.runner.json) → kein Interleave.
@@ -83,7 +83,7 @@ public class PollerBackstopPostgresTests : IClassFixture<PollerBackstopPostgresT
     public async Task Der_Poll_weckt_nur_Streams_mit_abonniertem_Event_und_liest_ueber_alle_Seiten()
     {
         var store = new MartenEventStore(
-            _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.Zero);
+            _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance);
         var baseHwm = (await store.ReadChangedStreamsAsync(0, null, int.MaxValue, default)).HighWaterMark;
         var typen = BatchLeser.TypenAus(new[] { typeof(ImagePairInspiziert) });
 
@@ -120,7 +120,7 @@ public class PollerBackstopPostgresTests : IClassFixture<PollerBackstopPostgresT
     [Fact]
     public async Task Batch_Leser_holt_ein_Event_mit_verlorenem_Signal_beim_naechsten_Poll_nach()
     {
-        var es = new MartenEventStore(_fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.Zero);
+        var es = new MartenEventStore(_fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance);
         var konsum = new Konsum(1, 500);
         var proj = "it-poll-" + Guid.NewGuid().ToString("N");
         await BatchHilfe.StarteAmKopfAsync(_fx.Store, proj, konsum);
@@ -164,6 +164,7 @@ public class PollerBackstopPostgresTests : IClassFixture<PollerBackstopPostgresT
             {
                 opts.Connection(
                     "Host=localhost;Port=5432;Database=cqrs_events;Username=postgres;Password=postgres");
+                opts.Events.AppendMode = JasperFx.Events.EventAppendMode.Quick;   // wie der Host; der Horizont setzt ihn voraus
                 opts.DatabaseSchemaName = "audit_befund1_it";
                 opts.Events.DatabaseSchemaName = "audit_befund1_it";
                 opts.AutoCreateSchemaObjects = JasperFx.AutoCreate.All;

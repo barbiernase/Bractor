@@ -183,6 +183,7 @@ public sealed class GeteiltFixture : IAsyncLifetime
         services.AddMarten(opts =>
         {
             opts.Connection(Server + ";Database=" + Datenbank);
+            opts.Events.AppendMode = JasperFx.Events.EventAppendMode.Quick;   // wie der Host; der Horizont setzt ihn voraus
             opts.DatabaseSchemaName = "it_geteilt";
             opts.AutoCreateSchemaObjects = JasperFx.AutoCreate.All;
             KonsumSchema.Registriere(opts);

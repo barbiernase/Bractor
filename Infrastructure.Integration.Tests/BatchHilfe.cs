@@ -15,13 +15,6 @@ namespace Infrastructure.Integration.Tests;
 public static class BatchHilfe
 {
     /// <summary>
-    /// Marten setzt den Event-Zeitstempel beim Append mit der Uhr des Clients, die Karenz vergleicht ihn mit der DB-Uhr. Mit Karenz 0 liegt ein
-    /// eben angehängtes Event deshalb manchmal um Bruchteile einer Millisekunde „in der Zukunft“ (gemessen bis 0,2 ms) und ist noch nicht gesetzt.
-    /// Tests, die mit Karenz 0 eine Position prüfen, warten vorher kurz.
-    /// </summary>
-    public static Task UhrenversatzAbwartenAsync() => Task.Delay(20);
-
-    /// <summary>
     /// Die höchste Sequenz des Logs im Schema des Stores. Rohes SQL löst Martens AutoCreate nicht aus — auf einer frischen Datenbank (vor dem
     /// ersten Append) legt der Helfer die Event-Tabellen deshalb selbst an.
     /// </summary>

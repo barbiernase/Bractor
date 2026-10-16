@@ -10,6 +10,7 @@ hierher. Stand: 2026-10-16, nach Phase 4 des Plans Garantien und Durchsatz und P
 |---|---|:--:|
 | G-5 | Rehydration zählt die Version je materialisiertem Event: ein Split-Upcast verschiebt die Version | P2 |
 | G-6 | Garantie ohne eigenen Nachweis-Test: Fehler nach dem Append im Aggregat-Actor (P10) | P2 |
+| G-10 | Zeitlimits rechnen ab dem Event-Zeitstempel (Uhr des Hosts) gegen die DB-Uhr — mit mehreren Knoten verschiebt der Uhrenversatz jedes Zeitlimit | P2 |
 | PF-13 | Unter S5-64: Reaktion p99 2–3,5 s (p50 5 ms) — ihr Nachschub wartet am heißen Posten hinter den Reservierungen (der S3-64-Rückgang ist mit „korreliert lesen“ erledigt: 1,85 × Baseline) | P3 |
 | PF-4b | Rest von PF-4: keine Lease für den Prozess-Backstop im Cluster (jeder Knoten heilt alle offenen Vorgänge); Abnahme „S3 Zeit je Teil konstant über N“ und „10 000 offene Vorgänge im Leerlauf“ ohne Szenario im Treiber | P3 |
 | PF-10 | Datei-Treiber meldet eine Datei nach der anderen ins Log (Rückstau): das Melde-Tempo ist die Decke von S1 — Entscheidung offen | P2 |
@@ -219,6 +220,13 @@ Fehler selbst; erreichbar ist der Pfad nur über einen werfenden Applier — der
 Dead-Letter). *Empfehlung:* entweder den Pfad auf den Applier-Fall zurückschneiden oder einen Prüfstand-Test mit einem Actor über eine
 werfende Applier-Naht.
 
+**G-10 · Zwei Uhren im Zeitlimit.** Die Aktivierung eines offenen Aufrufs ist der Zeitstempel des jüngsten gematchten Events
+(`ProzessManager`, Kommentar „DB-Zeit“); diesen Zeitstempel setzt Marten beim Append aber mit der Uhr des Hosts, verglichen wird mit der DB-Uhr
+(`IDbClock`). Mit einem Knoten liegt der Versatz unter 1 ms; mit mehreren läuft ein Zeitlimit je nach Uhr des schreibenden Knotens früher oder
+später ab. *Empfehlung:* den Event-Zeitstempel von der Datenbank setzen lassen (Vorgabewert bzw. Regel beim Einfügen, oder der Schreiber gibt die
+Datenbankzeit mit — zu prüfen gegen Martens Anhänge-Modus `Quick`), dann gilt für alles Fachliche genau eine Uhr. Die Sichtbarkeit hängt seit G-9
+nicht mehr an einer Uhr.
+
 **G-5 · Versionszählung bei Split-Upcasts.** `AggregateRehydrator` zählt `Version++` je materialisiertem Event; ein Split-Upcast liefert aus
 einer gespeicherten Position mehrere Events (`MartenEventStore`, `SubIndex`), die Version läuft dem Log davon, und jeder Append scheitert.
 Latent: heute gibt es keinen Split-Upcast. *Empfehlung:* je gespeicherter Position zählen (`AggregateVersion`), Prüfstand-Test mit Split.
@@ -297,6 +305,19 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **G-9 · Eine lange offene Transaktion überholte die Positionen (2026-10-16; docs/03 §3.3, docs/04 §4.1.1, docs/11 §11.4):** Batch-Leser,
+  Prozess-Poll und Poll der Emittenten rückten ihre Marke bis zur höchsten Sequenz vor, deren Event älter als 3 s war (Karenz gegen den
+  Event-Zeitstempel). Blieb eine Transaktion länger offen (Sperre, Platten-Hänger, Störung), lag ihr Event nach dem Commit unter der Marke und
+  wurde nie gelesen — auch das Signal half nicht, der Leser liest ab seiner Lese-Position (gemessen: der neue Test ist gegen den alten Code rot,
+  die Marke stand auf der Sequenz hinter der noch laufenden Transaktion). Jetzt bestimmt der **Horizont der Vollständigkeit** die gesetzte
+  Sequenz ohne Uhr aus den Transaktionsnummern von Postgres (`Horizont`, `MartenEventStore.GesetztAsync`): Zählerstand, dann die eigene
+  Transaktionsnummer; frei, sobald keine kleinere mehr läuft. Voraussetzung (Wächter-Test): Marten schreibt im Modus `Quick` die Stream-Zeile vor
+  den Events. Eine lange offene Transaktion hält die Positionen an statt überholt zu werden; der Store warnt nach 30 s. Nebenbei: die
+  Partitionsformel als SQL liegt hinter der Naht (`PartitionsAusdruck`), `Konsum.Karenz` und der Parameter `stragglerGrace` sind weg. Nachweis:
+  I `SequenceGapPostgresTests.Eine_lange_offene_Transaktion_wird_nicht_ueberholt`, `AnhaengeReihenfolgePostgresTests`; P `HorizontTests`.
+  Offen: Messung auf dem Messserver (die Positionen liegen jetzt Millisekunden statt ≥ 3 s hinter dem Kopf; das kürzere Fenster sollte die
+  Partitions-Reads in S1 billiger machen), G-10.
 
 - **Leerlauf: Nachlauf statt Grundlast (früher PF-14, 2026-10-16, Messserver; docs/04 §4.1.3, docs/12 §12.5):** L1 ≈ 30 und L5 ≈ 113
   Queries/s im Leerlauf waren keine bleibende Last, sondern der erste Poll-Takt nach der Last, den das 15-s-Fenster traf: unter Höchstlast rücken

@@ -23,173 +23,104 @@ namespace Infrastructure.Integration.Tests;
 /// Braucht laufendes Postgres auf localhost:5432 (docker-compose.infrastructure.yml).
 /// </summary>
 [Trait("Kategorie", "Garantie")]
-public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.Fixture>
+public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.Fixture>, IAsyncDisposable
 {
     private readonly Fixture _fx;
     public SequenceGapPostgresTests(Fixture fx) => _fx = fx;
 
     /// <summary>
-    /// CONFIRM (fix-unabhängig, prüft das rohe DB-Phänomen): Eine später committete Transaktion mit
-    /// NIEDRIGERER Sequenz wird erst sichtbar, NACHDEM eine höhere Sequenz bereits sichtbar war. Der
-    /// naive <c>max(seq)</c>-Cursor rückt damit über eine noch unsichtbare, niedrigere Seq hinaus.
+    /// CONFIRM (fix-unabhängig, prüft das rohe DB-Phänomen): Eine später committete Transaktion mit NIEDRIGERER Sequenz wird erst sichtbar,
+    /// NACHDEM eine höhere Sequenz bereits sichtbar war. Ein naiver <c>max(seq)</c>-Cursor rückt damit über eine noch unsichtbare, niedrigere
+    /// Seq hinaus.
     /// </summary>
     [Fact]
     public async Task Reverse_Commit_Reihenfolge_macht_eine_niedrigere_Sequenz_erst_nach_einer_hoeheren_sichtbar()
     {
-        // Grace = 0 → das Verhalten ist identisch zur alten, naiven max(seq)-Logik. So bleibt dieser
-        // Test ein stabiler Regressions-Wächter für das ROHE DB-Phänomen (fix-unabhängig).
-        var reader = new MartenEventStore(
-            _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.Zero);
-
-        var baseHwm = (await reader.ReadChangedStreamsAsync(0, null, int.MaxValue, default)).HighWaterMark;
-
-        var streamA = Guid.NewGuid(); // zieht die NIEDRIGERE Seq (INSERT zuerst)
-        var streamB = Guid.NewGuid(); // zieht die HÖHERE Seq (INSERT danach), committet aber ZUERST
-
-        await using var connA = new NpgsqlConnection(Fixture.ConnString);
-        await using var connB = new NpgsqlConnection(Fixture.ConnString);
-        await connA.OpenAsync();
-        await connB.OpenAsync();
-        var txA = await connA.BeginTransactionAsync();
-        var txB = await connB.BeginTransactionAsync();
-
-        // INSERT A zuerst → niedrigere seq_id, in txA geflusht, NICHT committet (OwnsTransactionLifecycle=false).
-        await using (var sA = _fx.Store.LightweightSession(SessionOptions.ForTransaction(txA)))
-        {
-            sA.Events.StartStream(streamA, new ImagePairInspiziert());
-            await sA.SaveChangesAsync();
-        }
-        // INSERT B danach → höhere seq_id, in txB geflusht, NICHT committet.
-        await using (var sB = _fx.Store.LightweightSession(SessionOptions.ForTransaction(txB)))
-        {
-            sB.Events.StartStream(streamB, new ImagePairInspiziert());
-            await sB.SaveChangesAsync();
-        }
-
-        // B committet ZUERST → nur B sichtbar.
-        await txB.CommitAsync();
-
-        await BatchHilfe.UhrenversatzAbwartenAsync();
-        var scanNurB = await reader.ReadChangedStreamsAsync(baseHwm, null, int.MaxValue, default);
-        scanNurB.StreamIds.Should().Contain(streamB);
-        scanNurB.StreamIds.Should().NotContain(streamA, "A ist noch uncommitted");
-        var naiveHwm = scanNurB.HighWaterMark; // = B's (höhere) Sequenz
-
-        // Erst JETZT committet A → seine niedrigere Seq wird sichtbar, liegt aber UNTER naiveHwm.
+        var (streamA, streamB, txA) = await NachzueglerAsync();
+        var naiveHwm = await SichtbarMaxAsync();   // = B's (höhere) Sequenz
         await txA.CommitAsync();
 
         var seqA = await SeqOf(streamA);
         var seqB = await SeqOf(streamB);
         seqA.Should().BeLessThan(seqB, "A wurde zuerst eingefügt → niedrigere Sequenz");
         naiveHwm.Should().Be(seqB, "der naive Cursor steht auf B's höherer Sequenz");
-        seqA.Should().BeLessThanOrEqualTo(naiveHwm,
-            "BESTÄTIGT Befund 3: A's Seq liegt unter dem bereits vorgerückten Cursor → ein Scan ab naiveHwm " +
-            "(Sequence > naiveHwm) überspringt A für immer");
-
-        // Der Beweis, dass der naive Read A wirklich verliert:
-        var scanAbNaiv = await reader.ReadChangedStreamsAsync(naiveHwm, null, int.MaxValue, default);
-        scanAbNaiv.StreamIds.Should().NotContain(streamA, "A wird ab der naiven HWM nie wieder gescannt");
+        seqA.Should().BeLessThan(naiveHwm, "BESTÄTIGT Befund 3: A's Seq liegt unter dem naiven Cursor — ein Scan ab dort überspränge A für immer");
     }
 
     /// <summary>
-    /// FIX (Befund 3): Die Straggler-Karenz hält die HWM hinter einem zu jungen Event zurück — der
-    /// Stream wird zwar geweckt (Heilung), aber der Cursor rückt NICHT über es hinaus, solange ein
-    /// in-flight Nachzügler mit niedrigerer Seq noch landen könnte. Ohne Karenz rückt die HWM sofort
-    /// vor (die alte, unsichere Logik).
+    /// G-9: eine Transaktion, die lange offen ist — länger als jede zeitliche Karenz (früher 3 s) —, wird nie überholt. Solange sie läuft,
+    /// bleiben die Marke des Polls und die gesetzte Sequenz des Partitions-Reads vor ihrer Sequenz; die jüngere, schon sichtbare wird trotzdem
+    /// geliefert (Latenz). Danach liest der nächste Durchlauf sie, und die Marke rückt über beide.
     /// </summary>
     [Fact]
-    public async Task Straggler_Karenz_haelt_die_HWM_hinter_einem_zu_jungen_Event_zurueck()
+    public async Task Eine_lange_offene_Transaktion_wird_nicht_ueberholt()
     {
-        var ohneKarenz = new MartenEventStore(
-            _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.Zero);
-        var mitKarenz = new MartenEventStore(
-            _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.FromMinutes(5));
+        var es = Neu();
+        var basis = await SichtbarMaxAsync();
+        var (streamA, streamB, txA) = await NachzueglerAsync();
+        await Task.Delay(TimeSpan.FromSeconds(4));                   // länger als die frühere Karenz: eine Uhr hielte jetzt nicht mehr
+        var seqB = await SeqOf(streamB);
 
-        // Referenzpunkt: alles bis hier ist "alt genug" (max seq ohne Karenz).
-        var trueMax = (await ohneKarenz.ReadChangedStreamsAsync(0, null, int.MaxValue, default)).HighWaterMark;
+        var poll = await es.ReadChangedStreamsAsync(basis, null, int.MaxValue, default);
+        poll.StreamIds.Should().Contain(streamB, "die sichtbare, jüngere Sequenz wird geweckt (Latenz)");
+        poll.HighWaterMark.Should().BeLessThan(seqB, "die Marke überholt die noch laufende Transaktion mit der kleineren Sequenz nicht");
+        var seite = await es.ReadPartitionAsync(basis, 0, 1, null, Array.Empty<long>(), 100, default);
+        seite.Events.Select(e => e.Event.AggregateId).Should().Contain(streamB);
+        seite.Gesetzt.Should().BeLessThan(seqB, "dieselbe Regel im Batch-Konsum");
 
-        var stream = Guid.NewGuid();
-        await ohneKarenz.AppendEventsAsync(stream, 0, new Abstractions.IEvent[] { new ImagePairInspiziert() });
-
-        // Mit Karenz: der Stream wird geweckt, aber die HWM bleibt bei trueMax (Event zu jung).
-        var mit = await mitKarenz.ReadChangedStreamsAsync(trueMax, null, int.MaxValue, default);
-        mit.StreamIds.Should().Contain(stream, "der geänderte Stream wird trotz Karenz geweckt (Heilung)");
-        mit.HighWaterMark.Should().Be(trueMax,
-            "die Straggler-Karenz rückt die HWM NICHT über das zu junge Event hinaus (schützt in-flight Nachzügler)");
-
-        // Ohne Karenz: die HWM rückt sofort über das Event (die alte, für Befund 3 unsichere Logik). Kurz warten: den Event-Zeitstempel setzt
-        //   der Client, er liegt manchmal Bruchteile einer Millisekunde vor der DB-Uhr (BatchHilfe.UhrenversatzAbwartenAsync).
-        await BatchHilfe.UhrenversatzAbwartenAsync();
-        var ohne = await ohneKarenz.ReadChangedStreamsAsync(trueMax, null, int.MaxValue, default);
-        ohne.HighWaterMark.Should().BeGreaterThan(trueMax, "ohne Karenz rückt die HWM sofort vor");
+        await txA.CommitAsync();
+        var seqA = await SeqOf(streamA);
+        var nachher = await es.ReadChangedStreamsAsync(poll.HighWaterMark, null, int.MaxValue, default);
+        nachher.StreamIds.Should().Contain(streamA, "ab der Marke ist der Nachzügler jetzt zu lesen — nichts ging verloren");
+        seqA.Should().BeGreaterThan(poll.HighWaterMark);
+        (await es.ReadChangedStreamsAsync(nachher.HighWaterMark, null, int.MaxValue, default)).HighWaterMark
+            .Should().BeGreaterThanOrEqualTo(seqB, "ist die Transaktion beendet, rückt die Marke über beide");
     }
 
     /// <summary>
     /// PF-14: steht hinter der Marke nichts, liefern Partitions-Read und Emittenten-Poll eine leere Seite und halten die Marke (gesetzte
-    /// Sequenz und „dahinter?“ in einer Abfrage, die Seite entfällt); steht dahinter nur ein zu junges Event, liefern sie es (Latenz), schieben
-    /// die Marke aber nicht vor — die Abkürzung ändert die Karenz-Regel nicht.
+    /// Sequenz und „dahinter?“ in einer Runde, die Seite entfällt); ein neues Event ohne ältere laufende Transaktion kommt und ist gesetzt.
     /// </summary>
     [Fact]
-    public async Task Hinter_der_Marke_nichts_heisst_leere_Seite_und_ein_junges_Event_kommt_ohne_die_Marke_zu_schieben()
+    public async Task Hinter_der_Marke_nichts_heisst_leere_Seite_und_ein_neues_Event_kommt()
     {
-        var ohneKarenz = new MartenEventStore(
-            _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.Zero);
-        var mitKarenz = new MartenEventStore(
-            _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.FromMinutes(5));
-        await ohneKarenz.AppendEventsAsync(Guid.NewGuid(), 0, new Abstractions.IEvent[] { new ImagePairInspiziert() });
-        await BatchHilfe.UhrenversatzAbwartenAsync();
-        var kopf = (await ohneKarenz.ReadChangedStreamsAsync(0, null, int.MaxValue, default)).HighWaterMark;
+        var es = Neu();
+        await es.AppendEventsAsync(Guid.NewGuid(), 0, new Abstractions.IEvent[] { new ImagePairInspiziert() });
+        var kopf = await SichtbarMaxAsync();
 
-        var leer = await mitKarenz.ReadPartitionAsync(kopf, 0, 1, null, Array.Empty<long>(), 100, default);
+        var leer = await es.ReadPartitionAsync(kopf, 0, 1, null, Array.Empty<long>(), 100, default);
         leer.Events.Should().BeEmpty();
         leer.Gesetzt.Should().Be(kopf);
         leer.Voll.Should().BeFalse();
-        var leerPoll = await mitKarenz.ReadChangedStreamsAsync(kopf, null, 100, default);
+        var leerPoll = await es.ReadChangedStreamsAsync(kopf, null, 100, default);
         leerPoll.StreamIds.Should().BeEmpty();
         leerPoll.HighWaterMark.Should().Be(kopf);
 
         var stream = Guid.NewGuid();
-        await ohneKarenz.AppendEventsAsync(stream, 0, new Abstractions.IEvent[] { new ImagePairInspiziert() });
-        var jung = await mitKarenz.ReadPartitionAsync(kopf, 0, 1, null, Array.Empty<long>(), 100, default);
-        jung.Events.Select(e => e.Event.AggregateId).Should().Contain(stream, "ein junges Event wird geliefert (Latenz)");
-        jung.Gesetzt.Should().Be(kopf, "die Karenz hält die Marke vor dem jungen Event");
-        var jungPoll = await mitKarenz.ReadChangedStreamsAsync(kopf, null, 100, default);
-        jungPoll.StreamIds.Should().Contain(stream);
-        jungPoll.HighWaterMark.Should().Be(kopf);
+        await es.AppendEventsAsync(stream, 0, new Abstractions.IEvent[] { new ImagePairInspiziert() });
+        var neu = await es.ReadPartitionAsync(kopf, 0, 1, null, Array.Empty<long>(), 100, default);
+        neu.Events.Select(e => e.Event.AggregateId).Should().Contain(stream);
+        neu.Gesetzt.Should().BeGreaterThanOrEqualTo(kopf);
+        var neuPoll = await es.ReadChangedStreamsAsync(kopf, null, 100, default);
+        neuPoll.StreamIds.Should().Contain(stream);
+        neuPoll.HighWaterMark.Should().BeGreaterThan(kopf, "ohne ältere laufende Transaktion ist das neue Event sofort endgültig");
     }
 
     /// <summary>
     /// Derselbe Nachzügler im Batch-Konsum: der Leser wendet die höhere, früher committete Sequenz sofort an, rückt seine Position aber nicht
-    /// über die Karenz hinaus — die niedrigere Sequenz, die erst danach sichtbar wird, liest der nächste Durchlauf. Jedes Event genau einmal,
+    /// über die noch laufende Transaktion hinaus — die niedrigere Sequenz, die erst danach sichtbar wird, liest der nächste Durchlauf. Jedes Event genau einmal,
     /// auch nach einer Neuaktivierung (der Guard fängt die Wiederholung ab).
     /// </summary>
     [Fact]
     public async Task Batch_Leser_ueberholt_einen_Nachzuegler_nicht_und_wendet_jedes_Event_genau_einmal_an()
     {
-        var es = new MartenEventStore(_fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.FromMinutes(5));
+        var es = Neu();
         var konsum = new Konsum(1, 500);
         var proj = "it-nachzuegler-" + Guid.NewGuid().ToString("N");
         await BatchHilfe.StarteAmKopfAsync(_fx.Store, proj, konsum);
         var kopf = await BatchHilfe.KopfAsync(_fx.Store);
-        var (streamA, streamB) = (Guid.NewGuid(), Guid.NewGuid());
 
-        await using var connA = new NpgsqlConnection(Fixture.ConnString);
-        await using var connB = new NpgsqlConnection(Fixture.ConnString);
-        await connA.OpenAsync();
-        await connB.OpenAsync();
-        var txA = await connA.BeginTransactionAsync();
-        var txB = await connB.BeginTransactionAsync();
-        await using (var sA = _fx.Store.LightweightSession(SessionOptions.ForTransaction(txA)))
-        {
-            sA.Events.StartStream(streamA, new ImagePairInspiziert());
-            await sA.SaveChangesAsync();
-        }
-        await using (var sB = _fx.Store.LightweightSession(SessionOptions.ForTransaction(txB)))
-        {
-            sB.Events.StartStream(streamB, new ImagePairInspiziert());
-            await sB.SaveChangesAsync();
-        }
-        await txB.CommitAsync();                                     // die höhere Sequenz wird zuerst sichtbar
+        var (streamA, streamB, txA) = await NachzueglerAsync();       // die höhere Sequenz ist sichtbar, die kleinere läuft noch
 
         var store = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
         var leser = BatchHilfe.HistorieLeser(es, store, proj, 0, konsum);
@@ -203,6 +134,50 @@ public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.F
 
         (await store.GetByPairIdAsync(streamA))!.Eintraege.Should().HaveCount(1);
         (await store.GetByPairIdAsync(streamB))!.Eintraege.Should().HaveCount(1, "die Neuaktivierung liest es erneut, der Guard überspringt es");
+    }
+
+    private MartenEventStore Neu() => new(_fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance);
+
+    /// <summary>
+    /// Zwei Transaktionen: A fügt zuerst ein (kleinere Sequenz) und bleibt offen, B fügt danach ein (größere Sequenz) und committet. Die
+    /// Verbindung von A lebt bis zum Ende des Tests (der Aufrufer committet; sonst rollt das Aufräumen sie zurück).
+    /// </summary>
+    private async Task<(Guid A, Guid B, NpgsqlTransaction TxA)> NachzueglerAsync()
+    {
+        var (streamA, streamB) = (Guid.NewGuid(), Guid.NewGuid());
+        var connA = new NpgsqlConnection(Fixture.ConnString);
+        _aufraeumen.Add(connA);
+        await using var connB = new NpgsqlConnection(Fixture.ConnString);
+        await connA.OpenAsync();
+        await connB.OpenAsync();
+        var txA = await connA.BeginTransactionAsync();
+        var txB = await connB.BeginTransactionAsync();
+        await using (var sA = _fx.Store.LightweightSession(SessionOptions.ForTransaction(txA)))
+        {
+            sA.Events.StartStream(streamA, new ImagePairInspiziert());
+            await sA.SaveChangesAsync();
+        }
+        await using (var sB = _fx.Store.LightweightSession(SessionOptions.ForTransaction(txB)))
+        {
+            sB.Events.StartStream(streamB, new ImagePairInspiziert());
+            await sB.SaveChangesAsync();
+        }
+        await txB.CommitAsync();
+        return (streamA, streamB, txA);
+    }
+
+    private readonly List<NpgsqlConnection> _aufraeumen = new();
+
+    public async ValueTask DisposeAsync()
+    {
+        foreach (var c in _aufraeumen) await c.DisposeAsync();
+    }
+
+    /// <summary>Die höchste sichtbare Sequenz — der naive Cursor.</summary>
+    private async Task<long> SichtbarMaxAsync()
+    {
+        await using var s = _fx.Store.QuerySession();
+        return (await s.QueryAsync<long>("select coalesce(max(seq_id), 0) from audit_befund3_it.mt_events")).Single();
     }
 
     private async Task<long> SeqOf(Guid streamId)
@@ -230,6 +205,7 @@ public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.F
             Store = DocumentStore.For(opts =>
             {
                 opts.Connection(ConnString);
+                opts.Events.AppendMode = JasperFx.Events.EventAppendMode.Quick;   // wie der Host; der Horizont setzt ihn voraus
                 opts.DatabaseSchemaName = "audit_befund3_it";
                 opts.Events.DatabaseSchemaName = "audit_befund3_it";
                 opts.AutoCreateSchemaObjects = JasperFx.AutoCreate.All;

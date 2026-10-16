@@ -384,6 +384,12 @@ zwei. Messung `…_0309_7a1f9f9_server-nachlauf` (gültig, grün), Störungsläu
 2,6 und 1,5 % — **E5-Ziel Leerlauf erreicht**; Nachlauf L1 48 s, L5 15 s; Lastblöcke im Band der Läufe davor. Neu: PF-15 (die Grundlast wächst mit
 Projektionen × Partitionen).
 
+**Nachtrag G-9 Horizont der Vollständigkeit** (2026-10-16, auf Tobis Wort): die Karenz von 3 s (Uhr) ist durch den Horizont aus den
+Transaktionsnummern von Postgres ersetzt (docs/13 §13.6). Eine länger als 3 s offene Transaktion wurde vorher überholt (neuer Test gegen den
+alten Code rot). Prüfstand, Garantie-Suite und Integration grün; **noch nicht gemessen** — auf dem Messserver zu prüfen: Durchsatz und Queries
+je Vorgang S1/S5 (die Positionen liegen nur noch Millisekunden hinter dem Kopf, die Partitions-Reads durchsuchen ein kürzeres Fenster),
+Leerlauf L1/L5 (eine Probe je Poll statt einer Zeit-Abfrage). Neu offen: G-10 (Zeitlimit mischt Host- und DB-Uhr).
+
 **Phase 5** (umgesetzt, 2026-10-15, auf Tobis Wort vor Phase 4; Code `22632bc`…`ffaeaea`, gemessen auf dem Messserver, docs/12 §12.6):
 - *Umgesetzt:* PF-4 — `ProzessPoll` liest seitenweise (`ReadPartitionAsync`) und routet die geladenen Events, Starts nur für neue oder offene
   Vorgänge (`StreamsVorhandenAsync`), Marke je Seite; Backstop mit Fristen im Offen-Index (`ProzessOffen.Frist`, Sekundentakt, geschrieben erst

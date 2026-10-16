@@ -166,7 +166,7 @@ public interface IAggregateRepository
         /// Globales Leseprimitiv für den Poll der Emittenten (docs/04 §4.1): eine Seite der Streams, die jenseits von
         /// <paramref name="afterGlobalSequence"/> ein Event eines der <paramref name="typen"/> bekommen haben (Speicher-Diskriminatoren samt
         /// Upcasting-Vorgängern wie bei <see cref="ReadPartitionAsync"/>; null = jeder Typ), höchstens <paramref name="limit"/> solche Events
-        /// weit, und die Marke, bis zu der die Seite reicht — nie über die gesetzte Sequenz (Karenz). Liest nur Sequenz und Stream, keine
+        /// weit, und die Marke, bis zu der die Seite reicht — nie über die gesetzte Sequenz (siehe <see cref="ReadPartitionAsync"/>). Liest nur Sequenz und Stream, keine
         /// Daten; Tombstones zählen nicht. Der Poller weckt die Adapter der Streams — so heilt er das letzte verlorene Signal vor Stille.
         /// </summary>
         Task<StreamChanges> ReadChangedStreamsAsync(
@@ -218,8 +218,9 @@ public interface IAggregateRepository
         /// <paramref name="limit"/> Events. <paramref name="typen"/> = die Speicher-Diskriminatoren der abonnierten Typen samt ihrer
         /// Upcasting-Vorgänger (null = ohne Typfilter); <paramref name="ausser"/> = Sequenzen, die der Leser schon erledigt hat.
         /// Tombstones liest es nicht; materialisiert wird wie in <see cref="ReadStreamAsync"/>.
-        /// Vor der Seite bestimmt es die <b>gesetzte</b> Sequenz: die höchste, deren Event älter als die Karenz ist — bis dorthin ist
-        /// jede kleinere Sequenz sichtbar (Nachzügler-Regel wie beim Poll).
+        /// Vor der Seite bestimmt es die <b>gesetzte</b> Sequenz: bis dorthin ist jede Sequenz endgültig — committet und sichtbar oder nie.
+        /// Wie der Store das weiß, ist seine Sache (Postgres: aus den Transaktionsnummern, ohne Uhr); eine Transaktion, die noch läuft, wird
+        /// nie überholt, auch nicht, wenn sie lange offen ist (Nachzügler-Regel wie beim Poll).
         /// </summary>
         Task<PartitionsSeite> ReadPartitionAsync(
             long nach, int partition, int partitionen, IReadOnlyCollection<string>? typen, IReadOnlyCollection<long> ausser, int limit,

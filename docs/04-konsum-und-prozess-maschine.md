@@ -1,6 +1,6 @@
 # 04 — Konsum- & Prozess-Maschine (vier Konsumenten, eine Maschine)
 
-Stand 2026-10-15 (Batch-Konsum, Plan Garantien und Durchsatz Phase 3), gegen den Code geprüft. Maßstab: docs/konzept-werkbank.md.
+Stand 2026-10-16 (Batch-Konsum, Horizont der Vollständigkeit), gegen den Code geprüft. Maßstab: docs/konzept-werkbank.md.
 
 Projektion, Reaktion, Prozess und Fluss sind **vier durable Konsumenten des Logs**. Sie folgen demselben Muster: ein Signal weckt
 schnell, ein Poll heilt verlorene Signale, gelesen wird geordnet aus dem Event-Store (Invariante 1), der Fortschritt liegt durabel im
@@ -25,8 +25,8 @@ bestätigtem Emit vor). Beide sind store-agnostisch: die Schleife trägt die *Po
 ### 4.1.1 Batch-Konsum der Projektionen
 
 **Partition.** Jede replaybare Projektion hat `P` Partitionen (Umgebung `Konsum.Partitionen`, Standard 8). Ein Stream gehört genau einer:
-letztes Byte der UUID in RFC-Reihenfolge modulo P — in SQL `get_byte(uuid_send(stream_id), 15) % P`, in .NET
-`id.ToByteArray(bigEndian: true)[15] % P` (`Abstractions/PartitionsCheckpoint.cs`, `Partitionierung`). Beide Seiten rechnen dasselbe, ohne Index
+letztes Byte der UUID in RFC-Reihenfolge modulo P — in .NET `id.ToByteArray(bigEndian: true)[15] % P` (`Abstractions/PartitionsCheckpoint.cs`,
+`Partitionierung`), im Store in seiner Sprache (Postgres: `get_byte(uuid_send(stream_id), 15) % P`, `Infrastructure/Persistence/PartitionsAusdruck.cs`). Beide Seiten rechnen dasselbe, ohne Index
 und ohne Hash-Abhängigkeit von Laufzeit oder PG-Version; für zufällige und gehashte Ids gleichverteilt. `P` ≤ 256; ein Wechsel von `P` ist ein
 Neuaufbau (er gehört zum Stand der Leseseite, §4.3).
 
@@ -49,16 +49,17 @@ die Versionsprüfung des Partitions-Checkpoints (G-4, unten). Ein Durchlauf:
 6. **Danach** der Versions-Index (Redis) für die Events des Batches best-effort, parallel — nie über Uncommittetes.
 7. **Weiter**, solange die Seite voll war.
 
-**Position und Nachzügler.** Vor jeder Seite bestimmt `ReadPartitionAsync` die *gesetzte* Sequenz: die höchste, deren Event älter als die Karenz
-ist (3 s, DB-Uhr; dieselbe Regel wie beim Poll der Emittenten). Die Position rückt nie darüber hinaus, bei voller Seite nie über deren Ende und
+**Position und Nachzügler.** Vor jeder Seite bestimmt `ReadPartitionAsync` die *gesetzte* Sequenz: bis dorthin ist jede Sequenz endgültig — der
+Horizont der Vollständigkeit aus den Transaktionsnummern von Postgres, ohne Uhr ([03](03-schreibseite.md) §3.3, G-9; dieselbe Regel wie beim
+Poll der Emittenten). Die Position rückt nie darüber hinaus, bei voller Seite nie über deren Ende und
 nie über das erste Event eines hängenden Streams (unten). Jüngere Events werden trotzdem angewandt (Latenz); welche schon erledigt sind, merkt
 sich die Aktivierung und schließt sie beim nächsten Lesen aus, nach einer Neuaktivierung fängt der Guard sie ab. So überholt die Position keine
 noch unsichtbare kleinere Sequenz. Gesetzte Sequenz und „steht dahinter überhaupt ein Event?“ kommen aus **einer** Abfrage; steht hinter der
 Position nichts, entfällt die Seite — eine Weckung ohne Neues kostet eine Abfrage statt zwei (PF-14; ebenso der Prozess-Poll und der Poll der
 Emittenten). Gelesen wird ab einer Lese-Position im Speicher: durabel wird sie mit jedem Commit eines Batches; über fremde
-Events hinweg (leere Seite) höchstens einmal je Poll-Intervall — sonst committete unter Last jede Weckung nur eine Zahl. Grenzfall wie beim
-Poll: eine Transaktion, die länger als die Karenz offen ist, kann überholt werden. Den Event-Zeitstempel setzt Marten beim Append mit der Uhr des
-Clients; ein Versatz zur DB-Uhr verschiebt die Karenz um diesen Betrag (gemessen unter 1 ms).
+Events hinweg (leere Seite) höchstens einmal je Poll-Intervall — sonst committete unter Last jede Weckung nur eine Zahl. Eine Transaktion, die
+lange offen ist, hält die Position an (nicht die Zustellung: jüngere Events werden weiter angewandt), sie wird nie überholt. Bis 2026-10-16 galt
+hier eine Karenz von 3 s gegen den Event-Zeitstempel; eine länger offene Transaktion wurde überholt und ihr Event nie gelesen (G-9).
 
 **Poison und Konflikt halten niemanden auf.**
 - Wirft der Dispatch, ist der Batch verworfen; der Stream des werfenden Events wird abgetrennt und allein versucht, der Rest läuft ohne ihn.

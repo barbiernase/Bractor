@@ -144,7 +144,7 @@ public sealed class KonsumRueckstand(IDocumentStore marten, IEnumerable<BatchReg
             var positionen = new long[konsum.Partitionen];
             foreach (var p in partitionen.Where(p => p.Partition < konsum.Partitionen)) positionen[p.Partition] = p.Position;
             var typen = BatchLeser.TypenAus(reg.EventTypes)?.ToArray();
-            var sql = $"select count(*) from {schema}.mt_events where seq_id > ? and seq_id > (?::bigint[])[{Partitionierung.Sql("stream_id")} % ? + 1]"
+            var sql = $"select count(*) from {schema}.mt_events where seq_id > ? and seq_id > (?::bigint[])[{Infrastructure.Persistence.PartitionsAusdruck.Sql("stream_id")} % ? + 1]"
                       + (typen is null ? "" : " and type = any(?)");
             object[] parameter = typen is null
                 ? [positionen.Min(), positionen, konsum.Partitionen]

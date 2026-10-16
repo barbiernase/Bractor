@@ -44,7 +44,8 @@ public class GeparkterStream
 }
 
 /// <summary>
-/// Die Partitions-Funktion des Batch-Konsums (E10): das letzte Byte der UUID in RFC-Reihenfolge modulo P. SQL und .NET rechnen dasselbe,
+/// Die Partitions-Funktion des Batch-Konsums (E10): das letzte Byte der UUID in RFC-Reihenfolge modulo P. Der Store rechnet dasselbe in seiner
+/// Sprache (Postgres: <c>Infrastructure.Persistence.PartitionsAusdruck</c>),
 /// ohne Index und ohne Abhängigkeit von Laufzeit oder PG-Version; für zufällige und gehashte Ids gleichverteilt. P ≤ 256; ein Wechsel von P
 /// ist ein Neuaufbau.
 /// </summary>
@@ -54,8 +55,6 @@ public static class Partitionierung
 
     public static int Von(Guid streamId, int partitionen) => streamId.ToByteArray(bigEndian: true)[15] % partitionen;
 
-    /// <summary>Derselbe Ausdruck in SQL über die Spalte <paramref name="spalte"/> (uuid).</summary>
-    public static string Sql(string spalte) => $"get_byte(uuid_send({spalte}), 15)";
 }
 
 /// <summary>

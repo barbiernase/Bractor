@@ -101,6 +101,7 @@ public class MetadataPostgresTests : IClassFixture<MetadataPostgresTests.Fixture
             {
                 opts.Connection(
                     "Host=localhost;Port=5432;Database=cqrs_events;Username=postgres;Password=postgres");
+                opts.Events.AppendMode = JasperFx.Events.EventAppendMode.Quick;   // wie der Host; der Horizont setzt ihn voraus
                 opts.DatabaseSchemaName = "audit_metadata_it";
                 opts.Events.DatabaseSchemaName = "audit_metadata_it";
                 opts.AutoCreateSchemaObjects = JasperFx.AutoCreate.All;

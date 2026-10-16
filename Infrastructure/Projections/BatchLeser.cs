@@ -19,7 +19,7 @@ namespace Infrastructure.Projections;
 ///   <item><b>Danach</b> der Versions-Index best-effort — nie über Uncommittetes.</item>
 ///   <item><b>Weiter</b>, solange die Seite voll war.</item>
 /// </list>
-/// <b>Position und Nachzügler:</b> die Position rückt nur bis zur gesetzten Sequenz vor (älter als die Karenz) und nie über ein Event, das
+/// <b>Position und Nachzügler:</b> die Position rückt nur bis zur gesetzten Sequenz vor (bis dorthin ist laut Store jede endgültig) und nie über ein Event, das
 /// hängt. Jüngere Events werden trotzdem angewandt (Latenz); welche schon erledigt sind, merkt sich die Aktivierung (<c>_erledigt</c>), damit
 /// der nächste Durchlauf sie nicht erneut liest — nach einer Neuaktivierung fängt der Guard sie ab. Gelesen wird ab der Lese-Position im
 /// Speicher (<c>_lese</c>); durabel wird sie mit jedem Commit eines Batches, über fremde Events hinweg (leere Seite) aber höchstens einmal je

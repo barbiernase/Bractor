@@ -36,7 +36,6 @@ public class CoCommitPostgresTests : IClassFixture<PostgresFixture>
         var es = EventStore();
         await es.AppendEventsAsync(stream, 0, new IEvent[] { new ImagePairInspiziert() });
         var store = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
-        await BatchHilfe.UhrenversatzAbwartenAsync();
 
         await BatchHilfe.HistorieLeser(es, store, proj, 0, EinePartition).LaufAsync();
 
@@ -108,9 +107,9 @@ public class CoCommitPostgresTests : IClassFixture<PostgresFixture>
         return proj;
     }
 
-    // Karenz 0: frisch angehängte Events sind sofort „gesetzt“, die Position darf über sie hinaus.
+    // Ohne ältere laufende Transaktion sind frisch angehängte Events sofort „gesetzt“, die Position darf über sie hinaus.
     private MartenEventStore EventStore()
-        => new(_fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.Zero);
+        => new(_fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance);
 
     private sealed class NoopFactory : IAggregateHandlerFactory
     {
@@ -133,6 +132,7 @@ public sealed class PostgresFixture : IDisposable
         {
             opts.Connection(
                 "Host=localhost;Port=5432;Database=cqrs_events;Username=postgres;Password=postgres");
+            opts.Events.AppendMode = JasperFx.Events.EventAppendMode.Quick;   // wie der Host; der Horizont setzt ihn voraus
             opts.DatabaseSchemaName = "phase2_cocommit_it";
             opts.AutoCreateSchemaObjects = JasperFx.AutoCreate.All;
             KonsumSchema.Registriere(opts);

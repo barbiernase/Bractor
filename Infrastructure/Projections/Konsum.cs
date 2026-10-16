@@ -2,15 +2,12 @@ namespace Infrastructure.Projections;
 
 /// <summary>
 /// Die Größen des Batch-Konsums (Umgebung <c>Konsum</c>, docs/04 §4.1): Partitionen je Projektion (E4) und Events je Seite (E11). Dazu die
-/// festen Zeiten des Lesers: Karenz der Position (Nachzügler-Regel, wie beim Poll) und das Poll-Intervall je Partition.
+/// feste Poll-Intervall je Partition. Bis wohin die Position vorrücken darf, sagt der Store (Horizont der Vollständigkeit), keine Uhr.
 /// </summary>
 public sealed record Konsum(int Partitionen, int BatchGroesse)
 {
     /// <summary>E4 und E11 (Plan Garantien und Durchsatz): 8 Partitionen, 500 Events je Seite.</summary>
     public static Konsum Standard { get; } = new(8, 500);
-
-    /// <summary>Die Position rückt nur bis zu Events vor, die älter sind als diese Karenz (DB-Uhr).</summary>
-    public static readonly TimeSpan Karenz = TimeSpan.FromSeconds(3);
 
     /// <summary>Der Poll weckt jede Partition in diesem Abstand — das Netz für verlorene Signale.</summary>
     public static readonly TimeSpan PollIntervall = TimeSpan.FromSeconds(30);

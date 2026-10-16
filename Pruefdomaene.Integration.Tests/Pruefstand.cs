@@ -71,6 +71,7 @@ internal static class Pruefstand
     public static IDocumentStore Store(string schema) => DocumentStore.For(opts =>
     {
         opts.Connection(Verbindung);
+        opts.Events.AppendMode = JasperFx.Events.EventAppendMode.Quick;   // wie der Host; der Horizont setzt ihn voraus
         opts.DatabaseSchemaName = schema;
         opts.Events.DatabaseSchemaName = schema;
         opts.AutoCreateSchemaObjects = JasperFx.AutoCreate.All;

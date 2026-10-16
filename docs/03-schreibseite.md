@@ -172,12 +172,21 @@ nicht aus Namespaces (`CommandAggregateMapGenerator`).
 - **Read** (`ReadStreamAsync`): `Where(StreamId == && Version >= from).OrderBy(Version)`, materialisiert `EventEnvelope` (Akteur aus dem
   Header als `UserId`). Dabei läuft jedes Event durch die Upcasting-Naht `GeneratedEventUpcasting.Aufwerten` (1:1 oder 1:N mit
   `SubIndex`) — eine Backend-Primitive für Prod (`IUpcast`), die heute keine Domäne nutzt; ohne Upcast ist sie ein Durchreichen.
-- **Poll-Backstop** (`ReadChangedStreamsAsync`, Emittenten und Dirigent): globale Marten-Sequenz `seq_id` mit **Straggler-Karenz** (Default
-  3 s): die High-Water-Mark rückt nur bis zur höchsten Sequenz vor, deren Event älter als die Karenz ist — schützt gegen nebenläufig in
-  umgekehrter Seq-Reihenfolge sichtbare Commits. Referenzzeit ist die DB-Uhr (`select now()`); den Event-Zeitstempel setzt Marten mit der Uhr
-  des Hosts (Versatz gemessen unter 1 ms).
-- **Partitions-Seite** (`ReadPartitionAsync`, Batch-Konsum der Projektionen): erst die gesetzte Sequenz (dieselbe Karenz-Regel, rückwärts über
-  den Primärschlüssel), dann die Events einer Partition (`get_byte(uuid_send(stream_id), 15) % P`) jenseits der Position, nur die abonnierten
+- **Horizont der Vollständigkeit** (`Horizont`, G-9): bis zu welcher globalen Sequenz `seq_id` jedes Event endgültig ist — committet und
+  sichtbar oder nie (zurückgerollt). Postgres zieht die Sequenz im Insert innerhalb der Transaktion; nebenläufige Commits werden in umgekehrter
+  Reihenfolge sichtbar. Ohne Uhr: eine **Probe** (eine kurze eigene Transaktion ohne Warten auf die Platte, eine Runde) liest erst den Stand des
+  Sequenzzählers, dann ihre eigene Transaktionsnummer und die älteste noch laufende. Im Anhänge-Modus `Quick` schreibt Marten in jeder
+  Transaktion zuerst die Stream-Zeile, dann die Events mit `nextval` — jede Transaktion hat ihre Nummer, bevor sie eine Sequenz zieht
+  (Wächter: I `AnhaengeReihenfolgePostgresTests`); Nummern steigen. Läuft keine kleinere Nummer als die der Probe mehr, ist alles bis zu ihrem
+  Stand endgültig. Eine lange offene Transaktion hält den Horizont an, statt überholt zu werden; nach 30 s warnt der Store einmal je Minute mit
+  der ältesten schreibenden Transaktion (`pg_stat_activity`). Je Store ein Horizont, geteilt von allen Lesern eines Prozesses; solange eine Probe
+  offen ist, kommt höchstens alle 5 ms eine neue (dazwischen prüft eine Runde nur die älteste laufende Nummer); ein Leser ohne
+  Mitleser (ein Poll) wartet bis 250 ms auf seine eigene Probe, damit seine Marke nicht ein Poll-Intervall zurücksteht. Im Modus `Rich` (zieht
+  die Sequenzen vor der Transaktion) verweigert der Horizont den Dienst.
+- **Poll-Backstop** (`ReadChangedStreamsAsync`, Emittenten und Dirigent): die High-Water-Mark rückt nur bis zum Horizont vor — schützt gegen
+  in umgekehrter Reihenfolge sichtbare Commits, auch gegen eine Transaktion, die lange offen ist.
+- **Partitions-Seite** (`ReadPartitionAsync`, Batch-Konsum der Projektionen): erst die gesetzte Sequenz (der Horizont, in derselben Runde wie
+  „steht dahinter etwas?“), dann die Events einer Partition (`PartitionsAusdruck`: `get_byte(uuid_send(stream_id), 15) % P`) jenseits der Position, nur die abonnierten
   Typen samt Upcasting-Herkunft, ohne schon Erledigtes, `order by seq_id limit N`; materialisiert wie `ReadStreamAsync`
   ([04](04-konsum-und-prozess-maschine.md) §4.1.1).
 

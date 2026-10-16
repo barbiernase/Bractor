@@ -24,8 +24,8 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
     private readonly Fixture _fx;
     public GarantiePostgresTests(Fixture fx) => _fx = fx;
 
-    private MartenEventStore EventStore(TimeSpan? karenz = null, bool schnell = false)
-        => new(schnell ? _fx.Schnell : _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: karenz ?? TimeSpan.Zero);
+    private MartenEventStore EventStore(bool schnell = true)
+        => new(schnell ? _fx.Store : _fx.Rich, new NoopFactory(), NullLogger<MartenEventStore>.Instance);
 
     [Theory, InlineData(false), InlineData(true)]   // Martens Anhänge-Modus: Standard (Rich) und schnell (Quick, so läuft der Host)
     public async Task Ein_Append_wird_ganz_oder_gar_nicht_gueltig(bool schnell)
@@ -71,7 +71,7 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
         // Der Offen-Index-Eintrag reist im Append des ProzessGestartet, sein Ende im Append des ProzessBeendet (docs/03 §3.3): scheitert der
         //   Append an der Version, gibt es auch keinen Eintrag bzw. kein Ende.
         var es = EventStore(schnell: schnell);
-        var store = schnell ? _fx.Schnell : _fx.Store;
+        var store = schnell ? _fx.Store : _fx.Rich;
         var k = Guid.NewGuid();
         async Task<bool> Offen() { await using var q = store.QuerySession(); return await q.LoadAsync<ProzessOffen>(k) is not null; }
 
@@ -151,7 +151,6 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
         await es.AppendEventsAsync(danach, 0, new IEvent[] { new ImagePairInspiziert() });
 
         var poller = new Poller(es, async (s, ct) => { await es.ReadStreamAsync(s, 0, ct); return true; }, startHighWater: basis);
-        await BatchHilfe.UhrenversatzAbwartenAsync();   // Karenz 0: das letzte Event soll schon gesetzt sein
         await poller.PollOnceAsync();
 
         var kopf = (await es.ReadChangedStreamsAsync(basis, null, int.MaxValue, default)).HighWaterMark;
@@ -204,7 +203,6 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
         var leser = BatchHilfe.HistorieLeser(es, store, proj, 0, EinePartition, jetzt: () => uhr,
             vorher: e => e.AggregateId == gift && !heilt ? throw new InvalidOperationException("Dispatch wirft dauerhaft") : Task.CompletedTask);
 
-        await BatchHilfe.UhrenversatzAbwartenAsync();
         await leser.LaufAsync();
         (await store.GetByPairIdAsync(gesund))!.Eintraege.Should().HaveCount(2, "ein vergifteter Stream hält die anderen nicht auf");
         (await store.GetByPairIdAsync(gift)).Should().BeNull();
@@ -231,7 +229,7 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
         using var frisch = Fixture.Neu("garantie_neuaufbau_" + Guid.NewGuid().ToString("N")[..8]);
         try
         {
-            var es = new MartenEventStore(frisch, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.Zero);
+            var es = new MartenEventStore(frisch, new NoopFactory(), NullLogger<MartenEventStore>.Instance);
             var proj = "it-neuaufbau";
             var stream = Guid.NewGuid();
             await es.AppendEventsAsync(stream, 0, new IEvent[] { new ImagePairInspiziert() });
@@ -267,11 +265,12 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
     /// <summary>Eigenes Marten-Schema (Isolation gegen andere Tests und die Sim-Daten).</summary>
     public sealed class Fixture : IDisposable
     {
-        public IDocumentStore Store { get; } = Neu("garantie_it");
-        /// <summary>Derselbe Store im schnellen Anhänge-Modus des Hosts (eigenes Schema).</summary>
-        public IDocumentStore Schnell { get; } = Neu("garantie_it_schnell", schnell: true);
+        /// <summary>Der Store im schnellen Anhänge-Modus des Hosts (der Horizont der Vollständigkeit setzt ihn voraus).</summary>
+        public IDocumentStore Store { get; } = Neu("garantie_it_schnell");
+        /// <summary>Derselbe Store im Standard-Modus Rich (eigenes Schema) — nur für die Anhänge-Garantien je Modus.</summary>
+        public IDocumentStore Rich { get; } = Neu("garantie_it", schnell: false);
 
-        public static DocumentStore Neu(string schema, bool schnell = false) => DocumentStore.For(opts =>
+        public static DocumentStore Neu(string schema, bool schnell = true) => DocumentStore.For(opts =>
         {
             if (schnell) opts.Events.AppendMode = JasperFx.Events.EventAppendMode.Quick;
             opts.Connection("Host=localhost;Port=5432;Database=cqrs_events;Username=postgres;Password=postgres");
@@ -282,6 +281,6 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
             InboxTabelle.Registriere(opts);
         });
 
-        public void Dispose() { Store.Dispose(); Schnell.Dispose(); }
+        public void Dispose() { Store.Dispose(); Rich.Dispose(); }
     }
 }
