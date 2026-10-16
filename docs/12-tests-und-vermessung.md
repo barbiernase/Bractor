@@ -688,7 +688,8 @@ Reaktion p99 S5-64 330 → 260 ms. Je Vorgang (`pg_stat_statements`):
 oben). Gültig, Exactly-once grün; zwei Störungsläufe grün (`…_server-art-prod-stoerung-1/2`: 55 537 und 52 926 Vorgänge). Gegen „Horizont + Uhr“
 (Sim, je ein Lauf): S1–S3 und S5 0,91–1,03 ×; die Zeitstempel-Regel kostet in Prod ≈ 7–10 µs je Event-Insert statt 20–35 µs (S5-64 Datenbankzeit
 je Vorgang 1,78 → 1,66 ms, wieder wie vor dem Umbau; S3-64 0,99 → 0,81; S1 9,5 → 8,7). **S4 0,75 ×** (962 Paare/s; Range aufnehmen und Einfrieren je
-0,3 statt 0,1/0,2 s), reproduzierbar (vier weitere Läufe 969–1 019). Ursache: in Sim leert der Abgleich der Leseseite beim Start alle Read-Models
+0,3 statt 0,1/0,2 s), reproduzierbar (vier weitere Läufe 969–1 019, Ordner `…_0658d0d_server-s4-ab-*-<commit>` — trotz des Namens alle mit
+`0658d0d` gelaufen, ein Fehler im Aufruf). Ursache: in Sim leert der Abgleich der Leseseite beim Start alle Read-Models
 und legt damit deren Tabellen an; in Prod legt Marten sie erst beim ersten Zugriff an — in S4 für vier Dokumenttypen (Tabellen-Inspektion,
 Funktionen, `CREATE TABLE`) mitten in der Messung (PF-18). A-B-B-A nur S1/S4 in Sim gegen den Stand vor G-9/G-10 (`7a1f9f9` gegen `a78c21d`,
 Ordner `…_server-s4-ab-{a1,b1,b2,a2}`): S4 1 728 / 1 683 / 1 724 / 1 349 Paare/s, S1 88 / 90 / 91 / 85 — der Code von G-9/G-10 kostet S4 nichts.
