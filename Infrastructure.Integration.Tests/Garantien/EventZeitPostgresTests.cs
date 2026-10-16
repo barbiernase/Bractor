@@ -82,6 +82,27 @@ public class EventZeitPostgresTests
         (zeit - DateTimeOffset.UtcNow).Should().BeGreaterThan(TimeSpan.FromHours(1.9), "der Versatz steckt im Zeitstempel");
     }
 
+    [Fact]
+    public async Task Ein_unveraenderter_Stand_fasst_die_Regel_beim_Start_nicht_an()
+    {
+        // Ein create or replace trigger braucht eine Sperre auf mt_events, die mit laufenden Inserts kollidiert — beim Neustart schreibt der alte
+        // Host oft noch. Steht die Regel schon so, wie sie soll, darf ein Start sie nicht neu schreiben (die Katalog-Zeile bleibt dieselbe).
+        using var store = Store("garantie_eventzeit_start_it", EventZeit.Datenbankzeit);
+        var es = EventStore(store);
+        await es.AppendEventsAsync(Guid.NewGuid(), 0, new IEvent[] { new ImagePairInspiziert() });   // legt die Regel an
+        async Task<string> Fassung()
+        {
+            await using var conn = new NpgsqlConnection(Verbindung);
+            await conn.OpenAsync();
+            await using var cmd = new NpgsqlCommand(
+                $"select p.xmin::text from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = 'garantie_eventzeit_start_it' and p.proname = '{EventZeit.Regel}'", conn);
+            return (string)(await cmd.ExecuteScalarAsync())!;
+        }
+        var vorher = await Fassung();
+        await EventZeit.AnlegenAsync(store, default);   // wie ein zweiter Start
+        (await Fassung()).Should().Be(vorher, "die Regel stand schon so — kein create or replace, keine Sperre auf mt_events");
+    }
+
     private sealed class NoopFactory : IAggregateHandlerFactory
     {
         public IAggregateHandler CreateHandler(IState state) => throw new NotSupportedException("Test liest und schreibt nur Events.");

@@ -21,14 +21,36 @@ public static class CqrsSchemaMigrator
     /// <summary>
     /// Wendet alle konfigurierten Schema-Änderungen eager auf die Datenbank an (advisory-lock-gesichert).
     /// Idempotent: ist das Schema bereits aktuell, ist es ein No-op. Wirft bei DB-/Verbindungsfehlern.
+    /// Der eine Weg für den Migrator im Cluster und den Start eines Standalone-Hosts (<see cref="SchemaBeimStart"/>, PF-18).
     /// </summary>
-    public static async Task ApplyAllAsync(IServiceProvider services)
+    public static async Task ApplyAllAsync(IServiceProvider services, CancellationToken ct = default)
     {
         var store = services.GetRequiredService<IDocumentStore>();
         // IMartenStorage-Ebene nimmt nur den optionalen AutoCreate-Override (keinen CancellationToken).
         // CreateOrUpdate erzwingt das eager Anlegen unabhängig von der konfigurierten AutoCreate-Stufe.
         await store.Storage.ApplyAllConfiguredChangesToDatabaseAsync(AutoCreate.CreateOrUpdate);
+        // Die Read-Models kennt Marten erst beim ersten Zugriff (sie stehen nicht in den Optionen): die generierte Liste legt sie vorab an —
+        //   sonst fände ein Mitglied ohne Schema-Recht ihre Tabellen nicht, und ein Standalone-Host legte sie mitten im Verkehr an (PF-18).
+        foreach (var rm in services.GetServices<Abstractions.ReadModelTyp>())
+            await store.Storage.Database.EnsureStorageExistsAsync(rm.Typ, ct);
         // Die Regel für den Event-Zeitstempel (G-10) ist kein Weasel-Objekt (Weasel kennt keine Trigger): eigens anlegen.
-        await Infrastructure.Persistence.EventZeit.AnlegenAsync(store, CancellationToken.None);
+        await Infrastructure.Persistence.EventZeit.AnlegenAsync(store, ct);
     }
+}
+
+/// <summary>
+/// PF-18: ein Standalone-Host legt beim Start das ganze Schema an, wie der Migrator im Cluster — Tabellen, Funktionen und Indizes entstehen nicht
+/// mehr beim ersten Zugriff mitten im Verkehr (Inspektion, DDL-Sperren). Startet nach dem Umgebungs-Siegel (in Sim legt es die Datenbank an) und
+/// vor allen übrigen Diensten (Hosted Services starten in Registrierungs-Reihenfolge).
+/// </summary>
+public sealed class SchemaBeimStart(IServiceProvider services) : Microsoft.Extensions.Hosting.IHostedService
+{
+    public async Task StartAsync(CancellationToken ct)
+    {
+        var dauer = System.Diagnostics.Stopwatch.StartNew();
+        await CqrsSchemaMigrator.ApplyAllAsync(services, ct);
+        Console.WriteLine($"[CQRS] Schema vollständig angelegt ({dauer.ElapsedMilliseconds} ms)");
+    }
+
+    public Task StopAsync(CancellationToken ct) => Task.CompletedTask;
 }

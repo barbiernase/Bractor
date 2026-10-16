@@ -81,6 +81,60 @@ public class UmgebungE2ETests
         finally { await LoescheDatenbankAsync(db); }
     }
 
+    /// <summary>
+    /// PF-18: ein Standalone-Host legt das ganze Schema beim Start an — nach dem Start stehen die Tabellen aller Read-Models (Marten kennt sie
+    /// sonst erst beim ersten Zugriff) und die Regel für den Event-Zeitstempel, bevor irgendein Command oder eine Abfrage kam. In Prod (kein
+    /// Abgleich der Leseseite, der sie nebenbei anlegt) ist das der einzige Weg.
+    /// </summary>
+    [Fact]
+    public async Task Ein_Prod_Host_legt_das_ganze_Schema_beim_Start_an()
+    {
+        var db = "cqrs_it_schema_" + Guid.NewGuid().ToString("N")[..8];
+        var u = Umgebung("it-schema-" + Guid.NewGuid().ToString("N")[..6], UmgebungsArt.Prod, db);
+        var verz = Directory.CreateTempSubdirectory("umgebung-it-").FullName;
+        await using (var conn = new NpgsqlConnection(Verbindung + ";Database=postgres"))
+        {
+            await conn.OpenAsync();
+            await using var cmd = conn.CreateCommand();
+            cmd.CommandText = $"create database \"{db}\"";   // ein Prod-Host legt keine Datenbank an
+            await cmd.ExecuteNonQueryAsync();
+        }
+        var builder = WebApplication.CreateBuilder();
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["Quellen:DateiErkannt:Pfad"] = Path.Combine(verz, "quelle"),
+            ["Konfig:BildaufbereitungKonfig:AusgabePfad"] = Path.Combine(verz, ".preprocessed"),
+        });
+        builder.AddCqrs(u);
+        await using var host = builder.Build();
+        try
+        {
+            await host.StartAsync();
+            var store = host.Services.GetRequiredService<IDocumentStore>();
+            var readModels = host.Services.GetServices<ReadModelTyp>().ToList();
+            readModels.Should().NotBeEmpty();
+
+            await using var conn = new NpgsqlConnection(UmgebungLader.Verbindung(u.EventStore));
+            await conn.OpenAsync();
+            foreach (var rm in readModels)
+            {
+                var tabelle = store.Options.FindOrResolveDocumentType(rm.Typ).TableName.QualifiedName;
+                await using var cmd = new NpgsqlCommand("select to_regclass($1) is not null", conn);
+                cmd.Parameters.Add(new NpgsqlParameter { Value = tabelle });
+                ((bool)(await cmd.ExecuteScalarAsync())!).Should().BeTrue($"die Tabelle {tabelle} des Read-Models {rm.Typ.Name} steht nach dem Start");
+            }
+            await using (var cmd = new NpgsqlCommand(
+                $"select exists(select 1 from pg_trigger where tgname = '{EventZeit.Regel}' and tgrelid = 'es.mt_events'::regclass)", conn))
+                ((bool)(await cmd.ExecuteScalarAsync())!).Should().BeTrue("die Regel für den Event-Zeitstempel steht nach dem Start");
+        }
+        finally
+        {
+            await host.StopAsync();
+            await LoescheDatenbankAsync(db);
+            try { Directory.Delete(verz, true); } catch { /* egal */ }
+        }
+    }
+
     [Fact]
     public async Task Zwei_Umgebungen_parallel_stoeren_sich_nicht()
     {

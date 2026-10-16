@@ -17,7 +17,6 @@ hierher. Stand: 2026-10-16, nach Phase 4 des Plans Garantien und Durchsatz und P
 | PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16 | P3 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
 | PF-17 | Kosten von Horizont und Zeitstempel-Regel (G-9, G-10): je Probe bzw. Prüfung ≈ 0,45 ms (S1 3 ms je Paar, mehr als erwartet), je Event-Insert ≈ 7–10 µs (Prod) bzw. 20–35 µs (Sim, Versatz je Zeile aus `uhr`) | P3 |
-| PF-18 | Schema wird im Betrieb lazy angelegt: ein Standalone-Host legt Tabellen und Funktionen eines Dokumenttyps erst beim ersten Zugriff an, mitten im Verkehr (S4 in Prod 0,2 s länger; in Sim verdeckt, weil der Abgleich der Leseseite beim Start alles anlegt) | P2 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
 | W10-2 | Reflektive Serialisierung zur Laufzeit (Marten-Default, Marking-Store, Snapshot-`Clone`, HTTP-Antworten); kein Reflection-Verbot im Build | P1 |
@@ -227,13 +226,6 @@ Aufrufe, wenn die Position weit zurückliegt). Die Zeitstempel-Regel kostet in S
 aus `uhr` liest. *Optionen:* den Versatz je Transaktion einmal lesen (`set_config(…, true)`), in Prod misst nur die Datenbankzeit; für die Proben
 `EXPLAIN ANALYZE` unter Last. Wirkung Ende zu Ende im Band der Einzelläufe.
 
-**PF-18 · Schema lazy im Betrieb.** Mit `AutoCreate.CreateOrUpdate` (Rolle Standalone) prüft und legt Marten das Schema eines Dokumenttyps beim
-ersten Zugriff an: Tabellen-Inspektion, Funktionsvergleich, `CREATE TABLE`, `CREATE OR REPLACE FUNCTION` — Runden und DDL-Sperren mitten im Verkehr.
-Gemessen in S4 (Art Prod, frische DB): vier Dokumenttypen, Range aufnehmen und Einfrieren je 0,3 statt 0,1/0,2 s. In Sim verdeckt der Abgleich der
-Leseseite das (er leert beim Start alle Read-Models und legt sie dabei an); im Cluster legt der Migrator alles vorab an. *Empfehlung:* auch
-Standalone beim Start das ganze Schema anlegen (`ApplyAllConfiguredChangesToDatabaseAsync`, wie der Migrator, vor den Hosted Services) — eine
-Rechnung beim Start statt Sperren im Betrieb, und die Messung misst den eingeschwungenen Zustand.
-
 **G-5 · Versionszählung bei Split-Upcasts.** `AggregateRehydrator` zählt `Version++` je materialisiertem Event; ein Split-Upcast liefert aus
 einer gespeicherten Position mehrere Events (`MartenEventStore`, `SubIndex`), die Version läuft dem Log davon, und jeder Append scheitert.
 Latent: heute gibt es keinen Split-Upcast. *Empfehlung:* je gespeicherter Position zählen (`AggregateVersion`), Prüfstand-Test mit Split.
@@ -312,6 +304,16 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 10. **P1-1/P1-2/AK-1** Produktionshärtung (TLS, Identitäten, Consul, durable Client-Zustellung).
 
 ## 13.6 Erledigt (früher hier offen)
+
+- **PF-18 · Schema lazy im Betrieb (2026-10-17; docs/03 §3.3):** ein Standalone-Host legte Tabellen und Funktionen eines Dokumenttyps erst beim
+  ersten Zugriff an, mitten im Verkehr (gemessen: S4 in Art Prod 0,2 s länger; in Sim verdeckt, weil der Abgleich der Leseseite beim Start alle
+  Read-Models leert und dabei anlegt). Jetzt legt `SchemaBeimStart` (Rolle Standalone, nach dem Siegel, vor allen übrigen Diensten) das ganze
+  Schema an — derselbe Weg wie der Migrator im Cluster (`CqrsSchemaMigrator.ApplyAllAsync`), der nun auch die Read-Models anlegt: Marten kennt sie
+  erst beim ersten Zugriff, ein Mitglied ohne Schema-Recht hätte ihre Tabellen nie gefunden. Die Regel für den Event-Zeitstempel wird nur noch
+  geschrieben, wenn sie fehlt oder anders lautet, und dann mit Sperrfrist: ein `create or replace trigger` bei jedem Start kollidierte mit Inserts
+  des noch laufenden alten Hosts (Werkbank-Abnahme: Host antwortete 90 s nicht, zeitweise). Nachweis: I
+  `UmgebungE2ETests.Ein_Prod_Host_legt_das_ganze_Schema_beim_Start_an` (ohne den Schritt rot gesehen),
+  `EventZeitPostgresTests.Ein_unveraenderter_Stand_fasst_die_Regel_beim_Start_nicht_an`; Werkbank-Abnahme dreimal grün.
 
 - **G-9 · Eine lange offene Transaktion überholte die Positionen (2026-10-16; docs/03 §3.3, docs/04 §4.1.1, docs/11 §11.4):** Batch-Leser,
   Prozess-Poll und Poll der Emittenten rückten ihre Marke bis zur höchsten Sequenz vor, deren Event älter als 3 s war (Karenz gegen den

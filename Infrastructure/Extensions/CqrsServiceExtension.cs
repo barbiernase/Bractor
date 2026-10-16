@@ -260,6 +260,11 @@ public static class CqrsServiceExtensions
             + (builder.AppendBatching ? $" + Group-Commit-Batching (max {builder.AppendBatchMaxSize})" : ""));
         Console.WriteLine($"    Schema: {builder.EventStoreSchema}");
 
+        // PF-18: Standalone legt das ganze Schema beim Start an (der Migrator im Cluster tut es vorab, Mitglieder nie) — vor allen übrigen
+        //   Hosted Services dieses Frameworks, damit nichts das Schema mitten im Verkehr anlegt.
+        if (builder.SchemaRole == MartenSchemaRole.Standalone)
+            services.AddHostedService<SchemaBeimStart>();
+
         // Horizont der Inbox (E2): ältere Quittungen räumt ein Dienst je Knoten ab (Lease über einen Advisory-Lock).
         services.AddHostedService(provider => new InboxAufraeumer(
             provider.GetRequiredService<IDocumentStore>(), builder.InboxHorizont, provider.GetService<ILogger<InboxAufraeumer>>()));

@@ -59,10 +59,19 @@ public static class EventZeit
     public static Task AnlegenAsync(IDocumentStore store, CancellationToken ct)
         => AnlegenAsync(store, store.Options.Events.DatabaseSchemaName, Uhr(store), ct);
 
+    /// <summary>Der Rumpf der Regel — so, wie Postgres ihn speichert (<c>pg_proc.prosrc</c>), damit ein unveränderter Stand nichts anfasst.</summary>
+    private static string Rumpf(string uhr) => $"\nbegin\n    new.timestamp := {uhr};\n    return new;\nend\n";
+
+    /// <summary>
+    /// Legt Funktion und Trigger an — nur, wenn sie fehlen oder anders lauten: ein <c>create or replace trigger</c> braucht eine Sperre auf
+    /// <c>mt_events</c>, die mit laufenden Inserts kollidiert und alle folgenden hinter sich warten lässt; beim Neustart eines Hosts schreibt der
+    /// alte oft noch. Wenn doch, dann mit Sperrfrist — ein Start hängt nie unbegrenzt, er scheitert laut.
+    /// </summary>
     private static async Task AnlegenAsync(IDocumentStore store, string schema, string uhr, CancellationToken ct)
     {
         await using var conn = store.Storage.Database.CreateConnection();
         await conn.OpenAsync(ct);
+        if (await AktuellAsync(conn, schema, uhr, ct)) return;
         await using var tx = await conn.BeginTransactionAsync(ct);
         await using (var cmd = new NpgsqlCommand
         {
@@ -70,19 +79,29 @@ public static class EventZeit
             Transaction = tx,
             // Mehrere Knoten starten gleichzeitig: die Sperre reiht ihr Anlegen hintereinander.
             CommandText = $"""
+                set local lock_timeout = '10s';
                 select pg_advisory_xact_lock(hashtext('{schema}.{Regel}'));
-                create or replace function "{schema}".{Regel}() returns trigger language plpgsql as $f$
-                begin
-                    new.timestamp := {uhr};
-                    return new;
-                end
-                $f$;
+                create or replace function "{schema}".{Regel}() returns trigger language plpgsql as $f${Rumpf(uhr)}$f$;
                 create or replace trigger {Regel} before insert on "{schema}".mt_events
                     for each row execute function "{schema}".{Regel}();
                 """,
         })
             await cmd.ExecuteNonQueryAsync(ct);
         await tx.CommitAsync(ct);
+    }
+
+    /// <summary>Ob Trigger und Funktion schon so stehen, wie sie stehen sollen (eine Leseabfrage, keine Sperre auf <c>mt_events</c>).</summary>
+    private static async Task<bool> AktuellAsync(NpgsqlConnection conn, string schema, string uhr, CancellationToken ct)
+    {
+        await using var cmd = new NpgsqlCommand(
+            "select (select p.prosrc from pg_proc p join pg_namespace n on n.oid = p.pronamespace where n.nspname = $2 and p.proname = $1), "
+            + "exists(select 1 from pg_trigger t join pg_class c on c.oid = t.tgrelid join pg_namespace n on n.oid = c.relnamespace "
+            + "where t.tgname = $1 and c.relname = 'mt_events' and n.nspname = $2)", conn);
+        cmd.Parameters.Add(new NpgsqlParameter { Value = Regel });
+        cmd.Parameters.Add(new NpgsqlParameter { Value = schema });
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        await r.ReadAsync(ct);
+        return !r.IsDBNull(0) && r.GetString(0) == Rumpf(uhr) && r.GetBoolean(1);
     }
 
     private static async Task<bool> VorhandenAsync(IDocumentStore store, string schema, CancellationToken ct)

@@ -165,7 +165,11 @@ nicht aus Namespaces (`CommandAggregateMapGenerator`).
 - **OCC**: `EventStreamUnexpectedMaxEventIdException` und die Doppel-Erstellung werden zu `ConcurrencyException`.
 - **Zeitstempel** (G-10): den setzt die Datenbank beim Einfügen, mit derselben Uhr, die `IDbClock` liest (`EventZeit`, Regel `before insert` auf
   `mt_events`; Ausdruck `UmgebungsDbClock.Ausdruck`, in Sim samt Versatz). Marten schickt die Uhr des Hosts mit, die Regel ersetzt sie. Angelegt
-  vor dem ersten Schreiben je Store bzw. vom Migrator (Weasel kennt keine Trigger); ein Mitglied ohne Schema-Recht prüft nur, dass sie da ist.
+  beim Start mit dem übrigen Schema bzw. vom Migrator, sonst vor dem ersten Schreiben je Store (Weasel kennt keine Trigger) — geschrieben nur, wenn
+  sie fehlt oder anders lautet, mit Sperrfrist; ein Mitglied ohne Schema-Recht prüft nur, dass sie da ist.
+- **Schema beim Start** (PF-18): ein Standalone-Host legt vor allen übrigen Diensten das ganze Schema an (`SchemaBeimStart`), der Migrator im
+  Cluster ebenso (`CqrsSchemaMigrator.ApplyAllAsync`): Martens konfigurierte Objekte, die Read-Models aus der generierten Liste (Marten kennt sie
+  sonst erst beim ersten Zugriff) und die Regel für den Event-Zeitstempel. Im Verkehr entsteht kein Schema mehr.
 - **Metadaten** in **derselben** Transaktion: `CorrelationId`, `CausationId` und die Header
   - `aggregate_type` — der Aggregat-Typ,
   - `akteur` — der Akteur der Kette (`ImAuftrag.Header`; reist mit den Events zu Flüssen, Prozessen, Fristen),
