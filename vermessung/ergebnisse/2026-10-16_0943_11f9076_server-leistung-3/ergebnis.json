@@ -1,0 +1,1651 @@
+{
+  "art": "leistung",
+  "format": 2,
+  "anlass": "server-leistung-3",
+  "skript": "scripts/vermessung-e2e.sh --anlass server-leistung-3",
+  "zeit": "2026-10-16T07:43:15.7985552+00:00",
+  "commit": "11f9076",
+  "branch": "HEAD",
+  "arbeitsbaum": "sauber",
+  "rechner": "Ubuntu-noble-latest-amd64-base, Ubuntu 24.04.4 LTS, 13th Gen Intel(R) Core(TM) i5-13500, 20 Kerne, 62 GiB",
+  "umgebungen": [
+    "vermessung",
+    "vermessung-pruefdomaene"
+  ],
+  "parameter": {
+    "wiederholungen": 3,
+    "fenster_s": 15,
+    "abbau_frist_s": 120,
+    "warmlauf_s": 30,
+    "bildeingang": "Stoß von 600 TIFF-Paaren (96 × 64), ein Sender",
+    "heiss": "2000 Teile von 64 Sendern an EINEN Sammelvorgang (N = 1 000 000), je Teil StarteTeilauftrag + SchließeTeilauftragAb",
+    "verteilt": "Prüfdomäne, ruhig: 1 Sender, höchstens 1000 Vorgänge; Decke: 64 Sender, höchstens 3000 Vorgänge; je 10 Vorgänge 8 Aufträge, 1 Auftrag gegen ein volles Kontingent (Kompensation), 1 Verteilung auf 4 Ziele; 50 Posten, 20 Ziele",
+    "neuaufbau": "Host gestoppt, der gespeicherte Projektions-Stand gelöscht (wirkt wie eine Code-Änderung in Sim), Host gestartet: alle Projektionen lesen das Log ab 0; Dauer vom ersten Abbau bis kein Rückstand (/monitoring/metrics, alle 50 ms); dreimal",
+    "leerlauf_s": 60,
+    "leerlauf": "erst nach dem Nachlauf (alle Poll-Cursor und Projektions-Positionen am Kopf des Logs, höchstens nachlauf_frist_s), dann das Fenster",
+    "nachlauf_frist_s": 180,
+    "sichtbar": "Bildeingang: Query GetImagePair je offenem Paar (komplett), alle 100 ms; Heiß: TeilVerbucht im Log; Verteilt: ProzessBeendet im Log",
+    "transaktionen": "COMMITs aus pg_stat_statements (track = top); Queries = übrige Statements ohne BEGIN/COMMIT/ROLLBACK/DISCARD/SET/SHOW; ohne die Lese-Rolle des Treibers",
+    "cpu_ms_je_vorgang": "mittlere CPU des Hosts im Fenster × Dauer des Fensters / Vorgänge"
+  },
+  "spalten": [
+    {
+      "tabelle": "last",
+      "key": "durchsatz_je_s",
+      "titel": "Durchsatz (/s)"
+    },
+    {
+      "tabelle": "last",
+      "key": "angenommen_je_s",
+      "titel": "Schreiben angenommen (/s)"
+    },
+    {
+      "tabelle": "last",
+      "key": "latenz_p50_ms",
+      "titel": "Latenz p50 (ms)"
+    },
+    {
+      "tabelle": "last",
+      "key": "latenz_p99_ms",
+      "titel": "Latenz p99 (ms)"
+    },
+    {
+      "tabelle": "last",
+      "key": "reaktion_p99_ms",
+      "titel": "Reaktion p99 (ms)"
+    },
+    {
+      "tabelle": "last",
+      "key": "tx_je_vorgang",
+      "titel": "Transaktionen je Vorgang"
+    },
+    {
+      "tabelle": "last",
+      "key": "queries_je_vorgang",
+      "titel": "Queries je Vorgang"
+    },
+    {
+      "tabelle": "last",
+      "key": "cpu_ms_je_vorgang",
+      "titel": "CPU je Vorgang (ms)"
+    },
+    {
+      "tabelle": "ruhe",
+      "key": "queries_je_s",
+      "titel": "Queries (/s)"
+    },
+    {
+      "tabelle": "ruhe",
+      "key": "cpu_prozent",
+      "titel": "CPU (% eines Kerns)"
+    },
+    {
+      "tabelle": "ruhe",
+      "key": "nachlauf_s",
+      "titel": "Nachlauf (s)"
+    },
+    {
+      "tabelle": "ruhe",
+      "key": "rss_ende_mb",
+      "titel": "RSS am Ende (MB)"
+    },
+    {
+      "tabelle": "ruhe",
+      "key": "events_je_s",
+      "titel": "Neuaufbau (Events/s)"
+    },
+    {
+      "tabelle": "ruhe",
+      "key": "dauer_s",
+      "titel": "Neuaufbau (s)"
+    },
+    {
+      "tabelle": "ruhe",
+      "key": "events",
+      "titel": "Neuaufbau (Events)"
+    }
+  ],
+  "fremdlast_vorher": "Last 3.15 2.86 2.15 1/687 251673\n · CPU-stärkste: 100 ps;22.8 dotnet; 1.9 consul; 1.3 redis-server; 1.1 redis-server",
+  "fremdlast_nachher": "Last 1.90 2.90 2.47 2/646 258825\n · CPU-stärkste: 5.4 dotnet; 3.3 postgres; 1.9 consul; 1.4 postgres; 1.3 redis-server",
+  "szenarien": {
+    "Bildeingang": {
+      "titel": "Bildeingang: Quelle, Fluss, Projektion (Paare)",
+      "tabelle": "last",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "durchsatz_je_s": 85.016,
+            "angenommen_je_s": 3992.337,
+            "latenz_p50_ms": 3503.834,
+            "latenz_p99_ms": 6807.194,
+            "rueckstand": 600,
+            "abbau_s": 6.907,
+            "abgebaut": 1,
+            "fehler": 0,
+            "tx_je_s": 1782.4,
+            "queries_je_s": 12312.334,
+            "queries": 87438,
+            "tx_je_vorgang": 21.097,
+            "queries_je_vorgang": 145.73,
+            "cpu_prozent": 1001.626,
+            "rss_mb": 1683.273,
+            "xact_je_s_info": 9238.405,
+            "cpu_ms_je_vorgang": 118.557,
+            "rss_ende_mb": 1661.836,
+            "rss_lauf_max_mb": 1683.273,
+            "rss_ende_anteil": 0.987,
+            "aktive_actors": 2254,
+            "aktive_actors_hoechst": 2254
+          },
+          "details": {
+            "block": {
+              "sender": 1,
+              "angenommen": 600,
+              "fehler": 0,
+              "sichtbar": 600,
+              "fenster_s": 0.15,
+              "abbau_s": 6.907,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 5.09 3.26 2.31 1/865 252547\n · CPU-stärkste: 209 dotnet;20.5 dotnet;12.5 postgres; 8.0 dotnet; 7.6 postgres"
+          }
+        },
+        {
+          "kennzahlen": {
+            "durchsatz_je_s": 81.885,
+            "angenommen_je_s": 4011.518,
+            "latenz_p50_ms": 3642.794,
+            "latenz_p99_ms": 7177.884,
+            "rueckstand": 597,
+            "abbau_s": 7.178,
+            "abgebaut": 1,
+            "fehler": 0,
+            "tx_je_s": 1705.022,
+            "queries_je_s": 11888.53,
+            "queries": 87716,
+            "tx_je_vorgang": 20.967,
+            "queries_je_vorgang": 146.193,
+            "cpu_prozent": 913.976,
+            "rss_mb": 1963.102,
+            "xact_je_s_info": 9321.374,
+            "cpu_ms_je_vorgang": 112.392,
+            "rss_ende_mb": 1961.895,
+            "rss_lauf_max_mb": 1963.102,
+            "rss_ende_anteil": 0.999,
+            "aktive_actors": 8066,
+            "aktive_actors_hoechst": 8066
+          },
+          "details": {
+            "block": {
+              "sender": 1,
+              "angenommen": 600,
+              "fehler": 0,
+              "sichtbar": 600,
+              "fenster_s": 0.15,
+              "abbau_s": 7.178,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 6.68 3.67 2.46 1/934 252779\n · CPU-stärkste: 328 dotnet;20.1 dotnet;11.7 dotnet; 5.9 postgres; 5.8 postgres"
+          }
+        },
+        {
+          "kennzahlen": {
+            "durchsatz_je_s": 76.816,
+            "angenommen_je_s": 7059.762,
+            "latenz_p50_ms": 4220.679,
+            "latenz_p99_ms": 7622.986,
+            "rueckstand": 600,
+            "abbau_s": 7.726,
+            "abgebaut": 1,
+            "fehler": 0,
+            "tx_je_s": 1592.24,
+            "queries_je_s": 11421.479,
+            "queries": 89658,
+            "tx_je_vorgang": 20.832,
+            "queries_je_vorgang": 149.43,
+            "cpu_prozent": 945.58,
+            "rss_mb": 2056.34,
+            "xact_je_s_info": 8855.347,
+            "cpu_ms_je_vorgang": 123.713,
+            "rss_ende_mb": 2053.754,
+            "rss_lauf_max_mb": 2056.34,
+            "rss_ende_anteil": 0.999,
+            "aktive_actors": 13867,
+            "aktive_actors_hoechst": 13867
+          },
+          "details": {
+            "block": {
+              "sender": 1,
+              "angenommen": 600,
+              "fehler": 0,
+              "sichtbar": 600,
+              "fenster_s": 0.085,
+              "abbau_s": 7.726,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 8.47 4.10 2.60 3/932 253004\n · CPU-stärkste: 409 dotnet;19.6 dotnet;14.0 dotnet; 5.4 postgres; 5.4 postgres"
+          }
+        }
+      ],
+      "median": {
+        "durchsatz_je_s": 81.885,
+        "angenommen_je_s": 4011.518,
+        "latenz_p50_ms": 3642.794,
+        "latenz_p99_ms": 7177.884,
+        "rueckstand": 600,
+        "abbau_s": 7.178,
+        "abgebaut": 1,
+        "fehler": 0,
+        "tx_je_s": 1705.022,
+        "queries_je_s": 11888.53,
+        "queries": 87716,
+        "tx_je_vorgang": 20.967,
+        "queries_je_vorgang": 146.193,
+        "cpu_prozent": 945.58,
+        "rss_mb": 1963.102,
+        "xact_je_s_info": 9238.405,
+        "cpu_ms_je_vorgang": 118.557,
+        "rss_ende_mb": 1961.895,
+        "rss_lauf_max_mb": 1963.102,
+        "rss_ende_anteil": 0.999,
+        "aktive_actors": 8066,
+        "aktive_actors_hoechst": 8066
+      },
+      "min": {
+        "durchsatz_je_s": 76.816,
+        "angenommen_je_s": 3992.337,
+        "latenz_p50_ms": 3503.834,
+        "latenz_p99_ms": 6807.194,
+        "rueckstand": 597,
+        "abbau_s": 6.907,
+        "abgebaut": 1,
+        "fehler": 0,
+        "tx_je_s": 1592.24,
+        "queries_je_s": 11421.479,
+        "queries": 87438,
+        "tx_je_vorgang": 20.832,
+        "queries_je_vorgang": 145.73,
+        "cpu_prozent": 913.976,
+        "rss_mb": 1683.273,
+        "xact_je_s_info": 8855.347,
+        "cpu_ms_je_vorgang": 112.392,
+        "rss_ende_mb": 1661.836,
+        "rss_lauf_max_mb": 1683.273,
+        "rss_ende_anteil": 0.987,
+        "aktive_actors": 2254,
+        "aktive_actors_hoechst": 2254
+      },
+      "max": {
+        "durchsatz_je_s": 85.016,
+        "angenommen_je_s": 7059.762,
+        "latenz_p50_ms": 4220.679,
+        "latenz_p99_ms": 7622.986,
+        "rueckstand": 600,
+        "abbau_s": 7.726,
+        "abgebaut": 1,
+        "fehler": 0,
+        "tx_je_s": 1782.4,
+        "queries_je_s": 12312.334,
+        "queries": 89658,
+        "tx_je_vorgang": 21.097,
+        "queries_je_vorgang": 149.43,
+        "cpu_prozent": 1001.626,
+        "rss_mb": 2056.34,
+        "xact_je_s_info": 9321.374,
+        "cpu_ms_je_vorgang": 123.713,
+        "rss_ende_mb": 2053.754,
+        "rss_lauf_max_mb": 2056.34,
+        "rss_ende_anteil": 0.999,
+        "aktive_actors": 13867,
+        "aktive_actors_hoechst": 13867
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": [
+          {
+            "name": "je Datei genau eine Quell-Nachricht im Log",
+            "ok": true,
+            "soll": "1220",
+            "ist": "1220",
+            "wiederholung": 1
+          },
+          {
+            "name": "keine Datei zweimal gemeldet",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "je Paar genau ein ImagePairErstellt",
+            "ok": true,
+            "soll": "610",
+            "ist": "610",
+            "wiederholung": 1
+          },
+          {
+            "name": "BildVerfuegbar genau einmal je Bild (2 je Paar)",
+            "ok": true,
+            "soll": "1220",
+            "ist": "1220",
+            "wiederholung": 1
+          },
+          {
+            "name": "kein Paar mit mehr als 2 BildVerfuegbar",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "je Paar genau ein ImagePairKomplett",
+            "ok": true,
+            "soll": "610",
+            "ist": "610",
+            "wiederholung": 1
+          },
+          {
+            "name": "Read-Model: komplette Paare = ImagePairKomplett im Log",
+            "ok": true,
+            "soll": "610",
+            "ist": "610",
+            "wiederholung": 1
+          },
+          {
+            "name": "Read-Model: Paare = ImagePairErstellt im Log",
+            "ok": true,
+            "soll": "610",
+            "ist": "610",
+            "wiederholung": 1
+          },
+          {
+            "name": "je Datei genau eine Quell-Nachricht im Log",
+            "ok": true,
+            "soll": "1200",
+            "ist": "1200",
+            "wiederholung": 2
+          },
+          {
+            "name": "keine Datei zweimal gemeldet",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 2
+          },
+          {
+            "name": "je Paar genau ein ImagePairErstellt",
+            "ok": true,
+            "soll": "600",
+            "ist": "600",
+            "wiederholung": 2
+          },
+          {
+            "name": "BildVerfuegbar genau einmal je Bild (2 je Paar)",
+            "ok": true,
+            "soll": "1200",
+            "ist": "1200",
+            "wiederholung": 2
+          },
+          {
+            "name": "kein Paar mit mehr als 2 BildVerfuegbar",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 2
+          },
+          {
+            "name": "je Paar genau ein ImagePairKomplett",
+            "ok": true,
+            "soll": "600",
+            "ist": "600",
+            "wiederholung": 2
+          },
+          {
+            "name": "Read-Model: komplette Paare = ImagePairKomplett im Log",
+            "ok": true,
+            "soll": "1210",
+            "ist": "1210",
+            "wiederholung": 2
+          },
+          {
+            "name": "Read-Model: Paare = ImagePairErstellt im Log",
+            "ok": true,
+            "soll": "1210",
+            "ist": "1210",
+            "wiederholung": 2
+          },
+          {
+            "name": "je Datei genau eine Quell-Nachricht im Log",
+            "ok": true,
+            "soll": "1200",
+            "ist": "1200",
+            "wiederholung": 3
+          },
+          {
+            "name": "keine Datei zweimal gemeldet",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 3
+          },
+          {
+            "name": "je Paar genau ein ImagePairErstellt",
+            "ok": true,
+            "soll": "600",
+            "ist": "600",
+            "wiederholung": 3
+          },
+          {
+            "name": "BildVerfuegbar genau einmal je Bild (2 je Paar)",
+            "ok": true,
+            "soll": "1200",
+            "ist": "1200",
+            "wiederholung": 3
+          },
+          {
+            "name": "kein Paar mit mehr als 2 BildVerfuegbar",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 3
+          },
+          {
+            "name": "je Paar genau ein ImagePairKomplett",
+            "ok": true,
+            "soll": "600",
+            "ist": "600",
+            "wiederholung": 3
+          },
+          {
+            "name": "Read-Model: komplette Paare = ImagePairKomplett im Log",
+            "ok": true,
+            "soll": "1810",
+            "ist": "1810",
+            "wiederholung": 3
+          },
+          {
+            "name": "Read-Model: Paare = ImagePairErstellt im Log",
+            "ok": true,
+            "soll": "1810",
+            "ist": "1810",
+            "wiederholung": 3
+          }
+        ]
+      }
+    },
+    "Heiss": {
+      "titel": "Heißer Schreiber: ein Sammelvorgang, 64 Sender (Teile)",
+      "tabelle": "last",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "durchsatz_je_s": 963.628,
+            "angenommen_je_s": 1993.282,
+            "latenz_p50_ms": 823.625,
+            "latenz_p99_ms": 1085.654,
+            "rueckstand": 1695,
+            "abbau_s": 1.072,
+            "abgebaut": 1,
+            "fehler": 0,
+            "tx_je_s": 951.726,
+            "queries_je_s": 15836.226,
+            "queries": 33462,
+            "tx_je_vorgang": 1.006,
+            "queries_je_vorgang": 16.731,
+            "cpu_prozent": 550.936,
+            "rss_mb": 1882.23,
+            "xact_je_s_info": 5835.769,
+            "cpu_ms_je_vorgang": 5.821,
+            "rss_ende_mb": 1882.23,
+            "rss_lauf_max_mb": 1882.23,
+            "rss_ende_anteil": 1,
+            "aktive_actors": 6266,
+            "aktive_actors_hoechst": 6266
+          },
+          "details": {
+            "block": {
+              "sender": 64,
+              "angenommen": 2000,
+              "fehler": 0,
+              "sichtbar": 2000,
+              "fenster_s": 1.003,
+              "abbau_s": 1.072,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 5.09 3.26 2.31 1/932 252655\n · CPU-stärkste: 219 dotnet;20.4 dotnet; 9.4 dotnet; 6.5 postgres; 6.3 postgres"
+          }
+        },
+        {
+          "kennzahlen": {
+            "durchsatz_je_s": 1327.133,
+            "angenommen_je_s": 2983.56,
+            "latenz_p50_ms": 650.831,
+            "latenz_p99_ms": 861.573,
+            "rueckstand": 1679,
+            "abbau_s": 0.837,
+            "abgebaut": 1,
+            "fehler": 0,
+            "tx_je_s": 1382.863,
+            "queries_je_s": 19724.683,
+            "queries": 33434,
+            "tx_je_vorgang": 1.172,
+            "queries_je_vorgang": 16.717,
+            "cpu_prozent": 433.241,
+            "rss_mb": 2025.586,
+            "xact_je_s_info": 5419.362,
+            "cpu_ms_je_vorgang": 3.672,
+            "rss_ende_mb": 2025.586,
+            "rss_lauf_max_mb": 2025.586,
+            "rss_ende_anteil": 1,
+            "aktive_actors": 12067,
+            "aktive_actors_hoechst": 12067
+          },
+          "details": {
+            "block": {
+              "sender": 64,
+              "angenommen": 2000,
+              "fehler": 0,
+              "sichtbar": 2000,
+              "fenster_s": 0.67,
+              "abbau_s": 0.837,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 6.68 3.67 2.46 3/936 252832\n · CPU-stärkste: 329 dotnet;20.0 dotnet;12.3 dotnet; 5.7 postgres; 5.5 postgres"
+          }
+        },
+        {
+          "kennzahlen": {
+            "durchsatz_je_s": 1043.935,
+            "angenommen_je_s": 3194.941,
+            "latenz_p50_ms": 841.129,
+            "latenz_p99_ms": 1304.464,
+            "rueckstand": 1789,
+            "abbau_s": 1.29,
+            "abgebaut": 1,
+            "fehler": 0,
+            "tx_je_s": 1012.247,
+            "queries_je_s": 15662.199,
+            "queries": 33452,
+            "tx_je_vorgang": 1.081,
+            "queries_je_vorgang": 16.726,
+            "cpu_prozent": 371.65,
+            "rss_mb": 2101.113,
+            "xact_je_s_info": 6918.579,
+            "cpu_ms_je_vorgang": 3.969,
+            "rss_ende_mb": 2101.113,
+            "rss_lauf_max_mb": 2101.113,
+            "rss_ende_anteil": 1,
+            "aktive_actors": 17868,
+            "aktive_actors_hoechst": 17868
+          },
+          "details": {
+            "block": {
+              "sender": 64,
+              "angenommen": 2000,
+              "fehler": 0,
+              "sichtbar": 2000,
+              "fenster_s": 0.626,
+              "abbau_s": 1.29,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 10.03 4.49 2.74 3/912 253065\n · CPU-stärkste: 407 dotnet;19.5 dotnet;14.4 dotnet; 5.4 postgres; 5.3 postgres"
+          }
+        }
+      ],
+      "median": {
+        "durchsatz_je_s": 1043.935,
+        "angenommen_je_s": 2983.56,
+        "latenz_p50_ms": 823.625,
+        "latenz_p99_ms": 1085.654,
+        "rueckstand": 1695,
+        "abbau_s": 1.072,
+        "abgebaut": 1,
+        "fehler": 0,
+        "tx_je_s": 1012.247,
+        "queries_je_s": 15836.226,
+        "queries": 33452,
+        "tx_je_vorgang": 1.081,
+        "queries_je_vorgang": 16.726,
+        "cpu_prozent": 433.241,
+        "rss_mb": 2025.586,
+        "xact_je_s_info": 5835.769,
+        "cpu_ms_je_vorgang": 3.969,
+        "rss_ende_mb": 2025.586,
+        "rss_lauf_max_mb": 2025.586,
+        "rss_ende_anteil": 1,
+        "aktive_actors": 12067,
+        "aktive_actors_hoechst": 12067
+      },
+      "min": {
+        "durchsatz_je_s": 963.628,
+        "angenommen_je_s": 1993.282,
+        "latenz_p50_ms": 650.831,
+        "latenz_p99_ms": 861.573,
+        "rueckstand": 1679,
+        "abbau_s": 0.837,
+        "abgebaut": 1,
+        "fehler": 0,
+        "tx_je_s": 951.726,
+        "queries_je_s": 15662.199,
+        "queries": 33434,
+        "tx_je_vorgang": 1.006,
+        "queries_je_vorgang": 16.717,
+        "cpu_prozent": 371.65,
+        "rss_mb": 1882.23,
+        "xact_je_s_info": 5419.362,
+        "cpu_ms_je_vorgang": 3.672,
+        "rss_ende_mb": 1882.23,
+        "rss_lauf_max_mb": 1882.23,
+        "rss_ende_anteil": 1,
+        "aktive_actors": 6266,
+        "aktive_actors_hoechst": 6266
+      },
+      "max": {
+        "durchsatz_je_s": 1327.133,
+        "angenommen_je_s": 3194.941,
+        "latenz_p50_ms": 841.129,
+        "latenz_p99_ms": 1304.464,
+        "rueckstand": 1789,
+        "abbau_s": 1.29,
+        "abgebaut": 1,
+        "fehler": 0,
+        "tx_je_s": 1382.863,
+        "queries_je_s": 19724.683,
+        "queries": 33462,
+        "tx_je_vorgang": 1.172,
+        "queries_je_vorgang": 16.731,
+        "cpu_prozent": 550.936,
+        "rss_mb": 2101.113,
+        "xact_je_s_info": 6918.579,
+        "cpu_ms_je_vorgang": 5.821,
+        "rss_ende_mb": 2101.113,
+        "rss_lauf_max_mb": 2101.113,
+        "rss_ende_anteil": 1,
+        "aktive_actors": 17868,
+        "aktive_actors_hoechst": 17868
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": [
+          {
+            "name": "Heiß 1: Fertig = Zahl der TeilVerbucht (Sammelvorgänge mit Abweichung)",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "Heiß 1: TeilVerbucht = gestartete Teile",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 1
+          },
+          {
+            "name": "Heiß 1: kein Sammelvorgang mit mehr TeilVerbucht als Teilen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "Heiß 1: Barriere nur bei vollen Sammelvorgängen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "Heiß 1: je Teil genau ein TeilauftragAbgeschlossen",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 1
+          },
+          {
+            "name": "Heiß 1: kein Teil zweimal abgeschlossen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "Heiß 1: je Teil ein erfolgreich beendeter Vorgang",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 1
+          },
+          {
+            "name": "Heiß 1: kein Vorgang zweimal beendet",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 1
+          },
+          {
+            "name": "Heiß 2: Fertig = Zahl der TeilVerbucht (Sammelvorgänge mit Abweichung)",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 2
+          },
+          {
+            "name": "Heiß 2: TeilVerbucht = gestartete Teile",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 2
+          },
+          {
+            "name": "Heiß 2: kein Sammelvorgang mit mehr TeilVerbucht als Teilen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 2
+          },
+          {
+            "name": "Heiß 2: Barriere nur bei vollen Sammelvorgängen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 2
+          },
+          {
+            "name": "Heiß 2: je Teil genau ein TeilauftragAbgeschlossen",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 2
+          },
+          {
+            "name": "Heiß 2: kein Teil zweimal abgeschlossen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 2
+          },
+          {
+            "name": "Heiß 2: je Teil ein erfolgreich beendeter Vorgang",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 2
+          },
+          {
+            "name": "Heiß 2: kein Vorgang zweimal beendet",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 2
+          },
+          {
+            "name": "Heiß 3: Fertig = Zahl der TeilVerbucht (Sammelvorgänge mit Abweichung)",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 3
+          },
+          {
+            "name": "Heiß 3: TeilVerbucht = gestartete Teile",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 3
+          },
+          {
+            "name": "Heiß 3: kein Sammelvorgang mit mehr TeilVerbucht als Teilen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 3
+          },
+          {
+            "name": "Heiß 3: Barriere nur bei vollen Sammelvorgängen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 3
+          },
+          {
+            "name": "Heiß 3: je Teil genau ein TeilauftragAbgeschlossen",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 3
+          },
+          {
+            "name": "Heiß 3: kein Teil zweimal abgeschlossen",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 3
+          },
+          {
+            "name": "Heiß 3: je Teil ein erfolgreich beendeter Vorgang",
+            "ok": true,
+            "soll": "2000",
+            "ist": "2000",
+            "wiederholung": 3
+          },
+          {
+            "name": "Heiß 3: kein Vorgang zweimal beendet",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 3
+          }
+        ]
+      }
+    },
+    "Verteilt-1": {
+      "titel": "Verteilt ruhig: Prüfdomäne, 1 Sender (Vorgänge)",
+      "tabelle": "last",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "durchsatz_je_s": 281,
+            "angenommen_je_s": 282.003,
+            "latenz_p50_ms": 17.078,
+            "latenz_p99_ms": 36.345,
+            "rueckstand": 56,
+            "abbau_s": 0.013,
+            "abgebaut": 1,
+            "fehler": 0,
+            "tx_je_s": 2017.87,
+            "queries_je_s": 9720.449,
+            "queries": 35493,
+            "tx_je_vorgang": 7.368,
+            "queries_je_vorgang": 35.493,
+            "cpu_prozent": 467.859,
+            "rss_mb": 1049.504,
+            "xact_je_s_info": 4978.947,
+            "cpu_ms_je_vorgang": 17.083,
+            "rss_ende_mb": 1049.504,
+            "rss_lauf_max_mb": 1049.504,
+            "rss_ende_anteil": 1,
+            "aktive_actors": 2436,
+            "aktive_actors_hoechst": 2436
+          },
+          "details": {
+            "block": {
+              "sender": 1,
+              "angenommen": 1000,
+              "fehler": 0,
+              "sichtbar": 1000,
+              "fenster_s": 3.546,
+              "abbau_s": 0.013,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 1.79 2.81 2.38 7/860 257173\n · CPU-stärkste: 128 dotnet; 7.4 postgres; 7.3 postgres; 7.2 postgres; 6.3 postgres"
+          }
+        },
+        {
+          "kennzahlen": {
+            "durchsatz_je_s": 313.51,
+            "angenommen_je_s": 314.816,
+            "latenz_p50_ms": 19.221,
+            "latenz_p99_ms": 613.115,
+            "rueckstand": 23,
+            "abbau_s": 0.013,
+            "abgebaut": 1,
+            "fehler": 0,
+            "tx_je_s": 1667.871,
+            "queries_je_s": 10317.494,
+            "queries": 35947,
+            "tx_je_vorgang": 5.811,
+            "queries_je_vorgang": 35.947,
+            "cpu_prozent": 538.856,
+            "rss_mb": 1235.887,
+            "xact_je_s_info": 6485.208,
+            "cpu_ms_je_vorgang": 18.774,
+            "rss_ende_mb": 1235.887,
+            "rss_lauf_max_mb": 1235.887,
+            "rss_ende_anteil": 1,
+            "aktive_actors": 10436,
+            "aktive_actors_hoechst": 10436
+          },
+          "details": {
+            "block": {
+              "sender": 1,
+              "angenommen": 1000,
+              "fehler": 0,
+              "sichtbar": 1000,
+              "fenster_s": 3.176,
+              "abbau_s": 0.013,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 1.89 2.81 2.38 4/858 257313\n · CPU-stärkste: 186 dotnet;10.8 postgres; 5.9 dotnet; 4.8 postgres; 4.7 postgres"
+          }
+        },
+        {
+          "kennzahlen": {
+            "durchsatz_je_s": 299.69,
+            "angenommen_je_s": 300.81,
+            "latenz_p50_ms": 20.137,
+            "latenz_p99_ms": 332.626,
+            "rueckstand": 89,
+            "abbau_s": 0.012,
+            "abgebaut": 1,
+            "fehler": 0,
+            "tx_je_s": 1739.238,
+            "queries_je_s": 9802.205,
+            "queries": 35681,
+            "tx_je_vorgang": 6.331,
+            "queries_je_vorgang": 35.681,
+            "cpu_prozent": 428.684,
+            "rss_mb": 1338.391,
+            "xact_je_s_info": 5960.002,
+            "cpu_ms_je_vorgang": 15.604,
+            "rss_ende_mb": 1338.391,
+            "rss_lauf_max_mb": 1338.391,
+            "rss_ende_anteil": 1,
+            "aktive_actors": 18436,
+            "aktive_actors_hoechst": 18436
+          },
+          "details": {
+            "block": {
+              "sender": 1,
+              "angenommen": 1000,
+              "fehler": 0,
+              "sichtbar": 1000,
+              "fenster_s": 3.324,
+              "abbau_s": 0.012,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 6.16 3.68 2.67 5/858 257450\n · CPU-stärkste: 230 dotnet;12.0 postgres; 6.4 dotnet; 4.5 postgres; 4.4 postgres"
+          }
+        }
+      ],
+      "median": {
+        "durchsatz_je_s": 299.69,
+        "angenommen_je_s": 300.81,
+        "latenz_p50_ms": 19.221,
+        "latenz_p99_ms": 332.626,
+        "rueckstand": 56,
+        "abbau_s": 0.013,
+        "abgebaut": 1,
+        "fehler": 0,
+        "tx_je_s": 1739.238,
+        "queries_je_s": 9802.205,
+        "queries": 35681,
+        "tx_je_vorgang": 6.331,
+        "queries_je_vorgang": 35.681,
+        "cpu_prozent": 467.859,
+        "rss_mb": 1235.887,
+        "xact_je_s_info": 5960.002,
+        "cpu_ms_je_vorgang": 17.083,
+        "rss_ende_mb": 1235.887,
+        "rss_lauf_max_mb": 1235.887,
+        "rss_ende_anteil": 1,
+        "aktive_actors": 10436,
+        "aktive_actors_hoechst": 10436
+      },
+      "min": {
+        "durchsatz_je_s": 281,
+        "angenommen_je_s": 282.003,
+        "latenz_p50_ms": 17.078,
+        "latenz_p99_ms": 36.345,
+        "rueckstand": 23,
+        "abbau_s": 0.012,
+        "abgebaut": 1,
+        "fehler": 0,
+        "tx_je_s": 1667.871,
+        "queries_je_s": 9720.449,
+        "queries": 35493,
+        "tx_je_vorgang": 5.811,
+        "queries_je_vorgang": 35.493,
+        "cpu_prozent": 428.684,
+        "rss_mb": 1049.504,
+        "xact_je_s_info": 4978.947,
+        "cpu_ms_je_vorgang": 15.604,
+        "rss_ende_mb": 1049.504,
+        "rss_lauf_max_mb": 1049.504,
+        "rss_ende_anteil": 1,
+        "aktive_actors": 2436,
+        "aktive_actors_hoechst": 2436
+      },
+      "max": {
+        "durchsatz_je_s": 313.51,
+        "angenommen_je_s": 314.816,
+        "latenz_p50_ms": 20.137,
+        "latenz_p99_ms": 613.115,
+        "rueckstand": 89,
+        "abbau_s": 0.013,
+        "abgebaut": 1,
+        "fehler": 0,
+        "tx_je_s": 2017.87,
+        "queries_je_s": 10317.494,
+        "queries": 35947,
+        "tx_je_vorgang": 7.368,
+        "queries_je_vorgang": 35.947,
+        "cpu_prozent": 538.856,
+        "rss_mb": 1338.391,
+        "xact_je_s_info": 6485.208,
+        "cpu_ms_je_vorgang": 18.774,
+        "rss_ende_mb": 1338.391,
+        "rss_lauf_max_mb": 1338.391,
+        "rss_ende_anteil": 1,
+        "aktive_actors": 18436,
+        "aktive_actors_hoechst": 18436
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": []
+      }
+    },
+    "Verteilt-64": {
+      "titel": "Verteilt an der Decke: Prüfdomäne, 64 Sender (Vorgänge)",
+      "tabelle": "last",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "durchsatz_je_s": 1336.525,
+            "angenommen_je_s": 4050.163,
+            "latenz_p50_ms": 998.466,
+            "latenz_p99_ms": 1606.966,
+            "rueckstand": 2498,
+            "abbau_s": 1.504,
+            "abgebaut": 1,
+            "fehler": 0,
+            "tx_je_s": 1211.659,
+            "queries_je_s": 31512.904,
+            "queries": 77400,
+            "tx_je_vorgang": 0.992,
+            "queries_je_vorgang": 25.8,
+            "cpu_prozent": 809.203,
+            "rss_mb": 1129.125,
+            "xact_je_s_info": 13585.97,
+            "cpu_ms_je_vorgang": 6.625,
+            "rss_ende_mb": 1129.125,
+            "rss_lauf_max_mb": 1129.125,
+            "rss_ende_anteil": 1,
+            "aktive_actors": 8436,
+            "aktive_actors_hoechst": 8436,
+            "reaktion_p50_ms": 25.626,
+            "reaktion_p99_ms": 348.376
+          },
+          "details": {
+            "block": {
+              "sender": 64,
+              "angenommen": 3000,
+              "fehler": 0,
+              "sichtbar": 3000,
+              "fenster_s": 0.741,
+              "abbau_s": 1.504,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 1.79 2.81 2.38 5/860 257177\n · CPU-stärkste: 128 dotnet; 7.4 postgres; 7.2 postgres; 7.2 postgres; 6.2 postgres"
+          }
+        },
+        {
+          "kennzahlen": {
+            "durchsatz_je_s": 1223.147,
+            "angenommen_je_s": 3562.888,
+            "latenz_p50_ms": 967.849,
+            "latenz_p99_ms": 1676.345,
+            "rueckstand": 2547,
+            "abbau_s": 1.611,
+            "abgebaut": 1,
+            "fehler": 0,
+            "tx_je_s": 1410.495,
+            "queries_je_s": 29721.492,
+            "queries": 78787,
+            "tx_je_vorgang": 1.246,
+            "queries_je_vorgang": 26.262,
+            "cpu_prozent": 683.629,
+            "rss_mb": 1297.621,
+            "xact_je_s_info": 13007.939,
+            "cpu_ms_je_vorgang": 6.041,
+            "rss_ende_mb": 1297.621,
+            "rss_lauf_max_mb": 1297.621,
+            "rss_ende_anteil": 1,
+            "aktive_actors": 16436,
+            "aktive_actors_hoechst": 16436,
+            "reaktion_p50_ms": 55.605,
+            "reaktion_p99_ms": 227.915
+          },
+          "details": {
+            "block": {
+              "sender": 64,
+              "angenommen": 3000,
+              "fehler": 0,
+              "sichtbar": 3000,
+              "fenster_s": 0.842,
+              "abbau_s": 1.611,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 1.89 2.81 2.38 5/858 257317\n · CPU-stärkste: 186 dotnet;10.8 postgres; 5.9 dotnet; 4.8 postgres; 4.7 postgres"
+          }
+        },
+        {
+          "kennzahlen": {
+            "durchsatz_je_s": 1159.412,
+            "angenommen_je_s": 2578.761,
+            "latenz_p50_ms": 792.406,
+            "latenz_p99_ms": 1445.672,
+            "rueckstand": 1723,
+            "abbau_s": 1.424,
+            "abgebaut": 1,
+            "fehler": 0,
+            "tx_je_s": 1646.339,
+            "queries_je_s": 29696.681,
+            "queries": 85428,
+            "tx_je_vorgang": 1.579,
+            "queries_je_vorgang": 28.476,
+            "cpu_prozent": 655.532,
+            "rss_mb": 1401.168,
+            "xact_je_s_info": 11715.916,
+            "cpu_ms_je_vorgang": 6.286,
+            "rss_ende_mb": 1401.168,
+            "rss_lauf_max_mb": 1401.168,
+            "rss_ende_anteil": 1,
+            "aktive_actors": 24436,
+            "aktive_actors_hoechst": 24436,
+            "reaktion_p50_ms": 12.455,
+            "reaktion_p99_ms": 143.637
+          },
+          "details": {
+            "block": {
+              "sender": 64,
+              "angenommen": 3000,
+              "fehler": 0,
+              "sichtbar": 3000,
+              "fenster_s": 1.163,
+              "abbau_s": 1.424,
+              "abgebaut": true
+            },
+            "fremdlast_danach": "Last 6.16 3.68 2.67 4/858 257454\n · CPU-stärkste: 230 dotnet;11.9 postgres; 6.4 dotnet; 4.5 postgres; 4.4 postgres"
+          }
+        }
+      ],
+      "median": {
+        "durchsatz_je_s": 1223.147,
+        "angenommen_je_s": 3562.888,
+        "latenz_p50_ms": 967.849,
+        "latenz_p99_ms": 1606.966,
+        "rueckstand": 2498,
+        "abbau_s": 1.504,
+        "abgebaut": 1,
+        "fehler": 0,
+        "tx_je_s": 1410.495,
+        "queries_je_s": 29721.492,
+        "queries": 78787,
+        "tx_je_vorgang": 1.246,
+        "queries_je_vorgang": 26.262,
+        "cpu_prozent": 683.629,
+        "rss_mb": 1297.621,
+        "xact_je_s_info": 13007.939,
+        "cpu_ms_je_vorgang": 6.286,
+        "rss_ende_mb": 1297.621,
+        "rss_lauf_max_mb": 1297.621,
+        "rss_ende_anteil": 1,
+        "aktive_actors": 16436,
+        "aktive_actors_hoechst": 16436,
+        "reaktion_p50_ms": 25.626,
+        "reaktion_p99_ms": 227.915
+      },
+      "min": {
+        "durchsatz_je_s": 1159.412,
+        "angenommen_je_s": 2578.761,
+        "latenz_p50_ms": 792.406,
+        "latenz_p99_ms": 1445.672,
+        "rueckstand": 1723,
+        "abbau_s": 1.424,
+        "abgebaut": 1,
+        "fehler": 0,
+        "tx_je_s": 1211.659,
+        "queries_je_s": 29696.681,
+        "queries": 77400,
+        "tx_je_vorgang": 0.992,
+        "queries_je_vorgang": 25.8,
+        "cpu_prozent": 655.532,
+        "rss_mb": 1129.125,
+        "xact_je_s_info": 11715.916,
+        "cpu_ms_je_vorgang": 6.041,
+        "rss_ende_mb": 1129.125,
+        "rss_lauf_max_mb": 1129.125,
+        "rss_ende_anteil": 1,
+        "aktive_actors": 8436,
+        "aktive_actors_hoechst": 8436,
+        "reaktion_p50_ms": 12.455,
+        "reaktion_p99_ms": 143.637
+      },
+      "max": {
+        "durchsatz_je_s": 1336.525,
+        "angenommen_je_s": 4050.163,
+        "latenz_p50_ms": 998.466,
+        "latenz_p99_ms": 1676.345,
+        "rueckstand": 2547,
+        "abbau_s": 1.611,
+        "abgebaut": 1,
+        "fehler": 0,
+        "tx_je_s": 1646.339,
+        "queries_je_s": 31512.904,
+        "queries": 85428,
+        "tx_je_vorgang": 1.579,
+        "queries_je_vorgang": 28.476,
+        "cpu_prozent": 809.203,
+        "rss_mb": 1401.168,
+        "xact_je_s_info": 13585.97,
+        "cpu_ms_je_vorgang": 6.625,
+        "rss_ende_mb": 1401.168,
+        "rss_lauf_max_mb": 1401.168,
+        "rss_ende_anteil": 1,
+        "aktive_actors": 24436,
+        "aktive_actors_hoechst": 24436,
+        "reaktion_p50_ms": 55.605,
+        "reaktion_p99_ms": 348.376
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": [
+          {
+            "name": "je Vorgang genau ein ProzessBeendet",
+            "ok": true,
+            "soll": "12050",
+            "ist": "12050",
+            "wiederholung": 3
+          },
+          {
+            "name": "kein Vorgang mit mehr als einem ProzessBeendet",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 3
+          },
+          {
+            "name": "gelingende Vorgänge enden mit Erfolg",
+            "ok": true,
+            "soll": "10845",
+            "ist": "10845",
+            "wiederholung": 3
+          },
+          {
+            "name": "abgelehnte Aufträge enden ohne Erfolg",
+            "ok": true,
+            "soll": "1205",
+            "ist": "1205",
+            "wiederholung": 3
+          },
+          {
+            "name": "jede Kompensation genau einmal (PostenFreigegeben je abgelehntem Auftrag)",
+            "ok": true,
+            "soll": "1205",
+            "ist": "1205",
+            "wiederholung": 3
+          },
+          {
+            "name": "je gelingendem Auftrag genau ein AuftragBestaetigt",
+            "ok": true,
+            "soll": "9640",
+            "ist": "9640",
+            "wiederholung": 3
+          },
+          {
+            "name": "je Verteilung jedes Ziel genau einmal zugebucht",
+            "ok": true,
+            "soll": "4820",
+            "ist": "4820",
+            "wiederholung": 3
+          },
+          {
+            "name": "je Verteilung genau ein VerteilungAbgeschlossen",
+            "ok": true,
+            "soll": "1205",
+            "ist": "1205",
+            "wiederholung": 3
+          },
+          {
+            "name": "Reaktion: je Reservierung unter dem Mindestbestand genau ein Nachschub",
+            "ok": true,
+            "soll": "5550",
+            "ist": "5550",
+            "wiederholung": 3
+          },
+          {
+            "name": "Reaktion: je Reaktions-Command genau eine Wirkung (Ziel-Events je Ursache = 1)",
+            "ok": true,
+            "soll": "0",
+            "ist": "0",
+            "wiederholung": 3
+          }
+        ]
+      }
+    },
+    "Leerlauf-Beispiel": {
+      "titel": "Leerlauf Beispieldomäne",
+      "tabelle": "ruhe",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "tx_je_s": 0,
+            "queries_je_s": 3.833,
+            "cpu_prozent": 3.308,
+            "rss_mb": 2135.082,
+            "rss_ende_mb": 2100.648,
+            "rss_lauf_max_mb": 2137.805,
+            "aktive_actors": 17868,
+            "nachlauf_s": 62.323,
+            "nachlauf_queries": 1610
+          },
+          "details": {
+            "mit_rueckstand": false,
+            "nachlauf_eingeholt": true,
+            "fremdlast_danach": "Last 1.46 3.04 2.42 1/859 254996\n · CPU-stärkste: 142 dotnet;15.3 dotnet; 6.5 dotnet; 1.9 consul; 1.3 redis-server"
+          }
+        }
+      ],
+      "median": {
+        "tx_je_s": 0,
+        "queries_je_s": 3.833,
+        "cpu_prozent": 3.308,
+        "rss_mb": 2135.082,
+        "rss_ende_mb": 2100.648,
+        "rss_lauf_max_mb": 2137.805,
+        "aktive_actors": 17868,
+        "nachlauf_s": 62.323,
+        "nachlauf_queries": 1610
+      },
+      "min": {
+        "tx_je_s": 0,
+        "queries_je_s": 3.833,
+        "cpu_prozent": 3.308,
+        "rss_mb": 2135.082,
+        "rss_ende_mb": 2100.648,
+        "rss_lauf_max_mb": 2137.805,
+        "aktive_actors": 17868,
+        "nachlauf_s": 62.323,
+        "nachlauf_queries": 1610
+      },
+      "max": {
+        "tx_je_s": 0,
+        "queries_je_s": 3.833,
+        "cpu_prozent": 3.308,
+        "rss_mb": 2135.082,
+        "rss_ende_mb": 2100.648,
+        "rss_lauf_max_mb": 2137.805,
+        "aktive_actors": 17868,
+        "nachlauf_s": 62.323,
+        "nachlauf_queries": 1610
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": []
+      }
+    },
+    "Leerlauf-Pruef": {
+      "titel": "Leerlauf Prüfdomäne",
+      "tabelle": "ruhe",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "tx_je_s": 0.033,
+            "queries_je_s": 2.565,
+            "cpu_prozent": 1.511,
+            "rss_mb": 1404.023,
+            "rss_ende_mb": 1402.402,
+            "rss_lauf_max_mb": 1410.051,
+            "aktive_actors": 24436,
+            "nachlauf_s": 14.061,
+            "nachlauf_queries": 2347
+          },
+          "details": {
+            "mit_rueckstand": false,
+            "nachlauf_eingeholt": true,
+            "fremdlast_danach": "Last 1.97 2.93 2.48 1/816 258810\n · CPU-stärkste: 100 ps;97.5 dotnet;50.0 postgres; 5.5 dotnet; 3.3 postgres"
+          }
+        }
+      ],
+      "median": {
+        "tx_je_s": 0.033,
+        "queries_je_s": 2.565,
+        "cpu_prozent": 1.511,
+        "rss_mb": 1404.023,
+        "rss_ende_mb": 1402.402,
+        "rss_lauf_max_mb": 1410.051,
+        "aktive_actors": 24436,
+        "nachlauf_s": 14.061,
+        "nachlauf_queries": 2347
+      },
+      "min": {
+        "tx_je_s": 0.033,
+        "queries_je_s": 2.565,
+        "cpu_prozent": 1.511,
+        "rss_mb": 1404.023,
+        "rss_ende_mb": 1402.402,
+        "rss_lauf_max_mb": 1410.051,
+        "aktive_actors": 24436,
+        "nachlauf_s": 14.061,
+        "nachlauf_queries": 2347
+      },
+      "max": {
+        "tx_je_s": 0.033,
+        "queries_je_s": 2.565,
+        "cpu_prozent": 1.511,
+        "rss_mb": 1404.023,
+        "rss_ende_mb": 1402.402,
+        "rss_lauf_max_mb": 1410.051,
+        "aktive_actors": 24436,
+        "nachlauf_s": 14.061,
+        "nachlauf_queries": 2347
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": []
+      }
+    },
+    "Neuaufbau": {
+      "titel": "Neuaufbau aller Projektionen",
+      "tabelle": "ruhe",
+      "wiederholungen": [
+        {
+          "kennzahlen": {
+            "events": 14480,
+            "log_events": 62583,
+            "dauer_s": 0.258,
+            "events_je_s": 56032.468,
+            "start_s": 3.895,
+            "bis_eingeholt_s": 6.061,
+            "cpu_prozent": 152.702,
+            "queries": 20758
+          },
+          "details": {
+            "fremdlast_danach": "Last 1.51 2.98 2.40 1/830 255474\n · CPU-stärkste: 200 dotnet;15.0 dotnet;14.4 postgres;14.1 postgres;14.1 postgres"
+          }
+        },
+        {
+          "kennzahlen": {
+            "events": 14480,
+            "log_events": 62583,
+            "dauer_s": 0.272,
+            "events_je_s": 53155.834,
+            "start_s": 3.881,
+            "bis_eingeholt_s": 6.171,
+            "cpu_prozent": 193.363,
+            "queries": 20746
+          },
+          "details": {
+            "fremdlast_danach": "Last 2.03 3.06 2.43 1/833 255921\n · CPU-stärkste: 190 dotnet;15.5 postgres;14.8 dotnet;14.6 postgres;14.4 postgres"
+          }
+        },
+        {
+          "kennzahlen": {
+            "events": 14480,
+            "log_events": 62583,
+            "dauer_s": 0.338,
+            "events_je_s": 42861.934,
+            "start_s": 3.918,
+            "bis_eingeholt_s": 6.089,
+            "cpu_prozent": 208.868,
+            "queries": 20746
+          },
+          "details": {
+            "fremdlast_danach": "Last 1.95 3.01 2.42 1/829 256278\n · CPU-stärkste: 204 dotnet;23.5 postgres;14.6 dotnet;14.4 postgres;12.3 postgres"
+          }
+        }
+      ],
+      "median": {
+        "events": 14480,
+        "log_events": 62583,
+        "dauer_s": 0.272,
+        "events_je_s": 53155.834,
+        "start_s": 3.895,
+        "bis_eingeholt_s": 6.089,
+        "cpu_prozent": 193.363,
+        "queries": 20746
+      },
+      "min": {
+        "events": 14480,
+        "log_events": 62583,
+        "dauer_s": 0.258,
+        "events_je_s": 42861.934,
+        "start_s": 3.881,
+        "bis_eingeholt_s": 6.061,
+        "cpu_prozent": 152.702,
+        "queries": 20746
+      },
+      "max": {
+        "events": 14480,
+        "log_events": 62583,
+        "dauer_s": 0.338,
+        "events_je_s": 56032.468,
+        "start_s": 3.918,
+        "bis_eingeholt_s": 6.171,
+        "cpu_prozent": 208.868,
+        "queries": 20758
+      },
+      "exactly_once": {
+        "ok": true,
+        "pruefungen": [
+          {
+            "name": "Neuaufbau: der Rückstand fällt auf null",
+            "ok": true,
+            "soll": "ja",
+            "ist": "ja",
+            "wiederholung": 1
+          },
+          {
+            "name": "nach dem Neuaufbau: Read-Model: komplette Paare = ImagePairKomplett im Log",
+            "ok": true,
+            "soll": "1810",
+            "ist": "1810",
+            "wiederholung": 1
+          },
+          {
+            "name": "nach dem Neuaufbau: Read-Model: Paare = ImagePairErstellt im Log",
+            "ok": true,
+            "soll": "1810",
+            "ist": "1810",
+            "wiederholung": 1
+          },
+          {
+            "name": "Neuaufbau: der Rückstand fällt auf null",
+            "ok": true,
+            "soll": "ja",
+            "ist": "ja",
+            "wiederholung": 2
+          },
+          {
+            "name": "nach dem Neuaufbau: Read-Model: komplette Paare = ImagePairKomplett im Log",
+            "ok": true,
+            "soll": "1810",
+            "ist": "1810",
+            "wiederholung": 2
+          },
+          {
+            "name": "nach dem Neuaufbau: Read-Model: Paare = ImagePairErstellt im Log",
+            "ok": true,
+            "soll": "1810",
+            "ist": "1810",
+            "wiederholung": 2
+          },
+          {
+            "name": "Neuaufbau: der Rückstand fällt auf null",
+            "ok": true,
+            "soll": "ja",
+            "ist": "ja",
+            "wiederholung": 3
+          },
+          {
+            "name": "nach dem Neuaufbau: Read-Model: komplette Paare = ImagePairKomplett im Log",
+            "ok": true,
+            "soll": "1810",
+            "ist": "1810",
+            "wiederholung": 3
+          },
+          {
+            "name": "nach dem Neuaufbau: Read-Model: Paare = ImagePairErstellt im Log",
+            "ok": true,
+            "soll": "1810",
+            "ist": "1810",
+            "wiederholung": 3
+          }
+        ]
+      }
+    }
+  },
+  "global": [
+    {
+      "anwendung": "Beispieldomäne",
+      "pruefungen": [
+        {
+          "name": "Beispieldomäne: keine CommandId zweimal gewirkt (Events je CommandId in genau einer Transaktion)",
+          "ok": true,
+          "soll": "0",
+          "ist": "0"
+        },
+        {
+          "name": "Beispieldomäne: keine CommandId zweimal noop-markiert",
+          "ok": true,
+          "soll": "0",
+          "ist": "0"
+        },
+        {
+          "name": "Beispieldomäne: keine CommandId zweimal abgelehnt-markiert",
+          "ok": true,
+          "soll": "0",
+          "ist": "0"
+        },
+        {
+          "name": "Beispieldomäne: kein Stream mit doppelter Version",
+          "ok": true,
+          "soll": "0",
+          "ist": "0"
+        }
+      ]
+    },
+    {
+      "anwendung": "Prüfdomäne",
+      "pruefungen": [
+        {
+          "name": "Prüfdomäne: keine CommandId zweimal gewirkt (Events je CommandId in genau einer Transaktion)",
+          "ok": true,
+          "soll": "0",
+          "ist": "0"
+        },
+        {
+          "name": "Prüfdomäne: keine CommandId zweimal noop-markiert",
+          "ok": true,
+          "soll": "0",
+          "ist": "0"
+        },
+        {
+          "name": "Prüfdomäne: keine CommandId zweimal abgelehnt-markiert",
+          "ok": true,
+          "soll": "0",
+          "ist": "0"
+        },
+        {
+          "name": "Prüfdomäne: kein Stream mit doppelter Version",
+          "ok": true,
+          "soll": "0",
+          "ist": "0"
+        }
+      ]
+    }
+  ],
+  "exactly_once_ok": true,
+  "gueltig": true,
+  "begruendung": []
+}

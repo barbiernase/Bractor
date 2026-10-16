@@ -26,7 +26,12 @@ internal sealed class Datenbank
     }
 
     public string Admin(string db) => $"{_basis};Database={db};Pooling=true;Maximum Pool Size=4";
-    public string Leser => new NpgsqlConnectionStringBuilder(_basis) { Database = Name, Username = LeseRolle, Password = LesePasswort, MaxPoolSize = 4 }.ConnectionString;
+    /// <summary>Die Verbindung der Lese-Rolle. Ohne parallele Abfragen: die Prüfungen nach einem Störungslauf fragen mit zehntausenden Ids, und ein
+    /// paralleler Plan sprengte das Shared Memory des Containers (64 MB, Fehler 53100) — die Prüfung soll nie an der Messumgebung scheitern.</summary>
+    public string Leser => new NpgsqlConnectionStringBuilder(_basis)
+    {
+        Database = Name, Username = LeseRolle, Password = LesePasswort, MaxPoolSize = 4, Options = "-c max_parallel_workers_per_gather=0",
+    }.ConnectionString;
 
     public async Task<T> SkalarAsync<T>(string db, string sql, params (string, object)[] p)
     {

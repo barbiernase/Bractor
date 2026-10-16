@@ -1,0 +1,114 @@
+{
+  "art": "stoerung",
+  "format": 2,
+  "anlass": "server-stoerung-1",
+  "skript": "scripts/vermessung-e2e.sh --stoerung --anlass server-stoerung-1",
+  "zeit": "2026-10-16T07:49:09.1661732+00:00",
+  "commit": "11f9076",
+  "branch": "HEAD",
+  "arbeitsbaum": "sauber",
+  "rechner": "Ubuntu-noble-latest-amd64-base, Ubuntu 24.04.4 LTS, 13th Gen Intel(R) Core(TM) i5-13500, 20 Kerne, 62 GiB",
+  "umgebungen": [
+    "vermessung",
+    "vermessung-pruefdomaene"
+  ],
+  "parameter": {
+    "wiederholungen": 3,
+    "fenster_s": 15,
+    "abbau_frist_s": 120,
+    "warmlauf_s": 30,
+    "bildeingang": "Stoß von 600 TIFF-Paaren (96 × 64), ein Sender",
+    "heiss": "2000 Teile von 64 Sendern an EINEN Sammelvorgang (N = 1 000 000), je Teil StarteTeilauftrag + SchließeTeilauftragAb",
+    "verteilt": "Prüfdomäne, ruhig: 1 Sender, höchstens 1000 Vorgänge; Decke: 64 Sender, höchstens 3000 Vorgänge; je 10 Vorgänge 8 Aufträge, 1 Auftrag gegen ein volles Kontingent (Kompensation), 1 Verteilung auf 4 Ziele; 50 Posten, 20 Ziele",
+    "neuaufbau": "Host gestoppt, der gespeicherte Projektions-Stand gelöscht (wirkt wie eine Code-Änderung in Sim), Host gestartet: alle Projektionen lesen das Log ab 0; Dauer vom ersten Abbau bis kein Rückstand (/monitoring/metrics, alle 50 ms); dreimal",
+    "leerlauf_s": 60,
+    "leerlauf": "erst nach dem Nachlauf (alle Poll-Cursor und Projektions-Positionen am Kopf des Logs, höchstens nachlauf_frist_s), dann das Fenster",
+    "nachlauf_frist_s": 180,
+    "sichtbar": "Bildeingang: Query GetImagePair je offenem Paar (komplett), alle 100 ms; Heiß: TeilVerbucht im Log; Verteilt: ProzessBeendet im Log",
+    "transaktionen": "COMMITs aus pg_stat_statements (track = top); Queries = übrige Statements ohne BEGIN/COMMIT/ROLLBACK/DISCARD/SET/SHOW; ohne die Lese-Rolle des Treibers",
+    "cpu_ms_je_vorgang": "mittlere CPU des Hosts im Fenster × Dauer des Fensters / Vorgänge"
+  },
+  "spalten": [
+    {
+      "tabelle": "last",
+      "key": "durchsatz_je_s",
+      "titel": "Durchsatz (/s)"
+    },
+    {
+      "tabelle": "last",
+      "key": "angenommen_je_s",
+      "titel": "Schreiben angenommen (/s)"
+    },
+    {
+      "tabelle": "last",
+      "key": "latenz_p50_ms",
+      "titel": "Latenz p50 (ms)"
+    },
+    {
+      "tabelle": "last",
+      "key": "latenz_p99_ms",
+      "titel": "Latenz p99 (ms)"
+    },
+    {
+      "tabelle": "last",
+      "key": "reaktion_p99_ms",
+      "titel": "Reaktion p99 (ms)"
+    },
+    {
+      "tabelle": "last",
+      "key": "tx_je_vorgang",
+      "titel": "Transaktionen je Vorgang"
+    },
+    {
+      "tabelle": "last",
+      "key": "queries_je_vorgang",
+      "titel": "Queries je Vorgang"
+    },
+    {
+      "tabelle": "last",
+      "key": "cpu_ms_je_vorgang",
+      "titel": "CPU je Vorgang (ms)"
+    },
+    {
+      "tabelle": "ruhe",
+      "key": "queries_je_s",
+      "titel": "Queries (/s)"
+    },
+    {
+      "tabelle": "ruhe",
+      "key": "cpu_prozent",
+      "titel": "CPU (% eines Kerns)"
+    },
+    {
+      "tabelle": "ruhe",
+      "key": "nachlauf_s",
+      "titel": "Nachlauf (s)"
+    },
+    {
+      "tabelle": "ruhe",
+      "key": "rss_ende_mb",
+      "titel": "RSS am Ende (MB)"
+    },
+    {
+      "tabelle": "ruhe",
+      "key": "events_je_s",
+      "titel": "Neuaufbau (Events/s)"
+    },
+    {
+      "tabelle": "ruhe",
+      "key": "dauer_s",
+      "titel": "Neuaufbau (s)"
+    },
+    {
+      "tabelle": "ruhe",
+      "key": "events",
+      "titel": "Neuaufbau (Events)"
+    }
+  ],
+  "fremdlast_vorher": "Last 2.43 2.99 2.51 1/633 260051\n · CPU-stärkste: 1.9 consul; 1.3 redis-server; 1.1 redis-server; 0.6 dotnet; 0.1 containerd",
+  "fremdlast_nachher": "Last 13.72 6.80 3.95 3/987 264036\n · CPU-stärkste: 768 dotnet;56.7 dotnet;18.8 dotnet; 4.0 postgres; 4.0 postgres",
+  "gueltig": false,
+  "begruendung": [
+    "PostgresException: 53100: could not resize shared memory segment \"/PostgreSQL.2491488578\" to 4308800 bytes: No space left on device"
+  ]
+}

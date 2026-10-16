@@ -156,8 +156,34 @@ internal sealed class Ressourcen : IAsyncDisposable
                 }
                 catch { /* Prozess gerade beendet */ }
             }
+            SystemProbe(jetzt);
             try { await Task.Delay(1000, _cts.Token); } catch (OperationCanceledException) { }
         }
+    }
+
+    private (long Belegt, long Gesamt)? _systemVorher;
+
+    /// <summary>
+    /// CPU des ganzen Rechners (alle Prozesse, also auch Postgres und Redis) als Rolle <c>system</c>, in Prozent eines Kerns — aus
+    /// <c>/proc/stat</c> (nur Linux; sonst keine Probe). Zeigt neben der CPU des Hosts, ob die Maschine oder der Host die Grenze ist.
+    /// </summary>
+    private void SystemProbe(DateTimeOffset jetzt)
+    {
+        try
+        {
+            if (!File.Exists("/proc/stat")) return;
+            var f = File.ReadLines("/proc/stat").First().Split(' ', StringSplitOptions.RemoveEmptyEntries).Skip(1).Select(long.Parse).ToArray();
+            var gesamt = f.Take(8).Sum();
+            var belegt = gesamt - f[3] - f[4];   // ohne idle und iowait
+            if (_systemVorher is { } v && gesamt > v.Gesamt)
+            {
+                var prozent = (double)(belegt - v.Belegt) / (gesamt - v.Gesamt) * Environment.ProcessorCount * 100;
+                lock (_proben) _proben.Add(new Probe(jetzt, "system", 0, double.NaN, prozent));
+                _csv.WriteLine(FormattableString.Invariant($"{jetzt:O},{_abschnitt},system,0,,{prozent:F1}"));
+            }
+            _systemVorher = (belegt, gesamt);
+        }
+        catch { /* keine Probe */ }
     }
 
     /// <summary>Mittlere CPU und höchster RSS einer Rolle im Fenster.</summary>

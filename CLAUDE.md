@@ -92,29 +92,24 @@ Die Domänen im Repo (ImagePair, Datensatz, Training …) sind nur **Prüfling u
 
 ## Build / Test / Werkzeuge
 
-**Vor Test oder Messung `docs/12-tests-und-vermessung.md` lesen.** Integration immer sequentiell; xUnit schluckt App-Logs.
+**Vor Test oder Messung `docs/12-tests-und-vermessung.md` lesen.** Drei Ebenen, je ein Befehl; Ebene 2 und 3 auf dem Messserver, nie parallel zueinander.
 
 - Build: `dotnet build`
-- Prüfstand (store-frei, immer grün): `dotnet test Infrastructure.Pruefstand.Tests/Infrastructure.Pruefstand.Tests.csproj`
-- Integration (Postgres/Consul/Redis, sequentiell): `dotnet test Infrastructure.Integration.Tests/Infrastructure.Integration.Tests.csproj`
-- Prüfdomäne (Framework domänenneutral, echtes Marten, sequentiell, nie parallel zur anderen Integrations-Suite):
-  `dotnet test Pruefdomaene.Integration.Tests/Pruefdomaene.Integration.Tests.csproj`
-- Garantie-Suite (vor jedem Commit, Integration nacheinander): `--filter Kategorie=Garantie` auf Prüfstand, Integration, Prüfdomäne;
-  offene Lücken sind `Skip = "G-n offen (docs/13)"` (`docs/11-garantien.md` §11.14)
-- E2E-Messung (echter Host, Exactly-once, nie parallel zu Integrations-Suiten): `scripts/vermessung-e2e.sh --anlass <a> --spalte <s>`,
-  Tabelle `scripts/vermessung-tabelle.sh --schreibe` (`docs/12-tests-und-vermessung.md` §12.5/§12.6)
-- **Messserver** (Messungen, Integration, Gate — statt auf dem MacBook): `scripts/server.sh lauf <befehl …>` führt den gepushten `HEAD` dort aus
-  und holt `vermessung/ergebnisse/` zurück; `einrichten`, `status`, `warte`, `log` (docs/12 §12.6)
+- Ebene 1, store-frei (≈ 1½ min): `./pruefe.sh schnell` — ignorierte Quellen, Build, Codegen-Drift, Build ändert nichts, `--check`, `--sonde`,
+  Prüfstand (`Infrastructure.Pruefstand.Tests`, auch Client-Tests), Python-SDK und -Worker
+- Ebene 2, echtes Marten (≈ 5 min, vor jedem Push auf dem Server): `./pruefe.sh alles` — Ebene 1, dann nacheinander Integration, Prüfdomäne,
+  Werkbank-Abnahme. Einzeln: `dotnet test <Projekt>/<Projekt>.csproj`
+- Ebene 3, Ende zu Ende (echte Hosts, Exactly-once): `scripts/vermessung-e2e.sh --anlass <a>` (Leistung, ≈ 6 min) bzw. `--stoerung --anlass <a>`
+  (≈ 4 min); Tabelle `scripts/vermessung-tabelle.sh --schreibe` (docs/12 §12.5)
+- Garantien: Nachweis je Zeile in `docs/11-garantien.md`, gehalten von `GarantieMatrixTests`; offene Lücken `Skip = "G-n offen (docs/13)"`
+- **Messserver** (Ebene 2 und 3 statt auf dem MacBook): `scripts/server.sh lauf <befehl …>` führt den gepushten `HEAD` frisch ausgecheckt aus und
+  holt `vermessung/ergebnisse/` zurück; `--los`, `warte`, `status`, `log`, `einrichten`; Prüfzweig `pruef/<name>` (docs/12 §12.6)
 - Infra hochfahren: `docker compose -f docker-compose.infrastructure.yml up -d`
-- Werkbank-Abnahme (echte Werkbank auf einer Kopie, eigene Sim-DB, sequentiell, nach `dotnet build`):
-  `dotnet test Werkbank.Abnahme.Tests/Werkbank.Abnahme.Tests.csproj`
 - Werkbank: `dotnet run --project Werkbank` → http://localhost:5178/editor/ (in `.claude/launch.json` als „Werkbank“). ⟳ baut und startet den echten
   Host in der gewählten Umgebung; Bedienung (Palette, ⊕, ✎, 🤖, ↶, Spur): `docs/konzept-werkbank.md` §6–§8.
 - Hosts: `dotnet run --project Host.Grpc -- --umgebung sim-main` bzw. `Host.Blazor -- --umgebung sim-main` (Sim-DB `cqrs_sim_<branch>` über `CQRS_BRANCH`).
 - Multi-Node (3 Nodes + Consul): `docker compose -f deploy-multinode/docker-compose.yml up -d --build` (`docs/06-transport-multinode-betrieb.md`).
-- Gate „frischer Checkout baut“ (vor jedem Push): `./pruefe-checkout.sh` (Worktree des Commits: ignorierte Quellen, Build, Drift, Prüfstand)
-- Editor-Parität (Code ⇄ Lesen ⇄ Karten, schreibt nichts): `dotnet run --project GraphExtractor -- --check`
-- Agnostik-Sonde (fremde Domäne + Gesten-Skript + Fixpunkt): `dotnet run --project GraphExtractor -- --sonde`
+- Editor-Parität bzw. Agnostik-Sonde einzeln (beide in Ebene 1): `dotnet run --project GraphExtractor -- --check` bzw. `-- --sonde`
 - Grammatik als Liste „Regel → Build-Gegenstück“: `dotnet run --project GraphExtractor -- --grammatik`
 - Warmer Workspace messen: `dotnet run --project GraphExtractor -- --warm`
 - LLM-Kontexte: `dotnet run --project GraphExtractor -- --kontexte <verz>` bzw. `--kontext <Disc>`, Slots: `--slots` (`docs/konzept-llm-minimalkontext.md`)

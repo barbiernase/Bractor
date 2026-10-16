@@ -113,7 +113,7 @@ hinweg.
 
 ### 4.1.3 Last ohne Eingang
 
-Kommt nichts hinein, arbeiten nur die Takte (gemessen auf dem Messserver, Diagnose `--art leerlauf`, docs/12 §12.5, PF-14):
+Kommt nichts hinein, arbeiten nur die Takte (gemessen auf dem Messserver, Zeitreihe vom 2026-10-16 im Messarchiv docs/12-anhang-messarchiv.md, PF-14):
 - **Batch-Poll** alle 30 s je Projektion und Partition eine Weckung, ohne Neues eine Abfrage (Beispieldomäne: 5 Projektionen × 8 Partitionen =
   40 Abfragen je 30 s — der größte Posten, er wächst mit Projektionen × Partitionen);
 - **Prozess-Poll** und **Poll der Emittenten** alle 30 s je eine Abfrage;

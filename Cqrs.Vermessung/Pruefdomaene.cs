@@ -155,11 +155,13 @@ internal sealed class Pruefdomaene : ILast
             ("k", verteilungen.Select(v => v.Korrelation.ToString()).ToArray()))));
         p.Add(P("je Verteilung genau ein VerteilungAbgeschlossen", verteilungen.Length, await db.ZahlAsync(
             $"select count(*) from {s}.mt_events where type = 'verteilung_abgeschlossen' and stream_id = any(@v)", ("v", verteilungen.Select(v => v.Id).ToArray()))));
-        var ausloeser = await db.ZahlAsync($"select count(*) from {s}.mt_events where type = 'posten_reserviert' and (data->>'Fehlmenge')::int > 0");
-        p.Add(P("Reaktion: je Reservierung unter dem Mindestbestand genau ein Nachschub", ausloeser, await db.ZahlAsync($"""
-            select count(distinct headers->>'ursache') from {s}.mt_events
-            where type = 'posten_zugebucht' and headers->>'ueber' = 'reaktion:NachschubBeiMindestbestand'
-            """)));
+        // Soll und Ist in EINER Abfrage (ein Schnappschuss): getrennt gezählt, lief der Host dazwischen weiter (früher VM-1).
+        var (ausloeser, nachschub) = (await db.LiesAsync($"""
+            select (select count(*) from {s}.mt_events where type = 'posten_reserviert' and (data->>'Fehlmenge')::int > 0),
+                   (select count(distinct headers->>'ursache') from {s}.mt_events
+                     where type = 'posten_zugebucht' and headers->>'ueber' = 'reaktion:NachschubBeiMindestbestand')
+            """, r => (r.GetInt64(0), r.GetInt64(1)))).Single();
+        p.Add(P("Reaktion: je Reservierung unter dem Mindestbestand genau ein Nachschub", ausloeser, nachschub));
         p.Add(Pruefung.Gleich("Reaktion: je Reaktions-Command genau eine Wirkung (Ziel-Events je Ursache = 1)", 0, await db.ZahlAsync($"""
             select count(*) from (select headers->>'ursache' from {s}.mt_events
               where type = 'posten_zugebucht' and headers->>'ueber' = 'reaktion:NachschubBeiMindestbestand' group by 1 having count(*) > 1) x

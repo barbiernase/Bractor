@@ -92,9 +92,8 @@ Die Beispieldomäne prüft das Framework; sie ist nicht Architektur (konzept-wer
 ### Tests
 | Projekt | Rolle |
 |---|---|
-| `Infrastructure.Pruefstand.Tests` | Ebene 1: store-frei, im Speicher |
-| `Infrastructure.Integration.Tests` | Ebene 2: gegen echtes Marten/Consul/Redis, sequentiell |
-| `Client.Infrastructure.CollectionTests` | C#-Client: Virtualisierung, Zustellverfolgung |
+| `Infrastructure.Pruefstand.Tests` | Ebene 1: store-frei, im Speicher (auch der C#-Client: Virtualisierung, Zustellverfolgung) |
+| `Infrastructure.Integration.Tests`, `Pruefdomaene.Integration.Tests`, `Werkbank.Abnahme.Tests` | Ebene 2: gegen echtes Marten/Consul/Redis, nacheinander (`./pruefe.sh alles`, docs/12) |
 | `Cqrs.Testing` | Test-DSL für den Prüfstand (`Szenario`, `SagaSzenario`, `FlussLaufwerk`) |
 
 Zahlen: [12](12-tests-und-vermessung.md).

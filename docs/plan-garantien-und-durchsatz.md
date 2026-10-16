@@ -20,6 +20,11 @@
 
 ### 0.1 · Messprinzip (bindend für jede Phase)
 
+> **Seit 2026-10-16 abgelöst** (Vereinfachung von Tests und Vermessung, §8 „Nachtrag Tests und Vermessung“): gemessen wird mit sechs Szenarien
+> und je drei Wiederholungen im Host (docs/12 §12.5), die Garantien prüft keine eigene Suite mehr, sondern ihre Ebene (`./pruefe.sh`, docs/11
+> §11.14). Die Prinzipien „real, Ende zu Ende, gespeichert, Exactly-once in jedem Lauf“ gelten weiter; was unten zu Szenarien S1–S5,
+> Spalten und Garantie-Suite steht, beschreibt die Phasen bis dahin.
+
 - **Real:** gemessen wird der echte Host (`Host.Grpc`, Umgebung `vermessung`, eigene Datenbank) mit den realen Anwendungen des Repos — der
   Beispieldomäne (`Domain*`) und der Prüfdomäne (`Pruefdomaene*`). Keine eigens erfundenen Bench-Typen; braucht ein Mechanismus einen Nutzer,
   den keine Domäne hat (heute: Reaktion), bekommt die Prüfdomäne einen fachlich sinnvollen.

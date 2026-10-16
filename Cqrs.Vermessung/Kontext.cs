@@ -40,6 +40,7 @@ internal sealed class Messfenster
         var bis = DateTimeOffset.UtcNow;
         var (txs, qs, tx, q, xact, st) = Datenbank.Differenz(_a!, b, _db.LeserStatements - _leserVorher);
         var (cpu, rss) = _res.Fenster(_rolle, Von, bis);
+        var (cpuSystem, _) = _res.Fenster("system", Von, bis);
         var (rssEnde, rssHoechst) = _res.Speicher(_rolle, Von, bis);
         var actors = _lauf is null ? double.NaN : await _lauf.AktiveActorsAsync();
         var werte = new Dictionary<string, double>
@@ -49,6 +50,7 @@ internal sealed class Messfenster
             ["queries_je_vorgang"] = vorgaenge > 0 ? (double)q / vorgaenge : double.NaN,
             ["cpu_prozent"] = cpu, ["rss_mb"] = rss, ["xact_je_s_info"] = xact,
             ["cpu_ms_je_vorgang"] = vorgaenge > 0 ? cpu / 100 * (bis - Von).TotalMilliseconds / vorgaenge : double.NaN,
+            ["cpu_system_prozent"] = cpuSystem,
             ["rss_ende_mb"] = rssEnde, ["rss_lauf_max_mb"] = rssHoechst, ["rss_ende_anteil"] = rssEnde / rssHoechst,
             ["aktive_actors"] = actors, ["aktive_actors_hoechst"] = _lauf?.HoechstActors ?? double.NaN,
         };
