@@ -16,7 +16,8 @@ hierher. Stand: 2026-10-16, nach Phase 4 des Plans Garantien und Durchsatz und P
 | VM-1 | Vermessungs-Treiber zählt Soll und Ist der Exactly-once-Prüfung in getrennten Abfragen, während der Host noch abbaut | P3 |
 | PF-15 | Grundlast ohne Eingang wächst mit Projektionen × Partitionen: der Batch-Poll weckt alle 30 s jede Partition (je eine Abfrage), dazu jede Sekunde DB-Uhr und Fristen — heute L1 3,8 Queries/s, bei 50 Projektionen ≈ 16 | P3 |
 | PF-6 | Read-your-writes-Index: ein Redis-Write je Event und Projektion, nicht abschaltbar | P2 |
-| PF-17 | Kosten von Horizont und Zeitstempel-Regel (G-9, G-10): je Probe bzw. Prüfung ≈ 0,45 ms (S1 3 ms je Paar, mehr als erwartet), je Event-Insert ≈ 20–35 µs in Sim (Versatz je Zeile aus `uhr`) | P3 |
+| PF-17 | Kosten von Horizont und Zeitstempel-Regel (G-9, G-10): je Probe bzw. Prüfung ≈ 0,45 ms (S1 3 ms je Paar, mehr als erwartet), je Event-Insert ≈ 7–10 µs (Prod) bzw. 20–35 µs (Sim, Versatz je Zeile aus `uhr`) | P3 |
+| PF-18 | Schema wird im Betrieb lazy angelegt: ein Standalone-Host legt Tabellen und Funktionen eines Dokumenttyps erst beim ersten Zugriff an, mitten im Verkehr (S4 in Prod 0,2 s länger; in Sim verdeckt, weil der Abgleich der Leseseite beim Start alles anlegt) | P2 |
 | PF-7 | Quelle = ein Stream und ein Vorgang je Quell-Nachricht — Entscheidung offen für hochfrequente Quellen | P2 |
 | W10-1 | Reflection im Codegen (`MetadataLoadContext`) und im Werkbank-Schema | P1 |
 | W10-2 | Reflektive Serialisierung zur Laufzeit (Marten-Default, Marking-Store, Snapshot-`Clone`, HTTP-Antworten); kein Reflection-Verbot im Build | P1 |
@@ -225,6 +226,13 @@ werfende Applier-Naht.
 Aufrufe, wenn die Position weit zurückliegt). Die Zeitstempel-Regel kostet in Sim ≈ 20–35 µs je eingefügtem Event, weil sie je Zeile den Versatz
 aus `uhr` liest. *Optionen:* den Versatz je Transaktion einmal lesen (`set_config(…, true)`), in Prod misst nur die Datenbankzeit; für die Proben
 `EXPLAIN ANALYZE` unter Last. Wirkung Ende zu Ende im Band der Einzelläufe.
+
+**PF-18 · Schema lazy im Betrieb.** Mit `AutoCreate.CreateOrUpdate` (Rolle Standalone) prüft und legt Marten das Schema eines Dokumenttyps beim
+ersten Zugriff an: Tabellen-Inspektion, Funktionsvergleich, `CREATE TABLE`, `CREATE OR REPLACE FUNCTION` — Runden und DDL-Sperren mitten im Verkehr.
+Gemessen in S4 (Art Prod, frische DB): vier Dokumenttypen, Range aufnehmen und Einfrieren je 0,3 statt 0,1/0,2 s. In Sim verdeckt der Abgleich der
+Leseseite das (er leert beim Start alle Read-Models und legt sie dabei an); im Cluster legt der Migrator alles vorab an. *Empfehlung:* auch
+Standalone beim Start das ganze Schema anlegen (`ApplyAllConfiguredChangesToDatabaseAsync`, wie der Migrator, vor den Hosted Services) — eine
+Rechnung beim Start statt Sperren im Betrieb, und die Messung misst den eingeschwungenen Zustand.
 
 **G-5 · Versionszählung bei Split-Upcasts.** `AggregateRehydrator` zählt `Version++` je materialisiertem Event; ein Split-Upcast liefert aus
 einer gespeicherten Position mehrere Events (`MartenEventStore`, `SubIndex`), die Version läuft dem Log davon, und jeder Append scheitert.
