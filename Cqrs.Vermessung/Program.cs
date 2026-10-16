@@ -1,5 +1,5 @@
 // ═══════════════════════════════════════════════════════════════════════════════════════════════════════════════════════
-// EBENE 3 — ENDE ZU ENDE (docs/12 §12.4): der echte Host, die realen Anwendungen, nur echte Eingänge.
+// EBENE 3 — ENDE ZU ENDE (docs/12 §12.5): der echte Host, die realen Anwendungen, nur echte Eingänge.
 //   scripts/vermessung-e2e.sh --anlass server-leistung              Leistungsmessung (≈ 7 min)
 //   scripts/vermessung-e2e.sh --stoerung --anlass server-stoerung    Störungslauf (≈ 4 min)
 // Jeder Lauf legt seinen Ordner unter vermessung/ergebnisse/ an (nur anhängen) und prüft Exactly-once; schlägt eine Prüfung fehl, ist

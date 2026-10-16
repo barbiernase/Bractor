@@ -7,7 +7,7 @@
 #
 # Läuft im Arbeitsbaum, wie er ist. Vor dem Push auf dem Messserver: scripts/server.sh lauf ./pruefe.sh alles — der Server checkt den gepushten
 # Commit frisch aus, so prüft der Lauf genau das, was ein Clone sieht. Infrastruktur (Postgres, Redis, Consul) muss laufen
-# (docker compose -f docker-compose.infrastructure.yml up -d); nie gleichzeitig mit einer Messung (docs/12 §12.6).
+# (docker compose -f docker-compose.infrastructure.yml up -d); nie gleichzeitig mit einer Messung (docs/12 §12.7).
 # Exit-Code 0 = alles grün; sonst rot, die letzten Zeilen des roten Schritts stehen in der Ausgabe.
 set -uo pipefail
 export MSBUILDDISABLENODEREUSE=1   # wiederverwendete MSBuild-Knoten erben die Ausgabe und hielten eine Pipe offen
@@ -53,7 +53,7 @@ unveraendert() {
   diff <(echo "$VORHER") <(echo "$nachher"); return 1
 }
 
-# ── Python der Umgebung (docs/12 §12.5): Umgebung:Python aus sim-main, sonst CQRS_PYTHON, sonst python3 ──────────────
+# ── Python der Umgebung (docs/12 §12.6): Umgebung:Python aus sim-main, sonst CQRS_PYTHON, sonst python3 ──────────────
 PY="$(python3 -c 'import json,os,re; p=json.load(open("umgebungen/umgebung.sim-main.json"))["Umgebung"].get("Python",""); print(re.sub(r"\$\{env:(\w+)\}", lambda m: os.environ.get(m.group(1),""), p))' 2>/dev/null)"
 [[ -x "$PY" ]] || PY="${CQRS_PYTHON:-python3}"
 pytest_in() { (cd "$1" && "$PY" -m pytest -q); }

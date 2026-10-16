@@ -3,7 +3,7 @@ using System.Text.Json.Nodes;
 namespace Cqrs.Vermessung;
 
 /// <summary>
-/// Die Parameter eines Laufs — fest, damit jede Messung dieselbe ist (docs/12 §12.4). Über die Kommandozeile wählbar sind nur der Anlass und
+/// Die Parameter eines Laufs — fest, damit jede Messung dieselbe ist (docs/12 §12.5). Über die Kommandozeile wählbar sind nur der Anlass und
 /// die Art (Leistung oder <c>--stoerung</c>).
 /// </summary>
 internal sealed class Optionen
@@ -65,7 +65,7 @@ internal sealed class Optionen
         ["verteilt"] = $"Prüfdomäne, ruhig: 1 Sender, höchstens {VorgaengeRuhig} Vorgänge; Decke: {Sender} Sender, höchstens {VorgaengeDecke} Vorgänge; "
                        + "je 10 Vorgänge 8 Aufträge, 1 Auftrag gegen ein volles Kontingent (Kompensation), 1 Verteilung auf 4 Ziele; 50 Posten, 20 Ziele",
         ["neuaufbau"] = "Host gestoppt, der gespeicherte Projektions-Stand gelöscht (wirkt wie eine Code-Änderung in Sim), Host gestartet: alle Projektionen "
-                        + "lesen das Log ab 0; Dauer vom ersten Abbau bis kein Rückstand (/monitoring/metrics, alle 200 ms)",
+                        + "lesen das Log ab 0; Dauer vom ersten Abbau bis kein Rückstand (/monitoring/metrics, alle 50 ms); dreimal",
         ["leerlauf_s"] = Leerlauf.TotalSeconds,
         ["leerlauf"] = "erst nach dem Nachlauf (alle Poll-Cursor und Projektions-Positionen am Kopf des Logs, höchstens nachlauf_frist_s), dann das Fenster",
         ["nachlauf_frist_s"] = NachlaufFrist.TotalSeconds,

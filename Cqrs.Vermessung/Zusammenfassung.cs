@@ -5,7 +5,7 @@ using System.Text.Json.Nodes;
 namespace Cqrs.Vermessung;
 
 /// <summary>
-/// Die wenigen Kennzahlen, die ein Mensch liest (docs/12 §12.4), als zwei kleine Tabellen: <b>Last</b> (Szenarien mit Vorgängen) und
+/// Die wenigen Kennzahlen, die ein Mensch liest (docs/12 §12.5), als zwei kleine Tabellen: <b>Last</b> (Szenarien mit Vorgängen) und
 /// <b>Ohne Eingang</b> (Leerlauf, Neuaufbau) — je Zelle Median und Spanne über die Wiederholungen. Alle übrigen Kennzahlen bleiben in
 /// <c>ergebnis.json</c>. Die Spalten stehen als <c>spalten</c> im Ergebnis; <c>scripts/vermessung-tabelle.sh</c> setzt daraus die Tabelle in
 /// docs/12 zusammen (eine Quelle).
@@ -52,7 +52,7 @@ internal static class Zusammenfassung
             foreach (var tabelle in new[] { "last", "ruhe" })
             {
                 var spalten = Spalten.Where(s => s.Tabelle == tabelle).ToList();
-                var zeilen = sz.Where(kv => spalten.Any(s => kv.Value!["median"]![s.Key] is not null)).ToList();
+                var zeilen = sz.Where(kv => (string?)kv.Value!["tabelle"] == tabelle).ToList();
                 if (zeilen.Count == 0) continue;
                 sb.AppendLine("| Szenario | " + string.Join(" | ", spalten.Select(s => s.Titel)) + " |");
                 sb.AppendLine("|---|" + string.Concat(spalten.Select(_ => "---:|")));

@@ -33,4 +33,10 @@ public class CommandVorpruefungTests
                                  stateVersion: 6, expectedVersion: 5)
             .Should().Be(E.IdempotenterErfolg);
     }
+
+    [Fact]
+    public void Bereits_abgelehnt_liefert_konsistente_Ablehnung()
+        => CommandVorpruefung.Prüfe(istIdempotent: true, bereitsVerarbeitet: false, bereitsAbgelehnt: true,
+                                    stateVersion: 6, expectedVersion: 5)
+            .Should().Be(E.IdempotenteAblehnung);
 }

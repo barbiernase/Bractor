@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Die Leistungstabelle (docs/12 §12.4) — erzeugt aus den Ergebnis-Ordnern, nie von Hand.
+# Die Leistungstabelle (docs/12 §12.5) — erzeugt aus den Ergebnis-Ordnern, nie von Hand.
 #
 #   scripts/vermessung-tabelle.sh             druckt die Tabelle (Markdown)
 #   scripts/vermessung-tabelle.sh --schreibe  ersetzt sie in docs/12 zwischen <!-- vermessung-tabelle:anfang --> und <!-- …:ende -->
@@ -50,8 +50,7 @@ else:
         reihenfolge = list(leistung[-1]["szenarien"].keys())
         for tab in ("last", "ruhe"):
             sp = [s for s in spalten if s["tabelle"] == tab]
-            namen = [n for n in reihenfolge if any(
-                k["kennzahlen"].get(s["key"]) is not None for e in leistung for k in e["szenarien"].get(n, {}).get("wiederholungen", []) for s in sp)]
+            namen = [n for n in reihenfolge if leistung[-1]["szenarien"][n].get("tabelle") == tab]
             if not namen:
                 continue
             zeilen.append("| Szenario | " + " | ".join(s["titel"] for s in sp) + " |")

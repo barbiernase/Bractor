@@ -94,7 +94,7 @@ internal sealed class Bildeingang : ILast, IAsyncDisposable
         Pruefung P(string name, long soll, long ist) => Pruefung.Erwartet(name, soll, ist, vollstaendig);
         var ids = _paare.ToArray();
         var s = db.Schema;
-        var praefix = Jahr + "%";
+        var praefix = _basis.ToString("yyyy_MM_dd_", CultureInfo.InvariantCulture) + "%";   // nur die Dateien dieses Eingangs (Tag = Wiederholung)
         var p = new List<Pruefung>
         {
             P("je Datei genau eine Quell-Nachricht im Log", dateien,

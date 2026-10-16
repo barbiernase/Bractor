@@ -12,7 +12,7 @@ internal sealed class SzenarioWert
 }
 
 /// <summary>
-/// Die Leistungsmessung (docs/12 §12.4) in wenigen Minuten, je Anwendung ein Host auf frischer DB. Beispieldomäne: <b>Bildeingang</b> (Stoß
+/// Die Leistungsmessung (docs/12 §12.5) in wenigen Minuten, je Anwendung ein Host auf frischer DB. Beispieldomäne: <b>Bildeingang</b> (Stoß
 /// TIFF-Paare: Quelle, Fluss mit Funktionen, Projektion, Query) und <b>Heiß</b> (Teile von 64 Sendern an EINEN Sammelvorgang), je dreimal;
 /// danach der <b>Leerlauf</b> und der <b>Neuaufbau</b> aller Projektionen über das so entstandene Log. Prüfdomäne: <b>Verteilt</b> ruhig
 /// (1 Sender) und an der Decke (64 Sender) — Schreiben, Prozess (Diamant, Kompensation, Fan-out), Reaktion —, je dreimal, danach der Leerlauf.
@@ -20,15 +20,16 @@ internal sealed class SzenarioWert
 /// </summary>
 internal static class Leistung
 {
-    public static readonly (string Name, string Titel, string Einheit)[] Szenarien =
+    /// <summary>Die Szenarien in Tabellen-Reihenfolge; <c>Tabelle</c> „last“ (mit Vorgängen) oder „ruhe“ (ohne Eingang).</summary>
+    public static readonly (string Name, string Titel, string Tabelle)[] Szenarien =
     [
-        ("Bildeingang", "Bildeingang: Quelle, Fluss, Projektion", "Paare"),
-        ("Heiss", "Heißer Schreiber: ein Sammelvorgang, 64 Sender", "Teile"),
-        ("Verteilt-1", "Verteilt ruhig: Prüfdomäne, 1 Sender", "Vorgänge"),
-        ("Verteilt-64", "Verteilt an der Decke: Prüfdomäne, 64 Sender", "Vorgänge"),
-        ("Neuaufbau", "Neuaufbau aller Projektionen", "Events"),
-        ("Leerlauf-Beispiel", "Leerlauf Beispieldomäne", ""),
-        ("Leerlauf-Pruef", "Leerlauf Prüfdomäne", ""),
+        ("Bildeingang", "Bildeingang: Quelle, Fluss, Projektion (Paare)", "last"),
+        ("Heiss", "Heißer Schreiber: ein Sammelvorgang, 64 Sender (Teile)", "last"),
+        ("Verteilt-1", "Verteilt ruhig: Prüfdomäne, 1 Sender (Vorgänge)", "last"),
+        ("Verteilt-64", "Verteilt an der Decke: Prüfdomäne, 64 Sender (Vorgänge)", "last"),
+        ("Leerlauf-Beispiel", "Leerlauf Beispieldomäne", "ruhe"),
+        ("Leerlauf-Pruef", "Leerlauf Prüfdomäne", "ruhe"),
+        ("Neuaufbau", "Neuaufbau aller Projektionen", "ruhe"),
     ];
 
     public static async Task<JsonObject> LaufeAsync(Kontext k)
@@ -72,7 +73,7 @@ internal static class Leistung
                 Merke("Heiss", heiss);
             }
             Merke("Leerlauf-Beispiel", await LeerlaufAsync(k, lauf, "Leerlauf-Beispiel", abgebaut));
-            Merke("Neuaufbau", await NeuaufbauAsync(k, lauf));
+            for (var w = 1; w <= o.Wiederholungen; w++) Merke("Neuaufbau", await NeuaufbauAsync(k, lauf, w));
             Global("Beispieldomäne", await GlobalePruefung.PruefeAsync(lauf.Db, "Beispieldomäne"));
         }
 
@@ -108,7 +109,7 @@ internal static class Leistung
         }
 
         var szenarien = new JsonObject();
-        foreach (var (name, titel, einheit) in Szenarien)
+        foreach (var (name, titel, tabelle) in Szenarien)
         {
             if (!werte.TryGetValue(name, out var liste)) continue;
             var schluessel = liste.SelectMany(w => w.Kennzahlen.Keys).Distinct().ToList();
@@ -117,7 +118,7 @@ internal static class Leistung
             szenarien[name] = new JsonObject
             {
                 ["titel"] = titel,
-                ["einheit"] = einheit,
+                ["tabelle"] = tabelle,
                 ["wiederholungen"] = new JsonArray(liste.Select(w => (JsonNode)new JsonObject
                 {
                     ["kennzahlen"] = new JsonObject(w.Kennzahlen.Select(kv => KeyValuePair.Create(kv.Key, Ablage.Zahl(kv.Value)))),
@@ -227,15 +228,16 @@ internal static class Leistung
     /// Neuaufbau aller Projektionen über das Log der Blöcke davor: Host stoppen, den gespeicherten Projektions-Stand löschen (in Sim heißt das
     /// „Code geändert“, <c>ProjektionsStandDienst</c>), Host starten — die Leseseite wird geleert, jede Partition jeder Projektion liest ab 0.
     /// Gemessen wird über den Rückstand in <c>/monitoring/metrics</c> (relevante Events jenseits der Positionen, Summe über die Projektionen):
-    /// vom ersten Abbau bis null. Danach muss das Read-Model wieder dem Log entsprechen.
+    /// vom ersten Abbau bis null, alle 50 ms abgefragt. Danach muss das Read-Model wieder dem Log entsprechen. Dreimal hintereinander — ein
+    /// Neuaufbau über das Log dieser Messung dauert unter einer Sekunde, die Spanne zeigt die Unschärfe der Abfrage.
     /// </summary>
-    private static async Task<SzenarioWert> NeuaufbauAsync(Kontext k, Anwendungslauf lauf)
+    private static async Task<SzenarioWert> NeuaufbauAsync(Kontext k, Anwendungslauf lauf, int w)
     {
-        Console.WriteLine("  Neuaufbau");
+        Console.WriteLine($"  Neuaufbau ({w}/{k.Optionen.Wiederholungen})");
         var kopf = await lauf.Db.ZahlAsync($"select coalesce(max(seq_id), 0) from {lauf.Db.Schema}.mt_events");
         await lauf.Host.StoppeAsync();
         await lauf.Db.AusfuehrenAsync(lauf.Db.Name, $"delete from {lauf.Db.Schema}.stand where schluessel like 'projektion:%'");
-        k.Ressourcen.Abschnitt("Neuaufbau");
+        k.Ressourcen.Abschnitt($"Neuaufbau-{w}");
         var fenster = new Messfenster(lauf.Db, k.Ressourcen, lauf.Rolle);
         await fenster.StarteAsync();
         var gesamt = Stopwatch.StartNew();
@@ -252,9 +254,9 @@ internal static class Leistung
             else if (r == hoechst) zuletztHoechst = t;
             if (beginn == null && r >= 0 && r < hoechst) beginn = zuletztHoechst;
             if (r == 0 && hoechst > 0) { ende = t; break; }
-            await Task.Delay(200);
+            await Task.Delay(50);
         }
-        var (kz, _) = await fenster.EndeAsync((int)Math.Max(0, hoechst), k.Ablage, "Neuaufbau", 1);
+        var (kz, _) = await fenster.EndeAsync((int)Math.Max(0, hoechst), k.Ablage, "Neuaufbau", w);
         var dauer = ende is { } e && beginn is { } b ? (e - b).TotalSeconds : double.NaN;
         var wert = new SzenarioWert();
         wert.Kennzahlen["events"] = hoechst;

@@ -9,7 +9,7 @@ namespace Abstractions;
 /// als Duplikate erkennbar sind und verpuffen.
 ///
 /// MD5 dient nur als stabile, gut streuende Ableitung — keine kryptografische Eigenschaft nötig
-/// (identisch zur Begründung bei <see cref="ReaktionsId"/>).
+/// (identisch zur Begründung bei <c>EmitId</c>).
 /// </summary>
 public static class ProzessId
 {

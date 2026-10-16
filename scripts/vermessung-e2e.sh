@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Ebene 3 der Test-Suite — Ende zu Ende (docs/12 §12.4): ein Befehl, feste Parameter, echte Hosts, echte Eingänge, Exactly-once-Prüfung.
+# Ebene 3 der Test-Suite — Ende zu Ende (docs/12 §12.5): ein Befehl, feste Parameter, echte Hosts, echte Eingänge, Exactly-once-Prüfung.
 #
 #   scripts/vermessung-e2e.sh --anlass server-leistung              Leistungsmessung (≈ 7 min)
 #   scripts/vermessung-e2e.sh --stoerung --anlass server-stoerung    Störungslauf (≈ 4 min)
