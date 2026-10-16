@@ -42,10 +42,23 @@ löst den Aggregat-Typ aus der generierten Map (`GeneratedPipelines.CommandAggre
 
 **(c) Aggregat-Actor — der Kern.**
 `AggregateActorBase.ReceiveAsync`: das erste `CommandEnvelope` löst `InitializeAsync` aus (Rehydration aus dem Log, ggf. ab Snapshot);
-dann läuft `HandleCommandAsync` im Spur-Rahmen `Spur.Von(Ursache, decide:<Aggregat>/<Command>, Wirker des Absenders)`. Es wird **immer**
-`context.Respond(...)` aufgerufen — sonst wiederholt Proto.Actor.
+dann reiht der Actor den Command ein. Jeder Command bekommt **immer** eine Antwort an seinen Absender — sonst wiederholt der Aufrufer.
 
-`HandleCommandAsync` dispatcht exhaustiv über den Summentyp `CommandModus`:
+**Bündel** (Normalweg, `StarteBuendelAsync`): während ein Commit läuft, nimmt der Actor weitere Commands an und sammelt sie
+(`context.ReenterAfter` — die Mailbox ist nicht blockiert). Ist der Commit durch, nimmt er bis zu `Schreibpfad.BuendelGroesse` (Standard 64)
+wartende Commands und entscheidet sie nacheinander im Speicher (`EntscheideAsync`, je im Spur-Rahmen `Spur.Von(Ursache,
+decide:<Aggregat>/<Command>, Wirker des Absenders)`): dieselbe Vorprüfung und dasselbe Decide wie der Einzel-Pfad unten, die Events eines
+schreibenden Commands wendet er sofort an — der nächste entscheidet auf diesem Stand. Alle schreibenden Commands gehen als Teile
+(`AppendTeil`: Events, Korrelation, Kausalität = CommandId, Akteur, Spur, Quittung) in **einen** Append (`AppendTeileAsync`, eine Transaktion,
+im Group-Commit ein Auftrag). Geantwortet wird jedem erst nach diesem Commit (`AbschliessenAsync`: Cache, Signale, Ablehnung an die Sitzung,
+Antwort in Mailbox-Reihenfolge); eine CommandId, die zweimal im Bündel steht, bekommt die Antwort ihres ersten Auftretens. Scheitert der Append
+(Versionskonflikt durch einen zweiten Schreiber, eine Wiederholung, die der Cache nicht kannte, ein mehrdeutiger Commit, ein DB-Fehler), sind
+alle Entscheidungen des Bündels hinfällig: der Actor lädt frisch und behandelt jeden Command einzeln über `HandleCommandAsync` (`EinzelnAsync`)
+— ein Command, den das Bündel doch geschrieben hatte, scheitert dort an seiner Quittung und bekommt den Ausgang des ersten Mals. Solange ein
+Bündel unterwegs ist, schreibt der Actor keinen Snapshot (sein State trägt nicht committete Entscheidungen) und passiviert nicht. Bei verteilter
+Last ist ein Bündel meist ein Command; ein heißes Aggregat teilt sich Commits statt je Command einen.
+
+**Einzel-Pfad** (nach einem gescheiterten Bündel): `HandleCommandAsync` dispatcht exhaustiv über den Summentyp `CommandModus`:
 - `Client c` → OCC gegen `c.ExpectedVersion`, idempotent (Inbox vor OCC)
 - `Emittiert` → keine behauptete Version (`expectedVersion = _state.Version`), idempotent
 

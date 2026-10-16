@@ -298,6 +298,14 @@ Ableitungen auf den Server, dann die Leitsatz-Verletzungen in den Werkzeugen, zu
 
 ## 13.6 Erledigt (früher hier offen)
 
+- **Aggregat-Bündel (2026-10-16, Messserver; docs/03 §3.1):** ein heißes Aggregat war an „ein Command je Commit“ gebunden (Single-Writer +
+  sicherer Commit ≈ 4 ms). Jetzt sammelt der Actor während des Commits (`ReenterAfter`), entscheidet die gesammelten nacheinander im Speicher
+  und hängt sie als Teile eines Appends an (`AppendTeil`, `AppendTeileAsync`; Metadaten, Spur und Quittung je Command); scheitert der Append,
+  lädt er frisch und behandelt jeden einzeln (Tobi: Sammeln während des Commits, Rückfall einzeln, immer an, `Schreibpfad.BuendelGroesse` 64).
+  Gemessen (A-B-B-A): S3-8 1,72 ×, S3-64 2,29 × (Latenz p50 S3-8 1,4 s → 15 ms), S5 1,01–1,07 ×; zwei Störungsläufe grün. Nachweis: PD
+  `SchreibGarantieTests.Ein_heisser_Posten_buendelt…`, `…Im_Buendel_entscheidet_jeder_Command_auf_dem_Stand_nach_dem_vorigen`,
+  `…Ein_zweiter_Schreiber_mitten_im_Ansturm…` (Gegenprobe: ohne Anwenden im Bündel fallen alle Schreib-Garantien).
+
 - **Prozess-Manager liest nur, was er nicht schon weiß (2026-10-16, Messserver; docs/04 §4.5, docs/03 §3.3):** die Datenbankarbeit je Vorgang
   lag zur Hälfte im Lesen des Managers, die meisten Ziel-Stream-Reads kamen leer zurück (0,4 Zeilen je Abfrage). Jetzt: Router-Weckungen
   mit Event lesen nur dessen Stream (nichts, wenn schon gefaltet), Weckungen nach Send bzw. Funktions-Ergebnis tragen Ziel und Vorgang, ein

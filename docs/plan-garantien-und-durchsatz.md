@@ -369,6 +369,12 @@ Messung `…_0026_6a437ba_server-prozess-manager` (gültig, grün), Störungslä
 S5-64 457 → 1 246 Vorgänge/s, S5-8 451 → 1 030, S1 1,40 ×, S3/S4 unverändert; gegen die Server-Baseline S5-64 6,0 ×, S5-8 2,8 ×, S1 1,54 ×.
 Damit ist das alte E5-Ziel „S5-8 ≥ 3 × Baseline“ fast erreicht (2,85 ×); S1 bleibt am Datei-Treiber (PF-10).
 
+**Nachtrag Aggregat-Bündel** (2026-10-16, auf Tobis Wort, Code `2390f1e`, Messserver): ein Aggregat-Actor sammelt während seines Commits und
+hängt die gesammelten Commands in einem Append an (docs/13 §13.6). Messung `…_0146_2390f1e_server-buendel` (gültig, grün), Störungsläufe
+`…_0150_…`/`…_0153_…` (grün), A-B-B-A `…_server-bu-ab-*`: S3-8 1,72 ×, S3-64 2,29 ×, S5 unverändert. Gegen die Server-Baseline: S3-64 5,9 ×,
+S3-8 3,7 ×, S5-64 6,2 ×, S5-8 2,6 ×, S1 1,54 × — das alte E5-Ziel „S3 heiß ≥ 1,5 × des Stands nach Phase 3“ ist auch gegen die Baseline weit
+übertroffen.
+
 **Phase 5** (umgesetzt, 2026-10-15, auf Tobis Wort vor Phase 4; Code `22632bc`…`ffaeaea`, gemessen auf dem Messserver, docs/12 §12.6):
 - *Umgesetzt:* PF-4 — `ProzessPoll` liest seitenweise (`ReadPartitionAsync`) und routet die geladenen Events, Starts nur für neue oder offene
   Vorgänge (`StreamsVorhandenAsync`), Marke je Seite; Backstop mit Fristen im Offen-Index (`ProzessOffen.Frist`, Sekundentakt, geschrieben erst
