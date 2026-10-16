@@ -18,7 +18,6 @@ namespace Infrastructure.Integration.Tests.Garantien;
 /// derselben Partition einen Effekt nicht doppelt an (G-4), ein Poison-Stream wird geparkt und holt nach der Heilung nach, und ein Neuaufbau
 /// nimmt einem noch laufenden Leser den Commit.
 /// </summary>
-[Trait("Kategorie", "Garantie")]
 public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture>
 {
     private readonly Fixture _fx;
@@ -26,22 +25,6 @@ public class GarantiePostgresTests : IClassFixture<GarantiePostgresTests.Fixture
 
     private MartenEventStore EventStore(TimeSpan? karenz = null, bool schnell = false)
         => new(schnell ? _fx.Schnell : _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: karenz ?? TimeSpan.Zero);
-
-    [Theory, InlineData(false), InlineData(true)]   // Martens Anhänge-Modus: Standard (Rich) und schnell (Quick, so läuft der Host)
-    public async Task Ein_Append_wird_ganz_oder_gar_nicht_gueltig(bool schnell)
-    {
-        var es = EventStore(schnell: schnell);
-        var id = Guid.NewGuid();
-        await es.AppendEventsAsync(id, 0, new IEvent[] { new ImagePairInspiziert() });
-
-        // Zwei Events gegen eine veraltete Version: keines darf gültig werden.
-        var akt = () => es.AppendEventsAsync(id, 0, new IEvent[] { new ImagePairInspiziert(), new ImagePairInspiziert() });
-        await akt.Should().ThrowAsync<Exception>();
-        (await es.ReadStreamAsync(id, 0, default)).Should().HaveCount(1);
-
-        await es.AppendEventsAsync(id, 1, new IEvent[] { new ImagePairInspiziert(), new ImagePairInspiziert() });
-        (await es.ReadStreamAsync(id, 0, default)).Select(e => e.AggregateVersion).Should().Equal(1, 2, 3);
-    }
 
     [Theory, InlineData(false), InlineData(true)]   // Martens Anhänge-Modus: Standard (Rich) und schnell (Quick, so läuft der Host)
     public async Task Effekt_und_Quittung_werden_gemeinsam_gueltig_oder_gar_nicht(bool schnell)

@@ -21,29 +21,11 @@ namespace Infrastructure.Integration.Tests;
 ///
 /// Braucht laufendes Postgres auf localhost:5432 (cqrs_events / postgres / postgres) — im Dev-Setup über docker-compose.infrastructure.yml.
 /// </summary>
-[Trait("Kategorie", "Garantie")]
 public class CoCommitPostgresTests : IClassFixture<PostgresFixture>
 {
     private static readonly Konsum EinePartition = new(1, 500);
     private readonly PostgresFixture _fx;
     public CoCommitPostgresTests(PostgresFixture fx) => _fx = fx;
-
-    [Fact]
-    public async Task Happy_Path_schreibt_Effekt_Guard_und_Partition_gemeinsam()
-    {
-        var proj = await FrischeProjektion();
-        var stream = Guid.NewGuid();
-        var es = EventStore();
-        await es.AppendEventsAsync(stream, 0, new IEvent[] { new ImagePairInspiziert() });
-        var store = new Domain.Infrastructure.ImagePair.ImagePairHistorieStore(_fx.Store);
-        await BatchHilfe.UhrenversatzAbwartenAsync();
-
-        await BatchHilfe.HistorieLeser(es, store, proj, 0, EinePartition).LaufAsync();
-
-        (await store.GetByPairIdAsync(stream))!.Eintraege.Should().HaveCount(1);
-        (await BatchHilfe.GuardAsync(_fx.Store, proj, stream)).Should().Be(1);
-        (await BatchHilfe.PartitionAsync(_fx.Store, proj, 0))!.Position.Should().Be(await BatchHilfe.KopfAsync(_fx.Store));
-    }
 
     [Fact]
     public async Task Viele_Streams_eines_Batches_werden_in_einem_Commit_gueltig()

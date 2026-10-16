@@ -16,7 +16,6 @@ namespace Pruefdomaene.Integration.Tests;
 /// (Roundtrip samt Inboxen, Überschreiben, Löschen) — und die volle Schleife im Cluster: ein Actor schreibt über der Schwelle einen
 /// Snapshot, eine spätere Rehydration seedet NACHWEISLICH daraus (Snapshot + Tail == Voll-Fold).
 /// </summary>
-[Trait("Kategorie", "Garantie")]
 public class SnapshotTests : IClassFixture<SnapshotTests.Fixture>
 {
     private readonly Fixture _fx;

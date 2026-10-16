@@ -16,7 +16,6 @@ namespace Infrastructure.Pruefstand.Analyzers;
 /// CQRS067 = Schreib-Fähigkeit liest nicht, Lese-Fähigkeit puffert nicht. Gegen die echte <c>MartenCoCommitStoreBase</c>
 /// und echte Marten-Typen.
 /// </summary>
-[Trait("Kategorie", "Garantie")]
 public class StoreZugriffAnalyzerTests
 {
     private static async Task<string[]> Ids(string code)

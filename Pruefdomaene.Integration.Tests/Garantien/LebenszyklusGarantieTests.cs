@@ -13,7 +13,6 @@ namespace Pruefdomaene.Integration.Tests.Garantien;
 /// nächste Nachricht aktiviert sie frisch — derselbe Stand, dieselbe Inbox (eine alte CommandId wirkt nicht erneut), derselbe Cursor der Reaktion
 /// (nichts doppelt, nichts verloren). Beweis der Passivierung: der Aggregat-Actor schreibt beim Stoppen einen Snapshot.
 /// </summary>
-[Trait("Kategorie", "Garantie")]
 public class LebenszyklusGarantieTests
 {
     private static readonly TimeSpan Frist = TimeSpan.FromSeconds(60);

@@ -16,7 +16,6 @@ namespace Infrastructure.Pruefstand.Garantien;
 /// <see cref="IEventStoreRepository.ReadStreamAsync"/>: die Envelopes sind so, wie Marten sie materialisiert (Position,
 /// SubIndex); Store-Semantik selbst prüfen die Integrations-Suiten.
 /// </summary>
-[Trait("Kategorie", "Garantie")]
 public class RehydrationGarantieTests
 {
     private static readonly IAggregateHandlerFactory Fabrik = new Domain.AggregateHandlerFactory();

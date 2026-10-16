@@ -17,7 +17,6 @@ namespace Infrastructure.Pruefstand.Garantien;
 /// Unbekanntem, keine Ausnahme verlässt den Emitter, die Drossel begrenzt die Sends je Ziel, und der Dirigent wiederholt einen unbekannten Send
 /// erst nach einem Backoff und nie doppelt gleichzeitig (PF-9). Store-frei über die Sende-Naht des echten <see cref="CommandEmitter"/>.
 /// </summary>
-[Trait("Kategorie", "Garantie")]
 public class EmitGarantieTests
 {
     private static readonly CancellationToken Ct = CancellationToken.None;

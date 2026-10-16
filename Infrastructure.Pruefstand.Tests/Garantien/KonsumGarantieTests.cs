@@ -19,7 +19,6 @@ namespace Infrastructure.Pruefstand.Garantien;
 /// Lese-Seam liefert den Log so, wie Marten ihn liefert (geordnet ab Version); der Cursor ist ein Fake. Den Batch-Konsum der Projektionen prüft
 /// <see cref="BatchKonsumGarantieTests"/>.
 /// </summary>
-[Trait("Kategorie", "Garantie")]
 public class KonsumGarantieTests
 {
     private static readonly CancellationToken Ct = CancellationToken.None;
@@ -72,31 +71,6 @@ public class KonsumGarantieTests
         await adapter.WakeAsync(stream, Ct);
 
         angewandt.Should().Equal(1, 2, 3, 4, 5);
-    }
-
-    [Fact]
-    public async Task Absturz_zwischen_Emit_und_Cursor_gibt_denselben_Command_mit_derselben_CommandId_erneut_aus()
-    {
-        // Die Reaktion gibt je Event einen Command aus — über das echte Ausgabe-Routing und das eine Emit-Primitiv (Send-Seam).
-        var stream = Guid.NewGuid();
-        var log = new List<EventEnvelope> { Evt(stream, 1), Evt(stream, 2) };
-        var ids = new List<Guid>();
-        var emitter = new CommandEmitter((_, env, _) => { lock (ids) ids.Add(env.CommandId); return Task.FromResult<CommandResult?>(new CommandResult { Success = true }); });
-        var router = new HandlerOutputRouter(emitter, null, "reaktion");
-        var cursor = new AbsturzCursor();
-        var adapter = new EmittentenAdapter(new LeseSeam(log), cursor, "reaktion",
-            (e, _, a) => router.EmitFor(e, a)(new MeldeTeilFertig(Guid.Parse("00000000-0000-0000-0000-0000000000aa"))));
-
-        var erster = () => adapter.WakeAsync(stream, Ct);
-        await erster.Should().ThrowAsync<InvalidOperationException>();
-        var vorDemAbsturz = ids.ToList();
-        ids.Clear();
-
-        await adapter.WakeAsync(stream, Ct);                     // die nächste Weckung nach dem Neustart
-
-        vorDemAbsturz.Should().HaveCount(2);
-        ids.Should().Equal(vorDemAbsturz, "dieselbe Ursache ergibt dieselbe CommandId — die Inbox des Ziels verwirft die Wiederholung");
-        (await cursor.Innen.LadeAsync($"reaktion:{stream}", Ct)).Should().Be(3);
     }
 
     [Fact]

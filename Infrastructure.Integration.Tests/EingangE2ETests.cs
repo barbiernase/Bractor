@@ -202,7 +202,6 @@ public class EingangE2ETests
     /// Command, der fachlich nicht idempotent ist (jede Range ist ein neues Event).
     /// </summary>
     [Fact]
-    [Trait("Kategorie", "Garantie")]
     public async Task Client_wiederholt_mit_derselben_CommandId_und_wirkt_genau_einmal()
     {
         var name = "sim-wiederholung-" + Guid.NewGuid().ToString("N")[..6];

@@ -92,7 +92,6 @@ public class FunktionsAufrufTests
         w.Gesendet.Should().BeEmpty("nach einem Fehlschlag feuert keine Vorwärts-Transition mehr");
     }
 
-    [Trait("Kategorie", "Garantie")]
     [Fact]
     public async Task Ein_Zeitlimit_laesst_einen_haengenden_Aufruf_scheitern_und_ein_spaetes_Ergebnis_aendert_nichts()
     {
@@ -260,7 +259,6 @@ public class FunktionsAufrufTests
         ProzessRegelHash.Berechne(nurSende).Should().Be(ProzessRegelHash.Berechne(alt));
     }
 
-    [Trait("Kategorie", "Garantie")]
     [Fact]
     public void Der_Azyklizitaets_Guard_sieht_Zyklen_durch_Funktionen()
     {

@@ -16,7 +16,6 @@ namespace Infrastructure.Pruefstand.Garantien;
 /// beendeten Vorgang neu und rückt seine Marke nie über eine unbestätigte Weckung — ein Vorgang mit verlorenem Start-Signal und verlorener
 /// Poll-Weckung wird beim nächsten Durchlauf erneut geweckt. Die Marten-Semantik der Seite (Ordnung, Karenz) prüft die Integration.
 /// </summary>
-[Trait("Kategorie", "Garantie")]
 public class ProzessPollGarantieTests
 {
     private sealed record Auftrag : IEvent;

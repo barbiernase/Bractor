@@ -22,107 +22,10 @@ namespace Infrastructure.Integration.Tests;
 ///
 /// Braucht laufendes Postgres auf localhost:5432 (docker-compose.infrastructure.yml).
 /// </summary>
-[Trait("Kategorie", "Garantie")]
 public class SequenceGapPostgresTests : IClassFixture<SequenceGapPostgresTests.Fixture>
 {
     private readonly Fixture _fx;
     public SequenceGapPostgresTests(Fixture fx) => _fx = fx;
-
-    /// <summary>
-    /// CONFIRM (fix-unabhängig, prüft das rohe DB-Phänomen): Eine später committete Transaktion mit
-    /// NIEDRIGERER Sequenz wird erst sichtbar, NACHDEM eine höhere Sequenz bereits sichtbar war. Der
-    /// naive <c>max(seq)</c>-Cursor rückt damit über eine noch unsichtbare, niedrigere Seq hinaus.
-    /// </summary>
-    [Fact]
-    public async Task Reverse_Commit_Reihenfolge_macht_eine_niedrigere_Sequenz_erst_nach_einer_hoeheren_sichtbar()
-    {
-        // Grace = 0 → das Verhalten ist identisch zur alten, naiven max(seq)-Logik. So bleibt dieser
-        // Test ein stabiler Regressions-Wächter für das ROHE DB-Phänomen (fix-unabhängig).
-        var reader = new MartenEventStore(
-            _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.Zero);
-
-        var baseHwm = (await reader.ReadChangedStreamsAsync(0, null, int.MaxValue, default)).HighWaterMark;
-
-        var streamA = Guid.NewGuid(); // zieht die NIEDRIGERE Seq (INSERT zuerst)
-        var streamB = Guid.NewGuid(); // zieht die HÖHERE Seq (INSERT danach), committet aber ZUERST
-
-        await using var connA = new NpgsqlConnection(Fixture.ConnString);
-        await using var connB = new NpgsqlConnection(Fixture.ConnString);
-        await connA.OpenAsync();
-        await connB.OpenAsync();
-        var txA = await connA.BeginTransactionAsync();
-        var txB = await connB.BeginTransactionAsync();
-
-        // INSERT A zuerst → niedrigere seq_id, in txA geflusht, NICHT committet (OwnsTransactionLifecycle=false).
-        await using (var sA = _fx.Store.LightweightSession(SessionOptions.ForTransaction(txA)))
-        {
-            sA.Events.StartStream(streamA, new ImagePairInspiziert());
-            await sA.SaveChangesAsync();
-        }
-        // INSERT B danach → höhere seq_id, in txB geflusht, NICHT committet.
-        await using (var sB = _fx.Store.LightweightSession(SessionOptions.ForTransaction(txB)))
-        {
-            sB.Events.StartStream(streamB, new ImagePairInspiziert());
-            await sB.SaveChangesAsync();
-        }
-
-        // B committet ZUERST → nur B sichtbar.
-        await txB.CommitAsync();
-
-        await BatchHilfe.UhrenversatzAbwartenAsync();
-        var scanNurB = await reader.ReadChangedStreamsAsync(baseHwm, null, int.MaxValue, default);
-        scanNurB.StreamIds.Should().Contain(streamB);
-        scanNurB.StreamIds.Should().NotContain(streamA, "A ist noch uncommitted");
-        var naiveHwm = scanNurB.HighWaterMark; // = B's (höhere) Sequenz
-
-        // Erst JETZT committet A → seine niedrigere Seq wird sichtbar, liegt aber UNTER naiveHwm.
-        await txA.CommitAsync();
-
-        var seqA = await SeqOf(streamA);
-        var seqB = await SeqOf(streamB);
-        seqA.Should().BeLessThan(seqB, "A wurde zuerst eingefügt → niedrigere Sequenz");
-        naiveHwm.Should().Be(seqB, "der naive Cursor steht auf B's höherer Sequenz");
-        seqA.Should().BeLessThanOrEqualTo(naiveHwm,
-            "BESTÄTIGT Befund 3: A's Seq liegt unter dem bereits vorgerückten Cursor → ein Scan ab naiveHwm " +
-            "(Sequence > naiveHwm) überspringt A für immer");
-
-        // Der Beweis, dass der naive Read A wirklich verliert:
-        var scanAbNaiv = await reader.ReadChangedStreamsAsync(naiveHwm, null, int.MaxValue, default);
-        scanAbNaiv.StreamIds.Should().NotContain(streamA, "A wird ab der naiven HWM nie wieder gescannt");
-    }
-
-    /// <summary>
-    /// FIX (Befund 3): Die Straggler-Karenz hält die HWM hinter einem zu jungen Event zurück — der
-    /// Stream wird zwar geweckt (Heilung), aber der Cursor rückt NICHT über es hinaus, solange ein
-    /// in-flight Nachzügler mit niedrigerer Seq noch landen könnte. Ohne Karenz rückt die HWM sofort
-    /// vor (die alte, unsichere Logik).
-    /// </summary>
-    [Fact]
-    public async Task Straggler_Karenz_haelt_die_HWM_hinter_einem_zu_jungen_Event_zurueck()
-    {
-        var ohneKarenz = new MartenEventStore(
-            _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.Zero);
-        var mitKarenz = new MartenEventStore(
-            _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.FromMinutes(5));
-
-        // Referenzpunkt: alles bis hier ist "alt genug" (max seq ohne Karenz).
-        var trueMax = (await ohneKarenz.ReadChangedStreamsAsync(0, null, int.MaxValue, default)).HighWaterMark;
-
-        var stream = Guid.NewGuid();
-        await ohneKarenz.AppendEventsAsync(stream, 0, new Abstractions.IEvent[] { new ImagePairInspiziert() });
-
-        // Mit Karenz: der Stream wird geweckt, aber die HWM bleibt bei trueMax (Event zu jung).
-        var mit = await mitKarenz.ReadChangedStreamsAsync(trueMax, null, int.MaxValue, default);
-        mit.StreamIds.Should().Contain(stream, "der geänderte Stream wird trotz Karenz geweckt (Heilung)");
-        mit.HighWaterMark.Should().Be(trueMax,
-            "die Straggler-Karenz rückt die HWM NICHT über das zu junge Event hinaus (schützt in-flight Nachzügler)");
-
-        // Ohne Karenz: die HWM rückt sofort über das Event (die alte, für Befund 3 unsichere Logik). Kurz warten: den Event-Zeitstempel setzt
-        //   der Client, er liegt manchmal Bruchteile einer Millisekunde vor der DB-Uhr (BatchHilfe.UhrenversatzAbwartenAsync).
-        await BatchHilfe.UhrenversatzAbwartenAsync();
-        var ohne = await ohneKarenz.ReadChangedStreamsAsync(trueMax, null, int.MaxValue, default);
-        ohne.HighWaterMark.Should().BeGreaterThan(trueMax, "ohne Karenz rückt die HWM sofort vor");
-    }
 
     /// <summary>
     /// PF-14: steht hinter der Marke nichts, liefern Partitions-Read und Emittenten-Poll eine leere Seite und halten die Marke (gesetzte

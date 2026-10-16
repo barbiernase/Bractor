@@ -25,7 +25,6 @@ namespace Pruefdomaene.Integration.Tests;
 /// den Command erst nach einer Weckung ohne Quelle aus (sie liest den Ziel-Stream zu früh), danach weckt der Send wie im Host mit Ziel und
 /// Vorgang.
 /// </summary>
-[Trait("Kategorie", "Garantie")]
 public class MarkingCursorAequivalenzTests : IClassFixture<MarkingCursorAequivalenzTests.Fixture>
 {
     private readonly Fixture _fx;

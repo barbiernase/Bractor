@@ -18,7 +18,6 @@ namespace Infrastructure.Pruefstand.Garantien;
 /// <see cref="CommandEmitter"/> (kein Cluster): Timeout, technischer Fehlschlag, Wiederholung nach Absturz.
 /// Store-frei: der Fristplan ist der In-Memory-Randstore (nicht autoritativ, Inv. 6), die DB-Uhr ein Fake.
 /// </summary>
-[Trait("Kategorie", "Garantie")]
 public class FristGarantieTests
 {
     private static readonly DateTimeOffset T0 = new(2026, 1, 1, 12, 0, 0, TimeSpan.Zero);

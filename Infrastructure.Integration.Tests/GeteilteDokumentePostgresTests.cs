@@ -1,6 +1,5 @@
 using Abstractions;
 using Core;
-using Domain.Datensatz;
 using Domain.Infrastructure.Generated;
 using Domain.Modell;
 using Domain.Projections;
@@ -11,86 +10,24 @@ using Marten;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging.Abstractions;
 using Npgsql;
-using Domain.Infrastructure.Datensatz;
 using Domain.Infrastructure.Modell;
-using Domain.Projections.Datensatz;
 using Domain.Projections.Modell;
 
 namespace Infrastructure.Integration.Tests;
 
 /// <summary>
-/// Dokumente, in die MEHRERE Streams schreiben, gegen echtes Postgres mit der echten Domäne und dem GENERIERTEN
-/// Marten-Schema (<c>AddGeneratedProjectionServices</c>).
-///
-/// Die Konsum-Maschine garantiert einen Schreiber je (Projektion, Partition) und damit je Stream. Zwei Datensätze in zwei Partitionen
-/// laufen in zwei Batch-Lesern parallel. Früher pflegten beide dieselbe Liste „Datensätze dieses Bildpaares“ per Lesen → Ändern →
-/// Schreiben — der spätere Commit überschrieb den früheren still (Lost Update). Jetzt: Zeilen je (Datensatz, Paar).
-/// Ebenso der Singleton „aktives Modell“: jedes Modell ist ein eigener Stream; „die jüngste Aktivierung gewinnt“ muss
-/// nach Event-Zeit gelten, nicht nach der zufälligen Verarbeitungsreihenfolge der Partitionen.
+/// Ein Dokument, in das MEHRERE Streams schreiben, gegen echtes Postgres mit dem GENERIERTEN Marten-Schema
+/// (<c>AddGeneratedProjectionServices</c>): der Singleton „aktives Modell“ der Beispieldomäne, vier Partitions-Leser gleichzeitig. Bewiesen
+/// wird die generierte Optimistic-Concurrency-Registrierung — die Wiederholung im Leser selbst prüft <see cref="SchreibRegelPostgresTests"/>
+/// domänenneutral.
 /// </summary>
 [Collection(GeteiltCollection.Name)]
-[Trait("Kategorie", "Garantie")]
 public class GeteilteDokumentePostgresTests
 {
     private readonly GeteiltFixture _fx;
     public GeteilteDokumentePostgresTests(GeteiltFixture fx) => _fx = fx;
 
     private static readonly Konsum VierPartitionen = new(4, 500);
-
-    [Fact]
-    public async Task Zwei_Datensaetze_nehmen_dieselben_Paare_gleichzeitig_auf_beide_stehen_im_Rueckwaerts_Index()
-    {
-        var paare = Enumerable.Range(0, 40).Select(_ => Guid.NewGuid()).ToList();
-        var (a, b) = (BatchHilfe.StreamIn(0, 4), BatchHilfe.StreamIn(1, 4));
-        var proj = await Frisch("datensatz");
-        var es = _fx.EventStore();
-        foreach (var ds in new[] { a, b })
-            await es.AppendEventsAsync(ds, 0,
-                new IEvent[] { new DatensatzErstellt("ds-" + ds.ToString("N")[..6]) }
-                    .Concat(paare.Select(p => (IEvent)new PaarAufgenommen(p))).ToList());
-
-        // Zwei Partitionen, zwei Batch-Leser, zwei Store-Instanzen (je ein Fähigkeits-Bereich) — gleichzeitig.
-        await Task.WhenAll(
-            Task.Run(() => DatensatzLeser(es, proj, 0).LaufAsync()),
-            Task.Run(() => DatensatzLeser(es, proj, 1).LaufAsync()));
-
-        var leser = new DatensatzStore(_fx.Store);
-        foreach (var p in paare)
-            (await leser.HoleDatensaetzeFuerPaarAsync(p)).Select(d => d.Id)
-                .Should().BeEquivalentTo(new[] { a, b }, $"Paar {p} liegt in beiden Datensätzen");
-    }
-
-    [Fact]
-    public async Task Paar_entfernen_nimmt_nur_die_Zeile_dieses_Datensatzes_heraus()
-    {
-        var p = Guid.NewGuid();
-        var (a, b) = (BatchHilfe.StreamIn(0, 4), BatchHilfe.StreamIn(1, 4));
-        var proj = await Frisch("datensatz");
-        var es = _fx.EventStore();
-        await es.AppendEventsAsync(a, 0, new IEvent[] { new DatensatzErstellt("a"), new PaarAufgenommen(p), new PaarEntfernt(p) });
-        await es.AppendEventsAsync(b, 0, new IEvent[] { new DatensatzErstellt("b"), new PaarAufgenommen(p) });
-
-        await DatensatzLeser(es, proj, 0).LaufAsync();
-        await DatensatzLeser(es, proj, 1).LaufAsync();
-
-        (await new DatensatzStore(_fx.Store).HoleDatensaetzeFuerPaarAsync(p)).Select(d => d.Id)
-            .Should().BeEquivalentTo(new[] { b });
-    }
-
-    [Fact]
-    public async Task Aktives_Modell_juengere_Aktivierung_gewinnt_auch_wenn_ihr_Stream_zuerst_verarbeitet_wird()
-    {
-        var es = _fx.EventStore();
-        var proj = await Frisch("modell");
-        var alt = await ModellMitAktivierung(es, BatchHilfe.StreamIn(0, 4));
-        var neu = await ModellMitAktivierung(es, BatchHilfe.StreamIn(1, 4));   // später angehängt → jüngere Event-Zeit
-
-        // Umgekehrte Verarbeitungsreihenfolge: die Partition des NEUEN Modells zuerst, die des alten danach.
-        await ModellLeser(es, proj, 1).LaufAsync();
-        await ModellLeser(es, proj, 0).LaufAsync();
-
-        (await new ModellStore(_fx.Store).GetAktivesAsync())!.ModellId.Should().Be(neu);
-    }
 
     [Fact]
     public async Task Aktives_Modell_gleichzeitig_aktiviert_ergibt_immer_die_juengste_Aktivierung()
@@ -118,15 +55,6 @@ public class GeteilteDokumentePostgresTests
         var proj = $"{projektion}-it-{Guid.NewGuid():N}";
         await BatchHilfe.StarteAmKopfAsync(_fx.Store, proj, VierPartitionen);
         return proj;
-    }
-
-    private BatchLeser DatensatzLeser(MartenEventStore es, string proj, int partition)
-    {
-        var store = new DatensatzStore(_fx.Store);
-        var projektion = new DatensatzProjektion();
-        var faehigkeiten = new FaehigkeitenAus(store);
-        return new BatchLeser(es, store, proj, partition, VierPartitionen, BatchLeser.TypenAus(DatensatzProjektion.SubscribedTypes),
-            (e, w) => projektion.DispatchAsync(e, w, BatchLeser.KeineAusgabe, faehigkeiten));
     }
 
     private BatchLeser ModellLeser(MartenEventStore es, string proj, int partition)

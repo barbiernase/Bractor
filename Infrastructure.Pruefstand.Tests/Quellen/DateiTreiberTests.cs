@@ -43,7 +43,6 @@ public class DateiTreiberTests
         DateiScan.Bilde(DateiKennungArt.PfadGroesseZeit, d).Should().Be("sub/a.tiff|4711|" + T0.ToString("O"));
     }
 
-    [Trait("Kategorie", "Garantie")]
     [Fact]
     public void Vorgangs_Id_folgt_aus_Typ_und_Kennung()
     {
@@ -72,7 +71,6 @@ public class DateiTreiberTests
         scan.Fertige([Stand("a.tiff", marker: true), Stand("a.tiff.done")], T0).Select(d => d.Name).Should().Equal("a.tiff");
     }
 
-    [Trait("Kategorie", "Garantie")]
     [Fact]
     public void Gemeldet_wird_nicht_wiederholt_eine_ersetzte_Datei_aber_schon()
     {
@@ -91,7 +89,6 @@ public class DateiTreiberTests
         scan.Fertige([Stand("a", 10, T0.AddMinutes(1))], T0.AddSeconds(5)).Should().BeEmpty();
     }
 
-    [Trait("Kategorie", "Garantie")]
     [Fact]
     public void Schon_im_Log_bekannte_Dateien_werden_nicht_gemeldet_verschwundene_fallen_aus_dem_Gedaechtnis()
     {
@@ -104,7 +101,6 @@ public class DateiTreiberTests
 
     // ── Lease (EinmalImCluster) ──────────────────────────────────────────────────────────────────────────────────────
 
-    [Trait("Kategorie", "Garantie")]
     [Fact]
     public void Lease_hat_genau_einen_Halter_bis_sie_ablaeuft()
     {
@@ -190,7 +186,6 @@ public class DateiTreiberTests
 
     // ── Treiber gegen ein echtes Verzeichnis (der Log ist eine Funktion) ────────────────────────────────────────────
 
-    [Trait("Kategorie", "Garantie")]
     [Fact]
     public async Task Treiber_meldet_neue_Dateien_genau_einmal_und_ueberspringt_was_der_Log_schon_kennt()
     {
@@ -263,7 +258,6 @@ public class DateiTreiberTests
     }
 
     /// <summary>Garantie (docs/11 §11.8): Rückstau — die nächste Datei wird erst gemeldet, wenn die vorige im Log steht.</summary>
-    [Trait("Kategorie", "Garantie")]
     [Fact]
     public async Task Rueckstau_die_naechste_Datei_erst_wenn_die_vorige_im_Log_steht()
     {

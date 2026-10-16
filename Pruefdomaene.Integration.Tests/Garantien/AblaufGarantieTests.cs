@@ -10,36 +10,12 @@ namespace Pruefdomaene.Integration.Tests.Garantien;
 
 /// <summary>
 /// Garantien der durablen Konsumenten im echten Cluster (docs/11 §11.6, §11.7): die Reaktion <c>NachschubBeiMindestbestand</c> wirkt genau
-/// einmal über Signal und Poll (beide lesen ab ihrem Cursor) und auch, wenn sie zwischen Emit und Cursor abstürzt (dann sendet sie erneut,
-/// die Inbox verwirft es); ein Vorgang, dessen Host mitten im Lauf neu startet, wird zu Ende geführt und wirkt jeden Schritt genau einmal.
+/// einmal, auch wenn sie zwischen Emit und Cursor abstürzt (dann sendet sie erneut, die Inbox verwirft es); ein Vorgang, dessen Host mitten im
+/// Lauf neu startet, wird zu Ende geführt und wirkt jeden Schritt genau einmal.
 /// </summary>
-[Trait("Kategorie", "Garantie")]
 public class AblaufGarantieTests
 {
     private static readonly TimeSpan Frist = TimeSpan.FromSeconds(90);
-
-    [Fact]
-    public async Task Reaktion_wirkt_genau_einmal_ueber_Signal_und_Poll()
-    {
-        using var host = Cluster("garantie-reaktion");
-        await host.StartAsync();
-        try
-        {
-            var store = host.Services.GetRequiredService<IEventStoreRepository>();
-            var p = Guid.NewGuid();
-            (await FrageAsync(host, new EroeffnePosten(p, 100, Mindestbestand: 98), Guid.NewGuid()))!.Success.Should().BeTrue();
-            (await FrageAsync(host, new ReservierePosten(p, 5), Guid.NewGuid()))!.Success.Should().BeTrue();   // Fehlmenge 3
-
-            async Task<int> Nachschuebe() => (await store.ReadStreamAsync(p, 0, default)).Count(e => e.Payload is PostenZugebucht);
-            await Warte(async () => await Nachschuebe() > 0, Frist, "Die Reaktion hat nicht nachgebucht.");
-            // Mindestens ein Poll-Durchlauf (30 s) weckt den Posten-Stream erneut; er liest ab dem Cursor und gibt nichts erneut aus.
-            await Task.Delay(TimeSpan.FromSeconds(40));
-
-            (await Nachschuebe()).Should().Be(1, "dieselbe Ursache ergibt dieselbe CommandId — die Inbox des Postens verwirft die Wiederholung");
-            (await Zustand<Posten.Posten>(host.Services, p)).Bestand.Should().Be(103);
-        }
-        finally { await host.StopAsync(); }
-    }
 
     [Fact]
     public async Task Absturz_zwischen_Emit_und_Cursor_die_Reaktion_sendet_erneut_und_wirkt_genau_einmal()

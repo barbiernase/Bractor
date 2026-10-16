@@ -16,7 +16,6 @@ namespace Infrastructure.Pruefstand.Garantien;
 /// des <c>ProzessGestartet</c> bzw. <c>ProzessBeendet</c> (eine Transaktion, docs/03 §3.3), und ein Eintrag ohne Vorgang räumt die
 /// Backstop-Weckung ab.
 /// </summary>
-[Trait("Kategorie", "Garantie")]
 public class ProzessStartGarantieTests
 {
     [Fact]

@@ -15,7 +15,6 @@ namespace Infrastructure.Pruefstand.Analyzers;
 /// CQRS051 = Fähigkeit trägt genau eine Funktion; CQRS054 = kein Store/Fristplan im Zustand eines Konsumenten;
 /// CQRS055 = kein selbstgebauter Store. Andere Dienste im Konstruktor bleiben erlaubt.
 /// </summary>
-[Trait("Kategorie", "Garantie")]
 public class FaehigkeitAnalyzerTests
 {
     private static async Task<string[]> Ids(string code)

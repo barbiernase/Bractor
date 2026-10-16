@@ -7,17 +7,16 @@ using Abstractions;
 using Core;
 using FluentAssertions;
 using Infrastructure.Projections;
-using Infrastructure.Pruefstand.BatchKonsum;
+using Infrastructure.Pruefstand.Konsumenten;
 
 namespace Infrastructure.Pruefstand.Garantien;
 
 /// <summary>
-/// Garantien des Batch-Konsums (docs/11 §11.4, §11.5) unter Störung, store-frei über die Seams des <see cref="BatchLeser"/>: doppelte und
-/// ungeordnete Seiten, Nachzügler hinter der Karenz, Neuaktivierung, zwei Aktivierungen, Poison-Stream, Konflikt an einem geteilten Dokument.
-/// Der Lese-Seam bildet Sichtbarkeit und Karenz nach, der Tracker committet atomar mit Versionsprüfung — ob Marten das tatsächlich tut, prüft
-/// die Integration (<c>CoCommitPostgresTests</c>, <c>GarantiePostgresTests</c>).
+/// Garantien des Batch-Konsums (docs/11 §11.4, §11.5), die reine Leser-Logik sind — store-frei über die Seams des <see cref="BatchLeser"/>:
+/// doppelte und ungeordnete Seiten mit Nachzüglern, volle Seiten, ein dauerhafter Konflikt. Was an Marten hängt (Absturz mitten im Batch, zwei
+/// Aktivierungen, Poison-Stream, Konflikt an geteilten Dokumenten), prüft allein die Integration (<c>CoCommitPostgresTests</c>,
+/// <c>GarantiePostgresTests</c>, <c>SchreibRegelPostgresTests</c>).
 /// </summary>
-[Trait("Kategorie", "Garantie")]
 public class BatchKonsumGarantieTests
 {
     private const string Projektion = "projektion";
@@ -73,98 +72,6 @@ public class BatchKonsumGarantieTests
 
         db.Angewandt.Should().HaveCount(8);
         leser.Position.Should().Be(fremd.Seq, "nach der letzten (nicht vollen) Seite läuft die Position über fremde Events bis zur gesetzten Sequenz");
-    }
-
-    [Fact]
-    public async Task Absturz_mitten_im_Batch_laesst_nichts_gelten_die_Wiederholung_wirkt_genau_einmal()
-    {
-        var log = new PartitionsLog();
-        var db = new SpeicherKonsum();
-        var s = PartitionsLog.StreamIn(0, 2);
-        log.Haenge(s, 1);
-        log.Haenge(s, 2);
-
-        var abstuerzend = Leser(log, new SpeicherTracker(db), absturz: () => throw new InvalidOperationException("Absturz vor dem Commit"));
-        var lauf = () => abstuerzend.LaufAsync(Ct);
-        await lauf.Should().ThrowAsync<InvalidOperationException>();             // der Prozess endet mitten im Batch
-
-        db.Angewandt.Should().BeEmpty();
-        await Leser(log, new SpeicherTracker(db)).LaufAsync(Ct);
-        db.VersionenVon(s).Should().Equal(1, 2);
-    }
-
-    [Fact]
-    public async Task Zwei_Aktivierungen_derselben_Partition_wenden_einen_Effekt_nicht_doppelt_an()
-    {
-        var log = new PartitionsLog();
-        var db = new SpeicherKonsum();
-        var s = PartitionsLog.StreamIn(0, 2);
-        log.Haenge(s, 1);
-
-        var halt = new TaskCompletionSource();
-        var angehalten = new TaskCompletionSource();
-        var erste = Leser(log, new SpeicherTracker(db), absturz: async () => { angehalten.TrySetResult(); await halt.Task; });
-        var zweite = Leser(log, new SpeicherTracker(db));
-
-        var ersteLaeuft = erste.LaufAsync(Ct);
-        await angehalten.Task;                                                   // die erste hat ihren Effekt gepuffert
-        await zweite.LaufAsync(Ct);                                              // die zweite läuft ganz durch
-        halt.SetResult();
-        await ersteLaeuft;                                                       // ihr Commit scheitert an der Version, sie lädt neu
-
-        db.VersionenVon(s).Should().Equal(new[] { 1 }, "der Effekt gilt genau einmal");
-    }
-
-    [Fact]
-    public async Task Ein_Poison_Stream_wird_geparkt_der_Rest_committet_nach_der_Heilung_holt_er_nach()
-    {
-        var log = new PartitionsLog();
-        var db = new SpeicherKonsum();
-        var (gift, gesund) = (PartitionsLog.StreamIn(0, 2), PartitionsLog.StreamIn(0, 2));
-        log.Haenge(gift, 1);
-        log.Haenge(gesund, 1);
-        log.Haenge(gift, 2);
-        log.Haenge(gesund, 2);
-
-        var heilt = false;
-        var uhr = DateTimeOffset.UnixEpoch;
-        var leser = Leser(log, new SpeicherTracker(db), jetzt: () => uhr,
-            vorher: e => e.AggregateId == gift && !heilt ? throw new InvalidOperationException("Dispatch wirft dauerhaft") : Task.CompletedTask);
-
-        await leser.LaufAsync(Ct);
-        db.VersionenVon(gesund).Should().Equal(1, 2);
-        db.VersionenVon(gift).Should().BeEmpty();
-        leser.Geparkt.Should().ContainSingle(g => g.StreamId == gift && g.Version == -1);
-        leser.Position.Should().Be(4, "ein geparkter Stream hält die Position nicht fest");
-
-        log.Haenge(gift, 3);                                                     // weitere Events des geparkten Streams werden übersprungen
-        await leser.LaufAsync(Ct);
-        db.VersionenVon(gift).Should().BeEmpty();
-
-        heilt = true;                                                            // der Fehler ist behoben
-        uhr += Konsum.PollIntervall;                  // der nächste Poll versucht geparkte Streams einzeln
-        await leser.LaufAsync(Ct);
-        db.VersionenVon(gift).Should().Equal(1, 2, 3);
-        leser.Geparkt.Should().BeEmpty();
-
-        log.Haenge(gift, 4);
-        await leser.LaufAsync(Ct);
-        db.VersionenVon(gift).Should().Equal(1, 2, 3, 4);
-    }
-
-    [Fact]
-    public async Task Ein_Konflikt_an_einem_geteilten_Dokument_trennt_den_Batch_und_verliert_keinen_Beitrag()
-    {
-        var log = new PartitionsLog();
-        var db = new SpeicherKonsum();
-        var streams = Enumerable.Range(0, 3).Select(_ => PartitionsLog.StreamIn(0, 2)).ToList();
-        foreach (var s in streams) log.Haenge(s, 1);
-
-        // Jeder Commit, der mehr als einen Stream enthält, kollidiert (ein anderer Batch schrieb dasselbe geteilte Dokument).
-        db.CommitFehler = guards => guards.Count > 1 ? new SchreibKonfliktException("geteiltes Dokument", new Exception()) : null;
-        await Leser(log, new SpeicherTracker(db)).LaufAsync(Ct);
-
-        db.Angewandt.Select(x => x.Stream).Should().BeEquivalentTo(streams, "jeder Stream wirkt genau einmal");
     }
 
     [Fact]

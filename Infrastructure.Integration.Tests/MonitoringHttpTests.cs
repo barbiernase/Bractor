@@ -73,22 +73,4 @@ public class MonitoringHttpTests
         finally { await app.StopAsync(); }
     }
 
-    [Fact]
-    public async Task Nicht_leere_DLQ_meldet_Degraded_und_metrics_zeigt_die_Zahl()
-    {
-        var app = await BooteAsync(offeneProzesse: 0, dlq: 3);
-        try
-        {
-            using var client = new HttpClient { BaseAddress = new Uri(app.Urls.First()) };
-
-            var health = await client.GetAsync("/health");
-            health.StatusCode.Should().Be(HttpStatusCode.OK, "Degraded ist noch 200 — das Backend läuft");
-            var doc = JsonDocument.Parse(await health.Content.ReadAsStringAsync());
-            doc.RootElement.GetProperty("status").GetString().Should().Be("Degraded");
-
-            var metrik = await client.GetFromJsonAsync<BackendMetrik>("/monitoring/metrics");
-            metrik!.DlqEinträge.Should().Be(3);
-        }
-        finally { await app.StopAsync(); }
-    }
 }

@@ -15,7 +15,6 @@ namespace Infrastructure.Pruefstand.Analyzers;
 /// CQRS079–083 — Grammatik-Regeln und Graph-Diagnosen im Build (Werkbank P7.4): MISSING-APPLY, GR-FALTUNG, ENUM-ZERO, GR-GARANTIE und
 /// Regel Z (GR-ZUSTAND). Alles aus Signaturen und Symbolen, nie aus Rümpfen.
 /// </summary>
-[Trait("Kategorie", "Garantie")]
 public class ModellAnalyzerTests
 {
     private static async Task<Diagnostic[]> Befunde(string code)

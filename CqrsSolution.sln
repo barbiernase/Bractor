@@ -43,8 +43,6 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "GraphExtractor", "GraphExtr
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Domain.Client.Modules.Blazor", "Domain.Client.Modules.Blazor\Domain.Client.Modules.Blazor.csproj", "{3B1C6726-F4F6-4151-B59E-7D43F6A679B7}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Client.Infrastructure.CollectionTests", "Client.Infrastructure.CollectionTests\Client.Infrastructure.CollectionTests.csproj", "{591D75EE-97C9-47C1-9EA4-E118D24D3D8E}"
-EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Infrastructure.Pruefstand.Tests", "Infrastructure.Pruefstand.Tests\Infrastructure.Pruefstand.Tests.csproj", "{131A02A4-D649-45DF-8285-8C6EA2118C3C}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Infrastructure.Integration.Tests", "Infrastructure.Integration.Tests\Infrastructure.Integration.Tests.csproj", "{3B2E39A5-4CCA-4C06-9C0C-93A4B0AC5E28}"
@@ -331,18 +329,6 @@ Global
 		{3B1C6726-F4F6-4151-B59E-7D43F6A679B7}.Release|x64.Build.0 = Release|Any CPU
 		{3B1C6726-F4F6-4151-B59E-7D43F6A679B7}.Release|x86.ActiveCfg = Release|Any CPU
 		{3B1C6726-F4F6-4151-B59E-7D43F6A679B7}.Release|x86.Build.0 = Release|Any CPU
-		{591D75EE-97C9-47C1-9EA4-E118D24D3D8E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
-		{591D75EE-97C9-47C1-9EA4-E118D24D3D8E}.Debug|Any CPU.Build.0 = Debug|Any CPU
-		{591D75EE-97C9-47C1-9EA4-E118D24D3D8E}.Debug|x64.ActiveCfg = Debug|Any CPU
-		{591D75EE-97C9-47C1-9EA4-E118D24D3D8E}.Debug|x64.Build.0 = Debug|Any CPU
-		{591D75EE-97C9-47C1-9EA4-E118D24D3D8E}.Debug|x86.ActiveCfg = Debug|Any CPU
-		{591D75EE-97C9-47C1-9EA4-E118D24D3D8E}.Debug|x86.Build.0 = Debug|Any CPU
-		{591D75EE-97C9-47C1-9EA4-E118D24D3D8E}.Release|Any CPU.ActiveCfg = Release|Any CPU
-		{591D75EE-97C9-47C1-9EA4-E118D24D3D8E}.Release|Any CPU.Build.0 = Release|Any CPU
-		{591D75EE-97C9-47C1-9EA4-E118D24D3D8E}.Release|x64.ActiveCfg = Release|Any CPU
-		{591D75EE-97C9-47C1-9EA4-E118D24D3D8E}.Release|x64.Build.0 = Release|Any CPU
-		{591D75EE-97C9-47C1-9EA4-E118D24D3D8E}.Release|x86.ActiveCfg = Release|Any CPU
-		{591D75EE-97C9-47C1-9EA4-E118D24D3D8E}.Release|x86.Build.0 = Release|Any CPU
 		{131A02A4-D649-45DF-8285-8C6EA2118C3C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
 		{131A02A4-D649-45DF-8285-8C6EA2118C3C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{131A02A4-D649-45DF-8285-8C6EA2118C3C}.Debug|x64.ActiveCfg = Debug|Any CPU

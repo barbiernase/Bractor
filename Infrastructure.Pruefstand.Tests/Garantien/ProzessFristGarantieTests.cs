@@ -13,7 +13,6 @@ namespace Infrastructure.Pruefstand.Garantien;
 /// genau mit dem Ablauf im Index, geschrieben einmal; der Backstop findet ihn zur Frist, die Weckung lässt den Aufruf scheitern und räumt
 /// den Eintrag ab. Wer vorher fertig wird, schreibt nie eine Frist; ein Zeitlimit kürzer als die Stille bis zur Heilung steht sofort dort.
 /// </summary>
-[Trait("Kategorie", "Garantie")]
 public class ProzessFristGarantieTests
 {
     private static (FunktionsWelt Welt, OffenIndexImSpeicher Index, TaskCompletionSource Freigabe) HaengendeWelt(TimeSpan limit)

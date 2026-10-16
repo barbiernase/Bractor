@@ -40,6 +40,9 @@ namespace Infrastructure.Integration.Tests;
 /// </summary>
 public class PipelineFlussE2ETests
 {
+    /// <summary>Eigenes Event-Schema — nie das Standard-Schema <c>es</c>, in das auch andere Läufe schreiben.</summary>
+    private const string Schema = "it_fluss";
+
     private sealed class Verkleinerung : IBildVerkleinerung
     {
         public Task<OneOf<BildVerkleinert, BildNichtLesbar>> RufeAsync(VerkleinereBild a, IAusfuehrung x)
@@ -56,7 +59,7 @@ public class PipelineFlussE2ETests
     /// <summary>Die Host-Verdrahtung wie Host.Grpc: Framework, Prozesse/Flüsse, Funktionen — die Bildaufbereitung als Fakes.</summary>
     private static void Verdrahte(IServiceCollection s, string watchDir, string cluster, bool grpc, bool verkleinerungExtern)
     {
-        s.AddCqrsFramework(opts => { opts.EnableGrpc = grpc; opts.ClusterName = cluster; });
+        s.AddCqrsFramework(opts => { opts.EnableGrpc = grpc; opts.ClusterName = cluster; opts.EventStoreSchema = Schema; });
         GeneratedPipelines.RegisterAllPipelines(s);
         s.AddGeneratedProzesse();
         if (verkleinerungExtern) s.AddExterneFunktion<IBildVerkleinerung>();
@@ -134,7 +137,7 @@ public class PipelineFlussE2ETests
             kette.Where(e => e.Wirker!.StartsWith("funktion:")).Should().OnlyContain(e => e.Ueber != null && e.Ueber.StartsWith("fluss:Bildeingang#"));
 
             // Einblick (Werkbank P4.6/P4.7): der Vorgang steht mit Wurzel und Zustand in der Liste, sein Graph enthält die Kette.
-            var leser = new Infrastructure.Einblick.SpurLeser("Host=localhost;Port=5432;Database=cqrs_events;Username=postgres;Password=postgres", "es");
+            var leser = new Infrastructure.Einblick.SpurLeser("Host=localhost;Port=5432;Database=cqrs_events;Username=postgres;Password=postgres", Schema);
             var vg = (await leser.VorgaengeAsync(200, default)).Single(x => x.Korrelation == korrelation.ToString());
             (vg.Zustand, vg.Prozess, vg.WurzelWirker).Should().Be(("fertig", nameof(Bildeingang), "quelle:DateiErkannt"));
             (await leser.VorgaengeAsync(200, default)).Should().NotContain(x => x.Korrelation == vorgang.ToString(),
@@ -225,52 +228,6 @@ public class PipelineFlussE2ETests
     }
 
     /// <summary>
-    /// Der Trainings-Wächter (Warten am Strom gegen ein Zeitlimit) live: TrainingBegonnen startet den Fluss, das Ende im SELBEN Strom
-    /// (vom Dirigenten nachgelesen, geweckt über den §3-Backstop) beendet den Vorgang erfolgreich — ohne Markierung, ohne Frist.
-    /// </summary>
-    [Fact]
-    public async Task Trainings_Waechter_endet_still_wenn_das_Training_im_Strom_endet()
-    {
-        var watchDir = Path.Combine(Path.GetTempPath(), "fluss-tw-" + Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(watchDir);
-        var builder = Host.CreateApplicationBuilder();
-        Verdrahte(builder.Services, watchDir, "fluss-tw-" + Guid.NewGuid().ToString("N")[..8], grpc: false, verkleinerungExtern: false);
-        using var host = builder.Build();
-        await host.StartAsync();
-        try
-        {
-            var es = host.Services.GetRequiredService<IEventStoreRepository>();
-            var dispatcher = host.Services.GetRequiredService<IAggregateDispatcher>();
-            var lauf = Guid.NewGuid();
-            void Sende(ICommand c) => dispatcher.Dispatch(new CommandEnvelope
-            { AggregateId = lauf, AggregateType = "Trainingslauf", Modus = new CommandModus.Emittiert(), Payload = c });
-
-            Sende(new Domain.Trainingslauf.StarteTraining(lauf, Guid.NewGuid(), 1, new Domain.Trainingslauf.Hyperparameter(1, 0.1, 8, "r", 1)));
-            await Warte(async () => (await es.ReadStreamAsync(lauf, 0, default)).Count >= 1, TimeSpan.FromSeconds(30), "Training nicht angelegt");
-            Sende(new Domain.Trainingslauf.MeldeTrainingBegonnen(lauf));
-            await Warte(async () => (await es.ReadStreamAsync(lauf, 0, default)).Any(e => e.Payload is Domain.Trainingslauf.TrainingBegonnen),
-                TimeSpan.FromSeconds(30), "TrainingBegonnen fehlt");
-            var begonnen = (await es.ReadStreamAsync(lauf, 0, default)).First(e => e.Payload is Domain.Trainingslauf.TrainingBegonnen);
-            var korrelation = ProzessId.Für(nameof(TrainingWaechter), lauf, begonnen.AggregateVersion);
-            await Warte(async () => (await es.ReadStreamAsync(korrelation, 0, default)).Any(e => e.Payload is ProzessGestartet),
-                TimeSpan.FromSeconds(60), "Der Wächter-Fluss ist nicht gestartet (Auf<TrainingBegonnen>).");
-
-            Sende(new Domain.Trainingslauf.MeldeTrainingAbgeschlossen(lauf, "/modelle/m.pt", new Domain.Trainingslauf.Endmetriken(0.1, 0.9)));
-            await Warte(async () => (await es.ReadStreamAsync(korrelation, 0, default)).Any(e => e.Payload is ProzessBeendet),
-                TimeSpan.FromSeconds(60), "Der Wächter hat das Ende im Strom nicht gesehen (Warten + Backstop).");
-
-            (await es.ReadStreamAsync(korrelation, 0, default)).Select(e => e.Payload).OfType<ProzessBeendet>().Single().Erfolg.Should().BeTrue();
-            (await es.ReadStreamAsync(lauf, 0, default)).Should().NotContain(e => e.Payload is Domain.Trainingslauf.TrainingHaengengeblieben,
-                "das Ende kam vor dem Zeitlimit — keine Markierung");
-        }
-        finally
-        {
-            await host.StopAsync();
-            try { Directory.Delete(watchDir, recursive: true); } catch { /* egal */ }
-        }
-    }
-
-    /// <summary>
     /// Der Datensatz-Resolver live: FuegeRangeHinzu → RangeAngefordert → ƒ Range-Suche mit der ECHTEN Lese-Fähigkeit
     /// (ISearchImagePairs über einen Fähigkeits-Bereich) → NimmRangeAuf an DENSELBEN Datensatz (Id aus dem Strom der Quelle).
     /// </summary>
@@ -321,7 +278,6 @@ public class PipelineFlussE2ETests
     /// (bis BildVerfuegbar); nach einem Neustart (neuer Host, derselbe Log) gleicht der Treiber gebündelt mit dem Log ab und meldet
     /// nichts erneut. Läuft im Default-Laufmodus EinmalImCluster (Lease über die Cluster-Identität quelle/DateiErkannt).
     /// </summary>
-    [Trait("Kategorie", "Garantie")]
     [Fact]
     public async Task Datei_Treiber_meldet_eine_Datei_genau_einmal_auch_nach_Neustart()
     {

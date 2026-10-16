@@ -14,7 +14,6 @@ namespace Infrastructure.Pruefstand.Garantien;
 /// Fähigkeit hat genau eine Store-Klasse (CQRS053), und jeder Wire-Typ der Anwendung ist serialisierbar (Boot-Check). Die Generatoren laufen
 /// über einer Probe-Compilation, wie im Build.
 /// </summary>
-[Trait("Kategorie", "Garantie")]
 public class BuildGarantieTests
 {
     private const string Kopf = "using System; using System.Threading.Tasks; using Abstractions; using Core;\n";

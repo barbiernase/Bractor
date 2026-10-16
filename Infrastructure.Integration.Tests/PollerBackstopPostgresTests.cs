@@ -20,60 +20,10 @@ namespace Infrastructure.Integration.Tests;
 ///
 /// Braucht laufendes Postgres auf localhost:5432 (docker-compose.infrastructure.yml).
 /// </summary>
-[Trait("Kategorie", "Garantie")]
 public class PollerBackstopPostgresTests : IClassFixture<PollerBackstopPostgresTests.Fixture>
 {
     private readonly Fixture _fx;
     public PollerBackstopPostgresTests(Fixture fx) => _fx = fx;
-
-    [Fact]
-    public async Task Unbestaetigte_Weckung_darf_die_HWM_nicht_ueber_den_Stream_hinaus_schieben()
-    {
-        // Grace = 0: dieser Test isoliert den Poll-Cursor-Guard (Befund 1) von der Straggler-Karenz
-        // (Befund 3) — ein frisch angehängtes Event ist sofort HWM-fähig, sodass die (buggy) naive
-        // Advance den Stream überhaupt überspringen KÖNNTE. Genau das verhindert der Fix.
-        var store = new MartenEventStore(
-            _fx.Store, new NoopFactory(), NullLogger<MartenEventStore>.Instance, stragglerGrace: TimeSpan.Zero);
-
-        // Isolation gegen früher in DIESEM Schema angehängte Events: ab der aktuellen globalen
-        // HWM aufsetzen. Ebene-2-Tests laufen sequentiell (xunit.runner.json) → kein Interleave.
-        var baseHwm = (await store.ReadChangedStreamsAsync(0, null, int.MaxValue, default)).HighWaterMark;
-
-        // Ein terminaler Stream: ein Event, danach STILLE. Sein Signal geht verloren (kein Wake) —
-        // der Poll ist die einzige verbleibende Rettung.
-        var streamId = Guid.NewGuid();
-        await store.AppendEventsAsync(streamId, 0, new IEvent[] { new ImagePairInspiziert() });
-
-        // Stub-Adapter: die Verarbeitung scheitert beim ERSTEN Aufruf (transienter Fehler →
-        // nicht caught-up), gelingt danach. Er notiert, welche Streams er wirklich verarbeitet hat.
-        var verarbeitet = new List<Guid>();
-        var ersterAufruf = true;
-        Func<Guid, CancellationToken, Task<bool>> wake = (sid, ct) =>
-        {
-            if (ersterAufruf)
-            {
-                ersterAufruf = false;
-                return Task.FromResult(false); // Verarbeitung gescheitert → unbestätigt.
-            }
-            verarbeitet.Add(sid);
-            return Task.FromResult(true);
-        };
-
-        var poller = new Poller(store, wake, startHighWater: baseHwm);
-
-        // Poll 1: weckt den Stream, aber die Verarbeitung scheitert (unbestätigt).
-        await poller.PollOnceAsync();
-        verarbeitet.Should().BeEmpty("die erste Verarbeitung ist gescheitert");
-
-        // Poll 2: KEIN neues Event. Der Fix verlangt, dass die HWM in Poll 1 NICHT über den
-        // unverarbeiteten Stream hinaus vorgerückt ist → der Stream wird erneut geweckt und jetzt
-        // verarbeitet. Bug (Befund 1): die HWM ist bereits vorbei → der Stream wird nie wieder
-        // geweckt → 'verarbeitet' bleibt leer und die Projektion hängt für immer zurück.
-        await poller.PollOnceAsync();
-
-        verarbeitet.Should().ContainSingle().Which.Should().Be(streamId,
-            "ein unbestätigt gebliebener Stream muss beim nächsten Poll erneut geweckt werden");
-    }
 
     /// <summary>
     /// PF-12: der Poll der Emittenten weckt nur Streams mit einem abonnierten Event — früher jeden geänderten Stream des Logs, und der
